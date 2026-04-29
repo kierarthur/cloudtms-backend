@@ -21706,6 +21706,11 @@ declare
   v_batch_status_upper text := null;
   v_has_external_submission_evidence boolean := false;
   v_current_transfer_hash text := null;
+  v_pending_transfer_hash text := null;
+  v_stable_transfer_hash text := null;
+  v_execution_transfer_hash text := null;
+  v_csv_comparison_transfer_hash text := null;
+  v_csv_export_match_basis text := null;
   v_bank_csv_export_hash text := null;
   v_has_cloudtms_csv_export boolean := false;
   v_csv_export_matches_current_transfers boolean := false;
@@ -22035,7 +22040,7 @@ begin
     )
     order by transfer_hash_rows.id
   )::text, '[]'))
-  into v_current_transfer_hash
+  into v_pending_transfer_hash
   from (
     select
       pbt_hash.id::text as id,
@@ -22059,16 +22064,56 @@ begin
     order by pbt_hash.id
   ) transfer_hash_rows;
 
+  select md5(coalesce(jsonb_agg(
+    jsonb_build_object(
+      'id', transfer_hash_rows.id,
+      'candidate_id', transfer_hash_rows.candidate_id,
+      'umbrella_id', transfer_hash_rows.umbrella_id,
+      'pay_channel', transfer_hash_rows.pay_channel,
+      'amount', transfer_hash_rows.amount,
+      'currency', transfer_hash_rows.currency,
+      'payment_reference', transfer_hash_rows.payment_reference,
+      'payee_name', transfer_hash_rows.payee_name,
+      'sort_code_digits', transfer_hash_rows.sort_code_digits,
+      'account_number_digits', transfer_hash_rows.account_number_digits,
+      'account_type', transfer_hash_rows.account_type,
+      'bank_details_hash_snapshot', transfer_hash_rows.bank_details_hash_snapshot,
+      'payee_entity_kind', transfer_hash_rows.payee_entity_kind,
+      'payee_entity_id', transfer_hash_rows.payee_entity_id,
+      'transfer_group_key', transfer_hash_rows.transfer_group_key
+    )
+    order by transfer_hash_rows.id
+  )::text, '[]'))
+  into v_stable_transfer_hash
+  from (
+    select
+      pbt_hash.id::text as id,
+      case when pbt_hash.candidate_id is null then null else pbt_hash.candidate_id::text end as candidate_id,
+      case when pbt_hash.umbrella_id is null then null else pbt_hash.umbrella_id::text end as umbrella_id,
+      pbt_hash.pay_channel,
+      round(pbt_hash.amount, 2) as amount,
+      pbt_hash.currency,
+      pbt_hash.payment_reference,
+      pbt_hash.payee_name,
+      regexp_replace(coalesce(pbt_hash.sort_code,''), '[^0-9]', '', 'g') as sort_code_digits,
+      regexp_replace(coalesce(pbt_hash.account_number,''), '[^0-9]', '', 'g') as account_number_digits,
+      pbt_hash.account_type,
+      pbt_hash.bank_details_hash_snapshot,
+      pbt_hash.payee_entity_kind,
+      case when pbt_hash.payee_entity_id is null then null else pbt_hash.payee_entity_id::text end as payee_entity_id,
+      pbt_hash.transfer_group_key
+    from public.pay_bank_transfers pbt_hash
+    where pbt_hash.pay_batch_id = p_pay_batch_id
+      and upper(coalesce(pbt_hash.status,'')) <> 'BLOCKED'
+    order by pbt_hash.id
+  ) transfer_hash_rows;
+
   v_bank_csv_export_hash := nullif(btrim(coalesce(v_batch.bank_csv_export_json->>'transfer_hash', '')), '');
+  v_execution_transfer_hash := nullif(btrim(coalesce(v_execution_intent_json->>'current_transfer_hash', '')), '');
   v_has_cloudtms_csv_export := (
     v_batch.bank_csv_export_json is not null
     and jsonb_typeof(v_batch.bank_csv_export_json) = 'object'
     and v_bank_csv_export_hash is not null
-  );
-  v_csv_export_matches_current_transfers := (
-    v_has_cloudtms_csv_export = true
-    and v_current_transfer_hash is not null
-    and v_bank_csv_export_hash = v_current_transfer_hash
   );
 
   select exists(
@@ -22103,6 +22148,40 @@ begin
       )
   )
   into v_has_external_submission_evidence;
+
+
+  if v_has_cloudtms_csv_export = true then
+    if v_execution_commit_state = 'COMMITTED'
+       or v_batch_status_upper in ('COMMITTED','PAID','SETTLED')
+       or v_has_external_submission_evidence = true then
+      v_csv_comparison_transfer_hash := coalesce(v_execution_transfer_hash, v_stable_transfer_hash, v_pending_transfer_hash);
+      v_csv_export_match_basis := case
+        when v_execution_transfer_hash is not null then 'EXECUTION_INTENT_CURRENT_TRANSFER_HASH'
+        when v_stable_transfer_hash is not null then 'STABLE_ALL_NON_BLOCKED_TRANSFER_HASH'
+        when v_pending_transfer_hash is not null then 'PENDING_TRANSFER_HASH'
+        else 'NO_TRANSFER_HASH_AVAILABLE'
+      end;
+    else
+      v_csv_comparison_transfer_hash := coalesce(v_pending_transfer_hash, v_stable_transfer_hash, v_execution_transfer_hash);
+      v_csv_export_match_basis := case
+        when v_pending_transfer_hash is not null then 'PENDING_TRANSFER_HASH'
+        when v_stable_transfer_hash is not null then 'STABLE_ALL_NON_BLOCKED_TRANSFER_HASH'
+        when v_execution_transfer_hash is not null then 'EXECUTION_INTENT_CURRENT_TRANSFER_HASH'
+        else 'NO_TRANSFER_HASH_AVAILABLE'
+      end;
+    end if;
+  else
+    v_csv_comparison_transfer_hash := coalesce(v_pending_transfer_hash, v_stable_transfer_hash, v_execution_transfer_hash);
+    v_csv_export_match_basis := 'NO_CLOUDTMS_CSV_EXPORT';
+  end if;
+
+  v_current_transfer_hash := v_csv_comparison_transfer_hash;
+  v_csv_export_matches_current_transfers := (
+    v_has_cloudtms_csv_export = true
+    and v_bank_csv_export_hash is not null
+    and v_csv_comparison_transfer_hash is not null
+    and v_bank_csv_export_hash = v_csv_comparison_transfer_hash
+  );
 
   if v_active_auth_execution_intent_json is not null then
     v_execution_mode_pending := upper(nullif(btrim(coalesce(v_active_auth_execution_intent_json->>'execution_mode','')), ''));
@@ -23101,7 +23180,7 @@ begin
   into v_candidates
   from cand_src;
 
-  with finance_flags as (
+  with item_flags as (
     select
       pbc.id as pay_batch_candidate_id,
       pbc.candidate_id as candidate_id,
@@ -23133,25 +23212,55 @@ begin
     left join public.v_finance_cases_register vfcr
       on vfcr.finance_case_id = pbi.finance_case_id
     where pbc.pay_batch_id = p_pay_batch_id
-      and pbi.finance_case_id is not null
       and pbi.item_type <> 'DEBT_CREATED'
       and coalesce(pbi.is_voided, false) = false
   ),
+  transfer_remittance_targets as (
+    select distinct
+      pbc.id as pay_batch_candidate_id,
+      pbc.candidate_id as candidate_id,
+      pbt.umbrella_id as umbrella_id
+    from public.pay_bank_transfers pbt
+    join public.pay_batch_candidates pbc
+      on pbc.pay_batch_id = pbt.pay_batch_id
+     and pbc.candidate_id = pbt.candidate_id
+    where pbt.pay_batch_id = p_pay_batch_id
+      and pbt.umbrella_id is not null
+      and upper(coalesce(pbt.pay_channel::text,'')) = 'UMBRELLA'
+      and upper(coalesce(pbt.status::text,'')) <> 'BLOCKED'
+  ),
   rem_targets as (
     select distinct
-      ff.pay_batch_candidate_id,
-      ff.candidate_id,
-      ff.umbrella_id
-    from finance_flags ff
-    where ff.appears_on_umbrella_remittance = true
+      ifl.pay_batch_candidate_id,
+      ifl.candidate_id,
+      ifl.umbrella_id
+    from item_flags ifl
+    where ifl.appears_on_umbrella_remittance = true
+      and ifl.umbrella_id is not null
+
+    union
+
+    select distinct
+      trt.pay_batch_candidate_id,
+      trt.candidate_id,
+      trt.umbrella_id
+    from transfer_remittance_targets trt
   )
   select jsonb_build_object(
-    'candidate_count', count(*)::int,
-    'sent_count', count(*) filter (where pbc.remittance_sent_at_utc is not null)::int,
-    'unsent_count', count(*) filter (where pbc.remittance_sent_at_utc is null)::int,
-    'error_count', count(*) filter (where nullif(btrim(coalesce(pbc.last_remittance_error,'')), '') is not null)::int,
+    'candidate_count', count(distinct pbc.id)::int,
+    'umbrella_count', count(distinct rt.umbrella_id) filter (where rt.umbrella_id is not null)::int,
+    'umbrella_remittance_job_count', count(distinct rt.umbrella_id) filter (where rt.umbrella_id is not null)::int,
+    'candidate_copy_job_count', count(distinct pbc.id)::int,
+    'job_kinds', case
+      when count(distinct pbc.id) = 0 then '[]'::jsonb
+      else jsonb_build_array('UMBRELLA_REMITTANCE', 'CANDIDATE_UMBRELLA_COPY_REMITTANCE')
+    end,
+    'queued_count', count(distinct pbc.id) filter (where pbc.remittance_sent_at_utc is null and upper(coalesce(pbc.remittance_trigger_status,'')) in ('QUEUED_TO_MAIL_OUTBOX','MAIL_OUTBOX_DUPLICATE_EXISTS'))::int,
+    'sent_count', count(distinct pbc.id) filter (where pbc.remittance_sent_at_utc is not null)::int,
+    'unsent_count', count(distinct pbc.id) filter (where pbc.remittance_sent_at_utc is null)::int,
+    'error_count', count(distinct pbc.id) filter (where nullif(btrim(coalesce(pbc.last_remittance_error,'')), '') is not null)::int,
     'latest_sent_at_utc', max(pbc.remittance_sent_at_utc),
-    'all_sent', case when count(*) = 0 then false else bool_and(pbc.remittance_sent_at_utc is not null) end,
+    'all_sent', case when count(distinct pbc.id) = 0 then false else bool_and(pbc.remittance_sent_at_utc is not null) end,
     'trigger_statuses', coalesce(
       to_jsonb(
         array_agg(distinct pbc.remittance_trigger_status order by pbc.remittance_trigger_status)
@@ -23161,15 +23270,12 @@ begin
     )
   )
   into v_remittance_summary
-  from public.pay_batch_candidates pbc
-  where pbc.pay_batch_id = p_pay_batch_id
-    and exists (
-      select 1
-      from rem_targets rt
-      where rt.pay_batch_candidate_id = pbc.id
-    );
+  from rem_targets rt
+  join public.pay_batch_candidates pbc
+    on pbc.id = rt.pay_batch_candidate_id
+  where pbc.pay_batch_id = p_pay_batch_id;
 
-  with finance_flags as (
+  with item_flags as (
     select
       pbc.id as pay_batch_candidate_id,
       pbc.candidate_id as candidate_id,
@@ -23201,29 +23307,53 @@ begin
     left join public.v_finance_cases_register vfcr
       on vfcr.finance_case_id = pbi.finance_case_id
     where pbc.pay_batch_id = p_pay_batch_id
-      and pbi.finance_case_id is not null
       and pbi.item_type <> 'DEBT_CREATED'
       and coalesce(pbi.is_voided, false) = false
   ),
+  transfer_remittance_targets as (
+    select distinct
+      pbc.id as pay_batch_candidate_id,
+      pbc.candidate_id as candidate_id,
+      pbt.umbrella_id as umbrella_id
+    from public.pay_bank_transfers pbt
+    join public.pay_batch_candidates pbc
+      on pbc.pay_batch_id = pbt.pay_batch_id
+     and pbc.candidate_id = pbt.candidate_id
+    where pbt.pay_batch_id = p_pay_batch_id
+      and pbt.umbrella_id is not null
+      and upper(coalesce(pbt.pay_channel::text,'')) = 'UMBRELLA'
+      and upper(coalesce(pbt.status::text,'')) <> 'BLOCKED'
+  ),
   rem_targets as (
     select distinct
-      ff.pay_batch_candidate_id,
-      ff.candidate_id,
-      ff.umbrella_id
-    from finance_flags ff
-    where ff.appears_on_umbrella_remittance = true
+      ifl.pay_batch_candidate_id,
+      ifl.candidate_id,
+      ifl.umbrella_id
+    from item_flags ifl
+    where ifl.appears_on_umbrella_remittance = true
+      and ifl.umbrella_id is not null
+
+    union
+
+    select distinct
+      trt.pay_batch_candidate_id,
+      trt.candidate_id,
+      trt.umbrella_id
+    from transfer_remittance_targets trt
   ),
   payout_notice_targets as (
     select distinct
-      ff.pay_batch_candidate_id,
-      ff.candidate_id
-    from finance_flags ff
-    where ff.generates_candidate_payment_advice = true
+      ifl.pay_batch_candidate_id,
+      ifl.candidate_id
+    from item_flags ifl
+    where ifl.generates_candidate_payment_advice = true
   ),
   outbox_union as (
     select
       'MAIL'::text as outbox_channel,
+      upper(coalesce(mo.type::text,'')) as outbox_type,
       upper(coalesce(mo.status::text,'')) as outbox_status,
+      mo.reference as reference,
       mo.created_at_utc as created_at_utc,
       mo.sent_at as sent_at_utc,
       mo.delivered_at as delivered_at_utc,
@@ -23238,7 +23368,9 @@ begin
 
     select
       upper(coalesce(co.channel::text,'')) as outbox_channel,
+      upper(coalesce(co.channel::text,'')) as outbox_type,
       upper(coalesce(co.status::text,'')) as outbox_status,
+      coalesce(co.provider_payload_json->>'reference', co.provider_payload_json->>'mail_reference', '') as reference,
       co.created_at_utc as created_at_utc,
       co.sent_at as sent_at_utc,
       co.delivered_at as delivered_at_utc,
@@ -23252,12 +23384,20 @@ begin
   rem_outbox as (
     select *
     from outbox_union ou
-    where ou.recipient_kind = 'UMBRELLA'
+    where ou.reference like ('remit:pay_batch:' || p_pay_batch_id::text || ':%')
+      and (
+        (ou.outbox_channel = 'MAIL' and ou.outbox_type = 'REMITTANCE')
+        or ou.outbox_channel <> 'MAIL'
+      )
   ),
   payout_notice_outbox as (
     select *
     from outbox_union ou
-    where ou.recipient_kind = 'CANDIDATE'
+    where ou.reference like ('payout_notice:pay_batch:' || p_pay_batch_id::text || ':%')
+      and (
+        (ou.outbox_channel = 'MAIL' and ou.outbox_type = 'REMITTANCE')
+        or ou.outbox_channel <> 'MAIL'
+      )
   )
   select jsonb_build_object(
     'contains_remittance_items', exists(select 1 from rem_targets),
@@ -23272,9 +23412,24 @@ begin
       end,
     'remittance', jsonb_build_object(
       'contains_items', exists(select 1 from rem_targets),
-      'item_count', (select count(*)::int from finance_flags ff where ff.appears_on_umbrella_remittance = true),
+      'item_count', (select count(*)::int from item_flags ifl where ifl.appears_on_umbrella_remittance = true),
+      'job_kinds', case when exists(select 1 from rem_targets) then jsonb_build_array('UMBRELLA_REMITTANCE', 'CANDIDATE_UMBRELLA_COPY_REMITTANCE') else '[]'::jsonb end,
+      'umbrella_remittance_job_count', (select count(distinct rt.umbrella_id)::int from rem_targets rt where rt.umbrella_id is not null),
+      'candidate_copy_job_count', (select count(distinct rt.candidate_id)::int from rem_targets rt),
       'candidate_count_targeted', (select count(distinct rt.candidate_id)::int from rem_targets rt),
       'umbrella_count_targeted', (select count(distinct rt.umbrella_id)::int from rem_targets rt where rt.umbrella_id is not null),
+      'candidate_count_queued', (
+        select count(*)::int
+        from public.pay_batch_candidates pbc
+        where pbc.pay_batch_id = p_pay_batch_id
+          and exists (
+            select 1
+            from rem_targets rt
+            where rt.pay_batch_candidate_id = pbc.id
+          )
+          and pbc.remittance_sent_at_utc is null
+          and upper(coalesce(pbc.remittance_trigger_status,'')) in ('QUEUED_TO_MAIL_OUTBOX','MAIL_OUTBOX_DUPLICATE_EXISTS')
+      ),
       'candidate_count_sent', (
         select count(*)::int
         from public.pay_batch_candidates pbc
@@ -23372,16 +23527,17 @@ begin
           group by ro.outbox_status
         ) osc
       ), '{}'::jsonb),
-      'sent_count', (select count(*)::int from rem_outbox ro where ro.sent_at_utc is not null),
+      'queued_count', (select count(*)::int from rem_outbox ro where ro.outbox_status = 'QUEUED'),
+      'sent_count', (select count(*)::int from rem_outbox ro where ro.sent_at_utc is not null or ro.outbox_status = 'SENT'),
       'delivered_count', (select count(*)::int from rem_outbox ro where ro.delivered_at_utc is not null),
       'read_count', (select count(*)::int from rem_outbox ro where ro.read_at_utc is not null),
-      'failed_count', (select count(*)::int from rem_outbox ro where ro.failed_at_utc is not null),
+      'failed_count', (select count(*)::int from rem_outbox ro where ro.failed_at_utc is not null or ro.outbox_status = 'FAILED'),
       'latest_outbox_created_at_utc', (select max(ro.created_at_utc) from rem_outbox ro),
       'latest_outbox_sent_at_utc', (select max(ro.sent_at_utc) from rem_outbox ro)
     ),
     'payout_notice', jsonb_build_object(
       'contains_items', exists(select 1 from payout_notice_targets),
-      'item_count', (select count(*)::int from finance_flags ff where ff.generates_candidate_payment_advice = true),
+      'item_count', (select count(*)::int from item_flags ifl where ifl.generates_candidate_payment_advice = true),
       'candidate_count_targeted', (select count(distinct pnt.candidate_id)::int from payout_notice_targets pnt),
       'outbox_row_count', (select count(*)::int from payout_notice_outbox),
       'outbox_channels', coalesce((
@@ -23411,10 +23567,11 @@ begin
           group by pno.outbox_status
         ) osc
       ), '{}'::jsonb),
-      'sent_count', (select count(*)::int from payout_notice_outbox pno where pno.sent_at_utc is not null),
+      'queued_count', (select count(*)::int from payout_notice_outbox pno where pno.outbox_status = 'QUEUED'),
+      'sent_count', (select count(*)::int from payout_notice_outbox pno where pno.sent_at_utc is not null or pno.outbox_status = 'SENT'),
       'delivered_count', (select count(*)::int from payout_notice_outbox pno where pno.delivered_at_utc is not null),
       'read_count', (select count(*)::int from payout_notice_outbox pno where pno.read_at_utc is not null),
-      'failed_count', (select count(*)::int from payout_notice_outbox pno where pno.failed_at_utc is not null),
+      'failed_count', (select count(*)::int from payout_notice_outbox pno where pno.failed_at_utc is not null or pno.outbox_status = 'FAILED'),
       'latest_outbox_created_at_utc', (select max(pno.created_at_utc) from payout_notice_outbox pno),
       'latest_sent_at_utc', (select max(pno.sent_at_utc) from payout_notice_outbox pno)
     )
@@ -23561,6 +23718,11 @@ begin
     'execution_mode_pending', v_execution_mode_pending,
     'suppress_remittances_pending', v_suppress_remittances_pending,
     'current_transfer_hash', v_current_transfer_hash,
+    'pending_transfer_hash', v_pending_transfer_hash,
+    'stable_transfer_hash', v_stable_transfer_hash,
+    'execution_transfer_hash', v_execution_transfer_hash,
+    'csv_comparison_transfer_hash', v_csv_comparison_transfer_hash,
+    'csv_export_match_basis', v_csv_export_match_basis,
 
     -- ✅ NEW: batch kind + channels for UI
     'batch_kind', v_batch_kind,
@@ -23601,6 +23763,11 @@ begin
       'execution_mode_pending', v_execution_mode_pending,
       'suppress_remittances_pending', v_suppress_remittances_pending,
       'current_transfer_hash', v_current_transfer_hash,
+      'pending_transfer_hash', v_pending_transfer_hash,
+      'stable_transfer_hash', v_stable_transfer_hash,
+      'execution_transfer_hash', v_execution_transfer_hash,
+      'csv_comparison_transfer_hash', v_csv_comparison_transfer_hash,
+      'csv_export_match_basis', v_csv_export_match_basis,
       'pay_date', v_batch.pay_date::text,
       'authoritative_payment_date', case when v_batch.authoritative_payment_date is null then null else v_batch.authoritative_payment_date::text end,
       'authoritative_payment_date_source', v_batch.authoritative_payment_date_source,
