@@ -21170,7 +21170,6 @@ $$;
 commit;
 
 
-begin;
 
 -- =========================================================
 -- A4.6 pay_settle_monzo(p_pay_batch_id, p_actor_user_id, p_confirmed bool)
