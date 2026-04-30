@@ -299,6 +299,10 @@ select
   ac.amount_ex_vat
 from adj_components ac;
 $$;
+
+
+
+
 CREATE OR REPLACE FUNCTION public._pay_reserved_components(p_timesheet_ids uuid[])
 RETURNS TABLE (
   timesheet_id uuid,
@@ -323,21 +327,163 @@ inp AS (
     ARRAY[]::uuid[]
   ) AS ts_ids
 ),
-active_item_ids AS (
+active_batch_item_ids AS (
   SELECT
-    pbi.id AS pay_batch_item_id
-  FROM inp AS i
-  JOIN public.pay_batch_items AS pbi
-    ON pbi.timesheet_id = ANY(i.ts_ids)
-  JOIN public.pay_batch_candidates AS pbc
-    ON pbc.id = pbi.pay_batch_candidate_id
-  JOIN public.pay_batches AS pb
-    ON pb.id = pbc.pay_batch_id
-  WHERE pbi.timesheet_id IS NOT NULL
-    AND COALESCE(pbi.is_voided, false) = false
-    AND pbi.pay_channel IN ('PAYE','UMBRELLA')
-    AND public._pay_batch_status_is_active_reservation(pb.status)
-    AND pbi.item_type IN ('SEGMENT_DELTA','EXPENSE_DELTA','ADJUSTMENT_DELTA','MILEAGE_DELTA')
+    public.pay_batch_items.id AS pay_batch_item_id
+  FROM inp AS input_scope
+  JOIN public.pay_batch_items
+    ON public.pay_batch_items.timesheet_id = ANY(input_scope.ts_ids)
+  JOIN public.pay_batch_candidates
+    ON public.pay_batch_candidates.id = public.pay_batch_items.pay_batch_candidate_id
+  JOIN public.pay_batches
+    ON public.pay_batches.id = public.pay_batch_candidates.pay_batch_id
+  LEFT JOIN public.pay_bank_transfers
+    ON public.pay_bank_transfers.id = public.pay_batch_items.pay_bank_transfer_id
+  WHERE public.pay_batch_items.timesheet_id IS NOT NULL
+    AND COALESCE(public.pay_batch_items.is_voided, false) = false
+    AND upper(coalesce(public.pay_batch_items.pay_channel, '')) IN ('PAYE','UMBRELLA')
+    AND public._pay_batch_status_is_active_reservation(public.pay_batches.status)
+    AND public.pay_batch_items.item_type IN ('SEGMENT_DELTA','EXPENSE_DELTA','ADJUSTMENT_DELTA','MILEAGE_DELTA')
+    AND public._pay_batch_item_source_reservation_amount_ex_vat(public.pay_batch_items.id) IS NOT NULL
+    AND NOT EXISTS (
+      SELECT 1
+      FROM public.pay_payment_correction_items AS applied_corrections
+      WHERE applied_corrections.pay_batch_item_id = public.pay_batch_items.id
+        AND applied_corrections.status = 'APPLIED'
+        AND applied_corrections.correction_item_kind IN ('PRE_BANK_CANCEL','NO_MONEY_UNWIND','SETTLED_REVERSAL')
+    )
+    AND NOT (
+      upper(btrim(coalesce(public.pay_batch_candidates.settlement_status, ''))) = 'SETTLED'
+      OR public.pay_batch_candidates.settled_at_utc IS NOT NULL
+      OR upper(btrim(coalesce(public.pay_bank_transfers.status, ''))) = 'COMPLETED'
+      OR public.pay_bank_transfers.completed_at_utc IS NOT NULL
+    )
+),
+open_correction_hold_item_ids AS (
+  SELECT DISTINCT
+    public.pay_batch_items.id AS pay_batch_item_id
+  FROM inp AS input_scope
+  JOIN public.pay_batch_items
+    ON public.pay_batch_items.timesheet_id = ANY(input_scope.ts_ids)
+  JOIN public.pay_batch_candidates
+    ON public.pay_batch_candidates.id = public.pay_batch_items.pay_batch_candidate_id
+  JOIN public.pay_payment_correction_requests
+    ON public.pay_payment_correction_requests.pay_batch_id = public.pay_batch_candidates.pay_batch_id
+  LEFT JOIN public.pay_bank_transfers
+    ON public.pay_bank_transfers.id = public.pay_batch_items.pay_bank_transfer_id
+  WHERE public.pay_payment_correction_requests.status IN ('REQUESTED','AWAITING_AUTHORISATION','AUTHORISED','EXPANDED','PROCESSING','BLOCKED')
+    AND public.pay_payment_correction_requests.correction_kind IN ('PRE_BANK_CANCEL','NO_MONEY_UNWIND','MANUAL_EVIDENCE_NO_MONEY')
+    AND public.pay_batch_items.timesheet_id IS NOT NULL
+    AND COALESCE(public.pay_batch_items.is_voided, false) = false
+    AND upper(coalesce(public.pay_batch_items.pay_channel, '')) IN ('PAYE','UMBRELLA')
+    AND public.pay_batch_items.item_type IN ('SEGMENT_DELTA','EXPENSE_DELTA','ADJUSTMENT_DELTA','MILEAGE_DELTA')
+    AND public._pay_batch_item_source_reservation_amount_ex_vat(public.pay_batch_items.id) IS NOT NULL
+    AND NOT EXISTS (
+      SELECT 1
+      FROM public.pay_payment_correction_items AS applied_corrections
+      WHERE applied_corrections.pay_batch_item_id = public.pay_batch_items.id
+        AND applied_corrections.status = 'APPLIED'
+        AND applied_corrections.correction_item_kind IN ('PRE_BANK_CANCEL','NO_MONEY_UNWIND','SETTLED_REVERSAL')
+    )
+    AND NOT (
+      upper(btrim(coalesce(public.pay_batch_candidates.settlement_status, ''))) = 'SETTLED'
+      OR public.pay_batch_candidates.settled_at_utc IS NOT NULL
+      OR upper(btrim(coalesce(public.pay_bank_transfers.status, ''))) = 'COMPLETED'
+      OR public.pay_bank_transfers.completed_at_utc IS NOT NULL
+    )
+    AND (
+      upper(nullif(btrim(coalesce(public.pay_payment_correction_requests.selection_json->>'scope_type', '')), '')) = 'BATCH'
+      OR (
+        upper(nullif(btrim(coalesce(public.pay_payment_correction_requests.selection_json->>'scope_type', '')), '')) = 'CANDIDATES'
+        AND public.pay_batch_candidates.id::text IN (
+          SELECT jsonb_array_elements_text(
+            CASE
+              WHEN jsonb_typeof(public.pay_payment_correction_requests.selection_json->'pay_batch_candidate_ids') = 'array'
+                THEN public.pay_payment_correction_requests.selection_json->'pay_batch_candidate_ids'
+              ELSE '[]'::jsonb
+            END
+          )
+        )
+      )
+      OR (
+        upper(nullif(btrim(coalesce(public.pay_payment_correction_requests.selection_json->>'scope_type', '')), '')) = 'TRANSFER'
+        AND public.pay_batch_items.pay_bank_transfer_id::text IN (
+          SELECT jsonb_array_elements_text(
+            CASE
+              WHEN jsonb_typeof(public.pay_payment_correction_requests.selection_json->'pay_bank_transfer_ids') = 'array'
+                THEN public.pay_payment_correction_requests.selection_json->'pay_bank_transfer_ids'
+              ELSE '[]'::jsonb
+            END
+          )
+        )
+      )
+      OR (
+        upper(nullif(btrim(coalesce(public.pay_payment_correction_requests.selection_json->>'scope_type', '')), '')) = 'UMBRELLA_PAYMENT_GROUP'
+        AND NULLIF(btrim(coalesce(public.pay_payment_correction_requests.selection_json->>'umbrella_id', '')), '') IS NOT NULL
+        AND (
+          public.pay_batch_items.umbrella_id::text = public.pay_payment_correction_requests.selection_json->>'umbrella_id'
+          OR public.pay_bank_transfers.umbrella_id::text = public.pay_payment_correction_requests.selection_json->>'umbrella_id'
+          OR (
+            upper(coalesce(public.pay_bank_transfers.payee_entity_kind, '')) IN ('UMBRELLA','UMBRELLA_COMPANY')
+            AND public.pay_bank_transfers.payee_entity_id::text = public.pay_payment_correction_requests.selection_json->>'umbrella_id'
+          )
+        )
+        AND (
+          NULLIF(btrim(coalesce(public.pay_payment_correction_requests.selection_json->>'transfer_group_key', '')), '') IS NULL
+          OR public.pay_bank_transfers.transfer_group_key = public.pay_payment_correction_requests.selection_json->>'transfer_group_key'
+        )
+        AND (
+          jsonb_typeof(public.pay_payment_correction_requests.selection_json->'pay_bank_transfer_ids') IS DISTINCT FROM 'array'
+          OR public.pay_batch_items.pay_bank_transfer_id::text IN (
+            SELECT jsonb_array_elements_text(public.pay_payment_correction_requests.selection_json->'pay_bank_transfer_ids')
+          )
+        )
+      )
+    )
+),
+unresolved_terminal_failure_hold_item_ids AS (
+  SELECT DISTINCT
+    public.pay_batch_items.id AS pay_batch_item_id
+  FROM inp AS input_scope
+  JOIN public.pay_batch_items
+    ON public.pay_batch_items.timesheet_id = ANY(input_scope.ts_ids)
+  JOIN public.pay_batch_candidates
+    ON public.pay_batch_candidates.id = public.pay_batch_items.pay_batch_candidate_id
+  JOIN public.pay_bank_transfer_events
+    ON public.pay_bank_transfer_events.pay_batch_id = public.pay_batch_candidates.pay_batch_id
+   AND public.pay_bank_transfer_events.pay_bank_transfer_id = public.pay_batch_items.pay_bank_transfer_id
+   AND public.pay_bank_transfer_events.mapping_status = 'MATCHED'
+   AND public.pay_bank_transfer_events.normalised_state IN ('FAILED','DECLINED','REJECTED','CANCELLED')
+  LEFT JOIN public.pay_bank_transfers
+    ON public.pay_bank_transfers.id = public.pay_batch_items.pay_bank_transfer_id
+  WHERE public.pay_batch_items.timesheet_id IS NOT NULL
+    AND COALESCE(public.pay_batch_items.is_voided, false) = false
+    AND upper(coalesce(public.pay_batch_items.pay_channel, '')) IN ('PAYE','UMBRELLA')
+    AND public.pay_batch_items.item_type IN ('SEGMENT_DELTA','EXPENSE_DELTA','ADJUSTMENT_DELTA','MILEAGE_DELTA')
+    AND public._pay_batch_item_source_reservation_amount_ex_vat(public.pay_batch_items.id) IS NOT NULL
+    AND NOT EXISTS (
+      SELECT 1
+      FROM public.pay_payment_correction_items AS applied_corrections
+      WHERE applied_corrections.pay_batch_item_id = public.pay_batch_items.id
+        AND applied_corrections.status = 'APPLIED'
+        AND applied_corrections.correction_item_kind IN ('PRE_BANK_CANCEL','NO_MONEY_UNWIND','SETTLED_REVERSAL')
+    )
+    AND NOT (
+      upper(btrim(coalesce(public.pay_batch_candidates.settlement_status, ''))) = 'SETTLED'
+      OR public.pay_batch_candidates.settled_at_utc IS NOT NULL
+      OR upper(btrim(coalesce(public.pay_bank_transfers.status, ''))) = 'COMPLETED'
+      OR public.pay_bank_transfers.completed_at_utc IS NOT NULL
+    )
+),
+active_item_ids AS (
+  SELECT active_batch_item_ids.pay_batch_item_id
+  FROM active_batch_item_ids
+  UNION
+  SELECT open_correction_hold_item_ids.pay_batch_item_id
+  FROM open_correction_hold_item_ids
+  UNION
+  SELECT unresolved_terminal_failure_hold_item_ids.pay_batch_item_id
+  FROM unresolved_terminal_failure_hold_item_ids
 ),
 reserved_keyed AS (
   SELECT
@@ -381,6 +527,7 @@ SELECT
   reserved_components.amount_inc_vat
 FROM reserved_components;
 $$;
+
 
 
 CREATE OR REPLACE FUNCTION public._pay_outstanding_components(p_timesheet_ids uuid[])
