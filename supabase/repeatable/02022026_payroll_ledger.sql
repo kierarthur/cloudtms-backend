@@ -23829,6 +23829,7 @@ $$;
 
 
 
+
 create or replace function public.pay_unpay_batch(
   p_pay_batch_id uuid,
   p_actor_user_id uuid,
@@ -23867,6 +23868,7 @@ declare
   v_changed_channel_audit_before_json jsonb := null;
   v_changed_channel_audit_after_json jsonb := null;
   v_changed_channel_unwound_ct int := 0;
+  v_correction_flow_guard jsonb := '{}'::jsonb;
 begin
   if p_pay_batch_id is null then
     raise exception 'pay_batch_id is required';
@@ -23875,7 +23877,10 @@ begin
   select
     pb.id,
     pb.status,
-    pb.batch_kind_fixed
+    pb.batch_kind_fixed,
+    pb.execution_commit_state,
+    pb.execution_commit_ref,
+    pb.execution_committed_at_utc
   into v_batch
   from public.pay_batches pb
   where pb.id = p_pay_batch_id
@@ -23885,7 +23890,65 @@ begin
     raise exception 'pay_batch not found';
   end if;
 
-  if v_batch.status in ('SETTLED','PARTIAL') and p_force is distinct from true then
+  if (
+    upper(btrim(coalesce(v_batch.execution_commit_state, 'NOT_SUBMITTED'))) <> 'NOT_SUBMITTED'
+    or nullif(btrim(coalesce(v_batch.execution_commit_ref, '')), '') is not null
+    or v_batch.execution_committed_at_utc is not null
+    or exists (
+      select 1
+      from public.pay_bank_transfers as pbt_guard
+      where pbt_guard.pay_batch_id = p_pay_batch_id
+        and (
+          nullif(btrim(coalesce(pbt_guard.rail_tx_id, '')), '') is not null
+          or nullif(btrim(coalesce(pbt_guard.request_id, '')), '') is not null
+          or nullif(btrim(coalesce(pbt_guard.payment_reference, '')), '') is not null
+          or pbt_guard.completed_at_utc is not null
+          or upper(btrim(coalesce(pbt_guard.status, ''))) in ('COMPLETED','FAILED','DECLINED','REJECTED','CANCELLED','CANCELED','RETURNED','REVERTED')
+          or nullif(btrim(coalesce(pbt_guard.failed_reason, '')), '') is not null
+          or upper(btrim(coalesce(pbt_guard.rail_state, ''))) in ('FAILED','DECLINED','REJECTED','CANCELLED','CANCELED','RETURNED','REVERTED','COMPLETED','SETTLED','PAID','EXECUTED')
+          or lower(btrim(coalesce(pbt_guard.rail_meta_json->>'completed', 'false'))) in ('true','1','yes','y','on')
+          or lower(btrim(coalesce(pbt_guard.rail_meta_json->>'failed', 'false'))) in ('true','1','yes','y','on')
+          or lower(btrim(coalesce(pbt_guard.rail_meta_json->>'declined', 'false'))) in ('true','1','yes','y','on')
+          or lower(btrim(coalesce(pbt_guard.rail_meta_json->>'rejected', 'false'))) in ('true','1','yes','y','on')
+          or lower(btrim(coalesce(pbt_guard.rail_meta_json->>'returned', 'false'))) in ('true','1','yes','y','on')
+        )
+    )
+    or exists (select 1 from public.pay_bank_transfer_events as pbte_guard where pbte_guard.pay_batch_id = p_pay_batch_id)
+    or exists (select 1 from public.timesheet_pay_state_history as tpsh_guard where tpsh_guard.pay_batch_id = p_pay_batch_id)
+    or exists (select 1 from public.pay_payment_correction_requests as ppcr_guard where ppcr_guard.pay_batch_id = p_pay_batch_id and ppcr_guard.status not in ('REJECTED','CANCELLED'))
+    or exists (select 1 from public.pay_payment_correction_items as ppci_guard where ppci_guard.pay_batch_id = p_pay_batch_id)
+  ) then
+    v_correction_flow_guard := jsonb_build_object(
+      'error', 'USE_PAYMENT_CORRECTION_FLOW',
+      'code', 'USE_PAYMENT_CORRECTION_FLOW',
+      'message', 'pay_unpay_batch is restricted to legacy/admin no-bank-evidence batches. Use the payment correction flow for submitted, failed, settled, returned, or corrected batches.',
+      'pay_batch_id', p_pay_batch_id::text,
+      'execution_commit_state', v_batch.execution_commit_state,
+      'execution_commit_ref', v_batch.execution_commit_ref,
+      'execution_committed_at_utc', case when v_batch.execution_committed_at_utc is null then null else v_batch.execution_committed_at_utc::text end
+    );
+
+    begin
+      perform public._imp_debug_audit(
+        p_actor_user_id,
+        'PAY_UNPAY_BATCH_BLOCKED_USE_CORRECTION_FLOW',
+        v_correction_flow_guard,
+        'pay_batch',
+        p_pay_batch_id::text,
+        null::jsonb,
+        null::text,
+        null::text,
+        null::text
+      );
+    exception when others then
+      null;
+    end;
+
+    raise exception '%', v_correction_flow_guard::text;
+  end if;
+
+  if v_batch.status in
+ ('SETTLED','PARTIAL') and p_force is distinct from true then
     raise exception 'UNPAY_REQUIRES_FORCE_FOR_SETTLED_BATCH';
   end if;
 
@@ -24467,6 +24530,7 @@ begin
   );
 end;
 $$;
+
 
 
 create or replace function public.pay_execute_bank(
