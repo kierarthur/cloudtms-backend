@@ -1092,13 +1092,6 @@ where fr.timesheet_id is not null
 $function$;
 
 
-
-
-
-
-
-
-
 CREATE OR REPLACE FUNCTION public._pay_candidate_week_totals(p_candidate_ids uuid[], p_week_start date)
 RETURNS TABLE (
   candidate_id uuid,
@@ -1107,101 +1100,197 @@ RETURNS TABLE (
   loan_repaid_wtd numeric,
   overpay_recovered_wtd numeric
 )
-LANGUAGE sql
-STABLE
+LANGUAGE plpgsql
+VOLATILE
 SECURITY DEFINER
 SET search_path TO 'public'
 AS $function$
-with
-inp as (
-  select
-    coalesce(
-      (select array_agg(distinct x) from unnest(coalesce(p_candidate_ids, array[]::uuid[])) as t(x) where x is not null),
-      array[]::uuid[]
-    ) as cand_ids,
-    p_week_start as week_start,
-    (p_week_start + interval '6 days')::date as week_end
-),
-eligible_batches as (
-  select
-    pb.id as pay_batch_id
-  from inp i
-  join public.pay_batches pb
-    on pb.pay_date >= i.week_start
-   and pb.pay_date <= i.week_end
-  where pb.cancelled_at_utc is null
-    and upper(coalesce(pb.batch_kind_fixed,'')) <> 'LOANS'
-),
-cand_rows as (
-  select
-    pbc.candidate_id,
-    pbc.pay_batch_id,
-    coalesce(pbc.net_bank_amount,0)::numeric as net_bank_amount
-  from inp i
-  join public.pay_batch_candidates pbc
-    on pbc.candidate_id = any(i.cand_ids)
-  join eligible_batches eb
-    on eb.pay_batch_id = pbc.pay_batch_id
-  where pbc.settled_at_utc is not null
-    and upper(coalesce(pbc.settlement_status,'')) = 'SETTLED'
-),
-paid as (
-  select
-    cr.candidate_id,
-    round(sum(cr.net_bank_amount),2) as paid_wtd
-  from cand_rows cr
-  group by cr.candidate_id
-),
-loan_rep as (
-  select
-    pbc.candidate_id,
-    round(sum(abs(coalesce(pbi.amount_ex_vat, pbi.amount_inc_vat, 0))),2) as loan_repaid_wtd
-  from inp i
-  join public.pay_batch_candidates pbc
-    on pbc.candidate_id = any(i.cand_ids)
-  join eligible_batches eb
-    on eb.pay_batch_id = pbc.pay_batch_id
-  join public.pay_batch_items pbi
-    on pbi.pay_batch_candidate_id = pbc.id
-  where pbc.settled_at_utc is not null
-    and upper(coalesce(pbc.settlement_status,'')) = 'SETTLED'
-    and pbi.is_voided = false
-    and pbi.item_type = 'LOAN_REPAYMENT'
-  group by pbc.candidate_id
-),
-overpay_rec as (
-  select
-    pbc.candidate_id,
-    round(sum(abs(coalesce(pbi.amount_ex_vat, pbi.amount_inc_vat, 0))),2) as overpay_recovered_wtd
-  from inp i
-  join public.pay_batch_candidates pbc
-    on pbc.candidate_id = any(i.cand_ids)
-  join eligible_batches eb
-    on eb.pay_batch_id = pbc.pay_batch_id
-  join public.pay_batch_items pbi
-    on pbi.pay_batch_candidate_id = pbc.id
-  where pbc.settled_at_utc is not null
-    and upper(coalesce(pbc.settlement_status,'')) = 'SETTLED'
-    and pbi.is_voided = false
-    and pbi.item_type = 'OVERPAYMENT_RECOVERY'
-  group by pbc.candidate_id
-)
-select
-  c.id as candidate_id,
-  (select i2.week_start from inp i2) as week_start,
-  coalesce(p.paid_wtd,0) as paid_wtd,
-  coalesce(l.loan_repaid_wtd,0) as loan_repaid_wtd,
-  coalesce(o.overpay_recovered_wtd,0) as overpay_recovered_wtd
-from inp i
-join public.candidates c
-  on c.id = any(i.cand_ids)
-left join paid p
-  on p.candidate_id = c.id
-left join loan_rep l
-  on l.candidate_id = c.id
-left join overpay_rec o
-  on o.candidate_id = c.id;
+BEGIN
+  PERFORM public._imp_debug_audit(
+    NULL::uuid,
+    'PAY_CANDIDATE_WEEK_TOTALS_START',
+    jsonb_build_object(
+      'candidate_count', COALESCE(array_length(p_candidate_ids, 1), 0),
+      'week_start', p_week_start
+    ),
+    'pay_candidate_week_totals',
+    COALESCE(p_week_start::text, 'NO_WEEK_START'),
+    NULL::jsonb,
+    NULL::text,
+    NULL::text,
+    NULL::text
+  );
+
+  RETURN QUERY
+  WITH
+  inp AS (
+    SELECT
+      COALESCE(
+        (
+          SELECT array_agg(DISTINCT input_candidate_ids.candidate_id_value)
+          FROM unnest(COALESCE(p_candidate_ids, ARRAY[]::uuid[])) AS input_candidate_ids(candidate_id_value)
+          WHERE input_candidate_ids.candidate_id_value IS NOT NULL
+        ),
+        ARRAY[]::uuid[]
+      ) AS cand_ids,
+      p_week_start AS week_start,
+      (p_week_start + INTERVAL '6 days')::date AS week_end
+  ),
+  eligible_batches AS (
+    SELECT
+      public.pay_batches.id AS pay_batch_id
+    FROM inp
+    JOIN public.pay_batches
+      ON public.pay_batches.pay_date >= inp.week_start
+     AND public.pay_batches.pay_date <= inp.week_end
+    WHERE public.pay_batches.cancelled_at_utc IS NULL
+      AND upper(coalesce(public.pay_batches.batch_kind_fixed,'')) <> 'LOANS'
+  ),
+  settled_candidate_rows AS (
+    SELECT
+      public.pay_batch_candidates.id AS pay_batch_candidate_id,
+      public.pay_batch_candidates.candidate_id,
+      public.pay_batch_candidates.pay_batch_id,
+      COALESCE(public.pay_batch_candidates.net_bank_amount,0)::numeric AS net_bank_amount
+    FROM inp
+    JOIN public.pay_batch_candidates
+      ON public.pay_batch_candidates.candidate_id = ANY(inp.cand_ids)
+    JOIN eligible_batches
+      ON eligible_batches.pay_batch_id = public.pay_batch_candidates.pay_batch_id
+    WHERE public.pay_batch_candidates.settled_at_utc IS NOT NULL
+      AND upper(coalesce(public.pay_batch_candidates.settlement_status,'')) = 'SETTLED'
+  ),
+  corrected_candidate_item_amounts AS (
+    SELECT
+      settled_candidate_rows.pay_batch_candidate_id,
+      round(
+        COALESCE(
+          sum(COALESCE(public.pay_batch_items.amount_inc_vat, public.pay_batch_items.amount_ex_vat, 0)),
+          0
+        ),
+        2
+      ) AS corrected_amount_inc_vat
+    FROM settled_candidate_rows
+    JOIN public.pay_batch_items
+      ON public.pay_batch_items.pay_batch_candidate_id = settled_candidate_rows.pay_batch_candidate_id
+    JOIN public.pay_payment_correction_items
+      ON public.pay_payment_correction_items.pay_batch_item_id = public.pay_batch_items.id
+     AND public.pay_payment_correction_items.status = 'APPLIED'
+     AND public.pay_payment_correction_items.correction_item_kind IN ('PRE_BANK_CANCEL','NO_MONEY_UNWIND','SETTLED_REVERSAL')
+    GROUP BY settled_candidate_rows.pay_batch_candidate_id
+  ),
+  paid AS (
+    SELECT
+      settled_candidate_rows.candidate_id,
+      round(
+        COALESCE(
+          sum(
+            COALESCE(settled_candidate_rows.net_bank_amount,0)
+            - COALESCE(corrected_candidate_item_amounts.corrected_amount_inc_vat,0)
+          ),
+          0
+        ),
+        2
+      ) AS paid_wtd
+    FROM settled_candidate_rows
+    LEFT JOIN corrected_candidate_item_amounts
+      ON corrected_candidate_item_amounts.pay_batch_candidate_id = settled_candidate_rows.pay_batch_candidate_id
+    GROUP BY settled_candidate_rows.candidate_id
+  ),
+  loan_rep AS (
+    SELECT
+      settled_candidate_rows.candidate_id,
+      round(sum(abs(coalesce(public.pay_batch_items.amount_ex_vat, public.pay_batch_items.amount_inc_vat, 0))),2) AS loan_repaid_wtd
+    FROM settled_candidate_rows
+    JOIN public.pay_batch_items
+      ON public.pay_batch_items.pay_batch_candidate_id = settled_candidate_rows.pay_batch_candidate_id
+    WHERE COALESCE(public.pay_batch_items.is_voided, false) = false
+      AND public.pay_batch_items.item_type = 'LOAN_REPAYMENT'
+      AND NOT EXISTS (
+        SELECT 1
+        FROM public.pay_payment_correction_items AS applied_corrections
+        WHERE applied_corrections.pay_batch_item_id = public.pay_batch_items.id
+          AND applied_corrections.status = 'APPLIED'
+          AND applied_corrections.correction_item_kind IN ('PRE_BANK_CANCEL','NO_MONEY_UNWIND','SETTLED_REVERSAL')
+      )
+    GROUP BY settled_candidate_rows.candidate_id
+  ),
+  overpay_rec AS (
+    SELECT
+      settled_candidate_rows.candidate_id,
+      round(sum(abs(coalesce(public.pay_batch_items.amount_ex_vat, public.pay_batch_items.amount_inc_vat, 0))),2) AS overpay_recovered_wtd
+    FROM settled_candidate_rows
+    JOIN public.pay_batch_items
+      ON public.pay_batch_items.pay_batch_candidate_id = settled_candidate_rows.pay_batch_candidate_id
+    WHERE COALESCE(public.pay_batch_items.is_voided, false) = false
+      AND public.pay_batch_items.item_type = 'OVERPAYMENT_RECOVERY'
+      AND NOT EXISTS (
+        SELECT 1
+        FROM public.pay_payment_correction_items AS applied_corrections
+        WHERE applied_corrections.pay_batch_item_id = public.pay_batch_items.id
+          AND applied_corrections.status = 'APPLIED'
+          AND applied_corrections.correction_item_kind IN ('PRE_BANK_CANCEL','NO_MONEY_UNWIND','SETTLED_REVERSAL')
+      )
+    GROUP BY settled_candidate_rows.candidate_id
+  )
+  SELECT
+    public.candidates.id AS candidate_id,
+    (SELECT inp.week_start FROM inp) AS week_start,
+    COALESCE(paid.paid_wtd,0) AS paid_wtd,
+    COALESCE(loan_rep.loan_repaid_wtd,0) AS loan_repaid_wtd,
+    COALESCE(overpay_rec.overpay_recovered_wtd,0) AS overpay_recovered_wtd
+  FROM inp
+  JOIN public.candidates
+    ON public.candidates.id = ANY(inp.cand_ids)
+  LEFT JOIN paid
+    ON paid.candidate_id = public.candidates.id
+  LEFT JOIN loan_rep
+    ON loan_rep.candidate_id = public.candidates.id
+  LEFT JOIN overpay_rec
+    ON overpay_rec.candidate_id = public.candidates.id;
+
+  PERFORM public._imp_debug_audit(
+    NULL::uuid,
+    'PAY_CANDIDATE_WEEK_TOTALS_RESULT',
+    jsonb_build_object(
+      'candidate_count', COALESCE(array_length(p_candidate_ids, 1), 0),
+      'week_start', p_week_start
+    ),
+    'pay_candidate_week_totals',
+    COALESCE(p_week_start::text, 'NO_WEEK_START'),
+    NULL::jsonb,
+    NULL::text,
+    NULL::text,
+    NULL::text
+  );
+
+  RETURN;
+
+EXCEPTION
+  WHEN OTHERS THEN
+    PERFORM public._imp_debug_audit(
+      NULL::uuid,
+      'PAY_CANDIDATE_WEEK_TOTALS_ERROR',
+      jsonb_build_object(
+        'candidate_count', COALESCE(array_length(p_candidate_ids, 1), 0),
+        'week_start', p_week_start,
+        'sqlstate', SQLSTATE,
+        'error_message', SQLERRM
+      ),
+      'pay_candidate_week_totals',
+      COALESCE(p_week_start::text, 'NO_WEEK_START'),
+      NULL::jsonb,
+      NULL::text,
+      NULL::text,
+      NULL::text
+    );
+    RAISE;
+END;
 $function$;
+
+
+
+
 
 DROP FUNCTION IF EXISTS public.pay_create_draft_batches_split(
   date,
