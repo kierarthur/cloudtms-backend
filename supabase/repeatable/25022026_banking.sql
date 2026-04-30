@@ -5447,6 +5447,9 @@ declare
   v_settlement_json jsonb := '[]'::jsonb;
   v_settle_result jsonb := '{}'::jsonb;
   v_settlement_confirmation_json jsonb := '{}'::jsonb;
+  v_worker_communications jsonb := '{}'::jsonb;
+  v_remittance_queue_stage_result jsonb := '{}'::jsonb;
+  v_manual_event_ingest_results jsonb := '[]'::jsonb;
 begin
   if p_pay_batch_id is null then
     raise exception 'pay_settle_manual_confirm: pay_batch_id is required';
@@ -5477,6 +5480,25 @@ begin
   if p_payment_date is null then
     raise exception 'pay_settle_manual_confirm: payment_date is required';
   end if;
+
+  PERFORM public._imp_debug_audit(
+    p_actor_user_id,
+    'PAY_SETTLE_MANUAL_CONFIRM_START',
+    jsonb_build_object(
+      'pay_batch_id', p_pay_batch_id,
+      'scope', v_scope,
+      'settlement_mode', v_settlement_mode,
+      'auth_request_id', p_auth_request_id,
+      'payment_date', p_payment_date::text,
+      'suppress_remittances', coalesce(p_suppress_remittances, false)
+    ),
+    'pay_batches',
+    p_pay_batch_id::text,
+    NULL::jsonb,
+    NULL::text,
+    NULL::text,
+    NULL::text
+  );
 
   select
     pb.id,
@@ -5968,6 +5990,96 @@ begin
 
   v_settle_result := public.pay_settle_rail(p_pay_batch_id, v_settlement_json, p_actor_user_id);
 
+  v_worker_communications := coalesce(v_settle_result->'worker_communications', '{}'::jsonb);
+  v_remittance_queue_stage_result := coalesce(
+    v_settle_result->'remittance_queue_stage_result',
+    v_worker_communications->'remittance_queue_stage_result',
+    v_worker_communications->'result',
+    '{}'::jsonb
+  );
+  v_manual_event_ingest_results := coalesce(v_settle_result#>'{bank_event_ingest,results}', '[]'::jsonb);
+
+  IF jsonb_array_length(coalesce(v_manual_event_ingest_results, '[]'::jsonb)) = 0 THEN
+    SELECT coalesce(
+      jsonb_agg(
+        public.pay_bank_event_ingest(
+          jsonb_build_object(
+            'pay_batch_id', p_pay_batch_id::text,
+            'pay_bank_transfer_id', pbt_manual_event.id::text,
+            'provider_key', coalesce(nullif(btrim(coalesce(v_provider, '')), ''), 'MANUAL'),
+            'provider_event_id', 'manual-confirm:' || p_auth_request_id::text || ':' || pbt_manual_event.id::text,
+            'provider_reference', coalesce(v_bank_confirm_ref, 'external-settlement:' || p_auth_request_id::text, pbt_manual_event.payment_reference, pbt_manual_event.request_id, pbt_manual_event.rail_tx_id),
+            'provider_state', case when v_settlement_mode = 'CSV_SETTLEMENT' then 'CSV_MANUAL_CONFIRM' else 'EXTERNAL_SETTLEMENT_CONFIRM' end,
+            'normalised_state', 'COMPLETED',
+            'event_source', 'MANUAL_CONFIRM',
+            'event_time_utc', v_now::text,
+            'amount', pbt_manual_event.amount,
+            'currency', coalesce(nullif(btrim(coalesce(pbt_manual_event.currency, '')), ''), 'GBP'),
+            'idempotency_key', 'MANUAL_CONFIRM|' || p_pay_batch_id::text || '|' || pbt_manual_event.id::text || '|COMPLETED|' || p_auth_request_id::text,
+            'raw_payload', jsonb_strip_nulls(jsonb_build_object(
+              'source_rpc', 'pay_settle_manual_confirm',
+              'settlement_mode', v_settlement_mode,
+              'bank_confirm_ref', case when v_settlement_mode = 'CSV_SETTLEMENT' then v_bank_confirm_ref else null end,
+              'external_settlement_comment', case when v_settlement_mode = 'EXTERNAL_SETTLEMENT' then v_external_settlement_comment else null end,
+              'payment_date', v_intent_payment_date::text,
+              'auth_request_id', p_auth_request_id::text,
+              'csv_export_hash', case when v_settlement_mode = 'CSV_SETTLEMENT' then v_bank_csv_export_hash else null end
+            ))
+          ),
+          p_actor_user_id
+        )
+        order by pbt_manual_event.id
+      ),
+      '[]'::jsonb
+    )
+    INTO v_manual_event_ingest_results
+    FROM public.pay_bank_transfers AS pbt_manual_event
+    WHERE pbt_manual_event.pay_batch_id = p_pay_batch_id
+      AND (v_scope = 'ALL' OR upper(coalesce(pbt_manual_event.pay_channel, '')) = v_scope)
+      AND (
+        upper(coalesce(pbt_manual_event.status, '')) = 'COMPLETED'
+        OR pbt_manual_event.completed_at_utc IS NOT NULL
+      );
+  END IF;
+
+  IF v_remittance_queue_stage_result IS NULL OR v_remittance_queue_stage_result = '{}'::jsonb THEN
+    v_remittance_queue_stage_result := public.pay_remittance_maybe_queue_for_trigger(
+      p_pay_batch_id => p_pay_batch_id,
+      p_trigger => 'ON_PAYMENT_CONFIRMED',
+      p_scope => 'ALL',
+      p_actor_user_id => p_actor_user_id,
+      p_only_confirmed => true
+    );
+    v_worker_communications := coalesce(v_worker_communications, '{}'::jsonb) || jsonb_build_object(
+      'manual_confirm_fallback_queue_trigger_used', true,
+      'remittance_queue_stage_result', v_remittance_queue_stage_result,
+      'result', v_remittance_queue_stage_result,
+      'dispatch_required', lower(btrim(coalesce(v_remittance_queue_stage_result->>'dispatch_required', 'false'))) in ('true','1','yes','y','on')
+    );
+  END IF;
+
+  PERFORM public._imp_debug_audit(
+    p_actor_user_id,
+    'PAY_SETTLE_MANUAL_CONFIRM_RESULT',
+    jsonb_build_object(
+      'pay_batch_id', p_pay_batch_id,
+      'scope', v_scope,
+      'settlement_mode', v_settlement_mode,
+      'auth_request_id', p_auth_request_id,
+      'settlement_json_count', jsonb_array_length(coalesce(v_settlement_json, '[]'::jsonb)),
+      'reservations_committed_count', v_reservations_committed_count,
+      'reservations_committed_amount', coalesce(v_reservations_committed_amount, 0),
+      'manual_event_ingest_count', jsonb_array_length(coalesce(v_manual_event_ingest_results, '[]'::jsonb)),
+      'remittance_queue_stage_result', v_remittance_queue_stage_result
+    ),
+    'pay_batches',
+    p_pay_batch_id::text,
+    NULL::jsonb,
+    NULL::text,
+    NULL::text,
+    NULL::text
+  );
+
   return coalesce(v_settle_result, '{}'::jsonb)
     || jsonb_build_object(
       'authoritative_payment_date', v_intent_payment_date::text,
@@ -5977,12 +6089,36 @@ begin
       'execution_commit_state', (select pb3.execution_commit_state from public.pay_batches pb3 where pb3.id = p_pay_batch_id),
       'execution_commit_ref', (select pb3.execution_commit_ref from public.pay_batches pb3 where pb3.id = p_pay_batch_id),
       'execution_committed_at_utc', (select case when pb3.execution_committed_at_utc is null then null else pb3.execution_committed_at_utc::text end from public.pay_batches pb3 where pb3.id = p_pay_batch_id),
+      'worker_communications', v_worker_communications,
+      'remittance_queue_stage_result', v_remittance_queue_stage_result,
+      'manual_event_ingest_results', v_manual_event_ingest_results,
+      'bank_event_ingest', coalesce(v_settle_result->'bank_event_ingest', jsonb_build_object('count', jsonb_array_length(v_manual_event_ingest_results), 'results', v_manual_event_ingest_results)),
       'reservations_committed_count', v_reservations_committed_count,
       'reservations_committed_amount', coalesce(v_reservations_committed_amount,0)
     );
+EXCEPTION
+  WHEN OTHERS THEN
+    PERFORM public._imp_debug_audit(
+      p_actor_user_id,
+      'PAY_SETTLE_MANUAL_CONFIRM_ERROR',
+      jsonb_build_object(
+        'pay_batch_id', p_pay_batch_id,
+        'scope', v_scope,
+        'settlement_mode', v_settlement_mode,
+        'auth_request_id', p_auth_request_id,
+        'sqlstate', SQLSTATE,
+        'error_message', SQLERRM
+      ),
+      'pay_batches',
+      COALESCE(p_pay_batch_id::text, 'NO_BATCH_ID'),
+      NULL::jsonb,
+      NULL::text,
+      NULL::text,
+      NULL::text
+    );
+    RAISE;
 end;
 $$;
-
 
 
 
@@ -12870,6 +13006,8 @@ $$;
 
 drop function if exists public.pay_batch_auth_start(uuid, text, timestamptz, text, jsonb, uuid, text);
 
+
+
 create or replace function public.pay_batch_auth_start(
   p_pay_batch_id uuid,
   p_schedule_kind text,
@@ -12933,6 +13071,8 @@ declare
 
   v_schedule_result jsonb := '{}'::jsonb;
   v_worker_communications jsonb := '{}'::jsonb;
+  v_remittance_queue_stage_result jsonb := '{}'::jsonb;
+  v_payment_remittance_send_timing text := 'ON_EXECUTION';
   v_execution_commit_state text := 'NOT_SUBMITTED';
   v_execution_commit_ref text := null;
   v_execution_committed_at_utc timestamptz := null;
@@ -12994,13 +13134,19 @@ begin
     raise exception 'pay_batch_auth_start: actor_user does not have payment golden key';
   end if;
 
-  select sd.payment_authoriser_quantity
+  select
+    sd.payment_authoriser_quantity,
+    sd.payment_remittance_send_timing
   into v_cfg
   from public.settings_defaults sd
   where sd.id = 1
   limit 1;
 
   v_req_qty := greatest(1, coalesce(v_cfg.payment_authoriser_quantity, 1));
+  v_payment_remittance_send_timing := upper(btrim(coalesce(v_cfg.payment_remittance_send_timing, 'ON_EXECUTION')));
+  if v_payment_remittance_send_timing not in ('ON_EXECUTION', 'ON_PAYMENT_CONFIRMED') then
+    v_payment_remittance_send_timing := 'ON_EXECUTION';
+  end if;
 
   select
     pb.id,
@@ -13450,7 +13596,30 @@ begin
         'auth_request_id', v_existing_id::text,
         'auth_state', 'AWAITING',
         'existing_auth_request', true,
-        'execution_intent_json', v_existing_execution_intent
+        'execution_intent_json', v_existing_execution_intent,
+        'payment_remittance_send_timing', v_payment_remittance_send_timing,
+        'worker_communications', jsonb_build_object(
+          'automatic_commit_stage', false,
+          'message_kind', case when v_batch_kind_fixed = 'LOANS' then 'PAYOUT_NOTICE' else 'REMITTANCE' end,
+          'trigger_status', 'AWAITING_AUTHORISATION',
+          'dispatch_required', false,
+          'remittance_queue_stage_result', jsonb_build_object(
+            'ok', true,
+            'queued', false,
+            'dispatch_required', false,
+            'trigger_status', 'AWAITING_AUTHORISATION',
+            'configured_timing', v_payment_remittance_send_timing,
+            'message', 'Existing authorisation request is still awaiting final approval; no remittance or payout notice queueing is performed.'
+          )
+        ),
+        'remittance_queue_stage_result', jsonb_build_object(
+          'ok', true,
+          'queued', false,
+          'dispatch_required', false,
+          'trigger_status', 'AWAITING_AUTHORISATION',
+          'configured_timing', v_payment_remittance_send_timing,
+          'message', 'Existing authorisation request is still awaiting final approval; no remittance or payout notice queueing is performed.'
+        )
       );
     end if;
 
@@ -13485,6 +13654,12 @@ begin
       );
 
       v_worker_communications := coalesce(v_schedule_result->'worker_communications', '{}'::jsonb);
+      v_remittance_queue_stage_result := coalesce(
+        v_schedule_result->'remittance_queue_stage_result',
+        v_schedule_result#>'{worker_communications,remittance_queue_stage_result}',
+        v_schedule_result#>'{worker_communications,result}',
+        '{}'::jsonb
+      );
     else
     -- v_provider was normalised and validated before this scheduling branch.
 
@@ -13810,6 +13985,37 @@ begin
     );
   end if;
 
+  if v_remittance_queue_stage_result is null or v_remittance_queue_stage_result = '{}'::jsonb then
+    if v_use_golden = true or v_req_qty <= 1 then
+      v_remittance_queue_stage_result := jsonb_build_object(
+        'ok', true,
+        'queued', false,
+        'deferred', true,
+        'dispatch_required', false,
+        'trigger_status', 'AUTHORISED_AWAITING_PAYMENT_CONFIRMATION',
+        'configured_timing', v_payment_remittance_send_timing,
+        'message', 'Payment authorisation is complete, but no execution-stage remittance or payout notice was queued by this path; confirmation-stage queueing remains controlled by the timing helper.'
+      );
+    else
+      v_remittance_queue_stage_result := jsonb_build_object(
+        'ok', true,
+        'queued', false,
+        'deferred', true,
+        'dispatch_required', false,
+        'trigger_status', 'AWAITING_AUTHORISATION',
+        'configured_timing', v_payment_remittance_send_timing,
+        'message', 'Payment authorisation is awaiting final approval; remittance and payout notice queueing is deferred.'
+      );
+    end if;
+  end if;
+
+  v_worker_communications := coalesce(v_worker_communications, '{}'::jsonb) || jsonb_build_object(
+    'trigger_status', coalesce(nullif(btrim(coalesce(v_remittance_queue_stage_result->>'trigger_status', '')), ''), nullif(btrim(coalesce(v_worker_communications->>'trigger_status', '')), '')),
+    'remittance_queue_stage_result', v_remittance_queue_stage_result,
+    'configured_timing', v_payment_remittance_send_timing,
+    'dispatch_required', lower(btrim(coalesce(v_remittance_queue_stage_result->>'dispatch_required', 'false'))) in ('true','1','yes','y','on')
+  );
+
   select
     pb2.id,
     pb2.schedule_kind,
@@ -13946,7 +14152,9 @@ begin
       'execution_mode', v_execution_mode,
       'execution_intent_json', v_execution_intent,
       'suppress_remittances', v_suppress_remittances,
-      'worker_communications', v_worker_communications
+      'payment_remittance_send_timing', v_payment_remittance_send_timing,
+      'worker_communications', v_worker_communications,
+      'remittance_queue_stage_result', v_remittance_queue_stage_result
     );
   else
     update public.pay_batches pb5
@@ -13998,11 +14206,14 @@ begin
       'execution_mode', v_execution_mode,
       'execution_intent_json', v_execution_intent,
       'suppress_remittances', v_suppress_remittances,
-      'worker_communications', v_worker_communications
+      'payment_remittance_send_timing', v_payment_remittance_send_timing,
+      'worker_communications', v_worker_communications,
+      'remittance_queue_stage_result', v_remittance_queue_stage_result
     );
   end if;
 end;
 $$;
+
 
 
 create or replace function public.pay_batch_auth_apply_action(
@@ -14030,6 +14241,15 @@ declare
   v_new_auth_state text := null;
   v_new_batch_status text := null;
   v_execution_intent_json jsonb := '{}'::jsonb;
+
+  v_schedule_kind text := null;
+  v_scheduled_at_utc timestamptz := null;
+  v_funding_account_ref text := null;
+  v_funds_warning_hours_json jsonb := null;
+  v_schedule_result jsonb := '{}'::jsonb;
+  v_worker_communications jsonb := '{}'::jsonb;
+  v_remittance_queue_stage_result jsonb := '{}'::jsonb;
+  v_remittance_send_timing text := 'ON_EXECUTION';
 begin
   if p_auth_request_id is null then
     raise exception 'pay_batch_auth_apply_action: auth_request_id is required';
@@ -14047,6 +14267,10 @@ begin
     pbar.pay_batch_id,
     pbar.state,
     pbar.required_quantity,
+    pbar.schedule_kind,
+    pbar.scheduled_at_utc,
+    pbar.funding_account_ref,
+    pbar.funds_warning_hours_json,
     pbar.execution_intent_json
   into v_req
   from public.pay_batch_auth_requests pbar
@@ -14065,6 +14289,17 @@ begin
     v_execution_intent_json := v_req.execution_intent_json;
   else
     v_execution_intent_json := '{}'::jsonb;
+  end if;
+
+  select coalesce(nullif(btrim(coalesce(sd.payment_remittance_send_timing, '')), ''), 'ON_EXECUTION')
+  into v_remittance_send_timing
+  from public.settings_defaults sd
+  where sd.id = 1
+  limit 1;
+
+  v_remittance_send_timing := coalesce(nullif(btrim(coalesce(v_remittance_send_timing, '')), ''), 'ON_EXECUTION');
+  if v_remittance_send_timing not in ('ON_EXECUTION', 'ON_PAYMENT_CONFIRMED') then
+    v_remittance_send_timing := 'ON_EXECUTION';
   end if;
 
   select
@@ -14092,6 +14327,24 @@ begin
   if v_action = 'USE_GOLDEN_KEY' and coalesce(v_user.payment_golden_key,false) = false then
     raise exception 'pay_batch_auth_apply_action: actor_user does not have payment golden key';
   end if;
+
+  perform public._imp_debug_audit(
+    p_actor_user_id,
+    'PAY_BATCH_AUTH_APPLY_ACTION_START',
+    jsonb_build_object(
+      'auth_request_id', p_auth_request_id::text,
+      'pay_batch_id', v_req.pay_batch_id::text,
+      'action', v_action,
+      'required_quantity', v_req.required_quantity,
+      'payment_remittance_send_timing', v_remittance_send_timing
+    ),
+    'pay_batch_auth_requests',
+    p_auth_request_id::text,
+    null::jsonb,
+    null::text,
+    null::text,
+    null::text
+  );
 
   insert into public.pay_batch_auth_actions(
     auth_request_id,
@@ -14143,6 +14396,39 @@ begin
       execution_intent_json = null
     where pb2.id = v_req.pay_batch_id;
 
+    v_worker_communications := jsonb_build_object(
+      'automatic_commit_stage', false,
+      'message_kind', 'NONE',
+      'trigger_status', 'AUTH_REJECTED_NO_QUEUE',
+      'dispatch_required', false,
+      'error', null,
+      'result', jsonb_build_object(
+        'ok', true,
+        'queued', false,
+        'deferred', false,
+        'dispatch_required', false,
+        'trigger_status', 'AUTH_REJECTED_NO_QUEUE',
+        'configured_timing', v_remittance_send_timing
+      )
+    );
+    v_remittance_queue_stage_result := v_worker_communications->'result';
+
+    perform public._imp_debug_audit(
+      p_actor_user_id,
+      'PAY_BATCH_AUTH_APPLY_ACTION_REJECTED',
+      jsonb_build_object(
+        'auth_request_id', p_auth_request_id::text,
+        'pay_batch_id', v_req.pay_batch_id::text,
+        'worker_communications', v_worker_communications
+      ),
+      'pay_batch_auth_requests',
+      p_auth_request_id::text,
+      null::jsonb,
+      null::text,
+      null::text,
+      null::text
+    );
+
     return jsonb_build_object(
       'ok', true,
       'pay_batch_id', v_req.pay_batch_id::text,
@@ -14152,9 +14438,12 @@ begin
       'required_quantity', v_req.required_quantity,
       'approved_count', 0,
       'became_authorised', false,
+      'payment_remittance_send_timing', v_remittance_send_timing,
       'execution_intent_json', v_execution_intent_json,
       'execution_mode', v_execution_intent_json->>'execution_mode',
-      'suppress_remittances', lower(btrim(coalesce(v_execution_intent_json->>'suppress_remittances','false'))) in ('true','1','yes','y','on')
+      'suppress_remittances', lower(btrim(coalesce(v_execution_intent_json->>'suppress_remittances','false'))) in ('true','1','yes','y','on'),
+      'worker_communications', v_worker_communications,
+      'remittance_queue_stage_result', v_remittance_queue_stage_result
     );
   end if;
 
@@ -14167,6 +14456,26 @@ begin
   if v_action = 'USE_GOLDEN_KEY' or v_approved_count >= greatest(1, coalesce(v_req.required_quantity,1)) then
     v_became_authorised := true;
 
+    v_schedule_kind := upper(btrim(coalesce(
+      nullif(v_req.schedule_kind, ''),
+      nullif(v_execution_intent_json->>'schedule_kind', ''),
+      'IMMEDIATE'
+    )));
+    if v_schedule_kind not in ('IMMEDIATE','SCHEDULED') then
+      raise exception 'pay_batch_auth_apply_action: invalid stored schedule_kind %', v_schedule_kind;
+    end if;
+
+    v_scheduled_at_utc := v_req.scheduled_at_utc;
+    if v_scheduled_at_utc is null and nullif(btrim(coalesce(v_execution_intent_json->>'scheduled_at_utc', '')), '') is not null then
+      v_scheduled_at_utc := (v_execution_intent_json->>'scheduled_at_utc')::timestamptz;
+    end if;
+    if v_schedule_kind = 'SCHEDULED' and v_scheduled_at_utc is null then
+      raise exception 'pay_batch_auth_apply_action: stored scheduled_at_utc is required for SCHEDULED authorisation';
+    end if;
+
+    v_funding_account_ref := v_req.funding_account_ref;
+    v_funds_warning_hours_json := v_req.funds_warning_hours_json;
+
     update public.pay_batch_auth_requests pbar3
     set
       state = 'AUTHORISED',
@@ -14177,16 +14486,45 @@ begin
       execution_intent_json = v_execution_intent_json
     where pbar3.id = p_auth_request_id;
 
-    update public.pay_batches pb4
-    set
-      status = 'AUTHORISED_FOR_PAYMENT',
-      execution_intent_json = v_execution_intent_json
-    where pb4.id = v_req.pay_batch_id;
-
     update public.pay_batch_auth_tokens pbat3
     set used_at_utc = v_now
     where pbat3.auth_request_id = p_auth_request_id
       and pbat3.used_at_utc is null;
+
+    update public.pay_batches pb_before_schedule
+    set
+      execution_intent_json = v_execution_intent_json,
+      execution_commit_state = coalesce(nullif(btrim(coalesce(pb_before_schedule.execution_commit_state, '')), ''), 'NOT_SUBMITTED')
+    where pb_before_schedule.id = v_req.pay_batch_id;
+
+    v_schedule_result := public.pay_batch_schedule(
+      v_req.pay_batch_id,
+      v_schedule_kind,
+      v_scheduled_at_utc,
+      v_funding_account_ref,
+      v_funds_warning_hours_json,
+      p_actor_user_id
+    );
+
+    update public.pay_batches pb4
+    set
+      status = 'AUTHORISED_FOR_PAYMENT',
+      execution_intent_json = v_execution_intent_json,
+      authoritative_payment_date = coalesce(
+        pb4.authoritative_payment_date,
+        (pb4.scheduled_at_utc at time zone 'Europe/London')::date,
+        pb4.pay_date
+      ),
+      authoritative_payment_date_source = coalesce(pb4.authoritative_payment_date_source, 'AUTH_APPLY_SCHEDULED_AT_UTC')
+    where pb4.id = v_req.pay_batch_id;
+
+    v_worker_communications := coalesce(v_schedule_result->'worker_communications', '{}'::jsonb);
+    v_remittance_queue_stage_result := coalesce(
+      v_schedule_result->'remittance_queue_stage_result',
+      v_worker_communications->'remittance_queue_stage_result',
+      v_worker_communications->'result',
+      '{}'::jsonb
+    );
 
     v_new_auth_state := 'AUTHORISED';
     v_new_batch_status := 'AUTHORISED_FOR_PAYMENT';
@@ -14201,7 +14539,45 @@ begin
     where pb5.id = v_req.pay_batch_id;
 
     v_new_batch_status := 'AWAITING_AUTHORISATION';
+    v_worker_communications := jsonb_build_object(
+      'automatic_commit_stage', false,
+      'message_kind', case when upper(btrim(coalesce(v_execution_intent_json->>'execution_mode', 'STANDARD_BANK'))) in ('CSV_SETTLEMENT','EXTERNAL_SETTLEMENT') then 'PAYOUT_NOTICE_AND_REMITTANCE' else 'REMITTANCE' end,
+      'trigger_status', 'AWAITING_AUTHORISATION',
+      'dispatch_required', false,
+      'error', null,
+      'result', jsonb_build_object(
+        'ok', true,
+        'queued', false,
+        'deferred', true,
+        'dispatch_required', false,
+        'trigger_status', 'AWAITING_AUTHORISATION',
+        'configured_timing', v_remittance_send_timing
+      )
+    );
+    v_remittance_queue_stage_result := v_worker_communications->'result';
   end if;
+
+  perform public._imp_debug_audit(
+    p_actor_user_id,
+    'PAY_BATCH_AUTH_APPLY_ACTION_RESULT',
+    jsonb_build_object(
+      'auth_request_id', p_auth_request_id::text,
+      'pay_batch_id', v_req.pay_batch_id::text,
+      'action', v_action,
+      'approved_count', v_approved_count,
+      'became_authorised', v_became_authorised,
+      'auth_state', v_new_auth_state,
+      'batch_status', v_new_batch_status,
+      'schedule_result', v_schedule_result,
+      'worker_communications', v_worker_communications
+    ),
+    'pay_batch_auth_requests',
+    p_auth_request_id::text,
+    null::jsonb,
+    null::text,
+    null::text,
+    null::text
+  );
 
   return jsonb_build_object(
     'ok', true,
@@ -14212,12 +14588,36 @@ begin
     'required_quantity', v_req.required_quantity,
     'approved_count', v_approved_count,
     'became_authorised', v_became_authorised,
+    'payment_remittance_send_timing', v_remittance_send_timing,
     'execution_intent_json', v_execution_intent_json,
     'execution_mode', v_execution_intent_json->>'execution_mode',
-    'suppress_remittances', lower(btrim(coalesce(v_execution_intent_json->>'suppress_remittances','false'))) in ('true','1','yes','y','on')
+    'suppress_remittances', lower(btrim(coalesce(v_execution_intent_json->>'suppress_remittances','false'))) in ('true','1','yes','y','on'),
+    'schedule_result', v_schedule_result,
+    'worker_communications', v_worker_communications,
+    'remittance_queue_stage_result', v_remittance_queue_stage_result
   );
+exception
+  when others then
+    perform public._imp_debug_audit(
+      p_actor_user_id,
+      'PAY_BATCH_AUTH_APPLY_ACTION_ERROR',
+      jsonb_build_object(
+        'auth_request_id', p_auth_request_id::text,
+        'action', v_action,
+        'sqlstate', SQLSTATE,
+        'error_message', SQLERRM
+      ),
+      'pay_batch_auth_requests',
+      coalesce(p_auth_request_id::text, 'NO_AUTH_REQUEST_ID'),
+      null::jsonb,
+      null::text,
+      null::text,
+      null::text
+    );
+    raise;
 end;
 $$;
+
 
 
 
