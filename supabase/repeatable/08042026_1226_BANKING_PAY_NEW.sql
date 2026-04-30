@@ -12951,6 +12951,7 @@ end;
 $function$;
 
 
+
 CREATE OR REPLACE FUNCTION public.pay_preview_candidate_build_finance_case_baseline(
   p_context_json jsonb,
   p_candidate_id uuid
@@ -12989,6 +12990,22 @@ declare
   v_requires_payee_map boolean := false;
   v_paye_guardrails jsonb := '{}'::jsonb;
 begin
+  PERFORM public._imp_debug_audit(
+    v_actor_user_id,
+    'PAY_PREVIEW_FINANCE_CASE_BASELINE_START',
+    jsonb_build_object(
+      'candidate_id', p_candidate_id,
+      'context_pay_date', p_context_json->>'pay_date',
+      'context_pay_week_start', p_context_json->>'pay_week_start'
+    ),
+    'pay_preview_finance',
+    COALESCE(p_candidate_id::text, 'NO_CANDIDATE_ID'),
+    NULL::jsonb,
+    NULL::text,
+    NULL::text,
+    NULL::text
+  );
+
   if jsonb_typeof(v_context_json) <> 'object' then
     raise exception 'p_context_json must be a JSON object';
   end if;
@@ -13086,16 +13103,41 @@ begin
           on pbc.id = pbi.pay_batch_candidate_id
         join public.pay_batches pb
           on pb.id = pbc.pay_batch_id
-        where pbi.is_voided = false
+        left join public.pay_bank_transfers pbt
+          on pbt.id = pbi.pay_bank_transfer_id
+        where coalesce(pbi.is_voided, false) = false
           and pbi.source_ref ~ '^advance:[0-9a-fA-F-]{36}$'
           and pbi.item_type in ('LOAN_REPAYMENT','OVERPAYMENT_RECOVERY','MANUAL_DEBT_RECOVERY')
           and pbi.repayment_week_start = v_week_start
           and upper(coalesce(pb.status::text,'')) <> 'CANCELLED'
+          and not exists (
+            select 1
+            from public.pay_payment_correction_items pci_repaid_wtd
+            where pci_repaid_wtd.pay_batch_item_id = pbi.id
+              and pci_repaid_wtd.status = 'APPLIED'
+              and pci_repaid_wtd.correction_item_kind in ('PRE_BANK_CANCEL','NO_MONEY_UNWIND','SETTLED_REVERSAL')
+          )
+          and (
+            upper(btrim(coalesce(pbc.settlement_status, ''))) = 'SETTLED'
+            or pbc.settled_at_utc is not null
+            or upper(btrim(coalesce(pbt.status, ''))) = 'COMPLETED'
+            or pbt.completed_at_utc is not null
+            or exists (
+              select 1
+              from public.pay_advance_reservations par_repaid_wtd
+              where par_repaid_wtd.pay_batch_item_id = pbi.id
+                and (
+                  upper(btrim(coalesce(par_repaid_wtd.status, ''))) = 'SETTLED'
+                  or par_repaid_wtd.settled_at_utc is not null
+                )
+            )
+          )
         group by nullif(btrim(split_part(coalesce(pbi.source_ref,''), ':', 2)),'')::uuid
-  
+
   ;
 
-  create temporary table finance_case_recovery_rows_base on commit drop as
+
+create temporary table finance_case_recovery_rows_base on commit drop as
         select
           vfcr.finance_case_id,
           vfcr.candidate_id,
@@ -14847,13 +14889,51 @@ begin
   
   ;
 
+  PERFORM public._imp_debug_audit(
+    v_actor_user_id,
+    'PAY_PREVIEW_FINANCE_CASE_BASELINE_RESULT',
+    jsonb_build_object(
+      'candidate_id', v_candidate_id,
+      'finance_case_component_count', (select count(*)::int from finance_case_component_review_rows_effective),
+      'finance_case_resolution_count', (select count(*)::int from finance_case_resolution_rollup),
+      'finance_case_repaid_wtd_count', (select count(*)::int from finance_case_repaid_wtd)
+    ),
+    'pay_preview_finance',
+    COALESCE(v_candidate_id::text, 'NO_CANDIDATE_ID'),
+    NULL::jsonb,
+    NULL::text,
+    NULL::text,
+    NULL::text
+  );
+
   return jsonb_build_object(
     'candidate_id', v_candidate_id::text,
     'finance_case_component_count', (select count(*)::int from finance_case_component_review_rows_effective),
     'finance_case_resolution_count', (select count(*)::int from finance_case_resolution_rollup)
   );
+
+exception
+  when others then
+    PERFORM public._imp_debug_audit(
+      v_actor_user_id,
+      'PAY_PREVIEW_FINANCE_CASE_BASELINE_ERROR',
+      jsonb_build_object(
+        'candidate_id', p_candidate_id,
+        'sqlstate', SQLSTATE,
+        'error_message', SQLERRM
+      ),
+      'pay_preview_finance',
+      COALESCE(p_candidate_id::text, 'NO_CANDIDATE_ID'),
+      NULL::jsonb,
+      NULL::text,
+      NULL::text,
+      NULL::text
+    );
+    RAISE;
 end;
 $function$;
+
+
 
 CREATE OR REPLACE FUNCTION public.pay_preview_candidate_build_payee_baseline(
   p_context_json jsonb,
