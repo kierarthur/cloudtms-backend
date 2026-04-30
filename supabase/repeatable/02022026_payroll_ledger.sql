@@ -24929,7 +24929,6 @@ begin
 end;
 $$;
 
-
 create or replace function public.pay_execute_bank(
   p_pay_batch_id uuid,
   p_pay_channel_scope text,
@@ -24963,6 +24962,7 @@ declare
   v_auto_execute boolean := false;
 
   v_transfers jsonb := '[]'::jsonb;
+  v_provider_submission_event_payloads jsonb := '[]'::jsonb;
   v_blocked_reasons jsonb := '[]'::jsonb;
 
   v_fresh jsonb := null;
@@ -26607,6 +26607,62 @@ begin
       or (v_do_loans = true and pbt.pay_channel = 'PAYE')
     );
 
+
+  select coalesce(
+    jsonb_agg(
+      jsonb_strip_nulls(
+        jsonb_build_object(
+          'pay_batch_id', p_pay_batch_id::text,
+          'pay_bank_transfer_id', pbt_event.id::text,
+          'provider_key', v_provider,
+          'provider_reference', coalesce(
+            nullif(btrim(coalesce(pbt_event.rail_tx_id, '')), ''),
+            nullif(btrim(coalesce(pbt_event.request_id, '')), ''),
+            nullif(btrim(coalesce(pbt_event.payment_reference, '')), '')
+          ),
+          'provider_state', coalesce(
+            nullif(btrim(coalesce(pbt_event.rail_state, '')), ''),
+            nullif(btrim(coalesce(pbt_event.status, '')), '')
+          ),
+          'normalised_state', case
+            when upper(btrim(coalesce(pbt_event.status, ''))) = 'COMPLETED'
+              or pbt_event.completed_at_utc is not null then 'COMPLETED'
+            when upper(btrim(coalesce(pbt_event.status, ''))) in ('FAILED','DECLINED','REJECTED','CANCELLED','CANCELED') then 'FAILED'
+            when upper(btrim(coalesce(pbt_event.status, ''))) in ('RETURNED','REVERTED') then 'RETURNED'
+            when upper(btrim(coalesce(pbt_event.status, ''))) = 'BLOCKED' then 'UNKNOWN'
+            else 'PENDING'
+          end,
+          'event_source', 'PROVIDER_POLL',
+          'event_time_utc', now()::text,
+          'amount', pbt_event.amount,
+          'currency', coalesce(nullif(btrim(coalesce(pbt_event.currency, '')), ''), 'GBP'),
+          'raw_payload', jsonb_build_object(
+            'source_rpc', 'pay_execute_bank',
+            'transfer_group_key', pbt_event.transfer_group_key,
+            'grouping_mode_used', pbt_event.grouping_mode_used,
+            'pay_channel', pbt_event.pay_channel,
+            'request_id', pbt_event.request_id,
+            'payment_reference', pbt_event.payment_reference,
+            'rail_tx_id', pbt_event.rail_tx_id,
+            'rail_state', pbt_event.rail_state,
+            'rail_meta_json', coalesce(pbt_event.rail_meta_json, '{}'::jsonb)
+          )
+        )
+      )
+      order by pbt_event.pay_channel, pbt_event.week_ending_bucket nulls last, pbt_event.amount desc, pbt_event.id
+    ),
+    '[]'::jsonb
+  )
+  into v_provider_submission_event_payloads
+  from public.pay_bank_transfers pbt_event
+  where pbt_event.pay_batch_id = p_pay_batch_id
+    and (
+      (v_do_paye = true and pbt_event.pay_channel = 'PAYE')
+      or (v_do_umbrella = true and pbt_event.pay_channel = 'UMBRELLA')
+      or (v_do_loans = true and pbt_event.pay_channel = 'PAYE')
+    )
+    and upper(coalesce(pbt_event.status, '')) <> 'BLOCKED';
+
   begin
     perform public._imp_debug_audit(
       p_actor_user_id,
@@ -26647,10 +26703,13 @@ begin
     'execution_commit_ref', (select pb4.execution_commit_ref from public.pay_batches pb4 where pb4.id = p_pay_batch_id),
     'execution_committed_at_utc', (select case when pb4.execution_committed_at_utc is null then null else pb4.execution_committed_at_utc::text end from public.pay_batches pb4 where pb4.id = p_pay_batch_id),
     'blocked', v_blocked_reasons,
+    'provider_submission_events_insertable', true,
+    'provider_submission_event_payloads', coalesce(v_provider_submission_event_payloads, '[]'::jsonb),
     'transfers', v_transfers
   );
 end;
 $$;
+
 
 
 CREATE OR REPLACE FUNCTION public.pay_sync_overpayments_from_preview(
