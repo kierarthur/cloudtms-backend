@@ -7854,9 +7854,6 @@ END;
 $function$;
 
 
-
-
-
 CREATE OR REPLACE FUNCTION public._pay_active_settled_components(
   p_timesheet_ids uuid[]
 )
@@ -7926,16 +7923,12 @@ active_components AS (
     economic_components.key_value AS component_key_value,
     economic_components.source_amount_ex_vat AS component_amount_ex_vat,
     public.pay_batch_items.amount_inc_vat AS component_amount_inc_vat
-  FROM public._pay_batch_item_economic_components(
+  FROM active_item_ids
+  JOIN LATERAL public._pay_batch_item_economic_components(
     NULL::uuid,
-    (
-      SELECT COALESCE(
-        array_agg(active_item_ids.pay_batch_item_id ORDER BY active_item_ids.pay_batch_item_id),
-        ARRAY[]::uuid[]
-      )
-      FROM active_item_ids
-    )
+    ARRAY[active_item_ids.pay_batch_item_id]::uuid[]
   ) AS economic_components
+    ON economic_components.pay_batch_item_id = active_item_ids.pay_batch_item_id
   JOIN public.pay_batch_items
     ON public.pay_batch_items.id = economic_components.pay_batch_item_id
   WHERE economic_components.timesheet_id IS NOT NULL
@@ -7994,6 +7987,7 @@ ORDER BY
   active_component_totals.key_type,
   active_component_totals.key_value;
 $function$;
+
 
 
 
