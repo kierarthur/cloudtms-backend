@@ -1092,6 +1092,7 @@ where fr.timesheet_id is not null
 $function$;
 
 
+
 CREATE OR REPLACE FUNCTION public._pay_candidate_week_totals(p_candidate_ids uuid[], p_week_start date)
 RETURNS TABLE (
   candidate_id uuid,
@@ -1287,8 +1288,6 @@ EXCEPTION
     RAISE;
 END;
 $function$;
-
-
 
 
 
