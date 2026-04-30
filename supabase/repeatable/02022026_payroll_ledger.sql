@@ -173,7 +173,6 @@ $$;
 
 
 
-
 create or replace function public.pay_batch_cancel(
   p_pay_batch_id uuid,
   p_actor_user_id uuid,
@@ -1119,7 +1118,6 @@ begin
   );
 end;
 $$;
-
 
 
 
