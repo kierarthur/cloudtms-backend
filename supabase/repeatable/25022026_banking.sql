@@ -1290,7 +1290,6 @@ END;
 $function$;
 
 
-
 DROP FUNCTION IF EXISTS public.pay_create_draft_batches_split(
   date,
   date,
