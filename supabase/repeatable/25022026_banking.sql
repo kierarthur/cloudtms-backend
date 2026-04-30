@@ -529,7 +529,6 @@ FROM reserved_components;
 $$;
 
 
-
 CREATE OR REPLACE FUNCTION public._pay_outstanding_components(p_timesheet_ids uuid[])
  RETURNS TABLE(timesheet_id uuid, key_type text, key_value text, truth_ex_vat numeric, baseline_ex_vat numeric, reserved_ex_vat numeric, outstanding_ex_vat numeric, truth_inc_vat numeric, baseline_inc_vat numeric, reserved_inc_vat numeric, outstanding_inc_vat numeric, reservation_overrun_detected boolean)
  LANGUAGE sql
@@ -792,19 +791,58 @@ truth_components as (
   join lateral public._pay_timesheet_components(tsl.snap_json) as tc
     on true
 ),
-baseline_components as (
+active_settled_components as (
+  select
+    active_rows.timesheet_id,
+    active_rows.key_type,
+    active_rows.key_value,
+    active_rows.amount_ex_vat,
+    active_rows.amount_inc_vat
+  from public._pay_active_settled_components((select inp.ts_ids from inp)) as active_rows
+),
+legacy_baseline_timesheets as (
+  select distinct
+    tps.timesheet_id
+  from inp i
+  join public.timesheet_pay_state tps
+    on tps.timesheet_id = any(i.ts_ids)
+  where not exists (
+    select 1
+    from active_settled_components active_check
+    where active_check.timesheet_id = tps.timesheet_id
+  )
+),
+legacy_baseline_components as (
   select
     tps.timesheet_id,
     bc.key_type,
     bc.key_value,
     bc.amount_ex_vat,
     bc.amount_inc_vat
-  from inp i
+  from legacy_baseline_timesheets lbt
   join public.timesheet_pay_state tps
-    on tps.timesheet_id = any(i.ts_ids)
+    on tps.timesheet_id = lbt.timesheet_id
   join lateral public._pay_timesheet_components(coalesce(tps.last_settled_snapshot_json,'{}'::jsonb)) as bc
     on true
 ),
+baseline_components as (
+  select
+    active_settled_components.timesheet_id,
+    active_settled_components.key_type,
+    active_settled_components.key_value,
+    active_settled_components.amount_ex_vat,
+    active_settled_components.amount_inc_vat
+  from active_settled_components
+  union all
+  select
+    legacy_baseline_components.timesheet_id,
+    legacy_baseline_components.key_type,
+    legacy_baseline_components.key_value,
+    legacy_baseline_components.amount_ex_vat,
+    legacy_baseline_components.amount_inc_vat
+  from legacy_baseline_components
+),
+
 reserved_components as (
   select
     rc.timesheet_id,
@@ -1052,6 +1090,9 @@ where fr.timesheet_id is not null
   and fr.key_type is not null
   and fr.key_value is not null;
 $function$;
+
+
+
 
 
 
