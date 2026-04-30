@@ -36296,6 +36296,8 @@ begin
 end;
 $function$;
 
+
+
 CREATE OR REPLACE FUNCTION public._pay_batch_status_is_active_reservation(p_status text)
  RETURNS boolean
  LANGUAGE sql
@@ -36308,7 +36310,6 @@ AS $function$
     'READY',
     'WAITING_BANK_CONFIRM',
     'PARTIAL',
-    'FAILED',
     'BLOCKED_FUNDS',
     'SCHEDULED',
     'EXECUTING',
@@ -36316,6 +36317,9 @@ AS $function$
     'AUTHORISED_FOR_PAYMENT'
   );
 $function$;
+
+
+
 
 CREATE OR REPLACE FUNCTION public._pay_current_timesheet_entitlement_components(p_timesheet_ids uuid[])
  RETURNS TABLE(timesheet_id uuid, key_type text, key_value text, truth_ex_vat numeric, baseline_ex_vat numeric, truth_inc_vat numeric, baseline_inc_vat numeric)
