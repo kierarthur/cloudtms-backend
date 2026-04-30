@@ -6097,7 +6097,6 @@ $$;
 
 
 
-
 create or replace function public.pay_settle_rail(
   p_pay_batch_id uuid,
   p_settlement_json jsonb,
@@ -6176,7 +6175,25 @@ declare
   v_settlement_mode text := 'STANDARD_BANK';
   v_effective_payment_date date := null;
   v_suppression_audit_json jsonb := '{}'::jsonb;
+  v_bank_event_ingest_results jsonb := '[]'::jsonb;
+  v_bank_event_ingest_count int := 0;
 begin
+  PERFORM public._imp_debug_audit(
+    p_actor_user_id,
+    'PAY_SETTLE_RAIL_START',
+    jsonb_build_object(
+      'pay_batch_id', p_pay_batch_id,
+      'actor_user_id', p_actor_user_id,
+      'settlement_row_count', CASE WHEN p_settlement_json IS NULL OR jsonb_typeof(p_settlement_json) <> 'array' THEN NULL ELSE jsonb_array_length(p_settlement_json) END
+    ),
+    'pay_batches',
+    COALESCE(p_pay_batch_id::text, 'NO_BATCH_ID'),
+    NULL::jsonb,
+    NULL::text,
+    NULL::text,
+    NULL::text
+  );
+
   if p_pay_batch_id is null then
     raise exception 'pay_settle_rail: pay_batch_id is required';
   end if;
@@ -6296,10 +6313,10 @@ begin
   if exists (
     select 1
     from _tmp_settle_in t
-    where t.status not in ('PENDING','COMPLETED','FAILED')
+    where t.status not in ('PENDING','PROCESSING','UNKNOWN','COMPLETED','FAILED','DECLINED','REJECTED','CANCELLED','CANCELED')
     limit 1
   ) then
-    raise exception 'pay_settle_rail: invalid status in settlement_json (allowed: PENDING|COMPLETED|FAILED)';
+    raise exception 'pay_settle_rail: invalid status in settlement_json (allowed: PENDING|PROCESSING|UNKNOWN|COMPLETED|FAILED|DECLINED|REJECTED|CANCELLED|CANCELED)';
   end if;
 
   if exists (
@@ -6316,7 +6333,11 @@ begin
 
   update public.pay_bank_transfers pbt
   set
-    status = t.status,
+    status = CASE
+      WHEN t.status = 'COMPLETED' THEN 'COMPLETED'
+      WHEN t.status IN ('FAILED','DECLINED','REJECTED','CANCELLED','CANCELED') THEN 'FAILED'
+      ELSE 'PENDING'
+    END,
     rail_tx_id = coalesce(t.rail_tx_id, pbt.rail_tx_id),
     rail_state = coalesce(t.rail_state, pbt.rail_state),
     rail_meta_json = case
@@ -6329,12 +6350,46 @@ begin
       else pbt.completed_at_utc
     end,
     failed_reason = case
-      when t.status = 'FAILED' then coalesce(pbt.failed_reason, nullif(btrim(coalesce(t.rail_state,'')),''))
+      when t.status IN ('FAILED','DECLINED','REJECTED','CANCELLED','CANCELED') then coalesce(pbt.failed_reason, nullif(btrim(coalesce(t.rail_state,'')),''), t.status)
       else pbt.failed_reason
     end
   from _tmp_settle_in t
   where pbt.id = t.transfer_id
     and pbt.pay_batch_id = p_pay_batch_id;
+
+  DROP TABLE IF EXISTS pg_temp._tmp_settle_bank_event_ingest_results;
+  CREATE TEMP TABLE _tmp_settle_bank_event_ingest_results ON COMMIT DROP AS
+  SELECT
+    settle_event_rows.transfer_id,
+    settle_event_rows.status,
+    public.pay_bank_event_ingest(
+      jsonb_build_object(
+        'pay_batch_id', p_pay_batch_id::text,
+        'pay_bank_transfer_id', settle_event_rows.transfer_id::text,
+        'provider_key', COALESCE(v_batch.rail_provider_snapshot, 'UNKNOWN'),
+        'provider_reference', COALESCE(settle_event_rows.rail_tx_id, bank_transfer_for_event.rail_tx_id, bank_transfer_for_event.request_id, bank_transfer_for_event.payment_reference),
+        'provider_state', COALESCE(settle_event_rows.rail_state, settle_event_rows.status),
+        'normalised_state', settle_event_rows.status,
+        'event_source', CASE WHEN v_settlement_mode IN ('CSV_SETTLEMENT','EXTERNAL_SETTLEMENT') THEN 'MANUAL_CONFIRM' ELSE 'PROVIDER_POLL' END,
+        'event_time_utc', v_now::text,
+        'amount', bank_transfer_for_event.amount,
+        'currency', 'GBP',
+        'raw_payload', COALESCE(settle_event_rows.rail_meta_json, '{}'::jsonb) || jsonb_build_object(
+          'settlement_mode', v_settlement_mode,
+          'source_rpc', 'pay_settle_rail'
+        )
+      ),
+      p_actor_user_id
+    ) AS ingest_result
+  FROM _tmp_settle_in AS settle_event_rows
+  JOIN public.pay_bank_transfers AS bank_transfer_for_event
+    ON bank_transfer_for_event.id = settle_event_rows.transfer_id;
+
+  SELECT
+    COALESCE(jsonb_agg(ingest_rows.ingest_result ORDER BY ingest_rows.transfer_id), '[]'::jsonb),
+    count(*)::int
+  INTO v_bank_event_ingest_results, v_bank_event_ingest_count
+  FROM pg_temp._tmp_settle_bank_event_ingest_results AS ingest_rows;
 
   select
     count(*) filter (
@@ -7461,28 +7516,19 @@ begin
     end;
   elsif v_catchup_needed then
     begin
-      if upper(btrim(coalesce(v_batch.batch_kind_fixed,''))) = 'LOANS' then
-        v_comm_result := public.pay_finance_payout_notice_queue_commit_stage(
-          p_pay_batch_id,
-          p_actor_user_id
-        );
+      v_comm_result := public.pay_remittance_maybe_queue_for_trigger(
+        p_pay_batch_id => p_pay_batch_id,
+        p_trigger => 'ON_PAYMENT_CONFIRMED',
+        p_scope => 'ALL',
+        p_actor_user_id => p_actor_user_id,
+        p_only_confirmed => true
+      );
 
-        v_comm_trigger_status := coalesce(
-          nullif(btrim(coalesce(v_comm_result->>'trigger_status','')), ''),
-          'PAYOUT_NOTICE_CATCHUP_QUEUED'
-        );
-      else
-        v_comm_result := public.pay_remittance_queue_commit_stage(
-          p_pay_batch_id,
-          'ALL',
-          p_actor_user_id
-        );
-
-        v_comm_trigger_status := coalesce(
-          nullif(btrim(coalesce(v_comm_result->>'trigger_status','')), ''),
-          'REMITTANCE_CATCHUP_QUEUED'
-        );
-      end if;
+      v_comm_trigger_status := coalesce(
+        nullif(btrim(coalesce(v_comm_result->>'configured_timing','')), ''),
+        nullif(btrim(coalesce(v_comm_result#>>'{queue_result,trigger_status}','')), ''),
+        'PAYMENT_CONFIRMED_QUEUE_TRIGGER_PROCESSED'
+      );
 
       if coalesce((v_comm_result->>'ok')::boolean, true) = false then
         raise exception '%', coalesce(
@@ -7902,7 +7948,9 @@ begin
         'execution_commit_state', case when coalesce(v_completed_transfer_count, 0) > 0 then 'COMMITTED' else v_execution_commit_state end,
         'execution_commit_ref', coalesce(v_execution_commit_ref, v_detected_execution_commit_ref),
         'execution_committed_at_utc', case when coalesce(v_execution_committed_at_utc, v_detected_execution_committed_at_utc) is null then null else coalesce(v_execution_committed_at_utc, v_detected_execution_committed_at_utc)::text end,
-        'worker_communications', v_worker_communications
+        'worker_communications', v_worker_communications,
+        'bank_event_ingest_count', v_bank_event_ingest_count,
+        'bank_event_ingest_results', v_bank_event_ingest_results
       ),
       'pay_batches',
       p_pay_batch_id::text,
@@ -7947,7 +7995,11 @@ begin
     'timesheet_channel_change_audit', jsonb_build_object(
       'settled_event_count', v_changed_channel_settled_ct
     ),
-    'worker_communications', v_worker_communications
+    'worker_communications', v_worker_communications,
+    'bank_event_ingest', jsonb_build_object(
+      'count', v_bank_event_ingest_count,
+      'results', v_bank_event_ingest_results
+    )
   );
 end;
 $$;
