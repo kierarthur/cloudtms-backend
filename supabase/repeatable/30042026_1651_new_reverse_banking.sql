@@ -7855,6 +7855,8 @@ $function$;
 
 
 
+
+
 CREATE OR REPLACE FUNCTION public._pay_active_settled_components(
   p_timesheet_ids uuid[]
 )
@@ -7865,66 +7867,38 @@ RETURNS TABLE(
   amount_ex_vat numeric,
   amount_inc_vat numeric
 )
-LANGUAGE plpgsql
-VOLATILE
+LANGUAGE sql
+STABLE
 SECURITY DEFINER
 SET search_path TO 'public'
 AS $function$
-DECLARE
-  v_input_timesheet_count integer := 0;
-  v_candidate_item_count integer := 0;
-  v_returned_row_count integer := 0;
-BEGIN
-  SELECT COALESCE(count(DISTINCT input_timesheet_ids.timesheet_id), 0)::integer
-  INTO v_input_timesheet_count
-  FROM unnest(COALESCE(p_timesheet_ids, ARRAY[]::uuid[])) AS input_timesheet_ids(timesheet_id)
-  WHERE input_timesheet_ids.timesheet_id IS NOT NULL;
-
-  PERFORM public._imp_debug_audit(
-    NULL::uuid,
-    'PAY_ACTIVE_SETTLED_COMPONENTS_START',
-    jsonb_build_object(
-      'input_timesheet_count', v_input_timesheet_count
-    ),
-    'pay_payment_correction',
-    'active_settled_components',
-    NULL::jsonb,
-    NULL::text,
-    NULL::text,
-    NULL::text
-  );
-
-  IF v_input_timesheet_count = 0 THEN
-    RETURN;
-  END IF;
-
-  DROP TABLE IF EXISTS pg_temp._tmp_active_settled_item_ids;
-  CREATE TEMP TABLE _tmp_active_settled_item_ids ON COMMIT DROP AS
-  WITH input_timesheets AS (
-    SELECT DISTINCT input_timesheet_ids.timesheet_id
-    FROM unnest(COALESCE(p_timesheet_ids, ARRAY[]::uuid[])) AS input_timesheet_ids(timesheet_id)
-    WHERE input_timesheet_ids.timesheet_id IS NOT NULL
-  )
+WITH input_timesheets AS (
+  SELECT DISTINCT
+    input_timesheet_values.timesheet_id_value AS timesheet_id
+  FROM unnest(COALESCE(p_timesheet_ids, ARRAY[]::uuid[])) AS input_timesheet_values(timesheet_id_value)
+  WHERE input_timesheet_values.timesheet_id_value IS NOT NULL
+),
+active_item_ids AS (
   SELECT DISTINCT
     public.pay_batch_items.id AS pay_batch_item_id
-  FROM public.pay_batch_items
+  FROM input_timesheets
+  JOIN public.pay_batch_items
+    ON public.pay_batch_items.timesheet_id = input_timesheets.timesheet_id
   JOIN public.pay_batch_candidates
     ON public.pay_batch_candidates.id = public.pay_batch_items.pay_batch_candidate_id
   LEFT JOIN public.pay_bank_transfers
     ON public.pay_bank_transfers.id = public.pay_batch_items.pay_bank_transfer_id
-  JOIN input_timesheets
-    ON input_timesheets.timesheet_id = public.pay_batch_items.timesheet_id
   WHERE COALESCE(public.pay_batch_items.is_voided, false) = false
-    AND upper(btrim(COALESCE(public.pay_batch_items.item_type, ''))) IN (
+    AND UPPER(BTRIM(COALESCE(public.pay_batch_items.item_type, ''))) IN (
       'SEGMENT_DELTA',
       'EXPENSE_DELTA',
       'ADJUSTMENT_DELTA',
       'MILEAGE_DELTA'
     )
     AND (
-      upper(btrim(COALESCE(public.pay_batch_candidates.settlement_status, ''))) = 'SETTLED'
+      UPPER(BTRIM(COALESCE(public.pay_batch_candidates.settlement_status, ''))) = 'SETTLED'
       OR public.pay_batch_candidates.settled_at_utc IS NOT NULL
-      OR upper(btrim(COALESCE(public.pay_bank_transfers.status, ''))) = 'COMPLETED'
+      OR UPPER(BTRIM(COALESCE(public.pay_bank_transfers.status, ''))) = 'COMPLETED'
       OR public.pay_bank_transfers.completed_at_utc IS NOT NULL
       OR EXISTS (
         SELECT 1
@@ -7943,113 +7917,84 @@ BEGIN
           'NO_MONEY_UNWIND',
           'SETTLED_REVERSAL'
         )
-    );
-
-  SELECT count(*)::integer
-  INTO v_candidate_item_count
-  FROM pg_temp._tmp_active_settled_item_ids AS active_item_ids;
-
-  IF v_candidate_item_count = 0 THEN
-    PERFORM public._imp_debug_audit(
-      NULL::uuid,
-      'PAY_ACTIVE_SETTLED_COMPONENTS_RESULT',
-      jsonb_build_object(
-        'input_timesheet_count', v_input_timesheet_count,
-        'candidate_item_count', 0,
-        'returned_row_count', 0
-      ),
-      'pay_payment_correction',
-      'active_settled_components',
-      NULL::jsonb,
-      NULL::text,
-      NULL::text,
-      NULL::text
-    );
-
-    RETURN;
-  END IF;
-
-  RETURN QUERY
-  WITH active_components AS (
-    SELECT
-      economic_components.timesheet_id AS component_timesheet_id,
-      economic_components.key_type AS component_key_type,
-      economic_components.key_value AS component_key_value,
-      economic_components.source_amount_ex_vat AS component_amount_ex_vat,
-      public.pay_batch_items.amount_inc_vat AS component_amount_inc_vat
-    FROM public._pay_batch_item_economic_components(
-      NULL::uuid,
-      (
-        SELECT COALESCE(array_agg(active_item_ids.pay_batch_item_id ORDER BY active_item_ids.pay_batch_item_id), ARRAY[]::uuid[])
-        FROM pg_temp._tmp_active_settled_item_ids AS active_item_ids
+    )
+),
+active_components AS (
+  SELECT
+    economic_components.timesheet_id AS component_timesheet_id,
+    economic_components.key_type AS component_key_type,
+    economic_components.key_value AS component_key_value,
+    economic_components.source_amount_ex_vat AS component_amount_ex_vat,
+    public.pay_batch_items.amount_inc_vat AS component_amount_inc_vat
+  FROM public._pay_batch_item_economic_components(
+    NULL::uuid,
+    (
+      SELECT COALESCE(
+        array_agg(active_item_ids.pay_batch_item_id ORDER BY active_item_ids.pay_batch_item_id),
+        ARRAY[]::uuid[]
       )
-    ) AS economic_components
-    JOIN public.pay_batch_items
-      ON public.pay_batch_items.id = economic_components.pay_batch_item_id
-    WHERE economic_components.timesheet_id IS NOT NULL
-      AND economic_components.key_type IS NOT NULL
-      AND economic_components.key_value IS NOT NULL
-      AND economic_components.key_resolution_failure_reason IS NULL
-  )
+      FROM active_item_ids
+    )
+  ) AS economic_components
+  JOIN public.pay_batch_items
+    ON public.pay_batch_items.id = economic_components.pay_batch_item_id
+  WHERE economic_components.timesheet_id IS NOT NULL
+    AND economic_components.key_type IS NOT NULL
+    AND BTRIM(COALESCE(economic_components.key_type, '')) <> ''
+    AND economic_components.key_value IS NOT NULL
+    AND BTRIM(COALESCE(economic_components.key_value, '')) <> ''
+    AND economic_components.key_resolution_failure_reason IS NULL
+    AND UPPER(BTRIM(COALESCE(economic_components.item_type, ''))) IN (
+      'SEGMENT_DELTA',
+      'EXPENSE_DELTA',
+      'ADJUSTMENT_DELTA',
+      'MILEAGE_DELTA'
+    )
+    AND UPPER(BTRIM(COALESCE(economic_components.key_type, ''))) IN (
+      'TS_DAY',
+      'TS_TOTAL',
+      'ADDITIONAL_CODE',
+      'ADJUSTMENT_CODE',
+      'EXPENSE_CODE'
+    )
+    AND NOT (
+      UPPER(BTRIM(COALESCE(economic_components.key_type, ''))) = 'TS_DAY'
+      AND economic_components.key_value !~ '^\d{4}-\d{2}-\d{2}$'
+    )
+),
+active_component_totals AS (
   SELECT
     active_components.component_timesheet_id AS timesheet_id,
-    active_components.component_key_type AS key_type,
+    UPPER(BTRIM(active_components.component_key_type)) AS key_type,
     active_components.component_key_value AS key_value,
-    round(COALESCE(sum(COALESCE(active_components.component_amount_ex_vat, 0)), 0), 2)::numeric AS amount_ex_vat,
-    round(COALESCE(sum(COALESCE(active_components.component_amount_inc_vat, 0)), 0), 2)::numeric AS amount_inc_vat
+    ROUND(COALESCE(SUM(COALESCE(active_components.component_amount_ex_vat, 0)), 0), 2)::numeric AS amount_ex_vat,
+    ROUND(COALESCE(SUM(COALESCE(active_components.component_amount_inc_vat, 0)), 0), 2)::numeric AS amount_inc_vat
   FROM active_components
   GROUP BY
     active_components.component_timesheet_id,
-    active_components.component_key_type,
+    UPPER(BTRIM(active_components.component_key_type)),
     active_components.component_key_value
-  HAVING round(COALESCE(sum(COALESCE(active_components.component_amount_ex_vat, 0)), 0), 2) <> 0
-      OR round(COALESCE(sum(COALESCE(active_components.component_amount_inc_vat, 0)), 0), 2) <> 0
-  ORDER BY
-    active_components.component_timesheet_id,
-    active_components.component_key_type,
-    active_components.component_key_value;
-
-  GET DIAGNOSTICS v_returned_row_count = ROW_COUNT;
-
-  PERFORM public._imp_debug_audit(
-    NULL::uuid,
-    'PAY_ACTIVE_SETTLED_COMPONENTS_RESULT',
-    jsonb_build_object(
-      'input_timesheet_count', v_input_timesheet_count,
-      'candidate_item_count', v_candidate_item_count,
-      'returned_row_count', v_returned_row_count
-    ),
-    'pay_payment_correction',
-    'active_settled_components',
-    NULL::jsonb,
-    NULL::text,
-    NULL::text,
-    NULL::text
-  );
-
-  RETURN;
-
-EXCEPTION
-  WHEN OTHERS THEN
-    PERFORM public._imp_debug_audit(
-      NULL::uuid,
-      'PAY_ACTIVE_SETTLED_COMPONENTS_ERROR',
-      jsonb_build_object(
-        'input_timesheet_count', v_input_timesheet_count,
-        'sqlstate', SQLSTATE,
-        'error_message', SQLERRM
-      ),
-      'pay_payment_correction',
-      'active_settled_components',
-      NULL::jsonb,
-      NULL::text,
-      NULL::text,
-      NULL::text
-    );
-
-    RAISE;
-END;
+)
+SELECT
+  active_component_totals.timesheet_id,
+  active_component_totals.key_type,
+  active_component_totals.key_value,
+  active_component_totals.amount_ex_vat,
+  active_component_totals.amount_inc_vat
+FROM active_component_totals
+WHERE active_component_totals.timesheet_id IS NOT NULL
+  AND active_component_totals.key_type IS NOT NULL
+  AND active_component_totals.key_value IS NOT NULL
+  AND (
+    ROUND(COALESCE(active_component_totals.amount_ex_vat, 0), 2) <> 0
+    OR ROUND(COALESCE(active_component_totals.amount_inc_vat, 0), 2) <> 0
+  )
+ORDER BY
+  active_component_totals.timesheet_id,
+  active_component_totals.key_type,
+  active_component_totals.key_value;
 $function$;
+
 
 
 CREATE OR REPLACE FUNCTION public.pay_bank_event_ingest(
