@@ -173,6 +173,7 @@ $$;
 
 
 
+
 create or replace function public.pay_batch_cancel(
   p_pay_batch_id uuid,
   p_actor_user_id uuid,
@@ -193,6 +194,7 @@ declare
   v_reincluded_timesheet_ids jsonb := '[]'::jsonb;
   v_component_restored_count int := 0;
   v_component_restored_amount numeric := 0;
+  v_communications_cancelled_count int := 0;
   v_execution_commit_state text := 'NOT_SUBMITTED';
   v_completed_transfer_count int := 0;
   v_pending_transfer_count int := 0;
@@ -218,6 +220,22 @@ declare
   v_rebuild_snapshot_run_id uuid := NULL::uuid;
   v_rebuild_snapshot_result jsonb := '{}'::jsonb;
 begin
+  PERFORM public._imp_debug_audit(
+    p_actor_user_id,
+    'PAY_BATCH_CANCEL_START',
+    jsonb_build_object(
+      'pay_batch_id', p_pay_batch_id,
+      'actor_user_id', p_actor_user_id,
+      'reason_supplied', NULLIF(BTRIM(COALESCE(p_reason, '')), '') IS NOT NULL
+    ),
+    'pay_batch',
+    COALESCE(p_pay_batch_id::text, 'NO_BATCH_ID'),
+    NULL::jsonb,
+    NULL::text,
+    NULL::text,
+    NULL::text
+  );
+
   if p_pay_batch_id is null then
     raise exception 'pay_batch_cancel: pay_batch_id is required';
   end if;
@@ -253,225 +271,199 @@ begin
     v_execution_commit_state := 'NOT_SUBMITTED';
   end if;
 
-  if v_execution_commit_state = 'COMMITTED' then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_BATCH_CANCEL',
-      'code', 'CORRECTION_ONLY_REQUIRED',
-      'message', 'pay_batch_cancel: batch has already crossed the external commit boundary; correction flow is required',
-      'pay_batch_id', p_pay_batch_id::text,
-      'execution_commit_state', v_execution_commit_state,
-      'execution_commit_ref', v_batch.execution_commit_ref,
-      'execution_committed_at_utc', case when v_batch.execution_committed_at_utc is null then null else v_batch.execution_committed_at_utc::text end
-    )::text;
-  elsif v_execution_commit_state = 'SUBMITTED_NOT_COMMITTED' then
-    select
-      count(*) filter (
-        where nullif(btrim(coalesce(pbt.rail_tx_id, '')), '') is not null
-           or upper(coalesce(pbt.rail_state, '')) in (
-             'SUBMITTED',
-             'QUEUED',
-             'ACCEPTED',
-             'SENT',
-             'PROCESSING',
-             'IN_FLIGHT',
-             'PENDING_SETTLEMENT',
-             'PENDING_CONFIRMATION',
-             'PENDING_SUBMISSION',
-             'COMPLETED',
-             'SETTLED',
-             'COMMITTED',
-             'PAID',
-             'EXECUTED',
-             'CANCELLED',
-             'CANCELED',
-             'REVOKED',
-             'VOIDED',
-             'ABORTED',
-             'UNWOUND',
-             'CANCEL_CONFIRMED',
-             'CANCELLATION_CONFIRMED',
-             'FAILED_BEFORE_COMMIT',
-             'SUBMISSION_FAILED'
-           )
-           or lower(btrim(coalesce(pbt.rail_meta_json->>'submitted', 'false'))) in ('true', '1', 'yes', 'y', 'on')
-           or lower(btrim(coalesce(pbt.rail_meta_json->>'queued', 'false'))) in ('true', '1', 'yes', 'y', 'on')
-           or lower(btrim(coalesce(pbt.rail_meta_json->>'accepted', 'false'))) in ('true', '1', 'yes', 'y', 'on')
-           or lower(btrim(coalesce(pbt.rail_meta_json->>'sent', 'false'))) in ('true', '1', 'yes', 'y', 'on')
-           or lower(btrim(coalesce(pbt.rail_meta_json->>'processing', 'false'))) in ('true', '1', 'yes', 'y', 'on')
-           or lower(btrim(coalesce(pbt.rail_meta_json->>'completed', 'false'))) in ('true', '1', 'yes', 'y', 'on')
-           or lower(btrim(coalesce(pbt.rail_meta_json->>'committed', 'false'))) in ('true', '1', 'yes', 'y', 'on')
-           or lower(btrim(coalesce(pbt.rail_meta_json->>'settled', 'false'))) in ('true', '1', 'yes', 'y', 'on')
-           or lower(btrim(coalesce(pbt.rail_meta_json->>'paid', 'false'))) in ('true', '1', 'yes', 'y', 'on')
-           or lower(btrim(coalesce(pbt.rail_meta_json->>'executed', 'false'))) in ('true', '1', 'yes', 'y', 'on')
-           or lower(btrim(coalesce(pbt.rail_meta_json->>'cancellation_confirmed', 'false'))) in ('true', '1', 'yes', 'y', 'on')
-           or lower(btrim(coalesce(pbt.rail_meta_json->>'cancelled', 'false'))) in ('true', '1', 'yes', 'y', 'on')
-           or lower(btrim(coalesce(pbt.rail_meta_json->>'canceled', 'false'))) in ('true', '1', 'yes', 'y', 'on')
-           or lower(btrim(coalesce(pbt.rail_meta_json->>'revoked', 'false'))) in ('true', '1', 'yes', 'y', 'on')
-           or lower(btrim(coalesce(pbt.rail_meta_json->>'voided', 'false'))) in ('true', '1', 'yes', 'y', 'on')
-           or lower(btrim(coalesce(pbt.rail_meta_json->>'aborted', 'false'))) in ('true', '1', 'yes', 'y', 'on')
-           or lower(btrim(coalesce(pbt.rail_meta_json->>'unwound', 'false'))) in ('true', '1', 'yes', 'y', 'on')
-           or lower(btrim(coalesce(pbt.rail_meta_json->>'submission_failed', 'false'))) in ('true', '1', 'yes', 'y', 'on')
-           or lower(btrim(coalesce(pbt.rail_meta_json->>'failed_before_commit', 'false'))) in ('true', '1', 'yes', 'y', 'on')
-      )::int,
-      count(*) filter (
-        where upper(coalesce(pbt.status,'')) = 'COMPLETED'
-           or pbt.completed_at_utc is not null
-           or upper(coalesce(pbt.rail_state,'')) in ('COMPLETED','SETTLED','COMMITTED','PAID','EXECUTED')
-           or lower(btrim(coalesce(pbt.rail_meta_json->>'completed', 'false'))) in ('true', '1', 'yes', 'y', 'on')
-           or lower(btrim(coalesce(pbt.rail_meta_json->>'committed', 'false'))) in ('true', '1', 'yes', 'y', 'on')
-           or lower(btrim(coalesce(pbt.rail_meta_json->>'settled', 'false'))) in ('true', '1', 'yes', 'y', 'on')
-           or lower(btrim(coalesce(pbt.rail_meta_json->>'paid', 'false'))) in ('true', '1', 'yes', 'y', 'on')
-           or lower(btrim(coalesce(pbt.rail_meta_json->>'executed', 'false'))) in ('true', '1', 'yes', 'y', 'on')
-      )::int,
-      count(*) filter (
-        where upper(coalesce(pbt.status,'')) = 'PENDING'
-          and (
-            nullif(btrim(coalesce(pbt.rail_tx_id, '')), '') is not null
-            or upper(coalesce(pbt.rail_state, '')) in (
-              'SUBMITTED',
-              'QUEUED',
-              'ACCEPTED',
-              'SENT',
-              'PROCESSING',
-              'IN_FLIGHT',
-              'PENDING_SETTLEMENT',
-              'PENDING_CONFIRMATION',
-              'PENDING_SUBMISSION'
-            )
-            or lower(btrim(coalesce(pbt.rail_meta_json->>'submitted', 'false'))) in ('true', '1', 'yes', 'y', 'on')
-            or lower(btrim(coalesce(pbt.rail_meta_json->>'queued', 'false'))) in ('true', '1', 'yes', 'y', 'on')
-            or lower(btrim(coalesce(pbt.rail_meta_json->>'accepted', 'false'))) in ('true', '1', 'yes', 'y', 'on')
-            or lower(btrim(coalesce(pbt.rail_meta_json->>'sent', 'false'))) in ('true', '1', 'yes', 'y', 'on')
-            or lower(btrim(coalesce(pbt.rail_meta_json->>'processing', 'false'))) in ('true', '1', 'yes', 'y', 'on')
-          )
-          and not (
-            upper(coalesce(pbt.rail_state, '')) in (
-              'CANCELLED',
-              'CANCELED',
-              'REVOKED',
-              'VOIDED',
-              'ABORTED',
-              'UNWOUND',
-              'CANCEL_CONFIRMED',
-              'CANCELLATION_CONFIRMED',
-              'FAILED_BEFORE_COMMIT',
-              'SUBMISSION_FAILED'
-            )
-            or lower(btrim(coalesce(pbt.rail_meta_json->>'cancellation_confirmed', 'false'))) in ('true', '1', 'yes', 'y', 'on')
-            or lower(btrim(coalesce(pbt.rail_meta_json->>'cancelled', 'false'))) in ('true', '1', 'yes', 'y', 'on')
-            or lower(btrim(coalesce(pbt.rail_meta_json->>'canceled', 'false'))) in ('true', '1', 'yes', 'y', 'on')
-            or lower(btrim(coalesce(pbt.rail_meta_json->>'revoked', 'false'))) in ('true', '1', 'yes', 'y', 'on')
-            or lower(btrim(coalesce(pbt.rail_meta_json->>'voided', 'false'))) in ('true', '1', 'yes', 'y', 'on')
-            or lower(btrim(coalesce(pbt.rail_meta_json->>'aborted', 'false'))) in ('true', '1', 'yes', 'y', 'on')
-            or lower(btrim(coalesce(pbt.rail_meta_json->>'unwound', 'false'))) in ('true', '1', 'yes', 'y', 'on')
-            or lower(btrim(coalesce(pbt.rail_meta_json->>'submission_failed', 'false'))) in ('true', '1', 'yes', 'y', 'on')
-            or lower(btrim(coalesce(pbt.rail_meta_json->>'failed_before_commit', 'false'))) in ('true', '1', 'yes', 'y', 'on')
-          )
-      )::int
-    into
-      v_total_transfer_count,
-      v_completed_transfer_count,
-      v_pending_transfer_count
-    from public.pay_bank_transfers pbt
-    where pbt.pay_batch_id = p_pay_batch_id;
-
-    if v_batch.execution_committed_at_utc is not null
-       or v_batch.completed_at_utc is not null
-       or coalesce(v_completed_transfer_count, 0) > 0 then
-      raise exception '%', jsonb_build_object(
-        'error', 'PAY_BATCH_CANCEL',
-        'code', 'CORRECTION_ONLY_REQUIRED',
-        'message', 'pay_batch_cancel: batch shows committed transfer activity; correction flow is required',
-        'pay_batch_id', p_pay_batch_id::text,
-        'execution_commit_state', v_execution_commit_state,
-        'execution_commit_ref', v_batch.execution_commit_ref,
-        'execution_committed_at_utc', case when v_batch.execution_committed_at_utc is null then null else v_batch.execution_committed_at_utc::text end,
-        'completed_transfer_count', coalesce(v_completed_transfer_count, 0)
-      )::text;
-    end if;
-
-    if coalesce(v_pending_transfer_count, 0) > 0 then
-      raise exception '%', jsonb_build_object(
-        'error', 'PAY_BATCH_CANCEL',
-        'code', 'EXTERNAL_CANCEL_CONFIRMATION_REQUIRED',
-        'message', 'pay_batch_cancel: external cancellation/unwind confirmation is required before cancelling a submitted batch',
-        'pay_batch_id', p_pay_batch_id::text,
-        'execution_commit_state', v_execution_commit_state,
-        'execution_commit_ref', v_batch.execution_commit_ref,
-        'pending_transfer_count', coalesce(v_pending_transfer_count, 0)
-      )::text;
-    end if;
-
-    select
-      count(*)::int
-    into v_external_unwind_confirmed_count
-    from public.pay_bank_transfers pbt
-    where pbt.pay_batch_id = p_pay_batch_id
-      and (
-        upper(coalesce(pbt.rail_state, '')) in (
-          'CANCELLED',
-          'CANCELED',
-          'REVOKED',
-          'VOIDED',
-          'ABORTED',
-          'UNWOUND',
-          'CANCEL_CONFIRMED',
-          'CANCELLATION_CONFIRMED',
-          'FAILED_BEFORE_COMMIT',
-          'SUBMISSION_FAILED'
-        )
-        or lower(btrim(coalesce(pbt.rail_meta_json->>'cancellation_confirmed', 'false'))) in ('true', '1', 'yes', 'y', 'on')
-        or lower(btrim(coalesce(pbt.rail_meta_json->>'cancelled', 'false'))) in ('true', '1', 'yes', 'y', 'on')
-        or lower(btrim(coalesce(pbt.rail_meta_json->>'canceled', 'false'))) in ('true', '1', 'yes', 'y', 'on')
-        or lower(btrim(coalesce(pbt.rail_meta_json->>'revoked', 'false'))) in ('true', '1', 'yes', 'y', 'on')
-        or lower(btrim(coalesce(pbt.rail_meta_json->>'voided', 'false'))) in ('true', '1', 'yes', 'y', 'on')
-        or lower(btrim(coalesce(pbt.rail_meta_json->>'aborted', 'false'))) in ('true', '1', 'yes', 'y', 'on')
-        or lower(btrim(coalesce(pbt.rail_meta_json->>'unwound', 'false'))) in ('true', '1', 'yes', 'y', 'on')
-        or lower(btrim(coalesce(pbt.rail_meta_json->>'submission_failed', 'false'))) in ('true', '1', 'yes', 'y', 'on')
-        or lower(btrim(coalesce(pbt.rail_meta_json->>'failed_before_commit', 'false'))) in ('true', '1', 'yes', 'y', 'on')
-      );
-
-    select coalesce(
+  select
+    count(*)::int,
+    count(*) filter (
+      where upper(coalesce(pbt.status,'')) = 'COMPLETED'
+         or pbt.completed_at_utc is not null
+         or upper(coalesce(pbt.rail_state,'')) in ('COMPLETED','SETTLED','COMMITTED','PAID','EXECUTED')
+    )::int,
+    count(*) filter (
+      where upper(coalesce(pbt.status,'')) = 'PENDING'
+    )::int,
+    coalesce(
       jsonb_agg(
         jsonb_build_object(
           'transfer_id', pbt.id::text,
           'status', pbt.status,
+          'rail_tx_id_present', nullif(btrim(coalesce(pbt.rail_tx_id, '')), '') is not null,
+          'request_id_present', nullif(btrim(coalesce(pbt.request_id, '')), '') is not null,
+          'payment_reference_present', nullif(btrim(coalesce(pbt.payment_reference, '')), '') is not null,
           'rail_state', pbt.rail_state,
-          'rail_meta_json', pbt.rail_meta_json,
-          'completed_at_utc', case when pbt.completed_at_utc is null then null else pbt.completed_at_utc::text end
+          'rail_meta_json_present', coalesce(pbt.rail_meta_json, '{}'::jsonb) <> '{}'::jsonb,
+          'completed_at_utc', case when pbt.completed_at_utc is null then null else pbt.completed_at_utc::text end,
+          'failed_reason', pbt.failed_reason
         )
         order by pbt.id
-      ),
+      ) filter (
+        where nullif(btrim(coalesce(pbt.rail_tx_id, '')), '') is not null
+           or nullif(btrim(coalesce(pbt.request_id, '')), '') is not null
+           or nullif(btrim(coalesce(pbt.payment_reference, '')), '') is not null
+           or nullif(btrim(coalesce(pbt.rail_state, '')), '') is not null
+           or coalesce(pbt.rail_meta_json, '{}'::jsonb) <> '{}'::jsonb
+           or pbt.completed_at_utc is not null
+           or nullif(btrim(coalesce(pbt.failed_reason, '')), '') is not null
+           or upper(coalesce(pbt.status,'')) in ('COMPLETED','FAILED','CANCELLED','CANCELED','RETURNED','REVERSED','REVERTED')
+        ),
       '[]'::jsonb
     )
-    into v_transfer_state_sample
-    from (
-      select pbt.id, pbt.status, pbt.rail_state, pbt.rail_meta_json, pbt.completed_at_utc
-      from public.pay_bank_transfers pbt
-      where pbt.pay_batch_id = p_pay_batch_id
-      order by pbt.id
-      limit 20
-    ) pbt;
+  into
+    v_total_transfer_count,
+    v_completed_transfer_count,
+    v_pending_transfer_count,
+    v_transfer_state_sample
+  from public.pay_bank_transfers pbt
+  where pbt.pay_batch_id = p_pay_batch_id;
 
-    if coalesce(v_total_transfer_count, 0) = 0
-       or coalesce(v_external_unwind_confirmed_count, 0) <> coalesce(v_total_transfer_count, 0) then
-      raise exception '%', jsonb_build_object(
-        'error', 'PAY_BATCH_CANCEL',
-        'code', 'EXTERNAL_CANCEL_CONFIRMATION_REQUIRED',
-        'message', 'pay_batch_cancel: external cancellation/unwind confirmation is required before cancelling a submitted batch',
-        'pay_batch_id', p_pay_batch_id::text,
-        'execution_commit_state', v_execution_commit_state,
-        'execution_commit_ref', v_batch.execution_commit_ref,
-        'total_transfer_count', coalesce(v_total_transfer_count, 0),
-        'externally_confirmed_unwind_count', coalesce(v_external_unwind_confirmed_count, 0),
-        'transfer_state_sample', v_transfer_state_sample
-      )::text;
-    end if;
-
-    v_cancellation_outcome := 'PRE_COMMIT_UNWIND';
-  else
-    v_cancellation_outcome := 'PRE_SUBMISSION_CANCEL';
+  if v_execution_commit_state <> 'NOT_SUBMITTED'
+     or nullif(btrim(coalesce(v_batch.execution_commit_ref, '')), '') is not null
+     or v_batch.execution_committed_at_utc is not null
+     or v_batch.completed_at_utc is not null then
+    raise exception '%', jsonb_build_object(
+      'error', 'USE_PAYMENT_CORRECTION_FLOW',
+      'code', 'USE_PAYMENT_CORRECTION_FLOW',
+      'message', 'pay_batch_cancel is restricted to whole-batch pre-bank cancellation. This batch has crossed, or may have crossed, the bank/adaptor submission boundary and must use the payment correction flow.',
+      'pay_batch_id', p_pay_batch_id::text,
+      'execution_commit_state', v_execution_commit_state,
+      'execution_commit_ref', v_batch.execution_commit_ref,
+      'execution_committed_at_utc', case when v_batch.execution_committed_at_utc is null then null else v_batch.execution_committed_at_utc::text end,
+      'completed_at_utc', case when v_batch.completed_at_utc is null then null else v_batch.completed_at_utc::text end,
+      'total_transfer_count', coalesce(v_total_transfer_count, 0),
+      'completed_transfer_count', coalesce(v_completed_transfer_count, 0),
+      'pending_transfer_count', coalesce(v_pending_transfer_count, 0)
+    )::text;
   end if;
+
+  if exists (
+    select 1
+    from public.pay_bank_transfers pbt
+    where pbt.pay_batch_id = p_pay_batch_id
+      and (
+        nullif(btrim(coalesce(pbt.rail_tx_id, '')), '') is not null
+        or nullif(btrim(coalesce(pbt.request_id, '')), '') is not null
+        or nullif(btrim(coalesce(pbt.payment_reference, '')), '') is not null
+        or nullif(btrim(coalesce(pbt.rail_state, '')), '') is not null
+        or coalesce(pbt.rail_meta_json, '{}'::jsonb) <> '{}'::jsonb
+        or pbt.completed_at_utc is not null
+        or nullif(btrim(coalesce(pbt.failed_reason, '')), '') is not null
+        or upper(coalesce(pbt.status,'')) in ('COMPLETED','FAILED','CANCELLED','CANCELED','RETURNED','REVERSED','REVERTED')
+      )
+  ) then
+    raise exception '%', jsonb_build_object(
+      'error', 'USE_PAYMENT_CORRECTION_FLOW',
+      'code', 'USE_PAYMENT_CORRECTION_FLOW',
+      'message', 'pay_batch_cancel cannot cancel a batch with transfer/provider state, failure state, settlement state, or bank evidence. Use the payment correction flow.',
+      'pay_batch_id', p_pay_batch_id::text,
+      'transfer_state_sample', v_transfer_state_sample
+    )::text;
+  end if;
+
+  if exists (
+    select 1
+    from public.pay_bank_transfer_events bank_event_evidence
+    where bank_event_evidence.pay_batch_id = p_pay_batch_id
+  ) then
+    raise exception '%', jsonb_build_object(
+      'error', 'USE_PAYMENT_CORRECTION_FLOW',
+      'code', 'USE_PAYMENT_CORRECTION_FLOW',
+      'message', 'pay_batch_cancel cannot cancel a batch with immutable bank event evidence. Use the payment correction flow.',
+      'pay_batch_id', p_pay_batch_id::text
+    )::text;
+  end if;
+
+  if exists (
+    select 1
+    from public.pay_payment_correction_requests correction_request_evidence
+    where correction_request_evidence.pay_batch_id = p_pay_batch_id
+      and correction_request_evidence.status not in ('REJECTED','CANCELLED')
+  )
+  or exists (
+    select 1
+    from public.pay_payment_correction_items correction_item_evidence
+    where correction_item_evidence.pay_batch_id = p_pay_batch_id
+      and correction_item_evidence.status = 'APPLIED'
+  ) then
+    raise exception '%', jsonb_build_object(
+      'error', 'USE_PAYMENT_CORRECTION_FLOW',
+      'code', 'USE_PAYMENT_CORRECTION_FLOW',
+      'message', 'pay_batch_cancel cannot cancel a batch that already has active or applied payment correction evidence. Use the payment correction flow.',
+      'pay_batch_id', p_pay_batch_id::text
+    )::text;
+  end if;
+
+  if exists (
+    select 1
+    from public.pay_batch_candidates pbc_settlement_evidence
+    where pbc_settlement_evidence.pay_batch_id = p_pay_batch_id
+      and (
+        upper(btrim(coalesce(pbc_settlement_evidence.settlement_status, ''))) = 'SETTLED'
+        or pbc_settlement_evidence.settled_at_utc is not null
+      )
+  )
+  or exists (
+    select 1
+    from public.pay_batch_items pbi_history_scope
+    join public.pay_batch_candidates pbc_history_scope
+      on pbc_history_scope.id = pbi_history_scope.pay_batch_candidate_id
+    join public.timesheet_pay_state_history tpsh_evidence
+      on tpsh_evidence.pay_batch_id = pbc_history_scope.pay_batch_id
+     and tpsh_evidence.timesheet_id = pbi_history_scope.timesheet_id
+    where pbc_history_scope.pay_batch_id = p_pay_batch_id
+  )
+  or exists (
+    select 1
+    from public.pay_advance_reservations par_settlement_evidence
+    where par_settlement_evidence.pay_batch_id = p_pay_batch_id
+      and (
+        upper(btrim(coalesce(par_settlement_evidence.status, ''))) = 'SETTLED'
+        or par_settlement_evidence.settled_at_utc is not null
+      )
+  )
+  or exists (
+    select 1
+    from public.pay_advances payout_settlement_evidence
+    where upper(btrim(coalesce(payout_settlement_evidence.payout_status::text, ''))) = 'PAID'
+      and (
+        payout_settlement_evidence.payout_pay_batch_id = p_pay_batch_id
+        or payout_settlement_evidence.payout_transfer_id in (
+          select pbt_payout_evidence.id
+          from public.pay_bank_transfers pbt_payout_evidence
+          where pbt_payout_evidence.pay_batch_id = p_pay_batch_id
+        )
+      )
+  ) then
+    raise exception '%', jsonb_build_object(
+      'error', 'USE_PAYMENT_CORRECTION_FLOW',
+      'code', 'USE_PAYMENT_CORRECTION_FLOW',
+      'message', 'pay_batch_cancel cannot cancel a batch with settlement, pay-state, settled reservation, or paid payout evidence. Use the payment correction flow.',
+      'pay_batch_id', p_pay_batch_id::text
+    )::text;
+  end if;
+
+  if upper(coalesce(v_batch.status,'')) in (
+    'FAILED',
+    'SETTLED',
+    'COMPLETED',
+    'PAID',
+    'RETURNED',
+    'REVERSED',
+    'REVERTED',
+    'NO_MONEY_UNWOUND',
+    'PARTIALLY_UNWOUND',
+    'PARTIALLY_REVERSED',
+    'REVERSED',
+    'ACTION_REQUIRED'
+  ) then
+    raise exception '%', jsonb_build_object(
+      'error', 'USE_PAYMENT_CORRECTION_FLOW',
+      'code', 'USE_PAYMENT_CORRECTION_FLOW',
+      'message', 'pay_batch_cancel cannot cancel a batch whose core status indicates settlement, failure, return, reversal, or correction action is required. Use the payment correction flow.',
+      'pay_batch_id', p_pay_batch_id::text,
+      'status', v_batch.status
+    )::text;
+  end if;
+
+  v_cancellation_outcome := 'PRE_SUBMISSION_CANCEL';
 
   if upper(coalesce(v_batch.status,'')) not in (
     'DRAFT',
@@ -479,12 +471,13 @@ begin
     'READY',
     'WAITING_BANK_CONFIRM',
     'PARTIAL',
+    'BLOCKED_FUNDS',
     'SCHEDULED',
     'AWAITING_AUTHORISATION',
     'AUTHORISED_FOR_PAYMENT',
     'EXECUTING'
   ) then
-    raise exception 'pay_batch_cancel: batch status must be DRAFT, DRAFT_CREATED, READY, WAITING_BANK_CONFIRM, PARTIAL, SCHEDULED, AWAITING_AUTHORISATION, AUTHORISED_FOR_PAYMENT or EXECUTING (current=%)', v_batch.status;
+    raise exception 'pay_batch_cancel: batch status must be DRAFT, DRAFT_CREATED, READY, WAITING_BANK_CONFIRM, PARTIAL, BLOCKED_FUNDS, SCHEDULED, AWAITING_AUTHORISATION, AUTHORISED_FOR_PAYMENT or EXECUTING (current=%)', v_batch.status;
   end if;
 
   create temp table if not exists _tmp_cancel_batch_candidates (
@@ -517,31 +510,16 @@ begin
 
   delete from public.pay_bank_transfers pbt
   where pbt.pay_batch_id = p_pay_batch_id
-    and not (
-      v_execution_commit_state = 'SUBMITTED_NOT_COMMITTED'
-      and (
-        upper(coalesce(pbt.rail_state, '')) in (
-          'CANCELLED',
-          'CANCELED',
-          'REVOKED',
-          'VOIDED',
-          'ABORTED',
-          'UNWOUND',
-          'CANCEL_CONFIRMED',
-          'CANCELLATION_CONFIRMED',
-          'FAILED_BEFORE_COMMIT',
-          'SUBMISSION_FAILED'
-        )
-        or lower(btrim(coalesce(pbt.rail_meta_json->>'cancellation_confirmed', 'false'))) in ('true', '1', 'yes', 'y', 'on')
-        or lower(btrim(coalesce(pbt.rail_meta_json->>'cancelled', 'false'))) in ('true', '1', 'yes', 'y', 'on')
-        or lower(btrim(coalesce(pbt.rail_meta_json->>'canceled', 'false'))) in ('true', '1', 'yes', 'y', 'on')
-        or lower(btrim(coalesce(pbt.rail_meta_json->>'revoked', 'false'))) in ('true', '1', 'yes', 'y', 'on')
-        or lower(btrim(coalesce(pbt.rail_meta_json->>'voided', 'false'))) in ('true', '1', 'yes', 'y', 'on')
-        or lower(btrim(coalesce(pbt.rail_meta_json->>'aborted', 'false'))) in ('true', '1', 'yes', 'y', 'on')
-        or lower(btrim(coalesce(pbt.rail_meta_json->>'unwound', 'false'))) in ('true', '1', 'yes', 'y', 'on')
-        or lower(btrim(coalesce(pbt.rail_meta_json->>'submission_failed', 'false'))) in ('true', '1', 'yes', 'y', 'on')
-        or lower(btrim(coalesce(pbt.rail_meta_json->>'failed_before_commit', 'false'))) in ('true', '1', 'yes', 'y', 'on')
-      )
+    and nullif(btrim(coalesce(pbt.rail_tx_id, '')), '') is null
+    and nullif(btrim(coalesce(pbt.rail_state, '')), '') is null
+    and nullif(btrim(coalesce(pbt.request_id, '')), '') is null
+    and nullif(btrim(coalesce(pbt.payment_reference, '')), '') is null
+    and coalesce(pbt.rail_meta_json, '{}'::jsonb) = '{}'::jsonb
+    and not exists (
+      select 1
+      from public.pay_bank_transfer_events bank_event_preserve
+      where bank_event_preserve.pay_bank_transfer_id = pbt.id
+         or bank_event_preserve.pay_batch_id = pbt.pay_batch_id
     );
 
   if to_regclass('public.pay_batch_auth_requests') is not null then
@@ -564,6 +542,19 @@ begin
            )' using p_pay_batch_id;
     end if;
   end if;
+
+  UPDATE public.mail_outbox AS queued_cancel_mail
+  SET
+    status = 'FAILED',
+    failed_at = COALESCE(queued_cancel_mail.failed_at, v_cancelled_at_utc),
+    last_error = 'CANCELLED_INTERNAL_PAYMENT_CORRECTION'
+  WHERE queued_cancel_mail.status::text = 'QUEUED'
+    AND (
+      queued_cancel_mail.context_id = p_pay_batch_id
+      OR queued_cancel_mail.reference ILIKE '%' || p_pay_batch_id::text || '%'
+    );
+
+  GET DIAGNOSTICS v_communications_cancelled_count = ROW_COUNT;
 
   with rel as (
     update public.pay_advance_reservations par
@@ -1049,8 +1040,32 @@ begin
     p_reason
   );
 
+  PERFORM public._imp_debug_audit(
+    p_actor_user_id,
+    'PAY_BATCH_CANCEL_RESULT',
+    jsonb_build_object(
+      'pay_batch_id', p_pay_batch_id,
+      'classification', 'PRE_BANK_CANCEL',
+      'released_reservation_count', v_released_reservation_count,
+      'released_reservation_amount', v_released_reservation_amount,
+      'component_restored_count', v_component_restored_count,
+      'communications_cancelled', v_communications_cancelled_count,
+      'cancellation_outcome', v_cancellation_outcome,
+      'dirty_candidate_count', v_dirty_candidate_count
+    ),
+    'pay_batch',
+    p_pay_batch_id::text,
+    NULL::jsonb,
+    NULL::text,
+    NULL::text,
+    NULL::text
+  );
+
   return jsonb_build_object(
     'ok', true,
+    'classification', 'PRE_BANK_CANCEL',
+    'correction_required', false,
+    'communications_cancelled', v_communications_cancelled_count,
     'pay_batch_id', p_pay_batch_id::text,
     'status', (select pb2.status from public.pay_batches pb2 where pb2.id = p_pay_batch_id),
     'cancelled_at_utc', (select pb3.cancelled_at_utc::text from public.pay_batches pb3 where pb3.id = p_pay_batch_id),
@@ -27631,6 +27646,7 @@ exception
     RAISE;
 end;
 $$;
+
 
 
 
