@@ -11954,7 +11954,6 @@ end;
 $function$;
 
 
-
 CREATE OR REPLACE FUNCTION public.pay_reconcile_external_payment(
   p_actor_user_id uuid,
   p_payload_json jsonb
@@ -12082,6 +12081,7 @@ BEGIN
   RETURN v_response;
 END;
 $$;
+
 
 
 
