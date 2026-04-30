@@ -17063,9 +17063,6 @@ end;
 $function$;
 
 
-
-
-
 CREATE OR REPLACE FUNCTION public.pay_preview_candidate_collect_scope(
   p_context_json jsonb,
   p_candidate_id uuid
@@ -17420,18 +17417,102 @@ begin
           and upper(coalesce(pbi.pay_channel,'')) in ('PAYE','UMBRELLA')
           and pbi.item_type in ('SEGMENT_DELTA','EXPENSE_DELTA','ADJUSTMENT_DELTA','MILEAGE_DELTA')
           and public._pay_batch_item_source_reservation_amount_ex_vat(pbi.id) is not null
-          and upper(coalesce(pb_r.status::text,'')) in (
-            'DRAFT',
-            'DRAFT_CREATED',
-            'READY',
-            'WAITING_BANK_CONFIRM',
-            'PARTIAL',
-            'FAILED',
-            'BLOCKED_FUNDS',
-            'SCHEDULED',
-            'EXECUTING',
-            'AWAITING_AUTHORISATION',
-            'AUTHORISED_FOR_PAYMENT'
+          and coalesce(pbi.is_voided, false) = false
+          and not exists (
+            select 1
+            from public.pay_payment_correction_items applied_corrections
+            where applied_corrections.pay_batch_item_id = pbi.id
+              and applied_corrections.status = 'APPLIED'
+              and applied_corrections.correction_item_kind in ('PRE_BANK_CANCEL','NO_MONEY_UNWIND','SETTLED_REVERSAL')
+          )
+          and not (
+            upper(btrim(coalesce(pbc_r.settlement_status, ''))) = 'SETTLED'
+            or pbc_r.settled_at_utc is not null
+            or exists (
+              select 1
+              from public.pay_bank_transfers completed_transfer_check
+              where completed_transfer_check.id = pbi.pay_bank_transfer_id
+                and (
+                  upper(btrim(coalesce(completed_transfer_check.status, ''))) = 'COMPLETED'
+                  or completed_transfer_check.completed_at_utc is not null
+                )
+            )
+          )
+          and (
+            public._pay_batch_status_is_active_reservation(pb_r.status)
+            or exists (
+              select 1
+              from public.pay_payment_correction_requests open_correction_requests
+              left join public.pay_bank_transfers correction_scope_transfer
+                on correction_scope_transfer.id = pbi.pay_bank_transfer_id
+              where open_correction_requests.pay_batch_id = pbc_r.pay_batch_id
+                and open_correction_requests.status in ('REQUESTED','AWAITING_AUTHORISATION','AUTHORISED','EXPANDED','PROCESSING','BLOCKED')
+                and open_correction_requests.correction_kind in ('PRE_BANK_CANCEL','NO_MONEY_UNWIND','MANUAL_EVIDENCE_NO_MONEY')
+                and (
+                  upper(nullif(btrim(coalesce(open_correction_requests.selection_json->>'scope_type', '')), '')) = 'BATCH'
+                  or (
+                    upper(nullif(btrim(coalesce(open_correction_requests.selection_json->>'scope_type', '')), '')) = 'CANDIDATES'
+                    and pbc_r.id::text in (
+                      select jsonb_array_elements_text(
+                        case
+                          when jsonb_typeof(open_correction_requests.selection_json->'pay_batch_candidate_ids') = 'array'
+                            then open_correction_requests.selection_json->'pay_batch_candidate_ids'
+                          else '[]'::jsonb
+                        end
+                      )
+                    )
+                  )
+                  or (
+                    upper(nullif(btrim(coalesce(open_correction_requests.selection_json->>'scope_type', '')), '')) = 'TRANSFER'
+                    and pbi.pay_bank_transfer_id::text in (
+                      select jsonb_array_elements_text(
+                        case
+                          when jsonb_typeof(open_correction_requests.selection_json->'pay_bank_transfer_ids') = 'array'
+                            then open_correction_requests.selection_json->'pay_bank_transfer_ids'
+                          else '[]'::jsonb
+                        end
+                      )
+                    )
+                  )
+                  or (
+                    upper(nullif(btrim(coalesce(open_correction_requests.selection_json->>'scope_type', '')), '')) = 'UMBRELLA_PAYMENT_GROUP'
+                    and nullif(btrim(coalesce(open_correction_requests.selection_json->>'umbrella_id', '')), '') is not null
+                    and (
+                      pbi.umbrella_id::text = open_correction_requests.selection_json->>'umbrella_id'
+                      or correction_scope_transfer.umbrella_id::text = open_correction_requests.selection_json->>'umbrella_id'
+                      or (
+                        upper(coalesce(correction_scope_transfer.payee_entity_kind, '')) in ('UMBRELLA','UMBRELLA_COMPANY')
+                        and correction_scope_transfer.payee_entity_id::text = open_correction_requests.selection_json->>'umbrella_id'
+                      )
+                    )
+                    and (
+                      nullif(btrim(coalesce(open_correction_requests.selection_json->>'transfer_group_key', '')), '') is null
+                      or correction_scope_transfer.transfer_group_key = open_correction_requests.selection_json->>'transfer_group_key'
+                    )
+                    and (
+                      jsonb_typeof(open_correction_requests.selection_json->'pay_bank_transfer_ids') is distinct from 'array'
+                      or pbi.pay_bank_transfer_id::text in (
+                        select jsonb_array_elements_text(open_correction_requests.selection_json->'pay_bank_transfer_ids')
+                      )
+                    )
+                  )
+                )
+            )
+            or exists (
+              select 1
+              from public.pay_bank_transfer_events unresolved_terminal_failure_events
+              where unresolved_terminal_failure_events.pay_batch_id = pbc_r.pay_batch_id
+                and unresolved_terminal_failure_events.pay_bank_transfer_id = pbi.pay_bank_transfer_id
+                and unresolved_terminal_failure_events.mapping_status = 'MATCHED'
+                and unresolved_terminal_failure_events.normalised_state in ('FAILED','DECLINED','REJECTED','CANCELLED')
+                and not exists (
+                  select 1
+                  from public.pay_payment_correction_items applied_failure_corrections
+                  where applied_failure_corrections.pay_batch_item_id = pbi.id
+                    and applied_failure_corrections.status = 'APPLIED'
+                    and applied_failure_corrections.correction_item_kind in ('NO_MONEY_UNWIND','PRE_BANK_CANCEL','SETTLED_REVERSAL')
+                )
+            )
           )
   
   ;
@@ -18589,6 +18670,8 @@ begin
   );
 end;
 $function$;
+
+
 
 
 
