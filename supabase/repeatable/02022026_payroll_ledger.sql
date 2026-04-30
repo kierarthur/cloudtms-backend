@@ -26178,9 +26178,6 @@ begin
 end;
 $$;
 
-
-
-
 CREATE OR REPLACE FUNCTION public.pay_sync_overpayments_from_preview(
   p_pay_date date,
   p_week_ending_cutoff date,
@@ -26235,6 +26232,25 @@ declare
   v_taxability_event_before_json jsonb;
   v_taxability_event_after_json jsonb;
 begin
+  PERFORM public._imp_debug_audit(
+    p_actor_user_id,
+    'PAY_SYNC_OVERPAYMENTS_FROM_PREVIEW_START',
+    jsonb_build_object(
+      'pay_date', p_pay_date,
+      'week_ending_cutoff', p_week_ending_cutoff,
+      'pay_channel_scope', p_pay_channel_scope,
+      'candidate_count', COALESCE(array_length(p_candidate_ids, 1), 0),
+      'force_include_timesheet_count', COALESCE(array_length(p_force_include_timesheet_ids, 1), 0),
+      'exclude_timesheet_count', COALESCE(array_length(p_exclude_timesheet_ids, 1), 0)
+    ),
+    'pay_sync_overpayments',
+    COALESCE(p_pay_date::text, 'NO_PAY_DATE'),
+    NULL::jsonb,
+    NULL::text,
+    NULL::text,
+    NULL::text
+  );
+
   if p_pay_date is null then
     raise exception 'pay_date is required';
   end if;
@@ -26377,6 +26393,34 @@ begin
         and nullif(btrim(coalesce(itm.value->>'timesheet_id', '')), '')::uuid = any(p_exclude_timesheet_ids)
       )
   ),
+  active_settled_basis AS (
+    SELECT
+      distinct_timesheet_rows.timesheet_id,
+      active_components.active_settled_component_count,
+      active_components.active_settled_amount_ex,
+      active_components.active_settled_signature
+    FROM (
+      SELECT DISTINCT timesheet_item_rows.timesheet_id
+      FROM timesheet_item_rows
+      WHERE timesheet_item_rows.timesheet_id IS NOT NULL
+    ) AS distinct_timesheet_rows
+    LEFT JOIN LATERAL (
+      SELECT
+        count(*)::integer AS active_settled_component_count,
+        round(COALESCE(sum(COALESCE(active_settled_rows.amount_ex_vat, 0)), 0), 2)::numeric(12,2) AS active_settled_amount_ex,
+        md5(COALESCE(jsonb_agg(
+          jsonb_build_object(
+            'key_type', active_settled_rows.key_type,
+            'key_value', active_settled_rows.key_value,
+            'amount_ex_vat', round(COALESCE(active_settled_rows.amount_ex_vat, 0), 2),
+            'amount_inc_vat', round(COALESCE(active_settled_rows.amount_inc_vat, 0), 2)
+          )
+          ORDER BY active_settled_rows.key_type, active_settled_rows.key_value
+        )::text, '[]')) AS active_settled_signature
+      FROM public._pay_active_settled_components(ARRAY[distinct_timesheet_rows.timesheet_id]::uuid[]) AS active_settled_rows
+    ) AS active_components
+      ON true
+  ),
   timesheet_item_with_baseline as (
     select
       tir.candidate_id,
@@ -26384,10 +26428,14 @@ begin
       tir.client_id,
       coalesce(ts.worked_start_iso::date, ts.scheduled_start_iso::date, ts.week_ending_date) as linked_shift_date,
       tir.corrected_amount_ex,
-      coalesce(
-        tps.last_settled_signature,
-        md5(coalesce(tps.last_settled_snapshot_json::text, '{}'))
-      ) as baseline_signature,
+      case
+        when COALESCE(active_settled_basis.active_settled_component_count, 0) > 0
+          then active_settled_basis.active_settled_signature
+        else coalesce(
+          tps.last_settled_signature,
+          md5(coalesce(tps.last_settled_snapshot_json::text, '{}'))
+        )
+      end as baseline_signature,
       tir.candidate_pay_method,
       tir.case_is_blocked,
       tir.case_components_json
@@ -26396,6 +26444,8 @@ begin
       on ts.timesheet_id = tir.timesheet_id
     left join public.timesheet_pay_state tps
       on tps.timesheet_id = tir.timesheet_id
+    left join active_settled_basis
+      on active_settled_basis.timesheet_id = tir.timesheet_id
   ),
   timesheet_exploded_components as (
     select
@@ -26883,7 +26933,20 @@ begin
       pa.linked_shift_date as old_linked_shift_date,
       pa.baseline_signature as old_baseline_signature,
       pa.taxability as old_taxability,
-      pa.routing_kind as old_routing_kind
+      pa.routing_kind as old_routing_kind,
+      pa.written_off_at_utc as old_written_off_at_utc,
+      pa.cleared_at_utc as old_cleared_at_utc,
+      exists (
+        select 1
+        from public.pay_finance_case_events sync_safety_events
+        where sync_safety_events.finance_case_id = pa.id
+          and (
+            upper(btrim(coalesce(sync_safety_events.event_type, ''))) like '%WRITE%OFF%'
+            or upper(btrim(coalesce(sync_safety_events.event_type, ''))) like '%RESTRUCT%'
+            or upper(btrim(coalesce(sync_safety_events.event_type, ''))) like '%MANUAL%'
+            or upper(btrim(coalesce(sync_safety_events.event_type, ''))) like '%RESOLUTION%'
+          )
+      ) as old_has_manual_or_restructure_event
     into v_existing_case_row
     from public.pay_advances pa
     where pa.candidate_id = v_target_case_row.candidate_id
@@ -26896,6 +26959,86 @@ begin
       pa.id desc
     limit 1
     for update;
+
+    if v_existing_case_row.finance_case_id is not null
+       and (
+         v_existing_case_row.old_written_off_at_utc is not null
+         or v_existing_case_row.old_cleared_at_utc is not null
+         or upper(coalesce(v_existing_case_row.old_status::text,'')) not in ('ACTIVE','PAID_OFF')
+         or coalesce(v_existing_case_row.old_has_manual_or_restructure_event, false)
+       ) then
+      insert into public.pay_finance_case_events (
+        finance_case_id,
+        event_type,
+        event_at_utc,
+        actor_user_id,
+        pay_batch_id,
+        reservation_id,
+        before_json,
+        after_json,
+        reason,
+        note
+      )
+      values (
+        v_existing_case_row.finance_case_id,
+        'SYNC_SKIPPED',
+        now(),
+        p_actor_user_id,
+        null,
+        null,
+        jsonb_build_object(
+          'case_type', v_existing_case_row.old_case_type::text,
+          'status', v_existing_case_row.old_status::text,
+          'original_amount', v_existing_case_row.old_original_amount,
+          'outstanding_amount', v_existing_case_row.old_outstanding_amount,
+          'source_original_paid_amount', v_existing_case_row.old_source_original_paid_amount,
+          'source_corrected_paid_amount', v_existing_case_row.old_source_corrected_paid_amount,
+          'linked_shift_date', case when v_existing_case_row.old_linked_shift_date is null then null else v_existing_case_row.old_linked_shift_date::text end,
+          'baseline_signature', v_existing_case_row.old_baseline_signature,
+          'written_off_at_utc', v_existing_case_row.old_written_off_at_utc,
+          'cleared_at_utc', v_existing_case_row.old_cleared_at_utc,
+          'has_manual_or_restructure_event', v_existing_case_row.old_has_manual_or_restructure_event
+        ),
+        jsonb_build_object(
+          'sync_skipped', true,
+          'target_case_type', case when v_target_case_row.desired_case_type is null then null else v_target_case_row.desired_case_type::text end,
+          'target_original_amount', v_target_case_amount_ex,
+          'target_source_original_paid_amount', v_target_case_row.source_original_paid_amount,
+          'target_source_corrected_paid_amount', v_target_case_row.source_corrected_paid_amount,
+          'target_baseline_signature', v_target_case_row.baseline_signature
+        ),
+        'PREVIEW_FINANCE_SYNC_SKIPPED_PROTECTED_CASE',
+        'Skipped overpayment/underpayment preview sync because the existing case is written-off, cleared, closed, manually resolved, or restructured.'
+      );
+
+      insert into pg_temp.tmp_sync_case_links (
+        candidate_id,
+        timesheet_id,
+        finance_case_id,
+        desired_case_type,
+        source_original_paid_amount,
+        source_corrected_paid_amount,
+        case_amount_ex,
+        linked_shift_date,
+        baseline_signature,
+        components_sync_json
+      )
+      values (
+        v_target_case_row.candidate_id,
+        v_target_case_row.timesheet_id,
+        v_existing_case_row.finance_case_id,
+        v_existing_case_row.old_case_type,
+        v_existing_case_row.old_source_original_paid_amount,
+        v_existing_case_row.old_source_corrected_paid_amount,
+        v_existing_case_row.old_original_amount,
+        v_existing_case_row.old_linked_shift_date,
+        v_existing_case_row.old_baseline_signature,
+        '[]'::jsonb
+      )
+      on conflict (candidate_id, timesheet_id) do nothing;
+
+      continue;
+    end if;
 
     v_existing_recovered_amount := greatest(coalesce(v_existing_case_row.old_original_amount, 0) - coalesce(v_existing_case_row.old_outstanding_amount, 0), 0);
     v_new_outstanding_amount := greatest(v_target_case_amount_ex - v_existing_recovered_amount, 0)::numeric(12,2);
@@ -27203,6 +27346,20 @@ begin
         where c.id = pa.candidate_id
           and upper(coalesce(c.pay_method,'')) = v_scope
       )
+      and upper(coalesce(pa.status::text, '')) = 'ACTIVE'
+      and pa.written_off_at_utc is null
+      and pa.cleared_at_utc is null
+      and not exists (
+        select 1
+        from public.pay_finance_case_events sync_clear_safety_events
+        where sync_clear_safety_events.finance_case_id = pa.id
+          and (
+            upper(btrim(coalesce(sync_clear_safety_events.event_type, ''))) like '%WRITE%OFF%'
+            or upper(btrim(coalesce(sync_clear_safety_events.event_type, ''))) like '%RESTRUCT%'
+            or upper(btrim(coalesce(sync_clear_safety_events.event_type, ''))) like '%MANUAL%'
+            or upper(btrim(coalesce(sync_clear_safety_events.event_type, ''))) like '%RESOLUTION%'
+          )
+      )
       and not exists (
         select 1
         from public.pay_item_snoozes pis
@@ -27415,6 +27572,27 @@ begin
     end if;
   end loop;
 
+  PERFORM public._imp_debug_audit(
+    p_actor_user_id,
+    'PAY_SYNC_OVERPAYMENTS_FROM_PREVIEW_RESULT',
+    jsonb_build_object(
+      'pay_channel_scope', v_scope,
+      'overpayment_case_count', v_overpayment_case_count,
+      'underpayment_case_count', v_underpayment_case_count,
+      'cases_inserted', v_cases_inserted,
+      'cases_touched', v_cases_touched,
+      'cases_amended', v_cases_amended,
+      'cases_reopened', v_cases_reopened,
+      'cases_cleared', v_cases_cleared
+    ),
+    'pay_sync_overpayments',
+    COALESCE(p_pay_date::text, 'NO_PAY_DATE'),
+    NULL::jsonb,
+    NULL::text,
+    NULL::text,
+    NULL::text
+  );
+
   return jsonb_build_object(
     'ok', true,
     'pay_channel_scope', v_scope,
@@ -27430,10 +27608,29 @@ begin
     'cases_reopened', v_cases_reopened,
     'cases_cleared', v_cases_cleared
   );
+exception
+  when others then
+    PERFORM public._imp_debug_audit(
+      p_actor_user_id,
+      'PAY_SYNC_OVERPAYMENTS_FROM_PREVIEW_ERROR',
+      jsonb_build_object(
+        'pay_date', p_pay_date,
+        'week_ending_cutoff', p_week_ending_cutoff,
+        'pay_channel_scope', p_pay_channel_scope,
+        'candidate_count', COALESCE(array_length(p_candidate_ids, 1), 0),
+        'sqlstate', SQLSTATE,
+        'error_message', SQLERRM
+      ),
+      'pay_sync_overpayments',
+      COALESCE(p_pay_date::text, 'NO_PAY_DATE'),
+      NULL::jsonb,
+      NULL::text,
+      NULL::text,
+      NULL::text
+    );
+    RAISE;
 end;
 $$;
-
-
 
 
 
