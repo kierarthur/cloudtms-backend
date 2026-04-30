@@ -12951,7 +12951,6 @@ end;
 $function$;
 
 
-
 CREATE OR REPLACE FUNCTION public.pay_preview_candidate_build_finance_case_baseline(
   p_context_json jsonb,
   p_candidate_id uuid
@@ -14932,7 +14931,6 @@ exception
     RAISE;
 end;
 $function$;
-
 
 
 CREATE OR REPLACE FUNCTION public.pay_preview_candidate_build_payee_baseline(
