@@ -176,10 +176,14 @@ $$;
 
 
 
+DROP FUNCTION IF EXISTS public.pay_batch_cancel(uuid, uuid, text);
+
 create or replace function public.pay_batch_cancel(
   p_pay_batch_id uuid,
   p_actor_user_id uuid,
-  p_reason text
+  p_reason text,
+  p_correction_request_id uuid DEFAULT NULL::uuid,
+  p_work_item_id uuid DEFAULT NULL::uuid
 )
 returns jsonb
 language plpgsql
@@ -228,7 +232,9 @@ begin
     jsonb_build_object(
       'pay_batch_id', p_pay_batch_id,
       'actor_user_id', p_actor_user_id,
-      'reason_supplied', NULLIF(BTRIM(COALESCE(p_reason, '')), '') IS NOT NULL
+      'reason_supplied', NULLIF(BTRIM(COALESCE(p_reason, '')), '') IS NOT NULL,
+      'correction_request_id', CASE WHEN p_correction_request_id IS NULL THEN NULL ELSE p_correction_request_id::text END,
+      'work_item_id', CASE WHEN p_work_item_id IS NULL THEN NULL ELSE p_work_item_id::text END
     ),
     'pay_batch',
     COALESCE(p_pay_batch_id::text, 'NO_BATCH_ID'),
@@ -373,23 +379,109 @@ begin
     )::text;
   end if;
 
+  IF p_correction_request_id IS NOT NULL THEN
+    SELECT public.pay_payment_correction_requests.*
+    INTO v_correction_context_request
+    FROM public.pay_payment_correction_requests
+    WHERE public.pay_payment_correction_requests.id = p_correction_request_id
+    FOR UPDATE;
+
+    IF v_correction_context_request.id IS NULL THEN
+      RAISE EXCEPTION '%', jsonb_build_object(
+        'error', 'PAYMENT_CORRECTION_REQUEST_NOT_FOUND',
+        'code', 'PAYMENT_CORRECTION_REQUEST_NOT_FOUND',
+        'message', 'pay_batch_cancel correction context request was not found.',
+        'pay_batch_id', p_pay_batch_id::text,
+        'correction_request_id', p_correction_request_id::text
+      )::text;
+    END IF;
+
+    IF v_correction_context_request.pay_batch_id <> p_pay_batch_id THEN
+      RAISE EXCEPTION '%', jsonb_build_object(
+        'error', 'PAYMENT_CORRECTION_REQUEST_BATCH_MISMATCH',
+        'code', 'PAYMENT_CORRECTION_REQUEST_BATCH_MISMATCH',
+        'message', 'pay_batch_cancel correction context belongs to a different batch.',
+        'pay_batch_id', p_pay_batch_id::text,
+        'correction_request_id', p_correction_request_id::text,
+        'request_pay_batch_id', v_correction_context_request.pay_batch_id::text
+      )::text;
+    END IF;
+
+    IF v_correction_context_request.correction_kind <> 'PRE_BANK_CANCEL'
+       OR v_correction_context_request.status NOT IN ('AUTHORISED', 'EXPANDED', 'PROCESSING') THEN
+      RAISE EXCEPTION '%', jsonb_build_object(
+        'error', 'PAYMENT_CORRECTION_CONTEXT_NOT_PRE_BANK_CANCEL',
+        'code', 'PAYMENT_CORRECTION_CONTEXT_NOT_PRE_BANK_CANCEL',
+        'message', 'pay_batch_cancel correction context must be an authorised/expanded/processing PRE_BANK_CANCEL request.',
+        'pay_batch_id', p_pay_batch_id::text,
+        'correction_request_id', p_correction_request_id::text,
+        'correction_kind', v_correction_context_request.correction_kind,
+        'request_status', v_correction_context_request.status
+      )::text;
+    END IF;
+
+    IF p_work_item_id IS NOT NULL THEN
+      SELECT public.pay_payment_correction_work_items.*
+      INTO v_correction_context_work_item
+      FROM public.pay_payment_correction_work_items
+      WHERE public.pay_payment_correction_work_items.id = p_work_item_id
+      FOR UPDATE;
+
+      IF v_correction_context_work_item.id IS NULL THEN
+        RAISE EXCEPTION '%', jsonb_build_object(
+          'error', 'PAYMENT_CORRECTION_WORK_ITEM_NOT_FOUND',
+          'code', 'PAYMENT_CORRECTION_WORK_ITEM_NOT_FOUND',
+          'message', 'pay_batch_cancel correction context work item was not found.',
+          'pay_batch_id', p_pay_batch_id::text,
+          'correction_request_id', p_correction_request_id::text,
+          'work_item_id', p_work_item_id::text
+        )::text;
+      END IF;
+
+      IF v_correction_context_work_item.correction_request_id <> p_correction_request_id
+         OR v_correction_context_work_item.pay_batch_id <> p_pay_batch_id
+         OR v_correction_context_work_item.work_kind <> 'PRE_BANK_CANCEL'
+         OR v_correction_context_work_item.status NOT IN ('PROCESSING', 'PENDING', 'FAILED_RETRYABLE') THEN
+        RAISE EXCEPTION '%', jsonb_build_object(
+          'error', 'PAYMENT_CORRECTION_WORK_ITEM_CONTEXT_INVALID',
+          'code', 'PAYMENT_CORRECTION_WORK_ITEM_CONTEXT_INVALID',
+          'message', 'pay_batch_cancel correction context work item is not valid for whole-batch PRE_BANK_CANCEL.',
+          'pay_batch_id', p_pay_batch_id::text,
+          'correction_request_id', p_correction_request_id::text,
+          'work_item_id', p_work_item_id::text,
+          'work_kind', v_correction_context_work_item.work_kind,
+          'work_status', v_correction_context_work_item.status
+        )::text;
+      END IF;
+    END IF;
+  END IF;
+
   if exists (
     select 1
     from public.pay_payment_correction_requests correction_request_evidence
     where correction_request_evidence.pay_batch_id = p_pay_batch_id
       and correction_request_evidence.status not in ('REJECTED','CANCELLED')
+      and (
+        p_correction_request_id is null
+        or correction_request_evidence.id <> p_correction_request_id
+      )
   )
   or exists (
     select 1
     from public.pay_payment_correction_items correction_item_evidence
     where correction_item_evidence.pay_batch_id = p_pay_batch_id
       and correction_item_evidence.status = 'APPLIED'
+      and (
+        p_correction_request_id is null
+        or correction_item_evidence.correction_request_id <> p_correction_request_id
+      )
   ) then
     raise exception '%', jsonb_build_object(
       'error', 'USE_PAYMENT_CORRECTION_FLOW',
       'code', 'USE_PAYMENT_CORRECTION_FLOW',
-      'message', 'pay_batch_cancel cannot cancel a batch that already has active or applied payment correction evidence. Use the payment correction flow.',
-      'pay_batch_id', p_pay_batch_id::text
+      'message', 'pay_batch_cancel cannot cancel a batch that already has active or applied payment correction evidence outside the supplied PRE_BANK_CANCEL context. Use the payment correction flow.',
+      'pay_batch_id', p_pay_batch_id::text,
+      'correction_request_id', CASE WHEN p_correction_request_id IS NULL THEN NULL ELSE p_correction_request_id::text END
     )::text;
   end if;
 
@@ -516,6 +608,87 @@ begin
       where bank_event_preserve.pay_bank_transfer_id = pbt.id
          or bank_event_preserve.pay_batch_id = pbt.pay_batch_id
     );
+
+  GET DIAGNOSTICS v_voided_transfer_count = ROW_COUNT;
+
+  IF p_correction_request_id IS NOT NULL THEN
+    INSERT INTO public.pay_payment_correction_items(
+      correction_request_id,
+      pay_batch_id,
+      pay_batch_candidate_id,
+      candidate_id,
+      pay_batch_item_id,
+      pay_bank_transfer_id,
+      timesheet_id,
+      finance_case_id,
+      finance_component_id,
+      reservation_id,
+      item_type,
+      correction_item_kind,
+      source_amount,
+      amount_ex_vat,
+      amount_vat,
+      amount_inc_vat,
+      economic_key_type,
+      economic_key_value,
+      before_snapshot_json,
+      after_snapshot_json,
+      status,
+      created_at_utc,
+      applied_at_utc
+    )
+    SELECT
+      p_correction_request_id,
+      p_pay_batch_id,
+      batch_cancel_items.pay_batch_candidate_id,
+      batch_cancel_candidates.candidate_id,
+      batch_cancel_items.id,
+      batch_cancel_items.pay_bank_transfer_id,
+      batch_cancel_items.timesheet_id,
+      batch_cancel_items.finance_case_id,
+      batch_cancel_items.finance_component_id,
+      batch_cancel_items.reservation_id,
+      batch_cancel_items.item_type,
+      'PRE_BANK_CANCEL',
+      economic_components.source_amount_ex_vat,
+      batch_cancel_items.amount_ex_vat,
+      batch_cancel_items.amount_vat,
+      COALESCE(economic_components.source_amount_inc_vat, batch_cancel_items.amount_inc_vat),
+      economic_components.key_type,
+      economic_components.key_value,
+      to_jsonb(batch_cancel_items),
+      to_jsonb(batch_cancel_items) || jsonb_build_object(
+        'batch_status', 'CANCELLED',
+        'correction_context', true,
+        'correction_request_id', p_correction_request_id::text,
+        'work_item_id', CASE WHEN p_work_item_id IS NULL THEN NULL ELSE p_work_item_id::text END,
+        'updated_at_utc', v_cancelled_at_utc
+      ),
+      'APPLIED',
+      v_cancelled_at_utc,
+      v_cancelled_at_utc
+    FROM public.pay_batch_items AS batch_cancel_items
+    JOIN public.pay_batch_candidates AS batch_cancel_candidates
+      ON batch_cancel_candidates.id = batch_cancel_items.pay_batch_candidate_id
+    LEFT JOIN LATERAL (
+      SELECT
+        economic_helper.key_type,
+        economic_helper.key_value,
+        economic_helper.source_amount_ex_vat,
+        economic_helper.source_amount_inc_vat
+      FROM public._pay_batch_item_economic_components(
+        NULL::uuid,
+        ARRAY[batch_cancel_items.id]::uuid[]
+      ) AS economic_helper
+      LIMIT 1
+    ) AS economic_components
+      ON true
+    WHERE batch_cancel_candidates.pay_batch_id = p_pay_batch_id
+      AND COALESCE(batch_cancel_items.is_voided, false) = false
+    ON CONFLICT (pay_batch_item_id, correction_item_kind) WHERE status = 'APPLIED' AND pay_batch_item_id IS NOT NULL DO NOTHING;
+
+    GET DIAGNOSTICS v_inserted_correction_item_count = ROW_COUNT;
+  END IF;
 
   if to_regclass('public.pay_batch_auth_requests') is not null then
     execute
@@ -1045,6 +1218,10 @@ begin
       'released_reservation_amount', v_released_reservation_amount,
       'component_restored_count', v_component_restored_count,
       'communications_cancelled', v_communications_cancelled_count,
+      'transfers_voided', v_voided_transfer_count,
+      'inserted_correction_item_count', v_inserted_correction_item_count,
+      'correction_request_id', CASE WHEN p_correction_request_id IS NULL THEN NULL ELSE p_correction_request_id::text END,
+      'work_item_id', CASE WHEN p_work_item_id IS NULL THEN NULL ELSE p_work_item_id::text END,
       'cancellation_outcome', v_cancellation_outcome,
       'dirty_candidate_count', v_dirty_candidate_count
     ),
@@ -1061,6 +1238,10 @@ begin
     'classification', 'PRE_BANK_CANCEL',
     'correction_required', false,
     'communications_cancelled', v_communications_cancelled_count,
+    'transfers_voided', v_voided_transfer_count,
+    'inserted_correction_item_count', v_inserted_correction_item_count,
+    'correction_request_id', CASE WHEN p_correction_request_id IS NULL THEN NULL ELSE p_correction_request_id::text END,
+    'work_item_id', CASE WHEN p_work_item_id IS NULL THEN NULL ELSE p_work_item_id::text END,
     'pay_batch_id', p_pay_batch_id::text,
     'status', (select pb2.status from public.pay_batches pb2 where pb2.id = p_pay_batch_id),
     'cancelled_at_utc', (select pb3.cancelled_at_utc::text from public.pay_batches pb3 where pb3.id = p_pay_batch_id),
