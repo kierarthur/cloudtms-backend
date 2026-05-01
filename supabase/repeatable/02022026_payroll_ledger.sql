@@ -171,11 +171,6 @@ end;
 $$;
 
 
-
-
-
-
-
 DROP FUNCTION IF EXISTS public.pay_batch_cancel(uuid, uuid, text);
 
 create or replace function public.pay_batch_cancel(
@@ -225,6 +220,10 @@ declare
   v_snapshot_rebuild_result_json jsonb := '[]'::jsonb;
   v_rebuild_snapshot_run_id uuid := NULL::uuid;
   v_rebuild_snapshot_result jsonb := '{}'::jsonb;
+  v_correction_context_request public.pay_payment_correction_requests%rowtype;
+  v_correction_context_work_item public.pay_payment_correction_work_items%rowtype;
+  v_voided_transfer_count int := 0;
+  v_inserted_correction_item_count int := 0;
 begin
   PERFORM public._imp_debug_audit(
     p_actor_user_id,
@@ -1295,6 +1294,9 @@ begin
   );
 end;
 $$;
+
+
+
 
 
 
