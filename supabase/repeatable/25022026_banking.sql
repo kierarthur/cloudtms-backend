@@ -12223,15 +12223,15 @@ BEGIN
     'can_apply', false,
     'auto_correction_allowed', false,
     'legacy_no_artifact_batch', true,
-    'message', 'External payment reconciliation must now be performed through a normal Banking Pay batch and manual settlement confirmation. This legacy no-artifact reconciliation path is review-only and does not create settlement artifacts.',
+    'message', 'USE_PAYMENT_CORRECTION_FLOW: External payment reconciliation must be backfilled into proper Banking Pay batch artifacts, then settled through manual settlement confirmation so pay_bank_event_ingest and pay_settle_rail can preserve frozen correction evidence. Legacy no-artifact reconciliation is AMBIGUOUS_REVIEW_REQUIRED and cannot auto-correct.',
     'pay_date', CASE WHEN v_pay_date IS NULL THEN NULL ELSE v_pay_date::text END,
     'payment_reference', v_payment_reference,
     'timesheet_count', v_timesheet_count,
     'candidate_count', v_candidate_count,
     'hard_blockers', jsonb_build_array(
       jsonb_build_object(
-        'code', 'LEGACY_NO_ARTIFACT_RECONCILIATION_DISABLED',
-        'message', 'Legacy external reconciliation is classified as AMBIGUOUS_REVIEW_REQUIRED. Create a normal batch and confirm settlement manually instead.'
+        'code', 'USE_PAYMENT_CORRECTION_FLOW',
+        'message', 'Legacy external reconciliation is classified as AMBIGUOUS_REVIEW_REQUIRED. Backfill/create a normal Banking Pay batch and confirm settlement manually so the event/correction artifact path is preserved.'
       )
     )
   );
@@ -12248,11 +12248,13 @@ BEGIN
     NULL::text
   );
 
+  RAISE EXCEPTION 'USE_PAYMENT_CORRECTION_FLOW: External payment reconciliation must be backfilled into proper Banking Pay batch artifacts before correction can be applied.'
+    USING ERRCODE = 'P0001',
+          DETAIL = v_response::text;
+
   RETURN v_response;
 END;
 $$;
-
-
 
 
 create or replace function public.pay_batches_claim_due_scheduled(
