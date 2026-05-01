@@ -4134,7 +4134,7 @@ EXCEPTION
 
     RAISE;
 END;
-$function$
+$function$;
 
 CREATE OR REPLACE FUNCTION public.pay_payment_correction_authorise(
   p_correction_request_id uuid,
