@@ -10500,6 +10500,1100 @@ END;
 $function$;
 
 
+CREATE OR REPLACE FUNCTION public._pay_payment_correction_apply_accepted_finance_resolution(
+  p_correction_request_id uuid,
+  p_work_item_id uuid,
+  p_actor_user_id uuid DEFAULT NULL::uuid
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_request public.pay_payment_correction_requests%rowtype;
+  v_work_item public.pay_payment_correction_work_items%rowtype;
+  v_batch public.pay_batches%rowtype;
+  v_now timestamptz := now();
+  v_effective_actor_user_id uuid := NULL::uuid;
+  v_actor_kind text := 'SYSTEM';
+
+  v_resolution_root jsonb := NULL::jsonb;
+  v_resolution_body jsonb := NULL::jsonb;
+  v_resolution_cases jsonb := '[]'::jsonb;
+
+  v_sensitive_case_count integer := 0;
+  v_case_record record;
+  v_component_record record;
+  v_accepted_case_json jsonb := NULL::jsonb;
+  v_accepted_component_ids_json jsonb := '[]'::jsonb;
+  v_accepted_fingerprints_json jsonb := '{}'::jsonb;
+  v_accepted_surface text := NULL::text;
+  v_accepted_effective_pay_date_text text := NULL::text;
+  v_accepted_effective_pay_date date := NULL::date;
+  v_resolution_path text := NULL::text;
+  v_schedule_input_mode text := NULL::text;
+  v_weeks_total integer := NULL::integer;
+  v_weekly_due numeric := NULL::numeric;
+  v_manual_total_remaining numeric := NULL::numeric;
+  v_note text := NULL::text;
+  v_component_resolutions jsonb := '[]'::jsonb;
+
+  v_case_row public.pay_advances%rowtype;
+  v_expected_fingerprint text := NULL::text;
+  v_current_fingerprint text := NULL::text;
+  v_regenerated_suggestion jsonb := NULL::jsonb;
+  v_regenerated_suggestion_hash text := NULL::text;
+  v_accepted_suggestion_hash text := NULL::text;
+  v_plan_case_json jsonb := NULL::jsonb;
+  v_plan_suggestion_hash text := NULL::text;
+  v_plan_effective_pay_date_text text := NULL::text;
+  v_apply_result jsonb := NULL::jsonb;
+  v_apply_results jsonb := '[]'::jsonb;
+  v_blocker jsonb := NULL::jsonb;
+  v_open_overlap_count integer := 0;
+  v_selected_component_count integer := 0;
+  v_missing_component_count integer := 0;
+  v_missing_fingerprint_count integer := 0;
+  v_fingerprint_mismatch_count integer := 0;
+  v_stale_component_count integer := 0;
+  v_closed_unrecoverable_component_count integer := 0;
+  v_total_selected_item_count integer := 0;
+  v_result jsonb := '{}'::jsonb;
+BEGIN
+  IF p_correction_request_id IS NULL THEN
+    RAISE EXCEPTION 'PAYMENT_CORRECTION_REQUEST_ID_REQUIRED'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object('code', 'PAYMENT_CORRECTION_REQUEST_ID_REQUIRED')::text;
+  END IF;
+
+  IF p_work_item_id IS NULL THEN
+    RAISE EXCEPTION 'PAYMENT_CORRECTION_WORK_ITEM_ID_REQUIRED'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object('code', 'PAYMENT_CORRECTION_WORK_ITEM_ID_REQUIRED')::text;
+  END IF;
+
+  SELECT public.pay_payment_correction_requests.*
+  INTO v_request
+  FROM public.pay_payment_correction_requests
+  WHERE public.pay_payment_correction_requests.id = p_correction_request_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'PAYMENT_CORRECTION_REQUEST_NOT_FOUND'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object(
+              'code', 'PAYMENT_CORRECTION_REQUEST_NOT_FOUND',
+              'correction_request_id', p_correction_request_id
+            )::text;
+  END IF;
+
+  SELECT public.pay_payment_correction_work_items.*
+  INTO v_work_item
+  FROM public.pay_payment_correction_work_items
+  WHERE public.pay_payment_correction_work_items.id = p_work_item_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'PAYMENT_CORRECTION_WORK_ITEM_NOT_FOUND'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object(
+              'code', 'PAYMENT_CORRECTION_WORK_ITEM_NOT_FOUND',
+              'work_item_id', p_work_item_id
+            )::text;
+  END IF;
+
+  IF v_work_item.correction_request_id IS DISTINCT FROM v_request.id THEN
+    RAISE EXCEPTION 'PAYMENT_CORRECTION_WORK_ITEM_REQUEST_MISMATCH'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object(
+              'code', 'PAYMENT_CORRECTION_WORK_ITEM_REQUEST_MISMATCH',
+              'correction_request_id', v_request.id,
+              'work_item_id', v_work_item.id,
+              'work_item_correction_request_id', v_work_item.correction_request_id
+            )::text;
+  END IF;
+
+  IF v_work_item.pay_batch_id IS DISTINCT FROM v_request.pay_batch_id THEN
+    RAISE EXCEPTION 'PAYMENT_CORRECTION_WORK_ITEM_BATCH_MISMATCH'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object(
+              'code', 'PAYMENT_CORRECTION_WORK_ITEM_BATCH_MISMATCH',
+              'correction_request_id', v_request.id,
+              'work_item_id', v_work_item.id,
+              'request_pay_batch_id', v_request.pay_batch_id,
+              'work_item_pay_batch_id', v_work_item.pay_batch_id
+            )::text;
+  END IF;
+
+  SELECT public.pay_batches.*
+  INTO v_batch
+  FROM public.pay_batches
+  WHERE public.pay_batches.id = v_request.pay_batch_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'PAY_BATCH_NOT_FOUND'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object(
+              'code', 'PAY_BATCH_NOT_FOUND',
+              'pay_batch_id', v_request.pay_batch_id
+            )::text;
+  END IF;
+
+  SELECT public.pay_payment_correction_actions.actor_user_id
+  INTO v_effective_actor_user_id
+  FROM public.pay_payment_correction_actions
+  WHERE public.pay_payment_correction_actions.correction_request_id = v_request.id
+    AND public.pay_payment_correction_actions.action IN ('AUTHORISE', 'USE_GOLDEN_KEY')
+    AND public.pay_payment_correction_actions.actor_user_id IS NOT NULL
+  ORDER BY public.pay_payment_correction_actions.action_at_utc DESC, public.pay_payment_correction_actions.id DESC
+  LIMIT 1;
+
+  v_effective_actor_user_id := COALESCE(p_actor_user_id, v_effective_actor_user_id, v_request.requested_by_user_id);
+  v_actor_kind := CASE WHEN v_effective_actor_user_id IS NULL THEN 'SYSTEM' ELSE 'USER' END;
+
+  DROP TABLE IF EXISTS pg_temp._tmp_pcafr_selected_items;
+  CREATE TEMP TABLE _tmp_pcafr_selected_items ON COMMIT DROP AS
+  SELECT selected_items.*
+  FROM public._pay_payment_correction_selected_items(
+    v_request.pay_batch_id,
+    v_work_item.selection_json,
+    true
+  ) AS selected_items;
+
+  SELECT count(*)::integer
+  INTO v_total_selected_item_count
+  FROM pg_temp._tmp_pcafr_selected_items AS selected_count;
+
+  DROP TABLE IF EXISTS pg_temp._tmp_pcafr_sensitive_cases;
+  CREATE TEMP TABLE _tmp_pcafr_sensitive_cases ON COMMIT DROP AS
+  SELECT
+    selected_items.finance_case_id AS finance_case_id,
+    COALESCE(pay_finance_case_components.candidate_id, selected_items.candidate_id) AS candidate_id,
+    COALESCE(
+      jsonb_agg(DISTINCT selected_items.finance_component_id ORDER BY selected_items.finance_component_id)
+        FILTER (WHERE selected_items.finance_component_id IS NOT NULL),
+      '[]'::jsonb
+    ) AS selected_component_ids
+  FROM pg_temp._tmp_pcafr_selected_items AS selected_items
+  JOIN public.pay_batch_items AS pay_batch_items
+    ON pay_batch_items.id = selected_items.pay_batch_item_id
+  LEFT JOIN public.pay_finance_case_components AS pay_finance_case_components
+    ON pay_finance_case_components.id = selected_items.finance_component_id
+  LEFT JOIN public.pay_advances AS pay_advances
+    ON pay_advances.id = selected_items.finance_case_id
+  WHERE selected_items.finance_case_id IS NOT NULL
+    AND selected_items.finance_component_id IS NOT NULL
+    AND (
+      COALESCE(pay_finance_case_components.classification::text, '') = 'TAXABLE_CHANNEL_SENSITIVE'
+      OR COALESCE(pay_batch_items.frozen_component_classification::text, '') = 'TAXABLE_CHANNEL_SENSITIVE'
+      OR (
+        COALESCE(pay_advances.taxability::text, '') = 'TAXABLE'
+        AND (
+          pay_batch_items.frozen_resolution_mode IS NOT NULL
+          OR pay_finance_case_components.saved_resolution_mode IS NOT NULL
+        )
+      )
+    )
+  GROUP BY selected_items.finance_case_id, COALESCE(pay_finance_case_components.candidate_id, selected_items.candidate_id);
+
+  SELECT count(*)::integer
+  INTO v_sensitive_case_count
+  FROM pg_temp._tmp_pcafr_sensitive_cases AS sensitive_case_count;
+
+  IF v_sensitive_case_count = 0 THEN
+    v_result := jsonb_build_object(
+      'ok', true,
+      'applied', false,
+      'reason', 'NO_CHANNEL_SENSITIVE_FINANCE',
+      'correction_request_id', v_request.id::text,
+      'work_item_id', v_work_item.id::text,
+      'selected_item_count', v_total_selected_item_count,
+      'processed_at_utc', v_now,
+      'processing_actor_kind', v_actor_kind,
+      'actor_user_id', CASE WHEN v_effective_actor_user_id IS NULL THEN NULL ELSE v_effective_actor_user_id::text END
+    );
+
+    UPDATE public.pay_payment_correction_work_items AS no_sensitive_work_item
+    SET result_json = COALESCE(no_sensitive_work_item.result_json, '{}'::jsonb) || jsonb_build_object(
+          'accepted_finance_resolution', v_result
+        )
+    WHERE no_sensitive_work_item.id = v_work_item.id;
+
+    RETURN v_result;
+  END IF;
+
+  IF v_request.accepted_resolution_json IS NULL
+     OR COALESCE(jsonb_typeof(v_request.accepted_resolution_json), 'null') <> 'object' THEN
+    v_blocker := jsonb_build_object(
+      'code', 'ACCEPTED_RESOLUTION_REQUIRED',
+      'message', 'Selected gross/taxable/channel-sensitive finance items require accepted_resolution_json before correction apply.',
+      'correction_request_id', v_request.id::text,
+      'work_item_id', v_work_item.id::text,
+      'sensitive_finance_case_count', v_sensitive_case_count
+    );
+
+    UPDATE public.pay_payment_correction_work_items AS accepted_missing_work_item
+    SET status = 'BLOCKED',
+        locked_at_utc = NULL,
+        locked_by = NULL,
+        processed_at_utc = v_now,
+        last_error = v_blocker->>'message',
+        result_json = COALESCE(accepted_missing_work_item.result_json, '{}'::jsonb) || jsonb_build_object(
+          'ok', false,
+          'status', 'BLOCKED',
+          'blocker', v_blocker,
+          'accepted_finance_resolution', jsonb_build_object('ok', false, 'blocker', v_blocker),
+          'processed_at_utc', v_now
+        )
+    WHERE accepted_missing_work_item.id = v_work_item.id;
+
+    RETURN jsonb_build_object('ok', false, 'status', 'BLOCKED', 'blocker', v_blocker);
+  END IF;
+
+  v_resolution_root := v_request.accepted_resolution_json;
+
+  v_resolution_body := CASE
+    WHEN v_resolution_root ? 'suggested_resolution'
+      AND COALESCE(jsonb_typeof(v_resolution_root->'suggested_resolution'), 'null') = 'object'
+      THEN v_resolution_root->'suggested_resolution'
+    WHEN v_resolution_root ? 'accepted_resolution'
+      AND COALESCE(jsonb_typeof(v_resolution_root->'accepted_resolution'), 'null') = 'object'
+      THEN v_resolution_root->'accepted_resolution'
+    ELSE v_resolution_root
+  END;
+
+  v_resolution_cases := COALESCE(v_resolution_body->'finance_cases', v_resolution_root->'finance_cases', '[]'::jsonb);
+
+  IF COALESCE(jsonb_typeof(v_resolution_cases), 'null') <> 'array' THEN
+    v_blocker := jsonb_build_object(
+      'code', 'ACCEPTED_RESOLUTION_FINANCE_CASES_INVALID',
+      'message', 'accepted_resolution_json.finance_cases must be an array.',
+      'correction_request_id', v_request.id::text,
+      'work_item_id', v_work_item.id::text
+    );
+
+    UPDATE public.pay_payment_correction_work_items AS accepted_cases_invalid_work_item
+    SET status = 'BLOCKED',
+        locked_at_utc = NULL,
+        locked_by = NULL,
+        processed_at_utc = v_now,
+        last_error = v_blocker->>'message',
+        result_json = COALESCE(accepted_cases_invalid_work_item.result_json, '{}'::jsonb) || jsonb_build_object(
+          'ok', false,
+          'status', 'BLOCKED',
+          'blocker', v_blocker,
+          'accepted_finance_resolution', jsonb_build_object('ok', false, 'blocker', v_blocker),
+          'processed_at_utc', v_now
+        )
+    WHERE accepted_cases_invalid_work_item.id = v_work_item.id;
+
+    RETURN jsonb_build_object('ok', false, 'status', 'BLOCKED', 'blocker', v_blocker);
+  END IF;
+
+  FOR v_case_record IN
+    SELECT sensitive_cases.*
+    FROM pg_temp._tmp_pcafr_sensitive_cases AS sensitive_cases
+    ORDER BY sensitive_cases.finance_case_id
+  LOOP
+    SELECT finance_case_rows.*
+    INTO v_case_row
+    FROM public.pay_advances AS finance_case_rows
+    WHERE finance_case_rows.id = v_case_record.finance_case_id
+    FOR UPDATE;
+
+    IF NOT FOUND THEN
+      v_blocker := jsonb_build_object(
+        'code', 'FINANCE_CASE_NOT_FOUND',
+        'message', 'Selected finance case no longer exists.',
+        'finance_case_id', v_case_record.finance_case_id::text
+      );
+
+      UPDATE public.pay_payment_correction_work_items AS finance_case_missing_work_item
+      SET status = 'BLOCKED',
+          locked_at_utc = NULL,
+          locked_by = NULL,
+          processed_at_utc = v_now,
+          last_error = v_blocker->>'message',
+          result_json = COALESCE(finance_case_missing_work_item.result_json, '{}'::jsonb) || jsonb_build_object(
+            'ok', false,
+            'status', 'BLOCKED',
+            'blocker', v_blocker,
+            'accepted_finance_resolution', jsonb_build_object('ok', false, 'blocker', v_blocker),
+            'processed_at_utc', v_now
+          )
+      WHERE finance_case_missing_work_item.id = v_work_item.id;
+
+      RETURN jsonb_build_object('ok', false, 'status', 'BLOCKED', 'blocker', v_blocker);
+    END IF;
+
+    SELECT accepted_case.value
+    INTO v_accepted_case_json
+    FROM jsonb_array_elements(v_resolution_cases) AS accepted_case(value)
+    WHERE NULLIF(btrim(COALESCE(accepted_case.value->>'finance_case_id', '')), '') = v_case_record.finance_case_id::text
+    LIMIT 1;
+
+    IF v_accepted_case_json IS NULL THEN
+      v_blocker := jsonb_build_object(
+        'code', 'ACCEPTED_RESOLUTION_CASE_MISSING',
+        'message', 'accepted_resolution_json does not include the selected gross/channel-sensitive finance case.',
+        'finance_case_id', v_case_record.finance_case_id::text
+      );
+
+      UPDATE public.pay_payment_correction_work_items AS accepted_case_missing_work_item
+      SET status = 'BLOCKED',
+          locked_at_utc = NULL,
+          locked_by = NULL,
+          processed_at_utc = v_now,
+          last_error = v_blocker->>'message',
+          result_json = COALESCE(accepted_case_missing_work_item.result_json, '{}'::jsonb) || jsonb_build_object(
+            'ok', false,
+            'status', 'BLOCKED',
+            'blocker', v_blocker,
+            'accepted_finance_resolution', jsonb_build_object('ok', false, 'blocker', v_blocker),
+            'processed_at_utc', v_now
+          )
+      WHERE accepted_case_missing_work_item.id = v_work_item.id;
+
+      RETURN jsonb_build_object('ok', false, 'status', 'BLOCKED', 'blocker', v_blocker);
+    END IF;
+
+    IF NULLIF(btrim(COALESCE(v_accepted_case_json->>'candidate_id', '')), '') IS NOT NULL
+       AND NULLIF(btrim(COALESCE(v_accepted_case_json->>'candidate_id', '')), '') <> v_case_record.candidate_id::text THEN
+      v_blocker := jsonb_build_object(
+        'code', 'ACCEPTED_RESOLUTION_CANDIDATE_MISMATCH',
+        'message', 'accepted_resolution_json candidate_id does not match the selected finance case candidate.',
+        'finance_case_id', v_case_record.finance_case_id::text,
+        'accepted_candidate_id', v_accepted_case_json->>'candidate_id',
+        'selected_candidate_id', v_case_record.candidate_id::text
+      );
+
+      UPDATE public.pay_payment_correction_work_items AS accepted_candidate_mismatch_work_item
+      SET status = 'BLOCKED',
+          locked_at_utc = NULL,
+          locked_by = NULL,
+          processed_at_utc = v_now,
+          last_error = v_blocker->>'message',
+          result_json = COALESCE(accepted_candidate_mismatch_work_item.result_json, '{}'::jsonb) || jsonb_build_object(
+            'ok', false,
+            'status', 'BLOCKED',
+            'blocker', v_blocker,
+            'accepted_finance_resolution', jsonb_build_object('ok', false, 'blocker', v_blocker),
+            'processed_at_utc', v_now
+          )
+      WHERE accepted_candidate_mismatch_work_item.id = v_work_item.id;
+
+      RETURN jsonb_build_object('ok', false, 'status', 'BLOCKED', 'blocker', v_blocker);
+    END IF;
+
+    SELECT plan_case.value
+    INTO v_plan_case_json
+    FROM jsonb_array_elements(
+      CASE
+        WHEN COALESCE(jsonb_typeof(v_request.plan_json#>'{suggested_resolution,finance_cases}'), 'null') = 'array'
+          THEN v_request.plan_json#>'{suggested_resolution,finance_cases}'
+        ELSE '[]'::jsonb
+      END
+    ) AS plan_case(value)
+    WHERE NULLIF(btrim(COALESCE(plan_case.value->>'finance_case_id', '')), '') = v_case_record.finance_case_id::text
+    LIMIT 1;
+
+    v_plan_suggestion_hash := NULLIF(btrim(COALESCE(v_plan_case_json->>'suggestion_hash', '')), '');
+    v_plan_effective_pay_date_text := NULLIF(btrim(COALESCE(v_plan_case_json->>'effective_pay_date', '')), '');
+
+    v_accepted_component_ids_json := COALESCE(
+      v_accepted_case_json->'component_ids',
+      v_accepted_case_json->'selected_component_ids',
+      '[]'::jsonb
+    );
+
+    IF COALESCE(jsonb_typeof(v_accepted_component_ids_json), 'null') <> 'array' THEN
+      v_blocker := jsonb_build_object(
+        'code', 'ACCEPTED_RESOLUTION_COMPONENT_IDS_INVALID',
+        'message', 'accepted_resolution_json finance case component_ids must be an array.',
+        'finance_case_id', v_case_record.finance_case_id::text
+      );
+
+      UPDATE public.pay_payment_correction_work_items AS accepted_components_invalid_work_item
+      SET status = 'BLOCKED',
+          locked_at_utc = NULL,
+          locked_by = NULL,
+          processed_at_utc = v_now,
+          last_error = v_blocker->>'message',
+          result_json = COALESCE(accepted_components_invalid_work_item.result_json, '{}'::jsonb) || jsonb_build_object(
+            'ok', false,
+            'status', 'BLOCKED',
+            'blocker', v_blocker,
+            'accepted_finance_resolution', jsonb_build_object('ok', false, 'blocker', v_blocker),
+            'processed_at_utc', v_now
+          )
+      WHERE accepted_components_invalid_work_item.id = v_work_item.id;
+
+      RETURN jsonb_build_object('ok', false, 'status', 'BLOCKED', 'blocker', v_blocker);
+    END IF;
+
+    SELECT count(*)::integer
+    INTO v_selected_component_count
+    FROM public.pay_finance_case_components AS selected_component_count
+    WHERE selected_component_count.finance_case_id = v_case_record.finance_case_id
+      AND selected_component_count.id IN (
+        SELECT (selected_component_ids.value)::uuid
+        FROM jsonb_array_elements_text(v_case_record.selected_component_ids) AS selected_component_ids(value)
+        WHERE selected_component_ids.value ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+      );
+
+    SELECT count(*)::integer
+    INTO v_missing_component_count
+    FROM jsonb_array_elements_text(v_case_record.selected_component_ids) AS selected_component_ids(value)
+    WHERE selected_component_ids.value ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+      AND NOT EXISTS (
+        SELECT 1
+        FROM jsonb_array_elements_text(v_accepted_component_ids_json) AS accepted_component_ids(value)
+        WHERE accepted_component_ids.value = selected_component_ids.value
+      );
+
+    IF v_selected_component_count = 0 OR v_missing_component_count > 0 THEN
+      v_blocker := jsonb_build_object(
+        'code', 'ACCEPTED_RESOLUTION_COMPONENT_SCOPE_MISMATCH',
+        'message', 'accepted_resolution_json does not cover all selected gross/channel-sensitive finance components.',
+        'finance_case_id', v_case_record.finance_case_id::text,
+        'missing_component_count', v_missing_component_count,
+        'selected_component_count', v_selected_component_count
+      );
+
+      UPDATE public.pay_payment_correction_work_items AS component_scope_mismatch_work_item
+      SET status = 'BLOCKED',
+          locked_at_utc = NULL,
+          locked_by = NULL,
+          processed_at_utc = v_now,
+          last_error = v_blocker->>'message',
+          result_json = COALESCE(component_scope_mismatch_work_item.result_json, '{}'::jsonb) || jsonb_build_object(
+            'ok', false,
+            'status', 'BLOCKED',
+            'blocker', v_blocker,
+            'accepted_finance_resolution', jsonb_build_object('ok', false, 'blocker', v_blocker),
+            'processed_at_utc', v_now
+          )
+      WHERE component_scope_mismatch_work_item.id = v_work_item.id;
+
+      RETURN jsonb_build_object('ok', false, 'status', 'BLOCKED', 'blocker', v_blocker);
+    END IF;
+
+    v_accepted_fingerprints_json := COALESCE(
+      v_accepted_case_json->'current_component_fingerprints',
+      v_accepted_case_json->'component_fingerprints',
+      '{}'::jsonb
+    );
+
+    IF COALESCE(jsonb_typeof(v_accepted_fingerprints_json), 'null') <> 'object' THEN
+      v_blocker := jsonb_build_object(
+        'code', 'ACCEPTED_RESOLUTION_COMPONENT_FINGERPRINTS_INVALID',
+        'message', 'accepted_resolution_json current_component_fingerprints must be an object.',
+        'finance_case_id', v_case_record.finance_case_id::text
+      );
+
+      UPDATE public.pay_payment_correction_work_items AS fingerprints_invalid_work_item
+      SET status = 'BLOCKED',
+          locked_at_utc = NULL,
+          locked_by = NULL,
+          processed_at_utc = v_now,
+          last_error = v_blocker->>'message',
+          result_json = COALESCE(fingerprints_invalid_work_item.result_json, '{}'::jsonb) || jsonb_build_object(
+            'ok', false,
+            'status', 'BLOCKED',
+            'blocker', v_blocker,
+            'accepted_finance_resolution', jsonb_build_object('ok', false, 'blocker', v_blocker),
+            'processed_at_utc', v_now
+          )
+      WHERE fingerprints_invalid_work_item.id = v_work_item.id;
+
+      RETURN jsonb_build_object('ok', false, 'status', 'BLOCKED', 'blocker', v_blocker);
+    END IF;
+
+    v_missing_fingerprint_count := 0;
+    v_fingerprint_mismatch_count := 0;
+    v_stale_component_count := 0;
+    v_closed_unrecoverable_component_count := 0;
+
+    FOR v_component_record IN
+      SELECT public.pay_finance_case_components.*
+      FROM public.pay_finance_case_components
+      WHERE public.pay_finance_case_components.finance_case_id = v_case_record.finance_case_id
+        AND public.pay_finance_case_components.id IN (
+          SELECT (selected_component_ids.value)::uuid
+          FROM jsonb_array_elements_text(v_case_record.selected_component_ids) AS selected_component_ids(value)
+          WHERE selected_component_ids.value ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+        )
+      ORDER BY public.pay_finance_case_components.id
+      FOR UPDATE
+    LOOP
+      v_expected_fingerprint := NULLIF(btrim(COALESCE(v_accepted_fingerprints_json->>v_component_record.id::text, '')), '');
+      v_current_fingerprint := COALESCE(
+        NULLIF(btrim(v_component_record.resolution_fingerprint), ''),
+        md5(jsonb_build_object(
+          'finance_component_id', v_component_record.id,
+          'finance_case_id', v_component_record.finance_case_id,
+          'classification', v_component_record.classification::text,
+          'source_pay_method', v_component_record.source_pay_method,
+          'source_amount', v_component_record.source_amount,
+          'remaining_source_amount', v_component_record.remaining_source_amount,
+          'saved_target_pay_method', v_component_record.saved_target_pay_method,
+          'saved_resolution_mode', v_component_record.saved_resolution_mode::text,
+          'saved_resolution_payload_json', v_component_record.saved_resolution_payload_json,
+          'saved_resolution_result_json', v_component_record.saved_resolution_result_json,
+          'is_resolution_stale', v_component_record.is_resolution_stale,
+          'closed_at_utc', v_component_record.closed_at_utc,
+          'updated_at_utc', v_component_record.updated_at_utc
+        )::text)
+      );
+
+      IF v_expected_fingerprint IS NULL THEN
+        v_missing_fingerprint_count := v_missing_fingerprint_count + 1;
+      ELSIF v_expected_fingerprint <> v_current_fingerprint THEN
+        v_fingerprint_mismatch_count := v_fingerprint_mismatch_count + 1;
+      END IF;
+
+      IF COALESCE(v_component_record.is_resolution_stale, false) THEN
+        v_stale_component_count := v_stale_component_count + 1;
+      END IF;
+
+      IF v_component_record.closed_at_utc IS NOT NULL
+         AND round(COALESCE(v_component_record.remaining_source_amount, 0), 2) <= 0 THEN
+        v_closed_unrecoverable_component_count := v_closed_unrecoverable_component_count + 1;
+      END IF;
+    END LOOP;
+
+    IF v_missing_fingerprint_count > 0 OR v_fingerprint_mismatch_count > 0 THEN
+      v_blocker := jsonb_build_object(
+        'code', 'ACCEPTED_RESOLUTION_STALE',
+        'message', 'Accepted finance resolution is stale because one or more component fingerprints no longer match.',
+        'finance_case_id', v_case_record.finance_case_id::text,
+        'missing_fingerprint_count', v_missing_fingerprint_count,
+        'fingerprint_mismatch_count', v_fingerprint_mismatch_count
+      );
+
+      UPDATE public.pay_payment_correction_work_items AS stale_fingerprint_work_item
+      SET status = 'BLOCKED',
+          locked_at_utc = NULL,
+          locked_by = NULL,
+          processed_at_utc = v_now,
+          last_error = v_blocker->>'message',
+          result_json = COALESCE(stale_fingerprint_work_item.result_json, '{}'::jsonb) || jsonb_build_object(
+            'ok', false,
+            'status', 'BLOCKED',
+            'blocker', v_blocker,
+            'accepted_finance_resolution', jsonb_build_object('ok', false, 'blocker', v_blocker),
+            'processed_at_utc', v_now
+          )
+      WHERE stale_fingerprint_work_item.id = v_work_item.id;
+
+      RETURN jsonb_build_object('ok', false, 'status', 'BLOCKED', 'blocker', v_blocker);
+    END IF;
+
+    IF v_stale_component_count > 0 OR v_closed_unrecoverable_component_count > 0 THEN
+      v_blocker := jsonb_build_object(
+        'code', 'FINANCE_CASE_MANUAL_REVIEW_REQUIRED',
+        'message', 'Selected finance components are stale or closed in a way that requires manual review before correction apply.',
+        'finance_case_id', v_case_record.finance_case_id::text,
+        'stale_component_count', v_stale_component_count,
+        'closed_unrecoverable_component_count', v_closed_unrecoverable_component_count
+      );
+
+      UPDATE public.pay_payment_correction_work_items AS manual_review_component_work_item
+      SET status = 'BLOCKED',
+          locked_at_utc = NULL,
+          locked_by = NULL,
+          processed_at_utc = v_now,
+          last_error = v_blocker->>'message',
+          result_json = COALESCE(manual_review_component_work_item.result_json, '{}'::jsonb) || jsonb_build_object(
+            'ok', false,
+            'status', 'BLOCKED',
+            'blocker', v_blocker,
+            'accepted_finance_resolution', jsonb_build_object('ok', false, 'blocker', v_blocker),
+            'processed_at_utc', v_now
+          )
+      WHERE manual_review_component_work_item.id = v_work_item.id;
+
+      RETURN jsonb_build_object('ok', false, 'status', 'BLOCKED', 'blocker', v_blocker);
+    END IF;
+
+    IF v_case_row.status <> 'ACTIVE'::public.pay_advance_status_enum
+       OR v_case_row.written_off_at_utc IS NOT NULL THEN
+      v_blocker := jsonb_build_object(
+        'code', 'FINANCE_CASE_NOT_ACTIVE_OR_WRITTEN_OFF',
+        'message', 'Selected finance case is no longer active or has been written off.',
+        'finance_case_id', v_case_record.finance_case_id::text,
+        'status', v_case_row.status::text,
+        'written_off_at_utc', v_case_row.written_off_at_utc
+      );
+
+      UPDATE public.pay_payment_correction_work_items AS inactive_case_work_item
+      SET status = 'BLOCKED',
+          locked_at_utc = NULL,
+          locked_by = NULL,
+          processed_at_utc = v_now,
+          last_error = v_blocker->>'message',
+          result_json = COALESCE(inactive_case_work_item.result_json, '{}'::jsonb) || jsonb_build_object(
+            'ok', false,
+            'status', 'BLOCKED',
+            'blocker', v_blocker,
+            'accepted_finance_resolution', jsonb_build_object('ok', false, 'blocker', v_blocker),
+            'processed_at_utc', v_now
+          )
+      WHERE inactive_case_work_item.id = v_work_item.id;
+
+      RETURN jsonb_build_object('ok', false, 'status', 'BLOCKED', 'blocker', v_blocker);
+    END IF;
+
+    SELECT count(*)::integer
+    INTO v_open_overlap_count
+    FROM public.pay_batch_items AS overlapping_items
+    JOIN public.pay_batch_candidates AS overlapping_candidates
+      ON overlapping_candidates.id = overlapping_items.pay_batch_candidate_id
+    JOIN public.pay_batches AS overlapping_batches
+      ON overlapping_batches.id = overlapping_candidates.pay_batch_id
+    WHERE overlapping_candidates.pay_batch_id <> v_request.pay_batch_id
+      AND COALESCE(overlapping_items.is_voided, false) = false
+      AND overlapping_batches.cancelled_at_utc IS NULL
+      AND public._pay_batch_status_is_active_reservation(overlapping_batches.status)
+      AND (
+        overlapping_items.finance_case_id = v_case_record.finance_case_id
+        OR overlapping_items.finance_component_id IN (
+          SELECT (selected_component_ids.value)::uuid
+          FROM jsonb_array_elements_text(v_case_record.selected_component_ids) AS selected_component_ids(value)
+          WHERE selected_component_ids.value ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+        )
+        OR overlapping_items.reservation_id IN (
+          SELECT selected_items.reservation_id
+          FROM pg_temp._tmp_pcafr_selected_items AS selected_items
+          WHERE selected_items.finance_case_id = v_case_record.finance_case_id
+            AND selected_items.reservation_id IS NOT NULL
+        )
+      );
+
+    IF v_open_overlap_count > 0 THEN
+      v_blocker := jsonb_build_object(
+        'code', 'DRAFT_BATCH_INTERFERENCE',
+        'message', 'An open overlapping draft/reserved batch already references the selected finance case/component/reservation. Delete or cancel the overlapping draft first.',
+        'finance_case_id', v_case_record.finance_case_id::text,
+        'overlap_count', v_open_overlap_count
+      );
+
+      UPDATE public.pay_payment_correction_work_items AS overlap_work_item
+      SET status = 'BLOCKED',
+          locked_at_utc = NULL,
+          locked_by = NULL,
+          processed_at_utc = v_now,
+          last_error = v_blocker->>'message',
+          result_json = COALESCE(overlap_work_item.result_json, '{}'::jsonb) || jsonb_build_object(
+            'ok', false,
+            'status', 'BLOCKED',
+            'blocker', v_blocker,
+            'accepted_finance_resolution', jsonb_build_object('ok', false, 'blocker', v_blocker),
+            'processed_at_utc', v_now
+          )
+      WHERE overlap_work_item.id = v_work_item.id;
+
+      RETURN jsonb_build_object('ok', false, 'status', 'BLOCKED', 'blocker', v_blocker);
+    END IF;
+
+    v_accepted_surface := COALESCE(
+      NULLIF(btrim(v_accepted_case_json->>'apply_surface'), ''),
+      NULLIF(btrim(v_resolution_body->>'apply_surface'), ''),
+      'pay_finance_case_apply_taxable_channel_restructure'
+    );
+
+    IF v_accepted_surface NOT IN (
+      'pay_finance_case_apply_taxable_channel_restructure',
+      'pay_manual_debt_adjustment_resolve_taxable_channel_change',
+      'pay_finance_component_resolutions_apply'
+    ) THEN
+      v_blocker := jsonb_build_object(
+        'code', 'ACCEPTED_RESOLUTION_APPLY_SURFACE_UNSUPPORTED',
+        'message', 'accepted_resolution_json apply_surface is not supported by the payment correction finance helper.',
+        'finance_case_id', v_case_record.finance_case_id::text,
+        'apply_surface', v_accepted_surface
+      );
+
+      UPDATE public.pay_payment_correction_work_items AS unsupported_surface_work_item
+      SET status = 'BLOCKED',
+          locked_at_utc = NULL,
+          locked_by = NULL,
+          processed_at_utc = v_now,
+          last_error = v_blocker->>'message',
+          result_json = COALESCE(unsupported_surface_work_item.result_json, '{}'::jsonb) || jsonb_build_object(
+            'ok', false,
+            'status', 'BLOCKED',
+            'blocker', v_blocker,
+            'accepted_finance_resolution', jsonb_build_object('ok', false, 'blocker', v_blocker),
+            'processed_at_utc', v_now
+          )
+      WHERE unsupported_surface_work_item.id = v_work_item.id;
+
+      RETURN jsonb_build_object('ok', false, 'status', 'BLOCKED', 'blocker', v_blocker);
+    END IF;
+
+    v_accepted_effective_pay_date_text := COALESCE(
+      NULLIF(btrim(v_accepted_case_json->>'effective_pay_date'), ''),
+      v_plan_effective_pay_date_text,
+      NULLIF(btrim(v_resolution_body->>'effective_pay_date'), ''),
+      COALESCE(v_batch.authoritative_payment_date, v_batch.pay_date)::text
+    );
+
+    IF v_accepted_effective_pay_date_text !~ '^\d{4}-\d{2}-\d{2}$' THEN
+      v_blocker := jsonb_build_object(
+        'code', 'ACCEPTED_RESOLUTION_EFFECTIVE_PAY_DATE_INVALID',
+        'message', 'accepted_resolution_json effective_pay_date must be YYYY-MM-DD.',
+        'finance_case_id', v_case_record.finance_case_id::text,
+        'effective_pay_date', v_accepted_effective_pay_date_text
+      );
+
+      UPDATE public.pay_payment_correction_work_items AS effective_date_invalid_work_item
+      SET status = 'BLOCKED',
+          locked_at_utc = NULL,
+          locked_by = NULL,
+          processed_at_utc = v_now,
+          last_error = v_blocker->>'message',
+          result_json = COALESCE(effective_date_invalid_work_item.result_json, '{}'::jsonb) || jsonb_build_object(
+            'ok', false,
+            'status', 'BLOCKED',
+            'blocker', v_blocker,
+            'accepted_finance_resolution', jsonb_build_object('ok', false, 'blocker', v_blocker),
+            'processed_at_utc', v_now
+          )
+      WHERE effective_date_invalid_work_item.id = v_work_item.id;
+
+      RETURN jsonb_build_object('ok', false, 'status', 'BLOCKED', 'blocker', v_blocker);
+    END IF;
+
+    IF v_plan_effective_pay_date_text IS NOT NULL
+       AND v_plan_effective_pay_date_text ~ '^\d{4}-\d{2}-\d{2}$'
+       AND v_accepted_effective_pay_date_text <> v_plan_effective_pay_date_text THEN
+      v_blocker := jsonb_build_object(
+        'code', 'ACCEPTED_RESOLUTION_EFFECTIVE_PAY_DATE_MISMATCH',
+        'message', 'accepted_resolution_json effective_pay_date does not match the payment correction plan effective_pay_date.',
+        'finance_case_id', v_case_record.finance_case_id::text,
+        'accepted_effective_pay_date', v_accepted_effective_pay_date_text,
+        'planned_effective_pay_date', v_plan_effective_pay_date_text
+      );
+
+      UPDATE public.pay_payment_correction_work_items AS effective_date_mismatch_work_item
+      SET status = 'BLOCKED',
+          locked_at_utc = NULL,
+          locked_by = NULL,
+          processed_at_utc = v_now,
+          last_error = v_blocker->>'message',
+          result_json = COALESCE(effective_date_mismatch_work_item.result_json, '{}'::jsonb) || jsonb_build_object(
+            'ok', false,
+            'status', 'BLOCKED',
+            'blocker', v_blocker,
+            'accepted_finance_resolution', jsonb_build_object('ok', false, 'blocker', v_blocker),
+            'processed_at_utc', v_now
+          )
+      WHERE effective_date_mismatch_work_item.id = v_work_item.id;
+
+      RETURN jsonb_build_object('ok', false, 'status', 'BLOCKED', 'blocker', v_blocker);
+    END IF;
+
+    v_accepted_effective_pay_date := v_accepted_effective_pay_date_text::date;
+    v_resolution_path := COALESCE(
+      NULLIF(btrim(v_accepted_case_json->>'resolution_path'), ''),
+      NULLIF(btrim(v_resolution_body->>'resolution_path'), ''),
+      NULLIF(btrim(v_accepted_case_json#>>'{suggestion,resolution_path}'), ''),
+      'SUGGESTED'
+    );
+    v_schedule_input_mode := COALESCE(
+      NULLIF(btrim(v_accepted_case_json->>'schedule_input_mode'), ''),
+      NULLIF(btrim(v_resolution_body->>'schedule_input_mode'), ''),
+      NULLIF(btrim(v_accepted_case_json#>>'{suggestion,schedule_input_mode}'), '')
+    );
+
+    v_weeks_total := CASE
+      WHEN COALESCE(v_accepted_case_json->>'weeks_total', v_resolution_body->>'weeks_total', v_accepted_case_json#>>'{suggestion,selected,weeks_total}') ~ '^-?\d+$'
+        THEN COALESCE(v_accepted_case_json->>'weeks_total', v_resolution_body->>'weeks_total', v_accepted_case_json#>>'{suggestion,selected,weeks_total}')::integer
+      ELSE NULL::integer
+    END;
+
+    v_weekly_due := CASE
+      WHEN COALESCE(v_accepted_case_json->>'weekly_due', v_resolution_body->>'weekly_due', v_accepted_case_json#>>'{suggestion,selected,weekly_due}') ~ '^-?\d+(\.\d+)?$'
+        THEN COALESCE(v_accepted_case_json->>'weekly_due', v_resolution_body->>'weekly_due', v_accepted_case_json#>>'{suggestion,selected,weekly_due}')::numeric
+      ELSE NULL::numeric
+    END;
+
+    v_manual_total_remaining := CASE
+      WHEN COALESCE(v_accepted_case_json->>'manual_total_remaining', v_resolution_body->>'manual_total_remaining') ~ '^-?\d+(\.\d+)?$'
+        THEN COALESCE(v_accepted_case_json->>'manual_total_remaining', v_resolution_body->>'manual_total_remaining')::numeric
+      ELSE NULL::numeric
+    END;
+
+    v_note := COALESCE(
+      NULLIF(btrim(v_accepted_case_json->>'note'), ''),
+      NULLIF(btrim(v_resolution_body->>'note'), ''),
+      'Applied accepted taxable channel finance resolution for payment correction request ' || v_request.id::text || ', work item ' || v_work_item.id::text
+    );
+
+    IF v_effective_actor_user_id IS NULL THEN
+      v_blocker := jsonb_build_object(
+        'code', 'ACTOR_USER_ID_REQUIRED_FOR_ACCEPTED_FINANCE_RESOLUTION',
+        'message', 'Applying accepted gross/channel-sensitive finance resolution requires a user actor.',
+        'finance_case_id', v_case_record.finance_case_id::text
+      );
+
+      UPDATE public.pay_payment_correction_work_items AS actor_required_work_item
+      SET status = 'BLOCKED',
+          locked_at_utc = NULL,
+          locked_by = NULL,
+          processed_at_utc = v_now,
+          last_error = v_blocker->>'message',
+          result_json = COALESCE(actor_required_work_item.result_json, '{}'::jsonb) || jsonb_build_object(
+            'ok', false,
+            'status', 'BLOCKED',
+            'blocker', v_blocker,
+            'accepted_finance_resolution', jsonb_build_object('ok', false, 'blocker', v_blocker),
+            'processed_at_utc', v_now
+          )
+      WHERE actor_required_work_item.id = v_work_item.id;
+
+      RETURN jsonb_build_object('ok', false, 'status', 'BLOCKED', 'blocker', v_blocker);
+    END IF;
+
+    BEGIN
+      v_regenerated_suggestion := public.pay_finance_case_taxable_channel_restructure_suggestion(
+        p_finance_case_id => v_case_record.finance_case_id,
+        p_actor_user_id => v_effective_actor_user_id,
+        p_effective_pay_date => v_accepted_effective_pay_date,
+        p_resolution_path => v_resolution_path,
+        p_schedule_input_mode => v_schedule_input_mode,
+        p_weeks_total => v_weeks_total,
+        p_weekly_due => v_weekly_due,
+        p_manual_total_remaining => v_manual_total_remaining,
+        p_note => 'Regenerated for accepted payment correction finance resolution ' || v_request.id::text || ', work item ' || v_work_item.id::text
+      );
+
+      v_regenerated_suggestion_hash := md5(v_regenerated_suggestion::text);
+      v_accepted_suggestion_hash := NULLIF(btrim(COALESCE(v_accepted_case_json->>'suggestion_hash', '')), '');
+
+      IF v_accepted_suggestion_hash IS NULL THEN
+        v_blocker := jsonb_build_object(
+          'code', 'ACCEPTED_RESOLUTION_SUGGESTION_HASH_REQUIRED',
+          'message', 'accepted_resolution_json must include suggestion_hash for every selected gross/channel-sensitive finance case.',
+          'finance_case_id', v_case_record.finance_case_id::text
+        );
+
+        UPDATE public.pay_payment_correction_work_items AS missing_suggestion_hash_work_item
+        SET status = 'BLOCKED',
+            locked_at_utc = NULL,
+            locked_by = NULL,
+            processed_at_utc = v_now,
+            last_error = v_blocker->>'message',
+            result_json = COALESCE(missing_suggestion_hash_work_item.result_json, '{}'::jsonb) || jsonb_build_object(
+              'ok', false,
+              'status', 'BLOCKED',
+              'blocker', v_blocker,
+              'accepted_finance_resolution', jsonb_build_object('ok', false, 'blocker', v_blocker),
+              'processed_at_utc', v_now
+            )
+        WHERE missing_suggestion_hash_work_item.id = v_work_item.id;
+
+        RETURN jsonb_build_object('ok', false, 'status', 'BLOCKED', 'blocker', v_blocker);
+      END IF;
+
+      IF v_plan_suggestion_hash IS NOT NULL
+         AND v_accepted_suggestion_hash <> v_plan_suggestion_hash THEN
+        v_blocker := jsonb_build_object(
+          'code', 'ACCEPTED_RESOLUTION_PLAN_HASH_MISMATCH',
+          'message', 'accepted_resolution_json suggestion_hash does not match the stored correction plan suggestion_hash.',
+          'finance_case_id', v_case_record.finance_case_id::text,
+          'accepted_suggestion_hash', v_accepted_suggestion_hash,
+          'planned_suggestion_hash', v_plan_suggestion_hash
+        );
+
+        UPDATE public.pay_payment_correction_work_items AS plan_hash_mismatch_work_item
+        SET status = 'BLOCKED',
+            locked_at_utc = NULL,
+            locked_by = NULL,
+            processed_at_utc = v_now,
+            last_error = v_blocker->>'message',
+            result_json = COALESCE(plan_hash_mismatch_work_item.result_json, '{}'::jsonb) || jsonb_build_object(
+              'ok', false,
+              'status', 'BLOCKED',
+              'blocker', v_blocker,
+              'accepted_finance_resolution', jsonb_build_object('ok', false, 'blocker', v_blocker),
+              'processed_at_utc', v_now
+            )
+        WHERE plan_hash_mismatch_work_item.id = v_work_item.id;
+
+        RETURN jsonb_build_object('ok', false, 'status', 'BLOCKED', 'blocker', v_blocker);
+      END IF;
+
+      IF v_accepted_suggestion_hash <> v_regenerated_suggestion_hash THEN
+        v_blocker := jsonb_build_object(
+          'code', 'ACCEPTED_RESOLUTION_STALE',
+          'message', 'Accepted finance resolution is stale because the regenerated suggestion no longer matches the accepted suggestion hash.',
+          'finance_case_id', v_case_record.finance_case_id::text,
+          'accepted_suggestion_hash', v_accepted_suggestion_hash,
+          'regenerated_suggestion_hash', v_regenerated_suggestion_hash
+        );
+
+        UPDATE public.pay_payment_correction_work_items AS stale_suggestion_work_item
+        SET status = 'BLOCKED',
+            locked_at_utc = NULL,
+            locked_by = NULL,
+            processed_at_utc = v_now,
+            last_error = v_blocker->>'message',
+            result_json = COALESCE(stale_suggestion_work_item.result_json, '{}'::jsonb) || jsonb_build_object(
+              'ok', false,
+              'status', 'BLOCKED',
+              'blocker', v_blocker,
+              'accepted_finance_resolution', jsonb_build_object('ok', false, 'blocker', v_blocker),
+              'processed_at_utc', v_now
+            )
+        WHERE stale_suggestion_work_item.id = v_work_item.id;
+
+        RETURN jsonb_build_object('ok', false, 'status', 'BLOCKED', 'blocker', v_blocker);
+      END IF;
+    EXCEPTION WHEN OTHERS THEN
+      v_blocker := jsonb_build_object(
+        'code', 'ACCEPTED_RESOLUTION_REGENERATION_FAILED',
+        'message', 'Accepted finance resolution could not be regenerated using the existing suggested-resolution function.',
+        'finance_case_id', v_case_record.finance_case_id::text,
+        'sqlstate', SQLSTATE,
+        'error_message', SQLERRM
+      );
+
+      UPDATE public.pay_payment_correction_work_items AS regeneration_failed_work_item
+      SET status = 'BLOCKED',
+          locked_at_utc = NULL,
+          locked_by = NULL,
+          processed_at_utc = v_now,
+          last_error = v_blocker->>'message',
+          result_json = COALESCE(regeneration_failed_work_item.result_json, '{}'::jsonb) || jsonb_build_object(
+            'ok', false,
+            'status', 'BLOCKED',
+            'blocker', v_blocker,
+            'accepted_finance_resolution', jsonb_build_object('ok', false, 'blocker', v_blocker),
+            'processed_at_utc', v_now
+          )
+      WHERE regeneration_failed_work_item.id = v_work_item.id;
+
+      RETURN jsonb_build_object('ok', false, 'status', 'BLOCKED', 'blocker', v_blocker);
+    END;
+
+    BEGIN
+      IF v_accepted_surface = 'pay_finance_case_apply_taxable_channel_restructure' THEN
+        v_apply_result := public.pay_finance_case_apply_taxable_channel_restructure(
+          p_finance_case_id => v_case_record.finance_case_id,
+          p_actor_user_id => v_effective_actor_user_id,
+          p_resolution_path => v_resolution_path,
+          p_schedule_input_mode => v_schedule_input_mode,
+          p_weeks_total => v_weeks_total,
+          p_weekly_due => v_weekly_due,
+          p_manual_total_remaining => v_manual_total_remaining,
+          p_effective_pay_date => v_accepted_effective_pay_date,
+          p_note => v_note
+        );
+      ELSIF v_accepted_surface = 'pay_manual_debt_adjustment_resolve_taxable_channel_change' THEN
+        v_apply_result := public.pay_manual_debt_adjustment_resolve_taxable_channel_change(
+          p_finance_case_id => v_case_record.finance_case_id,
+          p_actor_user_id => v_effective_actor_user_id,
+          p_resolution_path => v_resolution_path,
+          p_schedule_input_mode => v_schedule_input_mode,
+          p_weeks_total => v_weeks_total,
+          p_weekly_due => v_weekly_due,
+          p_manual_total_remaining => v_manual_total_remaining,
+          p_effective_pay_date => v_accepted_effective_pay_date,
+          p_note => v_note
+        );
+      ELSE
+        v_component_resolutions := COALESCE(
+          v_accepted_case_json->'component_resolutions',
+          v_accepted_case_json#>'{suggestion,component_resolutions}',
+          v_accepted_case_json#>'{suggestion,resolutions}',
+          v_accepted_case_json#>'{suggestion,components}',
+          '[]'::jsonb
+        );
+
+        IF COALESCE(jsonb_typeof(v_component_resolutions), 'null') <> 'array'
+           OR jsonb_array_length(v_component_resolutions) = 0 THEN
+          RAISE EXCEPTION 'COMPONENT_RESOLUTIONS_REQUIRED'
+            USING DETAIL = jsonb_build_object(
+              'code', 'COMPONENT_RESOLUTIONS_REQUIRED',
+              'finance_case_id', v_case_record.finance_case_id::text,
+              'apply_surface', v_accepted_surface
+            )::text;
+        END IF;
+
+        v_apply_result := public.pay_finance_component_resolutions_apply(
+          p_candidate_id => v_case_record.candidate_id,
+          p_component_resolutions => v_component_resolutions,
+          p_actor_user_id => v_effective_actor_user_id,
+          p_finance_case_id => v_case_record.finance_case_id,
+          p_reason => v_note
+        );
+      END IF;
+    EXCEPTION WHEN OTHERS THEN
+      v_blocker := jsonb_build_object(
+        'code', 'ACCEPTED_FINANCE_RESOLUTION_APPLY_FAILED',
+        'message', 'Accepted finance resolution failed to apply. The helper marked this work item blocked; caller must not mark the correction work item applied.',
+        'finance_case_id', v_case_record.finance_case_id::text,
+        'apply_surface', v_accepted_surface,
+        'sqlstate', SQLSTATE,
+        'error_message', SQLERRM
+      );
+
+      UPDATE public.pay_payment_correction_work_items AS apply_failed_work_item
+      SET status = 'BLOCKED',
+          locked_at_utc = NULL,
+          locked_by = NULL,
+          processed_at_utc = v_now,
+          last_error = v_blocker->>'message',
+          result_json = COALESCE(apply_failed_work_item.result_json, '{}'::jsonb) || jsonb_build_object(
+            'ok', false,
+            'status', 'BLOCKED',
+            'blocker', v_blocker,
+            'accepted_finance_resolution', jsonb_build_object('ok', false, 'blocker', v_blocker),
+            'processed_at_utc', v_now
+          )
+      WHERE apply_failed_work_item.id = v_work_item.id;
+
+      RETURN jsonb_build_object('ok', false, 'status', 'BLOCKED', 'blocker', v_blocker);
+    END;
+
+    v_apply_results := v_apply_results || jsonb_build_array(jsonb_build_object(
+      'finance_case_id', v_case_record.finance_case_id::text,
+      'candidate_id', v_case_record.candidate_id::text,
+      'selected_component_ids', v_case_record.selected_component_ids,
+      'apply_surface', v_accepted_surface,
+      'effective_pay_date', v_accepted_effective_pay_date::text,
+      'regenerated_suggestion_hash', v_regenerated_suggestion_hash,
+      'apply_result', v_apply_result
+    ));
+  END LOOP;
+
+  v_result := jsonb_build_object(
+    'ok', true,
+    'applied', true,
+    'correction_request_id', v_request.id::text,
+    'work_item_id', v_work_item.id::text,
+    'sensitive_finance_case_count', v_sensitive_case_count,
+    'selected_item_count', v_total_selected_item_count,
+    'apply_results', v_apply_results,
+    'processed_at_utc', v_now,
+    'processing_actor_kind', v_actor_kind,
+    'actor_user_id', CASE WHEN v_effective_actor_user_id IS NULL THEN NULL ELSE v_effective_actor_user_id::text END
+  );
+
+  UPDATE public.pay_payment_correction_work_items AS successful_work_item
+  SET result_json = COALESCE(successful_work_item.result_json, '{}'::jsonb) || jsonb_build_object(
+        'accepted_finance_resolution', v_result
+      )
+  WHERE successful_work_item.id = v_work_item.id;
+
+  RETURN v_result;
+END;
+$function$;
 
 
 
