@@ -10500,6 +10500,7 @@ END;
 $function$;
 
 
+
 CREATE OR REPLACE FUNCTION public._pay_payment_correction_apply_accepted_finance_resolution(
   p_correction_request_id uuid,
   p_work_item_id uuid,
@@ -11594,9 +11595,6 @@ BEGIN
   RETURN v_result;
 END;
 $function$;
-
-
-
 
 
 
