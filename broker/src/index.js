@@ -92227,7 +92227,6 @@ async function handleInvoiceBatchIssueConfirm(env, req) {
   }
 }
 
-
 async function handleInvoiceRender(env, req, invoiceId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -92257,9 +92256,12 @@ async function handleInvoiceRender(env, req, invoiceId) {
   const mode = String(invpdf?.mode || 'free').trim().toLowerCase() === 'paid' ? 'paid' : 'free';
   const allowInlineRender = (mode === 'paid') && (invpdf?.allow_inline_render === true);
   const queueOnRender = (invpdf?.queue_on_render !== false);
+  const expectedPdfKey = `docs-pdf/invoices/invoice_${String(invoiceId).trim()}.pdf`;
+  let cacheMissingR2 = false;
 
   try {
     // ✅ Fast-path caching (skip render entirely if still valid and not force_regen)
+    // IMPORTANT: DB-current is not enough; verify the R2 object exists before returning cached:true.
     if (!forceRegen) {
       try {
         const { rows } = await sbFetch(
@@ -92272,7 +92274,7 @@ async function handleInvoiceRender(env, req, invoiceId) {
         );
 
         const inv = rows && rows.length ? rows[0] : null;
-        const key = (inv && typeof inv.invoice_pdf_r2_key === 'string') ? inv.invoice_pdf_r2_key.trim() : '';
+        const key = (inv && typeof inv.invoice_pdf_r2_key === 'string') ? inv.invoice_pdf_r2_key.trim().replace(/^\/+/, '') : '';
         const genAt = inv ? inv.invoice_pdf_generated_at_utc : null;
         const updAt = inv ? inv.updated_at : null;
 
@@ -92281,10 +92283,16 @@ async function handleInvoiceRender(env, req, invoiceId) {
           const tGen = new Date(genAt).getTime();
 
           if (Number.isFinite(tUpd) && Number.isFinite(tGen) && tUpd <= tGen) {
-            return withCORS(env, req, ok({
-              pdf_key: key.replace(/^\/+/, ''),
-              cached: true
-            }));
+            const head = await r2Head(env, key);
+            if (head) {
+              return withCORS(env, req, ok({
+                pdf_key: key,
+                cached: true,
+                ready: true
+              }));
+            }
+
+            cacheMissingR2 = true;
           }
         }
       } catch {
@@ -92292,15 +92300,19 @@ async function handleInvoiceRender(env, req, invoiceId) {
       }
     }
 
+    const effectiveForceRegen = !!(forceRegen || cacheMissingR2);
+
     // Paid-mode optional: attempt inline render (best-effort), but ALWAYS fall back to queue if it fails.
     if (allowInlineRender) {
       try {
-        const core = await _renderInvoiceBundleAndStore(env, req, invoiceId, user, { force_regen: forceRegen });
+        const core = await _renderInvoiceBundleAndStore(env, req, invoiceId, user, { force_regen: effectiveForceRegen });
         if (core?.ok && core?.pdf_key) {
           return withCORS(env, req, ok({
             pdf_key: String(core.pdf_key).replace(/^\/+/, ''),
             cached: !!core.cached,
-            rendered_inline: true
+            rendered_inline: true,
+            ready: true,
+            cache_missing_r2: cacheMissingR2
           }));
         }
       } catch {
@@ -92315,13 +92327,16 @@ async function handleInvoiceRender(env, req, invoiceId) {
 
     await sbRpc(env, 'invpdf_enqueue_one', {
       p_invoice_id: String(invoiceId),
-      p_force_regen: !!forceRegen
+      p_force_regen: effectiveForceRegen
     });
 
     return withCORS(env, req, ok({
       queued: true,
-      force_regen: !!forceRegen,
-      rendered_inline: false
+      ready: false,
+      force_regen: effectiveForceRegen,
+      rendered_inline: false,
+      expected_pdf_key: expectedPdfKey,
+      cache_missing_r2: cacheMissingR2
     }));
   } catch (e) {
     return withCORS(env, req, serverError('Failed to render or enqueue invoice PDF'));
