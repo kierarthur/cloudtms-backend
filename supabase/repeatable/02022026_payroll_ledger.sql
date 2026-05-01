@@ -173,6 +173,9 @@ $$;
 
 
 
+
+
+
 create or replace function public.pay_batch_cancel(
   p_pay_batch_id uuid,
   p_actor_user_id uuid,
@@ -500,20 +503,13 @@ begin
     v_dirty_candidate_ids
   from _tmp_cancel_batch_candidates cancel_candidate_rows;
 
-  update public.pay_batch_items pbi
-  set pay_bank_transfer_id = null
-  from public.pay_batch_candidates pbc
-  where pbc.id = pbi.pay_batch_candidate_id
-    and pbc.pay_batch_id = p_pay_batch_id
-    and pbi.pay_bank_transfer_id is not null;
-
-  delete from public.pay_bank_transfers pbt
+  update public.pay_bank_transfers pbt
+  set
+    status = 'VOIDED',
+    failed_reason = coalesce(nullif(btrim(coalesce(pbt.failed_reason, '')), ''), 'PRE_BANK_BATCH_CANCELLED')
   where pbt.pay_batch_id = p_pay_batch_id
-    and nullif(btrim(coalesce(pbt.rail_tx_id, '')), '') is null
-    and nullif(btrim(coalesce(pbt.rail_state, '')), '') is null
-    and nullif(btrim(coalesce(pbt.request_id, '')), '') is null
-    and nullif(btrim(coalesce(pbt.payment_reference, '')), '') is null
-    and coalesce(pbt.rail_meta_json, '{}'::jsonb) = '{}'::jsonb
+    and upper(btrim(coalesce(pbt.status, ''))) not in ('COMPLETED','VOIDED','CANCELLED','RETURNED','REVERTED')
+    and pbt.completed_at_utc is null
     and not exists (
       select 1
       from public.pay_bank_transfer_events bank_event_preserve
@@ -1118,9 +1114,6 @@ begin
   );
 end;
 $$;
-
-
-
 
 
 
