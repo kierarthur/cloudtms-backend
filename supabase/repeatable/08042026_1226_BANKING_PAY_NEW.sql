@@ -17141,6 +17141,13 @@ end;
 $function$;
 
 
+
+
+
+
+
+
+
 CREATE OR REPLACE FUNCTION public.pay_preview_candidate_collect_scope(
   p_context_json jsonb,
   p_candidate_id uuid
@@ -17284,7 +17291,7 @@ begin
     raise exception 'rail defaults missing from p_context_json';
   end if;
 
-  drop table if exists pg_temp.pay_preview_candidate_context, pg_temp.targeted_refresh_timesheet_ids, pg_temp.linked_refresh_timesheet_ids, pg_temp.targeted_refresh_all_timesheet_ids, pg_temp.active_snoozes, pg_temp.active_timesheet_payment_snoozes, pg_temp.active_segment_snoozes, pg_temp.active_timesheet_payment_overrides, pg_temp.force_include, pg_temp.reserved_batch_items, pg_temp.reserved_by_source_ref, pg_temp.reserved_total_by_timesheet, pg_temp.reserved_segment_key_map, pg_temp.reserved_segment_sums, pg_temp.reserved_preview_segment_ords, pg_temp.reserved_additional_by_code, pg_temp.eligible_tsfin, pg_temp.debted_overpayment_cases, pg_temp.umb_map, pg_temp.adj, pg_temp.ts_current, pg_temp.targeted_baseline_only_ts_current, pg_temp.ts_baseline, pg_temp.finance_case_baseline_scope, pg_temp.segment_status, pg_temp.blocked_items_all, pg_temp.blocked_items, pg_temp.blocked_items_snoozed, pg_temp.do_not_pay_all, pg_temp.do_not_pay_items, pg_temp.do_not_pay_items_snoozed, pg_temp.ts_deltas, pg_temp.ts_itemised, pg_temp.worked_time_current_segment_rows, pg_temp.worked_time_baseline_segment_rows, pg_temp.worked_time_current_ranked, pg_temp.worked_time_baseline_ranked, pg_temp.worked_time_bucket_ids, pg_temp.worked_time_bucket_agg, pg_temp.worked_time_bucket_calc, pg_temp.worked_time_bucket_alloc, pg_temp.worked_time_bucket_effective, pg_temp.worked_time_bucket_component_rows, pg_temp.worked_time_key_totals, pg_temp.worked_time_bucket_component_sums, pg_temp.worked_time_amount_fallback_rows, pg_temp.timesheet_component_rows, pg_temp.timesheet_component_match_rows, pg_temp.transient_timesheet_component_rows, pg_temp.transient_timesheet_component_review_rows, pg_temp.timesheet_case_actionable_basis, pg_temp.timesheet_live_scope, pg_temp.timesheet_linked_scope_counts, pg_temp.transient_timesheet_component_review_rows_effective, pg_temp.timesheet_case_rollup, pg_temp.finance_candidate_seed, pg_temp.candidate_base, pg_temp.timesheet_candidate_rollup, pg_temp.candidate_rollup, pg_temp.blocked_counts, pg_temp.do_not_pay_counts, pg_temp.loan_due, pg_temp.overpayment_balances, pg_temp.loan_due_this_week, pg_temp.loan_repaid_wtd, pg_temp.paid_wtd_before, pg_temp.cand_enriched, pg_temp.payee_baseline_rows, pg_temp.payees_src, pg_temp.payees, pg_temp.payees_enriched, pg_temp.payees_json, pg_temp.cand_payee0, pg_temp.cand_payee, pg_temp.timesheet_case_rollup_effective, pg_temp.finance_case_repaid_wtd, pg_temp.finance_case_recovery_rows_base, pg_temp.manual_debt_recovery_rows, pg_temp.manual_debt_recovery_allocations, pg_temp.manual_debt_recovery_totals, pg_temp.overpayment_recovery_rows, pg_temp.overpayment_recovery_allocations, pg_temp.overpayment_recovery_totals, pg_temp.payment_advance_recovery_rows, pg_temp.payment_advance_recovery_allocations, pg_temp.finance_case_protected_allocations, pg_temp.finance_case_payee_readiness, pg_temp.finance_case_component_rows, pg_temp.finance_case_component_review_rows, pg_temp.finance_case_component_review_rows_effective, pg_temp.finance_case_due_source_amounts, pg_temp.finance_case_component_due_source_base, pg_temp.finance_case_component_due_source_shares, pg_temp.finance_case_component_due_source_allocations, pg_temp.finance_case_component_due_preview_base, pg_temp.finance_case_component_due_preview_allocations, pg_temp.finance_case_taxable_manual_debt_resolution, pg_temp.finance_case_resolution_rollup, pg_temp.canonical_timesheet_lines, pg_temp.timesheet_active_segment_snooze_meta, pg_temp.canonical_timesheet_segment_rows, pg_temp.canonical_timesheet_segment_rollup, pg_temp.canonical_timesheet_presentation_seed, pg_temp.canonical_timesheet_presentation_state, pg_temp.canonical_timesheet_presentation_rows, pg_temp.finance_case_lines, pg_temp.timesheet_canonical_preview_lines, pg_temp.canonical_preview_lines, pg_temp.candidate_preview_line_rollup, pg_temp.candidate_preview_timesheet_rollup, pg_temp.summary_json, pg_temp.timesheet_case_states_flat, pg_temp.finance_case_states_flat, pg_temp.candidate_case_states_flat, pg_temp.candidate_case_states, pg_temp.case_resolution_states_json, pg_temp.finance_candidate_totals, pg_temp.candidate_finance_itemisation, pg_temp.paye_summary_breakdown_json, pg_temp.timesheet_baseline_component_rows, pg_temp.finance_baseline_component_rows, pg_temp.baseline_component_rows_json;
+  drop table if exists pg_temp.pay_preview_candidate_context, pg_temp.targeted_refresh_timesheet_ids, pg_temp.linked_refresh_timesheet_ids, pg_temp.targeted_refresh_all_timesheet_ids, pg_temp.active_snoozes, pg_temp.active_timesheet_payment_snoozes, pg_temp.active_segment_snoozes, pg_temp.active_timesheet_payment_overrides, pg_temp.force_include, pg_temp.reserved_batch_items, pg_temp.reserved_by_source_ref, pg_temp.reserved_total_by_timesheet, pg_temp.reserved_segment_key_map, pg_temp.reserved_segment_sums, pg_temp.reserved_preview_segment_ords, pg_temp.reserved_additional_by_code, pg_temp.eligible_tsfin, pg_temp.debted_overpayment_cases, pg_temp.umb_map, pg_temp.adj, pg_temp.ts_current, pg_temp.targeted_baseline_only_ts_current, pg_temp.active_settled_artifact_components, pg_temp.active_settled_artifact_baseline_by_timesheet, pg_temp.ts_baseline, pg_temp.finance_case_baseline_scope, pg_temp.segment_status, pg_temp.blocked_items_all, pg_temp.blocked_items, pg_temp.blocked_items_snoozed, pg_temp.do_not_pay_all, pg_temp.do_not_pay_items, pg_temp.do_not_pay_items_snoozed, pg_temp.ts_deltas, pg_temp.ts_itemised, pg_temp.worked_time_current_segment_rows, pg_temp.worked_time_baseline_segment_rows, pg_temp.worked_time_current_ranked, pg_temp.worked_time_baseline_ranked, pg_temp.worked_time_bucket_ids, pg_temp.worked_time_bucket_agg, pg_temp.worked_time_bucket_calc, pg_temp.worked_time_bucket_alloc, pg_temp.worked_time_bucket_effective, pg_temp.worked_time_bucket_component_rows, pg_temp.worked_time_key_totals, pg_temp.worked_time_bucket_component_sums, pg_temp.worked_time_amount_fallback_rows, pg_temp.timesheet_component_rows, pg_temp.timesheet_component_match_rows, pg_temp.transient_timesheet_component_rows, pg_temp.transient_timesheet_component_review_rows, pg_temp.timesheet_case_actionable_basis, pg_temp.timesheet_live_scope, pg_temp.timesheet_linked_scope_counts, pg_temp.transient_timesheet_component_review_rows_effective, pg_temp.timesheet_case_rollup, pg_temp.finance_candidate_seed, pg_temp.candidate_base, pg_temp.timesheet_candidate_rollup, pg_temp.candidate_rollup, pg_temp.blocked_counts, pg_temp.do_not_pay_counts, pg_temp.loan_due, pg_temp.overpayment_balances, pg_temp.loan_due_this_week, pg_temp.loan_repaid_wtd, pg_temp.paid_wtd_before, pg_temp.cand_enriched, pg_temp.payee_baseline_rows, pg_temp.payees_src, pg_temp.payees, pg_temp.payees_enriched, pg_temp.payees_json, pg_temp.cand_payee0, pg_temp.cand_payee, pg_temp.timesheet_case_rollup_effective, pg_temp.finance_case_repaid_wtd, pg_temp.finance_case_recovery_rows_base, pg_temp.manual_debt_recovery_rows, pg_temp.manual_debt_recovery_allocations, pg_temp.manual_debt_recovery_totals, pg_temp.overpayment_recovery_rows, pg_temp.overpayment_recovery_allocations, pg_temp.overpayment_recovery_totals, pg_temp.payment_advance_recovery_rows, pg_temp.payment_advance_recovery_allocations, pg_temp.finance_case_protected_allocations, pg_temp.finance_case_payee_readiness, pg_temp.finance_case_component_rows, pg_temp.finance_case_component_review_rows, pg_temp.finance_case_component_review_rows_effective, pg_temp.finance_case_due_source_amounts, pg_temp.finance_case_component_due_source_base, pg_temp.finance_case_component_due_source_shares, pg_temp.finance_case_component_due_source_allocations, pg_temp.finance_case_component_due_preview_base, pg_temp.finance_case_component_due_preview_allocations, pg_temp.finance_case_taxable_manual_debt_resolution, pg_temp.finance_case_resolution_rollup, pg_temp.canonical_timesheet_lines, pg_temp.timesheet_active_segment_snooze_meta, pg_temp.canonical_timesheet_segment_rows, pg_temp.canonical_timesheet_segment_rollup, pg_temp.canonical_timesheet_presentation_seed, pg_temp.canonical_timesheet_presentation_state, pg_temp.canonical_timesheet_presentation_rows, pg_temp.finance_case_lines, pg_temp.timesheet_canonical_preview_lines, pg_temp.canonical_preview_lines, pg_temp.candidate_preview_line_rollup, pg_temp.candidate_preview_timesheet_rollup, pg_temp.summary_json, pg_temp.timesheet_case_states_flat, pg_temp.finance_case_states_flat, pg_temp.candidate_case_states_flat, pg_temp.candidate_case_states, pg_temp.case_resolution_states_json, pg_temp.finance_candidate_totals, pg_temp.candidate_finance_itemisation, pg_temp.paye_summary_breakdown_json, pg_temp.timesheet_baseline_component_rows, pg_temp.finance_baseline_component_rows, pg_temp.baseline_component_rows_json;
 
   create temporary table pay_preview_candidate_context on commit drop as
     select
@@ -17521,60 +17528,37 @@ begin
             or exists (
               select 1
               from public.pay_payment_correction_requests open_correction_requests
-              left join public.pay_bank_transfers correction_scope_transfer
-                on correction_scope_transfer.id = pbi.pay_bank_transfer_id
+              join lateral public._pay_payment_correction_selected_items(
+                open_correction_requests.pay_batch_id,
+                case
+                  when jsonb_typeof(open_correction_requests.plan_json->'selected_pay_batch_item_ids') = 'array' then
+                    coalesce(open_correction_requests.selection_json, '{}'::jsonb)
+                    || jsonb_build_object(
+                      'pay_batch_item_ids', open_correction_requests.plan_json->'selected_pay_batch_item_ids',
+                      'expected_pay_batch_item_ids', open_correction_requests.plan_json->'selected_pay_batch_item_ids'
+                    )
+                  when jsonb_typeof(open_correction_requests.plan_json#>'{selection,selected_pay_batch_item_ids}') = 'array' then
+                    coalesce(open_correction_requests.selection_json, '{}'::jsonb)
+                    || jsonb_build_object(
+                      'pay_batch_item_ids', open_correction_requests.plan_json#>'{selection,selected_pay_batch_item_ids}',
+                      'expected_pay_batch_item_ids', open_correction_requests.plan_json#>'{selection,selected_pay_batch_item_ids}'
+                    )
+                  when jsonb_typeof(open_correction_requests.plan_json#>'{selection,pay_batch_item_ids}') = 'array' then
+                    coalesce(open_correction_requests.selection_json, '{}'::jsonb)
+                    || jsonb_build_object(
+                      'pay_batch_item_ids', open_correction_requests.plan_json#>'{selection,pay_batch_item_ids}',
+                      'expected_pay_batch_item_ids', open_correction_requests.plan_json#>'{selection,pay_batch_item_ids}'
+                    )
+                  else
+                    coalesce(open_correction_requests.selection_json, '{}'::jsonb)
+                end,
+                false
+              ) open_correction_selected_items
+                on open_correction_selected_items.pay_batch_id = open_correction_requests.pay_batch_id
               where open_correction_requests.pay_batch_id = pbc_r.pay_batch_id
                 and open_correction_requests.status in ('REQUESTED','AWAITING_AUTHORISATION','AUTHORISED','EXPANDED','PROCESSING','BLOCKED')
                 and open_correction_requests.correction_kind in ('PRE_BANK_CANCEL','NO_MONEY_UNWIND','MANUAL_EVIDENCE_NO_MONEY')
-                and (
-                  upper(nullif(btrim(coalesce(open_correction_requests.selection_json->>'scope_type', '')), '')) = 'BATCH'
-                  or (
-                    upper(nullif(btrim(coalesce(open_correction_requests.selection_json->>'scope_type', '')), '')) = 'CANDIDATES'
-                    and pbc_r.id::text in (
-                      select jsonb_array_elements_text(
-                        case
-                          when jsonb_typeof(open_correction_requests.selection_json->'pay_batch_candidate_ids') = 'array'
-                            then open_correction_requests.selection_json->'pay_batch_candidate_ids'
-                          else '[]'::jsonb
-                        end
-                      )
-                    )
-                  )
-                  or (
-                    upper(nullif(btrim(coalesce(open_correction_requests.selection_json->>'scope_type', '')), '')) = 'TRANSFER'
-                    and pbi.pay_bank_transfer_id::text in (
-                      select jsonb_array_elements_text(
-                        case
-                          when jsonb_typeof(open_correction_requests.selection_json->'pay_bank_transfer_ids') = 'array'
-                            then open_correction_requests.selection_json->'pay_bank_transfer_ids'
-                          else '[]'::jsonb
-                        end
-                      )
-                    )
-                  )
-                  or (
-                    upper(nullif(btrim(coalesce(open_correction_requests.selection_json->>'scope_type', '')), '')) = 'UMBRELLA_PAYMENT_GROUP'
-                    and nullif(btrim(coalesce(open_correction_requests.selection_json->>'umbrella_id', '')), '') is not null
-                    and (
-                      pbi.umbrella_id::text = open_correction_requests.selection_json->>'umbrella_id'
-                      or correction_scope_transfer.umbrella_id::text = open_correction_requests.selection_json->>'umbrella_id'
-                      or (
-                        upper(coalesce(correction_scope_transfer.payee_entity_kind, '')) in ('UMBRELLA','UMBRELLA_COMPANY')
-                        and correction_scope_transfer.payee_entity_id::text = open_correction_requests.selection_json->>'umbrella_id'
-                      )
-                    )
-                    and (
-                      nullif(btrim(coalesce(open_correction_requests.selection_json->>'transfer_group_key', '')), '') is null
-                      or correction_scope_transfer.transfer_group_key = open_correction_requests.selection_json->>'transfer_group_key'
-                    )
-                    and (
-                      jsonb_typeof(open_correction_requests.selection_json->'pay_bank_transfer_ids') is distinct from 'array'
-                      or pbi.pay_bank_transfer_id::text in (
-                        select jsonb_array_elements_text(open_correction_requests.selection_json->'pay_bank_transfer_ids')
-                      )
-                    )
-                  )
-                )
+                and open_correction_selected_items.pay_batch_item_id = pbi.id
             )
             or exists (
               select 1
@@ -18496,6 +18480,55 @@ begin
           )
   ;
 
+  create temporary table active_settled_artifact_components on commit drop as
+        select
+          active_settled_components.timesheet_id,
+          active_settled_components.key_type,
+          active_settled_components.key_value,
+          active_settled_components.amount_ex_vat,
+          active_settled_components.amount_inc_vat
+        from public._pay_active_settled_components(
+          ARRAY(
+            select distinct active_baseline_scope.timesheet_id
+            from (
+              select ts_current.timesheet_id
+              from ts_current
+              where ts_current.timesheet_id is not null
+              union
+              select targeted_baseline_only_ts_current.timesheet_id
+              from targeted_baseline_only_ts_current
+              where targeted_baseline_only_ts_current.timesheet_id is not null
+            ) as active_baseline_scope
+          )
+        ) as active_settled_components
+        where active_settled_components.timesheet_id is not null
+          and active_settled_components.key_type is not null
+          and active_settled_components.key_value is not null
+  ;
+
+  create temporary table active_settled_artifact_baseline_by_timesheet on commit drop as
+        select
+          active_settled_artifact_components.timesheet_id,
+          coalesce(
+            jsonb_agg(
+              jsonb_build_object(
+                'key_type', active_settled_artifact_components.key_type,
+                'key_value', active_settled_artifact_components.key_value,
+                'amount_ex_vat', active_settled_artifact_components.amount_ex_vat,
+                'amount_inc_vat', active_settled_artifact_components.amount_inc_vat,
+                'baseline_source', 'ACTIVE_SETTLED_ARTIFACT'
+              )
+              order by active_settled_artifact_components.key_type, active_settled_artifact_components.key_value
+            ),
+            '[]'::jsonb
+          ) as active_settled_components_json,
+          round(coalesce(sum(coalesce(active_settled_artifact_components.amount_ex_vat, 0)), 0), 2)::numeric as active_settled_amount_ex_vat,
+          round(coalesce(sum(coalesce(active_settled_artifact_components.amount_inc_vat, 0)), 0), 2)::numeric as active_settled_amount_inc_vat,
+          count(*)::int as active_settled_component_count
+        from active_settled_artifact_components
+        group by active_settled_artifact_components.timesheet_id
+  ;
+
   create temporary table ts_baseline on commit drop as
         select
           t.candidate_id,
@@ -18520,7 +18553,22 @@ begin
           t.cand_bank_hash,
           t.umb_bank_hash,
 
-          coalesce(t.last_settled_snapshot_json, '{}'::jsonb) as base_json,
+          case
+            when coalesce(active_settled_artifact_baseline.active_settled_component_count, 0) > 0 then
+              jsonb_build_object(
+                'baseline_source', 'ACTIVE_SETTLED_ARTIFACT',
+                'active_settled_artifact_components', coalesce(active_settled_artifact_baseline.active_settled_components_json, '[]'::jsonb),
+                'active_settled_amount_ex_vat', coalesce(active_settled_artifact_baseline.active_settled_amount_ex_vat, 0),
+                'active_settled_amount_inc_vat', coalesce(active_settled_artifact_baseline.active_settled_amount_inc_vat, 0),
+                'legacy_timesheet_pay_state_snapshot_json', coalesce(t.last_settled_snapshot_json, '{}'::jsonb)
+              )
+            else coalesce(t.last_settled_snapshot_json, '{}'::jsonb)
+          end as base_json,
+          coalesce(active_settled_artifact_baseline.active_settled_components_json, '[]'::jsonb) as active_settled_artifact_components_json,
+          coalesce(active_settled_artifact_baseline.active_settled_component_count, 0)::int as active_settled_artifact_component_count,
+          coalesce(active_settled_artifact_baseline.active_settled_amount_ex_vat, 0)::numeric as active_settled_artifact_amount_ex_vat,
+          coalesce(active_settled_artifact_baseline.active_settled_amount_inc_vat, 0)::numeric as active_settled_artifact_amount_inc_vat,
+          (coalesce(active_settled_artifact_baseline.active_settled_component_count, 0) > 0) as has_active_settled_artifact_baseline,
           t.baseline_signature,
           coalesce(t.has_active_overpayment_case,false) as has_active_overpayment_case,
 
@@ -18561,76 +18609,91 @@ begin
           t.charge_sun as cur_charge_sun,
           t.charge_bh as cur_charge_bh,
           case
+            when coalesce(active_settled_artifact_baseline.active_settled_component_count, 0) > 0 then 0::numeric
             when coalesce(t.last_settled_snapshot_json->>'hours_day', t.last_settled_snapshot_json #>> '{invoice_breakdown_json,base_hours,day}', '') ~ '^-?\d+(\.\d+)?$'
               then round(coalesce((t.last_settled_snapshot_json->>'hours_day')::numeric, (t.last_settled_snapshot_json #>> '{invoice_breakdown_json,base_hours,day}')::numeric), 6)
             else 0::numeric
           end as bas_hours_day,
           case
+            when coalesce(active_settled_artifact_baseline.active_settled_component_count, 0) > 0 then 0::numeric
             when coalesce(t.last_settled_snapshot_json->>'hours_night', t.last_settled_snapshot_json #>> '{invoice_breakdown_json,base_hours,night}', '') ~ '^-?\d+(\.\d+)?$'
               then round(coalesce((t.last_settled_snapshot_json->>'hours_night')::numeric, (t.last_settled_snapshot_json #>> '{invoice_breakdown_json,base_hours,night}')::numeric), 6)
             else 0::numeric
           end as bas_hours_night,
           case
+            when coalesce(active_settled_artifact_baseline.active_settled_component_count, 0) > 0 then 0::numeric
             when coalesce(t.last_settled_snapshot_json->>'hours_sat', t.last_settled_snapshot_json #>> '{invoice_breakdown_json,base_hours,sat}', '') ~ '^-?\d+(\.\d+)?$'
               then round(coalesce((t.last_settled_snapshot_json->>'hours_sat')::numeric, (t.last_settled_snapshot_json #>> '{invoice_breakdown_json,base_hours,sat}')::numeric), 6)
             else 0::numeric
           end as bas_hours_sat,
           case
+            when coalesce(active_settled_artifact_baseline.active_settled_component_count, 0) > 0 then 0::numeric
             when coalesce(t.last_settled_snapshot_json->>'hours_sun', t.last_settled_snapshot_json #>> '{invoice_breakdown_json,base_hours,sun}', '') ~ '^-?\d+(\.\d+)?$'
               then round(coalesce((t.last_settled_snapshot_json->>'hours_sun')::numeric, (t.last_settled_snapshot_json #>> '{invoice_breakdown_json,base_hours,sun}')::numeric), 6)
             else 0::numeric
           end as bas_hours_sun,
           case
+            when coalesce(active_settled_artifact_baseline.active_settled_component_count, 0) > 0 then 0::numeric
             when coalesce(t.last_settled_snapshot_json->>'hours_bh', t.last_settled_snapshot_json #>> '{invoice_breakdown_json,base_hours,bh}', '') ~ '^-?\d+(\.\d+)?$'
               then round(coalesce((t.last_settled_snapshot_json->>'hours_bh')::numeric, (t.last_settled_snapshot_json #>> '{invoice_breakdown_json,base_hours,bh}')::numeric), 6)
             else 0::numeric
           end as bas_hours_bh,
           case
+            when coalesce(active_settled_artifact_baseline.active_settled_component_count, 0) > 0 then null::numeric
             when coalesce(t.last_settled_snapshot_json->>'pay_day', t.last_settled_snapshot_json #>> '{invoice_breakdown_json,base_hours,pay_rates,day}', '') ~ '^-?\d+(\.\d+)?$'
               then round(coalesce((t.last_settled_snapshot_json->>'pay_day')::numeric, (t.last_settled_snapshot_json #>> '{invoice_breakdown_json,base_hours,pay_rates,day}')::numeric), 6)
             else null::numeric
           end as bas_pay_day,
           case
+            when coalesce(active_settled_artifact_baseline.active_settled_component_count, 0) > 0 then null::numeric
             when coalesce(t.last_settled_snapshot_json->>'pay_night', t.last_settled_snapshot_json #>> '{invoice_breakdown_json,base_hours,pay_rates,night}', '') ~ '^-?\d+(\.\d+)?$'
               then round(coalesce((t.last_settled_snapshot_json->>'pay_night')::numeric, (t.last_settled_snapshot_json #>> '{invoice_breakdown_json,base_hours,pay_rates,night}')::numeric), 6)
             else null::numeric
           end as bas_pay_night,
           case
+            when coalesce(active_settled_artifact_baseline.active_settled_component_count, 0) > 0 then null::numeric
             when coalesce(t.last_settled_snapshot_json->>'pay_sat', t.last_settled_snapshot_json #>> '{invoice_breakdown_json,base_hours,pay_rates,sat}', '') ~ '^-?\d+(\.\d+)?$'
               then round(coalesce((t.last_settled_snapshot_json->>'pay_sat')::numeric, (t.last_settled_snapshot_json #>> '{invoice_breakdown_json,base_hours,pay_rates,sat}')::numeric), 6)
             else null::numeric
           end as bas_pay_sat,
           case
+            when coalesce(active_settled_artifact_baseline.active_settled_component_count, 0) > 0 then null::numeric
             when coalesce(t.last_settled_snapshot_json->>'pay_sun', t.last_settled_snapshot_json #>> '{invoice_breakdown_json,base_hours,pay_rates,sun}', '') ~ '^-?\d+(\.\d+)?$'
               then round(coalesce((t.last_settled_snapshot_json->>'pay_sun')::numeric, (t.last_settled_snapshot_json #>> '{invoice_breakdown_json,base_hours,pay_rates,sun}')::numeric), 6)
             else null::numeric
           end as bas_pay_sun,
           case
+            when coalesce(active_settled_artifact_baseline.active_settled_component_count, 0) > 0 then null::numeric
             when coalesce(t.last_settled_snapshot_json->>'pay_bh', t.last_settled_snapshot_json #>> '{invoice_breakdown_json,base_hours,pay_rates,bh}', '') ~ '^-?\d+(\.\d+)?$'
               then round(coalesce((t.last_settled_snapshot_json->>'pay_bh')::numeric, (t.last_settled_snapshot_json #>> '{invoice_breakdown_json,base_hours,pay_rates,bh}')::numeric), 6)
             else null::numeric
           end as bas_pay_bh,
           case
+            when coalesce(active_settled_artifact_baseline.active_settled_component_count, 0) > 0 then null::numeric
             when coalesce(t.last_settled_snapshot_json->>'charge_day', t.last_settled_snapshot_json #>> '{invoice_breakdown_json,base_hours,charge_rates,day}', '') ~ '^-?\d+(\.\d+)?$'
               then round(coalesce((t.last_settled_snapshot_json->>'charge_day')::numeric, (t.last_settled_snapshot_json #>> '{invoice_breakdown_json,base_hours,charge_rates,day}')::numeric), 6)
             else null::numeric
           end as bas_charge_day,
           case
+            when coalesce(active_settled_artifact_baseline.active_settled_component_count, 0) > 0 then null::numeric
             when coalesce(t.last_settled_snapshot_json->>'charge_night', t.last_settled_snapshot_json #>> '{invoice_breakdown_json,base_hours,charge_rates,night}', '') ~ '^-?\d+(\.\d+)?$'
               then round(coalesce((t.last_settled_snapshot_json->>'charge_night')::numeric, (t.last_settled_snapshot_json #>> '{invoice_breakdown_json,base_hours,charge_rates,night}')::numeric), 6)
             else null::numeric
           end as bas_charge_night,
           case
+            when coalesce(active_settled_artifact_baseline.active_settled_component_count, 0) > 0 then null::numeric
             when coalesce(t.last_settled_snapshot_json->>'charge_sat', t.last_settled_snapshot_json #>> '{invoice_breakdown_json,base_hours,charge_rates,sat}', '') ~ '^-?\d+(\.\d+)?$'
               then round(coalesce((t.last_settled_snapshot_json->>'charge_sat')::numeric, (t.last_settled_snapshot_json #>> '{invoice_breakdown_json,base_hours,charge_rates,sat}')::numeric), 6)
             else null::numeric
           end as bas_charge_sat,
           case
+            when coalesce(active_settled_artifact_baseline.active_settled_component_count, 0) > 0 then null::numeric
             when coalesce(t.last_settled_snapshot_json->>'charge_sun', t.last_settled_snapshot_json #>> '{invoice_breakdown_json,base_hours,charge_rates,sun}', '') ~ '^-?\d+(\.\d+)?$'
               then round(coalesce((t.last_settled_snapshot_json->>'charge_sun')::numeric, (t.last_settled_snapshot_json #>> '{invoice_breakdown_json,base_hours,charge_rates,sun}')::numeric), 6)
             else null::numeric
           end as bas_charge_sun,
           case
+            when coalesce(active_settled_artifact_baseline.active_settled_component_count, 0) > 0 then null::numeric
             when coalesce(t.last_settled_snapshot_json->>'charge_bh', t.last_settled_snapshot_json #>> '{invoice_breakdown_json,base_hours,charge_rates,bh}', '') ~ '^-?\d+(\.\d+)?$'
               then round(coalesce((t.last_settled_snapshot_json->>'charge_bh')::numeric, (t.last_settled_snapshot_json #>> '{invoice_breakdown_json,base_hours,charge_rates,bh}')::numeric), 6)
             else null::numeric
@@ -18653,6 +18716,8 @@ begin
           union all
           select * from targeted_baseline_only_ts_current
         ) t
+        left join active_settled_artifact_baseline_by_timesheet as active_settled_artifact_baseline
+          on active_settled_artifact_baseline.timesheet_id = t.timesheet_id
   
   ;
 
@@ -18748,11 +18813,6 @@ begin
   );
 end;
 $function$;
-
-
-
-
-
 
 
 
