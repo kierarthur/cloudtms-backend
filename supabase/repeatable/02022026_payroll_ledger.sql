@@ -21344,6 +21344,7 @@ declare
   v_latest_correction_request jsonb := '{}'::jsonb;
   v_latest_correction_request_status text := NULL::text;
   v_open_correction_request_count integer := 0;
+  v_open_settled_reversal_request_count integer := 0;
   v_bank_event_count integer := 0;
   v_bank_failure_event_count integer := 0;
   v_bank_return_event_count integer := 0;
@@ -23368,6 +23369,7 @@ begin
           'amount', public.pay_bank_transfer_events.amount,
           'currency', public.pay_bank_transfer_events.currency,
           'mapping_status', public.pay_bank_transfer_events.mapping_status,
+          'mapping_method', public.pay_bank_transfer_events.mapping_method,
           'movement_classification', public.pay_bank_transfer_events.movement_classification,
           'correction_disposition', public.pay_bank_transfer_events.correction_disposition
         )
@@ -23444,9 +23446,13 @@ begin
   ) AS settlement_evidence_rows;
 
   SELECT
-    COUNT(*)::integer
+    COUNT(*)::integer,
+    COUNT(*) FILTER (
+      WHERE public.pay_payment_correction_requests.correction_kind IN ('SETTLED_REVERSAL','MANUAL_EVIDENCE_SETTLED_RETURN')
+    )::integer
   INTO
-    v_open_correction_request_count
+    v_open_correction_request_count,
+    v_open_settled_reversal_request_count
   FROM public.pay_payment_correction_requests
   WHERE public.pay_payment_correction_requests.pay_batch_id = p_pay_batch_id
     AND public.pay_payment_correction_requests.status IN (
@@ -23616,6 +23622,7 @@ begin
     'can_plan', true,
     'counts', jsonb_build_object(
       'open_request_count', COALESCE(v_open_correction_request_count, 0),
+      'open_settled_reversal_request_count', COALESCE(v_open_settled_reversal_request_count, 0),
       'bank_event_count', COALESCE(v_bank_event_count, 0),
       'bank_failure_event_count', COALESCE(v_bank_failure_event_count, 0),
       'bank_return_event_count', COALESCE(v_bank_return_event_count, 0),
@@ -23632,17 +23639,35 @@ begin
 
   v_movement_classification := jsonb_build_object(
     'classification', CASE
-      WHEN v_can_reverse_settled_payment THEN 'TRUE_SETTLED_REVERSAL_REQUIRED'
+      WHEN COALESCE(v_bank_return_event_count, 0) > 0
+        OR COALESCE(v_open_settled_reversal_request_count, 0) > 0
+        OR COALESCE(v_applied_reversal_item_count, 0) > 0
+        THEN 'TRUE_SETTLED_REVERSAL_REQUIRED'
       WHEN v_can_unwind_failed_payment THEN 'NO_MONEY_UNWIND'
       WHEN v_can_cancel_payment_attempt THEN 'PRE_BANK_CANCEL'
+      WHEN v_can_reverse_settled_payment
+        AND (
+          COALESCE(v_bank_failure_event_count, 0) > 0
+          OR COALESCE(v_transfer_failure_count, 0) > 0
+        )
+        THEN 'AMBIGUOUS_REVIEW_REQUIRED'
+      WHEN v_can_reverse_settled_payment THEN 'SETTLED_NO_CORRECTION_REQUIRED'
       WHEN v_can_review_bank_evidence THEN 'AMBIGUOUS_REVIEW_REQUIRED'
-      ELSE 'PRE_BANK_CANCEL'
+      ELSE 'NONE'
     END,
     'source', 'pay_batch_get_summary',
     'derived_state', v_derived_correction_state,
+    'can_reverse_settled_payment', v_can_reverse_settled_payment,
+    'settled_reversal_required', (
+      COALESCE(v_bank_return_event_count, 0) > 0
+      OR COALESCE(v_open_settled_reversal_request_count, 0) > 0
+      OR COALESCE(v_applied_reversal_item_count, 0) > 0
+    ),
     'settlement_evidence_count', COALESCE(v_settlement_evidence_count, 0),
     'bank_failure_event_count', COALESCE(v_bank_failure_event_count, 0),
     'bank_return_event_count', COALESCE(v_bank_return_event_count, 0),
+    'open_settled_reversal_request_count', COALESCE(v_open_settled_reversal_request_count, 0),
+    'applied_reversal_item_count', COALESCE(v_applied_reversal_item_count, 0),
     'transfer_failure_count', COALESCE(v_transfer_failure_count, 0),
     'transfer_completed_count', COALESCE(v_transfer_completed_count, 0)
   );
@@ -23843,6 +23868,7 @@ begin
   );
 end;
 $$;
+
 
 
 CREATE OR REPLACE FUNCTION public.pay_batches_list(p_limit integer DEFAULT 50, p_offset integer DEFAULT 0, p_status text DEFAULT NULL::text)
@@ -24098,19 +24124,33 @@ begin
       transfer_evidence as (
         select
           count(*) filter (
-            where upper(btrim(coalesce(pbt_evidence.status, ''))) in ('FAILED','DECLINED','REJECTED','CANCELLED','CANCELED','RETURNED','REVERTED')
-               or nullif(btrim(coalesce(pbt_evidence.failed_reason, '')), '') is not null
+            where upper(btrim(coalesce(pbt_evidence.status, ''))) in ('FAILED','DECLINED','REJECTED','CANCELLED','CANCELED','SUBMISSION_FAILED','FAILED_BEFORE_COMMIT')
+               or (
+                 nullif(btrim(coalesce(pbt_evidence.failed_reason, '')), '') is not null
+                 and upper(btrim(coalesce(pbt_evidence.status, ''))) not in ('RETURNED','REVERTED')
+               )
           )::integer as failed_transfer_count,
+          count(*) filter (
+            where upper(btrim(coalesce(pbt_evidence.status, ''))) in ('RETURNED','REVERTED')
+          )::integer as returned_transfer_count,
           count(*) filter (
             where upper(btrim(coalesce(pbt_evidence.status, ''))) = 'COMPLETED'
                or pbt_evidence.completed_at_utc is not null
-          )::integer as completed_transfer_count
+          )::integer as completed_transfer_count,
+          count(*) filter (
+            where nullif(btrim(coalesce(pbt_evidence.request_id, '')), '') is not null
+               or nullif(btrim(coalesce(pbt_evidence.rail_tx_id, '')), '') is not null
+               or nullif(btrim(coalesce(pbt_evidence.payment_reference, '')), '') is not null
+               or upper(btrim(coalesce(pbt_evidence.status, ''))) in ('SUBMITTED','PROCESSING','PENDING','COMPLETED','FAILED','DECLINED','REJECTED','CANCELLED','CANCELED','SUBMISSION_FAILED','FAILED_BEFORE_COMMIT','RETURNED','REVERTED')
+          )::integer as submission_or_rail_evidence_count
         from public.pay_bank_transfers pbt_evidence
         where pbt_evidence.pay_batch_id = pb0.id
       ),
       request_summary as (
         select
           count(*) filter (where ppcr_corr.status in ('REQUESTED','AWAITING_AUTHORISATION','AUTHORISED','EXPANDED','PROCESSING','BLOCKED'))::integer as open_request_count,
+          count(*) filter (where ppcr_corr.status in ('REQUESTED','AWAITING_AUTHORISATION','AUTHORISED','EXPANDED','PROCESSING','BLOCKED') and ppcr_corr.correction_kind in ('SETTLED_REVERSAL','MANUAL_EVIDENCE_SETTLED_RETURN'))::integer as open_settled_reversal_request_count,
+          count(*) filter (where ppcr_corr.status in ('REQUESTED','AWAITING_AUTHORISATION','AUTHORISED','EXPANDED','PROCESSING','BLOCKED') and ppcr_corr.correction_kind in ('NO_MONEY_UNWIND','MANUAL_EVIDENCE_NO_MONEY'))::integer as open_no_money_unwind_request_count,
           max(ppcr_corr.updated_at_utc) as latest_request_at_utc,
           (
             select ppcr_latest.correction_kind
@@ -24152,12 +24192,22 @@ begin
       select
         case
           when coalesce((select sum(correction_items.item_count) from correction_items where correction_items.correction_item_kind = 'SETTLED_REVERSAL'), 0) > 0
-            or coalesce((select returned_event_count from bank_events), 0) > 0 then 'TRUE_SETTLED_REVERSAL_REQUIRED'
+            or coalesce((select returned_event_count from bank_events), 0) > 0
+            or coalesce((select returned_transfer_count from transfer_evidence), 0) > 0
+            or coalesce((select open_settled_reversal_request_count from request_summary), 0) > 0 then 'TRUE_SETTLED_REVERSAL_REQUIRED'
           when coalesce((select sum(correction_items.item_count) from correction_items where correction_items.correction_item_kind = 'NO_MONEY_UNWIND'), 0) > 0
             or coalesce((select failed_event_count from bank_events), 0) > 0
-            or coalesce((select failed_transfer_count from transfer_evidence), 0) > 0 then 'NO_MONEY_UNWIND'
+            or coalesce((select failed_transfer_count from transfer_evidence), 0) > 0
+            or coalesce((select open_no_money_unwind_request_count from request_summary), 0) > 0 then 'NO_MONEY_UNWIND'
           when coalesce((select open_request_count from request_summary), 0) > 0 then 'AMBIGUOUS_REVIEW_REQUIRED'
-          else 'PRE_BANK_CANCEL'
+          when coalesce((select event_count from bank_events), 0) = 0
+            and coalesce((select submission_or_rail_evidence_count from transfer_evidence), 0) = 0
+            and nullif(btrim(coalesce(pb0.execution_commit_ref, '')), '') is null
+            and pb0.execution_committed_at_utc is null
+            and upper(btrim(coalesce(pb0.execution_commit_state, 'NOT_SUBMITTED'))) in ('', 'NOT_SUBMITTED', 'NONE') then 'PRE_BANK_CANCEL'
+          when coalesce((select completed_transfer_count from transfer_evidence), 0) > 0
+            or coalesce((select remaining_paid_amount_inc_vat from item_totals), 0) > 0 then 'SETTLED_NO_CORRECTION_REQUIRED'
+          else 'NONE'
         end as movement_classification,
         case
           when coalesce((select sum(correction_items.item_count) from correction_items where correction_items.correction_item_kind = 'SETTLED_REVERSAL'), 0) > 0
@@ -24168,16 +24218,20 @@ begin
                and coalesce((select correctable_item_count from item_totals), 0) > 0
                and coalesce((select sum(correction_items.item_count) from correction_items where correction_items.correction_item_kind in ('NO_MONEY_UNWIND','PRE_BANK_CANCEL')), 0) >= coalesce((select correctable_item_count from item_totals), 0) then 'NO_MONEY_UNWOUND'
           when coalesce((select sum(correction_items.item_count) from correction_items where correction_items.correction_item_kind in ('NO_MONEY_UNWIND','PRE_BANK_CANCEL')), 0) > 0 then 'PARTIALLY_UNWOUND'
-          when coalesce((select returned_event_count from bank_events), 0) > 0 then 'SETTLED_RETURNED'
+          when coalesce((select returned_event_count from bank_events), 0) > 0
+            or coalesce((select returned_transfer_count from transfer_evidence), 0) > 0
+            or coalesce((select open_settled_reversal_request_count from request_summary), 0) > 0 then 'SETTLED_RETURNED'
           when coalesce((select open_request_count from request_summary), 0) > 0
             or coalesce((select failed_returned_event_count from bank_events), 0) > 0
-            or coalesce((select failed_transfer_count from transfer_evidence), 0) > 0 then 'ACTION_REQUIRED'
+            or coalesce((select failed_transfer_count from transfer_evidence), 0) > 0
+            or coalesce((select returned_transfer_count from transfer_evidence), 0) > 0 then 'ACTION_REQUIRED'
           else 'NONE'
         end as correction_status,
         (
           coalesce((select open_request_count from request_summary), 0)
           + coalesce((select failed_returned_event_count from bank_events), 0)
           + coalesce((select failed_transfer_count from transfer_evidence), 0)
+          + coalesce((select returned_transfer_count from transfer_evidence), 0)
         )::integer as correction_required_count,
         coalesce((select failed_returned_event_count from bank_events), 0)::integer as failed_returned_event_count,
         coalesce((select sum(correction_items.amount_inc_vat) from correction_items where correction_items.correction_item_kind = 'NO_MONEY_UNWIND'), 0)::numeric as unwound_amount_inc_vat,
@@ -24207,7 +24261,6 @@ begin
   );
 end;
 $function$;
-
 
 
 
