@@ -6144,6 +6144,7 @@ $$;
 
 
 
+
 create or replace function public.pay_settle_rail(
   p_pay_batch_id uuid,
   p_settlement_json jsonb,
@@ -6353,6 +6354,15 @@ begin
   from jsonb_array_elements(p_settlement_json) e
   where e is not null and jsonb_typeof(e) = 'object';
 
+  update _tmp_settle_in AS settle_status_normalise
+  set status = case
+    when settle_status_normalise.status = 'CANCELED' then 'CANCELLED'
+    when settle_status_normalise.status in ('SUCCESS','SUCCEEDED','SETTLED','PAID') then 'COMPLETED'
+    when settle_status_normalise.status = 'REVERSED' then 'REVERTED'
+    when settle_status_normalise.status in ('SUBMISSION_FAILED','FAILED_BEFORE_COMMIT') then 'FAILED'
+    else settle_status_normalise.status
+  end;
+
   if exists (select 1 from _tmp_settle_in t where t.transfer_id is null limit 1) then
     raise exception 'pay_settle_rail: settlement_json contains an invalid or missing transfer_id';
   end if;
@@ -6360,10 +6370,10 @@ begin
   if exists (
     select 1
     from _tmp_settle_in t
-    where t.status not in ('PENDING','PROCESSING','UNKNOWN','COMPLETED','FAILED','DECLINED','REJECTED','CANCELLED','CANCELED')
+    where t.status not in ('PENDING','PROCESSING','UNKNOWN','COMPLETED','FAILED','DECLINED','REJECTED','CANCELLED','RETURNED','REVERTED')
     limit 1
   ) then
-    raise exception 'pay_settle_rail: invalid status in settlement_json (allowed: PENDING|PROCESSING|UNKNOWN|COMPLETED|FAILED|DECLINED|REJECTED|CANCELLED|CANCELED)';
+    raise exception 'pay_settle_rail: invalid status in settlement_json (allowed: PENDING|PROCESSING|UNKNOWN|COMPLETED|FAILED|DECLINED|REJECTED|CANCELLED|RETURNED|REVERTED)';
   end if;
 
   if exists (
@@ -6382,7 +6392,8 @@ begin
   set
     status = CASE
       WHEN t.status = 'COMPLETED' THEN 'COMPLETED'
-      WHEN t.status IN ('FAILED','DECLINED','REJECTED','CANCELLED','CANCELED') THEN 'FAILED'
+      WHEN t.status IN ('FAILED','DECLINED','REJECTED','CANCELLED','RETURNED','REVERTED') THEN t.status
+      WHEN t.status = 'BLOCKED' THEN 'BLOCKED'
       ELSE 'PENDING'
     END,
     rail_tx_id = coalesce(t.rail_tx_id, pbt.rail_tx_id),
@@ -6397,7 +6408,7 @@ begin
       else pbt.completed_at_utc
     end,
     failed_reason = case
-      when t.status IN ('FAILED','DECLINED','REJECTED','CANCELLED','CANCELED') then coalesce(pbt.failed_reason, nullif(btrim(coalesce(t.rail_state,'')),''), t.status)
+      when t.status IN ('FAILED','DECLINED','REJECTED','CANCELLED','RETURNED','REVERTED') then coalesce(pbt.failed_reason, nullif(btrim(coalesce(t.rail_state,'')),''), t.status)
       else pbt.failed_reason
     end
   from _tmp_settle_in t
@@ -7457,9 +7468,9 @@ begin
   ),
   stats as (
     select
-      sum(case when upper(coalesce(pbt.status,'')) = 'PENDING' then 1 else 0 end)::int as pending_ct,
+      sum(case when upper(coalesce(pbt.status,'')) in ('PENDING','PROCESSING','UNKNOWN') then 1 else 0 end)::int as pending_ct,
       sum(case when upper(coalesce(pbt.status,'')) = 'COMPLETED' then 1 else 0 end)::int as completed_ct,
-      sum(case when upper(coalesce(pbt.status,'')) = 'FAILED' then 1 else 0 end)::int as failed_ct,
+      sum(case when upper(coalesce(pbt.status,'')) in ('FAILED','DECLINED','REJECTED','CANCELLED','RETURNED','REVERTED') then 1 else 0 end)::int as failed_ct,
       sum(case when upper(coalesce(pbt.status,'')) = 'BLOCKED' then 1 else 0 end)::int as blocked_ct
     from payable_transfer_ids pti
     join public.pay_bank_transfers pbt
@@ -7688,7 +7699,7 @@ begin
   into v_pending_transfers
   from public.pay_bank_transfers pbt
   where pbt.pay_batch_id = p_pay_batch_id
-    and upper(coalesce(pbt.status,'')) = 'PENDING';
+    and upper(coalesce(pbt.status,'')) in ('PENDING','PROCESSING','UNKNOWN');
 
   select coalesce(
     jsonb_agg(
@@ -7709,7 +7720,7 @@ begin
   into v_failed_transfers
   from public.pay_bank_transfers pbt
   where pbt.pay_batch_id = p_pay_batch_id
-    and upper(coalesce(pbt.status,'')) = 'FAILED';
+    and upper(coalesce(pbt.status,'')) in ('FAILED','DECLINED','REJECTED','CANCELLED','RETURNED','REVERTED');
 
   select coalesce(
     jsonb_agg(
@@ -8050,6 +8061,9 @@ begin
   );
 end;
 $$;
+
+
+
 
 
 
@@ -12367,9 +12381,14 @@ end;
 $$;
 
 
+
+
+DROP FUNCTION IF EXISTS public.pay_bank_transfers_apply_rail_updates(uuid, jsonb);
+
 CREATE OR REPLACE FUNCTION public.pay_bank_transfers_apply_rail_updates(
   p_pay_batch_id uuid,
-  p_updates jsonb
+  p_updates jsonb,
+  p_actor_user_id uuid DEFAULT NULL::uuid
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -12404,12 +12423,13 @@ DECLARE
   v_event_result_count integer := 0;
 BEGIN
   PERFORM public._imp_debug_audit(
-    NULL::uuid,
+    p_actor_user_id,
     'PAY_BANK_TRANSFERS_APPLY_RAIL_UPDATES_START',
     jsonb_build_object(
       'pay_batch_id', p_pay_batch_id,
       'updates_is_array', p_updates IS NOT NULL AND jsonb_typeof(p_updates) = 'array',
-      'update_count', CASE WHEN p_updates IS NOT NULL AND jsonb_typeof(p_updates) = 'array' THEN jsonb_array_length(p_updates) ELSE NULL END
+      'update_count', CASE WHEN p_updates IS NOT NULL AND jsonb_typeof(p_updates) = 'array' THEN jsonb_array_length(p_updates) ELSE NULL END,
+      'actor_user_id', CASE WHEN p_actor_user_id IS NULL THEN NULL ELSE p_actor_user_id::text END
     ),
     'pay_bank_transfers',
     COALESCE(p_pay_batch_id::text, 'NO_BATCH_ID'),
@@ -12569,7 +12589,7 @@ BEGIN
     WHERE public.pay_batches.id = p_pay_batch_id;
 
     PERFORM public._imp_debug_audit(
-      NULL::uuid,
+      p_actor_user_id,
       'PAY_BANK_TRANSFERS_APPLY_RAIL_UPDATES_RESULT',
       jsonb_build_object(
         'pay_batch_id', p_pay_batch_id,
@@ -12611,6 +12631,8 @@ BEGIN
   SET
     transfer_status = CASE
       WHEN tmp_update_normalise.transfer_status = 'CANCELED' THEN 'CANCELLED'
+      WHEN tmp_update_normalise.transfer_status IN ('SUCCESS','SUCCEEDED','SETTLED','PAID') THEN 'COMPLETED'
+      WHEN tmp_update_normalise.transfer_status = 'REVERSED' THEN 'REVERTED'
       WHEN tmp_update_normalise.transfer_status = 'SUBMITTED' THEN 'PENDING'
       WHEN tmp_update_normalise.transfer_status = 'SUBMISSION_FAILED' THEN 'FAILED'
       WHEN tmp_update_normalise.transfer_status = 'FAILED_BEFORE_COMMIT' THEN 'FAILED'
@@ -12618,6 +12640,8 @@ BEGIN
     END,
     normalised_state = CASE
       WHEN tmp_update_normalise.normalised_state = 'CANCELED' THEN 'CANCELLED'
+      WHEN tmp_update_normalise.normalised_state IN ('SUCCESS','SUCCEEDED','SETTLED','PAID') THEN 'COMPLETED'
+      WHEN tmp_update_normalise.normalised_state = 'REVERSED' THEN 'REVERTED'
       WHEN tmp_update_normalise.normalised_state = 'SUBMISSION_FAILED' THEN 'FAILED'
       WHEN tmp_update_normalise.normalised_state = 'FAILED_BEFORE_COMMIT' THEN 'FAILED'
       WHEN tmp_update_normalise.normalised_state = 'BLOCKED' THEN 'UNKNOWN'
@@ -12752,7 +12776,7 @@ BEGIN
           'rail_meta_json', tmp_update.rail_meta_json
         ))
       ),
-      NULL::uuid
+      p_actor_user_id
     ) AS ingest_result
   FROM pg_temp._tmp_pbt_updates AS tmp_update
   JOIN public.pay_bank_transfers AS existing_transfer
@@ -12767,6 +12791,14 @@ BEGIN
           'row_seq', event_result_rows.row_seq,
           'transfer_id', event_result_rows.transfer_id::text,
           'status', event_result_rows.transfer_status,
+          'event_id', event_result_rows.ingest_result->>'event_id',
+          'normalised_state', event_result_rows.transfer_status,
+          'mapping_status', event_result_rows.ingest_result->>'mapping_status',
+          'mapping_method', event_result_rows.ingest_result->>'mapping_method',
+          'classification', event_result_rows.ingest_result->>'classification',
+          'correction_disposition', event_result_rows.ingest_result->>'correction_disposition',
+          'correction_request_id', event_result_rows.ingest_result->>'correction_request_id',
+          'admin_notice_group_id', event_result_rows.ingest_result->>'admin_notice_group_id',
           'ingest_result', event_result_rows.ingest_result
         )
         ORDER BY event_result_rows.row_seq
@@ -12783,13 +12815,14 @@ BEGIN
   SET
     status = CASE
       WHEN tmp_update.transfer_status = 'COMPLETED' THEN 'COMPLETED'
-      WHEN tmp_update.transfer_status IN ('FAILED','DECLINED','REJECTED','CANCELLED','RETURNED','REVERTED')
+      WHEN tmp_update.transfer_status IN ('FAILED','DECLINED','REJECTED','CANCELLED')
         THEN CASE
           WHEN upper(coalesce(pay_bank_transfer.status, '')) = 'COMPLETED'
             OR pay_bank_transfer.completed_at_utc IS NOT NULL
             THEN pay_bank_transfer.status
-          ELSE 'FAILED'
+          ELSE tmp_update.transfer_status
         END
+      WHEN tmp_update.transfer_status IN ('RETURNED','REVERTED') THEN tmp_update.transfer_status
       WHEN tmp_update.transfer_status = 'BLOCKED' THEN 'BLOCKED'
       ELSE 'PENDING'
     END,
@@ -12927,7 +12960,7 @@ BEGIN
   END IF;
 
   PERFORM public._imp_debug_audit(
-    NULL::uuid,
+    p_actor_user_id,
     'PAY_BANK_TRANSFERS_APPLY_RAIL_UPDATES_RESULT',
     jsonb_build_object(
       'pay_batch_id', p_pay_batch_id,
@@ -13003,7 +13036,7 @@ BEGIN
 EXCEPTION
   WHEN OTHERS THEN
     PERFORM public._imp_debug_audit(
-      NULL::uuid,
+      p_actor_user_id,
       'PAY_BANK_TRANSFERS_APPLY_RAIL_UPDATES_ERROR',
       jsonb_build_object(
         'pay_batch_id', p_pay_batch_id,
@@ -13021,6 +13054,11 @@ EXCEPTION
     RAISE;
 END;
 $$;
+
+
+
+
+
 
 
 
@@ -22184,6 +22222,8 @@ $function$;
 
 DROP FUNCTION IF EXISTS public.pay_remittance_queue_commit_stage(uuid, text, uuid);
 
+
+
 CREATE OR REPLACE FUNCTION public.pay_remittance_queue_commit_stage(
   p_pay_batch_id uuid,
   p_scope text,
@@ -22774,6 +22814,28 @@ begin
 
         v_work_job := jsonb_set(v_work_job, '{candidates}', v_pruned_candidates, true);
         v_work_job := jsonb_set(v_work_job, '{summary,total_amount}', to_jsonb(coalesce(v_pruned_total_amount, 0)), true);
+        v_work_job := jsonb_set(
+          v_work_job,
+          '{queue_context}',
+          jsonb_strip_nulls(jsonb_build_object(
+            'context_kind', 'pay_batches',
+            'context_id', p_pay_batch_id::text,
+            'pay_batch_id', p_pay_batch_id::text,
+            'scope', v_scope,
+            'only_confirmed', v_only_confirmed,
+            'confirmed_only_granularity', case when v_only_confirmed then 'CANDIDATE_ALL_TRANSFERS_REQUIRED' else null end,
+            'job_kind', v_job_kind,
+            'recipient_kind', v_recipient_kind,
+            'umbrella_id', case when v_umbrella_id is null then null else v_umbrella_id::text end,
+            'candidate_ids', coalesce((
+              select jsonb_agg(nullif(btrim(coalesce(candidate_context.value->>'candidate_id', '')), '') order by nullif(btrim(coalesce(candidate_context.value->>'candidate_id', '')), ''))
+              from jsonb_array_elements(coalesce(v_pruned_candidates, '[]'::jsonb)) as candidate_context(value)
+              where nullif(btrim(coalesce(candidate_context.value->>'candidate_id', '')), '') is not null
+            ), '[]'::jsonb),
+            'reference', concat('pay_batch:', p_pay_batch_id::text, ':umbrella:', coalesce(v_umbrella_id::text, 'UNKNOWN'))
+          )),
+          true
+        );
 
         v_filtered_jobs := v_filtered_jobs || jsonb_build_array(v_work_job);
       end if;
@@ -22796,6 +22858,31 @@ begin
            from pg_temp.tmp_commit_stage_target_candidates tc
            where tc.candidate_id = v_candidate_id
          ) then
+        v_work_job := jsonb_set(
+          v_work_job,
+          '{queue_context}',
+          jsonb_strip_nulls(jsonb_build_object(
+            'context_kind', 'pay_batches',
+            'context_id', p_pay_batch_id::text,
+            'pay_batch_id', p_pay_batch_id::text,
+            'scope', v_scope,
+            'only_confirmed', v_only_confirmed,
+            'confirmed_only_granularity', case when v_only_confirmed then 'CANDIDATE_ALL_TRANSFERS_REQUIRED' else null end,
+            'job_kind', v_job_kind,
+            'recipient_kind', v_recipient_kind,
+            'candidate_id', v_candidate_id::text,
+            'pay_batch_candidate_id', (
+              select tc.pay_batch_candidate_id::text
+              from pg_temp.tmp_commit_stage_target_candidates tc
+              where tc.candidate_id = v_candidate_id
+              order by tc.pay_batch_candidate_id
+              limit 1
+            ),
+            'reference', concat('pay_batch:', p_pay_batch_id::text, ':candidate:', v_candidate_id::text)
+          )),
+          true
+        );
+
         v_filtered_jobs := v_filtered_jobs || jsonb_build_array(v_work_job);
 
         insert into pg_temp.tmp_commit_stage_job_map(
@@ -22944,6 +23031,7 @@ begin
       'pay_batch_id', p_pay_batch_id,
       'scope', v_scope,
       'only_confirmed', COALESCE(p_only_confirmed, false),
+      'confirmed_only_granularity', case when v_only_confirmed then 'CANDIDATE_ALL_TRANSFERS_REQUIRED' else 'NOT_APPLICABLE' end,
       'trigger_status', v_trigger_status,
       'candidate_count_targeted', v_target_candidate_count,
       'candidate_count_ready', v_ready_candidate_count,
@@ -22970,6 +23058,7 @@ begin
       'execution_committed_at_utc', case when v_batch.execution_committed_at_utc is null then null else v_batch.execution_committed_at_utc::text end,
     'scope', v_scope,
     'only_confirmed', COALESCE(p_only_confirmed, false),
+      'confirmed_only_granularity', case when v_only_confirmed then 'CANDIDATE_ALL_TRANSFERS_REQUIRED' else 'NOT_APPLICABLE' end,
     'pay_date', case when coalesce(v_batch.authoritative_payment_date, v_batch.pay_date) is null then null else coalesce(v_batch.authoritative_payment_date, v_batch.pay_date)::text end,
     'authoritative_payment_date', case when v_batch.authoritative_payment_date is null then null else v_batch.authoritative_payment_date::text end,
     'authoritative_payment_date_source', v_batch.authoritative_payment_date_source,
@@ -22991,6 +23080,7 @@ EXCEPTION
         'pay_batch_id', p_pay_batch_id,
         'scope', v_scope,
         'only_confirmed', COALESCE(p_only_confirmed, false),
+      'confirmed_only_granularity', case when v_only_confirmed then 'CANDIDATE_ALL_TRANSFERS_REQUIRED' else 'NOT_APPLICABLE' end,
         'sqlstate', SQLSTATE,
         'error_message', SQLERRM
       ),
@@ -23004,6 +23094,9 @@ EXCEPTION
     RAISE;
 end;
 $function$;
+
+
+
 
 
 
