@@ -1,4 +1,6 @@
 CREATE OR REPLACE FUNCTION public.banking_get_capabilities()
+
+  
 RETURNS jsonb
 LANGUAGE plpgsql
 SECURITY DEFINER
