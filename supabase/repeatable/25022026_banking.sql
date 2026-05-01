@@ -311,7 +311,6 @@ $$;
 
 
 
-
 CREATE OR REPLACE FUNCTION public._pay_reserved_components(p_timesheet_ids uuid[])
 RETURNS TABLE (
   timesheet_id uuid,
@@ -506,7 +505,9 @@ reserved_keyed AS (
     ROUND(COALESCE(economic_components.source_amount_ex_vat, 0), 2) AS amount_ex_vat,
     ROUND(COALESCE(economic_components.source_amount_inc_vat, 0), 2) AS amount_inc_vat
   FROM active_item_ids AS active_items
-  JOIN LATERAL public._pay_batch_item_economic_components(NULL::uuid, ARRAY[active_items.pay_batch_item_id]::uuid[]) AS economic_components
+  JOIN LATERAL public._pay_batch_item_economic_components(
+    p_pay_batch_item_ids => ARRAY[active_items.pay_batch_item_id]::uuid[]
+  ) AS economic_components
     ON true
   WHERE economic_components.item_type IN ('SEGMENT_DELTA','EXPENSE_DELTA','ADJUSTMENT_DELTA','MILEAGE_DELTA')
     AND economic_components.key_resolution_failure_reason IS NULL
@@ -540,6 +541,8 @@ SELECT
   reserved_components.amount_inc_vat
 FROM reserved_components;
 $$;
+
+
 
 
 
