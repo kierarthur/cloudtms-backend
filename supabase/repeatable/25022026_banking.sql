@@ -6781,6 +6781,7 @@ $$;
 
 
 
+
 create or replace function public.pay_settle_rail(
   p_pay_batch_id uuid,
   p_settlement_json jsonb,
@@ -6800,6 +6801,7 @@ declare
 
   v_pending_transfers jsonb := '[]'::jsonb;
   v_failed_transfers  jsonb := '[]'::jsonb;
+  v_returned_transfers jsonb := '[]'::jsonb;
   v_blocked_transfers jsonb := '[]'::jsonb;
 
   v_batch_status text;
@@ -7030,6 +7032,9 @@ begin
       WHEN t.status = 'COMPLETED' THEN 'COMPLETED'
       WHEN t.status IN ('FAILED','DECLINED','REJECTED','CANCELLED','RETURNED','REVERTED') THEN t.status
       WHEN t.status = 'BLOCKED' THEN 'BLOCKED'
+      WHEN t.status = 'PROCESSING' THEN 'PROCESSING'
+      WHEN t.status = 'UNKNOWN' THEN 'UNKNOWN'
+      WHEN t.status = 'PENDING' THEN 'PENDING'
       ELSE 'PENDING'
     END,
     rail_tx_id = coalesce(t.rail_tx_id, pbt.rail_tx_id),
@@ -7044,7 +7049,7 @@ begin
       else pbt.completed_at_utc
     end,
     failed_reason = case
-      when t.status IN ('FAILED','DECLINED','REJECTED','CANCELLED','RETURNED','REVERTED') then coalesce(pbt.failed_reason, nullif(btrim(coalesce(t.rail_state,'')),''), t.status)
+      when t.status IN ('FAILED','DECLINED','REJECTED','CANCELLED') then coalesce(pbt.failed_reason, nullif(btrim(coalesce(t.rail_state,'')),''), t.status)
       else pbt.failed_reason
     end
   from _tmp_settle_in t
@@ -8106,7 +8111,9 @@ begin
     select
       sum(case when upper(coalesce(pbt.status,'')) in ('PENDING','PROCESSING','UNKNOWN') then 1 else 0 end)::int as pending_ct,
       sum(case when upper(coalesce(pbt.status,'')) = 'COMPLETED' then 1 else 0 end)::int as completed_ct,
-      sum(case when upper(coalesce(pbt.status,'')) in ('FAILED','DECLINED','REJECTED','CANCELLED','RETURNED','REVERTED') then 1 else 0 end)::int as failed_ct,
+      sum(case when upper(coalesce(pbt.status,'')) = 'COMPLETED' or pbt.completed_at_utc is not null then 1 else 0 end)::int as settled_evidence_ct,
+      sum(case when upper(coalesce(pbt.status,'')) in ('FAILED','DECLINED','REJECTED','CANCELLED') then 1 else 0 end)::int as failed_ct,
+      sum(case when upper(coalesce(pbt.status,'')) in ('RETURNED','REVERTED') then 1 else 0 end)::int as returned_ct,
       sum(case when upper(coalesce(pbt.status,'')) = 'BLOCKED' then 1 else 0 end)::int as blocked_ct
     from payable_transfer_ids pti
     join public.pay_bank_transfers pbt
@@ -8115,8 +8122,21 @@ begin
   )
   select
     case
-      when coalesce(s.pending_ct,0) = 0 and coalesce(s.failed_ct,0) = 0 and coalesce(s.blocked_ct,0) = 0 then 'SETTLED'
-      when coalesce(s.pending_ct,0) = 0 and coalesce(s.failed_ct,0) > 0 then 'FAILED'
+      when coalesce(s.pending_ct,0) = 0
+       and coalesce(s.failed_ct,0) = 0
+       and coalesce(s.blocked_ct,0) = 0
+       and coalesce(s.returned_ct,0) = 0
+        then 'SETTLED'
+      when coalesce(s.pending_ct,0) = 0
+       and coalesce(s.failed_ct,0) = 0
+       and coalesce(s.blocked_ct,0) = 0
+       and coalesce(s.returned_ct,0) > 0
+       and coalesce(s.settled_evidence_ct,0) > 0
+        then 'SETTLED'
+      when coalesce(s.pending_ct,0) = 0
+       and coalesce(s.failed_ct,0) > 0
+       and coalesce(s.returned_ct,0) = 0
+        then 'FAILED'
       else 'PARTIAL'
     end
   into v_batch_status
@@ -8356,7 +8376,28 @@ begin
   into v_failed_transfers
   from public.pay_bank_transfers pbt
   where pbt.pay_batch_id = p_pay_batch_id
-    and upper(coalesce(pbt.status,'')) in ('FAILED','DECLINED','REJECTED','CANCELLED','RETURNED','REVERTED');
+    and upper(coalesce(pbt.status,'')) in ('FAILED','DECLINED','REJECTED','CANCELLED');
+
+  select coalesce(
+    jsonb_agg(
+      jsonb_build_object(
+        'id', pbt.id::text,
+        'pay_channel', pbt.pay_channel,
+        'status', pbt.status,
+        'amount', pbt.amount,
+        'rail_tx_id', pbt.rail_tx_id,
+        'rail_state', pbt.rail_state,
+        'rail_meta_json', pbt.rail_meta_json,
+        'completed_at_utc', case when pbt.completed_at_utc is null then null else pbt.completed_at_utc::text end
+      )
+      order by pbt.pay_channel, pbt.amount desc, pbt.id
+    ),
+    '[]'::jsonb
+  )
+  into v_returned_transfers
+  from public.pay_bank_transfers pbt
+  where pbt.pay_batch_id = p_pay_batch_id
+    and upper(coalesce(pbt.status,'')) in ('RETURNED','REVERTED');
 
   select coalesce(
     jsonb_agg(
@@ -8670,6 +8711,7 @@ begin
     'newly_settled_candidates', v_newly_settled_candidates,
     'still_pending_transfers', v_pending_transfers,
     'failed_transfers', v_failed_transfers,
+    'returned_transfers', v_returned_transfers,
     'blocked_transfers', v_blocked_transfers,
     'freshness', jsonb_build_object(
       'is_stale', v_is_stale,
@@ -8697,6 +8739,7 @@ begin
   );
 end;
 $$;
+
 
 
 
@@ -13022,7 +13065,6 @@ $$;
 
 
 DROP FUNCTION IF EXISTS public.pay_bank_transfers_apply_rail_updates(uuid, jsonb);
-
 CREATE OR REPLACE FUNCTION public.pay_bank_transfers_apply_rail_updates(
   p_pay_batch_id uuid,
   p_updates jsonb,
@@ -13462,6 +13504,9 @@ BEGIN
         END
       WHEN tmp_update.transfer_status IN ('RETURNED','REVERTED') THEN tmp_update.transfer_status
       WHEN tmp_update.transfer_status = 'BLOCKED' THEN 'BLOCKED'
+      WHEN tmp_update.transfer_status = 'PROCESSING' THEN 'PROCESSING'
+      WHEN tmp_update.transfer_status = 'UNKNOWN' THEN 'UNKNOWN'
+      WHEN tmp_update.transfer_status = 'PENDING' THEN 'PENDING'
       ELSE 'PENDING'
     END,
     rail_tx_id = coalesce(tmp_update.rail_tx_id, pay_bank_transfer.rail_tx_id),
@@ -13692,6 +13737,7 @@ EXCEPTION
     RAISE;
 END;
 $$;
+
 
 
 
@@ -22898,6 +22944,7 @@ declare
   v_candidate_work_json jsonb;
   v_pruned_non_timesheet_lines jsonb := '[]'::jsonb;
   v_pruned_transfers jsonb := '[]'::jsonb;
+  v_pruned_timesheets jsonb := '[]'::jsonb;
   v_candidate_excluded_transfer_total numeric := 0;
   v_job_excluded_transfer_total numeric := 0;
   v_original_job_total numeric := 0;
@@ -23081,163 +23128,191 @@ begin
     candidate_tms_ref text null
   ) on commit drop;
 
+  drop table if exists pg_temp.tmp_commit_stage_confirmed_items;
+  create temporary table pg_temp.tmp_commit_stage_confirmed_items(
+    pay_batch_item_id uuid primary key,
+    pay_batch_candidate_id uuid not null,
+    candidate_id uuid not null,
+    pay_bank_transfer_id uuid null,
+    umbrella_id uuid null,
+    pay_channel text not null,
+    item_type text not null,
+    timesheet_id uuid null,
+    finance_case_id uuid null,
+    amount_inc_vat numeric null,
+    transfer_group_key text null
+  ) on commit drop;
+
+  insert into pg_temp.tmp_commit_stage_confirmed_items(
+    pay_batch_item_id,
+    pay_batch_candidate_id,
+    candidate_id,
+    pay_bank_transfer_id,
+    umbrella_id,
+    pay_channel,
+    item_type,
+    timesheet_id,
+    finance_case_id,
+    amount_inc_vat,
+    transfer_group_key
+  )
+  select distinct
+    pbi.id,
+    pbc.id,
+    pbc.candidate_id,
+    pbi.pay_bank_transfer_id,
+    pbi.umbrella_id,
+    upper(coalesce(pbi.pay_channel, '')),
+    pbi.item_type,
+    pbi.timesheet_id,
+    pbi.finance_case_id,
+    pbi.amount_inc_vat,
+    pbt_confirmed.transfer_group_key
+  from public.pay_batch_candidates as pbc
+  join public.pay_batch_items as pbi
+    on pbi.pay_batch_candidate_id = pbc.id
+  left join public.pay_bank_transfers as pbt_confirmed
+    on pbt_confirmed.id = pbi.pay_bank_transfer_id
+   and pbt_confirmed.pay_batch_id = p_pay_batch_id
+  where pbc.pay_batch_id = p_pay_batch_id
+    and (pbc.remittance_sent_at_utc is null or v_only_confirmed)
+    and coalesce(pbi.is_voided, false) = false
+    and pbi.item_type <> 'DEBT_CREATED'
+    and not exists (
+      select 1
+      from public.pay_payment_correction_items as ppc_confirmed_scope_correction
+      where ppc_confirmed_scope_correction.pay_batch_item_id = pbi.id
+        and ppc_confirmed_scope_correction.status = 'APPLIED'
+        and ppc_confirmed_scope_correction.correction_item_kind in ('PRE_BANK_CANCEL','NO_MONEY_UNWIND','SETTLED_REVERSAL')
+    )
+    and (
+      (
+        (v_scope = 'ALL' or v_scope = 'UMBRELLA')
+        and upper(coalesce(pbi.pay_channel, '')) = 'UMBRELLA'
+        and not (
+          pbi.finance_case_id is not null
+          and pbi.item_type in ('LOAN_PAYOUT', 'MANUAL_CREDIT_PAYOUT')
+          and jsonb_typeof(pbi.payout_instruction_snapshot_json) = 'object'
+          and upper(coalesce(pbi.payout_instruction_snapshot_json->>'routing_kind', '')) = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'
+          and lower(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'is_candidate_directed_oneoff_payout', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+        )
+      )
+      or (
+        (v_scope = 'ALL' or v_scope = 'PAYE')
+        and upper(coalesce(pbi.pay_channel, '')) = 'PAYE'
+      )
+    )
+    and (
+      v_only_confirmed = false
+      or (
+        (
+          pbi.pay_bank_transfer_id is not null
+          and (
+            upper(btrim(coalesce(pbt_confirmed.status, ''))) = 'COMPLETED'
+            or pbt_confirmed.completed_at_utc is not null
+          )
+          and upper(btrim(coalesce(pbt_confirmed.status, ''))) not in (
+            'FAILED',
+            'DECLINED',
+            'REJECTED',
+            'CANCELLED',
+            'CANCELED',
+            'RETURNED',
+            'REVERTED',
+            'PENDING',
+            'PROCESSING',
+            'UNKNOWN',
+            'BLOCKED'
+          )
+          and not exists (
+            select 1
+            from public.mail_outbox as already_scoped_remittance
+            where already_scoped_remittance.status::text in ('QUEUED','SENT')
+              and coalesce(already_scoped_remittance.payment_scope_json->>'pay_batch_id', '') = p_pay_batch_id::text
+              and exists (
+                select 1
+                from jsonb_array_elements_text(coalesce(already_scoped_remittance.payment_scope_json->'pay_bank_transfer_ids', '[]'::jsonb)) as already_transfer_ids(transfer_id_text)
+                where already_transfer_ids.transfer_id_text = pbi.pay_bank_transfer_id::text
+              )
+          )
+        )
+        or (
+          pbi.pay_bank_transfer_id is null
+          and pbc.remittance_sent_at_utc is null
+          and (
+            upper(btrim(coalesce(pbc.settlement_status, ''))) = 'SETTLED'
+            or pbc.settled_at_utc is not null
+          )
+        )
+      )
+    );
+
+  insert into pg_temp.tmp_commit_stage_excluded_transfers(
+    transfer_id,
+    candidate_id,
+    umbrella_id
+  )
+  select distinct
+    pbi_unconfirmed_scope.pay_bank_transfer_id,
+    pbc_unconfirmed_scope.candidate_id,
+    pbi_unconfirmed_scope.umbrella_id
+  from public.pay_batch_candidates as pbc_unconfirmed_scope
+  join public.pay_batch_items as pbi_unconfirmed_scope
+    on pbi_unconfirmed_scope.pay_batch_candidate_id = pbc_unconfirmed_scope.id
+  where pbc_unconfirmed_scope.pay_batch_id = p_pay_batch_id
+    and v_only_confirmed
+    and pbi_unconfirmed_scope.pay_bank_transfer_id is not null
+    and coalesce(pbi_unconfirmed_scope.is_voided, false) = false
+    and pbi_unconfirmed_scope.item_type <> 'DEBT_CREATED'
+    and not exists (
+      select 1
+      from public.pay_payment_correction_items as ppc_unconfirmed_scope_correction
+      where ppc_unconfirmed_scope_correction.pay_batch_item_id = pbi_unconfirmed_scope.id
+        and ppc_unconfirmed_scope_correction.status = 'APPLIED'
+        and ppc_unconfirmed_scope_correction.correction_item_kind in ('PRE_BANK_CANCEL','NO_MONEY_UNWIND','SETTLED_REVERSAL')
+    )
+    and (
+      (
+        (v_scope = 'ALL' or v_scope = 'UMBRELLA')
+        and upper(coalesce(pbi_unconfirmed_scope.pay_channel, '')) = 'UMBRELLA'
+        and not (
+          pbi_unconfirmed_scope.finance_case_id is not null
+          and pbi_unconfirmed_scope.item_type in ('LOAN_PAYOUT', 'MANUAL_CREDIT_PAYOUT')
+          and jsonb_typeof(pbi_unconfirmed_scope.payout_instruction_snapshot_json) = 'object'
+          and upper(coalesce(pbi_unconfirmed_scope.payout_instruction_snapshot_json->>'routing_kind', '')) = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'
+          and lower(btrim(coalesce(pbi_unconfirmed_scope.payout_instruction_snapshot_json->>'is_candidate_directed_oneoff_payout', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+        )
+      )
+      or (
+        (v_scope = 'ALL' or v_scope = 'PAYE')
+        and upper(coalesce(pbi_unconfirmed_scope.pay_channel, '')) = 'PAYE'
+      )
+    )
+    and not exists (
+      select 1
+      from pg_temp.tmp_commit_stage_confirmed_items as confirmed_scope_item
+      where confirmed_scope_item.pay_batch_item_id = pbi_unconfirmed_scope.id
+    )
+  on conflict (transfer_id) do nothing;
+
   insert into pg_temp.tmp_commit_stage_target_candidates(
     pay_batch_candidate_id,
     candidate_id,
     candidate_display_name,
     candidate_tms_ref
   )
-  select
+  select distinct
     pbc.id,
     pbc.candidate_id,
     pbc.candidate_display_name,
     pbc.candidate_tms_ref
-  from public.pay_batch_candidates pbc
+  from public.pay_batch_candidates as pbc
   where pbc.pay_batch_id = p_pay_batch_id
-    and pbc.remittance_sent_at_utc is null
-    and not exists (
-      select 1
-      from public.pay_batch_items as pbi_candidate_correction_scope
-      join public.pay_payment_correction_items as ppc_candidate_correction_scope
-        on ppc_candidate_correction_scope.pay_batch_item_id = pbi_candidate_correction_scope.id
-       and ppc_candidate_correction_scope.status = 'APPLIED'
-       and ppc_candidate_correction_scope.correction_item_kind in ('PRE_BANK_CANCEL','NO_MONEY_UNWIND','SETTLED_REVERSAL')
-      where pbi_candidate_correction_scope.pay_batch_candidate_id = pbc.id
-        and coalesce(pbi_candidate_correction_scope.is_voided, false) = false
-    )
+    and (pbc.remittance_sent_at_utc is null or v_only_confirmed)
     and exists (
       select 1
-      from public.pay_batch_items pbi
-      left join public.pay_bank_transfers pbt_confirm
-        on pbt_confirm.id = pbi.pay_bank_transfer_id
-       and pbt_confirm.pay_batch_id = p_pay_batch_id
-      where pbi.pay_batch_candidate_id = pbc.id
-        and coalesce(pbi.is_voided, false) = false
-        and not exists (
-          select 1
-          from public.pay_payment_correction_items as ppc_target_candidate_correction
-          where ppc_target_candidate_correction.pay_batch_item_id = pbi.id
-            and ppc_target_candidate_correction.status = 'APPLIED'
-            and ppc_target_candidate_correction.correction_item_kind in ('PRE_BANK_CANCEL','NO_MONEY_UNWIND','SETTLED_REVERSAL')
-        )
-        and pbi.item_type <> 'DEBT_CREATED'
-        and (
-          (
-            (v_scope = 'ALL' or v_scope = 'UMBRELLA')
-            and upper(coalesce(pbi.pay_channel, '')) = 'UMBRELLA'
-            and not (
-              pbi.finance_case_id is not null
-              and pbi.item_type in ('LOAN_PAYOUT', 'MANUAL_CREDIT_PAYOUT')
-              and jsonb_typeof(pbi.payout_instruction_snapshot_json) = 'object'
-              and upper(coalesce(pbi.payout_instruction_snapshot_json->>'routing_kind', '')) = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'
-              and lower(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'is_candidate_directed_oneoff_payout', 'false'))) in ('true', '1', 'yes', 'y', 'on')
-            )
-          )
-          or (
-            (v_scope = 'ALL' or v_scope = 'PAYE')
-            and upper(coalesce(pbi.pay_channel, '')) = 'PAYE'
-          )
-        )
-        and (
-          coalesce(p_only_confirmed, false) = false
-          or (
-            (
-              (
-                pbi.pay_bank_transfer_id is not null
-                and (
-                  upper(btrim(coalesce(pbt_confirm.status, ''))) = 'COMPLETED'
-                  or pbt_confirm.completed_at_utc is not null
-                )
-              )
-              or (
-                pbi.pay_bank_transfer_id is null
-                and (
-                  upper(btrim(coalesce(pbc.settlement_status, ''))) = 'SETTLED'
-                  or pbc.settled_at_utc is not null
-                )
-              )
-            )
-            and upper(btrim(coalesce(pbt_confirm.status, ''))) not in (
-              'FAILED',
-              'DECLINED',
-              'REJECTED',
-              'CANCELLED',
-              'CANCELED',
-              'RETURNED',
-              'REVERTED',
-              'PENDING',
-              'PROCESSING',
-              'UNKNOWN',
-              'BLOCKED'
-            )
-          )
-        )
-    )
-    and (
-      coalesce(p_only_confirmed, false) = false
-      or not exists (
-        select 1
-        from public.pay_batch_items pbi_unconfirmed
-        left join public.pay_bank_transfers pbt_unconfirmed
-          on pbt_unconfirmed.id = pbi_unconfirmed.pay_bank_transfer_id
-         and pbt_unconfirmed.pay_batch_id = p_pay_batch_id
-        where pbi_unconfirmed.pay_batch_candidate_id = pbc.id
-          and coalesce(pbi_unconfirmed.is_voided, false) = false
-          and pbi_unconfirmed.item_type <> 'DEBT_CREATED'
-          and (
-            (
-              (v_scope = 'ALL' or v_scope = 'UMBRELLA')
-              and upper(coalesce(pbi_unconfirmed.pay_channel, '')) = 'UMBRELLA'
-              and not (
-                pbi_unconfirmed.finance_case_id is not null
-                and pbi_unconfirmed.item_type in ('LOAN_PAYOUT', 'MANUAL_CREDIT_PAYOUT')
-                and jsonb_typeof(pbi_unconfirmed.payout_instruction_snapshot_json) = 'object'
-                and upper(coalesce(pbi_unconfirmed.payout_instruction_snapshot_json->>'routing_kind', '')) = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'
-                and lower(btrim(coalesce(pbi_unconfirmed.payout_instruction_snapshot_json->>'is_candidate_directed_oneoff_payout', 'false'))) in ('true', '1', 'yes', 'y', 'on')
-              )
-            )
-            or (
-              (v_scope = 'ALL' or v_scope = 'PAYE')
-              and upper(coalesce(pbi_unconfirmed.pay_channel, '')) = 'PAYE'
-            )
-          )
-          and (
-            exists (
-              select 1
-              from public.pay_payment_correction_items as ppc_unconfirmed_correction
-              where ppc_unconfirmed_correction.pay_batch_item_id = pbi_unconfirmed.id
-                and ppc_unconfirmed_correction.status = 'APPLIED'
-                and ppc_unconfirmed_correction.correction_item_kind in ('PRE_BANK_CANCEL','NO_MONEY_UNWIND','SETTLED_REVERSAL')
-            )
-            or upper(btrim(coalesce(pbt_unconfirmed.status, ''))) in (
-              'FAILED',
-              'DECLINED',
-              'REJECTED',
-              'CANCELLED',
-              'CANCELED',
-              'RETURNED',
-              'REVERTED',
-              'PENDING',
-              'PROCESSING',
-              'UNKNOWN',
-              'BLOCKED'
-            )
-            or (
-              pbi_unconfirmed.pay_bank_transfer_id is not null
-              and not (
-                upper(btrim(coalesce(pbt_unconfirmed.status, ''))) = 'COMPLETED'
-                or pbt_unconfirmed.completed_at_utc is not null
-              )
-            )
-            or (
-              pbi_unconfirmed.pay_bank_transfer_id is null
-              and not (
-                upper(btrim(coalesce(pbc.settlement_status, ''))) = 'SETTLED'
-                or pbc.settled_at_utc is not null
-              )
-            )
-          )
-      )
+      from pg_temp.tmp_commit_stage_confirmed_items as confirmed_target_item
+      where confirmed_target_item.pay_batch_candidate_id = pbc.id
     );
 
   select count(*)::int
@@ -23413,6 +23488,121 @@ begin
 
           v_candidate_work_json := jsonb_set(v_candidate_work_json, '{non_timesheet_lines}', coalesce(v_pruned_non_timesheet_lines, '[]'::jsonb), true);
 
+          if v_only_confirmed then
+            select coalesce(jsonb_agg(timesheet_rows.value order by timesheet_rows.ord), '[]'::jsonb)
+            into v_pruned_timesheets
+            from jsonb_array_elements(coalesce(v_candidate_work_json->'timesheets', '[]'::jsonb)) with ordinality as timesheet_rows(value, ord)
+            where nullif(btrim(coalesce(timesheet_rows.value->>'timesheet_id', '')), '') is not null
+              and exists (
+                select 1
+                from pg_temp.tmp_commit_stage_confirmed_items as confirmed_timesheet_item
+                where confirmed_timesheet_item.candidate_id = v_candidate_id
+                  and confirmed_timesheet_item.timesheet_id is not null
+                  and confirmed_timesheet_item.timesheet_id::text = nullif(btrim(coalesce(timesheet_rows.value->>'timesheet_id', '')), '')
+              )
+              and not exists (
+                select 1
+                from public.pay_batch_items as mixed_timesheet_item
+                join public.pay_batch_candidates as mixed_timesheet_candidate
+                  on mixed_timesheet_candidate.id = mixed_timesheet_item.pay_batch_candidate_id
+                where mixed_timesheet_candidate.pay_batch_id = p_pay_batch_id
+                  and mixed_timesheet_candidate.candidate_id = v_candidate_id
+                  and mixed_timesheet_item.timesheet_id is not null
+                  and mixed_timesheet_item.timesheet_id::text = nullif(btrim(coalesce(timesheet_rows.value->>'timesheet_id', '')), '')
+                  and coalesce(mixed_timesheet_item.is_voided, false) = false
+                  and mixed_timesheet_item.item_type <> 'DEBT_CREATED'
+                  and not exists (
+                    select 1
+                    from public.pay_payment_correction_items as mixed_timesheet_correction
+                    where mixed_timesheet_correction.pay_batch_item_id = mixed_timesheet_item.id
+                      and mixed_timesheet_correction.status = 'APPLIED'
+                      and mixed_timesheet_correction.correction_item_kind in ('PRE_BANK_CANCEL','NO_MONEY_UNWIND','SETTLED_REVERSAL')
+                  )
+                  and not exists (
+                    select 1
+                    from pg_temp.tmp_commit_stage_confirmed_items as confirmed_mixed_timesheet_item
+                    where confirmed_mixed_timesheet_item.pay_batch_item_id = mixed_timesheet_item.id
+                  )
+              );
+
+            v_candidate_work_json := jsonb_set(v_candidate_work_json, '{timesheets}', coalesce(v_pruned_timesheets, '[]'::jsonb), true);
+
+            select coalesce(jsonb_agg(non_timesheet_rows.value order by non_timesheet_rows.ord), '[]'::jsonb)
+            into v_pruned_non_timesheet_lines
+            from jsonb_array_elements(coalesce(v_candidate_work_json->'non_timesheet_lines', '[]'::jsonb)) with ordinality as non_timesheet_rows(value, ord)
+            where nullif(btrim(coalesce(non_timesheet_rows.value->>'finance_case_id', '')), '') is not null
+              and exists (
+                select 1
+                from pg_temp.tmp_commit_stage_confirmed_items as confirmed_finance_item
+                where confirmed_finance_item.candidate_id = v_candidate_id
+                  and confirmed_finance_item.finance_case_id is not null
+                  and confirmed_finance_item.finance_case_id::text = nullif(btrim(coalesce(non_timesheet_rows.value->>'finance_case_id', '')), '')
+              )
+              and not exists (
+                select 1
+                from public.pay_batch_items as mixed_finance_item
+                join public.pay_batch_candidates as mixed_finance_candidate
+                  on mixed_finance_candidate.id = mixed_finance_item.pay_batch_candidate_id
+                where mixed_finance_candidate.pay_batch_id = p_pay_batch_id
+                  and mixed_finance_candidate.candidate_id = v_candidate_id
+                  and mixed_finance_item.finance_case_id is not null
+                  and mixed_finance_item.finance_case_id::text = nullif(btrim(coalesce(non_timesheet_rows.value->>'finance_case_id', '')), '')
+                  and coalesce(mixed_finance_item.is_voided, false) = false
+                  and mixed_finance_item.item_type <> 'DEBT_CREATED'
+                  and not exists (
+                    select 1
+                    from public.pay_payment_correction_items as mixed_finance_correction
+                    where mixed_finance_correction.pay_batch_item_id = mixed_finance_item.id
+                      and mixed_finance_correction.status = 'APPLIED'
+                      and mixed_finance_correction.correction_item_kind in ('PRE_BANK_CANCEL','NO_MONEY_UNWIND','SETTLED_REVERSAL')
+                  )
+                  and not exists (
+                    select 1
+                    from pg_temp.tmp_commit_stage_confirmed_items as confirmed_mixed_finance_item
+                    where confirmed_mixed_finance_item.pay_batch_item_id = mixed_finance_item.id
+                  )
+              );
+
+            v_candidate_work_json := jsonb_set(v_candidate_work_json, '{non_timesheet_lines}', coalesce(v_pruned_non_timesheet_lines, '[]'::jsonb), true);
+
+            if jsonb_typeof(v_candidate_work_json->'transfers') = 'array' then
+              select coalesce(jsonb_agg(transfer_rows.value order by transfer_rows.ord), '[]'::jsonb)
+              into v_pruned_transfers
+              from jsonb_array_elements(coalesce(v_candidate_work_json->'transfers', '[]'::jsonb)) with ordinality as transfer_rows(value, ord)
+              where nullif(btrim(coalesce(transfer_rows.value->>'transfer_id', '')), '') is not null
+                and exists (
+                  select 1
+                  from pg_temp.tmp_commit_stage_confirmed_items as confirmed_transfer_item
+                  where confirmed_transfer_item.candidate_id = v_candidate_id
+                    and confirmed_transfer_item.pay_bank_transfer_id is not null
+                    and confirmed_transfer_item.pay_bank_transfer_id::text = nullif(btrim(coalesce(transfer_rows.value->>'transfer_id', '')), '')
+                );
+
+              v_candidate_work_json := jsonb_set(v_candidate_work_json, '{transfers}', coalesce(v_pruned_transfers, '[]'::jsonb), true);
+            end if;
+
+            v_candidate_work_json := jsonb_set(
+              v_candidate_work_json,
+              '{confirmed_only_scope}',
+              jsonb_build_object(
+                'enabled', true,
+                'granularity', 'TRANSFER_PAYMENT_GROUP_CONFIRMED_ITEMS',
+                'pay_bank_transfer_ids', coalesce((
+                  select jsonb_agg(distinct confirmed_scope_transfer.pay_bank_transfer_id::text)
+                  from pg_temp.tmp_commit_stage_confirmed_items as confirmed_scope_transfer
+                  where confirmed_scope_transfer.candidate_id = v_candidate_id
+                    and confirmed_scope_transfer.pay_bank_transfer_id is not null
+                ), '[]'::jsonb),
+                'pay_batch_item_ids', coalesce((
+                  select jsonb_agg(distinct confirmed_scope_item.pay_batch_item_id::text)
+                  from pg_temp.tmp_commit_stage_confirmed_items as confirmed_scope_item
+                  where confirmed_scope_item.candidate_id = v_candidate_id
+                ), '[]'::jsonb)
+              ),
+              true
+            );
+          end if;
+
           if jsonb_typeof(v_candidate_work_json->'totals') = 'object' then
             if btrim(coalesce(v_candidate_work_json #>> '{totals,final_paid}', '')) ~ '^-?[0-9]+(\.[0-9]+)?$' then
               v_final_paid_amount := round(greatest((v_candidate_work_json #>> '{totals,final_paid}')::numeric - coalesce(v_candidate_excluded_transfer_total, 0), 0), 2);
@@ -23462,7 +23652,7 @@ begin
             'pay_batch_id', p_pay_batch_id::text,
             'scope', v_scope,
             'only_confirmed', v_only_confirmed,
-            'confirmed_only_granularity', case when v_only_confirmed then 'CANDIDATE_ALL_TRANSFERS_REQUIRED' else null end,
+            'confirmed_only_granularity', case when v_only_confirmed then 'TRANSFER_PAYMENT_GROUP_CONFIRMED_ITEMS' else null end,
             'job_kind', v_job_kind,
             'recipient_kind', v_recipient_kind,
             'umbrella_id', case when v_umbrella_id is null then null else v_umbrella_id::text end,
@@ -23514,6 +23704,14 @@ begin
                       and umbrella_scope_corrections.status = 'APPLIED'
                       and umbrella_scope_corrections.correction_item_kind in ('PRE_BANK_CANCEL','NO_MONEY_UNWIND','SETTLED_REVERSAL')
                   )
+                  and (
+                    v_only_confirmed = false
+                    or exists (
+                      select 1
+                      from pg_temp.tmp_commit_stage_confirmed_items as umbrella_scope_confirmed_items
+                      where umbrella_scope_confirmed_items.pay_batch_item_id = umbrella_scope_items.id
+                    )
+                  )
               ), '[]'::jsonb),
               'transfer_group_keys', coalesce((
                 select jsonb_agg(distinct umbrella_scope_transfers.transfer_group_key)
@@ -23531,6 +23729,14 @@ begin
                     select 1
                     from jsonb_array_elements(coalesce(v_pruned_candidates, '[]'::jsonb)) as umbrella_scope_candidate_json(value)
                     where nullif(btrim(coalesce(umbrella_scope_candidate_json.value->>'candidate_id', '')), '') = umbrella_scope_transfer_candidates.candidate_id::text
+                  )
+                  and (
+                    v_only_confirmed = false
+                    or exists (
+                      select 1
+                      from pg_temp.tmp_commit_stage_confirmed_items as umbrella_scope_transfer_confirmed_items
+                      where umbrella_scope_transfer_confirmed_items.pay_batch_item_id = umbrella_scope_transfer_items.id
+                    )
                   )
               ), '[]'::jsonb),
               'pay_batch_item_ids', coalesce((
@@ -23553,6 +23759,14 @@ begin
                     where umbrella_scope_item_corrections.pay_batch_item_id = umbrella_scope_item_ids.id
                       and umbrella_scope_item_corrections.status = 'APPLIED'
                       and umbrella_scope_item_corrections.correction_item_kind in ('PRE_BANK_CANCEL','NO_MONEY_UNWIND','SETTLED_REVERSAL')
+                  )
+                  and (
+                    v_only_confirmed = false
+                    or exists (
+                      select 1
+                      from pg_temp.tmp_commit_stage_confirmed_items as umbrella_scope_item_confirmed_items
+                      where umbrella_scope_item_confirmed_items.pay_batch_item_id = umbrella_scope_item_ids.id
+                    )
                   )
               ), '[]'::jsonb),
               'pay_channels', jsonb_build_array('UMBRELLA')
@@ -23589,6 +23803,160 @@ begin
            from pg_temp.tmp_commit_stage_target_candidates tc
            where tc.candidate_id = v_candidate_id
          ) then
+        if v_only_confirmed then
+          select round(coalesce(sum(pbt_excluded_candidate.amount), 0), 2)
+          into v_candidate_excluded_transfer_total
+          from pg_temp.tmp_commit_stage_excluded_transfers as excluded_candidate_transfer
+          join public.pay_bank_transfers as pbt_excluded_candidate
+            on pbt_excluded_candidate.id = excluded_candidate_transfer.transfer_id
+          where excluded_candidate_transfer.candidate_id = v_candidate_id;
+
+          if jsonb_typeof(v_work_job->'timesheets') = 'array' then
+            select coalesce(jsonb_agg(timesheet_rows.value order by timesheet_rows.ord), '[]'::jsonb)
+            into v_pruned_timesheets
+            from jsonb_array_elements(coalesce(v_work_job->'timesheets', '[]'::jsonb)) with ordinality as timesheet_rows(value, ord)
+            where nullif(btrim(coalesce(timesheet_rows.value->>'timesheet_id', '')), '') is not null
+              and exists (
+                select 1
+                from pg_temp.tmp_commit_stage_confirmed_items as confirmed_timesheet_item
+                where confirmed_timesheet_item.candidate_id = v_candidate_id
+                  and confirmed_timesheet_item.timesheet_id is not null
+                  and confirmed_timesheet_item.timesheet_id::text = nullif(btrim(coalesce(timesheet_rows.value->>'timesheet_id', '')), '')
+              )
+              and not exists (
+                select 1
+                from public.pay_batch_items as mixed_timesheet_item
+                join public.pay_batch_candidates as mixed_timesheet_candidate
+                  on mixed_timesheet_candidate.id = mixed_timesheet_item.pay_batch_candidate_id
+                where mixed_timesheet_candidate.pay_batch_id = p_pay_batch_id
+                  and mixed_timesheet_candidate.candidate_id = v_candidate_id
+                  and mixed_timesheet_item.timesheet_id is not null
+                  and mixed_timesheet_item.timesheet_id::text = nullif(btrim(coalesce(timesheet_rows.value->>'timesheet_id', '')), '')
+                  and coalesce(mixed_timesheet_item.is_voided, false) = false
+                  and mixed_timesheet_item.item_type <> 'DEBT_CREATED'
+                  and not exists (
+                    select 1
+                    from public.pay_payment_correction_items as mixed_timesheet_correction
+                    where mixed_timesheet_correction.pay_batch_item_id = mixed_timesheet_item.id
+                      and mixed_timesheet_correction.status = 'APPLIED'
+                      and mixed_timesheet_correction.correction_item_kind in ('PRE_BANK_CANCEL','NO_MONEY_UNWIND','SETTLED_REVERSAL')
+                  )
+                  and not exists (
+                    select 1
+                    from pg_temp.tmp_commit_stage_confirmed_items as confirmed_mixed_timesheet_item
+                    where confirmed_mixed_timesheet_item.pay_batch_item_id = mixed_timesheet_item.id
+                  )
+              );
+
+            v_work_job := jsonb_set(v_work_job, '{timesheets}', coalesce(v_pruned_timesheets, '[]'::jsonb), true);
+          end if;
+
+          if jsonb_typeof(v_work_job->'non_timesheet_lines') = 'array' then
+            select coalesce(jsonb_agg(non_timesheet_rows.value order by non_timesheet_rows.ord), '[]'::jsonb)
+            into v_pruned_non_timesheet_lines
+            from jsonb_array_elements(coalesce(v_work_job->'non_timesheet_lines', '[]'::jsonb)) with ordinality as non_timesheet_rows(value, ord)
+            where nullif(btrim(coalesce(non_timesheet_rows.value->>'finance_case_id', '')), '') is not null
+              and exists (
+                select 1
+                from pg_temp.tmp_commit_stage_confirmed_items as confirmed_finance_item
+                where confirmed_finance_item.candidate_id = v_candidate_id
+                  and confirmed_finance_item.finance_case_id is not null
+                  and confirmed_finance_item.finance_case_id::text = nullif(btrim(coalesce(non_timesheet_rows.value->>'finance_case_id', '')), '')
+              )
+              and not exists (
+                select 1
+                from public.pay_batch_items as mixed_finance_item
+                join public.pay_batch_candidates as mixed_finance_candidate
+                  on mixed_finance_candidate.id = mixed_finance_item.pay_batch_candidate_id
+                where mixed_finance_candidate.pay_batch_id = p_pay_batch_id
+                  and mixed_finance_candidate.candidate_id = v_candidate_id
+                  and mixed_finance_item.finance_case_id is not null
+                  and mixed_finance_item.finance_case_id::text = nullif(btrim(coalesce(non_timesheet_rows.value->>'finance_case_id', '')), '')
+                  and coalesce(mixed_finance_item.is_voided, false) = false
+                  and mixed_finance_item.item_type <> 'DEBT_CREATED'
+                  and not exists (
+                    select 1
+                    from public.pay_payment_correction_items as mixed_finance_correction
+                    where mixed_finance_correction.pay_batch_item_id = mixed_finance_item.id
+                      and mixed_finance_correction.status = 'APPLIED'
+                      and mixed_finance_correction.correction_item_kind in ('PRE_BANK_CANCEL','NO_MONEY_UNWIND','SETTLED_REVERSAL')
+                  )
+                  and not exists (
+                    select 1
+                    from pg_temp.tmp_commit_stage_confirmed_items as confirmed_mixed_finance_item
+                    where confirmed_mixed_finance_item.pay_batch_item_id = mixed_finance_item.id
+                  )
+              );
+
+            v_work_job := jsonb_set(v_work_job, '{non_timesheet_lines}', coalesce(v_pruned_non_timesheet_lines, '[]'::jsonb), true);
+          end if;
+
+          if jsonb_typeof(v_work_job->'transfers') = 'array' then
+            select coalesce(jsonb_agg(transfer_rows.value order by transfer_rows.ord), '[]'::jsonb)
+            into v_pruned_transfers
+            from jsonb_array_elements(coalesce(v_work_job->'transfers', '[]'::jsonb)) with ordinality as transfer_rows(value, ord)
+            where nullif(btrim(coalesce(transfer_rows.value->>'transfer_id', '')), '') is not null
+              and exists (
+                select 1
+                from pg_temp.tmp_commit_stage_confirmed_items as confirmed_transfer_item
+                where confirmed_transfer_item.candidate_id = v_candidate_id
+                  and confirmed_transfer_item.pay_bank_transfer_id is not null
+                  and confirmed_transfer_item.pay_bank_transfer_id::text = nullif(btrim(coalesce(transfer_rows.value->>'transfer_id', '')), '')
+              );
+
+            v_work_job := jsonb_set(v_work_job, '{transfers}', coalesce(v_pruned_transfers, '[]'::jsonb), true);
+          end if;
+
+          select round(coalesce(sum(confirmed_transfer_amounts.amount), 0), 2)
+          into v_final_paid_amount
+          from (
+            select distinct
+              confirmed_transfer.pay_bank_transfer_id,
+              pbt_confirmed_amount.amount
+            from pg_temp.tmp_commit_stage_confirmed_items as confirmed_transfer
+            join public.pay_bank_transfers as pbt_confirmed_amount
+              on pbt_confirmed_amount.id = confirmed_transfer.pay_bank_transfer_id
+            where confirmed_transfer.candidate_id = v_candidate_id
+              and confirmed_transfer.pay_bank_transfer_id is not null
+          ) as confirmed_transfer_amounts;
+
+          if coalesce(v_final_paid_amount, 0) <= 0
+             and btrim(coalesce(v_work_job #>> '{summary,total_amount}', '')) ~ '^-?[0-9]+(\.[0-9]+)?$' then
+            v_final_paid_amount := round(greatest((v_work_job #>> '{summary,total_amount}')::numeric - coalesce(v_candidate_excluded_transfer_total, 0), 0), 2);
+          end if;
+
+          if coalesce(v_final_paid_amount, 0) >= 0 then
+            v_work_job := jsonb_set(v_work_job, '{summary,total_amount}', to_jsonb(coalesce(v_final_paid_amount, 0)), true);
+            if jsonb_typeof(v_work_job->'pay_totals') = 'object' then
+              v_work_job := jsonb_set(v_work_job, '{pay_totals,final_paid}', to_jsonb(coalesce(v_final_paid_amount, 0)), true);
+              if jsonb_typeof(v_work_job #> '{pay_totals,deductions_summary}') = 'object' then
+                v_work_job := jsonb_set(v_work_job, '{pay_totals,deductions_summary,final_payable}', to_jsonb(coalesce(v_final_paid_amount, 0)), true);
+              end if;
+            end if;
+          end if;
+
+          v_work_job := jsonb_set(
+            v_work_job,
+            '{confirmed_only_scope}',
+            jsonb_build_object(
+              'enabled', true,
+              'granularity', 'TRANSFER_PAYMENT_GROUP_CONFIRMED_ITEMS',
+              'pay_bank_transfer_ids', coalesce((
+                select jsonb_agg(distinct confirmed_scope_transfer.pay_bank_transfer_id::text)
+                from pg_temp.tmp_commit_stage_confirmed_items as confirmed_scope_transfer
+                where confirmed_scope_transfer.candidate_id = v_candidate_id
+                  and confirmed_scope_transfer.pay_bank_transfer_id is not null
+              ), '[]'::jsonb),
+              'pay_batch_item_ids', coalesce((
+                select jsonb_agg(distinct confirmed_scope_item.pay_batch_item_id::text)
+                from pg_temp.tmp_commit_stage_confirmed_items as confirmed_scope_item
+                where confirmed_scope_item.candidate_id = v_candidate_id
+              ), '[]'::jsonb)
+            ),
+            true
+          );
+        end if;
+
         v_work_job := jsonb_set(
           v_work_job,
           '{queue_context}',
@@ -23598,7 +23966,7 @@ begin
             'pay_batch_id', p_pay_batch_id::text,
             'scope', v_scope,
             'only_confirmed', v_only_confirmed,
-            'confirmed_only_granularity', case when v_only_confirmed then 'CANDIDATE_ALL_TRANSFERS_REQUIRED' else null end,
+            'confirmed_only_granularity', case when v_only_confirmed then 'TRANSFER_PAYMENT_GROUP_CONFIRMED_ITEMS' else null end,
             'job_kind', v_job_kind,
             'recipient_kind', v_recipient_kind,
             'candidate_id', v_candidate_id::text,
@@ -23634,6 +24002,14 @@ begin
                       and candidate_scope_umbrella_corrections.status = 'APPLIED'
                       and candidate_scope_umbrella_corrections.correction_item_kind in ('PRE_BANK_CANCEL','NO_MONEY_UNWIND','SETTLED_REVERSAL')
                   )
+                  and (
+                    v_only_confirmed = false
+                    or exists (
+                      select 1
+                      from pg_temp.tmp_commit_stage_confirmed_items as candidate_scope_umbrella_confirmed_items
+                      where candidate_scope_umbrella_confirmed_items.pay_batch_item_id = candidate_scope_items.id
+                    )
+                  )
               ), '[]'::jsonb),
               'pay_bank_transfer_ids', coalesce((
                 select jsonb_agg(distinct candidate_scope_items.pay_bank_transfer_id::text)
@@ -23651,6 +24027,14 @@ begin
                       and candidate_scope_transfer_corrections.status = 'APPLIED'
                       and candidate_scope_transfer_corrections.correction_item_kind in ('PRE_BANK_CANCEL','NO_MONEY_UNWIND','SETTLED_REVERSAL')
                   )
+                  and (
+                    v_only_confirmed = false
+                    or exists (
+                      select 1
+                      from pg_temp.tmp_commit_stage_confirmed_items as candidate_scope_transfer_confirmed_items
+                      where candidate_scope_transfer_confirmed_items.pay_batch_item_id = candidate_scope_items.id
+                    )
+                  )
               ), '[]'::jsonb),
               'transfer_group_keys', coalesce((
                 select jsonb_agg(distinct candidate_scope_transfers.transfer_group_key)
@@ -23663,6 +24047,14 @@ begin
                   and candidate_scope_transfer_candidates.candidate_id = v_candidate_id
                   and candidate_scope_transfers.transfer_group_key is not null
                   and coalesce(candidate_scope_transfer_items.is_voided, false) = false
+                  and (
+                    v_only_confirmed = false
+                    or exists (
+                      select 1
+                      from pg_temp.tmp_commit_stage_confirmed_items as candidate_scope_group_confirmed_items
+                      where candidate_scope_group_confirmed_items.pay_batch_item_id = candidate_scope_transfer_items.id
+                    )
+                  )
               ), '[]'::jsonb),
               'pay_batch_item_ids', coalesce((
                 select jsonb_agg(distinct candidate_scope_item_ids.id::text)
@@ -23679,6 +24071,14 @@ begin
                       and candidate_scope_item_corrections.status = 'APPLIED'
                       and candidate_scope_item_corrections.correction_item_kind in ('PRE_BANK_CANCEL','NO_MONEY_UNWIND','SETTLED_REVERSAL')
                   )
+                  and (
+                    v_only_confirmed = false
+                    or exists (
+                      select 1
+                      from pg_temp.tmp_commit_stage_confirmed_items as candidate_scope_item_confirmed_items
+                      where candidate_scope_item_confirmed_items.pay_batch_item_id = candidate_scope_item_ids.id
+                    )
+                  )
               ), '[]'::jsonb),
               'pay_channels', coalesce((
                 select jsonb_agg(distinct upper(coalesce(candidate_scope_channels.pay_channel, '')))
@@ -23688,6 +24088,14 @@ begin
                 where candidate_scope_channel_candidates.pay_batch_id = p_pay_batch_id
                   and candidate_scope_channel_candidates.candidate_id = v_candidate_id
                   and nullif(btrim(coalesce(candidate_scope_channels.pay_channel, '')), '') is not null
+                  and (
+                    v_only_confirmed = false
+                    or exists (
+                      select 1
+                      from pg_temp.tmp_commit_stage_confirmed_items as candidate_scope_channel_confirmed_items
+                      where candidate_scope_channel_confirmed_items.pay_batch_item_id = candidate_scope_channels.id
+                    )
+                  )
               ), '[]'::jsonb)
             )),
             'reference', concat('pay_batch:', p_pay_batch_id::text, ':candidate:', v_candidate_id::text)
@@ -23735,7 +24143,7 @@ begin
       last_remittance_error = null,
       updated_at = now()
     where pbc.pay_batch_id = p_pay_batch_id
-      and pbc.remittance_sent_at_utc is null
+      and (pbc.remittance_sent_at_utc is null or v_only_confirmed)
       and exists (
         select 1
         from pg_temp.tmp_commit_stage_job_map jm
@@ -23849,7 +24257,7 @@ begin
       'pay_batch_id', p_pay_batch_id,
       'scope', v_scope,
       'only_confirmed', COALESCE(p_only_confirmed, false),
-      'confirmed_only_granularity', case when v_only_confirmed then 'CANDIDATE_ALL_TRANSFERS_REQUIRED' else 'NOT_APPLICABLE' end,
+      'confirmed_only_granularity', case when v_only_confirmed then 'TRANSFER_PAYMENT_GROUP_CONFIRMED_ITEMS' else 'NOT_APPLICABLE' end,
       'trigger_status', v_trigger_status,
       'candidate_count_targeted', v_target_candidate_count,
       'candidate_count_ready', v_ready_candidate_count,
@@ -23876,7 +24284,7 @@ begin
       'execution_committed_at_utc', case when v_batch.execution_committed_at_utc is null then null else v_batch.execution_committed_at_utc::text end,
     'scope', v_scope,
     'only_confirmed', COALESCE(p_only_confirmed, false),
-      'confirmed_only_granularity', case when v_only_confirmed then 'CANDIDATE_ALL_TRANSFERS_REQUIRED' else 'NOT_APPLICABLE' end,
+      'confirmed_only_granularity', case when v_only_confirmed then 'TRANSFER_PAYMENT_GROUP_CONFIRMED_ITEMS' else 'NOT_APPLICABLE' end,
     'pay_date', case when coalesce(v_batch.authoritative_payment_date, v_batch.pay_date) is null then null else coalesce(v_batch.authoritative_payment_date, v_batch.pay_date)::text end,
     'authoritative_payment_date', case when v_batch.authoritative_payment_date is null then null else v_batch.authoritative_payment_date::text end,
     'authoritative_payment_date_source', v_batch.authoritative_payment_date_source,
@@ -23898,7 +24306,7 @@ EXCEPTION
         'pay_batch_id', p_pay_batch_id,
         'scope', v_scope,
         'only_confirmed', COALESCE(p_only_confirmed, false),
-      'confirmed_only_granularity', case when v_only_confirmed then 'CANDIDATE_ALL_TRANSFERS_REQUIRED' else 'NOT_APPLICABLE' end,
+      'confirmed_only_granularity', case when v_only_confirmed then 'TRANSFER_PAYMENT_GROUP_CONFIRMED_ITEMS' else 'NOT_APPLICABLE' end,
         'sqlstate', SQLSTATE,
         'error_message', SQLERRM
       ),
@@ -23912,6 +24320,8 @@ EXCEPTION
     RAISE;
 end;
 $function$;
+
+
 
 
 
