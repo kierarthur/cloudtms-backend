@@ -5973,7 +5973,6 @@ $function$;
 
 
 
-
 CREATE OR REPLACE FUNCTION public.pay_pre_bank_cancel_apply_work_item(
   p_work_item_id uuid,
   p_actor_user_id uuid DEFAULT NULL::uuid
@@ -6013,26 +6012,16 @@ DECLARE
   v_is_authorised_or_scheduled_batch boolean := false;
   v_candidate_id uuid;
   v_refresh_result jsonb;
-  v_effective_actor_user_id uuid := NULL::uuid;
-  v_processing_actor_kind text := 'SYSTEM';
-  v_expected_item_count integer := NULL;
-  v_expected_item_ids jsonb := '[]'::jsonb;
-  v_resolved_item_ids jsonb := '[]'::jsonb;
-  v_selection_drift boolean := false;
+  v_scope_type text := NULL::text;
+  v_work_unit text := NULL::text;
+  v_is_whole_batch_work_item boolean := false;
   v_total_active_batch_item_count integer := 0;
-  v_is_whole_batch_work boolean := false;
-  v_batch_cancel_result jsonb := '{}'::jsonb;
-  v_released_reservation_amount numeric := 0;
-  v_restored_component_amount numeric := 0;
-  v_released_finance_case_ids jsonb := '[]'::jsonb;
-  v_dirty_candidate_ids jsonb := '[]'::jsonb;
-  v_snapshot_refresh_job_count integer := 0;
-  v_snapshot_refresh_job_ids jsonb := '[]'::jsonb;
-  v_source_session_discard_attempted boolean := false;
-  v_source_session_discarded boolean := false;
-  v_source_session_discard_state_changed boolean := false;
-  v_source_session_discarded_at_utc timestamptz := NULL::timestamptz;
-  v_source_session_discard_result jsonb := NULL::jsonb;
+  v_expected_item_count integer := NULL::integer;
+  v_expected_item_id_count integer := 0;
+  v_expected_item_mismatch_count integer := 0;
+  v_effective_actor_user_id uuid := NULL::uuid;
+  v_finance_resolution_result jsonb := NULL::jsonb;
+  v_batch_cancel_result jsonb := NULL::jsonb;
 BEGIN
   PERFORM public._imp_debug_audit(
     p_actor_user_id,
@@ -6111,26 +6100,7 @@ BEGIN
             )::text;
   END IF;
 
-  SELECT
-    COALESCE(p_actor_user_id, latest_authorising_action.actor_user_id, CASE WHEN COALESCE(v_request.auto_requested, false) THEN NULL::uuid ELSE v_request.requested_by_user_id END),
-    CASE
-      WHEN COALESCE(p_actor_user_id, latest_authorising_action.actor_user_id, CASE WHEN COALESCE(v_request.auto_requested, false) THEN NULL::uuid ELSE v_request.requested_by_user_id END) IS NULL THEN 'SYSTEM'
-      ELSE 'USER'
-    END
-  INTO
-    v_effective_actor_user_id,
-    v_processing_actor_kind
-  FROM public.pay_payment_correction_requests AS actor_request
-  LEFT JOIN LATERAL (
-    SELECT authorising_actions.actor_user_id
-    FROM public.pay_payment_correction_actions AS authorising_actions
-    WHERE authorising_actions.correction_request_id = actor_request.id
-      AND authorising_actions.action IN ('AUTHORISE', 'USE_GOLDEN_KEY')
-      AND authorising_actions.actor_user_id IS NOT NULL
-    ORDER BY authorising_actions.action_at_utc DESC, authorising_actions.id DESC
-    LIMIT 1
-  ) AS latest_authorising_action ON true
-  WHERE actor_request.id = v_request.id;
+  v_effective_actor_user_id := COALESCE(p_actor_user_id, v_request.requested_by_user_id);
 
   SELECT public.pay_batches.*
   INTO v_batch
@@ -6158,7 +6128,6 @@ BEGIN
     selected_rows.item_type,
     selected_rows.timesheet_id,
     selected_rows.pay_bank_transfer_id,
-    selected_rows.umbrella_id,
     selected_rows.finance_case_id,
     selected_rows.finance_component_id,
     selected_rows.reservation_id,
@@ -6181,7 +6150,6 @@ BEGIN
   CREATE INDEX ON pg_temp._tmp_pre_bank_cancel_selected (pay_batch_candidate_id);
   CREATE INDEX ON pg_temp._tmp_pre_bank_cancel_selected (candidate_id);
   CREATE INDEX ON pg_temp._tmp_pre_bank_cancel_selected (pay_bank_transfer_id);
-  CREATE INDEX ON pg_temp._tmp_pre_bank_cancel_selected (umbrella_id);
   CREATE INDEX ON pg_temp._tmp_pre_bank_cancel_selected (reservation_id);
   CREATE INDEX ON pg_temp._tmp_pre_bank_cancel_selected (finance_component_id);
 
@@ -6211,97 +6179,220 @@ BEGIN
       locked_at_utc = NULL,
       locked_by = NULL,
       processed_at_utc = v_now,
-      processed_by_user_id = COALESCE(v_effective_actor_user_id, no_items_work.processed_by_user_id),
       last_error = v_blocker->>'message',
       result_json = COALESCE(no_items_work.result_json, '{}'::jsonb) || jsonb_build_object(
         'ok', false,
         'status', 'BLOCKED',
         'blocker', v_blocker,
-        'processed_at_utc', v_now,
-        'processing_actor_kind', v_processing_actor_kind,
-        'processing_actor_user_id', CASE WHEN v_effective_actor_user_id IS NULL THEN NULL ELSE v_effective_actor_user_id::text END
+        'processed_at_utc', v_now
       )
     WHERE no_items_work.id = p_work_item_id;
 
     RETURN jsonb_build_object('ok', false, 'status', 'BLOCKED', 'blocker', v_blocker);
   END IF;
+v_scope_type := upper(btrim(COALESCE(v_work_item.selection_json->>'scope_type', '')));
+v_work_unit := upper(btrim(COALESCE(v_work_item.selection_json->>'work_unit', '')));
 
-  v_expected_item_count := CASE
-    WHEN COALESCE(v_work_item.selection_json->>'expected_item_count', '') ~ '^[0-9]+$'
-      THEN (v_work_item.selection_json->>'expected_item_count')::integer
-    ELSE NULL::integer
-  END;
+SELECT count(*)::integer
+INTO v_total_active_batch_item_count
+FROM public.pay_batch_items AS total_batch_items
+JOIN public.pay_batch_candidates AS total_batch_candidates
+  ON total_batch_candidates.id = total_batch_items.pay_batch_candidate_id
+WHERE total_batch_candidates.pay_batch_id = v_work_item.pay_batch_id
+  AND COALESCE(total_batch_items.is_voided, false) = false;
 
-  v_expected_item_ids := CASE
-    WHEN jsonb_typeof(v_work_item.selection_json->'expected_pay_batch_item_ids') = 'array'
-      THEN COALESCE(v_work_item.selection_json->'expected_pay_batch_item_ids', '[]'::jsonb)
-    WHEN jsonb_typeof(v_work_item.selection_json->'pay_batch_item_ids') = 'array'
-      THEN COALESCE(v_work_item.selection_json->'pay_batch_item_ids', '[]'::jsonb)
-    ELSE '[]'::jsonb
-  END;
+v_is_whole_batch_work_item := (
+  v_scope_type = 'BATCH'
+  AND COALESCE(NULLIF(v_work_unit, ''), 'BATCH') = 'BATCH'
+  AND v_selected_item_count = COALESCE(v_total_active_batch_item_count, 0)
+);
 
-  SELECT COALESCE(jsonb_agg(DISTINCT expected_item_values.expected_item_id ORDER BY expected_item_values.expected_item_id), '[]'::jsonb)
-  INTO v_expected_item_ids
-  FROM jsonb_array_elements_text(v_expected_item_ids) AS expected_item_values(expected_item_id);
-
-  SELECT COALESCE(jsonb_agg(DISTINCT selected_item_ids.pay_batch_item_id::text ORDER BY selected_item_ids.pay_batch_item_id::text), '[]'::jsonb)
-  INTO v_resolved_item_ids
-  FROM pg_temp._tmp_pre_bank_cancel_selected AS selected_item_ids;
-
-  v_selection_drift := (
-    (v_expected_item_count IS NOT NULL AND v_expected_item_count <> v_selected_item_count)
-    OR (jsonb_array_length(v_expected_item_ids) > 0 AND v_expected_item_ids <> v_resolved_item_ids)
-  );
-
-  IF v_selection_drift THEN
+IF v_work_item.selection_json ? 'expected_item_count' THEN
+  IF COALESCE(v_work_item.selection_json->>'expected_item_count', '') !~ '^[0-9]+$' THEN
     v_blocker := jsonb_build_object(
       'code', 'WORK_SELECTION_DRIFT',
-      'message', 'The pre-bank cancellation work item selection no longer resolves to the expected selected pay_batch_items.',
-      'expected_item_count', v_expected_item_count,
-      'resolved_item_count', v_selected_item_count,
-      'expected_pay_batch_item_ids', v_expected_item_ids,
-      'resolved_pay_batch_item_ids', v_resolved_item_ids
+      'message', 'Correction work item expected_item_count is not a valid non-negative integer.',
+      'expected_item_count_raw', v_work_item.selection_json->>'expected_item_count'
     );
 
-    UPDATE public.pay_payment_correction_work_items AS selection_drift_work
+    UPDATE public.pay_payment_correction_work_items AS pre_bank_cancel_invalid_expected_count_work
     SET
       status = 'BLOCKED',
       locked_at_utc = NULL,
       locked_by = NULL,
       processed_at_utc = v_now,
-      processed_by_user_id = COALESCE(v_effective_actor_user_id, selection_drift_work.processed_by_user_id),
-      last_error = 'WORK_SELECTION_DRIFT',
-      result_json = COALESCE(selection_drift_work.result_json, '{}'::jsonb) || jsonb_build_object(
+      last_error = v_blocker->>'message',
+      result_json = COALESCE(pre_bank_cancel_invalid_expected_count_work.result_json, '{}'::jsonb) || jsonb_build_object(
         'ok', false,
         'status', 'BLOCKED',
         'blocker', v_blocker,
-        'processed_at_utc', v_now,
-        'processing_actor_kind', v_processing_actor_kind,
-        'processing_actor_user_id', CASE WHEN v_effective_actor_user_id IS NULL THEN NULL ELSE v_effective_actor_user_id::text END
+        'processed_at_utc', v_now
       )
-    WHERE selection_drift_work.id = p_work_item_id;
+    WHERE pre_bank_cancel_invalid_expected_count_work.id = p_work_item_id;
 
     RETURN jsonb_build_object('ok', false, 'status', 'BLOCKED', 'blocker', v_blocker);
   END IF;
 
-  SELECT count(*)::integer
-  INTO v_total_active_batch_item_count
-  FROM public.pay_batch_items AS active_batch_items
-  JOIN public.pay_batch_candidates AS active_batch_candidates
-    ON active_batch_candidates.id = active_batch_items.pay_batch_candidate_id
-  WHERE active_batch_candidates.pay_batch_id = v_work_item.pay_batch_id
-    AND COALESCE(active_batch_items.is_voided, false) = false
-    AND NOT EXISTS (
-      SELECT 1
-      FROM public.pay_payment_correction_items AS active_batch_item_corrections
-      WHERE active_batch_item_corrections.pay_batch_item_id = active_batch_items.id
-        AND active_batch_item_corrections.status = 'APPLIED'
-        AND active_batch_item_corrections.correction_item_kind IN ('PRE_BANK_CANCEL', 'NO_MONEY_UNWIND', 'SETTLED_REVERSAL')
+  v_expected_item_count := (v_work_item.selection_json->>'expected_item_count')::integer;
+
+  IF v_expected_item_count <> v_selected_item_count THEN
+    v_blocker := jsonb_build_object(
+      'code', 'WORK_SELECTION_DRIFT',
+      'message', 'Correction work item selection no longer resolves to the expected selected pay_batch_item count.',
+      'expected_item_count', v_expected_item_count,
+      'resolved_item_count', v_selected_item_count
     );
 
-  v_is_whole_batch_work := upper(btrim(COALESCE(v_work_item.selection_json->>'scope_type', ''))) = 'BATCH'
-    AND v_selected_item_count = v_total_active_batch_item_count
-    AND v_total_active_batch_item_count > 0;
+    UPDATE public.pay_payment_correction_work_items AS pre_bank_cancel_expected_count_drift_work
+    SET
+      status = 'BLOCKED',
+      locked_at_utc = NULL,
+      locked_by = NULL,
+      processed_at_utc = v_now,
+      last_error = v_blocker->>'message',
+      result_json = COALESCE(pre_bank_cancel_expected_count_drift_work.result_json, '{}'::jsonb) || jsonb_build_object(
+        'ok', false,
+        'status', 'BLOCKED',
+        'blocker', v_blocker,
+        'processed_at_utc', v_now
+      )
+    WHERE pre_bank_cancel_expected_count_drift_work.id = p_work_item_id;
+
+    RETURN jsonb_build_object('ok', false, 'status', 'BLOCKED', 'blocker', v_blocker);
+  END IF;
+END IF;
+
+IF v_work_item.selection_json ? 'expected_pay_batch_item_ids'
+   AND COALESCE(jsonb_typeof(v_work_item.selection_json->'expected_pay_batch_item_ids'), 'null') <> 'array' THEN
+  v_blocker := jsonb_build_object(
+    'code', 'WORK_SELECTION_DRIFT',
+    'message', 'Correction work item expected_pay_batch_item_ids must be a JSON array.'
+  );
+
+  UPDATE public.pay_payment_correction_work_items AS pre_bank_cancel_expected_ids_type_work
+  SET
+    status = 'BLOCKED',
+    locked_at_utc = NULL,
+    locked_by = NULL,
+    processed_at_utc = v_now,
+    last_error = v_blocker->>'message',
+    result_json = COALESCE(pre_bank_cancel_expected_ids_type_work.result_json, '{}'::jsonb) || jsonb_build_object(
+      'ok', false,
+      'status', 'BLOCKED',
+      'blocker', v_blocker,
+      'processed_at_utc', v_now
+    )
+  WHERE pre_bank_cancel_expected_ids_type_work.id = p_work_item_id;
+
+  RETURN jsonb_build_object('ok', false, 'status', 'BLOCKED', 'blocker', v_blocker);
+END IF;
+
+DROP TABLE IF EXISTS pg_temp._tmp_pre_bank_cancel_expected_items;
+CREATE TEMP TABLE _tmp_pre_bank_cancel_expected_items ON COMMIT DROP AS
+WITH raw_expected_item_ids AS (
+  SELECT jsonb_array_elements_text(
+    CASE
+      WHEN COALESCE(jsonb_typeof(v_work_item.selection_json->'expected_pay_batch_item_ids'), 'null') = 'array'
+        THEN v_work_item.selection_json->'expected_pay_batch_item_ids'
+      ELSE '[]'::jsonb
+    END
+  ) AS raw_pay_batch_item_id
+)
+SELECT DISTINCT
+  raw_expected_item_ids.raw_pay_batch_item_id,
+  CASE
+    WHEN raw_expected_item_ids.raw_pay_batch_item_id ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+      THEN raw_expected_item_ids.raw_pay_batch_item_id::uuid
+    ELSE NULL::uuid
+  END AS pay_batch_item_id
+FROM raw_expected_item_ids;
+
+SELECT count(*)::integer
+INTO v_expected_item_mismatch_count
+FROM pg_temp._tmp_pre_bank_cancel_expected_items AS invalid_expected_items
+WHERE invalid_expected_items.pay_batch_item_id IS NULL;
+
+IF v_expected_item_mismatch_count > 0 THEN
+  v_blocker := jsonb_build_object(
+    'code', 'WORK_SELECTION_DRIFT',
+    'message', 'Correction work item expected_pay_batch_item_ids contains invalid UUID values.',
+    'invalid_expected_item_count', v_expected_item_mismatch_count
+  );
+
+  UPDATE public.pay_payment_correction_work_items AS pre_bank_cancel_invalid_expected_ids_work
+  SET
+    status = 'BLOCKED',
+    locked_at_utc = NULL,
+    locked_by = NULL,
+    processed_at_utc = v_now,
+    last_error = v_blocker->>'message',
+    result_json = COALESCE(pre_bank_cancel_invalid_expected_ids_work.result_json, '{}'::jsonb) || jsonb_build_object(
+      'ok', false,
+      'status', 'BLOCKED',
+      'blocker', v_blocker,
+      'processed_at_utc', v_now
+    )
+  WHERE pre_bank_cancel_invalid_expected_ids_work.id = p_work_item_id;
+
+  RETURN jsonb_build_object('ok', false, 'status', 'BLOCKED', 'blocker', v_blocker);
+END IF;
+
+SELECT count(*)::integer
+INTO v_expected_item_id_count
+FROM pg_temp._tmp_pre_bank_cancel_expected_items AS expected_item_count
+WHERE expected_item_count.pay_batch_item_id IS NOT NULL;
+
+IF v_expected_item_id_count > 0 THEN
+  SELECT count(*)::integer
+  INTO v_expected_item_mismatch_count
+  FROM (
+    (
+      SELECT expected_items.pay_batch_item_id
+      FROM pg_temp._tmp_pre_bank_cancel_expected_items AS expected_items
+      WHERE expected_items.pay_batch_item_id IS NOT NULL
+      EXCEPT
+      SELECT selected_items.pay_batch_item_id
+      FROM pg_temp._tmp_pre_bank_cancel_selected AS selected_items
+    )
+    UNION ALL
+    (
+      SELECT selected_items.pay_batch_item_id
+      FROM pg_temp._tmp_pre_bank_cancel_selected AS selected_items
+      EXCEPT
+      SELECT expected_items.pay_batch_item_id
+      FROM pg_temp._tmp_pre_bank_cancel_expected_items AS expected_items
+      WHERE expected_items.pay_batch_item_id IS NOT NULL
+    )
+  ) AS expected_item_drift;
+
+  IF v_expected_item_mismatch_count > 0 THEN
+    v_blocker := jsonb_build_object(
+      'code', 'WORK_SELECTION_DRIFT',
+      'message', 'Correction work item selection no longer resolves to the expected selected pay_batch_items.',
+      'expected_item_count', v_expected_item_id_count,
+      'resolved_item_count', v_selected_item_count,
+      'mismatch_count', v_expected_item_mismatch_count
+    );
+
+    UPDATE public.pay_payment_correction_work_items AS pre_bank_cancel_expected_ids_drift_work
+    SET
+      status = 'BLOCKED',
+      locked_at_utc = NULL,
+      locked_by = NULL,
+      processed_at_utc = v_now,
+      last_error = v_blocker->>'message',
+      result_json = COALESCE(pre_bank_cancel_expected_ids_drift_work.result_json, '{}'::jsonb) || jsonb_build_object(
+        'ok', false,
+        'status', 'BLOCKED',
+        'blocker', v_blocker,
+        'processed_at_utc', v_now
+      )
+    WHERE pre_bank_cancel_expected_ids_drift_work.id = p_work_item_id;
+
+    RETURN jsonb_build_object('ok', false, 'status', 'BLOCKED', 'blocker', v_blocker);
+  END IF;
+END IF;
+
 
   PERFORM 1
   FROM public.pay_batch_items AS locked_batch_items
@@ -6356,7 +6447,7 @@ BEGIN
 
   v_classification_result := public._pay_payment_movement_classify(
     v_work_item.pay_batch_id,
-    v_work_item.selection_json || jsonb_build_object(
+    COALESCE(v_work_item.selection_json, '{}'::jsonb) || jsonb_build_object(
       'requested_action', 'CANCEL_PAYMENT_ATTEMPT',
       'source_context', 'WORK_ITEM_APPLY'
     )
@@ -6484,15 +6575,12 @@ BEGIN
       locked_at_utc = NULL,
       locked_by = NULL,
       processed_at_utc = v_now,
-      processed_by_user_id = COALESCE(v_effective_actor_user_id, submission_blocked_work.processed_by_user_id),
       last_error = v_blocker->>'message',
       result_json = COALESCE(submission_blocked_work.result_json, '{}'::jsonb) || jsonb_build_object(
         'ok', false,
         'status', 'BLOCKED',
         'blocker', v_blocker,
-        'processed_at_utc', v_now,
-        'processing_actor_kind', v_processing_actor_kind,
-        'processing_actor_user_id', CASE WHEN v_effective_actor_user_id IS NULL THEN NULL ELSE v_effective_actor_user_id::text END
+        'processed_at_utc', v_now
       )
     WHERE submission_blocked_work.id = p_work_item_id;
 
@@ -6568,6 +6656,98 @@ BEGIN
 
     RETURN jsonb_build_object('ok', false, 'status', 'BLOCKED', 'blocker', v_blocker);
   END IF;
+
+
+IF v_is_whole_batch_work_item THEN
+  IF v_effective_actor_user_id IS NULL THEN
+    v_blocker := jsonb_build_object(
+      'code', 'PAYMENT_CORRECTION_ACTOR_REQUIRED_FOR_WHOLE_BATCH_CANCEL',
+      'message', 'Whole-batch pre-bank cancellation requires a user actor so pay_batch_cancel can write the required audit trail.'
+    );
+
+    UPDATE public.pay_payment_correction_work_items AS whole_batch_actor_blocked_work
+    SET
+      status = 'BLOCKED',
+      locked_at_utc = NULL,
+      locked_by = NULL,
+      processed_at_utc = v_now,
+      last_error = v_blocker->>'message',
+      result_json = COALESCE(whole_batch_actor_blocked_work.result_json, '{}'::jsonb) || jsonb_build_object(
+        'ok', false,
+        'status', 'BLOCKED',
+        'blocker', v_blocker,
+        'processed_at_utc', v_now
+      )
+    WHERE whole_batch_actor_blocked_work.id = p_work_item_id;
+
+    RETURN jsonb_build_object('ok', false, 'status', 'BLOCKED', 'blocker', v_blocker);
+  END IF;
+
+  v_batch_cancel_result := public.pay_batch_cancel(
+    v_work_item.pay_batch_id,
+    v_effective_actor_user_id,
+    COALESCE(NULLIF(btrim(COALESCE(v_request.reason, '')), ''), 'Payment correction pre-bank cancellation')
+  );
+
+  v_finance_resolution_result := public._pay_payment_correction_apply_accepted_finance_resolution(
+    v_work_item.correction_request_id,
+    p_work_item_id,
+    v_effective_actor_user_id
+  );
+
+  IF NOT COALESCE(NULLIF(v_finance_resolution_result->>'ok', '')::boolean, false) THEN
+    RAISE EXCEPTION 'ACCEPTED_FINANCE_RESOLUTION_BLOCKED'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object(
+              'code', 'ACCEPTED_FINANCE_RESOLUTION_BLOCKED',
+              'message', 'Accepted gross/channel-sensitive finance resolution blocked whole-batch pre-bank cancellation; no partial correction must be committed.',
+              'work_item_id', p_work_item_id,
+              'correction_request_id', v_work_item.correction_request_id,
+              'finance_resolution_result', v_finance_resolution_result
+            )::text;
+  END IF;
+
+  v_result := COALESCE(v_batch_cancel_result, '{}'::jsonb) || jsonb_build_object(
+    'ok', true,
+    'status', 'APPLIED',
+    'work_item_id', p_work_item_id,
+    'correction_request_id', v_work_item.correction_request_id,
+    'pay_batch_id', v_work_item.pay_batch_id,
+    'correction_item_kind', 'PRE_BANK_CANCEL',
+    'work_unit', 'BATCH',
+    'selected_item_count', v_selected_item_count,
+    'selected_candidate_count', v_selected_candidate_count,
+    'selected_transfer_count', v_selected_transfer_count,
+    'classification_result', v_classification_result,
+    'pay_batch_cancel_result', v_batch_cancel_result,
+    'accepted_finance_resolution', v_finance_resolution_result,
+    'applied_at_utc', v_now
+  );
+
+  UPDATE public.pay_payment_correction_work_items AS whole_batch_applied_work_item
+  SET
+    status = 'APPLIED',
+    locked_at_utc = NULL,
+    locked_by = NULL,
+    processed_at_utc = COALESCE(whole_batch_applied_work_item.processed_at_utc, v_now),
+    last_error = NULL,
+    result_json = COALESCE(whole_batch_applied_work_item.result_json, '{}'::jsonb) || v_result
+  WHERE whole_batch_applied_work_item.id = p_work_item_id;
+
+  PERFORM public._imp_debug_audit(
+    v_effective_actor_user_id,
+    'PAYMENT_CORRECTION_PRE_BANK_CANCEL_WORK_RESULT',
+    v_result,
+    'pay_payment_correction',
+    p_work_item_id::text,
+    NULL::jsonb,
+    NULL::text,
+    NULL::text,
+    NULL::text
+  );
+
+  RETURN v_result;
+END IF;
 
   INSERT INTO public.pay_payment_correction_items(
     correction_request_id,
@@ -6666,7 +6846,7 @@ BEGIN
       status = 'RELEASED',
       released_at_utc = COALESCE(reservations_to_release.released_at_utc, v_now),
       released_reason = 'PRE_BANK_CANCEL',
-      updated_by_user_id = v_effective_actor_user_id
+      updated_by_user_id = p_actor_user_id
     FROM release_candidates
     WHERE reservations_to_release.id = release_candidates.id
     RETURNING
@@ -6686,18 +6866,8 @@ BEGIN
     released_rows.reserved_source_amount
   FROM released_rows;
 
-  SELECT
-    count(*)::integer,
-    round(COALESCE(sum(COALESCE(released_reservation_count.reserved_amount, 0)), 0), 2)::numeric,
-    COALESCE(
-      jsonb_agg(DISTINCT released_reservation_count.finance_case_id::text ORDER BY released_reservation_count.finance_case_id::text)
-        FILTER (WHERE released_reservation_count.finance_case_id IS NOT NULL),
-      '[]'::jsonb
-    )
-  INTO
-    v_released_reservation_count,
-    v_released_reservation_amount,
-    v_released_finance_case_ids
+  SELECT count(*)::integer
+  INTO v_released_reservation_count
   FROM pg_temp._tmp_pre_bank_cancel_released_reservations AS released_reservation_count;
 
   DROP TABLE IF EXISTS pg_temp._tmp_pre_bank_cancel_component_restore;
@@ -6753,10 +6923,6 @@ BEGIN
 
   GET DIAGNOSTICS v_restored_component_count = ROW_COUNT;
 
-  SELECT round(COALESCE(sum(COALESCE(component_restore_amount.restore_source_amount, 0)), 0), 2)::numeric
-  INTO v_restored_component_amount
-  FROM pg_temp._tmp_pre_bank_cancel_component_restore_apply AS component_restore_amount;
-
   INSERT INTO public.pay_finance_case_events(
     finance_case_id,
     finance_component_id,
@@ -6775,7 +6941,7 @@ BEGIN
     component_restore_apply.finance_component_id,
     'COMPONENT_RESTORED',
     v_now,
-    v_effective_actor_user_id,
+    p_actor_user_id,
     v_work_item.pay_batch_id,
     NULL::uuid,
     jsonb_build_object('remaining_source_amount', component_restore_apply.remaining_before),
@@ -6807,7 +6973,7 @@ BEGIN
     released_reservations.finance_component_id,
     'RESERVATION_RELEASED',
     v_now,
-    v_effective_actor_user_id,
+    p_actor_user_id,
     v_work_item.pay_batch_id,
     released_reservations.reservation_id,
     jsonb_build_object('reservation_status', 'RESERVED_OR_COMMITTED'),
@@ -6851,70 +7017,82 @@ BEGIN
     last_error = 'CANCELLED_INTERNAL_PAYMENT_CORRECTION'
   WHERE queued_mail_to_cancel.status::text = 'QUEUED'
     AND (
-      queued_mail_to_cancel.context_id IN (
-        SELECT scoped_mail_items.pay_batch_item_id
-        FROM pg_temp._tmp_pre_bank_cancel_selected AS scoped_mail_items
-      )
+      (v_is_whole_batch_work_item AND queued_mail_to_cancel.context_id = v_work_item.pay_batch_id)
       OR queued_mail_to_cancel.context_id IN (
-        SELECT DISTINCT scoped_mail_candidates.pay_batch_candidate_id
-        FROM pg_temp._tmp_pre_bank_cancel_selected AS scoped_mail_candidates
-        WHERE scoped_mail_candidates.pay_batch_candidate_id IS NOT NULL
-      )
-      OR queued_mail_to_cancel.context_id IN (
-        SELECT DISTINCT scoped_mail_transfers.pay_bank_transfer_id
-        FROM pg_temp._tmp_pre_bank_cancel_selected AS scoped_mail_transfers
-        WHERE scoped_mail_transfers.pay_bank_transfer_id IS NOT NULL
-      )
-      OR queued_mail_to_cancel.context_id IN (
-        SELECT DISTINCT scoped_mail_finance_cases.finance_case_id
-        FROM pg_temp._tmp_pre_bank_cancel_selected AS scoped_mail_finance_cases
-        WHERE scoped_mail_finance_cases.finance_case_id IS NOT NULL
-      )
-      OR queued_mail_to_cancel.context_id IN (
-        SELECT DISTINCT scoped_mail_reservations.reservation_id
-        FROM pg_temp._tmp_pre_bank_cancel_selected AS scoped_mail_reservations
-        WHERE scoped_mail_reservations.reservation_id IS NOT NULL
-      )
-      OR (
-        queued_mail_to_cancel.context_id = v_work_item.pay_batch_id
-        AND upper(btrim(COALESCE(queued_mail_to_cancel.recipient_kind, ''))) = 'CANDIDATE'
-        AND queued_mail_to_cancel.recipient_id IN (
-          SELECT DISTINCT scoped_mail_candidate_recipients.candidate_id
-          FROM pg_temp._tmp_pre_bank_cancel_selected AS scoped_mail_candidate_recipients
-          WHERE scoped_mail_candidate_recipients.candidate_id IS NOT NULL
-        )
-      )
-      OR (
-        queued_mail_to_cancel.context_id = v_work_item.pay_batch_id
-        AND upper(btrim(COALESCE(queued_mail_to_cancel.recipient_kind, ''))) = 'UMBRELLA'
-        AND queued_mail_to_cancel.recipient_id IN (
-          SELECT DISTINCT scoped_mail_umbrella_recipients.umbrella_id
-          FROM pg_temp._tmp_pre_bank_cancel_selected AS scoped_mail_umbrella_recipients
-          WHERE scoped_mail_umbrella_recipients.umbrella_id IS NOT NULL
-        )
+        SELECT scoped_mail_ids.scope_id
+        FROM (
+          SELECT DISTINCT selected_mail_items.pay_batch_item_id AS scope_id
+          FROM pg_temp._tmp_pre_bank_cancel_selected AS selected_mail_items
+          WHERE selected_mail_items.pay_batch_item_id IS NOT NULL
+          UNION
+          SELECT DISTINCT selected_mail_candidates.pay_batch_candidate_id AS scope_id
+          FROM pg_temp._tmp_pre_bank_cancel_selected AS selected_mail_candidates
+          WHERE selected_mail_candidates.pay_batch_candidate_id IS NOT NULL
+          UNION
+          SELECT DISTINCT selected_mail_transfers.pay_bank_transfer_id AS scope_id
+          FROM pg_temp._tmp_pre_bank_cancel_selected AS selected_mail_transfers
+          WHERE selected_mail_transfers.pay_bank_transfer_id IS NOT NULL
+          UNION
+          SELECT DISTINCT selected_mail_finance_cases.finance_case_id AS scope_id
+          FROM pg_temp._tmp_pre_bank_cancel_selected AS selected_mail_finance_cases
+          WHERE selected_mail_finance_cases.finance_case_id IS NOT NULL
+          UNION
+          SELECT DISTINCT selected_mail_reservations.reservation_id AS scope_id
+          FROM pg_temp._tmp_pre_bank_cancel_selected AS selected_mail_reservations
+          WHERE selected_mail_reservations.reservation_id IS NOT NULL
+        ) AS scoped_mail_ids
       )
       OR EXISTS (
         SELECT 1
-        FROM pg_temp._tmp_pre_bank_cancel_selected AS scoped_mail_references
-        WHERE queued_mail_to_cancel.reference IS NOT NULL
-          AND (
-            queued_mail_to_cancel.reference ILIKE '%' || scoped_mail_references.pay_batch_item_id::text || '%'
-            OR queued_mail_to_cancel.reference ILIKE '%' || scoped_mail_references.pay_batch_candidate_id::text || '%'
-            OR (
-              scoped_mail_references.pay_bank_transfer_id IS NOT NULL
-              AND queued_mail_to_cancel.reference ILIKE '%' || scoped_mail_references.pay_bank_transfer_id::text || '%'
-            )
-            OR (
-              scoped_mail_references.finance_case_id IS NOT NULL
-              AND queued_mail_to_cancel.reference ILIKE '%' || scoped_mail_references.finance_case_id::text || '%'
-            )
+        FROM pg_temp._tmp_pre_bank_cancel_selected AS selected_mail_references
+        WHERE (
+             queued_mail_to_cancel.reference ILIKE '%' || selected_mail_references.pay_batch_item_id::text || '%'
+          OR queued_mail_to_cancel.reference ILIKE '%' || selected_mail_references.pay_batch_candidate_id::text || '%'
+          OR (
+            selected_mail_references.pay_bank_transfer_id IS NOT NULL
+            AND queued_mail_to_cancel.reference ILIKE '%' || selected_mail_references.pay_bank_transfer_id::text || '%'
           )
-          AND (
-            queued_mail_to_cancel.context_id = v_work_item.pay_batch_id
-            OR queued_mail_to_cancel.reference ILIKE '%' || v_work_item.pay_batch_id::text || '%'
+          OR (
+            selected_mail_references.finance_case_id IS NOT NULL
+            AND queued_mail_to_cancel.reference ILIKE '%' || selected_mail_references.finance_case_id::text || '%'
           )
+          OR (
+            selected_mail_references.reservation_id IS NOT NULL
+            AND queued_mail_to_cancel.reference ILIKE '%' || selected_mail_references.reservation_id::text || '%'
+          )
+        )
+        AND (
+          v_is_whole_batch_work_item
+          OR queued_mail_to_cancel.context_id = v_work_item.pay_batch_id
+          OR queued_mail_to_cancel.reference ILIKE '%' || v_work_item.pay_batch_id::text || '%'
+          OR queued_mail_to_cancel.context_id IN (
+            SELECT scoped_context_ids.scope_id
+            FROM (
+              SELECT DISTINCT scoped_context_items.pay_batch_item_id AS scope_id
+              FROM pg_temp._tmp_pre_bank_cancel_selected AS scoped_context_items
+              WHERE scoped_context_items.pay_batch_item_id IS NOT NULL
+              UNION
+              SELECT DISTINCT scoped_context_candidates.pay_batch_candidate_id AS scope_id
+              FROM pg_temp._tmp_pre_bank_cancel_selected AS scoped_context_candidates
+              WHERE scoped_context_candidates.pay_batch_candidate_id IS NOT NULL
+              UNION
+              SELECT DISTINCT scoped_context_transfers.pay_bank_transfer_id AS scope_id
+              FROM pg_temp._tmp_pre_bank_cancel_selected AS scoped_context_transfers
+              WHERE scoped_context_transfers.pay_bank_transfer_id IS NOT NULL
+              UNION
+              SELECT DISTINCT scoped_context_cases.finance_case_id AS scope_id
+              FROM pg_temp._tmp_pre_bank_cancel_selected AS scoped_context_cases
+              WHERE scoped_context_cases.finance_case_id IS NOT NULL
+              UNION
+              SELECT DISTINCT scoped_context_reservations.reservation_id AS scope_id
+              FROM pg_temp._tmp_pre_bank_cancel_selected AS scoped_context_reservations
+              WHERE scoped_context_reservations.reservation_id IS NOT NULL
+            ) AS scoped_context_ids
+          )
+        )
       )
     );
+
 
   GET DIAGNOSTICS v_cancelled_mail_count = ROW_COUNT;
 
@@ -6945,7 +7123,7 @@ BEGIN
     failed_reason = CASE
       WHEN recalculated_transfers.remaining_amount = 0
            AND upper(btrim(COALESCE(transfer_to_recalculate.status, ''))) NOT IN ('COMPLETED')
-        THEN COALESCE(transfer_to_recalculate.failed_reason, 'PRE_BANK_CANCEL')
+        THEN COALESCE(transfer_to_recalculate.failed_reason, 'PRE_BANK_CANCEL_VOIDED')
       ELSE transfer_to_recalculate.failed_reason
     END,
     rail_meta_json = CASE
@@ -6963,98 +7141,6 @@ BEGIN
   WHERE transfer_to_recalculate.id = recalculated_transfers.pay_bank_transfer_id;
 
   GET DIAGNOSTICS v_recalculated_transfer_count = ROW_COUNT;
-
-  IF v_is_whole_batch_work THEN
-    UPDATE public.pay_batch_auth_requests AS auth_requests_to_cancel
-    SET
-      state = 'CANCELLED',
-      finalised_at_utc = COALESCE(auth_requests_to_cancel.finalised_at_utc, v_now),
-      finalised_by_user_id = COALESCE(auth_requests_to_cancel.finalised_by_user_id, v_effective_actor_user_id)
-    WHERE auth_requests_to_cancel.pay_batch_id = v_work_item.pay_batch_id
-      AND upper(btrim(COALESCE(auth_requests_to_cancel.state, ''))) NOT IN ('CANCELLED', 'REJECTED', 'COMPLETED', 'EXECUTED', 'FAILED');
-
-    IF to_regclass('public.pay_batch_auth_tokens') IS NOT NULL THEN
-      EXECUTE
-        'UPDATE public.pay_batch_auth_tokens AS auth_tokens_to_cancel
-         SET used_at_utc = COALESCE(auth_tokens_to_cancel.used_at_utc, now())
-         WHERE auth_tokens_to_cancel.used_at_utc IS NULL
-           AND auth_tokens_to_cancel.auth_request_id IN (
-             SELECT auth_requests_for_tokens.id
-             FROM public.pay_batch_auth_requests AS auth_requests_for_tokens
-             WHERE auth_requests_for_tokens.pay_batch_id = $1
-           )'
-      USING v_work_item.pay_batch_id;
-    END IF;
-
-    UPDATE public.pay_batches AS batch_to_cancel
-    SET
-      status = 'CANCELLED',
-      cancelled_at_utc = COALESCE(batch_to_cancel.cancelled_at_utc, v_now),
-      cancelled_by_user_id = COALESCE(batch_to_cancel.cancelled_by_user_id, v_effective_actor_user_id),
-      cancel_reason = COALESCE(NULLIF(btrim(v_request.reason), ''), batch_to_cancel.cancel_reason, 'PAYMENT_CORRECTION_PRE_BANK_CANCEL'),
-      schedule_kind = NULL,
-      scheduled_at_utc = NULL,
-      scheduled_by_user_id = NULL,
-      funding_account_ref = NULL,
-      funds_warning_hours_json = NULL,
-      execution_commit_state = CASE
-        WHEN NULLIF(btrim(COALESCE(batch_to_cancel.execution_commit_state, '')), '') IS NULL THEN 'NOT_SUBMITTED'
-        ELSE batch_to_cancel.execution_commit_state
-      END
-    WHERE batch_to_cancel.id = v_work_item.pay_batch_id;
-
-    IF v_batch.source_workbench_session_id IS NOT NULL AND v_effective_actor_user_id IS NOT NULL THEN
-      v_source_session_discard_attempted := true;
-
-      BEGIN
-        v_source_session_discard_result := public.pay_workbench_session_discard(
-          p_session_id => v_batch.source_workbench_session_id,
-          p_actor_user_id => v_effective_actor_user_id
-        );
-
-        v_source_session_discarded := CASE
-          WHEN lower(COALESCE(v_source_session_discard_result->>'ok', 'true')) IN ('true', 't', 'yes', 'y', '1') THEN true
-          WHEN lower(COALESCE(v_source_session_discard_result->>'ok', '')) IN ('false', 'f', 'no', 'n', '0') THEN false
-          ELSE true
-        END;
-        v_source_session_discard_state_changed := CASE
-          WHEN lower(COALESCE(v_source_session_discard_result->>'state_changed', '')) IN ('true', 't', 'yes', 'y', '1') THEN true
-          WHEN lower(COALESCE(v_source_session_discard_result->>'discarded', '')) IN ('true', 't', 'yes', 'y', '1') THEN true
-          WHEN lower(COALESCE(v_source_session_discard_result->>'state_changed', '')) IN ('false', 'f', 'no', 'n', '0') THEN false
-          WHEN lower(COALESCE(v_source_session_discard_result->>'discarded', '')) IN ('false', 'f', 'no', 'n', '0') THEN false
-          ELSE v_source_session_discarded
-        END;
-        v_source_session_discarded_at_utc := v_now;
-      EXCEPTION
-        WHEN OTHERS THEN
-          v_source_session_discarded := false;
-          v_source_session_discard_state_changed := false;
-          v_source_session_discard_result := jsonb_build_object(
-            'ok', false,
-            'sqlstate', SQLSTATE,
-            'error_message', SQLERRM
-          );
-
-          PERFORM public._imp_debug_audit(
-            v_effective_actor_user_id,
-            'PAYMENT_CORRECTION_PRE_BANK_CANCEL_WORKBENCH_DISCARD_ERROR',
-            jsonb_build_object(
-              'work_item_id', p_work_item_id,
-              'pay_batch_id', v_work_item.pay_batch_id,
-              'source_workbench_session_id', v_batch.source_workbench_session_id,
-              'sqlstate', SQLSTATE,
-              'error_message', SQLERRM
-            ),
-            'pay_payment_correction',
-            p_work_item_id::text,
-            NULL::jsonb,
-            NULL::text,
-            NULL::text,
-            NULL::text
-          );
-      END;
-    END IF;
-  END IF;
 
   INSERT INTO public.app_change_counters(entity_key, seq, updated_at)
   SELECT
@@ -7074,14 +7160,6 @@ BEGIN
 
   GET DIAGNOSTICS v_dirty_candidate_count = ROW_COUNT;
 
-  SELECT COALESCE(
-    jsonb_agg(DISTINCT selected_dirty_candidate_ids.candidate_id::text ORDER BY selected_dirty_candidate_ids.candidate_id::text),
-    '[]'::jsonb
-  )
-  INTO v_dirty_candidate_ids
-  FROM pg_temp._tmp_pre_bank_cancel_selected AS selected_dirty_candidate_ids
-  WHERE selected_dirty_candidate_ids.candidate_id IS NOT NULL;
-
   IF v_batch.source_snapshot_run_id IS NOT NULL THEN
     FOR v_candidate_id IN
       SELECT DISTINCT selected_refresh_candidates.candidate_id
@@ -7094,7 +7172,7 @@ BEGIN
           p_snapshot_run_id => v_batch.source_snapshot_run_id,
           p_candidate_id => v_candidate_id,
           p_reason => 'PAYMENT_CORRECTION_PRE_BANK_CANCEL',
-          p_actor_user_id => v_effective_actor_user_id,
+          p_actor_user_id => p_actor_user_id,
           p_payload_json => jsonb_build_object(
             'pay_batch_id', v_work_item.pay_batch_id,
             'correction_request_id', v_work_item.correction_request_id,
@@ -7102,11 +7180,6 @@ BEGIN
             'refresh_reason', 'PAYMENT_CORRECTION_PRE_BANK_CANCEL'
           )
         );
-
-        IF NULLIF(btrim(COALESCE(v_refresh_result->>'job_id', '')), '') IS NOT NULL THEN
-          v_snapshot_refresh_job_ids := v_snapshot_refresh_job_ids || jsonb_build_array(v_refresh_result->>'job_id');
-          v_snapshot_refresh_job_count := v_snapshot_refresh_job_count + 1;
-        END IF;
       EXCEPTION
         WHEN OTHERS THEN
           PERFORM public._imp_debug_audit(
@@ -7130,144 +7203,47 @@ BEGIN
     END LOOP;
   END IF;
 
-  IF v_is_whole_batch_work THEN
-    v_batch_cancel_result := jsonb_build_object(
-      'ok', true,
-      'classification', 'PRE_BANK_CANCEL',
-      'correction_required', false,
-      'communications_cancelled', v_cancelled_mail_count,
-      'pay_batch_id', v_work_item.pay_batch_id::text,
-      'status', (
-        SELECT refreshed_batch_for_result.status
-        FROM public.pay_batches AS refreshed_batch_for_result
-        WHERE refreshed_batch_for_result.id = v_work_item.pay_batch_id
-      ),
-      'cancelled_at_utc', (
-        SELECT CASE WHEN refreshed_batch_for_result.cancelled_at_utc IS NULL THEN NULL ELSE refreshed_batch_for_result.cancelled_at_utc::text END
-        FROM public.pay_batches AS refreshed_batch_for_result
-        WHERE refreshed_batch_for_result.id = v_work_item.pay_batch_id
-      ),
-      'cancelled_by_user_id', CASE WHEN v_effective_actor_user_id IS NULL THEN NULL ELSE v_effective_actor_user_id::text END,
-      'cancel_reason', COALESCE(NULLIF(btrim(v_request.reason), ''), 'PAYMENT_CORRECTION_PRE_BANK_CANCEL'),
-      'source_workbench_session_id', CASE WHEN v_batch.source_workbench_session_id IS NULL THEN NULL ELSE v_batch.source_workbench_session_id::text END,
-      'source_snapshot_run_id', CASE WHEN v_batch.source_snapshot_run_id IS NULL THEN NULL ELSE v_batch.source_snapshot_run_id::text END,
-      'source_session_version', v_batch.source_session_version,
-      'execution_commit_state', (
-        SELECT refreshed_batch_for_result.execution_commit_state
-        FROM public.pay_batches AS refreshed_batch_for_result
-        WHERE refreshed_batch_for_result.id = v_work_item.pay_batch_id
-      ),
-      'execution_commit_ref', (
-        SELECT refreshed_batch_for_result.execution_commit_ref
-        FROM public.pay_batches AS refreshed_batch_for_result
-        WHERE refreshed_batch_for_result.id = v_work_item.pay_batch_id
-      ),
-      'execution_committed_at_utc', (
-        SELECT CASE WHEN refreshed_batch_for_result.execution_committed_at_utc IS NULL THEN NULL ELSE refreshed_batch_for_result.execution_committed_at_utc::text END
-        FROM public.pay_batches AS refreshed_batch_for_result
-        WHERE refreshed_batch_for_result.id = v_work_item.pay_batch_id
-      ),
-      'cancellation_outcome', 'PAYMENT_CORRECTION_PRE_BANK_CANCEL',
-      'source_session_preserved', false,
-      'source_session_discard_attempted', v_source_session_discard_attempted,
-      'source_session_discarded', v_source_session_discarded,
-      'source_session_discard_state_changed', v_source_session_discard_state_changed,
-      'source_session_discarded_at_utc', CASE WHEN v_source_session_discarded_at_utc IS NULL THEN NULL ELSE v_source_session_discarded_at_utc::text END,
-      'source_session_discard_result', COALESCE(v_source_session_discard_result, '{}'::jsonb),
-      'dirtied_candidates', jsonb_build_object(
-        'count', v_dirty_candidate_count,
-        'candidate_ids', v_dirty_candidate_ids
-      ),
-      'snapshot_refresh', jsonb_build_object(
-        'job_count', v_snapshot_refresh_job_count,
-        'job_ids', v_snapshot_refresh_job_ids
-      ),
-      'snapshot_rebuild', jsonb_build_object(
-        'count', 0,
-        'snapshot_run_ids', '[]'::jsonb,
-        'results', '[]'::jsonb
-      ),
-      'released_reservations', jsonb_build_object(
-        'count', v_released_reservation_count,
-        'amount', v_released_reservation_amount,
-        'finance_case_ids', v_released_finance_case_ids
-      ),
-      'component_restoration', jsonb_build_object(
-        'count', v_restored_component_count,
-        'amount', v_restored_component_amount
-      ),
-      'timesheet_payment_overrides', jsonb_build_object(
-        'cleared_count', 0,
-        'reincluded_timesheet_ids', '[]'::jsonb
-      ),
-      'authoritative_payment_date', (
-        SELECT CASE WHEN refreshed_batch_for_result.authoritative_payment_date IS NULL THEN NULL ELSE refreshed_batch_for_result.authoritative_payment_date::text END
-        FROM public.pay_batches AS refreshed_batch_for_result
-        WHERE refreshed_batch_for_result.id = v_work_item.pay_batch_id
-      ),
-      'authoritative_payment_date_source', (
-        SELECT refreshed_batch_for_result.authoritative_payment_date_source
-        FROM public.pay_batches AS refreshed_batch_for_result
-        WHERE refreshed_batch_for_result.id = v_work_item.pay_batch_id
-      ),
-      'worker_communications', jsonb_build_object(
-        'remittance_sent_audit_preserved', true,
-        'commit_stage_audit_preserved', true
-      )
-    );
-  ELSE
-    v_batch_cancel_result := '{}'::jsonb;
-  END IF;
 
-  v_result := CASE
-    WHEN v_is_whole_batch_work THEN v_batch_cancel_result || jsonb_build_object(
-      'work_item_status', 'APPLIED',
-      'work_item_id', p_work_item_id,
-      'correction_request_id', v_work_item.correction_request_id,
-      'correction_item_kind', 'PRE_BANK_CANCEL',
-      'selected_item_count', v_selected_item_count,
-      'selected_candidate_count', v_selected_candidate_count,
-      'selected_transfer_count', v_selected_transfer_count,
-      'voided_item_count', v_voided_item_count,
-      'inserted_correction_item_count', v_inserted_correction_item_count,
-      'released_reservation_count', v_released_reservation_count,
-      'restored_component_count', v_restored_component_count,
-      'reset_payout_count', v_reset_payout_count,
-      'cancelled_mail_count', v_cancelled_mail_count,
-      'recalculated_transfer_count', v_recalculated_transfer_count,
-      'dirty_candidate_count', v_dirty_candidate_count,
-      'whole_batch_cancel_mirrored', true,
-      'classification_result', v_classification_result,
-      'processing_actor_kind', v_processing_actor_kind,
-      'processing_actor_user_id', CASE WHEN v_effective_actor_user_id IS NULL THEN NULL ELSE v_effective_actor_user_id::text END,
-      'applied_at_utc', v_now
-    )
-    ELSE jsonb_build_object(
-      'ok', true,
-      'status', 'APPLIED',
-      'work_item_id', p_work_item_id,
-      'correction_request_id', v_work_item.correction_request_id,
-      'pay_batch_id', v_work_item.pay_batch_id,
-      'correction_item_kind', 'PRE_BANK_CANCEL',
-      'selected_item_count', v_selected_item_count,
-      'selected_candidate_count', v_selected_candidate_count,
-      'selected_transfer_count', v_selected_transfer_count,
-      'voided_item_count', v_voided_item_count,
-      'inserted_correction_item_count', v_inserted_correction_item_count,
-      'released_reservation_count', v_released_reservation_count,
-      'restored_component_count', v_restored_component_count,
-      'reset_payout_count', v_reset_payout_count,
-      'cancelled_mail_count', v_cancelled_mail_count,
-      'communications_cancelled', v_cancelled_mail_count,
-      'recalculated_transfer_count', v_recalculated_transfer_count,
-      'dirty_candidate_count', v_dirty_candidate_count,
-      'whole_batch_cancel_mirrored', false,
-      'classification_result', v_classification_result,
-      'processing_actor_kind', v_processing_actor_kind,
-      'processing_actor_user_id', CASE WHEN v_effective_actor_user_id IS NULL THEN NULL ELSE v_effective_actor_user_id::text END,
-      'applied_at_utc', v_now
-    )
-  END;
+v_finance_resolution_result := public._pay_payment_correction_apply_accepted_finance_resolution(
+  v_work_item.correction_request_id,
+  p_work_item_id,
+  v_effective_actor_user_id
+);
+
+IF NOT COALESCE(NULLIF(v_finance_resolution_result->>'ok', '')::boolean, false) THEN
+  RAISE EXCEPTION 'ACCEPTED_FINANCE_RESOLUTION_BLOCKED'
+    USING ERRCODE = 'P0001',
+          DETAIL = jsonb_build_object(
+            'code', 'ACCEPTED_FINANCE_RESOLUTION_BLOCKED',
+            'message', 'Accepted gross/channel-sensitive finance resolution blocked pre-bank cancellation; no partial correction must be committed.',
+            'work_item_id', p_work_item_id,
+            'correction_request_id', v_work_item.correction_request_id,
+            'finance_resolution_result', v_finance_resolution_result
+          )::text;
+END IF;
+
+
+  v_result := jsonb_build_object(
+    'ok', true,
+    'status', 'APPLIED',
+    'work_item_id', p_work_item_id,
+    'correction_request_id', v_work_item.correction_request_id,
+    'pay_batch_id', v_work_item.pay_batch_id,
+    'correction_item_kind', 'PRE_BANK_CANCEL',
+    'selected_item_count', v_selected_item_count,
+    'selected_candidate_count', v_selected_candidate_count,
+    'selected_transfer_count', v_selected_transfer_count,
+    'voided_item_count', v_voided_item_count,
+    'inserted_correction_item_count', v_inserted_correction_item_count,
+    'released_reservation_count', v_released_reservation_count,
+    'restored_component_count', v_restored_component_count,
+    'reset_payout_count', v_reset_payout_count,
+    'cancelled_mail_count', v_cancelled_mail_count,
+    'recalculated_transfer_count', v_recalculated_transfer_count,
+    'dirty_candidate_count', v_dirty_candidate_count,
+    'classification_result', v_classification_result,
+    'applied_at_utc', v_now
+  );
 
   UPDATE public.pay_payment_correction_work_items AS applied_work_item
   SET
@@ -7275,13 +7251,12 @@ BEGIN
     locked_at_utc = NULL,
     locked_by = NULL,
     processed_at_utc = COALESCE(applied_work_item.processed_at_utc, v_now),
-    processed_by_user_id = COALESCE(v_effective_actor_user_id, applied_work_item.processed_by_user_id),
     last_error = NULL,
     result_json = COALESCE(applied_work_item.result_json, '{}'::jsonb) || v_result
   WHERE applied_work_item.id = p_work_item_id;
 
   PERFORM public._imp_debug_audit(
-    v_effective_actor_user_id,
+    p_actor_user_id,
     'PAYMENT_CORRECTION_PRE_BANK_CANCEL_WORK_RESULT',
     v_result,
     'pay_payment_correction',
@@ -7315,11 +7290,6 @@ EXCEPTION
     RAISE;
 END;
 $function$;
-
-
-
-
-
 
 
 
