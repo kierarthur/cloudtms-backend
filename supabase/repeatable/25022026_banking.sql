@@ -23471,8 +23471,100 @@ begin
               from jsonb_array_elements(coalesce(v_pruned_candidates, '[]'::jsonb)) as candidate_context(value)
               where nullif(btrim(coalesce(candidate_context.value->>'candidate_id', '')), '') is not null
             ), '[]'::jsonb),
+            'payment_scope_json', jsonb_strip_nulls(jsonb_build_object(
+              'notice_scope', 'UMBRELLA_GROUP',
+              'pay_batch_id', p_pay_batch_id::text,
+              'pay_batch_candidate_ids', coalesce((
+                select jsonb_agg(distinct umbrella_scope_target_candidates.pay_batch_candidate_id::text)
+                from pg_temp.tmp_commit_stage_target_candidates as umbrella_scope_target_candidates
+                where exists (
+                  select 1
+                  from jsonb_array_elements(coalesce(v_pruned_candidates, '[]'::jsonb)) as umbrella_scope_candidate_json(value)
+                  where nullif(btrim(coalesce(umbrella_scope_candidate_json.value->>'candidate_id', '')), '') = umbrella_scope_target_candidates.candidate_id::text
+                )
+              ), '[]'::jsonb),
+              'candidate_ids', coalesce((
+                select jsonb_agg(distinct umbrella_scope_candidate_ids.candidate_id_text)
+                from (
+                  select nullif(btrim(coalesce(umbrella_scope_candidate_json.value->>'candidate_id', '')), '') as candidate_id_text
+                  from jsonb_array_elements(coalesce(v_pruned_candidates, '[]'::jsonb)) as umbrella_scope_candidate_json(value)
+                  where nullif(btrim(coalesce(umbrella_scope_candidate_json.value->>'candidate_id', '')), '') is not null
+                ) as umbrella_scope_candidate_ids
+              ), '[]'::jsonb),
+              'umbrella_ids', case when v_umbrella_id is null then '[]'::jsonb else jsonb_build_array(v_umbrella_id::text) end,
+              'pay_bank_transfer_ids', coalesce((
+                select jsonb_agg(distinct umbrella_scope_items.pay_bank_transfer_id::text)
+                from public.pay_batch_items as umbrella_scope_items
+                join public.pay_batch_candidates as umbrella_scope_candidates
+                  on umbrella_scope_candidates.id = umbrella_scope_items.pay_batch_candidate_id
+                where umbrella_scope_candidates.pay_batch_id = p_pay_batch_id
+                  and umbrella_scope_items.pay_bank_transfer_id is not null
+                  and coalesce(umbrella_scope_items.is_voided, false) = false
+                  and upper(coalesce(umbrella_scope_items.pay_channel, '')) = 'UMBRELLA'
+                  and (v_umbrella_id is null or umbrella_scope_items.umbrella_id = v_umbrella_id)
+                  and exists (
+                    select 1
+                    from jsonb_array_elements(coalesce(v_pruned_candidates, '[]'::jsonb)) as umbrella_scope_candidate_json(value)
+                    where nullif(btrim(coalesce(umbrella_scope_candidate_json.value->>'candidate_id', '')), '') = umbrella_scope_candidates.candidate_id::text
+                  )
+                  and not exists (
+                    select 1
+                    from public.pay_payment_correction_items as umbrella_scope_corrections
+                    where umbrella_scope_corrections.pay_batch_item_id = umbrella_scope_items.id
+                      and umbrella_scope_corrections.status = 'APPLIED'
+                      and umbrella_scope_corrections.correction_item_kind in ('PRE_BANK_CANCEL','NO_MONEY_UNWIND','SETTLED_REVERSAL')
+                  )
+              ), '[]'::jsonb),
+              'transfer_group_keys', coalesce((
+                select jsonb_agg(distinct umbrella_scope_transfers.transfer_group_key)
+                from public.pay_batch_items as umbrella_scope_transfer_items
+                join public.pay_batch_candidates as umbrella_scope_transfer_candidates
+                  on umbrella_scope_transfer_candidates.id = umbrella_scope_transfer_items.pay_batch_candidate_id
+                join public.pay_bank_transfers as umbrella_scope_transfers
+                  on umbrella_scope_transfers.id = umbrella_scope_transfer_items.pay_bank_transfer_id
+                where umbrella_scope_transfer_candidates.pay_batch_id = p_pay_batch_id
+                  and umbrella_scope_transfers.transfer_group_key is not null
+                  and coalesce(umbrella_scope_transfer_items.is_voided, false) = false
+                  and upper(coalesce(umbrella_scope_transfer_items.pay_channel, '')) = 'UMBRELLA'
+                  and (v_umbrella_id is null or umbrella_scope_transfer_items.umbrella_id = v_umbrella_id)
+                  and exists (
+                    select 1
+                    from jsonb_array_elements(coalesce(v_pruned_candidates, '[]'::jsonb)) as umbrella_scope_candidate_json(value)
+                    where nullif(btrim(coalesce(umbrella_scope_candidate_json.value->>'candidate_id', '')), '') = umbrella_scope_transfer_candidates.candidate_id::text
+                  )
+              ), '[]'::jsonb),
+              'pay_batch_item_ids', coalesce((
+                select jsonb_agg(distinct umbrella_scope_item_ids.id::text)
+                from public.pay_batch_items as umbrella_scope_item_ids
+                join public.pay_batch_candidates as umbrella_scope_item_candidates
+                  on umbrella_scope_item_candidates.id = umbrella_scope_item_ids.pay_batch_candidate_id
+                where umbrella_scope_item_candidates.pay_batch_id = p_pay_batch_id
+                  and coalesce(umbrella_scope_item_ids.is_voided, false) = false
+                  and upper(coalesce(umbrella_scope_item_ids.pay_channel, '')) = 'UMBRELLA'
+                  and (v_umbrella_id is null or umbrella_scope_item_ids.umbrella_id = v_umbrella_id)
+                  and exists (
+                    select 1
+                    from jsonb_array_elements(coalesce(v_pruned_candidates, '[]'::jsonb)) as umbrella_scope_candidate_json(value)
+                    where nullif(btrim(coalesce(umbrella_scope_candidate_json.value->>'candidate_id', '')), '') = umbrella_scope_item_candidates.candidate_id::text
+                  )
+                  and not exists (
+                    select 1
+                    from public.pay_payment_correction_items as umbrella_scope_item_corrections
+                    where umbrella_scope_item_corrections.pay_batch_item_id = umbrella_scope_item_ids.id
+                      and umbrella_scope_item_corrections.status = 'APPLIED'
+                      and umbrella_scope_item_corrections.correction_item_kind in ('PRE_BANK_CANCEL','NO_MONEY_UNWIND','SETTLED_REVERSAL')
+                  )
+              ), '[]'::jsonb),
+              'pay_channels', jsonb_build_array('UMBRELLA')
+            )),
             'reference', concat('pay_batch:', p_pay_batch_id::text, ':umbrella:', coalesce(v_umbrella_id::text, 'UNKNOWN'))
           )),
+          true
+        );
+        v_work_job := jsonb_set(
+          v_work_job,
+          '{payment_scope_json}',
+          coalesce(v_work_job #> '{queue_context,payment_scope_json}', '{}'::jsonb),
           true
         );
 
@@ -23517,8 +23609,95 @@ begin
               order by tc.pay_batch_candidate_id
               limit 1
             ),
+            'payment_scope_json', jsonb_strip_nulls(jsonb_build_object(
+              'notice_scope', 'CANDIDATE',
+              'pay_batch_id', p_pay_batch_id::text,
+              'pay_batch_candidate_ids', coalesce((
+                select jsonb_agg(distinct candidate_scope_target_candidates.pay_batch_candidate_id::text)
+                from pg_temp.tmp_commit_stage_target_candidates as candidate_scope_target_candidates
+                where candidate_scope_target_candidates.candidate_id = v_candidate_id
+              ), '[]'::jsonb),
+              'candidate_ids', jsonb_build_array(v_candidate_id::text),
+              'umbrella_ids', coalesce((
+                select jsonb_agg(distinct candidate_scope_items.umbrella_id::text)
+                from public.pay_batch_items as candidate_scope_items
+                join public.pay_batch_candidates as candidate_scope_candidates
+                  on candidate_scope_candidates.id = candidate_scope_items.pay_batch_candidate_id
+                where candidate_scope_candidates.pay_batch_id = p_pay_batch_id
+                  and candidate_scope_candidates.candidate_id = v_candidate_id
+                  and candidate_scope_items.umbrella_id is not null
+                  and coalesce(candidate_scope_items.is_voided, false) = false
+                  and not exists (
+                    select 1
+                    from public.pay_payment_correction_items as candidate_scope_umbrella_corrections
+                    where candidate_scope_umbrella_corrections.pay_batch_item_id = candidate_scope_items.id
+                      and candidate_scope_umbrella_corrections.status = 'APPLIED'
+                      and candidate_scope_umbrella_corrections.correction_item_kind in ('PRE_BANK_CANCEL','NO_MONEY_UNWIND','SETTLED_REVERSAL')
+                  )
+              ), '[]'::jsonb),
+              'pay_bank_transfer_ids', coalesce((
+                select jsonb_agg(distinct candidate_scope_items.pay_bank_transfer_id::text)
+                from public.pay_batch_items as candidate_scope_items
+                join public.pay_batch_candidates as candidate_scope_candidates
+                  on candidate_scope_candidates.id = candidate_scope_items.pay_batch_candidate_id
+                where candidate_scope_candidates.pay_batch_id = p_pay_batch_id
+                  and candidate_scope_candidates.candidate_id = v_candidate_id
+                  and candidate_scope_items.pay_bank_transfer_id is not null
+                  and coalesce(candidate_scope_items.is_voided, false) = false
+                  and not exists (
+                    select 1
+                    from public.pay_payment_correction_items as candidate_scope_transfer_corrections
+                    where candidate_scope_transfer_corrections.pay_batch_item_id = candidate_scope_items.id
+                      and candidate_scope_transfer_corrections.status = 'APPLIED'
+                      and candidate_scope_transfer_corrections.correction_item_kind in ('PRE_BANK_CANCEL','NO_MONEY_UNWIND','SETTLED_REVERSAL')
+                  )
+              ), '[]'::jsonb),
+              'transfer_group_keys', coalesce((
+                select jsonb_agg(distinct candidate_scope_transfers.transfer_group_key)
+                from public.pay_batch_items as candidate_scope_transfer_items
+                join public.pay_batch_candidates as candidate_scope_transfer_candidates
+                  on candidate_scope_transfer_candidates.id = candidate_scope_transfer_items.pay_batch_candidate_id
+                join public.pay_bank_transfers as candidate_scope_transfers
+                  on candidate_scope_transfers.id = candidate_scope_transfer_items.pay_bank_transfer_id
+                where candidate_scope_transfer_candidates.pay_batch_id = p_pay_batch_id
+                  and candidate_scope_transfer_candidates.candidate_id = v_candidate_id
+                  and candidate_scope_transfers.transfer_group_key is not null
+                  and coalesce(candidate_scope_transfer_items.is_voided, false) = false
+              ), '[]'::jsonb),
+              'pay_batch_item_ids', coalesce((
+                select jsonb_agg(distinct candidate_scope_item_ids.id::text)
+                from public.pay_batch_items as candidate_scope_item_ids
+                join public.pay_batch_candidates as candidate_scope_item_candidates
+                  on candidate_scope_item_candidates.id = candidate_scope_item_ids.pay_batch_candidate_id
+                where candidate_scope_item_candidates.pay_batch_id = p_pay_batch_id
+                  and candidate_scope_item_candidates.candidate_id = v_candidate_id
+                  and coalesce(candidate_scope_item_ids.is_voided, false) = false
+                  and not exists (
+                    select 1
+                    from public.pay_payment_correction_items as candidate_scope_item_corrections
+                    where candidate_scope_item_corrections.pay_batch_item_id = candidate_scope_item_ids.id
+                      and candidate_scope_item_corrections.status = 'APPLIED'
+                      and candidate_scope_item_corrections.correction_item_kind in ('PRE_BANK_CANCEL','NO_MONEY_UNWIND','SETTLED_REVERSAL')
+                  )
+              ), '[]'::jsonb),
+              'pay_channels', coalesce((
+                select jsonb_agg(distinct upper(coalesce(candidate_scope_channels.pay_channel, '')))
+                from public.pay_batch_items as candidate_scope_channels
+                join public.pay_batch_candidates as candidate_scope_channel_candidates
+                  on candidate_scope_channel_candidates.id = candidate_scope_channels.pay_batch_candidate_id
+                where candidate_scope_channel_candidates.pay_batch_id = p_pay_batch_id
+                  and candidate_scope_channel_candidates.candidate_id = v_candidate_id
+                  and nullif(btrim(coalesce(candidate_scope_channels.pay_channel, '')), '') is not null
+              ), '[]'::jsonb)
+            )),
             'reference', concat('pay_batch:', p_pay_batch_id::text, ':candidate:', v_candidate_id::text)
           )),
+          true
+        );
+        v_work_job := jsonb_set(
+          v_work_job,
+          '{payment_scope_json}',
+          coalesce(v_work_job #> '{queue_context,payment_scope_json}', '{}'::jsonb),
           true
         );
 
@@ -23733,7 +23912,6 @@ EXCEPTION
     RAISE;
 end;
 $function$;
-
 
 
 
@@ -24156,11 +24334,66 @@ begin
           'scope_kind', 'PAYOUT_NOTICE_CANDIDATE',
           'pay_batch_id', p_pay_batch_id::text,
           'candidate_id', v_candidate_id::text,
+          'pay_batch_candidate_ids', COALESCE(
+            (
+              SELECT jsonb_agg(DISTINCT public_tmp_payout_notice_candidates.pay_batch_candidate_id::text)
+              FROM pg_temp.tmp_payout_notice_target_candidates AS public_tmp_payout_notice_candidates
+              WHERE public_tmp_payout_notice_candidates.candidate_id = v_candidate_id
+            ),
+            '[]'::jsonb
+          ),
+          'candidate_ids', jsonb_build_array(v_candidate_id::text),
           'finance_case_ids', COALESCE(
             (
               SELECT jsonb_agg(DISTINCT public_tmp_payout_notice_target_items.finance_case_id::text)
               FROM pg_temp.tmp_payout_notice_target_items AS public_tmp_payout_notice_target_items
               WHERE public_tmp_payout_notice_target_items.candidate_id = v_candidate_id
+            ),
+            '[]'::jsonb
+          ),
+          'finance_component_ids', COALESCE(
+            (
+              SELECT jsonb_agg(DISTINCT public_pay_batch_items_component_scope.finance_component_id::text)
+              FROM public.pay_batch_items AS public_pay_batch_items_component_scope
+              JOIN public.pay_batch_candidates AS public_pay_batch_candidates_component_scope
+                ON public_pay_batch_candidates_component_scope.id = public_pay_batch_items_component_scope.pay_batch_candidate_id
+              JOIN pg_temp.tmp_payout_notice_target_items AS public_tmp_payout_notice_component_scope
+                ON public_tmp_payout_notice_component_scope.candidate_id = public_pay_batch_candidates_component_scope.candidate_id
+               AND public_tmp_payout_notice_component_scope.finance_case_id = public_pay_batch_items_component_scope.finance_case_id
+              WHERE public_pay_batch_candidates_component_scope.pay_batch_id = p_pay_batch_id
+                AND public_pay_batch_candidates_component_scope.candidate_id = v_candidate_id
+                AND public_pay_batch_items_component_scope.finance_component_id IS NOT NULL
+                AND COALESCE(public_pay_batch_items_component_scope.is_voided, false) = false
+                AND public_pay_batch_items_component_scope.item_type IN ('LOAN_PAYOUT', 'MANUAL_CREDIT_PAYOUT')
+            ),
+            '[]'::jsonb
+          ),
+          'reservation_ids', COALESCE(
+            (
+              SELECT jsonb_agg(DISTINCT public_pay_batch_items_reservation_scope.reservation_id::text)
+              FROM public.pay_batch_items AS public_pay_batch_items_reservation_scope
+              JOIN public.pay_batch_candidates AS public_pay_batch_candidates_reservation_scope
+                ON public_pay_batch_candidates_reservation_scope.id = public_pay_batch_items_reservation_scope.pay_batch_candidate_id
+              JOIN pg_temp.tmp_payout_notice_target_items AS public_tmp_payout_notice_reservation_scope
+                ON public_tmp_payout_notice_reservation_scope.candidate_id = public_pay_batch_candidates_reservation_scope.candidate_id
+               AND public_tmp_payout_notice_reservation_scope.finance_case_id = public_pay_batch_items_reservation_scope.finance_case_id
+              WHERE public_pay_batch_candidates_reservation_scope.pay_batch_id = p_pay_batch_id
+                AND public_pay_batch_candidates_reservation_scope.candidate_id = v_candidate_id
+                AND public_pay_batch_items_reservation_scope.reservation_id IS NOT NULL
+                AND COALESCE(public_pay_batch_items_reservation_scope.is_voided, false) = false
+                AND public_pay_batch_items_reservation_scope.item_type IN ('LOAN_PAYOUT', 'MANUAL_CREDIT_PAYOUT')
+            ),
+            '[]'::jsonb
+          ),
+          'payout_transfer_ids', COALESCE(
+            (
+              SELECT jsonb_agg(DISTINCT public_pay_advances_payout_scope.payout_transfer_id::text)
+              FROM public.pay_advances AS public_pay_advances_payout_scope
+              JOIN pg_temp.tmp_payout_notice_target_items AS public_tmp_payout_notice_payout_scope
+                ON public_tmp_payout_notice_payout_scope.finance_case_id = public_pay_advances_payout_scope.id
+               AND public_tmp_payout_notice_payout_scope.candidate_id = v_candidate_id
+              WHERE public_pay_advances_payout_scope.payout_transfer_id IS NOT NULL
+                AND public_pay_advances_payout_scope.payout_pay_batch_id = p_pay_batch_id
             ),
             '[]'::jsonb
           ),
@@ -24210,7 +24443,107 @@ begin
                 )
             ),
             '[]'::jsonb
-          )
+          ),
+          'payment_scope_json', jsonb_strip_nulls(jsonb_build_object(
+            'notice_scope', 'FINANCE_PAYOUT',
+            'pay_batch_id', p_pay_batch_id::text,
+            'pay_batch_candidate_ids', COALESCE(
+              (
+                SELECT jsonb_agg(DISTINCT public_tmp_payout_notice_candidates.pay_batch_candidate_id::text)
+                FROM pg_temp.tmp_payout_notice_target_candidates AS public_tmp_payout_notice_candidates
+                WHERE public_tmp_payout_notice_candidates.candidate_id = v_candidate_id
+              ),
+              '[]'::jsonb
+            ),
+            'candidate_ids', jsonb_build_array(v_candidate_id::text),
+            'finance_case_ids', COALESCE(
+              (
+                SELECT jsonb_agg(DISTINCT public_tmp_payout_notice_target_items.finance_case_id::text)
+                FROM pg_temp.tmp_payout_notice_target_items AS public_tmp_payout_notice_target_items
+                WHERE public_tmp_payout_notice_target_items.candidate_id = v_candidate_id
+              ),
+              '[]'::jsonb
+            ),
+            'finance_component_ids', COALESCE(
+              (
+                SELECT jsonb_agg(DISTINCT public_pay_batch_items_component_scope.finance_component_id::text)
+                FROM public.pay_batch_items AS public_pay_batch_items_component_scope
+                JOIN public.pay_batch_candidates AS public_pay_batch_candidates_component_scope
+                  ON public_pay_batch_candidates_component_scope.id = public_pay_batch_items_component_scope.pay_batch_candidate_id
+                JOIN pg_temp.tmp_payout_notice_target_items AS public_tmp_payout_notice_component_scope
+                  ON public_tmp_payout_notice_component_scope.candidate_id = public_pay_batch_candidates_component_scope.candidate_id
+                 AND public_tmp_payout_notice_component_scope.finance_case_id = public_pay_batch_items_component_scope.finance_case_id
+                WHERE public_pay_batch_candidates_component_scope.pay_batch_id = p_pay_batch_id
+                  AND public_pay_batch_candidates_component_scope.candidate_id = v_candidate_id
+                  AND public_pay_batch_items_component_scope.finance_component_id IS NOT NULL
+                  AND COALESCE(public_pay_batch_items_component_scope.is_voided, false) = false
+                  AND public_pay_batch_items_component_scope.item_type IN ('LOAN_PAYOUT', 'MANUAL_CREDIT_PAYOUT')
+              ),
+              '[]'::jsonb
+            ),
+            'reservation_ids', COALESCE(
+              (
+                SELECT jsonb_agg(DISTINCT public_pay_batch_items_reservation_scope.reservation_id::text)
+                FROM public.pay_batch_items AS public_pay_batch_items_reservation_scope
+                JOIN public.pay_batch_candidates AS public_pay_batch_candidates_reservation_scope
+                  ON public_pay_batch_candidates_reservation_scope.id = public_pay_batch_items_reservation_scope.pay_batch_candidate_id
+                JOIN pg_temp.tmp_payout_notice_target_items AS public_tmp_payout_notice_reservation_scope
+                  ON public_tmp_payout_notice_reservation_scope.candidate_id = public_pay_batch_candidates_reservation_scope.candidate_id
+                 AND public_tmp_payout_notice_reservation_scope.finance_case_id = public_pay_batch_items_reservation_scope.finance_case_id
+                WHERE public_pay_batch_candidates_reservation_scope.pay_batch_id = p_pay_batch_id
+                  AND public_pay_batch_candidates_reservation_scope.candidate_id = v_candidate_id
+                  AND public_pay_batch_items_reservation_scope.reservation_id IS NOT NULL
+                  AND COALESCE(public_pay_batch_items_reservation_scope.is_voided, false) = false
+                  AND public_pay_batch_items_reservation_scope.item_type IN ('LOAN_PAYOUT', 'MANUAL_CREDIT_PAYOUT')
+              ),
+              '[]'::jsonb
+            ),
+            'pay_bank_transfer_ids', COALESCE(
+              (
+                SELECT jsonb_agg(DISTINCT public_pay_batch_items_transfer_scope.pay_bank_transfer_id::text)
+                FROM public.pay_batch_items AS public_pay_batch_items_transfer_scope
+                JOIN public.pay_batch_candidates AS public_pay_batch_candidates_transfer_scope
+                  ON public_pay_batch_candidates_transfer_scope.id = public_pay_batch_items_transfer_scope.pay_batch_candidate_id
+                JOIN pg_temp.tmp_payout_notice_target_items AS public_tmp_payout_notice_transfer_scope
+                  ON public_tmp_payout_notice_transfer_scope.candidate_id = public_pay_batch_candidates_transfer_scope.candidate_id
+                 AND public_tmp_payout_notice_transfer_scope.finance_case_id = public_pay_batch_items_transfer_scope.finance_case_id
+                WHERE public_pay_batch_candidates_transfer_scope.pay_batch_id = p_pay_batch_id
+                  AND public_pay_batch_candidates_transfer_scope.candidate_id = v_candidate_id
+                  AND public_pay_batch_items_transfer_scope.pay_bank_transfer_id IS NOT NULL
+                  AND COALESCE(public_pay_batch_items_transfer_scope.is_voided, false) = false
+                  AND public_pay_batch_items_transfer_scope.item_type IN ('LOAN_PAYOUT', 'MANUAL_CREDIT_PAYOUT')
+              ),
+              '[]'::jsonb
+            ),
+            'payout_transfer_ids', COALESCE(
+              (
+                SELECT jsonb_agg(DISTINCT public_pay_advances_payout_scope.payout_transfer_id::text)
+                FROM public.pay_advances AS public_pay_advances_payout_scope
+                JOIN pg_temp.tmp_payout_notice_target_items AS public_tmp_payout_notice_payout_scope
+                  ON public_tmp_payout_notice_payout_scope.finance_case_id = public_pay_advances_payout_scope.id
+                 AND public_tmp_payout_notice_payout_scope.candidate_id = v_candidate_id
+                WHERE public_pay_advances_payout_scope.payout_transfer_id IS NOT NULL
+                  AND public_pay_advances_payout_scope.payout_pay_batch_id = p_pay_batch_id
+              ),
+              '[]'::jsonb
+            ),
+            'pay_batch_item_ids', COALESCE(
+              (
+                SELECT jsonb_agg(DISTINCT public_pay_batch_items_scope.id::text)
+                FROM public.pay_batch_items AS public_pay_batch_items_scope
+                JOIN public.pay_batch_candidates AS public_pay_batch_candidates_scope
+                  ON public_pay_batch_candidates_scope.id = public_pay_batch_items_scope.pay_batch_candidate_id
+                JOIN pg_temp.tmp_payout_notice_target_items AS public_tmp_payout_notice_items_scope
+                  ON public_tmp_payout_notice_items_scope.candidate_id = public_pay_batch_candidates_scope.candidate_id
+                 AND public_tmp_payout_notice_items_scope.finance_case_id = public_pay_batch_items_scope.finance_case_id
+                WHERE public_pay_batch_candidates_scope.pay_batch_id = p_pay_batch_id
+                  AND public_pay_batch_candidates_scope.candidate_id = v_candidate_id
+                  AND COALESCE(public_pay_batch_items_scope.is_voided, false) = false
+                  AND public_pay_batch_items_scope.item_type IN ('LOAN_PAYOUT', 'MANUAL_CREDIT_PAYOUT')
+              ),
+              '[]'::jsonb
+            )
+          ))
         )
         INTO v_queue_context;
 
@@ -24227,6 +24560,12 @@ begin
         v_work_job := jsonb_set(v_work_job, '{total_amount}', to_jsonb(coalesce(v_pruned_job_total, 0)), true);
         v_work_job := jsonb_set(v_work_job, '{subject}', to_jsonb(v_subject), true);
         v_work_job := jsonb_set(v_work_job, '{worker_message}', to_jsonb(v_worker_message), true);
+        v_work_job := jsonb_set(
+          v_work_job,
+          '{payment_scope_json}',
+          COALESCE(v_queue_context->'payment_scope_json', '{}'::jsonb),
+          true
+        );
 
         v_filtered_jobs := v_filtered_jobs || jsonb_build_array(v_work_job);
 
