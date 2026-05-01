@@ -21452,7 +21452,6 @@ $$;
 -- A4.8 pay_unpay_batch(p_pay_batch_id, p_actor_user_id, p_reason, p_force boolean)
 -- =========================================================
 
-
 create or replace function public.pay_batch_get(p_pay_batch_id uuid)
 returns jsonb
 language plpgsql
@@ -23822,10 +23821,14 @@ begin
 
   v_movement_classification := jsonb_build_object(
     'classification', CASE
-      WHEN COALESCE(v_bank_return_event_count, 0) > 0
-        OR COALESCE(v_open_settled_reversal_request_count, 0) > 0
-        OR COALESCE(v_applied_reversal_item_count, 0) > 0
+      WHEN COALESCE(v_open_settled_reversal_request_count, 0) > 0
+        OR (
+          COALESCE(v_bank_return_event_count, 0) > 0
+          AND COALESCE(v_applied_reversal_item_count, 0) = 0
+        )
         THEN 'TRUE_SETTLED_REVERSAL_REQUIRED'
+      WHEN COALESCE(v_applied_reversal_item_count, 0) > 0
+        THEN 'SETTLED_REVERSAL_APPLIED'
       WHEN v_can_unwind_failed_payment THEN 'NO_MONEY_UNWIND'
       WHEN v_can_cancel_payment_attempt THEN 'PRE_BANK_CANCEL'
       WHEN v_can_reverse_settled_payment
@@ -23842,9 +23845,11 @@ begin
     'derived_state', v_derived_correction_state,
     'can_reverse_settled_payment', v_can_reverse_settled_payment,
     'settled_reversal_required', (
-      COALESCE(v_bank_return_event_count, 0) > 0
-      OR COALESCE(v_open_settled_reversal_request_count, 0) > 0
-      OR COALESCE(v_applied_reversal_item_count, 0) > 0
+      COALESCE(v_open_settled_reversal_request_count, 0) > 0
+      OR (
+        COALESCE(v_bank_return_event_count, 0) > 0
+        AND COALESCE(v_applied_reversal_item_count, 0) = 0
+      )
     ),
     'settlement_evidence_count', COALESCE(v_settlement_evidence_count, 0),
     'bank_failure_event_count', COALESCE(v_bank_failure_event_count, 0),
@@ -24052,6 +24057,12 @@ begin
 end;
 $$;
 
+
+
+
+-- =========================================================
+-- A4.9 pay_batches_list / pay_batch_get
+-- =========================================================
 
 
 CREATE OR REPLACE FUNCTION public.pay_batches_list(p_limit integer DEFAULT 50, p_offset integer DEFAULT 0, p_status text DEFAULT NULL::text)
@@ -24374,10 +24385,15 @@ begin
       )
       select
         case
-          when coalesce((select sum(correction_items.item_count) from correction_items where correction_items.correction_item_kind = 'SETTLED_REVERSAL'), 0) > 0
-            or coalesce((select returned_event_count from bank_events), 0) > 0
-            or coalesce((select returned_transfer_count from transfer_evidence), 0) > 0
-            or coalesce((select open_settled_reversal_request_count from request_summary), 0) > 0 then 'TRUE_SETTLED_REVERSAL_REQUIRED'
+          when coalesce((select open_settled_reversal_request_count from request_summary), 0) > 0
+            or (
+              (
+                coalesce((select returned_event_count from bank_events), 0) > 0
+                or coalesce((select returned_transfer_count from transfer_evidence), 0) > 0
+              )
+              and coalesce((select sum(correction_items.item_count) from correction_items where correction_items.correction_item_kind = 'SETTLED_REVERSAL'), 0) = 0
+            ) then 'TRUE_SETTLED_REVERSAL_REQUIRED'
+          when coalesce((select sum(correction_items.item_count) from correction_items where correction_items.correction_item_kind = 'SETTLED_REVERSAL'), 0) > 0 then 'SETTLED_REVERSAL_APPLIED'
           when coalesce((select sum(correction_items.item_count) from correction_items where correction_items.correction_item_kind = 'NO_MONEY_UNWIND'), 0) > 0
             or coalesce((select failed_event_count from bank_events), 0) > 0
             or coalesce((select failed_transfer_count from transfer_evidence), 0) > 0
@@ -24444,15 +24460,6 @@ begin
   );
 end;
 $function$;
-
-
-
--- =========================================================
--- A4.9 pay_batches_list / pay_batch_get
--- =========================================================
-
-
-
 
 
 create or replace function public.pay_unpay_batch(
