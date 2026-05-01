@@ -8819,6 +8819,9 @@ $function$;
 
 
 
+
+
+
 CREATE OR REPLACE FUNCTION public._pay_active_settled_components(
   p_timesheet_ids uuid[]
 )
@@ -8887,7 +8890,36 @@ active_components AS (
     economic_components.key_type AS component_key_type,
     economic_components.key_value AS component_key_value,
     economic_components.source_amount_ex_vat AS component_amount_ex_vat,
-    public.pay_batch_items.amount_inc_vat AS component_amount_inc_vat
+    COALESCE(
+      (
+        SELECT
+          ROUND(ABS(NULLIF(BTRIM(active_source_inc_values.source_inc_text), '')::numeric), 2)::numeric
+        FROM (
+          VALUES
+            (row_to_json(economic_components)->>'source_amount_inc_vat'),
+            (row_to_json(economic_components)->>'source_pay_inc_vat'),
+            (public.pay_batch_items.frozen_source_basis_json->>'source_amount_inc_vat'),
+            (public.pay_batch_items.frozen_source_basis_json->>'source_pay_inc_vat'),
+            (public.pay_batch_items.frozen_source_basis_json->>'pay_inc_vat'),
+            (public.pay_batch_items.frozen_source_basis_json->>'amount_inc_vat'),
+            (public.pay_batch_items.frozen_component_snapshot_json->>'source_amount_inc_vat'),
+            (public.pay_batch_items.frozen_component_snapshot_json->>'source_pay_inc_vat'),
+            (public.pay_batch_items.frozen_component_snapshot_json->>'source_entitlement_amount_inc_vat'),
+            (public.pay_batch_items.frozen_component_snapshot_json->>'source_reservation_amount_inc_vat'),
+            (public.pay_batch_items.frozen_component_snapshot_json#>>'{source_basis_json,source_amount_inc_vat}'),
+            (public.pay_batch_items.frozen_component_snapshot_json#>>'{source_basis_json,source_pay_inc_vat}'),
+            (public.pay_batch_items.frozen_component_snapshot_json#>>'{source_basis_json,amount_inc_vat}'),
+            (public.pay_batch_items.frozen_resolution_payload_json->>'source_amount_inc_vat'),
+            (public.pay_batch_items.frozen_resolution_payload_json->>'source_pay_inc_vat'),
+            (public.pay_batch_items.frozen_resolution_result_json->>'source_amount_inc_vat'),
+            (public.pay_batch_items.frozen_resolution_result_json->>'source_pay_inc_vat')
+        ) AS active_source_inc_values(source_inc_text)
+        WHERE NULLIF(BTRIM(active_source_inc_values.source_inc_text), '') IS NOT NULL
+          AND BTRIM(active_source_inc_values.source_inc_text) ~ '^-?[0-9]+(\.[0-9]+)?$'
+        LIMIT 1
+      ),
+      economic_components.source_amount_ex_vat
+    ) AS component_amount_inc_vat
   FROM active_item_ids
   JOIN LATERAL public._pay_batch_item_economic_components(
     NULL::uuid,
