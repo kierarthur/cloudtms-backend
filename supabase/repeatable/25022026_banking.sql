@@ -303,6 +303,11 @@ $$;
 
 
 
+
+
+
+
+
 CREATE OR REPLACE FUNCTION public._pay_reserved_components(p_timesheet_ids uuid[])
 RETURNS TABLE (
   timesheet_id uuid,
@@ -361,84 +366,62 @@ active_batch_item_ids AS (
 ),
 open_correction_hold_item_ids AS (
   SELECT DISTINCT
-    public.pay_batch_items.id AS pay_batch_item_id
+    selected_correction_items.pay_batch_item_id AS pay_batch_item_id
   FROM inp AS input_scope
-  JOIN public.pay_batch_items
-    ON public.pay_batch_items.timesheet_id = ANY(input_scope.ts_ids)
-  JOIN public.pay_batch_candidates
-    ON public.pay_batch_candidates.id = public.pay_batch_items.pay_batch_candidate_id
-  JOIN public.pay_payment_correction_requests
-    ON public.pay_payment_correction_requests.pay_batch_id = public.pay_batch_candidates.pay_batch_id
-  LEFT JOIN public.pay_bank_transfers
-    ON public.pay_bank_transfers.id = public.pay_batch_items.pay_bank_transfer_id
-  WHERE public.pay_payment_correction_requests.status IN ('REQUESTED','AWAITING_AUTHORISATION','AUTHORISED','EXPANDED','PROCESSING','BLOCKED')
-    AND public.pay_payment_correction_requests.correction_kind IN ('PRE_BANK_CANCEL','NO_MONEY_UNWIND','MANUAL_EVIDENCE_NO_MONEY')
-    AND public.pay_batch_items.timesheet_id IS NOT NULL
-    AND COALESCE(public.pay_batch_items.is_voided, false) = false
-    AND upper(coalesce(public.pay_batch_items.pay_channel, '')) IN ('PAYE','UMBRELLA')
-    AND public.pay_batch_items.item_type IN ('SEGMENT_DELTA','EXPENSE_DELTA','ADJUSTMENT_DELTA','MILEAGE_DELTA')
-    AND public._pay_batch_item_source_reservation_amount_ex_vat(public.pay_batch_items.id) IS NOT NULL
+  JOIN public.pay_payment_correction_requests AS open_correction_requests
+    ON open_correction_requests.status IN ('REQUESTED','AWAITING_AUTHORISATION','AUTHORISED','EXPANDED','PROCESSING','BLOCKED')
+   AND open_correction_requests.correction_kind IN ('PRE_BANK_CANCEL','NO_MONEY_UNWIND','MANUAL_EVIDENCE_NO_MONEY')
+  JOIN LATERAL public._pay_payment_correction_selected_items(
+    open_correction_requests.pay_batch_id,
+    CASE
+      WHEN jsonb_typeof(open_correction_requests.plan_json->'selected_pay_batch_item_ids') = 'array' THEN
+        COALESCE(open_correction_requests.selection_json, '{}'::jsonb)
+        || jsonb_build_object(
+          'pay_batch_item_ids', open_correction_requests.plan_json->'selected_pay_batch_item_ids',
+          'expected_pay_batch_item_ids', open_correction_requests.plan_json->'selected_pay_batch_item_ids'
+        )
+      WHEN jsonb_typeof(open_correction_requests.plan_json#>'{selection,selected_pay_batch_item_ids}') = 'array' THEN
+        COALESCE(open_correction_requests.selection_json, '{}'::jsonb)
+        || jsonb_build_object(
+          'pay_batch_item_ids', open_correction_requests.plan_json#>'{selection,selected_pay_batch_item_ids}',
+          'expected_pay_batch_item_ids', open_correction_requests.plan_json#>'{selection,selected_pay_batch_item_ids}'
+        )
+      WHEN jsonb_typeof(open_correction_requests.plan_json#>'{selection,pay_batch_item_ids}') = 'array' THEN
+        COALESCE(open_correction_requests.selection_json, '{}'::jsonb)
+        || jsonb_build_object(
+          'pay_batch_item_ids', open_correction_requests.plan_json#>'{selection,pay_batch_item_ids}',
+          'expected_pay_batch_item_ids', open_correction_requests.plan_json#>'{selection,pay_batch_item_ids}'
+        )
+      ELSE
+        COALESCE(open_correction_requests.selection_json, '{}'::jsonb)
+    END,
+    false
+  ) AS selected_correction_items
+    ON selected_correction_items.pay_batch_id = open_correction_requests.pay_batch_id
+  JOIN public.pay_batch_items AS selected_pay_batch_items
+    ON selected_pay_batch_items.id = selected_correction_items.pay_batch_item_id
+  JOIN public.pay_batch_candidates AS selected_pay_batch_candidates
+    ON selected_pay_batch_candidates.id = selected_pay_batch_items.pay_batch_candidate_id
+  LEFT JOIN public.pay_bank_transfers AS selected_pay_bank_transfers
+    ON selected_pay_bank_transfers.id = selected_pay_batch_items.pay_bank_transfer_id
+  WHERE selected_pay_batch_items.timesheet_id = ANY(input_scope.ts_ids)
+    AND selected_pay_batch_items.timesheet_id IS NOT NULL
+    AND COALESCE(selected_pay_batch_items.is_voided, false) = false
+    AND upper(coalesce(selected_pay_batch_items.pay_channel, '')) IN ('PAYE','UMBRELLA')
+    AND selected_pay_batch_items.item_type IN ('SEGMENT_DELTA','EXPENSE_DELTA','ADJUSTMENT_DELTA','MILEAGE_DELTA')
+    AND public._pay_batch_item_source_reservation_amount_ex_vat(selected_pay_batch_items.id) IS NOT NULL
     AND NOT EXISTS (
       SELECT 1
       FROM public.pay_payment_correction_items AS applied_corrections
-      WHERE applied_corrections.pay_batch_item_id = public.pay_batch_items.id
+      WHERE applied_corrections.pay_batch_item_id = selected_pay_batch_items.id
         AND applied_corrections.status = 'APPLIED'
         AND applied_corrections.correction_item_kind IN ('PRE_BANK_CANCEL','NO_MONEY_UNWIND','SETTLED_REVERSAL')
     )
     AND NOT (
-      upper(btrim(coalesce(public.pay_batch_candidates.settlement_status, ''))) = 'SETTLED'
-      OR public.pay_batch_candidates.settled_at_utc IS NOT NULL
-      OR upper(btrim(coalesce(public.pay_bank_transfers.status, ''))) = 'COMPLETED'
-      OR public.pay_bank_transfers.completed_at_utc IS NOT NULL
-    )
-    AND (
-      upper(nullif(btrim(coalesce(public.pay_payment_correction_requests.selection_json->>'scope_type', '')), '')) = 'BATCH'
-      OR (
-        upper(nullif(btrim(coalesce(public.pay_payment_correction_requests.selection_json->>'scope_type', '')), '')) = 'CANDIDATES'
-        AND public.pay_batch_candidates.id::text IN (
-          SELECT jsonb_array_elements_text(
-            CASE
-              WHEN jsonb_typeof(public.pay_payment_correction_requests.selection_json->'pay_batch_candidate_ids') = 'array'
-                THEN public.pay_payment_correction_requests.selection_json->'pay_batch_candidate_ids'
-              ELSE '[]'::jsonb
-            END
-          )
-        )
-      )
-      OR (
-        upper(nullif(btrim(coalesce(public.pay_payment_correction_requests.selection_json->>'scope_type', '')), '')) = 'TRANSFER'
-        AND public.pay_batch_items.pay_bank_transfer_id::text IN (
-          SELECT jsonb_array_elements_text(
-            CASE
-              WHEN jsonb_typeof(public.pay_payment_correction_requests.selection_json->'pay_bank_transfer_ids') = 'array'
-                THEN public.pay_payment_correction_requests.selection_json->'pay_bank_transfer_ids'
-              ELSE '[]'::jsonb
-            END
-          )
-        )
-      )
-      OR (
-        upper(nullif(btrim(coalesce(public.pay_payment_correction_requests.selection_json->>'scope_type', '')), '')) = 'UMBRELLA_PAYMENT_GROUP'
-        AND NULLIF(btrim(coalesce(public.pay_payment_correction_requests.selection_json->>'umbrella_id', '')), '') IS NOT NULL
-        AND (
-          public.pay_batch_items.umbrella_id::text = public.pay_payment_correction_requests.selection_json->>'umbrella_id'
-          OR public.pay_bank_transfers.umbrella_id::text = public.pay_payment_correction_requests.selection_json->>'umbrella_id'
-          OR (
-            upper(coalesce(public.pay_bank_transfers.payee_entity_kind, '')) IN ('UMBRELLA','UMBRELLA_COMPANY')
-            AND public.pay_bank_transfers.payee_entity_id::text = public.pay_payment_correction_requests.selection_json->>'umbrella_id'
-          )
-        )
-        AND (
-          NULLIF(btrim(coalesce(public.pay_payment_correction_requests.selection_json->>'transfer_group_key', '')), '') IS NULL
-          OR public.pay_bank_transfers.transfer_group_key = public.pay_payment_correction_requests.selection_json->>'transfer_group_key'
-        )
-        AND (
-          jsonb_typeof(public.pay_payment_correction_requests.selection_json->'pay_bank_transfer_ids') IS DISTINCT FROM 'array'
-          OR public.pay_batch_items.pay_bank_transfer_id::text IN (
-            SELECT jsonb_array_elements_text(public.pay_payment_correction_requests.selection_json->'pay_bank_transfer_ids')
-          )
-        )
-      )
+      upper(btrim(coalesce(selected_pay_batch_candidates.settlement_status, ''))) = 'SETTLED'
+      OR selected_pay_batch_candidates.settled_at_utc IS NOT NULL
+      OR upper(btrim(coalesce(selected_pay_bank_transfers.status, ''))) = 'COMPLETED'
+      OR selected_pay_bank_transfers.completed_at_utc IS NOT NULL
     )
 ),
 unresolved_terminal_failure_hold_item_ids AS (
@@ -491,10 +474,44 @@ reserved_keyed AS (
     UPPER(NULLIF(BTRIM(COALESCE(economic_components.key_type, '')), '')) AS key_type,
     NULLIF(BTRIM(COALESCE(economic_components.key_value, '')), '') AS key_value,
     ROUND(COALESCE(economic_components.source_amount_ex_vat, 0), 2) AS amount_ex_vat,
-    ROUND(COALESCE(economic_components.source_amount_ex_vat, 0), 2) AS amount_inc_vat
+    ROUND(
+      COALESCE(
+        (
+          SELECT
+            ABS(NULLIF(BTRIM(reserved_source_inc_values.source_inc_text), '')::numeric)
+          FROM (
+            VALUES
+              (row_to_json(economic_components)->>'source_amount_inc_vat'),
+              (row_to_json(economic_components)->>'source_pay_inc_vat'),
+              (reserved_pay_batch_items.frozen_source_basis_json->>'source_amount_inc_vat'),
+              (reserved_pay_batch_items.frozen_source_basis_json->>'source_pay_inc_vat'),
+              (reserved_pay_batch_items.frozen_source_basis_json->>'pay_inc_vat'),
+              (reserved_pay_batch_items.frozen_source_basis_json->>'amount_inc_vat'),
+              (reserved_pay_batch_items.frozen_component_snapshot_json->>'source_amount_inc_vat'),
+              (reserved_pay_batch_items.frozen_component_snapshot_json->>'source_pay_inc_vat'),
+              (reserved_pay_batch_items.frozen_component_snapshot_json->>'source_entitlement_amount_inc_vat'),
+              (reserved_pay_batch_items.frozen_component_snapshot_json->>'source_reservation_amount_inc_vat'),
+              (reserved_pay_batch_items.frozen_component_snapshot_json#>>'{source_basis_json,source_amount_inc_vat}'),
+              (reserved_pay_batch_items.frozen_component_snapshot_json#>>'{source_basis_json,source_pay_inc_vat}'),
+              (reserved_pay_batch_items.frozen_component_snapshot_json#>>'{source_basis_json,amount_inc_vat}'),
+              (reserved_pay_batch_items.frozen_resolution_payload_json->>'source_amount_inc_vat'),
+              (reserved_pay_batch_items.frozen_resolution_payload_json->>'source_pay_inc_vat'),
+              (reserved_pay_batch_items.frozen_resolution_result_json->>'source_amount_inc_vat'),
+              (reserved_pay_batch_items.frozen_resolution_result_json->>'source_pay_inc_vat')
+          ) AS reserved_source_inc_values(source_inc_text)
+          WHERE NULLIF(BTRIM(reserved_source_inc_values.source_inc_text), '') IS NOT NULL
+            AND BTRIM(reserved_source_inc_values.source_inc_text) ~ '^-?[0-9]+(\.[0-9]+)?$'
+          LIMIT 1
+        ),
+        economic_components.source_amount_ex_vat
+      ),
+      2
+    ) AS amount_inc_vat
   FROM active_item_ids AS active_items
   JOIN LATERAL public._pay_batch_item_economic_components(NULL::uuid, ARRAY[active_items.pay_batch_item_id]::uuid[]) AS economic_components
     ON true
+  JOIN public.pay_batch_items AS reserved_pay_batch_items
+    ON reserved_pay_batch_items.id = active_items.pay_batch_item_id
   WHERE economic_components.item_type IN ('SEGMENT_DELTA','EXPENSE_DELTA','ADJUSTMENT_DELTA','MILEAGE_DELTA')
     AND economic_components.key_resolution_failure_reason IS NULL
     AND economic_components.source_amount_ex_vat IS NOT NULL
@@ -527,6 +544,9 @@ SELECT
   reserved_components.amount_inc_vat
 FROM reserved_components;
 $$;
+
+
+
 
 
 CREATE OR REPLACE FUNCTION public._pay_outstanding_components(p_timesheet_ids uuid[])
