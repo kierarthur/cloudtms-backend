@@ -22224,6 +22224,7 @@ DROP FUNCTION IF EXISTS public.pay_remittance_queue_commit_stage(uuid, text, uui
 
 
 
+
 CREATE OR REPLACE FUNCTION public.pay_remittance_queue_commit_stage(
   p_pay_batch_id uuid,
   p_scope text,
@@ -23102,7 +23103,6 @@ $function$;
 
 
 
-
 DROP FUNCTION IF EXISTS public.pay_finance_payout_notice_queue_commit_stage(uuid, uuid);
 
 CREATE OR REPLACE FUNCTION public.pay_finance_payout_notice_queue_commit_stage(
@@ -23136,6 +23136,8 @@ declare
   v_first_label text := null;
   v_subject text := null;
   v_worker_message text := null;
+  v_queue_context jsonb := '{}'::jsonb;
+  v_queue_reference text := null;
 
   v_target_candidate_count integer := 0;
   v_ready_candidate_count integer := 0;
@@ -23302,8 +23304,11 @@ begin
           'REJECTED',
           'CANCELLED',
           'CANCELED',
+          'SUBMISSION_FAILED',
+          'FAILED_BEFORE_COMMIT',
           'RETURNED',
           'REVERTED',
+          'VOIDED',
           'PENDING',
           'PROCESSING',
           'UNKNOWN',
@@ -23502,7 +23507,84 @@ begin
           else 'A payment has been scheduled.'
         end;
 
-        v_work_job := coalesce(v_job, '{}'::jsonb) || jsonb_build_object('job_kind', 'PAYOUT_NOTICE');
+        v_queue_reference := 'payout_notice:pay_batch:' || p_pay_batch_id::text || ':PAYOUT_NOTICE:CANDIDATE:' || v_candidate_id::text;
+
+        SELECT jsonb_build_object(
+          'context_kind', 'pay_batches',
+          'context_id', p_pay_batch_id::text,
+          'reference', v_queue_reference,
+          'recipient_kind', 'CANDIDATE',
+          'recipient_id', v_candidate_id::text,
+          'scope_kind', 'PAYOUT_NOTICE_CANDIDATE',
+          'pay_batch_id', p_pay_batch_id::text,
+          'candidate_id', v_candidate_id::text,
+          'finance_case_ids', COALESCE(
+            (
+              SELECT jsonb_agg(DISTINCT public_tmp_payout_notice_target_items.finance_case_id::text)
+              FROM pg_temp.tmp_payout_notice_target_items AS public_tmp_payout_notice_target_items
+              WHERE public_tmp_payout_notice_target_items.candidate_id = v_candidate_id
+            ),
+            '[]'::jsonb
+          ),
+          'pay_batch_item_ids', COALESCE(
+            (
+              SELECT jsonb_agg(DISTINCT public_pay_batch_items_scope.id::text)
+              FROM public.pay_batch_items AS public_pay_batch_items_scope
+              JOIN public.pay_batch_candidates AS public_pay_batch_candidates_scope
+                ON public_pay_batch_candidates_scope.id = public_pay_batch_items_scope.pay_batch_candidate_id
+              JOIN pg_temp.tmp_payout_notice_target_items AS public_tmp_payout_notice_items_scope
+                ON public_tmp_payout_notice_items_scope.candidate_id = public_pay_batch_candidates_scope.candidate_id
+               AND public_tmp_payout_notice_items_scope.finance_case_id = public_pay_batch_items_scope.finance_case_id
+              WHERE public_pay_batch_candidates_scope.pay_batch_id = p_pay_batch_id
+                AND public_pay_batch_candidates_scope.candidate_id = v_candidate_id
+                AND COALESCE(public_pay_batch_items_scope.is_voided, false) = false
+                AND public_pay_batch_items_scope.item_type IN ('LOAN_PAYOUT', 'MANUAL_CREDIT_PAYOUT')
+                AND NOT EXISTS (
+                  SELECT 1
+                  FROM public.pay_payment_correction_items AS public_pay_payment_correction_items_scope
+                  WHERE public_pay_payment_correction_items_scope.pay_batch_item_id = public_pay_batch_items_scope.id
+                    AND public_pay_payment_correction_items_scope.status = 'APPLIED'
+                    AND public_pay_payment_correction_items_scope.correction_item_kind IN ('PRE_BANK_CANCEL','NO_MONEY_UNWIND','SETTLED_REVERSAL')
+                )
+            ),
+            '[]'::jsonb
+          ),
+          'pay_bank_transfer_ids', COALESCE(
+            (
+              SELECT jsonb_agg(DISTINCT public_pay_batch_items_transfer_scope.pay_bank_transfer_id::text)
+              FROM public.pay_batch_items AS public_pay_batch_items_transfer_scope
+              JOIN public.pay_batch_candidates AS public_pay_batch_candidates_transfer_scope
+                ON public_pay_batch_candidates_transfer_scope.id = public_pay_batch_items_transfer_scope.pay_batch_candidate_id
+              JOIN pg_temp.tmp_payout_notice_target_items AS public_tmp_payout_notice_transfer_scope
+                ON public_tmp_payout_notice_transfer_scope.candidate_id = public_pay_batch_candidates_transfer_scope.candidate_id
+               AND public_tmp_payout_notice_transfer_scope.finance_case_id = public_pay_batch_items_transfer_scope.finance_case_id
+              WHERE public_pay_batch_candidates_transfer_scope.pay_batch_id = p_pay_batch_id
+                AND public_pay_batch_candidates_transfer_scope.candidate_id = v_candidate_id
+                AND public_pay_batch_items_transfer_scope.pay_bank_transfer_id IS NOT NULL
+                AND COALESCE(public_pay_batch_items_transfer_scope.is_voided, false) = false
+                AND public_pay_batch_items_transfer_scope.item_type IN ('LOAN_PAYOUT', 'MANUAL_CREDIT_PAYOUT')
+                AND NOT EXISTS (
+                  SELECT 1
+                  FROM public.pay_payment_correction_items AS public_pay_payment_correction_transfer_scope
+                  WHERE public_pay_payment_correction_transfer_scope.pay_batch_item_id = public_pay_batch_items_transfer_scope.id
+                    AND public_pay_payment_correction_transfer_scope.status = 'APPLIED'
+                    AND public_pay_payment_correction_transfer_scope.correction_item_kind IN ('PRE_BANK_CANCEL','NO_MONEY_UNWIND','SETTLED_REVERSAL')
+                )
+            ),
+            '[]'::jsonb
+          )
+        )
+        INTO v_queue_context;
+
+        v_work_job := coalesce(v_job, '{}'::jsonb) || jsonb_build_object(
+          'job_kind', 'PAYOUT_NOTICE',
+          'context_kind', 'pay_batches',
+          'context_id', p_pay_batch_id::text,
+          'reference', v_queue_reference,
+          'recipient_kind', 'CANDIDATE',
+          'recipient_id', v_candidate_id::text,
+          'queue_context', COALESCE(v_queue_context, '{}'::jsonb)
+        );
         v_work_job := jsonb_set(v_work_job, '{items}', coalesce(v_pruned_job_items, '[]'::jsonb), true);
         v_work_job := jsonb_set(v_work_job, '{total_amount}', to_jsonb(coalesce(v_pruned_job_total, 0)), true);
         v_work_job := jsonb_set(v_work_job, '{subject}', to_jsonb(v_subject), true);
@@ -23668,7 +23750,6 @@ EXCEPTION
     RAISE;
 end;
 $function$;
-
 
 
 
