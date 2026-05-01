@@ -9399,8 +9399,6 @@ $function$;
 
 
 
-
-
 CREATE OR REPLACE FUNCTION public.pay_bank_event_ingest(
   p_event_json jsonb,
   p_actor_user_id uuid DEFAULT NULL::uuid
@@ -9465,6 +9463,26 @@ DECLARE
   v_admin_notice_result jsonb := NULL::jsonb;
   v_notice_kind text := 'BANK_FAILURE_DETECTED';
   v_exact_mapping_required_blocker jsonb := NULL::jsonb;
+
+  v_provider_state_upper text := NULL::text;
+  v_final_work_item_totals jsonb := jsonb_build_object(
+    'total', 0,
+    'applied', 0,
+    'skipped', 0,
+    'blocked', 0,
+    'failed_retryable', 0,
+    'failed_final', 0,
+    'pending', 0,
+    'processing', 0
+  );
+  v_work_total_count integer := 0;
+  v_work_applied_count integer := 0;
+  v_work_skipped_count integer := 0;
+  v_work_blocked_count integer := 0;
+  v_work_failed_retryable_count integer := 0;
+  v_work_failed_final_count integer := 0;
+  v_work_pending_count integer := 0;
+  v_work_processing_count integer := 0;
 BEGIN
   PERFORM public._imp_debug_audit(
     p_actor_user_id,
@@ -9598,6 +9616,8 @@ BEGIN
     WHEN v_normalised_state IN ('UNKNOWN', 'TIMEOUT', 'TIMED_OUT', 'TIMEDOUT', 'API_TIMEOUT') THEN 'UNKNOWN'
     ELSE 'UNKNOWN'
   END;
+
+  v_provider_state_upper := upper(btrim(coalesce(v_provider_state, '')));
 
   IF v_event_source NOT IN ('PROVIDER_WEBHOOK', 'PROVIDER_POLL', 'MANUAL_CONFIRM', 'MANUAL_EVIDENCE', 'SYSTEM') THEN
     v_event_source := CASE
@@ -9963,6 +9983,22 @@ BEGIN
           'latest_bank_event_at_utc', v_now
         )
       WHERE transfer_to_update.id = v_pay_bank_transfer_id;
+    ELSIF v_normalised_state IN ('SUBMITTED', 'PENDING', 'PROCESSING', 'UNKNOWN') THEN
+      UPDATE public.pay_bank_transfers AS transfer_to_update
+      SET
+        status = CASE
+          WHEN v_normalised_state = 'SUBMITTED' THEN 'PENDING'
+          WHEN v_normalised_state IN ('PENDING', 'PROCESSING', 'UNKNOWN') THEN v_normalised_state
+          ELSE transfer_to_update.status
+        END,
+        rail_state = COALESCE(v_provider_state, transfer_to_update.rail_state),
+        rail_tx_id = COALESCE(NULLIF(v_provider_reference, ''), transfer_to_update.rail_tx_id),
+        rail_meta_json = COALESCE(transfer_to_update.rail_meta_json, '{}'::jsonb) || jsonb_build_object(
+          'latest_bank_event_id', v_event_id,
+          'latest_bank_event_state', v_normalised_state,
+          'latest_bank_event_at_utc', v_now
+        )
+      WHERE transfer_to_update.id = v_pay_bank_transfer_id;
     END IF;
   END IF;
 
@@ -10029,6 +10065,88 @@ BEGIN
         'blocker', NULL::jsonb
       )
     );
+  END IF;
+
+  IF v_normalised_state IN ('SUBMITTED', 'PENDING', 'PROCESSING', 'UNKNOWN') THEN
+    IF v_mapping_status = 'MATCHED'
+       AND v_mapping_method IN (
+         'TRANSFER_ID',
+         'PROVIDER_EVENT_ID',
+         'PROVIDER_REFERENCE',
+         'REQUEST_ID',
+         'RAIL_TX_ID',
+         'PAYMENT_REFERENCE',
+         'MANUAL_TRANSFER_SELECTION'
+       )
+       AND v_provider_state_upper NOT IN ('TIMEOUT', 'TIMED_OUT', 'TIMEDOUT', 'API_TIMEOUT') THEN
+      v_classification := NULL::text;
+      v_correction_disposition := 'NO_CORRECTION_REQUIRED';
+      v_classification_result := jsonb_build_object(
+        'classification', NULL::text,
+        'reasons', jsonb_build_array('NON_TERMINAL_PROVIDER_STATE_NO_PAYMENT_CORRECTION_REQUIRED'),
+        'evidence', jsonb_build_object(
+          'mapping_status', v_mapping_status,
+          'mapping_method', v_mapping_method,
+          'normalised_state', v_normalised_state,
+          'provider_state', v_provider_state
+        ),
+        'counts', '{}'::jsonb,
+        'blockers', '[]'::jsonb,
+        'selected_amounts', '{}'::jsonb,
+        'safe_to_auto_apply', false
+      );
+
+      UPDATE public.pay_bank_transfer_events AS bank_event_to_update
+      SET
+        movement_classification = NULL::text,
+        correction_disposition = v_correction_disposition,
+        mapping_method = v_mapping_method
+      WHERE bank_event_to_update.id = v_event_id;
+
+      PERFORM public._imp_debug_audit(
+        p_actor_user_id,
+        'PAYMENT_BANK_EVENT_INGEST_NON_TERMINAL_NO_CORRECTION',
+        jsonb_build_object(
+          'event_id', v_event_id,
+          'pay_batch_id', v_pay_batch_id,
+          'pay_bank_transfer_id', v_pay_bank_transfer_id,
+          'normalised_state', v_normalised_state,
+          'mapping_status', v_mapping_status,
+          'mapping_method', v_mapping_method,
+          'correction_disposition', v_correction_disposition
+        ),
+        'pay_payment_correction',
+        v_event_id::text,
+        NULL::jsonb,
+        NULL::text,
+        NULL::text,
+        NULL::text
+      );
+
+      RETURN jsonb_build_object(
+        'ok', true,
+        'event_id', v_event_id,
+        'inserted', v_inserted_event,
+        'mapping_status', v_mapping_status,
+        'mapping_method', v_mapping_method,
+        'classification', NULL::text,
+        'correction_disposition', v_correction_disposition,
+        'correction_request_id', NULL::uuid,
+        'admin_notice_group_id', NULL::uuid,
+        'message', 'Provider state recorded; no correction action required yet.',
+        'selection_json', NULL::jsonb,
+        'classification_result', v_classification_result,
+        'auto_apply', jsonb_build_object(
+          'auto_setting', false,
+          'safe_to_auto_apply', false,
+          'request_start_result', NULL::jsonb,
+          'expand_result', NULL::jsonb,
+          'process_result', NULL::jsonb,
+          'final_work_item_totals', v_final_work_item_totals,
+          'blocker', NULL::jsonb
+        )
+      );
+    END IF;
   END IF;
 
   IF v_pay_bank_transfer_id IS NOT NULL THEN
@@ -10119,7 +10237,7 @@ BEGIN
     ELSE 'BANK_FAILURE_DETECTED'
   END;
 
-  IF v_normalised_state NOT IN ('FAILED', 'DECLINED', 'REJECTED', 'CANCELLED', 'RETURNED', 'REVERTED', 'UNKNOWN', 'PENDING', 'PROCESSING') THEN
+  IF v_normalised_state NOT IN ('FAILED', 'DECLINED', 'REJECTED', 'CANCELLED', 'RETURNED', 'REVERTED', 'SUBMITTED', 'UNKNOWN', 'PENDING', 'PROCESSING') THEN
     v_correction_disposition := 'NO_CORRECTION_REQUIRED';
   ELSIF v_classification IS NULL THEN
     v_correction_disposition := 'NO_CORRECTION_REQUIRED';
@@ -10163,9 +10281,82 @@ BEGIN
       IF v_correction_request_id IS NOT NULL THEN
         v_expand_result := public.pay_payment_correction_expand_work(v_correction_request_id, NULL::uuid);
         v_process_result := public.pay_payment_correction_process_chunk(v_correction_request_id, 50, 'bank-event-ingest');
-        v_correction_disposition := 'AUTO_APPLIED';
+
+        SELECT
+          count(*)::integer,
+          count(*) FILTER (WHERE correction_work_item.status = 'APPLIED')::integer,
+          count(*) FILTER (WHERE correction_work_item.status = 'SKIPPED')::integer,
+          count(*) FILTER (WHERE correction_work_item.status = 'BLOCKED')::integer,
+          count(*) FILTER (WHERE correction_work_item.status = 'FAILED_RETRYABLE')::integer,
+          count(*) FILTER (WHERE correction_work_item.status = 'FAILED_FINAL')::integer,
+          count(*) FILTER (WHERE correction_work_item.status = 'PENDING')::integer,
+          count(*) FILTER (WHERE correction_work_item.status = 'PROCESSING')::integer
+        INTO
+          v_work_total_count,
+          v_work_applied_count,
+          v_work_skipped_count,
+          v_work_blocked_count,
+          v_work_failed_retryable_count,
+          v_work_failed_final_count,
+          v_work_pending_count,
+          v_work_processing_count
+        FROM public.pay_payment_correction_work_items AS correction_work_item
+        WHERE correction_work_item.correction_request_id = v_correction_request_id;
+
+        v_final_work_item_totals := jsonb_build_object(
+          'total', COALESCE(v_work_total_count, 0),
+          'applied', COALESCE(v_work_applied_count, 0),
+          'skipped', COALESCE(v_work_skipped_count, 0),
+          'blocked', COALESCE(v_work_blocked_count, 0),
+          'failed_retryable', COALESCE(v_work_failed_retryable_count, 0),
+          'failed_final', COALESCE(v_work_failed_final_count, 0),
+          'pending', COALESCE(v_work_pending_count, 0),
+          'processing', COALESCE(v_work_processing_count, 0)
+        );
+
+        IF COALESCE(v_work_total_count, 0) <= 0 THEN
+          v_correction_disposition := 'FAILED';
+          v_exact_mapping_required_blocker := jsonb_build_object(
+            'code', 'AUTO_CORRECTION_NO_WORK_ITEMS_PROCESSED',
+            'message', 'Automatic payment correction created a request but no work items were available to apply.'
+          );
+        ELSIF COALESCE(v_work_blocked_count, 0) > 0 THEN
+          v_correction_disposition := 'BLOCKED';
+          v_exact_mapping_required_blocker := jsonb_build_object(
+            'code', 'AUTO_CORRECTION_WORK_ITEMS_BLOCKED',
+            'message', 'Automatic payment correction could not fully apply because one or more work items are blocked.',
+            'final_work_item_totals', v_final_work_item_totals
+          );
+        ELSIF COALESCE(v_work_failed_retryable_count, 0) > 0 OR COALESCE(v_work_failed_final_count, 0) > 0 THEN
+          v_correction_disposition := 'FAILED';
+          v_exact_mapping_required_blocker := jsonb_build_object(
+            'code', 'AUTO_CORRECTION_WORK_ITEMS_FAILED',
+            'message', 'Automatic payment correction could not fully apply because one or more work items failed.',
+            'final_work_item_totals', v_final_work_item_totals
+          );
+        ELSIF COALESCE(v_work_pending_count, 0) > 0 OR COALESCE(v_work_processing_count, 0) > 0 THEN
+          v_correction_disposition := 'ACTION_REQUIRED';
+          v_exact_mapping_required_blocker := jsonb_build_object(
+            'code', 'AUTO_CORRECTION_WORK_ITEMS_REMAIN_PENDING',
+            'message', 'Automatic payment correction created work items but did not finish all selected work in this run.',
+            'final_work_item_totals', v_final_work_item_totals
+          );
+        ELSIF COALESCE(v_work_applied_count, 0) + COALESCE(v_work_skipped_count, 0) = COALESCE(v_work_total_count, 0) THEN
+          v_correction_disposition := 'AUTO_APPLIED';
+        ELSE
+          v_correction_disposition := 'ACTION_REQUIRED';
+          v_exact_mapping_required_blocker := jsonb_build_object(
+            'code', 'AUTO_CORRECTION_WORK_ITEM_STATUS_UNRESOLVED',
+            'message', 'Automatic payment correction finished with unresolved work item status totals.',
+            'final_work_item_totals', v_final_work_item_totals
+          );
+        END IF;
       ELSE
         v_correction_disposition := 'BLOCKED';
+        v_exact_mapping_required_blocker := jsonb_build_object(
+          'code', 'AUTO_CORRECTION_REQUEST_NOT_CREATED',
+          'message', 'Automatic payment correction could not create a correction request.'
+        );
       END IF;
     EXCEPTION
       WHEN OTHERS THEN
@@ -10220,7 +10411,13 @@ BEGIN
         'provider_state', v_provider_state,
         'normalised_state', v_normalised_state,
         'amount', v_amount,
-        'currency', v_currency
+        'currency', v_currency,
+        'correction_request_id', CASE WHEN v_correction_request_id IS NULL THEN NULL ELSE v_correction_request_id::text END,
+        'request_start_result', COALESCE(v_request_start_result, '{}'::jsonb),
+        'expand_result', COALESCE(v_expand_result, '{}'::jsonb),
+        'process_result', COALESCE(v_process_result, '{}'::jsonb),
+        'final_work_item_totals', COALESCE(v_final_work_item_totals, '{}'::jsonb),
+        'blocker', v_exact_mapping_required_blocker
       )
     );
 
@@ -10277,6 +10474,7 @@ BEGIN
       'request_start_result', v_request_start_result,
       'expand_result', v_expand_result,
       'process_result', v_process_result,
+      'final_work_item_totals', v_final_work_item_totals,
       'blocker', v_exact_mapping_required_blocker
     )
   );
@@ -10302,7 +10500,6 @@ EXCEPTION
     RAISE;
 END;
 $function$;
-
 
 
 
