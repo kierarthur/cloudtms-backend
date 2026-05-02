@@ -1,3 +1,7 @@
+
+
+
+
 CREATE OR REPLACE FUNCTION public.bulk_process_dataset_v1(p_filters jsonb DEFAULT '{}'::jsonb)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -8,6 +12,11 @@ DECLARE
   v_filters jsonb := COALESCE(p_filters, '{}'::jsonb);
   v_show_weekly_manual boolean := TRUE;
   v_show_daily_manual boolean := TRUE;
+  v_bucket text := NULL;
+  v_limit_text text := NULL;
+  v_offset_text text := NULL;
+  v_limit integer := NULL;
+  v_offset integer := 0;
   v_out jsonb;
 BEGIN
   v_show_weekly_manual := CASE
@@ -19,6 +28,21 @@ BEGIN
     WHEN LOWER(NULLIF(BTRIM(COALESCE(v_filters->>'show_daily_manual', v_filters->>'showDailyManual', v_filters->>'show_daily', v_filters->>'showDaily', '')), '')) IN ('false', '0', 'no', 'n', 'off') THEN FALSE
     ELSE TRUE
   END;
+
+  v_bucket := UPPER(NULLIF(BTRIM(COALESCE(v_filters->>'bucket', v_filters->>'bulk_process_bucket', v_filters->>'bulkProcessBucket', '')), ''));
+  IF v_bucket NOT IN ('UNPROCESSED', 'PROCESSED') THEN
+    v_bucket := NULL;
+  END IF;
+
+  v_limit_text := NULLIF(BTRIM(COALESCE(v_filters->>'limit', v_filters->>'page_size', v_filters->>'pageSize', '')), '');
+  IF v_limit_text ~ '^[0-9]+$' THEN
+    v_limit := GREATEST(1, LEAST(v_limit_text::integer, 1000));
+  END IF;
+
+  v_offset_text := NULLIF(BTRIM(COALESCE(v_filters->>'offset', v_filters->>'page_offset', v_filters->>'pageOffset', '')), '');
+  IF v_offset_text ~ '^[0-9]+$' THEN
+    v_offset := GREATEST(v_offset_text::integer, 0);
+  END IF;
 
   WITH decision_rows AS (
     SELECT decision_result.row_json
@@ -38,14 +62,30 @@ BEGIN
     SELECT manual_rows.row_json
     FROM manual_rows
     WHERE UPPER(COALESCE(manual_rows.row_json->>'bulk_process_bucket', '')) = 'UNPROCESSED'
+      AND (v_bucket IS NULL OR v_bucket = 'UNPROCESSED')
+      AND COALESCE((manual_rows.row_json->>'can_process')::boolean, FALSE) = TRUE
   ),
   processed_rows AS (
     SELECT manual_rows.row_json
     FROM manual_rows
     WHERE UPPER(COALESCE(manual_rows.row_json->>'bulk_process_bucket', '')) = 'PROCESSED'
+      AND (v_bucket IS NULL OR v_bucket = 'PROCESSED')
       AND NULLIF(BTRIM(COALESCE(manual_rows.row_json->>'timesheet_id', '')), '') IS NOT NULL
-      AND COALESCE((manual_rows.row_json->>'locked')::boolean, FALSE) = FALSE
-      AND COALESCE((manual_rows.row_json->>'is_authorised')::boolean, FALSE) = FALSE
+      AND COALESCE((manual_rows.row_json->>'can_unprocess')::boolean, FALSE) = TRUE
+  ),
+  paged_unprocessed_rows AS (
+    SELECT unprocessed_rows.row_json
+    FROM unprocessed_rows
+    ORDER BY unprocessed_rows.row_json->>'week_ending_date', unprocessed_rows.row_json->>'client_name', unprocessed_rows.row_json->>'candidate_name', unprocessed_rows.row_json->>'row_key'
+    OFFSET v_offset
+    LIMIT COALESCE(v_limit, 2147483647)
+  ),
+  paged_processed_rows AS (
+    SELECT processed_rows.row_json
+    FROM processed_rows
+    ORDER BY processed_rows.row_json->>'week_ending_date', processed_rows.row_json->>'client_name', processed_rows.row_json->>'candidate_name', processed_rows.row_json->>'row_key'
+    OFFSET v_offset
+    LIMIT COALESCE(v_limit, 2147483647)
   ),
   counts AS (
     SELECT
@@ -58,7 +98,13 @@ BEGIN
       'candidate_id', NULLIF(BTRIM(COALESCE(v_filters->>'candidate_id', v_filters->>'candidateId', '')), ''),
       'client_id', NULLIF(BTRIM(COALESCE(v_filters->>'client_id', v_filters->>'clientId', '')), ''),
       'show_weekly_manual', v_show_weekly_manual,
-      'show_daily_manual', v_show_daily_manual
+      'show_daily_manual', v_show_daily_manual,
+      'bucket', v_bucket,
+      'date_from', NULLIF(BTRIM(COALESCE(v_filters->>'date_from', v_filters->>'dateFrom', v_filters->>'from_date', v_filters->>'fromDate', '')), ''),
+      'date_to', NULLIF(BTRIM(COALESCE(v_filters->>'date_to', v_filters->>'dateTo', v_filters->>'to_date', v_filters->>'toDate', '')), ''),
+      'week_ending_date', NULLIF(BTRIM(COALESCE(v_filters->>'week_ending_date', v_filters->>'weekEndingDate', v_filters->>'week_ending', v_filters->>'weekEnding', '')), ''),
+      'limit', v_limit,
+      'offset', v_offset
     ),
     'counts', JSONB_BUILD_OBJECT(
       'unprocessed', counts.unprocessed_count,
@@ -66,12 +112,12 @@ BEGIN
       'total', counts.unprocessed_count + counts.processed_count
     ),
     'unprocessed_rows', COALESCE((
-      SELECT JSONB_AGG(unprocessed_rows.row_json ORDER BY unprocessed_rows.row_json->>'week_ending_date', unprocessed_rows.row_json->>'client_name', unprocessed_rows.row_json->>'candidate_name', unprocessed_rows.row_json->>'row_key')
-      FROM unprocessed_rows
+      SELECT JSONB_AGG(paged_unprocessed_rows.row_json ORDER BY paged_unprocessed_rows.row_json->>'week_ending_date', paged_unprocessed_rows.row_json->>'client_name', paged_unprocessed_rows.row_json->>'candidate_name', paged_unprocessed_rows.row_json->>'row_key')
+      FROM paged_unprocessed_rows
     ), '[]'::jsonb),
     'processed_rows', COALESCE((
-      SELECT JSONB_AGG(processed_rows.row_json ORDER BY processed_rows.row_json->>'week_ending_date', processed_rows.row_json->>'client_name', processed_rows.row_json->>'candidate_name', processed_rows.row_json->>'row_key')
-      FROM processed_rows
+      SELECT JSONB_AGG(paged_processed_rows.row_json ORDER BY paged_processed_rows.row_json->>'week_ending_date', paged_processed_rows.row_json->>'client_name', paged_processed_rows.row_json->>'candidate_name', paged_processed_rows.row_json->>'row_key')
+      FROM paged_processed_rows
     ), '[]'::jsonb)
   )
   INTO v_out
@@ -83,7 +129,13 @@ BEGIN
       'candidate_id', NULLIF(BTRIM(COALESCE(v_filters->>'candidate_id', v_filters->>'candidateId', '')), ''),
       'client_id', NULLIF(BTRIM(COALESCE(v_filters->>'client_id', v_filters->>'clientId', '')), ''),
       'show_weekly_manual', v_show_weekly_manual,
-      'show_daily_manual', v_show_daily_manual
+      'show_daily_manual', v_show_daily_manual,
+      'bucket', v_bucket,
+      'date_from', NULLIF(BTRIM(COALESCE(v_filters->>'date_from', v_filters->>'dateFrom', v_filters->>'from_date', v_filters->>'fromDate', '')), ''),
+      'date_to', NULLIF(BTRIM(COALESCE(v_filters->>'date_to', v_filters->>'dateTo', v_filters->>'to_date', v_filters->>'toDate', '')), ''),
+      'week_ending_date', NULLIF(BTRIM(COALESCE(v_filters->>'week_ending_date', v_filters->>'weekEndingDate', v_filters->>'week_ending', v_filters->>'weekEnding', '')), ''),
+      'limit', v_limit,
+      'offset', v_offset
     ),
     'counts', JSONB_BUILD_OBJECT('unprocessed', 0, 'processed', 0, 'total', 0),
     'unprocessed_rows', '[]'::jsonb,
@@ -91,6 +143,10 @@ BEGIN
   ));
 END;
 $function$;
+
+
+
+
 
 CREATE OR REPLACE FUNCTION public.bulk_authorise_dataset_v1(p_filters jsonb DEFAULT '{}'::jsonb)
  RETURNS jsonb
@@ -108,6 +164,10 @@ DECLARE
   v_show_electronic boolean := TRUE;
   v_validation_already boolean := TRUE;
   v_validation_awaiting boolean := TRUE;
+  v_limit_text text := NULL;
+  v_offset_text text := NULL;
+  v_limit integer := NULL;
+  v_offset integer := 0;
   v_out jsonb;
 BEGIN
   v_classification := UPPER(NULLIF(BTRIM(COALESCE(v_filters->>'classification', v_filters->>'classificationRaw', '')), ''));
@@ -150,6 +210,16 @@ BEGIN
     ELSE TRUE
   END;
 
+  v_limit_text := NULLIF(BTRIM(COALESCE(v_filters->>'limit', v_filters->>'page_size', v_filters->>'pageSize', '')), '');
+  IF v_limit_text ~ '^[0-9]+$' THEN
+    v_limit := GREATEST(1, LEAST(v_limit_text::integer, 1000));
+  END IF;
+
+  v_offset_text := NULLIF(BTRIM(COALESCE(v_filters->>'offset', v_filters->>'page_offset', v_filters->>'pageOffset', '')), '');
+  IF v_offset_text ~ '^[0-9]+$' THEN
+    v_offset := GREATEST(v_offset_text::integer, 0);
+  END IF;
+
   WITH decision_rows AS (
     SELECT decision_result.row_json
     FROM public.bulk_timesheet_row_decision_v1(v_filters || JSONB_BUILD_OBJECT('dataset_mode', 'authorise')) AS decision_result(row_json)
@@ -191,6 +261,13 @@ BEGIN
         )
       )
   ),
+  paged_visible_rows AS (
+    SELECT visible_rows.row_json
+    FROM visible_rows
+    ORDER BY visible_rows.row_json->>'week_ending_date', visible_rows.row_json->>'client_name', visible_rows.row_json->>'candidate_name', visible_rows.row_json->>'row_key'
+    OFFSET v_offset
+    LIMIT COALESCE(v_limit, 2147483647)
+  ),
   counts AS (
     SELECT
       (SELECT COUNT(*)::integer FROM visible_rows) AS total_count,
@@ -217,7 +294,12 @@ BEGIN
       'show_qr', v_show_qr,
       'show_electronic', v_show_electronic,
       'validation_already', v_validation_already,
-      'validation_awaiting', v_validation_awaiting
+      'validation_awaiting', v_validation_awaiting,
+      'date_from', NULLIF(BTRIM(COALESCE(v_filters->>'date_from', v_filters->>'dateFrom', v_filters->>'from_date', v_filters->>'fromDate', '')), ''),
+      'date_to', NULLIF(BTRIM(COALESCE(v_filters->>'date_to', v_filters->>'dateTo', v_filters->>'to_date', v_filters->>'toDate', '')), ''),
+      'week_ending_date', NULLIF(BTRIM(COALESCE(v_filters->>'week_ending_date', v_filters->>'weekEndingDate', v_filters->>'week_ending', v_filters->>'weekEnding', '')), ''),
+      'limit', v_limit,
+      'offset', v_offset
     ),
     'counts', JSONB_BUILD_OBJECT(
       'total', counts.total_count,
@@ -235,12 +317,19 @@ BEGIN
       ),
       'validation', JSONB_BUILD_OBJECT(
         'already_validated', counts.already_validated_count,
-        'awaiting_validation', counts.awaiting_validation_count
+        'awaiting_validation', counts.awaiting_validation_count,
+        'scope', 'visible_rows_after_classification_and_toggle_filters'
+      ),
+      'scope', JSONB_BUILD_OBJECT(
+        'total', 'visible_rows_after_classification_and_toggle_filters',
+        'by_classification', 'eligible_rows_before_classification_filter',
+        'timesheets_by_type', 'visible_rows_after_classification_and_toggle_filters',
+        'validation', 'visible_rows_after_classification_and_toggle_filters'
       )
     ),
     'rows', COALESCE((
-      SELECT JSONB_AGG(visible_rows.row_json ORDER BY visible_rows.row_json->>'week_ending_date', visible_rows.row_json->>'client_name', visible_rows.row_json->>'candidate_name', visible_rows.row_json->>'row_key')
-      FROM visible_rows
+      SELECT JSONB_AGG(paged_visible_rows.row_json ORDER BY paged_visible_rows.row_json->>'week_ending_date', paged_visible_rows.row_json->>'client_name', paged_visible_rows.row_json->>'candidate_name', paged_visible_rows.row_json->>'row_key')
+      FROM paged_visible_rows
     ), '[]'::jsonb)
   )
   INTO v_out
@@ -258,7 +347,12 @@ BEGIN
       'show_qr', v_show_qr,
       'show_electronic', v_show_electronic,
       'validation_already', v_validation_already,
-      'validation_awaiting', v_validation_awaiting
+      'validation_awaiting', v_validation_awaiting,
+      'date_from', NULLIF(BTRIM(COALESCE(v_filters->>'date_from', v_filters->>'dateFrom', v_filters->>'from_date', v_filters->>'fromDate', '')), ''),
+      'date_to', NULLIF(BTRIM(COALESCE(v_filters->>'date_to', v_filters->>'dateTo', v_filters->>'to_date', v_filters->>'toDate', '')), ''),
+      'week_ending_date', NULLIF(BTRIM(COALESCE(v_filters->>'week_ending_date', v_filters->>'weekEndingDate', v_filters->>'week_ending', v_filters->>'weekEnding', '')), ''),
+      'limit', v_limit,
+      'offset', v_offset
     ),
     'counts', JSONB_BUILD_OBJECT(
       'total', 0,
@@ -272,6 +366,7 @@ BEGIN
   ));
 END;
 $function$;
+
 
 
 CREATE OR REPLACE FUNCTION public.bulk_timesheet_row_decision_v1(p_filters jsonb DEFAULT '{}'::jsonb)
@@ -291,6 +386,14 @@ DECLARE
   v_timesheet_ids uuid[] := NULL;
   v_contract_week_ids uuid[] := NULL;
   v_row_keys text[] := NULL;
+  v_dataset_mode text := NULL;
+  v_period_filter text := NULL;
+  v_date_from_text text := NULL;
+  v_date_to_text text := NULL;
+  v_week_ending_text text := NULL;
+  v_date_from date := NULL;
+  v_date_to date := NULL;
+  v_week_ending_date date := NULL;
   v_uuid_re text := '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$';
 BEGIN
   v_q := NULLIF(BTRIM(COALESCE(v_filters->>'q', v_filters->>'candidate_text', v_filters->>'candidateText', v_filters->>'name', '')), '');
@@ -352,8 +455,84 @@ BEGIN
     v_row_keys := ARRAY[NULLIF(BTRIM(v_filters->>'row_key'), '')];
   END IF;
 
+  v_dataset_mode := UPPER(NULLIF(BTRIM(COALESCE(v_filters->>'dataset_mode', v_filters->>'datasetMode', '')), ''));
+  IF v_dataset_mode NOT IN ('PROCESS', 'AUTHORISE', 'ROW_CONTEXT') THEN
+    v_dataset_mode := NULL;
+  END IF;
+
+  v_period_filter := UPPER(NULLIF(BTRIM(COALESCE(v_filters->>'period_type', v_filters->>'periodType', v_filters->>'sheet_scope', v_filters->>'sheetScope', '')), ''));
+  IF v_period_filter NOT IN ('DAILY', 'WEEKLY') THEN
+    v_period_filter := NULL;
+  END IF;
+
+  v_date_from_text := NULLIF(BTRIM(COALESCE(v_filters->>'date_from', v_filters->>'dateFrom', v_filters->>'from_date', v_filters->>'fromDate', '')), '');
+  v_date_to_text := NULLIF(BTRIM(COALESCE(v_filters->>'date_to', v_filters->>'dateTo', v_filters->>'to_date', v_filters->>'toDate', '')), '');
+  v_week_ending_text := NULLIF(BTRIM(COALESCE(v_filters->>'week_ending_date', v_filters->>'weekEndingDate', v_filters->>'week_ending', v_filters->>'weekEnding', '')), '');
+
+  BEGIN
+    IF v_date_from_text IS NOT NULL THEN
+      v_date_from := v_date_from_text::date;
+    END IF;
+  EXCEPTION WHEN OTHERS THEN
+    v_date_from := NULL;
+  END;
+
+  BEGIN
+    IF v_date_to_text IS NOT NULL THEN
+      v_date_to := v_date_to_text::date;
+    END IF;
+  EXCEPTION WHEN OTHERS THEN
+    v_date_to := NULL;
+  END;
+
+  BEGIN
+    IF v_week_ending_text IS NOT NULL THEN
+      v_week_ending_date := v_week_ending_text::date;
+    END IF;
+  EXCEPTION WHEN OTHERS THEN
+    v_week_ending_date := NULL;
+  END;
+
   RETURN QUERY
-  WITH tf_ranked AS (
+  WITH base_scope AS (
+    SELECT vb0.*
+    FROM public.v_timesheets_summary_base AS vb0
+    WHERE (v_candidate_id IS NULL OR vb0.candidate_id = v_candidate_id)
+      AND (v_client_id IS NULL OR vb0.client_id = v_client_id)
+      AND (v_timesheet_ids IS NULL OR vb0.timesheet_id = ANY(v_timesheet_ids))
+      AND (v_contract_week_ids IS NULL OR vb0.contract_week_id = ANY(v_contract_week_ids))
+      AND (
+        v_row_keys IS NULL
+        OR CASE
+             WHEN vb0.timesheet_id IS NOT NULL THEN 'timesheet:' || vb0.timesheet_id::text
+             WHEN vb0.contract_week_id IS NOT NULL THEN 'contract_week:' || vb0.contract_week_id::text
+             ELSE ''
+           END = ANY(v_row_keys)
+      )
+      AND (
+        v_week_ending_date IS NULL
+        OR COALESCE(vb0.contract_week_ending_date, vb0.week_ending_date) = v_week_ending_date
+      )
+      AND (
+        v_date_from IS NULL
+        OR COALESCE(vb0.contract_week_ending_date, vb0.week_ending_date) >= v_date_from
+      )
+      AND (
+        v_date_to IS NULL
+        OR COALESCE(vb0.contract_week_ending_date, vb0.week_ending_date) <= v_date_to
+      )
+      AND (
+        v_period_filter IS NULL
+        OR UPPER(COALESCE(vb0.sheet_scope::text, CASE WHEN UPPER(COALESCE(vb0.route_type, '')) LIKE 'DAILY\_%' ESCAPE '\' THEN 'DAILY' ELSE 'WEEKLY' END)) = v_period_filter
+      )
+  ),
+  base_ids AS (
+    SELECT DISTINCT
+      base_scope.timesheet_id,
+      base_scope.contract_week_id
+    FROM base_scope
+  ),
+  tf_ranked AS (
     SELECT
       tf0.id,
       tf0.timesheet_id,
@@ -419,6 +598,11 @@ BEGIN
       ) AS rn
     FROM public.timesheets_financials AS tf0
     WHERE tf0.is_current = TRUE
+      AND EXISTS (
+        SELECT 1
+        FROM base_scope AS bs_tf
+        WHERE bs_tf.timesheet_id = tf0.timesheet_id
+      )
   ),
   tf_latest AS (
     SELECT
@@ -498,6 +682,11 @@ BEGIN
       ) AS rn
     FROM public.timesheet_validations AS tv0
     WHERE tv0.timesheet_id IS NOT NULL
+      AND EXISTS (
+        SELECT 1
+        FROM base_scope AS bs_tv
+        WHERE bs_tv.timesheet_id = tv0.timesheet_id
+      )
   ),
   tv_latest AS (
     SELECT
@@ -526,6 +715,11 @@ BEGIN
       ) AS rn
     FROM public.timesheet_evidence AS te0
     WHERE te0.timesheet_id IS NOT NULL
+      AND EXISTS (
+        SELECT 1
+        FROM base_scope AS bs_te
+        WHERE bs_te.timesheet_id = te0.timesheet_id
+      )
   ),
   te_primary AS (
     SELECT
@@ -545,8 +739,15 @@ BEGIN
       COALESCE(BOOL_OR(UPPER(COALESCE(te2.kind, '')) = 'MILEAGE'), FALSE) AS has_mileage_evidence,
       COALESCE(BOOL_OR(UPPER(COALESCE(te2.kind, '')) = 'TRAVEL'), FALSE) AS has_travel_evidence,
       COALESCE(BOOL_OR(UPPER(COALESCE(te2.kind, '')) = 'ACCOMMODATION'), FALSE) AS has_accommodation_evidence,
-      COALESCE(BOOL_OR(UPPER(COALESCE(te2.kind, '')) = 'OTHER'), FALSE) AS has_other_evidence
+      COALESCE(BOOL_OR(UPPER(COALESCE(te2.kind, '')) = 'OTHER'), FALSE) AS has_other_evidence,
+      MAX(te2.created_at) AS evidence_updated_at
     FROM public.timesheet_evidence AS te2
+    WHERE te2.timesheet_id IS NOT NULL
+      AND EXISTS (
+        SELECT 1
+        FROM base_scope AS bs_te2
+        WHERE bs_te2.timesheet_id = te2.timesheet_id
+      )
     GROUP BY te2.timesheet_id
   ),
   mq_ranked AS (
@@ -566,6 +767,11 @@ BEGIN
     FROM public.manual_timesheet_queue AS mq0
     WHERE UPPER(COALESCE(mq0.status, '')) = 'STAGED'
       AND NULLIF(BTRIM(COALESCE(mq0.meta_json->>'contract_week_id', '')), '') IS NOT NULL
+      AND EXISTS (
+        SELECT 1
+        FROM base_scope AS bs_mq
+        WHERE bs_mq.contract_week_id::text = NULLIF(BTRIM(COALESCE(mq0.meta_json->>'contract_week_id', '')), '')
+      )
   ),
   mq_primary AS (
     SELECT
@@ -581,7 +787,8 @@ BEGIN
   mq_agg AS (
     SELECT
       mq2.contract_week_id_text,
-      COUNT(mq2.id)::integer AS queue_staged_count
+      COUNT(mq2.id)::integer AS queue_staged_count,
+      MAX(mq2.uploaded_at_utc) AS queue_updated_at
     FROM mq_ranked AS mq2
     GROUP BY mq2.contract_week_id_text
   ),
@@ -752,9 +959,11 @@ BEGIN
       tf.invoice_breakdown_json AS invoice_breakdown_json,
       tf.policy_snapshot_json AS policy_snapshot_json,
       tf.updated_at AS tsfin_updated_at,
+      tv.updated_at AS validation_updated_at,
       tv.pre_validated AS validation_pre_validated,
       tv.reason_code AS validation_reason_code,
       tv.validated_at_utc AS validation_validated_at_utc,
+      te.evidence_updated_at AS evidence_updated_at,
       te.attached_evidence_count AS attached_evidence_count,
       COALESCE(te.has_timesheet_evidence, FALSE) AS ev_timesheet,
       COALESCE(te.has_mileage_evidence, FALSE) AS ev_mileage,
@@ -766,6 +975,7 @@ BEGIN
       tep.display_name AS primary_evidence_display_name,
       tep.storage_key AS primary_evidence_storage_key,
       COALESCE(mqa.queue_staged_count, 0) AS queue_staged_count,
+      mqa.queue_updated_at AS queue_updated_at,
       mqp.id AS primary_queue_id,
       mqp.r2_key AS primary_queue_r2_key,
       mqp.original_filename AS primary_queue_original_filename,
@@ -810,7 +1020,7 @@ BEGIN
         ) AS invoice_segment(segment_value)
         WHERE NULLIF(BTRIM(COALESCE(invoice_segment.segment_value->>'invoice_locked_invoice_id', '')), '') IS NOT NULL
       ) AS has_segment_invoice_lock
-    FROM public.v_timesheets_summary_base AS vb
+    FROM base_scope AS vb
     LEFT JOIN public.timesheets AS ts
       ON ts.timesheet_id = vb.timesheet_id
      AND ts.is_current = TRUE
@@ -1239,15 +1449,50 @@ BEGIN
         COALESCE(dc.timesheet_updated_at::text, ''),
         COALESCE(dc.contract_week_updated_at::text, ''),
         COALESCE(dc.tsfin_updated_at::text, ''),
+        COALESCE(dc.validation_updated_at::text, ''),
+        COALESCE(dc.evidence_updated_at::text, ''),
+        COALESCE(dc.queue_updated_at::text, ''),
         COALESCE(dc.processing_status, ''),
         COALESCE(dc.summary_stage, ''),
         COALESCE(dc.tools_stage, ''),
         COALESCE(dc.authorised_at_server::text, ''),
         COALESCE(dc.authorised_at_utc::text, ''),
+        COALESCE(dc.is_authorised::text, ''),
+        COALESCE(dc.locked::text, ''),
+        COALESCE(dc.locked_by_invoice_id::text, ''),
+        COALESCE(dc.has_segment_invoice_lock::text, ''),
+        COALESCE(dc.invoice_segments_locked::text, ''),
+        COALESCE(dc.invoice_is_paid::text, ''),
+        COALESCE(dc.paid_at_utc::text, ''),
+        COALESCE(dc.route_family, ''),
+        COALESCE(dc.route_subfamily, ''),
+        COALESCE(dc.submission_mode, ''),
+        COALESCE(dc.cw_submission_mode_snapshot, ''),
+        COALESCE(dc.qr_status_upper, ''),
+        COALESCE(dc.qr_generated_at::text, ''),
+        COALESCE(dc.qr_scanned_at::text, ''),
+        COALESCE(dc.qr_signed_at_utc::text, ''),
+        COALESCE(dc.validation_status, ''),
+        COALESCE(dc.validation_pre_validated::text, ''),
+        COALESCE(dc.validation_reason_code, ''),
+        COALESCE(dc.validation_validated_at_utc::text, ''),
+        COALESCE((dc.hr_validation_required_for_invoice = TRUE AND dc.hr_validation_satisfied = FALSE)::text, ''),
+        COALESCE(dc.issue_codes::text, ''),
+        COALESCE(dc.attached_evidence_count::text, ''),
+        COALESCE(dc.queue_staged_count::text, ''),
+        COALESCE(dc.primary_evidence_storage_key, ''),
         COALESCE(dc.manual_pdf_r2_key, ''),
         COALESCE(dc.uploaded_pdf_r2_key, ''),
         COALESCE(dc.generated_pdf_at_utc::text, ''),
-        COALESCE(dc.primary_queue_r2_key, '')
+        COALESCE(dc.primary_queue_r2_key, ''),
+        COALESCE(dc.client_requires_hr::text, ''),
+        COALESCE(dc.client_no_timesheet_required::text, ''),
+        COALESCE(dc.client_autoprocess_hr::text, ''),
+        COALESCE(dc.client_is_nhsp::text, ''),
+        COALESCE(dc.total_hours::text, ''),
+        COALESCE(dc.total_pay_ex_vat::text, ''),
+        COALESCE(dc.total_charge_ex_vat::text, ''),
+        COALESCE(dc.margin_ex_vat::text, '')
       )) AS row_signature
     FROM decisions AS dc
   ),
@@ -1430,11 +1675,52 @@ BEGIN
         'hr_validation_satisfied', ar.hr_validation_satisfied,
         'hr_validation_awaiting', ar.hr_validation_awaiting,
         'issue_codes', ar.issue_codes,
-        'has_deviation_marker', FALSE,
-        'deviation_marker_reason', NULL::text,
-        'nhsp_highlight_red', FALSE,
-        'nhsp_highlight_reason', NULL::text,
-        'nhsp_deviation_pct', NULL::numeric,
+        'has_deviation_marker', (
+          COALESCE(ar.has_rate_issue, FALSE)
+          OR COALESCE(ar.has_pay_channel_issue, FALSE)
+          OR NULLIF(BTRIM(COALESCE(ar.validation_reason_code, '')), '') IS NOT NULL
+          OR jsonb_typeof(ar.hr_crosscheck_issues) IN ('array', 'object')
+          OR (
+            NULLIF(BTRIM(COALESCE(ar.hr_crosscheck_status, '')), '') IS NOT NULL
+            AND UPPER(COALESCE(ar.hr_crosscheck_status, '')) NOT IN ('OK', 'VALID', 'VALIDATION_OK', 'MATCHED', 'PASS', 'PASSED')
+          )
+        ),
+        'deviation_marker_reason', CASE
+          WHEN COALESCE(ar.has_rate_issue, FALSE) THEN 'RATE_ISSUE'
+          WHEN COALESCE(ar.has_pay_channel_issue, FALSE) THEN 'PAY_CHANNEL_ISSUE'
+          WHEN NULLIF(BTRIM(COALESCE(ar.validation_reason_code, '')), '') IS NOT NULL THEN ar.validation_reason_code
+          WHEN NULLIF(BTRIM(COALESCE(ar.hr_crosscheck_status, '')), '') IS NOT NULL
+           AND UPPER(COALESCE(ar.hr_crosscheck_status, '')) NOT IN ('OK', 'VALID', 'VALIDATION_OK', 'MATCHED', 'PASS', 'PASSED') THEN ar.hr_crosscheck_status
+          WHEN jsonb_typeof(ar.hr_crosscheck_issues) IN ('array', 'object') THEN 'HR_CROSSCHECK_ISSUE'
+          ELSE NULL::text
+        END,
+        'nhsp_highlight_red', (
+          (ar.route_type_upper IN ('WEEKLY_NHSP', 'WEEKLY_NHSP_ADJUSTMENT') OR COALESCE(ar.client_is_nhsp, FALSE) = TRUE OR COALESCE(ar.contract_is_nhsp, FALSE) = TRUE)
+          AND (
+            COALESCE(ar.has_rate_issue, FALSE)
+            OR COALESCE(ar.has_pay_channel_issue, FALSE)
+            OR COALESCE(ar.nhsp_shift_deferred_count, 0) > 0
+            OR NULLIF(BTRIM(COALESCE(ar.validation_reason_code, '')), '') IS NOT NULL
+            OR (
+              NULLIF(BTRIM(COALESCE(ar.hr_crosscheck_status, '')), '') IS NOT NULL
+              AND UPPER(COALESCE(ar.hr_crosscheck_status, '')) NOT IN ('OK', 'VALID', 'VALIDATION_OK', 'MATCHED', 'PASS', 'PASSED')
+            )
+          )
+        ),
+        'nhsp_highlight_reason', CASE
+          WHEN NOT (ar.route_type_upper IN ('WEEKLY_NHSP', 'WEEKLY_NHSP_ADJUSTMENT') OR COALESCE(ar.client_is_nhsp, FALSE) = TRUE OR COALESCE(ar.contract_is_nhsp, FALSE) = TRUE) THEN NULL::text
+          WHEN COALESCE(ar.nhsp_shift_deferred_count, 0) > 0 THEN 'DEFERRED_NHSP_SHIFTS'
+          WHEN COALESCE(ar.has_rate_issue, FALSE) THEN 'RATE_ISSUE'
+          WHEN COALESCE(ar.has_pay_channel_issue, FALSE) THEN 'PAY_CHANNEL_ISSUE'
+          WHEN NULLIF(BTRIM(COALESCE(ar.validation_reason_code, '')), '') IS NOT NULL THEN ar.validation_reason_code
+          WHEN NULLIF(BTRIM(COALESCE(ar.hr_crosscheck_status, '')), '') IS NOT NULL
+           AND UPPER(COALESCE(ar.hr_crosscheck_status, '')) NOT IN ('OK', 'VALID', 'VALIDATION_OK', 'MATCHED', 'PASS', 'PASSED') THEN ar.hr_crosscheck_status
+          ELSE NULL::text
+        END,
+        'nhsp_deviation_pct', CASE
+          WHEN COALESCE(ar.nhsp_shift_count, 0) > 0 THEN ROUND((COALESCE(ar.nhsp_shift_deferred_count, 0)::numeric / NULLIF(ar.nhsp_shift_count::numeric, 0)) * 100, 2)
+          ELSE NULL::numeric
+        END,
         'nhsp_is_ad_hoc', ar.contract_is_ad_hoc
       )
       || JSONB_BUILD_OBJECT(
@@ -1513,16 +1799,21 @@ BEGIN
           'evidence_badges', ar.evidence_badges
         ),
         'row_patch', JSONB_BUILD_OBJECT(
+          'previous_row_key', NULL::text,
           'row_key', ar.row_key,
+          'new_row_key', ar.row_key,
           'stable_row_id', ar.stable_row_id_text,
           'timesheet_id', ar.timesheet_id,
           'current_timesheet_id', ar.timesheet_id,
           'expected_timesheet_id', ar.timesheet_id,
           'contract_week_id', ar.contract_week_id,
           'row_signature', ar.row_signature,
+          'previous_row_signature', NULL::text,
           'bulk_process_bucket', ar.bulk_process_bucket,
+          'previous_bulk_process_bucket', NULL::text,
           'bulk_authorise_classification', ar.bulk_authorise_classification,
           'bulk_authorise_section', CASE WHEN ar.can_bulk_authorise THEN 'processed_eligible' WHEN ar.can_bulk_unauthorise THEN 'authorised_eligible' ELSE NULL::text END,
+          'previous_bulk_authorise_section', NULL::text,
           'processing_status', ar.processing_status,
           'summary_stage', CASE WHEN ar.is_unprocessed THEN 'UNPROCESSED' ELSE ar.summary_stage END,
           'tools_stage', CASE WHEN ar.is_unprocessed THEN 'UNPROCESSED' ELSE ar.tools_stage END,
@@ -1533,7 +1824,18 @@ BEGIN
           'can_bulk_authorise', ar.can_bulk_authorise,
           'can_bulk_unauthorise', ar.can_bulk_unauthorise,
           'primary_artifact_storage_key', ar.primary_artifact_storage_key,
-          'evidence_badges', ar.evidence_badges
+          'previous_primary_artifact_storage_key', NULL::text,
+          'primary_artifact_preview_mode', ar.primary_artifact_preview_mode,
+          'evidence_badges', ar.evidence_badges,
+          'cache_invalidation_hints', JSONB_BUILD_OBJECT(
+            'row_keys', JSONB_BUILD_ARRAY(ar.row_key),
+            'timesheet_ids', CASE WHEN ar.timesheet_id IS NULL THEN '[]'::jsonb ELSE JSONB_BUILD_ARRAY(ar.timesheet_id) END,
+            'contract_week_ids', CASE WHEN ar.contract_week_id IS NULL THEN '[]'::jsonb ELSE JSONB_BUILD_ARRAY(ar.contract_week_id) END,
+            'storage_keys', CASE WHEN ar.primary_artifact_storage_key IS NULL THEN '[]'::jsonb ELSE JSONB_BUILD_ARRAY(ar.primary_artifact_storage_key) END,
+            'row_signature', ar.row_signature,
+            'invalidate_context', TRUE,
+            'invalidate_preview', FALSE
+          )
         )
       )
     ) AS row_json
@@ -1545,6 +1847,12 @@ BEGIN
     ar.row_key ASC;
 END;
 $function$;
+
+
+
+
+
+
 
 
 CREATE OR REPLACE FUNCTION public.bulk_process_row_context_v1(p_filters jsonb DEFAULT '{}'::jsonb)
@@ -1561,7 +1869,7 @@ DECLARE
   v_id_text text := NULL;
   v_timesheet_id_text text := NULL;
   v_contract_week_id_text text := NULL;
-  v_include_evidence boolean := TRUE;
+  v_include_evidence boolean := FALSE;
   v_uuid_re text := '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$';
   v_out jsonb;
 BEGIN
@@ -1638,8 +1946,8 @@ BEGIN
   END IF;
 
   v_include_evidence := CASE
-    WHEN LOWER(NULLIF(BTRIM(COALESCE(v_filters->>'include_evidence', v_filters->>'includeEvidence', v_filters->>'load_evidence', v_filters->>'loadEvidence', '')), '')) IN ('false', '0', 'no', 'n', 'off') THEN FALSE
-    ELSE TRUE
+    WHEN LOWER(NULLIF(BTRIM(COALESCE(v_filters->>'include_evidence', v_filters->>'includeEvidence', v_filters->>'load_evidence', v_filters->>'loadEvidence', '')), '')) IN ('true', '1', 'yes', 'y', 'on') THEN TRUE
+    ELSE FALSE
   END;
 
   WITH decision_row AS (
@@ -2525,6 +2833,7 @@ BEGIN
         'context_kind', 'bulk_process_row_context',
         'context_type', 'bulk_process',
         'slim_context', TRUE,
+        'evidence_loaded', v_include_evidence,
         'requested_timesheet_id', row_ids.row_json->>'requested_timesheet_id',
         'current_timesheet_id', row_ids.row_json->>'current_timesheet_id',
         'expected_timesheet_id', row_ids.row_json->>'expected_timesheet_id',
@@ -2818,7 +3127,6 @@ BEGIN
   ));
 END;
 $function$;
-
 
 
 CREATE OR REPLACE FUNCTION public.bulk_authorise_row_context_v1(p_filters jsonb DEFAULT '{}'::jsonb)
