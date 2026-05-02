@@ -21458,6 +21458,7 @@ $$;
 -- =========================================================
 -- A4.9 pay_batches_list / pay_batch_get
 -- =========================================================
+
 create or replace function public.pay_batch_get(p_pay_batch_id uuid)
 returns jsonb
 language plpgsql
@@ -21537,6 +21538,14 @@ declare
   v_processing_request_count integer := 0;
   v_blocked_request_count integer := 0;
   v_failed_request_count integer := 0;
+  v_work_item_pending_count integer := 0;
+  v_work_item_processing_count integer := 0;
+  v_work_item_blocked_count integer := 0;
+  v_work_item_failed_retryable_count integer := 0;
+  v_work_item_failed_final_count integer := 0;
+  v_work_item_failed_count integer := 0;
+  v_work_item_requires_user_action boolean := false;
+  v_work_item_processing_continues boolean := false;
   v_bank_event_count integer := 0;
   v_bank_failure_event_count integer := 0;
   v_bank_return_event_count integer := 0;
@@ -23682,6 +23691,33 @@ begin
   WHERE public.pay_payment_correction_requests.pay_batch_id = p_pay_batch_id;
 
   SELECT
+    COUNT(*) FILTER (WHERE public.pay_payment_correction_work_items.status = 'PENDING')::integer,
+    COUNT(*) FILTER (WHERE public.pay_payment_correction_work_items.status = 'PROCESSING')::integer,
+    COUNT(*) FILTER (WHERE public.pay_payment_correction_work_items.status = 'BLOCKED')::integer,
+    COUNT(*) FILTER (WHERE public.pay_payment_correction_work_items.status = 'FAILED_RETRYABLE')::integer,
+    COUNT(*) FILTER (WHERE public.pay_payment_correction_work_items.status = 'FAILED_FINAL')::integer
+  INTO
+    v_work_item_pending_count,
+    v_work_item_processing_count,
+    v_work_item_blocked_count,
+    v_work_item_failed_retryable_count,
+    v_work_item_failed_final_count
+  FROM public.pay_payment_correction_work_items
+  WHERE public.pay_payment_correction_work_items.pay_batch_id = p_pay_batch_id;
+
+  v_work_item_failed_count := COALESCE(v_work_item_failed_retryable_count, 0) + COALESCE(v_work_item_failed_final_count, 0);
+  v_work_item_requires_user_action := (
+    COALESCE(v_work_item_blocked_count, 0) > 0
+    OR COALESCE(v_work_item_failed_retryable_count, 0) > 0
+    OR COALESCE(v_work_item_failed_final_count, 0) > 0
+  );
+  v_work_item_processing_continues := (
+    COALESCE(v_work_item_pending_count, 0) > 0
+    OR COALESCE(v_work_item_processing_count, 0) > 0
+    OR COALESCE(v_work_item_failed_retryable_count, 0) > 0
+  );
+
+  SELECT
     public.pay_payment_correction_requests.id
   INTO
     v_open_correction_request_id
@@ -23769,7 +23805,19 @@ begin
   WHERE public.pay_payment_correction_items.pay_batch_id = p_pay_batch_id
     AND public.pay_payment_correction_items.status = 'APPLIED';
 
-  IF v_applied_reversal_item_count > 0 THEN
+  IF (
+    COALESCE(v_work_item_pending_count, 0) > 0
+    OR COALESCE(v_work_item_processing_count, 0) > 0
+    OR COALESCE(v_processing_request_count, 0) > 0
+  ) THEN
+    v_derived_correction_state := 'PROCESSING';
+  ELSIF v_work_item_requires_user_action
+        OR COALESCE(v_blocked_request_count, 0) > 0
+        OR COALESCE(v_failed_request_count, 0) > 0 THEN
+    v_derived_correction_state := 'ACTION_REQUIRED';
+  ELSIF COALESCE(v_awaiting_authorisation_count, 0) > 0 THEN
+    v_derived_correction_state := 'AWAITING_AUTHORISATION';
+  ELSIF v_applied_reversal_item_count > 0 THEN
     IF v_correctable_item_count > 0 AND v_applied_reversal_item_count >= v_correctable_item_count THEN
       v_derived_correction_state := 'REVERSED';
     ELSE
@@ -23781,14 +23829,6 @@ begin
     ELSE
       v_derived_correction_state := 'PARTIALLY_UNWOUND';
     END IF;
-  ELSIF COALESCE(v_blocked_request_count, 0) > 0 OR COALESCE(v_failed_request_count, 0) > 0 THEN
-    v_derived_correction_state := 'ACTION_REQUIRED';
-  ELSIF COALESCE(v_awaiting_authorisation_count, 0) > 0 THEN
-    v_derived_correction_state := 'AWAITING_AUTHORISATION';
-  ELSIF COALESCE(v_processing_request_count, 0) > 0
-        AND COALESCE(v_blocked_request_count, 0) = 0
-        AND COALESCE(v_failed_request_count, 0) = 0 THEN
-    v_derived_correction_state := 'PROCESSING';
   ELSIF v_bank_return_event_count > 0 THEN
     v_derived_correction_state := 'SETTLED_RETURNED';
   ELSIF v_bank_failure_event_count > 0 OR v_transfer_failure_count > 0 THEN
@@ -23844,11 +23884,20 @@ begin
       v_derived_correction_state IN ('ACTION_REQUIRED','SETTLED_RETURNED')
       OR COALESCE(v_blocked_request_count, 0) > 0
       OR COALESCE(v_failed_request_count, 0) > 0
+      OR v_work_item_requires_user_action
     ),
-    'processing_count', COALESCE(v_processing_request_count, 0),
+    'processing_count', GREATEST(
+      COALESCE(v_processing_request_count, 0),
+      CASE WHEN v_work_item_processing_continues THEN 1 ELSE 0 END
+    ),
     'awaiting_authorisation_count', COALESCE(v_awaiting_authorisation_count, 0),
-    'blocked_count', COALESCE(v_blocked_request_count, 0),
-    'failed_count', COALESCE(v_failed_request_count, 0),
+    'blocked_count', COALESCE(v_blocked_request_count, 0) + COALESCE(v_work_item_blocked_count, 0),
+    'failed_count', COALESCE(v_failed_request_count, 0) + COALESCE(v_work_item_failed_count, 0),
+    'work_item_blocked_count', COALESCE(v_work_item_blocked_count, 0),
+    'work_item_failed_retryable_count', COALESCE(v_work_item_failed_retryable_count, 0),
+    'work_item_failed_final_count', COALESCE(v_work_item_failed_final_count, 0),
+    'work_item_pending_count', COALESCE(v_work_item_pending_count, 0),
+    'work_item_processing_count', COALESCE(v_work_item_processing_count, 0),
     'open_request_id', CASE WHEN v_open_correction_request_id IS NULL THEN NULL ELSE v_open_correction_request_id::text END,
     'latest_request', COALESCE(v_latest_correction_request, '{}'::jsonb),
     'can_plan', true,
@@ -23859,6 +23908,11 @@ begin
       'processing_request_count', COALESCE(v_processing_request_count, 0),
       'blocked_request_count', COALESCE(v_blocked_request_count, 0),
       'failed_request_count', COALESCE(v_failed_request_count, 0),
+      'work_item_blocked_count', COALESCE(v_work_item_blocked_count, 0),
+      'work_item_failed_retryable_count', COALESCE(v_work_item_failed_retryable_count, 0),
+      'work_item_failed_final_count', COALESCE(v_work_item_failed_final_count, 0),
+      'work_item_pending_count', COALESCE(v_work_item_pending_count, 0),
+      'work_item_processing_count', COALESCE(v_work_item_processing_count, 0),
       'bank_event_count', COALESCE(v_bank_event_count, 0),
       'bank_failure_event_count', COALESCE(v_bank_failure_event_count, 0),
       'bank_return_event_count', COALESCE(v_bank_return_event_count, 0),
@@ -23875,7 +23929,13 @@ begin
 
   v_movement_classification := jsonb_build_object(
     'classification', CASE
-      WHEN COALESCE(v_blocked_request_count, 0) > 0 OR COALESCE(v_failed_request_count, 0) > 0
+      WHEN COALESCE(v_work_item_pending_count, 0) > 0
+        OR COALESCE(v_work_item_processing_count, 0) > 0
+        OR COALESCE(v_processing_request_count, 0) > 0
+        THEN 'PROCESSING'
+      WHEN v_work_item_requires_user_action
+        OR COALESCE(v_blocked_request_count, 0) > 0
+        OR COALESCE(v_failed_request_count, 0) > 0
         THEN 'AMBIGUOUS_REVIEW_REQUIRED'
       WHEN COALESCE(v_awaiting_authorisation_count, 0) > 0
         AND COALESCE(v_open_settled_reversal_request_count, 0) > 0
@@ -23910,11 +23970,15 @@ begin
       (
         COALESCE(v_open_settled_reversal_request_count, 0) > 0
         AND COALESCE(v_processing_request_count, 0) = 0
+        AND COALESCE(v_work_item_pending_count, 0) = 0
+        AND COALESCE(v_work_item_processing_count, 0) = 0
       )
       OR (
         COALESCE(v_bank_return_event_count, 0) > 0
         AND COALESCE(v_applied_reversal_item_count, 0) = 0
         AND COALESCE(v_processing_request_count, 0) = 0
+        AND COALESCE(v_work_item_pending_count, 0) = 0
+        AND COALESCE(v_work_item_processing_count, 0) = 0
       )
     ),
     'settlement_evidence_count', COALESCE(v_settlement_evidence_count, 0),
@@ -23925,6 +23989,11 @@ begin
     'processing_request_count', COALESCE(v_processing_request_count, 0),
     'blocked_request_count', COALESCE(v_blocked_request_count, 0),
     'failed_request_count', COALESCE(v_failed_request_count, 0),
+    'work_item_blocked_count', COALESCE(v_work_item_blocked_count, 0),
+    'work_item_failed_retryable_count', COALESCE(v_work_item_failed_retryable_count, 0),
+    'work_item_failed_final_count', COALESCE(v_work_item_failed_final_count, 0),
+    'work_item_pending_count', COALESCE(v_work_item_pending_count, 0),
+    'work_item_processing_count', COALESCE(v_work_item_processing_count, 0),
     'applied_reversal_item_count', COALESCE(v_applied_reversal_item_count, 0),
     'transfer_failure_count', COALESCE(v_transfer_failure_count, 0),
     'transfer_completed_count', COALESCE(v_transfer_completed_count, 0)
@@ -24003,11 +24072,18 @@ begin
     'processing_request_count', COALESCE(v_processing_request_count, 0),
     'blocked_request_count', COALESCE(v_blocked_request_count, 0),
     'failed_request_count', COALESCE(v_failed_request_count, 0),
+    'work_item_pending_count', COALESCE(v_work_item_pending_count, 0),
+    'work_item_processing_count', COALESCE(v_work_item_processing_count, 0),
+    'work_item_blocked_count', COALESCE(v_work_item_blocked_count, 0),
+    'work_item_failed_retryable_count', COALESCE(v_work_item_failed_retryable_count, 0),
+    'work_item_failed_final_count', COALESCE(v_work_item_failed_final_count, 0),
     'requires_user_action', (
       v_derived_correction_state IN ('ACTION_REQUIRED','SETTLED_RETURNED')
       OR COALESCE(v_blocked_request_count, 0) > 0
       OR COALESCE(v_failed_request_count, 0) > 0
-    )
+      OR v_work_item_requires_user_action
+    ),
+    'processing_continues', v_work_item_processing_continues
   )
   INTO v_correction_progress
   FROM public.pay_payment_correction_requests
@@ -24242,6 +24318,11 @@ begin
         'correction_waiting_approval_count', pb.correction_waiting_approval_count,
         'correction_blocked_count', pb.correction_blocked_count,
         'correction_failed_count', pb.correction_failed_count,
+        'correction_work_blocked_count', pb.correction_work_blocked_count,
+        'correction_work_failed_retryable_count', pb.correction_work_failed_retryable_count,
+        'correction_work_failed_final_count', pb.correction_work_failed_final_count,
+        'correction_work_pending_count', pb.correction_work_pending_count,
+        'correction_work_processing_count', pb.correction_work_processing_count,
         'correction_requires_user_action', pb.correction_requires_user_action
       )
       order by pb.created_at_utc desc, pb.id desc
@@ -24306,6 +24387,11 @@ begin
       corr.correction_waiting_approval_count,
       corr.correction_blocked_count,
       corr.correction_failed_count,
+      corr.correction_work_blocked_count,
+      corr.correction_work_failed_retryable_count,
+      corr.correction_work_failed_final_count,
+      corr.correction_work_pending_count,
+      corr.correction_work_processing_count,
       corr.correction_requires_user_action
     from public.pay_batches pb0
     left join lateral (
@@ -24459,6 +24545,16 @@ begin
         from public.pay_payment_correction_requests ppcr_corr
         where ppcr_corr.pay_batch_id = pb0.id
       ),
+      work_item_summary as (
+        select
+          count(*) filter (where ppwi_corr.status = 'PENDING')::integer as correction_work_pending_count,
+          count(*) filter (where ppwi_corr.status = 'PROCESSING')::integer as correction_work_processing_count,
+          count(*) filter (where ppwi_corr.status = 'BLOCKED')::integer as correction_work_blocked_count,
+          count(*) filter (where ppwi_corr.status = 'FAILED_RETRYABLE')::integer as correction_work_failed_retryable_count,
+          count(*) filter (where ppwi_corr.status = 'FAILED_FINAL')::integer as correction_work_failed_final_count
+        from public.pay_payment_correction_work_items ppwi_corr
+        where ppwi_corr.pay_batch_id = pb0.id
+      ),
       action_summary as (
         select
           max(ppca_corr.action_at_utc) as latest_correction_action_at_utc
@@ -24488,7 +24584,10 @@ begin
       )
       select
         case
-          when coalesce((select correction_blocked_count from request_summary), 0) > 0
+          when coalesce((select correction_work_blocked_count from work_item_summary), 0) > 0
+            or coalesce((select correction_work_failed_retryable_count from work_item_summary), 0) > 0
+            or coalesce((select correction_work_failed_final_count from work_item_summary), 0) > 0
+            or coalesce((select correction_blocked_count from request_summary), 0) > 0
             or coalesce((select correction_failed_count from request_summary), 0) > 0 then 'AMBIGUOUS_REVIEW_REQUIRED'
           when coalesce((select waiting_settled_reversal_request_count from request_summary), 0) > 0
             or (
@@ -24501,8 +24600,8 @@ begin
             ) then 'TRUE_SETTLED_REVERSAL_REQUIRED'
           when coalesce((select correction_waiting_approval_count from request_summary), 0) > 0 then 'AWAITING_AUTHORISATION'
           when coalesce((select correction_processing_count from request_summary), 0) > 0
-            and coalesce((select correction_blocked_count from request_summary), 0) = 0
-            and coalesce((select correction_failed_count from request_summary), 0) = 0 then 'PROCESSING'
+            or coalesce((select correction_work_pending_count from work_item_summary), 0) > 0
+            or coalesce((select correction_work_processing_count from work_item_summary), 0) > 0 then 'PROCESSING'
           when coalesce((select sum(correction_items.item_count) from correction_items where correction_items.correction_item_kind = 'SETTLED_REVERSAL'), 0) > 0 then 'SETTLED_REVERSAL_APPLIED'
           when coalesce((select sum(correction_items.item_count) from correction_items where correction_items.correction_item_kind in ('NO_MONEY_UNWIND','PRE_BANK_CANCEL')), 0) > 0
             and coalesce((select correctable_item_count from item_totals), 0) > 0
@@ -24522,6 +24621,27 @@ begin
           else 'NONE'
         end as movement_classification,
         case
+          when (
+              coalesce((select correction_processing_count from request_summary), 0) > 0
+              or coalesce((select correction_work_pending_count from work_item_summary), 0) > 0
+              or coalesce((select correction_work_processing_count from work_item_summary), 0) > 0
+            )
+            and (
+              coalesce((select correction_work_blocked_count from work_item_summary), 0) > 0
+              or coalesce((select correction_work_failed_retryable_count from work_item_summary), 0) > 0
+              or coalesce((select correction_work_failed_final_count from work_item_summary), 0) > 0
+              or coalesce((select correction_blocked_count from request_summary), 0) > 0
+              or coalesce((select correction_failed_count from request_summary), 0) > 0
+            ) then 'PARTLY_APPLIED_REVIEW_NEEDED'
+          when coalesce((select correction_work_blocked_count from work_item_summary), 0) > 0
+            or coalesce((select correction_work_failed_retryable_count from work_item_summary), 0) > 0
+            or coalesce((select correction_work_failed_final_count from work_item_summary), 0) > 0
+            or coalesce((select correction_blocked_count from request_summary), 0) > 0
+            or coalesce((select correction_failed_count from request_summary), 0) > 0 then 'ACTION_REQUIRED'
+          when coalesce((select correction_waiting_approval_count from request_summary), 0) > 0 then 'WAITING_FOR_APPROVAL'
+          when coalesce((select correction_processing_count from request_summary), 0) > 0
+            or coalesce((select correction_work_pending_count from work_item_summary), 0) > 0
+            or coalesce((select correction_work_processing_count from work_item_summary), 0) > 0 then 'PROCESSING'
           when coalesce((select sum(correction_items.item_count) from correction_items where correction_items.correction_item_kind = 'SETTLED_REVERSAL'), 0) > 0
                and coalesce((select correctable_item_count from item_totals), 0) > 0
                and coalesce((select sum(correction_items.item_count) from correction_items where correction_items.correction_item_kind = 'SETTLED_REVERSAL'), 0) >= coalesce((select correctable_item_count from item_totals), 0) then 'REVERSED'
@@ -24530,12 +24650,6 @@ begin
                and coalesce((select correctable_item_count from item_totals), 0) > 0
                and coalesce((select sum(correction_items.item_count) from correction_items where correction_items.correction_item_kind in ('NO_MONEY_UNWIND','PRE_BANK_CANCEL')), 0) >= coalesce((select correctable_item_count from item_totals), 0) then 'NO_MONEY_UNWOUND'
           when coalesce((select sum(correction_items.item_count) from correction_items where correction_items.correction_item_kind in ('NO_MONEY_UNWIND','PRE_BANK_CANCEL')), 0) > 0 then 'PARTIALLY_UNWOUND'
-          when coalesce((select correction_blocked_count from request_summary), 0) > 0
-            or coalesce((select correction_failed_count from request_summary), 0) > 0 then 'ACTION_REQUIRED'
-          when coalesce((select correction_waiting_approval_count from request_summary), 0) > 0 then 'WAITING_FOR_APPROVAL'
-          when coalesce((select correction_processing_count from request_summary), 0) > 0
-            and coalesce((select correction_blocked_count from request_summary), 0) = 0
-            and coalesce((select correction_failed_count from request_summary), 0) = 0 then 'PROCESSING'
           when coalesce((select returned_event_count from bank_events), 0) > 0
             or coalesce((select returned_transfer_count from transfer_evidence), 0) > 0 then 'SETTLED_RETURNED'
           when coalesce((select failed_returned_event_count from bank_events), 0) > 0
@@ -24546,6 +24660,9 @@ begin
         (
           coalesce((select correction_blocked_count from request_summary), 0)
           + coalesce((select correction_failed_count from request_summary), 0)
+          + coalesce((select correction_work_blocked_count from work_item_summary), 0)
+          + coalesce((select correction_work_failed_retryable_count from work_item_summary), 0)
+          + coalesce((select correction_work_failed_final_count from work_item_summary), 0)
           + case
               when coalesce((select correction_processing_count from request_summary), 0) > 0
                 or coalesce((select correction_waiting_approval_count from request_summary), 0) > 0 then 0
@@ -24565,11 +24682,21 @@ begin
         coalesce((select correction_waiting_approval_count from request_summary), 0)::integer as correction_waiting_approval_count,
         coalesce((select correction_blocked_count from request_summary), 0)::integer as correction_blocked_count,
         coalesce((select correction_failed_count from request_summary), 0)::integer as correction_failed_count,
+        coalesce((select correction_work_blocked_count from work_item_summary), 0)::integer as correction_work_blocked_count,
+        coalesce((select correction_work_failed_retryable_count from work_item_summary), 0)::integer as correction_work_failed_retryable_count,
+        coalesce((select correction_work_failed_final_count from work_item_summary), 0)::integer as correction_work_failed_final_count,
+        coalesce((select correction_work_pending_count from work_item_summary), 0)::integer as correction_work_pending_count,
+        coalesce((select correction_work_processing_count from work_item_summary), 0)::integer as correction_work_processing_count,
         (
           coalesce((select correction_blocked_count from request_summary), 0) > 0
           or coalesce((select correction_failed_count from request_summary), 0) > 0
+          or coalesce((select correction_work_blocked_count from work_item_summary), 0) > 0
+          or coalesce((select correction_work_failed_retryable_count from work_item_summary), 0) > 0
+          or coalesce((select correction_work_failed_final_count from work_item_summary), 0) > 0
           or (
             coalesce((select correction_processing_count from request_summary), 0) = 0
+            and coalesce((select correction_work_pending_count from work_item_summary), 0) = 0
+            and coalesce((select correction_work_processing_count from work_item_summary), 0) = 0
             and coalesce((select correction_waiting_approval_count from request_summary), 0) = 0
             and (
               coalesce((select failed_returned_event_count from bank_events), 0) > 0
@@ -24601,9 +24728,6 @@ begin
   );
 end;
 $function$;
-
-
-
 
 
 
