@@ -7668,3 +7668,447 @@ BEGIN
 END;
 $function$;
 
+CREATE OR REPLACE FUNCTION public.contract_week_manual_upsert_bulk_process_atomic(
+  p_week_id uuid,
+  p_expected_timesheet_id uuid DEFAULT NULL,
+  p_timesheet_create_json jsonb DEFAULT NULL,
+  p_timesheet_patch_json jsonb DEFAULT '{}'::jsonb,
+  p_contract_week_patch_json jsonb DEFAULT '{}'::jsonb,
+  p_tsfin_snapshot_json jsonb DEFAULT NULL,
+  p_rotation_json jsonb DEFAULT NULL,
+  p_actor_user_id uuid DEFAULT NULL,
+  p_materialise_staged_evidence boolean DEFAULT true,
+  p_now_utc timestamp with time zone DEFAULT now()
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+VOLATILE SECURITY DEFINER
+SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_now timestamp with time zone := COALESCE(p_now_utc, now());
+  v_contract_week_id uuid := NULL;
+  v_contract_id uuid := NULL;
+  v_timesheet_id uuid := NULL;
+  v_current_timesheet_id uuid := NULL;
+  v_current_timesheet_version integer := NULL;
+  v_was_stale boolean := FALSE;
+  v_created_now boolean := FALSE;
+  v_processing_status public.ts_fin_processing_status_enum := NULL;
+  v_contract_week_json jsonb := NULL;
+  v_timesheet_json jsonb := NULL;
+  v_timesheet_financials_json jsonb := NULL;
+  v_pre_row jsonb := NULL;
+  v_post_row jsonb := NULL;
+  v_row_patch jsonb := '{}'::jsonb;
+  v_cache_invalidation_hints jsonb := '{}'::jsonb;
+  v_cache_invalidation jsonb := '{}'::jsonb;
+  v_pre_bucket text := NULL;
+  v_post_bucket text := NULL;
+  v_unprocessed_delta integer := 0;
+  v_processed_delta integer := 0;
+  v_total_delta integer := 0;
+  v_previous_storage_key text := NULL;
+  v_primary_storage_key text := NULL;
+  v_primary_artifact_id text := NULL;
+  v_primary_artifact_kind text := NULL;
+  v_primary_artifact_display_name text := NULL;
+  v_primary_artifact_preview_mode text := NULL;
+  v_row_key text := NULL;
+  v_row_signature text := NULL;
+  v_previous_row_key text := NULL;
+  v_preview_changed boolean := FALSE;
+  v_error_sqlstate text := NULL;
+  v_error_message text := NULL;
+  v_error_code text := NULL;
+  v_exception_detail text := NULL;
+  v_exception_hint text := NULL;
+  v_detail_json jsonb := NULL;
+  v_missing jsonb := '[]'::jsonb;
+  v_error_current_timesheet_id uuid := NULL;
+  v_rotation_action text := NULL;
+  v_rotation_applied boolean := FALSE;
+  v_rotation_old_timesheet_id text := NULL;
+  v_rotation_new_timesheet_id text := NULL;
+  v_rotation_old_version integer := NULL;
+  v_rotation_new_version integer := NULL;
+  v_pre_current_timesheet_id_text text := NULL;
+  v_pre_current_version_text text := NULL;
+BEGIN
+  IF p_week_id IS NULL THEN
+    RETURN JSONB_BUILD_OBJECT(
+      'ok', FALSE,
+      'operation', 'contract_week_manual_upsert_bulk_process',
+      'success', FALSE,
+      'error_code', 'CONTRACT_WEEK_ID_REQUIRED',
+      'message', 'p_week_id is required.'
+    );
+  END IF;
+
+  IF p_rotation_json IS NOT NULL AND jsonb_typeof(p_rotation_json) = 'object' THEN
+    v_rotation_action := UPPER(BTRIM(COALESCE(p_rotation_json->>'qr_action', '')));
+    IF v_rotation_action = '' THEN
+      v_rotation_action := NULL;
+    END IF;
+  END IF;
+
+  SELECT decision_result.row_json
+    INTO v_pre_row
+  FROM public.bulk_timesheet_row_decision_v1(JSONB_BUILD_OBJECT(
+    'dataset_mode', 'process',
+    'contract_week_id', p_week_id::text
+  )) AS decision_result(row_json)
+  LIMIT 1;
+
+  v_pre_bucket := NULLIF(BTRIM(COALESCE(v_pre_row->>'bulk_process_bucket', '')), '');
+  v_previous_row_key := NULLIF(BTRIM(COALESCE(v_pre_row->>'row_key', '')), '');
+  v_previous_storage_key := NULLIF(BTRIM(COALESCE(v_pre_row->>'primary_artifact_storage_key', '')), '');
+  v_pre_current_timesheet_id_text := NULLIF(BTRIM(COALESCE(v_pre_row->>'current_timesheet_id', v_pre_row->>'timesheet_id', p_expected_timesheet_id::text, '')), '');
+  v_pre_current_version_text := NULLIF(BTRIM(COALESCE(v_pre_row->>'current_version', v_pre_row->>'current_timesheet_version', '')), '');
+
+  IF v_pre_current_version_text ~ '^[0-9]+$' THEN
+    v_rotation_old_version := v_pre_current_version_text::integer;
+  END IF;
+
+  SELECT upsert_result.contract_week_id,
+         upsert_result.contract_id,
+         upsert_result.timesheet_id,
+         upsert_result.current_timesheet_id,
+         upsert_result.current_timesheet_version,
+         upsert_result.was_stale,
+         upsert_result.created_now,
+         upsert_result.processing_status,
+         upsert_result.contract_week_json,
+         upsert_result.timesheet_json,
+         upsert_result.timesheet_financials_json
+    INTO v_contract_week_id,
+         v_contract_id,
+         v_timesheet_id,
+         v_current_timesheet_id,
+         v_current_timesheet_version,
+         v_was_stale,
+         v_created_now,
+         v_processing_status,
+         v_contract_week_json,
+         v_timesheet_json,
+         v_timesheet_financials_json
+  FROM public.contract_week_manual_upsert_atomic(
+    p_week_id => p_week_id,
+    p_expected_timesheet_id => p_expected_timesheet_id,
+    p_timesheet_create_json => p_timesheet_create_json,
+    p_timesheet_patch_json => p_timesheet_patch_json,
+    p_contract_week_patch_json => p_contract_week_patch_json,
+    p_tsfin_snapshot_json => p_tsfin_snapshot_json,
+    p_rotation_json => p_rotation_json,
+    p_actor_user_id => p_actor_user_id,
+    p_materialise_staged_evidence => p_materialise_staged_evidence,
+    p_now_utc => v_now
+  ) AS upsert_result;
+
+  IF v_contract_week_id IS NULL THEN
+    RETURN JSONB_BUILD_OBJECT(
+      'ok', FALSE,
+      'operation', 'contract_week_manual_upsert_bulk_process',
+      'success', FALSE,
+      'error_code', 'UPSERT_RETURNED_NO_ROW',
+      'message', 'contract_week_manual_upsert_atomic did not return a row.',
+      'contract_week_id', p_week_id
+    );
+  END IF;
+
+  SELECT decision_result.row_json
+    INTO v_post_row
+  FROM public.bulk_timesheet_row_decision_v1(
+    CASE
+      WHEN v_current_timesheet_id IS NOT NULL THEN JSONB_BUILD_OBJECT(
+        'dataset_mode', 'process',
+        'timesheet_id', v_current_timesheet_id::text,
+        'contract_week_id', v_contract_week_id::text
+      )
+      ELSE JSONB_BUILD_OBJECT(
+        'dataset_mode', 'process',
+        'contract_week_id', v_contract_week_id::text
+      )
+    END
+  ) AS decision_result(row_json)
+  LIMIT 1;
+
+  IF v_post_row IS NULL THEN
+    RETURN JSONB_BUILD_OBJECT(
+      'ok', FALSE,
+      'operation', 'contract_week_manual_upsert_bulk_process',
+      'success', FALSE,
+      'error_code', 'POST_DECISION_ROW_NOT_FOUND',
+      'message', 'bulk_timesheet_row_decision_v1 did not return a post-upsert row.',
+      'contract_week_id', v_contract_week_id,
+      'timesheet_id', v_timesheet_id,
+      'current_timesheet_id', v_current_timesheet_id,
+      'previous_row_key', v_previous_row_key,
+      'rotation_applied', FALSE,
+      'old_timesheet_id', CASE WHEN p_rotation_json IS NULL THEN NULL ELSE v_pre_current_timesheet_id_text END,
+      'cache_invalidation_hints', JSONB_BUILD_OBJECT(
+        'row_keys', JSONB_BUILD_ARRAY(v_previous_row_key),
+        'contract_week_ids', JSONB_BUILD_ARRAY(v_contract_week_id),
+        'timesheet_ids', JSONB_BUILD_ARRAY(v_pre_current_timesheet_id_text, v_timesheet_id, v_current_timesheet_id),
+        'storage_keys', JSONB_BUILD_ARRAY(v_previous_storage_key),
+        'datasets', JSONB_BUILD_ARRAY('bulk_process', 'bulk_authorise'),
+        'invalidate_context', TRUE,
+        'invalidate_preview', FALSE
+      )
+    );
+  END IF;
+
+  v_post_bucket := NULLIF(BTRIM(COALESCE(v_post_row->>'bulk_process_bucket', '')), '');
+  v_row_key := NULLIF(BTRIM(COALESCE(v_post_row->>'row_key', '')), '');
+  v_row_signature := NULLIF(BTRIM(COALESCE(v_post_row->>'row_signature', '')), '');
+  v_primary_storage_key := NULLIF(BTRIM(COALESCE(v_post_row->>'primary_artifact_storage_key', '')), '');
+  v_primary_artifact_id := NULLIF(BTRIM(COALESCE(v_post_row->>'primary_artifact_id', '')), '');
+  v_primary_artifact_kind := NULLIF(BTRIM(COALESCE(v_post_row->>'primary_artifact_kind', '')), '');
+  v_primary_artifact_display_name := NULLIF(BTRIM(COALESCE(v_post_row->>'primary_artifact_display_name', '')), '');
+  v_primary_artifact_preview_mode := NULLIF(BTRIM(COALESCE(v_post_row->>'primary_artifact_preview_mode', '')), '');
+  v_preview_changed := COALESCE(v_previous_storage_key, '') IS DISTINCT FROM COALESCE(v_primary_storage_key, '');
+
+  v_rotation_applied := p_rotation_json IS NOT NULL
+    AND NULLIF(BTRIM(COALESCE(v_pre_current_timesheet_id_text, '')), '') IS NOT NULL
+    AND COALESCE(v_pre_current_timesheet_id_text, '') IS DISTINCT FROM COALESCE(v_current_timesheet_id::text, '');
+
+  IF v_rotation_applied THEN
+    v_rotation_old_timesheet_id := v_pre_current_timesheet_id_text;
+    v_rotation_new_timesheet_id := v_current_timesheet_id::text;
+    v_rotation_new_version := v_current_timesheet_version;
+  ELSE
+    v_rotation_old_timesheet_id := NULL;
+    v_rotation_new_timesheet_id := NULL;
+    v_rotation_old_version := NULL;
+    v_rotation_new_version := NULL;
+  END IF;
+
+  v_total_delta := CASE
+    WHEN v_pre_row IS NULL AND v_post_row IS NOT NULL THEN 1
+    WHEN v_pre_row IS NOT NULL AND v_post_row IS NULL THEN -1
+    ELSE 0
+  END;
+
+  v_unprocessed_delta := CASE
+    WHEN COALESCE(v_pre_bucket, '') = 'UNPROCESSED' AND COALESCE(v_post_bucket, '') <> 'UNPROCESSED' THEN -1
+    WHEN COALESCE(v_pre_bucket, '') <> 'UNPROCESSED' AND COALESCE(v_post_bucket, '') = 'UNPROCESSED' THEN 1
+    ELSE 0
+  END;
+
+  v_processed_delta := CASE
+    WHEN COALESCE(v_pre_bucket, '') = 'PROCESSED' AND COALESCE(v_post_bucket, '') <> 'PROCESSED' THEN -1
+    WHEN COALESCE(v_pre_bucket, '') <> 'PROCESSED' AND COALESCE(v_post_bucket, '') = 'PROCESSED' THEN 1
+    ELSE 0
+  END;
+
+  v_row_patch := COALESCE(v_post_row->'row_patch', JSONB_BUILD_OBJECT())
+    || JSONB_BUILD_OBJECT(
+      'previous_row_key', v_previous_row_key,
+      'row_key', v_row_key,
+      'new_row_key', v_row_key,
+      'stable_row_id', v_post_row->>'stable_row_id',
+      'contract_week_id', v_contract_week_id,
+      'contract_id', v_contract_id,
+      'timesheet_id', v_current_timesheet_id,
+      'current_timesheet_id', v_current_timesheet_id,
+      'expected_timesheet_id', v_current_timesheet_id,
+      'current_version', v_current_timesheet_version,
+      'current_timesheet_version', v_current_timesheet_version,
+      'row_signature', v_row_signature,
+      'previous_bulk_process_bucket', v_pre_bucket,
+      'bulk_process_bucket', v_post_bucket,
+      'bucket_transition', JSONB_BUILD_OBJECT(
+        'from', v_pre_bucket,
+        'to', v_post_bucket,
+        'changed', COALESCE(v_pre_bucket, '') IS DISTINCT FROM COALESCE(v_post_bucket, '')
+      ),
+      'primary_artifact_storage_key', v_primary_storage_key,
+      'previous_primary_artifact_storage_key', v_previous_storage_key,
+      'primary_artifact_preview_mode', v_primary_artifact_preview_mode,
+      'has_any_evidence', COALESCE(NULLIF(v_post_row->>'has_any_evidence', '')::boolean, FALSE),
+      'evidence_badges', COALESCE(v_post_row->'evidence_badges', '[]'::jsonb),
+      'rotation_applied', v_rotation_applied,
+      'old_timesheet_id', v_rotation_old_timesheet_id,
+      'new_timesheet_id', v_rotation_new_timesheet_id,
+      'qr_action', v_rotation_action
+    );
+
+  v_cache_invalidation_hints := JSONB_BUILD_OBJECT(
+    'row_keys', JSONB_BUILD_ARRAY(v_previous_row_key, v_row_key),
+    'contract_week_ids', JSONB_BUILD_ARRAY(v_contract_week_id),
+    'timesheet_ids', JSONB_BUILD_ARRAY(v_rotation_old_timesheet_id, v_timesheet_id, v_current_timesheet_id),
+    'storage_keys', JSONB_BUILD_ARRAY(v_previous_storage_key, v_primary_storage_key),
+    'datasets', JSONB_BUILD_ARRAY('bulk_process', 'bulk_authorise'),
+    'row_signature', v_row_signature,
+    'invalidate_context', TRUE,
+    'invalidate_preview', v_preview_changed
+  );
+
+  v_cache_invalidation := JSONB_BUILD_OBJECT(
+    'rows', JSONB_BUILD_ARRAY(JSONB_BUILD_OBJECT(
+      'previous_row_key', v_previous_row_key,
+      'row_key', v_row_key,
+      'new_row_key', v_row_key,
+      'contract_week_id', v_contract_week_id,
+      'timesheet_id', v_current_timesheet_id,
+      'old_timesheet_id', v_rotation_old_timesheet_id,
+      'new_row_signature', v_row_signature
+    )),
+    'artifacts', JSONB_BUILD_ARRAY(JSONB_BUILD_OBJECT(
+      'contract_week_id', v_contract_week_id,
+      'timesheet_id', v_current_timesheet_id,
+      'previous_storage_key', v_previous_storage_key,
+      'storage_key', v_primary_storage_key,
+      'changed', v_preview_changed
+    )),
+    'datasets', JSONB_BUILD_ARRAY('bulk_process', 'bulk_authorise')
+  );
+
+  RETURN JSONB_BUILD_OBJECT(
+    'ok', TRUE,
+    'operation', 'contract_week_manual_upsert_bulk_process',
+    'success', TRUE,
+    'contract_week_id', v_contract_week_id,
+    'contract_id', v_contract_id,
+    'timesheet_id', v_timesheet_id,
+    'current_timesheet_id', v_current_timesheet_id,
+    'expected_timesheet_id', v_current_timesheet_id,
+    'current_version', v_current_timesheet_version,
+    'current_timesheet_version', v_current_timesheet_version,
+    'was_stale', COALESCE(v_was_stale, FALSE),
+    'created_now', COALESCE(v_created_now, FALSE),
+    'rotation_applied', v_rotation_applied,
+    'rotation_action', v_rotation_action,
+    'old_timesheet_id', v_rotation_old_timesheet_id,
+    'new_timesheet_id', v_rotation_new_timesheet_id,
+    'old_version', v_rotation_old_version,
+    'new_version', v_rotation_new_version,
+    'processing_status', v_processing_status,
+    'previous_bulk_process_bucket', v_pre_bucket,
+    'bulk_process_bucket', v_post_bucket,
+    'bucket_transition', JSONB_BUILD_OBJECT(
+      'from', v_pre_bucket,
+      'to', v_post_bucket,
+      'changed', COALESCE(v_pre_bucket, '') IS DISTINCT FROM COALESCE(v_post_bucket, '')
+    ),
+    'contract_week', COALESCE(v_contract_week_json, NULL::jsonb),
+    'contract_week_json', COALESCE(v_contract_week_json, NULL::jsonb),
+    'timesheet', COALESCE(v_timesheet_json, NULL::jsonb),
+    'timesheet_json', COALESCE(v_timesheet_json, NULL::jsonb),
+    'tsfin', COALESCE(v_timesheet_financials_json, NULL::jsonb),
+    'timesheet_financials_json', COALESCE(v_timesheet_financials_json, NULL::jsonb),
+    'row_patch', v_row_patch,
+    'data_row', COALESCE(v_post_row, JSONB_BUILD_OBJECT()),
+    'row', COALESCE(v_post_row, JSONB_BUILD_OBJECT()),
+    'row_key', v_row_key,
+    'new_row_key', v_row_key,
+    'previous_row_key', v_previous_row_key,
+    'row_signature', v_row_signature,
+    'primary_artifact', CASE
+      WHEN v_primary_artifact_id IS NOT NULL OR v_primary_storage_key IS NOT NULL THEN JSONB_BUILD_OBJECT(
+        'id', v_primary_artifact_id,
+        'kind', v_primary_artifact_kind,
+        'display_name', v_primary_artifact_display_name,
+        'storage_key', v_primary_storage_key,
+        'previous_storage_key', v_previous_storage_key,
+        'preview_mode', v_primary_artifact_preview_mode,
+        'changed', v_preview_changed
+      )
+      ELSE NULL::jsonb
+    END,
+    'evidence_hints', JSONB_BUILD_OBJECT(
+      'has_any_evidence', COALESCE(NULLIF(v_post_row->>'has_any_evidence', '')::boolean, FALSE),
+      'evidence_badges', COALESCE(v_post_row->'evidence_badges', '[]'::jsonb),
+      'attached_evidence_count', COALESCE(NULLIF(v_post_row->>'attached_evidence_count', '')::integer, 0),
+      'queue_staged_count', COALESCE(NULLIF(v_post_row->>'queue_staged_count', '')::integer, 0),
+      'evidence_document_locked', COALESCE(NULLIF(v_post_row->>'evidence_document_locked', '')::boolean, FALSE),
+      'evidence_lock_reason', v_post_row->>'evidence_lock_reason'
+    ),
+    'preview_hints', JSONB_BUILD_OBJECT(
+      'primary_artifact_id', v_primary_artifact_id,
+      'primary_artifact_kind', v_primary_artifact_kind,
+      'primary_artifact_display_name', v_primary_artifact_display_name,
+      'primary_artifact_storage_key', v_primary_storage_key,
+      'previous_primary_artifact_storage_key', v_previous_storage_key,
+      'primary_artifact_preview_mode', v_primary_artifact_preview_mode,
+      'preview_storage_key', v_primary_storage_key,
+      'primary_left_pane_mode', v_post_row->>'primary_left_pane_mode',
+      'changed', v_preview_changed
+    ),
+    'artifact_hints', COALESCE(v_post_row->'artifact_hints', JSONB_BUILD_OBJECT(
+      'route_family', v_post_row->>'route_family',
+      'route_subfamily', v_post_row->>'route_subfamily',
+      'underlying_channel_family', v_post_row->>'underlying_channel_family',
+      'primary_artifact_storage_key', v_primary_storage_key,
+      'previous_primary_artifact_storage_key', v_previous_storage_key,
+      'primary_artifact_preview_mode', v_primary_artifact_preview_mode,
+      'has_any_evidence', COALESCE(NULLIF(v_post_row->>'has_any_evidence', '')::boolean, FALSE),
+      'evidence_badges', COALESCE(v_post_row->'evidence_badges', '[]'::jsonb),
+      'changed', v_preview_changed
+    )),
+    'count_deltas', JSONB_BUILD_OBJECT(
+      'unprocessed', v_unprocessed_delta,
+      'processed', v_processed_delta,
+      'total', v_total_delta
+    ),
+    'cache_invalidation_hints', v_cache_invalidation_hints,
+    'cache_invalidation', v_cache_invalidation
+  );
+EXCEPTION WHEN OTHERS THEN
+  v_error_sqlstate := SQLSTATE;
+  v_error_message := SQLERRM;
+  v_error_code := CASE
+    WHEN SQLSTATE = 'P0001' AND NULLIF(BTRIM(SQLERRM), '') IS NOT NULL THEN SQLERRM
+    ELSE SQLSTATE
+  END;
+
+  GET STACKED DIAGNOSTICS
+    v_exception_detail = PG_EXCEPTION_DETAIL,
+    v_exception_hint = PG_EXCEPTION_HINT;
+
+  IF NULLIF(BTRIM(COALESCE(v_exception_detail, '')), '') IS NOT NULL THEN
+    BEGIN
+      v_detail_json := v_exception_detail::jsonb;
+      IF jsonb_typeof(v_detail_json->'missing') = 'array' THEN
+        v_missing := v_detail_json->'missing';
+      END IF;
+      IF NULLIF(BTRIM(COALESCE(v_detail_json->>'current_timesheet_id', '')), '') IS NOT NULL THEN
+        v_error_current_timesheet_id := (v_detail_json->>'current_timesheet_id')::uuid;
+      END IF;
+    EXCEPTION WHEN OTHERS THEN
+      v_detail_json := NULL;
+      v_missing := '[]'::jsonb;
+      v_error_current_timesheet_id := NULL;
+    END;
+  END IF;
+
+  RETURN JSONB_BUILD_OBJECT(
+    'ok', FALSE,
+    'operation', 'contract_week_manual_upsert_bulk_process',
+    'success', FALSE,
+    'error_code', v_error_code,
+    'sqlstate', v_error_sqlstate,
+    'message', v_error_message,
+    'detail', v_exception_detail,
+    'detail_json', v_detail_json,
+    'hint', v_exception_hint,
+    'missing', v_missing,
+    'contract_week_id', p_week_id,
+    'expected_timesheet_id', p_expected_timesheet_id,
+    'current_timesheet_id', COALESCE(v_error_current_timesheet_id, p_expected_timesheet_id),
+    'rotation_action', v_rotation_action,
+    'rotation_applied', FALSE,
+    'old_timesheet_id', CASE WHEN p_rotation_json IS NULL THEN NULL ELSE v_pre_current_timesheet_id_text END,
+    'previous_row_key', v_previous_row_key,
+    'cache_invalidation_hints', JSONB_BUILD_OBJECT(
+      'row_keys', CASE WHEN v_previous_row_key IS NULL THEN '[]'::jsonb ELSE JSONB_BUILD_ARRAY(v_previous_row_key) END,
+      'contract_week_ids', JSONB_BUILD_ARRAY(p_week_id),
+      'timesheet_ids', JSONB_BUILD_ARRAY(p_expected_timesheet_id, v_pre_current_timesheet_id_text),
+      'storage_keys', CASE WHEN v_previous_storage_key IS NULL THEN '[]'::jsonb ELSE JSONB_BUILD_ARRAY(v_previous_storage_key) END,
+      'datasets', JSONB_BUILD_ARRAY('bulk_process'),
+      'invalidate_context', TRUE,
+      'invalidate_preview', FALSE
+    )
+  );
+END;
+$function$;
