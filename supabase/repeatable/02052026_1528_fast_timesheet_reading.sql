@@ -3128,7 +3128,6 @@ BEGIN
 END;
 $function$;
 
-
 CREATE OR REPLACE FUNCTION public.bulk_authorise_row_context_v1(p_filters jsonb DEFAULT '{}'::jsonb)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -3143,9 +3142,9 @@ DECLARE
   v_id_text text := NULL;
   v_timesheet_id_text text := NULL;
   v_contract_week_id_text text := NULL;
-  v_include_evidence boolean := TRUE;
-  v_include_compare boolean := TRUE;
-  v_include_import_source_rows boolean := TRUE;
+  v_include_evidence boolean := FALSE;
+  v_include_compare boolean := FALSE;
+  v_include_import_source_rows boolean := FALSE;
   v_uuid_re text := '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$';
   v_out jsonb;
 BEGIN
@@ -3222,18 +3221,18 @@ BEGIN
   END IF;
 
   v_include_evidence := CASE
-    WHEN LOWER(NULLIF(BTRIM(COALESCE(v_filters->>'include_evidence', v_filters->>'includeEvidence', v_filters->>'load_evidence', v_filters->>'loadEvidence', '')), '')) IN ('false', '0', 'no', 'n', 'off') THEN FALSE
-    ELSE TRUE
+    WHEN LOWER(NULLIF(BTRIM(COALESCE(v_filters->>'include_evidence', v_filters->>'includeEvidence', v_filters->>'load_evidence', v_filters->>'loadEvidence', '')), '')) IN ('true', '1', 'yes', 'y', 'on') THEN TRUE
+    ELSE FALSE
   END;
 
   v_include_compare := CASE
-    WHEN LOWER(NULLIF(BTRIM(COALESCE(v_filters->>'include_compare', v_filters->>'includeCompare', v_filters->>'load_compare', v_filters->>'loadCompare', '')), '')) IN ('false', '0', 'no', 'n', 'off') THEN FALSE
-    ELSE TRUE
+    WHEN LOWER(NULLIF(BTRIM(COALESCE(v_filters->>'include_compare', v_filters->>'includeCompare', v_filters->>'load_compare', v_filters->>'loadCompare', '')), '')) IN ('true', '1', 'yes', 'y', 'on') THEN TRUE
+    ELSE FALSE
   END;
 
   v_include_import_source_rows := CASE
-    WHEN LOWER(NULLIF(BTRIM(COALESCE(v_filters->>'include_import_source_rows', v_filters->>'includeImportSourceRows', v_filters->>'load_import_source_rows', v_filters->>'loadImportSourceRows', '')), '')) IN ('false', '0', 'no', 'n', 'off') THEN FALSE
-    ELSE TRUE
+    WHEN LOWER(NULLIF(BTRIM(COALESCE(v_filters->>'include_import_source_rows', v_filters->>'includeImportSourceRows', v_filters->>'load_import_source_rows', v_filters->>'loadImportSourceRows', '')), '')) IN ('true', '1', 'yes', 'y', 'on') THEN TRUE
+    ELSE FALSE
   END;
 
   WITH decision_row AS (
@@ -4148,10 +4147,10 @@ BEGIN
       ns0.cancelled_reason
     FROM public.nhsp_shifts AS ns0
     CROSS JOIN row_ids AS ids
-    WHERE v_include_import_source_rows = TRUE
+    WHERE (v_include_compare = TRUE OR v_include_import_source_rows = TRUE)
       AND (
-        COALESCE((ids.row_json->>'compare_block_required')::boolean, FALSE) = TRUE
-        OR UPPER(COALESCE(ids.row_json->>'route_family', '')) = 'IMPORT_AUTHORITATIVE'
+        (v_include_compare = TRUE AND COALESCE((ids.row_json->>'compare_block_required')::boolean, FALSE) = TRUE)
+        OR (v_include_import_source_rows = TRUE AND UPPER(COALESCE(ids.row_json->>'route_family', '')) = 'IMPORT_AUTHORITATIVE')
       )
       AND (
         (ids.timesheet_id IS NOT NULL AND ns0.timesheet_id = ids.timesheet_id)
@@ -4570,10 +4569,16 @@ BEGIN
           'is_import_authoritative', COALESCE((base_payload.payload_json->>'is_import_authoritative')::boolean, FALSE),
           'compare_block_required', COALESCE((base_payload.payload_json->>'compare_block_required')::boolean, FALSE),
           'primary_artifact', COALESCE(base_payload.payload_json->'primary_artifact', NULL::jsonb),
-          'source_items', COALESCE(base_payload.payload_json->'import_source_rows', base_payload.payload_json->'shifts', '[]'::jsonb),
+          'source_items', CASE
+            WHEN v_include_import_source_rows = TRUE THEN COALESCE(NULLIF(base_payload.payload_json->'import_source_rows', 'null'::jsonb), base_payload.payload_json->'shifts', '[]'::jsonb)
+            ELSE '[]'::jsonb
+          END,
           'primary_left_pane_mode', base_payload.payload_json->>'primary_left_pane_mode'
         ),
-        'compare_payload', COALESCE(base_payload.payload_json->'healthroster_compare', JSONB_BUILD_OBJECT('required', FALSE, 'rows', '[]'::jsonb, 'imported_detail_refs', JSONB_BUILD_OBJECT())),
+        'compare_payload', CASE
+          WHEN v_include_compare = TRUE THEN COALESCE(base_payload.payload_json->'healthroster_compare', JSONB_BUILD_OBJECT('required', FALSE, 'rows', '[]'::jsonb, 'imported_detail_refs', JSONB_BUILD_OBJECT()))
+          ELSE NULL::jsonb
+        END,
         'data_row', COALESCE(base_payload.payload_json->'row', JSONB_BUILD_OBJECT())
       ) AS payload_json
     FROM base_payload
@@ -4591,6 +4596,5 @@ BEGIN
   ));
 END;
 $function$;
-
 
 
