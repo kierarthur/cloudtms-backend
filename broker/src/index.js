@@ -25425,6 +25425,32 @@ async function handleBankingPayBatchCancel(env, req, user, payBatchId) {
 
 
 
+function sanitizePaymentIssueDisplayMessage(value, fallback) {
+  const safeFallback = String(fallback || 'This payment needs review.').trim() || 'This payment needs review.';
+  const payload = (value && typeof value === 'object') ? value : null;
+  const code = String(payload?.code || payload?.error_code || '').trim().toUpperCase();
+  const rawCandidate = payload ? (payload.message ?? payload.error ?? '') : value;
+  const raw = (typeof rawCandidate === 'string' || typeof rawCandidate === 'number' || typeof rawCandidate === 'boolean')
+    ? String(rawCandidate).trim()
+    : '';
+  const lower = raw.toLowerCase();
+  const mapping = {
+    TIMESHEET_SCOPE_NOT_ALLOWED: 'Select a payment, not a timesheet.',
+    AMBIGUOUS_REVIEW_REQUIRED: 'This payment needs review.',
+    DRAFT_INTERFERENCE: 'Another payment batch already includes this payment. Remove it from that batch first.',
+    SUGGESTED_RESOLUTION_REQUIRED: 'Review the finance adjustment before continuing.',
+    AGGREGATE_TRANSFER_SUBSET_UNSAFE: 'Select the full umbrella payment group to continue.',
+    MAIL_SCOPE_LEGACY_BROAD_MATCH_REQUIRES_REVIEW: 'This payment needs review before queued notices can be updated.',
+    PLAN_STALE: 'This payment needs review. Refresh the payment issue and try again.',
+    ACCEPTED_RESOLUTION_STALE: 'This review is out of date. Please refresh and review it again.'
+  };
+  if (mapping[code]) return mapping[code];
+  if (code.includes('REAUTH') || lower.includes('reauth') || lower.includes('invalid token') || lower.includes('missing token')) return 'Please verify your identity before continuing.';
+  if (code.includes('REASON') || lower.includes('missing reason') || lower.includes('reason is required')) return 'Reason is required.';
+  if (/(correction|unwind|reverse|reversal|settled reversal|no-money|movement classification|work item|frozen artifact|economic artifact|pre-bank|post-draft)/i.test(lower)) return safeFallback;
+  return raw || safeFallback;
+}
+
 async function handleBankingPayCorrectionPlan(env, req, user, payBatchId) {
   const id = String(payBatchId || '').trim();
   if (!id) return withCORS(env, req, badRequest('pay_batch_id is required'));
@@ -25487,7 +25513,7 @@ async function handleBankingPayCorrectionPlan(env, req, user, payBatchId) {
     const dbPayload = extractDbRaisedJson(e);
     if (dbPayload && typeof dbPayload === 'object') {
       const code = String(dbPayload.code || dbPayload.error_code || fallbackCode || 'PAYMENT_CORRECTION_PLAN_FAILED').trim().toUpperCase();
-      const message = String(dbPayload.message || dbPayload.error || fallbackMessage || code).trim() || code;
+      const message = sanitizePaymentIssueDisplayMessage({ ...dbPayload, code }, fallbackMessage);
       const status = (
         code.includes('STALE') ||
         code.includes('BLOCK') ||
@@ -25507,7 +25533,7 @@ async function handleBankingPayCorrectionPlan(env, req, user, payBatchId) {
 
     const statusRaw = Number(e && e.status);
     const status = Number.isFinite(statusRaw) && statusRaw >= 400 && statusRaw < 600 ? statusRaw : 500;
-    const message = String(e?.message || e || fallbackMessage || 'Payment correction plan failed.');
+    const message = sanitizePaymentIssueDisplayMessage(e, fallbackMessage || 'Unable to review payment issue.');
     return withCORS(env, req, jsonResponse(status >= 500 ? 500 : status, {
       ok: false,
       error: message,
@@ -25626,7 +25652,12 @@ async function handleBankingPayCorrectionPlan(env, req, user, payBatchId) {
   if (!body || typeof body !== 'object' || Array.isArray(body)) return withCORS(env, req, badRequest('Invalid JSON'));
 
   const selectionRes = normalizeSelection(body);
-  if (!selectionRes.ok) return withCORS(env, req, badRequest(selectionRes.error));
+  if (!selectionRes.ok) {
+    const err = String(selectionRes.error || '').trim().toUpperCase();
+    if (err === 'TIMESHEET_SCOPE_NOT_ALLOWED') return withCORS(env, req, badRequest('Select a payment, not a timesheet.'));
+    if (err.includes('SCOPE')) return withCORS(env, req, badRequest('This payment selection is not supported.'));
+    return withCORS(env, req, badRequest('Unable to review payment issue.'));
+  }
 
   try {
     const rpcRes = await sbRpc(env, 'pay_payment_correction_plan', {
@@ -25642,7 +25673,7 @@ async function handleBankingPayCorrectionPlan(env, req, user, payBatchId) {
       plan
     }));
   } catch (e) {
-    return rpcErrorResponse(e, 'PAYMENT_CORRECTION_PLAN_FAILED', 'Payment correction plan failed.');
+    return rpcErrorResponse(e, 'PAYMENT_CORRECTION_PLAN_FAILED', 'Unable to review payment issue.');
   }
 }
 
@@ -25707,7 +25738,7 @@ async function handleBankingPayCorrectionStart(env, req, user, payBatchId) {
     const dbPayload = extractDbRaisedJson(e);
     if (dbPayload && typeof dbPayload === 'object') {
       const code = String(dbPayload.code || dbPayload.error_code || fallbackCode || 'PAYMENT_CORRECTION_START_FAILED').trim().toUpperCase();
-      const message = String(dbPayload.message || dbPayload.error || fallbackMessage || code).trim() || code;
+      const message = sanitizePaymentIssueDisplayMessage({ ...dbPayload, code }, fallbackMessage);
       const status = (
         code.includes('STALE') ||
         code.includes('BLOCK') ||
@@ -25728,7 +25759,7 @@ async function handleBankingPayCorrectionStart(env, req, user, payBatchId) {
 
     const statusRaw = Number(e && e.status);
     const status = Number.isFinite(statusRaw) && statusRaw >= 400 && statusRaw < 600 ? statusRaw : 500;
-    const message = String(e?.message || e || fallbackMessage || 'Payment correction start failed.');
+    const message = sanitizePaymentIssueDisplayMessage(e, fallbackMessage || 'Unable to start payment issue action.');
     return withCORS(env, req, jsonResponse(status >= 500 ? 500 : status, {
       ok: false,
       error: message,
@@ -25847,14 +25878,14 @@ async function handleBankingPayCorrectionStart(env, req, user, payBatchId) {
   if (!body || typeof body !== 'object' || Array.isArray(body)) return withCORS(env, req, badRequest('Invalid JSON'));
 
   const selectionRes = normalizeSelection(body);
-  if (!selectionRes.ok) return withCORS(env, req, badRequest(selectionRes.error));
+  if (!selectionRes.ok) return withCORS(env, req, badRequest(sanitizePaymentIssueDisplayMessage(selectionRes.error, 'Unable to start payment issue action.')));
 
   const reason = String(body.reason || body.correction_reason || '').trim();
-  if (!reason) return withCORS(env, req, badRequest('reason is required'));
+  if (!reason) return withCORS(env, req, badRequest('Reason is required.'));
 
   const reauthToken = String(body.reauth_token || body.reauthToken || '').trim();
   const reauthCheck = await verifyPaymentReversalReauth(env, user, reauthToken);
-  if (!reauthCheck.ok) return withCORS(env, req, reauthCheck.response);
+  if (!reauthCheck.ok) return withCORS(env, req, badRequest('Please verify your identity before continuing.'));
 
   const acceptedResolutionJson = (() => {
     const value = body.accepted_resolution_json ?? body.acceptedResolutionJson ?? body.accepted_resolution ?? body.acceptedResolution ?? null;
@@ -25891,7 +25922,7 @@ async function handleBankingPayCorrectionStart(env, req, user, payBatchId) {
       }
     }));
   } catch (e) {
-    return rpcErrorResponse(e, 'PAYMENT_CORRECTION_START_FAILED', 'Payment correction start failed.');
+    return rpcErrorResponse(e, 'PAYMENT_CORRECTION_START_FAILED', 'Unable to start payment issue action.');
   }
 }
 
@@ -25969,12 +26000,12 @@ async function handleBankingPayCorrectionAuthAction(env, req, user, correctionRe
     const dbPayload = extractDbRaisedJson(e);
     if (dbPayload && typeof dbPayload === 'object') {
       const code = String(dbPayload.code || dbPayload.error_code || fallbackCode || 'PAYMENT_CORRECTION_AUTH_ACTION_FAILED').trim().toUpperCase();
-      const message = String(dbPayload.message || dbPayload.error || fallbackMessage || code).trim() || code;
+      const message = sanitizePaymentIssueDisplayMessage({ ...dbPayload, code }, fallbackMessage);
       const status = code.includes('BLOCK') || code.includes('STALE') || code.includes('CONFLICT') || code.includes('TERMINAL') || code.includes('NOT_AUTHORISABLE') || code.includes('ALREADY') ? 409 : 400;
       return withCORS(env, req, jsonResponse(status, { ...dbPayload, error_code: code, message, error: message }));
     }
 
-    const raw = String(e?.message || e || fallbackMessage || 'Payment correction authorisation action failed.').trim();
+    const raw = sanitizePaymentIssueDisplayMessage(e, fallbackMessage || 'Unable to submit approval action.');
     return withCORS(env, req, jsonResponse(400, {
       error: raw,
       message: raw,
@@ -26084,7 +26115,7 @@ async function handleBankingPayCorrectionAuthAction(env, req, user, correctionRe
   if (action === 'AUTHORISE' || action === 'USE_GOLDEN_KEY') {
     const reauthToken = String(body.reauth_token ?? body.reauthToken ?? '').trim();
     const reauthCheck = await verifyPaymentReversalReauth(env, user, reauthToken);
-    if (!reauthCheck.ok) return withCORS(env, req, reauthCheck.response);
+    if (!reauthCheck.ok) return withCORS(env, req, badRequest('Please verify your identity before continuing.'));
   }
 
   try {
@@ -26103,7 +26134,7 @@ async function handleBankingPayCorrectionAuthAction(env, req, user, correctionRe
 
     return withCORS(env, req, ok(payload));
   } catch (e) {
-    return rpcErrorResponse(e, 'PAYMENT_CORRECTION_AUTH_ACTION_FAILED', 'Payment correction authorisation action failed.');
+    return rpcErrorResponse(e, 'PAYMENT_CORRECTION_AUTH_ACTION_FAILED', 'Unable to submit approval action.');
   }
 }
 async function handleBankingPayCorrectionProcess(env, req, user, correctionRequestId) {
@@ -26180,12 +26211,12 @@ async function handleBankingPayCorrectionProcess(env, req, user, correctionReque
     const dbPayload = extractDbRaisedJson(e);
     if (dbPayload && typeof dbPayload === 'object') {
       const code = String(dbPayload.code || dbPayload.error_code || fallbackCode || 'PAYMENT_CORRECTION_PROCESS_FAILED').trim().toUpperCase();
-      const message = String(dbPayload.message || dbPayload.error || fallbackMessage || code).trim() || code;
+      const message = sanitizePaymentIssueDisplayMessage({ ...dbPayload, code }, fallbackMessage);
       const status = code.includes('BLOCK') || code.includes('STALE') || code.includes('CONFLICT') || code.includes('DRIFT') ? 409 : 400;
       return withCORS(env, req, jsonResponse(status, { ...dbPayload, error_code: code, message, error: message }));
     }
 
-    const raw = String(e?.message || e || fallbackMessage || 'Payment correction process failed.').trim();
+    const raw = sanitizePaymentIssueDisplayMessage(e, fallbackMessage || 'Unable to process selected payments.');
     return withCORS(env, req, jsonResponse(400, {
       error: raw,
       message: raw,
@@ -26243,9 +26274,22 @@ async function handleBankingPayCorrectionProcess(env, req, user, correctionReque
     });
 
     const result = unwrapRpc(rpcRes, 'pay_payment_correction_process_chunk');
-    return withCORS(env, req, ok(result && typeof result === 'object' ? result : { ok: true, result }));
+    const payload = (result && typeof result === 'object') ? { ...result } : { ok: true, result };
+    const totals = (payload.totals && typeof payload.totals === 'object') ? payload.totals : {};
+    const blockedOrFailed = Number(totals.blocked || 0) + Number(totals.failed_retryable || 0) + Number(totals.failed_final || 0);
+    if (blockedOrFailed > 0) {
+      payload.display_status = 'Needs review';
+      payload.display_message = 'Some payments need review.';
+    } else if (Number(totals.pending || 0) > 0 || Number(totals.processing || 0) > 0) {
+      payload.display_status = 'Processing';
+      payload.display_message = 'Processing. Selected payments are being updated.';
+    } else {
+      payload.display_status = 'Applied';
+      payload.display_message = 'Applied. The selected amounts are now available to be processed in the next batch.';
+    }
+    return withCORS(env, req, ok(payload));
   } catch (e) {
-    return rpcErrorResponse(e, 'PAYMENT_CORRECTION_PROCESS_FAILED', 'Payment correction process failed.');
+    return rpcErrorResponse(e, 'PAYMENT_CORRECTION_PROCESS_FAILED', 'Unable to process selected payments.');
   }
 }
 
@@ -26390,9 +26434,19 @@ async function handleBankingPayCorrectionStatus(env, req, user, correctionReques
     const blockerStatuses = new Set(['BLOCKED', 'FAILED_RETRYABLE', 'FAILED_FINAL']);
     const blockedRows = workItems.filter((item) => blockerStatuses.has(String(item?.status || '').trim().toUpperCase()));
 
+    const resolveBlockedDisplayMessage = (blockerCode) => {
+      const code = String(blockerCode || '').trim().toUpperCase();
+      if (code === 'MAIL_SCOPE_LEGACY_BROAD_MATCH_REQUIRES_REVIEW') return 'This payment needs review before queued notices can be updated.';
+      if (code === 'DRAFT_INTERFERENCE') return 'Another payment batch already includes this payment. Remove it from that batch first.';
+      if (code === 'AGGREGATE_TRANSFER_SUBSET_UNSAFE') return 'Select the full umbrella payment group to continue.';
+      return 'This payment needs review.';
+    };
+
     const blockers = blockedRows.map((item) => {
       const resultJson = (item && item.result_json && typeof item.result_json === 'object' && !Array.isArray(item.result_json)) ? item.result_json : {};
       const blocker = (resultJson.blocker && typeof resultJson.blocker === 'object' && !Array.isArray(resultJson.blocker)) ? resultJson.blocker : null;
+      const blockerCode = String(blocker?.code || resultJson.code || resultJson.status || '').trim().toUpperCase();
+      const displayMessage = resolveBlockedDisplayMessage(blockerCode);
       return {
         work_item_id: item.id || null,
         status: item.status || null,
@@ -26402,32 +26456,44 @@ async function handleBankingPayCorrectionStatus(env, req, user, correctionReques
         pay_bank_transfer_id: item.pay_bank_transfer_id || null,
         umbrella_id: item.umbrella_id || null,
         attempt_count: item.attempt_count ?? null,
-        code: blocker?.code || resultJson.code || resultJson.status || null,
-        message: blocker?.message || item.last_error || resultJson.error_message || resultJson.message || null,
+        code: blockerCode || null,
+        display_status: 'Needs review',
+        display_message: displayMessage,
+        message: displayMessage,
         last_error: item.last_error || null,
         result_json: resultJson
       };
     });
 
-    const exportableBlockedRows = blockedRows.map((item) => ({
-      correction_request_id: item.correction_request_id || id,
-      work_item_id: item.id || null,
-      pay_batch_id: item.pay_batch_id || requestRow.pay_batch_id || null,
-      status: item.status || null,
-      work_kind: item.work_kind || null,
-      candidate_id: item.candidate_id || null,
-      pay_batch_candidate_id: item.pay_batch_candidate_id || null,
-      pay_bank_transfer_id: item.pay_bank_transfer_id || null,
-      umbrella_id: item.umbrella_id || null,
-      attempt_count: item.attempt_count ?? null,
-      last_error: item.last_error || null,
-      locked_at_utc: item.locked_at_utc || null,
-      locked_by: item.locked_by || null,
-      processed_at_utc: item.processed_at_utc || null,
-      processed_by_user_id: item.processed_by_user_id || null,
-      selection_json: item.selection_json || {},
-      result_json: item.result_json || {}
-    }));
+    const exportableBlockedRows = blockedRows.map((item) => {
+      const resultJson = (item && item.result_json && typeof item.result_json === 'object' && !Array.isArray(item.result_json)) ? item.result_json : {};
+      const blocker = (resultJson.blocker && typeof resultJson.blocker === 'object' && !Array.isArray(resultJson.blocker)) ? resultJson.blocker : null;
+      const blockerCode = String(blocker?.code || resultJson.code || resultJson.status || '').trim().toUpperCase();
+      const displayMessage = resolveBlockedDisplayMessage(blockerCode);
+      return {
+        correction_request_id: item.correction_request_id || id,
+        work_item_id: item.id || null,
+        pay_batch_id: item.pay_batch_id || requestRow.pay_batch_id || null,
+        status: item.status || null,
+        work_kind: item.work_kind || null,
+        candidate_id: item.candidate_id || null,
+        pay_batch_candidate_id: item.pay_batch_candidate_id || null,
+        pay_bank_transfer_id: item.pay_bank_transfer_id || null,
+        umbrella_id: item.umbrella_id || null,
+        attempt_count: item.attempt_count ?? null,
+        code: blockerCode || null,
+        display_status: 'Needs review',
+        display_message: displayMessage,
+        reason_display: displayMessage,
+        internal_last_error: item.last_error || null,
+        support_result_json: resultJson,
+        locked_at_utc: item.locked_at_utc || null,
+        locked_by: item.locked_by || null,
+        processed_at_utc: item.processed_at_utc || null,
+        processed_by_user_id: item.processed_by_user_id || null,
+        selection_json: item.selection_json || {}
+      };
+    });
 
     const displayTotals = {
       total: totals.total,
