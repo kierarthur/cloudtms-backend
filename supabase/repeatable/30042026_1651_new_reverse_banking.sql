@@ -16865,3 +16865,1240 @@ BEGIN
 END;
 $function$;
 
+
+CREATE OR REPLACE FUNCTION public.timesheet_authorise_bulk_atomic(p_items jsonb DEFAULT '[]'::jsonb, p_actor_user_id uuid DEFAULT NULL::uuid, p_now_utc timestamp with time zone DEFAULT now())
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ VOLATILE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_now timestamp with time zone := COALESCE(p_now_utc, now());
+  v_items_array jsonb := '[]'::jsonb;
+  v_uuid_re text := '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$';
+  v_success_count integer := 0;
+  v_failure_count integer := 0;
+  v_out jsonb;
+BEGIN
+  IF p_actor_user_id IS NULL THEN
+    RETURN JSONB_BUILD_OBJECT(
+      'ok', FALSE,
+      'action', 'AUTHORISE',
+      'error_code', 'ACTOR_USER_ID_REQUIRED',
+      'message', 'timesheet_authorise_bulk_atomic requires p_actor_user_id.',
+      'requested_count', 0,
+      'success_count', 0,
+      'failure_count', 0,
+      'results', '[]'::jsonb,
+      'row_patches', '[]'::jsonb,
+      'count_deltas', JSONB_BUILD_OBJECT('processed_eligible', 0, 'authorised_eligible', 0, 'total', 0),
+      'cache_invalidation_hints', JSONB_BUILD_OBJECT('row_keys', '[]'::jsonb, 'timesheet_ids', '[]'::jsonb, 'storage_keys', '[]'::jsonb, 'datasets', JSONB_BUILD_ARRAY('bulk_authorise'))
+    );
+  END IF;
+
+  IF p_items IS NOT NULL AND JSONB_TYPEOF(p_items) NOT IN ('array', 'object') THEN
+    RETURN JSONB_BUILD_OBJECT(
+      'ok', FALSE,
+      'action', 'AUTHORISE',
+      'error_code', 'ITEMS_JSON_MUST_BE_ARRAY_OR_OBJECT',
+      'message', 'p_items must be a JSON array or an object containing items/rows/selected/selections.',
+      'requested_count', 0,
+      'success_count', 0,
+      'failure_count', 0,
+      'results', '[]'::jsonb,
+      'row_patches', '[]'::jsonb,
+      'count_deltas', JSONB_BUILD_OBJECT('processed_eligible', 0, 'authorised_eligible', 0, 'total', 0),
+      'cache_invalidation_hints', JSONB_BUILD_OBJECT('row_keys', '[]'::jsonb, 'timesheet_ids', '[]'::jsonb, 'storage_keys', '[]'::jsonb, 'datasets', JSONB_BUILD_ARRAY('bulk_authorise'))
+    );
+  END IF;
+
+  v_items_array := CASE
+    WHEN p_items IS NULL THEN '[]'::jsonb
+    WHEN JSONB_TYPEOF(p_items) = 'array' THEN p_items
+    WHEN JSONB_TYPEOF(p_items) = 'object' AND JSONB_TYPEOF(p_items->'items') = 'array' THEN p_items->'items'
+    WHEN JSONB_TYPEOF(p_items) = 'object' AND JSONB_TYPEOF(p_items->'rows') = 'array' THEN p_items->'rows'
+    WHEN JSONB_TYPEOF(p_items) = 'object' AND JSONB_TYPEOF(p_items->'selected') = 'array' THEN p_items->'selected'
+    WHEN JSONB_TYPEOF(p_items) = 'object' AND JSONB_TYPEOF(p_items->'selections') = 'array' THEN p_items->'selections'
+    WHEN JSONB_TYPEOF(p_items) = 'object' THEN JSONB_BUILD_ARRAY(p_items)
+    ELSE '[]'::jsonb
+  END;
+
+  DROP TABLE IF EXISTS pg_temp.timesheet_authorise_bulk_items;
+  DROP TABLE IF EXISTS pg_temp.timesheet_authorise_bulk_state;
+  DROP TABLE IF EXISTS pg_temp.timesheet_authorise_bulk_decisions;
+  DROP TABLE IF EXISTS pg_temp.timesheet_authorise_bulk_work;
+  DROP TABLE IF EXISTS pg_temp.timesheet_authorise_bulk_updated_ts;
+  DROP TABLE IF EXISTS pg_temp.timesheet_authorise_bulk_updated_tf;
+  DROP TABLE IF EXISTS pg_temp.timesheet_authorise_bulk_post_decisions;
+  DROP TABLE IF EXISTS pg_temp.timesheet_authorise_bulk_results;
+
+  CREATE TEMP TABLE timesheet_authorise_bulk_items ON COMMIT DROP AS
+  SELECT
+    input_values.ordinality::integer AS ordinal,
+    CASE WHEN JSONB_TYPEOF(input_values.item_json) = 'object' THEN input_values.item_json ELSE JSONB_BUILD_OBJECT('value', input_values.item_json) END AS item_json,
+    NULLIF(BTRIM(COALESCE(input_values.item_json->>'row_key', input_values.item_json->>'rowKey', '')), '') AS row_key,
+    NULLIF(BTRIM(COALESCE(input_values.item_json->>'timesheet_id', input_values.item_json->>'timesheetId', input_values.item_json->>'current_timesheet_id', input_values.item_json->>'currentTimesheetId', input_values.item_json->>'requested_timesheet_id', input_values.item_json->>'requestedTimesheetId', '')), '') AS timesheet_id_text,
+    NULLIF(BTRIM(COALESCE(input_values.item_json->>'expected_timesheet_id', input_values.item_json->>'expectedTimesheetId', input_values.item_json->>'expected_current_timesheet_id', input_values.item_json->>'expectedCurrentTimesheetId', '')), '') AS expected_timesheet_id_text
+  FROM JSONB_ARRAY_ELEMENTS(v_items_array) WITH ORDINALITY AS input_values(item_json, ordinality);
+
+  CREATE TEMP TABLE timesheet_authorise_bulk_state ON COMMIT DROP AS
+  SELECT
+    item_rows.ordinal,
+    item_rows.item_json,
+    item_rows.row_key,
+    CASE
+      WHEN item_rows.timesheet_id_text ~* v_uuid_re THEN item_rows.timesheet_id_text::uuid
+      WHEN item_rows.row_key LIKE 'timesheet:%' AND SUBSTRING(item_rows.row_key FROM 11) ~* v_uuid_re THEN SUBSTRING(item_rows.row_key FROM 11)::uuid
+      ELSE NULL::uuid
+    END AS requested_timesheet_id,
+    CASE WHEN item_rows.expected_timesheet_id_text ~* v_uuid_re THEN item_rows.expected_timesheet_id_text::uuid ELSE NULL::uuid END AS expected_timesheet_id,
+    requested_ts.timesheet_id AS db_requested_timesheet_id,
+    requested_ts.booking_id AS requested_booking_id,
+    requested_ts.version AS requested_version,
+    requested_ts.is_current AS requested_is_current,
+    current_ts.timesheet_id AS current_timesheet_id,
+    current_ts.booking_id AS current_booking_id,
+    current_ts.version AS current_version,
+    current_ts.is_current AS current_is_current,
+    current_ts.authorised_at_server AS current_authorised_at_server,
+    current_ts.sheet_scope AS current_sheet_scope,
+    current_ts.submission_mode AS current_submission_mode,
+    current_tf.id AS tsfin_id,
+    current_tf.processing_status AS tsfin_processing_status,
+    current_tf.basis AS tsfin_basis,
+    current_tf.locked_by_invoice_id AS tsfin_locked_by_invoice_id,
+    current_tf.paid_at_utc AS tsfin_paid_at_utc,
+    current_tf.invoice_breakdown_json AS tsfin_invoice_breakdown_json,
+    COALESCE(segment_state.has_segment_invoice_lock, FALSE) AS has_segment_invoice_lock
+  FROM pg_temp.timesheet_authorise_bulk_items AS item_rows
+  LEFT JOIN LATERAL (
+    SELECT ts_req.timesheet_id, ts_req.booking_id, ts_req.version, ts_req.is_current
+    FROM public.timesheets AS ts_req
+    WHERE ts_req.timesheet_id = CASE
+      WHEN item_rows.timesheet_id_text ~* v_uuid_re THEN item_rows.timesheet_id_text::uuid
+      WHEN item_rows.row_key LIKE 'timesheet:%' AND SUBSTRING(item_rows.row_key FROM 11) ~* v_uuid_re THEN SUBSTRING(item_rows.row_key FROM 11)::uuid
+      ELSE NULL::uuid
+    END
+    ORDER BY ts_req.version DESC NULLS LAST, ts_req.updated_at DESC NULLS LAST, ts_req.created_at DESC NULLS LAST, ts_req.timesheet_id DESC
+    LIMIT 1
+    FOR UPDATE
+  ) AS requested_ts ON TRUE
+  LEFT JOIN LATERAL (
+    SELECT ts_cur.timesheet_id, ts_cur.booking_id, ts_cur.version, ts_cur.is_current, ts_cur.authorised_at_server, ts_cur.sheet_scope, ts_cur.submission_mode
+    FROM public.timesheets AS ts_cur
+    WHERE requested_ts.booking_id IS NOT NULL
+      AND ts_cur.booking_id = requested_ts.booking_id
+    ORDER BY CASE WHEN COALESCE(ts_cur.is_current, FALSE) = TRUE THEN 0 ELSE 1 END ASC,
+             ts_cur.version DESC NULLS LAST,
+             ts_cur.updated_at DESC NULLS LAST,
+             ts_cur.created_at DESC NULLS LAST,
+             ts_cur.timesheet_id DESC
+    LIMIT 1
+    FOR UPDATE
+  ) AS current_ts ON TRUE
+  LEFT JOIN LATERAL (
+    SELECT tf_sel.id, tf_sel.processing_status, tf_sel.basis, tf_sel.locked_by_invoice_id, tf_sel.paid_at_utc, tf_sel.invoice_breakdown_json
+    FROM public.timesheets_financials AS tf_sel
+    WHERE tf_sel.timesheet_id = current_ts.timesheet_id
+      AND tf_sel.is_current = TRUE
+    ORDER BY tf_sel.computed_at_utc DESC NULLS LAST, tf_sel.created_at DESC NULLS LAST, tf_sel.updated_at DESC NULLS LAST, tf_sel.id DESC
+    LIMIT 1
+    FOR UPDATE
+  ) AS current_tf ON TRUE
+  LEFT JOIN LATERAL (
+    SELECT EXISTS (
+      SELECT 1
+      FROM JSONB_ARRAY_ELEMENTS(
+        CASE
+          WHEN current_tf.invoice_breakdown_json IS NULL THEN '[]'::jsonb
+          WHEN JSONB_TYPEOF(current_tf.invoice_breakdown_json) = 'array' THEN current_tf.invoice_breakdown_json
+          WHEN JSONB_TYPEOF(current_tf.invoice_breakdown_json) = 'object' AND JSONB_TYPEOF(current_tf.invoice_breakdown_json->'segments') = 'array' THEN current_tf.invoice_breakdown_json->'segments'
+          ELSE '[]'::jsonb
+        END
+      ) AS invoice_segment(segment_json)
+      WHERE NULLIF(BTRIM(COALESCE(invoice_segment.segment_json->>'invoice_locked_invoice_id', '')), '') IS NOT NULL
+    ) AS has_segment_invoice_lock
+  ) AS segment_state ON TRUE;
+
+  CREATE TEMP TABLE timesheet_authorise_bulk_decisions ON COMMIT DROP AS
+  SELECT decision_result.row_json
+  FROM (
+    SELECT decision_ids.timesheet_ids_json
+    FROM (
+      SELECT COALESCE(JSONB_AGG(DISTINCT TO_JSONB(state_rows.current_timesheet_id::text)) FILTER (WHERE state_rows.current_timesheet_id IS NOT NULL), '[]'::jsonb) AS timesheet_ids_json
+      FROM pg_temp.timesheet_authorise_bulk_state AS state_rows
+    ) AS decision_ids
+    WHERE JSONB_ARRAY_LENGTH(decision_ids.timesheet_ids_json) > 0
+  ) AS decision_filter
+  CROSS JOIN LATERAL public.bulk_timesheet_row_decision_v1(JSONB_BUILD_OBJECT('timesheet_ids', decision_filter.timesheet_ids_json, 'dataset_mode', 'authorise')) AS decision_result(row_json);
+
+  CREATE TEMP TABLE timesheet_authorise_bulk_work ON COMMIT DROP AS
+  SELECT
+    state_rows.ordinal,
+    state_rows.item_json,
+    state_rows.row_key,
+    state_rows.requested_timesheet_id,
+    state_rows.expected_timesheet_id,
+    state_rows.db_requested_timesheet_id,
+    state_rows.requested_booking_id,
+    state_rows.requested_version,
+    state_rows.requested_is_current,
+    state_rows.current_timesheet_id,
+    state_rows.current_booking_id,
+    state_rows.current_version,
+    state_rows.current_is_current,
+    state_rows.current_authorised_at_server,
+    state_rows.current_sheet_scope,
+    state_rows.current_submission_mode,
+    state_rows.tsfin_id,
+    state_rows.tsfin_processing_status,
+    state_rows.tsfin_basis,
+    state_rows.tsfin_locked_by_invoice_id,
+    state_rows.tsfin_paid_at_utc,
+    state_rows.has_segment_invoice_lock,
+    decision_rows.row_json AS pre_row_json,
+    COALESCE((decision_rows.row_json->>'can_bulk_authorise')::boolean, FALSE) AS eligible_flag,
+    CASE
+      WHEN state_rows.requested_timesheet_id IS NULL THEN 'TIMESHEET_ID_REQUIRED'
+      WHEN state_rows.expected_timesheet_id IS NULL THEN 'EXPECTED_TIMESHEET_ID_REQUIRED'
+      WHEN state_rows.db_requested_timesheet_id IS NULL THEN 'TIMESHEET_NOT_FOUND'
+      WHEN state_rows.current_timesheet_id IS NULL THEN 'CURRENT_TIMESHEET_NOT_FOUND'
+      WHEN state_rows.current_is_current IS DISTINCT FROM TRUE THEN 'CURRENT_TIMESHEET_NOT_FOUND'
+      WHEN state_rows.expected_timesheet_id IS DISTINCT FROM state_rows.current_timesheet_id THEN 'TIMESHEET_MOVED'
+      WHEN state_rows.tsfin_id IS NULL THEN 'NO_TSFIN'
+      WHEN decision_rows.row_json IS NULL THEN 'DECISION_ROW_NOT_FOUND'
+      WHEN state_rows.tsfin_locked_by_invoice_id IS NOT NULL OR state_rows.tsfin_paid_at_utc IS NOT NULL OR state_rows.has_segment_invoice_lock = TRUE OR COALESCE((decision_rows.row_json->>'locked')::boolean, FALSE) = TRUE THEN 'TIMESHEET_LOCKED_OR_PAID'
+      WHEN COALESCE((decision_rows.row_json->>'qr_unsigned_blocked')::boolean, FALSE) = TRUE THEN 'QR_UNSIGNED_BLOCKED'
+      WHEN COALESCE((decision_rows.row_json->>'is_authorised')::boolean, FALSE) = TRUE THEN 'ALREADY_AUTHORISED'
+      WHEN COALESCE((decision_rows.row_json->>'requires_authorisation')::boolean, FALSE) = FALSE THEN 'AUTHORISATION_NOT_REQUIRED'
+      WHEN COALESCE((decision_rows.row_json->>'can_bulk_authorise')::boolean, FALSE) = FALSE THEN 'AUTHORISE_NOT_ALLOWED'
+      ELSE NULL::text
+    END AS failure_code,
+    CASE
+      WHEN state_rows.tsfin_processing_status IN ('PENDING_AUTH'::public.ts_fin_processing_status_enum, 'READY_FOR_HR'::public.ts_fin_processing_status_enum) THEN
+        CASE
+          WHEN COALESCE((decision_rows.row_json->>'hr_validation_required_for_invoice')::boolean, FALSE) = TRUE AND COALESCE((decision_rows.row_json->>'hr_validation_satisfied')::boolean, FALSE) = FALSE THEN 'READY_FOR_HR'::public.ts_fin_processing_status_enum
+          WHEN state_rows.tsfin_basis IN ('NHSP'::public.timesheet_fin_basis_enum, 'NHSP_ADJUSTMENT'::public.timesheet_fin_basis_enum, 'HEALTHROSTER_SELF_BILL'::public.timesheet_fin_basis_enum, 'HEALTHROSTER_ADJUSTMENT'::public.timesheet_fin_basis_enum) THEN 'READY_FOR_INVOICE'::public.ts_fin_processing_status_enum
+          WHEN COALESCE((decision_rows.row_json->>'validation_pre_validated')::boolean, FALSE) = TRUE AND COALESCE((decision_rows.row_json->>'hr_validation_satisfied')::boolean, FALSE) = TRUE THEN 'READY_FOR_INVOICE'::public.ts_fin_processing_status_enum
+          WHEN COALESCE((decision_rows.row_json->>'client_requires_hr')::boolean, FALSE) = TRUE THEN 'READY_FOR_HR'::public.ts_fin_processing_status_enum
+          ELSE 'READY_FOR_INVOICE'::public.ts_fin_processing_status_enum
+        END
+      ELSE state_rows.tsfin_processing_status
+    END AS new_processing_status
+  FROM pg_temp.timesheet_authorise_bulk_state AS state_rows
+  LEFT JOIN pg_temp.timesheet_authorise_bulk_decisions AS decision_rows
+    ON CASE WHEN COALESCE(decision_rows.row_json->>'timesheet_id', '') ~* v_uuid_re THEN (decision_rows.row_json->>'timesheet_id')::uuid ELSE NULL::uuid END = state_rows.current_timesheet_id;
+
+  CREATE TEMP TABLE timesheet_authorise_bulk_updated_ts ON COMMIT DROP AS
+  WITH updated_rows AS (
+    UPDATE public.timesheets AS ts_upd
+    SET authorised_at_server = v_now,
+        updated_at = v_now
+    FROM pg_temp.timesheet_authorise_bulk_work AS work_rows
+    WHERE work_rows.failure_code IS NULL
+      AND ts_upd.timesheet_id = work_rows.current_timesheet_id
+      AND ts_upd.is_current = TRUE
+    RETURNING ts_upd.timesheet_id, ts_upd.version, ts_upd.updated_at
+  )
+  SELECT updated_rows.timesheet_id, updated_rows.version, updated_rows.updated_at
+  FROM updated_rows;
+
+  CREATE TEMP TABLE timesheet_authorise_bulk_updated_tf ON COMMIT DROP AS
+  WITH updated_rows AS (
+    UPDATE public.timesheets_financials AS tf_upd
+    SET processing_status = work_rows.new_processing_status,
+        authorised_by_user_id = p_actor_user_id,
+        authorised_at_utc = v_now,
+        updated_at = v_now
+    FROM pg_temp.timesheet_authorise_bulk_work AS work_rows
+    JOIN pg_temp.timesheet_authorise_bulk_updated_ts AS updated_ts
+      ON updated_ts.timesheet_id = work_rows.current_timesheet_id
+    WHERE work_rows.failure_code IS NULL
+      AND tf_upd.id = work_rows.tsfin_id
+      AND tf_upd.is_current = TRUE
+    RETURNING tf_upd.timesheet_id, tf_upd.processing_status, tf_upd.updated_at
+  )
+  SELECT updated_rows.timesheet_id, updated_rows.processing_status, updated_rows.updated_at
+  FROM updated_rows;
+
+
+  CREATE TEMP TABLE timesheet_authorise_bulk_post_decisions ON COMMIT DROP AS
+  SELECT post_decision_result.row_json
+  FROM (
+    SELECT post_ids.timesheet_ids_json
+    FROM (
+      SELECT COALESCE(JSONB_AGG(DISTINCT TO_JSONB(updated_tf.timesheet_id::text)) FILTER (WHERE updated_tf.timesheet_id IS NOT NULL), '[]'::jsonb) AS timesheet_ids_json
+      FROM pg_temp.timesheet_authorise_bulk_updated_tf AS updated_tf
+    ) AS post_ids
+    WHERE JSONB_ARRAY_LENGTH(post_ids.timesheet_ids_json) > 0
+  ) AS post_filter
+  CROSS JOIN LATERAL public.bulk_timesheet_row_decision_v1(JSONB_BUILD_OBJECT('timesheet_ids', post_filter.timesheet_ids_json, 'dataset_mode', 'authorise')) AS post_decision_result(row_json);
+
+  CREATE TEMP TABLE timesheet_authorise_bulk_results ON COMMIT DROP AS
+  SELECT
+    work_rows.ordinal,
+    CASE WHEN work_rows.failure_code IS NULL AND updated_tf.timesheet_id IS NOT NULL THEN TRUE ELSE FALSE END AS success,
+    JSONB_BUILD_OBJECT(
+      'item_index', work_rows.ordinal,
+      'success', CASE WHEN work_rows.failure_code IS NULL AND updated_tf.timesheet_id IS NOT NULL THEN TRUE ELSE FALSE END,
+      'action', 'AUTHORISE',
+      'error_code', CASE WHEN work_rows.failure_code IS NULL AND updated_tf.timesheet_id IS NOT NULL THEN NULL::text ELSE COALESCE(work_rows.failure_code, 'MUTATION_UPDATE_FAILED') END,
+      'message', CASE
+        WHEN work_rows.failure_code IS NULL AND updated_tf.timesheet_id IS NOT NULL THEN NULL::text
+        WHEN COALESCE(work_rows.failure_code, 'MUTATION_UPDATE_FAILED') = 'TIMESHEET_MOVED' THEN 'Timesheet has moved to a different current row.'
+        WHEN COALESCE(work_rows.failure_code, 'MUTATION_UPDATE_FAILED') = 'TIMESHEET_LOCKED_OR_PAID' THEN 'Timesheet is locked, invoice-locked, or paid.'
+        WHEN COALESCE(work_rows.failure_code, 'MUTATION_UPDATE_FAILED') = 'QR_UNSIGNED_BLOCKED' THEN 'QR timesheet has not been signed and returned.'
+        WHEN COALESCE(work_rows.failure_code, 'MUTATION_UPDATE_FAILED') = 'AUTHORISE_NOT_ALLOWED' THEN 'Timesheet is not eligible for bulk authorisation.'
+        ELSE COALESCE(work_rows.failure_code, 'MUTATION_UPDATE_FAILED')
+      END,
+      'requested_timesheet_id', work_rows.requested_timesheet_id,
+      'expected_timesheet_id', work_rows.expected_timesheet_id,
+      'current_timesheet_id', work_rows.current_timesheet_id,
+      'current_version', COALESCE(updated_ts.version, work_rows.current_version),
+      'was_stale', work_rows.requested_timesheet_id IS DISTINCT FROM work_rows.current_timesheet_id,
+      'processing_status_before', work_rows.tsfin_processing_status,
+      'processing_status_after', updated_tf.processing_status,
+      'row_key_before', COALESCE(work_rows.row_key, work_rows.pre_row_json->>'row_key'),
+      'row_key_after', COALESCE(post_rows.row_json->>'row_key', work_rows.pre_row_json->>'row_key'),
+      'row', CASE WHEN work_rows.failure_code IS NULL AND updated_tf.timesheet_id IS NOT NULL THEN COALESCE(post_rows.row_json, JSONB_BUILD_OBJECT()) ELSE COALESCE(work_rows.pre_row_json, JSONB_BUILD_OBJECT()) END,
+      'row_patch', CASE WHEN work_rows.failure_code IS NULL AND updated_tf.timesheet_id IS NOT NULL THEN COALESCE(post_rows.row_json->'row_patch', JSONB_BUILD_OBJECT()) ELSE JSONB_BUILD_OBJECT() END,
+      'cache_invalidation_hints', CASE WHEN work_rows.failure_code IS NULL AND updated_tf.timesheet_id IS NOT NULL THEN JSONB_BUILD_OBJECT(
+        'row_keys', JSONB_BUILD_ARRAY(COALESCE(work_rows.row_key, work_rows.pre_row_json->>'row_key'), post_rows.row_json->>'row_key'),
+        'timesheet_ids', JSONB_BUILD_ARRAY(work_rows.requested_timesheet_id, work_rows.current_timesheet_id),
+        'storage_keys', JSONB_BUILD_ARRAY(post_rows.row_json->>'primary_artifact_storage_key'),
+        'row_signature', post_rows.row_json->>'row_signature',
+        'invalidate_context', TRUE,
+        'invalidate_preview', FALSE
+      ) ELSE JSONB_BUILD_OBJECT() END
+    ) AS result_json
+  FROM pg_temp.timesheet_authorise_bulk_work AS work_rows
+  LEFT JOIN pg_temp.timesheet_authorise_bulk_updated_ts AS updated_ts ON updated_ts.timesheet_id = work_rows.current_timesheet_id
+  LEFT JOIN pg_temp.timesheet_authorise_bulk_updated_tf AS updated_tf ON updated_tf.timesheet_id = work_rows.current_timesheet_id
+  LEFT JOIN pg_temp.timesheet_authorise_bulk_post_decisions AS post_rows ON CASE WHEN COALESCE(post_rows.row_json->>'timesheet_id', '') ~* v_uuid_re THEN (post_rows.row_json->>'timesheet_id')::uuid ELSE NULL::uuid END = work_rows.current_timesheet_id;
+
+  SELECT
+    COUNT(result_rows.result_json) FILTER (WHERE result_rows.success = TRUE)::integer,
+    COUNT(result_rows.result_json) FILTER (WHERE result_rows.success = FALSE)::integer
+  INTO v_success_count, v_failure_count
+  FROM pg_temp.timesheet_authorise_bulk_results AS result_rows;
+
+  SELECT JSONB_BUILD_OBJECT(
+    'ok', v_failure_count = 0,
+    'action', 'AUTHORISE',
+    'requested_count', JSONB_ARRAY_LENGTH(v_items_array),
+    'success_count', v_success_count,
+    'failure_count', v_failure_count,
+    'has_failures', v_failure_count > 0,
+    'results', COALESCE((SELECT JSONB_AGG(result_rows.result_json ORDER BY result_rows.ordinal ASC) FROM pg_temp.timesheet_authorise_bulk_results AS result_rows), '[]'::jsonb),
+    'row_patches', COALESCE((SELECT JSONB_AGG(result_rows.result_json->'row_patch' ORDER BY result_rows.ordinal ASC) FROM pg_temp.timesheet_authorise_bulk_results AS result_rows WHERE result_rows.success = TRUE), '[]'::jsonb),
+    'count_deltas', JSONB_BUILD_OBJECT('processed_eligible', -v_success_count, 'authorised_eligible', v_success_count, 'total', 0),
+    'cache_invalidation_hints', JSONB_BUILD_OBJECT(
+      'row_keys', COALESCE((SELECT JSONB_AGG(TO_JSONB(distinct_row_keys.row_key)) FROM (SELECT DISTINCT cache_key_values.cache_key AS row_key FROM pg_temp.timesheet_authorise_bulk_results AS result_rows CROSS JOIN LATERAL JSONB_ARRAY_ELEMENTS_TEXT(COALESCE(result_rows.result_json->'cache_invalidation_hints'->'row_keys', '[]'::jsonb)) AS cache_key_values(cache_key) WHERE result_rows.success = TRUE AND NULLIF(BTRIM(COALESCE(cache_key_values.cache_key, '')), '') IS NOT NULL) AS distinct_row_keys), '[]'::jsonb),
+      'timesheet_ids', COALESCE((SELECT JSONB_AGG(TO_JSONB(distinct_timesheet_ids.timesheet_id_text)) FROM (SELECT DISTINCT cache_timesheet_values.timesheet_id_text FROM pg_temp.timesheet_authorise_bulk_results AS result_rows CROSS JOIN LATERAL JSONB_ARRAY_ELEMENTS_TEXT(COALESCE(result_rows.result_json->'cache_invalidation_hints'->'timesheet_ids', '[]'::jsonb)) AS cache_timesheet_values(timesheet_id_text) WHERE result_rows.success = TRUE AND NULLIF(BTRIM(COALESCE(cache_timesheet_values.timesheet_id_text, '')), '') IS NOT NULL) AS distinct_timesheet_ids), '[]'::jsonb),
+      'storage_keys', COALESCE((SELECT JSONB_AGG(TO_JSONB(distinct_storage_keys.storage_key)) FROM (SELECT DISTINCT cache_storage_values.storage_key FROM pg_temp.timesheet_authorise_bulk_results AS result_rows CROSS JOIN LATERAL JSONB_ARRAY_ELEMENTS_TEXT(COALESCE(result_rows.result_json->'cache_invalidation_hints'->'storage_keys', '[]'::jsonb)) AS cache_storage_values(storage_key) WHERE result_rows.success = TRUE AND NULLIF(BTRIM(COALESCE(cache_storage_values.storage_key, '')), '') IS NOT NULL) AS distinct_storage_keys), '[]'::jsonb),
+      'datasets', JSONB_BUILD_ARRAY('bulk_authorise')
+    )
+  ) INTO v_out;
+
+  RETURN COALESCE(v_out, JSONB_BUILD_OBJECT('ok', TRUE, 'action', 'AUTHORISE', 'requested_count', 0, 'success_count', 0, 'failure_count', 0, 'has_failures', FALSE, 'results', '[]'::jsonb, 'row_patches', '[]'::jsonb, 'count_deltas', JSONB_BUILD_OBJECT('processed_eligible', 0, 'authorised_eligible', 0, 'total', 0), 'cache_invalidation_hints', JSONB_BUILD_OBJECT('row_keys', '[]'::jsonb, 'timesheet_ids', '[]'::jsonb, 'storage_keys', '[]'::jsonb, 'datasets', JSONB_BUILD_ARRAY('bulk_authorise'))));
+END;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.timesheet_unauthorise_bulk_atomic(p_items jsonb DEFAULT '[]'::jsonb, p_actor_user_id uuid DEFAULT NULL::uuid, p_now_utc timestamp with time zone DEFAULT now())
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ VOLATILE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_now timestamp with time zone := COALESCE(p_now_utc, now());
+  v_items_array jsonb := '[]'::jsonb;
+  v_uuid_re text := '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$';
+  v_success_count integer := 0;
+  v_failure_count integer := 0;
+  v_out jsonb;
+BEGIN
+  IF p_actor_user_id IS NULL THEN
+    RETURN JSONB_BUILD_OBJECT(
+      'ok', FALSE,
+      'action', 'UNAUTHORISE',
+      'error_code', 'ACTOR_USER_ID_REQUIRED',
+      'message', 'timesheet_unauthorise_bulk_atomic requires p_actor_user_id.',
+      'requested_count', 0,
+      'success_count', 0,
+      'failure_count', 0,
+      'results', '[]'::jsonb,
+      'row_patches', '[]'::jsonb,
+      'count_deltas', JSONB_BUILD_OBJECT('processed_eligible', 0, 'authorised_eligible', 0, 'total', 0),
+      'cache_invalidation_hints', JSONB_BUILD_OBJECT('row_keys', '[]'::jsonb, 'timesheet_ids', '[]'::jsonb, 'storage_keys', '[]'::jsonb, 'datasets', JSONB_BUILD_ARRAY('bulk_authorise'))
+    );
+  END IF;
+
+  IF p_items IS NOT NULL AND JSONB_TYPEOF(p_items) NOT IN ('array', 'object') THEN
+    RETURN JSONB_BUILD_OBJECT(
+      'ok', FALSE,
+      'action', 'UNAUTHORISE',
+      'error_code', 'ITEMS_JSON_MUST_BE_ARRAY_OR_OBJECT',
+      'message', 'p_items must be a JSON array or an object containing items/rows/selected/selections.',
+      'requested_count', 0,
+      'success_count', 0,
+      'failure_count', 0,
+      'results', '[]'::jsonb,
+      'row_patches', '[]'::jsonb,
+      'count_deltas', JSONB_BUILD_OBJECT('processed_eligible', 0, 'authorised_eligible', 0, 'total', 0),
+      'cache_invalidation_hints', JSONB_BUILD_OBJECT('row_keys', '[]'::jsonb, 'timesheet_ids', '[]'::jsonb, 'storage_keys', '[]'::jsonb, 'datasets', JSONB_BUILD_ARRAY('bulk_authorise'))
+    );
+  END IF;
+
+  v_items_array := CASE
+    WHEN p_items IS NULL THEN '[]'::jsonb
+    WHEN JSONB_TYPEOF(p_items) = 'array' THEN p_items
+    WHEN JSONB_TYPEOF(p_items) = 'object' AND JSONB_TYPEOF(p_items->'items') = 'array' THEN p_items->'items'
+    WHEN JSONB_TYPEOF(p_items) = 'object' AND JSONB_TYPEOF(p_items->'rows') = 'array' THEN p_items->'rows'
+    WHEN JSONB_TYPEOF(p_items) = 'object' AND JSONB_TYPEOF(p_items->'selected') = 'array' THEN p_items->'selected'
+    WHEN JSONB_TYPEOF(p_items) = 'object' AND JSONB_TYPEOF(p_items->'selections') = 'array' THEN p_items->'selections'
+    WHEN JSONB_TYPEOF(p_items) = 'object' THEN JSONB_BUILD_ARRAY(p_items)
+    ELSE '[]'::jsonb
+  END;
+
+  DROP TABLE IF EXISTS pg_temp.timesheet_unauthorise_bulk_items;
+  DROP TABLE IF EXISTS pg_temp.timesheet_unauthorise_bulk_state;
+  DROP TABLE IF EXISTS pg_temp.timesheet_unauthorise_bulk_decisions;
+  DROP TABLE IF EXISTS pg_temp.timesheet_unauthorise_bulk_work;
+  DROP TABLE IF EXISTS pg_temp.timesheet_unauthorise_bulk_updated_ts;
+  DROP TABLE IF EXISTS pg_temp.timesheet_unauthorise_bulk_updated_tf;
+  DROP TABLE IF EXISTS pg_temp.timesheet_unauthorise_bulk_updated_cw;
+  DROP TABLE IF EXISTS pg_temp.timesheet_unauthorise_bulk_post_decisions;
+  DROP TABLE IF EXISTS pg_temp.timesheet_unauthorise_bulk_results;
+
+  CREATE TEMP TABLE timesheet_unauthorise_bulk_items ON COMMIT DROP AS
+  SELECT
+    input_values.ordinality::integer AS ordinal,
+    CASE WHEN JSONB_TYPEOF(input_values.item_json) = 'object' THEN input_values.item_json ELSE JSONB_BUILD_OBJECT('value', input_values.item_json) END AS item_json,
+    NULLIF(BTRIM(COALESCE(input_values.item_json->>'row_key', input_values.item_json->>'rowKey', '')), '') AS row_key,
+    NULLIF(BTRIM(COALESCE(input_values.item_json->>'timesheet_id', input_values.item_json->>'timesheetId', input_values.item_json->>'current_timesheet_id', input_values.item_json->>'currentTimesheetId', input_values.item_json->>'requested_timesheet_id', input_values.item_json->>'requestedTimesheetId', '')), '') AS timesheet_id_text,
+    NULLIF(BTRIM(COALESCE(input_values.item_json->>'expected_timesheet_id', input_values.item_json->>'expectedTimesheetId', input_values.item_json->>'expected_current_timesheet_id', input_values.item_json->>'expectedCurrentTimesheetId', '')), '') AS expected_timesheet_id_text
+  FROM JSONB_ARRAY_ELEMENTS(v_items_array) WITH ORDINALITY AS input_values(item_json, ordinality);
+
+  CREATE TEMP TABLE timesheet_unauthorise_bulk_state ON COMMIT DROP AS
+  SELECT
+    item_rows.ordinal,
+    item_rows.item_json,
+    item_rows.row_key,
+    CASE
+      WHEN item_rows.timesheet_id_text ~* v_uuid_re THEN item_rows.timesheet_id_text::uuid
+      WHEN item_rows.row_key LIKE 'timesheet:%' AND SUBSTRING(item_rows.row_key FROM 11) ~* v_uuid_re THEN SUBSTRING(item_rows.row_key FROM 11)::uuid
+      ELSE NULL::uuid
+    END AS requested_timesheet_id,
+    CASE WHEN item_rows.expected_timesheet_id_text ~* v_uuid_re THEN item_rows.expected_timesheet_id_text::uuid ELSE NULL::uuid END AS expected_timesheet_id,
+    requested_ts.timesheet_id AS db_requested_timesheet_id,
+    requested_ts.booking_id AS requested_booking_id,
+    requested_ts.version AS requested_version,
+    requested_ts.is_current AS requested_is_current,
+    current_ts.timesheet_id AS current_timesheet_id,
+    current_ts.booking_id AS current_booking_id,
+    current_ts.version AS current_version,
+    current_ts.is_current AS current_is_current,
+    current_ts.authorised_at_server AS current_authorised_at_server,
+    current_ts.sheet_scope AS current_sheet_scope,
+    current_ts.submission_mode AS current_submission_mode,
+    current_tf.id AS tsfin_id,
+    current_tf.processing_status AS tsfin_processing_status,
+    current_tf.basis AS tsfin_basis,
+    current_tf.locked_by_invoice_id AS tsfin_locked_by_invoice_id,
+    current_tf.paid_at_utc AS tsfin_paid_at_utc,
+    current_tf.invoice_breakdown_json AS tsfin_invoice_breakdown_json,
+    COALESCE(segment_state.has_segment_invoice_lock, FALSE) AS has_segment_invoice_lock
+  FROM pg_temp.timesheet_unauthorise_bulk_items AS item_rows
+  LEFT JOIN LATERAL (
+    SELECT ts_req.timesheet_id, ts_req.booking_id, ts_req.version, ts_req.is_current
+    FROM public.timesheets AS ts_req
+    WHERE ts_req.timesheet_id = CASE
+      WHEN item_rows.timesheet_id_text ~* v_uuid_re THEN item_rows.timesheet_id_text::uuid
+      WHEN item_rows.row_key LIKE 'timesheet:%' AND SUBSTRING(item_rows.row_key FROM 11) ~* v_uuid_re THEN SUBSTRING(item_rows.row_key FROM 11)::uuid
+      ELSE NULL::uuid
+    END
+    ORDER BY ts_req.version DESC NULLS LAST, ts_req.updated_at DESC NULLS LAST, ts_req.created_at DESC NULLS LAST, ts_req.timesheet_id DESC
+    LIMIT 1
+    FOR UPDATE
+  ) AS requested_ts ON TRUE
+  LEFT JOIN LATERAL (
+    SELECT ts_cur.timesheet_id, ts_cur.booking_id, ts_cur.version, ts_cur.is_current, ts_cur.authorised_at_server, ts_cur.sheet_scope, ts_cur.submission_mode
+    FROM public.timesheets AS ts_cur
+    WHERE requested_ts.booking_id IS NOT NULL
+      AND ts_cur.booking_id = requested_ts.booking_id
+    ORDER BY CASE WHEN COALESCE(ts_cur.is_current, FALSE) = TRUE THEN 0 ELSE 1 END ASC,
+             ts_cur.version DESC NULLS LAST,
+             ts_cur.updated_at DESC NULLS LAST,
+             ts_cur.created_at DESC NULLS LAST,
+             ts_cur.timesheet_id DESC
+    LIMIT 1
+    FOR UPDATE
+  ) AS current_ts ON TRUE
+  LEFT JOIN LATERAL (
+    SELECT tf_sel.id, tf_sel.processing_status, tf_sel.basis, tf_sel.locked_by_invoice_id, tf_sel.paid_at_utc, tf_sel.invoice_breakdown_json
+    FROM public.timesheets_financials AS tf_sel
+    WHERE tf_sel.timesheet_id = current_ts.timesheet_id
+      AND tf_sel.is_current = TRUE
+    ORDER BY tf_sel.computed_at_utc DESC NULLS LAST, tf_sel.created_at DESC NULLS LAST, tf_sel.updated_at DESC NULLS LAST, tf_sel.id DESC
+    LIMIT 1
+    FOR UPDATE
+  ) AS current_tf ON TRUE
+  LEFT JOIN LATERAL (
+    SELECT EXISTS (
+      SELECT 1
+      FROM JSONB_ARRAY_ELEMENTS(
+        CASE
+          WHEN current_tf.invoice_breakdown_json IS NULL THEN '[]'::jsonb
+          WHEN JSONB_TYPEOF(current_tf.invoice_breakdown_json) = 'array' THEN current_tf.invoice_breakdown_json
+          WHEN JSONB_TYPEOF(current_tf.invoice_breakdown_json) = 'object' AND JSONB_TYPEOF(current_tf.invoice_breakdown_json->'segments') = 'array' THEN current_tf.invoice_breakdown_json->'segments'
+          ELSE '[]'::jsonb
+        END
+      ) AS invoice_segment(segment_json)
+      WHERE NULLIF(BTRIM(COALESCE(invoice_segment.segment_json->>'invoice_locked_invoice_id', '')), '') IS NOT NULL
+    ) AS has_segment_invoice_lock
+  ) AS segment_state ON TRUE;
+
+  CREATE TEMP TABLE timesheet_unauthorise_bulk_decisions ON COMMIT DROP AS
+  SELECT decision_result.row_json
+  FROM (
+    SELECT decision_ids.timesheet_ids_json
+    FROM (
+      SELECT COALESCE(JSONB_AGG(DISTINCT TO_JSONB(state_rows.current_timesheet_id::text)) FILTER (WHERE state_rows.current_timesheet_id IS NOT NULL), '[]'::jsonb) AS timesheet_ids_json
+      FROM pg_temp.timesheet_unauthorise_bulk_state AS state_rows
+    ) AS decision_ids
+    WHERE JSONB_ARRAY_LENGTH(decision_ids.timesheet_ids_json) > 0
+  ) AS decision_filter
+  CROSS JOIN LATERAL public.bulk_timesheet_row_decision_v1(JSONB_BUILD_OBJECT('timesheet_ids', decision_filter.timesheet_ids_json, 'dataset_mode', 'authorise')) AS decision_result(row_json);
+
+  CREATE TEMP TABLE timesheet_unauthorise_bulk_work ON COMMIT DROP AS
+  SELECT
+    state_rows.ordinal,
+    state_rows.item_json,
+    state_rows.row_key,
+    state_rows.requested_timesheet_id,
+    state_rows.expected_timesheet_id,
+    state_rows.db_requested_timesheet_id,
+    state_rows.requested_booking_id,
+    state_rows.requested_version,
+    state_rows.requested_is_current,
+    state_rows.current_timesheet_id,
+    state_rows.current_booking_id,
+    state_rows.current_version,
+    state_rows.current_is_current,
+    state_rows.current_authorised_at_server,
+    state_rows.current_sheet_scope,
+    state_rows.current_submission_mode,
+    state_rows.tsfin_id,
+    state_rows.tsfin_processing_status,
+    state_rows.tsfin_basis,
+    state_rows.tsfin_locked_by_invoice_id,
+    state_rows.tsfin_paid_at_utc,
+    state_rows.has_segment_invoice_lock,
+    decision_rows.row_json AS pre_row_json,
+    COALESCE((decision_rows.row_json->>'can_bulk_unauthorise')::boolean, FALSE) AS eligible_flag,
+    CASE
+      WHEN state_rows.requested_timesheet_id IS NULL THEN 'TIMESHEET_ID_REQUIRED'
+      WHEN state_rows.expected_timesheet_id IS NULL THEN 'EXPECTED_TIMESHEET_ID_REQUIRED'
+      WHEN state_rows.db_requested_timesheet_id IS NULL THEN 'TIMESHEET_NOT_FOUND'
+      WHEN state_rows.current_timesheet_id IS NULL THEN 'CURRENT_TIMESHEET_NOT_FOUND'
+      WHEN state_rows.current_is_current IS DISTINCT FROM TRUE THEN 'CURRENT_TIMESHEET_NOT_FOUND'
+      WHEN state_rows.expected_timesheet_id IS DISTINCT FROM state_rows.current_timesheet_id THEN 'TIMESHEET_MOVED'
+      WHEN state_rows.tsfin_id IS NULL THEN 'NO_TSFIN'
+      WHEN decision_rows.row_json IS NULL THEN 'DECISION_ROW_NOT_FOUND'
+      WHEN state_rows.tsfin_locked_by_invoice_id IS NOT NULL OR state_rows.tsfin_paid_at_utc IS NOT NULL OR state_rows.has_segment_invoice_lock = TRUE OR COALESCE((decision_rows.row_json->>'locked')::boolean, FALSE) = TRUE THEN 'TIMESHEET_LOCKED_OR_PAID'
+      WHEN COALESCE((decision_rows.row_json->>'is_authorised')::boolean, FALSE) = FALSE THEN 'NOT_AUTHORISED'
+      WHEN COALESCE((decision_rows.row_json->>'can_bulk_unauthorise')::boolean, FALSE) = FALSE THEN 'UNAUTHORISE_NOT_ALLOWED'
+      ELSE NULL::text
+    END AS failure_code,
+    'PENDING_AUTH'::public.ts_fin_processing_status_enum AS new_processing_status
+  FROM pg_temp.timesheet_unauthorise_bulk_state AS state_rows
+  LEFT JOIN pg_temp.timesheet_unauthorise_bulk_decisions AS decision_rows
+    ON CASE WHEN COALESCE(decision_rows.row_json->>'timesheet_id', '') ~* v_uuid_re THEN (decision_rows.row_json->>'timesheet_id')::uuid ELSE NULL::uuid END = state_rows.current_timesheet_id;
+
+  CREATE TEMP TABLE timesheet_unauthorise_bulk_updated_ts ON COMMIT DROP AS
+  WITH updated_rows AS (
+    UPDATE public.timesheets AS ts_upd
+    SET authorised_at_server = NULL,
+        updated_at = v_now
+    FROM pg_temp.timesheet_unauthorise_bulk_work AS work_rows
+    WHERE work_rows.failure_code IS NULL
+      AND ts_upd.timesheet_id = work_rows.current_timesheet_id
+      AND ts_upd.is_current = TRUE
+    RETURNING ts_upd.timesheet_id, ts_upd.version, ts_upd.updated_at
+  )
+  SELECT updated_rows.timesheet_id, updated_rows.version, updated_rows.updated_at
+  FROM updated_rows;
+
+  CREATE TEMP TABLE timesheet_unauthorise_bulk_updated_tf ON COMMIT DROP AS
+  WITH updated_rows AS (
+    UPDATE public.timesheets_financials AS tf_upd
+    SET processing_status = work_rows.new_processing_status,
+        authorised_by_user_id = NULL,
+        authorised_at_utc = NULL,
+        updated_at = v_now
+    FROM pg_temp.timesheet_unauthorise_bulk_work AS work_rows
+    JOIN pg_temp.timesheet_unauthorise_bulk_updated_ts AS updated_ts
+      ON updated_ts.timesheet_id = work_rows.current_timesheet_id
+    WHERE work_rows.failure_code IS NULL
+      AND tf_upd.id = work_rows.tsfin_id
+      AND tf_upd.is_current = TRUE
+    RETURNING tf_upd.timesheet_id, tf_upd.processing_status, tf_upd.updated_at
+  )
+  SELECT updated_rows.timesheet_id, updated_rows.processing_status, updated_rows.updated_at
+  FROM updated_rows;
+
+  CREATE TEMP TABLE timesheet_unauthorise_bulk_updated_cw ON COMMIT DROP AS
+  WITH updated_rows AS (
+    UPDATE public.contract_weeks AS cw_upd
+    SET timesheet_id = work_rows.current_timesheet_id,
+        status = 'SUBMITTED'::public.contract_week_status_enum,
+        updated_at = v_now
+    FROM pg_temp.timesheet_unauthorise_bulk_work AS work_rows
+    JOIN pg_temp.timesheet_unauthorise_bulk_updated_tf AS updated_tf
+      ON updated_tf.timesheet_id = work_rows.current_timesheet_id
+    WHERE work_rows.failure_code IS NULL
+      AND work_rows.current_sheet_scope = 'WEEKLY'::public.timesheet_scope_enum
+      AND cw_upd.timesheet_id = work_rows.current_timesheet_id
+    RETURNING cw_upd.id, cw_upd.timesheet_id, cw_upd.status, cw_upd.updated_at
+  )
+  SELECT updated_rows.id, updated_rows.timesheet_id, updated_rows.status, updated_rows.updated_at
+  FROM updated_rows;
+
+
+  CREATE TEMP TABLE timesheet_unauthorise_bulk_post_decisions ON COMMIT DROP AS
+  SELECT post_decision_result.row_json
+  FROM (
+    SELECT post_ids.timesheet_ids_json
+    FROM (
+      SELECT COALESCE(JSONB_AGG(DISTINCT TO_JSONB(updated_tf.timesheet_id::text)) FILTER (WHERE updated_tf.timesheet_id IS NOT NULL), '[]'::jsonb) AS timesheet_ids_json
+      FROM pg_temp.timesheet_unauthorise_bulk_updated_tf AS updated_tf
+    ) AS post_ids
+    WHERE JSONB_ARRAY_LENGTH(post_ids.timesheet_ids_json) > 0
+  ) AS post_filter
+  CROSS JOIN LATERAL public.bulk_timesheet_row_decision_v1(JSONB_BUILD_OBJECT('timesheet_ids', post_filter.timesheet_ids_json, 'dataset_mode', 'authorise')) AS post_decision_result(row_json);
+
+  CREATE TEMP TABLE timesheet_unauthorise_bulk_results ON COMMIT DROP AS
+  SELECT
+    work_rows.ordinal,
+    CASE WHEN work_rows.failure_code IS NULL AND updated_tf.timesheet_id IS NOT NULL THEN TRUE ELSE FALSE END AS success,
+    JSONB_BUILD_OBJECT(
+      'item_index', work_rows.ordinal,
+      'success', CASE WHEN work_rows.failure_code IS NULL AND updated_tf.timesheet_id IS NOT NULL THEN TRUE ELSE FALSE END,
+      'action', 'UNAUTHORISE',
+      'error_code', CASE WHEN work_rows.failure_code IS NULL AND updated_tf.timesheet_id IS NOT NULL THEN NULL::text ELSE COALESCE(work_rows.failure_code, 'MUTATION_UPDATE_FAILED') END,
+      'message', CASE
+        WHEN work_rows.failure_code IS NULL AND updated_tf.timesheet_id IS NOT NULL THEN NULL::text
+        WHEN COALESCE(work_rows.failure_code, 'MUTATION_UPDATE_FAILED') = 'TIMESHEET_MOVED' THEN 'Timesheet has moved to a different current row.'
+        WHEN COALESCE(work_rows.failure_code, 'MUTATION_UPDATE_FAILED') = 'TIMESHEET_LOCKED_OR_PAID' THEN 'Timesheet is locked, invoice-locked, or paid.'
+        WHEN COALESCE(work_rows.failure_code, 'MUTATION_UPDATE_FAILED') = 'NOT_AUTHORISED' THEN 'Timesheet is not currently authorised.'
+        WHEN COALESCE(work_rows.failure_code, 'MUTATION_UPDATE_FAILED') = 'UNAUTHORISE_NOT_ALLOWED' THEN 'Timesheet is not eligible for bulk unauthorisation.'
+        ELSE COALESCE(work_rows.failure_code, 'MUTATION_UPDATE_FAILED')
+      END,
+      'requested_timesheet_id', work_rows.requested_timesheet_id,
+      'expected_timesheet_id', work_rows.expected_timesheet_id,
+      'current_timesheet_id', work_rows.current_timesheet_id,
+      'current_version', COALESCE(updated_ts.version, work_rows.current_version),
+      'was_stale', work_rows.requested_timesheet_id IS DISTINCT FROM work_rows.current_timesheet_id,
+      'processing_status_before', work_rows.tsfin_processing_status,
+      'processing_status_after', updated_tf.processing_status,
+      'row_key_before', COALESCE(work_rows.row_key, work_rows.pre_row_json->>'row_key'),
+      'row_key_after', COALESCE(post_rows.row_json->>'row_key', work_rows.pre_row_json->>'row_key'),
+      'row', CASE WHEN work_rows.failure_code IS NULL AND updated_tf.timesheet_id IS NOT NULL THEN COALESCE(post_rows.row_json, JSONB_BUILD_OBJECT()) ELSE COALESCE(work_rows.pre_row_json, JSONB_BUILD_OBJECT()) END,
+      'row_patch', CASE WHEN work_rows.failure_code IS NULL AND updated_tf.timesheet_id IS NOT NULL THEN COALESCE(post_rows.row_json->'row_patch', JSONB_BUILD_OBJECT()) ELSE JSONB_BUILD_OBJECT() END,
+      'cache_invalidation_hints', CASE WHEN work_rows.failure_code IS NULL AND updated_tf.timesheet_id IS NOT NULL THEN JSONB_BUILD_OBJECT(
+        'row_keys', JSONB_BUILD_ARRAY(COALESCE(work_rows.row_key, work_rows.pre_row_json->>'row_key'), post_rows.row_json->>'row_key'),
+        'timesheet_ids', JSONB_BUILD_ARRAY(work_rows.requested_timesheet_id, work_rows.current_timesheet_id),
+        'storage_keys', JSONB_BUILD_ARRAY(post_rows.row_json->>'primary_artifact_storage_key'),
+        'row_signature', post_rows.row_json->>'row_signature',
+        'invalidate_context', TRUE,
+        'invalidate_preview', FALSE
+      ) ELSE JSONB_BUILD_OBJECT() END
+    ) AS result_json
+  FROM pg_temp.timesheet_unauthorise_bulk_work AS work_rows
+  LEFT JOIN pg_temp.timesheet_unauthorise_bulk_updated_ts AS updated_ts ON updated_ts.timesheet_id = work_rows.current_timesheet_id
+  LEFT JOIN pg_temp.timesheet_unauthorise_bulk_updated_tf AS updated_tf ON updated_tf.timesheet_id = work_rows.current_timesheet_id
+  LEFT JOIN pg_temp.timesheet_unauthorise_bulk_post_decisions AS post_rows ON CASE WHEN COALESCE(post_rows.row_json->>'timesheet_id', '') ~* v_uuid_re THEN (post_rows.row_json->>'timesheet_id')::uuid ELSE NULL::uuid END = work_rows.current_timesheet_id;
+
+  SELECT
+    COUNT(result_rows.result_json) FILTER (WHERE result_rows.success = TRUE)::integer,
+    COUNT(result_rows.result_json) FILTER (WHERE result_rows.success = FALSE)::integer
+  INTO v_success_count, v_failure_count
+  FROM pg_temp.timesheet_unauthorise_bulk_results AS result_rows;
+
+  SELECT JSONB_BUILD_OBJECT(
+    'ok', v_failure_count = 0,
+    'action', 'UNAUTHORISE',
+    'requested_count', JSONB_ARRAY_LENGTH(v_items_array),
+    'success_count', v_success_count,
+    'failure_count', v_failure_count,
+    'has_failures', v_failure_count > 0,
+    'results', COALESCE((SELECT JSONB_AGG(result_rows.result_json ORDER BY result_rows.ordinal ASC) FROM pg_temp.timesheet_unauthorise_bulk_results AS result_rows), '[]'::jsonb),
+    'row_patches', COALESCE((SELECT JSONB_AGG(result_rows.result_json->'row_patch' ORDER BY result_rows.ordinal ASC) FROM pg_temp.timesheet_unauthorise_bulk_results AS result_rows WHERE result_rows.success = TRUE), '[]'::jsonb),
+    'count_deltas', JSONB_BUILD_OBJECT('processed_eligible', v_success_count, 'authorised_eligible', -v_success_count, 'total', 0),
+    'cache_invalidation_hints', JSONB_BUILD_OBJECT(
+      'row_keys', COALESCE((SELECT JSONB_AGG(TO_JSONB(distinct_row_keys.row_key)) FROM (SELECT DISTINCT cache_key_values.cache_key AS row_key FROM pg_temp.timesheet_unauthorise_bulk_results AS result_rows CROSS JOIN LATERAL JSONB_ARRAY_ELEMENTS_TEXT(COALESCE(result_rows.result_json->'cache_invalidation_hints'->'row_keys', '[]'::jsonb)) AS cache_key_values(cache_key) WHERE result_rows.success = TRUE AND NULLIF(BTRIM(COALESCE(cache_key_values.cache_key, '')), '') IS NOT NULL) AS distinct_row_keys), '[]'::jsonb),
+      'timesheet_ids', COALESCE((SELECT JSONB_AGG(TO_JSONB(distinct_timesheet_ids.timesheet_id_text)) FROM (SELECT DISTINCT cache_timesheet_values.timesheet_id_text FROM pg_temp.timesheet_unauthorise_bulk_results AS result_rows CROSS JOIN LATERAL JSONB_ARRAY_ELEMENTS_TEXT(COALESCE(result_rows.result_json->'cache_invalidation_hints'->'timesheet_ids', '[]'::jsonb)) AS cache_timesheet_values(timesheet_id_text) WHERE result_rows.success = TRUE AND NULLIF(BTRIM(COALESCE(cache_timesheet_values.timesheet_id_text, '')), '') IS NOT NULL) AS distinct_timesheet_ids), '[]'::jsonb),
+      'storage_keys', COALESCE((SELECT JSONB_AGG(TO_JSONB(distinct_storage_keys.storage_key)) FROM (SELECT DISTINCT cache_storage_values.storage_key FROM pg_temp.timesheet_unauthorise_bulk_results AS result_rows CROSS JOIN LATERAL JSONB_ARRAY_ELEMENTS_TEXT(COALESCE(result_rows.result_json->'cache_invalidation_hints'->'storage_keys', '[]'::jsonb)) AS cache_storage_values(storage_key) WHERE result_rows.success = TRUE AND NULLIF(BTRIM(COALESCE(cache_storage_values.storage_key, '')), '') IS NOT NULL) AS distinct_storage_keys), '[]'::jsonb),
+      'datasets', JSONB_BUILD_ARRAY('bulk_authorise')
+    )
+  ) INTO v_out;
+
+  RETURN COALESCE(v_out, JSONB_BUILD_OBJECT('ok', TRUE, 'action', 'UNAUTHORISE', 'requested_count', 0, 'success_count', 0, 'failure_count', 0, 'has_failures', FALSE, 'results', '[]'::jsonb, 'row_patches', '[]'::jsonb, 'count_deltas', JSONB_BUILD_OBJECT('processed_eligible', 0, 'authorised_eligible', 0, 'total', 0), 'cache_invalidation_hints', JSONB_BUILD_OBJECT('row_keys', '[]'::jsonb, 'timesheet_ids', '[]'::jsonb, 'storage_keys', '[]'::jsonb, 'datasets', JSONB_BUILD_ARRAY('bulk_authorise'))));
+END;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.timesheet_daily_manual_process_atomic(p_timesheet_id uuid, p_expected_timesheet_id uuid, p_actor_user_id uuid DEFAULT NULL::uuid, p_timesheet_patch_json jsonb DEFAULT '{}'::jsonb, p_tsfin_patch_json jsonb DEFAULT '{}'::jsonb, p_now_utc timestamp with time zone DEFAULT now())
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ VOLATILE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_now timestamp with time zone := COALESCE(p_now_utc, now());
+  v_requested_booking_id text := NULL;
+  v_requested_timesheet_id uuid := NULL;
+  v_current_timesheet_id uuid := NULL;
+  v_current_version integer := NULL;
+  v_was_stale boolean := FALSE;
+  v_sheet_scope text := NULL;
+  v_submission_mode text := NULL;
+  v_authorised_at_server timestamp with time zone := NULL;
+  v_tsfin_id uuid := NULL;
+  v_previous_status public.ts_fin_processing_status_enum := NULL;
+  v_new_status public.ts_fin_processing_status_enum := 'PENDING_AUTH'::public.ts_fin_processing_status_enum;
+  v_locked_by_invoice_id uuid := NULL;
+  v_paid_at_utc timestamp with time zone := NULL;
+  v_invoice_breakdown_json jsonb := NULL;
+  v_has_segment_invoice_lock boolean := FALSE;
+  v_effective_candidate_id uuid := NULL;
+  v_effective_client_id uuid := NULL;
+  v_effective_pay_method text := NULL;
+  v_effective_candidate_assignment text := NULL;
+  v_effective_has_rate_issue boolean := FALSE;
+  v_effective_has_pay_channel_issue boolean := FALSE;
+  v_timesheet_patch jsonb := COALESCE(p_timesheet_patch_json, '{}'::jsonb);
+  v_tsfin_patch jsonb := COALESCE(p_tsfin_patch_json, '{}'::jsonb);
+  v_timesheet_json jsonb := NULL;
+  v_tsfin_json jsonb := NULL;
+  v_post_row jsonb := NULL;
+BEGIN
+  IF p_timesheet_id IS NULL THEN
+    RETURN JSONB_BUILD_OBJECT('ok', FALSE, 'operation', 'daily_manual_process', 'error_code', 'TIMESHEET_ID_REQUIRED', 'message', 'p_timesheet_id is required.');
+  END IF;
+
+  IF p_expected_timesheet_id IS NULL THEN
+    RETURN JSONB_BUILD_OBJECT('ok', FALSE, 'operation', 'daily_manual_process', 'error_code', 'EXPECTED_TIMESHEET_ID_REQUIRED', 'message', 'p_expected_timesheet_id is required.');
+  END IF;
+
+  IF p_actor_user_id IS NULL THEN
+    RETURN JSONB_BUILD_OBJECT('ok', FALSE, 'operation', 'daily_manual_process', 'error_code', 'ACTOR_USER_ID_REQUIRED', 'message', 'p_actor_user_id is required.');
+  END IF;
+
+  IF jsonb_typeof(v_timesheet_patch) <> 'object' THEN
+    RETURN JSONB_BUILD_OBJECT('ok', FALSE, 'operation', 'daily_manual_process', 'error_code', 'TIMESHEET_PATCH_MUST_BE_OBJECT', 'message', 'p_timesheet_patch_json must be a JSON object.');
+  END IF;
+
+  IF jsonb_typeof(v_tsfin_patch) <> 'object' THEN
+    RETURN JSONB_BUILD_OBJECT('ok', FALSE, 'operation', 'daily_manual_process', 'error_code', 'TSFIN_PATCH_MUST_BE_OBJECT', 'message', 'p_tsfin_patch_json must be a JSON object.');
+  END IF;
+
+  SELECT requested_ts.booking_id,
+         requested_ts.timesheet_id
+    INTO v_requested_booking_id,
+         v_requested_timesheet_id
+  FROM public.timesheets AS requested_ts
+  WHERE requested_ts.timesheet_id = p_timesheet_id
+  LIMIT 1;
+
+  IF v_requested_timesheet_id IS NULL THEN
+    RETURN JSONB_BUILD_OBJECT('ok', FALSE, 'operation', 'daily_manual_process', 'error_code', 'TIMESHEET_NOT_FOUND', 'message', 'Timesheet was not found.', 'requested_timesheet_id', p_timesheet_id);
+  END IF;
+
+  SELECT current_ts.timesheet_id,
+         current_ts.version
+    INTO v_current_timesheet_id,
+         v_current_version
+  FROM public.timesheets AS current_ts
+  WHERE current_ts.booking_id = v_requested_booking_id
+    AND current_ts.is_current = TRUE
+  ORDER BY current_ts.version DESC NULLS LAST, current_ts.updated_at DESC NULLS LAST, current_ts.created_at DESC NULLS LAST, current_ts.timesheet_id DESC
+  LIMIT 1;
+
+  IF v_current_timesheet_id IS NULL THEN
+    v_current_timesheet_id := v_requested_timesheet_id;
+  END IF;
+
+  v_was_stale := v_requested_timesheet_id IS DISTINCT FROM v_current_timesheet_id;
+
+  IF p_expected_timesheet_id IS DISTINCT FROM v_current_timesheet_id THEN
+    RETURN JSONB_BUILD_OBJECT(
+      'ok', FALSE,
+      'operation', 'daily_manual_process',
+      'error_code', 'TIMESHEET_MOVED',
+      'message', 'Timesheet has moved to a newer current row.',
+      'requested_timesheet_id', p_timesheet_id,
+      'expected_timesheet_id', p_expected_timesheet_id,
+      'current_timesheet_id', v_current_timesheet_id,
+      'was_stale', v_was_stale
+    );
+  END IF;
+
+  SELECT current_ts.sheet_scope::text,
+         current_ts.submission_mode::text,
+         current_ts.authorised_at_server,
+         current_ts.version
+    INTO v_sheet_scope,
+         v_submission_mode,
+         v_authorised_at_server,
+         v_current_version
+  FROM public.timesheets AS current_ts
+  WHERE current_ts.timesheet_id = v_current_timesheet_id
+    AND current_ts.is_current = TRUE
+  LIMIT 1
+  FOR UPDATE;
+
+  IF v_sheet_scope IS NULL THEN
+    RETURN JSONB_BUILD_OBJECT('ok', FALSE, 'operation', 'daily_manual_process', 'error_code', 'CURRENT_TIMESHEET_NOT_FOUND', 'message', 'Current timesheet was not found.', 'current_timesheet_id', v_current_timesheet_id);
+  END IF;
+
+  IF UPPER(COALESCE(v_sheet_scope, '')) <> 'DAILY' THEN
+    RETURN JSONB_BUILD_OBJECT('ok', FALSE, 'operation', 'daily_manual_process', 'error_code', 'NOT_DAILY', 'message', 'Timesheet is not DAILY; daily manual process only applies to DAILY sheets.', 'current_timesheet_id', v_current_timesheet_id);
+  END IF;
+
+  IF UPPER(COALESCE(v_submission_mode, '')) <> 'MANUAL' THEN
+    RETURN JSONB_BUILD_OBJECT('ok', FALSE, 'operation', 'daily_manual_process', 'error_code', 'NOT_MANUAL', 'message', 'Timesheet must be MANUAL before processing.', 'current_timesheet_id', v_current_timesheet_id);
+  END IF;
+
+  IF v_authorised_at_server IS NOT NULL THEN
+    RETURN JSONB_BUILD_OBJECT('ok', FALSE, 'operation', 'daily_manual_process', 'error_code', 'TIMESHEET_ALREADY_AUTHORISED', 'message', 'This timesheet is already authorised.', 'current_timesheet_id', v_current_timesheet_id);
+  END IF;
+
+  SELECT tsfin_current.id,
+         tsfin_current.processing_status,
+         tsfin_current.locked_by_invoice_id,
+         tsfin_current.paid_at_utc,
+         tsfin_current.invoice_breakdown_json,
+         CASE WHEN v_tsfin_patch ? 'candidate_id' THEN NULLIF(BTRIM(v_tsfin_patch->>'candidate_id'), '')::uuid ELSE tsfin_current.candidate_id END,
+         CASE WHEN v_tsfin_patch ? 'client_id' THEN NULLIF(BTRIM(v_tsfin_patch->>'client_id'), '')::uuid ELSE tsfin_current.client_id END,
+         CASE WHEN v_tsfin_patch ? 'pay_method' THEN NULLIF(BTRIM(v_tsfin_patch->>'pay_method'), '') ELSE tsfin_current.pay_method END,
+         CASE WHEN v_tsfin_patch ? 'candidate_assignment' THEN NULLIF(BTRIM(v_tsfin_patch->>'candidate_assignment'), '') ELSE tsfin_current.candidate_assignment::text END,
+         CASE WHEN v_tsfin_patch ? 'has_rate_issue' THEN COALESCE((v_tsfin_patch->>'has_rate_issue')::boolean, FALSE) ELSE COALESCE(tsfin_current.has_rate_issue, FALSE) END,
+         CASE WHEN v_tsfin_patch ? 'has_pay_channel_issue' THEN COALESCE((v_tsfin_patch->>'has_pay_channel_issue')::boolean, FALSE) ELSE COALESCE(tsfin_current.has_pay_channel_issue, FALSE) END
+    INTO v_tsfin_id,
+         v_previous_status,
+         v_locked_by_invoice_id,
+         v_paid_at_utc,
+         v_invoice_breakdown_json,
+         v_effective_candidate_id,
+         v_effective_client_id,
+         v_effective_pay_method,
+         v_effective_candidate_assignment,
+         v_effective_has_rate_issue,
+         v_effective_has_pay_channel_issue
+  FROM public.timesheets_financials AS tsfin_current
+  WHERE tsfin_current.timesheet_id = v_current_timesheet_id
+    AND tsfin_current.is_current = TRUE
+  ORDER BY tsfin_current.computed_at_utc DESC NULLS LAST, tsfin_current.created_at DESC NULLS LAST, tsfin_current.updated_at DESC NULLS LAST, tsfin_current.id DESC
+  LIMIT 1
+  FOR UPDATE;
+
+  IF v_tsfin_id IS NULL THEN
+    RETURN JSONB_BUILD_OBJECT('ok', FALSE, 'operation', 'daily_manual_process', 'error_code', 'NO_TSFIN', 'message', 'No current financial snapshot exists for this timesheet.', 'current_timesheet_id', v_current_timesheet_id);
+  END IF;
+
+  SELECT EXISTS (
+    SELECT 1
+    FROM jsonb_array_elements(
+      CASE
+        WHEN v_invoice_breakdown_json IS NULL THEN '[]'::jsonb
+        WHEN jsonb_typeof(v_invoice_breakdown_json) = 'array' THEN v_invoice_breakdown_json
+        WHEN jsonb_typeof(v_invoice_breakdown_json) = 'object'
+         AND jsonb_typeof(v_invoice_breakdown_json->'segments') = 'array' THEN v_invoice_breakdown_json->'segments'
+        ELSE '[]'::jsonb
+      END
+    ) AS invoice_segment(segment_json)
+    WHERE NULLIF(BTRIM(COALESCE(invoice_segment.segment_json->>'invoice_locked_invoice_id', '')), '') IS NOT NULL
+  ) INTO v_has_segment_invoice_lock;
+
+  IF v_locked_by_invoice_id IS NOT NULL OR v_paid_at_utc IS NOT NULL OR v_has_segment_invoice_lock = TRUE THEN
+    RETURN JSONB_BUILD_OBJECT('ok', FALSE, 'operation', 'daily_manual_process', 'error_code', 'TIMESHEET_LOCKED_OR_PAID', 'message', 'Timesheet already invoiced or paid; cannot process.', 'current_timesheet_id', v_current_timesheet_id);
+  END IF;
+
+  IF v_previous_status <> 'UNPROCESSED'::public.ts_fin_processing_status_enum THEN
+    RETURN JSONB_BUILD_OBJECT('ok', FALSE, 'operation', 'daily_manual_process', 'error_code', 'NOT_UNPROCESSED', 'message', 'Timesheet is not in UNPROCESSED state.', 'current_timesheet_id', v_current_timesheet_id, 'previous_status', v_previous_status);
+  END IF;
+
+  IF v_effective_candidate_id IS NULL THEN
+    RETURN JSONB_BUILD_OBJECT('ok', FALSE, 'operation', 'daily_manual_process', 'error_code', 'CANDIDATE_MISSING', 'message', 'Cannot process: candidate is missing from TSFIN context.', 'current_timesheet_id', v_current_timesheet_id);
+  END IF;
+
+  IF v_effective_client_id IS NULL THEN
+    RETURN JSONB_BUILD_OBJECT('ok', FALSE, 'operation', 'daily_manual_process', 'error_code', 'CLIENT_MISSING', 'message', 'Cannot process: client is missing from TSFIN context.', 'current_timesheet_id', v_current_timesheet_id);
+  END IF;
+
+  IF v_effective_has_rate_issue = TRUE THEN
+    RETURN JSONB_BUILD_OBJECT('ok', FALSE, 'operation', 'daily_manual_process', 'error_code', 'RATE_ISSUE', 'message', 'Cannot process: TSFIN has a rate issue.', 'current_timesheet_id', v_current_timesheet_id);
+  END IF;
+
+  IF v_effective_has_pay_channel_issue = TRUE THEN
+    RETURN JSONB_BUILD_OBJECT('ok', FALSE, 'operation', 'daily_manual_process', 'error_code', 'PAY_CHANNEL_ISSUE', 'message', 'Cannot process: TSFIN has a pay channel issue.', 'current_timesheet_id', v_current_timesheet_id);
+  END IF;
+
+  IF NULLIF(BTRIM(COALESCE(v_effective_pay_method, '')), '') IS NULL THEN
+    RETURN JSONB_BUILD_OBJECT('ok', FALSE, 'operation', 'daily_manual_process', 'error_code', 'PAY_METHOD_MISSING', 'message', 'Cannot process: pay method is missing from TSFIN context.', 'current_timesheet_id', v_current_timesheet_id);
+  END IF;
+
+  IF NULLIF(BTRIM(COALESCE(v_effective_candidate_assignment, '')), '') IS NULL OR UPPER(COALESCE(v_effective_candidate_assignment, '')) = 'UNASSIGNED' THEN
+    RETURN JSONB_BUILD_OBJECT('ok', FALSE, 'operation', 'daily_manual_process', 'error_code', 'CANDIDATE_ASSIGNMENT_UNRESOLVED', 'message', 'Cannot process: candidate assignment is unresolved in TSFIN context.', 'current_timesheet_id', v_current_timesheet_id);
+  END IF;
+
+  UPDATE public.timesheets AS timesheet_update
+  SET worked_start_iso = CASE WHEN v_timesheet_patch ? 'worked_start_iso' THEN NULLIF(BTRIM(v_timesheet_patch->>'worked_start_iso'), '')::timestamp with time zone ELSE timesheet_update.worked_start_iso END,
+      worked_end_iso = CASE WHEN v_timesheet_patch ? 'worked_end_iso' THEN NULLIF(BTRIM(v_timesheet_patch->>'worked_end_iso'), '')::timestamp with time zone ELSE timesheet_update.worked_end_iso END,
+      break_start_iso = CASE WHEN v_timesheet_patch ? 'break_start_iso' THEN NULLIF(BTRIM(v_timesheet_patch->>'break_start_iso'), '')::timestamp with time zone ELSE timesheet_update.break_start_iso END,
+      break_end_iso = CASE WHEN v_timesheet_patch ? 'break_end_iso' THEN NULLIF(BTRIM(v_timesheet_patch->>'break_end_iso'), '')::timestamp with time zone ELSE timesheet_update.break_end_iso END,
+      break_minutes = CASE WHEN v_timesheet_patch ? 'break_minutes' THEN NULLIF(BTRIM(v_timesheet_patch->>'break_minutes'), '')::integer ELSE timesheet_update.break_minutes END,
+      worked_minutes = CASE WHEN v_timesheet_patch ? 'worked_minutes' THEN NULLIF(BTRIM(v_timesheet_patch->>'worked_minutes'), '')::integer ELSE timesheet_update.worked_minutes END,
+      actual_schedule_json = CASE WHEN v_timesheet_patch ? 'actual_schedule_json' THEN v_timesheet_patch->'actual_schedule_json' ELSE timesheet_update.actual_schedule_json END,
+      additional_units_week = CASE WHEN v_timesheet_patch ? 'additional_units_week' THEN v_timesheet_patch->'additional_units_week' ELSE timesheet_update.additional_units_week END,
+      additional_units_per_day = CASE WHEN v_timesheet_patch ? 'additional_units_per_day' THEN v_timesheet_patch->'additional_units_per_day' ELSE timesheet_update.additional_units_per_day END,
+      reference_number = CASE WHEN v_timesheet_patch ? 'reference_number' THEN NULLIF(BTRIM(v_timesheet_patch->>'reference_number'), '') ELSE timesheet_update.reference_number END,
+      reference_set_at = CASE WHEN v_timesheet_patch ? 'reference_number' THEN CASE WHEN NULLIF(BTRIM(v_timesheet_patch->>'reference_number'), '') IS NULL THEN NULL::timestamp with time zone WHEN NULLIF(BTRIM(v_timesheet_patch->>'reference_number'), '') IS DISTINCT FROM NULLIF(BTRIM(COALESCE(timesheet_update.reference_number, '')), '') THEN v_now ELSE COALESCE(timesheet_update.reference_set_at, v_now) END ELSE timesheet_update.reference_set_at END,
+      updated_at = v_now
+  WHERE timesheet_update.timesheet_id = v_current_timesheet_id
+    AND timesheet_update.is_current = TRUE
+  RETURNING TO_JSONB(timesheet_update), timesheet_update.version
+  INTO v_timesheet_json, v_current_version;
+
+  IF v_timesheet_json IS NULL THEN
+    RETURN JSONB_BUILD_OBJECT('ok', FALSE, 'operation', 'daily_manual_process', 'error_code', 'TIMESHEET_UPDATE_FAILED', 'message', 'Failed to update current timesheet.', 'current_timesheet_id', v_current_timesheet_id);
+  END IF;
+
+  UPDATE public.timesheets_financials AS tsfin_update
+  SET worked_start_iso = CASE WHEN v_tsfin_patch ? 'worked_start_iso' THEN NULLIF(BTRIM(v_tsfin_patch->>'worked_start_iso'), '')::timestamp with time zone ELSE tsfin_update.worked_start_iso END,
+      worked_end_iso = CASE WHEN v_tsfin_patch ? 'worked_end_iso' THEN NULLIF(BTRIM(v_tsfin_patch->>'worked_end_iso'), '')::timestamp with time zone ELSE tsfin_update.worked_end_iso END,
+      break_start_iso = CASE WHEN v_tsfin_patch ? 'break_start_iso' THEN NULLIF(BTRIM(v_tsfin_patch->>'break_start_iso'), '')::timestamp with time zone ELSE tsfin_update.break_start_iso END,
+      break_end_iso = CASE WHEN v_tsfin_patch ? 'break_end_iso' THEN NULLIF(BTRIM(v_tsfin_patch->>'break_end_iso'), '')::timestamp with time zone ELSE tsfin_update.break_end_iso END,
+      break_minutes = CASE WHEN v_tsfin_patch ? 'break_minutes' THEN NULLIF(BTRIM(v_tsfin_patch->>'break_minutes'), '')::integer ELSE tsfin_update.break_minutes END,
+      actual_schedule_json = CASE WHEN v_tsfin_patch ? 'actual_schedule_json' THEN v_tsfin_patch->'actual_schedule_json' ELSE tsfin_update.actual_schedule_json END,
+      actual_minutes_by_day_json = CASE WHEN v_tsfin_patch ? 'actual_minutes_by_day_json' THEN v_tsfin_patch->'actual_minutes_by_day_json' ELSE tsfin_update.actual_minutes_by_day_json END,
+      additional_units_json = CASE WHEN v_tsfin_patch ? 'additional_units_json' THEN v_tsfin_patch->'additional_units_json' ELSE tsfin_update.additional_units_json END,
+      candidate_id = CASE WHEN v_tsfin_patch ? 'candidate_id' THEN NULLIF(BTRIM(v_tsfin_patch->>'candidate_id'), '')::uuid ELSE tsfin_update.candidate_id END,
+      client_id = CASE WHEN v_tsfin_patch ? 'client_id' THEN NULLIF(BTRIM(v_tsfin_patch->>'client_id'), '')::uuid ELSE tsfin_update.client_id END,
+      pay_method = CASE WHEN v_tsfin_patch ? 'pay_method' THEN NULLIF(BTRIM(v_tsfin_patch->>'pay_method'), '') ELSE tsfin_update.pay_method END,
+      candidate_assignment = CASE WHEN v_tsfin_patch ? 'candidate_assignment' THEN NULLIF(BTRIM(v_tsfin_patch->>'candidate_assignment'), '')::public.candidate_assignment_enum ELSE tsfin_update.candidate_assignment END,
+      basis = CASE WHEN v_tsfin_patch ? 'basis' THEN NULLIF(BTRIM(v_tsfin_patch->>'basis'), '')::public.timesheet_fin_basis_enum ELSE tsfin_update.basis END,
+      policy_snapshot_json = CASE WHEN v_tsfin_patch ? 'policy_snapshot_json' THEN v_tsfin_patch->'policy_snapshot_json' ELSE tsfin_update.policy_snapshot_json END,
+      rate_source_refs_json = CASE WHEN v_tsfin_patch ? 'rate_source_refs_json' THEN v_tsfin_patch->'rate_source_refs_json' ELSE tsfin_update.rate_source_refs_json END,
+      hours_day = CASE WHEN v_tsfin_patch ? 'hours_day' THEN NULLIF(BTRIM(v_tsfin_patch->>'hours_day'), '')::numeric ELSE tsfin_update.hours_day END,
+      hours_night = CASE WHEN v_tsfin_patch ? 'hours_night' THEN NULLIF(BTRIM(v_tsfin_patch->>'hours_night'), '')::numeric ELSE tsfin_update.hours_night END,
+      hours_sat = CASE WHEN v_tsfin_patch ? 'hours_sat' THEN NULLIF(BTRIM(v_tsfin_patch->>'hours_sat'), '')::numeric ELSE tsfin_update.hours_sat END,
+      hours_sun = CASE WHEN v_tsfin_patch ? 'hours_sun' THEN NULLIF(BTRIM(v_tsfin_patch->>'hours_sun'), '')::numeric ELSE tsfin_update.hours_sun END,
+      hours_bh = CASE WHEN v_tsfin_patch ? 'hours_bh' THEN NULLIF(BTRIM(v_tsfin_patch->>'hours_bh'), '')::numeric ELSE tsfin_update.hours_bh END,
+      pay_day = CASE WHEN v_tsfin_patch ? 'pay_day' THEN NULLIF(BTRIM(v_tsfin_patch->>'pay_day'), '')::numeric ELSE tsfin_update.pay_day END,
+      pay_night = CASE WHEN v_tsfin_patch ? 'pay_night' THEN NULLIF(BTRIM(v_tsfin_patch->>'pay_night'), '')::numeric ELSE tsfin_update.pay_night END,
+      pay_sat = CASE WHEN v_tsfin_patch ? 'pay_sat' THEN NULLIF(BTRIM(v_tsfin_patch->>'pay_sat'), '')::numeric ELSE tsfin_update.pay_sat END,
+      pay_sun = CASE WHEN v_tsfin_patch ? 'pay_sun' THEN NULLIF(BTRIM(v_tsfin_patch->>'pay_sun'), '')::numeric ELSE tsfin_update.pay_sun END,
+      pay_bh = CASE WHEN v_tsfin_patch ? 'pay_bh' THEN NULLIF(BTRIM(v_tsfin_patch->>'pay_bh'), '')::numeric ELSE tsfin_update.pay_bh END,
+      charge_day = CASE WHEN v_tsfin_patch ? 'charge_day' THEN NULLIF(BTRIM(v_tsfin_patch->>'charge_day'), '')::numeric ELSE tsfin_update.charge_day END,
+      charge_night = CASE WHEN v_tsfin_patch ? 'charge_night' THEN NULLIF(BTRIM(v_tsfin_patch->>'charge_night'), '')::numeric ELSE tsfin_update.charge_night END,
+      charge_sat = CASE WHEN v_tsfin_patch ? 'charge_sat' THEN NULLIF(BTRIM(v_tsfin_patch->>'charge_sat'), '')::numeric ELSE tsfin_update.charge_sat END,
+      charge_sun = CASE WHEN v_tsfin_patch ? 'charge_sun' THEN NULLIF(BTRIM(v_tsfin_patch->>'charge_sun'), '')::numeric ELSE tsfin_update.charge_sun END,
+      charge_bh = CASE WHEN v_tsfin_patch ? 'charge_bh' THEN NULLIF(BTRIM(v_tsfin_patch->>'charge_bh'), '')::numeric ELSE tsfin_update.charge_bh END,
+      total_hours = CASE WHEN v_tsfin_patch ? 'total_hours' THEN NULLIF(BTRIM(v_tsfin_patch->>'total_hours'), '')::numeric ELSE tsfin_update.total_hours END,
+      total_pay_ex_vat = CASE WHEN v_tsfin_patch ? 'total_pay_ex_vat' THEN NULLIF(BTRIM(v_tsfin_patch->>'total_pay_ex_vat'), '')::numeric ELSE tsfin_update.total_pay_ex_vat END,
+      total_charge_ex_vat = CASE WHEN v_tsfin_patch ? 'total_charge_ex_vat' THEN NULLIF(BTRIM(v_tsfin_patch->>'total_charge_ex_vat'), '')::numeric ELSE tsfin_update.total_charge_ex_vat END,
+      margin_ex_vat = CASE WHEN v_tsfin_patch ? 'margin_ex_vat' THEN NULLIF(BTRIM(v_tsfin_patch->>'margin_ex_vat'), '')::numeric ELSE tsfin_update.margin_ex_vat END,
+      expenses_pay_ex_vat = CASE WHEN v_tsfin_patch ? 'expenses_pay_ex_vat' THEN NULLIF(BTRIM(v_tsfin_patch->>'expenses_pay_ex_vat'), '')::numeric ELSE tsfin_update.expenses_pay_ex_vat END,
+      expenses_charge_ex_vat = CASE WHEN v_tsfin_patch ? 'expenses_charge_ex_vat' THEN NULLIF(BTRIM(v_tsfin_patch->>'expenses_charge_ex_vat'), '')::numeric ELSE tsfin_update.expenses_charge_ex_vat END,
+      expenses_description = CASE WHEN v_tsfin_patch ? 'expenses_description' THEN NULLIF(BTRIM(v_tsfin_patch->>'expenses_description'), '') ELSE tsfin_update.expenses_description END,
+      mileage_units = CASE WHEN v_tsfin_patch ? 'mileage_units' THEN NULLIF(BTRIM(v_tsfin_patch->>'mileage_units'), '')::numeric ELSE tsfin_update.mileage_units END,
+      mileage_pay_rate = CASE WHEN v_tsfin_patch ? 'mileage_pay_rate' THEN NULLIF(BTRIM(v_tsfin_patch->>'mileage_pay_rate'), '')::numeric ELSE tsfin_update.mileage_pay_rate END,
+      mileage_charge_rate = CASE WHEN v_tsfin_patch ? 'mileage_charge_rate' THEN NULLIF(BTRIM(v_tsfin_patch->>'mileage_charge_rate'), '')::numeric ELSE tsfin_update.mileage_charge_rate END,
+      mileage_pay_ex_vat = CASE WHEN v_tsfin_patch ? 'mileage_pay_ex_vat' THEN NULLIF(BTRIM(v_tsfin_patch->>'mileage_pay_ex_vat'), '')::numeric ELSE tsfin_update.mileage_pay_ex_vat END,
+      mileage_charge_ex_vat = CASE WHEN v_tsfin_patch ? 'mileage_charge_ex_vat' THEN NULLIF(BTRIM(v_tsfin_patch->>'mileage_charge_ex_vat'), '')::numeric ELSE tsfin_update.mileage_charge_ex_vat END,
+      travel_pay_ex_vat = CASE WHEN v_tsfin_patch ? 'travel_pay_ex_vat' THEN NULLIF(BTRIM(v_tsfin_patch->>'travel_pay_ex_vat'), '')::numeric ELSE tsfin_update.travel_pay_ex_vat END,
+      travel_charge_ex_vat = CASE WHEN v_tsfin_patch ? 'travel_charge_ex_vat' THEN NULLIF(BTRIM(v_tsfin_patch->>'travel_charge_ex_vat'), '')::numeric ELSE tsfin_update.travel_charge_ex_vat END,
+      accommodation_pay_ex_vat = CASE WHEN v_tsfin_patch ? 'accommodation_pay_ex_vat' THEN NULLIF(BTRIM(v_tsfin_patch->>'accommodation_pay_ex_vat'), '')::numeric ELSE tsfin_update.accommodation_pay_ex_vat END,
+      accommodation_charge_ex_vat = CASE WHEN v_tsfin_patch ? 'accommodation_charge_ex_vat' THEN NULLIF(BTRIM(v_tsfin_patch->>'accommodation_charge_ex_vat'), '')::numeric ELSE tsfin_update.accommodation_charge_ex_vat END,
+      other_pay_ex_vat = CASE WHEN v_tsfin_patch ? 'other_pay_ex_vat' THEN NULLIF(BTRIM(v_tsfin_patch->>'other_pay_ex_vat'), '')::numeric ELSE tsfin_update.other_pay_ex_vat END,
+      other_charge_ex_vat = CASE WHEN v_tsfin_patch ? 'other_charge_ex_vat' THEN NULLIF(BTRIM(v_tsfin_patch->>'other_charge_ex_vat'), '')::numeric ELSE tsfin_update.other_charge_ex_vat END,
+      additional_pay_ex_vat = CASE WHEN v_tsfin_patch ? 'additional_pay_ex_vat' THEN NULLIF(BTRIM(v_tsfin_patch->>'additional_pay_ex_vat'), '')::numeric ELSE tsfin_update.additional_pay_ex_vat END,
+      additional_charge_ex_vat = CASE WHEN v_tsfin_patch ? 'additional_charge_ex_vat' THEN NULLIF(BTRIM(v_tsfin_patch->>'additional_charge_ex_vat'), '')::numeric ELSE tsfin_update.additional_charge_ex_vat END,
+      additional_margin_ex_vat = CASE WHEN v_tsfin_patch ? 'additional_margin_ex_vat' THEN NULLIF(BTRIM(v_tsfin_patch->>'additional_margin_ex_vat'), '')::numeric ELSE tsfin_update.additional_margin_ex_vat END,
+      has_rate_issue = CASE WHEN v_tsfin_patch ? 'has_rate_issue' THEN COALESCE((v_tsfin_patch->>'has_rate_issue')::boolean, FALSE) ELSE tsfin_update.has_rate_issue END,
+      has_pay_channel_issue = CASE WHEN v_tsfin_patch ? 'has_pay_channel_issue' THEN COALESCE((v_tsfin_patch->>'has_pay_channel_issue')::boolean, FALSE) ELSE tsfin_update.has_pay_channel_issue END,
+      processing_status = v_new_status,
+      processed_by_user_id = p_actor_user_id,
+      processed_at_utc = v_now,
+      authorised_by_user_id = NULL,
+      authorised_at_utc = NULL,
+      updated_at = v_now
+  WHERE tsfin_update.id = v_tsfin_id
+    AND tsfin_update.is_current = TRUE
+  RETURNING TO_JSONB(tsfin_update)
+  INTO v_tsfin_json;
+
+  IF v_tsfin_json IS NULL THEN
+    RETURN JSONB_BUILD_OBJECT('ok', FALSE, 'operation', 'daily_manual_process', 'error_code', 'TSFIN_UPDATE_FAILED', 'message', 'Failed to update current financial snapshot.', 'current_timesheet_id', v_current_timesheet_id);
+  END IF;
+
+  SELECT decision_result.row_json
+    INTO v_post_row
+  FROM public.bulk_timesheet_row_decision_v1(JSONB_BUILD_OBJECT('dataset_mode', 'process', 'timesheet_id', v_current_timesheet_id::text)) AS decision_result(row_json)
+  LIMIT 1;
+
+  RETURN JSONB_BUILD_OBJECT(
+    'ok', TRUE,
+    'operation', 'daily_manual_process',
+    'processed', TRUE,
+    'success', TRUE,
+    'requested_timesheet_id', p_timesheet_id,
+    'expected_timesheet_id', p_expected_timesheet_id,
+    'current_timesheet_id', v_current_timesheet_id,
+    'timesheet_id', v_current_timesheet_id,
+    'current_version', v_current_version,
+    'was_stale', v_was_stale,
+    'previous_status', v_previous_status,
+    'processing_status', v_new_status,
+    'status_transition', JSONB_BUILD_OBJECT('from', v_previous_status, 'to', v_new_status, 'processed_at_utc', v_now, 'processed_by_user_id', p_actor_user_id),
+    'timesheet', COALESCE(v_timesheet_json, NULL::jsonb),
+    'tsfin', COALESCE(v_tsfin_json, NULL::jsonb),
+    'row_patch', COALESCE(v_post_row->'row_patch', JSONB_BUILD_OBJECT()),
+    'data_row', COALESCE(v_post_row, JSONB_BUILD_OBJECT()),
+    'count_deltas', JSONB_BUILD_OBJECT('unprocessed', -1, 'processed', 1),
+    'cache_invalidation_hints', JSONB_BUILD_OBJECT(
+      'row_keys', JSONB_BUILD_ARRAY(COALESCE(v_post_row->>'row_key', 'timesheet:' || v_current_timesheet_id::text)),
+      'timesheet_ids', JSONB_BUILD_ARRAY(v_current_timesheet_id),
+      'storage_keys', JSONB_BUILD_ARRAY(v_post_row->>'primary_artifact_storage_key'),
+      'datasets', JSONB_BUILD_ARRAY('bulk_process', 'bulk_authorise'),
+      'invalidate_context', TRUE,
+      'invalidate_preview', FALSE
+    ),
+    'cache_invalidation', JSONB_BUILD_OBJECT(
+      'row_keys', JSONB_BUILD_ARRAY(COALESCE(v_post_row->>'row_key', 'timesheet:' || v_current_timesheet_id::text)),
+      'timesheet_ids', JSONB_BUILD_ARRAY(v_current_timesheet_id),
+      'storage_keys', JSONB_BUILD_ARRAY(v_post_row->>'primary_artifact_storage_key'),
+      'datasets', JSONB_BUILD_ARRAY('bulk_process', 'bulk_authorise'),
+      'invalidate_context', TRUE,
+      'invalidate_preview', FALSE
+    )
+  );
+END;
+$function$;
+CREATE OR REPLACE FUNCTION public.timesheet_daily_manual_unprocess_atomic(p_timesheet_id uuid, p_expected_timesheet_id uuid, p_actor_user_id uuid DEFAULT NULL::uuid, p_now_utc timestamp with time zone DEFAULT now())
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ VOLATILE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_now timestamp with time zone := COALESCE(p_now_utc, now());
+  v_requested_booking_id text := NULL;
+  v_requested_timesheet_id uuid := NULL;
+  v_current_timesheet_id uuid := NULL;
+  v_current_version integer := NULL;
+  v_was_stale boolean := FALSE;
+  v_sheet_scope text := NULL;
+  v_submission_mode text := NULL;
+  v_authorised_at_server timestamp with time zone := NULL;
+  v_tsfin_id uuid := NULL;
+  v_previous_status public.ts_fin_processing_status_enum := NULL;
+  v_new_status public.ts_fin_processing_status_enum := 'UNPROCESSED'::public.ts_fin_processing_status_enum;
+  v_locked_by_invoice_id uuid := NULL;
+  v_paid_at_utc timestamp with time zone := NULL;
+  v_invoice_breakdown_json jsonb := NULL;
+  v_has_segment_invoice_lock boolean := FALSE;
+  v_tsfin_json jsonb := NULL;
+  v_timesheet_json jsonb := NULL;
+  v_post_row jsonb := NULL;
+BEGIN
+  IF p_timesheet_id IS NULL THEN
+    RETURN JSONB_BUILD_OBJECT('ok', FALSE, 'operation', 'daily_manual_unprocess', 'error_code', 'TIMESHEET_ID_REQUIRED', 'message', 'p_timesheet_id is required.');
+  END IF;
+
+  IF p_expected_timesheet_id IS NULL THEN
+    RETURN JSONB_BUILD_OBJECT('ok', FALSE, 'operation', 'daily_manual_unprocess', 'error_code', 'EXPECTED_TIMESHEET_ID_REQUIRED', 'message', 'p_expected_timesheet_id is required.');
+  END IF;
+
+  SELECT requested_ts.booking_id,
+         requested_ts.timesheet_id
+    INTO v_requested_booking_id,
+         v_requested_timesheet_id
+  FROM public.timesheets AS requested_ts
+  WHERE requested_ts.timesheet_id = p_timesheet_id
+  LIMIT 1;
+
+  IF v_requested_timesheet_id IS NULL THEN
+    RETURN JSONB_BUILD_OBJECT('ok', FALSE, 'operation', 'daily_manual_unprocess', 'error_code', 'TIMESHEET_NOT_FOUND', 'message', 'Timesheet was not found.', 'requested_timesheet_id', p_timesheet_id);
+  END IF;
+
+  SELECT current_ts.timesheet_id,
+         current_ts.version
+    INTO v_current_timesheet_id,
+         v_current_version
+  FROM public.timesheets AS current_ts
+  WHERE current_ts.booking_id = v_requested_booking_id
+    AND current_ts.is_current = TRUE
+  ORDER BY current_ts.version DESC NULLS LAST, current_ts.timesheet_id DESC
+  LIMIT 1;
+
+  IF v_current_timesheet_id IS NULL THEN
+    v_current_timesheet_id := v_requested_timesheet_id;
+  END IF;
+
+  v_was_stale := v_requested_timesheet_id IS DISTINCT FROM v_current_timesheet_id;
+
+  IF p_expected_timesheet_id IS DISTINCT FROM v_current_timesheet_id THEN
+    RETURN JSONB_BUILD_OBJECT(
+      'ok', FALSE,
+      'operation', 'daily_manual_unprocess',
+      'error_code', 'TIMESHEET_MOVED',
+      'message', 'Timesheet has moved to a newer current row.',
+      'requested_timesheet_id', p_timesheet_id,
+      'expected_timesheet_id', p_expected_timesheet_id,
+      'current_timesheet_id', v_current_timesheet_id,
+      'was_stale', v_was_stale
+    );
+  END IF;
+
+  SELECT current_ts.sheet_scope::text,
+         current_ts.submission_mode::text,
+         current_ts.authorised_at_server,
+         current_ts.version,
+         TO_JSONB(current_ts)
+    INTO v_sheet_scope,
+         v_submission_mode,
+         v_authorised_at_server,
+         v_current_version,
+         v_timesheet_json
+  FROM public.timesheets AS current_ts
+  WHERE current_ts.timesheet_id = v_current_timesheet_id
+    AND current_ts.is_current = TRUE
+  LIMIT 1
+  FOR UPDATE;
+
+  IF v_sheet_scope IS NULL THEN
+    RETURN JSONB_BUILD_OBJECT('ok', FALSE, 'operation', 'daily_manual_unprocess', 'error_code', 'CURRENT_TIMESHEET_NOT_FOUND', 'message', 'Current timesheet was not found.', 'current_timesheet_id', v_current_timesheet_id);
+  END IF;
+
+  IF UPPER(COALESCE(v_sheet_scope, '')) <> 'DAILY' THEN
+    RETURN JSONB_BUILD_OBJECT('ok', FALSE, 'operation', 'daily_manual_unprocess', 'error_code', 'NOT_DAILY', 'message', 'Timesheet is not DAILY; daily manual unprocess only applies to DAILY sheets.', 'current_timesheet_id', v_current_timesheet_id);
+  END IF;
+
+  IF UPPER(COALESCE(v_submission_mode, '')) <> 'MANUAL' THEN
+    RETURN JSONB_BUILD_OBJECT('ok', FALSE, 'operation', 'daily_manual_unprocess', 'error_code', 'NOT_MANUAL', 'message', 'Timesheet must be MANUAL before unprocessing.', 'current_timesheet_id', v_current_timesheet_id);
+  END IF;
+
+  IF v_authorised_at_server IS NOT NULL THEN
+    RETURN JSONB_BUILD_OBJECT('ok', FALSE, 'operation', 'daily_manual_unprocess', 'error_code', 'TIMESHEET_AUTHORISED_EDIT_BLOCKED', 'message', 'This timesheet is authorised. Unauthorise it before unprocessing.', 'current_timesheet_id', v_current_timesheet_id);
+  END IF;
+
+  SELECT tsfin_current.id,
+         tsfin_current.processing_status,
+         tsfin_current.locked_by_invoice_id,
+         tsfin_current.paid_at_utc,
+         tsfin_current.invoice_breakdown_json
+    INTO v_tsfin_id,
+         v_previous_status,
+         v_locked_by_invoice_id,
+         v_paid_at_utc,
+         v_invoice_breakdown_json
+  FROM public.timesheets_financials AS tsfin_current
+  WHERE tsfin_current.timesheet_id = v_current_timesheet_id
+    AND tsfin_current.is_current = TRUE
+  ORDER BY tsfin_current.computed_at_utc DESC NULLS LAST, tsfin_current.id DESC
+  LIMIT 1
+  FOR UPDATE;
+
+  IF v_tsfin_id IS NULL THEN
+    RETURN JSONB_BUILD_OBJECT('ok', FALSE, 'operation', 'daily_manual_unprocess', 'error_code', 'NO_TSFIN', 'message', 'No current financial snapshot exists for this timesheet.', 'current_timesheet_id', v_current_timesheet_id);
+  END IF;
+
+  SELECT EXISTS (
+    SELECT 1
+    FROM jsonb_array_elements(
+      CASE
+        WHEN v_invoice_breakdown_json IS NULL THEN '[]'::jsonb
+        WHEN jsonb_typeof(v_invoice_breakdown_json) = 'array' THEN v_invoice_breakdown_json
+        WHEN jsonb_typeof(v_invoice_breakdown_json) = 'object'
+         AND jsonb_typeof(v_invoice_breakdown_json->'segments') = 'array' THEN v_invoice_breakdown_json->'segments'
+        ELSE '[]'::jsonb
+      END
+    ) AS invoice_segment(segment_json)
+    WHERE NULLIF(BTRIM(COALESCE(invoice_segment.segment_json->>'invoice_locked_invoice_id', '')), '') IS NOT NULL
+  ) INTO v_has_segment_invoice_lock;
+
+  IF v_locked_by_invoice_id IS NOT NULL OR v_paid_at_utc IS NOT NULL OR v_has_segment_invoice_lock = TRUE THEN
+    RETURN JSONB_BUILD_OBJECT('ok', FALSE, 'operation', 'daily_manual_unprocess', 'error_code', 'TIMESHEET_LOCKED_OR_PAID', 'message', 'Cannot unprocess: timesheet is locked or paid.', 'current_timesheet_id', v_current_timesheet_id);
+  END IF;
+
+  IF v_previous_status = 'UNPROCESSED'::public.ts_fin_processing_status_enum THEN
+    RETURN JSONB_BUILD_OBJECT('ok', FALSE, 'operation', 'daily_manual_unprocess', 'error_code', 'ALREADY_UNPROCESSED', 'message', 'Timesheet is already UNPROCESSED.', 'current_timesheet_id', v_current_timesheet_id, 'previous_status', v_previous_status);
+  END IF;
+
+  UPDATE public.timesheets_financials AS tsfin_update
+  SET processing_status = v_new_status,
+      processed_by_user_id = NULL,
+      processed_at_utc = NULL,
+      authorised_by_user_id = NULL,
+      authorised_at_utc = NULL,
+      updated_at = v_now
+  WHERE tsfin_update.id = v_tsfin_id
+    AND tsfin_update.is_current = TRUE
+  RETURNING TO_JSONB(tsfin_update)
+  INTO v_tsfin_json;
+
+  IF v_tsfin_json IS NULL THEN
+    RETURN JSONB_BUILD_OBJECT('ok', FALSE, 'operation', 'daily_manual_unprocess', 'error_code', 'TSFIN_UPDATE_FAILED', 'message', 'Failed to move daily timesheet back to UNPROCESSED.', 'current_timesheet_id', v_current_timesheet_id);
+  END IF;
+
+  SELECT TO_JSONB(current_ts)
+    INTO v_timesheet_json
+  FROM public.timesheets AS current_ts
+  WHERE current_ts.timesheet_id = v_current_timesheet_id
+    AND current_ts.is_current = TRUE
+  LIMIT 1;
+
+  SELECT decision_result.row_json
+    INTO v_post_row
+  FROM public.bulk_timesheet_row_decision_v1(JSONB_BUILD_OBJECT('dataset_mode', 'process', 'timesheet_id', v_current_timesheet_id::text)) AS decision_result(row_json)
+  LIMIT 1;
+
+  RETURN JSONB_BUILD_OBJECT(
+    'ok', TRUE,
+    'operation', 'daily_manual_unprocess',
+    'unprocessed', TRUE,
+    'success', TRUE,
+    'requested_timesheet_id', p_timesheet_id,
+    'expected_timesheet_id', p_expected_timesheet_id,
+    'current_timesheet_id', v_current_timesheet_id,
+    'timesheet_id', v_current_timesheet_id,
+    'current_version', v_current_version,
+    'was_stale', v_was_stale,
+    'previous_status', v_previous_status,
+    'processing_status', v_new_status,
+    'status_transition', JSONB_BUILD_OBJECT('from', v_previous_status, 'to', v_new_status, 'processed_at_utc', NULL::text, 'processed_by_user_id', NULL::text),
+    'timesheet', COALESCE(v_timesheet_json, NULL::jsonb),
+    'tsfin', COALESCE(v_tsfin_json, NULL::jsonb),
+    'row_patch', COALESCE(v_post_row->'row_patch', JSONB_BUILD_OBJECT()),
+    'data_row', COALESCE(v_post_row, JSONB_BUILD_OBJECT()),
+    'count_deltas', JSONB_BUILD_OBJECT('unprocessed', 1, 'processed', -1),
+    'cache_invalidation_hints', JSONB_BUILD_OBJECT(
+      'row_keys', JSONB_BUILD_ARRAY(COALESCE(v_post_row->>'row_key', 'timesheet:' || v_current_timesheet_id::text)),
+      'timesheet_ids', JSONB_BUILD_ARRAY(v_current_timesheet_id),
+      'storage_keys', JSONB_BUILD_ARRAY(v_post_row->>'primary_artifact_storage_key'),
+      'datasets', JSONB_BUILD_ARRAY('bulk_process', 'bulk_authorise'),
+      'invalidate_context', TRUE,
+      'invalidate_preview', FALSE
+    ),
+    'cache_invalidation', JSONB_BUILD_OBJECT(
+      'rows', JSONB_BUILD_ARRAY(JSONB_BUILD_OBJECT('row_key', COALESCE(v_post_row->>'row_key', 'timesheet:' || v_current_timesheet_id::text), 'timesheet_id', v_current_timesheet_id, 'new_row_signature', v_post_row->>'row_signature')),
+      'artifacts', JSONB_BUILD_ARRAY(JSONB_BUILD_OBJECT('timesheet_id', v_current_timesheet_id, 'storage_key', v_post_row->>'primary_artifact_storage_key')),
+      'datasets', JSONB_BUILD_ARRAY('bulk_process', 'bulk_authorise')
+    )
+  );
+END;
+$function$;
+
