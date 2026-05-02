@@ -5983,8 +5983,18 @@ BEGIN
         'failed_final', 0,
         'parent_status', v_request_status,
         'totals', v_totals,
-        'requires_user_action', COALESCE(v_requires_user_action, false),
-        'processing_continues', COALESCE(v_processing_continues, false),
+        'requires_user_action', (
+          COALESCE(v_requires_user_action, false)
+          OR COALESCE((v_totals->>'blocked')::integer, 0) > 0
+          OR COALESCE((v_totals->>'failed_retryable')::integer, 0) > 0
+          OR COALESCE((v_totals->>'failed_final')::integer, 0) > 0
+        ),
+        'processing_continues', (
+          COALESCE(v_processing_continues, false)
+          OR COALESCE((v_totals->>'pending')::integer, 0) > 0
+          OR COALESCE((v_totals->>'processing')::integer, 0) > 0
+          OR COALESCE((v_totals->>'failed_retryable')::integer, 0) > 0
+        ),
         'source_bank_event_update', v_source_event_update,
         'source_bank_event_updates', v_source_event_updates,
         'terminal_request', true,
@@ -6228,8 +6238,18 @@ BEGIN
       'failed_final', 0,
       'parent_status', v_parent_status,
       'totals', v_totals,
-      'requires_user_action', COALESCE(v_requires_user_action, false),
-      'processing_continues', COALESCE(v_processing_continues, false),
+      'requires_user_action', (
+        COALESCE(v_requires_user_action, false)
+        OR COALESCE((v_totals->>'blocked')::integer, 0) > 0
+        OR COALESCE((v_totals->>'failed_retryable')::integer, 0) > 0
+        OR COALESCE((v_totals->>'failed_final')::integer, 0) > 0
+      ),
+      'processing_continues', (
+        COALESCE(v_processing_continues, false)
+        OR COALESCE((v_totals->>'pending')::integer, 0) > 0
+        OR COALESCE((v_totals->>'processing')::integer, 0) > 0
+        OR COALESCE((v_totals->>'failed_retryable')::integer, 0) > 0
+      ),
       'source_bank_event_update', v_source_event_update,
       'source_bank_event_updates', v_source_event_updates,
       'processing_actor_kind', CASE WHEN p_actor_user_id IS NULL THEN 'SYSTEM' ELSE 'USER' END,
@@ -6763,8 +6783,18 @@ BEGIN
     'failed_final', v_failed_final_count,
     'parent_status', v_parent_status,
     'totals', v_totals,
-    'requires_user_action', COALESCE(v_requires_user_action, false),
-    'processing_continues', COALESCE(v_processing_continues, false),
+    'requires_user_action', (
+      COALESCE(v_requires_user_action, false)
+      OR COALESCE((v_totals->>'blocked')::integer, 0) > 0
+      OR COALESCE((v_totals->>'failed_retryable')::integer, 0) > 0
+      OR COALESCE((v_totals->>'failed_final')::integer, 0) > 0
+    ),
+    'processing_continues', (
+      COALESCE(v_processing_continues, false)
+      OR COALESCE((v_totals->>'pending')::integer, 0) > 0
+      OR COALESCE((v_totals->>'processing')::integer, 0) > 0
+      OR COALESCE((v_totals->>'failed_retryable')::integer, 0) > 0
+    ),
     'source_bank_event_update', v_source_event_update,
     'source_bank_event_updates', v_source_event_updates,
     'processing_actor_kind', CASE WHEN p_actor_user_id IS NULL THEN 'SYSTEM' ELSE 'USER' END,
@@ -6795,7 +6825,6 @@ EXCEPTION
     RAISE;
 END;
 $function$;
-
 
 
 CREATE OR REPLACE FUNCTION public.pay_pre_bank_cancel_apply_work_item(
