@@ -5788,6 +5788,12 @@ DECLARE
   v_selection_drift_result jsonb := '{}'::jsonb;
   v_effective_actor_user_id uuid := NULL::uuid;
   v_processing_actor_kind text := 'SYSTEM';
+  v_source_bank_event_id uuid := NULL::uuid;
+  v_source_event_disposition text := NULL::text;
+  v_source_event_update jsonb := NULL::jsonb;
+  v_source_event_updates jsonb := '[]'::jsonb;
+  v_requires_user_action boolean := false;
+  v_processing_continues boolean := false;
 BEGIN
   PERFORM public._imp_debug_audit(
     p_actor_user_id,
@@ -5847,6 +5853,127 @@ BEGIN
       FROM public.pay_payment_correction_work_items
       WHERE public.pay_payment_correction_work_items.correction_request_id = p_correction_request_id;
 
+
+      DROP TABLE IF EXISTS pg_temp._tmp_payment_correction_source_event_updates;
+      CREATE TEMP TABLE _tmp_payment_correction_source_event_updates ON COMMIT DROP AS
+      WITH request_totals AS (
+        SELECT
+          public.pay_payment_correction_requests.id AS correction_request_id,
+          public.pay_payment_correction_requests.source_bank_event_id,
+          public.pay_payment_correction_requests.status::text AS parent_status,
+          COALESCE((v_totals->>'total')::integer, 0) AS total_count,
+          COALESCE((v_totals->>'pending')::integer, 0) AS pending_count,
+          COALESCE((v_totals->>'processing')::integer, 0) AS processing_count,
+          COALESCE((v_totals->>'applied')::integer, 0) AS applied_count,
+          COALESCE((v_totals->>'skipped')::integer, 0) AS skipped_count,
+          COALESCE((v_totals->>'blocked')::integer, 0) AS blocked_count,
+          COALESCE((v_totals->>'failed_retryable')::integer, 0) AS failed_retryable_count,
+          COALESCE((v_totals->>'failed_final')::integer, 0) AS failed_final_count,
+          COALESCE((v_totals->>'cancelled')::integer, 0) AS cancelled_count
+        FROM public.pay_payment_correction_requests
+        WHERE public.pay_payment_correction_requests.id = p_correction_request_id
+          AND public.pay_payment_correction_requests.source_bank_event_id IS NOT NULL
+          AND public.pay_payment_correction_requests.status IN ('APPLIED', 'APPLIED_WITH_BLOCKERS', 'BLOCKED', 'FAILED', 'PROCESSING', 'EXPANDED', 'AUTHORISED')
+      ), derived_event_status AS (
+        SELECT
+          request_totals.correction_request_id,
+          request_totals.source_bank_event_id,
+          request_totals.parent_status,
+          request_totals.total_count,
+          request_totals.pending_count,
+          request_totals.processing_count,
+          request_totals.applied_count,
+          request_totals.skipped_count,
+          request_totals.blocked_count,
+          request_totals.failed_retryable_count,
+          request_totals.failed_final_count,
+          request_totals.cancelled_count,
+          CASE
+            WHEN COALESCE(request_totals.total_count, 0) <= 0 THEN 'FAILED'
+            WHEN COALESCE(request_totals.failed_retryable_count, 0) > 0 OR COALESCE(request_totals.failed_final_count, 0) > 0 OR request_totals.parent_status = 'FAILED' THEN 'FAILED'
+            WHEN COALESCE(request_totals.blocked_count, 0) > 0 OR request_totals.parent_status IN ('APPLIED_WITH_BLOCKERS', 'BLOCKED') THEN 'BLOCKED'
+            WHEN request_totals.parent_status = 'APPLIED'
+                 AND COALESCE(request_totals.applied_count, 0) + COALESCE(request_totals.skipped_count, 0) = COALESCE(request_totals.total_count, 0) THEN 'AUTO_APPLIED'
+            WHEN request_totals.parent_status IN ('PROCESSING', 'EXPANDED', 'AUTHORISED')
+                 AND COALESCE(request_totals.pending_count, 0) + COALESCE(request_totals.processing_count, 0) > 0
+                 AND COALESCE(request_totals.blocked_count, 0) = 0
+                 AND COALESCE(request_totals.failed_retryable_count, 0) = 0
+                 AND COALESCE(request_totals.failed_final_count, 0) = 0 THEN 'AUTO_PROCESSING'
+            WHEN COALESCE(request_totals.pending_count, 0) + COALESCE(request_totals.processing_count, 0) > 0
+                 AND COALESCE(request_totals.blocked_count, 0) = 0
+                 AND COALESCE(request_totals.failed_retryable_count, 0) = 0
+                 AND COALESCE(request_totals.failed_final_count, 0) = 0 THEN 'AUTO_PROCESSING'
+            ELSE 'FAILED'
+          END AS correction_disposition,
+          jsonb_build_object(
+            'total', COALESCE(request_totals.total_count, 0),
+            'pending', COALESCE(request_totals.pending_count, 0),
+            'processing', COALESCE(request_totals.processing_count, 0),
+            'applied', COALESCE(request_totals.applied_count, 0),
+            'skipped', COALESCE(request_totals.skipped_count, 0),
+            'blocked', COALESCE(request_totals.blocked_count, 0),
+            'failed_retryable', COALESCE(request_totals.failed_retryable_count, 0),
+            'failed_final', COALESCE(request_totals.failed_final_count, 0),
+            'cancelled', COALESCE(request_totals.cancelled_count, 0)
+          ) AS totals_json
+        FROM request_totals
+      ), updated_events AS (
+        UPDATE public.pay_bank_transfer_events AS bank_event_to_update
+        SET
+          correction_disposition = derived_event_status.correction_disposition
+        FROM derived_event_status
+        WHERE bank_event_to_update.id = derived_event_status.source_bank_event_id
+        RETURNING
+          derived_event_status.correction_request_id,
+          bank_event_to_update.id AS source_bank_event_id,
+          derived_event_status.correction_disposition,
+          derived_event_status.parent_status,
+          derived_event_status.totals_json,
+          (derived_event_status.correction_disposition IN ('BLOCKED', 'FAILED')) AS requires_user_action,
+          (derived_event_status.correction_disposition = 'AUTO_PROCESSING') AS processing_continues
+      )
+      SELECT
+        updated_events.correction_request_id,
+        updated_events.source_bank_event_id,
+        updated_events.correction_disposition,
+        updated_events.parent_status,
+        updated_events.totals_json,
+        updated_events.requires_user_action,
+        updated_events.processing_continues
+      FROM updated_events;
+
+      SELECT COALESCE(jsonb_agg(jsonb_build_object(
+        'correction_request_id', source_event_updates.correction_request_id,
+        'event_id', source_event_updates.source_bank_event_id,
+        'correction_disposition', source_event_updates.correction_disposition,
+        'parent_status', source_event_updates.parent_status,
+        'totals', source_event_updates.totals_json,
+        'requires_user_action', source_event_updates.requires_user_action,
+        'processing_continues', source_event_updates.processing_continues
+      ) ORDER BY source_event_updates.correction_request_id), '[]'::jsonb)
+      INTO v_source_event_updates
+      FROM pg_temp._tmp_payment_correction_source_event_updates AS source_event_updates;
+
+      SELECT
+        jsonb_build_object(
+          'correction_request_id', source_event_updates.correction_request_id,
+          'event_id', source_event_updates.source_bank_event_id,
+          'correction_disposition', source_event_updates.correction_disposition,
+          'parent_status', source_event_updates.parent_status,
+          'totals', source_event_updates.totals_json,
+          'requires_user_action', source_event_updates.requires_user_action,
+          'processing_continues', source_event_updates.processing_continues
+        ),
+        source_event_updates.requires_user_action,
+        source_event_updates.processing_continues
+      INTO
+        v_source_event_update,
+        v_requires_user_action,
+        v_processing_continues
+      FROM pg_temp._tmp_payment_correction_source_event_updates AS source_event_updates
+      ORDER BY source_event_updates.correction_request_id
+      LIMIT 1;
+
       RETURN jsonb_build_object(
         'ok', true,
         'processed', 0,
@@ -5856,6 +5983,10 @@ BEGIN
         'failed_final', 0,
         'parent_status', v_request_status,
         'totals', v_totals,
+        'requires_user_action', COALESCE(v_requires_user_action, false),
+        'processing_continues', COALESCE(v_processing_continues, false),
+        'source_bank_event_update', v_source_event_update,
+        'source_bank_event_updates', v_source_event_updates,
         'terminal_request', true,
         'processing_actor_kind', CASE WHEN p_actor_user_id IS NULL THEN 'SYSTEM' ELSE 'USER' END,
         'processing_actor_user_id', CASE WHEN p_actor_user_id IS NULL THEN NULL ELSE p_actor_user_id::text END
@@ -5946,6 +6077,130 @@ BEGIN
       v_parent_status := NULL;
     END IF;
 
+    IF p_correction_request_id IS NOT NULL THEN
+
+      DROP TABLE IF EXISTS pg_temp._tmp_payment_correction_source_event_updates;
+      CREATE TEMP TABLE _tmp_payment_correction_source_event_updates ON COMMIT DROP AS
+      WITH request_totals AS (
+        SELECT
+          public.pay_payment_correction_requests.id AS correction_request_id,
+          public.pay_payment_correction_requests.source_bank_event_id,
+          public.pay_payment_correction_requests.status::text AS parent_status,
+          COALESCE((v_totals->>'total')::integer, 0) AS total_count,
+          COALESCE((v_totals->>'pending')::integer, 0) AS pending_count,
+          COALESCE((v_totals->>'processing')::integer, 0) AS processing_count,
+          COALESCE((v_totals->>'applied')::integer, 0) AS applied_count,
+          COALESCE((v_totals->>'skipped')::integer, 0) AS skipped_count,
+          COALESCE((v_totals->>'blocked')::integer, 0) AS blocked_count,
+          COALESCE((v_totals->>'failed_retryable')::integer, 0) AS failed_retryable_count,
+          COALESCE((v_totals->>'failed_final')::integer, 0) AS failed_final_count,
+          COALESCE((v_totals->>'cancelled')::integer, 0) AS cancelled_count
+        FROM public.pay_payment_correction_requests
+        WHERE public.pay_payment_correction_requests.id = p_correction_request_id
+          AND public.pay_payment_correction_requests.source_bank_event_id IS NOT NULL
+          AND public.pay_payment_correction_requests.status IN ('APPLIED', 'APPLIED_WITH_BLOCKERS', 'BLOCKED', 'FAILED', 'PROCESSING', 'EXPANDED', 'AUTHORISED')
+      ), derived_event_status AS (
+        SELECT
+          request_totals.correction_request_id,
+          request_totals.source_bank_event_id,
+          request_totals.parent_status,
+          request_totals.total_count,
+          request_totals.pending_count,
+          request_totals.processing_count,
+          request_totals.applied_count,
+          request_totals.skipped_count,
+          request_totals.blocked_count,
+          request_totals.failed_retryable_count,
+          request_totals.failed_final_count,
+          request_totals.cancelled_count,
+          CASE
+            WHEN COALESCE(request_totals.total_count, 0) <= 0 THEN 'FAILED'
+            WHEN COALESCE(request_totals.failed_retryable_count, 0) > 0 OR COALESCE(request_totals.failed_final_count, 0) > 0 OR request_totals.parent_status = 'FAILED' THEN 'FAILED'
+            WHEN COALESCE(request_totals.blocked_count, 0) > 0 OR request_totals.parent_status IN ('APPLIED_WITH_BLOCKERS', 'BLOCKED') THEN 'BLOCKED'
+            WHEN request_totals.parent_status = 'APPLIED'
+                 AND COALESCE(request_totals.applied_count, 0) + COALESCE(request_totals.skipped_count, 0) = COALESCE(request_totals.total_count, 0) THEN 'AUTO_APPLIED'
+            WHEN request_totals.parent_status IN ('PROCESSING', 'EXPANDED', 'AUTHORISED')
+                 AND COALESCE(request_totals.pending_count, 0) + COALESCE(request_totals.processing_count, 0) > 0
+                 AND COALESCE(request_totals.blocked_count, 0) = 0
+                 AND COALESCE(request_totals.failed_retryable_count, 0) = 0
+                 AND COALESCE(request_totals.failed_final_count, 0) = 0 THEN 'AUTO_PROCESSING'
+            WHEN COALESCE(request_totals.pending_count, 0) + COALESCE(request_totals.processing_count, 0) > 0
+                 AND COALESCE(request_totals.blocked_count, 0) = 0
+                 AND COALESCE(request_totals.failed_retryable_count, 0) = 0
+                 AND COALESCE(request_totals.failed_final_count, 0) = 0 THEN 'AUTO_PROCESSING'
+            ELSE 'FAILED'
+          END AS correction_disposition,
+          jsonb_build_object(
+            'total', COALESCE(request_totals.total_count, 0),
+            'pending', COALESCE(request_totals.pending_count, 0),
+            'processing', COALESCE(request_totals.processing_count, 0),
+            'applied', COALESCE(request_totals.applied_count, 0),
+            'skipped', COALESCE(request_totals.skipped_count, 0),
+            'blocked', COALESCE(request_totals.blocked_count, 0),
+            'failed_retryable', COALESCE(request_totals.failed_retryable_count, 0),
+            'failed_final', COALESCE(request_totals.failed_final_count, 0),
+            'cancelled', COALESCE(request_totals.cancelled_count, 0)
+          ) AS totals_json
+        FROM request_totals
+      ), updated_events AS (
+        UPDATE public.pay_bank_transfer_events AS bank_event_to_update
+        SET
+          correction_disposition = derived_event_status.correction_disposition
+        FROM derived_event_status
+        WHERE bank_event_to_update.id = derived_event_status.source_bank_event_id
+        RETURNING
+          derived_event_status.correction_request_id,
+          bank_event_to_update.id AS source_bank_event_id,
+          derived_event_status.correction_disposition,
+          derived_event_status.parent_status,
+          derived_event_status.totals_json,
+          (derived_event_status.correction_disposition IN ('BLOCKED', 'FAILED')) AS requires_user_action,
+          (derived_event_status.correction_disposition = 'AUTO_PROCESSING') AS processing_continues
+      )
+      SELECT
+        updated_events.correction_request_id,
+        updated_events.source_bank_event_id,
+        updated_events.correction_disposition,
+        updated_events.parent_status,
+        updated_events.totals_json,
+        updated_events.requires_user_action,
+        updated_events.processing_continues
+      FROM updated_events;
+
+      SELECT COALESCE(jsonb_agg(jsonb_build_object(
+        'correction_request_id', source_event_updates.correction_request_id,
+        'event_id', source_event_updates.source_bank_event_id,
+        'correction_disposition', source_event_updates.correction_disposition,
+        'parent_status', source_event_updates.parent_status,
+        'totals', source_event_updates.totals_json,
+        'requires_user_action', source_event_updates.requires_user_action,
+        'processing_continues', source_event_updates.processing_continues
+      ) ORDER BY source_event_updates.correction_request_id), '[]'::jsonb)
+      INTO v_source_event_updates
+      FROM pg_temp._tmp_payment_correction_source_event_updates AS source_event_updates;
+
+      SELECT
+        jsonb_build_object(
+          'correction_request_id', source_event_updates.correction_request_id,
+          'event_id', source_event_updates.source_bank_event_id,
+          'correction_disposition', source_event_updates.correction_disposition,
+          'parent_status', source_event_updates.parent_status,
+          'totals', source_event_updates.totals_json,
+          'requires_user_action', source_event_updates.requires_user_action,
+          'processing_continues', source_event_updates.processing_continues
+        ),
+        source_event_updates.requires_user_action,
+        source_event_updates.processing_continues
+      INTO
+        v_source_event_update,
+        v_requires_user_action,
+        v_processing_continues
+      FROM pg_temp._tmp_payment_correction_source_event_updates AS source_event_updates
+      ORDER BY source_event_updates.correction_request_id
+      LIMIT 1;
+
+    END IF;
+
     PERFORM public._imp_debug_audit(
       p_actor_user_id,
       'PAYMENT_CORRECTION_PROCESS_CHUNK_NO_WORK',
@@ -5973,6 +6228,10 @@ BEGIN
       'failed_final', 0,
       'parent_status', v_parent_status,
       'totals', v_totals,
+      'requires_user_action', COALESCE(v_requires_user_action, false),
+      'processing_continues', COALESCE(v_processing_continues, false),
+      'source_bank_event_update', v_source_event_update,
+      'source_bank_event_updates', v_source_event_updates,
       'processing_actor_kind', CASE WHEN p_actor_user_id IS NULL THEN 'SYSTEM' ELSE 'USER' END,
       'processing_actor_user_id', CASE WHEN p_actor_user_id IS NULL THEN NULL ELSE p_actor_user_id::text END
     );
@@ -6318,6 +6577,160 @@ BEGIN
     v_parent_status := NULL;
   END IF;
 
+
+  DROP TABLE IF EXISTS pg_temp._tmp_payment_correction_source_event_updates;
+  CREATE TEMP TABLE _tmp_payment_correction_source_event_updates ON COMMIT DROP AS
+  WITH request_scope AS (
+    SELECT public.pay_payment_correction_requests.id AS correction_request_id
+    FROM public.pay_payment_correction_requests
+    WHERE public.pay_payment_correction_requests.source_bank_event_id IS NOT NULL
+      AND public.pay_payment_correction_requests.status IN ('APPLIED', 'APPLIED_WITH_BLOCKERS', 'BLOCKED', 'FAILED', 'PROCESSING', 'EXPANDED', 'AUTHORISED')
+      AND (
+        (p_correction_request_id IS NOT NULL AND public.pay_payment_correction_requests.id = p_correction_request_id)
+        OR (
+          p_correction_request_id IS NULL
+          AND public.pay_payment_correction_requests.id = ANY(v_parent_request_ids)
+        )
+      )
+  ), request_totals AS (
+    SELECT
+      public.pay_payment_correction_requests.id AS correction_request_id,
+      public.pay_payment_correction_requests.source_bank_event_id,
+      public.pay_payment_correction_requests.status::text AS parent_status,
+      count(public.pay_payment_correction_work_items.id)::integer AS total_count,
+      count(public.pay_payment_correction_work_items.id) FILTER (WHERE public.pay_payment_correction_work_items.status = 'PENDING')::integer AS pending_count,
+      count(public.pay_payment_correction_work_items.id) FILTER (WHERE public.pay_payment_correction_work_items.status = 'PROCESSING')::integer AS processing_count,
+      count(public.pay_payment_correction_work_items.id) FILTER (WHERE public.pay_payment_correction_work_items.status = 'APPLIED')::integer AS applied_count,
+      count(public.pay_payment_correction_work_items.id) FILTER (WHERE public.pay_payment_correction_work_items.status = 'SKIPPED')::integer AS skipped_count,
+      count(public.pay_payment_correction_work_items.id) FILTER (WHERE public.pay_payment_correction_work_items.status = 'BLOCKED')::integer AS blocked_count,
+      count(public.pay_payment_correction_work_items.id) FILTER (WHERE public.pay_payment_correction_work_items.status = 'FAILED_RETRYABLE')::integer AS failed_retryable_count,
+      count(public.pay_payment_correction_work_items.id) FILTER (WHERE public.pay_payment_correction_work_items.status = 'FAILED_FINAL')::integer AS failed_final_count,
+      count(public.pay_payment_correction_work_items.id) FILTER (WHERE public.pay_payment_correction_work_items.status = 'CANCELLED')::integer AS cancelled_count
+    FROM request_scope
+    JOIN public.pay_payment_correction_requests
+      ON public.pay_payment_correction_requests.id = request_scope.correction_request_id
+    LEFT JOIN public.pay_payment_correction_work_items
+      ON public.pay_payment_correction_work_items.correction_request_id = public.pay_payment_correction_requests.id
+    GROUP BY
+      public.pay_payment_correction_requests.id,
+      public.pay_payment_correction_requests.source_bank_event_id,
+      public.pay_payment_correction_requests.status
+  ), derived_event_status AS (
+    SELECT
+      request_totals.correction_request_id,
+      request_totals.source_bank_event_id,
+      request_totals.parent_status,
+      request_totals.total_count,
+      request_totals.pending_count,
+      request_totals.processing_count,
+      request_totals.applied_count,
+      request_totals.skipped_count,
+      request_totals.blocked_count,
+      request_totals.failed_retryable_count,
+      request_totals.failed_final_count,
+      request_totals.cancelled_count,
+      CASE
+        WHEN COALESCE(request_totals.total_count, 0) <= 0 THEN 'FAILED'
+        WHEN COALESCE(request_totals.failed_retryable_count, 0) > 0 OR COALESCE(request_totals.failed_final_count, 0) > 0 OR request_totals.parent_status = 'FAILED' THEN 'FAILED'
+        WHEN COALESCE(request_totals.blocked_count, 0) > 0 OR request_totals.parent_status IN ('APPLIED_WITH_BLOCKERS', 'BLOCKED') THEN 'BLOCKED'
+        WHEN request_totals.parent_status = 'APPLIED'
+             AND COALESCE(request_totals.applied_count, 0) + COALESCE(request_totals.skipped_count, 0) = COALESCE(request_totals.total_count, 0) THEN 'AUTO_APPLIED'
+        WHEN request_totals.parent_status IN ('PROCESSING', 'EXPANDED', 'AUTHORISED')
+             AND COALESCE(request_totals.pending_count, 0) + COALESCE(request_totals.processing_count, 0) > 0
+             AND COALESCE(request_totals.blocked_count, 0) = 0
+             AND COALESCE(request_totals.failed_retryable_count, 0) = 0
+             AND COALESCE(request_totals.failed_final_count, 0) = 0 THEN 'AUTO_PROCESSING'
+        WHEN COALESCE(request_totals.pending_count, 0) + COALESCE(request_totals.processing_count, 0) > 0
+             AND COALESCE(request_totals.blocked_count, 0) = 0
+             AND COALESCE(request_totals.failed_retryable_count, 0) = 0
+             AND COALESCE(request_totals.failed_final_count, 0) = 0 THEN 'AUTO_PROCESSING'
+        ELSE 'FAILED'
+      END AS correction_disposition,
+      jsonb_build_object(
+        'total', COALESCE(request_totals.total_count, 0),
+        'pending', COALESCE(request_totals.pending_count, 0),
+        'processing', COALESCE(request_totals.processing_count, 0),
+        'applied', COALESCE(request_totals.applied_count, 0),
+        'skipped', COALESCE(request_totals.skipped_count, 0),
+        'blocked', COALESCE(request_totals.blocked_count, 0),
+        'failed_retryable', COALESCE(request_totals.failed_retryable_count, 0),
+        'failed_final', COALESCE(request_totals.failed_final_count, 0),
+        'cancelled', COALESCE(request_totals.cancelled_count, 0)
+      ) AS totals_json
+    FROM request_totals
+  ), updated_events AS (
+    UPDATE public.pay_bank_transfer_events AS bank_event_to_update
+    SET
+      correction_disposition = derived_event_status.correction_disposition
+    FROM derived_event_status
+    WHERE bank_event_to_update.id = derived_event_status.source_bank_event_id
+    RETURNING
+      derived_event_status.correction_request_id,
+      bank_event_to_update.id AS source_bank_event_id,
+      derived_event_status.correction_disposition,
+      derived_event_status.parent_status,
+      derived_event_status.totals_json,
+      (derived_event_status.correction_disposition IN ('BLOCKED', 'FAILED')) AS requires_user_action,
+      (derived_event_status.correction_disposition = 'AUTO_PROCESSING') AS processing_continues
+  )
+  SELECT
+    updated_events.correction_request_id,
+    updated_events.source_bank_event_id,
+    updated_events.correction_disposition,
+    updated_events.parent_status,
+    updated_events.totals_json,
+    updated_events.requires_user_action,
+    updated_events.processing_continues
+  FROM updated_events;
+
+  SELECT COALESCE(jsonb_agg(jsonb_build_object(
+    'correction_request_id', source_event_updates.correction_request_id,
+    'event_id', source_event_updates.source_bank_event_id,
+    'correction_disposition', source_event_updates.correction_disposition,
+    'parent_status', source_event_updates.parent_status,
+    'totals', source_event_updates.totals_json,
+    'requires_user_action', source_event_updates.requires_user_action,
+    'processing_continues', source_event_updates.processing_continues
+  ) ORDER BY source_event_updates.correction_request_id), '[]'::jsonb)
+  INTO v_source_event_updates
+  FROM pg_temp._tmp_payment_correction_source_event_updates AS source_event_updates;
+
+  IF p_correction_request_id IS NOT NULL THEN
+    SELECT
+      jsonb_build_object(
+        'correction_request_id', source_event_updates.correction_request_id,
+        'event_id', source_event_updates.source_bank_event_id,
+        'correction_disposition', source_event_updates.correction_disposition,
+        'parent_status', source_event_updates.parent_status,
+        'totals', source_event_updates.totals_json,
+        'requires_user_action', source_event_updates.requires_user_action,
+        'processing_continues', source_event_updates.processing_continues
+      ),
+      source_event_updates.source_bank_event_id,
+      source_event_updates.correction_disposition,
+      source_event_updates.requires_user_action,
+      source_event_updates.processing_continues
+    INTO
+      v_source_event_update,
+      v_source_bank_event_id,
+      v_source_event_disposition,
+      v_requires_user_action,
+      v_processing_continues
+    FROM pg_temp._tmp_payment_correction_source_event_updates AS source_event_updates
+    WHERE source_event_updates.correction_request_id = p_correction_request_id
+    ORDER BY source_event_updates.correction_request_id
+    LIMIT 1;
+  ELSE
+    v_source_event_update := NULL::jsonb;
+    SELECT
+      COALESCE(bool_or(source_event_updates.requires_user_action), false),
+      COALESCE(bool_or(source_event_updates.processing_continues), false)
+    INTO
+      v_requires_user_action,
+      v_processing_continues
+    FROM pg_temp._tmp_payment_correction_source_event_updates AS source_event_updates;
+  END IF;
+
   PERFORM public._imp_debug_audit(
     p_actor_user_id,
     'PAYMENT_CORRECTION_PROCESS_CHUNK_RESULT',
@@ -6350,6 +6763,10 @@ BEGIN
     'failed_final', v_failed_final_count,
     'parent_status', v_parent_status,
     'totals', v_totals,
+    'requires_user_action', COALESCE(v_requires_user_action, false),
+    'processing_continues', COALESCE(v_processing_continues, false),
+    'source_bank_event_update', v_source_event_update,
+    'source_bank_event_updates', v_source_event_updates,
     'processing_actor_kind', CASE WHEN p_actor_user_id IS NULL THEN 'SYSTEM' ELSE 'USER' END,
     'processing_actor_user_id', CASE WHEN p_actor_user_id IS NULL THEN NULL ELSE p_actor_user_id::text END
   );
@@ -6378,7 +6795,6 @@ EXCEPTION
     RAISE;
 END;
 $function$;
-
 
 
 
@@ -9708,6 +10124,7 @@ $function$;
 
 
 
+
 CREATE OR REPLACE FUNCTION public.pay_bank_event_ingest(
   p_event_json jsonb,
   p_actor_user_id uuid DEFAULT NULL::uuid
@@ -10644,16 +11061,13 @@ BEGIN
             'final_work_item_totals', v_final_work_item_totals
           );
         ELSIF COALESCE(v_work_pending_count, 0) > 0 OR COALESCE(v_work_processing_count, 0) > 0 THEN
-          v_correction_disposition := 'ACTION_REQUIRED';
-          v_exact_mapping_required_blocker := jsonb_build_object(
-            'code', 'AUTO_CORRECTION_WORK_ITEMS_REMAIN_PENDING',
-            'message', 'Automatic payment correction created work items but did not finish all selected work in this run.',
-            'final_work_item_totals', v_final_work_item_totals
-          );
+          v_correction_disposition := 'AUTO_PROCESSING';
+          v_exact_mapping_required_blocker := NULL::jsonb;
         ELSIF COALESCE(v_work_applied_count, 0) + COALESCE(v_work_skipped_count, 0) = COALESCE(v_work_total_count, 0) THEN
           v_correction_disposition := 'AUTO_APPLIED';
+          v_exact_mapping_required_blocker := NULL::jsonb;
         ELSE
-          v_correction_disposition := 'ACTION_REQUIRED';
+          v_correction_disposition := 'FAILED';
           v_exact_mapping_required_blocker := jsonb_build_object(
             'code', 'AUTO_CORRECTION_WORK_ITEM_STATUS_UNRESOLVED',
             'message', 'Automatic payment correction finished with unresolved work item status totals.',
@@ -10696,11 +11110,12 @@ BEGIN
     END;
   END IF;
 
-  IF v_correction_disposition <> 'NO_CORRECTION_REQUIRED' THEN
+  IF v_correction_disposition NOT IN ('NO_CORRECTION_REQUIRED', 'AUTO_PROCESSING') THEN
     v_admin_notice_result := public.pay_payment_return_admin_notice_queue(
       p_notice_kind => CASE
         WHEN v_correction_disposition = 'AMBIGUOUS' THEN 'AUTO_CORRECTION_BLOCKED'
         WHEN v_correction_disposition = 'BLOCKED' THEN 'AUTO_CORRECTION_BLOCKED'
+        WHEN v_correction_disposition = 'FAILED' THEN 'AUTO_CORRECTION_BLOCKED'
         WHEN v_correction_disposition = 'AUTO_APPLIED' AND v_classification = 'NO_MONEY_UNWIND' THEN 'NO_MONEY_UNWIND_APPLIED'
         WHEN v_correction_disposition = 'AUTO_APPLIED' AND v_classification = 'TRUE_SETTLED_REVERSAL_REQUIRED' THEN 'SETTLED_REVERSAL_APPLIED'
         ELSE v_notice_kind
@@ -10784,6 +11199,8 @@ BEGIN
       'expand_result', v_expand_result,
       'process_result', v_process_result,
       'final_work_item_totals', v_final_work_item_totals,
+      'status', v_correction_disposition,
+      'requires_user_action', v_correction_disposition IN ('ACTION_REQUIRED', 'AMBIGUOUS', 'BLOCKED', 'FAILED'),
       'blocker', v_exact_mapping_required_blocker
     )
   );
@@ -10809,9 +11226,6 @@ EXCEPTION
     RAISE;
 END;
 $function$;
-
-
-
 
 
 CREATE OR REPLACE FUNCTION public.pay_payment_return_admin_notice_queue(
