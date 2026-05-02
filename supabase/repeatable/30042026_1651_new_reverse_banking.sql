@@ -14512,3 +14512,1506 @@ BEGIN
 END;
 $function$;
 
+
+CREATE OR REPLACE FUNCTION public._pay_payment_correction_mail_scope_match(
+  p_mail_outbox_id uuid,
+  p_pay_batch_id uuid,
+  p_selection_json jsonb,
+  p_selected_scope_json jsonb,
+  p_allow_legacy_broad_match boolean DEFAULT false
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+STABLE
+SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_mail_row public.mail_outbox%ROWTYPE;
+  v_mail_scope jsonb := '{}'::jsonb;
+  v_scope_type text := NULL::text;
+  v_work_unit text := NULL::text;
+  v_uuid_pattern text := '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$';
+
+  v_selected_pay_batch_ids uuid[] := ARRAY[]::uuid[];
+  v_selected_pay_batch_item_ids uuid[] := ARRAY[]::uuid[];
+  v_selected_pay_batch_candidate_ids uuid[] := ARRAY[]::uuid[];
+  v_selected_candidate_ids uuid[] := ARRAY[]::uuid[];
+  v_selected_pay_bank_transfer_ids uuid[] := ARRAY[]::uuid[];
+  v_selected_umbrella_ids uuid[] := ARRAY[]::uuid[];
+  v_selected_finance_case_ids uuid[] := ARRAY[]::uuid[];
+  v_selected_finance_component_ids uuid[] := ARRAY[]::uuid[];
+  v_selected_reservation_ids uuid[] := ARRAY[]::uuid[];
+  v_selected_payout_transfer_ids uuid[] := ARRAY[]::uuid[];
+  v_selected_transfer_group_keys text[] := ARRAY[]::text[];
+
+  v_mail_pay_batch_ids uuid[] := ARRAY[]::uuid[];
+  v_mail_pay_batch_item_ids uuid[] := ARRAY[]::uuid[];
+  v_mail_pay_batch_candidate_ids uuid[] := ARRAY[]::uuid[];
+  v_mail_candidate_ids uuid[] := ARRAY[]::uuid[];
+  v_mail_pay_bank_transfer_ids uuid[] := ARRAY[]::uuid[];
+  v_mail_umbrella_ids uuid[] := ARRAY[]::uuid[];
+  v_mail_finance_case_ids uuid[] := ARRAY[]::uuid[];
+  v_mail_finance_component_ids uuid[] := ARRAY[]::uuid[];
+  v_mail_reservation_ids uuid[] := ARRAY[]::uuid[];
+  v_mail_payout_transfer_ids uuid[] := ARRAY[]::uuid[];
+  v_mail_transfer_group_keys text[] := ARRAY[]::text[];
+
+  v_mail_batch_matches boolean := false;
+  v_is_whole_batch_scope boolean := false;
+  v_selected_has_narrow_payment_scope boolean := false;
+  v_selected_candidate_scope_complete boolean := false;
+  v_selected_has_candidate_filter boolean := false;
+  v_selected_has_umbrella_filter boolean := false;
+  v_candidate_filter_requires_payment_match boolean := false;
+  v_umbrella_filter_requires_payment_match boolean := false;
+  v_mail_candidate_scope_matches boolean := false;
+  v_mail_umbrella_scope_matches boolean := false;
+  v_transfer_scope_candidate_safe boolean := false;
+  v_transfer_scope_umbrella_safe boolean := false;
+  v_transfer_scope_safe boolean := false;
+
+  v_item_exact boolean := false;
+  v_item_partial boolean := false;
+  v_transfer_exact boolean := false;
+  v_transfer_partial boolean := false;
+  v_payout_transfer_exact boolean := false;
+  v_payout_transfer_partial boolean := false;
+  v_transfer_group_exact boolean := false;
+  v_transfer_group_partial boolean := false;
+  v_finance_case_exact boolean := false;
+  v_finance_case_partial boolean := false;
+  v_finance_component_exact boolean := false;
+  v_finance_component_partial boolean := false;
+  v_reservation_exact boolean := false;
+  v_reservation_partial boolean := false;
+  v_pay_batch_candidate_exact boolean := false;
+  v_pay_batch_candidate_partial boolean := false;
+  v_umbrella_group_exact boolean := false;
+  v_umbrella_partial boolean := false;
+  v_context_exact boolean := false;
+  v_legacy_broad_match boolean := false;
+  v_reference_broad_match boolean := false;
+  v_recipient_broad_match boolean := false;
+  v_payment_scope_broad_match boolean := false;
+  v_partial_overlap_requires_review boolean := false;
+
+  v_match_kind text := 'NONE';
+  v_match_confidence text := 'NONE';
+  v_safe_to_cancel boolean := false;
+  v_requires_review boolean := false;
+  v_reason text := 'NO_SCOPE_MATCH';
+BEGIN
+  IF p_mail_outbox_id IS NULL THEN
+    RETURN jsonb_build_object(
+      'matched', false,
+      'match_kind', 'NONE',
+      'match_confidence', 'NONE',
+      'safe_to_cancel', false,
+      'requires_review', false,
+      'reason', 'MAIL_OUTBOX_ID_REQUIRED'
+    );
+  END IF;
+
+  IF p_pay_batch_id IS NULL THEN
+    RETURN jsonb_build_object(
+      'matched', false,
+      'match_kind', 'NONE',
+      'match_confidence', 'NONE',
+      'safe_to_cancel', false,
+      'requires_review', false,
+      'reason', 'PAY_BATCH_ID_REQUIRED',
+      'mail_outbox_id', p_mail_outbox_id
+    );
+  END IF;
+
+  SELECT public.mail_outbox.*
+  INTO v_mail_row
+  FROM public.mail_outbox
+  WHERE public.mail_outbox.id = p_mail_outbox_id;
+
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object(
+      'matched', false,
+      'match_kind', 'NONE',
+      'match_confidence', 'NONE',
+      'safe_to_cancel', false,
+      'requires_review', false,
+      'reason', 'MAIL_OUTBOX_NOT_FOUND',
+      'mail_outbox_id', p_mail_outbox_id,
+      'pay_batch_id', p_pay_batch_id
+    );
+  END IF;
+
+  v_mail_scope := COALESCE(v_mail_row.payment_scope_json, '{}'::jsonb);
+  v_scope_type := upper(btrim(COALESCE(p_selected_scope_json->>'scope_type', p_selection_json->>'scope_type', '')));
+  v_work_unit := upper(btrim(COALESCE(p_selected_scope_json->>'work_unit', p_selection_json->>'work_unit', '')));
+
+  WITH source_payloads(payload) AS (
+    VALUES (COALESCE(p_selection_json, '{}'::jsonb)), (COALESCE(p_selected_scope_json, '{}'::jsonb))
+  ), key_names(key_name) AS (
+    VALUES ('pay_batch_id'), ('pay_batch_ids')
+  ), raw_values(raw_value) AS (
+    SELECT btrim(array_values.value_text)
+    FROM source_payloads
+    JOIN key_names ON true
+    CROSS JOIN LATERAL jsonb_array_elements_text(
+      COALESCE(
+        CASE WHEN jsonb_typeof(source_payloads.payload -> key_names.key_name) = 'array'
+          THEN source_payloads.payload -> key_names.key_name
+          ELSE '[]'::jsonb
+        END,
+        '[]'::jsonb
+      )
+    ) AS array_values(value_text)
+    UNION ALL
+    SELECT btrim(source_payloads.payload ->> key_names.key_name)
+    FROM source_payloads
+    JOIN key_names ON true
+    WHERE jsonb_typeof(source_payloads.payload -> key_names.key_name) IN ('string', 'number')
+  )
+  SELECT COALESCE(array_agg(DISTINCT uuid_values.uuid_value), ARRAY[]::uuid[])
+  INTO v_selected_pay_batch_ids
+  FROM (
+    SELECT raw_values.raw_value::uuid AS uuid_value
+    FROM raw_values
+    WHERE raw_values.raw_value ~ v_uuid_pattern
+  ) AS uuid_values;
+
+  WITH source_payloads(payload) AS (
+    VALUES (COALESCE(p_selection_json, '{}'::jsonb)), (COALESCE(p_selected_scope_json, '{}'::jsonb))
+  ), key_names(key_name) AS (
+    VALUES ('pay_batch_item_id'), ('pay_batch_item_ids'), ('selected_pay_batch_item_ids'), ('expected_pay_batch_item_ids')
+  ), raw_values(raw_value) AS (
+    SELECT btrim(array_values.value_text)
+    FROM source_payloads
+    JOIN key_names ON true
+    CROSS JOIN LATERAL jsonb_array_elements_text(
+      COALESCE(
+        CASE WHEN jsonb_typeof(source_payloads.payload -> key_names.key_name) = 'array'
+          THEN source_payloads.payload -> key_names.key_name
+          ELSE '[]'::jsonb
+        END,
+        '[]'::jsonb
+      )
+    ) AS array_values(value_text)
+    UNION ALL
+    SELECT btrim(source_payloads.payload ->> key_names.key_name)
+    FROM source_payloads
+    JOIN key_names ON true
+    WHERE jsonb_typeof(source_payloads.payload -> key_names.key_name) IN ('string', 'number')
+  )
+  SELECT COALESCE(array_agg(DISTINCT uuid_values.uuid_value), ARRAY[]::uuid[])
+  INTO v_selected_pay_batch_item_ids
+  FROM (
+    SELECT raw_values.raw_value::uuid AS uuid_value
+    FROM raw_values
+    WHERE raw_values.raw_value ~ v_uuid_pattern
+  ) AS uuid_values;
+
+  WITH source_payloads(payload) AS (
+    VALUES (COALESCE(p_selection_json, '{}'::jsonb)), (COALESCE(p_selected_scope_json, '{}'::jsonb))
+  ), key_names(key_name) AS (
+    VALUES ('pay_batch_candidate_id'), ('pay_batch_candidate_ids'), ('selected_pay_batch_candidate_ids')
+  ), raw_values(raw_value) AS (
+    SELECT btrim(array_values.value_text)
+    FROM source_payloads
+    JOIN key_names ON true
+    CROSS JOIN LATERAL jsonb_array_elements_text(
+      COALESCE(
+        CASE WHEN jsonb_typeof(source_payloads.payload -> key_names.key_name) = 'array'
+          THEN source_payloads.payload -> key_names.key_name
+          ELSE '[]'::jsonb
+        END,
+        '[]'::jsonb
+      )
+    ) AS array_values(value_text)
+    UNION ALL
+    SELECT btrim(source_payloads.payload ->> key_names.key_name)
+    FROM source_payloads
+    JOIN key_names ON true
+    WHERE jsonb_typeof(source_payloads.payload -> key_names.key_name) IN ('string', 'number')
+  )
+  SELECT COALESCE(array_agg(DISTINCT uuid_values.uuid_value), ARRAY[]::uuid[])
+  INTO v_selected_pay_batch_candidate_ids
+  FROM (
+    SELECT raw_values.raw_value::uuid AS uuid_value
+    FROM raw_values
+    WHERE raw_values.raw_value ~ v_uuid_pattern
+  ) AS uuid_values;
+
+  WITH source_payloads(payload) AS (
+    VALUES (COALESCE(p_selection_json, '{}'::jsonb)), (COALESCE(p_selected_scope_json, '{}'::jsonb))
+  ), key_names(key_name) AS (
+    VALUES ('candidate_id'), ('candidate_ids'), ('selected_candidate_ids')
+  ), raw_values(raw_value) AS (
+    SELECT btrim(array_values.value_text)
+    FROM source_payloads
+    JOIN key_names ON true
+    CROSS JOIN LATERAL jsonb_array_elements_text(
+      COALESCE(
+        CASE WHEN jsonb_typeof(source_payloads.payload -> key_names.key_name) = 'array'
+          THEN source_payloads.payload -> key_names.key_name
+          ELSE '[]'::jsonb
+        END,
+        '[]'::jsonb
+      )
+    ) AS array_values(value_text)
+    UNION ALL
+    SELECT btrim(source_payloads.payload ->> key_names.key_name)
+    FROM source_payloads
+    JOIN key_names ON true
+    WHERE jsonb_typeof(source_payloads.payload -> key_names.key_name) IN ('string', 'number')
+  )
+  SELECT COALESCE(array_agg(DISTINCT uuid_values.uuid_value), ARRAY[]::uuid[])
+  INTO v_selected_candidate_ids
+  FROM (
+    SELECT raw_values.raw_value::uuid AS uuid_value
+    FROM raw_values
+    WHERE raw_values.raw_value ~ v_uuid_pattern
+  ) AS uuid_values;
+
+  WITH source_payloads(payload) AS (
+    VALUES (COALESCE(p_selection_json, '{}'::jsonb)), (COALESCE(p_selected_scope_json, '{}'::jsonb))
+  ), key_names(key_name) AS (
+    VALUES ('pay_bank_transfer_id'), ('pay_bank_transfer_ids'), ('selected_pay_bank_transfer_ids')
+  ), raw_values(raw_value) AS (
+    SELECT btrim(array_values.value_text)
+    FROM source_payloads
+    JOIN key_names ON true
+    CROSS JOIN LATERAL jsonb_array_elements_text(
+      COALESCE(
+        CASE WHEN jsonb_typeof(source_payloads.payload -> key_names.key_name) = 'array'
+          THEN source_payloads.payload -> key_names.key_name
+          ELSE '[]'::jsonb
+        END,
+        '[]'::jsonb
+      )
+    ) AS array_values(value_text)
+    UNION ALL
+    SELECT btrim(source_payloads.payload ->> key_names.key_name)
+    FROM source_payloads
+    JOIN key_names ON true
+    WHERE jsonb_typeof(source_payloads.payload -> key_names.key_name) IN ('string', 'number')
+  )
+  SELECT COALESCE(array_agg(DISTINCT uuid_values.uuid_value), ARRAY[]::uuid[])
+  INTO v_selected_pay_bank_transfer_ids
+  FROM (
+    SELECT raw_values.raw_value::uuid AS uuid_value
+    FROM raw_values
+    WHERE raw_values.raw_value ~ v_uuid_pattern
+  ) AS uuid_values;
+
+  WITH source_payloads(payload) AS (
+    VALUES (COALESCE(p_selection_json, '{}'::jsonb)), (COALESCE(p_selected_scope_json, '{}'::jsonb))
+  ), key_names(key_name) AS (
+    VALUES ('umbrella_id'), ('umbrella_ids'), ('selected_umbrella_ids')
+  ), raw_values(raw_value) AS (
+    SELECT btrim(array_values.value_text)
+    FROM source_payloads
+    JOIN key_names ON true
+    CROSS JOIN LATERAL jsonb_array_elements_text(
+      COALESCE(
+        CASE WHEN jsonb_typeof(source_payloads.payload -> key_names.key_name) = 'array'
+          THEN source_payloads.payload -> key_names.key_name
+          ELSE '[]'::jsonb
+        END,
+        '[]'::jsonb
+      )
+    ) AS array_values(value_text)
+    UNION ALL
+    SELECT btrim(source_payloads.payload ->> key_names.key_name)
+    FROM source_payloads
+    JOIN key_names ON true
+    WHERE jsonb_typeof(source_payloads.payload -> key_names.key_name) IN ('string', 'number')
+  )
+  SELECT COALESCE(array_agg(DISTINCT uuid_values.uuid_value), ARRAY[]::uuid[])
+  INTO v_selected_umbrella_ids
+  FROM (
+    SELECT raw_values.raw_value::uuid AS uuid_value
+    FROM raw_values
+    WHERE raw_values.raw_value ~ v_uuid_pattern
+  ) AS uuid_values;
+
+  WITH source_payloads(payload) AS (
+    VALUES (COALESCE(p_selection_json, '{}'::jsonb)), (COALESCE(p_selected_scope_json, '{}'::jsonb))
+  ), key_names(key_name) AS (
+    VALUES ('finance_case_id'), ('finance_case_ids'), ('selected_finance_case_ids')
+  ), raw_values(raw_value) AS (
+    SELECT btrim(array_values.value_text)
+    FROM source_payloads
+    JOIN key_names ON true
+    CROSS JOIN LATERAL jsonb_array_elements_text(
+      COALESCE(
+        CASE WHEN jsonb_typeof(source_payloads.payload -> key_names.key_name) = 'array'
+          THEN source_payloads.payload -> key_names.key_name
+          ELSE '[]'::jsonb
+        END,
+        '[]'::jsonb
+      )
+    ) AS array_values(value_text)
+    UNION ALL
+    SELECT btrim(source_payloads.payload ->> key_names.key_name)
+    FROM source_payloads
+    JOIN key_names ON true
+    WHERE jsonb_typeof(source_payloads.payload -> key_names.key_name) IN ('string', 'number')
+  )
+  SELECT COALESCE(array_agg(DISTINCT uuid_values.uuid_value), ARRAY[]::uuid[])
+  INTO v_selected_finance_case_ids
+  FROM (
+    SELECT raw_values.raw_value::uuid AS uuid_value
+    FROM raw_values
+    WHERE raw_values.raw_value ~ v_uuid_pattern
+  ) AS uuid_values;
+
+  WITH source_payloads(payload) AS (
+    VALUES (COALESCE(p_selection_json, '{}'::jsonb)), (COALESCE(p_selected_scope_json, '{}'::jsonb))
+  ), key_names(key_name) AS (
+    VALUES ('finance_component_id'), ('finance_component_ids'), ('selected_finance_component_ids')
+  ), raw_values(raw_value) AS (
+    SELECT btrim(array_values.value_text)
+    FROM source_payloads
+    JOIN key_names ON true
+    CROSS JOIN LATERAL jsonb_array_elements_text(
+      COALESCE(
+        CASE WHEN jsonb_typeof(source_payloads.payload -> key_names.key_name) = 'array'
+          THEN source_payloads.payload -> key_names.key_name
+          ELSE '[]'::jsonb
+        END,
+        '[]'::jsonb
+      )
+    ) AS array_values(value_text)
+    UNION ALL
+    SELECT btrim(source_payloads.payload ->> key_names.key_name)
+    FROM source_payloads
+    JOIN key_names ON true
+    WHERE jsonb_typeof(source_payloads.payload -> key_names.key_name) IN ('string', 'number')
+  )
+  SELECT COALESCE(array_agg(DISTINCT uuid_values.uuid_value), ARRAY[]::uuid[])
+  INTO v_selected_finance_component_ids
+  FROM (
+    SELECT raw_values.raw_value::uuid AS uuid_value
+    FROM raw_values
+    WHERE raw_values.raw_value ~ v_uuid_pattern
+  ) AS uuid_values;
+
+  WITH source_payloads(payload) AS (
+    VALUES (COALESCE(p_selection_json, '{}'::jsonb)), (COALESCE(p_selected_scope_json, '{}'::jsonb))
+  ), key_names(key_name) AS (
+    VALUES ('reservation_id'), ('reservation_ids'), ('selected_reservation_ids')
+  ), raw_values(raw_value) AS (
+    SELECT btrim(array_values.value_text)
+    FROM source_payloads
+    JOIN key_names ON true
+    CROSS JOIN LATERAL jsonb_array_elements_text(
+      COALESCE(
+        CASE WHEN jsonb_typeof(source_payloads.payload -> key_names.key_name) = 'array'
+          THEN source_payloads.payload -> key_names.key_name
+          ELSE '[]'::jsonb
+        END,
+        '[]'::jsonb
+      )
+    ) AS array_values(value_text)
+    UNION ALL
+    SELECT btrim(source_payloads.payload ->> key_names.key_name)
+    FROM source_payloads
+    JOIN key_names ON true
+    WHERE jsonb_typeof(source_payloads.payload -> key_names.key_name) IN ('string', 'number')
+  )
+  SELECT COALESCE(array_agg(DISTINCT uuid_values.uuid_value), ARRAY[]::uuid[])
+  INTO v_selected_reservation_ids
+  FROM (
+    SELECT raw_values.raw_value::uuid AS uuid_value
+    FROM raw_values
+    WHERE raw_values.raw_value ~ v_uuid_pattern
+  ) AS uuid_values;
+
+  WITH source_payloads(payload) AS (
+    VALUES (COALESCE(p_selection_json, '{}'::jsonb)), (COALESCE(p_selected_scope_json, '{}'::jsonb))
+  ), key_names(key_name) AS (
+    VALUES ('payout_transfer_id'), ('payout_transfer_ids'), ('selected_payout_transfer_ids')
+  ), raw_values(raw_value) AS (
+    SELECT btrim(array_values.value_text)
+    FROM source_payloads
+    JOIN key_names ON true
+    CROSS JOIN LATERAL jsonb_array_elements_text(
+      COALESCE(
+        CASE WHEN jsonb_typeof(source_payloads.payload -> key_names.key_name) = 'array'
+          THEN source_payloads.payload -> key_names.key_name
+          ELSE '[]'::jsonb
+        END,
+        '[]'::jsonb
+      )
+    ) AS array_values(value_text)
+    UNION ALL
+    SELECT btrim(source_payloads.payload ->> key_names.key_name)
+    FROM source_payloads
+    JOIN key_names ON true
+    WHERE jsonb_typeof(source_payloads.payload -> key_names.key_name) IN ('string', 'number')
+  )
+  SELECT COALESCE(array_agg(DISTINCT uuid_values.uuid_value), ARRAY[]::uuid[])
+  INTO v_selected_payout_transfer_ids
+  FROM (
+    SELECT raw_values.raw_value::uuid AS uuid_value
+    FROM raw_values
+    WHERE raw_values.raw_value ~ v_uuid_pattern
+  ) AS uuid_values;
+
+  WITH source_payloads(payload) AS (
+    VALUES (COALESCE(p_selection_json, '{}'::jsonb)), (COALESCE(p_selected_scope_json, '{}'::jsonb))
+  ), key_names(key_name) AS (
+    VALUES ('transfer_group_key'), ('transfer_group_keys'), ('selected_transfer_group_keys')
+  ), raw_values(raw_value) AS (
+    SELECT btrim(array_values.value_text)
+    FROM source_payloads
+    JOIN key_names ON true
+    CROSS JOIN LATERAL jsonb_array_elements_text(
+      COALESCE(
+        CASE WHEN jsonb_typeof(source_payloads.payload -> key_names.key_name) = 'array'
+          THEN source_payloads.payload -> key_names.key_name
+          ELSE '[]'::jsonb
+        END,
+        '[]'::jsonb
+      )
+    ) AS array_values(value_text)
+    UNION ALL
+    SELECT btrim(source_payloads.payload ->> key_names.key_name)
+    FROM source_payloads
+    JOIN key_names ON true
+    WHERE jsonb_typeof(source_payloads.payload -> key_names.key_name) IN ('string', 'number')
+  )
+  SELECT COALESCE(array_agg(DISTINCT text_values.text_value), ARRAY[]::text[])
+  INTO v_selected_transfer_group_keys
+  FROM (
+    SELECT raw_values.raw_value AS text_value
+    FROM raw_values
+    WHERE NULLIF(raw_values.raw_value, '') IS NOT NULL
+  ) AS text_values;
+
+  WITH scope_payloads(payload) AS (
+    VALUES (COALESCE(v_mail_scope, '{}'::jsonb))
+  ), key_names(key_name) AS (
+    VALUES ('pay_batch_id'), ('pay_batch_ids')
+  ), raw_values(raw_value) AS (
+    SELECT btrim(array_values.value_text)
+    FROM scope_payloads
+    JOIN key_names ON true
+    CROSS JOIN LATERAL jsonb_array_elements_text(
+      COALESCE(
+        CASE WHEN jsonb_typeof(scope_payloads.payload -> key_names.key_name) = 'array'
+          THEN scope_payloads.payload -> key_names.key_name
+          ELSE '[]'::jsonb
+        END,
+        '[]'::jsonb
+      )
+    ) AS array_values(value_text)
+    UNION ALL
+    SELECT btrim(scope_payloads.payload ->> key_names.key_name)
+    FROM scope_payloads
+    JOIN key_names ON true
+    WHERE jsonb_typeof(scope_payloads.payload -> key_names.key_name) IN ('string', 'number')
+  )
+  SELECT COALESCE(array_agg(DISTINCT uuid_values.uuid_value), ARRAY[]::uuid[])
+  INTO v_mail_pay_batch_ids
+  FROM (
+    SELECT raw_values.raw_value::uuid AS uuid_value
+    FROM raw_values
+    WHERE raw_values.raw_value ~ v_uuid_pattern
+  ) AS uuid_values;
+
+  WITH scope_payloads(payload) AS (
+    VALUES (COALESCE(v_mail_scope, '{}'::jsonb))
+  ), key_names(key_name) AS (
+    VALUES ('pay_batch_item_id'), ('pay_batch_item_ids')
+  ), raw_values(raw_value) AS (
+    SELECT btrim(array_values.value_text)
+    FROM scope_payloads
+    JOIN key_names ON true
+    CROSS JOIN LATERAL jsonb_array_elements_text(
+      COALESCE(
+        CASE WHEN jsonb_typeof(scope_payloads.payload -> key_names.key_name) = 'array'
+          THEN scope_payloads.payload -> key_names.key_name
+          ELSE '[]'::jsonb
+        END,
+        '[]'::jsonb
+      )
+    ) AS array_values(value_text)
+    UNION ALL
+    SELECT btrim(scope_payloads.payload ->> key_names.key_name)
+    FROM scope_payloads
+    JOIN key_names ON true
+    WHERE jsonb_typeof(scope_payloads.payload -> key_names.key_name) IN ('string', 'number')
+  )
+  SELECT COALESCE(array_agg(DISTINCT uuid_values.uuid_value), ARRAY[]::uuid[])
+  INTO v_mail_pay_batch_item_ids
+  FROM (
+    SELECT raw_values.raw_value::uuid AS uuid_value
+    FROM raw_values
+    WHERE raw_values.raw_value ~ v_uuid_pattern
+  ) AS uuid_values;
+
+  WITH scope_payloads(payload) AS (
+    VALUES (COALESCE(v_mail_scope, '{}'::jsonb))
+  ), key_names(key_name) AS (
+    VALUES ('pay_batch_candidate_id'), ('pay_batch_candidate_ids')
+  ), raw_values(raw_value) AS (
+    SELECT btrim(array_values.value_text)
+    FROM scope_payloads
+    JOIN key_names ON true
+    CROSS JOIN LATERAL jsonb_array_elements_text(
+      COALESCE(
+        CASE WHEN jsonb_typeof(scope_payloads.payload -> key_names.key_name) = 'array'
+          THEN scope_payloads.payload -> key_names.key_name
+          ELSE '[]'::jsonb
+        END,
+        '[]'::jsonb
+      )
+    ) AS array_values(value_text)
+    UNION ALL
+    SELECT btrim(scope_payloads.payload ->> key_names.key_name)
+    FROM scope_payloads
+    JOIN key_names ON true
+    WHERE jsonb_typeof(scope_payloads.payload -> key_names.key_name) IN ('string', 'number')
+  )
+  SELECT COALESCE(array_agg(DISTINCT uuid_values.uuid_value), ARRAY[]::uuid[])
+  INTO v_mail_pay_batch_candidate_ids
+  FROM (
+    SELECT raw_values.raw_value::uuid AS uuid_value
+    FROM raw_values
+    WHERE raw_values.raw_value ~ v_uuid_pattern
+  ) AS uuid_values;
+
+  WITH scope_payloads(payload) AS (
+    VALUES (COALESCE(v_mail_scope, '{}'::jsonb))
+  ), key_names(key_name) AS (
+    VALUES ('candidate_id'), ('candidate_ids')
+  ), raw_values(raw_value) AS (
+    SELECT btrim(array_values.value_text)
+    FROM scope_payloads
+    JOIN key_names ON true
+    CROSS JOIN LATERAL jsonb_array_elements_text(
+      COALESCE(
+        CASE WHEN jsonb_typeof(scope_payloads.payload -> key_names.key_name) = 'array'
+          THEN scope_payloads.payload -> key_names.key_name
+          ELSE '[]'::jsonb
+        END,
+        '[]'::jsonb
+      )
+    ) AS array_values(value_text)
+    UNION ALL
+    SELECT btrim(scope_payloads.payload ->> key_names.key_name)
+    FROM scope_payloads
+    JOIN key_names ON true
+    WHERE jsonb_typeof(scope_payloads.payload -> key_names.key_name) IN ('string', 'number')
+  )
+  SELECT COALESCE(array_agg(DISTINCT uuid_values.uuid_value), ARRAY[]::uuid[])
+  INTO v_mail_candidate_ids
+  FROM (
+    SELECT raw_values.raw_value::uuid AS uuid_value
+    FROM raw_values
+    WHERE raw_values.raw_value ~ v_uuid_pattern
+  ) AS uuid_values;
+
+  WITH scope_payloads(payload) AS (
+    VALUES (COALESCE(v_mail_scope, '{}'::jsonb))
+  ), key_names(key_name) AS (
+    VALUES ('pay_bank_transfer_id'), ('pay_bank_transfer_ids')
+  ), raw_values(raw_value) AS (
+    SELECT btrim(array_values.value_text)
+    FROM scope_payloads
+    JOIN key_names ON true
+    CROSS JOIN LATERAL jsonb_array_elements_text(
+      COALESCE(
+        CASE WHEN jsonb_typeof(scope_payloads.payload -> key_names.key_name) = 'array'
+          THEN scope_payloads.payload -> key_names.key_name
+          ELSE '[]'::jsonb
+        END,
+        '[]'::jsonb
+      )
+    ) AS array_values(value_text)
+    UNION ALL
+    SELECT btrim(scope_payloads.payload ->> key_names.key_name)
+    FROM scope_payloads
+    JOIN key_names ON true
+    WHERE jsonb_typeof(scope_payloads.payload -> key_names.key_name) IN ('string', 'number')
+  )
+  SELECT COALESCE(array_agg(DISTINCT uuid_values.uuid_value), ARRAY[]::uuid[])
+  INTO v_mail_pay_bank_transfer_ids
+  FROM (
+    SELECT raw_values.raw_value::uuid AS uuid_value
+    FROM raw_values
+    WHERE raw_values.raw_value ~ v_uuid_pattern
+  ) AS uuid_values;
+
+  WITH scope_payloads(payload) AS (
+    VALUES (COALESCE(v_mail_scope, '{}'::jsonb))
+  ), key_names(key_name) AS (
+    VALUES ('umbrella_id'), ('umbrella_ids')
+  ), raw_values(raw_value) AS (
+    SELECT btrim(array_values.value_text)
+    FROM scope_payloads
+    JOIN key_names ON true
+    CROSS JOIN LATERAL jsonb_array_elements_text(
+      COALESCE(
+        CASE WHEN jsonb_typeof(scope_payloads.payload -> key_names.key_name) = 'array'
+          THEN scope_payloads.payload -> key_names.key_name
+          ELSE '[]'::jsonb
+        END,
+        '[]'::jsonb
+      )
+    ) AS array_values(value_text)
+    UNION ALL
+    SELECT btrim(scope_payloads.payload ->> key_names.key_name)
+    FROM scope_payloads
+    JOIN key_names ON true
+    WHERE jsonb_typeof(scope_payloads.payload -> key_names.key_name) IN ('string', 'number')
+  )
+  SELECT COALESCE(array_agg(DISTINCT uuid_values.uuid_value), ARRAY[]::uuid[])
+  INTO v_mail_umbrella_ids
+  FROM (
+    SELECT raw_values.raw_value::uuid AS uuid_value
+    FROM raw_values
+    WHERE raw_values.raw_value ~ v_uuid_pattern
+  ) AS uuid_values;
+
+  WITH scope_payloads(payload) AS (
+    VALUES (COALESCE(v_mail_scope, '{}'::jsonb))
+  ), key_names(key_name) AS (
+    VALUES ('finance_case_id'), ('finance_case_ids')
+  ), raw_values(raw_value) AS (
+    SELECT btrim(array_values.value_text)
+    FROM scope_payloads
+    JOIN key_names ON true
+    CROSS JOIN LATERAL jsonb_array_elements_text(
+      COALESCE(
+        CASE WHEN jsonb_typeof(scope_payloads.payload -> key_names.key_name) = 'array'
+          THEN scope_payloads.payload -> key_names.key_name
+          ELSE '[]'::jsonb
+        END,
+        '[]'::jsonb
+      )
+    ) AS array_values(value_text)
+    UNION ALL
+    SELECT btrim(scope_payloads.payload ->> key_names.key_name)
+    FROM scope_payloads
+    JOIN key_names ON true
+    WHERE jsonb_typeof(scope_payloads.payload -> key_names.key_name) IN ('string', 'number')
+  )
+  SELECT COALESCE(array_agg(DISTINCT uuid_values.uuid_value), ARRAY[]::uuid[])
+  INTO v_mail_finance_case_ids
+  FROM (
+    SELECT raw_values.raw_value::uuid AS uuid_value
+    FROM raw_values
+    WHERE raw_values.raw_value ~ v_uuid_pattern
+  ) AS uuid_values;
+
+  WITH scope_payloads(payload) AS (
+    VALUES (COALESCE(v_mail_scope, '{}'::jsonb))
+  ), key_names(key_name) AS (
+    VALUES ('finance_component_id'), ('finance_component_ids')
+  ), raw_values(raw_value) AS (
+    SELECT btrim(array_values.value_text)
+    FROM scope_payloads
+    JOIN key_names ON true
+    CROSS JOIN LATERAL jsonb_array_elements_text(
+      COALESCE(
+        CASE WHEN jsonb_typeof(scope_payloads.payload -> key_names.key_name) = 'array'
+          THEN scope_payloads.payload -> key_names.key_name
+          ELSE '[]'::jsonb
+        END,
+        '[]'::jsonb
+      )
+    ) AS array_values(value_text)
+    UNION ALL
+    SELECT btrim(scope_payloads.payload ->> key_names.key_name)
+    FROM scope_payloads
+    JOIN key_names ON true
+    WHERE jsonb_typeof(scope_payloads.payload -> key_names.key_name) IN ('string', 'number')
+  )
+  SELECT COALESCE(array_agg(DISTINCT uuid_values.uuid_value), ARRAY[]::uuid[])
+  INTO v_mail_finance_component_ids
+  FROM (
+    SELECT raw_values.raw_value::uuid AS uuid_value
+    FROM raw_values
+    WHERE raw_values.raw_value ~ v_uuid_pattern
+  ) AS uuid_values;
+
+  WITH scope_payloads(payload) AS (
+    VALUES (COALESCE(v_mail_scope, '{}'::jsonb))
+  ), key_names(key_name) AS (
+    VALUES ('reservation_id'), ('reservation_ids')
+  ), raw_values(raw_value) AS (
+    SELECT btrim(array_values.value_text)
+    FROM scope_payloads
+    JOIN key_names ON true
+    CROSS JOIN LATERAL jsonb_array_elements_text(
+      COALESCE(
+        CASE WHEN jsonb_typeof(scope_payloads.payload -> key_names.key_name) = 'array'
+          THEN scope_payloads.payload -> key_names.key_name
+          ELSE '[]'::jsonb
+        END,
+        '[]'::jsonb
+      )
+    ) AS array_values(value_text)
+    UNION ALL
+    SELECT btrim(scope_payloads.payload ->> key_names.key_name)
+    FROM scope_payloads
+    JOIN key_names ON true
+    WHERE jsonb_typeof(scope_payloads.payload -> key_names.key_name) IN ('string', 'number')
+  )
+  SELECT COALESCE(array_agg(DISTINCT uuid_values.uuid_value), ARRAY[]::uuid[])
+  INTO v_mail_reservation_ids
+  FROM (
+    SELECT raw_values.raw_value::uuid AS uuid_value
+    FROM raw_values
+    WHERE raw_values.raw_value ~ v_uuid_pattern
+  ) AS uuid_values;
+
+  WITH scope_payloads(payload) AS (
+    VALUES (COALESCE(v_mail_scope, '{}'::jsonb))
+  ), key_names(key_name) AS (
+    VALUES ('payout_transfer_id'), ('payout_transfer_ids')
+  ), raw_values(raw_value) AS (
+    SELECT btrim(array_values.value_text)
+    FROM scope_payloads
+    JOIN key_names ON true
+    CROSS JOIN LATERAL jsonb_array_elements_text(
+      COALESCE(
+        CASE WHEN jsonb_typeof(scope_payloads.payload -> key_names.key_name) = 'array'
+          THEN scope_payloads.payload -> key_names.key_name
+          ELSE '[]'::jsonb
+        END,
+        '[]'::jsonb
+      )
+    ) AS array_values(value_text)
+    UNION ALL
+    SELECT btrim(scope_payloads.payload ->> key_names.key_name)
+    FROM scope_payloads
+    JOIN key_names ON true
+    WHERE jsonb_typeof(scope_payloads.payload -> key_names.key_name) IN ('string', 'number')
+  )
+  SELECT COALESCE(array_agg(DISTINCT uuid_values.uuid_value), ARRAY[]::uuid[])
+  INTO v_mail_payout_transfer_ids
+  FROM (
+    SELECT raw_values.raw_value::uuid AS uuid_value
+    FROM raw_values
+    WHERE raw_values.raw_value ~ v_uuid_pattern
+  ) AS uuid_values;
+
+  WITH scope_payloads(payload) AS (
+    VALUES (COALESCE(v_mail_scope, '{}'::jsonb))
+  ), key_names(key_name) AS (
+    VALUES ('transfer_group_key'), ('transfer_group_keys')
+  ), raw_values(raw_value) AS (
+    SELECT btrim(array_values.value_text)
+    FROM scope_payloads
+    JOIN key_names ON true
+    CROSS JOIN LATERAL jsonb_array_elements_text(
+      COALESCE(
+        CASE WHEN jsonb_typeof(scope_payloads.payload -> key_names.key_name) = 'array'
+          THEN scope_payloads.payload -> key_names.key_name
+          ELSE '[]'::jsonb
+        END,
+        '[]'::jsonb
+      )
+    ) AS array_values(value_text)
+    UNION ALL
+    SELECT btrim(scope_payloads.payload ->> key_names.key_name)
+    FROM scope_payloads
+    JOIN key_names ON true
+    WHERE jsonb_typeof(scope_payloads.payload -> key_names.key_name) IN ('string', 'number')
+  )
+  SELECT COALESCE(array_agg(DISTINCT text_values.text_value), ARRAY[]::text[])
+  INTO v_mail_transfer_group_keys
+  FROM (
+    SELECT raw_values.raw_value AS text_value
+    FROM raw_values
+    WHERE NULLIF(raw_values.raw_value, '') IS NOT NULL
+  ) AS text_values;
+
+  IF lower(btrim(COALESCE(v_mail_row.context_kind, ''))) IN ('pay_batches', 'pay_batch')
+     AND v_mail_row.context_id = p_pay_batch_id THEN
+    v_mail_pay_batch_ids := ARRAY(
+      SELECT DISTINCT context_batch_ids.batch_id
+      FROM unnest(v_mail_pay_batch_ids || ARRAY[p_pay_batch_id]) AS context_batch_ids(batch_id)
+      WHERE context_batch_ids.batch_id IS NOT NULL
+    );
+  END IF;
+
+  IF lower(btrim(COALESCE(v_mail_row.context_kind, ''))) IN ('pay_batch_items', 'pay_batch_item')
+     AND v_mail_row.context_id IS NOT NULL THEN
+    v_mail_pay_batch_item_ids := ARRAY(
+      SELECT DISTINCT context_item_ids.item_id
+      FROM unnest(v_mail_pay_batch_item_ids || ARRAY[v_mail_row.context_id]) AS context_item_ids(item_id)
+      WHERE context_item_ids.item_id IS NOT NULL
+    );
+  END IF;
+
+  IF lower(btrim(COALESCE(v_mail_row.context_kind, ''))) IN ('pay_bank_transfers', 'pay_bank_transfer')
+     AND v_mail_row.context_id IS NOT NULL THEN
+    v_mail_pay_bank_transfer_ids := ARRAY(
+      SELECT DISTINCT context_transfer_ids.transfer_id
+      FROM unnest(v_mail_pay_bank_transfer_ids || ARRAY[v_mail_row.context_id]) AS context_transfer_ids(transfer_id)
+      WHERE context_transfer_ids.transfer_id IS NOT NULL
+    );
+  END IF;
+
+  IF lower(btrim(COALESCE(v_mail_row.context_kind, ''))) IN ('pay_batch_candidates', 'pay_batch_candidate')
+     AND v_mail_row.context_id IS NOT NULL THEN
+    v_mail_pay_batch_candidate_ids := ARRAY(
+      SELECT DISTINCT context_candidate_ids.pay_batch_candidate_id
+      FROM unnest(v_mail_pay_batch_candidate_ids || ARRAY[v_mail_row.context_id]) AS context_candidate_ids(pay_batch_candidate_id)
+      WHERE context_candidate_ids.pay_batch_candidate_id IS NOT NULL
+    );
+  END IF;
+
+  IF lower(btrim(COALESCE(v_mail_row.context_kind, ''))) IN ('pay_advances', 'pay_advance', 'finance_case', 'finance_cases')
+     AND v_mail_row.context_id IS NOT NULL THEN
+    v_mail_finance_case_ids := ARRAY(
+      SELECT DISTINCT context_finance_case_ids.finance_case_id
+      FROM unnest(v_mail_finance_case_ids || ARRAY[v_mail_row.context_id]) AS context_finance_case_ids(finance_case_id)
+      WHERE context_finance_case_ids.finance_case_id IS NOT NULL
+    );
+  END IF;
+
+  IF lower(btrim(COALESCE(v_mail_row.context_kind, ''))) IN ('pay_advance_reservations', 'pay_advance_reservation', 'reservation', 'reservations')
+     AND v_mail_row.context_id IS NOT NULL THEN
+    v_mail_reservation_ids := ARRAY(
+      SELECT DISTINCT context_reservation_ids.reservation_id
+      FROM unnest(v_mail_reservation_ids || ARRAY[v_mail_row.context_id]) AS context_reservation_ids(reservation_id)
+      WHERE context_reservation_ids.reservation_id IS NOT NULL
+    );
+  END IF;
+
+  v_mail_batch_matches := (
+    p_pay_batch_id = ANY(v_mail_pay_batch_ids)
+    OR (
+      lower(btrim(COALESCE(v_mail_row.context_kind, ''))) IN ('pay_batches', 'pay_batch')
+      AND v_mail_row.context_id = p_pay_batch_id
+    )
+  );
+
+  v_is_whole_batch_scope := (
+    v_scope_type = 'BATCH'
+    AND COALESCE(NULLIF(v_work_unit, ''), 'BATCH') = 'BATCH'
+    AND COALESCE(array_length(v_selected_pay_batch_item_ids, 1), 0) = 0
+    AND COALESCE(array_length(v_selected_pay_batch_candidate_ids, 1), 0) = 0
+    AND COALESCE(array_length(v_selected_pay_bank_transfer_ids, 1), 0) = 0
+    AND COALESCE(array_length(v_selected_umbrella_ids, 1), 0) = 0
+    AND COALESCE(array_length(v_selected_finance_case_ids, 1), 0) = 0
+    AND COALESCE(array_length(v_selected_finance_component_ids, 1), 0) = 0
+    AND COALESCE(array_length(v_selected_reservation_ids, 1), 0) = 0
+    AND COALESCE(array_length(v_selected_payout_transfer_ids, 1), 0) = 0
+    AND COALESCE(array_length(v_selected_transfer_group_keys, 1), 0) = 0
+  ) OR (lower(btrim(COALESCE(p_selected_scope_json->>'is_whole_batch', ''))) IN ('true', 't', '1', 'yes'));
+
+  v_selected_has_narrow_payment_scope := (
+    COALESCE(array_length(v_selected_pay_batch_item_ids, 1), 0) > 0
+    OR COALESCE(array_length(v_selected_pay_bank_transfer_ids, 1), 0) > 0
+    OR COALESCE(array_length(v_selected_transfer_group_keys, 1), 0) > 0
+    OR COALESCE(array_length(v_selected_finance_case_ids, 1), 0) > 0
+    OR COALESCE(array_length(v_selected_finance_component_ids, 1), 0) > 0
+    OR COALESCE(array_length(v_selected_reservation_ids, 1), 0) > 0
+    OR COALESCE(array_length(v_selected_payout_transfer_ids, 1), 0) > 0
+  );
+
+  v_selected_candidate_scope_complete := (
+    (lower(btrim(COALESCE(p_selected_scope_json->>'selected_candidate_scope_complete', ''))) IN ('true', 't', '1', 'yes'))
+    OR (lower(btrim(COALESCE(p_selected_scope_json->>'candidate_scope_complete', ''))) IN ('true', 't', '1', 'yes'))
+    OR (
+      v_scope_type = 'CANDIDATES'
+      AND COALESCE(array_length(v_selected_pay_batch_candidate_ids, 1), 0) > 0
+      AND v_selected_has_narrow_payment_scope = false
+    )
+  );
+
+  v_selected_has_candidate_filter := (
+    v_scope_type = 'CANDIDATES'
+    OR COALESCE(array_length(v_selected_pay_batch_candidate_ids, 1), 0) > 0
+    OR COALESCE(array_length(v_selected_candidate_ids, 1), 0) > 0
+  );
+
+  v_selected_has_umbrella_filter := (
+    v_scope_type = 'UMBRELLA_PAYMENT_GROUP'
+    OR COALESCE(array_length(v_selected_umbrella_ids, 1), 0) > 0
+  );
+
+  v_candidate_filter_requires_payment_match := (
+    v_scope_type = 'CANDIDATES'
+    AND v_selected_has_candidate_filter
+    AND v_selected_has_narrow_payment_scope
+  );
+
+  v_umbrella_filter_requires_payment_match := (
+    v_scope_type = 'UMBRELLA_PAYMENT_GROUP'
+    AND v_selected_has_umbrella_filter
+    AND v_selected_has_narrow_payment_scope
+  );
+
+  v_mail_candidate_scope_matches := (
+    (
+      COALESCE(array_length(v_selected_pay_batch_candidate_ids, 1), 0) > 0
+      AND COALESCE(array_length(v_mail_pay_batch_candidate_ids, 1), 0) > 0
+      AND v_mail_pay_batch_candidate_ids && v_selected_pay_batch_candidate_ids
+    )
+    OR (
+      COALESCE(array_length(v_selected_candidate_ids, 1), 0) > 0
+      AND COALESCE(array_length(v_mail_candidate_ids, 1), 0) > 0
+      AND v_mail_candidate_ids && v_selected_candidate_ids
+    )
+    OR (
+      COALESCE(array_length(v_selected_candidate_ids, 1), 0) > 0
+      AND upper(btrim(COALESCE(v_mail_row.recipient_kind, ''))) = 'CANDIDATE'
+      AND v_mail_row.recipient_id IS NOT NULL
+      AND v_mail_row.recipient_id = ANY(v_selected_candidate_ids)
+    )
+  );
+
+  v_mail_umbrella_scope_matches := (
+    (
+      COALESCE(array_length(v_selected_umbrella_ids, 1), 0) > 0
+      AND COALESCE(array_length(v_mail_umbrella_ids, 1), 0) > 0
+      AND v_mail_umbrella_ids && v_selected_umbrella_ids
+    )
+    OR (
+      COALESCE(array_length(v_selected_umbrella_ids, 1), 0) > 0
+      AND upper(btrim(COALESCE(v_mail_row.recipient_kind, ''))) = 'UMBRELLA'
+      AND v_mail_row.recipient_id IS NOT NULL
+      AND v_mail_row.recipient_id = ANY(v_selected_umbrella_ids)
+    )
+  );
+
+  v_transfer_scope_candidate_safe := (
+    v_candidate_filter_requires_payment_match = false
+    OR v_mail_candidate_scope_matches
+  );
+
+  v_transfer_scope_umbrella_safe := (
+    v_umbrella_filter_requires_payment_match = false
+    OR v_mail_umbrella_scope_matches
+  );
+
+  v_transfer_scope_safe := (
+    v_transfer_scope_candidate_safe
+    AND v_transfer_scope_umbrella_safe
+  );
+
+  IF v_mail_batch_matches = false THEN
+    SELECT EXISTS(
+      SELECT 1
+      FROM unnest(v_selected_pay_batch_ids || ARRAY[p_pay_batch_id]) AS selected_batch_ids(batch_id)
+      WHERE selected_batch_ids.batch_id IS NOT NULL
+        AND COALESCE(v_mail_row.reference, '') ILIKE '%' || selected_batch_ids.batch_id::text || '%'
+    )
+    INTO v_reference_broad_match;
+
+    IF v_reference_broad_match THEN
+      IF v_is_whole_batch_scope THEN
+        RETURN jsonb_build_object(
+          'matched', true,
+          'match_kind', 'WHOLE_BATCH',
+          'match_confidence', 'LEGACY_BROAD',
+          'safe_to_cancel', true,
+          'requires_review', false,
+          'reason', 'WHOLE_BATCH_SCOPE_MATCH_BY_LEGACY_BATCH_REFERENCE',
+          'mail_outbox_id', p_mail_outbox_id,
+          'pay_batch_id', p_pay_batch_id,
+          'mail_status', v_mail_row.status::text,
+          'mail_type', v_mail_row.type,
+          'recipient_kind', v_mail_row.recipient_kind,
+          'recipient_id', CASE WHEN v_mail_row.recipient_id IS NULL THEN NULL ELSE v_mail_row.recipient_id::text END,
+          'context_kind', v_mail_row.context_kind,
+          'context_id', CASE WHEN v_mail_row.context_id IS NULL THEN NULL ELSE v_mail_row.context_id::text END,
+          'reference', v_mail_row.reference,
+          'payment_scope_json', v_mail_scope,
+          'legacy_broad_match_allowed', true,
+          'safe_rule', 'Whole-batch correction may cancel mail rows matched by pay_batch_id.'
+        );
+      END IF;
+
+      RETURN jsonb_build_object(
+        'matched', true,
+        'match_kind', 'LEGACY_BROAD',
+        'match_confidence', 'LEGACY_BROAD',
+        'safe_to_cancel', false,
+        'requires_review', true,
+        'reason', 'MAIL_MATCHES_BATCH_ONLY_BY_LEGACY_REFERENCE',
+        'mail_outbox_id', p_mail_outbox_id,
+        'pay_batch_id', p_pay_batch_id,
+        'mail_status', v_mail_row.status::text,
+        'legacy_broad_match_allowed', COALESCE(p_allow_legacy_broad_match, false)
+      );
+    END IF;
+
+    RETURN jsonb_build_object(
+      'matched', false,
+      'match_kind', 'NONE',
+      'match_confidence', 'NONE',
+      'safe_to_cancel', false,
+      'requires_review', false,
+      'reason', 'MAIL_ROW_NOT_IN_PAY_BATCH_SCOPE',
+      'mail_outbox_id', p_mail_outbox_id,
+      'pay_batch_id', p_pay_batch_id,
+      'mail_status', v_mail_row.status::text,
+      'mail_context_kind', v_mail_row.context_kind,
+      'mail_context_id', CASE WHEN v_mail_row.context_id IS NULL THEN NULL ELSE v_mail_row.context_id::text END
+    );
+  END IF;
+
+  IF v_is_whole_batch_scope THEN
+    RETURN jsonb_build_object(
+      'matched', true,
+      'match_kind', 'WHOLE_BATCH',
+      'match_confidence', 'EXACT',
+      'safe_to_cancel', true,
+      'requires_review', false,
+      'reason', 'WHOLE_BATCH_SCOPE_MATCH',
+      'mail_outbox_id', p_mail_outbox_id,
+      'pay_batch_id', p_pay_batch_id,
+      'mail_status', v_mail_row.status::text,
+      'payment_scope_json', v_mail_scope
+    );
+  END IF;
+
+  v_item_exact := (
+    COALESCE(array_length(v_mail_pay_batch_item_ids, 1), 0) > 0
+    AND COALESCE(array_length(v_selected_pay_batch_item_ids, 1), 0) > 0
+    AND v_mail_pay_batch_item_ids <@ v_selected_pay_batch_item_ids
+  );
+
+  v_item_partial := (
+    COALESCE(array_length(v_mail_pay_batch_item_ids, 1), 0) > 0
+    AND COALESCE(array_length(v_selected_pay_batch_item_ids, 1), 0) > 0
+    AND v_mail_pay_batch_item_ids && v_selected_pay_batch_item_ids
+    AND v_item_exact = false
+  );
+
+  v_transfer_exact := (
+    COALESCE(array_length(v_mail_pay_bank_transfer_ids, 1), 0) > 0
+    AND COALESCE(array_length(v_selected_pay_bank_transfer_ids, 1), 0) > 0
+    AND v_mail_pay_bank_transfer_ids <@ v_selected_pay_bank_transfer_ids
+  );
+
+  v_transfer_partial := (
+    COALESCE(array_length(v_mail_pay_bank_transfer_ids, 1), 0) > 0
+    AND COALESCE(array_length(v_selected_pay_bank_transfer_ids, 1), 0) > 0
+    AND v_mail_pay_bank_transfer_ids && v_selected_pay_bank_transfer_ids
+    AND v_transfer_exact = false
+  );
+
+  v_payout_transfer_exact := (
+    COALESCE(array_length(v_mail_payout_transfer_ids, 1), 0) > 0
+    AND COALESCE(array_length(v_selected_payout_transfer_ids, 1), 0) > 0
+    AND v_mail_payout_transfer_ids <@ v_selected_payout_transfer_ids
+  );
+
+  v_payout_transfer_partial := (
+    COALESCE(array_length(v_mail_payout_transfer_ids, 1), 0) > 0
+    AND COALESCE(array_length(v_selected_payout_transfer_ids, 1), 0) > 0
+    AND v_mail_payout_transfer_ids && v_selected_payout_transfer_ids
+    AND v_payout_transfer_exact = false
+  );
+
+  v_transfer_group_exact := (
+    COALESCE(array_length(v_mail_transfer_group_keys, 1), 0) > 0
+    AND COALESCE(array_length(v_selected_transfer_group_keys, 1), 0) > 0
+    AND v_mail_transfer_group_keys <@ v_selected_transfer_group_keys
+  );
+
+  v_transfer_group_partial := (
+    COALESCE(array_length(v_mail_transfer_group_keys, 1), 0) > 0
+    AND COALESCE(array_length(v_selected_transfer_group_keys, 1), 0) > 0
+    AND v_mail_transfer_group_keys && v_selected_transfer_group_keys
+    AND v_transfer_group_exact = false
+  );
+
+  v_finance_case_exact := (
+    COALESCE(array_length(v_mail_finance_case_ids, 1), 0) > 0
+    AND COALESCE(array_length(v_selected_finance_case_ids, 1), 0) > 0
+    AND v_mail_finance_case_ids <@ v_selected_finance_case_ids
+  );
+
+  v_finance_case_partial := (
+    COALESCE(array_length(v_mail_finance_case_ids, 1), 0) > 0
+    AND COALESCE(array_length(v_selected_finance_case_ids, 1), 0) > 0
+    AND v_mail_finance_case_ids && v_selected_finance_case_ids
+    AND v_finance_case_exact = false
+  );
+
+  v_finance_component_exact := (
+    COALESCE(array_length(v_mail_finance_component_ids, 1), 0) > 0
+    AND COALESCE(array_length(v_selected_finance_component_ids, 1), 0) > 0
+    AND v_mail_finance_component_ids <@ v_selected_finance_component_ids
+  );
+
+  v_finance_component_partial := (
+    COALESCE(array_length(v_mail_finance_component_ids, 1), 0) > 0
+    AND COALESCE(array_length(v_selected_finance_component_ids, 1), 0) > 0
+    AND v_mail_finance_component_ids && v_selected_finance_component_ids
+    AND v_finance_component_exact = false
+  );
+
+  v_reservation_exact := (
+    COALESCE(array_length(v_mail_reservation_ids, 1), 0) > 0
+    AND COALESCE(array_length(v_selected_reservation_ids, 1), 0) > 0
+    AND v_mail_reservation_ids <@ v_selected_reservation_ids
+  );
+
+  v_reservation_partial := (
+    COALESCE(array_length(v_mail_reservation_ids, 1), 0) > 0
+    AND COALESCE(array_length(v_selected_reservation_ids, 1), 0) > 0
+    AND v_mail_reservation_ids && v_selected_reservation_ids
+    AND v_reservation_exact = false
+  );
+
+  v_pay_batch_candidate_exact := (
+    v_selected_candidate_scope_complete
+    AND COALESCE(array_length(v_mail_pay_batch_candidate_ids, 1), 0) > 0
+    AND COALESCE(array_length(v_selected_pay_batch_candidate_ids, 1), 0) > 0
+    AND v_mail_pay_batch_candidate_ids <@ v_selected_pay_batch_candidate_ids
+  );
+
+  v_pay_batch_candidate_partial := (
+    COALESCE(array_length(v_mail_pay_batch_candidate_ids, 1), 0) > 0
+    AND COALESCE(array_length(v_selected_pay_batch_candidate_ids, 1), 0) > 0
+    AND v_mail_pay_batch_candidate_ids && v_selected_pay_batch_candidate_ids
+    AND v_pay_batch_candidate_exact = false
+  );
+
+  v_umbrella_group_exact := (
+    COALESCE(array_length(v_mail_umbrella_ids, 1), 0) > 0
+    AND COALESCE(array_length(v_selected_umbrella_ids, 1), 0) > 0
+    AND v_mail_umbrella_ids <@ v_selected_umbrella_ids
+    AND (
+      v_transfer_group_exact
+      OR v_transfer_exact
+      OR v_item_exact
+      OR v_payout_transfer_exact
+      OR v_finance_case_exact
+      OR v_finance_component_exact
+      OR v_reservation_exact
+    )
+  );
+
+  v_umbrella_partial := (
+    COALESCE(array_length(v_mail_umbrella_ids, 1), 0) > 0
+    AND COALESCE(array_length(v_selected_umbrella_ids, 1), 0) > 0
+    AND v_mail_umbrella_ids && v_selected_umbrella_ids
+    AND v_umbrella_group_exact = false
+  );
+
+  v_context_exact := (
+    (
+      lower(btrim(COALESCE(v_mail_row.context_kind, ''))) IN ('pay_batch_items', 'pay_batch_item')
+      AND v_mail_row.context_id = ANY(v_selected_pay_batch_item_ids)
+    )
+    OR (
+      lower(btrim(COALESCE(v_mail_row.context_kind, ''))) IN ('pay_bank_transfers', 'pay_bank_transfer')
+      AND v_mail_row.context_id = ANY(v_selected_pay_bank_transfer_ids)
+      AND v_transfer_scope_safe
+    )
+    OR (
+      lower(btrim(COALESCE(v_mail_row.context_kind, ''))) IN ('pay_advances', 'pay_advance', 'finance_case', 'finance_cases')
+      AND v_mail_row.context_id = ANY(v_selected_finance_case_ids)
+    )
+    OR (
+      lower(btrim(COALESCE(v_mail_row.context_kind, ''))) IN ('pay_advance_reservations', 'pay_advance_reservation', 'reservation', 'reservations')
+      AND v_mail_row.context_id = ANY(v_selected_reservation_ids)
+    )
+    OR (
+      v_selected_candidate_scope_complete
+      AND lower(btrim(COALESCE(v_mail_row.context_kind, ''))) IN ('pay_batch_candidates', 'pay_batch_candidate')
+      AND v_mail_row.context_id = ANY(v_selected_pay_batch_candidate_ids)
+    )
+  );
+
+  IF v_item_exact THEN
+    v_match_kind := 'PAY_BATCH_ITEM';
+    v_reason := 'PAY_BATCH_ITEM_SCOPE_MATCH';
+  ELSIF v_transfer_exact AND v_transfer_scope_safe THEN
+    v_match_kind := 'TRANSFER';
+    v_reason := 'TRANSFER_SCOPE_MATCH';
+  ELSIF v_payout_transfer_exact AND v_transfer_scope_safe THEN
+    v_match_kind := 'TRANSFER';
+    v_reason := 'PAYOUT_TRANSFER_SCOPE_MATCH';
+  ELSIF v_umbrella_group_exact AND v_transfer_scope_safe THEN
+    v_match_kind := 'UMBRELLA_GROUP';
+    v_reason := 'UMBRELLA_GROUP_SCOPE_MATCH';
+  ELSIF v_finance_component_exact THEN
+    v_match_kind := 'FINANCE_CASE';
+    v_reason := 'FINANCE_COMPONENT_SCOPE_MATCH';
+  ELSIF v_reservation_exact THEN
+    v_match_kind := 'RESERVATION';
+    v_reason := 'RESERVATION_SCOPE_MATCH';
+  ELSIF v_finance_case_exact THEN
+    v_match_kind := 'FINANCE_CASE';
+    v_reason := 'FINANCE_CASE_SCOPE_MATCH';
+  ELSIF v_transfer_group_exact AND v_transfer_scope_safe THEN
+    v_match_kind := 'TRANSFER';
+    v_reason := 'TRANSFER_GROUP_SCOPE_MATCH';
+  ELSIF v_pay_batch_candidate_exact THEN
+    v_match_kind := 'PAY_BATCH_CANDIDATE';
+    v_reason := 'COMPLETE_PAY_BATCH_CANDIDATE_SCOPE_MATCH';
+  ELSIF v_context_exact THEN
+    v_match_kind := CASE
+      WHEN lower(btrim(COALESCE(v_mail_row.context_kind, ''))) IN ('pay_batch_items', 'pay_batch_item') THEN 'PAY_BATCH_ITEM'
+      WHEN lower(btrim(COALESCE(v_mail_row.context_kind, ''))) IN ('pay_bank_transfers', 'pay_bank_transfer') THEN 'TRANSFER'
+      WHEN lower(btrim(COALESCE(v_mail_row.context_kind, ''))) IN ('pay_batch_candidates', 'pay_batch_candidate') THEN 'PAY_BATCH_CANDIDATE'
+      WHEN lower(btrim(COALESCE(v_mail_row.context_kind, ''))) IN ('pay_advance_reservations', 'pay_advance_reservation', 'reservation', 'reservations') THEN 'RESERVATION'
+      ELSE 'FINANCE_CASE'
+    END;
+    v_reason := 'CONTEXT_SCOPE_MATCH';
+  END IF;
+
+  v_partial_overlap_requires_review := (
+    v_item_partial
+    OR v_transfer_partial
+    OR (v_transfer_exact AND v_transfer_scope_safe = false)
+    OR v_payout_transfer_partial
+    OR (v_payout_transfer_exact AND v_transfer_scope_safe = false)
+    OR v_transfer_group_partial
+    OR (v_transfer_group_exact AND v_transfer_scope_safe = false)
+    OR (v_umbrella_group_exact AND v_transfer_scope_safe = false)
+    OR v_finance_case_partial
+    OR v_finance_component_partial
+    OR v_reservation_partial
+    OR (
+      v_pay_batch_candidate_partial
+      AND NOT (
+        v_item_exact
+        OR v_transfer_exact
+        OR v_payout_transfer_exact
+        OR v_transfer_group_exact
+        OR v_finance_case_exact
+        OR v_finance_component_exact
+        OR v_reservation_exact
+      )
+    )
+    OR (
+      v_umbrella_partial
+      AND NOT (
+        v_item_exact
+        OR v_transfer_exact
+        OR v_payout_transfer_exact
+        OR v_transfer_group_exact
+        OR v_finance_case_exact
+        OR v_finance_component_exact
+        OR v_reservation_exact
+      )
+    )
+  );
+
+  IF v_match_kind <> 'NONE' AND v_partial_overlap_requires_review THEN
+    RETURN jsonb_build_object(
+      'matched', true,
+      'match_kind', 'LEGACY_BROAD',
+      'match_confidence', 'LEGACY_BROAD',
+      'safe_to_cancel', false,
+      'requires_review', true,
+      'reason', 'MAIL_SCOPE_PARTIAL_OVERLAP_REQUIRES_REVIEW',
+      'mail_outbox_id', p_mail_outbox_id,
+      'pay_batch_id', p_pay_batch_id,
+      'mail_status', v_mail_row.status::text,
+      'mail_type', v_mail_row.type,
+      'recipient_kind', v_mail_row.recipient_kind,
+      'recipient_id', CASE WHEN v_mail_row.recipient_id IS NULL THEN NULL ELSE v_mail_row.recipient_id::text END,
+      'context_kind', v_mail_row.context_kind,
+      'context_id', CASE WHEN v_mail_row.context_id IS NULL THEN NULL ELSE v_mail_row.context_id::text END,
+      'reference', v_mail_row.reference,
+      'payment_scope_json', v_mail_scope,
+      'legacy_broad_match_allowed', COALESCE(p_allow_legacy_broad_match, false),
+      'partial_overlap', true,
+      'would_otherwise_match_kind', v_match_kind,
+      'would_otherwise_match_reason', v_reason,
+      'safe_rule', 'Do not cancel selected-scope mail rows when a populated scope dimension only partially overlaps the selected scope.'
+    );
+  END IF;
+
+  IF v_match_kind <> 'NONE' THEN
+    RETURN jsonb_build_object(
+      'matched', true,
+      'match_kind', v_match_kind,
+      'match_confidence', 'EXACT',
+      'safe_to_cancel', true,
+      'requires_review', false,
+      'reason', v_reason,
+      'mail_outbox_id', p_mail_outbox_id,
+      'pay_batch_id', p_pay_batch_id,
+      'mail_status', v_mail_row.status::text,
+      'mail_type', v_mail_row.type,
+      'recipient_kind', v_mail_row.recipient_kind,
+      'recipient_id', CASE WHEN v_mail_row.recipient_id IS NULL THEN NULL ELSE v_mail_row.recipient_id::text END,
+      'context_kind', v_mail_row.context_kind,
+      'context_id', CASE WHEN v_mail_row.context_id IS NULL THEN NULL ELSE v_mail_row.context_id::text END,
+      'reference', v_mail_row.reference,
+      'payment_scope_json', v_mail_scope,
+      'selected_scope_summary', jsonb_build_object(
+        'scope_type', v_scope_type,
+        'pay_batch_item_count', COALESCE(array_length(v_selected_pay_batch_item_ids, 1), 0),
+        'pay_bank_transfer_count', COALESCE(array_length(v_selected_pay_bank_transfer_ids, 1), 0),
+        'pay_batch_candidate_count', COALESCE(array_length(v_selected_pay_batch_candidate_ids, 1), 0),
+        'finance_case_count', COALESCE(array_length(v_selected_finance_case_ids, 1), 0),
+        'finance_component_count', COALESCE(array_length(v_selected_finance_component_ids, 1), 0),
+        'reservation_count', COALESCE(array_length(v_selected_reservation_ids, 1), 0),
+        'payout_transfer_count', COALESCE(array_length(v_selected_payout_transfer_ids, 1), 0),
+        'transfer_group_count', COALESCE(array_length(v_selected_transfer_group_keys, 1), 0)
+      )
+    );
+  END IF;
+
+  v_partial_overlap_requires_review := (
+    v_item_partial
+    OR v_transfer_partial
+    OR (v_transfer_exact AND v_transfer_scope_safe = false)
+    OR v_payout_transfer_partial
+    OR (v_payout_transfer_exact AND v_transfer_scope_safe = false)
+    OR v_transfer_group_partial
+    OR (v_transfer_group_exact AND v_transfer_scope_safe = false)
+    OR (v_umbrella_group_exact AND v_transfer_scope_safe = false)
+    OR v_finance_case_partial
+    OR v_finance_component_partial
+    OR v_reservation_partial
+    OR v_pay_batch_candidate_partial
+    OR v_umbrella_partial
+  );
+
+  SELECT EXISTS(
+    SELECT 1
+    FROM unnest(v_selected_pay_batch_item_ids) AS selected_reference_item_ids(item_id)
+    WHERE selected_reference_item_ids.item_id IS NOT NULL
+      AND COALESCE(v_mail_row.reference, '') ILIKE '%' || selected_reference_item_ids.item_id::text || '%'
+  ) OR EXISTS(
+    SELECT 1
+    FROM unnest(v_selected_pay_bank_transfer_ids) AS selected_reference_transfer_ids(transfer_id)
+    WHERE selected_reference_transfer_ids.transfer_id IS NOT NULL
+      AND COALESCE(v_mail_row.reference, '') ILIKE '%' || selected_reference_transfer_ids.transfer_id::text || '%'
+  ) OR EXISTS(
+    SELECT 1
+    FROM unnest(v_selected_pay_batch_candidate_ids) AS selected_reference_candidate_ids(pay_batch_candidate_id)
+    WHERE selected_reference_candidate_ids.pay_batch_candidate_id IS NOT NULL
+      AND COALESCE(v_mail_row.reference, '') ILIKE '%' || selected_reference_candidate_ids.pay_batch_candidate_id::text || '%'
+  ) OR EXISTS(
+    SELECT 1
+    FROM unnest(v_selected_candidate_ids) AS selected_reference_candidates(candidate_id)
+    WHERE selected_reference_candidates.candidate_id IS NOT NULL
+      AND COALESCE(v_mail_row.reference, '') ILIKE '%' || selected_reference_candidates.candidate_id::text || '%'
+  ) OR EXISTS(
+    SELECT 1
+    FROM unnest(v_selected_umbrella_ids) AS selected_reference_umbrellas(umbrella_id)
+    WHERE selected_reference_umbrellas.umbrella_id IS NOT NULL
+      AND COALESCE(v_mail_row.reference, '') ILIKE '%' || selected_reference_umbrellas.umbrella_id::text || '%'
+  ) OR EXISTS(
+    SELECT 1
+    FROM unnest(v_selected_finance_case_ids) AS selected_reference_finance_cases(finance_case_id)
+    WHERE selected_reference_finance_cases.finance_case_id IS NOT NULL
+      AND COALESCE(v_mail_row.reference, '') ILIKE '%' || selected_reference_finance_cases.finance_case_id::text || '%'
+  ) OR EXISTS(
+    SELECT 1
+    FROM unnest(v_selected_finance_component_ids) AS selected_reference_finance_components(finance_component_id)
+    WHERE selected_reference_finance_components.finance_component_id IS NOT NULL
+      AND COALESCE(v_mail_row.reference, '') ILIKE '%' || selected_reference_finance_components.finance_component_id::text || '%'
+  ) OR EXISTS(
+    SELECT 1
+    FROM unnest(v_selected_reservation_ids) AS selected_reference_reservations(reservation_id)
+    WHERE selected_reference_reservations.reservation_id IS NOT NULL
+      AND COALESCE(v_mail_row.reference, '') ILIKE '%' || selected_reference_reservations.reservation_id::text || '%'
+  ) OR EXISTS(
+    SELECT 1
+    FROM unnest(v_selected_transfer_group_keys) AS selected_reference_groups(transfer_group_key)
+    WHERE NULLIF(selected_reference_groups.transfer_group_key, '') IS NOT NULL
+      AND COALESCE(v_mail_row.reference, '') ILIKE '%' || selected_reference_groups.transfer_group_key || '%'
+  )
+  INTO v_reference_broad_match;
+
+  v_recipient_broad_match := (
+    (
+      upper(btrim(COALESCE(v_mail_row.recipient_kind, ''))) = 'CANDIDATE'
+      AND v_mail_row.recipient_id IS NOT NULL
+      AND (
+        v_mail_row.recipient_id = ANY(v_selected_candidate_ids)
+      )
+    )
+    OR (
+      upper(btrim(COALESCE(v_mail_row.recipient_kind, ''))) = 'UMBRELLA'
+      AND v_mail_row.recipient_id IS NOT NULL
+      AND (
+        v_mail_row.recipient_id = ANY(v_selected_umbrella_ids)
+      )
+    )
+  );
+
+  v_payment_scope_broad_match := (
+    (
+      COALESCE(array_length(v_mail_candidate_ids, 1), 0) > 0
+      AND COALESCE(array_length(v_selected_candidate_ids, 1), 0) > 0
+      AND v_mail_candidate_ids && v_selected_candidate_ids
+    )
+    OR (
+      COALESCE(array_length(v_mail_umbrella_ids, 1), 0) > 0
+      AND COALESCE(array_length(v_selected_umbrella_ids, 1), 0) > 0
+      AND v_mail_umbrella_ids && v_selected_umbrella_ids
+    )
+    OR (
+      COALESCE(array_length(v_mail_pay_batch_candidate_ids, 1), 0) > 0
+      AND COALESCE(array_length(v_selected_pay_batch_candidate_ids, 1), 0) > 0
+      AND v_mail_pay_batch_candidate_ids && v_selected_pay_batch_candidate_ids
+    )
+  );
+
+  v_legacy_broad_match := (
+    v_partial_overlap_requires_review
+    OR v_reference_broad_match
+    OR v_recipient_broad_match
+    OR v_payment_scope_broad_match
+  );
+
+  IF v_legacy_broad_match THEN
+    RETURN jsonb_build_object(
+      'matched', true,
+      'match_kind', 'LEGACY_BROAD',
+      'match_confidence', 'LEGACY_BROAD',
+      'safe_to_cancel', false,
+      'requires_review', true,
+      'reason', CASE
+        WHEN v_partial_overlap_requires_review THEN 'MAIL_SCOPE_PARTIAL_OVERLAP_REQUIRES_REVIEW'
+        WHEN v_reference_broad_match THEN 'MAIL_SCOPE_MATCHES_LEGACY_REFERENCE_ONLY'
+        WHEN v_recipient_broad_match THEN 'MAIL_SCOPE_MATCHES_RECIPIENT_ONLY'
+        ELSE 'MAIL_SCOPE_MATCHES_BROAD_PAYMENT_SCOPE_ONLY'
+      END,
+      'mail_outbox_id', p_mail_outbox_id,
+      'pay_batch_id', p_pay_batch_id,
+      'mail_status', v_mail_row.status::text,
+      'mail_type', v_mail_row.type,
+      'recipient_kind', v_mail_row.recipient_kind,
+      'recipient_id', CASE WHEN v_mail_row.recipient_id IS NULL THEN NULL ELSE v_mail_row.recipient_id::text END,
+      'context_kind', v_mail_row.context_kind,
+      'context_id', CASE WHEN v_mail_row.context_id IS NULL THEN NULL ELSE v_mail_row.context_id::text END,
+      'reference', v_mail_row.reference,
+      'payment_scope_json', v_mail_scope,
+      'legacy_broad_match_allowed', COALESCE(p_allow_legacy_broad_match, false),
+      'partial_overlap', v_partial_overlap_requires_review,
+      'safe_rule', 'Do not cancel selected-scope mail rows unless safe_to_cancel is true.'
+    );
+  END IF;
+
+  RETURN jsonb_build_object(
+    'matched', false,
+    'match_kind', 'NONE',
+    'match_confidence', 'NONE',
+    'safe_to_cancel', false,
+    'requires_review', false,
+    'reason', 'NO_EXACT_OR_LEGACY_SCOPE_MATCH',
+    'mail_outbox_id', p_mail_outbox_id,
+    'pay_batch_id', p_pay_batch_id,
+    'mail_status', v_mail_row.status::text,
+    'mail_type', v_mail_row.type,
+    'recipient_kind', v_mail_row.recipient_kind,
+    'recipient_id', CASE WHEN v_mail_row.recipient_id IS NULL THEN NULL ELSE v_mail_row.recipient_id::text END,
+    'context_kind', v_mail_row.context_kind,
+    'context_id', CASE WHEN v_mail_row.context_id IS NULL THEN NULL ELSE v_mail_row.context_id::text END,
+    'reference', v_mail_row.reference,
+    'payment_scope_json', v_mail_scope
+  );
+END;
+$function$;
+
