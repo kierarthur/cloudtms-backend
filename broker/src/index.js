@@ -738,7 +738,7 @@ async function loadSettingsDefaults(env) {
     const { rows } = await sbFetch(
       env,
       `${env.SUPABASE_URL}/rest/v1/settings_defaults` +
-        `?select=timezone_id,import_config_json,finance_email,finance_email_settings,max_attachments_per_email,system_email,system_emails,comms_adaptors_json` +
+        `?select=timezone_id,import_config_json,finance_email,finance_email_settings,max_attachments_per_email,system_email,system_emails,comms_adaptors_json,payment_remittance_send_timing,payment_return_auto_reverse_timesheets,payment_return_admin_recipient_role,payment_return_admin_notice_quiet_minutes,payment_return_admin_notice_max_wait_minutes` +
         `&id=eq.1` +
         `&limit=1`
     );
@@ -918,6 +918,31 @@ async function loadSettingsDefaults(env) {
       return (v >= 1 && v <= 100) ? v : 30;
     })();
 
+    const paymentRemittanceSendTiming = (() => {
+      const v = String(row.payment_remittance_send_timing || '').trim().toUpperCase();
+      return (v === 'ON_PAYMENT_CONFIRMED') ? 'ON_PAYMENT_CONFIRMED' : 'ON_EXECUTION';
+    })();
+
+    const paymentReturnAutoReverseTimesheets = _asBool(row.payment_return_auto_reverse_timesheets, false);
+
+    const paymentReturnAdminRecipientRole = (() => {
+      const v = String(row.payment_return_admin_recipient_role || '').trim();
+      return v ? v : 'ADMIN';
+    })();
+
+    const paymentReturnAdminNoticeQuietMinutes = (() => {
+      const n = Number(row.payment_return_admin_notice_quiet_minutes);
+      const v = Number.isFinite(n) ? Math.trunc(n) : 10;
+      return (v >= 0 && v <= 1440) ? v : 10;
+    })();
+
+    const paymentReturnAdminNoticeMaxWaitMinutes = (() => {
+      const n = Number(row.payment_return_admin_notice_max_wait_minutes);
+      const v0 = Number.isFinite(n) ? Math.trunc(n) : 60;
+      const v = (v0 >= paymentReturnAdminNoticeQuietMinutes && v0 <= 1440) ? v0 : 60;
+      return (v >= paymentReturnAdminNoticeQuietMinutes && v <= 1440) ? v : paymentReturnAdminNoticeQuietMinutes;
+    })();
+
     const out = {
       timezone_id: timezoneId,
       importConfig,
@@ -930,7 +955,14 @@ async function loadSettingsDefaults(env) {
       max_attachments_per_email: maxAttachments,
 
       // ✅ NEW: comms adaptors config for WATI/ClickSend + limits
-      comms_adaptors_json: commsAdaptorsJson
+      comms_adaptors_json: commsAdaptorsJson,
+
+      // ✅ NEW: payment correction/remittance timing settings
+      payment_remittance_send_timing: paymentRemittanceSendTiming,
+      payment_return_auto_reverse_timesheets: paymentReturnAutoReverseTimesheets,
+      payment_return_admin_recipient_role: paymentReturnAdminRecipientRole,
+      payment_return_admin_notice_quiet_minutes: paymentReturnAdminNoticeQuietMinutes,
+      payment_return_admin_notice_max_wait_minutes: paymentReturnAdminNoticeMaxWaitMinutes
     };
 
     // Store TTL cache
@@ -944,7 +976,12 @@ async function loadSettingsDefaults(env) {
         finance_email: financeEmail,
         system_email: systemEmail,
         max_attachments_per_email: maxAttachments,
-        comms_adaptors_json_present: !!(commsAdaptorsJson && typeof commsAdaptorsJson === 'object' && !Array.isArray(commsAdaptorsJson))
+        comms_adaptors_json_present: !!(commsAdaptorsJson && typeof commsAdaptorsJson === 'object' && !Array.isArray(commsAdaptorsJson)),
+        payment_remittance_send_timing: paymentRemittanceSendTiming,
+        payment_return_auto_reverse_timesheets: paymentReturnAutoReverseTimesheets,
+        payment_return_admin_recipient_role: paymentReturnAdminRecipientRole,
+        payment_return_admin_notice_quiet_minutes: paymentReturnAdminNoticeQuietMinutes,
+        payment_return_admin_notice_max_wait_minutes: paymentReturnAdminNoticeMaxWaitMinutes
       }));
     }
 
@@ -1024,14 +1061,20 @@ async function loadSettingsDefaults(env) {
       max_attachments_per_email: 30,
 
       // ✅ NEW fallbacks
-      comms_adaptors_json: {}
+      comms_adaptors_json: {},
+
+      // ✅ NEW fallbacks: payment correction/remittance timing settings
+      payment_remittance_send_timing: 'ON_EXECUTION',
+      payment_return_auto_reverse_timesheets: false,
+      payment_return_admin_recipient_role: 'ADMIN',
+      payment_return_admin_notice_quiet_minutes: 10,
+      payment_return_admin_notice_max_wait_minutes: 60
     };
 
     __SETTINGS_DEFAULTS_CACHE = { ts: Date.now(), value: out };
     return out;
   }
 }
-
 
 async function postToPowerAutomate(env, payload, channel = 'finance') {
   const isPlainObject = (x) => !!(x && typeof x === 'object' && !Array.isArray(x));
@@ -12606,6 +12649,21 @@ async function sendPayBatchRemittancesInternal(env, opts) {
   const payBatchId = opts && opts.payBatchId ? String(opts.payBatchId) : '';
   const actorUserId = opts && opts.actorUserId ? String(opts.actorUserId) : '';
   const scope = String(opts?.scope ?? opts?.pay_channel_scope ?? 'ALL').trim().toUpperCase();
+  const prebuiltQueueStageResult =
+    opts?.prebuiltQueueStageResult ??
+    opts?.prebuilt_queue_stage_result ??
+    opts?.remittanceQueueStageResult ??
+    opts?.remittance_queue_stage_result ??
+    opts?.queueStageResult ??
+    opts?.queue_stage_result ??
+    null;
+  const skipQueueStage = opts?.skipQueueStage === true || opts?.skip_queue_stage === true;
+  const onlyConfirmed = (() => {
+    const raw = opts?.onlyConfirmed ?? opts?.only_confirmed ?? false;
+    if (typeof raw === 'boolean') return raw;
+    const s = String(raw ?? '').trim().toLowerCase();
+    return ['1', 'true', 't', 'yes', 'y', 'on'].includes(s);
+  })();
 
   if (!payBatchId) throw new Error('pay_batch_id is required');
   if (!actorUserId) throw new Error('actor_user_id is required');
@@ -12731,17 +12789,145 @@ async function sendPayBatchRemittancesInternal(env, opts) {
     testTo = remittanceTestRecipientEmail.trim();
   }
 
+  const emptyQueueStageResult = (commKind, triggerStatus, extra = {}) => ({
+    ok: true,
+    trigger_status: triggerStatus || 'NO_QUEUEABLE_JOB',
+    error: null,
+    message_kind: commKind,
+    automatic_commit_stage: true,
+    dispatch_required: false,
+    pay_batch_id: payBatchId,
+    scope,
+    only_confirmed: onlyConfirmed,
+    candidate_count_targeted: 0,
+    candidate_count_ready: 0,
+    candidate_count_without_jobs: 0,
+    job_count: 0,
+    candidate_results: [],
+    job_results: [],
+    jobs: [],
+    ...extra
+  });
+
+  const returnNoQueueStageDispatch = (triggerStatus, extra = {}) => {
+    const remittanceResult = emptyQueueStageResult('REMITTANCE', triggerStatus, extra.remittance_result || {});
+    const payoutNoticeResult = emptyQueueStageResult('PAYOUT_NOTICE', triggerStatus, extra.payout_notice_result || {});
+    return {
+      ok: true,
+      pay_batch_id: payBatchId,
+      scope,
+      communication_mode: 'NONE',
+      trigger_status: triggerStatus,
+      error: null,
+      pay_date: null,
+      authoritative_payment_date: null,
+      bulk_reference: null,
+      payroll_testing: payrollTesting,
+      test_recipient: testTo,
+      queued_count: 0,
+      skipped_count: 0,
+      queued: [],
+      skipped: [],
+      suppressed: !!extra.suppressed,
+      deferred: !!extra.deferred,
+      skip_queue_stage: !!extra.skip_queue_stage,
+      prebuilt_queue_stage_result: extra.prebuilt_queue_stage_result || null,
+      remittance_result: remittanceResult,
+      payout_notice_result: payoutNoticeResult
+    };
+  };
+
+  const unwrapKnownQueueStagePayload = (value) => {
+    let payload = value;
+    const keys = [
+      'pay_remittance_maybe_queue_for_trigger',
+      'pay_remittance_queue_commit_stage',
+      'pay_finance_payout_notice_queue_commit_stage',
+      'remittance_queue_stage_result',
+      'prebuiltQueueStageResult',
+      'prebuilt_queue_stage_result'
+    ];
+
+    for (let i = 0; i < 5; i++) {
+      if (Array.isArray(payload) && payload.length === 1 && payload[0] && typeof payload[0] === 'object') {
+        payload = payload[0];
+        continue;
+      }
+
+      let changed = false;
+      if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
+        for (const key of keys) {
+          if (Object.prototype.hasOwnProperty.call(payload, key)) {
+            payload = payload[key];
+            changed = true;
+            break;
+          }
+        }
+      }
+      if (!changed) break;
+    }
+
+    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : null;
+  };
+
+  const normalizePrebuiltQueueStageResult = (raw) => {
+    const wrapper = unwrapKnownQueueStagePayload(raw);
+    if (!wrapper) return null;
+
+    const queueResult = (wrapper.queue_result && typeof wrapper.queue_result === 'object' && !Array.isArray(wrapper.queue_result))
+      ? wrapper.queue_result
+      : wrapper;
+
+    const jobs = Array.isArray(queueResult.jobs) ? queueResult.jobs : [];
+    const jobCountRaw = Number(queueResult.job_count ?? jobs.length ?? 0);
+    const jobCount = Number.isFinite(jobCountRaw) ? jobCountRaw : jobs.length;
+    const dispatchRequired =
+      queueResult.dispatch_required === true ||
+      wrapper.dispatch_required === true ||
+      wrapper.queued === true ||
+      jobCount > 0 ||
+      jobs.length > 0;
+
+    const jobKinds = jobs.map((job) => String(job?.job_kind || '').trim().toUpperCase()).filter(Boolean);
+    const messageKindRaw = String(queueResult.message_kind || wrapper.message_kind || '').trim().toUpperCase();
+    const isLoansBatch = wrapper.is_loans_batch === true || queueResult.is_loans_batch === true;
+    const hasPayoutJobs = jobKinds.some((jobKind) => jobKind.includes('PAYOUT_NOTICE') || jobKind.includes('PAYOUT'));
+    const hasRemittanceJobs = jobKinds.some((jobKind) => jobKind.includes('REMITTANCE'));
+    const messageKind =
+      messageKindRaw === 'PAYOUT_NOTICE' || messageKindRaw === 'REMITTANCE'
+        ? messageKindRaw
+        : isLoansBatch || (hasPayoutJobs && !hasRemittanceJobs)
+          ? 'PAYOUT_NOTICE'
+          : 'REMITTANCE';
+
+    return {
+      wrapper,
+      queueResult,
+      jobs,
+      jobCount,
+      dispatchRequired,
+      messageKind,
+      ok: !(wrapper.ok === false || queueResult.ok === false),
+      error: String(queueResult.error || wrapper.error || '').trim(),
+      triggerStatus: String(queueResult.trigger_status || wrapper.trigger_status || '').trim() || (dispatchRequired ? 'PREBUILT_QUEUE_STAGE_READY' : 'NO_QUEUEABLE_JOB'),
+      deferred: wrapper.deferred === true || queueResult.deferred === true,
+      suppressed: wrapper.suppressed === true || queueResult.suppressed === true
+    };
+  };
+
   const callQueueStage = async (commKind) => {
     try {
       const helperRpcRes = (commKind === 'PAYOUT_NOTICE')
         ? await sbRpc(env, 'pay_finance_payout_notice_queue_commit_stage', {
             p_pay_batch_id: payBatchId,
-            p_actor_user_id: actorUserId
+            p_actor_user_id: actorUserId,
+            p_only_confirmed: onlyConfirmed
           })
         : await sbRpc(env, 'pay_remittance_queue_commit_stage', {
             p_pay_batch_id: payBatchId,
             p_scope: scope,
-            p_actor_user_id: actorUserId
+            p_actor_user_id: actorUserId,
+            p_only_confirmed: onlyConfirmed
           });
 
       const helperRes = unwrapRpc(
@@ -12767,8 +12953,43 @@ async function sendPayBatchRemittancesInternal(env, opts) {
     }
   };
 
-  const remittanceHelperRes = await callQueueStage('REMITTANCE');
-  const payoutNoticeHelperRes = await callQueueStage('PAYOUT_NOTICE');
+  let remittanceHelperRes = null;
+  let payoutNoticeHelperRes = null;
+
+  const normalizedPrebuiltQueueStage = prebuiltQueueStageResult
+    ? normalizePrebuiltQueueStageResult(prebuiltQueueStageResult)
+    : null;
+
+  if (normalizedPrebuiltQueueStage) {
+    if (normalizedPrebuiltQueueStage.ok === false) {
+      throw new Error(normalizedPrebuiltQueueStage.error || normalizedPrebuiltQueueStage.triggerStatus || 'PREBUILT_QUEUE_STAGE_FAILED');
+    }
+
+    if (!normalizedPrebuiltQueueStage.dispatchRequired) {
+      return returnNoQueueStageDispatch(
+        normalizedPrebuiltQueueStage.triggerStatus,
+        {
+          suppressed: normalizedPrebuiltQueueStage.suppressed,
+          deferred: normalizedPrebuiltQueueStage.deferred,
+          prebuilt_queue_stage_result: normalizedPrebuiltQueueStage.wrapper
+        }
+      );
+    }
+
+    remittanceHelperRes = emptyQueueStageResult('REMITTANCE', 'PREBUILT_QUEUE_STAGE_NOT_FOR_REMITTANCE');
+    payoutNoticeHelperRes = emptyQueueStageResult('PAYOUT_NOTICE', 'PREBUILT_QUEUE_STAGE_NOT_FOR_PAYOUT_NOTICE');
+
+    if (normalizedPrebuiltQueueStage.messageKind === 'PAYOUT_NOTICE') {
+      payoutNoticeHelperRes = normalizedPrebuiltQueueStage.queueResult;
+    } else {
+      remittanceHelperRes = normalizedPrebuiltQueueStage.queueResult;
+    }
+  } else if (skipQueueStage) {
+    return returnNoQueueStageDispatch('QUEUE_STAGE_SKIPPED', { skip_queue_stage: true });
+  } else {
+    remittanceHelperRes = await callQueueStage('REMITTANCE');
+    payoutNoticeHelperRes = await callQueueStage('PAYOUT_NOTICE');
+  }
 
   let headerMsgFromBuild = null;
   let footerMsgFromBuild = null;
@@ -13506,6 +13727,14 @@ async function sendPayBatchRemittancesInternal(env, opts) {
         continue;
       }
 
+      const paymentScopeJson = (() => {
+        const direct = job?.payment_scope_json;
+        if (direct && typeof direct === 'object' && !Array.isArray(direct)) return direct;
+        const fromQueueContext = job?.queue_context?.payment_scope_json;
+        if (fromQueueContext && typeof fromQueueContext === 'object' && !Array.isArray(fromQueueContext)) return fromQueueContext;
+        return null;
+      })();
+
       const outboxRow = {
         type: 'REMITTANCE',
         to: toEmail,
@@ -13526,6 +13755,7 @@ async function sendPayBatchRemittancesInternal(env, opts) {
         recipient_id: recipientIdForOutbox,
         context_kind: 'pay_batches',
         context_id: contextId,
+        payment_scope_json: paymentScopeJson,
         mailshot_run_id: null,
         document_template_id: null,
         scheduled_for_utc: null,
@@ -13688,6 +13918,7 @@ async function sendPayBatchRemittancesInternal(env, opts) {
     payout_notice_result: payoutNoticeResult
   };
 }
+
 
 
 
@@ -15730,6 +15961,8 @@ async function revolutEnsurePayeesReadyFromPreview(env, railEnv, payees, actorUs
     diagnostics
   };
 }
+
+
 async function handleBankingCapabilities(env, req, user) {
   try {
     const select = [
@@ -15743,7 +15976,10 @@ async function handleBankingCapabilities(env, req, user) {
       'funds_warning_hours_json',
       'rail_default_funding_account_ref',
       'payroll_testing',
-      'paye_remittances_enabled'
+      'paye_remittances_enabled',
+      'payment_remittance_send_timing',
+      'payment_return_auto_reverse_timesheets',
+      'payment_return_admin_recipient_role'
     ].join(',');
 
     const { rows } = await sbFetch(
@@ -15776,6 +16012,15 @@ async function handleBankingCapabilities(env, req, user) {
 
     const payroll_testing = !!sd.payroll_testing;
     const paye_remittances_enabled = !!sd.paye_remittances_enabled;
+    const payment_remittance_send_timing = (() => {
+      const v = String(sd.payment_remittance_send_timing || '').trim().toUpperCase();
+      return (v === 'ON_PAYMENT_CONFIRMED') ? 'ON_PAYMENT_CONFIRMED' : 'ON_EXECUTION';
+    })();
+    const payment_return_auto_reverse_timesheets = !!sd.payment_return_auto_reverse_timesheets;
+    const payment_return_admin_recipient_role = (() => {
+      const v = String(sd.payment_return_admin_recipient_role || '').trim();
+      return v ? v : 'ADMIN';
+    })();
 
     const deriveWorkerEnvFromApiBase = (apiBase) => {
       const b = (apiBase === undefined || apiBase === null) ? '' : String(apiBase);
@@ -15879,6 +16124,15 @@ async function handleBankingCapabilities(env, req, user) {
       // ✅ PAYE remittances gate (UI can block PAYE remittance send)
       paye_remittances_enabled,
 
+      // ✅ payment correction support/capabilities
+      payment_correction_supported: true,
+      selected_candidate_correction_supported: true,
+      selected_umbrella_group_correction_supported: true,
+      large_correction_work_items_supported: true,
+      payment_remittance_send_timing,
+      payment_return_auto_reverse_timesheets,
+      payment_return_admin_recipient_role,
+
       rail_supports_scheduling,
       rail_supports_name_check,
       rail_supports_auto_execute,
@@ -15907,8 +16161,6 @@ async function handleBankingCapabilities(env, req, user) {
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
 }
-
-
 
 async function handleTimesheetCreateManualDaily(env, req) {
   const enc = encodeURIComponent;
@@ -20315,7 +20567,6 @@ async function handleBankingIdLedgerList(env, req, user) {
   }
 }
 
-
 async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
   const id = String(payBatchId || '').trim();
   if (!id) return withCORS(env, req, badRequest('pay_batch_id is required'));
@@ -20764,6 +21015,15 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
     const authStart = unwrapRpc(authStart0, 'pay_batch_auth_start');
     const authRequestId = String(authStart?.auth_request_id || '').trim() || null;
     const becameAuthorised = (authStart?.became_authorised === true) || (String(authStart?.status || '').toUpperCase() === 'AUTHORISED_FOR_PAYMENT');
+    const authStartQueueStageResult = (() => {
+      const direct = authStart?.remittance_queue_stage_result;
+      if (direct && typeof direct === 'object' && !Array.isArray(direct)) return direct;
+      const alt = authStart?.queue_stage_result;
+      if (alt && typeof alt === 'object' && !Array.isArray(alt)) return alt;
+      const queueResult = authStart?.queue_result;
+      if (queueResult && typeof queueResult === 'object' && !Array.isArray(queueResult)) return queueResult;
+      return null;
+    })();
     const finalisation = (becameAuthorised && authRequestId)
       ? await finaliseAuthorisedBankingPaySettlement(env, req, user, id, authRequestId, {})
       : null;
@@ -20777,6 +21037,27 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
         await sendPayBatchScheduledNoticeAllAuthorisers(env, id, authRequestId, user?.id || null);
       } catch {
         // best-effort only
+      }
+    }
+
+    let authStartRemittances = null;
+    if (becameAuthorised && authStartQueueStageResult) {
+      try {
+        authStartRemittances = await sendPayBatchRemittancesInternal(env, {
+          payBatchId: id,
+          scope: payChannelScope,
+          actorUserId: user.id,
+          batch_get: gateGet,
+          prebuiltQueueStageResult: authStartQueueStageResult,
+          onlyConfirmed: false
+        });
+      } catch (e) {
+        return withCORS(env, req, jsonResponse(409, {
+          error: 'Remittance queue dispatch failed.',
+          message: String(e?.message || e || 'Remittance queue dispatch failed.'),
+          error_code: 'REMITTANCE_QUEUE_DISPATCH_FAILED',
+          remittance_queue_stage_result: authStartQueueStageResult
+        }));
       }
     }
 
@@ -20801,7 +21082,8 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
       execution_mode: executionMode,
       effective_payment_date: effectivePaymentDate,
       suppress_remittances: suppressRemittances,
-      remittances: finalisation && typeof finalisation === 'object' ? (finalisation.remittances || null) : null,
+      remittances: finalisation && typeof finalisation === 'object' && finalisation.remittances ? finalisation.remittances : authStartRemittances,
+      remittance_queue_stage_result: authStartQueueStageResult,
       execution_commit_state: executionFields.execution_commit_state,
       execution_commit_ref: executionFields.execution_commit_ref,
       execution_committed_at_utc: executionFields.execution_committed_at_utc,
@@ -20837,7 +21119,6 @@ async function verifyPaymentScheduleReauth(env, user, reauthToken) {
 
   return { ok: true, payload };
 }
-
 
 async function finaliseAuthorisedBankingPaySettlement(env, req, userOrActor, payBatchId, authRequestId, options = {}) {
   const unwrapRpc = (rpcRes, key) => {
@@ -20939,6 +21220,27 @@ async function finaliseAuthorisedBankingPaySettlement(env, req, userOrActor, pay
   const confirmationMode = String(settlementConfirmation?.execution_mode || settlementConfirmation?.settlement_mode || '').trim().toUpperCase();
   const finalStateIsSettledOrCommitted = ['SETTLED', 'PAID', 'COMMITTED'].includes(status) || executionCommitState === 'COMMITTED';
 
+  const extractPrebuiltSettlementQueueStageResult = (settlementPayload) => {
+    if (!settlementPayload || typeof settlementPayload !== 'object' || Array.isArray(settlementPayload)) return null;
+
+    const candidates = [
+      settlementPayload.remittance_queue_stage_result,
+      settlementPayload.remittanceQueueStageResult,
+      settlementPayload.queue_stage_result,
+      settlementPayload.queueStageResult,
+      settlementPayload.queue_result,
+      settlementPayload.worker_communications && typeof settlementPayload.worker_communications === 'object'
+        ? settlementPayload.worker_communications.result
+        : null
+    ];
+
+    for (const candidate of candidates) {
+      if (candidate && typeof candidate === 'object' && !Array.isArray(candidate)) return candidate;
+    }
+
+    return null;
+  };
+
   const enqueueRemittancesForSettlement = async (settlementPayload, batchPayload) => {
     if (mode !== 'CSV_SETTLEMENT' && mode !== 'EXTERNAL_SETTLEMENT') {
       return { attempted: false, ok: null, suppressed: false, reason: 'NATIVE_EXECUTION_SETTLES_VIA_RAIL', result: null };
@@ -20946,12 +21248,27 @@ async function finaliseAuthorisedBankingPaySettlement(env, req, userOrActor, pay
     if (!settlementAdvanced(settlementPayload)) {
       return { attempted: false, ok: null, suppressed: false, reason: 'SETTLEMENT_NOT_ADVANCED', result: null };
     }
+
+    const prebuiltQueueStageResult = extractPrebuiltSettlementQueueStageResult(settlementPayload);
+    if (!prebuiltQueueStageResult) {
+      return {
+        attempted: false,
+        ok: true,
+        suppressed: false,
+        reason: 'NO_PREBUILT_QUEUE_STAGE_RESULT',
+        result: null,
+        prebuilt_queue_stage_result: null
+      };
+    }
+
     try {
       return await enqueuePayBatchRemittancesAfterSettlement(env, {
         payBatchId: id,
         scope,
         actorUserId,
         settlementResult: settlementPayload,
+        prebuiltQueueStageResult,
+        onlyConfirmed: true,
         pay_batch_get: batchPayload || batchGet || null
       });
     } catch (e) {
@@ -20961,7 +21278,8 @@ async function finaliseAuthorisedBankingPaySettlement(env, req, userOrActor, pay
         suppressed: false,
         reason: String(e?.message || e || 'REMITTANCES_ENQUEUE_FAILED'),
         result: null,
-        error: String(e?.message || e || 'REMITTANCES_ENQUEUE_FAILED')
+        error: String(e?.message || e || 'REMITTANCES_ENQUEUE_FAILED'),
+        prebuilt_queue_stage_result: prebuiltQueueStageResult
       };
     }
   };
@@ -21018,6 +21336,7 @@ async function finaliseAuthorisedBankingPaySettlement(env, req, userOrActor, pay
     return { ok: false, error_code: 'SETTLEMENT_FINALISATION_FAILED', message: String(e?.message || e || 'SETTLEMENT_FINALISATION_FAILED') };
   }
 }
+
 
 
 
@@ -24086,7 +24405,6 @@ async function handleBankingPayAuthTokenAction(env, req, user) {
   }));
 }
 
-
 async function handleBankingPayBatchAuthAction(env, req, user, payBatchId) {
   const enc = encodeURIComponent;
 
@@ -24239,6 +24557,16 @@ async function handleBankingPayBatchAuthAction(env, req, user, payBatchId) {
   const out = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
   const becameAuthorised = (out.became_authorised === true) || (String(out.status || '').toUpperCase() === 'AUTHORISED_FOR_PAYMENT');
   const outMode = String(out.execution_mode || '').trim().toUpperCase();
+  const authActionQueueStageResult = (() => {
+    const direct = out?.remittance_queue_stage_result;
+    if (direct && typeof direct === 'object' && !Array.isArray(direct)) return direct;
+    const alt = out?.queue_stage_result;
+    if (alt && typeof alt === 'object' && !Array.isArray(alt)) return alt;
+    const queueResult = out?.queue_result;
+    if (queueResult && typeof queueResult === 'object' && !Array.isArray(queueResult)) return queueResult;
+    return null;
+  })();
+
   let finalisation = null;
   if (becameAuthorised && actionKind !== 'REJECT') {
     finalisation = await finaliseAuthorisedBankingPaySettlement(env, req, user, id, authRequestId, {});
@@ -24256,6 +24584,40 @@ async function handleBankingPayBatchAuthAction(env, req, user, payBatchId) {
       await sendPayBatchScheduledNoticeAllAuthorisers(env, id, authRequestId, user?.id || null);
     } catch {
       // best-effort only
+    }
+  }
+
+  const finalisationRemittances = (finalisation && typeof finalisation === 'object' && finalisation.remittances && typeof finalisation.remittances === 'object')
+    ? finalisation.remittances
+    : null;
+  const finalisationAlreadyHandledRemittanceQueue = !!(finalisationRemittances && (
+    finalisationRemittances.attempted === true
+    || finalisationRemittances.suppressed === true
+    || finalisationRemittances.result !== undefined
+    || finalisationRemittances.reason !== undefined
+  ));
+
+  let authActionRemittances = null;
+  if (becameAuthorised && actionKind !== 'REJECT' && authActionQueueStageResult && !finalisationAlreadyHandledRemittanceQueue) {
+    try {
+      authActionRemittances = await sendPayBatchRemittancesInternal(env, {
+        payBatchId: id,
+        scope: String(out?.pay_channel_scope || out?.scope || 'ALL').trim().toUpperCase(),
+        actorUserId: user.id,
+        batch_get: beforeGet,
+        prebuiltQueueStageResult: authActionQueueStageResult,
+        onlyConfirmed: false
+      });
+    } catch (e) {
+      return withCORS(env, req, new Response(JSON.stringify({
+        error: 'Remittance queue dispatch failed.',
+        message: String(e?.message || e || 'Remittance queue dispatch failed.'),
+        error_code: 'REMITTANCE_QUEUE_DISPATCH_FAILED',
+        remittance_queue_stage_result: authActionQueueStageResult
+      }), {
+        status: 409,
+        headers: { 'Content-Type': 'application/json; charset=utf-8' }
+      }));
     }
   }
 
@@ -24285,10 +24647,13 @@ async function handleBankingPayBatchAuthAction(env, req, user, payBatchId) {
     execution_mode: out.execution_mode || null,
     suppress_remittances: (typeof out.suppress_remittances === 'boolean') ? out.suppress_remittances : null,
     finalisation,
+    remittances: finalisation && typeof finalisation === 'object' && finalisation.remittances ? finalisation.remittances : authActionRemittances,
+    remittance_queue_stage_result: authActionQueueStageResult,
     batch: respBatch,
     auth: respAuth
   }));
 }
+
 
 
 async function sendPayBatchScheduledNoticeAllAuthorisers(env, payBatchId, authRequestId, actorUserId) {
@@ -24475,6 +24840,7 @@ async function handleBankingPayBatchNotifyScheduled(env, req, user, payBatchId) 
     return withCORS(env, req, serverError(String(e?.message || e || 'NOTIFY_FAILED')));
   }
 }
+
 
 
 async function handleBankingPayBatchCancel(env, req, user, payBatchId) {
@@ -24678,6 +25044,7 @@ async function handleBankingPayBatchCancel(env, req, user, payBatchId) {
 
     const correctionOnly = (
       code === 'CORRECTION_ONLY_REQUIRED' ||
+      code === 'USE_PAYMENT_CORRECTION_FLOW' ||
       code === 'PAYMENT_ALREADY_COMMITTED' ||
       cancellationOutcome === 'CORRECTION_ONLY' ||
       cancellationOutcome === 'POST_COMMIT_CORRECTION_ONLY' ||
@@ -24738,10 +25105,16 @@ async function handleBankingPayBatchCancel(env, req, user, payBatchId) {
       ''
     ).trim().toUpperCase() || 'BATCH_NOT_CANCELLABLE';
 
+    if (code === 'USE_PAYMENT_CORRECTION_FLOW') {
+      return {
+        error_code: code,
+        message: 'This batch has bank/payment evidence. Open the Payment issue panel to review it safely.'
+      };
+    }
     if (code === 'CORRECTION_ONLY_REQUIRED' || code === 'PAYMENT_ALREADY_COMMITTED') {
       return {
         error_code: code,
-        message: 'This batch has already been committed or paid and cannot be cancelled. Use correction flow instead.'
+        message: 'This batch has bank/payment evidence. Open the Payment issue panel to review it safely.'
       };
     }
     if (code === 'EXTERNAL_CANCEL_CONFIRMATION_REQUIRED') {
@@ -25031,14 +25404,1069 @@ async function handleBankingPayBatchCancel(env, req, user, payBatchId) {
     if (
       dbPayload &&
       typeof dbPayload === 'object' &&
-      ['CORRECTION_ONLY_REQUIRED', 'PAYMENT_ALREADY_COMMITTED', 'EXTERNAL_CANCEL_CONFIRMATION_REQUIRED', 'BATCH_NOT_CANCELLABLE']
+      ['USE_PAYMENT_CORRECTION_FLOW', 'CORRECTION_ONLY_REQUIRED', 'PAYMENT_ALREADY_COMMITTED', 'EXTERNAL_CANCEL_CONFIRMATION_REQUIRED', 'BATCH_NOT_CANCELLABLE']
         .includes(String(dbPayload.code || dbPayload.error_code || '').trim().toUpperCase())
     ) {
       return _buildConflictResponse(dbPayload);
     }
+
+    const rawErrorText = String(e?.message || e || '').trim();
+    if (rawErrorText.toUpperCase().includes('USE_PAYMENT_CORRECTION_FLOW')) {
+      return _buildConflictResponse({
+        code: 'USE_PAYMENT_CORRECTION_FLOW',
+        message: 'This batch has bank/payment evidence. Open the Payment issue panel to review it safely.',
+        raw_error: rawErrorText
+      });
+    }
+
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
 }
+
+
+
+async function handleBankingPayCorrectionPlan(env, req, user, payBatchId) {
+  const id = String(payBatchId || '').trim();
+  if (!id) return withCORS(env, req, badRequest('pay_batch_id is required'));
+
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  if (!uuidRe.test(id)) return withCORS(env, req, badRequest('invalid_pay_batch_id'));
+
+  const jsonResponse = (status, payload) => {
+    const headers = new Headers(JSON_HEADERS);
+    headers.set('Content-Type', 'application/json; charset=utf-8');
+    return new Response(JSON.stringify(payload && typeof payload === 'object' ? payload : { error: String(payload || 'error') }), { status, headers });
+  };
+
+  const unwrapRpc = (rpcRes, key) => {
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(payload) && payload.length === 1 && payload[0] && typeof payload[0] === 'object') payload = payload[0];
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) payload = payload[key];
+    } catch {}
+    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : payload;
+  };
+
+  const safeJsonParse = (value) => {
+    try { return JSON.parse(String(value || '')); } catch { return null; }
+  };
+
+  const extractDbRaisedJson = (e) => {
+    try {
+      const candidates = [];
+      if (e && typeof e === 'object') {
+        if (e.json && typeof e.json === 'object') {
+          if (typeof e.json.message === 'string') candidates.push(e.json.message);
+          if (typeof e.json.details === 'string') candidates.push(e.json.details);
+          if (typeof e.json.hint === 'string') candidates.push(e.json.hint);
+          if (typeof e.json.code === 'string') candidates.push(JSON.stringify(e.json));
+        }
+        if (typeof e.body === 'string') candidates.push(e.body);
+        if (typeof e.message === 'string') candidates.push(e.message);
+      }
+
+      for (const raw of candidates) {
+        const text = String(raw || '').trim();
+        if (!text) continue;
+        if (text.startsWith('{') && text.endsWith('}')) {
+          const parsed = safeJsonParse(text);
+          if (parsed && typeof parsed === 'object') return parsed;
+        }
+        const first = text.indexOf('{');
+        const last = text.lastIndexOf('}');
+        if (first >= 0 && last > first) {
+          const parsed = safeJsonParse(text.slice(first, last + 1));
+          if (parsed && typeof parsed === 'object') return parsed;
+        }
+      }
+    } catch {}
+    return null;
+  };
+
+  const rpcErrorResponse = (e, fallbackCode, fallbackMessage) => {
+    const dbPayload = extractDbRaisedJson(e);
+    if (dbPayload && typeof dbPayload === 'object') {
+      const code = String(dbPayload.code || dbPayload.error_code || fallbackCode || 'PAYMENT_CORRECTION_PLAN_FAILED').trim().toUpperCase();
+      const message = String(dbPayload.message || dbPayload.error || fallbackMessage || code).trim() || code;
+      const status = (
+        code.includes('STALE') ||
+        code.includes('BLOCK') ||
+        code.includes('AMBIGUOUS') ||
+        code.includes('INTERFERENCE') ||
+        code.includes('NOT_ALLOWED') ||
+        code.includes('NOT_CANCELLABLE')
+      ) ? 409 : 400;
+      return withCORS(env, req, jsonResponse(status, {
+        ok: false,
+        error: message,
+        message,
+        error_code: code,
+        details: dbPayload
+      }));
+    }
+
+    const statusRaw = Number(e && e.status);
+    const status = Number.isFinite(statusRaw) && statusRaw >= 400 && statusRaw < 600 ? statusRaw : 500;
+    const message = String(e?.message || e || fallbackMessage || 'Payment correction plan failed.');
+    return withCORS(env, req, jsonResponse(status >= 500 ? 500 : status, {
+      ok: false,
+      error: message,
+      message,
+      error_code: fallbackCode || 'PAYMENT_CORRECTION_PLAN_FAILED'
+    }));
+  };
+
+  const requirePaymentPermission = async () => {
+    const currentUserId = String(user?.id || '').trim();
+    if (!currentUserId) return { ok: false, response: unauthorized('Unauthorized') };
+
+    try {
+      const { rows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/tms_users?id=eq.${encodeURIComponent(currentUserId)}&select=id,is_active,role,payment_authoriser,payment_golden_key&limit=1`,
+        false
+      );
+      const row = (rows && rows[0]) ? rows[0] : null;
+      if (!row || row.is_active !== true) return { ok: false, response: unauthorized('Unauthorized') };
+
+      const role = String(row.role || '').trim().toLowerCase();
+      const allowed = role === 'admin' || row.payment_authoriser === true || row.payment_golden_key === true;
+      if (!allowed) return { ok: false, response: badRequest('PAYMENT_PERMISSION_REQUIRED') };
+      return { ok: true, user: row };
+    } catch (e) {
+      return { ok: false, response: serverError(String(e?.message || e || 'Failed to validate payment permission')) };
+    }
+  };
+
+  const normalizeSelection = (body) => {
+    const directKeys = [
+      'scope_type',
+      'requested_action',
+      'source_context',
+      'pay_batch_candidate_id',
+      'pay_batch_candidate_ids',
+      'pay_bank_transfer_id',
+      'pay_bank_transfer_ids',
+      'pay_batch_item_id',
+      'pay_batch_item_ids',
+      'expected_pay_batch_item_ids',
+      'expected_item_count',
+      'candidate_id',
+      'candidate_ids',
+      'umbrella_id',
+      'umbrella_ids',
+      'transfer_group_key',
+      'finance_case_id',
+      'finance_case_ids',
+      'finance_component_id',
+      'finance_component_ids',
+      'reservation_id',
+      'reservation_ids',
+      'item_type',
+      'item_types'
+    ];
+
+    const source =
+      (body && body.selection_json && typeof body.selection_json === 'object' && !Array.isArray(body.selection_json)) ? body.selection_json
+        : (body && body.selection && typeof body.selection === 'object' && !Array.isArray(body.selection)) ? body.selection
+          : (body && directKeys.some((key) => Object.prototype.hasOwnProperty.call(body, key))) ? (() => {
+              const out = {};
+              for (const key of directKeys) {
+                if (Object.prototype.hasOwnProperty.call(body, key)) out[key] = body[key];
+              }
+              return out;
+            })()
+            : null;
+
+    if (!source || typeof source !== 'object' || Array.isArray(source)) {
+      return { ok: false, error: 'selection_json must be an object' };
+    }
+
+    const selection = { ...source };
+    if (body && body.requested_action !== undefined && selection.requested_action === undefined) {
+      selection.requested_action = body.requested_action;
+    }
+
+    const scopeType = String(selection.scope_type || '').trim().toUpperCase();
+    if (!scopeType) return { ok: false, error: 'selection scope_type is required' };
+    if (scopeType === 'TIMESHEET' || scopeType === 'TIMESHEETS') return { ok: false, error: 'TIMESHEET_SCOPE_NOT_ALLOWED' };
+    if (!['BATCH', 'CANDIDATES', 'TRANSFER', 'UMBRELLA_PAYMENT_GROUP'].includes(scopeType)) {
+      return { ok: false, error: 'Unsupported correction scope_type' };
+    }
+    selection.scope_type = scopeType;
+
+    if (selection.requested_action !== undefined && selection.requested_action !== null) {
+      selection.requested_action = String(selection.requested_action).trim().toUpperCase();
+    }
+
+    const hasNonEmptyArray = (value) => Array.isArray(value) && value.some((item) => String(item || '').trim());
+    if (scopeType === 'CANDIDATES' && !hasNonEmptyArray(selection.pay_batch_candidate_ids) && !hasNonEmptyArray(selection.candidate_ids)) {
+      return { ok: false, error: 'CANDIDATES scope requires pay_batch_candidate_ids or candidate_ids' };
+    }
+    if (scopeType === 'TRANSFER' && !String(selection.pay_bank_transfer_id || '').trim() && !hasNonEmptyArray(selection.pay_bank_transfer_ids)) {
+      return { ok: false, error: 'TRANSFER scope requires pay_bank_transfer_id or pay_bank_transfer_ids' };
+    }
+    if (scopeType === 'UMBRELLA_PAYMENT_GROUP') {
+      const hasUmbrella = !!String(selection.umbrella_id || '').trim() || hasNonEmptyArray(selection.umbrella_ids);
+      const hasGroup = !!String(selection.transfer_group_key || '').trim();
+      const hasTransfers = hasNonEmptyArray(selection.pay_bank_transfer_ids) || !!String(selection.pay_bank_transfer_id || '').trim();
+      if (!hasUmbrella && !hasGroup && !hasTransfers) {
+        return { ok: false, error: 'UMBRELLA_PAYMENT_GROUP scope requires umbrella, transfer group, or transfer identity' };
+      }
+    }
+
+    return { ok: true, selection };
+  };
+
+  const permission = await requirePaymentPermission();
+  if (!permission.ok) return withCORS(env, req, permission.response);
+
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return withCORS(env, req, badRequest('Invalid JSON'));
+
+  const selectionRes = normalizeSelection(body);
+  if (!selectionRes.ok) return withCORS(env, req, badRequest(selectionRes.error));
+
+  try {
+    const rpcRes = await sbRpc(env, 'pay_payment_correction_plan', {
+      p_pay_batch_id: id,
+      p_selection_json: selectionRes.selection,
+      p_actor_user_id: String(user.id)
+    });
+    const plan = unwrapRpc(rpcRes, 'pay_payment_correction_plan');
+    return withCORS(env, req, ok({
+      ok: true,
+      pay_batch_id: id,
+      selection: selectionRes.selection,
+      plan
+    }));
+  } catch (e) {
+    return rpcErrorResponse(e, 'PAYMENT_CORRECTION_PLAN_FAILED', 'Payment correction plan failed.');
+  }
+}
+
+async function handleBankingPayCorrectionStart(env, req, user, payBatchId) {
+  const id = String(payBatchId || '').trim();
+  if (!id) return withCORS(env, req, badRequest('pay_batch_id is required'));
+
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  if (!uuidRe.test(id)) return withCORS(env, req, badRequest('invalid_pay_batch_id'));
+
+  const jsonResponse = (status, payload) => {
+    const headers = new Headers(JSON_HEADERS);
+    headers.set('Content-Type', 'application/json; charset=utf-8');
+    return new Response(JSON.stringify(payload && typeof payload === 'object' ? payload : { error: String(payload || 'error') }), { status, headers });
+  };
+
+  const unwrapRpc = (rpcRes, key) => {
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(payload) && payload.length === 1 && payload[0] && typeof payload[0] === 'object') payload = payload[0];
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) payload = payload[key];
+    } catch {}
+    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : payload;
+  };
+
+  const safeJsonParse = (value) => {
+    try { return JSON.parse(String(value || '')); } catch { return null; }
+  };
+
+  const extractDbRaisedJson = (e) => {
+    try {
+      const candidates = [];
+      if (e && typeof e === 'object') {
+        if (e.json && typeof e.json === 'object') {
+          if (typeof e.json.message === 'string') candidates.push(e.json.message);
+          if (typeof e.json.details === 'string') candidates.push(e.json.details);
+          if (typeof e.json.hint === 'string') candidates.push(e.json.hint);
+          if (typeof e.json.code === 'string') candidates.push(JSON.stringify(e.json));
+        }
+        if (typeof e.body === 'string') candidates.push(e.body);
+        if (typeof e.message === 'string') candidates.push(e.message);
+      }
+      for (const raw of candidates) {
+        const text = String(raw || '').trim();
+        if (!text) continue;
+        if (text.startsWith('{') && text.endsWith('}')) {
+          const parsed = safeJsonParse(text);
+          if (parsed && typeof parsed === 'object') return parsed;
+        }
+        const first = text.indexOf('{');
+        const last = text.lastIndexOf('}');
+        if (first >= 0 && last > first) {
+          const parsed = safeJsonParse(text.slice(first, last + 1));
+          if (parsed && typeof parsed === 'object') return parsed;
+        }
+      }
+    } catch {}
+    return null;
+  };
+
+  const rpcErrorResponse = (e, fallbackCode, fallbackMessage) => {
+    const dbPayload = extractDbRaisedJson(e);
+    if (dbPayload && typeof dbPayload === 'object') {
+      const code = String(dbPayload.code || dbPayload.error_code || fallbackCode || 'PAYMENT_CORRECTION_START_FAILED').trim().toUpperCase();
+      const message = String(dbPayload.message || dbPayload.error || fallbackMessage || code).trim() || code;
+      const status = (
+        code.includes('STALE') ||
+        code.includes('BLOCK') ||
+        code.includes('AMBIGUOUS') ||
+        code.includes('INTERFERENCE') ||
+        code.includes('NOT_ALLOWED') ||
+        code.includes('REQUIRES') ||
+        code.includes('REQUIRED')
+      ) ? 409 : 400;
+      return withCORS(env, req, jsonResponse(status, {
+        ok: false,
+        error: message,
+        message,
+        error_code: code,
+        details: dbPayload
+      }));
+    }
+
+    const statusRaw = Number(e && e.status);
+    const status = Number.isFinite(statusRaw) && statusRaw >= 400 && statusRaw < 600 ? statusRaw : 500;
+    const message = String(e?.message || e || fallbackMessage || 'Payment correction start failed.');
+    return withCORS(env, req, jsonResponse(status >= 500 ? 500 : status, {
+      ok: false,
+      error: message,
+      message,
+      error_code: fallbackCode || 'PAYMENT_CORRECTION_START_FAILED'
+    }));
+  };
+
+  const requirePaymentPermission = async () => {
+    const currentUserId = String(user?.id || '').trim();
+    if (!currentUserId) return { ok: false, response: unauthorized('Unauthorized') };
+
+    try {
+      const { rows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/tms_users?id=eq.${encodeURIComponent(currentUserId)}&select=id,is_active,role,payment_authoriser,payment_golden_key&limit=1`,
+        false
+      );
+      const row = (rows && rows[0]) ? rows[0] : null;
+      if (!row || row.is_active !== true) return { ok: false, response: unauthorized('Unauthorized') };
+
+      const role = String(row.role || '').trim().toLowerCase();
+      const allowed = role === 'admin' || row.payment_authoriser === true || row.payment_golden_key === true;
+      if (!allowed) return { ok: false, response: badRequest('PAYMENT_PERMISSION_REQUIRED') };
+      return { ok: true, user: row };
+    } catch (e) {
+      return { ok: false, response: serverError(String(e?.message || e || 'Failed to validate payment permission')) };
+    }
+  };
+
+  const normalizeSelection = (body) => {
+    const directKeys = [
+      'scope_type',
+      'requested_action',
+      'source_context',
+      'pay_batch_candidate_id',
+      'pay_batch_candidate_ids',
+      'pay_bank_transfer_id',
+      'pay_bank_transfer_ids',
+      'pay_batch_item_id',
+      'pay_batch_item_ids',
+      'expected_pay_batch_item_ids',
+      'expected_item_count',
+      'candidate_id',
+      'candidate_ids',
+      'umbrella_id',
+      'umbrella_ids',
+      'transfer_group_key',
+      'finance_case_id',
+      'finance_case_ids',
+      'finance_component_id',
+      'finance_component_ids',
+      'reservation_id',
+      'reservation_ids',
+      'item_type',
+      'item_types'
+    ];
+
+    const source =
+      (body && body.selection_json && typeof body.selection_json === 'object' && !Array.isArray(body.selection_json)) ? body.selection_json
+        : (body && body.selection && typeof body.selection === 'object' && !Array.isArray(body.selection)) ? body.selection
+          : (body && directKeys.some((key) => Object.prototype.hasOwnProperty.call(body, key))) ? (() => {
+              const out = {};
+              for (const key of directKeys) {
+                if (Object.prototype.hasOwnProperty.call(body, key)) out[key] = body[key];
+              }
+              return out;
+            })()
+            : null;
+
+    if (!source || typeof source !== 'object' || Array.isArray(source)) {
+      return { ok: false, error: 'selection_json must be an object' };
+    }
+
+    const selection = { ...source };
+    if (body && body.requested_action !== undefined && selection.requested_action === undefined) {
+      selection.requested_action = body.requested_action;
+    }
+
+    const scopeType = String(selection.scope_type || '').trim().toUpperCase();
+    if (!scopeType) return { ok: false, error: 'selection scope_type is required' };
+    if (scopeType === 'TIMESHEET' || scopeType === 'TIMESHEETS') return { ok: false, error: 'TIMESHEET_SCOPE_NOT_ALLOWED' };
+    if (!['BATCH', 'CANDIDATES', 'TRANSFER', 'UMBRELLA_PAYMENT_GROUP'].includes(scopeType)) {
+      return { ok: false, error: 'Unsupported correction scope_type' };
+    }
+    selection.scope_type = scopeType;
+
+    if (selection.requested_action !== undefined && selection.requested_action !== null) {
+      selection.requested_action = String(selection.requested_action).trim().toUpperCase();
+    }
+
+    const hasNonEmptyArray = (value) => Array.isArray(value) && value.some((item) => String(item || '').trim());
+    if (scopeType === 'CANDIDATES' && !hasNonEmptyArray(selection.pay_batch_candidate_ids) && !hasNonEmptyArray(selection.candidate_ids)) {
+      return { ok: false, error: 'CANDIDATES scope requires pay_batch_candidate_ids or candidate_ids' };
+    }
+    if (scopeType === 'TRANSFER' && !String(selection.pay_bank_transfer_id || '').trim() && !hasNonEmptyArray(selection.pay_bank_transfer_ids)) {
+      return { ok: false, error: 'TRANSFER scope requires pay_bank_transfer_id or pay_bank_transfer_ids' };
+    }
+    if (scopeType === 'UMBRELLA_PAYMENT_GROUP') {
+      const hasUmbrella = !!String(selection.umbrella_id || '').trim() || hasNonEmptyArray(selection.umbrella_ids);
+      const hasGroup = !!String(selection.transfer_group_key || '').trim();
+      const hasTransfers = hasNonEmptyArray(selection.pay_bank_transfer_ids) || !!String(selection.pay_bank_transfer_id || '').trim();
+      if (!hasUmbrella && !hasGroup && !hasTransfers) {
+        return { ok: false, error: 'UMBRELLA_PAYMENT_GROUP scope requires umbrella, transfer group, or transfer identity' };
+      }
+    }
+
+    return { ok: true, selection };
+  };
+
+  const permission = await requirePaymentPermission();
+  if (!permission.ok) return withCORS(env, req, permission.response);
+
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return withCORS(env, req, badRequest('Invalid JSON'));
+
+  const selectionRes = normalizeSelection(body);
+  if (!selectionRes.ok) return withCORS(env, req, badRequest(selectionRes.error));
+
+  const reason = String(body.reason || body.correction_reason || '').trim();
+  if (!reason) return withCORS(env, req, badRequest('reason is required'));
+
+  const reauthToken = String(body.reauth_token || body.reauthToken || '').trim();
+  const reauthCheck = await verifyPaymentReversalReauth(env, user, reauthToken);
+  if (!reauthCheck.ok) return withCORS(env, req, reauthCheck.response);
+
+  const acceptedResolutionJson = (() => {
+    const value = body.accepted_resolution_json ?? body.acceptedResolutionJson ?? body.accepted_resolution ?? body.acceptedResolution ?? null;
+    if (value === null || value === undefined) return null;
+    return value;
+  })();
+
+  if (acceptedResolutionJson !== null && (typeof acceptedResolutionJson !== 'object' || Array.isArray(acceptedResolutionJson))) {
+    return withCORS(env, req, badRequest('accepted_resolution_json must be an object when supplied'));
+  }
+
+  try {
+    const rpcRes = await sbRpc(env, 'pay_payment_correction_request_start', {
+      p_pay_batch_id: id,
+      p_selection_json: selectionRes.selection,
+      p_reason: reason,
+      p_actor_user_id: String(user.id),
+      p_source_bank_event_id: null,
+      p_auto_requested: false,
+      p_accepted_resolution_json: acceptedResolutionJson
+    });
+    const result = unwrapRpc(rpcRes, 'pay_payment_correction_request_start');
+    return withCORS(env, req, ok({
+      ok: true,
+      correction_request_id: result?.correction_request_id || null,
+      pay_batch_id: result?.pay_batch_id || id,
+      status: result?.status || null,
+      plan: result?.plan || null,
+      progress: result?.progress || result?.work_item_progress || null,
+      result,
+      reauth: {
+        verified_by_user_id: reauthCheck.verified_by_user_id,
+        verified_at_utc: reauthCheck.verified_at_utc
+      }
+    }));
+  } catch (e) {
+    return rpcErrorResponse(e, 'PAYMENT_CORRECTION_START_FAILED', 'Payment correction start failed.');
+  }
+}
+
+async function handleBankingPayCorrectionAuthAction(env, req, user, correctionRequestId) {
+  const id = String(correctionRequestId || '').trim();
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  const enc = encodeURIComponent;
+
+  if (!id) return withCORS(env, req, badRequest('correction_request_id is required'));
+  if (!uuidRe.test(id)) return withCORS(env, req, badRequest('invalid_correction_request_id'));
+
+  const unwrapRpc = (rpcRes, key) => {
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(payload) && payload.length === 1 && payload[0] && typeof payload[0] === 'object') payload = payload[0];
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) payload = payload[key];
+    } catch {}
+    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : payload;
+  };
+
+  const jsonResponse = (status, payload) => {
+    const headers = new Headers();
+    headers.set('Content-Type', 'application/json; charset=utf-8');
+    let bodyOut = '';
+    try { bodyOut = JSON.stringify(payload && typeof payload === 'object' ? payload : { error: 'REQUEST_FAILED' }); }
+    catch { bodyOut = JSON.stringify({ error: 'REQUEST_FAILED', message: 'Failed to serialize response payload' }); }
+    return new Response(bodyOut, { status, headers });
+  };
+
+  const safeJsonParse = (s) => {
+    try { return JSON.parse(String(s || '')); } catch { return null; }
+  };
+
+  const extractDbRaisedJson = (e) => {
+    try {
+      const ej = (e && typeof e === 'object' && e.json && typeof e.json === 'object') ? e.json : null;
+      let msg = (ej && typeof ej.message === 'string') ? ej.message : null;
+
+      if (!msg && e && typeof e === 'object' && typeof e.body === 'string' && e.body.trim()) {
+        const envObj = safeJsonParse(e.body);
+        if (envObj && typeof envObj === 'object' && typeof envObj.message === 'string') msg = envObj.message;
+      }
+
+      if (!msg && e && typeof e === 'object' && typeof e.message === 'string' && e.message.trim()) {
+        const m = e.message;
+        const i1 = m.indexOf('{');
+        const i2 = m.lastIndexOf('}');
+        if (i1 !== -1 && i2 !== -1 && i2 > i1) {
+          const envObj = safeJsonParse(m.slice(i1, i2 + 1));
+          if (envObj && typeof envObj === 'object') {
+            if (typeof envObj.message === 'string') msg = envObj.message;
+            if (!msg && typeof envObj.code === 'string') return envObj;
+          }
+        }
+      }
+
+      if (!msg || typeof msg !== 'string') return null;
+      const t = msg.trim();
+      if (t.startsWith('{') && t.endsWith('}')) {
+        const payload = safeJsonParse(t);
+        return (payload && typeof payload === 'object') ? payload : null;
+      }
+
+      const j1 = t.indexOf('{');
+      const j2 = t.lastIndexOf('}');
+      if (j1 !== -1 && j2 !== -1 && j2 > j1) {
+        const payload = safeJsonParse(t.slice(j1, j2 + 1));
+        return (payload && typeof payload === 'object') ? payload : null;
+      }
+    } catch {}
+    return null;
+  };
+
+  const rpcErrorResponse = (e, fallbackCode, fallbackMessage) => {
+    const dbPayload = extractDbRaisedJson(e);
+    if (dbPayload && typeof dbPayload === 'object') {
+      const code = String(dbPayload.code || dbPayload.error_code || fallbackCode || 'PAYMENT_CORRECTION_AUTH_ACTION_FAILED').trim().toUpperCase();
+      const message = String(dbPayload.message || dbPayload.error || fallbackMessage || code).trim() || code;
+      const status = code.includes('BLOCK') || code.includes('STALE') || code.includes('CONFLICT') || code.includes('TERMINAL') || code.includes('NOT_AUTHORISABLE') || code.includes('ALREADY') ? 409 : 400;
+      return withCORS(env, req, jsonResponse(status, { ...dbPayload, error_code: code, message, error: message }));
+    }
+
+    const raw = String(e?.message || e || fallbackMessage || 'Payment correction authorisation action failed.').trim();
+    return withCORS(env, req, jsonResponse(400, {
+      error: raw,
+      message: raw,
+      error_code: fallbackCode || 'PAYMENT_CORRECTION_AUTH_ACTION_FAILED'
+    }));
+  };
+
+  const ensurePaymentCorrectionPermission = async () => {
+    const userId = String(user?.id || '').trim();
+    if (!userId || !uuidRe.test(userId)) return { ok: false, response: unauthorized('Unauthorized') };
+
+    try {
+      const { rows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/tms_users` +
+        `?id=eq.${enc(userId)}` +
+        `&select=id,is_active,role,payment_authoriser,payment_golden_key` +
+        `&limit=1`,
+        false
+      );
+      const row = (rows && rows[0]) ? rows[0] : null;
+      if (!row || row.is_active !== true) return { ok: false, response: unauthorized('Unauthorized') };
+
+      const role = String(row.role || '').trim().toLowerCase();
+      const allowed = role === 'admin' || row.payment_authoriser === true || row.payment_golden_key === true;
+      if (!allowed) return { ok: false, response: forbidden('PAYMENT_PERMISSION_REQUIRED') };
+
+      return { ok: true, user: row };
+    } catch (e) {
+      return { ok: false, response: serverError(String(e?.message || e || 'Failed to validate payment permission')) };
+    }
+  };
+
+  const loadProgress = async (correctionRequestId) => {
+    const requestId = String(correctionRequestId || '').trim();
+    if (!uuidRe.test(requestId)) return null;
+
+    try {
+      const q = new URLSearchParams();
+      q.set('select', 'id,status,last_error,result_json,work_kind,selection_json,attempt_count,pay_batch_candidate_id,pay_bank_transfer_id,candidate_id,umbrella_id,processed_at_utc');
+      q.set('correction_request_id', `eq.${requestId}`);
+      q.set('order', 'created_at_utc.asc,id.asc');
+      q.set('limit', '10000');
+
+      const { rows } = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/pay_payment_correction_work_items?${q.toString()}`, false);
+      const workItems = Array.isArray(rows) ? rows : [];
+      const totals = {
+        total: workItems.length,
+        pending: 0,
+        processing: 0,
+        applied: 0,
+        skipped: 0,
+        blocked: 0,
+        failed_retryable: 0,
+        failed_final: 0,
+        cancelled: 0
+      };
+
+      for (const item of workItems) {
+        const status = String(item?.status || '').trim().toUpperCase();
+        if (status === 'PENDING') totals.pending += 1;
+        else if (status === 'PROCESSING') totals.processing += 1;
+        else if (status === 'APPLIED') totals.applied += 1;
+        else if (status === 'SKIPPED') totals.skipped += 1;
+        else if (status === 'BLOCKED') totals.blocked += 1;
+        else if (status === 'FAILED_RETRYABLE') totals.failed_retryable += 1;
+        else if (status === 'FAILED_FINAL') totals.failed_final += 1;
+        else if (status === 'CANCELLED') totals.cancelled += 1;
+      }
+
+      const blockers = workItems
+        .filter((item) => ['BLOCKED', 'FAILED_RETRYABLE', 'FAILED_FINAL'].includes(String(item?.status || '').trim().toUpperCase()))
+        .slice(0, 200)
+        .map((item) => ({
+          work_item_id: item.id || null,
+          status: item.status || null,
+          work_kind: item.work_kind || null,
+          candidate_id: item.candidate_id || null,
+          pay_batch_candidate_id: item.pay_batch_candidate_id || null,
+          pay_bank_transfer_id: item.pay_bank_transfer_id || null,
+          umbrella_id: item.umbrella_id || null,
+          attempt_count: item.attempt_count ?? null,
+          last_error: item.last_error || null,
+          result_json: item.result_json || null
+        }));
+
+      return { totals, blockers };
+    } catch {
+      return null;
+    }
+  };
+
+  const permission = await ensurePaymentCorrectionPermission();
+  if (!permission.ok) return withCORS(env, req, permission.response);
+
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return withCORS(env, req, badRequest('Invalid JSON'));
+
+  const action = String(body.action ?? body.action_kind ?? '').trim().toUpperCase();
+  if (!['AUTHORISE', 'USE_GOLDEN_KEY', 'REJECT', 'CANCEL'].includes(action)) {
+    return withCORS(env, req, badRequest('action must be AUTHORISE, USE_GOLDEN_KEY, REJECT or CANCEL'));
+  }
+
+  const note = (body.note === null || body.note === undefined) ? null : String(body.note).trim();
+
+  if (action === 'AUTHORISE' || action === 'USE_GOLDEN_KEY') {
+    const reauthToken = String(body.reauth_token ?? body.reauthToken ?? '').trim();
+    const reauthCheck = await verifyPaymentReversalReauth(env, user, reauthToken);
+    if (!reauthCheck.ok) return withCORS(env, req, reauthCheck.response);
+  }
+
+  try {
+    const rpcRes = await sbRpc(env, 'pay_payment_correction_authorise', {
+      p_correction_request_id: id,
+      p_actor_user_id: String(user.id),
+      p_action: action,
+      p_note: note
+    });
+
+    const result = unwrapRpc(rpcRes, 'pay_payment_correction_authorise');
+    const progress = await loadProgress(id);
+    const payload = (result && typeof result === 'object' && !Array.isArray(result))
+      ? { ...result, progress: progress || result.progress || null }
+      : { ok: true, result, progress };
+
+    return withCORS(env, req, ok(payload));
+  } catch (e) {
+    return rpcErrorResponse(e, 'PAYMENT_CORRECTION_AUTH_ACTION_FAILED', 'Payment correction authorisation action failed.');
+  }
+}
+async function handleBankingPayCorrectionProcess(env, req, user, correctionRequestId) {
+  const id = String(correctionRequestId || '').trim();
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  const enc = encodeURIComponent;
+
+  if (!id) return withCORS(env, req, badRequest('correction_request_id is required'));
+  if (!uuidRe.test(id)) return withCORS(env, req, badRequest('invalid_correction_request_id'));
+
+  const unwrapRpc = (rpcRes, key) => {
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(payload) && payload.length === 1 && payload[0] && typeof payload[0] === 'object') payload = payload[0];
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) payload = payload[key];
+    } catch {}
+    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : payload;
+  };
+
+  const jsonResponse = (status, payload) => {
+    const headers = new Headers();
+    headers.set('Content-Type', 'application/json; charset=utf-8');
+    let bodyOut = '';
+    try { bodyOut = JSON.stringify(payload && typeof payload === 'object' ? payload : { error: 'REQUEST_FAILED' }); }
+    catch { bodyOut = JSON.stringify({ error: 'REQUEST_FAILED', message: 'Failed to serialize response payload' }); }
+    return new Response(bodyOut, { status, headers });
+  };
+
+  const safeJsonParse = (s) => {
+    try { return JSON.parse(String(s || '')); } catch { return null; }
+  };
+
+  const extractDbRaisedJson = (e) => {
+    try {
+      const ej = (e && typeof e === 'object' && e.json && typeof e.json === 'object') ? e.json : null;
+      let msg = (ej && typeof ej.message === 'string') ? ej.message : null;
+
+      if (!msg && e && typeof e === 'object' && typeof e.body === 'string' && e.body.trim()) {
+        const envObj = safeJsonParse(e.body);
+        if (envObj && typeof envObj === 'object' && typeof envObj.message === 'string') msg = envObj.message;
+      }
+
+      if (!msg && e && typeof e === 'object' && typeof e.message === 'string' && e.message.trim()) {
+        const m = e.message;
+        const i1 = m.indexOf('{');
+        const i2 = m.lastIndexOf('}');
+        if (i1 !== -1 && i2 !== -1 && i2 > i1) {
+          const envObj = safeJsonParse(m.slice(i1, i2 + 1));
+          if (envObj && typeof envObj === 'object') {
+            if (typeof envObj.message === 'string') msg = envObj.message;
+            if (!msg && typeof envObj.code === 'string') return envObj;
+          }
+        }
+      }
+
+      if (!msg || typeof msg !== 'string') return null;
+      const t = msg.trim();
+      if (t.startsWith('{') && t.endsWith('}')) {
+        const payload = safeJsonParse(t);
+        return (payload && typeof payload === 'object') ? payload : null;
+      }
+
+      const j1 = t.indexOf('{');
+      const j2 = t.lastIndexOf('}');
+      if (j1 !== -1 && j2 !== -1 && j2 > j1) {
+        const payload = safeJsonParse(t.slice(j1, j2 + 1));
+        return (payload && typeof payload === 'object') ? payload : null;
+      }
+    } catch {}
+    return null;
+  };
+
+  const rpcErrorResponse = (e, fallbackCode, fallbackMessage) => {
+    const dbPayload = extractDbRaisedJson(e);
+    if (dbPayload && typeof dbPayload === 'object') {
+      const code = String(dbPayload.code || dbPayload.error_code || fallbackCode || 'PAYMENT_CORRECTION_PROCESS_FAILED').trim().toUpperCase();
+      const message = String(dbPayload.message || dbPayload.error || fallbackMessage || code).trim() || code;
+      const status = code.includes('BLOCK') || code.includes('STALE') || code.includes('CONFLICT') || code.includes('DRIFT') ? 409 : 400;
+      return withCORS(env, req, jsonResponse(status, { ...dbPayload, error_code: code, message, error: message }));
+    }
+
+    const raw = String(e?.message || e || fallbackMessage || 'Payment correction process failed.').trim();
+    return withCORS(env, req, jsonResponse(400, {
+      error: raw,
+      message: raw,
+      error_code: fallbackCode || 'PAYMENT_CORRECTION_PROCESS_FAILED'
+    }));
+  };
+
+  const ensurePaymentCorrectionPermission = async () => {
+    const userId = String(user?.id || '').trim();
+    if (!userId || !uuidRe.test(userId)) return { ok: false, response: unauthorized('Unauthorized') };
+
+    try {
+      const { rows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/tms_users` +
+        `?id=eq.${enc(userId)}` +
+        `&select=id,is_active,role,payment_authoriser,payment_golden_key` +
+        `&limit=1`,
+        false
+      );
+      const row = (rows && rows[0]) ? rows[0] : null;
+      if (!row || row.is_active !== true) return { ok: false, response: unauthorized('Unauthorized') };
+
+      const role = String(row.role || '').trim().toLowerCase();
+      const allowed = role === 'admin' || row.payment_authoriser === true || row.payment_golden_key === true;
+      if (!allowed) return { ok: false, response: forbidden('PAYMENT_PERMISSION_REQUIRED') };
+
+      return { ok: true, user: row };
+    } catch (e) {
+      return { ok: false, response: serverError(String(e?.message || e || 'Failed to validate payment permission')) };
+    }
+  };
+
+  const permission = await ensurePaymentCorrectionPermission();
+  if (!permission.ok) return withCORS(env, req, permission.response);
+
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+  if (body !== null && (typeof body !== 'object' || Array.isArray(body))) return withCORS(env, req, badRequest('Invalid JSON'));
+  body = body || {};
+
+  const limit = (() => {
+    const raw = body.limit ?? body.p_limit ?? 50;
+    const n = Number(raw);
+    if (!Number.isFinite(n)) return 50;
+    return Math.max(1, Math.min(100, Math.trunc(n)));
+  })();
+
+  try {
+    const rpcRes = await sbRpc(env, 'pay_payment_correction_process_chunk', {
+      p_correction_request_id: id,
+      p_limit: limit,
+      p_worker_id: 'manual-correction',
+      p_actor_user_id: String(user.id)
+    });
+
+    const result = unwrapRpc(rpcRes, 'pay_payment_correction_process_chunk');
+    return withCORS(env, req, ok(result && typeof result === 'object' ? result : { ok: true, result }));
+  } catch (e) {
+    return rpcErrorResponse(e, 'PAYMENT_CORRECTION_PROCESS_FAILED', 'Payment correction process failed.');
+  }
+}
+
+
+
+async function handleBankingPayCorrectionStatus(env, req, user, correctionRequestId) {
+  const id = String(correctionRequestId || '').trim();
+  if (!id) return withCORS(env, req, badRequest('correction_request_id is required'));
+
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  if (!uuidRe.test(id)) return withCORS(env, req, badRequest('invalid_correction_request_id'));
+
+  const jsonResponse = (status, payload) => {
+    const headers = new Headers(JSON_HEADERS);
+    headers.set('Content-Type', 'application/json; charset=utf-8');
+    return new Response(JSON.stringify(payload && typeof payload === 'object' ? payload : { error: String(payload || 'error') }), { status, headers });
+  };
+
+  const requirePaymentPermission = async () => {
+    const currentUserId = String(user?.id || '').trim();
+    if (!currentUserId) return { ok: false, response: unauthorized('Unauthorized') };
+
+    try {
+      const { rows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/tms_users?id=eq.${encodeURIComponent(currentUserId)}&select=id,is_active,role,payment_authoriser,payment_golden_key&limit=1`,
+        false
+      );
+      const row = (rows && rows[0]) ? rows[0] : null;
+      if (!row || row.is_active !== true) return { ok: false, response: unauthorized('Unauthorized') };
+
+      const role = String(row.role || '').trim().toLowerCase();
+      const allowed = role === 'admin' || row.payment_authoriser === true || row.payment_golden_key === true;
+      if (!allowed) return { ok: false, response: badRequest('PAYMENT_PERMISSION_REQUIRED') };
+      return { ok: true, user: row };
+    } catch (e) {
+      return { ok: false, response: serverError(String(e?.message || e || 'Failed to validate payment permission')) };
+    }
+  };
+
+  const permission = await requirePaymentPermission();
+  if (!permission.ok) return withCORS(env, req, permission.response);
+
+  const enc = encodeURIComponent;
+
+  try {
+    const requestSelect = [
+      'id',
+      'pay_batch_id',
+      'correction_kind',
+      'status',
+      'requested_by_user_id',
+      'requested_at_utc',
+      'required_quantity',
+      'approved_count',
+      'golden_key_used',
+      'golden_key_user_id',
+      'reason',
+      'selection_json',
+      'selection_hash',
+      'plan_json',
+      'plan_hash',
+      'accepted_resolution_json',
+      'accepted_resolution_hash',
+      'source_bank_event_id',
+      'auto_requested',
+      'created_at_utc',
+      'authorised_at_utc',
+      'applied_at_utc',
+      'cancelled_at_utc',
+      'updated_at_utc'
+    ].join(',');
+
+    const requestRes = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/pay_payment_correction_requests?id=eq.${enc(id)}&select=${requestSelect}&limit=1`,
+      false
+    );
+    const requestRow = (requestRes.rows && requestRes.rows[0]) ? requestRes.rows[0] : null;
+    if (!requestRow) {
+      return withCORS(env, req, jsonResponse(404, {
+        ok: false,
+        error: 'Payment issue not found.',
+        message: 'Payment issue not found.',
+        error_code: 'PAYMENT_CORRECTION_REQUEST_NOT_FOUND'
+      }));
+    }
+
+    const workSelect = [
+      'id',
+      'correction_request_id',
+      'pay_batch_id',
+      'pay_batch_candidate_id',
+      'pay_bank_transfer_id',
+      'candidate_id',
+      'umbrella_id',
+      'work_kind',
+      'selection_json',
+      'selection_hash',
+      'status',
+      'attempt_count',
+      'last_error',
+      'locked_at_utc',
+      'locked_by',
+      'created_at_utc',
+      'processed_at_utc',
+      'processed_by_user_id',
+      'result_json'
+    ].join(',');
+
+    const workRes = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/pay_payment_correction_work_items?correction_request_id=eq.${enc(id)}&select=${workSelect}&order=created_at_utc.asc,id.asc&limit=10000`,
+      false
+    );
+    const workItems = Array.isArray(workRes.rows) ? workRes.rows : [];
+
+    const totals = {
+      total: workItems.length,
+      pending: 0,
+      processing: 0,
+      applied: 0,
+      skipped: 0,
+      blocked: 0,
+      failed_retryable: 0,
+      failed_final: 0,
+      cancelled: 0
+    };
+
+    for (const item of workItems) {
+      const status = String(item?.status || '').trim().toUpperCase();
+      if (status === 'PENDING') totals.pending += 1;
+      else if (status === 'PROCESSING') totals.processing += 1;
+      else if (status === 'APPLIED') totals.applied += 1;
+      else if (status === 'SKIPPED') totals.skipped += 1;
+      else if (status === 'BLOCKED') totals.blocked += 1;
+      else if (status === 'FAILED_RETRYABLE') totals.failed_retryable += 1;
+      else if (status === 'FAILED_FINAL') totals.failed_final += 1;
+      else if (status === 'CANCELLED') totals.cancelled += 1;
+    }
+
+    const blockerStatuses = new Set(['BLOCKED', 'FAILED_RETRYABLE', 'FAILED_FINAL']);
+    const blockedRows = workItems.filter((item) => blockerStatuses.has(String(item?.status || '').trim().toUpperCase()));
+
+    const blockers = blockedRows.map((item) => {
+      const resultJson = (item && item.result_json && typeof item.result_json === 'object' && !Array.isArray(item.result_json)) ? item.result_json : {};
+      const blocker = (resultJson.blocker && typeof resultJson.blocker === 'object' && !Array.isArray(resultJson.blocker)) ? resultJson.blocker : null;
+      return {
+        work_item_id: item.id || null,
+        status: item.status || null,
+        work_kind: item.work_kind || null,
+        candidate_id: item.candidate_id || null,
+        pay_batch_candidate_id: item.pay_batch_candidate_id || null,
+        pay_bank_transfer_id: item.pay_bank_transfer_id || null,
+        umbrella_id: item.umbrella_id || null,
+        attempt_count: item.attempt_count ?? null,
+        code: blocker?.code || resultJson.code || resultJson.status || null,
+        message: blocker?.message || item.last_error || resultJson.error_message || resultJson.message || null,
+        last_error: item.last_error || null,
+        result_json: resultJson
+      };
+    });
+
+    const exportableBlockedRows = blockedRows.map((item) => ({
+      correction_request_id: item.correction_request_id || id,
+      work_item_id: item.id || null,
+      pay_batch_id: item.pay_batch_id || requestRow.pay_batch_id || null,
+      status: item.status || null,
+      work_kind: item.work_kind || null,
+      candidate_id: item.candidate_id || null,
+      pay_batch_candidate_id: item.pay_batch_candidate_id || null,
+      pay_bank_transfer_id: item.pay_bank_transfer_id || null,
+      umbrella_id: item.umbrella_id || null,
+      attempt_count: item.attempt_count ?? null,
+      last_error: item.last_error || null,
+      locked_at_utc: item.locked_at_utc || null,
+      locked_by: item.locked_by || null,
+      processed_at_utc: item.processed_at_utc || null,
+      processed_by_user_id: item.processed_by_user_id || null,
+      selection_json: item.selection_json || {},
+      result_json: item.result_json || {}
+    }));
+
+    const displayTotals = {
+      total: totals.total,
+      applied: totals.applied + totals.skipped,
+      waiting: totals.pending,
+      processing: totals.processing,
+      needs_review: totals.blocked,
+      could_not_apply: totals.failed_retryable + totals.failed_final
+    };
+
+    const requestStatusUpper = String(requestRow?.status || '').trim().toUpperCase();
+    const requiresUserAction = (
+      displayTotals.needs_review > 0
+      || displayTotals.could_not_apply > 0
+      || ['BLOCKED', 'APPLIED_WITH_BLOCKERS', 'FAILED'].includes(requestStatusUpper)
+    );
+
+    return withCORS(env, req, ok({
+      ok: true,
+      correction_request_id: id,
+      request: requestRow,
+      totals,
+      display_totals: displayTotals,
+      requires_user_action: requiresUserAction,
+      blockers,
+      exportable_blocked_rows: exportableBlockedRows
+    }));
+  } catch (e) {
+    const message = String(e?.message || e || 'Payment issue status failed.');
+    return withCORS(env, req, jsonResponse(500, {
+      ok: false,
+      error: message,
+      message,
+      error_code: 'PAYMENT_CORRECTION_STATUS_FAILED'
+    }));
+  }
+}
+
+
 
 async function handleBankingPayBatchExportCsv(env, req, user, payBatchId) {
   if (!user) return withCORS(env, req, unauthorized());
@@ -25747,6 +27175,9 @@ async function handleBankingPayBatchExportDetailCsv(env, req, user, payBatchId) 
   }
 }
 
+
+
+
 async function handleBankingPayBatchPoll(env, req, user, payBatchId) {
   const id = String(payBatchId || '').trim();
   if (!id) return withCORS(env, req, badRequest('pay_batch_id is required'));
@@ -26048,7 +27479,118 @@ async function handleBankingPayBatchPoll(env, req, user, payBatchId) {
     let remitInfoFromPoll = { attempted: false, ok: false, reason: 'NOT_ATTEMPTED' };
 
     try {
-      polled = await adapter.pollBatch(env, id, user.id);
+      if (provider === 'REVOLUT') {
+        const token = await revolutAuth_getAccessToken(env);
+        const pollableTransfers = [];
+
+        for (const transferRow of (transfers || [])) {
+          if (!hasPollableSubmissionEvidence(transferRow)) continue;
+          const requestId = String(transferRow?.request_id || '').trim();
+          if (!requestId) continue;
+          pollableTransfers.push({ transfer: transferRow, requestId });
+        }
+
+        const providerEvents = [];
+        for (const pollable of pollableTransfers) {
+          const transferRow = pollable.transfer;
+          const event = await revolutPayment_poll(env, token, {
+            request_id: pollable.requestId,
+            transfer_id: String(transferRow?.id || '').trim(),
+            pay_batch_id: id,
+            amount: Number(transferRow?.amount || 0),
+            currency: String(transferRow?.currency || 'GBP').trim().toUpperCase() || 'GBP'
+          });
+
+          providerEvents.push({
+            ...event,
+            transfer_id: String(transferRow?.id || '').trim(),
+            pay_bank_transfer_id: String(transferRow?.id || '').trim(),
+            pay_batch_id: id,
+            amount: Number.isFinite(Number(event?.amount)) ? Number(event.amount) : Number(transferRow?.amount || 0),
+            currency: String(event?.currency || transferRow?.currency || 'GBP').trim().toUpperCase() || 'GBP'
+          });
+        }
+
+        if (!providerEvents.length) {
+          polled = {
+            ok: true,
+            pay_batch_id: id,
+            polled: 0,
+            events: [],
+            event_results: [],
+            events_ingested: 0,
+            completed_settled: 0,
+            corrections_started: 0,
+            corrections_processing: 0,
+            corrections_applied: 0,
+            action_required: 0,
+            settled: null
+          };
+        } else {
+          const applyUpdates0 = await sbRpc(env, 'pay_bank_transfers_apply_rail_updates', {
+            p_pay_batch_id: String(id),
+            p_updates: providerEvents,
+            p_actor_user_id: String(user.id)
+          });
+          const applyUpdates = unwrapRpc(applyUpdates0, 'pay_bank_transfers_apply_rail_updates');
+          const eventResults = Array.isArray(applyUpdates?.event_results) ? applyUpdates.event_results : [];
+          const settlementJson = Array.isArray(applyUpdates?.settlement_json) ? applyUpdates.settlement_json : [];
+          const settlementRequired = applyUpdates?.settlement_required === true && settlementJson.length > 0;
+          let settledObj = null;
+
+          if (settlementRequired) {
+            const settled0 = await sbRpc(env, 'pay_settle_rail', {
+              p_pay_batch_id: String(id),
+              p_settlement_json: settlementJson,
+              p_actor_user_id: String(user.id)
+            });
+            settledObj = unwrapRpc(settled0, 'pay_settle_rail');
+          }
+
+          const countByDisposition = (values) => {
+            const set = new Set(values.map((value) => String(value || '').trim().toUpperCase()).filter(Boolean));
+            return eventResults.filter((eventRow) => {
+              const direct = String(eventRow?.correction_disposition || '').trim().toUpperCase();
+              const nested = String(eventRow?.ingest_result?.correction_disposition || '').trim().toUpperCase();
+              return set.has(direct) || set.has(nested);
+            }).length;
+          };
+
+          const correctionRequestCount = eventResults.filter((eventRow) => {
+            const direct = String(eventRow?.correction_request_id || '').trim();
+            const nested = String(eventRow?.ingest_result?.correction_request_id || '').trim();
+            return !!(direct || nested);
+          }).length;
+
+          const completedSettledCount = (() => {
+            const n = Number(
+              settledObj?.newly_settled_count
+              ?? settledObj?.settled_count
+              ?? settledObj?.completed_count
+              ?? 0
+            );
+            return Number.isFinite(n) ? n : 0;
+          })();
+
+          polled = {
+            ok: true,
+            pay_batch_id: id,
+            polled: providerEvents.length,
+            events: providerEvents,
+            event_results: eventResults,
+            apply_updates_result: applyUpdates,
+            settled: settledObj,
+            events_ingested: Number.isFinite(Number(applyUpdates?.event_result_count)) ? Number(applyUpdates.event_result_count) : eventResults.length,
+            completed_settled: completedSettledCount,
+            corrections_started: correctionRequestCount,
+            corrections_processing: countByDisposition(['AUTO_PROCESSING']),
+            corrections_applied: countByDisposition(['AUTO_APPLIED']),
+            action_required: countByDisposition(['ACTION_REQUIRED', 'BLOCKED', 'AMBIGUOUS', 'FAILED'])
+          };
+        }
+      } else {
+        polled = await adapter.pollBatch(env, id, user.id);
+      }
     } catch (e) {
       const msg = (e && e.message) ? String(e.message) : String(e || 'POLL_FAILED');
       if (msg.includes('RAIL_ENV_MISMATCH')) {
@@ -26148,6 +27690,7 @@ async function handleBankingPayBatchPoll(env, req, user, payBatchId) {
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
 }
+
 
 
 async function handleContractsCalendar(env, req, contractId) {
@@ -56777,6 +58320,23 @@ async function enqueuePayBatchRemittancesAfterSettlement(env, opts = {}) {
     opts?.result
   );
 
+  const prebuiltQueueStageResult = getObject(
+    opts?.prebuiltQueueStageResult,
+    opts?.prebuilt_queue_stage_result,
+    opts?.remittanceQueueStageResult,
+    opts?.remittance_queue_stage_result,
+    suppliedSettlement?.remittance_queue_stage_result,
+    suppliedSettlement?.remittanceQueueStageResult,
+    suppliedSettlement?.worker_communications?.result,
+    suppliedSettlement?.queue_result
+  );
+
+  const onlyConfirmed = (() => {
+    if (opts?.onlyConfirmed !== undefined) return readBool(opts.onlyConfirmed);
+    if (opts?.only_confirmed !== undefined) return readBool(opts.only_confirmed);
+    return true;
+  })();
+
   let batchGet = extractBatchPayload(
     opts?.pay_batch_get
       ?? opts?.batch_get
@@ -56880,7 +58440,9 @@ async function enqueuePayBatchRemittancesAfterSettlement(env, opts = {}) {
       payBatchId,
       scope: effectiveScope,
       actorUserId,
-      batch_get: batchGet
+      batch_get: batchGet,
+      prebuiltQueueStageResult,
+      onlyConfirmed
     });
 
     return {
@@ -56910,6 +58472,7 @@ async function enqueuePayBatchRemittancesAfterSettlement(env, opts = {}) {
     };
   }
 }
+
 
 
 
@@ -79900,6 +81463,13 @@ async function handleGetSettings(env, req) {
         // ✅ NEW: payment authoriser quantity
         'payment_authoriser_quantity',
 
+        // ✅ NEW: payment correction/remittance timing settings
+        'payment_remittance_send_timing',
+        'payment_return_auto_reverse_timesheets',
+        'payment_return_admin_recipient_role',
+        'payment_return_admin_notice_quiet_minutes',
+        'payment_return_admin_notice_max_wait_minutes',
+
         // ✅ NEW: pay eligibility window (Option A)
         'pay_eligibility_months_back',
         // NOTE: pay_eligibility_weeks_ahead is deprecated (cutoff date controls upper bound); do not expose.
@@ -79991,7 +81561,6 @@ async function handleGetSettings(env, req) {
   }
 }
 
-
 async function handleUpdateSettings(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized('Unauthorized');
@@ -80037,6 +81606,13 @@ async function handleUpdateSettings(env, req) {
     // ✅ NEW: payment authoriser quantity
     'payment_authoriser_quantity',
 
+    // ✅ NEW: payment correction/remittance timing settings
+    'payment_remittance_send_timing',
+    'payment_return_auto_reverse_timesheets',
+    'payment_return_admin_recipient_role',
+    'payment_return_admin_notice_quiet_minutes',
+    'payment_return_admin_notice_max_wait_minutes',
+
     // ✅ NEW: pay eligibility window (Option A)
     'pay_eligibility_months_back',
     // NOTE: pay_eligibility_weeks_ahead is deprecated (cutoff date controls upper bound); ignore updates.
@@ -80065,14 +81641,26 @@ async function handleUpdateSettings(env, req) {
   // If we need to validate default funding account ref, fetch rail defaults once
   const needsRailFundingValidation = ('rail_default_funding_account_ref' in data);
 
+  // If quiet/max settings are updated independently, fetch current values to validate the combined pair.
+  const needsPaymentCorrectionTimingValidation =
+    ('payment_return_admin_notice_quiet_minutes' in data) ||
+    ('payment_return_admin_notice_max_wait_minutes' in data);
+
   let currentEmailSettings = null;
   let currentRailDefaults = null;
+  let currentPaymentCorrectionSettings = null;
 
-  if (needsWebhookMerge || needsRailFundingValidation) {
+  if (needsWebhookMerge || needsRailFundingValidation || needsPaymentCorrectionTimingValidation) {
     try {
       const selParts = [];
       if (needsWebhookMerge) selParts.push('finance_email_settings', 'system_emails');
       if (needsRailFundingValidation) selParts.push('rail_provider_default', 'rail_env_default');
+      if (needsPaymentCorrectionTimingValidation) {
+        selParts.push(
+          'payment_return_admin_notice_quiet_minutes',
+          'payment_return_admin_notice_max_wait_minutes'
+        );
+      }
       const sel = selParts.join(',');
 
       const { rows } = await sbFetch(
@@ -80095,9 +81683,22 @@ async function handleUpdateSettings(env, req) {
           rail_env_default: row0.rail_env_default
         };
       }
+
+      if (needsPaymentCorrectionTimingValidation) {
+        currentPaymentCorrectionSettings = {
+          payment_return_admin_notice_quiet_minutes: row0.payment_return_admin_notice_quiet_minutes,
+          payment_return_admin_notice_max_wait_minutes: row0.payment_return_admin_notice_max_wait_minutes
+        };
+      }
     } catch {
       if (needsWebhookMerge) currentEmailSettings = { finance_email_settings: {}, system_emails: {} };
       if (needsRailFundingValidation) currentRailDefaults = { rail_provider_default: null, rail_env_default: null };
+      if (needsPaymentCorrectionTimingValidation) {
+        currentPaymentCorrectionSettings = {
+          payment_return_admin_notice_quiet_minutes: 10,
+          payment_return_admin_notice_max_wait_minutes: 60
+        };
+      }
     }
   }
 
@@ -80167,8 +81768,83 @@ async function handleUpdateSettings(env, req) {
 
   const MAX_REM_MSG_LEN = 2000;
 
+  const parseStrictBoolean = (raw, fieldName) => {
+    if (typeof raw === 'boolean') return raw;
+    if (typeof raw === 'string') {
+      const t = raw.trim().toLowerCase();
+      if (t === 'true') return true;
+      if (t === 'false') return false;
+    }
+    throw new Error(`${fieldName} must be boolean`);
+  };
+
+  const parseStrictInteger = (raw, fieldName) => {
+    const n = Number(raw);
+    const v = Number.isFinite(n) ? Math.trunc(n) : NaN;
+    if (!Number.isFinite(v)) throw new Error(`${fieldName} must be an integer`);
+    return v;
+  };
+
   for (const k of allowed) {
     if (!(k in data)) continue;
+
+    if (k === 'payment_remittance_send_timing') {
+      const v = String(data.payment_remittance_send_timing || '').trim().toUpperCase();
+      if (!['ON_EXECUTION', 'ON_PAYMENT_CONFIRMED'].includes(v)) {
+        return withCORS(env, req, badRequest('payment_remittance_send_timing must be ON_EXECUTION or ON_PAYMENT_CONFIRMED'));
+      }
+      payload.payment_remittance_send_timing = v;
+      continue;
+    }
+
+    if (k === 'payment_return_auto_reverse_timesheets') {
+      try {
+        payload.payment_return_auto_reverse_timesheets = parseStrictBoolean(data.payment_return_auto_reverse_timesheets, 'payment_return_auto_reverse_timesheets');
+      } catch (e) {
+        return withCORS(env, req, badRequest(String(e?.message || e)));
+      }
+      continue;
+    }
+
+    if (k === 'payment_return_admin_recipient_role') {
+      if (typeof data.payment_return_admin_recipient_role !== 'string') {
+        return withCORS(env, req, badRequest('payment_return_admin_recipient_role must be a non-empty string'));
+      }
+      const v = data.payment_return_admin_recipient_role.trim();
+      if (!v) {
+        return withCORS(env, req, badRequest('payment_return_admin_recipient_role must be a non-empty string'));
+      }
+      payload.payment_return_admin_recipient_role = v;
+      continue;
+    }
+
+    if (k === 'payment_return_admin_notice_quiet_minutes') {
+      let v;
+      try {
+        v = parseStrictInteger(data.payment_return_admin_notice_quiet_minutes, 'payment_return_admin_notice_quiet_minutes');
+      } catch (e) {
+        return withCORS(env, req, badRequest(String(e?.message || e)));
+      }
+      if (!(v >= 0 && v <= 1440)) {
+        return withCORS(env, req, badRequest('payment_return_admin_notice_quiet_minutes must be an integer between 0 and 1440'));
+      }
+      payload.payment_return_admin_notice_quiet_minutes = v;
+      continue;
+    }
+
+    if (k === 'payment_return_admin_notice_max_wait_minutes') {
+      let v;
+      try {
+        v = parseStrictInteger(data.payment_return_admin_notice_max_wait_minutes, 'payment_return_admin_notice_max_wait_minutes');
+      } catch (e) {
+        return withCORS(env, req, badRequest(String(e?.message || e)));
+      }
+      if (!(v >= 0 && v <= 1440)) {
+        return withCORS(env, req, badRequest('payment_return_admin_notice_max_wait_minutes must be an integer between 0 and 1440'));
+      }
+      payload.payment_return_admin_notice_max_wait_minutes = v;
+      continue;
+    }
 
     if (k === 'comms_adaptors_json') {
       const raw = data.comms_adaptors_json;
@@ -80563,6 +82239,31 @@ async function handleUpdateSettings(env, req) {
     payload[k] = data[k];
   }
 
+  if (
+    ('payment_return_admin_notice_quiet_minutes' in payload) ||
+    ('payment_return_admin_notice_max_wait_minutes' in payload)
+  ) {
+    const quiet = ('payment_return_admin_notice_quiet_minutes' in payload)
+      ? payload.payment_return_admin_notice_quiet_minutes
+      : (() => {
+          const n = Number(currentPaymentCorrectionSettings?.payment_return_admin_notice_quiet_minutes);
+          const v = Number.isFinite(n) ? Math.trunc(n) : 10;
+          return (v >= 0 && v <= 1440) ? v : 10;
+        })();
+
+    const maxWait = ('payment_return_admin_notice_max_wait_minutes' in payload)
+      ? payload.payment_return_admin_notice_max_wait_minutes
+      : (() => {
+          const n = Number(currentPaymentCorrectionSettings?.payment_return_admin_notice_max_wait_minutes);
+          const v = Number.isFinite(n) ? Math.trunc(n) : 60;
+          return (v >= 0 && v <= 1440) ? v : 60;
+        })();
+
+    if (maxWait < quiet) {
+      return withCORS(env, req, badRequest('payment_return_admin_notice_max_wait_minutes must be greater than or equal to payment_return_admin_notice_quiet_minutes'));
+    }
+  }
+
   try {
     const res = await fetch(`${env.SUPABASE_URL}/rest/v1/settings_defaults?id=eq.1`, {
       method: "PATCH",
@@ -80601,9 +82302,6 @@ async function handleUpdateSettings(env, req) {
   }
 }
 
-
-
-
 async function handleAuthReauthVerify(env, req) {
   const pre = preflightIfNeeded(env, req); if (pre) return pre;
 
@@ -80621,6 +82319,16 @@ async function handleAuthReauthVerify(env, req) {
     return badRequest('invalid_challenge_id');
   }
   if (!/^\d{6}$/.test(code)) return badRequest('invalid_code_format');
+
+  const allowedPurposes = new Set(['PAYMENT_SCHEDULE', 'PAYE_SAME_WEEK_OVERRIDE', 'PAYMENT_REVERSAL']);
+  const requestedPurposeRaw = (body.purpose !== undefined && body.purpose !== null)
+    ? body.purpose
+    : ((body.reauth_purpose !== undefined && body.reauth_purpose !== null) ? body.reauth_purpose : null);
+  const requestedPurpose = requestedPurposeRaw === null ? null : String(requestedPurposeRaw || '').trim().toUpperCase();
+
+  if (requestedPurpose && !allowedPurposes.has(requestedPurpose)) {
+    return badRequest('invalid_reauth_purpose');
+  }
 
   // Load auth policy (reuse same policy source as login 2FA)
   let authEffective = null;
@@ -80640,12 +82348,28 @@ async function handleAuthReauthVerify(env, req) {
 
   let ch;
   try {
-    ch = await sbGet2faChallengeById(env, challengeId);
+    const { rows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/tms_login_2fa_challenges` +
+        `?id=eq.${encodeURIComponent(challengeId)}` +
+        `&select=id,user_id,ip_address,code_salt,code_hash,expires_at_utc,used_at_utc,attempt_count,purpose` +
+        `&limit=1`
+    );
+    ch = (rows && rows[0]) ? rows[0] : null;
   } catch (e) {
     return serverError(e?.message || String(e));
   }
 
   if (!ch) return badRequest('invalid_challenge');
+
+  const challengePurpose = String(ch.purpose || 'PAYMENT_SCHEDULE').trim().toUpperCase();
+  if (!allowedPurposes.has(challengePurpose)) {
+    return badRequest('invalid_challenge_purpose');
+  }
+
+  if (requestedPurpose && requestedPurpose !== challengePurpose) {
+    return unauthorized('Invalid code');
+  }
 
   // Must match current logged-in user
   if (String(ch.user_id || '').trim() !== String(u.id || '').trim()) {
@@ -80700,14 +82424,14 @@ async function handleAuthReauthVerify(env, req) {
     await sbUpsert2faTrust(env, ch.user_id, ipKey, { verifiedAtIso: nowIso, lastUsedAtIso: nowIso });
   } catch {}
 
-  // Mint short-lived reauth token
+  // Mint short-lived reauth token, bound to the challenge purpose.
   const ttlSec = 300; // 5 minutes
   const exp = Math.floor(Date.now() / 1000) + ttlSec;
   const iat = Math.floor(Date.now() / 1000);
   const payload = {
     typ: 'reauth',
     sub: String(u.id),
-    purpose: 'PAYMENT_SCHEDULE',
+    purpose: challengePurpose,
     iat,
     exp
   };
@@ -80721,11 +82445,99 @@ async function handleAuthReauthVerify(env, req) {
 
   return new Response(JSON.stringify({
     ok: true,
-    purpose: 'PAYMENT_SCHEDULE',
+    purpose: challengePurpose,
     reauth_token: token,
     expires_in: ttlSec
   }), { status: 200, headers: JSON_HEADERS });
 }
+
+
+async function verifyPaymentReversalReauth(env, user, token) {
+  const reauthToken = String(token || '').trim();
+  if (!reauthToken) {
+    return {
+      ok: false,
+      response: badRequest('reauth_token is required'),
+      error: 'reauth_token is required'
+    };
+  }
+
+  const currentUserId = String(user?.id || '').trim();
+  if (!currentUserId) {
+    return {
+      ok: false,
+      response: unauthorized('Invalid reauth_token'),
+      error: 'Invalid reauth_token'
+    };
+  }
+
+  let verifiedToken;
+  try {
+    verifiedToken = await verifyToken(sessionSecret(env), reauthToken);
+  } catch (e) {
+    return {
+      ok: false,
+      response: unauthorized('Invalid reauth_token'),
+      error: String(e?.message || e || 'Invalid reauth_token')
+    };
+  }
+
+  if (!verifiedToken || verifiedToken.ok !== true) {
+    return {
+      ok: false,
+      response: unauthorized('Invalid reauth_token'),
+      error: String(verifiedToken?.error || 'Invalid reauth_token')
+    };
+  }
+
+  const payload = (verifiedToken && verifiedToken.payload && typeof verifiedToken.payload === 'object') ? verifiedToken.payload : {};
+  const typ = String(payload.typ || '').trim();
+  const purpose = String(payload.purpose || '').trim().toUpperCase();
+  const sub = String(payload.sub || '').trim();
+  const exp = Number(payload.exp);
+  const nowUnix = Math.floor(Date.now() / 1000);
+
+  if (typ !== 'reauth') {
+    return {
+      ok: false,
+      response: unauthorized('Invalid reauth_token'),
+      error: 'Invalid reauth_token'
+    };
+  }
+
+  if (purpose !== 'PAYMENT_REVERSAL') {
+    return {
+      ok: false,
+      response: unauthorized('Invalid reauth_token'),
+      error: 'Invalid reauth_token'
+    };
+  }
+
+  if (sub !== currentUserId) {
+    return {
+      ok: false,
+      response: unauthorized('Invalid reauth_token'),
+      error: 'Invalid reauth_token'
+    };
+  }
+
+  if (!Number.isFinite(exp) || nowUnix > exp) {
+    return {
+      ok: false,
+      response: unauthorized('Invalid reauth_token'),
+      error: 'Invalid reauth_token'
+    };
+  }
+
+  return {
+    ok: true,
+    verified_by_user_id: currentUserId,
+    verified_at_utc: new Date().toISOString()
+  };
+}
+
+
+
 
 async function handleAuthReauthStart(env, req) {
   const pre = preflightIfNeeded(env, req); if (pre) return pre;
@@ -80738,6 +82550,10 @@ async function handleAuthReauthStart(env, req) {
 
   const password = String(body.password || '').trim();
   if (!password) return badRequest('password_required');
+
+  const requestedPurpose = String(body.purpose || 'PAYMENT_SCHEDULE').trim().toUpperCase();
+  const allowedPurposes = new Set(['PAYMENT_SCHEDULE', 'PAYE_SAME_WEEK_OVERRIDE', 'PAYMENT_REVERSAL']);
+  if (!allowedPurposes.has(requestedPurpose)) return badRequest('invalid_reauth_purpose');
 
   // Verify current password against stored hash
   const userRow = await sbGetUserById(env, u.id); // includes password_hash
@@ -80769,16 +82585,30 @@ async function handleAuthReauthStart(env, req) {
   const salt = bufToBase64Url(crypto.getRandomValues(new Uint8Array(16)));
   const codeHash = await hash2faCode(salt, code);
 
-  // Insert challenge row (same table as login 2FA)
+  // Insert challenge row (same table as login 2FA), binding it to the requested reauth purpose.
   let challengeId = null;
   try {
-    challengeId = await sbInsert2faChallenge(env, {
-      user_id: userRow.id,
-      ip_address: ipKey,
-      code_salt: salt,
-      code_hash: codeHash,
-      expires_at_utc: expiresAtIso
+    const challengeRes = await fetch(`${env.SUPABASE_URL}/rest/v1/tms_login_2fa_challenges`, {
+      method: 'POST',
+      headers: { ...sbAuthHeaders(env), Prefer: 'return=representation' },
+      body: JSON.stringify({
+        user_id: String(userRow.id),
+        ip_address: String(ipKey),
+        code_salt: String(salt),
+        code_hash: String(codeHash),
+        expires_at_utc: String(expiresAtIso),
+        purpose: requestedPurpose
+      })
     });
+
+    if (!challengeRes.ok) {
+      const t = await challengeRes.text().catch(() => '');
+      return serverError(`2FA challenge insert failed (${challengeRes.status}) ${t || ''}`.trim());
+    }
+
+    const challengeRows = await challengeRes.json().catch(() => []);
+    const challengeRow = Array.isArray(challengeRows) ? challengeRows[0] : challengeRows;
+    challengeId = challengeRow && challengeRow.id ? String(challengeRow.id) : null;
   } catch (e) {
     return serverError(e?.message || String(e));
   }
@@ -80812,7 +82642,7 @@ async function handleAuthReauthStart(env, req) {
     htmlBody,
     textBody: bodyText,
     attachmentsV2: [],
-    meta: { kind: 'PAYMENT_REAUTH_2FA', user_id: String(userRow.id), challenge_id: String(challengeId), ip: ipKey, issued_at_utc: nowIso }
+    meta: { kind: 'PAYMENT_REAUTH_2FA', purpose: requestedPurpose, user_id: String(userRow.id), challenge_id: String(challengeId), ip: ipKey, issued_at_utc: nowIso }
   };
   if (replyTo) emailPayload.replyTo = replyTo;
 
@@ -80838,11 +82668,12 @@ async function handleAuthReauthStart(env, req) {
   return new Response(JSON.stringify({
     ok: true,
     tfa_required: true,
-    purpose: 'PAYMENT_SCHEDULE',
+    purpose: requestedPurpose,
     challenge_id: challengeId,
     expires_in: tfaCodeTtlSec
   }), { status: 200, headers: JSON_HEADERS });
 }
+
 
 function getClientIp(req) {
   const h = req && req.headers;
@@ -114751,6 +116582,17 @@ function getRailAdapter(provider) {
 
                 settlementUpdates.push({
                   transfer_id: transferId,
+                  pay_batch_id: batchId,
+                  provider_key: 'REVOLUT',
+                  provider_event_id: `SIMULATED:${requestId}`,
+                  provider_reference: `SIMULATED:${requestId}`,
+                  provider_state: 'PAYROLL_TESTING',
+                  normalised_state: 'COMPLETED',
+                  event_source: 'SYSTEM',
+                  event_time_utc: nowIso,
+                  amount: Number(t?.amount || 0),
+                  currency: String(t?.currency || 'GBP').toUpperCase(),
+                  raw_payload: { simulated: true, mode: 'payroll_testing', simulated_at_utc: nowIso, request_id: requestId },
                   status: 'COMPLETED',
                   rail_tx_id: `SIMULATED:${requestId}`,
                   rail_state: 'PAYROLL_TESTING',
@@ -114946,6 +116788,24 @@ function getRailAdapter(provider) {
 
                 updates.push({
                   transfer_id: transferId,
+                  pay_batch_id: batchId,
+                  provider_key: 'REVOLUT',
+                  provider_event_id: String(payRes.provider_event_id || payRes.event_id || payRes.rail_tx_id || requestId || '').trim() || null,
+                  provider_reference: String(payRes.provider_reference || payRes.payment_reference || payRes.rail_tx_id || requestId || '').trim() || null,
+                  provider_state: String(payRes.provider_state || payRes.rail_state || 'PENDING').trim() || 'PENDING',
+                  normalised_state: 'PENDING',
+                  event_source: 'SYSTEM',
+                  event_time_utc: nowIso,
+                  amount: Number(t?.amount || 0),
+                  currency: String(t?.currency || 'GBP').toUpperCase(),
+                  raw_payload: {
+                    source_adapter: 'REVOLUT',
+                    source_action: 'PAYMENT_CREATE',
+                    request_id: requestId,
+                    rail_tx_id: payRes.rail_tx_id || null,
+                    rail_state: payRes.rail_state || null,
+                    rail_meta_json: payRes.rail_meta_json || null
+                  },
                   status: 'PENDING',
                   rail_tx_id: payRes.rail_tx_id,
                   rail_state: payRes.rail_state,
@@ -114957,9 +116817,20 @@ function getRailAdapter(provider) {
                 const msg = (e && e.message) ? String(e.message) : String(e || 'unknown');
                 updates.push({
                   transfer_id: transferId,
+                  pay_batch_id: batchId,
+                  provider_key: 'REVOLUT',
+                  provider_event_id: null,
+                  provider_reference: requestId,
+                  provider_state: `CREATE_ERROR:${msg}`.slice(0, 500),
+                  normalised_state: 'PENDING',
+                  event_source: 'SYSTEM',
+                  event_time_utc: nowIso,
+                  amount: Number(t?.amount || 0),
+                  currency: String(t?.currency || 'GBP').toUpperCase(),
+                  raw_payload: { kind: 'REVOLUT_CREATE_ERROR', at_utc: nowIso, error: msg, request_id: requestId },
                   status: 'PENDING',
                   rail_state: `CREATE_ERROR:${msg}`.slice(0, 500),
-                  rail_meta_json: { kind: 'REVOLUT_CREATE_ERROR', at_utc: nowIso, error: msg },
+                  rail_meta_json: { kind: 'REVOLUT_CREATE_ERROR', at_utc: nowIso, error: msg, request_id: requestId },
                   failed_reason: null,
                   completed_at_utc: null
                 });
@@ -115121,13 +116992,34 @@ function getRailAdapter(provider) {
           for (const pollable of pollableTransfers) {
             const t = pollable.transfer;
             const polled = await revolutPayment_poll(env, token, { request_id: pollable.requestId });
+            const polledStatus = String(polled?.status || polled?.normalised_state || polled?.normalized_state || 'UNKNOWN').trim().toUpperCase();
+            const polledProviderState = String(polled?.provider_state || polled?.rail_state || polledStatus || '').trim() || null;
+            const polledRailTxId = polled?.rail_tx_id || polled?.provider_reference || polled?.payment_reference || null;
+            const polledAmount = Number(t?.amount || polled?.amount || 0);
+            const polledCurrency = String(t?.currency || polled?.currency || 'GBP').trim().toUpperCase() || 'GBP';
 
             updates.push({
               transfer_id: String(t?.id || '').trim(),
-              status: polled.status,
-              rail_tx_id: polled.rail_tx_id || null,
-              rail_state: polled.rail_state || null,
-              rail_meta_json: polled.rail_meta_json || null
+              pay_batch_id: String(batchId),
+              provider_key: 'REVOLUT',
+              provider_event_id: String(polled?.provider_event_id || polled?.event_id || polledRailTxId || pollable.requestId || '').trim() || null,
+              provider_reference: String(polled?.provider_reference || polled?.payment_reference || polledRailTxId || pollable.requestId || '').trim() || null,
+              provider_state: polledProviderState,
+              normalised_state: polledStatus,
+              event_source: 'PROVIDER_POLL',
+              event_time_utc: nowIso,
+              amount: Number.isFinite(polledAmount) ? polledAmount : null,
+              currency: polledCurrency,
+              raw_payload: {
+                source_adapter: 'REVOLUT',
+                source_action: 'PAYMENT_POLL',
+                request_id: pollable.requestId,
+                response: polled || null
+              },
+              status: polledStatus,
+              rail_tx_id: polledRailTxId,
+              rail_state: polled?.rail_state || polledProviderState,
+              rail_meta_json: polled?.rail_meta_json || polled?.raw_payload || null
             });
           }
 
@@ -115274,6 +117166,9 @@ function getRailAdapter(provider) {
   const mk = getRailAdapter.__RAIL_REGISTRY[p];
   return (typeof mk === 'function') ? mk() : null;
 }
+
+
+
 async function revolutAuth_getAccessToken(env) {
   const cacheKey = '__REVOLUT_TOKEN_CACHE__';
   const nowMs = Date.now();
@@ -115678,8 +117573,7 @@ async function revolutPayment_create(env, token, { request_id, source_account_id
     rail_meta_json: json || null
   };
 }
-
-async function revolutPayment_poll(env, token, { request_id }) {
+async function revolutPayment_poll(env, token, { request_id, transfer_id = null, pay_batch_id = null, amount = null, currency = null } = {}) {
   const t = token ? String(token).trim() : '';
   if (!t) throw new Error('REVOLUT_POLL_NO_TOKEN');
 
@@ -115690,7 +117584,6 @@ async function revolutPayment_poll(env, token, { request_id }) {
   const reqId = String(request_id || '').trim();
   if (!reqId) throw new Error('REVOLUT_POLL_REQUEST_ID_REQUIRED');
 
-  // GET /transaction/{transaction_id}?id_type=request_id — per docs. :contentReference[oaicite:9]{index=9}
   const url = `${apiBase}/transaction/${encodeURIComponent(reqId)}?id_type=request_id`;
 
   const res = await fetch(url, {
@@ -115710,20 +117603,105 @@ async function revolutPayment_poll(env, token, { request_id }) {
   }
 
   const txId = json && json.id ? String(json.id).trim() : null;
-  const state = json && json.state ? String(json.state).trim().toLowerCase() : '';
+  const rawState = json && json.state ? String(json.state).trim() : '';
+  const state = rawState.toLowerCase();
 
-  let status = 'PENDING';
-  if (state === 'completed') status = 'COMPLETED';
-  else if (state === 'declined' || state === 'failed' || state === 'reverted') status = 'FAILED';
-  else status = 'PENDING';
+  const normalisedState = (() => {
+    if (state === 'completed' || state === 'settled' || state === 'paid') return 'COMPLETED';
+    if (state === 'declined') return 'DECLINED';
+    if (state === 'rejected') return 'REJECTED';
+    if (state === 'failed') return 'FAILED';
+    if (state === 'cancelled' || state === 'canceled') return 'CANCELLED';
+    if (state === 'returned') return 'RETURNED';
+    if (state === 'reverted' || state === 'reversed') return 'REVERTED';
+    if (state === 'processing') return 'PROCESSING';
+    if (state === 'pending' || state === 'created' || state === 'queued' || state === 'accepted') return 'PENDING';
+    return 'UNKNOWN';
+  })();
+
+  const resolvedAmount = (() => {
+    const candidates = [
+      amount,
+      json && json.amount,
+      json && json.value,
+      json && json.requested_amount,
+      json && json.transaction_amount
+    ];
+    for (const value of candidates) {
+      if (value === null || value === undefined) continue;
+      if (typeof value === 'object' && value.amount !== undefined) {
+        const n = Number(value.amount);
+        if (Number.isFinite(n)) return n;
+        continue;
+      }
+      const n = Number(value);
+      if (Number.isFinite(n)) return n;
+    }
+    return null;
+  })();
+
+  const resolvedCurrency = (() => {
+    const candidates = [
+      currency,
+      json && json.currency,
+      json && json.ccy,
+      json && json.amount && typeof json.amount === 'object' ? json.amount.currency : null,
+      json && json.transaction_amount && typeof json.transaction_amount === 'object' ? json.transaction_amount.currency : null
+    ];
+    for (const value of candidates) {
+      const s = String(value == null ? '' : value).trim().toUpperCase();
+      if (s) return s;
+    }
+    return 'GBP';
+  })();
+
+  const eventTimeUtc = (() => {
+    const candidates = [
+      json && json.updated_at,
+      json && json.completed_at,
+      json && json.created_at,
+      json && json.started_at,
+      json && json.timestamp
+    ];
+    for (const value of candidates) {
+      const s = String(value == null ? '' : value).trim();
+      if (!s) continue;
+      const d = new Date(s);
+      if (Number.isFinite(d.getTime())) return d.toISOString();
+    }
+    return new Date().toISOString();
+  })();
+
+  const transferIdText = String(transfer_id || '').trim() || null;
+  const payBatchIdText = String(pay_batch_id || '').trim() || null;
+  const providerReference = txId || reqId;
 
   return {
-    status,
+    ok: true,
+    transfer_id: transferIdText,
+    pay_bank_transfer_id: transferIdText,
+    pay_batch_id: payBatchIdText,
+    provider_key: 'REVOLUT',
+    provider_event_id: txId || reqId,
+    provider_reference: providerReference,
+    payment_reference: providerReference,
+    provider_state: rawState || normalisedState,
+    normalised_state: normalisedState,
+    normalized_state: normalisedState,
+    event_source: 'PROVIDER_POLL',
+    event_time_utc: eventTimeUtc,
+    amount: resolvedAmount,
+    currency: resolvedCurrency,
+    raw_payload: json || {},
     rail_tx_id: txId,
-    rail_state: (json && json.state) ? String(json.state) : null,
-    rail_meta_json: json
+    rail_state: rawState || normalisedState,
+    rail_meta_json: json || {},
+    status: normalisedState
   };
 }
+
+
+
 
 async function csvAdapter_export(env, batchId, scope, actorUserId) {
   if (!batchId) throw new Error('csvAdapter_export: batchId required');
@@ -115836,6 +117814,11 @@ async function bankingCronTick(env, opts = {}) {
     submitted: [],
     polled_batches: [],
     settled_batches: [],
+    payment_corrections: {
+      process_chunk: null,
+      admin_notice_dispatch: null,
+      errors: []
+    },
     warnings: [],
     errors: []
   };
@@ -116939,12 +118922,18 @@ async function bankingCronTick(env, opts = {}) {
           if (!suppressRemittances) {
             remAttempted = true;
             try {
-              remResult = await sendPayBatchRemittancesInternal(env, {
+              const batchGetResForRemittance = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: batchId });
+              const batchGetPayloadForRemittance = _unwrapRpcPayload(batchGetResForRemittance, 'pay_batch_get');
+              remResult = await enqueuePayBatchRemittancesAfterSettlement(env, {
                 payBatchId: batchId,
                 scope: 'ALL',
-                actorUserId
+                actorUserId,
+                settlementResult: settledObj,
+                pay_batch_get: batchGetPayloadForRemittance,
+                onlyConfirmed: true
               });
-              remOk = true;
+              remOk = remResult && remResult.ok === true;
+              if (remResult && remResult.suppressed === true) remOk = true;
             } catch (e) {
               remOk = false;
               remError = _errMsg(e);
@@ -117012,8 +119001,46 @@ async function bankingCronTick(env, opts = {}) {
     });
   }
 
+
+  const correctionChunkLimit = (() => {
+    const n = Number(opts && (opts.correctionChunkLimit ?? opts.paymentCorrectionChunkLimit));
+    if (!Number.isFinite(n)) return 50;
+    return Math.max(1, Math.min(100, Math.trunc(n)));
+  })();
+
+  const adminNoticeDispatchLimit = (() => {
+    const n = Number(opts && (opts.adminNoticeDispatchLimit ?? opts.paymentReturnAdminNoticeDispatchLimit));
+    if (!Number.isFinite(n)) return 50;
+    return Math.max(1, Math.min(100, Math.trunc(n)));
+  })();
+
+  try {
+    const correctionChunkRes = await sbRpc(env, 'pay_payment_correction_process_chunk', {
+      p_limit: correctionChunkLimit,
+      p_worker_id: 'banking-cron'
+    });
+    summary.payment_corrections.process_chunk = _unwrapRpcPayload(correctionChunkRes, 'pay_payment_correction_process_chunk');
+  } catch (e) {
+    const err = { code: 'PAYMENT_CORRECTION_PROCESS_CHUNK_FAILED', error: _errMsg(e) };
+    summary.payment_corrections.errors.push(err);
+    summary.warnings.push(err);
+  }
+
+  try {
+    const noticeDispatchRes = await sbRpc(env, 'pay_payment_return_admin_notice_dispatch_due', {
+      p_limit: adminNoticeDispatchLimit
+    });
+    summary.payment_corrections.admin_notice_dispatch = _unwrapRpcPayload(noticeDispatchRes, 'pay_payment_return_admin_notice_dispatch_due');
+  } catch (e) {
+    const err = { code: 'PAYMENT_RETURN_ADMIN_NOTICE_DISPATCH_FAILED', error: _errMsg(e) };
+    summary.payment_corrections.errors.push(err);
+    summary.warnings.push(err);
+  }
+
   return summary;
 }
+
+
 
 
 function normalizeBankingPayPreviewDecisions(input, options = {}) {
@@ -123067,6 +125094,42 @@ if (req.method === 'POST' && p === '/api/banking/pay/reconcile-external') {
       return handleBankingPayBatchPoll(env, req, user, m.id);
     }
   }
+
+  {
+  const m = matchPath(p, '/api/banking/pay/batch/:id/correction/plan');
+  if (m && req.method === 'POST') {
+    return handleBankingPayCorrectionPlan(env, req, user, m.id);
+  }
+}
+
+{
+  const m = matchPath(p, '/api/banking/pay/batch/:id/correction/start');
+  if (m && req.method === 'POST') {
+    return handleBankingPayCorrectionStart(env, req, user, m.id);
+  }
+}
+
+{
+  const m = matchPath(p, '/api/banking/pay/correction/:id/auth-action');
+  if (m && req.method === 'POST') {
+    return handleBankingPayCorrectionAuthAction(env, req, user, m.id);
+  }
+}
+
+{
+  const m = matchPath(p, '/api/banking/pay/correction/:id/process');
+  if (m && req.method === 'POST') {
+    return handleBankingPayCorrectionProcess(env, req, user, m.id);
+  }
+}
+
+{
+  const m = matchPath(p, '/api/banking/pay/correction/:id/status');
+  if (m && req.method === 'GET') {
+    return handleBankingPayCorrectionStatus(env, req, user, m.id);
+  }
+}
+
   {
     const m = matchPath(p, '/api/banking/pay/batch/:id');
     if (m && req.method === 'GET') {
