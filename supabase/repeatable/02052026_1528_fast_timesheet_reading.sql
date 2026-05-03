@@ -4645,6 +4645,9 @@ DECLARE
   v_contract_candidate_id uuid := NULL;
   v_contract_client_id uuid := NULL;
   v_idempotency_key text := NULL;
+  v_client_idempotency_key text := NULL;
+  v_recipient_namespace text := NULL;
+  v_mail_held_until_pdf_rendered boolean := TRUE;
   v_existing_mail_id uuid := NULL;
   v_existing_mail_status text := NULL;
   v_mail_job_id uuid := NULL;
@@ -5043,19 +5046,38 @@ BEGIN
   WHERE tms_user_check.id = p_actor_user_id
   LIMIT 1;
 
-  v_idempotency_key := 'timesheet_qr_send:' || v_current_timesheet_id::text || ':' || md5(CONCAT_WS('|',
-    v_current_timesheet_id::text,
-    COALESCE(v_current_version::text, ''),
-    COALESCE(v_effective_qr_token, ''),
-    COALESCE(v_candidate_email, '')
-  ));
+  v_client_idempotency_key := NULLIF(
+    REGEXP_REPLACE(
+      LOWER(BTRIM(COALESCE(p_idempotency_key, ''))),
+      '[^a-z0-9._:-]+',
+      '-',
+      'g'
+    ),
+    ''
+  );
+
+  IF v_client_idempotency_key IS NULL THEN
+    v_client_idempotency_key := 'auto:' || md5(CONCAT_WS('|',
+      v_current_timesheet_id::text,
+      COALESCE(v_current_version::text, ''),
+      LOWER(COALESCE(v_candidate_email, ''))
+    ));
+  END IF;
+
+  v_recipient_namespace := md5(LOWER(COALESCE(v_candidate_email, '')));
+
+  v_idempotency_key := 'timesheet_qr_send:'
+    || v_current_timesheet_id::text
+    || ':v' || COALESCE(v_current_version::text, '0')
+    || ':recipient:' || v_recipient_namespace
+    || ':key:' || md5(v_client_idempotency_key);
 
   PERFORM pg_advisory_xact_lock(hashtext('timesheet_qr_send:' || v_current_timesheet_id::text));
   PERFORM pg_advisory_xact_lock(hashtext(v_idempotency_key));
 
   v_pdf_key := 'docs-pdf/timesheets/ts_' || v_current_timesheet_id::text || '.pdf';
   v_mail_reference := v_idempotency_key;
-  v_mail_scheduled_for_utc := v_now + interval '10 minutes';
+  v_mail_scheduled_for_utc := TIMESTAMPTZ '9999-12-31 00:00:00+00';
   v_mail_subject := CASE
     WHEN UPPER(COALESCE(v_sheet_scope, '')) = 'WEEKLY' THEN 'Weekly QR timesheet – week ending ' || COALESCE(v_week_ending_date::text, '(unknown)')
     ELSE 'Daily QR timesheet – ' || COALESCE((v_worked_start_iso AT TIME ZONE 'Europe/London')::date::text, '(unknown date)')
@@ -5152,9 +5174,12 @@ BEGIN
                'job_kind', 'TIMESHEET_QR_SEND',
                'pdf_job_id', v_pdf_job_id::text,
                'idempotency_key', v_idempotency_key,
+               'client_idempotency_key', v_client_idempotency_key,
                'requires_pdf_render', TRUE,
-               'release_mail_after_pdf_render', FALSE,
+               'release_mail_after_pdf_render', TRUE,
                'mail_delayed_for_pdf_render', TRUE,
+        'mail_held_until_pdf_rendered', v_mail_held_until_pdf_rendered,
+        'mail_hold_reason', 'PDF_RENDER_PENDING',
                'pdf_render_delay_minutes', 10,
                'pdf_storage_key', v_pdf_key,
                'current_timesheet_id', v_current_timesheet_id::text,
@@ -5163,7 +5188,7 @@ BEGIN
              )
        WHERE mail_update.id = v_existing_mail_id;
 
-      v_send_state := CASE WHEN UPPER(COALESCE(v_existing_mail_status, '')) = 'FAILED' THEN 'PDF_REQUEUED' ELSE 'PDF_ALREADY_QUEUED' END;
+      v_send_state := CASE WHEN UPPER(COALESCE(v_existing_mail_status, '')) = 'FAILED' THEN 'PDF_REQUEUED_MAIL_HELD' ELSE 'PDF_ALREADY_QUEUED_MAIL_HELD' END;
     END IF;
   ELSE
     INSERT INTO public.mail_outbox AS mail_insert (
@@ -5229,9 +5254,12 @@ BEGIN
         'job_kind', 'TIMESHEET_QR_SEND',
         'pdf_job_id', v_pdf_job_id::text,
         'idempotency_key', v_idempotency_key,
+        'client_idempotency_key', v_client_idempotency_key,
         'requires_pdf_render', TRUE,
-        'release_mail_after_pdf_render', FALSE,
+        'release_mail_after_pdf_render', TRUE,
         'mail_delayed_for_pdf_render', TRUE,
+        'mail_held_until_pdf_rendered', v_mail_held_until_pdf_rendered,
+        'mail_hold_reason', 'PDF_RENDER_PENDING',
         'pdf_render_delay_minutes', 10,
         'pdf_storage_key', v_pdf_key,
         'current_timesheet_id', v_current_timesheet_id::text,
@@ -5241,7 +5269,7 @@ BEGIN
     )
     RETURNING id INTO v_mail_job_id;
 
-    v_send_state := 'PDF_QUEUED';
+    v_send_state := 'PDF_QUEUED_MAIL_HELD';
   END IF;
 
   v_job_id := v_mail_job_id;
@@ -5283,10 +5311,13 @@ BEGIN
       'send_state', v_send_state,
       'recipient_email', v_candidate_email,
       'scheduled_for_utc', v_mail_scheduled_for_utc,
-      'mail_held_until_pdf_rendered', FALSE,
+      'mail_held_until_pdf_rendered', v_mail_held_until_pdf_rendered,
       'mail_delayed_for_pdf_render', TRUE,
+      'mail_hold_reason', 'PDF_RENDER_PENDING',
       'pdf_render_delay_minutes', 10,
-      'pdf_storage_key', v_pdf_key
+      'pdf_storage_key', v_pdf_key,
+      'client_idempotency_key', v_client_idempotency_key,
+      'recipient_namespace', v_recipient_namespace
     ),
     'Bulk QR send enqueue'
   );
@@ -5308,10 +5339,13 @@ BEGIN
     'recipient_name', v_candidate_name,
     'send_state', v_send_state,
     'scheduled_for_utc', v_mail_scheduled_for_utc,
-    'mail_held_until_pdf_rendered', FALSE,
+    'mail_held_until_pdf_rendered', v_mail_held_until_pdf_rendered,
     'mail_delayed_for_pdf_render', TRUE,
+    'mail_hold_reason', 'PDF_RENDER_PENDING',
     'pdf_render_delay_minutes', 10,
     'pdf_storage_key', v_pdf_key,
+    'client_idempotency_key', v_client_idempotency_key,
+    'recipient_namespace', v_recipient_namespace,
     'row_patch', COALESCE(v_post_row->'row_patch', jsonb_build_object()),
     'data_row', COALESCE(v_post_row, jsonb_build_object()),
     'row', COALESCE(v_post_row, jsonb_build_object()),
@@ -5341,4 +5375,588 @@ BEGIN
   );
 END;
 $function$;
+
+
+DROP FUNCTION IF EXISTS public.bulk_authorise_import_evidence_page_v1(jsonb, text, text, text, integer, integer, uuid);
+
+CREATE OR REPLACE FUNCTION public.bulk_authorise_import_evidence_page_v1(
+  p_items jsonb DEFAULT '[]'::jsonb,
+  p_classification text DEFAULT NULL,
+  p_section text DEFAULT NULL,
+  p_mode text DEFAULT 'view_all',
+  p_page integer DEFAULT 1,
+  p_page_size integer DEFAULT 20,
+  p_actor_user_id uuid DEFAULT NULL
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+STABLE SECURITY DEFINER
+SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_items jsonb := COALESCE(p_items, '[]'::jsonb);
+  v_classification text := UPPER(NULLIF(BTRIM(COALESCE(p_classification, '')), ''));
+  v_section text := LOWER(NULLIF(BTRIM(COALESCE(p_section, '')), ''));
+  v_mode text := LOWER(NULLIF(BTRIM(COALESCE(p_mode, 'view_all')), ''));
+  v_page integer := GREATEST(COALESCE(p_page, 1), 1);
+  v_page_size integer := CASE WHEN COALESCE(p_page_size, 20) <= 0 THEN NULL ELSE LEAST(GREATEST(COALESCE(p_page_size, 20), 1), 500) END;
+  v_uuid_re text := '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{12}$';
+  v_result jsonb := NULL;
+BEGIN
+  IF v_classification = 'HEALTHROSTER' THEN
+    v_classification := 'HR';
+  END IF;
+
+  IF v_classification NOT IN ('NHSP', 'HR') THEN
+    RETURN JSONB_BUILD_OBJECT(
+      'ok', FALSE,
+      'success', FALSE,
+      'error_code', 'INVALID_CLASSIFICATION',
+      'message', 'p_classification must be NHSP, HR, or HEALTHROSTER.',
+      'items', '[]'::jsonb,
+      'page', v_page,
+      'page_size', COALESCE(v_page_size, 0),
+      'total', 0,
+      'stale_items', '[]'::jsonb,
+      'accepted_row_keys', '[]'::jsonb
+    );
+  END IF;
+
+  IF v_section NOT IN ('processed_eligible', 'authorised_eligible') THEN
+    RETURN JSONB_BUILD_OBJECT(
+      'ok', FALSE,
+      'success', FALSE,
+      'error_code', 'INVALID_SECTION',
+      'message', 'p_section must be processed_eligible or authorised_eligible.',
+      'items', '[]'::jsonb,
+      'page', v_page,
+      'page_size', COALESCE(v_page_size, 0),
+      'total', 0,
+      'stale_items', '[]'::jsonb,
+      'accepted_row_keys', '[]'::jsonb
+    );
+  END IF;
+
+  IF v_mode NOT IN ('single', 'view_all') THEN
+    v_mode := 'view_all';
+  END IF;
+
+  IF jsonb_typeof(v_items) IS DISTINCT FROM 'array' THEN
+    RETURN JSONB_BUILD_OBJECT(
+      'ok', FALSE,
+      'success', FALSE,
+      'error_code', 'INVALID_ITEMS',
+      'message', 'p_items must be a JSON array.',
+      'items', '[]'::jsonb,
+      'page', v_page,
+      'page_size', COALESCE(v_page_size, 0),
+      'total', 0,
+      'stale_items', '[]'::jsonb,
+      'accepted_row_keys', '[]'::jsonb
+    );
+  END IF;
+
+  WITH raw_items AS (
+    SELECT
+      raw_item.ordinality::integer AS input_ordinal,
+      raw_item.item AS item_json
+    FROM jsonb_array_elements(v_items) WITH ORDINALITY AS raw_item(item, ordinality)
+    WHERE jsonb_typeof(raw_item.item) = 'object'
+  ),
+  normalised_items AS (
+    SELECT
+      raw_items.input_ordinal,
+      NULLIF(BTRIM(COALESCE(raw_items.item_json->>'row_key', '')), '') AS supplied_row_key,
+      NULLIF(BTRIM(COALESCE(raw_items.item_json->>'row_signature', raw_items.item_json->>'expected_row_signature', '')), '') AS supplied_row_signature,
+      NULLIF(BTRIM(COALESCE(raw_items.item_json->>'timesheet_id', '')), '') AS supplied_timesheet_id_text,
+      NULLIF(BTRIM(COALESCE(raw_items.item_json->>'current_timesheet_id', '')), '') AS supplied_current_timesheet_id_text,
+      NULLIF(BTRIM(COALESCE(raw_items.item_json->>'expected_timesheet_id', '')), '') AS supplied_expected_timesheet_id_text,
+      NULLIF(BTRIM(COALESCE(raw_items.item_json->>'contract_week_id', '')), '') AS supplied_contract_week_id_text,
+      raw_items.item_json AS item_json
+    FROM raw_items
+  ),
+  resolved_items AS (
+    SELECT
+      normalised_items.input_ordinal,
+      normalised_items.supplied_row_key,
+      normalised_items.supplied_row_signature,
+      CASE
+        WHEN COALESCE(normalised_items.supplied_current_timesheet_id_text, normalised_items.supplied_expected_timesheet_id_text, normalised_items.supplied_timesheet_id_text) ~* v_uuid_re
+          THEN COALESCE(normalised_items.supplied_current_timesheet_id_text, normalised_items.supplied_expected_timesheet_id_text, normalised_items.supplied_timesheet_id_text)::uuid
+        WHEN normalised_items.supplied_row_key LIKE 'timesheet:%'
+         AND SUBSTRING(normalised_items.supplied_row_key FROM LENGTH('timesheet:') + 1) ~* v_uuid_re
+          THEN SUBSTRING(normalised_items.supplied_row_key FROM LENGTH('timesheet:') + 1)::uuid
+        ELSE NULL::uuid
+      END AS requested_timesheet_id,
+      CASE
+        WHEN normalised_items.supplied_contract_week_id_text ~* v_uuid_re
+          THEN normalised_items.supplied_contract_week_id_text::uuid
+        WHEN normalised_items.supplied_row_key LIKE 'contract_week:%'
+         AND SUBSTRING(normalised_items.supplied_row_key FROM LENGTH('contract_week:') + 1) ~* v_uuid_re
+          THEN SUBSTRING(normalised_items.supplied_row_key FROM LENGTH('contract_week:') + 1)::uuid
+        WHEN normalised_items.supplied_row_key LIKE 'contract-week:%'
+         AND SUBSTRING(normalised_items.supplied_row_key FROM LENGTH('contract-week:') + 1) ~* v_uuid_re
+          THEN SUBSTRING(normalised_items.supplied_row_key FROM LENGTH('contract-week:') + 1)::uuid
+        ELSE NULL::uuid
+      END AS requested_contract_week_id,
+      normalised_items.item_json
+    FROM normalised_items
+  ),
+  decision_rows AS (
+    SELECT
+      resolved_items.input_ordinal,
+      resolved_items.supplied_row_key,
+      resolved_items.supplied_row_signature,
+      resolved_items.requested_timesheet_id,
+      resolved_items.requested_contract_week_id,
+      decision_result.row_json AS row_json
+    FROM resolved_items
+    LEFT JOIN LATERAL (
+      SELECT decision_call.row_json
+      FROM public.bulk_timesheet_row_decision_v1(
+        CASE
+          WHEN resolved_items.requested_timesheet_id IS NOT NULL THEN JSONB_BUILD_OBJECT(
+            'dataset_mode', 'authorise',
+            'timesheet_id', resolved_items.requested_timesheet_id::text
+          )
+          WHEN resolved_items.requested_contract_week_id IS NOT NULL THEN JSONB_BUILD_OBJECT(
+            'dataset_mode', 'authorise',
+            'contract_week_id', resolved_items.requested_contract_week_id::text
+          )
+          WHEN resolved_items.supplied_row_key IS NOT NULL THEN JSONB_BUILD_OBJECT(
+            'dataset_mode', 'authorise',
+            'row_key', resolved_items.supplied_row_key
+          )
+          ELSE JSONB_BUILD_OBJECT(
+            'dataset_mode', 'authorise',
+            'row_key', '__NO_VALID_ROW_KEY__'
+          )
+        END
+      ) AS decision_call(row_json)
+      LIMIT 1
+    ) AS decision_result ON TRUE
+  ),
+  evaluated_rows AS (
+    SELECT
+      decision_rows.input_ordinal,
+      decision_rows.supplied_row_key,
+      decision_rows.supplied_row_signature,
+      decision_rows.requested_timesheet_id,
+      decision_rows.requested_contract_week_id,
+      decision_rows.row_json,
+      NULLIF(BTRIM(COALESCE(decision_rows.row_json->>'row_key', '')), '') AS decision_row_key,
+      NULLIF(BTRIM(COALESCE(decision_rows.row_json->>'row_signature', '')), '') AS decision_row_signature,
+      CASE
+        WHEN NULLIF(BTRIM(COALESCE(decision_rows.row_json->>'current_timesheet_id', decision_rows.row_json->>'timesheet_id', '')), '') ~* v_uuid_re
+          THEN NULLIF(BTRIM(COALESCE(decision_rows.row_json->>'current_timesheet_id', decision_rows.row_json->>'timesheet_id', '')), '')::uuid
+        ELSE NULL::uuid
+      END AS decision_timesheet_id,
+      CASE
+        WHEN NULLIF(BTRIM(COALESCE(decision_rows.row_json->>'contract_week_id', '')), '') ~* v_uuid_re
+          THEN NULLIF(BTRIM(COALESCE(decision_rows.row_json->>'contract_week_id', '')), '')::uuid
+        ELSE NULL::uuid
+      END AS decision_contract_week_id,
+      UPPER(NULLIF(BTRIM(COALESCE(decision_rows.row_json->>'bulk_authorise_classification', decision_rows.row_json->'bulk_authorise'->>'classification', '')), '')) AS decision_classification,
+      LOWER(NULLIF(BTRIM(COALESCE(
+        decision_rows.row_json->>'bulk_authorise_section',
+        decision_rows.row_json->'bulk_authorise'->>'section',
+        CASE
+          WHEN LOWER(COALESCE(decision_rows.row_json->>'can_bulk_authorise', 'false')) IN ('true', 't', '1', 'yes') THEN 'processed_eligible'
+          WHEN LOWER(COALESCE(decision_rows.row_json->>'can_bulk_unauthorise', 'false')) IN ('true', 't', '1', 'yes') THEN 'authorised_eligible'
+          ELSE NULL::text
+        END,
+        ''
+      )), '')) AS decision_section,
+      (
+        LOWER(COALESCE(decision_rows.row_json->>'is_import_authoritative', 'false')) IN ('true', 't', '1', 'yes')
+        OR LOWER(COALESCE(decision_rows.row_json->'action_flags'->>'is_import_authoritative', 'false')) IN ('true', 't', '1', 'yes')
+        OR UPPER(COALESCE(decision_rows.row_json->>'route_family', '')) = 'IMPORT_AUTHORITATIVE'
+      ) AS is_import_authoritative,
+      (
+        NULLIF(BTRIM(COALESCE(decision_rows.supplied_row_signature, '')), '') IS NOT NULL
+        AND COALESCE(NULLIF(BTRIM(COALESCE(decision_rows.row_json->>'row_signature', '')), ''), '') IS DISTINCT FROM NULLIF(BTRIM(COALESCE(decision_rows.supplied_row_signature, '')), '')
+      ) AS is_stale
+    FROM decision_rows
+  ),
+  accepted_candidates AS (
+    SELECT
+      evaluated_rows.input_ordinal,
+      evaluated_rows.decision_row_key,
+      evaluated_rows.decision_row_signature,
+      evaluated_rows.decision_timesheet_id,
+      evaluated_rows.decision_contract_week_id,
+      evaluated_rows.row_json,
+      NULLIF(BTRIM(COALESCE(evaluated_rows.row_json->>'candidate_name', evaluated_rows.row_json->>'candidate_display_name', '')), '') AS candidate_name,
+      NULLIF(BTRIM(COALESCE(evaluated_rows.row_json->>'client_name', evaluated_rows.row_json->>'client_display_name', '')), '') AS client_name,
+      NULLIF(BTRIM(COALESCE(evaluated_rows.row_json->>'week_ending_date', evaluated_rows.row_json->>'contract_week_ending_date', '')), '') AS week_ending_date_text
+    FROM evaluated_rows
+    WHERE evaluated_rows.row_json IS NOT NULL
+      AND evaluated_rows.is_stale IS NOT TRUE
+      AND evaluated_rows.is_import_authoritative IS TRUE
+      AND evaluated_rows.decision_timesheet_id IS NOT NULL
+      AND evaluated_rows.decision_classification = v_classification
+      AND evaluated_rows.decision_section = v_section
+  ),
+  accepted_scope AS (
+    SELECT DISTINCT ON (accepted_candidates.decision_timesheet_id)
+      accepted_candidates.input_ordinal,
+      accepted_candidates.decision_row_key,
+      accepted_candidates.decision_row_signature,
+      accepted_candidates.decision_timesheet_id,
+      accepted_candidates.decision_contract_week_id,
+      accepted_candidates.row_json,
+      accepted_candidates.candidate_name,
+      accepted_candidates.client_name,
+      accepted_candidates.week_ending_date_text
+    FROM accepted_candidates
+    ORDER BY accepted_candidates.decision_timesheet_id, accepted_candidates.input_ordinal
+  ),
+  stale_items AS (
+    SELECT
+      evaluated_rows.input_ordinal,
+      JSONB_BUILD_OBJECT(
+        'code', 'ROW_SIGNATURE_MISMATCH',
+        'row_key', COALESCE(evaluated_rows.supplied_row_key, evaluated_rows.decision_row_key),
+        'timesheet_id', COALESCE(evaluated_rows.decision_timesheet_id, evaluated_rows.requested_timesheet_id),
+        'contract_week_id', COALESCE(evaluated_rows.decision_contract_week_id, evaluated_rows.requested_contract_week_id),
+        'expected_row_signature', evaluated_rows.supplied_row_signature,
+        'current_row_signature', evaluated_rows.decision_row_signature
+      ) AS item_json
+    FROM evaluated_rows
+    WHERE evaluated_rows.is_stale IS TRUE
+  ),
+  warning_items AS (
+    SELECT
+      evaluated_rows.input_ordinal,
+      CASE
+        WHEN evaluated_rows.row_json IS NULL THEN JSONB_BUILD_OBJECT(
+          'code', 'ROW_NOT_FOUND',
+          'row_key', evaluated_rows.supplied_row_key,
+          'timesheet_id', evaluated_rows.requested_timesheet_id,
+          'contract_week_id', evaluated_rows.requested_contract_week_id
+        )
+        WHEN evaluated_rows.is_stale IS TRUE THEN JSONB_BUILD_OBJECT(
+          'code', 'ROW_SIGNATURE_MISMATCH',
+          'row_key', COALESCE(evaluated_rows.supplied_row_key, evaluated_rows.decision_row_key),
+          'timesheet_id', COALESCE(evaluated_rows.decision_timesheet_id, evaluated_rows.requested_timesheet_id),
+          'contract_week_id', COALESCE(evaluated_rows.decision_contract_week_id, evaluated_rows.requested_contract_week_id),
+          'expected_row_signature', evaluated_rows.supplied_row_signature,
+          'current_row_signature', evaluated_rows.decision_row_signature
+        )
+        WHEN evaluated_rows.is_import_authoritative IS NOT TRUE THEN JSONB_BUILD_OBJECT(
+          'code', 'NOT_IMPORT_AUTHORITATIVE',
+          'row_key', COALESCE(evaluated_rows.supplied_row_key, evaluated_rows.decision_row_key),
+          'timesheet_id', evaluated_rows.decision_timesheet_id,
+          'contract_week_id', evaluated_rows.decision_contract_week_id
+        )
+        WHEN evaluated_rows.decision_classification IS DISTINCT FROM v_classification THEN JSONB_BUILD_OBJECT(
+          'code', 'CLASSIFICATION_MISMATCH',
+          'row_key', COALESCE(evaluated_rows.supplied_row_key, evaluated_rows.decision_row_key),
+          'timesheet_id', evaluated_rows.decision_timesheet_id,
+          'contract_week_id', evaluated_rows.decision_contract_week_id,
+          'expected_classification', v_classification,
+          'actual_classification', evaluated_rows.decision_classification
+        )
+        WHEN evaluated_rows.decision_section IS DISTINCT FROM v_section THEN JSONB_BUILD_OBJECT(
+          'code', 'SECTION_MISMATCH',
+          'row_key', COALESCE(evaluated_rows.supplied_row_key, evaluated_rows.decision_row_key),
+          'timesheet_id', evaluated_rows.decision_timesheet_id,
+          'contract_week_id', evaluated_rows.decision_contract_week_id,
+          'expected_section', v_section,
+          'actual_section', evaluated_rows.decision_section
+        )
+        ELSE NULL::jsonb
+      END AS warning_json
+    FROM evaluated_rows
+  ),
+  source_imports AS (
+    SELECT
+      accepted_scope.input_ordinal,
+      accepted_scope.decision_row_key,
+      accepted_scope.decision_row_signature,
+      accepted_scope.decision_timesheet_id,
+      accepted_scope.decision_contract_week_id,
+      accepted_scope.candidate_name,
+      accepted_scope.client_name,
+      accepted_scope.week_ending_date_text,
+      import_rows.source_system,
+      import_rows.import_id,
+      import_rows.filename,
+      import_rows.uploaded_at_utc,
+      import_rows.file_r2_key,
+      COALESCE(import_rows.header_rows, '[]'::jsonb) AS header_rows,
+      COALESCE(import_rows.header_columns, '[]'::jsonb) AS header_columns,
+      COALESCE(import_rows.rows, '[]'::jsonb) AS rows_json
+    FROM accepted_scope
+    CROSS JOIN LATERAL public.timesheet_import_rows_for_timesheet_current(
+      accepted_scope.decision_timesheet_id,
+      TRUE,
+      NULL::uuid,
+      NULL::uuid
+    ) AS import_rows(
+      requested_timesheet_id,
+      current_timesheet_id,
+      source_system,
+      import_id,
+      filename,
+      uploaded_at_utc,
+      file_r2_key,
+      header_rows,
+      header_columns,
+      rows
+    )
+  ),
+  import_row_elements AS (
+    SELECT
+      source_imports.input_ordinal,
+      source_imports.decision_row_key,
+      source_imports.decision_row_signature,
+      source_imports.decision_timesheet_id,
+      source_imports.decision_contract_week_id,
+      source_imports.candidate_name,
+      source_imports.client_name,
+      source_imports.week_ending_date_text,
+      source_imports.source_system,
+      source_imports.import_id,
+      source_imports.filename,
+      source_imports.uploaded_at_utc,
+      source_imports.file_r2_key,
+      source_imports.header_rows,
+      source_imports.header_columns,
+      import_row_item.row_value AS row_value,
+      (import_row_item.row_ordinality - 1)::integer AS raw_row_index
+    FROM source_imports
+    CROSS JOIN LATERAL jsonb_array_elements(source_imports.rows_json) WITH ORDINALITY AS import_row_item(row_value, row_ordinality)
+  ),
+  flattened_items AS (
+    SELECT
+      ROW_NUMBER() OVER (
+        ORDER BY
+          import_row_elements.input_ordinal,
+          import_row_elements.uploaded_at_utc NULLS LAST,
+          import_row_elements.import_id,
+          import_row_elements.raw_row_index
+      ) AS result_ordinal,
+      JSONB_BUILD_OBJECT(
+        'id',
+          CONCAT_WS('|',
+            import_row_elements.decision_row_key,
+            COALESCE(import_row_elements.import_id::text, ''),
+            COALESCE(import_row_elements.row_value->'payload'->>'external_row_key', import_row_elements.row_value->'payload'->>'row_key', import_row_elements.row_value->'payload'->>'external_key', ''),
+            COALESCE(import_row_elements.row_value->'payload'->>'source_row_key', import_row_elements.row_value->'payload'->>'stable_source_key', import_row_elements.raw_row_index::text)
+          ),
+        'timesheet_id', import_row_elements.decision_timesheet_id,
+        'row_key', import_row_elements.decision_row_key,
+        'row_signature', import_row_elements.decision_row_signature,
+        'contract_week_id', import_row_elements.decision_contract_week_id,
+        'candidate_name', import_row_elements.candidate_name,
+        'client_name', import_row_elements.client_name,
+        'week_ending_date', import_row_elements.week_ending_date_text,
+        'source_system', import_row_elements.source_system,
+        'import_id', import_row_elements.import_id,
+        'filename', import_row_elements.filename,
+        'uploaded_at_utc', import_row_elements.uploaded_at_utc,
+        'file_r2_key', import_row_elements.file_r2_key,
+        'header_rows', import_row_elements.header_rows,
+        'header_columns', import_row_elements.header_columns,
+        'raw_row_index', import_row_elements.raw_row_index,
+        'raw_columns', import_row_elements.row_value->'raw_columns',
+        'raw_row', COALESCE(import_row_elements.row_value->'payload', '{}'::jsonb),
+        'external_row_key', NULLIF(BTRIM(COALESCE(import_row_elements.row_value->'payload'->>'external_row_key', import_row_elements.row_value->'payload'->>'row_key', import_row_elements.row_value->'payload'->>'external_key', '')), ''),
+        'source_row_key', NULLIF(BTRIM(COALESCE(import_row_elements.row_value->'payload'->>'source_row_key', import_row_elements.row_value->'payload'->>'stable_source_key', import_row_elements.row_value->'payload'->>'source_key', '')), ''),
+        'nhsp_shift_id', COALESCE(import_row_elements.row_value->'payload'->'nhsp_shift_id', import_row_elements.row_value->'payload'->'shift_id'),
+        'hr_request_id', COALESCE(import_row_elements.row_value->'payload'->'hr_request_id', import_row_elements.row_value->'payload'->'request_id'),
+        'hr_shift_id', import_row_elements.row_value->'payload'->'hr_shift_id'
+      ) AS item_json
+    FROM import_row_elements
+  ),
+  totals AS (
+    SELECT COUNT(*)::integer AS total_count
+    FROM flattened_items
+  ),
+  page_meta AS (
+    SELECT
+      totals.total_count,
+      CASE
+        WHEN v_page_size IS NULL THEN 1
+        WHEN totals.total_count = 0 THEN 1
+        ELSE LEAST(v_page, GREATEST(CEIL(totals.total_count::numeric / v_page_size::numeric)::integer, 1))
+      END AS effective_page,
+      CASE
+        WHEN v_page_size IS NULL THEN totals.total_count
+        ELSE v_page_size
+      END AS effective_page_size,
+      CASE
+        WHEN v_page_size IS NULL THEN CASE WHEN totals.total_count > 0 THEN 1 ELSE 0 END
+        WHEN totals.total_count = 0 THEN 0
+        ELSE CEIL(totals.total_count::numeric / v_page_size::numeric)::integer
+      END AS total_pages
+    FROM totals
+  ),
+  page_items AS (
+    SELECT flattened_items.item_json
+    FROM flattened_items
+    CROSS JOIN page_meta
+    WHERE v_page_size IS NULL
+       OR (
+         flattened_items.result_ordinal > ((page_meta.effective_page - 1) * page_meta.effective_page_size)
+         AND flattened_items.result_ordinal <= (page_meta.effective_page * page_meta.effective_page_size)
+       )
+    ORDER BY flattened_items.result_ordinal
+  ),
+  accepted_json AS (
+    SELECT
+      COALESCE(JSONB_AGG(accepted_scope.decision_row_key ORDER BY accepted_scope.input_ordinal), '[]'::jsonb) AS accepted_row_keys,
+      COALESCE(JSONB_AGG(JSONB_BUILD_OBJECT(
+        'row_key', accepted_scope.decision_row_key,
+        'row_signature', accepted_scope.decision_row_signature,
+        'timesheet_id', accepted_scope.decision_timesheet_id,
+        'contract_week_id', accepted_scope.decision_contract_week_id,
+        'candidate_name', accepted_scope.candidate_name,
+        'client_name', accepted_scope.client_name,
+        'week_ending_date', accepted_scope.week_ending_date_text
+      ) ORDER BY accepted_scope.input_ordinal), '[]'::jsonb) AS accepted_scope_json
+    FROM accepted_scope
+  ),
+  stale_json AS (
+    SELECT COALESCE(JSONB_AGG(stale_items.item_json ORDER BY stale_items.input_ordinal), '[]'::jsonb) AS stale_items_json
+    FROM stale_items
+  ),
+  warnings_json AS (
+    SELECT COALESCE(JSONB_AGG(warning_items.warning_json ORDER BY warning_items.input_ordinal), '[]'::jsonb) AS warnings_json
+    FROM warning_items
+    WHERE warning_items.warning_json IS NOT NULL
+  ),
+  imports_json AS (
+    SELECT COALESCE(JSONB_AGG(import_summary.import_json ORDER BY import_summary.source_system, import_summary.uploaded_at_utc NULLS LAST, import_summary.import_id), '[]'::jsonb) AS imports_array
+    FROM (
+      SELECT DISTINCT ON (source_imports.decision_timesheet_id, source_imports.import_id, source_imports.file_r2_key)
+        source_imports.source_system,
+        source_imports.uploaded_at_utc,
+        source_imports.import_id,
+        JSONB_BUILD_OBJECT(
+          'timesheet_id', source_imports.decision_timesheet_id,
+          'row_key', source_imports.decision_row_key,
+          'contract_week_id', source_imports.decision_contract_week_id,
+          'source_system', source_imports.source_system,
+          'import_id', source_imports.import_id,
+          'filename', source_imports.filename,
+          'uploaded_at_utc', source_imports.uploaded_at_utc,
+          'file_r2_key', source_imports.file_r2_key,
+          'header_rows', source_imports.header_rows,
+          'header_columns', source_imports.header_columns
+        ) AS import_json
+      FROM source_imports
+      ORDER BY source_imports.decision_timesheet_id, source_imports.import_id, source_imports.file_r2_key, source_imports.uploaded_at_utc NULLS LAST
+    ) AS import_summary
+  ),
+  headers_json AS (
+    SELECT
+      COALESCE((
+        SELECT source_imports.header_rows
+        FROM source_imports
+        WHERE jsonb_typeof(source_imports.header_rows) = 'array'
+          AND jsonb_array_length(source_imports.header_rows) > 0
+        ORDER BY source_imports.input_ordinal, source_imports.uploaded_at_utc NULLS LAST, source_imports.import_id
+        LIMIT 1
+      ), '[]'::jsonb) AS header_rows,
+      COALESCE((
+        SELECT source_imports.header_columns
+        FROM source_imports
+        WHERE jsonb_typeof(source_imports.header_columns) = 'array'
+          AND jsonb_array_length(source_imports.header_columns) > 0
+        ORDER BY source_imports.input_ordinal, source_imports.uploaded_at_utc NULLS LAST, source_imports.import_id
+        LIMIT 1
+      ), '[]'::jsonb) AS header_columns
+  ),
+  fallback_columns AS (
+    SELECT COALESCE(JSONB_AGG(DISTINCT payload_keys.payload_key), '[]'::jsonb) AS column_keys
+    FROM import_row_elements
+    CROSS JOIN LATERAL jsonb_object_keys(COALESCE(import_row_elements.row_value->'payload', '{}'::jsonb)) AS payload_keys(payload_key)
+  ),
+  mapping_json AS (
+    SELECT COALESCE(JSONB_AGG(mapping_rows.mapping_json ORDER BY mapping_rows.result_ordinal), '[]'::jsonb) AS mapping_array
+    FROM (
+      SELECT
+        flattened_items.result_ordinal,
+        JSONB_BUILD_OBJECT(
+          'row_id', flattened_items.item_json->>'id',
+          'timesheet_id', flattened_items.item_json->>'timesheet_id',
+          'row_key', flattened_items.item_json->>'row_key',
+          'contract_week_id', flattened_items.item_json->>'contract_week_id'
+        ) AS mapping_json
+      FROM flattened_items
+    ) AS mapping_rows
+  )
+  SELECT JSONB_BUILD_OBJECT(
+    'ok', TRUE,
+    'success', TRUE,
+    'source_system', (
+      SELECT source_imports.source_system
+      FROM source_imports
+      WHERE NULLIF(BTRIM(COALESCE(source_imports.source_system, '')), '') IS NOT NULL
+      ORDER BY source_imports.input_ordinal, source_imports.uploaded_at_utc NULLS LAST, source_imports.import_id
+      LIMIT 1
+    ),
+    'classification', v_classification,
+    'mode', v_mode,
+    'selected_section', v_section,
+    'page', page_meta.effective_page,
+    'page_size', page_meta.effective_page_size,
+    'total', page_meta.total_count,
+    'total_rows', page_meta.total_count,
+    'total_pages', page_meta.total_pages,
+    'items', COALESCE((SELECT JSONB_AGG(page_items.item_json ORDER BY page_items.item_json->>'id') FROM page_items), '[]'::jsonb),
+    'rows', COALESCE((SELECT JSONB_AGG(page_items.item_json ORDER BY page_items.item_json->>'id') FROM page_items), '[]'::jsonb),
+    'header_rows', headers_json.header_rows,
+    'header_columns', headers_json.header_columns,
+    'display_columns', CASE
+      WHEN jsonb_typeof(headers_json.header_columns) = 'array' AND jsonb_array_length(headers_json.header_columns) > 0 THEN headers_json.header_columns
+      ELSE fallback_columns.column_keys
+    END,
+    'imports', imports_json.imports_array,
+    'row_to_timesheet_mapping', mapping_json.mapping_array,
+    'stale_items', stale_json.stale_items_json,
+    'accepted_row_keys', accepted_json.accepted_row_keys,
+    'accepted_scope', accepted_json.accepted_scope_json,
+    'warnings', warnings_json.warnings_json,
+    'actor_user_id', p_actor_user_id
+  )
+    INTO v_result
+  FROM page_meta
+  CROSS JOIN headers_json
+  CROSS JOIN fallback_columns
+  CROSS JOIN imports_json
+  CROSS JOIN mapping_json
+  CROSS JOIN stale_json
+  CROSS JOIN accepted_json
+  CROSS JOIN warnings_json;
+
+  RETURN COALESCE(v_result, JSONB_BUILD_OBJECT(
+    'ok', TRUE,
+    'success', TRUE,
+    'classification', v_classification,
+    'mode', v_mode,
+    'selected_section', v_section,
+    'page', 1,
+    'page_size', COALESCE(v_page_size, 0),
+    'total', 0,
+    'total_rows', 0,
+    'total_pages', 0,
+    'items', '[]'::jsonb,
+    'rows', '[]'::jsonb,
+    'header_rows', '[]'::jsonb,
+    'header_columns', '[]'::jsonb,
+    'display_columns', '[]'::jsonb,
+    'imports', '[]'::jsonb,
+    'row_to_timesheet_mapping', '[]'::jsonb,
+    'stale_items', '[]'::jsonb,
+    'accepted_row_keys', '[]'::jsonb,
+    'accepted_scope', '[]'::jsonb,
+    'warnings', '[]'::jsonb,
+    'actor_user_id', p_actor_user_id
+  ));
+END;
+$function$;
+
 
