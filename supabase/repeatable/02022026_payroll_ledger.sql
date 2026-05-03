@@ -21459,6 +21459,7 @@ $$;
 -- A4.9 pay_batches_list / pay_batch_get
 -- =========================================================
 
+
 create or replace function public.pay_batch_get(p_pay_batch_id uuid)
 returns jsonb
 language plpgsql
@@ -23880,6 +23881,33 @@ begin
 
   v_payment_correction := jsonb_build_object(
     'derived_state', v_derived_correction_state,
+    'display_state', CASE
+      WHEN (
+        COALESCE(v_work_item_pending_count, 0) > 0
+        OR COALESCE(v_work_item_processing_count, 0) > 0
+        OR COALESCE(v_processing_request_count, 0) > 0
+      )
+      AND (
+        COALESCE(v_work_item_blocked_count, 0) > 0
+        OR COALESCE(v_work_item_failed_retryable_count, 0) > 0
+        OR COALESCE(v_work_item_failed_final_count, 0) > 0
+        OR COALESCE(v_blocked_request_count, 0) > 0
+        OR COALESCE(v_failed_request_count, 0) > 0
+      ) THEN 'PARTLY_APPLIED_REVIEW_NEEDED'
+      WHEN (
+        COALESCE(v_work_item_pending_count, 0) > 0
+        OR COALESCE(v_work_item_processing_count, 0) > 0
+        OR COALESCE(v_processing_request_count, 0) > 0
+      ) THEN 'PROCESSING'
+      WHEN (
+        COALESCE(v_work_item_blocked_count, 0) > 0
+        OR COALESCE(v_work_item_failed_retryable_count, 0) > 0
+        OR COALESCE(v_work_item_failed_final_count, 0) > 0
+        OR COALESCE(v_blocked_request_count, 0) > 0
+        OR COALESCE(v_failed_request_count, 0) > 0
+      ) THEN 'ACTION_REQUIRED'
+      ELSE v_derived_correction_state
+    END,
     'requires_user_action', (
       v_derived_correction_state IN ('ACTION_REQUIRED','SETTLED_RETURNED')
       OR COALESCE(v_blocked_request_count, 0) > 0
@@ -24067,6 +24095,33 @@ begin
       '{}'::jsonb
     ),
     'latest_request_status', v_latest_correction_request_status,
+    'display_state', CASE
+      WHEN (
+        COALESCE(v_work_item_pending_count, 0) > 0
+        OR COALESCE(v_work_item_processing_count, 0) > 0
+        OR COALESCE(v_processing_request_count, 0) > 0
+      )
+      AND (
+        COALESCE(v_work_item_blocked_count, 0) > 0
+        OR COALESCE(v_work_item_failed_retryable_count, 0) > 0
+        OR COALESCE(v_work_item_failed_final_count, 0) > 0
+        OR COALESCE(v_blocked_request_count, 0) > 0
+        OR COALESCE(v_failed_request_count, 0) > 0
+      ) THEN 'PARTLY_APPLIED_REVIEW_NEEDED'
+      WHEN (
+        COALESCE(v_work_item_pending_count, 0) > 0
+        OR COALESCE(v_work_item_processing_count, 0) > 0
+        OR COALESCE(v_processing_request_count, 0) > 0
+      ) THEN 'PROCESSING'
+      WHEN (
+        COALESCE(v_work_item_blocked_count, 0) > 0
+        OR COALESCE(v_work_item_failed_retryable_count, 0) > 0
+        OR COALESCE(v_work_item_failed_final_count, 0) > 0
+        OR COALESCE(v_blocked_request_count, 0) > 0
+        OR COALESCE(v_failed_request_count, 0) > 0
+      ) THEN 'ACTION_REQUIRED'
+      ELSE v_derived_correction_state
+    END,
     'open_request_id', CASE WHEN v_open_correction_request_id IS NULL THEN NULL ELSE v_open_correction_request_id::text END,
     'awaiting_authorisation_count', COALESCE(v_awaiting_authorisation_count, 0),
     'processing_request_count', COALESCE(v_processing_request_count, 0),
