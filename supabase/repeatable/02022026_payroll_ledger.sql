@@ -24268,11 +24268,6 @@ end;
 $$;
 
 
-
-
-
-
-
 CREATE OR REPLACE FUNCTION public.pay_batches_list(p_limit integer DEFAULT 50, p_offset integer DEFAULT 0, p_status text DEFAULT NULL::text)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -24293,92 +24288,96 @@ begin
 
   select coalesce(
     jsonb_agg(
-      jsonb_build_object(
-        'id', pb.id::text,
-        'pay_date', pb.pay_date::text,
-        'authoritative_payment_date', case when pb.authoritative_payment_date is null then null else pb.authoritative_payment_date::text end,
-        'authoritative_payment_date_source', pb.authoritative_payment_date_source,
-        'created_at_utc', pb.created_at_utc,
-        'created_by_user_id', case when pb.created_by_user_id is null then null else pb.created_by_user_id::text end,
-        'status', pb.status,
-        'banking_system_snapshot', pb.banking_system_snapshot,
-        'external_paye_system_snapshot', pb.external_paye_system_snapshot,
+      (
+        jsonb_build_object(
+          'id', pb.id::text,
+          'pay_date', pb.pay_date::text,
+          'authoritative_payment_date', case when pb.authoritative_payment_date is null then null else pb.authoritative_payment_date::text end,
+          'authoritative_payment_date_source', pb.authoritative_payment_date_source,
+          'created_at_utc', pb.created_at_utc,
+          'created_by_user_id', case when pb.created_by_user_id is null then null else pb.created_by_user_id::text end,
+          'status', pb.status,
+          'banking_system_snapshot', pb.banking_system_snapshot,
+          'external_paye_system_snapshot', pb.external_paye_system_snapshot,
 
-        'batch_kind_fixed', pb.batch_kind_fixed,
-        'batch_kind', pb.batch_kind,
-        'pay_channels_present', pb.pay_channels_present,
-        'batch_display_classification', pb.batch_display_classification,
+          'batch_kind_fixed', pb.batch_kind_fixed,
+          'batch_kind', pb.batch_kind,
+          'pay_channels_present', pb.pay_channels_present,
+          'batch_display_classification', pb.batch_display_classification,
 
-        'same_week_paye_override_used', pb.same_week_paye_override_used,
-        'same_week_paye_override_reason', pb.same_week_paye_override_reason,
-        'same_week_paye_override_verified_at_utc', pb.same_week_paye_override_verified_at_utc,
-        'same_week_paye_override_verified_by_user_id', case when pb.same_week_paye_override_verified_by_user_id is null then null else pb.same_week_paye_override_verified_by_user_id::text end,
+          'same_week_paye_override_used', pb.same_week_paye_override_used,
+          'same_week_paye_override_reason', pb.same_week_paye_override_reason,
+          'same_week_paye_override_verified_at_utc', pb.same_week_paye_override_verified_at_utc,
+          'same_week_paye_override_verified_by_user_id', case when pb.same_week_paye_override_verified_by_user_id is null then null else pb.same_week_paye_override_verified_by_user_id::text end,
 
-        'source_workbench_session_id', case when pb.source_workbench_session_id is null then null else pb.source_workbench_session_id::text end,
-        'source_snapshot_run_id', case when pb.source_snapshot_run_id is null then null else pb.source_snapshot_run_id::text end,
-        'source_session_version', pb.source_session_version,
-        'execution_commit_state', pb.execution_commit_state,
-        'execution_commit_ref', pb.execution_commit_ref,
-        'execution_committed_at_utc', pb.execution_committed_at_utc,
+          'source_workbench_session_id', case when pb.source_workbench_session_id is null then null else pb.source_workbench_session_id::text end,
+          'source_snapshot_run_id', case when pb.source_snapshot_run_id is null then null else pb.source_snapshot_run_id::text end,
+          'source_session_version', pb.source_session_version,
+          'execution_commit_state', pb.execution_commit_state,
+          'execution_commit_ref', pb.execution_commit_ref,
+          'execution_committed_at_utc', pb.execution_committed_at_utc,
 
-        'remittance_summary', jsonb_build_object(
-          'candidate_count', pb.remittance_candidate_count,
-          'sent_count', pb.remittance_sent_count,
-          'unsent_count', pb.remittance_unsent_count,
-          'error_count', pb.remittance_error_count,
-          'latest_sent_at_utc', pb.remittance_latest_sent_at_utc,
-          'all_sent', pb.remittance_all_sent,
-          'trigger_statuses', pb.remittance_trigger_statuses
-        ),
+          'remittance_summary', jsonb_build_object(
+            'candidate_count', pb.remittance_candidate_count,
+            'sent_count', pb.remittance_sent_count,
+            'unsent_count', pb.remittance_unsent_count,
+            'error_count', pb.remittance_error_count,
+            'latest_sent_at_utc', pb.remittance_latest_sent_at_utc,
+            'all_sent', pb.remittance_all_sent,
+            'trigger_statuses', pb.remittance_trigger_statuses
+          )
+        )
+        || jsonb_build_object(
+          'rail_provider_snapshot', pb.rail_provider_snapshot,
+          'rail_env_snapshot', pb.rail_env_snapshot,
+          'schedule_kind', pb.schedule_kind,
+          'scheduled_at_utc', pb.scheduled_at_utc,
+          'executing_started_at_utc', pb.executing_started_at_utc,
+          'last_status_checked_at_utc', pb.last_status_checked_at_utc,
 
-        'rail_provider_snapshot', pb.rail_provider_snapshot,
-        'rail_env_snapshot', pb.rail_env_snapshot,
-        'schedule_kind', pb.schedule_kind,
-        'scheduled_at_utc', pb.scheduled_at_utc,
-        'executing_started_at_utc', pb.executing_started_at_utc,
-        'last_status_checked_at_utc', pb.last_status_checked_at_utc,
+          'funding_account_ref', pb.funding_account_ref,
 
-        'funding_account_ref', pb.funding_account_ref,
+          'manual_confirmed_at_utc', pb.monzo_confirmed_at_utc,
+          'manual_confirmed_by_user_id', case when pb.monzo_confirmed_by_user_id is null then null else pb.monzo_confirmed_by_user_id::text end,
 
-        'manual_confirmed_at_utc', pb.monzo_confirmed_at_utc,
-        'manual_confirmed_by_user_id', case when pb.monzo_confirmed_by_user_id is null then null else pb.monzo_confirmed_by_user_id::text end,
+          'monzo_confirmed_at_utc', pb.monzo_confirmed_at_utc,
+          'monzo_confirmed_by_user_id', case when pb.monzo_confirmed_by_user_id is null then null else pb.monzo_confirmed_by_user_id::text end,
 
-        'monzo_confirmed_at_utc', pb.monzo_confirmed_at_utc,
-        'monzo_confirmed_by_user_id', case when pb.monzo_confirmed_by_user_id is null then null else pb.monzo_confirmed_by_user_id::text end,
+          'total_bank_out', pb.total_bank_out,
+          'total_debt_created', pb.total_debt_created,
 
-        'total_bank_out', pb.total_bank_out,
-        'total_debt_created', pb.total_debt_created,
+          'bulk_ref_num', pb.bulk_ref_num,
+          'bulk_ref_date', case when pb.bulk_ref_date is null then null else pb.bulk_ref_date::text end,
+          'bulk_reference', pb.bulk_reference,
 
-        'bulk_ref_num', pb.bulk_ref_num,
-        'bulk_ref_date', case when pb.bulk_ref_date is null then null else pb.bulk_ref_date::text end,
-        'bulk_reference', pb.bulk_reference,
-
-        'auth_required_quantity', pb.auth_required_quantity,
-        'auth_approved_count', pb.auth_approved_count,
-        'auth_label', pb.auth_label,
-        'auth_state', pb.auth_state,
-
-        'movement_classification', pb.movement_classification,
-        'correction_status', pb.correction_status,
-        'correction_required_count', pb.correction_required_count,
-        'failed_returned_event_count', pb.failed_returned_event_count,
-        'unwound_amount_inc_vat', pb.unwound_amount_inc_vat,
-        'reversed_amount_inc_vat', pb.reversed_amount_inc_vat,
-        'remaining_paid_amount_inc_vat', pb.remaining_paid_amount_inc_vat,
-        'latest_bank_failure_at_utc', pb.latest_bank_failure_at_utc,
-        'latest_correction_action_at_utc', pb.latest_correction_action_at_utc,
-        'latest_correction_request_status', pb.latest_correction_request_status,
-        'latest_correction_request_kind', pb.latest_correction_request_kind,
-        'correction_processing_count', pb.correction_processing_count,
-        'correction_waiting_approval_count', pb.correction_waiting_approval_count,
-        'correction_blocked_count', pb.correction_blocked_count,
-        'correction_failed_count', pb.correction_failed_count,
-        'correction_work_blocked_count', pb.correction_work_blocked_count,
-        'correction_work_failed_retryable_count', pb.correction_work_failed_retryable_count,
-        'correction_work_failed_final_count', pb.correction_work_failed_final_count,
-        'correction_work_pending_count', pb.correction_work_pending_count,
-        'correction_work_processing_count', pb.correction_work_processing_count,
-        'correction_requires_user_action', pb.correction_requires_user_action
+          'auth_required_quantity', pb.auth_required_quantity,
+          'auth_approved_count', pb.auth_approved_count,
+          'auth_label', pb.auth_label,
+          'auth_state', pb.auth_state
+        )
+        || jsonb_build_object(
+          'movement_classification', pb.movement_classification,
+          'correction_status', pb.correction_status,
+          'correction_required_count', pb.correction_required_count,
+          'failed_returned_event_count', pb.failed_returned_event_count,
+          'unwound_amount_inc_vat', pb.unwound_amount_inc_vat,
+          'reversed_amount_inc_vat', pb.reversed_amount_inc_vat,
+          'remaining_paid_amount_inc_vat', pb.remaining_paid_amount_inc_vat,
+          'latest_bank_failure_at_utc', pb.latest_bank_failure_at_utc,
+          'latest_correction_action_at_utc', pb.latest_correction_action_at_utc,
+          'latest_correction_request_status', pb.latest_correction_request_status,
+          'latest_correction_request_kind', pb.latest_correction_request_kind,
+          'correction_processing_count', pb.correction_processing_count,
+          'correction_waiting_approval_count', pb.correction_waiting_approval_count,
+          'correction_blocked_count', pb.correction_blocked_count,
+          'correction_failed_count', pb.correction_failed_count,
+          'correction_work_blocked_count', pb.correction_work_blocked_count,
+          'correction_work_failed_retryable_count', pb.correction_work_failed_retryable_count,
+          'correction_work_failed_final_count', pb.correction_work_failed_final_count,
+          'correction_work_pending_count', pb.correction_work_pending_count,
+          'correction_work_processing_count', pb.correction_work_processing_count,
+          'correction_requires_user_action', pb.correction_requires_user_action
+        )
       )
       order by pb.created_at_utc desc, pb.id desc
     ),
@@ -24783,6 +24782,8 @@ begin
   );
 end;
 $function$;
+
+
 
 
 
