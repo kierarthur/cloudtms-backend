@@ -4597,4 +4597,751 @@ BEGIN
 END;
 $function$;
 
+CREATE OR REPLACE FUNCTION public.timesheet_qr_send_enqueue_v1(
+  p_timesheet_id uuid,
+  p_expected_timesheet_id uuid DEFAULT NULL,
+  p_actor_user_id uuid DEFAULT NULL,
+  p_idempotency_key text DEFAULT NULL,
+  p_now_utc timestamp with time zone DEFAULT now()
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+VOLATILE SECURITY DEFINER
+SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_now timestamp with time zone := COALESCE(p_now_utc, now());
+  v_requested_timesheet_id uuid := NULL;
+  v_requested_booking_id text := NULL;
+  v_current_timesheet_id uuid := NULL;
+  v_current_version integer := NULL;
+  v_sheet_scope text := NULL;
+  v_submission_mode text := NULL;
+  v_contract_id uuid := NULL;
+  v_week_ending_date date := NULL;
+  v_worked_start_iso timestamp with time zone := NULL;
+  v_worked_end_iso timestamp with time zone := NULL;
+  v_actual_schedule_json jsonb := NULL;
+  v_qr_status text := NULL;
+  v_qr_token text := NULL;
+  v_effective_qr_token text := NULL;
+  v_qr_payload_json jsonb := '{}'::jsonb;
+  v_payload_qr_token text := NULL;
+  v_qr_generated_at timestamp with time zone := NULL;
+  v_qr_scanned_at timestamp with time zone := NULL;
+  v_qr_signed_hash text := NULL;
+  v_qr_signed_at_utc timestamp with time zone := NULL;
+  v_updated_at timestamp with time zone := NULL;
+  v_tsfin_id uuid := NULL;
+  v_tsfin_processing_status text := NULL;
+  v_locked_by_invoice_id uuid := NULL;
+  v_paid_at_utc timestamp with time zone := NULL;
+  v_invoice_breakdown_json jsonb := NULL;
+  v_has_segment_invoice_lock boolean := FALSE;
+  v_has_hours_for_send boolean := FALSE;
+  v_candidate_id uuid := NULL;
+  v_client_id uuid := NULL;
+  v_candidate_email text := NULL;
+  v_candidate_name text := NULL;
+  v_candidate_opt_in_email boolean := TRUE;
+  v_recipient_available boolean := FALSE;
+  v_contract_candidate_id uuid := NULL;
+  v_contract_client_id uuid := NULL;
+  v_idempotency_key text := NULL;
+  v_existing_mail_id uuid := NULL;
+  v_existing_mail_status text := NULL;
+  v_mail_job_id uuid := NULL;
+  v_pdf_job_id uuid := NULL;
+  v_existing_pdf_job_id uuid := NULL;
+  v_job_id uuid := NULL;
+  v_send_state text := NULL;
+  v_pdf_key text := NULL;
+  v_mail_subject text := NULL;
+  v_mail_body_text text := NULL;
+  v_mail_body_html text := NULL;
+  v_mail_reference text := NULL;
+  v_mail_scheduled_for_utc timestamp with time zone := NULL;
+  v_created_by_user_id uuid := NULL;
+  v_post_row jsonb := NULL;
+  v_row_key text := NULL;
+  v_storage_key text := NULL;
+  v_row_signature text := NULL;
+BEGIN
+  IF p_timesheet_id IS NULL THEN
+    RETURN jsonb_build_object(
+      'ok', FALSE,
+      'queued', FALSE,
+      'operation', 'timesheet_qr_send_enqueue',
+      'error_code', 'TIMESHEET_ID_REQUIRED',
+      'message', 'p_timesheet_id is required.',
+      'recipient_available', FALSE,
+      'send_state', 'REJECTED'
+    );
+  END IF;
+
+  SELECT requested_ts.timesheet_id,
+         requested_ts.booking_id
+    INTO v_requested_timesheet_id,
+         v_requested_booking_id
+  FROM public.timesheets AS requested_ts
+  WHERE requested_ts.timesheet_id = p_timesheet_id
+  LIMIT 1;
+
+  IF v_requested_timesheet_id IS NULL THEN
+    RETURN jsonb_build_object(
+      'ok', FALSE,
+      'queued', FALSE,
+      'operation', 'timesheet_qr_send_enqueue',
+      'error_code', 'TIMESHEET_NOT_FOUND',
+      'message', 'Timesheet was not found.',
+      'requested_timesheet_id', p_timesheet_id,
+      'recipient_available', FALSE,
+      'send_state', 'REJECTED'
+    );
+  END IF;
+
+  SELECT current_ts.timesheet_id,
+         current_ts.version
+    INTO v_current_timesheet_id,
+         v_current_version
+  FROM public.timesheets AS current_ts
+  WHERE current_ts.booking_id = v_requested_booking_id
+    AND current_ts.is_current = TRUE
+  ORDER BY current_ts.version DESC NULLS LAST,
+           current_ts.updated_at DESC NULLS LAST,
+           current_ts.created_at DESC NULLS LAST,
+           current_ts.timesheet_id DESC
+  LIMIT 1;
+
+  IF v_current_timesheet_id IS NULL THEN
+    v_current_timesheet_id := v_requested_timesheet_id;
+  END IF;
+
+  IF p_expected_timesheet_id IS NOT NULL AND p_expected_timesheet_id IS DISTINCT FROM v_current_timesheet_id THEN
+    RETURN jsonb_build_object(
+      'ok', FALSE,
+      'queued', FALSE,
+      'operation', 'timesheet_qr_send_enqueue',
+      'error_code', 'TIMESHEET_MOVED',
+      'message', 'Timesheet has moved to a newer current row.',
+      'requested_timesheet_id', p_timesheet_id,
+      'expected_timesheet_id', p_expected_timesheet_id,
+      'current_timesheet_id', v_current_timesheet_id,
+      'recipient_available', FALSE,
+      'send_state', 'REJECTED'
+    );
+  END IF;
+
+  IF v_requested_timesheet_id IS DISTINCT FROM v_current_timesheet_id THEN
+    RETURN jsonb_build_object(
+      'ok', FALSE,
+      'queued', FALSE,
+      'operation', 'timesheet_qr_send_enqueue',
+      'error_code', 'TIMESHEET_MOVED',
+      'message', 'timesheet_qr_send_enqueue_v1 requires the current timesheet row.',
+      'requested_timesheet_id', p_timesheet_id,
+      'expected_timesheet_id', COALESCE(p_expected_timesheet_id, p_timesheet_id),
+      'current_timesheet_id', v_current_timesheet_id,
+      'recipient_available', FALSE,
+      'send_state', 'REJECTED'
+    );
+  END IF;
+
+  SELECT ts_current.sheet_scope::text,
+         ts_current.submission_mode::text,
+         ts_current.contract_id,
+         ts_current.week_ending_date,
+         ts_current.worked_start_iso,
+         ts_current.worked_end_iso,
+         ts_current.actual_schedule_json,
+         ts_current.qr_status::text,
+         ts_current.qr_token,
+         ts_current.qr_payload_json,
+         ts_current.qr_generated_at,
+         ts_current.qr_scanned_at,
+         ts_current.qr_signed_hash,
+         ts_current.qr_signed_at_utc,
+         ts_current.version,
+         ts_current.updated_at
+    INTO v_sheet_scope,
+         v_submission_mode,
+         v_contract_id,
+         v_week_ending_date,
+         v_worked_start_iso,
+         v_worked_end_iso,
+         v_actual_schedule_json,
+         v_qr_status,
+         v_qr_token,
+         v_qr_payload_json,
+         v_qr_generated_at,
+         v_qr_scanned_at,
+         v_qr_signed_hash,
+         v_qr_signed_at_utc,
+         v_current_version,
+         v_updated_at
+  FROM public.timesheets AS ts_current
+  WHERE ts_current.timesheet_id = v_current_timesheet_id
+    AND ts_current.is_current = TRUE
+  LIMIT 1
+  FOR UPDATE;
+
+  IF v_sheet_scope IS NULL THEN
+    RETURN jsonb_build_object(
+      'ok', FALSE,
+      'queued', FALSE,
+      'operation', 'timesheet_qr_send_enqueue',
+      'error_code', 'CURRENT_TIMESHEET_NOT_FOUND',
+      'message', 'Current timesheet was not found.',
+      'current_timesheet_id', v_current_timesheet_id,
+      'recipient_available', FALSE,
+      'send_state', 'REJECTED'
+    );
+  END IF;
+
+  IF UPPER(COALESCE(v_sheet_scope, '')) NOT IN ('DAILY', 'WEEKLY') THEN
+    RETURN jsonb_build_object(
+      'ok', FALSE,
+      'queued', FALSE,
+      'operation', 'timesheet_qr_send_enqueue',
+      'error_code', 'UNSUPPORTED_SHEET_SCOPE',
+      'message', 'QR send is only supported for DAILY or WEEKLY timesheets.',
+      'current_timesheet_id', v_current_timesheet_id,
+      'sheet_scope', v_sheet_scope,
+      'recipient_available', FALSE,
+      'send_state', 'REJECTED'
+    );
+  END IF;
+
+  IF UPPER(COALESCE(v_submission_mode, '')) <> 'MANUAL' THEN
+    RETURN jsonb_build_object(
+      'ok', FALSE,
+      'queued', FALSE,
+      'operation', 'timesheet_qr_send_enqueue',
+      'error_code', 'NOT_MANUAL_QR_ROUTE',
+      'message', 'QR send requires a MANUAL submission-mode timesheet with QR enabled.',
+      'current_timesheet_id', v_current_timesheet_id,
+      'submission_mode', v_submission_mode,
+      'recipient_available', FALSE,
+      'send_state', 'REJECTED'
+    );
+  END IF;
+
+  IF UPPER(COALESCE(v_qr_status, '')) <> 'PENDING' THEN
+    RETURN jsonb_build_object(
+      'ok', FALSE,
+      'queued', FALSE,
+      'operation', 'timesheet_qr_send_enqueue',
+      'error_code', 'QR_NOT_PENDING',
+      'message', 'QR send requires qr_status=PENDING.',
+      'current_timesheet_id', v_current_timesheet_id,
+      'qr_status', v_qr_status,
+      'recipient_available', FALSE,
+      'send_state', 'REJECTED'
+    );
+  END IF;
+
+  IF v_qr_scanned_at IS NOT NULL OR NULLIF(BTRIM(COALESCE(v_qr_signed_hash, '')), '') IS NOT NULL OR v_qr_signed_at_utc IS NOT NULL THEN
+    RETURN jsonb_build_object(
+      'ok', FALSE,
+      'queued', FALSE,
+      'operation', 'timesheet_qr_send_enqueue',
+      'error_code', 'QR_ALREADY_SIGNED',
+      'message', 'Cannot queue QR send: timesheet already has signed QR markers.',
+      'current_timesheet_id', v_current_timesheet_id,
+      'recipient_available', FALSE,
+      'send_state', 'REJECTED'
+    );
+  END IF;
+
+  SELECT tf_current.id,
+         tf_current.processing_status::text,
+         tf_current.locked_by_invoice_id,
+         tf_current.paid_at_utc,
+         tf_current.invoice_breakdown_json,
+         tf_current.candidate_id,
+         tf_current.client_id
+    INTO v_tsfin_id,
+         v_tsfin_processing_status,
+         v_locked_by_invoice_id,
+         v_paid_at_utc,
+         v_invoice_breakdown_json,
+         v_candidate_id,
+         v_client_id
+  FROM public.timesheets_financials AS tf_current
+  WHERE tf_current.timesheet_id = v_current_timesheet_id
+    AND tf_current.is_current = TRUE
+  ORDER BY tf_current.computed_at_utc DESC NULLS LAST,
+           tf_current.created_at DESC NULLS LAST,
+           tf_current.updated_at DESC NULLS LAST,
+           tf_current.id DESC
+  LIMIT 1
+  FOR UPDATE;
+
+  IF v_tsfin_id IS NULL THEN
+    RETURN jsonb_build_object(
+      'ok', FALSE,
+      'queued', FALSE,
+      'operation', 'timesheet_qr_send_enqueue',
+      'error_code', 'NO_TSFIN',
+      'message', 'No current financial snapshot exists for this timesheet.',
+      'current_timesheet_id', v_current_timesheet_id,
+      'recipient_available', FALSE,
+      'send_state', 'REJECTED'
+    );
+  END IF;
+
+  SELECT EXISTS (
+    SELECT 1
+    FROM jsonb_array_elements(
+      CASE
+        WHEN v_invoice_breakdown_json IS NULL THEN '[]'::jsonb
+        WHEN jsonb_typeof(v_invoice_breakdown_json) = 'array' THEN v_invoice_breakdown_json
+        WHEN jsonb_typeof(v_invoice_breakdown_json) = 'object'
+         AND jsonb_typeof(v_invoice_breakdown_json->'segments') = 'array' THEN v_invoice_breakdown_json->'segments'
+        ELSE '[]'::jsonb
+      END
+    ) AS invoice_segment(segment_json)
+    WHERE NULLIF(BTRIM(COALESCE(invoice_segment.segment_json->>'invoice_locked_invoice_id', '')), '') IS NOT NULL
+  ) INTO v_has_segment_invoice_lock;
+
+  IF v_locked_by_invoice_id IS NOT NULL OR v_paid_at_utc IS NOT NULL OR v_has_segment_invoice_lock = TRUE THEN
+    RETURN jsonb_build_object(
+      'ok', FALSE,
+      'queued', FALSE,
+      'operation', 'timesheet_qr_send_enqueue',
+      'error_code', 'TIMESHEET_LOCKED_OR_PAID',
+      'message', 'Cannot queue QR send: timesheet is locked, invoice-locked, or paid.',
+      'current_timesheet_id', v_current_timesheet_id,
+      'recipient_available', FALSE,
+      'send_state', 'REJECTED'
+    );
+  END IF;
+
+  IF UPPER(COALESCE(v_sheet_scope, '')) = 'WEEKLY' THEN
+    SELECT EXISTS (
+      SELECT 1
+      FROM jsonb_array_elements(
+        CASE
+          WHEN jsonb_typeof(COALESCE(v_actual_schedule_json, '[]'::jsonb)) = 'array' THEN COALESCE(v_actual_schedule_json, '[]'::jsonb)
+          ELSE '[]'::jsonb
+        END
+      ) AS schedule_segment(segment_json)
+      WHERE NULLIF(BTRIM(COALESCE(schedule_segment.segment_json->>'start', schedule_segment.segment_json->>'start_utc', '')), '') IS NOT NULL
+        AND NULLIF(BTRIM(COALESCE(schedule_segment.segment_json->>'end', schedule_segment.segment_json->>'end_utc', '')), '') IS NOT NULL
+    ) OR EXISTS (
+      SELECT 1
+      FROM jsonb_array_elements(
+        CASE
+          WHEN v_invoice_breakdown_json IS NULL THEN '[]'::jsonb
+          WHEN jsonb_typeof(v_invoice_breakdown_json) = 'array' THEN v_invoice_breakdown_json
+          WHEN jsonb_typeof(v_invoice_breakdown_json) = 'object'
+           AND jsonb_typeof(v_invoice_breakdown_json->'segments') = 'array' THEN v_invoice_breakdown_json->'segments'
+          ELSE '[]'::jsonb
+        END
+      ) AS invoice_segment(segment_json)
+    ) INTO v_has_hours_for_send;
+  ELSE
+    v_has_hours_for_send := v_worked_start_iso IS NOT NULL AND v_worked_end_iso IS NOT NULL;
+  END IF;
+
+  IF COALESCE(v_has_hours_for_send, FALSE) = FALSE THEN
+    RETURN jsonb_build_object(
+      'ok', FALSE,
+      'queued', FALSE,
+      'operation', 'timesheet_qr_send_enqueue',
+      'error_code', 'NO_HOURS_RECORDED',
+      'message', 'Cannot queue QR send: no hours are recorded yet.',
+      'current_timesheet_id', v_current_timesheet_id,
+      'recipient_available', FALSE,
+      'send_state', 'REJECTED'
+    );
+  END IF;
+
+  IF v_contract_id IS NOT NULL THEN
+    SELECT contract_row.candidate_id,
+           contract_row.client_id
+      INTO v_contract_candidate_id,
+           v_contract_client_id
+    FROM public.contracts AS contract_row
+    WHERE contract_row.id = v_contract_id
+    LIMIT 1;
+  END IF;
+
+  v_candidate_id := COALESCE(v_contract_candidate_id, v_candidate_id);
+  v_client_id := COALESCE(v_contract_client_id, v_client_id);
+
+  IF v_candidate_id IS NULL THEN
+    RETURN jsonb_build_object(
+      'ok', FALSE,
+      'queued', FALSE,
+      'operation', 'timesheet_qr_send_enqueue',
+      'error_code', 'CANDIDATE_NOT_FOUND',
+      'message', 'Cannot queue QR send: candidate could not be resolved.',
+      'current_timesheet_id', v_current_timesheet_id,
+      'recipient_available', FALSE,
+      'send_state', 'REJECTED'
+    );
+  END IF;
+
+  SELECT NULLIF(BTRIM(candidate_row.email), ''),
+         COALESCE(NULLIF(BTRIM(candidate_row.display_name), ''), NULLIF(BTRIM(CONCAT_WS(' ', NULLIF(BTRIM(candidate_row.first_name), ''), NULLIF(BTRIM(candidate_row.last_name), ''))), '')),
+         COALESCE(candidate_row.opt_in_email, TRUE)
+    INTO v_candidate_email,
+         v_candidate_name,
+         v_candidate_opt_in_email
+  FROM public.candidates AS candidate_row
+  WHERE candidate_row.id = v_candidate_id
+  LIMIT 1;
+
+  v_recipient_available := NULLIF(BTRIM(COALESCE(v_candidate_email, '')), '') IS NOT NULL AND COALESCE(v_candidate_opt_in_email, TRUE) = TRUE;
+
+  IF v_recipient_available = FALSE THEN
+    RETURN jsonb_build_object(
+      'ok', FALSE,
+      'queued', FALSE,
+      'operation', 'timesheet_qr_send_enqueue',
+      'error_code', CASE WHEN NULLIF(BTRIM(COALESCE(v_candidate_email, '')), '') IS NULL THEN 'CANDIDATE_EMAIL_MISSING' ELSE 'CANDIDATE_EMAIL_OPTED_OUT' END,
+      'message', CASE WHEN NULLIF(BTRIM(COALESCE(v_candidate_email, '')), '') IS NULL THEN 'Cannot queue QR send: candidate email is missing.' ELSE 'Cannot queue QR send: candidate has opted out of email.' END,
+      'current_timesheet_id', v_current_timesheet_id,
+      'candidate_id', v_candidate_id,
+      'recipient_available', FALSE,
+      'send_state', 'REJECTED'
+    );
+  END IF;
+
+  v_payload_qr_token := CASE
+    WHEN jsonb_typeof(v_qr_payload_json) = 'object' THEN NULLIF(BTRIM(COALESCE(v_qr_payload_json->>'tok', '')), '')
+    ELSE NULL
+  END;
+  v_effective_qr_token := COALESCE(NULLIF(BTRIM(COALESCE(v_qr_token, '')), ''), v_payload_qr_token, gen_random_uuid()::text);
+  v_qr_payload_json := COALESCE(CASE WHEN jsonb_typeof(v_qr_payload_json) = 'object' THEN v_qr_payload_json ELSE '{}'::jsonb END, '{}'::jsonb)
+    || jsonb_build_object('v', 1, 'tok', v_effective_qr_token);
+
+  UPDATE public.timesheets AS ts_qr_update
+     SET qr_token = v_effective_qr_token,
+         qr_payload_json = v_qr_payload_json,
+         qr_generated_at = COALESCE(ts_qr_update.qr_generated_at, v_now),
+         qr_r2_key = NULL,
+         qr_scanned_at = NULL,
+         qr_scan_info_json = NULL,
+         updated_at = v_now
+   WHERE ts_qr_update.timesheet_id = v_current_timesheet_id
+     AND ts_qr_update.is_current = TRUE
+  RETURNING ts_qr_update.qr_generated_at,
+            ts_qr_update.updated_at
+       INTO v_qr_generated_at,
+            v_updated_at;
+
+  IF UPPER(COALESCE(v_tsfin_processing_status, '')) <> 'AWAITING_MANUAL_SIGNATURE' THEN
+    UPDATE public.timesheets_financials AS tf_update
+       SET processing_status = 'AWAITING_MANUAL_SIGNATURE'::public.ts_fin_processing_status_enum,
+           updated_at = v_now
+     WHERE tf_update.id = v_tsfin_id
+       AND tf_update.is_current = TRUE;
+  END IF;
+
+  SELECT tms_user_check.id
+    INTO v_created_by_user_id
+  FROM public.tms_users AS tms_user_check
+  WHERE tms_user_check.id = p_actor_user_id
+  LIMIT 1;
+
+  v_idempotency_key := 'timesheet_qr_send:' || v_current_timesheet_id::text || ':' || md5(CONCAT_WS('|',
+    v_current_timesheet_id::text,
+    COALESCE(v_current_version::text, ''),
+    COALESCE(v_effective_qr_token, ''),
+    COALESCE(v_candidate_email, '')
+  ));
+
+  PERFORM pg_advisory_xact_lock(hashtext('timesheet_qr_send:' || v_current_timesheet_id::text));
+  PERFORM pg_advisory_xact_lock(hashtext(v_idempotency_key));
+
+  v_pdf_key := 'docs-pdf/timesheets/ts_' || v_current_timesheet_id::text || '.pdf';
+  v_mail_reference := v_idempotency_key;
+  v_mail_scheduled_for_utc := v_now + interval '10 minutes';
+  v_mail_subject := CASE
+    WHEN UPPER(COALESCE(v_sheet_scope, '')) = 'WEEKLY' THEN 'Weekly QR timesheet – week ending ' || COALESCE(v_week_ending_date::text, '(unknown)')
+    ELSE 'Daily QR timesheet – ' || COALESCE((v_worked_start_iso AT TIME ZONE 'Europe/London')::date::text, '(unknown date)')
+  END;
+  v_mail_body_text := CONCAT_WS(E'\n',
+    'Please print the attached timesheet, ask the ward manager to sign it,',
+    'and then upload the signed copy via the app.',
+    '',
+    CASE WHEN UPPER(COALESCE(v_sheet_scope, '')) = 'WEEKLY' THEN 'Week ending: ' || COALESCE(v_week_ending_date::text, '(unknown)') ELSE 'Date: ' || COALESCE((v_worked_start_iso AT TIME ZONE 'Europe/London')::date::text, '(unknown date)') END,
+    'Timesheet ID: ' || v_current_timesheet_id::text
+  );
+  v_mail_body_html := '<p>Please print the attached timesheet, ask the ward manager to sign it, and then upload the signed copy via the app.<br/><br/>'
+    || CASE WHEN UPPER(COALESCE(v_sheet_scope, '')) = 'WEEKLY' THEN 'Week ending: ' || COALESCE(v_week_ending_date::text, '(unknown)') ELSE 'Date: ' || COALESCE((v_worked_start_iso AT TIME ZONE 'Europe/London')::date::text, '(unknown date)') END
+    || '<br/>Timesheet ID: ' || v_current_timesheet_id::text || '</p>';
+
+  SELECT existing_pdf.id
+    INTO v_existing_pdf_job_id
+  FROM public.ts_pdfs_outbox AS existing_pdf
+  WHERE existing_pdf.timesheet_id = v_current_timesheet_id
+    AND existing_pdf.reason = 'FORCE_REGEN'::public.ts_pdf_reason_enum
+  ORDER BY existing_pdf.created_at DESC,
+           existing_pdf.id DESC
+  LIMIT 1
+  FOR UPDATE;
+
+  IF v_existing_pdf_job_id IS NOT NULL THEN
+    UPDATE public.ts_pdfs_outbox AS pdf_update
+       SET attempt_count = 0,
+           next_attempt_at = NULL,
+           last_error = NULL,
+           prefer_generated = TRUE,
+           force_regen = TRUE
+     WHERE pdf_update.id = v_existing_pdf_job_id
+    RETURNING pdf_update.id INTO v_pdf_job_id;
+  ELSE
+    INSERT INTO public.ts_pdfs_outbox AS pdf_insert (
+      timesheet_id,
+      reason,
+      attempt_count,
+      next_attempt_at,
+      last_error,
+      prefer_generated,
+      force_regen,
+      created_at
+    ) VALUES (
+      v_current_timesheet_id,
+      'FORCE_REGEN'::public.ts_pdf_reason_enum,
+      0,
+      NULL,
+      NULL,
+      TRUE,
+      TRUE,
+      v_now
+    )
+    RETURNING pdf_insert.id INTO v_pdf_job_id;
+  END IF;
+
+  SELECT mail_existing.id,
+         mail_existing.status::text
+    INTO v_existing_mail_id,
+         v_existing_mail_status
+  FROM public.mail_outbox AS mail_existing
+  WHERE mail_existing.type = 'TIMESHEET_QR'
+    AND mail_existing.reference = v_mail_reference
+    AND mail_existing.context_kind = 'timesheets'
+    AND mail_existing.context_id = v_current_timesheet_id
+    AND mail_existing."to" = v_candidate_email
+  ORDER BY mail_existing.created_at_utc DESC,
+           mail_existing.id DESC
+  LIMIT 1;
+
+  IF v_existing_mail_id IS NOT NULL THEN
+    v_mail_job_id := v_existing_mail_id;
+
+    IF UPPER(COALESCE(v_existing_mail_status, '')) = 'SENT' THEN
+      v_send_state := 'ALREADY_SENT';
+    ELSE
+      UPDATE public.mail_outbox AS mail_update
+         SET status = 'QUEUED'::public.mail_status_enum,
+             subject = v_mail_subject,
+             body_html = v_mail_body_html,
+             body_text = v_mail_body_text,
+             attachments = jsonb_build_array(jsonb_build_object('r2_key', v_pdf_key, 'filename', 'Timesheet_' || COALESCE(v_week_ending_date::text, v_current_timesheet_id::text) || '.pdf')),
+             last_error = NULL,
+             failed_at = NULL,
+             scheduled_for_utc = v_mail_scheduled_for_utc,
+             next_attempt_at_utc = v_mail_scheduled_for_utc,
+             provider_status = NULL,
+             provider_message_id = NULL,
+             attempt_lease_token = NULL,
+             attempt_leased_at_utc = NULL,
+             attempt_lease_expires_at_utc = NULL,
+             payment_scope_json = jsonb_build_object(
+               'job_kind', 'TIMESHEET_QR_SEND',
+               'pdf_job_id', v_pdf_job_id::text,
+               'idempotency_key', v_idempotency_key,
+               'requires_pdf_render', TRUE,
+               'release_mail_after_pdf_render', FALSE,
+               'mail_delayed_for_pdf_render', TRUE,
+               'pdf_render_delay_minutes', 10,
+               'pdf_storage_key', v_pdf_key,
+               'current_timesheet_id', v_current_timesheet_id::text,
+               'current_version', v_current_version,
+               'recipient_email', v_candidate_email
+             )
+       WHERE mail_update.id = v_existing_mail_id;
+
+      v_send_state := CASE WHEN UPPER(COALESCE(v_existing_mail_status, '')) = 'FAILED' THEN 'PDF_REQUEUED' ELSE 'PDF_ALREADY_QUEUED' END;
+    END IF;
+  ELSE
+    INSERT INTO public.mail_outbox AS mail_insert (
+      type,
+      "to",
+      cc,
+      bcc,
+      reply_to,
+      importance,
+      email_type,
+      subject,
+      body_html,
+      body_text,
+      attachments,
+      status,
+      last_error,
+      created_at_utc,
+      sent_at,
+      created_by,
+      reference,
+      recipient_kind,
+      recipient_id,
+      context_kind,
+      context_id,
+      mailshot_run_id,
+      document_template_id,
+      provider_status,
+      delivered_at,
+      read_at,
+      scheduled_for_utc,
+      next_attempt_at_utc,
+      payment_scope_json
+    ) VALUES (
+      'TIMESHEET_QR',
+      v_candidate_email,
+      NULL,
+      NULL,
+      NULL,
+      'Normal',
+      'html',
+      v_mail_subject,
+      v_mail_body_html,
+      v_mail_body_text,
+      jsonb_build_array(jsonb_build_object('r2_key', v_pdf_key, 'filename', 'Timesheet_' || COALESCE(v_week_ending_date::text, v_current_timesheet_id::text) || '.pdf')),
+      'QUEUED'::public.mail_status_enum,
+      NULL,
+      v_now,
+      NULL,
+      v_created_by_user_id,
+      v_mail_reference,
+      'candidate',
+      v_candidate_id,
+      'timesheets',
+      v_current_timesheet_id,
+      NULL,
+      NULL,
+      NULL,
+      NULL,
+      NULL,
+      v_mail_scheduled_for_utc,
+      v_mail_scheduled_for_utc,
+      jsonb_build_object(
+        'job_kind', 'TIMESHEET_QR_SEND',
+        'pdf_job_id', v_pdf_job_id::text,
+        'idempotency_key', v_idempotency_key,
+        'requires_pdf_render', TRUE,
+        'release_mail_after_pdf_render', FALSE,
+        'mail_delayed_for_pdf_render', TRUE,
+        'pdf_render_delay_minutes', 10,
+        'pdf_storage_key', v_pdf_key,
+        'current_timesheet_id', v_current_timesheet_id::text,
+        'current_version', v_current_version,
+        'recipient_email', v_candidate_email
+      )
+    )
+    RETURNING id INTO v_mail_job_id;
+
+    v_send_state := 'PDF_QUEUED';
+  END IF;
+
+  v_job_id := v_mail_job_id;
+
+  SELECT decision_result.row_json
+    INTO v_post_row
+  FROM public.bulk_timesheet_row_decision_v1(jsonb_build_object(
+    'dataset_mode', 'process',
+    'timesheet_id', v_current_timesheet_id::text
+  )) AS decision_result(row_json)
+  LIMIT 1;
+
+  v_row_key := NULLIF(BTRIM(COALESCE(v_post_row->>'row_key', '')), '');
+  v_storage_key := NULLIF(BTRIM(COALESCE(v_post_row->>'primary_artifact_storage_key', '')), '');
+  v_row_signature := NULLIF(BTRIM(COALESCE(v_post_row->>'row_signature', '')), '');
+
+  INSERT INTO public.audit_events AS audit_insert (
+    ts_utc,
+    actor_user_id,
+    object_type,
+    object_id_text,
+    action,
+    before_json,
+    after_json,
+    reason
+  ) VALUES (
+    v_now,
+    p_actor_user_id,
+    'timesheets',
+    v_current_timesheet_id::text,
+    'TIMESHEET_QR_SEND_QUEUED',
+    NULL,
+    jsonb_build_object(
+      'timesheet_id', v_current_timesheet_id,
+      'job_id', v_job_id,
+      'mail_outbox_id', v_mail_job_id,
+      'pdf_job_id', v_pdf_job_id,
+      'idempotency_key', v_idempotency_key,
+      'send_state', v_send_state,
+      'recipient_email', v_candidate_email,
+      'scheduled_for_utc', v_mail_scheduled_for_utc,
+      'mail_held_until_pdf_rendered', FALSE,
+      'mail_delayed_for_pdf_render', TRUE,
+      'pdf_render_delay_minutes', 10,
+      'pdf_storage_key', v_pdf_key
+    ),
+    'Bulk QR send enqueue'
+  );
+
+  RETURN jsonb_build_object(
+    'ok', TRUE,
+    'queued', TRUE,
+    'operation', 'timesheet_qr_send_enqueue',
+    'job_id', v_job_id,
+    'mail_outbox_id', v_mail_job_id,
+    'pdf_job_id', v_pdf_job_id,
+    'idempotency_key', v_idempotency_key,
+    'current_timesheet_id', v_current_timesheet_id,
+    'timesheet_id', v_current_timesheet_id,
+    'expected_timesheet_id', v_current_timesheet_id,
+    'current_version', v_current_version,
+    'recipient_available', TRUE,
+    'recipient_email', v_candidate_email,
+    'recipient_name', v_candidate_name,
+    'send_state', v_send_state,
+    'scheduled_for_utc', v_mail_scheduled_for_utc,
+    'mail_held_until_pdf_rendered', FALSE,
+    'mail_delayed_for_pdf_render', TRUE,
+    'pdf_render_delay_minutes', 10,
+    'pdf_storage_key', v_pdf_key,
+    'row_patch', COALESCE(v_post_row->'row_patch', jsonb_build_object()),
+    'data_row', COALESCE(v_post_row, jsonb_build_object()),
+    'row', COALESCE(v_post_row, jsonb_build_object()),
+    'cache_invalidation_hints', jsonb_build_object(
+      'row_keys', jsonb_build_array(COALESCE(v_row_key, 'timesheet:' || v_current_timesheet_id::text)),
+      'timesheet_ids', jsonb_build_array(v_current_timesheet_id),
+      'storage_keys', jsonb_build_array(v_storage_key, v_pdf_key),
+      'datasets', jsonb_build_array('bulk_process', 'bulk_authorise'),
+      'row_signature', v_row_signature,
+      'invalidate_context', TRUE,
+      'invalidate_preview', TRUE
+    ),
+    'cache_invalidation', jsonb_build_object(
+      'rows', jsonb_build_array(jsonb_build_object(
+        'row_key', COALESCE(v_row_key, 'timesheet:' || v_current_timesheet_id::text),
+        'timesheet_id', v_current_timesheet_id,
+        'new_row_signature', v_row_signature
+      )),
+      'artifacts', jsonb_build_array(jsonb_build_object(
+        'timesheet_id', v_current_timesheet_id,
+        'storage_key', COALESCE(v_storage_key, v_pdf_key),
+        'pdf_storage_key', v_pdf_key,
+        'changed', TRUE
+      )),
+      'datasets', jsonb_build_array('bulk_process', 'bulk_authorise')
+    )
+  );
+END;
+$function$;
 
