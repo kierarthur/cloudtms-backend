@@ -17687,7 +17687,8 @@ END;
 $function$;
 
 
-
+DROP FUNCTION IF EXISTS public.timesheet_daily_manual_process_atomic(uuid, uuid, uuid, jsonb, jsonb, timestamp with time zone);
+DROP FUNCTION IF EXISTS public.timesheet_daily_manual_process_atomic(uuid, uuid, uuid, jsonb, jsonb, timestamp with time zone, text);
 
 CREATE OR REPLACE FUNCTION public.timesheet_daily_manual_process_atomic(p_timesheet_id uuid, p_expected_timesheet_id uuid, p_actor_user_id uuid DEFAULT NULL::uuid, p_timesheet_patch_json jsonb DEFAULT '{}'::jsonb, p_tsfin_patch_json jsonb DEFAULT '{}'::jsonb, p_now_utc timestamp with time zone DEFAULT now(), p_expected_row_signature text DEFAULT NULL::text)
  RETURNS jsonb
@@ -17743,6 +17744,32 @@ DECLARE
     'other_pay_ex_vat', 'other_charge_ex_vat',
     'additional_pay_ex_vat', 'additional_charge_ex_vat', 'additional_margin_ex_vat'
   ];
+  v_forbidden_tsfin_patch_keys text[] := ARRAY[
+    'candidate_id', 'client_id', 'pay_method', 'candidate_assignment', 'basis',
+    'policy_snapshot_json', 'rate_source_refs_json',
+    'normal_hours', 'unsocial_hours', 'saturday_hours', 'sunday_hours', 'bank_holiday_hours',
+    'sleep_in_units', 'on_call_units', 'mileage_units', 'expenses_units',
+    'total_hours', 'total_pay_ex_vat', 'total_charge_ex_vat', 'margin_ex_vat', 'net_delta_ex_vat',
+    'normal_pay_rate', 'unsocial_pay_rate', 'saturday_pay_rate', 'sunday_pay_rate', 'bank_holiday_pay_rate',
+    'normal_charge_rate', 'unsocial_charge_rate', 'saturday_charge_rate', 'sunday_charge_rate', 'bank_holiday_charge_rate',
+    'mileage_pay_rate', 'mileage_charge_rate', 'expenses_pay', 'expenses_charge',
+    'has_rate_issue', 'has_pay_channel_issue',
+    'hours_day', 'hours_night', 'hours_sat', 'hours_sun', 'hours_bh',
+    'pay_day', 'pay_night', 'pay_sat', 'pay_sun', 'pay_bh',
+    'charge_day', 'charge_night', 'charge_sat', 'charge_sun', 'charge_bh',
+    'expenses_pay_ex_vat', 'expenses_charge_ex_vat',
+    'mileage_pay_ex_vat', 'mileage_charge_ex_vat',
+    'travel_pay_ex_vat', 'travel_charge_ex_vat',
+    'accommodation_pay_ex_vat', 'accommodation_charge_ex_vat',
+    'other_pay_ex_vat', 'other_charge_ex_vat',
+    'additional_pay_ex_vat', 'additional_charge_ex_vat', 'additional_margin_ex_vat'
+  ];
+  v_financial_affecting_timesheet_patch_keys text[] := ARRAY[
+    'worked_start_iso', 'worked_end_iso', 'break_start_iso', 'break_end_iso',
+    'break_minutes', 'worked_minutes', 'actual_schedule_json',
+    'additional_units_week', 'additional_units_per_day',
+    'scheduled_start_iso', 'scheduled_end_iso', 'week_ending_date', 'worked_date', 'work_date'
+  ];
 BEGIN
   IF p_timesheet_id IS NULL THEN
     RETURN JSONB_BUILD_OBJECT('ok', FALSE, 'operation', 'daily_manual_process', 'error_code', 'TIMESHEET_ID_REQUIRED', 'message', 'p_timesheet_id is required.');
@@ -17763,6 +17790,34 @@ BEGIN
   IF jsonb_typeof(v_tsfin_patch) <> 'object' THEN
     RETURN JSONB_BUILD_OBJECT('ok', FALSE, 'operation', 'daily_manual_process', 'error_code', 'TSFIN_PATCH_MUST_BE_OBJECT', 'message', 'p_tsfin_patch_json must be a JSON object.');
   END IF;
+
+  FOREACH v_patch_key IN ARRAY v_forbidden_tsfin_patch_keys LOOP
+    IF v_tsfin_patch ? v_patch_key THEN
+      RETURN JSONB_BUILD_OBJECT(
+        'ok', FALSE,
+        'success', FALSE,
+        'operation', 'daily_manual_process',
+        'error_code', 'TSFIN_PATCH_FORBIDDEN_FIELD',
+        'message', 'Cannot process: TSFIN patch contains an authoritative or financial field.',
+        'field', v_patch_key,
+        'timesheet_id', p_timesheet_id
+      );
+    END IF;
+  END LOOP;
+
+  FOREACH v_patch_key IN ARRAY v_financial_affecting_timesheet_patch_keys LOOP
+    IF v_timesheet_patch ? v_patch_key THEN
+      RETURN JSONB_BUILD_OBJECT(
+        'ok', FALSE,
+        'success', FALSE,
+        'operation', 'daily_manual_process',
+        'error_code', 'TIMESHEET_PATCH_REQUIRES_RECALCULATION',
+        'message', 'Cannot process while changing worked time, schedule, break, work date, or additional units. Save and recalculate the row before processing.',
+        'field', v_patch_key,
+        'timesheet_id', p_timesheet_id
+      );
+    END IF;
+  END LOOP;
 
   SELECT requested_ts.booking_id,
          requested_ts.timesheet_id
@@ -17840,12 +17895,12 @@ BEGIN
          tsfin_current.locked_by_invoice_id,
          tsfin_current.paid_at_utc,
          tsfin_current.invoice_breakdown_json,
-         CASE WHEN v_tsfin_patch ? 'candidate_id' THEN NULLIF(BTRIM(v_tsfin_patch->>'candidate_id'), '')::uuid ELSE tsfin_current.candidate_id END,
-         CASE WHEN v_tsfin_patch ? 'client_id' THEN NULLIF(BTRIM(v_tsfin_patch->>'client_id'), '')::uuid ELSE tsfin_current.client_id END,
-         CASE WHEN v_tsfin_patch ? 'pay_method' THEN NULLIF(BTRIM(v_tsfin_patch->>'pay_method'), '') ELSE tsfin_current.pay_method END,
-         CASE WHEN v_tsfin_patch ? 'candidate_assignment' THEN NULLIF(BTRIM(v_tsfin_patch->>'candidate_assignment'), '') ELSE tsfin_current.candidate_assignment::text END,
-         CASE WHEN v_tsfin_patch ? 'has_rate_issue' THEN COALESCE((v_tsfin_patch->>'has_rate_issue')::boolean, FALSE) ELSE COALESCE(tsfin_current.has_rate_issue, FALSE) END,
-         CASE WHEN v_tsfin_patch ? 'has_pay_channel_issue' THEN COALESCE((v_tsfin_patch->>'has_pay_channel_issue')::boolean, FALSE) ELSE COALESCE(tsfin_current.has_pay_channel_issue, FALSE) END,
+         tsfin_current.candidate_id,
+         tsfin_current.client_id,
+         tsfin_current.pay_method,
+         tsfin_current.candidate_assignment::text,
+         COALESCE(tsfin_current.has_rate_issue, FALSE),
+         COALESCE(tsfin_current.has_pay_channel_issue, FALSE),
          TO_JSONB(tsfin_current)
     INTO v_tsfin_id,
          v_previous_status,
@@ -18028,60 +18083,7 @@ BEGIN
   END IF;
 
   UPDATE public.timesheets_financials AS tsfin_update
-  SET worked_start_iso = CASE WHEN v_tsfin_patch ? 'worked_start_iso' THEN NULLIF(BTRIM(v_tsfin_patch->>'worked_start_iso'), '')::timestamp with time zone ELSE tsfin_update.worked_start_iso END,
-      worked_end_iso = CASE WHEN v_tsfin_patch ? 'worked_end_iso' THEN NULLIF(BTRIM(v_tsfin_patch->>'worked_end_iso'), '')::timestamp with time zone ELSE tsfin_update.worked_end_iso END,
-      break_start_iso = CASE WHEN v_tsfin_patch ? 'break_start_iso' THEN NULLIF(BTRIM(v_tsfin_patch->>'break_start_iso'), '')::timestamp with time zone ELSE tsfin_update.break_start_iso END,
-      break_end_iso = CASE WHEN v_tsfin_patch ? 'break_end_iso' THEN NULLIF(BTRIM(v_tsfin_patch->>'break_end_iso'), '')::timestamp with time zone ELSE tsfin_update.break_end_iso END,
-      break_minutes = CASE WHEN v_tsfin_patch ? 'break_minutes' THEN NULLIF(BTRIM(v_tsfin_patch->>'break_minutes'), '')::integer ELSE tsfin_update.break_minutes END,
-      actual_schedule_json = CASE WHEN v_tsfin_patch ? 'actual_schedule_json' THEN v_tsfin_patch->'actual_schedule_json' ELSE tsfin_update.actual_schedule_json END,
-      actual_minutes_by_day_json = CASE WHEN v_tsfin_patch ? 'actual_minutes_by_day_json' THEN v_tsfin_patch->'actual_minutes_by_day_json' ELSE tsfin_update.actual_minutes_by_day_json END,
-      additional_units_json = CASE WHEN v_tsfin_patch ? 'additional_units_json' THEN v_tsfin_patch->'additional_units_json' ELSE tsfin_update.additional_units_json END,
-      candidate_id = CASE WHEN v_tsfin_patch ? 'candidate_id' THEN NULLIF(BTRIM(v_tsfin_patch->>'candidate_id'), '')::uuid ELSE tsfin_update.candidate_id END,
-      client_id = CASE WHEN v_tsfin_patch ? 'client_id' THEN NULLIF(BTRIM(v_tsfin_patch->>'client_id'), '')::uuid ELSE tsfin_update.client_id END,
-      pay_method = CASE WHEN v_tsfin_patch ? 'pay_method' THEN NULLIF(BTRIM(v_tsfin_patch->>'pay_method'), '') ELSE tsfin_update.pay_method END,
-      candidate_assignment = CASE WHEN v_tsfin_patch ? 'candidate_assignment' THEN NULLIF(BTRIM(v_tsfin_patch->>'candidate_assignment'), '')::public.candidate_assignment_enum ELSE tsfin_update.candidate_assignment END,
-      basis = CASE WHEN v_tsfin_patch ? 'basis' THEN NULLIF(BTRIM(v_tsfin_patch->>'basis'), '')::public.timesheet_fin_basis_enum ELSE tsfin_update.basis END,
-      policy_snapshot_json = CASE WHEN v_tsfin_patch ? 'policy_snapshot_json' THEN v_tsfin_patch->'policy_snapshot_json' ELSE tsfin_update.policy_snapshot_json END,
-      rate_source_refs_json = CASE WHEN v_tsfin_patch ? 'rate_source_refs_json' THEN v_tsfin_patch->'rate_source_refs_json' ELSE tsfin_update.rate_source_refs_json END,
-      hours_day = CASE WHEN v_tsfin_patch ? 'hours_day' THEN NULLIF(BTRIM(v_tsfin_patch->>'hours_day'), '')::numeric ELSE tsfin_update.hours_day END,
-      hours_night = CASE WHEN v_tsfin_patch ? 'hours_night' THEN NULLIF(BTRIM(v_tsfin_patch->>'hours_night'), '')::numeric ELSE tsfin_update.hours_night END,
-      hours_sat = CASE WHEN v_tsfin_patch ? 'hours_sat' THEN NULLIF(BTRIM(v_tsfin_patch->>'hours_sat'), '')::numeric ELSE tsfin_update.hours_sat END,
-      hours_sun = CASE WHEN v_tsfin_patch ? 'hours_sun' THEN NULLIF(BTRIM(v_tsfin_patch->>'hours_sun'), '')::numeric ELSE tsfin_update.hours_sun END,
-      hours_bh = CASE WHEN v_tsfin_patch ? 'hours_bh' THEN NULLIF(BTRIM(v_tsfin_patch->>'hours_bh'), '')::numeric ELSE tsfin_update.hours_bh END,
-      pay_day = CASE WHEN v_tsfin_patch ? 'pay_day' THEN NULLIF(BTRIM(v_tsfin_patch->>'pay_day'), '')::numeric ELSE tsfin_update.pay_day END,
-      pay_night = CASE WHEN v_tsfin_patch ? 'pay_night' THEN NULLIF(BTRIM(v_tsfin_patch->>'pay_night'), '')::numeric ELSE tsfin_update.pay_night END,
-      pay_sat = CASE WHEN v_tsfin_patch ? 'pay_sat' THEN NULLIF(BTRIM(v_tsfin_patch->>'pay_sat'), '')::numeric ELSE tsfin_update.pay_sat END,
-      pay_sun = CASE WHEN v_tsfin_patch ? 'pay_sun' THEN NULLIF(BTRIM(v_tsfin_patch->>'pay_sun'), '')::numeric ELSE tsfin_update.pay_sun END,
-      pay_bh = CASE WHEN v_tsfin_patch ? 'pay_bh' THEN NULLIF(BTRIM(v_tsfin_patch->>'pay_bh'), '')::numeric ELSE tsfin_update.pay_bh END,
-      charge_day = CASE WHEN v_tsfin_patch ? 'charge_day' THEN NULLIF(BTRIM(v_tsfin_patch->>'charge_day'), '')::numeric ELSE tsfin_update.charge_day END,
-      charge_night = CASE WHEN v_tsfin_patch ? 'charge_night' THEN NULLIF(BTRIM(v_tsfin_patch->>'charge_night'), '')::numeric ELSE tsfin_update.charge_night END,
-      charge_sat = CASE WHEN v_tsfin_patch ? 'charge_sat' THEN NULLIF(BTRIM(v_tsfin_patch->>'charge_sat'), '')::numeric ELSE tsfin_update.charge_sat END,
-      charge_sun = CASE WHEN v_tsfin_patch ? 'charge_sun' THEN NULLIF(BTRIM(v_tsfin_patch->>'charge_sun'), '')::numeric ELSE tsfin_update.charge_sun END,
-      charge_bh = CASE WHEN v_tsfin_patch ? 'charge_bh' THEN NULLIF(BTRIM(v_tsfin_patch->>'charge_bh'), '')::numeric ELSE tsfin_update.charge_bh END,
-      total_hours = CASE WHEN v_tsfin_patch ? 'total_hours' THEN NULLIF(BTRIM(v_tsfin_patch->>'total_hours'), '')::numeric ELSE tsfin_update.total_hours END,
-      total_pay_ex_vat = CASE WHEN v_tsfin_patch ? 'total_pay_ex_vat' THEN NULLIF(BTRIM(v_tsfin_patch->>'total_pay_ex_vat'), '')::numeric ELSE tsfin_update.total_pay_ex_vat END,
-      total_charge_ex_vat = CASE WHEN v_tsfin_patch ? 'total_charge_ex_vat' THEN NULLIF(BTRIM(v_tsfin_patch->>'total_charge_ex_vat'), '')::numeric ELSE tsfin_update.total_charge_ex_vat END,
-      margin_ex_vat = CASE WHEN v_tsfin_patch ? 'margin_ex_vat' THEN NULLIF(BTRIM(v_tsfin_patch->>'margin_ex_vat'), '')::numeric ELSE tsfin_update.margin_ex_vat END,
-      expenses_pay_ex_vat = CASE WHEN v_tsfin_patch ? 'expenses_pay_ex_vat' THEN NULLIF(BTRIM(v_tsfin_patch->>'expenses_pay_ex_vat'), '')::numeric ELSE tsfin_update.expenses_pay_ex_vat END,
-      expenses_charge_ex_vat = CASE WHEN v_tsfin_patch ? 'expenses_charge_ex_vat' THEN NULLIF(BTRIM(v_tsfin_patch->>'expenses_charge_ex_vat'), '')::numeric ELSE tsfin_update.expenses_charge_ex_vat END,
-      expenses_description = CASE WHEN v_tsfin_patch ? 'expenses_description' THEN NULLIF(BTRIM(v_tsfin_patch->>'expenses_description'), '') ELSE tsfin_update.expenses_description END,
-      mileage_units = CASE WHEN v_tsfin_patch ? 'mileage_units' THEN NULLIF(BTRIM(v_tsfin_patch->>'mileage_units'), '')::numeric ELSE tsfin_update.mileage_units END,
-      mileage_pay_rate = CASE WHEN v_tsfin_patch ? 'mileage_pay_rate' THEN NULLIF(BTRIM(v_tsfin_patch->>'mileage_pay_rate'), '')::numeric ELSE tsfin_update.mileage_pay_rate END,
-      mileage_charge_rate = CASE WHEN v_tsfin_patch ? 'mileage_charge_rate' THEN NULLIF(BTRIM(v_tsfin_patch->>'mileage_charge_rate'), '')::numeric ELSE tsfin_update.mileage_charge_rate END,
-      mileage_pay_ex_vat = CASE WHEN v_tsfin_patch ? 'mileage_pay_ex_vat' THEN NULLIF(BTRIM(v_tsfin_patch->>'mileage_pay_ex_vat'), '')::numeric ELSE tsfin_update.mileage_pay_ex_vat END,
-      mileage_charge_ex_vat = CASE WHEN v_tsfin_patch ? 'mileage_charge_ex_vat' THEN NULLIF(BTRIM(v_tsfin_patch->>'mileage_charge_ex_vat'), '')::numeric ELSE tsfin_update.mileage_charge_ex_vat END,
-      travel_pay_ex_vat = CASE WHEN v_tsfin_patch ? 'travel_pay_ex_vat' THEN NULLIF(BTRIM(v_tsfin_patch->>'travel_pay_ex_vat'), '')::numeric ELSE tsfin_update.travel_pay_ex_vat END,
-      travel_charge_ex_vat = CASE WHEN v_tsfin_patch ? 'travel_charge_ex_vat' THEN NULLIF(BTRIM(v_tsfin_patch->>'travel_charge_ex_vat'), '')::numeric ELSE tsfin_update.travel_charge_ex_vat END,
-      accommodation_pay_ex_vat = CASE WHEN v_tsfin_patch ? 'accommodation_pay_ex_vat' THEN NULLIF(BTRIM(v_tsfin_patch->>'accommodation_pay_ex_vat'), '')::numeric ELSE tsfin_update.accommodation_pay_ex_vat END,
-      accommodation_charge_ex_vat = CASE WHEN v_tsfin_patch ? 'accommodation_charge_ex_vat' THEN NULLIF(BTRIM(v_tsfin_patch->>'accommodation_charge_ex_vat'), '')::numeric ELSE tsfin_update.accommodation_charge_ex_vat END,
-      other_pay_ex_vat = CASE WHEN v_tsfin_patch ? 'other_pay_ex_vat' THEN NULLIF(BTRIM(v_tsfin_patch->>'other_pay_ex_vat'), '')::numeric ELSE tsfin_update.other_pay_ex_vat END,
-      other_charge_ex_vat = CASE WHEN v_tsfin_patch ? 'other_charge_ex_vat' THEN NULLIF(BTRIM(v_tsfin_patch->>'other_charge_ex_vat'), '')::numeric ELSE tsfin_update.other_charge_ex_vat END,
-      additional_pay_ex_vat = CASE WHEN v_tsfin_patch ? 'additional_pay_ex_vat' THEN NULLIF(BTRIM(v_tsfin_patch->>'additional_pay_ex_vat'), '')::numeric ELSE tsfin_update.additional_pay_ex_vat END,
-      additional_charge_ex_vat = CASE WHEN v_tsfin_patch ? 'additional_charge_ex_vat' THEN NULLIF(BTRIM(v_tsfin_patch->>'additional_charge_ex_vat'), '')::numeric ELSE tsfin_update.additional_charge_ex_vat END,
-      additional_margin_ex_vat = CASE WHEN v_tsfin_patch ? 'additional_margin_ex_vat' THEN NULLIF(BTRIM(v_tsfin_patch->>'additional_margin_ex_vat'), '')::numeric ELSE tsfin_update.additional_margin_ex_vat END,
-      has_rate_issue = CASE WHEN v_tsfin_patch ? 'has_rate_issue' THEN COALESCE((v_tsfin_patch->>'has_rate_issue')::boolean, FALSE) ELSE tsfin_update.has_rate_issue END,
-      has_pay_channel_issue = CASE WHEN v_tsfin_patch ? 'has_pay_channel_issue' THEN COALESCE((v_tsfin_patch->>'has_pay_channel_issue')::boolean, FALSE) ELSE tsfin_update.has_pay_channel_issue END,
-      processing_status = v_new_status,
+  SET processing_status = v_new_status,
       processed_by_user_id = p_actor_user_id,
       processed_at_utc = v_now,
       authorised_by_user_id = NULL,
@@ -18159,6 +18161,9 @@ BEGIN
   );
 END;
 $function$;
+
+
+
 
 
 
