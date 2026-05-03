@@ -28066,6 +28066,8 @@ async function handleAuditEventsList(env, req) {
 // - Returns the updated contract_week row (representation)
 // ============================================================================
 
+
+
 async function handleContractWeekManualUpsert(env, req, weekId) {
   const enc = encodeURIComponent;
   const WLOG = true;
@@ -29904,20 +29906,35 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
     ? 'contract_week_manual_upsert_bulk_process_atomic'
     : 'contract_week_manual_upsert_atomic';
 
+  const rpcArgs = bulkProcessResponseRequested
+    ? {
+        p_week_id: String(cw.id),
+        p_expected_timesheet_id: currentTimesheetIdForWeek || null,
+        p_timesheet_create_json: rpcTimesheetCreateJson,
+        p_timesheet_patch_json: rpcTimesheetPatchJson,
+        p_contract_week_patch_json: rpcWeekPatch,
+        p_tsfin_snapshot_json: snap,
+        p_rotation_json: rotationRpcJson,
+        p_actor_user_id: user?.id || null,
+        p_materialise_staged_evidence: true,
+        p_now_utc: nowIso2
+      }
+    : {
+        p_week_id: String(cw.id),
+        p_expected_timesheet_id: currentTimesheetIdForWeek || null,
+        p_timesheet_create_json: rpcTimesheetCreateJson,
+        p_timesheet_patch_json: rpcTimesheetPatchJson,
+        p_contract_week_patch_json: rpcWeekPatch,
+        p_tsfin_snapshot_json: snap,
+        p_rotation_json: rotationRpcJson,
+        p_actor_user_id: user?.id || null,
+        p_materialise_staged_evidence: true,
+        p_now_utc: nowIso2
+      };
+
   let rpcRes;
   try {
-    rpcRes = await sbRpc(env, rpcFunctionName, {
-      p_week_id: String(cw.id),
-      p_expected_timesheet_id: currentTimesheetIdForWeek || null,
-      p_timesheet_create_json: rpcTimesheetCreateJson,
-      p_timesheet_patch_json: rpcTimesheetPatchJson,
-      p_contract_week_patch_json: rpcWeekPatch,
-      p_tsfin_snapshot_json: snap,
-      p_rotation_json: rotationRpcJson,
-      p_actor_user_id: user?.id || null,
-      p_materialise_staged_evidence: true,
-      p_now_utc: nowIso2
-    });
+    rpcRes = await sbRpc(env, rpcFunctionName, rpcArgs);
   } catch (e) {
     const rpcErr = parseRpcFailure(e);
     const detailObj = parseMaybeJsonObj(rpcErr.details);
@@ -34532,6 +34549,59 @@ async function handleTimesheetDailyManualProcess(env, req, timesheetId) {
     }
     return (out && typeof out === 'object' && !Array.isArray(out)) ? out : {};
   };
+  const pickObject = (value) => (value && typeof value === 'object' && !Array.isArray(value)) ? value : {};
+  const errorCodeOf = (payload, fallback = '') => String(payload?.error_code || payload?.error || fallback || '').trim().toUpperCase();
+  const statusForProcessError = (payload) => {
+    const code = errorCodeOf(payload);
+    if (code === 'TIMESHEET_MOVED' || code === 'ROW_SIGNATURE_MISMATCH') return 409;
+    if (
+      code === 'TIMESHEET_LOCKED_OR_PAID' ||
+      code === 'TIMESHEET_ALREADY_AUTHORISED' ||
+      code === 'NOT_UNPROCESSED' ||
+      code === 'TSFIN_PATCH_MISMATCH'
+    ) return 409;
+    if (
+      code === 'TIMESHEET_ID_REQUIRED' ||
+      code === 'EXPECTED_TIMESHEET_ID_REQUIRED' ||
+      code === 'ACTOR_USER_ID_REQUIRED' ||
+      code === 'TIMESHEET_NOT_FOUND' ||
+      code === 'CURRENT_TIMESHEET_NOT_FOUND' ||
+      code === 'NOT_DAILY' ||
+      code === 'NOT_MANUAL' ||
+      code === 'NO_TSFIN' ||
+      code === 'CANDIDATE_MISSING' ||
+      code === 'CLIENT_MISSING' ||
+      code === 'RATE_ISSUE' ||
+      code === 'PAY_CHANNEL_ISSUE' ||
+      code === 'PAY_METHOD_MISSING' ||
+      code === 'CANDIDATE_ASSIGNMENT_UNRESOLVED' ||
+      code === 'AUTHORITATIVE_TSFIN_TOTALS_MISSING' ||
+      code === 'TSFIN_PATCH_INVALID_NUMERIC' ||
+      code === 'TIMESHEET_PATCH_MUST_BE_OBJECT' ||
+      code === 'TSFIN_PATCH_MUST_BE_OBJECT'
+    ) return 400;
+    return 500;
+  };
+  const responseForRpcPayload = (payload, fallbackMessage) => {
+    if (!payload || typeof payload !== 'object' || payload.ok !== false) {
+      return withCORS(env, req, ok(payload || {}));
+    }
+    const status = statusForProcessError(payload);
+    const body = {
+      error: payload.error_code || payload.error || 'PROCESS_FAILED',
+      error_code: payload.error_code || payload.error || 'PROCESS_FAILED',
+      message: payload.message || fallbackMessage,
+      ...payload
+    };
+    return withCORS(env, req, new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } }));
+  };
+  const parseRpcErrorPayload = (err) => {
+    if (err && err.json && typeof err.json === 'object') return err.json;
+    if (typeof err?.body === 'string' && err.body) {
+      try { return JSON.parse(err.body); } catch {}
+    }
+    return { ok: false, error_code: 'RPC_FAILED', message: String(err?.message || err || 'Failed to process daily manual timesheet') };
+  };
 
   const requestedTimesheetId = trimStr(timesheetId || '');
   if (!requestedTimesheetId) return withCORS(env, req, badRequest('timesheet_id is required'));
@@ -34544,7 +34614,6 @@ async function handleTimesheetDailyManualProcess(env, req, timesheetId) {
     return withCORS(env, req, badRequest('Invalid JSON'));
   }
 
-  const pickObject = (value) => (value && typeof value === 'object' && !Array.isArray(value)) ? value : {};
   const expectedTimesheetId = trimStr(
     body?.expected_timesheet_id ||
     body?.expectedTimesheetId ||
@@ -34553,6 +34622,15 @@ async function handleTimesheetDailyManualProcess(env, req, timesheetId) {
     body?.current_timesheet_id ||
     body?.currentTimesheetId ||
     requestedTimesheetId
+  );
+  const expectedRowSignature = trimStr(
+    body?.expected_row_signature ||
+    body?.expectedRowSignature ||
+    body?.row_signature ||
+    body?.rowSignature ||
+    body?.data_row?.row_signature ||
+    body?.dataRow?.rowSignature ||
+    ''
   );
 
   const timesheetPatchKeys = [
@@ -34638,6 +34716,9 @@ async function handleTimesheetDailyManualProcess(env, req, timesheetId) {
       tsfinPatch[key] = body[key];
     }
   }
+  if (expectedRowSignature && !Object.prototype.hasOwnProperty.call(timesheetPatch, 'row_signature')) {
+    timesheetPatch.row_signature = expectedRowSignature;
+  }
 
   try {
     const rpcRes = await sbRpc(env, 'timesheet_daily_manual_process_atomic', {
@@ -34645,15 +34726,16 @@ async function handleTimesheetDailyManualProcess(env, req, timesheetId) {
       p_expected_timesheet_id: expectedTimesheetId || requestedTimesheetId,
       p_actor_user_id: user?.id || null,
       p_timesheet_patch_json: timesheetPatch,
-      p_tsfin_patch_json: tsfinPatch
+      p_tsfin_patch_json: tsfinPatch,
+      p_expected_row_signature: expectedRowSignature || null
     }, { timeoutMs: 45000 });
     const payload = unwrapRpcPayload(rpcRes, 'timesheet_daily_manual_process_atomic');
-    return withCORS(env, req, ok(payload));
+    return responseForRpcPayload(payload, 'Failed to process daily manual timesheet');
   } catch (err) {
-    return withCORS(env, req, serverError(String(err?.message || err || 'Failed to process daily manual timesheet')));
+    const payload = parseRpcErrorPayload(err);
+    return responseForRpcPayload(payload, 'Failed to process daily manual timesheet');
   }
 }
-
 async function handleTimesheetDailyManualUnprocess(env, req, timesheetId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -34666,6 +34748,46 @@ async function handleTimesheetDailyManualUnprocess(env, req, timesheetId) {
       out = out[fnName];
     }
     return (out && typeof out === 'object' && !Array.isArray(out)) ? out : {};
+  };
+  const statusForUnprocessError = (payload) => {
+    const code = String(payload?.error_code || payload?.error || '').trim().toUpperCase();
+    if (code === 'TIMESHEET_MOVED' || code === 'ROW_SIGNATURE_MISMATCH') return 409;
+    if (
+      code === 'TIMESHEET_LOCKED_OR_PAID' ||
+      code === 'TIMESHEET_AUTHORISED_EDIT_BLOCKED' ||
+      code === 'ALREADY_UNPROCESSED' ||
+      code === 'UNPROCESS_NOT_ALLOWED'
+    ) return 409;
+    if (
+      code === 'TIMESHEET_ID_REQUIRED' ||
+      code === 'EXPECTED_TIMESHEET_ID_REQUIRED' ||
+      code === 'TIMESHEET_NOT_FOUND' ||
+      code === 'CURRENT_TIMESHEET_NOT_FOUND' ||
+      code === 'NOT_DAILY' ||
+      code === 'NOT_MANUAL' ||
+      code === 'NO_TSFIN'
+    ) return 400;
+    return 500;
+  };
+  const responseForRpcPayload = (payload, fallbackMessage) => {
+    if (!payload || typeof payload !== 'object' || payload.ok !== false) {
+      return withCORS(env, req, ok(payload || {}));
+    }
+    const status = statusForUnprocessError(payload);
+    const body = {
+      error: payload.error_code || payload.error || 'UNPROCESS_FAILED',
+      error_code: payload.error_code || payload.error || 'UNPROCESS_FAILED',
+      message: payload.message || fallbackMessage,
+      ...payload
+    };
+    return withCORS(env, req, new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } }));
+  };
+  const parseRpcErrorPayload = (err) => {
+    if (err && err.json && typeof err.json === 'object') return err.json;
+    if (typeof err?.body === 'string' && err.body) {
+      try { return JSON.parse(err.body); } catch {}
+    }
+    return { ok: false, error_code: 'RPC_FAILED', message: String(err?.message || err || 'Failed to unprocess daily manual timesheet') };
   };
 
   const requestedTimesheetId = trimStr(timesheetId || '');
@@ -34688,19 +34810,33 @@ async function handleTimesheetDailyManualUnprocess(env, req, timesheetId) {
     body?.currentTimesheetId ||
     requestedTimesheetId
   );
+  const expectedRowSignature = trimStr(
+    body?.expected_row_signature ||
+    body?.expectedRowSignature ||
+    body?.row_signature ||
+    body?.rowSignature ||
+    body?.data_row?.row_signature ||
+    body?.dataRow?.rowSignature ||
+    ''
+  );
 
   try {
     const rpcRes = await sbRpc(env, 'timesheet_daily_manual_unprocess_atomic', {
       p_timesheet_id: requestedTimesheetId,
       p_expected_timesheet_id: expectedTimesheetId || requestedTimesheetId,
-      p_actor_user_id: user?.id || null
+      p_actor_user_id: user?.id || null,
+      p_expected_row_signature: expectedRowSignature || null
     }, { timeoutMs: 45000 });
     const payload = unwrapRpcPayload(rpcRes, 'timesheet_daily_manual_unprocess_atomic');
-    return withCORS(env, req, ok(payload));
+    return responseForRpcPayload(payload, 'Failed to unprocess daily manual timesheet');
   } catch (err) {
-    return withCORS(env, req, serverError(String(err?.message || err || 'Failed to unprocess daily manual timesheet')));
+    const payload = parseRpcErrorPayload(err);
+    return responseForRpcPayload(payload, 'Failed to unprocess daily manual timesheet');
   }
 }
+
+
+
 
 async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
   const enc = encodeURIComponent;
@@ -39296,6 +39432,69 @@ async function handleTimesheetQrResendEmail(env, req, timesheetId) {
   const expected = body?.expected_timesheet_id ? String(body.expected_timesheet_id) : '';
   if (!expected) return withCORS(env, req, badRequest('expected_timesheet_id is required'));
 
+  const queueMode = !!(
+    body?.bulk_process === true ||
+    body?.bulkProcess === true ||
+    body?.bulk_authorise === true ||
+    body?.bulkAuthorise === true ||
+    body?.queue_only === true ||
+    body?.queueOnly === true ||
+    body?.enqueue_only === true ||
+    body?.enqueueOnly === true ||
+    body?.return_bulk_patch === true ||
+    body?.returnBulkPatch === true ||
+    String(body?.context || '').trim().toLowerCase() === 'bulk_process' ||
+    String(body?.mode || '').trim().toLowerCase() === 'bulk_process' ||
+    String(body?.context || '').trim().toLowerCase() === 'bulk_authorise' ||
+    String(body?.mode || '').trim().toLowerCase() === 'bulk_authorise'
+  );
+
+  const unwrapRpcPayload = (payload, fnName) => {
+    let out = payload;
+    if (Array.isArray(out) && out.length === 1) out = out[0];
+    if (out && typeof out === 'object' && !Array.isArray(out) && Object.prototype.hasOwnProperty.call(out, fnName)) {
+      out = out[fnName];
+    }
+    return (out && typeof out === 'object' && !Array.isArray(out)) ? out : {};
+  };
+
+  const statusForQrEnqueuePayload = (payload) => {
+    const code = String(payload?.error_code || payload?.error || '').trim().toUpperCase();
+    if (code === 'TIMESHEET_MOVED') return 409;
+    if (code === 'TIMESHEET_LOCKED_OR_PAID' || code === 'QR_ALREADY_SIGNED') return 409;
+    if (code) return 400;
+    return 500;
+  };
+
+  if (queueMode) {
+    try {
+      const rpcRes = await sbRpc(env, 'timesheet_qr_send_enqueue_v1', {
+        p_timesheet_id: timesheetId,
+        p_expected_timesheet_id: expected,
+        p_actor_user_id: user?.id || null,
+        p_idempotency_key: body?.idempotency_key || body?.idempotencyKey || null
+      }, { timeoutMs: 45000 });
+      const payload = unwrapRpcPayload(rpcRes, 'timesheet_qr_send_enqueue_v1');
+      if (payload && payload.ok === false) {
+        const status = statusForQrEnqueuePayload(payload);
+        return withCORS(env, req, new Response(JSON.stringify({
+          error: payload.error_code || payload.error || 'QR_SEND_ENQUEUE_FAILED',
+          error_code: payload.error_code || payload.error || 'QR_SEND_ENQUEUE_FAILED',
+          message: payload.message || 'Failed to queue QR send.',
+          ...payload
+        }), { status, headers: { 'Content-Type': 'application/json' } }));
+      }
+      return withCORS(env, req, ok({
+        ...payload,
+        queued: payload.queued !== false,
+        bulk_mode: true
+      }));
+    } catch (err) {
+      return withCORS(env, req, serverError(String(err?.message || err || 'Failed to queue QR send')));
+    }
+  }
+
+
   // ✅ stale-safe resolve
   const resolved = await resolveTimesheetToCurrent(env, timesheetId);
   if (!resolved) return withCORS(env, req, notFound('Timesheet not found'));
@@ -39323,7 +39522,7 @@ async function handleTimesheetQrResendEmail(env, req, timesheetId) {
 
     const r = await fetch(url, {
       method: 'PATCH',
-      headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+      headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
       body: JSON.stringify(patchBody)
     });
 
@@ -39428,11 +39627,28 @@ async function handleTimesheetQrResendEmail(env, req, timesheetId) {
       `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
         `?timesheet_id=eq.${enc(currentTimesheetId)}` +
         `&is_current=eq.true` +
-        `&select=id,processing_status,locked_by_invoice_id,paid_at_utc` +
+        `&select=id,processing_status,locked_by_invoice_id,paid_at_utc,invoice_breakdown_json` +
         `&limit=1`
     );
 
-    if (fin && (fin.locked_by_invoice_id || fin.paid_at_utc)) {
+    const hasSegmentInvoiceLock = (invoiceBreakdownJson) => {
+      try {
+        const source = invoiceBreakdownJson && typeof invoiceBreakdownJson === 'object' ? invoiceBreakdownJson : null;
+        if (!source) return false;
+        const segments = Array.isArray(source)
+          ? source
+          : (Array.isArray(source.segments) ? source.segments : []);
+        return segments.some((segment) => {
+          if (!segment || typeof segment !== 'object') return false;
+          const lockedInvoiceId = segment.invoice_locked_invoice_id ?? segment.locked_by_invoice_id ?? null;
+          return lockedInvoiceId != null && String(lockedInvoiceId).trim() !== '';
+        });
+      } catch {
+        return false;
+      }
+    };
+
+    if (fin && (fin.locked_by_invoice_id || fin.paid_at_utc || hasSegmentInvoiceLock(fin.invoice_breakdown_json))) {
       return withCORS(env, req, badRequest('Cannot send: timesheet is invoiced/locked or paid'));
     }
 
@@ -39442,7 +39658,7 @@ async function handleTimesheetQrResendEmail(env, req, timesheetId) {
         `${env.SUPABASE_URL}/rest/v1/timesheets_financials?id=eq.${enc(fin.id)}`,
         {
           method: 'PATCH',
-          headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+          headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
           body: JSON.stringify({
             processing_status: 'AWAITING_MANUAL_SIGNATURE',
             updated_at: nowFix
@@ -39664,7 +39880,7 @@ async function handleTimesheetQrResendEmail(env, req, timesheetId) {
       patchUrl,
       {
         method: 'PATCH',
-        headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+        headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
         body: JSON.stringify({
           manual_pdf_r2_key: pdfKey,
           updated_at: nowIso()
@@ -39769,7 +39985,7 @@ async function handleTimesheetQrResendEmail(env, req, timesheetId) {
         `&is_current=eq.true`,
       {
         method: 'PATCH',
-        headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+        headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
         body: JSON.stringify({
           qr_last_sent_hash: current_hash,
           qr_last_sent_at_utc: nowSent,
@@ -39819,6 +40035,9 @@ async function handleTimesheetQrResendEmail(env, req, timesheetId) {
     qr_last_sent_hash: current_hash
   }));
 }
+
+
+
 
 async function handleTimesheetsSummary(env, req) {
   const user = await requireUser(env, req, ['admin']);
@@ -40390,13 +40609,39 @@ async function handleBulkProcessDataset(env, req) {
     return (out && typeof out === 'object' && !Array.isArray(out)) ? out : {};
   };
 
+  const numberParam = (value, defaultValue = null, minValue = null, maxValue = null) => {
+    if (value == null || String(value).trim() === '') return defaultValue;
+    const n = Number(value);
+    if (!Number.isFinite(n)) return defaultValue;
+    let out = Math.trunc(n);
+    if (minValue != null) out = Math.max(minValue, out);
+    if (maxValue != null) out = Math.min(maxValue, out);
+    return out;
+  };
+
+  const startedAt = Date.now();
+  const debugRequested = boolParam(q('debug') || q('debug_performance') || q('debugPerformance'), false);
+
   const filters = {
     q: normalizeNullableText(q('q') || q('candidate_text') || q('candidateText') || q('name')),
     candidate_id: normalizeNullableText(q('candidate_id') || q('candidateId')),
     client_id: normalizeNullableText(q('client_id') || q('clientId')),
+    date_from: normalizeNullableText(q('date_from') || q('dateFrom') || q('from_date') || q('fromDate')),
+    date_to: normalizeNullableText(q('date_to') || q('dateTo') || q('to_date') || q('toDate')),
+    week_ending_from: normalizeNullableText(q('week_ending_from') || q('weekEndingFrom')),
+    week_ending_to: normalizeNullableText(q('week_ending_to') || q('weekEndingTo')),
+    week_ending_date: normalizeNullableText(q('week_ending_date') || q('weekEndingDate')),
+    bucket: normalizeNullableText(q('bucket') || q('bulk_process_bucket') || q('bulkProcessBucket')),
     show_weekly_manual: boolParam(q('show_weekly_manual') || q('showWeeklyManual') || q('show_weekly') || q('showWeekly'), true),
-    show_daily_manual: boolParam(q('show_daily_manual') || q('showDailyManual') || q('show_daily') || q('showDaily'), true)
+    show_daily_manual: boolParam(q('show_daily_manual') || q('showDailyManual') || q('show_daily') || q('showDaily'), true),
+    limit: numberParam(q('limit') || q('page_size') || q('pageSize'), null, 1, 1000),
+    offset: numberParam(q('offset'), 0, 0, null),
+    actor_user_id: user?.id || null
   };
+
+  for (const key of Object.keys(filters)) {
+    if (filters[key] == null || filters[key] === '') delete filters[key];
+  }
 
   try {
     const rpcRes = await sbRpc(env, 'bulk_process_dataset_v1', { p_filters: filters }, { timeoutMs: 45000 });
@@ -40417,16 +40662,43 @@ async function handleBulkProcessDataset(env, req) {
       ? payload.filters
       : filters;
 
-    return withCORS(env, req, ok({
+    const elapsedMs = Date.now() - startedAt;
+    const responseBody = {
       filters: responseFilters,
       counts,
       unprocessed_rows: unprocessedRows,
       processed_rows: processedRows
-    }));
+    };
+
+    if (debugRequested) {
+      responseBody.debug = {
+        source: 'bulk_process_dataset_v1',
+        elapsed_ms: elapsedMs,
+        returned_unprocessed_rows: unprocessedRows.length,
+        returned_processed_rows: processedRows.length,
+        returned_total_rows: unprocessedRows.length + processedRows.length,
+        filters_sent: filters
+      };
+    }
+
+    try {
+      console.log(JSON.stringify({
+        tag: 'BULK_PROCESS_DATASET_RPC',
+        elapsed_ms: elapsedMs,
+        returned_unprocessed_rows: unprocessedRows.length,
+        returned_processed_rows: processedRows.length,
+        returned_total_rows: unprocessedRows.length + processedRows.length,
+        debug_requested: debugRequested
+      }));
+    } catch {}
+
+    return withCORS(env, req, ok(responseBody));
   } catch (e) {
     return withCORS(env, req, serverError(String(e?.message || e || 'Failed to load bulk process dataset')));
   }
 }
+
+
 
 
 function buildBulkAuthoriseEligibility(row, fin, summaryBase, validation, family) {
@@ -41108,12 +41380,21 @@ async function handleBankingPayFinanceCaseTaxableChannelRestructureSuggestion(en
 }
 
 
-
-
-
-
-async function fetchBulkAuthoriseEligibilityFactsMap(env, timesheetIds) {
+async function fetchBulkAuthoriseEligibilityFactsMap(env, timesheetIds, context = {}) {
   const enc = encodeURIComponent;
+  const contextLabel = String((context && typeof context === 'object' ? (context.context || context.caller || context.path || '') : context) || '').trim();
+  try {
+    console.warn('[BULK_AUTHORISE_ELIGIBILITY_FACTS_MAP][LEGACY_ONLY]', {
+      context: contextLabel || null,
+      timesheet_count: Array.isArray(timesheetIds) ? timesheetIds.length : 0,
+      note: 'This helper is legacy-only and must not be used by bulk dataset, row-context, or selected-action paths.'
+    });
+  } catch {}
+  if (/bulk[_-]?(dataset|row|context|selected|authorise|unauthorise|action)/i.test(contextLabel)) {
+    try {
+      console.warn('[BULK_AUTHORISE_ELIGIBILITY_FACTS_MAP][UNEXPECTED_BULK_CALLER]', { context: contextLabel });
+    } catch {}
+  }
   const finByTimesheetId = Object.create(null);
   const summaryBaseByTimesheetId = Object.create(null);
   const validationByTimesheetId = Object.create(null);
@@ -41252,6 +41533,9 @@ async function fetchBulkAuthoriseEligibilityFactsMap(env, timesheetIds) {
   };
 }
 
+
+
+
 async function handleBulkAuthoriseDataset(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -41286,10 +41570,28 @@ async function handleBulkAuthoriseDataset(env, req) {
     return (out && typeof out === 'object' && !Array.isArray(out)) ? out : {};
   };
 
+  const numberParam = (value, defaultValue = null, minValue = null, maxValue = null) => {
+    if (value == null || String(value).trim() === '') return defaultValue;
+    const n = Number(value);
+    if (!Number.isFinite(n)) return defaultValue;
+    let out = Math.trunc(n);
+    if (minValue != null) out = Math.max(minValue, out);
+    if (maxValue != null) out = Math.min(maxValue, out);
+    return out;
+  };
+
+  const startedAt = Date.now();
+  const debugRequested = boolParam(q('debug') || q('debug_performance') || q('debugPerformance'), false);
+
   const filters = {
     q: normalizeNullableText(q('q') || q('candidate_text') || q('candidateText') || q('name')),
     candidate_id: normalizeNullableText(q('candidate_id') || q('candidateId')),
     client_id: normalizeNullableText(q('client_id') || q('clientId')),
+    date_from: normalizeNullableText(q('date_from') || q('dateFrom') || q('from_date') || q('fromDate')),
+    date_to: normalizeNullableText(q('date_to') || q('dateTo') || q('to_date') || q('toDate')),
+    week_ending_from: normalizeNullableText(q('week_ending_from') || q('weekEndingFrom')),
+    week_ending_to: normalizeNullableText(q('week_ending_to') || q('weekEndingTo')),
+    week_ending_date: normalizeNullableText(q('week_ending_date') || q('weekEndingDate')),
     classification: normalizeClassification(q('classification') || q('classificationRaw')),
     show_daily: boolParam(q('show_daily') || q('showDaily'), true),
     show_weekly: boolParam(q('show_weekly') || q('showWeekly'), true),
@@ -41297,8 +41599,15 @@ async function handleBulkAuthoriseDataset(env, req) {
     show_qr: boolParam(q('show_qr') || q('showQr'), true),
     show_electronic: boolParam(q('show_electronic') || q('showElectronic'), true),
     validation_already: boolParam(q('validation_already') || q('validationAlready'), true),
-    validation_awaiting: boolParam(q('validation_awaiting') || q('validationAwaiting'), false)
+    validation_awaiting: boolParam(q('validation_awaiting') || q('validationAwaiting'), true),
+    limit: numberParam(q('limit') || q('page_size') || q('pageSize'), null, 1, 1000),
+    offset: numberParam(q('offset'), 0, 0, null),
+    actor_user_id: user?.id || null
   };
+
+  for (const key of Object.keys(filters)) {
+    if (filters[key] == null || filters[key] === '') delete filters[key];
+  }
 
   try {
     const rpcRes = await sbRpc(env, 'bulk_authorise_dataset_v1', { p_filters: filters }, { timeoutMs: 45000 });
@@ -41331,15 +41640,37 @@ async function handleBulkAuthoriseDataset(env, req) {
       ? payload.filters
       : filters;
 
-    return withCORS(env, req, ok({
+    const elapsedMs = Date.now() - startedAt;
+    const responseBody = {
       filters: responseFilters,
       counts,
       rows
-    }));
+    };
+
+    if (debugRequested) {
+      responseBody.debug = {
+        source: 'bulk_authorise_dataset_v1',
+        elapsed_ms: elapsedMs,
+        returned_rows: rows.length,
+        filters_sent: filters
+      };
+    }
+
+    try {
+      console.log(JSON.stringify({
+        tag: 'BULK_AUTHORISE_DATASET_RPC',
+        elapsed_ms: elapsedMs,
+        returned_rows: rows.length,
+        debug_requested: debugRequested
+      }));
+    } catch {}
+
+    return withCORS(env, req, ok(responseBody));
   } catch (e) {
     return withCORS(env, req, serverError(String(e?.message || e || 'Failed to load bulk authorise dataset')));
   }
 }
+
 
 async function handleBulkProcessRowContext(env, req, rowIdentity = null) {
   const user = await requireUser(env, req, ['admin']);
@@ -41379,7 +41710,7 @@ async function handleBulkProcessRowContext(env, req, rowIdentity = null) {
     requested_timesheet_id: trimStr(q('requested_timesheet_id') || q('requestedTimesheetId') || ''),
     expected_timesheet_id: trimStr(q('expected_timesheet_id') || q('expectedTimesheetId') || q('expected_current_timesheet_id') || q('expectedCurrentTimesheetId') || ''),
     contract_week_id: trimStr(q('contract_week_id') || q('contractWeekId') || q('week_id') || q('weekId') || ''),
-    include_evidence: boolParam(q('include_evidence') || q('includeEvidence') || q('load_evidence') || q('loadEvidence'), true)
+    include_evidence: boolParam(q('include_evidence') || q('includeEvidence') || q('load_evidence') || q('loadEvidence'), false)
   };
 
   if (routeIdentity) {
@@ -41410,6 +41741,8 @@ async function handleBulkProcessRowContext(env, req, rowIdentity = null) {
     return withCORS(env, req, serverError(String(err?.message || err || 'Failed to load bulk process row context')));
   }
 }
+
+
 
 
 function classifyBulkAuthoriseRow(row, fin, summaryBase) {
@@ -41701,7 +42034,7 @@ async function handleTimesheetBulkAuthoriseContext(env, req, timesheetId = null)
     requested_timesheet_id: trimStr(q('requested_timesheet_id') || q('requestedTimesheetId') || ''),
     expected_timesheet_id: trimStr(q('expected_timesheet_id') || q('expectedTimesheetId') || q('expected_current_timesheet_id') || q('expectedCurrentTimesheetId') || ''),
     contract_week_id: trimStr(q('contract_week_id') || q('contractWeekId') || q('week_id') || q('weekId') || ''),
-    include_evidence: boolParam(q('include_evidence') || q('includeEvidence') || q('load_evidence') || q('loadEvidence'), true),
+    include_evidence: boolParam(q('include_evidence') || q('includeEvidence') || q('load_evidence') || q('loadEvidence'), false),
     include_compare: boolParam(q('include_compare') || q('includeCompare') || q('load_compare') || q('loadCompare'), false),
     include_import_source_rows: boolParam(q('include_import_source_rows') || q('includeImportSourceRows') || q('load_import_source_rows') || q('loadImportSourceRows'), false),
     base_only: boolParam(q('base_only') || q('baseOnly'), false)
@@ -41754,6 +42087,7 @@ async function handleTimesheetBulkAuthoriseContext(env, req, timesheetId = null)
     return withCORS(env, req, serverError(String(err?.message || err || 'Failed to load bulk authorise row context')));
   }
 }
+
 
 
 async function handleBulkTimesheetAuthoriseSelected(env, req) {
@@ -41853,8 +42187,17 @@ async function handleBulkTimesheetAuthoriseSelected(env, req) {
     const failedItems = results.filter((result) => result && result.success !== true);
     const staleItems = failedItems.filter((result) => String(result?.error_code || '').trim().toUpperCase() === 'TIMESHEET_MOVED' || result?.was_stale === true);
 
+    const successCount = Number(payload.success_count || results.filter((result) => result && result.success === true).length || 0);
+    const failureCount = Number(payload.failure_count || failedItems.length || 0);
+    const batchCompleted = payload.batch_completed !== false;
+    const allSuccess = payload.all_success === true || (payload.all_success == null && failureCount === 0);
+
     return withCORS(env, req, ok({
       ...payload,
+      ok: batchCompleted,
+      batch_completed: batchCompleted,
+      all_success: allSuccess,
+      has_failures: failureCount > 0,
       action: payload.action || 'AUTHORISE',
       results,
       row_patches: Array.isArray(payload.row_patches) ? payload.row_patches : [],
@@ -41862,14 +42205,13 @@ async function handleBulkTimesheetAuthoriseSelected(env, req) {
       cache_invalidation_hints: (payload.cache_invalidation_hints && typeof payload.cache_invalidation_hints === 'object') ? payload.cache_invalidation_hints : {},
       failed_items: failedItems,
       stale_items: staleItems,
-      success_count: Number(payload.success_count || results.filter((result) => result && result.success === true).length || 0),
-      failure_count: Number(payload.failure_count || failedItems.length || 0)
+      success_count: successCount,
+      failure_count: failureCount
     }));
   } catch (err) {
     return withCORS(env, req, serverError(String(err?.message || err || 'Failed to authorise selected timesheets')));
   }
 }
-
 
 
 
@@ -41971,8 +42313,17 @@ async function handleBulkTimesheetUnauthoriseSelected(env, req) {
     const failedItems = results.filter((result) => result && result.success !== true);
     const staleItems = failedItems.filter((result) => String(result?.error_code || '').trim().toUpperCase() === 'TIMESHEET_MOVED' || result?.was_stale === true);
 
+    const successCount = Number(payload.success_count || results.filter((result) => result && result.success === true).length || 0);
+    const failureCount = Number(payload.failure_count || failedItems.length || 0);
+    const batchCompleted = payload.batch_completed !== false;
+    const allSuccess = payload.all_success === true || (payload.all_success == null && failureCount === 0);
+
     return withCORS(env, req, ok({
       ...payload,
+      ok: batchCompleted,
+      batch_completed: batchCompleted,
+      all_success: allSuccess,
+      has_failures: failureCount > 0,
       action: payload.action || 'UNAUTHORISE',
       results,
       row_patches: Array.isArray(payload.row_patches) ? payload.row_patches : [],
@@ -41980,13 +42331,14 @@ async function handleBulkTimesheetUnauthoriseSelected(env, req) {
       cache_invalidation_hints: (payload.cache_invalidation_hints && typeof payload.cache_invalidation_hints === 'object') ? payload.cache_invalidation_hints : {},
       failed_items: failedItems,
       stale_items: staleItems,
-      success_count: Number(payload.success_count || results.filter((result) => result && result.success === true).length || 0),
-      failure_count: Number(payload.failure_count || failedItems.length || 0)
+      success_count: successCount,
+      failure_count: failureCount
     }));
   } catch (err) {
     return withCORS(env, req, serverError(String(err?.message || err || 'Failed to unauthorise selected timesheets')));
   }
 }
+
 
 
 async function handleBulkAuthoriseImportEvidencePage(env, req) {
@@ -50226,6 +50578,7 @@ async function handleTimesheetAllowElectronicAgain(env, req, timesheetId) {
   }));
 }
 
+
 async function handleTimesheetAllowQrAgain(env, req, timesheetId) {
   const enc = encodeURIComponent;
 
@@ -50238,6 +50591,40 @@ async function handleTimesheetAllowQrAgain(env, req, timesheetId) {
   try { body = await parseJSONBody(req); } catch { body = null; }
   const expectedTimesheetId = body?.expected_timesheet_id ? String(body.expected_timesheet_id) : '';
   if (!expectedTimesheetId) return withCORS(env, req, badRequest('expected_timesheet_id is required'));
+
+  const bulkMode = !!(
+    body?.bulk_process === true ||
+    body?.bulkProcess === true ||
+    body?.bulk_process_mode === true ||
+    body?.bulkProcessMode === true ||
+    body?.bulk_authorise === true ||
+    body?.bulkAuthorise === true ||
+    body?.return_bulk_patch === true ||
+    body?.returnBulkPatch === true ||
+    String(body?.context || '').trim().toLowerCase() === 'bulk_process' ||
+    String(body?.mode || '').trim().toLowerCase() === 'bulk_process' ||
+    String(body?.context || '').trim().toLowerCase() === 'bulk_authorise' ||
+    String(body?.mode || '').trim().toLowerCase() === 'bulk_authorise'
+  );
+  const parseMaybeJsonObj = (value) => {
+    if (!value) return null;
+    if (typeof value === 'object') return value;
+    if (typeof value === 'string') {
+      try { const parsed = JSON.parse(value); return (parsed && typeof parsed === 'object') ? parsed : null; } catch {}
+    }
+    return null;
+  };
+  const loadDecisionRow = async (id) => {
+    if (!id) return null;
+    try {
+      const res = await sbRpc(env, 'bulk_timesheet_row_decision_v1', { p_filters: { dataset_mode: 'process', timesheet_id: String(id) } }, { timeoutMs: 45000 });
+      const first = Array.isArray(res) ? (res[0] || null) : res;
+      return parseMaybeJsonObj(first?.row_json) || parseMaybeJsonObj(first?.bulk_timesheet_row_decision_v1) || parseMaybeJsonObj(first);
+    } catch {
+      return null;
+    }
+  };
+  const preDecisionRow = bulkMode ? await loadDecisionRow(timesheetId) : null;
 
   const resolved = await resolveTimesheetToCurrent(env, timesheetId);
   if (!resolved) return withCORS(env, req, notFound('Timesheet not found'));
@@ -50260,7 +50647,7 @@ async function handleTimesheetAllowQrAgain(env, req, timesheetId) {
     `${env.SUPABASE_URL}/rest/v1/timesheets` +
       `?timesheet_id=eq.${enc(currentTimesheetId)}` +
       `&is_current=eq.true` +
-      `&select=*` +
+      `&select=timesheet_id,booking_id,version,is_current,is_adjustment,submission_mode,qr_status,qr_token,qr_generated_at,qr_scanned_at` +
       `&limit=1`
   );
   if (!ts) return withCORS(env, req, notFound('Timesheet not found'));
@@ -50279,10 +50666,27 @@ async function handleTimesheetAllowQrAgain(env, req, timesheetId) {
     `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
       `?timesheet_id=eq.${enc(currentTimesheetId)}` +
       `&is_current=eq.true` +
-      `&select=id,locked_by_invoice_id,paid_at_utc,timesheet_version,processing_status` +
+      `&select=id,locked_by_invoice_id,paid_at_utc,timesheet_version,processing_status,invoice_breakdown_json` +
       `&limit=1`
   );
-  if (fin && (fin.locked_by_invoice_id || fin.paid_at_utc)) {
+  const hasSegmentInvoiceLock = (invoiceBreakdownJson) => {
+    try {
+      const source = invoiceBreakdownJson && typeof invoiceBreakdownJson === 'object' ? invoiceBreakdownJson : null;
+      if (!source) return false;
+      const segments = Array.isArray(source)
+        ? source
+        : (Array.isArray(source.segments) ? source.segments : []);
+      return segments.some((segment) => {
+        if (!segment || typeof segment !== 'object') return false;
+        const lockedInvoiceId = segment.invoice_locked_invoice_id ?? segment.locked_by_invoice_id ?? null;
+        return lockedInvoiceId != null && String(lockedInvoiceId).trim() !== '';
+      });
+    } catch {
+      return false;
+    }
+  };
+
+  if (fin && (fin.locked_by_invoice_id || fin.paid_at_utc || hasSegmentInvoiceLock(fin.invoice_breakdown_json))) {
     return withCORS(env, req, badRequest('Cannot allow QR again: timesheet is invoiced/locked or paid'));
   }
 
@@ -50382,6 +50786,30 @@ async function handleTimesheetAllowQrAgain(env, req, timesheetId) {
 
   try { await purgeSupersededTimesheetArtifactsForBooking(env, bookingId); } catch {}
 
+  const postDecisionRow = bulkMode ? await loadDecisionRow(newTimesheetId) : null;
+  const previousRowKey = preDecisionRow?.row_key || (currentTimesheetId ? `timesheet:${currentTimesheetId}` : null);
+  const newRowKey = postDecisionRow?.row_key || (newTimesheetId ? `timesheet:${newTimesheetId}` : null);
+  const previousBucket = preDecisionRow?.bulk_process_bucket || null;
+  const nextBucket = postDecisionRow?.bulk_process_bucket || null;
+  const previousStorageKey = preDecisionRow?.primary_artifact_storage_key || null;
+  const nextStorageKey = postDecisionRow?.primary_artifact_storage_key || null;
+  const rowPatch = postDecisionRow?.row_patch && typeof postDecisionRow.row_patch === 'object' ? { ...postDecisionRow.row_patch } : {};
+  if (bulkMode) {
+    rowPatch.previous_row_key = previousRowKey;
+    rowPatch.row_key = newRowKey;
+    rowPatch.new_row_key = newRowKey;
+    rowPatch.old_timesheet_id = currentTimesheetId;
+    rowPatch.current_timesheet_id = newTimesheetId;
+    rowPatch.expected_timesheet_id = newTimesheetId;
+    rowPatch.current_version = inserted?.version ?? nextVersion;
+    rowPatch.current_timesheet_version = inserted?.version ?? nextVersion;
+    rowPatch.row_signature = postDecisionRow?.row_signature || rowPatch.row_signature || null;
+    rowPatch.previous_bulk_process_bucket = previousBucket;
+    rowPatch.bulk_process_bucket = nextBucket;
+    rowPatch.qr_email_can_send_now = postDecisionRow?.qr_email_can_send_now === true;
+    rowPatch.qr_email_recipient_available = postDecisionRow?.qr_email_recipient_available === true;
+  }
+
   return withCORS(env, req, ok({
     ok: true,
     booking_id: bookingId,
@@ -50390,7 +50818,28 @@ async function handleTimesheetAllowQrAgain(env, req, timesheetId) {
     new_version: inserted?.version ?? nextVersion,
 
     requested_timesheet_id: resolved.requested_timesheet_id || timesheetId,
-    was_stale: !!resolved.was_stale
+    was_stale: !!resolved.was_stale,
+    bulk_mode: bulkMode,
+    row_patch: bulkMode ? rowPatch : undefined,
+    data_row: bulkMode ? (postDecisionRow || {}) : undefined,
+    row: bulkMode ? (postDecisionRow || {}) : undefined,
+    previous_row_key: bulkMode ? previousRowKey : undefined,
+    new_row_key: bulkMode ? newRowKey : undefined,
+    row_key: bulkMode ? newRowKey : undefined,
+    row_signature: bulkMode ? (postDecisionRow?.row_signature || null) : undefined,
+    count_deltas: bulkMode ? { unprocessed: 0, processed: 0, total: 0 } : undefined,
+    bucket_transition: bulkMode ? { from: previousBucket, to: nextBucket, changed: String(previousBucket || '') !== String(nextBucket || '') } : undefined,
+    cache_invalidation_hints: bulkMode ? {
+      row_keys: [previousRowKey, newRowKey].filter(Boolean),
+      timesheet_ids: [currentTimesheetId, newTimesheetId].filter(Boolean),
+      storage_keys: [previousStorageKey, nextStorageKey].filter(Boolean),
+      datasets: ['bulk_process', 'bulk_authorise'],
+      row_signature: postDecisionRow?.row_signature || null,
+      invalidate_context: true,
+      invalidate_preview: String(previousStorageKey || '') !== String(nextStorageKey || '')
+    } : undefined,
+    qr_email_can_send_now: bulkMode ? (postDecisionRow?.qr_email_can_send_now === true) : undefined,
+    qr_email_recipient_available: bulkMode ? (postDecisionRow?.qr_email_recipient_available === true) : undefined
   }));
 }
 
