@@ -7929,6 +7929,9 @@ BEGIN
 END;
 $function$;
 
+
+DROP FUNCTION IF EXISTS public.contract_week_manual_upsert_bulk_process_atomic(uuid, uuid, jsonb, jsonb, jsonb, jsonb, jsonb, uuid, boolean, timestamp with time zone);
+
 CREATE OR REPLACE FUNCTION public.contract_week_manual_upsert_bulk_process_atomic(
   p_week_id uuid,
   p_expected_timesheet_id uuid DEFAULT NULL,
@@ -7939,7 +7942,8 @@ CREATE OR REPLACE FUNCTION public.contract_week_manual_upsert_bulk_process_atomi
   p_rotation_json jsonb DEFAULT NULL,
   p_actor_user_id uuid DEFAULT NULL,
   p_materialise_staged_evidence boolean DEFAULT true,
-  p_now_utc timestamp with time zone DEFAULT now()
+  p_now_utc timestamp with time zone DEFAULT now(),
+  p_expected_row_signature text DEFAULT NULL
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -7966,6 +7970,8 @@ DECLARE
   v_cache_invalidation jsonb := '{}'::jsonb;
   v_pre_bucket text := NULL;
   v_post_bucket text := NULL;
+  v_pre_authorise_section text := NULL;
+  v_post_authorise_section text := NULL;
   v_unprocessed_delta integer := 0;
   v_processed_delta integer := 0;
   v_total_delta integer := 0;
@@ -7977,6 +7983,8 @@ DECLARE
   v_primary_artifact_preview_mode text := NULL;
   v_row_key text := NULL;
   v_row_signature text := NULL;
+  v_expected_row_signature text := NULL;
+  v_current_row_signature text := NULL;
   v_previous_row_key text := NULL;
   v_preview_changed boolean := FALSE;
   v_error_sqlstate text := NULL;
@@ -8022,10 +8030,38 @@ BEGIN
   LIMIT 1;
 
   v_pre_bucket := NULLIF(BTRIM(COALESCE(v_pre_row->>'bulk_process_bucket', '')), '');
+  v_pre_authorise_section := NULLIF(BTRIM(COALESCE(v_pre_row->>'bulk_authorise_section', '')), '');
   v_previous_row_key := NULLIF(BTRIM(COALESCE(v_pre_row->>'row_key', '')), '');
   v_previous_storage_key := NULLIF(BTRIM(COALESCE(v_pre_row->>'primary_artifact_storage_key', '')), '');
   v_pre_current_timesheet_id_text := NULLIF(BTRIM(COALESCE(v_pre_row->>'current_timesheet_id', v_pre_row->>'timesheet_id', p_expected_timesheet_id::text, '')), '');
   v_pre_current_version_text := NULLIF(BTRIM(COALESCE(v_pre_row->>'current_version', v_pre_row->>'current_timesheet_version', '')), '');
+  v_expected_row_signature := NULLIF(BTRIM(COALESCE(p_expected_row_signature, '')), '');
+  v_current_row_signature := NULLIF(BTRIM(COALESCE(v_pre_row->>'row_signature', '')), '');
+
+  IF v_expected_row_signature IS NOT NULL
+     AND COALESCE(v_current_row_signature, '') IS DISTINCT FROM v_expected_row_signature THEN
+    RETURN JSONB_BUILD_OBJECT(
+      'ok', FALSE,
+      'operation', 'contract_week_manual_upsert_bulk_process',
+      'success', FALSE,
+      'error_code', 'ROW_SIGNATURE_MISMATCH',
+      'message', 'Contract week row changed after it was loaded. Refresh the row and try again.',
+      'expected_row_signature', v_expected_row_signature,
+      'current_row_signature', v_current_row_signature,
+      'current_timesheet_id', NULLIF(BTRIM(COALESCE(v_pre_row->>'current_timesheet_id', v_pre_row->>'timesheet_id', '')), '')::uuid,
+      'contract_week_id', p_week_id,
+      'previous_row_key', v_previous_row_key,
+      'cache_invalidation_hints', JSONB_BUILD_OBJECT(
+        'row_keys', CASE WHEN v_previous_row_key IS NULL THEN '[]'::jsonb ELSE JSONB_BUILD_ARRAY(v_previous_row_key) END,
+        'contract_week_ids', JSONB_BUILD_ARRAY(p_week_id),
+        'timesheet_ids', CASE WHEN v_pre_current_timesheet_id_text IS NULL THEN '[]'::jsonb ELSE JSONB_BUILD_ARRAY(v_pre_current_timesheet_id_text) END,
+        'storage_keys', CASE WHEN v_previous_storage_key IS NULL THEN '[]'::jsonb ELSE JSONB_BUILD_ARRAY(v_previous_storage_key) END,
+        'datasets', JSONB_BUILD_ARRAY('bulk_process', 'bulk_authorise'),
+        'invalidate_context', TRUE,
+        'invalidate_preview', FALSE
+      )
+    );
+  END IF;
 
   IF v_pre_current_version_text ~ '^[0-9]+$' THEN
     v_rotation_old_version := v_pre_current_version_text::integer;
@@ -8063,7 +8099,8 @@ BEGIN
     p_rotation_json => p_rotation_json,
     p_actor_user_id => p_actor_user_id,
     p_materialise_staged_evidence => p_materialise_staged_evidence,
-    p_now_utc => v_now
+    p_now_utc => v_now,
+    p_expected_row_signature => v_expected_row_signature
   ) AS upsert_result;
 
   IF v_contract_week_id IS NULL THEN
@@ -8120,6 +8157,7 @@ BEGIN
   END IF;
 
   v_post_bucket := NULLIF(BTRIM(COALESCE(v_post_row->>'bulk_process_bucket', '')), '');
+  v_post_authorise_section := NULLIF(BTRIM(COALESCE(v_post_row->>'bulk_authorise_section', '')), '');
   v_row_key := NULLIF(BTRIM(COALESCE(v_post_row->>'row_key', '')), '');
   v_row_signature := NULLIF(BTRIM(COALESCE(v_post_row->>'row_signature', '')), '');
   v_primary_storage_key := NULLIF(BTRIM(COALESCE(v_post_row->>'primary_artifact_storage_key', '')), '');
@@ -8178,6 +8216,8 @@ BEGIN
       'row_signature', v_row_signature,
       'previous_bulk_process_bucket', v_pre_bucket,
       'bulk_process_bucket', v_post_bucket,
+      'previous_bulk_authorise_section', v_pre_authorise_section,
+      'bulk_authorise_section', v_post_authorise_section,
       'bucket_transition', JSONB_BUILD_OBJECT(
         'from', v_pre_bucket,
         'to', v_post_bucket,
@@ -8185,6 +8225,10 @@ BEGIN
       ),
       'primary_artifact_storage_key', v_primary_storage_key,
       'previous_primary_artifact_storage_key', v_previous_storage_key,
+      'old_storage_key', v_previous_storage_key,
+      'new_storage_key', v_primary_storage_key,
+      'old_storage_keys', CASE WHEN v_previous_storage_key IS NULL THEN '[]'::jsonb ELSE JSONB_BUILD_ARRAY(v_previous_storage_key) END,
+      'new_storage_keys', CASE WHEN v_primary_storage_key IS NULL THEN '[]'::jsonb ELSE JSONB_BUILD_ARRAY(v_primary_storage_key) END,
       'primary_artifact_preview_mode', v_primary_artifact_preview_mode,
       'has_any_evidence', COALESCE(NULLIF(v_post_row->>'has_any_evidence', '')::boolean, FALSE),
       'evidence_badges', COALESCE(v_post_row->'evidence_badges', '[]'::jsonb),
@@ -8247,6 +8291,8 @@ BEGIN
     'processing_status', v_processing_status,
     'previous_bulk_process_bucket', v_pre_bucket,
     'bulk_process_bucket', v_post_bucket,
+    'previous_bulk_authorise_section', v_pre_authorise_section,
+    'bulk_authorise_section', v_post_authorise_section,
     'bucket_transition', JSONB_BUILD_OBJECT(
       'from', v_pre_bucket,
       'to', v_post_bucket,
@@ -8291,6 +8337,10 @@ BEGIN
       'primary_artifact_display_name', v_primary_artifact_display_name,
       'primary_artifact_storage_key', v_primary_storage_key,
       'previous_primary_artifact_storage_key', v_previous_storage_key,
+      'old_storage_key', v_previous_storage_key,
+      'new_storage_key', v_primary_storage_key,
+      'old_storage_keys', CASE WHEN v_previous_storage_key IS NULL THEN '[]'::jsonb ELSE JSONB_BUILD_ARRAY(v_previous_storage_key) END,
+      'new_storage_keys', CASE WHEN v_primary_storage_key IS NULL THEN '[]'::jsonb ELSE JSONB_BUILD_ARRAY(v_primary_storage_key) END,
       'primary_artifact_preview_mode', v_primary_artifact_preview_mode,
       'preview_storage_key', v_primary_storage_key,
       'primary_left_pane_mode', v_post_row->>'primary_left_pane_mode',
@@ -8302,6 +8352,10 @@ BEGIN
       'underlying_channel_family', v_post_row->>'underlying_channel_family',
       'primary_artifact_storage_key', v_primary_storage_key,
       'previous_primary_artifact_storage_key', v_previous_storage_key,
+      'old_storage_key', v_previous_storage_key,
+      'new_storage_key', v_primary_storage_key,
+      'old_storage_keys', CASE WHEN v_previous_storage_key IS NULL THEN '[]'::jsonb ELSE JSONB_BUILD_ARRAY(v_previous_storage_key) END,
+      'new_storage_keys', CASE WHEN v_primary_storage_key IS NULL THEN '[]'::jsonb ELSE JSONB_BUILD_ARRAY(v_primary_storage_key) END,
       'primary_artifact_preview_mode', v_primary_artifact_preview_mode,
       'has_any_evidence', COALESCE(NULLIF(v_post_row->>'has_any_evidence', '')::boolean, FALSE),
       'evidence_badges', COALESCE(v_post_row->'evidence_badges', '[]'::jsonb),
@@ -8373,3 +8427,5 @@ EXCEPTION WHEN OTHERS THEN
   );
 END;
 $function$;
+
+
