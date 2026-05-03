@@ -368,7 +368,6 @@ END;
 $function$;
 
 
-
 CREATE OR REPLACE FUNCTION public.bulk_timesheet_row_decision_v1(p_filters jsonb DEFAULT '{}'::jsonb)
  RETURNS TABLE(row_json jsonb)
  LANGUAGE plpgsql
@@ -1679,7 +1678,7 @@ BEGIN
           COALESCE(ar.has_rate_issue, FALSE)
           OR COALESCE(ar.has_pay_channel_issue, FALSE)
           OR NULLIF(BTRIM(COALESCE(ar.validation_reason_code, '')), '') IS NOT NULL
-          OR jsonb_typeof(ar.hr_crosscheck_issues) IN ('array', 'object')
+          OR COALESCE(array_length(ar.hr_crosscheck_issues, 1), 0) > 0
           OR (
             NULLIF(BTRIM(COALESCE(ar.hr_crosscheck_status, '')), '') IS NOT NULL
             AND UPPER(COALESCE(ar.hr_crosscheck_status, '')) NOT IN ('OK', 'VALID', 'VALIDATION_OK', 'MATCHED', 'PASS', 'PASSED')
@@ -1691,7 +1690,7 @@ BEGIN
           WHEN NULLIF(BTRIM(COALESCE(ar.validation_reason_code, '')), '') IS NOT NULL THEN ar.validation_reason_code
           WHEN NULLIF(BTRIM(COALESCE(ar.hr_crosscheck_status, '')), '') IS NOT NULL
            AND UPPER(COALESCE(ar.hr_crosscheck_status, '')) NOT IN ('OK', 'VALID', 'VALIDATION_OK', 'MATCHED', 'PASS', 'PASSED') THEN ar.hr_crosscheck_status
-          WHEN jsonb_typeof(ar.hr_crosscheck_issues) IN ('array', 'object') THEN 'HR_CROSSCHECK_ISSUE'
+          WHEN COALESCE(array_length(ar.hr_crosscheck_issues, 1), 0) > 0 THEN 'HR_CROSSCHECK_ISSUE'
           ELSE NULL::text
         END,
         'nhsp_highlight_red', (
@@ -1847,8 +1846,6 @@ BEGIN
     ar.row_key ASC;
 END;
 $function$;
-
-
 
 
 
