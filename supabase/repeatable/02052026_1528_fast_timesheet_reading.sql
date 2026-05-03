@@ -367,7 +367,6 @@ BEGIN
 END;
 $function$;
 
-
 CREATE OR REPLACE FUNCTION public.bulk_timesheet_row_decision_v1(p_filters jsonb DEFAULT '{}'::jsonb)
  RETURNS TABLE(row_json jsonb)
  LANGUAGE plpgsql
@@ -710,7 +709,13 @@ BEGIN
       te0.created_at,
       ROW_NUMBER() OVER (
         PARTITION BY te0.timesheet_id
-        ORDER BY te0.created_at ASC NULLS LAST, te0.id ASC
+        ORDER BY
+          CASE
+            WHEN UPPER(COALESCE(te0.kind, '')) = 'TIMESHEET' THEN 0
+            ELSE 1
+          END ASC,
+          te0.created_at ASC NULLS LAST,
+          te0.id ASC
       ) AS rn
     FROM public.timesheet_evidence AS te0
     WHERE te0.timesheet_id IS NOT NULL
@@ -1425,9 +1430,46 @@ BEGIN
       END AS primary_left_pane_mode,
       CASE
         WHEN dc.route_family = 'IMPORT_AUTHORITATIVE' THEN NULL::text
-        WHEN dc.route_family = 'QR' THEN COALESCE(NULLIF(BTRIM(dc.manual_pdf_r2_key), ''), CASE WHEN dc.generated_pdf_at_utc IS NOT NULL AND dc.timesheet_id IS NOT NULL THEN 'docs-pdf/timesheets/ts_' || dc.timesheet_id::text || '.pdf' ELSE NULL END)
-        WHEN dc.route_family = 'ELECTRONIC' THEN COALESCE(CASE WHEN dc.generated_pdf_at_utc IS NOT NULL AND dc.timesheet_id IS NOT NULL THEN 'docs-pdf/timesheets/ts_' || dc.timesheet_id::text || '.pdf' ELSE NULL END, NULLIF(BTRIM(dc.manual_pdf_r2_key), ''))
-        WHEN dc.route_family = 'MANUAL_NON_QR' AND dc.timesheet_id IS NOT NULL THEN NULLIF(BTRIM(dc.manual_pdf_r2_key), '')
+        WHEN dc.route_family = 'QR'
+          AND COALESCE(
+            NULLIF(BTRIM(dc.manual_pdf_r2_key), ''),
+            CASE WHEN dc.generated_pdf_at_utc IS NOT NULL AND dc.timesheet_id IS NOT NULL THEN 'docs-pdf/timesheets/ts_' || dc.timesheet_id::text || '.pdf' ELSE NULL END
+          ) IS NOT NULL THEN 'DOCUMENT'
+        WHEN dc.route_family = 'ELECTRONIC'
+          AND COALESCE(
+            CASE WHEN dc.generated_pdf_at_utc IS NOT NULL AND dc.timesheet_id IS NOT NULL THEN 'docs-pdf/timesheets/ts_' || dc.timesheet_id::text || '.pdf' ELSE NULL END,
+            NULLIF(BTRIM(dc.manual_pdf_r2_key), '')
+          ) IS NOT NULL THEN 'DOCUMENT'
+        WHEN dc.route_family = 'MANUAL_NON_QR'
+          AND dc.timesheet_id IS NOT NULL
+          AND NULLIF(BTRIM(dc.manual_pdf_r2_key), '') IS NOT NULL THEN 'DOCUMENT'
+        WHEN dc.timesheet_id IS NOT NULL
+          AND NULLIF(BTRIM(dc.primary_evidence_storage_key), '') IS NOT NULL THEN 'EVIDENCE'
+        WHEN dc.timesheet_id IS NULL
+          AND dc.contract_week_id IS NOT NULL
+          AND NULLIF(BTRIM(dc.uploaded_pdf_r2_key), '') IS NOT NULL THEN 'DOCUMENT'
+        WHEN dc.timesheet_id IS NULL
+          AND dc.contract_week_id IS NOT NULL
+          AND NULLIF(BTRIM(dc.primary_queue_r2_key), '') IS NOT NULL THEN 'QUEUE'
+        ELSE NULL::text
+      END AS primary_artifact_source,
+      CASE
+        WHEN dc.route_family = 'IMPORT_AUTHORITATIVE' THEN NULL::text
+        WHEN dc.route_family = 'QR' THEN COALESCE(
+          NULLIF(BTRIM(dc.manual_pdf_r2_key), ''),
+          CASE WHEN dc.generated_pdf_at_utc IS NOT NULL AND dc.timesheet_id IS NOT NULL THEN 'docs-pdf/timesheets/ts_' || dc.timesheet_id::text || '.pdf' ELSE NULL END,
+          NULLIF(BTRIM(dc.primary_evidence_storage_key), '')
+        )
+        WHEN dc.route_family = 'ELECTRONIC' THEN COALESCE(
+          CASE WHEN dc.generated_pdf_at_utc IS NOT NULL AND dc.timesheet_id IS NOT NULL THEN 'docs-pdf/timesheets/ts_' || dc.timesheet_id::text || '.pdf' ELSE NULL END,
+          NULLIF(BTRIM(dc.manual_pdf_r2_key), ''),
+          NULLIF(BTRIM(dc.primary_evidence_storage_key), '')
+        )
+        WHEN dc.route_family = 'MANUAL_NON_QR' AND dc.timesheet_id IS NOT NULL THEN COALESCE(
+          NULLIF(BTRIM(dc.manual_pdf_r2_key), ''),
+          NULLIF(BTRIM(dc.primary_evidence_storage_key), '')
+        )
+        WHEN dc.timesheet_id IS NOT NULL THEN NULLIF(BTRIM(dc.primary_evidence_storage_key), '')
         WHEN dc.timesheet_id IS NULL AND dc.contract_week_id IS NOT NULL THEN COALESCE(NULLIF(BTRIM(dc.uploaded_pdf_r2_key), ''), NULLIF(BTRIM(dc.primary_queue_r2_key), ''))
         ELSE NULL::text
       END AS primary_artifact_storage_key,
@@ -1478,6 +1520,13 @@ BEGIN
         COALESCE((dc.hr_validation_required_for_invoice = TRUE AND dc.hr_validation_satisfied = FALSE)::text, ''),
         COALESCE(dc.issue_codes::text, ''),
         COALESCE(dc.attached_evidence_count::text, ''),
+        COALESCE(dc.ev_timesheet::text, ''),
+        COALESCE(dc.ev_mileage::text, ''),
+        COALESCE(dc.ev_travel::text, ''),
+        COALESCE(dc.ev_accommodation::text, ''),
+        COALESCE(dc.ev_other::text, ''),
+        COALESCE(dc.primary_evidence_id::text, ''),
+        COALESCE(dc.primary_evidence_kind, ''),
         COALESCE(dc.queue_staged_count::text, ''),
         COALESCE(dc.primary_evidence_storage_key, ''),
         COALESCE(dc.manual_pdf_r2_key, ''),
@@ -1499,6 +1548,10 @@ BEGIN
     SELECT
       fr.*,
       CASE
+        WHEN fr.primary_artifact_source = 'DOCUMENT' AND fr.primary_artifact_storage_key IS NOT NULL AND fr.timesheet_id IS NOT NULL THEN 'timesheet:' || fr.timesheet_id::text
+        WHEN fr.primary_artifact_source = 'DOCUMENT' AND fr.primary_artifact_storage_key IS NOT NULL AND fr.contract_week_id IS NOT NULL THEN 'contract_week:' || fr.contract_week_id::text
+        WHEN fr.primary_artifact_source = 'EVIDENCE' AND fr.primary_evidence_id IS NOT NULL THEN 'evidence:' || fr.primary_evidence_id::text
+        WHEN fr.primary_artifact_source = 'QUEUE' AND fr.primary_queue_id IS NOT NULL THEN 'manual_queue:' || fr.primary_queue_id::text
         WHEN fr.primary_artifact_storage_key IS NOT NULL AND fr.timesheet_id IS NOT NULL THEN 'timesheet:' || fr.timesheet_id::text
         WHEN fr.primary_artifact_storage_key IS NOT NULL AND fr.contract_week_id IS NOT NULL THEN 'contract_week:' || fr.contract_week_id::text
         WHEN fr.primary_evidence_id IS NOT NULL THEN 'evidence:' || fr.primary_evidence_id::text
@@ -1506,12 +1559,18 @@ BEGIN
         ELSE NULL::text
       END AS primary_artifact_id,
       CASE
+        WHEN fr.primary_artifact_source = 'DOCUMENT' THEN 'TIMESHEET'
+        WHEN fr.primary_artifact_source = 'EVIDENCE' THEN UPPER(COALESCE(NULLIF(BTRIM(fr.primary_evidence_kind), ''), 'TIMESHEET'))
+        WHEN fr.primary_artifact_source = 'QUEUE' THEN 'TIMESHEET'
         WHEN fr.primary_artifact_storage_key IS NOT NULL THEN 'TIMESHEET'
         WHEN fr.primary_evidence_kind IS NOT NULL THEN UPPER(fr.primary_evidence_kind)
         WHEN fr.primary_queue_id IS NOT NULL THEN 'TIMESHEET'
         ELSE NULL::text
       END AS primary_artifact_kind,
       CASE
+        WHEN fr.primary_artifact_source = 'DOCUMENT' THEN 'Timesheet PDF'
+        WHEN fr.primary_artifact_source = 'EVIDENCE' THEN COALESCE(NULLIF(BTRIM(fr.primary_evidence_display_name), ''), 'Evidence')
+        WHEN fr.primary_artifact_source = 'QUEUE' THEN COALESCE(NULLIF(BTRIM(fr.primary_queue_original_filename), ''), 'Staged timesheet evidence')
         WHEN fr.primary_artifact_storage_key IS NOT NULL THEN 'Timesheet PDF'
         WHEN fr.primary_evidence_display_name IS NOT NULL THEN fr.primary_evidence_display_name
         WHEN fr.primary_queue_original_filename IS NOT NULL THEN fr.primary_queue_original_filename
@@ -1520,6 +1579,9 @@ BEGIN
       CASE
         WHEN fr.primary_left_pane_mode = 'IMPORT_SOURCE_ONLY' THEN 'IMPORT_TABLE'
         WHEN fr.primary_left_pane_mode = 'SIGNATURES_ONLY' THEN 'SIGNATURES'
+        WHEN fr.primary_artifact_source = 'DOCUMENT' THEN 'PDF'
+        WHEN fr.primary_artifact_source = 'EVIDENCE' THEN 'FILE'
+        WHEN fr.primary_artifact_source = 'QUEUE' THEN 'PDF'
         WHEN fr.primary_artifact_storage_key IS NOT NULL THEN 'PDF'
         WHEN fr.primary_evidence_storage_key IS NOT NULL THEN 'FILE'
         ELSE NULL::text
@@ -1730,6 +1792,7 @@ BEGIN
         'primary_artifact_display_name', ar.primary_artifact_display_name,
         'primary_artifact_storage_key', ar.primary_artifact_storage_key,
         'primary_artifact_preview_mode', ar.primary_artifact_preview_mode,
+        'primary_artifact_source', ar.primary_artifact_source,
         'primary_left_pane_mode', ar.primary_left_pane_mode,
         'manual_pdf_r2_key', ar.manual_pdf_r2_key,
         'uploaded_pdf_r2_key', ar.uploaded_pdf_r2_key,
@@ -3125,6 +3188,10 @@ BEGIN
 END;
 $function$;
 
+
+
+
+
 CREATE OR REPLACE FUNCTION public.bulk_authorise_row_context_v1(p_filters jsonb DEFAULT '{}'::jsonb)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -3675,6 +3742,18 @@ BEGIN
     FROM row_ids
     WHERE v_include_evidence = TRUE
       AND NULLIF(BTRIM(row_ids.row_json->>'primary_artifact_storage_key'), '') IS NOT NULL
+      AND NOT (
+        NULLIF(BTRIM(COALESCE(row_ids.row_json->>'primary_artifact_id', '')), '') LIKE 'evidence:%'
+        OR (
+          row_ids.timesheet_id IS NOT NULL
+          AND EXISTS (
+            SELECT 1
+            FROM public.timesheet_evidence AS te_primary_artifact
+            WHERE te_primary_artifact.timesheet_id = row_ids.timesheet_id
+              AND te_primary_artifact.storage_key = NULLIF(BTRIM(row_ids.row_json->>'primary_artifact_storage_key'), '')
+          )
+        )
+      )
     UNION ALL
     SELECT
       10::integer AS sort_order,
@@ -3688,9 +3767,12 @@ BEGIN
         'filename', COALESCE(NULLIF(BTRIM(te0.display_name), ''), 'Evidence'),
         'storage_key', te0.storage_key,
         'r2_key', te0.storage_key,
+        'mime_type', NULL::text,
         'uploaded_at_utc', te0.created_at,
         'created_at', te0.created_at,
         'created_by', te0.created_by,
+        'rotation', 0,
+        'rotation_degrees', 0,
         'system', FALSE,
         'is_view_only', NOT COALESCE((ids.row_json->>'can_manage_evidence')::boolean, FALSE),
         'can_delete', COALESCE((ids.row_json->>'can_manage_evidence')::boolean, FALSE),
@@ -3699,8 +3781,8 @@ BEGIN
         'can_edit_type', COALESCE((ids.row_json->>'can_manage_evidence')::boolean, FALSE),
         'can_return_to_queue', COALESCE((ids.row_json->>'can_manage_evidence')::boolean, FALSE),
         'preview_mode', 'FILE',
-        'source_label', NULL::text,
-        'source_badge', NULL::text
+        'source_label', 'Attached',
+        'source_badge', 'Attached'
       ) AS item_json
     FROM public.timesheet_evidence AS te0
     CROSS JOIN row_ids AS ids
@@ -4593,6 +4675,8 @@ BEGIN
   ));
 END;
 $function$;
+
+
 
 CREATE OR REPLACE FUNCTION public.timesheet_qr_send_enqueue_v1(
   p_timesheet_id uuid,
