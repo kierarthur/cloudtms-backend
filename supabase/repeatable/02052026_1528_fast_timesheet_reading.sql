@@ -1914,7 +1914,6 @@ $function$;
 
 
 
-
 CREATE OR REPLACE FUNCTION public.bulk_process_row_context_v1(p_filters jsonb DEFAULT '{}'::jsonb)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -2462,10 +2461,53 @@ BEGIN
         'timesheet_id', te0.timesheet_id,
         'contract_week_id', NULL::uuid,
         'kind', UPPER(COALESCE(NULLIF(BTRIM(te0.kind), ''), 'TIMESHEET')),
-        'display_name', COALESCE(NULLIF(BTRIM(te0.display_name), ''), 'Evidence'),
-        'filename', COALESCE(NULLIF(BTRIM(te0.display_name), ''), 'Evidence'),
+        'display_name', COALESCE(NULLIF(BTRIM(te0.display_name), ''), NULLIF(BTRIM(REGEXP_REPLACE(COALESCE(te0.storage_key, ''), '^.*/', '')), ''), 'Evidence'),
+        'filename', COALESCE(
+          NULLIF(
+            BTRIM(
+              CASE
+                WHEN NULLIF(BTRIM(COALESCE(te0.display_name, '')), '') IS NOT NULL
+                  AND LOWER(NULLIF(BTRIM(COALESCE(te0.display_name, '')), '')) ~ '\.(pdf|png|jpe?g|gif|webp|bmp|svg|tif|tiff|heic|heif|avif)$'
+                  THEN te0.display_name
+                WHEN NULLIF(BTRIM(COALESCE(te0.storage_key, '')), '') IS NOT NULL
+                  THEN REGEXP_REPLACE(COALESCE(te0.storage_key, ''), '^.*/', '')
+                ELSE te0.display_name
+              END
+            ),
+            ''
+          ),
+          'Evidence'
+        ),
         'storage_key', te0.storage_key,
         'r2_key', te0.storage_key,
+        'mime_type', CASE
+          WHEN LOWER(COALESCE(te0.storage_key, '')) ~ '\.pdf($|[?#])' THEN 'application/pdf'
+          WHEN LOWER(COALESCE(te0.storage_key, '')) ~ '\.png($|[?#])' THEN 'image/png'
+          WHEN LOWER(COALESCE(te0.storage_key, '')) ~ '\.jpe?g($|[?#])' THEN 'image/jpeg'
+          WHEN LOWER(COALESCE(te0.storage_key, '')) ~ '\.gif($|[?#])' THEN 'image/gif'
+          WHEN LOWER(COALESCE(te0.storage_key, '')) ~ '\.webp($|[?#])' THEN 'image/webp'
+          WHEN LOWER(COALESCE(te0.storage_key, '')) ~ '\.bmp($|[?#])' THEN 'image/bmp'
+          WHEN LOWER(COALESCE(te0.storage_key, '')) ~ '\.svg($|[?#])' THEN 'image/svg+xml'
+          WHEN LOWER(COALESCE(te0.storage_key, '')) ~ '\.tiff?($|[?#])' THEN 'image/tiff'
+          WHEN LOWER(COALESCE(te0.storage_key, '')) ~ '\.heic($|[?#])' THEN 'image/heic'
+          WHEN LOWER(COALESCE(te0.storage_key, '')) ~ '\.heif($|[?#])' THEN 'image/heif'
+          WHEN LOWER(COALESCE(te0.storage_key, '')) ~ '\.avif($|[?#])' THEN 'image/avif'
+          ELSE NULL::text
+        END,
+        'content_type', CASE
+          WHEN LOWER(COALESCE(te0.storage_key, '')) ~ '\.pdf($|[?#])' THEN 'application/pdf'
+          WHEN LOWER(COALESCE(te0.storage_key, '')) ~ '\.png($|[?#])' THEN 'image/png'
+          WHEN LOWER(COALESCE(te0.storage_key, '')) ~ '\.jpe?g($|[?#])' THEN 'image/jpeg'
+          WHEN LOWER(COALESCE(te0.storage_key, '')) ~ '\.gif($|[?#])' THEN 'image/gif'
+          WHEN LOWER(COALESCE(te0.storage_key, '')) ~ '\.webp($|[?#])' THEN 'image/webp'
+          WHEN LOWER(COALESCE(te0.storage_key, '')) ~ '\.bmp($|[?#])' THEN 'image/bmp'
+          WHEN LOWER(COALESCE(te0.storage_key, '')) ~ '\.svg($|[?#])' THEN 'image/svg+xml'
+          WHEN LOWER(COALESCE(te0.storage_key, '')) ~ '\.tiff?($|[?#])' THEN 'image/tiff'
+          WHEN LOWER(COALESCE(te0.storage_key, '')) ~ '\.heic($|[?#])' THEN 'image/heic'
+          WHEN LOWER(COALESCE(te0.storage_key, '')) ~ '\.heif($|[?#])' THEN 'image/heif'
+          WHEN LOWER(COALESCE(te0.storage_key, '')) ~ '\.avif($|[?#])' THEN 'image/avif'
+          ELSE NULL::text
+        END,
         'uploaded_at_utc', te0.created_at,
         'created_at', te0.created_at,
         'created_by', te0.created_by,
@@ -2476,7 +2518,11 @@ BEGIN
         'can_edit_kind', COALESCE((ids.row_json->>'can_manage_evidence')::boolean, FALSE),
         'can_edit_type', COALESCE((ids.row_json->>'can_manage_evidence')::boolean, FALSE),
         'can_return_to_queue', COALESCE((ids.row_json->>'can_manage_evidence')::boolean, FALSE),
-        'preview_mode', 'FILE',
+        'preview_mode', CASE
+          WHEN LOWER(COALESCE(te0.storage_key, '')) ~ '\.pdf($|[?#])' THEN 'PDF'
+          WHEN LOWER(COALESCE(te0.storage_key, '')) ~ '\.(png|jpe?g|gif|webp|bmp|svg|tif|tiff|heic|heif|avif)($|[?#])' THEN 'IMAGE'
+          ELSE 'FILE'
+        END,
         'source_label', NULL::text,
         'source_badge', NULL::text
       ) AS item_json
