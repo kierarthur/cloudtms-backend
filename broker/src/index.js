@@ -25744,254 +25744,7 @@ async function handleBankingPayCorrectionPlan(env, req, user, payBatchId) {
   }
 }
 
-async function handleBankingPayCorrectionStart(env, req, user, payBatchId) {
-  const id = String(payBatchId || '').trim();
-  if (!id) return withCORS(env, req, badRequest('pay_batch_id is required'));
 
-  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-  if (!uuidRe.test(id)) return withCORS(env, req, badRequest('invalid_pay_batch_id'));
-
-  const jsonResponse = (status, payload) => {
-    const headers = new Headers(JSON_HEADERS);
-    headers.set('Content-Type', 'application/json; charset=utf-8');
-    return new Response(JSON.stringify(payload && typeof payload === 'object' ? payload : { error: String(payload || 'error') }), { status, headers });
-  };
-
-  const unwrapRpc = (rpcRes, key) => {
-    let payload = rpcRes;
-    try {
-      if (Array.isArray(payload) && payload.length === 1 && payload[0] && typeof payload[0] === 'object') payload = payload[0];
-      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) payload = payload[key];
-    } catch {}
-    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : payload;
-  };
-
-  const safeJsonParse = (value) => {
-    try { return JSON.parse(String(value || '')); } catch { return null; }
-  };
-
-  const extractDbRaisedJson = (e) => {
-    try {
-      const candidates = [];
-      if (e && typeof e === 'object') {
-        if (e.json && typeof e.json === 'object') {
-          if (typeof e.json.message === 'string') candidates.push(e.json.message);
-          if (typeof e.json.details === 'string') candidates.push(e.json.details);
-          if (typeof e.json.hint === 'string') candidates.push(e.json.hint);
-          if (typeof e.json.code === 'string') candidates.push(JSON.stringify(e.json));
-        }
-        if (typeof e.body === 'string') candidates.push(e.body);
-        if (typeof e.message === 'string') candidates.push(e.message);
-      }
-      for (const raw of candidates) {
-        const text = String(raw || '').trim();
-        if (!text) continue;
-        if (text.startsWith('{') && text.endsWith('}')) {
-          const parsed = safeJsonParse(text);
-          if (parsed && typeof parsed === 'object') return parsed;
-        }
-        const first = text.indexOf('{');
-        const last = text.lastIndexOf('}');
-        if (first >= 0 && last > first) {
-          const parsed = safeJsonParse(text.slice(first, last + 1));
-          if (parsed && typeof parsed === 'object') return parsed;
-        }
-      }
-    } catch {}
-    return null;
-  };
-
-  const rpcErrorResponse = (e, fallbackCode, fallbackMessage) => {
-    const dbPayload = extractDbRaisedJson(e);
-    if (dbPayload && typeof dbPayload === 'object') {
-      const code = String(dbPayload.code || dbPayload.error_code || fallbackCode || 'PAYMENT_CORRECTION_START_FAILED').trim().toUpperCase();
-      const message = sanitizePaymentIssueDisplayMessage({ ...dbPayload, code }, fallbackMessage);
-      const status = (
-        code.includes('STALE') ||
-        code.includes('BLOCK') ||
-        code.includes('AMBIGUOUS') ||
-        code.includes('INTERFERENCE') ||
-        code.includes('NOT_ALLOWED') ||
-        code.includes('REQUIRES') ||
-        code.includes('REQUIRED')
-      ) ? 409 : 400;
-      return withCORS(env, req, jsonResponse(status, {
-        ok: false,
-        error: message,
-        message,
-        error_code: code,
-        details: dbPayload
-      }));
-    }
-
-    const statusRaw = Number(e && e.status);
-    const status = Number.isFinite(statusRaw) && statusRaw >= 400 && statusRaw < 600 ? statusRaw : 500;
-    const message = sanitizePaymentIssueDisplayMessage(e, fallbackMessage || 'Unable to start payment issue action.');
-    return withCORS(env, req, jsonResponse(status >= 500 ? 500 : status, {
-      ok: false,
-      error: message,
-      message,
-      error_code: fallbackCode || 'PAYMENT_CORRECTION_START_FAILED'
-    }));
-  };
-
-  const requirePaymentPermission = async () => {
-    const currentUserId = String(user?.id || '').trim();
-    if (!currentUserId) return { ok: false, response: unauthorized('Unauthorized') };
-
-    try {
-      const { rows } = await sbFetch(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/tms_users?id=eq.${encodeURIComponent(currentUserId)}&select=id,is_active,role,payment_authoriser,payment_golden_key&limit=1`,
-        false
-      );
-      const row = (rows && rows[0]) ? rows[0] : null;
-      if (!row || row.is_active !== true) return { ok: false, response: unauthorized('Unauthorized') };
-
-      const role = String(row.role || '').trim().toLowerCase();
-      const allowed = role === 'admin' || row.payment_authoriser === true || row.payment_golden_key === true;
-      if (!allowed) return { ok: false, response: badRequest('PAYMENT_PERMISSION_REQUIRED') };
-      return { ok: true, user: row };
-    } catch (e) {
-      return { ok: false, response: serverError(String(e?.message || e || 'Failed to validate payment permission')) };
-    }
-  };
-
-  const normalizeSelection = (body) => {
-    const directKeys = [
-      'scope_type',
-      'requested_action',
-      'source_context',
-      'pay_batch_candidate_id',
-      'pay_batch_candidate_ids',
-      'pay_bank_transfer_id',
-      'pay_bank_transfer_ids',
-      'pay_batch_item_id',
-      'pay_batch_item_ids',
-      'expected_pay_batch_item_ids',
-      'expected_item_count',
-      'candidate_id',
-      'candidate_ids',
-      'umbrella_id',
-      'umbrella_ids',
-      'transfer_group_key',
-      'finance_case_id',
-      'finance_case_ids',
-      'finance_component_id',
-      'finance_component_ids',
-      'reservation_id',
-      'reservation_ids',
-      'item_type',
-      'item_types'
-    ];
-
-    const source =
-      (body && body.selection_json && typeof body.selection_json === 'object' && !Array.isArray(body.selection_json)) ? body.selection_json
-        : (body && body.selection && typeof body.selection === 'object' && !Array.isArray(body.selection)) ? body.selection
-          : (body && directKeys.some((key) => Object.prototype.hasOwnProperty.call(body, key))) ? (() => {
-              const out = {};
-              for (const key of directKeys) {
-                if (Object.prototype.hasOwnProperty.call(body, key)) out[key] = body[key];
-              }
-              return out;
-            })()
-            : null;
-
-    if (!source || typeof source !== 'object' || Array.isArray(source)) {
-      return { ok: false, error: 'selection_json must be an object' };
-    }
-
-    const selection = { ...source };
-    if (body && body.requested_action !== undefined && selection.requested_action === undefined) {
-      selection.requested_action = body.requested_action;
-    }
-
-    const scopeType = String(selection.scope_type || '').trim().toUpperCase();
-    if (!scopeType) return { ok: false, error: 'selection scope_type is required' };
-    if (scopeType === 'TIMESHEET' || scopeType === 'TIMESHEETS') return { ok: false, error: 'TIMESHEET_SCOPE_NOT_ALLOWED' };
-    if (!['BATCH', 'CANDIDATES', 'TRANSFER', 'UMBRELLA_PAYMENT_GROUP'].includes(scopeType)) {
-      return { ok: false, error: 'Unsupported correction scope_type' };
-    }
-    selection.scope_type = scopeType;
-
-    if (selection.requested_action !== undefined && selection.requested_action !== null) {
-      selection.requested_action = String(selection.requested_action).trim().toUpperCase();
-    }
-
-    const hasNonEmptyArray = (value) => Array.isArray(value) && value.some((item) => String(item || '').trim());
-    if (scopeType === 'CANDIDATES' && !hasNonEmptyArray(selection.pay_batch_candidate_ids) && !hasNonEmptyArray(selection.candidate_ids)) {
-      return { ok: false, error: 'CANDIDATES scope requires pay_batch_candidate_ids or candidate_ids' };
-    }
-    if (scopeType === 'TRANSFER' && !String(selection.pay_bank_transfer_id || '').trim() && !hasNonEmptyArray(selection.pay_bank_transfer_ids)) {
-      return { ok: false, error: 'TRANSFER scope requires pay_bank_transfer_id or pay_bank_transfer_ids' };
-    }
-    if (scopeType === 'UMBRELLA_PAYMENT_GROUP') {
-      const hasUmbrella = !!String(selection.umbrella_id || '').trim() || hasNonEmptyArray(selection.umbrella_ids);
-      const hasGroup = !!String(selection.transfer_group_key || '').trim();
-      const hasTransfers = hasNonEmptyArray(selection.pay_bank_transfer_ids) || !!String(selection.pay_bank_transfer_id || '').trim();
-      if (!hasUmbrella && !hasGroup && !hasTransfers) {
-        return { ok: false, error: 'UMBRELLA_PAYMENT_GROUP scope requires umbrella, transfer group, or transfer identity' };
-      }
-    }
-
-    return { ok: true, selection };
-  };
-
-  const permission = await requirePaymentPermission();
-  if (!permission.ok) return withCORS(env, req, permission.response);
-
-  let body = null;
-  try { body = await parseJSONBody(req); } catch { body = null; }
-  if (!body || typeof body !== 'object' || Array.isArray(body)) return withCORS(env, req, badRequest('Invalid JSON'));
-
-  const selectionRes = normalizeSelection(body);
-  if (!selectionRes.ok) return withCORS(env, req, badRequest(sanitizePaymentIssueDisplayMessage(selectionRes.error, 'Unable to start payment issue action.')));
-
-  const reason = String(body.reason || body.correction_reason || '').trim();
-  if (!reason) return withCORS(env, req, badRequest('Reason is required.'));
-
-  const reauthToken = String(body.reauth_token || body.reauthToken || '').trim();
-  const reauthCheck = await verifyPaymentReversalReauth(env, user, reauthToken);
-  if (!reauthCheck.ok) return withCORS(env, req, badRequest('Please verify your identity before continuing.'));
-
-  const acceptedResolutionJson = (() => {
-    const value = body.accepted_resolution_json ?? body.acceptedResolutionJson ?? body.accepted_resolution ?? body.acceptedResolution ?? null;
-    if (value === null || value === undefined) return null;
-    return value;
-  })();
-
-  if (acceptedResolutionJson !== null && (typeof acceptedResolutionJson !== 'object' || Array.isArray(acceptedResolutionJson))) {
-    return withCORS(env, req, badRequest('accepted_resolution_json must be an object when supplied'));
-  }
-
-  try {
-    const rpcRes = await sbRpc(env, 'pay_payment_correction_request_start', {
-      p_pay_batch_id: id,
-      p_selection_json: selectionRes.selection,
-      p_reason: reason,
-      p_actor_user_id: String(user.id),
-      p_source_bank_event_id: null,
-      p_auto_requested: false,
-      p_accepted_resolution_json: acceptedResolutionJson
-    });
-    const result = unwrapRpc(rpcRes, 'pay_payment_correction_request_start');
-    return withCORS(env, req, ok({
-      ok: true,
-      correction_request_id: result?.correction_request_id || null,
-      pay_batch_id: result?.pay_batch_id || id,
-      status: result?.status || null,
-      plan: result?.plan || null,
-      progress: result?.progress || result?.work_item_progress || null,
-      result,
-      reauth: {
-        verified_by_user_id: reauthCheck.verified_by_user_id,
-        verified_at_utc: reauthCheck.verified_at_utc
-      }
-    }));
-  } catch (e) {
-    return rpcErrorResponse(e, 'PAYMENT_CORRECTION_START_FAILED', 'Unable to start payment issue action.');
-  }
-}
 
 async function handleBankingPayCorrectionAuthAction(env, req, user, correctionRequestId) {
   const id = String(correctionRequestId || '').trim();
@@ -41802,6 +41555,7 @@ function buildBulkAuthoriseEligibility(row, fin, summaryBase, validation, family
     deviation_marker_reason: deviationMarkerReason
   };
 }
+
 async function handleBankingPayFinanceCaseTaxableChannelRestructureSuggestion(env, req, user, financeCaseId) {
   const financeCaseIdText = String(financeCaseId || '').trim();
   const actorUserId = String(user?.id || '').trim();
@@ -41819,6 +41573,137 @@ async function handleBankingPayFinanceCaseTaxableChannelRestructureSuggestion(en
 
   const trimStr = (value) => String(value == null ? '' : value).trim();
   const upperTrim = (value) => trimStr(value).toUpperCase();
+
+  const stableStringify = (value) => {
+    if (value === null || value === undefined) return 'null';
+    if (typeof value === 'number') return Number.isFinite(value) ? String(value) : 'null';
+    if (typeof value === 'boolean') return value ? 'true' : 'false';
+    if (typeof value === 'string') return JSON.stringify(value);
+    if (Array.isArray(value)) return `[${value.map((item) => stableStringify(item)).join(',')}]`;
+    if (typeof value === 'object') {
+      const keys = Object.keys(value).sort();
+      return `{${keys.map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`).join(',')}}`;
+    }
+    return JSON.stringify(String(value));
+  };
+
+  const md5Hex = (input) => {
+    const str = String(input == null ? '' : input);
+    const rotateLeft = (lValue, iShiftBits) => (lValue << iShiftBits) | (lValue >>> (32 - iShiftBits));
+    const addUnsigned = (lX, lY) => {
+      const lX4 = lX & 0x40000000;
+      const lY4 = lY & 0x40000000;
+      const lX8 = lX & 0x80000000;
+      const lY8 = lY & 0x80000000;
+      const lResult = (lX & 0x3fffffff) + (lY & 0x3fffffff);
+      if (lX4 & lY4) return lResult ^ 0x80000000 ^ lX8 ^ lY8;
+      if (lX4 | lY4) {
+        if (lResult & 0x40000000) return lResult ^ 0xc0000000 ^ lX8 ^ lY8;
+        return lResult ^ 0x40000000 ^ lX8 ^ lY8;
+      }
+      return lResult ^ lX8 ^ lY8;
+    };
+    const F = (x, y, z) => (x & y) | ((~x) & z);
+    const G = (x, y, z) => (x & z) | (y & (~z));
+    const H = (x, y, z) => x ^ y ^ z;
+    const I = (x, y, z) => y ^ (x | (~z));
+    const FF = (a, b, c, d, x, s, ac) => addUnsigned(rotateLeft(addUnsigned(addUnsigned(a, F(b, c, d)), addUnsigned(x, ac)), s), b);
+    const GG = (a, b, c, d, x, s, ac) => addUnsigned(rotateLeft(addUnsigned(addUnsigned(a, G(b, c, d)), addUnsigned(x, ac)), s), b);
+    const HH = (a, b, c, d, x, s, ac) => addUnsigned(rotateLeft(addUnsigned(addUnsigned(a, H(b, c, d)), addUnsigned(x, ac)), s), b);
+    const II = (a, b, c, d, x, s, ac) => addUnsigned(rotateLeft(addUnsigned(addUnsigned(a, I(b, c, d)), addUnsigned(x, ac)), s), b);
+    const utf8 = unescape(encodeURIComponent(str));
+    const wordArray = [];
+    let i;
+    for (i = 0; i < utf8.length - 3; i += 4) {
+      wordArray.push(utf8.charCodeAt(i) | (utf8.charCodeAt(i + 1) << 8) | (utf8.charCodeAt(i + 2) << 16) | (utf8.charCodeAt(i + 3) << 24));
+    }
+    let word = 0;
+    switch (utf8.length % 4) {
+      case 0: word = 0x80; break;
+      case 1: word = utf8.charCodeAt(i) | 0x8000; break;
+      case 2: word = utf8.charCodeAt(i) | (utf8.charCodeAt(i + 1) << 8) | 0x800000; break;
+      case 3: word = utf8.charCodeAt(i) | (utf8.charCodeAt(i + 1) << 8) | (utf8.charCodeAt(i + 2) << 16) | 0x80000000; break;
+    }
+    wordArray.push(word);
+    while ((wordArray.length % 16) !== 14) wordArray.push(0);
+    wordArray.push(utf8.length << 3);
+    wordArray.push(utf8.length >>> 29);
+    let a = 0x67452301;
+    let b = 0xefcdab89;
+    let c = 0x98badcfe;
+    let d = 0x10325476;
+    for (let k = 0; k < wordArray.length; k += 16) {
+      const AA = a, BB = b, CC = c, DD = d;
+      a = FF(a,b,c,d,wordArray[k+0],7,0xd76aa478); d = FF(d,a,b,c,wordArray[k+1],12,0xe8c7b756); c = FF(c,d,a,b,wordArray[k+2],17,0x242070db); b = FF(b,c,d,a,wordArray[k+3],22,0xc1bdceee);
+      a = FF(a,b,c,d,wordArray[k+4],7,0xf57c0faf); d = FF(d,a,b,c,wordArray[k+5],12,0x4787c62a); c = FF(c,d,a,b,wordArray[k+6],17,0xa8304613); b = FF(b,c,d,a,wordArray[k+7],22,0xfd469501);
+      a = FF(a,b,c,d,wordArray[k+8],7,0x698098d8); d = FF(d,a,b,c,wordArray[k+9],12,0x8b44f7af); c = FF(c,d,a,b,wordArray[k+10],17,0xffff5bb1); b = FF(b,c,d,a,wordArray[k+11],22,0x895cd7be);
+      a = FF(a,b,c,d,wordArray[k+12],7,0x6b901122); d = FF(d,a,b,c,wordArray[k+13],12,0xfd987193); c = FF(c,d,a,b,wordArray[k+14],17,0xa679438e); b = FF(b,c,d,a,wordArray[k+15],22,0x49b40821);
+      a = GG(a,b,c,d,wordArray[k+1],5,0xf61e2562); d = GG(d,a,b,c,wordArray[k+6],9,0xc040b340); c = GG(c,d,a,b,wordArray[k+11],14,0x265e5a51); b = GG(b,c,d,a,wordArray[k+0],20,0xe9b6c7aa);
+      a = GG(a,b,c,d,wordArray[k+5],5,0xd62f105d); d = GG(d,a,b,c,wordArray[k+10],9,0x02441453); c = GG(c,d,a,b,wordArray[k+15],14,0xd8a1e681); b = GG(b,c,d,a,wordArray[k+4],20,0xe7d3fbc8);
+      a = GG(a,b,c,d,wordArray[k+9],5,0x21e1cde6); d = GG(d,a,b,c,wordArray[k+14],9,0xc33707d6); c = GG(c,d,a,b,wordArray[k+3],14,0xf4d50d87); b = GG(b,c,d,a,wordArray[k+8],20,0x455a14ed);
+      a = GG(a,b,c,d,wordArray[k+13],5,0xa9e3e905); d = GG(d,a,b,c,wordArray[k+2],9,0xfcefa3f8); c = GG(c,d,a,b,wordArray[k+7],14,0x676f02d9); b = GG(b,c,d,a,wordArray[k+12],20,0x8d2a4c8a);
+      a = HH(a,b,c,d,wordArray[k+5],4,0xfffa3942); d = HH(d,a,b,c,wordArray[k+8],11,0x8771f681); c = HH(c,d,a,b,wordArray[k+11],16,0x6d9d6122); b = HH(b,c,d,a,wordArray[k+14],23,0xfde5380c);
+      a = HH(a,b,c,d,wordArray[k+1],4,0xa4beea44); d = HH(d,a,b,c,wordArray[k+4],11,0x4bdecfa9); c = HH(c,d,a,b,wordArray[k+7],16,0xf6bb4b60); b = HH(b,c,d,a,wordArray[k+10],23,0xbebfbc70);
+      a = HH(a,b,c,d,wordArray[k+13],4,0x289b7ec6); d = HH(d,a,b,c,wordArray[k+0],11,0xeaa127fa); c = HH(c,d,a,b,wordArray[k+3],16,0xd4ef3085); b = HH(b,c,d,a,wordArray[k+6],23,0x04881d05);
+      a = HH(a,b,c,d,wordArray[k+9],4,0xd9d4d039); d = HH(d,a,b,c,wordArray[k+12],11,0xe6db99e5); c = HH(c,d,a,b,wordArray[k+15],16,0x1fa27cf8); b = HH(b,c,d,a,wordArray[k+2],23,0xc4ac5665);
+      a = II(a,b,c,d,wordArray[k+0],6,0xf4292244); d = II(d,a,b,c,wordArray[k+7],10,0x432aff97); c = II(c,d,a,b,wordArray[k+14],15,0xab9423a7); b = II(b,c,d,a,wordArray[k+5],21,0xfc93a039);
+      a = II(a,b,c,d,wordArray[k+12],6,0x655b59c3); d = II(d,a,b,c,wordArray[k+3],10,0x8f0ccc92); c = II(c,d,a,b,wordArray[k+10],15,0xffeff47d); b = II(b,c,d,a,wordArray[k+1],21,0x85845dd1);
+      a = II(a,b,c,d,wordArray[k+8],6,0x6fa87e4f); d = II(d,a,b,c,wordArray[k+15],10,0xfe2ce6e0); c = II(c,d,a,b,wordArray[k+6],15,0xa3014314); b = II(b,c,d,a,wordArray[k+13],21,0x4e0811a1);
+      a = II(a,b,c,d,wordArray[k+4],6,0xf7537e82); d = II(d,a,b,c,wordArray[k+11],10,0xbd3af235); c = II(c,d,a,b,wordArray[k+2],15,0x2ad7d2bb); b = II(b,c,d,a,wordArray[k+9],21,0xeb86d391);
+      a = addUnsigned(a, AA); b = addUnsigned(b, BB); c = addUnsigned(c, CC); d = addUnsigned(d, DD);
+    }
+    const wordToHex = (lValue) => {
+      let out = '';
+      for (let lCount = 0; lCount <= 3; lCount += 1) {
+        const byte = (lValue >>> (lCount * 8)) & 255;
+        out += (`0${byte.toString(16)}`).slice(-2);
+      }
+      return out;
+    };
+    return (wordToHex(a) + wordToHex(b) + wordToHex(c) + wordToHex(d)).toLowerCase();
+  };
+
+  const asArray = (value) => Array.isArray(value) ? value : (value == null || value === '' ? [] : [value]);
+  const uniqueTextArray = (value) => Array.from(new Set(asArray(value).map((item) => trimStr(item)).filter(Boolean))).sort();
+  const objectFrom = (...values) => {
+    for (const value of values) {
+      if (value && typeof value === 'object' && !Array.isArray(value)) return value;
+    }
+    return {};
+  };
+
+
+  const stripVolatileSuggestionFields = (value) => {
+    if (value === null || value === undefined) return value;
+    if (Array.isArray(value)) return value.map((item) => stripVolatileSuggestionFields(item));
+    if (typeof value !== 'object') return value;
+    const volatileKeys = new Set([
+      'generated_at', 'generated_at_utc', 'created_at', 'created_at_utc',
+      'updated_at', 'updated_at_utc', 'audit', 'debug'
+    ]);
+    const out = {};
+    for (const key of Object.keys(value).sort()) {
+      if (volatileKeys.has(key)) continue;
+      out[key] = stripVolatileSuggestionFields(value[key]);
+    }
+    return out;
+  };
+
+  const pickSuggestionText = (suggestion, paths, fallback = null) => {
+    const root = (suggestion && typeof suggestion === 'object' && !Array.isArray(suggestion)) ? suggestion : {};
+    for (const path of paths) {
+      try {
+        let cur = root;
+        for (const part of path) {
+          if (!cur || typeof cur !== 'object') { cur = null; break; }
+          cur = cur[part];
+        }
+        const text = trimStr(cur);
+        if (text) return text;
+      } catch {}
+    }
+    return fallback;
+  };
 
   const normalizeResolutionPath = (raw) => {
     const s = upperTrim(raw);
@@ -42063,6 +41948,23 @@ async function handleBankingPayFinanceCaseTaxableChannelRestructureSuggestion(en
 
   const note = (body.note === undefined || body.note === null) ? null : String(body.note).trim() || null;
 
+  const selectedComponentIds = uniqueTextArray(body.selected_component_ids ?? body.selectedComponentIds ?? body.component_ids ?? body.componentIds);
+  const currentComponentFingerprints = objectFrom(body.current_component_fingerprints, body.currentComponentFingerprints, body.component_fingerprints, body.componentFingerprints);
+  const applySurface = trimStr(body.apply_surface ?? body.applySurface ?? 'pay_finance_case_apply_taxable_channel_restructure') || 'pay_finance_case_apply_taxable_channel_restructure';
+  const correctionContextSupplied = !!(
+    body.payment_issue_mode === true ||
+    body.paymentIssueMode === true ||
+    body.correction_mode === true ||
+    body.correctionMode === true ||
+    body.payment_correction_mode === true ||
+    body.paymentCorrectionMode === true ||
+    selectedComponentIds.length > 0 ||
+    Object.keys(currentComponentFingerprints).length > 0 ||
+    trimStr(body.apply_surface ?? body.applySurface) ||
+    body.accepted_resolution_context === true ||
+    body.acceptedResolutionContext === true
+  );
+
   try {
     const rpcRes = await sbRpc(env, 'pay_finance_case_taxable_channel_restructure_suggestion', {
       p_finance_case_id: financeCaseIdText,
@@ -42079,7 +41981,88 @@ async function handleBankingPayFinanceCaseTaxableChannelRestructureSuggestion(en
     const payload = unwrapRpc(rpcRes, 'pay_finance_case_taxable_channel_restructure_suggestion');
     const payloadObj = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : { ok: true, suggestion: payload };
 
-    return withCORS(env, req, ok(payloadObj));
+    if (!correctionContextSupplied) {
+      return withCORS(env, req, ok(payloadObj));
+    }
+
+    const candidateId = trimStr(body.candidate_id ?? body.candidateId ?? payloadObj.candidate_id ?? payloadObj.candidateId);
+    const canonicalResolutionPath = pickSuggestionText(payloadObj, [['resolution_path'], ['request', 'resolution_path']], resolutionPath) || resolutionPath;
+    const canonicalResolutionMode = pickSuggestionText(payloadObj, [['resolution_mode'], ['result', 'resolution_mode'], ['suggestion', 'resolution_mode']], null);
+    const canonicalWeeksTotal = pickSuggestionText(payloadObj, [['weeks_total'], ['result', 'weeks_total'], ['suggestion', 'weeks_total']], weeksTotalResult.value == null ? null : String(weeksTotalResult.value));
+    const canonicalWeeklyDue = pickSuggestionText(payloadObj, [['weekly_due'], ['result', 'weekly_due'], ['suggestion', 'weekly_due']], weeklyDueResult.value == null ? null : String(weeklyDueResult.value));
+    const canonicalManualTotal = pickSuggestionText(payloadObj, [['manual_total_remaining'], ['result', 'manual_total_remaining'], ['suggestion', 'manual_total_remaining']], manualTotalProvided && manualTotalResult.value != null ? String(manualTotalResult.value) : null);
+    const taxableChannelResult = stripVolatileSuggestionFields(
+      (payloadObj && typeof payloadObj === 'object' && !Array.isArray(payloadObj) && payloadObj.taxable_channel_result && typeof payloadObj.taxable_channel_result === 'object') ? payloadObj.taxable_channel_result
+        : (payloadObj && typeof payloadObj === 'object' && !Array.isArray(payloadObj) && payloadObj.result && typeof payloadObj.result === 'object') ? payloadObj.result
+          : (payloadObj && typeof payloadObj === 'object' && !Array.isArray(payloadObj) && payloadObj.suggestion && typeof payloadObj.suggestion === 'object') ? payloadObj.suggestion
+            : payloadObj
+    );
+    const hashBasis = {
+      hash_algorithm: 'md5',
+      hash_version: 'payment_correction_finance_resolution_v1',
+      source: 'handleBankingPayFinanceCaseTaxableChannelRestructureSuggestion',
+      finance_case_id: financeCaseIdText,
+      candidate_id: candidateId || null,
+      component_ids: selectedComponentIds,
+      selected_component_ids: selectedComponentIds,
+      component_fingerprints: currentComponentFingerprints,
+      current_component_fingerprints: currentComponentFingerprints,
+      apply_surface: applySurface,
+      effective_pay_date: effectivePayDate,
+      resolution_path: canonicalResolutionPath || resolutionPath,
+      resolution_mode: canonicalResolutionMode,
+      schedule_input_mode: scheduleInputMode || null,
+      weeks_total: canonicalWeeksTotal,
+      weekly_due: canonicalWeeklyDue,
+      manual_total_remaining: canonicalManualTotal,
+      note,
+      taxable_channel_result: taxableChannelResult
+    };
+    const hashText = stableStringify(hashBasis);
+    hashBasis.hash_text = hashText;
+    const suggestionHash = md5Hex(hashText);
+
+    const acceptedCase = {
+      ...payloadObj,
+      finance_case_id: financeCaseIdText,
+      candidate_id: candidateId || undefined,
+      component_ids: selectedComponentIds,
+      selected_component_ids: selectedComponentIds,
+      component_fingerprints: currentComponentFingerprints,
+      current_component_fingerprints: currentComponentFingerprints,
+      apply_surface: applySurface,
+      effective_pay_date: effectivePayDate,
+      resolution_path: resolutionPath,
+      schedule_input_mode: scheduleInputMode || undefined,
+      ...(weeksTotalResult.value != null ? { weeks_total: weeksTotalResult.value } : {}),
+      ...(weeklyDueResult.value != null ? { weekly_due: weeklyDueResult.value } : {}),
+      ...(manualTotalProvided && manualTotalResult.value != null ? { manual_total_remaining: manualTotalResult.value } : {}),
+      ...(note ? { note } : {}),
+      suggestion: payloadObj,
+      suggestion_hash: suggestionHash,
+      suggestion_hash_basis: hashBasis
+    };
+    const acceptedResolutionJson = {
+      accepted_resolution: {
+        required: true,
+        resolution_source: 'PAYMENT_ISSUE_MODAL',
+        finance_cases: [acceptedCase]
+      },
+      finance_cases: [acceptedCase]
+    };
+
+    return withCORS(env, req, ok({
+      ...payloadObj,
+      suggestion: {
+        ...payloadObj,
+        finance_cases: [acceptedCase]
+      },
+      suggestion_hash: suggestionHash,
+      suggestion_hash_basis: hashBasis,
+      accepted_resolution_case: acceptedCase,
+      accepted_resolution_json: acceptedResolutionJson,
+      finance_cases: [acceptedCase]
+    }));
   } catch (e) {
     const raised = _extractDbRaisedJson(e);
     const raisedRes = _raisedPayloadResponse(raised, e?.status === 404 ? 404 : (e?.status === 409 ? 409 : 400));
@@ -42087,6 +42070,7 @@ async function handleBankingPayFinanceCaseTaxableChannelRestructureSuggestion(en
     return withCORS(env, req, serverError(String(e?.message || e || 'Failed to calculate taxable finance channel restructure suggestion')));
   }
 }
+
 
 
 async function fetchBulkAuthoriseEligibilityFactsMap(env, timesheetIds, context = {}) {
@@ -42797,6 +42781,373 @@ async function handleTimesheetBulkAuthoriseContext(env, req, timesheetId = null)
   }
 }
 
+async function handleBankingPayCorrectionStart(env, req, user, payBatchId) {
+  const id = String(payBatchId || '').trim();
+  if (!id) return withCORS(env, req, badRequest('pay_batch_id is required'));
+
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  if (!uuidRe.test(id)) return withCORS(env, req, badRequest('invalid_pay_batch_id'));
+
+  const jsonResponse = (status, payload) => {
+    const headers = new Headers(JSON_HEADERS);
+    headers.set('Content-Type', 'application/json; charset=utf-8');
+    return new Response(JSON.stringify(payload && typeof payload === 'object' ? payload : { error: String(payload || 'error') }), { status, headers });
+  };
+
+  const unwrapRpc = (rpcRes, key) => {
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(payload) && payload.length === 1 && payload[0] && typeof payload[0] === 'object') payload = payload[0];
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) payload = payload[key];
+    } catch {}
+    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : payload;
+  };
+
+  const safeJsonParse = (value) => {
+    try { return JSON.parse(String(value || '')); } catch { return null; }
+  };
+
+  const extractDbRaisedJson = (e) => {
+    try {
+      const candidates = [];
+      if (e && typeof e === 'object') {
+        if (e.json && typeof e.json === 'object') {
+          if (typeof e.json.message === 'string') candidates.push(e.json.message);
+          if (typeof e.json.details === 'string') candidates.push(e.json.details);
+          if (typeof e.json.hint === 'string') candidates.push(e.json.hint);
+          if (typeof e.json.code === 'string') candidates.push(JSON.stringify(e.json));
+        }
+        if (typeof e.body === 'string') candidates.push(e.body);
+        if (typeof e.message === 'string') candidates.push(e.message);
+      }
+      for (const raw of candidates) {
+        const text = String(raw || '').trim();
+        if (!text) continue;
+        if (text.startsWith('{') && text.endsWith('}')) {
+          const parsed = safeJsonParse(text);
+          if (parsed && typeof parsed === 'object') return parsed;
+        }
+        const first = text.indexOf('{');
+        const last = text.lastIndexOf('}');
+        if (first >= 0 && last > first) {
+          const parsed = safeJsonParse(text.slice(first, last + 1));
+          if (parsed && typeof parsed === 'object') return parsed;
+        }
+      }
+    } catch {}
+    return null;
+  };
+
+  const rpcErrorResponse = (e, fallbackCode, fallbackMessage) => {
+    const dbPayload = extractDbRaisedJson(e);
+    if (dbPayload && typeof dbPayload === 'object') {
+      const code = String(dbPayload.code || dbPayload.error_code || fallbackCode || 'PAYMENT_CORRECTION_START_FAILED').trim().toUpperCase();
+      const message = sanitizePaymentIssueDisplayMessage({ ...dbPayload, code }, fallbackMessage);
+      const status = (
+        code.includes('STALE') ||
+        code.includes('BLOCK') ||
+        code.includes('AMBIGUOUS') ||
+        code.includes('INTERFERENCE') ||
+        code.includes('NOT_ALLOWED') ||
+        code.includes('REQUIRES') ||
+        code.includes('REQUIRED')
+      ) ? 409 : 400;
+      return withCORS(env, req, jsonResponse(status, {
+        ok: false,
+        error: message,
+        message,
+        error_code: code,
+        details: dbPayload
+      }));
+    }
+
+    const statusRaw = Number(e && e.status);
+    const status = Number.isFinite(statusRaw) && statusRaw >= 400 && statusRaw < 600 ? statusRaw : 500;
+    const message = sanitizePaymentIssueDisplayMessage(e, fallbackMessage || 'Unable to start payment issue action.');
+    return withCORS(env, req, jsonResponse(status >= 500 ? 500 : status, {
+      ok: false,
+      error: message,
+      message,
+      error_code: fallbackCode || 'PAYMENT_CORRECTION_START_FAILED'
+    }));
+  };
+
+  const requirePaymentPermission = async () => {
+    const currentUserId = String(user?.id || '').trim();
+    if (!currentUserId) return { ok: false, response: unauthorized('Unauthorized') };
+
+    try {
+      const { rows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/tms_users?id=eq.${encodeURIComponent(currentUserId)}&select=id,is_active,role,payment_authoriser,payment_golden_key&limit=1`,
+        false
+      );
+      const row = (rows && rows[0]) ? rows[0] : null;
+      if (!row || row.is_active !== true) return { ok: false, response: unauthorized('Unauthorized') };
+
+      const role = String(row.role || '').trim().toLowerCase();
+      const allowed = role === 'admin' || row.payment_authoriser === true || row.payment_golden_key === true;
+      if (!allowed) return { ok: false, response: badRequest('PAYMENT_PERMISSION_REQUIRED') };
+      return { ok: true, user: row };
+    } catch (e) {
+      return { ok: false, response: serverError(String(e?.message || e || 'Failed to validate payment permission')) };
+    }
+  };
+
+  const normalizeSelection = (body) => {
+    const directKeys = [
+      'scope_type',
+      'requested_action',
+      'source_context',
+      'pay_batch_candidate_id',
+      'pay_batch_candidate_ids',
+      'pay_bank_transfer_id',
+      'pay_bank_transfer_ids',
+      'pay_batch_item_id',
+      'pay_batch_item_ids',
+      'expected_pay_batch_item_ids',
+      'expected_item_count',
+      'candidate_id',
+      'candidate_ids',
+      'umbrella_id',
+      'umbrella_ids',
+      'transfer_group_key',
+      'finance_case_id',
+      'finance_case_ids',
+      'finance_component_id',
+      'finance_component_ids',
+      'reservation_id',
+      'reservation_ids',
+      'item_type',
+      'item_types'
+    ];
+
+    const source =
+      (body && body.selection_json && typeof body.selection_json === 'object' && !Array.isArray(body.selection_json)) ? body.selection_json
+        : (body && body.selection && typeof body.selection === 'object' && !Array.isArray(body.selection)) ? body.selection
+          : (body && directKeys.some((key) => Object.prototype.hasOwnProperty.call(body, key))) ? (() => {
+              const out = {};
+              for (const key of directKeys) {
+                if (Object.prototype.hasOwnProperty.call(body, key)) out[key] = body[key];
+              }
+              return out;
+            })()
+            : null;
+
+    if (!source || typeof source !== 'object' || Array.isArray(source)) {
+      return { ok: false, error: 'selection_json must be an object' };
+    }
+
+    const selection = { ...source };
+    if (body && body.requested_action !== undefined && selection.requested_action === undefined) {
+      selection.requested_action = body.requested_action;
+    }
+
+    const scopeType = String(selection.scope_type || '').trim().toUpperCase();
+    if (!scopeType) return { ok: false, error: 'selection scope_type is required' };
+    if (scopeType === 'TIMESHEET' || scopeType === 'TIMESHEETS') return { ok: false, error: 'TIMESHEET_SCOPE_NOT_ALLOWED' };
+    if (!['BATCH', 'CANDIDATES', 'TRANSFER', 'UMBRELLA_PAYMENT_GROUP'].includes(scopeType)) {
+      return { ok: false, error: 'Unsupported correction scope_type' };
+    }
+    selection.scope_type = scopeType;
+
+    if (selection.requested_action !== undefined && selection.requested_action !== null) {
+      selection.requested_action = String(selection.requested_action).trim().toUpperCase();
+    }
+
+    const hasNonEmptyArray = (value) => Array.isArray(value) && value.some((item) => String(item || '').trim());
+    if (scopeType === 'CANDIDATES' && !hasNonEmptyArray(selection.pay_batch_candidate_ids) && !hasNonEmptyArray(selection.candidate_ids)) {
+      return { ok: false, error: 'CANDIDATES scope requires pay_batch_candidate_ids or candidate_ids' };
+    }
+    if (scopeType === 'TRANSFER' && !String(selection.pay_bank_transfer_id || '').trim() && !hasNonEmptyArray(selection.pay_bank_transfer_ids)) {
+      return { ok: false, error: 'TRANSFER scope requires pay_bank_transfer_id or pay_bank_transfer_ids' };
+    }
+    if (scopeType === 'UMBRELLA_PAYMENT_GROUP') {
+      const hasUmbrella = !!String(selection.umbrella_id || '').trim() || hasNonEmptyArray(selection.umbrella_ids);
+      const hasGroup = !!String(selection.transfer_group_key || '').trim();
+      const hasTransfers = hasNonEmptyArray(selection.pay_bank_transfer_ids) || !!String(selection.pay_bank_transfer_id || '').trim();
+      if (!hasUmbrella && !hasGroup && !hasTransfers) {
+        return { ok: false, error: 'UMBRELLA_PAYMENT_GROUP scope requires umbrella, transfer group, or transfer identity' };
+      }
+    }
+
+    return { ok: true, selection };
+  };
+
+  const permission = await requirePaymentPermission();
+  if (!permission.ok) return withCORS(env, req, permission.response);
+
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return withCORS(env, req, badRequest('Invalid JSON'));
+
+  const selectionRes = normalizeSelection(body);
+  if (!selectionRes.ok) return withCORS(env, req, badRequest(sanitizePaymentIssueDisplayMessage(selectionRes.error, 'Unable to start payment issue action.')));
+
+  const reason = String(body.reason || body.correction_reason || '').trim();
+  if (!reason) return withCORS(env, req, badRequest('Reason is required.'));
+
+  const reauthToken = String(body.reauth_token || body.reauthToken || '').trim();
+  const reauthCheck = await verifyPaymentReversalReauth(env, user, reauthToken);
+  if (!reauthCheck.ok) return withCORS(env, req, badRequest('Please verify your identity before continuing.'));
+
+  const acceptedResolutionJson = (() => {
+    const value = body.accepted_resolution_json ?? body.acceptedResolutionJson ?? body.accepted_resolution ?? body.acceptedResolution ?? null;
+    if (value === null || value === undefined) return null;
+    return value;
+  })();
+
+  if (acceptedResolutionJson !== null && (typeof acceptedResolutionJson !== 'object' || Array.isArray(acceptedResolutionJson))) {
+    return withCORS(env, req, badRequest('accepted_resolution_json must be an object when supplied'));
+  }
+
+  const selection = selectionRes.selection;
+  const selectionSourceContext = String(selection.source_context || selection.sourceContext || '').trim().toUpperCase();
+  const selectionRequestedAction = String(selection.requested_action || selection.requestedAction || '').trim().toUpperCase();
+  const isDraftRemovalSelection = selectionSourceContext === 'DRAFT_REMOVE_FROM_BATCH' && selectionRequestedAction === 'CANCEL_PAYMENT_ATTEMPT';
+  const getNestedText = (value, paths) => {
+    const root = (value && typeof value === 'object') ? value : {};
+    for (const path of paths) {
+      try {
+        let cur = root;
+        for (const part of path) {
+          if (!cur || typeof cur !== 'object') { cur = null; break; }
+          cur = cur[part];
+        }
+        const text = String(cur || '').trim();
+        if (text) return text;
+      } catch {}
+    }
+    return '';
+  };
+  const arrayHasBlocker = (value, codeWanted) => {
+    const list = Array.isArray(value) ? value : [];
+    const wanted = String(codeWanted || '').trim().toUpperCase();
+    return list.some((item) => {
+      if (typeof item === 'string') return item.trim().toUpperCase() === wanted;
+      if (!item || typeof item !== 'object') return false;
+      return String(item.code || item.id || item.key || item.reason || item.blocker_code || '').trim().toUpperCase() === wanted;
+    });
+  };
+  const canAutoProcessDraftRemoval = (startResult) => {
+    if (!isDraftRemovalSelection) return false;
+    const res = (startResult && typeof startResult === 'object') ? startResult : {};
+    const plan = (res.plan && typeof res.plan === 'object') ? res.plan : {};
+    const correctionKind = String(res.correction_kind || plan.correction_kind || plan.correctionKind || '').trim().toUpperCase();
+    const status = getNestedText(res, [
+      ['status'],
+      ['request', 'status'],
+      ['correction_request', 'status'],
+      ['request_status'],
+      ['correction_request_status']
+    ]).toUpperCase();
+    const classification = getNestedText(res, [
+      ['plan', 'classification'],
+      ['plan', 'movement_classification'],
+      ['plan', 'movementClassification'],
+      ['plan', 'movement_classification', 'classification'],
+      ['plan', 'movementClassification', 'classification'],
+      ['plan', 'movement_classification_detail', 'classification'],
+      ['plan', 'movementClassificationDetail', 'classification'],
+      ['classification'],
+      ['movement_classification'],
+      ['movement_classification', 'classification'],
+      ['movementClassification', 'classification']
+    ]).toUpperCase();
+    const suggestedResolutionRequired = plan.suggested_resolution_required === true ||
+      plan.suggestedResolutionRequired === true ||
+      plan?.suggested_resolution?.required === true ||
+      plan?.suggestedResolution?.required === true ||
+      plan?.suggested_resolution_payload?.required === true ||
+      plan?.suggestedResolutionPayload?.required === true;
+    const hasAnyBlocker = (Array.isArray(plan.hard_blockers) && plan.hard_blockers.length > 0);
+    const hasResolutionBlocker = arrayHasBlocker(plan.hard_blockers, 'SUGGESTED_RESOLUTION_REQUIRED') || arrayHasBlocker(plan.blockers, 'SUGGESTED_RESOLUTION_REQUIRED');
+    const hasStaleSignal = plan.is_stale === true ||
+      plan.isStale === true ||
+      plan.stale === true ||
+      plan.selection_stale === true ||
+      plan.selectionStale === true ||
+      (Array.isArray(plan.stale_reasons) && plan.stale_reasons.length > 0) ||
+      (Array.isArray(plan.staleReasons) && plan.staleReasons.length > 0) ||
+      arrayHasBlocker(plan.hard_blockers, 'STALE_SELECTION') ||
+      arrayHasBlocker(plan.hard_blockers, 'SELECTION_STALE') ||
+      arrayHasBlocker(plan.hard_blockers, 'BATCH_STALE') ||
+      arrayHasBlocker(plan.hard_blockers, 'STALE') ||
+      arrayHasBlocker(plan.blockers, 'STALE_SELECTION') ||
+      arrayHasBlocker(plan.blockers, 'SELECTION_STALE') ||
+      arrayHasBlocker(plan.blockers, 'BATCH_STALE') ||
+      arrayHasBlocker(plan.blockers, 'STALE');
+    if (suggestedResolutionRequired) return false;
+    if (hasResolutionBlocker) return false;
+    if (hasAnyBlocker) return false;
+    if (hasStaleSignal) return false;
+    if (!(correctionKind === 'PRE_BANK_CANCEL' || classification === 'PRE_BANK_CANCEL')) return false;
+    if (!(status === 'AUTHORISED' || status === 'AUTHORIZED' || status === 'EXPANDED' || status === 'PROCESSING')) return false;
+    return true;
+  };
+
+  try {
+    const rpcRes = await sbRpc(env, 'pay_payment_correction_request_start', {
+      p_pay_batch_id: id,
+      p_selection_json: selection,
+      p_reason: reason,
+      p_actor_user_id: String(user.id),
+      p_source_bank_event_id: null,
+      p_auto_requested: false,
+      p_accepted_resolution_json: acceptedResolutionJson
+    });
+    const result = unwrapRpc(rpcRes, 'pay_payment_correction_request_start');
+
+    let expandResult = null;
+    let processResult = null;
+    let finalStatus = null;
+    let immediateDraftRemovalProcessed = false;
+
+    if (canAutoProcessDraftRemoval(result)) {
+      const correctionRequestId = String(result?.correction_request_id || '').trim();
+      if (correctionRequestId) {
+        const expandRpcRes = await sbRpc(env, 'pay_payment_correction_expand_work', {
+          p_correction_request_id: correctionRequestId,
+          p_actor_user_id: String(user.id)
+        });
+        expandResult = unwrapRpc(expandRpcRes, 'pay_payment_correction_expand_work');
+
+        const processRpcRes = await sbRpc(env, 'pay_payment_correction_process_chunk', {
+          p_correction_request_id: correctionRequestId,
+          p_limit: 50,
+          p_worker_id: 'manual-correction',
+          p_actor_user_id: String(user.id)
+        });
+        processResult = unwrapRpc(processRpcRes, 'pay_payment_correction_process_chunk');
+        finalStatus = processResult?.status || processResult?.display_status || expandResult?.status || result?.status || null;
+        immediateDraftRemovalProcessed = true;
+      }
+    }
+
+    return withCORS(env, req, ok({
+      ok: true,
+      correction_request_id: result?.correction_request_id || null,
+      pay_batch_id: result?.pay_batch_id || id,
+      status: finalStatus || result?.status || null,
+      plan: result?.plan || null,
+      progress: processResult?.progress || processResult?.totals || expandResult?.progress || result?.progress || result?.work_item_progress || null,
+      result,
+      start_result: result,
+      expand_result: expandResult,
+      process_result: processResult,
+      immediate_draft_removal_processed: immediateDraftRemovalProcessed,
+      draft_only_removal: isDraftRemovalSelection,
+      display_status: immediateDraftRemovalProcessed ? (processResult?.display_status || 'Applied') : undefined,
+      display_message: immediateDraftRemovalProcessed ? (processResult?.display_message || 'Payment removed from batch') : undefined,
+      reauth: {
+        verified_by_user_id: reauthCheck.verified_by_user_id,
+        verified_at_utc: reauthCheck.verified_at_utc
+      }
+    }));
+  } catch (e) {
+    return rpcErrorResponse(e, 'PAYMENT_CORRECTION_START_FAILED', 'Unable to start payment issue action.');
+  }
+}
 
 
 async function handleBulkTimesheetAuthoriseSelected(env, req) {
@@ -42886,6 +43237,17 @@ async function handleBulkTimesheetAuthoriseSelected(env, req) {
   const items = normalizeSelections(body);
   if (!items.length) return withCORS(env, req, badRequest('A non-empty selected set is required'));
 
+  const maxItemsPerRequest = 100;
+  if (items.length > maxItemsPerRequest) {
+    return withCORS(env, req, new Response(JSON.stringify({
+      error: 'Bulk timesheet action request is too large. Please send this action in smaller chunks.',
+      code: 'BULK_ACTION_CHUNK_TOO_LARGE',
+      max_items_per_request: maxItemsPerRequest,
+      received_count: items.length,
+      action: 'AUTHORISE'
+    }), { status: 400, headers: JSON_HEADERS }));
+  }
+
   try {
     const rpcRes = await sbRpc(env, 'timesheet_authorise_bulk_atomic', {
       p_items: items,
@@ -42921,9 +43283,6 @@ async function handleBulkTimesheetAuthoriseSelected(env, req) {
     return withCORS(env, req, serverError(String(err?.message || err || 'Failed to authorise selected timesheets')));
   }
 }
-
-
-
 
 async function handleBulkTimesheetUnauthoriseSelected(env, req) {
   const user = await requireUser(env, req, ['admin']);
@@ -43012,6 +43371,17 @@ async function handleBulkTimesheetUnauthoriseSelected(env, req) {
   const items = normalizeSelections(body);
   if (!items.length) return withCORS(env, req, badRequest('A non-empty selected set is required'));
 
+  const maxItemsPerRequest = 100;
+  if (items.length > maxItemsPerRequest) {
+    return withCORS(env, req, new Response(JSON.stringify({
+      error: 'Bulk timesheet action request is too large. Please send this action in smaller chunks.',
+      code: 'BULK_ACTION_CHUNK_TOO_LARGE',
+      max_items_per_request: maxItemsPerRequest,
+      received_count: items.length,
+      action: 'UNAUTHORISE'
+    }), { status: 400, headers: JSON_HEADERS }));
+  }
+
   try {
     const rpcRes = await sbRpc(env, 'timesheet_unauthorise_bulk_atomic', {
       p_items: items,
@@ -43047,6 +43417,7 @@ async function handleBulkTimesheetUnauthoriseSelected(env, req) {
     return withCORS(env, req, serverError(String(err?.message || err || 'Failed to unauthorise selected timesheets')));
   }
 }
+
 
 async function handleBulkAuthoriseImportEvidencePage(env, req) {
   const user = await requireUser(env, req, ['admin']);
