@@ -10265,6 +10265,7 @@ async function handleBankingPayWorkbenchSessionDiscard(env, req, user, sessionId
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
 }
+
 async function handleBankingPayWorkbenchSessionOpen(env, req, user) {
   let body = null;
   try { body = await parseJSONBody(req); } catch { body = null; }
@@ -10300,6 +10301,62 @@ async function handleBankingPayWorkbenchSessionOpen(env, req, user) {
       }
     } catch {}
     return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+  };
+
+  const normalizeCutoffDate = (raw) => {
+    const parsed = parseIsoOrUkDateToIso(raw);
+    return parsed || '9999-12-31';
+  };
+
+  const stableStringify = (value) => {
+    if (Array.isArray(value)) {
+      return `[${value.map((item) => stableStringify(item)).join(',')}]`;
+    }
+    if (value && typeof value === 'object') {
+      return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`).join(',')}}`;
+    }
+    return JSON.stringify(value);
+  };
+
+  const normalizeSignatureForCompare = (raw) => {
+    const s = String(raw || '').trim();
+    if (!s) return '';
+    try {
+      const parsed = JSON.parse(s);
+      return stableStringify(parsed);
+    } catch {
+      return s;
+    }
+  };
+
+  const extractWorkbenchContext = (payload) => {
+    const obj = isPlainObject(payload) ? payload : {};
+    const session = isPlainObject(obj.session) ? obj.session : {};
+    const preview = isPlainObject(obj.preview) ? obj.preview : {};
+    return {
+      session_id: String(obj.session_id || obj.id || session.session_id || session.id || preview.session_id || '').trim(),
+      pay_date: parseIsoOrUkDateToIso(obj.pay_date || obj.payDate || session.pay_date || session.payDate || preview.pay_date || preview.payDate || ''),
+      week_ending_cutoff: normalizeCutoffDate(obj.week_ending_cutoff_date || obj.weekEndingCutoffDate || obj.week_ending_cutoff || obj.weekEndingCutoff || session.week_ending_cutoff_date || session.weekEndingCutoffDate || session.week_ending_cutoff || session.weekEndingCutoff || preview.week_ending_cutoff_date || preview.weekEndingCutoffDate || preview.week_ending_cutoff || preview.weekEndingCutoff || ''),
+      session_signature: String(obj.session_signature || obj.sessionSignature || session.session_signature || session.sessionSignature || preview.session_signature || preview.sessionSignature || '').trim()
+    };
+  };
+
+  const rejectMismatchedWorkbenchContext = (stage, payload) => {
+    const ctx = extractWorkbenchContext(payload);
+    if (ctx.pay_date && ctx.pay_date !== payDate) {
+      return withCORS(env, req, serverError(`pay_workbench_session_open returned pay_date ${ctx.pay_date} for requested pay_date ${payDate} at ${stage}`));
+    }
+    if (ctx.week_ending_cutoff && ctx.week_ending_cutoff !== weekEndingCutoff) {
+      return withCORS(env, req, serverError(`pay_workbench_session_open returned week_ending_cutoff ${ctx.week_ending_cutoff} for requested week_ending_cutoff ${weekEndingCutoff} at ${stage}`));
+    }
+    if (ctx.session_signature) {
+      const returnedSignature = normalizeSignatureForCompare(ctx.session_signature);
+      const requestedSignature = normalizeSignatureForCompare(sessionSignature);
+      if (returnedSignature && requestedSignature && returnedSignature !== requestedSignature) {
+        return withCORS(env, req, serverError(`pay_workbench_session_open returned a different session_signature at ${stage}`));
+      }
+    }
+    return null;
   };
 
   const payDateRaw = String(body.pay_date || body.payDate || '').trim();
@@ -10338,6 +10395,9 @@ async function handleBankingPayWorkbenchSessionOpen(env, req, user) {
       return withCORS(env, req, serverError('pay_workbench_session_open did not return a valid session_id'));
     }
 
+    const openContextMismatch = rejectMismatchedWorkbenchContext('SESSION_OPEN', openPayload);
+    if (openContextMismatch) return openContextMismatch;
+
     const previewRpc = await sbRpc(env, 'pay_workbench_session_get_preview', {
       p_session_id: sessionId
     });
@@ -10356,11 +10416,18 @@ async function handleBankingPayWorkbenchSessionOpen(env, req, user) {
       out.session_version = openPayload.session_version;
     }
 
+    if (!out.week_ending_cutoff && openPayload.week_ending_cutoff) out.week_ending_cutoff = openPayload.week_ending_cutoff;
+    if (!out.week_ending_cutoff_date && openPayload.week_ending_cutoff_date) out.week_ending_cutoff_date = openPayload.week_ending_cutoff_date;
+
+    const previewContextMismatch = rejectMismatchedWorkbenchContext('SESSION_PREVIEW', out);
+    if (previewContextMismatch) return previewContextMismatch;
+
     return withCORS(env, req, ok(out));
   } catch (e) {
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
 }
+
 
 
 async function handleBankingPayWorkbenchSessionGet(env, req, user, sessionId) {
