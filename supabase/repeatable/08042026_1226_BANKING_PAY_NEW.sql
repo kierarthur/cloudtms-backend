@@ -10946,6 +10946,8 @@ begin
 end;
 $function$;
 
+
+
 CREATE OR REPLACE FUNCTION public.pay_preview_candidate_build_entitlement_rows(
   p_context_json jsonb,
   p_candidate_id uuid
@@ -11656,6 +11658,55 @@ begin
           where bas_seg.seg is not null
             and jsonb_typeof(bas_seg.seg) = 'object'
         ),
+        active_settled_key_baselines as (
+          select
+            ts_base.timesheet_id,
+            ts_base.candidate_id,
+            upper(nullif(btrim(coalesce(active_component.component_json->>'key_type','')), '')) as component_key_type,
+            nullif(btrim(coalesce(active_component.component_json->>'key_value','')), '') as component_key_value,
+            round(
+              coalesce(
+                sum(
+                  coalesce(
+                    nullif(btrim(coalesce(active_component.component_json->>'amount_ex_vat','')), '')::numeric,
+                    0
+                  )
+                ),
+                0
+              ),
+              2
+            ) as baseline_amount_ex_vat,
+            round(
+              coalesce(
+                sum(
+                  coalesce(
+                    nullif(btrim(coalesce(active_component.component_json->>'amount_inc_vat','')), '')::numeric,
+                    0
+                  )
+                ),
+                0
+              ),
+              2
+            ) as baseline_amount_inc_vat
+          from ts_baseline ts_base
+          join lateral jsonb_array_elements(
+            case
+              when coalesce(ts_base.has_active_settled_artifact_baseline, false) = true
+               and jsonb_typeof(coalesce(ts_base.active_settled_artifact_components_json, '[]'::jsonb)) = 'array'
+              then coalesce(ts_base.active_settled_artifact_components_json, '[]'::jsonb)
+              else '[]'::jsonb
+            end
+          ) as active_component(component_json) on true
+          where active_component.component_json is not null
+            and jsonb_typeof(active_component.component_json) = 'object'
+            and upper(nullif(btrim(coalesce(active_component.component_json->>'key_type','')), '')) is not null
+            and nullif(btrim(coalesce(active_component.component_json->>'key_value','')), '') is not null
+          group by
+            ts_base.timesheet_id,
+            ts_base.candidate_id,
+            upper(nullif(btrim(coalesce(active_component.component_json->>'key_type','')), '')),
+            nullif(btrim(coalesce(active_component.component_json->>'key_value','')), '')
+        ),
         cur_ranked as (
           select
             cs.timesheet_id,
@@ -11756,6 +11807,112 @@ begin
            and br.bucket_row_ord = i.bucket_row_ord
           group by i.timesheet_id, i.candidate_id, i.component_key_type, i.component_key_value, i.bucket_row_ord
         ),
+        agg_active_baseline as (
+          select
+            agg_rows.timesheet_id,
+            agg_rows.candidate_id,
+            agg_rows.component_key_type,
+            agg_rows.component_key_value,
+            agg_rows.bucket_row_ord,
+            agg_rows.cur_segment_id,
+            agg_rows.bas_segment_id,
+            agg_rows.ref_num,
+            agg_rows.work_date,
+            agg_rows.segment_stable_key,
+            agg_rows.cur_source_seg_ord,
+            agg_rows.bas_source_seg_ord,
+            agg_rows.cur_excluded,
+            agg_rows.cur_source_units,
+            agg_rows.cur_source_rate,
+            agg_rows.cur_source_charge_rate,
+            agg_rows.cur_payable_ex_vat,
+            agg_rows.bas_payable_ex_vat,
+            agg_rows.cur_charge_ex_vat,
+            agg_rows.bas_charge_ex_vat,
+            active_key_baseline.baseline_amount_ex_vat as active_settled_key_baseline_ex_vat,
+            active_key_baseline.baseline_amount_inc_vat as active_settled_key_baseline_inc_vat,
+            round(
+              case
+                when active_key_baseline.baseline_amount_ex_vat is null then 0
+                when coalesce(agg_rows.cur_payable_ex_vat, 0) <= 0 then 0
+                else greatest(
+                  least(
+                    coalesce(agg_rows.cur_payable_ex_vat, 0),
+                    greatest(
+                      coalesce(active_key_baseline.baseline_amount_ex_vat, 0)
+                      - coalesce(
+                          sum(coalesce(agg_rows.cur_payable_ex_vat, 0)) over (
+                            partition by agg_rows.timesheet_id, agg_rows.candidate_id, agg_rows.component_key_type, agg_rows.component_key_value
+                            order by agg_rows.bucket_row_ord
+                            rows between unbounded preceding and 1 preceding
+                          ),
+                          0
+                        ),
+                      0
+                    )
+                  ),
+                  0
+                )
+              end,
+              2
+            ) as active_settled_allocated_baseline_ex_vat
+          from agg agg_rows
+          left join active_settled_key_baselines active_key_baseline
+            on active_key_baseline.timesheet_id = agg_rows.timesheet_id
+           and active_key_baseline.candidate_id = agg_rows.candidate_id
+           and active_key_baseline.component_key_type = agg_rows.component_key_type
+           and active_key_baseline.component_key_value = agg_rows.component_key_value
+        ),
+        agg_effective_baseline as (
+          select
+            active_rows.timesheet_id,
+            active_rows.candidate_id,
+            active_rows.component_key_type,
+            active_rows.component_key_value,
+            active_rows.bucket_row_ord,
+            active_rows.cur_segment_id,
+            active_rows.bas_segment_id,
+            active_rows.ref_num,
+            active_rows.work_date,
+            active_rows.segment_stable_key,
+            active_rows.cur_source_seg_ord,
+            active_rows.bas_source_seg_ord,
+            active_rows.cur_excluded,
+            active_rows.cur_source_units,
+            active_rows.cur_source_rate,
+            active_rows.cur_source_charge_rate,
+            active_rows.cur_payable_ex_vat,
+            active_rows.bas_payable_ex_vat,
+            active_rows.cur_charge_ex_vat,
+            active_rows.bas_charge_ex_vat,
+            active_rows.active_settled_key_baseline_ex_vat,
+            active_rows.active_settled_key_baseline_inc_vat,
+            active_rows.active_settled_allocated_baseline_ex_vat,
+            round(
+              case
+                when active_rows.active_settled_key_baseline_ex_vat is not null
+                then coalesce(active_rows.active_settled_allocated_baseline_ex_vat, 0)
+                else coalesce(active_rows.bas_payable_ex_vat, 0)
+              end,
+              2
+            ) as effective_bas_payable_ex_vat,
+            round(
+              case
+                when active_rows.active_settled_key_baseline_ex_vat is not null then
+                  case
+                    when coalesce(active_rows.cur_payable_ex_vat, 0) <= 0 then 0
+                    else round(
+                      coalesce(active_rows.cur_charge_ex_vat, 0)
+                      * (coalesce(active_rows.active_settled_allocated_baseline_ex_vat, 0) / nullif(coalesce(active_rows.cur_payable_ex_vat, 0), 0)),
+                      2
+                    )
+                  end
+                else coalesce(active_rows.bas_charge_ex_vat, 0)
+              end,
+              2
+            ) as effective_bas_charge_ex_vat
+          from agg_active_baseline active_rows
+        ),
         calc as (
           select
             b.candidate_id,
@@ -11779,12 +11936,12 @@ begin
             coalesce(b.is_forced_advance,false) as is_forced_advance,
             round(
               coalesce(a.cur_payable_ex_vat,0)
-              - coalesce(a.bas_payable_ex_vat,0),
+              - coalesce(a.effective_bas_payable_ex_vat,0),
               2
             ) as raw_delta_before_reservation_ex,
             round(
               coalesce(a.cur_charge_ex_vat,0)
-              - coalesce(a.bas_charge_ex_vat,0),
+              - coalesce(a.effective_bas_charge_ex_vat,0),
               2
             ) as raw_delta_charge_ex_vat,
             round(
@@ -11793,7 +11950,7 @@ begin
                   coalesce(b.has_active_overpayment_case,false) = true
                   and round(
                     coalesce(a.cur_payable_ex_vat,0)
-                    - coalesce(a.bas_payable_ex_vat,0),
+                    - coalesce(a.effective_bas_payable_ex_vat,0),
                     2
                   ) < 0
                 )
@@ -11805,14 +11962,14 @@ begin
                   and (a.ref_num is null or btrim(coalesce(a.ref_num,'')) = '')
                   and round(
                     coalesce(a.cur_payable_ex_vat,0)
-                    - coalesce(a.bas_payable_ex_vat,0),
+                    - coalesce(a.effective_bas_payable_ex_vat,0),
                     2
                   ) > 0
                 )
                 then 0
                 else round(
                   coalesce(a.cur_payable_ex_vat,0)
-                  - coalesce(a.bas_payable_ex_vat,0),
+                  - coalesce(a.effective_bas_payable_ex_vat,0),
                   2
                 )
               end,
@@ -11824,19 +11981,19 @@ begin
                   coalesce(b.has_active_overpayment_case,false) = true
                   and round(
                     coalesce(a.cur_payable_ex_vat,0)
-                    - coalesce(a.bas_payable_ex_vat,0),
+                    - coalesce(a.effective_bas_payable_ex_vat,0),
                     2
                   ) < 0
                 )
                 then 0
                 when round(
                   coalesce(a.cur_payable_ex_vat,0)
-                  - coalesce(a.bas_payable_ex_vat,0),
+                  - coalesce(a.effective_bas_payable_ex_vat,0),
                   2
                 ) > 0
                 then round(
                   coalesce(a.cur_payable_ex_vat,0)
-                  - coalesce(a.bas_payable_ex_vat,0),
+                  - coalesce(a.effective_bas_payable_ex_vat,0),
                   2
                 )
                 else 0
@@ -11845,7 +12002,7 @@ begin
             ) as allocatable_delta_ex,
             coalesce(rss.reserved_amount_ex_vat,0) as reserved_bucket_amount_ex_vat
           from ts_baseline b
-          join agg a
+          join agg_effective_baseline a
             on a.timesheet_id = b.timesheet_id
            and a.candidate_id = b.candidate_id
           left join reserved_segment_sums rss
@@ -12952,6 +13109,8 @@ begin
   );
 end;
 $function$;
+
+
 
 
 CREATE OR REPLACE FUNCTION public.pay_preview_candidate_build_finance_case_baseline(
