@@ -28133,6 +28133,7 @@ async function handleAuditEventsList(env, req) {
 // - Returns the updated contract_week row (representation)
 // ============================================================================
 
+
 async function handleContractWeekManualUpsert(env, req, weekId) {
   const enc = encodeURIComponent;
   const WLOG = true;
@@ -28331,6 +28332,25 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
       details: payload?.details ?? payload?.detail ?? null,
       payload
     };
+  };
+
+  const makeScopedWeeklyManualBookingId = ({ legacyBookingId, contract, contractWeek }) => {
+    const contractWeekId = String(contractWeek?.id || '').trim();
+    const compactContractWeekId = contractWeekId.replace(/[^a-zA-Z0-9]/g, '');
+
+    if (compactContractWeekId) {
+      return `bk_cw_${compactContractWeekId}`;
+    }
+
+    const fallbackParts = [
+      'WEEKLY_MANUAL_CONTRACT_WEEK',
+      String(legacyBookingId || '').trim(),
+      String(contract?.id || contractWeek?.contract_id || '').trim(),
+      String(contractWeek?.week_ending_date || '').trim(),
+      String(contractWeek?.additional_seq ?? 0).trim()
+    ].filter(Boolean);
+
+    return `bk_cw_${fallbackParts.join('_').replace(/[^a-zA-Z0-9_]/g, '_')}`;
   };
 
   // rotation degrees normalisation
@@ -29407,13 +29427,28 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
     const ward_norm     = (contract.ward_hint || 'contract').toLowerCase();
     const job_title_norm= (contract.role || 'weekly').toLowerCase();
 
-    const booking_id = await makeWeeklyBookingId(contract?.candidate_id || null, contract, cw);
+    const legacyBookingId = await makeWeeklyBookingId(contract?.candidate_id || null, contract, cw);
+    const booking_id = makeScopedWeeklyManualBookingId({
+      legacyBookingId,
+      contract,
+      contractWeek: cw
+    });
     if (!booking_id || booking_id === '{}' || booking_id === 'null' || booking_id === 'undefined') {
       wlog('bad_request_invalid_booking_id', {
-        booking_id
+        booking_id,
+        legacy_booking_id: legacyBookingId || null
       });
       return withCORS(env, req, badRequest(`Invalid booking_id produced: "${booking_id}"`));
     }
+
+    wlog('weekly_manual_booking_id_scoped', {
+      legacy_booking_id: legacyBookingId || null,
+      scoped_booking_id: booking_id,
+      contract_week_id: cw.id || null,
+      contract_id: contract.id || null,
+      week_ending_date: cw.week_ending_date || null,
+      additional_seq: cw.additional_seq ?? 0
+    });
 
     const generatedTimesheetId =
       (globalThis.crypto && typeof globalThis.crypto.randomUUID === 'function')
@@ -30068,6 +30103,47 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
       );
     }
 
+    if (rpcErr.message === 'BOOKING_ID_COLLISION') {
+      return withCORS(
+        env,
+        req,
+        new Response(
+          JSON.stringify({
+            error: 'BOOKING_ID_COLLISION',
+            error_code: 'BOOKING_ID_COLLISION',
+            message: 'Weekly manual booking identity collided with another contract context. Refresh the row and try again.',
+            contract_week_id: detailObj?.contract_week_id || cw.id || weekId,
+            supplied_booking_id: detailObj?.supplied_booking_id || null,
+            booking_id: detailObj?.booking_id || null,
+            existing_timesheet_id: detailObj?.existing_timesheet_id || null,
+            existing_contract_id: detailObj?.existing_contract_id || null,
+            target_contract_id: detailObj?.target_contract_id || contract?.id || cw?.contract_id || null,
+            target_week_ending_date: detailObj?.target_week_ending_date || cw?.week_ending_date || null,
+            refresh_required: true,
+            cache_invalidation_hints: {
+              row_keys: [],
+              contract_week_ids: [String(cw.id || weekId)],
+              timesheet_ids: currentTimesheetIdForWeek ? [String(currentTimesheetIdForWeek)] : [],
+              storage_keys: [],
+              datasets: ['bulk_process', 'bulk_authorise'],
+              invalidate_context: true,
+              invalidate_preview: false,
+              refresh_required: true
+            },
+            cache_invalidation: {
+              rows: [],
+              contract_week_ids: [String(cw.id || weekId)],
+              timesheet_ids: currentTimesheetIdForWeek ? [String(currentTimesheetIdForWeek)] : [],
+              storage_keys: [],
+              datasets: ['bulk_process', 'bulk_authorise'],
+              refresh_required: true
+            }
+          }),
+          { status: 409, headers: { 'Content-Type': 'application/json' } }
+        )
+      );
+    }
+
     if (rpcErr.message === 'CONTRACT_WEEK_NOT_FOUND') {
       return withCORS(env, req, notFound('Week not found'));
     }
@@ -30169,6 +30245,46 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
               supplied_value: bulkPayload.supplied_value ?? null,
               contract_week_id: bulkPayload.contract_week_id || cw.id || weekId,
               timesheet_id: bulkPayload.timesheet_id || bulkPayload.current_timesheet_id || currentTimesheetIdForWeek || null
+            }),
+            { status: 409, headers: { 'Content-Type': 'application/json' } }
+          )
+        );
+      }
+      if (message === 'BOOKING_ID_COLLISION' || errorCode === 'BOOKING_ID_COLLISION') {
+        return withCORS(
+          env,
+          req,
+          new Response(
+            JSON.stringify({
+              error: 'BOOKING_ID_COLLISION',
+              error_code: 'BOOKING_ID_COLLISION',
+              message: 'Weekly manual booking identity collided with another contract context. Refresh the row and try again.',
+              contract_week_id: bulkPayload.contract_week_id || cw.id || weekId,
+              supplied_booking_id: bulkPayload.detail_json?.supplied_booking_id || bulkPayload.supplied_booking_id || null,
+              booking_id: bulkPayload.detail_json?.booking_id || bulkPayload.booking_id || null,
+              existing_timesheet_id: bulkPayload.detail_json?.existing_timesheet_id || bulkPayload.existing_timesheet_id || null,
+              existing_contract_id: bulkPayload.detail_json?.existing_contract_id || bulkPayload.existing_contract_id || null,
+              target_contract_id: bulkPayload.detail_json?.target_contract_id || contract?.id || cw?.contract_id || null,
+              target_week_ending_date: bulkPayload.detail_json?.target_week_ending_date || cw?.week_ending_date || null,
+              refresh_required: true,
+              cache_invalidation_hints: bulkPayload.cache_invalidation_hints || {
+                row_keys: [],
+                contract_week_ids: [String(cw.id || weekId)],
+                timesheet_ids: currentTimesheetIdForWeek ? [String(currentTimesheetIdForWeek)] : [],
+                storage_keys: [],
+                datasets: ['bulk_process', 'bulk_authorise'],
+                invalidate_context: true,
+                invalidate_preview: false,
+                refresh_required: true
+              },
+              cache_invalidation: bulkPayload.cache_invalidation || {
+                rows: [],
+                contract_week_ids: [String(cw.id || weekId)],
+                timesheet_ids: currentTimesheetIdForWeek ? [String(currentTimesheetIdForWeek)] : [],
+                storage_keys: [],
+                datasets: ['bulk_process', 'bulk_authorise'],
+                refresh_required: true
+              }
             }),
             { status: 409, headers: { 'Content-Type': 'application/json' } }
           )
