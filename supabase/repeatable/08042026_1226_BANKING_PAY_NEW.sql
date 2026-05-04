@@ -34702,7 +34702,6 @@ BEGIN
 END;
 $function$;
 
-
 CREATE OR REPLACE FUNCTION public._pay_workbench_candidate_projection_contract()
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -34710,7 +34709,7 @@ IMMUTABLE
 SET search_path TO 'public'
 AS $function$
 DECLARE
-  v_projection_version integer := 3;
+  v_projection_version integer := 4;
   v_hidden_recovery_template_projection_version integer := 1;
   v_requires_hidden_recovery_templates boolean := true;
 BEGIN
@@ -34721,8 +34720,6 @@ BEGIN
   );
 END;
 $function$;
-
-
 
 
 CREATE OR REPLACE FUNCTION public._pay_batch_item_source_reservation_amount_ex_vat(p_pay_batch_item_id uuid)
