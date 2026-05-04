@@ -2008,6 +2008,7 @@ END;
 $function$;
 
 
+
 CREATE OR REPLACE FUNCTION public.pay_payment_correction_plan(
   p_pay_batch_id uuid,
   p_selection_json jsonb,
@@ -2047,6 +2048,11 @@ DECLARE
   v_large_correction jsonb := '{}'::jsonb;
   v_work_expansion_plan jsonb := '{}'::jsonb;
   v_can_apply boolean := false;
+  v_draft_removal_requested boolean := false;
+  v_strict_draft_removal_pre_bank_cancel boolean := false;
+  v_expected_item_count integer := NULL::integer;
+  v_expected_item_id_count integer := 0;
+  v_expected_item_mismatch_count integer := 0;
 
   v_selected_item_count integer := 0;
   v_selected_candidate_count integer := 0;
@@ -2386,7 +2392,103 @@ BEGIN
     v_total_amount_inc_vat
   FROM pg_temp._tmp_payment_correction_plan_detail AS plan_detail;
 
-  IF v_gross_channel_sensitive_item_count > 0 THEN
+  v_draft_removal_requested := COALESCE(NULLIF(btrim(p_selection_json->>'source_context'), ''), '') = 'DRAFT_REMOVE_FROM_BATCH'
+    AND COALESCE(NULLIF(btrim(p_selection_json->>'requested_action'), ''), '') = 'CANCEL_PAYMENT_ATTEMPT';
+
+  IF v_draft_removal_requested THEN
+    IF v_selected_item_count <= 0 THEN
+      v_hard_blockers := v_hard_blockers || jsonb_build_array(jsonb_build_object(
+        'code', 'DRAFT_REMOVE_SELECTED_ITEM_REQUIRED',
+        'message', 'Draft removal requires at least one selected non-voided frozen batch item.',
+        'pay_batch_id', p_pay_batch_id::text
+      ));
+    END IF;
+
+    IF NULLIF(btrim(COALESCE(p_selection_json->>'expected_item_count', '')), '') IS NOT NULL THEN
+      IF (p_selection_json->>'expected_item_count') !~ '^\d+$' THEN
+        v_hard_blockers := v_hard_blockers || jsonb_build_array(jsonb_build_object(
+          'code', 'DRAFT_REMOVE_EXPECTED_ITEM_COUNT_INVALID',
+          'message', 'Draft removal expected_item_count must be a whole number.',
+          'pay_batch_id', p_pay_batch_id::text,
+          'expected_item_count', p_selection_json->>'expected_item_count'
+        ));
+      ELSE
+        v_expected_item_count := (p_selection_json->>'expected_item_count')::integer;
+        IF v_expected_item_count IS DISTINCT FROM v_selected_item_count THEN
+          v_hard_blockers := v_hard_blockers || jsonb_build_array(jsonb_build_object(
+            'code', 'DRAFT_REMOVE_SELECTION_DRIFT',
+            'message', 'Draft removal selection has changed since the UI built the request.',
+            'pay_batch_id', p_pay_batch_id::text,
+            'expected_item_count', v_expected_item_count,
+            'selected_item_count', v_selected_item_count
+          ));
+        END IF;
+      END IF;
+    END IF;
+
+    IF p_selection_json ? 'expected_pay_batch_item_ids' THEN
+      IF COALESCE(jsonb_typeof(p_selection_json->'expected_pay_batch_item_ids'), 'null') <> 'array' THEN
+        v_hard_blockers := v_hard_blockers || jsonb_build_array(jsonb_build_object(
+          'code', 'DRAFT_REMOVE_EXPECTED_ITEM_IDS_INVALID',
+          'message', 'Draft removal expected_pay_batch_item_ids must be an array.',
+          'pay_batch_id', p_pay_batch_id::text
+        ));
+      ELSE
+        SELECT
+          count(*)::integer,
+          COALESCE(sum(CASE WHEN NOT EXISTS (
+            SELECT 1
+            FROM pg_temp._tmp_payment_correction_plan_selected AS selected_item_rows
+            WHERE selected_item_rows.pay_batch_item_id::text = expected_item_ids.value
+          ) THEN 1 ELSE 0 END), 0)::integer
+        INTO
+          v_expected_item_id_count,
+          v_expected_item_mismatch_count
+        FROM jsonb_array_elements_text(p_selection_json->'expected_pay_batch_item_ids') AS expected_item_ids(value);
+
+        IF v_expected_item_id_count IS DISTINCT FROM v_selected_item_count
+           OR COALESCE(v_expected_item_mismatch_count, 0) > 0 THEN
+          v_hard_blockers := v_hard_blockers || jsonb_build_array(jsonb_build_object(
+            'code', 'DRAFT_REMOVE_SELECTION_DRIFT',
+            'message', 'Draft removal selected item ids have changed since the UI built the request.',
+            'pay_batch_id', p_pay_batch_id::text,
+            'expected_item_id_count', v_expected_item_id_count,
+            'selected_item_count', v_selected_item_count,
+            'mismatch_count', v_expected_item_mismatch_count
+          ));
+        END IF;
+      END IF;
+    END IF;
+
+    IF v_classification <> 'PRE_BANK_CANCEL' THEN
+      v_hard_blockers := v_hard_blockers || jsonb_build_array(jsonb_build_object(
+        'code', 'DRAFT_REMOVE_CLASSIFICATION_MISMATCH',
+        'message', 'Draft removal is only allowed while the selected payment is still a strict pre-bank cancel.',
+        'pay_batch_id', p_pay_batch_id::text,
+        'classification', v_classification
+      ));
+    END IF;
+
+    IF upper(btrim(COALESCE(v_batch_status, ''))) NOT IN ('DRAFT', 'DRAFT_CREATED')
+       OR upper(btrim(COALESCE(v_batch_execution_commit_state, ''))) IN ('SUBMITTED_NOT_COMMITTED', 'COMMITTED', 'SETTLED', 'CANCELLED') THEN
+      v_hard_blockers := v_hard_blockers || jsonb_build_array(jsonb_build_object(
+        'code', 'DRAFT_REMOVE_NO_LONGER_PRE_BANK',
+        'message', 'Draft removal is only allowed before the batch is submitted, executed, settled, cancelled, or committed.',
+        'pay_batch_id', p_pay_batch_id::text,
+        'batch_status', v_batch_status,
+        'execution_commit_state', v_batch_execution_commit_state
+      ));
+    END IF;
+  END IF;
+
+  v_strict_draft_removal_pre_bank_cancel := v_draft_removal_requested
+    AND v_classification = 'PRE_BANK_CANCEL'
+    AND v_selected_item_count > 0
+    AND upper(btrim(COALESCE(v_batch_status, ''))) IN ('DRAFT', 'DRAFT_CREATED')
+    AND upper(btrim(COALESCE(v_batch_execution_commit_state, ''))) NOT IN ('SUBMITTED_NOT_COMMITTED', 'COMMITTED', 'SETTLED', 'CANCELLED')
+    AND jsonb_array_length(v_hard_blockers) = 0;
+
+  IF v_gross_channel_sensitive_item_count > 0 AND NOT COALESCE(v_strict_draft_removal_pre_bank_cancel, false) THEN
     v_suggested_resolution_required := true;
   END IF;
 
@@ -3730,12 +3832,18 @@ BEGIN
       OR lower(COALESCE(p_accepted_resolution_json#>>'{validation,stale}', 'false')) IN ('true', 't', 'yes', 'y', '1')
     );
 
+  v_draft_removal_requested := COALESCE(NULLIF(btrim(p_selection_json->>'source_context'), ''), '') = 'DRAFT_REMOVE_FROM_BATCH'
+    AND COALESCE(NULLIF(btrim(p_selection_json->>'requested_action'), ''), '') = 'CANCEL_PAYMENT_ATTEMPT';
+
   SELECT COALESCE(jsonb_agg(blocker_elements.blocker_value ORDER BY blocker_elements.blocker_ordinal), '[]'::jsonb)
   INTO v_effective_hard_blockers
   FROM jsonb_array_elements(v_hard_blockers) WITH ORDINALITY AS blocker_elements(blocker_value, blocker_ordinal)
   WHERE NOT (
     v_suggested_resolution_required
-    AND v_accepted_resolution_supplied
+    AND (
+      v_accepted_resolution_supplied
+      OR (v_draft_removal_requested AND v_classification = 'PRE_BANK_CANCEL')
+    )
     AND COALESCE(blocker_elements.blocker_value->>'code', '') = 'SUGGESTED_RESOLUTION_REQUIRED'
   );
 
@@ -3744,6 +3852,24 @@ BEGIN
       'code', 'ACCEPTED_RESOLUTION_STALE',
       'message', 'The accepted suggested finance resolution is stale and must be regenerated before correction request start.'
     ));
+  END IF;
+
+  IF v_draft_removal_requested
+     AND v_classification = 'PRE_BANK_CANCEL'
+     AND v_suggested_resolution_required THEN
+    v_suggested_resolution_required := false;
+    v_hard_blockers := v_effective_hard_blockers;
+    v_plan := v_plan || jsonb_build_object(
+      'suggested_resolution_required', false,
+      'suggested_resolution', NULL::jsonb,
+      'hard_blockers', v_effective_hard_blockers
+    );
+
+    IF NOT COALESCE(v_plan_can_apply, false)
+       AND jsonb_array_length(v_effective_hard_blockers) = 0 THEN
+      v_plan_can_apply := true;
+      v_plan := v_plan || jsonb_build_object('can_apply', true);
+    END IF;
   END IF;
 
   IF v_suggested_resolution_required AND v_accepted_resolution_supplied THEN
@@ -4333,8 +4459,6 @@ EXCEPTION
     RAISE;
 END;
 $function$;
-
-
 
 
 
