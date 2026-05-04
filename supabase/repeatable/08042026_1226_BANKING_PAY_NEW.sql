@@ -15095,6 +15095,7 @@ end;
 $function$;
 
 
+
 CREATE OR REPLACE FUNCTION public.pay_preview_candidate_build_payee_baseline(
   p_context_json jsonb,
   p_candidate_id uuid
@@ -15219,7 +15220,7 @@ begin
   from pg_temp.pay_preview_candidate_context ctx
   limit 1;
 
-  drop table if exists pg_temp.finance_candidate_seed, pg_temp.candidate_base, pg_temp.timesheet_candidate_rollup, pg_temp.candidate_rollup, pg_temp.blocked_counts, pg_temp.do_not_pay_counts, pg_temp.loan_due, pg_temp.overpayment_balances, pg_temp.loan_due_this_week, pg_temp.loan_repaid_wtd, pg_temp.paid_wtd_before, pg_temp.cand_enriched, pg_temp.payee_baseline_rows, pg_temp.payees_src, pg_temp.payees, pg_temp.payees_enriched, pg_temp.payees_json, pg_temp.cand_payee0, pg_temp.cand_payee, pg_temp.timesheet_case_rollup_effective;
+  drop table if exists pg_temp.finance_candidate_seed, pg_temp.candidate_base, pg_temp.timesheet_candidate_rollup, pg_temp.candidate_rollup, pg_temp.blocked_counts, pg_temp.do_not_pay_counts, pg_temp.loan_due, pg_temp.overpayment_balances, pg_temp.loan_due_this_week, pg_temp.loan_repaid_wtd, pg_temp.paid_wtd_before, pg_temp.cand_enriched, pg_temp.payee_baseline_rows, pg_temp.payees_src, pg_temp.payees, pg_temp.payees_enriched, pg_temp.payees_json, pg_temp.cand_payee0, pg_temp.cand_payee, pg_temp.timesheet_case_rollup_payable, pg_temp.timesheet_case_rollup_effective;
 
   create temporary table finance_candidate_seed on commit drop as
         select
@@ -15288,6 +15289,173 @@ begin
   
   ;
 
+  create temporary table timesheet_case_rollup_payable on commit drop as
+        with normalized_timesheet_rollup as (
+          select
+            tcr.candidate_id,
+            tcr.timesheet_id,
+            tcr.client_id,
+            tcr.ts_week_ending_date,
+            tcr.ts_client_name,
+            tcr.ts_pay_method,
+            tcr.cand_pay_method,
+            tcr.cand_tms_ref,
+            tcr.cand_display_name,
+            tcr.cand_umbrella_id,
+            tcr.umb_enabled,
+            tcr.umb_vat_chargeable,
+            tcr.candidate_has_bank_details,
+            tcr.candidate_bank_hash,
+            tcr.umbrella_has_bank_details,
+            tcr.umbrella_bank_hash,
+            tcr.resolution_family,
+            round(coalesce(ti.payment_amount_ex_vat, ti.total_ex, tcr.payment_amount_ex_vat, tcr.case_total_amount_ex, 0), 2) as effective_payment_amount_ex_vat,
+            round(coalesce(ti.payment_amount_inc_vat, ti.payment_amount, ti.payment_amount_ex_vat, ti.total_ex, tcr.payment_amount_inc_vat, tcr.payment_amount, tcr.payment_amount_ex_vat, tcr.case_total_amount_ex, 0), 2) as effective_payment_amount_inc_vat,
+            round(coalesce(ti.payment_amount, ti.payment_amount_inc_vat, ti.payment_amount_ex_vat, ti.total_ex, tcr.payment_amount, tcr.payment_amount_inc_vat, tcr.payment_amount_ex_vat, tcr.case_total_amount_ex, 0), 2) as effective_payment_amount,
+            round(coalesce(case when ti.timesheet_id is not null then ti_segment_totals.segment_total_ex else null::numeric end, tcr.segments_total_ex, 0), 2) as effective_segments_total_ex,
+            coalesce(ti.segment_deltas_json, tcr.segment_deltas_json, '[]'::jsonb) as effective_segment_deltas_json,
+            coalesce(ti.adjustment_deltas_json, tcr.adjustment_deltas_json, '[]'::jsonb) as effective_adjustment_deltas_json,
+            coalesce(ti.additional_unit_deltas_json, tcr.additional_unit_deltas_json, '[]'::jsonb) as effective_additional_unit_deltas_json,
+            round(coalesce(ti.delta_additional_pay_ex_vat, tcr.delta_additional_pay_ex_vat, 0), 2) as effective_delta_additional_pay_ex_vat,
+            round(coalesce(ti.delta_expenses_pay_ex_vat, tcr.delta_expenses_pay_ex_vat, 0), 2) as effective_delta_expenses_pay_ex_vat,
+            round(coalesce(ti.delta_travel_pay_ex_vat, tcr.delta_travel_pay_ex_vat, 0), 2) as effective_delta_travel_pay_ex_vat,
+            round(coalesce(ti.delta_accommodation_pay_ex_vat, tcr.delta_accommodation_pay_ex_vat, 0), 2) as effective_delta_accommodation_pay_ex_vat,
+            round(coalesce(ti.delta_other_pay_ex_vat, tcr.delta_other_pay_ex_vat, 0), 2) as effective_delta_other_pay_ex_vat,
+            round(coalesce(ti.delta_mileage_pay_ex_vat, tcr.delta_mileage_pay_ex_vat, 0), 2) as effective_delta_mileage_pay_ex_vat,
+            coalesce(ti.reservation_overrun_detected, tcr.reservation_overrun_detected, false) as effective_reservation_overrun_detected,
+            tcr.case_components_json,
+            tcr.case_resolution_summary_json,
+            tcr.case_needs_resolution,
+            tcr.case_resolution_satisfied_now,
+            tcr.resolution_action_label,
+            tcr.linked_resolution_scope_json,
+            tcr.unresolved_taxable_amount_ex,
+            tcr.open_taxable_count,
+            tcr.open_reimbursement_count,
+            tcr.unresolved_taxable_count,
+            tcr.stale_count,
+            tcr.is_mixed_case,
+            tcr.is_blocked
+          from timesheet_case_rollup tcr
+          left join ts_itemised ti
+            on ti.timesheet_id = tcr.timesheet_id
+           and ti.candidate_id = tcr.candidate_id
+          left join lateral (
+            select round(
+                     coalesce(
+                       sum(
+                         case
+                           when coalesce(segment_delta.value->>'delta_pay_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+                             then (segment_delta.value->>'delta_pay_ex_vat')::numeric
+                           else 0::numeric
+                         end
+                       ),
+                       0::numeric
+                     ),
+                     2
+                   ) as segment_total_ex
+            from jsonb_array_elements(
+              case
+                when jsonb_typeof(coalesce(ti.segment_deltas_json, '[]'::jsonb)) = 'array'
+                  then coalesce(ti.segment_deltas_json, '[]'::jsonb)
+                else '[]'::jsonb
+              end
+            ) as segment_delta(value)
+          ) ti_segment_totals on true
+        )
+        select
+          normalized_timesheet_rollup.candidate_id,
+          normalized_timesheet_rollup.timesheet_id,
+          normalized_timesheet_rollup.client_id,
+          normalized_timesheet_rollup.ts_week_ending_date,
+          normalized_timesheet_rollup.ts_client_name,
+          normalized_timesheet_rollup.ts_pay_method,
+          normalized_timesheet_rollup.cand_pay_method,
+          normalized_timesheet_rollup.cand_tms_ref,
+          normalized_timesheet_rollup.cand_display_name,
+          normalized_timesheet_rollup.cand_umbrella_id,
+          normalized_timesheet_rollup.umb_enabled,
+          normalized_timesheet_rollup.umb_vat_chargeable,
+          normalized_timesheet_rollup.candidate_has_bank_details,
+          normalized_timesheet_rollup.candidate_bank_hash,
+          normalized_timesheet_rollup.umbrella_has_bank_details,
+          normalized_timesheet_rollup.umbrella_bank_hash,
+          normalized_timesheet_rollup.resolution_family,
+          case
+            when normalized_timesheet_rollup.effective_payment_amount_ex_vat = 0 then false
+            else normalized_timesheet_rollup.case_needs_resolution
+          end as case_needs_resolution,
+          case
+            when normalized_timesheet_rollup.effective_payment_amount_ex_vat = 0 then true
+            else normalized_timesheet_rollup.case_resolution_satisfied_now
+          end as case_resolution_satisfied_now,
+          normalized_timesheet_rollup.resolution_action_label,
+          normalized_timesheet_rollup.linked_resolution_scope_json,
+          normalized_timesheet_rollup.effective_payment_amount_ex_vat as case_total_amount_ex,
+          case
+            when coalesce(normalized_timesheet_rollup.is_blocked, false) = true then 0::numeric
+            else normalized_timesheet_rollup.effective_payment_amount_ex_vat
+          end as safe_amount_ex,
+          case
+            when normalized_timesheet_rollup.effective_payment_amount_ex_vat = 0 then 0::numeric
+            else normalized_timesheet_rollup.unresolved_taxable_amount_ex
+          end as unresolved_taxable_amount_ex,
+          normalized_timesheet_rollup.open_taxable_count,
+          normalized_timesheet_rollup.open_reimbursement_count,
+          case
+            when normalized_timesheet_rollup.effective_payment_amount_ex_vat = 0 then 0
+            else normalized_timesheet_rollup.unresolved_taxable_count
+          end as unresolved_taxable_count,
+          normalized_timesheet_rollup.stale_count,
+          normalized_timesheet_rollup.is_mixed_case,
+          case
+            when normalized_timesheet_rollup.effective_payment_amount_ex_vat = 0 then false
+            else normalized_timesheet_rollup.is_blocked
+          end as is_blocked,
+          normalized_timesheet_rollup.effective_segments_total_ex as segments_total_ex,
+          normalized_timesheet_rollup.effective_delta_additional_pay_ex_vat as delta_additional_pay_ex_vat,
+          normalized_timesheet_rollup.effective_delta_expenses_pay_ex_vat as delta_expenses_pay_ex_vat,
+          normalized_timesheet_rollup.effective_delta_travel_pay_ex_vat as delta_travel_pay_ex_vat,
+          normalized_timesheet_rollup.effective_delta_accommodation_pay_ex_vat as delta_accommodation_pay_ex_vat,
+          normalized_timesheet_rollup.effective_delta_other_pay_ex_vat as delta_other_pay_ex_vat,
+          normalized_timesheet_rollup.effective_delta_mileage_pay_ex_vat as delta_mileage_pay_ex_vat,
+          normalized_timesheet_rollup.effective_segment_deltas_json as segment_deltas_json,
+          normalized_timesheet_rollup.effective_adjustment_deltas_json as adjustment_deltas_json,
+          normalized_timesheet_rollup.effective_additional_unit_deltas_json as additional_unit_deltas_json,
+          normalized_timesheet_rollup.effective_reservation_overrun_detected as reservation_overrun_detected,
+          normalized_timesheet_rollup.effective_payment_amount_ex_vat as payment_amount_ex_vat,
+          normalized_timesheet_rollup.effective_payment_amount_inc_vat as payment_amount_inc_vat,
+          normalized_timesheet_rollup.effective_payment_amount as payment_amount,
+          (
+            coalesce(normalized_timesheet_rollup.case_resolution_summary_json, '{}'::jsonb)
+            || jsonb_build_object(
+              'case_needs_resolution', case
+                when normalized_timesheet_rollup.effective_payment_amount_ex_vat = 0 then false
+                else normalized_timesheet_rollup.case_needs_resolution
+              end,
+              'case_resolution_satisfied_now', case
+                when normalized_timesheet_rollup.effective_payment_amount_ex_vat = 0 then true
+                else normalized_timesheet_rollup.case_resolution_satisfied_now
+              end,
+              'safe_amount_ex_vat', case
+                when coalesce(normalized_timesheet_rollup.is_blocked, false) = true then 0::numeric
+                else normalized_timesheet_rollup.effective_payment_amount_ex_vat
+              end,
+              'blocked_case_amount_ex_vat', case
+                when coalesce(normalized_timesheet_rollup.is_blocked, false) = true then normalized_timesheet_rollup.effective_payment_amount_ex_vat
+                else 0::numeric
+              end,
+              'unresolved_taxable_amount_ex_vat', case
+                when normalized_timesheet_rollup.effective_payment_amount_ex_vat = 0 then 0::numeric
+                else normalized_timesheet_rollup.unresolved_taxable_amount_ex
+              end
+            )
+          ) as case_resolution_summary_json,
+          normalized_timesheet_rollup.case_components_json
+        from normalized_timesheet_rollup
+
+  ;
+
   create temporary table timesheet_candidate_rollup on commit drop as
         select
           tcr.candidate_id,
@@ -15325,7 +15493,7 @@ begin
             ) filter (where round(coalesce(tcr.case_total_amount_ex,0),2) <> 0),
             '[]'::jsonb
           ) as timesheets_itemisation
-        from timesheet_case_rollup tcr
+        from timesheet_case_rollup_payable tcr
         group by tcr.candidate_id
   
   ;
@@ -15916,7 +16084,7 @@ begin
             )
           ) as case_resolution_summary_json,
           tcr.case_components_json
-        from timesheet_case_rollup tcr
+        from timesheet_case_rollup_payable tcr
         left join cand_payee cp
           on cp.candidate_id = tcr.candidate_id
   
