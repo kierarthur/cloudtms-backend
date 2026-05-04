@@ -3513,8 +3513,6 @@ END;
 $function$;
 
 
-
-
 CREATE OR REPLACE FUNCTION public.pay_payment_correction_request_start(p_pay_batch_id uuid, p_selection_json jsonb, p_reason text, p_actor_user_id uuid, p_source_bank_event_id uuid DEFAULT NULL::uuid, p_auto_requested boolean DEFAULT false, p_accepted_resolution_json jsonb DEFAULT NULL::jsonb)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -3554,6 +3552,14 @@ DECLARE
   v_selected_scope_json jsonb := '{}'::jsonb;
   v_request public.pay_payment_correction_requests%rowtype;
   v_existing_request public.pay_payment_correction_requests%rowtype;
+  v_draft_removal_requested boolean := false;
+  v_draft_removal_auto_authorised boolean := false;
+  v_selected_item_count integer := 0;
+  v_expected_item_count integer := NULL::integer;
+  v_expected_item_mismatch_count integer := 0;
+  v_expected_item_id_count integer := 0;
+  v_batch_pre_bank_safe boolean := false;
+  v_bank_submission_evidence_count integer := 0;
 BEGIN
   PERFORM public._imp_debug_audit(
     p_actor_user_id,
@@ -3942,6 +3948,129 @@ BEGIN
 
   v_selection_hash := md5(v_selected_scope_json::text);
 
+  v_draft_removal_requested := COALESCE(NULLIF(btrim(p_selection_json->>'source_context'), ''), '') = 'DRAFT_REMOVE_FROM_BATCH'
+    AND COALESCE(NULLIF(btrim(p_selection_json->>'requested_action'), ''), '') = 'CANCEL_PAYMENT_ATTEMPT';
+
+  IF v_draft_removal_requested THEN
+    v_selected_item_count := COALESCE(jsonb_array_length(COALESCE(v_selected_scope_json->'pay_batch_item_ids', '[]'::jsonb)), 0);
+
+    IF v_selected_item_count <= 0 THEN
+      RAISE EXCEPTION 'DRAFT_REMOVE_SELECTED_ITEM_REQUIRED'
+        USING ERRCODE = 'P0001',
+              DETAIL = jsonb_build_object(
+                'code', 'DRAFT_REMOVE_SELECTED_ITEM_REQUIRED',
+                'pay_batch_id', p_pay_batch_id
+              )::text;
+    END IF;
+
+    IF NULLIF(btrim(COALESCE(p_selection_json->>'expected_item_count', '')), '') IS NOT NULL THEN
+      IF (p_selection_json->>'expected_item_count') !~ '^\d+$' THEN
+        RAISE EXCEPTION 'DRAFT_REMOVE_EXPECTED_ITEM_COUNT_INVALID'
+          USING ERRCODE = 'P0001',
+                DETAIL = jsonb_build_object(
+                  'code', 'DRAFT_REMOVE_EXPECTED_ITEM_COUNT_INVALID',
+                  'pay_batch_id', p_pay_batch_id,
+                  'expected_item_count', p_selection_json->>'expected_item_count'
+                )::text;
+      END IF;
+      v_expected_item_count := (p_selection_json->>'expected_item_count')::integer;
+      IF v_expected_item_count IS DISTINCT FROM v_selected_item_count THEN
+        RAISE EXCEPTION 'DRAFT_REMOVE_SELECTION_DRIFT'
+          USING ERRCODE = 'P0001',
+                DETAIL = jsonb_build_object(
+                  'code', 'DRAFT_REMOVE_SELECTION_DRIFT',
+                  'pay_batch_id', p_pay_batch_id,
+                  'expected_item_count', v_expected_item_count,
+                  'selected_item_count', v_selected_item_count
+                )::text;
+      END IF;
+    END IF;
+
+    IF COALESCE(jsonb_typeof(p_selection_json->'expected_pay_batch_item_ids'), 'null') = 'array' THEN
+      SELECT
+        count(*)::integer,
+        COALESCE(sum(CASE WHEN NOT EXISTS (
+          SELECT 1
+          FROM jsonb_array_elements_text(COALESCE(v_selected_scope_json->'pay_batch_item_ids', '[]'::jsonb)) AS selected_item_ids(value)
+          WHERE selected_item_ids.value = expected_item_ids.value
+        ) THEN 1 ELSE 0 END), 0)::integer
+      INTO v_expected_item_id_count, v_expected_item_mismatch_count
+      FROM jsonb_array_elements_text(p_selection_json->'expected_pay_batch_item_ids') AS expected_item_ids(value);
+
+      IF v_expected_item_id_count IS DISTINCT FROM v_selected_item_count
+         OR COALESCE(v_expected_item_mismatch_count, 0) > 0 THEN
+        RAISE EXCEPTION 'DRAFT_REMOVE_SELECTION_DRIFT'
+          USING ERRCODE = 'P0001',
+                DETAIL = jsonb_build_object(
+                  'code', 'DRAFT_REMOVE_SELECTION_DRIFT',
+                  'pay_batch_id', p_pay_batch_id,
+                  'expected_item_id_count', v_expected_item_id_count,
+                  'selected_item_count', v_selected_item_count,
+                  'mismatch_count', v_expected_item_mismatch_count
+                )::text;
+      END IF;
+    END IF;
+
+    SELECT
+      (
+        UPPER(BTRIM(COALESCE(public.pay_batches.status, ''))) IN ('DRAFT', 'DRAFT_CREATED')
+        AND UPPER(BTRIM(COALESCE(public.pay_batches.execution_commit_state, ''))) NOT IN ('SUBMITTED_NOT_COMMITTED', 'COMMITTED', 'SETTLED', 'CANCELLED')
+        AND public.pay_batches.executing_started_at_utc IS NULL
+        AND public.pay_batches.cancelled_at_utc IS NULL
+      ),
+      COALESCE(count(public.pay_bank_transfers.id) FILTER (WHERE
+        UPPER(BTRIM(COALESCE(public.pay_bank_transfers.status, ''))) IN ('SUBMITTED', 'SENT', 'SCHEDULED', 'PROCESSING', 'EXECUTED', 'COMPLETED', 'PAID', 'SETTLED', 'COMMITTED', 'RETURNED', 'REJECTED', 'DECLINED', 'FAILED', 'CANCELLED')
+        OR public.pay_bank_transfers.completed_at_utc IS NOT NULL
+        OR NULLIF(BTRIM(COALESCE(public.pay_bank_transfers.request_id, '')), '') IS NOT NULL
+        OR NULLIF(BTRIM(COALESCE(public.pay_bank_transfers.rail_tx_id, '')), '') IS NOT NULL
+        OR NULLIF(BTRIM(COALESCE(public.pay_bank_transfers.payment_reference, '')), '') IS NOT NULL
+      ), 0)::integer
+    INTO v_batch_pre_bank_safe, v_bank_submission_evidence_count
+    FROM public.pay_batches
+    LEFT JOIN public.pay_bank_transfers
+      ON public.pay_bank_transfers.pay_batch_id = public.pay_batches.id
+    WHERE public.pay_batches.id = p_pay_batch_id
+    GROUP BY
+      public.pay_batches.status,
+      public.pay_batches.execution_commit_state,
+      public.pay_batches.executing_started_at_utc,
+      public.pay_batches.cancelled_at_utc;
+
+    IF NOT COALESCE(v_batch_pre_bank_safe, false) OR COALESCE(v_bank_submission_evidence_count, 0) > 0 THEN
+      RAISE EXCEPTION 'DRAFT_REMOVE_NO_LONGER_PRE_BANK'
+        USING ERRCODE = 'P0001',
+              DETAIL = jsonb_build_object(
+                'code', 'DRAFT_REMOVE_NO_LONGER_PRE_BANK',
+                'pay_batch_id', p_pay_batch_id,
+                'bank_submission_evidence_count', v_bank_submission_evidence_count
+              )::text;
+    END IF;
+
+    IF v_classification <> 'PRE_BANK_CANCEL' OR v_correction_kind IS DISTINCT FROM 'PRE_BANK_CANCEL' THEN
+      RAISE EXCEPTION 'DRAFT_REMOVE_CLASSIFICATION_MISMATCH'
+        USING ERRCODE = 'P0001',
+              DETAIL = jsonb_build_object(
+                'code', 'DRAFT_REMOVE_CLASSIFICATION_MISMATCH',
+                'pay_batch_id', p_pay_batch_id,
+                'classification', v_classification,
+                'correction_kind', v_correction_kind
+              )::text;
+    END IF;
+
+    IF v_suggested_resolution_required THEN
+      RAISE EXCEPTION 'DRAFT_REMOVE_BLOCKED_BY_SUGGESTED_RESOLUTION'
+        USING ERRCODE = 'P0001',
+              DETAIL = jsonb_build_object(
+                'code', 'DRAFT_REMOVE_BLOCKED_BY_SUGGESTED_RESOLUTION',
+                'pay_batch_id', p_pay_batch_id
+              )::text;
+    END IF;
+
+    v_draft_removal_auto_authorised := true;
+    v_status := 'AUTHORISED';
+    v_approved_count := v_required_quantity;
+  END IF;
+
   v_plan_material_json := jsonb_build_object(
     'classification', v_classification,
     'recommended_action', v_plan->>'recommended_action',
@@ -3976,6 +4105,48 @@ BEGIN
   LIMIT 1;
 
   IF v_existing_request.id IS NOT NULL THEN
+    IF COALESCE(v_draft_removal_auto_authorised, false)
+       AND v_existing_request.status <> 'AUTHORISED' THEN
+      UPDATE public.pay_payment_correction_requests AS existing_draft_remove_request
+      SET status = 'AUTHORISED',
+          approved_count = GREATEST(COALESCE(existing_draft_remove_request.required_quantity, v_required_quantity, 1), 1),
+          authorised_at_utc = COALESCE(existing_draft_remove_request.authorised_at_utc, now()),
+          updated_at_utc = now()
+      WHERE existing_draft_remove_request.id = v_existing_request.id
+      RETURNING existing_draft_remove_request.* INTO v_existing_request;
+
+      INSERT INTO public.pay_payment_correction_actions (
+        correction_request_id,
+        pay_batch_id,
+        actor_kind,
+        actor_user_id,
+        action,
+        action_at_utc,
+        note,
+        before_json,
+        after_json,
+        metadata_json
+      )
+      VALUES (
+        v_existing_request.id,
+        p_pay_batch_id,
+        'USER',
+        p_actor_user_id,
+        'AUTHORISE',
+        now(),
+        'Auto-authorised draft removal after strict PRE_BANK_CANCEL validation.',
+        NULL::jsonb,
+        to_jsonb(v_existing_request),
+        jsonb_build_object(
+          'classification', v_classification,
+          'correction_kind', v_correction_kind,
+          'draft_removal_auto_authorised', true,
+          'selection_hash', v_selection_hash,
+          'selected_scope', v_selected_scope_json
+        )
+      );
+    END IF;
+
     PERFORM public._imp_debug_audit(
       p_actor_user_id,
       'PAYMENT_CORRECTION_REQUEST_START_EXISTING_OPEN_REQUEST',
@@ -4000,7 +4171,7 @@ BEGIN
       'pay_batch_id', v_existing_request.pay_batch_id,
       'correction_kind', v_existing_request.correction_kind,
       'status', v_existing_request.status,
-      'authorisation_required', NOT COALESCE(v_existing_request.auto_requested, false),
+      'authorisation_required', v_existing_request.status <> 'AUTHORISED',
       'approved_count', v_existing_request.approved_count,
       'required_quantity', v_existing_request.required_quantity,
       'plan', v_existing_request.plan_json
@@ -4052,7 +4223,7 @@ BEGIN
     p_source_bank_event_id,
     COALESCE(p_auto_requested, false),
     now(),
-    CASE WHEN COALESCE(p_auto_requested, false) THEN now() ELSE NULL::timestamptz END,
+    CASE WHEN COALESCE(p_auto_requested, false) OR COALESCE(v_draft_removal_auto_authorised, false) THEN now() ELSE NULL::timestamptz END,
     NULL::timestamptz,
     NULL::timestamptz,
     now()
@@ -4090,7 +4261,8 @@ BEGIN
       'selection_hash', v_selection_hash,
       'accepted_resolution_hash', v_accepted_resolution_hash,
       'selected_scope', v_selected_scope_json,
-      'finance_resolution_validation', v_finance_resolution_validation
+      'finance_resolution_validation', v_finance_resolution_validation,
+      'draft_removal_auto_authorised', v_draft_removal_auto_authorised
     )
   );
 
@@ -4107,7 +4279,8 @@ BEGIN
       'required_quantity', v_required_quantity,
       'approved_count', v_approved_count,
       'suggested_resolution_required', v_suggested_resolution_required,
-      'accepted_resolution_supplied', v_accepted_resolution_supplied
+      'accepted_resolution_supplied', v_accepted_resolution_supplied,
+      'draft_removal_auto_authorised', v_draft_removal_auto_authorised
     ),
     'pay_payment_correction',
     p_pay_batch_id::text,
@@ -4124,7 +4297,7 @@ BEGIN
     'pay_batch_id', v_request.pay_batch_id,
     'correction_kind', v_request.correction_kind,
     'status', v_request.status,
-    'authorisation_required', NOT COALESCE(v_request.auto_requested, false),
+    'authorisation_required', NOT (COALESCE(v_request.auto_requested, false) OR COALESCE(v_draft_removal_auto_authorised, false)),
     'approved_count', v_request.approved_count,
     'required_quantity', v_request.required_quantity,
     'plan', v_plan,
@@ -4132,7 +4305,8 @@ BEGIN
     'plan_hash', v_plan_hash,
     'accepted_resolution_hash', v_accepted_resolution_hash,
     'selected_scope', v_selected_scope_json,
-    'finance_resolution_validation', v_finance_resolution_validation
+    'finance_resolution_validation', v_finance_resolution_validation,
+    'draft_removal_auto_authorised', v_draft_removal_auto_authorised
   );
 
 EXCEPTION
@@ -4159,6 +4333,11 @@ EXCEPTION
     RAISE;
 END;
 $function$;
+
+
+
+
+
 
 CREATE OR REPLACE FUNCTION public.pay_payment_correction_authorise(
   p_correction_request_id uuid,
