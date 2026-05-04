@@ -385,6 +385,8 @@ $function$;
 
 
 
+
+
 CREATE OR REPLACE FUNCTION public.bulk_timesheet_row_decision_v1(p_filters jsonb DEFAULT '{}'::jsonb)
  RETURNS TABLE(row_json jsonb)
  LANGUAGE plpgsql
@@ -512,35 +514,7 @@ BEGIN
   RETURN QUERY
   WITH base_scope AS (
     SELECT vb0.*
-    FROM public.v_timesheets_summary_base AS vb0
-    WHERE (v_candidate_id IS NULL OR vb0.candidate_id = v_candidate_id)
-      AND (v_client_id IS NULL OR vb0.client_id = v_client_id)
-      AND (v_timesheet_ids IS NULL OR vb0.timesheet_id = ANY(v_timesheet_ids))
-      AND (v_contract_week_ids IS NULL OR vb0.contract_week_id = ANY(v_contract_week_ids))
-      AND (
-        v_row_keys IS NULL
-        OR CASE
-             WHEN vb0.timesheet_id IS NOT NULL THEN 'timesheet:' || vb0.timesheet_id::text
-             WHEN vb0.contract_week_id IS NOT NULL THEN 'contract_week:' || vb0.contract_week_id::text
-             ELSE ''
-           END = ANY(v_row_keys)
-      )
-      AND (
-        v_week_ending_date IS NULL
-        OR COALESCE(vb0.contract_week_ending_date, vb0.week_ending_date) = v_week_ending_date
-      )
-      AND (
-        v_date_from IS NULL
-        OR COALESCE(vb0.contract_week_ending_date, vb0.week_ending_date) >= v_date_from
-      )
-      AND (
-        v_date_to IS NULL
-        OR COALESCE(vb0.contract_week_ending_date, vb0.week_ending_date) <= v_date_to
-      )
-      AND (
-        v_period_filter IS NULL
-        OR UPPER(COALESCE(vb0.sheet_scope::text, CASE WHEN UPPER(COALESCE(vb0.route_type, '')) LIKE 'DAILY\_%' ESCAPE '\' THEN 'DAILY' ELSE 'WEEKLY' END)) = v_period_filter
-      )
+    FROM public.bulk_timesheet_workbench_row_source_v1(v_filters) AS vb0
   ),
   base_ids AS (
     SELECT DISTINCT
@@ -1927,7 +1901,6 @@ BEGIN
     ar.row_key ASC;
 END;
 $function$;
-
 
 
 
