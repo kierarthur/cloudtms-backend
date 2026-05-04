@@ -6579,6 +6579,15 @@ DECLARE
   v_next_version integer := NULL;
   v_rotated_ts public.timesheets%ROWTYPE;
 
+  v_original_booking_id text := NULL;
+  v_candidate_booking_id text := NULL;
+  v_booking_retry integer := 0;
+  v_existing_booking_ts public.timesheets%ROWTYPE;
+  v_existing_booking_cw_id uuid := NULL;
+  v_existing_booking_cw_contract_id uuid := NULL;
+  v_existing_booking_cw_week_ending_date date := NULL;
+  v_existing_booking_same_context boolean := FALSE;
+
   v_queue_item public.manual_timesheet_queue%ROWTYPE;
   v_queue_kind text := NULL;
   v_primary_timesheet_storage_key text := NULL;
@@ -6815,7 +6824,220 @@ BEGIN
       RAISE EXCEPTION 'contract_id must match contract_weeks.contract_id';
     END IF;
 
-    INSERT INTO public.timesheets (
+    v_create_rec.booking_id := NULLIF(BTRIM(COALESCE(v_create_rec.booking_id, '')), '');
+    v_create_rec.version := COALESCE(v_create_rec.version, 1);
+    v_original_booking_id := v_create_rec.booking_id;
+
+    PERFORM pg_advisory_xact_lock(hashtext(v_original_booking_id));
+
+    SELECT ts_existing.*
+      INTO v_existing_booking_ts
+    FROM public.timesheets AS ts_existing
+    WHERE ts_existing.booking_id = v_original_booking_id
+    ORDER BY
+      CASE WHEN COALESCE(ts_existing.is_current, FALSE) = TRUE THEN 0 ELSE 1 END ASC,
+      ts_existing.version DESC NULLS LAST,
+      ts_existing.updated_at DESC NULLS LAST,
+      ts_existing.created_at DESC NULLS LAST,
+      ts_existing.timesheet_id DESC
+    LIMIT 1
+    FOR UPDATE;
+
+    IF FOUND THEN
+      v_existing_booking_cw_id := NULL;
+      v_existing_booking_cw_contract_id := NULL;
+      v_existing_booking_cw_week_ending_date := NULL;
+
+      SELECT cw_existing.id,
+             cw_existing.contract_id,
+             cw_existing.week_ending_date
+        INTO v_existing_booking_cw_id,
+             v_existing_booking_cw_contract_id,
+             v_existing_booking_cw_week_ending_date
+      FROM public.contract_weeks AS cw_existing
+      WHERE cw_existing.timesheet_id = v_existing_booking_ts.timesheet_id
+      ORDER BY
+        CASE WHEN cw_existing.id = v_week.id THEN 0 ELSE 1 END ASC,
+        cw_existing.updated_at DESC NULLS LAST,
+        cw_existing.created_at DESC NULLS LAST,
+        cw_existing.id DESC
+      LIMIT 1
+      FOR UPDATE;
+
+      v_existing_booking_same_context :=
+        v_existing_booking_ts.contract_id IS NOT DISTINCT FROM v_week.contract_id
+        AND v_existing_booking_ts.week_ending_date IS NOT DISTINCT FROM v_week.week_ending_date
+        AND v_existing_booking_cw_id IS NOT NULL
+        AND v_existing_booking_cw_id IS NOT DISTINCT FROM v_week.id;
+
+      IF v_existing_booking_same_context THEN
+        IF COALESCE(v_existing_booking_ts.is_current, FALSE) = TRUE THEN
+          v_current_ts := v_existing_booking_ts;
+        ELSE
+          SELECT ts_current_existing.*
+            INTO v_current_ts
+          FROM public.timesheets AS ts_current_existing
+          WHERE ts_current_existing.booking_id = v_original_booking_id
+            AND ts_current_existing.is_current = TRUE
+          ORDER BY ts_current_existing.version DESC NULLS LAST,
+                   ts_current_existing.updated_at DESC NULLS LAST,
+                   ts_current_existing.created_at DESC NULLS LAST,
+                   ts_current_existing.timesheet_id DESC
+          LIMIT 1
+          FOR UPDATE;
+
+          IF NOT FOUND THEN
+            v_current_ts := NULL;
+            SELECT COALESCE(MAX(ts_version_existing.version), 0) + 1
+              INTO v_create_rec.version
+            FROM public.timesheets AS ts_version_existing
+            WHERE ts_version_existing.booking_id = v_original_booking_id;
+            v_create_rec.booking_id := v_original_booking_id;
+          END IF;
+        END IF;
+
+        IF v_current_ts.timesheet_id IS NOT NULL THEN
+          v_was_stale := TRUE;
+          v_patch_json :=
+            (
+              v_create_json
+              - 'timesheet_id'
+              - 'booking_id'
+              - 'version'
+              - 'is_current'
+              - 'contract_id'
+              - 'week_ending_date'
+              - 'created_at'
+            ) || COALESCE(v_patch_json, '{}'::jsonb);
+        END IF;
+      ELSE
+        v_booking_retry := 0;
+        LOOP
+          v_booking_retry := v_booking_retry + 1;
+
+          IF v_booking_retry > 25 THEN
+            RAISE EXCEPTION USING
+              MESSAGE = 'BOOKING_ID_COLLISION',
+              DETAIL = jsonb_build_object(
+                'reason', 'Unable to derive a collision-free weekly manual booking_id for contract_week.',
+                'supplied_booking_id', v_original_booking_id,
+                'contract_week_id', v_week.id::text,
+                'target_contract_id', v_week.contract_id::text,
+                'target_week_ending_date', v_week.week_ending_date::text,
+                'existing_timesheet_id', v_existing_booking_ts.timesheet_id::text,
+                'existing_contract_id', CASE WHEN v_existing_booking_ts.contract_id IS NULL THEN NULL ELSE v_existing_booking_ts.contract_id::text END,
+                'existing_week_ending_date', CASE WHEN v_existing_booking_ts.week_ending_date IS NULL THEN NULL ELSE v_existing_booking_ts.week_ending_date::text END,
+                'existing_contract_week_id', CASE WHEN v_existing_booking_cw_id IS NULL THEN NULL ELSE v_existing_booking_cw_id::text END
+              )::text;
+          END IF;
+
+          IF v_booking_retry = 1 THEN
+            v_candidate_booking_id := 'bk_cw_' || REPLACE(v_week.id::text, '-', '');
+          ELSE
+            v_candidate_booking_id := 'bk_cw_' || REPLACE(v_week.id::text, '-', '') || '_' || SUBSTRING(MD5(
+              v_original_booking_id ||
+              '|contract_week_id=' || v_week.id::text ||
+              '|contract_id=' || v_week.contract_id::text ||
+              '|week_ending_date=' || v_week.week_ending_date::text ||
+              '|try=' || v_booking_retry::text
+            ) FROM 1 FOR 16);
+          END IF;
+
+          PERFORM pg_advisory_xact_lock(hashtext(v_candidate_booking_id));
+
+          SELECT ts_candidate.*
+            INTO v_existing_booking_ts
+          FROM public.timesheets AS ts_candidate
+          WHERE ts_candidate.booking_id = v_candidate_booking_id
+          ORDER BY
+            CASE WHEN COALESCE(ts_candidate.is_current, FALSE) = TRUE THEN 0 ELSE 1 END ASC,
+            ts_candidate.version DESC NULLS LAST,
+            ts_candidate.updated_at DESC NULLS LAST,
+            ts_candidate.created_at DESC NULLS LAST,
+            ts_candidate.timesheet_id DESC
+          LIMIT 1
+          FOR UPDATE;
+
+          IF NOT FOUND THEN
+            v_create_rec.booking_id := v_candidate_booking_id;
+            EXIT;
+          END IF;
+
+          v_existing_booking_cw_id := NULL;
+          v_existing_booking_cw_contract_id := NULL;
+          v_existing_booking_cw_week_ending_date := NULL;
+
+          SELECT cw_candidate.id,
+                 cw_candidate.contract_id,
+                 cw_candidate.week_ending_date
+            INTO v_existing_booking_cw_id,
+                 v_existing_booking_cw_contract_id,
+                 v_existing_booking_cw_week_ending_date
+          FROM public.contract_weeks AS cw_candidate
+          WHERE cw_candidate.timesheet_id = v_existing_booking_ts.timesheet_id
+          ORDER BY
+            CASE WHEN cw_candidate.id = v_week.id THEN 0 ELSE 1 END ASC,
+            cw_candidate.updated_at DESC NULLS LAST,
+            cw_candidate.created_at DESC NULLS LAST,
+            cw_candidate.id DESC
+          LIMIT 1
+          FOR UPDATE;
+
+          v_existing_booking_same_context :=
+            v_existing_booking_ts.contract_id IS NOT DISTINCT FROM v_week.contract_id
+            AND v_existing_booking_ts.week_ending_date IS NOT DISTINCT FROM v_week.week_ending_date
+            AND v_existing_booking_cw_id IS NOT NULL
+            AND v_existing_booking_cw_id IS NOT DISTINCT FROM v_week.id;
+
+          IF v_existing_booking_same_context THEN
+            IF COALESCE(v_existing_booking_ts.is_current, FALSE) = TRUE THEN
+              v_current_ts := v_existing_booking_ts;
+            ELSE
+              SELECT ts_current_candidate.*
+                INTO v_current_ts
+              FROM public.timesheets AS ts_current_candidate
+              WHERE ts_current_candidate.booking_id = v_candidate_booking_id
+                AND ts_current_candidate.is_current = TRUE
+              ORDER BY ts_current_candidate.version DESC NULLS LAST,
+                       ts_current_candidate.updated_at DESC NULLS LAST,
+                       ts_current_candidate.created_at DESC NULLS LAST,
+                       ts_current_candidate.timesheet_id DESC
+              LIMIT 1
+              FOR UPDATE;
+
+              IF NOT FOUND THEN
+                v_current_ts := NULL;
+                SELECT COALESCE(MAX(ts_version_candidate.version), 0) + 1
+                  INTO v_create_rec.version
+                FROM public.timesheets AS ts_version_candidate
+                WHERE ts_version_candidate.booking_id = v_candidate_booking_id;
+                v_create_rec.booking_id := v_candidate_booking_id;
+              END IF;
+            END IF;
+
+            IF v_current_ts.timesheet_id IS NOT NULL THEN
+              v_was_stale := TRUE;
+              v_patch_json :=
+                (
+                  v_create_json
+                  - 'timesheet_id'
+                  - 'booking_id'
+                  - 'version'
+                  - 'is_current'
+                  - 'contract_id'
+                  - 'week_ending_date'
+                  - 'created_at'
+                ) || COALESCE(v_patch_json, '{}'::jsonb);
+            END IF;
+            EXIT;
+          END IF;
+        END LOOP;
+      END IF;
+    END IF;
+
+    IF v_current_ts.timesheet_id IS NULL THEN
+      BEGIN
+        INSERT INTO public.timesheets (
       timesheet_id,
       booking_id,
       occupant_key_norm,
@@ -6891,7 +7113,22 @@ BEGIN
     )
     RETURNING * INTO v_current_ts;
 
-    v_created_now := true;
+        v_created_now := true;
+      EXCEPTION WHEN unique_violation THEN
+        RAISE EXCEPTION USING
+          MESSAGE = 'BOOKING_ID_COLLISION',
+          DETAIL = jsonb_build_object(
+            'reason', 'Unique violation while creating weekly manual timesheet.',
+            'constraint', 'timesheets_booking_id_version_uidx',
+            'booking_id', v_create_rec.booking_id,
+            'version', COALESCE(v_create_rec.version, 1),
+            'supplied_booking_id', v_original_booking_id,
+            'contract_week_id', v_week.id::text,
+            'target_contract_id', v_week.contract_id::text,
+            'target_week_ending_date', v_week.week_ending_date::text
+          )::text;
+      END;
+    END IF;
   ELSE
     IF v_rotation_json IS NOT NULL THEN
       IF p_actor_user_id IS NULL THEN
@@ -6973,6 +7210,48 @@ BEGIN
       INSERT INTO public.timesheets
       SELECT (v_rotated_ts).*
       RETURNING * INTO v_current_ts;
+    END IF;
+  END IF;
+
+  IF v_current_ts.timesheet_id IS NOT NULL AND COALESCE(v_created_now, FALSE) = FALSE THEN
+    IF v_current_ts.authorised_at_server IS NOT NULL THEN
+      RAISE EXCEPTION 'TIMESHEET_ALREADY_AUTHORISED';
+    END IF;
+
+    SELECT *
+      INTO v_current_tsfin
+    FROM public.timesheets_financials AS tsfin_reuse_lock
+    WHERE tsfin_reuse_lock.timesheet_id = v_current_ts.timesheet_id
+      AND tsfin_reuse_lock.is_current = TRUE
+    ORDER BY tsfin_reuse_lock.computed_at_utc DESC NULLS LAST,
+             tsfin_reuse_lock.created_at DESC NULLS LAST,
+             tsfin_reuse_lock.updated_at DESC NULLS LAST,
+             tsfin_reuse_lock.id DESC
+    LIMIT 1
+    FOR UPDATE;
+
+    IF v_current_tsfin.id IS NOT NULL THEN
+      v_previous_processing_status := v_current_tsfin.processing_status;
+
+      SELECT EXISTS (
+        SELECT 1
+        FROM jsonb_array_elements(
+          CASE
+            WHEN v_current_tsfin.invoice_breakdown_json IS NULL THEN '[]'::jsonb
+            WHEN jsonb_typeof(v_current_tsfin.invoice_breakdown_json) = 'array' THEN v_current_tsfin.invoice_breakdown_json
+            WHEN jsonb_typeof(v_current_tsfin.invoice_breakdown_json) = 'object'
+             AND jsonb_typeof(v_current_tsfin.invoice_breakdown_json->'segments') = 'array' THEN v_current_tsfin.invoice_breakdown_json->'segments'
+            ELSE '[]'::jsonb
+          END
+        ) AS reuse_invoice_segment(segment_json)
+        WHERE NULLIF(BTRIM(COALESCE(reuse_invoice_segment.segment_json->>'invoice_locked_invoice_id', '')), '') IS NOT NULL
+      ) INTO v_segment_invoice_lock;
+
+      IF v_current_tsfin.locked_by_invoice_id IS NOT NULL
+         OR v_current_tsfin.paid_at_utc IS NOT NULL
+         OR COALESCE(v_segment_invoice_lock, FALSE) = TRUE THEN
+        RAISE EXCEPTION 'TIMESHEET_LOCKED_OR_PAID';
+      END IF;
     END IF;
   END IF;
 
@@ -7456,8 +7735,6 @@ $function$;
 
 
 
-
-
 CREATE OR REPLACE FUNCTION public.timesheet_unauthorise_atomic(
   p_timesheet_id uuid,
   p_expected_timesheet_id uuid,
@@ -7932,6 +8209,7 @@ $function$;
 
 DROP FUNCTION IF EXISTS public.contract_week_manual_upsert_bulk_process_atomic(uuid, uuid, jsonb, jsonb, jsonb, jsonb, jsonb, uuid, boolean, timestamp with time zone);
 
+
 CREATE OR REPLACE FUNCTION public.contract_week_manual_upsert_bulk_process_atomic(
   p_week_id uuid,
   p_expected_timesheet_id uuid DEFAULT NULL,
@@ -8051,6 +8329,7 @@ BEGIN
       'current_timesheet_id', NULLIF(BTRIM(COALESCE(v_pre_row->>'current_timesheet_id', v_pre_row->>'timesheet_id', '')), '')::uuid,
       'contract_week_id', p_week_id,
       'previous_row_key', v_previous_row_key,
+      'refresh_required', TRUE,
       'cache_invalidation_hints', JSONB_BUILD_OBJECT(
         'row_keys', CASE WHEN v_previous_row_key IS NULL THEN '[]'::jsonb ELSE JSONB_BUILD_ARRAY(v_previous_row_key) END,
         'contract_week_ids', JSONB_BUILD_ARRAY(p_week_id),
@@ -8058,7 +8337,19 @@ BEGIN
         'storage_keys', CASE WHEN v_previous_storage_key IS NULL THEN '[]'::jsonb ELSE JSONB_BUILD_ARRAY(v_previous_storage_key) END,
         'datasets', JSONB_BUILD_ARRAY('bulk_process', 'bulk_authorise'),
         'invalidate_context', TRUE,
-        'invalidate_preview', FALSE
+        'invalidate_preview', FALSE,
+        'refresh_required', TRUE
+      ),
+      'cache_invalidation', JSONB_BUILD_OBJECT(
+        'rows', CASE WHEN v_previous_row_key IS NULL THEN '[]'::jsonb ELSE JSONB_BUILD_ARRAY(JSONB_BUILD_OBJECT(
+          'previous_row_key', v_previous_row_key,
+          'contract_week_id', p_week_id,
+          'timesheet_id', CASE WHEN v_pre_current_timesheet_id_text IS NULL THEN NULL ELSE v_pre_current_timesheet_id_text END
+        )) END,
+        'contract_week_ids', JSONB_BUILD_ARRAY(p_week_id),
+        'timesheet_ids', CASE WHEN v_pre_current_timesheet_id_text IS NULL THEN '[]'::jsonb ELSE JSONB_BUILD_ARRAY(v_pre_current_timesheet_id_text) END,
+        'datasets', JSONB_BUILD_ARRAY('bulk_process', 'bulk_authorise'),
+        'refresh_required', TRUE
       )
     );
   END IF;
@@ -8144,6 +8435,7 @@ BEGIN
       'previous_row_key', v_previous_row_key,
       'rotation_applied', FALSE,
       'old_timesheet_id', CASE WHEN p_rotation_json IS NULL THEN NULL ELSE v_pre_current_timesheet_id_text END,
+      'refresh_required', TRUE,
       'cache_invalidation_hints', JSONB_BUILD_OBJECT(
         'row_keys', JSONB_BUILD_ARRAY(v_previous_row_key),
         'contract_week_ids', JSONB_BUILD_ARRAY(v_contract_week_id),
@@ -8151,7 +8443,19 @@ BEGIN
         'storage_keys', JSONB_BUILD_ARRAY(v_previous_storage_key),
         'datasets', JSONB_BUILD_ARRAY('bulk_process', 'bulk_authorise'),
         'invalidate_context', TRUE,
-        'invalidate_preview', FALSE
+        'invalidate_preview', FALSE,
+        'refresh_required', TRUE
+      ),
+      'cache_invalidation', JSONB_BUILD_OBJECT(
+        'rows', JSONB_BUILD_ARRAY(JSONB_BUILD_OBJECT(
+          'previous_row_key', v_previous_row_key,
+          'contract_week_id', v_contract_week_id,
+          'timesheet_id', v_current_timesheet_id
+        )),
+        'contract_week_ids', JSONB_BUILD_ARRAY(v_contract_week_id),
+        'timesheet_ids', JSONB_BUILD_ARRAY(v_pre_current_timesheet_id_text, v_timesheet_id, v_current_timesheet_id),
+        'datasets', JSONB_BUILD_ARRAY('bulk_process', 'bulk_authorise'),
+        'refresh_required', TRUE
       )
     );
   END IF;
@@ -8381,6 +8685,14 @@ EXCEPTION WHEN OTHERS THEN
     v_exception_detail = PG_EXCEPTION_DETAIL,
     v_exception_hint = PG_EXCEPTION_HINT;
 
+  IF v_error_sqlstate = '23505'
+     AND (
+       v_error_message ILIKE '%timesheets_booking_id_version_uidx%'
+       OR COALESCE(v_exception_detail, '') ILIKE '%timesheets_booking_id_version_uidx%'
+     ) THEN
+    v_error_code := 'BOOKING_ID_COLLISION';
+  END IF;
+
   IF NULLIF(BTRIM(COALESCE(v_exception_detail, '')), '') IS NOT NULL THEN
     BEGIN
       v_detail_json := v_exception_detail::jsonb;
@@ -8408,6 +8720,12 @@ EXCEPTION WHEN OTHERS THEN
     'detail_json', v_detail_json,
     'hint', v_exception_hint,
     'missing', v_missing,
+    'supplied_booking_id', v_detail_json->>'supplied_booking_id',
+    'booking_id', v_detail_json->>'booking_id',
+    'existing_timesheet_id', v_detail_json->>'existing_timesheet_id',
+    'existing_contract_id', v_detail_json->>'existing_contract_id',
+    'target_contract_id', v_detail_json->>'target_contract_id',
+    'target_week_ending_date', v_detail_json->>'target_week_ending_date',
     'contract_week_id', p_week_id,
     'expected_timesheet_id', p_expected_timesheet_id,
     'current_timesheet_id', COALESCE(v_error_current_timesheet_id, p_expected_timesheet_id),
@@ -8415,14 +8733,27 @@ EXCEPTION WHEN OTHERS THEN
     'rotation_applied', FALSE,
     'old_timesheet_id', CASE WHEN p_rotation_json IS NULL THEN NULL ELSE v_pre_current_timesheet_id_text END,
     'previous_row_key', v_previous_row_key,
+    'refresh_required', TRUE,
     'cache_invalidation_hints', JSONB_BUILD_OBJECT(
       'row_keys', CASE WHEN v_previous_row_key IS NULL THEN '[]'::jsonb ELSE JSONB_BUILD_ARRAY(v_previous_row_key) END,
       'contract_week_ids', JSONB_BUILD_ARRAY(p_week_id),
       'timesheet_ids', JSONB_BUILD_ARRAY(p_expected_timesheet_id, v_pre_current_timesheet_id_text),
       'storage_keys', CASE WHEN v_previous_storage_key IS NULL THEN '[]'::jsonb ELSE JSONB_BUILD_ARRAY(v_previous_storage_key) END,
-      'datasets', JSONB_BUILD_ARRAY('bulk_process'),
+      'datasets', JSONB_BUILD_ARRAY('bulk_process', 'bulk_authorise'),
       'invalidate_context', TRUE,
-      'invalidate_preview', FALSE
+      'invalidate_preview', FALSE,
+      'refresh_required', TRUE
+    ),
+    'cache_invalidation', JSONB_BUILD_OBJECT(
+      'rows', CASE WHEN v_previous_row_key IS NULL THEN '[]'::jsonb ELSE JSONB_BUILD_ARRAY(JSONB_BUILD_OBJECT(
+        'previous_row_key', v_previous_row_key,
+        'contract_week_id', p_week_id,
+        'timesheet_id', COALESCE(v_error_current_timesheet_id, p_expected_timesheet_id)
+      )) END,
+      'contract_week_ids', JSONB_BUILD_ARRAY(p_week_id),
+      'timesheet_ids', JSONB_BUILD_ARRAY(p_expected_timesheet_id, v_pre_current_timesheet_id_text),
+      'datasets', JSONB_BUILD_ARRAY('bulk_process', 'bulk_authorise'),
+      'refresh_required', TRUE
     )
   );
 END;
