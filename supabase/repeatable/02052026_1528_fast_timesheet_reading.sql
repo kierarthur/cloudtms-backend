@@ -6107,4 +6107,1536 @@ BEGIN
 END;
 $function$;
 
+CREATE OR REPLACE FUNCTION public.bulk_timesheet_workbench_row_source_v1(p_filters jsonb DEFAULT '{}'::jsonb)
+RETURNS TABLE(
+  timesheet_id uuid,
+  timesheet_status public.timesheet_status_enum,
+  week_ending_date date,
+  booking_id text,
+  occupant_key_norm text,
+  hospital_norm text,
+  sheet_scope public.timesheet_scope_enum,
+  submission_mode public.submission_mode_enum,
+  authorised_at_server timestamp with time zone,
+  candidate_id uuid,
+  client_id uuid,
+  pay_method text,
+  processing_status public.ts_fin_processing_status_enum,
+  basis public.timesheet_fin_basis_enum,
+  total_hours numeric,
+  total_pay_ex_vat numeric,
+  total_charge_ex_vat numeric,
+  margin_ex_vat numeric,
+  paid_at_utc timestamp with time zone,
+  pay_on_hold boolean,
+  ready_to_pay boolean,
+  locked_by_invoice_id uuid,
+  candidate_name text,
+  client_name text,
+  nhsp_shift_count integer,
+  nhsp_shift_included_count integer,
+  nhsp_shift_deferred_count integer,
+  validation_status public.validation_status_enum,
+  summary_stage text,
+  route_type text,
+  contract_week_id uuid,
+  contract_week_ending_date date,
+  contract_week_status public.contract_week_status_enum,
+  additional_seq integer,
+  is_adjustment boolean,
+  qr_status public.timesheet_qr_status_enum,
+  pay_adjustment_count integer,
+  has_pay_adjustments boolean,
+  is_adjusted boolean,
+  is_qr boolean,
+  needs_attention boolean,
+  client_autoprocess_hr boolean,
+  has_rate_issue boolean,
+  has_pay_channel_issue boolean,
+  hr_crosscheck_status text,
+  hr_crosscheck_issues text[],
+  external_source_rows_json jsonb,
+  issue_codes text[],
+  client_requires_hr boolean,
+  client_no_timesheet_required boolean,
+  client_is_nhsp boolean,
+  client_pay_reference_required boolean,
+  client_invoice_reference_required boolean,
+  client_hr_validation_required boolean,
+  client_ts_reference_required boolean,
+  require_reference_to_pay boolean,
+  require_reference_to_invoice boolean,
+  qr_token text,
+  qr_generated_at timestamp with time zone,
+  qr_scanned_at timestamp with time zone,
+  candidate_hint_text jsonb,
+  expenses_pay_ex_vat numeric,
+  expenses_description text,
+  mileage_units numeric,
+  mileage_pay_rate numeric,
+  mileage_charge_rate numeric,
+  mileage_pay_ex_vat numeric,
+  travel_pay_ex_vat numeric,
+  travel_charge_ex_vat numeric,
+  accommodation_pay_ex_vat numeric,
+  accommodation_charge_ex_vat numeric,
+  other_pay_ex_vat numeric,
+  other_charge_ex_vat numeric,
+  hr_validation_required_for_invoice boolean,
+  invoice_segments_total integer,
+  invoice_segments_locked integer,
+  invoice_segments_unlocked integer,
+  invoice_segment_stage text,
+  tools_stage text,
+  processing_status_display text,
+  invoice_is_paid boolean,
+  refs_block_invoicing boolean,
+  refs_block_issuing_invoices boolean,
+  refs_block_invoice_and_issuing boolean,
+  pay_icon_code text,
+  pay_status_code text,
+  pay_paid_at_utc timestamp with time zone,
+  net_delta_ex_vat numeric
+)
+LANGUAGE plpgsql
+STABLE SECURITY DEFINER
+SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_filters jsonb := COALESCE(p_filters, '{}'::jsonb);
+  v_candidate_id_text text := NULL;
+  v_client_id_text text := NULL;
+  v_candidate_id uuid := NULL;
+  v_client_id uuid := NULL;
+  v_timesheet_ids uuid[] := NULL;
+  v_contract_week_ids uuid[] := NULL;
+  v_row_keys text[] := NULL;
+  v_dataset_mode text := NULL;
+  v_period_filter text := NULL;
+  v_date_from_text text := NULL;
+  v_date_to_text text := NULL;
+  v_week_ending_text text := NULL;
+  v_date_from date := NULL;
+  v_date_to date := NULL;
+  v_week_ending_date date := NULL;
+  v_uuid_re text := '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$';
+  v_numeric_re text := E'^[-+]?[0-9]+(\\.[0-9]+)?$';
+BEGIN
+  v_candidate_id_text := NULLIF(BTRIM(COALESCE(v_filters->>'candidate_id', v_filters->>'candidateId', '')), '');
+  BEGIN
+    IF v_candidate_id_text IS NOT NULL THEN
+      v_candidate_id := v_candidate_id_text::uuid;
+    END IF;
+  EXCEPTION WHEN OTHERS THEN
+    v_candidate_id := NULL;
+  END;
+
+  v_client_id_text := NULLIF(BTRIM(COALESCE(v_filters->>'client_id', v_filters->>'clientId', '')), '');
+  BEGIN
+    IF v_client_id_text IS NOT NULL THEN
+      v_client_id := v_client_id_text::uuid;
+    END IF;
+  EXCEPTION WHEN OTHERS THEN
+    v_client_id := NULL;
+  END;
+
+  IF v_filters ? 'timesheet_ids' AND jsonb_typeof(v_filters->'timesheet_ids') = 'array' THEN
+    SELECT ARRAY_AGG(uuid_values.uuid_value)
+      INTO v_timesheet_ids
+    FROM (
+      SELECT DISTINCT input_values.value::uuid AS uuid_value
+      FROM jsonb_array_elements_text(v_filters->'timesheet_ids') AS input_values(value)
+      WHERE input_values.value ~* v_uuid_re
+    ) AS uuid_values;
+  ELSIF v_filters ? 'timesheetIds' AND jsonb_typeof(v_filters->'timesheetIds') = 'array' THEN
+    SELECT ARRAY_AGG(uuid_values.uuid_value)
+      INTO v_timesheet_ids
+    FROM (
+      SELECT DISTINCT input_values.value::uuid AS uuid_value
+      FROM jsonb_array_elements_text(v_filters->'timesheetIds') AS input_values(value)
+      WHERE input_values.value ~* v_uuid_re
+    ) AS uuid_values;
+  ELSIF v_filters ? 'timesheet_id' AND NULLIF(BTRIM(COALESCE(v_filters->>'timesheet_id', '')), '') IS NOT NULL AND (v_filters->>'timesheet_id') ~* v_uuid_re THEN
+    v_timesheet_ids := ARRAY[(v_filters->>'timesheet_id')::uuid];
+  ELSIF v_filters ? 'timesheetId' AND NULLIF(BTRIM(COALESCE(v_filters->>'timesheetId', '')), '') IS NOT NULL AND (v_filters->>'timesheetId') ~* v_uuid_re THEN
+    v_timesheet_ids := ARRAY[(v_filters->>'timesheetId')::uuid];
+  END IF;
+
+  IF v_filters ? 'contract_week_ids' AND jsonb_typeof(v_filters->'contract_week_ids') = 'array' THEN
+    SELECT ARRAY_AGG(uuid_values.uuid_value)
+      INTO v_contract_week_ids
+    FROM (
+      SELECT DISTINCT input_values.value::uuid AS uuid_value
+      FROM jsonb_array_elements_text(v_filters->'contract_week_ids') AS input_values(value)
+      WHERE input_values.value ~* v_uuid_re
+    ) AS uuid_values;
+  ELSIF v_filters ? 'contractWeekIds' AND jsonb_typeof(v_filters->'contractWeekIds') = 'array' THEN
+    SELECT ARRAY_AGG(uuid_values.uuid_value)
+      INTO v_contract_week_ids
+    FROM (
+      SELECT DISTINCT input_values.value::uuid AS uuid_value
+      FROM jsonb_array_elements_text(v_filters->'contractWeekIds') AS input_values(value)
+      WHERE input_values.value ~* v_uuid_re
+    ) AS uuid_values;
+  ELSIF v_filters ? 'contract_week_id' AND NULLIF(BTRIM(COALESCE(v_filters->>'contract_week_id', '')), '') IS NOT NULL AND (v_filters->>'contract_week_id') ~* v_uuid_re THEN
+    v_contract_week_ids := ARRAY[(v_filters->>'contract_week_id')::uuid];
+  ELSIF v_filters ? 'contractWeekId' AND NULLIF(BTRIM(COALESCE(v_filters->>'contractWeekId', '')), '') IS NOT NULL AND (v_filters->>'contractWeekId') ~* v_uuid_re THEN
+    v_contract_week_ids := ARRAY[(v_filters->>'contractWeekId')::uuid];
+  END IF;
+
+  IF v_filters ? 'row_keys' AND jsonb_typeof(v_filters->'row_keys') = 'array' THEN
+    SELECT ARRAY_AGG(row_key_values.row_key_value)
+      INTO v_row_keys
+    FROM (
+      SELECT DISTINCT NULLIF(BTRIM(input_values.value), '') AS row_key_value
+      FROM jsonb_array_elements_text(v_filters->'row_keys') AS input_values(value)
+    ) AS row_key_values
+    WHERE row_key_values.row_key_value IS NOT NULL;
+  ELSIF v_filters ? 'rowKeys' AND jsonb_typeof(v_filters->'rowKeys') = 'array' THEN
+    SELECT ARRAY_AGG(row_key_values.row_key_value)
+      INTO v_row_keys
+    FROM (
+      SELECT DISTINCT NULLIF(BTRIM(input_values.value), '') AS row_key_value
+      FROM jsonb_array_elements_text(v_filters->'rowKeys') AS input_values(value)
+    ) AS row_key_values
+    WHERE row_key_values.row_key_value IS NOT NULL;
+  ELSIF v_filters ? 'row_key' AND NULLIF(BTRIM(COALESCE(v_filters->>'row_key', '')), '') IS NOT NULL THEN
+    v_row_keys := ARRAY[NULLIF(BTRIM(v_filters->>'row_key'), '')];
+  ELSIF v_filters ? 'rowKey' AND NULLIF(BTRIM(COALESCE(v_filters->>'rowKey', '')), '') IS NOT NULL THEN
+    v_row_keys := ARRAY[NULLIF(BTRIM(v_filters->>'rowKey'), '')];
+  END IF;
+
+  v_dataset_mode := UPPER(NULLIF(BTRIM(COALESCE(v_filters->>'dataset_mode', v_filters->>'datasetMode', '')), ''));
+  IF v_dataset_mode NOT IN ('PROCESS', 'AUTHORISE', 'ROW_CONTEXT') THEN
+    v_dataset_mode := NULL;
+  END IF;
+
+  v_period_filter := UPPER(NULLIF(BTRIM(COALESCE(v_filters->>'period_type', v_filters->>'periodType', v_filters->>'sheet_scope', v_filters->>'sheetScope', '')), ''));
+  IF v_period_filter NOT IN ('DAILY', 'WEEKLY') THEN
+    v_period_filter := NULL;
+  END IF;
+
+  v_date_from_text := NULLIF(BTRIM(COALESCE(v_filters->>'date_from', v_filters->>'dateFrom', v_filters->>'from_date', v_filters->>'fromDate', '')), '');
+  v_date_to_text := NULLIF(BTRIM(COALESCE(v_filters->>'date_to', v_filters->>'dateTo', v_filters->>'to_date', v_filters->>'toDate', '')), '');
+  v_week_ending_text := NULLIF(BTRIM(COALESCE(v_filters->>'week_ending_date', v_filters->>'weekEndingDate', v_filters->>'week_ending', v_filters->>'weekEnding', '')), '');
+
+  BEGIN
+    IF v_date_from_text IS NOT NULL THEN
+      v_date_from := v_date_from_text::date;
+    END IF;
+  EXCEPTION WHEN OTHERS THEN
+    v_date_from := NULL;
+  END;
+
+  BEGIN
+    IF v_date_to_text IS NOT NULL THEN
+      v_date_to := v_date_to_text::date;
+    END IF;
+  EXCEPTION WHEN OTHERS THEN
+    v_date_to := NULL;
+  END;
+
+  BEGIN
+    IF v_week_ending_text IS NOT NULL THEN
+      v_week_ending_date := v_week_ending_text::date;
+    END IF;
+  EXCEPTION WHEN OTHERS THEN
+    v_week_ending_date := NULL;
+  END;
+
+  RETURN QUERY
+  WITH client_hr AS MATERIALIZED (
+    SELECT
+      cs0.client_id,
+      BOOL_OR(cs0.autoprocess_hr) AS autoprocess_hr,
+      BOOL_OR(cs0.requires_hr) AS requires_hr,
+      BOOL_OR(cs0.no_timesheet_required) AS no_timesheet_required,
+      BOOL_OR(cs0.pay_reference_required) AS pay_reference_required,
+      BOOL_OR(cs0.invoice_reference_required) AS invoice_reference_required,
+      BOOL_OR(cs0.reference_number_required_to_issue_invoice) AS reference_number_required_to_issue_invoice,
+      BOOL_OR(cs0.hr_validation_required) AS hr_validation_required,
+      BOOL_OR(cs0.ts_reference_required) AS ts_reference_required,
+      BOOL_OR(cs0.is_nhsp) AS is_nhsp
+    FROM public.client_settings AS cs0
+    GROUP BY cs0.client_id
+  ),
+  timesheet_scope_rows AS MATERIALIZED (
+    SELECT
+      ts0.timesheet_id,
+      cw0.id AS contract_week_id,
+      COALESCE(cw0.week_ending_date, ts0.week_ending_date) AS effective_week_ending_date,
+      ts0.sheet_scope AS effective_sheet_scope,
+      COALESCE(ts0.contract_id, cw0.contract_id) AS effective_contract_id
+    FROM public.timesheets AS ts0
+    LEFT JOIN public.contract_weeks AS cw0
+      ON cw0.timesheet_id = ts0.timesheet_id
+    WHERE ts0.is_current = TRUE
+      AND (v_timesheet_ids IS NULL OR ts0.timesheet_id = ANY(v_timesheet_ids))
+      AND (v_contract_week_ids IS NULL OR cw0.id = ANY(v_contract_week_ids))
+      AND (
+        v_row_keys IS NULL
+        OR ('timesheet:' || ts0.timesheet_id::text) = ANY(v_row_keys)
+      )
+      AND (
+        v_week_ending_date IS NULL
+        OR COALESCE(cw0.week_ending_date, ts0.week_ending_date) = v_week_ending_date
+      )
+      AND (
+        v_date_from IS NULL
+        OR COALESCE(cw0.week_ending_date, ts0.week_ending_date) >= v_date_from
+      )
+      AND (
+        v_date_to IS NULL
+        OR COALESCE(cw0.week_ending_date, ts0.week_ending_date) <= v_date_to
+      )
+      AND (
+        v_period_filter IS NULL
+        OR UPPER(ts0.sheet_scope::text) = v_period_filter
+      )
+  ),
+  contract_week_scope_rows AS MATERIALIZED (
+    SELECT
+      cw0.id AS contract_week_id,
+      cw0.contract_id,
+      cw0.week_ending_date AS effective_week_ending_date
+    FROM public.contract_weeks AS cw0
+    JOIN public.contracts AS ct_scope
+      ON ct_scope.id = cw0.contract_id
+    WHERE cw0.timesheet_id IS NULL
+      AND v_timesheet_ids IS NULL
+      AND (v_candidate_id IS NULL OR ct_scope.candidate_id = v_candidate_id)
+      AND (v_client_id IS NULL OR ct_scope.client_id = v_client_id)
+      AND (v_contract_week_ids IS NULL OR cw0.id = ANY(v_contract_week_ids))
+      AND (
+        v_row_keys IS NULL
+        OR ('contract_week:' || cw0.id::text) = ANY(v_row_keys)
+      )
+      AND (
+        v_week_ending_date IS NULL
+        OR cw0.week_ending_date = v_week_ending_date
+      )
+      AND (
+        v_date_from IS NULL
+        OR cw0.week_ending_date >= v_date_from
+      )
+      AND (
+        v_date_to IS NULL
+        OR cw0.week_ending_date <= v_date_to
+      )
+      AND (
+        v_period_filter IS NULL
+        OR v_period_filter = 'WEEKLY'
+      )
+  ),
+  tf_ranked AS MATERIALIZED (
+    SELECT
+      tf0.id,
+      tf0.timesheet_id,
+      tf0.candidate_id,
+      tf0.client_id,
+      tf0.pay_method,
+      tf0.processing_status,
+      tf0.basis,
+      tf0.total_hours,
+      tf0.total_pay_ex_vat,
+      tf0.total_charge_ex_vat,
+      tf0.margin_ex_vat,
+      tf0.paid_at_utc,
+      tf0.pay_on_hold,
+      tf0.locked_by_invoice_id,
+      tf0.has_rate_issue,
+      tf0.has_pay_channel_issue,
+      tf0.hr_crosscheck_status,
+      tf0.hr_crosscheck_issues,
+      tf0.external_source_rows_json,
+      tf0.invoice_breakdown_json,
+      tf0.expenses_pay_ex_vat,
+      tf0.expenses_description,
+      tf0.mileage_units,
+      tf0.mileage_pay_rate,
+      tf0.mileage_charge_rate,
+      tf0.mileage_pay_ex_vat,
+      tf0.travel_pay_ex_vat,
+      tf0.travel_charge_ex_vat,
+      tf0.accommodation_pay_ex_vat,
+      tf0.accommodation_charge_ex_vat,
+      tf0.other_pay_ex_vat,
+      tf0.other_charge_ex_vat,
+      tf0.created_at,
+      tf0.updated_at,
+      ROW_NUMBER() OVER (
+        PARTITION BY tf0.timesheet_id
+        ORDER BY tf0.created_at DESC NULLS LAST, tf0.updated_at DESC NULLS LAST, tf0.id DESC
+      ) AS rn
+    FROM public.timesheets_financials AS tf0
+    WHERE tf0.is_current = TRUE
+      AND EXISTS (
+        SELECT 1
+        FROM timesheet_scope_rows AS ts_scope_tf
+        WHERE ts_scope_tf.timesheet_id = tf0.timesheet_id
+      )
+  ),
+  tf_latest AS MATERIALIZED (
+    SELECT
+      tf1.id,
+      tf1.timesheet_id,
+      tf1.candidate_id,
+      tf1.client_id,
+      tf1.pay_method,
+      tf1.processing_status,
+      tf1.basis,
+      tf1.total_hours,
+      tf1.total_pay_ex_vat,
+      tf1.total_charge_ex_vat,
+      tf1.margin_ex_vat,
+      tf1.paid_at_utc,
+      tf1.pay_on_hold,
+      tf1.locked_by_invoice_id,
+      tf1.has_rate_issue,
+      tf1.has_pay_channel_issue,
+      tf1.hr_crosscheck_status,
+      tf1.hr_crosscheck_issues,
+      tf1.external_source_rows_json,
+      tf1.invoice_breakdown_json,
+      tf1.expenses_pay_ex_vat,
+      tf1.expenses_description,
+      tf1.mileage_units,
+      tf1.mileage_pay_rate,
+      tf1.mileage_charge_rate,
+      tf1.mileage_pay_ex_vat,
+      tf1.travel_pay_ex_vat,
+      tf1.travel_charge_ex_vat,
+      tf1.accommodation_pay_ex_vat,
+      tf1.accommodation_charge_ex_vat,
+      tf1.other_pay_ex_vat,
+      tf1.other_charge_ex_vat
+    FROM tf_ranked AS tf1
+    WHERE tf1.rn = 1
+  ),
+  tv_ranked AS MATERIALIZED (
+    SELECT
+      tv0.id,
+      tv0.timesheet_id,
+      tv0.status,
+      tv0.reason_code,
+      tv0.created_at,
+      tv0.updated_at,
+      ROW_NUMBER() OVER (
+        PARTITION BY tv0.timesheet_id
+        ORDER BY tv0.updated_at DESC NULLS LAST, tv0.created_at DESC NULLS LAST, tv0.id DESC
+      ) AS rn
+    FROM public.timesheet_validations AS tv0
+    WHERE tv0.timesheet_id IS NOT NULL
+      AND EXISTS (
+        SELECT 1
+        FROM timesheet_scope_rows AS ts_scope_tv
+        WHERE ts_scope_tv.timesheet_id = tv0.timesheet_id
+      )
+  ),
+  tv_latest AS MATERIALIZED (
+    SELECT
+      tv1.timesheet_id,
+      tv1.status
+    FROM tv_ranked AS tv1
+    WHERE tv1.rn = 1
+  ),
+  evidence_agg AS MATERIALIZED (
+    SELECT
+      te0.timesheet_id,
+      COUNT(te0.id)::integer AS evidence_count,
+      COALESCE(BOOL_OR(UPPER(COALESCE(te0.kind, '')) = 'TIMESHEET'), FALSE) AS has_timesheet_evidence,
+      COALESCE(BOOL_OR(UPPER(COALESCE(te0.kind, '')) = 'MILEAGE'), FALSE) AS has_mileage_evidence,
+      COALESCE(BOOL_OR(UPPER(COALESCE(te0.kind, '')) = 'TRAVEL'), FALSE) AS has_travel_evidence,
+      COALESCE(BOOL_OR(UPPER(COALESCE(te0.kind, '')) = 'ACCOMMODATION'), FALSE) AS has_accommodation_evidence,
+      COALESCE(BOOL_OR(UPPER(COALESCE(te0.kind, '')) = 'OTHER'), FALSE) AS has_other_evidence
+    FROM public.timesheet_evidence AS te0
+    WHERE te0.timesheet_id IS NOT NULL
+      AND EXISTS (
+        SELECT 1
+        FROM timesheet_scope_rows AS ts_scope_te
+        WHERE ts_scope_te.timesheet_id = te0.timesheet_id
+      )
+    GROUP BY te0.timesheet_id
+  ),
+  nhsp_agg AS MATERIALIZED (
+    SELECT
+      ns0.timesheet_id,
+      COUNT(ns0.id)::integer AS nhsp_shift_count,
+      (COUNT(ns0.id) FILTER (WHERE ns0.invoice_status = 'INCLUDED'))::integer AS nhsp_shift_included_count,
+      (COUNT(ns0.id) FILTER (WHERE ns0.invoice_status = 'DEFERRED'))::integer AS nhsp_shift_deferred_count
+    FROM public.nhsp_shifts AS ns0
+    WHERE ns0.timesheet_id IS NOT NULL
+      AND EXISTS (
+        SELECT 1
+        FROM timesheet_scope_rows AS ts_scope_ns
+        WHERE ts_scope_ns.timesheet_id = ns0.timesheet_id
+      )
+    GROUP BY ns0.timesheet_id
+  ),
+  pay_adjustments_agg AS MATERIALIZED (
+    SELECT
+      pa0.timesheet_id,
+      COUNT(pa0.id)::integer AS pay_adjustment_count
+    FROM public.ts_pay_adjustments AS pa0
+    WHERE pa0.timesheet_id IS NOT NULL
+      AND EXISTS (
+        SELECT 1
+        FROM timesheet_scope_rows AS ts_scope_pa
+        WHERE ts_scope_pa.timesheet_id = pa0.timesheet_id
+      )
+    GROUP BY pa0.timesheet_id
+  ),
+  timesheet_rows AS MATERIALIZED (
+    SELECT
+      ts0.timesheet_id AS timesheet_id,
+      ts0.status AS timesheet_status,
+      ts0.week_ending_date AS week_ending_date,
+      ts0.booking_id AS booking_id,
+      ts0.occupant_key_norm AS occupant_key_norm,
+      ts0.hospital_norm AS hospital_norm,
+      ts0.sheet_scope AS sheet_scope,
+      ts0.submission_mode AS submission_mode,
+      ts0.authorised_at_server AS authorised_at_server,
+      COALESCE(tf2.candidate_id, ct0.candidate_id) AS candidate_id,
+      COALESCE(tf2.client_id, ct0.client_id) AS client_id,
+      tf2.pay_method AS pay_method,
+      tf2.processing_status AS processing_status,
+      tf2.basis AS basis,
+      tf2.total_hours AS total_hours,
+      tf2.total_pay_ex_vat AS total_pay_ex_vat,
+      tf2.total_charge_ex_vat AS total_charge_ex_vat,
+      tf2.margin_ex_vat AS margin_ex_vat,
+      tf2.paid_at_utc AS paid_at_utc,
+      tf2.pay_on_hold AS pay_on_hold,
+      tf2.locked_by_invoice_id AS locked_by_invoice_id,
+      CASE
+        WHEN COALESCE(tf2.candidate_id, ct0.candidate_id) IS NULL
+         AND ts0.candidate_hint_text IS NOT NULL
+         AND jsonb_typeof(ts0.candidate_hint_text) = 'object'
+         AND (
+           NULLIF(BTRIM(CONCAT_WS(' ', NULLIF(BTRIM(ts0.candidate_hint_text->>'first_name'), ''), NULLIF(BTRIM(ts0.candidate_hint_text->>'surname'), ''))), '') IS NOT NULL
+           OR NULLIF(BTRIM(ts0.candidate_hint_text->>'display_name'), '') IS NOT NULL
+           OR NULLIF(BTRIM(ts0.candidate_hint_text->>'email'), '') IS NOT NULL
+         ) THEN
+          'Unresolved Timesheet - '
+          || COALESCE(
+            NULLIF(BTRIM(CONCAT_WS(' ', NULLIF(BTRIM(ts0.candidate_hint_text->>'first_name'), ''), NULLIF(BTRIM(ts0.candidate_hint_text->>'surname'), ''))), ''),
+            NULLIF(BTRIM(ts0.candidate_hint_text->>'display_name'), ''),
+            'Candidate'
+          )
+          || CASE
+               WHEN NULLIF(BTRIM(ts0.candidate_hint_text->>'email'), '') IS NOT NULL THEN ', Email - ' || BTRIM(ts0.candidate_hint_text->>'email')
+               ELSE ''
+             END
+        ELSE COALESCE(cand0.display_name, ts0.occupant_key_norm)
+      END AS candidate_name,
+      cli0.name AS client_name,
+      COALESCE(ns1.nhsp_shift_count, 0) AS nhsp_shift_count,
+      COALESCE(ns1.nhsp_shift_included_count, 0) AS nhsp_shift_included_count,
+      COALESCE(ns1.nhsp_shift_deferred_count, 0) AS nhsp_shift_deferred_count,
+      tv2.status AS validation_status,
+      cw0.id AS contract_week_id,
+      cw0.week_ending_date AS contract_week_ending_date,
+      cw0.status AS contract_week_status,
+      cw0.additional_seq AS additional_seq,
+      COALESCE(ts0.is_adjustment, cw0.is_adjustment, FALSE) AS is_adjustment,
+      ts0.qr_status AS qr_status,
+      ts0.qr_token AS qr_token,
+      ts0.qr_generated_at AS qr_generated_at,
+      ts0.qr_scanned_at AS qr_scanned_at,
+      ts0.qr_last_sent_hash AS qr_last_sent_hash,
+      COALESCE(pa1.pay_adjustment_count, 0) AS pay_adjustment_count,
+      COALESCE(
+        CASE WHEN ct0.overrideclientsettings THEN ct0.autoprocess_hr ELSE NULL::boolean END,
+        ch0.autoprocess_hr,
+        FALSE
+      ) AS client_autoprocess_hr,
+      COALESCE(
+        CASE WHEN ct0.overrideclientsettings THEN ct0.requires_hr ELSE NULL::boolean END,
+        ch0.requires_hr,
+        FALSE
+      ) AS client_requires_hr,
+      COALESCE(
+        CASE WHEN ct0.overrideclientsettings THEN ct0.no_timesheet_required ELSE NULL::boolean END,
+        ch0.no_timesheet_required,
+        FALSE
+      ) AS client_no_timesheet_required,
+      COALESCE(ch0.pay_reference_required, FALSE) AS client_pay_reference_required,
+      COALESCE(ch0.invoice_reference_required, FALSE) AS client_invoice_reference_required,
+      COALESCE(ch0.hr_validation_required, FALSE) AS client_hr_validation_required,
+      COALESCE(ch0.ts_reference_required, FALSE) AS client_ts_reference_required,
+      COALESCE(
+        CASE WHEN ct0.overrideclientsettings THEN ct0.is_nhsp ELSE NULL::boolean END,
+        ch0.is_nhsp,
+        FALSE
+      ) AS client_is_nhsp,
+      COALESCE(tf2.has_rate_issue, FALSE) AS has_rate_issue,
+      COALESCE(tf2.has_pay_channel_issue, FALSE) AS has_pay_channel_issue,
+      tf2.hr_crosscheck_status AS hr_crosscheck_status,
+      tf2.hr_crosscheck_issues AS hr_crosscheck_issues,
+      tf2.external_source_rows_json AS external_source_rows_json,
+      ts0.reference_number AS reference_number,
+      ts0.day_references_json AS day_references_json,
+      ts0.actual_schedule_json AS actual_schedule_json,
+      ts0.r2_nurse_key AS r2_nurse_key,
+      ts0.r2_auth_key AS r2_auth_key,
+      ts0.manual_pdf_r2_key AS manual_pdf_r2_key,
+      COALESCE(
+        CASE WHEN ct0.overrideclientsettings THEN ct0.require_reference_to_pay ELSE NULL::boolean END,
+        ch0.pay_reference_required,
+        FALSE
+      ) AS require_reference_to_pay,
+      COALESCE(
+        CASE WHEN ct0.overrideclientsettings THEN ct0.require_reference_to_invoice ELSE NULL::boolean END,
+        ch0.invoice_reference_required,
+        FALSE
+      ) AS require_reference_to_invoice,
+      COALESCE(ev1.evidence_count, 0) AS evidence_count,
+      COALESCE(ev1.has_timesheet_evidence, FALSE) AS has_timesheet_evidence,
+      COALESCE(ev1.has_mileage_evidence, FALSE) AS has_mileage_evidence,
+      COALESCE(ev1.has_travel_evidence, FALSE) AS has_travel_evidence,
+      COALESCE(ev1.has_accommodation_evidence, FALSE) AS has_accommodation_evidence,
+      COALESCE(ev1.has_other_evidence, FALSE) AS has_other_evidence,
+      ts0.candidate_hint_text AS candidate_hint_text,
+      tf2.expenses_pay_ex_vat AS expenses_pay_ex_vat,
+      tf2.expenses_description AS expenses_description,
+      tf2.mileage_units AS mileage_units,
+      tf2.mileage_pay_rate AS mileage_pay_rate,
+      tf2.mileage_charge_rate AS mileage_charge_rate,
+      tf2.mileage_pay_ex_vat AS mileage_pay_ex_vat,
+      tf2.travel_pay_ex_vat AS travel_pay_ex_vat,
+      tf2.travel_charge_ex_vat AS travel_charge_ex_vat,
+      tf2.accommodation_pay_ex_vat AS accommodation_pay_ex_vat,
+      tf2.accommodation_charge_ex_vat AS accommodation_charge_ex_vat,
+      tf2.other_pay_ex_vat AS other_pay_ex_vat,
+      tf2.other_charge_ex_vat AS other_charge_ex_vat,
+      tf2.invoice_breakdown_json AS invoice_breakdown_json
+    FROM timesheet_scope_rows AS ts_scope
+    JOIN public.timesheets AS ts0
+      ON ts0.timesheet_id = ts_scope.timesheet_id
+     AND ts0.is_current = TRUE
+    LEFT JOIN public.contract_weeks AS cw0
+      ON cw0.id = ts_scope.contract_week_id
+    LEFT JOIN public.contracts AS ct0
+      ON ct0.id = COALESCE(ts0.contract_id, cw0.contract_id)
+    LEFT JOIN tf_latest AS tf2
+      ON tf2.timesheet_id = ts0.timesheet_id
+    LEFT JOIN tv_latest AS tv2
+      ON tv2.timesheet_id = ts0.timesheet_id
+    LEFT JOIN evidence_agg AS ev1
+      ON ev1.timesheet_id = ts0.timesheet_id
+    LEFT JOIN nhsp_agg AS ns1
+      ON ns1.timesheet_id = ts0.timesheet_id
+    LEFT JOIN pay_adjustments_agg AS pa1
+      ON pa1.timesheet_id = ts0.timesheet_id
+    LEFT JOIN public.candidates AS cand0
+      ON cand0.id = COALESCE(tf2.candidate_id, ct0.candidate_id)
+    LEFT JOIN public.clients AS cli0
+      ON cli0.id = COALESCE(tf2.client_id, ct0.client_id)
+    LEFT JOIN client_hr AS ch0
+      ON ch0.client_id = COALESCE(tf2.client_id, ct0.client_id)
+  ),
+  planned_week_rows AS MATERIALIZED (
+    SELECT
+      NULL::uuid AS timesheet_id,
+      NULL::public.timesheet_status_enum AS timesheet_status,
+      cw0.week_ending_date AS week_ending_date,
+      NULL::text AS booking_id,
+      NULL::text AS occupant_key_norm,
+      NULL::text AS hospital_norm,
+      'WEEKLY'::public.timesheet_scope_enum AS sheet_scope,
+      cw0.submission_mode_snapshot AS submission_mode,
+      NULL::timestamp with time zone AS authorised_at_server,
+      ct0.candidate_id AS candidate_id,
+      ct0.client_id AS client_id,
+      NULL::text AS pay_method,
+      NULL::public.ts_fin_processing_status_enum AS processing_status,
+      NULL::public.timesheet_fin_basis_enum AS basis,
+      ROUND(
+        (
+          CASE WHEN NULLIF(BTRIM(COALESCE(cw0.totals_json #>> '{hours,day}', '')), '') ~ v_numeric_re THEN (cw0.totals_json #>> '{hours,day}')::numeric ELSE 0::numeric END
+          + CASE WHEN NULLIF(BTRIM(COALESCE(cw0.totals_json #>> '{hours,night}', '')), '') ~ v_numeric_re THEN (cw0.totals_json #>> '{hours,night}')::numeric ELSE 0::numeric END
+          + CASE WHEN NULLIF(BTRIM(COALESCE(cw0.totals_json #>> '{hours,sat}', '')), '') ~ v_numeric_re THEN (cw0.totals_json #>> '{hours,sat}')::numeric ELSE 0::numeric END
+          + CASE WHEN NULLIF(BTRIM(COALESCE(cw0.totals_json #>> '{hours,sun}', '')), '') ~ v_numeric_re THEN (cw0.totals_json #>> '{hours,sun}')::numeric ELSE 0::numeric END
+          + CASE WHEN NULLIF(BTRIM(COALESCE(cw0.totals_json #>> '{hours,bh}', '')), '') ~ v_numeric_re THEN (cw0.totals_json #>> '{hours,bh}')::numeric ELSE 0::numeric END
+        ),
+        2
+      ) AS total_hours,
+      NULL::numeric AS total_pay_ex_vat,
+      NULL::numeric AS total_charge_ex_vat,
+      NULL::numeric AS margin_ex_vat,
+      NULL::timestamp with time zone AS paid_at_utc,
+      FALSE AS pay_on_hold,
+      NULL::uuid AS locked_by_invoice_id,
+      cand0.display_name AS candidate_name,
+      cli0.name AS client_name,
+      0::integer AS nhsp_shift_count,
+      0::integer AS nhsp_shift_included_count,
+      0::integer AS nhsp_shift_deferred_count,
+      NULL::public.validation_status_enum AS validation_status,
+      cw0.id AS contract_week_id,
+      cw0.week_ending_date AS contract_week_ending_date,
+      cw0.status AS contract_week_status,
+      cw0.additional_seq AS additional_seq,
+      cw0.is_adjustment AS is_adjustment,
+      NULL::public.timesheet_qr_status_enum AS qr_status,
+      NULL::text AS qr_token,
+      NULL::timestamp with time zone AS qr_generated_at,
+      NULL::timestamp with time zone AS qr_scanned_at,
+      NULL::text AS qr_last_sent_hash,
+      0::integer AS pay_adjustment_count,
+      COALESCE(
+        CASE WHEN ct0.overrideclientsettings THEN ct0.autoprocess_hr ELSE NULL::boolean END,
+        ch0.autoprocess_hr,
+        FALSE
+      ) AS client_autoprocess_hr,
+      COALESCE(
+        CASE WHEN ct0.overrideclientsettings THEN ct0.requires_hr ELSE NULL::boolean END,
+        ch0.requires_hr,
+        FALSE
+      ) AS client_requires_hr,
+      COALESCE(
+        CASE WHEN ct0.overrideclientsettings THEN ct0.no_timesheet_required ELSE NULL::boolean END,
+        ch0.no_timesheet_required,
+        FALSE
+      ) AS client_no_timesheet_required,
+      COALESCE(ch0.pay_reference_required, FALSE) AS client_pay_reference_required,
+      COALESCE(ch0.invoice_reference_required, FALSE) AS client_invoice_reference_required,
+      COALESCE(ch0.hr_validation_required, FALSE) AS client_hr_validation_required,
+      COALESCE(ch0.ts_reference_required, FALSE) AS client_ts_reference_required,
+      COALESCE(
+        CASE WHEN ct0.overrideclientsettings THEN ct0.is_nhsp ELSE NULL::boolean END,
+        ch0.is_nhsp,
+        FALSE
+      ) AS client_is_nhsp,
+      FALSE AS has_rate_issue,
+      FALSE AS has_pay_channel_issue,
+      NULL::text AS hr_crosscheck_status,
+      NULL::text[] AS hr_crosscheck_issues,
+      NULL::jsonb AS external_source_rows_json,
+      NULL::text AS reference_number,
+      NULL::jsonb AS day_references_json,
+      NULL::jsonb AS actual_schedule_json,
+      NULL::text AS r2_nurse_key,
+      NULL::text AS r2_auth_key,
+      NULL::text AS manual_pdf_r2_key,
+      COALESCE(
+        CASE WHEN ct0.overrideclientsettings THEN ct0.require_reference_to_pay ELSE NULL::boolean END,
+        ch0.pay_reference_required,
+        FALSE
+      ) AS require_reference_to_pay,
+      COALESCE(
+        CASE WHEN ct0.overrideclientsettings THEN ct0.require_reference_to_invoice ELSE NULL::boolean END,
+        ch0.invoice_reference_required,
+        FALSE
+      ) AS require_reference_to_invoice,
+      0::integer AS evidence_count,
+      FALSE AS has_timesheet_evidence,
+      FALSE AS has_mileage_evidence,
+      FALSE AS has_travel_evidence,
+      FALSE AS has_accommodation_evidence,
+      FALSE AS has_other_evidence,
+      NULL::jsonb AS candidate_hint_text,
+      NULL::numeric AS expenses_pay_ex_vat,
+      NULL::text AS expenses_description,
+      NULL::numeric AS mileage_units,
+      NULL::numeric AS mileage_pay_rate,
+      NULL::numeric AS mileage_charge_rate,
+      NULL::numeric AS mileage_pay_ex_vat,
+      NULL::numeric AS travel_pay_ex_vat,
+      NULL::numeric AS travel_charge_ex_vat,
+      NULL::numeric AS accommodation_pay_ex_vat,
+      NULL::numeric AS accommodation_charge_ex_vat,
+      NULL::numeric AS other_pay_ex_vat,
+      NULL::numeric AS other_charge_ex_vat,
+      NULL::jsonb AS invoice_breakdown_json
+    FROM contract_week_scope_rows AS cw_scope
+    JOIN public.contract_weeks AS cw0
+      ON cw0.id = cw_scope.contract_week_id
+    JOIN public.contracts AS ct0
+      ON ct0.id = cw0.contract_id
+    LEFT JOIN public.candidates AS cand0
+      ON cand0.id = ct0.candidate_id
+    LEFT JOIN public.clients AS cli0
+      ON cli0.id = ct0.client_id
+    LEFT JOIN client_hr AS ch0
+      ON ch0.client_id = ct0.client_id
+  ),
+  base_union AS MATERIALIZED (
+    SELECT
+      tr0.timesheet_id,
+      tr0.timesheet_status,
+      tr0.week_ending_date,
+      tr0.booking_id,
+      tr0.occupant_key_norm,
+      tr0.hospital_norm,
+      tr0.sheet_scope,
+      tr0.submission_mode,
+      tr0.authorised_at_server,
+      tr0.candidate_id,
+      tr0.client_id,
+      tr0.pay_method,
+      tr0.processing_status,
+      tr0.basis,
+      tr0.total_hours,
+      tr0.total_pay_ex_vat,
+      tr0.total_charge_ex_vat,
+      tr0.margin_ex_vat,
+      tr0.paid_at_utc,
+      tr0.pay_on_hold,
+      tr0.locked_by_invoice_id,
+      tr0.candidate_name,
+      tr0.client_name,
+      tr0.nhsp_shift_count,
+      tr0.nhsp_shift_included_count,
+      tr0.nhsp_shift_deferred_count,
+      tr0.validation_status,
+      tr0.contract_week_id,
+      tr0.contract_week_ending_date,
+      tr0.contract_week_status,
+      tr0.additional_seq,
+      tr0.is_adjustment,
+      tr0.qr_status,
+      tr0.qr_token,
+      tr0.qr_generated_at,
+      tr0.qr_scanned_at,
+      tr0.qr_last_sent_hash,
+      tr0.pay_adjustment_count,
+      tr0.client_autoprocess_hr,
+      tr0.client_requires_hr,
+      tr0.client_no_timesheet_required,
+      tr0.client_pay_reference_required,
+      tr0.client_invoice_reference_required,
+      tr0.client_hr_validation_required,
+      tr0.client_ts_reference_required,
+      tr0.client_is_nhsp,
+      tr0.has_rate_issue,
+      tr0.has_pay_channel_issue,
+      tr0.hr_crosscheck_status,
+      tr0.hr_crosscheck_issues,
+      tr0.external_source_rows_json,
+      tr0.reference_number,
+      tr0.day_references_json,
+      tr0.actual_schedule_json,
+      tr0.r2_nurse_key,
+      tr0.r2_auth_key,
+      tr0.manual_pdf_r2_key,
+      tr0.require_reference_to_pay,
+      tr0.require_reference_to_invoice,
+      tr0.evidence_count,
+      tr0.has_timesheet_evidence,
+      tr0.has_mileage_evidence,
+      tr0.has_travel_evidence,
+      tr0.has_accommodation_evidence,
+      tr0.has_other_evidence,
+      tr0.candidate_hint_text,
+      tr0.expenses_pay_ex_vat,
+      tr0.expenses_description,
+      tr0.mileage_units,
+      tr0.mileage_pay_rate,
+      tr0.mileage_charge_rate,
+      tr0.mileage_pay_ex_vat,
+      tr0.travel_pay_ex_vat,
+      tr0.travel_charge_ex_vat,
+      tr0.accommodation_pay_ex_vat,
+      tr0.accommodation_charge_ex_vat,
+      tr0.other_pay_ex_vat,
+      tr0.other_charge_ex_vat,
+      tr0.invoice_breakdown_json
+    FROM timesheet_rows AS tr0
+    UNION ALL
+    SELECT
+      pwr0.timesheet_id,
+      pwr0.timesheet_status,
+      pwr0.week_ending_date,
+      pwr0.booking_id,
+      pwr0.occupant_key_norm,
+      pwr0.hospital_norm,
+      pwr0.sheet_scope,
+      pwr0.submission_mode,
+      pwr0.authorised_at_server,
+      pwr0.candidate_id,
+      pwr0.client_id,
+      pwr0.pay_method,
+      pwr0.processing_status,
+      pwr0.basis,
+      pwr0.total_hours,
+      pwr0.total_pay_ex_vat,
+      pwr0.total_charge_ex_vat,
+      pwr0.margin_ex_vat,
+      pwr0.paid_at_utc,
+      pwr0.pay_on_hold,
+      pwr0.locked_by_invoice_id,
+      pwr0.candidate_name,
+      pwr0.client_name,
+      pwr0.nhsp_shift_count,
+      pwr0.nhsp_shift_included_count,
+      pwr0.nhsp_shift_deferred_count,
+      pwr0.validation_status,
+      pwr0.contract_week_id,
+      pwr0.contract_week_ending_date,
+      pwr0.contract_week_status,
+      pwr0.additional_seq,
+      pwr0.is_adjustment,
+      pwr0.qr_status,
+      pwr0.qr_token,
+      pwr0.qr_generated_at,
+      pwr0.qr_scanned_at,
+      pwr0.qr_last_sent_hash,
+      pwr0.pay_adjustment_count,
+      pwr0.client_autoprocess_hr,
+      pwr0.client_requires_hr,
+      pwr0.client_no_timesheet_required,
+      pwr0.client_pay_reference_required,
+      pwr0.client_invoice_reference_required,
+      pwr0.client_hr_validation_required,
+      pwr0.client_ts_reference_required,
+      pwr0.client_is_nhsp,
+      pwr0.has_rate_issue,
+      pwr0.has_pay_channel_issue,
+      pwr0.hr_crosscheck_status,
+      pwr0.hr_crosscheck_issues,
+      pwr0.external_source_rows_json,
+      pwr0.reference_number,
+      pwr0.day_references_json,
+      pwr0.actual_schedule_json,
+      pwr0.r2_nurse_key,
+      pwr0.r2_auth_key,
+      pwr0.manual_pdf_r2_key,
+      pwr0.require_reference_to_pay,
+      pwr0.require_reference_to_invoice,
+      pwr0.evidence_count,
+      pwr0.has_timesheet_evidence,
+      pwr0.has_mileage_evidence,
+      pwr0.has_travel_evidence,
+      pwr0.has_accommodation_evidence,
+      pwr0.has_other_evidence,
+      pwr0.candidate_hint_text,
+      pwr0.expenses_pay_ex_vat,
+      pwr0.expenses_description,
+      pwr0.mileage_units,
+      pwr0.mileage_pay_rate,
+      pwr0.mileage_charge_rate,
+      pwr0.mileage_pay_ex_vat,
+      pwr0.travel_pay_ex_vat,
+      pwr0.travel_charge_ex_vat,
+      pwr0.accommodation_pay_ex_vat,
+      pwr0.accommodation_charge_ex_vat,
+      pwr0.other_pay_ex_vat,
+      pwr0.other_charge_ex_vat,
+      pwr0.invoice_breakdown_json
+    FROM planned_week_rows AS pwr0
+  ),
+  issue_rows AS MATERIALIZED (
+    SELECT
+      bu0.*,
+      (
+        ARRAY[]::text[]
+        || CASE
+             WHEN COALESCE(bu0.has_rate_issue, FALSE) = TRUE OR bu0.processing_status = 'RATE_MISSING'::public.ts_fin_processing_status_enum THEN ARRAY['Rate'::text]
+             ELSE ARRAY[]::text[]
+           END
+        || CASE
+             WHEN COALESCE(bu0.has_pay_channel_issue, FALSE) = TRUE OR bu0.processing_status = 'PAY_CHANNEL_MISSING'::public.ts_fin_processing_status_enum THEN ARRAY['Pay channel'::text]
+             ELSE ARRAY[]::text[]
+           END
+        || CASE
+             WHEN bu0.processing_status = 'UNASSIGNED'::public.ts_fin_processing_status_enum THEN ARRAY['Candidate ID'::text]
+             WHEN bu0.processing_status = 'CLIENT_UNRESOLVED'::public.ts_fin_processing_status_enum THEN ARRAY['Client ID'::text]
+             ELSE ARRAY[]::text[]
+           END
+        || CASE
+             WHEN COALESCE(bu0.pay_on_hold, FALSE) = TRUE THEN ARRAY['On hold'::text]
+             ELSE ARRAY[]::text[]
+           END
+        || CASE
+             WHEN NOT (
+                    bu0.timesheet_id IS NOT NULL
+                    AND COALESCE(bu0.client_hr_validation_required, FALSE) = TRUE
+                    AND COALESCE(bu0.client_no_timesheet_required, FALSE) = FALSE
+                    AND COALESCE(bu0.total_hours, 0::numeric) > 0::numeric
+                  )
+              AND (
+                    bu0.hr_crosscheck_status = 'HOURS_MISMATCH_HR'
+                    OR COALESCE(bu0.hr_crosscheck_issues, ARRAY[]::text[]) && ARRAY['HOURS_MISMATCH_HR'::text]
+                  ) THEN ARRAY['Hours mismatch HR'::text]
+             ELSE ARRAY[]::text[]
+           END
+        || CASE
+             WHEN NOT (
+                    bu0.timesheet_id IS NOT NULL
+                    AND COALESCE(bu0.client_hr_validation_required, FALSE) = TRUE
+                    AND COALESCE(bu0.client_no_timesheet_required, FALSE) = FALSE
+                    AND COALESCE(bu0.total_hours, 0::numeric) > 0::numeric
+                  )
+              AND COALESCE(bu0.hr_crosscheck_issues, ARRAY[]::text[]) && ARRAY['HR_HOURS_MISSING'::text] THEN ARRAY['HR hours missing'::text]
+             ELSE ARRAY[]::text[]
+           END
+        || CASE
+             WHEN COALESCE(bu0.hr_crosscheck_issues, ARRAY[]::text[]) && ARRAY['DUPLICATE_CONTRACTS'::text] THEN ARRAY['Duplicate contracts'::text]
+             ELSE ARRAY[]::text[]
+           END
+        || CASE
+             WHEN bu0.timesheet_id IS NOT NULL
+              AND COALESCE(bu0.client_requires_hr, FALSE) = TRUE
+              AND COALESCE(bu0.client_no_timesheet_required, FALSE) = FALSE
+              AND bu0.sheet_scope = 'WEEKLY'::public.timesheet_scope_enum
+              AND COALESCE(bu0.total_hours, 0::numeric) > 0::numeric
+              AND NOT (
+                    COALESCE(bu0.evidence_count, 0) > 0
+                    OR (bu0.submission_mode = 'ELECTRONIC'::public.submission_mode_enum AND bu0.r2_nurse_key IS NOT NULL AND bu0.r2_auth_key IS NOT NULL)
+                    OR (bu0.submission_mode = 'MANUAL'::public.submission_mode_enum AND bu0.manual_pdf_r2_key IS NOT NULL)
+                  ) THEN ARRAY['Timesheet evidence'::text]
+             ELSE ARRAY[]::text[]
+           END
+        || CASE
+             WHEN bu0.timesheet_id IS NOT NULL
+              AND (
+                    COALESCE(bu0.travel_charge_ex_vat, 0::numeric) > 0::numeric
+                    OR COALESCE(bu0.travel_pay_ex_vat, 0::numeric) > 0::numeric
+                    OR COALESCE(bu0.accommodation_charge_ex_vat, 0::numeric) > 0::numeric
+                    OR COALESCE(bu0.accommodation_pay_ex_vat, 0::numeric) > 0::numeric
+                    OR COALESCE(bu0.other_charge_ex_vat, 0::numeric) > 0::numeric
+                    OR COALESCE(bu0.other_pay_ex_vat, 0::numeric) > 0::numeric
+                  )
+              AND (
+                    ((COALESCE(bu0.travel_charge_ex_vat, 0::numeric) > 0::numeric OR COALESCE(bu0.travel_pay_ex_vat, 0::numeric) > 0::numeric) AND COALESCE(bu0.has_travel_evidence, FALSE) = FALSE)
+                    OR ((COALESCE(bu0.accommodation_charge_ex_vat, 0::numeric) > 0::numeric OR COALESCE(bu0.accommodation_pay_ex_vat, 0::numeric) > 0::numeric) AND COALESCE(bu0.has_accommodation_evidence, FALSE) = FALSE)
+                    OR ((COALESCE(bu0.other_charge_ex_vat, 0::numeric) > 0::numeric OR COALESCE(bu0.other_pay_ex_vat, 0::numeric) > 0::numeric) AND COALESCE(bu0.has_other_evidence, FALSE) = FALSE)
+                  ) THEN ARRAY['Expenses evidence'::text]
+             ELSE ARRAY[]::text[]
+           END
+        || CASE
+             WHEN bu0.timesheet_id IS NOT NULL
+              AND (
+                    COALESCE(bu0.mileage_units, 0::numeric) > 0::numeric
+                    OR COALESCE(bu0.mileage_charge_ex_vat, 0::numeric) > 0::numeric
+                    OR COALESCE(bu0.mileage_pay_ex_vat, 0::numeric) > 0::numeric
+                  )
+              AND COALESCE(bu0.has_mileage_evidence, FALSE) = FALSE THEN ARRAY['Mileage evidence'::text]
+             ELSE ARRAY[]::text[]
+           END
+        || CASE
+             WHEN bu0.timesheet_id IS NOT NULL
+              AND bu0.sheet_scope = 'DAILY'::public.timesheet_scope_enum
+              AND COALESCE(bu0.total_hours, 0::numeric) > 0::numeric
+              AND (
+                    COALESCE(bu0.require_reference_to_pay, FALSE)
+                    OR COALESCE(bu0.require_reference_to_invoice, FALSE)
+                    OR COALESCE(bu0.client_ts_reference_required, FALSE)
+                    OR COALESCE(bu0.client_pay_reference_required, FALSE)
+                    OR COALESCE(bu0.client_invoice_reference_required, FALSE)
+                  )
+              AND NULLIF(BTRIM(COALESCE(bu0.reference_number, '')), '') IS NULL THEN ARRAY['Reference'::text]
+             ELSE ARRAY[]::text[]
+           END
+        || CASE
+             WHEN bu0.timesheet_id IS NOT NULL
+              AND bu0.sheet_scope = 'WEEKLY'::public.timesheet_scope_enum
+              AND COALESCE(bu0.total_hours, 0::numeric) > 0::numeric
+              AND (
+                    COALESCE(bu0.require_reference_to_pay, FALSE)
+                    OR COALESCE(bu0.require_reference_to_invoice, FALSE)
+                    OR (
+                      COALESCE(bu0.require_reference_to_pay, FALSE) = FALSE
+                      AND COALESCE(bu0.require_reference_to_invoice, FALSE) = FALSE
+                      AND (
+                        COALESCE(bu0.client_pay_reference_required, FALSE)
+                        OR COALESCE(bu0.client_invoice_reference_required, FALSE)
+                        OR COALESCE(bu0.client_ts_reference_required, FALSE)
+                      )
+                    )
+                  )
+              AND (
+                    (
+                      bu0.invoice_breakdown_json IS NOT NULL
+                      AND jsonb_typeof(bu0.invoice_breakdown_json) = 'object'
+                      AND UPPER(COALESCE(bu0.invoice_breakdown_json->>'mode', '')) = 'SEGMENTS'
+                      AND jsonb_typeof(bu0.invoice_breakdown_json->'segments') = 'array'
+                      AND EXISTS (
+                        SELECT 1
+                        FROM jsonb_array_elements(
+                          CASE
+                            WHEN bu0.invoice_breakdown_json IS NOT NULL
+                             AND jsonb_typeof(bu0.invoice_breakdown_json) = 'object'
+                             AND UPPER(COALESCE(bu0.invoice_breakdown_json->>'mode', '')) = 'SEGMENTS'
+                             AND jsonb_typeof(bu0.invoice_breakdown_json->'segments') = 'array' THEN bu0.invoice_breakdown_json->'segments'
+                            ELSE '[]'::jsonb
+                          END
+                        ) AS weekly_segment_ref(segment_value)
+                        WHERE NULLIF(BTRIM(COALESCE(weekly_segment_ref.segment_value->>'invoice_locked_invoice_id', '')), '') IS NULL
+                          AND (
+                            CASE WHEN NULLIF(BTRIM(COALESCE(weekly_segment_ref.segment_value->>'hours_day', '')), '') ~ v_numeric_re THEN (weekly_segment_ref.segment_value->>'hours_day')::numeric ELSE 0::numeric END
+                            + CASE WHEN NULLIF(BTRIM(COALESCE(weekly_segment_ref.segment_value->>'hours_night', '')), '') ~ v_numeric_re THEN (weekly_segment_ref.segment_value->>'hours_night')::numeric ELSE 0::numeric END
+                            + CASE WHEN NULLIF(BTRIM(COALESCE(weekly_segment_ref.segment_value->>'hours_sat', '')), '') ~ v_numeric_re THEN (weekly_segment_ref.segment_value->>'hours_sat')::numeric ELSE 0::numeric END
+                            + CASE WHEN NULLIF(BTRIM(COALESCE(weekly_segment_ref.segment_value->>'hours_sun', '')), '') ~ v_numeric_re THEN (weekly_segment_ref.segment_value->>'hours_sun')::numeric ELSE 0::numeric END
+                            + CASE WHEN NULLIF(BTRIM(COALESCE(weekly_segment_ref.segment_value->>'hours_bh', '')), '') ~ v_numeric_re THEN (weekly_segment_ref.segment_value->>'hours_bh')::numeric ELSE 0::numeric END
+                          ) > 0::numeric
+                          AND NULLIF(BTRIM(COALESCE(weekly_segment_ref.segment_value->>'ref_num', '')), '') IS NULL
+                      )
+                    )
+                    OR (
+                      bu0.submission_mode = 'MANUAL'::public.submission_mode_enum
+                      AND (
+                        bu0.actual_schedule_json IS NULL
+                        OR jsonb_typeof(bu0.actual_schedule_json) <> 'array'
+                        OR jsonb_array_length(
+                          CASE
+                            WHEN bu0.actual_schedule_json IS NOT NULL AND jsonb_typeof(bu0.actual_schedule_json) = 'array' THEN bu0.actual_schedule_json
+                            ELSE '[]'::jsonb
+                          END
+                        ) = 0
+                        OR EXISTS (
+                          SELECT 1
+                          FROM jsonb_array_elements(
+                            CASE
+                              WHEN bu0.actual_schedule_json IS NOT NULL AND jsonb_typeof(bu0.actual_schedule_json) = 'array' THEN bu0.actual_schedule_json
+                              ELSE '[]'::jsonb
+                            END
+                          ) AS weekly_actual_ref(segment_value)
+                          WHERE NULLIF(BTRIM(COALESCE(weekly_actual_ref.segment_value->>'start', '')), '') IS NOT NULL
+                            AND NULLIF(BTRIM(COALESCE(weekly_actual_ref.segment_value->>'end', '')), '') IS NOT NULL
+                            AND NULLIF(BTRIM(COALESCE(weekly_actual_ref.segment_value->>'ref_num', '')), '') IS NULL
+                        )
+                      )
+                    )
+                    OR (
+                      bu0.submission_mode <> 'MANUAL'::public.submission_mode_enum
+                      AND NOT (
+                        EXISTS (
+                          SELECT 1
+                          FROM jsonb_array_elements_text(
+                            CASE
+                              WHEN bu0.day_references_json IS NOT NULL AND jsonb_typeof(bu0.day_references_json) = 'object' AND jsonb_typeof(bu0.day_references_json->'__freeform_refs') = 'array' THEN bu0.day_references_json->'__freeform_refs'
+                              WHEN bu0.day_references_json IS NOT NULL AND jsonb_typeof(bu0.day_references_json) = 'object' AND jsonb_typeof(bu0.day_references_json->'__freeform') = 'array' THEN bu0.day_references_json->'__freeform'
+                              WHEN bu0.day_references_json IS NOT NULL AND jsonb_typeof(bu0.day_references_json) = 'object' AND jsonb_typeof(bu0.day_references_json->'__freeform_lines') = 'array' THEN bu0.day_references_json->'__freeform_lines'
+                              WHEN bu0.day_references_json IS NOT NULL AND jsonb_typeof(bu0.day_references_json) = 'array' THEN bu0.day_references_json
+                              ELSE '[]'::jsonb
+                            END
+                          ) AS day_ref_text(value_text)
+                          WHERE NULLIF(BTRIM(COALESCE(day_ref_text.value_text, '')), '') IS NOT NULL
+                        )
+                        OR EXISTS (
+                          SELECT 1
+                          FROM jsonb_each_text(
+                            CASE
+                              WHEN bu0.day_references_json IS NOT NULL AND jsonb_typeof(bu0.day_references_json) = 'object' THEN bu0.day_references_json
+                              ELSE '{}'::jsonb
+                            END
+                          ) AS day_ref_entry(key_name, value_text)
+                          WHERE NULLIF(BTRIM(COALESCE(day_ref_entry.value_text, '')), '') IS NOT NULL
+                            AND LEFT(COALESCE(day_ref_entry.key_name, ''), 2) <> '__'
+                        )
+                      )
+                    )
+                  ) THEN ARRAY['Reference'::text]
+             ELSE ARRAY[]::text[]
+           END
+        || CASE
+             WHEN bu0.timesheet_id IS NOT NULL
+              AND COALESCE(bu0.client_hr_validation_required, FALSE) = TRUE
+              AND COALESCE(bu0.client_no_timesheet_required, FALSE) = FALSE
+              AND COALESCE(bu0.total_hours, 0::numeric) > 0::numeric
+              AND (bu0.validation_status IS NULL OR bu0.validation_status = 'PENDING'::public.validation_status_enum) THEN ARRAY['Awaiting validation'::text]
+             WHEN bu0.timesheet_id IS NOT NULL
+              AND COALESCE(bu0.client_hr_validation_required, FALSE) = TRUE
+              AND COALESCE(bu0.client_no_timesheet_required, FALSE) = FALSE
+              AND COALESCE(bu0.total_hours, 0::numeric) > 0::numeric
+              AND bu0.validation_status IS NOT NULL
+              AND bu0.validation_status <> ALL (ARRAY['VALIDATION_OK'::public.validation_status_enum, 'OVERRIDDEN'::public.validation_status_enum, 'PENDING'::public.validation_status_enum]) THEN ARRAY['Validation failed'::text]
+             ELSE ARRAY[]::text[]
+           END
+        || CASE
+             WHEN bu0.timesheet_id IS NOT NULL
+              AND COALESCE(bu0.client_requires_hr, FALSE) = TRUE
+              AND COALESCE(bu0.client_autoprocess_hr, FALSE) = FALSE
+              AND bu0.authorised_at_server IS NULL THEN ARRAY['Authorisation'::text]
+             ELSE ARRAY[]::text[]
+           END
+        || CASE
+             WHEN bu0.timesheet_id IS NOT NULL
+              AND bu0.qr_status = 'PENDING'::public.timesheet_qr_status_enum
+              AND (
+                    (NULLIF(BTRIM(COALESCE(bu0.qr_token, '')), '') IS NOT NULL AND bu0.qr_generated_at IS NOT NULL)
+                    OR NULLIF(BTRIM(COALESCE(bu0.qr_last_sent_hash, '')), '') IS NOT NULL
+                  )
+              AND bu0.qr_scanned_at IS NULL
+              AND COALESCE(bu0.total_hours, 0::numeric) > 0::numeric THEN ARRAY['Awaiting signed QR timesheet'::text]
+             ELSE ARRAY[]::text[]
+           END
+      ) AS lightweight_issue_codes
+    FROM base_union AS bu0
+  ),
+  segment_rows AS MATERIALIZED (
+    SELECT
+      ir0.*,
+      segment_stats.seg_total AS invoice_segments_total_calc,
+      segment_stats.seg_locked AS invoice_segments_locked_calc,
+      COALESCE(invoice_paid_stats.invoice_paid_any, FALSE) AS invoice_is_paid_calc
+    FROM issue_rows AS ir0
+    LEFT JOIN LATERAL (
+      SELECT
+        CASE
+          WHEN ir0.timesheet_id IS NULL THEN NULL::integer
+          WHEN ir0.invoice_breakdown_json IS NOT NULL
+           AND jsonb_typeof(ir0.invoice_breakdown_json) = 'object'
+           AND UPPER(COALESCE(ir0.invoice_breakdown_json->>'mode', '')) = 'SEGMENTS'
+           AND jsonb_typeof(ir0.invoice_breakdown_json->'segments') = 'array' THEN jsonb_array_length(ir0.invoice_breakdown_json->'segments')::integer
+          ELSE 1::integer
+        END AS seg_total,
+        CASE
+          WHEN ir0.timesheet_id IS NULL THEN NULL::integer
+          WHEN ir0.invoice_breakdown_json IS NOT NULL
+           AND jsonb_typeof(ir0.invoice_breakdown_json) = 'object'
+           AND UPPER(COALESCE(ir0.invoice_breakdown_json->>'mode', '')) = 'SEGMENTS'
+           AND jsonb_typeof(ir0.invoice_breakdown_json->'segments') = 'array' THEN (
+             SELECT COUNT(*)::integer
+             FROM jsonb_array_elements(ir0.invoice_breakdown_json->'segments') AS lock_segment(segment_value)
+             WHERE NULLIF(BTRIM(COALESCE(lock_segment.segment_value->>'invoice_locked_invoice_id', '')), '') IS NOT NULL
+           )
+          ELSE CASE WHEN ir0.locked_by_invoice_id IS NULL THEN 0::integer ELSE 1::integer END
+        END AS seg_locked
+    ) AS segment_stats
+      ON TRUE
+    LEFT JOIN LATERAL (
+      SELECT
+        CASE
+          WHEN ir0.timesheet_id IS NULL THEN FALSE
+          WHEN ir0.invoice_breakdown_json IS NOT NULL
+           AND jsonb_typeof(ir0.invoice_breakdown_json) = 'object'
+           AND UPPER(COALESCE(ir0.invoice_breakdown_json->>'mode', '')) = 'SEGMENTS'
+           AND jsonb_typeof(ir0.invoice_breakdown_json->'segments') = 'array' THEN EXISTS (
+             SELECT 1
+             FROM jsonb_array_elements(ir0.invoice_breakdown_json->'segments') AS paid_segment(segment_value)
+             JOIN public.invoices AS inv2
+               ON inv2.id = CASE
+                 WHEN NULLIF(BTRIM(COALESCE(paid_segment.segment_value->>'invoice_locked_invoice_id', '')), '') ~* v_uuid_re THEN (paid_segment.segment_value->>'invoice_locked_invoice_id')::uuid
+                 ELSE NULL::uuid
+               END
+             WHERE inv2.status = 'PAID'::public.invoice_status_enum
+                OR inv2.paid_at_utc IS NOT NULL
+           )
+          ELSE EXISTS (
+             SELECT 1
+             FROM public.invoices AS inv3
+             WHERE inv3.id = ir0.locked_by_invoice_id
+               AND (inv3.status = 'PAID'::public.invoice_status_enum OR inv3.paid_at_utc IS NOT NULL)
+           )
+        END AS invoice_paid_any
+    ) AS invoice_paid_stats
+      ON TRUE
+  ),
+  issue_normalised_rows AS MATERIALIZED (
+    SELECT
+      sr0.*,
+      array_remove(array_remove(COALESCE(sr0.lightweight_issue_codes, ARRAY[]::text[]), 'Reference'::text), 'Timesheet evidence'::text) AS workbench_issue_codes
+    FROM segment_rows AS sr0
+  ),
+  result_rows AS MATERIALIZED (
+    SELECT
+      sr0.timesheet_id,
+      sr0.timesheet_status,
+      sr0.week_ending_date,
+      sr0.booking_id,
+      sr0.occupant_key_norm,
+      sr0.hospital_norm,
+      sr0.sheet_scope,
+      sr0.submission_mode,
+      sr0.authorised_at_server,
+      sr0.candidate_id,
+      sr0.client_id,
+      sr0.pay_method,
+      sr0.processing_status,
+      sr0.basis,
+      sr0.total_hours,
+      sr0.total_pay_ex_vat,
+      sr0.total_charge_ex_vat,
+      sr0.margin_ex_vat,
+      sr0.paid_at_utc,
+      sr0.pay_on_hold,
+      FALSE AS ready_to_pay,
+      sr0.locked_by_invoice_id,
+      sr0.candidate_name,
+      sr0.client_name,
+      sr0.nhsp_shift_count,
+      sr0.nhsp_shift_included_count,
+      sr0.nhsp_shift_deferred_count,
+      sr0.validation_status,
+      CASE
+        WHEN sr0.timesheet_id IS NULL THEN CASE sr0.contract_week_status
+          WHEN 'PLANNED'::public.contract_week_status_enum THEN 'PLANNED'
+          WHEN 'OPEN'::public.contract_week_status_enum THEN 'PLANNED'
+          WHEN 'SUBMITTED'::public.contract_week_status_enum THEN 'PENDING_AUTH'
+          WHEN 'AUTHORISED'::public.contract_week_status_enum THEN 'READY_FOR_INVOICE'
+          WHEN 'INVOICED'::public.contract_week_status_enum THEN 'INVOICED'
+          WHEN 'CANCELLED'::public.contract_week_status_enum THEN 'NEEDS_ATTENTION'
+          ELSE 'UNKNOWN'
+        END
+        WHEN sr0.paid_at_utc IS NOT NULL THEN 'PAID'
+        WHEN sr0.locked_by_invoice_id IS NOT NULL
+          OR (
+            sr0.invoice_segments_total_calc IS NOT NULL
+            AND sr0.invoice_segments_total_calc > 0
+            AND COALESCE(sr0.invoice_segments_locked_calc, 0) >= sr0.invoice_segments_total_calc
+          ) THEN 'INVOICED'
+        WHEN sr0.timesheet_id IS NOT NULL
+         AND sr0.qr_status = 'PENDING'::public.timesheet_qr_status_enum
+         AND NULLIF(BTRIM(COALESCE(sr0.qr_token, '')), '') IS NULL
+         AND sr0.qr_generated_at IS NULL THEN 'QR_NOT_ISSUED'
+        WHEN sr0.timesheet_id IS NOT NULL
+         AND sr0.qr_status = 'PENDING'::public.timesheet_qr_status_enum
+         AND NULLIF(BTRIM(COALESCE(sr0.qr_token, '')), '') IS NOT NULL
+         AND sr0.qr_generated_at IS NOT NULL
+         AND sr0.qr_scanned_at IS NULL THEN 'QR_ISSUED_AWAITING_SIGNATURE'
+        WHEN sr0.processing_status = 'READY_FOR_INVOICE'::public.ts_fin_processing_status_enum THEN 'READY_FOR_INVOICE'
+        WHEN sr0.processing_status = 'READY_FOR_HR'::public.ts_fin_processing_status_enum THEN 'READY_FOR_HR'
+        WHEN sr0.processing_status = 'PENDING_AUTH'::public.ts_fin_processing_status_enum THEN 'PENDING_AUTH'
+        WHEN sr0.processing_status = 'UNPROCESSED'::public.ts_fin_processing_status_enum THEN 'UNPROCESSED'
+        WHEN sr0.processing_status = ANY (ARRAY['UNASSIGNED'::public.ts_fin_processing_status_enum, 'CLIENT_UNRESOLVED'::public.ts_fin_processing_status_enum, 'RATE_MISSING'::public.ts_fin_processing_status_enum, 'PAY_CHANNEL_MISSING'::public.ts_fin_processing_status_enum]) THEN 'NEEDS_ATTENTION'
+        ELSE 'UNKNOWN'
+      END AS summary_stage,
+      CASE
+        WHEN sr0.sheet_scope = 'DAILY'::public.timesheet_scope_enum AND sr0.submission_mode = 'ELECTRONIC'::public.submission_mode_enum THEN 'DAILY_ELECTRONIC'
+        WHEN sr0.sheet_scope = 'DAILY'::public.timesheet_scope_enum AND sr0.submission_mode = 'MANUAL'::public.submission_mode_enum THEN 'DAILY_MANUAL'
+        WHEN sr0.sheet_scope = 'WEEKLY'::public.timesheet_scope_enum AND COALESCE(sr0.client_autoprocess_hr, FALSE) = TRUE THEN 'WEEKLY_HEALTHROSTER'
+        WHEN sr0.sheet_scope = 'WEEKLY'::public.timesheet_scope_enum AND sr0.basis = 'NHSP_ADJUSTMENT'::public.timesheet_fin_basis_enum THEN 'WEEKLY_NHSP_ADJUSTMENT'
+        WHEN sr0.sheet_scope = 'WEEKLY'::public.timesheet_scope_enum AND sr0.basis = 'NHSP'::public.timesheet_fin_basis_enum THEN 'WEEKLY_NHSP'
+        WHEN sr0.sheet_scope = 'WEEKLY'::public.timesheet_scope_enum AND COALESCE(sr0.client_is_nhsp, FALSE) = TRUE THEN 'WEEKLY_NHSP'
+        WHEN sr0.sheet_scope = 'WEEKLY'::public.timesheet_scope_enum AND sr0.submission_mode = 'ELECTRONIC'::public.submission_mode_enum THEN 'WEEKLY_ELECTRONIC'
+        WHEN sr0.sheet_scope = 'WEEKLY'::public.timesheet_scope_enum AND sr0.submission_mode = 'MANUAL'::public.submission_mode_enum THEN 'WEEKLY_MANUAL'
+        ELSE 'UNKNOWN'
+      END AS route_type,
+      sr0.contract_week_id,
+      sr0.contract_week_ending_date,
+      sr0.contract_week_status,
+      sr0.additional_seq,
+      sr0.is_adjustment,
+      sr0.qr_status,
+      sr0.pay_adjustment_count,
+      (COALESCE(sr0.pay_adjustment_count, 0) > 0) AS has_pay_adjustments,
+      (COALESCE(sr0.is_adjustment, FALSE) OR COALESCE(sr0.pay_adjustment_count, 0) > 0) AS is_adjusted,
+      (sr0.qr_status IS NOT NULL) AS is_qr,
+      (
+        sr0.processing_status = ANY (ARRAY['UNASSIGNED'::public.ts_fin_processing_status_enum, 'CLIENT_UNRESOLVED'::public.ts_fin_processing_status_enum, 'RATE_MISSING'::public.ts_fin_processing_status_enum, 'PAY_CHANNEL_MISSING'::public.ts_fin_processing_status_enum])
+        OR (
+          NOT (
+            sr0.timesheet_id IS NOT NULL
+            AND COALESCE(sr0.client_hr_validation_required, FALSE) = TRUE
+            AND COALESCE(sr0.client_no_timesheet_required, FALSE) = FALSE
+            AND COALESCE(sr0.total_hours, 0::numeric) > 0::numeric
+          )
+          AND sr0.hr_crosscheck_status IS NOT NULL
+          AND sr0.hr_crosscheck_status <> 'OK'
+        )
+        OR (
+          NOT (
+            sr0.timesheet_id IS NOT NULL
+            AND COALESCE(sr0.client_hr_validation_required, FALSE) = TRUE
+            AND COALESCE(sr0.client_no_timesheet_required, FALSE) = FALSE
+            AND COALESCE(sr0.total_hours, 0::numeric) > 0::numeric
+          )
+          AND COALESCE(sr0.hr_crosscheck_issues, ARRAY[]::text[]) && ARRAY['DUPLICATE_CONTRACTS'::text]
+        )
+        OR COALESCE(array_length(sr0.workbench_issue_codes, 1), 0) > 0
+      ) AS needs_attention,
+      sr0.client_autoprocess_hr,
+      sr0.has_rate_issue,
+      sr0.has_pay_channel_issue,
+      sr0.hr_crosscheck_status,
+      sr0.hr_crosscheck_issues,
+      sr0.external_source_rows_json,
+      COALESCE(sr0.workbench_issue_codes, ARRAY[]::text[]) AS issue_codes,
+      sr0.client_requires_hr,
+      sr0.client_no_timesheet_required,
+      sr0.client_is_nhsp,
+      sr0.client_pay_reference_required,
+      sr0.client_invoice_reference_required,
+      sr0.client_hr_validation_required,
+      sr0.client_ts_reference_required,
+      sr0.require_reference_to_pay,
+      sr0.require_reference_to_invoice,
+      sr0.qr_token,
+      sr0.qr_generated_at,
+      sr0.qr_scanned_at,
+      sr0.candidate_hint_text,
+      sr0.expenses_pay_ex_vat,
+      sr0.expenses_description,
+      sr0.mileage_units,
+      sr0.mileage_pay_rate,
+      sr0.mileage_charge_rate,
+      sr0.mileage_pay_ex_vat,
+      sr0.travel_pay_ex_vat,
+      sr0.travel_charge_ex_vat,
+      sr0.accommodation_pay_ex_vat,
+      sr0.accommodation_charge_ex_vat,
+      sr0.other_pay_ex_vat,
+      sr0.other_charge_ex_vat,
+      (
+        sr0.timesheet_id IS NOT NULL
+        AND COALESCE(sr0.client_hr_validation_required, FALSE) = TRUE
+        AND COALESCE(sr0.client_no_timesheet_required, FALSE) = FALSE
+        AND COALESCE(sr0.total_hours, 0::numeric) > 0::numeric
+      ) AS hr_validation_required_for_invoice,
+      sr0.invoice_segments_total_calc AS invoice_segments_total,
+      sr0.invoice_segments_locked_calc AS invoice_segments_locked,
+      CASE
+        WHEN sr0.invoice_segments_total_calc IS NULL THEN NULL::integer
+        ELSE GREATEST(sr0.invoice_segments_total_calc - COALESCE(sr0.invoice_segments_locked_calc, 0), 0)
+      END AS invoice_segments_unlocked,
+      CASE
+        WHEN sr0.invoice_segments_total_calc IS NULL THEN NULL::text
+        WHEN COALESCE(sr0.invoice_segments_locked_calc, 0) = 0 THEN 'NOT_INVOICED'
+        WHEN COALESCE(sr0.invoice_segments_locked_calc, 0) >= sr0.invoice_segments_total_calc THEN 'FULLY_INVOICED'
+        ELSE 'PARTIALLY_INVOICED'
+      END AS invoice_segment_stage,
+      CASE
+        WHEN sr0.timesheet_id IS NULL THEN 'UNPROCESSED'
+        WHEN sr0.processing_status = 'UNPROCESSED'::public.ts_fin_processing_status_enum THEN 'UNPROCESSED'
+        WHEN sr0.locked_by_invoice_id IS NOT NULL OR COALESCE(sr0.invoice_segments_locked_calc, 0) > 0 THEN 'INVOICED'
+        WHEN sr0.timesheet_id IS NOT NULL
+         AND sr0.authorised_at_server IS NULL
+         AND (
+           sr0.processing_status = 'PENDING_AUTH'::public.ts_fin_processing_status_enum
+           OR (
+             COALESCE(sr0.client_requires_hr, FALSE) = TRUE
+             AND COALESCE(sr0.client_autoprocess_hr, FALSE) = FALSE
+             AND COALESCE(array_length(sr0.workbench_issue_codes, 1), 0) = 1
+             AND sr0.workbench_issue_codes @> ARRAY['Authorisation'::text]
+           )
+         ) THEN 'AWAITING_AUTHORISATION'
+        WHEN sr0.timesheet_id IS NOT NULL
+         AND sr0.processing_status = 'READY_FOR_INVOICE'::public.ts_fin_processing_status_enum THEN 'AUTHORISED_FOR_INVOICING'
+        ELSE 'PROCESSING_DELAYED'
+      END AS tools_stage,
+      CASE
+        WHEN sr0.timesheet_id IS NULL THEN 'Unprocessed'
+        WHEN sr0.processing_status = 'UNPROCESSED'::public.ts_fin_processing_status_enum THEN 'Unprocessed'
+        WHEN sr0.locked_by_invoice_id IS NOT NULL OR COALESCE(sr0.invoice_segments_locked_calc, 0) > 0 THEN
+          CASE
+            WHEN sr0.invoice_segments_total_calc IS NOT NULL
+             AND COALESCE(sr0.invoice_segments_locked_calc, 0) > 0
+             AND COALESCE(sr0.invoice_segments_locked_calc, 0) < sr0.invoice_segments_total_calc THEN 'Partially Invoiced'
+            ELSE 'Invoiced'
+          END
+        WHEN sr0.timesheet_id IS NOT NULL
+         AND sr0.workbench_issue_codes @> ARRAY['Awaiting signed QR timesheet'::text] THEN 'Awaiting signed QR timesheet'
+        WHEN sr0.timesheet_id IS NOT NULL
+         AND sr0.authorised_at_server IS NULL
+         AND (
+           sr0.processing_status = 'PENDING_AUTH'::public.ts_fin_processing_status_enum
+           OR (
+             COALESCE(sr0.client_requires_hr, FALSE) = TRUE
+             AND COALESCE(sr0.client_autoprocess_hr, FALSE) = FALSE
+             AND COALESCE(array_length(sr0.workbench_issue_codes, 1), 0) = 1
+             AND sr0.workbench_issue_codes @> ARRAY['Authorisation'::text]
+           )
+         ) THEN 'Awaiting Authorisation'
+        WHEN sr0.timesheet_id IS NOT NULL
+         AND sr0.processing_status = 'READY_FOR_INVOICE'::public.ts_fin_processing_status_enum THEN 'Authorised for Invoicing'
+        ELSE 'Processing Delayed'
+      END AS processing_status_display,
+      COALESCE(sr0.invoice_is_paid_calc, FALSE) AS invoice_is_paid,
+      FALSE AS refs_block_invoicing,
+      FALSE AS refs_block_issuing_invoices,
+      FALSE AS refs_block_invoice_and_issuing,
+      'NONE'::text AS pay_icon_code,
+      NULL::text AS pay_status_code,
+      NULL::timestamp with time zone AS pay_paid_at_utc,
+      0::numeric AS net_delta_ex_vat
+    FROM issue_normalised_rows AS sr0
+  )
+  SELECT
+    rr0.timesheet_id,
+    rr0.timesheet_status,
+    rr0.week_ending_date,
+    rr0.booking_id,
+    rr0.occupant_key_norm,
+    rr0.hospital_norm,
+    rr0.sheet_scope,
+    rr0.submission_mode,
+    rr0.authorised_at_server,
+    rr0.candidate_id,
+    rr0.client_id,
+    rr0.pay_method,
+    rr0.processing_status,
+    rr0.basis,
+    rr0.total_hours,
+    rr0.total_pay_ex_vat,
+    rr0.total_charge_ex_vat,
+    rr0.margin_ex_vat,
+    rr0.paid_at_utc,
+    rr0.pay_on_hold,
+    rr0.ready_to_pay,
+    rr0.locked_by_invoice_id,
+    rr0.candidate_name,
+    rr0.client_name,
+    rr0.nhsp_shift_count,
+    rr0.nhsp_shift_included_count,
+    rr0.nhsp_shift_deferred_count,
+    rr0.validation_status,
+    rr0.summary_stage,
+    rr0.route_type,
+    rr0.contract_week_id,
+    rr0.contract_week_ending_date,
+    rr0.contract_week_status,
+    rr0.additional_seq,
+    rr0.is_adjustment,
+    rr0.qr_status,
+    rr0.pay_adjustment_count,
+    rr0.has_pay_adjustments,
+    rr0.is_adjusted,
+    rr0.is_qr,
+    rr0.needs_attention,
+    rr0.client_autoprocess_hr,
+    rr0.has_rate_issue,
+    rr0.has_pay_channel_issue,
+    rr0.hr_crosscheck_status,
+    rr0.hr_crosscheck_issues,
+    rr0.external_source_rows_json,
+    rr0.issue_codes,
+    rr0.client_requires_hr,
+    rr0.client_no_timesheet_required,
+    rr0.client_is_nhsp,
+    rr0.client_pay_reference_required,
+    rr0.client_invoice_reference_required,
+    rr0.client_hr_validation_required,
+    rr0.client_ts_reference_required,
+    rr0.require_reference_to_pay,
+    rr0.require_reference_to_invoice,
+    rr0.qr_token,
+    rr0.qr_generated_at,
+    rr0.qr_scanned_at,
+    rr0.candidate_hint_text,
+    rr0.expenses_pay_ex_vat,
+    rr0.expenses_description,
+    rr0.mileage_units,
+    rr0.mileage_pay_rate,
+    rr0.mileage_charge_rate,
+    rr0.mileage_pay_ex_vat,
+    rr0.travel_pay_ex_vat,
+    rr0.travel_charge_ex_vat,
+    rr0.accommodation_pay_ex_vat,
+    rr0.accommodation_charge_ex_vat,
+    rr0.other_pay_ex_vat,
+    rr0.other_charge_ex_vat,
+    rr0.hr_validation_required_for_invoice,
+    rr0.invoice_segments_total,
+    rr0.invoice_segments_locked,
+    rr0.invoice_segments_unlocked,
+    rr0.invoice_segment_stage,
+    rr0.tools_stage,
+    rr0.processing_status_display,
+    rr0.invoice_is_paid,
+    rr0.refs_block_invoicing,
+    rr0.refs_block_issuing_invoices,
+    rr0.refs_block_invoice_and_issuing,
+    rr0.pay_icon_code,
+    rr0.pay_status_code,
+    rr0.pay_paid_at_utc,
+    rr0.net_delta_ex_vat
+  FROM result_rows AS rr0
+  WHERE (v_candidate_id IS NULL OR rr0.candidate_id = v_candidate_id)
+    AND (v_client_id IS NULL OR rr0.client_id = v_client_id);
+END;
+$function$;
 
