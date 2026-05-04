@@ -6080,6 +6080,7 @@ BEGIN
 END;
 $function$;
 
+
 CREATE OR REPLACE FUNCTION public.bulk_timesheet_workbench_row_source_v1(p_filters jsonb DEFAULT '{}'::jsonb)
 RETURNS TABLE(
   timesheet_id uuid,
@@ -6429,6 +6430,7 @@ BEGIN
       tf0.mileage_pay_rate,
       tf0.mileage_charge_rate,
       tf0.mileage_pay_ex_vat,
+      tf0.mileage_charge_ex_vat,
       tf0.travel_pay_ex_vat,
       tf0.travel_charge_ex_vat,
       tf0.accommodation_pay_ex_vat,
@@ -6477,6 +6479,7 @@ BEGIN
       tf1.mileage_pay_rate,
       tf1.mileage_charge_rate,
       tf1.mileage_pay_ex_vat,
+      tf1.mileage_charge_ex_vat,
       tf1.travel_pay_ex_vat,
       tf1.travel_charge_ex_vat,
       tf1.accommodation_pay_ex_vat,
@@ -6677,6 +6680,7 @@ BEGIN
       tf2.mileage_pay_rate AS mileage_pay_rate,
       tf2.mileage_charge_rate AS mileage_charge_rate,
       tf2.mileage_pay_ex_vat AS mileage_pay_ex_vat,
+      tf2.mileage_charge_ex_vat AS mileage_charge_ex_vat,
       tf2.travel_pay_ex_vat AS travel_pay_ex_vat,
       tf2.travel_charge_ex_vat AS travel_charge_ex_vat,
       tf2.accommodation_pay_ex_vat AS accommodation_pay_ex_vat,
@@ -6816,6 +6820,7 @@ BEGIN
       NULL::numeric AS mileage_pay_rate,
       NULL::numeric AS mileage_charge_rate,
       NULL::numeric AS mileage_pay_ex_vat,
+      NULL::numeric AS mileage_charge_ex_vat,
       NULL::numeric AS travel_pay_ex_vat,
       NULL::numeric AS travel_charge_ex_vat,
       NULL::numeric AS accommodation_pay_ex_vat,
@@ -6909,6 +6914,7 @@ BEGIN
       tr0.mileage_pay_rate,
       tr0.mileage_charge_rate,
       tr0.mileage_pay_ex_vat,
+      tr0.mileage_charge_ex_vat,
       tr0.travel_pay_ex_vat,
       tr0.travel_charge_ex_vat,
       tr0.accommodation_pay_ex_vat,
@@ -6991,6 +6997,7 @@ BEGIN
       pwr0.mileage_pay_rate,
       pwr0.mileage_charge_rate,
       pwr0.mileage_pay_ex_vat,
+      pwr0.mileage_charge_ex_vat,
       pwr0.travel_pay_ex_vat,
       pwr0.travel_charge_ex_vat,
       pwr0.accommodation_pay_ex_vat,
@@ -7612,4 +7619,6 @@ BEGIN
     AND (v_client_id IS NULL OR rr0.client_id = v_client_id);
 END;
 $function$;
+
+
 
