@@ -19745,7 +19745,6 @@ BEGIN
 END;
 $function$;
 
-
 CREATE OR REPLACE FUNCTION public.pay_workbench_session_get_preview(
   p_session_id uuid
 )
@@ -20397,6 +20396,7 @@ BEGIN
     'pay_date', v_context_json->'pay_date',
     'pay_week_start', v_context_json->'pay_week_start',
     'week_ending_cutoff_date', v_context_json->'week_ending_cutoff_date',
+    'week_ending_cutoff', v_session_row.week_ending_cutoff::text,
     'eligibility', COALESCE(v_context_json->'eligibility', '{}'::jsonb),
     'filters', COALESCE(v_context_json->'filters', '{}'::jsonb),
     'finance', COALESCE(v_context_json->'finance', '{}'::jsonb),
@@ -20415,7 +20415,36 @@ BEGIN
     'paye_guardrails', COALESCE(v_snapshot_run_row.paye_guardrails_json, '{}'::jsonb),
     'session_id', p_session_id::text,
     'snapshot_run_id', CASE WHEN v_session_row.source_snapshot_run_id IS NULL THEN NULL ELSE v_session_row.source_snapshot_run_id::text END,
+    'source_snapshot_run_id', CASE WHEN v_session_row.source_snapshot_run_id IS NULL THEN NULL ELSE v_session_row.source_snapshot_run_id::text END,
     'session_version', v_session_row.version,
+    'session_signature', v_session_row.session_signature,
+    'session', jsonb_build_object(
+      'id', v_session_row.id::text,
+      'session_id', v_session_row.id::text,
+      'pay_date', v_session_row.pay_date::text,
+      'pay_week_start', v_context_json->>'pay_week_start',
+      'week_ending_cutoff', v_session_row.week_ending_cutoff::text,
+      'week_ending_cutoff_date', v_session_row.week_ending_cutoff::text,
+      'snapshot_run_id', CASE WHEN v_session_row.source_snapshot_run_id IS NULL THEN NULL ELSE v_session_row.source_snapshot_run_id::text END,
+      'source_snapshot_run_id', CASE WHEN v_session_row.source_snapshot_run_id IS NULL THEN NULL ELSE v_session_row.source_snapshot_run_id::text END,
+      'session_version', v_session_row.version,
+      'session_signature', v_session_row.session_signature,
+      'server_selected_preview_row_ids', COALESCE(v_session_row.server_selected_preview_row_ids, '[]'::jsonb),
+      'server_selected_preview_row_ids_provided', COALESCE(v_session_row.server_selected_preview_row_ids_provided, false)
+    ),
+    'workbench', jsonb_build_object(
+      'session_id', v_session_row.id::text,
+      'pay_date', v_session_row.pay_date::text,
+      'pay_week_start', v_context_json->>'pay_week_start',
+      'week_ending_cutoff', v_session_row.week_ending_cutoff::text,
+      'week_ending_cutoff_date', v_session_row.week_ending_cutoff::text,
+      'snapshot_run_id', CASE WHEN v_session_row.source_snapshot_run_id IS NULL THEN NULL ELSE v_session_row.source_snapshot_run_id::text END,
+      'source_snapshot_run_id', CASE WHEN v_session_row.source_snapshot_run_id IS NULL THEN NULL ELSE v_session_row.source_snapshot_run_id::text END,
+      'session_version', v_session_row.version,
+      'session_signature', v_session_row.session_signature,
+      'server_selected_preview_row_ids', COALESCE(v_session_row.server_selected_preview_row_ids, '[]'::jsonb),
+      'server_selected_preview_row_ids_provided', COALESCE(v_session_row.server_selected_preview_row_ids_provided, false)
+    ),
     'server_selected_preview_row_ids', COALESCE(v_session_row.server_selected_preview_row_ids, '[]'::jsonb),
     'server_selected_preview_row_ids_provided', COALESCE(v_session_row.server_selected_preview_row_ids_provided, false),
     'pending_candidate_ids', v_pending_candidate_ids_jsonb,
@@ -20423,7 +20452,6 @@ BEGIN
   );
 END;
 $function$;
-
 
 
 
