@@ -2,6 +2,10 @@
 
 
 
+
+
+
+
 CREATE OR REPLACE FUNCTION public.bulk_process_dataset_v1(p_filters jsonb DEFAULT '{}'::jsonb)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -15,6 +19,10 @@ DECLARE
   v_bucket text := NULL;
   v_limit_text text := NULL;
   v_offset_text text := NULL;
+  v_week_ending_from_text text := NULL;
+  v_week_ending_to_text text := NULL;
+  v_week_ending_from date := NULL;
+  v_week_ending_to date := NULL;
   v_limit integer := NULL;
   v_offset integer := 0;
   v_out jsonb;
@@ -43,6 +51,25 @@ BEGIN
   IF v_offset_text ~ '^[0-9]+$' THEN
     v_offset := GREATEST(v_offset_text::integer, 0);
   END IF;
+
+  v_week_ending_from_text := NULLIF(BTRIM(COALESCE(v_filters->>'week_ending_from', v_filters->>'weekEndingFrom', '')), '');
+  v_week_ending_to_text := NULLIF(BTRIM(COALESCE(v_filters->>'week_ending_to', v_filters->>'weekEndingTo', '')), '');
+
+  BEGIN
+    IF v_week_ending_from_text IS NOT NULL THEN
+      v_week_ending_from := v_week_ending_from_text::date;
+    END IF;
+  EXCEPTION WHEN OTHERS THEN
+    v_week_ending_from := NULL;
+  END;
+
+  BEGIN
+    IF v_week_ending_to_text IS NOT NULL THEN
+      v_week_ending_to := v_week_ending_to_text::date;
+    END IF;
+  EXCEPTION WHEN OTHERS THEN
+    v_week_ending_to := NULL;
+  END;
 
   WITH decision_rows AS (
     SELECT decision_result.row_json
@@ -103,6 +130,8 @@ BEGIN
       'date_from', NULLIF(BTRIM(COALESCE(v_filters->>'date_from', v_filters->>'dateFrom', v_filters->>'from_date', v_filters->>'fromDate', '')), ''),
       'date_to', NULLIF(BTRIM(COALESCE(v_filters->>'date_to', v_filters->>'dateTo', v_filters->>'to_date', v_filters->>'toDate', '')), ''),
       'week_ending_date', NULLIF(BTRIM(COALESCE(v_filters->>'week_ending_date', v_filters->>'weekEndingDate', v_filters->>'week_ending', v_filters->>'weekEnding', '')), ''),
+      'week_ending_from', v_week_ending_from,
+      'week_ending_to', v_week_ending_to,
       'limit', v_limit,
       'offset', v_offset
     ),
@@ -134,6 +163,8 @@ BEGIN
       'date_from', NULLIF(BTRIM(COALESCE(v_filters->>'date_from', v_filters->>'dateFrom', v_filters->>'from_date', v_filters->>'fromDate', '')), ''),
       'date_to', NULLIF(BTRIM(COALESCE(v_filters->>'date_to', v_filters->>'dateTo', v_filters->>'to_date', v_filters->>'toDate', '')), ''),
       'week_ending_date', NULLIF(BTRIM(COALESCE(v_filters->>'week_ending_date', v_filters->>'weekEndingDate', v_filters->>'week_ending', v_filters->>'weekEnding', '')), ''),
+      'week_ending_from', v_week_ending_from,
+      'week_ending_to', v_week_ending_to,
       'limit', v_limit,
       'offset', v_offset
     ),
@@ -143,9 +174,6 @@ BEGIN
   ));
 END;
 $function$;
-
-
-
 
 
 CREATE OR REPLACE FUNCTION public.bulk_authorise_dataset_v1(p_filters jsonb DEFAULT '{}'::jsonb)
@@ -6080,7 +6108,6 @@ BEGIN
 END;
 $function$;
 
-
 CREATE OR REPLACE FUNCTION public.bulk_timesheet_workbench_row_source_v1(p_filters jsonb DEFAULT '{}'::jsonb)
 RETURNS TABLE(
   timesheet_id uuid,
@@ -6185,14 +6212,21 @@ DECLARE
   v_timesheet_ids uuid[] := NULL;
   v_contract_week_ids uuid[] := NULL;
   v_row_keys text[] := NULL;
+  v_row_key_timesheet_ids uuid[] := NULL;
+  v_row_key_contract_week_ids uuid[] := NULL;
+  v_has_contract_week_row_key boolean := FALSE;
   v_dataset_mode text := NULL;
   v_period_filter text := NULL;
   v_date_from_text text := NULL;
   v_date_to_text text := NULL;
   v_week_ending_text text := NULL;
+  v_week_ending_from_text text := NULL;
+  v_week_ending_to_text text := NULL;
   v_date_from date := NULL;
   v_date_to date := NULL;
   v_week_ending_date date := NULL;
+  v_week_ending_from date := NULL;
+  v_week_ending_to date := NULL;
   v_uuid_re text := '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$';
   v_numeric_re text := E'^[-+]?[0-9]+(\\.[0-9]+)?$';
 BEGIN
@@ -6280,6 +6314,53 @@ BEGIN
     v_row_keys := ARRAY[NULLIF(BTRIM(v_filters->>'rowKey'), '')];
   END IF;
 
+
+  IF v_row_keys IS NOT NULL THEN
+    SELECT ARRAY_AGG(parsed_values.uuid_value)
+      INTO v_row_key_timesheet_ids
+    FROM (
+      SELECT DISTINCT SUBSTRING(row_key_values.row_key_value FROM 11)::uuid AS uuid_value
+      FROM UNNEST(v_row_keys) AS row_key_values(row_key_value)
+      WHERE LOWER(LEFT(row_key_values.row_key_value, 10)) = 'timesheet:'
+        AND SUBSTRING(row_key_values.row_key_value FROM 11) ~* v_uuid_re
+    ) AS parsed_values;
+
+    SELECT ARRAY_AGG(parsed_values.uuid_value)
+      INTO v_row_key_contract_week_ids
+    FROM (
+      SELECT DISTINCT SUBSTRING(row_key_values.row_key_value FROM 15)::uuid AS uuid_value
+      FROM UNNEST(v_row_keys) AS row_key_values(row_key_value)
+      WHERE LOWER(LEFT(row_key_values.row_key_value, 14)) = 'contract_week:'
+        AND SUBSTRING(row_key_values.row_key_value FROM 15) ~* v_uuid_re
+    ) AS parsed_values;
+
+    v_has_contract_week_row_key := COALESCE(ARRAY_LENGTH(v_row_key_contract_week_ids, 1), 0) > 0;
+
+    IF v_row_key_timesheet_ids IS NOT NULL THEN
+      SELECT ARRAY_AGG(merged_ids.uuid_value)
+        INTO v_timesheet_ids
+      FROM (
+        SELECT DISTINCT existing_ids.uuid_value
+        FROM UNNEST(COALESCE(v_timesheet_ids, ARRAY[]::uuid[])) AS existing_ids(uuid_value)
+        UNION
+        SELECT DISTINCT row_key_ids.uuid_value
+        FROM UNNEST(v_row_key_timesheet_ids) AS row_key_ids(uuid_value)
+      ) AS merged_ids;
+    END IF;
+
+    IF v_row_key_contract_week_ids IS NOT NULL THEN
+      SELECT ARRAY_AGG(merged_ids.uuid_value)
+        INTO v_contract_week_ids
+      FROM (
+        SELECT DISTINCT existing_ids.uuid_value
+        FROM UNNEST(COALESCE(v_contract_week_ids, ARRAY[]::uuid[])) AS existing_ids(uuid_value)
+        UNION
+        SELECT DISTINCT row_key_ids.uuid_value
+        FROM UNNEST(v_row_key_contract_week_ids) AS row_key_ids(uuid_value)
+      ) AS merged_ids;
+    END IF;
+  END IF;
+
   v_dataset_mode := UPPER(NULLIF(BTRIM(COALESCE(v_filters->>'dataset_mode', v_filters->>'datasetMode', '')), ''));
   IF v_dataset_mode NOT IN ('PROCESS', 'AUTHORISE', 'ROW_CONTEXT') THEN
     v_dataset_mode := NULL;
@@ -6293,6 +6374,8 @@ BEGIN
   v_date_from_text := NULLIF(BTRIM(COALESCE(v_filters->>'date_from', v_filters->>'dateFrom', v_filters->>'from_date', v_filters->>'fromDate', '')), '');
   v_date_to_text := NULLIF(BTRIM(COALESCE(v_filters->>'date_to', v_filters->>'dateTo', v_filters->>'to_date', v_filters->>'toDate', '')), '');
   v_week_ending_text := NULLIF(BTRIM(COALESCE(v_filters->>'week_ending_date', v_filters->>'weekEndingDate', v_filters->>'week_ending', v_filters->>'weekEnding', '')), '');
+  v_week_ending_from_text := NULLIF(BTRIM(COALESCE(v_filters->>'week_ending_from', v_filters->>'weekEndingFrom', '')), '');
+  v_week_ending_to_text := NULLIF(BTRIM(COALESCE(v_filters->>'week_ending_to', v_filters->>'weekEndingTo', '')), '');
 
   BEGIN
     IF v_date_from_text IS NOT NULL THEN
@@ -6316,6 +6399,22 @@ BEGIN
     END IF;
   EXCEPTION WHEN OTHERS THEN
     v_week_ending_date := NULL;
+  END;
+
+  BEGIN
+    IF v_week_ending_from_text IS NOT NULL THEN
+      v_week_ending_from := v_week_ending_from_text::date;
+    END IF;
+  EXCEPTION WHEN OTHERS THEN
+    v_week_ending_from := NULL;
+  END;
+
+  BEGIN
+    IF v_week_ending_to_text IS NOT NULL THEN
+      v_week_ending_to := v_week_ending_to_text::date;
+    END IF;
+  EXCEPTION WHEN OTHERS THEN
+    v_week_ending_to := NULL;
   END;
 
   RETURN QUERY
@@ -6346,22 +6445,46 @@ BEGIN
       ON cw0.timesheet_id = ts0.timesheet_id
     WHERE ts0.is_current = TRUE
       AND (v_timesheet_ids IS NULL OR ts0.timesheet_id = ANY(v_timesheet_ids))
-      AND (v_contract_week_ids IS NULL OR cw0.id = ANY(v_contract_week_ids))
+      AND (
+        v_contract_week_ids IS NULL
+        OR cw0.id = ANY(v_contract_week_ids)
+        OR v_timesheet_ids IS NOT NULL
+        OR (v_row_key_timesheet_ids IS NOT NULL AND ts0.timesheet_id = ANY(v_row_key_timesheet_ids))
+      )
       AND (
         v_row_keys IS NULL
         OR ('timesheet:' || ts0.timesheet_id::text) = ANY(v_row_keys)
+        OR (v_row_key_timesheet_ids IS NOT NULL AND ts0.timesheet_id = ANY(v_row_key_timesheet_ids))
       )
       AND (
         v_week_ending_date IS NULL
         OR COALESCE(cw0.week_ending_date, ts0.week_ending_date) = v_week_ending_date
       )
       AND (
+        v_week_ending_from IS NULL
+        OR COALESCE(cw0.week_ending_date, ts0.week_ending_date) >= v_week_ending_from
+      )
+      AND (
+        v_week_ending_to IS NULL
+        OR COALESCE(cw0.week_ending_date, ts0.week_ending_date) <= v_week_ending_to
+      )
+      AND (
         v_date_from IS NULL
-        OR COALESCE(cw0.week_ending_date, ts0.week_ending_date) >= v_date_from
+        OR (
+          CASE
+            WHEN ts0.sheet_scope = 'DAILY'::public.timesheet_scope_enum THEN COALESCE(ts0.worked_start_iso::date, ts0.scheduled_start_iso::date, ts0.week_ending_date)
+            ELSE COALESCE(cw0.week_ending_date, ts0.week_ending_date)
+          END
+        ) >= v_date_from
       )
       AND (
         v_date_to IS NULL
-        OR COALESCE(cw0.week_ending_date, ts0.week_ending_date) <= v_date_to
+        OR (
+          CASE
+            WHEN ts0.sheet_scope = 'DAILY'::public.timesheet_scope_enum THEN COALESCE(ts0.worked_start_iso::date, ts0.scheduled_start_iso::date, ts0.week_ending_date)
+            ELSE COALESCE(cw0.week_ending_date, ts0.week_ending_date)
+          END
+        ) <= v_date_to
       )
       AND (
         v_period_filter IS NULL
@@ -6377,7 +6500,15 @@ BEGIN
     JOIN public.contracts AS ct_scope
       ON ct_scope.id = cw0.contract_id
     WHERE cw0.timesheet_id IS NULL
-      AND v_timesheet_ids IS NULL
+      AND (
+        v_timesheet_ids IS NULL
+        OR v_contract_week_ids IS NOT NULL
+        OR v_has_contract_week_row_key = TRUE
+      )
+      AND (
+        COALESCE(v_dataset_mode, 'PROCESS') <> 'AUTHORISE'
+        OR v_has_contract_week_row_key = TRUE
+      )
       AND (v_candidate_id IS NULL OR ct_scope.candidate_id = v_candidate_id)
       AND (v_client_id IS NULL OR ct_scope.client_id = v_client_id)
       AND (v_contract_week_ids IS NULL OR cw0.id = ANY(v_contract_week_ids))
@@ -6388,6 +6519,14 @@ BEGIN
       AND (
         v_week_ending_date IS NULL
         OR cw0.week_ending_date = v_week_ending_date
+      )
+      AND (
+        v_week_ending_from IS NULL
+        OR cw0.week_ending_date >= v_week_ending_from
+      )
+      AND (
+        v_week_ending_to IS NULL
+        OR cw0.week_ending_date <= v_week_ending_to
       )
       AND (
         v_date_from IS NULL
@@ -7056,19 +7195,7 @@ BEGIN
              WHEN COALESCE(bu0.hr_crosscheck_issues, ARRAY[]::text[]) && ARRAY['DUPLICATE_CONTRACTS'::text] THEN ARRAY['Duplicate contracts'::text]
              ELSE ARRAY[]::text[]
            END
-        || CASE
-             WHEN bu0.timesheet_id IS NOT NULL
-              AND COALESCE(bu0.client_requires_hr, FALSE) = TRUE
-              AND COALESCE(bu0.client_no_timesheet_required, FALSE) = FALSE
-              AND bu0.sheet_scope = 'WEEKLY'::public.timesheet_scope_enum
-              AND COALESCE(bu0.total_hours, 0::numeric) > 0::numeric
-              AND NOT (
-                    COALESCE(bu0.evidence_count, 0) > 0
-                    OR (bu0.submission_mode = 'ELECTRONIC'::public.submission_mode_enum AND bu0.r2_nurse_key IS NOT NULL AND bu0.r2_auth_key IS NOT NULL)
-                    OR (bu0.submission_mode = 'MANUAL'::public.submission_mode_enum AND bu0.manual_pdf_r2_key IS NOT NULL)
-                  ) THEN ARRAY['Timesheet evidence'::text]
-             ELSE ARRAY[]::text[]
-           END
+
         || CASE
              WHEN bu0.timesheet_id IS NOT NULL
               AND (
@@ -7096,122 +7223,8 @@ BEGIN
               AND COALESCE(bu0.has_mileage_evidence, FALSE) = FALSE THEN ARRAY['Mileage evidence'::text]
              ELSE ARRAY[]::text[]
            END
-        || CASE
-             WHEN bu0.timesheet_id IS NOT NULL
-              AND bu0.sheet_scope = 'DAILY'::public.timesheet_scope_enum
-              AND COALESCE(bu0.total_hours, 0::numeric) > 0::numeric
-              AND (
-                    COALESCE(bu0.require_reference_to_pay, FALSE)
-                    OR COALESCE(bu0.require_reference_to_invoice, FALSE)
-                    OR COALESCE(bu0.client_ts_reference_required, FALSE)
-                    OR COALESCE(bu0.client_pay_reference_required, FALSE)
-                    OR COALESCE(bu0.client_invoice_reference_required, FALSE)
-                  )
-              AND NULLIF(BTRIM(COALESCE(bu0.reference_number, '')), '') IS NULL THEN ARRAY['Reference'::text]
-             ELSE ARRAY[]::text[]
-           END
-        || CASE
-             WHEN bu0.timesheet_id IS NOT NULL
-              AND bu0.sheet_scope = 'WEEKLY'::public.timesheet_scope_enum
-              AND COALESCE(bu0.total_hours, 0::numeric) > 0::numeric
-              AND (
-                    COALESCE(bu0.require_reference_to_pay, FALSE)
-                    OR COALESCE(bu0.require_reference_to_invoice, FALSE)
-                    OR (
-                      COALESCE(bu0.require_reference_to_pay, FALSE) = FALSE
-                      AND COALESCE(bu0.require_reference_to_invoice, FALSE) = FALSE
-                      AND (
-                        COALESCE(bu0.client_pay_reference_required, FALSE)
-                        OR COALESCE(bu0.client_invoice_reference_required, FALSE)
-                        OR COALESCE(bu0.client_ts_reference_required, FALSE)
-                      )
-                    )
-                  )
-              AND (
-                    (
-                      bu0.invoice_breakdown_json IS NOT NULL
-                      AND jsonb_typeof(bu0.invoice_breakdown_json) = 'object'
-                      AND UPPER(COALESCE(bu0.invoice_breakdown_json->>'mode', '')) = 'SEGMENTS'
-                      AND jsonb_typeof(bu0.invoice_breakdown_json->'segments') = 'array'
-                      AND EXISTS (
-                        SELECT 1
-                        FROM jsonb_array_elements(
-                          CASE
-                            WHEN bu0.invoice_breakdown_json IS NOT NULL
-                             AND jsonb_typeof(bu0.invoice_breakdown_json) = 'object'
-                             AND UPPER(COALESCE(bu0.invoice_breakdown_json->>'mode', '')) = 'SEGMENTS'
-                             AND jsonb_typeof(bu0.invoice_breakdown_json->'segments') = 'array' THEN bu0.invoice_breakdown_json->'segments'
-                            ELSE '[]'::jsonb
-                          END
-                        ) AS weekly_segment_ref(segment_value)
-                        WHERE NULLIF(BTRIM(COALESCE(weekly_segment_ref.segment_value->>'invoice_locked_invoice_id', '')), '') IS NULL
-                          AND (
-                            CASE WHEN NULLIF(BTRIM(COALESCE(weekly_segment_ref.segment_value->>'hours_day', '')), '') ~ v_numeric_re THEN (weekly_segment_ref.segment_value->>'hours_day')::numeric ELSE 0::numeric END
-                            + CASE WHEN NULLIF(BTRIM(COALESCE(weekly_segment_ref.segment_value->>'hours_night', '')), '') ~ v_numeric_re THEN (weekly_segment_ref.segment_value->>'hours_night')::numeric ELSE 0::numeric END
-                            + CASE WHEN NULLIF(BTRIM(COALESCE(weekly_segment_ref.segment_value->>'hours_sat', '')), '') ~ v_numeric_re THEN (weekly_segment_ref.segment_value->>'hours_sat')::numeric ELSE 0::numeric END
-                            + CASE WHEN NULLIF(BTRIM(COALESCE(weekly_segment_ref.segment_value->>'hours_sun', '')), '') ~ v_numeric_re THEN (weekly_segment_ref.segment_value->>'hours_sun')::numeric ELSE 0::numeric END
-                            + CASE WHEN NULLIF(BTRIM(COALESCE(weekly_segment_ref.segment_value->>'hours_bh', '')), '') ~ v_numeric_re THEN (weekly_segment_ref.segment_value->>'hours_bh')::numeric ELSE 0::numeric END
-                          ) > 0::numeric
-                          AND NULLIF(BTRIM(COALESCE(weekly_segment_ref.segment_value->>'ref_num', '')), '') IS NULL
-                      )
-                    )
-                    OR (
-                      bu0.submission_mode = 'MANUAL'::public.submission_mode_enum
-                      AND (
-                        bu0.actual_schedule_json IS NULL
-                        OR jsonb_typeof(bu0.actual_schedule_json) <> 'array'
-                        OR jsonb_array_length(
-                          CASE
-                            WHEN bu0.actual_schedule_json IS NOT NULL AND jsonb_typeof(bu0.actual_schedule_json) = 'array' THEN bu0.actual_schedule_json
-                            ELSE '[]'::jsonb
-                          END
-                        ) = 0
-                        OR EXISTS (
-                          SELECT 1
-                          FROM jsonb_array_elements(
-                            CASE
-                              WHEN bu0.actual_schedule_json IS NOT NULL AND jsonb_typeof(bu0.actual_schedule_json) = 'array' THEN bu0.actual_schedule_json
-                              ELSE '[]'::jsonb
-                            END
-                          ) AS weekly_actual_ref(segment_value)
-                          WHERE NULLIF(BTRIM(COALESCE(weekly_actual_ref.segment_value->>'start', '')), '') IS NOT NULL
-                            AND NULLIF(BTRIM(COALESCE(weekly_actual_ref.segment_value->>'end', '')), '') IS NOT NULL
-                            AND NULLIF(BTRIM(COALESCE(weekly_actual_ref.segment_value->>'ref_num', '')), '') IS NULL
-                        )
-                      )
-                    )
-                    OR (
-                      bu0.submission_mode <> 'MANUAL'::public.submission_mode_enum
-                      AND NOT (
-                        EXISTS (
-                          SELECT 1
-                          FROM jsonb_array_elements_text(
-                            CASE
-                              WHEN bu0.day_references_json IS NOT NULL AND jsonb_typeof(bu0.day_references_json) = 'object' AND jsonb_typeof(bu0.day_references_json->'__freeform_refs') = 'array' THEN bu0.day_references_json->'__freeform_refs'
-                              WHEN bu0.day_references_json IS NOT NULL AND jsonb_typeof(bu0.day_references_json) = 'object' AND jsonb_typeof(bu0.day_references_json->'__freeform') = 'array' THEN bu0.day_references_json->'__freeform'
-                              WHEN bu0.day_references_json IS NOT NULL AND jsonb_typeof(bu0.day_references_json) = 'object' AND jsonb_typeof(bu0.day_references_json->'__freeform_lines') = 'array' THEN bu0.day_references_json->'__freeform_lines'
-                              WHEN bu0.day_references_json IS NOT NULL AND jsonb_typeof(bu0.day_references_json) = 'array' THEN bu0.day_references_json
-                              ELSE '[]'::jsonb
-                            END
-                          ) AS day_ref_text(value_text)
-                          WHERE NULLIF(BTRIM(COALESCE(day_ref_text.value_text, '')), '') IS NOT NULL
-                        )
-                        OR EXISTS (
-                          SELECT 1
-                          FROM jsonb_each_text(
-                            CASE
-                              WHEN bu0.day_references_json IS NOT NULL AND jsonb_typeof(bu0.day_references_json) = 'object' THEN bu0.day_references_json
-                              ELSE '{}'::jsonb
-                            END
-                          ) AS day_ref_entry(key_name, value_text)
-                          WHERE NULLIF(BTRIM(COALESCE(day_ref_entry.value_text, '')), '') IS NOT NULL
-                            AND LEFT(COALESCE(day_ref_entry.key_name, ''), 2) <> '__'
-                        )
-                      )
-                    )
-                  ) THEN ARRAY['Reference'::text]
-             ELSE ARRAY[]::text[]
-           END
+
+
         || CASE
              WHEN bu0.timesheet_id IS NOT NULL
               AND COALESCE(bu0.client_hr_validation_required, FALSE) = TRUE
@@ -7309,7 +7322,7 @@ BEGIN
   issue_normalised_rows AS MATERIALIZED (
     SELECT
       sr0.*,
-      array_remove(array_remove(COALESCE(sr0.lightweight_issue_codes, ARRAY[]::text[]), 'Reference'::text), 'Timesheet evidence'::text) AS workbench_issue_codes
+      COALESCE(sr0.lightweight_issue_codes, ARRAY[]::text[]) AS workbench_issue_codes
     FROM segment_rows AS sr0
   ),
   result_rows AS MATERIALIZED (
@@ -7619,6 +7632,7 @@ BEGIN
     AND (v_client_id IS NULL OR rr0.client_id = v_client_id);
 END;
 $function$;
+
 
 
 
