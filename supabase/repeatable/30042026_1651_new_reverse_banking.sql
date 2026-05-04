@@ -12342,6 +12342,8 @@ $function$;
 
 
 
+
+
 CREATE OR REPLACE FUNCTION public._pay_payment_correction_apply_accepted_finance_resolution(
   p_correction_request_id uuid,
   p_work_item_id uuid,
@@ -12380,6 +12382,7 @@ DECLARE
   v_weekly_due numeric := NULL::numeric;
   v_manual_total_remaining numeric := NULL::numeric;
   v_note text := NULL::text;
+  v_regeneration_note text := NULL::text;
   v_component_resolutions jsonb := '[]'::jsonb;
 
   v_case_row public.pay_advances%rowtype;
@@ -13180,6 +13183,22 @@ BEGIN
       'Applied accepted taxable channel finance resolution for payment correction request ' || v_request.id::text || ', work item ' || v_work_item.id::text
     );
 
+    v_regeneration_note := CASE
+      WHEN UPPER(COALESCE(v_resolution_path, 'SUGGESTED')) = 'MANUAL' THEN COALESCE(
+        NULLIF(btrim(v_accepted_case_json->>'note'), ''),
+        NULLIF(btrim(v_resolution_body->>'note'), '')
+      )
+      ELSE COALESCE(
+        NULLIF(btrim(v_accepted_case_json->>'note'), ''),
+        NULLIF(btrim(v_accepted_case_json#>>'{suggestion,note}'), ''),
+        NULLIF(btrim(v_accepted_case_json#>>'{suggestion,request,note}'), ''),
+        NULLIF(btrim(v_plan_case_json->>'note'), ''),
+        NULLIF(btrim(v_plan_case_json#>>'{suggestion,note}'), ''),
+        NULLIF(btrim(v_plan_case_json#>>'{suggestion,request,note}'), ''),
+        'Generated for payment correction plan ' || v_request.pay_batch_id::text
+      )
+    END;
+
     IF v_effective_actor_user_id IS NULL THEN
       v_blocker := jsonb_build_object(
         'code', 'ACTOR_USER_ID_REQUIRED_FOR_ACCEPTED_FINANCE_RESOLUTION',
@@ -13269,7 +13288,7 @@ BEGIN
         p_weeks_total => v_weeks_total,
         p_weekly_due => v_weekly_due,
         p_manual_total_remaining => v_manual_total_remaining,
-        p_note => 'Regenerated for accepted payment correction finance resolution ' || v_request.id::text || ', work item ' || v_work_item.id::text
+        p_note => v_regeneration_note
       );
 
       v_regenerated_taxable_result := COALESCE(
@@ -13568,9 +13587,6 @@ BEGIN
   RETURN v_result;
 END;
 $function$;
-
-
-
 
 
 
@@ -14964,6 +14980,7 @@ DECLARE
   v_manual_total_remaining text := NULL::text;
   v_schedule_input_mode text := NULL::text;
   v_note text := NULL::text;
+  v_regeneration_note text := NULL::text;
   v_accepted_hash_text text := NULL::text;
   v_accepted_hash_basis jsonb := '{}'::jsonb;
   v_accepted_basis_taxable_result jsonb := NULL::jsonb;
@@ -15681,6 +15698,19 @@ BEGIN
       );
     END IF;
 
+    v_regeneration_note := CASE
+      WHEN v_resolution_path = 'MANUAL' THEN v_note
+      ELSE COALESCE(
+        NULLIF(btrim(v_accepted_case_json->>'note'), ''),
+        NULLIF(btrim(v_accepted_case_json#>>'{suggestion,note}'), ''),
+        NULLIF(btrim(v_accepted_case_json#>>'{suggestion,request,note}'), ''),
+        NULLIF(btrim(v_plan_case_json->>'note'), ''),
+        NULLIF(btrim(v_plan_case_json#>>'{suggestion,note}'), ''),
+        NULLIF(btrim(v_plan_case_json#>>'{suggestion,request,note}'), ''),
+        'Generated for payment correction plan ' || p_pay_batch_id::text
+      )
+    END;
+
     BEGIN
       v_regenerated_suggestion := public.pay_finance_case_taxable_channel_restructure_suggestion(
         p_finance_case_id => v_finance_case_id,
@@ -15691,7 +15721,7 @@ BEGIN
         p_weeks_total => CASE WHEN v_resolution_path = 'MANUAL' AND COALESCE(v_weeks_total, '') ~ '^\d+$' THEN v_weeks_total::integer ELSE NULL::integer END,
         p_weekly_due => CASE WHEN v_resolution_path = 'MANUAL' AND COALESCE(v_weekly_due, '') ~ '^\d+(\.\d+)?$' THEN v_weekly_due::numeric ELSE NULL::numeric END,
         p_manual_total_remaining => CASE WHEN v_resolution_path = 'MANUAL' AND COALESCE(v_manual_total_remaining, '') ~ '^\d+(\.\d+)?$' THEN v_manual_total_remaining::numeric ELSE NULL::numeric END,
-        p_note => COALESCE(v_note, 'Regenerated for payment correction accepted-resolution validation ' || p_pay_batch_id::text)
+        p_note => v_regeneration_note
       );
     EXCEPTION WHEN OTHERS THEN
       RETURN jsonb_build_object(
@@ -15802,7 +15832,6 @@ BEGIN
   );
 END;
 $function$;
-
 
 
 CREATE OR REPLACE FUNCTION public._pay_payment_correction_mail_scope_match(
