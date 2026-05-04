@@ -220,24 +220,24 @@ BEGIN
     v_offset := GREATEST(v_offset_text::integer, 0);
   END IF;
 
-  WITH decision_rows AS (
+  WITH decision_rows AS MATERIALIZED (
     SELECT decision_result.row_json
     FROM public.bulk_timesheet_row_decision_v1(v_filters || JSONB_BUILD_OBJECT('dataset_mode', 'authorise')) AS decision_result(row_json)
   ),
-  eligible_rows_before_classification AS (
+  eligible_rows_before_classification AS MATERIALIZED (
     SELECT decision_rows.row_json
     FROM decision_rows
     WHERE NULLIF(BTRIM(COALESCE(decision_rows.row_json->>'timesheet_id', '')), '') IS NOT NULL
       AND UPPER(COALESCE(decision_rows.row_json->>'bulk_process_bucket', '')) <> 'UNPROCESSED'
       AND NULLIF(BTRIM(COALESCE(decision_rows.row_json->>'bulk_authorise_section', '')), '') IS NOT NULL
   ),
-  classification_filtered_rows AS (
+  classification_filtered_rows AS MATERIALIZED (
     SELECT eligible_rows_before_classification.row_json
     FROM eligible_rows_before_classification
     WHERE v_classification IS NULL
        OR UPPER(COALESCE(eligible_rows_before_classification.row_json->>'bulk_authorise_classification', '')) = v_classification
   ),
-  visible_rows AS (
+  visible_rows AS MATERIALIZED (
     SELECT classification_filtered_rows.row_json
     FROM classification_filtered_rows
     WHERE (
@@ -261,26 +261,41 @@ BEGIN
         )
       )
   ),
-  paged_visible_rows AS (
+  paged_visible_rows AS MATERIALIZED (
     SELECT visible_rows.row_json
     FROM visible_rows
     ORDER BY visible_rows.row_json->>'week_ending_date', visible_rows.row_json->>'client_name', visible_rows.row_json->>'candidate_name', visible_rows.row_json->>'row_key'
     OFFSET v_offset
     LIMIT COALESCE(v_limit, 2147483647)
   ),
-  counts AS (
+  visible_counts AS (
     SELECT
-      (SELECT COUNT(*)::integer FROM visible_rows) AS total_count,
-      (SELECT COUNT(*)::integer FROM visible_rows WHERE visible_rows.row_json->>'bulk_authorise_section' = 'processed_eligible') AS processed_eligible_count,
-      (SELECT COUNT(*)::integer FROM visible_rows WHERE visible_rows.row_json->>'bulk_authorise_section' = 'authorised_eligible') AS authorised_eligible_count,
-      (SELECT COUNT(*)::integer FROM eligible_rows_before_classification WHERE eligible_rows_before_classification.row_json->>'bulk_authorise_classification' = 'TIMESHEETS') AS timesheets_count,
-      (SELECT COUNT(*)::integer FROM eligible_rows_before_classification WHERE eligible_rows_before_classification.row_json->>'bulk_authorise_classification' = 'NHSP') AS nhsp_count,
-      (SELECT COUNT(*)::integer FROM eligible_rows_before_classification WHERE eligible_rows_before_classification.row_json->>'bulk_authorise_classification' = 'HR') AS hr_count,
-      (SELECT COUNT(*)::integer FROM visible_rows WHERE visible_rows.row_json->>'bulk_authorise_classification' = 'TIMESHEETS' AND visible_rows.row_json->>'route_family' = 'MANUAL_NON_QR') AS manual_count,
-      (SELECT COUNT(*)::integer FROM visible_rows WHERE visible_rows.row_json->>'bulk_authorise_classification' = 'TIMESHEETS' AND visible_rows.row_json->>'route_family' = 'QR') AS qr_count,
-      (SELECT COUNT(*)::integer FROM visible_rows WHERE visible_rows.row_json->>'bulk_authorise_classification' = 'TIMESHEETS' AND visible_rows.row_json->>'route_family' = 'ELECTRONIC') AS electronic_count,
-      (SELECT COUNT(*)::integer FROM visible_rows WHERE visible_rows.row_json->>'bulk_authorise_classification' = 'TIMESHEETS' AND COALESCE((visible_rows.row_json->>'hr_validation_awaiting')::boolean, FALSE) = FALSE) AS already_validated_count,
-      (SELECT COUNT(*)::integer FROM visible_rows WHERE visible_rows.row_json->>'bulk_authorise_classification' = 'TIMESHEETS' AND COALESCE((visible_rows.row_json->>'hr_validation_awaiting')::boolean, FALSE) = TRUE) AS awaiting_validation_count
+      COUNT(*)::integer AS total_count,
+      COUNT(*) FILTER (WHERE visible_rows.row_json->>'bulk_authorise_section' = 'processed_eligible')::integer AS processed_eligible_count,
+      COUNT(*) FILTER (WHERE visible_rows.row_json->>'bulk_authorise_section' = 'authorised_eligible')::integer AS authorised_eligible_count,
+      COUNT(*) FILTER (WHERE visible_rows.row_json->>'bulk_authorise_classification' = 'TIMESHEETS' AND visible_rows.row_json->>'route_family' = 'MANUAL_NON_QR')::integer AS manual_count,
+      COUNT(*) FILTER (WHERE visible_rows.row_json->>'bulk_authorise_classification' = 'TIMESHEETS' AND visible_rows.row_json->>'route_family' = 'QR')::integer AS qr_count,
+      COUNT(*) FILTER (WHERE visible_rows.row_json->>'bulk_authorise_classification' = 'TIMESHEETS' AND visible_rows.row_json->>'route_family' = 'ELECTRONIC')::integer AS electronic_count,
+      COUNT(*) FILTER (WHERE visible_rows.row_json->>'bulk_authorise_classification' = 'TIMESHEETS' AND COALESCE((visible_rows.row_json->>'hr_validation_awaiting')::boolean, FALSE) = FALSE)::integer AS already_validated_count,
+      COUNT(*) FILTER (WHERE visible_rows.row_json->>'bulk_authorise_classification' = 'TIMESHEETS' AND COALESCE((visible_rows.row_json->>'hr_validation_awaiting')::boolean, FALSE) = TRUE)::integer AS awaiting_validation_count
+    FROM visible_rows
+  ),
+  eligible_counts AS (
+    SELECT
+      COUNT(*) FILTER (WHERE eligible_rows_before_classification.row_json->>'bulk_authorise_classification' = 'TIMESHEETS')::integer AS timesheets_count,
+      COUNT(*) FILTER (WHERE eligible_rows_before_classification.row_json->>'bulk_authorise_classification' = 'NHSP')::integer AS nhsp_count,
+      COUNT(*) FILTER (WHERE eligible_rows_before_classification.row_json->>'bulk_authorise_classification' = 'HR')::integer AS hr_count
+    FROM eligible_rows_before_classification
+  ),
+  rows_payload AS (
+    SELECT COALESCE(
+      JSONB_AGG(
+        paged_visible_rows.row_json
+        ORDER BY paged_visible_rows.row_json->>'week_ending_date', paged_visible_rows.row_json->>'client_name', paged_visible_rows.row_json->>'candidate_name', paged_visible_rows.row_json->>'row_key'
+      ),
+      '[]'::jsonb
+    ) AS rows_json
+    FROM paged_visible_rows
   )
   SELECT JSONB_BUILD_OBJECT(
     'filters', JSONB_BUILD_OBJECT(
@@ -302,22 +317,22 @@ BEGIN
       'offset', v_offset
     ),
     'counts', JSONB_BUILD_OBJECT(
-      'total', counts.total_count,
-      'processed_eligible', counts.processed_eligible_count,
-      'authorised_eligible', counts.authorised_eligible_count,
+      'total', COALESCE(visible_counts.total_count, 0),
+      'processed_eligible', COALESCE(visible_counts.processed_eligible_count, 0),
+      'authorised_eligible', COALESCE(visible_counts.authorised_eligible_count, 0),
       'by_classification', JSONB_BUILD_OBJECT(
-        'TIMESHEETS', counts.timesheets_count,
-        'NHSP', counts.nhsp_count,
-        'HR', counts.hr_count
+        'TIMESHEETS', COALESCE(eligible_counts.timesheets_count, 0),
+        'NHSP', COALESCE(eligible_counts.nhsp_count, 0),
+        'HR', COALESCE(eligible_counts.hr_count, 0)
       ),
       'timesheets_by_type', JSONB_BUILD_OBJECT(
-        'manual', counts.manual_count,
-        'qr', counts.qr_count,
-        'electronic', counts.electronic_count
+        'manual', COALESCE(visible_counts.manual_count, 0),
+        'qr', COALESCE(visible_counts.qr_count, 0),
+        'electronic', COALESCE(visible_counts.electronic_count, 0)
       ),
       'validation', JSONB_BUILD_OBJECT(
-        'already_validated', counts.already_validated_count,
-        'awaiting_validation', counts.awaiting_validation_count,
+        'already_validated', COALESCE(visible_counts.already_validated_count, 0),
+        'awaiting_validation', COALESCE(visible_counts.awaiting_validation_count, 0),
         'scope', 'visible_rows_after_classification_and_toggle_filters'
       ),
       'scope', JSONB_BUILD_OBJECT(
@@ -327,13 +342,12 @@ BEGIN
         'validation', 'visible_rows_after_classification_and_toggle_filters'
       )
     ),
-    'rows', COALESCE((
-      SELECT JSONB_AGG(paged_visible_rows.row_json ORDER BY paged_visible_rows.row_json->>'week_ending_date', paged_visible_rows.row_json->>'client_name', paged_visible_rows.row_json->>'candidate_name', paged_visible_rows.row_json->>'row_key')
-      FROM paged_visible_rows
-    ), '[]'::jsonb)
+    'rows', COALESCE(rows_payload.rows_json, '[]'::jsonb)
   )
   INTO v_out
-  FROM counts;
+  FROM visible_counts
+  CROSS JOIN eligible_counts
+  CROSS JOIN rows_payload;
 
   RETURN COALESCE(v_out, JSONB_BUILD_OBJECT(
     'filters', JSONB_BUILD_OBJECT(
@@ -366,6 +380,10 @@ BEGIN
   ));
 END;
 $function$;
+
+
+
+
 
 CREATE OR REPLACE FUNCTION public.bulk_timesheet_row_decision_v1(p_filters jsonb DEFAULT '{}'::jsonb)
  RETURNS TABLE(row_json jsonb)
