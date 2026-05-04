@@ -12391,6 +12391,10 @@ DECLARE
   v_plan_case_json jsonb := NULL::jsonb;
   v_plan_suggestion_hash text := NULL::text;
   v_plan_effective_pay_date_text text := NULL::text;
+  v_accepted_hash_text text := NULL::text;
+  v_accepted_hash_basis jsonb := '{}'::jsonb;
+  v_accepted_basis_taxable_result jsonb := NULL::jsonb;
+  v_regenerated_taxable_result jsonb := NULL::jsonb;
   v_apply_result jsonb := NULL::jsonb;
   v_apply_results jsonb := '[]'::jsonb;
   v_blocker jsonb := NULL::jsonb;
@@ -13201,6 +13205,60 @@ BEGIN
       RETURN jsonb_build_object('ok', false, 'status', 'BLOCKED', 'blocker', v_blocker);
     END IF;
 
+    v_accepted_suggestion_hash := NULLIF(btrim(COALESCE(v_accepted_case_json->>'suggestion_hash', '')), '');
+    v_accepted_hash_text := COALESCE(NULLIF(btrim(v_accepted_case_json#>>'{suggestion_hash_basis,hash_text}'), ''), NULLIF(btrim(v_resolution_body#>>'{suggestion_hash_basis,hash_text}'), ''));
+    v_accepted_hash_basis := COALESCE(v_accepted_case_json->'suggestion_hash_basis', v_resolution_body->'suggestion_hash_basis', '{}'::jsonb);
+
+    IF COALESCE(jsonb_typeof(v_accepted_hash_basis), 'null') <> 'object' THEN
+      v_blocker := jsonb_build_object(
+        'code', 'ACCEPTED_SUGGESTION_HASH_BASIS_INVALID',
+        'message', 'accepted_resolution_json suggestion_hash_basis must be an object.',
+        'finance_case_id', v_case_record.finance_case_id::text
+      );
+
+      UPDATE public.pay_payment_correction_work_items AS invalid_hash_basis_work_item
+      SET status = 'BLOCKED',
+          locked_at_utc = NULL,
+          locked_by = NULL,
+          processed_at_utc = v_now,
+          last_error = v_blocker->>'message',
+          result_json = COALESCE(invalid_hash_basis_work_item.result_json, '{}'::jsonb) || jsonb_build_object(
+            'ok', false,
+            'status', 'BLOCKED',
+            'blocker', v_blocker,
+            'accepted_finance_resolution', jsonb_build_object('ok', false, 'blocker', v_blocker),
+            'processed_at_utc', v_now
+          )
+      WHERE invalid_hash_basis_work_item.id = v_work_item.id;
+
+      RETURN jsonb_build_object('ok', false, 'status', 'BLOCKED', 'blocker', v_blocker);
+    END IF;
+
+    IF UPPER(COALESCE(v_resolution_path, 'SUGGESTED')) = 'MANUAL' AND v_accepted_hash_text IS NULL THEN
+      v_blocker := jsonb_build_object(
+        'code', 'ACCEPTED_SUGGESTION_HASH_BASIS_TEXT_MISSING',
+        'message', 'accepted_resolution_json manual resolution must include backend-generated suggestion_hash_basis.hash_text.',
+        'finance_case_id', v_case_record.finance_case_id::text
+      );
+
+      UPDATE public.pay_payment_correction_work_items AS missing_hash_basis_text_work_item
+      SET status = 'BLOCKED',
+          locked_at_utc = NULL,
+          locked_by = NULL,
+          processed_at_utc = v_now,
+          last_error = v_blocker->>'message',
+          result_json = COALESCE(missing_hash_basis_text_work_item.result_json, '{}'::jsonb) || jsonb_build_object(
+            'ok', false,
+            'status', 'BLOCKED',
+            'blocker', v_blocker,
+            'accepted_finance_resolution', jsonb_build_object('ok', false, 'blocker', v_blocker),
+            'processed_at_utc', v_now
+          )
+      WHERE missing_hash_basis_text_work_item.id = v_work_item.id;
+
+      RETURN jsonb_build_object('ok', false, 'status', 'BLOCKED', 'blocker', v_blocker);
+    END IF;
+
     BEGIN
       v_regenerated_suggestion := public.pay_finance_case_taxable_channel_restructure_suggestion(
         p_finance_case_id => v_case_record.finance_case_id,
@@ -13214,8 +13272,79 @@ BEGIN
         p_note => 'Regenerated for accepted payment correction finance resolution ' || v_request.id::text || ', work item ' || v_work_item.id::text
       );
 
-      v_regenerated_suggestion_hash := md5(v_regenerated_suggestion::text);
-      v_accepted_suggestion_hash := NULLIF(btrim(COALESCE(v_accepted_case_json->>'suggestion_hash', '')), '');
+      v_regenerated_taxable_result := COALESCE(
+        v_regenerated_suggestion->'taxable_channel_result',
+        v_regenerated_suggestion->'result',
+        v_regenerated_suggestion->'suggestion',
+        v_regenerated_suggestion
+      ) - 'generated_at'
+        - 'generated_at_utc'
+        - 'created_at'
+        - 'created_at_utc'
+        - 'updated_at'
+        - 'updated_at_utc'
+        - 'audit'
+        - 'debug';
+
+      IF UPPER(COALESCE(v_resolution_path, 'SUGGESTED')) = 'MANUAL' THEN
+        v_accepted_basis_taxable_result := v_accepted_hash_basis->'taxable_channel_result';
+
+        IF COALESCE(v_accepted_hash_basis->>'hash_version', '') <> 'payment_correction_finance_resolution_v1'
+           OR COALESCE(v_accepted_hash_basis->>'finance_case_id', '') <> v_case_record.finance_case_id::text
+           OR COALESCE(v_accepted_hash_basis->>'candidate_id', '') <> v_case_row.candidate_id::text
+           OR COALESCE(v_accepted_hash_basis->>'apply_surface', '') <> v_accepted_surface
+           OR COALESCE(v_accepted_hash_basis->>'effective_pay_date', '') <> v_accepted_effective_pay_date_text
+           OR UPPER(COALESCE(v_accepted_hash_basis->>'resolution_path', '')) <> 'MANUAL'
+           OR COALESCE(v_accepted_hash_basis->>'schedule_input_mode', '') <> COALESCE(v_schedule_input_mode, '')
+           OR COALESCE(v_accepted_hash_basis->>'weeks_total', '') <> COALESCE(v_weeks_total::text, '')
+           OR COALESCE(v_accepted_hash_basis->>'weekly_due', '') <> COALESCE(v_weekly_due::text, '')
+           OR COALESCE(v_accepted_hash_basis->>'manual_total_remaining', '') <> COALESCE(v_manual_total_remaining::text, '')
+           OR COALESCE(v_accepted_hash_basis->'selected_component_ids', '[]'::jsonb) IS DISTINCT FROM COALESCE(v_accepted_component_ids_json, '[]'::jsonb)
+           OR COALESCE(v_accepted_hash_basis->'current_component_fingerprints', v_accepted_hash_basis->'component_fingerprints', '{}'::jsonb) IS DISTINCT FROM COALESCE(v_accepted_fingerprints_json, '{}'::jsonb)
+           OR v_accepted_basis_taxable_result IS NULL
+           OR v_accepted_basis_taxable_result IS DISTINCT FROM v_regenerated_taxable_result THEN
+          v_blocker := jsonb_build_object(
+            'code', 'ACCEPTED_SUGGESTION_HASH_BASIS_MISMATCH',
+            'message', 'accepted_resolution_json manual suggestion_hash_basis does not match the regenerated backend suggestion and selected correction scope.',
+            'finance_case_id', v_case_record.finance_case_id::text
+          );
+
+          UPDATE public.pay_payment_correction_work_items AS hash_basis_mismatch_work_item
+          SET status = 'BLOCKED',
+              locked_at_utc = NULL,
+              locked_by = NULL,
+              processed_at_utc = v_now,
+              last_error = v_blocker->>'message',
+              result_json = COALESCE(hash_basis_mismatch_work_item.result_json, '{}'::jsonb) || jsonb_build_object(
+                'ok', false,
+                'status', 'BLOCKED',
+                'blocker', v_blocker,
+                'accepted_finance_resolution', jsonb_build_object('ok', false, 'blocker', v_blocker),
+                'processed_at_utc', v_now
+              )
+          WHERE hash_basis_mismatch_work_item.id = v_work_item.id;
+
+          RETURN jsonb_build_object('ok', false, 'status', 'BLOCKED', 'blocker', v_blocker);
+        END IF;
+
+        v_regenerated_suggestion_hash := md5(v_accepted_hash_text);
+      ELSE
+        v_regenerated_suggestion_hash := md5(jsonb_build_object(
+          'finance_case_id', v_case_record.finance_case_id,
+          'candidate_id', v_case_row.candidate_id,
+          'component_ids', v_case_record.selected_component_ids,
+          'selected_component_ids', v_case_record.selected_component_ids,
+          'component_fingerprints', v_accepted_fingerprints_json,
+          'effective_pay_date', v_accepted_effective_pay_date,
+          'apply_surface', v_accepted_surface,
+          'resolution_path', COALESCE(v_regenerated_suggestion->>'resolution_path', v_regenerated_suggestion#>>'{request,resolution_path}', v_resolution_path, 'SUGGESTED'),
+          'resolution_mode', COALESCE(v_regenerated_suggestion->>'resolution_mode', v_regenerated_suggestion#>>'{result,resolution_mode}', v_regenerated_suggestion#>>'{suggestion,resolution_mode}'),
+          'weeks_total', COALESCE(v_regenerated_suggestion->>'weeks_total', v_regenerated_suggestion#>>'{result,weeks_total}', v_regenerated_suggestion#>>'{suggestion,weeks_total}'),
+          'weekly_due', COALESCE(v_regenerated_suggestion->>'weekly_due', v_regenerated_suggestion#>>'{result,weekly_due}', v_regenerated_suggestion#>>'{suggestion,weekly_due}'),
+          'manual_total_remaining', COALESCE(v_regenerated_suggestion->>'manual_total_remaining', v_regenerated_suggestion#>>'{result,manual_total_remaining}', v_regenerated_suggestion#>>'{suggestion,manual_total_remaining}'),
+          'taxable_channel_result', v_regenerated_taxable_result
+        )::text);
+      END IF;
 
       IF v_accepted_suggestion_hash IS NULL THEN
         v_blocker := jsonb_build_object(
@@ -13242,7 +13371,8 @@ BEGIN
         RETURN jsonb_build_object('ok', false, 'status', 'BLOCKED', 'blocker', v_blocker);
       END IF;
 
-      IF v_plan_suggestion_hash IS NOT NULL
+      IF UPPER(COALESCE(v_resolution_path, 'SUGGESTED')) = 'SUGGESTED'
+         AND v_plan_suggestion_hash IS NOT NULL
          AND v_accepted_suggestion_hash <> v_plan_suggestion_hash THEN
         v_blocker := jsonb_build_object(
           'code', 'ACCEPTED_RESOLUTION_PLAN_HASH_MISMATCH',
@@ -13410,6 +13540,8 @@ BEGIN
       'apply_surface', v_accepted_surface,
       'effective_pay_date', v_accepted_effective_pay_date::text,
       'regenerated_suggestion_hash', v_regenerated_suggestion_hash,
+      'resolution_path', v_resolution_path,
+      'accepted_suggestion_hash', v_accepted_suggestion_hash,
       'apply_result', v_apply_result
     ));
   END LOOP;
@@ -13436,6 +13568,11 @@ BEGIN
   RETURN v_result;
 END;
 $function$;
+
+
+
+
+
 
 CREATE OR REPLACE FUNCTION public.pay_no_money_unwind_apply_work_item(
   p_work_item_id uuid,
@@ -14760,7 +14897,6 @@ EXCEPTION
 END;
 $function$;
 
-
 CREATE OR REPLACE FUNCTION public._pay_payment_correction_validate_accepted_finance_resolution(
   p_pay_batch_id uuid,
   p_selection_json jsonb,
@@ -14826,6 +14962,12 @@ DECLARE
   v_weeks_total text := NULL::text;
   v_weekly_due text := NULL::text;
   v_manual_total_remaining text := NULL::text;
+  v_schedule_input_mode text := NULL::text;
+  v_note text := NULL::text;
+  v_accepted_hash_text text := NULL::text;
+  v_accepted_hash_basis jsonb := '{}'::jsonb;
+  v_accepted_basis_taxable_result jsonb := NULL::jsonb;
+  v_regenerated_taxable_result jsonb := NULL::jsonb;
 
   v_affected_reservation_ids uuid[] := ARRAY[]::uuid[];
   v_open_overlap_count integer := 0;
@@ -15428,7 +15570,64 @@ BEGIN
       NULLIF(btrim(v_resolution_body->>'suggestion_hash'), '')
     );
 
-    IF v_plan_suggestion_hash IS NULL THEN
+    v_resolution_path := UPPER(COALESCE(
+      NULLIF(btrim(v_accepted_case_json->>'resolution_path'), ''),
+      NULLIF(btrim(v_resolution_body->>'resolution_path'), ''),
+      'SUGGESTED'
+    ));
+    IF v_resolution_path NOT IN ('SUGGESTED', 'MANUAL') THEN
+      RETURN jsonb_build_object(
+        'ok', false,
+        'required', true,
+        'validated', false,
+        'blocker', jsonb_build_object(
+          'code', 'ACCEPTED_RESOLUTION_PATH_INVALID',
+          'message', 'accepted_resolution_json resolution_path must be SUGGESTED or MANUAL.',
+          'finance_case_id', v_finance_case_id::text,
+          'resolution_path', v_resolution_path
+        )
+      );
+    END IF;
+
+    v_schedule_input_mode := UPPER(COALESCE(
+      NULLIF(btrim(v_accepted_case_json->>'schedule_input_mode'), ''),
+      NULLIF(btrim(v_resolution_body->>'schedule_input_mode'), ''),
+      NULLIF(btrim(v_accepted_case_json#>>'{suggestion,schedule_input_mode}'), '')
+    ));
+    v_weeks_total := COALESCE(v_accepted_case_json->>'weeks_total', v_resolution_body->>'weeks_total', v_accepted_case_json#>>'{suggestion,selected,weeks_total}');
+    v_weekly_due := COALESCE(v_accepted_case_json->>'weekly_due', v_resolution_body->>'weekly_due', v_accepted_case_json#>>'{suggestion,selected,weekly_due}');
+    v_manual_total_remaining := COALESCE(v_accepted_case_json->>'manual_total_remaining', v_resolution_body->>'manual_total_remaining');
+    v_note := COALESCE(NULLIF(btrim(v_accepted_case_json->>'note'), ''), NULLIF(btrim(v_resolution_body->>'note'), ''));
+    v_accepted_hash_text := COALESCE(NULLIF(btrim(v_accepted_case_json#>>'{suggestion_hash_basis,hash_text}'), ''), NULLIF(btrim(v_resolution_body#>>'{suggestion_hash_basis,hash_text}'), ''));
+    v_accepted_hash_basis := COALESCE(v_accepted_case_json->'suggestion_hash_basis', v_resolution_body->'suggestion_hash_basis', '{}'::jsonb);
+
+    IF COALESCE(jsonb_typeof(v_accepted_hash_basis), 'null') <> 'object' THEN
+      RETURN jsonb_build_object(
+        'ok', false,
+        'required', true,
+        'validated', false,
+        'blocker', jsonb_build_object(
+          'code', 'ACCEPTED_SUGGESTION_HASH_BASIS_INVALID',
+          'message', 'accepted_resolution_json suggestion_hash_basis must be an object.',
+          'finance_case_id', v_finance_case_id::text
+        )
+      );
+    END IF;
+
+    IF v_resolution_path = 'MANUAL' AND v_accepted_hash_text IS NULL THEN
+      RETURN jsonb_build_object(
+        'ok', false,
+        'required', true,
+        'validated', false,
+        'blocker', jsonb_build_object(
+          'code', 'ACCEPTED_SUGGESTION_HASH_BASIS_TEXT_MISSING',
+          'message', 'accepted_resolution_json manual resolution must include backend-generated suggestion_hash_basis.hash_text.',
+          'finance_case_id', v_finance_case_id::text
+        )
+      );
+    END IF;
+
+    IF v_plan_suggestion_hash IS NULL AND v_resolution_path = 'SUGGESTED' THEN
       RETURN jsonb_build_object(
         'ok', false,
         'required', true,
@@ -15454,7 +15653,7 @@ BEGIN
       );
     END IF;
 
-    IF v_accepted_suggestion_hash <> v_plan_suggestion_hash THEN
+    IF v_resolution_path = 'SUGGESTED' AND v_accepted_suggestion_hash <> v_plan_suggestion_hash THEN
       RETURN jsonb_build_object(
         'ok', false,
         'required', true,
@@ -15487,12 +15686,12 @@ BEGIN
         p_finance_case_id => v_finance_case_id,
         p_actor_user_id => p_actor_user_id,
         p_effective_pay_date => v_plan_effective_pay_date,
-        p_resolution_path => 'SUGGESTED',
-        p_schedule_input_mode => NULL::text,
-        p_weeks_total => NULL::integer,
-        p_weekly_due => NULL::numeric,
-        p_manual_total_remaining => NULL::numeric,
-        p_note => 'Regenerated for payment correction accepted-resolution validation ' || p_pay_batch_id::text
+        p_resolution_path => v_resolution_path,
+        p_schedule_input_mode => CASE WHEN v_resolution_path = 'MANUAL' THEN NULLIF(v_schedule_input_mode, '') ELSE NULL::text END,
+        p_weeks_total => CASE WHEN v_resolution_path = 'MANUAL' AND COALESCE(v_weeks_total, '') ~ '^\d+$' THEN v_weeks_total::integer ELSE NULL::integer END,
+        p_weekly_due => CASE WHEN v_resolution_path = 'MANUAL' AND COALESCE(v_weekly_due, '') ~ '^\d+(\.\d+)?$' THEN v_weekly_due::numeric ELSE NULL::numeric END,
+        p_manual_total_remaining => CASE WHEN v_resolution_path = 'MANUAL' AND COALESCE(v_manual_total_remaining, '') ~ '^\d+(\.\d+)?$' THEN v_manual_total_remaining::numeric ELSE NULL::numeric END,
+        p_note => COALESCE(v_note, 'Regenerated for payment correction accepted-resolution validation ' || p_pay_batch_id::text)
       );
     EXCEPTION WHEN OTHERS THEN
       RETURN jsonb_build_object(
@@ -15515,33 +15714,67 @@ BEGIN
     v_weekly_due := COALESCE(v_regenerated_suggestion->>'weekly_due', v_regenerated_suggestion#>>'{result,weekly_due}', v_regenerated_suggestion#>>'{suggestion,weekly_due}');
     v_manual_total_remaining := COALESCE(v_regenerated_suggestion->>'manual_total_remaining', v_regenerated_suggestion#>>'{result,manual_total_remaining}', v_regenerated_suggestion#>>'{suggestion,manual_total_remaining}');
 
-    v_regenerated_suggestion_hash := md5(jsonb_build_object(
-      'finance_case_id', v_finance_case_id,
-      'candidate_id', v_case_row.candidate_id,
-      'component_ids', COALESCE(v_plan_case_json->'component_ids', to_jsonb(v_plan_component_ids)),
-      'selected_component_ids', COALESCE(v_plan_case_json->'selected_component_ids', to_jsonb(v_plan_component_ids)),
-      'component_fingerprints', v_plan_fingerprints_json,
-      'effective_pay_date', v_plan_effective_pay_date,
-      'apply_surface', v_plan_apply_surface,
-      'resolution_path', v_resolution_path,
-      'resolution_mode', v_resolution_mode,
-      'weeks_total', v_weeks_total,
-      'weekly_due', v_weekly_due,
-      'manual_total_remaining', v_manual_total_remaining,
-      'taxable_channel_result', COALESCE(
-        v_regenerated_suggestion->'taxable_channel_result',
-        v_regenerated_suggestion->'result',
-        v_regenerated_suggestion->'suggestion',
-        v_regenerated_suggestion
-      ) - 'generated_at'
-        - 'generated_at_utc'
-        - 'created_at'
-        - 'created_at_utc'
-        - 'updated_at'
-        - 'updated_at_utc'
-        - 'audit'
-        - 'debug'
-    )::text);
+    v_regenerated_taxable_result := COALESCE(
+      v_regenerated_suggestion->'taxable_channel_result',
+      v_regenerated_suggestion->'result',
+      v_regenerated_suggestion->'suggestion',
+      v_regenerated_suggestion
+    ) - 'generated_at'
+      - 'generated_at_utc'
+      - 'created_at'
+      - 'created_at_utc'
+      - 'updated_at'
+      - 'updated_at_utc'
+      - 'audit'
+      - 'debug';
+
+    IF v_resolution_path = 'MANUAL' THEN
+      v_accepted_basis_taxable_result := v_accepted_hash_basis->'taxable_channel_result';
+
+      IF COALESCE(v_accepted_hash_basis->>'hash_version', '') <> 'payment_correction_finance_resolution_v1'
+         OR COALESCE(v_accepted_hash_basis->>'finance_case_id', '') <> v_finance_case_id::text
+         OR COALESCE(v_accepted_hash_basis->>'candidate_id', '') <> v_case_row.candidate_id::text
+         OR COALESCE(v_accepted_hash_basis->>'apply_surface', '') <> v_plan_apply_surface
+         OR COALESCE(v_accepted_hash_basis->>'effective_pay_date', '') <> v_plan_effective_pay_date_text
+         OR UPPER(COALESCE(v_accepted_hash_basis->>'resolution_path', '')) <> 'MANUAL'
+         OR COALESCE(v_accepted_hash_basis->>'schedule_input_mode', '') <> COALESCE(NULLIF(btrim(v_accepted_case_json->>'schedule_input_mode'), ''), NULLIF(btrim(v_resolution_body->>'schedule_input_mode'), ''), '')
+         OR COALESCE(v_accepted_hash_basis->>'weeks_total', '') <> COALESCE(v_accepted_case_json->>'weeks_total', v_resolution_body->>'weeks_total', v_accepted_case_json#>>'{suggestion,selected,weeks_total}', '')
+         OR COALESCE(v_accepted_hash_basis->>'weekly_due', '') <> COALESCE(v_accepted_case_json->>'weekly_due', v_resolution_body->>'weekly_due', v_accepted_case_json#>>'{suggestion,selected,weekly_due}', '')
+         OR COALESCE(v_accepted_hash_basis->>'manual_total_remaining', '') <> COALESCE(v_accepted_case_json->>'manual_total_remaining', v_resolution_body->>'manual_total_remaining', '')
+         OR COALESCE(v_accepted_hash_basis->'selected_component_ids', '[]'::jsonb) IS DISTINCT FROM COALESCE(v_accepted_component_ids_json, '[]'::jsonb)
+         OR COALESCE(v_accepted_hash_basis->'current_component_fingerprints', v_accepted_hash_basis->'component_fingerprints', '{}'::jsonb) IS DISTINCT FROM COALESCE(v_accepted_fingerprints_json, '{}'::jsonb)
+         OR v_accepted_basis_taxable_result IS NULL
+         OR v_accepted_basis_taxable_result IS DISTINCT FROM v_regenerated_taxable_result THEN
+        RETURN jsonb_build_object(
+          'ok', false,
+          'required', true,
+          'validated', false,
+          'blocker', jsonb_build_object(
+            'code', 'ACCEPTED_SUGGESTION_HASH_BASIS_MISMATCH',
+            'message', 'accepted_resolution_json manual suggestion_hash_basis does not match the regenerated backend suggestion and selected correction scope.',
+            'finance_case_id', v_finance_case_id::text
+          )
+        );
+      END IF;
+
+      v_regenerated_suggestion_hash := md5(v_accepted_hash_text);
+    ELSE
+      v_regenerated_suggestion_hash := md5(jsonb_build_object(
+        'finance_case_id', v_finance_case_id,
+        'candidate_id', v_case_row.candidate_id,
+        'component_ids', COALESCE(v_plan_case_json->'component_ids', to_jsonb(v_plan_component_ids)),
+        'selected_component_ids', COALESCE(v_plan_case_json->'selected_component_ids', to_jsonb(v_plan_component_ids)),
+        'component_fingerprints', v_plan_fingerprints_json,
+        'effective_pay_date', v_plan_effective_pay_date,
+        'apply_surface', v_plan_apply_surface,
+        'resolution_path', v_resolution_path,
+        'resolution_mode', v_resolution_mode,
+        'weeks_total', v_weeks_total,
+        'weekly_due', v_weekly_due,
+        'manual_total_remaining', v_manual_total_remaining,
+        'taxable_channel_result', v_regenerated_taxable_result
+      )::text);
+    END IF;
 
     IF v_regenerated_suggestion_hash <> v_accepted_suggestion_hash THEN
       RETURN jsonb_build_object(
@@ -15569,6 +15802,7 @@ BEGIN
   );
 END;
 $function$;
+
 
 
 CREATE OR REPLACE FUNCTION public._pay_payment_correction_mail_scope_match(
