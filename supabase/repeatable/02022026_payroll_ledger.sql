@@ -21509,7 +21509,13 @@ $$;
 
 
 
-create or replace function public.pay_batch_get(p_pay_batch_id uuid)
+
+
+
+
+DROP FUNCTION IF EXISTS public.pay_batch_get(uuid);
+
+create or replace function public.pay_batch_get(p_pay_batch_id uuid, p_actor_user_id uuid DEFAULT NULL::uuid)
 returns jsonb
 language plpgsql
 security definer
@@ -21617,6 +21623,33 @@ declare
   v_active_effective_amount_ex_vat numeric := 0;
   v_active_effective_amount_inc_vat numeric := 0;
   v_payment_issue_candidate_count integer := 0;
+
+  -- Banking red-alert / blocked-funds modal support
+  v_alert_actor_user_id uuid := '00000000-0000-0000-0000-000000000000'::uuid;
+  v_alert_registry jsonb := jsonb_build_object('alerts', '[]'::jsonb, 'unacknowledged_count', 0, 'highest_severity', NULL::text, 'highest_label', NULL::text);
+  v_banking_alerts jsonb := '[]'::jsonb;
+  v_banking_alert_kind text := NULL::text;
+  v_banking_alert_severity text := NULL::text;
+  v_banking_alert_label text := NULL::text;
+  v_banking_alert_reason text := NULL::text;
+  v_banking_alert_fingerprint text := NULL::text;
+  v_banking_alert_acknowledged_for_user boolean := false;
+  v_banking_alert_requires_attention boolean := false;
+  v_blocked_funds_required_gbp numeric := NULL::numeric;
+  v_blocked_funds_available_gbp numeric := NULL::numeric;
+  v_blocked_funds_sufficient boolean := NULL::boolean;
+  v_blocked_funds_provider text := NULL::text;
+  v_blocked_funds_env text := NULL::text;
+  v_blocked_funds_account_ref text := NULL::text;
+  v_no_bank_transfer_events boolean := true;
+  v_no_rail_tx_id boolean := true;
+  v_no_provider_submission_reference boolean := true;
+  v_no_submitted_or_completed_transfer_state boolean := true;
+  v_no_submission_evidence_flags jsonb := '{}'::jsonb;
+  v_can_retry_blocked_funds boolean := false;
+  v_blocked_funds_alert_payload jsonb := '{}'::jsonb;
+  v_blocked_funds_payment_issue jsonb := NULL::jsonb;
+  v_payment_issues jsonb := '[]'::jsonb;
 begin
   if p_pay_batch_id is null then
     raise exception 'pay_batch_id is required';
@@ -22215,6 +22248,286 @@ begin
       )
   )
   into v_has_external_submission_evidence;
+
+  v_alert_actor_user_id := COALESCE(p_actor_user_id, '00000000-0000-0000-0000-000000000000'::uuid);
+
+  v_alert_registry := public.banking_alerts_active_for_user(
+    v_alert_actor_user_id,
+    'pay_batch'::text,
+    p_pay_batch_id,
+    true,
+    50
+  );
+
+  SELECT
+    COALESCE(jsonb_agg(alert_scope.alert_json ORDER BY alert_scope.severity_rank DESC, alert_scope.sort_at_utc DESC NULLS LAST, alert_scope.alert_fingerprint ASC), '[]'::jsonb),
+    (array_agg(alert_scope.alert_json ->> 'alert_kind' ORDER BY alert_scope.severity_rank DESC, alert_scope.sort_at_utc DESC NULLS LAST, alert_scope.alert_fingerprint ASC))[1],
+    (array_agg(alert_scope.alert_json ->> 'severity' ORDER BY alert_scope.severity_rank DESC, alert_scope.sort_at_utc DESC NULLS LAST, alert_scope.alert_fingerprint ASC))[1],
+    (array_agg(alert_scope.alert_json ->> 'label' ORDER BY alert_scope.severity_rank DESC, alert_scope.sort_at_utc DESC NULLS LAST, alert_scope.alert_fingerprint ASC))[1],
+    (array_agg(alert_scope.alert_json ->> 'description' ORDER BY alert_scope.severity_rank DESC, alert_scope.sort_at_utc DESC NULLS LAST, alert_scope.alert_fingerprint ASC))[1],
+    (array_agg(alert_scope.alert_fingerprint ORDER BY alert_scope.severity_rank DESC, alert_scope.sort_at_utc DESC NULLS LAST, alert_scope.alert_fingerprint ASC))[1],
+    COALESCE(bool_and(alert_scope.acknowledged_for_current_user), false),
+    COALESCE(bool_or(alert_scope.acknowledged_for_current_user = false), false)
+  INTO
+    v_banking_alerts,
+    v_banking_alert_kind,
+    v_banking_alert_severity,
+    v_banking_alert_label,
+    v_banking_alert_reason,
+    v_banking_alert_fingerprint,
+    v_banking_alert_acknowledged_for_user,
+    v_banking_alert_requires_attention
+  FROM (
+    SELECT
+      alert_items.alert_json,
+      alert_items.alert_json ->> 'alert_fingerprint' AS alert_fingerprint,
+      CASE
+        WHEN (alert_items.alert_json ->> 'severity_rank') ~ '^[0-9]+$' THEN (alert_items.alert_json ->> 'severity_rank')::integer
+        ELSE 0
+      END AS severity_rank,
+      CASE
+        WHEN NULLIF(alert_items.alert_json ->> 'sort_at_utc', '') IS NULL THEN NULL::timestamptz
+        ELSE (alert_items.alert_json ->> 'sort_at_utc')::timestamptz
+      END AS sort_at_utc,
+      COALESCE((alert_items.alert_json ->> 'acknowledged_for_current_user')::boolean, false) AS acknowledged_for_current_user
+    FROM jsonb_array_elements(COALESCE(v_alert_registry -> 'alerts', '[]'::jsonb)) AS alert_items(alert_json)
+    WHERE alert_items.alert_json ->> 'pay_batch_id' = p_pay_batch_id::text
+  ) AS alert_scope;
+
+  v_banking_alerts := COALESCE(v_banking_alerts, '[]'::jsonb);
+  v_banking_alert_acknowledged_for_user := COALESCE(v_banking_alert_acknowledged_for_user, false);
+  v_banking_alert_requires_attention := COALESCE(v_banking_alert_requires_attention, false);
+
+  v_blocked_funds_required_gbp := CASE
+    WHEN COALESCE(
+      v_batch.last_funds_check_json #>> '{required_gbp}',
+      v_batch.last_funds_check_json #>> '{required}',
+      v_batch.last_funds_check_json #>> '{required_amount_gbp}',
+      v_batch.last_funds_check_json #>> '{required_amount}'
+    ) ~ '^-?[0-9]+(\.[0-9]+)?$'
+      THEN COALESCE(
+        v_batch.last_funds_check_json #>> '{required_gbp}',
+        v_batch.last_funds_check_json #>> '{required}',
+        v_batch.last_funds_check_json #>> '{required_amount_gbp}',
+        v_batch.last_funds_check_json #>> '{required_amount}'
+      )::numeric
+    ELSE NULL::numeric
+  END;
+
+  v_blocked_funds_available_gbp := CASE
+    WHEN COALESCE(
+      v_batch.last_funds_check_json #>> '{available_gbp}',
+      v_batch.last_funds_check_json #>> '{available}',
+      v_batch.last_funds_check_json #>> '{available_amount_gbp}',
+      v_batch.last_funds_check_json #>> '{available_amount}'
+    ) ~ '^-?[0-9]+(\.[0-9]+)?$'
+      THEN COALESCE(
+        v_batch.last_funds_check_json #>> '{available_gbp}',
+        v_batch.last_funds_check_json #>> '{available}',
+        v_batch.last_funds_check_json #>> '{available_amount_gbp}',
+        v_batch.last_funds_check_json #>> '{available_amount}'
+      )::numeric
+    ELSE NULL::numeric
+  END;
+
+  v_blocked_funds_sufficient := CASE
+    WHEN lower(btrim(COALESCE(v_batch.last_funds_check_json #>> '{sufficient}', v_batch.last_funds_check_json #>> '{is_sufficient}', ''))) IN ('true','1','yes','y','on') THEN true
+    WHEN lower(btrim(COALESCE(v_batch.last_funds_check_json #>> '{sufficient}', v_batch.last_funds_check_json #>> '{is_sufficient}', ''))) IN ('false','0','no','n','off') THEN false
+    ELSE NULL::boolean
+  END;
+
+  v_blocked_funds_provider := COALESCE(
+    v_batch.last_funds_check_json #>> '{rail_provider}',
+    v_batch.last_funds_check_json #>> '{provider}',
+    v_batch.rail_provider_snapshot
+  );
+
+  v_blocked_funds_env := COALESCE(
+    v_batch.last_funds_check_json #>> '{rail_env}',
+    v_batch.last_funds_check_json #>> '{env}',
+    v_batch.rail_env_snapshot
+  );
+
+  v_blocked_funds_account_ref := COALESCE(
+    v_batch.last_funds_check_json #>> '{funding_account_ref}',
+    v_batch.last_funds_check_json #>> '{account_ref}',
+    v_batch.funding_account_ref
+  );
+
+  SELECT NOT EXISTS (
+    SELECT 1
+    FROM public.pay_bank_transfer_events AS blocked_funds_retry_events
+    WHERE blocked_funds_retry_events.pay_batch_id = p_pay_batch_id
+  )
+  INTO v_no_bank_transfer_events;
+
+  SELECT NOT EXISTS (
+    SELECT 1
+    FROM public.pay_bank_transfers AS blocked_funds_retry_transfers
+    WHERE blocked_funds_retry_transfers.pay_batch_id = p_pay_batch_id
+      AND NULLIF(BTRIM(COALESCE(blocked_funds_retry_transfers.rail_tx_id, '')), '') IS NOT NULL
+  )
+  INTO v_no_rail_tx_id;
+
+  SELECT NOT EXISTS (
+    SELECT 1
+    FROM public.pay_bank_transfers AS blocked_funds_retry_transfers
+    WHERE blocked_funds_retry_transfers.pay_batch_id = p_pay_batch_id
+      AND COALESCE(
+        NULLIF(BTRIM(COALESCE(blocked_funds_retry_transfers.rail_meta_json ->> 'provider_submission_id', '')), ''),
+        NULLIF(BTRIM(COALESCE(blocked_funds_retry_transfers.rail_meta_json ->> 'submission_id', '')), ''),
+        NULLIF(BTRIM(COALESCE(blocked_funds_retry_transfers.rail_meta_json ->> 'provider_transfer_id', '')), ''),
+        NULLIF(BTRIM(COALESCE(blocked_funds_retry_transfers.rail_meta_json ->> 'transfer_id', '')), ''),
+        NULLIF(BTRIM(COALESCE(blocked_funds_retry_transfers.rail_meta_json ->> 'external_transfer_id', '')), ''),
+        NULLIF(BTRIM(COALESCE(blocked_funds_retry_transfers.rail_meta_json ->> 'provider_payment_id', '')), ''),
+        NULLIF(BTRIM(COALESCE(blocked_funds_retry_transfers.rail_meta_json ->> 'payment_id', '')), ''),
+        NULLIF(BTRIM(COALESCE(blocked_funds_retry_transfers.rail_meta_json ->> 'external_payment_id', '')), ''),
+        NULLIF(BTRIM(COALESCE(blocked_funds_retry_transfers.rail_meta_json ->> 'transaction_id', '')), '')
+      ) IS NOT NULL
+  )
+  INTO v_no_provider_submission_reference;
+
+  SELECT NOT EXISTS (
+    SELECT 1
+    FROM public.pay_bank_transfers AS blocked_funds_retry_transfers
+    WHERE blocked_funds_retry_transfers.pay_batch_id = p_pay_batch_id
+      AND (
+        upper(btrim(COALESCE(blocked_funds_retry_transfers.status, ''))) IN ('SUBMITTED','QUEUED','ACCEPTED','SENT','PROCESSING','IN_FLIGHT','PENDING_SETTLEMENT','PENDING_CONFIRMATION','PENDING_SUBMISSION','COMPLETED','SETTLED','COMMITTED','PAID','EXECUTED')
+        OR upper(btrim(COALESCE(blocked_funds_retry_transfers.rail_state, ''))) IN ('SUBMITTED','QUEUED','ACCEPTED','SENT','PROCESSING','IN_FLIGHT','PENDING_SETTLEMENT','PENDING_CONFIRMATION','PENDING_SUBMISSION','COMPLETED','SETTLED','COMMITTED','PAID','EXECUTED')
+        OR lower(btrim(COALESCE(blocked_funds_retry_transfers.rail_meta_json ->> 'submitted', 'false'))) IN ('true','1','yes','y','on')
+        OR lower(btrim(COALESCE(blocked_funds_retry_transfers.rail_meta_json ->> 'queued', 'false'))) IN ('true','1','yes','y','on')
+        OR lower(btrim(COALESCE(blocked_funds_retry_transfers.rail_meta_json ->> 'accepted', 'false'))) IN ('true','1','yes','y','on')
+        OR lower(btrim(COALESCE(blocked_funds_retry_transfers.rail_meta_json ->> 'sent', 'false'))) IN ('true','1','yes','y','on')
+        OR lower(btrim(COALESCE(blocked_funds_retry_transfers.rail_meta_json ->> 'processing', 'false'))) IN ('true','1','yes','y','on')
+        OR lower(btrim(COALESCE(blocked_funds_retry_transfers.rail_meta_json ->> 'completed', 'false'))) IN ('true','1','yes','y','on')
+        OR lower(btrim(COALESCE(blocked_funds_retry_transfers.rail_meta_json ->> 'committed', 'false'))) IN ('true','1','yes','y','on')
+        OR lower(btrim(COALESCE(blocked_funds_retry_transfers.rail_meta_json ->> 'settled', 'false'))) IN ('true','1','yes','y','on')
+        OR lower(btrim(COALESCE(blocked_funds_retry_transfers.rail_meta_json ->> 'paid', 'false'))) IN ('true','1','yes','y','on')
+      )
+  )
+  INTO v_no_submitted_or_completed_transfer_state;
+
+  v_no_submission_evidence_flags := jsonb_build_object(
+    'execution_commit_not_submitted', v_execution_commit_state = 'NOT_SUBMITTED',
+    'execution_commit_ref_absent', NULLIF(BTRIM(COALESCE(v_batch.execution_commit_ref, '')), '') IS NULL,
+    'execution_committed_at_absent', v_batch.execution_committed_at_utc IS NULL,
+    'no_bank_transfer_events', COALESCE(v_no_bank_transfer_events, false),
+    'no_rail_tx_id', COALESCE(v_no_rail_tx_id, false),
+    'no_provider_submission_reference', COALESCE(v_no_provider_submission_reference, false),
+    'no_submitted_or_completed_transfer_state', COALESCE(v_no_submitted_or_completed_transfer_state, false),
+    'no_external_submission_evidence', COALESCE(v_has_external_submission_evidence, false) = false
+  );
+
+  v_can_retry_blocked_funds := (
+    v_batch_status_upper = 'BLOCKED_FUNDS'
+    AND v_execution_commit_state = 'NOT_SUBMITTED'
+    AND NULLIF(BTRIM(COALESCE(v_batch.execution_commit_ref, '')), '') IS NULL
+    AND v_batch.execution_committed_at_utc IS NULL
+    AND COALESCE(v_active_effective_item_count, 0) > 0
+    AND COALESCE(v_no_bank_transfer_events, false) = true
+    AND COALESCE(v_no_rail_tx_id, false) = true
+    AND COALESCE(v_no_provider_submission_reference, false) = true
+    AND COALESCE(v_no_submitted_or_completed_transfer_state, false) = true
+    AND COALESCE(v_has_external_submission_evidence, false) = false
+    AND v_blocked_funds_sufficient IS FALSE
+  );
+
+  IF v_batch_status_upper = 'BLOCKED_FUNDS' THEN
+    v_blocked_funds_alert_payload := jsonb_strip_nulls(jsonb_build_object(
+      'pay_batch_id', p_pay_batch_id::text,
+      'issue_kind', 'BLOCKED_FUNDS',
+      'batch_status', v_batch.status,
+      'execution_commit_state', v_batch.execution_commit_state,
+      'execution_commit_ref', v_batch.execution_commit_ref,
+      'execution_committed_at_utc', CASE WHEN v_batch.execution_committed_at_utc IS NULL THEN NULL ELSE v_batch.execution_committed_at_utc::text END,
+      'last_funds_check_at_utc', CASE WHEN v_batch.last_funds_check_at_utc IS NULL THEN NULL ELSE v_batch.last_funds_check_at_utc::text END,
+      'funds_check_checked_at_utc', COALESCE(
+        v_batch.last_funds_check_json #>> '{checked_at_utc}',
+        v_batch.last_funds_check_json #>> '{checked_at}',
+        v_batch.last_funds_check_json #>> '{timestamp}'
+      ),
+      'required_gbp', v_blocked_funds_required_gbp,
+      'available_gbp', v_blocked_funds_available_gbp,
+      'sufficient', v_blocked_funds_sufficient,
+      'funding_account_ref', v_blocked_funds_account_ref,
+      'rail_provider', v_blocked_funds_provider,
+      'rail_env', v_blocked_funds_env,
+      'can_retry_blocked_funds', v_can_retry_blocked_funds,
+      'no_submission_evidence_flags', v_no_submission_evidence_flags,
+      'active_item_count', COALESCE(v_active_effective_item_count, 0)
+    ));
+
+    IF NULLIF(BTRIM(COALESCE(v_banking_alert_fingerprint, '')), '') IS NULL THEN
+      v_banking_alert_fingerprint := public.banking_alert_fingerprint(
+        'BLOCKED_FUNDS',
+        'pay_batch',
+        p_pay_batch_id,
+        v_blocked_funds_alert_payload
+      );
+    END IF;
+
+    v_banking_alert_kind := COALESCE(v_banking_alert_kind, 'BLOCKED_FUNDS');
+    v_banking_alert_severity := COALESCE(v_banking_alert_severity, 'critical');
+    v_banking_alert_label := COALESCE(v_banking_alert_label, 'Bank rejected payment');
+    v_banking_alert_reason := COALESCE(
+      v_banking_alert_reason,
+      concat(
+        'Blocked funds',
+        CASE WHEN v_blocked_funds_required_gbp IS NULL THEN '' ELSE ' — required £' || v_blocked_funds_required_gbp::text END,
+        CASE WHEN v_blocked_funds_available_gbp IS NULL THEN '' ELSE ', available £' || v_blocked_funds_available_gbp::text END
+      )
+    );
+
+    IF v_banking_alerts = '[]'::jsonb THEN
+      v_banking_alerts := jsonb_build_array(jsonb_build_object(
+        'alert_kind', 'BLOCKED_FUNDS',
+        'severity', 'critical',
+        'severity_rank', 100,
+        'entity_kind', 'pay_batch',
+        'entity_id', p_pay_batch_id::text,
+        'pay_batch_id', p_pay_batch_id::text,
+        'alert_fingerprint', v_banking_alert_fingerprint,
+        'label', 'Bank rejected payment',
+        'title', 'Bank rejected payment — blocked funds',
+        'description', v_banking_alert_reason,
+        'action_guidance', 'Fund the account and retry, or cancel/release the batch.',
+        'acknowledged_for_current_user', v_banking_alert_acknowledged_for_user,
+        'payload_json', v_blocked_funds_alert_payload
+      ));
+    END IF;
+
+    v_blocked_funds_payment_issue := jsonb_build_object(
+      'issue_kind', 'BLOCKED_FUNDS',
+      'severity', 'critical',
+      'bank_status_label', 'Bank rejected payment',
+      'what_happened', concat(
+        'Blocked funds',
+        CASE WHEN v_blocked_funds_required_gbp IS NULL THEN '' ELSE ' — required £' || v_blocked_funds_required_gbp::text END,
+        CASE WHEN v_blocked_funds_available_gbp IS NULL THEN '' ELSE ', available £' || v_blocked_funds_available_gbp::text END
+      ),
+      'what_happened_label', concat(
+        'Blocked funds',
+        CASE WHEN v_blocked_funds_required_gbp IS NULL THEN '' ELSE ' — required £' || v_blocked_funds_required_gbp::text END,
+        CASE WHEN v_blocked_funds_available_gbp IS NULL THEN '' ELSE ', available £' || v_blocked_funds_available_gbp::text END
+      ),
+      'action_label', 'Retry payment / Cancel payment',
+      'status_label', 'Urgent action needed',
+      'requires_user_action', true,
+      'whole_batch_issue', true,
+      'can_retry_blocked_funds', v_can_retry_blocked_funds,
+      'required_gbp', v_blocked_funds_required_gbp,
+      'available_gbp', v_blocked_funds_available_gbp,
+      'sufficient', v_blocked_funds_sufficient,
+      'provider', v_blocked_funds_provider,
+      'rail_provider', v_blocked_funds_provider,
+      'rail_env', v_blocked_funds_env,
+      'funding_account_ref', v_blocked_funds_account_ref,
+      'alert_fingerprint', v_banking_alert_fingerprint,
+      'no_submission_evidence_flags', v_no_submission_evidence_flags
+    );
+
+    v_payment_issues := jsonb_build_array(v_blocked_funds_payment_issue);
+  END IF;
 
 
   if v_has_cloudtms_csv_export = true then
@@ -24344,6 +24657,16 @@ begin
     )
   );
 
+  IF v_blocked_funds_payment_issue IS NOT NULL THEN
+    v_payment_correction := v_payment_correction || jsonb_build_object(
+      'blocked_funds_issue', v_blocked_funds_payment_issue,
+      'payment_issues', v_payment_issues,
+      'blocked_funds_action_required', true,
+      'can_retry_blocked_funds', v_can_retry_blocked_funds,
+      'requires_user_action', true
+    );
+  END IF;
+
   v_movement_classification := jsonb_build_object(
     'classification', CASE
       WHEN COALESCE(v_work_item_pending_count, 0) > 0
@@ -24416,11 +24739,22 @@ begin
     'transfer_completed_count', COALESCE(v_transfer_completed_count, 0)
   );
 
+  IF v_blocked_funds_payment_issue IS NOT NULL THEN
+    v_movement_classification := v_movement_classification || jsonb_build_object(
+      'blocked_funds_issue', v_blocked_funds_payment_issue,
+      'blocked_funds_action_required', true,
+      'bank_status_label', 'Bank rejected payment',
+      'issue_kind', 'BLOCKED_FUNDS',
+      'can_retry_blocked_funds', v_can_retry_blocked_funds
+    );
+  END IF;
+
   v_manual_actions := jsonb_build_object(
     'can_cancel_payment_attempt', v_can_cancel_payment_attempt,
     'can_unwind_failed_payment', v_can_unwind_failed_payment,
     'can_reverse_settled_payment', v_can_reverse_settled_payment,
-    'can_review_bank_evidence', v_can_review_bank_evidence
+    'can_review_bank_evidence', v_can_review_bank_evidence,
+    'can_retry_blocked_funds', v_can_retry_blocked_funds
   );
 
   SELECT jsonb_build_object(
@@ -24587,6 +24921,26 @@ begin
     || jsonb_build_object(
       'manual_actions', v_manual_actions,
       'communication_status', v_communication_status,
+      'last_funds_check_at_utc', v_batch.last_funds_check_at_utc,
+      'last_funds_check_json', v_batch.last_funds_check_json,
+      'blocked_funds_required_gbp', v_blocked_funds_required_gbp,
+      'blocked_funds_available_gbp', v_blocked_funds_available_gbp,
+      'blocked_funds_sufficient', v_blocked_funds_sufficient,
+      'blocked_funds_provider', v_blocked_funds_provider,
+      'blocked_funds_env', v_blocked_funds_env,
+      'blocked_funds_account_ref', v_blocked_funds_account_ref,
+      'banking_alerts', v_banking_alerts,
+      'banking_alert_kind', v_banking_alert_kind,
+      'banking_alert_severity', v_banking_alert_severity,
+      'banking_alert_label', v_banking_alert_label,
+      'banking_alert_reason', v_banking_alert_reason,
+      'banking_alert_fingerprint', v_banking_alert_fingerprint,
+      'banking_alert_acknowledged_for_user', v_banking_alert_acknowledged_for_user,
+      'banking_alert_requires_attention', v_banking_alert_requires_attention,
+      'can_retry_blocked_funds', v_can_retry_blocked_funds,
+      'no_submission_evidence_flags', v_no_submission_evidence_flags,
+      'blocked_funds_payment_issue', v_blocked_funds_payment_issue,
+      'payment_issues', v_payment_issues,
       'finance_case_correction_summary', v_finance_case_correction_summary,
       'correction_progress', v_correction_progress,
 
@@ -24660,6 +25014,27 @@ begin
           'monzo_confirmed_by_user_id', case when v_batch.monzo_confirmed_by_user_id is null then null else v_batch.monzo_confirmed_by_user_id::text end,
 
           'last_status_checked_at_utc', v_batch.last_status_checked_at_utc,
+          'last_funds_check_at_utc', v_batch.last_funds_check_at_utc,
+          'last_funds_check_json', v_batch.last_funds_check_json,
+          'funding_account_ref', v_batch.funding_account_ref,
+          'blocked_funds_required_gbp', v_blocked_funds_required_gbp,
+          'blocked_funds_available_gbp', v_blocked_funds_available_gbp,
+          'blocked_funds_sufficient', v_blocked_funds_sufficient,
+          'blocked_funds_provider', v_blocked_funds_provider,
+          'blocked_funds_env', v_blocked_funds_env,
+          'blocked_funds_account_ref', v_blocked_funds_account_ref,
+          'banking_alerts', v_banking_alerts,
+          'banking_alert_kind', v_banking_alert_kind,
+          'banking_alert_severity', v_banking_alert_severity,
+          'banking_alert_label', v_banking_alert_label,
+          'banking_alert_reason', v_banking_alert_reason,
+          'banking_alert_fingerprint', v_banking_alert_fingerprint,
+          'banking_alert_acknowledged_for_user', v_banking_alert_acknowledged_for_user,
+          'banking_alert_requires_attention', v_banking_alert_requires_attention,
+          'can_retry_blocked_funds', v_can_retry_blocked_funds,
+          'no_submission_evidence_flags', v_no_submission_evidence_flags,
+          'blocked_funds_payment_issue', v_blocked_funds_payment_issue,
+          'payment_issues', v_payment_issues,
 
           -- Rail-generic scheduling/execution fields
           'rail_provider_snapshot', v_batch.rail_provider_snapshot,
@@ -24680,6 +25055,7 @@ begin
     );
 end;
 $$;
+
 
 
 
