@@ -26431,10 +26431,16 @@ begin
 end;
 $$;
 
+
+
+
+DROP FUNCTION IF EXISTS public.pay_execute_bank(uuid, text, uuid);
+
 create or replace function public.pay_execute_bank(
   p_pay_batch_id uuid,
   p_pay_channel_scope text,
-  p_actor_user_id uuid
+  p_actor_user_id uuid,
+  p_retry_blocked_funds boolean DEFAULT false
 )
 returns jsonb
 language plpgsql
@@ -26488,6 +26494,12 @@ declare
   v_detected_committed_transfer_count int := 0;
   v_detected_execution_commit_ref text := null;
   v_detected_execution_committed_at_utc timestamptz := null;
+
+  v_retry_blocked_funds boolean := false;
+  v_blocked_funds_transfer_event_count integer := 0;
+  v_blocked_funds_submission_evidence_count integer := 0;
+  v_blocked_funds_active_item_count integer := 0;
+  v_blocked_funds_sufficient_text text := null;
 begin
   if p_pay_batch_id is null then
     raise exception 'pay_batch_id is required';
@@ -26500,6 +26512,8 @@ begin
   if v_scope not in ('PAYE','UMBRELLA','ALL','LOANS') then
     raise exception 'Invalid pay_channel_scope (PAYE|UMBRELLA|ALL|LOANS)';
   end if;
+
+  v_retry_blocked_funds := coalesce(p_retry_blocked_funds, false);
 
   -- Lock the batch row to prevent concurrent execution / bulk ref allocation races
   select
@@ -26516,7 +26530,10 @@ begin
     pb.batch_kind_fixed,
     pb.execution_commit_state,
     pb.execution_commit_ref,
-    pb.execution_committed_at_utc
+    pb.execution_committed_at_utc,
+    pb.last_funds_check_at_utc,
+    pb.last_funds_check_json,
+    pb.funding_account_ref
   into v_batch
   from public.pay_batches pb
   where pb.id = p_pay_batch_id
@@ -26732,6 +26749,26 @@ begin
     )::text;
   end if;
 
+  if upper(btrim(coalesce(v_batch.status, ''))) = 'BLOCKED_FUNDS' and v_retry_blocked_funds is not true then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_EXECUTE_BANK',
+      'code', 'BLOCKED_FUNDS_RETRY_REQUIRED',
+      'message', 'pay_execute_bank: BLOCKED_FUNDS batches cannot use generic execute; use the dedicated blocked-funds retry path',
+      'pay_batch_id', p_pay_batch_id::text,
+      'status', v_batch.status
+    )::text;
+  end if;
+
+  if v_retry_blocked_funds is true and upper(btrim(coalesce(v_batch.status, ''))) <> 'BLOCKED_FUNDS' then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_EXECUTE_BANK',
+      'code', 'BLOCKED_FUNDS_RETRY_STATUS_MISMATCH',
+      'message', 'pay_execute_bank: blocked-funds retry can only be used when the batch status is BLOCKED_FUNDS',
+      'pay_batch_id', p_pay_batch_id::text,
+      'status', v_batch.status
+    )::text;
+  end if;
+
   v_fresh := public.pay_batch_validate_freshness(p_pay_batch_id, p_actor_user_id);
   v_is_stale := coalesce((v_fresh->>'is_stale')::boolean, false);
   v_stale_reasons := coalesce(v_fresh->'stale_reasons', '[]'::jsonb);
@@ -26771,7 +26808,141 @@ begin
     )::text;
   end if;
 
-  if v_batch.status not in ('DRAFT','READY','PARTIAL','WAITING_BANK_CONFIRM','DRAFT_CREATED') then
+  if upper(btrim(coalesce(v_batch.status, ''))) = 'BLOCKED_FUNDS' then
+    if v_retry_blocked_funds is not true then
+      raise exception '%', jsonb_build_object(
+        'error', 'PAY_EXECUTE_BANK',
+        'code', 'BLOCKED_FUNDS_RETRY_REQUIRED',
+        'message', 'pay_execute_bank: BLOCKED_FUNDS batches require the dedicated blocked-funds retry path',
+        'pay_batch_id', p_pay_batch_id::text,
+        'status', v_batch.status
+      )::text;
+    end if;
+
+    if v_execution_commit_state <> 'NOT_SUBMITTED'
+       or nullif(btrim(coalesce(v_execution_commit_ref, '')), '') is not null
+       or v_execution_committed_at_utc is not null then
+      raise exception '%', jsonb_build_object(
+        'error', 'PAY_EXECUTE_BANK',
+        'code', 'BLOCKED_FUNDS_RETRY_EXECUTION_STATE_CONFLICT',
+        'message', 'pay_execute_bank: blocked-funds retry is only allowed before any bank submission boundary has been crossed',
+        'pay_batch_id', p_pay_batch_id::text,
+        'execution_commit_state', v_execution_commit_state,
+        'execution_commit_ref', v_execution_commit_ref,
+        'execution_committed_at_utc', case when v_execution_committed_at_utc is null then null else v_execution_committed_at_utc::text end
+      )::text;
+    end if;
+
+    select count(*)::integer
+      into v_blocked_funds_transfer_event_count
+    from public.pay_bank_transfer_events as pbt_event_guard
+    where pbt_event_guard.pay_batch_id = p_pay_batch_id;
+
+    if coalesce(v_blocked_funds_transfer_event_count, 0) > 0 then
+      raise exception '%', jsonb_build_object(
+        'error', 'PAY_EXECUTE_BANK',
+        'code', 'BLOCKED_FUNDS_RETRY_TRANSFER_EVENTS_EXIST',
+        'message', 'pay_execute_bank: blocked-funds retry is unsafe because bank transfer events already exist for this batch',
+        'pay_batch_id', p_pay_batch_id::text,
+        'event_count', v_blocked_funds_transfer_event_count
+      )::text;
+    end if;
+
+    select count(*)::integer
+      into v_blocked_funds_submission_evidence_count
+    from public.pay_bank_transfers as pbt_submission_guard
+    where pbt_submission_guard.pay_batch_id = p_pay_batch_id
+      and (
+        (v_do_paye = true and pbt_submission_guard.pay_channel = 'PAYE')
+        or (v_do_umbrella = true and pbt_submission_guard.pay_channel = 'UMBRELLA')
+        or (v_do_loans = true and pbt_submission_guard.pay_channel = 'PAYE')
+      )
+      and (
+        nullif(btrim(coalesce(pbt_submission_guard.rail_tx_id, '')), '') is not null
+        or upper(btrim(coalesce(pbt_submission_guard.status, ''))) in ('SUBMITTED','QUEUED','ACCEPTED','SENT','PROCESSING','IN_FLIGHT','PENDING_SETTLEMENT','PENDING_CONFIRMATION','PENDING_SUBMISSION','COMPLETED','SETTLED','COMMITTED','PAID','EXECUTED')
+        or upper(btrim(coalesce(pbt_submission_guard.rail_state, ''))) in ('SUBMITTED','QUEUED','ACCEPTED','SENT','PROCESSING','IN_FLIGHT','PENDING_SETTLEMENT','PENDING_CONFIRMATION','PENDING_SUBMISSION','COMPLETED','SETTLED','COMMITTED','PAID','EXECUTED')
+        or lower(btrim(coalesce(pbt_submission_guard.rail_meta_json->>'submitted', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+        or lower(btrim(coalesce(pbt_submission_guard.rail_meta_json->>'queued', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+        or lower(btrim(coalesce(pbt_submission_guard.rail_meta_json->>'accepted', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+        or lower(btrim(coalesce(pbt_submission_guard.rail_meta_json->>'sent', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+        or lower(btrim(coalesce(pbt_submission_guard.rail_meta_json->>'processing', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+        or lower(btrim(coalesce(pbt_submission_guard.rail_meta_json->>'completed', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+        or lower(btrim(coalesce(pbt_submission_guard.rail_meta_json->>'committed', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+        or lower(btrim(coalesce(pbt_submission_guard.rail_meta_json->>'settled', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+        or lower(btrim(coalesce(pbt_submission_guard.rail_meta_json->>'paid', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+        or lower(btrim(coalesce(pbt_submission_guard.rail_meta_json->>'executed', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+        or coalesce(
+          nullif(btrim(coalesce(pbt_submission_guard.rail_meta_json->>'provider_submission_id', '')), ''),
+          nullif(btrim(coalesce(pbt_submission_guard.rail_meta_json->>'submission_id', '')), ''),
+          nullif(btrim(coalesce(pbt_submission_guard.rail_meta_json->>'provider_transfer_id', '')), ''),
+          nullif(btrim(coalesce(pbt_submission_guard.rail_meta_json->>'transfer_id', '')), ''),
+          nullif(btrim(coalesce(pbt_submission_guard.rail_meta_json->>'external_transfer_id', '')), ''),
+          nullif(btrim(coalesce(pbt_submission_guard.rail_meta_json->>'provider_payment_id', '')), ''),
+          nullif(btrim(coalesce(pbt_submission_guard.rail_meta_json->>'payment_id', '')), ''),
+          nullif(btrim(coalesce(pbt_submission_guard.rail_meta_json->>'external_payment_id', '')), ''),
+          nullif(btrim(coalesce(pbt_submission_guard.rail_meta_json->>'transaction_id', '')), ''),
+          nullif(btrim(coalesce(pbt_submission_guard.rail_meta_json->>'id', '')), '')
+        ) is not null
+      );
+
+    if coalesce(v_blocked_funds_submission_evidence_count, 0) > 0 then
+      raise exception '%', jsonb_build_object(
+        'error', 'PAY_EXECUTE_BANK',
+        'code', 'BLOCKED_FUNDS_RETRY_SUBMISSION_EVIDENCE_EXISTS',
+        'message', 'pay_execute_bank: blocked-funds retry is unsafe because transfer submission or settlement evidence already exists',
+        'pay_batch_id', p_pay_batch_id::text,
+        'submission_evidence_count', v_blocked_funds_submission_evidence_count
+      )::text;
+    end if;
+
+    select count(*)::integer
+      into v_blocked_funds_active_item_count
+    from public.pay_batch_candidates as pbc_active_guard
+    join public.pay_batch_items as pbi_active_guard
+      on pbi_active_guard.pay_batch_candidate_id = pbc_active_guard.id
+    where pbc_active_guard.pay_batch_id = p_pay_batch_id
+      and coalesce(pbi_active_guard.is_voided, false) = false
+      and (
+        (v_do_paye = true and pbi_active_guard.pay_channel = 'PAYE')
+        or (v_do_umbrella = true and pbi_active_guard.pay_channel = 'UMBRELLA')
+        or (v_do_loans = true and pbi_active_guard.pay_channel = 'PAYE')
+      );
+
+    if coalesce(v_blocked_funds_active_item_count, 0) <= 0 then
+      raise exception '%', jsonb_build_object(
+        'error', 'PAY_EXECUTE_BANK',
+        'code', 'BLOCKED_FUNDS_RETRY_NO_ACTIVE_ITEMS',
+        'message', 'pay_execute_bank: blocked-funds retry requires active frozen batch items for the requested scope',
+        'pay_batch_id', p_pay_batch_id::text,
+        'scope', v_scope
+      )::text;
+    end if;
+
+    v_blocked_funds_sufficient_text := lower(btrim(coalesce(
+      v_batch.last_funds_check_json #>> '{sufficient}',
+      v_batch.last_funds_check_json #>> '{is_sufficient}',
+      ''
+    )));
+
+    if v_blocked_funds_sufficient_text not in ('false', '0', 'no', 'n', 'off') then
+      raise exception '%', jsonb_build_object(
+        'error', 'PAY_EXECUTE_BANK',
+        'code', 'BLOCKED_FUNDS_RETRY_REQUIRES_INSUFFICIENT_FUNDS_CHECK',
+        'message', 'pay_execute_bank: blocked-funds retry requires the latest stored funds check to explicitly show insufficient funds',
+        'pay_batch_id', p_pay_batch_id::text,
+        'last_funds_check_at_utc', case when v_batch.last_funds_check_at_utc is null then null else v_batch.last_funds_check_at_utc::text end,
+        'sufficient', nullif(v_blocked_funds_sufficient_text, '')
+      )::text;
+    end if;
+  elsif v_retry_blocked_funds is true then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_EXECUTE_BANK',
+      'code', 'BLOCKED_FUNDS_RETRY_STATUS_MISMATCH',
+      'message', 'pay_execute_bank: blocked-funds retry can only be used when the batch status is BLOCKED_FUNDS',
+      'pay_batch_id', p_pay_batch_id::text,
+      'status', v_batch.status
+    )::text;
+  elsif v_batch.status not in ('DRAFT','READY','PARTIAL','WAITING_BANK_CONFIRM','DRAFT_CREATED') then
     raise exception 'pay_batch status not valid for execute (current=%)', v_batch.status;
   end if;
 
@@ -28201,6 +28372,7 @@ begin
     'bulk_reference', v_bulk_reference,
     'pending_count', v_pending_count,
     'blocked_count', v_blocked_count,
+    'retry_blocked_funds', v_retry_blocked_funds,
     'execution_commit_state', (select pb4.execution_commit_state from public.pay_batches pb4 where pb4.id = p_pay_batch_id),
     'execution_commit_ref', (select pb4.execution_commit_ref from public.pay_batches pb4 where pb4.id = p_pay_batch_id),
     'execution_committed_at_utc', (select case when pb4.execution_committed_at_utc is null then null else pb4.execution_committed_at_utc::text end from public.pay_batches pb4 where pb4.id = p_pay_batch_id),
@@ -28211,6 +28383,9 @@ begin
   );
 end;
 $$;
+
+
+
 
 
 
