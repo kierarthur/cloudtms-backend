@@ -8852,6 +8852,10 @@ $function$;
 
 
 
+
+
+
+
 CREATE OR REPLACE FUNCTION public.pay_settled_payment_reversal_apply_work_item(
   p_work_item_id uuid,
   p_actor_user_id uuid DEFAULT NULL::uuid
@@ -8878,6 +8882,7 @@ DECLARE
   v_selected_finance_component_count integer := 0;
   v_selected_finance_case_count integer := 0;
   v_inserted_correction_item_count integer := 0;
+  v_voided_item_count integer := 0;
   v_released_reservation_count integer := 0;
   v_restored_component_count integer := 0;
   v_reset_payout_count integer := 0;
@@ -8915,6 +8920,11 @@ DECLARE
   v_mail_selected_scope_json jsonb := '{}'::jsonb;
   v_communications_review_required_count integer := 0;
   v_mail_scope_matching jsonb := '{}'::jsonb;
+
+  v_summary_refresh_candidate_count integer := 0;
+  v_active_batch_item_count_after integer := 0;
+  v_active_batch_amount_inc_vat_after numeric := 0;
+  v_batch_empty_after boolean := false;
 BEGIN
   PERFORM public._imp_debug_audit(
     p_actor_user_id,
@@ -9811,6 +9821,18 @@ END IF;
 
   GET DIAGNOSTICS v_inserted_correction_item_count = ROW_COUNT;
 
+  UPDATE public.pay_batch_items AS items_to_void
+  SET
+    is_voided = true,
+    updated_at = v_now
+  WHERE items_to_void.id IN (
+    SELECT selected_to_void.pay_batch_item_id
+    FROM pg_temp._tmp_settled_reversal_selected AS selected_to_void
+  )
+    AND COALESCE(items_to_void.is_voided, false) = false;
+
+  GET DIAGNOSTICS v_voided_item_count = ROW_COUNT;
+
   DROP TABLE IF EXISTS pg_temp._tmp_settled_reversal_released_reservations;
   CREATE TEMP TABLE _tmp_settled_reversal_released_reservations ON COMMIT DROP AS
   WITH release_candidates AS (
@@ -9997,6 +10019,197 @@ END IF;
     );
 
   GET DIAGNOSTICS v_reset_payout_count = ROW_COUNT;
+
+
+  DROP TABLE IF EXISTS pg_temp._tmp_settled_reversal_affected_candidates;
+  CREATE TEMP TABLE _tmp_settled_reversal_affected_candidates ON COMMIT DROP AS
+  SELECT DISTINCT
+    selected_affected_candidates.pay_batch_candidate_id,
+    selected_affected_candidates.candidate_id
+  FROM pg_temp._tmp_settled_reversal_selected AS selected_affected_candidates
+  WHERE selected_affected_candidates.pay_batch_candidate_id IS NOT NULL;
+
+  WITH active_candidate_items AS (
+    SELECT
+      public.pay_batch_candidates.id AS pay_batch_candidate_id,
+      public.pay_batch_items.id AS pay_batch_item_id,
+      public.pay_batch_items.item_type,
+      public.pay_batch_items.amount_ex_vat,
+      public.pay_batch_items.amount_inc_vat,
+      public.pay_batch_items.pay_channel,
+      public.pay_batch_items.paye_treatment
+    FROM pg_temp._tmp_settled_reversal_affected_candidates AS affected_candidates
+    JOIN public.pay_batch_candidates
+      ON public.pay_batch_candidates.id = affected_candidates.pay_batch_candidate_id
+     AND public.pay_batch_candidates.pay_batch_id = v_work_item.pay_batch_id
+    LEFT JOIN public.pay_batch_items
+      ON public.pay_batch_items.pay_batch_candidate_id = public.pay_batch_candidates.id
+     AND COALESCE(public.pay_batch_items.is_voided, false) = false
+     AND NOT EXISTS (
+       SELECT 1
+       FROM public.pay_payment_correction_items AS applied_candidate_item_corrections
+       WHERE applied_candidate_item_corrections.pay_batch_item_id = public.pay_batch_items.id
+         AND applied_candidate_item_corrections.status = 'APPLIED'
+         AND applied_candidate_item_corrections.correction_item_kind IN ('PRE_BANK_CANCEL', 'NO_MONEY_UNWIND', 'SETTLED_REVERSAL')
+     )
+  ),
+  affected_candidate_sums AS (
+    SELECT
+      active_candidate_items.pay_batch_candidate_id,
+      count(active_candidate_items.pay_batch_item_id)::integer AS active_item_count,
+      COALESCE(bool_or(upper(btrim(COALESCE(active_candidate_items.pay_channel, ''))) = 'PAYE') FILTER (WHERE active_candidate_items.pay_batch_item_id IS NOT NULL), false) AS has_active_paye_item,
+      COALESCE(bool_or(upper(btrim(COALESCE(active_candidate_items.pay_channel, ''))) = 'UMBRELLA') FILTER (WHERE active_candidate_items.pay_batch_item_id IS NOT NULL), false) AS has_active_umbrella_item,
+      round(COALESCE(sum(
+        CASE
+          WHEN active_candidate_items.pay_batch_item_id IS NOT NULL
+           AND active_candidate_items.item_type NOT IN ('OVERPAYMENT_RECOVERY', 'LOAN_REPAYMENT', 'MANUAL_DEBT_RECOVERY', 'MANUAL_CREDIT_PAYOUT', 'LOAN_PAYOUT', 'DEBT_CREATED')
+          THEN COALESCE(active_candidate_items.amount_ex_vat, 0)
+          ELSE 0
+        END
+      ), 0), 2)::numeric(12,2) AS earnings_ex,
+      round(COALESCE(sum(
+        CASE
+          WHEN active_candidate_items.pay_batch_item_id IS NOT NULL
+           AND active_candidate_items.item_type <> 'DEBT_CREATED'
+          THEN COALESCE(active_candidate_items.amount_ex_vat, 0)
+          ELSE 0
+        END
+      ), 0), 2)::numeric(12,2) AS earnings_inc,
+      round(COALESCE(sum(
+        CASE
+          WHEN active_candidate_items.pay_batch_item_id IS NOT NULL
+           AND COALESCE(active_candidate_items.paye_treatment, 'NONE') IN ('GROSS_ADD', 'GROSS_DEDUCT')
+          THEN COALESCE(active_candidate_items.amount_ex_vat, 0)
+          ELSE 0
+        END
+      ), 0), 2)::numeric(12,2) AS gross_adjustments_ex_sum,
+      round(COALESCE(sum(
+        CASE
+          WHEN active_candidate_items.pay_batch_item_id IS NOT NULL
+           AND COALESCE(active_candidate_items.paye_treatment, 'NONE') IN ('NET_ADD', 'NET_DEDUCT')
+          THEN COALESCE(active_candidate_items.amount_ex_vat, 0)
+          ELSE 0
+        END
+      ), 0), 2)::numeric(12,2) AS net_adjustments_ex_sum,
+      round(COALESCE(sum(
+        CASE
+          WHEN active_candidate_items.pay_batch_item_id IS NOT NULL
+           AND active_candidate_items.item_type = 'OVERPAYMENT_RECOVERY'
+          THEN -COALESCE(active_candidate_items.amount_ex_vat, 0)
+          ELSE 0
+        END
+      ), 0), 2)::numeric(12,2) AS overpayment_recovery_taken_ex,
+      round(COALESCE(sum(
+        CASE
+          WHEN active_candidate_items.pay_batch_item_id IS NOT NULL
+           AND active_candidate_items.item_type = 'LOAN_REPAYMENT'
+          THEN -COALESCE(active_candidate_items.amount_ex_vat, 0)
+          ELSE 0
+        END
+      ), 0), 2)::numeric(12,2) AS loan_repayment_taken_ex,
+      round(COALESCE(sum(
+        CASE
+          WHEN active_candidate_items.pay_batch_item_id IS NOT NULL
+           AND active_candidate_items.item_type = 'DEBT_CREATED'
+          THEN COALESCE(active_candidate_items.amount_inc_vat, active_candidate_items.amount_ex_vat, 0)
+          ELSE 0
+        END
+      ), 0), 2)::numeric(12,2) AS debt_created_sum
+    FROM active_candidate_items
+    GROUP BY active_candidate_items.pay_batch_candidate_id
+  ),
+  paye_net AS (
+    SELECT
+      public.pay_batch_paye_net_inputs.pay_batch_candidate_id,
+      public.pay_batch_paye_net_inputs.net_amount::numeric(12,2) AS net_amount
+    FROM public.pay_batch_paye_net_inputs
+    WHERE public.pay_batch_paye_net_inputs.pay_batch_candidate_id IN (
+      SELECT affected_candidates.pay_batch_candidate_id
+      FROM pg_temp._tmp_settled_reversal_affected_candidates AS affected_candidates
+    )
+  ),
+  candidate_summary_update AS (
+    UPDATE public.pay_batch_candidates AS candidates_to_refresh
+    SET
+      awaiting_net_amount = CASE
+        WHEN COALESCE(affected_candidate_sums.active_item_count, 0) = 0 THEN false
+        WHEN COALESCE(affected_candidate_sums.has_active_paye_item, false) = true
+          THEN NOT EXISTS (
+            SELECT 1
+            FROM public.pay_batch_paye_net_inputs AS paye_net_input_check
+            WHERE paye_net_input_check.pay_batch_candidate_id = candidates_to_refresh.id
+          )
+        ELSE false
+      END,
+      gross_preview = CASE
+        WHEN COALESCE(affected_candidate_sums.active_item_count, 0) = 0 THEN 0::numeric(12,2)
+        WHEN COALESCE(affected_candidate_sums.has_active_paye_item, false) = true
+          THEN round(COALESCE(affected_candidate_sums.earnings_ex, 0) + COALESCE(affected_candidate_sums.gross_adjustments_ex_sum, 0), 2)::numeric(12,2)
+        ELSE greatest(COALESCE(affected_candidate_sums.earnings_inc, 0), 0)::numeric(12,2)
+      END,
+      net_bank_amount = CASE
+        WHEN COALESCE(affected_candidate_sums.active_item_count, 0) = 0 THEN 0::numeric(12,2)
+        WHEN COALESCE(affected_candidate_sums.has_active_paye_item, false) = true THEN
+          CASE
+            WHEN NOT EXISTS (
+              SELECT 1
+              FROM public.pay_batch_paye_net_inputs AS paye_net_input_check
+              WHERE paye_net_input_check.pay_batch_candidate_id = candidates_to_refresh.id
+            ) THEN NULL::numeric
+            ELSE greatest(round(COALESCE(paye_net.net_amount, 0) + COALESCE(affected_candidate_sums.net_adjustments_ex_sum, 0), 2), 0)::numeric(12,2)
+          END
+        ELSE greatest(COALESCE(affected_candidate_sums.earnings_inc, 0), 0)::numeric(12,2)
+      END,
+      debt_created = COALESCE(affected_candidate_sums.debt_created_sum, 0)::numeric(12,2),
+      overpayment_recovery_taken = COALESCE(affected_candidate_sums.overpayment_recovery_taken_ex, 0)::numeric(12,2),
+      loan_repayment_taken = COALESCE(affected_candidate_sums.loan_repayment_taken_ex, 0)::numeric(12,2),
+      mismatch_settlement_choice = NULL,
+      updated_at = v_now
+    FROM affected_candidate_sums
+    LEFT JOIN paye_net
+      ON paye_net.pay_batch_candidate_id = affected_candidate_sums.pay_batch_candidate_id
+    WHERE candidates_to_refresh.id = affected_candidate_sums.pay_batch_candidate_id
+      AND candidates_to_refresh.pay_batch_id = v_work_item.pay_batch_id
+    RETURNING candidates_to_refresh.id
+  )
+  SELECT count(*)::integer
+  INTO v_summary_refresh_candidate_count
+  FROM candidate_summary_update;
+
+  SELECT
+    count(public.pay_batch_items.id)::integer,
+    round(COALESCE(sum(COALESCE(public.pay_batch_items.amount_inc_vat, 0)), 0), 2)::numeric
+  INTO
+    v_active_batch_item_count_after,
+    v_active_batch_amount_inc_vat_after
+  FROM public.pay_batch_items
+  JOIN public.pay_batch_candidates
+    ON public.pay_batch_candidates.id = public.pay_batch_items.pay_batch_candidate_id
+  WHERE public.pay_batch_candidates.pay_batch_id = v_work_item.pay_batch_id
+    AND COALESCE(public.pay_batch_items.is_voided, false) = false
+    AND NOT EXISTS (
+      SELECT 1
+      FROM public.pay_payment_correction_items AS applied_batch_item_corrections
+      WHERE applied_batch_item_corrections.pay_batch_item_id = public.pay_batch_items.id
+        AND applied_batch_item_corrections.status = 'APPLIED'
+        AND applied_batch_item_corrections.correction_item_kind IN ('PRE_BANK_CANCEL', 'NO_MONEY_UNWIND', 'SETTLED_REVERSAL')
+    );
+
+  v_batch_empty_after := COALESCE(v_active_batch_item_count_after, 0) = 0;
+
+  UPDATE public.pay_batches AS batch_to_refresh
+  SET
+    total_bank_out = COALESCE((
+      SELECT round(COALESCE(sum(COALESCE(public.pay_batch_candidates.net_bank_amount, 0)), 0), 2)::numeric
+      FROM public.pay_batch_candidates
+      WHERE public.pay_batch_candidates.pay_batch_id = v_work_item.pay_batch_id
+    ), 0)::numeric,
+    total_debt_created = COALESCE((
+      SELECT round(COALESCE(sum(COALESCE(public.pay_batch_candidates.debt_created, 0)), 0), 2)::numeric
+      FROM public.pay_batch_candidates
+      WHERE public.pay_batch_candidates.pay_batch_id = v_work_item.pay_batch_id
+    ), 0)::numeric
+  WHERE batch_to_refresh.id = v_work_item.pay_batch_id;
 
   SELECT jsonb_build_object(
     'scope_type', v_scope_type,
@@ -10402,6 +10615,7 @@ v_notice_queue_result := public.pay_payment_return_admin_notice_queue(
     'selected_item_count', v_selected_item_count,
     'selected_candidate_count', v_selected_candidate_count,
     'selected_transfer_count', v_selected_transfer_count,
+    'voided_item_count', v_voided_item_count,
     'inserted_correction_item_count', v_inserted_correction_item_count,
     'released_reservation_count', v_released_reservation_count,
     'restored_component_count', v_restored_component_count,
@@ -10412,6 +10626,10 @@ v_notice_queue_result := public.pay_payment_return_admin_notice_queue(
     'mail_scope_matching', v_mail_scope_matching,
     'timesheet_state_updated_count', v_timesheet_state_updated_count,
     'timesheet_state_deleted_count', v_timesheet_state_deleted_count,
+    'summary_refresh_candidate_count', v_summary_refresh_candidate_count,
+    'active_batch_item_count_after', COALESCE(v_active_batch_item_count_after, 0),
+    'active_batch_amount_inc_vat_after', COALESCE(v_active_batch_amount_inc_vat_after, 0),
+    'batch_empty_after', COALESCE(v_batch_empty_after, false),
     'accepted_finance_resolution', v_finance_resolution_result,
     'applied_at_utc', v_now
   )
@@ -10431,6 +10649,7 @@ v_notice_group_id := NULLIF(v_notice_queue_result->>'notice_group_id', '')::uuid
     'selected_item_count', v_selected_item_count,
     'selected_candidate_count', v_selected_candidate_count,
     'selected_transfer_count', v_selected_transfer_count,
+    'voided_item_count', v_voided_item_count,
     'inserted_correction_item_count', v_inserted_correction_item_count,
     'released_reservation_count', v_released_reservation_count,
     'restored_component_count', v_restored_component_count,
@@ -10442,6 +10661,10 @@ v_notice_group_id := NULLIF(v_notice_queue_result->>'notice_group_id', '')::uuid
     'timesheet_state_updated_count', v_timesheet_state_updated_count,
     'timesheet_state_deleted_count', v_timesheet_state_deleted_count,
     'dirty_candidate_count', v_dirty_candidate_count,
+    'summary_refresh_candidate_count', v_summary_refresh_candidate_count,
+    'active_batch_item_count_after', COALESCE(v_active_batch_item_count_after, 0),
+    'active_batch_amount_inc_vat_after', COALESCE(v_active_batch_amount_inc_vat_after, 0),
+    'batch_empty_after', COALESCE(v_batch_empty_after, false),
     'notice_group_id', v_notice_group_id,
     'notice_queue_result', v_notice_queue_result,
     'accepted_finance_resolution', v_finance_resolution_result,
@@ -10522,11 +10745,6 @@ EXCEPTION
     );
 END;
 $function$;
-
-
-
-
-
 
 
 
@@ -13927,7 +14145,6 @@ END;
 $function$;
 
 
-
 CREATE OR REPLACE FUNCTION public.pay_no_money_unwind_apply_work_item(
   p_work_item_id uuid,
   p_actor_user_id uuid DEFAULT NULL::uuid
@@ -13981,6 +14198,11 @@ DECLARE
   v_mail_selected_scope_json jsonb := '{}'::jsonb;
   v_communications_review_required_count integer := 0;
   v_mail_scope_matching jsonb := '{}'::jsonb;
+
+  v_summary_refresh_candidate_count integer := 0;
+  v_active_batch_item_count_after integer := 0;
+  v_active_batch_amount_inc_vat_after numeric := 0;
+  v_batch_empty_after boolean := false;
 BEGIN
   PERFORM public._imp_debug_audit(
     p_actor_user_id,
@@ -14808,6 +15030,197 @@ END IF;
 
   GET DIAGNOSTICS v_updated_candidate_count = ROW_COUNT;
 
+
+  DROP TABLE IF EXISTS pg_temp._tmp_no_money_unwind_affected_candidates;
+  CREATE TEMP TABLE _tmp_no_money_unwind_affected_candidates ON COMMIT DROP AS
+  SELECT DISTINCT
+    selected_affected_candidates.pay_batch_candidate_id,
+    selected_affected_candidates.candidate_id
+  FROM pg_temp._tmp_no_money_unwind_selected AS selected_affected_candidates
+  WHERE selected_affected_candidates.pay_batch_candidate_id IS NOT NULL;
+
+  WITH active_candidate_items AS (
+    SELECT
+      public.pay_batch_candidates.id AS pay_batch_candidate_id,
+      public.pay_batch_items.id AS pay_batch_item_id,
+      public.pay_batch_items.item_type,
+      public.pay_batch_items.amount_ex_vat,
+      public.pay_batch_items.amount_inc_vat,
+      public.pay_batch_items.pay_channel,
+      public.pay_batch_items.paye_treatment
+    FROM pg_temp._tmp_no_money_unwind_affected_candidates AS affected_candidates
+    JOIN public.pay_batch_candidates
+      ON public.pay_batch_candidates.id = affected_candidates.pay_batch_candidate_id
+     AND public.pay_batch_candidates.pay_batch_id = v_work_item.pay_batch_id
+    LEFT JOIN public.pay_batch_items
+      ON public.pay_batch_items.pay_batch_candidate_id = public.pay_batch_candidates.id
+     AND COALESCE(public.pay_batch_items.is_voided, false) = false
+     AND NOT EXISTS (
+       SELECT 1
+       FROM public.pay_payment_correction_items AS applied_candidate_item_corrections
+       WHERE applied_candidate_item_corrections.pay_batch_item_id = public.pay_batch_items.id
+         AND applied_candidate_item_corrections.status = 'APPLIED'
+         AND applied_candidate_item_corrections.correction_item_kind IN ('PRE_BANK_CANCEL', 'NO_MONEY_UNWIND', 'SETTLED_REVERSAL')
+     )
+  ),
+  affected_candidate_sums AS (
+    SELECT
+      active_candidate_items.pay_batch_candidate_id,
+      count(active_candidate_items.pay_batch_item_id)::integer AS active_item_count,
+      COALESCE(bool_or(upper(btrim(COALESCE(active_candidate_items.pay_channel, ''))) = 'PAYE') FILTER (WHERE active_candidate_items.pay_batch_item_id IS NOT NULL), false) AS has_active_paye_item,
+      COALESCE(bool_or(upper(btrim(COALESCE(active_candidate_items.pay_channel, ''))) = 'UMBRELLA') FILTER (WHERE active_candidate_items.pay_batch_item_id IS NOT NULL), false) AS has_active_umbrella_item,
+      round(COALESCE(sum(
+        CASE
+          WHEN active_candidate_items.pay_batch_item_id IS NOT NULL
+           AND active_candidate_items.item_type NOT IN ('OVERPAYMENT_RECOVERY', 'LOAN_REPAYMENT', 'MANUAL_DEBT_RECOVERY', 'MANUAL_CREDIT_PAYOUT', 'LOAN_PAYOUT', 'DEBT_CREATED')
+          THEN COALESCE(active_candidate_items.amount_ex_vat, 0)
+          ELSE 0
+        END
+      ), 0), 2)::numeric(12,2) AS earnings_ex,
+      round(COALESCE(sum(
+        CASE
+          WHEN active_candidate_items.pay_batch_item_id IS NOT NULL
+           AND active_candidate_items.item_type <> 'DEBT_CREATED'
+          THEN COALESCE(active_candidate_items.amount_ex_vat, 0)
+          ELSE 0
+        END
+      ), 0), 2)::numeric(12,2) AS earnings_inc,
+      round(COALESCE(sum(
+        CASE
+          WHEN active_candidate_items.pay_batch_item_id IS NOT NULL
+           AND COALESCE(active_candidate_items.paye_treatment, 'NONE') IN ('GROSS_ADD', 'GROSS_DEDUCT')
+          THEN COALESCE(active_candidate_items.amount_ex_vat, 0)
+          ELSE 0
+        END
+      ), 0), 2)::numeric(12,2) AS gross_adjustments_ex_sum,
+      round(COALESCE(sum(
+        CASE
+          WHEN active_candidate_items.pay_batch_item_id IS NOT NULL
+           AND COALESCE(active_candidate_items.paye_treatment, 'NONE') IN ('NET_ADD', 'NET_DEDUCT')
+          THEN COALESCE(active_candidate_items.amount_ex_vat, 0)
+          ELSE 0
+        END
+      ), 0), 2)::numeric(12,2) AS net_adjustments_ex_sum,
+      round(COALESCE(sum(
+        CASE
+          WHEN active_candidate_items.pay_batch_item_id IS NOT NULL
+           AND active_candidate_items.item_type = 'OVERPAYMENT_RECOVERY'
+          THEN -COALESCE(active_candidate_items.amount_ex_vat, 0)
+          ELSE 0
+        END
+      ), 0), 2)::numeric(12,2) AS overpayment_recovery_taken_ex,
+      round(COALESCE(sum(
+        CASE
+          WHEN active_candidate_items.pay_batch_item_id IS NOT NULL
+           AND active_candidate_items.item_type = 'LOAN_REPAYMENT'
+          THEN -COALESCE(active_candidate_items.amount_ex_vat, 0)
+          ELSE 0
+        END
+      ), 0), 2)::numeric(12,2) AS loan_repayment_taken_ex,
+      round(COALESCE(sum(
+        CASE
+          WHEN active_candidate_items.pay_batch_item_id IS NOT NULL
+           AND active_candidate_items.item_type = 'DEBT_CREATED'
+          THEN COALESCE(active_candidate_items.amount_inc_vat, active_candidate_items.amount_ex_vat, 0)
+          ELSE 0
+        END
+      ), 0), 2)::numeric(12,2) AS debt_created_sum
+    FROM active_candidate_items
+    GROUP BY active_candidate_items.pay_batch_candidate_id
+  ),
+  paye_net AS (
+    SELECT
+      public.pay_batch_paye_net_inputs.pay_batch_candidate_id,
+      public.pay_batch_paye_net_inputs.net_amount::numeric(12,2) AS net_amount
+    FROM public.pay_batch_paye_net_inputs
+    WHERE public.pay_batch_paye_net_inputs.pay_batch_candidate_id IN (
+      SELECT affected_candidates.pay_batch_candidate_id
+      FROM pg_temp._tmp_no_money_unwind_affected_candidates AS affected_candidates
+    )
+  ),
+  candidate_summary_update AS (
+    UPDATE public.pay_batch_candidates AS candidates_to_refresh
+    SET
+      awaiting_net_amount = CASE
+        WHEN COALESCE(affected_candidate_sums.active_item_count, 0) = 0 THEN false
+        WHEN COALESCE(affected_candidate_sums.has_active_paye_item, false) = true
+          THEN NOT EXISTS (
+            SELECT 1
+            FROM public.pay_batch_paye_net_inputs AS paye_net_input_check
+            WHERE paye_net_input_check.pay_batch_candidate_id = candidates_to_refresh.id
+          )
+        ELSE false
+      END,
+      gross_preview = CASE
+        WHEN COALESCE(affected_candidate_sums.active_item_count, 0) = 0 THEN 0::numeric(12,2)
+        WHEN COALESCE(affected_candidate_sums.has_active_paye_item, false) = true
+          THEN round(COALESCE(affected_candidate_sums.earnings_ex, 0) + COALESCE(affected_candidate_sums.gross_adjustments_ex_sum, 0), 2)::numeric(12,2)
+        ELSE greatest(COALESCE(affected_candidate_sums.earnings_inc, 0), 0)::numeric(12,2)
+      END,
+      net_bank_amount = CASE
+        WHEN COALESCE(affected_candidate_sums.active_item_count, 0) = 0 THEN 0::numeric(12,2)
+        WHEN COALESCE(affected_candidate_sums.has_active_paye_item, false) = true THEN
+          CASE
+            WHEN NOT EXISTS (
+              SELECT 1
+              FROM public.pay_batch_paye_net_inputs AS paye_net_input_check
+              WHERE paye_net_input_check.pay_batch_candidate_id = candidates_to_refresh.id
+            ) THEN NULL::numeric
+            ELSE greatest(round(COALESCE(paye_net.net_amount, 0) + COALESCE(affected_candidate_sums.net_adjustments_ex_sum, 0), 2), 0)::numeric(12,2)
+          END
+        ELSE greatest(COALESCE(affected_candidate_sums.earnings_inc, 0), 0)::numeric(12,2)
+      END,
+      debt_created = COALESCE(affected_candidate_sums.debt_created_sum, 0)::numeric(12,2),
+      overpayment_recovery_taken = COALESCE(affected_candidate_sums.overpayment_recovery_taken_ex, 0)::numeric(12,2),
+      loan_repayment_taken = COALESCE(affected_candidate_sums.loan_repayment_taken_ex, 0)::numeric(12,2),
+      mismatch_settlement_choice = NULL,
+      updated_at = v_now
+    FROM affected_candidate_sums
+    LEFT JOIN paye_net
+      ON paye_net.pay_batch_candidate_id = affected_candidate_sums.pay_batch_candidate_id
+    WHERE candidates_to_refresh.id = affected_candidate_sums.pay_batch_candidate_id
+      AND candidates_to_refresh.pay_batch_id = v_work_item.pay_batch_id
+    RETURNING candidates_to_refresh.id
+  )
+  SELECT count(*)::integer
+  INTO v_summary_refresh_candidate_count
+  FROM candidate_summary_update;
+
+  SELECT
+    count(public.pay_batch_items.id)::integer,
+    round(COALESCE(sum(COALESCE(public.pay_batch_items.amount_inc_vat, 0)), 0), 2)::numeric
+  INTO
+    v_active_batch_item_count_after,
+    v_active_batch_amount_inc_vat_after
+  FROM public.pay_batch_items
+  JOIN public.pay_batch_candidates
+    ON public.pay_batch_candidates.id = public.pay_batch_items.pay_batch_candidate_id
+  WHERE public.pay_batch_candidates.pay_batch_id = v_work_item.pay_batch_id
+    AND COALESCE(public.pay_batch_items.is_voided, false) = false
+    AND NOT EXISTS (
+      SELECT 1
+      FROM public.pay_payment_correction_items AS applied_batch_item_corrections
+      WHERE applied_batch_item_corrections.pay_batch_item_id = public.pay_batch_items.id
+        AND applied_batch_item_corrections.status = 'APPLIED'
+        AND applied_batch_item_corrections.correction_item_kind IN ('PRE_BANK_CANCEL', 'NO_MONEY_UNWIND', 'SETTLED_REVERSAL')
+    );
+
+  v_batch_empty_after := COALESCE(v_active_batch_item_count_after, 0) = 0;
+
+  UPDATE public.pay_batches AS batch_to_refresh
+  SET
+    total_bank_out = COALESCE((
+      SELECT round(COALESCE(sum(COALESCE(public.pay_batch_candidates.net_bank_amount, 0)), 0), 2)::numeric
+      FROM public.pay_batch_candidates
+      WHERE public.pay_batch_candidates.pay_batch_id = v_work_item.pay_batch_id
+    ), 0)::numeric,
+    total_debt_created = COALESCE((
+      SELECT round(COALESCE(sum(COALESCE(public.pay_batch_candidates.debt_created, 0)), 0), 2)::numeric
+      FROM public.pay_batch_candidates
+      WHERE public.pay_batch_candidates.pay_batch_id = v_work_item.pay_batch_id
+    ), 0)::numeric
+  WHERE batch_to_refresh.id = v_work_item.pay_batch_id;
+
   SELECT jsonb_build_object(
     'scope_type', v_scope_type,
     'work_unit', COALESCE(NULLIF(v_work_unit, ''), v_scope_type, 'UNKNOWN'),
@@ -15140,6 +15553,10 @@ v_notice_queue_result := public.pay_payment_return_admin_notice_queue(
     'communications_cancelled', v_cancelled_mail_count,
     'communications_review_required', v_communications_review_required_count,
     'mail_scope_matching', v_mail_scope_matching,
+    'summary_refresh_candidate_count', v_summary_refresh_candidate_count,
+    'active_batch_item_count_after', COALESCE(v_active_batch_item_count_after, 0),
+    'active_batch_amount_inc_vat_after', COALESCE(v_active_batch_amount_inc_vat_after, 0),
+    'batch_empty_after', COALESCE(v_batch_empty_after, false),
     'accepted_finance_resolution', v_finance_resolution_result,
     'applied_at_utc', v_now
   )
@@ -15170,6 +15587,10 @@ v_notice_group_id := NULLIF(v_notice_queue_result->>'notice_group_id', '')::uuid
     'communications_review_required', v_communications_review_required_count,
     'mail_scope_matching', v_mail_scope_matching,
     'dirty_candidate_count', v_dirty_candidate_count,
+    'summary_refresh_candidate_count', v_summary_refresh_candidate_count,
+    'active_batch_item_count_after', COALESCE(v_active_batch_item_count_after, 0),
+    'active_batch_amount_inc_vat_after', COALESCE(v_active_batch_amount_inc_vat_after, 0),
+    'batch_empty_after', COALESCE(v_batch_empty_after, false),
     'notice_group_id', v_notice_group_id,
     'notice_queue_result', v_notice_queue_result,
     'accepted_finance_resolution', v_finance_resolution_result,
@@ -15250,6 +15671,7 @@ EXCEPTION
     );
 END;
 $function$;
+
 
 CREATE OR REPLACE FUNCTION public._pay_payment_correction_validate_accepted_finance_resolution(
   p_pay_batch_id uuid,
