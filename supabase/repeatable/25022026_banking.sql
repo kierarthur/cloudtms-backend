@@ -5424,74 +5424,247 @@ $$;
 
 
 
-
-
-create or replace function public.pay_batch_mark_blocked_funds(
+CREATE OR REPLACE FUNCTION public.pay_batch_mark_blocked_funds(
   p_pay_batch_id uuid,
   p_actor_user_id uuid,
   p_funds_check_json jsonb
 )
-returns jsonb
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
+RETURNS jsonb
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $function$
+DECLARE
   v_batch record;
   v_now timestamptz := now();
+  v_funds_check_json jsonb := '{}'::jsonb;
   v_reservation_status_summary jsonb := '[]'::jsonb;
-  v_authoritative_payment_date date := null;
-  v_authoritative_payment_date_source text := null;
-begin
-  if p_pay_batch_id is null then
-    raise exception 'pay_batch_mark_blocked_funds: pay_batch_id is required';
-  end if;
-  if p_actor_user_id is null then
-    raise exception 'pay_batch_mark_blocked_funds: actor_user_id is required';
-  end if;
+  v_authoritative_payment_date date := NULL::date;
+  v_authoritative_payment_date_source text := NULL::text;
+  v_active_item_count integer := 0;
+  v_transfer_event_count integer := 0;
+  v_unsafe_transfer_count integer := 0;
+  v_required_gbp_text text := NULL::text;
+  v_available_gbp_text text := NULL::text;
+  v_funding_account_ref text := NULL::text;
+  v_rail_provider text := NULL::text;
+  v_rail_env text := NULL::text;
+  v_alert_payload jsonb := '{}'::jsonb;
+  v_alert_fingerprint text := NULL::text;
+  v_notice_result jsonb := '{}'::jsonb;
+BEGIN
+  IF p_pay_batch_id IS NULL THEN
+    RAISE EXCEPTION 'pay_batch_mark_blocked_funds: pay_batch_id is required';
+  END IF;
 
-  select
-    pb.id,
-    pb.status,
-    pb.authoritative_payment_date,
-    pb.authoritative_payment_date_source
-  into v_batch
-  from public.pay_batches pb
-  where pb.id = p_pay_batch_id
-  for update;
+  IF p_actor_user_id IS NULL THEN
+    RAISE EXCEPTION 'pay_batch_mark_blocked_funds: actor_user_id is required';
+  END IF;
 
-  if v_batch.id is null then
-    raise exception 'pay_batch_mark_blocked_funds: pay_batch not found';
-  end if;
+  IF p_funds_check_json IS NOT NULL AND COALESCE(jsonb_typeof(p_funds_check_json), 'null') <> 'object' THEN
+    RAISE EXCEPTION 'pay_batch_mark_blocked_funds: funds_check_json must be a JSON object';
+  END IF;
 
-  if v_batch.status not in ('READY','SCHEDULED','EXECUTING') then
-    raise exception 'pay_batch_mark_blocked_funds: batch status must be READY, SCHEDULED or EXECUTING (current=%)', v_batch.status;
-  end if;
+  v_funds_check_json := COALESCE(p_funds_check_json, '{}'::jsonb);
+
+  SELECT
+    public.pay_batches.id,
+    public.pay_batches.status,
+    public.pay_batches.authoritative_payment_date,
+    public.pay_batches.authoritative_payment_date_source,
+    public.pay_batches.execution_commit_state,
+    public.pay_batches.execution_commit_ref,
+    public.pay_batches.execution_committed_at_utc,
+    public.pay_batches.rail_provider_snapshot,
+    public.pay_batches.rail_env_snapshot,
+    public.pay_batches.funding_account_ref,
+    public.pay_batches.pay_date,
+    public.pay_batches.bulk_reference
+  INTO v_batch
+  FROM public.pay_batches
+  WHERE public.pay_batches.id = p_pay_batch_id
+  FOR UPDATE;
+
+  IF v_batch.id IS NULL THEN
+    RAISE EXCEPTION 'pay_batch_mark_blocked_funds: pay_batch not found';
+  END IF;
+
+  IF upper(btrim(coalesce(v_batch.status, ''))) NOT IN ('READY', 'SCHEDULED', 'EXECUTING', 'BLOCKED_FUNDS') THEN
+    RAISE EXCEPTION 'pay_batch_mark_blocked_funds: batch status must be READY, SCHEDULED, EXECUTING or BLOCKED_FUNDS (current=%)', v_batch.status;
+  END IF;
+
+  IF upper(btrim(coalesce(v_batch.execution_commit_state, 'NOT_SUBMITTED'))) <> 'NOT_SUBMITTED' THEN
+    RAISE EXCEPTION 'pay_batch_mark_blocked_funds: batch has already crossed execution commit boundary (execution_commit_state=%)', v_batch.execution_commit_state;
+  END IF;
+
+  IF nullif(btrim(coalesce(v_batch.execution_commit_ref, '')), '') IS NOT NULL THEN
+    RAISE EXCEPTION 'pay_batch_mark_blocked_funds: batch has execution_commit_ref and cannot be marked blocked funds safely';
+  END IF;
+
+  IF v_batch.execution_committed_at_utc IS NOT NULL THEN
+    RAISE EXCEPTION 'pay_batch_mark_blocked_funds: batch has execution_committed_at_utc and cannot be marked blocked funds safely';
+  END IF;
+
+  SELECT count(*)::integer
+  INTO v_transfer_event_count
+  FROM public.pay_bank_transfer_events
+  WHERE public.pay_bank_transfer_events.pay_batch_id = p_pay_batch_id;
+
+  IF COALESCE(v_transfer_event_count, 0) > 0 THEN
+    RAISE EXCEPTION 'pay_batch_mark_blocked_funds: pay_bank_transfer_events exist for this batch and the blocked-funds pre-submission path is unsafe';
+  END IF;
+
+  SELECT count(*)::integer
+  INTO v_unsafe_transfer_count
+  FROM public.pay_bank_transfers
+  WHERE public.pay_bank_transfers.pay_batch_id = p_pay_batch_id
+    AND (
+      nullif(btrim(coalesce(public.pay_bank_transfers.rail_tx_id, '')), '') IS NOT NULL
+      OR upper(btrim(coalesce(public.pay_bank_transfers.status, ''))) NOT IN ('', 'PENDING')
+      OR upper(btrim(coalesce(public.pay_bank_transfers.rail_state, ''))) IN (
+        'SUBMITTED',
+        'ACCEPTED',
+        'SENT',
+        'PROCESSING',
+        'COMPLETED',
+        'SETTLED',
+        'FAILED',
+        'DECLINED',
+        'REJECTED',
+        'RETURNED',
+        'REVERTED',
+        'CANCELLED',
+        'CANCELED'
+      )
+      OR nullif(btrim(coalesce(public.pay_bank_transfers.rail_meta_json #>> '{provider_submission_id}', '')), '') IS NOT NULL
+      OR nullif(btrim(coalesce(public.pay_bank_transfers.rail_meta_json #>> '{provider_payment_id}', '')), '') IS NOT NULL
+      OR nullif(btrim(coalesce(public.pay_bank_transfers.rail_meta_json #>> '{payment_id}', '')), '') IS NOT NULL
+      OR nullif(btrim(coalesce(public.pay_bank_transfers.rail_meta_json #>> '{transaction_id}', '')), '') IS NOT NULL
+      OR nullif(btrim(coalesce(public.pay_bank_transfers.rail_meta_json #>> '{revolut_payment_id}', '')), '') IS NOT NULL
+      OR nullif(btrim(coalesce(public.pay_bank_transfers.rail_meta_json #>> '{revolut_transaction_id}', '')), '') IS NOT NULL
+      OR nullif(btrim(coalesce(public.pay_bank_transfers.rail_meta_json #>> '{provider,response,id}', '')), '') IS NOT NULL
+      OR nullif(btrim(coalesce(public.pay_bank_transfers.rail_meta_json #>> '{response,id}', '')), '') IS NOT NULL
+    );
+
+  IF COALESCE(v_unsafe_transfer_count, 0) > 0 THEN
+    RAISE EXCEPTION 'pay_batch_mark_blocked_funds: transfer/provider evidence exists and the blocked-funds pre-submission path is unsafe';
+  END IF;
+
+  SELECT count(*)::integer
+  INTO v_active_item_count
+  FROM public.pay_batch_candidates
+  JOIN public.pay_batch_items
+    ON public.pay_batch_items.pay_batch_candidate_id = public.pay_batch_candidates.id
+  WHERE public.pay_batch_candidates.pay_batch_id = p_pay_batch_id
+    AND COALESCE(public.pay_batch_items.is_voided, false) = false;
+
+  IF COALESCE(v_active_item_count, 0) <= 0 THEN
+    RAISE EXCEPTION 'pay_batch_mark_blocked_funds: no active frozen batch items exist for this batch';
+  END IF;
 
   v_authoritative_payment_date := v_batch.authoritative_payment_date;
   v_authoritative_payment_date_source := v_batch.authoritative_payment_date_source;
 
-  update public.pay_batch_items pbi
-  set pay_bank_transfer_id = null
-  from public.pay_batch_candidates pbc
-  where pbc.id = pbi.pay_batch_candidate_id
-    and pbc.pay_batch_id = p_pay_batch_id
-    and pbi.pay_bank_transfer_id is not null;
+  v_required_gbp_text := COALESCE(
+    v_funds_check_json #>> '{required_gbp}',
+    v_funds_check_json #>> '{required}',
+    v_funds_check_json #>> '{required_amount_gbp}',
+    v_funds_check_json #>> '{required_amount}'
+  );
 
-  delete from public.pay_bank_transfers pbt
-  where pbt.pay_batch_id = p_pay_batch_id;
+  v_available_gbp_text := COALESCE(
+    v_funds_check_json #>> '{available_gbp}',
+    v_funds_check_json #>> '{available}',
+    v_funds_check_json #>> '{available_amount_gbp}',
+    v_funds_check_json #>> '{available_amount}'
+  );
 
-  update public.pay_batches pb
-  set
+  v_funding_account_ref := COALESCE(
+    v_funds_check_json #>> '{funding_account_ref}',
+    v_funds_check_json #>> '{account_ref}',
+    v_batch.funding_account_ref
+  );
+
+  v_rail_provider := COALESCE(
+    v_funds_check_json #>> '{rail_provider}',
+    v_funds_check_json #>> '{provider}',
+    v_batch.rail_provider_snapshot
+  );
+
+  v_rail_env := COALESCE(
+    v_funds_check_json #>> '{rail_env}',
+    v_funds_check_json #>> '{env}',
+    v_batch.rail_env_snapshot
+  );
+
+  UPDATE public.pay_batch_items AS batch_item_to_unlink
+  SET pay_bank_transfer_id = NULL
+  FROM public.pay_batch_candidates AS batch_candidate_to_unlink
+  WHERE batch_candidate_to_unlink.id = batch_item_to_unlink.pay_batch_candidate_id
+    AND batch_candidate_to_unlink.pay_batch_id = p_pay_batch_id
+    AND batch_item_to_unlink.pay_bank_transfer_id IS NOT NULL;
+
+  DELETE FROM public.pay_bank_transfers AS transfer_to_delete
+  WHERE transfer_to_delete.pay_batch_id = p_pay_batch_id;
+
+  UPDATE public.pay_batches AS blocked_batch
+  SET
     status = 'BLOCKED_FUNDS',
     last_funds_check_at_utc = v_now,
-    last_funds_check_json = p_funds_check_json,
-    schedule_kind = null,
-    scheduled_at_utc = null,
-    scheduled_by_user_id = null
-  where pb.id = p_pay_batch_id;
+    last_funds_check_json = v_funds_check_json,
+    schedule_kind = NULL,
+    scheduled_at_utc = NULL,
+    scheduled_by_user_id = NULL
+  WHERE blocked_batch.id = p_pay_batch_id;
 
-  insert into public.pay_finance_case_events(
+  v_alert_payload := jsonb_strip_nulls(jsonb_build_object(
+    'pay_batch_id', p_pay_batch_id::text,
+    'issue_kind', 'BLOCKED_FUNDS',
+    'batch_status', 'BLOCKED_FUNDS',
+    'execution_commit_state', v_batch.execution_commit_state,
+    'execution_commit_ref', v_batch.execution_commit_ref,
+    'execution_committed_at_utc', CASE WHEN v_batch.execution_committed_at_utc IS NULL THEN NULL ELSE v_batch.execution_committed_at_utc::text END,
+    'last_funds_check_at_utc', v_now::text,
+    'funds_check_checked_at_utc', COALESCE(
+      v_funds_check_json #>> '{checked_at_utc}',
+      v_funds_check_json #>> '{checked_at}',
+      v_funds_check_json #>> '{timestamp}',
+      v_now::text
+    ),
+    'required_gbp', v_required_gbp_text,
+    'available_gbp', v_available_gbp_text,
+    'funding_account_ref', v_funding_account_ref,
+    'rail_provider', v_rail_provider,
+    'rail_env', v_rail_env,
+    'sufficient', COALESCE(v_funds_check_json #>> '{sufficient}', v_funds_check_json #>> '{is_sufficient}', 'false'),
+    'active_item_count', v_active_item_count,
+    'bank_submission_happened', false,
+    'action_guidance', 'Fund the account and retry, or cancel/release the batch.'
+  ));
+
+  v_alert_fingerprint := public.banking_alert_fingerprint(
+    'BLOCKED_FUNDS',
+    'pay_batch',
+    p_pay_batch_id,
+    v_alert_payload
+  );
+
+  v_alert_payload := v_alert_payload || jsonb_build_object('alert_fingerprint', v_alert_fingerprint);
+
+  v_notice_result := public.pay_payment_return_admin_notice_queue(
+    'BLOCKED_FUNDS',
+    p_pay_batch_id,
+    v_rail_provider,
+    NULL::text,
+    v_alert_payload || jsonb_build_object(
+      'pay_date', CASE WHEN v_batch.pay_date IS NULL THEN NULL ELSE v_batch.pay_date::text END,
+      'bulk_reference', v_batch.bulk_reference,
+      'status', 'BLOCKED_FUNDS'
+    )
+  );
+
+  INSERT INTO public.pay_finance_case_events(
     finance_case_id,
     event_type,
     event_at_utc,
@@ -5503,55 +5676,56 @@ begin
     reason,
     note
   )
-  select
-    par.finance_case_id,
+  SELECT
+    public.pay_advance_reservations.finance_case_id,
     'FUNDS_BLOCKED',
     v_now,
     p_actor_user_id,
     p_pay_batch_id,
-    par.id,
+    public.pay_advance_reservations.id,
     jsonb_build_object(
-      'reservation_status', par.status,
+      'reservation_status', public.pay_advance_reservations.status,
       'authoritative_payment_date', v_authoritative_payment_date,
       'authoritative_payment_date_source', v_authoritative_payment_date_source
     ),
     jsonb_build_object(
-      'reservation_status', par.status,
+      'reservation_status', public.pay_advance_reservations.status,
       'batch_status', 'BLOCKED_FUNDS',
       'authoritative_payment_date', v_authoritative_payment_date,
-      'authoritative_payment_date_source', v_authoritative_payment_date_source
+      'authoritative_payment_date_source', v_authoritative_payment_date_source,
+      'banking_alert_fingerprint', v_alert_fingerprint
     ),
     'funds_blocked',
-    null
-  from public.pay_advance_reservations par
-  where par.pay_batch_id = p_pay_batch_id
-    and upper(coalesce(par.status,'')) in ('RESERVED','COMMITTED');
+    NULL::text
+  FROM public.pay_advance_reservations
+  WHERE public.pay_advance_reservations.pay_batch_id = p_pay_batch_id
+    AND upper(coalesce(public.pay_advance_reservations.status, '')) IN ('RESERVED', 'COMMITTED');
 
-  select coalesce(
+  SELECT COALESCE(
     jsonb_agg(
       jsonb_build_object(
-        'status', x.reservation_status,
-        'count', x.reservation_count,
-        'amount', x.reservation_amount
+        'status', reservation_summary.reservation_status,
+        'count', reservation_summary.reservation_count,
+        'amount', reservation_summary.reservation_amount
       )
-      order by x.reservation_status
+      ORDER BY reservation_summary.reservation_status
     ),
     '[]'::jsonb
   )
-  into v_reservation_status_summary
-  from (
-    select
-      upper(coalesce(par.status,'')) as reservation_status,
-      count(*)::int as reservation_count,
-      round(coalesce(sum(par.reserved_amount),0),2) as reservation_amount
-    from public.pay_advance_reservations par
-    where par.pay_batch_id = p_pay_batch_id
-      and upper(coalesce(par.status,'')) in ('RESERVED','COMMITTED')
-    group by upper(coalesce(par.status,''))
-  ) x;
+  INTO v_reservation_status_summary
+  FROM (
+    SELECT
+      upper(coalesce(public.pay_advance_reservations.status, '')) AS reservation_status,
+      count(*)::integer AS reservation_count,
+      round(coalesce(sum(public.pay_advance_reservations.reserved_amount), 0), 2) AS reservation_amount
+    FROM public.pay_advance_reservations
+    WHERE public.pay_advance_reservations.pay_batch_id = p_pay_batch_id
+      AND upper(coalesce(public.pay_advance_reservations.status, '')) IN ('RESERVED', 'COMMITTED')
+    GROUP BY upper(coalesce(public.pay_advance_reservations.status, ''))
+  ) AS reservation_summary;
 
-  begin
-    perform public._imp_debug_audit(
+  BEGIN
+    PERFORM public._imp_debug_audit(
       p_actor_user_id,
       'PAY_BATCH_MARK_BLOCKED_FUNDS:OK',
       jsonb_build_object(
@@ -5560,31 +5734,44 @@ begin
         'authoritative_payment_date', v_authoritative_payment_date,
         'authoritative_payment_date_source', v_authoritative_payment_date_source,
         'reservation_status_summary', v_reservation_status_summary,
-        'funds_check_json', p_funds_check_json
+        'funds_check_json', v_funds_check_json,
+        'banking_alert_fingerprint', v_alert_fingerprint,
+        'admin_notice_result', v_notice_result
       ),
       'pay_batches',
       p_pay_batch_id::text,
-      null,
-      null,
-      null,
-      null
+      NULL::jsonb,
+      NULL::text,
+      NULL::text,
+      NULL::text
     );
-  exception when others then
-    null;
-  end;
+  EXCEPTION WHEN OTHERS THEN
+    NULL;
+  END;
 
-  return jsonb_build_object(
+  RETURN jsonb_build_object(
     'ok', true,
     'pay_batch_id', p_pay_batch_id::text,
-    'status', (select pb2.status from public.pay_batches pb2 where pb2.id = p_pay_batch_id),
-    'last_funds_check_at_utc', (select pb3.last_funds_check_at_utc::text from public.pay_batches pb3 where pb3.id = p_pay_batch_id),
-    'last_funds_check_json', (select pb4.last_funds_check_json from public.pay_batches pb4 where pb4.id = p_pay_batch_id),
-    'authoritative_payment_date', case when v_authoritative_payment_date is null then null else v_authoritative_payment_date::text end,
+    'status', 'BLOCKED_FUNDS',
+    'last_funds_check_at_utc', v_now::text,
+    'last_funds_check_json', v_funds_check_json,
+    'authoritative_payment_date', CASE WHEN v_authoritative_payment_date IS NULL THEN NULL ELSE v_authoritative_payment_date::text END,
     'authoritative_payment_date_source', v_authoritative_payment_date_source,
-    'reservation_status_summary', v_reservation_status_summary
+    'reservation_status_summary', v_reservation_status_summary,
+    'banking_alert_kind', 'BLOCKED_FUNDS',
+    'banking_alert_fingerprint', v_alert_fingerprint,
+    'banking_alert_payload', v_alert_payload,
+    'blocked_funds_required_gbp', v_required_gbp_text,
+    'blocked_funds_available_gbp', v_available_gbp_text,
+    'blocked_funds_provider', v_rail_provider,
+    'blocked_funds_env', v_rail_env,
+    'blocked_funds_account_ref', v_funding_account_ref,
+    'admin_notice_result', v_notice_result
   );
-end;
-$$;
+END;
+$function$;
+
+
 
 create or replace function public.pay_export_bank_csv(
   p_pay_batch_id uuid,
