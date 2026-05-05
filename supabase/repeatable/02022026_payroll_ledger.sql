@@ -21507,6 +21507,8 @@ $$;
 -- =========================================================
 
 
+
+
 create or replace function public.pay_batch_get(p_pay_batch_id uuid)
 returns jsonb
 language plpgsql
@@ -21611,6 +21613,10 @@ declare
   v_can_unwind_failed_payment boolean := false;
   v_can_reverse_settled_payment boolean := false;
   v_can_review_bank_evidence boolean := false;
+  v_active_effective_item_count integer := 0;
+  v_active_effective_amount_ex_vat numeric := 0;
+  v_active_effective_amount_inc_vat numeric := 0;
+  v_payment_issue_candidate_count integer := 0;
 begin
   if p_pay_batch_id is null then
     raise exception 'pay_batch_id is required';
@@ -21669,7 +21675,151 @@ begin
     where pbc.pay_batch_id = p_pay_batch_id
       and pbi.item_type <> 'DEBT_CREATED'
       and coalesce(pbi.is_voided, false) = false
+      and not exists (
+        select 1
+        from public.pay_payment_correction_items as active_item_corrections
+        where active_item_corrections.pay_batch_item_id = pbi.id
+          and active_item_corrections.status = 'APPLIED'
+          and active_item_corrections.correction_item_kind in ('PRE_BANK_CANCEL','NO_MONEY_UNWIND','SETTLED_REVERSAL')
+      )
   ) ch;
+
+  DROP TABLE IF EXISTS pg_temp._tmp_pay_batch_get_candidate_effective;
+  CREATE TEMP TABLE _tmp_pay_batch_get_candidate_effective ON COMMIT DROP AS
+  WITH item_scope AS (
+    SELECT
+      pbc_effective.id AS pay_batch_candidate_id,
+      pbc_effective.candidate_id,
+      pbi_effective.id AS pay_batch_item_id,
+      pbi_effective.item_type,
+      pbi_effective.amount_ex_vat,
+      pbi_effective.amount_inc_vat,
+      COALESCE(pbi_effective.is_voided, false) AS is_voided,
+      EXISTS (
+        SELECT 1
+        FROM public.pay_payment_correction_items AS precancel_items
+        WHERE precancel_items.pay_batch_item_id = pbi_effective.id
+          AND precancel_items.status = 'APPLIED'
+          AND precancel_items.correction_item_kind = 'PRE_BANK_CANCEL'
+      ) AS has_precancel,
+      EXISTS (
+        SELECT 1
+        FROM public.pay_payment_correction_items AS unwind_items
+        WHERE unwind_items.pay_batch_item_id = pbi_effective.id
+          AND unwind_items.status = 'APPLIED'
+          AND unwind_items.correction_item_kind = 'NO_MONEY_UNWIND'
+      ) AS has_no_money_unwind,
+      EXISTS (
+        SELECT 1
+        FROM public.pay_payment_correction_items AS reversal_items
+        WHERE reversal_items.pay_batch_item_id = pbi_effective.id
+          AND reversal_items.status = 'APPLIED'
+          AND reversal_items.correction_item_kind = 'SETTLED_REVERSAL'
+      ) AS has_settled_reversal
+    FROM public.pay_batch_candidates AS pbc_effective
+    LEFT JOIN public.pay_batch_items AS pbi_effective
+      ON pbi_effective.pay_batch_candidate_id = pbc_effective.id
+    WHERE pbc_effective.pay_batch_id = p_pay_batch_id
+  ), candidate_effective AS (
+    SELECT
+      item_scope.pay_batch_candidate_id,
+      item_scope.candidate_id,
+      COUNT(item_scope.pay_batch_item_id)::integer AS total_item_count,
+      COUNT(item_scope.pay_batch_item_id) FILTER (
+        WHERE item_scope.pay_batch_item_id IS NOT NULL
+          AND COALESCE(item_scope.is_voided, false) = false
+          AND NOT (item_scope.has_precancel OR item_scope.has_no_money_unwind OR item_scope.has_settled_reversal)
+      )::integer AS active_effective_item_count,
+      ROUND(COALESCE(SUM(
+        CASE
+          WHEN item_scope.pay_batch_item_id IS NOT NULL
+           AND item_scope.item_type <> 'DEBT_CREATED'
+           AND COALESCE(item_scope.is_voided, false) = false
+           AND NOT (item_scope.has_precancel OR item_scope.has_no_money_unwind OR item_scope.has_settled_reversal)
+          THEN COALESCE(item_scope.amount_ex_vat, 0)
+          ELSE 0
+        END
+      ), 0), 2)::numeric AS active_effective_amount_ex_vat,
+      ROUND(COALESCE(SUM(
+        CASE
+          WHEN item_scope.pay_batch_item_id IS NOT NULL
+           AND item_scope.item_type <> 'DEBT_CREATED'
+           AND COALESCE(item_scope.is_voided, false) = false
+           AND NOT (item_scope.has_precancel OR item_scope.has_no_money_unwind OR item_scope.has_settled_reversal)
+          THEN COALESCE(item_scope.amount_inc_vat, item_scope.amount_ex_vat, 0)
+          ELSE 0
+        END
+      ), 0), 2)::numeric AS active_effective_amount_inc_vat,
+      ROUND(COALESCE(SUM(
+        CASE
+          WHEN item_scope.pay_batch_item_id IS NOT NULL
+           AND item_scope.item_type <> 'DEBT_CREATED'
+          THEN COALESCE(item_scope.amount_ex_vat, 0)
+          ELSE 0
+        END
+      ), 0), 2)::numeric AS original_frozen_amount_ex_vat,
+      ROUND(COALESCE(SUM(
+        CASE
+          WHEN item_scope.pay_batch_item_id IS NOT NULL
+           AND item_scope.item_type <> 'DEBT_CREATED'
+          THEN COALESCE(item_scope.amount_inc_vat, item_scope.amount_ex_vat, 0)
+          ELSE 0
+        END
+      ), 0), 2)::numeric AS original_frozen_amount_inc_vat,
+      COUNT(item_scope.pay_batch_item_id) FILTER (WHERE item_scope.has_precancel)::integer AS applied_precancel_item_count,
+      COUNT(item_scope.pay_batch_item_id) FILTER (WHERE item_scope.has_no_money_unwind)::integer AS applied_unwind_item_count,
+      COUNT(item_scope.pay_batch_item_id) FILTER (WHERE item_scope.has_settled_reversal)::integer AS applied_reversal_item_count,
+      COUNT(item_scope.pay_batch_item_id) FILTER (WHERE item_scope.has_precancel OR item_scope.has_no_money_unwind OR item_scope.has_settled_reversal)::integer AS corrected_item_count
+    FROM item_scope
+    GROUP BY item_scope.pay_batch_candidate_id, item_scope.candidate_id
+  )
+  SELECT
+    candidate_effective.pay_batch_candidate_id,
+    candidate_effective.candidate_id,
+    COALESCE(candidate_effective.total_item_count, 0)::integer AS total_item_count,
+    COALESCE(candidate_effective.active_effective_item_count, 0)::integer AS active_effective_item_count,
+    COALESCE(candidate_effective.active_effective_amount_ex_vat, 0)::numeric AS active_effective_amount_ex_vat,
+    COALESCE(candidate_effective.active_effective_amount_inc_vat, 0)::numeric AS active_effective_amount_inc_vat,
+    COALESCE(candidate_effective.original_frozen_amount_ex_vat, 0)::numeric AS original_frozen_amount_ex_vat,
+    COALESCE(candidate_effective.original_frozen_amount_inc_vat, 0)::numeric AS original_frozen_amount_inc_vat,
+    COALESCE(candidate_effective.applied_precancel_item_count, 0)::integer AS applied_precancel_item_count,
+    COALESCE(candidate_effective.applied_unwind_item_count, 0)::integer AS applied_unwind_item_count,
+    COALESCE(candidate_effective.applied_reversal_item_count, 0)::integer AS applied_reversal_item_count,
+    COALESCE(candidate_effective.corrected_item_count, 0)::integer AS corrected_item_count,
+    (COALESCE(candidate_effective.corrected_item_count, 0) > 0) AS payment_issue_badge,
+    (
+      COALESCE(candidate_effective.corrected_item_count, 0) > 0
+      AND COALESCE(candidate_effective.active_effective_item_count, 0) = 0
+    ) AS current_effective_zero,
+    CASE
+      WHEN COALESCE(candidate_effective.applied_reversal_item_count, 0) > 0 THEN 'Bank returned payment'
+      WHEN COALESCE(candidate_effective.applied_unwind_item_count, 0) > 0 THEN 'Bank rejected payment'
+      WHEN COALESCE(candidate_effective.applied_precancel_item_count, 0) > 0 THEN 'Payment removed from batch'
+      ELSE NULL::text
+    END AS payment_issue_label,
+    COALESCE((
+      SELECT jsonb_agg(issue_kind_values.issue_kind ORDER BY issue_kind_values.issue_kind)
+      FROM (
+        SELECT 'PRE_BANK_CANCEL'::text AS issue_kind WHERE COALESCE(candidate_effective.applied_precancel_item_count, 0) > 0
+        UNION ALL
+        SELECT 'NO_MONEY_UNWIND'::text AS issue_kind WHERE COALESCE(candidate_effective.applied_unwind_item_count, 0) > 0
+        UNION ALL
+        SELECT 'SETTLED_REVERSAL'::text AS issue_kind WHERE COALESCE(candidate_effective.applied_reversal_item_count, 0) > 0
+      ) AS issue_kind_values
+    ), '[]'::jsonb) AS payment_issue_kinds
+  FROM candidate_effective;
+
+  SELECT
+    COALESCE(SUM(COALESCE(candidate_effective.active_effective_item_count, 0)), 0)::integer,
+    ROUND(COALESCE(SUM(COALESCE(candidate_effective.active_effective_amount_ex_vat, 0)), 0), 2)::numeric,
+    ROUND(COALESCE(SUM(COALESCE(candidate_effective.active_effective_amount_inc_vat, 0)), 0), 2)::numeric,
+    COUNT(*) FILTER (WHERE COALESCE(candidate_effective.payment_issue_badge, false))::integer
+  INTO
+    v_active_effective_item_count,
+    v_active_effective_amount_ex_vat,
+    v_active_effective_amount_inc_vat,
+    v_payment_issue_candidate_count
+  FROM pg_temp._tmp_pay_batch_get_candidate_effective AS candidate_effective;
 
   -- ✅ C: load schedule defaults for UI preselect (do not change batch state)
   select
@@ -21791,8 +21941,27 @@ begin
         'candidate_display_name', pbc.candidate_display_name,
         'paye_state', pbc.paye_state,
         'mismatch_settlement_choice', pbc.mismatch_settlement_choice,
-        'gross_preview', pbc.gross_preview,
-        'net_bank_amount', pbc.net_bank_amount,
+        'original_gross_preview', pbc.gross_preview,
+        'original_net_bank_amount', pbc.net_bank_amount,
+        'gross_preview', case when coalesce(ce.current_effective_zero, false) then 0::numeric else pbc.gross_preview end,
+        'net_bank_amount', case when coalesce(ce.current_effective_zero, false) then 0::numeric else pbc.net_bank_amount end,
+        'current_effective_gross_preview', case when coalesce(ce.current_effective_zero, false) then 0::numeric else pbc.gross_preview end,
+        'current_effective_net_bank_amount', case when coalesce(ce.current_effective_zero, false) then 0::numeric else pbc.net_bank_amount end,
+        'current_effective_item_count', coalesce(ce.active_effective_item_count, 0),
+        'active_effective_item_count', coalesce(ce.active_effective_item_count, 0),
+        'total_item_count', coalesce(ce.total_item_count, 0),
+        'current_effective_amount_ex_vat', coalesce(ce.active_effective_amount_ex_vat, 0),
+        'current_effective_amount_inc_vat', coalesce(ce.active_effective_amount_inc_vat, 0),
+        'original_frozen_amount_ex_vat', coalesce(ce.original_frozen_amount_ex_vat, 0),
+        'original_frozen_amount_inc_vat', coalesce(ce.original_frozen_amount_inc_vat, 0),
+        'payment_issue_badge', coalesce(ce.payment_issue_badge, false),
+        'payment_issue_badge_label', case when coalesce(ce.payment_issue_badge, false) then 'PAYMENT ISSUE' else null end,
+        'payment_issue_label', ce.payment_issue_label,
+        'payment_issue_kinds', coalesce(ce.payment_issue_kinds, '[]'::jsonb),
+        'applied_precancel_item_count', coalesce(ce.applied_precancel_item_count, 0),
+        'applied_unwind_item_count', coalesce(ce.applied_unwind_item_count, 0),
+        'applied_reversal_item_count', coalesce(ce.applied_reversal_item_count, 0),
+        'corrected_item_count', coalesce(ce.corrected_item_count, 0),
         'debt_created', pbc.debt_created,
         'overpayment_recovery_taken', pbc.overpayment_recovery_taken,
         'loan_repayment_taken', pbc.loan_repayment_taken,
@@ -21814,14 +21983,14 @@ begin
 
         -- ✅ NEW: explicit deductions summary for child modal / UI
         'deductions_summary', jsonb_build_object(
-          'gross_positive', pbc.gross_preview,
+          'gross_positive', case when coalesce(ce.current_effective_zero, false) then 0::numeric else pbc.gross_preview end,
           'manual_debt_recovery', coalesce(fs.manual_debt_recovery,0),
           'manual_debt_net_deductions', coalesce(fs.manual_debt_net_deductions,0),
           'payment_advance_repayment', coalesce(fs.payment_advance_repayment,0),
           'loan_repayment', coalesce(fs.payment_advance_repayment,0),
           'repayment', coalesce(fs.repayment,0),
           'overpayment_recovery', coalesce(fs.overpayment_recovery,0),
-          'final_payable', pbc.net_bank_amount,
+          'final_payable', case when coalesce(ce.current_effective_zero, false) then 0::numeric else pbc.net_bank_amount end,
           'awaiting_net_amount', case when v_batch_kind_fixed = 'LOANS' then false else coalesce(pbc.awaiting_net_amount,false) end,
           'paye_net_amount', ni.net_amount
         ),
@@ -21837,6 +22006,8 @@ begin
   )
   into v_candidates
   from public.pay_batch_candidates pbc
+  left join pg_temp._tmp_pay_batch_get_candidate_effective AS ce
+    on ce.pay_batch_candidate_id = pbc.id
   left join lateral (
     select
       pni.net_amount,
@@ -21861,6 +22032,13 @@ begin
     from public.pay_batch_items pbi
     where pbi.pay_batch_candidate_id = pbc.id
       and coalesce(pbi.is_voided, false) = false
+      and not exists (
+        select 1
+        from public.pay_payment_correction_items as active_item_corrections
+        where active_item_corrections.pay_batch_item_id = pbi.id
+          and active_item_corrections.status = 'APPLIED'
+          and active_item_corrections.correction_item_kind in ('PRE_BANK_CANCEL','NO_MONEY_UNWIND','SETTLED_REVERSAL')
+      )
   ) fs on true
   where pbc.pay_batch_id = p_pay_batch_id;
 
@@ -22085,11 +22263,13 @@ begin
 
   v_can_create_bank_csv_file := (
     v_provider_known = true
+    and COALESCE(v_active_effective_item_count, 0) > 0
     and v_batch_status_upper not in ('COMMITTED','PAID','SETTLED','CANCELLED')
     and v_execution_commit_state = 'NOT_SUBMITTED'
   );
   v_can_start_standard_execution := (
     v_provider_known = true
+    and COALESCE(v_active_effective_item_count, 0) > 0
     and v_provider_normalized <> 'CSV'
     and v_batch_status_upper not in ('COMMITTED','PAID','SETTLED','CANCELLED')
     and v_execution_commit_state = 'NOT_SUBMITTED'
@@ -22097,6 +22277,7 @@ begin
   );
   v_can_start_csv_settlement := (
     v_provider_known = true
+    and COALESCE(v_active_effective_item_count, 0) > 0
     and v_batch_status_upper not in ('COMMITTED','PAID','SETTLED','CANCELLED')
     and v_execution_commit_state = 'NOT_SUBMITTED'
     and v_has_external_submission_evidence = false
@@ -22105,6 +22286,7 @@ begin
   );
   v_can_start_external_settlement := (
     v_provider_known = true
+    and COALESCE(v_active_effective_item_count, 0) > 0
     and v_batch_status_upper not in ('COMMITTED','PAID','SETTLED','CANCELLED')
     and v_execution_commit_state = 'NOT_SUBMITTED'
     and v_has_external_submission_evidence = false
@@ -22175,8 +22357,24 @@ begin
       pbc.remittance_sent_at_utc,
       pbc.remittance_sent_by_user_id,
       pbc.remittance_trigger_status,
-      pbc.last_remittance_error
+      pbc.last_remittance_error,
+      ce.total_item_count,
+      ce.active_effective_item_count,
+      ce.active_effective_amount_ex_vat,
+      ce.active_effective_amount_inc_vat,
+      ce.original_frozen_amount_ex_vat,
+      ce.original_frozen_amount_inc_vat,
+      ce.applied_precancel_item_count,
+      ce.applied_unwind_item_count,
+      ce.applied_reversal_item_count,
+      ce.corrected_item_count,
+      ce.payment_issue_badge,
+      ce.payment_issue_label,
+      ce.payment_issue_kinds,
+      ce.current_effective_zero
     from public.pay_batch_candidates pbc
+    left join pg_temp._tmp_pay_batch_get_candidate_effective AS ce
+      on ce.pay_batch_candidate_id = pbc.id
     where pbc.pay_batch_id = p_pay_batch_id
   ),
   ni as (
@@ -22209,6 +22407,13 @@ begin
     left join public.pay_batch_items pbi
       on pbi.pay_batch_candidate_id = pbc.id
      and coalesce(pbi.is_voided, false) = false
+      and not exists (
+        select 1
+        from public.pay_payment_correction_items as active_item_corrections
+        where active_item_corrections.pay_batch_item_id = pbi.id
+          and active_item_corrections.status = 'APPLIED'
+          and active_item_corrections.correction_item_kind in ('PRE_BANK_CANCEL','NO_MONEY_UNWIND','SETTLED_REVERSAL')
+      )
     where pbc.pay_batch_id = p_pay_batch_id
     group by pbc.id
   ),
@@ -22227,6 +22432,13 @@ begin
     left join public.pay_batch_items pbi
       on pbi.pay_batch_candidate_id = pbc.id
      and coalesce(pbi.is_voided, false) = false
+      and not exists (
+        select 1
+        from public.pay_payment_correction_items as active_item_corrections
+        where active_item_corrections.pay_batch_item_id = pbi.id
+          and active_item_corrections.status = 'APPLIED'
+          and active_item_corrections.correction_item_kind in ('PRE_BANK_CANCEL','NO_MONEY_UNWIND','SETTLED_REVERSAL')
+      )
     where pbc.pay_batch_id = p_pay_batch_id
     group by pbc.id
   ),
@@ -22261,6 +22473,13 @@ begin
     left join public.pay_batch_items pbi
       on pbi.pay_batch_candidate_id = pbc.id
      and coalesce(pbi.is_voided, false) = false
+      and not exists (
+        select 1
+        from public.pay_payment_correction_items as active_item_corrections
+        where active_item_corrections.pay_batch_item_id = pbi.id
+          and active_item_corrections.status = 'APPLIED'
+          and active_item_corrections.correction_item_kind in ('PRE_BANK_CANCEL','NO_MONEY_UNWIND','SETTLED_REVERSAL')
+      )
     left join public.pay_bank_transfers pbt
       on pbt.id = pbi.pay_bank_transfer_id
      and pbt.pay_batch_id = p_pay_batch_id
@@ -22293,16 +22512,33 @@ begin
         'remittance_sent_by_user_id', case when c.remittance_sent_by_user_id is null then null else c.remittance_sent_by_user_id::text end,
         'remittance_trigger_status', c.remittance_trigger_status,
         'last_remittance_error', c.last_remittance_error,
-        'final_net_paid', c.net_bank_amount,
+        'original_gross_preview', c.gross_preview,
+        'original_net_bank_amount', c.net_bank_amount,
+        'current_effective_item_count', coalesce(c.active_effective_item_count, 0),
+        'active_effective_item_count', coalesce(c.active_effective_item_count, 0),
+        'total_item_count', coalesce(c.total_item_count, 0),
+        'current_effective_amount_ex_vat', coalesce(c.active_effective_amount_ex_vat, 0),
+        'current_effective_amount_inc_vat', coalesce(c.active_effective_amount_inc_vat, 0),
+        'original_frozen_amount_ex_vat', coalesce(c.original_frozen_amount_ex_vat, 0),
+        'original_frozen_amount_inc_vat', coalesce(c.original_frozen_amount_inc_vat, 0),
+        'payment_issue_badge', coalesce(c.payment_issue_badge, false),
+        'payment_issue_badge_label', case when coalesce(c.payment_issue_badge, false) then 'PAYMENT ISSUE' else null end,
+        'payment_issue_label', c.payment_issue_label,
+        'payment_issue_kinds', coalesce(c.payment_issue_kinds, '[]'::jsonb),
+        'applied_precancel_item_count', coalesce(c.applied_precancel_item_count, 0),
+        'applied_unwind_item_count', coalesce(c.applied_unwind_item_count, 0),
+        'applied_reversal_item_count', coalesce(c.applied_reversal_item_count, 0),
+        'corrected_item_count', coalesce(c.corrected_item_count, 0),
+        'final_net_paid', case when coalesce(c.current_effective_zero, false) then 0::numeric else c.net_bank_amount end,
         'deductions_summary', jsonb_build_object(
-          'gross_positive', c.gross_preview,
+          'gross_positive', case when coalesce(c.current_effective_zero, false) then 0::numeric else c.gross_preview end,
           'manual_debt_recovery', coalesce(fs.manual_debt_recovery,0),
           'manual_debt_net_deductions', coalesce(fs.manual_debt_net_deductions,0),
           'payment_advance_repayment', coalesce(fs.payment_advance_repayment,0),
           'loan_repayment', coalesce(fs.payment_advance_repayment,0),
           'repayment', coalesce(fs.repayment,0),
           'overpayment_recovery', coalesce(fs.overpayment_recovery,0),
-          'final_payable', c.net_bank_amount,
+          'final_payable', case when coalesce(c.current_effective_zero, false) then 0::numeric else c.net_bank_amount end,
           'awaiting_net_amount', case when v_batch_kind_fixed = 'LOANS' then false else coalesce(c.awaiting_net_amount, false) end,
           'paye_net_amount', n.net_amount
         ),
@@ -22315,6 +22551,7 @@ begin
         'umbrella_total_inc_vat', s.umbrella_total_inc_vat,
         'payment_amount',
           (case
+            when coalesce(c.current_effective_zero, false) then 0::numeric
             when v_batch_kind = 'PAYE' then s.paye_total_ex_vat
             when v_batch_kind = 'UMBRELLA' then s.umbrella_total_inc_vat
             else round(coalesce(s.paye_total_ex_vat,0) + coalesce(s.umbrella_total_inc_vat,0),2)
@@ -22328,6 +22565,8 @@ begin
         ),
         'payment_status',
           (case
+            when coalesce(c.payment_issue_badge, false) and coalesce(c.active_effective_item_count, 0) = 0 then 'PAYMENT_ISSUE'
+            when coalesce(c.payment_issue_badge, false) then 'PAYMENT_ISSUE_PARTIAL'
             when coalesce(tr0.total_transfers,0) = 0 then 'DRAFT'
             when coalesce(tr0.blocked_transfers,0) > 0 then 'BLOCKED'
             when coalesce(tr0.failed_transfers,0) > 0 then 'FAILED'
@@ -22357,8 +22596,16 @@ begin
       pbc.id as pay_batch_candidate_id,
       pbc.candidate_id,
       pbc.candidate_display_name,
-      pbc.candidate_tms_ref
+      pbc.candidate_tms_ref,
+      ce.total_item_count,
+      ce.active_effective_item_count,
+      ce.payment_issue_badge,
+      ce.payment_issue_label,
+      ce.payment_issue_kinds,
+      ce.corrected_item_count
     from public.pay_batch_candidates pbc
+    left join pg_temp._tmp_pay_batch_get_candidate_effective AS ce
+      on ce.pay_batch_candidate_id = pbc.id
     where pbc.pay_batch_id = p_pay_batch_id
   ),
   ts_groups as (
@@ -22372,6 +22619,13 @@ begin
     join public.pay_batch_items pbi
       on pbi.pay_batch_candidate_id = pbc.id
      and coalesce(pbi.is_voided, false) = false
+      and not exists (
+        select 1
+        from public.pay_payment_correction_items as active_item_corrections
+        where active_item_corrections.pay_batch_item_id = pbi.id
+          and active_item_corrections.status = 'APPLIED'
+          and active_item_corrections.correction_item_kind in ('PRE_BANK_CANCEL','NO_MONEY_UNWIND','SETTLED_REVERSAL')
+      )
     where pbc.pay_batch_id = p_pay_batch_id
       and pbi.timesheet_id is not null
     group by pbc.id, pbc.candidate_id, pbi.timesheet_id
@@ -22416,6 +22670,13 @@ begin
     join public.pay_batch_items pbi
       on pbi.pay_batch_candidate_id = pbc.id
      and coalesce(pbi.is_voided, false) = false
+      and not exists (
+        select 1
+        from public.pay_payment_correction_items as active_item_corrections
+        where active_item_corrections.pay_batch_item_id = pbi.id
+          and active_item_corrections.status = 'APPLIED'
+          and active_item_corrections.correction_item_kind in ('PRE_BANK_CANCEL','NO_MONEY_UNWIND','SETTLED_REVERSAL')
+      )
     join public.pay_batch_item_breakdowns pbib
       on pbib.pay_batch_item_id = pbi.id
     where pbc.pay_batch_id = p_pay_batch_id
@@ -22593,6 +22854,13 @@ begin
     join public.pay_batch_items pbi
       on pbi.pay_batch_candidate_id = pbc.id
      and coalesce(pbi.is_voided, false) = false
+      and not exists (
+        select 1
+        from public.pay_payment_correction_items as active_item_corrections
+        where active_item_corrections.pay_batch_item_id = pbi.id
+          and active_item_corrections.status = 'APPLIED'
+          and active_item_corrections.correction_item_kind in ('PRE_BANK_CANCEL','NO_MONEY_UNWIND','SETTLED_REVERSAL')
+      )
     left join public.v_finance_cases_register vfcr
       on vfcr.finance_case_id = pbi.finance_case_id
     left join public.tms_users tuc
@@ -22610,6 +22878,13 @@ begin
     where pbc.pay_batch_id = p_pay_batch_id
       and pbi.timesheet_id is null
       and coalesce(pbi.is_voided, false) = false
+      and not exists (
+        select 1
+        from public.pay_payment_correction_items as active_item_corrections
+        where active_item_corrections.pay_batch_item_id = pbi.id
+          and active_item_corrections.status = 'APPLIED'
+          and active_item_corrections.correction_item_kind in ('PRE_BANK_CANCEL','NO_MONEY_UNWIND','SETTLED_REVERSAL')
+      )
   ),
   non_ts_groups as (
     select
@@ -22869,6 +23144,13 @@ begin
     left join public.pay_batch_items pbi
       on pbi.pay_batch_candidate_id = pbc.id
      and coalesce(pbi.is_voided, false) = false
+      and not exists (
+        select 1
+        from public.pay_payment_correction_items as active_item_corrections
+        where active_item_corrections.pay_batch_item_id = pbi.id
+          and active_item_corrections.status = 'APPLIED'
+          and active_item_corrections.correction_item_kind in ('PRE_BANK_CANCEL','NO_MONEY_UNWIND','SETTLED_REVERSAL')
+      )
     where pbc.pay_batch_id = p_pay_batch_id
     group by pbc.id
   ),
@@ -23000,6 +23282,12 @@ begin
       p.candidate_id,
       p.candidate_display_name,
       p.candidate_tms_ref,
+      p.total_item_count,
+      p.active_effective_item_count,
+      p.payment_issue_badge,
+      p.payment_issue_label,
+      p.payment_issue_kinds,
+      p.corrected_item_count,
       coalesce(tsa.ts_lines, '[]'::jsonb) as ts_lines,
       coalesce(nta.non_ts_lines, '[]'::jsonb) as non_ts_lines
     from pbci p
@@ -23017,9 +23305,21 @@ begin
         'candidate_id', cl.candidate_id::text,
         'candidate_display_name', cl.candidate_display_name,
         'candidate_tms_ref', cl.candidate_tms_ref,
+        'total_item_count', coalesce(cl.total_item_count, 0),
+        'active_effective_item_count', coalesce(cl.active_effective_item_count, 0),
+        'current_effective_item_count', coalesce(cl.active_effective_item_count, 0),
+        'payment_issue_badge', coalesce(cl.payment_issue_badge, false),
+        'payment_issue_badge_label', case when coalesce(cl.payment_issue_badge, false) then 'PAYMENT ISSUE' else null end,
+        'payment_issue_label', cl.payment_issue_label,
+        'payment_issue_kinds', coalesce(cl.payment_issue_kinds, '[]'::jsonb),
+        'corrected_item_count', coalesce(cl.corrected_item_count, 0),
         'candidate_lines', jsonb_build_object(
           'ts_lines', cl.ts_lines,
-          'non_ts_lines', cl.non_ts_lines
+          'non_ts_lines', cl.non_ts_lines,
+          'payment_issue_badge', coalesce(cl.payment_issue_badge, false),
+          'payment_issue_badge_label', case when coalesce(cl.payment_issue_badge, false) then 'PAYMENT ISSUE' else null end,
+          'payment_issue_label', cl.payment_issue_label,
+          'payment_issue_kinds', coalesce(cl.payment_issue_kinds, '[]'::jsonb)
         ),
         'ts_lines', cl.ts_lines,
         'non_ts_lines', cl.non_ts_lines
@@ -23050,7 +23350,11 @@ begin
             (
               select jsonb_build_object(
                 'ts_lines', coalesce(line_src.line_json->'ts_lines', '[]'::jsonb),
-                'non_ts_lines', coalesce(line_src.line_json->'non_ts_lines', '[]'::jsonb)
+                'non_ts_lines', coalesce(line_src.line_json->'non_ts_lines', '[]'::jsonb),
+                'payment_issue_badge', coalesce((line_src.line_json->>'payment_issue_badge')::boolean, false),
+                'payment_issue_badge_label', line_src.line_json->>'payment_issue_badge_label',
+                'payment_issue_label', line_src.line_json->>'payment_issue_label',
+                'payment_issue_kinds', coalesce(line_src.line_json->'payment_issue_kinds', '[]'::jsonb)
               )
               from line_src
               where coalesce(line_src.line_json->>'pay_batch_candidate_id','') = coalesce(cand_src.cand_json->>'id','')
@@ -23058,7 +23362,11 @@ begin
             ),
             jsonb_build_object(
               'ts_lines', '[]'::jsonb,
-              'non_ts_lines', '[]'::jsonb
+              'non_ts_lines', '[]'::jsonb,
+              'payment_issue_badge', coalesce((cand_src.cand_json->>'payment_issue_badge')::boolean, false),
+              'payment_issue_badge_label', cand_src.cand_json->>'payment_issue_badge_label',
+              'payment_issue_label', cand_src.cand_json->>'payment_issue_label',
+              'payment_issue_kinds', coalesce(cand_src.cand_json->'payment_issue_kinds', '[]'::jsonb)
             )
           )
       )
@@ -23103,6 +23411,13 @@ begin
     where pbc.pay_batch_id = p_pay_batch_id
       and pbi.item_type <> 'DEBT_CREATED'
       and coalesce(pbi.is_voided, false) = false
+      and not exists (
+        select 1
+        from public.pay_payment_correction_items as active_item_corrections
+        where active_item_corrections.pay_batch_item_id = pbi.id
+          and active_item_corrections.status = 'APPLIED'
+          and active_item_corrections.correction_item_kind in ('PRE_BANK_CANCEL','NO_MONEY_UNWIND','SETTLED_REVERSAL')
+      )
   ),
   transfer_remittance_targets as (
     select distinct
@@ -23198,6 +23513,13 @@ begin
     where pbc.pay_batch_id = p_pay_batch_id
       and pbi.item_type <> 'DEBT_CREATED'
       and coalesce(pbi.is_voided, false) = false
+      and not exists (
+        select 1
+        from public.pay_payment_correction_items as active_item_corrections
+        where active_item_corrections.pay_batch_item_id = pbi.id
+          and active_item_corrections.status = 'APPLIED'
+          and active_item_corrections.correction_item_kind in ('PRE_BANK_CANCEL','NO_MONEY_UNWIND','SETTLED_REVERSAL')
+      )
   ),
   transfer_remittance_targets as (
     select distinct
@@ -23481,7 +23803,14 @@ begin
     on pbc.id = pbi.pay_batch_candidate_id
   where pbc.pay_batch_id = p_pay_batch_id
     and pbi.finance_case_id is not null
-    and coalesce(pbi.is_voided, false) = false;
+    and coalesce(pbi.is_voided, false) = false
+      and not exists (
+        select 1
+        from public.pay_payment_correction_items as active_item_corrections
+        where active_item_corrections.pay_batch_item_id = pbi.id
+          and active_item_corrections.status = 'APPLIED'
+          and active_item_corrections.correction_item_kind in ('PRE_BANK_CANCEL','NO_MONEY_UNWIND','SETTLED_REVERSAL')
+      );
 
   with finance_items as (
     select
@@ -23507,6 +23836,13 @@ begin
     where pbc.pay_batch_id = p_pay_batch_id
       and pbi.finance_case_id is not null
       and coalesce(pbi.is_voided, false) = false
+      and not exists (
+        select 1
+        from public.pay_payment_correction_items as active_item_corrections
+        where active_item_corrections.pay_batch_item_id = pbi.id
+          and active_item_corrections.status = 'APPLIED'
+          and active_item_corrections.correction_item_kind in ('PRE_BANK_CANCEL','NO_MONEY_UNWIND','SETTLED_REVERSAL')
+      )
     group by pbi.finance_case_id
   ),
   reservation_rollup as (
@@ -23866,13 +24202,19 @@ begin
   ELSIF COALESCE(v_awaiting_authorisation_count, 0) > 0 THEN
     v_derived_correction_state := 'AWAITING_AUTHORISATION';
   ELSIF v_applied_reversal_item_count > 0 THEN
-    IF v_correctable_item_count > 0 AND v_applied_reversal_item_count >= v_correctable_item_count THEN
+    IF COALESCE(v_active_effective_item_count, 0) = 0 THEN
       v_derived_correction_state := 'REVERSED';
     ELSE
       v_derived_correction_state := 'PARTIALLY_REVERSED';
     END IF;
-  ELSIF v_applied_unwind_item_count > 0 OR v_applied_precancel_item_count > 0 THEN
-    IF v_correctable_item_count > 0 AND (v_applied_unwind_item_count + v_applied_precancel_item_count) >= v_correctable_item_count THEN
+  ELSIF v_applied_unwind_item_count > 0 THEN
+    IF COALESCE(v_active_effective_item_count, 0) = 0 THEN
+      v_derived_correction_state := 'NO_MONEY_UNWOUND';
+    ELSE
+      v_derived_correction_state := 'PARTIALLY_UNWOUND';
+    END IF;
+  ELSIF v_applied_precancel_item_count > 0 THEN
+    IF v_correctable_item_count > 0 AND v_applied_precancel_item_count >= v_correctable_item_count THEN
       v_derived_correction_state := 'NO_MONEY_UNWOUND';
     ELSE
       v_derived_correction_state := 'PARTIALLY_UNWOUND';
@@ -24218,6 +24560,15 @@ begin
     'batch_kind', v_batch_kind,
     'batch_kind_fixed', case when v_batch.batch_kind_fixed is null then null else v_batch.batch_kind_fixed end,
     'pay_channels_present', v_pay_channels_present,
+    'active_effective_item_count', COALESCE(v_active_effective_item_count, 0),
+    'active_effective_amount_ex_vat', COALESCE(v_active_effective_amount_ex_vat, 0),
+    'active_effective_amount_inc_vat', COALESCE(v_active_effective_amount_inc_vat, 0),
+    'active_item_count', COALESCE(v_active_effective_item_count, 0),
+    'active_batch_item_count', COALESCE(v_active_effective_item_count, 0),
+    'active_payment_item_count', COALESCE(v_active_effective_item_count, 0),
+    'active_bank_out', COALESCE(v_active_effective_amount_ex_vat, 0),
+    'payment_issue_candidate_count', COALESCE(v_payment_issue_candidate_count, 0),
+    'has_payment_issue_candidates', COALESCE(v_payment_issue_candidate_count, 0) > 0,
 
     -- ✅ child modal datasets
     'candidate_breakdown', v_candidate_breakdown,
@@ -24267,6 +24618,15 @@ begin
       'execution_transfer_hash', v_execution_transfer_hash,
       'csv_comparison_transfer_hash', v_csv_comparison_transfer_hash,
       'csv_export_match_basis', v_csv_export_match_basis,
+      'active_effective_item_count', COALESCE(v_active_effective_item_count, 0),
+      'active_effective_amount_ex_vat', COALESCE(v_active_effective_amount_ex_vat, 0),
+      'active_effective_amount_inc_vat', COALESCE(v_active_effective_amount_inc_vat, 0),
+      'active_item_count', COALESCE(v_active_effective_item_count, 0),
+      'active_batch_item_count', COALESCE(v_active_effective_item_count, 0),
+      'active_payment_item_count', COALESCE(v_active_effective_item_count, 0),
+      'active_bank_out', COALESCE(v_active_effective_amount_ex_vat, 0),
+      'payment_issue_candidate_count', COALESCE(v_payment_issue_candidate_count, 0),
+      'has_payment_issue_candidates', COALESCE(v_payment_issue_candidate_count, 0) > 0,
       'pay_date', v_batch.pay_date::text,
       'authoritative_payment_date', case when v_batch.authoritative_payment_date is null then null else v_batch.authoritative_payment_date::text end,
       'authoritative_payment_date_source', v_batch.authoritative_payment_date_source,
@@ -24313,6 +24673,9 @@ begin
   );
 end;
 $$;
+
+
+
 
 
 CREATE OR REPLACE FUNCTION public.pay_batches_list(p_limit integer DEFAULT 50, p_offset integer DEFAULT 0, p_status text DEFAULT NULL::text)
