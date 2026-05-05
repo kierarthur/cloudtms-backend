@@ -10573,6 +10573,9 @@ $$;
 
 
 
+
+
+
 CREATE OR REPLACE FUNCTION public.pay_remittance_build(p_pay_batch_id uuid, p_scope text DEFAULT 'ALL'::text)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -10810,6 +10813,26 @@ begin
           end
         )
     ),
+    candidate_total_items as (
+      select
+        uc.umbrella_id,
+        pbc.candidate_id,
+        pbi.id as pay_batch_item_id,
+        pbi.item_type,
+        pbi.timesheet_id,
+        pbi.amount_ex_vat,
+        pbi.amount_vat,
+        pbi.amount_inc_vat
+      from umb_candidates uc
+      join public.pay_batch_candidates pbc
+        on pbc.pay_batch_id = p_pay_batch_id
+       and pbc.candidate_id = uc.candidate_id
+      join public.pay_batch_items pbi
+        on pbi.pay_batch_candidate_id = pbc.id
+      where upper(coalesce(pbi.pay_channel,'')) = 'UMBRELLA'
+        and pbi.item_type <> 'DEBT_CREATED'
+        and coalesce(pbi.is_voided,false) = false
+    ),
     ts_meta as (
       select
         ci.umbrella_id,
@@ -10851,7 +10874,12 @@ begin
        and tsa.timesheet_id = tm.timesheet_id
     ),
     ts_snap as (
-      select
+      select distinct on (
+        tss.pay_batch_id,
+        tss.candidate_id,
+        tss.timesheet_id,
+        upper(coalesce(tss.pay_channel,''))
+      )
         tss.pay_batch_id,
         tss.timesheet_id,
         tss.candidate_id,
@@ -10861,6 +10889,13 @@ begin
       from public.pay_batch_timesheet_snapshots tss
       where tss.pay_batch_id = p_pay_batch_id
         and upper(coalesce(tss.pay_channel,'')) = 'UMBRELLA'
+      order by
+        tss.pay_batch_id,
+        tss.candidate_id,
+        tss.timesheet_id,
+        upper(coalesce(tss.pay_channel,'')),
+        tss.created_at_utc desc,
+        tss.id desc
     ),
     ts_class as (
       select
@@ -11215,8 +11250,11 @@ begin
               'other_rows', ts.other_rows,
               'totals', jsonb_build_object(
                 'total_ex_vat', ts.totals_ex_vat,
+                'gross_ex_vat', ts.totals_ex_vat,
                 'vat', ts.totals_vat,
-                'total_inc_vat', ts.totals_inc_vat
+                'gross_vat', ts.totals_vat,
+                'total_inc_vat', ts.totals_inc_vat,
+                'gross_inc_vat', ts.totals_inc_vat
               ),
               'schedule_rows', case
                 when coalesce(ujf.detailed_breakdown,false) = true and ts.timesheet_render_mode = 'SEGMENT'
@@ -11245,6 +11283,60 @@ begin
        and sc.candidate_id = ts.candidate_id
        and sc.timesheet_id = ts.timesheet_id
       group by ts.umbrella_id, ts.candidate_id
+    ),
+    candidate_frozen_totals as (
+      select
+        ci.umbrella_id,
+        ci.candidate_id,
+        (count(distinct ci.timesheet_id) filter (where ci.timesheet_id is not null))::integer as timesheet_count,
+        count(distinct ci.pay_batch_item_id)::integer as item_count,
+        round(coalesce(sum(
+          case
+            when ci.item_type in ('LOAN_REPAYMENT','OVERPAYMENT_RECOVERY','MANUAL_DEBT_RECOVERY') then 0
+            when coalesce(ci.amount_inc_vat,0) < 0 or coalesce(ci.amount_ex_vat,0) < 0 then 0
+            else coalesce(ci.amount_ex_vat,0)
+          end
+        ),0),2) as gross_ex_vat,
+        round(coalesce(sum(
+          case
+            when ci.item_type in ('LOAN_REPAYMENT','OVERPAYMENT_RECOVERY','MANUAL_DEBT_RECOVERY') then 0
+            when coalesce(ci.amount_inc_vat,0) < 0 or coalesce(ci.amount_ex_vat,0) < 0 then 0
+            else coalesce(ci.amount_vat,0)
+          end
+        ),0),2) as gross_vat,
+        round(coalesce(sum(
+          case
+            when ci.item_type in ('LOAN_REPAYMENT','OVERPAYMENT_RECOVERY','MANUAL_DEBT_RECOVERY') then 0
+            when coalesce(ci.amount_inc_vat,0) < 0 or coalesce(ci.amount_ex_vat,0) < 0 then 0
+            else coalesce(ci.amount_inc_vat,0)
+          end
+        ),0),2) as gross_inc_vat,
+        round(coalesce(sum(
+          case
+            when ci.item_type in ('LOAN_REPAYMENT','OVERPAYMENT_RECOVERY','MANUAL_DEBT_RECOVERY') then abs(coalesce(ci.amount_ex_vat,0))
+            when coalesce(ci.amount_ex_vat,0) < 0 then abs(coalesce(ci.amount_ex_vat,0))
+            else 0
+          end
+        ),0),2) as deductions_ex_vat,
+        round(coalesce(sum(
+          case
+            when ci.item_type in ('LOAN_REPAYMENT','OVERPAYMENT_RECOVERY','MANUAL_DEBT_RECOVERY') then abs(coalesce(ci.amount_vat,0))
+            when coalesce(ci.amount_vat,0) < 0 then abs(coalesce(ci.amount_vat,0))
+            else 0
+          end
+        ),0),2) as deductions_vat,
+        round(coalesce(sum(
+          case
+            when ci.item_type in ('LOAN_REPAYMENT','OVERPAYMENT_RECOVERY','MANUAL_DEBT_RECOVERY') then abs(coalesce(ci.amount_inc_vat,0))
+            when coalesce(ci.amount_inc_vat,0) < 0 then abs(coalesce(ci.amount_inc_vat,0))
+            else 0
+          end
+        ),0),2) as deductions_inc_vat,
+        round(coalesce(sum(coalesce(ci.amount_ex_vat,0)),0),2) as net_ex_vat,
+        round(coalesce(sum(coalesce(ci.amount_vat,0)),0),2) as net_vat,
+        round(coalesce(sum(coalesce(ci.amount_inc_vat,0)),0),2) as net_inc_vat
+      from candidate_total_items ci
+      group by ci.umbrella_id, ci.candidate_id
     ),
     candidate_payload as (
       select
@@ -11276,6 +11368,24 @@ begin
               and pbc_tot.candidate_id = cm.candidate_id
             limit 1
           ), '{}'::jsonb),
+          'frozen_totals', jsonb_build_object(
+            'timesheet_count', coalesce(cft.timesheet_count, 0),
+            'item_count', coalesce(cft.item_count, 0),
+            'gross_ex_vat', round(coalesce(cft.gross_ex_vat,0),2),
+            'vat', round(coalesce(cft.gross_vat,0),2),
+            'gross_vat', round(coalesce(cft.gross_vat,0),2),
+            'gross_inc_vat', round(coalesce(cft.gross_inc_vat,0),2),
+            'deductions_ex_vat', round(coalesce(cft.deductions_ex_vat,0),2),
+            'deductions_vat', round(coalesce(cft.deductions_vat,0),2),
+            'deductions_inc_vat', round(coalesce(cft.deductions_inc_vat,0),2),
+            'deductions_recoveries_ex_vat', round(coalesce(cft.deductions_ex_vat,0),2),
+            'deductions_recoveries_vat', round(coalesce(cft.deductions_vat,0),2),
+            'deductions_recoveries_inc_vat', round(coalesce(cft.deductions_inc_vat,0),2),
+            'net_ex_vat', round(coalesce(cft.net_ex_vat,0),2),
+            'net_vat', round(coalesce(cft.net_vat,0),2),
+            'net_inc_vat', round(coalesce(cft.net_inc_vat,0),2),
+            'final_payable', round(coalesce(cft.net_inc_vat,0),2)
+          ),
           'non_timesheet_lines', coalesce((
             select coalesce(
               jsonb_agg(
@@ -11387,6 +11497,7 @@ begin
               )
             where pbc_nt.pay_batch_id = p_pay_batch_id
               and pbc_nt.candidate_id = cm.candidate_id
+              and upper(coalesce(pbi_nt.pay_channel,'')) = 'UMBRELLA'
               and pbi_nt.is_voided = false
               and pbi_nt.timesheet_id is null
               and pbi_nt.item_type in ('LOAN_REPAYMENT','OVERPAYMENT_RECOVERY','LOAN_PAYOUT','MANUAL_CREDIT_PAYOUT','MANUAL_DEBT_RECOVERY')
@@ -11396,27 +11507,102 @@ begin
       left join cand_timesheets ct
         on ct.umbrella_id = cm.umbrella_id
        and ct.candidate_id = cm.candidate_id
+      left join candidate_frozen_totals cft
+        on cft.umbrella_id = cm.umbrella_id
+       and cft.candidate_id = cm.candidate_id
+    ),
+    umbrella_transfer_totals as (
+      select
+        ut.umbrella_id,
+        round(coalesce(sum(coalesce(ut.amount,0)),0),2) as umbrella_total_amount,
+        coalesce(max(nullif(btrim(coalesce(ut.currency,'')),'')), 'GBP') as currency,
+        bool_or(coalesce(ut.is_simulated,false)) as transfer_test_mode,
+        count(distinct ut.transfer_id)::integer as transfer_count,
+        coalesce(
+          jsonb_agg(
+            jsonb_build_object(
+              'transfer_id', ut.transfer_id::text,
+              'candidate_id', case when ut.candidate_id is null then null else ut.candidate_id::text end,
+              'pay_channel', ut.pay_channel,
+              'amount', ut.amount,
+              'currency', ut.currency,
+              'status', ut.status,
+              'payment_reference', ut.payment_reference,
+              'completed_at_utc', case when ut.completed_at_utc is null then null else ut.completed_at_utc::text end,
+              'rail_tx_id', ut.rail_tx_id,
+              'rail_state', ut.rail_state,
+              'rail_meta_json', ut.rail_meta_json,
+              'failed_reason', ut.failed_reason,
+              'is_simulated', coalesce(ut.is_simulated,false)
+            )
+            order by ut.candidate_id, ut.transfer_id
+          ),
+          '[]'::jsonb
+        ) as transfers_json
+      from umb_transfers ut
+      group by ut.umbrella_id
+    ),
+    umbrella_candidate_payloads as (
+      select
+        cp.umbrella_id,
+        count(distinct cp.candidate_id)::integer as candidate_count,
+        coalesce(
+          jsonb_agg(cp.candidate_json order by (cp.candidate_json->>'display_name') nulls last, (cp.candidate_json->>'tms_ref') nulls last, cp.candidate_id),
+          '[]'::jsonb
+        ) as candidates_json
+      from candidate_payload cp
+      group by cp.umbrella_id
+    ),
+    umbrella_frozen_totals as (
+      select
+        cft.umbrella_id,
+        coalesce(sum(coalesce(cft.timesheet_count,0)),0)::integer as timesheet_count,
+        coalesce(sum(coalesce(cft.item_count,0)),0)::integer as item_count,
+        round(coalesce(sum(coalesce(cft.gross_ex_vat,0)),0),2) as gross_ex_vat,
+        round(coalesce(sum(coalesce(cft.gross_vat,0)),0),2) as gross_vat,
+        round(coalesce(sum(coalesce(cft.gross_inc_vat,0)),0),2) as gross_inc_vat,
+        round(coalesce(sum(coalesce(cft.deductions_ex_vat,0)),0),2) as deductions_ex_vat,
+        round(coalesce(sum(coalesce(cft.deductions_vat,0)),0),2) as deductions_vat,
+        round(coalesce(sum(coalesce(cft.deductions_inc_vat,0)),0),2) as deductions_inc_vat,
+        round(coalesce(sum(coalesce(cft.net_ex_vat,0)),0),2) as net_ex_vat,
+        round(coalesce(sum(coalesce(cft.net_vat,0)),0),2) as net_vat,
+        round(coalesce(sum(coalesce(cft.net_inc_vat,0)),0),2) as net_inc_vat
+      from candidate_frozen_totals cft
+      group by cft.umbrella_id
     ),
     umb_job as (
       select
         ur.umbrella_id,
         ur.umbrella_name,
         ur.remittance_email,
-        ur.test_mode,
+        (coalesce(ur.test_mode,false) or coalesce(utt.transfer_test_mode,false)) as test_mode,
         ujf.detailed_breakdown,
-        round(coalesce(sum(ut.amount),0),2) as umbrella_total_amount,
-        coalesce(
-          jsonb_agg(cp.candidate_json order by (cp.candidate_json->>'display_name') nulls last, (cp.candidate_json->>'tms_ref') nulls last),
-          '[]'::jsonb
-        ) as candidates_json
+        round(coalesce(utt.umbrella_total_amount,0),2) as umbrella_total_amount,
+        coalesce(utt.currency, 'GBP') as currency,
+        coalesce(utt.transfer_count,0) as transfer_count,
+        coalesce(ucp.candidate_count,0) as candidate_count,
+        coalesce(uft.timesheet_count,0) as timesheet_count,
+        coalesce(uft.item_count,0) as item_count,
+        round(coalesce(uft.gross_ex_vat,0),2) as gross_ex_vat,
+        round(coalesce(uft.gross_vat,0),2) as gross_vat,
+        round(coalesce(uft.gross_inc_vat,0),2) as gross_inc_vat,
+        round(coalesce(uft.deductions_ex_vat,0),2) as deductions_ex_vat,
+        round(coalesce(uft.deductions_vat,0),2) as deductions_vat,
+        round(coalesce(uft.deductions_inc_vat,0),2) as deductions_inc_vat,
+        round(coalesce(uft.net_ex_vat,0),2) as net_ex_vat,
+        round(coalesce(uft.net_vat,0),2) as net_vat,
+        round(coalesce(uft.net_inc_vat,0),2) as net_inc_vat,
+        coalesce(utt.transfers_json,'[]'::jsonb) as transfers_json,
+        coalesce(ucp.candidates_json,'[]'::jsonb) as candidates_json
       from umb_roster ur
       join umb_job_flags ujf
         on ujf.umbrella_id = ur.umbrella_id
-      join umb_transfers ut
-        on ut.umbrella_id = ur.umbrella_id
-      join candidate_payload cp
-        on cp.umbrella_id = ur.umbrella_id
-      group by ur.umbrella_id, ur.umbrella_name, ur.remittance_email, ur.test_mode, ujf.detailed_breakdown
+      left join umbrella_transfer_totals utt
+        on utt.umbrella_id = ur.umbrella_id
+      left join umbrella_candidate_payloads ucp
+        on ucp.umbrella_id = ur.umbrella_id
+      left join umbrella_frozen_totals uft
+        on uft.umbrella_id = ur.umbrella_id
     )
     select coalesce(
       jsonb_agg(
@@ -11438,8 +11624,28 @@ begin
           ),
           'summary', jsonb_build_object(
             'total_amount', uj.umbrella_total_amount,
-            'currency', 'GBP'
+            'currency', coalesce(uj.currency, 'GBP'),
+            'transfer_count', coalesce(uj.transfer_count,0),
+            'candidate_count', coalesce(uj.candidate_count,0),
+            'timesheet_count', coalesce(uj.timesheet_count,0),
+            'item_count', coalesce(uj.item_count,0),
+            'gross_ex_vat', round(coalesce(uj.gross_ex_vat,0),2),
+            'vat', round(coalesce(uj.gross_vat,0),2),
+            'gross_vat', round(coalesce(uj.gross_vat,0),2),
+            'gross_inc_vat', round(coalesce(uj.gross_inc_vat,0),2),
+            'deductions_ex_vat', round(coalesce(uj.deductions_ex_vat,0),2),
+            'deductions_vat', round(coalesce(uj.deductions_vat,0),2),
+            'deductions_inc_vat', round(coalesce(uj.deductions_inc_vat,0),2),
+            'deductions_recoveries_ex_vat', round(coalesce(uj.deductions_ex_vat,0),2),
+            'deductions_recoveries_vat', round(coalesce(uj.deductions_vat,0),2),
+            'deductions_recoveries_inc_vat', round(coalesce(uj.deductions_inc_vat,0),2),
+            'net_ex_vat', round(coalesce(uj.net_ex_vat,0),2),
+            'net_vat', round(coalesce(uj.net_vat,0),2),
+            'net_inc_vat', round(coalesce(uj.net_inc_vat,0),2),
+            'final_payable', uj.umbrella_total_amount,
+            'frozen_item_net_inc_vat', round(coalesce(uj.net_inc_vat,0),2)
           ),
+          'transfers', coalesce(uj.transfers_json,'[]'::jsonb),
           'candidates', coalesce(uj.candidates_json,'[]'::jsonb)
         )
         order by uj.umbrella_name nulls last, uj.umbrella_id
@@ -11608,7 +11814,11 @@ begin
        and tsa.timesheet_id = tm.timesheet_id
     ),
     ts_snap as (
-      select
+      select distinct on (
+        tss.candidate_id,
+        tss.timesheet_id,
+        upper(coalesce(tss.pay_channel,''))
+      )
         tss.timesheet_id,
         tss.candidate_id,
         tss.base_snapshot_json,
@@ -11616,6 +11826,12 @@ begin
       from public.pay_batch_timesheet_snapshots tss
       where tss.pay_batch_id = p_pay_batch_id
         and upper(coalesce(tss.pay_channel,'')) = 'PAYE'
+      order by
+        tss.candidate_id,
+        tss.timesheet_id,
+        upper(coalesce(tss.pay_channel,'')),
+        tss.created_at_utc desc,
+        tss.id desc
     ),
     ts_class as (
       select
@@ -11959,8 +12175,11 @@ begin
               'other_rows', ts.other_rows,
               'totals', jsonb_build_object(
                 'total_ex_vat', ts.totals_ex_vat,
+                'gross_ex_vat', ts.totals_ex_vat,
                 'vat', ts.totals_vat,
-                'total_inc_vat', ts.totals_inc_vat
+                'gross_vat', ts.totals_vat,
+                'total_inc_vat', ts.totals_inc_vat,
+                'gross_inc_vat', ts.totals_inc_vat
               ),
               'schedule_rows', case
                 when coalesce(ca.eff_detailed,false) = true and ts.timesheet_render_mode = 'SEGMENT'
@@ -12213,6 +12432,7 @@ begin
               )
             where pbc_nt.pay_batch_id = p_pay_batch_id
               and pbc_nt.candidate_id = cj.candidate_id
+              and upper(coalesce(pbi_nt.pay_channel,'')) = 'PAYE'
               and pbi_nt.is_voided = false
               and pbi_nt.timesheet_id is null
               and pbi_nt.item_type in ('LOAN_REPAYMENT','OVERPAYMENT_RECOVERY','LOAN_PAYOUT','MANUAL_CREDIT_PAYOUT','MANUAL_DEBT_RECOVERY')
@@ -12386,7 +12606,11 @@ begin
        and tsa.timesheet_id = tm.timesheet_id
     ),
     ts_snap as (
-      select
+      select distinct on (
+        tss.candidate_id,
+        tss.timesheet_id,
+        upper(coalesce(tss.pay_channel,''))
+      )
         tss.timesheet_id,
         tss.candidate_id,
         tss.base_snapshot_json,
@@ -12394,6 +12618,12 @@ begin
       from public.pay_batch_timesheet_snapshots tss
       where tss.pay_batch_id = p_pay_batch_id
         and upper(coalesce(tss.pay_channel,'')) = 'UMBRELLA'
+      order by
+        tss.candidate_id,
+        tss.timesheet_id,
+        upper(coalesce(tss.pay_channel,'')),
+        tss.created_at_utc desc,
+        tss.id desc
     ),
     ts_class as (
       select
@@ -12737,8 +12967,11 @@ begin
               'other_rows', ts.other_rows,
               'totals', jsonb_build_object(
                 'total_ex_vat', ts.totals_ex_vat,
+                'gross_ex_vat', ts.totals_ex_vat,
                 'vat', ts.totals_vat,
-                'total_inc_vat', ts.totals_inc_vat
+                'gross_vat', ts.totals_vat,
+                'total_inc_vat', ts.totals_inc_vat,
+                'gross_inc_vat', ts.totals_inc_vat
               ),
               'schedule_rows', case
                 when coalesce(ca.eff_detailed,false) = true and ts.timesheet_render_mode = 'SEGMENT'
@@ -12958,6 +13191,7 @@ begin
               )
             where pbc_nt.pay_batch_id = p_pay_batch_id
               and pbc_nt.candidate_id = cj.candidate_id
+              and upper(coalesce(pbi_nt.pay_channel,'')) = 'UMBRELLA'
               and pbi_nt.is_voided = false
               and pbi_nt.timesheet_id is null
               and pbi_nt.item_type in ('LOAN_REPAYMENT','OVERPAYMENT_RECOVERY','LOAN_PAYOUT','MANUAL_CREDIT_PAYOUT','MANUAL_DEBT_RECOVERY')
@@ -12988,6 +13222,7 @@ begin
   );
 end;
 $function$;
+
 
 
 CREATE OR REPLACE FUNCTION public.pay_reconcile_external_payment(
