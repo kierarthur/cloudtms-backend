@@ -24682,7 +24682,10 @@ end;
 $$;
 
 
-CREATE OR REPLACE FUNCTION public.pay_batches_list(p_limit integer DEFAULT 50, p_offset integer DEFAULT 0, p_status text DEFAULT NULL::text)
+
+DROP FUNCTION IF EXISTS public.pay_batches_list(integer, integer, text);
+
+CREATE OR REPLACE FUNCTION public.pay_batches_list(p_limit integer DEFAULT 50, p_offset integer DEFAULT 0, p_status text DEFAULT NULL::text, p_actor_user_id uuid DEFAULT NULL::uuid)
  RETURNS jsonb
  LANGUAGE plpgsql
  SECURITY DEFINER
@@ -24694,7 +24697,50 @@ declare
   v_status text := upper(nullif(btrim(coalesce(p_status,'')), ''));
   v_total int := 0;
   v_rows jsonb := '[]'::jsonb;
+  v_alert_registry jsonb := jsonb_build_object('alerts', '[]'::jsonb, 'unacknowledged_count', 0, 'highest_severity', NULL::text, 'highest_label', NULL::text);
+  v_nav_alerts jsonb := '[]'::jsonb;
+  v_banking_unacknowledged_alert_count integer := 0;
+  v_banking_highest_alert_label text := NULL::text;
+  v_banking_highest_alert_severity text := NULL::text;
+  v_alert_actor_user_id uuid := COALESCE(p_actor_user_id, '00000000-0000-0000-0000-000000000000'::uuid);
 begin
+  v_alert_registry := public.banking_alerts_active_for_user(
+    v_alert_actor_user_id,
+    NULL::text,
+    NULL::uuid,
+    true,
+    500
+  );
+
+  SELECT
+    COALESCE(jsonb_agg(nav_alerts.alert_json ORDER BY nav_alerts.severity_rank DESC, nav_alerts.sort_at_utc DESC NULLS LAST, nav_alerts.alert_fingerprint ASC), '[]'::jsonb),
+    count(*)::integer,
+    (array_agg(nav_alerts.alert_json ->> 'label' ORDER BY nav_alerts.severity_rank DESC, nav_alerts.sort_at_utc DESC NULLS LAST, nav_alerts.alert_fingerprint ASC))[1],
+    (array_agg(nav_alerts.alert_json ->> 'severity' ORDER BY nav_alerts.severity_rank DESC, nav_alerts.sort_at_utc DESC NULLS LAST, nav_alerts.alert_fingerprint ASC))[1]
+  INTO
+    v_nav_alerts,
+    v_banking_unacknowledged_alert_count,
+    v_banking_highest_alert_label,
+    v_banking_highest_alert_severity
+  FROM (
+    SELECT
+      alert_items.alert_json,
+      CASE
+        WHEN (alert_items.alert_json ->> 'severity_rank') ~ '^[0-9]+$' THEN (alert_items.alert_json ->> 'severity_rank')::integer
+        ELSE 0
+      END AS severity_rank,
+      CASE
+        WHEN NULLIF(alert_items.alert_json ->> 'sort_at_utc', '') IS NULL THEN NULL::timestamptz
+        ELSE (alert_items.alert_json ->> 'sort_at_utc')::timestamptz
+      END AS sort_at_utc,
+      alert_items.alert_json ->> 'alert_fingerprint' AS alert_fingerprint
+    FROM jsonb_array_elements(COALESCE(v_alert_registry -> 'alerts', '[]'::jsonb)) AS alert_items(alert_json)
+    WHERE COALESCE((alert_items.alert_json ->> 'acknowledged_for_current_user')::boolean, false) = false
+  ) AS nav_alerts;
+
+  v_nav_alerts := COALESCE(v_nav_alerts, '[]'::jsonb);
+  v_banking_unacknowledged_alert_count := COALESCE(v_banking_unacknowledged_alert_count, 0);
+
   select count(*)::int
   into v_total
   from public.pay_batches pb
@@ -24748,8 +24794,23 @@ begin
           'scheduled_at_utc', pb.scheduled_at_utc,
           'executing_started_at_utc', pb.executing_started_at_utc,
           'last_status_checked_at_utc', pb.last_status_checked_at_utc,
+          'last_funds_check_at_utc', pb.last_funds_check_at_utc,
+          'last_funds_check_json', pb.last_funds_check_json,
 
           'funding_account_ref', pb.funding_account_ref,
+          'blocked_funds_required_gbp', pb.blocked_funds_required_gbp,
+          'blocked_funds_available_gbp', pb.blocked_funds_available_gbp,
+          'blocked_funds_provider', pb.blocked_funds_provider,
+          'blocked_funds_env', pb.blocked_funds_env,
+          'blocked_funds_account_ref', pb.blocked_funds_account_ref,
+          'banking_alerts', pb.banking_alerts,
+          'banking_alert_kind', pb.banking_alert_kind,
+          'banking_alert_severity', pb.banking_alert_severity,
+          'banking_alert_label', pb.banking_alert_label,
+          'banking_alert_reason', pb.banking_alert_reason,
+          'banking_alert_fingerprint', pb.banking_alert_fingerprint,
+          'banking_alert_acknowledged_for_user', pb.banking_alert_acknowledged_for_user,
+          'banking_alert_requires_attention', pb.banking_alert_requires_attention,
 
           'manual_confirmed_at_utc', pb.monzo_confirmed_at_utc,
           'manual_confirmed_by_user_id', case when pb.monzo_confirmed_by_user_id is null then null else pb.monzo_confirmed_by_user_id::text end,
@@ -24860,7 +24921,20 @@ begin
       corr.correction_work_failed_final_count,
       corr.correction_work_pending_count,
       corr.correction_work_processing_count,
-      corr.correction_requires_user_action
+      corr.correction_requires_user_action,
+      bf.blocked_funds_required_gbp,
+      bf.blocked_funds_available_gbp,
+      bf.blocked_funds_provider,
+      bf.blocked_funds_env,
+      bf.blocked_funds_account_ref,
+      COALESCE(ba.banking_alerts, '[]'::jsonb) AS banking_alerts,
+      ba.banking_alert_kind,
+      ba.banking_alert_severity,
+      ba.banking_alert_label,
+      ba.banking_alert_reason,
+      ba.banking_alert_fingerprint,
+      COALESCE(ba.banking_alert_acknowledged_for_user, false) AS banking_alert_acknowledged_for_user,
+      COALESCE(ba.banking_alert_requires_attention, false) AS banking_alert_requires_attention
     from public.pay_batches pb0
     left join lateral (
       select
@@ -24920,6 +24994,81 @@ begin
       from public.pay_batch_candidates pbc0
       where pbc0.pay_batch_id = pb0.id
     ) rmt on true
+    left join lateral (
+      select
+        CASE
+          WHEN COALESCE(
+            pb0.last_funds_check_json #>> '{required_gbp}',
+            pb0.last_funds_check_json #>> '{required}',
+            pb0.last_funds_check_json #>> '{required_amount_gbp}',
+            pb0.last_funds_check_json #>> '{required_amount}'
+          ) ~ '^-?[0-9]+(\.[0-9]+)?$'
+            THEN COALESCE(
+              pb0.last_funds_check_json #>> '{required_gbp}',
+              pb0.last_funds_check_json #>> '{required}',
+              pb0.last_funds_check_json #>> '{required_amount_gbp}',
+              pb0.last_funds_check_json #>> '{required_amount}'
+            )::numeric
+          ELSE NULL::numeric
+        END AS blocked_funds_required_gbp,
+        CASE
+          WHEN COALESCE(
+            pb0.last_funds_check_json #>> '{available_gbp}',
+            pb0.last_funds_check_json #>> '{available}',
+            pb0.last_funds_check_json #>> '{available_amount_gbp}',
+            pb0.last_funds_check_json #>> '{available_amount}'
+          ) ~ '^-?[0-9]+(\.[0-9]+)?$'
+            THEN COALESCE(
+              pb0.last_funds_check_json #>> '{available_gbp}',
+              pb0.last_funds_check_json #>> '{available}',
+              pb0.last_funds_check_json #>> '{available_amount_gbp}',
+              pb0.last_funds_check_json #>> '{available_amount}'
+            )::numeric
+          ELSE NULL::numeric
+        END AS blocked_funds_available_gbp,
+        COALESCE(
+          pb0.last_funds_check_json #>> '{rail_provider}',
+          pb0.last_funds_check_json #>> '{provider}',
+          pb0.rail_provider_snapshot
+        ) AS blocked_funds_provider,
+        COALESCE(
+          pb0.last_funds_check_json #>> '{rail_env}',
+          pb0.last_funds_check_json #>> '{env}',
+          pb0.rail_env_snapshot
+        ) AS blocked_funds_env,
+        COALESCE(
+          pb0.last_funds_check_json #>> '{funding_account_ref}',
+          pb0.last_funds_check_json #>> '{account_ref}',
+          pb0.funding_account_ref
+        ) AS blocked_funds_account_ref
+    ) bf on true
+    left join lateral (
+      SELECT
+        COALESCE(jsonb_agg(alert_scope.alert_json ORDER BY alert_scope.severity_rank DESC, alert_scope.sort_at_utc DESC NULLS LAST, alert_scope.alert_fingerprint ASC), '[]'::jsonb) AS banking_alerts,
+        (array_agg(alert_scope.alert_json ->> 'alert_kind' ORDER BY alert_scope.severity_rank DESC, alert_scope.sort_at_utc DESC NULLS LAST, alert_scope.alert_fingerprint ASC))[1] AS banking_alert_kind,
+        (array_agg(alert_scope.alert_json ->> 'severity' ORDER BY alert_scope.severity_rank DESC, alert_scope.sort_at_utc DESC NULLS LAST, alert_scope.alert_fingerprint ASC))[1] AS banking_alert_severity,
+        (array_agg(alert_scope.alert_json ->> 'label' ORDER BY alert_scope.severity_rank DESC, alert_scope.sort_at_utc DESC NULLS LAST, alert_scope.alert_fingerprint ASC))[1] AS banking_alert_label,
+        (array_agg(alert_scope.alert_json ->> 'description' ORDER BY alert_scope.severity_rank DESC, alert_scope.sort_at_utc DESC NULLS LAST, alert_scope.alert_fingerprint ASC))[1] AS banking_alert_reason,
+        (array_agg(alert_scope.alert_fingerprint ORDER BY alert_scope.severity_rank DESC, alert_scope.sort_at_utc DESC NULLS LAST, alert_scope.alert_fingerprint ASC))[1] AS banking_alert_fingerprint,
+        COALESCE(bool_and(alert_scope.acknowledged_for_current_user), false) AS banking_alert_acknowledged_for_user,
+        COALESCE(bool_or(alert_scope.acknowledged_for_current_user = false), false) AS banking_alert_requires_attention
+      FROM (
+        SELECT
+          alert_items.alert_json,
+          alert_items.alert_json ->> 'alert_fingerprint' AS alert_fingerprint,
+          CASE
+            WHEN (alert_items.alert_json ->> 'severity_rank') ~ '^[0-9]+$' THEN (alert_items.alert_json ->> 'severity_rank')::integer
+            ELSE 0
+          END AS severity_rank,
+          CASE
+            WHEN NULLIF(alert_items.alert_json ->> 'sort_at_utc', '') IS NULL THEN NULL::timestamptz
+            ELSE (alert_items.alert_json ->> 'sort_at_utc')::timestamptz
+          END AS sort_at_utc,
+          COALESCE((alert_items.alert_json ->> 'acknowledged_for_current_user')::boolean, false) AS acknowledged_for_current_user
+        FROM jsonb_array_elements(COALESCE(v_alert_registry -> 'alerts', '[]'::jsonb)) AS alert_items(alert_json)
+        WHERE alert_items.alert_json ->> 'pay_batch_id' = pb0.id::text
+      ) AS alert_scope
+    ) ba on true
     left join lateral (
       with item_scope as (
         select
@@ -25192,13 +25341,14 @@ begin
     'total_count', v_total,
     'limit', v_limit,
     'offset', v_offset,
-    'rows', v_rows
+    'rows', v_rows,
+    'banking_alerts', v_nav_alerts,
+    'banking_unacknowledged_alert_count', v_banking_unacknowledged_alert_count,
+    'banking_highest_alert_label', v_banking_highest_alert_label,
+    'banking_highest_alert_severity', v_banking_highest_alert_severity
   );
 end;
 $function$;
-
-
-
 
 
 
