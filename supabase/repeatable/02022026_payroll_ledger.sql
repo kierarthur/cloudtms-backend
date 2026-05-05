@@ -173,6 +173,8 @@ $$;
 
 DROP FUNCTION IF EXISTS public.pay_batch_cancel(uuid, uuid, text);
 
+
+
 create or replace function public.pay_batch_cancel(
   p_pay_batch_id uuid,
   p_actor_user_id uuid,
@@ -224,6 +226,12 @@ declare
   v_correction_context_work_item public.pay_payment_correction_work_items%rowtype;
   v_voided_transfer_count int := 0;
   v_inserted_correction_item_count int := 0;
+  v_active_item_count int := 0;
+  v_pre_bank_correction_request_count int := 0;
+  v_non_pre_bank_correction_request_count int := 0;
+  v_pre_bank_correction_item_count int := 0;
+  v_non_pre_bank_correction_item_count int := 0;
+  v_safe_empty_draft_pre_bank_only boolean := false;
 begin
   PERFORM public._imp_debug_audit(
     p_actor_user_id,
@@ -455,32 +463,69 @@ begin
     END IF;
   END IF;
 
-  if exists (
-    select 1
-    from public.pay_payment_correction_requests correction_request_evidence
-    where correction_request_evidence.pay_batch_id = p_pay_batch_id
-      and correction_request_evidence.status not in ('REJECTED','CANCELLED')
-      and (
-        p_correction_request_id is null
-        or correction_request_evidence.id <> p_correction_request_id
-      )
-  )
-  or exists (
-    select 1
-    from public.pay_payment_correction_items correction_item_evidence
-    where correction_item_evidence.pay_batch_id = p_pay_batch_id
-      and correction_item_evidence.status = 'APPLIED'
-      and (
-        p_correction_request_id is null
-        or correction_item_evidence.correction_request_id <> p_correction_request_id
-      )
-  ) then
+  SELECT count(public.pay_batch_items.id)::int
+  INTO v_active_item_count
+  FROM public.pay_batch_items
+  JOIN public.pay_batch_candidates
+    ON public.pay_batch_candidates.id = public.pay_batch_items.pay_batch_candidate_id
+  WHERE public.pay_batch_candidates.pay_batch_id = p_pay_batch_id
+    AND COALESCE(public.pay_batch_items.is_voided, false) = false;
+
+  SELECT
+    count(*) FILTER (WHERE correction_request_evidence.correction_kind = 'PRE_BANK_CANCEL')::int,
+    count(*) FILTER (WHERE correction_request_evidence.correction_kind IS DISTINCT FROM 'PRE_BANK_CANCEL')::int
+  INTO
+    v_pre_bank_correction_request_count,
+    v_non_pre_bank_correction_request_count
+  FROM public.pay_payment_correction_requests AS correction_request_evidence
+  WHERE correction_request_evidence.pay_batch_id = p_pay_batch_id
+    AND correction_request_evidence.status NOT IN ('REJECTED','CANCELLED')
+    AND (
+      p_correction_request_id IS NULL
+      OR correction_request_evidence.id <> p_correction_request_id
+    );
+
+  SELECT
+    count(*) FILTER (WHERE correction_item_evidence.correction_item_kind = 'PRE_BANK_CANCEL')::int,
+    count(*) FILTER (WHERE correction_item_evidence.correction_item_kind IS DISTINCT FROM 'PRE_BANK_CANCEL')::int
+  INTO
+    v_pre_bank_correction_item_count,
+    v_non_pre_bank_correction_item_count
+  FROM public.pay_payment_correction_items AS correction_item_evidence
+  WHERE correction_item_evidence.pay_batch_id = p_pay_batch_id
+    AND correction_item_evidence.status = 'APPLIED'
+    AND (
+      p_correction_request_id IS NULL
+      OR correction_item_evidence.correction_request_id <> p_correction_request_id
+    );
+
+  v_safe_empty_draft_pre_bank_only := (
+    upper(coalesce(v_batch.status,'')) IN ('DRAFT', 'DRAFT_CREATED')
+    AND v_execution_commit_state = 'NOT_SUBMITTED'
+    AND COALESCE(v_active_item_count, 0) = 0
+    AND COALESCE(v_non_pre_bank_correction_request_count, 0) = 0
+    AND COALESCE(v_non_pre_bank_correction_item_count, 0) = 0
+  );
+
+  IF NOT COALESCE(v_safe_empty_draft_pre_bank_only, false)
+     AND (
+       COALESCE(v_pre_bank_correction_request_count, 0) > 0
+       OR COALESCE(v_non_pre_bank_correction_request_count, 0) > 0
+       OR COALESCE(v_pre_bank_correction_item_count, 0) > 0
+       OR COALESCE(v_non_pre_bank_correction_item_count, 0) > 0
+     ) THEN
     raise exception '%', jsonb_build_object(
       'error', 'USE_PAYMENT_CORRECTION_FLOW',
       'code', 'USE_PAYMENT_CORRECTION_FLOW',
       'message', 'pay_batch_cancel cannot cancel a batch that already has active or applied payment correction evidence outside the supplied PRE_BANK_CANCEL context. Use the payment correction flow.',
       'pay_batch_id', p_pay_batch_id::text,
-      'correction_request_id', CASE WHEN p_correction_request_id IS NULL THEN NULL ELSE p_correction_request_id::text END
+      'correction_request_id', CASE WHEN p_correction_request_id IS NULL THEN NULL ELSE p_correction_request_id::text END,
+      'active_item_count', COALESCE(v_active_item_count, 0),
+      'pre_bank_correction_request_count', COALESCE(v_pre_bank_correction_request_count, 0),
+      'non_pre_bank_correction_request_count', COALESCE(v_non_pre_bank_correction_request_count, 0),
+      'pre_bank_correction_item_count', COALESCE(v_pre_bank_correction_item_count, 0),
+      'non_pre_bank_correction_item_count', COALESCE(v_non_pre_bank_correction_item_count, 0),
+      'safe_empty_draft_pre_bank_only', COALESCE(v_safe_empty_draft_pre_bank_only, false)
     )::text;
   end if;
 
@@ -1239,6 +1284,10 @@ begin
     'communications_cancelled', v_communications_cancelled_count,
     'transfers_voided', v_voided_transfer_count,
     'inserted_correction_item_count', v_inserted_correction_item_count,
+    'active_item_count_before_cancel', COALESCE(v_active_item_count, 0),
+    'safe_empty_draft_pre_bank_only', COALESCE(v_safe_empty_draft_pre_bank_only, false),
+    'pre_bank_correction_request_count', COALESCE(v_pre_bank_correction_request_count, 0),
+    'pre_bank_correction_item_count', COALESCE(v_pre_bank_correction_item_count, 0),
     'correction_request_id', CASE WHEN p_correction_request_id IS NULL THEN NULL ELSE p_correction_request_id::text END,
     'work_item_id', CASE WHEN p_work_item_id IS NULL THEN NULL ELSE p_work_item_id::text END,
     'pay_batch_id', p_pay_batch_id::text,
@@ -1294,8 +1343,6 @@ begin
   );
 end;
 $$;
-
-
 
 
 
