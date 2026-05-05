@@ -21508,7 +21508,6 @@ $$;
 
 
 
-
 create or replace function public.pay_batch_get(p_pay_batch_id uuid)
 returns jsonb
 language plpgsql
@@ -24534,72 +24533,10 @@ begin
   WHERE public.pay_payment_correction_requests.pay_batch_id = p_pay_batch_id;
 
 
-  return jsonb_build_object(
-    'ok', true,
+  return
+    jsonb_build_object(
+      'ok', true,
 
-    'bank_csv_export_json', v_batch.bank_csv_export_json,
-    'execution_intent_json', v_execution_intent_json,
-    'settlement_confirmation_json', v_batch.settlement_confirmation_json,
-    'can_create_bank_csv_file', v_can_create_bank_csv_file,
-    'can_start_standard_execution', v_can_start_standard_execution,
-    'can_start_csv_settlement', v_can_start_csv_settlement,
-    'can_start_external_settlement', v_can_start_external_settlement,
-    'has_cloudtms_csv_export', v_has_cloudtms_csv_export,
-    'csv_export_matches_current_transfers', v_csv_export_matches_current_transfers,
-    'has_external_submission_evidence', v_has_external_submission_evidence,
-    'execution_mode_pending', v_execution_mode_pending,
-    'suppress_remittances_pending', v_suppress_remittances_pending,
-    'current_transfer_hash', v_current_transfer_hash,
-    'pending_transfer_hash', v_pending_transfer_hash,
-    'stable_transfer_hash', v_stable_transfer_hash,
-    'execution_transfer_hash', v_execution_transfer_hash,
-    'csv_comparison_transfer_hash', v_csv_comparison_transfer_hash,
-    'csv_export_match_basis', v_csv_export_match_basis,
-
-    -- ✅ NEW: batch kind + channels for UI
-    'batch_kind', v_batch_kind,
-    'batch_kind_fixed', case when v_batch.batch_kind_fixed is null then null else v_batch.batch_kind_fixed end,
-    'pay_channels_present', v_pay_channels_present,
-    'active_effective_item_count', COALESCE(v_active_effective_item_count, 0),
-    'active_effective_amount_ex_vat', COALESCE(v_active_effective_amount_ex_vat, 0),
-    'active_effective_amount_inc_vat', COALESCE(v_active_effective_amount_inc_vat, 0),
-    'active_item_count', COALESCE(v_active_effective_item_count, 0),
-    'active_batch_item_count', COALESCE(v_active_effective_item_count, 0),
-    'active_payment_item_count', COALESCE(v_active_effective_item_count, 0),
-    'active_bank_out', COALESCE(v_active_effective_amount_ex_vat, 0),
-    'payment_issue_candidate_count', COALESCE(v_payment_issue_candidate_count, 0),
-    'has_payment_issue_candidates', COALESCE(v_payment_issue_candidate_count, 0) > 0,
-
-    -- ✅ child modal datasets
-    'candidate_breakdown', v_candidate_breakdown,
-    'candidate_lines', v_candidate_lines,
-    'finance_case_groups', v_finance_case_groups,
-    'finance_summaries', v_finance_summaries,
-    'remittance_summary', v_remittance_summary,
-    'communications', v_communications_summary,
-
-    -- payment correction / bank evidence / manual action summaries
-    'payment_correction', v_payment_correction,
-    'bank_evidence', v_bank_evidence,
-    'movement_classification', v_movement_classification,
-    'manual_actions', v_manual_actions,
-    'communication_status', v_communication_status,
-    'finance_case_correction_summary', v_finance_case_correction_summary,
-    'correction_progress', v_correction_progress,
-
-    -- schedule recommendations for UI preselect (includes default funding account)
-    'schedule_recommendations', jsonb_build_object(
-      'default_schedule_umbrella_local', v_default_schedule_umbrella_local,
-      'default_schedule_paye_local', v_default_schedule_paye_local,
-      'funds_warning_hours_json', v_funds_warning_hours_json,
-      'rail_default_funding_account_ref', v_rail_default_funding_account_ref
-    ),
-
-    -- authorisation summary for Banking UI
-    'auth', v_auth,
-
-    'batch', jsonb_build_object(
-      'id', v_batch.id::text,
       'bank_csv_export_json', v_batch.bank_csv_export_json,
       'execution_intent_json', v_execution_intent_json,
       'settlement_confirmation_json', v_batch.settlement_confirmation_json,
@@ -24618,6 +24555,11 @@ begin
       'execution_transfer_hash', v_execution_transfer_hash,
       'csv_comparison_transfer_hash', v_csv_comparison_transfer_hash,
       'csv_export_match_basis', v_csv_export_match_basis,
+
+      -- ✅ NEW: batch kind + channels for UI
+      'batch_kind', v_batch_kind,
+      'batch_kind_fixed', case when v_batch.batch_kind_fixed is null then null else v_batch.batch_kind_fixed end,
+      'pay_channels_present', v_pay_channels_present,
       'active_effective_item_count', COALESCE(v_active_effective_item_count, 0),
       'active_effective_amount_ex_vat', COALESCE(v_active_effective_amount_ex_vat, 0),
       'active_effective_amount_inc_vat', COALESCE(v_active_effective_amount_inc_vat, 0),
@@ -24627,53 +24569,116 @@ begin
       'active_bank_out', COALESCE(v_active_effective_amount_ex_vat, 0),
       'payment_issue_candidate_count', COALESCE(v_payment_issue_candidate_count, 0),
       'has_payment_issue_candidates', COALESCE(v_payment_issue_candidate_count, 0) > 0,
-      'pay_date', v_batch.pay_date::text,
-      'authoritative_payment_date', case when v_batch.authoritative_payment_date is null then null else v_batch.authoritative_payment_date::text end,
-      'authoritative_payment_date_source', v_batch.authoritative_payment_date_source,
-      'same_week_paye_override_used', v_batch.same_week_paye_override_used,
-      'same_week_paye_override_reason', v_batch.same_week_paye_override_reason,
-      'same_week_paye_override_verified_at_utc', v_batch.same_week_paye_override_verified_at_utc,
-      'same_week_paye_override_verified_by_user_id', case when v_batch.same_week_paye_override_verified_by_user_id is null then null else v_batch.same_week_paye_override_verified_by_user_id::text end,
-      'source_workbench_session_id', case when v_batch.source_workbench_session_id is null then null else v_batch.source_workbench_session_id::text end,
-      'source_snapshot_run_id', case when v_batch.source_snapshot_run_id is null then null else v_batch.source_snapshot_run_id::text end,
-      'source_session_version', v_batch.source_session_version,
-      'execution_commit_state', v_batch.execution_commit_state,
-      'execution_commit_ref', v_batch.execution_commit_ref,
-      'execution_committed_at_utc', v_batch.execution_committed_at_utc,
-      'created_at_utc', v_batch.created_at_utc,
-      'created_by_user_id', case when v_batch.created_by_user_id is null then null else v_batch.created_by_user_id::text end,
-      'status', v_batch.status,
-      'banking_system_snapshot', v_batch.banking_system_snapshot,
-      'external_paye_system_snapshot', v_batch.external_paye_system_snapshot,
 
-      -- Neutral (rail-generic) manual confirm aliases (keep legacy keys too)
-      'manual_confirmed_at_utc', v_batch.monzo_confirmed_at_utc,
-      'manual_confirmed_by_user_id', case when v_batch.monzo_confirmed_by_user_id is null then null else v_batch.monzo_confirmed_by_user_id::text end,
+      -- ✅ child modal datasets
+      'candidate_breakdown', v_candidate_breakdown,
+      'candidate_lines', v_candidate_lines,
+      'finance_case_groups', v_finance_case_groups,
+      'finance_summaries', v_finance_summaries,
+      'remittance_summary', v_remittance_summary,
+      'communications', v_communications_summary,
 
-      'monzo_confirmed_at_utc', v_batch.monzo_confirmed_at_utc,
-      'monzo_confirmed_by_user_id', case when v_batch.monzo_confirmed_by_user_id is null then null else v_batch.monzo_confirmed_by_user_id::text end,
+      -- payment correction / bank evidence / manual action summaries
+      'payment_correction', v_payment_correction,
+      'bank_evidence', v_bank_evidence,
+      'movement_classification', v_movement_classification
+    )
+    || jsonb_build_object(
+      'manual_actions', v_manual_actions,
+      'communication_status', v_communication_status,
+      'finance_case_correction_summary', v_finance_case_correction_summary,
+      'correction_progress', v_correction_progress,
 
-      'last_status_checked_at_utc', v_batch.last_status_checked_at_utc,
+      -- schedule recommendations for UI preselect (includes default funding account)
+      'schedule_recommendations', jsonb_build_object(
+        'default_schedule_umbrella_local', v_default_schedule_umbrella_local,
+        'default_schedule_paye_local', v_default_schedule_paye_local,
+        'funds_warning_hours_json', v_funds_warning_hours_json,
+        'rail_default_funding_account_ref', v_rail_default_funding_account_ref
+      ),
 
-      -- Rail-generic scheduling/execution fields
-      'rail_provider_snapshot', v_batch.rail_provider_snapshot,
-      'rail_env_snapshot', v_batch.rail_env_snapshot,
-      'schedule_kind', v_batch.schedule_kind,
-      'scheduled_at_utc', v_batch.scheduled_at_utc,
-      'executing_started_at_utc', v_batch.executing_started_at_utc,
+      -- authorisation summary for Banking UI
+      'auth', v_auth,
 
-      -- Bulk payment reference fields
-      'bulk_ref_num', v_batch.bulk_ref_num,
-      'bulk_ref_date', case when v_batch.bulk_ref_date is null then null else v_batch.bulk_ref_date::text end,
-      'bulk_reference', v_batch.bulk_reference
-    ),
-    'candidates', v_candidates,
-    'transfers', v_transfers,
-    'items', v_items
-  );
+      'batch', (
+        jsonb_build_object(
+          'id', v_batch.id::text,
+          'bank_csv_export_json', v_batch.bank_csv_export_json,
+          'execution_intent_json', v_execution_intent_json,
+          'settlement_confirmation_json', v_batch.settlement_confirmation_json,
+          'can_create_bank_csv_file', v_can_create_bank_csv_file,
+          'can_start_standard_execution', v_can_start_standard_execution,
+          'can_start_csv_settlement', v_can_start_csv_settlement,
+          'can_start_external_settlement', v_can_start_external_settlement,
+          'has_cloudtms_csv_export', v_has_cloudtms_csv_export,
+          'csv_export_matches_current_transfers', v_csv_export_matches_current_transfers,
+          'has_external_submission_evidence', v_has_external_submission_evidence,
+          'execution_mode_pending', v_execution_mode_pending,
+          'suppress_remittances_pending', v_suppress_remittances_pending,
+          'current_transfer_hash', v_current_transfer_hash,
+          'pending_transfer_hash', v_pending_transfer_hash,
+          'stable_transfer_hash', v_stable_transfer_hash,
+          'execution_transfer_hash', v_execution_transfer_hash,
+          'csv_comparison_transfer_hash', v_csv_comparison_transfer_hash,
+          'csv_export_match_basis', v_csv_export_match_basis,
+          'active_effective_item_count', COALESCE(v_active_effective_item_count, 0),
+          'active_effective_amount_ex_vat', COALESCE(v_active_effective_amount_ex_vat, 0),
+          'active_effective_amount_inc_vat', COALESCE(v_active_effective_amount_inc_vat, 0),
+          'active_item_count', COALESCE(v_active_effective_item_count, 0),
+          'active_batch_item_count', COALESCE(v_active_effective_item_count, 0),
+          'active_payment_item_count', COALESCE(v_active_effective_item_count, 0),
+          'active_bank_out', COALESCE(v_active_effective_amount_ex_vat, 0),
+          'payment_issue_candidate_count', COALESCE(v_payment_issue_candidate_count, 0),
+          'has_payment_issue_candidates', COALESCE(v_payment_issue_candidate_count, 0) > 0,
+          'pay_date', v_batch.pay_date::text,
+          'authoritative_payment_date', case when v_batch.authoritative_payment_date is null then null else v_batch.authoritative_payment_date::text end,
+          'authoritative_payment_date_source', v_batch.authoritative_payment_date_source,
+          'same_week_paye_override_used', v_batch.same_week_paye_override_used,
+          'same_week_paye_override_reason', v_batch.same_week_paye_override_reason,
+          'same_week_paye_override_verified_at_utc', v_batch.same_week_paye_override_verified_at_utc,
+          'same_week_paye_override_verified_by_user_id', case when v_batch.same_week_paye_override_verified_by_user_id is null then null else v_batch.same_week_paye_override_verified_by_user_id::text end,
+          'source_workbench_session_id', case when v_batch.source_workbench_session_id is null then null else v_batch.source_workbench_session_id::text end,
+          'source_snapshot_run_id', case when v_batch.source_snapshot_run_id is null then null else v_batch.source_snapshot_run_id::text end,
+          'source_session_version', v_batch.source_session_version,
+          'execution_commit_state', v_batch.execution_commit_state,
+          'execution_commit_ref', v_batch.execution_commit_ref
+        )
+        || jsonb_build_object(
+          'execution_committed_at_utc', v_batch.execution_committed_at_utc,
+          'created_at_utc', v_batch.created_at_utc,
+          'created_by_user_id', case when v_batch.created_by_user_id is null then null else v_batch.created_by_user_id::text end,
+          'status', v_batch.status,
+          'banking_system_snapshot', v_batch.banking_system_snapshot,
+          'external_paye_system_snapshot', v_batch.external_paye_system_snapshot,
+
+          -- Neutral (rail-generic) manual confirm aliases (keep legacy keys too)
+          'manual_confirmed_at_utc', v_batch.monzo_confirmed_at_utc,
+          'manual_confirmed_by_user_id', case when v_batch.monzo_confirmed_by_user_id is null then null else v_batch.monzo_confirmed_by_user_id::text end,
+
+          'monzo_confirmed_at_utc', v_batch.monzo_confirmed_at_utc,
+          'monzo_confirmed_by_user_id', case when v_batch.monzo_confirmed_by_user_id is null then null else v_batch.monzo_confirmed_by_user_id::text end,
+
+          'last_status_checked_at_utc', v_batch.last_status_checked_at_utc,
+
+          -- Rail-generic scheduling/execution fields
+          'rail_provider_snapshot', v_batch.rail_provider_snapshot,
+          'rail_env_snapshot', v_batch.rail_env_snapshot,
+          'schedule_kind', v_batch.schedule_kind,
+          'scheduled_at_utc', v_batch.scheduled_at_utc,
+          'executing_started_at_utc', v_batch.executing_started_at_utc,
+
+          -- Bulk payment reference fields
+          'bulk_ref_num', v_batch.bulk_ref_num,
+          'bulk_ref_date', case when v_batch.bulk_ref_date is null then null else v_batch.bulk_ref_date::text end,
+          'bulk_reference', v_batch.bulk_reference
+        )
+      ),
+      'candidates', v_candidates,
+      'transfers', v_transfers,
+      'items', v_items
+    );
 end;
 $$;
-
 
 
 
