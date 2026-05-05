@@ -21508,6 +21508,7 @@ $$;
 
 
 
+
 create or replace function public.pay_batch_get(p_pay_batch_id uuid)
 returns jsonb
 language plpgsql
@@ -24213,10 +24214,10 @@ begin
       v_derived_correction_state := 'PARTIALLY_UNWOUND';
     END IF;
   ELSIF v_applied_precancel_item_count > 0 THEN
-    IF v_correctable_item_count > 0 AND v_applied_precancel_item_count >= v_correctable_item_count THEN
-      v_derived_correction_state := 'NO_MONEY_UNWOUND';
+    IF COALESCE(v_active_effective_item_count, 0) = 0 THEN
+      v_derived_correction_state := 'PRE_BANK_CANCELLED';
     ELSE
-      v_derived_correction_state := 'PARTIALLY_UNWOUND';
+      v_derived_correction_state := 'PARTIALLY_PRE_BANK_CANCELLED';
     END IF;
   ELSIF v_bank_return_event_count > 0 THEN
     v_derived_correction_state := 'SETTLED_RETURNED';
@@ -24679,8 +24680,6 @@ begin
     );
 end;
 $$;
-
-
 
 
 CREATE OR REPLACE FUNCTION public.pay_batches_list(p_limit integer DEFAULT 50, p_offset integer DEFAULT 0, p_status text DEFAULT NULL::text)
