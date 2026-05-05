@@ -11992,6 +11992,7 @@ END;
 $function$;
 
 
+
 CREATE OR REPLACE FUNCTION public.pay_payment_return_admin_notice_queue(
   p_notice_kind text,
   p_pay_batch_id uuid DEFAULT NULL::uuid,
@@ -12010,6 +12011,7 @@ DECLARE
   v_provider_key text;
   v_execution_commit_ref text;
   v_summary_json jsonb := '{}'::jsonb;
+  v_alert_fingerprint text := NULL::text;
   v_recipient_role text := 'ADMIN';
   v_quiet_minutes integer := 10;
   v_max_wait_minutes integer := 60;
@@ -12020,10 +12022,20 @@ DECLARE
   v_max_send_at_utc timestamptz;
   v_merge_count integer := 1;
   v_return_json jsonb := '{}'::jsonb;
+  v_blocked_batch record;
+  v_required_gbp_text text := NULL::text;
+  v_available_gbp_text text := NULL::text;
+  v_funding_account_ref text := NULL::text;
+  v_rail_provider text := NULL::text;
+  v_rail_env text := NULL::text;
 BEGIN
   v_notice_kind := upper(nullif(btrim(COALESCE(p_notice_kind, '')), ''));
   v_provider_key := upper(nullif(btrim(COALESCE(p_provider_key, '')), ''));
   v_execution_commit_ref := nullif(btrim(COALESCE(p_execution_commit_ref, '')), '');
+
+  IF v_notice_kind = 'BANKING_BLOCKED_FUNDS' THEN
+    v_notice_kind := 'BLOCKED_FUNDS';
+  END IF;
 
   PERFORM public._imp_debug_audit(
     NULL::uuid,
@@ -12057,6 +12069,7 @@ BEGIN
 
   IF v_notice_kind NOT IN (
     'BANK_FAILURE_DETECTED',
+    'BLOCKED_FUNDS',
     'NO_MONEY_UNWIND_REQUIRED',
     'NO_MONEY_UNWIND_APPLIED',
     'SETTLED_RETURN_DETECTED',
@@ -12100,58 +12113,262 @@ BEGIN
   v_quiet_minutes := LEAST(GREATEST(COALESCE(v_quiet_minutes, 10), 0), 1440);
   v_max_wait_minutes := LEAST(GREATEST(COALESCE(v_max_wait_minutes, 60), v_quiet_minutes), 1440);
 
+  IF v_notice_kind = 'BLOCKED_FUNDS' THEN
+    IF p_pay_batch_id IS NULL THEN
+      RAISE EXCEPTION 'PAYMENT_RETURN_ADMIN_NOTICE_BLOCKED_FUNDS_BATCH_REQUIRED'
+        USING ERRCODE = 'P0001',
+              DETAIL = jsonb_build_object(
+                'code', 'PAYMENT_RETURN_ADMIN_NOTICE_BLOCKED_FUNDS_BATCH_REQUIRED',
+                'notice_kind', v_notice_kind
+              )::text;
+    END IF;
+
+    SELECT
+      public.pay_batches.id,
+      public.pay_batches.status,
+      public.pay_batches.execution_commit_state,
+      public.pay_batches.execution_commit_ref,
+      public.pay_batches.execution_committed_at_utc,
+      public.pay_batches.last_funds_check_at_utc,
+      public.pay_batches.last_funds_check_json,
+      public.pay_batches.funding_account_ref,
+      public.pay_batches.rail_provider_snapshot,
+      public.pay_batches.rail_env_snapshot,
+      public.pay_batches.pay_date,
+      public.pay_batches.bulk_reference
+    INTO v_blocked_batch
+    FROM public.pay_batches
+    WHERE public.pay_batches.id = p_pay_batch_id;
+
+    IF v_blocked_batch.id IS NULL THEN
+      RAISE EXCEPTION 'PAYMENT_RETURN_ADMIN_NOTICE_BLOCKED_FUNDS_BATCH_NOT_FOUND'
+        USING ERRCODE = 'P0001',
+              DETAIL = jsonb_build_object(
+                'code', 'PAYMENT_RETURN_ADMIN_NOTICE_BLOCKED_FUNDS_BATCH_NOT_FOUND',
+                'pay_batch_id', p_pay_batch_id
+              )::text;
+    END IF;
+
+    v_required_gbp_text := COALESCE(
+      v_summary_json #>> '{required_gbp}',
+      v_summary_json #>> '{required}',
+      v_summary_json #>> '{required_amount_gbp}',
+      v_summary_json #>> '{required_amount}',
+      v_summary_json #>> '{blocked_funds,required_gbp}',
+      v_blocked_batch.last_funds_check_json #>> '{required_gbp}',
+      v_blocked_batch.last_funds_check_json #>> '{required}',
+      v_blocked_batch.last_funds_check_json #>> '{required_amount_gbp}',
+      v_blocked_batch.last_funds_check_json #>> '{required_amount}'
+    );
+
+    v_available_gbp_text := COALESCE(
+      v_summary_json #>> '{available_gbp}',
+      v_summary_json #>> '{available}',
+      v_summary_json #>> '{available_amount_gbp}',
+      v_summary_json #>> '{available_amount}',
+      v_summary_json #>> '{blocked_funds,available_gbp}',
+      v_blocked_batch.last_funds_check_json #>> '{available_gbp}',
+      v_blocked_batch.last_funds_check_json #>> '{available}',
+      v_blocked_batch.last_funds_check_json #>> '{available_amount_gbp}',
+      v_blocked_batch.last_funds_check_json #>> '{available_amount}'
+    );
+
+    v_funding_account_ref := COALESCE(
+      v_summary_json #>> '{funding_account_ref}',
+      v_summary_json #>> '{blocked_funds,funding_account_ref}',
+      v_blocked_batch.last_funds_check_json #>> '{funding_account_ref}',
+      v_blocked_batch.last_funds_check_json #>> '{account_ref}',
+      v_blocked_batch.funding_account_ref
+    );
+
+    v_rail_provider := COALESCE(
+      v_summary_json #>> '{rail_provider}',
+      v_summary_json #>> '{provider}',
+      v_summary_json #>> '{blocked_funds,rail_provider}',
+      v_blocked_batch.last_funds_check_json #>> '{rail_provider}',
+      v_blocked_batch.last_funds_check_json #>> '{provider}',
+      v_blocked_batch.rail_provider_snapshot,
+      v_provider_key
+    );
+
+    v_rail_env := COALESCE(
+      v_summary_json #>> '{rail_env}',
+      v_summary_json #>> '{env}',
+      v_summary_json #>> '{blocked_funds,rail_env}',
+      v_blocked_batch.last_funds_check_json #>> '{rail_env}',
+      v_blocked_batch.last_funds_check_json #>> '{env}',
+      v_blocked_batch.rail_env_snapshot
+    );
+
+    v_provider_key := upper(nullif(btrim(coalesce(v_provider_key, v_rail_provider, '')), ''));
+    v_execution_commit_ref := nullif(btrim(coalesce(v_execution_commit_ref, v_blocked_batch.execution_commit_ref, '')), '');
+
+    v_summary_json := v_summary_json || jsonb_strip_nulls(jsonb_build_object(
+      'notice_kind', 'BLOCKED_FUNDS',
+      'pay_batch_id', p_pay_batch_id::text,
+      'pay_date', CASE WHEN v_blocked_batch.pay_date IS NULL THEN NULL ELSE v_blocked_batch.pay_date::text END,
+      'bulk_reference', v_blocked_batch.bulk_reference,
+      'provider_key', v_provider_key,
+      'rail_provider', v_rail_provider,
+      'rail_env', v_rail_env,
+      'funding_account_ref', v_funding_account_ref,
+      'required_gbp', v_required_gbp_text,
+      'available_gbp', v_available_gbp_text,
+      'sufficient', false,
+      'status', v_blocked_batch.status,
+      'execution_commit_state', v_blocked_batch.execution_commit_state,
+      'execution_commit_ref', v_blocked_batch.execution_commit_ref,
+      'execution_committed_at_utc', CASE WHEN v_blocked_batch.execution_committed_at_utc IS NULL THEN NULL ELSE v_blocked_batch.execution_committed_at_utc::text END,
+      'last_funds_check_at_utc', CASE WHEN v_blocked_batch.last_funds_check_at_utc IS NULL THEN NULL ELSE v_blocked_batch.last_funds_check_at_utc::text END,
+      'bank_submission_happened', false,
+      'action_guidance', 'Fund the account and retry, or cancel/release the batch.'
+    ));
+
+    v_alert_fingerprint := nullif(btrim(coalesce(
+      v_summary_json ->> 'alert_fingerprint',
+      v_summary_json #>> '{banking_alert,alert_fingerprint}',
+      v_summary_json #>> '{alert,alert_fingerprint}',
+      ''
+    )), '');
+
+    IF v_alert_fingerprint IS NULL THEN
+      v_alert_fingerprint := public.banking_alert_fingerprint(
+        'BLOCKED_FUNDS',
+        'pay_batch',
+        p_pay_batch_id,
+        jsonb_strip_nulls(jsonb_build_object(
+          'pay_batch_id', p_pay_batch_id::text,
+          'issue_kind', 'BLOCKED_FUNDS',
+          'batch_status', v_blocked_batch.status,
+          'execution_commit_state', v_blocked_batch.execution_commit_state,
+          'last_funds_check_at_utc', CASE WHEN v_blocked_batch.last_funds_check_at_utc IS NULL THEN NULL ELSE v_blocked_batch.last_funds_check_at_utc::text END,
+          'funds_check_checked_at_utc', COALESCE(
+            v_blocked_batch.last_funds_check_json #>> '{checked_at_utc}',
+            v_blocked_batch.last_funds_check_json #>> '{checked_at}',
+            v_blocked_batch.last_funds_check_json #>> '{timestamp}'
+          ),
+          'required_gbp', v_required_gbp_text,
+          'available_gbp', v_available_gbp_text,
+          'funding_account_ref', v_funding_account_ref,
+          'rail_provider', v_rail_provider,
+          'rail_env', v_rail_env
+        ))
+      );
+    END IF;
+
+    v_summary_json := v_summary_json || jsonb_build_object('alert_fingerprint', v_alert_fingerprint);
+  ELSE
+    v_alert_fingerprint := nullif(btrim(coalesce(
+      v_summary_json ->> 'alert_fingerprint',
+      v_summary_json #>> '{banking_alert,alert_fingerprint}',
+      v_summary_json #>> '{alert,alert_fingerprint}',
+      ''
+    )), '');
+  END IF;
+
+  IF v_alert_fingerprint IS NOT NULL AND btrim(v_alert_fingerprint) = '' THEN
+    v_alert_fingerprint := NULL::text;
+  END IF;
+
   SELECT public.pay_payment_return_notice_groups.*
   INTO v_existing_group
   FROM public.pay_payment_return_notice_groups
-  WHERE public.pay_payment_return_notice_groups.status = 'OPEN'
-    AND public.pay_payment_return_notice_groups.notice_kind = v_notice_kind
-    AND public.pay_payment_return_notice_groups.pay_batch_id IS NOT DISTINCT FROM p_pay_batch_id
-    AND public.pay_payment_return_notice_groups.provider_key IS NOT DISTINCT FROM v_provider_key
-    AND public.pay_payment_return_notice_groups.execution_commit_ref IS NOT DISTINCT FROM v_execution_commit_ref
-  ORDER BY public.pay_payment_return_notice_groups.created_at_utc ASC, public.pay_payment_return_notice_groups.id ASC
+  WHERE public.pay_payment_return_notice_groups.notice_kind = v_notice_kind
+    AND (
+      (
+        v_alert_fingerprint IS NOT NULL
+        AND public.pay_payment_return_notice_groups.alert_fingerprint = v_alert_fingerprint
+      )
+      OR (
+        v_alert_fingerprint IS NULL
+        AND public.pay_payment_return_notice_groups.status = 'OPEN'
+        AND public.pay_payment_return_notice_groups.alert_fingerprint IS NULL
+        AND public.pay_payment_return_notice_groups.pay_batch_id IS NOT DISTINCT FROM p_pay_batch_id
+        AND public.pay_payment_return_notice_groups.provider_key IS NOT DISTINCT FROM v_provider_key
+        AND public.pay_payment_return_notice_groups.execution_commit_ref IS NOT DISTINCT FROM v_execution_commit_ref
+      )
+    )
+  ORDER BY
+    CASE upper(btrim(coalesce(public.pay_payment_return_notice_groups.status, '')))
+      WHEN 'OPEN' THEN 0
+      WHEN 'READY' THEN 1
+      WHEN 'FAILED' THEN 2
+      WHEN 'SENT' THEN 3
+      ELSE 4
+    END,
+    public.pay_payment_return_notice_groups.created_at_utc ASC,
+    public.pay_payment_return_notice_groups.id ASC
   LIMIT 1
   FOR UPDATE;
 
   IF v_existing_group.id IS NOT NULL THEN
-    v_merge_count := COALESCE((v_existing_group.summary_json#>>'{notice_queue_meta,merge_count}')::integer, 1) + 1;
-    v_quiet_until_utc := LEAST(
-      v_existing_group.max_send_at_utc,
-      GREATEST(v_existing_group.quiet_until_utc, v_now + make_interval(mins => v_quiet_minutes))
-    );
+    v_notice_group_id := v_existing_group.id;
 
-    UPDATE public.pay_payment_return_notice_groups AS existing_notice_group
-    SET
-      quiet_until_utc = v_quiet_until_utc,
-      summary_json = COALESCE(existing_notice_group.summary_json, '{}'::jsonb)
-        || v_summary_json
-        || jsonb_build_object(
-          'notice_queue_meta', jsonb_build_object(
-            'merge_count', v_merge_count,
-            'last_queued_at_utc', v_now,
-            'recipient_role', v_recipient_role,
-            'quiet_minutes', v_quiet_minutes,
-            'max_wait_minutes', v_max_wait_minutes
+    IF upper(btrim(coalesce(v_existing_group.status, ''))) = 'SENT' AND v_alert_fingerprint IS NOT NULL THEN
+      v_return_json := jsonb_build_object(
+        'ok', true,
+        'created', false,
+        'already_dispatched', true,
+        'notice_group_id', v_notice_group_id,
+        'notice_kind', v_notice_kind,
+        'pay_batch_id', p_pay_batch_id,
+        'provider_key', v_provider_key,
+        'execution_commit_ref', v_execution_commit_ref,
+        'alert_fingerprint', v_alert_fingerprint,
+        'recipient_role', v_recipient_role,
+        'quiet_until_utc', v_existing_group.quiet_until_utc,
+        'max_send_at_utc', v_existing_group.max_send_at_utc,
+        'merge_count', COALESCE((v_existing_group.summary_json#>>'{notice_queue_meta,merge_count}')::integer, 1)
+      );
+    ELSE
+      v_merge_count := COALESCE((v_existing_group.summary_json#>>'{notice_queue_meta,merge_count}')::integer, 1) + 1;
+      v_quiet_until_utc := LEAST(
+        v_existing_group.max_send_at_utc,
+        GREATEST(v_existing_group.quiet_until_utc, v_now + make_interval(mins => v_quiet_minutes))
+      );
+
+      UPDATE public.pay_payment_return_notice_groups AS existing_notice_group
+      SET
+        status = CASE
+          WHEN upper(btrim(coalesce(existing_notice_group.status, ''))) = 'FAILED' THEN 'OPEN'
+          ELSE existing_notice_group.status
+        END,
+        quiet_until_utc = v_quiet_until_utc,
+        alert_fingerprint = COALESCE(existing_notice_group.alert_fingerprint, v_alert_fingerprint),
+        summary_json = COALESCE(existing_notice_group.summary_json, '{}'::jsonb)
+          || v_summary_json
+          || jsonb_build_object(
+            'notice_queue_meta', jsonb_build_object(
+              'merge_count', v_merge_count,
+              'last_queued_at_utc', v_now,
+              'recipient_role', v_recipient_role,
+              'quiet_minutes', v_quiet_minutes,
+              'max_wait_minutes', v_max_wait_minutes,
+              'alert_fingerprint', v_alert_fingerprint
+            ),
+            'latest_summary_json', v_summary_json
           ),
-          'latest_summary_json', v_summary_json
-        ),
-      updated_at_utc = v_now
-    WHERE existing_notice_group.id = v_existing_group.id
-    RETURNING existing_notice_group.id
-    INTO v_notice_group_id;
+        updated_at_utc = v_now
+      WHERE existing_notice_group.id = v_existing_group.id
+      RETURNING existing_notice_group.id
+      INTO v_notice_group_id;
 
-    v_return_json := jsonb_build_object(
-      'ok', true,
-      'created', false,
-      'notice_group_id', v_notice_group_id,
-      'notice_kind', v_notice_kind,
-      'pay_batch_id', p_pay_batch_id,
-      'provider_key', v_provider_key,
-      'execution_commit_ref', v_execution_commit_ref,
-      'recipient_role', v_recipient_role,
-      'quiet_until_utc', v_quiet_until_utc,
-      'max_send_at_utc', v_existing_group.max_send_at_utc,
-      'merge_count', v_merge_count
-    );
+      v_return_json := jsonb_build_object(
+        'ok', true,
+        'created', false,
+        'reopened_failed_notice', upper(btrim(coalesce(v_existing_group.status, ''))) = 'FAILED',
+        'notice_group_id', v_notice_group_id,
+        'notice_kind', v_notice_kind,
+        'pay_batch_id', p_pay_batch_id,
+        'provider_key', v_provider_key,
+        'execution_commit_ref', v_execution_commit_ref,
+        'alert_fingerprint', v_alert_fingerprint,
+        'recipient_role', v_recipient_role,
+        'quiet_until_utc', v_quiet_until_utc,
+        'max_send_at_utc', v_existing_group.max_send_at_utc,
+        'merge_count', v_merge_count
+      );
+    END IF;
   ELSE
     v_quiet_until_utc := v_now + make_interval(mins => v_quiet_minutes);
     v_max_send_at_utc := v_now + make_interval(mins => v_max_wait_minutes);
@@ -12169,7 +12386,8 @@ BEGIN
       mail_outbox_ids,
       created_at_utc,
       updated_at_utc,
-      sent_at_utc
+      sent_at_utc,
+      alert_fingerprint
     )
     VALUES (
       p_pay_batch_id,
@@ -12186,13 +12404,15 @@ BEGIN
           'created_at_utc', v_now,
           'recipient_role', v_recipient_role,
           'quiet_minutes', v_quiet_minutes,
-          'max_wait_minutes', v_max_wait_minutes
+          'max_wait_minutes', v_max_wait_minutes,
+          'alert_fingerprint', v_alert_fingerprint
         )
       ),
       '[]'::jsonb,
       v_now,
       v_now,
-      NULL::timestamptz
+      NULL::timestamptz,
+      v_alert_fingerprint
     )
     RETURNING public.pay_payment_return_notice_groups.id
     INTO v_notice_group_id;
@@ -12205,6 +12425,7 @@ BEGIN
       'pay_batch_id', p_pay_batch_id,
       'provider_key', v_provider_key,
       'execution_commit_ref', v_execution_commit_ref,
+      'alert_fingerprint', v_alert_fingerprint,
       'recipient_role', v_recipient_role,
       'quiet_until_utc', v_quiet_until_utc,
       'max_send_at_utc', v_max_send_at_utc,
@@ -12277,6 +12498,17 @@ DECLARE
   v_group_row record;
   v_notice_summary text;
   v_result jsonb := '{}'::jsonb;
+  v_notice_reference text;
+  v_pay_batch_short text;
+  v_blocked_provider text;
+  v_blocked_env text;
+  v_blocked_account text;
+  v_blocked_required text;
+  v_blocked_available text;
+  v_blocked_status text;
+  v_blocked_execution_state text;
+  v_blocked_pay_date text;
+  v_blocked_bulk_reference text;
 BEGIN
   PERFORM public._imp_debug_audit(
     NULL::uuid,
@@ -12342,7 +12574,8 @@ BEGIN
     claimed_groups.mail_outbox_ids,
     claimed_groups.created_at_utc,
     claimed_groups.updated_at_utc,
-    claimed_groups.sent_at_utc
+    claimed_groups.sent_at_utc,
+    claimed_groups.alert_fingerprint
   FROM claimed_groups;
 
   SELECT count(*)::integer
@@ -12367,6 +12600,8 @@ BEGIN
   LOOP
     v_mail_outbox_id := NULL::uuid;
     v_to_emails := NULL::text;
+    v_notice_reference := NULL::text;
+    v_pay_batch_short := CASE WHEN v_group_row.pay_batch_id IS NULL THEN '' ELSE left(v_group_row.pay_batch_id::text, 8) END;
 
     SELECT string_agg(admin_recipients.email, ',' ORDER BY admin_recipients.email)
     INTO v_to_emails
@@ -12375,7 +12610,16 @@ BEGIN
       FROM public.tms_users
       WHERE COALESCE(public.tms_users.is_active, false) = true
         AND NULLIF(btrim(COALESCE(public.tms_users.email, '')), '') IS NOT NULL
-        AND upper(btrim(COALESCE(public.tms_users.role, ''))) = upper(btrim(v_recipient_role))
+        AND (
+          upper(btrim(COALESCE(public.tms_users.role, ''))) = upper(btrim(v_recipient_role))
+          OR (
+            upper(btrim(coalesce(v_group_row.notice_kind, ''))) = 'BLOCKED_FUNDS'
+            AND (
+              COALESCE(public.tms_users.payment_authoriser, false) = true
+              OR COALESCE(public.tms_users.payment_golden_key, false) = true
+            )
+          )
+        )
     ) AS admin_recipients;
 
     IF NULLIF(btrim(COALESCE(v_to_emails, '')), '') IS NULL THEN
@@ -12398,25 +12642,123 @@ BEGIN
     END IF;
 
     v_notice_summary := left(COALESCE(v_group_row.summary_json::text, '{}'), 12000);
-    v_subject := 'CloudTMS payment correction notice: ' || COALESCE(v_group_row.notice_kind, 'PAYMENT_RETURN_NOTICE');
-    v_body_text := concat_ws(E'\n',
-      'CloudTMS payment correction/admin notice',
-      '',
-      'Notice kind: ' || COALESCE(v_group_row.notice_kind, ''),
-      'Pay batch ID: ' || COALESCE(v_group_row.pay_batch_id::text, ''),
-      'Provider: ' || COALESCE(v_group_row.provider_key, ''),
-      'Execution reference: ' || COALESCE(v_group_row.execution_commit_ref, ''),
-      'Created at UTC: ' || COALESCE(v_group_row.created_at_utc::text, ''),
-      '',
-      'Summary JSON:',
-      v_notice_summary
-    );
-    v_body_html := '<p>CloudTMS payment correction/admin notice</p>'
-      || '<p><strong>Notice kind:</strong> ' || COALESCE(v_group_row.notice_kind, '') || '</p>'
-      || '<p><strong>Pay batch ID:</strong> ' || COALESCE(v_group_row.pay_batch_id::text, '') || '</p>'
-      || '<p><strong>Provider:</strong> ' || COALESCE(v_group_row.provider_key, '') || '</p>'
-      || '<p><strong>Execution reference:</strong> ' || COALESCE(v_group_row.execution_commit_ref, '') || '</p>'
-      || '<pre>' || replace(replace(replace(v_notice_summary, '&', '&amp;'), '<', '&lt;'), '>', '&gt;') || '</pre>';
+
+    IF upper(btrim(coalesce(v_group_row.notice_kind, ''))) = 'BLOCKED_FUNDS' THEN
+      v_blocked_provider := COALESCE(
+        v_group_row.summary_json #>> '{rail_provider}',
+        v_group_row.summary_json #>> '{provider}',
+        v_group_row.summary_json #>> '{latest_summary_json,rail_provider}',
+        v_group_row.summary_json #>> '{latest_summary_json,provider}',
+        v_group_row.provider_key,
+        ''
+      );
+      v_blocked_env := COALESCE(
+        v_group_row.summary_json #>> '{rail_env}',
+        v_group_row.summary_json #>> '{env}',
+        v_group_row.summary_json #>> '{latest_summary_json,rail_env}',
+        v_group_row.summary_json #>> '{latest_summary_json,env}',
+        ''
+      );
+      v_blocked_account := COALESCE(
+        v_group_row.summary_json #>> '{funding_account_ref}',
+        v_group_row.summary_json #>> '{latest_summary_json,funding_account_ref}',
+        v_group_row.summary_json #>> '{blocked_funds,funding_account_ref}',
+        ''
+      );
+      v_blocked_required := COALESCE(
+        v_group_row.summary_json #>> '{required_gbp}',
+        v_group_row.summary_json #>> '{required}',
+        v_group_row.summary_json #>> '{latest_summary_json,required_gbp}',
+        v_group_row.summary_json #>> '{latest_summary_json,required}',
+        v_group_row.summary_json #>> '{blocked_funds,required_gbp}',
+        ''
+      );
+      v_blocked_available := COALESCE(
+        v_group_row.summary_json #>> '{available_gbp}',
+        v_group_row.summary_json #>> '{available}',
+        v_group_row.summary_json #>> '{latest_summary_json,available_gbp}',
+        v_group_row.summary_json #>> '{latest_summary_json,available}',
+        v_group_row.summary_json #>> '{blocked_funds,available_gbp}',
+        ''
+      );
+      v_blocked_status := COALESCE(
+        v_group_row.summary_json #>> '{status}',
+        v_group_row.summary_json #>> '{batch_status}',
+        v_group_row.summary_json #>> '{latest_summary_json,status}',
+        'BLOCKED_FUNDS'
+      );
+      v_blocked_execution_state := COALESCE(
+        v_group_row.summary_json #>> '{execution_commit_state}',
+        v_group_row.summary_json #>> '{latest_summary_json,execution_commit_state}',
+        ''
+      );
+      v_blocked_pay_date := COALESCE(
+        v_group_row.summary_json #>> '{pay_date}',
+        v_group_row.summary_json #>> '{latest_summary_json,pay_date}',
+        ''
+      );
+      v_blocked_bulk_reference := COALESCE(
+        v_group_row.summary_json #>> '{bulk_reference}',
+        v_group_row.summary_json #>> '{latest_summary_json,bulk_reference}',
+        ''
+      );
+
+      v_subject := 'Bank rejected payment — blocked funds — Pay batch ' || COALESCE(NULLIF(v_pay_batch_short, ''), COALESCE(v_group_row.pay_batch_id::text, ''));
+      v_body_text := concat_ws(E'\n',
+        'CloudTMS could not submit this payment because the funding account did not have enough funds.',
+        '',
+        'Pay batch: ' || COALESCE(v_group_row.pay_batch_id::text, ''),
+        'Batch reference: ' || COALESCE(v_blocked_bulk_reference, ''),
+        'Pay date: ' || COALESCE(v_blocked_pay_date, ''),
+        'Provider: ' || COALESCE(v_blocked_provider, '') || CASE WHEN NULLIF(v_blocked_env, '') IS NULL THEN '' ELSE ' / ' || v_blocked_env END,
+        'Funding account: ' || COALESCE(v_blocked_account, ''),
+        'Required: ' || CASE WHEN NULLIF(v_blocked_required, '') IS NULL THEN '' ELSE '£' || v_blocked_required END,
+        'Available: ' || CASE WHEN NULLIF(v_blocked_available, '') IS NULL THEN '' ELSE '£' || v_blocked_available END,
+        'Status: ' || COALESCE(v_blocked_status, 'BLOCKED_FUNDS'),
+        'Execution state: ' || COALESCE(v_blocked_execution_state, ''),
+        'Bank submission happened: No',
+        'Action required: fund the account and retry, or cancel/release the batch.',
+        '',
+        'This is a blocked-funds bank rejection before submission. It is not a payment reversal.'
+      );
+      v_body_html := '<div style="font-family:Arial,sans-serif;color:#111827;line-height:1.45;">'
+        || '<h2 style="margin:0 0 12px 0;color:#991b1b;">Bank rejected payment — blocked funds</h2>'
+        || '<p>CloudTMS could not submit this payment because the funding account did not have enough funds.</p>'
+        || '<table style="border-collapse:collapse;width:100%;max-width:760px;">'
+        || '<tr><th style="text-align:left;border:1px solid #e5e7eb;padding:8px;background:#f9fafb;">Pay batch</th><td style="border:1px solid #e5e7eb;padding:8px;">' || replace(replace(replace(COALESCE(v_group_row.pay_batch_id::text, ''), '&', '&amp;'), '<', '&lt;'), '>', '&gt;') || '</td></tr>'
+        || '<tr><th style="text-align:left;border:1px solid #e5e7eb;padding:8px;background:#f9fafb;">Provider</th><td style="border:1px solid #e5e7eb;padding:8px;">' || replace(replace(replace(COALESCE(v_blocked_provider, '') || CASE WHEN NULLIF(v_blocked_env, '') IS NULL THEN '' ELSE ' / ' || v_blocked_env END, '&', '&amp;'), '<', '&lt;'), '>', '&gt;') || '</td></tr>'
+        || '<tr><th style="text-align:left;border:1px solid #e5e7eb;padding:8px;background:#f9fafb;">Funding account</th><td style="border:1px solid #e5e7eb;padding:8px;">' || replace(replace(replace(COALESCE(v_blocked_account, ''), '&', '&amp;'), '<', '&lt;'), '>', '&gt;') || '</td></tr>'
+        || '<tr><th style="text-align:left;border:1px solid #e5e7eb;padding:8px;background:#f9fafb;">Required</th><td style="border:1px solid #e5e7eb;padding:8px;">' || replace(replace(replace(CASE WHEN NULLIF(v_blocked_required, '') IS NULL THEN '' ELSE '£' || v_blocked_required END, '&', '&amp;'), '<', '&lt;'), '>', '&gt;') || '</td></tr>'
+        || '<tr><th style="text-align:left;border:1px solid #e5e7eb;padding:8px;background:#f9fafb;">Available</th><td style="border:1px solid #e5e7eb;padding:8px;">' || replace(replace(replace(CASE WHEN NULLIF(v_blocked_available, '') IS NULL THEN '' ELSE '£' || v_blocked_available END, '&', '&amp;'), '<', '&lt;'), '>', '&gt;') || '</td></tr>'
+        || '<tr><th style="text-align:left;border:1px solid #e5e7eb;padding:8px;background:#f9fafb;">Status</th><td style="border:1px solid #e5e7eb;padding:8px;">' || replace(replace(replace(COALESCE(v_blocked_status, 'BLOCKED_FUNDS'), '&', '&amp;'), '<', '&lt;'), '>', '&gt;') || '</td></tr>'
+        || '<tr><th style="text-align:left;border:1px solid #e5e7eb;padding:8px;background:#f9fafb;">Bank submission happened</th><td style="border:1px solid #e5e7eb;padding:8px;">No</td></tr>'
+        || '</table>'
+        || '<p style="margin-top:14px;"><strong>Action required:</strong> fund the account and retry, or cancel/release the batch.</p>'
+        || '<p style="font-size:12px;color:#6b7280;">This is a blocked-funds bank rejection before submission. It is not a payment reversal.</p>'
+        || '</div>';
+      v_notice_reference := 'banking_alert:pay_batch:' || COALESCE(v_group_row.pay_batch_id::text, 'NO_BATCH') || ':BLOCKED_FUNDS:' || md5(COALESCE(v_group_row.alert_fingerprint, v_group_row.id::text));
+    ELSE
+      v_subject := 'CloudTMS payment correction notice: ' || COALESCE(v_group_row.notice_kind, 'PAYMENT_RETURN_NOTICE');
+      v_body_text := concat_ws(E'\n',
+        'CloudTMS payment correction/admin notice',
+        '',
+        'Notice kind: ' || COALESCE(v_group_row.notice_kind, ''),
+        'Pay batch ID: ' || COALESCE(v_group_row.pay_batch_id::text, ''),
+        'Provider: ' || COALESCE(v_group_row.provider_key, ''),
+        'Execution reference: ' || COALESCE(v_group_row.execution_commit_ref, ''),
+        'Created at UTC: ' || COALESCE(v_group_row.created_at_utc::text, ''),
+        '',
+        'Summary JSON:',
+        v_notice_summary
+      );
+      v_body_html := '<p>CloudTMS payment correction/admin notice</p>'
+        || '<p><strong>Notice kind:</strong> ' || COALESCE(v_group_row.notice_kind, '') || '</p>'
+        || '<p><strong>Pay batch ID:</strong> ' || COALESCE(v_group_row.pay_batch_id::text, '') || '</p>'
+        || '<p><strong>Provider:</strong> ' || COALESCE(v_group_row.provider_key, '') || '</p>'
+        || '<p><strong>Execution reference:</strong> ' || COALESCE(v_group_row.execution_commit_ref, '') || '</p>'
+        || '<pre>' || replace(replace(replace(v_notice_summary, '&', '&amp;'), '<', '&lt;'), '>', '&gt;') || '</pre>';
+      v_notice_reference := 'payment_return_notice_group:' || v_group_row.id::text;
+    END IF;
 
     INSERT INTO public.mail_outbox(
       type,
@@ -12454,7 +12796,7 @@ BEGIN
       v_body_text,
       NULL::jsonb,
       'QUEUED',
-      'payment_return_notice_group:' || v_group_row.id::text,
+      v_notice_reference,
       v_now,
       NULL::uuid,
       'ROLE',
@@ -12466,7 +12808,7 @@ BEGIN
     WHERE NOT EXISTS (
       SELECT 1
       FROM public.mail_outbox AS existing_notice_mail
-      WHERE existing_notice_mail.reference = 'payment_return_notice_group:' || v_group_row.id::text
+      WHERE existing_notice_mail.reference = v_notice_reference
         AND existing_notice_mail.email_type = 'payment_return_admin_notice'
     )
     RETURNING public.mail_outbox.id
@@ -12476,7 +12818,7 @@ BEGIN
       SELECT public.mail_outbox.id
       INTO v_mail_outbox_id
       FROM public.mail_outbox
-      WHERE public.mail_outbox.reference = 'payment_return_notice_group:' || v_group_row.id::text
+      WHERE public.mail_outbox.reference = v_notice_reference
         AND public.mail_outbox.email_type = 'payment_return_admin_notice'
       ORDER BY public.mail_outbox.created_at_utc ASC, public.mail_outbox.id ASC
       LIMIT 1;
@@ -12508,6 +12850,7 @@ BEGIN
             'mail_outbox_id', v_mail_outbox_id,
             'recipient_role', v_recipient_role,
             'to', v_to_emails,
+            'reference', v_notice_reference,
             'dispatched_at_utc', v_now
           )
         )
