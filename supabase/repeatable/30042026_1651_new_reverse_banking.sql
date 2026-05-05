@@ -63,6 +63,9 @@ DECLARE
   v_transfer_group_key text;
   v_expected_item_count integer := NULL::integer;
   v_expected_item_count_text text;
+  v_work_unit text := NULL::text;
+  v_source_correction_request_id_text text := NULL::text;
+  v_explicit_item_ids_authoritative boolean := false;
 
   v_return_item_ids uuid[] := ARRAY[]::uuid[];
   v_selected_item_count integer := 0;
@@ -606,6 +609,26 @@ BEGIN
     END IF;
   END IF;
 
+  v_work_unit := upper(NULLIF(btrim(COALESCE(p_selection_json->>'work_unit', '')), ''));
+  v_source_correction_request_id_text := NULLIF(btrim(COALESCE(p_selection_json->>'source_correction_request_id', '')), '');
+
+  v_explicit_item_ids_authoritative := (
+    (
+      COALESCE(array_length(v_pay_batch_item_ids, 1), 0) > 0
+      OR COALESCE(array_length(v_expected_pay_batch_item_ids, 1), 0) > 0
+    )
+    AND (
+      v_source_correction_request_id_text IS NOT NULL
+      OR v_work_unit IN ('BATCH', 'CANDIDATE', 'TRANSFER', 'CANDIDATE_TRANSFER', 'FINANCE_CASE')
+    )
+  );
+
+  IF COALESCE(v_explicit_item_ids_authoritative, false)
+     AND COALESCE(array_length(v_pay_batch_item_ids, 1), 0) = 0
+     AND COALESCE(array_length(v_expected_pay_batch_item_ids, 1), 0) > 0 THEN
+    v_pay_batch_item_ids := v_expected_pay_batch_item_ids;
+  END IF;
+
   IF v_scope_type = 'CANDIDATES'
      AND COALESCE(array_length(v_pay_batch_candidate_ids, 1), 0) = 0 THEN
     RAISE EXCEPTION 'PAY_BATCH_CANDIDATE_SELECTION_REQUIRED'
@@ -743,15 +766,18 @@ BEGIN
         OR public.pay_batch_items.pay_bank_transfer_id = ANY(v_pay_bank_transfer_ids)
       )
       AND (
-        COALESCE(array_length(v_finance_case_ids, 1), 0) = 0
+        COALESCE(v_explicit_item_ids_authoritative, false)
+        OR COALESCE(array_length(v_finance_case_ids, 1), 0) = 0
         OR public.pay_batch_items.finance_case_id = ANY(v_finance_case_ids)
       )
       AND (
-        COALESCE(array_length(v_finance_component_ids, 1), 0) = 0
+        COALESCE(v_explicit_item_ids_authoritative, false)
+        OR COALESCE(array_length(v_finance_component_ids, 1), 0) = 0
         OR public.pay_batch_items.finance_component_id = ANY(v_finance_component_ids)
       )
       AND (
-        COALESCE(array_length(v_reservation_ids, 1), 0) = 0
+        COALESCE(v_explicit_item_ids_authoritative, false)
+        OR COALESCE(array_length(v_reservation_ids, 1), 0) = 0
         OR public.pay_batch_items.reservation_id = ANY(v_reservation_ids)
       )
       AND (
@@ -966,6 +992,9 @@ BEGIN
       'umbrella_id', v_umbrella_id,
       'transfer_group_key', v_transfer_group_key,
       'expected_item_count', v_expected_item_count,
+      'work_unit', v_work_unit,
+      'source_correction_request_id_present', v_source_correction_request_id_text IS NOT NULL,
+      'explicit_item_ids_authoritative', COALESCE(v_explicit_item_ids_authoritative, false),
       'selected_item_count', v_selected_item_count,
       'selected_already_corrected_count', v_selected_already_corrected_count,
       'return_item_count', v_return_item_count
@@ -1156,7 +1185,10 @@ BEGIN
       'returned_row_count', v_returned_count,
       'key_resolution_failure_count', v_key_resolution_failure_count,
       'expected_item_count', v_expected_item_count,
-      'expected_pay_batch_item_id_count', COALESCE(array_length(v_expected_pay_batch_item_ids, 1), 0)
+      'expected_pay_batch_item_id_count', COALESCE(array_length(v_expected_pay_batch_item_ids, 1), 0),
+      'work_unit', v_work_unit,
+      'source_correction_request_id_present', v_source_correction_request_id_text IS NOT NULL,
+      'explicit_item_ids_authoritative', COALESCE(v_explicit_item_ids_authoritative, false)
     ),
     'pay_payment_correction',
     p_pay_batch_id::text,
@@ -1192,7 +1224,6 @@ EXCEPTION
     RAISE;
 END;
 $function$;
-
 
 
 
