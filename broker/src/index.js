@@ -20773,6 +20773,129 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
     return new Response(bodyOut, { status, headers });
   };
 
+
+  const getActivePaymentStateForBatchPayload = (batchPayload) => {
+    const payload = (batchPayload && typeof batchPayload === 'object' && !Array.isArray(batchPayload)) ? batchPayload : {};
+    const batchObj = (payload.batch && typeof payload.batch === 'object' && !Array.isArray(payload.batch)) ? payload.batch : {};
+
+    const firstFiniteNonNegativeInteger = (...values) => {
+      for (const value of values) {
+        if (value === null || value === undefined) continue;
+        const s = String(value).trim();
+        if (!s) continue;
+        const n = Number(s);
+        if (Number.isFinite(n) && n >= 0) return Math.trunc(n);
+      }
+      return null;
+    };
+
+    const countCandidateLineEntries = () => {
+      if (!Array.isArray(payload.candidate_lines)) return null;
+      let count = 0;
+      for (const entry of payload.candidate_lines) {
+        if (!entry || typeof entry !== 'object') continue;
+        const normalizedBlock = (entry.candidate_lines_normalized && typeof entry.candidate_lines_normalized === 'object' && !Array.isArray(entry.candidate_lines_normalized))
+          ? entry.candidate_lines_normalized
+          : null;
+        if (normalizedBlock) {
+          if (Array.isArray(normalizedBlock.tsLines)) count += normalizedBlock.tsLines.filter(Boolean).length;
+          if (Array.isArray(normalizedBlock.nonTsLines)) count += normalizedBlock.nonTsLines.filter(Boolean).length;
+          continue;
+        }
+        if (Array.isArray(entry.ts_lines) || Array.isArray(entry.non_ts_lines)) {
+          if (Array.isArray(entry.ts_lines)) count += entry.ts_lines.filter(Boolean).length;
+          if (Array.isArray(entry.non_ts_lines)) count += entry.non_ts_lines.filter(Boolean).length;
+          continue;
+        }
+        if (Array.isArray(entry.lines)) { count += entry.lines.filter(Boolean).length; continue; }
+        if (Array.isArray(entry.line_items)) { count += entry.line_items.filter(Boolean).length; continue; }
+        if (Array.isArray(entry.items)) { count += entry.items.filter(Boolean).length; continue; }
+        if (Array.isArray(entry.breakdown_lines)) { count += entry.breakdown_lines.filter(Boolean).length; continue; }
+        if (Array.isArray(entry.timesheets)) { count += entry.timesheets.filter(Boolean).length; continue; }
+        count += 1;
+      }
+      return count;
+    };
+
+    const explicitActiveCount = firstFiniteNonNegativeInteger(
+      payload.active_item_count,
+      payload.active_items,
+      payload.active_batch_item_count,
+      payload.active_batch_items,
+      payload.active_payment_item_count,
+      payload.active_pay_batch_item_count,
+      payload.active_batch_item_count_after,
+      batchObj.active_item_count,
+      batchObj.active_items,
+      batchObj.active_batch_item_count,
+      batchObj.active_batch_items,
+      batchObj.active_payment_item_count,
+      batchObj.active_pay_batch_item_count,
+      batchObj.active_batch_item_count_after
+    );
+
+    const payloadItems = Array.isArray(payload.items) ? payload.items : null;
+    const activeCountFromItems = payloadItems ? payloadItems.filter((item) => {
+      if (!item || typeof item !== 'object') return false;
+      if (item.is_voided === true || item.voided === true) return false;
+      const itemStatus = String(item.status || '').trim().toUpperCase();
+      return itemStatus !== 'VOIDED' && itemStatus !== 'CANCELLED' && itemStatus !== 'CANCELED';
+    }).length : null;
+
+    const activeCountFromLines = countCandidateLineEntries();
+    const known = explicitActiveCount !== null || activeCountFromItems !== null || activeCountFromLines !== null;
+    const count = explicitActiveCount !== null
+      ? explicitActiveCount
+      : (activeCountFromItems !== null ? activeCountFromItems : (activeCountFromLines !== null ? activeCountFromLines : 0));
+
+    return {
+      known,
+      count,
+      has_active_payments: !known || count > 0
+    };
+  };
+
+  const noActivePaymentsResponse = () => jsonResponse(409, {
+    ok: false,
+    pay_batch_id: id,
+    error: 'NO_ACTIVE_PAYMENTS_IN_BATCH',
+    message: 'This draft batch has no active payments. Delete the draft or create a new batch.',
+    error_code: 'NO_ACTIVE_PAYMENTS_IN_BATCH'
+  });
+
+
+  const getAuthoritativeFrozenActivePaymentState = async () => {
+    const enc = encodeURIComponent;
+    const candidateUrl = `${env.SUPABASE_URL}/rest/v1/pay_batch_candidates` +
+      `?pay_batch_id=eq.${enc(id)}` +
+      `&select=id`;
+    const { rows: candidateRows } = await sbFetch(env, candidateUrl, false);
+    const candidateIds = (Array.isArray(candidateRows) ? candidateRows : [])
+      .map((row) => String(row && row.id ? row.id : '').trim())
+      .filter(Boolean);
+
+    if (!candidateIds.length) {
+      return { known: true, count: 0, has_active_payments: false, source: 'FROZEN_PAY_BATCH_ITEMS' };
+    }
+
+    const chunkSize = 100;
+    for (let index = 0; index < candidateIds.length; index += chunkSize) {
+      const chunk = candidateIds.slice(index, index + chunkSize);
+      const inList = chunk.map((candidateId) => enc(candidateId)).join(',');
+      const itemUrl = `${env.SUPABASE_URL}/rest/v1/pay_batch_items` +
+        `?pay_batch_candidate_id=in.(${inList})` +
+        `&is_voided=eq.false` +
+        `&select=id` +
+        `&limit=1`;
+      const { rows: itemRows } = await sbFetch(env, itemUrl, false);
+      if (Array.isArray(itemRows) && itemRows.length > 0) {
+        return { known: true, count: itemRows.length, has_active_payments: true, source: 'FROZEN_PAY_BATCH_ITEMS' };
+      }
+    }
+
+    return { known: true, count: 0, has_active_payments: false, source: 'FROZEN_PAY_BATCH_ITEMS' };
+  };
+
   const _safeJsonParse = (s) => {
     try { return JSON.parse(String(s || '')); } catch { return null; }
   };
@@ -20943,6 +21066,16 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
         message: 'Batch has already crossed the native execution submission boundary.',
         error_code: 'EXECUTION_ALREADY_SUBMITTED'
       }));
+    }
+
+    const authoritativeActivePaymentState = await getAuthoritativeFrozenActivePaymentState();
+    if (authoritativeActivePaymentState.known && authoritativeActivePaymentState.has_active_payments !== true) {
+      return withCORS(env, req, noActivePaymentsResponse());
+    }
+
+    const activePaymentState = getActivePaymentStateForBatchPayload(gateGet);
+    if (authoritativeActivePaymentState.known !== true && activePaymentState.known && activePaymentState.count <= 0) {
+      return withCORS(env, req, noActivePaymentsResponse());
     }
 
     const providerRaw = String(gateBatch?.rail_provider_snapshot || gateGet?.rail_provider_snapshot || '').trim().toUpperCase();
@@ -21170,7 +21303,6 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
     return withCORS(env, req, jsonResponse(500, { error: 'Execute payment failed.', message: 'Execute payment failed.', error_code: 'BANKING_EXECUTE_PAYMENT_FAILED' }));
   }
 }
-
 
 async function verifyPaymentScheduleReauth(env, user, reauthToken) {
   const token = String(reauthToken || '').trim();
@@ -26354,6 +26486,7 @@ async function handleBankingPayCorrectionStatus(env, req, user, correctionReques
 
 
 
+
 async function handleBankingPayBatchExportCsv(env, req, user, payBatchId) {
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -26465,6 +26598,129 @@ async function handleBankingPayBatchExportCsv(env, req, user, payBatchId) {
     return new Response(JSON.stringify(payload && typeof payload === 'object' ? payload : { error: 'RPC_ERROR' }), { status, headers });
   };
 
+
+  const getActivePaymentStateForBatchPayload = (batchPayload) => {
+    const payload = (batchPayload && typeof batchPayload === 'object' && !Array.isArray(batchPayload)) ? batchPayload : {};
+    const batchObj = (payload.batch && typeof payload.batch === 'object' && !Array.isArray(payload.batch)) ? payload.batch : {};
+
+    const firstFiniteNonNegativeInteger = (...values) => {
+      for (const value of values) {
+        if (value === null || value === undefined) continue;
+        const s = String(value).trim();
+        if (!s) continue;
+        const n = Number(s);
+        if (Number.isFinite(n) && n >= 0) return Math.trunc(n);
+      }
+      return null;
+    };
+
+    const countCandidateLineEntries = () => {
+      if (!Array.isArray(payload.candidate_lines)) return null;
+      let count = 0;
+      for (const entry of payload.candidate_lines) {
+        if (!entry || typeof entry !== 'object') continue;
+        const normalizedBlock = (entry.candidate_lines_normalized && typeof entry.candidate_lines_normalized === 'object' && !Array.isArray(entry.candidate_lines_normalized))
+          ? entry.candidate_lines_normalized
+          : null;
+        if (normalizedBlock) {
+          if (Array.isArray(normalizedBlock.tsLines)) count += normalizedBlock.tsLines.filter(Boolean).length;
+          if (Array.isArray(normalizedBlock.nonTsLines)) count += normalizedBlock.nonTsLines.filter(Boolean).length;
+          continue;
+        }
+        if (Array.isArray(entry.ts_lines) || Array.isArray(entry.non_ts_lines)) {
+          if (Array.isArray(entry.ts_lines)) count += entry.ts_lines.filter(Boolean).length;
+          if (Array.isArray(entry.non_ts_lines)) count += entry.non_ts_lines.filter(Boolean).length;
+          continue;
+        }
+        if (Array.isArray(entry.lines)) { count += entry.lines.filter(Boolean).length; continue; }
+        if (Array.isArray(entry.line_items)) { count += entry.line_items.filter(Boolean).length; continue; }
+        if (Array.isArray(entry.items)) { count += entry.items.filter(Boolean).length; continue; }
+        if (Array.isArray(entry.breakdown_lines)) { count += entry.breakdown_lines.filter(Boolean).length; continue; }
+        if (Array.isArray(entry.timesheets)) { count += entry.timesheets.filter(Boolean).length; continue; }
+        count += 1;
+      }
+      return count;
+    };
+
+    const explicitActiveCount = firstFiniteNonNegativeInteger(
+      payload.active_item_count,
+      payload.active_items,
+      payload.active_batch_item_count,
+      payload.active_batch_items,
+      payload.active_payment_item_count,
+      payload.active_pay_batch_item_count,
+      payload.active_batch_item_count_after,
+      batchObj.active_item_count,
+      batchObj.active_items,
+      batchObj.active_batch_item_count,
+      batchObj.active_batch_items,
+      batchObj.active_payment_item_count,
+      batchObj.active_pay_batch_item_count,
+      batchObj.active_batch_item_count_after
+    );
+
+    const payloadItems = Array.isArray(payload.items) ? payload.items : null;
+    const activeCountFromItems = payloadItems ? payloadItems.filter((item) => {
+      if (!item || typeof item !== 'object') return false;
+      if (item.is_voided === true || item.voided === true) return false;
+      const itemStatus = String(item.status || '').trim().toUpperCase();
+      return itemStatus !== 'VOIDED' && itemStatus !== 'CANCELLED' && itemStatus !== 'CANCELED';
+    }).length : null;
+
+    const activeCountFromLines = countCandidateLineEntries();
+    const known = explicitActiveCount !== null || activeCountFromItems !== null || activeCountFromLines !== null;
+    const count = explicitActiveCount !== null
+      ? explicitActiveCount
+      : (activeCountFromItems !== null ? activeCountFromItems : (activeCountFromLines !== null ? activeCountFromLines : 0));
+
+    return {
+      known,
+      count,
+      has_active_payments: !known || count > 0
+    };
+  };
+
+  const noActivePaymentsResponse = () => jsonResponse(409, {
+    ok: false,
+    pay_batch_id: id,
+    error: 'NO_ACTIVE_PAYMENTS_IN_BATCH',
+    message: 'This draft batch has no active payments. Delete the draft or create a new batch.',
+    error_code: 'NO_ACTIVE_PAYMENTS_IN_BATCH'
+  });
+
+
+  const getAuthoritativeFrozenActivePaymentState = async () => {
+    const enc = encodeURIComponent;
+    const candidateUrl = `${env.SUPABASE_URL}/rest/v1/pay_batch_candidates` +
+      `?pay_batch_id=eq.${enc(id)}` +
+      `&select=id`;
+    const { rows: candidateRows } = await sbFetch(env, candidateUrl, false);
+    const candidateIds = (Array.isArray(candidateRows) ? candidateRows : [])
+      .map((row) => String(row && row.id ? row.id : '').trim())
+      .filter(Boolean);
+
+    if (!candidateIds.length) {
+      return { known: true, count: 0, has_active_payments: false, source: 'FROZEN_PAY_BATCH_ITEMS' };
+    }
+
+    const chunkSize = 100;
+    for (let index = 0; index < candidateIds.length; index += chunkSize) {
+      const chunk = candidateIds.slice(index, index + chunkSize);
+      const inList = chunk.map((candidateId) => enc(candidateId)).join(',');
+      const itemUrl = `${env.SUPABASE_URL}/rest/v1/pay_batch_items` +
+        `?pay_batch_candidate_id=in.(${inList})` +
+        `&is_voided=eq.false` +
+        `&select=id` +
+        `&limit=1`;
+      const { rows: itemRows } = await sbFetch(env, itemUrl, false);
+      if (Array.isArray(itemRows) && itemRows.length > 0) {
+        return { known: true, count: itemRows.length, has_active_payments: true, source: 'FROZEN_PAY_BATCH_ITEMS' };
+      }
+    }
+
+    return { known: true, count: 0, has_active_payments: false, source: 'FROZEN_PAY_BATCH_ITEMS' };
+  };
+
   try {
     const batchGet0 = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: id });
     const batchGet = unwrapRpc(batchGet0, 'pay_batch_get');
@@ -26472,6 +26728,16 @@ async function handleBankingPayBatchExportCsv(env, req, user, payBatchId) {
 
     if (!batchObj || typeof batchObj !== 'object') {
       return withCORS(env, req, badRequest('PAY_BATCH_NOT_FOUND'));
+    }
+
+    const authoritativeActivePaymentState = await getAuthoritativeFrozenActivePaymentState();
+    if (authoritativeActivePaymentState.known && authoritativeActivePaymentState.has_active_payments !== true) {
+      return withCORS(env, req, noActivePaymentsResponse());
+    }
+
+    const activePaymentState = getActivePaymentStateForBatchPayload(batchGet);
+    if (authoritativeActivePaymentState.known !== true && activePaymentState.known && activePaymentState.count <= 0) {
+      return withCORS(env, req, noActivePaymentsResponse());
     }
 
     const normalizeProvider = (rawProvider) => {
@@ -26666,8 +26932,6 @@ async function handleBankingPayBatchExportCsv(env, req, user, payBatchId) {
     return withCORS(env, req, jsonResponse(norm.status, norm.body));
   }
 }
-
-
 
 
 async function handleBankingPayBatchExportDetailCsv(env, req, user, payBatchId) {
