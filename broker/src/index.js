@@ -12761,7 +12761,7 @@ async function sendPayBatchRemittancesInternal(env, opts) {
     if (optionsBatchPayload) {
       batchGet = unwrapRpc(optionsBatchPayload, 'pay_batch_get');
     } else {
-      const batchGet0 = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: payBatchId });
+      const batchGet0 = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: payBatchId, p_actor_user_id: actorUserId });
       batchGet = unwrapRpc(batchGet0, 'pay_batch_get');
     }
   } catch (e) {
@@ -13083,234 +13083,6 @@ async function sendPayBatchRemittancesInternal(env, opts) {
     return Number.isFinite(n) ? n : null;
   };
 
-  const fmtDateShort = (isoOrDateStr) => {
-    const s = String(isoOrDateStr || '').trim();
-    if (!s) return '';
-    let d;
-    if (s.includes('T')) d = new Date(s);
-    else if (/^\d{4}-\d{2}-\d{2}$/.test(s)) d = new Date(`${s}T00:00:00.000Z`);
-    else d = new Date(s);
-    if (!Number.isFinite(d.getTime())) return s;
-
-    const wd = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London', weekday: 'short' }).format(d);
-    const ddmmyy = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London', year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
-    return `${wd} ${ddmmyy}`;
-  };
-
-  const fmtTime = (isoStr) => {
-    const s = String(isoStr || '').trim();
-    if (!s) return '';
-    const d = new Date(s);
-    if (!Number.isFinite(d.getTime())) return '';
-    return new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London', hour: '2-digit', minute: '2-digit', hour12: false }).format(d);
-  };
-
-  const fmtBreak = (seg) => {
-    if (!seg || typeof seg !== 'object') return '';
-    const breaks = seg.breaks;
-    if (Array.isArray(breaks) && breaks.length > 0) {
-      const b0 = breaks[0];
-      const bs = (b0 && (b0.start_utc || b0.start_iso || b0.start)) ? String(b0.start_utc || b0.start_iso || b0.start) : '';
-      const be = (b0 && (b0.end_utc || b0.end_iso || b0.end)) ? String(b0.end_utc || b0.end_iso || b0.end) : '';
-      const t1 = fmtTime(bs);
-      const t2 = fmtTime(be);
-      if (t1 && t2) return `${t1}–${t2}`;
-    }
-    const bm = asNum(seg.break_mins);
-    if (bm == null) return '';
-    return `${bm}m`;
-  };
-
-  const printTable = (lines, headers, rows) => {
-    const cols = headers.length;
-    const widths = new Array(cols).fill(0);
-
-    const measure = (x) => String(x ?? '').length;
-
-    for (let i = 0; i < cols; i++) widths[i] = Math.max(widths[i], measure(headers[i]));
-    for (const r of rows) {
-      for (let i = 0; i < cols; i++) widths[i] = Math.max(widths[i], measure(r[i]));
-    }
-
-    const pad = (s, w) => {
-      const str = String(s ?? '');
-      if (str.length >= w) return str;
-      return str + ' '.repeat(w - str.length);
-    };
-
-    lines.push(headers.map((h, i) => pad(h, widths[i])).join('  '));
-    for (const r of rows) {
-      lines.push(r.map((v, i) => pad(v, widths[i])).join('  '));
-    }
-  };
-
-  const normalizeUnitRows = (rows, useInc) => {
-    const out = [];
-    for (const r of (Array.isArray(rows) ? rows : [])) {
-      const unit = (r && r.unit != null) ? String(r.unit) : '';
-      const qty = asNum(r?.quantity);
-      const rate = asNum(r?.rate);
-      const total = useInc ? asNum(r?.total_inc_vat) : asNum(r?.total_ex_vat);
-
-      if (qty == null || Math.abs(qty) < 1e-9) continue;
-      if (total == null || Math.abs(total) < 1e-9) continue;
-
-      out.push({
-        unit,
-        quantity: qty,
-        rate: rate,
-        total: total
-      });
-    }
-    return out;
-  };
-
-  const renderTimesheetSection = (lines, ctx) => {
-    const candidateDisplay = ctx.candidateDisplay || '';
-    const clientName = ctx.clientName || '';
-    const weekEnding = ctx.weekEnding || '';
-    const jobTitle = ctx.jobTitle || '';
-    const band = ctx.band || '';
-    const timesheetType = ctx.timesheetType || 'Standard';
-    const renderMode = ctx.renderMode || 'AGGREGATE';
-    const detailed = !!ctx.detailed;
-
-    const unitRows = normalizeUnitRows(ctx.unit_rows, false);
-    const addlRows = normalizeUnitRows(ctx.additional_units_rows, false);
-    const expRows = normalizeUnitRows(ctx.expenses_rows, false);
-    const otherRows = normalizeUnitRows(ctx.other_rows, false);
-
-    const totals = (ctx.totals && typeof ctx.totals === 'object') ? ctx.totals : {};
-    const totalEx = asNum(totals.total_ex_vat);
-    const totalVat = asNum(totals.vat);
-    const totalInc = asNum(totals.total_inc_vat);
-
-    lines.push(`Candidate\t${candidateDisplay}`);
-    lines.push(`Client\t${clientName}`);
-    lines.push(`Week Ending\t${weekEnding}`);
-    lines.push(`Job Title\t${jobTitle}`);
-    lines.push(`Band\t${band}`);
-    lines.push(`Timesheet Type\t${timesheetType}`);
-    lines.push('');
-
-    if (detailed && renderMode === 'SEGMENT') {
-      if (timesheetType === 'Adjustment') {
-        const changes = Array.isArray(ctx.schedule_changes) ? ctx.schedule_changes : [];
-        if (changes.length) {
-          lines.push('Schedule changes');
-          const rows = [];
-          for (const ch of changes) {
-            const dateLbl = fmtDateShort(ch?.date);
-            const before = (ch && typeof ch.before === 'object' && ch.before) ? ch.before : null;
-            const after = (ch && typeof ch.after === 'object' && ch.after) ? ch.after : null;
-
-            const bStart = before ? fmtTime(before.start_utc) : '';
-            const bEnd = before ? fmtTime(before.end_utc) : '';
-            const bBreak = before ? fmtBreak(before) : '';
-
-            const aStart = after ? fmtTime(after.start_utc) : '';
-            const aEnd = after ? fmtTime(after.end_utc) : '';
-            const aBreak = after ? fmtBreak(after) : '';
-
-            rows.push([dateLbl, 'Before', bStart, bEnd, bBreak]);
-            rows.push([dateLbl, 'After', aStart, aEnd, aBreak]);
-          }
-          printTable(lines, ['Date', 'Type', 'Start', 'End', 'Break'], rows);
-          lines.push('');
-        }
-      } else {
-        const sched = Array.isArray(ctx.schedule_rows) ? ctx.schedule_rows : [];
-        if (sched.length) {
-          lines.push('Schedule');
-          const rows = [];
-          for (const seg of sched) {
-            const dateLbl = fmtDateShort(seg?.date);
-            const start = fmtTime(seg?.start_utc);
-            const end = fmtTime(seg?.end_utc);
-            const br = fmtBreak(seg);
-            rows.push([dateLbl, start, end, br]);
-          }
-          printTable(lines, ['Date', 'Start', 'End', 'Break'], rows);
-          lines.push('');
-        }
-      }
-    }
-
-    const unitTableRows = [];
-    for (const r of unitRows) {
-      unitTableRows.push([
-        r.unit,
-        String(r.quantity),
-        (r.rate == null ? '' : String(r.rate)),
-        `£${asMoney(r.total)}`
-      ]);
-    }
-
-    if (unitTableRows.length) {
-      printTable(lines, ['Unit', 'Quantity', 'Rate', 'Total'], unitTableRows);
-      lines.push('');
-    } else {
-      lines.push('Unit  Quantity  Rate  Total');
-      lines.push('');
-    }
-
-    if (addlRows.length) {
-      lines.push('Additional Units');
-      const rows = [];
-      for (const r of addlRows) {
-        rows.push([
-          r.unit,
-          String(r.quantity),
-          (r.rate == null ? '' : String(r.rate)),
-          `£${asMoney(r.total)}`
-        ]);
-      }
-      printTable(lines, ['Unit', 'Quantity', 'Rate', 'Total'], rows);
-      lines.push('');
-    }
-
-    if (expRows.length) {
-      lines.push('Expenses');
-      const rows = [];
-      for (const r of expRows) {
-        rows.push([
-          r.unit,
-          String(r.quantity),
-          (r.rate == null ? '' : String(r.rate)),
-          `£${asMoney(r.total)}`
-        ]);
-      }
-      printTable(lines, ['Unit', 'Quantity', 'Rate', 'Total'], rows);
-      lines.push('');
-    }
-
-    if (otherRows.length) {
-      lines.push('Other');
-      const rows = [];
-      for (const r of otherRows) {
-        rows.push([
-          r.unit,
-          String(r.quantity),
-          (r.rate == null ? '' : String(r.rate)),
-          `£${asMoney(r.total)}`
-        ]);
-      }
-      printTable(lines, ['Unit', 'Quantity', 'Rate', 'Total'], rows);
-      lines.push('');
-    }
-
-    if (totalVat != null && Math.abs(totalVat) > 1e-9) {
-      lines.push(`Total (exc VAT)\t\t\t£${asMoney(totalEx) ?? ''}`);
-      lines.push(`VAT\t\t\t£${asMoney(totalVat) ?? ''}`);
-      lines.push(`Total (inc VAT)\t\t\t£${asMoney(totalInc) ?? ''}`);
-    } else {
-      const gross = (totalInc != null ? totalInc : totalEx);
-      lines.push(`Gross Pay\t\t\t£${asMoney(gross) ?? ''}`);
-    }
-
-    lines.push('');
-  };
-
   const stringifyPayoutSchedule = (v) => {
     if (v == null) return '';
     if (typeof v === 'string') return v.trim();
@@ -13479,27 +13251,31 @@ async function sendPayBatchRemittancesInternal(env, opts) {
         return /^\[TEST MODE\]/i.test(seed) ? seed : `[TEST MODE] ${seed}`;
       })();
 
-      const subject = isPayoutNotice ? payoutSubject : defaultSubject;
+      let subject = isPayoutNotice ? payoutSubject : defaultSubject;
 
-      const lines = [];
-      if (headerMsg) {
-        lines.push(headerMsg);
-        lines.push('');
-      }
-
-      if (effectiveTestMode) {
-        if (payrollTesting) {
-          lines.push('PAYROLL TEST MODE — communications routed to test recipient');
-          lines.push(`Test recipient: ${testTo}`);
-          if (intendedToEmail) lines.push(`Intended recipient: ${intendedToEmail}`);
-          lines.push('');
-        } else {
-          lines.push('SIMULATED / TEST MODE — communication generated without live dispatch');
-          lines.push('');
-        }
-      }
+      let bodyText = '';
+      let bodyHtml = '';
+      let renderSummaryJson = null;
 
       if (isPayoutNotice) {
+        const lines = [];
+        if (headerMsg) {
+          lines.push(headerMsg);
+          lines.push('');
+        }
+
+        if (effectiveTestMode) {
+          if (payrollTesting) {
+            lines.push('PAYROLL TEST MODE — communications routed to test recipient');
+            lines.push(`Test recipient: ${testTo}`);
+            if (intendedToEmail) lines.push(`Intended recipient: ${intendedToEmail}`);
+            lines.push('');
+          } else {
+            lines.push('SIMULATED / TEST MODE — communication generated without live dispatch');
+            lines.push('');
+          }
+        }
+
         const payoutScheduledDate = String(job?.scheduled_payment_date || authoritativePaymentDate || payDate || '').trim();
 
         const candidateDisplay = [
@@ -13580,130 +13356,48 @@ async function sendPayBatchRemittancesInternal(env, opts) {
         }
 
         lines.push('This payment notice was generated from frozen pay batch artifacts in CloudTMS.');
-      } else {
-        lines.push('Remittance Advice');
-        if (bulkRef) lines.push(`Bank reference: ${bulkRef}`);
-        if (payDate) lines.push(`Pay date: ${payDate}`);
-        lines.push(`Pay batch: ${payBatchId}`);
-        lines.push(`Scope: ${scope}`);
-        lines.push('');
 
-        if (isUmbrellaJob) {
-          const umbName = (recipient?.name && String(recipient.name).trim()) ? String(recipient.name).trim() : '';
-          if (umbName) {
-            lines.push(`Umbrella: ${umbName}`);
-            lines.push('');
-          }
-
-          const candidates = Array.isArray(job?.candidates) ? job.candidates : [];
-          for (const c of candidates) {
-            const dn = (c?.display_name && String(c.display_name).trim()) ? String(c.display_name).trim() : '';
-            const tr = (c?.tms_ref && String(c.tms_ref).trim()) ? String(c.tms_ref).trim() : '';
-            const candidateDisplay = [dn, tr ? `(${tr})` : ''].filter(Boolean).join(' ') || '(unknown)';
-
-            const timesheets = Array.isArray(c?.timesheets) ? c.timesheets : [];
-            for (const ts of timesheets) {
-              const weekEnding = ts?.week_ending_date ? fmtDateShort(ts.week_ending_date) : '';
-              renderTimesheetSection(lines, {
-                candidateDisplay,
-                clientName: (ts?.client_name != null) ? String(ts.client_name) : '',
-                weekEnding,
-                jobTitle: (ts?.job_title != null) ? String(ts.job_title) : '',
-                band: (ts?.band != null) ? String(ts.band) : '',
-                timesheetType: (ts?.timesheet_type != null) ? String(ts.timesheet_type) : 'Standard',
-                renderMode: (ts?.timesheet_render_mode != null) ? String(ts.timesheet_render_mode) : 'AGGREGATE',
-                detailed,
-                unit_rows: ts?.unit_rows,
-                additional_units_rows: ts?.additional_units_rows,
-                expenses_rows: ts?.expenses_rows,
-                other_rows: ts?.other_rows,
-                totals: ts?.totals,
-                schedule_rows: ts?.schedule_rows,
-                schedule_changes: ts?.schedule_changes
-              });
-            }
-          }
-        } else {
-          const displayName = (recipient?.display_name && String(recipient.display_name).trim()) ? String(recipient.display_name).trim() : '';
-          const tmsRef = (recipient?.tms_ref && String(recipient.tms_ref).trim()) ? String(recipient.tms_ref).trim() : '';
-          const candidateDisplay = [displayName, tmsRef ? `(${tmsRef})` : ''].filter(Boolean).join(' ') || '(unknown)';
-
-          if (isPayeJob) {
-            const adv = (job && typeof job.paye_net_advisory === 'object' && job.paye_net_advisory) ? job.paye_net_advisory : null;
-
-            const originalNet = asNum(adv?.original_net_input);
-            const loanTaken = asNum(adv?.loan_repayment_taken);
-            const overpayTaken = asNum(adv?.overpayment_recovery_taken);
-            const finalNetPaid = asNum(adv?.final_net_paid);
-
-            const hasLoan = (loanTaken != null && loanTaken > 1e-9);
-            const hasOverpay = (overpayTaken != null && overpayTaken > 1e-9);
-
-            const dedTotal = Number(loanTaken || 0) + Number(overpayTaken || 0);
-            const hasAnyDeduction = (dedTotal > 1e-9);
-            const netMissing = (originalNet == null);
-
-            if (adv && (hasAnyDeduction || netMissing)) {
-              lines.push('PAYE net summary');
-
-              if (netMissing) {
-                lines.push('PAYE net not provided\t(advisory — final paid cannot be confirmed until net is entered)');
-              }
-
-              if (originalNet != null) lines.push(`Original PAYE net\t£${asMoney(originalNet) ?? ''}`);
-              else lines.push('Original PAYE net\t(not provided)');
-
-              if (hasLoan) lines.push(`Loan repayment\t-£${asMoney(loanTaken) ?? ''}`);
-              if (hasOverpay) lines.push(`Overpayment recovery\t-£${asMoney(overpayTaken) ?? ''}`);
-
-              if (originalNet != null && hasAnyDeduction) {
-                const computedFinal = Number(originalNet) - Number(dedTotal || 0);
-                lines.push(`Final paid\t£${asMoney(originalNet) ?? ''} − £${asMoney(dedTotal) ?? ''} = £${asMoney(computedFinal) ?? ''}`);
-              } else if (finalNetPaid != null) {
-                lines.push(`Final paid\t£${asMoney(finalNetPaid) ?? ''}`);
-              } else if (originalNet != null) {
-                lines.push(`Final paid\t£${asMoney(originalNet) ?? ''}`);
-              } else {
-                lines.push('Final paid\t(unknown — PAYE net not provided)');
-              }
-
-              lines.push('');
-            }
-          }
-
-          const timesheets = Array.isArray(job?.timesheets) ? job.timesheets : [];
-          for (const ts of timesheets) {
-            const weekEnding = ts?.week_ending_date ? fmtDateShort(ts.week_ending_date) : '';
-            renderTimesheetSection(lines, {
-              candidateDisplay,
-              clientName: (ts?.client_name != null) ? String(ts.client_name) : '',
-              weekEnding,
-              jobTitle: (ts?.job_title != null) ? String(ts.job_title) : '',
-              band: (ts?.band != null) ? String(ts.band) : '',
-              timesheetType: (ts?.timesheet_type != null) ? String(ts.timesheet_type) : 'Standard',
-              renderMode: (ts?.timesheet_render_mode != null) ? String(ts.timesheet_render_mode) : 'AGGREGATE',
-              detailed,
-              unit_rows: ts?.unit_rows,
-              additional_units_rows: ts?.additional_units_rows,
-              expenses_rows: ts?.expenses_rows,
-              other_rows: ts?.other_rows,
-              totals: ts?.totals,
-              schedule_rows: ts?.schedule_rows,
-              schedule_changes: ts?.schedule_changes
-            });
-          }
+        if (footerMsg) {
+          lines.push('');
+          lines.push(footerMsg);
         }
 
-        lines.push('This remittance was generated from frozen pay batch artifacts in CloudTMS.');
-      }
+        bodyText = lines.join('\n');
+        bodyHtml = `<pre>${escapeHtml(bodyText)}</pre>`;
+      } else {
+        const remittancePayload = buildRemittanceEmailPayload(job, {
+          payBatchId,
+          scope,
+          payDate,
+          authoritativePaymentDate,
+          bulkReference: bulkRef,
+          recipient,
+          jobKind: jobKindRaw,
+          headerMessage: headerMsg,
+          footerMessage: footerMsg,
+          detailedBreakdown: detailed,
+          effectiveTestMode,
+          payrollTesting,
+          testRecipient: testTo,
+          intendedRecipient: intendedToEmail,
+          onlyConfirmed,
+          generatedAtUtc: nowIso
+        });
 
-      if (footerMsg) {
-        lines.push('');
-        lines.push(footerMsg);
-      }
+        subject = remittancePayload.subject || subject;
+        bodyText = String(remittancePayload.body_text || '').trim();
+        bodyHtml = String(remittancePayload.body_html || '').trim();
+        renderSummaryJson = (remittancePayload.summary_json && typeof remittancePayload.summary_json === 'object' && !Array.isArray(remittancePayload.summary_json))
+          ? remittancePayload.summary_json
+          : null;
 
-      const bodyText = lines.join('\n');
-      const bodyHtml = `<pre>${escapeHtml(bodyText)}</pre>`;
+        if (!bodyText) {
+          bodyText = 'Remittance Advice\n\nThis remittance was generated from frozen pay batch artifacts in CloudTMS.';
+        }
+        if (!bodyHtml) {
+          bodyHtml = `<pre>${escapeHtml(bodyText)}</pre>`;
+        }
+      }
 
       const payeeEntityKind = isPayoutNotice
         ? 'CANDIDATE'
@@ -13870,7 +13564,8 @@ async function sendPayBatchRemittancesInternal(env, opts) {
           subject,
           reference,
           trigger_status: 'QUEUED_TO_MAIL_OUTBOX',
-          mail_outbox_id: mailId
+          mail_outbox_id: mailId,
+          summary_json: renderSummaryJson
         });
       } catch (e) {
         skipped.push({
@@ -13986,8 +13681,2002 @@ async function sendPayBatchRemittancesInternal(env, opts) {
   };
 }
 
+function buildRemittanceEmailPayload(job, context = {}) {
+  const sourceJob = (typeof normaliseRemittanceJobForRendering === 'function')
+    ? normaliseRemittanceJobForRendering((job && typeof job === 'object') ? job : {})
+    : ((job && typeof job === 'object') ? job : {});
+  const ctx = (context && typeof context === 'object') ? context : {};
+  const h = (value) => escapeHtml(String(value == null ? '' : value));
+  const asNum = (value) => {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : null;
+  };
+  const moneyNum = (value) => {
+    const n = asNum(value);
+    return n == null ? 0 : n;
+  };
+  const fmtMoney = (value) => `£${moneyNum(value).toFixed(2)}`;
+  const shortId = (value) => String(value || '').trim().slice(0, 8);
+  const normaliseDateLabel = (value) => {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+    if (typeof formatCloudTmsLondonDate === 'function') {
+      const formatted = formatCloudTmsLondonDate(raw);
+      return formatted && formatted !== 'Not recorded' ? formatted : raw;
+    }
+    const d = new Date(raw.includes('T') ? raw : `${raw}T00:00:00.000Z`);
+    if (!Number.isFinite(d.getTime())) return raw;
+    return new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London', year: 'numeric', month: 'long', day: 'numeric' }).format(d);
+  };
+  const normaliseDateTimeLabel = (value) => {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+    if (typeof formatCloudTmsLondonDateTime === 'function') {
+      const formatted = formatCloudTmsLondonDateTime(raw);
+      return formatted && formatted !== 'Not recorded' ? formatted : raw;
+    }
+    const d = new Date(raw);
+    if (!Number.isFinite(d.getTime())) return raw;
+    const date = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London', year: 'numeric', month: 'long', day: 'numeric' }).format(d);
+    const time = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London', hour: '2-digit', minute: '2-digit', hour12: false, hourCycle: 'h23' }).format(d);
+    return `${date} at ${time} hrs (UK time)`;
+  };
+  const tableHtml = (headers, rows, options = {}) => {
+    const title = options.title ? `<h3 style="margin:18px 0 8px;font-size:15px;color:#111827;">${h(options.title)}</h3>` : '';
+    const alignRight = new Set(options.alignRight || []);
+    const thead = `<thead><tr>${headers.map((header, index) => `<th style="border:1px solid #d1d5db;background:#f3f4f6;padding:8px 9px;text-align:${alignRight.has(index) ? 'right' : 'left'};font-size:12px;color:#374151;">${h(header)}</th>`).join('')}</tr></thead>`;
+    const tbody = `<tbody>${rows.map((row) => `<tr>${headers.map((_, index) => `<td style="border:1px solid #e5e7eb;padding:8px 9px;text-align:${alignRight.has(index) ? 'right' : 'left'};font-size:12px;color:#111827;vertical-align:top;">${h(row[index] ?? '')}</td>`).join('')}</tr>`).join('')}</tbody>`;
+    return `${title}<table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse;width:100%;margin:0 0 12px 0;">${thead}${tbody}</table>`;
+  };
+  const textTable = (lines, title, headers, rows) => {
+    if (title) lines.push(title);
+    lines.push(headers.join('\t'));
+    for (const row of rows) lines.push(row.map((value) => String(value == null ? '' : value)).join('\t'));
+    lines.push('');
+  };
+  const uniqueBy = (arr, keyFn) => {
+    const out = [];
+    const seen = new Set();
+    const source = Array.isArray(arr) ? arr : [];
+    source.forEach((item, index) => {
+      const keyRaw = typeof keyFn === 'function' ? keyFn(item, index) : index;
+      const key = String(keyRaw == null ? '' : keyRaw).trim() || `index:${index}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      out.push(item);
+    });
+    return out;
+  };
+  const firstNonBlank = (...values) => {
+    for (const value of values) {
+      const s = String(value == null ? '' : value).trim();
+      if (s) return s;
+    }
+    return '';
+  };
+  const collectArrays = (...values) => {
+    const out = [];
+    for (const value of values) {
+      if (Array.isArray(value)) out.push(...value);
+    }
+    return out;
+  };
+  const candidateKey = (candidate, index) => {
+    const stableKey = String(
+      candidate?.render_dedupe_key
+      || candidate?.renderDedupeKey
+      || candidate?.render_key
+      || candidate?.renderKey
+      || candidate?.stable_key
+      || candidate?.stableKey
+      || candidate?.source_key
+      || candidate?.sourceKey
+      || ''
+    ).trim();
+    if (stableKey) return ['candidate_stable', stableKey].join('|');
+
+    const payBatchCandidateId = String(candidate?.pay_batch_candidate_id || candidate?.payBatchCandidateId || candidate?.batch_candidate_id || candidate?.batchCandidateId || '').trim();
+    if (payBatchCandidateId) return ['candidate_batch', payBatchCandidateId].join('|');
+
+    const candidateId = String(candidate?.candidate_id || candidate?.candidateId || candidate?.id || '').trim();
+    const umbrellaId = String(candidate?.umbrella_id || candidate?.umbrellaId || candidate?.recipient_umbrella_id || candidate?.recipientUmbrellaId || '').trim();
+    const recipientKind = String(candidate?.recipient_kind || candidate?.recipientKind || candidate?.job_kind || candidate?.jobKind || '').trim().toUpperCase();
+    if (candidateId) return ['candidate', candidateId, umbrellaId || 'none', recipientKind || 'default'].join('|');
+
+    return ['candidate_index', String(index)].join('|');
+  };
+  const professionalLineTypeLabel = (value) => {
+    const type = String(value || '').trim().toUpperCase();
+    const map = {
+      MANUAL_DEBT_RECOVERY: 'Manual debt recovery',
+      PAYMENT_ADVANCE_REPAYMENT: 'Payment advance repayment',
+      OVERPAYMENT_RECOVERY: 'Overpayment recovery',
+      LOAN_REPAYMENT: 'Loan repayment',
+      ADJUSTMENT_DELTA: 'Manual adjustment',
+      EXPENSE_DELTA: 'Expense',
+      MILEAGE_DELTA: 'Mileage',
+      LOAN_PAYOUT: 'Loan payout',
+      MANUAL_CREDIT_PAYOUT: 'Manual credit payout',
+      MANUAL_CREDIT_ADJUSTMENT: 'Manual credit adjustment',
+      MANUAL_DEBT_ADJUSTMENT: 'Manual debt adjustment',
+      SEGMENT_DELTA: 'Timesheet pay'
+    };
+    return map[type] || '';
+  };
+  const preferredLineLabel = (line) => {
+    const l = line && typeof line === 'object' ? line : {};
+    return firstNonBlank(
+      l.line_label,
+      l.lineLabel,
+      l.friendly_line_label,
+      l.friendlyLineLabel,
+      l.item_type_label,
+      l.itemTypeLabel,
+      l.label,
+      l.description,
+      l.adjustment_comment,
+      l.adjustmentComment,
+      professionalLineTypeLabel(l.item_type || l.itemType || l.internal_item_type || l.internalItemType || l.line_kind || l.lineKind),
+      l.item_type,
+      l.internal_item_type,
+      l.kind,
+      'Deduction / recovery'
+    );
+  };
+  const timesheetKey = (candidate, timesheet, index) => {
+    const candidateId = String(candidate?.candidate_id || candidate?.id || '').trim();
+    const timesheetId = String(timesheet?.timesheet_id || timesheet?.timesheetId || timesheet?.ts_id || timesheet?.tsId || timesheet?.id || '').trim();
+    const weekEnding = String(timesheet?.week_ending_date || timesheet?.weekEndingDate || timesheet?.week_ending || timesheet?.weekEnding || '').trim();
+    const clientId = String(timesheet?.client_id || timesheet?.clientId || '').trim();
+    const stableKey = String(
+      timesheet?.render_dedupe_key
+      || timesheet?.renderDedupeKey
+      || timesheet?.render_key
+      || timesheet?.renderKey
+      || timesheet?.stable_key
+      || timesheet?.stableKey
+      || timesheet?.timesheet_stable_key
+      || timesheet?.timesheetStableKey
+      || timesheet?.section_key
+      || timesheet?.sectionKey
+      || timesheet?.source_key
+      || timesheet?.sourceKey
+      || ''
+    ).trim();
+
+    if (timesheetId) return ['tsid', candidateId || 'unknown', timesheetId, weekEnding || 'unknown', clientId || 'unknown'].join('|');
+    if (stableKey) return ['tsstable', candidateId || 'unknown', stableKey, weekEnding || 'unknown', clientId || 'unknown'].join('|');
+    return ['tsindex', candidateId || 'unknown', String(index)].join('|');
+  };
+
+  const lineKey = (line, index) => {
+    const itemId = String(line?.pay_batch_item_id || line?.payBatchItemId || line?.item_id || line?.itemId || line?.id || '').trim();
+    const breakdownId = String(line?.pay_batch_item_breakdown_id || line?.payBatchItemBreakdownId || line?.breakdown_id || line?.breakdownId || '').trim();
+    const kind = String(line?.item_type || line?.itemType || line?.internal_item_type || line?.internalItemType || line?.line_kind || line?.lineKind || line?.kind || '').trim().toUpperCase();
+    const bucketOrUnit = String(line?.bucket_code || line?.bucketCode || line?.unit_name || line?.unitName || line?.unit || line?.label || '').trim();
+    const rate = String(line?.rate ?? line?.unit_rate ?? line?.unitRate ?? '').trim();
+    const amountExVat = String(line?.amount_ex_vat ?? line?.amountExVat ?? line?.total_ex_vat ?? line?.totalExVat ?? '').trim();
+    const vat = String(line?.vat ?? line?.amount_vat ?? line?.amountVat ?? line?.total_vat ?? line?.totalVat ?? '').trim();
+    const amountIncVat = String(line?.amount_inc_vat ?? line?.amountIncVat ?? line?.total_inc_vat ?? line?.totalIncVat ?? line?.amount ?? line?.total ?? '').trim();
+    const routing = String(line?.routing_kind || line?.routingKind || line?.route || line?.payee || line?.destination_label || line?.destinationLabel || '').trim();
+    const sourceRef = String(line?.source_ref || line?.sourceRef || '').trim();
+    const financeCaseId = String(line?.finance_case_id || line?.financeCaseId || '').trim();
+    const stableKey = String(
+      line?.render_dedupe_key
+      || line?.renderDedupeKey
+      || line?.render_key
+      || line?.renderKey
+      || line?.stable_key
+      || line?.stableKey
+      || line?.source_key
+      || line?.sourceKey
+      || ''
+    ).trim();
+
+    if (itemId || breakdownId) return ['lineid', itemId || 'none', breakdownId || 'none', kind || 'unknown', amountExVat || '0.00', amountIncVat || '0.00'].join('|');
+    if (stableKey) return ['linestable', stableKey, kind || 'unknown', amountExVat || '0.00', amountIncVat || '0.00'].join('|');
+    if (sourceRef || financeCaseId) return ['linesource', sourceRef || 'none', financeCaseId || 'none', kind || 'unknown', amountExVat || '0.00', amountIncVat || '0.00'].join('|');
+    if (kind || bucketOrUnit || rate || amountExVat || vat || amountIncVat || routing) {
+      return ['linefallback', kind, bucketOrUnit, rate, amountExVat, vat, amountIncVat, routing, index].join('|');
+    }
+    return ['lineindex', String(index)].join('|');
+  };
+  const normaliseLines = (lines) => uniqueBy(Array.isArray(lines) ? lines : [], lineKey);
+  const makeCandidate = (candidateLike, rootTimesheets = null) => {
+    const candidate = (candidateLike && typeof candidateLike === 'object') ? candidateLike : {};
+    const recipient = (sourceJob.recipient && typeof sourceJob.recipient === 'object') ? sourceJob.recipient : {};
+    const candidateId = String(candidate.candidate_id || recipient.candidate_id || '').trim();
+    const displayName = String(candidate.display_name || recipient.display_name || '').trim();
+    const tmsRef = String(candidate.tms_ref || recipient.tms_ref || '').trim();
+    const timesheetsRaw = Array.isArray(rootTimesheets)
+      ? rootTimesheets
+      : collectArrays(candidate.timesheets, candidate.timesheet_sections, candidate.timesheetSections, candidate.timesheet_summaries, candidate.timesheetSummaries);
+    const timesheets = uniqueBy(timesheetsRaw, (timesheet, index) => timesheetKey({ candidate_id: candidateId }, timesheet, index));
+    const frozenTotals = (candidate.frozen_totals && typeof candidate.frozen_totals === 'object') ? candidate.frozen_totals : {};
+    const totals = (candidate.totals && typeof candidate.totals === 'object') ? candidate.totals : {};
+    const grossEx = moneyNum(frozenTotals.gross_ex_vat ?? totals.gross_ex_vat ?? totals.total_ex_vat);
+    const vat = moneyNum(frozenTotals.vat ?? frozenTotals.gross_vat ?? totals.vat ?? totals.gross_vat);
+    const grossInc = moneyNum(frozenTotals.gross_inc_vat ?? totals.gross_inc_vat ?? totals.total_inc_vat ?? (grossEx + vat));
+    const deductions = moneyNum(frozenTotals.deductions_recoveries_inc_vat ?? frozenTotals.deductions_inc_vat ?? totals.deductions_inc_vat ?? totals?.deductions_summary?.total_deductions);
+    const finalPayable = moneyNum(frozenTotals.final_payable ?? frozenTotals.net_inc_vat ?? totals.final_payable ?? totals.final_paid ?? (grossInc - deductions));
+    return {
+      ...candidate,
+      candidate_id: candidateId,
+      display_name: displayName,
+      tms_ref: tmsRef,
+      timesheets,
+      non_timesheet_lines: normaliseLines(collectArrays(
+        candidate.non_timesheet_lines,
+        candidate.nonTsLines,
+        candidate.non_timesheet_lines,
+        candidate.nonTimesheetLines,
+        candidate.deductions,
+        candidate.recoveries,
+        candidate.finance_lines,
+        candidate.financeLines,
+        candidate.adjustment_lines,
+        candidate.adjustmentLines,
+        candidate.other_non_timesheet_lines,
+        candidate.otherNonTimesheetLines
+      )),
+      frozen_totals: {
+        ...frozenTotals,
+        gross_ex_vat: grossEx,
+        vat,
+        gross_vat: vat,
+        gross_inc_vat: grossInc,
+        deductions_recoveries_inc_vat: deductions,
+        deductions_inc_vat: deductions,
+        final_payable: finalPayable,
+        net_inc_vat: finalPayable,
+        timesheet_count: Number(frozenTotals.timesheet_count ?? timesheets.length) || timesheets.length
+      }
+    };
+  };
+  const recipient = (sourceJob.recipient && typeof sourceJob.recipient === 'object') ? sourceJob.recipient : {};
+  const jobKind = String(ctx.jobKind || sourceJob.job_kind || '').trim().toUpperCase();
+  const isUmbrellaJob = jobKind === 'UMBRELLA_REMITTANCE' || String(recipient.entity_kind || '').trim().toUpperCase() === 'UMBRELLA';
+  const isUmbrellaCopyJob = jobKind === 'CANDIDATE_UMBRELLA_COPY_REMITTANCE';
+  const payBatchId = String(ctx.payBatchId || sourceJob.pay_batch_id || '').trim();
+  const payDate = String(ctx.payDate || sourceJob.pay_date || sourceJob.authoritative_payment_date || '').trim();
+  const payDateLabel = normaliseDateLabel(payDate) || payDate || 'Pay run';
+  const generatedAtLabel = normaliseDateTimeLabel(ctx.generatedAtUtc || ctx.generated_at_utc || sourceJob.generated_at_utc || sourceJob.generatedAtUtc || sourceJob.created_at_utc);
+  const authorisedAtLabel = normaliseDateTimeLabel(ctx.authorisedAtUtc || ctx.authorised_at_utc || sourceJob.authorised_at_utc || sourceJob.authorized_at_utc || sourceJob.authorisedAtUtc);
+  const confirmedAtLabel = normaliseDateTimeLabel(ctx.confirmedAtUtc || ctx.confirmed_at_utc || sourceJob.confirmed_at_utc || sourceJob.payment_confirmed_at_utc || sourceJob.confirmedAtUtc);
+  const bulkReference = String(ctx.bulkReference || sourceJob.bulk_reference || '').trim();
+  const scope = String(ctx.scope || sourceJob.pay_channel_scope || sourceJob.scope || 'ALL').trim().toUpperCase();
+  const recipientName = isUmbrellaJob
+    ? String(recipient.name || sourceJob.umbrella_name || 'Umbrella').trim()
+    : String(recipient.display_name || sourceJob.display_name || 'Candidate').trim();
+  const subjectBase = isUmbrellaJob
+    ? `Remittance Advice – ${recipientName || 'Umbrella'} – Pay batch ${shortId(payBatchId)} – ${payDateLabel}`
+    : isUmbrellaCopyJob
+      ? `Remittance Advice Copy – ${recipientName || 'Candidate'} – Pay batch ${shortId(payBatchId)} – ${payDateLabel}`
+      : `Remittance Advice – ${recipientName || 'Candidate'} – Pay batch ${shortId(payBatchId)} – ${payDateLabel}`;
+  const subject = ctx.effectiveTestMode === true && !/^\[TEST MODE\]/i.test(subjectBase) ? `[TEST MODE] ${subjectBase}` : subjectBase;
+  const candidates = isUmbrellaJob
+    ? uniqueBy((Array.isArray(sourceJob.candidates) ? sourceJob.candidates : []).map((candidate) => makeCandidate(candidate)), candidateKey)
+    : [makeCandidate({
+        candidate_id: recipient.candidate_id,
+        display_name: recipient.display_name,
+        tms_ref: recipient.tms_ref,
+        timesheets: Array.isArray(sourceJob.timesheets) ? sourceJob.timesheets : [],
+        totals: sourceJob.totals,
+        frozen_totals: sourceJob.frozen_totals,
+        non_timesheet_lines: collectArrays(
+          sourceJob.non_timesheet_lines,
+          sourceJob.nonTsLines,
+          sourceJob.non_timesheet_lines,
+          sourceJob.nonTimesheetLines,
+          sourceJob.deductions,
+          sourceJob.recoveries,
+          sourceJob.finance_lines,
+          sourceJob.financeLines,
+          sourceJob.adjustment_lines,
+          sourceJob.adjustmentLines,
+          sourceJob.other_non_timesheet_lines,
+          sourceJob.otherNonTimesheetLines
+        )
+      })];
+  const summary = (sourceJob.summary && typeof sourceJob.summary === 'object') ? sourceJob.summary : {};
+  const computedSummary = candidates.reduce((acc, candidate) => {
+    const ft = candidate.frozen_totals || {};
+    acc.candidate_count += 1;
+    acc.timesheet_count += Array.isArray(candidate.timesheets) ? candidate.timesheets.length : 0;
+    acc.gross_ex_vat += moneyNum(ft.gross_ex_vat);
+    acc.vat += moneyNum(ft.vat ?? ft.gross_vat);
+    acc.gross_inc_vat += moneyNum(ft.gross_inc_vat);
+    acc.deductions += moneyNum(ft.deductions_recoveries_inc_vat ?? ft.deductions_inc_vat);
+    acc.final_payable += moneyNum(ft.final_payable ?? ft.net_inc_vat);
+    return acc;
+  }, { candidate_count: 0, timesheet_count: 0, gross_ex_vat: 0, vat: 0, gross_inc_vat: 0, deductions: 0, final_payable: 0 });
+  const grandTotals = {
+    candidate_count: Number(summary.candidate_count ?? computedSummary.candidate_count) || computedSummary.candidate_count,
+    timesheet_count: Number(summary.timesheet_count ?? computedSummary.timesheet_count) || computedSummary.timesheet_count,
+    gross_ex_vat: moneyNum(summary.gross_ex_vat ?? computedSummary.gross_ex_vat),
+    vat: moneyNum(summary.vat ?? summary.gross_vat ?? computedSummary.vat),
+    gross_inc_vat: moneyNum(summary.gross_inc_vat ?? computedSummary.gross_inc_vat),
+    deductions: moneyNum(summary.deductions_recoveries_inc_vat ?? summary.deductions_inc_vat ?? computedSummary.deductions),
+    final_payable: moneyNum(summary.final_payable ?? summary.net_inc_vat ?? summary.total_amount ?? computedSummary.final_payable)
+  };
+  const textLines = [];
+  if (ctx.headerMessage) {
+    textLines.push(String(ctx.headerMessage));
+    textLines.push('');
+  }
+  if (ctx.effectiveTestMode === true) {
+    if (ctx.payrollTesting === true) {
+      textLines.push('PAYROLL TEST MODE — communications routed to test recipient');
+      if (ctx.testRecipient) textLines.push(`Test recipient: ${ctx.testRecipient}`);
+      if (ctx.intendedRecipient) textLines.push(`Intended recipient: ${ctx.intendedRecipient}`);
+    } else {
+      textLines.push('SIMULATED / TEST MODE — communication generated without live dispatch');
+    }
+    textLines.push('');
+  }
+  textLines.push('Remittance Advice');
+  if (bulkReference) textLines.push(`Bank reference: ${bulkReference}`);
+  if (payDateLabel) textLines.push(`Pay date: ${payDateLabel}`);
+  if (generatedAtLabel) textLines.push(`Generated at: ${generatedAtLabel}`);
+  if (authorisedAtLabel) textLines.push(`Authorised at: ${authorisedAtLabel}`);
+  if (confirmedAtLabel) textLines.push(`Payment confirmed at: ${confirmedAtLabel}`);
+  textLines.push(`Pay batch: ${payBatchId}`);
+  textLines.push(`Scope: ${scope}`);
+  if (isUmbrellaJob) textLines.push(`Umbrella: ${recipientName}`);
+  textLines.push('');
+  const generatedTimingText = ctx.onlyConfirmed === true
+    ? 'This remittance advice was generated after payment confirmation.'
+    : 'This remittance advice was generated when the batch was authorised for payment.';
+  textLines.push(generatedTimingText);
+  textLines.push('');
+  const candidateSummaryRows = candidates.map((candidate) => {
+    const ft = candidate.frozen_totals || {};
+    return [
+      String(candidate.display_name || '(unknown)'),
+      String(candidate.tms_ref || ''),
+      String((Array.isArray(candidate.timesheets) ? candidate.timesheets.length : 0)),
+      fmtMoney(ft.gross_ex_vat),
+      fmtMoney(ft.vat ?? ft.gross_vat),
+      fmtMoney(ft.gross_inc_vat),
+      fmtMoney(ft.deductions_recoveries_inc_vat ?? ft.deductions_inc_vat),
+      fmtMoney(ft.final_payable ?? ft.net_inc_vat)
+    ];
+  });
+  textTable(textLines, 'Candidate summary', ['Candidate', 'Works No.', 'Timesheets', 'Gross excl VAT', 'VAT', 'Gross incl VAT', 'Deductions', 'Final payable'], candidateSummaryRows);
+  let html = `<div style="font-family:Arial,Helvetica,sans-serif;color:#111827;font-size:14px;line-height:1.45;">`;
+  if (ctx.headerMessage) html += `<p style="margin:0 0 14px;">${h(ctx.headerMessage)}</p>`;
+  if (ctx.effectiveTestMode === true) {
+    html += `<div style="border:1px solid #f59e0b;background:#fffbeb;color:#92400e;padding:10px 12px;border-radius:8px;margin:0 0 14px;"><strong>PAYROLL TEST MODE</strong>${ctx.testRecipient ? `<br>Test recipient: ${h(ctx.testRecipient)}` : ''}${ctx.intendedRecipient ? `<br>Intended recipient: ${h(ctx.intendedRecipient)}` : ''}</div>`;
+  }
+  html += `<h1 style="font-size:22px;margin:0 0 10px;color:#111827;">Remittance Advice</h1>`;
+  html += `<div style="border:1px solid #bfdbfe;background:#eff6ff;color:#1e3a8a;padding:10px 12px;border-radius:8px;margin:0 0 14px;">${h(generatedTimingText)}</div>`;
+  html += tableHtml(['Field', 'Value'], [
+    ...(bulkReference ? [['Bank reference', bulkReference]] : []),
+    ['Pay date', payDateLabel],
+    ...(generatedAtLabel ? [['Generated at', generatedAtLabel]] : []),
+    ...(authorisedAtLabel ? [['Authorised at', authorisedAtLabel]] : []),
+    ...(confirmedAtLabel ? [['Payment confirmed at', confirmedAtLabel]] : []),
+    ['Pay batch', payBatchId],
+    ['Scope', scope],
+    ...(isUmbrellaJob ? [['Umbrella', recipientName]] : [['Recipient', recipientName]])
+  ], { title: 'Batch summary' });
+  html += tableHtml(['Candidate', 'Works No.', 'Timesheets', 'Gross excl VAT', 'VAT', 'Gross incl VAT', 'Deductions', 'Final payable'], candidateSummaryRows, { title: 'Candidate summary', alignRight: [2, 3, 4, 5, 6, 7] });
+  for (const candidate of candidates) {
+    const ft = candidate.frozen_totals || {};
+    const displayName = [candidate.display_name, candidate.tms_ref ? `(${candidate.tms_ref})` : ''].filter(Boolean).join(' ') || '(unknown)';
+    textLines.push(`${displayName}`);
+    textLines.push('');
+    html += `<h2 style="font-size:18px;margin:22px 0 10px;color:#111827;">${h(displayName)}</h2>`;
+    const timesheetSummaryRows = (Array.isArray(candidate.timesheets) ? candidate.timesheets : []).map((timesheet) => {
+      const totals = (timesheet.totals && typeof timesheet.totals === 'object') ? timesheet.totals : {};
+      const frozenTotals = (timesheet.frozen_totals && typeof timesheet.frozen_totals === 'object') ? timesheet.frozen_totals : {};
+      return [
+        normaliseDateLabel(timesheet.week_ending_date || timesheet.weekEndingDate || timesheet.week_ending),
+        String(timesheet.client_name || ''),
+        String(timesheet.job_title || ''),
+        String(timesheet.timesheet_type || 'Standard'),
+        fmtMoney(frozenTotals.gross_ex_vat ?? totals.gross_ex_vat ?? totals.total_ex_vat),
+        fmtMoney(frozenTotals.vat ?? frozenTotals.gross_vat ?? totals.gross_vat ?? totals.vat),
+        fmtMoney(frozenTotals.gross_inc_vat ?? totals.gross_inc_vat ?? totals.total_inc_vat)
+      ];
+    });
+    if (timesheetSummaryRows.length) {
+      textTable(textLines, 'Timesheet summary', ['Week ending', 'Client', 'Job title', 'Timesheet type', 'Gross excl VAT', 'VAT', 'Gross incl VAT'], timesheetSummaryRows);
+      html += tableHtml(['Week ending', 'Client', 'Job title', 'Timesheet type', 'Gross excl VAT', 'VAT', 'Gross incl VAT'], timesheetSummaryRows, { title: 'Timesheet summary', alignRight: [4, 5, 6] });
+    }
+    for (const timesheet of (Array.isArray(candidate.timesheets) ? candidate.timesheets : [])) {
+      const section = renderTimesheetSection({
+        candidateDisplay: displayName,
+        clientName: timesheet?.client_name != null ? String(timesheet.client_name) : '',
+        weekEnding: timesheet?.week_ending_date ?? timesheet?.weekEndingDate ?? timesheet?.week_ending ?? '',
+        jobTitle: timesheet?.job_title != null ? String(timesheet.job_title) : '',
+        band: timesheet?.band != null ? String(timesheet.band) : '',
+        referenceNumber: timesheet?.reference_number != null ? String(timesheet.reference_number) : '',
+        timesheetType: timesheet?.timesheet_type != null ? String(timesheet.timesheet_type) : 'Standard',
+        renderMode: timesheet?.timesheet_render_mode != null ? String(timesheet.timesheet_render_mode) : 'AGGREGATE',
+        detailed: sourceJob.detailed_breakdown === true || ctx.detailedBreakdown === true,
+        timesheetId: timesheet?.timesheet_id ?? timesheet?.timesheetId ?? timesheet?.id ?? '',
+        candidateId: candidate.candidate_id || '',
+        unit_rows: timesheet?.unit_rows || timesheet?.unitRows,
+        additional_units_rows: timesheet?.additional_units_rows || timesheet?.additionalUnitsRows,
+        expenses_rows: timesheet?.expenses_rows || timesheet?.expensesRows,
+        other_rows: timesheet?.other_rows || timesheet?.otherRows,
+        totals: timesheet?.totals,
+        schedule_rows: timesheet?.schedule_rows,
+        schedule_changes: timesheet?.schedule_changes
+      });
+      if (section.body_text) textLines.push(section.body_text);
+      if (section.body_html) html += section.body_html;
+    }
+    const nonTimesheetLines = normaliseLines(collectArrays(
+      candidate.non_timesheet_lines,
+      candidate.nonTsLines,
+      candidate.non_timesheet_lines,
+      candidate.nonTimesheetLines,
+      candidate.deductions,
+      candidate.recoveries,
+      candidate.finance_lines,
+      candidate.financeLines,
+      candidate.adjustment_lines,
+      candidate.adjustmentLines,
+      candidate.other_non_timesheet_lines,
+      candidate.otherNonTimesheetLines
+    ));
+    if (nonTimesheetLines.length) {
+      const deductionRows = nonTimesheetLines.map((line) => [
+        preferredLineLabel(line),
+        fmtMoney(line.amount_ex_vat ?? line.total_ex_vat ?? line.amount ?? line.total),
+        fmtMoney(line.vat ?? line.amount_vat ?? line.total_vat),
+        fmtMoney(line.amount_inc_vat ?? line.total_inc_vat ?? line.amount ?? line.total),
+        String(line.routing_kind || line.route || line.payee || 'umbrella company')
+      ]);
+      textTable(textLines, 'Deductions / recoveries', ['Item', 'Excl VAT', 'VAT', 'Incl VAT', 'Routing'], deductionRows);
+      html += tableHtml(['Item', 'Excl VAT', 'VAT', 'Incl VAT', 'Routing'], deductionRows, { title: 'Deductions / recoveries', alignRight: [1, 2, 3] });
+    }
+    const candidateTotalRows = [
+      ['Gross Pay (excl VAT)', fmtMoney(ft.gross_ex_vat)],
+      ['VAT', fmtMoney(ft.vat ?? ft.gross_vat)],
+      ['Gross Pay (incl VAT)', fmtMoney(ft.gross_inc_vat)],
+      ['Deductions / recoveries', fmtMoney(ft.deductions_recoveries_inc_vat ?? ft.deductions_inc_vat)],
+      ['Final payable', fmtMoney(ft.final_payable ?? ft.net_inc_vat)]
+    ];
+    textTable(textLines, 'Candidate total', ['Total', 'Amount'], candidateTotalRows);
+    html += tableHtml(['Total', 'Amount'], candidateTotalRows, { title: 'Candidate total', alignRight: [1] });
+  }
+  const grandRows = [[
+    String(grandTotals.candidate_count),
+    String(grandTotals.timesheet_count),
+    fmtMoney(grandTotals.gross_ex_vat),
+    fmtMoney(grandTotals.vat),
+    fmtMoney(grandTotals.gross_inc_vat),
+    fmtMoney(grandTotals.deductions),
+    fmtMoney(grandTotals.final_payable)
+  ]];
+  textTable(textLines, 'Grand remittance total', ['Candidates', 'Timesheets', 'Gross excl VAT', 'VAT', 'Gross incl VAT', 'Deductions', 'Final payable'], grandRows);
+  html += tableHtml(['Candidates', 'Timesheets', 'Gross excl VAT', 'VAT', 'Gross incl VAT', 'Deductions', 'Final payable'], grandRows, { title: 'Grand remittance total', alignRight: [0, 1, 2, 3, 4, 5, 6] });
+  textLines.push('This remittance was generated from frozen pay batch artifacts in CloudTMS.');
+  html += `<p style="margin:18px 0 0;font-size:12px;color:#6b7280;">This remittance was generated from frozen pay batch artifacts in CloudTMS.</p>`;
+  if (ctx.footerMessage) {
+    textLines.push('');
+    textLines.push(String(ctx.footerMessage));
+    html += `<p style="margin:14px 0 0;">${h(ctx.footerMessage)}</p>`;
+  }
+  html += '</div>';
+  return {
+    subject,
+    body_text: textLines.join('\n'),
+    body_html: html,
+    summary_json: {
+      pay_batch_id: payBatchId,
+      job_kind: jobKind,
+      scope,
+      pay_date: payDate || null,
+      bulk_reference: bulkReference || null,
+      generated_at_label: generatedAtLabel || null,
+      authorised_at_label: authorisedAtLabel || null,
+      confirmed_at_label: confirmedAtLabel || null,
+      recipient: {
+        entity_kind: String(recipient.entity_kind || (isUmbrellaJob ? 'UMBRELLA' : 'CANDIDATE')).trim() || null,
+        candidate_id: recipient.candidate_id || null,
+        umbrella_id: recipient.umbrella_id || null,
+        name: recipientName || null
+      },
+      candidate_count: grandTotals.candidate_count,
+      timesheet_count: grandTotals.timesheet_count,
+      gross_ex_vat: grandTotals.gross_ex_vat,
+      vat: grandTotals.vat,
+      gross_inc_vat: grandTotals.gross_inc_vat,
+      deductions: grandTotals.deductions,
+      final_payable: grandTotals.final_payable
+    }
+  };
+}
 
 
+
+async function handleBankingPayBatchRetryBlockedFunds(env, req, user, payBatchId) {
+  const id = String(payBatchId || '').trim();
+  if (!id) return withCORS(env, req, badRequest('pay_batch_id is required'));
+
+  const actorUserId = String(user && user.id ? user.id : '').trim();
+  if (!actorUserId) return withCORS(env, req, unauthorized('Unauthorized'));
+
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+  if (body !== null && (typeof body !== 'object' || Array.isArray(body))) return withCORS(env, req, badRequest('Invalid JSON'));
+  body = body || {};
+
+  const scopeRaw = String(body.pay_channel_scope || body.scope || 'ALL').trim().toUpperCase();
+  const payChannelScope = (scopeRaw === 'PAYE' || scopeRaw === 'UMBRELLA' || scopeRaw === 'ALL') ? scopeRaw : 'ALL';
+  const reauthToken = String(body.reauth_token || body.reauthToken || '').trim();
+  const requestedFundingAccountRef = String(body.funding_account_ref ?? body.fundingAccountRef ?? '').trim() || null;
+
+  const unwrapRpc = (rpcRes, key) => {
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') payload = rpcRes[0];
+      if (payload && typeof payload === 'object' && key && Object.prototype.hasOwnProperty.call(payload, key)) payload = payload[key];
+    } catch {}
+    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+  };
+
+  const toBool = (value, fallback = false) => {
+    if (typeof value === 'boolean') return value;
+    if (value === null || value === undefined) return !!fallback;
+    const s = String(value).trim().toLowerCase();
+    if (['true', '1', 'yes', 'y', 'on'].includes(s)) return true;
+    if (['false', '0', 'no', 'n', 'off'].includes(s)) return false;
+    return !!fallback;
+  };
+
+  const jsonResponse = (status, payload) => {
+    const headers = new Headers();
+    headers.set('Content-Type', 'application/json; charset=utf-8');
+    let bodyOut = '';
+    try { bodyOut = JSON.stringify(payload && typeof payload === 'object' ? payload : { error: 'RPC_ERROR' }); }
+    catch { bodyOut = JSON.stringify({ error: 'RPC_ERROR', message: 'Failed to serialize response payload' }); }
+    return new Response(bodyOut, { status, headers });
+  };
+
+  const safeParseJsonObject = (value) => {
+    if (value && typeof value === 'object' && !Array.isArray(value)) return value;
+    if (typeof value !== 'string') return null;
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    try {
+      const parsed = JSON.parse(trimmed);
+      return (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) ? parsed : null;
+    } catch {
+      return null;
+    }
+  };
+
+  const extractDbRaisedJson = (e) => {
+    const candidates = [e?.details, e?.detail, e?.message, e?.error, String(e || '')];
+    for (const c of candidates) {
+      const text = String(c || '').trim();
+      if (!text) continue;
+      const direct = safeParseJsonObject(text);
+      if (direct) return direct;
+      const start = text.indexOf('{');
+      const end = text.lastIndexOf('}');
+      if (start >= 0 && end > start) {
+        const embedded = safeParseJsonObject(text.slice(start, end + 1));
+        if (embedded) return embedded;
+      }
+    }
+    return null;
+  };
+
+  const normaliseRpcError = (e, fallbackCode) => {
+    const payload = extractDbRaisedJson(e);
+    if (payload && typeof payload === 'object') {
+      const code = String(payload.code || payload.error_code || fallbackCode || 'RPC_ERROR').trim().toUpperCase();
+      const message = String(payload.message || payload.error || code || 'Request failed.');
+      const status = code === 'BATCH_STALE' ? 409 : 400;
+      return {
+        status,
+        body: {
+          ...payload,
+          error: payload.error || message,
+          message,
+          error_code: code
+        }
+      };
+    }
+
+    const msg = String(e?.message || e || fallbackCode || 'Request failed.');
+    return {
+      status: 400,
+      body: {
+        error: msg,
+        message: msg,
+        error_code: String(fallbackCode || 'RPC_ERROR').toUpperCase()
+      }
+    };
+  };
+
+  const loadBatch = async () => {
+    const batch0 = await sbRpc(env, 'pay_batch_get', {
+      p_pay_batch_id: id,
+      p_actor_user_id: actorUserId
+    });
+    return unwrapRpc(batch0, 'pay_batch_get');
+  };
+
+  const loadActiveAlertSummary = async () => {
+    const active0 = await sbRpc(env, 'banking_alerts_active_for_user', {
+      p_actor_user_id: actorUserId,
+      p_entity_kind: null,
+      p_entity_id: null,
+      p_include_acknowledged: false,
+      p_limit: 500
+    });
+    return unwrapRpc(active0, 'banking_alerts_active_for_user');
+  };
+
+  const buildAlertSummaryFields = (summary) => {
+    const src = (summary && typeof summary === 'object' && !Array.isArray(summary)) ? summary : {};
+    return {
+      banking_alerts: Array.isArray(src.alerts) ? src.alerts : [],
+      banking_unacknowledged_alert_count: Number.isFinite(Number(src.unacknowledged_count)) ? Math.max(0, Math.trunc(Number(src.unacknowledged_count))) : 0,
+      banking_highest_alert_label: src.highest_label || null,
+      banking_highest_alert_severity: src.highest_severity || null
+    };
+  };
+
+  const safeLoadActiveAlertSummary = async () => {
+    try { return await loadActiveAlertSummary(); }
+    catch { return { alerts: [], unacknowledged_count: 0, highest_label: null, highest_severity: null }; }
+  };
+
+  const extractBatchObject = (payload) => {
+    const p = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+    return (p.batch && typeof p.batch === 'object' && !Array.isArray(p.batch)) ? p.batch : p;
+  };
+
+  const normaliseProvider = (rawProvider) => {
+    const raw = String(rawProvider || '').trim().toUpperCase();
+    if (!raw) return { provider: null, valid: false, reason: 'RAIL_PROVIDER_REQUIRED' };
+    const provider = raw === 'REV' ? 'REVOLUT' : raw;
+    const knownProviders = new Set(['CSV', 'REVOLUT']);
+    try {
+      const listed = getRailAdapter('__LIST__');
+      if (Array.isArray(listed)) {
+        for (const p of listed) {
+          const v = String(p || '').trim().toUpperCase();
+          if (v) knownProviders.add(v);
+        }
+      }
+    } catch {}
+    if (!knownProviders.has(provider)) return { provider, valid: false, reason: 'UNKNOWN_RAIL_PROVIDER' };
+    return { provider, valid: true, reason: null };
+  };
+
+  const reauthCheck = await verifyPaymentScheduleReauth(env, user, reauthToken);
+  if (!reauthCheck.ok) return withCORS(env, req, reauthCheck.response);
+
+  try {
+    const enc = encodeURIComponent;
+    const { rows: urows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/tms_users` +
+      `?id=eq.${enc(actorUserId)}` +
+      `&select=id,is_active,email,display_name,payment_authoriser,payment_golden_key` +
+      `&limit=1`
+    );
+    const u0 = (Array.isArray(urows) && urows[0] && typeof urows[0] === 'object') ? urows[0] : null;
+    if (!u0 || u0.is_active !== true) return withCORS(env, req, unauthorized('Unauthorized'));
+    if (u0.payment_authoriser !== true) return withCORS(env, req, badRequest('PAYMENT_AUTHORISER_REQUIRED'));
+  } catch (e) {
+    return withCORS(env, req, serverError(String(e?.message || e || 'Failed to validate payment authoriser')));
+  }
+
+  try {
+    const beforeGet = await loadBatch();
+    const beforeBatch = extractBatchObject(beforeGet);
+    const status = String(beforeBatch.status || beforeGet.status || '').trim().toUpperCase();
+    const canRetryBlockedFunds = toBool(beforeGet.can_retry_blocked_funds ?? beforeBatch.can_retry_blocked_funds, false);
+
+    if (status !== 'BLOCKED_FUNDS') {
+      return withCORS(env, req, jsonResponse(409, {
+        ok: false,
+        error: 'Batch is not blocked funds.',
+        message: 'Batch is not blocked funds.',
+        error_code: 'BLOCKED_FUNDS_RETRY_STATUS_MISMATCH',
+        pay_batch_id: id,
+        status
+      }));
+    }
+
+    if (canRetryBlockedFunds !== true) {
+      return withCORS(env, req, jsonResponse(409, {
+        ok: false,
+        error: 'Blocked-funds retry is not safe for this batch.',
+        message: 'Blocked-funds retry is not safe for this batch.',
+        error_code: 'BLOCKED_FUNDS_RETRY_NOT_ALLOWED',
+        pay_batch_id: id,
+        can_retry_blocked_funds: false,
+        batch_get: beforeGet
+      }));
+    }
+
+    const storedFundingAccountRef = String(beforeBatch.funding_account_ref || beforeGet.funding_account_ref || beforeGet.blocked_funds_account_ref || '').trim() || null;
+    if (requestedFundingAccountRef && storedFundingAccountRef && requestedFundingAccountRef !== storedFundingAccountRef) {
+      return withCORS(env, req, badRequest('BLOCKED_FUNDS_RETRY_FUNDING_ACCOUNT_MISMATCH'));
+    }
+
+    const providerMeta = normaliseProvider(beforeBatch.rail_provider_snapshot || beforeGet.rail_provider_snapshot || beforeGet.blocked_funds_provider || null);
+    if (!providerMeta.valid) return withCORS(env, req, badRequest(providerMeta.reason || 'UNKNOWN_RAIL_PROVIDER'));
+    if (providerMeta.provider === 'CSV') return withCORS(env, req, badRequest('BLOCKED_FUNDS_RETRY_STANDARD_BANK_ONLY'));
+
+    const adapter = getRailAdapter(providerMeta.provider);
+    if (!adapter || typeof adapter !== 'object') return withCORS(env, req, badRequest('UNKNOWN_RAIL_PROVIDER'));
+    if (typeof adapter.executeDueBatches !== 'function') return withCORS(env, req, badRequest('RAIL_RETRY_EXECUTION_NOT_SUPPORTED'));
+
+    if (typeof adapter.capabilities === 'function') {
+      try {
+        const caps = await adapter.capabilities(env);
+        if (caps && typeof caps === 'object' && caps.available === false) {
+          const reason = String(caps.reason || 'RAIL_NOT_CONFIGURED').trim() || 'RAIL_NOT_CONFIGURED';
+          return withCORS(env, req, badRequest(reason));
+        }
+      } catch (e) {
+        return withCORS(env, req, badRequest(String(e?.message || e || 'RAIL_NOT_CONFIGURED')));
+      }
+    }
+
+    let executeResult = null;
+    try {
+      const execute0 = await sbRpc(env, 'pay_execute_bank', {
+        p_pay_batch_id: id,
+        p_pay_channel_scope: payChannelScope,
+        p_actor_user_id: actorUserId,
+        p_retry_blocked_funds: true
+      });
+      executeResult = unwrapRpc(execute0, 'pay_execute_bank');
+    } catch (e) {
+      const norm = normaliseRpcError(e, 'PAY_EXECUTE_BANK_FAILED');
+      return withCORS(env, req, jsonResponse(norm.status, norm.body));
+    }
+
+    let afterExecuteGet = null;
+    try {
+      afterExecuteGet = await loadBatch();
+    } catch (e) {
+      const norm = normaliseRpcError(e, 'PAY_BATCH_GET_FAILED');
+      return withCORS(env, req, jsonResponse(norm.status, norm.body));
+    }
+
+    const afterExecuteBatch = extractBatchObject(afterExecuteGet);
+
+    const executionPendingCount = (() => {
+      const n = Number(executeResult?.pending_count);
+      return Number.isFinite(n) ? Math.max(0, Math.trunc(n)) : null;
+    })();
+
+    const executionBlockedCount = (() => {
+      const n = Number(executeResult?.blocked_count);
+      return Number.isFinite(n) ? Math.max(0, Math.trunc(n)) : null;
+    })();
+
+    const transferRowsAfterExecute = Array.isArray(afterExecuteGet?.transfers) ? afterExecuteGet.transfers : [];
+    const transferDerivedPendingCount = transferRowsAfterExecute.length
+      ? transferRowsAfterExecute.filter((transferRow) => {
+          if (!transferRow || typeof transferRow !== 'object') return false;
+          const transferStatus = String(transferRow.status || '').trim().toUpperCase();
+          if (transferStatus !== 'PENDING') return false;
+          const railTxId = String(transferRow.rail_tx_id || '').trim();
+          if (railTxId) return false;
+          const amount = Number(transferRow.amount || 0);
+          const currency = String(transferRow.currency || 'GBP').trim().toUpperCase() || 'GBP';
+          return Number.isFinite(amount) && amount > 0 && currency === 'GBP';
+        }).length
+      : null;
+
+    const transferDerivedBlockedCount = transferRowsAfterExecute.length
+      ? transferRowsAfterExecute.filter((transferRow) => {
+          if (!transferRow || typeof transferRow !== 'object') return false;
+          return String(transferRow.status || '').trim().toUpperCase() === 'BLOCKED';
+        }).length
+      : null;
+
+    const pendingTransfersForSubmission = transferDerivedPendingCount !== null
+      ? transferDerivedPendingCount
+      : (executionPendingCount !== null ? executionPendingCount : 0);
+
+    const blockedTransfersAfterMaterialisation = transferDerivedBlockedCount !== null
+      ? transferDerivedBlockedCount
+      : (executionBlockedCount !== null ? executionBlockedCount : 0);
+
+    if (pendingTransfersForSubmission <= 0) {
+      const materialisationAlertSummaryFields = buildAlertSummaryFields(await safeLoadActiveAlertSummary());
+      return withCORS(env, req, jsonResponse(409, {
+        ok: false,
+        error: blockedTransfersAfterMaterialisation > 0
+          ? 'Blocked-funds retry could not submit because the frozen payout instructions produced blocked transfers.'
+          : 'Blocked-funds retry did not create any pending bank transfers to submit.',
+        message: blockedTransfersAfterMaterialisation > 0
+          ? 'Blocked-funds retry could not submit because the frozen payout instructions produced blocked transfers.'
+          : 'Blocked-funds retry did not create any pending bank transfers to submit.',
+        error_code: blockedTransfersAfterMaterialisation > 0
+          ? 'BLOCKED_FUNDS_RETRY_TRANSFER_MATERIALISATION_BLOCKED'
+          : 'BLOCKED_FUNDS_RETRY_NO_PENDING_TRANSFERS',
+        pay_batch_id: id,
+        pending_count: pendingTransfersForSubmission,
+        blocked_count: blockedTransfersAfterMaterialisation,
+        executed: executeResult,
+        batch_get: afterExecuteGet,
+        banking_alerts: materialisationAlertSummaryFields.banking_alerts,
+        banking_unacknowledged_alert_count: materialisationAlertSummaryFields.banking_unacknowledged_alert_count,
+        banking_highest_alert_label: materialisationAlertSummaryFields.banking_highest_alert_label,
+        banking_highest_alert_severity: materialisationAlertSummaryFields.banking_highest_alert_severity
+      }));
+    }
+
+    const refreshedFundingAccountRef = String(afterExecuteBatch.funding_account_ref || afterExecuteGet.funding_account_ref || storedFundingAccountRef || '').trim();
+    if (!refreshedFundingAccountRef) {
+      const fundingAccountAlertSummaryFields = buildAlertSummaryFields(await safeLoadActiveAlertSummary());
+      return withCORS(env, req, jsonResponse(409, {
+        ok: false,
+        error: 'Funding account is required before retry can submit.',
+        message: 'Funding account is required before retry can submit.',
+        error_code: 'BLOCKED_FUNDS_RETRY_FUNDING_ACCOUNT_REQUIRED',
+        pay_batch_id: id,
+        executed: executeResult,
+        batch_get: afterExecuteGet,
+        banking_alerts: fundingAccountAlertSummaryFields.banking_alerts,
+        banking_unacknowledged_alert_count: fundingAccountAlertSummaryFields.banking_unacknowledged_alert_count,
+        banking_highest_alert_label: fundingAccountAlertSummaryFields.banking_highest_alert_label,
+        banking_highest_alert_severity: fundingAccountAlertSummaryFields.banking_highest_alert_severity
+      }));
+    }
+
+    const retryRequestedAtUtc = new Date().toISOString();
+    const baseExecutionIntentJson = (afterExecuteBatch.execution_intent_json && typeof afterExecuteBatch.execution_intent_json === 'object' && !Array.isArray(afterExecuteBatch.execution_intent_json))
+      ? afterExecuteBatch.execution_intent_json
+      : {};
+    const originalBlockedFundsAlertFingerprint = String(
+      beforeGet?.banking_alert_fingerprint
+      || beforeBatch?.banking_alert_fingerprint
+      || beforeGet?.blocked_funds_payment_issue?.alert_fingerprint
+      || beforeBatch?.blocked_funds_payment_issue?.alert_fingerprint
+      || ''
+    ).trim() || null;
+    const retryExecutionIntentJson = {
+      ...baseExecutionIntentJson,
+      execution_mode: 'STANDARD_BANK',
+      pay_channel_scope: payChannelScope,
+      suppress_remittances: true,
+      suppress_remittances_confirmed: true,
+      blocked_funds_retry: true,
+      retry_requested_at_utc: retryRequestedAtUtc,
+      retry_actor_user_id: actorUserId,
+      original_blocked_funds_alert_fingerprint: originalBlockedFundsAlertFingerprint
+    };
+
+    const claimRow = {
+      pay_batch_id: id,
+      id,
+      rail_provider_snapshot: afterExecuteBatch.rail_provider_snapshot || beforeBatch.rail_provider_snapshot || providerMeta.provider,
+      rail_env_snapshot: afterExecuteBatch.rail_env_snapshot || beforeBatch.rail_env_snapshot || afterExecuteGet.blocked_funds_env || 'PROD',
+      schedule_kind: 'IMMEDIATE',
+      scheduled_at_utc: retryRequestedAtUtc,
+      funding_account_ref: refreshedFundingAccountRef,
+      execution_mode: 'STANDARD_BANK',
+      execution_intent_json: retryExecutionIntentJson,
+      suppress_remittances: true,
+      suppress_remittances_confirmed: true,
+      blocked_funds_retry: true
+    };
+
+    let retrySubmission = null;
+    try {
+      retrySubmission = await adapter.executeDueBatches(env, {
+        nowUtc: new Date().toISOString(),
+        limit: 1,
+        claimedRows: [claimRow],
+        actorUserId,
+        perBatchSubmitLimit: 500
+      });
+    } catch (e) {
+      const submissionFailureAlertSummaryFields = buildAlertSummaryFields(await safeLoadActiveAlertSummary());
+      return withCORS(env, req, jsonResponse(409, {
+        ok: false,
+        error: 'Blocked-funds retry submission failed.',
+        message: String(e?.message || e || 'Blocked-funds retry submission failed.'),
+        error_code: 'BLOCKED_FUNDS_RETRY_SUBMISSION_FAILED',
+        pay_batch_id: id,
+        executed: executeResult,
+        batch_get: afterExecuteGet,
+        banking_alerts: submissionFailureAlertSummaryFields.banking_alerts,
+        banking_unacknowledged_alert_count: submissionFailureAlertSummaryFields.banking_unacknowledged_alert_count,
+        banking_highest_alert_label: submissionFailureAlertSummaryFields.banking_highest_alert_label,
+        banking_highest_alert_severity: submissionFailureAlertSummaryFields.banking_highest_alert_severity
+      }));
+    }
+
+    let refreshedGet = null;
+    try {
+      refreshedGet = await loadBatch();
+    } catch {
+      refreshedGet = afterExecuteGet;
+    }
+
+    const refreshedBatch = extractBatchObject(refreshedGet);
+    const refreshedStatus = String(refreshedBatch.status || refreshedGet.status || '').trim().toUpperCase();
+    const blockedAgain = refreshedStatus === 'BLOCKED_FUNDS';
+    const refreshedAlertSummary = await safeLoadActiveAlertSummary();
+    const refreshedAlertSummaryFields = buildAlertSummaryFields(refreshedAlertSummary);
+
+    const retrySubmissionErrors = Array.isArray(retrySubmission?.errors) ? retrySubmission.errors : [];
+    const retrySubmissionBlockedFunds = Array.isArray(retrySubmission?.blocked_funds) ? retrySubmission.blocked_funds : [];
+    const retrySubmissionSubmitted = Array.isArray(retrySubmission?.submitted) ? retrySubmission.submitted : [];
+
+    const retrySubmissionHasBatch = (rows) => rows.some((row) => {
+      if (!row || typeof row !== 'object') return false;
+      const rowBatchId = String(row.pay_batch_id || row.id || '').trim();
+      return rowBatchId === id;
+    });
+
+    const blockedFundsRecorded = retrySubmissionHasBatch(retrySubmissionBlockedFunds);
+    const submittedEntry = retrySubmissionSubmitted.find((row) => {
+      if (!row || typeof row !== 'object') return false;
+      const rowBatchId = String(row.pay_batch_id || row.id || '').trim();
+      return rowBatchId === id;
+    }) || null;
+
+    const submittedCount = Number(submittedEntry?.submitted_count);
+    const updatesApplied = Number(submittedEntry?.updates_applied);
+    const submittedProgress = !!submittedEntry && (
+      (Number.isFinite(submittedCount) && submittedCount > 0)
+      || (Number.isFinite(updatesApplied) && updatesApplied > 0)
+      || submittedEntry.simulated === true
+    );
+
+    if (blockedAgain || blockedFundsRecorded) {
+      return withCORS(env, req, ok({
+        ok: true,
+        pay_batch_id: id,
+        status: 'BLOCKED_FUNDS',
+        retry_blocked_funds: true,
+        blocked_funds_retry_status: 'BLOCKED_FUNDS',
+        blocked_funds: true,
+        executed: executeResult,
+        retry_submission: retrySubmission,
+        batch_get: refreshedGet,
+        banking_alerts: refreshedAlertSummaryFields.banking_alerts,
+        banking_unacknowledged_alert_count: refreshedAlertSummaryFields.banking_unacknowledged_alert_count,
+        banking_highest_alert_label: refreshedAlertSummaryFields.banking_highest_alert_label,
+        banking_highest_alert_severity: refreshedAlertSummaryFields.banking_highest_alert_severity,
+        banking_alert_kind: refreshedGet?.banking_alert_kind || refreshedBatch.banking_alert_kind || null,
+        banking_alert_fingerprint: refreshedGet?.banking_alert_fingerprint || refreshedBatch.banking_alert_fingerprint || null,
+        banking_alert_requires_attention: refreshedGet?.banking_alert_requires_attention ?? refreshedBatch.banking_alert_requires_attention ?? null,
+        blocked_funds_required_gbp: refreshedGet?.blocked_funds_required_gbp ?? refreshedBatch.blocked_funds_required_gbp ?? null,
+        blocked_funds_available_gbp: refreshedGet?.blocked_funds_available_gbp ?? refreshedBatch.blocked_funds_available_gbp ?? null,
+        blocked_funds_provider: refreshedGet?.blocked_funds_provider || refreshedBatch.blocked_funds_provider || null,
+        blocked_funds_env: refreshedGet?.blocked_funds_env || refreshedBatch.blocked_funds_env || null,
+        blocked_funds_account_ref: refreshedGet?.blocked_funds_account_ref || refreshedBatch.blocked_funds_account_ref || null
+      }));
+    }
+
+    if (retrySubmissionErrors.length > 0) {
+      return withCORS(env, req, jsonResponse(409, {
+        ok: false,
+        error: 'Blocked-funds retry did not complete.',
+        message: 'Blocked-funds retry did not complete. Review the returned provider/funds-check errors before retrying again.',
+        error_code: 'BLOCKED_FUNDS_RETRY_SUBMISSION_INCOMPLETE',
+        pay_batch_id: id,
+        executed: executeResult,
+        retry_submission: retrySubmission,
+        batch_get: refreshedGet,
+        banking_alerts: refreshedAlertSummaryFields.banking_alerts,
+        banking_unacknowledged_alert_count: refreshedAlertSummaryFields.banking_unacknowledged_alert_count,
+        banking_highest_alert_label: refreshedAlertSummaryFields.banking_highest_alert_label,
+        banking_highest_alert_severity: refreshedAlertSummaryFields.banking_highest_alert_severity
+      }));
+    }
+
+    if (!submittedProgress) {
+      return withCORS(env, req, jsonResponse(409, {
+        ok: false,
+        error: 'Blocked-funds retry produced no bank submission progress.',
+        message: 'Blocked-funds retry produced no bank submission progress.',
+        error_code: 'BLOCKED_FUNDS_RETRY_NO_SUBMISSION_PROGRESS',
+        pay_batch_id: id,
+        executed: executeResult,
+        retry_submission: retrySubmission,
+        batch_get: refreshedGet,
+        banking_alerts: refreshedAlertSummaryFields.banking_alerts,
+        banking_unacknowledged_alert_count: refreshedAlertSummaryFields.banking_unacknowledged_alert_count,
+        banking_highest_alert_label: refreshedAlertSummaryFields.banking_highest_alert_label,
+        banking_highest_alert_severity: refreshedAlertSummaryFields.banking_highest_alert_severity
+      }));
+    }
+
+    return withCORS(env, req, ok({
+      ok: true,
+      pay_batch_id: id,
+      retry_blocked_funds: true,
+      blocked_funds_retry_status: 'RETRY_SUBMITTED_OR_IN_PROGRESS',
+      blocked_funds: false,
+      executed: executeResult,
+      retry_submission: retrySubmission,
+      batch_get: refreshedGet,
+      banking_alerts: refreshedAlertSummaryFields.banking_alerts,
+      banking_unacknowledged_alert_count: refreshedAlertSummaryFields.banking_unacknowledged_alert_count,
+      banking_highest_alert_label: refreshedAlertSummaryFields.banking_highest_alert_label,
+      banking_highest_alert_severity: refreshedAlertSummaryFields.banking_highest_alert_severity,
+      banking_alert_kind: refreshedGet?.banking_alert_kind || refreshedBatch.banking_alert_kind || null,
+      banking_alert_fingerprint: refreshedGet?.banking_alert_fingerprint || refreshedBatch.banking_alert_fingerprint || null,
+      banking_alert_requires_attention: refreshedGet?.banking_alert_requires_attention ?? refreshedBatch.banking_alert_requires_attention ?? null
+    }));
+  } catch (e) {
+    const norm = normaliseRpcError(e, 'BLOCKED_FUNDS_RETRY_FAILED');
+    if (norm.status >= 400 && norm.status < 500) return withCORS(env, req, jsonResponse(norm.status, norm.body));
+    return withCORS(env, req, serverError(String(e?.message || e || 'BLOCKED_FUNDS_RETRY_FAILED')));
+  }
+}
+function normaliseRemittanceJobForRendering(job) {
+  const cloneValue = (value) => {
+    if (value === null || value === undefined) return value;
+    try {
+      return JSON.parse(JSON.stringify(value));
+    } catch {
+      if (Array.isArray(value)) return value.map((entry) => cloneValue(entry));
+      if (typeof value === 'object') {
+        const out = {};
+        for (const key of Object.keys(value)) out[key] = cloneValue(value[key]);
+        return out;
+      }
+      return value;
+    }
+  };
+
+  const normaliseScalar = (value) => {
+    if (value === null || value === undefined) return '';
+    if (typeof value === 'number') return Number.isFinite(value) ? String(value) : '';
+    if (typeof value === 'boolean') return value ? 'true' : 'false';
+    const s = String(value).trim();
+    return s === 'null' || s === 'undefined' ? '' : s;
+  };
+
+  const upperScalar = (value) => normaliseScalar(value).toUpperCase();
+
+  const firstNonBlank = (...values) => {
+    for (const value of values) {
+      const s = normaliseScalar(value);
+      if (s) return s;
+    }
+    return '';
+  };
+
+  const moneyKey = (value) => {
+    const s = normaliseScalar(value);
+    if (!s) return '0.00';
+    const n = Number(s.replace(/,/g, ''));
+    if (!Number.isFinite(n)) return s;
+    return (Math.round(n * 100) / 100).toFixed(2);
+  };
+
+  const quantityKey = (value) => {
+    const s = normaliseScalar(value);
+    if (!s) return '0';
+    const n = Number(s.replace(/,/g, ''));
+    if (!Number.isFinite(n)) return s;
+    return (Math.round(n * 1000000) / 1000000).toString();
+  };
+
+  const canonicalDateKey = (value) => {
+    const s = normaliseScalar(value);
+    if (!s) return '';
+    if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+    const d = new Date(s);
+    if (Number.isFinite(d.getTime())) return d.toISOString().slice(0, 10);
+    return s;
+  };
+
+  const getCandidateId = (obj, fallbackCandidateId) => firstNonBlank(
+    obj && obj.candidate_id,
+    obj && obj.candidateId,
+    obj && obj.worker_id,
+    obj && obj.workerId,
+    obj && obj.candidate && obj.candidate.id,
+    fallbackCandidateId
+  );
+
+  const getPayBatchCandidateId = (obj) => firstNonBlank(
+    obj && obj.pay_batch_candidate_id,
+    obj && obj.payBatchCandidateId,
+    obj && obj.batch_candidate_id,
+    obj && obj.batchCandidateId
+  );
+
+  const getUmbrellaId = (obj, fallbackUmbrellaId) => firstNonBlank(
+    obj && obj.umbrella_id,
+    obj && obj.umbrellaId,
+    obj && obj.recipient_umbrella_id,
+    obj && obj.recipientUmbrellaId,
+    fallbackUmbrellaId
+  );
+
+  const getTimesheetId = (obj, fallbackTimesheetId) => firstNonBlank(
+    obj && obj.timesheet_id,
+    obj && obj.timesheetId,
+    obj && obj.ts_id,
+    obj && obj.tsId,
+    obj && obj.timesheet && obj.timesheet.id,
+    fallbackTimesheetId
+  );
+
+  const getClientId = (obj, fallbackClientId) => firstNonBlank(
+    obj && obj.client_id,
+    obj && obj.clientId,
+    obj && obj.client && obj.client.id,
+    fallbackClientId
+  );
+
+  const getWeekEnding = (obj, fallbackWeekEnding) => canonicalDateKey(firstNonBlank(
+    obj && obj.week_ending_date,
+    obj && obj.weekEndingDate,
+    obj && obj.week_ending,
+    obj && obj.weekEnding,
+    obj && obj.week_end,
+    obj && obj.weekEnd,
+    fallbackWeekEnding
+  ));
+
+  const stableFallbackKey = (obj) => firstNonBlank(
+    obj && obj.render_key,
+    obj && obj.renderKey,
+    obj && obj.render_dedupe_key,
+    obj && obj.renderDedupeKey,
+    obj && obj.stable_key,
+    obj && obj.stableKey,
+    obj && obj.section_key,
+    obj && obj.sectionKey,
+    obj && obj.timesheet_stable_key,
+    obj && obj.timesheetStableKey,
+    obj && obj.segment_stable_key,
+    obj && obj.segmentStableKey,
+    obj && obj.source_key,
+    obj && obj.sourceKey,
+    obj && obj.pay_batch_item_id,
+    obj && obj.payBatchItemId,
+    obj && obj.source_ref,
+    obj && obj.sourceRef
+  );
+
+  const buildCandidateKey = (candidate, index) => {
+    const payBatchCandidateId = getPayBatchCandidateId(candidate);
+    if (payBatchCandidateId) return `candidate|pay_batch_candidate:${payBatchCandidateId}`;
+
+    const candidateId = getCandidateId(candidate);
+    const umbrellaId = getUmbrellaId(candidate);
+    const recipientKind = upperScalar(candidate && (candidate.recipient_kind || candidate.recipientKind || candidate.job_kind || candidate.jobKind));
+    if (candidateId) return `candidate|candidate:${candidateId}|umbrella:${umbrellaId || 'none'}|recipient:${recipientKind || 'default'}`;
+
+    const stable = stableFallbackKey(candidate);
+    if (stable) return `candidate|stable:${stable}`;
+
+    return `candidate|index:${index}`;
+  };
+
+  const buildTimesheetKey = (timesheet, index, context = {}) => {
+    const candidateId = getCandidateId(timesheet, context.candidateId);
+    const timesheetId = getTimesheetId(timesheet, context.timesheetId);
+    const weekEnding = getWeekEnding(timesheet, context.weekEnding);
+    const clientId = getClientId(timesheet, context.clientId);
+
+    if (timesheetId) {
+      return [
+        'timesheet',
+        `candidate:${candidateId || 'unknown'}`,
+        `timesheet:${timesheetId}`,
+        `week:${weekEnding || 'unknown'}`,
+        `client:${clientId || 'unknown'}`
+      ].join('|');
+    }
+
+    const stable = stableFallbackKey(timesheet);
+    if (stable) {
+      return [
+        'timesheet',
+        `candidate:${candidateId || 'unknown'}`,
+        `stable:${stable}`,
+        `week:${weekEnding || 'unknown'}`,
+        `client:${clientId || 'unknown'}`
+      ].join('|');
+    }
+
+    return `timesheet|index:${index}`;
+  };
+
+  const buildUnitRateRowKey = (row, index, context = {}) => {
+    const breakdownId = firstNonBlank(
+      row && row.pay_batch_item_breakdown_id,
+      row && row.payBatchItemBreakdownId,
+      row && row.breakdown_id,
+      row && row.breakdownId,
+      row && row.line_id,
+      row && row.lineId
+    );
+
+    if (breakdownId) {
+      return [
+        'unit_rate',
+        `timesheet:${getTimesheetId(row, context.timesheetId) || 'unknown'}`,
+        `breakdown:${breakdownId}`
+      ].join('|');
+    }
+
+    const timesheetId = getTimesheetId(row, context.timesheetId);
+    const lineKind = upperScalar(row && (row.line_kind || row.lineKind || row.kind || context.lineKind));
+    const bucketCode = upperScalar(row && (row.bucket_code || row.bucketCode || row.bucket || row.code));
+    const unitName = upperScalar(row && (row.unit_name || row.unitName || row.unit || row.label));
+    const rate = moneyKey(row && row.rate);
+    const amountExVat = moneyKey(firstNonBlank(row && row.amount_ex_vat, row && row.amountExVat, row && row.total_ex_vat, row && row.totalExVat));
+    const vat = moneyKey(firstNonBlank(row && row.amount_vat, row && row.amountVat, row && row.total_vat, row && row.totalVat, row && row.vat));
+    const amountIncVat = moneyKey(firstNonBlank(row && row.amount_inc_vat, row && row.amountIncVat, row && row.total_inc_vat, row && row.totalIncVat));
+    const quantity = quantityKey(firstNonBlank(row && row.units, row && row.quantity, row && row.qty));
+
+    if (timesheetId || lineKind || bucketCode || unitName || rate !== '0.00' || amountExVat !== '0.00' || vat !== '0.00' || amountIncVat !== '0.00') {
+      return [
+        'unit_rate',
+        `timesheet:${timesheetId || 'unknown'}`,
+        `line_kind:${lineKind || 'unknown'}`,
+        `bucket:${bucketCode || 'none'}`,
+        `unit:${unitName || 'unknown'}`,
+        `quantity:${quantity}`,
+        `rate:${rate}`,
+        `ex:${amountExVat}`,
+        `vat:${vat}`,
+        `inc:${amountIncVat}`
+      ].join('|');
+    }
+
+    return `unit_rate|index:${index}`;
+  };
+
+  const buildNonTimesheetLineKey = (line, index, context = {}) => {
+    const payBatchItemId = firstNonBlank(
+      line && line.pay_batch_item_id,
+      line && line.payBatchItemId,
+      line && line.item_id,
+      line && line.itemId
+    );
+    const breakdownId = firstNonBlank(
+      line && line.pay_batch_item_breakdown_id,
+      line && line.payBatchItemBreakdownId,
+      line && line.breakdown_id,
+      line && line.breakdownId
+    );
+    const itemType = upperScalar(line && (line.item_type || line.itemType || line.internal_item_type || line.internalItemType || line.line_kind || line.lineKind));
+    const amountExVat = moneyKey(firstNonBlank(line && line.amount_ex_vat, line && line.amountExVat, line && line.total_ex_vat, line && line.totalExVat));
+    const amountIncVat = moneyKey(firstNonBlank(line && line.amount_inc_vat, line && line.amountIncVat, line && line.total_inc_vat, line && line.totalIncVat));
+    const sourceRef = firstNonBlank(line && line.source_ref, line && line.sourceRef);
+    const financeCaseId = firstNonBlank(line && line.finance_case_id, line && line.financeCaseId);
+    const destinationGroupKey = firstNonBlank(line && line.destination_group_key, line && line.destinationGroupKey);
+    const candidateId = getCandidateId(line, context.candidateId);
+
+    if (payBatchItemId || breakdownId) {
+      return [
+        'non_ts',
+        `candidate:${candidateId || 'unknown'}`,
+        `item:${payBatchItemId || 'none'}`,
+        `breakdown:${breakdownId || 'none'}`,
+        `type:${itemType || 'unknown'}`,
+        `ex:${amountExVat}`,
+        `inc:${amountIncVat}`
+      ].join('|');
+    }
+
+    if (sourceRef || financeCaseId || destinationGroupKey) {
+      return [
+        'non_ts',
+        `candidate:${candidateId || 'unknown'}`,
+        `source:${sourceRef || 'none'}`,
+        `finance_case:${financeCaseId || 'none'}`,
+        `destination:${destinationGroupKey || 'none'}`,
+        `type:${itemType || 'unknown'}`,
+        `ex:${amountExVat}`,
+        `inc:${amountIncVat}`
+      ].join('|');
+    }
+
+    if (itemType || amountExVat !== '0.00' || amountIncVat !== '0.00') {
+      return [
+        'non_ts',
+        `candidate:${candidateId || 'unknown'}`,
+        `type:${itemType || 'unknown'}`,
+        `ex:${amountExVat}`,
+        `inc:${amountIncVat}`,
+        `index:${index}`
+      ].join('|');
+    }
+
+    return `non_ts|index:${index}`;
+  };
+
+  const setRenderKey = (obj, key) => {
+    if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return obj;
+    if (!Object.prototype.hasOwnProperty.call(obj, 'render_key') || !normaliseScalar(obj.render_key)) {
+      obj.render_key = key;
+    }
+    if (!Object.prototype.hasOwnProperty.call(obj, 'render_dedupe_key') || !normaliseScalar(obj.render_dedupe_key)) {
+      obj.render_dedupe_key = key;
+    }
+    return obj;
+  };
+
+  const dedupeArray = (arr, keyFn, mergeFn) => {
+    if (!Array.isArray(arr)) return arr;
+    const seen = new Map();
+    const out = [];
+
+    arr.forEach((entry, index) => {
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+        out.push(entry);
+        return;
+      }
+
+      const key = keyFn(entry, index);
+      const finalKey = normaliseScalar(key) || `index:${index}`;
+
+      if (seen.has(finalKey)) {
+        const existing = seen.get(finalKey);
+        if (typeof mergeFn === 'function') mergeFn(existing, entry, finalKey);
+        return;
+      }
+
+      setRenderKey(entry, finalKey);
+      seen.set(finalKey, entry);
+      out.push(entry);
+    });
+
+    return out;
+  };
+
+  const mergeKnownArrays = (target, source, arrayKeys, context, normaliser) => {
+    for (const key of arrayKeys) {
+      if (!Array.isArray(source[key])) continue;
+      if (!Array.isArray(target[key])) target[key] = [];
+      target[key] = target[key].concat(source[key].map((entry) => cloneValue(entry)));
+      if (typeof normaliser === 'function') target[key] = normaliser(target[key], key, context);
+    }
+  };
+
+  const unitArrayKeys = [
+    'unit_rows',
+    'unitRows',
+    'rate_rows',
+    'rateRows',
+    'additional_units_rows',
+    'additionalUnitsRows',
+    'expenses_rows',
+    'expensesRows',
+    'other_rows',
+    'otherRows'
+  ];
+
+  const nonTimesheetLineArrayKeys = [
+    'non_ts_lines',
+    'nonTsLines',
+    'non_timesheet_lines',
+    'nonTimesheetLines',
+    'deductions',
+    'recoveries',
+    'finance_lines',
+    'financeLines',
+    'adjustment_lines',
+    'adjustmentLines',
+    'other_non_timesheet_lines',
+    'otherNonTimesheetLines'
+  ];
+
+  const timesheetArrayKeys = [
+    'timesheets',
+    'timesheet_sections',
+    'timesheetSections',
+    'timesheet_summaries',
+    'timesheetSummaries'
+  ];
+
+  const normaliseUnitRowsArray = (rows, keyName, context) => dedupeArray(
+    rows,
+    (row, index) => buildUnitRateRowKey(row, index, {
+      ...context,
+      lineKind: keyName
+    })
+  );
+
+  const normaliseNonTimesheetLinesArray = (rows, keyName, context) => dedupeArray(
+    rows,
+    (line, index) => buildNonTimesheetLineKey(line, index, context)
+  );
+
+  const normaliseTimesheet = (timesheet, index, context = {}) => {
+    if (!timesheet || typeof timesheet !== 'object' || Array.isArray(timesheet)) return timesheet;
+
+    const timesheetKey = buildTimesheetKey(timesheet, index, context);
+    setRenderKey(timesheet, timesheetKey);
+
+    const childContext = {
+      ...context,
+      candidateId: getCandidateId(timesheet, context.candidateId),
+      payBatchCandidateId: getPayBatchCandidateId(timesheet) || context.payBatchCandidateId,
+      timesheetId: getTimesheetId(timesheet, context.timesheetId),
+      weekEnding: getWeekEnding(timesheet, context.weekEnding),
+      clientId: getClientId(timesheet, context.clientId)
+    };
+
+    for (const key of unitArrayKeys) {
+      if (Array.isArray(timesheet[key])) {
+        timesheet[key] = normaliseUnitRowsArray(timesheet[key], key, childContext);
+      }
+    }
+
+    for (const key of nonTimesheetLineArrayKeys) {
+      if (Array.isArray(timesheet[key])) {
+        timesheet[key] = normaliseNonTimesheetLinesArray(timesheet[key], key, childContext);
+      }
+    }
+
+    return timesheet;
+  };
+
+  const normaliseTimesheetArray = (rows, context = {}) => dedupeArray(
+    Array.isArray(rows) ? rows.map((entry, index) => normaliseTimesheet(entry, index, context)) : rows,
+    (timesheet, index) => buildTimesheetKey(timesheet, index, context),
+    (existing, duplicate, key) => {
+      mergeKnownArrays(existing, duplicate, unitArrayKeys, {
+        ...context,
+        timesheetId: getTimesheetId(existing, context.timesheetId) || getTimesheetId(duplicate, context.timesheetId),
+        candidateId: getCandidateId(existing, context.candidateId) || getCandidateId(duplicate, context.candidateId),
+        weekEnding: getWeekEnding(existing, context.weekEnding) || getWeekEnding(duplicate, context.weekEnding),
+        clientId: getClientId(existing, context.clientId) || getClientId(duplicate, context.clientId)
+      }, normaliseUnitRowsArray);
+
+      mergeKnownArrays(existing, duplicate, nonTimesheetLineArrayKeys, {
+        ...context,
+        timesheetId: getTimesheetId(existing, context.timesheetId) || getTimesheetId(duplicate, context.timesheetId),
+        candidateId: getCandidateId(existing, context.candidateId) || getCandidateId(duplicate, context.candidateId)
+      }, normaliseNonTimesheetLinesArray);
+
+      setRenderKey(existing, key);
+    }
+  );
+
+  const normaliseCandidate = (candidate, index, context = {}) => {
+    if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) return candidate;
+
+    const candidateKey = buildCandidateKey(candidate, index);
+    setRenderKey(candidate, candidateKey);
+
+    const childContext = {
+      ...context,
+      candidateId: getCandidateId(candidate, context.candidateId),
+      payBatchCandidateId: getPayBatchCandidateId(candidate) || context.payBatchCandidateId,
+      umbrellaId: getUmbrellaId(candidate, context.umbrellaId)
+    };
+
+    for (const key of timesheetArrayKeys) {
+      if (Array.isArray(candidate[key])) {
+        candidate[key] = normaliseTimesheetArray(candidate[key], childContext);
+      }
+    }
+
+    for (const key of nonTimesheetLineArrayKeys) {
+      if (Array.isArray(candidate[key])) {
+        candidate[key] = normaliseNonTimesheetLinesArray(candidate[key], key, childContext);
+      }
+    }
+
+    return candidate;
+  };
+
+  const normaliseCandidateArray = (rows, context = {}) => dedupeArray(
+    Array.isArray(rows) ? rows.map((entry, index) => normaliseCandidate(entry, index, context)) : rows,
+    (candidate, index) => buildCandidateKey(candidate, index),
+    (existing, duplicate, key) => {
+      const mergeContext = {
+        ...context,
+        candidateId: getCandidateId(existing, context.candidateId) || getCandidateId(duplicate, context.candidateId),
+        payBatchCandidateId: getPayBatchCandidateId(existing) || getPayBatchCandidateId(duplicate) || context.payBatchCandidateId,
+        umbrellaId: getUmbrellaId(existing, context.umbrellaId) || getUmbrellaId(duplicate, context.umbrellaId)
+      };
+
+      mergeKnownArrays(existing, duplicate, timesheetArrayKeys, mergeContext, (rowsToNormalise, _keyName, ctx) => normaliseTimesheetArray(rowsToNormalise, ctx));
+      mergeKnownArrays(existing, duplicate, nonTimesheetLineArrayKeys, mergeContext, normaliseNonTimesheetLinesArray);
+      setRenderKey(existing, key);
+    }
+  );
+
+  const output = cloneValue(job);
+
+  if (!output || typeof output !== 'object' || Array.isArray(output)) return output;
+
+  const rootContext = {
+    candidateId: getCandidateId(output),
+    payBatchCandidateId: getPayBatchCandidateId(output),
+    umbrellaId: getUmbrellaId(output),
+    timesheetId: getTimesheetId(output),
+    weekEnding: getWeekEnding(output),
+    clientId: getClientId(output)
+  };
+
+  if (Array.isArray(output.candidates)) {
+    output.candidates = normaliseCandidateArray(output.candidates, rootContext);
+  }
+
+  if (Array.isArray(output.candidate_summaries)) {
+    output.candidate_summaries = normaliseCandidateArray(output.candidate_summaries, rootContext);
+  }
+
+  if (Array.isArray(output.candidateSummaries)) {
+    output.candidateSummaries = normaliseCandidateArray(output.candidateSummaries, rootContext);
+  }
+
+  for (const key of timesheetArrayKeys) {
+    if (Array.isArray(output[key])) {
+      output[key] = normaliseTimesheetArray(output[key], rootContext);
+    }
+  }
+
+  for (const key of nonTimesheetLineArrayKeys) {
+    if (Array.isArray(output[key])) {
+      output[key] = normaliseNonTimesheetLinesArray(output[key], key, rootContext);
+    }
+  }
+
+  return output;
+}
+
+async function handleBankingAlertAcknowledge(env, req, user) {
+  const actorUserId = String(user && user.id ? user.id : '').trim();
+  if (!actorUserId) return withCORS(env, req, unauthorized('Unauthorized'));
+
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+  if (body !== null && (typeof body !== 'object' || Array.isArray(body))) return withCORS(env, req, badRequest('Invalid JSON'));
+  body = body || {};
+
+  const unwrapRpc = (rpcRes, key) => {
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') payload = rpcRes[0];
+      if (payload && typeof payload === 'object' && key && Object.prototype.hasOwnProperty.call(payload, key)) payload = payload[key];
+    } catch {}
+    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+  };
+
+  const truthy = (value) => {
+    if (value === true) return true;
+    const s = String(value === undefined || value === null ? '' : value).trim().toLowerCase();
+    return ['1', 'true', 't', 'yes', 'y', 'on'].includes(s);
+  };
+
+  const asNote = (value) => {
+    const s = String(value === undefined || value === null ? '' : value).trim();
+    return s || null;
+  };
+
+  const normaliseAlertObject = (value) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+    const alertFingerprint = String(value.alert_fingerprint ?? value.fingerprint ?? '').trim();
+    const alertKind = String(value.alert_kind ?? value.kind ?? '').trim().toUpperCase();
+    const entityKind = String(value.entity_kind ?? value.entityKind ?? 'pay_batch').trim().toLowerCase() || 'pay_batch';
+    const entityId = String(value.entity_id ?? value.entityId ?? value.pay_batch_id ?? value.payBatchId ?? '').trim();
+    const payloadJson = (() => {
+      const p = value.alert_payload_json ?? value.payload_json ?? value.payload ?? null;
+      return (p && typeof p === 'object' && !Array.isArray(p)) ? p : {};
+    })();
+    if (!alertFingerprint) return null;
+    return {
+      alert_fingerprint: alertFingerprint,
+      alert_kind: alertKind,
+      entity_kind: entityKind,
+      entity_id: entityId,
+      payload_json: payloadJson
+    };
+  };
+
+  const loadActiveAlertSummary = async () => {
+    const active0 = await sbRpc(env, 'banking_alerts_active_for_user', {
+      p_actor_user_id: actorUserId,
+      p_entity_kind: null,
+      p_entity_id: null,
+      p_include_acknowledged: false,
+      p_limit: 500
+    });
+    return unwrapRpc(active0, 'banking_alerts_active_for_user');
+  };
+
+  try {
+    const note = asNote(body.note ?? body.reason ?? null);
+    const clearAll = truthy(body.clear_all ?? body.clearAll ?? body.acknowledge_all ?? body.acknowledgeAll ?? false);
+
+    const explicitAlerts = (() => {
+      if (Array.isArray(body.alerts)) return body.alerts;
+      if (Array.isArray(body.alert_fingerprints)) return body.alert_fingerprints;
+      if (Array.isArray(body.alertFingerprints)) return body.alertFingerprints;
+      if (Array.isArray(body.fingerprints)) return body.fingerprints;
+      return null;
+    })();
+
+    let acknowledgeResult = null;
+    let mode = 'single';
+
+    if (clearAll === true) {
+      mode = 'clear_all';
+      const ack0 = await sbRpc(env, 'banking_alert_acknowledge_all_current', {
+        p_actor_user_id: actorUserId,
+        p_note: note
+      });
+      acknowledgeResult = unwrapRpc(ack0, 'banking_alert_acknowledge_all_current');
+    } else if (Array.isArray(explicitAlerts)) {
+      mode = 'many';
+      const alertsForRpc = explicitAlerts
+        .map((entry) => {
+          if (typeof entry === 'string') return String(entry).trim();
+          const normalised = normaliseAlertObject(entry);
+          return normalised || entry;
+        })
+        .filter((entry) => {
+          if (typeof entry === 'string') return entry.trim().length > 0;
+          return !!(entry && typeof entry === 'object' && !Array.isArray(entry));
+        });
+
+      if (!alertsForRpc.length) return withCORS(env, req, badRequest('alerts must contain at least one alert fingerprint'));
+
+      const ack0 = await sbRpc(env, 'banking_alert_acknowledge_many', {
+        p_actor_user_id: actorUserId,
+        p_alerts_json: alertsForRpc,
+        p_note: note
+      });
+      acknowledgeResult = unwrapRpc(ack0, 'banking_alert_acknowledge_many');
+    } else {
+      const alertFromBody = normaliseAlertObject(body.alert) || normaliseAlertObject(body);
+      const alertFingerprint = String(alertFromBody?.alert_fingerprint || body.alert_fingerprint || body.alertFingerprint || body.fingerprint || '').trim();
+      const alertKind = String(alertFromBody?.alert_kind || body.alert_kind || body.alertKind || body.kind || '').trim().toUpperCase();
+      const entityKind = String(alertFromBody?.entity_kind || body.entity_kind || body.entityKind || 'pay_batch').trim().toLowerCase() || 'pay_batch';
+      const entityId = String(alertFromBody?.entity_id || body.entity_id || body.entityId || body.pay_batch_id || body.payBatchId || '').trim();
+      const payloadJson = (() => {
+        const p = alertFromBody?.payload_json ?? body.alert_payload_json ?? body.payload_json ?? body.payload ?? {};
+        return (p && typeof p === 'object' && !Array.isArray(p)) ? p : {};
+      })();
+
+      if (!alertFingerprint) return withCORS(env, req, badRequest('alert_fingerprint is required'));
+      if (!alertKind) return withCORS(env, req, badRequest('alert_kind is required'));
+      if (!entityKind) return withCORS(env, req, badRequest('entity_kind is required'));
+      if (!entityId) return withCORS(env, req, badRequest('entity_id is required'));
+
+      const ack0 = await sbRpc(env, 'banking_alert_acknowledge', {
+        p_alert_fingerprint: alertFingerprint,
+        p_alert_kind: alertKind,
+        p_entity_kind: entityKind,
+        p_entity_id: entityId,
+        p_actor_user_id: actorUserId,
+        p_note: note,
+        p_alert_payload_json: payloadJson
+      });
+      acknowledgeResult = unwrapRpc(ack0, 'banking_alert_acknowledge');
+    }
+
+    const alertSummary = await loadActiveAlertSummary();
+
+    return withCORS(env, req, ok({
+      ok: true,
+      mode,
+      acknowledge_result: acknowledgeResult,
+      alert_summary: alertSummary,
+      banking_alerts: Array.isArray(alertSummary.alerts) ? alertSummary.alerts : [],
+      banking_unacknowledged_alert_count: Number.isFinite(Number(alertSummary.unacknowledged_count)) ? Math.max(0, Math.trunc(Number(alertSummary.unacknowledged_count))) : 0,
+      banking_highest_alert_label: alertSummary.highest_label || null,
+      banking_highest_alert_severity: alertSummary.highest_severity || null
+    }));
+  } catch (e) {
+    return withCORS(env, req, serverError(String(e?.message || e)));
+  }
+}
+
+
+function renderTimesheetSection(ctx) {
+  const context = (ctx && typeof ctx === 'object') ? ctx : {};
+  const h = (value) => escapeHtml(String(value == null ? '' : value));
+  const textLines = [];
+
+  const asNum = (value) => {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : null;
+  };
+
+  const moneyNum = (value) => {
+    const n = asNum(value);
+    return n == null ? 0 : n;
+  };
+
+  const fmtMoney = (value) => `£${moneyNum(value).toFixed(2)}`;
+
+  const firstNonBlank = (...values) => {
+    for (const value of values) {
+      const s = String(value == null ? '' : value).trim();
+      if (s) return s;
+    }
+    return '';
+  };
+
+  const moneyKey = (value) => {
+    const n = Number(String(value == null ? '' : value).replace(/,/g, ''));
+    return Number.isFinite(n) ? (Math.round(n * 100) / 100).toFixed(2) : String(value == null ? '' : value).trim();
+  };
+
+  const quantityKey = (value) => {
+    const n = Number(String(value == null ? '' : value).replace(/,/g, ''));
+    return Number.isFinite(n) ? (Math.round(n * 1000000) / 1000000).toString() : String(value == null ? '' : value).trim();
+  };
+
+  const fmtDateShort = (isoOrDateStr) => {
+    const s = String(isoOrDateStr || '').trim();
+    if (!s) return '';
+    if (typeof formatCloudTmsLondonDate === 'function') {
+      const formatted = formatCloudTmsLondonDate(s);
+      return formatted && formatted !== 'Not recorded' ? formatted : s;
+    }
+    let d;
+    if (s.includes('T')) d = new Date(s);
+    else if (/^\d{4}-\d{2}-\d{2}$/.test(s)) d = new Date(`${s}T00:00:00.000Z`);
+    else d = new Date(s);
+    if (!Number.isFinite(d.getTime())) return s;
+    return new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Europe/London',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    }).format(d);
+  };
+
+  const fmtDateTime = (value) => {
+    const s = String(value || '').trim();
+    if (!s) return '';
+    if (typeof formatCloudTmsLondonDateTime === 'function') {
+      const formatted = formatCloudTmsLondonDateTime(s);
+      return formatted && formatted !== 'Not recorded' ? formatted : s;
+    }
+    const d = new Date(s);
+    if (!Number.isFinite(d.getTime())) return s;
+    const date = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Europe/London',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    }).format(d);
+    const time = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Europe/London',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+      hourCycle: 'h23'
+    }).format(d);
+    return `${date} at ${time} hrs (UK time)`;
+  };
+
+  const fmtTime = (isoStr) => {
+    const s = String(isoStr || '').trim();
+    if (!s) return '';
+    const d = new Date(s);
+    if (!Number.isFinite(d.getTime())) return s;
+    return fmtDateTime(s);
+  };
+
+  const fmtBreak = (seg) => {
+    if (!seg || typeof seg !== 'object') return '';
+    const breaks = seg.breaks;
+    if (Array.isArray(breaks) && breaks.length > 0) {
+      const b0 = breaks[0];
+      const bs = (b0 && (b0.start_utc || b0.start_iso || b0.start)) ? String(b0.start_utc || b0.start_iso || b0.start) : '';
+      const be = (b0 && (b0.end_utc || b0.end_iso || b0.end)) ? String(b0.end_utc || b0.end_iso || b0.end) : '';
+      const t1 = fmtTime(bs);
+      const t2 = fmtTime(be);
+      if (t1 && t2) return `${t1}–${t2}`;
+    }
+    const bm = asNum(seg.break_mins ?? seg.break_minutes);
+    if (bm == null) return '';
+    return `${bm}m`;
+  };
+
+  const cell = (value) => h(value);
+
+  const tableHtml = (headers, rows, options = {}) => {
+    const title = options.title ? `<h4 style="margin:14px 0 6px;font-size:14px;color:#111827;">${h(options.title)}</h4>` : '';
+    const alignRight = new Set(options.alignRight || []);
+    const thead = `<thead><tr>${headers.map((header, index) => `<th style="border:1px solid #d1d5db;background:#f3f4f6;padding:7px 8px;text-align:${alignRight.has(index) ? 'right' : 'left'};font-size:12px;color:#374151;">${cell(header)}</th>`).join('')}</tr></thead>`;
+    const tbody = `<tbody>${rows.map((row) => `<tr>${headers.map((_, index) => `<td style="border:1px solid #e5e7eb;padding:7px 8px;text-align:${alignRight.has(index) ? 'right' : 'left'};font-size:12px;color:#111827;">${cell(row[index] ?? '')}</td>`).join('')}</tr>`).join('')}</tbody>`;
+    return `${title}<table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse;width:100%;margin:0 0 10px 0;">${thead}${tbody}</table>`;
+  };
+
+  const textTable = (title, headers, rows) => {
+    if (title) textLines.push(title);
+    textLines.push(headers.join('\t'));
+    for (const row of rows) textLines.push(row.map((value) => String(value == null ? '' : value)).join('\t'));
+    textLines.push('');
+  };
+
+  const buildUnitRowKey = (row, index, sectionName) => {
+    const breakdownId = firstNonBlank(row?.pay_batch_item_breakdown_id, row?.payBatchItemBreakdownId, row?.breakdown_id, row?.breakdownId, row?.line_id, row?.lineId);
+    if (breakdownId) return `breakdown:${breakdownId}`;
+
+    const stable = firstNonBlank(row?.render_dedupe_key, row?.renderDedupeKey, row?.render_key, row?.renderKey, row?.stable_key, row?.stableKey, row?.source_key, row?.sourceKey);
+    if (stable) return `stable:${stable}`;
+
+    const timesheetId = firstNonBlank(context.timesheetId, context.timesheet_id, row?.timesheet_id, row?.timesheetId);
+    const lineKind = String(row?.line_kind || row?.lineKind || row?.kind || sectionName || '').trim().toUpperCase();
+    const bucketCode = String(row?.bucket_code || row?.bucketCode || row?.bucket || row?.code || '').trim().toUpperCase();
+    const unitName = String(row?.unit_name || row?.unitName || row?.unit || row?.label || row?.name || '').trim().toUpperCase();
+    const rate = moneyKey(row?.rate ?? row?.unit_rate ?? row?.unitRate);
+    const amountExVat = moneyKey(row?.amount_ex_vat ?? row?.amountExVat ?? row?.total_ex_vat ?? row?.totalExVat);
+    const vat = moneyKey(row?.amount_vat ?? row?.amountVat ?? row?.total_vat ?? row?.totalVat ?? row?.vat);
+    const amountIncVat = moneyKey(row?.amount_inc_vat ?? row?.amountIncVat ?? row?.total_inc_vat ?? row?.totalIncVat ?? row?.amount ?? row?.total);
+    const quantity = quantityKey(row?.units ?? row?.quantity ?? row?.qty);
+
+    if (timesheetId || lineKind || bucketCode || unitName || rate || amountExVat || vat || amountIncVat || quantity) {
+      return [
+        `timesheet:${timesheetId || 'unknown'}`,
+        `line_kind:${lineKind || 'unknown'}`,
+        `bucket:${bucketCode || 'none'}`,
+        `unit:${unitName || 'unknown'}`,
+        `quantity:${quantity || '0'}`,
+        `rate:${rate || '0.00'}`,
+        `ex:${amountExVat || '0.00'}`,
+        `vat:${vat || '0.00'}`,
+        `inc:${amountIncVat || '0.00'}`
+      ].join('|');
+    }
+
+    return `index:${index}`;
+  };
+
+  const dedupeUnitRows = (rows, sectionName) => {
+    const seen = new Set();
+    const out = [];
+    const source = Array.isArray(rows) ? rows : [];
+    source.forEach((row, index) => {
+      if (!row || typeof row !== 'object') return;
+      const key = buildUnitRowKey(row, index, sectionName);
+      if (seen.has(key)) return;
+      seen.add(key);
+      out.push(row);
+    });
+    return out;
+  };
+
+  const normalizeUnitRows = (rows, sectionName) => {
+    const out = [];
+    for (const row of dedupeUnitRows(rows, sectionName)) {
+      const unit = String(row?.unit ?? row?.unit_name ?? row?.unitName ?? row?.label ?? row?.name ?? row?.bucket_code ?? '').trim();
+      const qty = asNum(row?.quantity ?? row?.qty ?? row?.units);
+      const rate = asNum(row?.rate ?? row?.unit_rate ?? row?.unitRate);
+      const totalEx = asNum(row?.total_ex_vat ?? row?.amount_ex_vat ?? row?.totalExVat ?? row?.amountExVat ?? row?.total ?? row?.amount);
+      const vat = asNum(row?.vat ?? row?.amount_vat ?? row?.amountVat ?? row?.total_vat ?? row?.totalVat);
+      const totalInc = asNum(row?.total_inc_vat ?? row?.amount_inc_vat ?? row?.totalIncVat ?? row?.amountIncVat ?? ((totalEx != null || vat != null) ? Number(totalEx || 0) + Number(vat || 0) : null));
+      if ((qty == null || Math.abs(qty) < 1e-9) && (totalEx == null || Math.abs(totalEx) < 1e-9) && (totalInc == null || Math.abs(totalInc) < 1e-9)) continue;
+      out.push({
+        unit: unit || 'Unit',
+        quantity: qty == null ? '' : String(qty),
+        rate: rate == null ? '' : fmtMoney(rate),
+        total_ex_vat: fmtMoney(totalEx),
+        vat: fmtMoney(vat),
+        total_inc_vat: fmtMoney(totalInc)
+      });
+    }
+    return out;
+  };
+
+  const candidateDisplay = String(context.candidateDisplay || '').trim();
+  const clientName = String(context.clientName || '').trim();
+  const weekEnding = fmtDateShort(context.weekEnding || context.week_ending_date || '');
+  const jobTitle = String(context.jobTitle || '').trim();
+  const band = String(context.band || '').trim();
+  const referenceNumber = String(context.referenceNumber || '').trim();
+  const timesheetType = String(context.timesheetType || 'Standard').trim() || 'Standard';
+  const renderMode = String(context.renderMode || 'AGGREGATE').trim().toUpperCase();
+  const detailed = context.detailed === true;
+
+  const totals = (context.totals && typeof context.totals === 'object') ? context.totals : {};
+  const grossEx = moneyNum(totals.gross_ex_vat ?? totals.total_ex_vat ?? totals.amount_ex_vat);
+  const grossVat = moneyNum(totals.gross_vat ?? totals.vat ?? totals.amount_vat);
+  const grossInc = moneyNum(totals.gross_inc_vat ?? totals.total_inc_vat ?? totals.amount_inc_vat ?? (grossEx + grossVat));
+
+  textLines.push(`Candidate\t${candidateDisplay}`);
+  textLines.push(`Client\t${clientName}`);
+  if (referenceNumber) textLines.push(`Timesheet reference\t${referenceNumber}`);
+  textLines.push(`Week Ending\t${weekEnding}`);
+  textLines.push(`Job Title\t${jobTitle}`);
+  textLines.push(`Band\t${band}`);
+  textLines.push(`Timesheet Type\t${timesheetType}`);
+  textLines.push('');
+
+  const metaRows = [
+    ['Candidate', candidateDisplay],
+    ['Client', clientName],
+    ...(referenceNumber ? [['Timesheet reference', referenceNumber]] : []),
+    ['Week ending', weekEnding],
+    ['Job title', jobTitle],
+    ['Band', band],
+    ['Timesheet type', timesheetType]
+  ];
+
+  let html = `<section style="margin:0 0 18px 0;padding:12px;border:1px solid #e5e7eb;border-radius:8px;background:#ffffff;">`;
+  html += `<h3 style="margin:0 0 10px;font-size:15px;color:#111827;">${h(clientName || 'Timesheet')}${weekEnding ? ` — ${h(weekEnding)}` : ''}</h3>`;
+  html += tableHtml(['Field', 'Value'], metaRows);
+
+  if (detailed && renderMode === 'SEGMENT') {
+    if (timesheetType.toLowerCase() === 'adjustment') {
+      const changes = Array.isArray(context.schedule_changes) ? context.schedule_changes : [];
+      const rows = [];
+      for (const change of changes) {
+        const dateLbl = fmtDateShort(change?.date);
+        const before = (change && typeof change.before === 'object' && change.before) ? change.before : null;
+        const after = (change && typeof change.after === 'object' && change.after) ? change.after : null;
+        rows.push([dateLbl, 'Before', before ? fmtTime(before.start_utc || before.start_iso || before.start) : '', before ? fmtTime(before.end_utc || before.end_iso || before.end) : '', before ? fmtBreak(before) : '']);
+        rows.push([dateLbl, 'After', after ? fmtTime(after.start_utc || after.start_iso || after.start) : '', after ? fmtTime(after.end_utc || after.end_iso || after.end) : '', after ? fmtBreak(after) : '']);
+      }
+      if (rows.length) {
+        textTable('Schedule changes', ['Date', 'Type', 'Start', 'End', 'Break'], rows);
+        html += tableHtml(['Date', 'Type', 'Start', 'End', 'Break'], rows, { title: 'Schedule changes' });
+      }
+    } else {
+      const sched = Array.isArray(context.schedule_rows) ? context.schedule_rows : [];
+      const rows = sched.map((seg) => [fmtDateShort(seg?.date), fmtTime(seg?.start_utc || seg?.start_iso || seg?.start), fmtTime(seg?.end_utc || seg?.end_iso || seg?.end), fmtBreak(seg)]);
+      if (rows.length) {
+        textTable('Schedule', ['Date', 'Start', 'End', 'Break'], rows);
+        html += tableHtml(['Date', 'Start', 'End', 'Break'], rows, { title: 'Schedule' });
+      }
+    }
+  }
+
+  const sections = [
+    ['Units / rates', normalizeUnitRows(context.unit_rows, 'unit_rows')],
+    ['Additional Units', normalizeUnitRows(context.additional_units_rows, 'additional_units_rows')],
+    ['Expenses', normalizeUnitRows(context.expenses_rows, 'expenses_rows')],
+    ['Other', normalizeUnitRows(context.other_rows, 'other_rows')]
+  ];
+
+  for (const [title, rows] of sections) {
+    if (!rows.length && title !== 'Units / rates') continue;
+    const tableRows = rows.map((row) => [row.unit, row.quantity, row.rate, row.total_ex_vat, row.vat, row.total_inc_vat]);
+    if (tableRows.length) {
+      textTable(title, ['Unit', 'Quantity', 'Rate', 'Total excl VAT', 'VAT', 'Total incl VAT'], tableRows);
+      html += tableHtml(['Unit', 'Quantity', 'Rate', 'Total excl VAT', 'VAT', 'Total incl VAT'], tableRows, { title, alignRight: [1, 2, 3, 4, 5] });
+    } else if (title === 'Units / rates') {
+      textTable(title, ['Unit', 'Quantity', 'Rate', 'Total excl VAT', 'VAT', 'Total incl VAT'], []);
+      html += tableHtml(['Unit', 'Quantity', 'Rate', 'Total excl VAT', 'VAT', 'Total incl VAT'], [], { title, alignRight: [1, 2, 3, 4, 5] });
+    }
+  }
+
+  const totalsRows = [
+    ['Gross Pay (excl VAT)', fmtMoney(grossEx)],
+    ['VAT', fmtMoney(grossVat)],
+    ['Gross Pay (incl VAT)', fmtMoney(grossInc)]
+  ];
+
+  textLines.push('Timesheet totals');
+  for (const [label, value] of totalsRows) textLines.push(`${label}\t${value}`);
+  textLines.push('');
+  html += tableHtml(['Total', 'Amount'], totalsRows, { title: 'Timesheet totals', alignRight: [1] });
+  html += '</section>';
+
+  return {
+    body_text: textLines.join('\n'),
+    body_html: html,
+    totals: {
+      gross_ex_vat: grossEx,
+      vat: grossVat,
+      gross_inc_vat: grossInc,
+      final_payable: grossInc
+    }
+  };
+}
 
 
 async function buildPayBatchDetailPdfFromRows(exportObj) {
@@ -20352,7 +22041,6 @@ async function tsfinBestEffortMakeReadyForDraft(env, timesheetIds, opts = {}) {
     lastErrorByTimesheetId
   };
 }
-
 async function handleBankingPayBatchGet(env, req, user, payBatchId) {
   const id = String(payBatchId || '').trim();
   if (!id) return withCORS(env, req, badRequest('pay_batch_id is required'));
@@ -20387,7 +22075,9 @@ async function handleBankingPayBatchGet(env, req, user, payBatchId) {
   };
 
   try {
-    const payload = _unwrapRpc(await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: id }), 'pay_batch_get');
+    const rpcArgs = { p_pay_batch_id: id };
+    if (user && user.id) rpcArgs.p_actor_user_id = String(user.id);
+    const payload = _unwrapRpc(await sbRpc(env, 'pay_batch_get', rpcArgs), 'pay_batch_get');
     const batch = (payload.batch && typeof payload.batch === 'object' && !Array.isArray(payload.batch)) ? payload.batch : {};
 
     const status = String(batch.status || payload.status || '').trim().toUpperCase();
@@ -20502,6 +22192,7 @@ async function handleBankingPayBatchGet(env, req, user, payBatchId) {
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
 }
+
 async function handleBankingPayBatchesList(env, req, user) {
   try {
     const u = new URL(req.url);
@@ -20520,12 +22211,19 @@ async function handleBankingPayBatchesList(env, req, user) {
 
     const statusRaw = (u.searchParams.get('status') || '').trim();
     const status = statusRaw ? statusRaw.toUpperCase() : null;
+    const actorUserId = user && user.id ? String(user.id).trim() : null;
 
-    const rpcRes = await sbRpc(env, 'pay_batches_list', {
+    const rpcArgs = {
       p_limit: limit,
       p_offset: offset,
       p_status: status
-    });
+    };
+
+    if (actorUserId) {
+      rpcArgs.p_actor_user_id = actorUserId;
+    }
+
+    const rpcRes = await sbRpc(env, 'pay_batches_list', rpcArgs);
 
     let payload = rpcRes;
     try {
@@ -20541,17 +22239,28 @@ async function handleBankingPayBatchesList(env, req, user) {
     const items = Array.isArray(obj.rows) ? obj.rows : [];
     const count = Number.isFinite(Number(obj.total_count)) ? Math.trunc(Number(obj.total_count)) : items.length;
 
+    const bankingAlerts = Array.isArray(obj.banking_alerts) ? obj.banking_alerts : [];
+    const bankingUnacknowledgedAlertCount = Number.isFinite(Number(obj.banking_unacknowledged_alert_count))
+      ? Math.max(0, Math.trunc(Number(obj.banking_unacknowledged_alert_count)))
+      : bankingAlerts.filter((alert) => alert && alert.acknowledged_for_current_user !== true).length;
+
     return withCORS(env, req, ok({
       ok: true,
       items,
       count,
       limit: Number.isFinite(Number(obj.limit)) ? Math.trunc(Number(obj.limit)) : limit,
-      offset: Number.isFinite(Number(obj.offset)) ? Math.trunc(Number(obj.offset)) : offset
+      offset: Number.isFinite(Number(obj.offset)) ? Math.trunc(Number(obj.offset)) : offset,
+      banking_alerts: bankingAlerts,
+      banking_unacknowledged_alert_count: bankingUnacknowledgedAlertCount,
+      banking_highest_alert_label: obj.banking_highest_alert_label || null,
+      banking_highest_alert_severity: obj.banking_highest_alert_severity || null
     }));
   } catch (e) {
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
 }
+
+
 async function handleBankingIdLedgerList(env, req, user) {
   try {
     const u = new URL(req.url);
@@ -20637,6 +22346,9 @@ async function handleBankingIdLedgerList(env, req, user) {
 async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
   const id = String(payBatchId || '').trim();
   if (!id) return withCORS(env, req, badRequest('pay_batch_id is required'));
+
+  const actorUserId = String(user && user.id ? user.id : '').trim();
+  if (!actorUserId) return withCORS(env, req, unauthorized('Unauthorized'));
 
   let body = null;
   try { body = await parseJSONBody(req); } catch { body = null; }
@@ -21048,7 +22760,7 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
 
     let gateGet0;
     try {
-      gateGet0 = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: id });
+      gateGet0 = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: id, p_actor_user_id: actorUserId });
     } catch (e) {
       const norm = normalizeRpcError(e, 'PAY_BATCH_GET_FAILED');
       return withCORS(env, req, jsonResponse(norm.status, norm.body));
@@ -21167,7 +22879,7 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
     if (hasHardBlockers) {
       let afterGet0;
       try {
-        afterGet0 = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: id });
+        afterGet0 = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: id, p_actor_user_id: actorUserId });
       } catch (e) {
         const norm = normalizeRpcError(e, 'PAY_BATCH_GET_FAILED');
         return withCORS(env, req, jsonResponse(norm.status, norm.body));
@@ -21263,7 +22975,7 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
 
     let afterGet0;
     try {
-      afterGet0 = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: id });
+      afterGet0 = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: id, p_actor_user_id: actorUserId });
     } catch (e) {
       const norm = normalizeRpcError(e, 'PAY_BATCH_GET_FAILED');
       return withCORS(env, req, jsonResponse(norm.status, norm.body));
@@ -21303,6 +23015,8 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
     return withCORS(env, req, jsonResponse(500, { error: 'Execute payment failed.', message: 'Execute payment failed.', error_code: 'BANKING_EXECUTE_PAYMENT_FAILED' }));
   }
 }
+
+
 
 async function verifyPaymentScheduleReauth(env, user, reauthToken) {
   const token = String(reauthToken || '').trim();
@@ -28177,16 +29891,32 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
     return withCORS(env, req, badRequest('Invalid JSON'));
   }
 
-  const bulkProcessResponseRequested = !!(
+  const requestContext = String(body?.context || body?.mode || '').trim().toLowerCase();
+  const bulkAuthoriseResponseRequested = !!(
+    body?.bulk_authorise === true ||
+    body?.bulkAuthorise === true ||
+    body?.bulk_authorise_mode === true ||
+    body?.bulkAuthoriseMode === true ||
+    requestContext === 'bulk_authorise'
+  );
+  const bulkProcessResponseRequested = !bulkAuthoriseResponseRequested && !!(
     body?.bulk_process === true ||
     body?.bulkProcess === true ||
     body?.bulk_process_mode === true ||
     body?.bulkProcessMode === true ||
     body?.return_bulk_patch === true ||
     body?.returnBulkPatch === true ||
-    String(body?.context || '').trim().toLowerCase() === 'bulk_process' ||
-    String(body?.mode || '').trim().toLowerCase() === 'bulk_process'
+    requestContext === 'bulk_process'
   );
+  const bulkPatchResponseRequested = !!(
+    bulkAuthoriseResponseRequested ||
+    bulkProcessResponseRequested ||
+    body?.return_bulk_patch === true ||
+    body?.returnBulkPatch === true
+  );
+  const bulkResponseContext = bulkAuthoriseResponseRequested
+    ? 'bulk_authorise'
+    : (bulkProcessResponseRequested ? 'bulk_process' : 'standard');
   const expectedRowSignature = String(
     body?.expected_row_signature ||
     body?.expectedRowSignature ||
@@ -28201,6 +29931,9 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
     expected_timesheet_id: body?.expected_timesheet_id ? String(body.expected_timesheet_id) : '',
     qr_action: String(body?.qr_action || body?.qrAction || '').trim().toUpperCase() || null,
     bulk_process_response_requested: bulkProcessResponseRequested,
+    bulk_authorise_response_requested: bulkAuthoriseResponseRequested,
+    bulk_patch_response_requested: bulkPatchResponseRequested,
+    bulk_response_context: bulkResponseContext,
     expected_row_signature_present: !!expectedRowSignature
   });
 
@@ -30027,23 +31760,36 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
     }
   }
 
-  const rpcFunctionName = bulkProcessResponseRequested
+  const expectedCurrentTsfinSnapshotJson = (() => {
+    const raw =
+      body?.expected_current_tsfin_snapshot_json ??
+      body?.expectedCurrentTsfinSnapshotJson ??
+      body?.current_tsfin_snapshot_json ??
+      body?.currentTsfinSnapshotJson ??
+      null;
+    const parsed = parseMaybeJsonObj(raw);
+    return (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) ? parsed : null;
+  })();
+
+  const rpcFunctionName = bulkPatchResponseRequested
     ? 'contract_week_manual_upsert_bulk_process_atomic'
     : 'contract_week_manual_upsert_atomic';
 
-  const rpcArgs = bulkProcessResponseRequested
+  const rpcArgs = bulkPatchResponseRequested
     ? {
         p_week_id: String(cw.id),
         p_expected_timesheet_id: currentTimesheetIdForWeek || null,
         p_timesheet_create_json: rpcTimesheetCreateJson,
         p_timesheet_patch_json: rpcTimesheetPatchJson,
         p_contract_week_patch_json: rpcWeekPatch,
-        p_tsfin_snapshot_json: snap,
+        p_expected_current_tsfin_snapshot_json: expectedCurrentTsfinSnapshotJson,
+        p_next_tsfin_snapshot_json: snap,
         p_rotation_json: rotationRpcJson,
         p_actor_user_id: user?.id || null,
         p_materialise_staged_evidence: true,
         p_now_utc: nowIso2,
-        p_expected_row_signature: expectedRowSignature || null
+        p_expected_row_signature: expectedRowSignature || null,
+        p_response_context: bulkResponseContext
       }
     : {
         p_week_id: String(cw.id),
@@ -30193,6 +31939,8 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
       rpcErr.message === 'p_contract_week_patch_json must be a JSON object' ||
       rpcErr.message === 'p_timesheet_create_json must be a JSON object' ||
       rpcErr.message === 'p_tsfin_snapshot_json must be a JSON object' ||
+      rpcErr.message === 'p_expected_current_tsfin_snapshot_json must be a JSON object' ||
+      rpcErr.message === 'p_next_tsfin_snapshot_json must be a JSON object' ||
       rpcErr.message === 'p_rotation_json must be a JSON object' ||
       rpcErr.message === 'p_actor_user_id is required when p_rotation_json is supplied' ||
       rpcErr.message === 'p_rotation_json.new_timesheet_id is required' ||
@@ -30210,7 +31958,7 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
     return withCORS(env, req, serverError(String(rpcErr.message || e?.message || e)));
   }
 
-  if (bulkProcessResponseRequested) {
+  if (bulkPatchResponseRequested) {
     let bulkPayload = unwrapJsonbRpcPayload(rpcRes, 'contract_week_manual_upsert_bulk_process_atomic');
     if (!bulkPayload) {
       wlog('contract_week_manual_upsert_bulk_process_atomic_invalid_payload', {
@@ -30523,7 +32271,28 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
     const previewHints = (bulkPayload.preview_hints && typeof bulkPayload.preview_hints === 'object') ? bulkPayload.preview_hints : {};
     const cacheInvalidationHints = (bulkPayload.cache_invalidation_hints && typeof bulkPayload.cache_invalidation_hints === 'object') ? bulkPayload.cache_invalidation_hints : {};
 
-    wlog('finish_bulk_process', {
+    const finalBackendRowSignature = String(
+      bulkPayload.backend_row_signature ||
+      bulkPayload.row_backend_signature ||
+      bulkPayload.row_signature ||
+      bulkPayload.data_row?.backend_row_signature ||
+      bulkPayload.data_row?.row_backend_signature ||
+      bulkPayload.data_row?.row_signature ||
+      ''
+    ).trim() || null;
+
+    const finalRowPatch = (bulkPayload.row_patch && typeof bulkPayload.row_patch === 'object') ? bulkPayload.row_patch : {};
+    const finalDataRow = (bulkPayload.data_row && typeof bulkPayload.data_row === 'object')
+      ? bulkPayload.data_row
+      : ((bulkPayload.row && typeof bulkPayload.row === 'object') ? bulkPayload.row : {});
+    const finalRow = (bulkPayload.row && typeof bulkPayload.row === 'object')
+      ? bulkPayload.row
+      : finalDataRow;
+    const finalRowPatches = Array.isArray(bulkPayload.row_patches)
+      ? bulkPayload.row_patches
+      : (Object.keys(finalRowPatch || {}).length ? [finalRowPatch] : []);
+
+    wlog(bulkAuthoriseResponseRequested ? 'finish_bulk_authorise' : 'finish_bulk_process', {
       final_timesheet_id: finalCurrentTimesheetId || null,
       final_booking_id: finalBulkTimesheet?.booking_id || null,
       final_version: finalVersion,
@@ -30533,14 +32302,16 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
       processing_status: finalProcessingStatus,
       row_key: rowKey,
       previous_row_key: previousRowKey,
-      bulk_process_bucket: bulkProcessBucket
+      bulk_process_bucket: bulkProcessBucket,
+      response_context: bulkResponseContext,
+      backend_row_signature_present: !!finalBackendRowSignature
     });
 
     return withCORS(env, req, ok({
       ...bulkPayload,
       ok: bulkPayload.ok !== false,
       success: bulkPayload.success !== false,
-      operation: bulkPayload.operation || 'contract_week_manual_upsert_bulk_process',
+      operation: bulkPayload.operation || (bulkAuthoriseResponseRequested ? 'contract_week_manual_upsert_bulk_authorise' : 'contract_week_manual_upsert_bulk_process'),
       timesheet_id: finalCurrentTimesheetId || bulkPayload.timesheet_id || null,
       current_timesheet_id: finalCurrentTimesheetId || null,
       current_version: finalVersion,
@@ -30548,13 +32319,16 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
       contract_week_id: bulkPayload.contract_week_id || cw.id || null,
       was_stale: !!bulkPayload.was_stale,
       processing_status: finalProcessingStatus,
-      row_patch: (bulkPayload.row_patch && typeof bulkPayload.row_patch === 'object') ? bulkPayload.row_patch : {},
-      data_row: (bulkPayload.data_row && typeof bulkPayload.data_row === 'object') ? bulkPayload.data_row : ((bulkPayload.row && typeof bulkPayload.row === 'object') ? bulkPayload.row : {}),
-      row: (bulkPayload.row && typeof bulkPayload.row === 'object') ? bulkPayload.row : ((bulkPayload.data_row && typeof bulkPayload.data_row === 'object') ? bulkPayload.data_row : {}),
+      row_patch: finalRowPatch,
+      row_patches: finalRowPatches,
+      data_row: finalDataRow,
+      row: finalRow,
       previous_row_key: previousRowKey,
       row_key: rowKey,
       new_row_key: rowKey,
-      row_signature: bulkPayload.row_signature || bulkPayload.data_row?.row_signature || null,
+      row_signature: finalBackendRowSignature,
+      backend_row_signature: finalBackendRowSignature,
+      row_backend_signature: finalBackendRowSignature,
       bulk_process_bucket: bulkProcessBucket,
       bucket_transition: (bulkPayload.bucket_transition && typeof bulkPayload.bucket_transition === 'object') ? bulkPayload.bucket_transition : {
         from: bulkPayload.previous_bulk_process_bucket || null,
@@ -30573,6 +32347,9 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
       timesheet_financials_json: finalBulkTsfin || bulkPayload.timesheet_financials_json || null,
       hours,
       used_schedule: true,
+      response_context: bulkResponseContext,
+      bulk_authorise: !!bulkAuthoriseResponseRequested,
+      bulk_process: !!bulkProcessResponseRequested,
       created_now: !!bulkPayload.created_now
     }));
   }
@@ -30718,7 +32495,56 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
   }));
 }
 
+function formatCloudTmsLondonDate(value) {
+  const fallback = 'Not recorded';
+  if (value === null || value === undefined) return fallback;
 
+  let dateValue;
+
+  if (value instanceof Date) {
+    dateValue = new Date(value.getTime());
+  } else if (typeof value === 'number') {
+    if (!Number.isFinite(value)) return fallback;
+    const epochMs = Math.abs(value) < 100000000000 ? value * 1000 : value;
+    dateValue = new Date(epochMs);
+  } else {
+    const raw = String(value || '').trim();
+    if (!raw) return fallback;
+
+    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+      const [yearPart, monthPart, dayPart] = raw.split('-').map((part) => Number(part));
+      if (!Number.isInteger(yearPart) || !Number.isInteger(monthPart) || !Number.isInteger(dayPart)) return fallback;
+      dateValue = new Date(Date.UTC(yearPart, monthPart - 1, dayPart, 12, 0, 0));
+    } else if (/^-?\d+(\.\d+)?$/.test(raw)) {
+      const numericValue = Number(raw);
+      if (!Number.isFinite(numericValue)) return fallback;
+      const epochMs = Math.abs(numericValue) < 100000000000 ? numericValue * 1000 : numericValue;
+      dateValue = new Date(epochMs);
+    } else {
+      dateValue = new Date(raw);
+    }
+  }
+
+  if (!(dateValue instanceof Date) || !Number.isFinite(dateValue.getTime())) return fallback;
+
+  const dateParts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/London',
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric'
+  }).formatToParts(dateValue);
+
+  const dayRaw = dateParts.find((part) => part.type === 'day')?.value || '';
+  const month = dateParts.find((part) => part.type === 'month')?.value || '';
+  const year = dateParts.find((part) => part.type === 'year')?.value || '';
+
+  const dayNumber = Number(dayRaw);
+  const day = Number.isFinite(dayNumber) && dayNumber > 0 ? String(dayNumber) : dayRaw;
+
+  if (!day || !month || !year) return fallback;
+
+  return `${day} ${month} ${year}`;
+}
 
 
 async function handleTimesheetManualDailyCreateOptions(env, req) {
@@ -119312,22 +121138,44 @@ function getRailAdapter(provider) {
                 });
               } catch (e) {
                 const msg = (e && e.message) ? String(e.message) : String(e || 'unknown');
+                const errorCode = String(e?.code || e?.error_code || e?.name || 'REVOLUT_CREATE_ERROR').trim().toUpperCase() || 'REVOLUT_CREATE_ERROR';
+                const messageHash = (() => {
+                  let h = 2166136261;
+                  const raw = `${errorCode}|${msg}`;
+                  for (let i = 0; i < raw.length; i += 1) {
+                    h ^= raw.charCodeAt(i);
+                    h = Math.imul(h, 16777619);
+                  }
+                  return (h >>> 0).toString(16).padStart(8, '0');
+                })();
+                const createErrorState = `CREATE_ERROR:${errorCode}:${messageHash}`.slice(0, 500);
+                const createErrorPayload = {
+                  kind: 'REVOLUT_CREATE_ERROR',
+                  at_utc: nowIso,
+                  error_code: errorCode,
+                  error_message_hash: messageHash,
+                  error: msg,
+                  request_id: requestId,
+                  submission_outcome: 'UNKNOWN',
+                  ambiguous_provider_create: true,
+                  requires_review: true
+                };
                 updates.push({
                   transfer_id: transferId,
                   pay_batch_id: batchId,
                   provider_key: 'REVOLUT',
                   provider_event_id: null,
                   provider_reference: requestId,
-                  provider_state: `CREATE_ERROR:${msg}`.slice(0, 500),
-                  normalised_state: 'PENDING',
+                  provider_state: createErrorState,
+                  normalised_state: 'UNKNOWN',
                   event_source: 'SYSTEM',
                   event_time_utc: nowIso,
                   amount: Number(t?.amount || 0),
                   currency: String(t?.currency || 'GBP').toUpperCase(),
-                  raw_payload: { kind: 'REVOLUT_CREATE_ERROR', at_utc: nowIso, error: msg, request_id: requestId },
+                  raw_payload: createErrorPayload,
                   status: 'PENDING',
-                  rail_state: `CREATE_ERROR:${msg}`.slice(0, 500),
-                  rail_meta_json: { kind: 'REVOLUT_CREATE_ERROR', at_utc: nowIso, error: msg, request_id: requestId },
+                  rail_state: createErrorState,
+                  rail_meta_json: createErrorPayload,
                   failed_reason: null,
                   completed_at_utc: null
                 });
@@ -119663,7 +121511,6 @@ function getRailAdapter(provider) {
   const mk = getRailAdapter.__RAIL_REGISTRY[p];
   return (typeof mk === 'function') ? mk() : null;
 }
-
 
 
 async function revolutAuth_getAccessToken(env) {
@@ -127528,6 +129375,18 @@ if (req.method === 'POST' && p === '/api/banking/id/balance-now') {
       return handleBankingPayBatchPrepare(env, req, user, m.id);
     }
   }
+// POST /api/banking/alerts/acknowledge
+if (req.method === 'POST' && p === '/api/banking/alerts/acknowledge') {
+  return handleBankingAlertAcknowledge(env, req, user);
+}
+
+// POST /api/banking/pay/batch/:id/retry-blocked-funds
+{
+  const m = matchPath(p, '/api/banking/pay/batch/:id/retry-blocked-funds');
+  if (m && req.method === 'POST') {
+    return handleBankingPayBatchRetryBlockedFunds(env, req, user, m.id);
+  }
+}
 
 // ====================== BANKING (CSV settle, remittances, external reconcile) ======================
 
