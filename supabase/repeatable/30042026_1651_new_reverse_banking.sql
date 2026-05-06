@@ -12493,7 +12493,6 @@ $function$;
 
 
 
-
 CREATE OR REPLACE FUNCTION public.pay_payment_return_admin_notice_dispatch_due(
   p_limit integer DEFAULT 50
 )
@@ -12530,6 +12529,9 @@ DECLARE
   v_blocked_execution_state text;
   v_blocked_pay_date text;
   v_blocked_bulk_reference text;
+  v_blocked_last_funds_checked text;
+  v_insert_context_kind text;
+  v_insert_context_id uuid;
 BEGIN
   PERFORM public._imp_debug_audit(
     NULL::uuid,
@@ -12622,6 +12624,8 @@ BEGIN
     v_mail_outbox_id := NULL::uuid;
     v_to_emails := NULL::text;
     v_notice_reference := NULL::text;
+    v_insert_context_kind := 'pay_payment_return_notice_groups';
+    v_insert_context_id := v_group_row.id;
     v_pay_batch_short := CASE WHEN v_group_row.pay_batch_id IS NULL THEN '' ELSE left(v_group_row.pay_batch_id::text, 8) END;
 
     SELECT string_agg(admin_recipients.email, ',' ORDER BY admin_recipients.email)
@@ -12652,7 +12656,8 @@ BEGIN
           'dispatch_error', jsonb_build_object(
             'code', 'NO_ADMIN_NOTICE_RECIPIENTS_FOR_ROLE',
             'recipient_role', v_recipient_role,
-            'failed_at_utc', v_now
+            'failed_at_utc', v_now,
+            'failed_at_display', public.cloudtms_format_london_datetime(v_now)
           )
         )
       WHERE no_recipient_group.id = v_group_row.id;
@@ -12665,6 +12670,8 @@ BEGIN
     v_notice_summary := left(COALESCE(v_group_row.summary_json::text, '{}'), 12000);
 
     IF upper(btrim(coalesce(v_group_row.notice_kind, ''))) = 'BLOCKED_FUNDS' THEN
+      v_insert_context_kind := 'pay_batches';
+      v_insert_context_id := v_group_row.pay_batch_id;
       v_blocked_provider := COALESCE(
         v_group_row.summary_json #>> '{rail_provider}',
         v_group_row.summary_json #>> '{provider}',
@@ -12714,9 +12721,20 @@ BEGIN
         ''
       );
       v_blocked_pay_date := COALESCE(
-        v_group_row.summary_json #>> '{pay_date}',
-        v_group_row.summary_json #>> '{latest_summary_json,pay_date}',
+        v_group_row.summary_json #>> '{pay_date_display}',
+        CASE
+          WHEN NULLIF(BTRIM(COALESCE(v_group_row.summary_json #>> '{pay_date}', v_group_row.summary_json #>> '{latest_summary_json,pay_date}', '')), '') IS NULL THEN NULL
+          ELSE public.cloudtms_format_london_date((COALESCE(v_group_row.summary_json #>> '{pay_date}', v_group_row.summary_json #>> '{latest_summary_json,pay_date}'))::date)
+        END,
         ''
+      );
+      v_blocked_last_funds_checked := COALESCE(
+        v_group_row.summary_json #>> '{last_funds_check_display}',
+        CASE
+          WHEN NULLIF(BTRIM(COALESCE(v_group_row.summary_json #>> '{last_funds_check_at_utc}', v_group_row.summary_json #>> '{latest_summary_json,last_funds_check_at_utc}', '')), '') IS NULL THEN NULL
+          ELSE public.cloudtms_format_london_datetime((COALESCE(v_group_row.summary_json #>> '{last_funds_check_at_utc}', v_group_row.summary_json #>> '{latest_summary_json,last_funds_check_at_utc}'))::timestamptz)
+        END,
+        'Not recorded'
       );
       v_blocked_bulk_reference := COALESCE(
         v_group_row.summary_json #>> '{bulk_reference}',
@@ -12737,25 +12755,29 @@ BEGIN
         'Available: ' || CASE WHEN NULLIF(v_blocked_available, '') IS NULL THEN '' ELSE '£' || v_blocked_available END,
         'Status: ' || COALESCE(v_blocked_status, 'BLOCKED_FUNDS'),
         'Execution state: ' || COALESCE(v_blocked_execution_state, ''),
+        'Last funds checked: ' || COALESCE(v_blocked_last_funds_checked, 'Not recorded'),
         'Bank submission happened: No',
         'Action required: fund the account and retry, or cancel/release the batch.',
         '',
-        'This is a blocked-funds bank rejection before submission. It is not a payment reversal.'
+        'This is a blocked-funds bank rejection before submission. It is not a returned or reversed payment.'
       );
       v_body_html := '<div style="font-family:Arial,sans-serif;color:#111827;line-height:1.45;">'
         || '<h2 style="margin:0 0 12px 0;color:#991b1b;">Bank rejected payment — blocked funds</h2>'
         || '<p>CloudTMS could not submit this payment because the funding account did not have enough funds.</p>'
         || '<table style="border-collapse:collapse;width:100%;max-width:760px;">'
         || '<tr><th style="text-align:left;border:1px solid #e5e7eb;padding:8px;background:#f9fafb;">Pay batch</th><td style="border:1px solid #e5e7eb;padding:8px;">' || replace(replace(replace(COALESCE(v_group_row.pay_batch_id::text, ''), '&', '&amp;'), '<', '&lt;'), '>', '&gt;') || '</td></tr>'
+        || '<tr><th style="text-align:left;border:1px solid #e5e7eb;padding:8px;background:#f9fafb;">Batch reference</th><td style="border:1px solid #e5e7eb;padding:8px;">' || replace(replace(replace(COALESCE(v_blocked_bulk_reference, ''), '&', '&amp;'), '<', '&lt;'), '>', '&gt;') || '</td></tr>'
+        || '<tr><th style="text-align:left;border:1px solid #e5e7eb;padding:8px;background:#f9fafb;">Pay date</th><td style="border:1px solid #e5e7eb;padding:8px;">' || replace(replace(replace(COALESCE(v_blocked_pay_date, ''), '&', '&amp;'), '<', '&lt;'), '>', '&gt;') || '</td></tr>'
         || '<tr><th style="text-align:left;border:1px solid #e5e7eb;padding:8px;background:#f9fafb;">Provider</th><td style="border:1px solid #e5e7eb;padding:8px;">' || replace(replace(replace(COALESCE(v_blocked_provider, '') || CASE WHEN NULLIF(v_blocked_env, '') IS NULL THEN '' ELSE ' / ' || v_blocked_env END, '&', '&amp;'), '<', '&lt;'), '>', '&gt;') || '</td></tr>'
         || '<tr><th style="text-align:left;border:1px solid #e5e7eb;padding:8px;background:#f9fafb;">Funding account</th><td style="border:1px solid #e5e7eb;padding:8px;">' || replace(replace(replace(COALESCE(v_blocked_account, ''), '&', '&amp;'), '<', '&lt;'), '>', '&gt;') || '</td></tr>'
         || '<tr><th style="text-align:left;border:1px solid #e5e7eb;padding:8px;background:#f9fafb;">Required</th><td style="border:1px solid #e5e7eb;padding:8px;">' || replace(replace(replace(CASE WHEN NULLIF(v_blocked_required, '') IS NULL THEN '' ELSE '£' || v_blocked_required END, '&', '&amp;'), '<', '&lt;'), '>', '&gt;') || '</td></tr>'
         || '<tr><th style="text-align:left;border:1px solid #e5e7eb;padding:8px;background:#f9fafb;">Available</th><td style="border:1px solid #e5e7eb;padding:8px;">' || replace(replace(replace(CASE WHEN NULLIF(v_blocked_available, '') IS NULL THEN '' ELSE '£' || v_blocked_available END, '&', '&amp;'), '<', '&lt;'), '>', '&gt;') || '</td></tr>'
         || '<tr><th style="text-align:left;border:1px solid #e5e7eb;padding:8px;background:#f9fafb;">Status</th><td style="border:1px solid #e5e7eb;padding:8px;">' || replace(replace(replace(COALESCE(v_blocked_status, 'BLOCKED_FUNDS'), '&', '&amp;'), '<', '&lt;'), '>', '&gt;') || '</td></tr>'
+        || '<tr><th style="text-align:left;border:1px solid #e5e7eb;padding:8px;background:#f9fafb;">Last funds checked</th><td style="border:1px solid #e5e7eb;padding:8px;">' || replace(replace(replace(COALESCE(v_blocked_last_funds_checked, 'Not recorded'), '&', '&amp;'), '<', '&lt;'), '>', '&gt;') || '</td></tr>'
         || '<tr><th style="text-align:left;border:1px solid #e5e7eb;padding:8px;background:#f9fafb;">Bank submission happened</th><td style="border:1px solid #e5e7eb;padding:8px;">No</td></tr>'
         || '</table>'
         || '<p style="margin-top:14px;"><strong>Action required:</strong> fund the account and retry, or cancel/release the batch.</p>'
-        || '<p style="font-size:12px;color:#6b7280;">This is a blocked-funds bank rejection before submission. It is not a payment reversal.</p>'
+        || '<p style="font-size:12px;color:#6b7280;">This is a blocked-funds bank rejection before submission. It is not a returned or reversed payment.</p>'
         || '</div>';
       v_notice_reference := 'banking_alert:pay_batch:' || COALESCE(v_group_row.pay_batch_id::text, 'NO_BATCH') || ':BLOCKED_FUNDS:' || md5(COALESCE(v_group_row.alert_fingerprint, v_group_row.id::text));
     ELSE
@@ -12767,17 +12789,28 @@ BEGIN
         'Pay batch ID: ' || COALESCE(v_group_row.pay_batch_id::text, ''),
         'Provider: ' || COALESCE(v_group_row.provider_key, ''),
         'Execution reference: ' || COALESCE(v_group_row.execution_commit_ref, ''),
-        'Created at UTC: ' || COALESCE(v_group_row.created_at_utc::text, ''),
+        'Created: ' || public.cloudtms_format_london_datetime(v_group_row.created_at_utc),
+        'Quiet window until: ' || public.cloudtms_format_london_datetime(v_group_row.quiet_until_utc),
+        'Latest send by: ' || public.cloudtms_format_london_datetime(v_group_row.max_send_at_utc),
         '',
-        'Summary JSON:',
-        v_notice_summary
+        'Action required: open CloudTMS Banking Pay and review the Payment Issues tab for this batch.',
+        '',
+        'The detailed audit payload is stored against the payment notice group in CloudTMS.'
       );
-      v_body_html := '<p>CloudTMS payment correction/admin notice</p>'
-        || '<p><strong>Notice kind:</strong> ' || COALESCE(v_group_row.notice_kind, '') || '</p>'
-        || '<p><strong>Pay batch ID:</strong> ' || COALESCE(v_group_row.pay_batch_id::text, '') || '</p>'
-        || '<p><strong>Provider:</strong> ' || COALESCE(v_group_row.provider_key, '') || '</p>'
-        || '<p><strong>Execution reference:</strong> ' || COALESCE(v_group_row.execution_commit_ref, '') || '</p>'
-        || '<pre>' || replace(replace(replace(v_notice_summary, '&', '&amp;'), '<', '&lt;'), '>', '&gt;') || '</pre>';
+      v_body_html := '<div style="font-family:Arial,sans-serif;color:#111827;line-height:1.45;">'
+        || '<h2 style="margin:0 0 12px 0;color:#991b1b;">CloudTMS payment correction/admin notice</h2>'
+        || '<table style="border-collapse:collapse;width:100%;max-width:760px;">'
+        || '<tr><th style="text-align:left;border:1px solid #e5e7eb;padding:8px;background:#f9fafb;">Notice kind</th><td style="border:1px solid #e5e7eb;padding:8px;">' || replace(replace(replace(COALESCE(v_group_row.notice_kind, ''), '&', '&amp;'), '<', '&lt;'), '>', '&gt;') || '</td></tr>'
+        || '<tr><th style="text-align:left;border:1px solid #e5e7eb;padding:8px;background:#f9fafb;">Pay batch ID</th><td style="border:1px solid #e5e7eb;padding:8px;">' || replace(replace(replace(COALESCE(v_group_row.pay_batch_id::text, ''), '&', '&amp;'), '<', '&lt;'), '>', '&gt;') || '</td></tr>'
+        || '<tr><th style="text-align:left;border:1px solid #e5e7eb;padding:8px;background:#f9fafb;">Provider</th><td style="border:1px solid #e5e7eb;padding:8px;">' || replace(replace(replace(COALESCE(v_group_row.provider_key, ''), '&', '&amp;'), '<', '&lt;'), '>', '&gt;') || '</td></tr>'
+        || '<tr><th style="text-align:left;border:1px solid #e5e7eb;padding:8px;background:#f9fafb;">Execution reference</th><td style="border:1px solid #e5e7eb;padding:8px;">' || replace(replace(replace(COALESCE(v_group_row.execution_commit_ref, ''), '&', '&amp;'), '<', '&lt;'), '>', '&gt;') || '</td></tr>'
+        || '<tr><th style="text-align:left;border:1px solid #e5e7eb;padding:8px;background:#f9fafb;">Created</th><td style="border:1px solid #e5e7eb;padding:8px;">' || replace(replace(replace(public.cloudtms_format_london_datetime(v_group_row.created_at_utc), '&', '&amp;'), '<', '&lt;'), '>', '&gt;') || '</td></tr>'
+        || '<tr><th style="text-align:left;border:1px solid #e5e7eb;padding:8px;background:#f9fafb;">Quiet window until</th><td style="border:1px solid #e5e7eb;padding:8px;">' || replace(replace(replace(public.cloudtms_format_london_datetime(v_group_row.quiet_until_utc), '&', '&amp;'), '<', '&lt;'), '>', '&gt;') || '</td></tr>'
+        || '<tr><th style="text-align:left;border:1px solid #e5e7eb;padding:8px;background:#f9fafb;">Latest send by</th><td style="border:1px solid #e5e7eb;padding:8px;">' || replace(replace(replace(public.cloudtms_format_london_datetime(v_group_row.max_send_at_utc), '&', '&amp;'), '<', '&lt;'), '>', '&gt;') || '</td></tr>'
+        || '</table>'
+        || '<p style="margin-top:14px;"><strong>Action required:</strong> open CloudTMS Banking Pay and review the Payment Issues tab for this batch.</p>'
+        || '<p style="font-size:12px;color:#6b7280;">The detailed audit payload is stored against the payment notice group in CloudTMS.</p>'
+        || '</div>';
       v_notice_reference := 'payment_return_notice_group:' || v_group_row.id::text;
     END IF;
 
@@ -12822,8 +12855,8 @@ BEGIN
       NULL::uuid,
       'ROLE',
       NULL::uuid,
-      'pay_payment_return_notice_groups',
-      v_group_row.id,
+      v_insert_context_kind,
+      v_insert_context_id,
       NULL::timestamptz,
       v_now
     WHERE NOT EXISTS (
@@ -12853,7 +12886,8 @@ BEGIN
         summary_json = COALESCE(failed_insert_group.summary_json, '{}'::jsonb) || jsonb_build_object(
           'dispatch_error', jsonb_build_object(
             'code', 'ADMIN_NOTICE_MAIL_OUTBOX_INSERT_FAILED',
-            'failed_at_utc', v_now
+            'failed_at_utc', v_now,
+            'failed_at_display', public.cloudtms_format_london_datetime(v_now)
           )
         )
       WHERE failed_insert_group.id = v_group_row.id;
@@ -12872,7 +12906,10 @@ BEGIN
             'recipient_role', v_recipient_role,
             'to', v_to_emails,
             'reference', v_notice_reference,
-            'dispatched_at_utc', v_now
+            'dispatched_at_utc', v_now,
+            'dispatched_at_display', public.cloudtms_format_london_datetime(v_now),
+            'context_kind', v_insert_context_kind,
+            'context_id', v_insert_context_id
           )
         )
       WHERE sent_group.id = v_group_row.id;
@@ -12925,6 +12962,8 @@ EXCEPTION
     RAISE;
 END;
 $function$;
+
+
 
 
 CREATE OR REPLACE FUNCTION public.pay_remittance_maybe_queue_for_trigger(
