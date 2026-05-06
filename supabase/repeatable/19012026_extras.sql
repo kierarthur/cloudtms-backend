@@ -6500,6 +6500,7 @@ $function$;
 DROP FUNCTION IF EXISTS public.contract_week_manual_upsert_bulk_process_atomic(uuid, uuid, jsonb, jsonb, jsonb, jsonb, jsonb, uuid, boolean, timestamp with time zone);
 DROP FUNCTION IF EXISTS public.contract_week_manual_upsert_atomic(uuid, uuid, jsonb, jsonb, jsonb, jsonb, jsonb, uuid, boolean, timestamp with time zone);
 
+
 CREATE OR REPLACE FUNCTION public.contract_week_manual_upsert_atomic(
   p_week_id uuid,
   p_expected_timesheet_id uuid DEFAULT NULL,
@@ -6606,22 +6607,8 @@ DECLARE
   v_previous_processing_status public.ts_fin_processing_status_enum := NULL;
   v_segment_invoice_lock boolean := FALSE;
   v_compare_key text := NULL;
-  v_snapshot_text text := NULL;
-  v_authoritative_text text := NULL;
-  v_snapshot_numeric numeric := NULL;
-  v_authoritative_numeric numeric := NULL;
-  v_financial_compare_keys text[] := ARRAY[
-    'hours_day', 'hours_night', 'hours_sat', 'hours_sun', 'hours_bh',
-    'pay_day', 'pay_night', 'pay_sat', 'pay_sun', 'pay_bh',
-    'charge_day', 'charge_night', 'charge_sat', 'charge_sun', 'charge_bh',
-    'total_hours', 'total_pay_ex_vat', 'total_charge_ex_vat', 'margin_ex_vat',
-    'expenses_pay_ex_vat', 'expenses_charge_ex_vat',
-    'mileage_units', 'mileage_pay_rate', 'mileage_charge_rate', 'mileage_pay_ex_vat', 'mileage_charge_ex_vat',
-    'travel_pay_ex_vat', 'travel_charge_ex_vat',
-    'accommodation_pay_ex_vat', 'accommodation_charge_ex_vat',
-    'other_pay_ex_vat', 'other_charge_ex_vat',
-    'additional_pay_ex_vat', 'additional_charge_ex_vat', 'additional_margin_ex_vat'
-  ];
+  -- p_tsfin_snapshot_json is the intended next-write TSFIN snapshot.
+  -- It must not be compared to the old/current TSFIN for mutable financial values.
 
   v_outbox public.ts_financials_outbox%ROWTYPE;
   v_write_result record;
@@ -7456,83 +7443,10 @@ BEGIN
       )::text;
   END IF;
 
-  IF v_current_tsfin.id IS NOT NULL THEN
-    IF NULLIF(BTRIM(COALESCE(v_tsfin_snapshot_json->>'pay_method', '')), '') IS NOT NULL
-       AND NULLIF(BTRIM(COALESCE(v_tsfin_snapshot_json->>'pay_method', '')), '') IS DISTINCT FROM NULLIF(BTRIM(COALESCE(v_current_tsfin.pay_method, '')), '') THEN
-      RAISE EXCEPTION USING
-        MESSAGE = 'TSFIN_SNAPSHOT_MISMATCH',
-        DETAIL = jsonb_build_object(
-          'field', 'pay_method',
-          'expected_value', v_current_tsfin.pay_method,
-          'supplied_value', v_tsfin_snapshot_json->>'pay_method',
-          'contract_week_id', v_week.id::text,
-          'timesheet_id', v_current_ts.timesheet_id::text
-        )::text;
-    END IF;
-
-    IF NULLIF(BTRIM(COALESCE(v_tsfin_snapshot_json->>'basis', '')), '') IS NOT NULL
-       AND NULLIF(BTRIM(COALESCE(v_tsfin_snapshot_json->>'basis', '')), '') IS DISTINCT FROM v_current_tsfin.basis::text THEN
-      RAISE EXCEPTION USING
-        MESSAGE = 'TSFIN_SNAPSHOT_MISMATCH',
-        DETAIL = jsonb_build_object(
-          'field', 'basis',
-          'expected_value', v_current_tsfin.basis::text,
-          'supplied_value', v_tsfin_snapshot_json->>'basis',
-          'contract_week_id', v_week.id::text,
-          'timesheet_id', v_current_ts.timesheet_id::text
-        )::text;
-    END IF;
-
-    FOREACH v_compare_key IN ARRAY v_financial_compare_keys LOOP
-      IF v_tsfin_snapshot_json ? v_compare_key THEN
-        v_snapshot_text := NULLIF(BTRIM(COALESCE(v_tsfin_snapshot_json->>v_compare_key, '')), '');
-        v_authoritative_text := NULLIF(BTRIM(COALESCE(to_jsonb(v_current_tsfin)->>v_compare_key, '')), '');
-
-        IF v_snapshot_text IS NULL AND v_authoritative_text IS NULL THEN
-          CONTINUE;
-        END IF;
-
-        IF v_snapshot_text IS NULL OR v_authoritative_text IS NULL THEN
-          RAISE EXCEPTION USING
-            MESSAGE = 'TSFIN_SNAPSHOT_MISMATCH',
-            DETAIL = jsonb_build_object(
-              'field', v_compare_key,
-              'expected_value', v_authoritative_text,
-              'supplied_value', v_snapshot_text,
-              'contract_week_id', v_week.id::text,
-              'timesheet_id', v_current_ts.timesheet_id::text
-            )::text;
-        END IF;
-
-        BEGIN
-          v_snapshot_numeric := v_snapshot_text::numeric;
-          v_authoritative_numeric := v_authoritative_text::numeric;
-        EXCEPTION WHEN OTHERS THEN
-          RAISE EXCEPTION USING
-            MESSAGE = 'TSFIN_SNAPSHOT_MISMATCH',
-            DETAIL = jsonb_build_object(
-              'field', v_compare_key,
-              'expected_value', v_authoritative_text,
-              'supplied_value', v_snapshot_text,
-              'contract_week_id', v_week.id::text,
-              'timesheet_id', v_current_ts.timesheet_id::text
-            )::text;
-        END;
-
-        IF ABS(COALESCE(v_snapshot_numeric, 0) - COALESCE(v_authoritative_numeric, 0)) > 0.0001 THEN
-          RAISE EXCEPTION USING
-            MESSAGE = 'TSFIN_SNAPSHOT_MISMATCH',
-            DETAIL = jsonb_build_object(
-              'field', v_compare_key,
-              'expected_value', v_authoritative_numeric,
-              'supplied_value', v_snapshot_numeric,
-              'contract_week_id', v_week.id::text,
-              'timesheet_id', v_current_ts.timesheet_id::text
-            )::text;
-        END IF;
-      END IF;
-    END LOOP;
-  END IF;
+  -- Do not compare the intended next TSFIN snapshot to the old current TSFIN for
+  -- mutable financial values such as hours, rates, totals, expenses, mileage, or margin.
+  -- Stale protection for this write is enforced by expected_timesheet_id, backend row
+  -- signature, authorisation/invoice/payment locks, and invariant candidate/client checks.
 
   IF COALESCE(NULLIF(v_tsfin_snapshot_json->>'mileage_units', '')::numeric, 0) > 0
      OR COALESCE(NULLIF(v_tsfin_snapshot_json->>'mileage_pay_ex_vat', '')::numeric, 0) > 0
@@ -7730,7 +7644,6 @@ BEGIN
   RETURN NEXT;
 END;
 $function$;
-
 
 
 
@@ -8209,6 +8122,7 @@ $function$;
 
 DROP FUNCTION IF EXISTS public.contract_week_manual_upsert_bulk_process_atomic(uuid, uuid, jsonb, jsonb, jsonb, jsonb, jsonb, uuid, boolean, timestamp with time zone);
 
+DROP FUNCTION IF EXISTS public.contract_week_manual_upsert_bulk_process_atomic(uuid, uuid, jsonb, jsonb, jsonb, jsonb, jsonb, uuid, boolean, timestamp with time zone, text);
 
 CREATE OR REPLACE FUNCTION public.contract_week_manual_upsert_bulk_process_atomic(
   p_week_id uuid,
@@ -8221,7 +8135,10 @@ CREATE OR REPLACE FUNCTION public.contract_week_manual_upsert_bulk_process_atomi
   p_actor_user_id uuid DEFAULT NULL,
   p_materialise_staged_evidence boolean DEFAULT true,
   p_now_utc timestamp with time zone DEFAULT now(),
-  p_expected_row_signature text DEFAULT NULL
+  p_expected_row_signature text DEFAULT NULL,
+  p_expected_current_tsfin_snapshot_json jsonb DEFAULT NULL,
+  p_next_tsfin_snapshot_json jsonb DEFAULT NULL,
+  p_response_context text DEFAULT NULL
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -8281,11 +8198,20 @@ DECLARE
   v_rotation_new_version integer := NULL;
   v_pre_current_timesheet_id_text text := NULL;
   v_pre_current_version_text text := NULL;
+  v_response_context text := CASE
+    WHEN LOWER(BTRIM(COALESCE(p_response_context, ''))) = 'bulk_authorise' THEN 'bulk_authorise'
+    ELSE 'bulk_process'
+  END;
+  v_operation text := CASE
+    WHEN LOWER(BTRIM(COALESCE(p_response_context, ''))) = 'bulk_authorise' THEN 'contract_week_manual_upsert_bulk_authorise'
+    ELSE 'contract_week_manual_upsert_bulk_process'
+  END;
+  v_next_tsfin_snapshot_json jsonb := COALESCE(p_next_tsfin_snapshot_json, p_tsfin_snapshot_json);
 BEGIN
   IF p_week_id IS NULL THEN
     RETURN JSONB_BUILD_OBJECT(
       'ok', FALSE,
-      'operation', 'contract_week_manual_upsert_bulk_process',
+      'operation', v_operation,
       'success', FALSE,
       'error_code', 'CONTRACT_WEEK_ID_REQUIRED',
       'message', 'p_week_id is required.'
@@ -8320,7 +8246,7 @@ BEGIN
      AND COALESCE(v_current_row_signature, '') IS DISTINCT FROM v_expected_row_signature THEN
     RETURN JSONB_BUILD_OBJECT(
       'ok', FALSE,
-      'operation', 'contract_week_manual_upsert_bulk_process',
+      'operation', v_operation,
       'success', FALSE,
       'error_code', 'ROW_SIGNATURE_MISMATCH',
       'message', 'Contract week row changed after it was loaded. Refresh the row and try again.',
@@ -8386,7 +8312,7 @@ BEGIN
     p_timesheet_create_json => p_timesheet_create_json,
     p_timesheet_patch_json => p_timesheet_patch_json,
     p_contract_week_patch_json => p_contract_week_patch_json,
-    p_tsfin_snapshot_json => p_tsfin_snapshot_json,
+    p_tsfin_snapshot_json => v_next_tsfin_snapshot_json,
     p_rotation_json => p_rotation_json,
     p_actor_user_id => p_actor_user_id,
     p_materialise_staged_evidence => p_materialise_staged_evidence,
@@ -8397,7 +8323,7 @@ BEGIN
   IF v_contract_week_id IS NULL THEN
     RETURN JSONB_BUILD_OBJECT(
       'ok', FALSE,
-      'operation', 'contract_week_manual_upsert_bulk_process',
+      'operation', v_operation,
       'success', FALSE,
       'error_code', 'UPSERT_RETURNED_NO_ROW',
       'message', 'contract_week_manual_upsert_atomic did not return a row.',
@@ -8425,7 +8351,7 @@ BEGIN
   IF v_post_row IS NULL THEN
     RETURN JSONB_BUILD_OBJECT(
       'ok', FALSE,
-      'operation', 'contract_week_manual_upsert_bulk_process',
+      'operation', v_operation,
       'success', FALSE,
       'error_code', 'POST_DECISION_ROW_NOT_FOUND',
       'message', 'bulk_timesheet_row_decision_v1 did not return a post-upsert row.',
@@ -8518,6 +8444,8 @@ BEGIN
       'current_version', v_current_timesheet_version,
       'current_timesheet_version', v_current_timesheet_version,
       'row_signature', v_row_signature,
+      'backend_row_signature', v_row_signature,
+      'row_backend_signature', v_row_signature,
       'previous_bulk_process_bucket', v_pre_bucket,
       'bulk_process_bucket', v_post_bucket,
       'previous_bulk_authorise_section', v_pre_authorise_section,
@@ -8549,6 +8477,8 @@ BEGIN
     'storage_keys', JSONB_BUILD_ARRAY(v_previous_storage_key, v_primary_storage_key),
     'datasets', JSONB_BUILD_ARRAY('bulk_process', 'bulk_authorise'),
     'row_signature', v_row_signature,
+    'backend_row_signature', v_row_signature,
+    'row_backend_signature', v_row_signature,
     'invalidate_context', TRUE,
     'invalidate_preview', v_preview_changed
   );
@@ -8575,7 +8505,7 @@ BEGIN
 
   RETURN JSONB_BUILD_OBJECT(
     'ok', TRUE,
-    'operation', 'contract_week_manual_upsert_bulk_process',
+    'operation', v_operation,
     'success', TRUE,
     'contract_week_id', v_contract_week_id,
     'contract_id', v_contract_id,
@@ -8609,12 +8539,18 @@ BEGIN
     'tsfin', COALESCE(v_timesheet_financials_json, NULL::jsonb),
     'timesheet_financials_json', COALESCE(v_timesheet_financials_json, NULL::jsonb),
     'row_patch', v_row_patch,
+    'row_patches', JSONB_BUILD_ARRAY(v_row_patch),
     'data_row', COALESCE(v_post_row, JSONB_BUILD_OBJECT()),
     'row', COALESCE(v_post_row, JSONB_BUILD_OBJECT()),
     'row_key', v_row_key,
     'new_row_key', v_row_key,
     'previous_row_key', v_previous_row_key,
     'row_signature', v_row_signature,
+    'backend_row_signature', v_row_signature,
+    'row_backend_signature', v_row_signature,
+    'response_context', v_response_context,
+    'bulk_authorise', v_response_context = 'bulk_authorise',
+    'bulk_process', v_response_context = 'bulk_process',
     'primary_artifact', CASE
       WHEN v_primary_artifact_id IS NOT NULL OR v_primary_storage_key IS NOT NULL THEN JSONB_BUILD_OBJECT(
         'id', v_primary_artifact_id,
@@ -8711,7 +8647,7 @@ EXCEPTION WHEN OTHERS THEN
 
   RETURN JSONB_BUILD_OBJECT(
     'ok', FALSE,
-    'operation', 'contract_week_manual_upsert_bulk_process',
+    'operation', v_operation,
     'success', FALSE,
     'error_code', v_error_code,
     'sqlstate', v_error_sqlstate,
@@ -8733,6 +8669,9 @@ EXCEPTION WHEN OTHERS THEN
     'rotation_applied', FALSE,
     'old_timesheet_id', CASE WHEN p_rotation_json IS NULL THEN NULL ELSE v_pre_current_timesheet_id_text END,
     'previous_row_key', v_previous_row_key,
+    'response_context', v_response_context,
+    'bulk_authorise', v_response_context = 'bulk_authorise',
+    'bulk_process', v_response_context = 'bulk_process',
     'refresh_required', TRUE,
     'cache_invalidation_hints', JSONB_BUILD_OBJECT(
       'row_keys', CASE WHEN v_previous_row_key IS NULL THEN '[]'::jsonb ELSE JSONB_BUILD_ARRAY(v_previous_row_key) END,
@@ -8758,8 +8697,6 @@ EXCEPTION WHEN OTHERS THEN
   );
 END;
 $function$;
-
-
 
 CREATE OR REPLACE FUNCTION public.cloudtms_format_london_datetime(p_ts timestamptz)
 RETURNS text
