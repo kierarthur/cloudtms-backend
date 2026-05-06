@@ -40178,5 +40178,149 @@ BEGIN
   );
 END;
 $function$;
+CREATE OR REPLACE FUNCTION public.banking_alert_acknowledge_all_current(
+  p_actor_user_id uuid,
+  p_note text DEFAULT NULL::text
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_active_json jsonb := '{}'::jsonb;
+  v_remaining_json jsonb := '{}'::jsonb;
+  v_active_count integer := 0;
+  v_acknowledged_count integer := 0;
+  v_acknowledged_alerts jsonb := '[]'::jsonb;
+BEGIN
+  IF p_actor_user_id IS NULL THEN
+    RAISE EXCEPTION 'BANKING_ALERT_ACKNOWLEDGE_ALL_CURRENT_ACTOR_REQUIRED'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object('code', 'BANKING_ALERT_ACKNOWLEDGE_ALL_CURRENT_ACTOR_REQUIRED')::text;
+  END IF;
+
+  v_active_json := public.banking_alerts_active_for_user(
+    p_actor_user_id,
+    NULL::text,
+    NULL::uuid,
+    false,
+    0
+  );
+
+  WITH active_alert_rows AS (
+    SELECT
+      active_alert_element.alert_json ->> 'alert_fingerprint' AS active_alert_fingerprint,
+      active_alert_element.alert_json ->> 'alert_kind' AS active_alert_kind,
+      active_alert_element.alert_json ->> 'entity_kind' AS active_entity_kind,
+      (active_alert_element.alert_json ->> 'entity_id')::uuid AS active_entity_id,
+      COALESCE(active_alert_element.alert_json -> 'payload_json', '{}'::jsonb) AS active_payload_json
+    FROM jsonb_array_elements(COALESCE(v_active_json -> 'alerts', '[]'::jsonb)) AS active_alert_element(alert_json)
+    WHERE NULLIF(BTRIM(COALESCE(active_alert_element.alert_json ->> 'alert_fingerprint', '')), '') IS NOT NULL
+      AND NULLIF(BTRIM(COALESCE(active_alert_element.alert_json ->> 'alert_kind', '')), '') IS NOT NULL
+      AND NULLIF(BTRIM(COALESCE(active_alert_element.alert_json ->> 'entity_kind', '')), '') IS NOT NULL
+      AND NULLIF(BTRIM(COALESCE(active_alert_element.alert_json ->> 'entity_id', '')), '') IS NOT NULL
+      AND COALESCE((active_alert_element.alert_json ->> 'acknowledged_for_current_user')::boolean, false) = false
+  ),
+  deduped_active_alert_rows AS (
+    SELECT DISTINCT ON (active_alert_rows.active_alert_fingerprint)
+      active_alert_rows.active_alert_fingerprint,
+      active_alert_rows.active_alert_kind,
+      active_alert_rows.active_entity_kind,
+      active_alert_rows.active_entity_id,
+      active_alert_rows.active_payload_json
+    FROM active_alert_rows
+    ORDER BY active_alert_rows.active_alert_fingerprint ASC
+  ),
+  counted_active_alerts AS (
+    SELECT COUNT(*)::integer AS active_alert_count
+    FROM deduped_active_alert_rows
+  ),
+  inserted_acknowledgements AS (
+    INSERT INTO public.banking_alert_acknowledgements AS banking_alert_acknowledgement_insert (
+      alert_fingerprint,
+      alert_kind,
+      entity_kind,
+      entity_id,
+      acknowledged_by_user_id,
+      acknowledged_at_utc,
+      acknowledge_scope,
+      note,
+      alert_payload_json,
+      resolved_at_ack
+    )
+    SELECT
+      deduped_active_alert_rows.active_alert_fingerprint,
+      UPPER(BTRIM(deduped_active_alert_rows.active_alert_kind)),
+      LOWER(BTRIM(deduped_active_alert_rows.active_entity_kind)),
+      deduped_active_alert_rows.active_entity_id,
+      p_actor_user_id,
+      now(),
+      'USER',
+      NULLIF(BTRIM(COALESCE(p_note, '')), ''),
+      COALESCE(deduped_active_alert_rows.active_payload_json, '{}'::jsonb),
+      false
+    FROM deduped_active_alert_rows
+    ON CONFLICT (alert_fingerprint, acknowledged_by_user_id, acknowledge_scope)
+    DO UPDATE SET
+      alert_kind = banking_alert_acknowledgement_insert.alert_kind,
+      entity_kind = banking_alert_acknowledgement_insert.entity_kind,
+      entity_id = banking_alert_acknowledgement_insert.entity_id,
+      note = COALESCE(EXCLUDED.note, banking_alert_acknowledgement_insert.note),
+      alert_payload_json = CASE
+        WHEN EXCLUDED.alert_payload_json = '{}'::jsonb THEN banking_alert_acknowledgement_insert.alert_payload_json
+        ELSE EXCLUDED.alert_payload_json
+      END
+    RETURNING
+      banking_alert_acknowledgement_insert.alert_fingerprint,
+      banking_alert_acknowledgement_insert.alert_kind,
+      banking_alert_acknowledgement_insert.entity_kind,
+      banking_alert_acknowledgement_insert.entity_id,
+      banking_alert_acknowledgement_insert.acknowledged_at_utc
+  ),
+  acknowledgement_summary AS (
+    SELECT
+      COUNT(*)::integer AS acknowledged_alert_count,
+      COALESCE(jsonb_agg(jsonb_build_object(
+        'alert_fingerprint', inserted_acknowledgements.alert_fingerprint,
+        'alert_kind', inserted_acknowledgements.alert_kind,
+        'entity_kind', inserted_acknowledgements.entity_kind,
+        'entity_id', inserted_acknowledgements.entity_id::text,
+        'acknowledged_at_utc', inserted_acknowledgements.acknowledged_at_utc::text
+      ) ORDER BY inserted_acknowledgements.acknowledged_at_utc DESC, inserted_acknowledgements.alert_fingerprint ASC), '[]'::jsonb) AS acknowledged_alerts_json
+    FROM inserted_acknowledgements
+  )
+  SELECT
+    COALESCE(counted_active_alerts.active_alert_count, 0),
+    COALESCE(acknowledgement_summary.acknowledged_alert_count, 0),
+    COALESCE(acknowledgement_summary.acknowledged_alerts_json, '[]'::jsonb)
+  INTO
+    v_active_count,
+    v_acknowledged_count,
+    v_acknowledged_alerts
+  FROM counted_active_alerts
+  CROSS JOIN acknowledgement_summary;
+
+  v_remaining_json := public.banking_alerts_active_for_user(
+    p_actor_user_id,
+    NULL::text,
+    NULL::uuid,
+    false,
+    0
+  );
+
+  RETURN jsonb_build_object(
+    'ok', true,
+    'mode', 'clear_all_current',
+    'active_count_before_acknowledge', COALESCE(v_active_count, 0),
+    'requested_count', COALESCE(v_active_count, 0),
+    'acknowledged_count', COALESCE(v_acknowledged_count, 0),
+    'ignored_count', GREATEST(COALESCE(v_active_count, 0) - COALESCE(v_acknowledged_count, 0), 0),
+    'acknowledged_alerts', COALESCE(v_acknowledged_alerts, '[]'::jsonb),
+    'remaining_alert_summary', v_remaining_json
+  );
+END;
+$function$;
 
 
