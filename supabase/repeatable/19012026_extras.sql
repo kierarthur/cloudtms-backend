@@ -8763,5 +8763,33 @@ BEGIN
 END;
 $function$;
 
+CREATE OR REPLACE FUNCTION public.cloudtms_format_gbp(p_amount numeric)
+ RETURNS text
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_amount numeric;
+  v_abs_amount numeric;
+  v_formatted text;
+BEGIN
+  IF p_amount IS NULL THEN
+    RETURN '—';
+  END IF;
+
+  v_amount := round(p_amount, 2);
+  v_abs_amount := abs(v_amount);
+  v_formatted := to_char(v_abs_amount, 'FM999,999,999,999,999,999,999,990.00');
+
+  IF v_amount < 0 THEN
+    RETURN '-£' || v_formatted;
+  END IF;
+
+  RETURN '£' || v_formatted;
+END;
+$function$;
+
+
 
 
