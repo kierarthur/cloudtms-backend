@@ -38470,6 +38470,7 @@ $function$;
 
 
 
+
 CREATE OR REPLACE FUNCTION public.banking_alerts_active_for_user(
   p_actor_user_id uuid,
   p_entity_kind text DEFAULT NULL::text,
@@ -38543,9 +38544,33 @@ BEGIN
       blocked_funds_source.payload_json,
       blocked_funds_source.required_gbp_text,
       blocked_funds_source.available_gbp_text,
+      CASE
+        WHEN nullif(blocked_funds_source.required_gbp_text, '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+          THEN public.cloudtms_format_gbp(blocked_funds_source.required_gbp_text::numeric)
+        ELSE '—'
+      END AS required_gbp_display,
+      CASE
+        WHEN nullif(blocked_funds_source.available_gbp_text, '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+          THEN public.cloudtms_format_gbp(blocked_funds_source.available_gbp_text::numeric)
+        ELSE '—'
+      END AS available_gbp_display,
       blocked_funds_source.sort_at_utc
     FROM blocked_funds_source
     WHERE COALESCE((blocked_funds_source.submission_evidence_json ->> 'transfer_event_count')::integer, 0) = 0
+      AND COALESCE((blocked_funds_source.submission_evidence_json ->> 'has_rail_tx_id')::boolean, false) = false
+      AND COALESCE((blocked_funds_source.submission_evidence_json ->> 'has_provider_submission_reference')::boolean, false) = false
+      AND COALESCE((blocked_funds_source.submission_evidence_json ->> 'has_provider_payment_reference')::boolean, false) = false
+      AND COALESCE((blocked_funds_source.submission_evidence_json ->> 'has_provider_transfer_reference')::boolean, false) = false
+      AND COALESCE((blocked_funds_source.submission_evidence_json ->> 'has_provider_transaction_reference')::boolean, false) = false
+      AND COALESCE((blocked_funds_source.submission_evidence_json ->> 'has_external_payment_reference')::boolean, false) = false
+      AND COALESCE((blocked_funds_source.submission_evidence_json ->> 'has_external_transfer_reference')::boolean, false) = false
+      AND COALESCE((blocked_funds_source.submission_evidence_json ->> 'has_submitted_state')::boolean, false) = false
+      AND COALESCE((blocked_funds_source.submission_evidence_json ->> 'has_processing_state')::boolean, false) = false
+      AND COALESCE((blocked_funds_source.submission_evidence_json ->> 'has_completed_state')::boolean, false) = false
+      AND COALESCE((blocked_funds_source.submission_evidence_json ->> 'has_failed_or_rejected_provider_state')::boolean, false) = false
+      AND COALESCE((blocked_funds_source.submission_evidence_json ->> 'has_unknown_or_timeout_state')::boolean, false) = false
+      AND COALESCE((blocked_funds_source.submission_evidence_json ->> 'has_provider_attempt_request_or_idempotency_reference')::boolean, false) = false
+      AND COALESCE((blocked_funds_source.submission_evidence_json ->> 'has_possible_provider_attempt_evidence')::boolean, false) = false
       AND COALESCE((blocked_funds_source.submission_evidence_json ->> 'has_external_submission_evidence')::boolean, false) = false
       AND COALESCE((blocked_funds_source.submission_evidence_json ->> 'no_submission_evidence')::boolean, false) = true
   ),
@@ -38562,8 +38587,8 @@ BEGIN
       'Bank rejected payment — blocked funds'::text AS title,
       concat(
         'Blocked funds',
-        CASE WHEN nullif(blocked_funds_payload.required_gbp_text, '') IS NULL THEN '' ELSE ' — required £' || blocked_funds_payload.required_gbp_text END,
-        CASE WHEN nullif(blocked_funds_payload.available_gbp_text, '') IS NULL THEN '' ELSE ', available £' || blocked_funds_payload.available_gbp_text END
+        CASE WHEN nullif(blocked_funds_payload.required_gbp_text, '') IS NULL THEN '' ELSE ' — required ' || blocked_funds_payload.required_gbp_display END,
+        CASE WHEN nullif(blocked_funds_payload.available_gbp_text, '') IS NULL THEN '' ELSE ', available ' || blocked_funds_payload.available_gbp_display END
       )::text AS description,
       'Fund the account and retry, or cancel/release the batch.'::text AS action_guidance,
       blocked_funds_payload.payload_json AS payload_json,
@@ -38594,6 +38619,7 @@ BEGIN
         ELSE NULL::text
       END AS alert_kind,
       public.pay_bank_transfer_events.pay_batch_id,
+      public.pay_bank_transfer_events.id AS source_id,
       coalesce(public.pay_bank_transfer_events.event_time_utc, public.pay_bank_transfer_events.received_at_utc, public.pay_bank_transfer_events.created_at_utc) AS sort_at_utc
     FROM public.pay_bank_transfer_events
     JOIN public.pay_batches AS bank_event_batches
@@ -38631,7 +38657,7 @@ BEGIN
       'pay_batch'::text AS entity_kind,
       bank_event_payloads.pay_batch_id AS entity_id,
       bank_event_payloads.pay_batch_id,
-      public.banking_alert_fingerprint(bank_event_payloads.alert_kind, 'pay_batch', bank_event_payloads.pay_batch_id, public.banking_alert_payload_for_pay_batch(bank_event_payloads.alert_kind, bank_event_payloads.pay_batch_id)) AS alert_fingerprint,
+      public.banking_alert_fingerprint(bank_event_payloads.alert_kind, 'pay_batch', bank_event_payloads.pay_batch_id, public.banking_alert_payload_for_pay_batch(bank_event_payloads.alert_kind, bank_event_payloads.pay_batch_id, 'pay_bank_transfer_event', bank_event_payloads.source_id)) AS alert_fingerprint,
       CASE bank_event_payloads.alert_kind
         WHEN 'BANK_RETURNED_PAYMENT' THEN 'Bank returned payment'
         WHEN 'BANK_REJECTED_PAYMENT' THEN 'Bank rejected payment'
@@ -38664,7 +38690,7 @@ BEGIN
         WHEN 'PAYMENT_CORRECTION_BLOCKED' THEN 'Open the batch and resolve the blocked correction.'
         ELSE 'Open the batch and confirm the provider outcome.'
       END::text AS action_guidance,
-      public.banking_alert_payload_for_pay_batch(bank_event_payloads.alert_kind, bank_event_payloads.pay_batch_id) AS payload_json,
+      public.banking_alert_payload_for_pay_batch(bank_event_payloads.alert_kind, bank_event_payloads.pay_batch_id, 'pay_bank_transfer_event', bank_event_payloads.source_id) AS payload_json,
       bank_event_payloads.sort_at_utc
     FROM bank_event_payloads
     WHERE bank_event_payloads.alert_kind IS NOT NULL
@@ -38684,6 +38710,7 @@ BEGIN
         ELSE NULL::text
       END AS alert_kind,
       public.pay_bank_transfers.pay_batch_id,
+      public.pay_bank_transfers.id AS source_id,
       coalesce(public.pay_bank_transfers.completed_at_utc, public.pay_bank_transfers.created_at_utc) AS sort_at_utc
     FROM public.pay_bank_transfers
     JOIN public.pay_batches AS transfer_batches
@@ -38725,7 +38752,7 @@ BEGIN
       'pay_batch'::text AS entity_kind,
       transfer_payloads.pay_batch_id AS entity_id,
       transfer_payloads.pay_batch_id,
-      public.banking_alert_fingerprint(transfer_payloads.alert_kind, 'pay_batch', transfer_payloads.pay_batch_id, public.banking_alert_payload_for_pay_batch(transfer_payloads.alert_kind, transfer_payloads.pay_batch_id)) AS alert_fingerprint,
+      public.banking_alert_fingerprint(transfer_payloads.alert_kind, 'pay_batch', transfer_payloads.pay_batch_id, public.banking_alert_payload_for_pay_batch(transfer_payloads.alert_kind, transfer_payloads.pay_batch_id, 'pay_bank_transfer', transfer_payloads.source_id)) AS alert_fingerprint,
       CASE transfer_payloads.alert_kind
         WHEN 'BANK_RETURNED_PAYMENT' THEN 'Bank returned payment'
         WHEN 'BANK_REJECTED_PAYMENT' THEN 'Bank rejected payment'
@@ -38746,7 +38773,7 @@ BEGIN
         WHEN 'BANK_REJECTED_PAYMENT' THEN 'Open the batch and complete the required correction or cancel/release action.'
         ELSE 'Open the batch and confirm the provider outcome.'
       END::text AS action_guidance,
-      public.banking_alert_payload_for_pay_batch(transfer_payloads.alert_kind, transfer_payloads.pay_batch_id) AS payload_json,
+      public.banking_alert_payload_for_pay_batch(transfer_payloads.alert_kind, transfer_payloads.pay_batch_id, 'pay_bank_transfer', transfer_payloads.source_id) AS payload_json,
       transfer_payloads.sort_at_utc
     FROM transfer_payloads
     WHERE transfer_payloads.alert_kind IS NOT NULL
@@ -38760,6 +38787,7 @@ BEGIN
         ELSE NULL::text
       END AS alert_kind,
       public.pay_payment_correction_requests.pay_batch_id,
+      public.pay_payment_correction_requests.id AS source_id,
       coalesce(public.pay_payment_correction_requests.updated_at_utc, public.pay_payment_correction_requests.created_at_utc, public.pay_payment_correction_requests.requested_at_utc) AS sort_at_utc
     FROM public.pay_payment_correction_requests
     JOIN public.pay_batches AS correction_request_batches
@@ -38781,7 +38809,7 @@ BEGIN
       'pay_batch'::text AS entity_kind,
       correction_request_payloads.pay_batch_id AS entity_id,
       correction_request_payloads.pay_batch_id,
-      public.banking_alert_fingerprint(correction_request_payloads.alert_kind, 'pay_batch', correction_request_payloads.pay_batch_id, public.banking_alert_payload_for_pay_batch(correction_request_payloads.alert_kind, correction_request_payloads.pay_batch_id)) AS alert_fingerprint,
+      public.banking_alert_fingerprint(correction_request_payloads.alert_kind, 'pay_batch', correction_request_payloads.pay_batch_id, public.banking_alert_payload_for_pay_batch(correction_request_payloads.alert_kind, correction_request_payloads.pay_batch_id, 'pay_payment_correction_request', correction_request_payloads.source_id)) AS alert_fingerprint,
       CASE correction_request_payloads.alert_kind
         WHEN 'PAYMENT_CORRECTION_FAILED' THEN 'Payment correction failed'
         WHEN 'PAYMENT_CORRECTION_BLOCKED' THEN 'Payment correction blocked'
@@ -38802,7 +38830,7 @@ BEGIN
         WHEN 'PAYMENT_CORRECTION_BLOCKED' THEN 'Open the batch and resolve the blocking condition.'
         ELSE 'Open the batch and approve, reject, or cancel the correction.'
       END::text AS action_guidance,
-      public.banking_alert_payload_for_pay_batch(correction_request_payloads.alert_kind, correction_request_payloads.pay_batch_id) AS payload_json,
+      public.banking_alert_payload_for_pay_batch(correction_request_payloads.alert_kind, correction_request_payloads.pay_batch_id, 'pay_payment_correction_request', correction_request_payloads.source_id) AS payload_json,
       correction_request_payloads.sort_at_utc
     FROM correction_request_payloads
     WHERE correction_request_payloads.alert_kind IS NOT NULL
@@ -38815,6 +38843,7 @@ BEGIN
         ELSE NULL::text
       END AS alert_kind,
       public.pay_payment_correction_work_items.pay_batch_id,
+      public.pay_payment_correction_work_items.id AS source_id,
       coalesce(public.pay_payment_correction_work_items.processed_at_utc, public.pay_payment_correction_work_items.created_at_utc) AS sort_at_utc
     FROM public.pay_payment_correction_work_items
     JOIN public.pay_batches AS correction_work_batches
@@ -38835,7 +38864,7 @@ BEGIN
       'pay_batch'::text AS entity_kind,
       correction_work_payloads.pay_batch_id AS entity_id,
       correction_work_payloads.pay_batch_id,
-      public.banking_alert_fingerprint(correction_work_payloads.alert_kind, 'pay_batch', correction_work_payloads.pay_batch_id, public.banking_alert_payload_for_pay_batch(correction_work_payloads.alert_kind, correction_work_payloads.pay_batch_id)) AS alert_fingerprint,
+      public.banking_alert_fingerprint(correction_work_payloads.alert_kind, 'pay_batch', correction_work_payloads.pay_batch_id, public.banking_alert_payload_for_pay_batch(correction_work_payloads.alert_kind, correction_work_payloads.pay_batch_id, 'pay_payment_correction_work_item', correction_work_payloads.source_id)) AS alert_fingerprint,
       CASE correction_work_payloads.alert_kind
         WHEN 'PAYMENT_CORRECTION_FAILED' THEN 'Payment correction failed'
         ELSE 'Payment correction blocked'
@@ -38852,7 +38881,7 @@ BEGIN
         WHEN 'PAYMENT_CORRECTION_FAILED' THEN 'Open the batch and retry, cancel, or review the correction.'
         ELSE 'Open the batch and resolve the blocked correction work item.'
       END::text AS action_guidance,
-      public.banking_alert_payload_for_pay_batch(correction_work_payloads.alert_kind, correction_work_payloads.pay_batch_id) AS payload_json,
+      public.banking_alert_payload_for_pay_batch(correction_work_payloads.alert_kind, correction_work_payloads.pay_batch_id, 'pay_payment_correction_work_item', correction_work_payloads.source_id) AS payload_json,
       correction_work_payloads.sort_at_utc
     FROM correction_work_payloads
     WHERE correction_work_payloads.alert_kind IS NOT NULL
@@ -38861,6 +38890,7 @@ BEGIN
     SELECT
       'REMITTANCE_SEND_FAILED'::text AS alert_kind,
       public.mail_outbox.context_id AS pay_batch_id,
+      public.mail_outbox.id AS source_id,
       coalesce(public.mail_outbox.failed_at, public.mail_outbox.created_at_utc) AS sort_at_utc
     FROM public.mail_outbox
     JOIN public.pay_batches AS remittance_batches
@@ -38891,12 +38921,12 @@ BEGIN
       'pay_batch'::text AS entity_kind,
       remittance_payloads.pay_batch_id AS entity_id,
       remittance_payloads.pay_batch_id,
-      public.banking_alert_fingerprint(remittance_payloads.alert_kind, 'pay_batch', remittance_payloads.pay_batch_id, public.banking_alert_payload_for_pay_batch(remittance_payloads.alert_kind, remittance_payloads.pay_batch_id)) AS alert_fingerprint,
+      public.banking_alert_fingerprint(remittance_payloads.alert_kind, 'pay_batch', remittance_payloads.pay_batch_id, public.banking_alert_payload_for_pay_batch(remittance_payloads.alert_kind, remittance_payloads.pay_batch_id, 'mail_outbox', remittance_payloads.source_id)) AS alert_fingerprint,
       'Remittance failed'::text AS label,
       'Remittance send failed'::text AS title,
       'A remittance email failed to send and requires review.'::text AS description,
       'Review or resend the remittance from the batch.'::text AS action_guidance,
-      public.banking_alert_payload_for_pay_batch(remittance_payloads.alert_kind, remittance_payloads.pay_batch_id) AS payload_json,
+      public.banking_alert_payload_for_pay_batch(remittance_payloads.alert_kind, remittance_payloads.pay_batch_id, 'mail_outbox', remittance_payloads.source_id) AS payload_json,
       remittance_payloads.sort_at_utc
     FROM remittance_payloads
   ),
@@ -39029,6 +39059,7 @@ BEGIN
   ));
 END;
 $function$;
+
 
 CREATE OR REPLACE FUNCTION public.banking_alert_acknowledge(
   p_alert_fingerprint text,
