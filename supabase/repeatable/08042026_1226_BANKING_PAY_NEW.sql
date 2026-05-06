@@ -39892,6 +39892,9 @@ BEGIN
           )::text;
 END;
 $function$;
+
+
+
 CREATE OR REPLACE FUNCTION public.pay_batch_submission_evidence(p_pay_batch_id uuid)
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -39909,7 +39912,13 @@ DECLARE
   v_has_provider_transaction_reference boolean := false;
   v_has_external_payment_reference boolean := false;
   v_has_external_transfer_reference boolean := false;
+  v_has_transfer_request_id_reference boolean := false;
+  v_has_transfer_rail_meta_request_or_idempotency_reference boolean := false;
+  v_event_has_idempotency_reference boolean := false;
   v_has_request_or_idempotency_reference boolean := false;
+  v_has_local_generated_request_identity boolean := false;
+  v_has_provider_attempt_request_or_idempotency_reference boolean := false;
+  v_has_possible_provider_attempt_evidence boolean := false;
   v_has_submitted_state boolean := false;
   v_has_processing_state boolean := false;
   v_has_completed_state boolean := false;
@@ -39988,10 +39997,19 @@ BEGIN
     ), false),
     COALESCE(BOOL_OR(
       NULLIF(BTRIM(COALESCE(public.pay_bank_transfers.request_id, '')), '') IS NOT NULL
-      OR NULLIF(BTRIM(COALESCE(public.pay_bank_transfers.rail_meta_json #>> '{request_id}', '')), '') IS NOT NULL
+    ), false),
+    COALESCE(BOOL_OR(
+      NULLIF(BTRIM(COALESCE(public.pay_bank_transfers.rail_meta_json #>> '{request_id}', '')), '') IS NOT NULL
+      OR NULLIF(BTRIM(COALESCE(public.pay_bank_transfers.rail_meta_json #>> '{provider_request_id}', '')), '') IS NOT NULL
+      OR NULLIF(BTRIM(COALESCE(public.pay_bank_transfers.rail_meta_json #>> '{rail_request_id}', '')), '') IS NOT NULL
       OR NULLIF(BTRIM(COALESCE(public.pay_bank_transfers.rail_meta_json #>> '{idempotency_key}', '')), '') IS NOT NULL
       OR NULLIF(BTRIM(COALESCE(public.pay_bank_transfers.rail_meta_json #>> '{request,idempotency_key}', '')), '') IS NOT NULL
+      OR NULLIF(BTRIM(COALESCE(public.pay_bank_transfers.rail_meta_json #>> '{request,id}', '')), '') IS NOT NULL
       OR NULLIF(BTRIM(COALESCE(public.pay_bank_transfers.rail_meta_json #>> '{idempotency,key}', '')), '') IS NOT NULL
+      OR NULLIF(BTRIM(COALESCE(public.pay_bank_transfers.rail_meta_json #>> '{provider,request_id}', '')), '') IS NOT NULL
+      OR NULLIF(BTRIM(COALESCE(public.pay_bank_transfers.rail_meta_json #>> '{provider,idempotency_key}', '')), '') IS NOT NULL
+      OR NULLIF(BTRIM(COALESCE(public.pay_bank_transfers.rail_meta_json #>> '{raw_payload,request_id}', '')), '') IS NOT NULL
+      OR NULLIF(BTRIM(COALESCE(public.pay_bank_transfers.rail_meta_json #>> '{raw_payload,idempotency_key}', '')), '') IS NOT NULL
     ), false),
     COALESCE(BOOL_OR(
       UPPER(BTRIM(COALESCE(public.pay_bank_transfers.status, ''))) IN ('SUBMITTED', 'QUEUED', 'ACCEPTED', 'SENT')
@@ -40039,7 +40057,8 @@ BEGIN
     v_has_provider_transaction_reference,
     v_has_external_payment_reference,
     v_has_external_transfer_reference,
-    v_has_request_or_idempotency_reference,
+    v_has_transfer_request_id_reference,
+    v_has_transfer_rail_meta_request_or_idempotency_reference,
     v_has_submitted_state,
     v_has_processing_state,
     v_has_completed_state,
@@ -40053,7 +40072,9 @@ BEGIN
     COALESCE(BOOL_OR(
       NULLIF(BTRIM(COALESCE(public.pay_bank_transfer_events.provider_event_id, '')), '') IS NOT NULL
       OR NULLIF(BTRIM(COALESCE(public.pay_bank_transfer_events.provider_reference, '')), '') IS NOT NULL
-      OR NULLIF(BTRIM(COALESCE(public.pay_bank_transfer_events.idempotency_key, '')), '') IS NOT NULL
+    ), false),
+    COALESCE(BOOL_OR(
+      NULLIF(BTRIM(COALESCE(public.pay_bank_transfer_events.idempotency_key, '')), '') IS NOT NULL
     ), false),
     COALESCE(BOOL_OR(
       UPPER(BTRIM(COALESCE(public.pay_bank_transfer_events.normalised_state, ''))) IN ('SUBMITTED', 'QUEUED', 'ACCEPTED', 'SENT')
@@ -40081,6 +40102,7 @@ BEGIN
   INTO
     v_transfer_event_count,
     v_event_has_provider_reference,
+    v_event_has_idempotency_reference,
     v_event_has_submitted_state,
     v_event_has_processing_state,
     v_event_has_completed_state,
@@ -40094,6 +40116,70 @@ BEGIN
   v_has_completed_state := COALESCE(v_has_completed_state, false) OR COALESCE(v_event_has_completed_state, false);
   v_has_failed_or_rejected_provider_state := COALESCE(v_has_failed_or_rejected_provider_state, false) OR COALESCE(v_event_has_failed_or_rejected_provider_state, false);
   v_has_unknown_or_timeout_state := COALESCE(v_has_unknown_or_timeout_state, false) OR COALESCE(v_event_has_unknown_or_timeout_state, false);
+
+  v_has_request_or_idempotency_reference :=
+    COALESCE(v_has_transfer_request_id_reference, false)
+    OR COALESCE(v_has_transfer_rail_meta_request_or_idempotency_reference, false)
+    OR COALESCE(v_event_has_idempotency_reference, false);
+
+  v_has_provider_attempt_request_or_idempotency_reference :=
+    COALESCE(v_has_transfer_rail_meta_request_or_idempotency_reference, false)
+    OR COALESCE(v_event_has_idempotency_reference, false)
+    OR (
+      COALESCE(v_has_transfer_request_id_reference, false)
+      AND (
+        COALESCE(v_transfer_event_count, 0) > 0
+        OR COALESCE(v_has_rail_tx_id, false)
+        OR COALESCE(v_has_provider_submission_reference, false)
+        OR COALESCE(v_has_provider_payment_reference, false)
+        OR COALESCE(v_has_provider_transfer_reference, false)
+        OR COALESCE(v_has_provider_transaction_reference, false)
+        OR COALESCE(v_has_external_payment_reference, false)
+        OR COALESCE(v_has_external_transfer_reference, false)
+        OR COALESCE(v_event_has_provider_reference, false)
+        OR COALESCE(v_has_submitted_state, false)
+        OR COALESCE(v_has_processing_state, false)
+        OR COALESCE(v_has_completed_state, false)
+        OR COALESCE(v_has_failed_or_rejected_provider_state, false)
+        OR COALESCE(v_has_unknown_or_timeout_state, false)
+      )
+    );
+
+  v_has_local_generated_request_identity :=
+    COALESCE(v_has_transfer_request_id_reference, false)
+    AND COALESCE(v_has_transfer_rail_meta_request_or_idempotency_reference, false) = false
+    AND COALESCE(v_event_has_idempotency_reference, false) = false
+    AND COALESCE(v_transfer_event_count, 0) = 0
+    AND COALESCE(v_has_rail_tx_id, false) = false
+    AND COALESCE(v_has_provider_submission_reference, false) = false
+    AND COALESCE(v_has_provider_payment_reference, false) = false
+    AND COALESCE(v_has_provider_transfer_reference, false) = false
+    AND COALESCE(v_has_provider_transaction_reference, false) = false
+    AND COALESCE(v_has_external_payment_reference, false) = false
+    AND COALESCE(v_has_external_transfer_reference, false) = false
+    AND COALESCE(v_event_has_provider_reference, false) = false
+    AND COALESCE(v_has_submitted_state, false) = false
+    AND COALESCE(v_has_processing_state, false) = false
+    AND COALESCE(v_has_completed_state, false) = false
+    AND COALESCE(v_has_failed_or_rejected_provider_state, false) = false
+    AND COALESCE(v_has_unknown_or_timeout_state, false) = false;
+
+  v_has_possible_provider_attempt_evidence :=
+    COALESCE(v_transfer_event_count, 0) > 0
+    OR COALESCE(v_has_rail_tx_id, false)
+    OR COALESCE(v_has_provider_submission_reference, false)
+    OR COALESCE(v_has_provider_payment_reference, false)
+    OR COALESCE(v_has_provider_transfer_reference, false)
+    OR COALESCE(v_has_provider_transaction_reference, false)
+    OR COALESCE(v_has_external_payment_reference, false)
+    OR COALESCE(v_has_external_transfer_reference, false)
+    OR COALESCE(v_event_has_provider_reference, false)
+    OR COALESCE(v_has_provider_attempt_request_or_idempotency_reference, false)
+    OR COALESCE(v_has_submitted_state, false)
+    OR COALESCE(v_has_processing_state, false)
+    OR COALESCE(v_has_completed_state, false)
+    OR COALESCE(v_has_failed_or_rejected_provider_state, false)
+    OR COALESCE(v_has_unknown_or_timeout_state, false);
 
   SELECT COALESCE(jsonb_agg(status_item.status_value ORDER BY status_item.status_value), '[]'::jsonb)
   INTO v_transfer_statuses
@@ -40135,19 +40221,7 @@ BEGIN
     v_has_external_submission_evidence := true;
   END IF;
 
-  IF COALESCE(v_has_rail_tx_id, false)
-    OR COALESCE(v_has_provider_submission_reference, false)
-    OR COALESCE(v_has_provider_payment_reference, false)
-    OR COALESCE(v_has_provider_transfer_reference, false)
-    OR COALESCE(v_has_provider_transaction_reference, false)
-    OR COALESCE(v_has_external_payment_reference, false)
-    OR COALESCE(v_has_external_transfer_reference, false)
-    OR COALESCE(v_event_has_provider_reference, false)
-    OR COALESCE(v_has_submitted_state, false)
-    OR COALESCE(v_has_processing_state, false)
-    OR COALESCE(v_has_completed_state, false)
-    OR COALESCE(v_has_failed_or_rejected_provider_state, false)
-    OR COALESCE(v_has_unknown_or_timeout_state, false) THEN
+  IF COALESCE(v_has_possible_provider_attempt_evidence, false) THEN
     v_has_external_submission_evidence := true;
   END IF;
 
@@ -40164,6 +40238,9 @@ BEGIN
     'has_external_payment_reference', COALESCE(v_has_external_payment_reference, false),
     'has_external_transfer_reference', COALESCE(v_has_external_transfer_reference, false),
     'has_request_or_idempotency_reference', COALESCE(v_has_request_or_idempotency_reference, false),
+    'has_local_generated_request_identity', COALESCE(v_has_local_generated_request_identity, false),
+    'has_provider_attempt_request_or_idempotency_reference', COALESCE(v_has_provider_attempt_request_or_idempotency_reference, false),
+    'has_possible_provider_attempt_evidence', COALESCE(v_has_possible_provider_attempt_evidence, false),
     'has_submitted_state', COALESCE(v_has_submitted_state, false),
     'has_processing_state', COALESCE(v_has_processing_state, false),
     'has_completed_state', COALESCE(v_has_completed_state, false),
@@ -40178,6 +40255,8 @@ BEGIN
   );
 END;
 $function$;
+
+
 CREATE OR REPLACE FUNCTION public.banking_alert_acknowledge_all_current(
   p_actor_user_id uuid,
   p_note text DEFAULT NULL::text
