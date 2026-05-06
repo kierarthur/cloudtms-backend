@@ -39030,8 +39030,6 @@ BEGIN
 END;
 $function$;
 
-
-
 CREATE OR REPLACE FUNCTION public.banking_alert_acknowledge(
   p_alert_fingerprint text,
   p_alert_kind text,
@@ -39052,7 +39050,13 @@ DECLARE
   v_alert_kind text := upper(nullif(btrim(coalesce(p_alert_kind, '')), ''));
   v_entity_kind text := lower(nullif(btrim(coalesce(p_entity_kind, '')), ''));
   v_alert_payload_json jsonb := '{}'::jsonb;
+  v_active_json jsonb := '{}'::jsonb;
+  v_active_alert_json jsonb := NULL::jsonb;
   v_existing_id uuid := NULL::uuid;
+  v_existing_alert_kind text := NULL::text;
+  v_existing_entity_kind text := NULL::text;
+  v_existing_entity_id uuid := NULL::uuid;
+  v_existing_alert_payload_json jsonb := '{}'::jsonb;
   v_ack_id uuid;
   v_ack_alert_fingerprint text;
   v_ack_alert_kind text;
@@ -39107,14 +39111,80 @@ BEGIN
 
   v_alert_payload_json := coalesce(p_alert_payload_json, '{}'::jsonb);
 
-  SELECT public.banking_alert_acknowledgements.id
-  INTO v_existing_id
+  SELECT
+    public.banking_alert_acknowledgements.id,
+    public.banking_alert_acknowledgements.alert_kind,
+    public.banking_alert_acknowledgements.entity_kind,
+    public.banking_alert_acknowledgements.entity_id,
+    COALESCE(public.banking_alert_acknowledgements.alert_payload_json, '{}'::jsonb)
+  INTO
+    v_existing_id,
+    v_existing_alert_kind,
+    v_existing_entity_kind,
+    v_existing_entity_id,
+    v_existing_alert_payload_json
   FROM public.banking_alert_acknowledgements
   WHERE public.banking_alert_acknowledgements.alert_fingerprint = v_alert_fingerprint
     AND public.banking_alert_acknowledgements.acknowledged_by_user_id = p_actor_user_id
     AND upper(btrim(coalesce(public.banking_alert_acknowledgements.acknowledge_scope, 'USER'))) = 'USER'
   ORDER BY public.banking_alert_acknowledgements.acknowledged_at_utc ASC, public.banking_alert_acknowledgements.id ASC
   LIMIT 1;
+
+  IF v_existing_id IS NOT NULL THEN
+    IF upper(btrim(coalesce(v_existing_alert_kind, ''))) <> v_alert_kind
+      OR lower(btrim(coalesce(v_existing_entity_kind, ''))) <> v_entity_kind
+      OR v_existing_entity_id IS DISTINCT FROM p_entity_id THEN
+      RAISE EXCEPTION 'BANKING_ALERT_ACKNOWLEDGE_EXISTING_MISMATCH'
+        USING ERRCODE = 'P0001',
+              DETAIL = jsonb_build_object(
+                'code', 'BANKING_ALERT_ACKNOWLEDGE_EXISTING_MISMATCH',
+                'alert_fingerprint', v_alert_fingerprint,
+                'requested_alert_kind', v_alert_kind,
+                'requested_entity_kind', v_entity_kind,
+                'requested_entity_id', p_entity_id::text,
+                'existing_alert_kind', v_existing_alert_kind,
+                'existing_entity_kind', v_existing_entity_kind,
+                'existing_entity_id', CASE WHEN v_existing_entity_id IS NULL THEN NULL ELSE v_existing_entity_id::text END
+              )::text;
+    END IF;
+
+    IF v_alert_payload_json = '{}'::jsonb THEN
+      v_alert_payload_json := COALESCE(v_existing_alert_payload_json, '{}'::jsonb);
+    END IF;
+  ELSE
+    v_active_json := public.banking_alerts_active_for_user(
+      p_actor_user_id,
+      v_entity_kind,
+      p_entity_id,
+      false,
+      0
+    );
+
+    SELECT active_alert.alert_json
+    INTO v_active_alert_json
+    FROM jsonb_array_elements(coalesce(v_active_json -> 'alerts', '[]'::jsonb)) AS active_alert(alert_json)
+    WHERE active_alert.alert_json ->> 'alert_fingerprint' = v_alert_fingerprint
+      AND upper(btrim(coalesce(active_alert.alert_json ->> 'alert_kind', ''))) = v_alert_kind
+      AND lower(btrim(coalesce(active_alert.alert_json ->> 'entity_kind', ''))) = v_entity_kind
+      AND (active_alert.alert_json ->> 'entity_id')::uuid = p_entity_id
+    LIMIT 1;
+
+    IF v_active_alert_json IS NULL THEN
+      RAISE EXCEPTION 'BANKING_ALERT_ACKNOWLEDGE_ALERT_NOT_ACTIVE'
+        USING ERRCODE = 'P0001',
+              DETAIL = jsonb_build_object(
+                'code', 'BANKING_ALERT_ACKNOWLEDGE_ALERT_NOT_ACTIVE',
+                'alert_fingerprint', v_alert_fingerprint,
+                'alert_kind', v_alert_kind,
+                'entity_kind', v_entity_kind,
+                'entity_id', p_entity_id::text
+              )::text;
+    END IF;
+
+    IF v_alert_payload_json = '{}'::jsonb THEN
+      v_alert_payload_json := coalesce(v_active_alert_json -> 'payload_json', '{}'::jsonb);
+    END IF;
+  END IF;
 
   v_created := v_existing_id IS NULL;
 
@@ -39144,11 +39214,14 @@ BEGIN
   )
   ON CONFLICT (alert_fingerprint, acknowledged_by_user_id, acknowledge_scope)
   DO UPDATE SET
-    alert_kind = EXCLUDED.alert_kind,
-    entity_kind = EXCLUDED.entity_kind,
-    entity_id = EXCLUDED.entity_id,
+    alert_kind = banking_alert_acknowledgement_insert.alert_kind,
+    entity_kind = banking_alert_acknowledgement_insert.entity_kind,
+    entity_id = banking_alert_acknowledgement_insert.entity_id,
     note = COALESCE(EXCLUDED.note, banking_alert_acknowledgement_insert.note),
-    alert_payload_json = EXCLUDED.alert_payload_json
+    alert_payload_json = CASE
+      WHEN EXCLUDED.alert_payload_json = '{}'::jsonb THEN banking_alert_acknowledgement_insert.alert_payload_json
+      ELSE EXCLUDED.alert_payload_json
+    END
   RETURNING
     id,
     alert_fingerprint,
