@@ -5423,7 +5423,6 @@ $$;
 
 
 
-
 CREATE OR REPLACE FUNCTION public.pay_batch_mark_blocked_funds(
   p_pay_batch_id uuid,
   p_actor_user_id uuid,
@@ -5439,12 +5438,11 @@ DECLARE
   v_batch record;
   v_now timestamptz := now();
   v_funds_check_json jsonb := '{}'::jsonb;
+  v_submission_evidence jsonb := '{}'::jsonb;
   v_reservation_status_summary jsonb := '[]'::jsonb;
   v_authoritative_payment_date date := NULL::date;
   v_authoritative_payment_date_source text := NULL::text;
   v_active_item_count integer := 0;
-  v_transfer_event_count integer := 0;
-  v_unsafe_transfer_count integer := 0;
   v_required_gbp_text text := NULL::text;
   v_available_gbp_text text := NULL::text;
   v_funding_account_ref text := NULL::text;
@@ -5506,49 +5504,18 @@ BEGIN
     RAISE EXCEPTION 'pay_batch_mark_blocked_funds: batch has execution_committed_at_utc and cannot be marked blocked funds safely';
   END IF;
 
-  SELECT count(*)::integer
-  INTO v_transfer_event_count
-  FROM public.pay_bank_transfer_events
-  WHERE public.pay_bank_transfer_events.pay_batch_id = p_pay_batch_id;
+  v_submission_evidence := public.pay_batch_submission_evidence(p_pay_batch_id);
 
-  IF COALESCE(v_transfer_event_count, 0) > 0 THEN
+  IF COALESCE((v_submission_evidence ->> 'transfer_event_count')::integer, 0) <> 0 THEN
     RAISE EXCEPTION 'pay_batch_mark_blocked_funds: pay_bank_transfer_events exist for this batch and the blocked-funds pre-submission path is unsafe';
   END IF;
 
-  SELECT count(*)::integer
-  INTO v_unsafe_transfer_count
-  FROM public.pay_bank_transfers
-  WHERE public.pay_bank_transfers.pay_batch_id = p_pay_batch_id
-    AND (
-      nullif(btrim(coalesce(public.pay_bank_transfers.rail_tx_id, '')), '') IS NOT NULL
-      OR upper(btrim(coalesce(public.pay_bank_transfers.status, ''))) NOT IN ('', 'PENDING')
-      OR upper(btrim(coalesce(public.pay_bank_transfers.rail_state, ''))) IN (
-        'SUBMITTED',
-        'ACCEPTED',
-        'SENT',
-        'PROCESSING',
-        'COMPLETED',
-        'SETTLED',
-        'FAILED',
-        'DECLINED',
-        'REJECTED',
-        'RETURNED',
-        'REVERTED',
-        'CANCELLED',
-        'CANCELED'
-      )
-      OR nullif(btrim(coalesce(public.pay_bank_transfers.rail_meta_json #>> '{provider_submission_id}', '')), '') IS NOT NULL
-      OR nullif(btrim(coalesce(public.pay_bank_transfers.rail_meta_json #>> '{provider_payment_id}', '')), '') IS NOT NULL
-      OR nullif(btrim(coalesce(public.pay_bank_transfers.rail_meta_json #>> '{payment_id}', '')), '') IS NOT NULL
-      OR nullif(btrim(coalesce(public.pay_bank_transfers.rail_meta_json #>> '{transaction_id}', '')), '') IS NOT NULL
-      OR nullif(btrim(coalesce(public.pay_bank_transfers.rail_meta_json #>> '{revolut_payment_id}', '')), '') IS NOT NULL
-      OR nullif(btrim(coalesce(public.pay_bank_transfers.rail_meta_json #>> '{revolut_transaction_id}', '')), '') IS NOT NULL
-      OR nullif(btrim(coalesce(public.pay_bank_transfers.rail_meta_json #>> '{provider,response,id}', '')), '') IS NOT NULL
-      OR nullif(btrim(coalesce(public.pay_bank_transfers.rail_meta_json #>> '{response,id}', '')), '') IS NOT NULL
-    );
-
-  IF COALESCE(v_unsafe_transfer_count, 0) > 0 THEN
+  IF COALESCE((v_submission_evidence ->> 'has_external_submission_evidence')::boolean, false) <> false THEN
     RAISE EXCEPTION 'pay_batch_mark_blocked_funds: transfer/provider evidence exists and the blocked-funds pre-submission path is unsafe';
+  END IF;
+
+  IF COALESCE((v_submission_evidence ->> 'no_submission_evidence')::boolean, false) <> true THEN
+    RAISE EXCEPTION 'pay_batch_mark_blocked_funds: no-submission evidence check failed and the blocked-funds pre-submission path is unsafe';
   END IF;
 
   SELECT count(*)::integer
@@ -5567,35 +5534,35 @@ BEGIN
   v_authoritative_payment_date_source := v_batch.authoritative_payment_date_source;
 
   v_required_gbp_text := COALESCE(
-    v_funds_check_json #>> '{required_gbp}',
-    v_funds_check_json #>> '{required}',
-    v_funds_check_json #>> '{required_amount_gbp}',
-    v_funds_check_json #>> '{required_amount}'
+    NULLIF(BTRIM(v_funds_check_json #>> '{required_gbp}'), ''),
+    NULLIF(BTRIM(v_funds_check_json #>> '{required}'), ''),
+    NULLIF(BTRIM(v_funds_check_json #>> '{required_amount_gbp}'), ''),
+    NULLIF(BTRIM(v_funds_check_json #>> '{required_amount}'), '')
   );
 
   v_available_gbp_text := COALESCE(
-    v_funds_check_json #>> '{available_gbp}',
-    v_funds_check_json #>> '{available}',
-    v_funds_check_json #>> '{available_amount_gbp}',
-    v_funds_check_json #>> '{available_amount}'
+    NULLIF(BTRIM(v_funds_check_json #>> '{available_gbp}'), ''),
+    NULLIF(BTRIM(v_funds_check_json #>> '{available}'), ''),
+    NULLIF(BTRIM(v_funds_check_json #>> '{available_amount_gbp}'), ''),
+    NULLIF(BTRIM(v_funds_check_json #>> '{available_amount}'), '')
   );
 
   v_funding_account_ref := COALESCE(
-    v_funds_check_json #>> '{funding_account_ref}',
-    v_funds_check_json #>> '{account_ref}',
-    v_batch.funding_account_ref
+    NULLIF(BTRIM(v_funds_check_json #>> '{funding_account_ref}'), ''),
+    NULLIF(BTRIM(v_funds_check_json #>> '{account_ref}'), ''),
+    NULLIF(BTRIM(v_batch.funding_account_ref), '')
   );
 
   v_rail_provider := COALESCE(
-    v_funds_check_json #>> '{rail_provider}',
-    v_funds_check_json #>> '{provider}',
-    v_batch.rail_provider_snapshot
+    NULLIF(BTRIM(v_funds_check_json #>> '{rail_provider}'), ''),
+    NULLIF(BTRIM(v_funds_check_json #>> '{provider}'), ''),
+    NULLIF(BTRIM(v_batch.rail_provider_snapshot), '')
   );
 
   v_rail_env := COALESCE(
-    v_funds_check_json #>> '{rail_env}',
-    v_funds_check_json #>> '{env}',
-    v_batch.rail_env_snapshot
+    NULLIF(BTRIM(v_funds_check_json #>> '{rail_env}'), ''),
+    NULLIF(BTRIM(v_funds_check_json #>> '{env}'), ''),
+    NULLIF(BTRIM(v_batch.rail_env_snapshot), '')
   );
 
   UPDATE public.pay_batch_items AS batch_item_to_unlink
@@ -5618,30 +5585,7 @@ BEGIN
     scheduled_by_user_id = NULL
   WHERE blocked_batch.id = p_pay_batch_id;
 
-  v_alert_payload := jsonb_strip_nulls(jsonb_build_object(
-    'pay_batch_id', p_pay_batch_id::text,
-    'issue_kind', 'BLOCKED_FUNDS',
-    'batch_status', 'BLOCKED_FUNDS',
-    'execution_commit_state', v_batch.execution_commit_state,
-    'execution_commit_ref', v_batch.execution_commit_ref,
-    'execution_committed_at_utc', CASE WHEN v_batch.execution_committed_at_utc IS NULL THEN NULL ELSE v_batch.execution_committed_at_utc::text END,
-    'last_funds_check_at_utc', v_now::text,
-    'funds_check_checked_at_utc', COALESCE(
-      v_funds_check_json #>> '{checked_at_utc}',
-      v_funds_check_json #>> '{checked_at}',
-      v_funds_check_json #>> '{timestamp}',
-      v_now::text
-    ),
-    'required_gbp', v_required_gbp_text,
-    'available_gbp', v_available_gbp_text,
-    'funding_account_ref', v_funding_account_ref,
-    'rail_provider', v_rail_provider,
-    'rail_env', v_rail_env,
-    'sufficient', COALESCE(v_funds_check_json #>> '{sufficient}', v_funds_check_json #>> '{is_sufficient}', 'false'),
-    'active_item_count', v_active_item_count,
-    'bank_submission_happened', false,
-    'action_guidance', 'Fund the account and retry, or cancel/release the batch.'
-  ));
+  v_alert_payload := public.banking_alert_payload_for_pay_batch('BLOCKED_FUNDS', p_pay_batch_id);
 
   v_alert_fingerprint := public.banking_alert_fingerprint(
     'BLOCKED_FUNDS',
@@ -5735,6 +5679,7 @@ BEGIN
         'authoritative_payment_date_source', v_authoritative_payment_date_source,
         'reservation_status_summary', v_reservation_status_summary,
         'funds_check_json', v_funds_check_json,
+        'submission_evidence', v_submission_evidence,
         'banking_alert_fingerprint', v_alert_fingerprint,
         'admin_notice_result', v_notice_result
       ),
@@ -5758,6 +5703,7 @@ BEGIN
     'authoritative_payment_date', CASE WHEN v_authoritative_payment_date IS NULL THEN NULL ELSE v_authoritative_payment_date::text END,
     'authoritative_payment_date_source', v_authoritative_payment_date_source,
     'reservation_status_summary', v_reservation_status_summary,
+    'submission_evidence', v_submission_evidence,
     'banking_alert_kind', 'BLOCKED_FUNDS',
     'banking_alert_fingerprint', v_alert_fingerprint,
     'banking_alert_payload', v_alert_payload,
@@ -5770,7 +5716,6 @@ BEGIN
   );
 END;
 $function$;
-
 
 
 create or replace function public.pay_export_bank_csv(
