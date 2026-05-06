@@ -10528,7 +10528,6 @@ $$;
 
 
 
-
 CREATE OR REPLACE FUNCTION public.pay_remittance_build(p_pay_batch_id uuid, p_scope text DEFAULT 'ALL'::text)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -11058,7 +11057,7 @@ begin
                     when upper(coalesce(r.line_kind,'')) = 'LOAN_REPAYMENT' then 'PAYMENT_ADVANCE_REPAYMENT'
                     when upper(coalesce(r.line_kind,'')) = 'LOAN_PAYOUT' then 'PAYMENT_ADVANCE'
                     when upper(coalesce(r.line_kind,'')) = 'MANUAL_CREDIT_PAYOUT' then 'MANUAL_CREDIT_ADJUSTMENT'
-                    when upper(coalesce(r.line_kind,'')) = 'MANUAL_DEBT_RECOVERY' then 'MANUAL_DEBT_ADJUSTMENT_RECOVERY'
+                    when upper(coalesce(r.line_kind,'')) = 'MANUAL_DEBT_RECOVERY' then 'MANUAL_DEBT_RECOVERY'
                     when upper(coalesce(r.line_kind,'')) = 'OVERPAYMENT_RECOVERY' then 'OVERPAYMENT_RECOVERY'
                     else r.line_kind
                   end
@@ -11386,12 +11385,14 @@ begin
                 jsonb_build_object(
                   'pay_batch_item_id', pbi_nt.id::text,
                   'pay_batch_item_breakdown_id', pbib_nt.id::text,
+                  'pay_batch_candidate_id', pbc_nt.id::text,
+                  'candidate_id', pbc_nt.candidate_id::text,
                   'stable_line_key', concat_ws('|', pbc_nt.candidate_id::text, pbi_nt.id::text, pbib_nt.id::text, coalesce(pbi_nt.item_type,''), coalesce(pbi_nt.source_ref,''), coalesce(pbi_nt.finance_case_id::text,''), coalesce(pbib_nt.line_kind,''), coalesce(pbib_nt.bucket_code,''), coalesce(pbib_nt.unit_name,''), coalesce(pbib_nt.rate::text,''), coalesce(pbib_nt.amount_ex_vat::text,''), coalesce(pbib_nt.amount_vat::text,''), coalesce(pbib_nt.amount_inc_vat::text,'')),
                   'item_type', case
                     when pbi_nt.item_type = 'LOAN_REPAYMENT' then 'PAYMENT_ADVANCE_REPAYMENT'
                     when pbi_nt.item_type = 'LOAN_PAYOUT' then 'PAYMENT_ADVANCE'
                     when pbi_nt.item_type = 'MANUAL_CREDIT_PAYOUT' then 'MANUAL_CREDIT_ADJUSTMENT'
-                    when pbi_nt.item_type = 'MANUAL_DEBT_RECOVERY' then 'MANUAL_DEBT_ADJUSTMENT_RECOVERY'
+                    when pbi_nt.item_type = 'MANUAL_DEBT_RECOVERY' then 'MANUAL_DEBT_RECOVERY'
                     when pbi_nt.item_type = 'OVERPAYMENT_RECOVERY' then 'OVERPAYMENT_RECOVERY'
                     else pbi_nt.item_type
                   end,
@@ -11402,7 +11403,7 @@ begin
                     when pbi_nt.item_type = 'LOAN_REPAYMENT' then 'PAYMENT_ADVANCE_REPAYMENT'
                     when pbi_nt.item_type = 'LOAN_PAYOUT' then 'PAYMENT_ADVANCE'
                     when pbi_nt.item_type = 'MANUAL_CREDIT_PAYOUT' then 'MANUAL_CREDIT_ADJUSTMENT'
-                    when pbi_nt.item_type = 'MANUAL_DEBT_RECOVERY' then 'MANUAL_DEBT_ADJUSTMENT_RECOVERY'
+                    when pbi_nt.item_type = 'MANUAL_DEBT_RECOVERY' then 'MANUAL_DEBT_RECOVERY'
                     else pbib_nt.line_kind
                   end,
                   'line_label', case
@@ -11410,7 +11411,7 @@ begin
                     when pbi_nt.item_type = 'LOAN_REPAYMENT' then 'Payment Advance Repayment'
                     when pbi_nt.item_type = 'LOAN_PAYOUT' then 'Payment Advance'
                     when pbi_nt.item_type = 'MANUAL_CREDIT_PAYOUT' then 'Manual Credit Adjustment'
-                    when pbi_nt.item_type = 'MANUAL_DEBT_RECOVERY' then 'Manual Debt Adjustment Recovery'
+                    when pbi_nt.item_type = 'MANUAL_DEBT_RECOVERY' then 'Manual Debt Recovery'
                     when nullif(btrim(coalesce(pa_fc.adjustment_comment,'')), '') is not null then pa_fc.adjustment_comment
                     when nullif(btrim(coalesce(pbib_nt.unit_name,'')), '') is not null then pbib_nt.unit_name
                     when nullif(btrim(coalesce(pbi_nt.description,'')), '') is not null then pbi_nt.description
@@ -11433,7 +11434,7 @@ begin
                   'deduction_kind', case
                     when pbi_nt.item_type = 'OVERPAYMENT_RECOVERY' then 'OVERPAYMENT_RECOVERY'
                     when pbi_nt.item_type = 'LOAN_REPAYMENT' then 'PAYMENT_ADVANCE_REPAYMENT'
-                    when pbi_nt.item_type = 'MANUAL_DEBT_RECOVERY' then 'MANUAL_DEBT_ADJUSTMENT_RECOVERY'
+                    when pbi_nt.item_type = 'MANUAL_DEBT_RECOVERY' then 'MANUAL_DEBT_RECOVERY'
                     else null
                   end,
                   'deduction_amount_ex_vat', case
@@ -12047,7 +12048,7 @@ begin
                     when upper(coalesce(r.line_kind,'')) = 'LOAN_REPAYMENT' then 'PAYMENT_ADVANCE_REPAYMENT'
                     when upper(coalesce(r.line_kind,'')) = 'LOAN_PAYOUT' then 'PAYMENT_ADVANCE'
                     when upper(coalesce(r.line_kind,'')) = 'MANUAL_CREDIT_PAYOUT' then 'MANUAL_CREDIT_ADJUSTMENT'
-                    when upper(coalesce(r.line_kind,'')) = 'MANUAL_DEBT_RECOVERY' then 'MANUAL_DEBT_ADJUSTMENT_RECOVERY'
+                    when upper(coalesce(r.line_kind,'')) = 'MANUAL_DEBT_RECOVERY' then 'MANUAL_DEBT_RECOVERY'
                     when upper(coalesce(r.line_kind,'')) = 'OVERPAYMENT_RECOVERY' then 'OVERPAYMENT_RECOVERY'
                     else r.line_kind
                   end
@@ -12401,12 +12402,14 @@ begin
                 jsonb_build_object(
                   'pay_batch_item_id', pbi_nt.id::text,
                   'pay_batch_item_breakdown_id', pbib_nt.id::text,
+                  'pay_batch_candidate_id', pbc_nt.id::text,
+                  'candidate_id', pbc_nt.candidate_id::text,
                   'stable_line_key', concat_ws('|', pbc_nt.candidate_id::text, pbi_nt.id::text, pbib_nt.id::text, coalesce(pbi_nt.item_type,''), coalesce(pbi_nt.source_ref,''), coalesce(pbi_nt.finance_case_id::text,''), coalesce(pbib_nt.line_kind,''), coalesce(pbib_nt.bucket_code,''), coalesce(pbib_nt.unit_name,''), coalesce(pbib_nt.rate::text,''), coalesce(pbib_nt.amount_ex_vat::text,''), coalesce(pbib_nt.amount_vat::text,''), coalesce(pbib_nt.amount_inc_vat::text,'')),
                   'item_type', case
                     when pbi_nt.item_type = 'LOAN_REPAYMENT' then 'PAYMENT_ADVANCE_REPAYMENT'
                     when pbi_nt.item_type = 'LOAN_PAYOUT' then 'PAYMENT_ADVANCE'
                     when pbi_nt.item_type = 'MANUAL_CREDIT_PAYOUT' then 'MANUAL_CREDIT_ADJUSTMENT'
-                    when pbi_nt.item_type = 'MANUAL_DEBT_RECOVERY' then 'MANUAL_DEBT_ADJUSTMENT_RECOVERY'
+                    when pbi_nt.item_type = 'MANUAL_DEBT_RECOVERY' then 'MANUAL_DEBT_RECOVERY'
                     when pbi_nt.item_type = 'OVERPAYMENT_RECOVERY' then 'OVERPAYMENT_RECOVERY'
                     else pbi_nt.item_type
                   end,
@@ -12417,7 +12420,7 @@ begin
                     when pbi_nt.item_type = 'LOAN_REPAYMENT' then 'PAYMENT_ADVANCE_REPAYMENT'
                     when pbi_nt.item_type = 'LOAN_PAYOUT' then 'PAYMENT_ADVANCE'
                     when pbi_nt.item_type = 'MANUAL_CREDIT_PAYOUT' then 'MANUAL_CREDIT_ADJUSTMENT'
-                    when pbi_nt.item_type = 'MANUAL_DEBT_RECOVERY' then 'MANUAL_DEBT_ADJUSTMENT_RECOVERY'
+                    when pbi_nt.item_type = 'MANUAL_DEBT_RECOVERY' then 'MANUAL_DEBT_RECOVERY'
                     else pbib_nt.line_kind
                   end,
                   'line_label', case
@@ -12425,7 +12428,7 @@ begin
                     when pbi_nt.item_type = 'LOAN_REPAYMENT' then 'Payment Advance Repayment'
                     when pbi_nt.item_type = 'LOAN_PAYOUT' then 'Payment Advance'
                     when pbi_nt.item_type = 'MANUAL_CREDIT_PAYOUT' then 'Manual Credit Adjustment'
-                    when pbi_nt.item_type = 'MANUAL_DEBT_RECOVERY' then 'Manual Debt Adjustment Recovery'
+                    when pbi_nt.item_type = 'MANUAL_DEBT_RECOVERY' then 'Manual Debt Recovery'
                     when nullif(btrim(coalesce(pa_fc.adjustment_comment,'')), '') is not null then pa_fc.adjustment_comment
                     when nullif(btrim(coalesce(pbib_nt.unit_name,'')), '') is not null then pbib_nt.unit_name
                     when nullif(btrim(coalesce(pbi_nt.description,'')), '') is not null then pbi_nt.description
@@ -12448,7 +12451,7 @@ begin
                   'deduction_kind', case
                     when pbi_nt.item_type = 'OVERPAYMENT_RECOVERY' then 'OVERPAYMENT_RECOVERY'
                     when pbi_nt.item_type = 'LOAN_REPAYMENT' then 'PAYMENT_ADVANCE_REPAYMENT'
-                    when pbi_nt.item_type = 'MANUAL_DEBT_RECOVERY' then 'MANUAL_DEBT_ADJUSTMENT_RECOVERY'
+                    when pbi_nt.item_type = 'MANUAL_DEBT_RECOVERY' then 'MANUAL_DEBT_RECOVERY'
                     else null
                   end,
                   'deduction_amount_ex_vat', case
@@ -12919,7 +12922,7 @@ begin
                     when upper(coalesce(r.line_kind,'')) = 'LOAN_REPAYMENT' then 'PAYMENT_ADVANCE_REPAYMENT'
                     when upper(coalesce(r.line_kind,'')) = 'LOAN_PAYOUT' then 'PAYMENT_ADVANCE'
                     when upper(coalesce(r.line_kind,'')) = 'MANUAL_CREDIT_PAYOUT' then 'MANUAL_CREDIT_ADJUSTMENT'
-                    when upper(coalesce(r.line_kind,'')) = 'MANUAL_DEBT_RECOVERY' then 'MANUAL_DEBT_ADJUSTMENT_RECOVERY'
+                    when upper(coalesce(r.line_kind,'')) = 'MANUAL_DEBT_RECOVERY' then 'MANUAL_DEBT_RECOVERY'
                     when upper(coalesce(r.line_kind,'')) = 'OVERPAYMENT_RECOVERY' then 'OVERPAYMENT_RECOVERY'
                     else r.line_kind
                   end
@@ -13240,12 +13243,14 @@ begin
                 jsonb_build_object(
                   'pay_batch_item_id', pbi_nt.id::text,
                   'pay_batch_item_breakdown_id', pbib_nt.id::text,
+                  'pay_batch_candidate_id', pbc_nt.id::text,
+                  'candidate_id', pbc_nt.candidate_id::text,
                   'stable_line_key', concat_ws('|', pbc_nt.candidate_id::text, pbi_nt.id::text, pbib_nt.id::text, coalesce(pbi_nt.item_type,''), coalesce(pbi_nt.source_ref,''), coalesce(pbi_nt.finance_case_id::text,''), coalesce(pbib_nt.line_kind,''), coalesce(pbib_nt.bucket_code,''), coalesce(pbib_nt.unit_name,''), coalesce(pbib_nt.rate::text,''), coalesce(pbib_nt.amount_ex_vat::text,''), coalesce(pbib_nt.amount_vat::text,''), coalesce(pbib_nt.amount_inc_vat::text,'')),
                   'item_type', case
                     when pbi_nt.item_type = 'LOAN_REPAYMENT' then 'PAYMENT_ADVANCE_REPAYMENT'
                     when pbi_nt.item_type = 'LOAN_PAYOUT' then 'PAYMENT_ADVANCE'
                     when pbi_nt.item_type = 'MANUAL_CREDIT_PAYOUT' then 'MANUAL_CREDIT_ADJUSTMENT'
-                    when pbi_nt.item_type = 'MANUAL_DEBT_RECOVERY' then 'MANUAL_DEBT_ADJUSTMENT_RECOVERY'
+                    when pbi_nt.item_type = 'MANUAL_DEBT_RECOVERY' then 'MANUAL_DEBT_RECOVERY'
                     when pbi_nt.item_type = 'OVERPAYMENT_RECOVERY' then 'OVERPAYMENT_RECOVERY'
                     else pbi_nt.item_type
                   end,
@@ -13256,7 +13261,7 @@ begin
                     when pbi_nt.item_type = 'LOAN_REPAYMENT' then 'PAYMENT_ADVANCE_REPAYMENT'
                     when pbi_nt.item_type = 'LOAN_PAYOUT' then 'PAYMENT_ADVANCE'
                     when pbi_nt.item_type = 'MANUAL_CREDIT_PAYOUT' then 'MANUAL_CREDIT_ADJUSTMENT'
-                    when pbi_nt.item_type = 'MANUAL_DEBT_RECOVERY' then 'MANUAL_DEBT_ADJUSTMENT_RECOVERY'
+                    when pbi_nt.item_type = 'MANUAL_DEBT_RECOVERY' then 'MANUAL_DEBT_RECOVERY'
                     else pbib_nt.line_kind
                   end,
                   'line_label', case
@@ -13264,7 +13269,7 @@ begin
                     when pbi_nt.item_type = 'LOAN_REPAYMENT' then 'Payment Advance Repayment'
                     when pbi_nt.item_type = 'LOAN_PAYOUT' then 'Payment Advance'
                     when pbi_nt.item_type = 'MANUAL_CREDIT_PAYOUT' then 'Manual Credit Adjustment'
-                    when pbi_nt.item_type = 'MANUAL_DEBT_RECOVERY' then 'Manual Debt Adjustment Recovery'
+                    when pbi_nt.item_type = 'MANUAL_DEBT_RECOVERY' then 'Manual Debt Recovery'
                     when nullif(btrim(coalesce(pa_fc.adjustment_comment,'')), '') is not null then pa_fc.adjustment_comment
                     when nullif(btrim(coalesce(pbib_nt.unit_name,'')), '') is not null then pbib_nt.unit_name
                     when nullif(btrim(coalesce(pbi_nt.description,'')), '') is not null then pbi_nt.description
@@ -13287,7 +13292,7 @@ begin
                   'deduction_kind', case
                     when pbi_nt.item_type = 'OVERPAYMENT_RECOVERY' then 'OVERPAYMENT_RECOVERY'
                     when pbi_nt.item_type = 'LOAN_REPAYMENT' then 'PAYMENT_ADVANCE_REPAYMENT'
-                    when pbi_nt.item_type = 'MANUAL_DEBT_RECOVERY' then 'MANUAL_DEBT_ADJUSTMENT_RECOVERY'
+                    when pbi_nt.item_type = 'MANUAL_DEBT_RECOVERY' then 'MANUAL_DEBT_RECOVERY'
                     else null
                   end,
                   'deduction_amount_ex_vat', case
@@ -13392,6 +13397,14 @@ begin
   );
 end;
 $function$;
+
+
+
+
+
+
+
+
 
 
 
