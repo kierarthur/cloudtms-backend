@@ -8698,54 +8698,6 @@ EXCEPTION WHEN OTHERS THEN
 END;
 $function$;
 
-CREATE OR REPLACE FUNCTION public.cloudtms_format_london_datetime(p_ts timestamptz)
-RETURNS text
-LANGUAGE plpgsql
-STABLE
-SECURITY DEFINER
-SET search_path TO 'public'
-AS $function$
-DECLARE
-  v_timezone_id text := 'Europe/London';
-  v_timezone_is_valid boolean := false;
-  v_local_ts timestamp without time zone;
-  v_suffix text := '(UK time)';
-BEGIN
-  IF p_ts IS NULL THEN
-    RETURN 'Not recorded';
-  END IF;
-
-  SELECT NULLIF(BTRIM(COALESCE(public.settings_defaults.timezone_id, '')), '')
-  INTO v_timezone_id
-  FROM public.settings_defaults
-  ORDER BY public.settings_defaults.id ASC
-  LIMIT 1;
-
-  v_timezone_id := COALESCE(v_timezone_id, 'Europe/London');
-
-  SELECT EXISTS (
-    SELECT 1
-    FROM pg_catalog.pg_timezone_names AS pg_tz
-    WHERE pg_tz.name = v_timezone_id
-  )
-  INTO v_timezone_is_valid;
-
-  IF COALESCE(v_timezone_is_valid, false) = false THEN
-    v_timezone_id := 'Europe/London';
-  END IF;
-
-  v_local_ts := p_ts AT TIME ZONE v_timezone_id;
-
-  IF v_timezone_id = 'Europe/London' THEN
-    v_suffix := '(UK time)';
-  ELSE
-    v_suffix := '(' || v_timezone_id || ')';
-  END IF;
-
-  RETURN TO_CHAR(v_local_ts, 'FMDD FMMonth YYYY "at" HH24:MI "hrs"') || ' ' || v_suffix;
-END;
-$function$;
-
 
 CREATE OR REPLACE FUNCTION public.cloudtms_format_london_date(p_date date)
 RETURNS text
@@ -8791,5 +8743,24 @@ END;
 $function$;
 
 
+CREATE OR REPLACE FUNCTION public.cloudtms_format_london_datetime(p_ts timestamptz)
+RETURNS text
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_local_ts timestamp without time zone;
+BEGIN
+  IF p_ts IS NULL THEN
+    RETURN 'Not recorded';
+  END IF;
+
+  v_local_ts := p_ts AT TIME ZONE 'Europe/London';
+
+  RETURN TO_CHAR(v_local_ts, 'FMDD FMMonth YYYY "at" HH24:MI "hrs"') || ' (UK time)';
+END;
+$function$;
 
 
