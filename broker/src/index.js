@@ -13695,7 +13695,19 @@ function buildRemittanceEmailPayload(job, context = {}) {
     const n = asNum(value);
     return n == null ? 0 : n;
   };
-  const fmtMoney = (value) => `£${moneyNum(value).toFixed(2)}`;
+  const fmtMoney = (value) => {
+    if (typeof formatCloudTmsGbp === 'function') {
+      const formatted = formatCloudTmsGbp(value);
+      if (formatted) return formatted;
+    }
+
+    return new Intl.NumberFormat('en-GB', {
+      style: 'currency',
+      currency: 'GBP',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(moneyNum(value));
+  };
   const shortId = (value) => String(value || '').trim().slice(0, 8);
   const normaliseDateLabel = (value) => {
     const raw = String(value || '').trim();
@@ -13786,26 +13798,49 @@ function buildRemittanceEmailPayload(job, context = {}) {
     return ['candidate_index', String(index)].join('|');
   };
   const professionalLineTypeLabel = (value) => {
-    const type = String(value || '').trim().toUpperCase();
+    const type = String(value || '').trim().toUpperCase().replace(/[\s\-]+/g, '_');
     const map = {
       MANUAL_DEBT_RECOVERY: 'Manual debt recovery',
+      MANUAL_DEBT_ADJUSTMENT_RECOVERY: 'Manual debt recovery',
       PAYMENT_ADVANCE_REPAYMENT: 'Payment advance repayment',
+      LOAN_REPAYMENT: 'Payment advance repayment',
       OVERPAYMENT_RECOVERY: 'Overpayment recovery',
-      LOAN_REPAYMENT: 'Loan repayment',
-      ADJUSTMENT_DELTA: 'Manual adjustment',
-      EXPENSE_DELTA: 'Expense',
-      MILEAGE_DELTA: 'Mileage',
-      LOAN_PAYOUT: 'Loan payout',
-      MANUAL_CREDIT_PAYOUT: 'Manual credit payout',
+      LOAN_PAYOUT: 'Payment advance',
+      PAYMENT_ADVANCE: 'Payment advance',
+      MANUAL_CREDIT_PAYOUT: 'Manual credit adjustment',
       MANUAL_CREDIT_ADJUSTMENT: 'Manual credit adjustment',
-      MANUAL_DEBT_ADJUSTMENT: 'Manual debt adjustment',
+      ADJUSTMENT_DELTA: 'Manual adjustment',
+      MANUAL_ADJUSTMENT: 'Manual adjustment',
+      EXPENSE_DELTA: 'Expense',
+      EXPENSE: 'Expense',
+      MILEAGE_DELTA: 'Mileage',
+      MILEAGE: 'Mileage',
       SEGMENT_DELTA: 'Timesheet pay'
     };
     return map[type] || '';
   };
+  const normaliseProfessionalLineLabel = (value) => {
+    const raw = String(value == null ? '' : value).trim();
+    if (!raw) return '';
+    const key = raw.toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+    const mapped = professionalLineTypeLabel(key);
+    if (mapped) return mapped;
+
+    const compact = key.replace(/_+/g, ' ');
+    if (/MANUAL\s+DEBT.*RECOVER/.test(compact)) return 'Manual debt recovery';
+    if (/PAYMENT\s+ADVANCE.*REPAY/.test(compact) || /LOAN.*REPAY/.test(compact)) return 'Payment advance repayment';
+    if (/OVERPAYMENT.*RECOVER/.test(compact)) return 'Overpayment recovery';
+    if (/LOAN.*PAYOUT/.test(compact) || /PAYMENT\s+ADVANCE$/.test(compact)) return 'Payment advance';
+    if (/MANUAL\s+CREDIT/.test(compact)) return 'Manual credit adjustment';
+    if (/MANUAL\s+ADJUST/.test(compact)) return 'Manual adjustment';
+    return '';
+  };
   const preferredLineLabel = (line) => {
     const l = line && typeof line === 'object' ? line : {};
-    return firstNonBlank(
+    const typeLabel = professionalLineTypeLabel(l.item_type || l.itemType || l.internal_item_type || l.internalItemType || l.line_kind || l.lineKind || l.kind);
+    if (typeLabel) return typeLabel;
+
+    const candidates = [
       l.line_label,
       l.lineLabel,
       l.friendly_line_label,
@@ -13816,12 +13851,47 @@ function buildRemittanceEmailPayload(job, context = {}) {
       l.description,
       l.adjustment_comment,
       l.adjustmentComment,
-      professionalLineTypeLabel(l.item_type || l.itemType || l.internal_item_type || l.internalItemType || l.line_kind || l.lineKind),
       l.item_type,
       l.internal_item_type,
-      l.kind,
-      'Deduction / recovery'
+      l.kind
+    ];
+
+    for (const candidate of candidates) {
+      const normalised = normaliseProfessionalLineLabel(candidate);
+      if (normalised) return normalised;
+      const raw = String(candidate == null ? '' : candidate).trim();
+      if (raw) return raw;
+    }
+
+    return 'Deduction / recovery';
+  };
+  const professionalRoutingLabel = (line, defaultValue = '') => {
+    const l = line && typeof line === 'object' ? line : {};
+    const raw = firstNonBlank(
+      l.destination_label,
+      l.destinationLabel,
+      l.payout_destination,
+      l.payoutDestination,
+      l.beneficiary_name,
+      l.beneficiaryName,
+      l.routing_kind,
+      l.routingKind,
+      l.route,
+      l.payee,
+      defaultValue
     );
+    if (!raw) return '';
+
+    const key = raw.toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+    const map = {
+      UMBRELLA_COMPANY: 'umbrella company',
+      ONE_OFF_SPECIFIED_BANK_ACCOUNT: 'one-off specified bank account',
+      NORMAL_PAY_ROUTE: 'normal PAYE route',
+      NORMAL_PAYE_ROUTE: 'normal PAYE route',
+      PAYE: 'normal PAYE route',
+      CANDIDATE: 'candidate'
+    };
+    return map[key] || raw;
   };
   const timesheetKey = (candidate, timesheet, index) => {
     const candidateId = String(candidate?.candidate_id || candidate?.id || '').trim();
@@ -14128,7 +14198,7 @@ function buildRemittanceEmailPayload(job, context = {}) {
         fmtMoney(line.amount_ex_vat ?? line.total_ex_vat ?? line.amount ?? line.total),
         fmtMoney(line.vat ?? line.amount_vat ?? line.total_vat),
         fmtMoney(line.amount_inc_vat ?? line.total_inc_vat ?? line.amount ?? line.total),
-        String(line.routing_kind || line.route || line.payee || 'umbrella company')
+        professionalRoutingLabel(line, isUmbrellaJob ? 'umbrella company' : '') || (isUmbrellaJob ? 'umbrella company' : '')
       ]);
       textTable(textLines, 'Deductions / recoveries', ['Item', 'Excl VAT', 'VAT', 'Incl VAT', 'Routing'], deductionRows);
       html += tableHtml(['Item', 'Excl VAT', 'VAT', 'Incl VAT', 'Routing'], deductionRows, { title: 'Deductions / recoveries', alignRight: [1, 2, 3] });
@@ -15380,6 +15450,166 @@ async function handleBankingAlertAcknowledge(env, req, user) {
   }
 }
 
+function formatCloudTmsLondonDateTime(value) {
+  const fallback = 'Not recorded';
+  const timeZone = 'Europe/London';
+  const suffix = 'UK time';
+
+  const getPartsInTimeZone = (dateValue, zone) => {
+    const parts = new Intl.DateTimeFormat('en-GB', {
+      timeZone: zone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+      hourCycle: 'h23'
+    }).formatToParts(dateValue);
+
+    const getPart = (type) => parts.find((part) => part.type === type)?.value || '';
+    return {
+      year: Number(getPart('year')),
+      month: Number(getPart('month')),
+      day: Number(getPart('day')),
+      hour: Number(getPart('hour')),
+      minute: Number(getPart('minute')),
+      second: Number(getPart('second'))
+    };
+  };
+
+  const zonedDateTimeToUtcDate = (year, month, day, hour = 0, minute = 0, second = 0, zone = 'Europe/London') => {
+    if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) return null;
+    if (!Number.isInteger(hour) || !Number.isInteger(minute) || !Number.isInteger(second)) return null;
+    if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+    if (hour < 0 || hour > 23 || minute < 0 || minute > 59 || second < 0 || second > 59) return null;
+
+    const targetUtc = Date.UTC(year, month - 1, day, hour, minute, second);
+    const targetValidationDate = new Date(targetUtc);
+    if (
+      targetValidationDate.getUTCFullYear() !== year
+      || targetValidationDate.getUTCMonth() !== month - 1
+      || targetValidationDate.getUTCDate() !== day
+      || targetValidationDate.getUTCHours() !== hour
+      || targetValidationDate.getUTCMinutes() !== minute
+      || targetValidationDate.getUTCSeconds() !== second
+    ) {
+      return null;
+    }
+
+    let guess = new Date(targetUtc);
+
+    for (let i = 0; i < 4; i += 1) {
+      const parts = getPartsInTimeZone(guess, zone);
+      if (!Number.isFinite(parts.year) || !Number.isFinite(parts.month) || !Number.isFinite(parts.day) || !Number.isFinite(parts.hour) || !Number.isFinite(parts.minute) || !Number.isFinite(parts.second)) return null;
+      const actualUtc = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second);
+      const diffMs = actualUtc - targetUtc;
+      if (diffMs === 0) return guess;
+      guess = new Date(guess.getTime() - diffMs);
+    }
+
+    const finalParts = getPartsInTimeZone(guess, zone);
+    if (
+      finalParts.year !== year
+      || finalParts.month !== month
+      || finalParts.day !== day
+      || finalParts.hour !== hour
+      || finalParts.minute !== minute
+      || finalParts.second !== second
+    ) {
+      return null;
+    }
+
+    return guess;
+  };
+
+  if (value === null || value === undefined) return fallback;
+
+  let dateValue;
+
+  if (value instanceof Date) {
+    dateValue = new Date(value.getTime());
+  } else if (typeof value === 'number') {
+    if (!Number.isFinite(value)) return fallback;
+    const epochMs = Math.abs(value) < 100000000000 ? value * 1000 : value;
+    dateValue = new Date(epochMs);
+  } else {
+    const raw = String(value || '').trim();
+    if (!raw) return fallback;
+
+    if (/^-?\d+(\.\d+)?$/.test(raw)) {
+      const numericValue = Number(raw);
+      if (!Number.isFinite(numericValue)) return fallback;
+      const epochMs = Math.abs(numericValue) < 100000000000 ? numericValue * 1000 : numericValue;
+      dateValue = new Date(epochMs);
+    } else if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+      const [yearPart, monthPart, dayPart] = raw.split('-').map((part) => Number(part));
+      dateValue = zonedDateTimeToUtcDate(yearPart, monthPart, dayPart, 0, 0, 0, timeZone);
+    } else {
+      dateValue = new Date(raw);
+    }
+  }
+
+  if (!(dateValue instanceof Date) || !Number.isFinite(dateValue.getTime())) return fallback;
+
+  const dateParts = new Intl.DateTimeFormat('en-GB', {
+    timeZone,
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric'
+  }).formatToParts(dateValue);
+
+  const timeParts = new Intl.DateTimeFormat('en-GB', {
+    timeZone,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+    hourCycle: 'h23'
+  }).formatToParts(dateValue);
+
+  const dayRaw = dateParts.find((part) => part.type === 'day')?.value || '';
+  const month = dateParts.find((part) => part.type === 'month')?.value || '';
+  const year = dateParts.find((part) => part.type === 'year')?.value || '';
+  const hour = timeParts.find((part) => part.type === 'hour')?.value || '';
+  const minute = timeParts.find((part) => part.type === 'minute')?.value || '';
+
+  const dayNumber = Number(dayRaw);
+  const day = Number.isFinite(dayNumber) && dayNumber > 0 ? String(dayNumber) : dayRaw;
+
+  if (!day || !month || !year || !hour || !minute) return fallback;
+
+  return `${day} ${month} ${year} at ${hour}:${minute} hrs (${suffix})`;
+}
+
+function formatCloudTmsGbp(value) {
+  const fallback = '£0.00';
+
+  if (value === null || value === undefined) return fallback;
+
+  let numericValue;
+
+  if (typeof value === 'number') {
+    numericValue = value;
+  } else {
+    const raw = String(value || '').trim();
+    if (!raw) return fallback;
+    const normalised = raw
+      .replace(/£/g, '')
+      .replace(/,/g, '')
+      .replace(/\s+/g, '');
+    numericValue = Number(normalised);
+  }
+
+  if (!Number.isFinite(numericValue)) return fallback;
+
+  return new Intl.NumberFormat('en-GB', {
+    style: 'currency',
+    currency: 'GBP',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  }).format(numericValue);
+}
 
 function renderTimesheetSection(ctx) {
   const context = (ctx && typeof ctx === 'object') ? ctx : {};
@@ -15396,7 +15626,19 @@ function renderTimesheetSection(ctx) {
     return n == null ? 0 : n;
   };
 
-  const fmtMoney = (value) => `£${moneyNum(value).toFixed(2)}`;
+  const fmtMoney = (value) => {
+    if (typeof formatCloudTmsGbp === 'function') {
+      const formatted = formatCloudTmsGbp(value);
+      if (formatted) return formatted;
+    }
+
+    return new Intl.NumberFormat('en-GB', {
+      style: 'currency',
+      currency: 'GBP',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(moneyNum(value));
+  };
 
   const firstNonBlank = (...values) => {
     for (const value of values) {
