@@ -25003,7 +25003,7 @@ begin
     NULL::text,
     NULL::uuid,
     true,
-    500
+    0
   );
 
   SELECT
