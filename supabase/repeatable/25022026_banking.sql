@@ -5423,6 +5423,7 @@ $$;
 
 
 
+
 CREATE OR REPLACE FUNCTION public.pay_batch_mark_blocked_funds(
   p_pay_batch_id uuid,
   p_actor_user_id uuid,
@@ -5508,6 +5509,14 @@ BEGIN
 
   IF COALESCE((v_submission_evidence ->> 'transfer_event_count')::integer, 0) <> 0 THEN
     RAISE EXCEPTION 'pay_batch_mark_blocked_funds: pay_bank_transfer_events exist for this batch and the blocked-funds pre-submission path is unsafe';
+  END IF;
+
+  IF COALESCE((v_submission_evidence ->> 'has_provider_attempt_request_or_idempotency_reference')::boolean, false) <> false THEN
+    RAISE EXCEPTION 'pay_batch_mark_blocked_funds: provider-attempt request or idempotency evidence exists and the blocked-funds pre-submission path is unsafe';
+  END IF;
+
+  IF COALESCE((v_submission_evidence ->> 'has_possible_provider_attempt_evidence')::boolean, false) <> false THEN
+    RAISE EXCEPTION 'pay_batch_mark_blocked_funds: possible provider-attempt evidence exists and the blocked-funds pre-submission path is unsafe';
   END IF;
 
   IF COALESCE((v_submission_evidence ->> 'has_external_submission_evidence')::boolean, false) <> false THEN
@@ -5716,6 +5725,7 @@ BEGIN
   );
 END;
 $function$;
+
 
 
 create or replace function public.pay_export_bank_csv(
