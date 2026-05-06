@@ -10519,8 +10519,6 @@ $$;
 
 
 
-
-
 CREATE OR REPLACE FUNCTION public.pay_remittance_build(p_pay_batch_id uuid, p_scope text DEFAULT 'ALL'::text)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -10904,6 +10902,8 @@ begin
         ci.umbrella_id,
         ci.candidate_id,
         ci.timesheet_id,
+        ci.pay_batch_item_id,
+        pbib.id as pay_batch_item_breakdown_id,
         pbib.line_kind,
         pbib.bucket_code,
         pbib.unit_name,
@@ -10922,6 +10922,8 @@ begin
         br.umbrella_id,
         br.candidate_id,
         br.timesheet_id,
+        array_remove(array_agg(distinct br.pay_batch_item_id::text), NULL::text) as pay_batch_item_ids,
+        array_remove(array_agg(distinct br.pay_batch_item_breakdown_id::text), NULL::text) as pay_batch_item_breakdown_ids,
         br.line_kind,
         br.bucket_code,
         br.unit_name,
@@ -10953,6 +10955,13 @@ begin
         coalesce(
           jsonb_agg(
             jsonb_build_object(
+              'candidate_id', tc.candidate_id::text,
+              'timesheet_id', tc.timesheet_id::text,
+              'stable_line_key', md5(concat_ws('|', tc.candidate_id::text, tc.timesheet_id::text, coalesce(r.line_kind,''), coalesce(r.bucket_code,''), coalesce(r.unit_name,''), coalesce(r.rate::text,''), coalesce(r.quantity::text,''), coalesce(r.total_ex_vat::text,''), coalesce(r.total_vat::text,''), coalesce(r.total_inc_vat::text,''))),
+              'pay_batch_item_ids', to_jsonb(r.pay_batch_item_ids),
+              'pay_batch_item_breakdown_ids', to_jsonb(r.pay_batch_item_breakdown_ids),
+              'line_kind_raw', r.line_kind,
+              'bucket_code', r.bucket_code,
               'unit', r.unit_name,
               'quantity', r.quantity,
               'rate', r.rate,
@@ -10978,6 +10987,13 @@ begin
         coalesce(
           jsonb_agg(
             jsonb_build_object(
+              'candidate_id', tc.candidate_id::text,
+              'timesheet_id', tc.timesheet_id::text,
+              'stable_line_key', md5(concat_ws('|', tc.candidate_id::text, tc.timesheet_id::text, coalesce(r.line_kind,''), coalesce(r.bucket_code,''), coalesce(r.unit_name,''), coalesce(r.rate::text,''), coalesce(r.quantity::text,''), coalesce(r.total_ex_vat::text,''), coalesce(r.total_vat::text,''), coalesce(r.total_inc_vat::text,''))),
+              'pay_batch_item_ids', to_jsonb(r.pay_batch_item_ids),
+              'pay_batch_item_breakdown_ids', to_jsonb(r.pay_batch_item_breakdown_ids),
+              'line_kind_raw', r.line_kind,
+              'bucket_code', r.bucket_code,
               'unit', r.unit_name,
               'quantity', r.quantity,
               'rate', r.rate,
@@ -10993,6 +11009,13 @@ begin
         coalesce(
           jsonb_agg(
             jsonb_build_object(
+              'candidate_id', tc.candidate_id::text,
+              'timesheet_id', tc.timesheet_id::text,
+              'stable_line_key', md5(concat_ws('|', tc.candidate_id::text, tc.timesheet_id::text, coalesce(r.line_kind,''), coalesce(r.bucket_code,''), coalesce(r.unit_name,''), coalesce(r.rate::text,''), coalesce(r.quantity::text,''), coalesce(r.total_ex_vat::text,''), coalesce(r.total_vat::text,''), coalesce(r.total_inc_vat::text,''))),
+              'pay_batch_item_ids', to_jsonb(r.pay_batch_item_ids),
+              'pay_batch_item_breakdown_ids', to_jsonb(r.pay_batch_item_breakdown_ids),
+              'line_kind_raw', r.line_kind,
+              'bucket_code', r.bucket_code,
               'unit', r.unit_name,
               'quantity', r.quantity,
               'rate', r.rate,
@@ -11008,6 +11031,13 @@ begin
         coalesce(
           jsonb_agg(
             jsonb_build_object(
+              'candidate_id', tc.candidate_id::text,
+              'timesheet_id', tc.timesheet_id::text,
+              'stable_line_key', md5(concat_ws('|', tc.candidate_id::text, tc.timesheet_id::text, coalesce(r.line_kind,''), coalesce(r.bucket_code,''), coalesce(r.unit_name,''), coalesce(r.rate::text,''), coalesce(r.quantity::text,''), coalesce(r.total_ex_vat::text,''), coalesce(r.total_vat::text,''), coalesce(r.total_inc_vat::text,''))),
+              'pay_batch_item_ids', to_jsonb(r.pay_batch_item_ids),
+              'pay_batch_item_breakdown_ids', to_jsonb(r.pay_batch_item_breakdown_ids),
+              'line_kind_raw', r.line_kind,
+              'bucket_code', r.bucket_code,
               'unit', r.unit_name,
               'quantity', r.quantity,
               'rate', r.rate,
@@ -11180,7 +11210,9 @@ begin
         coalesce(
           jsonb_agg(
             jsonb_build_object(
+              'candidate_id', ts.candidate_id::text,
               'timesheet_id', ts.timesheet_id::text,
+              'stable_timesheet_key', concat_ws('|', ts.candidate_id::text, ts.timesheet_id::text, coalesce(ts.week_ending_date::text,''), coalesce(ts.client_id::text,'')),
               'week_ending_date', case when ts.week_ending_date is null then null else ts.week_ending_date::text end,
               'reference_number', ts.reference_number,
               'client_id', case when ts.client_id is null then null else ts.client_id::text end,
@@ -11189,6 +11221,9 @@ begin
               'band', ts.band,
               'timesheet_render_mode', ts.timesheet_render_mode,
               'timesheet_type', ts.timesheet_type,
+              'frozen_gross_ex_vat', ts.totals_ex_vat,
+              'frozen_vat', ts.totals_vat,
+              'frozen_gross_inc_vat', ts.totals_inc_vat,
               'unit_rows', ts.unit_rows,
               'additional_units_rows', ts.additional_units_rows,
               'expenses_rows', ts.expenses_rows,
@@ -11289,8 +11324,12 @@ begin
         cm.candidate_id,
         jsonb_build_object(
           'candidate_id', cm.candidate_id::text,
+          'stable_candidate_key', cm.candidate_id::text,
           'tms_ref', cm.tms_ref,
+          'candidate_tms_ref', cm.tms_ref,
+          'works_number', cm.tms_ref,
           'display_name', cm.display_name,
+          'candidate_display_name', cm.display_name,
           'email', cm.email,
           'timesheets', coalesce(ct.timesheets_json,'[]'::jsonb),
           'totals', coalesce((
@@ -11335,6 +11374,9 @@ begin
             select coalesce(
               jsonb_agg(
                 jsonb_build_object(
+                  'pay_batch_item_id', pbi_nt.id::text,
+                  'pay_batch_item_breakdown_id', pbib_nt.id::text,
+                  'stable_line_key', concat_ws('|', pbc_nt.candidate_id::text, pbi_nt.id::text, pbib_nt.id::text, coalesce(pbi_nt.item_type,''), coalesce(pbi_nt.source_ref,''), coalesce(pbi_nt.finance_case_id::text,''), coalesce(pbib_nt.line_kind,''), coalesce(pbib_nt.bucket_code,''), coalesce(pbib_nt.unit_name,''), coalesce(pbib_nt.rate::text,''), coalesce(pbib_nt.amount_ex_vat::text,''), coalesce(pbib_nt.amount_vat::text,''), coalesce(pbib_nt.amount_inc_vat::text,'')),
                   'item_type', case
                     when pbi_nt.item_type = 'LOAN_REPAYMENT' then 'PAYMENT_ADVANCE_REPAYMENT'
                     when pbi_nt.item_type = 'LOAN_PAYOUT' then 'PAYMENT_ADVANCE'
@@ -11372,7 +11414,11 @@ begin
                   'total_vat', pbib_nt.amount_vat,
                   'total_inc_vat', pbib_nt.amount_inc_vat,
                   'signed_amount_ex_vat', pbib_nt.amount_ex_vat,
+                  'signed_amount_vat', pbib_nt.amount_vat,
                   'signed_amount_inc_vat', pbib_nt.amount_inc_vat,
+                  'frozen_amount_ex_vat', pbib_nt.amount_ex_vat,
+                  'frozen_amount_vat', pbib_nt.amount_vat,
+                  'frozen_amount_inc_vat', pbib_nt.amount_inc_vat,
                   'is_deduction', (pbi_nt.item_type in ('LOAN_REPAYMENT','OVERPAYMENT_RECOVERY','MANUAL_DEBT_RECOVERY')),
                   'deduction_kind', case
                     when pbi_nt.item_type = 'OVERPAYMENT_RECOVERY' then 'OVERPAYMENT_RECOVERY'
@@ -11389,6 +11435,15 @@ begin
                     else null
                   end,
                   'source_ref', pbi_nt.source_ref,
+                  'pay_channel', pbi_nt.pay_channel,
+                  'routing_kind', nullif(btrim(coalesce(pbi_nt.payout_instruction_snapshot_json->>'routing_kind','')), ''),
+                  'destination_label', nullif(btrim(coalesce(pbi_nt.payout_instruction_snapshot_json->>'destination_label','')), ''),
+                  'payout_destination', nullif(btrim(coalesce(pbi_nt.payout_instruction_snapshot_json->>'destination_label','')), ''),
+                  'masked_bank_account', nullif(btrim(coalesce(pbi_nt.payout_instruction_snapshot_json->>'masked_bank_account','')), ''),
+                  'beneficiary_name', nullif(btrim(coalesce(pbi_nt.payout_instruction_snapshot_json->>'beneficiary_name','')), ''),
+                  'bank_details_hash', nullif(btrim(coalesce(pbi_nt.payout_instruction_snapshot_json->>'bank_details_hash','')), ''),
+                  'appears_on_umbrella_remittance', lower(btrim(coalesce(pbi_nt.payout_instruction_snapshot_json->>'appears_on_umbrella_remittance','false'))) in ('true','1','yes','y','on'),
+                  'generates_candidate_payment_advice', lower(btrim(coalesce(pbi_nt.payout_instruction_snapshot_json->>'generates_candidate_payment_advice','false'))) in ('true','1','yes','y','on'),
                   'finance_case_id', case when coalesce(pbi_nt.finance_case_id, pa_fc.id) is null then null else coalesce(pbi_nt.finance_case_id, pa_fc.id)::text end,
                   'finance_case_type', case when pa_fc.case_type is null then null else pa_fc.case_type::text end,
                   'adjustment_comment', pa_fc.adjustment_comment,
@@ -11838,6 +11893,8 @@ begin
       select
         ci.candidate_id,
         ci.timesheet_id,
+        ci.pay_batch_item_id,
+        pbib.id as pay_batch_item_breakdown_id,
         pbib.line_kind,
         pbib.bucket_code,
         pbib.unit_name,
@@ -11855,6 +11912,8 @@ begin
       select
         br.candidate_id,
         br.timesheet_id,
+        array_remove(array_agg(distinct br.pay_batch_item_id::text), NULL::text) as pay_batch_item_ids,
+        array_remove(array_agg(distinct br.pay_batch_item_breakdown_id::text), NULL::text) as pay_batch_item_breakdown_ids,
         br.line_kind,
         br.bucket_code,
         br.unit_name,
@@ -11885,6 +11944,13 @@ begin
         coalesce(
           jsonb_agg(
             jsonb_build_object(
+              'candidate_id', tc.candidate_id::text,
+              'timesheet_id', tc.timesheet_id::text,
+              'stable_line_key', md5(concat_ws('|', tc.candidate_id::text, tc.timesheet_id::text, coalesce(r.line_kind,''), coalesce(r.bucket_code,''), coalesce(r.unit_name,''), coalesce(r.rate::text,''), coalesce(r.quantity::text,''), coalesce(r.total_ex_vat::text,''), coalesce(r.total_vat::text,''), coalesce(r.total_inc_vat::text,''))),
+              'pay_batch_item_ids', to_jsonb(r.pay_batch_item_ids),
+              'pay_batch_item_breakdown_ids', to_jsonb(r.pay_batch_item_breakdown_ids),
+              'line_kind_raw', r.line_kind,
+              'bucket_code', r.bucket_code,
               'unit', r.unit_name,
               'quantity', r.quantity,
               'rate', r.rate,
@@ -11910,6 +11976,13 @@ begin
         coalesce(
           jsonb_agg(
             jsonb_build_object(
+              'candidate_id', tc.candidate_id::text,
+              'timesheet_id', tc.timesheet_id::text,
+              'stable_line_key', md5(concat_ws('|', tc.candidate_id::text, tc.timesheet_id::text, coalesce(r.line_kind,''), coalesce(r.bucket_code,''), coalesce(r.unit_name,''), coalesce(r.rate::text,''), coalesce(r.quantity::text,''), coalesce(r.total_ex_vat::text,''), coalesce(r.total_vat::text,''), coalesce(r.total_inc_vat::text,''))),
+              'pay_batch_item_ids', to_jsonb(r.pay_batch_item_ids),
+              'pay_batch_item_breakdown_ids', to_jsonb(r.pay_batch_item_breakdown_ids),
+              'line_kind_raw', r.line_kind,
+              'bucket_code', r.bucket_code,
               'unit', r.unit_name,
               'quantity', r.quantity,
               'rate', r.rate,
@@ -11925,6 +11998,13 @@ begin
         coalesce(
           jsonb_agg(
             jsonb_build_object(
+              'candidate_id', tc.candidate_id::text,
+              'timesheet_id', tc.timesheet_id::text,
+              'stable_line_key', md5(concat_ws('|', tc.candidate_id::text, tc.timesheet_id::text, coalesce(r.line_kind,''), coalesce(r.bucket_code,''), coalesce(r.unit_name,''), coalesce(r.rate::text,''), coalesce(r.quantity::text,''), coalesce(r.total_ex_vat::text,''), coalesce(r.total_vat::text,''), coalesce(r.total_inc_vat::text,''))),
+              'pay_batch_item_ids', to_jsonb(r.pay_batch_item_ids),
+              'pay_batch_item_breakdown_ids', to_jsonb(r.pay_batch_item_breakdown_ids),
+              'line_kind_raw', r.line_kind,
+              'bucket_code', r.bucket_code,
               'unit', r.unit_name,
               'quantity', r.quantity,
               'rate', r.rate,
@@ -11940,6 +12020,13 @@ begin
         coalesce(
           jsonb_agg(
             jsonb_build_object(
+              'candidate_id', tc.candidate_id::text,
+              'timesheet_id', tc.timesheet_id::text,
+              'stable_line_key', md5(concat_ws('|', tc.candidate_id::text, tc.timesheet_id::text, coalesce(r.line_kind,''), coalesce(r.bucket_code,''), coalesce(r.unit_name,''), coalesce(r.rate::text,''), coalesce(r.quantity::text,''), coalesce(r.total_ex_vat::text,''), coalesce(r.total_vat::text,''), coalesce(r.total_inc_vat::text,''))),
+              'pay_batch_item_ids', to_jsonb(r.pay_batch_item_ids),
+              'pay_batch_item_breakdown_ids', to_jsonb(r.pay_batch_item_breakdown_ids),
+              'line_kind_raw', r.line_kind,
+              'bucket_code', r.bucket_code,
               'unit', r.unit_name,
               'quantity', r.quantity,
               'rate', r.rate,
@@ -12105,7 +12192,9 @@ begin
         coalesce(
           jsonb_agg(
             jsonb_build_object(
+              'candidate_id', ts.candidate_id::text,
               'timesheet_id', ts.timesheet_id::text,
+              'stable_timesheet_key', concat_ws('|', ts.candidate_id::text, ts.timesheet_id::text, coalesce(ts.week_ending_date::text,''), coalesce(ts.client_id::text,'')),
               'week_ending_date', case when ts.week_ending_date is null then null else ts.week_ending_date::text end,
               'reference_number', ts.reference_number,
               'client_id', case when ts.client_id is null then null else ts.client_id::text end,
@@ -12114,6 +12203,9 @@ begin
               'band', ts.band,
               'timesheet_render_mode', ts.timesheet_render_mode,
               'timesheet_type', ts.timesheet_type,
+              'frozen_gross_ex_vat', ts.totals_ex_vat,
+              'frozen_vat', ts.totals_vat,
+              'frozen_gross_inc_vat', ts.totals_inc_vat,
               'unit_rows', ts.unit_rows,
               'additional_units_rows', ts.additional_units_rows,
               'expenses_rows', ts.expenses_rows,
@@ -12203,8 +12295,12 @@ begin
           'recipient', jsonb_build_object(
             'entity_kind', 'CANDIDATE',
             'candidate_id', cj.candidate_id::text,
+            'stable_candidate_key', cj.candidate_id::text,
             'tms_ref', cj.tms_ref,
+            'candidate_tms_ref', cj.tms_ref,
+            'works_number', cj.tms_ref,
             'display_name', cj.display_name,
+            'candidate_display_name', cj.display_name,
             'email', cj.email
           ),
           'summary', jsonb_build_object(
@@ -12248,6 +12344,29 @@ begin
               and pbc_tot.candidate_id = cj.candidate_id
             limit 1
           ), '{}'::jsonb),
+          'frozen_totals', coalesce((
+            select jsonb_build_object(
+              'item_count', count(distinct pbi_ft.id)::integer,
+              'gross_ex_vat', round(coalesce(sum(case when pbi_ft.item_type in ('LOAN_REPAYMENT','OVERPAYMENT_RECOVERY','MANUAL_DEBT_RECOVERY') then 0 when coalesce(pbi_ft.amount_inc_vat,0) < 0 or coalesce(pbi_ft.amount_ex_vat,0) < 0 then 0 else coalesce(pbi_ft.amount_ex_vat,0) end),0),2),
+              'vat', round(coalesce(sum(case when pbi_ft.item_type in ('LOAN_REPAYMENT','OVERPAYMENT_RECOVERY','MANUAL_DEBT_RECOVERY') then 0 when coalesce(pbi_ft.amount_inc_vat,0) < 0 or coalesce(pbi_ft.amount_ex_vat,0) < 0 then 0 else coalesce(pbi_ft.amount_vat,0) end),0),2),
+              'gross_vat', round(coalesce(sum(case when pbi_ft.item_type in ('LOAN_REPAYMENT','OVERPAYMENT_RECOVERY','MANUAL_DEBT_RECOVERY') then 0 when coalesce(pbi_ft.amount_inc_vat,0) < 0 or coalesce(pbi_ft.amount_ex_vat,0) < 0 then 0 else coalesce(pbi_ft.amount_vat,0) end),0),2),
+              'gross_inc_vat', round(coalesce(sum(case when pbi_ft.item_type in ('LOAN_REPAYMENT','OVERPAYMENT_RECOVERY','MANUAL_DEBT_RECOVERY') then 0 when coalesce(pbi_ft.amount_inc_vat,0) < 0 or coalesce(pbi_ft.amount_ex_vat,0) < 0 then 0 else coalesce(pbi_ft.amount_inc_vat,0) end),0),2),
+              'deductions_ex_vat', round(coalesce(sum(case when pbi_ft.item_type in ('LOAN_REPAYMENT','OVERPAYMENT_RECOVERY','MANUAL_DEBT_RECOVERY') then abs(coalesce(pbi_ft.amount_ex_vat,0)) when coalesce(pbi_ft.amount_ex_vat,0) < 0 then abs(coalesce(pbi_ft.amount_ex_vat,0)) else 0 end),0),2),
+              'deductions_vat', round(coalesce(sum(case when pbi_ft.item_type in ('LOAN_REPAYMENT','OVERPAYMENT_RECOVERY','MANUAL_DEBT_RECOVERY') then abs(coalesce(pbi_ft.amount_vat,0)) when coalesce(pbi_ft.amount_vat,0) < 0 then abs(coalesce(pbi_ft.amount_vat,0)) else 0 end),0),2),
+              'deductions_inc_vat', round(coalesce(sum(case when pbi_ft.item_type in ('LOAN_REPAYMENT','OVERPAYMENT_RECOVERY','MANUAL_DEBT_RECOVERY') then abs(coalesce(pbi_ft.amount_inc_vat,0)) when coalesce(pbi_ft.amount_inc_vat,0) < 0 then abs(coalesce(pbi_ft.amount_inc_vat,0)) else 0 end),0),2),
+              'net_ex_vat', round(coalesce(sum(coalesce(pbi_ft.amount_ex_vat,0)),0),2),
+              'net_vat', round(coalesce(sum(coalesce(pbi_ft.amount_vat,0)),0),2),
+              'net_inc_vat', round(coalesce(sum(coalesce(pbi_ft.amount_inc_vat,0)),0),2),
+              'final_payable', round(coalesce(sum(coalesce(pbi_ft.amount_inc_vat,0)),0),2)
+            )
+            from public.pay_batch_candidates pbc_ft
+            join public.pay_batch_items pbi_ft
+              on pbi_ft.pay_batch_candidate_id = pbc_ft.id
+            where pbc_ft.pay_batch_id = p_pay_batch_id
+              and pbc_ft.candidate_id = cj.candidate_id
+              and pbi_ft.item_type <> 'DEBT_CREATED'
+              and coalesce(pbi_ft.is_voided,false) = false
+          ), '{}'::jsonb),
           'paye_net_advisory', coalesce((
             select jsonb_build_object(
               'original_net_input', (
@@ -12270,6 +12389,9 @@ begin
             select coalesce(
               jsonb_agg(
                 jsonb_build_object(
+                  'pay_batch_item_id', pbi_nt.id::text,
+                  'pay_batch_item_breakdown_id', pbib_nt.id::text,
+                  'stable_line_key', concat_ws('|', pbc_nt.candidate_id::text, pbi_nt.id::text, pbib_nt.id::text, coalesce(pbi_nt.item_type,''), coalesce(pbi_nt.source_ref,''), coalesce(pbi_nt.finance_case_id::text,''), coalesce(pbib_nt.line_kind,''), coalesce(pbib_nt.bucket_code,''), coalesce(pbib_nt.unit_name,''), coalesce(pbib_nt.rate::text,''), coalesce(pbib_nt.amount_ex_vat::text,''), coalesce(pbib_nt.amount_vat::text,''), coalesce(pbib_nt.amount_inc_vat::text,'')),
                   'item_type', case
                     when pbi_nt.item_type = 'LOAN_REPAYMENT' then 'PAYMENT_ADVANCE_REPAYMENT'
                     when pbi_nt.item_type = 'LOAN_PAYOUT' then 'PAYMENT_ADVANCE'
@@ -12307,7 +12429,11 @@ begin
                   'total_vat', pbib_nt.amount_vat,
                   'total_inc_vat', pbib_nt.amount_inc_vat,
                   'signed_amount_ex_vat', pbib_nt.amount_ex_vat,
+                  'signed_amount_vat', pbib_nt.amount_vat,
                   'signed_amount_inc_vat', pbib_nt.amount_inc_vat,
+                  'frozen_amount_ex_vat', pbib_nt.amount_ex_vat,
+                  'frozen_amount_vat', pbib_nt.amount_vat,
+                  'frozen_amount_inc_vat', pbib_nt.amount_inc_vat,
                   'is_deduction', (pbi_nt.item_type in ('LOAN_REPAYMENT','OVERPAYMENT_RECOVERY','MANUAL_DEBT_RECOVERY')),
                   'deduction_kind', case
                     when pbi_nt.item_type = 'OVERPAYMENT_RECOVERY' then 'OVERPAYMENT_RECOVERY'
@@ -12324,6 +12450,15 @@ begin
                     else null
                   end,
                   'source_ref', pbi_nt.source_ref,
+                  'pay_channel', pbi_nt.pay_channel,
+                  'routing_kind', nullif(btrim(coalesce(pbi_nt.payout_instruction_snapshot_json->>'routing_kind','')), ''),
+                  'destination_label', nullif(btrim(coalesce(pbi_nt.payout_instruction_snapshot_json->>'destination_label','')), ''),
+                  'payout_destination', nullif(btrim(coalesce(pbi_nt.payout_instruction_snapshot_json->>'destination_label','')), ''),
+                  'masked_bank_account', nullif(btrim(coalesce(pbi_nt.payout_instruction_snapshot_json->>'masked_bank_account','')), ''),
+                  'beneficiary_name', nullif(btrim(coalesce(pbi_nt.payout_instruction_snapshot_json->>'beneficiary_name','')), ''),
+                  'bank_details_hash', nullif(btrim(coalesce(pbi_nt.payout_instruction_snapshot_json->>'bank_details_hash','')), ''),
+                  'appears_on_umbrella_remittance', lower(btrim(coalesce(pbi_nt.payout_instruction_snapshot_json->>'appears_on_umbrella_remittance','false'))) in ('true','1','yes','y','on'),
+                  'generates_candidate_payment_advice', lower(btrim(coalesce(pbi_nt.payout_instruction_snapshot_json->>'generates_candidate_payment_advice','false'))) in ('true','1','yes','y','on'),
                   'finance_case_id', case when coalesce(pbi_nt.finance_case_id, pa_fc.id) is null then null else coalesce(pbi_nt.finance_case_id, pa_fc.id)::text end,
                   'finance_case_type', case when pa_fc.case_type is null then null else pa_fc.case_type::text end,
                   'adjustment_comment', pa_fc.adjustment_comment,
@@ -12630,6 +12765,8 @@ begin
       select
         ci.candidate_id,
         ci.timesheet_id,
+        ci.pay_batch_item_id,
+        pbib.id as pay_batch_item_breakdown_id,
         pbib.line_kind,
         pbib.bucket_code,
         pbib.unit_name,
@@ -12647,6 +12784,8 @@ begin
       select
         br.candidate_id,
         br.timesheet_id,
+        array_remove(array_agg(distinct br.pay_batch_item_id::text), NULL::text) as pay_batch_item_ids,
+        array_remove(array_agg(distinct br.pay_batch_item_breakdown_id::text), NULL::text) as pay_batch_item_breakdown_ids,
         br.line_kind,
         br.bucket_code,
         br.unit_name,
@@ -12677,6 +12816,13 @@ begin
         coalesce(
           jsonb_agg(
             jsonb_build_object(
+              'candidate_id', tc.candidate_id::text,
+              'timesheet_id', tc.timesheet_id::text,
+              'stable_line_key', md5(concat_ws('|', tc.candidate_id::text, tc.timesheet_id::text, coalesce(r.line_kind,''), coalesce(r.bucket_code,''), coalesce(r.unit_name,''), coalesce(r.rate::text,''), coalesce(r.quantity::text,''), coalesce(r.total_ex_vat::text,''), coalesce(r.total_vat::text,''), coalesce(r.total_inc_vat::text,''))),
+              'pay_batch_item_ids', to_jsonb(r.pay_batch_item_ids),
+              'pay_batch_item_breakdown_ids', to_jsonb(r.pay_batch_item_breakdown_ids),
+              'line_kind_raw', r.line_kind,
+              'bucket_code', r.bucket_code,
               'unit', r.unit_name,
               'quantity', r.quantity,
               'rate', r.rate,
@@ -12702,6 +12848,13 @@ begin
         coalesce(
           jsonb_agg(
             jsonb_build_object(
+              'candidate_id', tc.candidate_id::text,
+              'timesheet_id', tc.timesheet_id::text,
+              'stable_line_key', md5(concat_ws('|', tc.candidate_id::text, tc.timesheet_id::text, coalesce(r.line_kind,''), coalesce(r.bucket_code,''), coalesce(r.unit_name,''), coalesce(r.rate::text,''), coalesce(r.quantity::text,''), coalesce(r.total_ex_vat::text,''), coalesce(r.total_vat::text,''), coalesce(r.total_inc_vat::text,''))),
+              'pay_batch_item_ids', to_jsonb(r.pay_batch_item_ids),
+              'pay_batch_item_breakdown_ids', to_jsonb(r.pay_batch_item_breakdown_ids),
+              'line_kind_raw', r.line_kind,
+              'bucket_code', r.bucket_code,
               'unit', r.unit_name,
               'quantity', r.quantity,
               'rate', r.rate,
@@ -12717,6 +12870,13 @@ begin
         coalesce(
           jsonb_agg(
             jsonb_build_object(
+              'candidate_id', tc.candidate_id::text,
+              'timesheet_id', tc.timesheet_id::text,
+              'stable_line_key', md5(concat_ws('|', tc.candidate_id::text, tc.timesheet_id::text, coalesce(r.line_kind,''), coalesce(r.bucket_code,''), coalesce(r.unit_name,''), coalesce(r.rate::text,''), coalesce(r.quantity::text,''), coalesce(r.total_ex_vat::text,''), coalesce(r.total_vat::text,''), coalesce(r.total_inc_vat::text,''))),
+              'pay_batch_item_ids', to_jsonb(r.pay_batch_item_ids),
+              'pay_batch_item_breakdown_ids', to_jsonb(r.pay_batch_item_breakdown_ids),
+              'line_kind_raw', r.line_kind,
+              'bucket_code', r.bucket_code,
               'unit', r.unit_name,
               'quantity', r.quantity,
               'rate', r.rate,
@@ -12732,6 +12892,13 @@ begin
         coalesce(
           jsonb_agg(
             jsonb_build_object(
+              'candidate_id', tc.candidate_id::text,
+              'timesheet_id', tc.timesheet_id::text,
+              'stable_line_key', md5(concat_ws('|', tc.candidate_id::text, tc.timesheet_id::text, coalesce(r.line_kind,''), coalesce(r.bucket_code,''), coalesce(r.unit_name,''), coalesce(r.rate::text,''), coalesce(r.quantity::text,''), coalesce(r.total_ex_vat::text,''), coalesce(r.total_vat::text,''), coalesce(r.total_inc_vat::text,''))),
+              'pay_batch_item_ids', to_jsonb(r.pay_batch_item_ids),
+              'pay_batch_item_breakdown_ids', to_jsonb(r.pay_batch_item_breakdown_ids),
+              'line_kind_raw', r.line_kind,
+              'bucket_code', r.bucket_code,
               'unit', r.unit_name,
               'quantity', r.quantity,
               'rate', r.rate,
@@ -12897,7 +13064,9 @@ begin
         coalesce(
           jsonb_agg(
             jsonb_build_object(
+              'candidate_id', ts.candidate_id::text,
               'timesheet_id', ts.timesheet_id::text,
+              'stable_timesheet_key', concat_ws('|', ts.candidate_id::text, ts.timesheet_id::text, coalesce(ts.week_ending_date::text,''), coalesce(ts.client_id::text,'')),
               'week_ending_date', case when ts.week_ending_date is null then null else ts.week_ending_date::text end,
               'reference_number', ts.reference_number,
               'client_id', case when ts.client_id is null then null else ts.client_id::text end,
@@ -12906,6 +13075,9 @@ begin
               'band', ts.band,
               'timesheet_render_mode', ts.timesheet_render_mode,
               'timesheet_type', ts.timesheet_type,
+              'frozen_gross_ex_vat', ts.totals_ex_vat,
+              'frozen_vat', ts.totals_vat,
+              'frozen_gross_inc_vat', ts.totals_inc_vat,
               'unit_rows', ts.unit_rows,
               'additional_units_rows', ts.additional_units_rows,
               'expenses_rows', ts.expenses_rows,
@@ -12995,8 +13167,12 @@ begin
           'recipient', jsonb_build_object(
             'entity_kind', 'CANDIDATE',
             'candidate_id', cj.candidate_id::text,
+            'stable_candidate_key', cj.candidate_id::text,
             'tms_ref', cj.tms_ref,
+            'candidate_tms_ref', cj.tms_ref,
+            'works_number', cj.tms_ref,
             'display_name', cj.display_name,
+            'candidate_display_name', cj.display_name,
             'email', cj.email
           ),
           'summary', jsonb_build_object(
@@ -13025,10 +13201,36 @@ begin
               and pbc_tot.candidate_id = cj.candidate_id
             limit 1
           ), '{}'::jsonb),
+          'frozen_totals', coalesce((
+            select jsonb_build_object(
+              'item_count', count(distinct pbi_ft.id)::integer,
+              'gross_ex_vat', round(coalesce(sum(case when pbi_ft.item_type in ('LOAN_REPAYMENT','OVERPAYMENT_RECOVERY','MANUAL_DEBT_RECOVERY') then 0 when coalesce(pbi_ft.amount_inc_vat,0) < 0 or coalesce(pbi_ft.amount_ex_vat,0) < 0 then 0 else coalesce(pbi_ft.amount_ex_vat,0) end),0),2),
+              'vat', round(coalesce(sum(case when pbi_ft.item_type in ('LOAN_REPAYMENT','OVERPAYMENT_RECOVERY','MANUAL_DEBT_RECOVERY') then 0 when coalesce(pbi_ft.amount_inc_vat,0) < 0 or coalesce(pbi_ft.amount_ex_vat,0) < 0 then 0 else coalesce(pbi_ft.amount_vat,0) end),0),2),
+              'gross_vat', round(coalesce(sum(case when pbi_ft.item_type in ('LOAN_REPAYMENT','OVERPAYMENT_RECOVERY','MANUAL_DEBT_RECOVERY') then 0 when coalesce(pbi_ft.amount_inc_vat,0) < 0 or coalesce(pbi_ft.amount_ex_vat,0) < 0 then 0 else coalesce(pbi_ft.amount_vat,0) end),0),2),
+              'gross_inc_vat', round(coalesce(sum(case when pbi_ft.item_type in ('LOAN_REPAYMENT','OVERPAYMENT_RECOVERY','MANUAL_DEBT_RECOVERY') then 0 when coalesce(pbi_ft.amount_inc_vat,0) < 0 or coalesce(pbi_ft.amount_ex_vat,0) < 0 then 0 else coalesce(pbi_ft.amount_inc_vat,0) end),0),2),
+              'deductions_ex_vat', round(coalesce(sum(case when pbi_ft.item_type in ('LOAN_REPAYMENT','OVERPAYMENT_RECOVERY','MANUAL_DEBT_RECOVERY') then abs(coalesce(pbi_ft.amount_ex_vat,0)) when coalesce(pbi_ft.amount_ex_vat,0) < 0 then abs(coalesce(pbi_ft.amount_ex_vat,0)) else 0 end),0),2),
+              'deductions_vat', round(coalesce(sum(case when pbi_ft.item_type in ('LOAN_REPAYMENT','OVERPAYMENT_RECOVERY','MANUAL_DEBT_RECOVERY') then abs(coalesce(pbi_ft.amount_vat,0)) when coalesce(pbi_ft.amount_vat,0) < 0 then abs(coalesce(pbi_ft.amount_vat,0)) else 0 end),0),2),
+              'deductions_inc_vat', round(coalesce(sum(case when pbi_ft.item_type in ('LOAN_REPAYMENT','OVERPAYMENT_RECOVERY','MANUAL_DEBT_RECOVERY') then abs(coalesce(pbi_ft.amount_inc_vat,0)) when coalesce(pbi_ft.amount_inc_vat,0) < 0 then abs(coalesce(pbi_ft.amount_inc_vat,0)) else 0 end),0),2),
+              'net_ex_vat', round(coalesce(sum(coalesce(pbi_ft.amount_ex_vat,0)),0),2),
+              'net_vat', round(coalesce(sum(coalesce(pbi_ft.amount_vat,0)),0),2),
+              'net_inc_vat', round(coalesce(sum(coalesce(pbi_ft.amount_inc_vat,0)),0),2),
+              'final_payable', round(coalesce(sum(coalesce(pbi_ft.amount_inc_vat,0)),0),2)
+            )
+            from public.pay_batch_candidates pbc_ft
+            join public.pay_batch_items pbi_ft
+              on pbi_ft.pay_batch_candidate_id = pbc_ft.id
+            where pbc_ft.pay_batch_id = p_pay_batch_id
+              and pbc_ft.candidate_id = cj.candidate_id
+              and pbi_ft.item_type <> 'DEBT_CREATED'
+              and coalesce(pbi_ft.is_voided,false) = false
+          ), '{}'::jsonb),
           'non_timesheet_lines', coalesce((
             select coalesce(
               jsonb_agg(
                 jsonb_build_object(
+                  'pay_batch_item_id', pbi_nt.id::text,
+                  'pay_batch_item_breakdown_id', pbib_nt.id::text,
+                  'stable_line_key', concat_ws('|', pbc_nt.candidate_id::text, pbi_nt.id::text, pbib_nt.id::text, coalesce(pbi_nt.item_type,''), coalesce(pbi_nt.source_ref,''), coalesce(pbi_nt.finance_case_id::text,''), coalesce(pbib_nt.line_kind,''), coalesce(pbib_nt.bucket_code,''), coalesce(pbib_nt.unit_name,''), coalesce(pbib_nt.rate::text,''), coalesce(pbib_nt.amount_ex_vat::text,''), coalesce(pbib_nt.amount_vat::text,''), coalesce(pbib_nt.amount_inc_vat::text,'')),
                   'item_type', case
                     when pbi_nt.item_type = 'LOAN_REPAYMENT' then 'PAYMENT_ADVANCE_REPAYMENT'
                     when pbi_nt.item_type = 'LOAN_PAYOUT' then 'PAYMENT_ADVANCE'
@@ -13066,7 +13268,11 @@ begin
                   'total_vat', pbib_nt.amount_vat,
                   'total_inc_vat', pbib_nt.amount_inc_vat,
                   'signed_amount_ex_vat', pbib_nt.amount_ex_vat,
+                  'signed_amount_vat', pbib_nt.amount_vat,
                   'signed_amount_inc_vat', pbib_nt.amount_inc_vat,
+                  'frozen_amount_ex_vat', pbib_nt.amount_ex_vat,
+                  'frozen_amount_vat', pbib_nt.amount_vat,
+                  'frozen_amount_inc_vat', pbib_nt.amount_inc_vat,
                   'is_deduction', (pbi_nt.item_type in ('LOAN_REPAYMENT','OVERPAYMENT_RECOVERY','MANUAL_DEBT_RECOVERY')),
                   'deduction_kind', case
                     when pbi_nt.item_type = 'OVERPAYMENT_RECOVERY' then 'OVERPAYMENT_RECOVERY'
@@ -13083,6 +13289,15 @@ begin
                     else null
                   end,
                   'source_ref', pbi_nt.source_ref,
+                  'pay_channel', pbi_nt.pay_channel,
+                  'routing_kind', nullif(btrim(coalesce(pbi_nt.payout_instruction_snapshot_json->>'routing_kind','')), ''),
+                  'destination_label', nullif(btrim(coalesce(pbi_nt.payout_instruction_snapshot_json->>'destination_label','')), ''),
+                  'payout_destination', nullif(btrim(coalesce(pbi_nt.payout_instruction_snapshot_json->>'destination_label','')), ''),
+                  'masked_bank_account', nullif(btrim(coalesce(pbi_nt.payout_instruction_snapshot_json->>'masked_bank_account','')), ''),
+                  'beneficiary_name', nullif(btrim(coalesce(pbi_nt.payout_instruction_snapshot_json->>'beneficiary_name','')), ''),
+                  'bank_details_hash', nullif(btrim(coalesce(pbi_nt.payout_instruction_snapshot_json->>'bank_details_hash','')), ''),
+                  'appears_on_umbrella_remittance', lower(btrim(coalesce(pbi_nt.payout_instruction_snapshot_json->>'appears_on_umbrella_remittance','false'))) in ('true','1','yes','y','on'),
+                  'generates_candidate_payment_advice', lower(btrim(coalesce(pbi_nt.payout_instruction_snapshot_json->>'generates_candidate_payment_advice','false'))) in ('true','1','yes','y','on'),
                   'finance_case_id', case when coalesce(pbi_nt.finance_case_id, pa_fc.id) is null then null else coalesce(pbi_nt.finance_case_id, pa_fc.id)::text end,
                   'finance_case_type', case when pa_fc.case_type is null then null else pa_fc.case_type::text end,
                   'adjustment_comment', pa_fc.adjustment_comment,
@@ -13167,6 +13382,8 @@ begin
   );
 end;
 $function$;
+
+
 
 
 
