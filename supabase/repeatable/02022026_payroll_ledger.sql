@@ -26353,6 +26353,8 @@ $$;
 
 DROP FUNCTION IF EXISTS public.pay_execute_bank(uuid, text, uuid);
 
+DROP FUNCTION IF EXISTS public.pay_execute_bank(uuid, text, uuid);
+
 create or replace function public.pay_execute_bank(
   p_pay_batch_id uuid,
   p_pay_channel_scope text,
@@ -26780,7 +26782,9 @@ begin
     END IF;
 
     v_blocked_funds_submission_evidence_count := CASE
-      WHEN COALESCE((v_blocked_funds_submission_evidence_json ->> 'has_external_submission_evidence')::boolean, false) = true
+      WHEN COALESCE((v_blocked_funds_submission_evidence_json ->> 'has_provider_attempt_request_or_idempotency_reference')::boolean, false) = true
+        OR COALESCE((v_blocked_funds_submission_evidence_json ->> 'has_possible_provider_attempt_evidence')::boolean, false) = true
+        OR COALESCE((v_blocked_funds_submission_evidence_json ->> 'has_external_submission_evidence')::boolean, false) = true
         OR COALESCE((v_blocked_funds_submission_evidence_json ->> 'no_submission_evidence')::boolean, false) = false
       THEN 1
       ELSE 0
@@ -26790,7 +26794,7 @@ begin
       raise exception '%', jsonb_build_object(
         'error', 'PAY_EXECUTE_BANK',
         'code', 'BLOCKED_FUNDS_RETRY_SUBMISSION_EVIDENCE_EXISTS',
-        'message', 'pay_execute_bank: blocked-funds retry is unsafe because transfer submission, settlement, provider, or bank evidence already exists',
+        'message', 'pay_execute_bank: blocked-funds retry is unsafe because transfer submission, settlement, provider-attempt, idempotency, or bank evidence already exists',
         'pay_batch_id', p_pay_batch_id::text,
         'submission_evidence_count', v_blocked_funds_submission_evidence_count,
         'submission_evidence', v_blocked_funds_submission_evidence_json
@@ -28285,7 +28289,6 @@ begin
   );
 end;
 $$;
-
 
 
 
