@@ -12491,8 +12491,6 @@ EXCEPTION
 END;
 $function$;
 
-
-
 CREATE OR REPLACE FUNCTION public.pay_payment_return_admin_notice_dispatch_due(
   p_limit integer DEFAULT 50
 )
@@ -12709,6 +12707,16 @@ BEGIN
         v_group_row.summary_json #>> '{blocked_funds,available_gbp}',
         ''
       );
+      v_blocked_required := CASE
+        WHEN NULLIF(BTRIM(COALESCE(v_blocked_required, '')), '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+          THEN public.cloudtms_format_gbp(v_blocked_required::numeric)
+        ELSE COALESCE(NULLIF(BTRIM(COALESCE(v_blocked_required, '')), ''), '')
+      END;
+      v_blocked_available := CASE
+        WHEN NULLIF(BTRIM(COALESCE(v_blocked_available, '')), '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+          THEN public.cloudtms_format_gbp(v_blocked_available::numeric)
+        ELSE COALESCE(NULLIF(BTRIM(COALESCE(v_blocked_available, '')), ''), '')
+      END;
       v_blocked_status := COALESCE(
         v_group_row.summary_json #>> '{status}',
         v_group_row.summary_json #>> '{batch_status}',
@@ -12751,8 +12759,8 @@ BEGIN
         'Pay date: ' || COALESCE(v_blocked_pay_date, ''),
         'Provider: ' || COALESCE(v_blocked_provider, '') || CASE WHEN NULLIF(v_blocked_env, '') IS NULL THEN '' ELSE ' / ' || v_blocked_env END,
         'Funding account: ' || COALESCE(v_blocked_account, ''),
-        'Required: ' || CASE WHEN NULLIF(v_blocked_required, '') IS NULL THEN '' ELSE '£' || v_blocked_required END,
-        'Available: ' || CASE WHEN NULLIF(v_blocked_available, '') IS NULL THEN '' ELSE '£' || v_blocked_available END,
+        'Required: ' || COALESCE(NULLIF(v_blocked_required, ''), ''),
+        'Available: ' || COALESCE(NULLIF(v_blocked_available, ''), ''),
         'Status: ' || COALESCE(v_blocked_status, 'BLOCKED_FUNDS'),
         'Execution state: ' || COALESCE(v_blocked_execution_state, ''),
         'Last funds checked: ' || COALESCE(v_blocked_last_funds_checked, 'Not recorded'),
@@ -12770,8 +12778,8 @@ BEGIN
         || '<tr><th style="text-align:left;border:1px solid #e5e7eb;padding:8px;background:#f9fafb;">Pay date</th><td style="border:1px solid #e5e7eb;padding:8px;">' || replace(replace(replace(COALESCE(v_blocked_pay_date, ''), '&', '&amp;'), '<', '&lt;'), '>', '&gt;') || '</td></tr>'
         || '<tr><th style="text-align:left;border:1px solid #e5e7eb;padding:8px;background:#f9fafb;">Provider</th><td style="border:1px solid #e5e7eb;padding:8px;">' || replace(replace(replace(COALESCE(v_blocked_provider, '') || CASE WHEN NULLIF(v_blocked_env, '') IS NULL THEN '' ELSE ' / ' || v_blocked_env END, '&', '&amp;'), '<', '&lt;'), '>', '&gt;') || '</td></tr>'
         || '<tr><th style="text-align:left;border:1px solid #e5e7eb;padding:8px;background:#f9fafb;">Funding account</th><td style="border:1px solid #e5e7eb;padding:8px;">' || replace(replace(replace(COALESCE(v_blocked_account, ''), '&', '&amp;'), '<', '&lt;'), '>', '&gt;') || '</td></tr>'
-        || '<tr><th style="text-align:left;border:1px solid #e5e7eb;padding:8px;background:#f9fafb;">Required</th><td style="border:1px solid #e5e7eb;padding:8px;">' || replace(replace(replace(CASE WHEN NULLIF(v_blocked_required, '') IS NULL THEN '' ELSE '£' || v_blocked_required END, '&', '&amp;'), '<', '&lt;'), '>', '&gt;') || '</td></tr>'
-        || '<tr><th style="text-align:left;border:1px solid #e5e7eb;padding:8px;background:#f9fafb;">Available</th><td style="border:1px solid #e5e7eb;padding:8px;">' || replace(replace(replace(CASE WHEN NULLIF(v_blocked_available, '') IS NULL THEN '' ELSE '£' || v_blocked_available END, '&', '&amp;'), '<', '&lt;'), '>', '&gt;') || '</td></tr>'
+        || '<tr><th style="text-align:left;border:1px solid #e5e7eb;padding:8px;background:#f9fafb;">Required</th><td style="border:1px solid #e5e7eb;padding:8px;">' || replace(replace(replace(COALESCE(NULLIF(v_blocked_required, ''), ''), '&', '&amp;'), '<', '&lt;'), '>', '&gt;') || '</td></tr>'
+        || '<tr><th style="text-align:left;border:1px solid #e5e7eb;padding:8px;background:#f9fafb;">Available</th><td style="border:1px solid #e5e7eb;padding:8px;">' || replace(replace(replace(COALESCE(NULLIF(v_blocked_available, ''), ''), '&', '&amp;'), '<', '&lt;'), '>', '&gt;') || '</td></tr>'
         || '<tr><th style="text-align:left;border:1px solid #e5e7eb;padding:8px;background:#f9fafb;">Status</th><td style="border:1px solid #e5e7eb;padding:8px;">' || replace(replace(replace(COALESCE(v_blocked_status, 'BLOCKED_FUNDS'), '&', '&amp;'), '<', '&lt;'), '>', '&gt;') || '</td></tr>'
         || '<tr><th style="text-align:left;border:1px solid #e5e7eb;padding:8px;background:#f9fafb;">Last funds checked</th><td style="border:1px solid #e5e7eb;padding:8px;">' || replace(replace(replace(COALESCE(v_blocked_last_funds_checked, 'Not recorded'), '&', '&amp;'), '<', '&lt;'), '>', '&gt;') || '</td></tr>'
         || '<tr><th style="text-align:left;border:1px solid #e5e7eb;padding:8px;background:#f9fafb;">Bank submission happened</th><td style="border:1px solid #e5e7eb;padding:8px;">No</td></tr>'
