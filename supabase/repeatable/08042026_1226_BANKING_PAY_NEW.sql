@@ -39452,9 +39452,14 @@ END;
 $function$;
 
 
+DROP FUNCTION IF EXISTS public.banking_alert_payload_for_pay_batch(text, uuid);
 
-
-CREATE OR REPLACE FUNCTION public.banking_alert_payload_for_pay_batch(p_alert_kind text, p_pay_batch_id uuid)
+CREATE OR REPLACE FUNCTION public.banking_alert_payload_for_pay_batch(
+  p_alert_kind text,
+  p_pay_batch_id uuid,
+  p_source_kind text DEFAULT NULL::text,
+  p_source_id uuid DEFAULT NULL::uuid
+)
 RETURNS jsonb
 LANGUAGE plpgsql
 STABLE
@@ -39463,6 +39468,7 @@ SET search_path TO 'public'
 AS $function$
 DECLARE
   v_alert_kind text;
+  v_source_kind text;
   v_batch record;
   v_funds_check_json jsonb := '{}'::jsonb;
   v_required_gbp_text text := NULL;
@@ -39485,6 +39491,7 @@ DECLARE
   v_latest_remittance_failure jsonb := NULL;
 BEGIN
   v_alert_kind := UPPER(NULLIF(BTRIM(COALESCE(p_alert_kind, '')), ''));
+  v_source_kind := lower(nullif(btrim(coalesce(p_source_kind, '')), ''));
 
   IF v_alert_kind IS NULL THEN
     RAISE EXCEPTION 'BANKING_ALERT_PAYLOAD_KIND_REQUIRED'
@@ -39610,6 +39617,8 @@ BEGIN
   IF v_alert_kind = 'BLOCKED_FUNDS' THEN
     RETURN jsonb_strip_nulls(jsonb_build_object(
       'pay_batch_id', v_batch.id::text,
+      'source_kind', v_source_kind,
+      'source_id', CASE WHEN p_source_id IS NULL THEN NULL ELSE p_source_id::text END,
       'issue_kind', 'BLOCKED_FUNDS',
       'batch_status', UPPER(BTRIM(COALESCE(v_batch.status, ''))),
       'execution_commit_state', UPPER(BTRIM(COALESCE(v_batch.execution_commit_state, 'NOT_SUBMITTED'))),
@@ -39688,10 +39697,14 @@ BEGIN
     FROM public.pay_bank_transfers
     WHERE public.pay_bank_transfers.pay_batch_id = p_pay_batch_id
       AND (
+        v_source_kind IS DISTINCT FROM 'pay_bank_transfer'
+        OR public.pay_bank_transfers.id = p_source_id
+      )
+      AND (
         (v_alert_kind = 'BANK_REJECTED_PAYMENT'
           AND (
-            UPPER(BTRIM(COALESCE(public.pay_bank_transfers.status, ''))) IN ('FAILED', 'DECLINED', 'REJECTED', 'CANCELLED', 'CANCELED', 'SUBMISSION_FAILED')
-            OR UPPER(BTRIM(COALESCE(public.pay_bank_transfers.rail_state, ''))) IN ('FAILED', 'DECLINED', 'REJECTED', 'CANCELLED', 'CANCELED', 'SUBMISSION_FAILED')
+            UPPER(BTRIM(COALESCE(public.pay_bank_transfers.status, ''))) IN ('FAILED', 'DECLINED', 'REJECTED', 'CANCELLED', 'CANCELED', 'SUBMISSION_FAILED', 'FAILED_BEFORE_COMMIT')
+            OR UPPER(BTRIM(COALESCE(public.pay_bank_transfers.rail_state, ''))) IN ('FAILED', 'DECLINED', 'REJECTED', 'CANCELLED', 'CANCELED', 'SUBMISSION_FAILED', 'FAILED_BEFORE_COMMIT')
             OR NULLIF(BTRIM(COALESCE(public.pay_bank_transfers.failed_reason, '')), '') IS NOT NULL
           ))
         OR (v_alert_kind = 'BANK_RETURNED_PAYMENT'
@@ -39736,10 +39749,14 @@ BEGIN
     FROM public.pay_bank_transfer_events
     WHERE public.pay_bank_transfer_events.pay_batch_id = p_pay_batch_id
       AND (
+        v_source_kind IS DISTINCT FROM 'pay_bank_transfer_event'
+        OR public.pay_bank_transfer_events.id = p_source_id
+      )
+      AND (
         (v_alert_kind = 'BANK_REJECTED_PAYMENT'
           AND (
-            UPPER(BTRIM(COALESCE(public.pay_bank_transfer_events.normalised_state, ''))) IN ('FAILED', 'DECLINED', 'REJECTED', 'CANCELLED', 'CANCELED')
-            OR UPPER(BTRIM(COALESCE(public.pay_bank_transfer_events.provider_state, ''))) IN ('FAILED', 'DECLINED', 'REJECTED', 'CANCELLED', 'CANCELED')
+            UPPER(BTRIM(COALESCE(public.pay_bank_transfer_events.normalised_state, ''))) IN ('FAILED', 'DECLINED', 'REJECTED', 'CANCELLED', 'CANCELED', 'SUBMISSION_FAILED', 'FAILED_BEFORE_COMMIT')
+            OR UPPER(BTRIM(COALESCE(public.pay_bank_transfer_events.provider_state, ''))) IN ('FAILED', 'DECLINED', 'REJECTED', 'CANCELLED', 'CANCELED', 'SUBMISSION_FAILED', 'FAILED_BEFORE_COMMIT')
             OR UPPER(BTRIM(COALESCE(public.pay_bank_transfer_events.movement_classification, ''))) IN ('NO_MONEY_UNWIND', 'PRE_BANK_CANCEL')
           ))
         OR (v_alert_kind = 'BANK_RETURNED_PAYMENT'
@@ -39768,6 +39785,8 @@ BEGIN
 
     RETURN jsonb_strip_nulls(jsonb_build_object(
       'pay_batch_id', v_batch.id::text,
+      'source_kind', v_source_kind,
+      'source_id', CASE WHEN p_source_id IS NULL THEN NULL ELSE p_source_id::text END,
       'issue_kind', v_alert_kind,
       'batch_status', UPPER(BTRIM(COALESCE(v_batch.status, ''))),
       'rail_provider', NULLIF(BTRIM(COALESCE(v_batch.rail_provider_snapshot, '')), ''),
@@ -39782,6 +39801,39 @@ BEGIN
   END IF;
 
   IF v_alert_kind IN ('PAYMENT_CORRECTION_FAILED', 'PAYMENT_CORRECTION_BLOCKED', 'PAYMENT_CORRECTION_AWAITING_APPROVAL') THEN
+    IF v_source_kind = 'pay_bank_transfer_event' AND p_source_id IS NOT NULL THEN
+      SELECT jsonb_strip_nulls(jsonb_build_object(
+        'pay_bank_transfer_event_id', public.pay_bank_transfer_events.id::text,
+        'pay_bank_transfer_id', CASE WHEN public.pay_bank_transfer_events.pay_bank_transfer_id IS NULL THEN NULL ELSE public.pay_bank_transfer_events.pay_bank_transfer_id::text END,
+        'provider_key', public.pay_bank_transfer_events.provider_key,
+        'provider_event_id', public.pay_bank_transfer_events.provider_event_id,
+        'provider_reference', public.pay_bank_transfer_events.provider_reference,
+        'provider_state', public.pay_bank_transfer_events.provider_state,
+        'normalised_state', public.pay_bank_transfer_events.normalised_state,
+        'mapping_status', public.pay_bank_transfer_events.mapping_status,
+        'movement_classification', public.pay_bank_transfer_events.movement_classification,
+        'correction_disposition', public.pay_bank_transfer_events.correction_disposition,
+        'event_source', public.pay_bank_transfer_events.event_source,
+        'event_time_utc', CASE
+          WHEN public.pay_bank_transfer_events.event_time_utc IS NULL THEN NULL
+          ELSE TO_CHAR(public.pay_bank_transfer_events.event_time_utc AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')
+        END,
+        'received_at_utc', CASE
+          WHEN public.pay_bank_transfer_events.received_at_utc IS NULL THEN NULL
+          ELSE TO_CHAR(public.pay_bank_transfer_events.received_at_utc AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')
+        END,
+        'created_at_utc', CASE
+          WHEN public.pay_bank_transfer_events.created_at_utc IS NULL THEN NULL
+          ELSE TO_CHAR(public.pay_bank_transfer_events.created_at_utc AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')
+        END
+      ))
+      INTO v_latest_transfer_event
+      FROM public.pay_bank_transfer_events
+      WHERE public.pay_bank_transfer_events.pay_batch_id = p_pay_batch_id
+        AND public.pay_bank_transfer_events.id = p_source_id
+      LIMIT 1;
+    END IF;
+
     SELECT jsonb_strip_nulls(jsonb_build_object(
       'correction_request_id', public.pay_payment_correction_requests.id::text,
       'correction_kind', public.pay_payment_correction_requests.correction_kind,
@@ -39811,6 +39863,10 @@ BEGIN
     INTO v_latest_correction_request
     FROM public.pay_payment_correction_requests
     WHERE public.pay_payment_correction_requests.pay_batch_id = p_pay_batch_id
+      AND (
+        v_source_kind IS DISTINCT FROM 'pay_payment_correction_request'
+        OR public.pay_payment_correction_requests.id = p_source_id
+      )
       AND (
         (v_alert_kind = 'PAYMENT_CORRECTION_FAILED'
           AND UPPER(BTRIM(COALESCE(public.pay_payment_correction_requests.status, ''))) IN ('FAILED', 'FAILED_RETRYABLE', 'FAILED_FINAL'))
@@ -39847,6 +39903,10 @@ BEGIN
     FROM public.pay_payment_correction_work_items
     WHERE public.pay_payment_correction_work_items.pay_batch_id = p_pay_batch_id
       AND (
+        v_source_kind IS DISTINCT FROM 'pay_payment_correction_work_item'
+        OR public.pay_payment_correction_work_items.id = p_source_id
+      )
+      AND (
         (v_alert_kind = 'PAYMENT_CORRECTION_FAILED'
           AND UPPER(BTRIM(COALESCE(public.pay_payment_correction_work_items.status, ''))) IN ('FAILED', 'FAILED_RETRYABLE', 'FAILED_FINAL'))
         OR (v_alert_kind = 'PAYMENT_CORRECTION_BLOCKED'
@@ -39860,12 +39920,15 @@ BEGIN
 
     RETURN jsonb_strip_nulls(jsonb_build_object(
       'pay_batch_id', v_batch.id::text,
+      'source_kind', v_source_kind,
+      'source_id', CASE WHEN p_source_id IS NULL THEN NULL ELSE p_source_id::text END,
       'issue_kind', v_alert_kind,
       'batch_status', UPPER(BTRIM(COALESCE(v_batch.status, ''))),
       'rail_provider', NULLIF(BTRIM(COALESCE(v_batch.rail_provider_snapshot, '')), ''),
       'rail_env', NULLIF(BTRIM(COALESCE(v_batch.rail_env_snapshot, '')), ''),
       'latest_correction_request', v_latest_correction_request,
-      'latest_correction_work_item', v_latest_correction_work_item
+      'latest_correction_work_item', v_latest_correction_work_item,
+      'latest_transfer_event', v_latest_transfer_event
     ));
   END IF;
 
@@ -39894,6 +39957,10 @@ BEGIN
     FROM public.mail_outbox
     WHERE public.mail_outbox.context_kind = 'pay_batches'
       AND public.mail_outbox.context_id = p_pay_batch_id
+      AND (
+        v_source_kind IS DISTINCT FROM 'mail_outbox'
+        OR public.mail_outbox.id = p_source_id
+      )
       AND UPPER(BTRIM(COALESCE(public.mail_outbox.type, ''))) = 'REMITTANCE'
       AND (
         UPPER(BTRIM(COALESCE(public.mail_outbox.status::text, ''))) = 'FAILED'
@@ -39906,6 +39973,8 @@ BEGIN
 
     RETURN jsonb_strip_nulls(jsonb_build_object(
       'pay_batch_id', v_batch.id::text,
+      'source_kind', v_source_kind,
+      'source_id', CASE WHEN p_source_id IS NULL THEN NULL ELSE p_source_id::text END,
       'issue_kind', 'REMITTANCE_SEND_FAILED',
       'batch_status', UPPER(BTRIM(COALESCE(v_batch.status, ''))),
       'rail_provider', NULLIF(BTRIM(COALESCE(v_batch.rail_provider_snapshot, '')), ''),
@@ -39923,6 +39992,7 @@ BEGIN
           )::text;
 END;
 $function$;
+
 
 
 
