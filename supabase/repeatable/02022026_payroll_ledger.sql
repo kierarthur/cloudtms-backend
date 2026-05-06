@@ -21515,6 +21515,8 @@ $$;
 
 DROP FUNCTION IF EXISTS public.pay_batch_get(uuid);
 
+
+
 create or replace function public.pay_batch_get(p_pay_batch_id uuid, p_actor_user_id uuid DEFAULT NULL::uuid)
 returns jsonb
 language plpgsql
@@ -21559,6 +21561,7 @@ declare
   v_execution_commit_state text := 'NOT_SUBMITTED';
   v_batch_status_upper text := null;
   v_has_external_submission_evidence boolean := false;
+  v_submission_evidence jsonb := '{}'::jsonb;
   v_current_transfer_hash text := null;
   v_pending_transfer_hash text := null;
   v_stable_transfer_hash text := null;
@@ -22216,38 +22219,12 @@ begin
     and v_bank_csv_export_hash is not null
   );
 
-  select exists(
-    select 1
-    from public.pay_bank_transfers pbt_ext
-    where pbt_ext.pay_batch_id = p_pay_batch_id
-      and upper(coalesce(pbt_ext.status,'')) <> 'BLOCKED'
-      and (
-        nullif(btrim(coalesce(pbt_ext.rail_tx_id,'')), '') is not null
-        or upper(coalesce(pbt_ext.rail_state,'')) in ('SUBMITTED','QUEUED','ACCEPTED','SENT','PROCESSING','IN_FLIGHT','PENDING_SETTLEMENT','PENDING_CONFIRMATION','PENDING_SUBMISSION','COMPLETED','SETTLED','COMMITTED','PAID','EXECUTED')
-        or lower(btrim(coalesce(pbt_ext.rail_meta_json->>'submitted','false'))) in ('true','1','yes','y','on')
-        or lower(btrim(coalesce(pbt_ext.rail_meta_json->>'queued','false'))) in ('true','1','yes','y','on')
-        or lower(btrim(coalesce(pbt_ext.rail_meta_json->>'accepted','false'))) in ('true','1','yes','y','on')
-        or lower(btrim(coalesce(pbt_ext.rail_meta_json->>'sent','false'))) in ('true','1','yes','y','on')
-        or lower(btrim(coalesce(pbt_ext.rail_meta_json->>'processing','false'))) in ('true','1','yes','y','on')
-        or lower(btrim(coalesce(pbt_ext.rail_meta_json->>'completed','false'))) in ('true','1','yes','y','on')
-        or lower(btrim(coalesce(pbt_ext.rail_meta_json->>'committed','false'))) in ('true','1','yes','y','on')
-        or lower(btrim(coalesce(pbt_ext.rail_meta_json->>'settled','false'))) in ('true','1','yes','y','on')
-        or lower(btrim(coalesce(pbt_ext.rail_meta_json->>'paid','false'))) in ('true','1','yes','y','on')
-        or coalesce(
-          nullif(btrim(coalesce(pbt_ext.rail_meta_json->>'provider_submission_id','')), ''),
-          nullif(btrim(coalesce(pbt_ext.rail_meta_json->>'submission_id','')), ''),
-          nullif(btrim(coalesce(pbt_ext.rail_meta_json->>'provider_transfer_id','')), ''),
-          nullif(btrim(coalesce(pbt_ext.rail_meta_json->>'transfer_id','')), ''),
-          nullif(btrim(coalesce(pbt_ext.rail_meta_json->>'external_transfer_id','')), ''),
-          nullif(btrim(coalesce(pbt_ext.rail_meta_json->>'provider_payment_id','')), ''),
-          nullif(btrim(coalesce(pbt_ext.rail_meta_json->>'payment_id','')), ''),
-          nullif(btrim(coalesce(pbt_ext.rail_meta_json->>'external_payment_id','')), ''),
-          nullif(btrim(coalesce(pbt_ext.rail_meta_json->>'transaction_id','')), ''),
-          nullif(btrim(coalesce(pbt_ext.rail_meta_json->>'id','')), '')
-        ) is not null
-      )
-  )
-  into v_has_external_submission_evidence;
+  v_submission_evidence := public.pay_batch_submission_evidence(p_pay_batch_id);
+
+  v_has_external_submission_evidence := COALESCE(
+    (v_submission_evidence ->> 'has_external_submission_evidence')::boolean,
+    false
+  );
 
   v_alert_actor_user_id := COALESCE(p_actor_user_id, '00000000-0000-0000-0000-000000000000'::uuid);
 
@@ -22354,58 +22331,21 @@ begin
     v_batch.funding_account_ref
   );
 
-  SELECT NOT EXISTS (
-    SELECT 1
-    FROM public.pay_bank_transfer_events AS blocked_funds_retry_events
-    WHERE blocked_funds_retry_events.pay_batch_id = p_pay_batch_id
-  )
-  INTO v_no_bank_transfer_events;
-
-  SELECT NOT EXISTS (
-    SELECT 1
-    FROM public.pay_bank_transfers AS blocked_funds_retry_transfers
-    WHERE blocked_funds_retry_transfers.pay_batch_id = p_pay_batch_id
-      AND NULLIF(BTRIM(COALESCE(blocked_funds_retry_transfers.rail_tx_id, '')), '') IS NOT NULL
-  )
-  INTO v_no_rail_tx_id;
-
-  SELECT NOT EXISTS (
-    SELECT 1
-    FROM public.pay_bank_transfers AS blocked_funds_retry_transfers
-    WHERE blocked_funds_retry_transfers.pay_batch_id = p_pay_batch_id
-      AND COALESCE(
-        NULLIF(BTRIM(COALESCE(blocked_funds_retry_transfers.rail_meta_json ->> 'provider_submission_id', '')), ''),
-        NULLIF(BTRIM(COALESCE(blocked_funds_retry_transfers.rail_meta_json ->> 'submission_id', '')), ''),
-        NULLIF(BTRIM(COALESCE(blocked_funds_retry_transfers.rail_meta_json ->> 'provider_transfer_id', '')), ''),
-        NULLIF(BTRIM(COALESCE(blocked_funds_retry_transfers.rail_meta_json ->> 'transfer_id', '')), ''),
-        NULLIF(BTRIM(COALESCE(blocked_funds_retry_transfers.rail_meta_json ->> 'external_transfer_id', '')), ''),
-        NULLIF(BTRIM(COALESCE(blocked_funds_retry_transfers.rail_meta_json ->> 'provider_payment_id', '')), ''),
-        NULLIF(BTRIM(COALESCE(blocked_funds_retry_transfers.rail_meta_json ->> 'payment_id', '')), ''),
-        NULLIF(BTRIM(COALESCE(blocked_funds_retry_transfers.rail_meta_json ->> 'external_payment_id', '')), ''),
-        NULLIF(BTRIM(COALESCE(blocked_funds_retry_transfers.rail_meta_json ->> 'transaction_id', '')), '')
-      ) IS NOT NULL
-  )
-  INTO v_no_provider_submission_reference;
-
-  SELECT NOT EXISTS (
-    SELECT 1
-    FROM public.pay_bank_transfers AS blocked_funds_retry_transfers
-    WHERE blocked_funds_retry_transfers.pay_batch_id = p_pay_batch_id
-      AND (
-        upper(btrim(COALESCE(blocked_funds_retry_transfers.status, ''))) IN ('SUBMITTED','QUEUED','ACCEPTED','SENT','PROCESSING','IN_FLIGHT','PENDING_SETTLEMENT','PENDING_CONFIRMATION','PENDING_SUBMISSION','COMPLETED','SETTLED','COMMITTED','PAID','EXECUTED')
-        OR upper(btrim(COALESCE(blocked_funds_retry_transfers.rail_state, ''))) IN ('SUBMITTED','QUEUED','ACCEPTED','SENT','PROCESSING','IN_FLIGHT','PENDING_SETTLEMENT','PENDING_CONFIRMATION','PENDING_SUBMISSION','COMPLETED','SETTLED','COMMITTED','PAID','EXECUTED')
-        OR lower(btrim(COALESCE(blocked_funds_retry_transfers.rail_meta_json ->> 'submitted', 'false'))) IN ('true','1','yes','y','on')
-        OR lower(btrim(COALESCE(blocked_funds_retry_transfers.rail_meta_json ->> 'queued', 'false'))) IN ('true','1','yes','y','on')
-        OR lower(btrim(COALESCE(blocked_funds_retry_transfers.rail_meta_json ->> 'accepted', 'false'))) IN ('true','1','yes','y','on')
-        OR lower(btrim(COALESCE(blocked_funds_retry_transfers.rail_meta_json ->> 'sent', 'false'))) IN ('true','1','yes','y','on')
-        OR lower(btrim(COALESCE(blocked_funds_retry_transfers.rail_meta_json ->> 'processing', 'false'))) IN ('true','1','yes','y','on')
-        OR lower(btrim(COALESCE(blocked_funds_retry_transfers.rail_meta_json ->> 'completed', 'false'))) IN ('true','1','yes','y','on')
-        OR lower(btrim(COALESCE(blocked_funds_retry_transfers.rail_meta_json ->> 'committed', 'false'))) IN ('true','1','yes','y','on')
-        OR lower(btrim(COALESCE(blocked_funds_retry_transfers.rail_meta_json ->> 'settled', 'false'))) IN ('true','1','yes','y','on')
-        OR lower(btrim(COALESCE(blocked_funds_retry_transfers.rail_meta_json ->> 'paid', 'false'))) IN ('true','1','yes','y','on')
-      )
-  )
-  INTO v_no_submitted_or_completed_transfer_state;
+  v_no_bank_transfer_events := COALESCE((v_submission_evidence ->> 'transfer_event_count')::integer, 0) = 0;
+  v_no_rail_tx_id := COALESCE((v_submission_evidence ->> 'has_rail_tx_id')::boolean, false) = false;
+  v_no_provider_submission_reference := (
+    COALESCE((v_submission_evidence ->> 'has_provider_submission_reference')::boolean, false) = false
+    AND COALESCE((v_submission_evidence ->> 'has_provider_payment_reference')::boolean, false) = false
+    AND COALESCE((v_submission_evidence ->> 'has_provider_transfer_reference')::boolean, false) = false
+    AND COALESCE((v_submission_evidence ->> 'has_provider_transaction_reference')::boolean, false) = false
+    AND COALESCE((v_submission_evidence ->> 'has_external_payment_reference')::boolean, false) = false
+    AND COALESCE((v_submission_evidence ->> 'has_external_transfer_reference')::boolean, false) = false
+  );
+  v_no_submitted_or_completed_transfer_state := (
+    COALESCE((v_submission_evidence ->> 'has_submitted_state')::boolean, false) = false
+    AND COALESCE((v_submission_evidence ->> 'has_processing_state')::boolean, false) = false
+    AND COALESCE((v_submission_evidence ->> 'has_completed_state')::boolean, false) = false
+  );
 
   v_no_submission_evidence_flags := jsonb_build_object(
     'execution_commit_not_submitted', v_execution_commit_state = 'NOT_SUBMITTED',
@@ -22415,7 +22355,9 @@ begin
     'no_rail_tx_id', COALESCE(v_no_rail_tx_id, false),
     'no_provider_submission_reference', COALESCE(v_no_provider_submission_reference, false),
     'no_submitted_or_completed_transfer_state', COALESCE(v_no_submitted_or_completed_transfer_state, false),
-    'no_external_submission_evidence', COALESCE(v_has_external_submission_evidence, false) = false
+    'no_external_submission_evidence', COALESCE((v_submission_evidence ->> 'has_external_submission_evidence')::boolean, false) = false,
+    'no_submission_evidence', COALESCE((v_submission_evidence ->> 'no_submission_evidence')::boolean, false),
+    'submission_evidence', v_submission_evidence
   );
 
   v_can_retry_blocked_funds := (
@@ -22424,38 +22366,14 @@ begin
     AND NULLIF(BTRIM(COALESCE(v_batch.execution_commit_ref, '')), '') IS NULL
     AND v_batch.execution_committed_at_utc IS NULL
     AND COALESCE(v_active_effective_item_count, 0) > 0
-    AND COALESCE(v_no_bank_transfer_events, false) = true
-    AND COALESCE(v_no_rail_tx_id, false) = true
-    AND COALESCE(v_no_provider_submission_reference, false) = true
-    AND COALESCE(v_no_submitted_or_completed_transfer_state, false) = true
-    AND COALESCE(v_has_external_submission_evidence, false) = false
+    AND COALESCE((v_submission_evidence ->> 'transfer_event_count')::integer, 0) = 0
+    AND COALESCE((v_submission_evidence ->> 'has_external_submission_evidence')::boolean, false) = false
+    AND COALESCE((v_submission_evidence ->> 'no_submission_evidence')::boolean, false) = true
     AND v_blocked_funds_sufficient IS FALSE
   );
 
   IF v_batch_status_upper = 'BLOCKED_FUNDS' THEN
-    v_blocked_funds_alert_payload := jsonb_strip_nulls(jsonb_build_object(
-      'pay_batch_id', p_pay_batch_id::text,
-      'issue_kind', 'BLOCKED_FUNDS',
-      'batch_status', v_batch.status,
-      'execution_commit_state', v_batch.execution_commit_state,
-      'execution_commit_ref', v_batch.execution_commit_ref,
-      'execution_committed_at_utc', CASE WHEN v_batch.execution_committed_at_utc IS NULL THEN NULL ELSE v_batch.execution_committed_at_utc::text END,
-      'last_funds_check_at_utc', CASE WHEN v_batch.last_funds_check_at_utc IS NULL THEN NULL ELSE v_batch.last_funds_check_at_utc::text END,
-      'funds_check_checked_at_utc', COALESCE(
-        v_batch.last_funds_check_json #>> '{checked_at_utc}',
-        v_batch.last_funds_check_json #>> '{checked_at}',
-        v_batch.last_funds_check_json #>> '{timestamp}'
-      ),
-      'required_gbp', v_blocked_funds_required_gbp,
-      'available_gbp', v_blocked_funds_available_gbp,
-      'sufficient', v_blocked_funds_sufficient,
-      'funding_account_ref', v_blocked_funds_account_ref,
-      'rail_provider', v_blocked_funds_provider,
-      'rail_env', v_blocked_funds_env,
-      'can_retry_blocked_funds', v_can_retry_blocked_funds,
-      'no_submission_evidence_flags', v_no_submission_evidence_flags,
-      'active_item_count', COALESCE(v_active_effective_item_count, 0)
-    ));
+    v_blocked_funds_alert_payload := public.banking_alert_payload_for_pay_batch('BLOCKED_FUNDS', p_pay_batch_id);
 
     IF NULLIF(BTRIM(COALESCE(v_banking_alert_fingerprint, '')), '') IS NULL THEN
       v_banking_alert_fingerprint := public.banking_alert_fingerprint(
@@ -22522,6 +22440,8 @@ begin
       'rail_provider', v_blocked_funds_provider,
       'rail_env', v_blocked_funds_env,
       'funding_account_ref', v_blocked_funds_account_ref,
+      'last_funds_check_at_utc', CASE WHEN v_batch.last_funds_check_at_utc IS NULL THEN NULL ELSE v_batch.last_funds_check_at_utc::text END,
+      'last_funds_check_json', v_batch.last_funds_check_json,
       'alert_fingerprint', v_banking_alert_fingerprint,
       'no_submission_evidence_flags', v_no_submission_evidence_flags
     );
@@ -22577,21 +22497,21 @@ begin
   v_can_create_bank_csv_file := (
     v_provider_known = true
     and COALESCE(v_active_effective_item_count, 0) > 0
-    and v_batch_status_upper not in ('COMMITTED','PAID','SETTLED','CANCELLED')
+    and v_batch_status_upper not in ('COMMITTED','PAID','SETTLED','CANCELLED','BLOCKED_FUNDS')
     and v_execution_commit_state = 'NOT_SUBMITTED'
   );
   v_can_start_standard_execution := (
     v_provider_known = true
     and COALESCE(v_active_effective_item_count, 0) > 0
     and v_provider_normalized <> 'CSV'
-    and v_batch_status_upper not in ('COMMITTED','PAID','SETTLED','CANCELLED')
+    and v_batch_status_upper not in ('COMMITTED','PAID','SETTLED','CANCELLED','BLOCKED_FUNDS')
     and v_execution_commit_state = 'NOT_SUBMITTED'
     and v_has_external_submission_evidence = false
   );
   v_can_start_csv_settlement := (
     v_provider_known = true
     and COALESCE(v_active_effective_item_count, 0) > 0
-    and v_batch_status_upper not in ('COMMITTED','PAID','SETTLED','CANCELLED')
+    and v_batch_status_upper not in ('COMMITTED','PAID','SETTLED','CANCELLED','BLOCKED_FUNDS')
     and v_execution_commit_state = 'NOT_SUBMITTED'
     and v_has_external_submission_evidence = false
     and v_has_cloudtms_csv_export = true
@@ -22600,7 +22520,7 @@ begin
   v_can_start_external_settlement := (
     v_provider_known = true
     and COALESCE(v_active_effective_item_count, 0) > 0
-    and v_batch_status_upper not in ('COMMITTED','PAID','SETTLED','CANCELLED')
+    and v_batch_status_upper not in ('COMMITTED','PAID','SETTLED','CANCELLED','BLOCKED_FUNDS')
     and v_execution_commit_state = 'NOT_SUBMITTED'
     and v_has_external_submission_evidence = false
   );
@@ -25055,8 +24975,6 @@ begin
     );
 end;
 $$;
-
-
 
 
 DROP FUNCTION IF EXISTS public.pay_batches_list(integer, integer, text);
