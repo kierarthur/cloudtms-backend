@@ -19312,6 +19312,7 @@ $function$;
 DROP FUNCTION IF EXISTS public.timesheet_daily_manual_process_atomic(uuid, uuid, uuid, jsonb, jsonb, timestamp with time zone);
 DROP FUNCTION IF EXISTS public.timesheet_daily_manual_process_atomic(uuid, uuid, uuid, jsonb, jsonb, timestamp with time zone, text);
 
+
 CREATE OR REPLACE FUNCTION public.timesheet_daily_manual_process_atomic(p_timesheet_id uuid, p_expected_timesheet_id uuid, p_actor_user_id uuid DEFAULT NULL::uuid, p_timesheet_patch_json jsonb DEFAULT '{}'::jsonb, p_tsfin_patch_json jsonb DEFAULT '{}'::jsonb, p_now_utc timestamp with time zone DEFAULT now(), p_expected_row_signature text DEFAULT NULL::text)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -19580,7 +19581,7 @@ BEGIN
 
   SELECT decision_result.row_json
     INTO v_pre_row
-  FROM public.bulk_timesheet_row_decision_v1(JSONB_BUILD_OBJECT('dataset_mode', 'process', 'timesheet_id', v_current_timesheet_id::text)) AS decision_result(row_json)
+  FROM public.bulk_timesheet_row_patch_v1(JSONB_BUILD_OBJECT('dataset_mode', 'process', 'timesheet_id', v_current_timesheet_id::text)) AS decision_result(row_json)
   LIMIT 1;
 
   IF v_expected_row_signature IS NOT NULL
@@ -19722,7 +19723,7 @@ BEGIN
 
   SELECT decision_result.row_json
     INTO v_post_row
-  FROM public.bulk_timesheet_row_decision_v1(JSONB_BUILD_OBJECT('dataset_mode', 'process', 'timesheet_id', v_current_timesheet_id::text)) AS decision_result(row_json)
+  FROM public.bulk_timesheet_row_patch_v1(JSONB_BUILD_OBJECT('dataset_mode', 'process', 'timesheet_id', v_current_timesheet_id::text)) AS decision_result(row_json)
   LIMIT 1;
 
   PERFORM public._audit_insert(
@@ -19762,31 +19763,38 @@ BEGIN
     'timesheet', COALESCE(v_timesheet_json, NULL::jsonb),
     'tsfin', COALESCE(v_tsfin_json, NULL::jsonb),
     'row_patch', COALESCE(v_post_row->'row_patch', JSONB_BUILD_OBJECT()),
+    'row_patches', JSONB_BUILD_ARRAY(COALESCE(v_post_row->'row_patch', JSONB_BUILD_OBJECT())),
+    'row_signature', v_post_row->>'row_signature',
     'data_row', COALESCE(v_post_row, JSONB_BUILD_OBJECT()),
     'count_deltas', JSONB_BUILD_OBJECT('unprocessed', -1, 'processed', 1),
     'cache_invalidation_hints', JSONB_BUILD_OBJECT(
       'row_keys', JSONB_BUILD_ARRAY(COALESCE(v_post_row->>'row_key', 'timesheet:' || v_current_timesheet_id::text)),
       'timesheet_ids', JSONB_BUILD_ARRAY(v_current_timesheet_id),
-      'storage_keys', JSONB_BUILD_ARRAY(v_post_row->>'primary_artifact_storage_key'),
+      'storage_keys', '[]'::jsonb,
       'datasets', JSONB_BUILD_ARRAY('bulk_process', 'bulk_authorise'),
-      'invalidate_context', TRUE,
-      'invalidate_preview', FALSE
+      'row_signature', v_post_row->>'row_signature',
+      'manual_changed', TRUE,
+      'identity_changed', FALSE,
+      'status_only', FALSE,
+      'invalidate_context', FALSE,
+      'invalidate_row_context', FALSE,
+      'invalidate_editor_context', TRUE,
+      'invalidate_preview', FALSE,
+      'invalidate_evidence', FALSE
     ),
     'cache_invalidation', JSONB_BUILD_OBJECT(
       'row_keys', JSONB_BUILD_ARRAY(COALESCE(v_post_row->>'row_key', 'timesheet:' || v_current_timesheet_id::text)),
       'timesheet_ids', JSONB_BUILD_ARRAY(v_current_timesheet_id),
-      'storage_keys', JSONB_BUILD_ARRAY(v_post_row->>'primary_artifact_storage_key'),
+      'storage_keys', '[]'::jsonb,
       'datasets', JSONB_BUILD_ARRAY('bulk_process', 'bulk_authorise'),
-      'invalidate_context', TRUE,
+      'row_signature', v_post_row->>'row_signature',
+      'manual_changed', TRUE,
+      'invalidate_context', FALSE,
       'invalidate_preview', FALSE
     )
   );
 END;
 $function$;
-
-
-
-
 
 
 CREATE OR REPLACE FUNCTION public.timesheet_daily_manual_unprocess_atomic(p_timesheet_id uuid, p_expected_timesheet_id uuid, p_actor_user_id uuid DEFAULT NULL::uuid, p_now_utc timestamp with time zone DEFAULT now(), p_expected_row_signature text DEFAULT NULL::text)
@@ -19957,7 +19965,7 @@ BEGIN
 
   SELECT decision_result.row_json
     INTO v_pre_row
-  FROM public.bulk_timesheet_row_decision_v1(JSONB_BUILD_OBJECT('dataset_mode', 'process', 'timesheet_id', v_current_timesheet_id::text)) AS decision_result(row_json)
+  FROM public.bulk_timesheet_row_patch_v1(JSONB_BUILD_OBJECT('dataset_mode', 'process', 'timesheet_id', v_current_timesheet_id::text)) AS decision_result(row_json)
   LIMIT 1;
 
   IF v_expected_row_signature IS NOT NULL
@@ -19998,7 +20006,7 @@ BEGIN
 
   SELECT decision_result.row_json
     INTO v_post_row
-  FROM public.bulk_timesheet_row_decision_v1(JSONB_BUILD_OBJECT('dataset_mode', 'process', 'timesheet_id', v_current_timesheet_id::text)) AS decision_result(row_json)
+  FROM public.bulk_timesheet_row_patch_v1(JSONB_BUILD_OBJECT('dataset_mode', 'process', 'timesheet_id', v_current_timesheet_id::text)) AS decision_result(row_json)
   LIMIT 1;
 
   PERFORM public._audit_insert(
@@ -20036,23 +20044,39 @@ BEGIN
     'timesheet', COALESCE(v_timesheet_json, NULL::jsonb),
     'tsfin', COALESCE(v_tsfin_json, NULL::jsonb),
     'row_patch', COALESCE(v_post_row->'row_patch', JSONB_BUILD_OBJECT()),
+    'row_patches', JSONB_BUILD_ARRAY(COALESCE(v_post_row->'row_patch', JSONB_BUILD_OBJECT())),
+    'row_signature', v_post_row->>'row_signature',
     'data_row', COALESCE(v_post_row, JSONB_BUILD_OBJECT()),
     'count_deltas', JSONB_BUILD_OBJECT('unprocessed', 1, 'processed', -1),
     'cache_invalidation_hints', JSONB_BUILD_OBJECT(
       'row_keys', JSONB_BUILD_ARRAY(COALESCE(v_post_row->>'row_key', 'timesheet:' || v_current_timesheet_id::text)),
       'timesheet_ids', JSONB_BUILD_ARRAY(v_current_timesheet_id),
-      'storage_keys', JSONB_BUILD_ARRAY(v_post_row->>'primary_artifact_storage_key'),
+      'storage_keys', '[]'::jsonb,
       'datasets', JSONB_BUILD_ARRAY('bulk_process', 'bulk_authorise'),
-      'invalidate_context', TRUE,
-      'invalidate_preview', FALSE
+      'row_signature', v_post_row->>'row_signature',
+      'status_only', TRUE,
+      'identity_changed', FALSE,
+      'manual_changed', FALSE,
+      'invalidate_context', FALSE,
+      'invalidate_row_context', FALSE,
+      'invalidate_preview', FALSE,
+      'invalidate_evidence', FALSE
     ),
     'cache_invalidation', JSONB_BUILD_OBJECT(
       'rows', JSONB_BUILD_ARRAY(JSONB_BUILD_OBJECT('row_key', COALESCE(v_post_row->>'row_key', 'timesheet:' || v_current_timesheet_id::text), 'timesheet_id', v_current_timesheet_id, 'new_row_signature', v_post_row->>'row_signature')),
-      'artifacts', JSONB_BUILD_ARRAY(JSONB_BUILD_OBJECT('timesheet_id', v_current_timesheet_id, 'storage_key', v_post_row->>'primary_artifact_storage_key')),
-      'datasets', JSONB_BUILD_ARRAY('bulk_process', 'bulk_authorise')
+      'artifacts', '[]'::jsonb,
+      'datasets', JSONB_BUILD_ARRAY('bulk_process', 'bulk_authorise'),
+      'status_only', TRUE,
+      'invalidate_context', FALSE,
+      'invalidate_preview', FALSE
     )
   );
 END;
 $function$;
+
+
+
+
+
 
 
