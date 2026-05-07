@@ -14554,20 +14554,356 @@ async function handleBankingPayBatchRetryBlockedFunds(env, req, user, payBatchId
     };
   };
 
+  const transferRowsFromPayload = (payload) => {
+    const rows = [];
+    const src = isPlainObject(payload) ? payload : {};
+    if (Array.isArray(src.transfers)) rows.push(...src.transfers);
+    if (isPlainObject(src.batch) && Array.isArray(src.batch.transfers)) rows.push(...src.batch.transfers);
+    if (isPlainObject(src.payment_issue_payload) && Array.isArray(src.payment_issue_payload.transfers)) rows.push(...src.payment_issue_payload.transfers);
+    return rows.filter((row) => row && typeof row === 'object');
+  };
+
+  const isLocalOnlyPendingTransferRow = (transferRow) => {
+    if (!transferRow || typeof transferRow !== 'object') return false;
+    const transferStatus = String(transferRow.status || '').trim().toUpperCase();
+    if (transferStatus !== 'PENDING') return false;
+    const railTxId = String(transferRow.rail_tx_id || '').trim();
+    const railState = String(transferRow.rail_state || '').trim();
+    const completedAtUtc = String(transferRow.completed_at_utc || '').trim();
+    const railMeta = transferRow.rail_meta_json;
+    if (railTxId || railState || completedAtUtc) return false;
+    if (railMeta && typeof railMeta === 'object' && Object.keys(railMeta).length > 0) return false;
+    return true;
+  };
+
   const hasLocalOnlyPendingTransferRows = (payload) => {
-    const source = isPlainObject(payload) ? payload : {};
-    const rows = Array.isArray(source.transfers) ? source.transfers : [];
-    return rows.some((transferRow) => {
-      if (!transferRow || typeof transferRow !== 'object') return false;
-      const transferStatus = String(transferRow.status || '').trim().toUpperCase();
-      if (transferStatus !== 'PENDING') return false;
-      const railTxId = String(transferRow.rail_tx_id || '').trim();
-      const railState = String(transferRow.rail_state || '').trim();
-      const railMeta = transferRow.rail_meta_json;
-      if (railTxId || railState) return false;
-      if (railMeta && typeof railMeta === 'object' && Object.keys(railMeta).length > 0) return false;
-      return true;
+    return transferRowsFromPayload(payload).some(isLocalOnlyPendingTransferRow);
+  };
+
+  const hasUnsafeProviderTransferEvidenceRow = (transferRow) => {
+    if (!transferRow || typeof transferRow !== 'object') return false;
+    const transferStatus = String(transferRow.status || '').trim().toUpperCase();
+    const railTxId = String(transferRow.rail_tx_id || '').trim();
+    const railState = String(transferRow.rail_state || '').trim();
+    const completedAtUtc = String(transferRow.completed_at_utc || '').trim();
+    const railMeta = transferRow.rail_meta_json;
+    if (railTxId || railState || completedAtUtc) return true;
+    if (railMeta && typeof railMeta === 'object' && Object.keys(railMeta).length > 0) return true;
+    if (transferStatus && transferStatus !== 'PENDING') return true;
+    return false;
+  };
+
+  const restEnc = (value) => encodeURIComponent(String(value || '').trim());
+
+  const restInList = (values) => {
+    const list = (Array.isArray(values) ? values : [])
+      .map((value) => String(value || '').trim())
+      .filter(Boolean)
+      .map(restEnc);
+    return `in.(${list.join(',')})`;
+  };
+
+  const restJsonHeaders = { 'Content-Type': 'application/json', Prefer: 'return=minimal' };
+
+  const safeRows = (result) => (result && Array.isArray(result.rows)) ? result.rows : [];
+
+  const fetchLocalRetryCleanupState = async () => {
+    const batchUrl = `${env.SUPABASE_URL}/rest/v1/pay_batches` +
+      `?id=eq.${restEnc(id)}` +
+      `&select=id,status,execution_commit_state,execution_commit_ref,execution_committed_at_utc,schedule_kind,scheduled_at_utc,scheduled_by_user_id,last_funds_check_json,last_funds_check_at_utc,rail_provider_snapshot,rail_env_snapshot,funding_account_ref` +
+      `&limit=1`;
+    const transferUrl = `${env.SUPABASE_URL}/rest/v1/pay_bank_transfers` +
+      `?pay_batch_id=eq.${restEnc(id)}` +
+      `&select=id,status,rail_tx_id,rail_state,rail_meta_json,completed_at_utc,request_id,created_at_utc` +
+      `&order=created_at_utc.asc,id.asc`;
+    const eventUrl = `${env.SUPABASE_URL}/rest/v1/pay_bank_transfer_events` +
+      `?pay_batch_id=eq.${restEnc(id)}` +
+      `&select=id` +
+      `&limit=1`;
+    const reservationUrl = `${env.SUPABASE_URL}/rest/v1/pay_advance_reservations` +
+      `?pay_batch_id=eq.${restEnc(id)}` +
+      `&select=id,finance_case_id,finance_component_id,status,committed_at_utc,settled_at_utc,released_at_utc,released_reason,pay_batch_item_id,repayment_week_start,reserved_amount`;
+
+    const [batchRes, transferRes, eventRes, reservationRes] = await Promise.all([
+      sbFetch(env, batchUrl),
+      sbFetch(env, transferUrl),
+      sbFetch(env, eventUrl),
+      sbFetch(env, reservationUrl)
+    ]);
+
+    const batchRow = safeRows(batchRes)[0] || null;
+    const transferRows = safeRows(transferRes);
+    const transferEventRows = safeRows(eventRes);
+    const reservationRows = safeRows(reservationRes);
+    const localOnlyTransferRows = transferRows.filter(isLocalOnlyPendingTransferRow);
+    const unsafeTransferRows = transferRows.filter(hasUnsafeProviderTransferEvidenceRow);
+    const settledOrReleasedReservations = reservationRows.filter((reservationRow) => {
+      if (!reservationRow || typeof reservationRow !== 'object') return false;
+      return !!(reservationRow.settled_at_utc || reservationRow.released_at_utc);
     });
+    const committedReservationRows = reservationRows.filter((reservationRow) => {
+      if (!reservationRow || typeof reservationRow !== 'object') return false;
+      return String(reservationRow.status || '').trim().toUpperCase() === 'COMMITTED'
+        && !reservationRow.settled_at_utc
+        && !reservationRow.released_at_utc;
+    });
+
+    return {
+      batch: batchRow,
+      transferRows,
+      transferEventRows,
+      reservationRows,
+      localOnlyTransferRows,
+      unsafeTransferRows,
+      settledOrReleasedReservations,
+      committedReservationRows
+    };
+  };
+
+  const getSubmissionEvidence = async () => {
+    try {
+      const evidence0 = await sbRpc(env, 'pay_batch_submission_evidence', {
+        p_pay_batch_id: id
+      });
+      return unwrapRpc(evidence0, 'pay_batch_submission_evidence');
+    } catch (e) {
+      return {
+        ok: false,
+        error: String(e?.message || e || 'Failed to load submission evidence.'),
+        no_submission_evidence: false
+      };
+    }
+  };
+
+  const submissionEvidenceIsSafeForLocalCleanup = (submissionEvidence) => {
+    const evidence = isPlainObject(submissionEvidence) ? submissionEvidence : {};
+    if (toBool(evidence.has_external_submission_evidence, false)) return false;
+    if (toBool(evidence.has_possible_provider_attempt_evidence, false)) return false;
+    if (toBool(evidence.has_provider_attempt_request_or_idempotency_reference, false)) return false;
+    if (toBool(evidence.has_transfer_events, false)) return false;
+    if (Number(evidence.transfer_event_count || 0) > 0) return false;
+    if (toBool(evidence.has_rail_tx_id, false)) return false;
+    if (toBool(evidence.has_provider_submission_reference, false)) return false;
+    if (toBool(evidence.has_provider_transaction_reference, false)) return false;
+    if (toBool(evidence.has_provider_payment_reference, false)) return false;
+    if (toBool(evidence.has_provider_transfer_reference, false)) return false;
+    return toBool(evidence.no_submission_evidence, false) === true;
+  };
+
+  const insertLocalCleanupAuditEvents = async ({ beforeState, afterStatus, cleanupAtUtc, code, message } = {}) => {
+    const state = isPlainObject(beforeState) ? beforeState : {};
+    const reservationRows = Array.isArray(state.reservationRows) ? state.reservationRows : [];
+    const transferRows = Array.isArray(state.transferRows) ? state.transferRows : [];
+    const rows = reservationRows
+      .filter((reservationRow) => reservationRow && reservationRow.finance_case_id)
+      .map((reservationRow) => ({
+        finance_case_id: reservationRow.finance_case_id,
+        event_type: 'BLOCKED_FUNDS_LOCAL_TRANSFER_CLEANUP',
+        event_at_utc: cleanupAtUtc,
+        actor_user_id: actorUserId,
+        pay_batch_id: id,
+        reservation_id: reservationRow.id || null,
+        finance_component_id: reservationRow.finance_component_id || null,
+        before_json: {
+          batch_status_before_cleanup: state.batch && state.batch.status ? state.batch.status : null,
+          reservation_status_before_cleanup: reservationRow.status || null,
+          local_transfer_count: transferRows.length,
+          transfer_ids: transferRows.map((transferRow) => transferRow.id).filter(Boolean),
+          cleanup_code: String(code || '').trim() || null
+        },
+        after_json: {
+          batch_status_after_cleanup: afterStatus || 'BLOCKED_FUNDS',
+          reservation_status_after_cleanup: String(reservationRow.status || '').trim().toUpperCase() === 'COMMITTED' ? 'RESERVED' : (reservationRow.status || null),
+          local_transfers_deleted: true,
+          pay_bank_transfer_id_links_removed: true
+        },
+        reason: 'blocked_funds_retry_incomplete_local_transfer_cleanup',
+        note: String(message || 'Cleaned up local-only transfer rows after blocked-funds retry failed before provider submission evidence existed.').slice(0, 1000)
+      }));
+
+    if (!rows.length) return;
+    try {
+      await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/pay_finance_case_events`, {
+        method: 'POST',
+        headers: restJsonHeaders,
+        body: JSON.stringify(rows)
+      });
+    } catch {
+      // Audit insertion is best-effort only; it must not block a safety cleanup.
+    }
+  };
+
+  const directLocalRetryCleanup = async ({ code, message, retry_submission = null, batch_get = null } = {}) => {
+    const out = {
+      attempted: true,
+      ok: false,
+      skipped: false,
+      reason: null,
+      error: null,
+      error_code: null,
+      result: null,
+      batch_get: null,
+      submission_evidence: null,
+      direct_fallback: true
+    };
+
+    let beforeState = null;
+    try {
+      beforeState = await fetchLocalRetryCleanupState();
+    } catch (e) {
+      out.reason = 'DIRECT_CLEANUP_STATE_LOAD_FAILED';
+      out.error = String(e?.message || e || 'Unable to load local retry state for cleanup.');
+      out.error_code = 'BLOCKED_FUNDS_RETRY_DIRECT_CLEANUP_STATE_LOAD_FAILED';
+      return out;
+    }
+
+    const batchRow = beforeState.batch;
+    if (!batchRow || !batchRow.id) {
+      out.reason = 'DIRECT_CLEANUP_BATCH_NOT_FOUND';
+      out.error = 'Batch not found during local retry cleanup.';
+      out.error_code = 'BLOCKED_FUNDS_RETRY_DIRECT_CLEANUP_BATCH_NOT_FOUND';
+      return out;
+    }
+
+    const status = String(batchRow.status || '').trim().toUpperCase();
+    const executionCommitState = String(batchRow.execution_commit_state || 'NOT_SUBMITTED').trim().toUpperCase();
+    const allowedStatus = new Set(['READY', 'SCHEDULED', 'EXECUTING', 'BLOCKED_FUNDS']);
+    if (!allowedStatus.has(status)) {
+      out.reason = 'DIRECT_CLEANUP_UNSAFE_BATCH_STATUS';
+      out.error = `Batch status is ${status || 'UNKNOWN'} and cannot be cleaned as a local-only blocked-funds retry.`;
+      out.error_code = 'BLOCKED_FUNDS_RETRY_DIRECT_CLEANUP_UNSAFE_BATCH_STATUS';
+      return out;
+    }
+    if (executionCommitState !== 'NOT_SUBMITTED' || batchRow.execution_commit_ref || batchRow.execution_committed_at_utc) {
+      out.reason = 'DIRECT_CLEANUP_EXECUTION_COMMIT_EVIDENCE';
+      out.error = 'Execution commit evidence exists, so local retry cleanup is unsafe.';
+      out.error_code = 'BLOCKED_FUNDS_RETRY_DIRECT_CLEANUP_EXECUTION_COMMIT_EVIDENCE';
+      return out;
+    }
+    if (beforeState.transferEventRows.length > 0 || beforeState.unsafeTransferRows.length > 0) {
+      out.reason = 'DIRECT_CLEANUP_PROVIDER_EVIDENCE_PRESENT';
+      out.error = 'Provider transfer evidence exists, so local retry cleanup is unsafe.';
+      out.error_code = 'BLOCKED_FUNDS_RETRY_DIRECT_CLEANUP_PROVIDER_EVIDENCE_PRESENT';
+      return out;
+    }
+    if (beforeState.settledOrReleasedReservations.length > 0) {
+      out.reason = 'DIRECT_CLEANUP_SETTLED_OR_RELEASED_RESERVATION_PRESENT';
+      out.error = 'A finance reservation is already settled or released, so local retry cleanup is unsafe.';
+      out.error_code = 'BLOCKED_FUNDS_RETRY_DIRECT_CLEANUP_SETTLED_OR_RELEASED_RESERVATION_PRESENT';
+      return out;
+    }
+
+    const submissionEvidence = await getSubmissionEvidence();
+    out.submission_evidence = submissionEvidence;
+    if (!submissionEvidenceIsSafeForLocalCleanup(submissionEvidence)) {
+      out.reason = 'DIRECT_CLEANUP_SUBMISSION_EVIDENCE_UNSAFE';
+      out.error = 'Submission evidence check did not confirm a local-only retry state.';
+      out.error_code = 'BLOCKED_FUNDS_RETRY_DIRECT_CLEANUP_SUBMISSION_EVIDENCE_UNSAFE';
+      return out;
+    }
+
+    const cleanupFundsCheckJson = buildCleanupFundsCheckJson({
+      code,
+      message,
+      batch_get: batch_get || beforeState.batch || {},
+      batch: beforeState.batch || {},
+      retry_submission
+    });
+    const cleanupAtUtc = new Date().toISOString();
+    const transferIds = beforeState.transferRows.map((transferRow) => transferRow.id).filter(Boolean);
+    const committedReservationIds = beforeState.committedReservationRows.map((reservationRow) => reservationRow.id).filter(Boolean);
+
+    try {
+      if (transferIds.length > 0) {
+        await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/pay_batch_items?pay_bank_transfer_id=${restInList(transferIds)}`, {
+          method: 'PATCH',
+          headers: restJsonHeaders,
+          body: JSON.stringify({ pay_bank_transfer_id: null })
+        });
+
+        await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/pay_bank_transfers?id=${restInList(transferIds)}`, {
+          method: 'DELETE',
+          headers: { Prefer: 'return=minimal' }
+        });
+      }
+
+      if (committedReservationIds.length > 0) {
+        await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/pay_advance_reservations?id=${restInList(committedReservationIds)}`, {
+          method: 'PATCH',
+          headers: restJsonHeaders,
+          body: JSON.stringify({
+            status: 'RESERVED',
+            committed_at_utc: null,
+            updated_by_user_id: actorUserId
+          })
+        });
+      }
+
+      await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/pay_batches?id=eq.${restEnc(id)}&execution_commit_state=eq.NOT_SUBMITTED&execution_commit_ref=is.null&execution_committed_at_utc=is.null`, {
+        method: 'PATCH',
+        headers: restJsonHeaders,
+        body: JSON.stringify({
+          status: 'BLOCKED_FUNDS',
+          schedule_kind: null,
+          scheduled_at_utc: null,
+          scheduled_by_user_id: null,
+          last_funds_check_at_utc: cleanupAtUtc,
+          last_funds_check_json: cleanupFundsCheckJson
+        })
+      });
+    } catch (e) {
+      out.reason = 'DIRECT_CLEANUP_WRITE_FAILED';
+      out.error = String(e?.message || e || 'Direct local retry cleanup write failed.');
+      out.error_code = 'BLOCKED_FUNDS_RETRY_DIRECT_CLEANUP_WRITE_FAILED';
+      try { out.batch_get = await loadBatch(); } catch {}
+      return out;
+    }
+
+    await insertLocalCleanupAuditEvents({
+      beforeState,
+      afterStatus: 'BLOCKED_FUNDS',
+      cleanupAtUtc,
+      code,
+      message
+    });
+
+    let afterState = null;
+    try {
+      afterState = await fetchLocalRetryCleanupState();
+    } catch (e) {
+      out.reason = 'DIRECT_CLEANUP_VERIFY_STATE_LOAD_FAILED';
+      out.error = String(e?.message || e || 'Unable to verify local retry cleanup.');
+      out.error_code = 'BLOCKED_FUNDS_RETRY_DIRECT_CLEANUP_VERIFY_STATE_LOAD_FAILED';
+      try { out.batch_get = await loadBatch(); } catch {}
+      return out;
+    }
+
+    const afterStatus = String(afterState.batch?.status || '').trim().toUpperCase();
+    if (afterStatus !== 'BLOCKED_FUNDS' || afterState.transferRows.length > 0 || afterState.transferEventRows.length > 0 || afterState.unsafeTransferRows.length > 0) {
+      out.reason = 'DIRECT_CLEANUP_VERIFY_FAILED';
+      out.error = 'Local retry cleanup verification failed.';
+      out.error_code = 'BLOCKED_FUNDS_RETRY_DIRECT_CLEANUP_VERIFY_FAILED';
+      out.result = {
+        status_after_cleanup: afterStatus || null,
+        remaining_transfer_count: afterState.transferRows.length,
+        transfer_event_count: afterState.transferEventRows.length,
+        unsafe_transfer_count: afterState.unsafeTransferRows.length
+      };
+      try { out.batch_get = await loadBatch(); } catch {}
+      return out;
+    }
+
+    out.ok = true;
+    out.reason = 'DIRECT_LOCAL_ONLY_RETRY_ARTEFACTS_CLEANED';
+    out.result = {
+      status: 'BLOCKED_FUNDS',
+      local_transfers_deleted: transferIds.length,
+      committed_reservations_rewound: committedReservationIds.length,
+      transfer_event_count: 0,
+      provider_submission_evidence: false
+    };
+    try { out.batch_get = await loadBatch(); } catch { out.batch_get = afterState.batch || null; }
+    return out;
   };
 
   const cleanupLocalRetryArtefacts = async ({ code, message, executed = null, retry_submission = null, batch_get = null } = {}) => {
@@ -14579,14 +14915,15 @@ async function handleBankingPayBatchRetryBlockedFunds(env, req, user, payBatchId
       error: null,
       error_code: null,
       result: null,
-      batch_get: null
+      batch_get: null,
+      direct_fallback: null
     };
 
-    let currentGet = isPlainObject(batch_get) ? batch_get : null;
+    let currentGet = null;
     try {
-      if (!currentGet) currentGet = await loadBatch();
+      currentGet = await loadBatch();
     } catch (e) {
-      currentGet = null;
+      currentGet = isPlainObject(batch_get) ? batch_get : null;
       out.reason = 'BATCH_GET_BEFORE_CLEANUP_FAILED';
       out.error = String(e?.message || e || 'Unable to load batch before cleanup.');
     }
@@ -14611,7 +14948,7 @@ async function handleBankingPayBatchRetryBlockedFunds(env, req, user, payBatchId
     const cleanupFundsCheckJson = buildCleanupFundsCheckJson({
       code,
       message,
-      batch_get: currentGet,
+      batch_get: currentGet || batch_get,
       batch: currentBatch,
       retry_submission
     });
@@ -14628,7 +14965,7 @@ async function handleBankingPayBatchRetryBlockedFunds(env, req, user, payBatchId
     } catch (e) {
       const norm = normaliseRpcError(e, 'BLOCKED_FUNDS_RETRY_CLEANUP_FAILED');
       out.ok = false;
-      out.reason = 'CLEANUP_FAILED';
+      out.reason = 'RPC_CLEANUP_FAILED';
       out.error = String(norm.body?.message || norm.body?.error || e?.message || e || 'Cleanup failed.' );
       out.error_code = String(norm.body?.error_code || norm.body?.code || 'BLOCKED_FUNDS_RETRY_CLEANUP_FAILED').trim().toUpperCase();
     }
@@ -14636,7 +14973,50 @@ async function handleBankingPayBatchRetryBlockedFunds(env, req, user, payBatchId
     try {
       out.batch_get = await loadBatch();
     } catch {
-      out.batch_get = currentGet;
+      out.batch_get = currentGet || batch_get || null;
+    }
+
+    if (out.ok === true) {
+      let verifyState = null;
+      try { verifyState = await fetchLocalRetryCleanupState(); } catch { verifyState = null; }
+      const verifyStatus = String(verifyState?.batch?.status || extractBatchObject(out.batch_get || {}).status || '').trim().toUpperCase();
+      const remainingLocalOnlyTransfers = verifyState ? verifyState.localOnlyTransferRows.length : (hasLocalOnlyPendingTransferRows(out.batch_get) ? 1 : 0);
+      const remainingProviderEvidence = verifyState ? (verifyState.transferEventRows.length + verifyState.unsafeTransferRows.length) : 0;
+      if (verifyStatus === 'BLOCKED_FUNDS' && remainingLocalOnlyTransfers === 0 && remainingProviderEvidence === 0) {
+        return out;
+      }
+
+      out.ok = false;
+      out.reason = 'RPC_CLEANUP_DID_NOT_CLEAR_LOCAL_RETRY_ARTEFACTS';
+      out.error = 'Blocked-funds cleanup RPC did not leave the batch in a clean local-only blocked-funds state.';
+      out.error_code = 'BLOCKED_FUNDS_RETRY_CLEANUP_VERIFY_FAILED';
+      out.result = {
+        rpc_result: out.result,
+        verify_status: verifyStatus || null,
+        remaining_local_only_transfer_count: remainingLocalOnlyTransfers,
+        remaining_provider_evidence_count: remainingProviderEvidence
+      };
+    }
+
+    const directFallback = await directLocalRetryCleanup({
+      code: out.error_code || code || 'BLOCKED_FUNDS_RETRY_CLEANUP_FAILED',
+      message: out.error || message || 'Blocked-funds retry cleanup failed.',
+      retry_submission,
+      batch_get: out.batch_get || currentGet || batch_get
+    });
+    out.direct_fallback = directFallback;
+    if (directFallback.ok === true) {
+      out.ok = true;
+      out.reason = directFallback.reason || 'DIRECT_LOCAL_ONLY_RETRY_ARTEFACTS_CLEANED';
+      out.error = null;
+      out.error_code = null;
+      out.result = directFallback.result;
+      out.batch_get = directFallback.batch_get || out.batch_get;
+    } else if (!out.error) {
+      out.error = directFallback.error || 'Cleanup failed.';
+      out.error_code = directFallback.error_code || 'BLOCKED_FUNDS_RETRY_CLEANUP_FAILED';
+      out.reason = directFallback.reason || out.reason || 'CLEANUP_FAILED';
+      out.batch_get = directFallback.batch_get || out.batch_get;
     }
 
     return out;
