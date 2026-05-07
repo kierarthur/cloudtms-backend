@@ -18507,6 +18507,7 @@ BEGIN
 END;
 $function$;
 
+
 CREATE OR REPLACE FUNCTION public.timesheet_authorise_bulk_atomic(p_items jsonb DEFAULT '[]'::jsonb, p_actor_user_id uuid DEFAULT NULL::uuid, p_now_utc timestamp with time zone DEFAULT now())
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -18677,7 +18678,7 @@ BEGIN
     ) AS decision_ids
     WHERE JSONB_ARRAY_LENGTH(decision_ids.timesheet_ids_json) > 0
   ) AS decision_filter
-  CROSS JOIN LATERAL public.bulk_timesheet_row_decision_v1(JSONB_BUILD_OBJECT('timesheet_ids', decision_filter.timesheet_ids_json, 'dataset_mode', 'authorise')) AS decision_result(row_json);
+  CROSS JOIN LATERAL public.bulk_timesheet_row_patch_v1(JSONB_BUILD_OBJECT('timesheet_ids', decision_filter.timesheet_ids_json, 'dataset_mode', 'authorise', 'projection', 'status_patch', 'changed_domains', JSONB_BUILD_ARRAY('authorise'))) AS decision_result(row_json);
 
   CREATE TEMP TABLE timesheet_authorise_bulk_work ON COMMIT DROP AS
   SELECT
@@ -18726,9 +18727,8 @@ BEGIN
     CASE
       WHEN state_rows.tsfin_processing_status IN ('PENDING_AUTH'::public.ts_fin_processing_status_enum, 'READY_FOR_HR'::public.ts_fin_processing_status_enum) THEN
         CASE
-          WHEN COALESCE((decision_rows.row_json->>'hr_validation_required_for_invoice')::boolean, FALSE) = TRUE AND COALESCE((decision_rows.row_json->>'hr_validation_satisfied')::boolean, FALSE) = FALSE THEN 'READY_FOR_HR'::public.ts_fin_processing_status_enum
+          WHEN COALESCE((decision_rows.row_json->>'hr_validation_awaiting')::boolean, FALSE) = TRUE THEN 'READY_FOR_HR'::public.ts_fin_processing_status_enum
           WHEN state_rows.tsfin_basis IN ('NHSP'::public.timesheet_fin_basis_enum, 'NHSP_ADJUSTMENT'::public.timesheet_fin_basis_enum, 'HEALTHROSTER_SELF_BILL'::public.timesheet_fin_basis_enum, 'HEALTHROSTER_ADJUSTMENT'::public.timesheet_fin_basis_enum) THEN 'READY_FOR_INVOICE'::public.ts_fin_processing_status_enum
-          WHEN COALESCE((decision_rows.row_json->>'validation_pre_validated')::boolean, FALSE) = TRUE AND COALESCE((decision_rows.row_json->>'hr_validation_satisfied')::boolean, FALSE) = TRUE THEN 'READY_FOR_INVOICE'::public.ts_fin_processing_status_enum
           WHEN COALESCE((decision_rows.row_json->>'client_requires_hr')::boolean, FALSE) = TRUE THEN 'READY_FOR_HR'::public.ts_fin_processing_status_enum
           ELSE 'READY_FOR_INVOICE'::public.ts_fin_processing_status_enum
         END
@@ -18781,7 +18781,7 @@ BEGIN
     ) AS post_ids
     WHERE JSONB_ARRAY_LENGTH(post_ids.timesheet_ids_json) > 0
   ) AS post_filter
-  CROSS JOIN LATERAL public.bulk_timesheet_row_decision_v1(JSONB_BUILD_OBJECT('timesheet_ids', post_filter.timesheet_ids_json, 'dataset_mode', 'authorise')) AS post_decision_result(row_json);
+  CROSS JOIN LATERAL public.bulk_timesheet_row_patch_v1(JSONB_BUILD_OBJECT('timesheet_ids', post_filter.timesheet_ids_json, 'dataset_mode', 'authorise', 'projection', 'status_patch', 'changed_domains', JSONB_BUILD_ARRAY('authorise'))) AS post_decision_result(row_json);
 
 
 
@@ -18845,10 +18845,13 @@ BEGIN
       'cache_invalidation_hints', CASE WHEN work_rows.failure_code IS NULL AND updated_tf.timesheet_id IS NOT NULL THEN JSONB_BUILD_OBJECT(
         'row_keys', JSONB_BUILD_ARRAY(COALESCE(work_rows.row_key, work_rows.pre_row_json->>'row_key'), post_rows.row_json->>'row_key'),
         'timesheet_ids', JSONB_BUILD_ARRAY(work_rows.requested_timesheet_id, work_rows.current_timesheet_id),
-        'storage_keys', JSONB_BUILD_ARRAY(post_rows.row_json->>'primary_artifact_storage_key'),
+        'storage_keys', '[]'::jsonb,
         'row_signature', post_rows.row_json->>'row_signature',
-        'invalidate_context', TRUE,
-        'invalidate_preview', FALSE
+        'status_only', TRUE,
+        'invalidate_context', FALSE,
+        'invalidate_row_context', FALSE,
+        'invalidate_preview', FALSE,
+        'invalidate_evidence', FALSE
       ) ELSE JSONB_BUILD_OBJECT() END
     ) AS result_json
   FROM pg_temp.timesheet_authorise_bulk_work AS work_rows
@@ -18885,6 +18888,8 @@ BEGIN
   RETURN COALESCE(v_out, JSONB_BUILD_OBJECT('ok', TRUE, 'batch_completed', TRUE, 'all_success', TRUE, 'action', 'AUTHORISE', 'requested_count', 0, 'success_count', 0, 'failure_count', 0, 'has_failures', FALSE, 'results', '[]'::jsonb, 'row_patches', '[]'::jsonb, 'count_deltas', JSONB_BUILD_OBJECT('processed_eligible', 0, 'authorised_eligible', 0, 'total', 0), 'cache_invalidation_hints', JSONB_BUILD_OBJECT('row_keys', '[]'::jsonb, 'timesheet_ids', '[]'::jsonb, 'storage_keys', '[]'::jsonb, 'datasets', JSONB_BUILD_ARRAY('bulk_authorise'))));
 END;
 $function$;
+
+
 
 
 
@@ -19082,7 +19087,7 @@ BEGIN
     ) AS decision_ids
     WHERE JSONB_ARRAY_LENGTH(decision_ids.timesheet_ids_json) > 0
   ) AS decision_filter
-  CROSS JOIN LATERAL public.bulk_timesheet_row_decision_v1(JSONB_BUILD_OBJECT('timesheet_ids', decision_filter.timesheet_ids_json, 'dataset_mode', 'authorise')) AS decision_result(row_json);
+  CROSS JOIN LATERAL public.bulk_timesheet_row_patch_v1(JSONB_BUILD_OBJECT('timesheet_ids', decision_filter.timesheet_ids_json, 'dataset_mode', 'authorise', 'projection', 'status_patch', 'changed_domains', JSONB_BUILD_ARRAY('unauthorise'))) AS decision_result(row_json);
 
   CREATE TEMP TABLE timesheet_unauthorise_bulk_work ON COMMIT DROP AS
   SELECT
@@ -19193,7 +19198,7 @@ BEGIN
     ) AS post_ids
     WHERE JSONB_ARRAY_LENGTH(post_ids.timesheet_ids_json) > 0
   ) AS post_filter
-  CROSS JOIN LATERAL public.bulk_timesheet_row_decision_v1(JSONB_BUILD_OBJECT('timesheet_ids', post_filter.timesheet_ids_json, 'dataset_mode', 'authorise')) AS post_decision_result(row_json);
+  CROSS JOIN LATERAL public.bulk_timesheet_row_patch_v1(JSONB_BUILD_OBJECT('timesheet_ids', post_filter.timesheet_ids_json, 'dataset_mode', 'authorise', 'projection', 'status_patch', 'changed_domains', JSONB_BUILD_ARRAY('unauthorise'))) AS post_decision_result(row_json);
 
 
 
@@ -19258,10 +19263,13 @@ BEGIN
       'cache_invalidation_hints', CASE WHEN work_rows.failure_code IS NULL AND updated_tf.timesheet_id IS NOT NULL THEN JSONB_BUILD_OBJECT(
         'row_keys', JSONB_BUILD_ARRAY(COALESCE(work_rows.row_key, work_rows.pre_row_json->>'row_key'), post_rows.row_json->>'row_key'),
         'timesheet_ids', JSONB_BUILD_ARRAY(work_rows.requested_timesheet_id, work_rows.current_timesheet_id),
-        'storage_keys', JSONB_BUILD_ARRAY(post_rows.row_json->>'primary_artifact_storage_key'),
+        'storage_keys', '[]'::jsonb,
         'row_signature', post_rows.row_json->>'row_signature',
-        'invalidate_context', TRUE,
-        'invalidate_preview', FALSE
+        'status_only', TRUE,
+        'invalidate_context', FALSE,
+        'invalidate_row_context', FALSE,
+        'invalidate_preview', FALSE,
+        'invalidate_evidence', FALSE
       ) ELSE JSONB_BUILD_OBJECT() END
     ) AS result_json
   FROM pg_temp.timesheet_unauthorise_bulk_work AS work_rows
@@ -19298,6 +19306,7 @@ BEGIN
   RETURN COALESCE(v_out, JSONB_BUILD_OBJECT('ok', TRUE, 'batch_completed', TRUE, 'all_success', TRUE, 'action', 'UNAUTHORISE', 'requested_count', 0, 'success_count', 0, 'failure_count', 0, 'has_failures', FALSE, 'results', '[]'::jsonb, 'row_patches', '[]'::jsonb, 'count_deltas', JSONB_BUILD_OBJECT('processed_eligible', 0, 'authorised_eligible', 0, 'total', 0), 'cache_invalidation_hints', JSONB_BUILD_OBJECT('row_keys', '[]'::jsonb, 'timesheet_ids', '[]'::jsonb, 'storage_keys', '[]'::jsonb, 'datasets', JSONB_BUILD_ARRAY('bulk_authorise'))));
 END;
 $function$;
+
 
 
 DROP FUNCTION IF EXISTS public.timesheet_daily_manual_process_atomic(uuid, uuid, uuid, jsonb, jsonb, timestamp with time zone);
