@@ -30996,7 +30996,6 @@ async function handleAuditEventsList(env, req) {
 // - Returns the updated contract_week row (representation)
 // ============================================================================
 
-
 async function handleContractWeekManualUpsert(env, req, weekId) {
   const enc = encodeURIComponent;
   const WLOG = true;
@@ -31264,22 +31263,33 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
     return null;
   };
 
-  const loadFreshBulkProcessDecisionRow = async ({ timesheetId = null, contractWeekId = null } = {}) => {
-    const filters = { dataset_mode: 'process' };
+  const loadFreshBulkProcessPatchRow = async ({ timesheetId = null, contractWeekId = null, changedDomains = [] } = {}) => {
+    const filters = {
+      dataset_mode: 'process',
+      projection: 'dataset_row',
+      profile: 'list'
+    };
     const tsId = timesheetId ? String(timesheetId).trim() : '';
     const cwId = contractWeekId ? String(contractWeekId).trim() : '';
+    const domainList = Array.isArray(changedDomains)
+      ? changedDomains.map(v => String(v || '').trim()).filter(Boolean)
+      : [];
+
     if (tsId) filters.timesheet_id = tsId;
     if (cwId) filters.contract_week_id = cwId;
+    if (domainList.length) filters.changed_domains = domainList;
     if (!tsId && !cwId) return null;
+
     try {
-      const decisionRes = await sbRpc(env, 'bulk_timesheet_row_decision_v1', { p_filters: filters }, { timeoutMs: 45000 });
-      const first = Array.isArray(decisionRes) ? (decisionRes[0] || null) : decisionRes;
-      const rowJson = parseMaybeJsonObj(first?.row_json) || parseMaybeJsonObj(first?.bulk_timesheet_row_decision_v1) || parseMaybeJsonObj(first);
+      const patchRes = await sbRpc(env, 'bulk_timesheet_row_patch_v1', { p_filters: filters }, { timeoutMs: 45000 });
+      const first = Array.isArray(patchRes) ? (patchRes[0] || null) : patchRes;
+      const rowJson = parseMaybeJsonObj(first?.row_json) || parseMaybeJsonObj(first?.bulk_timesheet_row_patch_v1) || parseMaybeJsonObj(first);
       return (rowJson && typeof rowJson === 'object') ? rowJson : null;
     } catch (e) {
-      wlog('bulk_process_decision_refresh_failed', {
+      wlog('bulk_process_patch_refresh_failed', {
         timesheet_id: tsId || null,
         contract_week_id: cwId || null,
+        changed_domains: domainList,
         err: e?.message || String(e)
       });
       return null;
@@ -33293,61 +33303,72 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
             cache_invalidation_hints: {
               ...currentCacheHints,
               storage_keys: storageKeys,
-              invalidate_context: true,
-              invalidate_preview: true
+              evidence_changed: true,
+              storage_changed: true,
+              status_only: false,
+              invalidate_context: false,
+              invalidate_row_context: false,
+              invalidate_preview: true,
+              invalidate_evidence: true
             }
           };
 
-          const freshDecisionRow = await loadFreshBulkProcessDecisionRow({
+          const freshPatchRow = await loadFreshBulkProcessPatchRow({
             timesheetId: bulkCurrentTimesheetId,
-            contractWeekId: cw.id
+            contractWeekId: cw.id,
+            changedDomains: ['evidence', 'storage']
           });
-          if (freshDecisionRow) {
-            const freshStorageKey = String(freshDecisionRow.primary_artifact_storage_key || storageKey || '').trim() || null;
-            const freshPreviewMode = String(freshDecisionRow.primary_artifact_preview_mode || currentPreviewHints.primary_artifact_preview_mode || 'PDF').trim() || 'PDF';
+          if (freshPatchRow) {
+            const freshStorageKey = String(freshPatchRow.primary_artifact_storage_key || storageKey || '').trim() || null;
+            const freshPreviewMode = String(freshPatchRow.primary_artifact_preview_mode || currentPreviewHints.primary_artifact_preview_mode || 'PDF').trim() || 'PDF';
             const freshEvidenceHints = {
-              has_any_evidence: freshDecisionRow.has_any_evidence === true,
-              evidence_badges: Array.isArray(freshDecisionRow.evidence_badges) ? freshDecisionRow.evidence_badges : [],
-              attached_evidence_count: Number(freshDecisionRow.attached_evidence_count || 0) || 0,
-              queue_staged_count: Number(freshDecisionRow.queue_staged_count || 0) || 0,
-              evidence_document_locked: freshDecisionRow.evidence_document_locked === true,
-              evidence_lock_reason: freshDecisionRow.evidence_lock_reason || null
+              has_any_evidence: freshPatchRow.has_any_evidence === true,
+              evidence_badges: Array.isArray(freshPatchRow.evidence_badges) ? freshPatchRow.evidence_badges : [],
+              attached_evidence_count: Number(freshPatchRow.attached_evidence_count || 0) || 0,
+              queue_staged_count: Number(freshPatchRow.queue_staged_count || 0) || 0,
+              evidence_document_locked: freshPatchRow.evidence_document_locked === true,
+              evidence_lock_reason: freshPatchRow.evidence_lock_reason || null
             };
             const freshPreviewHints = {
-              primary_artifact_id: freshDecisionRow.primary_artifact_id || null,
-              primary_artifact_kind: freshDecisionRow.primary_artifact_kind || null,
-              primary_artifact_display_name: freshDecisionRow.primary_artifact_display_name || null,
+              primary_artifact_id: freshPatchRow.primary_artifact_id || null,
+              primary_artifact_kind: freshPatchRow.primary_artifact_kind || null,
+              primary_artifact_display_name: freshPatchRow.primary_artifact_display_name || null,
               primary_artifact_storage_key: freshStorageKey,
               primary_artifact_preview_mode: freshPreviewMode,
               preview_storage_key: freshStorageKey,
-              primary_left_pane_mode: freshDecisionRow.primary_left_pane_mode || null
+              primary_left_pane_mode: freshPatchRow.primary_left_pane_mode || null
             };
             bulkPayload = {
               ...bulkPayload,
-              row: freshDecisionRow,
-              data_row: freshDecisionRow,
-              row_patch: (freshDecisionRow.row_patch && typeof freshDecisionRow.row_patch === 'object') ? freshDecisionRow.row_patch : {},
-              row_key: freshDecisionRow.row_key || bulkPayload.row_key || null,
-              new_row_key: freshDecisionRow.row_key || bulkPayload.new_row_key || bulkPayload.row_key || null,
-              row_signature: freshDecisionRow.row_signature || bulkPayload.row_signature || null,
-              bulk_process_bucket: freshDecisionRow.bulk_process_bucket || bulkPayload.bulk_process_bucket || null,
+              row: freshPatchRow,
+              data_row: freshPatchRow,
+              row_patch: (freshPatchRow.row_patch && typeof freshPatchRow.row_patch === 'object') ? freshPatchRow.row_patch : {},
+              row_key: freshPatchRow.row_key || bulkPayload.row_key || null,
+              new_row_key: freshPatchRow.row_key || bulkPayload.new_row_key || bulkPayload.row_key || null,
+              row_signature: freshPatchRow.row_signature || bulkPayload.row_signature || null,
+              bulk_process_bucket: freshPatchRow.bulk_process_bucket || bulkPayload.bulk_process_bucket || null,
               evidence_hints: freshEvidenceHints,
               preview_hints: freshPreviewHints,
-              artifact_hints: (freshDecisionRow.artifact_hints && typeof freshDecisionRow.artifact_hints === 'object') ? freshDecisionRow.artifact_hints : {
-                route_family: freshDecisionRow.route_family || null,
-                route_subfamily: freshDecisionRow.route_subfamily || null,
-                underlying_channel_family: freshDecisionRow.underlying_channel_family || null,
+              artifact_hints: (freshPatchRow.artifact_hints && typeof freshPatchRow.artifact_hints === 'object') ? freshPatchRow.artifact_hints : {
+                route_family: freshPatchRow.route_family || null,
+                route_subfamily: freshPatchRow.route_subfamily || null,
+                underlying_channel_family: freshPatchRow.underlying_channel_family || null,
                 primary_artifact_storage_key: freshStorageKey,
                 primary_artifact_preview_mode: freshPreviewMode,
-                has_any_evidence: freshDecisionRow.has_any_evidence === true,
-                evidence_badges: Array.isArray(freshDecisionRow.evidence_badges) ? freshDecisionRow.evidence_badges : []
+                has_any_evidence: freshPatchRow.has_any_evidence === true,
+                evidence_badges: Array.isArray(freshPatchRow.evidence_badges) ? freshPatchRow.evidence_badges : []
               },
               cache_invalidation_hints: {
                 ...((bulkPayload.cache_invalidation_hints && typeof bulkPayload.cache_invalidation_hints === 'object') ? bulkPayload.cache_invalidation_hints : {}),
                 storage_keys: freshStorageKey ? [...new Set([...(storageKeys || []), freshStorageKey].filter(Boolean))] : storageKeys,
-                row_signature: freshDecisionRow.row_signature || bulkPayload.row_signature || null,
-                invalidate_context: true,
-                invalidate_preview: true
+                row_signature: freshPatchRow.row_signature || bulkPayload.row_signature || null,
+                evidence_changed: true,
+                storage_changed: true,
+                status_only: false,
+                invalidate_context: false,
+                invalidate_row_context: false,
+                invalidate_preview: true,
+                invalidate_evidence: true
               }
             };
           }
@@ -33626,6 +33647,8 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
     created_now: !!createdNow
   }));
 }
+
+
 
 function formatCloudTmsLondonDate(value) {
   const fallback = 'Not recorded';
@@ -38299,8 +38322,6 @@ async function handleTimesheetDailyManualUnprocess(env, req, timesheetId) {
 }
 
 
-
-
 async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
   const enc = encodeURIComponent;
 
@@ -38320,7 +38341,37 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
     return withCORS(env, req, badRequest('Invalid JSON'));
   }
 
-  const bulkProcessMode = !!(body?.bulk_process === true || body?.bulkProcess === true || body?.bulk_process_mode === true || body?.bulkProcessMode === true);
+  const requestContext = String(body?.context || body?.mode || '').trim().toLowerCase();
+  const bulkAuthoriseMode = !!(
+    body?.bulk_authorise === true ||
+    body?.bulkAuthorise === true ||
+    body?.bulk_authorise_mode === true ||
+    body?.bulkAuthoriseMode === true ||
+    requestContext === 'bulk_authorise'
+  );
+  const bulkProcessMode = !bulkAuthoriseMode && !!(
+    body?.bulk_process === true ||
+    body?.bulkProcess === true ||
+    body?.bulk_process_mode === true ||
+    body?.bulkProcessMode === true ||
+    requestContext === 'bulk_process'
+  );
+  const bulkPatchResponseRequested = !!(
+    bulkAuthoriseMode ||
+    bulkProcessMode ||
+    body?.return_bulk_patch === true ||
+    body?.returnBulkPatch === true
+  );
+  const bulkDatasetMode = bulkAuthoriseMode ? 'authorise' : 'process';
+  const bulkResponseContext = bulkAuthoriseMode ? 'bulk_authorise' : (bulkProcessMode ? 'bulk_process' : 'standard');
+  const expectedRowSignature = String(
+    body?.expected_row_signature ||
+    body?.expectedRowSignature ||
+    body?.row_signature ||
+    body?.rowSignature ||
+    ''
+  ).trim();
+
   const processNowIntent = !!(
     body?.process_now === true ||
     body?.processNow === true ||
@@ -38398,6 +38449,44 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
 
   // Helpers
   const trimStr = (v) => String(v == null ? '' : v).trim();
+
+  const parseMaybeJsonObj = (v) => {
+    if (v == null) return null;
+    if (typeof v === 'object') return v;
+    if (typeof v === 'string') {
+      try {
+        const parsed = JSON.parse(v);
+        return (parsed && typeof parsed === 'object') ? parsed : null;
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  };
+
+  const loadDailyManualBulkPatchRow = async ({ timesheetId: patchTimesheetId, datasetMode = 'process', changedDomains = [] } = {}) => {
+    const tsId = trimStr(patchTimesheetId);
+    if (!tsId) return null;
+
+    const domainList = Array.isArray(changedDomains)
+      ? changedDomains.map(v => trimStr(v)).filter(Boolean)
+      : [];
+
+    const filters = {
+      dataset_mode: datasetMode === 'authorise' ? 'authorise' : 'process',
+      projection: 'dataset_row',
+      profile: 'list',
+      timesheet_id: tsId,
+      actor_user_id: user?.id || null
+    };
+
+    if (domainList.length) filters.changed_domains = domainList;
+
+    const patchRes = await sbRpc(env, 'bulk_timesheet_row_patch_v1', { p_filters: filters }, { timeoutMs: 45000 });
+    const first = Array.isArray(patchRes) ? (patchRes[0] || null) : patchRes;
+    const rowJson = parseMaybeJsonObj(first?.row_json) || parseMaybeJsonObj(first?.bulk_timesheet_row_patch_v1) || parseMaybeJsonObj(first);
+    return (rowJson && typeof rowJson === 'object' && !Array.isArray(rowJson)) ? rowJson : null;
+  };
 
   const normIso = (v) => {
     if (v === undefined) return undefined;
@@ -39145,6 +39234,40 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
   const tsBefore = { ...ts };
   const finBefore = { ...tsfin };
 
+  let preBulkPatchRow = null;
+  if (bulkPatchResponseRequested && expectedRowSignature) {
+    try {
+      preBulkPatchRow = await loadDailyManualBulkPatchRow({
+        timesheetId: currentTimesheetId,
+        datasetMode: bulkDatasetMode,
+        changedDomains: ['manual', 'save']
+      });
+    } catch (e) {
+      return withCORS(env, req, serverError(`Failed to load daily manual bulk row signature: ${e?.message || e}`));
+    }
+
+    const currentRowSignature = String(preBulkPatchRow?.row_signature || '').trim();
+    if (!currentRowSignature || currentRowSignature !== expectedRowSignature) {
+      return withCORS(
+        env,
+        req,
+        new Response(
+          JSON.stringify({
+            error: 'ROW_SIGNATURE_MISMATCH',
+            error_code: 'ROW_SIGNATURE_MISMATCH',
+            message: 'Timesheet changed after it was loaded. Refresh the row and try again.',
+            expected_row_signature: expectedRowSignature,
+            current_row_signature: currentRowSignature || null,
+            current_timesheet_id: currentTimesheetId,
+            requested_timesheet_id: guard.resolved.requested_timesheet_id || timesheetId,
+            was_stale: !!guard.resolved.was_stale
+          }),
+          { status: 409, headers: { 'Content-Type': 'application/json' } }
+        )
+      );
+    }
+  }
+
   const hadQrBefore = !!(
     ts.qr_status ||
     ts.qr_token ||
@@ -39515,6 +39638,123 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
       `&select=*`
   ).catch(() => updatedTs || ts || null);
 
+  if (bulkPatchResponseRequested) {
+    const manualChanged = !!(
+      shouldPatchActualSchedule ||
+      referenceProvided ||
+      rotated ||
+      qrAction ||
+      changedFields.length ||
+      hoursChangedBuckets
+    );
+
+    let bulkRow = null;
+    try {
+      bulkRow = await loadDailyManualBulkPatchRow({
+        timesheetId: currentTimesheetId,
+        datasetMode: bulkDatasetMode,
+        changedDomains: manualChanged ? ['manual', 'schedule', 'save'] : ['save']
+      });
+    } catch (e) {
+      return withCORS(env, req, serverError(`Failed to build daily manual bulk patch row: ${e?.message || e}`));
+    }
+
+    if (!bulkRow || typeof bulkRow !== 'object' || Array.isArray(bulkRow)) {
+      return withCORS(env, req, serverError('bulk_timesheet_row_patch_v1 did not return a daily manual row patch.'));
+    }
+
+    const rowPatch = (bulkRow.row_patch && typeof bulkRow.row_patch === 'object' && !Array.isArray(bulkRow.row_patch))
+      ? bulkRow.row_patch
+      : {};
+    const rowKey = String(bulkRow.row_key || rowPatch.row_key || `timesheet:${currentTimesheetId}`).trim();
+    const rowSignature = String(bulkRow.row_signature || rowPatch.row_signature || '').trim() || null;
+    const cacheHints = {
+      ...((bulkRow.cache_invalidation_hints && typeof bulkRow.cache_invalidation_hints === 'object' && !Array.isArray(bulkRow.cache_invalidation_hints)) ? bulkRow.cache_invalidation_hints : {}),
+      row_keys: [rowKey].filter(Boolean),
+      timesheet_ids: [currentTimesheetId].filter(Boolean),
+      storage_keys: [],
+      datasets: ['bulk_process', 'bulk_authorise'],
+      row_signature: rowSignature,
+      manual_changed: manualChanged,
+      status_only: !manualChanged,
+      identity_changed: rotated === true,
+      invalidate_context: false,
+      invalidate_row_context: false,
+      invalidate_editor_context: manualChanged,
+      invalidate_preview: false,
+      invalidate_evidence: false
+    };
+
+    return withCORS(env, req, ok({
+      timesheet_id: currentTimesheetId,
+      booking_id: guard.resolved.booking_id || null,
+      requested_timesheet_id: guard.resolved.requested_timesheet_id || timesheetId,
+      current_timesheet_id: currentTimesheetId,
+      expected_timesheet_id: currentTimesheetId,
+      current_version: finalTs?.version ?? ts?.version ?? guard.resolved.current_version ?? null,
+      was_stale: !!guard.resolved.was_stale,
+
+      worked_start_iso: finalTs?.worked_start_iso ?? null,
+      worked_end_iso: finalTs?.worked_end_iso ?? null,
+      break_start_iso: finalTs?.break_start_iso ?? null,
+      break_end_iso: finalTs?.break_end_iso ?? null,
+      break_minutes: finalTs?.break_minutes ?? null,
+      worked_minutes: finalTs?.worked_minutes ?? null,
+      actual_schedule_json: finalTs?.actual_schedule_json ?? null,
+      reference_number: finalTs?.reference_number ?? null,
+      reference_set_at: finalTs?.reference_set_at ?? null,
+      processing_status: finAfter?.processing_status ?? null,
+
+      timesheet: finalTs || null,
+      tsfin: finAfter || null,
+      row_patch: rowPatch,
+      row_patches: [rowPatch],
+      data_row: bulkRow,
+      row: bulkRow,
+      row_key: rowKey,
+      new_row_key: rowKey,
+      row_signature: rowSignature,
+      backend_row_signature: rowSignature,
+      row_backend_signature: rowSignature,
+      count_deltas: (bulkRow.count_deltas && typeof bulkRow.count_deltas === 'object' && !Array.isArray(bulkRow.count_deltas)) ? bulkRow.count_deltas : {},
+      cache_invalidation_hints: cacheHints,
+      cache_invalidation: {
+        row_keys: cacheHints.row_keys,
+        timesheet_ids: cacheHints.timesheet_ids,
+        storage_keys: cacheHints.storage_keys,
+        datasets: cacheHints.datasets,
+        row_signature: cacheHints.row_signature,
+        manual_changed: cacheHints.manual_changed,
+        invalidate_context: cacheHints.invalidate_context,
+        invalidate_preview: cacheHints.invalidate_preview
+      },
+      response_context: bulkResponseContext,
+      bulk_authorise: bulkDatasetMode === 'authorise',
+      bulk_process: bulkDatasetMode === 'process',
+      summary_row_hint: {
+        timesheet_id: currentTimesheetId,
+        booking_id: guard.resolved.booking_id || null,
+        processing_status: finAfter?.processing_status ?? null,
+        reference_number: finalTs?.reference_number ?? null,
+        worked_start_iso: finalTs?.worked_start_iso ?? null,
+        worked_end_iso: finalTs?.worked_end_iso ?? null,
+        break_start_iso: finalTs?.break_start_iso ?? null,
+        break_end_iso: finalTs?.break_end_iso ?? null,
+        break_minutes: finalTs?.break_minutes ?? null,
+        worked_minutes: finalTs?.worked_minutes ?? null,
+        actual_schedule_json: finalTs?.actual_schedule_json ?? null,
+        total_hours: finAfter?.total_hours ?? null
+      },
+
+      qr_action: qrAction,
+      qr_issued: qrIssued,
+      qr_reissued: qrReissued,
+      qr_pdf_key: pdfKey,
+      qr_r2_key,
+      qr_token: qrToken || null
+    }));
+  }
+
   return withCORS(env, req, ok({
     timesheet_id: currentTimesheetId,
     booking_id: guard.resolved.booking_id || null,
@@ -39559,6 +39799,9 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
     qr_token: qrToken || null
   }));
 }
+
+
+
 
 async function handleContractWeekDeleteTimesheet(env, req, weekId) {
   const user = await requireUser(env, req, ['admin']);
@@ -39676,21 +39919,21 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
     body?.rowSignature ||
     ''
   ).trim();
-  const parseBulkDecisionRow = (value) => {
+  const parseBulkPatchRow = (value) => {
     if (!value) return null;
     if (typeof value === 'string') {
       const source = value.trim();
       if (!source) return null;
       try {
         const parsed = JSON.parse(source);
-        return parseBulkDecisionRow(parsed);
+        return parseBulkPatchRow(parsed);
       } catch {
         return null;
       }
     }
     if (typeof value !== 'object' || Array.isArray(value)) return null;
-    if (value.row_json !== undefined) return parseBulkDecisionRow(value.row_json);
-    if (value.bulk_timesheet_row_decision_v1 !== undefined) return parseBulkDecisionRow(value.bulk_timesheet_row_decision_v1);
+    if (value.row_json !== undefined) return parseBulkPatchRow(value.row_json);
+    if (value.bulk_timesheet_row_patch_v1 !== undefined) return parseBulkPatchRow(value.bulk_timesheet_row_patch_v1);
     return value;
   };
   const firstBulkString = function firstBulkString() {
@@ -39710,46 +39953,54 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
     if (rowContractWeekId) return `contract_week:${rowContractWeekId}`;
     return firstBulkString(source.stable_row_id, source.id);
   };
-  const loadBulkRouteDecisionRow = async (decisionTimesheetId, decisionContractWeekId) => {
-    const decisionFilters = { dataset_mode: bulkDatasetMode };
-    if (decisionTimesheetId) decisionFilters.timesheet_id = String(decisionTimesheetId);
-    if (decisionContractWeekId) decisionFilters.contract_week_id = String(decisionContractWeekId);
-    if (user?.id) decisionFilters.actor_user_id = String(user.id);
-    const decisionRows = await sbRpc(
+  const loadBulkRoutePatchRow = async (patchTimesheetId, patchContractWeekId, changedDomains = []) => {
+    const patchFilters = {
+      dataset_mode: bulkDatasetMode,
+      projection: 'dataset_row',
+      profile: 'list'
+    };
+    if (patchTimesheetId) patchFilters.timesheet_id = String(patchTimesheetId);
+    if (patchContractWeekId) patchFilters.contract_week_id = String(patchContractWeekId);
+    if (user?.id) patchFilters.actor_user_id = String(user.id);
+    if (Array.isArray(changedDomains)) {
+      const cleanDomains = changedDomains.map(v => trimStr(v)).filter(Boolean);
+      if (cleanDomains.length) patchFilters.changed_domains = cleanDomains;
+    }
+    const patchRows = await sbRpc(
       env,
-      'bulk_timesheet_row_decision_v1',
-      { p_filters: decisionFilters },
+      'bulk_timesheet_row_patch_v1',
+      { p_filters: patchFilters },
       { timeoutMs: 45000 }
     );
-    const firstDecisionRow = Array.isArray(decisionRows) ? (decisionRows[0] || null) : decisionRows;
-    return parseBulkDecisionRow(firstDecisionRow);
+    const firstPatchRow = Array.isArray(patchRows) ? (patchRows[0] || null) : patchRows;
+    return parseBulkPatchRow(firstPatchRow);
   };
-  let bulkPreDecisionRow = null;
+  let bulkPrePatchRow = null;
   let bulkPreviousRowKey = null;
-  const ensureBulkPreDeletionDecision = async (decisionTimesheetId, decisionContractWeekId) => {
+  const ensureBulkPreDeletionPatch = async (patchTimesheetId, patchContractWeekId) => {
     if (!bulkMode) return null;
     try {
-      bulkPreDecisionRow = await loadBulkRouteDecisionRow(decisionTimesheetId, decisionContractWeekId);
+      bulkPrePatchRow = await loadBulkRoutePatchRow(patchTimesheetId, patchContractWeekId);
     } catch (err) {
       return new Response(JSON.stringify({
-        error: 'BULK_ROUTE_DECISION_LOAD_FAILED',
-        error_code: 'BULK_ROUTE_DECISION_LOAD_FAILED',
-        message: err?.message || String(err || 'Failed to load bulk route decision row'),
-        current_timesheet_id: decisionTimesheetId || null,
-        contract_week_id: decisionContractWeekId || null
+        error: 'BULK_ROUTE_PATCH_LOAD_FAILED',
+        error_code: 'BULK_ROUTE_PATCH_LOAD_FAILED',
+        message: err?.message || String(err || 'Failed to load bulk route patch row'),
+        current_timesheet_id: patchTimesheetId || null,
+        contract_week_id: patchContractWeekId || null
       }), { status: 409, headers: { 'Content-Type': 'application/json' } });
     }
-    if (!bulkPreDecisionRow || typeof bulkPreDecisionRow !== 'object' || Array.isArray(bulkPreDecisionRow) || !Object.keys(bulkPreDecisionRow).length) {
+    if (!bulkPrePatchRow || typeof bulkPrePatchRow !== 'object' || Array.isArray(bulkPrePatchRow) || !Object.keys(bulkPrePatchRow).length) {
       return new Response(JSON.stringify({
-        error: 'BULK_ROUTE_DECISION_ROW_NOT_FOUND',
-        error_code: 'BULK_ROUTE_DECISION_ROW_NOT_FOUND',
+        error: 'BULK_ROUTE_PATCH_ROW_NOT_FOUND',
+        error_code: 'BULK_ROUTE_PATCH_ROW_NOT_FOUND',
         message: 'Could not load the current bulk row before weekly unprocess.',
-        current_timesheet_id: decisionTimesheetId || null,
-        contract_week_id: decisionContractWeekId || null
+        current_timesheet_id: patchTimesheetId || null,
+        contract_week_id: patchContractWeekId || null
       }), { status: 409, headers: { 'Content-Type': 'application/json' } });
     }
-    bulkPreviousRowKey = bulkDecisionRowKey(bulkPreDecisionRow, decisionTimesheetId, decisionContractWeekId);
-    const currentRowSignature = String(bulkPreDecisionRow.row_signature || '').trim();
+    bulkPreviousRowKey = bulkDecisionRowKey(bulkPrePatchRow, patchTimesheetId, patchContractWeekId);
+    const currentRowSignature = String(bulkPrePatchRow.row_signature || '').trim();
     if (expectedRowSignature && currentRowSignature !== expectedRowSignature) {
       return new Response(JSON.stringify({
         error: 'ROW_SIGNATURE_MISMATCH',
@@ -39757,8 +40008,8 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
         message: 'This bulk row changed after it was loaded. Refresh the row and try again.',
         expected_row_signature: expectedRowSignature,
         current_row_signature: currentRowSignature || null,
-        current_timesheet_id: firstBulkString(bulkPreDecisionRow.current_timesheet_id, bulkPreDecisionRow.timesheet_id, decisionTimesheetId) || null,
-        contract_week_id: firstBulkString(bulkPreDecisionRow.contract_week_id, decisionContractWeekId) || null,
+        current_timesheet_id: firstBulkString(bulkPrePatchRow.current_timesheet_id, bulkPrePatchRow.timesheet_id, patchTimesheetId) || null,
+        contract_week_id: firstBulkString(bulkPrePatchRow.contract_week_id, patchContractWeekId) || null,
         previous_row_key: bulkPreviousRowKey || null
       }), { status: 409, headers: { 'Content-Type': 'application/json' } });
     }
@@ -39769,17 +40020,19 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
       env,
       user?.id || null,
       bulkDatasetMode,
-      previousTimesheetIdForPatch || firstBulkString(bulkPreDecisionRow?.current_timesheet_id, bulkPreDecisionRow?.timesheet_id),
+      previousTimesheetIdForPatch || firstBulkString(bulkPrePatchRow?.current_timesheet_id, bulkPrePatchRow?.timesheet_id),
       null,
-      firstBulkString(bulkPreDecisionRow?.contract_week_id, currentContractWeekIdForPatch),
+      firstBulkString(bulkPrePatchRow?.contract_week_id, currentContractWeekIdForPatch),
       currentContractWeekIdForPatch,
       bulkPreviousRowKey,
       actionName,
       {
         ...body,
         ...extraContext,
-        preDecisionRow: bulkPreDecisionRow,
-        pre_decision_row: bulkPreDecisionRow,
+        preDecisionRow: bulkPrePatchRow,
+        pre_decision_row: bulkPrePatchRow,
+        prePatchRow: bulkPrePatchRow,
+        pre_patch_row: bulkPrePatchRow,
         previousRowKey: bulkPreviousRowKey,
         previous_row_key: bulkPreviousRowKey,
         expected_row_signature: expectedRowSignature || null,
@@ -39787,8 +40040,8 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
         bulk_process: bulkDatasetMode === 'process',
         bulk_authorise: bulkDatasetMode === 'authorise',
         return_bulk_patch: true,
-        previousStorageKey: bulkPreDecisionRow?.primary_artifact_storage_key || null,
-        previous_storage_key: bulkPreDecisionRow?.primary_artifact_storage_key || null,
+        previousStorageKey: bulkPrePatchRow?.primary_artifact_storage_key || null,
+        previous_storage_key: bulkPrePatchRow?.primary_artifact_storage_key || null,
         timeoutMs: 45000
       }
     );
@@ -39831,7 +40084,7 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
   }
   const bookingId = String(resolved.booking_id);
 
-  const bulkPreDeletionError = await ensureBulkPreDeletionDecision(currentTimesheetId, weekId);
+  const bulkPreDeletionError = await ensureBulkPreDeletionPatch(currentTimesheetId, weekId);
   if (bulkPreDeletionError) return withCORS(env, req, bulkPreDeletionError);
 
   const currentWeeklyTs = await sbGetOne(
@@ -40380,7 +40633,7 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
         extraContext: {
           currentVersion: null,
           postDecisionRow: null,
-          previousBulkProcessBucket: firstBulkString(bulkPreDecisionRow?.bulk_process_bucket, 'PROCESSED')
+          previousBulkProcessBucket: firstBulkString(bulkPrePatchRow?.bulk_process_bucket, 'PROCESSED')
         }
       });
     } catch (e) {
@@ -40397,7 +40650,7 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
       expected_timesheet_id: null,
       timesheet_id: null,
       contract_week_id: weekId,
-      previous_bulk_process_bucket: firstBulkString(bulkPreDecisionRow?.bulk_process_bucket, bulkPatch?.previous_bulk_process_bucket, 'PROCESSED'),
+      previous_bulk_process_bucket: firstBulkString(bulkPrePatchRow?.bulk_process_bucket, bulkPatch?.previous_bulk_process_bucket, 'PROCESSED'),
       bulk_process_bucket: firstBulkString(bulkPatch?.bulk_process_bucket, bulkPatch?.data_row?.bulk_process_bucket, 'UNPROCESSED')
     };
 
@@ -40472,7 +40725,6 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
     snooze_clear_failed_ids: snoozeClearResult.failedIds
   }));
 }
-
 
 
 
@@ -43720,14 +43972,10 @@ async function handleTimesheetQrResendEmail(env, req, timesheetId) {
   }));
 }
 
-
-
-
 async function handleTimesheetsSummary(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
-  const enc = encodeURIComponent;
   const urlObj = new URL(req.url);
   const q = (k) => urlObj.searchParams.get(k);
 
@@ -43768,222 +44016,30 @@ async function handleTimesheetsSummary(env, req) {
 
   const spec = buildTimesheetSummaryFilterSpec(urlObj.searchParams);
 
-  const clientId = spec.client_id || null;
-  const candidateId = spec.candidate_id || null;
-  const textQ = spec.q || null;
-  const idList = Array.isArray(spec.ids) ? spec.ids.map(String) : [];
+  const idList = Array.isArray(spec.ids) ? spec.ids.map(String).map(s => s.trim()).filter(Boolean) : [];
   const hasIdFilter = idList.length > 0;
-  const toolsStage = spec.tools_stage || null;
-  const effectiveIssues = spec.issues_filter || null;
-  const candidatePaid = spec.candidate_paid || null;
-  const isAdjusted = spec.is_adjusted || null;
-  const routeType = spec.route_type || null;
-  const sheetScope = spec.sheet_scope || null;
-  const qrStatus = spec.qr_status || null;
-  const weFrom = spec.week_ending_from || null;
-  const weTo = spec.week_ending_to || null;
-  const isQr = spec.is_qr || null;
-  const hrIssue = spec.hr_issue || null;
 
-  const mergeOrGroupsToOrParam = (groups) => {
-    const g = Array.isArray(groups) ? groups.filter(x => Array.isArray(x) && x.length) : [];
-    if (!g.length) return null;
-
-    let acc = null;
-    for (const group of g) {
-      const clean = group.map(s => String(s || '').trim()).filter(Boolean);
-      if (!clean.length) continue;
-
-      if (!acc) {
-        acc = clean.slice();
-        continue;
-      }
-
-      const combined = [];
-      for (const a of acc) {
-        for (const b of clean) {
-          combined.push(`and(${a},${b})`);
-        }
-      }
-      acc = combined;
+  const unwrapRpcPayload = (payload, fnName = null) => {
+    let out = payload;
+    if (Array.isArray(out) && out.length === 1 && fnName && out[0] && typeof out[0] === 'object' && Object.prototype.hasOwnProperty.call(out[0], fnName)) {
+      out = out[0][fnName];
+    } else if (out && typeof out === 'object' && !Array.isArray(out) && fnName && Object.prototype.hasOwnProperty.call(out, fnName)) {
+      out = out[fnName];
     }
-
-    if (!acc || !acc.length) return null;
-    return `(${acc.join(',')})`;
+    return out;
   };
 
-  const applyIssuesFilter = (apiIn, tokenUp) => {
-    let api = apiIn;
-    const tok = tokenUp ? String(tokenUp).toUpperCase() : null;
-    if (!tok || tok === 'ALL') return { api, orGroup: null };
-
-    const cs1 = (val) => `cs.{${enc(val)}}`;
-
-    switch (tok) {
-      case 'NO_MATCH_ID':
-        return { api, orGroup: ['candidate_id.is.null', 'client_id.is.null'] };
-
-      case 'RATE_MISSING':
-        api += `&issue_codes=${cs1('Rate')}`;
-        return { api, orGroup: null };
-
-      case 'PAY_CHAN_MISS':
-      case 'PAY_CHANNEL_MISSING':
-        api += `&issue_codes=${cs1('Pay channel')}`;
-        return { api, orGroup: null };
-
-      case 'AWAITING_HR_VALIDATION':
-      case 'AWAITING_HR_VALIDATION_REQUIRED':
-        api += `&issue_codes=${cs1('HR validation')}`;
-        return { api, orGroup: null };
-
-      case 'HR_HOURS_MISMATCH':
-      case 'HOURS_MISMATCH_HR':
-        api += `&issue_codes=${cs1('Hours mismatch HR')}`;
-        return { api, orGroup: null };
-
-      case 'HR_HOURS_MISSING':
-        api += `&issue_codes=${cs1('HR hours missing')}`;
-        return { api, orGroup: null };
-
-      case 'DUPLICATE_CONTRACTS':
-        api += `&issue_codes=${cs1('Duplicate contracts')}`;
-        return { api, orGroup: null };
-
-      case 'REFERENCE_MISSING':
-        api += `&issue_codes=${cs1('Reference')}`;
-        return { api, orGroup: null };
-
-      case 'VALIDATION':
-        api += `&issue_codes=${cs1('Validation')}`;
-        return { api, orGroup: null };
-
-      case 'AUTHORISATION':
-        api += `&issue_codes=${cs1('Authorisation')}`;
-        return { api, orGroup: null };
-
-      case 'ON_HOLD':
-        api += `&issue_codes=${cs1('On hold')}`;
-        return { api, orGroup: null };
-
-      case 'QR_NOT_ISSUED':
-        api += `&timesheet_id=not.is.null`;
-        api += `&qr_status=eq.PENDING`;
-        api += `&qr_token=is.null`;
-        api += `&qr_generated_at=is.null`;
-        return { api, orGroup: null };
-
-      case 'QR_AWAITING_SIGNATURE':
-      case 'QR_ISSUED_AWAITING_SIGNATURE':
-        api += `&timesheet_id=not.is.null`;
-        api += `&qr_status=eq.PENDING`;
-        api += `&qr_token=not.is.null`;
-        api += `&qr_generated_at=not.is.null`;
-        api += `&qr_scanned_at=is.null`;
-        return { api, orGroup: null };
-
-      case 'REFS_PDF_INVALID':
-        api += `&issue_codes=${cs1('Refs - Timesheet PDF invalid')}`;
-        return { api, orGroup: null };
-
-      default:
-        return { api, orGroup: null };
-    }
+  const rpcRows = (payload, fnName = null) => {
+    const out = unwrapRpcPayload(payload, fnName);
+    if (Array.isArray(out)) return out;
+    if (out && typeof out === 'object' && Array.isArray(out.data)) return out.data;
+    if (out && typeof out === 'object' && Array.isArray(out.rows)) return out.rows;
+    return [];
   };
 
-  const summaryFilters = {
-    ...spec,
-    order_by: orderCol,
-    order_dir: orderDir
-  };
-
-  const buildSummaryApi = ({ selectClause, limitValue, offsetValue, withPaging, withOrder }) => {
-    const select = Array.isArray(selectClause) ? selectClause.join(',') : String(selectClause || '*');
-
-    let api =
-      `${env.SUPABASE_URL}/rest/v1/v_timesheets_summary` +
-      `?select=${select}`;
-
-    if (withPaging) {
-      api += `&limit=${limitValue}&offset=${offsetValue}`;
-    }
-
-    const orGroups = [];
-
-    if (hasIdFilter) {
-      if (idList.length === 1) {
-        const one = String(idList[0]);
-        orGroups.push([`timesheet_id.eq.${one}`, `contract_week_id.eq.${one}`]);
-      } else {
-        const csv = idList.map(String).join(',');
-        orGroups.push([`timesheet_id.in.(${csv})`, `contract_week_id.in.(${csv})`]);
-      }
-    }
-
-    if (textQ) {
-      const t = String(textQ);
-      const pat = `*${t}*`;
-      orGroups.push([
-        `candidate_name.ilike.${pat}`,
-        `client_name.ilike.${pat}`,
-        `booking_id.ilike.${pat}`,
-        `occupant_key_norm.ilike.${pat}`,
-        `hospital_norm.ilike.${pat}`
-      ]);
-    }
-
-    if (clientId) api += `&client_id=eq.${enc(clientId)}`;
-    if (candidateId) api += `&candidate_id=eq.${enc(candidateId)}`;
-
-    if (toolsStage) {
-      api += `&tools_stage=eq.${enc(toolsStage)}`;
-    }
-
-    if (routeType) {
-      if (routeType === 'ELECTRONIC') {
-        api += `&route_type=in.(DAILY_ELECTRONIC,WEEKLY_ELECTRONIC)`;
-      } else if (routeType === 'MANUAL') {
-        api += `&route_type=in.(DAILY_MANUAL,WEEKLY_MANUAL)`;
-      } else if (routeType === 'NHSP') {
-        api += `&route_type=in.(WEEKLY_NHSP,WEEKLY_NHSP_ADJUSTMENT)`;
-      } else if (routeType === 'HEALTHROSTER') {
-        api += `&route_type=eq.WEEKLY_HEALTHROSTER`;
-      } else {
-        api += `&route_type=eq.${enc(routeType)}`;
-      }
-    }
-
-    if (sheetScope) api += `&sheet_scope=eq.${enc(sheetScope)}`;
-    if (qrStatus) api += `&qr_status=eq.${enc(qrStatus)}`;
-    if (weFrom) api += `&week_ending_date=gte.${enc(weFrom)}`;
-    if (weTo) api += `&week_ending_date=lte.${enc(weTo)}`;
-    if (isAdjusted === 'true') api += `&is_adjusted=eq.true`;
-    if (isAdjusted === 'false') api += `&is_adjusted=eq.false`;
-    if (isQr === 'true') api += `&is_qr=eq.true`;
-    if (isQr === 'false') api += `&is_qr=eq.false`;
-    if (candidatePaid === 'true') api += `&pay_paid_at_utc=not.is.null`;
-    if (hrIssue) api += `&hr_crosscheck_issues=cs.{${enc(hrIssue)}}`;
-
-    const issuesApplied = applyIssuesFilter(api, effectiveIssues);
-    api = issuesApplied.api;
-    if (issuesApplied.orGroup && Array.isArray(issuesApplied.orGroup) && issuesApplied.orGroup.length) {
-      orGroups.push(issuesApplied.orGroup);
-    }
-
-    const orExpr = mergeOrGroupsToOrParam(orGroups);
-    if (orExpr) {
-      api += `&or=${enc(orExpr)}`;
-    }
-
-    if (withOrder) {
-      if (orderByParam && allowedSort[orderByParam]) {
-        api += `&order=${enc(orderCol)}.${orderDir},client_name.asc,candidate_name.asc`;
-      } else {
-        api += `&order=week_ending_date.desc,client_name.asc,candidate_name.asc`;
-      }
-    }
-
-    return api;
+  const firstRpcRow = (payload, fnName = null) => {
+    const rows = rpcRows(payload, fnName);
+    return rows && rows.length ? rows[0] : null;
   };
 
   const normalizeSummaryRows = (rows) => {
@@ -44008,7 +44064,6 @@ async function handleTimesheetsSummary(env, req) {
       const contractWeekId = (o.contract_week_id != null && String(o.contract_week_id).trim()) ? String(o.contract_week_id).trim() : null;
       const processingStatus = String(o.processing_status || '').trim().toUpperCase();
       const summaryStage = String(o.summary_stage || '').trim().toUpperCase();
-      const toolsStage = String(o.tools_stage || '').trim().toUpperCase();
       const processingStatusDisplay = String(o.processing_status_display || '').trim();
 
       const isRealRowUnprocessed =
@@ -44070,54 +44125,16 @@ async function handleTimesheetsSummary(env, req) {
     return out;
   };
 
-  const fetchAllMatchingRows = async (selectClause) => {
-    const batchSize = 1000;
-    let offset = 0;
-    const acc = [];
-
-    while (true) {
-      const api = buildSummaryApi({
-        selectClause,
-        limitValue: batchSize,
-        offsetValue: offset,
-        withPaging: true,
-        withOrder: false
-      });
-
-      const { rows } = await sbFetch(env, api, false);
-      const batch = Array.isArray(rows) ? rows : [];
-      acc.push(...batch);
-
-      if (batch.length < batchSize) break;
-      offset += batchSize;
-    }
-
-    return acc;
+  const baseFilters = {
+    ...spec,
+    order_by: orderCol,
+    order_dir: orderDir
   };
 
-  const pageSelect = [
-    '*',
-    'route_type',
-    'route_display',
-    'client_no_timesheet_required',
-    'client_autoprocess_hr',
-    'client_is_nhsp',
-    'contract_id',
-    'contract_week_id',
-    'timesheet_id',
-    'sheet_scope',
-    'submission_mode',
-    'basis',
-    'summary_stage',
-    'tools_stage',
-    'processing_status',
-    'processing_status_display',
-    'invoice_is_paid',
-    'pay_icon_code',
-    'pay_status_code',
-    'pay_paid_at_utc',
-    'net_delta_ex_vat'
-  ];
+  if (hasIdFilter) {
+    baseFilters.ids = idList;
+    if (idList.length === 1) baseFilters.id = idList[0];
+  }
 
   if (format === 'membership') {
     try {
@@ -44126,32 +44143,24 @@ async function handleTimesheetsSummary(env, req) {
         filters: spec || {}
       });
 
-      let membershipIds = [];
-      let usedCanonicalRpc = false;
+      const membershipFilters = {
+        ...baseFilters,
+        purpose: 'membership',
+        disable_paging: true,
+        no_paging: true,
+        apply_paging: false
+      };
 
-      try {
-        const rpcRes = await sbRpc(env, 'timesheet_list_ids', { p_filters: spec });
-        const rpcRows = Array.isArray(rpcRes)
-          ? rpcRes
-          : ((rpcRes && typeof rpcRes === 'object' && Array.isArray(rpcRes.data)) ? rpcRes.data : []);
-
-        membershipIds = normalizeIdList(
-          rpcRows.map((row) => {
-            if (row == null) return '';
-            if (typeof row === 'string') return row;
-            if (typeof row === 'object' && Object.prototype.hasOwnProperty.call(row, 'id')) return row.id;
-            return '';
-          })
-        );
-        usedCanonicalRpc = true;
-      } catch {}
-
-      if (!usedCanonicalRpc) {
-        const allRows = await fetchAllMatchingRows(['timesheet_id', 'contract_week_id']);
-        membershipIds = normalizeIdList(
-          allRows.map((row) => getStableSummaryId(row))
-        );
-      }
+      const rpcRes = await sbRpc(env, 'timesheet_list_ids', { p_filters: membershipFilters });
+      const rows = rpcRows(rpcRes);
+      const membershipIds = normalizeIdList(
+        rows.map((row) => {
+          if (row == null) return '';
+          if (typeof row === 'string') return row;
+          if (typeof row === 'object' && Object.prototype.hasOwnProperty.call(row, 'id')) return row.id;
+          return '';
+        })
+      );
 
       const totalCount = membershipIds.length;
 
@@ -44172,82 +44181,35 @@ async function handleTimesheetsSummary(env, req) {
   const effLimit = hasIdFilter ? Math.min(200, Math.max(1, idList.length)) : pageSize;
   const effOffset = hasIdFilter ? 0 : ((page - 1) * pageSize);
 
-  const api = buildSummaryApi({
-    selectClause: pageSelect,
-    limitValue: effLimit,
-    offsetValue: effOffset,
-    withPaging: true,
-    withOrder: !hasIdFilter
-  });
+  const rowFilters = {
+    ...baseFilters,
+    limit: effLimit,
+    offset: effOffset
+  };
 
   try {
-    const { rows } = await sbFetch(env, api);
-    const outRows = normalizeSummaryRows(rows || []);
+    const rowRes = await sbRpc(env, 'timesheet_summary_lightweight_rows_v1', { p_filters: rowFilters });
+    const outRows = normalizeSummaryRows(rpcRows(rowRes, 'timesheet_summary_lightweight_rows_v1'));
 
     let totals = null;
     let totalCount = outRows.length;
 
-    const needsManualParity = hasIdFilter || !!textQ;
-    const needsFullMaterialization = format === 'membership' || needsManualParity || includeTotals || includeCount;
+    if (includeTotals || includeCount) {
+      const totalFilters = {
+        ...baseFilters,
+        purpose: 'totals',
+        disable_paging: true,
+        no_paging: true,
+        apply_paging: false
+      };
 
-    let allMatchedRows = null;
-    if (needsFullMaterialization && needsManualParity) {
-      allMatchedRows = normalizeSummaryRows(await fetchAllMatchingRows([
-        'timesheet_id',
-        'contract_week_id',
-        'total_pay_ex_vat',
-        'margin_ex_vat',
-        'route_type',
-        'route_display',
-        'client_no_timesheet_required',
-        'client_autoprocess_hr',
-        'client_is_nhsp',
-        'contract_id',
-        'sheet_scope',
-        'submission_mode',
-        'basis',
-        'summary_stage',
-        'tools_stage',
-        'processing_status',
-        'processing_status_display',
-        'invoice_is_paid',
-        'pay_icon_code',
-        'pay_status_code',
-        'pay_paid_at_utc',
-        'net_delta_ex_vat'
-      ]));
-    }
+      const totRes = await sbRpc(env, 'timesheet_list_totals', { p_filters: totalFilters });
+      const tot0 = firstRpcRow(totRes, 'timesheet_list_totals') || null;
 
-    if (includeTotals) {
-      if (needsManualParity) {
-        const materialized = Array.isArray(allMatchedRows) ? allMatchedRows : [];
-        let paySum = 0;
-        let marginSum = 0;
-        for (const row of materialized) {
-          paySum += Number(row?.total_pay_ex_vat || 0) || 0;
-          marginSum += Number(row?.margin_ex_vat || 0) || 0;
-        }
-        totals = {
-          count_all: materialized.length,
-          total_pay_ex_vat_sum: paySum,
-          margin_ex_vat_sum: marginSum
-        };
-        totalCount = materialized.length;
-      } else {
-        const totRes = await sbRpc(env, 'timesheet_list_totals', { p_filters: spec });
-        const totRows = Array.isArray(totRes) ? totRes : (totRes?.data || []);
-        totals = (totRows && totRows.length)
-          ? totRows[0]
-          : { count_all: 0, total_pay_ex_vat_sum: 0, margin_ex_vat_sum: 0 };
+      if (includeTotals) {
+        totals = tot0 || { count_all: 0, total_pay_ex_vat_sum: 0, margin_ex_vat_sum: 0 };
         totalCount = Number(totals?.count_all || 0);
-      }
-    } else if (includeCount) {
-      if (needsManualParity) {
-        totalCount = Array.isArray(allMatchedRows) ? allMatchedRows.length : outRows.length;
-      } else {
-        const totRes = await sbRpc(env, 'timesheet_list_totals', { p_filters: spec });
-        const totRows = Array.isArray(totRes) ? totRes : (totRes?.data || []);
-        const tot0 = (totRows && totRows.length) ? totRows[0] : null;
+      } else if (includeCount) {
         totalCount = Number(tot0?.count_all || 0);
       }
     }
@@ -44264,12 +44226,55 @@ async function handleTimesheetsSummary(env, req) {
   }
 }
 
+
+
 async function handleBulkProcessDataset(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
   const urlObj = new URL(req.url);
   const q = (k) => urlObj.searchParams.get(k);
+
+
+  const readJsonObjectBody = async () => {
+    const method = String(req.method || 'GET').toUpperCase();
+    if (method === 'GET' || method === 'HEAD') return {};
+
+    const contentType = String(req.headers?.get?.('content-type') || '').toLowerCase();
+    if (!contentType.includes('application/json')) return {};
+
+    try {
+      const parsed = await req.clone().json();
+      return (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) ? parsed : {};
+    } catch {
+      return {};
+    }
+  };
+
+  const body = await readJsonObjectBody();
+  const bodyFilters = (body && typeof body === 'object' && !Array.isArray(body) && body.filters && typeof body.filters === 'object' && !Array.isArray(body.filters))
+    ? body.filters
+    : {};
+  const bodyPFilters = (body && typeof body === 'object' && !Array.isArray(body) && body.p_filters && typeof body.p_filters === 'object' && !Array.isArray(body.p_filters))
+    ? body.p_filters
+    : {};
+
+  const bodyValue = (...keys) => {
+    for (const key of keys) {
+      if (Object.prototype.hasOwnProperty.call(body, key)) return body[key];
+      if (Object.prototype.hasOwnProperty.call(bodyFilters, key)) return bodyFilters[key];
+      if (Object.prototype.hasOwnProperty.call(bodyPFilters, key)) return bodyPFilters[key];
+    }
+    return null;
+  };
+
+  const param = (...keys) => {
+    for (const key of keys) {
+      const value = q(key);
+      if (value != null) return value;
+    }
+    return bodyValue(...keys);
+  };
 
   const normalizeNullableText = (value) => {
     const s = String(value == null ? '' : value).trim();
@@ -44282,6 +44287,16 @@ async function handleBulkProcessDataset(env, req) {
     if (s === 'false' || s === '0' || s === 'no' || s === 'n' || s === 'off') return false;
     if (s === 'true' || s === '1' || s === 'yes' || s === 'y' || s === 'on') return true;
     return !!defaultValue;
+  };
+
+  const normalizeProfile = (value) => {
+    const s = String(value == null ? '' : value).trim().toLowerCase();
+    return s === 'list' ? 'list' : 'list';
+  };
+
+  const normalizeProjection = (value) => {
+    const s = String(value == null ? '' : value).trim().toLowerCase();
+    return ['dataset_row', 'status_patch', 'summary_row', 'active_row_header'].includes(s) ? s : 'dataset_row';
   };
 
   const unwrapRpcPayload = (payload, fnName) => {
@@ -44304,28 +44319,33 @@ async function handleBulkProcessDataset(env, req) {
   };
 
   const startedAt = Date.now();
-  const debugRequested = boolParam(q('debug') || q('debug_performance') || q('debugPerformance'), false);
+  const debugRequested = boolParam(param('debug') || param('debug_performance') || param('debugPerformance'), false);
 
   const filters = {
-    q: normalizeNullableText(q('q') || q('candidate_text') || q('candidateText') || q('name')),
-    candidate_id: normalizeNullableText(q('candidate_id') || q('candidateId')),
-    client_id: normalizeNullableText(q('client_id') || q('clientId')),
-    date_from: normalizeNullableText(q('date_from') || q('dateFrom') || q('from_date') || q('fromDate')),
-    date_to: normalizeNullableText(q('date_to') || q('dateTo') || q('to_date') || q('toDate')),
-    week_ending_from: normalizeNullableText(q('week_ending_from') || q('weekEndingFrom')),
-    week_ending_to: normalizeNullableText(q('week_ending_to') || q('weekEndingTo')),
-    week_ending_date: normalizeNullableText(q('week_ending_date') || q('weekEndingDate')),
-    bucket: normalizeNullableText(q('bucket') || q('bulk_process_bucket') || q('bulkProcessBucket')),
-    show_weekly_manual: boolParam(q('show_weekly_manual') || q('showWeeklyManual') || q('show_weekly') || q('showWeekly'), true),
-    show_daily_manual: boolParam(q('show_daily_manual') || q('showDailyManual') || q('show_daily') || q('showDaily'), true),
-    limit: numberParam(q('limit') || q('page_size') || q('pageSize'), null, 1, 1000),
-    offset: numberParam(q('offset'), 0, 0, null),
+    q: normalizeNullableText(param('q') || param('candidate_text') || param('candidateText') || param('name')),
+    candidate_id: normalizeNullableText(param('candidate_id') || param('candidateId')),
+    client_id: normalizeNullableText(param('client_id') || param('clientId')),
+    date_from: normalizeNullableText(param('date_from') || param('dateFrom') || param('from_date') || param('fromDate')),
+    date_to: normalizeNullableText(param('date_to') || param('dateTo') || param('to_date') || param('toDate')),
+    week_ending_from: normalizeNullableText(param('week_ending_from') || param('weekEndingFrom')),
+    week_ending_to: normalizeNullableText(param('week_ending_to') || param('weekEndingTo')),
+    week_ending_date: normalizeNullableText(param('week_ending_date') || param('weekEndingDate')),
+    bucket: normalizeNullableText(param('bucket') || param('bulk_process_bucket') || param('bulkProcessBucket')),
+    show_weekly_manual: boolParam(param('show_weekly_manual') || param('showWeeklyManual') || param('show_weekly') || param('showWeekly'), true),
+    show_daily_manual: boolParam(param('show_daily_manual') || param('showDailyManual') || param('show_daily') || param('showDaily'), true),
+    limit: numberParam(param('limit') || param('page_size') || param('pageSize'), null, 1, 1000),
+    offset: numberParam(param('offset'), 0, 0, null),
+    profile: normalizeProfile(param('profile')),
+    projection: normalizeProjection(param('projection') || param('projectionMode')),
     actor_user_id: user?.id || null
   };
 
   for (const key of Object.keys(filters)) {
     if (filters[key] == null || filters[key] === '') delete filters[key];
   }
+
+  filters.profile = filters.profile || 'list';
+  filters.projection = filters.projection || 'dataset_row';
 
   try {
     const rpcRes = await sbRpc(env, 'bulk_process_dataset_v1', { p_filters: filters }, { timeoutMs: 45000 });
@@ -44381,8 +44401,6 @@ async function handleBulkProcessDataset(env, req) {
     return withCORS(env, req, serverError(String(e?.message || e || 'Failed to load bulk process dataset')));
   }
 }
-
-
 
 
 function buildBulkAuthoriseEligibility(row, fin, summaryBase, validation, family) {
@@ -45448,15 +45466,53 @@ async function fetchBulkAuthoriseEligibilityFactsMap(env, timesheetIds, context 
   };
 }
 
-
-
-
 async function handleBulkAuthoriseDataset(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
   const urlObj = new URL(req.url);
   const q = (k) => urlObj.searchParams.get(k);
+
+
+  const readJsonObjectBody = async () => {
+    const method = String(req.method || 'GET').toUpperCase();
+    if (method === 'GET' || method === 'HEAD') return {};
+
+    const contentType = String(req.headers?.get?.('content-type') || '').toLowerCase();
+    if (!contentType.includes('application/json')) return {};
+
+    try {
+      const parsed = await req.clone().json();
+      return (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) ? parsed : {};
+    } catch {
+      return {};
+    }
+  };
+
+  const body = await readJsonObjectBody();
+  const bodyFilters = (body && typeof body === 'object' && !Array.isArray(body) && body.filters && typeof body.filters === 'object' && !Array.isArray(body.filters))
+    ? body.filters
+    : {};
+  const bodyPFilters = (body && typeof body === 'object' && !Array.isArray(body) && body.p_filters && typeof body.p_filters === 'object' && !Array.isArray(body.p_filters))
+    ? body.p_filters
+    : {};
+
+  const bodyValue = (...keys) => {
+    for (const key of keys) {
+      if (Object.prototype.hasOwnProperty.call(body, key)) return body[key];
+      if (Object.prototype.hasOwnProperty.call(bodyFilters, key)) return bodyFilters[key];
+      if (Object.prototype.hasOwnProperty.call(bodyPFilters, key)) return bodyPFilters[key];
+    }
+    return null;
+  };
+
+  const param = (...keys) => {
+    for (const key of keys) {
+      const value = q(key);
+      if (value != null) return value;
+    }
+    return bodyValue(...keys);
+  };
 
   const normalizeNullableText = (value) => {
     const s = String(value == null ? '' : value).trim();
@@ -45474,6 +45530,16 @@ async function handleBulkAuthoriseDataset(env, req) {
   const normalizeClassification = (value) => {
     const s = String(value == null ? '' : value).trim().toUpperCase();
     return (s === 'TIMESHEETS' || s === 'NHSP' || s === 'HR') ? s : null;
+  };
+
+  const normalizeProfile = (value) => {
+    const s = String(value == null ? '' : value).trim().toLowerCase();
+    return s === 'list' ? 'list' : 'list';
+  };
+
+  const normalizeProjection = (value) => {
+    const s = String(value == null ? '' : value).trim().toLowerCase();
+    return ['dataset_row', 'status_patch', 'summary_row', 'active_row_header'].includes(s) ? s : 'dataset_row';
   };
 
   const unwrapRpcPayload = (payload, fnName) => {
@@ -45496,33 +45562,38 @@ async function handleBulkAuthoriseDataset(env, req) {
   };
 
   const startedAt = Date.now();
-  const debugRequested = boolParam(q('debug') || q('debug_performance') || q('debugPerformance'), false);
+  const debugRequested = boolParam(param('debug') || param('debug_performance') || param('debugPerformance'), false);
 
   const filters = {
-    q: normalizeNullableText(q('q') || q('candidate_text') || q('candidateText') || q('name')),
-    candidate_id: normalizeNullableText(q('candidate_id') || q('candidateId')),
-    client_id: normalizeNullableText(q('client_id') || q('clientId')),
-    date_from: normalizeNullableText(q('date_from') || q('dateFrom') || q('from_date') || q('fromDate')),
-    date_to: normalizeNullableText(q('date_to') || q('dateTo') || q('to_date') || q('toDate')),
-    week_ending_from: normalizeNullableText(q('week_ending_from') || q('weekEndingFrom')),
-    week_ending_to: normalizeNullableText(q('week_ending_to') || q('weekEndingTo')),
-    week_ending_date: normalizeNullableText(q('week_ending_date') || q('weekEndingDate')),
-    classification: normalizeClassification(q('classification') || q('classificationRaw')),
-    show_daily: boolParam(q('show_daily') || q('showDaily'), true),
-    show_weekly: boolParam(q('show_weekly') || q('showWeekly'), true),
-    show_manual: boolParam(q('show_manual') || q('showManual'), true),
-    show_qr: boolParam(q('show_qr') || q('showQr'), true),
-    show_electronic: boolParam(q('show_electronic') || q('showElectronic'), true),
-    validation_already: boolParam(q('validation_already') || q('validationAlready'), true),
-    validation_awaiting: boolParam(q('validation_awaiting') || q('validationAwaiting'), true),
-    limit: numberParam(q('limit') || q('page_size') || q('pageSize'), null, 1, 1000),
-    offset: numberParam(q('offset'), 0, 0, null),
+    q: normalizeNullableText(param('q') || param('candidate_text') || param('candidateText') || param('name')),
+    candidate_id: normalizeNullableText(param('candidate_id') || param('candidateId')),
+    client_id: normalizeNullableText(param('client_id') || param('clientId')),
+    date_from: normalizeNullableText(param('date_from') || param('dateFrom') || param('from_date') || param('fromDate')),
+    date_to: normalizeNullableText(param('date_to') || param('dateTo') || param('to_date') || param('toDate')),
+    week_ending_from: normalizeNullableText(param('week_ending_from') || param('weekEndingFrom')),
+    week_ending_to: normalizeNullableText(param('week_ending_to') || param('weekEndingTo')),
+    week_ending_date: normalizeNullableText(param('week_ending_date') || param('weekEndingDate')),
+    classification: normalizeClassification(param('classification') || param('classificationRaw')),
+    show_daily: boolParam(param('show_daily') || param('showDaily'), true),
+    show_weekly: boolParam(param('show_weekly') || param('showWeekly'), true),
+    show_manual: boolParam(param('show_manual') || param('showManual'), true),
+    show_qr: boolParam(param('show_qr') || param('showQr'), true),
+    show_electronic: boolParam(param('show_electronic') || param('showElectronic'), true),
+    validation_already: boolParam(param('validation_already') || param('validationAlready'), true),
+    validation_awaiting: boolParam(param('validation_awaiting') || param('validationAwaiting'), true),
+    limit: numberParam(param('limit') || param('page_size') || param('pageSize'), null, 1, 1000),
+    offset: numberParam(param('offset'), 0, 0, null),
+    profile: normalizeProfile(param('profile')),
+    projection: normalizeProjection(param('projection') || param('projectionMode')),
     actor_user_id: user?.id || null
   };
 
   for (const key of Object.keys(filters)) {
     if (filters[key] == null || filters[key] === '') delete filters[key];
   }
+
+  filters.profile = filters.profile || 'list';
+  filters.projection = filters.projection || 'dataset_row';
 
   try {
     const rpcRes = await sbRpc(env, 'bulk_authorise_dataset_v1', { p_filters: filters }, { timeoutMs: 45000 });
@@ -45587,6 +45658,7 @@ async function handleBulkAuthoriseDataset(env, req) {
 }
 
 
+
 async function handleBulkProcessRowContext(env, req, rowIdentity = null) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -45606,6 +45678,13 @@ async function handleBulkProcessRowContext(env, req, rowIdentity = null) {
     return !!defaultValue;
   };
 
+  const normalizeProfile = (value, baseOnly) => {
+    const s = trimStr(value).toLowerCase();
+    const allowed = new Set(['active_row_visible', 'status_header', 'editor', 'evidence', 'compare_import', 'full']);
+    if (allowed.has(s)) return s;
+    return baseOnly ? 'status_header' : 'active_row_visible';
+  };
+
   const unwrapRpcPayload = (payload, fnName) => {
     let out = payload;
     if (Array.isArray(out) && out.length === 1) out = out[0];
@@ -45618,6 +45697,12 @@ async function handleBulkProcessRowContext(env, req, rowIdentity = null) {
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   const routeIdentity = trimStr(rowIdentity || '');
 
+  const baseOnly = boolParam(q('base_only') || q('baseOnly'), false);
+  const profile = normalizeProfile(q('profile') || q('context_profile') || q('contextProfile'), baseOnly);
+  const includeEvidence = ['active_row_visible', 'evidence', 'full'].includes(profile);
+  const includeCompare = ['compare_import', 'full'].includes(profile);
+  const includeImportSourceRows = ['compare_import', 'full'].includes(profile);
+
   const filters = {
     row_key: trimStr(q('row_key') || q('rowKey') || ''),
     timesheet_id: trimStr(q('timesheet_id') || q('timesheetId') || ''),
@@ -45625,7 +45710,12 @@ async function handleBulkProcessRowContext(env, req, rowIdentity = null) {
     requested_timesheet_id: trimStr(q('requested_timesheet_id') || q('requestedTimesheetId') || ''),
     expected_timesheet_id: trimStr(q('expected_timesheet_id') || q('expectedTimesheetId') || q('expected_current_timesheet_id') || q('expectedCurrentTimesheetId') || ''),
     contract_week_id: trimStr(q('contract_week_id') || q('contractWeekId') || q('week_id') || q('weekId') || ''),
-    include_evidence: boolParam(q('include_evidence') || q('includeEvidence') || q('load_evidence') || q('loadEvidence'), false)
+    profile,
+    context_profile: profile,
+    include_evidence: includeEvidence,
+    include_compare: includeCompare,
+    include_import_source_rows: includeImportSourceRows,
+    base_only: profile === 'status_header'
   };
 
   if (routeIdentity) {
@@ -45640,12 +45730,25 @@ async function handleBulkProcessRowContext(env, req, rowIdentity = null) {
 
   const compactFilters = {};
   for (const [key, value] of Object.entries(filters)) {
-    if (key === 'include_evidence') {
+    if (key === 'include_evidence' || key === 'include_compare' || key === 'include_import_source_rows' || key === 'base_only') {
       compactFilters[key] = value === true;
       continue;
     }
     const cleanValue = trimStr(value);
     if (cleanValue) compactFilters[key] = cleanValue;
+  }
+
+  const hasIdentity = !!(
+    compactFilters.row_key ||
+    compactFilters.timesheet_id ||
+    compactFilters.current_timesheet_id ||
+    compactFilters.requested_timesheet_id ||
+    compactFilters.expected_timesheet_id ||
+    compactFilters.contract_week_id
+  );
+
+  if (!hasIdentity) {
+    return withCORS(env, req, badRequest('bulk process row context requires row_key, timesheet_id, or contract_week_id'));
   }
 
   try {
@@ -45930,6 +46033,13 @@ async function handleTimesheetBulkAuthoriseContext(env, req, timesheetId = null)
     return !!defaultValue;
   };
 
+  const normalizeProfile = (value, baseOnly) => {
+    const s = trimStr(value).toLowerCase();
+    const allowed = new Set(['active_row_visible', 'status_header', 'editor', 'evidence', 'compare_import', 'full']);
+    if (allowed.has(s)) return s;
+    return baseOnly ? 'status_header' : 'active_row_visible';
+  };
+
   const unwrapRpcPayload = (payload, fnName) => {
     let out = payload;
     if (Array.isArray(out) && out.length === 1) out = out[0];
@@ -45942,6 +46052,12 @@ async function handleTimesheetBulkAuthoriseContext(env, req, timesheetId = null)
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   const routeIdentity = trimStr(timesheetId || '');
 
+  const baseOnly = boolParam(q('base_only') || q('baseOnly'), false);
+  const profile = normalizeProfile(q('profile') || q('context_profile') || q('contextProfile'), baseOnly);
+  const includeEvidence = ['active_row_visible', 'evidence', 'full'].includes(profile);
+  const includeCompare = ['compare_import', 'full'].includes(profile);
+  const includeImportSourceRows = ['compare_import', 'full'].includes(profile);
+
   const filters = {
     row_key: trimStr(q('row_key') || q('rowKey') || ''),
     timesheet_id: trimStr(q('timesheet_id') || q('timesheetId') || ''),
@@ -45949,10 +46065,12 @@ async function handleTimesheetBulkAuthoriseContext(env, req, timesheetId = null)
     requested_timesheet_id: trimStr(q('requested_timesheet_id') || q('requestedTimesheetId') || ''),
     expected_timesheet_id: trimStr(q('expected_timesheet_id') || q('expectedTimesheetId') || q('expected_current_timesheet_id') || q('expectedCurrentTimesheetId') || ''),
     contract_week_id: trimStr(q('contract_week_id') || q('contractWeekId') || q('week_id') || q('weekId') || ''),
-    include_evidence: boolParam(q('include_evidence') || q('includeEvidence') || q('load_evidence') || q('loadEvidence'), false),
-    include_compare: boolParam(q('include_compare') || q('includeCompare') || q('load_compare') || q('loadCompare'), false),
-    include_import_source_rows: boolParam(q('include_import_source_rows') || q('includeImportSourceRows') || q('load_import_source_rows') || q('loadImportSourceRows'), false),
-    base_only: boolParam(q('base_only') || q('baseOnly'), false)
+    profile,
+    context_profile: profile,
+    include_evidence: includeEvidence,
+    include_compare: includeCompare,
+    include_import_source_rows: includeImportSourceRows,
+    base_only: profile === 'status_header'
   };
 
   if (routeIdentity) {
@@ -45963,12 +46081,6 @@ async function handleTimesheetBulkAuthoriseContext(env, req, timesheetId = null)
     } else if (!filters.row_key) {
       filters.row_key = routeIdentity;
     }
-  }
-
-  if (filters.base_only) {
-    filters.include_evidence = false;
-    filters.include_compare = false;
-    filters.include_import_source_rows = false;
   }
 
   const compactFilters = {};
@@ -55914,9 +56026,27 @@ async function buildBulkRouteMutationPatch(env, actorUserId, datasetMode, previo
   const modeRaw = lower(datasetMode || ctx.datasetMode || ctx.dataset_mode || ctx.mode || ctx.context || 'process');
   const normalisedDatasetMode = modeRaw.includes('authorise') ? 'authorise' : 'process';
   const actionName = trimStr(action || ctx.action || ctx.route_action || 'route_mutation');
+  const actionUpper = upper(actionName);
+  const changedDomains = compactArray(
+    normaliseArray(ctx.changedDomains || ctx.changed_domains || ctx.domains || ctx.changed_domain)
+      .map((value) => lower(value))
+  );
+  const isBulkContext = !!(
+    ctx.bulk === true ||
+    ctx.bulk_process === true ||
+    ctx.bulkProcess === true ||
+    ctx.bulk_authorise === true ||
+    ctx.bulkAuthorise === true ||
+    ctx.return_bulk_patch === true ||
+    ctx.returnBulkPatch === true ||
+    normalisedDatasetMode === 'process' ||
+    normalisedDatasetMode === 'authorise' ||
+    lower(ctx.context) === 'bulk_process' ||
+    lower(ctx.context) === 'bulk_authorise'
+  );
 
-  const preDecisionRow = objectValue(ctx.preDecisionRow || ctx.pre_decision_row || ctx.previousDecisionRow || ctx.previous_decision_row);
-  const postDecisionRowHint = objectValue(ctx.postDecisionRow || ctx.post_decision_row || ctx.decisionRow || ctx.decision_row);
+  const preDecisionRow = objectValue(ctx.prePatchRow || ctx.pre_patch_row || ctx.preDecisionRow || ctx.pre_decision_row || ctx.previousPatchRow || ctx.previous_patch_row || ctx.previousDecisionRow || ctx.previous_decision_row);
+  const postDecisionRowHint = objectValue(ctx.postPatchRow || ctx.post_patch_row || ctx.postDecisionRow || ctx.post_decision_row || ctx.patchRow || ctx.patch_row || ctx.decisionRow || ctx.decision_row);
 
   const previousTimesheetIdText = firstString(
     previousTimesheetId,
@@ -55986,24 +56116,27 @@ async function buildBulkRouteMutationPatch(env, actorUserId, datasetMode, previo
     throw new Error('buildBulkRouteMutationPatch requires currentTimesheetId or currentContractWeekId.');
   }
 
-  const decisionFilters = {
-    dataset_mode: normalisedDatasetMode
+  const patchFilters = {
+    dataset_mode: normalisedDatasetMode,
+    projection: 'dataset_row',
+    profile: 'list'
   };
-  if (currentTimesheetIdText) decisionFilters.timesheet_id = currentTimesheetIdText;
-  if (currentContractWeekIdText) decisionFilters.contract_week_id = currentContractWeekIdText;
-  if (actorUserId || ctx.actor_user_id || ctx.actorUserId) decisionFilters.actor_user_id = String(actorUserId || ctx.actor_user_id || ctx.actorUserId);
+  if (currentTimesheetIdText) patchFilters.timesheet_id = currentTimesheetIdText;
+  if (currentContractWeekIdText) patchFilters.contract_week_id = currentContractWeekIdText;
+  if (actorUserId || ctx.actor_user_id || ctx.actorUserId) patchFilters.actor_user_id = String(actorUserId || ctx.actor_user_id || ctx.actorUserId);
+  if (changedDomains.length) patchFilters.changed_domains = changedDomains;
 
   let rpcRows = null;
   try {
-    rpcRows = await sbRpc(env, 'bulk_timesheet_row_decision_v1', { p_filters: decisionFilters }, { timeoutMs: Number(ctx.timeoutMs || ctx.timeout_ms || 45000) });
+    rpcRows = await sbRpc(env, 'bulk_timesheet_row_patch_v1', { p_filters: patchFilters }, { timeoutMs: Number(ctx.timeoutMs || ctx.timeout_ms || 45000) });
   } catch (err) {
-    const msg = String(err?.message || err || 'bulk_timesheet_row_decision_v1 failed');
-    throw new Error(`BUILD_BULK_ROUTE_MUTATION_PATCH_DECISION_FAILED: ${msg}`);
+    const msg = String(err?.message || err || 'bulk_timesheet_row_patch_v1 failed');
+    throw new Error(`BUILD_BULK_ROUTE_MUTATION_PATCH_PATCH_FAILED: ${msg}`);
   }
 
   const firstRpcRow = Array.isArray(rpcRows) ? rpcRows[0] : rpcRows;
   const postDecisionRow = parseMaybeObject(firstRpcRow?.row_json)
-    || parseMaybeObject(firstRpcRow?.bulk_timesheet_row_decision_v1)
+    || parseMaybeObject(firstRpcRow?.bulk_timesheet_row_patch_v1)
     || parseMaybeObject(firstRpcRow)
     || postDecisionRowHint;
 
@@ -56118,6 +56251,35 @@ async function buildBulkRouteMutationPatch(env, actorUserId, datasetMode, previo
     changed: firstString(previousAuthoriseClassification) !== firstString(postAuthoriseClassification)
   };
 
+  const statusOnlyRequested = !!(
+    boolValue(ctx.status_only || ctx.statusOnly) ||
+    changedDomains.includes('status') ||
+    /AUTHORISE|UNAUTHORISE|STATUS/.test(actionUpper)
+  );
+  const identityChanged = !!(
+    (firstString(previousRowKeyText) && firstString(newRowKeyText) && firstString(previousRowKeyText) !== firstString(newRowKeyText)) ||
+    (firstString(previousTimesheetIdText) && firstString(newTimesheetIdText) && firstString(previousTimesheetIdText) !== firstString(newTimesheetIdText)) ||
+    (firstString(previousContractWeekIdText) && firstString(newContractWeekIdText) && firstString(previousContractWeekIdText) !== firstString(newContractWeekIdText)) ||
+    boolValue(ctx.identity_changed || ctx.identityChanged) ||
+    changedDomains.includes('identity')
+  );
+  const manualChanged = !!(
+    boolValue(ctx.manual_changed || ctx.manualChanged || ctx.schedule_changed || ctx.scheduleChanged || ctx.invalidate_editor_context || ctx.invalidateEditorContext) ||
+    changedDomains.some((domain) => ['manual', 'schedule', 'editor', 'save', 'process'].includes(domain)) ||
+    (!statusOnlyRequested && /MANUAL|SAVE|UPSERT|PROCESS/.test(actionUpper))
+  );
+  const evidenceChanged = !!(
+    (previewChanged && !statusOnlyRequested) ||
+    boolValue(ctx.evidence_changed || ctx.evidenceChanged || ctx.storage_changed || ctx.storageChanged) ||
+    changedDomains.some((domain) => ['evidence', 'storage', 'preview', 'artifact'].includes(domain)) ||
+    /EVIDENCE|STORAGE|ARTIFACT|ATTACH/.test(actionUpper)
+  );
+  const statusOnly = !!(
+    statusOnlyRequested &&
+    !identityChanged &&
+    !manualChanged &&
+    !evidenceChanged
+  );
   const cacheInvalidationHints = {
     affected_row_keys: compactArray(Array.from(affectedRowKeys)),
     affected_timesheet_ids: compactArray(Array.from(affectedTimesheetIds)),
@@ -56127,13 +56289,20 @@ async function buildBulkRouteMutationPatch(env, actorUserId, datasetMode, previo
     row_keys: compactArray(Array.from(affectedRowKeys)),
     timesheet_ids: compactArray(Array.from(affectedTimesheetIds)),
     contract_week_ids: compactArray(Array.from(affectedContractWeekIds)),
-    storage_keys: compactArray(Array.from(oldStorageKeys).concat(Array.from(newStorageKeys))),
+    storage_keys: evidenceChanged ? compactArray(Array.from(oldStorageKeys).concat(Array.from(newStorageKeys))) : [],
     datasets: ['bulk_process', 'bulk_authorise'],
     row_signature: rowSignature || null,
-    invalidate_row_context: true,
-    invalidate_context: true,
+    status_only: statusOnly,
+    identity_changed: identityChanged,
+    manual_changed: manualChanged,
+    evidence_changed: evidenceChanged,
+    storage_changed: evidenceChanged,
+    invalidate_context: false,
+    invalidate_row_context: false,
+    invalidate_editor_context: manualChanged,
     invalidate_preview_only_if_storage_changed: true,
-    invalidate_preview: previewChanged
+    invalidate_preview: evidenceChanged,
+    invalidate_evidence: evidenceChanged
   };
 
   const rowPatch = {
@@ -56194,13 +56363,14 @@ async function buildBulkRouteMutationPatch(env, actorUserId, datasetMode, previo
   return {
     ok: true,
     success: true,
-    bulk_mode: true,
+    bulk_mode: isBulkContext,
     operation: 'build_bulk_route_mutation_patch',
     action: actionName,
     route_mutation_action: actionName,
     dataset_mode: normalisedDatasetMode,
     actor_user_id: actorUserId || ctx.actor_user_id || ctx.actorUserId || null,
     row_patch: rowPatch,
+    row_patches: [rowPatch],
     data_row: dataRow,
     row: dataRow,
     previous_row_key: previousRowKeyText || null,
@@ -56228,7 +56398,9 @@ async function buildBulkRouteMutationPatch(env, actorUserId, datasetMode, previo
     cache_invalidation_hints: cacheInvalidationHints,
     cache_invalidation: {
       rows: compactArray(Array.from(affectedRowKeys)).map((rowKey) => ({ row_key: rowKey })),
-      artifacts: compactArray(Array.from(oldStorageKeys).concat(Array.from(newStorageKeys))).map((storageKey) => ({ storage_key: storageKey, changed: previewChanged })),
+      artifacts: evidenceChanged
+        ? compactArray(Array.from(oldStorageKeys).concat(Array.from(newStorageKeys))).map((storageKey) => ({ storage_key: storageKey, changed: true }))
+        : [],
       datasets: ['bulk_process', 'bulk_authorise']
     },
     primary_artifact: {
@@ -56238,7 +56410,7 @@ async function buildBulkRouteMutationPatch(env, actorUserId, datasetMode, previo
       storage_key: newStorageKey || null,
       previous_storage_key: previousStorageKey || null,
       preview_mode: firstString(postDecisionRow.primary_artifact_preview_mode) || null,
-      changed: previewChanged
+      changed: evidenceChanged
     },
     evidence_hints: {
       has_any_evidence: boolValue(postDecisionRow.has_any_evidence),
@@ -56260,7 +56432,7 @@ async function buildBulkRouteMutationPatch(env, actorUserId, datasetMode, previo
       new_storage_keys: compactArray(Array.from(newStorageKeys)),
       primary_artifact_preview_mode: firstString(postDecisionRow.primary_artifact_preview_mode) || null,
       preview_storage_key: newStorageKey || null,
-      changed: previewChanged
+      changed: evidenceChanged
     }
   };
 }
