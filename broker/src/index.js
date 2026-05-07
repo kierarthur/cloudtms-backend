@@ -22585,6 +22585,7 @@ async function handleBankingIdLedgerList(env, req, user) {
   }
 }
 
+
 async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
   const id = String(payBatchId || '').trim();
   if (!id) return withCORS(env, req, badRequest('pay_batch_id is required'));
@@ -23215,6 +23216,154 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
       }
     }
 
+    let standardImmediateRailExecution = null;
+    let standardImmediateRailExecutionAttempted = false;
+    let standardImmediateRailExecutionError = null;
+
+    if (becameAuthorised && executionMode === 'STANDARD_BANK' && scheduleKind === 'IMMEDIATE') {
+      standardImmediateRailExecutionAttempted = true;
+
+      const submissionNowIso = new Date().toISOString();
+      const immediateFundingAccountRef = String(
+        fundingAccountRef ||
+        authStart?.funding_account_ref ||
+        authStart?.funding_account ||
+        authStart?.execution_intent_json?.funding_account_ref ||
+        gateBatch?.funding_account_ref ||
+        gateGet?.funding_account_ref ||
+        ''
+      ).trim();
+
+      if (!immediateFundingAccountRef) {
+        return withCORS(env, req, jsonResponse(409, {
+          ok: false,
+          error: 'Funding account is required before immediate bank execution can submit.',
+          message: 'Funding account is required before immediate bank execution can submit.',
+          error_code: 'STANDARD_BANK_FUNDING_ACCOUNT_REQUIRED',
+          pay_batch_id: id,
+          executed: execRes,
+          prepared: prepRes,
+          auth_start: authStart,
+          awaiting_authorisation: false,
+          execution_mode: executionMode,
+          effective_payment_date: effectivePaymentDate
+        }));
+      }
+
+      const executionIntentJson = (() => {
+        const direct = authStart?.execution_intent_json;
+        if (direct && typeof direct === 'object' && !Array.isArray(direct)) return direct;
+        const batchIntent = gateBatch?.execution_intent_json;
+        if (batchIntent && typeof batchIntent === 'object' && !Array.isArray(batchIntent)) return batchIntent;
+        const gateIntent = gateGet?.execution_intent_json;
+        if (gateIntent && typeof gateIntent === 'object' && !Array.isArray(gateIntent)) return gateIntent;
+        return {
+          execution_mode: executionMode,
+          schedule_kind: scheduleKind,
+          payment_date: effectivePaymentDate,
+          auth_request_id: authRequestId,
+          pay_channel_scope: payChannelScope,
+          suppress_remittances: suppressRemittances
+        };
+      })();
+
+      const claimRow = {
+        pay_batch_id: id,
+        id,
+        rail_provider_snapshot: provider,
+        rail_env_snapshot: expectedEnv,
+        schedule_kind: 'IMMEDIATE',
+        scheduled_at_utc: submissionNowIso,
+        funding_account_ref: immediateFundingAccountRef,
+        execution_mode: 'STANDARD_BANK',
+        execution_intent_json: executionIntentJson,
+        suppress_remittances: suppressRemittances,
+        suppress_remittances_confirmed: suppressRemittancesConfirmed
+      };
+
+      try {
+        standardImmediateRailExecution = await adapter.executeDueBatches(env, {
+          nowUtc: submissionNowIso,
+          limit: 1,
+          claimedRows: [claimRow],
+          actorUserId,
+          perBatchSubmitLimit: 500
+        });
+      } catch (e) {
+        standardImmediateRailExecutionError = {
+          error: (e && e.message) ? String(e.message) : String(e || 'Immediate bank execution failed.'),
+          code: String(e?.code || 'STANDARD_BANK_IMMEDIATE_RAIL_EXECUTION_FAILED').trim().toUpperCase() || 'STANDARD_BANK_IMMEDIATE_RAIL_EXECUTION_FAILED',
+          pay_batch_id: id,
+          details: (e && typeof e === 'object' && e.details && typeof e.details === 'object') ? e.details : null,
+          execution_result: (e && typeof e === 'object' && e.execution_result && typeof e.execution_result === 'object') ? e.execution_result : null
+        };
+
+        let failedAfterGet = null;
+        try {
+          const failedAfterGet0 = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: id, p_actor_user_id: actorUserId });
+          failedAfterGet = unwrapRpc(failedAfterGet0, 'pay_batch_get');
+        } catch {}
+
+        return withCORS(env, req, jsonResponse(409, {
+          ok: false,
+          error: 'Immediate bank execution failed before a safe final state was recorded.',
+          message: standardImmediateRailExecutionError.error,
+          error_code: standardImmediateRailExecutionError.code,
+          pay_batch_id: id,
+          executed: execRes,
+          prepared: prepRes,
+          auth_start: authStart,
+          awaiting_authorisation: false,
+          finalisation,
+          execution_mode: executionMode,
+          effective_payment_date: effectivePaymentDate,
+          suppress_remittances: suppressRemittances,
+          remittances: finalisation && typeof finalisation === 'object' && finalisation.remittances ? finalisation.remittances : authStartRemittances,
+          remittance_queue_stage_result: authStartQueueStageResult,
+          rail_execution_attempted: true,
+          rail_execution_error: standardImmediateRailExecutionError,
+          batch_get: failedAfterGet
+        }));
+      }
+
+      const railErrors = Array.isArray(standardImmediateRailExecution?.errors) ? standardImmediateRailExecution.errors : [];
+      const batchRailErrors = railErrors.filter((row) => {
+        if (!row || typeof row !== 'object') return false;
+        const rowBatchId = String(row.pay_batch_id || row.id || '').trim();
+        return !rowBatchId || rowBatchId === id;
+      });
+
+      if (batchRailErrors.length) {
+        let erroredAfterGet = null;
+        try {
+          const erroredAfterGet0 = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: id, p_actor_user_id: actorUserId });
+          erroredAfterGet = unwrapRpc(erroredAfterGet0, 'pay_batch_get');
+        } catch {}
+
+        return withCORS(env, req, jsonResponse(409, {
+          ok: false,
+          error: 'Immediate bank execution returned errors and did not complete cleanly.',
+          message: 'Immediate bank execution returned errors and did not complete cleanly.',
+          error_code: 'STANDARD_BANK_IMMEDIATE_RAIL_EXECUTION_ERRORS',
+          pay_batch_id: id,
+          executed: execRes,
+          prepared: prepRes,
+          auth_start: authStart,
+          awaiting_authorisation: false,
+          finalisation,
+          execution_mode: executionMode,
+          effective_payment_date: effectivePaymentDate,
+          suppress_remittances: suppressRemittances,
+          remittances: finalisation && typeof finalisation === 'object' && finalisation.remittances ? finalisation.remittances : authStartRemittances,
+          remittance_queue_stage_result: authStartQueueStageResult,
+          rail_execution_attempted: true,
+          rail_execution_result: standardImmediateRailExecution,
+          rail_execution_errors: batchRailErrors,
+          batch_get: erroredAfterGet
+        }));
+      }
+    }
+
     let afterGet0;
     try {
       afterGet0 = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: id, p_actor_user_id: actorUserId });
@@ -23224,6 +23373,29 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
     }
     const afterGet = unwrapRpc(afterGet0, 'pay_batch_get');
     const executionFields = _extractExecutionFields(afterGet);
+    const finalBatchObject = (afterGet && typeof afterGet === 'object' && afterGet.batch && typeof afterGet.batch === 'object' && !Array.isArray(afterGet.batch)) ? afterGet.batch : {};
+    const finalBatchStatus = String(finalBatchObject.status || afterGet?.status || '').trim().toUpperCase();
+    const finalExecutionCommitState = String(executionFields.execution_commit_state || '').trim().toUpperCase();
+    const railBlockedFundsRows = Array.isArray(standardImmediateRailExecution?.blocked_funds) ? standardImmediateRailExecution.blocked_funds : [];
+    const railSubmittedRows = Array.isArray(standardImmediateRailExecution?.submitted) ? standardImmediateRailExecution.submitted : [];
+    const railBlockedFundsForThisBatch = railBlockedFundsRows.some((row) => {
+      if (!row || typeof row !== 'object') return false;
+      return String(row.pay_batch_id || row.id || '').trim() === id;
+    });
+    const railSubmittedForThisBatch = railSubmittedRows.find((row) => {
+      if (!row || typeof row !== 'object') return false;
+      return String(row.pay_batch_id || row.id || '').trim() === id;
+    }) || null;
+    const postExecutionStatus = (() => {
+      if (!becameAuthorised) return 'AWAITING_AUTHORISATION';
+      if (executionMode !== 'STANDARD_BANK') return finalExecutionCommitState === 'COMMITTED' ? 'COMMITTED' : (finalBatchStatus || 'AUTHORISED');
+      if (scheduleKind !== 'IMMEDIATE') return finalBatchStatus || 'AUTHORISED_FOR_PAYMENT';
+      if (finalBatchStatus === 'BLOCKED_FUNDS' || railBlockedFundsForThisBatch) return 'BLOCKED_FUNDS';
+      if (finalExecutionCommitState === 'SUBMITTED_NOT_COMMITTED') return 'SUBMITTED';
+      if (finalExecutionCommitState === 'COMMITTED') return 'COMMITTED';
+      if (railSubmittedForThisBatch) return finalBatchStatus || 'SUBMITTED';
+      return finalBatchStatus || 'UNKNOWN';
+    })();
 
     return withCORS(env, req, ok({
       ok: true,
@@ -23238,6 +23410,12 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
       suppress_remittances: suppressRemittances,
       remittances: finalisation && typeof finalisation === 'object' && finalisation.remittances ? finalisation.remittances : authStartRemittances,
       remittance_queue_stage_result: authStartQueueStageResult,
+      post_execution_status: postExecutionStatus,
+      rail_execution_attempted: standardImmediateRailExecutionAttempted,
+      rail_execution_result: standardImmediateRailExecution,
+      rail_execution_error: standardImmediateRailExecutionError,
+      blocked_funds: postExecutionStatus === 'BLOCKED_FUNDS',
+      submitted_to_bank: postExecutionStatus === 'SUBMITTED' || finalExecutionCommitState === 'SUBMITTED_NOT_COMMITTED',
       execution_commit_state: executionFields.execution_commit_state,
       execution_commit_ref: executionFields.execution_commit_ref,
       execution_committed_at_utc: executionFields.execution_committed_at_utc,
@@ -23256,9 +23434,7 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
     }
     return withCORS(env, req, jsonResponse(500, { error: 'Execute payment failed.', message: 'Execute payment failed.', error_code: 'BANKING_EXECUTE_PAYMENT_FAILED' }));
   }
-}
-
-
+}  
 
 async function verifyPaymentScheduleReauth(env, user, reauthToken) {
   const token = String(reauthToken || '').trim();
@@ -121300,11 +121476,21 @@ function getRailAdapter(provider) {
                 });
                 out.blocked_funds.push({ pay_batch_id: batchId, required_gbp: required, available_gbp: available });
               } catch (e) {
-                out.errors.push({
+                const markBlockedFundsError = {
                   code: 'MARK_BLOCKED_FUNDS_FAILED',
                   pay_batch_id: batchId,
-                  error: (e && e.message) ? String(e.message) : String(e || 'unknown')
-                });
+                  error: (e && e.message) ? String(e.message) : String(e || 'unknown'),
+                  funds_check_json: fundsCheckJson
+                };
+                out.ok = false;
+                out.errors.push(markBlockedFundsError);
+
+                const hardFailure = new Error(`MARK_BLOCKED_FUNDS_FAILED: ${markBlockedFundsError.error}`);
+                hardFailure.code = 'MARK_BLOCKED_FUNDS_FAILED';
+                hardFailure.pay_batch_id = batchId;
+                hardFailure.details = markBlockedFundsError;
+                hardFailure.execution_result = out;
+                throw hardFailure;
               }
               continue;
             }
@@ -122309,6 +122495,7 @@ async function csvAdapter_confirmManual() {
   throw new Error('USE_EXECUTE_MODAL_SETTLEMENT: CSV/manual settlement must be completed through the Execute modal authorisation flow.');
 }
 
+
 async function bankingCronTick(env, opts = {}) {
   const nowUtc = (() => {
     const v = opts && opts.nowUtc ? new Date(opts.nowUtc) : new Date();
@@ -122398,6 +122585,7 @@ async function bankingCronTick(env, opts = {}) {
     claimed: [],
     blocked_funds: [],
     submitted: [],
+    hard_due_execution_errors: [],
     polled_batches: [],
     settled_batches: [],
     payment_corrections: {
@@ -122410,6 +122598,16 @@ async function bankingCronTick(env, opts = {}) {
   };
 
   const _errMsg = (e) => (e && e.message) ? String(e.message) : String(e || 'unknown');
+
+  const _recordDueExecutionError = (issue) => {
+    const entry = (issue && typeof issue === 'object' && !Array.isArray(issue))
+      ? issue
+      : { code: 'DUE_EXECUTION_ERROR', error: _errMsg(issue) };
+    summary.ok = false;
+    summary.errors.push(entry);
+    summary.hard_due_execution_errors.push(entry);
+    return entry;
+  };
 
   const _unwrapRpcPayload = (rpcRes, key) => {
     let payload = rpcRes;
@@ -123320,7 +123518,7 @@ async function bankingCronTick(env, opts = {}) {
     const executionMode = String(row?.execution_mode || intent?.execution_mode || 'STANDARD_BANK').trim().toUpperCase() || 'STANDARD_BANK';
     const providerMeta = _normalizeProviderStrict(row?.rail_provider_snapshot || row?.rail_provider || null);
     if (!providerMeta.valid) {
-      summary.errors.push({
+      _recordDueExecutionError({
         code: providerMeta.reason || 'UNKNOWN_RAIL_PROVIDER',
         pay_batch_id: payBatchId,
         execution_mode: executionMode
@@ -123330,7 +123528,7 @@ async function bankingCronTick(env, opts = {}) {
     if (executionMode === 'CSV_SETTLEMENT' || executionMode === 'EXTERNAL_SETTLEMENT') {
       const authRequestId = String(row?.auth_request_id || intent?.auth_request_id || intent?.auth?.auth_request_id || '').trim();
       if (!authRequestId) {
-        summary.errors.push({
+        _recordDueExecutionError({
           code: 'AUTH_REQUEST_ID_REQUIRED',
           pay_batch_id: payBatchId,
           execution_mode: executionMode
@@ -123347,7 +123545,7 @@ async function bankingCronTick(env, opts = {}) {
           {}
         );
         if (!finalisation || finalisation.ok !== true) {
-          summary.errors.push({
+          _recordDueExecutionError({
             code: String(finalisation?.error_code || 'SETTLEMENT_FINALISATION_FAILED').toUpperCase(),
             pay_batch_id: payBatchId,
             execution_mode: executionMode,
@@ -123363,7 +123561,7 @@ async function bankingCronTick(env, opts = {}) {
           });
         }
       } catch (e) {
-        summary.errors.push({
+        _recordDueExecutionError({
           code: 'SETTLEMENT_FINALISATION_FAILED',
           pay_batch_id: payBatchId,
           execution_mode: executionMode,
@@ -123373,7 +123571,7 @@ async function bankingCronTick(env, opts = {}) {
       continue;
     }
     if (executionMode !== 'STANDARD_BANK') {
-      summary.errors.push({ code: 'UNSUPPORTED_EXECUTION_MODE', pay_batch_id: payBatchId, execution_mode: executionMode });
+      _recordDueExecutionError({ code: 'UNSUPPORTED_EXECUTION_MODE', pay_batch_id: payBatchId, execution_mode: executionMode });
       continue;
     }
     const prov = providerMeta.provider;
@@ -123385,7 +123583,7 @@ async function bankingCronTick(env, opts = {}) {
     try {
       const adapter = getRailAdapter(prov);
       if (!adapter || typeof adapter.executeDueBatches !== 'function') {
-        summary.warnings.push({ code: 'ADAPTER_EXECUTE_MISSING', provider: prov, claimed: rows.length });
+        _recordDueExecutionError({ code: 'ADAPTER_EXECUTE_MISSING', provider: prov, claimed: rows.length, pay_batch_ids: _extractBatchIds(rows) });
         continue;
       }
 
@@ -123406,7 +123604,23 @@ async function bankingCronTick(env, opts = {}) {
         summary.blocked_funds.push(...bf);
         summary.submitted.push(...sub);
         summary.warnings.push(...warns.map(w => ({ ...w, provider: prov })));
-        summary.errors.push(...errs.map(er => ({ ...er, provider: prov })));
+        if (errs.length) {
+          for (const er of errs) {
+            _recordDueExecutionError({
+              ...(er && typeof er === 'object' && !Array.isArray(er) ? er : { error: _errMsg(er) }),
+              provider: prov
+            });
+          }
+        }
+
+        if (res.ok === false && !errs.length) {
+          _recordDueExecutionError({
+            code: 'ADAPTER_EXECUTE_RETURNED_NOT_OK',
+            provider: prov,
+            pay_batch_ids: _extractBatchIds(rows),
+            result: res
+          });
+        }
       }
     } catch (e) {
       const msg = _errMsg(e);
@@ -123416,6 +123630,13 @@ async function bankingCronTick(env, opts = {}) {
       if (_isEnvMismatchError(msg)) {
         const ids = _extractBatchIds(rows);
         const revertRes = await _revertBatchesToScheduled(ids, prov, msg, 'EXECUTE');
+        _recordDueExecutionError({
+          code: 'ADAPTER_EXECUTE_ENV_MISMATCH_REVERTED',
+          provider: prov,
+          reverted_count: revertRes && Number.isFinite(Number(revertRes.reverted)) ? revertRes.reverted : 0,
+          pay_batch_ids: ids,
+          error: msg
+        });
         summary.warnings.push({
           code: 'ADAPTER_EXECUTE_ENV_MISMATCH_REVERTED',
           provider: prov,
@@ -123426,10 +123647,14 @@ async function bankingCronTick(env, opts = {}) {
         continue;
       }
 
-      summary.errors.push({
-        code: 'ADAPTER_EXECUTE_FAILED',
+      _recordDueExecutionError({
+        code: String(e?.code || 'ADAPTER_EXECUTE_FAILED').trim().toUpperCase() || 'ADAPTER_EXECUTE_FAILED',
         provider: prov,
-        error: msg
+        pay_batch_id: e && e.pay_batch_id ? String(e.pay_batch_id) : null,
+        pay_batch_ids: _extractBatchIds(rows),
+        error: msg,
+        details: e && typeof e === 'object' && e.details && typeof e.details === 'object' ? e.details : null,
+        execution_result: e && typeof e === 'object' && e.execution_result && typeof e.execution_result === 'object' ? e.execution_result : null
       });
     }
   }
@@ -123623,10 +123848,19 @@ async function bankingCronTick(env, opts = {}) {
     summary.warnings.push(err);
   }
 
+  if (summary.errors.length > 0 || summary.payment_corrections.errors.length > 0) {
+    summary.ok = false;
+  }
+
+  if (summary.hard_due_execution_errors.length > 0) {
+    const hardFailure = new Error('BANKING_DUE_EXECUTION_FAILED');
+    hardFailure.code = 'BANKING_DUE_EXECUTION_FAILED';
+    hardFailure.details = summary;
+    throw hardFailure;
+  }
+
   return summary;
 }
-
-
 
 
 function normalizeBankingPayPreviewDecisions(input, options = {}) {
