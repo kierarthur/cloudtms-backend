@@ -1228,6 +1228,7 @@ $function$;
 
 
 
+
 CREATE OR REPLACE FUNCTION public._pay_payment_movement_classify(
   p_pay_batch_id uuid,
   p_selection_json jsonb
@@ -1601,11 +1602,14 @@ BEGIN
         AND public.pay_bank_transfer_events.pay_bank_transfer_id = ANY(v_transfer_ids)
       )
       OR (
-        COALESCE(array_length(v_candidate_ids, 1), 0) > 0
+        COALESCE(array_length(v_transfer_ids, 1), 0) = 0
+        AND COALESCE(array_length(v_candidate_ids, 1), 0) > 0
         AND public.pay_bank_transfer_events.candidate_id = ANY(v_candidate_ids)
       )
       OR (
-        COALESCE(array_length(v_umbrella_ids, 1), 0) > 0
+        COALESCE(array_length(v_transfer_ids, 1), 0) = 0
+        AND COALESCE(array_length(v_candidate_ids, 1), 0) = 0
+        AND COALESCE(array_length(v_umbrella_ids, 1), 0) > 0
         AND public.pay_bank_transfer_events.umbrella_id = ANY(v_umbrella_ids)
       )
       OR (
@@ -2037,6 +2041,9 @@ EXCEPTION
     RAISE;
 END;
 $function$;
+
+
+
 
 
 
