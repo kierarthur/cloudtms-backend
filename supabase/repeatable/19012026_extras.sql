@@ -9139,6 +9139,8 @@ DROP FUNCTION IF EXISTS public.contract_week_manual_upsert_bulk_process_atomic(u
 
 DROP FUNCTION IF EXISTS public.contract_week_manual_upsert_bulk_process_atomic(uuid, uuid, jsonb, jsonb, jsonb, jsonb, jsonb, uuid, boolean, timestamp with time zone, text);
 
+
+
 CREATE OR REPLACE FUNCTION public.contract_week_manual_upsert_bulk_process_atomic(
   p_week_id uuid,
   p_expected_timesheet_id uuid DEFAULT NULL,
@@ -9242,7 +9244,7 @@ BEGIN
 
   SELECT decision_result.row_json
     INTO v_pre_row
-  FROM public.bulk_timesheet_row_decision_v1(JSONB_BUILD_OBJECT(
+  FROM public.bulk_timesheet_row_patch_v1(JSONB_BUILD_OBJECT(
     'dataset_mode', 'process',
     'contract_week_id', p_week_id::text
   )) AS decision_result(row_json)
@@ -9348,7 +9350,7 @@ BEGIN
 
   SELECT decision_result.row_json
     INTO v_post_row
-  FROM public.bulk_timesheet_row_decision_v1(
+  FROM public.bulk_timesheet_row_patch_v1(
     CASE
       WHEN v_current_timesheet_id IS NOT NULL THEN JSONB_BUILD_OBJECT(
         'dataset_mode', 'process',
@@ -9369,7 +9371,7 @@ BEGIN
       'operation', v_operation,
       'success', FALSE,
       'error_code', 'POST_DECISION_ROW_NOT_FOUND',
-      'message', 'bulk_timesheet_row_decision_v1 did not return a post-upsert row.',
+      'message', 'bulk_timesheet_row_patch_v1 did not return a post-upsert row.',
       'contract_week_id', v_contract_week_id,
       'timesheet_id', v_timesheet_id,
       'current_timesheet_id', v_current_timesheet_id,
@@ -9489,13 +9491,20 @@ BEGIN
     'row_keys', JSONB_BUILD_ARRAY(v_previous_row_key, v_row_key),
     'contract_week_ids', JSONB_BUILD_ARRAY(v_contract_week_id),
     'timesheet_ids', JSONB_BUILD_ARRAY(v_rotation_old_timesheet_id, v_timesheet_id, v_current_timesheet_id),
-    'storage_keys', JSONB_BUILD_ARRAY(v_previous_storage_key, v_primary_storage_key),
+    'storage_keys', CASE WHEN v_preview_changed THEN JSONB_BUILD_ARRAY(v_previous_storage_key, v_primary_storage_key) ELSE '[]'::jsonb END,
     'datasets', JSONB_BUILD_ARRAY('bulk_process', 'bulk_authorise'),
     'row_signature', v_row_signature,
     'backend_row_signature', v_row_signature,
     'row_backend_signature', v_row_signature,
-    'invalidate_context', TRUE,
-    'invalidate_preview', v_preview_changed
+    'identity_changed', TRUE,
+    'manual_changed', TRUE,
+    'evidence_changed', v_preview_changed,
+    'storage_changed', v_preview_changed,
+    'invalidate_context', FALSE,
+    'invalidate_row_context', FALSE,
+    'invalidate_editor_context', TRUE,
+    'invalidate_preview', v_preview_changed,
+    'invalidate_evidence', v_preview_changed
   );
 
   v_cache_invalidation := JSONB_BUILD_OBJECT(
@@ -9712,6 +9721,8 @@ EXCEPTION WHEN OTHERS THEN
   );
 END;
 $function$;
+
+
 
 
 CREATE OR REPLACE FUNCTION public.cloudtms_format_london_date(p_date date)
