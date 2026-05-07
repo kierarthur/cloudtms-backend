@@ -227,491 +227,799 @@ $$;
 -- Totals computed from v_timesheets_summary fields: total_pay_ex_vat, margin_ex_vat.
 -- ============================================================
 
-create or replace function public.timesheet_list_totals(p_filters jsonb)
-returns table (
+CREATE OR REPLACE FUNCTION public.timesheet_list_totals(p_filters jsonb)
+RETURNS TABLE (
   count_all bigint,
   total_pay_ex_vat_sum numeric,
   margin_ex_vat_sum numeric
 )
-language plpgsql
-stable
-security definer
-set search_path = public
-as $$
-declare
-  v_client_id uuid := null;
-  v_candidate_id uuid := null;
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path TO public
+AS $function$
+DECLARE
+  v_filters jsonb := COALESCE(p_filters, '{}'::jsonb);
+  v_source_filters jsonb := '{}'::jsonb;
 
-  v_summary_stage text := null;
-  v_tools_stage text := null;
+  v_client_id uuid := NULL;
+  v_candidate_id uuid := NULL;
+  v_summary_stage text := NULL;
+  v_tools_stage text := NULL;
+  v_route_type text := NULL;
+  v_sheet_scope text := NULL;
+  v_qr_status text := NULL;
+  v_we_from date := NULL;
+  v_we_to date := NULL;
+  v_is_adjusted text := NULL;
+  v_is_qr text := NULL;
+  v_needs_attention text := NULL;
+  v_candidate_paid text := NULL;
+  v_client_invoiced text := NULL;
+  v_hr_issue text := NULL;
+  v_proc_status_raw text := NULL;
+  v_proc_list text[] := NULL;
+  v_status_code text := NULL;
+  v_issues_filter text := NULL;
+  v_q text := NULL;
+  v_q_like text := NULL;
+  v_ids text[] := NULL;
+  v_uuid_re text := '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$';
+  v_has_client_filter boolean := FALSE;
+  v_has_candidate_filter boolean := FALSE;
+BEGIN
+  v_source_filters :=
+    v_filters
+    - 'q'
+    - 'query'
+    - 'name'
+    - 'client_id'
+    - 'clientId'
+    - 'candidate_id'
+    - 'candidateId'
+    - 'week_ending_from'
+    - 'weekEndingFrom'
+    - 'week_ending_to'
+    - 'weekEndingTo'
+    - 'route_type'
+    - 'routeType'
+    - 'issues_filter'
+    - 'issuesFilter'
+    - 'status_code'
+    - 'statusCode'
+    - 'summary_stage'
+    - 'summaryStage'
+    - 'client_invoiced'
+    - 'clientInvoiced'
+    - 'needs_attention'
+    - 'needsAttention'
+    || jsonb_build_object('disable_paging', TRUE, 'purpose', 'totals');
 
-  v_route_type text := null;
-  v_sheet_scope text := null;
-  v_qr_status text := null;
+  v_has_client_filter := NULLIF(BTRIM(COALESCE(v_filters->>'client_id', v_filters->>'clientId', '')), '') IS NOT NULL;
+  IF v_has_client_filter THEN
+    IF COALESCE(v_filters->>'client_id', v_filters->>'clientId') ~* v_uuid_re THEN
+      v_client_id := COALESCE(v_filters->>'client_id', v_filters->>'clientId')::uuid;
+    ELSE
+      RETURN;
+    END IF;
+  END IF;
 
-  v_we_from date := null;
-  v_we_to   date := null;
+  v_has_candidate_filter := NULLIF(BTRIM(COALESCE(v_filters->>'candidate_id', v_filters->>'candidateId', '')), '') IS NOT NULL;
+  IF v_has_candidate_filter THEN
+    IF COALESCE(v_filters->>'candidate_id', v_filters->>'candidateId') ~* v_uuid_re THEN
+      v_candidate_id := COALESCE(v_filters->>'candidate_id', v_filters->>'candidateId')::uuid;
+    ELSE
+      RETURN;
+    END IF;
+  END IF;
 
-  v_is_adjusted text := null;
-  v_is_qr text := null;
-  v_needs_attention text := null;
+  v_q := NULLIF(BTRIM(COALESCE(v_filters->>'q', v_filters->>'query', v_filters->>'name', '')), '');
+  IF v_q IS NOT NULL THEN
+    v_q_like := '%' || REPLACE(REPLACE(REPLACE(v_q, E'\\', E'\\\\'), '%', E'\\%'), '_', E'\\_') || '%';
+  END IF;
 
-  v_candidate_paid text := null;
-  v_client_invoiced text := null;
+  BEGIN
+    IF v_filters ? 'ids' THEN
+      IF jsonb_typeof(v_filters->'ids') = 'array' THEN
+        SELECT ARRAY_AGG(id_values.id_value)
+        INTO v_ids
+        FROM (
+          SELECT DISTINCT NULLIF(BTRIM(input_values.value), '') AS id_value
+          FROM jsonb_array_elements_text(v_filters->'ids') AS input_values(value)
+        ) AS id_values
+        WHERE id_values.id_value IS NOT NULL;
+      ELSIF NULLIF(BTRIM(COALESCE(v_filters->>'ids', '')), '') IS NOT NULL THEN
+        SELECT ARRAY_AGG(id_values.id_value)
+        INTO v_ids
+        FROM (
+          SELECT DISTINCT NULLIF(BTRIM(split_values.value), '') AS id_value
+          FROM unnest(regexp_split_to_array(v_filters->>'ids', '\s*,\s*')) AS split_values(value)
+        ) AS id_values
+        WHERE id_values.id_value IS NOT NULL;
+      END IF;
+    END IF;
+  EXCEPTION WHEN OTHERS THEN
+    v_ids := NULL;
+  END;
 
-  v_hr_issue text := null;
+  v_summary_stage := UPPER(NULLIF(BTRIM(COALESCE(v_filters->>'summary_stage', v_filters->>'summaryStage', '')), ''));
+  IF v_summary_stage = 'ALL' THEN v_summary_stage := NULL; END IF;
 
-  v_proc_status_raw text := null;
-  v_proc_list text[] := null;
+  v_tools_stage := UPPER(NULLIF(BTRIM(COALESCE(v_filters->>'tools_stage', v_filters->>'toolsStage', '')), ''));
+  IF v_tools_stage = 'ALL' THEN v_tools_stage := NULL; END IF;
 
-  v_status_code text := null;
-  v_issues_filter text := null;
+  v_issues_filter := UPPER(NULLIF(BTRIM(COALESCE(v_filters->>'issues_filter', v_filters->>'issuesFilter', '')), ''));
+  IF v_issues_filter = 'ALL' THEN v_issues_filter := NULL; END IF;
 
-  v_q text := null;
-  v_q_like text := null;
-  v_ids text[] := null;
-  v_ids_lits text := null;
+  v_route_type := UPPER(NULLIF(BTRIM(COALESCE(v_filters->>'route_type', v_filters->>'routeType', '')), ''));
+  IF v_route_type = 'ALL' THEN v_route_type := NULL; END IF;
 
-  -- dynamic sql
-  v_sql text := null;
-  v_proc_lits text := null;
+  v_sheet_scope := UPPER(NULLIF(BTRIM(COALESCE(v_filters->>'sheet_scope', v_filters->>'sheetScope', '')), ''));
+  IF v_sheet_scope = 'ALL' THEN v_sheet_scope := NULL; END IF;
 
-  -- view-column presence flags (avoid hard references to non-existent columns)
-  v_has_qr_token boolean := false;
-  v_has_qr_generated_at boolean := false;
-  v_has_qr_scanned_at boolean := false;
-begin
-  if p_filters is null then
-    p_filters := '{}'::jsonb;
-  end if;
+  v_qr_status := UPPER(NULLIF(BTRIM(COALESCE(v_filters->>'qr_status', v_filters->>'qrStatus', '')), ''));
+  IF v_qr_status = 'ALL' THEN v_qr_status := NULL; END IF;
 
-  -- ids
-  begin
-    if nullif(btrim(coalesce(p_filters->>'client_id','')), '') is not null then
-      v_client_id := (p_filters->>'client_id')::uuid;
-    end if;
-  exception when others then
-    v_client_id := null;
-  end;
+  BEGIN
+    IF NULLIF(BTRIM(COALESCE(v_filters->>'week_ending_from', v_filters->>'weekEndingFrom', '')), '') IS NOT NULL THEN
+      v_we_from := COALESCE(v_filters->>'week_ending_from', v_filters->>'weekEndingFrom')::date;
+    END IF;
+  EXCEPTION WHEN OTHERS THEN
+    v_we_from := NULL;
+  END;
 
-  begin
-    if nullif(btrim(coalesce(p_filters->>'candidate_id','')), '') is not null then
-      v_candidate_id := (p_filters->>'candidate_id')::uuid;
-    end if;
-  exception when others then
-    v_candidate_id := null;
-  end;
+  BEGIN
+    IF NULLIF(BTRIM(COALESCE(v_filters->>'week_ending_to', v_filters->>'weekEndingTo', '')), '') IS NOT NULL THEN
+      v_we_to := COALESCE(v_filters->>'week_ending_to', v_filters->>'weekEndingTo')::date;
+    END IF;
+  EXCEPTION WHEN OTHERS THEN
+    v_we_to := NULL;
+  END;
 
-  -- free-text q parity with visible summary list
-  v_q := nullif(
-    btrim(
-      coalesce(
-        p_filters->>'q',
-        p_filters->>'name',
-        ''
+  v_is_adjusted := LOWER(NULLIF(BTRIM(COALESCE(v_filters->>'is_adjusted', v_filters->>'isAdjusted', '')), ''));
+  v_is_qr := LOWER(NULLIF(BTRIM(COALESCE(v_filters->>'is_qr', v_filters->>'isQr', '')), ''));
+  v_needs_attention := LOWER(NULLIF(BTRIM(COALESCE(v_filters->>'needs_attention', v_filters->>'needsAttention', '')), ''));
+  v_candidate_paid := LOWER(NULLIF(BTRIM(COALESCE(v_filters->>'candidate_paid', v_filters->>'candidatePaid', '')), ''));
+  v_client_invoiced := LOWER(NULLIF(BTRIM(COALESCE(v_filters->>'client_invoiced', v_filters->>'clientInvoiced', '')), ''));
+
+  v_hr_issue := UPPER(NULLIF(BTRIM(COALESCE(v_filters->>'hr_issue', v_filters->>'hrIssue', '')), ''));
+  IF v_hr_issue = 'ALL' THEN v_hr_issue := NULL; END IF;
+
+  v_proc_status_raw := NULLIF(BTRIM(COALESCE(v_filters->>'processing_status', v_filters->>'processingStatus', '')), '');
+  IF v_proc_status_raw IS NOT NULL AND UPPER(v_proc_status_raw) <> 'ALL' THEN
+    SELECT ARRAY_AGG(status_values.status_value)
+    INTO v_proc_list
+    FROM (
+      SELECT NULLIF(BTRIM(UPPER(split_values.value)), '') AS status_value
+      FROM unnest(regexp_split_to_array(v_proc_status_raw, '\s*,\s*')) AS split_values(value)
+    ) AS status_values
+    WHERE status_values.status_value IS NOT NULL;
+  END IF;
+
+  v_status_code := UPPER(NULLIF(BTRIM(COALESCE(v_filters->>'status_code', v_filters->>'statusCode', '')), ''));
+  IF v_status_code = 'ALL' THEN v_status_code := NULL; END IF;
+
+  RETURN QUERY
+  WITH filtered_rows AS (
+    SELECT
+      summary_row.timesheet_id,
+      summary_row.contract_week_id,
+      COALESCE(summary_row.total_pay_ex_vat, 0::numeric) AS total_pay_ex_vat,
+      COALESCE(summary_row.margin_ex_vat, 0::numeric) AS margin_ex_vat
+    FROM public.timesheet_summary_lightweight_rows_v1(v_source_filters) AS summary_row
+    LEFT JOIN public.timesheets AS timesheet_row
+      ON timesheet_row.timesheet_id = summary_row.timesheet_id
+     AND timesheet_row.is_current = TRUE
+    WHERE
+
+      (
+        v_ids IS NULL
+        OR summary_row.timesheet_id::text = ANY(v_ids)
+        OR summary_row.contract_week_id::text = ANY(v_ids)
       )
-    ),
-    ''
-  );
+      AND (v_client_id IS NULL OR summary_row.client_id = v_client_id)
+      AND (v_candidate_id IS NULL OR summary_row.candidate_id = v_candidate_id)
+      AND (
+        v_q IS NULL
+        OR COALESCE(summary_row.candidate_name, '') ILIKE v_q_like ESCAPE '\'
+        OR COALESCE(summary_row.client_name, '') ILIKE v_q_like ESCAPE '\'
+        OR COALESCE(summary_row.booking_id, '') ILIKE v_q_like ESCAPE '\'
+        OR COALESCE(summary_row.occupant_key_norm, '') ILIKE v_q_like ESCAPE '\'
+        OR COALESCE(summary_row.hospital_norm, '') ILIKE v_q_like ESCAPE '\'
+      )
+      AND (v_summary_stage IS NULL OR UPPER(COALESCE(summary_row.summary_stage, '')) = v_summary_stage)
+      AND (v_tools_stage IS NULL OR UPPER(COALESCE(summary_row.tools_stage, '')) = v_tools_stage)
+      AND (v_we_from IS NULL OR summary_row.week_ending_date >= v_we_from)
+      AND (v_we_to IS NULL OR summary_row.week_ending_date <= v_we_to)
+      AND (
+        v_route_type IS NULL
+        OR (v_route_type = 'ELECTRONIC' AND UPPER(COALESCE(summary_row.route_type, '')) IN ('DAILY_ELECTRONIC', 'WEEKLY_ELECTRONIC'))
+        OR (v_route_type = 'MANUAL' AND (UPPER(COALESCE(summary_row.route_type, '')) IN ('DAILY_MANUAL', 'WEEKLY_MANUAL') OR UPPER(COALESCE(summary_row.route_family, '')) = 'MANUAL'))
+        OR (v_route_type = 'NHSP' AND (UPPER(COALESCE(summary_row.route_type, '')) IN ('WEEKLY_NHSP', 'WEEKLY_NHSP_ADJUSTMENT', 'NHSP') OR UPPER(COALESCE(summary_row.route_family, '')) = 'NHSP'))
+        OR (v_route_type = 'HEALTHROSTER' AND (UPPER(COALESCE(summary_row.route_type, '')) IN ('WEEKLY_HEALTHROSTER', 'HEALTHROSTER', 'HEALTHROSTER_DAILY') OR UPPER(COALESCE(summary_row.route_family, '')) = 'HEALTHROSTER'))
+        OR (v_route_type = 'QR' AND COALESCE(summary_row.is_qr, FALSE) = TRUE)
+        OR (v_route_type IN ('NO_TIMESHEET_REQUIRED', 'NO-TIMESHEET-REQUIRED') AND (UPPER(COALESCE(summary_row.route_type, '')) = 'NO_TIMESHEET_REQUIRED' OR UPPER(COALESCE(summary_row.route_family, '')) = 'NO_TIMESHEET_REQUIRED' OR COALESCE(summary_row.client_no_timesheet_required, FALSE) = TRUE))
+        OR UPPER(COALESCE(summary_row.route_type, '')) = v_route_type
+        OR UPPER(COALESCE(summary_row.route_family, '')) = v_route_type
+      )
+      AND (v_sheet_scope IS NULL OR UPPER(COALESCE(summary_row.sheet_scope, '')) = v_sheet_scope)
+      AND (v_qr_status IS NULL OR UPPER(COALESCE(summary_row.qr_status, '')) = v_qr_status)
+      AND (
+        v_is_adjusted IS NULL
+        OR (v_is_adjusted = 'true' AND COALESCE(summary_row.is_adjusted, FALSE) = TRUE)
+        OR (v_is_adjusted = 'false' AND COALESCE(summary_row.is_adjusted, FALSE) = FALSE)
+      )
+      AND (
+        v_is_qr IS NULL
+        OR (v_is_qr = 'true' AND COALESCE(summary_row.is_qr, FALSE) = TRUE)
+        OR (v_is_qr = 'false' AND COALESCE(summary_row.is_qr, FALSE) = FALSE)
+      )
+      AND (
+        v_needs_attention IS NULL
+        OR (v_needs_attention = 'true' AND COALESCE(summary_row.needs_attention, FALSE) = TRUE)
+        OR (v_needs_attention = 'false' AND COALESCE(summary_row.needs_attention, FALSE) = FALSE)
+      )
+      AND (
+        v_candidate_paid IS NULL
+        OR (v_candidate_paid = 'true' AND summary_row.pay_paid_at_utc IS NOT NULL)
+        OR (v_candidate_paid = 'false' AND summary_row.pay_paid_at_utc IS NULL)
+      )
+      AND (
+        v_client_invoiced IS NULL
+        OR (v_client_invoiced = 'true' AND COALESCE(summary_row.invoice_segments_locked, 0) > 0)
+        OR (v_client_invoiced = 'false' AND COALESCE(summary_row.invoice_segments_locked, 0) = 0)
+      )
+      AND (
+        v_hr_issue IS NULL
+        OR EXISTS (
+          SELECT 1
+          FROM unnest(COALESCE(summary_row.hr_crosscheck_issues, ARRAY[]::text[])) AS hr_issue_value(issue_code)
+          WHERE UPPER(COALESCE(hr_issue_value.issue_code, '')) = v_hr_issue
+        )
+      )
+      AND (
+        v_proc_list IS NULL
+        OR UPPER(COALESCE(summary_row.processing_status, '')) = ANY(v_proc_list)
+      )
+      AND (
+        v_issues_filter IS NULL
+        OR (
+          v_issues_filter = 'NO_MATCH_ID'
+          AND (summary_row.candidate_id IS NULL OR summary_row.client_id IS NULL)
+        )
+        OR (
+          v_issues_filter = 'RATE_MISSING'
+          AND (
+            COALESCE(summary_row.has_rate_issue, FALSE) = TRUE
+            OR EXISTS (
+              SELECT 1
+              FROM unnest(COALESCE(summary_row.issue_codes, ARRAY[]::text[])) AS issue_value(issue_code)
+              WHERE UPPER(COALESCE(issue_value.issue_code, '')) IN ('RATE', 'RATE MISSING')
+            )
+          )
+        )
+        OR (
+          v_issues_filter IN ('PAY_CHAN_MISS', 'PAY_CHANNEL_MISSING')
+          AND (
+            COALESCE(summary_row.has_pay_channel_issue, FALSE) = TRUE
+            OR EXISTS (
+              SELECT 1
+              FROM unnest(COALESCE(summary_row.issue_codes, ARRAY[]::text[])) AS issue_value(issue_code)
+              WHERE UPPER(COALESCE(issue_value.issue_code, '')) IN ('PAY CHANNEL', 'PAY CHANNEL MISSING')
+            )
+          )
+        )
+        OR (
+          v_issues_filter IN ('AWAITING_HR_VALIDATION', 'AWAITING_HR_VALIDATION_REQUIRED')
+          AND (
+            UPPER(COALESCE(summary_row.tools_stage, '')) = 'AWAITING_HR_VALIDATION'
+            OR EXISTS (
+              SELECT 1
+              FROM unnest(COALESCE(summary_row.issue_codes, ARRAY[]::text[])) AS issue_value(issue_code)
+              WHERE UPPER(COALESCE(issue_value.issue_code, '')) IN ('HR VALIDATION', 'AWAITING HR VALIDATION')
+            )
+          )
+        )
+        OR (
+          v_issues_filter IN ('HR_HOURS_MISMATCH', 'HOURS_MISMATCH_HR')
+          AND EXISTS (
+            SELECT 1
+            FROM unnest(COALESCE(summary_row.issue_codes, ARRAY[]::text[])) AS issue_value(issue_code)
+            WHERE UPPER(COALESCE(issue_value.issue_code, '')) IN ('HOURS MISMATCH HR', 'HOURS MISMATCH (HEALTHROSTER)')
+          )
+        )
+        OR (
+          v_issues_filter = 'HR_HOURS_MISSING'
+          AND EXISTS (
+            SELECT 1
+            FROM unnest(COALESCE(summary_row.issue_codes, ARRAY[]::text[])) AS issue_value(issue_code)
+            WHERE UPPER(COALESCE(issue_value.issue_code, '')) = 'HR HOURS MISSING'
+          )
+        )
+        OR (
+          v_issues_filter = 'DUPLICATE_CONTRACTS'
+          AND EXISTS (
+            SELECT 1
+            FROM unnest(COALESCE(summary_row.issue_codes, ARRAY[]::text[])) AS issue_value(issue_code)
+            WHERE UPPER(COALESCE(issue_value.issue_code, '')) = 'DUPLICATE CONTRACTS'
+          )
+        )
+        OR (
+          v_issues_filter = 'REFERENCE_MISSING'
+          AND EXISTS (
+            SELECT 1
+            FROM unnest(COALESCE(summary_row.issue_codes, ARRAY[]::text[])) AS issue_value(issue_code)
+            WHERE UPPER(COALESCE(issue_value.issue_code, '')) IN ('REFERENCE', 'REFERENCE MISSING')
+          )
+        )
+        OR (
+          v_issues_filter = 'VALIDATION'
+          AND EXISTS (
+            SELECT 1
+            FROM unnest(COALESCE(summary_row.issue_codes, ARRAY[]::text[])) AS issue_value(issue_code)
+            WHERE UPPER(COALESCE(issue_value.issue_code, '')) = 'VALIDATION'
+          )
+        )
+        OR (
+          v_issues_filter = 'AUTHORISATION'
+          AND EXISTS (
+            SELECT 1
+            FROM unnest(COALESCE(summary_row.issue_codes, ARRAY[]::text[])) AS issue_value(issue_code)
+            WHERE UPPER(COALESCE(issue_value.issue_code, '')) IN ('AUTHORISATION', 'AWAITING AUTHORISATION')
+          )
+        )
+        OR (
+          v_issues_filter = 'ON_HOLD'
+          AND EXISTS (
+            SELECT 1
+            FROM unnest(COALESCE(summary_row.issue_codes, ARRAY[]::text[])) AS issue_value(issue_code)
+            WHERE UPPER(COALESCE(issue_value.issue_code, '')) = 'ON HOLD'
+          )
+        )
+        OR (
+          v_issues_filter = 'REFS_PDF_INVALID'
+          AND EXISTS (
+            SELECT 1
+            FROM unnest(COALESCE(summary_row.issue_codes, ARRAY[]::text[])) AS issue_value(issue_code)
+            WHERE UPPER(COALESCE(issue_value.issue_code, '')) = 'REFS - TIMESHEET PDF INVALID'
+          )
+        )
+        OR (
+          v_issues_filter = 'QR_NOT_ISSUED'
+          AND summary_row.timesheet_id IS NOT NULL
+          AND UPPER(COALESCE(summary_row.qr_status, '')) = 'PENDING'
+          AND COALESCE(timesheet_row.qr_token, '') = ''
+          AND timesheet_row.qr_generated_at IS NULL
+        )
+        OR (
+          v_issues_filter IN ('QR_AWAITING_SIGNATURE', 'QR_ISSUED_AWAITING_SIGNATURE')
+          AND summary_row.timesheet_id IS NOT NULL
+          AND UPPER(COALESCE(summary_row.qr_status, '')) = 'PENDING'
+          AND COALESCE(timesheet_row.qr_token, '') <> ''
+          AND timesheet_row.qr_generated_at IS NOT NULL
+          AND timesheet_row.qr_scanned_at IS NULL
+        )
+      )
+      AND (
+        v_status_code IS NULL
+        OR (
+          v_status_code = 'NO_MATCH_ID'
+          AND (summary_row.candidate_id IS NULL OR summary_row.client_id IS NULL)
+        )
+        OR (v_status_code = 'RATE_MISSING' AND COALESCE(summary_row.has_rate_issue, FALSE) = TRUE)
+        OR (v_status_code = 'PAY_CHAN_MISS' AND COALESCE(summary_row.has_pay_channel_issue, FALSE) = TRUE)
+        OR (v_status_code = 'READY_FOR_HR' AND UPPER(COALESCE(summary_row.processing_status, '')) = 'READY_FOR_HR')
+        OR (v_status_code = 'READY_FOR_INV' AND UPPER(COALESCE(summary_row.processing_status, '')) = 'READY_FOR_INVOICE')
+        OR UPPER(COALESCE(summary_row.processing_status, '')) = v_status_code
+        OR UPPER(COALESCE(summary_row.summary_stage, '')) = v_status_code
+        OR UPPER(COALESCE(summary_row.tools_stage, '')) = v_status_code
+      )
 
-  if v_q is not null then
-    v_q_like :=
-      '%' ||
-      replace(
-        replace(
-          replace(v_q, E'\\', E'\\\\'),
-          '%',
-          E'\\%'
-        ),
-        '_',
-        E'\\_'
-      ) ||
-      '%';
-  end if;
+  )
+  SELECT
+    COUNT(*)::bigint AS count_all,
+    COALESCE(SUM(filtered_rows.total_pay_ex_vat), 0::numeric) AS total_pay_ex_vat_sum,
+    COALESCE(SUM(filtered_rows.margin_ex_vat), 0::numeric) AS margin_ex_vat_sum
+  FROM filtered_rows;
+END;
+$function$;
 
-  -- ids parity with visible summary list
-  begin
-    if p_filters ? 'ids' then
-      if jsonb_typeof(p_filters->'ids') = 'array' then
-        select array_agg(val)
-        into v_ids
-        from (
-          select distinct nullif(btrim(jv), '') as val
-          from jsonb_array_elements_text(p_filters->'ids') as t(jv)
-        ) s
-        where s.val is not null;
-      elsif nullif(btrim(coalesce(p_filters->>'ids', '')), '') is not null then
-        select array_agg(val)
-        into v_ids
-        from (
-          select distinct nullif(btrim(x), '') as val
-          from unnest(regexp_split_to_array(p_filters->>'ids', '\s*,\s*')) as u(x)
-        ) s
-        where s.val is not null;
-      end if;
-    end if;
-  exception when others then
-    v_ids := null;
-  end;
+CREATE OR REPLACE FUNCTION public.timesheet_list_totals(p_filters jsonb)
+RETURNS TABLE (
+  count_all bigint,
+  total_pay_ex_vat_sum numeric,
+  margin_ex_vat_sum numeric
+)
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path TO public
+AS $function$
+DECLARE
+  v_filters jsonb := COALESCE(p_filters, '{}'::jsonb);
+  v_source_filters jsonb := '{}'::jsonb;
 
-  v_summary_stage := nullif(btrim(coalesce(p_filters->>'summary_stage','')), '');
-  if v_summary_stage is not null and upper(v_summary_stage) = 'ALL' then
-    v_summary_stage := null;
-  end if;
+  v_client_id uuid := NULL;
+  v_candidate_id uuid := NULL;
+  v_summary_stage text := NULL;
+  v_tools_stage text := NULL;
+  v_route_type text := NULL;
+  v_sheet_scope text := NULL;
+  v_qr_status text := NULL;
+  v_we_from date := NULL;
+  v_we_to date := NULL;
+  v_is_adjusted text := NULL;
+  v_is_qr text := NULL;
+  v_needs_attention text := NULL;
+  v_candidate_paid text := NULL;
+  v_client_invoiced text := NULL;
+  v_hr_issue text := NULL;
+  v_proc_status_raw text := NULL;
+  v_proc_list text[] := NULL;
+  v_status_code text := NULL;
+  v_issues_filter text := NULL;
+  v_q text := NULL;
+  v_q_like text := NULL;
+  v_ids text[] := NULL;
+  v_uuid_re text := '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$';
+  v_has_client_filter boolean := FALSE;
+  v_has_candidate_filter boolean := FALSE;
+BEGIN
+  v_source_filters :=
+    v_filters
+    - 'q'
+    - 'query'
+    - 'name'
+    - 'client_id'
+    - 'clientId'
+    - 'candidate_id'
+    - 'candidateId'
+    - 'week_ending_from'
+    - 'weekEndingFrom'
+    - 'week_ending_to'
+    - 'weekEndingTo'
+    - 'route_type'
+    - 'routeType'
+    - 'issues_filter'
+    - 'issuesFilter'
+    - 'status_code'
+    - 'statusCode'
+    - 'summary_stage'
+    - 'summaryStage'
+    - 'client_invoiced'
+    - 'clientInvoiced'
+    - 'needs_attention'
+    - 'needsAttention'
+    || jsonb_build_object('disable_paging', TRUE, 'purpose', 'totals');
 
-  v_tools_stage := nullif(btrim(coalesce(p_filters->>'tools_stage','')), '');
-  if v_tools_stage is not null then
-    v_tools_stage := upper(v_tools_stage);
-  end if;
-  if v_tools_stage = 'ALL' then
-    v_tools_stage := null;
-  end if;
+  v_has_client_filter := NULLIF(BTRIM(COALESCE(v_filters->>'client_id', v_filters->>'clientId', '')), '') IS NOT NULL;
+  IF v_has_client_filter THEN
+    IF COALESCE(v_filters->>'client_id', v_filters->>'clientId') ~* v_uuid_re THEN
+      v_client_id := COALESCE(v_filters->>'client_id', v_filters->>'clientId')::uuid;
+    ELSE
+      RETURN;
+    END IF;
+  END IF;
 
-  v_issues_filter := nullif(btrim(coalesce(p_filters->>'issues_filter','')), '');
-  if v_issues_filter is not null then
-    v_issues_filter := upper(v_issues_filter);
-  end if;
-  if v_issues_filter = 'ALL' then
-    v_issues_filter := null;
-  end if;
+  v_has_candidate_filter := NULLIF(BTRIM(COALESCE(v_filters->>'candidate_id', v_filters->>'candidateId', '')), '') IS NOT NULL;
+  IF v_has_candidate_filter THEN
+    IF COALESCE(v_filters->>'candidate_id', v_filters->>'candidateId') ~* v_uuid_re THEN
+      v_candidate_id := COALESCE(v_filters->>'candidate_id', v_filters->>'candidateId')::uuid;
+    ELSE
+      RETURN;
+    END IF;
+  END IF;
 
-  v_route_type := nullif(btrim(coalesce(p_filters->>'route_type','')), '');
-  if v_route_type is not null then
-    v_route_type := upper(v_route_type);
-  end if;
-  if v_route_type = 'ALL' then
-    v_route_type := null;
-  end if;
+  v_q := NULLIF(BTRIM(COALESCE(v_filters->>'q', v_filters->>'query', v_filters->>'name', '')), '');
+  IF v_q IS NOT NULL THEN
+    v_q_like := '%' || REPLACE(REPLACE(REPLACE(v_q, E'\\', E'\\\\'), '%', E'\\%'), '_', E'\\_') || '%';
+  END IF;
 
-  v_sheet_scope := nullif(btrim(coalesce(p_filters->>'sheet_scope','')), '');
-  if v_sheet_scope is not null then
-    v_sheet_scope := upper(v_sheet_scope);
-  end if;
-  if v_sheet_scope = 'ALL' then
-    v_sheet_scope := null;
-  end if;
+  BEGIN
+    IF v_filters ? 'ids' THEN
+      IF jsonb_typeof(v_filters->'ids') = 'array' THEN
+        SELECT ARRAY_AGG(id_values.id_value)
+        INTO v_ids
+        FROM (
+          SELECT DISTINCT NULLIF(BTRIM(input_values.value), '') AS id_value
+          FROM jsonb_array_elements_text(v_filters->'ids') AS input_values(value)
+        ) AS id_values
+        WHERE id_values.id_value IS NOT NULL;
+      ELSIF NULLIF(BTRIM(COALESCE(v_filters->>'ids', '')), '') IS NOT NULL THEN
+        SELECT ARRAY_AGG(id_values.id_value)
+        INTO v_ids
+        FROM (
+          SELECT DISTINCT NULLIF(BTRIM(split_values.value), '') AS id_value
+          FROM unnest(regexp_split_to_array(v_filters->>'ids', '\s*,\s*')) AS split_values(value)
+        ) AS id_values
+        WHERE id_values.id_value IS NOT NULL;
+      END IF;
+    END IF;
+  EXCEPTION WHEN OTHERS THEN
+    v_ids := NULL;
+  END;
 
-  v_qr_status := nullif(btrim(coalesce(p_filters->>'qr_status','')), '');
-  if v_qr_status is not null then
-    v_qr_status := upper(v_qr_status);
-  end if;
+  v_summary_stage := UPPER(NULLIF(BTRIM(COALESCE(v_filters->>'summary_stage', v_filters->>'summaryStage', '')), ''));
+  IF v_summary_stage = 'ALL' THEN v_summary_stage := NULL; END IF;
 
-  begin
-    if nullif(btrim(coalesce(p_filters->>'week_ending_from','')), '') is not null then
-      v_we_from := (p_filters->>'week_ending_from')::date;
-    end if;
-  exception when others then
-    v_we_from := null;
-  end;
+  v_tools_stage := UPPER(NULLIF(BTRIM(COALESCE(v_filters->>'tools_stage', v_filters->>'toolsStage', '')), ''));
+  IF v_tools_stage = 'ALL' THEN v_tools_stage := NULL; END IF;
 
-  begin
-    if nullif(btrim(coalesce(p_filters->>'week_ending_to','')), '') is not null then
-      v_we_to := (p_filters->>'week_ending_to')::date;
-    end if;
-  exception when others then
-    v_we_to := null;
-  end;
+  v_issues_filter := UPPER(NULLIF(BTRIM(COALESCE(v_filters->>'issues_filter', v_filters->>'issuesFilter', '')), ''));
+  IF v_issues_filter = 'ALL' THEN v_issues_filter := NULL; END IF;
 
-  v_is_adjusted := nullif(btrim(coalesce(p_filters->>'is_adjusted','')), '');
-  v_is_qr := nullif(btrim(coalesce(p_filters->>'is_qr','')), '');
-  v_needs_attention := nullif(btrim(coalesce(p_filters->>'needs_attention','')), '');
+  v_route_type := UPPER(NULLIF(BTRIM(COALESCE(v_filters->>'route_type', v_filters->>'routeType', '')), ''));
+  IF v_route_type = 'ALL' THEN v_route_type := NULL; END IF;
 
-  v_candidate_paid := nullif(btrim(coalesce(p_filters->>'candidate_paid','')), '');
-  v_client_invoiced := nullif(btrim(coalesce(p_filters->>'client_invoiced','')), '');
+  v_sheet_scope := UPPER(NULLIF(BTRIM(COALESCE(v_filters->>'sheet_scope', v_filters->>'sheetScope', '')), ''));
+  IF v_sheet_scope = 'ALL' THEN v_sheet_scope := NULL; END IF;
 
-  v_hr_issue := nullif(btrim(coalesce(p_filters->>'hr_issue','')), '');
-  if v_hr_issue is not null then
-    v_hr_issue := upper(v_hr_issue);
-  end if;
+  v_qr_status := UPPER(NULLIF(BTRIM(COALESCE(v_filters->>'qr_status', v_filters->>'qrStatus', '')), ''));
+  IF v_qr_status = 'ALL' THEN v_qr_status := NULL; END IF;
 
-  v_proc_status_raw := nullif(btrim(coalesce(p_filters->>'processing_status','')), '');
-  if v_proc_status_raw is not null and upper(v_proc_status_raw) <> 'ALL' then
-    v_proc_list := array_remove(string_to_array(upper(v_proc_status_raw), ','), '');
-  else
-    v_proc_list := null;
-  end if;
+  BEGIN
+    IF NULLIF(BTRIM(COALESCE(v_filters->>'week_ending_from', v_filters->>'weekEndingFrom', '')), '') IS NOT NULL THEN
+      v_we_from := COALESCE(v_filters->>'week_ending_from', v_filters->>'weekEndingFrom')::date;
+    END IF;
+  EXCEPTION WHEN OTHERS THEN
+    v_we_from := NULL;
+  END;
 
-  v_status_code := nullif(btrim(coalesce(p_filters->>'status_code','')), '');
-  if v_status_code is not null then
-    v_status_code := upper(v_status_code);
-  end if;
+  BEGIN
+    IF NULLIF(BTRIM(COALESCE(v_filters->>'week_ending_to', v_filters->>'weekEndingTo', '')), '') IS NOT NULL THEN
+      v_we_to := COALESCE(v_filters->>'week_ending_to', v_filters->>'weekEndingTo')::date;
+    END IF;
+  EXCEPTION WHEN OTHERS THEN
+    v_we_to := NULL;
+  END;
 
-  -- Determine which QR columns exist on the view (prevents parse-time errors)
-  begin
-    select exists(
-      select 1
-      from information_schema.columns c
-      where c.table_schema = 'public'
-        and c.table_name = 'v_timesheets_summary'
-        and c.column_name = 'qr_token'
-    )
-    into v_has_qr_token;
+  v_is_adjusted := LOWER(NULLIF(BTRIM(COALESCE(v_filters->>'is_adjusted', v_filters->>'isAdjusted', '')), ''));
+  v_is_qr := LOWER(NULLIF(BTRIM(COALESCE(v_filters->>'is_qr', v_filters->>'isQr', '')), ''));
+  v_needs_attention := LOWER(NULLIF(BTRIM(COALESCE(v_filters->>'needs_attention', v_filters->>'needsAttention', '')), ''));
+  v_candidate_paid := LOWER(NULLIF(BTRIM(COALESCE(v_filters->>'candidate_paid', v_filters->>'candidatePaid', '')), ''));
+  v_client_invoiced := LOWER(NULLIF(BTRIM(COALESCE(v_filters->>'client_invoiced', v_filters->>'clientInvoiced', '')), ''));
 
-    select exists(
-      select 1
-      from information_schema.columns c
-      where c.table_schema = 'public'
-        and c.table_name = 'v_timesheets_summary'
-        and c.column_name in ('qr_generated_at', 'qr_generated_at_utc')
-    )
-    into v_has_qr_generated_at;
+  v_hr_issue := UPPER(NULLIF(BTRIM(COALESCE(v_filters->>'hr_issue', v_filters->>'hrIssue', '')), ''));
+  IF v_hr_issue = 'ALL' THEN v_hr_issue := NULL; END IF;
 
-    select exists(
-      select 1
-      from information_schema.columns c
-      where c.table_schema = 'public'
-        and c.table_name = 'v_timesheets_summary'
-        and c.column_name in ('qr_scanned_at', 'qr_scanned_at_utc')
-    )
-    into v_has_qr_scanned_at;
-  exception when others then
-    v_has_qr_token := false;
-    v_has_qr_generated_at := false;
-    v_has_qr_scanned_at := false;
-  end;
+  v_proc_status_raw := NULLIF(BTRIM(COALESCE(v_filters->>'processing_status', v_filters->>'processingStatus', '')), '');
+  IF v_proc_status_raw IS NOT NULL AND UPPER(v_proc_status_raw) <> 'ALL' THEN
+    SELECT ARRAY_AGG(status_values.status_value)
+    INTO v_proc_list
+    FROM (
+      SELECT NULLIF(BTRIM(UPPER(split_values.value)), '') AS status_value
+      FROM unnest(regexp_split_to_array(v_proc_status_raw, '\s*,\s*')) AS split_values(value)
+    ) AS status_values
+    WHERE status_values.status_value IS NOT NULL;
+  END IF;
 
-  v_sql := 'with base as (select * from public.v_timesheets_summary v where 1=1';
+  v_status_code := UPPER(NULLIF(BTRIM(COALESCE(v_filters->>'status_code', v_filters->>'statusCode', '')), ''));
+  IF v_status_code = 'ALL' THEN v_status_code := NULL; END IF;
 
-  if v_client_id is not null then
-    v_sql := v_sql || ' and v.client_id = ' || quote_literal(v_client_id::text) || '::uuid';
-  end if;
+  RETURN QUERY
+  WITH filtered_rows AS (
+    SELECT
+      summary_row.timesheet_id,
+      summary_row.contract_week_id,
+      COALESCE(summary_row.total_pay_ex_vat, 0::numeric) AS total_pay_ex_vat,
+      COALESCE(summary_row.margin_ex_vat, 0::numeric) AS margin_ex_vat
+    FROM public.timesheet_summary_lightweight_rows_v1(v_source_filters) AS summary_row
+    LEFT JOIN public.timesheets AS timesheet_row
+      ON timesheet_row.timesheet_id = summary_row.timesheet_id
+     AND timesheet_row.is_current = TRUE
+    WHERE
 
-  if v_candidate_id is not null then
-    v_sql := v_sql || ' and v.candidate_id = ' || quote_literal(v_candidate_id::text) || '::uuid';
-  end if;
+      (
+        v_ids IS NULL
+        OR summary_row.timesheet_id::text = ANY(v_ids)
+        OR summary_row.contract_week_id::text = ANY(v_ids)
+      )
+      AND (v_client_id IS NULL OR summary_row.client_id = v_client_id)
+      AND (v_candidate_id IS NULL OR summary_row.candidate_id = v_candidate_id)
+      AND (
+        v_q IS NULL
+        OR COALESCE(summary_row.candidate_name, '') ILIKE v_q_like ESCAPE '\'
+        OR COALESCE(summary_row.client_name, '') ILIKE v_q_like ESCAPE '\'
+        OR COALESCE(summary_row.booking_id, '') ILIKE v_q_like ESCAPE '\'
+        OR COALESCE(summary_row.occupant_key_norm, '') ILIKE v_q_like ESCAPE '\'
+        OR COALESCE(summary_row.hospital_norm, '') ILIKE v_q_like ESCAPE '\'
+      )
+      AND (v_summary_stage IS NULL OR UPPER(COALESCE(summary_row.summary_stage, '')) = v_summary_stage)
+      AND (v_tools_stage IS NULL OR UPPER(COALESCE(summary_row.tools_stage, '')) = v_tools_stage)
+      AND (v_we_from IS NULL OR summary_row.week_ending_date >= v_we_from)
+      AND (v_we_to IS NULL OR summary_row.week_ending_date <= v_we_to)
+      AND (
+        v_route_type IS NULL
+        OR (v_route_type = 'ELECTRONIC' AND UPPER(COALESCE(summary_row.route_type, '')) IN ('DAILY_ELECTRONIC', 'WEEKLY_ELECTRONIC'))
+        OR (v_route_type = 'MANUAL' AND (UPPER(COALESCE(summary_row.route_type, '')) IN ('DAILY_MANUAL', 'WEEKLY_MANUAL') OR UPPER(COALESCE(summary_row.route_family, '')) = 'MANUAL'))
+        OR (v_route_type = 'NHSP' AND (UPPER(COALESCE(summary_row.route_type, '')) IN ('WEEKLY_NHSP', 'WEEKLY_NHSP_ADJUSTMENT', 'NHSP') OR UPPER(COALESCE(summary_row.route_family, '')) = 'NHSP'))
+        OR (v_route_type = 'HEALTHROSTER' AND (UPPER(COALESCE(summary_row.route_type, '')) IN ('WEEKLY_HEALTHROSTER', 'HEALTHROSTER', 'HEALTHROSTER_DAILY') OR UPPER(COALESCE(summary_row.route_family, '')) = 'HEALTHROSTER'))
+        OR (v_route_type = 'QR' AND COALESCE(summary_row.is_qr, FALSE) = TRUE)
+        OR (v_route_type IN ('NO_TIMESHEET_REQUIRED', 'NO-TIMESHEET-REQUIRED') AND (UPPER(COALESCE(summary_row.route_type, '')) = 'NO_TIMESHEET_REQUIRED' OR UPPER(COALESCE(summary_row.route_family, '')) = 'NO_TIMESHEET_REQUIRED' OR COALESCE(summary_row.client_no_timesheet_required, FALSE) = TRUE))
+        OR UPPER(COALESCE(summary_row.route_type, '')) = v_route_type
+        OR UPPER(COALESCE(summary_row.route_family, '')) = v_route_type
+      )
+      AND (v_sheet_scope IS NULL OR UPPER(COALESCE(summary_row.sheet_scope, '')) = v_sheet_scope)
+      AND (v_qr_status IS NULL OR UPPER(COALESCE(summary_row.qr_status, '')) = v_qr_status)
+      AND (
+        v_is_adjusted IS NULL
+        OR (v_is_adjusted = 'true' AND COALESCE(summary_row.is_adjusted, FALSE) = TRUE)
+        OR (v_is_adjusted = 'false' AND COALESCE(summary_row.is_adjusted, FALSE) = FALSE)
+      )
+      AND (
+        v_is_qr IS NULL
+        OR (v_is_qr = 'true' AND COALESCE(summary_row.is_qr, FALSE) = TRUE)
+        OR (v_is_qr = 'false' AND COALESCE(summary_row.is_qr, FALSE) = FALSE)
+      )
+      AND (
+        v_needs_attention IS NULL
+        OR (v_needs_attention = 'true' AND COALESCE(summary_row.needs_attention, FALSE) = TRUE)
+        OR (v_needs_attention = 'false' AND COALESCE(summary_row.needs_attention, FALSE) = FALSE)
+      )
+      AND (
+        v_candidate_paid IS NULL
+        OR (v_candidate_paid = 'true' AND summary_row.pay_paid_at_utc IS NOT NULL)
+        OR (v_candidate_paid = 'false' AND summary_row.pay_paid_at_utc IS NULL)
+      )
+      AND (
+        v_client_invoiced IS NULL
+        OR (v_client_invoiced = 'true' AND COALESCE(summary_row.invoice_segments_locked, 0) > 0)
+        OR (v_client_invoiced = 'false' AND COALESCE(summary_row.invoice_segments_locked, 0) = 0)
+      )
+      AND (
+        v_hr_issue IS NULL
+        OR EXISTS (
+          SELECT 1
+          FROM unnest(COALESCE(summary_row.hr_crosscheck_issues, ARRAY[]::text[])) AS hr_issue_value(issue_code)
+          WHERE UPPER(COALESCE(hr_issue_value.issue_code, '')) = v_hr_issue
+        )
+      )
+      AND (
+        v_proc_list IS NULL
+        OR UPPER(COALESCE(summary_row.processing_status, '')) = ANY(v_proc_list)
+      )
+      AND (
+        v_issues_filter IS NULL
+        OR (
+          v_issues_filter = 'NO_MATCH_ID'
+          AND (summary_row.candidate_id IS NULL OR summary_row.client_id IS NULL)
+        )
+        OR (
+          v_issues_filter = 'RATE_MISSING'
+          AND (
+            COALESCE(summary_row.has_rate_issue, FALSE) = TRUE
+            OR EXISTS (
+              SELECT 1
+              FROM unnest(COALESCE(summary_row.issue_codes, ARRAY[]::text[])) AS issue_value(issue_code)
+              WHERE UPPER(COALESCE(issue_value.issue_code, '')) IN ('RATE', 'RATE MISSING')
+            )
+          )
+        )
+        OR (
+          v_issues_filter IN ('PAY_CHAN_MISS', 'PAY_CHANNEL_MISSING')
+          AND (
+            COALESCE(summary_row.has_pay_channel_issue, FALSE) = TRUE
+            OR EXISTS (
+              SELECT 1
+              FROM unnest(COALESCE(summary_row.issue_codes, ARRAY[]::text[])) AS issue_value(issue_code)
+              WHERE UPPER(COALESCE(issue_value.issue_code, '')) IN ('PAY CHANNEL', 'PAY CHANNEL MISSING')
+            )
+          )
+        )
+        OR (
+          v_issues_filter IN ('AWAITING_HR_VALIDATION', 'AWAITING_HR_VALIDATION_REQUIRED')
+          AND (
+            UPPER(COALESCE(summary_row.tools_stage, '')) = 'AWAITING_HR_VALIDATION'
+            OR EXISTS (
+              SELECT 1
+              FROM unnest(COALESCE(summary_row.issue_codes, ARRAY[]::text[])) AS issue_value(issue_code)
+              WHERE UPPER(COALESCE(issue_value.issue_code, '')) IN ('HR VALIDATION', 'AWAITING HR VALIDATION')
+            )
+          )
+        )
+        OR (
+          v_issues_filter IN ('HR_HOURS_MISMATCH', 'HOURS_MISMATCH_HR')
+          AND EXISTS (
+            SELECT 1
+            FROM unnest(COALESCE(summary_row.issue_codes, ARRAY[]::text[])) AS issue_value(issue_code)
+            WHERE UPPER(COALESCE(issue_value.issue_code, '')) IN ('HOURS MISMATCH HR', 'HOURS MISMATCH (HEALTHROSTER)')
+          )
+        )
+        OR (
+          v_issues_filter = 'HR_HOURS_MISSING'
+          AND EXISTS (
+            SELECT 1
+            FROM unnest(COALESCE(summary_row.issue_codes, ARRAY[]::text[])) AS issue_value(issue_code)
+            WHERE UPPER(COALESCE(issue_value.issue_code, '')) = 'HR HOURS MISSING'
+          )
+        )
+        OR (
+          v_issues_filter = 'DUPLICATE_CONTRACTS'
+          AND EXISTS (
+            SELECT 1
+            FROM unnest(COALESCE(summary_row.issue_codes, ARRAY[]::text[])) AS issue_value(issue_code)
+            WHERE UPPER(COALESCE(issue_value.issue_code, '')) = 'DUPLICATE CONTRACTS'
+          )
+        )
+        OR (
+          v_issues_filter = 'REFERENCE_MISSING'
+          AND EXISTS (
+            SELECT 1
+            FROM unnest(COALESCE(summary_row.issue_codes, ARRAY[]::text[])) AS issue_value(issue_code)
+            WHERE UPPER(COALESCE(issue_value.issue_code, '')) IN ('REFERENCE', 'REFERENCE MISSING')
+          )
+        )
+        OR (
+          v_issues_filter = 'VALIDATION'
+          AND EXISTS (
+            SELECT 1
+            FROM unnest(COALESCE(summary_row.issue_codes, ARRAY[]::text[])) AS issue_value(issue_code)
+            WHERE UPPER(COALESCE(issue_value.issue_code, '')) = 'VALIDATION'
+          )
+        )
+        OR (
+          v_issues_filter = 'AUTHORISATION'
+          AND EXISTS (
+            SELECT 1
+            FROM unnest(COALESCE(summary_row.issue_codes, ARRAY[]::text[])) AS issue_value(issue_code)
+            WHERE UPPER(COALESCE(issue_value.issue_code, '')) IN ('AUTHORISATION', 'AWAITING AUTHORISATION')
+          )
+        )
+        OR (
+          v_issues_filter = 'ON_HOLD'
+          AND EXISTS (
+            SELECT 1
+            FROM unnest(COALESCE(summary_row.issue_codes, ARRAY[]::text[])) AS issue_value(issue_code)
+            WHERE UPPER(COALESCE(issue_value.issue_code, '')) = 'ON HOLD'
+          )
+        )
+        OR (
+          v_issues_filter = 'REFS_PDF_INVALID'
+          AND EXISTS (
+            SELECT 1
+            FROM unnest(COALESCE(summary_row.issue_codes, ARRAY[]::text[])) AS issue_value(issue_code)
+            WHERE UPPER(COALESCE(issue_value.issue_code, '')) = 'REFS - TIMESHEET PDF INVALID'
+          )
+        )
+        OR (
+          v_issues_filter = 'QR_NOT_ISSUED'
+          AND summary_row.timesheet_id IS NOT NULL
+          AND UPPER(COALESCE(summary_row.qr_status, '')) = 'PENDING'
+          AND COALESCE(timesheet_row.qr_token, '') = ''
+          AND timesheet_row.qr_generated_at IS NULL
+        )
+        OR (
+          v_issues_filter IN ('QR_AWAITING_SIGNATURE', 'QR_ISSUED_AWAITING_SIGNATURE')
+          AND summary_row.timesheet_id IS NOT NULL
+          AND UPPER(COALESCE(summary_row.qr_status, '')) = 'PENDING'
+          AND COALESCE(timesheet_row.qr_token, '') <> ''
+          AND timesheet_row.qr_generated_at IS NOT NULL
+          AND timesheet_row.qr_scanned_at IS NULL
+        )
+      )
+      AND (
+        v_status_code IS NULL
+        OR (
+          v_status_code = 'NO_MATCH_ID'
+          AND (summary_row.candidate_id IS NULL OR summary_row.client_id IS NULL)
+        )
+        OR (v_status_code = 'RATE_MISSING' AND COALESCE(summary_row.has_rate_issue, FALSE) = TRUE)
+        OR (v_status_code = 'PAY_CHAN_MISS' AND COALESCE(summary_row.has_pay_channel_issue, FALSE) = TRUE)
+        OR (v_status_code = 'READY_FOR_HR' AND UPPER(COALESCE(summary_row.processing_status, '')) = 'READY_FOR_HR')
+        OR (v_status_code = 'READY_FOR_INV' AND UPPER(COALESCE(summary_row.processing_status, '')) = 'READY_FOR_INVOICE')
+        OR UPPER(COALESCE(summary_row.processing_status, '')) = v_status_code
+        OR UPPER(COALESCE(summary_row.summary_stage, '')) = v_status_code
+        OR UPPER(COALESCE(summary_row.tools_stage, '')) = v_status_code
+      )
 
-  if v_q is not null then
-    v_sql := v_sql ||
-      ' and (' ||
-      'coalesce(v.candidate_name, '''') ilike ' || quote_literal(v_q_like) || ' escape ''\''' ||
-      ' or coalesce(v.client_name, '''') ilike ' || quote_literal(v_q_like) || ' escape ''\''' ||
-      ' or coalesce(v.booking_id, '''') ilike ' || quote_literal(v_q_like) || ' escape ''\''' ||
-      ' or coalesce(v.occupant_key_norm, '''') ilike ' || quote_literal(v_q_like) || ' escape ''\''' ||
-      ' or coalesce(v.hospital_norm, '''') ilike ' || quote_literal(v_q_like) || ' escape ''\''' ||
-      ')';
-  end if;
-
-  if v_ids is not null and coalesce(array_length(v_ids, 1), 0) > 0 then
-    select string_agg(quote_literal(x), ',')
-    into v_ids_lits
-    from unnest(v_ids) as x;
-
-    if v_ids_lits is not null and btrim(v_ids_lits) <> '' then
-      v_sql := v_sql || ' and ('
-        || '(v.timesheet_id is not null and v.timesheet_id::text = any(ARRAY[' || v_ids_lits || ']::text[]))'
-        || ' or '
-        || '(v.contract_week_id is not null and v.contract_week_id::text = any(ARRAY[' || v_ids_lits || ']::text[]))'
-        || ')';
-    end if;
-  end if;
-
-  if v_summary_stage is not null then
-    v_sql := v_sql || ' and upper(coalesce(v.summary_stage::text, '''')) = ' || quote_literal(upper(v_summary_stage));
-  end if;
-
-  if v_tools_stage is not null then
-    v_sql := v_sql || ' and upper(coalesce(v.tools_stage::text, '''')) = ' || quote_literal(v_tools_stage);
-  end if;
-
-  if v_we_from is not null then
-    v_sql := v_sql || ' and v.week_ending_date >= ' || quote_literal(v_we_from::text) || '::date';
-  end if;
-
-  if v_we_to is not null then
-    v_sql := v_sql || ' and v.week_ending_date <= ' || quote_literal(v_we_to::text) || '::date';
-  end if;
-
-  -- route_type aggregation (matches backend mapping)
-  if v_route_type is not null then
-    if v_route_type = 'ELECTRONIC' then
-      v_sql := v_sql || ' and v.route_type in (''DAILY_ELECTRONIC'',''WEEKLY_ELECTRONIC'')';
-    elsif v_route_type = 'MANUAL' then
-      v_sql := v_sql || ' and v.route_type in (''DAILY_MANUAL'',''WEEKLY_MANUAL'')';
-    elsif v_route_type = 'NHSP' then
-      v_sql := v_sql || ' and v.route_type in (''WEEKLY_NHSP'',''WEEKLY_NHSP_ADJUSTMENT'')';
-    elsif v_route_type = 'HEALTHROSTER' then
-      v_sql := v_sql || ' and v.route_type = ''WEEKLY_HEALTHROSTER''';
-    elsif v_route_type = 'QR' then
-      v_sql := v_sql || ' and coalesce(v.is_qr,false) = true';
-    else
-      v_sql := v_sql || ' and v.route_type = ' || quote_literal(v_route_type);
-    end if;
-  end if;
-
-  if v_sheet_scope is not null then
-    v_sql := v_sql || ' and upper(coalesce(v.sheet_scope::text, '''')) = ' || quote_literal(v_sheet_scope);
-  end if;
-
-  if v_qr_status is not null then
-    v_sql := v_sql || ' and upper(coalesce(v.qr_status::text, '''')) = ' || quote_literal(v_qr_status);
-  end if;
-
-  if v_is_adjusted is not null then
-    if lower(v_is_adjusted) = 'true' then
-      v_sql := v_sql || ' and coalesce(v.is_adjusted,false) = true';
-    elsif lower(v_is_adjusted) = 'false' then
-      v_sql := v_sql || ' and coalesce(v.is_adjusted,false) = false';
-    end if;
-  end if;
-
-  if v_is_qr is not null then
-    if lower(v_is_qr) = 'true' then
-      v_sql := v_sql || ' and coalesce(v.is_qr,false) = true';
-    elsif lower(v_is_qr) = 'false' then
-      v_sql := v_sql || ' and coalesce(v.is_qr,false) = false';
-    end if;
-  end if;
-
-  if v_needs_attention is not null then
-    if lower(v_needs_attention) = 'true' then
-      v_sql := v_sql || ' and coalesce(v.needs_attention,false) = true';
-    elsif lower(v_needs_attention) = 'false' then
-      v_sql := v_sql || ' and coalesce(v.needs_attention,false) = false';
-    end if;
-  end if;
-
-  -- Candidate paid: include advanced/paid/partly paid by checking rollup settlement timestamp.
-  if v_candidate_paid is not null then
-    if lower(v_candidate_paid) = 'true' then
-      v_sql := v_sql || ' and v.pay_paid_at_utc is not null';
-    elsif lower(v_candidate_paid) = 'false' then
-      v_sql := v_sql || ' and v.pay_paid_at_utc is null';
-    end if;
-  end if;
-
-  if v_client_invoiced is not null then
-    if lower(v_client_invoiced) = 'true' then
-      v_sql := v_sql || ' and v.locked_by_invoice_id is not null';
-    elsif lower(v_client_invoiced) = 'false' then
-      v_sql := v_sql || ' and v.locked_by_invoice_id is null';
-    end if;
-  end if;
-
-  if v_hr_issue is not null then
-    v_sql := v_sql || ' and v.hr_crosscheck_issues is not null and ' || quote_literal(v_hr_issue) || ' = any(v.hr_crosscheck_issues)';
-  end if;
-
-  if v_proc_list is not null then
-    select string_agg(quote_literal(x), ',')
-    into v_proc_lits
-    from unnest(v_proc_list) as x;
-
-    if v_proc_lits is not null and btrim(v_proc_lits) <> '' then
-      v_sql := v_sql || ' and upper(coalesce(v.processing_status::text, '''')) = any(ARRAY[' || v_proc_lits || ']::text[])';
-    end if;
-  end if;
-
-  -- Issues filter (token-specific; avoids referencing columns that do not exist)
-  if v_issues_filter is not null then
-    if v_issues_filter = 'NO_MATCH_ID' then
-      v_sql := v_sql || ' and (v.candidate_id is null or v.client_id is null)';
-    elsif v_issues_filter = 'RATE_MISSING' then
-      v_sql := v_sql || ' and v.issue_codes @> array[''Rate'']::text[]';
-    elsif v_issues_filter in ('PAY_CHAN_MISS','PAY_CHANNEL_MISSING') then
-      v_sql := v_sql || ' and v.issue_codes @> array[''Pay channel'']::text[]';
-    elsif v_issues_filter in ('AWAITING_HR_VALIDATION','AWAITING_HR_VALIDATION_REQUIRED') then
-      v_sql := v_sql || ' and v.issue_codes @> array[''HR validation'']::text[]';
-    elsif v_issues_filter in ('HR_HOURS_MISMATCH','HOURS_MISMATCH_HR') then
-      v_sql := v_sql || ' and v.issue_codes @> array[''Hours mismatch HR'']::text[]';
-    elsif v_issues_filter = 'HR_HOURS_MISSING' then
-      v_sql := v_sql || ' and v.issue_codes @> array[''HR hours missing'']::text[]';
-    elsif v_issues_filter = 'DUPLICATE_CONTRACTS' then
-      v_sql := v_sql || ' and v.issue_codes @> array[''Duplicate contracts'']::text[]';
-    elsif v_issues_filter = 'REFERENCE_MISSING' then
-      v_sql := v_sql || ' and v.issue_codes @> array[''Reference'']::text[]';
-    elsif v_issues_filter = 'VALIDATION' then
-      v_sql := v_sql || ' and v.issue_codes @> array[''Validation'']::text[]';
-    elsif v_issues_filter = 'AUTHORISATION' then
-      v_sql := v_sql || ' and v.issue_codes @> array[''Authorisation'']::text[]';
-    elsif v_issues_filter = 'ON_HOLD' then
-      v_sql := v_sql || ' and v.issue_codes @> array[''On hold'']::text[]';
-    elsif v_issues_filter = 'REFS_PDF_INVALID' then
-      v_sql := v_sql || ' and v.issue_codes @> array[''Refs - Timesheet PDF invalid'']::text[]';
-
-    elsif v_issues_filter = 'QR_NOT_ISSUED' then
-      v_sql := v_sql || ' and v.timesheet_id is not null and upper(coalesce(v.qr_status::text, '''')) = ''PENDING''';
-
-      if v_has_qr_token then
-        v_sql := v_sql || ' and v.qr_token is null';
-      end if;
-
-      if v_has_qr_generated_at then
-        if exists (
-          select 1
-          from information_schema.columns c
-          where c.table_schema = 'public'
-            and c.table_name = 'v_timesheets_summary'
-            and c.column_name = 'qr_generated_at_utc'
-        ) then
-          v_sql := v_sql || ' and v.qr_generated_at_utc is null';
-        else
-          v_sql := v_sql || ' and v.qr_generated_at is null';
-        end if;
-      end if;
-
-    elsif v_issues_filter in ('QR_AWAITING_SIGNATURE','QR_ISSUED_AWAITING_SIGNATURE') then
-      v_sql := v_sql || ' and v.timesheet_id is not null and upper(coalesce(v.qr_status::text, '''')) = ''PENDING''';
-
-      if v_has_qr_token then
-        v_sql := v_sql || ' and v.qr_token is not null';
-      end if;
-
-      if v_has_qr_generated_at then
-        if exists (
-          select 1
-          from information_schema.columns c
-          where c.table_schema = 'public'
-            and c.table_name = 'v_timesheets_summary'
-            and c.column_name = 'qr_generated_at_utc'
-        ) then
-          v_sql := v_sql || ' and v.qr_generated_at_utc is not null';
-        else
-          v_sql := v_sql || ' and v.qr_generated_at is not null';
-        end if;
-      end if;
-
-      if v_has_qr_scanned_at then
-        if exists (
-          select 1
-          from information_schema.columns c
-          where c.table_schema = 'public'
-            and c.table_name = 'v_timesheets_summary'
-            and c.column_name = 'qr_scanned_at_utc'
-        ) then
-          v_sql := v_sql || ' and v.qr_scanned_at_utc is null';
-        else
-          v_sql := v_sql || ' and v.qr_scanned_at is null';
-        end if;
-      end if;
-    end if;
-  end if;
-
-  v_sql := v_sql || '), effective as (select * from base b where 1=1';
-
-  -- Mirror FE "status_code" filtering for totals
-  if v_status_code is not null and v_status_code <> 'ALL' then
-    if v_status_code = 'NO_MATCH_ID' then
-      v_sql := v_sql || ' and (b.candidate_id is null or b.client_id is null)';
-    elsif v_status_code = 'RATE_MISSING' then
-      v_sql := v_sql || ' and b.has_rate_issue = true';
-    elsif v_status_code = 'PAY_CHAN_MISS' then
-      v_sql := v_sql || ' and b.has_pay_channel_issue = true';
-    elsif v_status_code = 'READY_FOR_HR' then
-      v_sql := v_sql || ' and upper(coalesce(b.processing_status::text, '''')) = ''READY_FOR_HR''';
-    elsif v_status_code = 'READY_FOR_INV' then
-      v_sql := v_sql || ' and upper(coalesce(b.processing_status::text, '''')) = ''READY_FOR_INVOICE''';
-    end if;
-  end if;
-
-  v_sql := v_sql || ')
-    select count(*)::bigint as count_all,
-           coalesce(sum(coalesce(e.total_pay_ex_vat,0)),0)::numeric as total_pay_ex_vat_sum,
-           coalesce(sum(coalesce(e.margin_ex_vat,0)),0)::numeric as margin_ex_vat_sum
-    from effective e';
-
-  return query execute v_sql;
-end;
-$$;
+  )
+  SELECT
+    COUNT(*)::bigint AS count_all,
+    COALESCE(SUM(filtered_rows.total_pay_ex_vat), 0::numeric) AS total_pay_ex_vat_sum,
+    COALESCE(SUM(filtered_rows.margin_ex_vat), 0::numeric) AS margin_ex_vat_sum
+  FROM filtered_rows;
+END;
+$function$;
 
 
 
@@ -1929,292 +2237,403 @@ begin
   order by filtered.id;
 end;
 $$;
-create or replace function public.timesheet_list_ids(p_filters jsonb)
-returns table (
+
+
+CREATE OR REPLACE FUNCTION public.timesheet_list_ids(p_filters jsonb)
+RETURNS TABLE (
   id uuid
 )
-language plpgsql
-stable
-security definer
-set search_path = public
-as $$
-declare
-  v_client_id uuid := null;
-  v_candidate_id uuid := null;
-  v_summary_stage text := null;
-  v_tools_stage text := null;
-  v_route_type text := null;
-  v_sheet_scope text := null;
-  v_qr_status text := null;
-  v_we_from date := null;
-  v_we_to date := null;
-  v_is_adjusted text := null;
-  v_is_qr text := null;
-  v_needs_attention text := null;
-  v_candidate_paid text := null;
-  v_client_invoiced text := null;
-  v_hr_issue text := null;
-  v_proc_status_raw text := null;
-  v_proc_list text[] := null;
-  v_status_code text := null;
-  v_issues_filter text := null;
-  v_q text := null;
-  v_q_like text := null;
-  v_ids text[] := null;
-  v_ids_lits text := null;
-  v_sql text := null;
-  v_proc_lits text := null;
-  v_has_qr_token boolean := false;
-  v_has_qr_generated_at boolean := false;
-  v_has_qr_scanned_at boolean := false;
-begin
-  if p_filters is null then p_filters := '{}'::jsonb; end if;
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path TO public
+AS $function$
+DECLARE
+  v_filters jsonb := COALESCE(p_filters, '{}'::jsonb);
+  v_source_filters jsonb := '{}'::jsonb;
 
-  begin if nullif(btrim(coalesce(p_filters->>'client_id','')), '') is not null then v_client_id := (p_filters->>'client_id')::uuid; end if; exception when others then v_client_id := null; end;
-  begin if nullif(btrim(coalesce(p_filters->>'candidate_id','')), '') is not null then v_candidate_id := (p_filters->>'candidate_id')::uuid; end if; exception when others then v_candidate_id := null; end;
+  v_client_id uuid := NULL;
+  v_candidate_id uuid := NULL;
+  v_summary_stage text := NULL;
+  v_tools_stage text := NULL;
+  v_route_type text := NULL;
+  v_sheet_scope text := NULL;
+  v_qr_status text := NULL;
+  v_we_from date := NULL;
+  v_we_to date := NULL;
+  v_is_adjusted text := NULL;
+  v_is_qr text := NULL;
+  v_needs_attention text := NULL;
+  v_candidate_paid text := NULL;
+  v_client_invoiced text := NULL;
+  v_hr_issue text := NULL;
+  v_proc_status_raw text := NULL;
+  v_proc_list text[] := NULL;
+  v_status_code text := NULL;
+  v_issues_filter text := NULL;
+  v_q text := NULL;
+  v_q_like text := NULL;
+  v_ids text[] := NULL;
+  v_uuid_re text := '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$';
+  v_has_client_filter boolean := FALSE;
+  v_has_candidate_filter boolean := FALSE;
+BEGIN
+  v_source_filters :=
+    v_filters
+    - 'q'
+    - 'query'
+    - 'name'
+    - 'client_id'
+    - 'clientId'
+    - 'candidate_id'
+    - 'candidateId'
+    - 'week_ending_from'
+    - 'weekEndingFrom'
+    - 'week_ending_to'
+    - 'weekEndingTo'
+    - 'route_type'
+    - 'routeType'
+    - 'issues_filter'
+    - 'issuesFilter'
+    - 'status_code'
+    - 'statusCode'
+    - 'summary_stage'
+    - 'summaryStage'
+    - 'client_invoiced'
+    - 'clientInvoiced'
+    - 'needs_attention'
+    - 'needsAttention'
+    || jsonb_build_object('disable_paging', TRUE, 'purpose', 'membership');
 
-  v_q := nullif(btrim(coalesce(p_filters->>'q', coalesce(p_filters->>'name', ''))), '');
-  if v_q is not null then
-    v_q_like := '%' || replace(replace(replace(v_q, E'\\', E'\\\\'), '%', E'\\%'), '_', E'\\_') || '%';
-  end if;
+  v_has_client_filter := NULLIF(BTRIM(COALESCE(v_filters->>'client_id', v_filters->>'clientId', '')), '') IS NOT NULL;
+  IF v_has_client_filter THEN
+    IF COALESCE(v_filters->>'client_id', v_filters->>'clientId') ~* v_uuid_re THEN
+      v_client_id := COALESCE(v_filters->>'client_id', v_filters->>'clientId')::uuid;
+    ELSE
+      RETURN;
+    END IF;
+  END IF;
 
-  begin
-    if p_filters ? 'ids' then
-      if jsonb_typeof(p_filters->'ids') = 'array' then
-        select array_agg(val)
-        into v_ids
-        from (
-          select distinct nullif(btrim(e.value), '') as val
-          from jsonb_array_elements_text(p_filters->'ids') as e(value)
-        ) s
-        where s.val is not null;
-      elsif nullif(btrim(coalesce(p_filters->>'ids', '')), '') is not null then
-        select array_agg(val)
-        into v_ids
-        from (
-          select distinct nullif(btrim(x), '') as val
-          from unnest(regexp_split_to_array(p_filters->>'ids', '\s*,\s*')) as u(x)
-        ) s
-        where s.val is not null;
-      end if;
-    end if;
-  exception when others then
-    v_ids := null;
-  end;
+  v_has_candidate_filter := NULLIF(BTRIM(COALESCE(v_filters->>'candidate_id', v_filters->>'candidateId', '')), '') IS NOT NULL;
+  IF v_has_candidate_filter THEN
+    IF COALESCE(v_filters->>'candidate_id', v_filters->>'candidateId') ~* v_uuid_re THEN
+      v_candidate_id := COALESCE(v_filters->>'candidate_id', v_filters->>'candidateId')::uuid;
+    ELSE
+      RETURN;
+    END IF;
+  END IF;
 
-  v_summary_stage := nullif(btrim(coalesce(p_filters->>'summary_stage','')), '');
-  if v_summary_stage is not null and upper(v_summary_stage) = 'ALL' then v_summary_stage := null; end if;
+  v_q := NULLIF(BTRIM(COALESCE(v_filters->>'q', v_filters->>'query', v_filters->>'name', '')), '');
+  IF v_q IS NOT NULL THEN
+    v_q_like := '%' || REPLACE(REPLACE(REPLACE(v_q, E'\\', E'\\\\'), '%', E'\\%'), '_', E'\\_') || '%';
+  END IF;
 
-  v_tools_stage := nullif(btrim(coalesce(p_filters->>'tools_stage','')), '');
-  if v_tools_stage is not null then v_tools_stage := upper(v_tools_stage); end if;
-  if v_tools_stage = 'ALL' then v_tools_stage := null; end if;
+  BEGIN
+    IF v_filters ? 'ids' THEN
+      IF jsonb_typeof(v_filters->'ids') = 'array' THEN
+        SELECT ARRAY_AGG(id_values.id_value)
+        INTO v_ids
+        FROM (
+          SELECT DISTINCT NULLIF(BTRIM(input_values.value), '') AS id_value
+          FROM jsonb_array_elements_text(v_filters->'ids') AS input_values(value)
+        ) AS id_values
+        WHERE id_values.id_value IS NOT NULL;
+      ELSIF NULLIF(BTRIM(COALESCE(v_filters->>'ids', '')), '') IS NOT NULL THEN
+        SELECT ARRAY_AGG(id_values.id_value)
+        INTO v_ids
+        FROM (
+          SELECT DISTINCT NULLIF(BTRIM(split_values.value), '') AS id_value
+          FROM unnest(regexp_split_to_array(v_filters->>'ids', '\s*,\s*')) AS split_values(value)
+        ) AS id_values
+        WHERE id_values.id_value IS NOT NULL;
+      END IF;
+    END IF;
+  EXCEPTION WHEN OTHERS THEN
+    v_ids := NULL;
+  END;
 
-  v_issues_filter := nullif(btrim(coalesce(p_filters->>'issues_filter','')), '');
-  if v_issues_filter is not null then v_issues_filter := upper(v_issues_filter); end if;
-  if v_issues_filter = 'ALL' then v_issues_filter := null; end if;
+  v_summary_stage := UPPER(NULLIF(BTRIM(COALESCE(v_filters->>'summary_stage', v_filters->>'summaryStage', '')), ''));
+  IF v_summary_stage = 'ALL' THEN v_summary_stage := NULL; END IF;
 
-  v_route_type := nullif(btrim(coalesce(p_filters->>'route_type','')), '');
-  if v_route_type is not null then v_route_type := upper(v_route_type); end if;
-  if v_route_type = 'ALL' then v_route_type := null; end if;
+  v_tools_stage := UPPER(NULLIF(BTRIM(COALESCE(v_filters->>'tools_stage', v_filters->>'toolsStage', '')), ''));
+  IF v_tools_stage = 'ALL' THEN v_tools_stage := NULL; END IF;
 
-  v_sheet_scope := nullif(btrim(coalesce(p_filters->>'sheet_scope','')), '');
-  if v_sheet_scope is not null then v_sheet_scope := upper(v_sheet_scope); end if;
-  if v_sheet_scope = 'ALL' then v_sheet_scope := null; end if;
+  v_issues_filter := UPPER(NULLIF(BTRIM(COALESCE(v_filters->>'issues_filter', v_filters->>'issuesFilter', '')), ''));
+  IF v_issues_filter = 'ALL' THEN v_issues_filter := NULL; END IF;
 
-  v_qr_status := nullif(btrim(coalesce(p_filters->>'qr_status','')), '');
-  if v_qr_status is not null then v_qr_status := upper(v_qr_status); end if;
+  v_route_type := UPPER(NULLIF(BTRIM(COALESCE(v_filters->>'route_type', v_filters->>'routeType', '')), ''));
+  IF v_route_type = 'ALL' THEN v_route_type := NULL; END IF;
 
-  begin if nullif(btrim(coalesce(p_filters->>'week_ending_from','')), '') is not null then v_we_from := (p_filters->>'week_ending_from')::date; end if; exception when others then v_we_from := null; end;
-  begin if nullif(btrim(coalesce(p_filters->>'week_ending_to','')), '') is not null then v_we_to := (p_filters->>'week_ending_to')::date; end if; exception when others then v_we_to := null; end;
+  v_sheet_scope := UPPER(NULLIF(BTRIM(COALESCE(v_filters->>'sheet_scope', v_filters->>'sheetScope', '')), ''));
+  IF v_sheet_scope = 'ALL' THEN v_sheet_scope := NULL; END IF;
 
-  v_is_adjusted := nullif(btrim(coalesce(p_filters->>'is_adjusted','')), '');
-  v_is_qr := nullif(btrim(coalesce(p_filters->>'is_qr','')), '');
-  v_needs_attention := nullif(btrim(coalesce(p_filters->>'needs_attention','')), '');
-  v_candidate_paid := nullif(btrim(coalesce(p_filters->>'candidate_paid','')), '');
-  v_client_invoiced := nullif(btrim(coalesce(p_filters->>'client_invoiced','')), '');
+  v_qr_status := UPPER(NULLIF(BTRIM(COALESCE(v_filters->>'qr_status', v_filters->>'qrStatus', '')), ''));
+  IF v_qr_status = 'ALL' THEN v_qr_status := NULL; END IF;
 
-  v_hr_issue := nullif(btrim(coalesce(p_filters->>'hr_issue','')), '');
-  if v_hr_issue is not null then v_hr_issue := upper(v_hr_issue); end if;
+  BEGIN
+    IF NULLIF(BTRIM(COALESCE(v_filters->>'week_ending_from', v_filters->>'weekEndingFrom', '')), '') IS NOT NULL THEN
+      v_we_from := COALESCE(v_filters->>'week_ending_from', v_filters->>'weekEndingFrom')::date;
+    END IF;
+  EXCEPTION WHEN OTHERS THEN
+    v_we_from := NULL;
+  END;
 
-  v_proc_status_raw := nullif(btrim(coalesce(p_filters->>'processing_status','')), '');
-  if v_proc_status_raw is not null and upper(v_proc_status_raw) <> 'ALL' then
-    v_proc_list := array_remove(string_to_array(upper(v_proc_status_raw), ','), '');
-  else
-    v_proc_list := null;
-  end if;
+  BEGIN
+    IF NULLIF(BTRIM(COALESCE(v_filters->>'week_ending_to', v_filters->>'weekEndingTo', '')), '') IS NOT NULL THEN
+      v_we_to := COALESCE(v_filters->>'week_ending_to', v_filters->>'weekEndingTo')::date;
+    END IF;
+  EXCEPTION WHEN OTHERS THEN
+    v_we_to := NULL;
+  END;
 
-  v_status_code := nullif(btrim(coalesce(p_filters->>'status_code','')), '');
-  if v_status_code is not null then v_status_code := upper(v_status_code); end if;
+  v_is_adjusted := LOWER(NULLIF(BTRIM(COALESCE(v_filters->>'is_adjusted', v_filters->>'isAdjusted', '')), ''));
+  v_is_qr := LOWER(NULLIF(BTRIM(COALESCE(v_filters->>'is_qr', v_filters->>'isQr', '')), ''));
+  v_needs_attention := LOWER(NULLIF(BTRIM(COALESCE(v_filters->>'needs_attention', v_filters->>'needsAttention', '')), ''));
+  v_candidate_paid := LOWER(NULLIF(BTRIM(COALESCE(v_filters->>'candidate_paid', v_filters->>'candidatePaid', '')), ''));
+  v_client_invoiced := LOWER(NULLIF(BTRIM(COALESCE(v_filters->>'client_invoiced', v_filters->>'clientInvoiced', '')), ''));
 
-  begin
-    select exists(select 1 from information_schema.columns c where c.table_schema='public' and c.table_name='v_timesheets_summary' and c.column_name='qr_token') into v_has_qr_token;
-    select exists(select 1 from information_schema.columns c where c.table_schema='public' and c.table_name='v_timesheets_summary' and c.column_name in ('qr_generated_at','qr_generated_at_utc')) into v_has_qr_generated_at;
-    select exists(select 1 from information_schema.columns c where c.table_schema='public' and c.table_name='v_timesheets_summary' and c.column_name in ('qr_scanned_at','qr_scanned_at_utc')) into v_has_qr_scanned_at;
-  exception when others then
-    v_has_qr_token := false;
-    v_has_qr_generated_at := false;
-    v_has_qr_scanned_at := false;
-  end;
+  v_hr_issue := UPPER(NULLIF(BTRIM(COALESCE(v_filters->>'hr_issue', v_filters->>'hrIssue', '')), ''));
+  IF v_hr_issue = 'ALL' THEN v_hr_issue := NULL; END IF;
 
-  v_sql := 'with base as (select * from public.v_timesheets_summary v where 1=1';
+  v_proc_status_raw := NULLIF(BTRIM(COALESCE(v_filters->>'processing_status', v_filters->>'processingStatus', '')), '');
+  IF v_proc_status_raw IS NOT NULL AND UPPER(v_proc_status_raw) <> 'ALL' THEN
+    SELECT ARRAY_AGG(status_values.status_value)
+    INTO v_proc_list
+    FROM (
+      SELECT NULLIF(BTRIM(UPPER(split_values.value)), '') AS status_value
+      FROM unnest(regexp_split_to_array(v_proc_status_raw, '\s*,\s*')) AS split_values(value)
+    ) AS status_values
+    WHERE status_values.status_value IS NOT NULL;
+  END IF;
 
-  if v_client_id is not null then
-    v_sql := v_sql || ' and v.client_id = ' || quote_literal(v_client_id::text) || '::uuid';
-  end if;
-  if v_candidate_id is not null then
-    v_sql := v_sql || ' and v.candidate_id = ' || quote_literal(v_candidate_id::text) || '::uuid';
-  end if;
-  if v_q is not null then
-    v_sql := v_sql || ' and ('
-      || 'coalesce(v.candidate_name, '''') ilike ' || quote_literal(v_q_like) || ' escape ''\\'''
-      || ' or coalesce(v.client_name, '''') ilike ' || quote_literal(v_q_like) || ' escape ''\\'''
-      || ' or coalesce(v.booking_id, '''') ilike ' || quote_literal(v_q_like) || ' escape ''\\'''
-      || ' or coalesce(v.occupant_key_norm, '''') ilike ' || quote_literal(v_q_like) || ' escape ''\\'''
-      || ' or coalesce(v.hospital_norm, '''') ilike ' || quote_literal(v_q_like) || ' escape ''\\'''
-      || ')';
-  end if;
-  if v_ids is not null and coalesce(array_length(v_ids,1),0) > 0 then
-    select string_agg(quote_literal(x), ',') into v_ids_lits from unnest(v_ids) as x;
-    if v_ids_lits is not null and btrim(v_ids_lits) <> '' then
-      v_sql := v_sql || ' and ((v.timesheet_id is not null and v.timesheet_id::text = any(ARRAY[' || v_ids_lits || ']::text[])) or (v.contract_week_id is not null and v.contract_week_id::text = any(ARRAY[' || v_ids_lits || ']::text[])))';
-    end if;
-  end if;
-  if v_summary_stage is not null then v_sql := v_sql || ' and upper(coalesce(v.summary_stage::text, '''')) = ' || quote_literal(upper(v_summary_stage)); end if;
-  if v_tools_stage is not null then v_sql := v_sql || ' and upper(coalesce(v.tools_stage::text, '''')) = ' || quote_literal(v_tools_stage); end if;
-  if v_we_from is not null then v_sql := v_sql || ' and v.week_ending_date >= ' || quote_literal(v_we_from::text) || '::date'; end if;
-  if v_we_to is not null then v_sql := v_sql || ' and v.week_ending_date <= ' || quote_literal(v_we_to::text) || '::date'; end if;
+  v_status_code := UPPER(NULLIF(BTRIM(COALESCE(v_filters->>'status_code', v_filters->>'statusCode', '')), ''));
+  IF v_status_code = 'ALL' THEN v_status_code := NULL; END IF;
 
-  if v_route_type is not null then
-    if v_route_type = 'ELECTRONIC' then
-      v_sql := v_sql || ' and v.route_type in (''DAILY_ELECTRONIC'',''WEEKLY_ELECTRONIC'')';
-    elsif v_route_type = 'MANUAL' then
-      v_sql := v_sql || ' and v.route_type in (''DAILY_MANUAL'',''WEEKLY_MANUAL'')';
-    elsif v_route_type = 'NHSP' then
-      v_sql := v_sql || ' and v.route_type in (''WEEKLY_NHSP'',''WEEKLY_NHSP_ADJUSTMENT'')';
-    elsif v_route_type = 'HEALTHROSTER' then
-      v_sql := v_sql || ' and v.route_type = ''WEEKLY_HEALTHROSTER''';
-    elsif v_route_type = 'QR' then
-      v_sql := v_sql || ' and coalesce(v.is_qr,false) = true';
-    else
-      v_sql := v_sql || ' and v.route_type = ' || quote_literal(v_route_type);
-    end if;
-  end if;
+  RETURN QUERY
+  WITH filtered_rows AS (
+    SELECT
+      COALESCE(summary_row.timesheet_id, summary_row.contract_week_id) AS row_id
+    FROM public.timesheet_summary_lightweight_rows_v1(v_source_filters) AS summary_row
+    LEFT JOIN public.timesheets AS timesheet_row
+      ON timesheet_row.timesheet_id = summary_row.timesheet_id
+     AND timesheet_row.is_current = TRUE
+    WHERE
 
-  if v_sheet_scope is not null then v_sql := v_sql || ' and upper(coalesce(v.sheet_scope::text, '''')) = ' || quote_literal(v_sheet_scope); end if;
-  if v_qr_status is not null then v_sql := v_sql || ' and upper(coalesce(v.qr_status::text, '''')) = ' || quote_literal(v_qr_status); end if;
+      (
+        v_ids IS NULL
+        OR summary_row.timesheet_id::text = ANY(v_ids)
+        OR summary_row.contract_week_id::text = ANY(v_ids)
+      )
+      AND (v_client_id IS NULL OR summary_row.client_id = v_client_id)
+      AND (v_candidate_id IS NULL OR summary_row.candidate_id = v_candidate_id)
+      AND (
+        v_q IS NULL
+        OR COALESCE(summary_row.candidate_name, '') ILIKE v_q_like ESCAPE '\'
+        OR COALESCE(summary_row.client_name, '') ILIKE v_q_like ESCAPE '\'
+        OR COALESCE(summary_row.booking_id, '') ILIKE v_q_like ESCAPE '\'
+        OR COALESCE(summary_row.occupant_key_norm, '') ILIKE v_q_like ESCAPE '\'
+        OR COALESCE(summary_row.hospital_norm, '') ILIKE v_q_like ESCAPE '\'
+      )
+      AND (v_summary_stage IS NULL OR UPPER(COALESCE(summary_row.summary_stage, '')) = v_summary_stage)
+      AND (v_tools_stage IS NULL OR UPPER(COALESCE(summary_row.tools_stage, '')) = v_tools_stage)
+      AND (v_we_from IS NULL OR summary_row.week_ending_date >= v_we_from)
+      AND (v_we_to IS NULL OR summary_row.week_ending_date <= v_we_to)
+      AND (
+        v_route_type IS NULL
+        OR (v_route_type = 'ELECTRONIC' AND UPPER(COALESCE(summary_row.route_type, '')) IN ('DAILY_ELECTRONIC', 'WEEKLY_ELECTRONIC'))
+        OR (v_route_type = 'MANUAL' AND (UPPER(COALESCE(summary_row.route_type, '')) IN ('DAILY_MANUAL', 'WEEKLY_MANUAL') OR UPPER(COALESCE(summary_row.route_family, '')) = 'MANUAL'))
+        OR (v_route_type = 'NHSP' AND (UPPER(COALESCE(summary_row.route_type, '')) IN ('WEEKLY_NHSP', 'WEEKLY_NHSP_ADJUSTMENT', 'NHSP') OR UPPER(COALESCE(summary_row.route_family, '')) = 'NHSP'))
+        OR (v_route_type = 'HEALTHROSTER' AND (UPPER(COALESCE(summary_row.route_type, '')) IN ('WEEKLY_HEALTHROSTER', 'HEALTHROSTER', 'HEALTHROSTER_DAILY') OR UPPER(COALESCE(summary_row.route_family, '')) = 'HEALTHROSTER'))
+        OR (v_route_type = 'QR' AND COALESCE(summary_row.is_qr, FALSE) = TRUE)
+        OR (v_route_type IN ('NO_TIMESHEET_REQUIRED', 'NO-TIMESHEET-REQUIRED') AND (UPPER(COALESCE(summary_row.route_type, '')) = 'NO_TIMESHEET_REQUIRED' OR UPPER(COALESCE(summary_row.route_family, '')) = 'NO_TIMESHEET_REQUIRED' OR COALESCE(summary_row.client_no_timesheet_required, FALSE) = TRUE))
+        OR UPPER(COALESCE(summary_row.route_type, '')) = v_route_type
+        OR UPPER(COALESCE(summary_row.route_family, '')) = v_route_type
+      )
+      AND (v_sheet_scope IS NULL OR UPPER(COALESCE(summary_row.sheet_scope, '')) = v_sheet_scope)
+      AND (v_qr_status IS NULL OR UPPER(COALESCE(summary_row.qr_status, '')) = v_qr_status)
+      AND (
+        v_is_adjusted IS NULL
+        OR (v_is_adjusted = 'true' AND COALESCE(summary_row.is_adjusted, FALSE) = TRUE)
+        OR (v_is_adjusted = 'false' AND COALESCE(summary_row.is_adjusted, FALSE) = FALSE)
+      )
+      AND (
+        v_is_qr IS NULL
+        OR (v_is_qr = 'true' AND COALESCE(summary_row.is_qr, FALSE) = TRUE)
+        OR (v_is_qr = 'false' AND COALESCE(summary_row.is_qr, FALSE) = FALSE)
+      )
+      AND (
+        v_needs_attention IS NULL
+        OR (v_needs_attention = 'true' AND COALESCE(summary_row.needs_attention, FALSE) = TRUE)
+        OR (v_needs_attention = 'false' AND COALESCE(summary_row.needs_attention, FALSE) = FALSE)
+      )
+      AND (
+        v_candidate_paid IS NULL
+        OR (v_candidate_paid = 'true' AND summary_row.pay_paid_at_utc IS NOT NULL)
+        OR (v_candidate_paid = 'false' AND summary_row.pay_paid_at_utc IS NULL)
+      )
+      AND (
+        v_client_invoiced IS NULL
+        OR (v_client_invoiced = 'true' AND COALESCE(summary_row.invoice_segments_locked, 0) > 0)
+        OR (v_client_invoiced = 'false' AND COALESCE(summary_row.invoice_segments_locked, 0) = 0)
+      )
+      AND (
+        v_hr_issue IS NULL
+        OR EXISTS (
+          SELECT 1
+          FROM unnest(COALESCE(summary_row.hr_crosscheck_issues, ARRAY[]::text[])) AS hr_issue_value(issue_code)
+          WHERE UPPER(COALESCE(hr_issue_value.issue_code, '')) = v_hr_issue
+        )
+      )
+      AND (
+        v_proc_list IS NULL
+        OR UPPER(COALESCE(summary_row.processing_status, '')) = ANY(v_proc_list)
+      )
+      AND (
+        v_issues_filter IS NULL
+        OR (
+          v_issues_filter = 'NO_MATCH_ID'
+          AND (summary_row.candidate_id IS NULL OR summary_row.client_id IS NULL)
+        )
+        OR (
+          v_issues_filter = 'RATE_MISSING'
+          AND (
+            COALESCE(summary_row.has_rate_issue, FALSE) = TRUE
+            OR EXISTS (
+              SELECT 1
+              FROM unnest(COALESCE(summary_row.issue_codes, ARRAY[]::text[])) AS issue_value(issue_code)
+              WHERE UPPER(COALESCE(issue_value.issue_code, '')) IN ('RATE', 'RATE MISSING')
+            )
+          )
+        )
+        OR (
+          v_issues_filter IN ('PAY_CHAN_MISS', 'PAY_CHANNEL_MISSING')
+          AND (
+            COALESCE(summary_row.has_pay_channel_issue, FALSE) = TRUE
+            OR EXISTS (
+              SELECT 1
+              FROM unnest(COALESCE(summary_row.issue_codes, ARRAY[]::text[])) AS issue_value(issue_code)
+              WHERE UPPER(COALESCE(issue_value.issue_code, '')) IN ('PAY CHANNEL', 'PAY CHANNEL MISSING')
+            )
+          )
+        )
+        OR (
+          v_issues_filter IN ('AWAITING_HR_VALIDATION', 'AWAITING_HR_VALIDATION_REQUIRED')
+          AND (
+            UPPER(COALESCE(summary_row.tools_stage, '')) = 'AWAITING_HR_VALIDATION'
+            OR EXISTS (
+              SELECT 1
+              FROM unnest(COALESCE(summary_row.issue_codes, ARRAY[]::text[])) AS issue_value(issue_code)
+              WHERE UPPER(COALESCE(issue_value.issue_code, '')) IN ('HR VALIDATION', 'AWAITING HR VALIDATION')
+            )
+          )
+        )
+        OR (
+          v_issues_filter IN ('HR_HOURS_MISMATCH', 'HOURS_MISMATCH_HR')
+          AND EXISTS (
+            SELECT 1
+            FROM unnest(COALESCE(summary_row.issue_codes, ARRAY[]::text[])) AS issue_value(issue_code)
+            WHERE UPPER(COALESCE(issue_value.issue_code, '')) IN ('HOURS MISMATCH HR', 'HOURS MISMATCH (HEALTHROSTER)')
+          )
+        )
+        OR (
+          v_issues_filter = 'HR_HOURS_MISSING'
+          AND EXISTS (
+            SELECT 1
+            FROM unnest(COALESCE(summary_row.issue_codes, ARRAY[]::text[])) AS issue_value(issue_code)
+            WHERE UPPER(COALESCE(issue_value.issue_code, '')) = 'HR HOURS MISSING'
+          )
+        )
+        OR (
+          v_issues_filter = 'DUPLICATE_CONTRACTS'
+          AND EXISTS (
+            SELECT 1
+            FROM unnest(COALESCE(summary_row.issue_codes, ARRAY[]::text[])) AS issue_value(issue_code)
+            WHERE UPPER(COALESCE(issue_value.issue_code, '')) = 'DUPLICATE CONTRACTS'
+          )
+        )
+        OR (
+          v_issues_filter = 'REFERENCE_MISSING'
+          AND EXISTS (
+            SELECT 1
+            FROM unnest(COALESCE(summary_row.issue_codes, ARRAY[]::text[])) AS issue_value(issue_code)
+            WHERE UPPER(COALESCE(issue_value.issue_code, '')) IN ('REFERENCE', 'REFERENCE MISSING')
+          )
+        )
+        OR (
+          v_issues_filter = 'VALIDATION'
+          AND EXISTS (
+            SELECT 1
+            FROM unnest(COALESCE(summary_row.issue_codes, ARRAY[]::text[])) AS issue_value(issue_code)
+            WHERE UPPER(COALESCE(issue_value.issue_code, '')) = 'VALIDATION'
+          )
+        )
+        OR (
+          v_issues_filter = 'AUTHORISATION'
+          AND EXISTS (
+            SELECT 1
+            FROM unnest(COALESCE(summary_row.issue_codes, ARRAY[]::text[])) AS issue_value(issue_code)
+            WHERE UPPER(COALESCE(issue_value.issue_code, '')) IN ('AUTHORISATION', 'AWAITING AUTHORISATION')
+          )
+        )
+        OR (
+          v_issues_filter = 'ON_HOLD'
+          AND EXISTS (
+            SELECT 1
+            FROM unnest(COALESCE(summary_row.issue_codes, ARRAY[]::text[])) AS issue_value(issue_code)
+            WHERE UPPER(COALESCE(issue_value.issue_code, '')) = 'ON HOLD'
+          )
+        )
+        OR (
+          v_issues_filter = 'REFS_PDF_INVALID'
+          AND EXISTS (
+            SELECT 1
+            FROM unnest(COALESCE(summary_row.issue_codes, ARRAY[]::text[])) AS issue_value(issue_code)
+            WHERE UPPER(COALESCE(issue_value.issue_code, '')) = 'REFS - TIMESHEET PDF INVALID'
+          )
+        )
+        OR (
+          v_issues_filter = 'QR_NOT_ISSUED'
+          AND summary_row.timesheet_id IS NOT NULL
+          AND UPPER(COALESCE(summary_row.qr_status, '')) = 'PENDING'
+          AND COALESCE(timesheet_row.qr_token, '') = ''
+          AND timesheet_row.qr_generated_at IS NULL
+        )
+        OR (
+          v_issues_filter IN ('QR_AWAITING_SIGNATURE', 'QR_ISSUED_AWAITING_SIGNATURE')
+          AND summary_row.timesheet_id IS NOT NULL
+          AND UPPER(COALESCE(summary_row.qr_status, '')) = 'PENDING'
+          AND COALESCE(timesheet_row.qr_token, '') <> ''
+          AND timesheet_row.qr_generated_at IS NOT NULL
+          AND timesheet_row.qr_scanned_at IS NULL
+        )
+      )
+      AND (
+        v_status_code IS NULL
+        OR (
+          v_status_code = 'NO_MATCH_ID'
+          AND (summary_row.candidate_id IS NULL OR summary_row.client_id IS NULL)
+        )
+        OR (v_status_code = 'RATE_MISSING' AND COALESCE(summary_row.has_rate_issue, FALSE) = TRUE)
+        OR (v_status_code = 'PAY_CHAN_MISS' AND COALESCE(summary_row.has_pay_channel_issue, FALSE) = TRUE)
+        OR (v_status_code = 'READY_FOR_HR' AND UPPER(COALESCE(summary_row.processing_status, '')) = 'READY_FOR_HR')
+        OR (v_status_code = 'READY_FOR_INV' AND UPPER(COALESCE(summary_row.processing_status, '')) = 'READY_FOR_INVOICE')
+        OR UPPER(COALESCE(summary_row.processing_status, '')) = v_status_code
+        OR UPPER(COALESCE(summary_row.summary_stage, '')) = v_status_code
+        OR UPPER(COALESCE(summary_row.tools_stage, '')) = v_status_code
+      )
 
-  if v_is_adjusted is not null then
-    if lower(v_is_adjusted) = 'true' then v_sql := v_sql || ' and coalesce(v.is_adjusted,false) = true';
-    elsif lower(v_is_adjusted) = 'false' then v_sql := v_sql || ' and coalesce(v.is_adjusted,false) = false'; end if;
-  end if;
+  )
+  SELECT DISTINCT
+    filtered_rows.row_id AS id
+  FROM filtered_rows
+  WHERE filtered_rows.row_id IS NOT NULL
+  ORDER BY filtered_rows.row_id;
+END;
+$function$;
 
-  if v_is_qr is not null then
-    if lower(v_is_qr) = 'true' then v_sql := v_sql || ' and coalesce(v.is_qr,false) = true';
-    elsif lower(v_is_qr) = 'false' then v_sql := v_sql || ' and coalesce(v.is_qr,false) = false'; end if;
-  end if;
 
-  if v_needs_attention is not null then
-    if lower(v_needs_attention) = 'true' then v_sql := v_sql || ' and coalesce(v.needs_attention,false) = true';
-    elsif lower(v_needs_attention) = 'false' then v_sql := v_sql || ' and coalesce(v.needs_attention,false) = false'; end if;
-  end if;
 
-  if v_candidate_paid is not null then
-    if lower(v_candidate_paid) = 'true' then v_sql := v_sql || ' and v.pay_paid_at_utc is not null';
-    elsif lower(v_candidate_paid) = 'false' then v_sql := v_sql || ' and v.pay_paid_at_utc is null'; end if;
-  end if;
 
-  if v_client_invoiced is not null then
-    if lower(v_client_invoiced) = 'true' then v_sql := v_sql || ' and v.locked_by_invoice_id is not null';
-    elsif lower(v_client_invoiced) = 'false' then v_sql := v_sql || ' and v.locked_by_invoice_id is null'; end if;
-  end if;
-
-  if v_hr_issue is not null then
-    v_sql := v_sql || ' and v.hr_crosscheck_issues is not null and ' || quote_literal(v_hr_issue) || ' = any(v.hr_crosscheck_issues)';
-  end if;
-
-  if v_proc_list is not null then
-    select string_agg(quote_literal(x), ',') into v_proc_lits from unnest(v_proc_list) as x;
-    if v_proc_lits is not null and btrim(v_proc_lits) <> '' then
-      v_sql := v_sql || ' and upper(coalesce(v.processing_status::text, '''')) = any(ARRAY[' || v_proc_lits || ']::text[])';
-    end if;
-  end if;
-
-  if v_issues_filter is not null then
-    if v_issues_filter = 'NO_MATCH_ID' then
-      v_sql := v_sql || ' and (v.candidate_id is null or v.client_id is null)';
-    elsif v_issues_filter = 'RATE_MISSING' then
-      v_sql := v_sql || ' and v.issue_codes @> array[''Rate'']::text[]';
-    elsif v_issues_filter in ('PAY_CHAN_MISS','PAY_CHANNEL_MISSING') then
-      v_sql := v_sql || ' and v.issue_codes @> array[''Pay channel'']::text[]';
-    elsif v_issues_filter in ('AWAITING_HR_VALIDATION','AWAITING_HR_VALIDATION_REQUIRED') then
-      v_sql := v_sql || ' and v.issue_codes @> array[''HR validation'']::text[]';
-    elsif v_issues_filter in ('HR_HOURS_MISMATCH','HOURS_MISMATCH_HR') then
-      v_sql := v_sql || ' and v.issue_codes @> array[''Hours mismatch HR'']::text[]';
-    elsif v_issues_filter = 'HR_HOURS_MISSING' then
-      v_sql := v_sql || ' and v.issue_codes @> array[''HR hours missing'']::text[]';
-    elsif v_issues_filter = 'DUPLICATE_CONTRACTS' then
-      v_sql := v_sql || ' and v.issue_codes @> array[''Duplicate contracts'']::text[]';
-    elsif v_issues_filter = 'REFERENCE_MISSING' then
-      v_sql := v_sql || ' and v.issue_codes @> array[''Reference'']::text[]';
-    elsif v_issues_filter = 'VALIDATION' then
-      v_sql := v_sql || ' and v.issue_codes @> array[''Validation'']::text[]';
-    elsif v_issues_filter = 'AUTHORISATION' then
-      v_sql := v_sql || ' and v.issue_codes @> array[''Authorisation'']::text[]';
-    elsif v_issues_filter = 'ON_HOLD' then
-      v_sql := v_sql || ' and v.issue_codes @> array[''On hold'']::text[]';
-    elsif v_issues_filter = 'REFS_PDF_INVALID' then
-      v_sql := v_sql || ' and v.issue_codes @> array[''Refs - Timesheet PDF invalid'']::text[]';
-    elsif v_issues_filter = 'QR_NOT_ISSUED' then
-      v_sql := v_sql || ' and v.timesheet_id is not null and upper(coalesce(v.qr_status::text, '''')) = ''PENDING''';
-      if v_has_qr_token then v_sql := v_sql || ' and v.qr_token is null'; end if;
-      if v_has_qr_generated_at then
-        if exists (select 1 from information_schema.columns c where c.table_schema='public' and c.table_name='v_timesheets_summary' and c.column_name='qr_generated_at_utc') then
-          v_sql := v_sql || ' and v.qr_generated_at_utc is null';
-        else
-          v_sql := v_sql || ' and v.qr_generated_at is null';
-        end if;
-      end if;
-    elsif v_issues_filter in ('QR_AWAITING_SIGNATURE','QR_ISSUED_AWAITING_SIGNATURE') then
-      v_sql := v_sql || ' and v.timesheet_id is not null and upper(coalesce(v.qr_status::text, '''')) = ''PENDING''';
-      if v_has_qr_token then v_sql := v_sql || ' and v.qr_token is not null'; end if;
-      if v_has_qr_generated_at then
-        if exists (select 1 from information_schema.columns c where c.table_schema='public' and c.table_name='v_timesheets_summary' and c.column_name='qr_generated_at_utc') then
-          v_sql := v_sql || ' and v.qr_generated_at_utc is not null';
-        else
-          v_sql := v_sql || ' and v.qr_generated_at is not null';
-        end if;
-      end if;
-      if v_has_qr_scanned_at then
-        if exists (select 1 from information_schema.columns c where c.table_schema='public' and c.table_name='v_timesheets_summary' and c.column_name='qr_scanned_at_utc') then
-          v_sql := v_sql || ' and v.qr_scanned_at_utc is null';
-        else
-          v_sql := v_sql || ' and v.qr_scanned_at is null';
-        end if;
-      end if;
-    end if;
-  end if;
-
-  v_sql := v_sql || '), effective as (select * from base b where 1=1';
-
-  if v_status_code is not null and v_status_code <> 'ALL' then
-    if v_status_code = 'NO_MATCH_ID' then
-      v_sql := v_sql || ' and (b.candidate_id is null or b.client_id is null)';
-    elsif v_status_code = 'RATE_MISSING' then
-      v_sql := v_sql || ' and b.has_rate_issue = true';
-    elsif v_status_code = 'PAY_CHAN_MISS' then
-      v_sql := v_sql || ' and b.has_pay_channel_issue = true';
-    elsif v_status_code = 'READY_FOR_HR' then
-      v_sql := v_sql || ' and upper(coalesce(b.processing_status::text, '''')) = ''READY_FOR_HR''';
-    elsif v_status_code = 'READY_FOR_INV' then
-      v_sql := v_sql || ' and upper(coalesce(b.processing_status::text, '''')) = ''READY_FOR_INVOICE''';
-    end if;
-  end if;
-
-  v_sql := v_sql || ') select distinct coalesce(e.timesheet_id, e.contract_week_id) as id from effective e where coalesce(e.timesheet_id, e.contract_week_id) is not null order by coalesce(e.timesheet_id, e.contract_week_id)';
-
-  return query execute v_sql;
-end;
-$$;
 create or replace function public.invoice_list_ids(p_filters jsonb)
 returns table (
   id uuid
