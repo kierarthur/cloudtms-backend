@@ -5584,6 +5584,93 @@ BEGIN
   DELETE FROM public.pay_bank_transfers AS transfer_to_delete
   WHERE transfer_to_delete.pay_batch_id = p_pay_batch_id;
 
+  CREATE TEMPORARY TABLE IF NOT EXISTS pg_temp.tmp_mark_blocked_rewound_reservations (
+    reservation_id uuid NOT NULL,
+    finance_case_id uuid NOT NULL,
+    finance_component_id uuid NULL,
+    previous_status text NOT NULL,
+    previous_committed_at_utc timestamptz NULL,
+    reserved_amount numeric NULL,
+    repayment_week_start date NULL
+  ) ON COMMIT DROP;
+
+  TRUNCATE TABLE pg_temp.tmp_mark_blocked_rewound_reservations;
+
+  INSERT INTO pg_temp.tmp_mark_blocked_rewound_reservations (
+    reservation_id,
+    finance_case_id,
+    finance_component_id,
+    previous_status,
+    previous_committed_at_utc,
+    reserved_amount,
+    repayment_week_start
+  )
+  SELECT
+    public.pay_advance_reservations.id,
+    public.pay_advance_reservations.finance_case_id,
+    public.pay_advance_reservations.finance_component_id,
+    upper(coalesce(public.pay_advance_reservations.status, '')),
+    public.pay_advance_reservations.committed_at_utc,
+    public.pay_advance_reservations.reserved_amount,
+    public.pay_advance_reservations.repayment_week_start
+  FROM public.pay_advance_reservations
+  WHERE public.pay_advance_reservations.pay_batch_id = p_pay_batch_id
+    AND upper(coalesce(public.pay_advance_reservations.status, '')) = 'COMMITTED'
+    AND public.pay_advance_reservations.settled_at_utc IS NULL
+    AND public.pay_advance_reservations.released_at_utc IS NULL;
+
+  UPDATE public.pay_advance_reservations AS reservation_to_rewind
+  SET
+    status = 'RESERVED',
+    committed_at_utc = NULL,
+    updated_by_user_id = p_actor_user_id
+  WHERE reservation_to_rewind.pay_batch_id = p_pay_batch_id
+    AND upper(coalesce(reservation_to_rewind.status, '')) = 'COMMITTED'
+    AND reservation_to_rewind.settled_at_utc IS NULL
+    AND reservation_to_rewind.released_at_utc IS NULL;
+
+  INSERT INTO public.pay_finance_case_events(
+    finance_case_id,
+    event_type,
+    event_at_utc,
+    actor_user_id,
+    pay_batch_id,
+    reservation_id,
+    finance_component_id,
+    before_json,
+    after_json,
+    reason,
+    note
+  )
+  SELECT
+    rewound_reservation.finance_case_id,
+    'RESERVATION_REWOUND_TO_RESERVED',
+    v_now,
+    p_actor_user_id,
+    p_pay_batch_id,
+    rewound_reservation.reservation_id,
+    rewound_reservation.finance_component_id,
+    jsonb_build_object(
+      'reservation_status', rewound_reservation.previous_status,
+      'committed_at_utc', rewound_reservation.previous_committed_at_utc,
+      'reserved_amount', rewound_reservation.reserved_amount,
+      'repayment_week_start', rewound_reservation.repayment_week_start,
+      'batch_status', v_batch.status,
+      'execution_commit_state', v_batch.execution_commit_state
+    ),
+    jsonb_build_object(
+      'reservation_status', 'RESERVED',
+      'committed_at_utc', NULL,
+      'reserved_amount', rewound_reservation.reserved_amount,
+      'repayment_week_start', rewound_reservation.repayment_week_start,
+      'batch_status', 'BLOCKED_FUNDS',
+      'execution_commit_state', 'NOT_SUBMITTED',
+      'repair_reason', 'blocked_funds_pre_submission_reservation_rewind'
+    ),
+    'blocked_funds_pre_submission_reservation_rewind',
+    'Blocked funds before provider submission: local finance reservation rewound from COMMITTED to RESERVED.'
+  FROM pg_temp.tmp_mark_blocked_rewound_reservations AS rewound_reservation;
+
   UPDATE public.pay_batches AS blocked_batch
   SET
     status = 'BLOCKED_FUNDS',
@@ -5725,6 +5812,7 @@ BEGIN
   );
 END;
 $function$;
+
 
 
 
