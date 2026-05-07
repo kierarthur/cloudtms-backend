@@ -26409,6 +26409,7 @@ DROP FUNCTION IF EXISTS public.pay_execute_bank(uuid, text, uuid);
 
 DROP FUNCTION IF EXISTS public.pay_execute_bank(uuid, text, uuid);
 
+
 create or replace function public.pay_execute_bank(
   p_pay_batch_id uuid,
   p_pay_channel_scope text,
@@ -27598,7 +27599,7 @@ begin
         pbi_u.payout_instruction_snapshot_json as payout_instruction_snapshot_json,
         c_u.first_name as candidate_first_name,
         c_u.last_name as candidate_last_name,
-        (pbi_u.item_type in ('LOAN_PAYOUT','MANUAL_CREDIT_PAYOUT','MANUAL_DEBT_RECOVERY','LOAN_REPAYMENT')) as is_finance_item,
+        (pbi_u.item_type in ('LOAN_PAYOUT','MANUAL_CREDIT_PAYOUT','MANUAL_DEBT_RECOVERY','LOAN_REPAYMENT','OVERPAYMENT_RECOVERY')) as is_finance_item,
         (pbi_u.payout_instruction_snapshot_json is null) as is_missing_snapshot,
         upper(coalesce(pbi_u.payout_instruction_snapshot_json->>'routing_kind', 'UMBRELLA_COMPANY')) as routing_kind_txt,
         upper(coalesce(pbi_u.payout_instruction_snapshot_json->>'payee_entity_kind', 'UMBRELLA')) as payee_entity_kind_txt,
@@ -27709,6 +27710,20 @@ begin
         case
           when uir.is_finance_item = true and upper(coalesce(uir.routing_kind_txt,'')) = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT' then
             uir.candidate_id::text || '|ONEOFF|' || coalesce(uir.snapshot_bank_details_hash, '')
+          when upper(coalesce(uir.routing_kind_txt,'')) <> 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'
+            and exists (
+              select 1
+              from umbrella_item_rows uir_net_adjustment
+              where uir_net_adjustment.candidate_id = uir.candidate_id
+                and upper(coalesce(uir_net_adjustment.routing_kind_txt,'')) = upper(coalesce(uir.routing_kind_txt,''))
+                and upper(coalesce(uir_net_adjustment.payee_entity_kind_txt,'')) = upper(coalesce(uir.payee_entity_kind_txt,''))
+                and uir_net_adjustment.snapshot_payee_entity_id is not distinct from uir.snapshot_payee_entity_id
+                and coalesce(uir_net_adjustment.snapshot_bank_details_hash, '') = coalesce(uir.snapshot_bank_details_hash, '')
+                and uir_net_adjustment.is_finance_item = true
+                and round(coalesce(uir_net_adjustment.item_amount, 0), 2) < 0
+            ) then
+            uir.candidate_id::text || '|NET_UMBRELLA|' || upper(coalesce(uir.routing_kind_txt,'')) || '|' || coalesce(uir.payee_entity_kind_txt,'') || '|' ||
+            coalesce(uir.snapshot_payee_entity_id::text, '') || '|' || coalesce(uir.snapshot_bank_details_hash, '')
           when uir.is_finance_item = true then
             uir.candidate_id::text || '|' || upper(coalesce(uir.routing_kind_txt,'')) || '|' || coalesce(uir.payee_entity_kind_txt,'') || '|' ||
             coalesce(uir.snapshot_payee_entity_id::text, '') || '|' || coalesce(uir.snapshot_bank_details_hash, '')
@@ -27791,9 +27806,9 @@ begin
       min(tig.grouping_mode_used) as grouping_mode_used
     from _tmp_pay_transfer_item_groups tig
     where tig.pay_channel = 'UMBRELLA'
-      and round(greatest(tig.amount,0),2) > 0
     group by tig.pay_channel, tig.transfer_group_key
-    having round(greatest(sum(tig.amount),0),2) > 0;
+    having round(sum(coalesce(tig.amount, 0)), 2) > 0
+       and count(*) filter (where round(greatest(coalesce(tig.amount, 0), 0), 2) > 0) > 0;
   end if;
 
   -- Clear old item→transfer links for executed scopes (rebuild coherently)
@@ -28343,7 +28358,6 @@ begin
   );
 end;
 $$;
-
 
 
 
