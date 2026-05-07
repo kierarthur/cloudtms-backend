@@ -14262,8 +14262,6 @@ function buildRemittanceEmailPayload(job, context = {}) {
   };
 }
 
-
-
 async function handleBankingPayBatchRetryBlockedFunds(env, req, user, payBatchId) {
   const id = String(payBatchId || '').trim();
   if (!id) return withCORS(env, req, badRequest('pay_batch_id is required'));
@@ -14423,6 +14421,227 @@ async function handleBankingPayBatchRetryBlockedFunds(env, req, user, payBatchId
     return { provider, valid: true, reason: null };
   };
 
+
+  const isPlainObject = (value) => !!(value && typeof value === 'object' && !Array.isArray(value));
+
+  const clonePlainObject = (value) => {
+    if (!isPlainObject(value)) return {};
+    try { return JSON.parse(JSON.stringify(value)); } catch { return { ...value }; }
+  };
+
+  const buildFriendlyFailurePayload = ({
+    code = 'BLOCKED_FUNDS_RETRY_FAILED',
+    title = 'Payment retry did not complete',
+    message = '',
+    technical_message = '',
+    executed = null,
+    retry_submission = null,
+    batch_get = null,
+    cleanup = null,
+    alert_summary = null,
+    extra = null
+  } = {}) => {
+    const codeOut = String(code || 'BLOCKED_FUNDS_RETRY_FAILED').trim().toUpperCase() || 'BLOCKED_FUNDS_RETRY_FAILED';
+    const cleanupObj = isPlainObject(cleanup) ? cleanup : null;
+    const cleanupOk = cleanupObj && cleanupObj.ok === true;
+    const cleanupAttempted = cleanupObj && cleanupObj.attempted === true;
+    const cleanupFailed = cleanupObj && cleanupObj.ok === false;
+    const userMessage = String(message || '').trim() || (
+      cleanupOk
+        ? 'The retry did not complete. No payment was submitted to the bank, and CloudTMS has safely returned the batch to Bank rejected payment — blocked funds.'
+        : cleanupFailed
+          ? 'The retry did not complete, and CloudTMS could not safely clean up the local retry state automatically. Review the batch before trying again.'
+          : 'The retry did not complete. Review the Payment Issues panel before trying again.'
+    );
+    const summary = isPlainObject(alert_summary) ? buildAlertSummaryFields(alert_summary) : buildAlertSummaryFields({});
+    const payload = {
+      ok: false,
+      error: userMessage,
+      message: userMessage,
+      user_message: userMessage,
+      error_code: codeOut,
+      pay_batch_id: id,
+      friendly_error: {
+        title: String(title || 'Payment retry did not complete'),
+        message: userMessage,
+        technical_message: String(technical_message || '').trim() || null,
+        cleanup_attempted: cleanupAttempted,
+        cleanup_succeeded: cleanupOk,
+        cleanup_failed: cleanupFailed,
+        next_actions: cleanupFailed
+          ? [
+              'Do not retry this payment again until the local retry state has been reviewed.',
+              'Check whether provider submission evidence exists before changing the batch manually.'
+            ]
+          : [
+              'Fund the bank account, then use Retry again.',
+              'Use Payment Issues to cancel or release the batch if you do not want to retry.'
+            ]
+      },
+      retry_cleanup: cleanupObj,
+      executed: executed || null,
+      retry_submission: retry_submission || null,
+      batch_get: batch_get || (cleanupObj && cleanupObj.batch_get) || null,
+      banking_alerts: summary.banking_alerts,
+      banking_unacknowledged_alert_count: summary.banking_unacknowledged_alert_count,
+      banking_highest_alert_label: summary.banking_highest_alert_label,
+      banking_highest_alert_severity: summary.banking_highest_alert_severity
+    };
+    if (isPlainObject(extra)) Object.assign(payload, extra);
+    return payload;
+  };
+
+  const buildCleanupFundsCheckJson = ({ code, message, batch_get, batch, retry_submission } = {}) => {
+    const getObj = isPlainObject(batch_get) ? batch_get : {};
+    const batchObj = isPlainObject(batch) ? batch : extractBatchObject(getObj);
+    const submissionObj = isPlainObject(retry_submission) ? retry_submission : {};
+    const candidates = [
+      batchObj.last_funds_check_json,
+      getObj.last_funds_check_json,
+      batchObj.blocked_funds_check_json,
+      getObj.blocked_funds_check_json,
+      submissionObj.funds_check_json,
+      submissionObj.last_funds_check_json
+    ];
+
+    let base = {};
+    for (const candidate of candidates) {
+      if (isPlainObject(candidate)) {
+        base = clonePlainObject(candidate);
+        break;
+      }
+    }
+
+    const provider = String(
+      base.rail_provider ||
+      base.provider ||
+      batchObj.rail_provider_snapshot ||
+      getObj.rail_provider_snapshot ||
+      batchObj.blocked_funds_provider ||
+      getObj.blocked_funds_provider ||
+      ''
+    ).trim();
+    const railEnv = String(
+      base.rail_env ||
+      base.env ||
+      batchObj.rail_env_snapshot ||
+      getObj.rail_env_snapshot ||
+      batchObj.blocked_funds_env ||
+      getObj.blocked_funds_env ||
+      ''
+    ).trim();
+    const fundingAccountRef = String(
+      base.funding_account_ref ||
+      base.account_ref ||
+      batchObj.funding_account_ref ||
+      getObj.funding_account_ref ||
+      batchObj.blocked_funds_account_ref ||
+      getObj.blocked_funds_account_ref ||
+      ''
+    ).trim();
+
+    return {
+      ...base,
+      sufficient: false,
+      checked_at_utc: base.checked_at_utc || new Date().toISOString(),
+      rail_provider: provider || base.rail_provider || null,
+      rail_env: railEnv || base.rail_env || null,
+      funding_account_ref: fundingAccountRef || base.funding_account_ref || null,
+      retry_cleanup: true,
+      retry_cleanup_code: String(code || 'BLOCKED_FUNDS_RETRY_FAILED').trim().toUpperCase(),
+      retry_cleanup_message: String(message || '').trim() || null,
+      retry_cleanup_at_utc: new Date().toISOString()
+    };
+  };
+
+  const hasLocalOnlyPendingTransferRows = (payload) => {
+    const source = isPlainObject(payload) ? payload : {};
+    const rows = Array.isArray(source.transfers) ? source.transfers : [];
+    return rows.some((transferRow) => {
+      if (!transferRow || typeof transferRow !== 'object') return false;
+      const transferStatus = String(transferRow.status || '').trim().toUpperCase();
+      if (transferStatus !== 'PENDING') return false;
+      const railTxId = String(transferRow.rail_tx_id || '').trim();
+      const railState = String(transferRow.rail_state || '').trim();
+      const railMeta = transferRow.rail_meta_json;
+      if (railTxId || railState) return false;
+      if (railMeta && typeof railMeta === 'object' && Object.keys(railMeta).length > 0) return false;
+      return true;
+    });
+  };
+
+  const cleanupLocalRetryArtefacts = async ({ code, message, executed = null, retry_submission = null, batch_get = null } = {}) => {
+    const out = {
+      attempted: false,
+      ok: false,
+      skipped: false,
+      reason: null,
+      error: null,
+      error_code: null,
+      result: null,
+      batch_get: null
+    };
+
+    let currentGet = isPlainObject(batch_get) ? batch_get : null;
+    try {
+      if (!currentGet) currentGet = await loadBatch();
+    } catch (e) {
+      currentGet = null;
+      out.reason = 'BATCH_GET_BEFORE_CLEANUP_FAILED';
+      out.error = String(e?.message || e || 'Unable to load batch before cleanup.');
+    }
+
+    const currentBatch = extractBatchObject(currentGet || {});
+    const currentStatus = String(currentBatch.status || currentGet?.status || '').trim().toUpperCase();
+    const hasLocalOnlyPendingTransfers = hasLocalOnlyPendingTransferRows(currentGet);
+    const currentScheduleKind = String(currentBatch.schedule_kind || currentGet?.schedule_kind || '').trim();
+    const currentScheduledAtUtc = String(currentBatch.scheduled_at_utc || currentGet?.scheduled_at_utc || '').trim();
+    const currentScheduledByUserId = String(currentBatch.scheduled_by_user_id || currentGet?.scheduled_by_user_id || '').trim();
+    if (currentStatus === 'BLOCKED_FUNDS' && !hasLocalOnlyPendingTransfers && !currentScheduleKind && !currentScheduledAtUtc && !currentScheduledByUserId) {
+      out.attempted = false;
+      out.ok = true;
+      out.skipped = true;
+      out.reason = 'ALREADY_BLOCKED_FUNDS_WITH_NO_LOCAL_RETRY_ARTEFACTS';
+      out.batch_get = currentGet;
+      return out;
+    }
+
+    out.attempted = true;
+
+    const cleanupFundsCheckJson = buildCleanupFundsCheckJson({
+      code,
+      message,
+      batch_get: currentGet,
+      batch: currentBatch,
+      retry_submission
+    });
+
+    try {
+      const cleanup0 = await sbRpc(env, 'pay_batch_mark_blocked_funds', {
+        p_pay_batch_id: id,
+        p_actor_user_id: actorUserId,
+        p_funds_check_json: cleanupFundsCheckJson
+      });
+      out.result = unwrapRpc(cleanup0, 'pay_batch_mark_blocked_funds');
+      out.ok = true;
+      out.reason = 'MARKED_BLOCKED_FUNDS_AND_CLEARED_LOCAL_RETRY_ARTEFACTS';
+    } catch (e) {
+      const norm = normaliseRpcError(e, 'BLOCKED_FUNDS_RETRY_CLEANUP_FAILED');
+      out.ok = false;
+      out.reason = 'CLEANUP_FAILED';
+      out.error = String(norm.body?.message || norm.body?.error || e?.message || e || 'Cleanup failed.' );
+      out.error_code = String(norm.body?.error_code || norm.body?.code || 'BLOCKED_FUNDS_RETRY_CLEANUP_FAILED').trim().toUpperCase();
+    }
+
+    try {
+      out.batch_get = await loadBatch();
+    } catch {
+      out.batch_get = currentGet;
+    }
+
+    return out;
+  };
+
   const reauthCheck = await verifyPaymentScheduleReauth(env, user, reauthToken);
   if (!reauthCheck.ok) return withCORS(env, req, reauthCheck.response);
 
@@ -14507,7 +14726,15 @@ async function handleBankingPayBatchRetryBlockedFunds(env, req, user, payBatchId
       executeResult = unwrapRpc(execute0, 'pay_execute_bank');
     } catch (e) {
       const norm = normaliseRpcError(e, 'PAY_EXECUTE_BANK_FAILED');
-      return withCORS(env, req, jsonResponse(norm.status, norm.body));
+      const executeFailureAlertSummary = await safeLoadActiveAlertSummary();
+      return withCORS(env, req, jsonResponse(norm.status, buildFriendlyFailurePayload({
+        code: norm.body?.error_code || norm.body?.code || 'PAY_EXECUTE_BANK_FAILED',
+        title: 'Payment retry could not start',
+        message: norm.body?.message || norm.body?.error || 'The retry could not start. No payment was submitted to the bank.',
+        technical_message: norm.body?.message || norm.body?.error || String(e?.message || e || ''),
+        alert_summary: executeFailureAlertSummary,
+        extra: { rpc_error: norm.body || null }
+      })));
     }
 
     let afterExecuteGet = null;
@@ -14515,7 +14742,25 @@ async function handleBankingPayBatchRetryBlockedFunds(env, req, user, payBatchId
       afterExecuteGet = await loadBatch();
     } catch (e) {
       const norm = normaliseRpcError(e, 'PAY_BATCH_GET_FAILED');
-      return withCORS(env, req, jsonResponse(norm.status, norm.body));
+      const batchGetFailureAlertSummary = await safeLoadActiveAlertSummary();
+      const cleanup = await cleanupLocalRetryArtefacts({
+        code: 'PAY_BATCH_GET_FAILED_AFTER_RETRY_MATERIALISATION',
+        message: norm.body?.message || norm.body?.error || 'CloudTMS could not reload the batch after preparing the retry.',
+        executed: executeResult,
+        batch_get: null
+      });
+      return withCORS(env, req, jsonResponse(409, buildFriendlyFailurePayload({
+        code: 'PAY_BATCH_GET_FAILED_AFTER_RETRY_MATERIALISATION',
+        title: 'Payment retry did not complete',
+        message: cleanup.ok === true
+          ? 'The retry did not complete. No payment was submitted to the bank, and CloudTMS has safely returned the batch to Bank rejected payment — blocked funds.'
+          : 'The retry did not complete, and CloudTMS could not confirm the local retry state. Review the batch before trying again.',
+        technical_message: norm.body?.message || norm.body?.error || String(e?.message || e || ''),
+        executed: executeResult,
+        cleanup,
+        alert_summary: batchGetFailureAlertSummary,
+        extra: { rpc_error: norm.body || null }
+      })));
     }
 
     const afterExecuteBatch = extractBatchObject(afterExecuteGet);
@@ -14560,46 +14805,60 @@ async function handleBankingPayBatchRetryBlockedFunds(env, req, user, payBatchId
       : (executionBlockedCount !== null ? executionBlockedCount : 0);
 
     if (pendingTransfersForSubmission <= 0) {
-      const materialisationAlertSummaryFields = buildAlertSummaryFields(await safeLoadActiveAlertSummary());
-      return withCORS(env, req, jsonResponse(409, {
-        ok: false,
-        error: blockedTransfersAfterMaterialisation > 0
-          ? 'Blocked-funds retry could not submit because the frozen payout instructions produced blocked transfers.'
-          : 'Blocked-funds retry did not create any pending bank transfers to submit.',
-        message: blockedTransfersAfterMaterialisation > 0
-          ? 'Blocked-funds retry could not submit because the frozen payout instructions produced blocked transfers.'
-          : 'Blocked-funds retry did not create any pending bank transfers to submit.',
-        error_code: blockedTransfersAfterMaterialisation > 0
-          ? 'BLOCKED_FUNDS_RETRY_TRANSFER_MATERIALISATION_BLOCKED'
-          : 'BLOCKED_FUNDS_RETRY_NO_PENDING_TRANSFERS',
-        pay_batch_id: id,
-        pending_count: pendingTransfersForSubmission,
-        blocked_count: blockedTransfersAfterMaterialisation,
+      const code = blockedTransfersAfterMaterialisation > 0
+        ? 'BLOCKED_FUNDS_RETRY_TRANSFER_MATERIALISATION_BLOCKED'
+        : 'BLOCKED_FUNDS_RETRY_NO_PENDING_TRANSFERS';
+      const msg = blockedTransfersAfterMaterialisation > 0
+        ? 'Blocked-funds retry could not submit because the frozen payout instructions produced blocked transfers.'
+        : 'Blocked-funds retry did not create any pending bank transfers to submit.';
+      const cleanup = await cleanupLocalRetryArtefacts({
+        code,
+        message: msg,
         executed: executeResult,
-        batch_get: afterExecuteGet,
-        banking_alerts: materialisationAlertSummaryFields.banking_alerts,
-        banking_unacknowledged_alert_count: materialisationAlertSummaryFields.banking_unacknowledged_alert_count,
-        banking_highest_alert_label: materialisationAlertSummaryFields.banking_highest_alert_label,
-        banking_highest_alert_severity: materialisationAlertSummaryFields.banking_highest_alert_severity
-      }));
+        batch_get: afterExecuteGet
+      });
+      const materialisationAlertSummary = await safeLoadActiveAlertSummary();
+      return withCORS(env, req, jsonResponse(409, buildFriendlyFailurePayload({
+        code,
+        title: 'Payment retry did not complete',
+        message: cleanup.ok === true
+          ? 'The retry did not complete. No payment was submitted to the bank, and CloudTMS has safely returned the batch to Bank rejected payment — blocked funds.'
+          : msg,
+        technical_message: msg,
+        executed: executeResult,
+        batch_get: cleanup.batch_get || afterExecuteGet,
+        cleanup,
+        alert_summary: materialisationAlertSummary,
+        extra: {
+          pending_count: pendingTransfersForSubmission,
+          blocked_count: blockedTransfersAfterMaterialisation
+        }
+      })));
     }
 
     const refreshedFundingAccountRef = String(afterExecuteBatch.funding_account_ref || afterExecuteGet.funding_account_ref || storedFundingAccountRef || '').trim();
     if (!refreshedFundingAccountRef) {
-      const fundingAccountAlertSummaryFields = buildAlertSummaryFields(await safeLoadActiveAlertSummary());
-      return withCORS(env, req, jsonResponse(409, {
-        ok: false,
-        error: 'Funding account is required before retry can submit.',
-        message: 'Funding account is required before retry can submit.',
-        error_code: 'BLOCKED_FUNDS_RETRY_FUNDING_ACCOUNT_REQUIRED',
-        pay_batch_id: id,
+      const code = 'BLOCKED_FUNDS_RETRY_FUNDING_ACCOUNT_REQUIRED';
+      const msg = 'Funding account is required before retry can submit.';
+      const cleanup = await cleanupLocalRetryArtefacts({
+        code,
+        message: msg,
         executed: executeResult,
-        batch_get: afterExecuteGet,
-        banking_alerts: fundingAccountAlertSummaryFields.banking_alerts,
-        banking_unacknowledged_alert_count: fundingAccountAlertSummaryFields.banking_unacknowledged_alert_count,
-        banking_highest_alert_label: fundingAccountAlertSummaryFields.banking_highest_alert_label,
-        banking_highest_alert_severity: fundingAccountAlertSummaryFields.banking_highest_alert_severity
-      }));
+        batch_get: afterExecuteGet
+      });
+      const fundingAccountAlertSummary = await safeLoadActiveAlertSummary();
+      return withCORS(env, req, jsonResponse(409, buildFriendlyFailurePayload({
+        code,
+        title: 'Payment retry did not complete',
+        message: cleanup.ok === true
+          ? 'The retry did not complete. No payment was submitted to the bank, and CloudTMS has safely returned the batch to Bank rejected payment — blocked funds.'
+          : msg,
+        technical_message: msg,
+        executed: executeResult,
+        batch_get: cleanup.batch_get || afterExecuteGet,
+        cleanup,
+        alert_summary: fundingAccountAlertSummary
+      })));
     }
 
     const retryRequestedAtUtc = new Date().toISOString();
@@ -14650,20 +14909,27 @@ async function handleBankingPayBatchRetryBlockedFunds(env, req, user, payBatchId
         perBatchSubmitLimit: 500
       });
     } catch (e) {
-      const submissionFailureAlertSummaryFields = buildAlertSummaryFields(await safeLoadActiveAlertSummary());
-      return withCORS(env, req, jsonResponse(409, {
-        ok: false,
-        error: 'Blocked-funds retry submission failed.',
-        message: String(e?.message || e || 'Blocked-funds retry submission failed.'),
-        error_code: 'BLOCKED_FUNDS_RETRY_SUBMISSION_FAILED',
-        pay_batch_id: id,
+      const code = 'BLOCKED_FUNDS_RETRY_SUBMISSION_FAILED';
+      const technicalMessage = String(e?.message || e || 'Blocked-funds retry submission failed.');
+      const cleanup = await cleanupLocalRetryArtefacts({
+        code,
+        message: technicalMessage,
         executed: executeResult,
-        batch_get: afterExecuteGet,
-        banking_alerts: submissionFailureAlertSummaryFields.banking_alerts,
-        banking_unacknowledged_alert_count: submissionFailureAlertSummaryFields.banking_unacknowledged_alert_count,
-        banking_highest_alert_label: submissionFailureAlertSummaryFields.banking_highest_alert_label,
-        banking_highest_alert_severity: submissionFailureAlertSummaryFields.banking_highest_alert_severity
-      }));
+        batch_get: afterExecuteGet
+      });
+      const submissionFailureAlertSummary = await safeLoadActiveAlertSummary();
+      return withCORS(env, req, jsonResponse(409, buildFriendlyFailurePayload({
+        code,
+        title: 'Payment retry did not complete',
+        message: cleanup.ok === true
+          ? 'The retry did not complete. No payment was submitted to the bank, and CloudTMS has safely returned the batch to Bank rejected payment — blocked funds.'
+          : 'The retry did not complete, and CloudTMS could not safely clean up the local retry state automatically. Review the batch before trying again.',
+        technical_message: technicalMessage,
+        executed: executeResult,
+        batch_get: cleanup.batch_get || afterExecuteGet,
+        cleanup,
+        alert_summary: submissionFailureAlertSummary
+      })));
     }
 
     let refreshedGet = null;
@@ -14705,6 +14971,42 @@ async function handleBankingPayBatchRetryBlockedFunds(env, req, user, payBatchId
     );
 
     if (blockedAgain || blockedFundsRecorded) {
+      let blockedFundsGet = refreshedGet;
+      let blockedFundsBatch = refreshedBatch;
+      let blockedFundsAlertSummaryFields = refreshedAlertSummaryFields;
+      let blockedFundsCleanup = null;
+
+      if (!blockedAgain || hasLocalOnlyPendingTransferRows(refreshedGet)) {
+        blockedFundsCleanup = await cleanupLocalRetryArtefacts({
+          code: blockedAgain
+            ? 'BLOCKED_FUNDS_RETRY_BLOCKED_WITH_LOCAL_RETRY_ARTEFACTS'
+            : 'BLOCKED_FUNDS_RETRY_RECORDED_WITHOUT_BATCH_STATUS',
+          message: 'Blocked-funds retry was rejected before provider submission. CloudTMS is returning the batch to Bank rejected payment — blocked funds and clearing local retry records.',
+          executed: executeResult,
+          retry_submission: retrySubmission,
+          batch_get: refreshedGet
+        });
+
+        if (blockedFundsCleanup.ok !== true) {
+          const blockedFundsCleanupAlertSummary = await safeLoadActiveAlertSummary();
+          return withCORS(env, req, jsonResponse(409, buildFriendlyFailurePayload({
+            code: 'BLOCKED_FUNDS_RETRY_CLEANUP_FAILED',
+            title: 'Payment retry did not complete',
+            message: 'The retry was rejected before provider submission, but CloudTMS could not safely clean up the local retry state automatically. Review the batch before trying again.',
+            technical_message: blockedFundsCleanup.error || 'Blocked-funds cleanup failed after retry rejection.',
+            executed: executeResult,
+            retry_submission: retrySubmission,
+            batch_get: blockedFundsCleanup.batch_get || refreshedGet,
+            cleanup: blockedFundsCleanup,
+            alert_summary: blockedFundsCleanupAlertSummary
+          })));
+        }
+
+        blockedFundsGet = blockedFundsCleanup.batch_get || refreshedGet;
+        blockedFundsBatch = extractBatchObject(blockedFundsGet || {});
+        blockedFundsAlertSummaryFields = buildAlertSummaryFields(await safeLoadActiveAlertSummary());
+      }
+
       return withCORS(env, req, ok({
         ok: true,
         pay_batch_id: id,
@@ -14712,56 +15014,86 @@ async function handleBankingPayBatchRetryBlockedFunds(env, req, user, payBatchId
         retry_blocked_funds: true,
         blocked_funds_retry_status: 'BLOCKED_FUNDS',
         blocked_funds: true,
+        retry_cleanup: blockedFundsCleanup,
         executed: executeResult,
         retry_submission: retrySubmission,
-        batch_get: refreshedGet,
-        banking_alerts: refreshedAlertSummaryFields.banking_alerts,
-        banking_unacknowledged_alert_count: refreshedAlertSummaryFields.banking_unacknowledged_alert_count,
-        banking_highest_alert_label: refreshedAlertSummaryFields.banking_highest_alert_label,
-        banking_highest_alert_severity: refreshedAlertSummaryFields.banking_highest_alert_severity,
-        banking_alert_kind: refreshedGet?.banking_alert_kind || refreshedBatch.banking_alert_kind || null,
-        banking_alert_fingerprint: refreshedGet?.banking_alert_fingerprint || refreshedBatch.banking_alert_fingerprint || null,
-        banking_alert_requires_attention: refreshedGet?.banking_alert_requires_attention ?? refreshedBatch.banking_alert_requires_attention ?? null,
-        blocked_funds_required_gbp: refreshedGet?.blocked_funds_required_gbp ?? refreshedBatch.blocked_funds_required_gbp ?? null,
-        blocked_funds_available_gbp: refreshedGet?.blocked_funds_available_gbp ?? refreshedBatch.blocked_funds_available_gbp ?? null,
-        blocked_funds_provider: refreshedGet?.blocked_funds_provider || refreshedBatch.blocked_funds_provider || null,
-        blocked_funds_env: refreshedGet?.blocked_funds_env || refreshedBatch.blocked_funds_env || null,
-        blocked_funds_account_ref: refreshedGet?.blocked_funds_account_ref || refreshedBatch.blocked_funds_account_ref || null
+        batch_get: blockedFundsGet,
+        banking_alerts: blockedFundsAlertSummaryFields.banking_alerts,
+        banking_unacknowledged_alert_count: blockedFundsAlertSummaryFields.banking_unacknowledged_alert_count,
+        banking_highest_alert_label: blockedFundsAlertSummaryFields.banking_highest_alert_label,
+        banking_highest_alert_severity: blockedFundsAlertSummaryFields.banking_highest_alert_severity,
+        banking_alert_kind: blockedFundsGet?.banking_alert_kind || blockedFundsBatch.banking_alert_kind || null,
+        banking_alert_fingerprint: blockedFundsGet?.banking_alert_fingerprint || blockedFundsBatch.banking_alert_fingerprint || null,
+        banking_alert_requires_attention: blockedFundsGet?.banking_alert_requires_attention ?? blockedFundsBatch.banking_alert_requires_attention ?? null,
+        blocked_funds_required_gbp: blockedFundsGet?.blocked_funds_required_gbp ?? blockedFundsBatch.blocked_funds_required_gbp ?? null,
+        blocked_funds_available_gbp: blockedFundsGet?.blocked_funds_available_gbp ?? blockedFundsBatch.blocked_funds_available_gbp ?? null,
+        blocked_funds_provider: blockedFundsGet?.blocked_funds_provider || blockedFundsBatch.blocked_funds_provider || null,
+        blocked_funds_env: blockedFundsGet?.blocked_funds_env || blockedFundsBatch.blocked_funds_env || null,
+        blocked_funds_account_ref: blockedFundsGet?.blocked_funds_account_ref || blockedFundsBatch.blocked_funds_account_ref || null
       }));
     }
 
     if (retrySubmissionErrors.length > 0) {
-      return withCORS(env, req, jsonResponse(409, {
-        ok: false,
-        error: 'Blocked-funds retry did not complete.',
-        message: 'Blocked-funds retry did not complete. Review the returned provider/funds-check errors before retrying again.',
-        error_code: 'BLOCKED_FUNDS_RETRY_SUBMISSION_INCOMPLETE',
-        pay_batch_id: id,
+      const code = 'BLOCKED_FUNDS_RETRY_SUBMISSION_INCOMPLETE';
+      const cleanup = submittedProgress
+        ? {
+            attempted: false,
+            ok: false,
+            skipped: true,
+            reason: 'SUBMISSION_PROGRESS_PRESENT',
+            error: null,
+            error_code: null,
+            result: null,
+            batch_get: refreshedGet
+          }
+        : await cleanupLocalRetryArtefacts({
+            code,
+            message: 'Blocked-funds retry did not complete. Review the returned provider/funds-check errors before retrying again.',
+            executed: executeResult,
+            retry_submission: retrySubmission,
+            batch_get: refreshedGet
+          });
+      const retryIncompleteAlertSummary = await safeLoadActiveAlertSummary();
+      return withCORS(env, req, jsonResponse(409, buildFriendlyFailurePayload({
+        code,
+        title: submittedProgress ? 'Payment retry needs review' : 'Payment retry did not complete',
+        message: submittedProgress
+          ? 'The retry returned provider errors after some submission progress. Review the Payment Issues panel before taking further action.'
+          : cleanup.ok === true
+            ? 'The retry did not complete. No payment was submitted to the bank, and CloudTMS has safely returned the batch to Bank rejected payment — blocked funds.'
+            : 'The retry did not complete, and CloudTMS could not safely clean up the local retry state automatically. Review the batch before trying again.',
+        technical_message: 'Blocked-funds retry did not complete. Review the returned provider/funds-check errors before retrying again.',
         executed: executeResult,
         retry_submission: retrySubmission,
-        batch_get: refreshedGet,
-        banking_alerts: refreshedAlertSummaryFields.banking_alerts,
-        banking_unacknowledged_alert_count: refreshedAlertSummaryFields.banking_unacknowledged_alert_count,
-        banking_highest_alert_label: refreshedAlertSummaryFields.banking_highest_alert_label,
-        banking_highest_alert_severity: refreshedAlertSummaryFields.banking_highest_alert_severity
-      }));
+        batch_get: cleanup.batch_get || refreshedGet,
+        cleanup,
+        alert_summary: retryIncompleteAlertSummary
+      })));
     }
 
     if (!submittedProgress) {
-      return withCORS(env, req, jsonResponse(409, {
-        ok: false,
-        error: 'Blocked-funds retry produced no bank submission progress.',
+      const code = 'BLOCKED_FUNDS_RETRY_NO_SUBMISSION_PROGRESS';
+      const cleanup = await cleanupLocalRetryArtefacts({
+        code,
         message: 'Blocked-funds retry produced no bank submission progress.',
-        error_code: 'BLOCKED_FUNDS_RETRY_NO_SUBMISSION_PROGRESS',
-        pay_batch_id: id,
         executed: executeResult,
         retry_submission: retrySubmission,
-        batch_get: refreshedGet,
-        banking_alerts: refreshedAlertSummaryFields.banking_alerts,
-        banking_unacknowledged_alert_count: refreshedAlertSummaryFields.banking_unacknowledged_alert_count,
-        banking_highest_alert_label: refreshedAlertSummaryFields.banking_highest_alert_label,
-        banking_highest_alert_severity: refreshedAlertSummaryFields.banking_highest_alert_severity
-      }));
+        batch_get: refreshedGet
+      });
+      const noProgressAlertSummary = await safeLoadActiveAlertSummary();
+      return withCORS(env, req, jsonResponse(409, buildFriendlyFailurePayload({
+        code,
+        title: 'Payment retry did not complete',
+        message: cleanup.ok === true
+          ? 'The retry did not complete. No payment was submitted to the bank, and CloudTMS has safely returned the batch to Bank rejected payment — blocked funds.'
+          : 'The retry produced no bank submission progress, and CloudTMS could not safely clean up the local retry state automatically. Review the batch before trying again.',
+        technical_message: 'Blocked-funds retry produced no bank submission progress.',
+        executed: executeResult,
+        retry_submission: retrySubmission,
+        batch_get: cleanup.batch_get || refreshedGet,
+        cleanup,
+        alert_summary: noProgressAlertSummary
+      })));
     }
 
     return withCORS(env, req, ok({
@@ -14787,6 +15119,8 @@ async function handleBankingPayBatchRetryBlockedFunds(env, req, user, payBatchId
     return withCORS(env, req, serverError(String(e?.message || e || 'BLOCKED_FUNDS_RETRY_FAILED')));
   }
 }
+
+
 function normaliseRemittanceJobForRendering(job) {
   const cloneValue = (value) => {
     if (value === null || value === undefined) return value;
