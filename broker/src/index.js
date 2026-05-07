@@ -34150,6 +34150,7 @@ async function handleContractWeeksList(env, req) {
   const row = (await res.json().catch(()=>[]))[0];
   return withCORS(env, req, ok(row));
 }
+
 async function handleContractWeekSwitchMode(env, req, weekId) {
   const enc = encodeURIComponent;
 
@@ -34186,21 +34187,21 @@ async function handleContractWeekSwitchMode(env, req, weekId) {
     body?.rowSignature ||
     ''
   ).trim();
-  const parseBulkDecisionRow = (value) => {
+  const parseBulkPatchRow = (value) => {
     if (!value) return null;
     if (typeof value === 'string') {
       const source = value.trim();
       if (!source) return null;
       try {
         const parsed = JSON.parse(source);
-        return parseBulkDecisionRow(parsed);
+        return parseBulkPatchRow(parsed);
       } catch {
         return null;
       }
     }
     if (typeof value !== 'object' || Array.isArray(value)) return null;
-    if (value.row_json !== undefined) return parseBulkDecisionRow(value.row_json);
-    if (value.bulk_timesheet_row_decision_v1 !== undefined) return parseBulkDecisionRow(value.bulk_timesheet_row_decision_v1);
+    if (value.row_json !== undefined) return parseBulkPatchRow(value.row_json);
+    if (value.bulk_timesheet_row_patch_v1 !== undefined) return parseBulkPatchRow(value.bulk_timesheet_row_patch_v1);
     return value;
   };
   const firstBulkString = function firstBulkString() {
@@ -34210,7 +34211,7 @@ async function handleContractWeekSwitchMode(env, req, weekId) {
     }
     return '';
   };
-  const bulkDecisionRowKey = (row, fallbackTimesheetId, fallbackContractWeekId) => {
+  const bulkPatchRowKey = (row, fallbackTimesheetId, fallbackContractWeekId) => {
     const source = row && typeof row === 'object' && !Array.isArray(row) ? row : {};
     const explicit = firstBulkString(source.row_key, source.rowKey, source.new_row_key);
     if (explicit) return explicit;
@@ -34220,43 +34221,54 @@ async function handleContractWeekSwitchMode(env, req, weekId) {
     if (rowContractWeekId) return `contract_week:${rowContractWeekId}`;
     return firstBulkString(source.stable_row_id, source.id);
   };
-  const loadBulkRouteDecisionRow = async (decisionContractWeekId) => {
-    const decisionFilters = { dataset_mode: bulkDatasetMode };
-    if (decisionContractWeekId) decisionFilters.contract_week_id = String(decisionContractWeekId);
-    if (user?.id) decisionFilters.actor_user_id = String(user.id);
-    const decisionRows = await sbRpc(
+  const loadBulkRoutePatchRow = async (patchContractWeekId, changedDomains = []) => {
+    const patchFilters = {
+      dataset_mode: bulkDatasetMode,
+      projection: 'dataset_row',
+      profile: 'list'
+    };
+    const requestRowKey = firstBulkString(body?.row_key, body?.rowKey, body?.current_row_key, body?.currentRowKey);
+    if (requestRowKey) patchFilters.row_key = requestRowKey;
+    if (patchContractWeekId) patchFilters.contract_week_id = String(patchContractWeekId);
+    if (expectedRowSignature) patchFilters.expected_row_signature = expectedRowSignature;
+    if (user?.id) patchFilters.actor_user_id = String(user.id);
+    if (Array.isArray(changedDomains)) {
+      const cleanDomains = changedDomains.map((value) => String(value == null ? '' : value).trim()).filter(Boolean);
+      if (cleanDomains.length) patchFilters.changed_domains = cleanDomains;
+    }
+    const patchRows = await sbRpc(
       env,
-      'bulk_timesheet_row_decision_v1',
-      { p_filters: decisionFilters },
+      'bulk_timesheet_row_patch_v1',
+      { p_filters: patchFilters },
       { timeoutMs: 45000 }
     );
-    const firstDecisionRow = Array.isArray(decisionRows) ? (decisionRows[0] || null) : decisionRows;
-    return parseBulkDecisionRow(firstDecisionRow);
+    const firstPatchRow = Array.isArray(patchRows) ? (patchRows[0] || null) : patchRows;
+    return parseBulkPatchRow(firstPatchRow);
   };
-  let bulkPreDecisionRow = null;
+  let bulkPrePatchRow = null;
   let bulkPreviousRowKey = null;
-  const ensureBulkPreMutationDecision = async (decisionContractWeekId) => {
+  const ensureBulkPreMutationPatch = async (patchContractWeekId, changedDomains = []) => {
     if (!bulkMode) return null;
     try {
-      bulkPreDecisionRow = await loadBulkRouteDecisionRow(decisionContractWeekId);
+      bulkPrePatchRow = await loadBulkRoutePatchRow(patchContractWeekId, changedDomains);
     } catch (err) {
       return new Response(JSON.stringify({
-        error: 'BULK_ROUTE_DECISION_LOAD_FAILED',
-        error_code: 'BULK_ROUTE_DECISION_LOAD_FAILED',
-        message: err?.message || String(err || 'Failed to load bulk route decision row'),
-        contract_week_id: decisionContractWeekId || null
+        error: 'BULK_ROUTE_PATCH_LOAD_FAILED',
+        error_code: 'BULK_ROUTE_PATCH_LOAD_FAILED',
+        message: err?.message || String(err || 'Failed to load bulk route patch row'),
+        contract_week_id: patchContractWeekId || null
       }), { status: 409, headers: { 'Content-Type': 'application/json' } });
     }
-    if (!bulkPreDecisionRow || typeof bulkPreDecisionRow !== 'object' || Array.isArray(bulkPreDecisionRow) || !Object.keys(bulkPreDecisionRow).length) {
+    if (!bulkPrePatchRow || typeof bulkPrePatchRow !== 'object' || Array.isArray(bulkPrePatchRow) || !Object.keys(bulkPrePatchRow).length) {
       return new Response(JSON.stringify({
-        error: 'BULK_ROUTE_DECISION_ROW_NOT_FOUND',
-        error_code: 'BULK_ROUTE_DECISION_ROW_NOT_FOUND',
+        error: 'BULK_ROUTE_PATCH_ROW_NOT_FOUND',
+        error_code: 'BULK_ROUTE_PATCH_ROW_NOT_FOUND',
         message: 'Could not load the current bulk row before route mutation.',
-        contract_week_id: decisionContractWeekId || null
+        contract_week_id: patchContractWeekId || null
       }), { status: 409, headers: { 'Content-Type': 'application/json' } });
     }
-    bulkPreviousRowKey = bulkDecisionRowKey(bulkPreDecisionRow, null, decisionContractWeekId);
-    const currentRowSignature = String(bulkPreDecisionRow.row_signature || '').trim();
+    bulkPreviousRowKey = bulkPatchRowKey(bulkPrePatchRow, null, patchContractWeekId);
+    const currentRowSignature = String(bulkPrePatchRow.row_signature || '').trim();
     if (expectedRowSignature && currentRowSignature !== expectedRowSignature) {
       return new Response(JSON.stringify({
         error: 'ROW_SIGNATURE_MISMATCH',
@@ -34264,8 +34276,8 @@ async function handleContractWeekSwitchMode(env, req, weekId) {
         message: 'This bulk row changed after it was loaded. Refresh the row and try again.',
         expected_row_signature: expectedRowSignature,
         current_row_signature: currentRowSignature || null,
-        current_timesheet_id: firstBulkString(bulkPreDecisionRow.current_timesheet_id, bulkPreDecisionRow.timesheet_id) || null,
-        contract_week_id: firstBulkString(bulkPreDecisionRow.contract_week_id, decisionContractWeekId) || null,
+        current_timesheet_id: firstBulkString(bulkPrePatchRow.current_timesheet_id, bulkPrePatchRow.timesheet_id) || null,
+        contract_week_id: firstBulkString(bulkPrePatchRow.contract_week_id, patchContractWeekId) || null,
         previous_row_key: bulkPreviousRowKey || null
       }), { status: 409, headers: { 'Content-Type': 'application/json' } });
     }
@@ -34276,17 +34288,17 @@ async function handleContractWeekSwitchMode(env, req, weekId) {
       env,
       user?.id || null,
       bulkDatasetMode,
-      firstBulkString(bulkPreDecisionRow?.current_timesheet_id, bulkPreDecisionRow?.timesheet_id) || null,
-      firstBulkString(bulkPreDecisionRow?.current_timesheet_id, bulkPreDecisionRow?.timesheet_id) || null,
-      firstBulkString(bulkPreDecisionRow?.contract_week_id, currentContractWeekIdForPatch),
+      firstBulkString(bulkPrePatchRow?.current_timesheet_id, bulkPrePatchRow?.timesheet_id) || null,
+      firstBulkString(bulkPrePatchRow?.current_timesheet_id, bulkPrePatchRow?.timesheet_id) || null,
+      firstBulkString(bulkPrePatchRow?.contract_week_id, currentContractWeekIdForPatch),
       currentContractWeekIdForPatch,
       bulkPreviousRowKey,
       actionName,
       {
         ...body,
         ...extraContext,
-        preDecisionRow: bulkPreDecisionRow,
-        pre_decision_row: bulkPreDecisionRow,
+        prePatchRow: bulkPrePatchRow,
+        pre_patch_row: bulkPrePatchRow,
         previousRowKey: bulkPreviousRowKey,
         previous_row_key: bulkPreviousRowKey,
         expected_row_signature: expectedRowSignature || null,
@@ -34294,8 +34306,8 @@ async function handleContractWeekSwitchMode(env, req, weekId) {
         bulk_process: bulkDatasetMode === 'process',
         bulk_authorise: bulkDatasetMode === 'authorise',
         return_bulk_patch: true,
-        previousStorageKey: bulkPreDecisionRow?.primary_artifact_storage_key || null,
-        previous_storage_key: bulkPreDecisionRow?.primary_artifact_storage_key || null,
+        previousStorageKey: bulkPrePatchRow?.primary_artifact_storage_key || null,
+        previous_storage_key: bulkPrePatchRow?.primary_artifact_storage_key || null,
         timeoutMs: 45000
       }
     );
@@ -34308,7 +34320,7 @@ async function handleContractWeekSwitchMode(env, req, weekId) {
   if (!cw) return withCORS(env, req, notFound('Week not found'));
   if (cw.timesheet_id) return withCORS(env, req, badRequest('Cannot switch mode for a week with a timesheet'));
 
-  const bulkPreMutationError = await ensureBulkPreMutationDecision(cw.id || weekId);
+  const bulkPreMutationError = await ensureBulkPreMutationPatch(cw.id || weekId, ['route', 'manual', 'editor']);
   if (bulkPreMutationError) return withCORS(env, req, bulkPreMutationError);
 
   // ✅ UPDATED: backend defence-in-depth — block import-authoritative planned weeks using summary view / contract overrides
@@ -34355,7 +34367,7 @@ async function handleContractWeekSwitchMode(env, req, weekId) {
       bulkPatch = await buildBulkWeekPatchPayload({
         currentContractWeekIdForPatch: row?.id || cw.id || weekId,
         actionName: 'CONTRACT_WEEK_SWITCH_MODE',
-        extraContext: { postDecisionRow: null }
+        extraContext: { postPatchRow: null, changed_domains: ['route', 'manual', 'editor'] }
       });
     } catch (e) {
       return withCORS(env, req, serverError(`Failed to build bulk contract week switch patch: ${e?.message || String(e)}`));
@@ -34382,8 +34394,6 @@ async function handleContractWeekSwitchMode(env, req, weekId) {
 
   return withCORS(env, req, ok(row));
 }
-
-
 
 async function handleContractWeekPresignManualPdf(env, req, weekId) {
   // Admin presign wrapper — MUST align with /api/files/presign-upload + /api/files/upload token/key rules
@@ -53925,6 +53935,7 @@ async function submitSendMailshotWizard() {
 
   return state.submit_result;
 }
+
 async function handleTimesheetConvertQrToManual(env, req, timesheetId) {
   const enc = encodeURIComponent;
 
@@ -53964,21 +53975,21 @@ async function handleTimesheetConvertQrToManual(env, req, timesheetId) {
     body?.rowSignature ||
     ''
   ).trim();
-  const parseBulkDecisionRow = (value) => {
+  const parseBulkPatchRow = (value) => {
     if (!value) return null;
     if (typeof value === 'string') {
       const source = value.trim();
       if (!source) return null;
       try {
         const parsed = JSON.parse(source);
-        return parseBulkDecisionRow(parsed);
+        return parseBulkPatchRow(parsed);
       } catch {
         return null;
       }
     }
     if (typeof value !== 'object' || Array.isArray(value)) return null;
-    if (value.row_json !== undefined) return parseBulkDecisionRow(value.row_json);
-    if (value.bulk_timesheet_row_decision_v1 !== undefined) return parseBulkDecisionRow(value.bulk_timesheet_row_decision_v1);
+    if (value.row_json !== undefined) return parseBulkPatchRow(value.row_json);
+    if (value.bulk_timesheet_row_patch_v1 !== undefined) return parseBulkPatchRow(value.bulk_timesheet_row_patch_v1);
     return value;
   };
   const firstBulkString = function firstBulkString() {
@@ -53988,7 +53999,7 @@ async function handleTimesheetConvertQrToManual(env, req, timesheetId) {
     }
     return '';
   };
-  const bulkDecisionRowKey = (row, fallbackTimesheetId, fallbackContractWeekId) => {
+  const bulkPatchRowKey = (row, fallbackTimesheetId, fallbackContractWeekId) => {
     const source = row && typeof row === 'object' && !Array.isArray(row) ? row : {};
     const explicit = firstBulkString(source.row_key, source.rowKey, source.new_row_key);
     if (explicit) return explicit;
@@ -53998,46 +54009,57 @@ async function handleTimesheetConvertQrToManual(env, req, timesheetId) {
     if (rowContractWeekId) return `contract_week:${rowContractWeekId}`;
     return firstBulkString(source.stable_row_id, source.id);
   };
-  const loadBulkRouteDecisionRow = async (decisionTimesheetId, decisionContractWeekId) => {
-    const decisionFilters = { dataset_mode: bulkDatasetMode };
-    if (decisionTimesheetId) decisionFilters.timesheet_id = String(decisionTimesheetId);
-    if (decisionContractWeekId) decisionFilters.contract_week_id = String(decisionContractWeekId);
-    if (user?.id) decisionFilters.actor_user_id = String(user.id);
-    const decisionRows = await sbRpc(
+  const loadBulkRoutePatchRow = async (patchTimesheetId, patchContractWeekId, changedDomains = []) => {
+    const patchFilters = {
+      dataset_mode: bulkDatasetMode,
+      projection: 'dataset_row',
+      profile: 'list'
+    };
+    const requestRowKey = firstBulkString(body?.row_key, body?.rowKey, body?.current_row_key, body?.currentRowKey);
+    if (requestRowKey) patchFilters.row_key = requestRowKey;
+    if (patchTimesheetId) patchFilters.timesheet_id = String(patchTimesheetId);
+    if (patchContractWeekId) patchFilters.contract_week_id = String(patchContractWeekId);
+    if (expectedRowSignature) patchFilters.expected_row_signature = expectedRowSignature;
+    if (user?.id) patchFilters.actor_user_id = String(user.id);
+    if (Array.isArray(changedDomains)) {
+      const cleanDomains = changedDomains.map((value) => String(value == null ? '' : value).trim()).filter(Boolean);
+      if (cleanDomains.length) patchFilters.changed_domains = cleanDomains;
+    }
+    const patchRows = await sbRpc(
       env,
-      'bulk_timesheet_row_decision_v1',
-      { p_filters: decisionFilters },
+      'bulk_timesheet_row_patch_v1',
+      { p_filters: patchFilters },
       { timeoutMs: 45000 }
     );
-    const firstDecisionRow = Array.isArray(decisionRows) ? (decisionRows[0] || null) : decisionRows;
-    return parseBulkDecisionRow(firstDecisionRow);
+    const firstPatchRow = Array.isArray(patchRows) ? (patchRows[0] || null) : patchRows;
+    return parseBulkPatchRow(firstPatchRow);
   };
-  let bulkPreDecisionRow = null;
+  let bulkPrePatchRow = null;
   let bulkPreviousRowKey = null;
-  const ensureBulkPreMutationDecision = async (decisionTimesheetId, decisionContractWeekId) => {
+  const ensureBulkPreMutationPatch = async (patchTimesheetId, patchContractWeekId, changedDomains = []) => {
     if (!bulkMode) return null;
     try {
-      bulkPreDecisionRow = await loadBulkRouteDecisionRow(decisionTimesheetId, decisionContractWeekId);
+      bulkPrePatchRow = await loadBulkRoutePatchRow(patchTimesheetId, patchContractWeekId, changedDomains);
     } catch (err) {
       return new Response(JSON.stringify({
-        error: 'BULK_ROUTE_DECISION_LOAD_FAILED',
-        error_code: 'BULK_ROUTE_DECISION_LOAD_FAILED',
-        message: err?.message || String(err || 'Failed to load bulk route decision row'),
-        current_timesheet_id: decisionTimesheetId || null,
-        contract_week_id: decisionContractWeekId || null
+        error: 'BULK_ROUTE_PATCH_LOAD_FAILED',
+        error_code: 'BULK_ROUTE_PATCH_LOAD_FAILED',
+        message: err?.message || String(err || 'Failed to load bulk route patch row'),
+        current_timesheet_id: patchTimesheetId || null,
+        contract_week_id: patchContractWeekId || null
       }), { status: 409, headers: { 'Content-Type': 'application/json' } });
     }
-    if (!bulkPreDecisionRow || typeof bulkPreDecisionRow !== 'object' || Array.isArray(bulkPreDecisionRow) || !Object.keys(bulkPreDecisionRow).length) {
+    if (!bulkPrePatchRow || typeof bulkPrePatchRow !== 'object' || Array.isArray(bulkPrePatchRow) || !Object.keys(bulkPrePatchRow).length) {
       return new Response(JSON.stringify({
-        error: 'BULK_ROUTE_DECISION_ROW_NOT_FOUND',
-        error_code: 'BULK_ROUTE_DECISION_ROW_NOT_FOUND',
+        error: 'BULK_ROUTE_PATCH_ROW_NOT_FOUND',
+        error_code: 'BULK_ROUTE_PATCH_ROW_NOT_FOUND',
         message: 'Could not load the current bulk row before route mutation.',
-        current_timesheet_id: decisionTimesheetId || null,
-        contract_week_id: decisionContractWeekId || null
+        current_timesheet_id: patchTimesheetId || null,
+        contract_week_id: patchContractWeekId || null
       }), { status: 409, headers: { 'Content-Type': 'application/json' } });
     }
-    bulkPreviousRowKey = bulkDecisionRowKey(bulkPreDecisionRow, decisionTimesheetId, decisionContractWeekId);
-    const currentRowSignature = String(bulkPreDecisionRow.row_signature || '').trim();
+    bulkPreviousRowKey = bulkPatchRowKey(bulkPrePatchRow, patchTimesheetId, patchContractWeekId);
+    const currentRowSignature = String(bulkPrePatchRow.row_signature || '').trim();
     if (expectedRowSignature && currentRowSignature !== expectedRowSignature) {
       return new Response(JSON.stringify({
         error: 'ROW_SIGNATURE_MISMATCH',
@@ -54045,8 +54067,8 @@ async function handleTimesheetConvertQrToManual(env, req, timesheetId) {
         message: 'This bulk row changed after it was loaded. Refresh the row and try again.',
         expected_row_signature: expectedRowSignature,
         current_row_signature: currentRowSignature || null,
-        current_timesheet_id: firstBulkString(bulkPreDecisionRow.current_timesheet_id, bulkPreDecisionRow.timesheet_id, decisionTimesheetId) || null,
-        contract_week_id: firstBulkString(bulkPreDecisionRow.contract_week_id, decisionContractWeekId) || null,
+        current_timesheet_id: firstBulkString(bulkPrePatchRow.current_timesheet_id, bulkPrePatchRow.timesheet_id, patchTimesheetId) || null,
+        contract_week_id: firstBulkString(bulkPrePatchRow.contract_week_id, patchContractWeekId) || null,
         previous_row_key: bulkPreviousRowKey || null
       }), { status: 409, headers: { 'Content-Type': 'application/json' } });
     }
@@ -54057,17 +54079,17 @@ async function handleTimesheetConvertQrToManual(env, req, timesheetId) {
       env,
       user?.id || null,
       bulkDatasetMode,
-      previousTimesheetIdForPatch || firstBulkString(bulkPreDecisionRow?.current_timesheet_id, bulkPreDecisionRow?.timesheet_id),
+      previousTimesheetIdForPatch || firstBulkString(bulkPrePatchRow?.current_timesheet_id, bulkPrePatchRow?.timesheet_id),
       currentTimesheetIdForPatch,
-      previousContractWeekIdForPatch || firstBulkString(bulkPreDecisionRow?.contract_week_id),
-      currentContractWeekIdForPatch || previousContractWeekIdForPatch || firstBulkString(bulkPreDecisionRow?.contract_week_id),
+      previousContractWeekIdForPatch || firstBulkString(bulkPrePatchRow?.contract_week_id),
+      currentContractWeekIdForPatch || previousContractWeekIdForPatch || firstBulkString(bulkPrePatchRow?.contract_week_id),
       bulkPreviousRowKey,
       actionName,
       {
         ...body,
         ...extraContext,
-        preDecisionRow: bulkPreDecisionRow,
-        pre_decision_row: bulkPreDecisionRow,
+        prePatchRow: bulkPrePatchRow,
+        pre_patch_row: bulkPrePatchRow,
         previousRowKey: bulkPreviousRowKey,
         previous_row_key: bulkPreviousRowKey,
         expected_row_signature: expectedRowSignature || null,
@@ -54075,8 +54097,8 @@ async function handleTimesheetConvertQrToManual(env, req, timesheetId) {
         bulk_process: bulkDatasetMode === 'process',
         bulk_authorise: bulkDatasetMode === 'authorise',
         return_bulk_patch: true,
-        previousStorageKey: bulkPreDecisionRow?.primary_artifact_storage_key || null,
-        previous_storage_key: bulkPreDecisionRow?.primary_artifact_storage_key || null,
+        previousStorageKey: bulkPrePatchRow?.primary_artifact_storage_key || null,
+        previous_storage_key: bulkPrePatchRow?.primary_artifact_storage_key || null,
         timeoutMs: 45000
       }
     );
@@ -54201,7 +54223,7 @@ async function handleTimesheetConvertQrToManual(env, req, timesheetId) {
     return withCORS(env, req, badRequest('Cannot convert QR: timesheet already invoiced or paid'));
   }
 
-  const bulkPreMutationError = await ensureBulkPreMutationDecision(currentTimesheetId, null);
+  const bulkPreMutationError = await ensureBulkPreMutationPatch(currentTimesheetId, null, ['route', 'manual', 'editor', 'identity']);
   if (bulkPreMutationError) return withCORS(env, req, bulkPreMutationError);
 
   let inserted = null;
@@ -54300,10 +54322,10 @@ async function handleTimesheetConvertQrToManual(env, req, timesheetId) {
       bulkPatch = await buildBulkRoutePatchPayload({
         previousTimesheetIdForPatch: currentTimesheetId,
         currentTimesheetIdForPatch: newTimesheetId,
-        previousContractWeekIdForPatch: bulkPreDecisionRow?.contract_week_id || null,
-        currentContractWeekIdForPatch: bulkPreDecisionRow?.contract_week_id || null,
+        previousContractWeekIdForPatch: bulkPrePatchRow?.contract_week_id || null,
+        currentContractWeekIdForPatch: bulkPrePatchRow?.contract_week_id || null,
         actionName: 'CONVERT_QR_TO_MANUAL',
-        extraContext: { currentVersion: inserted?.version ?? nextVersion }
+        extraContext: { currentVersion: inserted?.version ?? nextVersion, changed_domains: ['route', 'manual', 'editor', 'identity'] }
       });
     } catch (e) {
       return withCORS(env, req, serverError(`Failed to build bulk route mutation patch: ${e?.message || String(e)}`));
@@ -54781,21 +54803,21 @@ async function handleTimesheetAllowElectronicAgain(env, req, timesheetId) {
     body?.rowSignature ||
     ''
   ).trim();
-  const parseBulkDecisionRow = (value) => {
+  const parseBulkPatchRow = (value) => {
     if (!value) return null;
     if (typeof value === 'string') {
       const source = value.trim();
       if (!source) return null;
       try {
         const parsed = JSON.parse(source);
-        return parseBulkDecisionRow(parsed);
+        return parseBulkPatchRow(parsed);
       } catch {
         return null;
       }
     }
     if (typeof value !== 'object' || Array.isArray(value)) return null;
-    if (value.row_json !== undefined) return parseBulkDecisionRow(value.row_json);
-    if (value.bulk_timesheet_row_decision_v1 !== undefined) return parseBulkDecisionRow(value.bulk_timesheet_row_decision_v1);
+    if (value.row_json !== undefined) return parseBulkPatchRow(value.row_json);
+    if (value.bulk_timesheet_row_patch_v1 !== undefined) return parseBulkPatchRow(value.bulk_timesheet_row_patch_v1);
     return value;
   };
   const firstBulkString = function firstBulkString() {
@@ -54805,7 +54827,7 @@ async function handleTimesheetAllowElectronicAgain(env, req, timesheetId) {
     }
     return '';
   };
-  const bulkDecisionRowKey = (row, fallbackTimesheetId, fallbackContractWeekId) => {
+  const bulkPatchRowKey = (row, fallbackTimesheetId, fallbackContractWeekId) => {
     const source = row && typeof row === 'object' && !Array.isArray(row) ? row : {};
     const explicit = firstBulkString(source.row_key, source.rowKey, source.new_row_key);
     if (explicit) return explicit;
@@ -54815,46 +54837,57 @@ async function handleTimesheetAllowElectronicAgain(env, req, timesheetId) {
     if (rowContractWeekId) return `contract_week:${rowContractWeekId}`;
     return firstBulkString(source.stable_row_id, source.id);
   };
-  const loadBulkRouteDecisionRow = async (decisionTimesheetId, decisionContractWeekId) => {
-    const decisionFilters = { dataset_mode: bulkDatasetMode };
-    if (decisionTimesheetId) decisionFilters.timesheet_id = String(decisionTimesheetId);
-    if (decisionContractWeekId) decisionFilters.contract_week_id = String(decisionContractWeekId);
-    if (user?.id) decisionFilters.actor_user_id = String(user.id);
-    const decisionRows = await sbRpc(
+  const loadBulkRoutePatchRow = async (patchTimesheetId, patchContractWeekId, changedDomains = []) => {
+    const patchFilters = {
+      dataset_mode: bulkDatasetMode,
+      projection: 'dataset_row',
+      profile: 'list'
+    };
+    const requestRowKey = firstBulkString(body?.row_key, body?.rowKey, body?.current_row_key, body?.currentRowKey);
+    if (requestRowKey) patchFilters.row_key = requestRowKey;
+    if (patchTimesheetId) patchFilters.timesheet_id = String(patchTimesheetId);
+    if (patchContractWeekId) patchFilters.contract_week_id = String(patchContractWeekId);
+    if (expectedRowSignature) patchFilters.expected_row_signature = expectedRowSignature;
+    if (user?.id) patchFilters.actor_user_id = String(user.id);
+    if (Array.isArray(changedDomains)) {
+      const cleanDomains = changedDomains.map((value) => String(value == null ? '' : value).trim()).filter(Boolean);
+      if (cleanDomains.length) patchFilters.changed_domains = cleanDomains;
+    }
+    const patchRows = await sbRpc(
       env,
-      'bulk_timesheet_row_decision_v1',
-      { p_filters: decisionFilters },
+      'bulk_timesheet_row_patch_v1',
+      { p_filters: patchFilters },
       { timeoutMs: 45000 }
     );
-    const firstDecisionRow = Array.isArray(decisionRows) ? (decisionRows[0] || null) : decisionRows;
-    return parseBulkDecisionRow(firstDecisionRow);
+    const firstPatchRow = Array.isArray(patchRows) ? (patchRows[0] || null) : patchRows;
+    return parseBulkPatchRow(firstPatchRow);
   };
-  let bulkPreDecisionRow = null;
+  let bulkPrePatchRow = null;
   let bulkPreviousRowKey = null;
-  const ensureBulkPreMutationDecision = async (decisionTimesheetId, decisionContractWeekId) => {
+  const ensureBulkPreMutationPatch = async (patchTimesheetId, patchContractWeekId, changedDomains = []) => {
     if (!bulkMode) return null;
     try {
-      bulkPreDecisionRow = await loadBulkRouteDecisionRow(decisionTimesheetId, decisionContractWeekId);
+      bulkPrePatchRow = await loadBulkRoutePatchRow(patchTimesheetId, patchContractWeekId, changedDomains);
     } catch (err) {
       return new Response(JSON.stringify({
-        error: 'BULK_ROUTE_DECISION_LOAD_FAILED',
-        error_code: 'BULK_ROUTE_DECISION_LOAD_FAILED',
-        message: err?.message || String(err || 'Failed to load bulk route decision row'),
-        current_timesheet_id: decisionTimesheetId || null,
-        contract_week_id: decisionContractWeekId || null
+        error: 'BULK_ROUTE_PATCH_LOAD_FAILED',
+        error_code: 'BULK_ROUTE_PATCH_LOAD_FAILED',
+        message: err?.message || String(err || 'Failed to load bulk route patch row'),
+        current_timesheet_id: patchTimesheetId || null,
+        contract_week_id: patchContractWeekId || null
       }), { status: 409, headers: { 'Content-Type': 'application/json' } });
     }
-    if (!bulkPreDecisionRow || typeof bulkPreDecisionRow !== 'object' || Array.isArray(bulkPreDecisionRow) || !Object.keys(bulkPreDecisionRow).length) {
+    if (!bulkPrePatchRow || typeof bulkPrePatchRow !== 'object' || Array.isArray(bulkPrePatchRow) || !Object.keys(bulkPrePatchRow).length) {
       return new Response(JSON.stringify({
-        error: 'BULK_ROUTE_DECISION_ROW_NOT_FOUND',
-        error_code: 'BULK_ROUTE_DECISION_ROW_NOT_FOUND',
+        error: 'BULK_ROUTE_PATCH_ROW_NOT_FOUND',
+        error_code: 'BULK_ROUTE_PATCH_ROW_NOT_FOUND',
         message: 'Could not load the current bulk row before route mutation.',
-        current_timesheet_id: decisionTimesheetId || null,
-        contract_week_id: decisionContractWeekId || null
+        current_timesheet_id: patchTimesheetId || null,
+        contract_week_id: patchContractWeekId || null
       }), { status: 409, headers: { 'Content-Type': 'application/json' } });
     }
-    bulkPreviousRowKey = bulkDecisionRowKey(bulkPreDecisionRow, decisionTimesheetId, decisionContractWeekId);
-    const currentRowSignature = String(bulkPreDecisionRow.row_signature || '').trim();
+    bulkPreviousRowKey = bulkPatchRowKey(bulkPrePatchRow, patchTimesheetId, patchContractWeekId);
+    const currentRowSignature = String(bulkPrePatchRow.row_signature || '').trim();
     if (expectedRowSignature && currentRowSignature !== expectedRowSignature) {
       return new Response(JSON.stringify({
         error: 'ROW_SIGNATURE_MISMATCH',
@@ -54862,8 +54895,8 @@ async function handleTimesheetAllowElectronicAgain(env, req, timesheetId) {
         message: 'This bulk row changed after it was loaded. Refresh the row and try again.',
         expected_row_signature: expectedRowSignature,
         current_row_signature: currentRowSignature || null,
-        current_timesheet_id: firstBulkString(bulkPreDecisionRow.current_timesheet_id, bulkPreDecisionRow.timesheet_id, decisionTimesheetId) || null,
-        contract_week_id: firstBulkString(bulkPreDecisionRow.contract_week_id, decisionContractWeekId) || null,
+        current_timesheet_id: firstBulkString(bulkPrePatchRow.current_timesheet_id, bulkPrePatchRow.timesheet_id, patchTimesheetId) || null,
+        contract_week_id: firstBulkString(bulkPrePatchRow.contract_week_id, patchContractWeekId) || null,
         previous_row_key: bulkPreviousRowKey || null
       }), { status: 409, headers: { 'Content-Type': 'application/json' } });
     }
@@ -54874,17 +54907,17 @@ async function handleTimesheetAllowElectronicAgain(env, req, timesheetId) {
       env,
       user?.id || null,
       bulkDatasetMode,
-      previousTimesheetIdForPatch || firstBulkString(bulkPreDecisionRow?.current_timesheet_id, bulkPreDecisionRow?.timesheet_id),
+      previousTimesheetIdForPatch || firstBulkString(bulkPrePatchRow?.current_timesheet_id, bulkPrePatchRow?.timesheet_id),
       currentTimesheetIdForPatch,
-      previousContractWeekIdForPatch || firstBulkString(bulkPreDecisionRow?.contract_week_id),
-      currentContractWeekIdForPatch || previousContractWeekIdForPatch || firstBulkString(bulkPreDecisionRow?.contract_week_id),
+      previousContractWeekIdForPatch || firstBulkString(bulkPrePatchRow?.contract_week_id),
+      currentContractWeekIdForPatch || previousContractWeekIdForPatch || firstBulkString(bulkPrePatchRow?.contract_week_id),
       bulkPreviousRowKey,
       actionName,
       {
         ...body,
         ...extraContext,
-        preDecisionRow: bulkPreDecisionRow,
-        pre_decision_row: bulkPreDecisionRow,
+        prePatchRow: bulkPrePatchRow,
+        pre_patch_row: bulkPrePatchRow,
         previousRowKey: bulkPreviousRowKey,
         previous_row_key: bulkPreviousRowKey,
         expected_row_signature: expectedRowSignature || null,
@@ -54892,8 +54925,8 @@ async function handleTimesheetAllowElectronicAgain(env, req, timesheetId) {
         bulk_process: bulkDatasetMode === 'process',
         bulk_authorise: bulkDatasetMode === 'authorise',
         return_bulk_patch: true,
-        previousStorageKey: bulkPreDecisionRow?.primary_artifact_storage_key || null,
-        previous_storage_key: bulkPreDecisionRow?.primary_artifact_storage_key || null,
+        previousStorageKey: bulkPrePatchRow?.primary_artifact_storage_key || null,
+        previous_storage_key: bulkPrePatchRow?.primary_artifact_storage_key || null,
         timeoutMs: 45000
       }
     );
@@ -55041,7 +55074,7 @@ async function handleTimesheetAllowElectronicAgain(env, req, timesheetId) {
     return withCORS(env, req, badRequest('Client does not support electronic submission'));
   }
 
-  const bulkPreMutationError = await ensureBulkPreMutationDecision(currentTimesheetId, null);
+  const bulkPreMutationError = await ensureBulkPreMutationPatch(currentTimesheetId, null, ['route', 'manual', 'editor', 'identity']);
   if (bulkPreMutationError) return withCORS(env, req, bulkPreMutationError);
 
   let inserted = null;
@@ -55130,10 +55163,10 @@ async function handleTimesheetAllowElectronicAgain(env, req, timesheetId) {
       bulkPatch = await buildBulkRoutePatchPayload({
         previousTimesheetIdForPatch: currentTimesheetId,
         currentTimesheetIdForPatch: newTimesheetId,
-        previousContractWeekIdForPatch: bulkPreDecisionRow?.contract_week_id || null,
-        currentContractWeekIdForPatch: bulkPreDecisionRow?.contract_week_id || null,
+        previousContractWeekIdForPatch: bulkPrePatchRow?.contract_week_id || null,
+        currentContractWeekIdForPatch: bulkPrePatchRow?.contract_week_id || null,
         actionName: 'ALLOW_ELECTRONIC_AGAIN',
-        extraContext: { currentVersion: inserted?.version ?? nextVersion }
+        extraContext: { currentVersion: inserted?.version ?? nextVersion, changed_domains: ['route', 'manual', 'editor', 'identity'] }
       });
     } catch (e) {
       return withCORS(env, req, serverError(`Failed to build bulk route mutation patch: ${e?.message || String(e)}`));
@@ -55165,6 +55198,7 @@ async function handleTimesheetAllowElectronicAgain(env, req, timesheetId) {
     was_stale: !!resolved.was_stale
   }));
 }
+
 
 async function handleTimesheetAllowQrAgain(env, req, timesheetId) {
   const enc = encodeURIComponent;
@@ -55207,21 +55241,21 @@ async function handleTimesheetAllowQrAgain(env, req, timesheetId) {
     body?.rowSignature ||
     ''
   ).trim();
-  const parseBulkDecisionRow = (value) => {
+  const parseBulkPatchRow = (value) => {
     if (!value) return null;
     if (typeof value === 'string') {
       const source = value.trim();
       if (!source) return null;
       try {
         const parsed = JSON.parse(source);
-        return parseBulkDecisionRow(parsed);
+        return parseBulkPatchRow(parsed);
       } catch {
         return null;
       }
     }
     if (typeof value !== 'object' || Array.isArray(value)) return null;
-    if (value.row_json !== undefined) return parseBulkDecisionRow(value.row_json);
-    if (value.bulk_timesheet_row_decision_v1 !== undefined) return parseBulkDecisionRow(value.bulk_timesheet_row_decision_v1);
+    if (value.row_json !== undefined) return parseBulkPatchRow(value.row_json);
+    if (value.bulk_timesheet_row_patch_v1 !== undefined) return parseBulkPatchRow(value.bulk_timesheet_row_patch_v1);
     return value;
   };
   const firstBulkString = function firstBulkString() {
@@ -55231,7 +55265,7 @@ async function handleTimesheetAllowQrAgain(env, req, timesheetId) {
     }
     return '';
   };
-  const bulkDecisionRowKey = (row, fallbackTimesheetId, fallbackContractWeekId) => {
+  const bulkPatchRowKey = (row, fallbackTimesheetId, fallbackContractWeekId) => {
     const source = row && typeof row === 'object' && !Array.isArray(row) ? row : {};
     const explicit = firstBulkString(source.row_key, source.rowKey, source.new_row_key);
     if (explicit) return explicit;
@@ -55241,46 +55275,57 @@ async function handleTimesheetAllowQrAgain(env, req, timesheetId) {
     if (rowContractWeekId) return `contract_week:${rowContractWeekId}`;
     return firstBulkString(source.stable_row_id, source.id);
   };
-  const loadBulkRouteDecisionRow = async (decisionTimesheetId, decisionContractWeekId) => {
-    const decisionFilters = { dataset_mode: bulkDatasetMode };
-    if (decisionTimesheetId) decisionFilters.timesheet_id = String(decisionTimesheetId);
-    if (decisionContractWeekId) decisionFilters.contract_week_id = String(decisionContractWeekId);
-    if (user?.id) decisionFilters.actor_user_id = String(user.id);
-    const decisionRows = await sbRpc(
+  const loadBulkRoutePatchRow = async (patchTimesheetId, patchContractWeekId, changedDomains = []) => {
+    const patchFilters = {
+      dataset_mode: bulkDatasetMode,
+      projection: 'dataset_row',
+      profile: 'list'
+    };
+    const requestRowKey = firstBulkString(body?.row_key, body?.rowKey, body?.current_row_key, body?.currentRowKey);
+    if (requestRowKey) patchFilters.row_key = requestRowKey;
+    if (patchTimesheetId) patchFilters.timesheet_id = String(patchTimesheetId);
+    if (patchContractWeekId) patchFilters.contract_week_id = String(patchContractWeekId);
+    if (expectedRowSignature) patchFilters.expected_row_signature = expectedRowSignature;
+    if (user?.id) patchFilters.actor_user_id = String(user.id);
+    if (Array.isArray(changedDomains)) {
+      const cleanDomains = changedDomains.map((value) => String(value == null ? '' : value).trim()).filter(Boolean);
+      if (cleanDomains.length) patchFilters.changed_domains = cleanDomains;
+    }
+    const patchRows = await sbRpc(
       env,
-      'bulk_timesheet_row_decision_v1',
-      { p_filters: decisionFilters },
+      'bulk_timesheet_row_patch_v1',
+      { p_filters: patchFilters },
       { timeoutMs: 45000 }
     );
-    const firstDecisionRow = Array.isArray(decisionRows) ? (decisionRows[0] || null) : decisionRows;
-    return parseBulkDecisionRow(firstDecisionRow);
+    const firstPatchRow = Array.isArray(patchRows) ? (patchRows[0] || null) : patchRows;
+    return parseBulkPatchRow(firstPatchRow);
   };
-  let bulkPreDecisionRow = null;
+  let bulkPrePatchRow = null;
   let bulkPreviousRowKey = null;
-  const ensureBulkPreMutationDecision = async (decisionTimesheetId, decisionContractWeekId) => {
+  const ensureBulkPreMutationPatch = async (patchTimesheetId, patchContractWeekId, changedDomains = []) => {
     if (!bulkMode) return null;
     try {
-      bulkPreDecisionRow = await loadBulkRouteDecisionRow(decisionTimesheetId, decisionContractWeekId);
+      bulkPrePatchRow = await loadBulkRoutePatchRow(patchTimesheetId, patchContractWeekId, changedDomains);
     } catch (err) {
       return new Response(JSON.stringify({
-        error: 'BULK_ROUTE_DECISION_LOAD_FAILED',
-        error_code: 'BULK_ROUTE_DECISION_LOAD_FAILED',
-        message: err?.message || String(err || 'Failed to load bulk route decision row'),
-        current_timesheet_id: decisionTimesheetId || null,
-        contract_week_id: decisionContractWeekId || null
+        error: 'BULK_ROUTE_PATCH_LOAD_FAILED',
+        error_code: 'BULK_ROUTE_PATCH_LOAD_FAILED',
+        message: err?.message || String(err || 'Failed to load bulk route patch row'),
+        current_timesheet_id: patchTimesheetId || null,
+        contract_week_id: patchContractWeekId || null
       }), { status: 409, headers: { 'Content-Type': 'application/json' } });
     }
-    if (!bulkPreDecisionRow || typeof bulkPreDecisionRow !== 'object' || Array.isArray(bulkPreDecisionRow) || !Object.keys(bulkPreDecisionRow).length) {
+    if (!bulkPrePatchRow || typeof bulkPrePatchRow !== 'object' || Array.isArray(bulkPrePatchRow) || !Object.keys(bulkPrePatchRow).length) {
       return new Response(JSON.stringify({
-        error: 'BULK_ROUTE_DECISION_ROW_NOT_FOUND',
-        error_code: 'BULK_ROUTE_DECISION_ROW_NOT_FOUND',
+        error: 'BULK_ROUTE_PATCH_ROW_NOT_FOUND',
+        error_code: 'BULK_ROUTE_PATCH_ROW_NOT_FOUND',
         message: 'Could not load the current bulk row before route mutation.',
-        current_timesheet_id: decisionTimesheetId || null,
-        contract_week_id: decisionContractWeekId || null
+        current_timesheet_id: patchTimesheetId || null,
+        contract_week_id: patchContractWeekId || null
       }), { status: 409, headers: { 'Content-Type': 'application/json' } });
     }
-    bulkPreviousRowKey = bulkDecisionRowKey(bulkPreDecisionRow, decisionTimesheetId, decisionContractWeekId);
-    const currentRowSignature = String(bulkPreDecisionRow.row_signature || '').trim();
+    bulkPreviousRowKey = bulkPatchRowKey(bulkPrePatchRow, patchTimesheetId, patchContractWeekId);
+    const currentRowSignature = String(bulkPrePatchRow.row_signature || '').trim();
     if (expectedRowSignature && currentRowSignature !== expectedRowSignature) {
       return new Response(JSON.stringify({
         error: 'ROW_SIGNATURE_MISMATCH',
@@ -55288,8 +55333,8 @@ async function handleTimesheetAllowQrAgain(env, req, timesheetId) {
         message: 'This bulk row changed after it was loaded. Refresh the row and try again.',
         expected_row_signature: expectedRowSignature,
         current_row_signature: currentRowSignature || null,
-        current_timesheet_id: firstBulkString(bulkPreDecisionRow.current_timesheet_id, bulkPreDecisionRow.timesheet_id, decisionTimesheetId) || null,
-        contract_week_id: firstBulkString(bulkPreDecisionRow.contract_week_id, decisionContractWeekId) || null,
+        current_timesheet_id: firstBulkString(bulkPrePatchRow.current_timesheet_id, bulkPrePatchRow.timesheet_id, patchTimesheetId) || null,
+        contract_week_id: firstBulkString(bulkPrePatchRow.contract_week_id, patchContractWeekId) || null,
         previous_row_key: bulkPreviousRowKey || null
       }), { status: 409, headers: { 'Content-Type': 'application/json' } });
     }
@@ -55300,17 +55345,17 @@ async function handleTimesheetAllowQrAgain(env, req, timesheetId) {
       env,
       user?.id || null,
       bulkDatasetMode,
-      previousTimesheetIdForPatch || firstBulkString(bulkPreDecisionRow?.current_timesheet_id, bulkPreDecisionRow?.timesheet_id),
+      previousTimesheetIdForPatch || firstBulkString(bulkPrePatchRow?.current_timesheet_id, bulkPrePatchRow?.timesheet_id),
       currentTimesheetIdForPatch,
-      previousContractWeekIdForPatch || firstBulkString(bulkPreDecisionRow?.contract_week_id),
-      currentContractWeekIdForPatch || previousContractWeekIdForPatch || firstBulkString(bulkPreDecisionRow?.contract_week_id),
+      previousContractWeekIdForPatch || firstBulkString(bulkPrePatchRow?.contract_week_id),
+      currentContractWeekIdForPatch || previousContractWeekIdForPatch || firstBulkString(bulkPrePatchRow?.contract_week_id),
       bulkPreviousRowKey,
       actionName,
       {
         ...body,
         ...extraContext,
-        preDecisionRow: bulkPreDecisionRow,
-        pre_decision_row: bulkPreDecisionRow,
+        prePatchRow: bulkPrePatchRow,
+        pre_patch_row: bulkPrePatchRow,
         previousRowKey: bulkPreviousRowKey,
         previous_row_key: bulkPreviousRowKey,
         expected_row_signature: expectedRowSignature || null,
@@ -55318,8 +55363,8 @@ async function handleTimesheetAllowQrAgain(env, req, timesheetId) {
         bulk_process: bulkDatasetMode === 'process',
         bulk_authorise: bulkDatasetMode === 'authorise',
         return_bulk_patch: true,
-        previousStorageKey: bulkPreDecisionRow?.primary_artifact_storage_key || null,
-        previous_storage_key: bulkPreDecisionRow?.primary_artifact_storage_key || null,
+        previousStorageKey: bulkPrePatchRow?.primary_artifact_storage_key || null,
+        previous_storage_key: bulkPrePatchRow?.primary_artifact_storage_key || null,
         timeoutMs: 45000
       }
     );
@@ -55407,7 +55452,7 @@ async function handleTimesheetAllowQrAgain(env, req, timesheetId) {
     return withCORS(env, req, badRequest('Allow QR again is only valid for manual-only timesheets'));
   }
 
-  const bulkPreMutationError = await ensureBulkPreMutationDecision(currentTimesheetId, null);
+  const bulkPreMutationError = await ensureBulkPreMutationPatch(currentTimesheetId, null, ['route', 'manual', 'editor', 'identity']);
   if (bulkPreMutationError) return withCORS(env, req, bulkPreMutationError);
 
   let inserted = null;
@@ -55494,10 +55539,10 @@ async function handleTimesheetAllowQrAgain(env, req, timesheetId) {
       bulkPatch = await buildBulkRoutePatchPayload({
         previousTimesheetIdForPatch: currentTimesheetId,
         currentTimesheetIdForPatch: newTimesheetId,
-        previousContractWeekIdForPatch: bulkPreDecisionRow?.contract_week_id || null,
-        currentContractWeekIdForPatch: bulkPreDecisionRow?.contract_week_id || null,
+        previousContractWeekIdForPatch: bulkPrePatchRow?.contract_week_id || null,
+        currentContractWeekIdForPatch: bulkPrePatchRow?.contract_week_id || null,
         actionName: 'ALLOW_QR_AGAIN',
-        extraContext: { currentVersion: inserted?.version ?? nextVersion }
+        extraContext: { currentVersion: inserted?.version ?? nextVersion, changed_domains: ['route', 'manual', 'editor', 'identity'] }
       });
     } catch (e) {
       return withCORS(env, req, serverError(`Failed to build bulk route mutation patch: ${e?.message || String(e)}`));
@@ -55533,6 +55578,7 @@ async function handleTimesheetAllowQrAgain(env, req, timesheetId) {
     was_stale: !!resolved.was_stale
   }));
 }
+
 
 async function handleTimesheetSwitchToManual(env, req, timesheetId) {
   const enc = encodeURIComponent;
@@ -55573,21 +55619,21 @@ async function handleTimesheetSwitchToManual(env, req, timesheetId) {
     body?.rowSignature ||
     ''
   ).trim();
-  const parseBulkDecisionRow = (value) => {
+  const parseBulkPatchRow = (value) => {
     if (!value) return null;
     if (typeof value === 'string') {
       const source = value.trim();
       if (!source) return null;
       try {
         const parsed = JSON.parse(source);
-        return parseBulkDecisionRow(parsed);
+        return parseBulkPatchRow(parsed);
       } catch {
         return null;
       }
     }
     if (typeof value !== 'object' || Array.isArray(value)) return null;
-    if (value.row_json !== undefined) return parseBulkDecisionRow(value.row_json);
-    if (value.bulk_timesheet_row_decision_v1 !== undefined) return parseBulkDecisionRow(value.bulk_timesheet_row_decision_v1);
+    if (value.row_json !== undefined) return parseBulkPatchRow(value.row_json);
+    if (value.bulk_timesheet_row_patch_v1 !== undefined) return parseBulkPatchRow(value.bulk_timesheet_row_patch_v1);
     return value;
   };
   const firstBulkString = function firstBulkString() {
@@ -55597,7 +55643,7 @@ async function handleTimesheetSwitchToManual(env, req, timesheetId) {
     }
     return '';
   };
-  const bulkDecisionRowKey = (row, fallbackTimesheetId, fallbackContractWeekId) => {
+  const bulkPatchRowKey = (row, fallbackTimesheetId, fallbackContractWeekId) => {
     const source = row && typeof row === 'object' && !Array.isArray(row) ? row : {};
     const explicit = firstBulkString(source.row_key, source.rowKey, source.new_row_key);
     if (explicit) return explicit;
@@ -55607,46 +55653,57 @@ async function handleTimesheetSwitchToManual(env, req, timesheetId) {
     if (rowContractWeekId) return `contract_week:${rowContractWeekId}`;
     return firstBulkString(source.stable_row_id, source.id);
   };
-  const loadBulkRouteDecisionRow = async (decisionTimesheetId, decisionContractWeekId) => {
-    const decisionFilters = { dataset_mode: bulkDatasetMode };
-    if (decisionTimesheetId) decisionFilters.timesheet_id = String(decisionTimesheetId);
-    if (decisionContractWeekId) decisionFilters.contract_week_id = String(decisionContractWeekId);
-    if (user?.id) decisionFilters.actor_user_id = String(user.id);
-    const decisionRows = await sbRpc(
+  const loadBulkRoutePatchRow = async (patchTimesheetId, patchContractWeekId, changedDomains = []) => {
+    const patchFilters = {
+      dataset_mode: bulkDatasetMode,
+      projection: 'dataset_row',
+      profile: 'list'
+    };
+    const requestRowKey = firstBulkString(body?.row_key, body?.rowKey, body?.current_row_key, body?.currentRowKey);
+    if (requestRowKey) patchFilters.row_key = requestRowKey;
+    if (patchTimesheetId) patchFilters.timesheet_id = String(patchTimesheetId);
+    if (patchContractWeekId) patchFilters.contract_week_id = String(patchContractWeekId);
+    if (expectedRowSignature) patchFilters.expected_row_signature = expectedRowSignature;
+    if (user?.id) patchFilters.actor_user_id = String(user.id);
+    if (Array.isArray(changedDomains)) {
+      const cleanDomains = changedDomains.map((value) => String(value == null ? '' : value).trim()).filter(Boolean);
+      if (cleanDomains.length) patchFilters.changed_domains = cleanDomains;
+    }
+    const patchRows = await sbRpc(
       env,
-      'bulk_timesheet_row_decision_v1',
-      { p_filters: decisionFilters },
+      'bulk_timesheet_row_patch_v1',
+      { p_filters: patchFilters },
       { timeoutMs: 45000 }
     );
-    const firstDecisionRow = Array.isArray(decisionRows) ? (decisionRows[0] || null) : decisionRows;
-    return parseBulkDecisionRow(firstDecisionRow);
+    const firstPatchRow = Array.isArray(patchRows) ? (patchRows[0] || null) : patchRows;
+    return parseBulkPatchRow(firstPatchRow);
   };
-  let bulkPreDecisionRow = null;
+  let bulkPrePatchRow = null;
   let bulkPreviousRowKey = null;
-  const ensureBulkPreMutationDecision = async (decisionTimesheetId, decisionContractWeekId) => {
+  const ensureBulkPreMutationPatch = async (patchTimesheetId, patchContractWeekId, changedDomains = []) => {
     if (!bulkMode) return null;
     try {
-      bulkPreDecisionRow = await loadBulkRouteDecisionRow(decisionTimesheetId, decisionContractWeekId);
+      bulkPrePatchRow = await loadBulkRoutePatchRow(patchTimesheetId, patchContractWeekId, changedDomains);
     } catch (err) {
       return new Response(JSON.stringify({
-        error: 'BULK_ROUTE_DECISION_LOAD_FAILED',
-        error_code: 'BULK_ROUTE_DECISION_LOAD_FAILED',
-        message: err?.message || String(err || 'Failed to load bulk route decision row'),
-        current_timesheet_id: decisionTimesheetId || null,
-        contract_week_id: decisionContractWeekId || null
+        error: 'BULK_ROUTE_PATCH_LOAD_FAILED',
+        error_code: 'BULK_ROUTE_PATCH_LOAD_FAILED',
+        message: err?.message || String(err || 'Failed to load bulk route patch row'),
+        current_timesheet_id: patchTimesheetId || null,
+        contract_week_id: patchContractWeekId || null
       }), { status: 409, headers: { 'Content-Type': 'application/json' } });
     }
-    if (!bulkPreDecisionRow || typeof bulkPreDecisionRow !== 'object' || Array.isArray(bulkPreDecisionRow) || !Object.keys(bulkPreDecisionRow).length) {
+    if (!bulkPrePatchRow || typeof bulkPrePatchRow !== 'object' || Array.isArray(bulkPrePatchRow) || !Object.keys(bulkPrePatchRow).length) {
       return new Response(JSON.stringify({
-        error: 'BULK_ROUTE_DECISION_ROW_NOT_FOUND',
-        error_code: 'BULK_ROUTE_DECISION_ROW_NOT_FOUND',
+        error: 'BULK_ROUTE_PATCH_ROW_NOT_FOUND',
+        error_code: 'BULK_ROUTE_PATCH_ROW_NOT_FOUND',
         message: 'Could not load the current bulk row before route mutation.',
-        current_timesheet_id: decisionTimesheetId || null,
-        contract_week_id: decisionContractWeekId || null
+        current_timesheet_id: patchTimesheetId || null,
+        contract_week_id: patchContractWeekId || null
       }), { status: 409, headers: { 'Content-Type': 'application/json' } });
     }
-    bulkPreviousRowKey = bulkDecisionRowKey(bulkPreDecisionRow, decisionTimesheetId, decisionContractWeekId);
-    const currentRowSignature = String(bulkPreDecisionRow.row_signature || '').trim();
+    bulkPreviousRowKey = bulkPatchRowKey(bulkPrePatchRow, patchTimesheetId, patchContractWeekId);
+    const currentRowSignature = String(bulkPrePatchRow.row_signature || '').trim();
     if (expectedRowSignature && currentRowSignature !== expectedRowSignature) {
       return new Response(JSON.stringify({
         error: 'ROW_SIGNATURE_MISMATCH',
@@ -55654,8 +55711,8 @@ async function handleTimesheetSwitchToManual(env, req, timesheetId) {
         message: 'This bulk row changed after it was loaded. Refresh the row and try again.',
         expected_row_signature: expectedRowSignature,
         current_row_signature: currentRowSignature || null,
-        current_timesheet_id: firstBulkString(bulkPreDecisionRow.current_timesheet_id, bulkPreDecisionRow.timesheet_id, decisionTimesheetId) || null,
-        contract_week_id: firstBulkString(bulkPreDecisionRow.contract_week_id, decisionContractWeekId) || null,
+        current_timesheet_id: firstBulkString(bulkPrePatchRow.current_timesheet_id, bulkPrePatchRow.timesheet_id, patchTimesheetId) || null,
+        contract_week_id: firstBulkString(bulkPrePatchRow.contract_week_id, patchContractWeekId) || null,
         previous_row_key: bulkPreviousRowKey || null
       }), { status: 409, headers: { 'Content-Type': 'application/json' } });
     }
@@ -55666,17 +55723,17 @@ async function handleTimesheetSwitchToManual(env, req, timesheetId) {
       env,
       user?.id || null,
       bulkDatasetMode,
-      previousTimesheetIdForPatch || firstBulkString(bulkPreDecisionRow?.current_timesheet_id, bulkPreDecisionRow?.timesheet_id),
+      previousTimesheetIdForPatch || firstBulkString(bulkPrePatchRow?.current_timesheet_id, bulkPrePatchRow?.timesheet_id),
       currentTimesheetIdForPatch,
-      previousContractWeekIdForPatch || firstBulkString(bulkPreDecisionRow?.contract_week_id),
-      currentContractWeekIdForPatch || previousContractWeekIdForPatch || firstBulkString(bulkPreDecisionRow?.contract_week_id),
+      previousContractWeekIdForPatch || firstBulkString(bulkPrePatchRow?.contract_week_id),
+      currentContractWeekIdForPatch || previousContractWeekIdForPatch || firstBulkString(bulkPrePatchRow?.contract_week_id),
       bulkPreviousRowKey,
       actionName,
       {
         ...body,
         ...extraContext,
-        preDecisionRow: bulkPreDecisionRow,
-        pre_decision_row: bulkPreDecisionRow,
+        prePatchRow: bulkPrePatchRow,
+        pre_patch_row: bulkPrePatchRow,
         previousRowKey: bulkPreviousRowKey,
         previous_row_key: bulkPreviousRowKey,
         expected_row_signature: expectedRowSignature || null,
@@ -55684,8 +55741,8 @@ async function handleTimesheetSwitchToManual(env, req, timesheetId) {
         bulk_process: bulkDatasetMode === 'process',
         bulk_authorise: bulkDatasetMode === 'authorise',
         return_bulk_patch: true,
-        previousStorageKey: bulkPreDecisionRow?.primary_artifact_storage_key || null,
-        previous_storage_key: bulkPreDecisionRow?.primary_artifact_storage_key || null,
+        previousStorageKey: bulkPrePatchRow?.primary_artifact_storage_key || null,
+        previous_storage_key: bulkPrePatchRow?.primary_artifact_storage_key || null,
         timeoutMs: 45000
       }
     );
@@ -55799,7 +55856,7 @@ async function handleTimesheetSwitchToManual(env, req, timesheetId) {
     return withCORS(env, req, badRequest('Only CONTRACT_WEEKLY timesheets can be switched to manual'));
   }
 
-  const bulkPreMutationError = await ensureBulkPreMutationDecision(currentTimesheetId, cw.id);
+  const bulkPreMutationError = await ensureBulkPreMutationPatch(currentTimesheetId, cw.id, ['route', 'manual', 'editor', 'identity']);
   if (bulkPreMutationError) return withCORS(env, req, bulkPreMutationError);
 
   let inserted = null;
@@ -55901,7 +55958,7 @@ async function handleTimesheetSwitchToManual(env, req, timesheetId) {
         previousContractWeekIdForPatch: cw.id,
         currentContractWeekIdForPatch: cw.id,
         actionName: 'SWITCH_TO_MANUAL',
-        extraContext: { currentVersion: inserted?.version ?? nextVersion }
+        extraContext: { currentVersion: inserted?.version ?? nextVersion, changed_domains: ['route', 'manual', 'editor', 'identity'] }
       });
     } catch (e) {
       return withCORS(env, req, serverError(`Failed to build bulk route mutation patch: ${e?.message || String(e)}`));
@@ -56480,21 +56537,21 @@ async function handleTimesheetSwitchDailyToManual(env, req, timesheetId) {
     body?.rowSignature ||
     ''
   ).trim();
-  const parseBulkDecisionRow = (value) => {
+  const parseBulkPatchRow = (value) => {
     if (!value) return null;
     if (typeof value === 'string') {
       const source = value.trim();
       if (!source) return null;
       try {
         const parsed = JSON.parse(source);
-        return parseBulkDecisionRow(parsed);
+        return parseBulkPatchRow(parsed);
       } catch {
         return null;
       }
     }
     if (typeof value !== 'object' || Array.isArray(value)) return null;
-    if (value.row_json !== undefined) return parseBulkDecisionRow(value.row_json);
-    if (value.bulk_timesheet_row_decision_v1 !== undefined) return parseBulkDecisionRow(value.bulk_timesheet_row_decision_v1);
+    if (value.row_json !== undefined) return parseBulkPatchRow(value.row_json);
+    if (value.bulk_timesheet_row_patch_v1 !== undefined) return parseBulkPatchRow(value.bulk_timesheet_row_patch_v1);
     return value;
   };
   const firstBulkString = function firstBulkString() {
@@ -56504,7 +56561,7 @@ async function handleTimesheetSwitchDailyToManual(env, req, timesheetId) {
     }
     return '';
   };
-  const bulkDecisionRowKey = (row, fallbackTimesheetId, fallbackContractWeekId) => {
+  const bulkPatchRowKey = (row, fallbackTimesheetId, fallbackContractWeekId) => {
     const source = row && typeof row === 'object' && !Array.isArray(row) ? row : {};
     const explicit = firstBulkString(source.row_key, source.rowKey, source.new_row_key);
     if (explicit) return explicit;
@@ -56514,46 +56571,57 @@ async function handleTimesheetSwitchDailyToManual(env, req, timesheetId) {
     if (rowContractWeekId) return `contract_week:${rowContractWeekId}`;
     return firstBulkString(source.stable_row_id, source.id);
   };
-  const loadBulkRouteDecisionRow = async (decisionTimesheetId, decisionContractWeekId) => {
-    const decisionFilters = { dataset_mode: bulkDatasetMode };
-    if (decisionTimesheetId) decisionFilters.timesheet_id = String(decisionTimesheetId);
-    if (decisionContractWeekId) decisionFilters.contract_week_id = String(decisionContractWeekId);
-    if (user?.id) decisionFilters.actor_user_id = String(user.id);
-    const decisionRows = await sbRpc(
+  const loadBulkRoutePatchRow = async (patchTimesheetId, patchContractWeekId, changedDomains = []) => {
+    const patchFilters = {
+      dataset_mode: bulkDatasetMode,
+      projection: 'dataset_row',
+      profile: 'list'
+    };
+    const requestRowKey = firstBulkString(body?.row_key, body?.rowKey, body?.current_row_key, body?.currentRowKey);
+    if (requestRowKey) patchFilters.row_key = requestRowKey;
+    if (patchTimesheetId) patchFilters.timesheet_id = String(patchTimesheetId);
+    if (patchContractWeekId) patchFilters.contract_week_id = String(patchContractWeekId);
+    if (expectedRowSignature) patchFilters.expected_row_signature = expectedRowSignature;
+    if (user?.id) patchFilters.actor_user_id = String(user.id);
+    if (Array.isArray(changedDomains)) {
+      const cleanDomains = changedDomains.map((value) => String(value == null ? '' : value).trim()).filter(Boolean);
+      if (cleanDomains.length) patchFilters.changed_domains = cleanDomains;
+    }
+    const patchRows = await sbRpc(
       env,
-      'bulk_timesheet_row_decision_v1',
-      { p_filters: decisionFilters },
+      'bulk_timesheet_row_patch_v1',
+      { p_filters: patchFilters },
       { timeoutMs: 45000 }
     );
-    const firstDecisionRow = Array.isArray(decisionRows) ? (decisionRows[0] || null) : decisionRows;
-    return parseBulkDecisionRow(firstDecisionRow);
+    const firstPatchRow = Array.isArray(patchRows) ? (patchRows[0] || null) : patchRows;
+    return parseBulkPatchRow(firstPatchRow);
   };
-  let bulkPreDecisionRow = null;
+  let bulkPrePatchRow = null;
   let bulkPreviousRowKey = null;
-  const ensureBulkPreMutationDecision = async (decisionTimesheetId, decisionContractWeekId) => {
+  const ensureBulkPreMutationPatch = async (patchTimesheetId, patchContractWeekId, changedDomains = []) => {
     if (!bulkMode) return null;
     try {
-      bulkPreDecisionRow = await loadBulkRouteDecisionRow(decisionTimesheetId, decisionContractWeekId);
+      bulkPrePatchRow = await loadBulkRoutePatchRow(patchTimesheetId, patchContractWeekId, changedDomains);
     } catch (err) {
       return new Response(JSON.stringify({
-        error: 'BULK_ROUTE_DECISION_LOAD_FAILED',
-        error_code: 'BULK_ROUTE_DECISION_LOAD_FAILED',
-        message: err?.message || String(err || 'Failed to load bulk route decision row'),
-        current_timesheet_id: decisionTimesheetId || null,
-        contract_week_id: decisionContractWeekId || null
+        error: 'BULK_ROUTE_PATCH_LOAD_FAILED',
+        error_code: 'BULK_ROUTE_PATCH_LOAD_FAILED',
+        message: err?.message || String(err || 'Failed to load bulk route patch row'),
+        current_timesheet_id: patchTimesheetId || null,
+        contract_week_id: patchContractWeekId || null
       }), { status: 409, headers: { 'Content-Type': 'application/json' } });
     }
-    if (!bulkPreDecisionRow || typeof bulkPreDecisionRow !== 'object' || Array.isArray(bulkPreDecisionRow) || !Object.keys(bulkPreDecisionRow).length) {
+    if (!bulkPrePatchRow || typeof bulkPrePatchRow !== 'object' || Array.isArray(bulkPrePatchRow) || !Object.keys(bulkPrePatchRow).length) {
       return new Response(JSON.stringify({
-        error: 'BULK_ROUTE_DECISION_ROW_NOT_FOUND',
-        error_code: 'BULK_ROUTE_DECISION_ROW_NOT_FOUND',
+        error: 'BULK_ROUTE_PATCH_ROW_NOT_FOUND',
+        error_code: 'BULK_ROUTE_PATCH_ROW_NOT_FOUND',
         message: 'Could not load the current bulk row before route mutation.',
-        current_timesheet_id: decisionTimesheetId || null,
-        contract_week_id: decisionContractWeekId || null
+        current_timesheet_id: patchTimesheetId || null,
+        contract_week_id: patchContractWeekId || null
       }), { status: 409, headers: { 'Content-Type': 'application/json' } });
     }
-    bulkPreviousRowKey = bulkDecisionRowKey(bulkPreDecisionRow, decisionTimesheetId, decisionContractWeekId);
-    const currentRowSignature = String(bulkPreDecisionRow.row_signature || '').trim();
+    bulkPreviousRowKey = bulkPatchRowKey(bulkPrePatchRow, patchTimesheetId, patchContractWeekId);
+    const currentRowSignature = String(bulkPrePatchRow.row_signature || '').trim();
     if (expectedRowSignature && currentRowSignature !== expectedRowSignature) {
       return new Response(JSON.stringify({
         error: 'ROW_SIGNATURE_MISMATCH',
@@ -56561,8 +56629,8 @@ async function handleTimesheetSwitchDailyToManual(env, req, timesheetId) {
         message: 'This bulk row changed after it was loaded. Refresh the row and try again.',
         expected_row_signature: expectedRowSignature,
         current_row_signature: currentRowSignature || null,
-        current_timesheet_id: firstBulkString(bulkPreDecisionRow.current_timesheet_id, bulkPreDecisionRow.timesheet_id, decisionTimesheetId) || null,
-        contract_week_id: firstBulkString(bulkPreDecisionRow.contract_week_id, decisionContractWeekId) || null,
+        current_timesheet_id: firstBulkString(bulkPrePatchRow.current_timesheet_id, bulkPrePatchRow.timesheet_id, patchTimesheetId) || null,
+        contract_week_id: firstBulkString(bulkPrePatchRow.contract_week_id, patchContractWeekId) || null,
         previous_row_key: bulkPreviousRowKey || null
       }), { status: 409, headers: { 'Content-Type': 'application/json' } });
     }
@@ -56573,17 +56641,17 @@ async function handleTimesheetSwitchDailyToManual(env, req, timesheetId) {
       env,
       user?.id || null,
       bulkDatasetMode,
-      previousTimesheetIdForPatch || firstBulkString(bulkPreDecisionRow?.current_timesheet_id, bulkPreDecisionRow?.timesheet_id),
+      previousTimesheetIdForPatch || firstBulkString(bulkPrePatchRow?.current_timesheet_id, bulkPrePatchRow?.timesheet_id),
       currentTimesheetIdForPatch,
-      previousContractWeekIdForPatch || firstBulkString(bulkPreDecisionRow?.contract_week_id),
-      currentContractWeekIdForPatch || previousContractWeekIdForPatch || firstBulkString(bulkPreDecisionRow?.contract_week_id),
+      previousContractWeekIdForPatch || firstBulkString(bulkPrePatchRow?.contract_week_id),
+      currentContractWeekIdForPatch || previousContractWeekIdForPatch || firstBulkString(bulkPrePatchRow?.contract_week_id),
       bulkPreviousRowKey,
       actionName,
       {
         ...body,
         ...extraContext,
-        preDecisionRow: bulkPreDecisionRow,
-        pre_decision_row: bulkPreDecisionRow,
+        prePatchRow: bulkPrePatchRow,
+        pre_patch_row: bulkPrePatchRow,
         previousRowKey: bulkPreviousRowKey,
         previous_row_key: bulkPreviousRowKey,
         expected_row_signature: expectedRowSignature || null,
@@ -56591,8 +56659,8 @@ async function handleTimesheetSwitchDailyToManual(env, req, timesheetId) {
         bulk_process: bulkDatasetMode === 'process',
         bulk_authorise: bulkDatasetMode === 'authorise',
         return_bulk_patch: true,
-        previousStorageKey: bulkPreDecisionRow?.primary_artifact_storage_key || null,
-        previous_storage_key: bulkPreDecisionRow?.primary_artifact_storage_key || null,
+        previousStorageKey: bulkPrePatchRow?.primary_artifact_storage_key || null,
+        previous_storage_key: bulkPrePatchRow?.primary_artifact_storage_key || null,
         timeoutMs: 45000
       }
     );
@@ -56696,7 +56764,7 @@ async function handleTimesheetSwitchDailyToManual(env, req, timesheetId) {
     return withCORS(env, req, badRequest('Cannot switch NHSP/HR-based daily timesheets to manual'));
   }
 
-  const bulkPreMutationError = await ensureBulkPreMutationDecision(currentTimesheetId, null);
+  const bulkPreMutationError = await ensureBulkPreMutationPatch(currentTimesheetId, null, ['route', 'manual', 'editor', 'identity']);
   if (bulkPreMutationError) return withCORS(env, req, bulkPreMutationError);
 
   let inserted = null;
@@ -56796,10 +56864,10 @@ async function handleTimesheetSwitchDailyToManual(env, req, timesheetId) {
       bulkPatch = await buildBulkRoutePatchPayload({
         previousTimesheetIdForPatch: currentTimesheetId,
         currentTimesheetIdForPatch: newTimesheetId,
-        previousContractWeekIdForPatch: bulkPreDecisionRow?.contract_week_id || null,
-        currentContractWeekIdForPatch: bulkPreDecisionRow?.contract_week_id || null,
+        previousContractWeekIdForPatch: bulkPrePatchRow?.contract_week_id || null,
+        currentContractWeekIdForPatch: bulkPrePatchRow?.contract_week_id || null,
         actionName: 'SWITCH_DAILY_TO_MANUAL',
-        extraContext: { currentVersion: inserted?.version ?? nextVersion }
+        extraContext: { currentVersion: inserted?.version ?? nextVersion, changed_domains: ['route', 'manual', 'editor', 'identity'] }
       });
     } catch (e) {
       return withCORS(env, req, serverError(`Failed to build bulk route mutation patch: ${e?.message || String(e)}`));
@@ -56835,6 +56903,16 @@ async function handleTimesheetSwitchDailyToManual(env, req, timesheetId) {
   }));
 }
 
+
+ async function handleTimesheetPresignExpensePdf(env, req, timesheetId) {
+  const user = await requireUser(env, req, ['admin']); // backoffice presign; workers can use public files if needed
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const key = `docs/receipts/ts_${timesheetId}/${Date.now()}_${Math.random().toString(16).slice(2)}.upload`;
+  const token = await createToken(env, 'UPLOAD', { key, c: 'receipt', ttlSec: 3600, maxBytes: 20*1024*1024, contentTypes: ['application/pdf','image/jpeg','image/png','image/heic','image/heif'] });
+  const upload_url = `${new URL(req.url).origin}/api/files/upload?key=${enc(key)}&token=${enc(token)}`;
+  return withCORS(env, req, ok({ key, upload_url, token, expires_in: 3600 }));
+}
 export async function handleTimesheetRevertToElectronic(env, req, timesheetId) {
   const enc = encodeURIComponent;
 
@@ -56874,21 +56952,21 @@ export async function handleTimesheetRevertToElectronic(env, req, timesheetId) {
     body?.rowSignature ||
     ''
   ).trim();
-  const parseBulkDecisionRow = (value) => {
+  const parseBulkPatchRow = (value) => {
     if (!value) return null;
     if (typeof value === 'string') {
       const source = value.trim();
       if (!source) return null;
       try {
         const parsed = JSON.parse(source);
-        return parseBulkDecisionRow(parsed);
+        return parseBulkPatchRow(parsed);
       } catch {
         return null;
       }
     }
     if (typeof value !== 'object' || Array.isArray(value)) return null;
-    if (value.row_json !== undefined) return parseBulkDecisionRow(value.row_json);
-    if (value.bulk_timesheet_row_decision_v1 !== undefined) return parseBulkDecisionRow(value.bulk_timesheet_row_decision_v1);
+    if (value.row_json !== undefined) return parseBulkPatchRow(value.row_json);
+    if (value.bulk_timesheet_row_patch_v1 !== undefined) return parseBulkPatchRow(value.bulk_timesheet_row_patch_v1);
     return value;
   };
   const firstBulkString = function firstBulkString() {
@@ -56898,7 +56976,7 @@ export async function handleTimesheetRevertToElectronic(env, req, timesheetId) {
     }
     return '';
   };
-  const bulkDecisionRowKey = (row, fallbackTimesheetId, fallbackContractWeekId) => {
+  const bulkPatchRowKey = (row, fallbackTimesheetId, fallbackContractWeekId) => {
     const source = row && typeof row === 'object' && !Array.isArray(row) ? row : {};
     const explicit = firstBulkString(source.row_key, source.rowKey, source.new_row_key);
     if (explicit) return explicit;
@@ -56908,46 +56986,57 @@ export async function handleTimesheetRevertToElectronic(env, req, timesheetId) {
     if (rowContractWeekId) return `contract_week:${rowContractWeekId}`;
     return firstBulkString(source.stable_row_id, source.id);
   };
-  const loadBulkRouteDecisionRow = async (decisionTimesheetId, decisionContractWeekId) => {
-    const decisionFilters = { dataset_mode: bulkDatasetMode };
-    if (decisionTimesheetId) decisionFilters.timesheet_id = String(decisionTimesheetId);
-    if (decisionContractWeekId) decisionFilters.contract_week_id = String(decisionContractWeekId);
-    if (user?.id) decisionFilters.actor_user_id = String(user.id);
-    const decisionRows = await sbRpc(
+  const loadBulkRoutePatchRow = async (patchTimesheetId, patchContractWeekId, changedDomains = []) => {
+    const patchFilters = {
+      dataset_mode: bulkDatasetMode,
+      projection: 'dataset_row',
+      profile: 'list'
+    };
+    const requestRowKey = firstBulkString(body?.row_key, body?.rowKey, body?.current_row_key, body?.currentRowKey);
+    if (requestRowKey) patchFilters.row_key = requestRowKey;
+    if (patchTimesheetId) patchFilters.timesheet_id = String(patchTimesheetId);
+    if (patchContractWeekId) patchFilters.contract_week_id = String(patchContractWeekId);
+    if (expectedRowSignature) patchFilters.expected_row_signature = expectedRowSignature;
+    if (user?.id) patchFilters.actor_user_id = String(user.id);
+    if (Array.isArray(changedDomains)) {
+      const cleanDomains = changedDomains.map((value) => String(value == null ? '' : value).trim()).filter(Boolean);
+      if (cleanDomains.length) patchFilters.changed_domains = cleanDomains;
+    }
+    const patchRows = await sbRpc(
       env,
-      'bulk_timesheet_row_decision_v1',
-      { p_filters: decisionFilters },
+      'bulk_timesheet_row_patch_v1',
+      { p_filters: patchFilters },
       { timeoutMs: 45000 }
     );
-    const firstDecisionRow = Array.isArray(decisionRows) ? (decisionRows[0] || null) : decisionRows;
-    return parseBulkDecisionRow(firstDecisionRow);
+    const firstPatchRow = Array.isArray(patchRows) ? (patchRows[0] || null) : patchRows;
+    return parseBulkPatchRow(firstPatchRow);
   };
-  let bulkPreDecisionRow = null;
+  let bulkPrePatchRow = null;
   let bulkPreviousRowKey = null;
-  const ensureBulkPreMutationDecision = async (decisionTimesheetId, decisionContractWeekId) => {
+  const ensureBulkPreMutationPatch = async (patchTimesheetId, patchContractWeekId, changedDomains = []) => {
     if (!bulkMode) return null;
     try {
-      bulkPreDecisionRow = await loadBulkRouteDecisionRow(decisionTimesheetId, decisionContractWeekId);
+      bulkPrePatchRow = await loadBulkRoutePatchRow(patchTimesheetId, patchContractWeekId, changedDomains);
     } catch (err) {
       return new Response(JSON.stringify({
-        error: 'BULK_ROUTE_DECISION_LOAD_FAILED',
-        error_code: 'BULK_ROUTE_DECISION_LOAD_FAILED',
-        message: err?.message || String(err || 'Failed to load bulk route decision row'),
-        current_timesheet_id: decisionTimesheetId || null,
-        contract_week_id: decisionContractWeekId || null
+        error: 'BULK_ROUTE_PATCH_LOAD_FAILED',
+        error_code: 'BULK_ROUTE_PATCH_LOAD_FAILED',
+        message: err?.message || String(err || 'Failed to load bulk route patch row'),
+        current_timesheet_id: patchTimesheetId || null,
+        contract_week_id: patchContractWeekId || null
       }), { status: 409, headers: { 'Content-Type': 'application/json' } });
     }
-    if (!bulkPreDecisionRow || typeof bulkPreDecisionRow !== 'object' || Array.isArray(bulkPreDecisionRow) || !Object.keys(bulkPreDecisionRow).length) {
+    if (!bulkPrePatchRow || typeof bulkPrePatchRow !== 'object' || Array.isArray(bulkPrePatchRow) || !Object.keys(bulkPrePatchRow).length) {
       return new Response(JSON.stringify({
-        error: 'BULK_ROUTE_DECISION_ROW_NOT_FOUND',
-        error_code: 'BULK_ROUTE_DECISION_ROW_NOT_FOUND',
+        error: 'BULK_ROUTE_PATCH_ROW_NOT_FOUND',
+        error_code: 'BULK_ROUTE_PATCH_ROW_NOT_FOUND',
         message: 'Could not load the current bulk row before route mutation.',
-        current_timesheet_id: decisionTimesheetId || null,
-        contract_week_id: decisionContractWeekId || null
+        current_timesheet_id: patchTimesheetId || null,
+        contract_week_id: patchContractWeekId || null
       }), { status: 409, headers: { 'Content-Type': 'application/json' } });
     }
-    bulkPreviousRowKey = bulkDecisionRowKey(bulkPreDecisionRow, decisionTimesheetId, decisionContractWeekId);
-    const currentRowSignature = String(bulkPreDecisionRow.row_signature || '').trim();
+    bulkPreviousRowKey = bulkPatchRowKey(bulkPrePatchRow, patchTimesheetId, patchContractWeekId);
+    const currentRowSignature = String(bulkPrePatchRow.row_signature || '').trim();
     if (expectedRowSignature && currentRowSignature !== expectedRowSignature) {
       return new Response(JSON.stringify({
         error: 'ROW_SIGNATURE_MISMATCH',
@@ -56955,8 +57044,8 @@ export async function handleTimesheetRevertToElectronic(env, req, timesheetId) {
         message: 'This bulk row changed after it was loaded. Refresh the row and try again.',
         expected_row_signature: expectedRowSignature,
         current_row_signature: currentRowSignature || null,
-        current_timesheet_id: firstBulkString(bulkPreDecisionRow.current_timesheet_id, bulkPreDecisionRow.timesheet_id, decisionTimesheetId) || null,
-        contract_week_id: firstBulkString(bulkPreDecisionRow.contract_week_id, decisionContractWeekId) || null,
+        current_timesheet_id: firstBulkString(bulkPrePatchRow.current_timesheet_id, bulkPrePatchRow.timesheet_id, patchTimesheetId) || null,
+        contract_week_id: firstBulkString(bulkPrePatchRow.contract_week_id, patchContractWeekId) || null,
         previous_row_key: bulkPreviousRowKey || null
       }), { status: 409, headers: { 'Content-Type': 'application/json' } });
     }
@@ -56967,17 +57056,17 @@ export async function handleTimesheetRevertToElectronic(env, req, timesheetId) {
       env,
       user?.id || null,
       bulkDatasetMode,
-      previousTimesheetIdForPatch || firstBulkString(bulkPreDecisionRow?.current_timesheet_id, bulkPreDecisionRow?.timesheet_id),
+      previousTimesheetIdForPatch || firstBulkString(bulkPrePatchRow?.current_timesheet_id, bulkPrePatchRow?.timesheet_id),
       currentTimesheetIdForPatch,
-      previousContractWeekIdForPatch || firstBulkString(bulkPreDecisionRow?.contract_week_id),
-      currentContractWeekIdForPatch || previousContractWeekIdForPatch || firstBulkString(bulkPreDecisionRow?.contract_week_id),
+      previousContractWeekIdForPatch || firstBulkString(bulkPrePatchRow?.contract_week_id),
+      currentContractWeekIdForPatch || previousContractWeekIdForPatch || firstBulkString(bulkPrePatchRow?.contract_week_id),
       bulkPreviousRowKey,
       actionName,
       {
         ...body,
         ...extraContext,
-        preDecisionRow: bulkPreDecisionRow,
-        pre_decision_row: bulkPreDecisionRow,
+        prePatchRow: bulkPrePatchRow,
+        pre_patch_row: bulkPrePatchRow,
         previousRowKey: bulkPreviousRowKey,
         previous_row_key: bulkPreviousRowKey,
         expected_row_signature: expectedRowSignature || null,
@@ -56985,8 +57074,8 @@ export async function handleTimesheetRevertToElectronic(env, req, timesheetId) {
         bulk_process: bulkDatasetMode === 'process',
         bulk_authorise: bulkDatasetMode === 'authorise',
         return_bulk_patch: true,
-        previousStorageKey: bulkPreDecisionRow?.primary_artifact_storage_key || null,
-        previous_storage_key: bulkPreDecisionRow?.primary_artifact_storage_key || null,
+        previousStorageKey: bulkPrePatchRow?.primary_artifact_storage_key || null,
+        previous_storage_key: bulkPrePatchRow?.primary_artifact_storage_key || null,
         timeoutMs: 45000
       }
     );
@@ -57098,7 +57187,7 @@ export async function handleTimesheetRevertToElectronic(env, req, timesheetId) {
     return withCORS(env, req, badRequest('Cannot revert: current is manual-only (set allow_manual_only=true to override)'));
   }
 
-  const bulkPreMutationError = await ensureBulkPreMutationDecision(currentTimesheetId, null);
+  const bulkPreMutationError = await ensureBulkPreMutationPatch(currentTimesheetId, null, ['route', 'manual', 'editor', 'identity']);
   if (bulkPreMutationError) return withCORS(env, req, bulkPreMutationError);
 
   if (current.timesheet_id === elec.timesheet_id && current.is_current) {
@@ -57108,10 +57197,10 @@ export async function handleTimesheetRevertToElectronic(env, req, timesheetId) {
         bulkPatch = await buildBulkRoutePatchPayload({
           previousTimesheetIdForPatch: currentTimesheetId,
           currentTimesheetIdForPatch: current.timesheet_id,
-          previousContractWeekIdForPatch: bulkPreDecisionRow?.contract_week_id || null,
-          currentContractWeekIdForPatch: bulkPreDecisionRow?.contract_week_id || null,
+          previousContractWeekIdForPatch: bulkPrePatchRow?.contract_week_id || null,
+          currentContractWeekIdForPatch: bulkPrePatchRow?.contract_week_id || null,
           actionName: 'REVERT_TO_ELECTRONIC',
-          extraContext: { currentVersion: elec.version || 1 }
+          extraContext: { currentVersion: elec.version || 1, changed_domains: ['route', 'manual', 'editor', 'identity'] }
         });
       } catch (e) {
         return withCORS(env, req, serverError(`Failed to build bulk route mutation patch: ${e?.message || String(e)}`));
@@ -57225,10 +57314,10 @@ export async function handleTimesheetRevertToElectronic(env, req, timesheetId) {
       bulkPatch = await buildBulkRoutePatchPayload({
         previousTimesheetIdForPatch: currentTimesheetId,
         currentTimesheetIdForPatch: elec.timesheet_id,
-        previousContractWeekIdForPatch: bulkPreDecisionRow?.contract_week_id || null,
-        currentContractWeekIdForPatch: bulkPreDecisionRow?.contract_week_id || null,
+        previousContractWeekIdForPatch: bulkPrePatchRow?.contract_week_id || null,
+        currentContractWeekIdForPatch: bulkPrePatchRow?.contract_week_id || null,
         actionName: 'REVERT_TO_ELECTRONIC',
-        extraContext: { currentVersion: elec.version || 1 }
+        extraContext: { currentVersion: elec.version || 1, changed_domains: ['route', 'manual', 'editor', 'identity'] }
       });
     } catch (e) {
       return withCORS(env, req, serverError(`Failed to build bulk route mutation patch: ${e?.message || String(e)}`));
@@ -57259,17 +57348,6 @@ export async function handleTimesheetRevertToElectronic(env, req, timesheetId) {
     was_stale: !!resolved.was_stale
   }));
 }
-
- async function handleTimesheetPresignExpensePdf(env, req, timesheetId) {
-  const user = await requireUser(env, req, ['admin']); // backoffice presign; workers can use public files if needed
-  if (!user) return withCORS(env, req, unauthorized());
-
-  const key = `docs/receipts/ts_${timesheetId}/${Date.now()}_${Math.random().toString(16).slice(2)}.upload`;
-  const token = await createToken(env, 'UPLOAD', { key, c: 'receipt', ttlSec: 3600, maxBytes: 20*1024*1024, contentTypes: ['application/pdf','image/jpeg','image/png','image/heic','image/heif'] });
-  const upload_url = `${new URL(req.url).origin}/api/files/upload?key=${enc(key)}&token=${enc(token)}`;
-  return withCORS(env, req, ok({ key, upload_url, token, expires_in: 3600 }));
-}
-
 // ────────────────────────────────────────────────────────────────
 // 3.5 Helper: resolve “import-authoritative” route using best source
 // Priority:
@@ -117358,6 +117436,96 @@ async function handleContractWeekCreateAdditionalWeeklyAdjustment(env, req, week
 
   const enc = encodeURIComponent;
 
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+
+  const bulkContextText = String(body?.context || body?.mode || '').trim().toLowerCase();
+  const returnBulkPatch = !!(
+    body?.return_bulk_patch === true ||
+    body?.returnBulkPatch === true ||
+    body?.bulk_process === true ||
+    body?.bulkProcess === true ||
+    body?.bulk_authorise === true ||
+    body?.bulkAuthorise === true ||
+    bulkContextText === 'bulk_process' ||
+    bulkContextText === 'bulk_authorise'
+  );
+
+  const parseBulkPatchRow = (value) => {
+    if (!value) return null;
+    if (typeof value === 'string') {
+      const source = value.trim();
+      if (!source) return null;
+      try {
+        const parsed = JSON.parse(source);
+        return parseBulkPatchRow(parsed);
+      } catch {
+        return null;
+      }
+    }
+    if (typeof value !== 'object' || Array.isArray(value)) return null;
+    if (value.row_json !== undefined) return parseBulkPatchRow(value.row_json);
+    if (value.bulk_timesheet_row_patch_v1 !== undefined) return parseBulkPatchRow(value.bulk_timesheet_row_patch_v1);
+    return value;
+  };
+
+  const firstBulkString = function firstBulkString() {
+    for (let i = 0; i < arguments.length; i += 1) {
+      const str = String(arguments[i] == null ? '' : arguments[i]).trim();
+      if (str) return str;
+    }
+    return '';
+  };
+
+  const buildCreatedWeeklyBulkPatchPayload = async (createdContractWeekId) => {
+    const patchFilters = {
+      dataset_mode: 'process',
+      projection: 'dataset_row',
+      profile: 'list',
+      contract_week_id: String(createdContractWeekId),
+      changed_domains: ['identity', 'manual', 'route']
+    };
+    if (user?.id) patchFilters.actor_user_id = String(user.id);
+
+    const patchRows = await sbRpc(
+      env,
+      'bulk_timesheet_row_patch_v1',
+      { p_filters: patchFilters },
+      { timeoutMs: 45000 }
+    );
+
+    const patchRow = parseBulkPatchRow(Array.isArray(patchRows) ? (patchRows[0] || null) : patchRows);
+    if (!patchRow || typeof patchRow !== 'object' || Array.isArray(patchRow) || !Object.keys(patchRow).length) {
+      throw new Error('Could not build bulk row patch for the new additional weekly adjustment.');
+    }
+
+    const rowKey = firstBulkString(patchRow.row_key, patchRow.new_row_key, `contract_week:${createdContractWeekId}`);
+    const cacheHints = {
+      ...((patchRow.cache_invalidation_hints && typeof patchRow.cache_invalidation_hints === 'object') ? patchRow.cache_invalidation_hints : {}),
+      identity_changed: true,
+      manual_changed: true,
+      route_changed: true,
+      invalidate_context: false,
+      invalidate_preview: false,
+      invalidate_evidence: false,
+      invalidate_editor_context: true
+    };
+
+    return {
+      row_patch: patchRow,
+      row_patches: [patchRow],
+      data_row: patchRow,
+      row: patchRow,
+      row_key: rowKey,
+      new_row_key: firstBulkString(patchRow.new_row_key, rowKey),
+      previous_row_key: firstBulkString(patchRow.previous_row_key, null),
+      row_signature: firstBulkString(patchRow.row_signature, patchRow.backend_row_signature),
+      count_deltas: (patchRow.count_deltas && typeof patchRow.count_deltas === 'object') ? patchRow.count_deltas : {},
+      cache_invalidation_hints: cacheHints
+    };
+  };
+
+
   // Load base week
   const base = await sbGetOne(
     env,
@@ -117435,13 +117603,37 @@ async function handleContractWeekCreateAdditionalWeeklyAdjustment(env, req, week
   const newWeek = (await cwIns.json().catch(() => []))[0] || null;
   if (!newWeek?.id) return withCORS(env, req, serverError('Failed to create additional week'));
 
-  return withCORS(env, req, ok({
+  const basePayload = {
     contract_week: newWeek,
     contract_week_id: newWeek.id,
     timesheet_id: null,
     current_timesheet_id: null,
     created_unprocessed: true
-  }));
+  };
+
+  if (returnBulkPatch) {
+    let bulkPatch = null;
+    try {
+      bulkPatch = await buildCreatedWeeklyBulkPatchPayload(newWeek.id);
+    } catch (e) {
+      return withCORS(env, req, serverError(`Failed to build bulk additional weekly adjustment patch: ${e?.message || String(e)}`));
+    }
+
+    return withCORS(env, req, ok({
+      ...basePayload,
+      ...bulkPatch,
+      contract_week: newWeek,
+      contract_week_id: newWeek.id,
+      timesheet_id: null,
+      current_timesheet_id: null,
+      created_unprocessed: true,
+      bulk_process: true,
+      bulk_authorise: false,
+      return_bulk_patch: true
+    }));
+  }
+
+  return withCORS(env, req, ok(basePayload));
 }
 
 
@@ -117493,11 +117685,102 @@ async function handleContractsCount(env, req) {
   }
 }
 
+
 async function handleTimesheetCreateAdditionalDailyManual(env, req, timesheetId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
   const enc = encodeURIComponent;
+
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+
+  const bulkContextText = String(body?.context || body?.mode || '').trim().toLowerCase();
+  const returnBulkPatch = !!(
+    body?.return_bulk_patch === true ||
+    body?.returnBulkPatch === true ||
+    body?.bulk_process === true ||
+    body?.bulkProcess === true ||
+    body?.bulk_authorise === true ||
+    body?.bulkAuthorise === true ||
+    bulkContextText === 'bulk_process' ||
+    bulkContextText === 'bulk_authorise'
+  );
+
+  const parseBulkPatchRow = (value) => {
+    if (!value) return null;
+    if (typeof value === 'string') {
+      const source = value.trim();
+      if (!source) return null;
+      try {
+        const parsed = JSON.parse(source);
+        return parseBulkPatchRow(parsed);
+      } catch {
+        return null;
+      }
+    }
+    if (typeof value !== 'object' || Array.isArray(value)) return null;
+    if (value.row_json !== undefined) return parseBulkPatchRow(value.row_json);
+    if (value.bulk_timesheet_row_patch_v1 !== undefined) return parseBulkPatchRow(value.bulk_timesheet_row_patch_v1);
+    return value;
+  };
+
+  const firstBulkString = function firstBulkString() {
+    for (let i = 0; i < arguments.length; i += 1) {
+      const str = String(arguments[i] == null ? '' : arguments[i]).trim();
+      if (str) return str;
+    }
+    return '';
+  };
+
+  const buildCreatedDailyBulkPatchPayload = async (createdTimesheetId) => {
+    const patchFilters = {
+      dataset_mode: 'process',
+      projection: 'dataset_row',
+      profile: 'list',
+      timesheet_id: String(createdTimesheetId),
+      changed_domains: ['identity', 'manual', 'route']
+    };
+    if (user?.id) patchFilters.actor_user_id = String(user.id);
+
+    const patchRows = await sbRpc(
+      env,
+      'bulk_timesheet_row_patch_v1',
+      { p_filters: patchFilters },
+      { timeoutMs: 45000 }
+    );
+
+    const patchRow = parseBulkPatchRow(Array.isArray(patchRows) ? (patchRows[0] || null) : patchRows);
+    if (!patchRow || typeof patchRow !== 'object' || Array.isArray(patchRow) || !Object.keys(patchRow).length) {
+      throw new Error('Could not build bulk row patch for the new additional daily manual timesheet.');
+    }
+
+    const rowKey = firstBulkString(patchRow.row_key, patchRow.new_row_key, `timesheet:${createdTimesheetId}`);
+    const cacheHints = {
+      ...((patchRow.cache_invalidation_hints && typeof patchRow.cache_invalidation_hints === 'object') ? patchRow.cache_invalidation_hints : {}),
+      identity_changed: true,
+      manual_changed: true,
+      route_changed: true,
+      invalidate_context: false,
+      invalidate_preview: false,
+      invalidate_evidence: false,
+      invalidate_editor_context: true
+    };
+
+    return {
+      row_patch: patchRow,
+      row_patches: [patchRow],
+      data_row: patchRow,
+      row: patchRow,
+      row_key: rowKey,
+      new_row_key: firstBulkString(patchRow.new_row_key, rowKey),
+      previous_row_key: firstBulkString(patchRow.previous_row_key, null),
+      row_signature: firstBulkString(patchRow.row_signature, patchRow.backend_row_signature),
+      count_deltas: (patchRow.count_deltas && typeof patchRow.count_deltas === 'object') ? patchRow.count_deltas : {},
+      cache_invalidation_hints: cacheHints
+    };
+  };
+
 
   if (!timesheetId) return withCORS(env, req, badRequest('timesheet_id is required'));
 
@@ -117866,14 +118149,38 @@ async function handleTimesheetCreateAdditionalDailyManual(env, req, timesheetId)
 
   await writeSnapshot(env, snap);
 
-  return withCORS(env, req, ok({
+  const basePayload = {
     timesheet_id: createdTs.timesheet_id,
     current_timesheet_id: createdTs.timesheet_id,
+    expected_timesheet_id: createdTs.timesheet_id,
     parent_timesheet_id,
     created_unprocessed: true
-  }));
-}
+  };
 
+  if (returnBulkPatch) {
+    let bulkPatch = null;
+    try {
+      bulkPatch = await buildCreatedDailyBulkPatchPayload(createdTs.timesheet_id);
+    } catch (e) {
+      return withCORS(env, req, serverError(`Failed to build bulk additional daily manual patch: ${e?.message || String(e)}`));
+    }
+
+    return withCORS(env, req, ok({
+      ...basePayload,
+      ...bulkPatch,
+      timesheet_id: createdTs.timesheet_id,
+      current_timesheet_id: createdTs.timesheet_id,
+      expected_timesheet_id: createdTs.timesheet_id,
+      parent_timesheet_id,
+      created_unprocessed: true,
+      bulk_process: true,
+      bulk_authorise: false,
+      return_bulk_patch: true
+    }));
+  }
+
+  return withCORS(env, req, ok(basePayload));
+}
 
 // ---------------------------
 // Invoices (TSFIN) – create from READY_FOR_INVOICE snapshots, lock them, build invoice_lines
