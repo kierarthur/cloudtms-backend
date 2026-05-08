@@ -9215,6 +9215,14 @@ DECLARE
   v_rotation_new_version integer := NULL;
   v_pre_current_timesheet_id_text text := NULL;
   v_pre_current_version_text text := NULL;
+  v_patch_dataset_mode text := CASE
+    WHEN LOWER(BTRIM(COALESCE(p_response_context, ''))) = 'bulk_authorise' THEN 'authorise'
+    ELSE 'process'
+  END;
+  v_pre_patch_filters jsonb := '{}'::jsonb;
+  v_post_patch_filters jsonb := '{}'::jsonb;
+  v_atomic_guard_row jsonb := NULL;
+  v_atomic_expected_row_signature text := NULL;
   v_response_context text := CASE
     WHEN LOWER(BTRIM(COALESCE(p_response_context, ''))) = 'bulk_authorise' THEN 'bulk_authorise'
     ELSE 'bulk_process'
@@ -9242,12 +9250,20 @@ BEGIN
     END IF;
   END IF;
 
+  v_pre_patch_filters := JSONB_BUILD_OBJECT(
+    'dataset_mode', v_patch_dataset_mode,
+    'contract_week_id', p_week_id::text
+  );
+
+  IF p_expected_timesheet_id IS NOT NULL THEN
+    v_pre_patch_filters := v_pre_patch_filters || JSONB_BUILD_OBJECT(
+      'timesheet_id', p_expected_timesheet_id::text
+    );
+  END IF;
+
   SELECT decision_result.row_json
     INTO v_pre_row
-  FROM public.bulk_timesheet_row_patch_v1(JSONB_BUILD_OBJECT(
-    'dataset_mode', 'process',
-    'contract_week_id', p_week_id::text
-  )) AS decision_result(row_json)
+  FROM public.bulk_timesheet_row_patch_v1(v_pre_patch_filters) AS decision_result(row_json)
   LIMIT 1;
 
   v_pre_bucket := NULLIF(BTRIM(COALESCE(v_pre_row->>'bulk_process_bucket', '')), '');
@@ -9258,6 +9274,43 @@ BEGIN
   v_pre_current_version_text := NULLIF(BTRIM(COALESCE(v_pre_row->>'current_version', v_pre_row->>'current_timesheet_version', '')), '');
   v_expected_row_signature := NULLIF(BTRIM(COALESCE(p_expected_row_signature, '')), '');
   v_current_row_signature := NULLIF(BTRIM(COALESCE(v_pre_row->>'row_signature', '')), '');
+
+  IF v_expected_row_signature IS NOT NULL AND v_pre_row IS NULL THEN
+    RETURN JSONB_BUILD_OBJECT(
+      'ok', FALSE,
+      'operation', v_operation,
+      'success', FALSE,
+      'error_code', 'ROW_SIGNATURE_LOOKUP_FAILED',
+      'message', 'The current row could not be resolved for the supplied timesheet and contract week. Refresh the row and try again.',
+      'expected_row_signature', v_expected_row_signature,
+      'current_row_signature', NULL,
+      'current_timesheet_id', p_expected_timesheet_id,
+      'contract_week_id', p_week_id,
+      'previous_row_key', CASE WHEN p_expected_timesheet_id IS NULL THEN NULL ELSE 'timesheet:' || p_expected_timesheet_id::text END,
+      'refresh_required', TRUE,
+      'cache_invalidation_hints', JSONB_BUILD_OBJECT(
+        'row_keys', CASE WHEN p_expected_timesheet_id IS NULL THEN '[]'::jsonb ELSE JSONB_BUILD_ARRAY('timesheet:' || p_expected_timesheet_id::text) END,
+        'contract_week_ids', JSONB_BUILD_ARRAY(p_week_id),
+        'timesheet_ids', CASE WHEN p_expected_timesheet_id IS NULL THEN '[]'::jsonb ELSE JSONB_BUILD_ARRAY(p_expected_timesheet_id) END,
+        'storage_keys', '[]'::jsonb,
+        'datasets', JSONB_BUILD_ARRAY('bulk_process', 'bulk_authorise'),
+        'invalidate_context', TRUE,
+        'invalidate_preview', FALSE,
+        'refresh_required', TRUE
+      ),
+      'cache_invalidation', JSONB_BUILD_OBJECT(
+        'rows', CASE WHEN p_expected_timesheet_id IS NULL THEN '[]'::jsonb ELSE JSONB_BUILD_ARRAY(JSONB_BUILD_OBJECT(
+          'previous_row_key', 'timesheet:' || p_expected_timesheet_id::text,
+          'contract_week_id', p_week_id,
+          'timesheet_id', p_expected_timesheet_id
+        )) END,
+        'contract_week_ids', JSONB_BUILD_ARRAY(p_week_id),
+        'timesheet_ids', CASE WHEN p_expected_timesheet_id IS NULL THEN '[]'::jsonb ELSE JSONB_BUILD_ARRAY(p_expected_timesheet_id) END,
+        'datasets', JSONB_BUILD_ARRAY('bulk_process', 'bulk_authorise'),
+        'refresh_required', TRUE
+      )
+    );
+  END IF;
 
   IF v_expected_row_signature IS NOT NULL
      AND COALESCE(v_current_row_signature, '') IS DISTINCT FROM v_expected_row_signature THEN
@@ -9297,6 +9350,64 @@ BEGIN
     );
   END IF;
 
+  IF v_expected_row_signature IS NOT NULL THEN
+    SELECT decision_result.row_json
+      INTO v_atomic_guard_row
+    FROM public.bulk_timesheet_row_decision_v1(
+      CASE
+        WHEN p_expected_timesheet_id IS NOT NULL THEN JSONB_BUILD_OBJECT(
+          'dataset_mode', 'process',
+          'timesheet_id', p_expected_timesheet_id::text,
+          'contract_week_id', p_week_id::text
+        )
+        ELSE JSONB_BUILD_OBJECT(
+          'dataset_mode', 'process',
+          'contract_week_id', p_week_id::text
+        )
+      END
+    ) AS decision_result(row_json)
+    LIMIT 1;
+
+    v_atomic_expected_row_signature := NULLIF(BTRIM(COALESCE(v_atomic_guard_row->>'row_signature', '')), '');
+
+    IF v_atomic_expected_row_signature IS NULL THEN
+      RETURN JSONB_BUILD_OBJECT(
+        'ok', FALSE,
+        'operation', v_operation,
+        'success', FALSE,
+        'error_code', 'ROW_SIGNATURE_LOOKUP_FAILED',
+        'message', 'The atomic save guard could not resolve the current row signature. Refresh the row and try again.',
+        'expected_row_signature', v_expected_row_signature,
+        'current_row_signature', NULL,
+        'current_timesheet_id', p_expected_timesheet_id,
+        'contract_week_id', p_week_id,
+        'previous_row_key', v_previous_row_key,
+        'refresh_required', TRUE,
+        'cache_invalidation_hints', JSONB_BUILD_OBJECT(
+          'row_keys', CASE WHEN v_previous_row_key IS NULL THEN '[]'::jsonb ELSE JSONB_BUILD_ARRAY(v_previous_row_key) END,
+          'contract_week_ids', JSONB_BUILD_ARRAY(p_week_id),
+          'timesheet_ids', CASE WHEN p_expected_timesheet_id IS NULL THEN '[]'::jsonb ELSE JSONB_BUILD_ARRAY(p_expected_timesheet_id) END,
+          'storage_keys', CASE WHEN v_previous_storage_key IS NULL THEN '[]'::jsonb ELSE JSONB_BUILD_ARRAY(v_previous_storage_key) END,
+          'datasets', JSONB_BUILD_ARRAY('bulk_process', 'bulk_authorise'),
+          'invalidate_context', TRUE,
+          'invalidate_preview', FALSE,
+          'refresh_required', TRUE
+        ),
+        'cache_invalidation', JSONB_BUILD_OBJECT(
+          'rows', CASE WHEN v_previous_row_key IS NULL THEN '[]'::jsonb ELSE JSONB_BUILD_ARRAY(JSONB_BUILD_OBJECT(
+            'previous_row_key', v_previous_row_key,
+            'contract_week_id', p_week_id,
+            'timesheet_id', p_expected_timesheet_id
+          )) END,
+          'contract_week_ids', JSONB_BUILD_ARRAY(p_week_id),
+          'timesheet_ids', CASE WHEN p_expected_timesheet_id IS NULL THEN '[]'::jsonb ELSE JSONB_BUILD_ARRAY(p_expected_timesheet_id) END,
+          'datasets', JSONB_BUILD_ARRAY('bulk_process', 'bulk_authorise'),
+          'refresh_required', TRUE
+        )
+      );
+    END IF;
+  END IF;
+
   IF v_pre_current_version_text ~ '^[0-9]+$' THEN
     v_rotation_old_version := v_pre_current_version_text::integer;
   END IF;
@@ -9334,7 +9445,10 @@ BEGIN
     p_actor_user_id => p_actor_user_id,
     p_materialise_staged_evidence => p_materialise_staged_evidence,
     p_now_utc => v_now,
-    p_expected_row_signature => v_expected_row_signature
+    p_expected_row_signature => CASE
+      WHEN v_expected_row_signature IS NULL THEN NULL
+      ELSE v_atomic_expected_row_signature
+    END
   ) AS upsert_result;
 
   IF v_contract_week_id IS NULL THEN
@@ -9348,21 +9462,20 @@ BEGIN
     );
   END IF;
 
+  v_post_patch_filters := JSONB_BUILD_OBJECT(
+    'dataset_mode', v_patch_dataset_mode,
+    'contract_week_id', v_contract_week_id::text
+  );
+
+  IF v_current_timesheet_id IS NOT NULL THEN
+    v_post_patch_filters := v_post_patch_filters || JSONB_BUILD_OBJECT(
+      'timesheet_id', v_current_timesheet_id::text
+    );
+  END IF;
+
   SELECT decision_result.row_json
     INTO v_post_row
-  FROM public.bulk_timesheet_row_patch_v1(
-    CASE
-      WHEN v_current_timesheet_id IS NOT NULL THEN JSONB_BUILD_OBJECT(
-        'dataset_mode', 'process',
-        'timesheet_id', v_current_timesheet_id::text,
-        'contract_week_id', v_contract_week_id::text
-      )
-      ELSE JSONB_BUILD_OBJECT(
-        'dataset_mode', 'process',
-        'contract_week_id', v_contract_week_id::text
-      )
-    END
-  ) AS decision_result(row_json)
+  FROM public.bulk_timesheet_row_patch_v1(v_post_patch_filters) AS decision_result(row_json)
   LIMIT 1;
 
   IF v_post_row IS NULL THEN
@@ -9721,6 +9834,7 @@ EXCEPTION WHEN OTHERS THEN
   );
 END;
 $function$;
+
 
 
 
