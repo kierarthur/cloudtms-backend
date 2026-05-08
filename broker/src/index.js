@@ -23299,7 +23299,6 @@ async function handleBankingIdLedgerList(env, req, user) {
   }
 }
 
-
 async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
   const id = String(payBatchId || '').trim();
   if (!id) return withCORS(env, req, badRequest('pay_batch_id is required'));
@@ -23326,7 +23325,7 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
     (body.funding_account_ref === null || body.funding_account_ref === undefined)
       ? null
       : String(body.funding_account_ref).trim();
-  const fundingAccountRef = fundingAccountRefRaw ? fundingAccountRefRaw : null;
+  let fundingAccountRef = fundingAccountRefRaw ? fundingAccountRefRaw : null;
   let warningHoursJson = null;
   if (body.warning_hours_json === null || body.warning_hours_json === undefined) {
     warningHoursJson = null;
@@ -23447,8 +23446,8 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
     const payload = (batchPayload && typeof batchPayload === 'object' && !Array.isArray(batchPayload)) ? batchPayload : {};
     const batchObj = (payload.batch && typeof payload.batch === 'object' && !Array.isArray(payload.batch)) ? payload.batch : {};
 
-    const firstFiniteNonNegativeInteger = (...values) => {
-      for (const value of values) {
+    const firstFiniteNonNegativeInteger = (values) => {
+      for (const value of (Array.isArray(values) ? values : [])) {
         if (value === null || value === undefined) continue;
         const s = String(value).trim();
         if (!s) continue;
@@ -23486,7 +23485,7 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
       return count;
     };
 
-    const explicitActiveCount = firstFiniteNonNegativeInteger(
+    const explicitActiveCount = firstFiniteNonNegativeInteger([
       payload.active_item_count,
       payload.active_items,
       payload.active_batch_item_count,
@@ -23501,7 +23500,7 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
       batchObj.active_payment_item_count,
       batchObj.active_pay_batch_item_count,
       batchObj.active_batch_item_count_after
-    );
+    ]);
 
     const payloadItems = Array.isArray(payload.items) ? payload.items : null;
     const activeCountFromItems = payloadItems ? payloadItems.filter((item) => {
@@ -23796,6 +23795,76 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
       return withCORS(env, req, badRequest(`RAIL_ENV_MISMATCH expected_env=${expectedEnv} worker_env=${workerEnv} api_base=${apiBase || ''}`));
     }
 
+    let defaultFundingAccountRef = null;
+    let authorisedAuthRequestFundingAccountRef = null;
+    let authorisedAuthRequestExecutionIntent = null;
+    if (executionMode === 'STANDARD_BANK') {
+      try {
+        const { rows: defaultFundingRows } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/settings_defaults?select=rail_default_funding_account_ref&limit=1`,
+          false
+        );
+        const defaultFundingRow = Array.isArray(defaultFundingRows) && defaultFundingRows.length ? defaultFundingRows[0] : null;
+        defaultFundingAccountRef = String(defaultFundingRow?.rail_default_funding_account_ref || '').trim() || null;
+      } catch {
+        defaultFundingAccountRef = null;
+      }
+
+      try {
+        const enc = encodeURIComponent;
+        const { rows: authorisedAuthRequestRows } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/pay_batch_auth_requests` +
+          `?pay_batch_id=eq.${enc(id)}` +
+          `&state=eq.AUTHORISED` +
+          `&select=id,funding_account_ref,execution_intent_json,finalised_at_utc,created_at_utc` +
+          `&order=finalised_at_utc.desc.nullslast,created_at_utc.desc` +
+          `&limit=1`,
+          false
+        );
+        const authorisedAuthRequest = Array.isArray(authorisedAuthRequestRows) && authorisedAuthRequestRows.length ? authorisedAuthRequestRows[0] : null;
+        authorisedAuthRequestFundingAccountRef = String(authorisedAuthRequest?.funding_account_ref || '').trim() || null;
+        authorisedAuthRequestExecutionIntent = (authorisedAuthRequest?.execution_intent_json && typeof authorisedAuthRequest.execution_intent_json === 'object' && !Array.isArray(authorisedAuthRequest.execution_intent_json))
+          ? authorisedAuthRequest.execution_intent_json
+          : null;
+      } catch {
+        authorisedAuthRequestFundingAccountRef = null;
+        authorisedAuthRequestExecutionIntent = null;
+      }
+
+      const existingIntent = (() => {
+        if (authorisedAuthRequestExecutionIntent && typeof authorisedAuthRequestExecutionIntent === 'object' && !Array.isArray(authorisedAuthRequestExecutionIntent)) return authorisedAuthRequestExecutionIntent;
+        const direct = gateBatch?.execution_intent_json;
+        if (direct && typeof direct === 'object' && !Array.isArray(direct)) return direct;
+        const fallback = gateGet?.execution_intent_json;
+        if (fallback && typeof fallback === 'object' && !Array.isArray(fallback)) return fallback;
+        return null;
+      })();
+
+      fundingAccountRef = String(
+        fundingAccountRef ||
+        existingIntent?.funding_account_ref ||
+        authorisedAuthRequestFundingAccountRef ||
+        gateBatch?.funding_account_ref ||
+        gateGet?.funding_account_ref ||
+        defaultFundingAccountRef ||
+        ''
+      ).trim() || null;
+
+      if (!fundingAccountRef) {
+        return withCORS(env, req, jsonResponse(409, {
+          ok: false,
+          error: 'Funding account is required before bank execution can start.',
+          message: 'Funding account is required before bank execution can start.',
+          error_code: 'STANDARD_BANK_FUNDING_ACCOUNT_REQUIRED',
+          pay_batch_id: id,
+          execution_mode: executionMode,
+          effective_payment_date: effectivePaymentDate
+        }));
+      }
+    }
+
     if (executionMode === 'CSV_SETTLEMENT') {
       if (gateGet?.has_cloudtms_csv_export !== true || gateGet?.csv_export_matches_current_transfers !== true) {
         return withCORS(env, req, badRequest('CSV_EXPORT_EVIDENCE_REQUIRED'));
@@ -23966,19 +24035,27 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
 
       const executionIntentJson = (() => {
         const direct = authStart?.execution_intent_json;
-        if (direct && typeof direct === 'object' && !Array.isArray(direct)) return direct;
         const batchIntent = gateBatch?.execution_intent_json;
-        if (batchIntent && typeof batchIntent === 'object' && !Array.isArray(batchIntent)) return batchIntent;
         const gateIntent = gateGet?.execution_intent_json;
-        if (gateIntent && typeof gateIntent === 'object' && !Array.isArray(gateIntent)) return gateIntent;
-        return {
-          execution_mode: executionMode,
-          schedule_kind: scheduleKind,
-          payment_date: effectivePaymentDate,
-          auth_request_id: authRequestId,
-          pay_channel_scope: payChannelScope,
-          suppress_remittances: suppressRemittances
-        };
+        const base = direct && typeof direct === 'object' && !Array.isArray(direct)
+          ? direct
+          : (batchIntent && typeof batchIntent === 'object' && !Array.isArray(batchIntent)
+            ? batchIntent
+            : (gateIntent && typeof gateIntent === 'object' && !Array.isArray(gateIntent)
+              ? gateIntent
+              : {
+                execution_mode: executionMode,
+                schedule_kind: scheduleKind,
+                payment_date: effectivePaymentDate,
+                auth_request_id: authRequestId,
+                pay_channel_scope: payChannelScope,
+                suppress_remittances: suppressRemittances
+              }));
+        return Object.assign({}, base, {
+          funding_account_ref: String(base.funding_account_ref || immediateFundingAccountRef || '').trim() || immediateFundingAccountRef,
+          rail_provider: String(base.rail_provider || provider || '').trim() || provider,
+          rail_env: String(base.rail_env || expectedEnv || '').trim() || expectedEnv
+        });
       })();
 
       const claimRow = {
@@ -24148,7 +24225,9 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
     }
     return withCORS(env, req, jsonResponse(500, { error: 'Execute payment failed.', message: 'Execute payment failed.', error_code: 'BANKING_EXECUTE_PAYMENT_FAILED' }));
   }
-}  
+}
+
+
 
 async function verifyPaymentScheduleReauth(env, user, reauthToken) {
   const token = String(reauthToken || '').trim();
