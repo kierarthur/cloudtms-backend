@@ -5489,8 +5489,8 @@ BEGIN
     RAISE EXCEPTION 'pay_batch_mark_blocked_funds: pay_batch not found';
   END IF;
 
-  IF upper(btrim(coalesce(v_batch.status, ''))) NOT IN ('READY', 'SCHEDULED', 'EXECUTING', 'BLOCKED_FUNDS') THEN
-    RAISE EXCEPTION 'pay_batch_mark_blocked_funds: batch status must be READY, SCHEDULED, EXECUTING or BLOCKED_FUNDS (current=%)', v_batch.status;
+  IF upper(btrim(coalesce(v_batch.status, ''))) NOT IN ('READY', 'SCHEDULED', 'EXECUTING', 'AUTHORISED_FOR_PAYMENT', 'BLOCKED_FUNDS') THEN
+    RAISE EXCEPTION 'pay_batch_mark_blocked_funds: batch status must be READY, SCHEDULED, EXECUTING, AUTHORISED_FOR_PAYMENT or BLOCKED_FUNDS (current=%)', v_batch.status;
   END IF;
 
   IF upper(btrim(coalesce(v_batch.execution_commit_state, 'NOT_SUBMITTED'))) <> 'NOT_SUBMITTED' THEN
@@ -5812,7 +5812,6 @@ BEGIN
   );
 END;
 $function$;
-
 
 
 
