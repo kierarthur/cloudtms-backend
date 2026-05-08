@@ -14443,8 +14443,6 @@ $$;
 
 drop function if exists public.pay_batch_auth_start(uuid, text, timestamptz, text, jsonb, uuid, text);
 
-
-
 create or replace function public.pay_batch_auth_start(
   p_pay_batch_id uuid,
   p_schedule_kind text,
@@ -14493,6 +14491,7 @@ declare
   v_has_awaiting_net boolean := false;
 
   v_provider text := null;
+  v_rail_env text := null;
   v_sched_at timestamptz := null;
   v_warn jsonb := '[]'::jsonb;
   v_funding text := null;
@@ -14528,6 +14527,7 @@ declare
   v_has_external_submission_evidence boolean := false;
   v_execution_intent jsonb := '{}'::jsonb;
   v_existing_execution_intent jsonb := null;
+  v_existing_funding_account_ref text := null;
   v_existing_execution_intent_cmp jsonb := '{}'::jsonb;
   v_execution_intent_cmp jsonb := '{}'::jsonb;
   v_status_upper text := null;
@@ -14599,6 +14599,7 @@ begin
     pb.execution_committed_at_utc,
     pb.bank_csv_export_json,
     pb.execution_intent_json,
+    pb.funding_account_ref,
     pb.settlement_confirmation_json
   into v_batch
   from public.pay_batches pb
@@ -14781,6 +14782,11 @@ begin
       'pay_batch_id', p_pay_batch_id::text,
       'rail_provider_snapshot', v_batch.rail_provider_snapshot
     )::text;
+  end if;
+
+  v_rail_env := upper(btrim(coalesce(v_batch.rail_env_snapshot, '')));
+  if v_rail_env = '' then
+    v_rail_env := 'PROD';
   end if;
 
   if v_payment_date is null then
@@ -14971,6 +14977,39 @@ begin
     )::text;
   end if;
 
+  select
+    sd.funds_warning_hours_json,
+    sd.rail_supports_name_check,
+    sd.rail_supports_scheduling,
+    sd.rail_default_funding_account_ref
+  into v_cfg
+  from public.settings_defaults sd
+  where sd.id = 1
+  limit 1;
+
+  v_warn := coalesce(p_warning_hours_json, coalesce(v_cfg.funds_warning_hours_json, '[]'::jsonb));
+  if v_warn is not null and jsonb_typeof(v_warn) <> 'array' then
+    raise exception 'pay_batch_auth_start: warning_hours_json must be a JSON array';
+  end if;
+
+  v_funding := nullif(btrim(coalesce(p_funding_account_ref,'')), '');
+  if v_funding is null then
+    v_funding := nullif(btrim(coalesce(v_batch.funding_account_ref,'')), '');
+  end if;
+  if v_execution_mode = 'STANDARD_BANK' and v_funding is null then
+    v_funding := nullif(btrim(coalesce(v_cfg.rail_default_funding_account_ref,'')), '');
+  end if;
+  if v_execution_mode = 'STANDARD_BANK' and v_funding is null then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_BATCH_AUTH_START',
+      'code', 'STANDARD_BANK_FUNDING_ACCOUNT_REQUIRED',
+      'message', 'pay_batch_auth_start: funding_account_ref is required for standard bank execution',
+      'pay_batch_id', p_pay_batch_id::text,
+      'rail_provider', v_provider,
+      'rail_env', v_rail_env
+    )::text;
+  end if;
+
   v_sched_at := case
     when v_kind = 'IMMEDIATE' then coalesce(p_scheduled_at_utc, v_now)
     else p_scheduled_at_utc
@@ -14979,8 +15018,16 @@ begin
     raise exception 'pay_batch_auth_start: scheduled_at_utc is required when schedule_kind=SCHEDULED';
   end if;
 
+  v_authoritative_payment_date := case
+    when v_execution_mode = 'STANDARD_BANK' then (v_sched_at at time zone 'Europe/London')::date
+    else v_payment_date
+  end;
+
   v_execution_intent := jsonb_build_object(
     'execution_mode', v_execution_mode,
+    'funding_account_ref', v_funding,
+    'rail_provider', v_provider,
+    'rail_env', v_rail_env,
     'payment_date', v_payment_date::text,
     'schedule_kind', v_kind,
     'scheduled_at_utc', case when v_sched_at is null then null else v_sched_at::text end,
@@ -15002,16 +15049,29 @@ begin
 
   select
     pbar.id,
-    pbar.execution_intent_json
+    pbar.execution_intent_json,
+    pbar.funding_account_ref
   into
     v_existing_id,
-    v_existing_execution_intent
+    v_existing_execution_intent,
+    v_existing_funding_account_ref
   from public.pay_batch_auth_requests pbar
   where pbar.pay_batch_id = p_pay_batch_id
     and pbar.state = 'AWAITING'
   limit 1;
 
   if v_existing_id is not null then
+    v_existing_execution_intent := coalesce(v_existing_execution_intent, '{}'::jsonb)
+      || jsonb_strip_nulls(jsonb_build_object(
+        'funding_account_ref', coalesce(
+          nullif(btrim(coalesce(v_existing_execution_intent->>'funding_account_ref', '')), ''),
+          nullif(btrim(coalesce(v_existing_funding_account_ref, '')), ''),
+          v_funding
+        ),
+        'rail_provider', coalesce(nullif(btrim(coalesce(v_existing_execution_intent->>'rail_provider', '')), ''), v_provider),
+        'rail_env', coalesce(nullif(btrim(coalesce(v_existing_execution_intent->>'rail_env', '')), ''), v_rail_env)
+      ));
+
     v_existing_execution_intent_cmp := coalesce(v_existing_execution_intent, '{}'::jsonb)
       - 'auth_request_id'
       - 'frozen_at_utc'
@@ -15026,6 +15086,14 @@ begin
       - 'suppress_remittances_confirmed_by_user_id';
 
     if v_existing_execution_intent_cmp = v_execution_intent_cmp then
+      update public.pay_batch_auth_requests pbar_existing_intent
+      set execution_intent_json = v_existing_execution_intent
+      where pbar_existing_intent.id = v_existing_id;
+
+      update public.pay_batches pb_existing_intent
+      set execution_intent_json = v_existing_execution_intent
+      where pb_existing_intent.id = p_pay_batch_id;
+
       return jsonb_build_object(
         'ok', true,
         'pay_batch_id', p_pay_batch_id::text,
@@ -15034,6 +15102,9 @@ begin
         'auth_state', 'AWAITING',
         'existing_auth_request', true,
         'execution_intent_json', v_existing_execution_intent,
+        'funding_account_ref', coalesce(v_existing_execution_intent->>'funding_account_ref', v_funding),
+        'rail_provider', coalesce(v_existing_execution_intent->>'rail_provider', v_provider),
+        'rail_env', coalesce(v_existing_execution_intent->>'rail_env', v_rail_env),
         'payment_remittance_send_timing', v_payment_remittance_send_timing,
         'worker_communications', jsonb_build_object(
           'automatic_commit_stage', false,
@@ -15085,8 +15156,8 @@ begin
         p_pay_batch_id,
         v_kind,
         p_scheduled_at_utc,
-        p_funding_account_ref,
-        p_warning_hours_json,
+        v_funding,
+        v_warn,
         p_actor_user_id
       );
 
@@ -15141,13 +15212,21 @@ begin
 
     v_authoritative_payment_date := (v_sched_at at time zone 'Europe/London')::date;
 
-    v_funding := nullif(btrim(coalesce(p_funding_account_ref,'')), '');
+    v_funding := nullif(btrim(coalesce(v_funding,'')), '');
+    if v_funding is null then
+      v_funding := nullif(btrim(coalesce(p_funding_account_ref,'')), '');
+    end if;
+    if v_funding is null then
+      v_funding := nullif(btrim(coalesce(v_batch.funding_account_ref,'')), '');
+    end if;
     if v_funding is null then
       v_funding := nullif(btrim(coalesce(v_cfg.rail_default_funding_account_ref,'')), '');
     end if;
     if v_funding is null then
       raise exception 'pay_batch_auth_start: funding_account_ref is required for this rail (provider=%)', v_batch.rail_provider_snapshot;
     end if;
+
+    v_execution_intent := jsonb_set(v_execution_intent, '{funding_account_ref}', to_jsonb(v_funding), true);
 
     select count(*)::int
     into v_pending_transfers
@@ -15381,7 +15460,16 @@ begin
       v_sched_at := p_scheduled_at_utc;
     end if;
 
-    v_funding := nullif(btrim(coalesce(p_funding_account_ref,'')), '');
+    v_funding := nullif(btrim(coalesce(v_funding,'')), '');
+    if v_funding is null then
+      v_funding := nullif(btrim(coalesce(p_funding_account_ref,'')), '');
+    end if;
+    if v_funding is null then
+      v_funding := nullif(btrim(coalesce(v_batch.funding_account_ref,'')), '');
+    end if;
+    if v_funding is not null then
+      v_execution_intent := jsonb_set(v_execution_intent, '{funding_account_ref}', to_jsonb(v_funding), true);
+    end if;
 
     update public.pay_batches pb2
     set
@@ -15588,6 +15676,9 @@ begin
       'execution_committed_at_utc', (select case when pb4.execution_committed_at_utc is null then null else pb4.execution_committed_at_utc::text end from public.pay_batches pb4 where pb4.id = p_pay_batch_id),
       'execution_mode', v_execution_mode,
       'execution_intent_json', v_execution_intent,
+      'funding_account_ref', v_batch.funding_account_ref,
+      'rail_provider', v_provider,
+      'rail_env', v_rail_env,
       'suppress_remittances', v_suppress_remittances,
       'payment_remittance_send_timing', v_payment_remittance_send_timing,
       'worker_communications', v_worker_communications,
@@ -15642,6 +15733,9 @@ begin
       'execution_committed_at_utc', (select case when pb6.execution_committed_at_utc is null then null else pb6.execution_committed_at_utc::text end from public.pay_batches pb6 where pb6.id = p_pay_batch_id),
       'execution_mode', v_execution_mode,
       'execution_intent_json', v_execution_intent,
+      'funding_account_ref', v_batch.funding_account_ref,
+      'rail_provider', v_provider,
+      'rail_env', v_rail_env,
       'suppress_remittances', v_suppress_remittances,
       'payment_remittance_send_timing', v_payment_remittance_send_timing,
       'worker_communications', v_worker_communications,
