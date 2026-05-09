@@ -38508,7 +38508,6 @@ $function$;
 
 
 
-
 CREATE OR REPLACE FUNCTION public.banking_alerts_active_for_user(
   p_actor_user_id uuid,
   p_entity_kind text DEFAULT NULL::text,
@@ -38523,7 +38522,7 @@ SECURITY DEFINER
 SET search_path TO 'public'
 AS $function$
 DECLARE
-  v_entity_kind text := lower(nullif(btrim(coalesce(p_entity_kind, '')), ''));
+  v_entity_kind text := LOWER(NULLIF(BTRIM(COALESCE(p_entity_kind, '')), ''));
   v_limit integer := NULL::integer;
   v_result jsonb := '{}'::jsonb;
 BEGIN
@@ -38541,76 +38540,60 @@ BEGIN
     v_limit := LEAST(GREATEST(p_limit, 1), 500);
   END IF;
 
-  WITH blocked_funds_source AS (
+  WITH blocked_funds_base AS (
     SELECT
-      public.pay_batches.id AS pay_batch_id,
-      public.pay_batches.last_funds_check_at_utc AS sort_at_utc,
-      public.banking_alert_payload_for_pay_batch('BLOCKED_FUNDS', public.pay_batches.id) AS payload_json,
-      public.pay_batch_submission_evidence(public.pay_batches.id) AS submission_evidence_json,
+      blocked_funds_pay_batches.id AS pay_batch_id,
+      blocked_funds_pay_batches.status AS batch_status,
+      blocked_funds_pay_batches.execution_commit_state AS execution_commit_state,
+      blocked_funds_pay_batches.execution_commit_ref AS execution_commit_ref,
+      blocked_funds_pay_batches.execution_committed_at_utc AS execution_committed_at_utc,
+      blocked_funds_pay_batches.last_funds_check_at_utc AS last_funds_check_at_utc,
+      blocked_funds_pay_batches.last_funds_check_json AS last_funds_check_json,
+      blocked_funds_pay_batches.funding_account_ref AS funding_account_ref,
+      blocked_funds_pay_batches.rail_provider_snapshot AS rail_provider_snapshot,
+      blocked_funds_pay_batches.rail_env_snapshot AS rail_env_snapshot,
       COALESCE(
-        public.pay_batches.last_funds_check_json #>> '{required_gbp}',
-        public.pay_batches.last_funds_check_json #>> '{required}',
-        public.pay_batches.last_funds_check_json #>> '{required_amount_gbp}',
-        public.pay_batches.last_funds_check_json #>> '{required_amount}'
+        NULLIF(BTRIM(blocked_funds_pay_batches.last_funds_check_json #>> '{required_gbp}'), ''),
+        NULLIF(BTRIM(blocked_funds_pay_batches.last_funds_check_json #>> '{required}'), ''),
+        NULLIF(BTRIM(blocked_funds_pay_batches.last_funds_check_json #>> '{required_amount_gbp}'), ''),
+        NULLIF(BTRIM(blocked_funds_pay_batches.last_funds_check_json #>> '{required_amount}'), '')
       ) AS required_gbp_text,
       COALESCE(
-        public.pay_batches.last_funds_check_json #>> '{available_gbp}',
-        public.pay_batches.last_funds_check_json #>> '{available}',
-        public.pay_batches.last_funds_check_json #>> '{available_amount_gbp}',
-        public.pay_batches.last_funds_check_json #>> '{available_amount}'
-      ) AS available_gbp_text
-    FROM public.pay_batches
-    WHERE upper(btrim(coalesce(public.pay_batches.status, ''))) = 'BLOCKED_FUNDS'
-      AND upper(btrim(coalesce(public.pay_batches.execution_commit_state, 'NOT_SUBMITTED'))) = 'NOT_SUBMITTED'
-      AND nullif(btrim(coalesce(public.pay_batches.execution_commit_ref, '')), '') IS NULL
-      AND public.pay_batches.execution_committed_at_utc IS NULL
-      AND public.pay_batches.cancelled_at_utc IS NULL
-      AND (v_entity_kind IS NULL OR v_entity_kind = 'pay_batch')
-      AND (p_entity_id IS NULL OR public.pay_batches.id = p_entity_id)
+        NULLIF(BTRIM(blocked_funds_pay_batches.last_funds_check_json #>> '{available_gbp}'), ''),
+        NULLIF(BTRIM(blocked_funds_pay_batches.last_funds_check_json #>> '{available}'), ''),
+        NULLIF(BTRIM(blocked_funds_pay_batches.last_funds_check_json #>> '{available_amount_gbp}'), ''),
+        NULLIF(BTRIM(blocked_funds_pay_batches.last_funds_check_json #>> '{available_amount}'), '')
+      ) AS available_gbp_text,
+      COALESCE(
+        NULLIF(BTRIM(blocked_funds_pay_batches.last_funds_check_json #>> '{funding_account_ref}'), ''),
+        NULLIF(BTRIM(blocked_funds_pay_batches.last_funds_check_json #>> '{account_ref}'), ''),
+        NULLIF(BTRIM(blocked_funds_pay_batches.last_funds_check_json #>> '{funding_account_id}'), ''),
+        NULLIF(BTRIM(blocked_funds_pay_batches.funding_account_ref), '')
+      ) AS resolved_funding_account_ref,
+      COALESCE(
+        NULLIF(BTRIM(blocked_funds_pay_batches.last_funds_check_json #>> '{rail_provider}'), ''),
+        NULLIF(BTRIM(blocked_funds_pay_batches.last_funds_check_json #>> '{provider}'), ''),
+        NULLIF(BTRIM(blocked_funds_pay_batches.rail_provider_snapshot), '')
+      ) AS resolved_rail_provider,
+      COALESCE(
+        NULLIF(BTRIM(blocked_funds_pay_batches.last_funds_check_json #>> '{rail_env}'), ''),
+        NULLIF(BTRIM(blocked_funds_pay_batches.last_funds_check_json #>> '{env}'), ''),
+        NULLIF(BTRIM(blocked_funds_pay_batches.rail_env_snapshot), '')
+      ) AS resolved_rail_env
+    FROM public.pay_batches AS blocked_funds_pay_batches
+    WHERE UPPER(BTRIM(COALESCE(blocked_funds_pay_batches.status, ''))) = 'BLOCKED_FUNDS'
+      AND UPPER(BTRIM(COALESCE(blocked_funds_pay_batches.execution_commit_state, 'NOT_SUBMITTED'))) = 'NOT_SUBMITTED'
+      AND NULLIF(BTRIM(COALESCE(blocked_funds_pay_batches.execution_commit_ref, '')), '') IS NULL
+      AND blocked_funds_pay_batches.execution_committed_at_utc IS NULL
+      AND blocked_funds_pay_batches.cancelled_at_utc IS NULL
       AND EXISTS (
         SELECT 1
-        FROM public.pay_batch_candidates AS blocked_funds_candidates_exists
-        JOIN public.pay_batch_items AS blocked_funds_items_exists
-          ON blocked_funds_items_exists.pay_batch_candidate_id = blocked_funds_candidates_exists.id
-        WHERE blocked_funds_candidates_exists.pay_batch_id = public.pay_batches.id
-          AND coalesce(blocked_funds_items_exists.is_voided, false) = false
+        FROM public.pay_batch_candidates AS blocked_funds_candidate_exists
+        JOIN public.pay_batch_items AS blocked_funds_item_exists
+          ON blocked_funds_item_exists.pay_batch_candidate_id = blocked_funds_candidate_exists.id
+        WHERE blocked_funds_candidate_exists.pay_batch_id = blocked_funds_pay_batches.id
+          AND COALESCE(blocked_funds_item_exists.is_voided, false) = false
       )
-  ),
-  blocked_funds_payload AS (
-    SELECT
-      blocked_funds_source.pay_batch_id,
-      blocked_funds_source.payload_json,
-      blocked_funds_source.required_gbp_text,
-      blocked_funds_source.available_gbp_text,
-      CASE
-        WHEN nullif(blocked_funds_source.required_gbp_text, '') ~ '^-?[0-9]+(\.[0-9]+)?$'
-          THEN public.cloudtms_format_gbp(blocked_funds_source.required_gbp_text::numeric)
-        ELSE '—'
-      END AS required_gbp_display,
-      CASE
-        WHEN nullif(blocked_funds_source.available_gbp_text, '') ~ '^-?[0-9]+(\.[0-9]+)?$'
-          THEN public.cloudtms_format_gbp(blocked_funds_source.available_gbp_text::numeric)
-        ELSE '—'
-      END AS available_gbp_display,
-      blocked_funds_source.sort_at_utc
-    FROM blocked_funds_source
-    WHERE COALESCE((blocked_funds_source.submission_evidence_json ->> 'transfer_event_count')::integer, 0) = 0
-      AND COALESCE((blocked_funds_source.submission_evidence_json ->> 'has_rail_tx_id')::boolean, false) = false
-      AND COALESCE((blocked_funds_source.submission_evidence_json ->> 'has_provider_submission_reference')::boolean, false) = false
-      AND COALESCE((blocked_funds_source.submission_evidence_json ->> 'has_provider_payment_reference')::boolean, false) = false
-      AND COALESCE((blocked_funds_source.submission_evidence_json ->> 'has_provider_transfer_reference')::boolean, false) = false
-      AND COALESCE((blocked_funds_source.submission_evidence_json ->> 'has_provider_transaction_reference')::boolean, false) = false
-      AND COALESCE((blocked_funds_source.submission_evidence_json ->> 'has_external_payment_reference')::boolean, false) = false
-      AND COALESCE((blocked_funds_source.submission_evidence_json ->> 'has_external_transfer_reference')::boolean, false) = false
-      AND COALESCE((blocked_funds_source.submission_evidence_json ->> 'has_submitted_state')::boolean, false) = false
-      AND COALESCE((blocked_funds_source.submission_evidence_json ->> 'has_processing_state')::boolean, false) = false
-      AND COALESCE((blocked_funds_source.submission_evidence_json ->> 'has_completed_state')::boolean, false) = false
-      AND COALESCE((blocked_funds_source.submission_evidence_json ->> 'has_failed_or_rejected_provider_state')::boolean, false) = false
-      AND COALESCE((blocked_funds_source.submission_evidence_json ->> 'has_unknown_or_timeout_state')::boolean, false) = false
-      AND COALESCE((blocked_funds_source.submission_evidence_json ->> 'has_provider_attempt_request_or_idempotency_reference')::boolean, false) = false
-      AND COALESCE((blocked_funds_source.submission_evidence_json ->> 'has_possible_provider_attempt_evidence')::boolean, false) = false
-      AND COALESCE((blocked_funds_source.submission_evidence_json ->> 'has_external_submission_evidence')::boolean, false) = false
-      AND COALESCE((blocked_funds_source.submission_evidence_json ->> 'no_submission_evidence')::boolean, false) = true
   ),
   blocked_funds_alerts AS (
     SELECT
@@ -38618,73 +38601,106 @@ BEGIN
       'critical'::text AS severity,
       100::integer AS severity_rank,
       'pay_batch'::text AS entity_kind,
-      blocked_funds_payload.pay_batch_id AS entity_id,
-      blocked_funds_payload.pay_batch_id AS pay_batch_id,
-      public.banking_alert_fingerprint('BLOCKED_FUNDS', 'pay_batch', blocked_funds_payload.pay_batch_id, blocked_funds_payload.payload_json) AS alert_fingerprint,
+      blocked_funds_base.pay_batch_id AS entity_id,
+      blocked_funds_base.pay_batch_id AS pay_batch_id,
+      NULL::text AS payload_source_kind,
+      NULL::uuid AS payload_source_id,
+      jsonb_strip_nulls(jsonb_build_object(
+        'fingerprint_source_kind', 'pay_batch',
+        'fingerprint_source_id', blocked_funds_base.pay_batch_id::text,
+        'issue_kind', 'BLOCKED_FUNDS',
+        'pay_batch_id', blocked_funds_base.pay_batch_id::text,
+        'batch_status', UPPER(BTRIM(COALESCE(blocked_funds_base.batch_status, ''))),
+        'execution_commit_state', UPPER(BTRIM(COALESCE(blocked_funds_base.execution_commit_state, 'NOT_SUBMITTED'))),
+        'execution_commit_ref', NULLIF(BTRIM(COALESCE(blocked_funds_base.execution_commit_ref, '')), ''),
+        'execution_committed_at_utc', CASE
+          WHEN blocked_funds_base.execution_committed_at_utc IS NULL THEN NULL::text
+          ELSE TO_CHAR(blocked_funds_base.execution_committed_at_utc AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')
+        END,
+        'last_funds_check_at_utc', CASE
+          WHEN blocked_funds_base.last_funds_check_at_utc IS NULL THEN NULL::text
+          ELSE TO_CHAR(blocked_funds_base.last_funds_check_at_utc AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')
+        END,
+        'required_gbp', CASE
+          WHEN blocked_funds_base.required_gbp_text ~ '^-?[0-9]+(\.[0-9]+)?$' THEN blocked_funds_base.required_gbp_text::numeric
+          ELSE NULL::numeric
+        END,
+        'available_gbp', CASE
+          WHEN blocked_funds_base.available_gbp_text ~ '^-?[0-9]+(\.[0-9]+)?$' THEN blocked_funds_base.available_gbp_text::numeric
+          ELSE NULL::numeric
+        END,
+        'funding_account_ref', blocked_funds_base.resolved_funding_account_ref,
+        'rail_provider', blocked_funds_base.resolved_rail_provider,
+        'rail_env', blocked_funds_base.resolved_rail_env
+      )) AS fingerprint_payload_json,
       'Bank rejected payment'::text AS label,
       'Bank rejected payment — blocked funds'::text AS title,
-      concat(
-        'Blocked funds',
-        CASE WHEN nullif(blocked_funds_payload.required_gbp_text, '') IS NULL THEN '' ELSE ' — required ' || blocked_funds_payload.required_gbp_display END,
-        CASE WHEN nullif(blocked_funds_payload.available_gbp_text, '') IS NULL THEN '' ELSE ', available ' || blocked_funds_payload.available_gbp_display END
-      )::text AS description,
+      ('Blocked funds — required '
+        || COALESCE(NULLIF(BTRIM(blocked_funds_base.required_gbp_text), ''), '—')
+        || ', available '
+        || COALESCE(NULLIF(BTRIM(blocked_funds_base.available_gbp_text), ''), '—')
+        || '. No payment was submitted.')::text AS description,
       'Fund the account and retry, or cancel/release the batch.'::text AS action_guidance,
-      blocked_funds_payload.payload_json AS payload_json,
-      blocked_funds_payload.sort_at_utc AS sort_at_utc
-    FROM blocked_funds_payload
+      blocked_funds_base.last_funds_check_at_utc AS sort_at_utc
+    FROM blocked_funds_base
   ),
-  bank_event_payloads AS (
+  bank_event_base AS (
     SELECT
       CASE
-        WHEN upper(btrim(coalesce(public.pay_bank_transfer_events.mapping_status, ''))) IN ('AMBIGUOUS','UNMATCHED','NO_MATCH','MULTIPLE_MATCHES')
-          OR upper(btrim(coalesce(public.pay_bank_transfer_events.correction_disposition, ''))) IN ('AMBIGUOUS','ACTION_REQUIRED')
+        WHEN UPPER(BTRIM(COALESCE(public.pay_bank_transfer_events.mapping_status, ''))) IN ('AMBIGUOUS','UNMATCHED','NO_MATCH','MULTIPLE_MATCHES')
+          OR UPPER(BTRIM(COALESCE(public.pay_bank_transfer_events.correction_disposition, ''))) IN ('AMBIGUOUS','ACTION_REQUIRED')
           THEN 'AMBIGUOUS_PAYMENT_REVIEW_REQUIRED'
-        WHEN upper(btrim(coalesce(public.pay_bank_transfer_events.correction_disposition, ''))) = 'FAILED'
+        WHEN UPPER(BTRIM(COALESCE(public.pay_bank_transfer_events.correction_disposition, ''))) = 'FAILED'
           THEN 'PAYMENT_CORRECTION_FAILED'
-        WHEN upper(btrim(coalesce(public.pay_bank_transfer_events.correction_disposition, ''))) = 'BLOCKED'
+        WHEN UPPER(BTRIM(COALESCE(public.pay_bank_transfer_events.correction_disposition, ''))) = 'BLOCKED'
           THEN 'PAYMENT_CORRECTION_BLOCKED'
-        WHEN upper(btrim(coalesce(public.pay_bank_transfer_events.normalised_state, ''))) IN ('RETURNED','REVERTED')
-          OR upper(btrim(coalesce(public.pay_bank_transfer_events.provider_state, ''))) IN ('RETURNED','REVERTED')
+        WHEN UPPER(BTRIM(COALESCE(public.pay_bank_transfer_events.normalised_state, ''))) IN ('RETURNED','REVERTED')
+          OR UPPER(BTRIM(COALESCE(public.pay_bank_transfer_events.provider_state, ''))) IN ('RETURNED','REVERTED')
           THEN 'BANK_RETURNED_PAYMENT'
-        WHEN upper(btrim(coalesce(public.pay_bank_transfer_events.normalised_state, ''))) IN ('FAILED','DECLINED','REJECTED','CANCELLED','CANCELED','SUBMISSION_FAILED')
-          OR upper(btrim(coalesce(public.pay_bank_transfer_events.provider_state, ''))) IN ('FAILED','DECLINED','REJECTED','CANCELLED','CANCELED','SUBMISSION_FAILED')
+        WHEN UPPER(BTRIM(COALESCE(public.pay_bank_transfer_events.normalised_state, ''))) IN ('FAILED','DECLINED','REJECTED','CANCELLED','CANCELED','SUBMISSION_FAILED')
+          OR UPPER(BTRIM(COALESCE(public.pay_bank_transfer_events.provider_state, ''))) IN ('FAILED','DECLINED','REJECTED','CANCELLED','CANCELED','SUBMISSION_FAILED')
           THEN 'BANK_REJECTED_PAYMENT'
-        WHEN upper(btrim(coalesce(public.pay_bank_transfer_events.normalised_state, ''))) IN ('UNKNOWN','TIMEOUT','TIMED_OUT','PENDING_REVIEW')
-          OR upper(btrim(coalesce(public.pay_bank_transfer_events.normalised_state, ''))) LIKE 'CREATE_ERROR%'
-          OR upper(btrim(coalesce(public.pay_bank_transfer_events.provider_state, ''))) IN ('UNKNOWN','TIMEOUT','TIMED_OUT','PENDING_REVIEW')
-          OR upper(btrim(coalesce(public.pay_bank_transfer_events.provider_state, ''))) LIKE 'CREATE_ERROR%'
+        WHEN UPPER(BTRIM(COALESCE(public.pay_bank_transfer_events.normalised_state, ''))) IN ('UNKNOWN','TIMEOUT','TIMED_OUT','PENDING_REVIEW')
+          OR UPPER(BTRIM(COALESCE(public.pay_bank_transfer_events.normalised_state, ''))) LIKE 'CREATE_ERROR%'
+          OR UPPER(BTRIM(COALESCE(public.pay_bank_transfer_events.provider_state, ''))) IN ('UNKNOWN','TIMEOUT','TIMED_OUT','PENDING_REVIEW')
+          OR UPPER(BTRIM(COALESCE(public.pay_bank_transfer_events.provider_state, ''))) LIKE 'CREATE_ERROR%'
           THEN 'RAIL_SUBMISSION_UNKNOWN_OR_TIMEOUT'
         ELSE NULL::text
       END AS alert_kind,
-      public.pay_bank_transfer_events.pay_batch_id,
+      public.pay_bank_transfer_events.pay_batch_id AS pay_batch_id,
       public.pay_bank_transfer_events.id AS source_id,
-      coalesce(public.pay_bank_transfer_events.event_time_utc, public.pay_bank_transfer_events.received_at_utc, public.pay_bank_transfer_events.created_at_utc) AS sort_at_utc
+      public.pay_bank_transfer_events.normalised_state AS normalised_state,
+      public.pay_bank_transfer_events.provider_state AS provider_state,
+      public.pay_bank_transfer_events.mapping_status AS mapping_status,
+      public.pay_bank_transfer_events.correction_disposition AS correction_disposition,
+      public.pay_bank_transfer_events.event_time_utc AS event_time_utc,
+      public.pay_bank_transfer_events.received_at_utc AS received_at_utc,
+      public.pay_bank_transfer_events.created_at_utc AS created_at_utc,
+      COALESCE(public.pay_bank_transfer_events.event_time_utc, public.pay_bank_transfer_events.received_at_utc, public.pay_bank_transfer_events.created_at_utc) AS sort_at_utc
     FROM public.pay_bank_transfer_events
     JOIN public.pay_batches AS bank_event_batches
       ON bank_event_batches.id = public.pay_bank_transfer_events.pay_batch_id
-    WHERE upper(btrim(coalesce(bank_event_batches.status, ''))) NOT IN ('CANCELLED','CANCELED')
-      AND (v_entity_kind IS NULL OR v_entity_kind = 'pay_batch')
-      AND (p_entity_id IS NULL OR public.pay_bank_transfer_events.pay_batch_id = p_entity_id)
+    WHERE UPPER(BTRIM(COALESCE(bank_event_batches.status, ''))) NOT IN ('CANCELLED','CANCELED')
       AND (
-        upper(btrim(coalesce(public.pay_bank_transfer_events.normalised_state, ''))) IN ('FAILED','DECLINED','REJECTED','CANCELLED','CANCELED','SUBMISSION_FAILED','RETURNED','REVERTED','UNKNOWN','TIMEOUT','TIMED_OUT','PENDING_REVIEW')
-        OR upper(btrim(coalesce(public.pay_bank_transfer_events.normalised_state, ''))) LIKE 'CREATE_ERROR%'
-        OR upper(btrim(coalesce(public.pay_bank_transfer_events.provider_state, ''))) IN ('FAILED','DECLINED','REJECTED','CANCELLED','CANCELED','SUBMISSION_FAILED','RETURNED','REVERTED','UNKNOWN','TIMEOUT','TIMED_OUT','PENDING_REVIEW')
-        OR upper(btrim(coalesce(public.pay_bank_transfer_events.provider_state, ''))) LIKE 'CREATE_ERROR%'
-        OR upper(btrim(coalesce(public.pay_bank_transfer_events.mapping_status, ''))) IN ('AMBIGUOUS','UNMATCHED','NO_MATCH','MULTIPLE_MATCHES')
-        OR upper(btrim(coalesce(public.pay_bank_transfer_events.correction_disposition, ''))) IN ('AMBIGUOUS','ACTION_REQUIRED','BLOCKED','FAILED')
+        UPPER(BTRIM(COALESCE(public.pay_bank_transfer_events.normalised_state, ''))) IN ('FAILED','DECLINED','REJECTED','CANCELLED','CANCELED','SUBMISSION_FAILED','RETURNED','REVERTED','UNKNOWN','TIMEOUT','TIMED_OUT','PENDING_REVIEW')
+        OR UPPER(BTRIM(COALESCE(public.pay_bank_transfer_events.normalised_state, ''))) LIKE 'CREATE_ERROR%'
+        OR UPPER(BTRIM(COALESCE(public.pay_bank_transfer_events.provider_state, ''))) IN ('FAILED','DECLINED','REJECTED','CANCELLED','CANCELED','SUBMISSION_FAILED','RETURNED','REVERTED','UNKNOWN','TIMEOUT','TIMED_OUT','PENDING_REVIEW')
+        OR UPPER(BTRIM(COALESCE(public.pay_bank_transfer_events.provider_state, ''))) LIKE 'CREATE_ERROR%'
+        OR UPPER(BTRIM(COALESCE(public.pay_bank_transfer_events.mapping_status, ''))) IN ('AMBIGUOUS','UNMATCHED','NO_MATCH','MULTIPLE_MATCHES')
+        OR UPPER(BTRIM(COALESCE(public.pay_bank_transfer_events.correction_disposition, ''))) IN ('AMBIGUOUS','ACTION_REQUIRED','BLOCKED','FAILED')
       )
       AND NOT EXISTS (
         SELECT 1
         FROM public.pay_payment_correction_requests AS resolved_event_corrections
         WHERE resolved_event_corrections.source_bank_event_id = public.pay_bank_transfer_events.id
-          AND upper(btrim(coalesce(resolved_event_corrections.status, ''))) IN ('APPLIED','RESOLVED')
+          AND UPPER(BTRIM(COALESCE(resolved_event_corrections.status, ''))) IN ('APPLIED','RESOLVED')
       )
   ),
   bank_event_alerts AS (
     SELECT
-      bank_event_payloads.alert_kind,
+      bank_event_base.alert_kind,
       'critical'::text AS severity,
-      CASE bank_event_payloads.alert_kind
+      CASE bank_event_base.alert_kind
         WHEN 'BANK_RETURNED_PAYMENT' THEN 95
         WHEN 'BANK_REJECTED_PAYMENT' THEN 94
         WHEN 'AMBIGUOUS_PAYMENT_REVIEW_REQUIRED' THEN 90
@@ -38693,10 +38709,23 @@ BEGIN
         ELSE 80
       END::integer AS severity_rank,
       'pay_batch'::text AS entity_kind,
-      bank_event_payloads.pay_batch_id AS entity_id,
-      bank_event_payloads.pay_batch_id,
-      public.banking_alert_fingerprint(bank_event_payloads.alert_kind, 'pay_batch', bank_event_payloads.pay_batch_id, public.banking_alert_payload_for_pay_batch(bank_event_payloads.alert_kind, bank_event_payloads.pay_batch_id, 'pay_bank_transfer_event', bank_event_payloads.source_id)) AS alert_fingerprint,
-      CASE bank_event_payloads.alert_kind
+      bank_event_base.pay_batch_id AS entity_id,
+      bank_event_base.pay_batch_id AS pay_batch_id,
+      'pay_bank_transfer_event'::text AS payload_source_kind,
+      bank_event_base.source_id AS payload_source_id,
+      jsonb_strip_nulls(jsonb_build_object(
+        'fingerprint_source_kind', 'pay_bank_transfer_event',
+        'fingerprint_source_id', bank_event_base.source_id::text,
+        'issue_kind', bank_event_base.alert_kind,
+        'pay_batch_id', bank_event_base.pay_batch_id::text,
+        'normalised_state', NULLIF(BTRIM(COALESCE(bank_event_base.normalised_state, '')), ''),
+        'provider_state', NULLIF(BTRIM(COALESCE(bank_event_base.provider_state, '')), ''),
+        'mapping_status', NULLIF(BTRIM(COALESCE(bank_event_base.mapping_status, '')), ''),
+        'correction_disposition', NULLIF(BTRIM(COALESCE(bank_event_base.correction_disposition, '')), ''),
+        'event_time_utc', CASE WHEN bank_event_base.event_time_utc IS NULL THEN NULL::text ELSE TO_CHAR(bank_event_base.event_time_utc AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') END,
+        'received_at_utc', CASE WHEN bank_event_base.received_at_utc IS NULL THEN NULL::text ELSE TO_CHAR(bank_event_base.received_at_utc AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') END
+      )) AS fingerprint_payload_json,
+      CASE bank_event_base.alert_kind
         WHEN 'BANK_RETURNED_PAYMENT' THEN 'Bank returned payment'
         WHEN 'BANK_REJECTED_PAYMENT' THEN 'Bank rejected payment'
         WHEN 'AMBIGUOUS_PAYMENT_REVIEW_REQUIRED' THEN 'Payment needs review'
@@ -38704,70 +38733,70 @@ BEGIN
         WHEN 'PAYMENT_CORRECTION_BLOCKED' THEN 'Payment correction blocked'
         ELSE 'Rail submission needs review'
       END::text AS label,
-      CASE bank_event_payloads.alert_kind
+      CASE bank_event_base.alert_kind
         WHEN 'BANK_RETURNED_PAYMENT' THEN 'Bank returned payment'
         WHEN 'BANK_REJECTED_PAYMENT' THEN 'Bank rejected payment'
-        WHEN 'AMBIGUOUS_PAYMENT_REVIEW_REQUIRED' THEN 'Ambiguous payment evidence'
+        WHEN 'AMBIGUOUS_PAYMENT_REVIEW_REQUIRED' THEN 'Payment event needs review'
         WHEN 'PAYMENT_CORRECTION_FAILED' THEN 'Payment correction failed'
         WHEN 'PAYMENT_CORRECTION_BLOCKED' THEN 'Payment correction blocked'
-        ELSE 'Rail submission unknown or timed out'
+        ELSE 'Rail submission needs review'
       END::text AS title,
-      CASE bank_event_payloads.alert_kind
-        WHEN 'BANK_RETURNED_PAYMENT' THEN 'Bank evidence indicates a returned/reverted payment that still requires action.'
-        WHEN 'BANK_REJECTED_PAYMENT' THEN 'Bank evidence indicates a failed/rejected payment that still requires action.'
-        WHEN 'AMBIGUOUS_PAYMENT_REVIEW_REQUIRED' THEN 'Bank evidence is ambiguous and requires review.'
-        WHEN 'PAYMENT_CORRECTION_FAILED' THEN 'Bank evidence indicates a failed payment correction state that requires review.'
-        WHEN 'PAYMENT_CORRECTION_BLOCKED' THEN 'Bank evidence indicates a blocked payment correction state that requires review.'
-        ELSE 'Rail submission outcome is unknown or timed out and requires review.'
+      CASE bank_event_base.alert_kind
+        WHEN 'BANK_RETURNED_PAYMENT' THEN 'The bank returned a payment. The candidate or umbrella is no longer paid for that transfer.'
+        WHEN 'BANK_REJECTED_PAYMENT' THEN 'The bank rejected a payment submission or transfer.'
+        WHEN 'AMBIGUOUS_PAYMENT_REVIEW_REQUIRED' THEN 'A bank payment event could not be matched safely and needs review.'
+        WHEN 'PAYMENT_CORRECTION_FAILED' THEN 'CloudTMS could not complete a payment correction automatically.'
+        WHEN 'PAYMENT_CORRECTION_BLOCKED' THEN 'A payment correction is blocked and needs review.'
+        ELSE 'CloudTMS could not confirm the final bank submission state.'
       END::text AS description,
-      CASE bank_event_payloads.alert_kind
-        WHEN 'BANK_RETURNED_PAYMENT' THEN 'Open the batch and complete the required payment correction.'
-        WHEN 'BANK_REJECTED_PAYMENT' THEN 'Open the batch and complete the required correction or cancel/release action.'
-        WHEN 'AMBIGUOUS_PAYMENT_REVIEW_REQUIRED' THEN 'Open the batch and review the Payment Issues tab.'
-        WHEN 'PAYMENT_CORRECTION_FAILED' THEN 'Open the batch and review the failed correction.'
-        WHEN 'PAYMENT_CORRECTION_BLOCKED' THEN 'Open the batch and resolve the blocked correction.'
-        ELSE 'Open the batch and confirm the provider outcome.'
+      CASE bank_event_base.alert_kind
+        WHEN 'BANK_RETURNED_PAYMENT' THEN 'Review the payment issue and set up a new payment if the worker still needs to be paid.'
+        WHEN 'BANK_REJECTED_PAYMENT' THEN 'Review the Payment Issues tab and retry or correct the batch.'
+        WHEN 'AMBIGUOUS_PAYMENT_REVIEW_REQUIRED' THEN 'Review and resolve the ambiguous bank event.'
+        ELSE 'Review the Payment Issues tab.'
       END::text AS action_guidance,
-      public.banking_alert_payload_for_pay_batch(bank_event_payloads.alert_kind, bank_event_payloads.pay_batch_id, 'pay_bank_transfer_event', bank_event_payloads.source_id) AS payload_json,
-      bank_event_payloads.sort_at_utc
-    FROM bank_event_payloads
-    WHERE bank_event_payloads.alert_kind IS NOT NULL
+      bank_event_base.sort_at_utc
+    FROM bank_event_base
+    WHERE bank_event_base.alert_kind IS NOT NULL
   ),
-  transfer_payloads AS (
+  transfer_base AS (
     SELECT
       CASE
-        WHEN upper(btrim(coalesce(public.pay_bank_transfers.status, ''))) IN ('RETURNED','REVERTED')
-          OR upper(btrim(coalesce(public.pay_bank_transfers.rail_state, ''))) IN ('RETURNED','REVERTED') THEN 'BANK_RETURNED_PAYMENT'
-        WHEN upper(btrim(coalesce(public.pay_bank_transfers.status, ''))) IN ('FAILED','DECLINED','REJECTED','CANCELLED','CANCELED','SUBMISSION_FAILED','FAILED_BEFORE_COMMIT')
-          OR upper(btrim(coalesce(public.pay_bank_transfers.rail_state, ''))) IN ('FAILED','DECLINED','REJECTED','CANCELLED','CANCELED','SUBMISSION_FAILED','FAILED_BEFORE_COMMIT')
-          OR nullif(btrim(coalesce(public.pay_bank_transfers.failed_reason, '')), '') IS NOT NULL THEN 'BANK_REJECTED_PAYMENT'
-        WHEN upper(btrim(coalesce(public.pay_bank_transfers.status, ''))) IN ('UNKNOWN','TIMEOUT','TIMED_OUT','PENDING_REVIEW')
-          OR upper(btrim(coalesce(public.pay_bank_transfers.status, ''))) LIKE 'CREATE_ERROR%'
-          OR upper(btrim(coalesce(public.pay_bank_transfers.rail_state, ''))) IN ('UNKNOWN','TIMEOUT','TIMED_OUT','PENDING_REVIEW')
-          OR upper(btrim(coalesce(public.pay_bank_transfers.rail_state, ''))) LIKE 'CREATE_ERROR%' THEN 'RAIL_SUBMISSION_UNKNOWN_OR_TIMEOUT'
+        WHEN UPPER(BTRIM(COALESCE(public.pay_bank_transfers.status, ''))) IN ('RETURNED','REVERTED')
+          OR UPPER(BTRIM(COALESCE(public.pay_bank_transfers.rail_state, ''))) IN ('RETURNED','REVERTED') THEN 'BANK_RETURNED_PAYMENT'
+        WHEN UPPER(BTRIM(COALESCE(public.pay_bank_transfers.status, ''))) IN ('FAILED','DECLINED','REJECTED','CANCELLED','CANCELED','SUBMISSION_FAILED','FAILED_BEFORE_COMMIT')
+          OR UPPER(BTRIM(COALESCE(public.pay_bank_transfers.rail_state, ''))) IN ('FAILED','DECLINED','REJECTED','CANCELLED','CANCELED','SUBMISSION_FAILED','FAILED_BEFORE_COMMIT')
+          OR NULLIF(BTRIM(COALESCE(public.pay_bank_transfers.failed_reason, '')), '') IS NOT NULL THEN 'BANK_REJECTED_PAYMENT'
+        WHEN UPPER(BTRIM(COALESCE(public.pay_bank_transfers.status, ''))) IN ('UNKNOWN','TIMEOUT','TIMED_OUT','PENDING_REVIEW')
+          OR UPPER(BTRIM(COALESCE(public.pay_bank_transfers.status, ''))) LIKE 'CREATE_ERROR%'
+          OR UPPER(BTRIM(COALESCE(public.pay_bank_transfers.rail_state, ''))) IN ('UNKNOWN','TIMEOUT','TIMED_OUT','PENDING_REVIEW')
+          OR UPPER(BTRIM(COALESCE(public.pay_bank_transfers.rail_state, ''))) LIKE 'CREATE_ERROR%' THEN 'RAIL_SUBMISSION_UNKNOWN_OR_TIMEOUT'
         ELSE NULL::text
       END AS alert_kind,
-      public.pay_bank_transfers.pay_batch_id,
+      public.pay_bank_transfers.pay_batch_id AS pay_batch_id,
       public.pay_bank_transfers.id AS source_id,
-      coalesce(public.pay_bank_transfers.completed_at_utc, public.pay_bank_transfers.created_at_utc) AS sort_at_utc
+      public.pay_bank_transfers.status AS transfer_status,
+      public.pay_bank_transfers.rail_state AS rail_state,
+      public.pay_bank_transfers.failed_reason AS failed_reason,
+      public.pay_bank_transfers.completed_at_utc AS completed_at_utc,
+      public.pay_bank_transfers.created_at_utc AS created_at_utc,
+      COALESCE(public.pay_bank_transfers.completed_at_utc, public.pay_bank_transfers.created_at_utc) AS sort_at_utc
     FROM public.pay_bank_transfers
     JOIN public.pay_batches AS transfer_batches
       ON transfer_batches.id = public.pay_bank_transfers.pay_batch_id
-    WHERE upper(btrim(coalesce(transfer_batches.status, ''))) NOT IN ('CANCELLED','CANCELED')
-      AND (v_entity_kind IS NULL OR v_entity_kind = 'pay_batch')
-      AND (p_entity_id IS NULL OR public.pay_bank_transfers.pay_batch_id = p_entity_id)
+    WHERE UPPER(BTRIM(COALESCE(transfer_batches.status, ''))) NOT IN ('CANCELLED','CANCELED')
       AND (
-        upper(btrim(coalesce(public.pay_bank_transfers.status, ''))) IN ('FAILED','DECLINED','REJECTED','CANCELLED','CANCELED','SUBMISSION_FAILED','FAILED_BEFORE_COMMIT','RETURNED','REVERTED','UNKNOWN','TIMEOUT','TIMED_OUT','PENDING_REVIEW')
-        OR upper(btrim(coalesce(public.pay_bank_transfers.status, ''))) LIKE 'CREATE_ERROR%'
-        OR upper(btrim(coalesce(public.pay_bank_transfers.rail_state, ''))) IN ('FAILED','DECLINED','REJECTED','CANCELLED','CANCELED','SUBMISSION_FAILED','FAILED_BEFORE_COMMIT','RETURNED','REVERTED','UNKNOWN','TIMEOUT','TIMED_OUT','PENDING_REVIEW')
-        OR upper(btrim(coalesce(public.pay_bank_transfers.rail_state, ''))) LIKE 'CREATE_ERROR%'
-        OR nullif(btrim(coalesce(public.pay_bank_transfers.failed_reason, '')), '') IS NOT NULL
+        UPPER(BTRIM(COALESCE(public.pay_bank_transfers.status, ''))) IN ('FAILED','DECLINED','REJECTED','CANCELLED','CANCELED','SUBMISSION_FAILED','FAILED_BEFORE_COMMIT','RETURNED','REVERTED','UNKNOWN','TIMEOUT','TIMED_OUT','PENDING_REVIEW')
+        OR UPPER(BTRIM(COALESCE(public.pay_bank_transfers.status, ''))) LIKE 'CREATE_ERROR%'
+        OR UPPER(BTRIM(COALESCE(public.pay_bank_transfers.rail_state, ''))) IN ('FAILED','DECLINED','REJECTED','CANCELLED','CANCELED','SUBMISSION_FAILED','FAILED_BEFORE_COMMIT','RETURNED','REVERTED','UNKNOWN','TIMEOUT','TIMED_OUT','PENDING_REVIEW')
+        OR UPPER(BTRIM(COALESCE(public.pay_bank_transfers.rail_state, ''))) LIKE 'CREATE_ERROR%'
+        OR NULLIF(BTRIM(COALESCE(public.pay_bank_transfers.failed_reason, '')), '') IS NOT NULL
       )
       AND NOT EXISTS (
         SELECT 1
         FROM public.pay_bank_transfer_events AS transfer_resolution_events
         WHERE transfer_resolution_events.pay_bank_transfer_id = public.pay_bank_transfers.id
-          AND upper(btrim(coalesce(transfer_resolution_events.correction_disposition, ''))) IN ('NO_CORRECTION_REQUIRED','AUTO_APPLIED','APPLIED','RESOLVED')
+          AND UPPER(BTRIM(COALESCE(transfer_resolution_events.correction_disposition, ''))) IN ('NO_CORRECTION_REQUIRED','AUTO_APPLIED','APPLIED','RESOLVED')
       )
       AND NOT EXISTS (
         SELECT 1
@@ -38775,200 +38804,239 @@ BEGIN
         JOIN public.pay_payment_correction_requests AS transfer_resolved_requests
           ON transfer_resolved_requests.id = transfer_resolved_work_items.correction_request_id
         WHERE transfer_resolved_work_items.pay_bank_transfer_id = public.pay_bank_transfers.id
-          AND upper(btrim(coalesce(transfer_resolved_requests.status, ''))) IN ('APPLIED','RESOLVED')
+          AND UPPER(BTRIM(COALESCE(transfer_resolved_requests.status, ''))) IN ('APPLIED','RESOLVED')
       )
   ),
   transfer_alerts AS (
     SELECT
-      transfer_payloads.alert_kind,
+      transfer_base.alert_kind,
       'critical'::text AS severity,
-      CASE transfer_payloads.alert_kind
+      CASE transfer_base.alert_kind
         WHEN 'BANK_RETURNED_PAYMENT' THEN 93
         WHEN 'BANK_REJECTED_PAYMENT' THEN 92
         ELSE 79
       END::integer AS severity_rank,
       'pay_batch'::text AS entity_kind,
-      transfer_payloads.pay_batch_id AS entity_id,
-      transfer_payloads.pay_batch_id,
-      public.banking_alert_fingerprint(transfer_payloads.alert_kind, 'pay_batch', transfer_payloads.pay_batch_id, public.banking_alert_payload_for_pay_batch(transfer_payloads.alert_kind, transfer_payloads.pay_batch_id, 'pay_bank_transfer', transfer_payloads.source_id)) AS alert_fingerprint,
-      CASE transfer_payloads.alert_kind
+      transfer_base.pay_batch_id AS entity_id,
+      transfer_base.pay_batch_id AS pay_batch_id,
+      'pay_bank_transfer'::text AS payload_source_kind,
+      transfer_base.source_id AS payload_source_id,
+      jsonb_strip_nulls(jsonb_build_object(
+        'fingerprint_source_kind', 'pay_bank_transfer',
+        'fingerprint_source_id', transfer_base.source_id::text,
+        'issue_kind', transfer_base.alert_kind,
+        'pay_batch_id', transfer_base.pay_batch_id::text,
+        'status', NULLIF(BTRIM(COALESCE(transfer_base.transfer_status, '')), ''),
+        'rail_state', NULLIF(BTRIM(COALESCE(transfer_base.rail_state, '')), ''),
+        'failed_reason_hash', CASE WHEN NULLIF(BTRIM(COALESCE(transfer_base.failed_reason, '')), '') IS NULL THEN NULL::text ELSE MD5(transfer_base.failed_reason) END,
+        'completed_at_utc', CASE WHEN transfer_base.completed_at_utc IS NULL THEN NULL::text ELSE TO_CHAR(transfer_base.completed_at_utc AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') END,
+        'created_at_utc', CASE WHEN transfer_base.created_at_utc IS NULL THEN NULL::text ELSE TO_CHAR(transfer_base.created_at_utc AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') END
+      )) AS fingerprint_payload_json,
+      CASE transfer_base.alert_kind
         WHEN 'BANK_RETURNED_PAYMENT' THEN 'Bank returned payment'
         WHEN 'BANK_REJECTED_PAYMENT' THEN 'Bank rejected payment'
         ELSE 'Rail submission needs review'
       END::text AS label,
-      CASE transfer_payloads.alert_kind
+      CASE transfer_base.alert_kind
         WHEN 'BANK_RETURNED_PAYMENT' THEN 'Bank returned payment'
         WHEN 'BANK_REJECTED_PAYMENT' THEN 'Bank rejected payment'
-        ELSE 'Rail submission unknown or timed out'
+        ELSE 'Rail submission needs review'
       END::text AS title,
-      CASE transfer_payloads.alert_kind
-        WHEN 'BANK_RETURNED_PAYMENT' THEN 'A stored bank transfer is returned/reverted and still requires action.'
-        WHEN 'BANK_REJECTED_PAYMENT' THEN 'A stored bank transfer failed or was rejected and still requires action.'
-        ELSE 'A stored bank transfer has an unknown or timed-out rail state.'
+      CASE transfer_base.alert_kind
+        WHEN 'BANK_RETURNED_PAYMENT' THEN 'The bank returned a payment. The candidate or umbrella is no longer paid for that transfer.'
+        WHEN 'BANK_REJECTED_PAYMENT' THEN 'The bank rejected a payment transfer.'
+        ELSE 'CloudTMS could not confirm the final bank submission state.'
       END::text AS description,
-      CASE transfer_payloads.alert_kind
-        WHEN 'BANK_RETURNED_PAYMENT' THEN 'Open the batch and complete the required payment correction.'
-        WHEN 'BANK_REJECTED_PAYMENT' THEN 'Open the batch and complete the required correction or cancel/release action.'
-        ELSE 'Open the batch and confirm the provider outcome.'
+      CASE transfer_base.alert_kind
+        WHEN 'BANK_RETURNED_PAYMENT' THEN 'Review the payment issue and set up a new payment if the worker still needs to be paid.'
+        ELSE 'Review the Payment Issues tab.'
       END::text AS action_guidance,
-      public.banking_alert_payload_for_pay_batch(transfer_payloads.alert_kind, transfer_payloads.pay_batch_id, 'pay_bank_transfer', transfer_payloads.source_id) AS payload_json,
-      transfer_payloads.sort_at_utc
-    FROM transfer_payloads
-    WHERE transfer_payloads.alert_kind IS NOT NULL
+      transfer_base.sort_at_utc
+    FROM transfer_base
+    WHERE transfer_base.alert_kind IS NOT NULL
   ),
-  correction_request_payloads AS (
+  correction_request_base AS (
     SELECT
       CASE
-        WHEN upper(btrim(coalesce(public.pay_payment_correction_requests.status, ''))) IN ('FAILED','FAILED_RETRYABLE','FAILED_FINAL') THEN 'PAYMENT_CORRECTION_FAILED'
-        WHEN upper(btrim(coalesce(public.pay_payment_correction_requests.status, ''))) IN ('BLOCKED','APPLIED_WITH_BLOCKERS') THEN 'PAYMENT_CORRECTION_BLOCKED'
-        WHEN upper(btrim(coalesce(public.pay_payment_correction_requests.status, ''))) IN ('REQUESTED','AWAITING_AUTHORISATION','AWAITING_AUTHORIZATION','PENDING_APPROVAL') THEN 'PAYMENT_CORRECTION_AWAITING_APPROVAL'
+        WHEN UPPER(BTRIM(COALESCE(public.pay_payment_correction_requests.status, ''))) IN ('FAILED','FAILED_RETRYABLE','FAILED_FINAL') THEN 'PAYMENT_CORRECTION_FAILED'
+        WHEN UPPER(BTRIM(COALESCE(public.pay_payment_correction_requests.status, ''))) IN ('BLOCKED','APPLIED_WITH_BLOCKERS') THEN 'PAYMENT_CORRECTION_BLOCKED'
+        WHEN UPPER(BTRIM(COALESCE(public.pay_payment_correction_requests.status, ''))) IN ('REQUESTED','AWAITING_AUTHORISATION','AWAITING_AUTHORIZATION','PENDING_APPROVAL') THEN 'PAYMENT_CORRECTION_AWAITING_APPROVAL'
         ELSE NULL::text
       END AS alert_kind,
-      public.pay_payment_correction_requests.pay_batch_id,
+      public.pay_payment_correction_requests.pay_batch_id AS pay_batch_id,
       public.pay_payment_correction_requests.id AS source_id,
-      coalesce(public.pay_payment_correction_requests.updated_at_utc, public.pay_payment_correction_requests.created_at_utc, public.pay_payment_correction_requests.requested_at_utc) AS sort_at_utc
+      public.pay_payment_correction_requests.status AS request_status,
+      public.pay_payment_correction_requests.correction_kind AS correction_kind,
+      public.pay_payment_correction_requests.selection_hash AS selection_hash,
+      public.pay_payment_correction_requests.updated_at_utc AS updated_at_utc,
+      public.pay_payment_correction_requests.created_at_utc AS created_at_utc,
+      public.pay_payment_correction_requests.requested_at_utc AS requested_at_utc,
+      COALESCE(public.pay_payment_correction_requests.updated_at_utc, public.pay_payment_correction_requests.created_at_utc, public.pay_payment_correction_requests.requested_at_utc) AS sort_at_utc
     FROM public.pay_payment_correction_requests
     JOIN public.pay_batches AS correction_request_batches
       ON correction_request_batches.id = public.pay_payment_correction_requests.pay_batch_id
-    WHERE upper(btrim(coalesce(correction_request_batches.status, ''))) NOT IN ('CANCELLED','CANCELED')
-      AND (v_entity_kind IS NULL OR v_entity_kind = 'pay_batch')
-      AND (p_entity_id IS NULL OR public.pay_payment_correction_requests.pay_batch_id = p_entity_id)
-      AND upper(btrim(coalesce(public.pay_payment_correction_requests.status, ''))) IN ('FAILED','FAILED_RETRYABLE','FAILED_FINAL','BLOCKED','APPLIED_WITH_BLOCKERS','REQUESTED','AWAITING_AUTHORISATION','AWAITING_AUTHORIZATION','PENDING_APPROVAL')
+    WHERE UPPER(BTRIM(COALESCE(correction_request_batches.status, ''))) NOT IN ('CANCELLED','CANCELED')
+      AND UPPER(BTRIM(COALESCE(public.pay_payment_correction_requests.status, ''))) IN ('FAILED','FAILED_RETRYABLE','FAILED_FINAL','BLOCKED','APPLIED_WITH_BLOCKERS','REQUESTED','AWAITING_AUTHORISATION','AWAITING_AUTHORIZATION','PENDING_APPROVAL')
   ),
   correction_request_alerts AS (
     SELECT
-      correction_request_payloads.alert_kind,
+      correction_request_base.alert_kind,
       'critical'::text AS severity,
-      CASE correction_request_payloads.alert_kind
+      CASE correction_request_base.alert_kind
         WHEN 'PAYMENT_CORRECTION_FAILED' THEN 88
         WHEN 'PAYMENT_CORRECTION_BLOCKED' THEN 87
         ELSE 75
       END::integer AS severity_rank,
       'pay_batch'::text AS entity_kind,
-      correction_request_payloads.pay_batch_id AS entity_id,
-      correction_request_payloads.pay_batch_id,
-      public.banking_alert_fingerprint(correction_request_payloads.alert_kind, 'pay_batch', correction_request_payloads.pay_batch_id, public.banking_alert_payload_for_pay_batch(correction_request_payloads.alert_kind, correction_request_payloads.pay_batch_id, 'pay_payment_correction_request', correction_request_payloads.source_id)) AS alert_fingerprint,
-      CASE correction_request_payloads.alert_kind
+      correction_request_base.pay_batch_id AS entity_id,
+      correction_request_base.pay_batch_id AS pay_batch_id,
+      'pay_payment_correction_request'::text AS payload_source_kind,
+      correction_request_base.source_id AS payload_source_id,
+      jsonb_strip_nulls(jsonb_build_object(
+        'fingerprint_source_kind', 'pay_payment_correction_request',
+        'fingerprint_source_id', correction_request_base.source_id::text,
+        'issue_kind', correction_request_base.alert_kind,
+        'pay_batch_id', correction_request_base.pay_batch_id::text,
+        'status', NULLIF(BTRIM(COALESCE(correction_request_base.request_status, '')), ''),
+        'correction_kind', NULLIF(BTRIM(COALESCE(correction_request_base.correction_kind, '')), ''),
+        'selection_hash', NULLIF(BTRIM(COALESCE(correction_request_base.selection_hash, '')), '')
+      )) AS fingerprint_payload_json,
+      CASE correction_request_base.alert_kind
         WHEN 'PAYMENT_CORRECTION_FAILED' THEN 'Payment correction failed'
         WHEN 'PAYMENT_CORRECTION_BLOCKED' THEN 'Payment correction blocked'
         ELSE 'Payment correction awaiting approval'
       END::text AS label,
-      CASE correction_request_payloads.alert_kind
+      CASE correction_request_base.alert_kind
         WHEN 'PAYMENT_CORRECTION_FAILED' THEN 'Payment correction failed'
         WHEN 'PAYMENT_CORRECTION_BLOCKED' THEN 'Payment correction blocked'
         ELSE 'Payment correction awaiting approval'
       END::text AS title,
-      CASE correction_request_payloads.alert_kind
-        WHEN 'PAYMENT_CORRECTION_FAILED' THEN 'A payment correction request failed and requires review.'
-        WHEN 'PAYMENT_CORRECTION_BLOCKED' THEN 'A payment correction request is blocked and requires review.'
+      CASE correction_request_base.alert_kind
+        WHEN 'PAYMENT_CORRECTION_FAILED' THEN 'CloudTMS could not complete a payment correction automatically.'
+        WHEN 'PAYMENT_CORRECTION_BLOCKED' THEN 'A payment correction is blocked and needs review.'
         ELSE 'A payment correction is awaiting approval.'
       END::text AS description,
-      CASE correction_request_payloads.alert_kind
-        WHEN 'PAYMENT_CORRECTION_FAILED' THEN 'Open the batch and review the failed correction.'
-        WHEN 'PAYMENT_CORRECTION_BLOCKED' THEN 'Open the batch and resolve the blocking condition.'
-        ELSE 'Open the batch and approve, reject, or cancel the correction.'
+      CASE correction_request_base.alert_kind
+        WHEN 'PAYMENT_CORRECTION_AWAITING_APPROVAL' THEN 'Review and approve or reject the correction request.'
+        ELSE 'Review the Payment Issues tab.'
       END::text AS action_guidance,
-      public.banking_alert_payload_for_pay_batch(correction_request_payloads.alert_kind, correction_request_payloads.pay_batch_id, 'pay_payment_correction_request', correction_request_payloads.source_id) AS payload_json,
-      correction_request_payloads.sort_at_utc
-    FROM correction_request_payloads
-    WHERE correction_request_payloads.alert_kind IS NOT NULL
+      correction_request_base.sort_at_utc
+    FROM correction_request_base
+    WHERE correction_request_base.alert_kind IS NOT NULL
   ),
-  correction_work_payloads AS (
+  correction_work_base AS (
     SELECT
       CASE
-        WHEN upper(btrim(coalesce(public.pay_payment_correction_work_items.status, ''))) IN ('FAILED','FAILED_RETRYABLE','FAILED_FINAL') THEN 'PAYMENT_CORRECTION_FAILED'
-        WHEN upper(btrim(coalesce(public.pay_payment_correction_work_items.status, ''))) IN ('BLOCKED','APPLIED_WITH_BLOCKERS') THEN 'PAYMENT_CORRECTION_BLOCKED'
+        WHEN UPPER(BTRIM(COALESCE(public.pay_payment_correction_work_items.status, ''))) IN ('FAILED','FAILED_RETRYABLE','FAILED_FINAL') THEN 'PAYMENT_CORRECTION_FAILED'
+        WHEN UPPER(BTRIM(COALESCE(public.pay_payment_correction_work_items.status, ''))) IN ('BLOCKED','APPLIED_WITH_BLOCKERS') THEN 'PAYMENT_CORRECTION_BLOCKED'
         ELSE NULL::text
       END AS alert_kind,
-      public.pay_payment_correction_work_items.pay_batch_id,
+      public.pay_payment_correction_work_items.pay_batch_id AS pay_batch_id,
       public.pay_payment_correction_work_items.id AS source_id,
-      coalesce(public.pay_payment_correction_work_items.processed_at_utc, public.pay_payment_correction_work_items.created_at_utc) AS sort_at_utc
+      public.pay_payment_correction_work_items.status AS work_status,
+      public.pay_payment_correction_work_items.work_kind AS work_kind,
+      public.pay_payment_correction_work_items.selection_hash AS selection_hash,
+      public.pay_payment_correction_work_items.processed_at_utc AS processed_at_utc,
+      public.pay_payment_correction_work_items.created_at_utc AS created_at_utc,
+      COALESCE(public.pay_payment_correction_work_items.processed_at_utc, public.pay_payment_correction_work_items.created_at_utc) AS sort_at_utc
     FROM public.pay_payment_correction_work_items
     JOIN public.pay_batches AS correction_work_batches
       ON correction_work_batches.id = public.pay_payment_correction_work_items.pay_batch_id
-    WHERE upper(btrim(coalesce(correction_work_batches.status, ''))) NOT IN ('CANCELLED','CANCELED')
-      AND (v_entity_kind IS NULL OR v_entity_kind = 'pay_batch')
-      AND (p_entity_id IS NULL OR public.pay_payment_correction_work_items.pay_batch_id = p_entity_id)
-      AND upper(btrim(coalesce(public.pay_payment_correction_work_items.status, ''))) IN ('FAILED','FAILED_RETRYABLE','FAILED_FINAL','BLOCKED','APPLIED_WITH_BLOCKERS')
+    WHERE UPPER(BTRIM(COALESCE(correction_work_batches.status, ''))) NOT IN ('CANCELLED','CANCELED')
+      AND UPPER(BTRIM(COALESCE(public.pay_payment_correction_work_items.status, ''))) IN ('FAILED','FAILED_RETRYABLE','FAILED_FINAL','BLOCKED','APPLIED_WITH_BLOCKERS')
   ),
   correction_work_alerts AS (
     SELECT
-      correction_work_payloads.alert_kind,
+      correction_work_base.alert_kind,
       'critical'::text AS severity,
-      CASE correction_work_payloads.alert_kind
+      CASE correction_work_base.alert_kind
         WHEN 'PAYMENT_CORRECTION_FAILED' THEN 86
         ELSE 85
       END::integer AS severity_rank,
       'pay_batch'::text AS entity_kind,
-      correction_work_payloads.pay_batch_id AS entity_id,
-      correction_work_payloads.pay_batch_id,
-      public.banking_alert_fingerprint(correction_work_payloads.alert_kind, 'pay_batch', correction_work_payloads.pay_batch_id, public.banking_alert_payload_for_pay_batch(correction_work_payloads.alert_kind, correction_work_payloads.pay_batch_id, 'pay_payment_correction_work_item', correction_work_payloads.source_id)) AS alert_fingerprint,
-      CASE correction_work_payloads.alert_kind
+      correction_work_base.pay_batch_id AS entity_id,
+      correction_work_base.pay_batch_id AS pay_batch_id,
+      'pay_payment_correction_work_item'::text AS payload_source_kind,
+      correction_work_base.source_id AS payload_source_id,
+      jsonb_strip_nulls(jsonb_build_object(
+        'fingerprint_source_kind', 'pay_payment_correction_work_item',
+        'fingerprint_source_id', correction_work_base.source_id::text,
+        'issue_kind', correction_work_base.alert_kind,
+        'pay_batch_id', correction_work_base.pay_batch_id::text,
+        'status', NULLIF(BTRIM(COALESCE(correction_work_base.work_status, '')), ''),
+        'work_kind', NULLIF(BTRIM(COALESCE(correction_work_base.work_kind, '')), ''),
+        'selection_hash', NULLIF(BTRIM(COALESCE(correction_work_base.selection_hash, '')), '')
+      )) AS fingerprint_payload_json,
+      CASE correction_work_base.alert_kind
         WHEN 'PAYMENT_CORRECTION_FAILED' THEN 'Payment correction failed'
         ELSE 'Payment correction blocked'
       END::text AS label,
-      CASE correction_work_payloads.alert_kind
-        WHEN 'PAYMENT_CORRECTION_FAILED' THEN 'Payment correction work failed'
-        ELSE 'Payment correction work blocked'
+      CASE correction_work_base.alert_kind
+        WHEN 'PAYMENT_CORRECTION_FAILED' THEN 'Payment correction failed'
+        ELSE 'Payment correction blocked'
       END::text AS title,
-      CASE correction_work_payloads.alert_kind
-        WHEN 'PAYMENT_CORRECTION_FAILED' THEN 'A correction work item failed and requires review.'
-        ELSE 'A correction work item is blocked and requires review.'
+      CASE correction_work_base.alert_kind
+        WHEN 'PAYMENT_CORRECTION_FAILED' THEN 'CloudTMS could not complete a payment correction work item automatically.'
+        ELSE 'A payment correction work item is blocked and needs review.'
       END::text AS description,
-      CASE correction_work_payloads.alert_kind
-        WHEN 'PAYMENT_CORRECTION_FAILED' THEN 'Open the batch and retry, cancel, or review the correction.'
-        ELSE 'Open the batch and resolve the blocked correction work item.'
-      END::text AS action_guidance,
-      public.banking_alert_payload_for_pay_batch(correction_work_payloads.alert_kind, correction_work_payloads.pay_batch_id, 'pay_payment_correction_work_item', correction_work_payloads.source_id) AS payload_json,
-      correction_work_payloads.sort_at_utc
-    FROM correction_work_payloads
-    WHERE correction_work_payloads.alert_kind IS NOT NULL
+      'Review the Payment Issues tab.'::text AS action_guidance,
+      correction_work_base.sort_at_utc
+    FROM correction_work_base
+    WHERE correction_work_base.alert_kind IS NOT NULL
   ),
-  remittance_payloads AS (
+  remittance_base AS (
     SELECT
-      'REMITTANCE_SEND_FAILED'::text AS alert_kind,
       public.mail_outbox.context_id AS pay_batch_id,
       public.mail_outbox.id AS source_id,
-      coalesce(public.mail_outbox.failed_at, public.mail_outbox.created_at_utc) AS sort_at_utc
+      public.mail_outbox.reference AS reference,
+      public.mail_outbox.failed_at AS failed_at,
+      public.mail_outbox.created_at_utc AS created_at_utc,
+      COALESCE(public.mail_outbox.failed_at, public.mail_outbox.created_at_utc) AS sort_at_utc
     FROM public.mail_outbox
     JOIN public.pay_batches AS remittance_batches
       ON remittance_batches.id = public.mail_outbox.context_id
-    WHERE upper(btrim(coalesce(remittance_batches.status, ''))) NOT IN ('CANCELLED','CANCELED')
-      AND upper(btrim(coalesce(public.mail_outbox.type, ''))) = 'REMITTANCE'
-      AND lower(btrim(coalesce(public.mail_outbox.context_kind, ''))) = 'pay_batches'
+    WHERE UPPER(BTRIM(COALESCE(remittance_batches.status, ''))) NOT IN ('CANCELLED','CANCELED')
+      AND UPPER(BTRIM(COALESCE(public.mail_outbox.type, ''))) = 'REMITTANCE'
+      AND LOWER(BTRIM(COALESCE(public.mail_outbox.context_kind, ''))) = 'pay_batches'
       AND public.mail_outbox.context_id IS NOT NULL
-      AND (v_entity_kind IS NULL OR v_entity_kind = 'pay_batch')
-      AND (p_entity_id IS NULL OR public.mail_outbox.context_id = p_entity_id)
-      AND upper(btrim(coalesce(public.mail_outbox.status::text, ''))) = 'FAILED'
+      AND UPPER(BTRIM(COALESCE(public.mail_outbox.status::text, ''))) = 'FAILED'
       AND NOT EXISTS (
         SELECT 1
         FROM public.mail_outbox AS remittance_success_outbox
-        WHERE upper(btrim(coalesce(remittance_success_outbox.type, ''))) = 'REMITTANCE'
-          AND lower(btrim(coalesce(remittance_success_outbox.context_kind, ''))) = 'pay_batches'
+        WHERE UPPER(BTRIM(COALESCE(remittance_success_outbox.type, ''))) = 'REMITTANCE'
+          AND LOWER(BTRIM(COALESCE(remittance_success_outbox.context_kind, ''))) = 'pay_batches'
           AND remittance_success_outbox.context_id = public.mail_outbox.context_id
-          AND coalesce(nullif(btrim(remittance_success_outbox.reference), ''), remittance_success_outbox.id::text) = coalesce(nullif(btrim(public.mail_outbox.reference), ''), public.mail_outbox.id::text)
-          AND upper(btrim(coalesce(remittance_success_outbox.status::text, ''))) = 'SENT'
-          AND coalesce(remittance_success_outbox.sent_at, remittance_success_outbox.created_at_utc) >= coalesce(public.mail_outbox.failed_at, public.mail_outbox.created_at_utc)
+          AND COALESCE(NULLIF(BTRIM(remittance_success_outbox.reference), ''), remittance_success_outbox.id::text) = COALESCE(NULLIF(BTRIM(public.mail_outbox.reference), ''), public.mail_outbox.id::text)
+          AND UPPER(BTRIM(COALESCE(remittance_success_outbox.status::text, ''))) = 'SENT'
+          AND COALESCE(remittance_success_outbox.sent_at, remittance_success_outbox.created_at_utc) >= COALESCE(public.mail_outbox.failed_at, public.mail_outbox.created_at_utc)
       )
   ),
   remittance_alerts AS (
     SELECT
-      remittance_payloads.alert_kind,
+      'REMITTANCE_SEND_FAILED'::text AS alert_kind,
       'critical'::text AS severity,
       60::integer AS severity_rank,
       'pay_batch'::text AS entity_kind,
-      remittance_payloads.pay_batch_id AS entity_id,
-      remittance_payloads.pay_batch_id,
-      public.banking_alert_fingerprint(remittance_payloads.alert_kind, 'pay_batch', remittance_payloads.pay_batch_id, public.banking_alert_payload_for_pay_batch(remittance_payloads.alert_kind, remittance_payloads.pay_batch_id, 'mail_outbox', remittance_payloads.source_id)) AS alert_fingerprint,
+      remittance_base.pay_batch_id AS entity_id,
+      remittance_base.pay_batch_id AS pay_batch_id,
+      'mail_outbox'::text AS payload_source_kind,
+      remittance_base.source_id AS payload_source_id,
+      jsonb_strip_nulls(jsonb_build_object(
+        'fingerprint_source_kind', 'mail_outbox',
+        'fingerprint_source_id', remittance_base.source_id::text,
+        'issue_kind', 'REMITTANCE_SEND_FAILED',
+        'pay_batch_id', remittance_base.pay_batch_id::text,
+        'reference', NULLIF(BTRIM(COALESCE(remittance_base.reference, '')), ''),
+        'failed_at_utc', CASE WHEN remittance_base.failed_at IS NULL THEN NULL::text ELSE TO_CHAR(remittance_base.failed_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') END
+      )) AS fingerprint_payload_json,
       'Remittance failed'::text AS label,
       'Remittance send failed'::text AS title,
       'A remittance email failed to send and requires review.'::text AS description,
       'Review or resend the remittance from the batch.'::text AS action_guidance,
-      public.banking_alert_payload_for_pay_batch(remittance_payloads.alert_kind, remittance_payloads.pay_batch_id, 'mail_outbox', remittance_payloads.source_id) AS payload_json,
-      remittance_payloads.sort_at_utc
-    FROM remittance_payloads
+      remittance_base.sort_at_utc
+    FROM remittance_base
   ),
-  raw_alerts AS (
+  raw_current_alerts AS (
     SELECT * FROM blocked_funds_alerts
     UNION ALL
     SELECT * FROM bank_event_alerts
@@ -38981,25 +39049,58 @@ BEGIN
     UNION ALL
     SELECT * FROM remittance_alerts
   ),
+  current_alert_identities AS (
+    SELECT
+      raw_current_alerts.alert_kind,
+      raw_current_alerts.severity,
+      raw_current_alerts.severity_rank,
+      raw_current_alerts.entity_kind,
+      raw_current_alerts.entity_id,
+      raw_current_alerts.pay_batch_id,
+      raw_current_alerts.payload_source_kind,
+      raw_current_alerts.payload_source_id,
+      public.banking_alert_fingerprint(
+        raw_current_alerts.alert_kind,
+        raw_current_alerts.entity_kind,
+        raw_current_alerts.entity_id,
+        raw_current_alerts.fingerprint_payload_json
+      ) AS alert_fingerprint,
+      raw_current_alerts.label,
+      raw_current_alerts.title,
+      raw_current_alerts.description,
+      raw_current_alerts.action_guidance,
+      raw_current_alerts.sort_at_utc
+    FROM raw_current_alerts
+    WHERE raw_current_alerts.alert_kind IS NOT NULL
+      AND raw_current_alerts.entity_id IS NOT NULL
+  ),
+  filtered_current_alert_identities AS (
+    SELECT current_alert_identities.*
+    FROM current_alert_identities
+    WHERE (v_entity_kind IS NULL OR current_alert_identities.entity_kind = v_entity_kind)
+      AND (p_entity_id IS NULL OR current_alert_identities.entity_id = p_entity_id)
+  ),
   deduped_alerts AS (
-    SELECT DISTINCT ON (raw_alerts.alert_fingerprint)
-      raw_alerts.alert_kind,
-      raw_alerts.severity,
-      raw_alerts.severity_rank,
-      raw_alerts.entity_kind,
-      raw_alerts.entity_id,
-      raw_alerts.pay_batch_id,
-      raw_alerts.alert_fingerprint,
-      raw_alerts.label,
-      raw_alerts.title,
-      raw_alerts.description,
-      raw_alerts.action_guidance,
-      raw_alerts.payload_json,
-      raw_alerts.sort_at_utc
-    FROM raw_alerts
-    WHERE raw_alerts.alert_kind IS NOT NULL
-      AND raw_alerts.alert_fingerprint IS NOT NULL
-    ORDER BY raw_alerts.alert_fingerprint, raw_alerts.severity_rank DESC, raw_alerts.sort_at_utc DESC NULLS LAST
+    SELECT DISTINCT ON (filtered_current_alert_identities.alert_fingerprint)
+      filtered_current_alert_identities.alert_kind,
+      filtered_current_alert_identities.severity,
+      filtered_current_alert_identities.severity_rank,
+      filtered_current_alert_identities.entity_kind,
+      filtered_current_alert_identities.entity_id,
+      filtered_current_alert_identities.pay_batch_id,
+      filtered_current_alert_identities.payload_source_kind,
+      filtered_current_alert_identities.payload_source_id,
+      filtered_current_alert_identities.alert_fingerprint,
+      filtered_current_alert_identities.label,
+      filtered_current_alert_identities.title,
+      filtered_current_alert_identities.description,
+      filtered_current_alert_identities.action_guidance,
+      filtered_current_alert_identities.sort_at_utc
+    FROM filtered_current_alert_identities
+    WHERE filtered_current_alert_identities.alert_fingerprint IS NOT NULL
+    ORDER BY filtered_current_alert_identities.alert_fingerprint ASC,
+             filtered_current_alert_identities.severity_rank DESC,
+             filtered_current_alert_identities.sort_at_utc DESC NULLS LAST
   ),
   alert_rows AS (
     SELECT
@@ -39009,94 +39110,161 @@ BEGIN
       deduped_alerts.entity_kind,
       deduped_alerts.entity_id,
       deduped_alerts.pay_batch_id,
+      deduped_alerts.payload_source_kind,
+      deduped_alerts.payload_source_id,
       deduped_alerts.alert_fingerprint,
       deduped_alerts.label,
       deduped_alerts.title,
       deduped_alerts.description,
       deduped_alerts.action_guidance,
-      deduped_alerts.payload_json,
       deduped_alerts.sort_at_utc,
-      public.banking_alert_acknowledgements.id IS NOT NULL AS acknowledged_for_current_user,
-      public.banking_alert_acknowledgements.acknowledged_at_utc
+      alert_acknowledgements.id IS NOT NULL AS acknowledged_for_current_user,
+      alert_acknowledgements.acknowledged_at_utc
     FROM deduped_alerts
-    LEFT JOIN public.banking_alert_acknowledgements
-      ON public.banking_alert_acknowledgements.alert_fingerprint = deduped_alerts.alert_fingerprint
-     AND public.banking_alert_acknowledgements.acknowledged_by_user_id = p_actor_user_id
-     AND upper(btrim(coalesce(public.banking_alert_acknowledgements.acknowledge_scope, 'USER'))) = 'USER'
-    WHERE p_include_acknowledged = true
-       OR public.banking_alert_acknowledgements.id IS NULL
+    LEFT JOIN public.banking_alert_acknowledgements AS alert_acknowledgements
+      ON alert_acknowledgements.acknowledged_by_user_id = p_actor_user_id
+     AND UPPER(BTRIM(COALESCE(alert_acknowledgements.acknowledge_scope, 'USER'))) = 'USER'
+     AND (
+       alert_acknowledgements.alert_fingerprint = deduped_alerts.alert_fingerprint
+       OR (
+         UPPER(BTRIM(COALESCE(alert_acknowledgements.alert_kind, ''))) = UPPER(BTRIM(COALESCE(deduped_alerts.alert_kind, '')))
+         AND LOWER(BTRIM(COALESCE(alert_acknowledgements.entity_kind, ''))) = LOWER(BTRIM(COALESCE(deduped_alerts.entity_kind, '')))
+         AND alert_acknowledgements.entity_id = deduped_alerts.entity_id
+         AND alert_acknowledgements.acknowledged_at_utc >= COALESCE(deduped_alerts.sort_at_utc, '-infinity'::timestamptz)
+       )
+     )
+    WHERE COALESCE(p_include_acknowledged, false) = true
+       OR alert_acknowledgements.id IS NULL
   ),
   counted_alerts AS (
     SELECT
       alert_rows.*,
-      count(*) OVER ()::integer AS filtered_count,
-      count(*) FILTER (WHERE alert_rows.acknowledged_for_current_user = false) OVER ()::integer AS unacknowledged_count
+      (COUNT(*) OVER ())::integer AS filtered_count,
+      (COUNT(*) FILTER (WHERE alert_rows.acknowledged_for_current_user = false) OVER ())::integer AS unacknowledged_count
     FROM alert_rows
   ),
   limited_alerts AS (
     SELECT counted_alerts.*
     FROM counted_alerts
-    ORDER BY counted_alerts.severity_rank DESC, counted_alerts.sort_at_utc DESC NULLS LAST, counted_alerts.alert_fingerprint ASC
+    ORDER BY counted_alerts.severity_rank DESC,
+             counted_alerts.sort_at_utc DESC NULLS LAST,
+             counted_alerts.alert_fingerprint ASC
     LIMIT v_limit
+  ),
+  detailed_alerts AS (
+    SELECT
+      limited_alerts.alert_kind,
+      limited_alerts.severity,
+      limited_alerts.severity_rank,
+      limited_alerts.entity_kind,
+      limited_alerts.entity_id,
+      limited_alerts.pay_batch_id,
+      limited_alerts.alert_fingerprint,
+      limited_alerts.label,
+      limited_alerts.title,
+      limited_alerts.description,
+      limited_alerts.action_guidance,
+      limited_alerts.sort_at_utc,
+      limited_alerts.acknowledged_for_current_user,
+      limited_alerts.acknowledged_at_utc,
+      limited_alerts.filtered_count,
+      limited_alerts.unacknowledged_count,
+      public.banking_alert_payload_for_pay_batch(
+        limited_alerts.alert_kind,
+        limited_alerts.pay_batch_id,
+        limited_alerts.payload_source_kind,
+        limited_alerts.payload_source_id
+      ) AS payload_json
+    FROM limited_alerts
+  ),
+  signal_aggregate AS (
+    SELECT
+      (COUNT(*) FILTER (WHERE alert_rows.acknowledged_for_current_user = false))::integer AS unacknowledged_count,
+      (ARRAY_AGG(alert_rows.severity ORDER BY alert_rows.severity_rank DESC, alert_rows.sort_at_utc DESC NULLS LAST, alert_rows.alert_fingerprint ASC) FILTER (WHERE alert_rows.acknowledged_for_current_user = false))[1] AS highest_severity,
+      (ARRAY_AGG(alert_rows.label ORDER BY alert_rows.severity_rank DESC, alert_rows.sort_at_utc DESC NULLS LAST, alert_rows.alert_fingerprint ASC) FILTER (WHERE alert_rows.acknowledged_for_current_user = false))[1] AS highest_label,
+      'banking_alert_signal:v2:' || MD5(COALESCE(STRING_AGG(
+        CONCAT_WS('|',
+          alert_rows.alert_fingerprint,
+          alert_rows.alert_kind,
+          alert_rows.entity_kind,
+          alert_rows.entity_id::text,
+          alert_rows.severity,
+          alert_rows.label
+        ),
+        CHR(10)
+        ORDER BY alert_rows.alert_fingerprint ASC
+      ) FILTER (WHERE alert_rows.acknowledged_for_current_user = false), '')) AS alert_hash
+    FROM alert_rows
   ),
   aggregate_result AS (
     SELECT
-      coalesce(jsonb_agg(
+      COALESCE(JSONB_AGG(
         jsonb_build_object(
-          'alert_kind', limited_alerts.alert_kind,
-          'severity', limited_alerts.severity,
-          'severity_rank', limited_alerts.severity_rank,
-          'entity_kind', limited_alerts.entity_kind,
-          'entity_id', limited_alerts.entity_id::text,
-          'pay_batch_id', limited_alerts.pay_batch_id::text,
-          'alert_fingerprint', limited_alerts.alert_fingerprint,
-          'label', limited_alerts.label,
-          'title', limited_alerts.title,
-          'description', limited_alerts.description,
-          'action_guidance', limited_alerts.action_guidance,
-          'acknowledged_for_current_user', limited_alerts.acknowledged_for_current_user,
-          'requires_attention_for_current_user', NOT limited_alerts.acknowledged_for_current_user,
-          'acknowledged_at_utc', CASE WHEN limited_alerts.acknowledged_at_utc IS NULL THEN NULL ELSE limited_alerts.acknowledged_at_utc::text END,
-          'sort_at_utc', CASE WHEN limited_alerts.sort_at_utc IS NULL THEN NULL ELSE limited_alerts.sort_at_utc::text END,
-          'payload_json', limited_alerts.payload_json
+          'alert_kind', detailed_alerts.alert_kind,
+          'severity', detailed_alerts.severity,
+          'severity_rank', detailed_alerts.severity_rank,
+          'entity_kind', detailed_alerts.entity_kind,
+          'entity_id', detailed_alerts.entity_id::text,
+          'pay_batch_id', detailed_alerts.pay_batch_id::text,
+          'alert_fingerprint', detailed_alerts.alert_fingerprint,
+          'label', detailed_alerts.label,
+          'title', detailed_alerts.title,
+          'description', detailed_alerts.description,
+          'action_guidance', detailed_alerts.action_guidance,
+          'acknowledged_for_current_user', detailed_alerts.acknowledged_for_current_user,
+          'requires_attention_for_current_user', NOT detailed_alerts.acknowledged_for_current_user,
+          'acknowledged_at_utc', CASE WHEN detailed_alerts.acknowledged_at_utc IS NULL THEN NULL::text ELSE detailed_alerts.acknowledged_at_utc::text END,
+          'sort_at_utc', CASE WHEN detailed_alerts.sort_at_utc IS NULL THEN NULL::text ELSE detailed_alerts.sort_at_utc::text END,
+          'payload_json', detailed_alerts.payload_json
         )
-        ORDER BY limited_alerts.severity_rank DESC, limited_alerts.sort_at_utc DESC NULLS LAST, limited_alerts.alert_fingerprint ASC
+        ORDER BY detailed_alerts.severity_rank DESC,
+                 detailed_alerts.sort_at_utc DESC NULLS LAST,
+                 detailed_alerts.alert_fingerprint ASC
       ), '[]'::jsonb) AS alerts_json,
-      coalesce(max(limited_alerts.unacknowledged_count), 0)::integer AS unacknowledged_count,
-      coalesce(max(limited_alerts.filtered_count), 0)::integer AS filtered_count,
-      (array_agg(limited_alerts.severity ORDER BY limited_alerts.severity_rank DESC, limited_alerts.sort_at_utc DESC NULLS LAST))[1] AS highest_severity,
-      (array_agg(limited_alerts.label ORDER BY limited_alerts.severity_rank DESC, limited_alerts.sort_at_utc DESC NULLS LAST))[1] AS highest_label
-    FROM limited_alerts
+      COALESCE(MAX(detailed_alerts.filtered_count), 0)::integer AS filtered_count,
+      (ARRAY_AGG(detailed_alerts.severity ORDER BY detailed_alerts.severity_rank DESC, detailed_alerts.sort_at_utc DESC NULLS LAST, detailed_alerts.alert_fingerprint ASC))[1] AS highest_severity,
+      (ARRAY_AGG(detailed_alerts.label ORDER BY detailed_alerts.severity_rank DESC, detailed_alerts.sort_at_utc DESC NULLS LAST, detailed_alerts.alert_fingerprint ASC))[1] AS highest_label
+    FROM detailed_alerts
   )
   SELECT jsonb_build_object(
     'ok', true,
     'generated_at_utc', now()::text,
     'actor_user_id', p_actor_user_id::text,
-    'include_acknowledged', coalesce(p_include_acknowledged, false),
+    'include_acknowledged', COALESCE(p_include_acknowledged, false),
     'limit', COALESCE(v_limit, 0),
     'alerts', aggregate_result.alerts_json,
-    'unacknowledged_count', aggregate_result.unacknowledged_count,
-    'filtered_count', aggregate_result.filtered_count,
-    'highest_severity', aggregate_result.highest_severity,
-    'highest_label', aggregate_result.highest_label
+    'banking_alert_hash', COALESCE(signal_aggregate.alert_hash, 'banking_alert_signal:v2:' || MD5('')),
+    'banking_unacknowledged_alert_count', COALESCE(signal_aggregate.unacknowledged_count, 0),
+    'banking_highest_alert_severity', CASE WHEN COALESCE(signal_aggregate.unacknowledged_count, 0) > 0 THEN COALESCE(signal_aggregate.highest_severity, '') ELSE '' END,
+    'banking_highest_alert_label', CASE WHEN COALESCE(signal_aggregate.unacknowledged_count, 0) > 0 THEN COALESCE(signal_aggregate.highest_label, '') ELSE '' END,
+    'unacknowledged_count', COALESCE(signal_aggregate.unacknowledged_count, 0),
+    'filtered_count', COALESCE(aggregate_result.filtered_count, 0),
+    'highest_severity', CASE WHEN COALESCE(aggregate_result.filtered_count, 0) > 0 THEN aggregate_result.highest_severity ELSE NULL::text END,
+    'highest_label', CASE WHEN COALESCE(aggregate_result.filtered_count, 0) > 0 THEN aggregate_result.highest_label ELSE NULL::text END
   )
   INTO v_result
-  FROM aggregate_result;
+  FROM aggregate_result
+  CROSS JOIN signal_aggregate;
 
-  RETURN coalesce(v_result, jsonb_build_object(
+  RETURN COALESCE(v_result, jsonb_build_object(
     'ok', true,
     'generated_at_utc', now()::text,
     'actor_user_id', p_actor_user_id::text,
-    'include_acknowledged', coalesce(p_include_acknowledged, false),
+    'include_acknowledged', COALESCE(p_include_acknowledged, false),
     'limit', COALESCE(v_limit, 0),
     'alerts', '[]'::jsonb,
+    'banking_alert_hash', 'banking_alert_signal:v2:' || MD5(''),
+    'banking_unacknowledged_alert_count', 0,
+    'banking_highest_alert_severity', '',
+    'banking_highest_alert_label', '',
     'unacknowledged_count', 0,
     'filtered_count', 0,
-    'highest_severity', null,
-    'highest_label', null
+    'highest_severity', NULL::text,
+    'highest_label', NULL::text
   ));
 END;
 $function$;
+
 
 CREATE OR REPLACE FUNCTION public.banking_alert_acknowledge(
   p_alert_fingerprint text,
@@ -39141,6 +39309,7 @@ DECLARE
   v_created boolean := false;
   v_upsert_inserted boolean := false;
   v_remaining_count integer := 0;
+  v_signal_json jsonb := '{}'::jsonb;
 BEGIN
   IF v_alert_fingerprint IS NULL THEN
     RAISE EXCEPTION 'BANKING_ALERT_ACKNOWLEDGE_FINGERPRINT_REQUIRED'
@@ -39271,7 +39440,22 @@ BEGIN
           NULL::text,
           NULL::uuid,
           false,
-          0
+          25
+        );
+
+        v_signal_json := public.banking_alert_signal_for_user(
+          p_actor_user_id,
+          NULL::text
+        );
+
+        v_remaining_json := v_remaining_json || jsonb_build_object(
+          'banking_alert_hash', COALESCE(v_signal_json ->> 'banking_alert_hash', 'banking_alert_signal:v2:' || MD5('')),
+          'banking_unacknowledged_alert_count', COALESCE((v_signal_json ->> 'banking_unacknowledged_alert_count')::integer, 0),
+          'banking_highest_alert_severity', COALESCE(v_signal_json ->> 'banking_highest_alert_severity', ''),
+          'banking_highest_alert_label', COALESCE(v_signal_json ->> 'banking_highest_alert_label', ''),
+          'unacknowledged_count', COALESCE((v_signal_json ->> 'banking_unacknowledged_alert_count')::integer, 0),
+          'highest_severity', NULLIF(COALESCE(v_signal_json ->> 'banking_highest_alert_severity', ''), ''),
+          'highest_label', NULLIF(COALESCE(v_signal_json ->> 'banking_highest_alert_label', ''), '')
         );
 
         RETURN jsonb_build_object(
@@ -39289,6 +39473,10 @@ BEGIN
           'entity_id', p_entity_id::text,
           'current_alert_fingerprint', v_current_alert_fingerprint,
           'entity_alert_summary', v_active_json,
+          'banking_alert_hash', COALESCE(v_signal_json ->> 'banking_alert_hash', 'banking_alert_signal:v2:' || MD5('')),
+          'banking_unacknowledged_alert_count', COALESCE((v_signal_json ->> 'banking_unacknowledged_alert_count')::integer, 0),
+          'banking_highest_alert_severity', COALESCE(v_signal_json ->> 'banking_highest_alert_severity', ''),
+          'banking_highest_alert_label', COALESCE(v_signal_json ->> 'banking_highest_alert_label', ''),
           'remaining_alert_summary', v_remaining_json,
           'alert_summary', v_remaining_json
         );
@@ -39365,10 +39553,25 @@ BEGIN
     NULL::text,
     NULL::uuid,
     false,
-    0
+    25
   );
 
-  v_remaining_count := COALESCE(NULLIF(v_remaining_json ->> 'unacknowledged_count', '')::integer, 0);
+  v_signal_json := public.banking_alert_signal_for_user(
+    p_actor_user_id,
+    NULL::text
+  );
+
+  v_remaining_count := COALESCE((v_signal_json ->> 'banking_unacknowledged_alert_count')::integer, 0);
+
+  v_remaining_json := v_remaining_json || jsonb_build_object(
+    'banking_alert_hash', COALESCE(v_signal_json ->> 'banking_alert_hash', 'banking_alert_signal:v2:' || MD5('')),
+    'banking_unacknowledged_alert_count', v_remaining_count,
+    'banking_highest_alert_severity', COALESCE(v_signal_json ->> 'banking_highest_alert_severity', ''),
+    'banking_highest_alert_label', COALESCE(v_signal_json ->> 'banking_highest_alert_label', ''),
+    'unacknowledged_count', v_remaining_count,
+    'highest_severity', NULLIF(COALESCE(v_signal_json ->> 'banking_highest_alert_severity', ''), ''),
+    'highest_label', NULLIF(COALESCE(v_signal_json ->> 'banking_highest_alert_label', ''), '')
+  );
 
   RETURN jsonb_build_object(
     'ok', true,
@@ -39378,6 +39581,10 @@ BEGIN
     'ignored', false,
     'ignored_count', 0,
     'remaining_unacknowledged_count', v_remaining_count,
+    'banking_alert_hash', COALESCE(v_signal_json ->> 'banking_alert_hash', 'banking_alert_signal:v2:' || MD5('')),
+    'banking_unacknowledged_alert_count', v_remaining_count,
+    'banking_highest_alert_severity', COALESCE(v_signal_json ->> 'banking_highest_alert_severity', ''),
+    'banking_highest_alert_label', COALESCE(v_signal_json ->> 'banking_highest_alert_label', ''),
     'remaining_alert_summary', v_remaining_json,
     'alert_summary', v_remaining_json,
     'acknowledgement', jsonb_build_object(
@@ -39396,7 +39603,6 @@ BEGIN
   );
 END;
 $function$;
-
 
 CREATE OR REPLACE FUNCTION public.banking_alert_acknowledge_many(
   p_actor_user_id uuid,
@@ -39419,6 +39625,7 @@ DECLARE
   v_active_json jsonb := '{}'::jsonb;
   v_remaining_json jsonb := '{}'::jsonb;
   v_acknowledged_alerts jsonb := '[]'::jsonb;
+  v_signal_json jsonb := '{}'::jsonb;
 BEGIN
   IF p_actor_user_id IS NULL THEN
     RAISE EXCEPTION 'BANKING_ALERT_ACKNOWLEDGE_MANY_ACTOR_REQUIRED'
@@ -39622,10 +39829,25 @@ BEGIN
     NULL::text,
     NULL::uuid,
     false,
-    0
+    25
   );
 
-  v_remaining_count := COALESCE(NULLIF(v_remaining_json ->> 'unacknowledged_count', '')::integer, 0);
+  v_signal_json := public.banking_alert_signal_for_user(
+    p_actor_user_id,
+    NULL::text
+  );
+
+  v_remaining_count := COALESCE((v_signal_json ->> 'banking_unacknowledged_alert_count')::integer, 0);
+
+  v_remaining_json := v_remaining_json || jsonb_build_object(
+    'banking_alert_hash', COALESCE(v_signal_json ->> 'banking_alert_hash', 'banking_alert_signal:v2:' || MD5('')),
+    'banking_unacknowledged_alert_count', v_remaining_count,
+    'banking_highest_alert_severity', COALESCE(v_signal_json ->> 'banking_highest_alert_severity', ''),
+    'banking_highest_alert_label', COALESCE(v_signal_json ->> 'banking_highest_alert_label', ''),
+    'unacknowledged_count', v_remaining_count,
+    'highest_severity', NULLIF(COALESCE(v_signal_json ->> 'banking_highest_alert_severity', ''), ''),
+    'highest_label', NULLIF(COALESCE(v_signal_json ->> 'banking_highest_alert_label', ''), '')
+  );
 
   RETURN jsonb_build_object(
     'ok', true,
@@ -39634,6 +39856,10 @@ BEGIN
     'already_acknowledged_count', coalesce(v_already_acknowledged_count, 0),
     'acknowledged_count', coalesce(v_acknowledged_count, 0),
     'remaining_unacknowledged_count', coalesce(v_remaining_count, 0),
+    'banking_alert_hash', COALESCE(v_signal_json ->> 'banking_alert_hash', 'banking_alert_signal:v2:' || MD5('')),
+    'banking_unacknowledged_alert_count', coalesce(v_remaining_count, 0),
+    'banking_highest_alert_severity', COALESCE(v_signal_json ->> 'banking_highest_alert_severity', ''),
+    'banking_highest_alert_label', COALESCE(v_signal_json ->> 'banking_highest_alert_label', ''),
     'ignored_count', coalesce(v_ignored_count, 0),
     'acknowledged_alerts', coalesce(v_acknowledged_alerts, '[]'::jsonb),
     'remaining_alert_summary', v_remaining_json,
@@ -40548,6 +40774,7 @@ BEGIN
 END;
 $function$;
 
+
 CREATE OR REPLACE FUNCTION public.banking_alert_acknowledge_all_current(
   p_actor_user_id uuid,
   p_note text DEFAULT NULL::text
@@ -40567,6 +40794,7 @@ DECLARE
   v_acknowledged_count integer := 0;
   v_remaining_count integer := 0;
   v_acknowledged_alerts jsonb := '[]'::jsonb;
+  v_signal_json jsonb := '{}'::jsonb;
 BEGIN
   IF p_actor_user_id IS NULL THEN
     RAISE EXCEPTION 'BANKING_ALERT_ACKNOWLEDGE_ALL_CURRENT_ACTOR_REQUIRED'
@@ -40692,10 +40920,25 @@ BEGIN
     NULL::text,
     NULL::uuid,
     false,
-    0
+    25
   );
 
-  v_remaining_count := COALESCE(NULLIF(v_remaining_json ->> 'unacknowledged_count', '')::integer, 0);
+  v_signal_json := public.banking_alert_signal_for_user(
+    p_actor_user_id,
+    NULL::text
+  );
+
+  v_remaining_count := COALESCE((v_signal_json ->> 'banking_unacknowledged_alert_count')::integer, 0);
+
+  v_remaining_json := v_remaining_json || jsonb_build_object(
+    'banking_alert_hash', COALESCE(v_signal_json ->> 'banking_alert_hash', 'banking_alert_signal:v2:' || MD5('')),
+    'banking_unacknowledged_alert_count', v_remaining_count,
+    'banking_highest_alert_severity', COALESCE(v_signal_json ->> 'banking_highest_alert_severity', ''),
+    'banking_highest_alert_label', COALESCE(v_signal_json ->> 'banking_highest_alert_label', ''),
+    'unacknowledged_count', v_remaining_count,
+    'highest_severity', NULLIF(COALESCE(v_signal_json ->> 'banking_highest_alert_severity', ''), ''),
+    'highest_label', NULLIF(COALESCE(v_signal_json ->> 'banking_highest_alert_label', ''), '')
+  );
 
   RETURN jsonb_build_object(
     'ok', true,
@@ -40706,6 +40949,10 @@ BEGIN
     'already_acknowledged_count', COALESCE(v_already_acknowledged_count, 0),
     'acknowledged_count', COALESCE(v_acknowledged_count, 0),
     'remaining_unacknowledged_count', COALESCE(v_remaining_count, 0),
+    'banking_alert_hash', COALESCE(v_signal_json ->> 'banking_alert_hash', 'banking_alert_signal:v2:' || MD5('')),
+    'banking_unacknowledged_alert_count', COALESCE(v_remaining_count, 0),
+    'banking_highest_alert_severity', COALESCE(v_signal_json ->> 'banking_highest_alert_severity', ''),
+    'banking_highest_alert_label', COALESCE(v_signal_json ->> 'banking_highest_alert_label', ''),
     'ignored_count', GREATEST(COALESCE(v_active_count, 0) - COALESCE(v_acknowledged_count, 0), 0),
     'acknowledged_alerts', COALESCE(v_acknowledged_alerts, '[]'::jsonb),
     'remaining_alert_summary', v_remaining_json,
@@ -40713,6 +40960,11 @@ BEGIN
   );
 END;
 $function$;
+
+
+
+
+
 CREATE OR REPLACE FUNCTION public.banking_alert_signal_for_user(
   p_actor_user_id uuid,
   p_last_alert_hash text DEFAULT NULL::text
@@ -40724,7 +40976,7 @@ SECURITY DEFINER
 SET search_path TO 'public'
 AS $function$
 DECLARE
-  v_last_alert_hash text := nullif(btrim(coalesce(p_last_alert_hash, '')), '');
+  v_last_alert_hash text := NULLIF(BTRIM(COALESCE(p_last_alert_hash, '')), '');
   v_result jsonb := '{}'::jsonb;
 BEGIN
   IF p_actor_user_id IS NULL THEN
@@ -40733,50 +40985,60 @@ BEGIN
             DETAIL = jsonb_build_object('code', 'BANKING_ALERT_SIGNAL_FOR_USER_ACTOR_REQUIRED')::text;
   END IF;
 
-  WITH blocked_funds_source AS (
+  WITH blocked_funds_base AS (
     SELECT
-      public.pay_batches.id AS pay_batch_id,
-      public.pay_batches.last_funds_check_at_utc AS sort_at_utc,
-      public.banking_alert_payload_for_pay_batch('BLOCKED_FUNDS', public.pay_batches.id) AS payload_json,
-      public.pay_batch_submission_evidence(public.pay_batches.id) AS submission_evidence_json
-    FROM public.pay_batches
-    WHERE upper(btrim(coalesce(public.pay_batches.status, ''))) = 'BLOCKED_FUNDS'
-      AND upper(btrim(coalesce(public.pay_batches.execution_commit_state, 'NOT_SUBMITTED'))) = 'NOT_SUBMITTED'
-      AND nullif(btrim(coalesce(public.pay_batches.execution_commit_ref, '')), '') IS NULL
-      AND public.pay_batches.execution_committed_at_utc IS NULL
-      AND public.pay_batches.cancelled_at_utc IS NULL
+      blocked_funds_pay_batches.id AS pay_batch_id,
+      blocked_funds_pay_batches.status AS batch_status,
+      blocked_funds_pay_batches.execution_commit_state AS execution_commit_state,
+      blocked_funds_pay_batches.execution_commit_ref AS execution_commit_ref,
+      blocked_funds_pay_batches.execution_committed_at_utc AS execution_committed_at_utc,
+      blocked_funds_pay_batches.last_funds_check_at_utc AS last_funds_check_at_utc,
+      blocked_funds_pay_batches.last_funds_check_json AS last_funds_check_json,
+      blocked_funds_pay_batches.funding_account_ref AS funding_account_ref,
+      blocked_funds_pay_batches.rail_provider_snapshot AS rail_provider_snapshot,
+      blocked_funds_pay_batches.rail_env_snapshot AS rail_env_snapshot,
+      COALESCE(
+        NULLIF(BTRIM(blocked_funds_pay_batches.last_funds_check_json #>> '{required_gbp}'), ''),
+        NULLIF(BTRIM(blocked_funds_pay_batches.last_funds_check_json #>> '{required}'), ''),
+        NULLIF(BTRIM(blocked_funds_pay_batches.last_funds_check_json #>> '{required_amount_gbp}'), ''),
+        NULLIF(BTRIM(blocked_funds_pay_batches.last_funds_check_json #>> '{required_amount}'), '')
+      ) AS required_gbp_text,
+      COALESCE(
+        NULLIF(BTRIM(blocked_funds_pay_batches.last_funds_check_json #>> '{available_gbp}'), ''),
+        NULLIF(BTRIM(blocked_funds_pay_batches.last_funds_check_json #>> '{available}'), ''),
+        NULLIF(BTRIM(blocked_funds_pay_batches.last_funds_check_json #>> '{available_amount_gbp}'), ''),
+        NULLIF(BTRIM(blocked_funds_pay_batches.last_funds_check_json #>> '{available_amount}'), '')
+      ) AS available_gbp_text,
+      COALESCE(
+        NULLIF(BTRIM(blocked_funds_pay_batches.last_funds_check_json #>> '{funding_account_ref}'), ''),
+        NULLIF(BTRIM(blocked_funds_pay_batches.last_funds_check_json #>> '{account_ref}'), ''),
+        NULLIF(BTRIM(blocked_funds_pay_batches.last_funds_check_json #>> '{funding_account_id}'), ''),
+        NULLIF(BTRIM(blocked_funds_pay_batches.funding_account_ref), '')
+      ) AS resolved_funding_account_ref,
+      COALESCE(
+        NULLIF(BTRIM(blocked_funds_pay_batches.last_funds_check_json #>> '{rail_provider}'), ''),
+        NULLIF(BTRIM(blocked_funds_pay_batches.last_funds_check_json #>> '{provider}'), ''),
+        NULLIF(BTRIM(blocked_funds_pay_batches.rail_provider_snapshot), '')
+      ) AS resolved_rail_provider,
+      COALESCE(
+        NULLIF(BTRIM(blocked_funds_pay_batches.last_funds_check_json #>> '{rail_env}'), ''),
+        NULLIF(BTRIM(blocked_funds_pay_batches.last_funds_check_json #>> '{env}'), ''),
+        NULLIF(BTRIM(blocked_funds_pay_batches.rail_env_snapshot), '')
+      ) AS resolved_rail_env
+    FROM public.pay_batches AS blocked_funds_pay_batches
+    WHERE UPPER(BTRIM(COALESCE(blocked_funds_pay_batches.status, ''))) = 'BLOCKED_FUNDS'
+      AND UPPER(BTRIM(COALESCE(blocked_funds_pay_batches.execution_commit_state, 'NOT_SUBMITTED'))) = 'NOT_SUBMITTED'
+      AND NULLIF(BTRIM(COALESCE(blocked_funds_pay_batches.execution_commit_ref, '')), '') IS NULL
+      AND blocked_funds_pay_batches.execution_committed_at_utc IS NULL
+      AND blocked_funds_pay_batches.cancelled_at_utc IS NULL
       AND EXISTS (
         SELECT 1
-        FROM public.pay_batch_candidates AS blocked_funds_candidates_exists
-        JOIN public.pay_batch_items AS blocked_funds_items_exists
-          ON blocked_funds_items_exists.pay_batch_candidate_id = blocked_funds_candidates_exists.id
-        WHERE blocked_funds_candidates_exists.pay_batch_id = public.pay_batches.id
-          AND coalesce(blocked_funds_items_exists.is_voided, false) = false
+        FROM public.pay_batch_candidates AS blocked_funds_candidate_exists
+        JOIN public.pay_batch_items AS blocked_funds_item_exists
+          ON blocked_funds_item_exists.pay_batch_candidate_id = blocked_funds_candidate_exists.id
+        WHERE blocked_funds_candidate_exists.pay_batch_id = blocked_funds_pay_batches.id
+          AND COALESCE(blocked_funds_item_exists.is_voided, false) = false
       )
-  ),
-  blocked_funds_payload AS (
-    SELECT
-      blocked_funds_source.pay_batch_id,
-      blocked_funds_source.payload_json,
-      blocked_funds_source.sort_at_utc
-    FROM blocked_funds_source
-    WHERE COALESCE((blocked_funds_source.submission_evidence_json ->> 'transfer_event_count')::integer, 0) = 0
-      AND COALESCE((blocked_funds_source.submission_evidence_json ->> 'has_rail_tx_id')::boolean, false) = false
-      AND COALESCE((blocked_funds_source.submission_evidence_json ->> 'has_provider_submission_reference')::boolean, false) = false
-      AND COALESCE((blocked_funds_source.submission_evidence_json ->> 'has_provider_payment_reference')::boolean, false) = false
-      AND COALESCE((blocked_funds_source.submission_evidence_json ->> 'has_provider_transfer_reference')::boolean, false) = false
-      AND COALESCE((blocked_funds_source.submission_evidence_json ->> 'has_provider_transaction_reference')::boolean, false) = false
-      AND COALESCE((blocked_funds_source.submission_evidence_json ->> 'has_external_payment_reference')::boolean, false) = false
-      AND COALESCE((blocked_funds_source.submission_evidence_json ->> 'has_external_transfer_reference')::boolean, false) = false
-      AND COALESCE((blocked_funds_source.submission_evidence_json ->> 'has_submitted_state')::boolean, false) = false
-      AND COALESCE((blocked_funds_source.submission_evidence_json ->> 'has_processing_state')::boolean, false) = false
-      AND COALESCE((blocked_funds_source.submission_evidence_json ->> 'has_completed_state')::boolean, false) = false
-      AND COALESCE((blocked_funds_source.submission_evidence_json ->> 'has_failed_or_rejected_provider_state')::boolean, false) = false
-      AND COALESCE((blocked_funds_source.submission_evidence_json ->> 'has_unknown_or_timeout_state')::boolean, false) = false
-      AND COALESCE((blocked_funds_source.submission_evidence_json ->> 'has_provider_attempt_request_or_idempotency_reference')::boolean, false) = false
-      AND COALESCE((blocked_funds_source.submission_evidence_json ->> 'has_possible_provider_attempt_evidence')::boolean, false) = false
-      AND COALESCE((blocked_funds_source.submission_evidence_json ->> 'has_external_submission_evidence')::boolean, false) = false
-      AND COALESCE((blocked_funds_source.submission_evidence_json ->> 'no_submission_evidence')::boolean, false) = true
   ),
   blocked_funds_alerts AS (
     SELECT
@@ -40784,62 +41046,106 @@ BEGIN
       'critical'::text AS severity,
       100::integer AS severity_rank,
       'pay_batch'::text AS entity_kind,
-      blocked_funds_payload.pay_batch_id AS entity_id,
-      public.banking_alert_fingerprint('BLOCKED_FUNDS', 'pay_batch', blocked_funds_payload.pay_batch_id, blocked_funds_payload.payload_json) AS alert_fingerprint,
+      blocked_funds_base.pay_batch_id AS entity_id,
+      blocked_funds_base.pay_batch_id AS pay_batch_id,
+      NULL::text AS payload_source_kind,
+      NULL::uuid AS payload_source_id,
+      jsonb_strip_nulls(jsonb_build_object(
+        'fingerprint_source_kind', 'pay_batch',
+        'fingerprint_source_id', blocked_funds_base.pay_batch_id::text,
+        'issue_kind', 'BLOCKED_FUNDS',
+        'pay_batch_id', blocked_funds_base.pay_batch_id::text,
+        'batch_status', UPPER(BTRIM(COALESCE(blocked_funds_base.batch_status, ''))),
+        'execution_commit_state', UPPER(BTRIM(COALESCE(blocked_funds_base.execution_commit_state, 'NOT_SUBMITTED'))),
+        'execution_commit_ref', NULLIF(BTRIM(COALESCE(blocked_funds_base.execution_commit_ref, '')), ''),
+        'execution_committed_at_utc', CASE
+          WHEN blocked_funds_base.execution_committed_at_utc IS NULL THEN NULL::text
+          ELSE TO_CHAR(blocked_funds_base.execution_committed_at_utc AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')
+        END,
+        'last_funds_check_at_utc', CASE
+          WHEN blocked_funds_base.last_funds_check_at_utc IS NULL THEN NULL::text
+          ELSE TO_CHAR(blocked_funds_base.last_funds_check_at_utc AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')
+        END,
+        'required_gbp', CASE
+          WHEN blocked_funds_base.required_gbp_text ~ '^-?[0-9]+(\.[0-9]+)?$' THEN blocked_funds_base.required_gbp_text::numeric
+          ELSE NULL::numeric
+        END,
+        'available_gbp', CASE
+          WHEN blocked_funds_base.available_gbp_text ~ '^-?[0-9]+(\.[0-9]+)?$' THEN blocked_funds_base.available_gbp_text::numeric
+          ELSE NULL::numeric
+        END,
+        'funding_account_ref', blocked_funds_base.resolved_funding_account_ref,
+        'rail_provider', blocked_funds_base.resolved_rail_provider,
+        'rail_env', blocked_funds_base.resolved_rail_env
+      )) AS fingerprint_payload_json,
       'Bank rejected payment'::text AS label,
-      blocked_funds_payload.sort_at_utc AS sort_at_utc
-    FROM blocked_funds_payload
+      'Bank rejected payment — blocked funds'::text AS title,
+      ('Blocked funds — required '
+        || COALESCE(NULLIF(BTRIM(blocked_funds_base.required_gbp_text), ''), '—')
+        || ', available '
+        || COALESCE(NULLIF(BTRIM(blocked_funds_base.available_gbp_text), ''), '—')
+        || '. No payment was submitted.')::text AS description,
+      'Fund the account and retry, or cancel/release the batch.'::text AS action_guidance,
+      blocked_funds_base.last_funds_check_at_utc AS sort_at_utc
+    FROM blocked_funds_base
   ),
-  bank_event_payloads AS (
+  bank_event_base AS (
     SELECT
       CASE
-        WHEN upper(btrim(coalesce(public.pay_bank_transfer_events.mapping_status, ''))) IN ('AMBIGUOUS','UNMATCHED','NO_MATCH','MULTIPLE_MATCHES')
-          OR upper(btrim(coalesce(public.pay_bank_transfer_events.correction_disposition, ''))) IN ('AMBIGUOUS','ACTION_REQUIRED')
+        WHEN UPPER(BTRIM(COALESCE(public.pay_bank_transfer_events.mapping_status, ''))) IN ('AMBIGUOUS','UNMATCHED','NO_MATCH','MULTIPLE_MATCHES')
+          OR UPPER(BTRIM(COALESCE(public.pay_bank_transfer_events.correction_disposition, ''))) IN ('AMBIGUOUS','ACTION_REQUIRED')
           THEN 'AMBIGUOUS_PAYMENT_REVIEW_REQUIRED'
-        WHEN upper(btrim(coalesce(public.pay_bank_transfer_events.correction_disposition, ''))) = 'FAILED'
+        WHEN UPPER(BTRIM(COALESCE(public.pay_bank_transfer_events.correction_disposition, ''))) = 'FAILED'
           THEN 'PAYMENT_CORRECTION_FAILED'
-        WHEN upper(btrim(coalesce(public.pay_bank_transfer_events.correction_disposition, ''))) = 'BLOCKED'
+        WHEN UPPER(BTRIM(COALESCE(public.pay_bank_transfer_events.correction_disposition, ''))) = 'BLOCKED'
           THEN 'PAYMENT_CORRECTION_BLOCKED'
-        WHEN upper(btrim(coalesce(public.pay_bank_transfer_events.normalised_state, ''))) IN ('RETURNED','REVERTED')
-          OR upper(btrim(coalesce(public.pay_bank_transfer_events.provider_state, ''))) IN ('RETURNED','REVERTED')
+        WHEN UPPER(BTRIM(COALESCE(public.pay_bank_transfer_events.normalised_state, ''))) IN ('RETURNED','REVERTED')
+          OR UPPER(BTRIM(COALESCE(public.pay_bank_transfer_events.provider_state, ''))) IN ('RETURNED','REVERTED')
           THEN 'BANK_RETURNED_PAYMENT'
-        WHEN upper(btrim(coalesce(public.pay_bank_transfer_events.normalised_state, ''))) IN ('FAILED','DECLINED','REJECTED','CANCELLED','CANCELED','SUBMISSION_FAILED')
-          OR upper(btrim(coalesce(public.pay_bank_transfer_events.provider_state, ''))) IN ('FAILED','DECLINED','REJECTED','CANCELLED','CANCELED','SUBMISSION_FAILED')
+        WHEN UPPER(BTRIM(COALESCE(public.pay_bank_transfer_events.normalised_state, ''))) IN ('FAILED','DECLINED','REJECTED','CANCELLED','CANCELED','SUBMISSION_FAILED')
+          OR UPPER(BTRIM(COALESCE(public.pay_bank_transfer_events.provider_state, ''))) IN ('FAILED','DECLINED','REJECTED','CANCELLED','CANCELED','SUBMISSION_FAILED')
           THEN 'BANK_REJECTED_PAYMENT'
-        WHEN upper(btrim(coalesce(public.pay_bank_transfer_events.normalised_state, ''))) IN ('UNKNOWN','TIMEOUT','TIMED_OUT','PENDING_REVIEW')
-          OR upper(btrim(coalesce(public.pay_bank_transfer_events.normalised_state, ''))) LIKE 'CREATE_ERROR%'
-          OR upper(btrim(coalesce(public.pay_bank_transfer_events.provider_state, ''))) IN ('UNKNOWN','TIMEOUT','TIMED_OUT','PENDING_REVIEW')
-          OR upper(btrim(coalesce(public.pay_bank_transfer_events.provider_state, ''))) LIKE 'CREATE_ERROR%'
+        WHEN UPPER(BTRIM(COALESCE(public.pay_bank_transfer_events.normalised_state, ''))) IN ('UNKNOWN','TIMEOUT','TIMED_OUT','PENDING_REVIEW')
+          OR UPPER(BTRIM(COALESCE(public.pay_bank_transfer_events.normalised_state, ''))) LIKE 'CREATE_ERROR%'
+          OR UPPER(BTRIM(COALESCE(public.pay_bank_transfer_events.provider_state, ''))) IN ('UNKNOWN','TIMEOUT','TIMED_OUT','PENDING_REVIEW')
+          OR UPPER(BTRIM(COALESCE(public.pay_bank_transfer_events.provider_state, ''))) LIKE 'CREATE_ERROR%'
           THEN 'RAIL_SUBMISSION_UNKNOWN_OR_TIMEOUT'
         ELSE NULL::text
       END AS alert_kind,
-      public.pay_bank_transfer_events.pay_batch_id,
+      public.pay_bank_transfer_events.pay_batch_id AS pay_batch_id,
       public.pay_bank_transfer_events.id AS source_id,
-      coalesce(public.pay_bank_transfer_events.event_time_utc, public.pay_bank_transfer_events.received_at_utc, public.pay_bank_transfer_events.created_at_utc) AS sort_at_utc
+      public.pay_bank_transfer_events.normalised_state AS normalised_state,
+      public.pay_bank_transfer_events.provider_state AS provider_state,
+      public.pay_bank_transfer_events.mapping_status AS mapping_status,
+      public.pay_bank_transfer_events.correction_disposition AS correction_disposition,
+      public.pay_bank_transfer_events.event_time_utc AS event_time_utc,
+      public.pay_bank_transfer_events.received_at_utc AS received_at_utc,
+      public.pay_bank_transfer_events.created_at_utc AS created_at_utc,
+      COALESCE(public.pay_bank_transfer_events.event_time_utc, public.pay_bank_transfer_events.received_at_utc, public.pay_bank_transfer_events.created_at_utc) AS sort_at_utc
     FROM public.pay_bank_transfer_events
     JOIN public.pay_batches AS bank_event_batches
       ON bank_event_batches.id = public.pay_bank_transfer_events.pay_batch_id
-    WHERE upper(btrim(coalesce(bank_event_batches.status, ''))) NOT IN ('CANCELLED','CANCELED')
+    WHERE UPPER(BTRIM(COALESCE(bank_event_batches.status, ''))) NOT IN ('CANCELLED','CANCELED')
       AND (
-        upper(btrim(coalesce(public.pay_bank_transfer_events.normalised_state, ''))) IN ('FAILED','DECLINED','REJECTED','CANCELLED','CANCELED','SUBMISSION_FAILED','RETURNED','REVERTED','UNKNOWN','TIMEOUT','TIMED_OUT','PENDING_REVIEW')
-        OR upper(btrim(coalesce(public.pay_bank_transfer_events.normalised_state, ''))) LIKE 'CREATE_ERROR%'
-        OR upper(btrim(coalesce(public.pay_bank_transfer_events.provider_state, ''))) IN ('FAILED','DECLINED','REJECTED','CANCELLED','CANCELED','SUBMISSION_FAILED','RETURNED','REVERTED','UNKNOWN','TIMEOUT','TIMED_OUT','PENDING_REVIEW')
-        OR upper(btrim(coalesce(public.pay_bank_transfer_events.provider_state, ''))) LIKE 'CREATE_ERROR%'
-        OR upper(btrim(coalesce(public.pay_bank_transfer_events.mapping_status, ''))) IN ('AMBIGUOUS','UNMATCHED','NO_MATCH','MULTIPLE_MATCHES')
-        OR upper(btrim(coalesce(public.pay_bank_transfer_events.correction_disposition, ''))) IN ('AMBIGUOUS','ACTION_REQUIRED','BLOCKED','FAILED')
+        UPPER(BTRIM(COALESCE(public.pay_bank_transfer_events.normalised_state, ''))) IN ('FAILED','DECLINED','REJECTED','CANCELLED','CANCELED','SUBMISSION_FAILED','RETURNED','REVERTED','UNKNOWN','TIMEOUT','TIMED_OUT','PENDING_REVIEW')
+        OR UPPER(BTRIM(COALESCE(public.pay_bank_transfer_events.normalised_state, ''))) LIKE 'CREATE_ERROR%'
+        OR UPPER(BTRIM(COALESCE(public.pay_bank_transfer_events.provider_state, ''))) IN ('FAILED','DECLINED','REJECTED','CANCELLED','CANCELED','SUBMISSION_FAILED','RETURNED','REVERTED','UNKNOWN','TIMEOUT','TIMED_OUT','PENDING_REVIEW')
+        OR UPPER(BTRIM(COALESCE(public.pay_bank_transfer_events.provider_state, ''))) LIKE 'CREATE_ERROR%'
+        OR UPPER(BTRIM(COALESCE(public.pay_bank_transfer_events.mapping_status, ''))) IN ('AMBIGUOUS','UNMATCHED','NO_MATCH','MULTIPLE_MATCHES')
+        OR UPPER(BTRIM(COALESCE(public.pay_bank_transfer_events.correction_disposition, ''))) IN ('AMBIGUOUS','ACTION_REQUIRED','BLOCKED','FAILED')
       )
       AND NOT EXISTS (
         SELECT 1
         FROM public.pay_payment_correction_requests AS resolved_event_corrections
         WHERE resolved_event_corrections.source_bank_event_id = public.pay_bank_transfer_events.id
-          AND upper(btrim(coalesce(resolved_event_corrections.status, ''))) IN ('APPLIED','RESOLVED')
+          AND UPPER(BTRIM(COALESCE(resolved_event_corrections.status, ''))) IN ('APPLIED','RESOLVED')
       )
   ),
   bank_event_alerts AS (
     SELECT
-      bank_event_payloads.alert_kind,
+      bank_event_base.alert_kind,
       'critical'::text AS severity,
-      CASE bank_event_payloads.alert_kind
+      CASE bank_event_base.alert_kind
         WHEN 'BANK_RETURNED_PAYMENT' THEN 95
         WHEN 'BANK_REJECTED_PAYMENT' THEN 94
         WHEN 'AMBIGUOUS_PAYMENT_REVIEW_REQUIRED' THEN 90
@@ -40848,9 +41154,23 @@ BEGIN
         ELSE 80
       END::integer AS severity_rank,
       'pay_batch'::text AS entity_kind,
-      bank_event_payloads.pay_batch_id AS entity_id,
-      public.banking_alert_fingerprint(bank_event_payloads.alert_kind, 'pay_batch', bank_event_payloads.pay_batch_id, public.banking_alert_payload_for_pay_batch(bank_event_payloads.alert_kind, bank_event_payloads.pay_batch_id, 'pay_bank_transfer_event', bank_event_payloads.source_id)) AS alert_fingerprint,
-      CASE bank_event_payloads.alert_kind
+      bank_event_base.pay_batch_id AS entity_id,
+      bank_event_base.pay_batch_id AS pay_batch_id,
+      'pay_bank_transfer_event'::text AS payload_source_kind,
+      bank_event_base.source_id AS payload_source_id,
+      jsonb_strip_nulls(jsonb_build_object(
+        'fingerprint_source_kind', 'pay_bank_transfer_event',
+        'fingerprint_source_id', bank_event_base.source_id::text,
+        'issue_kind', bank_event_base.alert_kind,
+        'pay_batch_id', bank_event_base.pay_batch_id::text,
+        'normalised_state', NULLIF(BTRIM(COALESCE(bank_event_base.normalised_state, '')), ''),
+        'provider_state', NULLIF(BTRIM(COALESCE(bank_event_base.provider_state, '')), ''),
+        'mapping_status', NULLIF(BTRIM(COALESCE(bank_event_base.mapping_status, '')), ''),
+        'correction_disposition', NULLIF(BTRIM(COALESCE(bank_event_base.correction_disposition, '')), ''),
+        'event_time_utc', CASE WHEN bank_event_base.event_time_utc IS NULL THEN NULL::text ELSE TO_CHAR(bank_event_base.event_time_utc AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') END,
+        'received_at_utc', CASE WHEN bank_event_base.received_at_utc IS NULL THEN NULL::text ELSE TO_CHAR(bank_event_base.received_at_utc AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') END
+      )) AS fingerprint_payload_json,
+      CASE bank_event_base.alert_kind
         WHEN 'BANK_RETURNED_PAYMENT' THEN 'Bank returned payment'
         WHEN 'BANK_REJECTED_PAYMENT' THEN 'Bank rejected payment'
         WHEN 'AMBIGUOUS_PAYMENT_REVIEW_REQUIRED' THEN 'Payment needs review'
@@ -40858,43 +41178,70 @@ BEGIN
         WHEN 'PAYMENT_CORRECTION_BLOCKED' THEN 'Payment correction blocked'
         ELSE 'Rail submission needs review'
       END::text AS label,
-      bank_event_payloads.sort_at_utc
-    FROM bank_event_payloads
-    WHERE bank_event_payloads.alert_kind IS NOT NULL
+      CASE bank_event_base.alert_kind
+        WHEN 'BANK_RETURNED_PAYMENT' THEN 'Bank returned payment'
+        WHEN 'BANK_REJECTED_PAYMENT' THEN 'Bank rejected payment'
+        WHEN 'AMBIGUOUS_PAYMENT_REVIEW_REQUIRED' THEN 'Payment event needs review'
+        WHEN 'PAYMENT_CORRECTION_FAILED' THEN 'Payment correction failed'
+        WHEN 'PAYMENT_CORRECTION_BLOCKED' THEN 'Payment correction blocked'
+        ELSE 'Rail submission needs review'
+      END::text AS title,
+      CASE bank_event_base.alert_kind
+        WHEN 'BANK_RETURNED_PAYMENT' THEN 'The bank returned a payment. The candidate or umbrella is no longer paid for that transfer.'
+        WHEN 'BANK_REJECTED_PAYMENT' THEN 'The bank rejected a payment submission or transfer.'
+        WHEN 'AMBIGUOUS_PAYMENT_REVIEW_REQUIRED' THEN 'A bank payment event could not be matched safely and needs review.'
+        WHEN 'PAYMENT_CORRECTION_FAILED' THEN 'CloudTMS could not complete a payment correction automatically.'
+        WHEN 'PAYMENT_CORRECTION_BLOCKED' THEN 'A payment correction is blocked and needs review.'
+        ELSE 'CloudTMS could not confirm the final bank submission state.'
+      END::text AS description,
+      CASE bank_event_base.alert_kind
+        WHEN 'BANK_RETURNED_PAYMENT' THEN 'Review the payment issue and set up a new payment if the worker still needs to be paid.'
+        WHEN 'BANK_REJECTED_PAYMENT' THEN 'Review the Payment Issues tab and retry or correct the batch.'
+        WHEN 'AMBIGUOUS_PAYMENT_REVIEW_REQUIRED' THEN 'Review and resolve the ambiguous bank event.'
+        ELSE 'Review the Payment Issues tab.'
+      END::text AS action_guidance,
+      bank_event_base.sort_at_utc
+    FROM bank_event_base
+    WHERE bank_event_base.alert_kind IS NOT NULL
   ),
-  transfer_payloads AS (
+  transfer_base AS (
     SELECT
       CASE
-        WHEN upper(btrim(coalesce(public.pay_bank_transfers.status, ''))) IN ('RETURNED','REVERTED')
-          OR upper(btrim(coalesce(public.pay_bank_transfers.rail_state, ''))) IN ('RETURNED','REVERTED') THEN 'BANK_RETURNED_PAYMENT'
-        WHEN upper(btrim(coalesce(public.pay_bank_transfers.status, ''))) IN ('FAILED','DECLINED','REJECTED','CANCELLED','CANCELED','SUBMISSION_FAILED','FAILED_BEFORE_COMMIT')
-          OR upper(btrim(coalesce(public.pay_bank_transfers.rail_state, ''))) IN ('FAILED','DECLINED','REJECTED','CANCELLED','CANCELED','SUBMISSION_FAILED','FAILED_BEFORE_COMMIT')
-          OR nullif(btrim(coalesce(public.pay_bank_transfers.failed_reason, '')), '') IS NOT NULL THEN 'BANK_REJECTED_PAYMENT'
-        WHEN upper(btrim(coalesce(public.pay_bank_transfers.status, ''))) IN ('UNKNOWN','TIMEOUT','TIMED_OUT','PENDING_REVIEW')
-          OR upper(btrim(coalesce(public.pay_bank_transfers.status, ''))) LIKE 'CREATE_ERROR%'
-          OR upper(btrim(coalesce(public.pay_bank_transfers.rail_state, ''))) IN ('UNKNOWN','TIMEOUT','TIMED_OUT','PENDING_REVIEW')
-          OR upper(btrim(coalesce(public.pay_bank_transfers.rail_state, ''))) LIKE 'CREATE_ERROR%' THEN 'RAIL_SUBMISSION_UNKNOWN_OR_TIMEOUT'
+        WHEN UPPER(BTRIM(COALESCE(public.pay_bank_transfers.status, ''))) IN ('RETURNED','REVERTED')
+          OR UPPER(BTRIM(COALESCE(public.pay_bank_transfers.rail_state, ''))) IN ('RETURNED','REVERTED') THEN 'BANK_RETURNED_PAYMENT'
+        WHEN UPPER(BTRIM(COALESCE(public.pay_bank_transfers.status, ''))) IN ('FAILED','DECLINED','REJECTED','CANCELLED','CANCELED','SUBMISSION_FAILED','FAILED_BEFORE_COMMIT')
+          OR UPPER(BTRIM(COALESCE(public.pay_bank_transfers.rail_state, ''))) IN ('FAILED','DECLINED','REJECTED','CANCELLED','CANCELED','SUBMISSION_FAILED','FAILED_BEFORE_COMMIT')
+          OR NULLIF(BTRIM(COALESCE(public.pay_bank_transfers.failed_reason, '')), '') IS NOT NULL THEN 'BANK_REJECTED_PAYMENT'
+        WHEN UPPER(BTRIM(COALESCE(public.pay_bank_transfers.status, ''))) IN ('UNKNOWN','TIMEOUT','TIMED_OUT','PENDING_REVIEW')
+          OR UPPER(BTRIM(COALESCE(public.pay_bank_transfers.status, ''))) LIKE 'CREATE_ERROR%'
+          OR UPPER(BTRIM(COALESCE(public.pay_bank_transfers.rail_state, ''))) IN ('UNKNOWN','TIMEOUT','TIMED_OUT','PENDING_REVIEW')
+          OR UPPER(BTRIM(COALESCE(public.pay_bank_transfers.rail_state, ''))) LIKE 'CREATE_ERROR%' THEN 'RAIL_SUBMISSION_UNKNOWN_OR_TIMEOUT'
         ELSE NULL::text
       END AS alert_kind,
-      public.pay_bank_transfers.pay_batch_id,
+      public.pay_bank_transfers.pay_batch_id AS pay_batch_id,
       public.pay_bank_transfers.id AS source_id,
-      coalesce(public.pay_bank_transfers.completed_at_utc, public.pay_bank_transfers.created_at_utc) AS sort_at_utc
+      public.pay_bank_transfers.status AS transfer_status,
+      public.pay_bank_transfers.rail_state AS rail_state,
+      public.pay_bank_transfers.failed_reason AS failed_reason,
+      public.pay_bank_transfers.completed_at_utc AS completed_at_utc,
+      public.pay_bank_transfers.created_at_utc AS created_at_utc,
+      COALESCE(public.pay_bank_transfers.completed_at_utc, public.pay_bank_transfers.created_at_utc) AS sort_at_utc
     FROM public.pay_bank_transfers
     JOIN public.pay_batches AS transfer_batches
       ON transfer_batches.id = public.pay_bank_transfers.pay_batch_id
-    WHERE upper(btrim(coalesce(transfer_batches.status, ''))) NOT IN ('CANCELLED','CANCELED')
+    WHERE UPPER(BTRIM(COALESCE(transfer_batches.status, ''))) NOT IN ('CANCELLED','CANCELED')
       AND (
-        upper(btrim(coalesce(public.pay_bank_transfers.status, ''))) IN ('FAILED','DECLINED','REJECTED','CANCELLED','CANCELED','SUBMISSION_FAILED','FAILED_BEFORE_COMMIT','RETURNED','REVERTED','UNKNOWN','TIMEOUT','TIMED_OUT','PENDING_REVIEW')
-        OR upper(btrim(coalesce(public.pay_bank_transfers.status, ''))) LIKE 'CREATE_ERROR%'
-        OR upper(btrim(coalesce(public.pay_bank_transfers.rail_state, ''))) IN ('FAILED','DECLINED','REJECTED','CANCELLED','CANCELED','SUBMISSION_FAILED','FAILED_BEFORE_COMMIT','RETURNED','REVERTED','UNKNOWN','TIMEOUT','TIMED_OUT','PENDING_REVIEW')
-        OR upper(btrim(coalesce(public.pay_bank_transfers.rail_state, ''))) LIKE 'CREATE_ERROR%'
-        OR nullif(btrim(coalesce(public.pay_bank_transfers.failed_reason, '')), '') IS NOT NULL
+        UPPER(BTRIM(COALESCE(public.pay_bank_transfers.status, ''))) IN ('FAILED','DECLINED','REJECTED','CANCELLED','CANCELED','SUBMISSION_FAILED','FAILED_BEFORE_COMMIT','RETURNED','REVERTED','UNKNOWN','TIMEOUT','TIMED_OUT','PENDING_REVIEW')
+        OR UPPER(BTRIM(COALESCE(public.pay_bank_transfers.status, ''))) LIKE 'CREATE_ERROR%'
+        OR UPPER(BTRIM(COALESCE(public.pay_bank_transfers.rail_state, ''))) IN ('FAILED','DECLINED','REJECTED','CANCELLED','CANCELED','SUBMISSION_FAILED','FAILED_BEFORE_COMMIT','RETURNED','REVERTED','UNKNOWN','TIMEOUT','TIMED_OUT','PENDING_REVIEW')
+        OR UPPER(BTRIM(COALESCE(public.pay_bank_transfers.rail_state, ''))) LIKE 'CREATE_ERROR%'
+        OR NULLIF(BTRIM(COALESCE(public.pay_bank_transfers.failed_reason, '')), '') IS NOT NULL
       )
       AND NOT EXISTS (
         SELECT 1
         FROM public.pay_bank_transfer_events AS transfer_resolution_events
         WHERE transfer_resolution_events.pay_bank_transfer_id = public.pay_bank_transfers.id
-          AND upper(btrim(coalesce(transfer_resolution_events.correction_disposition, ''))) IN ('NO_CORRECTION_REQUIRED','AUTO_APPLIED','APPLIED','RESOLVED')
+          AND UPPER(BTRIM(COALESCE(transfer_resolution_events.correction_disposition, ''))) IN ('NO_CORRECTION_REQUIRED','AUTO_APPLIED','APPLIED','RESOLVED')
       )
       AND NOT EXISTS (
         SELECT 1
@@ -40902,141 +41249,239 @@ BEGIN
         JOIN public.pay_payment_correction_requests AS transfer_resolved_requests
           ON transfer_resolved_requests.id = transfer_resolved_work_items.correction_request_id
         WHERE transfer_resolved_work_items.pay_bank_transfer_id = public.pay_bank_transfers.id
-          AND upper(btrim(coalesce(transfer_resolved_requests.status, ''))) IN ('APPLIED','RESOLVED')
+          AND UPPER(BTRIM(COALESCE(transfer_resolved_requests.status, ''))) IN ('APPLIED','RESOLVED')
       )
   ),
   transfer_alerts AS (
     SELECT
-      transfer_payloads.alert_kind,
+      transfer_base.alert_kind,
       'critical'::text AS severity,
-      CASE transfer_payloads.alert_kind
+      CASE transfer_base.alert_kind
         WHEN 'BANK_RETURNED_PAYMENT' THEN 93
         WHEN 'BANK_REJECTED_PAYMENT' THEN 92
         ELSE 79
       END::integer AS severity_rank,
       'pay_batch'::text AS entity_kind,
-      transfer_payloads.pay_batch_id AS entity_id,
-      public.banking_alert_fingerprint(transfer_payloads.alert_kind, 'pay_batch', transfer_payloads.pay_batch_id, public.banking_alert_payload_for_pay_batch(transfer_payloads.alert_kind, transfer_payloads.pay_batch_id, 'pay_bank_transfer', transfer_payloads.source_id)) AS alert_fingerprint,
-      CASE transfer_payloads.alert_kind
+      transfer_base.pay_batch_id AS entity_id,
+      transfer_base.pay_batch_id AS pay_batch_id,
+      'pay_bank_transfer'::text AS payload_source_kind,
+      transfer_base.source_id AS payload_source_id,
+      jsonb_strip_nulls(jsonb_build_object(
+        'fingerprint_source_kind', 'pay_bank_transfer',
+        'fingerprint_source_id', transfer_base.source_id::text,
+        'issue_kind', transfer_base.alert_kind,
+        'pay_batch_id', transfer_base.pay_batch_id::text,
+        'status', NULLIF(BTRIM(COALESCE(transfer_base.transfer_status, '')), ''),
+        'rail_state', NULLIF(BTRIM(COALESCE(transfer_base.rail_state, '')), ''),
+        'failed_reason_hash', CASE WHEN NULLIF(BTRIM(COALESCE(transfer_base.failed_reason, '')), '') IS NULL THEN NULL::text ELSE MD5(transfer_base.failed_reason) END,
+        'completed_at_utc', CASE WHEN transfer_base.completed_at_utc IS NULL THEN NULL::text ELSE TO_CHAR(transfer_base.completed_at_utc AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') END,
+        'created_at_utc', CASE WHEN transfer_base.created_at_utc IS NULL THEN NULL::text ELSE TO_CHAR(transfer_base.created_at_utc AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') END
+      )) AS fingerprint_payload_json,
+      CASE transfer_base.alert_kind
         WHEN 'BANK_RETURNED_PAYMENT' THEN 'Bank returned payment'
         WHEN 'BANK_REJECTED_PAYMENT' THEN 'Bank rejected payment'
         ELSE 'Rail submission needs review'
       END::text AS label,
-      transfer_payloads.sort_at_utc
-    FROM transfer_payloads
-    WHERE transfer_payloads.alert_kind IS NOT NULL
+      CASE transfer_base.alert_kind
+        WHEN 'BANK_RETURNED_PAYMENT' THEN 'Bank returned payment'
+        WHEN 'BANK_REJECTED_PAYMENT' THEN 'Bank rejected payment'
+        ELSE 'Rail submission needs review'
+      END::text AS title,
+      CASE transfer_base.alert_kind
+        WHEN 'BANK_RETURNED_PAYMENT' THEN 'The bank returned a payment. The candidate or umbrella is no longer paid for that transfer.'
+        WHEN 'BANK_REJECTED_PAYMENT' THEN 'The bank rejected a payment transfer.'
+        ELSE 'CloudTMS could not confirm the final bank submission state.'
+      END::text AS description,
+      CASE transfer_base.alert_kind
+        WHEN 'BANK_RETURNED_PAYMENT' THEN 'Review the payment issue and set up a new payment if the worker still needs to be paid.'
+        ELSE 'Review the Payment Issues tab.'
+      END::text AS action_guidance,
+      transfer_base.sort_at_utc
+    FROM transfer_base
+    WHERE transfer_base.alert_kind IS NOT NULL
   ),
-  correction_request_payloads AS (
+  correction_request_base AS (
     SELECT
       CASE
-        WHEN upper(btrim(coalesce(public.pay_payment_correction_requests.status, ''))) IN ('FAILED','FAILED_RETRYABLE','FAILED_FINAL') THEN 'PAYMENT_CORRECTION_FAILED'
-        WHEN upper(btrim(coalesce(public.pay_payment_correction_requests.status, ''))) IN ('BLOCKED','APPLIED_WITH_BLOCKERS') THEN 'PAYMENT_CORRECTION_BLOCKED'
-        WHEN upper(btrim(coalesce(public.pay_payment_correction_requests.status, ''))) IN ('REQUESTED','AWAITING_AUTHORISATION','AWAITING_AUTHORIZATION','PENDING_APPROVAL') THEN 'PAYMENT_CORRECTION_AWAITING_APPROVAL'
+        WHEN UPPER(BTRIM(COALESCE(public.pay_payment_correction_requests.status, ''))) IN ('FAILED','FAILED_RETRYABLE','FAILED_FINAL') THEN 'PAYMENT_CORRECTION_FAILED'
+        WHEN UPPER(BTRIM(COALESCE(public.pay_payment_correction_requests.status, ''))) IN ('BLOCKED','APPLIED_WITH_BLOCKERS') THEN 'PAYMENT_CORRECTION_BLOCKED'
+        WHEN UPPER(BTRIM(COALESCE(public.pay_payment_correction_requests.status, ''))) IN ('REQUESTED','AWAITING_AUTHORISATION','AWAITING_AUTHORIZATION','PENDING_APPROVAL') THEN 'PAYMENT_CORRECTION_AWAITING_APPROVAL'
         ELSE NULL::text
       END AS alert_kind,
-      public.pay_payment_correction_requests.pay_batch_id,
+      public.pay_payment_correction_requests.pay_batch_id AS pay_batch_id,
       public.pay_payment_correction_requests.id AS source_id,
-      coalesce(public.pay_payment_correction_requests.updated_at_utc, public.pay_payment_correction_requests.created_at_utc, public.pay_payment_correction_requests.requested_at_utc) AS sort_at_utc
+      public.pay_payment_correction_requests.status AS request_status,
+      public.pay_payment_correction_requests.correction_kind AS correction_kind,
+      public.pay_payment_correction_requests.selection_hash AS selection_hash,
+      public.pay_payment_correction_requests.updated_at_utc AS updated_at_utc,
+      public.pay_payment_correction_requests.created_at_utc AS created_at_utc,
+      public.pay_payment_correction_requests.requested_at_utc AS requested_at_utc,
+      COALESCE(public.pay_payment_correction_requests.updated_at_utc, public.pay_payment_correction_requests.created_at_utc, public.pay_payment_correction_requests.requested_at_utc) AS sort_at_utc
     FROM public.pay_payment_correction_requests
     JOIN public.pay_batches AS correction_request_batches
       ON correction_request_batches.id = public.pay_payment_correction_requests.pay_batch_id
-    WHERE upper(btrim(coalesce(correction_request_batches.status, ''))) NOT IN ('CANCELLED','CANCELED')
-      AND upper(btrim(coalesce(public.pay_payment_correction_requests.status, ''))) IN ('FAILED','FAILED_RETRYABLE','FAILED_FINAL','BLOCKED','APPLIED_WITH_BLOCKERS','REQUESTED','AWAITING_AUTHORISATION','AWAITING_AUTHORIZATION','PENDING_APPROVAL')
+    WHERE UPPER(BTRIM(COALESCE(correction_request_batches.status, ''))) NOT IN ('CANCELLED','CANCELED')
+      AND UPPER(BTRIM(COALESCE(public.pay_payment_correction_requests.status, ''))) IN ('FAILED','FAILED_RETRYABLE','FAILED_FINAL','BLOCKED','APPLIED_WITH_BLOCKERS','REQUESTED','AWAITING_AUTHORISATION','AWAITING_AUTHORIZATION','PENDING_APPROVAL')
   ),
   correction_request_alerts AS (
     SELECT
-      correction_request_payloads.alert_kind,
+      correction_request_base.alert_kind,
       'critical'::text AS severity,
-      CASE correction_request_payloads.alert_kind
+      CASE correction_request_base.alert_kind
         WHEN 'PAYMENT_CORRECTION_FAILED' THEN 88
         WHEN 'PAYMENT_CORRECTION_BLOCKED' THEN 87
         ELSE 75
       END::integer AS severity_rank,
       'pay_batch'::text AS entity_kind,
-      correction_request_payloads.pay_batch_id AS entity_id,
-      public.banking_alert_fingerprint(correction_request_payloads.alert_kind, 'pay_batch', correction_request_payloads.pay_batch_id, public.banking_alert_payload_for_pay_batch(correction_request_payloads.alert_kind, correction_request_payloads.pay_batch_id, 'pay_payment_correction_request', correction_request_payloads.source_id)) AS alert_fingerprint,
-      CASE correction_request_payloads.alert_kind
+      correction_request_base.pay_batch_id AS entity_id,
+      correction_request_base.pay_batch_id AS pay_batch_id,
+      'pay_payment_correction_request'::text AS payload_source_kind,
+      correction_request_base.source_id AS payload_source_id,
+      jsonb_strip_nulls(jsonb_build_object(
+        'fingerprint_source_kind', 'pay_payment_correction_request',
+        'fingerprint_source_id', correction_request_base.source_id::text,
+        'issue_kind', correction_request_base.alert_kind,
+        'pay_batch_id', correction_request_base.pay_batch_id::text,
+        'status', NULLIF(BTRIM(COALESCE(correction_request_base.request_status, '')), ''),
+        'correction_kind', NULLIF(BTRIM(COALESCE(correction_request_base.correction_kind, '')), ''),
+        'selection_hash', NULLIF(BTRIM(COALESCE(correction_request_base.selection_hash, '')), '')
+      )) AS fingerprint_payload_json,
+      CASE correction_request_base.alert_kind
         WHEN 'PAYMENT_CORRECTION_FAILED' THEN 'Payment correction failed'
         WHEN 'PAYMENT_CORRECTION_BLOCKED' THEN 'Payment correction blocked'
         ELSE 'Payment correction awaiting approval'
       END::text AS label,
-      correction_request_payloads.sort_at_utc
-    FROM correction_request_payloads
-    WHERE correction_request_payloads.alert_kind IS NOT NULL
+      CASE correction_request_base.alert_kind
+        WHEN 'PAYMENT_CORRECTION_FAILED' THEN 'Payment correction failed'
+        WHEN 'PAYMENT_CORRECTION_BLOCKED' THEN 'Payment correction blocked'
+        ELSE 'Payment correction awaiting approval'
+      END::text AS title,
+      CASE correction_request_base.alert_kind
+        WHEN 'PAYMENT_CORRECTION_FAILED' THEN 'CloudTMS could not complete a payment correction automatically.'
+        WHEN 'PAYMENT_CORRECTION_BLOCKED' THEN 'A payment correction is blocked and needs review.'
+        ELSE 'A payment correction is awaiting approval.'
+      END::text AS description,
+      CASE correction_request_base.alert_kind
+        WHEN 'PAYMENT_CORRECTION_AWAITING_APPROVAL' THEN 'Review and approve or reject the correction request.'
+        ELSE 'Review the Payment Issues tab.'
+      END::text AS action_guidance,
+      correction_request_base.sort_at_utc
+    FROM correction_request_base
+    WHERE correction_request_base.alert_kind IS NOT NULL
   ),
-  correction_work_payloads AS (
+  correction_work_base AS (
     SELECT
       CASE
-        WHEN upper(btrim(coalesce(public.pay_payment_correction_work_items.status, ''))) IN ('FAILED','FAILED_RETRYABLE','FAILED_FINAL') THEN 'PAYMENT_CORRECTION_FAILED'
-        WHEN upper(btrim(coalesce(public.pay_payment_correction_work_items.status, ''))) IN ('BLOCKED','APPLIED_WITH_BLOCKERS') THEN 'PAYMENT_CORRECTION_BLOCKED'
+        WHEN UPPER(BTRIM(COALESCE(public.pay_payment_correction_work_items.status, ''))) IN ('FAILED','FAILED_RETRYABLE','FAILED_FINAL') THEN 'PAYMENT_CORRECTION_FAILED'
+        WHEN UPPER(BTRIM(COALESCE(public.pay_payment_correction_work_items.status, ''))) IN ('BLOCKED','APPLIED_WITH_BLOCKERS') THEN 'PAYMENT_CORRECTION_BLOCKED'
         ELSE NULL::text
       END AS alert_kind,
-      public.pay_payment_correction_work_items.pay_batch_id,
+      public.pay_payment_correction_work_items.pay_batch_id AS pay_batch_id,
       public.pay_payment_correction_work_items.id AS source_id,
-      coalesce(public.pay_payment_correction_work_items.processed_at_utc, public.pay_payment_correction_work_items.created_at_utc) AS sort_at_utc
+      public.pay_payment_correction_work_items.status AS work_status,
+      public.pay_payment_correction_work_items.work_kind AS work_kind,
+      public.pay_payment_correction_work_items.selection_hash AS selection_hash,
+      public.pay_payment_correction_work_items.processed_at_utc AS processed_at_utc,
+      public.pay_payment_correction_work_items.created_at_utc AS created_at_utc,
+      COALESCE(public.pay_payment_correction_work_items.processed_at_utc, public.pay_payment_correction_work_items.created_at_utc) AS sort_at_utc
     FROM public.pay_payment_correction_work_items
     JOIN public.pay_batches AS correction_work_batches
       ON correction_work_batches.id = public.pay_payment_correction_work_items.pay_batch_id
-    WHERE upper(btrim(coalesce(correction_work_batches.status, ''))) NOT IN ('CANCELLED','CANCELED')
-      AND upper(btrim(coalesce(public.pay_payment_correction_work_items.status, ''))) IN ('FAILED','FAILED_RETRYABLE','FAILED_FINAL','BLOCKED','APPLIED_WITH_BLOCKERS')
+    WHERE UPPER(BTRIM(COALESCE(correction_work_batches.status, ''))) NOT IN ('CANCELLED','CANCELED')
+      AND UPPER(BTRIM(COALESCE(public.pay_payment_correction_work_items.status, ''))) IN ('FAILED','FAILED_RETRYABLE','FAILED_FINAL','BLOCKED','APPLIED_WITH_BLOCKERS')
   ),
   correction_work_alerts AS (
     SELECT
-      correction_work_payloads.alert_kind,
+      correction_work_base.alert_kind,
       'critical'::text AS severity,
-      CASE correction_work_payloads.alert_kind
+      CASE correction_work_base.alert_kind
         WHEN 'PAYMENT_CORRECTION_FAILED' THEN 86
         ELSE 85
       END::integer AS severity_rank,
       'pay_batch'::text AS entity_kind,
-      correction_work_payloads.pay_batch_id AS entity_id,
-      public.banking_alert_fingerprint(correction_work_payloads.alert_kind, 'pay_batch', correction_work_payloads.pay_batch_id, public.banking_alert_payload_for_pay_batch(correction_work_payloads.alert_kind, correction_work_payloads.pay_batch_id, 'pay_payment_correction_work_item', correction_work_payloads.source_id)) AS alert_fingerprint,
-      CASE correction_work_payloads.alert_kind
+      correction_work_base.pay_batch_id AS entity_id,
+      correction_work_base.pay_batch_id AS pay_batch_id,
+      'pay_payment_correction_work_item'::text AS payload_source_kind,
+      correction_work_base.source_id AS payload_source_id,
+      jsonb_strip_nulls(jsonb_build_object(
+        'fingerprint_source_kind', 'pay_payment_correction_work_item',
+        'fingerprint_source_id', correction_work_base.source_id::text,
+        'issue_kind', correction_work_base.alert_kind,
+        'pay_batch_id', correction_work_base.pay_batch_id::text,
+        'status', NULLIF(BTRIM(COALESCE(correction_work_base.work_status, '')), ''),
+        'work_kind', NULLIF(BTRIM(COALESCE(correction_work_base.work_kind, '')), ''),
+        'selection_hash', NULLIF(BTRIM(COALESCE(correction_work_base.selection_hash, '')), '')
+      )) AS fingerprint_payload_json,
+      CASE correction_work_base.alert_kind
         WHEN 'PAYMENT_CORRECTION_FAILED' THEN 'Payment correction failed'
         ELSE 'Payment correction blocked'
       END::text AS label,
-      correction_work_payloads.sort_at_utc
-    FROM correction_work_payloads
-    WHERE correction_work_payloads.alert_kind IS NOT NULL
+      CASE correction_work_base.alert_kind
+        WHEN 'PAYMENT_CORRECTION_FAILED' THEN 'Payment correction failed'
+        ELSE 'Payment correction blocked'
+      END::text AS title,
+      CASE correction_work_base.alert_kind
+        WHEN 'PAYMENT_CORRECTION_FAILED' THEN 'CloudTMS could not complete a payment correction work item automatically.'
+        ELSE 'A payment correction work item is blocked and needs review.'
+      END::text AS description,
+      'Review the Payment Issues tab.'::text AS action_guidance,
+      correction_work_base.sort_at_utc
+    FROM correction_work_base
+    WHERE correction_work_base.alert_kind IS NOT NULL
   ),
-  remittance_payloads AS (
+  remittance_base AS (
     SELECT
-      'REMITTANCE_SEND_FAILED'::text AS alert_kind,
       public.mail_outbox.context_id AS pay_batch_id,
       public.mail_outbox.id AS source_id,
-      coalesce(public.mail_outbox.failed_at, public.mail_outbox.created_at_utc) AS sort_at_utc
+      public.mail_outbox.reference AS reference,
+      public.mail_outbox.failed_at AS failed_at,
+      public.mail_outbox.created_at_utc AS created_at_utc,
+      COALESCE(public.mail_outbox.failed_at, public.mail_outbox.created_at_utc) AS sort_at_utc
     FROM public.mail_outbox
     JOIN public.pay_batches AS remittance_batches
       ON remittance_batches.id = public.mail_outbox.context_id
-    WHERE upper(btrim(coalesce(remittance_batches.status, ''))) NOT IN ('CANCELLED','CANCELED')
-      AND upper(btrim(coalesce(public.mail_outbox.type, ''))) = 'REMITTANCE'
-      AND lower(btrim(coalesce(public.mail_outbox.context_kind, ''))) = 'pay_batches'
+    WHERE UPPER(BTRIM(COALESCE(remittance_batches.status, ''))) NOT IN ('CANCELLED','CANCELED')
+      AND UPPER(BTRIM(COALESCE(public.mail_outbox.type, ''))) = 'REMITTANCE'
+      AND LOWER(BTRIM(COALESCE(public.mail_outbox.context_kind, ''))) = 'pay_batches'
       AND public.mail_outbox.context_id IS NOT NULL
-      AND upper(btrim(coalesce(public.mail_outbox.status::text, ''))) = 'FAILED'
+      AND UPPER(BTRIM(COALESCE(public.mail_outbox.status::text, ''))) = 'FAILED'
       AND NOT EXISTS (
         SELECT 1
         FROM public.mail_outbox AS remittance_success_outbox
-        WHERE upper(btrim(coalesce(remittance_success_outbox.type, ''))) = 'REMITTANCE'
-          AND lower(btrim(coalesce(remittance_success_outbox.context_kind, ''))) = 'pay_batches'
+        WHERE UPPER(BTRIM(COALESCE(remittance_success_outbox.type, ''))) = 'REMITTANCE'
+          AND LOWER(BTRIM(COALESCE(remittance_success_outbox.context_kind, ''))) = 'pay_batches'
           AND remittance_success_outbox.context_id = public.mail_outbox.context_id
-          AND coalesce(nullif(btrim(remittance_success_outbox.reference), ''), remittance_success_outbox.id::text) = coalesce(nullif(btrim(public.mail_outbox.reference), ''), public.mail_outbox.id::text)
-          AND upper(btrim(coalesce(remittance_success_outbox.status::text, ''))) = 'SENT'
-          AND coalesce(remittance_success_outbox.sent_at, remittance_success_outbox.created_at_utc) >= coalesce(public.mail_outbox.failed_at, public.mail_outbox.created_at_utc)
+          AND COALESCE(NULLIF(BTRIM(remittance_success_outbox.reference), ''), remittance_success_outbox.id::text) = COALESCE(NULLIF(BTRIM(public.mail_outbox.reference), ''), public.mail_outbox.id::text)
+          AND UPPER(BTRIM(COALESCE(remittance_success_outbox.status::text, ''))) = 'SENT'
+          AND COALESCE(remittance_success_outbox.sent_at, remittance_success_outbox.created_at_utc) >= COALESCE(public.mail_outbox.failed_at, public.mail_outbox.created_at_utc)
       )
   ),
   remittance_alerts AS (
     SELECT
-      remittance_payloads.alert_kind,
+      'REMITTANCE_SEND_FAILED'::text AS alert_kind,
       'critical'::text AS severity,
       60::integer AS severity_rank,
       'pay_batch'::text AS entity_kind,
-      remittance_payloads.pay_batch_id AS entity_id,
-      public.banking_alert_fingerprint(remittance_payloads.alert_kind, 'pay_batch', remittance_payloads.pay_batch_id, public.banking_alert_payload_for_pay_batch(remittance_payloads.alert_kind, remittance_payloads.pay_batch_id, 'mail_outbox', remittance_payloads.source_id)) AS alert_fingerprint,
+      remittance_base.pay_batch_id AS entity_id,
+      remittance_base.pay_batch_id AS pay_batch_id,
+      'mail_outbox'::text AS payload_source_kind,
+      remittance_base.source_id AS payload_source_id,
+      jsonb_strip_nulls(jsonb_build_object(
+        'fingerprint_source_kind', 'mail_outbox',
+        'fingerprint_source_id', remittance_base.source_id::text,
+        'issue_kind', 'REMITTANCE_SEND_FAILED',
+        'pay_batch_id', remittance_base.pay_batch_id::text,
+        'reference', NULLIF(BTRIM(COALESCE(remittance_base.reference, '')), ''),
+        'failed_at_utc', CASE WHEN remittance_base.failed_at IS NULL THEN NULL::text ELSE TO_CHAR(remittance_base.failed_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') END
+      )) AS fingerprint_payload_json,
       'Remittance failed'::text AS label,
-      remittance_payloads.sort_at_utc
-    FROM remittance_payloads
+      'Remittance send failed'::text AS title,
+      'A remittance email failed to send and requires review.'::text AS description,
+      'Review or resend the remittance from the batch.'::text AS action_guidance,
+      remittance_base.sort_at_utc
+    FROM remittance_base
   ),
-  raw_alerts AS (
+  raw_current_alerts AS (
     SELECT * FROM blocked_funds_alerts
     UNION ALL
     SELECT * FROM bank_event_alerts
@@ -41049,20 +41494,46 @@ BEGIN
     UNION ALL
     SELECT * FROM remittance_alerts
   ),
+  current_alert_identities AS (
+    SELECT
+      raw_current_alerts.alert_kind,
+      raw_current_alerts.severity,
+      raw_current_alerts.severity_rank,
+      raw_current_alerts.entity_kind,
+      raw_current_alerts.entity_id,
+      raw_current_alerts.pay_batch_id,
+      raw_current_alerts.payload_source_kind,
+      raw_current_alerts.payload_source_id,
+      public.banking_alert_fingerprint(
+        raw_current_alerts.alert_kind,
+        raw_current_alerts.entity_kind,
+        raw_current_alerts.entity_id,
+        raw_current_alerts.fingerprint_payload_json
+      ) AS alert_fingerprint,
+      raw_current_alerts.label,
+      raw_current_alerts.title,
+      raw_current_alerts.description,
+      raw_current_alerts.action_guidance,
+      raw_current_alerts.sort_at_utc
+    FROM raw_current_alerts
+    WHERE raw_current_alerts.alert_kind IS NOT NULL
+      AND raw_current_alerts.entity_id IS NOT NULL
+  ),
   deduped_alerts AS (
-    SELECT DISTINCT ON (raw_alerts.alert_fingerprint)
-      raw_alerts.alert_kind,
-      raw_alerts.severity,
-      raw_alerts.severity_rank,
-      raw_alerts.entity_kind,
-      raw_alerts.entity_id,
-      raw_alerts.alert_fingerprint,
-      raw_alerts.label,
-      raw_alerts.sort_at_utc
-    FROM raw_alerts
-    WHERE raw_alerts.alert_kind IS NOT NULL
-      AND raw_alerts.alert_fingerprint IS NOT NULL
-    ORDER BY raw_alerts.alert_fingerprint, raw_alerts.severity_rank DESC, raw_alerts.sort_at_utc DESC NULLS LAST
+    SELECT DISTINCT ON (current_alert_identities.alert_fingerprint)
+      current_alert_identities.alert_kind,
+      current_alert_identities.severity,
+      current_alert_identities.severity_rank,
+      current_alert_identities.entity_kind,
+      current_alert_identities.entity_id,
+      current_alert_identities.alert_fingerprint,
+      current_alert_identities.label,
+      current_alert_identities.sort_at_utc
+    FROM current_alert_identities
+    WHERE current_alert_identities.alert_fingerprint IS NOT NULL
+    ORDER BY current_alert_identities.alert_fingerprint ASC,
+             current_alert_identities.severity_rank DESC,
+             current_alert_identities.sort_at_utc DESC NULLS LAST
   ),
   unacknowledged_alerts AS (
     SELECT
@@ -41075,19 +41546,27 @@ BEGIN
       deduped_alerts.label,
       deduped_alerts.sort_at_utc
     FROM deduped_alerts
-    LEFT JOIN public.banking_alert_acknowledgements
-      ON public.banking_alert_acknowledgements.alert_fingerprint = deduped_alerts.alert_fingerprint
-     AND public.banking_alert_acknowledgements.acknowledged_by_user_id = p_actor_user_id
-     AND upper(btrim(coalesce(public.banking_alert_acknowledgements.acknowledge_scope, 'USER'))) = 'USER'
-    WHERE public.banking_alert_acknowledgements.id IS NULL
+    LEFT JOIN public.banking_alert_acknowledgements AS signal_acknowledgements
+      ON signal_acknowledgements.acknowledged_by_user_id = p_actor_user_id
+     AND UPPER(BTRIM(COALESCE(signal_acknowledgements.acknowledge_scope, 'USER'))) = 'USER'
+     AND (
+       signal_acknowledgements.alert_fingerprint = deduped_alerts.alert_fingerprint
+       OR (
+         UPPER(BTRIM(COALESCE(signal_acknowledgements.alert_kind, ''))) = UPPER(BTRIM(COALESCE(deduped_alerts.alert_kind, '')))
+         AND LOWER(BTRIM(COALESCE(signal_acknowledgements.entity_kind, ''))) = LOWER(BTRIM(COALESCE(deduped_alerts.entity_kind, '')))
+         AND signal_acknowledgements.entity_id = deduped_alerts.entity_id
+         AND signal_acknowledgements.acknowledged_at_utc >= COALESCE(deduped_alerts.sort_at_utc, '-infinity'::timestamptz)
+       )
+     )
+    WHERE signal_acknowledgements.id IS NULL
   ),
   aggregate_result AS (
     SELECT
-      count(*)::integer AS unacknowledged_count,
-      (array_agg(unacknowledged_alerts.severity ORDER BY unacknowledged_alerts.severity_rank DESC, unacknowledged_alerts.sort_at_utc DESC NULLS LAST, unacknowledged_alerts.alert_fingerprint ASC))[1] AS highest_severity,
-      (array_agg(unacknowledged_alerts.label ORDER BY unacknowledged_alerts.severity_rank DESC, unacknowledged_alerts.sort_at_utc DESC NULLS LAST, unacknowledged_alerts.alert_fingerprint ASC))[1] AS highest_label,
-      'banking_alert_signal:v1:' || md5(coalesce(string_agg(
-        concat_ws('|',
+      COUNT(*)::integer AS unacknowledged_count,
+      (ARRAY_AGG(unacknowledged_alerts.severity ORDER BY unacknowledged_alerts.severity_rank DESC, unacknowledged_alerts.sort_at_utc DESC NULLS LAST, unacknowledged_alerts.alert_fingerprint ASC))[1] AS highest_severity,
+      (ARRAY_AGG(unacknowledged_alerts.label ORDER BY unacknowledged_alerts.severity_rank DESC, unacknowledged_alerts.sort_at_utc DESC NULLS LAST, unacknowledged_alerts.alert_fingerprint ASC))[1] AS highest_label,
+      'banking_alert_signal:v2:' || MD5(COALESCE(STRING_AGG(
+        CONCAT_WS('|',
           unacknowledged_alerts.alert_fingerprint,
           unacknowledged_alerts.alert_kind,
           unacknowledged_alerts.entity_kind,
@@ -41095,7 +41574,7 @@ BEGIN
           unacknowledged_alerts.severity,
           unacknowledged_alerts.label
         ),
-        E'\n'
+        CHR(10)
         ORDER BY unacknowledged_alerts.alert_fingerprint ASC
       ), '')) AS alert_hash
     FROM unacknowledged_alerts
@@ -41108,10 +41587,10 @@ BEGIN
     'banking_alert_summary_changed', COALESCE(v_last_alert_hash IS DISTINCT FROM aggregate_result.alert_hash, true),
     'banking_unacknowledged_alert_count', COALESCE(aggregate_result.unacknowledged_count, 0),
     'unacknowledged_count', COALESCE(aggregate_result.unacknowledged_count, 0),
-    'banking_highest_alert_severity', CASE WHEN COALESCE(aggregate_result.unacknowledged_count, 0) > 0 THEN aggregate_result.highest_severity ELSE '' END,
-    'highest_severity', CASE WHEN COALESCE(aggregate_result.unacknowledged_count, 0) > 0 THEN aggregate_result.highest_severity ELSE NULL END,
-    'banking_highest_alert_label', CASE WHEN COALESCE(aggregate_result.unacknowledged_count, 0) > 0 THEN aggregate_result.highest_label ELSE '' END,
-    'highest_label', CASE WHEN COALESCE(aggregate_result.unacknowledged_count, 0) > 0 THEN aggregate_result.highest_label ELSE NULL END
+    'banking_highest_alert_severity', CASE WHEN COALESCE(aggregate_result.unacknowledged_count, 0) > 0 THEN COALESCE(aggregate_result.highest_severity, '') ELSE '' END,
+    'highest_severity', CASE WHEN COALESCE(aggregate_result.unacknowledged_count, 0) > 0 THEN aggregate_result.highest_severity ELSE NULL::text END,
+    'banking_highest_alert_label', CASE WHEN COALESCE(aggregate_result.unacknowledged_count, 0) > 0 THEN COALESCE(aggregate_result.highest_label, '') ELSE '' END,
+    'highest_label', CASE WHEN COALESCE(aggregate_result.unacknowledged_count, 0) > 0 THEN aggregate_result.highest_label ELSE NULL::text END
   )
   INTO v_result
   FROM aggregate_result;
@@ -41120,17 +41599,20 @@ BEGIN
     'ok', true,
     'generated_at_utc', now()::text,
     'actor_user_id', p_actor_user_id::text,
-    'banking_alert_hash', 'banking_alert_signal:v1:' || md5(''),
-    'banking_alert_summary_changed', COALESCE(v_last_alert_hash IS DISTINCT FROM ('banking_alert_signal:v1:' || md5('')), true),
+    'banking_alert_hash', 'banking_alert_signal:v2:' || MD5(''),
+    'banking_alert_summary_changed', COALESCE(v_last_alert_hash IS DISTINCT FROM ('banking_alert_signal:v2:' || MD5('')), true),
     'banking_unacknowledged_alert_count', 0,
     'unacknowledged_count', 0,
     'banking_highest_alert_severity', '',
-    'highest_severity', NULL,
+    'highest_severity', NULL::text,
     'banking_highest_alert_label', '',
-    'highest_label', NULL
+    'highest_label', NULL::text
   ));
 END;
 $function$;
+
+
+
 CREATE OR REPLACE FUNCTION public.rpc_changes_ping(p_last_seen jsonb DEFAULT '{}'::jsonb)
 RETURNS jsonb
 LANGUAGE plpgsql
