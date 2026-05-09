@@ -3860,6 +3860,11 @@ END;
 $function$;
 
 
+
+
+
+
+
 CREATE OR REPLACE FUNCTION public.pay_preview_build_candidate_rollup(
   p_context_json jsonb,
   p_candidate_effective_json jsonb
@@ -3897,6 +3902,7 @@ DECLARE
   v_blocked_items jsonb := '[]'::jsonb;
   v_do_not_pay_items jsonb := '[]'::jsonb;
   v_snoozed_items jsonb := '[]'::jsonb;
+  v_first_payee_json jsonb := NULL;
   v_primary_payee_json jsonb := NULL;
   v_primary_line_json jsonb := NULL;
   v_primary_payee_entity_kind text := '';
@@ -4243,7 +4249,7 @@ BEGIN
   END IF;
 
   SELECT elem.value
-  INTO v_primary_payee_json
+  INTO v_first_payee_json
   FROM jsonb_array_elements(v_normalized_payees) WITH ORDINALITY AS elem(value, ord)
   WHERE jsonb_typeof(elem.value) = 'object'
   ORDER BY elem.ord ASC
@@ -4263,9 +4269,39 @@ BEGIN
     v_candidate_effective_root->>'current_pay_method',
     v_candidate_effective_root->>'pay_method',
     CASE WHEN v_primary_line_json IS NULL THEN NULL ELSE v_primary_line_json->>'pay_channel' END,
-    CASE WHEN v_primary_payee_json IS NULL THEN NULL ELSE v_primary_payee_json->>'current_pay_method' END,
+    CASE WHEN v_first_payee_json IS NULL THEN NULL ELSE v_first_payee_json->>'current_pay_method' END,
+    CASE WHEN v_first_payee_json IS NULL THEN NULL ELSE v_first_payee_json->>'pay_method' END,
+    CASE WHEN v_first_payee_json IS NULL THEN NULL ELSE v_first_payee_json->>'pay_channel' END,
     ''
   )));
+
+  SELECT elem.value
+  INTO v_primary_payee_json
+  FROM jsonb_array_elements(v_normalized_payees) WITH ORDINALITY AS elem(value, ord)
+  WHERE jsonb_typeof(elem.value) = 'object'
+  ORDER BY
+    CASE
+      WHEN v_current_pay_method = 'PAYE'
+        AND UPPER(BTRIM(COALESCE(elem.value->>'payee_entity_kind', elem.value->>'entity_kind', ''))) = 'CANDIDATE'
+        THEN 0
+      WHEN v_current_pay_method <> ''
+        AND v_current_pay_method <> 'PAYE'
+        AND UPPER(BTRIM(COALESCE(elem.value->>'payee_entity_kind', elem.value->>'entity_kind', ''))) = 'UMBRELLA'
+        THEN 0
+      WHEN UPPER(BTRIM(COALESCE(v_candidate_row_source->>'payee_entity_kind', ''))) <> ''
+        AND UPPER(BTRIM(COALESCE(elem.value->>'payee_entity_kind', elem.value->>'entity_kind', ''))) = UPPER(BTRIM(COALESCE(v_candidate_row_source->>'payee_entity_kind', '')))
+        THEN 1
+      WHEN v_current_pay_method <> ''
+        AND UPPER(BTRIM(COALESCE(elem.value->>'current_pay_method', elem.value->>'pay_method', elem.value->>'pay_channel', ''))) = v_current_pay_method
+        THEN 2
+      ELSE 10
+    END,
+    elem.ord ASC
+  LIMIT 1;
+
+  IF v_primary_payee_json IS NULL THEN
+    v_primary_payee_json := v_first_payee_json;
+  END IF;
 
   IF v_display_name = '' THEN
     v_display_name := BTRIM(COALESCE(
@@ -4288,72 +4324,72 @@ BEGIN
   END IF;
 
   v_primary_payee_entity_kind := UPPER(BTRIM(COALESCE(
-    v_candidate_row_source->>'payee_entity_kind',
     CASE WHEN v_primary_payee_json IS NULL THEN NULL ELSE v_primary_payee_json->>'payee_entity_kind' END,
     CASE WHEN v_primary_payee_json IS NULL THEN NULL ELSE v_primary_payee_json->>'entity_kind' END,
     CASE WHEN v_primary_line_json IS NULL THEN NULL ELSE v_primary_line_json->>'payee_entity_kind' END,
+    v_candidate_row_source->>'payee_entity_kind',
     ''
   )));
 
   v_primary_payee_entity_id := BTRIM(COALESCE(
-    v_candidate_row_source->>'payee_entity_id',
     CASE WHEN v_primary_payee_json IS NULL THEN NULL ELSE v_primary_payee_json->>'payee_entity_id' END,
     CASE WHEN v_primary_payee_json IS NULL THEN NULL ELSE v_primary_payee_json->>'entity_id' END,
     CASE WHEN v_primary_line_json IS NULL THEN NULL ELSE v_primary_line_json->>'payee_entity_id' END,
+    v_candidate_row_source->>'payee_entity_id',
     ''
   ));
 
   v_primary_bank_details_hash := BTRIM(COALESCE(
-    v_candidate_row_source->>'bank_details_hash',
     CASE WHEN v_primary_payee_json IS NULL THEN NULL ELSE v_primary_payee_json->>'bank_details_hash' END,
     CASE WHEN v_primary_line_json IS NULL THEN NULL ELSE v_primary_line_json->>'bank_details_hash' END,
+    v_candidate_row_source->>'bank_details_hash',
     ''
   ));
 
   v_primary_payee_bank_hash := BTRIM(COALESCE(
-    v_candidate_row_source->>'payee_bank_hash',
     CASE WHEN v_primary_payee_json IS NULL THEN NULL ELSE v_primary_payee_json->>'payee_bank_hash' END,
     CASE WHEN v_primary_line_json IS NULL THEN NULL ELSE v_primary_line_json->>'payee_bank_hash' END,
+    v_candidate_row_source->>'payee_bank_hash',
     v_primary_bank_details_hash,
     ''
   ));
 
   v_primary_bank_details_hash_snapshot := BTRIM(COALESCE(
-    v_candidate_row_source->>'bank_details_hash_snapshot',
     CASE WHEN v_primary_payee_json IS NULL THEN NULL ELSE v_primary_payee_json->>'bank_details_hash_snapshot' END,
     CASE WHEN v_primary_line_json IS NULL THEN NULL ELSE v_primary_line_json->>'bank_details_hash_snapshot' END,
+    v_candidate_row_source->>'bank_details_hash_snapshot',
     ''
   ));
 
   v_primary_snapshot_bank_details_hash := BTRIM(COALESCE(
-    v_candidate_row_source->>'snapshot_bank_details_hash',
     CASE WHEN v_primary_payee_json IS NULL THEN NULL ELSE v_primary_payee_json->>'snapshot_bank_details_hash' END,
     CASE WHEN v_primary_line_json IS NULL THEN NULL ELSE v_primary_line_json->>'snapshot_bank_details_hash' END,
+    v_candidate_row_source->>'snapshot_bank_details_hash',
     v_primary_bank_details_hash_snapshot,
     ''
   ));
 
   v_primary_name_check_status := UPPER(BTRIM(COALESCE(
-    v_candidate_row_source->>'name_check_status',
     CASE WHEN v_primary_payee_json IS NULL THEN NULL ELSE v_primary_payee_json->>'name_check_status' END,
     CASE WHEN v_primary_payee_json IS NULL THEN NULL ELSE v_primary_payee_json #>> '{name_check,status}' END,
     CASE WHEN v_primary_line_json IS NULL THEN NULL ELSE v_primary_line_json->>'name_check_status' END,
+    v_candidate_row_source->>'name_check_status',
     ''
   )));
 
   v_primary_name_check_has_override := COALESCE(LOWER(BTRIM(COALESCE(
-    v_candidate_row_source->>'name_check_has_override',
     CASE WHEN v_primary_payee_json IS NULL THEN NULL ELSE v_primary_payee_json->>'name_check_has_override' END,
     CASE WHEN v_primary_payee_json IS NULL THEN NULL ELSE v_primary_payee_json #>> '{name_check,has_override}' END,
     CASE WHEN v_primary_line_json IS NULL THEN NULL ELSE v_primary_line_json->>'name_check_has_override' END,
+    v_candidate_row_source->>'name_check_has_override',
     'false'
   ))), 'false') IN ('true', 't', '1', 'yes', 'y', 'on');
 
   v_primary_payee_map_present := COALESCE(LOWER(BTRIM(COALESCE(
-    v_candidate_row_source->>'payee_map_present',
     CASE WHEN v_primary_payee_json IS NULL THEN NULL ELSE v_primary_payee_json->>'payee_map_present' END,
     CASE WHEN v_primary_payee_json IS NULL THEN NULL ELSE v_primary_payee_json #>> '{payee_map,present}' END,
     CASE WHEN v_primary_line_json IS NULL THEN NULL ELSE v_primary_line_json->>'payee_map_present' END,
+    v_candidate_row_source->>'payee_map_present',
     'false'
   ))), 'false') IN ('true', 't', '1', 'yes', 'y', 'on');
 
@@ -4380,6 +4416,7 @@ BEGIN
           ELSE '[]'::jsonb
         END
       ) AS explicit_code(value)
+      WHERE UPPER(BTRIM(explicit_code.value)) NOT IN ('BLOCKED_BANK_DETAILS', 'BLOCKED_NO_PAYEE_MAP', 'BLOCKED_NAME_CHECK')
 
       UNION ALL
 
@@ -4395,10 +4432,10 @@ BEGIN
       UNION ALL
 
       SELECT UPPER(BTRIM(payee_code.value)) AS code
-      FROM jsonb_array_elements(v_normalized_payees) AS payee_elem(value)
-      CROSS JOIN LATERAL jsonb_array_elements_text(
+      FROM jsonb_array_elements_text(
         CASE
-          WHEN jsonb_typeof(payee_elem.value->'blockers') = 'array' THEN COALESCE(payee_elem.value->'blockers', '[]'::jsonb)
+          WHEN v_primary_payee_json IS NOT NULL AND jsonb_typeof(v_primary_payee_json->'blockers') = 'array'
+            THEN COALESCE(v_primary_payee_json->'blockers', '[]'::jsonb)
           ELSE '[]'::jsonb
         END
       ) AS payee_code(value)
@@ -4612,6 +4649,7 @@ BEGIN
   );
 END;
 $function$;
+
 
 
 
