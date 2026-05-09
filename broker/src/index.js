@@ -24578,6 +24578,7 @@ async function handleBankingIdLedgerList(env, req, user) {
   }
 }
 
+
 async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
   const id = String(payBatchId || '').trim();
   if (!id) {
@@ -24765,11 +24766,129 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
     };
   };
 
+  const cleanPublicExecutePayload = (payload, options = {}) => {
+    const src = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+    const skipKeys = new Set([
+      'executed',
+      'prepared',
+      'auth_start',
+      'authStart',
+      'finalisation',
+      'finalization',
+      'remittances',
+      'remittance_queue_stage_result',
+      'queue_stage_result',
+      'rail_execution_result',
+      'rail_execution_error',
+      'rail_execution_errors',
+      'rail_execution_error_code',
+      'execution_commit_state',
+      'execution_commit_ref',
+      'execution_committed_at_utc',
+      'local_transfer_count',
+      'transfer_event_count',
+      'provider_transfer_evidence_count',
+      'active_frozen_item_count',
+      'transfers',
+      'transfer',
+      'submitted',
+      'blocked',
+      'request_id',
+      'rail_tx_id',
+      'rail_state',
+      'provider_response',
+      'rpc_payload',
+      'raw',
+      'debug',
+      'details'
+    ]);
+
+    const out = {};
+    for (const [key, value] of Object.entries(src)) {
+      if (skipKeys.has(key)) continue;
+      if (value === undefined) continue;
+      out[key] = value;
+    }
+
+    const batchGet = options.batch_get || options.batchGet || src.batch_get || null;
+    const code = String(out.error_code || out.code || options.error_code || options.fallbackCode || '').trim().toUpperCase();
+    const status = String(out.status || out.post_execution_status || '').trim().toUpperCase();
+    const isBlockedFunds = out.blocked_funds === true || code === 'BLOCKED_FUNDS' || status === 'BLOCKED_FUNDS';
+    const isScheduled = out.scheduled === true || (String(out.execution_mode || src.execution_mode || '').trim().toUpperCase() === 'STANDARD_BANK' && String(src.scheduled_at_utc || out.scheduled_at_utc || '').trim() && out.submitted_to_bank === false && isBlockedFunds !== true);
+    const submittedToBank = out.submitted_to_bank === true || String(out.post_execution_status || '').trim().toUpperCase() === 'SUBMITTED' || String(out.post_execution_status || '').trim().toUpperCase() === 'COMMITTED';
+    const awaitingAuthorisation = out.awaiting_authorisation === true;
+
+    const hasExplicitOk = Object.prototype.hasOwnProperty.call(src, 'ok');
+    const responseStatus = Number(options.http_status || options.status_code || options.responseStatus || options.status || src.http_status || src.status_code || 0);
+    out.ok = hasExplicitOk
+      ? src.ok !== false
+      : !(responseStatus >= 400 || out.error_code || out.code || out.error);
+    out.pay_batch_id = String(out.pay_batch_id || id || '').trim() || id;
+
+    if (isBlockedFunds) {
+      out.ok = true;
+      out.terminal = true;
+      out.blocked_funds = true;
+      out.submitted_to_bank = false;
+      out.status = 'BLOCKED_FUNDS';
+      out.post_execution_status = 'BLOCKED_FUNDS';
+      out.error_code = 'BLOCKED_FUNDS';
+      out.code = 'BLOCKED_FUNDS';
+      out.title = 'Bank rejected payment — blocked funds';
+      out.message = 'Bank rejected the payment because the funding account does not have enough money. No payment was submitted. Fund the account and retry, or cancel/release the batch.';
+      out.user_message = 'Bank rejected the payment because the funding account does not have enough money. No payment was submitted. Fund the account and retry, or cancel/release the batch.';
+      out.user_action = out.user_action || 'REVIEW_PAYMENT_ISSUES';
+      out.confirm_label = out.confirm_label || 'OK';
+      out.severity = out.severity || 'critical';
+    } else if (isScheduled) {
+      out.ok = true;
+      out.terminal = true;
+      out.scheduled = true;
+      out.blocked_funds = false;
+      out.submitted_to_bank = false;
+      out.title = 'Payment scheduled';
+      out.message = 'Payment scheduled. Funds will be checked when CloudTMS submits the payment to the bank on the scheduled date.';
+      out.user_message = 'Payment scheduled. Funds will be checked when CloudTMS submits the payment to the bank on the scheduled date.';
+    } else if (out.ok === true && !out.title) {
+      if (awaitingAuthorisation) {
+        out.terminal = false;
+        out.submitted_to_bank = false;
+        out.title = 'Payment authorisation requested';
+        out.message = 'Payment has been sent for authorisation. No bank submission has been confirmed yet.';
+        out.user_message = out.message;
+      } else if (submittedToBank) {
+        out.terminal = true;
+        out.submitted_to_bank = true;
+        out.blocked_funds = false;
+        out.title = 'Payment submitted';
+        out.message = 'Payment was submitted to the bank. Review the batch for the latest payment status.';
+        out.user_message = out.message;
+      } else {
+        out.terminal = out.terminal === true ? true : false;
+        out.blocked_funds = false;
+        out.submitted_to_bank = out.submitted_to_bank === true;
+        out.title = 'Payment updated';
+        out.message = 'Payment processing was updated. Review the batch for the latest status.';
+        out.user_message = out.message;
+      }
+    }
+
+    if (batchGet && typeof batchGet === 'object') out.batch_get = batchGet;
+
+    for (const [key, value] of Object.entries(out)) {
+      if (value === undefined) delete out[key];
+    }
+
+    return out;
+  };
+
+  const executeOk = (payload, options = {}) => ok(cleanPublicExecutePayload(payload, options));
+
   const jsonResponse = (status, payload) => {
     const headers = new Headers();
     headers.set('Content-Type', 'application/json; charset=utf-8');
     let bodyOut = '';
-    try { bodyOut = JSON.stringify(payload && typeof payload === 'object' ? payload : { error: 'RPC_ERROR' }); }
+    try { bodyOut = JSON.stringify(cleanPublicExecutePayload(payload && typeof payload === 'object' ? payload : { error: 'RPC_ERROR' }, { status_code: status })); }
     catch { bodyOut = JSON.stringify({ error: 'RPC_ERROR', message: 'Failed to serialize error payload' }); }
     return new Response(bodyOut, { status, headers });
   };
@@ -25603,7 +25722,7 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
         });
 
         if (reconciledBlockedFunds) {
-          return withCORS(env, req, ok(reconciledBlockedFunds));
+          return withCORS(env, req, executeOk(reconciledBlockedFunds));
         }
 
         const friendlySafeState = _friendlyExecutePayload({ error_code: 'STANDARD_BANK_IMMEDIATE_SAFE_STATE_NOT_RECORDED', pay_batch_id: id }, { fallbackCode: 'STANDARD_BANK_IMMEDIATE_SAFE_STATE_NOT_RECORDED', pay_batch_id: id });
@@ -25647,7 +25766,7 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
         });
 
         if (reconciledBlockedFunds) {
-          return withCORS(env, req, ok(reconciledBlockedFunds));
+          return withCORS(env, req, executeOk(reconciledBlockedFunds));
         }
 
         const friendlyRailErrors = _friendlyExecutePayload({ error_code: 'STANDARD_BANK_IMMEDIATE_RAIL_EXECUTION_ERRORS', pay_batch_id: id }, { fallbackCode: 'STANDARD_BANK_IMMEDIATE_RAIL_EXECUTION_ERRORS', pay_batch_id: id });
@@ -25714,7 +25833,7 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
         error_code: 'BLOCKED_FUNDS'
       }, { fallbackCode: 'BLOCKED_FUNDS' });
 
-      return withCORS(env, req, ok({
+      return withCORS(env, req, executeOk({
         ...friendlyBlockedFunds,
         ok: true,
         pay_batch_id: id,
@@ -25745,7 +25864,7 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
     }
 
     if (executionMode === 'STANDARD_BANK' && scheduleKind === 'SCHEDULED' && becameAuthorised) {
-      return withCORS(env, req, ok({
+      return withCORS(env, req, executeOk({
         ok: true,
         pay_batch_id: id,
         scheduled: true,
@@ -25801,7 +25920,7 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
       })));
     }
 
-    return withCORS(env, req, ok({
+    return withCORS(env, req, executeOk({
       ok: true,
       pay_batch_id: id,
       executed: execRes,
@@ -25835,6 +25954,8 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
     return withCORS(env, req, jsonResponse(norm.status, norm.body));
   }
 }
+
+
 async function verifyPaymentScheduleReauth(env, user, reauthToken) {
   const token = String(reauthToken || '').trim();
   if (!token) return { ok: false, response: badRequest('reauth_token is required') };
@@ -99031,6 +99152,8 @@ async function handleGetCandidate(env, req, candidateId) {
     return withCORS(env, req, serverError("Failed to fetch candidate"));
   }
 }
+
+
 async function handleChangesPing(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -99070,6 +99193,24 @@ async function handleChangesPing(env, req) {
       }
     } catch {}
     return '';
+  })();
+
+  const bankingAlertSummaryRequested = (() => {
+    try {
+      if (!body || typeof body !== 'object' || Array.isArray(body)) return false;
+      const raw = body.banking_alert_summary_needed
+        ?? body.force_banking_alert_summary
+        ?? body.banking_alert_detail_refresh
+        ?? body.bankingAlertSummaryNeeded
+        ?? body.forceBankingAlertSummary
+        ?? body.bankingAlertDetailRefresh
+        ?? false;
+      if (raw === true || raw === 1) return true;
+      const text = String(raw == null ? '' : raw).trim().toLowerCase();
+      return text === 'true' || text === '1' || text === 'yes' || text === 'detail' || text === 'details';
+    } catch {
+      return false;
+    }
   })();
 
   const unwrapRpcPayload = (rpcRes, key) => {
@@ -99123,8 +99264,12 @@ async function handleChangesPing(env, req) {
     responsePayload.banking_unacknowledged_alert_count = bankingUnacknowledgedCount;
     responsePayload.banking_highest_alert_label = bankingHighestAlertLabel;
     responsePayload.banking_highest_alert_severity = bankingHighestAlertSeverity;
+    responsePayload.banking_alert_summary_included = false;
+    responsePayload.banking_alert_summary_deferred = bankingUnacknowledgedCount > 0;
 
-    if (bankingAlertSummaryChanged) {
+    const shouldFetchBankingAlertSummary = bankingUnacknowledgedCount > 0 && (bankingAlertSummaryChanged || bankingAlertSummaryRequested);
+
+    if (shouldFetchBankingAlertSummary) {
       try {
         const alertRpcRes = await sbRpc(env, 'banking_alerts_active_for_user', {
           p_actor_user_id: user.id,
@@ -99141,7 +99286,8 @@ async function handleChangesPing(env, req) {
         );
         if (unacknowledgedCount > 0 && alerts.length < 1) {
           responsePayload.banking_alert_summary_deferred = true;
-          responsePayload.banking_alert_summary = undefined;
+          delete responsePayload.banking_alert_summary;
+          responsePayload.banking_alert_summary_included = false;
         } else {
           const bankingAlertSummary = Object.assign({}, alertSummaryRaw, {
             ok: alertSummaryRaw.ok !== false,
@@ -99158,6 +99304,7 @@ async function handleChangesPing(env, req) {
           });
           responsePayload.banking_alert_summary = bankingAlertSummary;
           responsePayload.banking_alert_summary_deferred = false;
+          responsePayload.banking_alert_summary_included = true;
           responsePayload.banking_unacknowledged_alert_count = unacknowledgedCount;
           responsePayload.banking_highest_alert_label = unacknowledgedCount > 0 ? String(bankingAlertSummary.banking_highest_alert_label || '').trim() : '';
           responsePayload.banking_highest_alert_severity = unacknowledgedCount > 0 ? String(bankingAlertSummary.banking_highest_alert_severity || '').trim().toLowerCase() : '';
@@ -99175,6 +99322,14 @@ async function handleChangesPing(env, req) {
       }
     }
 
+    if (bankingUnacknowledgedCount <= 0) {
+      responsePayload.banking_alert_summary_deferred = false;
+      responsePayload.banking_alert_summary_included = !!responsePayload.banking_alert_summary;
+    } else if (!responsePayload.banking_alert_summary) {
+      responsePayload.banking_alert_summary_deferred = true;
+      responsePayload.banking_alert_summary_included = false;
+    }
+
     return withCORS(env, req, ok(responsePayload));
   } catch (e) {
     console.error('[CHANGES_PING] rpc_changes_ping failed', {
@@ -99185,6 +99340,7 @@ async function handleChangesPing(env, req) {
     return withCORS(env, req, serverError('Failed to ping changes'));
   }
 }
+
 
 
 async function handleRolesGlobal(env, req) {
