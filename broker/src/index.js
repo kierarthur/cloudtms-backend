@@ -19587,19 +19587,25 @@ async function handleBankingPayPreview(env, req, user) {
   };
 
   const buildPreviewErrorResponse = (status, code, message, details, canRetry) => {
-    const payload = {
+    const errorInput = {
       ok: false,
       preview_unavailable: true,
       can_retry: !!canRetry,
-      error: {
-        code: String(code || 'BANKING_PAY_PREVIEW_FAILED'),
-        message: String(message || 'Unable to load Banking preview')
-      }
+      error_code: String(code || 'BANKING_PAY_PREVIEW_FAILED'),
+      code: String(code || 'BANKING_PAY_PREVIEW_FAILED'),
+      message: String(message || 'Unable to load Banking preview'),
+      details: (details && typeof details === 'object' && !Array.isArray(details)) ? details : undefined
     };
-    if (details && typeof details === 'object' && !Array.isArray(details)) {
-      payload.error.details = details;
-    }
-    return withCORS(env, req, new Response(JSON.stringify(payload), { status, headers: JSON_HEADERS }));
+    const friendlyPayload = makeBankingFriendlyErrorPayload(errorInput, { action: 'PREVIEW' });
+    const payload = {
+      ...((friendlyPayload && typeof friendlyPayload === 'object') ? friendlyPayload : {}),
+      ok: false,
+      preview_unavailable: true,
+      can_retry: !!canRetry
+    };
+    const normalisedCode = String(payload.error_code || payload.code || '').trim().toUpperCase();
+    const resolvedStatus = normalisedCode === 'BATCH_STALE' ? 409 : status;
+    return withCORS(env, req, new Response(JSON.stringify(payload), { status: resolvedStatus, headers: JSON_HEADERS }));
   };
 
   const payDateRaw = trimStr(body.pay_date || body.payDate || '');
@@ -21875,20 +21881,42 @@ const CREATE_DRAFT_CHECKPOINT = 'NONE';
     return args;
   };
 
-  const buildCreateDraftSessionErrorResponse = (status, code, message, details, canRetry) => {
-    const payload = {
+  const buildCreateDraftSessionErrorResponse = (status, code, message, details, canRetry, preserveSafeLocalMessage = false) => {
+    const errorInput = {
       ok: false,
       create_draft_unavailable: true,
       can_retry: !!canRetry,
-      error: {
-        code: String(code || 'BANKING_PAY_CREATE_DRAFT_FAILED'),
-        message: String(message || 'Unable to create Banking draft')
-      }
+      error_code: String(code || 'BANKING_PAY_CREATE_DRAFT_FAILED'),
+      code: String(code || 'BANKING_PAY_CREATE_DRAFT_FAILED'),
+      message: String(message || 'Unable to create Banking draft'),
+      details: (details && typeof details === 'object' && !Array.isArray(details)) ? details : undefined
     };
-    if (details && typeof details === 'object' && !Array.isArray(details)) {
-      payload.error.details = details;
+    const friendlyPayload = makeBankingFriendlyErrorPayload(errorInput, { action: 'CREATE_DRAFT' });
+    const payload = {
+      ...((friendlyPayload && typeof friendlyPayload === 'object') ? friendlyPayload : {}),
+      ok: false,
+      create_draft_unavailable: true,
+      can_retry: !!canRetry
+    };
+    const normalisedCode = String(payload.error_code || payload.code || code || '').trim().toUpperCase();
+    if (
+      preserveSafeLocalMessage === true &&
+      normalisedCode === 'NO_TIMESHEETS_READY_FOR_DRAFT' &&
+      typeof message === 'string' &&
+      message.trim()
+    ) {
+      const localMessage = String(message).trim();
+      payload.title = 'Payment batch could not be created';
+      payload.message = localMessage;
+      payload.user_message = localMessage;
+      payload.error = localMessage;
+      if (payload.friendly_error && typeof payload.friendly_error === 'object') {
+        payload.friendly_error.title = 'Payment batch could not be created';
+        payload.friendly_error.message = localMessage;
+      }
     }
-    return buildJsonResponseWithCors(status, payload);
+    const resolvedStatus = normalisedCode === 'BATCH_STALE' ? 409 : status;
+    return buildJsonResponseWithCors(resolvedStatus, payload);
   };
 
   const explicitPrepareDraftRefreshErrorCodes = new Set([
@@ -23541,7 +23569,22 @@ const CREATE_DRAFT_CHECKPOINT = 'NONE';
           preview_decision_keys: Object.keys(previewDecisions || {})
         });
       } catch {}
-      return withCORS(env, req, badRequest('Nothing is currently Ready to Pay for draft creation. Resolve Blocked for Pay items or refresh preview.'));
+      return buildCreateDraftSessionErrorResponse(
+        409,
+        'NO_TIMESHEETS_READY_FOR_DRAFT',
+        'There are no payment items ready for this batch. Refresh Banking, review the preview, then try again.',
+        {
+          pay_date: payDate,
+          week_ending_cutoff: cutoffIso,
+          provided_week_ending_cutoff: providedCutoffIso,
+          effective_candidate_id: effectiveCandidateId,
+          effective_client_id: effectiveClientId,
+          filter_source: routeFilterSource,
+          filter_was_derived: routeFilterWasDerived
+        },
+        true,
+        true
+      );
     }
 
     const effectiveTimesheetToCandidateId = effectiveScope.timesheetToCandidateId;
@@ -23559,15 +23602,20 @@ const CREATE_DRAFT_CHECKPOINT = 'NONE';
     const remainingInScope = uniqueInScopeIds.filter(tid => !excludedSet.has(String(tid)));
 
     if (uniqueInScopeIds.length > 0 && remainingInScope.length === 0 && excludedTimesheetIdsFromDrain.length > 0) {
-      return buildJsonResponseWithCors(409, {
-        error: 'NO_TIMESHEETS_READY_FOR_DRAFT',
-        message: 'No Ready to Pay timesheets were ready to draft because calculations are still processing. Please try again shortly.',
-        excluded_timesheets: excludedTimesheetIdsFromDrain.map((tid) => ({
-          timesheet_id: tid,
-          candidate_id: effectiveTimesheetToCandidateId.get(tid) || null,
-          reason_summary: 'CALCULATIONS_STILL_PROCESSING'
-        }))
-      });
+      return buildCreateDraftSessionErrorResponse(
+        409,
+        'NO_TIMESHEETS_READY_FOR_DRAFT',
+        'No Ready to Pay timesheets were ready to draft because calculations are still processing. Please try again shortly.',
+        {
+          excluded_timesheets: excludedTimesheetIdsFromDrain.map((tid) => ({
+            timesheet_id: tid,
+            candidate_id: effectiveTimesheetToCandidateId.get(tid) || null,
+            reason_summary: 'CALCULATIONS_STILL_PROCESSING'
+          }))
+        },
+        true,
+        true
+      );
     }
 
     if (excludedTimesheetIdsFromDrain.length > 0) {
@@ -23721,13 +23769,21 @@ const CREATE_DRAFT_CHECKPOINT = 'NONE';
       filter_was_derived: routeFilterWasDerived,
       error: String(e?.message || e || '')
     });
-    return buildJsonResponseWithCors(500, {
-      ok: false,
-      error: {
-        code: 'BANKING_PAY_CREATE_DRAFT_ROUTE_FAILED',
-        message: String(e?.message || e || 'Internal Server Error')
-      }
-    });
+    return buildCreateDraftSessionErrorResponse(
+      500,
+      'BANKING_PAY_CREATE_DRAFT_ROUTE_FAILED',
+      String(e?.message || e || 'Internal Server Error'),
+      {
+        pay_date: payDate,
+        week_ending_cutoff: cutoffIso,
+        provided_week_ending_cutoff: providedCutoffIso,
+        effective_candidate_id: effectiveCandidateId,
+        effective_client_id: effectiveClientId,
+        filter_source: routeFilterSource,
+        filter_was_derived: routeFilterWasDerived
+      },
+      true
+    );
   }
 }
 
