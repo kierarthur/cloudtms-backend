@@ -11432,10 +11432,32 @@ async function handleBankingPayWorkbenchSessionDiscard(env, req, user, sessionId
 }
 
 async function handleBankingPayWorkbenchSessionOpen(env, req, user) {
+  const buildFriendlyFailure = (status, errorInput, options = {}, extra = null) => {
+    const friendlyPayload = makeBankingFriendlyErrorPayload(errorInput, { action: 'WORKBENCH_SESSION_OPEN', ...options });
+    const base = (friendlyPayload && typeof friendlyPayload === 'object') ? friendlyPayload : {};
+    const reserved = new Set(['ok', 'error_code', 'code', 'title', 'message', 'user_message', 'friendly_error', 'user_action', 'confirm_label']);
+    const safeExtra = (extra && typeof extra === 'object' && !Array.isArray(extra)) ? extra : {};
+    const mergedExtra = Object.fromEntries(Object.entries(safeExtra).filter(([k]) => !reserved.has(k)));
+    const payload = { ...base, ...mergedExtra, ok: false };
+    const normalisedCode = String(payload.error_code || payload.code || '').trim().toUpperCase();
+    if (options.preserveSafeLocalMessage === true && normalisedCode !== 'BATCH_STALE') {
+      const localTitle = String(options.localTitle || '').trim();
+      const localMessage = String(options.localMessage || '').trim();
+      if (localTitle && localMessage) {
+        payload.title = localTitle;
+        payload.message = localMessage;
+        payload.user_message = localMessage;
+        payload.error = localMessage;
+        payload.friendly_error = { ...((payload.friendly_error && typeof payload.friendly_error === 'object') ? payload.friendly_error : {}), title: localTitle, message: localMessage };
+      }
+    }
+    const resolvedStatus = normalisedCode === 'BATCH_STALE' ? 409 : status;
+    return withCORS(env, req, new Response(JSON.stringify(payload), { status: resolvedStatus, headers: JSON_HEADERS }));
+  };
   let body = null;
   try { body = await parseJSONBody(req); } catch { body = null; }
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
-    return withCORS(env, req, badRequest('Invalid JSON'));
+    return buildFriendlyFailure(400, { code: 'BANKING_PAY_WORKBENCH_SESSION_OPEN_FAILED' }, { preserveSafeLocalMessage: true, localTitle: 'Payment preview could not be loaded', localMessage: 'CloudTMS could not open the Banking Pay workbench session. Refresh Banking and try again. No payment batch has been created.' });
   }
 
   const actorUserId = String(user?.id || '').trim();
@@ -11509,16 +11531,16 @@ async function handleBankingPayWorkbenchSessionOpen(env, req, user) {
   const rejectMismatchedWorkbenchContext = (stage, payload) => {
     const ctx = extractWorkbenchContext(payload);
     if (ctx.pay_date && ctx.pay_date !== payDate) {
-      return withCORS(env, req, serverError(`pay_workbench_session_open returned pay_date ${ctx.pay_date} for requested pay_date ${payDate} at ${stage}`));
+      return buildFriendlyFailure(409, { code: 'BANKING_PAY_WORKBENCH_SESSION_OPEN_CONTEXT_MISMATCH' }, { preserveSafeLocalMessage: true, localTitle: 'Payment preview needs refreshing', localMessage: 'Payment details have changed. Refresh Banking Pay preview, review the latest details, then try again.' });
     }
     if (ctx.week_ending_cutoff && ctx.week_ending_cutoff !== weekEndingCutoff) {
-      return withCORS(env, req, serverError(`pay_workbench_session_open returned week_ending_cutoff ${ctx.week_ending_cutoff} for requested week_ending_cutoff ${weekEndingCutoff} at ${stage}`));
+      return buildFriendlyFailure(409, { code: 'BANKING_PAY_WORKBENCH_SESSION_OPEN_CONTEXT_MISMATCH' }, { preserveSafeLocalMessage: true, localTitle: 'Payment preview needs refreshing', localMessage: 'Payment details have changed. Refresh Banking Pay preview, review the latest details, then try again.' });
     }
     if (ctx.session_signature) {
       const returnedSignature = normalizeSignatureForCompare(ctx.session_signature);
       const requestedSignature = normalizeSignatureForCompare(sessionSignature);
       if (returnedSignature && requestedSignature && returnedSignature !== requestedSignature) {
-        return withCORS(env, req, serverError(`pay_workbench_session_open returned a different session_signature at ${stage}`));
+        return buildFriendlyFailure(409, { code: 'BANKING_PAY_WORKBENCH_SESSION_OPEN_CONTEXT_MISMATCH' }, { preserveSafeLocalMessage: true, localTitle: 'Payment preview needs refreshing', localMessage: 'Payment details have changed. Refresh Banking Pay preview, review the latest details, then try again.' });
       }
     }
     return null;
@@ -11527,7 +11549,7 @@ async function handleBankingPayWorkbenchSessionOpen(env, req, user) {
   const payDateRaw = String(body.pay_date || body.payDate || '').trim();
   const payDate = parseIsoOrUkDateToIso(payDateRaw);
   if (!payDate) {
-    return withCORS(env, req, badRequest('pay_date is required (YYYY-MM-DD or DD/MM/YYYY)'));
+    return buildFriendlyFailure(400, { code: 'BANKING_PAY_WORKBENCH_SESSION_OPEN_FAILED' }, { preserveSafeLocalMessage: true, localTitle: 'Payment preview could not be loaded', localMessage: 'CloudTMS could not open the Banking Pay workbench session. Refresh Banking and try again. No payment batch has been created.' });
   }
 
   const ordinaryWeekEndingCutoff = '9999-12-31';
@@ -11535,7 +11557,7 @@ async function handleBankingPayWorkbenchSessionOpen(env, req, user) {
 
   const sessionSignature = String(body.session_signature || body.sessionSignature || '').trim();
   if (!sessionSignature) {
-    return withCORS(env, req, badRequest('session_signature is required'));
+    return buildFriendlyFailure(400, { code: 'BANKING_PAY_WORKBENCH_SESSION_OPEN_FAILED' }, { preserveSafeLocalMessage: true, localTitle: 'Payment preview could not be loaded', localMessage: 'CloudTMS could not open the Banking Pay workbench session. Refresh Banking and try again. No payment batch has been created.' });
   }
 
   const filtersSrc =
@@ -11557,7 +11579,7 @@ async function handleBankingPayWorkbenchSessionOpen(env, req, user) {
     const openPayload = unwrapRpc(openRpc, 'pay_workbench_session_open');
     const sessionId = String(openPayload.session_id || '').trim();
     if (!uuidRe.test(sessionId)) {
-      return withCORS(env, req, serverError('pay_workbench_session_open did not return a valid session_id'));
+      return buildFriendlyFailure(500, { ...openPayload, code: openPayload?.code || openPayload?.error_code || 'BANKING_PAY_WORKBENCH_SESSION_OPEN_FAILED' }, { preserveSafeLocalMessage: true, localTitle: 'Payment preview could not be loaded', localMessage: 'CloudTMS could not open the Banking Pay workbench session. Refresh Banking and try again. No payment batch has been created.' });
     }
 
     const openContextMismatch = rejectMismatchedWorkbenchContext('SESSION_OPEN', openPayload);
@@ -11589,13 +11611,41 @@ async function handleBankingPayWorkbenchSessionOpen(env, req, user) {
 
     return withCORS(env, req, ok(out));
   } catch (e) {
-    return withCORS(env, req, serverError(String(e?.message || e)));
+    const errorMessage = String(e?.message || e || '');
+    const staleLike = /(STALE_SESSION|OBSOLETE_SESSION|CONTEXT_MISMATCH|BATCH_STALE)/i.test(errorMessage);
+    return buildFriendlyFailure(
+      staleLike ? 409 : 500,
+      { code: staleLike ? 'STALE_SESSION' : 'BANKING_PAY_PREVIEW_SESSION_BACKED_FAILED', message: errorMessage },
+      staleLike
+        ? { preserveSafeLocalMessage: true, localTitle: 'Payment preview needs refreshing', localMessage: 'Payment details have changed. Refresh Banking Pay preview, review the latest details, then try again.' }
+        : { preserveSafeLocalMessage: true, localTitle: 'Payment preview could not be loaded', localMessage: 'CloudTMS could not open the Banking Pay workbench session. Refresh Banking and try again. No payment batch has been created.' }
+    );
   }
 }
 
 
 
 async function handleBankingPayWorkbenchSessionGet(env, req, user, sessionId) {
+  const buildFriendlyFailure = (status, errorInput, options = {}, extra = null) => {
+    const friendlyPayload = makeBankingFriendlyErrorPayload(errorInput, { action: 'PREVIEW', ...options });
+    const base = (friendlyPayload && typeof friendlyPayload === 'object') ? friendlyPayload : {};
+    const reserved = new Set(['ok', 'error_code', 'code', 'title', 'message', 'user_message', 'friendly_error', 'user_action', 'confirm_label']);
+    const mergedExtra = Object.fromEntries(Object.entries((extra && typeof extra === 'object' && !Array.isArray(extra)) ? extra : {}).filter(([k]) => !reserved.has(k)));
+    const payload = { ...base, ...mergedExtra, ok: false };
+    const normalisedCode = String(payload.error_code || payload.code || '').trim().toUpperCase();
+    if (options.preserveSafeLocalMessage === true && normalisedCode !== 'BATCH_STALE') {
+      const localTitle = String(options.localTitle || '').trim();
+      const localMessage = String(options.localMessage || '').trim();
+      if (localTitle && localMessage) {
+        payload.title = localTitle;
+        payload.message = localMessage;
+        payload.user_message = localMessage;
+        payload.error = localMessage;
+        payload.friendly_error = { ...((payload.friendly_error && typeof payload.friendly_error === 'object') ? payload.friendly_error : {}), title: localTitle, message: localMessage };
+      }
+    }
+    return withCORS(env, req, new Response(JSON.stringify(payload), { status: normalisedCode === 'BATCH_STALE' ? 409 : status, headers: JSON_HEADERS }));
+  };
   const id = String(sessionId || '').trim();
   const actorUserId = String(user?.id || '').trim();
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -11604,7 +11654,7 @@ async function handleBankingPayWorkbenchSessionGet(env, req, user, sessionId) {
     return withCORS(env, req, unauthorized('Unauthorized'));
   }
   if (!uuidRe.test(id)) {
-    return withCORS(env, req, badRequest('session_id must be a UUID'));
+    return buildFriendlyFailure(400, { code: 'STALE_SESSION' }, { preserveSafeLocalMessage: true, localTitle: 'Payment preview needs refreshing', localMessage: 'Refresh Banking Pay preview, review the latest details, then try again.' });
   }
 
   const enc = encodeURIComponent;
@@ -11633,7 +11683,7 @@ async function handleBankingPayWorkbenchSessionGet(env, req, user, sessionId) {
 
     const sessionRow = (rows && rows[0]) ? rows[0] : null;
     if (!sessionRow) {
-      return withCORS(env, req, notFound('Workbench session not found'));
+      return buildFriendlyFailure(404, { code: 'STALE_SESSION' }, { preserveSafeLocalMessage: true, localTitle: 'Payment preview needs refreshing', localMessage: 'Refresh Banking Pay preview, review the latest details, then try again.' });
     }
 
 
@@ -11644,12 +11694,34 @@ async function handleBankingPayWorkbenchSessionGet(env, req, user, sessionId) {
     const previewPayload = unwrapRpc(previewRpc, 'pay_workbench_session_get_preview');
     return withCORS(env, req, ok(previewPayload));
   } catch (e) {
-    return withCORS(env, req, serverError(String(e?.message || e)));
+    const msg = String(e?.message || e || '');
+    const staleLike = /(STALE_SESSION|OBSOLETE_SESSION|BATCH_STALE)/i.test(msg);
+    return buildFriendlyFailure(staleLike ? 409 : 500, { code: staleLike ? 'STALE_SESSION' : 'BANKING_PAY_PREVIEW_FAILED', message: msg }, { preserveSafeLocalMessage: true, localTitle: staleLike ? 'Payment preview needs refreshing' : 'Payment preview could not be refreshed', localMessage: staleLike ? 'Refresh Banking Pay preview, review the latest details, then try again.' : 'Refresh Banking Pay preview and try again.' });
   }
 }
 
 
 async function handleBankingPayWorkbenchSessionGetCandidate(env, req, user, sessionId, candidateId) {
+  const buildFriendlyFailure = (status, errorInput, options = {}, extra = null) => {
+    const friendlyPayload = makeBankingFriendlyErrorPayload(errorInput, { action: 'PREVIEW', ...options });
+    const base = (friendlyPayload && typeof friendlyPayload === 'object') ? friendlyPayload : {};
+    const reserved = new Set(['ok', 'error_code', 'code', 'title', 'message', 'user_message', 'friendly_error', 'user_action', 'confirm_label']);
+    const mergedExtra = Object.fromEntries(Object.entries((extra && typeof extra === 'object' && !Array.isArray(extra)) ? extra : {}).filter(([k]) => !reserved.has(k)));
+    const payload = { ...base, ...mergedExtra, ok: false };
+    const normalisedCode = String(payload.error_code || payload.code || '').trim().toUpperCase();
+    if (options.preserveSafeLocalMessage === true && normalisedCode !== 'BATCH_STALE') {
+      const localTitle = String(options.localTitle || '').trim();
+      const localMessage = String(options.localMessage || '').trim();
+      if (localTitle && localMessage) {
+        payload.title = localTitle;
+        payload.message = localMessage;
+        payload.user_message = localMessage;
+        payload.error = localMessage;
+        payload.friendly_error = { ...((payload.friendly_error && typeof payload.friendly_error === 'object') ? payload.friendly_error : {}), title: localTitle, message: localMessage };
+      }
+    }
+    return withCORS(env, req, new Response(JSON.stringify(payload), { status: normalisedCode === 'BATCH_STALE' ? 409 : status, headers: JSON_HEADERS }));
+  };
   const sessionIdText = String(sessionId || '').trim();
   const candidateIdText = String(candidateId || '').trim();
   const actorUserId = String(user?.id || '').trim();
@@ -11659,10 +11731,10 @@ async function handleBankingPayWorkbenchSessionGetCandidate(env, req, user, sess
     return withCORS(env, req, unauthorized('Unauthorized'));
   }
   if (!uuidRe.test(sessionIdText)) {
-    return withCORS(env, req, badRequest('session_id must be a UUID'));
+    return buildFriendlyFailure(400, { code: 'STALE_SESSION' }, { preserveSafeLocalMessage: true, localTitle: 'Payment preview needs refreshing', localMessage: 'Refresh Banking Pay preview, review the latest candidate details, then try again.' });
   }
   if (!uuidRe.test(candidateIdText)) {
-    return withCORS(env, req, badRequest('candidate_id must be a UUID'));
+    return buildFriendlyFailure(400, { code: 'WORKBENCH_SESSION_CANDIDATE_PROJECTION_STALE' }, { preserveSafeLocalMessage: true, localTitle: 'Payment preview needs refreshing', localMessage: 'Refresh Banking Pay preview, review the latest candidate details, then try again.' });
   }
 
   const enc = encodeURIComponent;
@@ -11691,7 +11763,7 @@ async function handleBankingPayWorkbenchSessionGetCandidate(env, req, user, sess
 
     const sessionRow = (rows && rows[0]) ? rows[0] : null;
     if (!sessionRow) {
-      return withCORS(env, req, notFound('Workbench session not found'));
+      return buildFriendlyFailure(404, { code: 'STALE_SESSION' }, { preserveSafeLocalMessage: true, localTitle: 'Payment preview needs refreshing', localMessage: 'Refresh Banking Pay preview, review the latest candidate details, then try again.' });
     }
 
 
@@ -11703,11 +11775,33 @@ async function handleBankingPayWorkbenchSessionGetCandidate(env, req, user, sess
     const candidatePayload = unwrapRpc(candidateRpc, 'pay_workbench_session_get_candidate_preview');
     return withCORS(env, req, ok(candidatePayload));
   } catch (e) {
-    return withCORS(env, req, serverError(String(e?.message || e)));
+    const msg = String(e?.message || e || '');
+    const staleLike = /(STALE_SESSION|OBSOLETE_SESSION|BATCH_STALE|WORKBENCH_SESSION_CANDIDATE_PROJECTION_STALE)/i.test(msg);
+    return buildFriendlyFailure(staleLike ? 409 : 500, { code: staleLike ? 'WORKBENCH_SESSION_CANDIDATE_PROJECTION_STALE' : 'BANKING_PAY_PREVIEW_FAILED', message: msg }, { preserveSafeLocalMessage: true, localTitle: 'Payment preview needs refreshing', localMessage: 'Refresh Banking Pay preview, review the latest candidate details, then try again.' });
   }
 }
 
 async function handleBankingPayWorkbenchSessionProgress(env, req, user, sessionId) {
+  const buildFriendlyFailure = (status, errorInput, options = {}, extra = null) => {
+    const friendlyPayload = makeBankingFriendlyErrorPayload(errorInput, { action: 'PREVIEW', ...options });
+    const base = (friendlyPayload && typeof friendlyPayload === 'object') ? friendlyPayload : {};
+    const reserved = new Set(['ok', 'error_code', 'code', 'title', 'message', 'user_message', 'friendly_error', 'user_action', 'confirm_label']);
+    const mergedExtra = Object.fromEntries(Object.entries((extra && typeof extra === 'object' && !Array.isArray(extra)) ? extra : {}).filter(([k]) => !reserved.has(k)));
+    const payload = { ...base, ...mergedExtra, ok: false };
+    const normalisedCode = String(payload.error_code || payload.code || '').trim().toUpperCase();
+    if (options.preserveSafeLocalMessage === true && normalisedCode !== 'BATCH_STALE') {
+      const localTitle = String(options.localTitle || '').trim();
+      const localMessage = String(options.localMessage || '').trim();
+      if (localTitle && localMessage) {
+        payload.title = localTitle;
+        payload.message = localMessage;
+        payload.user_message = localMessage;
+        payload.error = localMessage;
+        payload.friendly_error = { ...((payload.friendly_error && typeof payload.friendly_error === 'object') ? payload.friendly_error : {}), title: localTitle, message: localMessage };
+      }
+    }
+    return withCORS(env, req, new Response(JSON.stringify(payload), { status: normalisedCode === 'BATCH_STALE' ? 409 : status, headers: JSON_HEADERS }));
+  };
   const id = String(sessionId || '').trim();
   const actorUserId = String(user?.id || '').trim();
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -11716,7 +11810,7 @@ async function handleBankingPayWorkbenchSessionProgress(env, req, user, sessionI
     return withCORS(env, req, unauthorized('Unauthorized'));
   }
   if (!uuidRe.test(id)) {
-    return withCORS(env, req, badRequest('session_id must be a UUID'));
+    return buildFriendlyFailure(400, { code: 'STALE_SESSION' }, { preserveSafeLocalMessage: true, localTitle: 'Payment preview needs refreshing', localMessage: 'Refresh Banking Pay preview, review the latest details, then try again.' });
   }
 
   const enc = encodeURIComponent;
@@ -11745,7 +11839,7 @@ async function handleBankingPayWorkbenchSessionProgress(env, req, user, sessionI
 
     const sessionRow = (rows && rows[0]) ? rows[0] : null;
     if (!sessionRow) {
-      return withCORS(env, req, notFound('Workbench session not found'));
+      return buildFriendlyFailure(404, { code: 'STALE_SESSION' }, { preserveSafeLocalMessage: true, localTitle: 'Payment preview needs refreshing', localMessage: 'Refresh Banking Pay preview, review the latest details, then try again.' });
     }
 
 
@@ -11756,7 +11850,14 @@ async function handleBankingPayWorkbenchSessionProgress(env, req, user, sessionI
     const progressPayload = unwrapRpc(progressRpc, 'pay_workbench_session_get_progress');
     return withCORS(env, req, ok(progressPayload));
   } catch (e) {
-    return withCORS(env, req, serverError(String(e?.message || e)));
+    const msg = String(e?.message || e || '');
+    const staleLike = /(STALE_SESSION|OBSOLETE_SESSION|BATCH_STALE)/i.test(msg);
+    const runningLike = /(still running|in progress|temporarily unavailable|timeout|PENDING)/i.test(msg);
+    return buildFriendlyFailure(
+      staleLike ? 409 : (runningLike ? 503 : 500),
+      { code: staleLike ? 'STALE_SESSION' : 'BANKING_PAY_PREVIEW_FAILED', message: msg },
+      { preserveSafeLocalMessage: true, localTitle: staleLike ? 'Payment preview needs refreshing' : (runningLike ? 'Payment preview is still refreshing' : 'Payment preview could not be refreshed'), localMessage: staleLike ? 'Refresh Banking Pay preview, review the latest details, then try again.' : (runningLike ? 'CloudTMS is still refreshing payment details. Try again once the refresh has finished.' : 'Refresh Banking Pay preview and try again.') }
+    );
   }
 }
 
