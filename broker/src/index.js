@@ -28021,12 +28021,46 @@ async function handleBankingBankNameCheckClearOverride(env, req, user) {
 
 async function handleBankingPayBatchPayeNetImportSage(env, req, user, payBatchId) {
   const id = String(payBatchId || '').trim();
-  if (!id) return withCORS(env, req, badRequest('pay_batch_id is required'));
+  const friendlyFail = (errorInput, options = {}) => {
+    const fallbackCode = String(options.fallbackCode || 'SAGE_IMPORT_INVALID').trim().toUpperCase() || 'SAGE_IMPORT_INVALID';
+    const fallbackStatus = Number.isInteger(options.status) ? options.status : 400;
+    const fallback = makeBankingFriendlyErrorPayload(errorInput, {
+      action: 'PAYE_NET_IMPORT',
+      fallbackCode,
+      ...options
+    });
+    const locked = new Set(['ok', 'error_code', 'code', 'title', 'message', 'user_message', 'friendly_error', 'user_action', 'confirm_label']);
+    const extras = {};
+    if (options && typeof options.meta === 'object' && options.meta && !Array.isArray(options.meta)) {
+      for (const [k, v] of Object.entries(options.meta)) {
+        if (!locked.has(k)) extras[k] = v;
+      }
+    }
+    const payload = { ...(fallback && typeof fallback === 'object' ? fallback : {}), ...extras };
+    payload.ok = false;
+    if (!payload.friendly_error || typeof payload.friendly_error !== 'object') payload.friendly_error = {};
+    payload.friendly_error.ok = false;
+    if (options.title) {
+      payload.title = String(options.title);
+      payload.friendly_error.title = String(options.title);
+    }
+    if (options.message) {
+      payload.message = String(options.message);
+      payload.friendly_error.message = String(options.message);
+    }
+    if (!payload.user_message && typeof payload.message === 'string') payload.user_message = payload.message;
+    const codeUpper = String(payload.code || payload.error_code || fallbackCode).trim().toUpperCase();
+    payload.code = codeUpper;
+    payload.error_code = codeUpper;
+    payload.friendly_error.code = codeUpper;
+    return withCORS(env, req, new Response(JSON.stringify(payload), { status: (codeUpper === 'BATCH_STALE' ? 409 : fallbackStatus), headers: JSON_HEADERS }));
+  };
+  if (!id) return friendlyFail({ code: 'SAGE_IMPORT_INVALID' }, { title: 'PAYE net amounts could not be imported', message: 'Review the Sage export, refresh the batch, then try again.' });
 
   let body = null;
   try { body = await parseJSONBody(req); } catch { body = null; }
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
-    return withCORS(env, req, badRequest('Invalid JSON'));
+    return friendlyFail({ code: 'SAGE_IMPORT_INVALID' }, { title: 'PAYE net amounts could not be imported', message: 'Review the Sage export, refresh the batch, then try again.' });
   }
 
   const csvRaw =
@@ -28037,7 +28071,7 @@ async function handleBankingPayBatchPayeNetImportSage(env, req, user, payBatchId
     : '';
 
   if (!csvRaw.trim()) {
-    return withCORS(env, req, badRequest('csv_raw is required'));
+    return friendlyFail({ code: 'SAGE_IMPORT_INVALID' }, { title: 'PAYE net amounts could not be imported', message: 'Review the Sage export, refresh the batch, then try again.' });
   }
 
   const sourceFilenameRaw =
@@ -28105,9 +28139,11 @@ async function handleBankingPayBatchPayeNetImportSage(env, req, user, payBatchId
   const _maybeStale409 = (e) => {
     const payload = _extractDbRaisedJson(e);
     if (payload && typeof payload === 'object' && String(payload.code || '').toUpperCase() === 'BATCH_STALE') {
-      const headers = new Headers();
-      headers.set('Content-Type', 'application/json; charset=utf-8');
-      return withCORS(env, req, new Response(JSON.stringify(payload), { status: 409, headers }));
+      return friendlyFail(payload, {
+        status: 409,
+        title: 'Payment batch has changed',
+        message: 'This batch is no longer up to date. Refresh the batch, review the latest payment details, then try again.'
+      });
     }
     return null;
   };
@@ -28128,7 +28164,7 @@ async function handleBankingPayBatchPayeNetImportSage(env, req, user, payBatchId
     } catch (e) {
       const stale409 = _maybeStale409(e);
       if (stale409) return stale409;
-      return withCORS(env, req, serverError(String(e?.message || e)));
+      return friendlyFail(e, { status: 500, fallbackCode: 'SAGE_IMPORT_INVALID', title: 'PAYE net amounts could not be imported', message: 'Review the Sage export, refresh the batch, then try again.' });
     }
     const batchGet = unwrapRpc(batchGet0, 'pay_batch_get');
 
@@ -28150,18 +28186,58 @@ async function handleBankingPayBatchPayeNetImportSage(env, req, user, payBatchId
   } catch (e) {
     const stale409 = _maybeStale409(e);
     if (stale409) return stale409;
-    return withCORS(env, req, serverError(String(e?.message || e)));
+    const payload = _extractDbRaisedJson(e);
+    const code = String(payload?.code || '').toUpperCase();
+    if (code === 'PAYE_NET_MISSING') return friendlyFail(payload, { title: 'PAYE net amounts are missing', message: 'Enter the missing PAYE net amounts, click Save, then try again.' });
+    if (code === 'PAYE_NET_INVALID') return friendlyFail(payload, { title: 'PAYE net amounts are invalid', message: 'Correct the PAYE net amounts, click Save, then try again.' });
+    if (code === 'PAYE_NET_NOT_APPLICABLE_FOR_LOANS_BATCH') return friendlyFail(payload || e, {});
+    if (code === 'SAGE_IMPORT_INVALID') return friendlyFail(payload, { title: 'PAYE net amounts could not be imported', message: 'Review the Sage export, refresh the batch, then try again.' });
+    return friendlyFail(payload || e, { status: 500, fallbackCode: 'SAGE_IMPORT_INVALID', title: 'PAYE net amounts could not be imported', message: 'Review the Sage export, refresh the batch, then try again.' });
   }
 }
 
 async function handleBankingPayBatchPayeNetSetManual(env, req, user, payBatchId) {
   const id = String(payBatchId || '').trim();
-  if (!id) return withCORS(env, req, badRequest('pay_batch_id is required'));
+  const friendlyFail = (errorInput, options = {}) => {
+    const fallbackCode = String(options.fallbackCode || 'MANUAL_NET_INVALID').trim().toUpperCase() || 'MANUAL_NET_INVALID';
+    const fallbackStatus = Number.isInteger(options.status) ? options.status : 400;
+    const fallback = makeBankingFriendlyErrorPayload(errorInput, {
+      action: 'PAYE_NET_SAVE',
+      fallbackCode,
+      ...options
+    });
+    const locked = new Set(['ok', 'error_code', 'code', 'title', 'message', 'user_message', 'friendly_error', 'user_action', 'confirm_label']);
+    const extras = {};
+    if (options && typeof options.meta === 'object' && options.meta && !Array.isArray(options.meta)) {
+      for (const [k, v] of Object.entries(options.meta)) {
+        if (!locked.has(k)) extras[k] = v;
+      }
+    }
+    const payload = { ...(fallback && typeof fallback === 'object' ? fallback : {}), ...extras };
+    payload.ok = false;
+    if (!payload.friendly_error || typeof payload.friendly_error !== 'object') payload.friendly_error = {};
+    payload.friendly_error.ok = false;
+    if (options.title) {
+      payload.title = String(options.title);
+      payload.friendly_error.title = String(options.title);
+    }
+    if (options.message) {
+      payload.message = String(options.message);
+      payload.friendly_error.message = String(options.message);
+    }
+    if (!payload.user_message && typeof payload.message === 'string') payload.user_message = payload.message;
+    const codeUpper = String(payload.code || payload.error_code || fallbackCode).trim().toUpperCase();
+    payload.code = codeUpper;
+    payload.error_code = codeUpper;
+    payload.friendly_error.code = codeUpper;
+    return withCORS(env, req, new Response(JSON.stringify(payload), { status: (codeUpper === 'BATCH_STALE' ? 409 : fallbackStatus), headers: JSON_HEADERS }));
+  };
+  if (!id) return friendlyFail({ code: 'MANUAL_NET_INVALID' }, { title: 'PAYE net amounts could not be saved', message: 'Correct the PAYE net amounts, click Save, then try again.' });
 
   let body = null;
   try { body = await parseJSONBody(req); } catch { body = null; }
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
-    return withCORS(env, req, badRequest('Invalid JSON'));
+    return friendlyFail({ code: 'MANUAL_NET_INVALID' }, { title: 'PAYE net amounts could not be saved', message: 'Correct the PAYE net amounts, click Save, then try again.' });
   }
 
   const entries =
@@ -28172,7 +28248,7 @@ async function handleBankingPayBatchPayeNetSetManual(env, req, user, payBatchId)
     : [];
 
   if (!Array.isArray(entries)) {
-    return withCORS(env, req, badRequest('entries[] must be an array (can be empty)'));
+    return friendlyFail({ code: 'MANUAL_NET_INVALID' }, { title: 'PAYE net amounts could not be saved', message: 'Correct the PAYE net amounts, click Save, then try again.' });
   }
 
   const unwrapRpc = (rpcRes, key) => {
@@ -28231,9 +28307,11 @@ async function handleBankingPayBatchPayeNetSetManual(env, req, user, payBatchId)
   const _maybeStale409 = (e) => {
     const payload = _extractDbRaisedJson(e);
     if (payload && typeof payload === 'object' && String(payload.code || '').toUpperCase() === 'BATCH_STALE') {
-      const headers = new Headers();
-      headers.set('Content-Type', 'application/json; charset=utf-8');
-      return withCORS(env, req, new Response(JSON.stringify(payload), { status: 409, headers }));
+      return friendlyFail(payload, {
+        status: 409,
+        title: 'Payment batch has changed',
+        message: 'This batch is no longer up to date. Refresh the batch, review the latest payment details, then try again.'
+      });
     }
     return null;
   };
@@ -28253,7 +28331,7 @@ async function handleBankingPayBatchPayeNetSetManual(env, req, user, payBatchId)
     } catch (e) {
       const stale409 = _maybeStale409(e);
       if (stale409) return stale409;
-      return withCORS(env, req, serverError(String(e?.message || e)));
+      return friendlyFail(e, { status: 500, fallbackCode: 'MANUAL_NET_INVALID', title: 'PAYE net amounts could not be saved', message: 'Correct the PAYE net amounts, click Save, then try again.' });
     }
     const batchGet = unwrapRpc(batchGet0, 'pay_batch_get');
 
@@ -28273,7 +28351,13 @@ async function handleBankingPayBatchPayeNetSetManual(env, req, user, payBatchId)
   } catch (e) {
     const stale409 = _maybeStale409(e);
     if (stale409) return stale409;
-    return withCORS(env, req, serverError(String(e?.message || e)));
+    const payload = _extractDbRaisedJson(e);
+    const code = String(payload?.code || '').toUpperCase();
+    if (code === 'PAYE_NET_MISSING') return friendlyFail(payload, { title: 'PAYE net amounts are missing', message: 'Enter the missing PAYE net amounts, click Save, then try again.' });
+    if (code === 'PAYE_NET_INVALID') return friendlyFail(payload, { title: 'PAYE net amounts are invalid', message: 'Correct the PAYE net amounts, click Save, then try again.' });
+    if (code === 'PAYE_NET_NOT_APPLICABLE_FOR_LOANS_BATCH') return friendlyFail(payload || e, {});
+    if (code === 'MANUAL_NET_INVALID') return friendlyFail(payload, { title: 'PAYE net amounts could not be saved', message: 'Correct the PAYE net amounts, click Save, then try again.' });
+    return friendlyFail(payload || e, { status: 500, fallbackCode: 'MANUAL_NET_INVALID', title: 'PAYE net amounts could not be saved', message: 'Correct the PAYE net amounts, click Save, then try again.' });
   }
 }
 
