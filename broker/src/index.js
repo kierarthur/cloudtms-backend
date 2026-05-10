@@ -15529,6 +15529,61 @@ async function handleBankingPayBatchRetryBlockedFunds(env, req, user, payBatchId
     };
   };
 
+  const buildFriendlyError = (input, options = {}) => {
+    try {
+      if (typeof makeBankingFriendlyErrorPayload === 'function') {
+        return makeBankingFriendlyErrorPayload(input, { action: 'RETRY_BLOCKED_FUNDS', ...options });
+      }
+    } catch {}
+    const code = String(options.code || options.defaultCode || 'BLOCKED_FUNDS_RETRY_FAILED').trim().toUpperCase();
+    const message = String(options.defaultMessage || 'Blocked-funds retry failed.').trim();
+    return {
+      ok: false,
+      error: message,
+      message,
+      error_code: code,
+      code,
+      friendly_error: { code, title: 'Payment retry did not complete', message, user_action: null }
+    };
+  };
+
+  const respondFriendlyError = (input, options = {}, statusOverride = null, safeExtra = null) => {
+    const friendly = buildFriendlyError(input, options);
+    const preserveSafeLocalMessage = options && options.preserveSafeLocalMessage === true;
+    const inputObj = (input && typeof input === 'object' && !Array.isArray(input)) ? input : null;
+    const normalisedCode = String(friendly?.error_code || friendly?.code || '').trim().toUpperCase();
+    const safeText = (v) => {
+      const s = String(v || '').trim();
+      if (!s) return '';
+      const bad = /(P0001|SQLSTATE|RPC failed|MANUAL_DEBT_RECOVERY|key_type|key_value|diff\s*\[|\"diff\"|[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}|\{|\})/i;
+      return bad.test(s) ? '' : s;
+    };
+    if (preserveSafeLocalMessage && normalisedCode !== 'BATCH_STALE' && normalisedCode !== 'BLOCKED_FUNDS' && inputObj) {
+      const localTitle = safeText(inputObj.title);
+      const localMessage = safeText(inputObj.message || inputObj.user_message || inputObj.error);
+      if (localTitle) friendly.title = localTitle;
+      if (localMessage) {
+        friendly.message = localMessage;
+        friendly.user_message = localMessage;
+        friendly.error = localMessage;
+        if (friendly.friendly_error && typeof friendly.friendly_error === 'object') {
+          friendly.friendly_error.message = localMessage;
+          if (localTitle) friendly.friendly_error.title = localTitle;
+        }
+      }
+    }
+    if (safeExtra && typeof safeExtra === 'object' && !Array.isArray(safeExtra)) {
+      const protectedKeys = new Set(['ok', 'error_code', 'code', 'title', 'message', 'user_message', 'friendly_error', 'user_action', 'confirm_label']);
+      for (const [k, v] of Object.entries(safeExtra)) {
+        if (protectedKeys.has(String(k))) continue;
+        if (friendly[k] === undefined) friendly[k] = v;
+      }
+    }
+    const code = String(friendly?.error_code || friendly?.code || '').trim().toUpperCase();
+    const status = statusOverride || (code === 'BATCH_STALE' ? 409 : (Number(options.status) || 400));
+    return withCORS(env, req, jsonResponse(status, friendly));
+  };
+
   const loadBatch = async () => {
     const batch0 = await sbRpc(env, 'pay_batch_get', {
       p_pay_batch_id: id,
@@ -16201,9 +16256,9 @@ async function handleBankingPayBatchRetryBlockedFunds(env, req, user, payBatchId
     );
     const u0 = (Array.isArray(urows) && urows[0] && typeof urows[0] === 'object') ? urows[0] : null;
     if (!u0 || u0.is_active !== true) return withCORS(env, req, unauthorized('Unauthorized'));
-    if (u0.payment_authoriser !== true) return withCORS(env, req, badRequest('PAYMENT_AUTHORISER_REQUIRED'));
+    if (u0.payment_authoriser !== true) return respondFriendlyError('PAYMENT_AUTHORISER_REQUIRED', { code: 'PAYMENT_AUTHORISER_REQUIRED' }, 400);
   } catch (e) {
-    return withCORS(env, req, serverError(String(e?.message || e || 'Failed to validate payment authoriser')));
+    return respondFriendlyError(e, { code: 'PAYMENT_AUTHORISER_REQUIRED', defaultMessage: 'Failed to validate payment authoriser.' }, 400);
   }
 
   try {
@@ -16213,50 +16268,35 @@ async function handleBankingPayBatchRetryBlockedFunds(env, req, user, payBatchId
     const canRetryBlockedFunds = toBool(beforeGet.can_retry_blocked_funds ?? beforeBatch.can_retry_blocked_funds, false);
 
     if (status !== 'BLOCKED_FUNDS') {
-      return withCORS(env, req, jsonResponse(409, {
-        ok: false,
-        error: 'Batch is not blocked funds.',
-        message: 'Batch is not blocked funds.',
-        error_code: 'BLOCKED_FUNDS_RETRY_STATUS_MISMATCH',
-        pay_batch_id: id,
-        status
-      }));
+      return respondFriendlyError({ code: 'BLOCKED_FUNDS_RETRY_STATUS_MISMATCH', status }, { code: 'BLOCKED_FUNDS_RETRY_STATUS_MISMATCH' }, 409);
     }
 
     if (canRetryBlockedFunds !== true) {
-      return withCORS(env, req, jsonResponse(409, {
-        ok: false,
-        error: 'Blocked-funds retry is not safe for this batch.',
-        message: 'Blocked-funds retry is not safe for this batch.',
-        error_code: 'BLOCKED_FUNDS_RETRY_NOT_ALLOWED',
-        pay_batch_id: id,
-        can_retry_blocked_funds: false,
-        batch_get: beforeGet
-      }));
+      return respondFriendlyError({ code: 'BLOCKED_FUNDS_RETRY_NOT_ALLOWED', batch_get: beforeGet }, { code: 'BLOCKED_FUNDS_RETRY_NOT_ALLOWED' }, 409);
     }
 
     const storedFundingAccountRef = String(beforeBatch.funding_account_ref || beforeGet.funding_account_ref || beforeGet.blocked_funds_account_ref || '').trim() || null;
     if (requestedFundingAccountRef && storedFundingAccountRef && requestedFundingAccountRef !== storedFundingAccountRef) {
-      return withCORS(env, req, badRequest('BLOCKED_FUNDS_RETRY_FUNDING_ACCOUNT_MISMATCH'));
+      return respondFriendlyError('BLOCKED_FUNDS_RETRY_FUNDING_ACCOUNT_MISMATCH', { code: 'BLOCKED_FUNDS_RETRY_FUNDING_ACCOUNT_MISMATCH' }, 409);
     }
 
     const providerMeta = normaliseProvider(beforeBatch.rail_provider_snapshot || beforeGet.rail_provider_snapshot || beforeGet.blocked_funds_provider || null);
-    if (!providerMeta.valid) return withCORS(env, req, badRequest(providerMeta.reason || 'UNKNOWN_RAIL_PROVIDER'));
-    if (providerMeta.provider === 'CSV') return withCORS(env, req, badRequest('BLOCKED_FUNDS_RETRY_STANDARD_BANK_ONLY'));
+    if (!providerMeta.valid) return respondFriendlyError(providerMeta.reason || 'UNKNOWN_RAIL_PROVIDER', { code: providerMeta.reason || 'UNKNOWN_RAIL_PROVIDER' }, 400);
+    if (providerMeta.provider === 'CSV') return respondFriendlyError('RAIL_RETRY_EXECUTION_NOT_SUPPORTED', { code: 'RAIL_RETRY_EXECUTION_NOT_SUPPORTED' }, 400);
 
     const adapter = getRailAdapter(providerMeta.provider);
-    if (!adapter || typeof adapter !== 'object') return withCORS(env, req, badRequest('UNKNOWN_RAIL_PROVIDER'));
-    if (typeof adapter.executeDueBatches !== 'function') return withCORS(env, req, badRequest('RAIL_RETRY_EXECUTION_NOT_SUPPORTED'));
+    if (!adapter || typeof adapter !== 'object') return respondFriendlyError('UNKNOWN_RAIL_PROVIDER', { code: 'UNKNOWN_RAIL_PROVIDER' }, 400);
+    if (typeof adapter.executeDueBatches !== 'function') return respondFriendlyError('RAIL_RETRY_EXECUTION_NOT_SUPPORTED', { code: 'RAIL_RETRY_EXECUTION_NOT_SUPPORTED' }, 400);
 
     if (typeof adapter.capabilities === 'function') {
       try {
         const caps = await adapter.capabilities(env);
         if (caps && typeof caps === 'object' && caps.available === false) {
           const reason = String(caps.reason || 'RAIL_NOT_CONFIGURED').trim() || 'RAIL_NOT_CONFIGURED';
-          return withCORS(env, req, badRequest(reason));
+          return respondFriendlyError(reason, { code: reason }, 400);
         }
       } catch (e) {
-        return withCORS(env, req, badRequest(String(e?.message || e || 'RAIL_NOT_CONFIGURED')));
+        return respondFriendlyError(e, { code: 'RAIL_NOT_CONFIGURED' }, 400);
       }
     }
 
@@ -16272,14 +16312,13 @@ async function handleBankingPayBatchRetryBlockedFunds(env, req, user, payBatchId
     } catch (e) {
       const norm = normaliseRpcError(e, 'PAY_EXECUTE_BANK_FAILED');
       const executeFailureAlertSummary = await safeLoadActiveAlertSummary();
-      return withCORS(env, req, jsonResponse(norm.status, buildFriendlyFailurePayload({
-        code: norm.body?.error_code || norm.body?.code || 'PAY_EXECUTE_BANK_FAILED',
-        title: 'Payment retry could not start',
-        message: norm.body?.message || norm.body?.error || 'The retry could not start. No payment was submitted to the bank.',
-        technical_message: norm.body?.message || norm.body?.error || String(e?.message || e || ''),
-        alert_summary: executeFailureAlertSummary,
-        extra: { rpc_error: norm.body || null }
-      })));
+      const executeFailureAlertFields = buildAlertSummaryFields(executeFailureAlertSummary);
+      return respondFriendlyError(norm.body || e, { code: norm.body?.error_code || norm.body?.code || 'PAY_EXECUTE_BANK_FAILED' }, norm.status, {
+        banking_alerts: executeFailureAlertFields.banking_alerts,
+        banking_unacknowledged_alert_count: executeFailureAlertFields.banking_unacknowledged_alert_count,
+        banking_highest_alert_label: executeFailureAlertFields.banking_highest_alert_label,
+        banking_highest_alert_severity: executeFailureAlertFields.banking_highest_alert_severity
+      });
     }
 
     let afterExecuteGet = null;
@@ -16294,7 +16333,7 @@ async function handleBankingPayBatchRetryBlockedFunds(env, req, user, payBatchId
         executed: executeResult,
         batch_get: null
       });
-      return withCORS(env, req, jsonResponse(409, buildFriendlyFailurePayload({
+      return respondFriendlyError(buildFriendlyFailurePayload({
         code: 'PAY_BATCH_GET_FAILED_AFTER_RETRY_MATERIALISATION',
         title: 'Payment retry did not complete',
         message: cleanup.ok === true
@@ -16305,7 +16344,7 @@ async function handleBankingPayBatchRetryBlockedFunds(env, req, user, payBatchId
         cleanup,
         alert_summary: batchGetFailureAlertSummary,
         extra: { rpc_error: norm.body || null }
-      })));
+      }), { code: 'PAY_BATCH_GET_FAILED_AFTER_RETRY_MATERIALISATION', preserveSafeLocalMessage: true }, 409);
     }
 
     const afterExecuteBatch = extractBatchObject(afterExecuteGet);
@@ -16363,7 +16402,7 @@ async function handleBankingPayBatchRetryBlockedFunds(env, req, user, payBatchId
         batch_get: afterExecuteGet
       });
       const materialisationAlertSummary = await safeLoadActiveAlertSummary();
-      return withCORS(env, req, jsonResponse(409, buildFriendlyFailurePayload({
+      return respondFriendlyError(buildFriendlyFailurePayload({
         code,
         title: 'Payment retry did not complete',
         message: cleanup.ok === true
@@ -16378,7 +16417,7 @@ async function handleBankingPayBatchRetryBlockedFunds(env, req, user, payBatchId
           pending_count: pendingTransfersForSubmission,
           blocked_count: blockedTransfersAfterMaterialisation
         }
-      })));
+      }), { code, preserveSafeLocalMessage: true }, 409);
     }
 
     const refreshedFundingAccountRef = String(afterExecuteBatch.funding_account_ref || afterExecuteGet.funding_account_ref || storedFundingAccountRef || '').trim();
@@ -16392,7 +16431,7 @@ async function handleBankingPayBatchRetryBlockedFunds(env, req, user, payBatchId
         batch_get: afterExecuteGet
       });
       const fundingAccountAlertSummary = await safeLoadActiveAlertSummary();
-      return withCORS(env, req, jsonResponse(409, buildFriendlyFailurePayload({
+      return respondFriendlyError(buildFriendlyFailurePayload({
         code,
         title: 'Payment retry did not complete',
         message: cleanup.ok === true
@@ -16403,7 +16442,7 @@ async function handleBankingPayBatchRetryBlockedFunds(env, req, user, payBatchId
         batch_get: cleanup.batch_get || afterExecuteGet,
         cleanup,
         alert_summary: fundingAccountAlertSummary
-      })));
+      }), { code, preserveSafeLocalMessage: true }, 409);
     }
 
     const retryRequestedAtUtc = new Date().toISOString();
@@ -16463,7 +16502,7 @@ async function handleBankingPayBatchRetryBlockedFunds(env, req, user, payBatchId
         batch_get: afterExecuteGet
       });
       const submissionFailureAlertSummary = await safeLoadActiveAlertSummary();
-      return withCORS(env, req, jsonResponse(409, buildFriendlyFailurePayload({
+      return respondFriendlyError(buildFriendlyFailurePayload({
         code,
         title: 'Payment retry did not complete',
         message: cleanup.ok === true
@@ -16474,7 +16513,7 @@ async function handleBankingPayBatchRetryBlockedFunds(env, req, user, payBatchId
         batch_get: cleanup.batch_get || afterExecuteGet,
         cleanup,
         alert_summary: submissionFailureAlertSummary
-      })));
+      }), { code, preserveSafeLocalMessage: true }, 409);
     }
 
     let refreshedGet = null;
@@ -16534,7 +16573,7 @@ async function handleBankingPayBatchRetryBlockedFunds(env, req, user, payBatchId
 
         if (blockedFundsCleanup.ok !== true) {
           const blockedFundsCleanupAlertSummary = await safeLoadActiveAlertSummary();
-          return withCORS(env, req, jsonResponse(409, buildFriendlyFailurePayload({
+          return respondFriendlyError(buildFriendlyFailurePayload({
             code: 'BLOCKED_FUNDS_RETRY_CLEANUP_FAILED',
             title: 'Payment retry did not complete',
             message: 'The retry was rejected before provider submission, but CloudTMS could not safely clean up the local retry state automatically. Review the batch before trying again.',
@@ -16544,7 +16583,7 @@ async function handleBankingPayBatchRetryBlockedFunds(env, req, user, payBatchId
             batch_get: blockedFundsCleanup.batch_get || refreshedGet,
             cleanup: blockedFundsCleanup,
             alert_summary: blockedFundsCleanupAlertSummary
-          })));
+          }), { code: 'BLOCKED_FUNDS_RETRY_CLEANUP_FAILED', preserveSafeLocalMessage: true }, 409);
         }
 
         blockedFundsGet = blockedFundsCleanup.batch_get || refreshedGet;
@@ -16599,7 +16638,7 @@ async function handleBankingPayBatchRetryBlockedFunds(env, req, user, payBatchId
             batch_get: refreshedGet
           });
       const retryIncompleteAlertSummary = await safeLoadActiveAlertSummary();
-      return withCORS(env, req, jsonResponse(409, buildFriendlyFailurePayload({
+      return respondFriendlyError(buildFriendlyFailurePayload({
         code,
         title: submittedProgress ? 'Payment retry needs review' : 'Payment retry did not complete',
         message: submittedProgress
@@ -16613,7 +16652,7 @@ async function handleBankingPayBatchRetryBlockedFunds(env, req, user, payBatchId
         batch_get: cleanup.batch_get || refreshedGet,
         cleanup,
         alert_summary: retryIncompleteAlertSummary
-      })));
+      }), { code, preserveSafeLocalMessage: true }, 409);
     }
 
     if (!submittedProgress) {
@@ -16626,7 +16665,7 @@ async function handleBankingPayBatchRetryBlockedFunds(env, req, user, payBatchId
         batch_get: refreshedGet
       });
       const noProgressAlertSummary = await safeLoadActiveAlertSummary();
-      return withCORS(env, req, jsonResponse(409, buildFriendlyFailurePayload({
+      return respondFriendlyError(buildFriendlyFailurePayload({
         code,
         title: 'Payment retry did not complete',
         message: cleanup.ok === true
@@ -16638,7 +16677,7 @@ async function handleBankingPayBatchRetryBlockedFunds(env, req, user, payBatchId
         batch_get: cleanup.batch_get || refreshedGet,
         cleanup,
         alert_summary: noProgressAlertSummary
-      })));
+      }), { code, preserveSafeLocalMessage: true }, 409);
     }
 
     return withCORS(env, req, ok({
@@ -16660,8 +16699,7 @@ async function handleBankingPayBatchRetryBlockedFunds(env, req, user, payBatchId
     }));
   } catch (e) {
     const norm = normaliseRpcError(e, 'BLOCKED_FUNDS_RETRY_FAILED');
-    if (norm.status >= 400 && norm.status < 500) return withCORS(env, req, jsonResponse(norm.status, norm.body));
-    return withCORS(env, req, serverError(String(e?.message || e || 'BLOCKED_FUNDS_RETRY_FAILED')));
+    return respondFriendlyError(norm.body || e, { code: norm.body?.error_code || norm.body?.code || 'BLOCKED_FUNDS_RETRY_FAILED' }, norm.status >= 400 && norm.status < 600 ? norm.status : 400);
   }
 }
 
