@@ -6666,63 +6666,46 @@ function makeBankingFriendlyErrorPayload(input, options = {}) {
 
   const collectPayloads = (source) => {
     const out = [];
-
-    const pushObject = (candidate) => {
-      if (isPlainObject(candidate)) out.push(candidate);
+    const visited = new Set();
+    const queue = [];
+    const nestedKeys = ['error_code', 'code', 'error', 'message', 'details', 'detail', 'hint', 'body', 'json', 'payload', 'friendly_error', 'data', 'cause'];
+    const enqueue = (value) => {
+      if (value == null) return;
+      if (typeof value === 'object') {
+        if (visited.has(value)) return;
+        visited.add(value);
+      }
+      queue.push(value);
     };
 
-    const pushJsonFromText = (candidate) => {
-      const parsed = extractEmbeddedJsonObject(candidate);
-      if (parsed) out.push(parsed);
-    };
+    enqueue(source);
+    if (isPlainObject(options)) enqueue(options);
 
-    pushObject(source);
-
-    if (source instanceof Error) {
-      pushObject(source.json);
-      pushObject(source.body);
-      pushObject(source.payload);
-      pushObject(source.data);
-      pushJsonFromText(source.json);
-      pushJsonFromText(source.body);
-      pushJsonFromText(source.payload);
-      pushJsonFromText(source.data);
-      pushJsonFromText(source.message);
-      pushJsonFromText(source.stack);
-      pushJsonFromText(source.details);
-      pushJsonFromText(source.detail);
-      pushJsonFromText(source.error);
-    } else if (isPlainObject(source)) {
-      pushObject(source.json);
-      pushObject(source.body);
-      pushObject(source.payload);
-      pushObject(source.data);
-      pushObject(source.error_payload);
-      pushObject(source.friendly_error);
-      pushJsonFromText(source.json);
-      pushJsonFromText(source.body);
-      pushJsonFromText(source.payload);
-      pushJsonFromText(source.data);
-      pushJsonFromText(source.error_payload);
-      pushJsonFromText(source.friendly_error);
-      pushJsonFromText(source.message);
-      pushJsonFromText(source.error);
-      pushJsonFromText(source.details);
-      pushJsonFromText(source.detail);
-      pushJsonFromText(source.hint);
-    } else {
-      pushJsonFromText(source);
-    }
-
-    if (isPlainObject(options)) {
-      pushObject(options.payload);
-      pushObject(options.body);
-      pushObject(options.json);
-      pushObject(options.friendly_error);
-      pushJsonFromText(options.payload);
-      pushJsonFromText(options.body);
-      pushJsonFromText(options.json);
-      pushJsonFromText(options.friendly_error);
+    while (queue.length) {
+      const node = queue.shift();
+      if (isPlainObject(node)) {
+        out.push(node);
+        if (Array.isArray(node.errors)) {
+          for (const item of node.errors) enqueue(item);
+        }
+        for (const key of nestedKeys) {
+          enqueue(node[key]);
+          const parsed = extractEmbeddedJsonObject(node[key]);
+          if (parsed) enqueue(parsed);
+        }
+        enqueue(node.error_payload);
+      } else if (node instanceof Error) {
+        enqueue(node.message);
+        enqueue(node.stack);
+        enqueue(node.cause);
+        if (Array.isArray(node.errors)) {
+          for (const item of node.errors) enqueue(item);
+        }
+        for (const key of nestedKeys) enqueue(node[key]);
+      } else if (typeof node === 'string') {
+        const parsed = extractEmbeddedJsonObject(node);
+        if (parsed) enqueue(parsed);
+      }
     }
 
     return out;
@@ -6809,6 +6792,13 @@ function makeBankingFriendlyErrorPayload(input, options = {}) {
     'BATCH_STALE',
     'BLOCKED_FUNDS',
     'NO_ACTIVE_PAYMENTS_IN_BATCH',
+    'BLOCKED_FUNDS_RETRY_FAILED',
+    'BLOCKED_FUNDS_RETRY_REQUIRED',
+    'BLOCKED_FUNDS_RETRY_STATUS_MISMATCH',
+    'BLOCKED_FUNDS_RETRY_NOT_ALLOWED',
+    'BLOCKED_FUNDS_RETRY_FUNDING_ACCOUNT_MISMATCH',
+    'BLOCKED_FUNDS_RETRY_TRANSFER_EVENTS_EXIST',
+    'BLOCKED_FUNDS_RETRY_NO_ACTIVE_ITEMS',
     'EXECUTE_NOT_ALLOWED',
     'EXECUTION_ALREADY_SUBMITTED',
     'STANDARD_BANK_NOT_AVAILABLE_FOR_CSV_PROVIDER',
@@ -6833,6 +6823,12 @@ function makeBankingFriendlyErrorPayload(input, options = {}) {
     'PAYE_NOT_READY',
     'PAYE_NET_MISSING',
     'PAYE_NET_INVALID',
+    'PAYE_NET_REQUIRED',
+    'PAYE_NET_BANK_AMOUNT_MISSING',
+    'PAYE_NET_BANK_AMOUNT_INVALID',
+    'BLOCKED_BANK_DETAILS',
+    'SELECTED_PAYEE_ROUTE_NOT_READY',
+    'MISSING_RAIL_PROVIDER',
     'RAIL_ENV_MISMATCH',
     'HAS_HARD_BLOCKERS',
     'FUNDING_ACCOUNT_MISSING',
@@ -6848,7 +6844,16 @@ function makeBankingFriendlyErrorPayload(input, options = {}) {
     'BANKING_ALERT_ACKNOWLEDGEMENT_ALREADY_EXISTS',
     'BANKING_ALERT_ACKNOWLEDGE_ALERT_NOT_ACTIVE',
     'BANKING_ALERT_ACKNOWLEDGE_FAILED',
-    'BANKING_ACTION_FAILED'
+    'BANKING_ACTION_FAILED',
+    'BANKING_PAY_PREVIEW_FAILED',
+    'BANKING_PAY_PREVIEW_SESSION_BACKED_FAILED',
+    'BANKING_PAY_CREATE_DRAFT_FAILED',
+    'BANKING_PAY_CREATE_DRAFT_SESSION_BACKED_FAILED',
+    'BANKING_PAY_CREATE_DRAFT_ROUTE_FAILED',
+    'WORKBENCH_SESSION_CANDIDATE_PROJECTION_STALE',
+    'STALE_SESSION',
+    'OBSOLETE_SESSION',
+    'BANKING_PAY_WORKBENCH_SESSION_OPEN_CONTEXT_MISMATCH'
   ];
 
   const canonicaliseCode = (value) => {
@@ -6862,7 +6867,7 @@ function makeBankingFriendlyErrorPayload(input, options = {}) {
     if (code === 'CSV_UPLOADED_CONFIRMED_MUST_BE_TRUE' || code === 'CSV_UPLOADED_CONFIRMATION_MISSING') return 'CSV_UPLOADED_CONFIRMATION_REQUIRED';
     if (code === 'CSV_BANK_CONFIRM_REF_IS_REQUIRED' || code === 'CSV_BANK_CONFIRMATION_REFERENCE_REQUIRED') return 'CSV_BANK_CONFIRM_REF_REQUIRED';
     if (code === 'EXTERNAL_SETTLEMENT_COMMENT_IS_REQUIRED') return 'EXTERNAL_SETTLEMENT_COMMENT_REQUIRED';
-    if (code === 'HAS_HARD_BLOCKERS') return 'PREVIEW_GATE_NOT_SATISFIED';
+    if (code === 'HAS_HARD_BLOCKERS') return 'HAS_HARD_BLOCKERS';
     if (code === 'BANKING_ALERT_ACKNOWLEDGEMENT_ALREADY_EXISTS') return 'ACKNOWLEDGEMENT_ALREADY_EXISTS';
     if (code === 'ACKNOWLEDGEMENT_ALREADY_ACKNOWLEDGED') return 'ACKNOWLEDGEMENT_ALREADY_EXISTS';
     return code;
@@ -6989,7 +6994,7 @@ function makeBankingFriendlyErrorPayload(input, options = {}) {
       http_status: 200,
       severity: 'critical',
       title: 'Bank rejected payment — blocked funds',
-      message: 'Bank rejected the payment because the funding account does not have enough money. No payment was submitted. Fund the account and retry, or cancel/release the batch.',
+      message: 'The bank rejected the payment because the funding account does not have enough money. No payment was submitted. Fund the account and retry, or cancel/release the batch.',
       user_action: 'REVIEW_PAYMENT_ISSUES',
       confirm_label: 'OK',
       blocked_funds: true,
@@ -7152,7 +7157,7 @@ function makeBankingFriendlyErrorPayload(input, options = {}) {
       http_status: 400,
       severity: 'warning',
       title: 'PAYE net amounts are missing',
-      message: 'Missing PAYE net amounts. Enter the net amounts, click Save, then try again.',
+      message: 'Enter the missing PAYE net amounts, click Save, then try again.',
       user_action: 'COMPLETE_PAYE_NET_AMOUNTS',
       confirm_label: 'OK'
     },
@@ -7161,7 +7166,7 @@ function makeBankingFriendlyErrorPayload(input, options = {}) {
       http_status: 400,
       severity: 'warning',
       title: 'PAYE net amounts are invalid',
-      message: 'PAYE net amounts must be 0 or greater and use two decimal places. Correct the amounts, click Save, then try again.',
+      message: 'Correct the PAYE net amounts, click Save, then try again.',
       user_action: 'CORRECT_PAYE_NET_AMOUNTS',
       confirm_label: 'OK'
     },
@@ -7172,6 +7177,24 @@ function makeBankingFriendlyErrorPayload(input, options = {}) {
       title: 'Banking environment mismatch',
       message: 'The selected banking environment does not match this payment batch. Switch to the correct banking environment and try again.',
       user_action: 'CHECK_BANKING_ENVIRONMENT',
+      confirm_label: 'OK'
+    },
+    BLOCKED_BANK_DETAILS: {
+      ok: false,
+      http_status: 400,
+      severity: 'warning',
+      title: 'Bank details need attention',
+      message: 'Review or accept the highlighted bank details, then try again.',
+      user_action: 'REVIEW_BANK_DETAILS',
+      confirm_label: 'OK'
+    },
+    SELECTED_PAYEE_ROUTE_NOT_READY: {
+      ok: false,
+      http_status: 400,
+      severity: 'warning',
+      title: 'Bank details need attention',
+      message: 'Review or accept the highlighted bank details, then try again.',
+      user_action: 'REVIEW_BANK_DETAILS',
       confirm_label: 'OK'
     },
     HAS_HARD_BLOCKERS: {
@@ -7286,8 +7309,8 @@ function makeBankingFriendlyErrorPayload(input, options = {}) {
       ok: false,
       http_status: 400,
       severity: 'warning',
-      title: 'Banking rail is not configured',
-      message: 'The banking rail is not configured for this environment. Check Banking settings and try again.',
+      title: 'Banking setup needs attention',
+      message: 'CloudTMS could not submit this payment because the banking setup is incomplete or unavailable. Review Banking settings and try again.',
       user_action: 'CHECK_BANKING_SETTINGS',
       confirm_label: 'OK'
     },
@@ -7295,8 +7318,17 @@ function makeBankingFriendlyErrorPayload(input, options = {}) {
       ok: false,
       http_status: 400,
       severity: 'warning',
-      title: 'Unknown banking provider',
-      message: 'CloudTMS could not identify the banking provider for this batch. Check Banking settings and try again.',
+      title: 'Banking setup needs attention',
+      message: 'CloudTMS could not submit this payment because the banking setup is incomplete or unavailable. Review Banking settings and try again.',
+      user_action: 'CHECK_BANKING_SETTINGS',
+      confirm_label: 'OK'
+    },
+    MISSING_RAIL_PROVIDER: {
+      ok: false,
+      http_status: 400,
+      severity: 'warning',
+      title: 'Banking setup needs attention',
+      message: 'CloudTMS could not submit this payment because the banking setup is incomplete or unavailable. Review Banking settings and try again.',
       user_action: 'CHECK_BANKING_SETTINGS',
       confirm_label: 'OK'
     },
@@ -7356,6 +7388,78 @@ function makeBankingFriendlyErrorPayload(input, options = {}) {
   const template = Object.assign({}, defaultMessages[errorCode] || defaultMessages.BANKING_ACTION_FAILED);
 
   if (!defaultMessages[errorCode]) errorCode = 'BANKING_ACTION_FAILED';
+  const action = safeTrim(optionObject.action).toUpperCase();
+
+  if (errorCode === 'BATCH_STALE') {
+    if (action === 'RETRY_BLOCKED_FUNDS') {
+      Object.assign(template, {
+        title: 'Payment batch has changed',
+        message: 'This blocked-funds batch is no longer up to date. No payment was submitted. Refresh Banking, review the latest payment differences, then create or authorise a new payment batch.',
+        user_action: 'REFRESH_BATCH'
+      });
+    } else if (action === 'CREATE_DRAFT') {
+      Object.assign(template, {
+        title: 'Payment batch could not be created',
+        message: 'Payment details changed while the batch was being prepared. Refresh the preview, review the latest payment details, then try again.',
+        user_action: 'REFRESH_PREVIEW'
+      });
+    } else if (action === 'PREVIEW' || action === 'WORKBENCH_SESSION_OPEN') {
+      Object.assign(template, {
+        title: 'Payment preview needs refreshing',
+        message: 'Payment details have changed. Refresh Banking Pay preview, review the latest details, then try again.',
+        user_action: 'REFRESH_PREVIEW'
+      });
+    } else {
+      Object.assign(template, {
+        title: 'Payment batch has changed',
+        message: 'This batch is no longer up to date. No payment was submitted. Refresh Banking, review the latest payment details, then try again.'
+      });
+    }
+  }
+
+  if (
+    errorCode === 'BLOCKED_BANK_DETAILS'
+    || errorCode === 'SELECTED_PAYEE_ROUTE_NOT_READY'
+  ) {
+    Object.assign(template, {
+      title: 'Bank details need attention',
+      message: 'Review or accept the highlighted bank details, then try again.'
+    });
+  }
+
+  if (
+    errorCode === 'RAIL_ENV_MISMATCH'
+    || errorCode === 'RAIL_NOT_CONFIGURED'
+    || errorCode === 'UNKNOWN_RAIL_PROVIDER'
+    || errorCode === 'MISSING_RAIL_PROVIDER'
+    || errorCode === 'FUNDING_ACCOUNT_MISSING'
+  ) {
+    Object.assign(template, {
+      title: 'Banking setup needs attention',
+      message: 'CloudTMS could not submit this payment because the banking setup is incomplete or unavailable. Review Banking settings and try again.'
+    });
+  }
+
+  if (action === 'CREATE_DRAFT' && errorCode === 'BANKING_ACTION_FAILED') {
+    Object.assign(template, {
+      title: 'Payment batch could not be created',
+      message: 'CloudTMS could not create this payment batch because some payment details need attention. Review the highlighted items, refresh Banking, then try again.'
+    });
+  }
+
+  if ((action === 'PREVIEW' || action === 'WORKBENCH_SESSION_OPEN') && errorCode === 'BANKING_ACTION_FAILED') {
+    Object.assign(template, {
+      title: 'Payment preview could not be loaded',
+      message: 'CloudTMS could not calculate the payment preview. Refresh Banking and try again. No payment batch has been created.'
+    });
+  }
+
+  if (action === 'WORKBENCH_MODAL_ACTION' && errorCode === 'BANKING_ACTION_FAILED') {
+    Object.assign(template, {
+      title: 'Payment preview could not be updated',
+      message: 'CloudTMS could not save this payment decision. Refresh the preview and try again.'
+    });
+  }
 
   const overrideOk = Object.prototype.hasOwnProperty.call(optionObject, 'ok') ? optionObject.ok : undefined;
   const okOverrideAllowed = optionObject.allow_ok_override === true || optionObject.allowOkOverride === true;
@@ -7381,10 +7485,19 @@ function makeBankingFriendlyErrorPayload(input, options = {}) {
     if (upper.includes('PUBLIC.') || upper.includes('PAY_BATCHES') || upper.includes('PAY_BANK_TRANSFERS') || upper.includes('BANKING_ALERT_ACKNOWLEDGEMENTS')) return true;
     if (upper.includes('UQ_') || upper.includes('IDX_') || upper.includes('_PKEY') || upper.includes('PG_')) return true;
     if (upper.includes('BANKING_ALERT_ACK_USER_FINGERPRINT_SCOPE')) return true;
+    if (upper.includes('MANUAL_DEBT_RECOVERY')) return true;
+    if (upper.includes('KEY_TYPE')) return true;
+    if (upper.includes('KEY_VALUE')) return true;
+    if (upper.includes('TIMESHEET_ID')) return true;
+    if (/\bEXPECTED\b/.test(upper)) return true;
+    if (/\bACTUAL\b/.test(upper)) return true;
+    if (/\bDIFF\b/.test(upper) || /\bDIFFS\b/.test(upper) || /\bDIFF_JSON\b/.test(upper)) return true;
+    if (/"diff"\s*:/.test(text) || /'diff'\s*:/.test(text)) return true;
     if (upper.includes('VIOLATES') || upper.includes('RELATION "') || upper.includes('COLUMN "') || upper.includes('FUNCTION "')) return true;
     if (/\b(RELATION|COLUMN|FUNCTION|TABLE|SCHEMA|TYPE|OPERATOR|TRIGGER|POLICY|INDEX)\s+[\"']?[A-Z0-9_.-]+/.test(upper)) return true;
     if (/\b[A-Z0-9_]+\([^)]*\)/.test(upper)) return true;
     if (/\b(P[0-9A-Z]{4}|[0-9]{5})\b/.test(upper) && (upper.includes('ERROR') || upper.includes('FAILED'))) return true;
+    if (/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i.test(text)) return true;
     return false;
   };
 
