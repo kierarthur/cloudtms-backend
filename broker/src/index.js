@@ -10609,6 +10609,23 @@ function clampPlannedToWindow(plan, weekEndingYmd, wew, windowStartYmd, windowEn
 
 
 async function handleBankingPayWorkbenchSessionApplyCaseResolution(env, req, user, sessionId) {
+  const buildFriendlyFailure = (status, errorInput, options = {}, extra = null) => {
+    const friendlyPayload = makeBankingFriendlyErrorPayload(errorInput, { action: 'WORKBENCH_MODAL_ACTION', ...options });
+    const base = (friendlyPayload && typeof friendlyPayload === 'object') ? friendlyPayload : {};
+    const reserved = new Set(['ok', 'error_code', 'code', 'title', 'message', 'user_message', 'friendly_error', 'user_action', 'confirm_label']);
+    const safeExtra = (extra && typeof extra === 'object' && !Array.isArray(extra)) ? extra : {};
+    const mergedExtra = Object.fromEntries(Object.entries(safeExtra).filter(([k]) => !reserved.has(k)));
+    const payload = { ...base, ...mergedExtra, ok: false };
+    const normalisedCode = String(payload.error_code || payload.code || '').trim().toUpperCase();
+    const localTitle = 'Payment preview could not be updated';
+    const localMessage = 'CloudTMS could not save this payment decision. Refresh the preview and try again.';
+    if (normalisedCode !== 'BATCH_STALE') {
+      payload.title = localTitle; payload.message = localMessage; payload.user_message = localMessage; payload.error = localMessage;
+      payload.friendly_error = { ...((payload.friendly_error && typeof payload.friendly_error === 'object') ? payload.friendly_error : {}), title: localTitle, message: localMessage };
+    }
+    const resolvedStatus = normalisedCode === 'BATCH_STALE' ? 409 : status;
+    return withCORS(env, req, new Response(JSON.stringify(payload), { status: resolvedStatus, headers: JSON_HEADERS }));
+  };
   const id = String(sessionId || '').trim();
   const actorUserId = String(user?.id || '').trim();
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -10617,13 +10634,13 @@ async function handleBankingPayWorkbenchSessionApplyCaseResolution(env, req, use
     return withCORS(env, req, unauthorized('Unauthorized'));
   }
   if (!uuidRe.test(id)) {
-    return withCORS(env, req, badRequest('session_id must be a UUID'));
+    return buildFriendlyFailure(400, { code: 'WORKBENCH_SESSION_INVALID' });
   }
 
   let body = null;
   try { body = await parseJSONBody(req); } catch { body = null; }
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
-    return withCORS(env, req, badRequest('Invalid JSON'));
+    return buildFriendlyFailure(400, { code: 'WORKBENCH_MODAL_ACTION_INVALID_JSON' });
   }
 
   const enc = encodeURIComponent;
@@ -10795,45 +10812,45 @@ async function handleBankingPayWorkbenchSessionApplyCaseResolution(env, req, use
   const resolutionFamily = resolutionFamilyRaw || (hasBucketResolutions ? 'BUCKETED' : (hasTaxableChannelRestructureShape ? 'TAXABLE_CHANNEL_RESTRUCTURE' : 'NON_BUCKET'));
 
   if (!caseKey) {
-    return withCORS(env, req, badRequest('case_key is required'));
+    return buildFriendlyFailure(400, { code: 'WORKBENCH_MODAL_ACTION_INVALID_CASE_RESOLUTION' });
   }
   if (rawCandidateId && !candidateId) {
-    return withCORS(env, req, badRequest('candidate_id must be a UUID when supplied'));
+    return buildFriendlyFailure(400, { code: 'WORKBENCH_MODAL_ACTION_INVALID_CANDIDATE' });
   }
   if (rawFinanceCaseId && !financeCaseId) {
-    return withCORS(env, req, badRequest('finance_case_id must be a UUID when supplied'));
+    return buildFriendlyFailure(400, { code: 'WORKBENCH_MODAL_ACTION_INVALID_FINANCE_CASE' });
   }
   if (rawLinkedTimesheetId && !linkedTimesheetId) {
-    return withCORS(env, req, badRequest('linked_timesheet_id must be a UUID when supplied'));
+    return buildFriendlyFailure(400, { code: 'WORKBENCH_MODAL_ACTION_INVALID_TIMESHEET' });
   }
   if (resolveAllLinkedTimesheetsRaw !== undefined && resolveAllLinkedTimesheetsRaw !== null && typeof resolveAllLinkedTimesheetsRaw !== 'boolean') {
-    return withCORS(env, req, badRequest('resolve_all_linked_timesheets must be a boolean when supplied'));
+    return buildFriendlyFailure(400, { code: 'WORKBENCH_MODAL_ACTION_INVALID_CASE_RESOLUTION' });
   }
   if (!['BUCKETED', 'NON_BUCKET', 'TAXABLE_CHANNEL_RESTRUCTURE'].includes(resolutionFamily)) {
-    return withCORS(env, req, badRequest('resolution_family must be BUCKETED, NON_BUCKET or TAXABLE_CHANNEL_RESTRUCTURE'));
+    return buildFriendlyFailure(400, { code: 'WORKBENCH_MODAL_ACTION_INVALID_CASE_RESOLUTION' });
   }
 
   let resolutionPayloadJson = null;
 
   if (resolutionFamily === 'TAXABLE_CHANNEL_RESTRUCTURE') {
     if (!candidateId) {
-      return withCORS(env, req, badRequest('candidate_id is required for TAXABLE_CHANNEL_RESTRUCTURE'));
+      return buildFriendlyFailure(400, { code: 'WORKBENCH_MODAL_ACTION_INVALID_CANDIDATE' });
     }
     if (!financeCaseId) {
-      return withCORS(env, req, badRequest('finance_case_id is required for TAXABLE_CHANNEL_RESTRUCTURE'));
+      return buildFriendlyFailure(400, { code: 'WORKBENCH_MODAL_ACTION_INVALID_FINANCE_CASE' });
     }
     if (hasFrontendAuthoritativeConversionValue(body)) {
-      return withCORS(env, req, badRequest('Frontend-supplied ERNI/VAT conversion totals are not accepted for TAXABLE_CHANNEL_RESTRUCTURE; the backend calculates them.'));
+      return buildFriendlyFailure(400, { code: 'WORKBENCH_MODAL_ACTION_INVALID_CASE_RESOLUTION' });
     }
 
     const resolutionPath = normalizeResolutionPath(body.resolution_path ?? body.resolutionPath ?? body.path);
     if (!resolutionPath) {
-      return withCORS(env, req, badRequest('resolution_path must be SUGGESTED or MANUAL for TAXABLE_CHANNEL_RESTRUCTURE'));
+      return buildFriendlyFailure(400, { code: 'WORKBENCH_MODAL_ACTION_INVALID_CASE_RESOLUTION' });
     }
 
     const effectivePayDate = readIsoDate(body.effective_pay_date ?? body.effectivePayDate ?? body.pay_date ?? body.payDate);
     if (!effectivePayDate) {
-      return withCORS(env, req, badRequest('effective_pay_date must be supplied as YYYY-MM-DD for TAXABLE_CHANNEL_RESTRUCTURE'));
+      return buildFriendlyFailure(400, { code: 'WORKBENCH_MODAL_ACTION_INVALID_PAY_DATE' });
     }
 
     const scheduleInputModeRaw = body.schedule_input_mode ?? body.scheduleInputMode ?? body.repayment_input_mode ?? body.repaymentInputMode ?? body.repayment_mode ?? body.repaymentMode;
@@ -10843,39 +10860,39 @@ async function handleBankingPayWorkbenchSessionApplyCaseResolution(env, req, use
     const manualTotalProvided = hasOwnValue(body, ['manual_total_remaining', 'manualTotalRemaining', 'total_remaining_amount', 'totalRemainingAmount', 'target_remaining_balance_ex_vat', 'targetRemainingBalanceExVat']);
 
     if ((scheduleInputModeRaw !== undefined && scheduleInputModeRaw !== null && trimStr(scheduleInputModeRaw) !== '') && !scheduleInputMode) {
-      return withCORS(env, req, badRequest('schedule_input_mode must be BY_WEEKS or BY_WEEKLY_DUE for TAXABLE_CHANNEL_RESTRUCTURE'));
+      return buildFriendlyFailure(400, { code: 'WORKBENCH_MODAL_ACTION_INVALID_CASE_RESOLUTION' });
     }
     if (weeksTotalProvided && weeklyDueProvided) {
-      return withCORS(env, req, badRequest('Supply either weekly_due or weeks_total, not both, for TAXABLE_CHANNEL_RESTRUCTURE'));
+      return buildFriendlyFailure(400, { code: 'WORKBENCH_MODAL_ACTION_INVALID_CASE_RESOLUTION' });
     }
     if (resolutionPath === 'MANUAL' && !scheduleInputMode) {
-      return withCORS(env, req, badRequest('schedule_input_mode is required when TAXABLE_CHANNEL_RESTRUCTURE resolution_path is MANUAL'));
+      return buildFriendlyFailure(400, { code: 'WORKBENCH_MODAL_ACTION_INVALID_CASE_RESOLUTION' });
     }
     if (resolutionPath === 'MANUAL' && !weeksTotalProvided && !weeklyDueProvided) {
-      return withCORS(env, req, badRequest('weekly_due or weeks_total is required when TAXABLE_CHANNEL_RESTRUCTURE resolution_path is MANUAL'));
+      return buildFriendlyFailure(400, { code: 'WORKBENCH_MODAL_ACTION_INVALID_CASE_RESOLUTION' });
     }
     if (scheduleInputMode === 'BY_WEEKS' && !weeksTotalProvided) {
-      return withCORS(env, req, badRequest('weeks_total is required when schedule_input_mode is BY_WEEKS'));
+      return buildFriendlyFailure(400, { code: 'WORKBENCH_MODAL_ACTION_INVALID_CASE_RESOLUTION' });
     }
     if (scheduleInputMode === 'BY_WEEKLY_DUE' && !weeklyDueProvided) {
-      return withCORS(env, req, badRequest('weekly_due is required when schedule_input_mode is BY_WEEKLY_DUE'));
+      return buildFriendlyFailure(400, { code: 'WORKBENCH_MODAL_ACTION_INVALID_CASE_RESOLUTION' });
     }
 
     const weeksTotal = weeksTotalProvided ? readPositiveInteger(body.weeks_total ?? body.weeksTotal) : null;
     if (weeksTotalProvided && (!Number.isFinite(weeksTotal) || weeksTotal < 1)) {
-      return withCORS(env, req, badRequest('weeks_total must be an integer greater than 0 for TAXABLE_CHANNEL_RESTRUCTURE'));
+      return buildFriendlyFailure(400, { code: 'WORKBENCH_MODAL_ACTION_INVALID_CASE_RESOLUTION' });
     }
 
     const weeklyDue = weeklyDueProvided ? readPositiveNumber(body.weekly_due ?? body.weeklyDue) : null;
     if (weeklyDueProvided && (!Number.isFinite(weeklyDue) || weeklyDue <= 0)) {
-      return withCORS(env, req, badRequest('weekly_due must be a number greater than 0 for TAXABLE_CHANNEL_RESTRUCTURE'));
+      return buildFriendlyFailure(400, { code: 'WORKBENCH_MODAL_ACTION_INVALID_AMOUNT' });
     }
 
     const manualTotalRemaining = manualTotalProvided
       ? readPositiveNumber(body.manual_total_remaining ?? body.manualTotalRemaining ?? body.total_remaining_amount ?? body.totalRemainingAmount ?? body.target_remaining_balance_ex_vat ?? body.targetRemainingBalanceExVat)
       : null;
     if (manualTotalProvided && (!Number.isFinite(manualTotalRemaining) || manualTotalRemaining <= 0)) {
-      return withCORS(env, req, badRequest('manual_total_remaining must be a number greater than 0 for TAXABLE_CHANNEL_RESTRUCTURE'));
+      return buildFriendlyFailure(400, { code: 'WORKBENCH_MODAL_ACTION_INVALID_AMOUNT' });
     }
 
     const note = body.note === undefined || body.note === null ? null : trimStr(body.note) || null;
@@ -10904,20 +10921,20 @@ async function handleBankingPayWorkbenchSessionApplyCaseResolution(env, req, use
       for (const bucketResolution of rawBucketResolutions) {
         const normalized = normalizeBucketResolution(bucketResolution, body);
         if (normalized.error) {
-          return withCORS(env, req, badRequest(normalized.error));
+          return buildFriendlyFailure(400, { code: 'WORKBENCH_MODAL_ACTION_INVALID_CASE_RESOLUTION' });
         }
         normalizedBucketResolutions.push(normalized.value);
       }
     } else {
       const normalized = normalizeBucketResolution(body, body);
       if (normalized.error) {
-        return withCORS(env, req, badRequest(normalized.error));
+        return buildFriendlyFailure(400, { code: 'WORKBENCH_MODAL_ACTION_INVALID_CASE_RESOLUTION' });
       }
       normalizedBucketResolutions = [normalized.value];
     }
 
     if (!normalizedBucketResolutions.length) {
-      return withCORS(env, req, badRequest('bucket_resolutions must be a non-empty array for BUCKETED resolution'));
+      return buildFriendlyFailure(400, { code: 'WORKBENCH_MODAL_ACTION_INVALID_CASE_RESOLUTION' });
     }
 
     resolutionPayloadJson = {
@@ -10934,13 +10951,13 @@ async function handleBankingPayWorkbenchSessionApplyCaseResolution(env, req, use
     const targetAmountExVatValue = readNumber(body.target_amount_ex_vat ?? body.targetAmountExVat ?? body.target_amount ?? body.targetAmount ?? body.amount_ex_vat ?? body.amountExVat ?? body.amount);
 
     if (!resolutionMode) {
-      return withCORS(env, req, badRequest('resolution_mode is required for NON_BUCKET resolution'));
+      return buildFriendlyFailure(400, { code: 'WORKBENCH_MODAL_ACTION_INVALID_CASE_RESOLUTION' });
     }
     if (!['SUGGESTED_EQUIVALENT_BASIS', 'MANUAL_AMOUNT'].includes(resolutionMode)) {
-      return withCORS(env, req, badRequest('NON_BUCKET resolution_mode must be SUGGESTED_EQUIVALENT_BASIS or MANUAL_AMOUNT'));
+      return buildFriendlyFailure(400, { code: 'WORKBENCH_MODAL_ACTION_INVALID_CASE_RESOLUTION' });
     }
     if (!Number.isFinite(targetAmountExVatValue)) {
-      return withCORS(env, req, badRequest('target_amount_ex_vat must be a number for NON_BUCKET resolution'));
+      return buildFriendlyFailure(400, { code: 'WORKBENCH_MODAL_ACTION_INVALID_AMOUNT' });
     }
 
     resolutionPayloadJson = {
@@ -10966,10 +10983,10 @@ async function handleBankingPayWorkbenchSessionApplyCaseResolution(env, req, use
 
     const sessionRow = (rows && rows[0]) ? rows[0] : null;
     if (!sessionRow) {
-      return withCORS(env, req, notFound('Workbench session not found'));
+      return buildFriendlyFailure(404, { code: 'WORKBENCH_SESSION_NOT_FOUND' });
     }
     if (String(sessionRow.status || '').trim().toUpperCase() !== 'OPEN') {
-      return withCORS(env, req, badRequest('Workbench session is not open'));
+      return buildFriendlyFailure(409, { code: 'OBSOLETE_SESSION' });
     }
 
     const rpcRes = await sbRpc(env, 'pay_workbench_session_apply_case_resolution', {
@@ -11028,11 +11045,28 @@ async function handleBankingPayWorkbenchSessionApplyCaseResolution(env, req, use
       }
     }));
   } catch (e) {
-    return withCORS(env, req, serverError(String(e?.message || e)));
+    return buildFriendlyFailure(500, e);
   }
 }
 
 async function handleBankingPayWorkbenchSessionClearCaseResolution(env, req, user, sessionId) {
+  const buildFriendlyFailure = (status, errorInput, options = {}, extra = null) => {
+    const friendlyPayload = makeBankingFriendlyErrorPayload(errorInput, { action: 'WORKBENCH_MODAL_ACTION', ...options });
+    const base = (friendlyPayload && typeof friendlyPayload === 'object') ? friendlyPayload : {};
+    const reserved = new Set(['ok', 'error_code', 'code', 'title', 'message', 'user_message', 'friendly_error', 'user_action', 'confirm_label']);
+    const safeExtra = (extra && typeof extra === 'object' && !Array.isArray(extra)) ? extra : {};
+    const mergedExtra = Object.fromEntries(Object.entries(safeExtra).filter(([k]) => !reserved.has(k)));
+    const payload = { ...base, ...mergedExtra, ok: false };
+    const normalisedCode = String(payload.error_code || payload.code || '').trim().toUpperCase();
+    const localTitle = 'Payment preview could not be updated';
+    const localMessage = 'CloudTMS could not clear this payment decision. Refresh the preview and try again.';
+    if (normalisedCode !== 'BATCH_STALE') {
+      payload.title = localTitle; payload.message = localMessage; payload.user_message = localMessage; payload.error = localMessage;
+      payload.friendly_error = { ...((payload.friendly_error && typeof payload.friendly_error === 'object') ? payload.friendly_error : {}), title: localTitle, message: localMessage };
+    }
+    const resolvedStatus = normalisedCode === 'BATCH_STALE' ? 409 : status;
+    return withCORS(env, req, new Response(JSON.stringify(payload), { status: resolvedStatus, headers: JSON_HEADERS }));
+  };
   const id = String(sessionId || '').trim();
   const actorUserId = String(user?.id || '').trim();
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -11041,13 +11075,13 @@ async function handleBankingPayWorkbenchSessionClearCaseResolution(env, req, use
     return withCORS(env, req, unauthorized('Unauthorized'));
   }
   if (!uuidRe.test(id)) {
-    return withCORS(env, req, badRequest('session_id must be a UUID'));
+    return buildFriendlyFailure(400, { code: 'WORKBENCH_SESSION_INVALID' });
   }
 
   let body = null;
   try { body = await parseJSONBody(req); } catch { body = null; }
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
-    return withCORS(env, req, badRequest('Invalid JSON'));
+    return buildFriendlyFailure(400, { code: 'WORKBENCH_MODAL_ACTION_INVALID_JSON' });
   }
 
   const enc = encodeURIComponent;
@@ -11082,16 +11116,16 @@ async function handleBankingPayWorkbenchSessionClearCaseResolution(env, req, use
   const linkedTimesheetId = readUuid(body.linked_timesheet_id ?? body.linkedTimesheetId ?? body.timesheet_id ?? body.timesheetId);
 
   if (!caseKey) {
-    return withCORS(env, req, badRequest('case_key is required'));
+    return buildFriendlyFailure(400, { code: 'WORKBENCH_MODAL_ACTION_INVALID_CASE_KEY' });
   }
   if ((body.candidate_id !== undefined || body.candidateId !== undefined) && !candidateId) {
-    return withCORS(env, req, badRequest('candidate_id must be a UUID when supplied'));
+    return buildFriendlyFailure(400, { code: 'WORKBENCH_MODAL_ACTION_INVALID_CANDIDATE' });
   }
   if ((body.finance_case_id !== undefined || body.financeCaseId !== undefined) && !financeCaseId) {
-    return withCORS(env, req, badRequest('finance_case_id must be a UUID when supplied'));
+    return buildFriendlyFailure(400, { code: 'WORKBENCH_MODAL_ACTION_INVALID_FINANCE_CASE' });
   }
   if ((body.linked_timesheet_id !== undefined || body.linkedTimesheetId !== undefined || body.timesheet_id !== undefined || body.timesheetId !== undefined) && !linkedTimesheetId) {
-    return withCORS(env, req, badRequest('linked_timesheet_id must be a UUID when supplied'));
+    return buildFriendlyFailure(400, { code: 'WORKBENCH_MODAL_ACTION_INVALID_TIMESHEET' });
   }
 
   const resolutionPayloadJson = {
@@ -11113,10 +11147,10 @@ async function handleBankingPayWorkbenchSessionClearCaseResolution(env, req, use
 
     const sessionRow = (rows && rows[0]) ? rows[0] : null;
     if (!sessionRow) {
-      return withCORS(env, req, notFound('Workbench session not found'));
+      return buildFriendlyFailure(404, { code: 'WORKBENCH_SESSION_NOT_FOUND' });
     }
     if (String(sessionRow.status || '').trim().toUpperCase() !== 'OPEN') {
-      return withCORS(env, req, badRequest('Workbench session is not open'));
+      return buildFriendlyFailure(409, { code: 'OBSOLETE_SESSION' });
     }
 
     const rpcRes = await sbRpc(env, 'pay_workbench_session_clear_case_resolution', {
@@ -11167,12 +11201,29 @@ async function handleBankingPayWorkbenchSessionClearCaseResolution(env, req, use
 
     return withCORS(env, req, ok(responsePayload));
   } catch (e) {
-    return withCORS(env, req, serverError(String(e?.message || e)));
+    return buildFriendlyFailure(500, e);
   }
 }
 
 
 async function handleBankingPayWorkbenchSessionSetTimesheetExclusion(env, req, user, sessionId) {
+  const buildFriendlyFailure = (status, errorInput, options = {}, extra = null) => {
+    const friendlyPayload = makeBankingFriendlyErrorPayload(errorInput, { action: 'WORKBENCH_MODAL_ACTION', ...options });
+    const base = (friendlyPayload && typeof friendlyPayload === 'object') ? friendlyPayload : {};
+    const reserved = new Set(['ok', 'error_code', 'code', 'title', 'message', 'user_message', 'friendly_error', 'user_action', 'confirm_label']);
+    const safeExtra = (extra && typeof extra === 'object' && !Array.isArray(extra)) ? extra : {};
+    const mergedExtra = Object.fromEntries(Object.entries(safeExtra).filter(([k]) => !reserved.has(k)));
+    const payload = { ...base, ...mergedExtra, ok: false };
+    const normalisedCode = String(payload.error_code || payload.code || '').trim().toUpperCase();
+    const localTitle = 'Payment preview could not be updated';
+    const localMessage = 'CloudTMS could not save the timesheet exclusion. Refresh the preview and try again.';
+    if (normalisedCode !== 'BATCH_STALE') {
+      payload.title = localTitle; payload.message = localMessage; payload.user_message = localMessage; payload.error = localMessage;
+      payload.friendly_error = { ...((payload.friendly_error && typeof payload.friendly_error === 'object') ? payload.friendly_error : {}), title: localTitle, message: localMessage };
+    }
+    const resolvedStatus = normalisedCode === 'BATCH_STALE' ? 409 : status;
+    return withCORS(env, req, new Response(JSON.stringify(payload), { status: resolvedStatus, headers: JSON_HEADERS }));
+  };
   const id = String(sessionId || '').trim();
   const actorUserId = String(user?.id || '').trim();
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -11181,13 +11232,13 @@ async function handleBankingPayWorkbenchSessionSetTimesheetExclusion(env, req, u
     return withCORS(env, req, unauthorized('Unauthorized'));
   }
   if (!uuidRe.test(id)) {
-    return withCORS(env, req, badRequest('session_id must be a UUID'));
+    return buildFriendlyFailure(400, { code: 'WORKBENCH_SESSION_INVALID' });
   }
 
   let body = null;
   try { body = await parseJSONBody(req); } catch { body = null; }
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
-    return withCORS(env, req, badRequest('Invalid JSON'));
+    return buildFriendlyFailure(400, { code: 'WORKBENCH_MODAL_ACTION_INVALID_JSON' });
   }
 
   const enc = encodeURIComponent;
@@ -11221,13 +11272,13 @@ async function handleBankingPayWorkbenchSessionSetTimesheetExclusion(env, req, u
   const isExcludedRaw = body.is_excluded ?? body.isExcluded ?? body.exclude ?? body.excluded;
 
   if (!uuidRe.test(candidateId)) {
-    return withCORS(env, req, badRequest('candidate_id must be a UUID'));
+    return buildFriendlyFailure(400, { code: 'WORKBENCH_MODAL_ACTION_INVALID_CANDIDATE' });
   }
   if (!uuidRe.test(timesheetId)) {
-    return withCORS(env, req, badRequest('timesheet_id must be a UUID'));
+    return buildFriendlyFailure(400, { code: 'WORKBENCH_MODAL_ACTION_INVALID_TIMESHEET' });
   }
   if (typeof isExcludedRaw !== 'boolean') {
-    return withCORS(env, req, badRequest('is_excluded must be a boolean'));
+    return buildFriendlyFailure(400, { code: 'WORKBENCH_MODAL_ACTION_INVALID_EXCLUSION' });
   }
 
   try {
@@ -11242,10 +11293,10 @@ async function handleBankingPayWorkbenchSessionSetTimesheetExclusion(env, req, u
 
     const sessionRow = (rows && rows[0]) ? rows[0] : null;
     if (!sessionRow) {
-      return withCORS(env, req, notFound('Workbench session not found'));
+      return buildFriendlyFailure(404, { code: 'WORKBENCH_SESSION_NOT_FOUND' });
     }
     if (String(sessionRow.status || '').trim().toUpperCase() !== 'OPEN') {
-      return withCORS(env, req, badRequest('Workbench session is not open'));
+      return buildFriendlyFailure(409, { code: 'OBSOLETE_SESSION' });
     }
 
     const rpcRes = await sbRpc(env, 'pay_workbench_session_set_timesheet_exclusion', {
@@ -11298,12 +11349,29 @@ async function handleBankingPayWorkbenchSessionSetTimesheetExclusion(env, req, u
 
     return withCORS(env, req, ok(responsePayload));
   } catch (e) {
-    return withCORS(env, req, serverError(String(e?.message || e)));
+    return buildFriendlyFailure(500, e);
   }
 }
 
 
 async function handleBankingPayWorkbenchSessionSetSelectedRows(env, req, user, sessionId) {
+  const buildFriendlyFailure = (status, errorInput, options = {}, extra = null) => {
+    const friendlyPayload = makeBankingFriendlyErrorPayload(errorInput, { action: 'WORKBENCH_MODAL_ACTION', ...options });
+    const base = (friendlyPayload && typeof friendlyPayload === 'object') ? friendlyPayload : {};
+    const reserved = new Set(['ok', 'error_code', 'code', 'title', 'message', 'user_message', 'friendly_error', 'user_action', 'confirm_label']);
+    const safeExtra = (extra && typeof extra === 'object' && !Array.isArray(extra)) ? extra : {};
+    const mergedExtra = Object.fromEntries(Object.entries(safeExtra).filter(([k]) => !reserved.has(k)));
+    const payload = { ...base, ...mergedExtra, ok: false };
+    const normalisedCode = String(payload.error_code || payload.code || '').trim().toUpperCase();
+    const localTitle = 'Payment preview could not be updated';
+    const localMessage = 'CloudTMS could not save the selected payment rows. Refresh the preview and try again.';
+    if (normalisedCode !== 'BATCH_STALE') {
+      payload.title = localTitle; payload.message = localMessage; payload.user_message = localMessage; payload.error = localMessage;
+      payload.friendly_error = { ...((payload.friendly_error && typeof payload.friendly_error === 'object') ? payload.friendly_error : {}), title: localTitle, message: localMessage };
+    }
+    const resolvedStatus = normalisedCode === 'BATCH_STALE' ? 409 : status;
+    return withCORS(env, req, new Response(JSON.stringify(payload), { status: resolvedStatus, headers: JSON_HEADERS }));
+  };
   const id = String(sessionId || '').trim();
   const actorUserId = String(user?.id || '').trim();
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -11312,13 +11380,13 @@ async function handleBankingPayWorkbenchSessionSetSelectedRows(env, req, user, s
     return withCORS(env, req, unauthorized('Unauthorized'));
   }
   if (!uuidRe.test(id)) {
-    return withCORS(env, req, badRequest('session_id must be a UUID'));
+    return buildFriendlyFailure(400, { code: 'WORKBENCH_SESSION_INVALID' });
   }
 
   let body = null;
   try { body = await parseJSONBody(req); } catch { body = null; }
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
-    return withCORS(env, req, badRequest('Invalid JSON'));
+    return buildFriendlyFailure(400, { code: 'WORKBENCH_MODAL_ACTION_INVALID_JSON' });
   }
 
   const enc = encodeURIComponent;
@@ -11337,11 +11405,11 @@ async function handleBankingPayWorkbenchSessionSetSelectedRows(env, req, user, s
 
   const selectedPreviewRowIds = body.selected_preview_row_ids ?? body.selectedPreviewRowIds;
   if (!Array.isArray(selectedPreviewRowIds)) {
-    return withCORS(env, req, badRequest('selected_preview_row_ids must be an array'));
+    return buildFriendlyFailure(400, { code: 'WORKBENCH_MODAL_ACTION_INVALID_SELECTED_ROWS' });
   }
   for (const rowId of selectedPreviewRowIds) {
     if (typeof rowId !== 'string' || !String(rowId).trim()) {
-      return withCORS(env, req, badRequest('selected_preview_row_ids must contain non-empty strings only'));
+      return buildFriendlyFailure(400, { code: 'WORKBENCH_MODAL_ACTION_INVALID_SELECTED_ROWS' });
     }
   }
 
@@ -11359,10 +11427,10 @@ async function handleBankingPayWorkbenchSessionSetSelectedRows(env, req, user, s
 
     const sessionRow = (rows && rows[0]) ? rows[0] : null;
     if (!sessionRow) {
-      return withCORS(env, req, notFound('Workbench session not found'));
+      return buildFriendlyFailure(404, { code: 'WORKBENCH_SESSION_NOT_FOUND' });
     }
     if (String(sessionRow.status || '').trim().toUpperCase() !== 'OPEN') {
-      return withCORS(env, req, badRequest('Workbench session is not open'));
+      return buildFriendlyFailure(409, { code: 'OBSOLETE_SESSION' });
     }
 
     const rpcRes = await sbRpc(env, 'pay_workbench_session_set_selected_rows', {
@@ -11374,12 +11442,29 @@ async function handleBankingPayWorkbenchSessionSetSelectedRows(env, req, user, s
     const payload = unwrapRpc(rpcRes, 'pay_workbench_session_set_selected_rows');
     return withCORS(env, req, ok(payload));
   } catch (e) {
-    return withCORS(env, req, serverError(String(e?.message || e)));
+    return buildFriendlyFailure(500, e);
   }
 }
 
 
 async function handleBankingPayWorkbenchSessionDiscard(env, req, user, sessionId) {
+  const buildFriendlyFailure = (status, errorInput, options = {}, extra = null) => {
+    const friendlyPayload = makeBankingFriendlyErrorPayload(errorInput, { action: 'WORKBENCH_MODAL_ACTION', ...options });
+    const base = (friendlyPayload && typeof friendlyPayload === 'object') ? friendlyPayload : {};
+    const reserved = new Set(['ok', 'error_code', 'code', 'title', 'message', 'user_message', 'friendly_error', 'user_action', 'confirm_label']);
+    const safeExtra = (extra && typeof extra === 'object' && !Array.isArray(extra)) ? extra : {};
+    const mergedExtra = Object.fromEntries(Object.entries(safeExtra).filter(([k]) => !reserved.has(k)));
+    const payload = { ...base, ...mergedExtra, ok: false };
+    const normalisedCode = String(payload.error_code || payload.code || '').trim().toUpperCase();
+    const localTitle = 'Payment preview could not be closed';
+    const localMessage = 'Refresh Banking and try again.';
+    if (normalisedCode !== 'BATCH_STALE') {
+      payload.title = localTitle; payload.message = localMessage; payload.user_message = localMessage; payload.error = localMessage;
+      payload.friendly_error = { ...((payload.friendly_error && typeof payload.friendly_error === 'object') ? payload.friendly_error : {}), title: localTitle, message: localMessage };
+    }
+    const resolvedStatus = normalisedCode === 'BATCH_STALE' ? 409 : status;
+    return withCORS(env, req, new Response(JSON.stringify(payload), { status: resolvedStatus, headers: JSON_HEADERS }));
+  };
   const id = String(sessionId || '').trim();
   const actorUserId = String(user?.id || '').trim();
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -11388,7 +11473,7 @@ async function handleBankingPayWorkbenchSessionDiscard(env, req, user, sessionId
     return withCORS(env, req, unauthorized('Unauthorized'));
   }
   if (!uuidRe.test(id)) {
-    return withCORS(env, req, badRequest('session_id must be a UUID'));
+    return buildFriendlyFailure(400, { code: 'WORKBENCH_SESSION_INVALID' });
   }
 
   const enc = encodeURIComponent;
@@ -11417,7 +11502,7 @@ async function handleBankingPayWorkbenchSessionDiscard(env, req, user, sessionId
 
     const sessionRow = (rows && rows[0]) ? rows[0] : null;
     if (!sessionRow) {
-      return withCORS(env, req, notFound('Workbench session not found'));
+      return buildFriendlyFailure(404, { code: 'WORKBENCH_SESSION_NOT_FOUND' });
     }
     const rpcRes = await sbRpc(env, 'pay_workbench_session_discard', {
       p_session_id: id,
@@ -11427,7 +11512,7 @@ async function handleBankingPayWorkbenchSessionDiscard(env, req, user, sessionId
     const payload = unwrapRpc(rpcRes, 'pay_workbench_session_discard');
     return withCORS(env, req, ok(payload));
   } catch (e) {
-    return withCORS(env, req, serverError(String(e?.message || e)));
+    return buildFriendlyFailure(500, e);
   }
 }
 
@@ -69377,6 +69462,23 @@ async function apiUpdateAssignmentBandMapping(id, patch) {
   return __unwrapSingle(json);
 }
 async function handleBankingPayWorkbenchSessionClearAllDecisions(env, req, user, sessionId) {
+  const buildFriendlyFailure = (status, errorInput, options = {}, extra = null) => {
+    const friendlyPayload = makeBankingFriendlyErrorPayload(errorInput, { action: 'WORKBENCH_MODAL_ACTION', ...options });
+    const base = (friendlyPayload && typeof friendlyPayload === 'object') ? friendlyPayload : {};
+    const reserved = new Set(['ok', 'error_code', 'code', 'title', 'message', 'user_message', 'friendly_error', 'user_action', 'confirm_label']);
+    const safeExtra = (extra && typeof extra === 'object' && !Array.isArray(extra)) ? extra : {};
+    const mergedExtra = Object.fromEntries(Object.entries(safeExtra).filter(([k]) => !reserved.has(k)));
+    const payload = { ...base, ...mergedExtra, ok: false };
+    const normalisedCode = String(payload.error_code || payload.code || '').trim().toUpperCase();
+    const localTitle = 'Payment preview could not be updated';
+    const localMessage = 'CloudTMS could not clear the selected payment decisions. Refresh the preview and try again.';
+    if (normalisedCode !== 'BATCH_STALE') {
+      payload.title = localTitle; payload.message = localMessage; payload.user_message = localMessage; payload.error = localMessage;
+      payload.friendly_error = { ...((payload.friendly_error && typeof payload.friendly_error === 'object') ? payload.friendly_error : {}), title: localTitle, message: localMessage };
+    }
+    const resolvedStatus = normalisedCode === 'BATCH_STALE' ? 409 : status;
+    return withCORS(env, req, new Response(JSON.stringify(payload), { status: resolvedStatus, headers: JSON_HEADERS }));
+  };
   const id = String(sessionId || '').trim();
   const actorUserId = String(user?.id || '').trim();
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -69385,13 +69487,13 @@ async function handleBankingPayWorkbenchSessionClearAllDecisions(env, req, user,
     return withCORS(env, req, unauthorized('Unauthorized'));
   }
   if (!uuidRe.test(id)) {
-    return withCORS(env, req, badRequest('session_id must be a UUID'));
+    return buildFriendlyFailure(400, { code: 'WORKBENCH_SESSION_INVALID' });
   }
 
   let body = null;
   try { body = await parseJSONBody(req); } catch { body = null; }
   if (body !== null && (!body || typeof body !== 'object' || Array.isArray(body))) {
-    return withCORS(env, req, badRequest('Invalid JSON'));
+    return buildFriendlyFailure(400, { code: 'WORKBENCH_MODAL_ACTION_INVALID_JSON' });
   }
 
   const enc = encodeURIComponent;
@@ -69432,10 +69534,10 @@ async function handleBankingPayWorkbenchSessionClearAllDecisions(env, req, user,
 
     const sessionRow = (rows && rows[0]) ? rows[0] : null;
     if (!sessionRow) {
-      return withCORS(env, req, notFound('Workbench session not found'));
+      return buildFriendlyFailure(404, { code: 'WORKBENCH_SESSION_NOT_FOUND' });
     }
     if (String(sessionRow.status || '').trim().toUpperCase() !== 'OPEN') {
-      return withCORS(env, req, badRequest('Workbench session is not open'));
+      return buildFriendlyFailure(409, { code: 'OBSOLETE_SESSION' });
     }
 
     const clearRpc = await sbRpc(env, 'pay_workbench_session_clear_all_decisions', {
@@ -69559,7 +69661,7 @@ async function handleBankingPayWorkbenchSessionClearAllDecisions(env, req, user,
 
     return withCORS(env, req, ok(out));
   } catch (e) {
-    return withCORS(env, req, serverError(String(e?.message || e)));
+    return buildFriendlyFailure(500, e);
   }
 }
 
