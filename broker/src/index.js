@@ -43574,7 +43574,7 @@ async function getTimesheetEvidenceMutationPolicy(env, timesheetId, opts = {}) {
     `${env.SUPABASE_URL}/rest/v1/timesheets` +
       `?timesheet_id=eq.${enc(currentTsId)}` +
       `&is_current=eq.true` +
-      `&select=timesheet_id,authorised_at_server,revoked_at` +
+      `&select=timesheet_id,authorised_at_server,revoked_at,sheet_scope,submission_mode,line_type,is_adjustment,adjustment_origin,parent_timesheet_id` +
       `&limit=1`
   ).catch(() => null);
   out.authorised =
@@ -43586,7 +43586,7 @@ async function getTimesheetEvidenceMutationPolicy(env, timesheetId, opts = {}) {
     `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
       `?timesheet_id=eq.${enc(currentTsId)}` +
       `&is_current=eq.true` +
-      `&select=locked_by_invoice_id,paid_at_utc,invoice_breakdown_json` +
+      `&select=locked_by_invoice_id,paid_at_utc,invoice_breakdown_json,basis` +
       `&limit=1`
   ).catch(() => null);
 
@@ -43600,11 +43600,24 @@ async function getTimesheetEvidenceMutationPolicy(env, timesheetId, opts = {}) {
     env,
     `${env.SUPABASE_URL}/rest/v1/v_timesheets_summary_base` +
       `?timesheet_id=eq.${enc(currentTsId)}` +
-      `&select=timesheet_id,client_no_timesheet_required,basis,route_type` +
+      `&select=timesheet_id,client_no_timesheet_required,basis,route_type,route_family` +
       `&limit=1`
   ).catch(() => null);
-  out.summary = summary || null;
-  out.import_authoritative = isImportAuthoritativeEvidenceContext(summary);
+  const cw = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+      `?timesheet_id=eq.${enc(currentTsId)}` +
+      `&select=additional_seq` +
+      `&limit=1`
+  ).catch(() => null);
+  const classificationContext = {
+    ...(summary || {}),
+    ...(tsRow || {}),
+    basis: summary?.basis ?? fin?.basis ?? null,
+    additional_seq: cw?.additional_seq ?? null
+  };
+  out.summary = classificationContext || null;
+  out.import_authoritative = isImportAuthoritativeEvidenceContext(classificationContext);
   if (out.import_authoritative) out.protected_reason = 'IMPORT_AUTHORITATIVE_ROUTE';
 
   const evidence = opts?.evidence_item || null;
@@ -43632,7 +43645,19 @@ async function getTimesheetEvidenceMutationPolicy(env, timesheetId, opts = {}) {
     }
   }
 
-  out.can_manage_evidence = !out.document_locked && !out.import_authoritative && !out.protected_reason;
+  if (out.authorised) {
+    out.protected_reason = out.protected_reason || 'TIMESHEET_AUTHORISED_EDIT_BLOCKED';
+  } else if (out.candidate_paid) {
+    out.protected_reason = out.protected_reason || 'TIMESHEET_PAID_EDIT_BLOCKED';
+  } else if (out.document_locked) {
+    out.protected_reason =
+      out.protected_reason ||
+      (out.document_lock_reason === 'INVOICE_SEGMENT_LOCKED'
+        ? 'TIMESHEET_SEGMENT_INVOICE_LOCKED_EDIT_BLOCKED'
+        : 'TIMESHEET_INVOICE_LOCKED_EDIT_BLOCKED');
+  }
+
+  out.can_manage_evidence = !out.document_locked && !out.authorised && !out.candidate_paid && !out.import_authoritative && !out.protected_reason;
   return out;
 }
 
@@ -44384,15 +44409,49 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
 
 
 function isImportAuthoritativeEvidenceContext(summary) {
-  const basisU = String(summary?.basis || '').trim().toUpperCase();
+  const up = (v) => String(v || '').trim().toUpperCase();
+  const yes = (v) => v === true || String(v || '').trim().toLowerCase() === 'true';
+  const num = (v) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : 0;
+  };
 
-  return (
-    summary?.client_no_timesheet_required === true ||
+  const basisU = up(summary?.basis);
+  const submissionModeU = up(summary?.submission_mode);
+  const lineTypeU = up(summary?.line_type);
+  const adjustmentOriginU = up(summary?.adjustment_origin);
+  const routeTypeU = up(summary?.route_type);
+  const routeFamilyU = up(summary?.route_family);
+
+  const isAdditionalManualRow =
+    submissionModeU === 'MANUAL' &&
+    (
+      yes(summary?.is_adjustment) ||
+      !!summary?.parent_timesheet_id ||
+      num(summary?.additional_seq) > 0 ||
+      lineTypeU.includes('ADJUST') ||
+      lineTypeU.includes('ADDITIONAL') ||
+      adjustmentOriginU.includes('MANUAL') ||
+      adjustmentOriginU.includes('ADDITIONAL')
+    );
+
+  if (isAdditionalManualRow) return false;
+
+  const noTsRequired = yes(summary?.client_no_timesheet_required) || yes(summary?.no_timesheet_required);
+  const originalNhspHrBasis =
     basisU === 'NHSP' ||
-    basisU === 'NHSP_ADJUSTMENT' ||
     basisU === 'HEALTHROSTER_SELF_BILL' ||
-    basisU === 'HEALTHROSTER_ADJUSTMENT'
-  );
+    basisU === 'NHSP_ADJUSTMENT' ||
+    basisU === 'HEALTHROSTER_ADJUSTMENT';
+  const importRoute =
+    routeTypeU.includes('IMPORT') ||
+    routeTypeU.includes('NHSP') ||
+    routeTypeU.includes('HEALTHROSTER') ||
+    routeFamilyU.includes('IMPORT') ||
+    routeFamilyU.includes('NHSP') ||
+    routeFamilyU.includes('HEALTHROSTER');
+
+  return noTsRequired || originalNhspHrBasis || importRoute;
 }
 
 
@@ -93384,6 +93443,64 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
     );
   }
 
+  const before = await fetchCurrentTsfin(env, currentTimesheetId);
+  if (!before) return notFound('TSFIN current row not found');
+
+  const summary = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/v_timesheets_summary_base` +
+      `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+      `&select=timesheet_id,client_no_timesheet_required,basis,route_type,route_family` +
+      `&limit=1`
+  ).catch(() => null);
+  const tsClassRow = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+      `&is_current=eq.true` +
+      `&select=timesheet_id,sheet_scope,submission_mode,line_type,is_adjustment,adjustment_origin,parent_timesheet_id` +
+      `&limit=1`
+  ).catch(() => null);
+  const cw = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+      `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+      `&select=additional_seq` +
+      `&limit=1`
+  ).catch(() => null);
+  const classificationContext = {
+    ...(summary || {}),
+    ...(tsClassRow || {}),
+    basis: summary?.basis ?? before?.basis ?? null,
+    additional_seq: cw?.additional_seq ?? null
+  };
+
+  if (isImportAuthoritativeEvidenceContext(classificationContext)) {
+    return new Response(
+      JSON.stringify({
+        error_code: 'IMPORT_AUTHORITATIVE_EXPENSES_BLOCKED',
+        message: 'This timesheet route is import-authoritative. Add or amend expenses on an eligible manual/additional row.'
+      }),
+      { status: 409, headers: { 'Content-Type': 'application/json' } }
+    );
+  }
+
+  const lineTypeU = String(classificationContext?.line_type || '').toUpperCase();
+  const sheetScopeU = String(classificationContext?.sheet_scope || '').toUpperCase();
+  const segmentOnlyTarget =
+    lineTypeU === 'SEGMENT' ||
+    lineTypeU === 'SEGMENT_ONLY' ||
+    sheetScopeU === 'SEGMENT';
+  if (segmentOnlyTarget) {
+    return new Response(
+      JSON.stringify({
+        error_code: 'SEGMENT_CONTEXT_EXPENSES_BLOCKED',
+        message: 'This segment-only context cannot be amended via parent-level expense/mileage endpoints.'
+      }),
+      { status: 409, headers: { 'Content-Type': 'application/json' } }
+    );
+  }
+
   // From here on: ALWAYS use currentTimesheetId
   const toNum = (v) => (v === null || v === undefined ? null : Number(v));
   const nonneg = (n) => (n === null || n === undefined ? true : Number(n) >= 0);
@@ -93464,12 +93581,27 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
   }
 
   // -------- load current snapshot --------
-  const before = await fetchCurrentTsfin(env, currentTimesheetId);
-  if (!before) return notFound('TSFIN current row not found');
+  if (before.paid_at_utc) {
+    return new Response(
+      JSON.stringify({
+        error_code: 'TIMESHEET_PAID_EDIT_BLOCKED',
+        message: 'This timesheet has been paid and cannot be amended directly.'
+      }),
+      { status: 409, headers: { 'Content-Type': 'application/json' } }
+    );
+  }
 
   // Segment-aware lock: block expense/mileage/PO changes if ANY segment is invoiced
   if (before.locked_by_invoice_id || hasAnySegmentInvoiceLock(before)) {
-    return conflict('Timesheet financials are locked by an invoice');
+    return new Response(
+      JSON.stringify({
+        error_code: hasAnySegmentInvoiceLock(before)
+          ? 'TIMESHEET_SEGMENT_INVOICE_LOCKED_EDIT_BLOCKED'
+          : 'TIMESHEET_INVOICE_LOCKED_EDIT_BLOCKED',
+        message: 'Timesheet financials are locked by an invoice'
+      }),
+      { status: 409, headers: { 'Content-Type': 'application/json' } }
+    );
   }
 
   // -------- compute "after" values for evidence enforcement + totals coherency --------
@@ -112936,7 +113068,7 @@ async function fetchCurrentTsfin(env, timesheetId) {
     `&is_current=eq.true` +
     `&select=` + [
       'timesheet_id','timesheet_version','candidate_id','client_id',
-      'processing_status','locked_by_invoice_id','is_current',
+      'processing_status','locked_by_invoice_id','paid_at_utc','basis','is_current',
       'invoice_breakdown_json',
 
       // ✅ NEW: category expense columns (required for patchTsfinCommon correctness)
