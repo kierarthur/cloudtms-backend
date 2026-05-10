@@ -6838,6 +6838,7 @@ function makeBankingFriendlyErrorPayload(input, options = {}) {
     'REAUTH_REQUIRED',
     'RAIL_NOT_CONFIGURED',
     'UNKNOWN_RAIL_PROVIDER',
+    'RAIL_RETRY_EXECUTION_NOT_SUPPORTED',
     'MANUAL_CONFIRM_NOT_SUPPORTED_FOR_THIS_RAIL',
     'ACKNOWLEDGEMENT_ALREADY_EXISTS',
     'ACKNOWLEDGEMENT_ALREADY_ACKNOWLEDGED',
@@ -6846,8 +6847,12 @@ function makeBankingFriendlyErrorPayload(input, options = {}) {
     'BANKING_ALERT_ACKNOWLEDGE_FAILED',
     'BANKING_ACTION_FAILED',
     'BANKING_PAY_PREVIEW_FAILED',
+    'BANKING_PREVIEW_INVALID_PAY_DATE',
+    'BANKING_PREVIEW_INVALID_INPUT',
     'BANKING_PAY_PREVIEW_SESSION_BACKED_FAILED',
     'BANKING_PAY_CREATE_DRAFT_FAILED',
+    'BANKING_CREATE_DRAFT_INVALID_PAY_DATE',
+    'BANKING_CREATE_DRAFT_INVALID_INPUT',
     'BANKING_PAY_CREATE_DRAFT_SESSION_BACKED_FAILED',
     'BANKING_PAY_CREATE_DRAFT_ROUTE_FAILED',
     'WORKBENCH_SESSION_CANDIDATE_PROJECTION_STALE',
@@ -7323,6 +7328,15 @@ function makeBankingFriendlyErrorPayload(input, options = {}) {
       user_action: 'CHECK_BANKING_SETTINGS',
       confirm_label: 'OK'
     },
+    RAIL_RETRY_EXECUTION_NOT_SUPPORTED: {
+      ok: false,
+      http_status: 400,
+      severity: 'warning',
+      title: 'Banking setup needs attention',
+      message: 'CloudTMS could not retry this payment because the configured banking rail does not support retrying this batch. Review Banking settings, then retry or cancel/release the batch.',
+      user_action: 'REVIEW_BANKING_SETTINGS',
+      confirm_label: 'OK'
+    },
     MISSING_RAIL_PROVIDER: {
       ok: false,
       http_status: 400,
@@ -7382,6 +7396,42 @@ function makeBankingFriendlyErrorPayload(input, options = {}) {
       message: 'CloudTMS could not complete this Banking action. Please refresh and try again.',
       user_action: 'REFRESH_AND_RETRY',
       confirm_label: 'OK'
+    },
+    BANKING_PREVIEW_INVALID_PAY_DATE: {
+      ok: false,
+      http_status: 400,
+      severity: 'warning',
+      title: 'Payment preview could not be loaded',
+      message: 'Select a valid pay date, then try again. No payment batch has been created.',
+      user_action: 'CHECK_PAY_DATE',
+      confirm_label: 'OK'
+    },
+    BANKING_PREVIEW_INVALID_INPUT: {
+      ok: false,
+      http_status: 400,
+      severity: 'warning',
+      title: 'Payment preview could not be loaded',
+      message: 'Review the payment preview inputs, then try again.',
+      user_action: 'REFRESH_BANKING',
+      confirm_label: 'OK'
+    },
+    BANKING_CREATE_DRAFT_INVALID_PAY_DATE: {
+      ok: false,
+      http_status: 400,
+      severity: 'warning',
+      title: 'Payment batch could not be created',
+      message: 'Select a valid pay date, then try again. No payment batch has been created.',
+      user_action: 'CHECK_PAY_DATE',
+      confirm_label: 'OK'
+    },
+    BANKING_CREATE_DRAFT_INVALID_INPUT: {
+      ok: false,
+      http_status: 400,
+      severity: 'warning',
+      title: 'Payment batch could not be created',
+      message: 'Review your selected payment items, then try again.',
+      user_action: 'REVIEW_SELECTION',
+      confirm_label: 'OK'
     }
   };
 
@@ -7433,11 +7483,20 @@ function makeBankingFriendlyErrorPayload(input, options = {}) {
     || errorCode === 'UNKNOWN_RAIL_PROVIDER'
     || errorCode === 'MISSING_RAIL_PROVIDER'
     || errorCode === 'FUNDING_ACCOUNT_MISSING'
+    || errorCode === 'RAIL_RETRY_EXECUTION_NOT_SUPPORTED'
   ) {
-    Object.assign(template, {
-      title: 'Banking setup needs attention',
-      message: 'CloudTMS could not submit this payment because the banking setup is incomplete or unavailable. Review Banking settings and try again.'
-    });
+    if (errorCode === 'RAIL_RETRY_EXECUTION_NOT_SUPPORTED') {
+      Object.assign(template, {
+        title: 'Banking setup needs attention',
+        message: 'CloudTMS could not retry this payment because the configured banking rail does not support retrying this batch. Review Banking settings, then retry or cancel/release the batch.',
+        user_action: 'REVIEW_BANKING_SETTINGS'
+      });
+    } else {
+      Object.assign(template, {
+        title: 'Banking setup needs attention',
+        message: 'CloudTMS could not submit this payment because the banking setup is incomplete or unavailable. Review Banking settings and try again.'
+      });
+    }
   }
 
   if (action === 'CREATE_DRAFT' && errorCode === 'BANKING_ACTION_FAILED') {
@@ -19716,7 +19775,18 @@ async function handleBankingPayPreview(env, req, user) {
   let body = null;
   try { body = await parseJSONBody(req); } catch { body = null; }
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
-    return withCORS(env, req, badRequest('Invalid JSON'));
+    const friendlyPayload = makeBankingFriendlyErrorPayload({
+      ok: false,
+      error_code: 'BANKING_PAY_PREVIEW_FAILED',
+      code: 'BANKING_PAY_PREVIEW_FAILED',
+      message: 'Invalid JSON body'
+    }, { action: 'PREVIEW' });
+    return withCORS(env, req, new Response(JSON.stringify({
+      ...friendlyPayload,
+      ok: false,
+      preview_unavailable: true,
+      can_retry: true
+    }), { status: 400, headers: JSON_HEADERS }));
   }
 
   const actorUserId = String(user?.id || '').trim();
@@ -19797,7 +19867,18 @@ async function handleBankingPayPreview(env, req, user) {
   const payDateRaw = trimStr(body.pay_date || body.payDate || '');
   const payDate = parseIsoOrUkDateToIso(payDateRaw);
   if (!payDate) {
-    return withCORS(env, req, badRequest('pay_date is required (YYYY-MM-DD or DD/MM/YYYY)'));
+    const friendlyPayload = makeBankingFriendlyErrorPayload({
+      ok: false,
+      error_code: 'BANKING_PREVIEW_INVALID_PAY_DATE',
+      code: 'BANKING_PREVIEW_INVALID_PAY_DATE',
+      message: 'Select a valid pay date, then try again. No payment batch has been created.'
+    }, { action: 'PREVIEW' });
+    return withCORS(env, req, new Response(JSON.stringify({
+      ...friendlyPayload,
+      ok: false,
+      preview_unavailable: true,
+      can_retry: true
+    }), { status: 400, headers: JSON_HEADERS }));
   }
 
   const ordinaryWeekEndingCutoff = '9999-12-31';
@@ -19814,10 +19895,10 @@ async function handleBankingPayPreview(env, req, user) {
   const clientId = clientRaw || null;
 
   if (candidateId && !uuidRe.test(candidateId)) {
-    return withCORS(env, req, badRequest('candidate_id must be a UUID (or empty)'));
+    return buildPreviewErrorResponse(400, 'BANKING_PAY_PREVIEW_FAILED', 'Payment preview could not be loaded. Refresh Banking and try again.', { field: 'candidate_id' }, true);
   }
   if (clientId && !uuidRe.test(clientId)) {
-    return withCORS(env, req, badRequest('client_id must be a UUID (or empty)'));
+    return buildPreviewErrorResponse(400, 'BANKING_PAY_PREVIEW_FAILED', 'Payment preview could not be loaded. Refresh Banking and try again.', { field: 'client_id' }, true);
   }
 
   const baseFiltersSrc =
@@ -19886,7 +19967,7 @@ async function handleBankingPayPreview(env, req, user) {
 
   const normalizedDecisions = normalizeBankingPayPreviewDecisions(mergedLegacyDecisionInput);
   if (!normalizedDecisions || normalizedDecisions.ok !== true) {
-    return withCORS(env, req, badRequest(String(normalizedDecisions?.error || 'Invalid preview_decisions_json')));
+    return buildPreviewErrorResponse(400, 'BANKING_PAY_PREVIEW_FAILED', 'Payment preview could not be loaded. Refresh Banking and try again.', { field: 'preview_decisions_json' }, true);
   }
 
   const explicitDecisionInputPresent = !!(
@@ -21345,28 +21426,41 @@ async function handleTimesheetCreateManualDaily(env, req) {
 async function handleBankingPayCreateDraft(env, req, user) {
   let body = null;
   try { body = await parseJSONBody(req); } catch { body = null; }
-  if (!body || typeof body !== 'object') return withCORS(env, req, badRequest('Invalid JSON'));
+  const buildCreateDraftValidationError = (status, code, message, details = {}) => {
+    const friendlyPayload = makeBankingFriendlyErrorPayload({
+      ok: false,
+      create_draft_unavailable: true,
+      can_retry: true,
+      error_code: String(code || 'BANKING_PAY_CREATE_DRAFT_FAILED'),
+      code: String(code || 'BANKING_PAY_CREATE_DRAFT_FAILED'),
+      message: String(message || 'Unable to create Banking draft'),
+      details: (details && typeof details === 'object' && !Array.isArray(details)) ? details : undefined
+    }, { action: 'CREATE_DRAFT' });
+    return withCORS(env, req, new Response(JSON.stringify({
+      ...friendlyPayload,
+      ok: false,
+      create_draft_unavailable: true,
+      can_retry: true
+    }), { status, headers: JSON_HEADERS }));
+  };
 
-  const payDate = String(body.pay_date || '').trim();
-  if (!payDate) return withCORS(env, req, badRequest('pay_date is required (YYYY-MM-DD)'));
+  if (!body || typeof body !== 'object') return buildCreateDraftValidationError(400, 'BANKING_PAY_CREATE_DRAFT_FAILED', 'Payment batch could not be created. Refresh Banking and try again.', { field: 'body' });
+
+  const payDateRaw = String(body.pay_date || body.payDate || '').trim();
+  const parseIsoOrUkDateToIso = (raw) => {
+    const s = String(raw || '').trim();
+    if (!s) return null;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+    const m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (m) return `${m[3]}-${m[2]}-${m[1]}`;
+    return null;
+  };
+  const payDate = parseIsoOrUkDateToIso(payDateRaw);
+  if (!payDate) return buildCreateDraftValidationError(400, 'BANKING_CREATE_DRAFT_INVALID_PAY_DATE', 'Select a valid pay date, then try again. No payment batch has been created.', { field: 'pay_date' });
 
   const cutoffRaw = String(
     body.week_ending_cutoff_date || body.weekEndingCutoffDate || body.week_ending_cutoff || body.weekEndingCutoff || ''
   ).trim();
-
-  const parseIsoOrUkDateToIso = (raw) => {
-    const s = String(raw || '').trim();
-    if (!s) return null;
-
-    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-
-    const m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-    if (m) {
-      const dd = m[1], mm = m[2], yyyy = m[3];
-      return `${yyyy}-${mm}-${dd}`;
-    }
-    return null;
-  };
 
   const parseBool = (raw, dflt = false) => {
     if (typeof raw === 'boolean') return raw;
@@ -21891,10 +21985,10 @@ const CREATE_DRAFT_CHECKPOINT = 'NONE';
   const overrideReason = overrideReasonRaw || null;
 
   if (candidateId && !uuidRe.test(candidateId)) {
-    return withCORS(env, req, badRequest('candidate_id must be a UUID (or empty)'));
+    return buildCreateDraftValidationError(400, 'BANKING_PAY_CREATE_DRAFT_FAILED', 'Payment batch could not be created. Review your selection and try again.', { field: 'candidate_id' });
   }
   if (clientId && !uuidRe.test(clientId)) {
-    return withCORS(env, req, badRequest('client_id must be a UUID (or empty)'));
+    return buildCreateDraftValidationError(400, 'BANKING_PAY_CREATE_DRAFT_FAILED', 'Payment batch could not be created. Review your selection and try again.', { field: 'client_id' });
   }
 
   const includeSetIn =
@@ -21906,7 +22000,7 @@ const CREATE_DRAFT_CHECKPOINT = 'NONE';
 
   const includeSet = normalizeUuidArray(includeSetIn, 'include_set/candidate_ids');
   if (includeSet && includeSet.error) {
-    return withCORS(env, req, badRequest(includeSet.error));
+    return buildCreateDraftValidationError(400, 'BANKING_PAY_CREATE_DRAFT_FAILED', 'Payment batch could not be created. Review your selected candidates and try again.', { field: 'include_set' });
   }
 
   const excludeTimesheetIdsIn =
@@ -21916,7 +22010,7 @@ const CREATE_DRAFT_CHECKPOINT = 'NONE';
 
   const excludeTimesheetIds = normalizeUuidArray(excludeTimesheetIdsIn, 'exclude_timesheet_ids');
   if (excludeTimesheetIds && excludeTimesheetIds.error) {
-    return withCORS(env, req, badRequest(excludeTimesheetIds.error));
+    return buildCreateDraftValidationError(400, 'BANKING_PAY_CREATE_DRAFT_FAILED', 'Payment batch could not be created. Review your selected exclusions and try again.', { field: 'exclude_timesheet_ids' });
   }
 
   const previewDecisions = (previewDecisionsIn && typeof previewDecisionsIn === 'object' && !Array.isArray(previewDecisionsIn))
@@ -21932,7 +22026,7 @@ const CREATE_DRAFT_CHECKPOINT = 'NONE';
 
   const sanitizedCaseResolutionsResult = sanitizeCaseResolutions(previewCaseResolutionsRaw);
   if (sanitizedCaseResolutionsResult.error) {
-    return withCORS(env, req, badRequest(sanitizedCaseResolutionsResult.error));
+    return buildCreateDraftValidationError(400, 'BANKING_PAY_CREATE_DRAFT_FAILED', 'Payment batch could not be created because some payment details need attention. Review the highlighted items, refresh Banking, then try again.', { field: 'preview_decisions_json.case_resolutions' });
   }
 
   const sanitizedCaseResolutions = sanitizedCaseResolutionsResult.value || {};
@@ -21976,7 +22070,7 @@ const CREATE_DRAFT_CHECKPOINT = 'NONE';
   const explicitSelectedPreviewRowIdsProvided = hasSelectedPreviewRowIdsKey && rawSelectedPreviewRowIds !== null && rawSelectedPreviewRowIds !== undefined;
 
   if (hasSelectedPreviewRowIdsKey && explicitSelectedPreviewRowIdsProvided && !Array.isArray(rawSelectedPreviewRowIds)) {
-    return withCORS(env, req, badRequest('preview_decisions_json.selected_preview_row_ids must be an array when provided'));
+    return buildCreateDraftValidationError(400, 'BANKING_CREATE_DRAFT_INVALID_INPUT', 'Payment batch could not be created. Review your selected payment items, then try again.', { field: 'preview_decisions_json.selected_preview_row_ids' });
   }
 
   let overrideVerified = false;
