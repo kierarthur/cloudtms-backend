@@ -4699,807 +4699,230 @@ $$;
 
 
 
-create or replace function public.pay_batch_prepare(
+DROP FUNCTION IF EXISTS public.pay_batch_prepare(uuid, uuid);
+
+CREATE OR REPLACE FUNCTION public.pay_batch_prepare(
   p_pay_batch_id uuid,
   p_actor_user_id uuid
 )
-returns jsonb
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  v_batch record;
-  v_cfg record;
-
-  v_provider text := null;
-
-  v_need_name_check boolean := false;
-  v_requires_payee_map boolean := false;
-
-  v_payees jsonb := '[]'::jsonb;
-  v_summary jsonb := '{}'::jsonb;
-  v_has_hard_blockers boolean := false;
-
-  v_fresh jsonb := null;
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_now timestamptz := now();
+  v_batch_row public.pay_batches%ROWTYPE;
+  v_summary_json jsonb := '{}'::jsonb;
+  v_fresh_json jsonb := '{}'::jsonb;
+  v_blockers_json jsonb := '[]'::jsonb;
+  v_warnings_json jsonb := '[]'::jsonb;
+  v_next_required_phase text := 'START_AUTHORISATION';
+  v_ready boolean := false;
   v_is_stale boolean := false;
-  v_stale_reasons jsonb := '[]'::jsonb;
+  v_batch_status text := NULL::text;
+  v_execution_mode text := 'STANDARD_BANK';
+  v_candidate_count integer := 0;
+  v_item_count integer := 0;
+  v_transfer_count integer := 0;
+  v_pending_transfer_count integer := 0;
+  v_failed_transfer_count integer := 0;
+  v_blocked_transfer_count integer := 0;
+  v_submitted_transfer_count integer := 0;
+  v_awaiting_net_count integer := 0;
+  v_blocker_count integer := 0;
+  v_warning_count integer := 0;
   v_diff_sample jsonb := '[]'::jsonb;
-
-  v_batch_kind_fixed text := null;
-  v_has_paye boolean := false;
-  v_has_awaiting_net boolean := false;
-
-  v_bad_loans_payee_ct int := 0;
-
-  v_finance_reservation_summary jsonb := '{}'::jsonb;
-  v_same_week_override_json jsonb := '{}'::jsonb;
-  v_commit_stage_worker_communications jsonb := '{}'::jsonb;
-  v_remittance_status_summary jsonb := '{}'::jsonb;
-  v_finance_prepare_summary jsonb := '{}'::jsonb;
-  v_finance_destination_groups jsonb := '[]'::jsonb;
-  v_has_finance_snapshot_blockers boolean := false;
-  v_has_umbrella_remittance_items boolean := false;
-  v_has_candidate_payment_advice_items boolean := false;
-begin
-  if p_pay_batch_id is null then
-    raise exception '%', jsonb_build_object(
+BEGIN
+  IF p_pay_batch_id IS NULL THEN
+    RAISE EXCEPTION '%', jsonb_build_object(
       'error', 'PAY_BATCH_PREPARE',
       'code', 'PAY_BATCH_ID_REQUIRED',
       'message', 'pay_batch_prepare: pay_batch_id is required'
     )::text;
-  end if;
-  if p_actor_user_id is null then
-    raise exception '%', jsonb_build_object(
+  END IF;
+
+  IF p_actor_user_id IS NULL THEN
+    RAISE EXCEPTION '%', jsonb_build_object(
       'error', 'PAY_BATCH_PREPARE',
       'code', 'ACTOR_USER_ID_REQUIRED',
       'message', 'pay_batch_prepare: actor_user_id is required',
       'pay_batch_id', p_pay_batch_id::text
     )::text;
-  end if;
+  END IF;
 
-  select
-    pb.id,
-    pb.status,
-    pb.batch_kind_fixed,
-    pb.pay_date,
-    pb.authoritative_payment_date,
-    pb.authoritative_payment_date_source,
-    pb.same_week_paye_override_used,
-    pb.same_week_paye_override_reason,
-    pb.same_week_paye_override_verified_at_utc,
-    pb.same_week_paye_override_verified_by_user_id,
-    pb.rail_provider_snapshot,
-    pb.rail_env_snapshot,
-    pb.schedule_kind,
-    pb.scheduled_at_utc,
-    pb.funding_account_ref,
-    pb.funds_warning_hours_json
-  into v_batch
-  from public.pay_batches pb
-  where pb.id = p_pay_batch_id;
+  PERFORM 1
+  FROM public.tms_users AS actor_user
+  WHERE actor_user.id = p_actor_user_id;
 
-  if v_batch.id is null then
-    raise exception '%', jsonb_build_object(
+  IF NOT FOUND THEN
+    RAISE EXCEPTION '%', jsonb_build_object(
+      'error', 'PAY_BATCH_PREPARE',
+      'code', 'ACTOR_USER_NOT_FOUND',
+      'message', 'pay_batch_prepare: actor_user was not found',
+      'actor_user_id', p_actor_user_id::text,
+      'pay_batch_id', p_pay_batch_id::text
+    )::text;
+  END IF;
+
+  SELECT batch_row.*
+  INTO v_batch_row
+  FROM public.pay_batches AS batch_row
+  WHERE batch_row.id = p_pay_batch_id;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION '%', jsonb_build_object(
       'error', 'PAY_BATCH_PREPARE',
       'code', 'PAY_BATCH_NOT_FOUND',
       'message', 'pay_batch_prepare: pay_batch not found',
       'pay_batch_id', p_pay_batch_id::text
     )::text;
-  end if;
+  END IF;
 
-  v_batch_kind_fixed := upper(btrim(coalesce(v_batch.batch_kind_fixed,'')));
+  v_batch_status := upper(btrim(coalesce(v_batch_row.status, '')));
 
-  v_fresh := public.pay_batch_validate_freshness(p_pay_batch_id, p_actor_user_id);
-  v_is_stale := coalesce((v_fresh->>'is_stale')::boolean, false);
-  v_stale_reasons := coalesce(v_fresh->'stale_reasons', '[]'::jsonb);
-
-  if v_is_stale = true then
-    select coalesce(jsonb_agg(x.elem), '[]'::jsonb)
-      into v_diff_sample
-    from (
-      select elem
-      from jsonb_array_elements(coalesce(v_fresh->'diff','[]'::jsonb)) as elem
-      limit 50
-    ) x;
-
-    begin
-      perform public._imp_debug_audit(
-        p_actor_user_id,
-        'PAY_BATCH_PREPARE:STALE',
-        jsonb_build_object(
-          'pay_batch_id', p_pay_batch_id::text,
-          'stale_reasons', v_stale_reasons,
-          'diff_sample', v_diff_sample
-        ),
-        'pay_batches',
-        p_pay_batch_id::text,
-        null,
-        null,
-        null,
-        null
-      );
-    exception when others then
-      null;
-    end;
-
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_BATCH_PREPARE',
-      'code', 'BATCH_STALE',
-      'message', 'pay_batch_prepare: batch is stale; regenerate draft before proceeding',
-      'pay_batch_id', p_pay_batch_id::text,
-      'stale_reasons', v_stale_reasons,
-      'diff', v_diff_sample
-    )::text;
-  end if;
-
-  select exists(
-    select 1
-    from public.pay_batch_items pbi
-    join public.pay_batch_candidates pbc
-      on pbc.id = pbi.pay_batch_candidate_id
-    where pbc.pay_batch_id = p_pay_batch_id
-      and pbi.pay_channel = 'PAYE'
-      and pbi.is_voided = false
-  )
-  into v_has_paye;
-
-  select exists(
-    select 1
-    from public.pay_batch_candidates pbc2
-    where pbc2.pay_batch_id = p_pay_batch_id
-      and coalesce(pbc2.awaiting_net_amount,false) = true
-  )
-  into v_has_awaiting_net;
-
-  if v_batch_kind_fixed <> 'LOANS' and v_has_paye = true and v_has_awaiting_net = true then
-    begin
-      perform public._imp_debug_audit(
-        p_actor_user_id,
-        'PAY_BATCH_PREPARE:BLOCKED_AWAITING_NET',
-        jsonb_build_object(
-          'pay_batch_id', p_pay_batch_id::text,
-          'has_paye', v_has_paye,
-          'has_awaiting_net', v_has_awaiting_net
-        ),
-        'pay_batches',
-        p_pay_batch_id::text,
-        null,
-        null,
-        null,
-        null
-      );
-    exception when others then
-      null;
-    end;
-
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_BATCH_PREPARE',
-      'code', 'PAYE_NET_REQUIRED',
-      'message', 'pay_batch_prepare: PAYE net amounts are required before this batch can proceed',
-      'pay_batch_id', p_pay_batch_id::text
-    )::text;
-  end if;
-
-  if v_batch_kind_fixed = 'LOANS' then
-    select count(*)::int
-      into v_bad_loans_payee_ct
-    from public.pay_bank_transfers pbt
-    where pbt.pay_batch_id = p_pay_batch_id
-      and upper(
-        coalesce(
-          pbt.payee_entity_kind,
-          case
-            when upper(coalesce(pbt.pay_channel,'')) = 'UMBRELLA' then 'UMBRELLA'
-            else 'CANDIDATE'
-          end
-        )
-      ) <> 'CANDIDATE';
-
-    if v_bad_loans_payee_ct > 0 then
-      begin
-        perform public._imp_debug_audit(
-          p_actor_user_id,
-          'PAY_BATCH_PREPARE:BLOCKED_LOANS_PAYEE_KIND',
-          jsonb_build_object(
-            'pay_batch_id', p_pay_batch_id::text,
-            'bad_transfer_count', v_bad_loans_payee_ct
-          ),
-          'pay_batches',
-          p_pay_batch_id::text,
-          null,
-          null,
-          null,
-          null
-        );
-      exception when others then
-        null;
-      end;
-
-      raise exception '%', jsonb_build_object(
-        'error', 'PAY_BATCH_PREPARE',
-        'code', 'LOANS_PAYEE_MUST_BE_CANDIDATE',
-        'message', 'pay_batch_prepare: LOANS batches must pay candidates (not umbrellas)',
-        'pay_batch_id', p_pay_batch_id::text,
-        'bad_transfer_count', v_bad_loans_payee_ct
-      )::text;
-    end if;
-  end if;
-
-  v_provider := upper(btrim(coalesce(v_batch.rail_provider_snapshot,'')));
-
-  select
-    sd.rail_provider_default,
-    sd.rail_env_default,
-    sd.rail_supports_scheduling,
-    sd.rail_supports_name_check,
-    sd.rail_supports_auto_execute,
-    sd.default_schedule_umbrella_local,
-    sd.default_schedule_paye_local,
-    sd.funds_warning_hours_json,
-    sd.rail_default_funding_account_ref
-  into v_cfg
-  from public.settings_defaults sd
-  where sd.id = 1
-  limit 1;
-
-  if v_cfg.rail_provider_default is null then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_BATCH_PREPARE',
-      'code', 'SETTINGS_DEFAULTS_MISSING',
-      'message', 'pay_batch_prepare: settings_defaults missing (id=1)',
-      'pay_batch_id', p_pay_batch_id::text
-    )::text;
-  end if;
-
-  v_need_name_check := (coalesce(v_cfg.rail_supports_name_check,false) = true)
-                       and (v_provider <> 'CSV');
-
-  v_requires_payee_map := (v_provider <> 'CSV');
-
-  with t as (
-    select
-      pbt.id as transfer_id,
-      pbt.pay_batch_id,
-      upper(coalesce(pbt.pay_channel,'')) as pay_channel,
-      upper(coalesce(pbt.status,'')) as status,
-      pbt.amount,
-      pbt.currency,
-      pbt.payment_reference,
-      pbt.payee_name,
-      pbt.sort_code,
-      pbt.account_number,
-      pbt.account_type,
-      pbt.rail_provider,
-      pbt.rail_env,
-      pbt.request_id,
-      pbt.rail_tx_id,
-      pbt.rail_state,
-      pbt.rail_meta_json,
-      pbt.bank_details_hash_snapshot,
-      pbt.payee_entity_kind,
-      pbt.payee_entity_id,
-      pbt.transfer_group_key,
-      pbt.grouping_mode_used,
-      pbt.week_ending_bucket,
-      pbt.candidate_id,
-      pbt.umbrella_id,
-
-      upper(coalesce(pbt.payee_entity_kind,
-        case when upper(coalesce(pbt.pay_channel,'')) = 'UMBRELLA' then 'UMBRELLA' else 'CANDIDATE' end
-      )) as derived_payee_kind,
-
-      coalesce(
-        pbt.payee_entity_id,
-        case when upper(coalesce(pbt.pay_channel,'')) = 'UMBRELLA' then pbt.umbrella_id else pbt.candidate_id end
-      ) as derived_payee_id
-    from public.pay_bank_transfers pbt
-    where pbt.pay_batch_id = p_pay_batch_id
-  ),
-  t2 as (
-    select
-      t.*,
-      c.bank_details_hash as cand_bank_hash,
-      u.bank_details_hash as umb_bank_hash
-    from t
-    left join public.candidates c
-      on c.id = t.derived_payee_id
-     and t.derived_payee_kind = 'CANDIDATE'
-    left join public.umbrellas u
-      on u.id = t.derived_payee_id
-     and t.derived_payee_kind = 'UMBRELLA'
-  ),
-  t3 as (
-    select
-      t2.*,
-      nullif(btrim(coalesce(t2.bank_details_hash_snapshot,'')), '') as payee_bank_hash
-    from t2
-  ),
-  payees as (
-    select
-      t3.derived_payee_kind as payee_entity_kind,
-      t3.derived_payee_id as payee_entity_id,
-      t3.payee_bank_hash as bank_details_hash
-    from t3
-    group by t3.derived_payee_kind, t3.derived_payee_id, t3.payee_bank_hash
-  ),
-  payees_enriched as (
-    select
-      p.payee_entity_kind,
-      p.payee_entity_id,
-      p.bank_details_hash,
-
-      coalesce(bnc.status, 'UNVERIFIED') as name_check_status,
-      (bnc.override_reason is not null and bnc.override_hash = p.bank_details_hash) as name_check_has_override,
-
-      (bpm.payee_id is not null) as payee_map_present,
-
-      (p.bank_details_hash is null or btrim(p.bank_details_hash) = '') as is_missing_bank_details,
-
-      (
-        v_need_name_check = true
-        and coalesce(bnc.status, 'UNVERIFIED') <> 'PASS'
-        and not (bnc.override_reason is not null and bnc.override_hash = p.bank_details_hash)
-      ) as is_name_check_blocked,
-
-      (
-        v_requires_payee_map = true
-        and (bpm.payee_id is null)
-      ) as is_payee_map_blocked
-    from payees p
-    left join public.bank_name_checks bnc
-      on bnc.rail_provider = v_batch.rail_provider_snapshot
-     and bnc.rail_env = v_batch.rail_env_snapshot
-     and bnc.entity_kind = p.payee_entity_kind
-     and bnc.entity_id = p.payee_entity_id
-     and bnc.bank_details_hash = p.bank_details_hash
-    left join public.bank_payee_map bpm
-      on bpm.rail_provider = v_batch.rail_provider_snapshot
-     and bpm.rail_env = v_batch.rail_env_snapshot
-     and bpm.entity_kind = p.payee_entity_kind
-     and bpm.entity_id = p.payee_entity_id
-     and bpm.bank_details_hash = p.bank_details_hash
-  ),
-  payees_json as (
-    select
-      jsonb_agg(
-        jsonb_build_object(
-          'payee_entity_kind', pe.payee_entity_kind,
-          'payee_entity_id', pe.payee_entity_id::text,
-          'bank_details_hash', pe.bank_details_hash,
-          'name_check', jsonb_build_object(
-            'status', pe.name_check_status,
-            'has_override', pe.name_check_has_override
-          ),
-          'payee_map', jsonb_build_object(
-            'present', pe.payee_map_present
-          ),
-          'blockers',
-            (
-              (case when pe.is_missing_bank_details then jsonb_build_array('BLOCKED_BANK_DETAILS') else '[]'::jsonb end)
-              ||
-              (case when pe.is_name_check_blocked then jsonb_build_array('BLOCKED_NAME_CHECK') else '[]'::jsonb end)
-              ||
-              (case when pe.is_payee_map_blocked then jsonb_build_array('BLOCKED_NO_PAYEE_MAP') else '[]'::jsonb end)
-            ),
-          'transfers',
-            coalesce(
-              (
-                select jsonb_agg(
-                  jsonb_build_object(
-                    'id', t3.transfer_id::text,
-                    'pay_channel', t3.pay_channel,
-                    'status', t3.status,
-                    'amount', t3.amount,
-                    'currency', t3.currency,
-                    'payment_reference', t3.payment_reference,
-                    'payee_name', t3.payee_name,
-                    'sort_code', t3.sort_code,
-                    'account_number', t3.account_number,
-                    'account_type', t3.account_type,
-                    'rail_provider', t3.rail_provider,
-                    'rail_env', t3.rail_env,
-                    'request_id', t3.request_id,
-                    'rail_tx_id', t3.rail_tx_id,
-                    'rail_state', t3.rail_state,
-                    'rail_meta_json', t3.rail_meta_json,
-                    'bank_details_hash_snapshot', t3.bank_details_hash_snapshot,
-                    'transfer_group_key', t3.transfer_group_key,
-                    'grouping_mode_used', t3.grouping_mode_used,
-                    'week_ending_bucket', case when t3.week_ending_bucket is null then null else t3.week_ending_bucket::text end
-                  )
-                  order by t3.pay_channel, t3.amount desc, t3.transfer_id
-                )
-                from t3
-                where t3.derived_payee_kind = pe.payee_entity_kind
-                  and t3.derived_payee_id = pe.payee_entity_id
-                  and t3.payee_bank_hash is not distinct from pe.bank_details_hash
-              ),
-              '[]'::jsonb
-            )
-        )
-        order by pe.payee_entity_kind, pe.payee_entity_id
-      ) as j
-    from payees_enriched pe
-  ),
-  summary as (
-    select
-      jsonb_build_object(
-        'total_transfers', count(*)::int,
-        'pending', sum(case when upper(coalesce(t3.status,'')) = 'PENDING' then 1 else 0 end)::int,
-        'blocked', sum(case when upper(coalesce(t3.status,'')) = 'BLOCKED' then 1 else 0 end)::int,
-        'completed', sum(case when upper(coalesce(t3.status,'')) = 'COMPLETED' then 1 else 0 end)::int,
-        'failed', sum(case when upper(coalesce(t3.status,'')) = 'FAILED' then 1 else 0 end)::int
-      ) as j
-    from t3
-  ),
-  hard_blockers as (
-    select
-      exists(
-        select 1
-        from payees_enriched pe
-        where pe.is_missing_bank_details = true
-           or pe.is_name_check_blocked = true
-           or pe.is_payee_map_blocked = true
-      ) as has_any
-  )
-  select
-    coalesce((select pj.j from payees_json pj), '[]'::jsonb),
-    coalesce((select s.j from summary s), '{}'::jsonb),
-    coalesce((select hb.has_any from hard_blockers hb), false)
-  into v_payees, v_summary, v_has_hard_blockers;
-
-
-  if v_batch_kind_fixed <> 'LOANS' then
-    with finance_items as (
-      select
-        pbi.id as pay_batch_item_id,
-        pbi.item_type,
-        pbi.pay_channel,
-        pbi.finance_case_id,
-        pbi.source_ref,
-        pbi.amount_inc_vat,
-        pbi.paye_treatment,
-        pbi.payout_instruction_snapshot_json
-      from public.pay_batch_items as pbi
-      join public.pay_batch_candidates as pbc3
-        on pbc3.id = pbi.pay_batch_candidate_id
-      where pbc3.pay_batch_id = p_pay_batch_id
-        and pbi.is_voided = false
-        and pbi.item_type in ('LOAN_PAYOUT','MANUAL_CREDIT_PAYOUT','MANUAL_DEBT_RECOVERY','LOAN_REPAYMENT')
-    ),
-    parsed as (
-      select
-        fi.pay_batch_item_id,
-        fi.item_type,
-        upper(coalesce(fi.pay_channel,'')) as pay_channel,
-        fi.finance_case_id,
-        fi.source_ref,
-        fi.amount_inc_vat,
-        upper(coalesce(fi.paye_treatment,'')) as paye_treatment,
-        (
-          fi.item_type in ('LOAN_PAYOUT','MANUAL_CREDIT_PAYOUT')
-          or (
-            coalesce(fi.amount_inc_vat, 0) > 0
-            and upper(coalesce(fi.paye_treatment,'')) <> 'NET_DEDUCT'
-          )
-        ) as requires_payout_snapshot,
-        fi.payout_instruction_snapshot_json,
-        upper(nullif(btrim(coalesce(fi.payout_instruction_snapshot_json->>'routing_kind','')), '')) as routing_kind,
-        nullif(btrim(coalesce(fi.payout_instruction_snapshot_json->>'destination_label','')), '') as destination_label,
-        upper(nullif(btrim(coalesce(fi.payout_instruction_snapshot_json->>'payee_entity_kind','')), '')) as payee_entity_kind,
-        case
-          when nullif(btrim(coalesce(fi.payout_instruction_snapshot_json->>'payee_entity_id','')), '') is null then null::uuid
-          else (fi.payout_instruction_snapshot_json->>'payee_entity_id')::uuid
-        end as payee_entity_id,
-        nullif(btrim(coalesce(fi.payout_instruction_snapshot_json->>'bank_details_hash','')), '') as bank_details_hash,
-        nullif(btrim(coalesce(fi.payout_instruction_snapshot_json->>'beneficiary_name','')), '') as beneficiary_name,
-        coalesce((fi.payout_instruction_snapshot_json->>'appears_on_umbrella_remittance')::boolean, false) as appears_on_umbrella_remittance,
-        coalesce((fi.payout_instruction_snapshot_json->>'generates_candidate_payment_advice')::boolean, false) as generates_candidate_payment_advice
-      from finance_items as fi
-    ),
-    enriched as (
-      select
-        p.*,
-        (p.requires_payout_snapshot = true and p.payout_instruction_snapshot_json is null) as is_missing_snapshot,
-        (
-          p.requires_payout_snapshot = true
-          and p.payout_instruction_snapshot_json is not null
-          and p.routing_kind = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'
-          and (
-            p.bank_details_hash is null
-            or p.beneficiary_name is null
-            or p.payee_entity_kind is null
-            or p.payee_entity_id is null
-          )
-        ) as is_missing_oneoff_snapshot_details,
-        coalesce(bnc.status, 'UNVERIFIED') as name_check_status,
-        (bnc.override_reason is not null and bnc.override_hash = p.bank_details_hash) as name_check_has_override,
-        (bpm.payee_id is not null) as payee_map_present,
-        (
-          p.requires_payout_snapshot = true
-          and p.payout_instruction_snapshot_json is not null
-          and p.routing_kind = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'
-          and p.bank_details_hash is not null
-          and v_need_name_check = true
-          and coalesce(bnc.status, 'UNVERIFIED') <> 'PASS'
-          and not (bnc.override_reason is not null and bnc.override_hash = p.bank_details_hash)
-        ) as is_name_check_blocked,
-        (
-          p.requires_payout_snapshot = true
-          and p.payout_instruction_snapshot_json is not null
-          and p.routing_kind = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'
-          and p.bank_details_hash is not null
-          and v_requires_payee_map = true
-          and (bpm.payee_id is null)
-        ) as is_payee_map_blocked
-      from parsed as p
-      left join public.bank_name_checks as bnc
-        on bnc.rail_provider = v_batch.rail_provider_snapshot
-       and bnc.rail_env = v_batch.rail_env_snapshot
-       and bnc.entity_kind = p.payee_entity_kind
-       and bnc.entity_id = p.payee_entity_id
-       and bnc.bank_details_hash = p.bank_details_hash
-      left join public.bank_payee_map as bpm
-        on bpm.rail_provider = v_batch.rail_provider_snapshot
-       and bpm.rail_env = v_batch.rail_env_snapshot
-       and bpm.entity_kind = p.payee_entity_kind
-       and bpm.entity_id = p.payee_entity_id
-       and bpm.bank_details_hash = p.bank_details_hash
-    ),
-    destination_groups as (
-      select
-        e.routing_kind,
-        e.payee_entity_kind,
-        e.payee_entity_id,
-        e.bank_details_hash,
-        e.destination_label,
-        count(*)::int as item_count
-      from enriched as e
-      group by
-        e.routing_kind,
-        e.payee_entity_kind,
-        e.payee_entity_id,
-        e.bank_details_hash,
-        e.destination_label
-    ),
-    summary as (
-      select
-        jsonb_build_object(
-          'finance_item_count', count(*)::int,
-          'missing_snapshot_count', count(*) filter (where e.is_missing_snapshot)::int,
-          'missing_oneoff_snapshot_details_count', count(*) filter (where e.is_missing_oneoff_snapshot_details)::int,
-          'name_check_blocked_count', count(*) filter (where e.is_name_check_blocked)::int,
-          'payee_map_blocked_count', count(*) filter (where e.is_payee_map_blocked)::int,
-          'blocked_item_ids', coalesce(
-            jsonb_agg(e.pay_batch_item_id::text) filter (
-              where e.is_missing_snapshot
-                 or e.is_missing_oneoff_snapshot_details
-                 or e.is_name_check_blocked
-                 or e.is_payee_map_blocked
-            ),
-            '[]'::jsonb
-          )
-        ) as summary_json,
-        exists(
-          select 1
-          from enriched as eb
-          where eb.is_missing_snapshot
-             or eb.is_missing_oneoff_snapshot_details
-             or eb.is_name_check_blocked
-             or eb.is_payee_map_blocked
-        ) as has_blockers,
-        coalesce(bool_or(e.appears_on_umbrella_remittance), false) as has_umbrella_remittance_items,
-        coalesce(bool_or(e.generates_candidate_payment_advice), false) as has_candidate_payment_advice_items
-      from enriched as e
-    )
-    select
-      coalesce(s.summary_json, '{}'::jsonb),
-      coalesce(
-        (
-          select jsonb_agg(
-            jsonb_build_object(
-              'routing_kind', dg.routing_kind,
-              'payee_entity_kind', dg.payee_entity_kind,
-              'payee_entity_id', case when dg.payee_entity_id is null then null else dg.payee_entity_id::text end,
-              'bank_details_hash', dg.bank_details_hash,
-              'destination_label', dg.destination_label,
-              'item_count', dg.item_count
-            )
-            order by dg.routing_kind, dg.payee_entity_kind, dg.payee_entity_id, dg.bank_details_hash
-          )
-          from destination_groups as dg
-        ),
-        '[]'::jsonb
-      ),
-      coalesce(s.has_blockers, false),
-      coalesce(s.has_umbrella_remittance_items, false),
-      coalesce(s.has_candidate_payment_advice_items, false)
-    into
-      v_finance_prepare_summary,
-      v_finance_destination_groups,
-      v_has_finance_snapshot_blockers,
-      v_has_umbrella_remittance_items,
-      v_has_candidate_payment_advice_items
-    from summary as s;
-
-    v_has_hard_blockers := coalesce(v_has_hard_blockers, false) or coalesce(v_has_finance_snapshot_blockers, false);
-  else
-    v_finance_prepare_summary := '{}'::jsonb;
-    v_finance_destination_groups := '[]'::jsonb;
-    v_has_finance_snapshot_blockers := false;
-    v_has_umbrella_remittance_items := false;
-    v_has_candidate_payment_advice_items := (v_batch_kind_fixed = 'LOANS');
-  end if;
-
-  select coalesce(
-    jsonb_build_object(
-      'total_count', count(*)::int,
-      'reserved_count', count(*) filter (where upper(coalesce(par.status,'')) = 'RESERVED')::int,
-      'committed_count', count(*) filter (where upper(coalesce(par.status,'')) = 'COMMITTED')::int,
-      'settled_count', count(*) filter (where upper(coalesce(par.status,'')) = 'SETTLED')::int,
-      'released_count', count(*) filter (where upper(coalesce(par.status,'')) = 'RELEASED')::int,
-      'reserved_amount', round(coalesce(sum(case when upper(coalesce(par.status,'')) = 'RESERVED' then par.reserved_amount else 0 end),0),2),
-      'committed_amount', round(coalesce(sum(case when upper(coalesce(par.status,'')) = 'COMMITTED' then par.reserved_amount else 0 end),0),2),
-      'settled_amount', round(coalesce(sum(case when upper(coalesce(par.status,'')) = 'SETTLED' then par.reserved_amount else 0 end),0),2),
-      'released_amount', round(coalesce(sum(case when upper(coalesce(par.status,'')) = 'RELEASED' then par.reserved_amount else 0 end),0),2)
-    ),
-    jsonb_build_object(
-      'total_count', 0,
-      'reserved_count', 0,
-      'committed_count', 0,
-      'settled_count', 0,
-      'released_count', 0,
-      'reserved_amount', 0,
-      'committed_amount', 0,
-      'settled_amount', 0,
-      'released_amount', 0
-    )
-  )
-  into v_finance_reservation_summary
-  from public.pay_advance_reservations par
-  where par.pay_batch_id = p_pay_batch_id;
-
-  select jsonb_build_object(
-    'used', coalesce(v_batch.same_week_paye_override_used,false),
-    'reason', v_batch.same_week_paye_override_reason,
-    'verified_at_utc', case when v_batch.same_week_paye_override_verified_at_utc is null then null else v_batch.same_week_paye_override_verified_at_utc::text end,
-    'verified_by_user_id', case when v_batch.same_week_paye_override_verified_by_user_id is null then null else v_batch.same_week_paye_override_verified_by_user_id::text end
-  )
-  into v_same_week_override_json;
-
-  select coalesce(
-    jsonb_build_object(
-      'candidate_count', count(*)::int,
-      'sent_count', count(*) filter (where pbc.remittance_sent_at_utc is not null)::int,
-      'pending_count', count(*) filter (where pbc.remittance_sent_at_utc is null and coalesce(pbc.last_remittance_error,'') = '')::int,
-      'error_count', count(*) filter (where pbc.remittance_sent_at_utc is null and coalesce(pbc.last_remittance_error,'') <> '')::int,
-      'last_trigger_statuses', coalesce(
-        jsonb_agg(
-          jsonb_build_object(
-            'pay_batch_candidate_id', pbc.id::text,
-            'candidate_id', pbc.candidate_id::text,
-            'remittance_sent_at_utc', case when pbc.remittance_sent_at_utc is null then null else pbc.remittance_sent_at_utc::text end,
-            'remittance_trigger_status', pbc.remittance_trigger_status,
-            'last_remittance_error', pbc.last_remittance_error
-          )
-          order by pbc.id
-        ),
-        '[]'::jsonb
-      )
-    ),
-    jsonb_build_object(
-      'candidate_count', 0,
-      'sent_count', 0,
-      'pending_count', 0,
-      'error_count', 0,
-      'last_trigger_statuses', '[]'::jsonb
-    )
-  )
-  into v_remittance_status_summary
-  from public.pay_batch_candidates pbc
-  where pbc.pay_batch_id = p_pay_batch_id;
-
-  select jsonb_build_object(
-    'enabled_for_commit_stage', (v_provider <> 'CSV'),
-    'trigger_point', case when v_provider <> 'CSV' then 'SCHEDULED_OR_AUTHORISED' else 'MANUAL_CONFIRM' end,
-    'message_kind',
-      case
-        when v_has_umbrella_remittance_items = true and v_has_candidate_payment_advice_items = true then 'MIXED'
-        when v_has_candidate_payment_advice_items = true then 'PAYOUT_NOTICE'
-        when v_has_umbrella_remittance_items = true then 'REMITTANCE'
-        when v_batch_kind_fixed = 'LOANS' then 'PAYOUT_NOTICE'
-        else 'NONE'
-      end,
-    'will_fire_automatically', (v_provider <> 'CSV'),
-    'current_status', coalesce(v_batch.status,''),
-    'has_umbrella_remittance_items', v_has_umbrella_remittance_items,
-    'has_candidate_payment_advice_items', v_has_candidate_payment_advice_items,
-    'finance_destination_groups', v_finance_destination_groups,
-    'already_sent_summary', v_remittance_status_summary
-  )
-  into v_commit_stage_worker_communications;
-
-  v_summary := coalesce(v_summary, '{}'::jsonb)
-    || jsonb_build_object(
-      'finance_reservations', v_finance_reservation_summary,
-      'same_week_paye_override', v_same_week_override_json,
-      'freshness', jsonb_build_object(
-        'is_stale', v_is_stale,
-        'stale_reasons', v_stale_reasons,
-        'raw', v_fresh
-      ),
-      'finance_prepare', v_finance_prepare_summary,
-      'finance_destination_groups', v_finance_destination_groups,
-      'has_umbrella_remittance_items', v_has_umbrella_remittance_items,
-      'has_candidate_payment_advice_items', v_has_candidate_payment_advice_items,
-      'worker_communications', v_commit_stage_worker_communications
-    );
-
-  begin
-    perform public._imp_debug_audit(
-      p_actor_user_id,
-      'PAY_BATCH_PREPARE:READY',
-      jsonb_build_object(
-        'pay_batch_id', p_pay_batch_id::text,
-        'has_hard_blockers', v_has_hard_blockers,
-        'finance_reservations', v_finance_reservation_summary,
-        'same_week_paye_override', v_same_week_override_json
-      ),
-      'pay_batches',
-      p_pay_batch_id::text,
-      null,
-      null,
-      null,
-      null
-    );
-  exception when others then
-    null;
-  end;
-
-  return jsonb_build_object(
-    'ok', true,
-    'pay_batch_id', v_batch.id::text,
-    'status', v_batch.status,
-    'pay_date', case when v_batch.pay_date is null then null else v_batch.pay_date::text end,
-    'authoritative_payment_date', case when v_batch.authoritative_payment_date is null then null else v_batch.authoritative_payment_date::text end,
-    'authoritative_payment_date_source', v_batch.authoritative_payment_date_source,
-    'same_week_paye_override_used', coalesce(v_batch.same_week_paye_override_used,false),
-    'same_week_paye_override_reason', v_batch.same_week_paye_override_reason,
-    'same_week_paye_override_verified_at_utc', case when v_batch.same_week_paye_override_verified_at_utc is null then null else v_batch.same_week_paye_override_verified_at_utc::text end,
-    'same_week_paye_override_verified_by_user_id', case when v_batch.same_week_paye_override_verified_by_user_id is null then null else v_batch.same_week_paye_override_verified_by_user_id::text end,
-    'rail', jsonb_build_object(
-      'provider_snapshot', v_batch.rail_provider_snapshot,
-      'env_snapshot', v_batch.rail_env_snapshot,
-      'need_name_check', v_need_name_check,
-      'requires_payee_map', v_requires_payee_map
-    ),
-    'schedule_recommendations', jsonb_build_object(
-      'default_schedule_umbrella_local', v_cfg.default_schedule_umbrella_local,
-      'default_schedule_paye_local', v_cfg.default_schedule_paye_local,
-      'funds_warning_hours_json', v_cfg.funds_warning_hours_json,
-      'rail_default_funding_account_ref', v_cfg.rail_default_funding_account_ref
-    ),
-    'batch_schedule', jsonb_build_object(
-      'schedule_kind', v_batch.schedule_kind,
-      'scheduled_at_utc', case when v_batch.scheduled_at_utc is null then null else v_batch.scheduled_at_utc::text end,
-      'funding_account_ref', v_batch.funding_account_ref,
-      'funds_warning_hours_json', v_batch.funds_warning_hours_json
-    ),
-    'payees', v_payees,
-    'summary', v_summary,
-    'finance_reservations', v_finance_reservation_summary,
-    'finance_prepare', v_finance_prepare_summary,
-    'finance_destination_groups', v_finance_destination_groups,
-    'has_umbrella_remittance_items', v_has_umbrella_remittance_items,
-    'has_candidate_payment_advice_items', v_has_candidate_payment_advice_items,
-    'same_week_paye_override', v_same_week_override_json,
-    'worker_communications', v_commit_stage_worker_communications,
-    'has_hard_blockers', v_has_hard_blockers
+  v_summary_json := public.pay_batch_execution_summary_get(
+    p_pay_batch_id => p_pay_batch_id,
+    p_actor_user_id => p_actor_user_id
   );
-end;
-$$;
 
+  v_execution_mode := upper(btrim(coalesce(
+    v_summary_json->>'execution_mode',
+    v_batch_row.execution_intent_json->>'execution_mode',
+    v_batch_row.execution_intent_json->>'mode',
+    'STANDARD_BANK'
+  )));
+
+  v_candidate_count := coalesce(NULLIF(v_summary_json->>'candidate_count', '')::integer, 0);
+  v_item_count := coalesce(NULLIF(v_summary_json->>'item_count', '')::integer, 0);
+  v_transfer_count := coalesce(NULLIF(v_summary_json->>'transfer_count', '')::integer, 0);
+  v_pending_transfer_count := coalesce(NULLIF(v_summary_json->>'pending_transfer_count', '')::integer, 0);
+  v_failed_transfer_count := coalesce(NULLIF(v_summary_json->>'failed_transfer_count', '')::integer, 0);
+  v_blocked_transfer_count := coalesce(NULLIF(v_summary_json->>'blocked_transfer_count', '')::integer, 0);
+  v_submitted_transfer_count := coalesce(NULLIF(v_summary_json->>'submitted_transfer_count', '')::integer, 0);
+
+  v_fresh_json := public.pay_batch_validate_freshness(p_pay_batch_id, p_actor_user_id);
+  v_is_stale := coalesce((v_fresh_json->>'is_stale')::boolean, false);
+
+  IF v_is_stale THEN
+    SELECT coalesce(jsonb_agg(diff_row.elem), '[]'::jsonb)
+    INTO v_diff_sample
+    FROM (
+      SELECT diff_elem.elem
+      FROM jsonb_array_elements(coalesce(v_fresh_json->'diff', '[]'::jsonb)) AS diff_elem(elem)
+      LIMIT 20
+    ) AS diff_row;
+
+    v_blockers_json := v_blockers_json || jsonb_build_array(jsonb_build_object(
+      'code', 'BATCH_STALE',
+      'message', 'The payment batch is no longer up to date and must be regenerated before payment can continue.',
+      'stale_reasons', coalesce(v_fresh_json->'stale_reasons', '[]'::jsonb),
+      'diff_sample', v_diff_sample
+    ));
+  END IF;
+
+  IF v_batch_status IN ('CANCELLED', 'CANCELED') THEN
+    v_blockers_json := v_blockers_json || jsonb_build_array(jsonb_build_object(
+      'code', 'BATCH_CANCELLED',
+      'message', 'The payment batch has been cancelled.'
+    ));
+  END IF;
+
+  IF v_candidate_count <= 0 THEN
+    v_blockers_json := v_blockers_json || jsonb_build_array(jsonb_build_object(
+      'code', 'NO_CANDIDATES',
+      'message', 'The payment batch has no candidates.'
+    ));
+  END IF;
+
+  IF v_item_count <= 0 THEN
+    v_blockers_json := v_blockers_json || jsonb_build_array(jsonb_build_object(
+      'code', 'NO_PAYMENT_ITEMS',
+      'message', 'The payment batch has no payment items.'
+    ));
+  END IF;
+
+  SELECT count(*)::integer
+  INTO v_awaiting_net_count
+  FROM public.pay_batch_candidates AS batch_candidate
+  WHERE batch_candidate.pay_batch_id = p_pay_batch_id
+    AND coalesce(batch_candidate.awaiting_net_amount, false) = true;
+
+  IF v_awaiting_net_count > 0 THEN
+    v_blockers_json := v_blockers_json || jsonb_build_array(jsonb_build_object(
+      'code', 'PAYE_NET_REQUIRED',
+      'message', 'PAYE net amounts are required before this batch can proceed.',
+      'candidate_count', v_awaiting_net_count
+    ));
+  END IF;
+
+  IF v_execution_mode NOT IN ('CSV', 'EXTERNAL', 'EXTERNAL_SETTLEMENT', 'MANUAL_SETTLEMENT') THEN
+    IF v_transfer_count <= 0 THEN
+      v_blockers_json := v_blockers_json || jsonb_build_array(jsonb_build_object(
+        'code', 'BANK_TRANSFERS_NOT_PREPARED',
+        'message', 'Bank transfer groups must be prepared before payment authorisation can start.'
+      ));
+    END IF;
+
+    IF v_blocked_transfer_count > 0 THEN
+      v_blockers_json := v_blockers_json || jsonb_build_array(jsonb_build_object(
+        'code', 'BLOCKED_TRANSFERS',
+        'message', 'One or more bank transfers are blocked and must be corrected before submission.',
+        'blocked_transfer_count', v_blocked_transfer_count
+      ));
+    END IF;
+
+    IF v_failed_transfer_count > 0 THEN
+      v_blockers_json := v_blockers_json || jsonb_build_array(jsonb_build_object(
+        'code', 'FAILED_TRANSFERS',
+        'message', 'One or more bank transfers are failed and must be corrected before submission.',
+        'failed_transfer_count', v_failed_transfer_count
+      ));
+    END IF;
+
+    IF v_pending_transfer_count <= 0 AND v_submitted_transfer_count <= 0 AND v_transfer_count > 0 THEN
+      v_warnings_json := v_warnings_json || jsonb_build_array(jsonb_build_object(
+        'code', 'NO_PENDING_TRANSFERS',
+        'message', 'No pending bank transfers are waiting to be submitted.'
+      ));
+    END IF;
+  END IF;
+
+  v_blocker_count := jsonb_array_length(v_blockers_json);
+  v_warning_count := jsonb_array_length(v_warnings_json);
+  v_ready := v_blocker_count = 0;
+
+  v_next_required_phase := CASE
+    WHEN v_is_stale THEN 'REGENERATE_DRAFT'
+    WHEN v_batch_status IN ('CANCELLED', 'CANCELED') THEN 'STOP_CANCELLED'
+    WHEN v_execution_mode IN ('CSV', 'EXTERNAL', 'EXTERNAL_SETTLEMENT', 'MANUAL_SETTLEMENT') AND v_ready THEN 'SETTLEMENT'
+    WHEN v_transfer_count <= 0 THEN 'PREPARE_TRANSFER_SCOPE'
+    WHEN v_blocker_count > 0 THEN 'RESOLVE_BLOCKERS'
+    ELSE 'START_AUTHORISATION'
+  END;
+
+  RETURN jsonb_build_object(
+    'ok', true,
+    'pay_batch_id', p_pay_batch_id::text,
+    'ready', v_ready,
+    'ready_flag', v_ready,
+    'blocker_count', v_blocker_count,
+    'warning_count', v_warning_count,
+    'blockers', v_blockers_json,
+    'warnings', v_warnings_json,
+    'next_required_phase', v_next_required_phase,
+    'execution_summary', v_summary_json,
+    'batch_status', v_batch_row.status,
+    'execution_mode', v_execution_mode,
+    'schedule_state', coalesce(v_summary_json->'schedule_state', '{}'::jsonb),
+    'authorisation_state', coalesce(v_summary_json->'authorisation_state', '{}'::jsonb),
+    'blocked_funds_state', coalesce(v_summary_json->'blocked_funds_state', '{}'::jsonb),
+    'settlement_state', coalesce(v_summary_json->'settlement_state', '{}'::jsonb),
+    'remittance_state', coalesce(v_summary_json->'remittance_state', '{}'::jsonb),
+    'server_utc', v_now
+  );
+END;
+$function$;
 
 
 
