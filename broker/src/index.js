@@ -6666,16 +6666,57 @@ function makeBankingFriendlyErrorPayload(input, options = {}) {
 
   const collectPayloads = (source) => {
     const out = [];
-    const visited = new Set();
+    const visitedObjects = new Set();
+    const visitedStrings = new Set();
     const queue = [];
-    const nestedKeys = ['error_code', 'code', 'error', 'message', 'details', 'detail', 'hint', 'body', 'json', 'payload', 'friendly_error', 'data', 'cause'];
+    const nestedKeys = [
+      'error_code', 'errorCode', 'code', 'error', 'message', 'details', 'detail', 'reason', 'hint',
+      'body', 'json', 'payload', 'friendly_error', 'friendlyError', 'data', 'cause', 'errors',
+      'technical_message', 'technicalMessage', 'rpc_error', 'rpcError', 'original_error', 'originalError',
+      'inner_error', 'innerError', 'source_error', 'sourceError', 'raw_error', 'rawError', 'error_payload',
+      'errorPayload', 'response', 'result', 'rpc_response', 'rpcResponse', 'db_error', 'dbError'
+    ];
     const enqueue = (value) => {
       if (value == null) return;
+      if (typeof value === 'string') {
+        const text = value.trim();
+        if (!text) return;
+        if (visitedStrings.has(text)) return;
+        visitedStrings.add(text);
+        queue.push(text);
+        return;
+      }
       if (typeof value === 'object') {
-        if (visited.has(value)) return;
-        visited.add(value);
+        if (visitedObjects.has(value)) return;
+        visitedObjects.add(value);
       }
       queue.push(value);
+    };
+    const enqueueStringifiedObject = (value) => {
+      if (!value || typeof value !== 'object') return;
+      try {
+        const seen = new WeakSet();
+        const text = JSON.stringify(value, (_key, raw) => {
+          if (typeof raw === 'bigint') return raw.toString();
+          if (raw instanceof Error) {
+            return {
+              name: String(raw.name || 'Error'),
+              message: String(raw.message || ''),
+              code: raw.code == null ? undefined : String(raw.code),
+              error_code: raw.error_code == null ? undefined : String(raw.error_code),
+              details: raw.details,
+              hint: raw.hint,
+              cause: raw.cause
+            };
+          }
+          if (raw && typeof raw === 'object') {
+            if (seen.has(raw)) return '[Circular]';
+            seen.add(raw);
+          }
+          return raw;
+        });
+        if (text && text !== '{}' && text !== '[]') enqueue(text);
+      } catch {}
     };
 
     enqueue(source);
@@ -6685,23 +6726,38 @@ function makeBankingFriendlyErrorPayload(input, options = {}) {
       const node = queue.shift();
       if (isPlainObject(node)) {
         out.push(node);
+        enqueueStringifiedObject(node);
         if (Array.isArray(node.errors)) {
           for (const item of node.errors) enqueue(item);
         }
         for (const key of nestedKeys) {
           enqueue(node[key]);
+          if (node[key] && typeof node[key] === 'object') enqueueStringifiedObject(node[key]);
           const parsed = extractEmbeddedJsonObject(node[key]);
           if (parsed) enqueue(parsed);
         }
-        enqueue(node.error_payload);
       } else if (node instanceof Error) {
+        const errorPayload = {
+          name: node.name,
+          message: node.message,
+          code: node.code,
+          error_code: node.error_code,
+          details: node.details,
+          hint: node.hint,
+          cause: node.cause
+        };
+        out.push(errorPayload);
         enqueue(node.message);
         enqueue(node.stack);
         enqueue(node.cause);
+        enqueueStringifiedObject(errorPayload);
         if (Array.isArray(node.errors)) {
           for (const item of node.errors) enqueue(item);
         }
-        for (const key of nestedKeys) enqueue(node[key]);
+        for (const key of nestedKeys) {
+          enqueue(node[key]);
+          if (node[key] && typeof node[key] === 'object') enqueueStringifiedObject(node[key]);
+        }
       } else if (typeof node === 'string') {
         const parsed = extractEmbeddedJsonObject(node);
         if (parsed) enqueue(parsed);
@@ -6718,7 +6774,12 @@ function makeBankingFriendlyErrorPayload(input, options = {}) {
 
   const rawTextParts = [];
   const addRawText = (value) => {
-    const text = safeTrim(value);
+    let text = '';
+    if (value && typeof value === 'object') {
+      try { text = JSON.stringify(value); } catch { text = safeTrim(value); }
+    } else {
+      text = safeTrim(value);
+    }
     if (text) rawTextParts.push(text);
   };
 
@@ -6738,6 +6799,21 @@ function makeBankingFriendlyErrorPayload(input, options = {}) {
     addRawText(payload.hint);
     addRawText(payload.status);
     addRawText(payload.post_execution_status);
+    addRawText(payload.technical_message);
+    addRawText(payload.technicalMessage);
+    addRawText(payload.rpc_error);
+    addRawText(payload.rpcError);
+    addRawText(payload.original_error);
+    addRawText(payload.originalError);
+    addRawText(payload.inner_error);
+    addRawText(payload.innerError);
+    addRawText(payload.source_error);
+    addRawText(payload.sourceError);
+    addRawText(payload.raw_error);
+    addRawText(payload.rawError);
+    addRawText(payload.reason);
+    addRawText(payload.response);
+    addRawText(payload.result);
   }
 
   addRawText(sourceObject.error_code);
@@ -6753,6 +6829,21 @@ function makeBankingFriendlyErrorPayload(input, options = {}) {
   addRawText(sourceObject.data);
   addRawText(sourceObject.status);
   addRawText(sourceObject.post_execution_status);
+  addRawText(sourceObject.technical_message);
+  addRawText(sourceObject.technicalMessage);
+  addRawText(sourceObject.rpc_error);
+  addRawText(sourceObject.rpcError);
+  addRawText(sourceObject.original_error);
+  addRawText(sourceObject.originalError);
+  addRawText(sourceObject.inner_error);
+  addRawText(sourceObject.innerError);
+  addRawText(sourceObject.source_error);
+  addRawText(sourceObject.sourceError);
+  addRawText(sourceObject.raw_error);
+  addRawText(sourceObject.rawError);
+  addRawText(sourceObject.reason);
+  addRawText(sourceObject.response);
+  addRawText(sourceObject.result);
 
   if (input instanceof Error) {
     addRawText(input.name);
@@ -6855,6 +6946,12 @@ function makeBankingFriendlyErrorPayload(input, options = {}) {
     'BANKING_CREATE_DRAFT_INVALID_INPUT',
     'BANKING_PAY_CREATE_DRAFT_SESSION_BACKED_FAILED',
     'BANKING_PAY_CREATE_DRAFT_ROUTE_FAILED',
+    'BANKING_PAY_WORKBENCH_SESSION_OPEN_FAILED',
+    'BANKING_PAY_WORKBENCH_SESSION_GET_FAILED',
+    'BANKING_PAY_WORKBENCH_SESSION_GET_CANDIDATE_FAILED',
+    'BANKING_PAY_WORKBENCH_SESSION_PROGRESS_FAILED',
+    'BANKING_PAY_CREATE_DRAFT_SESSION_REQUIRED',
+    'NO_TIMESHEETS_READY_FOR_DRAFT',
     'WORKBENCH_SESSION_CANDIDATE_PROJECTION_STALE',
     'STALE_SESSION',
     'OBSOLETE_SESSION',
@@ -6938,18 +7035,81 @@ function makeBankingFriendlyErrorPayload(input, options = {}) {
   };
 
   const canonicalExplicitCodes = explicitCodeCandidates.map(canonicaliseCode).filter(Boolean);
-  const explicitSpecificKnownCode = canonicalExplicitCodes.find((candidateCode) => knownErrorCodes.includes(candidateCode) && candidateCode !== 'BANKING_ACTION_FAILED');
+  const wrapperErrorCodes = new Set([
+    'BLOCKED_FUNDS_RETRY_FAILED',
+    'BANKING_PAY_PREVIEW_FAILED',
+    'BANKING_PAY_PREVIEW_SESSION_BACKED_FAILED',
+    'BANKING_PAY_CREATE_DRAFT_FAILED',
+    'BANKING_PAY_CREATE_DRAFT_SESSION_BACKED_FAILED',
+    'BANKING_PAY_CREATE_DRAFT_ROUTE_FAILED',
+    'BANKING_PAY_WORKBENCH_SESSION_OPEN_FAILED',
+    'BANKING_PAY_WORKBENCH_SESSION_GET_FAILED',
+    'BANKING_PAY_WORKBENCH_SESSION_GET_CANDIDATE_FAILED',
+    'BANKING_PAY_WORKBENCH_SESSION_PROGRESS_FAILED',
+    'BANKING_ACTION_FAILED',
+    'BANKING_ALERT_ACKNOWLEDGE_FAILED'
+  ]);
+  const isWrapperErrorCode = (value) => {
+    const code = canonicaliseCode(value);
+    if (!code) return false;
+    if (wrapperErrorCodes.has(code)) return true;
+    if (code.startsWith('BANKING_PAY_') && code.endsWith('_FAILED')) return true;
+    if (code.startsWith('BANKING_') && code.endsWith('_FAILED')) return true;
+    return false;
+  };
+  const explicitSpecificKnownCode = canonicalExplicitCodes.find((candidateCode) => (
+    knownErrorCodes.includes(candidateCode) &&
+    candidateCode !== 'BANKING_ACTION_FAILED' &&
+    !isWrapperErrorCode(candidateCode) &&
+    !isDatabaseOrTransportCode(candidateCode)
+  ));
+  const explicitWrapperKnownCode = canonicalExplicitCodes.find((candidateCode) => (
+    knownErrorCodes.includes(candidateCode) &&
+    candidateCode !== 'BANKING_ACTION_FAILED' &&
+    isWrapperErrorCode(candidateCode)
+  ));
   const explicitGenericKnownCode = canonicalExplicitCodes.find((candidateCode) => candidateCode === 'BANKING_ACTION_FAILED');
   const detectedTextCode = detectCodeFromText();
-  const detectedSpecificTextCode = detectedTextCode && detectedTextCode !== 'BANKING_ACTION_FAILED' ? detectedTextCode : '';
+  const detectedSpecificTextCode = detectedTextCode && detectedTextCode !== 'BANKING_ACTION_FAILED' && !isWrapperErrorCode(detectedTextCode) ? detectedTextCode : '';
+  const detectedWrapperTextCode = detectedTextCode && detectedTextCode !== 'BANKING_ACTION_FAILED' && isWrapperErrorCode(detectedTextCode) ? detectedTextCode : '';
   const explicitSafeNonTransportCode = canonicalExplicitCodes.find((candidateCode) => {
     if (!candidateCode) return false;
-    if (knownErrorCodes.includes(candidateCode)) return candidateCode !== 'BANKING_ACTION_FAILED';
+    if (knownErrorCodes.includes(candidateCode)) return candidateCode !== 'BANKING_ACTION_FAILED' && !isWrapperErrorCode(candidateCode);
     if (isDatabaseOrTransportCode(candidateCode)) return false;
     return false;
   });
 
-  let errorCode = explicitSpecificKnownCode || detectedSpecificTextCode || explicitSafeNonTransportCode || explicitGenericKnownCode || detectedTextCode || 'BANKING_ACTION_FAILED';
+  const priorityBusinessCodes = [
+    'BATCH_STALE',
+    'PAYE_NOT_READY',
+    'PAYE_NET_MISSING',
+    'PAYE_NET_INVALID',
+    'PAYE_NET_REQUIRED',
+    'PAYE_NET_BANK_AMOUNT_MISSING',
+    'PAYE_NET_BANK_AMOUNT_INVALID',
+    'HAS_HARD_BLOCKERS',
+    'BLOCKED_BANK_DETAILS',
+    'SELECTED_PAYEE_ROUTE_NOT_READY',
+    'FUNDING_ACCOUNT_MISSING',
+    'RAIL_ENV_MISMATCH',
+    'RAIL_NOT_CONFIGURED',
+    'UNKNOWN_RAIL_PROVIDER',
+    'MISSING_RAIL_PROVIDER',
+    'STANDARD_BANK_IMMEDIATE_SAFE_STATE_NOT_RECORDED',
+    'STANDARD_BANK_IMMEDIATE_RAIL_EXECUTION_ERRORS',
+    'PAYMENT_AUTHORISER_REQUIRED',
+    'NO_ACTIVE_PAYMENTS_IN_BATCH'
+  ];
+  const priorityBusinessCode = priorityBusinessCodes.find((candidateCode) => {
+    if (canonicalExplicitCodes.includes(candidateCode)) return true;
+    if (detectedSpecificTextCode === candidateCode) return true;
+    if (containsErrorCodeToken(rawUpper, candidateCode)) return true;
+    if (candidateCode === 'BATCH_STALE' && containsErrorCodeToken(rawUpper, 'PAY_BATCH_VALIDATE_FRESHNESS_FAILED')) return true;
+    if (candidateCode === 'FUNDING_ACCOUNT_MISSING' && containsErrorCodeToken(rawUpper, 'STANDARD_BANK_FUNDING_ACCOUNT_REQUIRED')) return true;
+    return false;
+  });
+
+  let errorCode = priorityBusinessCode || explicitSpecificKnownCode || detectedSpecificTextCode || explicitSafeNonTransportCode || explicitWrapperKnownCode || detectedWrapperTextCode || explicitGenericKnownCode || detectedTextCode || 'BANKING_ACTION_FAILED';
 
   const hasBlockedFundsFlag = payloads.some((payload) => payload && payload.blocked_funds === true);
   const blockedFundsStatusValues = [
@@ -6978,7 +7138,7 @@ function makeBankingFriendlyErrorPayload(input, options = {}) {
     || rawUpper.includes('BLOCKED_FUNDS_RETRY_FUNDING_ACCOUNT_MISMATCH')
     || rawUpper.includes('BLOCKED_FUNDS_RETRY_STANDARD_BANK_ONLY');
 
-  if (hasExplicitBlockedFundsCode) {
+  if (hasExplicitBlockedFundsCode && !priorityBusinessCode && !hasSpecificNonBlockedFundsCode) {
     errorCode = 'BLOCKED_FUNDS';
   } else if ((sourceObject.blocked_funds === true || primaryPayload.blocked_funds === true || hasBlockedFundsFlag || hasBlockedFundsStatus) && !hasSpecificNonBlockedFundsCode && !hasBlockedFundsFailureContext) {
     errorCode = 'BLOCKED_FUNDS';
@@ -7008,6 +7168,17 @@ function makeBankingFriendlyErrorPayload(input, options = {}) {
       post_execution_status: 'BLOCKED_FUNDS'
     },
 
+    BLOCKED_FUNDS_RETRY_FAILED: {
+      ok: false,
+      http_status: 400,
+      severity: 'warning',
+      title: 'Payment retry could not start',
+      message: 'CloudTMS could not retry this blocked-funds payment. Refresh Banking, review Payment Issues, then try again.',
+      user_action: 'REVIEW_PAYMENT_ISSUES',
+      confirm_label: 'OK',
+      show_modal: true
+    },
+
     NO_ACTIVE_PAYMENTS_IN_BATCH: {
       ok: false,
       http_status: 409,
@@ -7015,6 +7186,16 @@ function makeBankingFriendlyErrorPayload(input, options = {}) {
       title: 'No active payments in this batch',
       message: 'This draft batch has no active payments. Delete the draft or create a new batch.',
       user_action: 'REVIEW_BATCH',
+      confirm_label: 'OK',
+      show_modal: true
+    },
+    NO_TIMESHEETS_READY_FOR_DRAFT: {
+      ok: false,
+      http_status: 409,
+      severity: 'warning',
+      title: 'Payment batch could not be created',
+      message: 'There are no payment items ready for this batch. Refresh Banking, review the preview, then try again.',
+      user_action: 'REFRESH_PREVIEW',
       confirm_label: 'OK',
       show_modal: true
     },
@@ -10665,24 +10846,114 @@ function clampPlannedToWindow(plan, weekEndingYmd, wew, windowStartYmd, windowEn
   // Unknown shape → nothing to render
   return [];
 }
-
-
 async function handleBankingPayWorkbenchSessionApplyCaseResolution(env, req, user, sessionId) {
   const buildFriendlyFailure = (status, errorInput, options = {}, extra = null) => {
-    const friendlyPayload = makeBankingFriendlyErrorPayload(errorInput, { action: 'WORKBENCH_MODAL_ACTION', ...options });
+
+    const isErrorObject = errorInput instanceof Error;
+    const errorInputObject = (errorInput && typeof errorInput === 'object' && !Array.isArray(errorInput) && !isErrorObject) ? errorInput : {};
+    const detailsObject = (errorInputObject.details && typeof errorInputObject.details === 'object' && !Array.isArray(errorInputObject.details)) ? errorInputObject.details : {};
+    const originalError = isErrorObject
+      ? errorInput
+      : (errorInputObject.original_error || errorInputObject.originalError || errorInputObject.rpc_error || errorInputObject.rpcError || detailsObject.original_error || detailsObject.originalError || detailsObject.rpc_error || detailsObject.rpcError || null);
+    const reasonText = String(
+      errorInputObject.reason ??
+      detailsObject.reason ??
+      errorInputObject.message ??
+      (isErrorObject ? errorInput.message : errorInput) ??
+      ''
+    ).trim();
+    const normaliserInput = {
+      ...errorInputObject,
+      ...(isErrorObject ? { message: errorInput.message, error: errorInput.message, name: errorInput.name } : {}),
+      details: {
+        ...detailsObject,
+        reason: detailsObject.reason ?? errorInputObject.reason ?? reasonText,
+        rpc_error: detailsObject.rpc_error || detailsObject.rpcError || errorInputObject.rpc_error || errorInputObject.rpcError || originalError || null,
+        original_error: detailsObject.original_error || detailsObject.originalError || errorInputObject.original_error || errorInputObject.originalError || originalError || null
+      },
+      reason: errorInputObject.reason ?? detailsObject.reason ?? reasonText,
+      technical_message: errorInputObject.technical_message ?? errorInputObject.technicalMessage ?? detailsObject.reason ?? reasonText,
+      rpc_error: errorInputObject.rpc_error || errorInputObject.rpcError || originalError || null,
+      original_error: errorInputObject.original_error || errorInputObject.originalError || originalError || null,
+      response: errorInputObject.response || detailsObject.response || null
+    };
+    const friendlyPayload = makeBankingFriendlyErrorPayload(normaliserInput, { action: 'WORKBENCH_MODAL_ACTION', ...options });
     const base = (friendlyPayload && typeof friendlyPayload === 'object') ? friendlyPayload : {};
     const reserved = new Set(['ok', 'error_code', 'code', 'title', 'message', 'user_message', 'friendly_error', 'user_action', 'confirm_label']);
     const safeExtra = (extra && typeof extra === 'object' && !Array.isArray(extra)) ? extra : {};
     const mergedExtra = Object.fromEntries(Object.entries(safeExtra).filter(([k]) => !reserved.has(k)));
     const payload = { ...base, ...mergedExtra, ok: false };
     const normalisedCode = String(payload.error_code || payload.code || '').trim().toUpperCase();
-    const localTitle = 'Payment preview could not be updated';
-    const localMessage = 'CloudTMS could not save this payment decision. Refresh the preview and try again.';
-    if (normalisedCode !== 'BATCH_STALE') {
-      payload.title = localTitle; payload.message = localMessage; payload.user_message = localMessage; payload.error = localMessage;
+
+    const genericFallbackCodes = new Set([
+      'BANKING_ACTION_FAILED',
+      'BANKING_PAY_PREVIEW_FAILED',
+      'BANKING_PAY_PREVIEW_SESSION_BACKED_FAILED',
+      'BANKING_PAY_CREATE_DRAFT_FAILED',
+      'BANKING_PAY_CREATE_DRAFT_SESSION_BACKED_FAILED',
+      'BANKING_PAY_CREATE_DRAFT_ROUTE_FAILED',
+      'BANKING_PAY_WORKBENCH_SESSION_OPEN_FAILED',
+      'BANKING_PAY_WORKBENCH_SESSION_GET_FAILED',
+      'BANKING_PAY_WORKBENCH_SESSION_GET_CANDIDATE_FAILED',
+      'BANKING_PAY_WORKBENCH_SESSION_PROGRESS_FAILED',
+      'BANKING_ALERT_ACKNOWLEDGE_FAILED',
+      'WORKBENCH_MODAL_ACTION_INVALID_JSON',
+      'WORKBENCH_MODAL_ACTION_INVALID_CASE_RESOLUTION',
+      'WORKBENCH_MODAL_ACTION_INVALID_CASE_KEY',
+      'WORKBENCH_MODAL_ACTION_INVALID_CANDIDATE',
+      'WORKBENCH_MODAL_ACTION_INVALID_FINANCE_CASE',
+      'WORKBENCH_MODAL_ACTION_INVALID_TIMESHEET',
+      'WORKBENCH_MODAL_ACTION_INVALID_PAY_DATE',
+      'WORKBENCH_MODAL_ACTION_INVALID_AMOUNT',
+      'WORKBENCH_MODAL_ACTION_INVALID_EXCLUSION',
+      'WORKBENCH_MODAL_ACTION_INVALID_SELECTED_ROWS',
+      'WORKBENCH_SESSION_INVALID',
+      'WORKBENCH_SESSION_NOT_FOUND',
+      'STALE_SESSION',
+      'OBSOLETE_SESSION',
+      'BANKING_PAY_WORKBENCH_SESSION_OPEN_CONTEXT_MISMATCH'
+    ]);
+    const validationStatusCodes = new Set([
+      'PAYE_NOT_READY',
+      'PAYE_NET_MISSING',
+      'PAYE_NET_INVALID',
+      'PAYE_NET_REQUIRED',
+      'PAYE_NET_BANK_AMOUNT_MISSING',
+      'PAYE_NET_BANK_AMOUNT_INVALID',
+      'BLOCKED_BANK_DETAILS',
+      'SELECTED_PAYEE_ROUTE_NOT_READY',
+      'HAS_HARD_BLOCKERS',
+      'FUNDING_ACCOUNT_MISSING',
+      'RAIL_ENV_MISMATCH',
+      'RAIL_NOT_CONFIGURED',
+      'UNKNOWN_RAIL_PROVIDER',
+      'MISSING_RAIL_PROVIDER'
+    ]);
+    const isGenericNormalisedCode = (code) => {
+      const c = String(code || '').trim().toUpperCase();
+      if (!c) return true;
+      if (genericFallbackCodes.has(c)) return true;
+      if (c.startsWith('BANKING_PAY_') && c.endsWith('_FAILED')) return true;
+      if (c.startsWith('BANKING_') && c.endsWith('_FAILED')) return true;
+      if (c.startsWith('WORKBENCH_MODAL_ACTION_INVALID_')) return true;
+      return false;
+    };
+    const resolveStatus = (code, fallbackStatus) => {
+      const c = String(code || '').trim().toUpperCase();
+      if (c === 'BATCH_STALE') return 409;
+      if (validationStatusCodes.has(c)) return 400;
+      return fallbackStatus;
+    };
+    const localTitle = 'Payment decision could not be saved';
+    const localMessage = 'Refresh the payment preview, review the latest details, then try again.';
+    if (isGenericNormalisedCode(normalisedCode)) {
+      payload.title = localTitle;
+      payload.message = localMessage;
+      payload.user_message = localMessage;
+      payload.error = localMessage;
       payload.friendly_error = { ...((payload.friendly_error && typeof payload.friendly_error === 'object') ? payload.friendly_error : {}), title: localTitle, message: localMessage };
     }
-    const resolvedStatus = normalisedCode === 'BATCH_STALE' ? 409 : status;
+    const resolvedStatus = resolveStatus(normalisedCode, status);
     return withCORS(env, req, new Response(JSON.stringify(payload), { status: resolvedStatus, headers: JSON_HEADERS }));
   };
   const id = String(sessionId || '').trim();
@@ -11110,20 +11381,112 @@ async function handleBankingPayWorkbenchSessionApplyCaseResolution(env, req, use
 
 async function handleBankingPayWorkbenchSessionClearCaseResolution(env, req, user, sessionId) {
   const buildFriendlyFailure = (status, errorInput, options = {}, extra = null) => {
-    const friendlyPayload = makeBankingFriendlyErrorPayload(errorInput, { action: 'WORKBENCH_MODAL_ACTION', ...options });
+
+    const isErrorObject = errorInput instanceof Error;
+    const errorInputObject = (errorInput && typeof errorInput === 'object' && !Array.isArray(errorInput) && !isErrorObject) ? errorInput : {};
+    const detailsObject = (errorInputObject.details && typeof errorInputObject.details === 'object' && !Array.isArray(errorInputObject.details)) ? errorInputObject.details : {};
+    const originalError = isErrorObject
+      ? errorInput
+      : (errorInputObject.original_error || errorInputObject.originalError || errorInputObject.rpc_error || errorInputObject.rpcError || detailsObject.original_error || detailsObject.originalError || detailsObject.rpc_error || detailsObject.rpcError || null);
+    const reasonText = String(
+      errorInputObject.reason ??
+      detailsObject.reason ??
+      errorInputObject.message ??
+      (isErrorObject ? errorInput.message : errorInput) ??
+      ''
+    ).trim();
+    const normaliserInput = {
+      ...errorInputObject,
+      ...(isErrorObject ? { message: errorInput.message, error: errorInput.message, name: errorInput.name } : {}),
+      details: {
+        ...detailsObject,
+        reason: detailsObject.reason ?? errorInputObject.reason ?? reasonText,
+        rpc_error: detailsObject.rpc_error || detailsObject.rpcError || errorInputObject.rpc_error || errorInputObject.rpcError || originalError || null,
+        original_error: detailsObject.original_error || detailsObject.originalError || errorInputObject.original_error || errorInputObject.originalError || originalError || null
+      },
+      reason: errorInputObject.reason ?? detailsObject.reason ?? reasonText,
+      technical_message: errorInputObject.technical_message ?? errorInputObject.technicalMessage ?? detailsObject.reason ?? reasonText,
+      rpc_error: errorInputObject.rpc_error || errorInputObject.rpcError || originalError || null,
+      original_error: errorInputObject.original_error || errorInputObject.originalError || originalError || null,
+      response: errorInputObject.response || detailsObject.response || null
+    };
+    const friendlyPayload = makeBankingFriendlyErrorPayload(normaliserInput, { action: 'WORKBENCH_MODAL_ACTION', ...options });
     const base = (friendlyPayload && typeof friendlyPayload === 'object') ? friendlyPayload : {};
     const reserved = new Set(['ok', 'error_code', 'code', 'title', 'message', 'user_message', 'friendly_error', 'user_action', 'confirm_label']);
     const safeExtra = (extra && typeof extra === 'object' && !Array.isArray(extra)) ? extra : {};
     const mergedExtra = Object.fromEntries(Object.entries(safeExtra).filter(([k]) => !reserved.has(k)));
     const payload = { ...base, ...mergedExtra, ok: false };
     const normalisedCode = String(payload.error_code || payload.code || '').trim().toUpperCase();
-    const localTitle = 'Payment preview could not be updated';
-    const localMessage = 'CloudTMS could not clear this payment decision. Refresh the preview and try again.';
-    if (normalisedCode !== 'BATCH_STALE') {
-      payload.title = localTitle; payload.message = localMessage; payload.user_message = localMessage; payload.error = localMessage;
+
+    const genericFallbackCodes = new Set([
+      'BANKING_ACTION_FAILED',
+      'BANKING_PAY_PREVIEW_FAILED',
+      'BANKING_PAY_PREVIEW_SESSION_BACKED_FAILED',
+      'BANKING_PAY_CREATE_DRAFT_FAILED',
+      'BANKING_PAY_CREATE_DRAFT_SESSION_BACKED_FAILED',
+      'BANKING_PAY_CREATE_DRAFT_ROUTE_FAILED',
+      'BANKING_PAY_WORKBENCH_SESSION_OPEN_FAILED',
+      'BANKING_PAY_WORKBENCH_SESSION_GET_FAILED',
+      'BANKING_PAY_WORKBENCH_SESSION_GET_CANDIDATE_FAILED',
+      'BANKING_PAY_WORKBENCH_SESSION_PROGRESS_FAILED',
+      'BANKING_ALERT_ACKNOWLEDGE_FAILED',
+      'WORKBENCH_MODAL_ACTION_INVALID_JSON',
+      'WORKBENCH_MODAL_ACTION_INVALID_CASE_RESOLUTION',
+      'WORKBENCH_MODAL_ACTION_INVALID_CASE_KEY',
+      'WORKBENCH_MODAL_ACTION_INVALID_CANDIDATE',
+      'WORKBENCH_MODAL_ACTION_INVALID_FINANCE_CASE',
+      'WORKBENCH_MODAL_ACTION_INVALID_TIMESHEET',
+      'WORKBENCH_MODAL_ACTION_INVALID_PAY_DATE',
+      'WORKBENCH_MODAL_ACTION_INVALID_AMOUNT',
+      'WORKBENCH_MODAL_ACTION_INVALID_EXCLUSION',
+      'WORKBENCH_MODAL_ACTION_INVALID_SELECTED_ROWS',
+      'WORKBENCH_SESSION_INVALID',
+      'WORKBENCH_SESSION_NOT_FOUND',
+      'STALE_SESSION',
+      'OBSOLETE_SESSION',
+      'BANKING_PAY_WORKBENCH_SESSION_OPEN_CONTEXT_MISMATCH'
+    ]);
+    const validationStatusCodes = new Set([
+      'PAYE_NOT_READY',
+      'PAYE_NET_MISSING',
+      'PAYE_NET_INVALID',
+      'PAYE_NET_REQUIRED',
+      'PAYE_NET_BANK_AMOUNT_MISSING',
+      'PAYE_NET_BANK_AMOUNT_INVALID',
+      'BLOCKED_BANK_DETAILS',
+      'SELECTED_PAYEE_ROUTE_NOT_READY',
+      'HAS_HARD_BLOCKERS',
+      'FUNDING_ACCOUNT_MISSING',
+      'RAIL_ENV_MISMATCH',
+      'RAIL_NOT_CONFIGURED',
+      'UNKNOWN_RAIL_PROVIDER',
+      'MISSING_RAIL_PROVIDER'
+    ]);
+    const isGenericNormalisedCode = (code) => {
+      const c = String(code || '').trim().toUpperCase();
+      if (!c) return true;
+      if (genericFallbackCodes.has(c)) return true;
+      if (c.startsWith('BANKING_PAY_') && c.endsWith('_FAILED')) return true;
+      if (c.startsWith('BANKING_') && c.endsWith('_FAILED')) return true;
+      if (c.startsWith('WORKBENCH_MODAL_ACTION_INVALID_')) return true;
+      return false;
+    };
+    const resolveStatus = (code, fallbackStatus) => {
+      const c = String(code || '').trim().toUpperCase();
+      if (c === 'BATCH_STALE') return 409;
+      if (validationStatusCodes.has(c)) return 400;
+      return fallbackStatus;
+    };
+    const localTitle = 'Payment decision could not be cleared';
+    const localMessage = 'Refresh the payment preview, review the latest details, then try again.';
+    if (isGenericNormalisedCode(normalisedCode)) {
+      payload.title = localTitle;
+      payload.message = localMessage;
+      payload.user_message = localMessage;
+      payload.error = localMessage;
       payload.friendly_error = { ...((payload.friendly_error && typeof payload.friendly_error === 'object') ? payload.friendly_error : {}), title: localTitle, message: localMessage };
     }
-    const resolvedStatus = normalisedCode === 'BATCH_STALE' ? 409 : status;
+    const resolvedStatus = resolveStatus(normalisedCode, status);
     return withCORS(env, req, new Response(JSON.stringify(payload), { status: resolvedStatus, headers: JSON_HEADERS }));
   };
   const id = String(sessionId || '').trim();
@@ -11264,23 +11627,114 @@ async function handleBankingPayWorkbenchSessionClearCaseResolution(env, req, use
   }
 }
 
-
 async function handleBankingPayWorkbenchSessionSetTimesheetExclusion(env, req, user, sessionId) {
   const buildFriendlyFailure = (status, errorInput, options = {}, extra = null) => {
-    const friendlyPayload = makeBankingFriendlyErrorPayload(errorInput, { action: 'WORKBENCH_MODAL_ACTION', ...options });
+
+    const isErrorObject = errorInput instanceof Error;
+    const errorInputObject = (errorInput && typeof errorInput === 'object' && !Array.isArray(errorInput) && !isErrorObject) ? errorInput : {};
+    const detailsObject = (errorInputObject.details && typeof errorInputObject.details === 'object' && !Array.isArray(errorInputObject.details)) ? errorInputObject.details : {};
+    const originalError = isErrorObject
+      ? errorInput
+      : (errorInputObject.original_error || errorInputObject.originalError || errorInputObject.rpc_error || errorInputObject.rpcError || detailsObject.original_error || detailsObject.originalError || detailsObject.rpc_error || detailsObject.rpcError || null);
+    const reasonText = String(
+      errorInputObject.reason ??
+      detailsObject.reason ??
+      errorInputObject.message ??
+      (isErrorObject ? errorInput.message : errorInput) ??
+      ''
+    ).trim();
+    const normaliserInput = {
+      ...errorInputObject,
+      ...(isErrorObject ? { message: errorInput.message, error: errorInput.message, name: errorInput.name } : {}),
+      details: {
+        ...detailsObject,
+        reason: detailsObject.reason ?? errorInputObject.reason ?? reasonText,
+        rpc_error: detailsObject.rpc_error || detailsObject.rpcError || errorInputObject.rpc_error || errorInputObject.rpcError || originalError || null,
+        original_error: detailsObject.original_error || detailsObject.originalError || errorInputObject.original_error || errorInputObject.originalError || originalError || null
+      },
+      reason: errorInputObject.reason ?? detailsObject.reason ?? reasonText,
+      technical_message: errorInputObject.technical_message ?? errorInputObject.technicalMessage ?? detailsObject.reason ?? reasonText,
+      rpc_error: errorInputObject.rpc_error || errorInputObject.rpcError || originalError || null,
+      original_error: errorInputObject.original_error || errorInputObject.originalError || originalError || null,
+      response: errorInputObject.response || detailsObject.response || null
+    };
+    const friendlyPayload = makeBankingFriendlyErrorPayload(normaliserInput, { action: 'WORKBENCH_MODAL_ACTION', ...options });
     const base = (friendlyPayload && typeof friendlyPayload === 'object') ? friendlyPayload : {};
     const reserved = new Set(['ok', 'error_code', 'code', 'title', 'message', 'user_message', 'friendly_error', 'user_action', 'confirm_label']);
     const safeExtra = (extra && typeof extra === 'object' && !Array.isArray(extra)) ? extra : {};
     const mergedExtra = Object.fromEntries(Object.entries(safeExtra).filter(([k]) => !reserved.has(k)));
     const payload = { ...base, ...mergedExtra, ok: false };
     const normalisedCode = String(payload.error_code || payload.code || '').trim().toUpperCase();
-    const localTitle = 'Payment preview could not be updated';
-    const localMessage = 'CloudTMS could not save the timesheet exclusion. Refresh the preview and try again.';
-    if (normalisedCode !== 'BATCH_STALE') {
-      payload.title = localTitle; payload.message = localMessage; payload.user_message = localMessage; payload.error = localMessage;
+
+    const genericFallbackCodes = new Set([
+      'BANKING_ACTION_FAILED',
+      'BANKING_PAY_PREVIEW_FAILED',
+      'BANKING_PAY_PREVIEW_SESSION_BACKED_FAILED',
+      'BANKING_PAY_CREATE_DRAFT_FAILED',
+      'BANKING_PAY_CREATE_DRAFT_SESSION_BACKED_FAILED',
+      'BANKING_PAY_CREATE_DRAFT_ROUTE_FAILED',
+      'BANKING_PAY_WORKBENCH_SESSION_OPEN_FAILED',
+      'BANKING_PAY_WORKBENCH_SESSION_GET_FAILED',
+      'BANKING_PAY_WORKBENCH_SESSION_GET_CANDIDATE_FAILED',
+      'BANKING_PAY_WORKBENCH_SESSION_PROGRESS_FAILED',
+      'BANKING_ALERT_ACKNOWLEDGE_FAILED',
+      'WORKBENCH_MODAL_ACTION_INVALID_JSON',
+      'WORKBENCH_MODAL_ACTION_INVALID_CASE_RESOLUTION',
+      'WORKBENCH_MODAL_ACTION_INVALID_CASE_KEY',
+      'WORKBENCH_MODAL_ACTION_INVALID_CANDIDATE',
+      'WORKBENCH_MODAL_ACTION_INVALID_FINANCE_CASE',
+      'WORKBENCH_MODAL_ACTION_INVALID_TIMESHEET',
+      'WORKBENCH_MODAL_ACTION_INVALID_PAY_DATE',
+      'WORKBENCH_MODAL_ACTION_INVALID_AMOUNT',
+      'WORKBENCH_MODAL_ACTION_INVALID_EXCLUSION',
+      'WORKBENCH_MODAL_ACTION_INVALID_SELECTED_ROWS',
+      'WORKBENCH_SESSION_INVALID',
+      'WORKBENCH_SESSION_NOT_FOUND',
+      'STALE_SESSION',
+      'OBSOLETE_SESSION',
+      'BANKING_PAY_WORKBENCH_SESSION_OPEN_CONTEXT_MISMATCH'
+    ]);
+    const validationStatusCodes = new Set([
+      'PAYE_NOT_READY',
+      'PAYE_NET_MISSING',
+      'PAYE_NET_INVALID',
+      'PAYE_NET_REQUIRED',
+      'PAYE_NET_BANK_AMOUNT_MISSING',
+      'PAYE_NET_BANK_AMOUNT_INVALID',
+      'BLOCKED_BANK_DETAILS',
+      'SELECTED_PAYEE_ROUTE_NOT_READY',
+      'HAS_HARD_BLOCKERS',
+      'FUNDING_ACCOUNT_MISSING',
+      'RAIL_ENV_MISMATCH',
+      'RAIL_NOT_CONFIGURED',
+      'UNKNOWN_RAIL_PROVIDER',
+      'MISSING_RAIL_PROVIDER'
+    ]);
+    const isGenericNormalisedCode = (code) => {
+      const c = String(code || '').trim().toUpperCase();
+      if (!c) return true;
+      if (genericFallbackCodes.has(c)) return true;
+      if (c.startsWith('BANKING_PAY_') && c.endsWith('_FAILED')) return true;
+      if (c.startsWith('BANKING_') && c.endsWith('_FAILED')) return true;
+      if (c.startsWith('WORKBENCH_MODAL_ACTION_INVALID_')) return true;
+      return false;
+    };
+    const resolveStatus = (code, fallbackStatus) => {
+      const c = String(code || '').trim().toUpperCase();
+      if (c === 'BATCH_STALE') return 409;
+      if (validationStatusCodes.has(c)) return 400;
+      return fallbackStatus;
+    };
+    const localTitle = 'Payment selection could not be updated';
+    const localMessage = 'Refresh the payment preview, review the latest details, then try again.';
+    if (isGenericNormalisedCode(normalisedCode)) {
+      payload.title = localTitle;
+      payload.message = localMessage;
+      payload.user_message = localMessage;
+      payload.error = localMessage;
       payload.friendly_error = { ...((payload.friendly_error && typeof payload.friendly_error === 'object') ? payload.friendly_error : {}), title: localTitle, message: localMessage };
     }
-    const resolvedStatus = normalisedCode === 'BATCH_STALE' ? 409 : status;
+    const resolvedStatus = resolveStatus(normalisedCode, status);
     return withCORS(env, req, new Response(JSON.stringify(payload), { status: resolvedStatus, headers: JSON_HEADERS }));
   };
   const id = String(sessionId || '').trim();
@@ -11413,22 +11867,118 @@ async function handleBankingPayWorkbenchSessionSetTimesheetExclusion(env, req, u
 }
 
 
+
+
+
+
 async function handleBankingPayWorkbenchSessionSetSelectedRows(env, req, user, sessionId) {
   const buildFriendlyFailure = (status, errorInput, options = {}, extra = null) => {
-    const friendlyPayload = makeBankingFriendlyErrorPayload(errorInput, { action: 'WORKBENCH_MODAL_ACTION', ...options });
+
+    const isErrorObject = errorInput instanceof Error;
+    const errorInputObject = (errorInput && typeof errorInput === 'object' && !Array.isArray(errorInput) && !isErrorObject) ? errorInput : {};
+    const detailsObject = (errorInputObject.details && typeof errorInputObject.details === 'object' && !Array.isArray(errorInputObject.details)) ? errorInputObject.details : {};
+    const originalError = isErrorObject
+      ? errorInput
+      : (errorInputObject.original_error || errorInputObject.originalError || errorInputObject.rpc_error || errorInputObject.rpcError || detailsObject.original_error || detailsObject.originalError || detailsObject.rpc_error || detailsObject.rpcError || null);
+    const reasonText = String(
+      errorInputObject.reason ??
+      detailsObject.reason ??
+      errorInputObject.message ??
+      (isErrorObject ? errorInput.message : errorInput) ??
+      ''
+    ).trim();
+    const normaliserInput = {
+      ...errorInputObject,
+      ...(isErrorObject ? { message: errorInput.message, error: errorInput.message, name: errorInput.name } : {}),
+      details: {
+        ...detailsObject,
+        reason: detailsObject.reason ?? errorInputObject.reason ?? reasonText,
+        rpc_error: detailsObject.rpc_error || detailsObject.rpcError || errorInputObject.rpc_error || errorInputObject.rpcError || originalError || null,
+        original_error: detailsObject.original_error || detailsObject.originalError || errorInputObject.original_error || errorInputObject.originalError || originalError || null
+      },
+      reason: errorInputObject.reason ?? detailsObject.reason ?? reasonText,
+      technical_message: errorInputObject.technical_message ?? errorInputObject.technicalMessage ?? detailsObject.reason ?? reasonText,
+      rpc_error: errorInputObject.rpc_error || errorInputObject.rpcError || originalError || null,
+      original_error: errorInputObject.original_error || errorInputObject.originalError || originalError || null,
+      response: errorInputObject.response || detailsObject.response || null
+    };
+    const friendlyPayload = makeBankingFriendlyErrorPayload(normaliserInput, { action: 'WORKBENCH_MODAL_ACTION', ...options });
     const base = (friendlyPayload && typeof friendlyPayload === 'object') ? friendlyPayload : {};
     const reserved = new Set(['ok', 'error_code', 'code', 'title', 'message', 'user_message', 'friendly_error', 'user_action', 'confirm_label']);
     const safeExtra = (extra && typeof extra === 'object' && !Array.isArray(extra)) ? extra : {};
     const mergedExtra = Object.fromEntries(Object.entries(safeExtra).filter(([k]) => !reserved.has(k)));
     const payload = { ...base, ...mergedExtra, ok: false };
     const normalisedCode = String(payload.error_code || payload.code || '').trim().toUpperCase();
-    const localTitle = 'Payment preview could not be updated';
-    const localMessage = 'CloudTMS could not save the selected payment rows. Refresh the preview and try again.';
-    if (normalisedCode !== 'BATCH_STALE') {
-      payload.title = localTitle; payload.message = localMessage; payload.user_message = localMessage; payload.error = localMessage;
+
+    const genericFallbackCodes = new Set([
+      'BANKING_ACTION_FAILED',
+      'BANKING_PAY_PREVIEW_FAILED',
+      'BANKING_PAY_PREVIEW_SESSION_BACKED_FAILED',
+      'BANKING_PAY_CREATE_DRAFT_FAILED',
+      'BANKING_PAY_CREATE_DRAFT_SESSION_BACKED_FAILED',
+      'BANKING_PAY_CREATE_DRAFT_ROUTE_FAILED',
+      'BANKING_PAY_WORKBENCH_SESSION_OPEN_FAILED',
+      'BANKING_PAY_WORKBENCH_SESSION_GET_FAILED',
+      'BANKING_PAY_WORKBENCH_SESSION_GET_CANDIDATE_FAILED',
+      'BANKING_PAY_WORKBENCH_SESSION_PROGRESS_FAILED',
+      'BANKING_ALERT_ACKNOWLEDGE_FAILED',
+      'WORKBENCH_MODAL_ACTION_INVALID_JSON',
+      'WORKBENCH_MODAL_ACTION_INVALID_CASE_RESOLUTION',
+      'WORKBENCH_MODAL_ACTION_INVALID_CASE_KEY',
+      'WORKBENCH_MODAL_ACTION_INVALID_CANDIDATE',
+      'WORKBENCH_MODAL_ACTION_INVALID_FINANCE_CASE',
+      'WORKBENCH_MODAL_ACTION_INVALID_TIMESHEET',
+      'WORKBENCH_MODAL_ACTION_INVALID_PAY_DATE',
+      'WORKBENCH_MODAL_ACTION_INVALID_AMOUNT',
+      'WORKBENCH_MODAL_ACTION_INVALID_EXCLUSION',
+      'WORKBENCH_MODAL_ACTION_INVALID_SELECTED_ROWS',
+      'WORKBENCH_SESSION_INVALID',
+      'WORKBENCH_SESSION_NOT_FOUND',
+      'STALE_SESSION',
+      'OBSOLETE_SESSION',
+      'BANKING_PAY_WORKBENCH_SESSION_OPEN_CONTEXT_MISMATCH'
+    ]);
+    const validationStatusCodes = new Set([
+      'PAYE_NOT_READY',
+      'PAYE_NET_MISSING',
+      'PAYE_NET_INVALID',
+      'PAYE_NET_REQUIRED',
+      'PAYE_NET_BANK_AMOUNT_MISSING',
+      'PAYE_NET_BANK_AMOUNT_INVALID',
+      'BLOCKED_BANK_DETAILS',
+      'SELECTED_PAYEE_ROUTE_NOT_READY',
+      'HAS_HARD_BLOCKERS',
+      'FUNDING_ACCOUNT_MISSING',
+      'RAIL_ENV_MISMATCH',
+      'RAIL_NOT_CONFIGURED',
+      'UNKNOWN_RAIL_PROVIDER',
+      'MISSING_RAIL_PROVIDER'
+    ]);
+    const isGenericNormalisedCode = (code) => {
+      const c = String(code || '').trim().toUpperCase();
+      if (!c) return true;
+      if (genericFallbackCodes.has(c)) return true;
+      if (c.startsWith('BANKING_PAY_') && c.endsWith('_FAILED')) return true;
+      if (c.startsWith('BANKING_') && c.endsWith('_FAILED')) return true;
+      if (c.startsWith('WORKBENCH_MODAL_ACTION_INVALID_')) return true;
+      return false;
+    };
+    const resolveStatus = (code, fallbackStatus) => {
+      const c = String(code || '').trim().toUpperCase();
+      if (c === 'BATCH_STALE') return 409;
+      if (validationStatusCodes.has(c)) return 400;
+      return fallbackStatus;
+    };
+    const localTitle = 'Payment selection could not be updated';
+    const localMessage = 'Refresh the payment preview, review the latest details, then try again.';
+    if (isGenericNormalisedCode(normalisedCode)) {
+      payload.title = localTitle;
+      payload.message = localMessage;
+      payload.user_message = localMessage;
+      payload.error = localMessage;
       payload.friendly_error = { ...((payload.friendly_error && typeof payload.friendly_error === 'object') ? payload.friendly_error : {}), title: localTitle, message: localMessage };
     }
-    const resolvedStatus = normalisedCode === 'BATCH_STALE' ? 409 : status;
+    const resolvedStatus = resolveStatus(normalisedCode, status);
     return withCORS(env, req, new Response(JSON.stringify(payload), { status: resolvedStatus, headers: JSON_HEADERS }));
   };
   const id = String(sessionId || '').trim();
@@ -11505,23 +12055,114 @@ async function handleBankingPayWorkbenchSessionSetSelectedRows(env, req, user, s
   }
 }
 
-
 async function handleBankingPayWorkbenchSessionDiscard(env, req, user, sessionId) {
   const buildFriendlyFailure = (status, errorInput, options = {}, extra = null) => {
-    const friendlyPayload = makeBankingFriendlyErrorPayload(errorInput, { action: 'WORKBENCH_MODAL_ACTION', ...options });
+
+    const isErrorObject = errorInput instanceof Error;
+    const errorInputObject = (errorInput && typeof errorInput === 'object' && !Array.isArray(errorInput) && !isErrorObject) ? errorInput : {};
+    const detailsObject = (errorInputObject.details && typeof errorInputObject.details === 'object' && !Array.isArray(errorInputObject.details)) ? errorInputObject.details : {};
+    const originalError = isErrorObject
+      ? errorInput
+      : (errorInputObject.original_error || errorInputObject.originalError || errorInputObject.rpc_error || errorInputObject.rpcError || detailsObject.original_error || detailsObject.originalError || detailsObject.rpc_error || detailsObject.rpcError || null);
+    const reasonText = String(
+      errorInputObject.reason ??
+      detailsObject.reason ??
+      errorInputObject.message ??
+      (isErrorObject ? errorInput.message : errorInput) ??
+      ''
+    ).trim();
+    const normaliserInput = {
+      ...errorInputObject,
+      ...(isErrorObject ? { message: errorInput.message, error: errorInput.message, name: errorInput.name } : {}),
+      details: {
+        ...detailsObject,
+        reason: detailsObject.reason ?? errorInputObject.reason ?? reasonText,
+        rpc_error: detailsObject.rpc_error || detailsObject.rpcError || errorInputObject.rpc_error || errorInputObject.rpcError || originalError || null,
+        original_error: detailsObject.original_error || detailsObject.originalError || errorInputObject.original_error || errorInputObject.originalError || originalError || null
+      },
+      reason: errorInputObject.reason ?? detailsObject.reason ?? reasonText,
+      technical_message: errorInputObject.technical_message ?? errorInputObject.technicalMessage ?? detailsObject.reason ?? reasonText,
+      rpc_error: errorInputObject.rpc_error || errorInputObject.rpcError || originalError || null,
+      original_error: errorInputObject.original_error || errorInputObject.originalError || originalError || null,
+      response: errorInputObject.response || detailsObject.response || null
+    };
+    const friendlyPayload = makeBankingFriendlyErrorPayload(normaliserInput, { action: 'WORKBENCH_MODAL_ACTION', ...options });
     const base = (friendlyPayload && typeof friendlyPayload === 'object') ? friendlyPayload : {};
     const reserved = new Set(['ok', 'error_code', 'code', 'title', 'message', 'user_message', 'friendly_error', 'user_action', 'confirm_label']);
     const safeExtra = (extra && typeof extra === 'object' && !Array.isArray(extra)) ? extra : {};
     const mergedExtra = Object.fromEntries(Object.entries(safeExtra).filter(([k]) => !reserved.has(k)));
     const payload = { ...base, ...mergedExtra, ok: false };
     const normalisedCode = String(payload.error_code || payload.code || '').trim().toUpperCase();
+
+    const genericFallbackCodes = new Set([
+      'BANKING_ACTION_FAILED',
+      'BANKING_PAY_PREVIEW_FAILED',
+      'BANKING_PAY_PREVIEW_SESSION_BACKED_FAILED',
+      'BANKING_PAY_CREATE_DRAFT_FAILED',
+      'BANKING_PAY_CREATE_DRAFT_SESSION_BACKED_FAILED',
+      'BANKING_PAY_CREATE_DRAFT_ROUTE_FAILED',
+      'BANKING_PAY_WORKBENCH_SESSION_OPEN_FAILED',
+      'BANKING_PAY_WORKBENCH_SESSION_GET_FAILED',
+      'BANKING_PAY_WORKBENCH_SESSION_GET_CANDIDATE_FAILED',
+      'BANKING_PAY_WORKBENCH_SESSION_PROGRESS_FAILED',
+      'BANKING_ALERT_ACKNOWLEDGE_FAILED',
+      'WORKBENCH_MODAL_ACTION_INVALID_JSON',
+      'WORKBENCH_MODAL_ACTION_INVALID_CASE_RESOLUTION',
+      'WORKBENCH_MODAL_ACTION_INVALID_CASE_KEY',
+      'WORKBENCH_MODAL_ACTION_INVALID_CANDIDATE',
+      'WORKBENCH_MODAL_ACTION_INVALID_FINANCE_CASE',
+      'WORKBENCH_MODAL_ACTION_INVALID_TIMESHEET',
+      'WORKBENCH_MODAL_ACTION_INVALID_PAY_DATE',
+      'WORKBENCH_MODAL_ACTION_INVALID_AMOUNT',
+      'WORKBENCH_MODAL_ACTION_INVALID_EXCLUSION',
+      'WORKBENCH_MODAL_ACTION_INVALID_SELECTED_ROWS',
+      'WORKBENCH_SESSION_INVALID',
+      'WORKBENCH_SESSION_NOT_FOUND',
+      'STALE_SESSION',
+      'OBSOLETE_SESSION',
+      'BANKING_PAY_WORKBENCH_SESSION_OPEN_CONTEXT_MISMATCH'
+    ]);
+    const validationStatusCodes = new Set([
+      'PAYE_NOT_READY',
+      'PAYE_NET_MISSING',
+      'PAYE_NET_INVALID',
+      'PAYE_NET_REQUIRED',
+      'PAYE_NET_BANK_AMOUNT_MISSING',
+      'PAYE_NET_BANK_AMOUNT_INVALID',
+      'BLOCKED_BANK_DETAILS',
+      'SELECTED_PAYEE_ROUTE_NOT_READY',
+      'HAS_HARD_BLOCKERS',
+      'FUNDING_ACCOUNT_MISSING',
+      'RAIL_ENV_MISMATCH',
+      'RAIL_NOT_CONFIGURED',
+      'UNKNOWN_RAIL_PROVIDER',
+      'MISSING_RAIL_PROVIDER'
+    ]);
+    const isGenericNormalisedCode = (code) => {
+      const c = String(code || '').trim().toUpperCase();
+      if (!c) return true;
+      if (genericFallbackCodes.has(c)) return true;
+      if (c.startsWith('BANKING_PAY_') && c.endsWith('_FAILED')) return true;
+      if (c.startsWith('BANKING_') && c.endsWith('_FAILED')) return true;
+      if (c.startsWith('WORKBENCH_MODAL_ACTION_INVALID_')) return true;
+      return false;
+    };
+    const resolveStatus = (code, fallbackStatus) => {
+      const c = String(code || '').trim().toUpperCase();
+      if (c === 'BATCH_STALE') return 409;
+      if (validationStatusCodes.has(c)) return 400;
+      return fallbackStatus;
+    };
     const localTitle = 'Payment preview could not be closed';
-    const localMessage = 'Refresh Banking and try again.';
-    if (normalisedCode !== 'BATCH_STALE') {
-      payload.title = localTitle; payload.message = localMessage; payload.user_message = localMessage; payload.error = localMessage;
+    const localMessage = 'Refresh Banking, then try again.';
+    if (isGenericNormalisedCode(normalisedCode)) {
+      payload.title = localTitle;
+      payload.message = localMessage;
+      payload.user_message = localMessage;
+      payload.error = localMessage;
       payload.friendly_error = { ...((payload.friendly_error && typeof payload.friendly_error === 'object') ? payload.friendly_error : {}), title: localTitle, message: localMessage };
     }
-    const resolvedStatus = normalisedCode === 'BATCH_STALE' ? 409 : status;
+    const resolvedStatus = resolveStatus(normalisedCode, status);
     return withCORS(env, req, new Response(JSON.stringify(payload), { status: resolvedStatus, headers: JSON_HEADERS }));
   };
   const id = String(sessionId || '').trim();
@@ -11575,16 +12216,106 @@ async function handleBankingPayWorkbenchSessionDiscard(env, req, user, sessionId
   }
 }
 
+
 async function handleBankingPayWorkbenchSessionOpen(env, req, user) {
   const buildFriendlyFailure = (status, errorInput, options = {}, extra = null) => {
-    const friendlyPayload = makeBankingFriendlyErrorPayload(errorInput, { action: 'WORKBENCH_SESSION_OPEN', ...options });
+
+    const isErrorObject = errorInput instanceof Error;
+    const errorInputObject = (errorInput && typeof errorInput === 'object' && !Array.isArray(errorInput) && !isErrorObject) ? errorInput : {};
+    const detailsObject = (errorInputObject.details && typeof errorInputObject.details === 'object' && !Array.isArray(errorInputObject.details)) ? errorInputObject.details : {};
+    const originalError = isErrorObject
+      ? errorInput
+      : (errorInputObject.original_error || errorInputObject.originalError || errorInputObject.rpc_error || errorInputObject.rpcError || detailsObject.original_error || detailsObject.originalError || detailsObject.rpc_error || detailsObject.rpcError || null);
+    const reasonText = String(
+      errorInputObject.reason ??
+      detailsObject.reason ??
+      errorInputObject.message ??
+      (isErrorObject ? errorInput.message : errorInput) ??
+      ''
+    ).trim();
+    const normaliserInput = {
+      ...errorInputObject,
+      ...(isErrorObject ? { message: errorInput.message, error: errorInput.message, name: errorInput.name } : {}),
+      details: {
+        ...detailsObject,
+        reason: detailsObject.reason ?? errorInputObject.reason ?? reasonText,
+        rpc_error: detailsObject.rpc_error || detailsObject.rpcError || errorInputObject.rpc_error || errorInputObject.rpcError || originalError || null,
+        original_error: detailsObject.original_error || detailsObject.originalError || errorInputObject.original_error || errorInputObject.originalError || originalError || null
+      },
+      reason: errorInputObject.reason ?? detailsObject.reason ?? reasonText,
+      technical_message: errorInputObject.technical_message ?? errorInputObject.technicalMessage ?? detailsObject.reason ?? reasonText,
+      rpc_error: errorInputObject.rpc_error || errorInputObject.rpcError || originalError || null,
+      original_error: errorInputObject.original_error || errorInputObject.originalError || originalError || null,
+      response: errorInputObject.response || detailsObject.response || null
+    };
+    const friendlyPayload = makeBankingFriendlyErrorPayload(normaliserInput, { action: 'WORKBENCH_SESSION_OPEN', ...options });
     const base = (friendlyPayload && typeof friendlyPayload === 'object') ? friendlyPayload : {};
     const reserved = new Set(['ok', 'error_code', 'code', 'title', 'message', 'user_message', 'friendly_error', 'user_action', 'confirm_label']);
     const safeExtra = (extra && typeof extra === 'object' && !Array.isArray(extra)) ? extra : {};
     const mergedExtra = Object.fromEntries(Object.entries(safeExtra).filter(([k]) => !reserved.has(k)));
     const payload = { ...base, ...mergedExtra, ok: false };
     const normalisedCode = String(payload.error_code || payload.code || '').trim().toUpperCase();
-    if (options.preserveSafeLocalMessage === true && normalisedCode !== 'BATCH_STALE') {
+
+    const genericFallbackCodes = new Set([
+      'BANKING_ACTION_FAILED',
+      'BANKING_PAY_PREVIEW_FAILED',
+      'BANKING_PAY_PREVIEW_SESSION_BACKED_FAILED',
+      'BANKING_PAY_CREATE_DRAFT_FAILED',
+      'BANKING_PAY_CREATE_DRAFT_SESSION_BACKED_FAILED',
+      'BANKING_PAY_CREATE_DRAFT_ROUTE_FAILED',
+      'BANKING_PAY_WORKBENCH_SESSION_OPEN_FAILED',
+      'BANKING_PAY_WORKBENCH_SESSION_GET_FAILED',
+      'BANKING_PAY_WORKBENCH_SESSION_GET_CANDIDATE_FAILED',
+      'BANKING_PAY_WORKBENCH_SESSION_PROGRESS_FAILED',
+      'BANKING_ALERT_ACKNOWLEDGE_FAILED',
+      'WORKBENCH_MODAL_ACTION_INVALID_JSON',
+      'WORKBENCH_MODAL_ACTION_INVALID_CASE_RESOLUTION',
+      'WORKBENCH_MODAL_ACTION_INVALID_CASE_KEY',
+      'WORKBENCH_MODAL_ACTION_INVALID_CANDIDATE',
+      'WORKBENCH_MODAL_ACTION_INVALID_FINANCE_CASE',
+      'WORKBENCH_MODAL_ACTION_INVALID_TIMESHEET',
+      'WORKBENCH_MODAL_ACTION_INVALID_PAY_DATE',
+      'WORKBENCH_MODAL_ACTION_INVALID_AMOUNT',
+      'WORKBENCH_MODAL_ACTION_INVALID_EXCLUSION',
+      'WORKBENCH_MODAL_ACTION_INVALID_SELECTED_ROWS',
+      'WORKBENCH_SESSION_INVALID',
+      'WORKBENCH_SESSION_NOT_FOUND',
+      'STALE_SESSION',
+      'OBSOLETE_SESSION',
+      'BANKING_PAY_WORKBENCH_SESSION_OPEN_CONTEXT_MISMATCH'
+    ]);
+    const validationStatusCodes = new Set([
+      'PAYE_NOT_READY',
+      'PAYE_NET_MISSING',
+      'PAYE_NET_INVALID',
+      'PAYE_NET_REQUIRED',
+      'PAYE_NET_BANK_AMOUNT_MISSING',
+      'PAYE_NET_BANK_AMOUNT_INVALID',
+      'BLOCKED_BANK_DETAILS',
+      'SELECTED_PAYEE_ROUTE_NOT_READY',
+      'HAS_HARD_BLOCKERS',
+      'FUNDING_ACCOUNT_MISSING',
+      'RAIL_ENV_MISMATCH',
+      'RAIL_NOT_CONFIGURED',
+      'UNKNOWN_RAIL_PROVIDER',
+      'MISSING_RAIL_PROVIDER'
+    ]);
+    const isGenericNormalisedCode = (code) => {
+      const c = String(code || '').trim().toUpperCase();
+      if (!c) return true;
+      if (genericFallbackCodes.has(c)) return true;
+      if (c.startsWith('BANKING_PAY_') && c.endsWith('_FAILED')) return true;
+      if (c.startsWith('BANKING_') && c.endsWith('_FAILED')) return true;
+      if (c.startsWith('WORKBENCH_MODAL_ACTION_INVALID_')) return true;
+      return false;
+    };
+    const resolveStatus = (code, fallbackStatus) => {
+      const c = String(code || '').trim().toUpperCase();
+      if (c === 'BATCH_STALE') return 409;
+      if (validationStatusCodes.has(c)) return 400;
+      return fallbackStatus;
+    };
+    if (options.preserveSafeLocalMessage === true && isGenericNormalisedCode(normalisedCode)) {
       const localTitle = String(options.localTitle || '').trim();
       const localMessage = String(options.localMessage || '').trim();
       if (localTitle && localMessage) {
@@ -11595,7 +12326,7 @@ async function handleBankingPayWorkbenchSessionOpen(env, req, user) {
         payload.friendly_error = { ...((payload.friendly_error && typeof payload.friendly_error === 'object') ? payload.friendly_error : {}), title: localTitle, message: localMessage };
       }
     }
-    const resolvedStatus = normalisedCode === 'BATCH_STALE' ? 409 : status;
+    const resolvedStatus = resolveStatus(normalisedCode, status);
     return withCORS(env, req, new Response(JSON.stringify(payload), { status: resolvedStatus, headers: JSON_HEADERS }));
   };
   let body = null;
@@ -11759,7 +12490,13 @@ async function handleBankingPayWorkbenchSessionOpen(env, req, user) {
     const staleLike = /(STALE_SESSION|OBSOLETE_SESSION|CONTEXT_MISMATCH|BATCH_STALE)/i.test(errorMessage);
     return buildFriendlyFailure(
       staleLike ? 409 : 500,
-      { code: staleLike ? 'STALE_SESSION' : 'BANKING_PAY_PREVIEW_SESSION_BACKED_FAILED', message: errorMessage },
+      {
+        code: staleLike ? 'STALE_SESSION' : 'BANKING_PAY_WORKBENCH_SESSION_OPEN_FAILED',
+        message: errorMessage,
+        details: { reason: errorMessage, rpc_error: e, original_error: e },
+        rpc_error: e,
+        original_error: e
+      },
       staleLike
         ? { preserveSafeLocalMessage: true, localTitle: 'Payment preview needs refreshing', localMessage: 'Payment details have changed. Refresh Banking Pay preview, review the latest details, then try again.' }
         : { preserveSafeLocalMessage: true, localTitle: 'Payment preview could not be loaded', localMessage: 'CloudTMS could not open the Banking Pay workbench session. Refresh Banking and try again. No payment batch has been created.' }
@@ -11767,17 +12504,104 @@ async function handleBankingPayWorkbenchSessionOpen(env, req, user) {
   }
 }
 
-
-
 async function handleBankingPayWorkbenchSessionGet(env, req, user, sessionId) {
   const buildFriendlyFailure = (status, errorInput, options = {}, extra = null) => {
-    const friendlyPayload = makeBankingFriendlyErrorPayload(errorInput, { action: 'PREVIEW', ...options });
+
+    const isErrorObject = errorInput instanceof Error;
+    const errorInputObject = (errorInput && typeof errorInput === 'object' && !Array.isArray(errorInput) && !isErrorObject) ? errorInput : {};
+    const detailsObject = (errorInputObject.details && typeof errorInputObject.details === 'object' && !Array.isArray(errorInputObject.details)) ? errorInputObject.details : {};
+    const originalError = isErrorObject
+      ? errorInput
+      : (errorInputObject.original_error || errorInputObject.originalError || errorInputObject.rpc_error || errorInputObject.rpcError || detailsObject.original_error || detailsObject.originalError || detailsObject.rpc_error || detailsObject.rpcError || null);
+    const reasonText = String(
+      errorInputObject.reason ??
+      detailsObject.reason ??
+      errorInputObject.message ??
+      (isErrorObject ? errorInput.message : errorInput) ??
+      ''
+    ).trim();
+    const normaliserInput = {
+      ...errorInputObject,
+      ...(isErrorObject ? { message: errorInput.message, error: errorInput.message, name: errorInput.name } : {}),
+      details: {
+        ...detailsObject,
+        reason: detailsObject.reason ?? errorInputObject.reason ?? reasonText,
+        rpc_error: detailsObject.rpc_error || detailsObject.rpcError || errorInputObject.rpc_error || errorInputObject.rpcError || originalError || null,
+        original_error: detailsObject.original_error || detailsObject.originalError || errorInputObject.original_error || errorInputObject.originalError || originalError || null
+      },
+      reason: errorInputObject.reason ?? detailsObject.reason ?? reasonText,
+      technical_message: errorInputObject.technical_message ?? errorInputObject.technicalMessage ?? detailsObject.reason ?? reasonText,
+      rpc_error: errorInputObject.rpc_error || errorInputObject.rpcError || originalError || null,
+      original_error: errorInputObject.original_error || errorInputObject.originalError || originalError || null,
+      response: errorInputObject.response || detailsObject.response || null
+    };
+    const friendlyPayload = makeBankingFriendlyErrorPayload(normaliserInput, { action: 'PREVIEW', ...options });
     const base = (friendlyPayload && typeof friendlyPayload === 'object') ? friendlyPayload : {};
     const reserved = new Set(['ok', 'error_code', 'code', 'title', 'message', 'user_message', 'friendly_error', 'user_action', 'confirm_label']);
     const mergedExtra = Object.fromEntries(Object.entries((extra && typeof extra === 'object' && !Array.isArray(extra)) ? extra : {}).filter(([k]) => !reserved.has(k)));
     const payload = { ...base, ...mergedExtra, ok: false };
     const normalisedCode = String(payload.error_code || payload.code || '').trim().toUpperCase();
-    if (options.preserveSafeLocalMessage === true && normalisedCode !== 'BATCH_STALE') {
+
+    const genericFallbackCodes = new Set([
+      'BANKING_ACTION_FAILED',
+      'BANKING_PAY_PREVIEW_FAILED',
+      'BANKING_PAY_PREVIEW_SESSION_BACKED_FAILED',
+      'BANKING_PAY_CREATE_DRAFT_FAILED',
+      'BANKING_PAY_CREATE_DRAFT_SESSION_BACKED_FAILED',
+      'BANKING_PAY_CREATE_DRAFT_ROUTE_FAILED',
+      'BANKING_PAY_WORKBENCH_SESSION_OPEN_FAILED',
+      'BANKING_PAY_WORKBENCH_SESSION_GET_FAILED',
+      'BANKING_PAY_WORKBENCH_SESSION_GET_CANDIDATE_FAILED',
+      'BANKING_PAY_WORKBENCH_SESSION_PROGRESS_FAILED',
+      'BANKING_ALERT_ACKNOWLEDGE_FAILED',
+      'WORKBENCH_MODAL_ACTION_INVALID_JSON',
+      'WORKBENCH_MODAL_ACTION_INVALID_CASE_RESOLUTION',
+      'WORKBENCH_MODAL_ACTION_INVALID_CASE_KEY',
+      'WORKBENCH_MODAL_ACTION_INVALID_CANDIDATE',
+      'WORKBENCH_MODAL_ACTION_INVALID_FINANCE_CASE',
+      'WORKBENCH_MODAL_ACTION_INVALID_TIMESHEET',
+      'WORKBENCH_MODAL_ACTION_INVALID_PAY_DATE',
+      'WORKBENCH_MODAL_ACTION_INVALID_AMOUNT',
+      'WORKBENCH_MODAL_ACTION_INVALID_EXCLUSION',
+      'WORKBENCH_MODAL_ACTION_INVALID_SELECTED_ROWS',
+      'WORKBENCH_SESSION_INVALID',
+      'WORKBENCH_SESSION_NOT_FOUND',
+      'STALE_SESSION',
+      'OBSOLETE_SESSION',
+      'BANKING_PAY_WORKBENCH_SESSION_OPEN_CONTEXT_MISMATCH'
+    ]);
+    const validationStatusCodes = new Set([
+      'PAYE_NOT_READY',
+      'PAYE_NET_MISSING',
+      'PAYE_NET_INVALID',
+      'PAYE_NET_REQUIRED',
+      'PAYE_NET_BANK_AMOUNT_MISSING',
+      'PAYE_NET_BANK_AMOUNT_INVALID',
+      'BLOCKED_BANK_DETAILS',
+      'SELECTED_PAYEE_ROUTE_NOT_READY',
+      'HAS_HARD_BLOCKERS',
+      'FUNDING_ACCOUNT_MISSING',
+      'RAIL_ENV_MISMATCH',
+      'RAIL_NOT_CONFIGURED',
+      'UNKNOWN_RAIL_PROVIDER',
+      'MISSING_RAIL_PROVIDER'
+    ]);
+    const isGenericNormalisedCode = (code) => {
+      const c = String(code || '').trim().toUpperCase();
+      if (!c) return true;
+      if (genericFallbackCodes.has(c)) return true;
+      if (c.startsWith('BANKING_PAY_') && c.endsWith('_FAILED')) return true;
+      if (c.startsWith('BANKING_') && c.endsWith('_FAILED')) return true;
+      if (c.startsWith('WORKBENCH_MODAL_ACTION_INVALID_')) return true;
+      return false;
+    };
+    const resolveStatus = (code, fallbackStatus) => {
+      const c = String(code || '').trim().toUpperCase();
+      if (c === 'BATCH_STALE') return 409;
+      if (validationStatusCodes.has(c)) return 400;
+      return fallbackStatus;
+    };
+    if (options.preserveSafeLocalMessage === true && isGenericNormalisedCode(normalisedCode)) {
       const localTitle = String(options.localTitle || '').trim();
       const localMessage = String(options.localMessage || '').trim();
       if (localTitle && localMessage) {
@@ -11788,7 +12612,7 @@ async function handleBankingPayWorkbenchSessionGet(env, req, user, sessionId) {
         payload.friendly_error = { ...((payload.friendly_error && typeof payload.friendly_error === 'object') ? payload.friendly_error : {}), title: localTitle, message: localMessage };
       }
     }
-    return withCORS(env, req, new Response(JSON.stringify(payload), { status: normalisedCode === 'BATCH_STALE' ? 409 : status, headers: JSON_HEADERS }));
+    return withCORS(env, req, new Response(JSON.stringify(payload), { status: resolveStatus(normalisedCode, status), headers: JSON_HEADERS }));
   };
   const id = String(sessionId || '').trim();
   const actorUserId = String(user?.id || '').trim();
@@ -11840,20 +12664,122 @@ async function handleBankingPayWorkbenchSessionGet(env, req, user, sessionId) {
   } catch (e) {
     const msg = String(e?.message || e || '');
     const staleLike = /(STALE_SESSION|OBSOLETE_SESSION|BATCH_STALE)/i.test(msg);
-    return buildFriendlyFailure(staleLike ? 409 : 500, { code: staleLike ? 'STALE_SESSION' : 'BANKING_PAY_PREVIEW_FAILED', message: msg }, { preserveSafeLocalMessage: true, localTitle: staleLike ? 'Payment preview needs refreshing' : 'Payment preview could not be refreshed', localMessage: staleLike ? 'Refresh Banking Pay preview, review the latest details, then try again.' : 'Refresh Banking Pay preview and try again.' });
+    return buildFriendlyFailure(
+      staleLike ? 409 : 500,
+      {
+        code: staleLike ? 'STALE_SESSION' : 'BANKING_PAY_WORKBENCH_SESSION_GET_FAILED',
+        message: msg,
+        details: { reason: msg, rpc_error: e, original_error: e },
+        rpc_error: e,
+        original_error: e
+      },
+      {
+        preserveSafeLocalMessage: true,
+        localTitle: staleLike ? 'Payment preview needs refreshing' : 'Payment preview could not be loaded',
+        localMessage: staleLike ? 'Refresh Banking Pay preview, review the latest details, then try again.' : 'CloudTMS could not calculate the payment preview. Refresh Banking and try again.'
+      }
+    );
   }
 }
 
-
 async function handleBankingPayWorkbenchSessionGetCandidate(env, req, user, sessionId, candidateId) {
   const buildFriendlyFailure = (status, errorInput, options = {}, extra = null) => {
-    const friendlyPayload = makeBankingFriendlyErrorPayload(errorInput, { action: 'PREVIEW', ...options });
+
+    const isErrorObject = errorInput instanceof Error;
+    const errorInputObject = (errorInput && typeof errorInput === 'object' && !Array.isArray(errorInput) && !isErrorObject) ? errorInput : {};
+    const detailsObject = (errorInputObject.details && typeof errorInputObject.details === 'object' && !Array.isArray(errorInputObject.details)) ? errorInputObject.details : {};
+    const originalError = isErrorObject
+      ? errorInput
+      : (errorInputObject.original_error || errorInputObject.originalError || errorInputObject.rpc_error || errorInputObject.rpcError || detailsObject.original_error || detailsObject.originalError || detailsObject.rpc_error || detailsObject.rpcError || null);
+    const reasonText = String(
+      errorInputObject.reason ??
+      detailsObject.reason ??
+      errorInputObject.message ??
+      (isErrorObject ? errorInput.message : errorInput) ??
+      ''
+    ).trim();
+    const normaliserInput = {
+      ...errorInputObject,
+      ...(isErrorObject ? { message: errorInput.message, error: errorInput.message, name: errorInput.name } : {}),
+      details: {
+        ...detailsObject,
+        reason: detailsObject.reason ?? errorInputObject.reason ?? reasonText,
+        rpc_error: detailsObject.rpc_error || detailsObject.rpcError || errorInputObject.rpc_error || errorInputObject.rpcError || originalError || null,
+        original_error: detailsObject.original_error || detailsObject.originalError || errorInputObject.original_error || errorInputObject.originalError || originalError || null
+      },
+      reason: errorInputObject.reason ?? detailsObject.reason ?? reasonText,
+      technical_message: errorInputObject.technical_message ?? errorInputObject.technicalMessage ?? detailsObject.reason ?? reasonText,
+      rpc_error: errorInputObject.rpc_error || errorInputObject.rpcError || originalError || null,
+      original_error: errorInputObject.original_error || errorInputObject.originalError || originalError || null,
+      response: errorInputObject.response || detailsObject.response || null
+    };
+    const friendlyPayload = makeBankingFriendlyErrorPayload(normaliserInput, { action: 'PREVIEW', ...options });
     const base = (friendlyPayload && typeof friendlyPayload === 'object') ? friendlyPayload : {};
     const reserved = new Set(['ok', 'error_code', 'code', 'title', 'message', 'user_message', 'friendly_error', 'user_action', 'confirm_label']);
     const mergedExtra = Object.fromEntries(Object.entries((extra && typeof extra === 'object' && !Array.isArray(extra)) ? extra : {}).filter(([k]) => !reserved.has(k)));
     const payload = { ...base, ...mergedExtra, ok: false };
     const normalisedCode = String(payload.error_code || payload.code || '').trim().toUpperCase();
-    if (options.preserveSafeLocalMessage === true && normalisedCode !== 'BATCH_STALE') {
+
+    const genericFallbackCodes = new Set([
+      'BANKING_ACTION_FAILED',
+      'BANKING_PAY_PREVIEW_FAILED',
+      'BANKING_PAY_PREVIEW_SESSION_BACKED_FAILED',
+      'BANKING_PAY_CREATE_DRAFT_FAILED',
+      'BANKING_PAY_CREATE_DRAFT_SESSION_BACKED_FAILED',
+      'BANKING_PAY_CREATE_DRAFT_ROUTE_FAILED',
+      'BANKING_PAY_WORKBENCH_SESSION_OPEN_FAILED',
+      'BANKING_PAY_WORKBENCH_SESSION_GET_FAILED',
+      'BANKING_PAY_WORKBENCH_SESSION_GET_CANDIDATE_FAILED',
+      'BANKING_PAY_WORKBENCH_SESSION_PROGRESS_FAILED',
+      'BANKING_ALERT_ACKNOWLEDGE_FAILED',
+      'WORKBENCH_MODAL_ACTION_INVALID_JSON',
+      'WORKBENCH_MODAL_ACTION_INVALID_CASE_RESOLUTION',
+      'WORKBENCH_MODAL_ACTION_INVALID_CASE_KEY',
+      'WORKBENCH_MODAL_ACTION_INVALID_CANDIDATE',
+      'WORKBENCH_MODAL_ACTION_INVALID_FINANCE_CASE',
+      'WORKBENCH_MODAL_ACTION_INVALID_TIMESHEET',
+      'WORKBENCH_MODAL_ACTION_INVALID_PAY_DATE',
+      'WORKBENCH_MODAL_ACTION_INVALID_AMOUNT',
+      'WORKBENCH_MODAL_ACTION_INVALID_EXCLUSION',
+      'WORKBENCH_MODAL_ACTION_INVALID_SELECTED_ROWS',
+      'WORKBENCH_SESSION_INVALID',
+      'WORKBENCH_SESSION_NOT_FOUND',
+      'STALE_SESSION',
+      'OBSOLETE_SESSION',
+      'BANKING_PAY_WORKBENCH_SESSION_OPEN_CONTEXT_MISMATCH'
+    ]);
+    const validationStatusCodes = new Set([
+      'PAYE_NOT_READY',
+      'PAYE_NET_MISSING',
+      'PAYE_NET_INVALID',
+      'PAYE_NET_REQUIRED',
+      'PAYE_NET_BANK_AMOUNT_MISSING',
+      'PAYE_NET_BANK_AMOUNT_INVALID',
+      'BLOCKED_BANK_DETAILS',
+      'SELECTED_PAYEE_ROUTE_NOT_READY',
+      'HAS_HARD_BLOCKERS',
+      'FUNDING_ACCOUNT_MISSING',
+      'RAIL_ENV_MISMATCH',
+      'RAIL_NOT_CONFIGURED',
+      'UNKNOWN_RAIL_PROVIDER',
+      'MISSING_RAIL_PROVIDER'
+    ]);
+    const isGenericNormalisedCode = (code) => {
+      const c = String(code || '').trim().toUpperCase();
+      if (!c) return true;
+      if (genericFallbackCodes.has(c)) return true;
+      if (c.startsWith('BANKING_PAY_') && c.endsWith('_FAILED')) return true;
+      if (c.startsWith('BANKING_') && c.endsWith('_FAILED')) return true;
+      if (c.startsWith('WORKBENCH_MODAL_ACTION_INVALID_')) return true;
+      return false;
+    };
+    const resolveStatus = (code, fallbackStatus) => {
+      const c = String(code || '').trim().toUpperCase();
+      if (c === 'BATCH_STALE') return 409;
+      if (validationStatusCodes.has(c)) return 400;
+      return fallbackStatus;
+    };
+    if (options.preserveSafeLocalMessage === true && isGenericNormalisedCode(normalisedCode)) {
       const localTitle = String(options.localTitle || '').trim();
       const localMessage = String(options.localMessage || '').trim();
       if (localTitle && localMessage) {
@@ -11864,7 +12790,7 @@ async function handleBankingPayWorkbenchSessionGetCandidate(env, req, user, sess
         payload.friendly_error = { ...((payload.friendly_error && typeof payload.friendly_error === 'object') ? payload.friendly_error : {}), title: localTitle, message: localMessage };
       }
     }
-    return withCORS(env, req, new Response(JSON.stringify(payload), { status: normalisedCode === 'BATCH_STALE' ? 409 : status, headers: JSON_HEADERS }));
+    return withCORS(env, req, new Response(JSON.stringify(payload), { status: resolveStatus(normalisedCode, status), headers: JSON_HEADERS }));
   };
   const sessionIdText = String(sessionId || '').trim();
   const candidateIdText = String(candidateId || '').trim();
@@ -11921,19 +12847,123 @@ async function handleBankingPayWorkbenchSessionGetCandidate(env, req, user, sess
   } catch (e) {
     const msg = String(e?.message || e || '');
     const staleLike = /(STALE_SESSION|OBSOLETE_SESSION|BATCH_STALE|WORKBENCH_SESSION_CANDIDATE_PROJECTION_STALE)/i.test(msg);
-    return buildFriendlyFailure(staleLike ? 409 : 500, { code: staleLike ? 'WORKBENCH_SESSION_CANDIDATE_PROJECTION_STALE' : 'BANKING_PAY_PREVIEW_FAILED', message: msg }, { preserveSafeLocalMessage: true, localTitle: 'Payment preview needs refreshing', localMessage: 'Refresh Banking Pay preview, review the latest candidate details, then try again.' });
+    return buildFriendlyFailure(
+      staleLike ? 409 : 500,
+      {
+        code: staleLike ? 'WORKBENCH_SESSION_CANDIDATE_PROJECTION_STALE' : 'BANKING_PAY_WORKBENCH_SESSION_GET_CANDIDATE_FAILED',
+        message: msg,
+        details: { reason: msg, rpc_error: e, original_error: e },
+        rpc_error: e,
+        original_error: e
+      },
+      {
+        preserveSafeLocalMessage: true,
+        localTitle: staleLike ? 'Payment preview needs refreshing' : 'Payment preview could not be loaded',
+        localMessage: staleLike ? 'Refresh Banking Pay preview, review the latest candidate details, then try again.' : 'CloudTMS could not calculate the payment preview. Refresh Banking and try again.'
+      }
+    );
   }
 }
 
+
 async function handleBankingPayWorkbenchSessionProgress(env, req, user, sessionId) {
   const buildFriendlyFailure = (status, errorInput, options = {}, extra = null) => {
-    const friendlyPayload = makeBankingFriendlyErrorPayload(errorInput, { action: 'PREVIEW', ...options });
+
+    const isErrorObject = errorInput instanceof Error;
+    const errorInputObject = (errorInput && typeof errorInput === 'object' && !Array.isArray(errorInput) && !isErrorObject) ? errorInput : {};
+    const detailsObject = (errorInputObject.details && typeof errorInputObject.details === 'object' && !Array.isArray(errorInputObject.details)) ? errorInputObject.details : {};
+    const originalError = isErrorObject
+      ? errorInput
+      : (errorInputObject.original_error || errorInputObject.originalError || errorInputObject.rpc_error || errorInputObject.rpcError || detailsObject.original_error || detailsObject.originalError || detailsObject.rpc_error || detailsObject.rpcError || null);
+    const reasonText = String(
+      errorInputObject.reason ??
+      detailsObject.reason ??
+      errorInputObject.message ??
+      (isErrorObject ? errorInput.message : errorInput) ??
+      ''
+    ).trim();
+    const normaliserInput = {
+      ...errorInputObject,
+      ...(isErrorObject ? { message: errorInput.message, error: errorInput.message, name: errorInput.name } : {}),
+      details: {
+        ...detailsObject,
+        reason: detailsObject.reason ?? errorInputObject.reason ?? reasonText,
+        rpc_error: detailsObject.rpc_error || detailsObject.rpcError || errorInputObject.rpc_error || errorInputObject.rpcError || originalError || null,
+        original_error: detailsObject.original_error || detailsObject.originalError || errorInputObject.original_error || errorInputObject.originalError || originalError || null
+      },
+      reason: errorInputObject.reason ?? detailsObject.reason ?? reasonText,
+      technical_message: errorInputObject.technical_message ?? errorInputObject.technicalMessage ?? detailsObject.reason ?? reasonText,
+      rpc_error: errorInputObject.rpc_error || errorInputObject.rpcError || originalError || null,
+      original_error: errorInputObject.original_error || errorInputObject.originalError || originalError || null,
+      response: errorInputObject.response || detailsObject.response || null
+    };
+    const friendlyPayload = makeBankingFriendlyErrorPayload(normaliserInput, { action: 'PREVIEW', ...options });
     const base = (friendlyPayload && typeof friendlyPayload === 'object') ? friendlyPayload : {};
     const reserved = new Set(['ok', 'error_code', 'code', 'title', 'message', 'user_message', 'friendly_error', 'user_action', 'confirm_label']);
     const mergedExtra = Object.fromEntries(Object.entries((extra && typeof extra === 'object' && !Array.isArray(extra)) ? extra : {}).filter(([k]) => !reserved.has(k)));
     const payload = { ...base, ...mergedExtra, ok: false };
     const normalisedCode = String(payload.error_code || payload.code || '').trim().toUpperCase();
-    if (options.preserveSafeLocalMessage === true && normalisedCode !== 'BATCH_STALE') {
+
+    const genericFallbackCodes = new Set([
+      'BANKING_ACTION_FAILED',
+      'BANKING_PAY_PREVIEW_FAILED',
+      'BANKING_PAY_PREVIEW_SESSION_BACKED_FAILED',
+      'BANKING_PAY_CREATE_DRAFT_FAILED',
+      'BANKING_PAY_CREATE_DRAFT_SESSION_BACKED_FAILED',
+      'BANKING_PAY_CREATE_DRAFT_ROUTE_FAILED',
+      'BANKING_PAY_WORKBENCH_SESSION_OPEN_FAILED',
+      'BANKING_PAY_WORKBENCH_SESSION_GET_FAILED',
+      'BANKING_PAY_WORKBENCH_SESSION_GET_CANDIDATE_FAILED',
+      'BANKING_PAY_WORKBENCH_SESSION_PROGRESS_FAILED',
+      'BANKING_ALERT_ACKNOWLEDGE_FAILED',
+      'WORKBENCH_MODAL_ACTION_INVALID_JSON',
+      'WORKBENCH_MODAL_ACTION_INVALID_CASE_RESOLUTION',
+      'WORKBENCH_MODAL_ACTION_INVALID_CASE_KEY',
+      'WORKBENCH_MODAL_ACTION_INVALID_CANDIDATE',
+      'WORKBENCH_MODAL_ACTION_INVALID_FINANCE_CASE',
+      'WORKBENCH_MODAL_ACTION_INVALID_TIMESHEET',
+      'WORKBENCH_MODAL_ACTION_INVALID_PAY_DATE',
+      'WORKBENCH_MODAL_ACTION_INVALID_AMOUNT',
+      'WORKBENCH_MODAL_ACTION_INVALID_EXCLUSION',
+      'WORKBENCH_MODAL_ACTION_INVALID_SELECTED_ROWS',
+      'WORKBENCH_SESSION_INVALID',
+      'WORKBENCH_SESSION_NOT_FOUND',
+      'STALE_SESSION',
+      'OBSOLETE_SESSION',
+      'BANKING_PAY_WORKBENCH_SESSION_OPEN_CONTEXT_MISMATCH'
+    ]);
+    const validationStatusCodes = new Set([
+      'PAYE_NOT_READY',
+      'PAYE_NET_MISSING',
+      'PAYE_NET_INVALID',
+      'PAYE_NET_REQUIRED',
+      'PAYE_NET_BANK_AMOUNT_MISSING',
+      'PAYE_NET_BANK_AMOUNT_INVALID',
+      'BLOCKED_BANK_DETAILS',
+      'SELECTED_PAYEE_ROUTE_NOT_READY',
+      'HAS_HARD_BLOCKERS',
+      'FUNDING_ACCOUNT_MISSING',
+      'RAIL_ENV_MISMATCH',
+      'RAIL_NOT_CONFIGURED',
+      'UNKNOWN_RAIL_PROVIDER',
+      'MISSING_RAIL_PROVIDER'
+    ]);
+    const isGenericNormalisedCode = (code) => {
+      const c = String(code || '').trim().toUpperCase();
+      if (!c) return true;
+      if (genericFallbackCodes.has(c)) return true;
+      if (c.startsWith('BANKING_PAY_') && c.endsWith('_FAILED')) return true;
+      if (c.startsWith('BANKING_') && c.endsWith('_FAILED')) return true;
+      if (c.startsWith('WORKBENCH_MODAL_ACTION_INVALID_')) return true;
+      return false;
+    };
+    const resolveStatus = (code, fallbackStatus) => {
+      const c = String(code || '').trim().toUpperCase();
+      if (c === 'BATCH_STALE') return 409;
+      if (validationStatusCodes.has(c)) return 400;
+      return fallbackStatus;
+    };
+    if (options.preserveSafeLocalMessage === true && isGenericNormalisedCode(normalisedCode)) {
       const localTitle = String(options.localTitle || '').trim();
       const localMessage = String(options.localMessage || '').trim();
       if (localTitle && localMessage) {
@@ -11944,7 +12974,7 @@ async function handleBankingPayWorkbenchSessionProgress(env, req, user, sessionI
         payload.friendly_error = { ...((payload.friendly_error && typeof payload.friendly_error === 'object') ? payload.friendly_error : {}), title: localTitle, message: localMessage };
       }
     }
-    return withCORS(env, req, new Response(JSON.stringify(payload), { status: normalisedCode === 'BATCH_STALE' ? 409 : status, headers: JSON_HEADERS }));
+    return withCORS(env, req, new Response(JSON.stringify(payload), { status: resolveStatus(normalisedCode, status), headers: JSON_HEADERS }));
   };
   const id = String(sessionId || '').trim();
   const actorUserId = String(user?.id || '').trim();
@@ -11999,11 +13029,22 @@ async function handleBankingPayWorkbenchSessionProgress(env, req, user, sessionI
     const runningLike = /(still running|in progress|temporarily unavailable|timeout|PENDING)/i.test(msg);
     return buildFriendlyFailure(
       staleLike ? 409 : (runningLike ? 503 : 500),
-      { code: staleLike ? 'STALE_SESSION' : 'BANKING_PAY_PREVIEW_FAILED', message: msg },
-      { preserveSafeLocalMessage: true, localTitle: staleLike ? 'Payment preview needs refreshing' : (runningLike ? 'Payment preview is still refreshing' : 'Payment preview could not be refreshed'), localMessage: staleLike ? 'Refresh Banking Pay preview, review the latest details, then try again.' : (runningLike ? 'CloudTMS is still refreshing payment details. Try again once the refresh has finished.' : 'Refresh Banking Pay preview and try again.') }
+      {
+        code: staleLike ? 'STALE_SESSION' : 'BANKING_PAY_WORKBENCH_SESSION_PROGRESS_FAILED',
+        message: msg,
+        details: { reason: msg, rpc_error: e, original_error: e },
+        rpc_error: e,
+        original_error: e
+      },
+      {
+        preserveSafeLocalMessage: true,
+        localTitle: staleLike ? 'Payment preview needs refreshing' : (runningLike ? 'Payment preview is still refreshing' : 'Payment preview could not be loaded'),
+        localMessage: staleLike ? 'Refresh Banking Pay preview, review the latest details, then try again.' : (runningLike ? 'CloudTMS is still refreshing payment details. Try again once the refresh has finished.' : 'CloudTMS could not calculate the payment preview. Refresh Banking and try again.')
+      }
     );
   }
 }
+
 
 
 
@@ -19770,7 +20811,6 @@ async function handleBankingPayReconcileExternal(env, req) {
   }
 }
 
-
 async function handleBankingPayPreview(env, req, user) {
   let body = null;
   try { body = await parseJSONBody(req); } catch { body = null; }
@@ -19842,7 +20882,8 @@ async function handleBankingPayPreview(env, req, user) {
     return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
   };
 
-  const buildPreviewErrorResponse = (status, code, message, details, canRetry) => {
+  const buildPreviewErrorResponse = (status, code, message, details, canRetry, originalError = null) => {
+    const detailsObject = (details && typeof details === 'object' && !Array.isArray(details)) ? details : {};
     const errorInput = {
       ok: false,
       preview_unavailable: true,
@@ -19850,7 +20891,11 @@ async function handleBankingPayPreview(env, req, user) {
       error_code: String(code || 'BANKING_PAY_PREVIEW_FAILED'),
       code: String(code || 'BANKING_PAY_PREVIEW_FAILED'),
       message: String(message || 'Unable to load Banking preview'),
-      details: (details && typeof details === 'object' && !Array.isArray(details)) ? details : undefined
+      details: detailsObject,
+      reason: detailsObject.reason,
+      technical_message: detailsObject.reason,
+      rpc_error: detailsObject.rpc_error || originalError || null,
+      original_error: originalError || detailsObject.original_error || null
     };
     const friendlyPayload = makeBankingFriendlyErrorPayload(errorInput, { action: 'PREVIEW' });
     const payload = {
@@ -19860,7 +20905,25 @@ async function handleBankingPayPreview(env, req, user) {
       can_retry: !!canRetry
     };
     const normalisedCode = String(payload.error_code || payload.code || '').trim().toUpperCase();
-    const resolvedStatus = normalisedCode === 'BATCH_STALE' ? 409 : status;
+    const validationCodes = new Set([
+      'PAYE_NOT_READY',
+      'PAYE_NET_MISSING',
+      'PAYE_NET_INVALID',
+      'PAYE_NET_REQUIRED',
+      'PAYE_NET_BANK_AMOUNT_MISSING',
+      'PAYE_NET_BANK_AMOUNT_INVALID',
+      'BLOCKED_BANK_DETAILS',
+      'SELECTED_PAYEE_ROUTE_NOT_READY',
+      'HAS_HARD_BLOCKERS',
+      'FUNDING_ACCOUNT_MISSING',
+      'RAIL_ENV_MISMATCH',
+      'RAIL_NOT_CONFIGURED',
+      'UNKNOWN_RAIL_PROVIDER',
+      'MISSING_RAIL_PROVIDER'
+    ]);
+    const resolvedStatus = normalisedCode === 'BATCH_STALE'
+      ? 409
+      : (validationCodes.has(normalisedCode) ? 400 : status);
     return withCORS(env, req, new Response(JSON.stringify(payload), { status: resolvedStatus, headers: JSON_HEADERS }));
   };
 
@@ -20092,11 +21155,20 @@ async function handleBankingPayPreview(env, req, user) {
       500,
       'BANKING_PAY_PREVIEW_SESSION_BACKED_FAILED',
       'Banking preview could not be loaded from the workbench session path.',
-      { ...previewSafeDetails, reason: String(e?.message || e || 'Unknown error'), legacy_fallback_enabled: false },
-      true
+      {
+        ...previewSafeDetails,
+        reason: String(e?.message || e || 'Unknown error'),
+        rpc_error: e,
+        original_error: e,
+        legacy_fallback_enabled: false
+      },
+      true,
+      e
     );
   }
 }
+
+
 
 async function revolutEnsurePayeesReadyFromPreview(env, railEnv, payees, actorUserId) {
   const envRaw = (railEnv !== undefined && railEnv !== null) ? String(railEnv).trim() : '';
@@ -21422,7 +22494,6 @@ async function handleTimesheetCreateManualDaily(env, req) {
   }));
 }
 
-
 async function handleBankingPayCreateDraft(env, req, user) {
   let body = null;
   try { body = await parseJSONBody(req); } catch { body = null; }
@@ -22162,6 +23233,7 @@ const CREATE_DRAFT_CHECKPOINT = 'NONE';
   };
 
   const buildCreateDraftSessionErrorResponse = (status, code, message, details, canRetry, preserveSafeLocalMessage = false) => {
+    const detailsObject = (details && typeof details === 'object' && !Array.isArray(details)) ? details : {};
     const errorInput = {
       ok: false,
       create_draft_unavailable: true,
@@ -22169,7 +23241,12 @@ const CREATE_DRAFT_CHECKPOINT = 'NONE';
       error_code: String(code || 'BANKING_PAY_CREATE_DRAFT_FAILED'),
       code: String(code || 'BANKING_PAY_CREATE_DRAFT_FAILED'),
       message: String(message || 'Unable to create Banking draft'),
-      details: (details && typeof details === 'object' && !Array.isArray(details)) ? details : undefined
+      details: detailsObject,
+      reason: detailsObject.reason,
+      technical_message: detailsObject.reason,
+      rpc_error: detailsObject.rpc_error || null,
+      original_error: detailsObject.original_error || detailsObject.rpc_error || null,
+      response: detailsObject.response || null
     };
     const friendlyPayload = makeBankingFriendlyErrorPayload(errorInput, { action: 'CREATE_DRAFT' });
     const payload = {
@@ -22179,23 +23256,46 @@ const CREATE_DRAFT_CHECKPOINT = 'NONE';
       can_retry: !!canRetry
     };
     const normalisedCode = String(payload.error_code || payload.code || code || '').trim().toUpperCase();
+    const isGenericNormalisedCode = !normalisedCode || normalisedCode === 'BANKING_ACTION_FAILED' || normalisedCode === 'BANKING_PAY_CREATE_DRAFT_FAILED' || normalisedCode === 'BANKING_PAY_CREATE_DRAFT_SESSION_BACKED_FAILED' || normalisedCode === 'BANKING_PAY_CREATE_DRAFT_ROUTE_FAILED';
     if (
       preserveSafeLocalMessage === true &&
-      normalisedCode === 'NO_TIMESHEETS_READY_FOR_DRAFT' &&
+      (normalisedCode === 'NO_TIMESHEETS_READY_FOR_DRAFT' || isGenericNormalisedCode) &&
       typeof message === 'string' &&
       message.trim()
     ) {
       const localMessage = String(message).trim();
-      payload.title = 'Payment batch could not be created';
-      payload.message = localMessage;
-      payload.user_message = localMessage;
-      payload.error = localMessage;
-      if (payload.friendly_error && typeof payload.friendly_error === 'object') {
-        payload.friendly_error.title = 'Payment batch could not be created';
-        payload.friendly_error.message = localMessage;
+      if (!/[{}]/.test(localMessage) && !/\b(P[0-9A-Z]{4}|SQLSTATE|RPC|MANUAL_DEBT_RECOVERY|KEY_TYPE|KEY_VALUE|TIMESHEET_ID)\b/i.test(localMessage)) {
+        payload.title = 'Payment batch could not be created';
+        payload.message = localMessage;
+        payload.user_message = localMessage;
+        payload.error = localMessage;
+        if (payload.friendly_error && typeof payload.friendly_error === 'object') {
+          payload.friendly_error.title = 'Payment batch could not be created';
+          payload.friendly_error.message = localMessage;
+        }
       }
     }
-    const resolvedStatus = normalisedCode === 'BATCH_STALE' ? 409 : status;
+    const validationCodes = new Set([
+      'PAYE_NOT_READY',
+      'PAYE_NET_MISSING',
+      'PAYE_NET_INVALID',
+      'PAYE_NET_REQUIRED',
+      'PAYE_NET_BANK_AMOUNT_MISSING',
+      'PAYE_NET_BANK_AMOUNT_INVALID',
+      'BLOCKED_BANK_DETAILS',
+      'SELECTED_PAYEE_ROUTE_NOT_READY',
+      'HAS_HARD_BLOCKERS',
+      'FUNDING_ACCOUNT_MISSING',
+      'RAIL_ENV_MISMATCH',
+      'RAIL_NOT_CONFIGURED',
+      'UNKNOWN_RAIL_PROVIDER',
+      'MISSING_RAIL_PROVIDER',
+      'BANKING_CREATE_DRAFT_INVALID_PAY_DATE',
+      'BANKING_CREATE_DRAFT_INVALID_INPUT'
+    ]);
+    const resolvedStatus = normalisedCode === 'BATCH_STALE'
+      ? 409
+      : (validationCodes.has(normalisedCode) ? 400 : status);
     return buildJsonResponseWithCors(resolvedStatus, payload);
   };
 
@@ -22223,7 +23323,17 @@ const CREATE_DRAFT_CHECKPOINT = 'NONE';
   };
 
   const extractPrepareDraftFailure = (errorLike) => {
-    const rawMessage = String(errorLike?.message || errorLike || '').trim();
+    const safeErrorStringify = (value) => {
+      try {
+        if (value == null) return '';
+        if (typeof value === 'string') return value;
+        if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') return String(value);
+        if (value instanceof Error) return String(value.message || value.name || '');
+        return safeJsonStringify(value);
+      } catch {
+        try { return String(value || ''); } catch { return ''; }
+      }
+    };
 
     const parseJsonObjectCandidate = (raw) => {
       const source = String(raw || '').trim();
@@ -22246,39 +23356,178 @@ const CREATE_DRAFT_CHECKPOINT = 'NONE';
       return null;
     };
 
-    const outerRpcError = parseJsonObjectCandidate(rawMessage);
-    const innerRpcMessage = parseJsonObjectCandidate(outerRpcError?.message);
-    const outerRpcCode = trimStr(outerRpcError?.code || '');
-    const structuredPayload =
-      (innerRpcMessage && typeof innerRpcMessage === 'object' && !Array.isArray(innerRpcMessage))
-        ? innerRpcMessage
-        : (
-            outerRpcError &&
-            typeof outerRpcError === 'object' &&
-            !Array.isArray(outerRpcError) &&
-            outerRpcCode &&
-            !/^[A-Z0-9]{5}$/.test(outerRpcCode)
-              ? outerRpcError
-              : null
-          );
+    const collectPayloads = (source) => {
+      const payloads = [];
+      const queue = [];
+      const seenObjects = new Set();
+      const seenStrings = new Set();
+      const keys = [
+        'error_code', 'errorCode', 'code', 'error', 'message', 'details', 'detail', 'reason', 'hint',
+        'body', 'json', 'payload', 'data', 'cause', 'errors', 'technical_message', 'technicalMessage',
+        'rpc_error', 'rpcError', 'original_error', 'originalError', 'inner_error', 'innerError',
+        'source_error', 'sourceError', 'raw_error', 'rawError', 'error_payload', 'errorPayload',
+        'response', 'result', 'rpc_response', 'rpcResponse'
+      ];
 
-    const structuredCodeRaw = trimStr(structuredPayload?.code || '');
-    const structuredCode = structuredCodeRaw && !/^[A-Z0-9]{5}$/.test(structuredCodeRaw)
-      ? structuredCodeRaw
-      : '';
-    const codeMatch = structuredCode
-      ? null
-      : rawMessage.match(/\b(WORKBENCH_SESSION_CANDIDATE_PROJECTION_STALE|MANUAL_DEBT_TEMPLATE_SOURCE_MISSING_FOR_SELECTED_PAYE_CANDIDATE|MANUAL_DEBT_TEMPLATE_NOT_CARRIED_TO_BATCH_BUILD|SELECTED_PAYEE_ROUTE_NOT_READY)\b/);
-    const errorCode = structuredCode || (codeMatch ? String(codeMatch[1] || '').trim() : null);
+      const enqueue = (value) => {
+        if (value == null) return;
+        if (typeof value === 'string') {
+          const text = value.trim();
+          if (!text || seenStrings.has(text)) return;
+          seenStrings.add(text);
+          queue.push(text);
+          return;
+        }
+        if (typeof value === 'object') {
+          if (seenObjects.has(value)) return;
+          seenObjects.add(value);
+        }
+        queue.push(value);
+      };
+
+      const enqueueStringifiedObject = (value) => {
+        if (!value || typeof value !== 'object') return;
+        try {
+          const text = safeJsonStringify(value);
+          if (text && text !== '{}' && text !== '[]') enqueue(text);
+        } catch {}
+      };
+
+      enqueue(source);
+
+      while (queue.length) {
+        const item = queue.shift();
+        if (item instanceof Error) {
+          const errorPayload = {
+            name: item.name,
+            message: item.message,
+            code: item.code,
+            error_code: item.error_code,
+            details: item.details,
+            hint: item.hint,
+            cause: item.cause
+          };
+          payloads.push(errorPayload);
+          enqueue(item.message);
+          enqueue(item.stack);
+          enqueue(item.cause);
+          enqueueStringifiedObject(errorPayload);
+          for (const key of keys) enqueue(item[key]);
+          continue;
+        }
+
+        if (item && typeof item === 'object' && !Array.isArray(item)) {
+          payloads.push(item);
+          enqueueStringifiedObject(item);
+          if (Array.isArray(item.errors)) {
+            for (const nested of item.errors) enqueue(nested);
+          }
+          for (const key of keys) {
+            const value = item[key];
+            enqueue(value);
+            if (value && typeof value === 'object') enqueueStringifiedObject(value);
+            const parsed = parseJsonObjectCandidate(value);
+            if (parsed) enqueue(parsed);
+          }
+          continue;
+        }
+
+        if (typeof item === 'string') {
+          const parsed = parseJsonObjectCandidate(item);
+          if (parsed) enqueue(parsed);
+        }
+      }
+
+      return payloads;
+    };
+
+    const normalisePrepareDraftCode = (value) => {
+      const raw = trimStr(value).toUpperCase();
+      if (!raw) return '';
+      const compact = raw
+        .replace(/^ERROR[:\s]+/, '')
+        .replace(/^CODE[:\s]+/, '')
+        .replace(/[^A-Z0-9_]+/g, '_')
+        .replace(/^_+|_+$/g, '');
+      if (!compact) return '';
+      if (/^[0-9]{5}$/.test(compact) || /^P[0-9A-Z]{4}$/.test(compact)) return '';
+      if (compact === 'PAY_BATCH_VALIDATE_FRESHNESS_FAILED') return 'BATCH_STALE';
+      if (compact === 'STANDARD_BANK_FUNDING_ACCOUNT_REQUIRED') return 'FUNDING_ACCOUNT_MISSING';
+      if (compact === 'REAUTH_REQUIRED') return 'PAYMENT_REAUTH_REQUIRED';
+      return compact;
+    };
+
+    const recognizedPrepareDraftCodes = new Set([
+      'BATCH_STALE',
+      'PAY_BATCH_VALIDATE_FRESHNESS_FAILED',
+      'PAYE_NOT_READY',
+      'PAYE_NET_MISSING',
+      'PAYE_NET_INVALID',
+      'PAYE_NET_REQUIRED',
+      'PAYE_NET_BANK_AMOUNT_MISSING',
+      'PAYE_NET_BANK_AMOUNT_INVALID',
+      'HAS_HARD_BLOCKERS',
+      'BLOCKED_BANK_DETAILS',
+      'SELECTED_PAYEE_ROUTE_NOT_READY',
+      'FUNDING_ACCOUNT_MISSING',
+      'RAIL_ENV_MISMATCH',
+      'RAIL_NOT_CONFIGURED',
+      'UNKNOWN_RAIL_PROVIDER',
+      'MISSING_RAIL_PROVIDER',
+      'STANDARD_BANK_IMMEDIATE_SAFE_STATE_NOT_RECORDED',
+      'STANDARD_BANK_IMMEDIATE_RAIL_EXECUTION_ERRORS',
+      'PAYMENT_AUTHORISER_REQUIRED',
+      'NO_ACTIVE_PAYMENTS_IN_BATCH',
+      'WORKBENCH_SESSION_CANDIDATE_PROJECTION_STALE',
+      'MANUAL_DEBT_TEMPLATE_SOURCE_MISSING_FOR_SELECTED_PAYE_CANDIDATE',
+      'MANUAL_DEBT_TEMPLATE_NOT_CARRIED_TO_BATCH_BUILD'
+    ]);
+
+    const rawMessage = safeErrorStringify(errorLike).trim();
+    const payloads = collectPayloads(errorLike);
+    const rawTextParts = [rawMessage];
+    for (const payload of payloads) {
+      if (!payload || typeof payload !== 'object' || Array.isArray(payload)) continue;
+      for (const key of ['error_code', 'errorCode', 'code', 'error', 'message', 'details', 'reason', 'technical_message', 'technicalMessage', 'rpc_error', 'rpcError', 'original_error', 'originalError', 'response']) {
+        const value = payload[key];
+        if (value == null) continue;
+        const text = safeErrorStringify(value).trim();
+        if (text) rawTextParts.push(text);
+      }
+    }
+    const rawText = rawTextParts.join('\n');
+    const rawUpper = rawText.toUpperCase();
+
+    let structuredPayload = null;
+    let errorCode = null;
+
+    for (const payload of payloads) {
+      if (!payload || typeof payload !== 'object' || Array.isArray(payload)) continue;
+      const candidateCode = normalisePrepareDraftCode(payload.error_code || payload.errorCode || payload.code || '');
+      if (candidateCode && recognizedPrepareDraftCodes.has(candidateCode)) {
+        errorCode = candidateCode === 'PAY_BATCH_VALIDATE_FRESHNESS_FAILED' ? 'BATCH_STALE' : candidateCode;
+        structuredPayload = payload;
+        break;
+      }
+    }
+
+    if (!errorCode) {
+      for (const knownCode of recognizedPrepareDraftCodes) {
+        if (rawUpper.includes(knownCode)) {
+          errorCode = knownCode === 'PAY_BATCH_VALIDATE_FRESHNESS_FAILED' ? 'BATCH_STALE' : knownCode;
+          break;
+        }
+      }
+    }
 
     const candidateIds = Array.from(new Set(
-      (rawMessage.match(/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/ig) || [])
+      (rawText.match(/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/ig) || [])
         .map((value) => String(value || '').trim())
         .filter((value) => uuidRe.test(value))
     ));
 
     return {
-      rawMessage,
+      rawMessage: rawText || rawMessage,
       errorCode,
       candidateIds,
       structuredPayload,
@@ -22522,29 +23771,43 @@ const CREATE_DRAFT_CHECKPOINT = 'NONE';
     pendingCandidateIds,
     refreshJobIds,
     refreshWarnings
-  }) => buildJsonResponseWithCors(409, {
-    ok: false,
-    create_draft_unavailable: true,
-    refresh_required: true,
-    can_retry: true,
-    pending_candidate_ids: Array.isArray(pendingCandidateIds) ? pendingCandidateIds : [],
-    refresh_job_ids: Array.isArray(refreshJobIds) ? refreshJobIds : [],
-    preview_reopen_required: true,
-    error: {
-      code: String(prepareFailure?.errorCode || 'BANKING_PAY_CREATE_DRAFT_SESSION_BACKED_FAILED'),
+  }) => {
+    const errorCode = String(prepareFailure?.errorCode || 'BANKING_PAY_CREATE_DRAFT_SESSION_BACKED_FAILED').trim() || 'BANKING_PAY_CREATE_DRAFT_SESSION_BACKED_FAILED';
+    const details = {
+      pay_date: payDate,
+      week_ending_cutoff: cutoffIso,
+      provided_week_ending_cutoff: providedCutoffIso,
+      session_id: sessionId,
+      source_snapshot_run_id: sourceSnapshotRunId || null,
+      pay_channel_scope: payChannelScope || 'ALL',
+      reason: String(prepareFailure?.rawMessage || ''),
+      rpc_error: prepareFailure?.structuredPayload || null,
+      warnings: Array.isArray(refreshWarnings) ? refreshWarnings : []
+    };
+    const friendlyPayload = makeBankingFriendlyErrorPayload({
+      ok: false,
+      create_draft_unavailable: true,
+      refresh_required: true,
+      can_retry: true,
+      error_code: errorCode,
+      code: errorCode,
       message: 'Banking draft could not be prepared because the workbench session must refresh before draft creation can continue.',
-      details: {
-        pay_date: payDate,
-        week_ending_cutoff: cutoffIso,
-        provided_week_ending_cutoff: providedCutoffIso,
-        session_id: sessionId,
-        source_snapshot_run_id: sourceSnapshotRunId || null,
-        pay_channel_scope: payChannelScope || 'ALL',
-        reason: String(prepareFailure?.rawMessage || ''),
-        warnings: Array.isArray(refreshWarnings) ? refreshWarnings : []
-      }
-    }
-  });
+      details,
+      reason: details.reason,
+      technical_message: details.reason,
+      rpc_error: details.rpc_error
+    }, { action: 'CREATE_DRAFT' });
+    return buildJsonResponseWithCors(409, {
+      ...((friendlyPayload && typeof friendlyPayload === 'object') ? friendlyPayload : {}),
+      ok: false,
+      create_draft_unavailable: true,
+      refresh_required: true,
+      can_retry: true,
+      pending_candidate_ids: Array.isArray(pendingCandidateIds) ? pendingCandidateIds : [],
+      refresh_job_ids: Array.isArray(refreshJobIds) ? refreshJobIds : [],
+      preview_reopen_required: true
+    });
+  };
 
   const sessionIdText = trimStr(body.session_id || body.sessionId || '');
   const payChannelScopeRaw = trimStr(body.pay_channel_scope || body.payChannelScope || body.scope || '');
@@ -23215,7 +24478,9 @@ const CREATE_DRAFT_CHECKPOINT = 'NONE';
           provided_week_ending_cutoff: providedCutoffIso,
           session_id: sessionIdText,
           pay_channel_scope: payChannelScope || 'ALL',
-          reason: prepareFailure.rawMessage || 'Unknown error'
+          reason: prepareFailure.rawMessage || 'Unknown error',
+          rpc_error: prepareFailure.structuredPayload || e,
+          original_error: e
         },
         true
       );
@@ -24060,12 +25325,16 @@ const CREATE_DRAFT_CHECKPOINT = 'NONE';
         effective_candidate_id: effectiveCandidateId,
         effective_client_id: effectiveClientId,
         filter_source: routeFilterSource,
-        filter_was_derived: routeFilterWasDerived
+        filter_was_derived: routeFilterWasDerived,
+        reason: String(e?.message || e || 'Internal Server Error'),
+        rpc_error: e,
+        original_error: e
       },
       true
     );
   }
 }
+
 
 
 
@@ -43637,7 +44906,6 @@ function hasAnySegmentInvoiceLock(input) {
     return false;
   }
 }
-
 async function getTimesheetEvidenceMutationPolicy(env, timesheetId, opts = {}) {
   const enc = encodeURIComponent;
   const out = {
@@ -43651,6 +44919,17 @@ async function getTimesheetEvidenceMutationPolicy(env, timesheetId, opts = {}) {
     current_timesheet_id: null,
     resolved: null,
     summary: null
+  };
+
+  const yes = (v) => {
+    if (v === true) return true;
+    if (v === false || v == null) return false;
+    const s = String(v).trim().toLowerCase();
+    return s === 'true' || s === '1' || s === 'yes' || s === 'y' || s === 'on';
+  };
+  const n = (v) => {
+    const x = Number(v);
+    return Number.isFinite(x) ? x : 0;
   };
 
   const resolved = await resolveTimesheetToCurrent(env, timesheetId).catch(() => null);
@@ -43668,12 +44947,28 @@ async function getTimesheetEvidenceMutationPolicy(env, timesheetId, opts = {}) {
     `${env.SUPABASE_URL}/rest/v1/timesheets` +
       `?timesheet_id=eq.${enc(currentTsId)}` +
       `&is_current=eq.true` +
-      `&select=timesheet_id,authorised_at_server,revoked_at,sheet_scope,submission_mode,line_type,is_adjustment,adjustment_origin,parent_timesheet_id` +
+      `&select=timesheet_id,contract_id,authorised_at_server,revoked_at,sheet_scope,submission_mode,line_type,is_adjustment,adjustment_origin,parent_timesheet_id,qr_status` +
       `&limit=1`
   ).catch(() => null);
+
+  if (!tsRow?.timesheet_id) {
+    out.protected_reason = 'INVALID_TIMESHEET_CONTEXT';
+    return out;
+  }
+
   out.authorised =
     !!(tsRow?.authorised_at_server) &&
     !(tsRow?.revoked_at && String(tsRow.revoked_at).trim());
+
+  const contract = tsRow?.contract_id
+    ? await sbGetOne(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/contracts` +
+          `?id=eq.${enc(tsRow.contract_id)}` +
+          `&select=id,self_bill,no_timesheet_required,weekly_timesheet_source,is_nhsp` +
+          `&limit=1`
+      ).catch(() => null)
+    : null;
 
   const fin = await sbGetOne(
     env,
@@ -43684,39 +44979,74 @@ async function getTimesheetEvidenceMutationPolicy(env, timesheetId, opts = {}) {
       `&limit=1`
   ).catch(() => null);
 
-  out.candidate_paid = !!fin?.paid_at_utc;
-  if (fin?.locked_by_invoice_id || hasAnySegmentInvoiceLock(fin)) {
-    out.document_locked = true;
-    out.document_lock_reason = fin?.locked_by_invoice_id ? 'INVOICE_LOCKED' : 'INVOICE_SEGMENT_LOCKED';
-  }
-
   const summary = await sbGetOne(
     env,
     `${env.SUPABASE_URL}/rest/v1/v_timesheets_summary_base` +
       `?timesheet_id=eq.${enc(currentTsId)}` +
-      `&select=timesheet_id,client_no_timesheet_required,basis,route_type,route_family` +
+      `&select=timesheet_id,client_no_timesheet_required,basis,route_type,additional_seq,is_adjustment,is_qr,qr_status,paid_at_utc,locked_by_invoice_id,invoice_segments_locked,client_is_nhsp` +
       `&limit=1`
   ).catch(() => null);
+
   const cw = await sbGetOne(
     env,
     `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
       `?timesheet_id=eq.${enc(currentTsId)}` +
-      `&select=additional_seq` +
+      `&select=additional_seq,submission_mode_snapshot,is_adjustment` +
       `&limit=1`
   ).catch(() => null);
+
+  out.candidate_paid = !!(fin?.paid_at_utc || summary?.paid_at_utc);
+
+  const segmentLocked =
+    hasAnySegmentInvoiceLock(fin) ||
+    n(summary?.invoice_segments_locked) > 0;
+
+  const wholeInvoiceLocked = !!(fin?.locked_by_invoice_id || summary?.locked_by_invoice_id);
+  if (wholeInvoiceLocked || segmentLocked) {
+    out.document_locked = true;
+    out.document_lock_reason = wholeInvoiceLocked ? 'INVOICE_LOCKED' : 'INVOICE_SEGMENT_LOCKED';
+  }
+
+  const routeTypeU = String(summary?.route_type || contract?.weekly_timesheet_source || '').trim().toUpperCase();
+  const derivedRouteFamily = routeTypeU.includes('NHSP') || yes(contract?.is_nhsp) || yes(summary?.client_is_nhsp)
+    ? 'NHSP'
+    : routeTypeU.includes('HEALTHROSTER')
+      ? 'HEALTHROSTER'
+      : routeTypeU.includes('IMPORT')
+        ? 'IMPORT'
+        : '';
+
   const classificationContext = {
     ...(summary || {}),
     ...(tsRow || {}),
     basis: summary?.basis ?? fin?.basis ?? null,
-    additional_seq: cw?.additional_seq ?? null
+    route_type: summary?.route_type ?? contract?.weekly_timesheet_source ?? null,
+    route_family: derivedRouteFamily,
+    additional_seq: summary?.additional_seq ?? cw?.additional_seq ?? null,
+    is_adjustment: tsRow?.is_adjustment ?? summary?.is_adjustment ?? cw?.is_adjustment ?? null,
+    submission_mode: tsRow?.submission_mode ?? cw?.submission_mode_snapshot ?? null,
+    self_bill: contract?.self_bill ?? false,
+    no_timesheet_required: contract?.no_timesheet_required ?? false,
+    contract_no_timesheet_required: contract?.no_timesheet_required ?? false,
+    client_no_timesheet_required: summary?.client_no_timesheet_required ?? false,
+    weekly_timesheet_source: contract?.weekly_timesheet_source ?? null,
+    is_nhsp: contract?.is_nhsp ?? summary?.client_is_nhsp ?? false,
+    invoice_breakdown_json: fin?.invoice_breakdown_json ?? null,
+    invoice_segments_locked: summary?.invoice_segments_locked ?? 0,
+    locked_by_invoice_id: fin?.locked_by_invoice_id ?? summary?.locked_by_invoice_id ?? null,
+    paid_at_utc: fin?.paid_at_utc ?? summary?.paid_at_utc ?? null,
+    is_qr: summary?.is_qr ?? null,
+    qr_status: tsRow?.qr_status ?? summary?.qr_status ?? null
   };
-  out.summary = classificationContext || null;
+
+  out.summary = classificationContext;
   out.import_authoritative = isImportAuthoritativeEvidenceContext(classificationContext);
-  if (out.import_authoritative) out.protected_reason = 'IMPORT_AUTHORITATIVE_ROUTE';
 
   const evidence = opts?.evidence_item || null;
   const evidenceId = String(evidence?.id || opts?.evidence_id || '').trim();
-  if (evidenceId.startsWith('SYS:')) out.protected_reason = out.protected_reason || 'SYSTEM_EVIDENCE';
+  let evidenceProtected = false;
+
+  if (evidenceId.startsWith('SYS:')) evidenceProtected = true;
 
   if (evidence && typeof evidence === 'object') {
     const src = String(
@@ -43726,34 +45056,42 @@ async function getTimesheetEvidenceMutationPolicy(env, timesheetId, opts = {}) {
       evidence?.origin ||
       ''
     ).toUpperCase();
+    const kindU = String(evidence?.kind || '').trim().toUpperCase();
     if (
       evidence?.is_system === true ||
       evidence?.system === true ||
       evidence?.is_protected === true ||
       evidence?.from_import === true ||
       !!evidence?.import_id ||
+      evidenceId.startsWith('SYS:') ||
       src.includes('NHSP') ||
-      src.includes('HEALTHROSTER')
+      src.includes('HEALTHROSTER') ||
+      src.includes('IMPORT') ||
+      kindU === 'AUTHORISATION' ||
+      kindU === 'SYSTEM'
     ) {
-      out.protected_reason = out.protected_reason || 'PROTECTED_IMPORT_OR_SYSTEM_EVIDENCE';
+      evidenceProtected = true;
     }
   }
 
   if (out.authorised) {
-    out.protected_reason = out.protected_reason || 'TIMESHEET_AUTHORISED_EDIT_BLOCKED';
+    out.protected_reason = 'TIMESHEET_AUTHORISED_EDIT_BLOCKED';
   } else if (out.candidate_paid) {
-    out.protected_reason = out.protected_reason || 'TIMESHEET_PAID_EDIT_BLOCKED';
+    out.protected_reason = 'TIMESHEET_PAID_EDIT_BLOCKED';
   } else if (out.document_locked) {
-    out.protected_reason =
-      out.protected_reason ||
-      (out.document_lock_reason === 'INVOICE_SEGMENT_LOCKED'
-        ? 'TIMESHEET_SEGMENT_INVOICE_LOCKED_EDIT_BLOCKED'
-        : 'TIMESHEET_INVOICE_LOCKED_EDIT_BLOCKED');
+    out.protected_reason = out.document_lock_reason === 'INVOICE_SEGMENT_LOCKED'
+      ? 'TIMESHEET_SEGMENT_INVOICE_LOCKED_EDIT_BLOCKED'
+      : 'TIMESHEET_INVOICE_LOCKED_EDIT_BLOCKED';
+  } else if (out.import_authoritative) {
+    out.protected_reason = 'IMPORT_AUTHORITATIVE_EXPENSES_BLOCKED';
+  } else if (evidenceProtected) {
+    out.protected_reason = 'PROTECTED_IMPORT_OR_SYSTEM_EVIDENCE';
   }
 
-  out.can_manage_evidence = !out.document_locked && !out.authorised && !out.candidate_paid && !out.import_authoritative && !out.protected_reason;
+  out.can_manage_evidence = !out.protected_reason;
   return out;
 }
+
 
 async function applyTimesheetEvidenceReplacement(env, args = {}) {
   throw new Error('Direct evidence replacement is not supported. Delete or return the existing evidence first, then add/attach the new evidence.');
@@ -44501,56 +45839,150 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
   }
 }
 
-
 function isImportAuthoritativeEvidenceContext(summary) {
   const up = (v) => String(v || '').trim().toUpperCase();
-  const yes = (v) => v === true || String(v || '').trim().toLowerCase() === 'true';
+  const yes = (v) => {
+    if (v === true) return true;
+    if (v === false || v == null) return false;
+    const s = String(v).trim().toLowerCase();
+    return s === 'true' || s === '1' || s === 'yes' || s === 'y' || s === 'on';
+  };
   const num = (v) => {
     const n = Number(v);
     return Number.isFinite(n) ? n : 0;
   };
 
   const basisU = up(summary?.basis);
-  const submissionModeU = up(summary?.submission_mode);
+  const submissionModeU = up(summary?.submission_mode || summary?.submission_mode_snapshot || summary?.cw_submission_mode_snapshot);
   const lineTypeU = up(summary?.line_type);
   const adjustmentOriginU = up(summary?.adjustment_origin);
   const routeTypeU = up(summary?.route_type);
   const routeFamilyU = up(summary?.route_family);
+  const routeSubfamilyU = up(summary?.route_subfamily);
+  const sourceU = up(summary?.source || summary?.source_system || summary?.weekly_timesheet_source || summary?.basis_source);
+  const correctionKindU = up(summary?.correction_kind);
 
-  const isAdditionalManualRow =
-    submissionModeU === 'MANUAL' &&
-    (
-      yes(summary?.is_adjustment) ||
-      !!summary?.parent_timesheet_id ||
-      num(summary?.additional_seq) > 0 ||
-      lineTypeU.includes('ADJUST') ||
-      lineTypeU.includes('ADDITIONAL') ||
-      adjustmentOriginU.includes('MANUAL') ||
-      adjustmentOriginU.includes('ADDITIONAL')
-    );
+  const invoiceBreakdown = (() => {
+    const raw = summary?.invoice_breakdown_json;
+    if (!raw) return null;
+    if (typeof raw === 'object') return raw;
+    if (typeof raw === 'string') {
+      try {
+        return JSON.parse(raw);
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  })();
 
-  if (isAdditionalManualRow) return false;
+  const invoiceModeU = up(invoiceBreakdown?.mode);
 
-  const noTsRequired = yes(summary?.client_no_timesheet_required) || yes(summary?.no_timesheet_required);
-  const originalNhspHrBasis =
-    basisU === 'NHSP' ||
-    basisU === 'HEALTHROSTER_SELF_BILL' ||
+  const noTsRequired =
+    yes(summary?.client_no_timesheet_required) ||
+    yes(summary?.no_timesheet_required) ||
+    yes(summary?.contract_no_timesheet_required);
+
+  const hasExplicitManualAdditionalFlag =
+    yes(summary?.manually_created) ||
+    yes(summary?.is_manual_additional) ||
+    yes(summary?.manual_additional) ||
+    yes(summary?.manual_adjustment) ||
+    yes(summary?.created_manually);
+
+  const hasManualSignal =
+    submissionModeU === 'MANUAL' ||
+    hasExplicitManualAdditionalFlag ||
+    routeSubfamilyU.includes('MANUAL');
+
+  const hasAdditionalOrAdjustmentSignal =
+    yes(summary?.is_adjustment) ||
+    !!summary?.parent_timesheet_id ||
+    num(summary?.additional_seq) > 0 ||
+    lineTypeU.includes('ADJUST') ||
+    lineTypeU.includes('ADDITIONAL') ||
+    adjustmentOriginU.includes('MANUAL') ||
+    adjustmentOriginU.includes('ADDITIONAL') ||
+    adjustmentOriginU.includes('ADD_ADDITIONAL') ||
+    adjustmentOriginU.includes('EXPENSE') ||
+    correctionKindU.includes('ADJUST') ||
+    correctionKindU.includes('ADDITIONAL');
+
+  const hasAdjustmentBasis =
     basisU === 'NHSP_ADJUSTMENT' ||
     basisU === 'HEALTHROSTER_ADJUSTMENT';
-  const importRoute =
+
+  const isClearlyAdditionalOrManualAdjustment =
+    hasExplicitManualAdditionalFlag ||
+    !!summary?.parent_timesheet_id ||
+    num(summary?.additional_seq) > 0 ||
+    hasAdditionalOrAdjustmentSignal ||
+    (hasManualSignal && hasAdjustmentBasis);
+
+  if (isClearlyAdditionalOrManualAdjustment) return false;
+
+  const originalNhspHrBasis =
+    basisU === 'NHSP' ||
+    basisU === 'HEALTHROSTER_SELF_BILL';
+
+  const originalImportRoute =
     routeTypeU.includes('IMPORT') ||
+    routeTypeU.includes('IMPORT_AUTHORITATIVE') ||
     routeTypeU.includes('NHSP') ||
     routeTypeU.includes('HEALTHROSTER') ||
     routeFamilyU.includes('IMPORT') ||
+    routeFamilyU.includes('IMPORT_AUTHORITATIVE') ||
     routeFamilyU.includes('NHSP') ||
-    routeFamilyU.includes('HEALTHROSTER');
+    routeFamilyU.includes('HEALTHROSTER') ||
+    sourceU.includes('IMPORT') ||
+    sourceU.includes('NHSP') ||
+    sourceU.includes('HEALTHROSTER') ||
+    yes(summary?.is_import_authoritative) ||
+    yes(summary?.import_authoritative) ||
+    yes(summary?.client_is_nhsp) ||
+    yes(summary?.is_nhsp);
 
-  return noTsRequired || originalNhspHrBasis || importRoute;
+  const adjustmentBasisWithOriginalImportSignals =
+    hasAdjustmentBasis &&
+    originalImportRoute &&
+    !hasManualSignal &&
+    !hasAdditionalOrAdjustmentSignal;
+
+  return !!(
+    noTsRequired ||
+    originalNhspHrBasis ||
+    adjustmentBasisWithOriginalImportSignals ||
+    originalImportRoute
+  );
 }
-
 
 async function handleTimesheetEvidenceReturnToQueue(env, req, tsId, evidenceId) {
   const enc = encodeURIComponent;
+
+  const evidencePolicyBlockedResponse = (policy, actionLabel) => {
+    const reason = policy?.protected_reason || (!policy?.can_manage_evidence ? 'EVIDENCE_MUTATION_BLOCKED' : null);
+    const code = reason || 'EVIDENCE_MUTATION_BLOCKED';
+    let message = `Evidence cannot be ${actionLabel || 'changed'} for this timesheet.`;
+    if (code === 'TIMESHEET_AUTHORISED_EDIT_BLOCKED') {
+      message = 'This timesheet is authorised. Unauthorise it before changing expenses or expense evidence.';
+    } else if (code === 'TIMESHEET_PAID_EDIT_BLOCKED') {
+      message = 'This timesheet has been paid and cannot be amended directly.';
+    } else if (code === 'TIMESHEET_SEGMENT_INVOICE_LOCKED_EDIT_BLOCKED') {
+      message = 'This timesheet has invoice-locked segments. Create an additional manual adjustment for any further expenses or expense evidence.';
+    } else if (code === 'TIMESHEET_INVOICE_LOCKED_EDIT_BLOCKED') {
+      message = 'This timesheet is invoice locked. Create an additional manual adjustment for any further expenses or expense evidence.';
+    } else if (code === 'IMPORT_AUTHORITATIVE_EXPENSES_BLOCKED' || code === 'IMPORT_AUTHORITATIVE_ROUTE') {
+      message = 'This original import-authoritative timesheet is view-only for direct expenses. Create an additional manual timesheet for expenses and expense evidence.';
+    } else if (code === 'PROTECTED_IMPORT_OR_SYSTEM_EVIDENCE' || code === 'SYSTEM_EVIDENCE') {
+      message = 'This protected system or import evidence cannot be changed.';
+    } else if (code === 'INVALID_TIMESHEET_CONTEXT') {
+      message = 'Invalid or missing current timesheet context.';
+    }
+    return new Response(
+      JSON.stringify({ error: code, error_code: code, message, protected_reason: reason }),
+      { status: code === 'INVALID_TIMESHEET_CONTEXT' ? 400 : 409, headers: JSON_HEADERS }
+    );
+  };
 
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -44558,7 +45990,7 @@ async function handleTimesheetEvidenceReturnToQueue(env, req, tsId, evidenceId) 
   if (!evidenceId) return withCORS(env, req, badRequest('evidence_id is required'));
 
   if (String(evidenceId).startsWith('SYS:')) {
-    return withCORS(env, req, badRequest('System evidence cannot be returned to queue'));
+    return withCORS(env, req, evidencePolicyBlockedResponse({ protected_reason: 'PROTECTED_IMPORT_OR_SYSTEM_EVIDENCE', can_manage_evidence: false }, 'returned to the queue'));
   }
 
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -44614,11 +46046,8 @@ async function handleTimesheetEvidenceReturnToQueue(env, req, tsId, evidenceId) 
 
   try {
     const evidencePolicy = await getTimesheetEvidenceMutationPolicy(env, currentTsId);
-    if (evidencePolicy.document_locked) {
-      return withCORS(env, req, badRequest('Timesheet is invoice/document locked; cannot return evidence to queue'));
-    }
-    if (evidencePolicy.import_authoritative) {
-      return withCORS(env, req, badRequest('Evidence is view-only for this route and cannot be returned to queue here'));
+    if (!evidencePolicy?.can_manage_evidence) {
+      return withCORS(env, req, evidencePolicyBlockedResponse(evidencePolicy, 'returned to the queue'));
     }
 
     const { rows: evRows } = await sbFetch(
@@ -44631,11 +46060,10 @@ async function handleTimesheetEvidenceReturnToQueue(env, req, tsId, evidenceId) 
     );
     const ev = evRows?.[0] || null;
     if (!ev) return withCORS(env, req, notFound('Evidence not found for this timesheet'));
+
     const evPolicy = await getTimesheetEvidenceMutationPolicy(env, currentTsId, { evidence_item: ev });
-    if (!evPolicy.can_manage_evidence) {
-      if (evPolicy.document_locked) return withCORS(env, req, badRequest('Timesheet is invoice/document locked; cannot return evidence to queue'));
-      if (evPolicy.import_authoritative) return withCORS(env, req, badRequest('Evidence is view-only for this route and cannot be returned to queue here'));
-      return withCORS(env, req, badRequest('Protected evidence cannot be returned to queue'));
+    if (!evPolicy?.can_manage_evidence) {
+      return withCORS(env, req, evidencePolicyBlockedResponse(evPolicy, 'returned to the queue'));
     }
 
     const tsMeta = await sbGetOne(
@@ -93470,25 +94898,18 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
 
   const enc = encodeURIComponent;
 
-  const hasAnySegmentInvoiceLock = (tf) => {
-    try {
-      const ib = tf?.invoice_breakdown_json;
-      if (!ib || typeof ib !== 'object') return false;
-      const mode = String(ib?.mode || '').toUpperCase();
-      if (mode !== 'SEGMENTS') return false;
-      const segs = Array.isArray(ib?.segments) ? ib.segments : [];
-      return segs.some(s => {
-        const v = s?.invoice_locked_invoice_id;
-        return v != null && String(v).trim() !== '';
-      });
-    } catch {
-      return false;
-    }
-  };
+  const jsonResponse = (status, payload) => new Response(JSON.stringify(payload), {
+    status,
+    headers: { 'Content-Type': 'application/json' }
+  });
 
-  // ─────────────────────────────────────────────────────────────
-  // optimistic concurrency guard (expected current id required)
-  // ─────────────────────────────────────────────────────────────
+  const blockedResponse = (code, message, status = 409, extra = {}) => jsonResponse(status, {
+    error: code,
+    error_code: code,
+    message,
+    ...extra
+  });
+
   const expected = (patch && patch.expected_timesheet_id) ? String(patch.expected_timesheet_id) : '';
   if (!expected) {
     return badRequest('expected_timesheet_id is required');
@@ -93508,10 +94929,7 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
       current_timesheet_id: resolved.current_timesheet_id || null,
       current_version: resolved.current_version != null ? resolved.current_version : null
     };
-    return new Response(JSON.stringify(payload), {
-      status: 409,
-      headers: { 'Content-Type': 'application/json' }
-    });
+    return jsonResponse(409, payload);
   }
 
   const currentTs = await sbGetOne(
@@ -93519,7 +94937,7 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
     `${env.SUPABASE_URL}/rest/v1/timesheets` +
       `?timesheet_id=eq.${enc(currentTimesheetId)}` +
       `&is_current=eq.true` +
-      `&select=timesheet_id,is_current,authorised_at_server,revoked_at`
+      `&select=timesheet_id,is_current,contract_id,authorised_at_server,revoked_at,sheet_scope,submission_mode,line_type,is_adjustment,adjustment_origin,parent_timesheet_id,qr_status`
   );
   if (!currentTs) return notFound('Timesheet not found');
 
@@ -93528,12 +94946,9 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
   const hasRevokedAt = currentTs.revoked_at != null && String(currentTs.revoked_at).trim() !== '';
 
   if (isCurrentRow && hasAuthorisedAtServer && !hasRevokedAt) {
-    return new Response(
-      JSON.stringify({
-        error_code: 'TIMESHEET_AUTHORISED_EDIT_BLOCKED',
-        message: 'This timesheet is authorised. Unauthorise it before editing Banking-relevant financials.'
-      }),
-      { status: 409, headers: { 'Content-Type': 'application/json' } }
+    return blockedResponse(
+      'TIMESHEET_AUTHORISED_EDIT_BLOCKED',
+      'This timesheet is authorised. Unauthorise it before changing expenses or mileage.'
     );
   }
 
@@ -93544,38 +94959,71 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
     env,
     `${env.SUPABASE_URL}/rest/v1/v_timesheets_summary_base` +
       `?timesheet_id=eq.${enc(currentTimesheetId)}` +
-      `&select=timesheet_id,client_no_timesheet_required,basis,route_type,route_family` +
+      `&select=timesheet_id,client_no_timesheet_required,basis,route_type,additional_seq,is_adjustment,is_qr,qr_status,paid_at_utc,locked_by_invoice_id,invoice_segments_locked,client_is_nhsp` +
       `&limit=1`
   ).catch(() => null);
-  const tsClassRow = await sbGetOne(
-    env,
-    `${env.SUPABASE_URL}/rest/v1/timesheets` +
-      `?timesheet_id=eq.${enc(currentTimesheetId)}` +
-      `&is_current=eq.true` +
-      `&select=timesheet_id,sheet_scope,submission_mode,line_type,is_adjustment,adjustment_origin,parent_timesheet_id` +
-      `&limit=1`
-  ).catch(() => null);
+
+  const contract = currentTs?.contract_id
+    ? await sbGetOne(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/contracts` +
+          `?id=eq.${enc(currentTs.contract_id)}` +
+          `&select=id,self_bill,no_timesheet_required,weekly_timesheet_source,is_nhsp` +
+          `&limit=1`
+      ).catch(() => null)
+    : null;
+
   const cw = await sbGetOne(
     env,
     `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
       `?timesheet_id=eq.${enc(currentTimesheetId)}` +
-      `&select=additional_seq` +
+      `&select=additional_seq,submission_mode_snapshot,is_adjustment` +
       `&limit=1`
   ).catch(() => null);
+
+  const yes = (v) => {
+    if (v === true) return true;
+    if (v === false || v == null) return false;
+    const s = String(v).trim().toLowerCase();
+    return s === 'true' || s === '1' || s === 'yes' || s === 'y' || s === 'on';
+  };
+
+  const routeTypeU = String(summary?.route_type || contract?.weekly_timesheet_source || '').trim().toUpperCase();
+  const derivedRouteFamily = routeTypeU.includes('NHSP') || yes(contract?.is_nhsp) || yes(summary?.client_is_nhsp)
+    ? 'NHSP'
+    : routeTypeU.includes('HEALTHROSTER')
+      ? 'HEALTHROSTER'
+      : routeTypeU.includes('IMPORT')
+        ? 'IMPORT'
+        : '';
+
   const classificationContext = {
     ...(summary || {}),
-    ...(tsClassRow || {}),
+    ...(currentTs || {}),
     basis: summary?.basis ?? before?.basis ?? null,
-    additional_seq: cw?.additional_seq ?? null
+    route_type: summary?.route_type ?? contract?.weekly_timesheet_source ?? null,
+    route_family: derivedRouteFamily,
+    additional_seq: summary?.additional_seq ?? cw?.additional_seq ?? null,
+    is_adjustment: currentTs?.is_adjustment ?? summary?.is_adjustment ?? cw?.is_adjustment ?? null,
+    submission_mode: currentTs?.submission_mode ?? cw?.submission_mode_snapshot ?? null,
+    self_bill: contract?.self_bill ?? false,
+    no_timesheet_required: contract?.no_timesheet_required ?? false,
+    contract_no_timesheet_required: contract?.no_timesheet_required ?? false,
+    client_no_timesheet_required: summary?.client_no_timesheet_required ?? false,
+    weekly_timesheet_source: contract?.weekly_timesheet_source ?? null,
+    is_nhsp: contract?.is_nhsp ?? summary?.client_is_nhsp ?? false,
+    invoice_breakdown_json: before?.invoice_breakdown_json ?? null,
+    invoice_segments_locked: summary?.invoice_segments_locked ?? 0,
+    locked_by_invoice_id: before?.locked_by_invoice_id ?? summary?.locked_by_invoice_id ?? null,
+    paid_at_utc: before?.paid_at_utc ?? summary?.paid_at_utc ?? null,
+    is_qr: summary?.is_qr ?? null,
+    qr_status: currentTs?.qr_status ?? summary?.qr_status ?? null
   };
 
   if (isImportAuthoritativeEvidenceContext(classificationContext)) {
-    return new Response(
-      JSON.stringify({
-        error_code: 'IMPORT_AUTHORITATIVE_EXPENSES_BLOCKED',
-        message: 'This timesheet route is import-authoritative. Add or amend expenses on an eligible manual/additional row.'
-      }),
-      { status: 409, headers: { 'Content-Type': 'application/json' } }
+    return blockedResponse(
+      'IMPORT_AUTHORITATIVE_EXPENSES_BLOCKED',
+      'This original import-authoritative timesheet is view-only for direct expenses. Create an additional manual timesheet for expenses.'
     );
   }
 
@@ -93584,30 +95032,40 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
   const segmentOnlyTarget =
     lineTypeU === 'SEGMENT' ||
     lineTypeU === 'SEGMENT_ONLY' ||
-    sheetScopeU === 'SEGMENT';
+    sheetScopeU === 'SEGMENT' ||
+    yes(classificationContext?.segment_only) ||
+    !!classificationContext?.segment_id ||
+    !!classificationContext?.segment_stable_key;
+
   if (segmentOnlyTarget) {
-    return new Response(
-      JSON.stringify({
-        error_code: 'SEGMENT_CONTEXT_EXPENSES_BLOCKED',
-        message: 'This segment-only context cannot be amended via parent-level expense/mileage endpoints.'
-      }),
-      { status: 409, headers: { 'Content-Type': 'application/json' } }
+    return blockedResponse(
+      'SEGMENT_CONTEXT_EXPENSES_BLOCKED',
+      'This segment-only context cannot be amended via parent-level expense or mileage endpoints.'
     );
   }
 
-  // From here on: ALWAYS use currentTimesheetId
-  const toNum = (v) => (v === null || v === undefined ? null : Number(v));
-  const nonneg = (n) => (n === null || n === undefined ? true : Number(n) >= 0);
-
+  const toNum = (v) => {
+    if (v === null || v === undefined || v === '') return null;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : NaN;
+  };
+  const nonneg = (value) => {
+    if (value === null || value === undefined || value === '') return true;
+    const n = Number(value);
+    return Number.isFinite(n) && n >= 0;
+  };
   const num0 = (v) => {
     const n = toNum(v);
     return (n == null || Number.isNaN(n)) ? 0 : n;
   };
-
+  const finiteOrNull = (v) => {
+    const n = toNum(v);
+    return (n == null || Number.isNaN(n)) ? null : n;
+  };
   const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 
   const normalizeExpensesDescription = (v) => {
-    if (v === undefined) return undefined; // not touched
+    if (v === undefined) return undefined;
     if (v === null) return null;
     if (typeof v === 'string') return v;
     try {
@@ -93616,7 +95074,6 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
     return String(v);
   };
 
-  // Evidence kind aliases (accept legacy UI values too)
   const KIND_ALIASES = {
     MILEAGE: ['MILEAGE', 'Mileage', 'mileage'],
     TRAVEL: ['TRAVEL', 'Travel', 'travel', 'EXPENSES', 'Expenses', 'expenses'],
@@ -93647,6 +95104,7 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
   const evidenceError = (missingArr) => {
     return new Response(JSON.stringify({
       error: 'EVIDENCE_REQUIRED',
+      error_code: 'EVIDENCE_REQUIRED',
       missing: missingArr
     }), {
       status: 400,
@@ -93654,11 +95112,8 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
     });
   };
 
-  // -------- basic numeric validations --------
   if (patch.expenses) {
     const xp = patch.expenses;
-
-    // Category numeric validation (>= 0)
     if (!nonneg(xp.travel_pay_ex_vat) || !nonneg(xp.travel_charge_ex_vat) ||
         !nonneg(xp.accommodation_pay_ex_vat) || !nonneg(xp.accommodation_charge_ex_vat) ||
         !nonneg(xp.other_pay_ex_vat) || !nonneg(xp.other_charge_ex_vat)) {
@@ -93668,37 +95123,29 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
 
   if (patch.mileage) {
     const ml = patch.mileage;
-
     if (!nonneg(ml.mileage_units) || !nonneg(ml.pay_ex_vat) || !nonneg(ml.charge_ex_vat) || !nonneg(ml.pay_rate) || !nonneg(ml.charge_rate)) {
       return badRequest('Mileage values must be >= 0');
     }
   }
 
-  // -------- load current snapshot --------
-  if (before.paid_at_utc) {
-    return new Response(
-      JSON.stringify({
-        error_code: 'TIMESHEET_PAID_EDIT_BLOCKED',
-        message: 'This timesheet has been paid and cannot be amended directly.'
-      }),
-      { status: 409, headers: { 'Content-Type': 'application/json' } }
+  if (before.paid_at_utc || summary?.paid_at_utc) {
+    return blockedResponse(
+      'TIMESHEET_PAID_EDIT_BLOCKED',
+      'This timesheet has been paid and cannot be amended directly.'
     );
   }
 
-  // Segment-aware lock: block expense/mileage/PO changes if ANY segment is invoiced
-  if (before.locked_by_invoice_id || hasAnySegmentInvoiceLock(before)) {
-    return new Response(
-      JSON.stringify({
-        error_code: hasAnySegmentInvoiceLock(before)
-          ? 'TIMESHEET_SEGMENT_INVOICE_LOCKED_EDIT_BLOCKED'
-          : 'TIMESHEET_INVOICE_LOCKED_EDIT_BLOCKED',
-        message: 'Timesheet financials are locked by an invoice'
-      }),
-      { status: 409, headers: { 'Content-Type': 'application/json' } }
+  const segmentInvoiceLocked = hasAnySegmentInvoiceLock(before) || Number(summary?.invoice_segments_locked || 0) > 0;
+  const wholeInvoiceLocked = !!(before.locked_by_invoice_id || summary?.locked_by_invoice_id);
+  if (wholeInvoiceLocked || segmentInvoiceLocked) {
+    return blockedResponse(
+      segmentInvoiceLocked ? 'TIMESHEET_SEGMENT_INVOICE_LOCKED_EDIT_BLOCKED' : 'TIMESHEET_INVOICE_LOCKED_EDIT_BLOCKED',
+      segmentInvoiceLocked
+        ? 'This timesheet has invoice-locked segments. Create an additional manual adjustment for any further expenses.'
+        : 'This timesheet is invoice locked. Create an additional manual adjustment for any further expenses.'
     );
   }
 
-  // -------- compute "after" values for evidence enforcement + totals coherency --------
   let afterTravelPay = num0(before.travel_pay_ex_vat);
   let afterTravelChg = num0(before.travel_charge_ex_vat);
   let afterAccomPay  = num0(before.accommodation_pay_ex_vat);
@@ -93709,6 +95156,8 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
   let afterMileageUnits = num0(before.mileage_units);
   let afterMileagePay   = num0(before.mileage_pay_ex_vat);
   let afterMileageChg   = num0(before.mileage_charge_ex_vat);
+  let afterMileagePayRate = finiteOrNull(before.mileage_pay_rate);
+  let afterMileageChargeRate = finiteOrNull(before.mileage_charge_rate);
 
   if (patch.expenses) {
     const xp = patch.expenses;
@@ -93723,35 +95172,79 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
     if (xp.other_charge_ex_vat !== undefined)      afterOtherChg = num0(xp.other_charge_ex_vat);
   }
 
+  let mileageUnitsTouched = false;
+  let mileagePayExplicit = false;
+  let mileageChargeExplicit = false;
+  let mileagePayRateTouched = false;
+  let mileageChargeRateTouched = false;
+
   if (patch.mileage) {
     const ml = patch.mileage;
-    if (ml.mileage_units !== undefined)   afterMileageUnits = num0(ml.mileage_units);
-    if (ml.pay_ex_vat !== undefined)      afterMileagePay   = num0(ml.pay_ex_vat);
-    if (ml.charge_ex_vat !== undefined)   afterMileageChg   = num0(ml.charge_ex_vat);
+    mileageUnitsTouched = ml.mileage_units !== undefined;
+    mileagePayExplicit = ml.pay_ex_vat !== undefined;
+    mileageChargeExplicit = ml.charge_ex_vat !== undefined;
+    mileagePayRateTouched = ml.pay_rate !== undefined;
+    mileageChargeRateTouched = ml.charge_rate !== undefined;
+
+    if (ml.mileage_units !== undefined) afterMileageUnits = num0(ml.mileage_units);
+    if (ml.pay_rate !== undefined) afterMileagePayRate = finiteOrNull(ml.pay_rate);
+    if (ml.charge_rate !== undefined) afterMileageChargeRate = finiteOrNull(ml.charge_rate);
+
+    if ((afterMileagePayRate == null || afterMileageChargeRate == null) && afterMileageUnits > 0) {
+      try {
+        if (afterMileagePayRate == null && before.candidate_id) {
+          const { rows: candRows } = await sbFetch(
+            env,
+            `${env.SUPABASE_URL}/rest/v1/candidates?id=eq.${encodeURIComponent(before.candidate_id)}&select=mileage_pay_rate&limit=1`
+          );
+          const candRate = finiteOrNull(candRows?.[0]?.mileage_pay_rate);
+          if (candRate != null) afterMileagePayRate = candRate;
+        }
+        if (afterMileageChargeRate == null && before.client_id) {
+          const { rows: cliRows } = await sbFetch(
+            env,
+            `${env.SUPABASE_URL}/rest/v1/clients?id=eq.${encodeURIComponent(before.client_id)}&select=mileage_charge_rate&limit=1`
+          );
+          const clientRate = finiteOrNull(cliRows?.[0]?.mileage_charge_rate);
+          if (clientRate != null) afterMileageChargeRate = clientRate;
+        }
+      } catch {}
+    }
+
+    if (ml.pay_ex_vat !== undefined) {
+      afterMileagePay = num0(ml.pay_ex_vat);
+    } else if (mileageUnitsTouched || mileagePayRateTouched) {
+      afterMileagePay = afterMileageUnits <= 0
+        ? 0
+        : (afterMileagePayRate == null ? afterMileagePay : round2(afterMileageUnits * afterMileagePayRate));
+    }
+
+    if (ml.charge_ex_vat !== undefined) {
+      afterMileageChg = num0(ml.charge_ex_vat);
+    } else if (mileageUnitsTouched || mileageChargeRateTouched) {
+      afterMileageChg = afterMileageUnits <= 0
+        ? 0
+        : (afterMileageChargeRate == null ? afterMileageChg : round2(afterMileageUnits * afterMileageChargeRate));
+    }
   }
 
-  // -------- evidence requirements (table-driven, deterministic) --------
   const missing = [];
 
-  // Mileage evidence required if any mileage claim > 0
   if (afterMileageUnits > 0 || afterMileagePay > 0 || afterMileageChg > 0) {
     const ok = await hasEvidenceForAnyKind(KIND_ALIASES.MILEAGE);
     if (!ok) missing.push({ category: 'mileage', required_kind: 'MILEAGE' });
   }
 
-  // Travel evidence required if any travel claim > 0
   if (afterTravelPay > 0 || afterTravelChg > 0) {
     const ok = await hasEvidenceForAnyKind(KIND_ALIASES.TRAVEL);
     if (!ok) missing.push({ category: 'travel', required_kind: 'TRAVEL' });
   }
 
-  // Accommodation evidence required if any accommodation claim > 0
   if (afterAccomPay > 0 || afterAccomChg > 0) {
     const ok = await hasEvidenceForAnyKind(KIND_ALIASES.ACCOMMODATION);
     if (!ok) missing.push({ category: 'accommodation', required_kind: 'ACCOMMODATION' });
   }
 
-  // Other evidence required if any other claim > 0
   if (afterOtherPay > 0 || afterOtherChg > 0) {
     const ok = await hasEvidenceForAnyKind(KIND_ALIASES.OTHER);
     if (!ok) missing.push({ category: 'other', required_kind: 'OTHER' });
@@ -93761,15 +95254,12 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
     return evidenceError(missing);
   }
 
-  // -------- construct update payload --------
   const upd = {};
   const nowISO = nowIso();
 
-  // Category expenses write + totals coherency
   if (patch.expenses) {
     const xp = patch.expenses;
 
-    // Only write explicit category columns when present in patch
     if (xp.travel_pay_ex_vat !== undefined)        upd.travel_pay_ex_vat = afterTravelPay;
     if (xp.travel_charge_ex_vat !== undefined)     upd.travel_charge_ex_vat = afterTravelChg;
 
@@ -93779,9 +95269,8 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
     if (xp.other_pay_ex_vat !== undefined)         upd.other_pay_ex_vat = afterOtherPay;
     if (xp.other_charge_ex_vat !== undefined)      upd.other_charge_ex_vat = afterOtherChg;
 
-    // Always keep totals coherent when the expenses patch path is used
-    const sumPay = num0(afterTravelPay) + num0(afterAccomPay) + num0(afterOtherPay);
-    const sumChg = num0(afterTravelChg) + num0(afterAccomChg) + num0(afterOtherChg);
+    const sumPay = round2(num0(afterTravelPay) + num0(afterAccomPay) + num0(afterOtherPay));
+    const sumChg = round2(num0(afterTravelChg) + num0(afterAccomChg) + num0(afterOtherChg));
 
     upd.expenses_pay_ex_vat = sumPay;
     upd.expenses_charge_ex_vat = sumChg;
@@ -93790,45 +95279,14 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
     if (desc !== undefined) upd.expenses_description = desc;
   }
 
-  // Mileage write (NO TSFIN evidence pointer fields; evidence is in timesheet_evidence table)
   if (patch.mileage) {
     const ml = patch.mileage;
 
-    if (ml.mileage_units !== undefined) {
-      upd.mileage_units = afterMileageUnits;
-    }
-    if (ml.pay_ex_vat !== undefined)        upd.mileage_pay_ex_vat = afterMileagePay;
-    if (ml.charge_ex_vat !== undefined)     upd.mileage_charge_ex_vat = afterMileageChg;
-
-    if (ml.pay_rate !== undefined)          upd.mileage_pay_rate = (ml.pay_rate === null ? null : toNum(ml.pay_rate));
-    if (ml.charge_rate !== undefined)       upd.mileage_charge_rate = (ml.charge_rate === null ? null : toNum(ml.charge_rate));
-
-    // Backfill rates from candidate/client if not provided (preserve existing if present)
-    if (ml.pay_rate === undefined || ml.charge_rate === undefined) {
-      const needPay = ml.pay_rate === undefined;
-      const needChg = ml.charge_rate === undefined;
-      if (needPay || needChg) {
-        let candRate = null, clientRate = null;
-        try {
-          if (needPay && before.candidate_id) {
-            const { rows: candRows } = await sbFetch(
-              env,
-              `${env.SUPABASE_URL}/rest/v1/candidates?id=eq.${encodeURIComponent(before.candidate_id)}&select=mileage_pay_rate&limit=1`
-            );
-            candRate = candRows?.[0]?.mileage_pay_rate ?? null;
-          }
-          if (needChg && before.client_id) {
-            const { rows: cliRows } = await sbFetch(
-              env,
-              `${env.SUPABASE_URL}/rest/v1/clients?id=eq.${encodeURIComponent(before.client_id)}&select=mileage_charge_rate&limit=1`
-            );
-            clientRate = cliRows?.[0]?.mileage_charge_rate ?? null;
-          }
-        } catch { /* ignore */ }
-        if (needPay) upd.mileage_pay_rate = toNum(before.mileage_pay_rate) ?? (candRate == null ? null : Number(candRate));
-        if (needChg) upd.mileage_charge_rate = toNum(before.mileage_charge_rate) ?? (clientRate == null ? null : Number(clientRate));
-      }
-    }
+    if (ml.mileage_units !== undefined) upd.mileage_units = afterMileageUnits;
+    if (mileagePayExplicit || mileageUnitsTouched || mileagePayRateTouched) upd.mileage_pay_ex_vat = afterMileagePay;
+    if (mileageChargeExplicit || mileageUnitsTouched || mileageChargeRateTouched) upd.mileage_charge_ex_vat = afterMileageChg;
+    if (ml.pay_rate !== undefined || afterMileagePayRate !== finiteOrNull(before.mileage_pay_rate)) upd.mileage_pay_rate = afterMileagePayRate;
+    if (ml.charge_rate !== undefined || afterMileageChargeRate !== finiteOrNull(before.mileage_charge_rate)) upd.mileage_charge_rate = afterMileageChargeRate;
   }
 
   if (patch.po && patch.po.number !== undefined) {
@@ -93839,52 +95297,48 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
     return ok({ updated: false, tsfin: before });
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // ✅ Strategy A: make patch immediately consistent (no stale window)
-  // - recompute invoice_breakdown_json.additional + totals from:
-  //   core (segments/base_hours) + current additional + updated expenses/mileage
-  // - totals remain pure ex VAT (NO ERNI)
-  // - margin includes PAYE-only ERNI on wage pay only (core + additional), never on expenses/mileage
-  // ─────────────────────────────────────────────────────────────
-  const afterExpPay = round2(num0(upd.expenses_pay_ex_vat !== undefined ? upd.expenses_pay_ex_vat : before.expenses_pay_ex_vat));
-  const afterExpChg = round2(num0(upd.expenses_charge_ex_vat !== undefined ? upd.expenses_charge_ex_vat : before.expenses_charge_ex_vat));
-
-  const afterMilPay = round2(num0(upd.mileage_pay_ex_vat !== undefined ? upd.mileage_pay_ex_vat : before.mileage_pay_ex_vat));
-  const afterMilChg = round2(num0(upd.mileage_charge_ex_vat !== undefined ? upd.mileage_charge_ex_vat : before.mileage_charge_ex_vat));
-
+  const beforeExpPay = round2(num0(before.expenses_pay_ex_vat));
+  const beforeExpChg = round2(num0(before.expenses_charge_ex_vat));
+  const beforeMilPay = round2(num0(before.mileage_pay_ex_vat));
+  const beforeMilChg = round2(num0(before.mileage_charge_ex_vat));
   const addPay = round2(num0(before.additional_pay_ex_vat));
   const addChg = round2(num0(before.additional_charge_ex_vat));
 
-  // core from breakdown (preferred)
-  let corePay = 0;
-  let coreChg = 0;
+  const afterExpPay = round2(num0(upd.expenses_pay_ex_vat !== undefined ? upd.expenses_pay_ex_vat : before.expenses_pay_ex_vat));
+  const afterExpChg = round2(num0(upd.expenses_charge_ex_vat !== undefined ? upd.expenses_charge_ex_vat : before.expenses_charge_ex_vat));
+  const afterMilPay = round2(num0(upd.mileage_pay_ex_vat !== undefined ? upd.mileage_pay_ex_vat : before.mileage_pay_ex_vat));
+  const afterMilChg = round2(num0(upd.mileage_charge_ex_vat !== undefined ? upd.mileage_charge_ex_vat : before.mileage_charge_ex_vat));
 
-  try {
-    const ib = before?.invoice_breakdown_json;
-    const mode = String(ib?.mode || '').toUpperCase();
+  let corePay = round2(num0(before.total_pay_ex_vat) - addPay - beforeExpPay - beforeMilPay);
+  let coreChg = round2(num0(before.total_charge_ex_vat) - addChg - beforeExpChg - beforeMilChg);
 
-    if (mode === 'SEGMENTS' && Array.isArray(ib?.segments)) {
-      for (const seg of ib.segments) {
-        if (!seg || typeof seg !== 'object') continue;
-        const chg = num0(seg.charge_amount);
-        const pay = num0(seg.pay_amount);
-        const excl = !!seg.exclude_from_pay;
-        coreChg += chg;
-        if (!excl) corePay += pay;
-      }
-    } else {
-      const bhPay = num0(ib?.base_hours?.pay_ex_vat);
-      const bhChg = num0(ib?.base_hours?.charge_ex_vat);
-      corePay = bhPay;
-      coreChg = bhChg;
+  const ib = (before.invoice_breakdown_json && typeof before.invoice_breakdown_json === 'object') ? before.invoice_breakdown_json : {};
+  const mode = String(ib?.mode || '').toUpperCase();
+
+  if (mode === 'SEGMENTS' && Array.isArray(ib?.segments)) {
+    let segPay = 0;
+    let segChg = 0;
+    for (const seg of ib.segments) {
+      if (!seg || typeof seg !== 'object') continue;
+      const chg = num0(seg.charge_amount);
+      const pay = num0(seg.pay_amount);
+      const excl = !!seg.exclude_from_pay;
+      segChg += chg;
+      if (!excl) segPay += pay;
     }
-  } catch {
-    corePay = 0;
-    coreChg = 0;
+    corePay = round2(segPay);
+    coreChg = round2(segChg);
+  } else if (ib?.base_hours && typeof ib.base_hours === 'object') {
+    const bhPay = num0(ib.base_hours.pay_ex_vat);
+    const bhChg = num0(ib.base_hours.charge_ex_vat);
+    if (bhPay || bhChg) {
+      corePay = round2(bhPay);
+      coreChg = round2(bhChg);
+    }
   }
 
-  corePay = round2(corePay);
-  coreChg = round2(coreChg);
+  if (!Number.isFinite(corePay)) corePay = 0;
+  if (!Number.isFinite(coreChg)) coreChg = 0;
 
   const nonsegPay = round2(addPay + afterExpPay + afterMilPay);
   const nonsegChg = round2(addChg + afterExpChg + afterMilChg);
@@ -93892,7 +95346,6 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
   const totalPay = round2(corePay + nonsegPay);
   const totalChg = round2(coreChg + nonsegChg);
 
-  // ERNI policy (PAYE-only; wage pay only)
   const pol = (before.policy_snapshot_json && typeof before.policy_snapshot_json === 'object') ? before.policy_snapshot_json : {};
   const applyTo = String(pol.apply_erni_to || 'PAYE_ONLY').toUpperCase();
   const erniPctRaw = Number(pol.erni_pct ?? 0);
@@ -93917,14 +95370,14 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
   const nonsegPayCost = round2(addlWageCost + reimbPay);
   const nonsegMargin = round2(nonsegChg - nonsegPayCost);
 
-  // patch breakdown JSON in-place
   const patchedBreakdown = (() => {
     const ib0 = (before.invoice_breakdown_json && typeof before.invoice_breakdown_json === 'object') ? before.invoice_breakdown_json : {};
     const out = { ...ib0 };
 
-    // preserve additional.units if present
     const priorAdd = (ib0.additional && typeof ib0.additional === 'object') ? ib0.additional : {};
-    const units = (priorAdd.units && typeof priorAdd.units === 'object') ? priorAdd.units : (before.additional_units_json && typeof before.additional_units_json === 'object' ? before.additional_units_json : {});
+    const units = (priorAdd.units && typeof priorAdd.units === 'object')
+      ? priorAdd.units
+      : (before.additional_units_json && typeof before.additional_units_json === 'object' ? before.additional_units_json : {});
 
     out.additional = {
       ...priorAdd,
@@ -93949,11 +95402,8 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
   upd.total_charge_ex_vat = totalChg;
   upd.margin_ex_vat = margin;
   upd.invoice_breakdown_json = patchedBreakdown;
-
-  // Clear stale because we wrote a consistent snapshot
   upd.is_stale = false;
   upd.stale_reason = null;
-
   upd.updated_at = nowISO;
 
   const url =
@@ -93975,9 +95425,6 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
 
   const json = await res.json().catch(() => []);
   const after = Array.isArray(json) ? json[0] : json;
-
-  // Still enqueue a recompute for safety (should be idempotent & match), but no stale UI window.
-  await enqueueManualTsfinRecalc(env, currentTimesheetId).catch(() => {});
 
   await insertAuditEvent(env, req, {
     object_type: 'timesheets_financials',
@@ -94038,6 +95485,7 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
     was_stale: !!resolved.was_stale
   });
 }
+
 // ============================================================
 // UPDATED: handleTimesheetEvidenceAdd / handleTimesheetEvidenceUpdateKind
 // - Normalizes kind to canonical set where applicable:
@@ -94049,6 +95497,31 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
 
 async function handleTimesheetEvidenceAdd(env, req, tsId) {
   const enc = encodeURIComponent;
+
+  const evidencePolicyBlockedResponse = (policy, actionLabel) => {
+    const reason = policy?.protected_reason || (!policy?.can_manage_evidence ? 'EVIDENCE_MUTATION_BLOCKED' : null);
+    const code = reason || 'EVIDENCE_MUTATION_BLOCKED';
+    let message = `Evidence cannot be ${actionLabel || 'changed'} for this timesheet.`;
+    if (code === 'TIMESHEET_AUTHORISED_EDIT_BLOCKED') {
+      message = 'This timesheet is authorised. Unauthorise it before changing expenses or expense evidence.';
+    } else if (code === 'TIMESHEET_PAID_EDIT_BLOCKED') {
+      message = 'This timesheet has been paid and cannot be amended directly.';
+    } else if (code === 'TIMESHEET_SEGMENT_INVOICE_LOCKED_EDIT_BLOCKED') {
+      message = 'This timesheet has invoice-locked segments. Create an additional manual adjustment for any further expenses or expense evidence.';
+    } else if (code === 'TIMESHEET_INVOICE_LOCKED_EDIT_BLOCKED') {
+      message = 'This timesheet is invoice locked. Create an additional manual adjustment for any further expenses or expense evidence.';
+    } else if (code === 'IMPORT_AUTHORITATIVE_EXPENSES_BLOCKED' || code === 'IMPORT_AUTHORITATIVE_ROUTE') {
+      message = 'This original import-authoritative timesheet is view-only for direct expenses. Create an additional manual timesheet for expenses and expense evidence.';
+    } else if (code === 'PROTECTED_IMPORT_OR_SYSTEM_EVIDENCE' || code === 'SYSTEM_EVIDENCE') {
+      message = 'This protected system or import evidence cannot be changed.';
+    } else if (code === 'INVALID_TIMESHEET_CONTEXT') {
+      message = 'Invalid or missing current timesheet context.';
+    }
+    return new Response(
+      JSON.stringify({ error: code, error_code: code, message, protected_reason: reason }),
+      { status: code === 'INVALID_TIMESHEET_CONTEXT' ? 400 : 409, headers: JSON_HEADERS }
+    );
+  };
 
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -94154,11 +95627,8 @@ async function handleTimesheetEvidenceAdd(env, req, tsId) {
 
   try {
     const evidencePolicy = await getTimesheetEvidenceMutationPolicy(env, currentTsId);
-    if (evidencePolicy.document_locked) {
-      return withCORS(env, req, badRequest('Timesheet is invoice/document locked; cannot add evidence'));
-    }
-    if (evidencePolicy.import_authoritative) {
-      return withCORS(env, req, badRequest('Evidence is view-only for this route and cannot be added here'));
+    if (!evidencePolicy?.can_manage_evidence) {
+      return withCORS(env, req, evidencePolicyBlockedResponse(evidencePolicy, 'added'));
     }
     if (!evidencePolicy.current_timesheet_id) {
       return withCORS(env, req, badRequest('Invalid or missing current timesheet context'));
@@ -94175,7 +95645,6 @@ async function handleTimesheetEvidenceAdd(env, req, tsId) {
     const ts = tsRows?.[0] || null;
     if (!ts) return withCORS(env, req, notFound('Timesheet not found'));
 
-    // Validate storage_key exists in R2 (best-effort)
     try {
       if (typeof r2Exists === 'function') {
         const exists = await r2Exists(env, storageKey);
@@ -94266,7 +95735,6 @@ async function handleTimesheetEvidenceAdd(env, req, tsId) {
       row = null;
     }
 
-    // ✅ NEW: if this evidence is a TIMESHEET, set timesheets.manual_pdf_r2_key to this storage_key
     if (String(kind).toUpperCase() === 'TIMESHEET') {
       try {
         const updRes = await fetch(
@@ -94328,9 +95796,33 @@ async function handleTimesheetEvidenceAdd(env, req, tsId) {
   }
 }
 
-
 async function handleTimesheetEvidenceUpdateKind(env, req, tsId, evidenceId) {
   const enc = encodeURIComponent;
+
+  const evidencePolicyBlockedResponse = (policy, actionLabel) => {
+    const reason = policy?.protected_reason || (!policy?.can_manage_evidence ? 'EVIDENCE_MUTATION_BLOCKED' : null);
+    const code = reason || 'EVIDENCE_MUTATION_BLOCKED';
+    let message = `Evidence cannot be ${actionLabel || 'changed'} for this timesheet.`;
+    if (code === 'TIMESHEET_AUTHORISED_EDIT_BLOCKED') {
+      message = 'This timesheet is authorised. Unauthorise it before changing expenses or expense evidence.';
+    } else if (code === 'TIMESHEET_PAID_EDIT_BLOCKED') {
+      message = 'This timesheet has been paid and cannot be amended directly.';
+    } else if (code === 'TIMESHEET_SEGMENT_INVOICE_LOCKED_EDIT_BLOCKED') {
+      message = 'This timesheet has invoice-locked segments. Create an additional manual adjustment for any further expenses or expense evidence.';
+    } else if (code === 'TIMESHEET_INVOICE_LOCKED_EDIT_BLOCKED') {
+      message = 'This timesheet is invoice locked. Create an additional manual adjustment for any further expenses or expense evidence.';
+    } else if (code === 'IMPORT_AUTHORITATIVE_EXPENSES_BLOCKED' || code === 'IMPORT_AUTHORITATIVE_ROUTE') {
+      message = 'This original import-authoritative timesheet is view-only for direct expenses. Create an additional manual timesheet for expenses and expense evidence.';
+    } else if (code === 'PROTECTED_IMPORT_OR_SYSTEM_EVIDENCE' || code === 'SYSTEM_EVIDENCE') {
+      message = 'This protected system or import evidence cannot be changed.';
+    } else if (code === 'INVALID_TIMESHEET_CONTEXT') {
+      message = 'Invalid or missing current timesheet context.';
+    }
+    return new Response(
+      JSON.stringify({ error: code, error_code: code, message, protected_reason: reason }),
+      { status: code === 'INVALID_TIMESHEET_CONTEXT' ? 400 : 409, headers: JSON_HEADERS }
+    );
+  };
 
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -94338,7 +95830,7 @@ async function handleTimesheetEvidenceUpdateKind(env, req, tsId, evidenceId) {
   if (!evidenceId) return withCORS(env, req, badRequest('evidence_id is required'));
 
   if (String(evidenceId).startsWith('SYS:')) {
-    return withCORS(env, req, badRequest('System evidence cannot be edited'));
+    return withCORS(env, req, evidencePolicyBlockedResponse({ protected_reason: 'PROTECTED_IMPORT_OR_SYSTEM_EVIDENCE', can_manage_evidence: false }, 'edited'));
   }
 
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -94411,14 +95903,10 @@ async function handleTimesheetEvidenceUpdateKind(env, req, tsId, evidenceId) {
 
   try {
     const evidencePolicy = await getTimesheetEvidenceMutationPolicy(env, currentTsId);
-    if (evidencePolicy.document_locked) {
-      return withCORS(env, req, badRequest('Timesheet is invoice/document locked; cannot update evidence kind'));
-    }
-    if (evidencePolicy.import_authoritative) {
-      return withCORS(env, req, badRequest('Evidence is view-only for this route and cannot be edited here'));
+    if (!evidencePolicy?.can_manage_evidence) {
+      return withCORS(env, req, evidencePolicyBlockedResponse(evidencePolicy, 'edited'));
     }
 
-    // Load evidence row
     const { rows: evRows } = await sbFetch(
       env,
       `${env.SUPABASE_URL}/rest/v1/timesheet_evidence` +
@@ -94430,11 +95918,10 @@ async function handleTimesheetEvidenceUpdateKind(env, req, tsId, evidenceId) {
 
     const ev = evRows?.[0] || null;
     if (!ev) return withCORS(env, req, notFound('Evidence not found for this timesheet'));
+
     const evPolicy = await getTimesheetEvidenceMutationPolicy(env, currentTsId, { evidence_item: ev });
-    if (!evPolicy.can_manage_evidence) {
-      if (evPolicy.document_locked) return withCORS(env, req, badRequest('Timesheet is invoice/document locked; cannot update evidence kind'));
-      if (evPolicy.import_authoritative) return withCORS(env, req, badRequest('Evidence is view-only for this route and cannot be edited here'));
-      return withCORS(env, req, badRequest('Protected evidence cannot be edited'));
+    if (!evPolicy?.can_manage_evidence) {
+      return withCORS(env, req, evidencePolicyBlockedResponse(evPolicy, 'edited'));
     }
 
     const oldKind = ev.kind != null ? String(ev.kind) : '';
@@ -94483,7 +95970,6 @@ async function handleTimesheetEvidenceUpdateKind(env, req, tsId, evidenceId) {
       }
     }
 
-    // Patch evidence kind
     const patchPayload = { kind: newKind };
     if (newKindU === 'TIMESHEET') patchPayload.storage_key = updatedStorageKey;
 
@@ -94513,9 +95999,6 @@ async function handleTimesheetEvidenceUpdateKind(env, req, tsId, evidenceId) {
       ? String(updated.storage_key).trim().replace(/^\/+/, '')
       : updatedStorageKey;
 
-    // ✅ Maintain timesheets.manual_pdf_r2_key based on TIMESHEET kind transitions
-    // - If changing TO TIMESHEET: set manual_pdf_r2_key to this evidence's PDF-safe storage_key
-    // - If changing FROM TIMESHEET: clear manual_pdf_r2_key only if it matches this evidence's storage_key
     try {
       let tsRow = null;
       try {
@@ -94630,24 +96113,49 @@ async function handleTimesheetEvidenceUpdateKind(env, req, tsId, evidenceId) {
 async function handleTimesheetEvidenceDelete(env, req, tsId, evidenceId) {
   const enc = encodeURIComponent;
 
-  // Auth: admin only
+  const evidencePolicyBlockedResponse = (policy, actionLabel) => {
+    const reason = policy?.protected_reason || (!policy?.can_manage_evidence ? 'EVIDENCE_MUTATION_BLOCKED' : null);
+    const code = reason || 'EVIDENCE_MUTATION_BLOCKED';
+    let message = `Evidence cannot be ${actionLabel || 'changed'} for this timesheet.`;
+    if (code === 'TIMESHEET_AUTHORISED_EDIT_BLOCKED') {
+      message = 'This timesheet is authorised. Unauthorise it before changing expenses or expense evidence.';
+    } else if (code === 'TIMESHEET_PAID_EDIT_BLOCKED') {
+      message = 'This timesheet has been paid and cannot be amended directly.';
+    } else if (code === 'TIMESHEET_SEGMENT_INVOICE_LOCKED_EDIT_BLOCKED') {
+      message = 'This timesheet has invoice-locked segments. Create an additional manual adjustment for any further expenses or expense evidence.';
+    } else if (code === 'TIMESHEET_INVOICE_LOCKED_EDIT_BLOCKED') {
+      message = 'This timesheet is invoice locked. Create an additional manual adjustment for any further expenses or expense evidence.';
+    } else if (code === 'IMPORT_AUTHORITATIVE_EXPENSES_BLOCKED' || code === 'IMPORT_AUTHORITATIVE_ROUTE') {
+      message = 'This original import-authoritative timesheet is view-only for direct expenses. Create an additional manual timesheet for expenses and expense evidence.';
+    } else if (code === 'PROTECTED_IMPORT_OR_SYSTEM_EVIDENCE' || code === 'SYSTEM_EVIDENCE') {
+      message = 'This protected system or import evidence cannot be changed.';
+    } else if (code === 'INVALID_TIMESHEET_CONTEXT') {
+      message = 'Invalid or missing current timesheet context.';
+    }
+    return new Response(
+      JSON.stringify({ error: code, error_code: code, message, protected_reason: reason }),
+      { status: code === 'INVALID_TIMESHEET_CONTEXT' ? 400 : 409, headers: JSON_HEADERS }
+    );
+  };
+
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
   if (!tsId) return withCORS(env, req, badRequest('timesheet_id is required'));
   if (!evidenceId) return withCORS(env, req, badRequest('evidence_id is required'));
 
-  // ✅ Guarded write (DELETE with JSON body)
+  if (String(evidenceId).startsWith('SYS:')) {
+    return withCORS(env, req, evidencePolicyBlockedResponse({ protected_reason: 'PROTECTED_IMPORT_OR_SYSTEM_EVIDENCE', can_manage_evidence: false }, 'deleted'));
+  }
+
   let body = null;
   try { body = await parseJSONBody(req); } catch { body = null; }
   const expected = body?.expected_timesheet_id ? String(body.expected_timesheet_id) : '';
   if (!expected) return withCORS(env, req, badRequest('expected_timesheet_id is required'));
 
-  // ✅ Rotation-safe resolve
   const resolved = await resolveTimesheetToCurrent(env, tsId);
   if (!resolved) return withCORS(env, req, notFound('Timesheet not found'));
   const currentTsId = resolved.current_timesheet_id;
 
-  // ✅ Guard mismatch → 409 TIMESHEET_MOVED
   if (String(expected) !== String(currentTsId)) {
     return withCORS(
       env,
@@ -94659,7 +96167,6 @@ async function handleTimesheetEvidenceDelete(env, req, tsId, evidenceId) {
     );
   }
 
-  // Local R2 delete helper (so deletion actually cleans up storage even if global r2Delete is absent)
   const r2DeleteLocal = async (key) => {
     const bucket = env.R2_BUCKET || env.R2;
     if (!bucket || typeof bucket.delete !== 'function') {
@@ -94673,14 +96180,10 @@ async function handleTimesheetEvidenceDelete(env, req, tsId, evidenceId) {
 
   try {
     const evidencePolicy = await getTimesheetEvidenceMutationPolicy(env, currentTsId);
-    if (evidencePolicy.document_locked) {
-      return withCORS(env, req, badRequest('Timesheet is invoice/document locked; cannot delete evidence'));
-    }
-    if (evidencePolicy.import_authoritative) {
-      return withCORS(env, req, badRequest('Evidence is view-only for this route and cannot be deleted here'));
+    if (!evidencePolicy?.can_manage_evidence) {
+      return withCORS(env, req, evidencePolicyBlockedResponse(evidencePolicy, 'deleted'));
     }
 
-    // Ensure evidence row exists and belongs to this timesheet
     const { rows: evRows } = await sbFetch(
       env,
       `${env.SUPABASE_URL}/rest/v1/timesheet_evidence` +
@@ -94691,14 +96194,12 @@ async function handleTimesheetEvidenceDelete(env, req, tsId, evidenceId) {
     );
     const ev = evRows?.[0] || null;
     if (!ev) return withCORS(env, req, notFound('Evidence not found for this timesheet'));
+
     const evPolicy = await getTimesheetEvidenceMutationPolicy(env, currentTsId, { evidence_item: ev });
-    if (!evPolicy.can_manage_evidence) {
-      if (evPolicy.document_locked) return withCORS(env, req, badRequest('Timesheet is invoice/document locked; cannot delete evidence'));
-      if (evPolicy.import_authoritative) return withCORS(env, req, badRequest('Evidence is view-only for this route and cannot be deleted here'));
-      return withCORS(env, req, badRequest('Protected evidence cannot be deleted'));
+    if (!evPolicy?.can_manage_evidence) {
+      return withCORS(env, req, evidencePolicyBlockedResponse(evPolicy, 'deleted'));
     }
 
-    // Load minimal TS context for audit + optional cleanup of pointers
     let tsMeta = null;
     try {
       const { rows: tsRows } = await sbFetch(
@@ -94715,7 +96216,6 @@ async function handleTimesheetEvidenceDelete(env, req, tsId, evidenceId) {
     const storageKeyRaw = ev.storage_key || null;
     const storageKeyForR2 = storageKeyRaw ? String(storageKeyRaw).trim().replace(/^\/+/, '') : null;
 
-    // 1) Best-effort delete from R2 (this deletes the actual file object)
     try {
       if (storageKeyForR2) {
         await r2DeleteLocal(storageKeyForR2);
@@ -94727,7 +96227,6 @@ async function handleTimesheetEvidenceDelete(env, req, tsId, evidenceId) {
       });
     }
 
-    // 2) Delete DB evidence row (timesheet_evidence)
     const delRes = await fetch(
       `${env.SUPABASE_URL}/rest/v1/timesheet_evidence?id=eq.${enc(evidenceId)}`,
       { method: 'DELETE', headers: { ...sbHeaders(env), Prefer: 'return=minimal' } }
@@ -94738,7 +96237,6 @@ async function handleTimesheetEvidenceDelete(env, req, tsId, evidenceId) {
       return withCORS(env, req, serverError(`Failed to delete timesheet evidence: ${t}`));
     }
 
-    // 2b) Delete matching provenance rows in manual_timesheet_queue so queue/evidence state cannot drift
     if (storageKeyForR2) {
       try {
         const provDelRes = await fetch(
@@ -94767,8 +96265,6 @@ async function handleTimesheetEvidenceDelete(env, req, tsId, evidenceId) {
       }
     }
 
-    // 3) If deleted evidence is kind=TIMESHEET and it matches manual_pdf_r2_key, clear it.
-    //    Also keep the existing “generated pdf” cleanup safeguard.
     try {
       const patches = {};
 
@@ -94791,7 +96287,7 @@ async function handleTimesheetEvidenceDelete(env, req, tsId, evidenceId) {
           `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(currentTsId)}&is_current=eq.true`,
           {
             method: 'PATCH',
-            headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+            headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
             body: JSON.stringify(patches)
           }
         );
@@ -94812,7 +96308,6 @@ async function handleTimesheetEvidenceDelete(env, req, tsId, evidenceId) {
       });
     }
 
-    // Audit
     try {
       await writeAudit(
         env,
@@ -94843,8 +96338,6 @@ async function handleTimesheetEvidenceDelete(env, req, tsId, evidenceId) {
     return withCORS(env, req, serverError(`Failed to delete timesheet evidence: ${e?.message || e}`));
   }
 }
-
-
 
 
 
@@ -113156,6 +114649,21 @@ const nonneg = (n) => (n === null || n === undefined ? true : Number(n) >= 0);
 
 
 async function fetchCurrentTsfin(env, timesheetId) {
+  const parseJsonMaybe = (value, fallback = null) => {
+    if (value == null) return fallback;
+    if (typeof value === 'object') return value;
+    if (typeof value === 'string') {
+      const raw = value.trim();
+      if (!raw) return fallback;
+      try {
+        return JSON.parse(raw);
+      } catch {
+        return fallback;
+      }
+    }
+    return fallback;
+  };
+
   const q =
     `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
     `?timesheet_id=eq.${encodeURIComponent(timesheetId)}` +
@@ -113163,18 +114671,22 @@ async function fetchCurrentTsfin(env, timesheetId) {
     `&select=` + [
       'timesheet_id','timesheet_version','candidate_id','client_id',
       'processing_status','locked_by_invoice_id','paid_at_utc','basis','is_current',
+      'pay_method','policy_snapshot_json',
+
+      'total_pay_ex_vat','total_charge_ex_vat','margin_ex_vat',
+      'additional_pay_ex_vat','additional_charge_ex_vat','additional_margin_ex_vat',
+      'additional_units_json',
+
+      'actual_schedule_json',
       'invoice_breakdown_json',
 
-      // ✅ NEW: category expense columns (required for patchTsfinCommon correctness)
       'travel_pay_ex_vat','travel_charge_ex_vat',
       'accommodation_pay_ex_vat','accommodation_charge_ex_vat',
       'other_pay_ex_vat','other_charge_ex_vat',
 
-      // legacy totals + notes/meta (still used)
       'expenses_pay_ex_vat','expenses_charge_ex_vat','expenses_description','expenses_evidence_r2_key',
       'expenses_evidence_manifest',
 
-      // mileage
       'mileage_pay_ex_vat','mileage_charge_ex_vat','mileage_units',
       'mileage_evidence_r2_key','mileage_evidence_manifest',
       'mileage_pay_rate','mileage_charge_rate',
@@ -113183,7 +114695,17 @@ async function fetchCurrentTsfin(env, timesheetId) {
     ].join(',');
 
   const { rows } = await sbFetch(env, q);
-  return (rows || [])[0] || null;
+  const row = (rows || [])[0] || null;
+  if (!row) return null;
+
+  row.invoice_breakdown_json = parseJsonMaybe(row.invoice_breakdown_json, {});
+  row.policy_snapshot_json = parseJsonMaybe(row.policy_snapshot_json, {});
+  row.additional_units_json = parseJsonMaybe(row.additional_units_json, {});
+  row.actual_schedule_json = parseJsonMaybe(row.actual_schedule_json, row.actual_schedule_json || null);
+  row.expenses_evidence_manifest = parseJsonMaybe(row.expenses_evidence_manifest, row.expenses_evidence_manifest || null);
+  row.mileage_evidence_manifest = parseJsonMaybe(row.mileage_evidence_manifest, row.mileage_evidence_manifest || null);
+
+  return row;
 }
 
 async function enqueueManualTsfinRecalc(env, timesheetId) {
