@@ -25222,10 +25222,16 @@ $function$;
 
 DROP FUNCTION IF EXISTS public.pay_finance_payout_notice_queue_commit_stage(uuid, uuid);
 
+DROP FUNCTION IF EXISTS public.pay_finance_payout_notice_queue_commit_stage(uuid, uuid);
+DROP FUNCTION IF EXISTS public.pay_finance_payout_notice_queue_commit_stage(uuid, uuid, boolean);
+DROP FUNCTION IF EXISTS public.pay_finance_payout_notice_queue_commit_stage(uuid, uuid, boolean, uuid, jsonb);
+
 CREATE OR REPLACE FUNCTION public.pay_finance_payout_notice_queue_commit_stage(
   p_pay_batch_id uuid,
   p_actor_user_id uuid,
-  p_only_confirmed boolean DEFAULT false
+  p_only_confirmed boolean DEFAULT false,
+  p_operation_id uuid DEFAULT NULL::uuid,
+  p_remittance_scope_ids jsonb DEFAULT NULL::jsonb
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -25263,6 +25269,21 @@ declare
   v_execution_intent_json jsonb := '{}'::jsonb;
   v_settlement_confirmation_json jsonb := '{}'::jsonb;
   v_suppress_remittances boolean := false;
+
+  v_operation_mode boolean := false;
+  v_operation_row public.banking_pay_operations%ROWTYPE;
+  v_requested_scope_count integer := 0;
+  v_matched_scope_count integer := 0;
+  v_already_queued_count integer := 0;
+  v_inserted_outbox_count integer := 0;
+  v_reused_outbox_count integer := 0;
+  v_skipped_count integer := 0;
+  v_failed_count integer := 0;
+  v_remaining_count integer := 0;
+  v_has_more boolean := false;
+  v_operation_scope_ids jsonb := '[]'::jsonb;
+  v_operation_job_results jsonb := '[]'::jsonb;
+  v_legacy_scope_count integer := 0;
 begin
   if p_pay_batch_id is null then
     raise exception 'pay_finance_payout_notice_queue_commit_stage: pay_batch_id is required';
@@ -25327,6 +25348,514 @@ begin
     'false'
   ))) in ('true','1','yes','y','on');
 
+  v_operation_mode := (p_operation_id IS NOT NULL OR p_remittance_scope_ids IS NOT NULL);
+
+  IF v_operation_mode THEN
+    IF p_operation_id IS NULL THEN
+      RAISE EXCEPTION 'pay_finance_payout_notice_queue_commit_stage operation mode requires p_operation_id';
+    END IF;
+    IF p_remittance_scope_ids IS NULL OR jsonb_typeof(p_remittance_scope_ids) <> 'array' OR jsonb_array_length(p_remittance_scope_ids) = 0 THEN
+      RAISE EXCEPTION 'pay_finance_payout_notice_queue_commit_stage operation mode requires non-empty p_remittance_scope_ids';
+    END IF;
+
+    SELECT operation_row.*
+    INTO v_operation_row
+    FROM public.banking_pay_operations AS operation_row
+    WHERE operation_row.id = p_operation_id
+    FOR UPDATE;
+
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'pay_finance_payout_notice_queue_commit_stage: operation % not found', p_operation_id;
+    END IF;
+
+    IF v_operation_row.operation_type NOT IN ('REMITTANCE_QUEUE', 'PAYMENT_EXECUTE', 'PAYMENT_SETTLEMENT') THEN
+      RAISE EXCEPTION 'pay_finance_payout_notice_queue_commit_stage: operation % is not payout-notice-capable', p_operation_id;
+    END IF;
+
+    IF v_operation_row.pay_batch_id IS NOT NULL AND v_operation_row.pay_batch_id <> p_pay_batch_id THEN
+      RAISE EXCEPTION 'pay_finance_payout_notice_queue_commit_stage: operation % is for pay batch %, not %', p_operation_id, v_operation_row.pay_batch_id, p_pay_batch_id;
+    END IF;
+
+    IF v_operation_row.actor_user_id IS NOT NULL AND v_operation_row.actor_user_id <> p_actor_user_id THEN
+      RAISE EXCEPTION 'pay_finance_payout_notice_queue_commit_stage: operation % belongs to a different actor', p_operation_id;
+    END IF;
+
+    WITH requested_scope AS (
+      SELECT DISTINCT (scope_element.value #>> '{}')::uuid AS remittance_scope_id
+      FROM jsonb_array_elements(p_remittance_scope_ids) AS scope_element(value)
+      WHERE (scope_element.value #>> '{}') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+    )
+    SELECT COUNT(*)::integer
+    INTO v_requested_scope_count
+    FROM requested_scope;
+
+    IF v_requested_scope_count <> jsonb_array_length(p_remittance_scope_ids) THEN
+      RAISE EXCEPTION 'pay_finance_payout_notice_queue_commit_stage operation mode received invalid or duplicate remittance scope ids';
+    END IF;
+
+    WITH requested_scope AS (
+      SELECT DISTINCT (scope_element.value #>> '{}')::uuid AS remittance_scope_id
+      FROM jsonb_array_elements(p_remittance_scope_ids) AS scope_element(value)
+      WHERE (scope_element.value #>> '{}') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+    ), selected_scope AS (
+      SELECT scope_row.*
+      FROM public.banking_pay_operation_remittance_scope AS scope_row
+      JOIN requested_scope
+        ON requested_scope.remittance_scope_id = scope_row.id
+      WHERE scope_row.operation_id = p_operation_id
+        AND scope_row.pay_batch_id = p_pay_batch_id
+      FOR UPDATE OF scope_row
+    )
+    SELECT COUNT(*)::integer,
+           COUNT(*) FILTER (WHERE selected_scope.status = 'QUEUED')::integer,
+           COUNT(*) FILTER (WHERE selected_scope.status = 'SKIPPED')::integer,
+           COUNT(*) FILTER (WHERE selected_scope.status = 'FAILED')::integer,
+           COALESCE(jsonb_agg(to_jsonb(selected_scope.id::text) ORDER BY selected_scope.id::text), '[]'::jsonb)
+    INTO v_matched_scope_count,
+         v_already_queued_count,
+         v_skipped_count,
+         v_failed_count,
+         v_operation_scope_ids
+    FROM selected_scope;
+
+    IF v_matched_scope_count <> v_requested_scope_count THEN
+      RAISE EXCEPTION 'pay_finance_payout_notice_queue_commit_stage operation mode one or more remittance scope ids do not belong to operation % and batch %', p_operation_id, p_pay_batch_id;
+    END IF;
+
+    IF v_suppress_remittances = true THEN
+      WITH requested_scope AS (
+        SELECT DISTINCT (scope_element.value #>> '{}')::uuid AS remittance_scope_id
+        FROM jsonb_array_elements(p_remittance_scope_ids) AS scope_element(value)
+        WHERE (scope_element.value #>> '{}') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+      ), skipped_scope AS (
+        UPDATE public.banking_pay_operation_remittance_scope AS scope_update
+        SET status = 'SKIPPED',
+            payload_json = jsonb_strip_nulls(COALESCE(scope_update.payload_json, '{}'::jsonb) || jsonb_build_object(
+              'skip_reason', 'SUPPRESSED_BY_EXECUTION_INTENT',
+              'skipped_at_utc', now()::text
+            )),
+            updated_at_utc = now()
+        FROM requested_scope
+        WHERE scope_update.id = requested_scope.remittance_scope_id
+          AND scope_update.operation_id = p_operation_id
+          AND scope_update.pay_batch_id = p_pay_batch_id
+          AND scope_update.status IN ('PENDING', 'FAILED')
+        RETURNING scope_update.id
+      ), selected_scope_after AS (
+        SELECT scope_row.status
+        FROM public.banking_pay_operation_remittance_scope AS scope_row
+        JOIN requested_scope
+          ON requested_scope.remittance_scope_id = scope_row.id
+        WHERE scope_row.operation_id = p_operation_id
+          AND scope_row.pay_batch_id = p_pay_batch_id
+      )
+      SELECT COUNT(*) FILTER (WHERE selected_scope_after.status = 'QUEUED')::integer,
+             COUNT(*) FILTER (WHERE selected_scope_after.status = 'SKIPPED')::integer,
+             COUNT(*) FILTER (WHERE selected_scope_after.status = 'FAILED')::integer
+      INTO v_already_queued_count,
+           v_skipped_count,
+           v_failed_count
+      FROM selected_scope_after;
+
+      SELECT COUNT(*)::integer
+      INTO v_remaining_count
+      FROM public.banking_pay_operation_remittance_scope AS remaining_scope
+      WHERE remaining_scope.operation_id = p_operation_id
+        AND remaining_scope.pay_batch_id = p_pay_batch_id
+        AND remaining_scope.status = 'PENDING';
+
+      v_has_more := COALESCE(v_remaining_count, 0) > 0;
+
+      UPDATE public.banking_pay_operations AS operation_update
+      SET pay_batch_id = p_pay_batch_id,
+          updated_at_utc = now()
+      WHERE operation_update.id = p_operation_id
+        AND operation_update.pay_batch_id IS NULL;
+
+      RETURN jsonb_build_object(
+        'ok', true,
+        'operation_mode', true,
+        'operation_id', p_operation_id::text,
+        'pay_batch_id', p_pay_batch_id::text,
+        'trigger_status', 'SUPPRESSED_BY_EXECUTION_INTENT',
+        'message_kind', 'PAYOUT_NOTICE',
+        'queued_count', 0,
+        'reused_count', COALESCE(v_already_queued_count, 0),
+        'skipped_count', COALESCE(v_skipped_count, 0),
+        'failed_count', COALESCE(v_failed_count, 0),
+        'remaining', COALESCE(v_remaining_count, 0),
+        'has_more', v_has_more,
+        'dispatch_required', false,
+        'remittance_scope_ids', COALESCE(v_operation_scope_ids, '[]'::jsonb),
+        'job_results', '[]'::jsonb
+      );
+    END IF;
+
+    DROP TABLE IF EXISTS pg_temp.tmp_operation_payout_notice_targets;
+    CREATE TEMPORARY TABLE pg_temp.tmp_operation_payout_notice_targets AS
+    WITH requested_scope AS (
+      SELECT DISTINCT (scope_element.value #>> '{}')::uuid AS remittance_scope_id
+      FROM jsonb_array_elements(p_remittance_scope_ids) AS scope_element(value)
+      WHERE (scope_element.value #>> '{}') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+    ), selected_scope AS (
+      SELECT scope_row.*
+      FROM public.banking_pay_operation_remittance_scope AS scope_row
+      JOIN requested_scope
+        ON requested_scope.remittance_scope_id = scope_row.id
+      WHERE scope_row.operation_id = p_operation_id
+        AND scope_row.pay_batch_id = p_pay_batch_id
+    ), payload_item_ids AS (
+      SELECT selected_scope.id AS remittance_scope_id,
+             (item_element.value #>> '{}')::uuid AS pay_batch_item_id
+      FROM selected_scope
+      CROSS JOIN LATERAL jsonb_array_elements(COALESCE(selected_scope.payload_json->'pay_batch_item_ids', '[]'::jsonb)) AS item_element(value)
+      WHERE (item_element.value #>> '{}') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+    ), eligible_item_rows AS (
+      SELECT
+        selected_scope.id AS remittance_scope_id,
+        selected_scope.status AS scope_status,
+        pbc.id AS pay_batch_candidate_id,
+        pbc.candidate_id,
+        pbi.id AS pay_batch_item_id,
+        pbi.finance_case_id,
+        pbi.item_type,
+        pbi.description,
+        pbi.amount_inc_vat,
+        pbi.amount_ex_vat,
+        pbi.payout_instruction_snapshot_json,
+        pbi.pay_bank_transfer_id,
+        CASE
+          WHEN pbi.item_type = 'LOAN_PAYOUT' THEN 'Payment Advance'
+          WHEN pbi.item_type = 'MANUAL_CREDIT_PAYOUT' THEN 'Manual Credit Adjustment'
+          ELSE COALESCE(NULLIF(BTRIM(COALESCE(pbi.description, '')), ''), 'Payment')
+        END AS item_label,
+        pa_payout.case_type,
+        pa_payout.payout_status,
+        pa_payout.payout_pay_batch_id,
+        pa_payout.payout_transfer_id,
+        pa_payout.adjustment_comment,
+        pa_payout.schedule_json,
+        pa_payout.weekly_due,
+        pa_payout.weeks_total,
+        pa_payout.start_week_start,
+        pa_payout.next_due_week_start,
+        pa_payout.outstanding_amount
+      FROM selected_scope
+      JOIN payload_item_ids
+        ON payload_item_ids.remittance_scope_id = selected_scope.id
+      JOIN public.pay_batch_items AS pbi
+        ON pbi.id = payload_item_ids.pay_batch_item_id
+      JOIN public.pay_batch_candidates AS pbc
+        ON pbc.id = pbi.pay_batch_candidate_id
+       AND pbc.pay_batch_id = p_pay_batch_id
+      LEFT JOIN public.pay_bank_transfers AS pbt_confirm
+        ON pbt_confirm.id = pbi.pay_bank_transfer_id
+       AND pbt_confirm.pay_batch_id = p_pay_batch_id
+      LEFT JOIN public.pay_advances AS pa_payout
+        ON pa_payout.id = pbi.finance_case_id
+      WHERE COALESCE(pbi.is_voided, false) = false
+        AND NOT EXISTS (
+          SELECT 1
+          FROM public.pay_payment_correction_items AS payout_notice_correction
+          WHERE payout_notice_correction.pay_batch_item_id = pbi.id
+            AND payout_notice_correction.status = 'APPLIED'
+            AND payout_notice_correction.correction_item_kind IN ('PRE_BANK_CANCEL','NO_MONEY_UNWIND','SETTLED_REVERSAL')
+        )
+        AND pbi.finance_case_id IS NOT NULL
+        AND pbi.item_type IN ('LOAN_PAYOUT', 'MANUAL_CREDIT_PAYOUT')
+        AND jsonb_typeof(pbi.payout_instruction_snapshot_json) = 'object'
+        AND upper(coalesce(pbi.payout_instruction_snapshot_json->>'routing_kind', '')) = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'
+        AND lower(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'is_candidate_directed_oneoff_payout', 'false'))) IN ('true', '1', 'yes', 'y', 'on')
+        AND lower(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'generates_candidate_payment_advice', 'false'))) IN ('true', '1', 'yes', 'y', 'on')
+        AND (
+          COALESCE(p_only_confirmed, false) = false
+          OR (
+            (
+              (
+                pbi.pay_bank_transfer_id IS NOT NULL
+                AND (
+                  upper(btrim(coalesce(pbt_confirm.status, ''))) = 'COMPLETED'
+                  OR pbt_confirm.completed_at_utc IS NOT NULL
+                )
+              )
+              OR (
+                pbi.pay_bank_transfer_id IS NULL
+                AND (
+                  upper(btrim(coalesce(pbc.settlement_status, ''))) = 'SETTLED'
+                  OR pbc.settled_at_utc IS NOT NULL
+                )
+              )
+            )
+            AND upper(btrim(coalesce(pbt_confirm.status, ''))) NOT IN (
+              'FAILED', 'DECLINED', 'REJECTED', 'CANCELLED', 'CANCELED',
+              'SUBMISSION_FAILED', 'FAILED_BEFORE_COMMIT', 'RETURNED',
+              'REVERTED', 'VOIDED', 'PENDING', 'PROCESSING', 'UNKNOWN', 'BLOCKED'
+            )
+            AND upper(btrim(coalesce(pa_payout.payout_status::text, ''))) = 'PAID'
+            AND (
+              pa_payout.payout_pay_batch_id = p_pay_batch_id
+              OR pa_payout.payout_transfer_id = pbi.pay_bank_transfer_id
+            )
+          )
+        )
+    ), grouped_targets AS (
+      SELECT
+        selected_scope.id AS remittance_scope_id,
+        selected_scope.status,
+        selected_scope.candidate_id,
+        candidate_row.email AS recipient_email,
+        candidate_row.display_name AS recipient_name,
+        'payout_notice:pay_batch:' || p_pay_batch_id::text || ':scope:' || selected_scope.id::text || ':candidate:' || COALESCE(selected_scope.candidate_id::text, 'UNKNOWN') AS deterministic_outbox_key,
+        COUNT(eligible_item_rows.pay_batch_item_id)::integer AS eligible_item_count,
+        ROUND(COALESCE(SUM(COALESCE(eligible_item_rows.amount_inc_vat, eligible_item_rows.amount_ex_vat, 0)), 0), 2) AS total_amount,
+        COALESCE(jsonb_agg(
+          jsonb_strip_nulls(jsonb_build_object(
+            'pay_batch_item_id', eligible_item_rows.pay_batch_item_id::text,
+            'finance_case_id', eligible_item_rows.finance_case_id::text,
+            'item_type', eligible_item_rows.item_type,
+            'label', eligible_item_rows.item_label,
+            'amount', ROUND(COALESCE(eligible_item_rows.amount_inc_vat, eligible_item_rows.amount_ex_vat, 0), 2),
+            'amount_ex_vat', ROUND(COALESCE(eligible_item_rows.amount_ex_vat, 0), 2),
+            'pay_bank_transfer_id', CASE WHEN eligible_item_rows.pay_bank_transfer_id IS NULL THEN NULL ELSE eligible_item_rows.pay_bank_transfer_id::text END,
+            'case_type', CASE WHEN eligible_item_rows.case_type IS NULL THEN NULL ELSE eligible_item_rows.case_type::text END,
+            'adjustment_comment', eligible_item_rows.adjustment_comment,
+            'repayment_arrangement', CASE
+              WHEN eligible_item_rows.item_type = 'LOAN_PAYOUT' THEN jsonb_build_object(
+                'weekly_due', eligible_item_rows.weekly_due,
+                'weeks_total', eligible_item_rows.weeks_total,
+                'start_week_start', CASE WHEN eligible_item_rows.start_week_start IS NULL THEN NULL ELSE eligible_item_rows.start_week_start::text END,
+                'next_due_week_start', CASE WHEN eligible_item_rows.next_due_week_start IS NULL THEN NULL ELSE eligible_item_rows.next_due_week_start::text END,
+                'schedule_json', COALESCE(eligible_item_rows.schedule_json, '[]'::jsonb),
+                'remaining_outstanding_amount', eligible_item_rows.outstanding_amount
+              )
+              ELSE NULL
+            END
+          )) ORDER BY eligible_item_rows.pay_batch_item_id::text
+        ) FILTER (WHERE eligible_item_rows.pay_batch_item_id IS NOT NULL), '[]'::jsonb) AS items_json,
+        selected_scope.payload_json
+      FROM selected_scope
+      LEFT JOIN public.candidates AS candidate_row
+        ON candidate_row.id = selected_scope.candidate_id
+      LEFT JOIN eligible_item_rows
+        ON eligible_item_rows.remittance_scope_id = selected_scope.id
+      GROUP BY selected_scope.id,
+               selected_scope.status,
+               selected_scope.candidate_id,
+               candidate_row.email,
+               candidate_row.display_name,
+               selected_scope.payload_json
+    )
+    SELECT *
+    FROM grouped_targets;
+
+    WITH skipped_not_queueable AS (
+      UPDATE public.banking_pay_operation_remittance_scope AS scope_update
+      SET status = 'SKIPPED',
+          payload_json = jsonb_strip_nulls(COALESCE(scope_update.payload_json, '{}'::jsonb) || jsonb_build_object(
+            'skip_reason', CASE
+              WHEN NULLIF(BTRIM(COALESCE(target_row.recipient_email, '')), '') IS NULL THEN 'MISSING_PAYOUT_NOTICE_RECIPIENT_EMAIL'
+              ELSE 'NO_ELIGIBLE_PAYOUT_NOTICE_ITEMS'
+            END,
+            'skipped_at_utc', now()::text
+          )),
+          updated_at_utc = now()
+      FROM pg_temp.tmp_operation_payout_notice_targets AS target_row
+      WHERE scope_update.id = target_row.remittance_scope_id
+        AND scope_update.operation_id = p_operation_id
+        AND scope_update.pay_batch_id = p_pay_batch_id
+        AND scope_update.status IN ('PENDING', 'FAILED')
+        AND (
+          NULLIF(BTRIM(COALESCE(target_row.recipient_email, '')), '') IS NULL
+          OR COALESCE(target_row.eligible_item_count, 0) = 0
+        )
+      RETURNING scope_update.id
+    )
+    SELECT COUNT(*)::integer
+    INTO v_skipped_count
+    FROM skipped_not_queueable;
+
+    WITH valid_targets AS (
+      SELECT target_row.*,
+             CASE
+               WHEN target_row.eligible_item_count = 1
+                AND target_row.items_json->0->>'label' = 'Payment Advance' THEN 'Payment Advance scheduled'
+               WHEN target_row.eligible_item_count = 1
+                AND target_row.items_json->0->>'label' = 'Manual Credit Adjustment' THEN 'Manual Credit Adjustment scheduled'
+               ELSE 'Payment scheduled'
+             END AS subject_text,
+             CASE
+               WHEN target_row.eligible_item_count = 1
+                AND target_row.items_json->0->>'label' = 'Payment Advance' THEN 'A Payment Advance has been scheduled.'
+               WHEN target_row.eligible_item_count = 1
+                AND target_row.items_json->0->>'label' = 'Manual Credit Adjustment' THEN 'A Manual Credit Adjustment has been scheduled.'
+               ELSE 'A payment has been scheduled.'
+             END AS body_intro
+      FROM pg_temp.tmp_operation_payout_notice_targets AS target_row
+      WHERE target_row.status IN ('PENDING', 'FAILED')
+        AND NULLIF(BTRIM(COALESCE(target_row.recipient_email, '')), '') IS NOT NULL
+        AND COALESCE(target_row.eligible_item_count, 0) > 0
+    ), upserted_outbox AS (
+      INSERT INTO public.mail_outbox AS mail_insert (
+        type,
+        "to",
+        cc,
+        subject,
+        body_html,
+        body_text,
+        attachments,
+        status,
+        created_at_utc,
+        created_by,
+        reference,
+        recipient_kind,
+        recipient_id,
+        context_kind,
+        context_id,
+        email_type,
+        importance,
+        scheduled_for_utc,
+        next_attempt_at_utc,
+        payment_scope_json,
+        deterministic_outbox_key
+      )
+      SELECT
+        'REMITTANCE',
+        valid_targets.recipient_email,
+        NULL::text,
+        valid_targets.subject_text,
+        '<pre>' || valid_targets.body_intro || E'
+
+Total amount: £' || COALESCE(valid_targets.total_amount::text, '0.00') || E'
+
+This payout notice was generated from frozen CloudTMS payment batch artefacts.</pre>',
+        valid_targets.body_intro || E'
+
+Total amount: £' || COALESCE(valid_targets.total_amount::text, '0.00') || E'
+
+This payout notice was generated from frozen CloudTMS payment batch artefacts.',
+        '[]'::jsonb,
+        'QUEUED'::public.mail_status_enum,
+        now(),
+        p_actor_user_id,
+        valid_targets.deterministic_outbox_key,
+        'candidate',
+        valid_targets.candidate_id,
+        'pay_batches',
+        p_pay_batch_id,
+        'html',
+        'Normal',
+        now(),
+        now(),
+        jsonb_strip_nulls(COALESCE(valid_targets.payload_json, '{}'::jsonb) || jsonb_build_object(
+          'notice_scope', 'PAYOUT_NOTICE_CANDIDATE',
+          'pay_batch_id', p_pay_batch_id::text,
+          'operation_id', p_operation_id::text,
+          'remittance_scope_id', valid_targets.remittance_scope_id::text,
+          'candidate_id', CASE WHEN valid_targets.candidate_id IS NULL THEN NULL ELSE valid_targets.candidate_id::text END,
+          'deterministic_outbox_key', valid_targets.deterministic_outbox_key,
+          'items', valid_targets.items_json,
+          'total_amount', valid_targets.total_amount,
+          'message_kind', 'PAYOUT_NOTICE'
+        )),
+        valid_targets.deterministic_outbox_key
+      FROM valid_targets
+      ON CONFLICT (deterministic_outbox_key)
+      DO UPDATE
+      SET status = CASE WHEN mail_insert.status::text = 'FAILED' THEN 'QUEUED'::public.mail_status_enum ELSE mail_insert.status END,
+          last_error = CASE WHEN mail_insert.status::text = 'FAILED' THEN NULL ELSE mail_insert.last_error END,
+          failed_at = CASE WHEN mail_insert.status::text = 'FAILED' THEN NULL ELSE mail_insert.failed_at END,
+          next_attempt_at_utc = CASE WHEN mail_insert.status::text = 'FAILED' THEN now() ELSE mail_insert.next_attempt_at_utc END,
+          payment_scope_json = CASE WHEN mail_insert.status::text = 'SENT' THEN mail_insert.payment_scope_json ELSE EXCLUDED.payment_scope_json END
+      RETURNING mail_insert.id,
+                mail_insert.deterministic_outbox_key,
+                (xmax = 0) AS was_inserted
+    ), updated_scope AS (
+      UPDATE public.banking_pay_operation_remittance_scope AS scope_update
+      SET status = 'QUEUED',
+          outbox_id = upserted_outbox.id,
+          payload_json = jsonb_strip_nulls(COALESCE(scope_update.payload_json, '{}'::jsonb) || jsonb_build_object(
+            'payout_notice_outbox_key', upserted_outbox.deterministic_outbox_key,
+            'payout_notice_queued_at_utc', now()::text
+          )),
+          updated_at_utc = now()
+      FROM upserted_outbox
+      JOIN pg_temp.tmp_operation_payout_notice_targets AS target_row
+        ON target_row.deterministic_outbox_key = upserted_outbox.deterministic_outbox_key
+      WHERE scope_update.operation_id = p_operation_id
+        AND scope_update.pay_batch_id = p_pay_batch_id
+        AND scope_update.id = target_row.remittance_scope_id
+        AND scope_update.status IN ('PENDING', 'FAILED')
+      RETURNING scope_update.id,
+                upserted_outbox.id AS outbox_id,
+                upserted_outbox.deterministic_outbox_key,
+                upserted_outbox.was_inserted
+    )
+    SELECT COUNT(*) FILTER (WHERE updated_scope.was_inserted)::integer,
+           COUNT(*) FILTER (WHERE updated_scope.was_inserted IS NOT TRUE)::integer,
+           COALESCE(jsonb_agg(jsonb_build_object(
+             'remittance_scope_id', updated_scope.id::text,
+             'deterministic_outbox_key', updated_scope.deterministic_outbox_key,
+             'outbox_id', updated_scope.outbox_id::text,
+             'queued', true,
+             'reused', (updated_scope.was_inserted IS NOT TRUE)
+           ) ORDER BY updated_scope.id::text), '[]'::jsonb)
+    INTO v_inserted_outbox_count,
+         v_reused_outbox_count,
+         v_operation_job_results
+    FROM updated_scope;
+
+    WITH requested_scope AS (
+      SELECT DISTINCT (scope_element.value #>> '{}')::uuid AS remittance_scope_id
+      FROM jsonb_array_elements(p_remittance_scope_ids) AS scope_element(value)
+      WHERE (scope_element.value #>> '{}') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+    ), selected_scope_after AS (
+      SELECT scope_row.status
+      FROM public.banking_pay_operation_remittance_scope AS scope_row
+      JOIN requested_scope
+        ON requested_scope.remittance_scope_id = scope_row.id
+      WHERE scope_row.operation_id = p_operation_id
+        AND scope_row.pay_batch_id = p_pay_batch_id
+    )
+    SELECT COUNT(*) FILTER (WHERE selected_scope_after.status = 'SKIPPED')::integer,
+           COUNT(*) FILTER (WHERE selected_scope_after.status = 'FAILED')::integer
+    INTO v_skipped_count,
+         v_failed_count
+    FROM selected_scope_after;
+
+    SELECT COUNT(*)::integer
+    INTO v_remaining_count
+    FROM public.banking_pay_operation_remittance_scope AS remaining_scope
+    WHERE remaining_scope.operation_id = p_operation_id
+      AND remaining_scope.pay_batch_id = p_pay_batch_id
+      AND remaining_scope.status = 'PENDING';
+
+    v_has_more := COALESCE(v_remaining_count, 0) > 0;
+
+    UPDATE public.banking_pay_operations AS operation_update
+    SET pay_batch_id = p_pay_batch_id,
+        updated_at_utc = now()
+    WHERE operation_update.id = p_operation_id
+      AND operation_update.pay_batch_id IS NULL;
+
+    RETURN jsonb_build_object(
+      'ok', true,
+      'operation_mode', true,
+      'operation_id', p_operation_id::text,
+      'pay_batch_id', p_pay_batch_id::text,
+      'trigger_status', CASE WHEN COALESCE(v_inserted_outbox_count, 0) + COALESCE(v_reused_outbox_count, 0) + COALESCE(v_already_queued_count, 0) > 0 THEN 'PAYOUT_NOTICE_QUEUE_CHUNK_PROCESSED' ELSE 'NO_QUEUEABLE_PAYOUT_NOTICE_SCOPE' END,
+      'message_kind', 'PAYOUT_NOTICE',
+      'queued_count', COALESCE(v_inserted_outbox_count, 0),
+      'reused_count', COALESCE(v_reused_outbox_count, 0) + COALESCE(v_already_queued_count, 0),
+      'skipped_count', COALESCE(v_skipped_count, 0),
+      'failed_count', COALESCE(v_failed_count, 0),
+      'remaining', COALESCE(v_remaining_count, 0),
+      'has_more', v_has_more,
+      'dispatch_required', (COALESCE(v_inserted_outbox_count, 0) + COALESCE(v_reused_outbox_count, 0) > 0),
+      'remittance_scope_ids', COALESCE(v_operation_scope_ids, '[]'::jsonb),
+      'job_results', COALESCE(v_operation_job_results, '[]'::jsonb)
+    );
+  END IF;
+
   if v_suppress_remittances = true then
     return jsonb_build_object(
       'ok', true,
@@ -25350,6 +25879,85 @@ begin
       'jobs', '[]'::jsonb
     );
   end if;
+
+  SELECT COUNT(DISTINCT legacy_candidate_count.candidate_id)::integer
+  INTO v_legacy_scope_count
+  FROM public.pay_batch_candidates AS legacy_candidate_count
+  JOIN public.pay_batch_items AS legacy_payout_item
+    ON legacy_payout_item.pay_batch_candidate_id = legacy_candidate_count.id
+  LEFT JOIN public.pay_bank_transfers AS legacy_transfer_confirm
+    ON legacy_transfer_confirm.id = legacy_payout_item.pay_bank_transfer_id
+   AND legacy_transfer_confirm.pay_batch_id = p_pay_batch_id
+  LEFT JOIN public.pay_advances AS legacy_payout_case
+    ON legacy_payout_case.id = legacy_payout_item.finance_case_id
+  WHERE legacy_candidate_count.pay_batch_id = p_pay_batch_id
+    AND COALESCE(legacy_payout_item.is_voided, false) = false
+    AND legacy_payout_item.finance_case_id IS NOT NULL
+    AND legacy_payout_item.item_type IN ('LOAN_PAYOUT', 'MANUAL_CREDIT_PAYOUT')
+    AND jsonb_typeof(legacy_payout_item.payout_instruction_snapshot_json) = 'object'
+    AND upper(coalesce(legacy_payout_item.payout_instruction_snapshot_json->>'routing_kind', '')) = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'
+    AND lower(btrim(coalesce(legacy_payout_item.payout_instruction_snapshot_json->>'is_candidate_directed_oneoff_payout', 'false'))) IN ('true', '1', 'yes', 'y', 'on')
+    AND lower(btrim(coalesce(legacy_payout_item.payout_instruction_snapshot_json->>'generates_candidate_payment_advice', 'false'))) IN ('true', '1', 'yes', 'y', 'on')
+    AND NOT EXISTS (
+      SELECT 1
+      FROM public.pay_payment_correction_items AS legacy_payout_notice_correction
+      WHERE legacy_payout_notice_correction.pay_batch_item_id = legacy_payout_item.id
+        AND legacy_payout_notice_correction.status = 'APPLIED'
+        AND legacy_payout_notice_correction.correction_item_kind IN ('PRE_BANK_CANCEL','NO_MONEY_UNWIND','SETTLED_REVERSAL')
+    )
+    AND (
+      COALESCE(p_only_confirmed, false) = false
+      OR (
+        (
+          (
+            legacy_payout_item.pay_bank_transfer_id IS NOT NULL
+            AND (
+              upper(btrim(coalesce(legacy_transfer_confirm.status, ''))) = 'COMPLETED'
+              OR legacy_transfer_confirm.completed_at_utc IS NOT NULL
+            )
+          )
+          OR (
+            legacy_payout_item.pay_bank_transfer_id IS NULL
+            AND (
+              upper(btrim(coalesce(legacy_candidate_count.settlement_status, ''))) = 'SETTLED'
+              OR legacy_candidate_count.settled_at_utc IS NOT NULL
+            )
+          )
+        )
+        AND upper(btrim(coalesce(legacy_transfer_confirm.status, ''))) NOT IN (
+          'FAILED',
+          'DECLINED',
+          'REJECTED',
+          'CANCELLED',
+          'CANCELED',
+          'SUBMISSION_FAILED',
+          'FAILED_BEFORE_COMMIT',
+          'RETURNED',
+          'REVERTED',
+          'VOIDED',
+          'PENDING',
+          'PROCESSING',
+          'UNKNOWN',
+          'BLOCKED'
+        )
+        AND upper(btrim(coalesce(legacy_payout_case.payout_status::text, ''))) = 'PAID'
+        AND (
+          legacy_payout_case.payout_pay_batch_id = p_pay_batch_id
+          OR legacy_payout_case.payout_transfer_id = legacy_payout_item.pay_bank_transfer_id
+        )
+      )
+    );
+
+  IF COALESCE(v_legacy_scope_count, 0) > 250 THEN
+    RAISE EXCEPTION '%', jsonb_build_object(
+      'error', 'PAY_FINANCE_PAYOUT_NOTICE_QUEUE_COMMIT_STAGE_OPERATION_REQUIRED',
+      'code', 'PAYOUT_NOTICE_OPERATION_REQUIRED',
+      'message', 'pay_finance_payout_notice_queue_commit_stage legacy mode is limited to small batches; use the scalable remittance/payout notice operation for this payment batch.',
+      'pay_batch_id', p_pay_batch_id::text,
+      'candidate_count', v_legacy_scope_count,
+      'legacy_safe_threshold', 250
+    )::text;
+  END IF;
 
   drop table if exists pg_temp.tmp_payout_notice_target_candidates;
   create temporary table pg_temp.tmp_payout_notice_target_candidates(
@@ -26028,6 +26636,8 @@ EXCEPTION
     RAISE;
 end;
 $function$;
+
+
 
 
 
