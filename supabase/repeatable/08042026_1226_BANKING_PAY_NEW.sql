@@ -19186,6 +19186,9 @@ $function$;
 
 
 
+
+DROP FUNCTION IF EXISTS public.pay_workbench_session_open(uuid, date, date, jsonb, text);
+
 CREATE OR REPLACE FUNCTION public.pay_workbench_session_open(p_actor_user_id uuid, p_pay_date date, p_week_ending_cutoff date, p_filters_json jsonb, p_session_signature text)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -19251,6 +19254,12 @@ DECLARE
   v_snapshot_hidden_recovery_template_projection_version integer := 0;
   v_snapshot_has_visible_paye_manual_debt_net_deduct boolean := false;
   v_snapshot_has_matching_hidden_paye_manual_debt_template boolean := false;
+  v_open_progress_json jsonb := '{}'::jsonb;
+  v_open_ready_flag boolean := false;
+  v_open_total_count integer := 0;
+  v_open_completed_count integer := 0;
+  v_open_pending_count integer := 0;
+  v_open_failed_count integer := 0;
 BEGIN
   IF p_actor_user_id IS NULL THEN
     RAISE EXCEPTION 'actor_user_id is required';
@@ -19933,6 +19942,34 @@ BEGIN
     p_actor_user_id
   );
 
+
+  v_open_progress_json := public.pay_workbench_session_get_progress(v_session_id);
+
+  v_open_ready_flag := CASE
+    WHEN lower(COALESCE(v_open_progress_json->>'ready_flag', '')) IN ('true', 'false') THEN (v_open_progress_json->>'ready_flag')::boolean
+    ELSE false
+  END;
+
+  v_open_total_count := COALESCE(
+    CASE WHEN COALESCE(v_open_progress_json->>'total_count', '') ~ '^[0-9]+$' THEN (v_open_progress_json->>'total_count')::integer ELSE NULL::integer END,
+    COALESCE(array_length(v_scope_candidate_ids, 1), 0)
+  );
+
+  v_open_completed_count := COALESCE(
+    CASE WHEN COALESCE(v_open_progress_json->>'completed_count', '') ~ '^[0-9]+$' THEN (v_open_progress_json->>'completed_count')::integer ELSE NULL::integer END,
+    0
+  );
+
+  v_open_pending_count := COALESCE(
+    CASE WHEN COALESCE(v_open_progress_json->>'pending_count', '') ~ '^[0-9]+$' THEN (v_open_progress_json->>'pending_count')::integer ELSE NULL::integer END,
+    0
+  );
+
+  v_open_failed_count := COALESCE(
+    CASE WHEN COALESCE(v_open_progress_json->>'failed_count', '') ~ '^[0-9]+$' THEN (v_open_progress_json->>'failed_count')::integer ELSE NULL::integer END,
+    0
+  );
+
   RETURN jsonb_build_object(
     'ok', true,
     'session_id', v_session_id::text,
@@ -19941,6 +19978,31 @@ BEGIN
     'pay_date', v_effective_pay_date::text,
     'scope_candidate_ids', to_jsonb(COALESCE(v_scope_candidate_ids, ARRAY[]::uuid[])),
     'scope_candidate_count', COALESCE(array_length(v_scope_candidate_ids, 1), 0),
+    'ready', v_open_ready_flag,
+    'ready_flag', v_open_ready_flag,
+    'total_count', v_open_total_count,
+    'completed_count', v_open_completed_count,
+    'pending_count', v_open_pending_count,
+    'failed_count', v_open_failed_count,
+    'candidate_counts', jsonb_build_object(
+      'total', v_open_total_count,
+      'ready', COALESCE(CASE WHEN COALESCE(v_open_progress_json->>'ready_count', '') ~ '^[0-9]+$' THEN (v_open_progress_json->>'ready_count')::integer ELSE NULL::integer END, 0),
+      'pending', v_open_pending_count,
+      'failed', v_open_failed_count
+    ),
+    'job_counts', jsonb_build_object(
+      'pending', COALESCE(jsonb_array_length(CASE WHEN jsonb_typeof(COALESCE(v_open_progress_json->'pending_job_ids', '[]'::jsonb)) = 'array' THEN COALESCE(v_open_progress_json->'pending_job_ids', '[]'::jsonb) ELSE '[]'::jsonb END), 0)
+    ),
+    'progress_summary', jsonb_build_object(
+      'phase', COALESCE(v_open_progress_json->>'phase', CASE WHEN v_open_ready_flag THEN 'READY' ELSE 'REFRESHING_CANDIDATES' END),
+      'status_text', COALESCE(v_open_progress_json->>'status_text', CASE WHEN v_open_ready_flag THEN 'Payment preview is ready.' ELSE 'Preparing payment preview.' END),
+      'ready_flag', v_open_ready_flag,
+      'total_count', v_open_total_count,
+      'completed_count', v_open_completed_count,
+      'pending_count', v_open_pending_count,
+      'failed_count', v_open_failed_count
+    ),
+    'progress', v_open_progress_json,
     'action', v_action,
     'session_version', v_session_version,
     'week_ending_cutoff', v_effective_week_ending_cutoff::text,
@@ -19950,6 +20012,14 @@ BEGIN
   );
 END;
 $function$;
+
+
+
+
+
+
+
+DROP FUNCTION IF EXISTS public.pay_workbench_session_get_preview(uuid);
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_session_get_preview(
   p_session_id uuid
@@ -19982,6 +20052,12 @@ DECLARE
   v_required_projection_version integer := 0;
   v_required_hidden_recovery_template_projection_version integer := 0;
   v_requires_hidden_recovery_templates boolean := false;
+  v_progress_json jsonb := '{}'::jsonb;
+  v_progress_ready_flag boolean := false;
+  v_preview_page_size integer := 100;
+  v_safe_full_preview_line_threshold integer := 2000;
+  v_bootstrap_preview_line_count integer := 0;
+  v_bootstrap_candidate_count integer := 0;
 BEGIN
   IF p_session_id IS NULL THEN
     RAISE EXCEPTION 'session_id is required';
@@ -20038,6 +20114,75 @@ BEGIN
   IF BTRIM(COALESCE(v_session_row.filters_json->>'client_id', v_session_row.filters_json->>'clientId', '')) ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
     v_filter_client_id := COALESCE(v_session_row.filters_json->>'client_id', v_session_row.filters_json->>'clientId')::uuid;
   END IF;
+
+  v_progress_json := public.pay_workbench_session_get_progress(p_session_id);
+  v_progress_ready_flag := CASE
+    WHEN lower(COALESCE(v_progress_json->>'ready_flag', '')) IN ('true', 'false') THEN (v_progress_json->>'ready_flag')::boolean
+    ELSE false
+  END;
+
+  IF v_progress_ready_flag IS NOT TRUE THEN
+    RETURN jsonb_build_object(
+      'ok', true,
+      'progress_only', true,
+      'ready', false,
+      'ready_flag', false,
+      'session_id', p_session_id::text,
+      'snapshot_run_id', CASE WHEN v_session_row.source_snapshot_run_id IS NULL THEN NULL ELSE v_session_row.source_snapshot_run_id::text END,
+      'source_snapshot_run_id', CASE WHEN v_session_row.source_snapshot_run_id IS NULL THEN NULL ELSE v_session_row.source_snapshot_run_id::text END,
+      'session_version', v_session_row.version,
+      'session_signature', v_session_row.session_signature,
+      'progress', v_progress_json,
+      'phase', COALESCE(v_progress_json->>'phase', 'REFRESHING_CANDIDATES'),
+      'status_text', COALESCE(v_progress_json->>'status_text', 'Preparing payment preview candidates.'),
+      'total_count', COALESCE(CASE WHEN COALESCE(v_progress_json->>'total_count', '') ~ '^[0-9]+$' THEN (v_progress_json->>'total_count')::integer ELSE NULL::integer END, 0),
+      'completed_count', COALESCE(CASE WHEN COALESCE(v_progress_json->>'completed_count', '') ~ '^[0-9]+$' THEN (v_progress_json->>'completed_count')::integer ELSE NULL::integer END, 0),
+      'pending_count', COALESCE(CASE WHEN COALESCE(v_progress_json->>'pending_count', '') ~ '^[0-9]+$' THEN (v_progress_json->>'pending_count')::integer ELSE NULL::integer END, 0),
+      'failed_count', COALESCE(CASE WHEN COALESCE(v_progress_json->>'failed_count', '') ~ '^[0-9]+$' THEN (v_progress_json->>'failed_count')::integer ELSE NULL::integer END, 0),
+      'pending_candidate_ids', COALESCE(v_progress_json->'pending_candidate_ids', '[]'::jsonb),
+      'failed_candidate_ids', COALESCE(v_progress_json->'failed_candidate_ids', '[]'::jsonb),
+      'session', jsonb_build_object(
+        'id', v_session_row.id::text,
+        'session_id', v_session_row.id::text,
+        'pay_date', v_session_row.pay_date::text,
+        'week_ending_cutoff', v_session_row.week_ending_cutoff::text,
+        'week_ending_cutoff_date', v_session_row.week_ending_cutoff::text,
+        'snapshot_run_id', CASE WHEN v_session_row.source_snapshot_run_id IS NULL THEN NULL ELSE v_session_row.source_snapshot_run_id::text END,
+        'source_snapshot_run_id', CASE WHEN v_session_row.source_snapshot_run_id IS NULL THEN NULL ELSE v_session_row.source_snapshot_run_id::text END,
+        'session_version', v_session_row.version,
+        'session_signature', v_session_row.session_signature,
+        'server_selected_preview_row_ids', COALESCE(v_session_row.server_selected_preview_row_ids, '[]'::jsonb),
+        'server_selected_preview_row_ids_provided', COALESCE(v_session_row.server_selected_preview_row_ids_provided, false)
+      ),
+      'workbench', jsonb_build_object(
+        'session_id', v_session_row.id::text,
+        'pay_date', v_session_row.pay_date::text,
+        'week_ending_cutoff', v_session_row.week_ending_cutoff::text,
+        'week_ending_cutoff_date', v_session_row.week_ending_cutoff::text,
+        'snapshot_run_id', CASE WHEN v_session_row.source_snapshot_run_id IS NULL THEN NULL ELSE v_session_row.source_snapshot_run_id::text END,
+        'source_snapshot_run_id', CASE WHEN v_session_row.source_snapshot_run_id IS NULL THEN NULL ELSE v_session_row.source_snapshot_run_id::text END,
+        'session_version', v_session_row.version,
+        'session_signature', v_session_row.session_signature,
+        'server_selected_preview_row_ids', COALESCE(v_session_row.server_selected_preview_row_ids, '[]'::jsonb),
+        'server_selected_preview_row_ids_provided', COALESCE(v_session_row.server_selected_preview_row_ids_provided, false)
+      )
+    );
+  END IF;
+
+  SELECT COALESCE(config_row.default_chunk_size, 100)
+  INTO v_preview_page_size
+  FROM public.banking_pay_operation_config AS config_row
+  WHERE config_row.enabled = true
+    AND config_row.chunk_type = 'PREVIEW_PAGE'
+    AND config_row.operation_type IN ('PREVIEW_REFRESH', 'ALL')
+  ORDER BY
+    CASE WHEN config_row.operation_type = 'PREVIEW_REFRESH' THEN 0 ELSE 1 END,
+    CASE WHEN config_row.phase = 'PAGE' THEN 0 WHEN config_row.phase = 'ALL' THEN 1 ELSE 2 END,
+    config_row.updated_at_utc DESC
+  LIMIT 1;
+
+  v_preview_page_size := COALESCE(v_preview_page_size, 100);
+  v_safe_full_preview_line_threshold := GREATEST(v_preview_page_size * 20, 1000);
 
   v_context_json := public.pay_preview_build_context(
     p_pay_date => v_session_row.pay_date,
@@ -20156,6 +20301,85 @@ BEGIN
           )
       )
     );
+
+  SELECT
+    COALESCE(count(*), 0)::integer,
+    COALESCE(sum(
+      CASE
+        WHEN jsonb_typeof(selected_workbench_candidate_state.canonical_preview_lines_json) = 'array'
+          THEN jsonb_array_length(selected_workbench_candidate_state.canonical_preview_lines_json)
+        ELSE 0
+      END
+    ), 0)::integer
+  INTO v_bootstrap_candidate_count, v_bootstrap_preview_line_count
+  FROM selected_workbench_candidate_state;
+
+  IF v_bootstrap_preview_line_count > v_safe_full_preview_line_threshold THEN
+    RETURN jsonb_build_object(
+      'ok', true,
+      'ready', true,
+      'ready_flag', true,
+      'progress_only', false,
+      'bootstrap_only', true,
+      'requires_paging', true,
+      'preview_page_rpc', 'pay_workbench_session_get_preview_page',
+      'session_id', p_session_id::text,
+      'snapshot_run_id', CASE WHEN v_session_row.source_snapshot_run_id IS NULL THEN NULL ELSE v_session_row.source_snapshot_run_id::text END,
+      'source_snapshot_run_id', CASE WHEN v_session_row.source_snapshot_run_id IS NULL THEN NULL ELSE v_session_row.source_snapshot_run_id::text END,
+      'session_version', v_session_row.version,
+      'session_signature', v_session_row.session_signature,
+      'candidate_count', v_bootstrap_candidate_count,
+      'canonical_preview_line_count', v_bootstrap_preview_line_count,
+      'safe_full_preview_line_threshold', v_safe_full_preview_line_threshold,
+      'page_size', v_preview_page_size,
+      'page_count', CEIL(v_bootstrap_preview_line_count::numeric / GREATEST(v_preview_page_size, 1)::numeric)::integer,
+      'progress', v_progress_json,
+      'summary', jsonb_build_object(
+        'candidate_count', v_bootstrap_candidate_count,
+        'canonical_preview_line_count', v_bootstrap_preview_line_count,
+        'requires_paging', true
+      ),
+      'session', jsonb_build_object(
+        'id', v_session_row.id::text,
+        'session_id', v_session_row.id::text,
+        'pay_date', v_session_row.pay_date::text,
+        'pay_week_start', v_context_json->>'pay_week_start',
+        'week_ending_cutoff', v_session_row.week_ending_cutoff::text,
+        'week_ending_cutoff_date', v_session_row.week_ending_cutoff::text,
+        'snapshot_run_id', CASE WHEN v_session_row.source_snapshot_run_id IS NULL THEN NULL ELSE v_session_row.source_snapshot_run_id::text END,
+        'source_snapshot_run_id', CASE WHEN v_session_row.source_snapshot_run_id IS NULL THEN NULL ELSE v_session_row.source_snapshot_run_id::text END,
+        'session_version', v_session_row.version,
+        'session_signature', v_session_row.session_signature,
+        'server_selected_preview_row_ids', COALESCE(v_session_row.server_selected_preview_row_ids, '[]'::jsonb),
+        'server_selected_preview_row_ids_provided', COALESCE(v_session_row.server_selected_preview_row_ids_provided, false)
+      ),
+      'workbench', jsonb_build_object(
+        'session_id', v_session_row.id::text,
+        'pay_date', v_session_row.pay_date::text,
+        'pay_week_start', v_context_json->>'pay_week_start',
+        'week_ending_cutoff', v_session_row.week_ending_cutoff::text,
+        'week_ending_cutoff_date', v_session_row.week_ending_cutoff::text,
+        'snapshot_run_id', CASE WHEN v_session_row.source_snapshot_run_id IS NULL THEN NULL ELSE v_session_row.source_snapshot_run_id::text END,
+        'source_snapshot_run_id', CASE WHEN v_session_row.source_snapshot_run_id IS NULL THEN NULL ELSE v_session_row.source_snapshot_run_id::text END,
+        'session_version', v_session_row.version,
+        'session_signature', v_session_row.session_signature,
+        'server_selected_preview_row_ids', COALESCE(v_session_row.server_selected_preview_row_ids, '[]'::jsonb),
+        'server_selected_preview_row_ids_provided', COALESCE(v_session_row.server_selected_preview_row_ids_provided, false)
+      ),
+      'server_selected_preview_row_ids', COALESCE(v_session_row.server_selected_preview_row_ids, '[]'::jsonb),
+      'server_selected_preview_row_ids_provided', COALESCE(v_session_row.server_selected_preview_row_ids_provided, false),
+      'paye_candidates', '[]'::jsonb,
+      'non_paye_payees', '[]'::jsonb,
+      'canonical_preview_lines', '[]'::jsonb,
+      'case_resolution_states', '[]'::jsonb,
+      'payees', '[]'::jsonb,
+      'itemisation', '[]'::jsonb,
+      'blocked_items', '[]'::jsonb,
+      'do_not_pay_items', '[]'::jsonb,
+      'snoozed_items', '[]'::jsonb,
+      'baseline_component_rows', '[]'::jsonb
+    );
+  END IF;
 
   SELECT COALESCE(
            jsonb_agg(selected_workbench_candidate_state.paye_candidate_json ORDER BY BTRIM(COALESCE(selected_workbench_candidate_state.paye_candidate_json->>'display_name', selected_workbench_candidate_state.paye_candidate_json->>'candidate_name', '')), BTRIM(COALESCE(selected_workbench_candidate_state.paye_candidate_json->>'tms_ref', '')), BTRIM(COALESCE(selected_workbench_candidate_state.paye_candidate_json->>'candidate_id', ''))),
@@ -20599,6 +20823,13 @@ BEGIN
   FROM latest_session_candidate_state;
 
   RETURN jsonb_build_object(
+    'ok', true,
+    'ready', true,
+    'ready_flag', true,
+    'progress_only', false,
+    'bootstrap_only', false,
+    'requires_paging', false,
+    'progress', v_progress_json,
     'pay_date', v_context_json->'pay_date',
     'pay_week_start', v_context_json->'pay_week_start',
     'week_ending_cutoff_date', v_context_json->'week_ending_cutoff_date',
@@ -20658,6 +20889,7 @@ BEGIN
   );
 END;
 $function$;
+
 
 
 
@@ -31231,10 +31463,8 @@ END;
 $function$;
 
 
-
-
-
-
+DROP FUNCTION IF EXISTS public.pay_create_draft_batch(date, date, text, uuid, jsonb, uuid, uuid, uuid[], text, public.pay_override_mode_enum);
+DROP FUNCTION IF EXISTS public.pay_create_draft_batch(date, date, text, uuid, jsonb, uuid, uuid, uuid[], text, public.pay_override_mode_enum, uuid, boolean);
 
 CREATE OR REPLACE FUNCTION public.pay_create_draft_batch(
   p_pay_date date,
@@ -31246,7 +31476,9 @@ CREATE OR REPLACE FUNCTION public.pay_create_draft_batch(
   p_client_id uuid DEFAULT NULL::uuid,
   p_force_include_timesheet_ids uuid[] DEFAULT NULL::uuid[],
   p_override_reason text DEFAULT NULL::text,
-  p_override_mode public.pay_override_mode_enum DEFAULT 'NONE'
+  p_override_mode public.pay_override_mode_enum DEFAULT 'NONE',
+  p_operation_id uuid DEFAULT NULL::uuid,
+  p_allow_legacy_unchunked boolean DEFAULT false
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -31270,6 +31502,8 @@ DECLARE
   v_pay_batch_id uuid := NULL::uuid;
   v_consumed_timesheet_payment_override_count integer := 0;
   v_consumed_timesheet_payment_overrides jsonb := '[]'::jsonb;
+  v_legacy_safe_selected_row_threshold integer := 250;
+  v_operation_row public.banking_pay_operations%ROWTYPE;
 BEGIN
   IF p_pay_date IS NULL THEN
     RAISE EXCEPTION 'pay_date is required';
@@ -31285,6 +31519,46 @@ BEGIN
 
   IF v_scope NOT IN ('PAYE', 'UMBRELLA') THEN
     RAISE EXCEPTION 'pay_channel_scope must be PAYE or UMBRELLA';
+  END IF;
+
+  IF p_operation_id IS NOT NULL THEN
+    SELECT operation_row.*
+    INTO v_operation_row
+    FROM public.banking_pay_operations AS operation_row
+    WHERE operation_row.id = p_operation_id;
+
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'pay_create_draft_batch operation % was not found', p_operation_id;
+    END IF;
+
+    IF v_operation_row.operation_type <> 'DRAFT_CREATE' THEN
+      RAISE EXCEPTION 'pay_create_draft_batch expected DRAFT_CREATE operation %, got %', p_operation_id, v_operation_row.operation_type;
+    END IF;
+
+    IF v_operation_row.actor_user_id IS NOT NULL AND v_operation_row.actor_user_id <> p_actor_user_id THEN
+      RAISE EXCEPTION 'pay_create_draft_batch operation % belongs to a different actor', p_operation_id;
+    END IF;
+
+    RETURN jsonb_build_object(
+      'ok', true,
+      'operation_mode', true,
+      'requires_operation_runner', true,
+      'operation_id', v_operation_row.id::text,
+      'operation_type', v_operation_row.operation_type,
+      'status', v_operation_row.status,
+      'phase', v_operation_row.phase,
+      'pay_batch_id', CASE WHEN v_operation_row.pay_batch_id IS NULL THEN NULL ELSE v_operation_row.pay_batch_id::text END,
+      'workbench_session_id', CASE WHEN v_operation_row.workbench_session_id IS NULL THEN NULL ELSE v_operation_row.workbench_session_id::text END,
+      'total_units', v_operation_row.total_units,
+      'completed_units', v_operation_row.completed_units,
+      'failed_units', v_operation_row.failed_units,
+      'current_chunk_index', v_operation_row.current_chunk_index,
+      'chunk_count', v_operation_row.chunk_count,
+      'progress_json', COALESCE(v_operation_row.progress_json, '{}'::jsonb),
+      'result_json', CASE WHEN v_operation_row.status IN ('COMPLETE', 'REVIEW_REQUIRED') THEN v_operation_row.result_json ELSE NULL END,
+      'error_json', CASE WHEN v_operation_row.status IN ('FAILED', 'CANCELLED', 'REVIEW_REQUIRED') THEN v_operation_row.error_json ELSE NULL END,
+      'message', 'Draft creation is running through the scalable Banking Pay operation flow.'
+    );
   END IF;
 
   IF (p_force_include_timesheet_ids IS NOT NULL AND coalesce(array_length(p_force_include_timesheet_ids, 1), 0) > 0)
@@ -31311,6 +31585,46 @@ BEGIN
     EXCEPTION WHEN OTHERS THEN
       NULL;
     END;
+  END IF;
+
+  v_selected_preview_row_ids_input := CASE
+    WHEN jsonb_typeof(v_preview_decisions_json->'selected_preview_row_ids') = 'array' THEN coalesce(v_preview_decisions_json->'selected_preview_row_ids', '[]'::jsonb)
+    ELSE '[]'::jsonb
+  END;
+
+  v_selected_preview_rows_supplied := jsonb_array_length(v_selected_preview_row_ids_input) > 0;
+
+  SELECT count(*)::integer
+  INTO v_requested_selected_preview_row_count
+  FROM (
+    SELECT DISTINCT btrim(sel.value) AS selected_preview_row_id
+    FROM jsonb_array_elements_text(v_selected_preview_row_ids_input) AS sel(value)
+    WHERE btrim(sel.value) <> ''
+  ) AS requested_rows;
+
+  IF COALESCE(p_allow_legacy_unchunked, false) IS NOT TRUE
+     AND v_selected_preview_rows_supplied = true
+     AND COALESCE(v_requested_selected_preview_row_count, 0) > v_legacy_safe_selected_row_threshold THEN
+    RAISE EXCEPTION '%', jsonb_build_object(
+      'error', 'PAY_CREATE_DRAFT_BATCH_LEGACY_SELECTED_SCOPE_TOO_LARGE',
+      'code', 'DRAFT_CREATE_OPERATION_REQUIRED',
+      'message', 'This draft selection is too large for the legacy all-at-once path. Use the scalable Banking Pay draft operation flow.',
+      'selected_preview_row_count', v_requested_selected_preview_row_count,
+      'safe_legacy_threshold', v_legacy_safe_selected_row_threshold,
+      'pay_channel_scope', v_scope
+    )::text;
+  END IF;
+
+  IF COALESCE(p_allow_legacy_unchunked, false) IS NOT TRUE
+     AND v_selected_preview_rows_supplied = false
+     AND p_candidate_id IS NULL THEN
+    RAISE EXCEPTION '%', jsonb_build_object(
+      'error', 'PAY_CREATE_DRAFT_BATCH_UNBOUNDED_LEGACY_DISABLED',
+      'code', 'DRAFT_CREATE_OPERATION_REQUIRED',
+      'message', 'Unbounded or client-wide legacy draft creation is disabled. Use the scalable Banking Pay draft operation flow, or supply an explicit small candidate/test scope or selected preview rows.',
+      'pay_channel_scope', v_scope,
+      'client_id', CASE WHEN p_client_id IS NULL THEN NULL ELSE p_client_id::text END
+    )::text;
   END IF;
 
   v_preview_payload_json := public.pay_preview(
@@ -31389,6 +31703,18 @@ BEGIN
     RAISE EXCEPTION 'Selected preview rows did not resolve fully within requested pay channel scope %', v_scope;
   END IF;
 
+  IF COALESCE(p_allow_legacy_unchunked, false) IS NOT TRUE
+     AND v_selected_preview_row_count > v_legacy_safe_selected_row_threshold THEN
+    RAISE EXCEPTION '%', jsonb_build_object(
+      'error', 'PAY_CREATE_DRAFT_BATCH_LEGACY_UNCHUNKED_TOO_LARGE',
+      'code', 'DRAFT_CREATE_OPERATION_REQUIRED',
+      'message', 'This draft contains too many payment rows for the legacy all-at-once path. Use the scalable Banking Pay draft operation flow.',
+      'selected_preview_row_count', v_selected_preview_row_count,
+      'safe_legacy_threshold', v_legacy_safe_selected_row_threshold,
+      'pay_channel_scope', v_scope
+    )::text;
+  END IF;
+
   v_build_result := public.pay_build_batch_artifacts_from_preview(
     p_pay_date => p_pay_date,
     p_week_ending_cutoff => p_week_ending_cutoff,
@@ -31397,7 +31723,11 @@ BEGIN
     p_selected_preview_row_ids => v_selected_preview_row_ids,
     p_source_workbench_session_id => NULL::uuid,
     p_source_snapshot_run_id => NULL::uuid,
-    p_source_session_version => NULL::bigint
+    p_source_session_version => NULL::bigint,
+    p_operation_id => NULL::uuid,
+    p_candidate_scope_ids => NULL::jsonb,
+    p_existing_pay_batch_id => NULL::uuid,
+    p_allow_legacy_unchunked => COALESCE(p_allow_legacy_unchunked, false)
   );
 
   IF jsonb_typeof(v_build_result) <> 'object' THEN
@@ -31474,6 +31804,14 @@ BEGIN
   );
 END;
 $function$;
+
+
+
+
+
+
+
+
 
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_session_apply_case_resolution(
@@ -32524,6 +32862,8 @@ $function$;
 
 
 
+DROP FUNCTION IF EXISTS public.pay_workbench_session_get_progress(uuid);
+
 CREATE OR REPLACE FUNCTION public.pay_workbench_session_get_progress(p_session_id uuid)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -32540,6 +32880,11 @@ DECLARE
   v_ready_count integer := 0;
   v_pending_count integer := 0;
   v_failed_count integer := 0;
+  v_total_count integer := 0;
+  v_completed_count integer := 0;
+  v_ready_flag boolean := false;
+  v_phase text := 'REFRESHING_CANDIDATES';
+  v_status_text text := 'Preparing payment preview.';
 BEGIN
   IF p_session_id IS NULL THEN
     RAISE EXCEPTION 'session_id is required';
@@ -32745,12 +33090,38 @@ BEGIN
     LIMIT 50
   ) AS recent_jobs;
 
+  v_total_count := coalesce(v_ready_count, 0) + coalesce(v_pending_count, 0) + coalesce(v_failed_count, 0);
+  v_completed_count := coalesce(v_ready_count, 0) + coalesce(v_failed_count, 0);
+  v_ready_flag := (coalesce(v_total_count, 0) > 0 AND coalesce(v_pending_count, 0) = 0 AND coalesce(v_failed_count, 0) = 0);
+
+  v_phase := CASE
+    WHEN v_ready_flag THEN 'READY'
+    WHEN coalesce(v_failed_count, 0) > 0 AND coalesce(v_pending_count, 0) = 0 THEN 'FAILED'
+    WHEN coalesce(v_ready_count, 0) > 0 THEN 'PARTIAL_READY'
+    ELSE 'REFRESHING_CANDIDATES'
+  END;
+
+  v_status_text := CASE
+    WHEN v_ready_flag THEN 'Payment preview is ready.'
+    WHEN coalesce(v_failed_count, 0) > 0 AND coalesce(v_pending_count, 0) = 0 THEN 'Payment preview could not be prepared for every candidate.'
+    WHEN coalesce(v_pending_count, 0) > 0 THEN 'Preparing payment preview candidates.'
+    ELSE 'Preparing payment preview.'
+  END;
+
   RETURN jsonb_build_object(
     'ok', true,
     'session_id', p_session_id::text,
     'snapshot_run_id', v_session_row.source_snapshot_run_id::text,
     'session_status', v_session_row.status,
     'session_version', v_session_row.version,
+    'ready_flag', v_ready_flag,
+    'ready', v_ready_flag,
+    'total_count', v_total_count,
+    'completed_count', v_completed_count,
+    'pending_count', v_pending_count,
+    'failed_count', v_failed_count,
+    'phase', v_phase,
+    'status_text', v_status_text,
     'ready_count', v_ready_count,
     'pending_count', v_pending_count,
     'failed_count', v_failed_count,
@@ -32763,6 +33134,11 @@ BEGIN
   );
 END;
 $function$;
+
+
+
+
+
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_snapshot_rebuild_summary(
   p_snapshot_run_id uuid
