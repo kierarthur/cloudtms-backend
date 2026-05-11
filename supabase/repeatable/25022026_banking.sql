@@ -13132,131 +13132,184 @@ END;
 $$;
 
 
-create or replace function public.pay_batches_claim_due_scheduled(
-  p_limit int,
-  p_now_utc timestamptz
+DROP FUNCTION IF EXISTS public.pay_batches_claim_due_scheduled(integer, timestamptz);
+
+CREATE OR REPLACE FUNCTION public.pay_batches_claim_due_scheduled(
+  p_limit integer DEFAULT 50,
+  p_now_utc timestamptz DEFAULT NULL::timestamptz
 )
-returns jsonb
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  v_limit int := greatest(1, least(coalesce(p_limit,50), 500));
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $function$
+DECLARE
   v_now timestamptz := now();
-  v_cutoff timestamptz := coalesce(p_now_utc, v_now);
+  v_cutoff timestamptz := COALESCE(p_now_utc, now());
+  v_limit integer := LEAST(GREATEST(COALESCE(p_limit, 50), 1), 500);
+  v_batch_record record;
+  v_operation_id uuid := NULL::uuid;
+  v_operation_created boolean := false;
+  v_actor_user_id uuid := NULL::uuid;
+  v_idempotency_key text := NULL::text;
+  v_input_json jsonb := '{}'::jsonb;
+  v_summary_json jsonb := '{}'::jsonb;
+  v_operations_json jsonb := '[]'::jsonb;
+  v_claimed_count integer := 0;
+BEGIN
+  FOR v_batch_record IN
+    SELECT
+      batch_row.id,
+      batch_row.status,
+      batch_row.pay_date,
+      batch_row.authoritative_payment_date,
+      batch_row.schedule_kind,
+      batch_row.scheduled_at_utc,
+      batch_row.scheduled_by_user_id,
+      batch_row.created_by_user_id,
+      batch_row.funding_account_ref,
+      batch_row.rail_provider_snapshot,
+      batch_row.rail_env_snapshot,
+      batch_row.execution_intent_json,
+      batch_row.execution_commit_state
+    FROM public.pay_batches AS batch_row
+    WHERE upper(coalesce(batch_row.status, '')) IN ('AUTHORISED_FOR_PAYMENT', 'EXECUTING')
+      AND upper(coalesce(batch_row.execution_commit_state, 'NOT_SUBMITTED')) = 'NOT_SUBMITTED'
+      AND batch_row.scheduled_at_utc IS NOT NULL
+      AND batch_row.scheduled_at_utc <= v_cutoff
+      AND batch_row.cancelled_at_utc IS NULL
+    ORDER BY batch_row.scheduled_at_utc ASC, batch_row.id ASC
+    FOR UPDATE SKIP LOCKED
+    LIMIT v_limit
+  LOOP
+    v_actor_user_id := COALESCE(v_batch_record.scheduled_by_user_id, v_batch_record.created_by_user_id);
+    v_idempotency_key := 'payment-execute:scheduled:batch:' || v_batch_record.id::text || ':scheduled_at:' || COALESCE(v_batch_record.scheduled_at_utc::text, 'none');
+    v_input_json := jsonb_strip_nulls(jsonb_build_object(
+      'source', 'pay_batches_claim_due_scheduled',
+      'pay_batch_id', v_batch_record.id::text,
+      'scheduled_at_utc', v_batch_record.scheduled_at_utc::text,
+      'schedule_kind', v_batch_record.schedule_kind,
+      'execution_mode', COALESCE(v_batch_record.execution_intent_json->>'execution_mode', v_batch_record.execution_intent_json->>'mode', 'STANDARD_BANK'),
+      'payment_date', COALESCE(v_batch_record.authoritative_payment_date, v_batch_record.pay_date)::text,
+      'funding_account_ref', v_batch_record.funding_account_ref,
+      'rail_provider_snapshot', v_batch_record.rail_provider_snapshot,
+      'rail_env_snapshot', v_batch_record.rail_env_snapshot,
+      'claimed_at_utc', v_now::text
+    ));
 
-  v_claimed jsonb := '[]'::jsonb;
-  v_claimed_count int := 0;
-begin
-  with candidate as (
-    select
-      pb.id,
-      pb.rail_provider_snapshot,
-      pb.rail_env_snapshot,
-      pb.schedule_kind,
-      pb.scheduled_at_utc,
-      pb.funding_account_ref,
-      pb.created_by_user_id,
-      case
-        when pb.execution_intent_json is not null and jsonb_typeof(pb.execution_intent_json) = 'object'
-          then pb.execution_intent_json
-        else '{}'::jsonb
-      end as execution_intent_json,
-      upper(btrim(coalesce(pb.execution_intent_json->>'execution_mode', 'STANDARD_BANK'))) as execution_mode,
-      lower(btrim(coalesce(pb.execution_intent_json->>'suppress_remittances', 'false'))) in ('true','1','yes','y','on') as suppress_remittances,
-      public.pay_batch_validate_freshness(
-        pb.id,
-        coalesce(pb.created_by_user_id, '00000000-0000-0000-0000-000000000000'::uuid)
-      ) as freshness_json
-    from public.pay_batches pb
-    where upper(coalesce(pb.status,'')) = 'AUTHORISED_FOR_PAYMENT'
-      and upper(coalesce(pb.execution_commit_state, 'NOT_SUBMITTED')) = 'NOT_SUBMITTED'
-      and pb.scheduled_at_utc is not null
-      and pb.scheduled_at_utc <= v_cutoff
-      and upper(coalesce(pb.status,'')) not in ('COMMITTED','PAID','SETTLED','CANCELLED')
-    order by pb.scheduled_at_utc asc, pb.id asc
-    for update skip locked
-    limit v_limit
-  ),
-  claim as (
-    select
-      c.id,
-      c.rail_provider_snapshot,
-      c.rail_env_snapshot,
-      c.schedule_kind,
-      c.scheduled_at_utc,
-      c.funding_account_ref,
-      case
-        when c.execution_mode in ('STANDARD_BANK','CSV_SETTLEMENT','EXTERNAL_SETTLEMENT') then c.execution_mode
-        else 'STANDARD_BANK'
-      end as execution_mode,
-      c.execution_intent_json,
-      c.suppress_remittances
-    from candidate c
-    where coalesce((c.freshness_json->>'is_stale')::boolean, false) = false
-      and (
-        case
-          when c.execution_mode in ('CSV_SETTLEMENT','EXTERNAL_SETTLEMENT') then true
-          else nullif(btrim(coalesce(c.funding_account_ref,'')), '') is not null
-        end
+    SELECT operation_row.id
+    INTO v_operation_id
+    FROM public.banking_pay_operations AS operation_row
+    WHERE operation_row.idempotency_key = v_idempotency_key
+      AND operation_row.operation_type = 'PAYMENT_EXECUTE'
+      AND operation_row.pay_batch_id = v_batch_record.id
+    ORDER BY operation_row.created_at_utc DESC NULLS LAST, operation_row.id DESC
+    LIMIT 1;
+
+    v_operation_created := false;
+
+    IF v_operation_id IS NULL THEN
+      INSERT INTO public.banking_pay_operations (
+        id,
+        operation_type,
+        status,
+        phase,
+        actor_user_id,
+        workbench_session_id,
+        pay_batch_id,
+        root_operation_id,
+        idempotency_key,
+        input_json,
+        config_json,
+        progress_json,
+        result_json,
+        error_json,
+        total_units,
+        completed_units,
+        failed_units,
+        current_chunk_index,
+        chunk_count,
+        locked_by,
+        lock_expires_at_utc,
+        created_at_utc,
+        started_at_utc,
+        updated_at_utc,
+        completed_at_utc,
+        failed_at_utc
       )
-  ),
-  upd as (
-    update public.pay_batches pb2
-    set
-      status = 'EXECUTING',
-      executing_started_at_utc = coalesce(pb2.executing_started_at_utc, v_now)
-    from claim c
-    where pb2.id = c.id
-      and upper(coalesce(pb2.execution_commit_state, 'NOT_SUBMITTED')) = 'NOT_SUBMITTED'
-      and upper(coalesce(pb2.status,'')) = 'AUTHORISED_FOR_PAYMENT'
-    returning
-      pb2.id,
-      pb2.rail_provider_snapshot,
-      pb2.rail_env_snapshot,
-      pb2.schedule_kind,
-      pb2.scheduled_at_utc,
-      pb2.funding_account_ref,
-      pb2.executing_started_at_utc,
-      c.execution_mode,
-      c.execution_intent_json,
-      c.suppress_remittances
-  )
-  select
-    coalesce(
-      jsonb_agg(
+      VALUES (
+        gen_random_uuid(),
+        'PAYMENT_EXECUTE',
+        'QUEUED',
+        'VALIDATE_BATCH',
+        v_actor_user_id,
+        NULL::uuid,
+        v_batch_record.id,
+        NULL::uuid,
+        v_idempotency_key,
+        v_input_json,
+        '{}'::jsonb,
         jsonb_build_object(
-          'pay_batch_id', u.id::text,
-          'rail_provider_snapshot', u.rail_provider_snapshot,
-          'rail_env_snapshot', u.rail_env_snapshot,
-          'schedule_kind', u.schedule_kind,
-          'scheduled_at_utc', u.scheduled_at_utc,
-          'funding_account_ref', u.funding_account_ref,
-          'executing_started_at_utc', u.executing_started_at_utc,
-          'execution_mode', u.execution_mode,
-          'execution_intent_json', u.execution_intent_json,
-          'suppress_remittances', u.suppress_remittances
-        )
-        order by u.scheduled_at_utc asc nulls last, u.id
-      ),
-      '[]'::jsonb
-    ),
-    count(*)::int
-  into v_claimed, v_claimed_count
-  from upd u;
+          'title', 'Scheduled payment queued',
+          'status_text', 'Scheduled payment is ready to continue through the scalable execution operation.',
+          'source', 'pay_batches_claim_due_scheduled'
+        ),
+        NULL::jsonb,
+        NULL::jsonb,
+        0,
+        0,
+        0,
+        0,
+        0,
+        NULL::text,
+        NULL::timestamptz,
+        v_now,
+        NULL::timestamptz,
+        v_now,
+        NULL::timestamptz,
+        NULL::timestamptz
+      )
+      RETURNING id INTO v_operation_id;
+      v_operation_created := true;
+    END IF;
 
-  return jsonb_build_object(
+    UPDATE public.pay_batches AS batch_update
+    SET status = CASE WHEN upper(coalesce(batch_update.status, '')) = 'AUTHORISED_FOR_PAYMENT' THEN 'EXECUTING' ELSE batch_update.status END,
+        executing_started_at_utc = COALESCE(batch_update.executing_started_at_utc, v_now),
+        execution_intent_json = jsonb_strip_nulls(COALESCE(batch_update.execution_intent_json, '{}'::jsonb) || jsonb_build_object(
+          'active_operation_id', v_operation_id::text,
+          'scheduled_claimed_at_utc', v_now::text
+        ))
+    WHERE batch_update.id = v_batch_record.id
+      AND upper(coalesce(batch_update.execution_commit_state, 'NOT_SUBMITTED')) = 'NOT_SUBMITTED';
+
+    v_summary_json := public.pay_batch_execution_summary_get(v_batch_record.id, v_actor_user_id);
+
+    v_operations_json := v_operations_json || jsonb_build_array(jsonb_build_object(
+      'pay_batch_id', v_batch_record.id::text,
+      'operation_id', v_operation_id::text,
+      'operation_created', v_operation_created,
+      'operation_type', 'PAYMENT_EXECUTE',
+      'idempotency_key', v_idempotency_key,
+      'scheduled_at_utc', v_batch_record.scheduled_at_utc,
+      'actor_user_id', CASE WHEN v_actor_user_id IS NULL THEN NULL ELSE v_actor_user_id::text END,
+      'batch_summary', v_summary_json
+    ));
+
+    v_claimed_count := v_claimed_count + 1;
+  END LOOP;
+
+  RETURN jsonb_build_object(
     'ok', true,
     'server_utc', v_now,
     'cutoff_utc', v_cutoff,
     'limit', v_limit,
     'claimed_count', v_claimed_count,
-    'claimed', v_claimed
+    'operations', v_operations_json,
+    'claimed', v_operations_json
   );
-end;
-$$;
-
+END;
+$function$;
 
 
 
