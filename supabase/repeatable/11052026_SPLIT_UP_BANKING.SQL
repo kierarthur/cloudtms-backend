@@ -3985,13 +3985,17 @@ begin
 end;
 $$;
 
+DROP FUNCTION IF EXISTS public.pay_remittance_maybe_queue_for_trigger(uuid, text, text, uuid, boolean);
+DROP FUNCTION IF EXISTS public.pay_remittance_maybe_queue_for_trigger(uuid, text, text, uuid, boolean, uuid, boolean);
 
 CREATE OR REPLACE FUNCTION public.pay_remittance_maybe_queue_for_trigger(
   p_pay_batch_id uuid,
   p_trigger text,
   p_scope text DEFAULT 'ALL'::text,
   p_actor_user_id uuid DEFAULT NULL::uuid,
-  p_only_confirmed boolean DEFAULT false
+  p_only_confirmed boolean DEFAULT false,
+  p_root_operation_id uuid DEFAULT NULL::uuid,
+  p_operation_mode boolean DEFAULT false
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -4009,12 +4013,18 @@ DECLARE
   v_suppress_reasons jsonb := '[]'::jsonb;
   v_auth_suppress_count integer := 0;
   v_queue_result jsonb := '{}'::jsonb;
+  v_has_remittance_operation_overload boolean := false;
+  v_has_finance_operation_overload boolean := false;
   v_has_remittance_confirmed_overload boolean := false;
   v_has_finance_confirmed_overload boolean := false;
   v_has_remittance_legacy_function boolean := false;
   v_has_finance_legacy_function boolean := false;
   v_dispatch_required boolean := false;
   v_job_count integer := 0;
+  v_operation_start record;
+  v_operation_kind text := null;
+  v_operation_idempotency_key text := null;
+  v_operation_input_json jsonb := '{}'::jsonb;
 BEGIN
   v_trigger := upper(nullif(btrim(COALESCE(p_trigger, '')), ''));
   v_scope := upper(nullif(btrim(COALESCE(p_scope, 'ALL')), ''));
@@ -4177,13 +4187,115 @@ BEGIN
     );
   END IF;
 
+  IF COALESCE(p_operation_mode, false) THEN
+    v_operation_kind := CASE WHEN v_is_loans_batch THEN 'PAYOUT_NOTICE' ELSE 'REMITTANCE' END;
+    v_operation_idempotency_key := 'remittance-queue:batch:' || p_pay_batch_id::text
+      || ':trigger:' || v_trigger
+      || ':scope:' || v_scope
+      || ':only-confirmed:' || CASE WHEN COALESCE(p_only_confirmed, false) THEN 'true' ELSE 'false' END
+      || ':kind:' || v_operation_kind
+      || ':root:' || COALESCE(p_root_operation_id::text, 'none');
+
+    v_operation_input_json := jsonb_build_object(
+      'pay_batch_id', p_pay_batch_id::text,
+      'trigger', v_trigger,
+      'configured_timing', v_timing_setting,
+      'scope', v_scope,
+      'only_confirmed', COALESCE(p_only_confirmed, false),
+      'message_kind', v_operation_kind,
+      'is_loans_batch', v_is_loans_batch,
+      'root_operation_id', CASE WHEN p_root_operation_id IS NULL THEN NULL ELSE p_root_operation_id::text END,
+      'source_rpc', 'pay_remittance_maybe_queue_for_trigger'
+    );
+
+    SELECT operation_start_row.*
+    INTO v_operation_start
+    FROM public.banking_pay_operation_start(
+      p_operation_type => 'REMITTANCE_QUEUE',
+      p_actor_user_id => v_effective_actor_user_id,
+      p_idempotency_key => v_operation_idempotency_key,
+      p_workbench_session_id => NULL::uuid,
+      p_pay_batch_id => p_pay_batch_id,
+      p_root_operation_id => p_root_operation_id,
+      p_input_json => v_operation_input_json,
+      p_config_json => '{}'::jsonb
+    ) AS operation_start_row;
+
+    PERFORM public._imp_debug_audit(
+      p_actor_user_id,
+      'PAY_REMITTANCE_MAYBE_QUEUE_FOR_TRIGGER_OPERATION_STARTED',
+      jsonb_build_object(
+        'pay_batch_id', p_pay_batch_id,
+        'trigger', v_trigger,
+        'configured_timing', v_timing_setting,
+        'scope', v_scope,
+        'only_confirmed', COALESCE(p_only_confirmed, false),
+        'is_loans_batch', v_is_loans_batch,
+        'message_kind', v_operation_kind,
+        'operation_id', v_operation_start.operation_id,
+        'operation_status', v_operation_start.status,
+        'operation_phase', v_operation_start.phase,
+        'root_operation_id', p_root_operation_id
+      ),
+      'pay_remittance',
+      p_pay_batch_id::text,
+      NULL::jsonb,
+      NULL::text,
+      NULL::text,
+      NULL::text
+    );
+
+    RETURN jsonb_build_object(
+      'ok', true,
+      'queued', false,
+      'operation_queued', true,
+      'deferred', false,
+      'suppressed', false,
+      'dispatch_required', false,
+      'requires_remittance_operation', true,
+      'trigger', v_trigger,
+      'configured_timing', v_timing_setting,
+      'pay_batch_id', p_pay_batch_id,
+      'scope', v_scope,
+      'only_confirmed', COALESCE(p_only_confirmed, false),
+      'is_loans_batch', v_is_loans_batch,
+      'message_kind', v_operation_kind,
+      'effective_actor_user_id', v_effective_actor_user_id,
+      'operation_id', v_operation_start.operation_id::text,
+      'operation_type', v_operation_start.operation_type,
+      'operation_status', v_operation_start.status,
+      'operation_phase', v_operation_start.phase,
+      'root_operation_id', CASE WHEN p_root_operation_id IS NULL THEN NULL ELSE p_root_operation_id::text END,
+      'queue_result', jsonb_build_object(
+        'ok', true,
+        'operation_mode', true,
+        'operation_id', v_operation_start.operation_id::text,
+        'operation_type', v_operation_start.operation_type,
+        'status', v_operation_start.status,
+        'phase', v_operation_start.phase,
+        'pay_batch_id', p_pay_batch_id::text,
+        'message_kind', v_operation_kind,
+        'trigger_status', 'REMITTANCE_QUEUE_OPERATION_STARTED',
+        'dispatch_required', false,
+        'job_count', 0,
+        'jobs', '[]'::jsonb
+      )
+    );
+  END IF;
+
+  v_has_remittance_operation_overload := to_regprocedure('public.pay_remittance_queue_commit_stage(uuid,text,uuid,boolean,uuid,jsonb)') IS NOT NULL;
+  v_has_finance_operation_overload := to_regprocedure('public.pay_finance_payout_notice_queue_commit_stage(uuid,uuid,boolean,uuid,jsonb)') IS NOT NULL;
   v_has_remittance_confirmed_overload := to_regprocedure('public.pay_remittance_queue_commit_stage(uuid,text,uuid,boolean)') IS NOT NULL;
   v_has_finance_confirmed_overload := to_regprocedure('public.pay_finance_payout_notice_queue_commit_stage(uuid,uuid,boolean)') IS NOT NULL;
   v_has_remittance_legacy_function := to_regprocedure('public.pay_remittance_queue_commit_stage(uuid,text,uuid)') IS NOT NULL;
   v_has_finance_legacy_function := to_regprocedure('public.pay_finance_payout_notice_queue_commit_stage(uuid,uuid)') IS NOT NULL;
 
   IF v_is_loans_batch THEN
-    IF v_has_finance_confirmed_overload THEN
+    IF v_has_finance_operation_overload THEN
+      EXECUTE 'SELECT public.pay_finance_payout_notice_queue_commit_stage($1, $2, $3, NULL::uuid, NULL::jsonb)'
+      INTO v_queue_result
+      USING p_pay_batch_id, v_effective_actor_user_id, COALESCE(p_only_confirmed, false);
+    ELSIF v_has_finance_confirmed_overload THEN
       EXECUTE 'SELECT public.pay_finance_payout_notice_queue_commit_stage($1, $2, $3)'
       INTO v_queue_result
       USING p_pay_batch_id, v_effective_actor_user_id, COALESCE(p_only_confirmed, false);
@@ -4216,7 +4328,11 @@ BEGIN
       );
     END IF;
   ELSE
-    IF v_has_remittance_confirmed_overload THEN
+    IF v_has_remittance_operation_overload THEN
+      EXECUTE 'SELECT public.pay_remittance_queue_commit_stage($1, $2, $3, $4, NULL::uuid, NULL::jsonb)'
+      INTO v_queue_result
+      USING p_pay_batch_id, v_scope, v_effective_actor_user_id, COALESCE(p_only_confirmed, false);
+    ELSIF v_has_remittance_confirmed_overload THEN
       EXECUTE 'SELECT public.pay_remittance_queue_commit_stage($1, $2, $3, $4)'
       INTO v_queue_result
       USING p_pay_batch_id, v_scope, v_effective_actor_user_id, COALESCE(p_only_confirmed, false);
@@ -4317,6 +4433,8 @@ EXCEPTION
     RAISE;
 END;
 $function$;
+
+
 
 
 DROP FUNCTION IF EXISTS public.pay_workbench_enqueue_candidate_refresh_many(uuid, jsonb, text, uuid);
