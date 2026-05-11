@@ -1959,6 +1959,11 @@ DROP FUNCTION IF EXISTS public.pay_create_draft_batches_split(
 );
 
 
+
+
+DROP FUNCTION IF EXISTS public.pay_create_draft_batches_split(date, date, uuid, jsonb, uuid, uuid, uuid[], text, public.pay_override_mode_enum, boolean, boolean, uuid, timestamptz);
+DROP FUNCTION IF EXISTS public.pay_create_draft_batches_split(date, date, uuid, jsonb, uuid, uuid, uuid[], text, public.pay_override_mode_enum, boolean, boolean, uuid, timestamptz, uuid, boolean);
+
 CREATE OR REPLACE FUNCTION public.pay_create_draft_batches_split(
   p_pay_date date,
   p_week_ending_cutoff date,
@@ -1972,7 +1977,9 @@ CREATE OR REPLACE FUNCTION public.pay_create_draft_batches_split(
   p_override_continue boolean DEFAULT false,
   p_override_verified boolean DEFAULT false,
   p_override_verified_by_user_id uuid DEFAULT NULL::uuid,
-  p_override_verified_at_utc timestamptz DEFAULT NULL::timestamptz
+  p_override_verified_at_utc timestamptz DEFAULT NULL::timestamptz,
+  p_operation_id uuid DEFAULT NULL::uuid,
+  p_allow_legacy_unchunked boolean DEFAULT false
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -2020,6 +2027,8 @@ DECLARE
   v_paye_create_blocked boolean := false;
   v_has_any_scope_outcome boolean := false;
   v_err text := '';
+  v_legacy_safe_selected_row_threshold integer := 250;
+  v_operation_row public.banking_pay_operations%ROWTYPE;
 BEGIN
   IF p_pay_date IS NULL THEN
     RAISE EXCEPTION 'pay_date is required';
@@ -2031,6 +2040,46 @@ BEGIN
 
   IF p_actor_user_id IS NULL THEN
     RAISE EXCEPTION 'actor_user_id is required';
+  END IF;
+
+  IF p_operation_id IS NOT NULL THEN
+    SELECT operation_row.*
+    INTO v_operation_row
+    FROM public.banking_pay_operations AS operation_row
+    WHERE operation_row.id = p_operation_id;
+
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'pay_create_draft_batches_split operation % was not found', p_operation_id;
+    END IF;
+
+    IF v_operation_row.operation_type <> 'DRAFT_CREATE' THEN
+      RAISE EXCEPTION 'pay_create_draft_batches_split expected DRAFT_CREATE operation %, got %', p_operation_id, v_operation_row.operation_type;
+    END IF;
+
+    IF v_operation_row.actor_user_id IS NOT NULL AND v_operation_row.actor_user_id <> p_actor_user_id THEN
+      RAISE EXCEPTION 'pay_create_draft_batches_split operation % belongs to a different actor', p_operation_id;
+    END IF;
+
+    RETURN jsonb_build_object(
+      'ok', true,
+      'operation_mode', true,
+      'requires_operation_runner', true,
+      'operation_id', v_operation_row.id::text,
+      'operation_type', v_operation_row.operation_type,
+      'status', v_operation_row.status,
+      'phase', v_operation_row.phase,
+      'pay_batch_id', CASE WHEN v_operation_row.pay_batch_id IS NULL THEN NULL ELSE v_operation_row.pay_batch_id::text END,
+      'workbench_session_id', CASE WHEN v_operation_row.workbench_session_id IS NULL THEN NULL ELSE v_operation_row.workbench_session_id::text END,
+      'total_units', v_operation_row.total_units,
+      'completed_units', v_operation_row.completed_units,
+      'failed_units', v_operation_row.failed_units,
+      'current_chunk_index', v_operation_row.current_chunk_index,
+      'chunk_count', v_operation_row.chunk_count,
+      'progress_json', COALESCE(v_operation_row.progress_json, '{}'::jsonb),
+      'result_json', CASE WHEN v_operation_row.status IN ('COMPLETE', 'REVIEW_REQUIRED') THEN v_operation_row.result_json ELSE NULL END,
+      'error_json', CASE WHEN v_operation_row.status IN ('FAILED', 'CANCELLED', 'REVIEW_REQUIRED') THEN v_operation_row.error_json ELSE NULL END,
+      'message', 'Draft creation is running through the scalable Banking Pay operation flow.'
+    );
   END IF;
 
   IF COALESCE(p_override_mode, 'NONE'::public.pay_override_mode_enum) = 'TIMESHEET_ADVANCE'::public.pay_override_mode_enum THEN
@@ -2124,6 +2173,29 @@ BEGIN
     ELSE
       RAISE EXCEPTION 'preview_decisions_json.selected_preview_row_ids must be an array when supplied';
     END IF;
+  END IF;
+
+  IF COALESCE(p_allow_legacy_unchunked, false) IS NOT TRUE
+     AND v_selected_preview_row_ids_supplied = true
+     AND COALESCE(v_selected_preview_row_ids_sanitized_count, 0) > v_legacy_safe_selected_row_threshold THEN
+    RAISE EXCEPTION '%', jsonb_build_object(
+      'error', 'PAY_CREATE_DRAFT_BATCHES_SPLIT_LEGACY_UNCHUNKED_TOO_LARGE',
+      'code', 'DRAFT_CREATE_OPERATION_REQUIRED',
+      'message', 'This draft selection is too large for the legacy split all-at-once path. Use the scalable Banking Pay draft operation flow.',
+      'selected_preview_row_count', v_selected_preview_row_ids_sanitized_count,
+      'safe_legacy_threshold', v_legacy_safe_selected_row_threshold
+    )::text;
+  END IF;
+
+  IF COALESCE(p_allow_legacy_unchunked, false) IS NOT TRUE
+     AND v_selected_preview_row_ids_supplied = false
+     AND p_candidate_id IS NULL THEN
+    RAISE EXCEPTION '%', jsonb_build_object(
+      'error', 'PAY_CREATE_DRAFT_BATCHES_SPLIT_UNBOUNDED_LEGACY_DISABLED',
+      'code', 'DRAFT_CREATE_OPERATION_REQUIRED',
+      'message', 'Unbounded or client-wide legacy split draft creation is disabled. Use the scalable Banking Pay draft operation flow, or supply an explicit small candidate/test scope or selected preview rows.',
+      'client_id', CASE WHEN p_client_id IS NULL THEN NULL ELSE p_client_id::text END
+    )::text;
   END IF;
 
   v_preview_decisions_json := (v_preview_decisions_json - 'case_resolutions' - 'selected_preview_row_ids')
@@ -2442,7 +2514,9 @@ BEGIN
         p_client_id => p_client_id,
         p_force_include_timesheet_ids => p_force_include_timesheet_ids,
         p_override_reason => p_override_reason,
-        p_override_mode => p_override_mode
+        p_override_mode => p_override_mode,
+        p_operation_id => NULL::uuid,
+        p_allow_legacy_unchunked => COALESCE(p_allow_legacy_unchunked, false)
       );
 
       IF NULLIF(BTRIM(COALESCE(v_umbrella_res->>'pay_batch_id', '')), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
@@ -2544,7 +2618,9 @@ BEGIN
           p_client_id => p_client_id,
           p_force_include_timesheet_ids => p_force_include_timesheet_ids,
           p_override_reason => p_override_reason,
-          p_override_mode => p_override_mode
+          p_override_mode => p_override_mode,
+          p_operation_id => NULL::uuid,
+          p_allow_legacy_unchunked => COALESCE(p_allow_legacy_unchunked, false)
         );
 
         IF NULLIF(BTRIM(COALESCE(v_paye_res->>'pay_batch_id', '')), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
@@ -2645,6 +2721,9 @@ BEGIN
   );
 END;
 $$;
+
+
+
 
 
 
