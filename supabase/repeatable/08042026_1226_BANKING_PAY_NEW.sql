@@ -22815,11 +22815,13 @@ begin
 end;
 $function$;
 
-
+DROP FUNCTION IF EXISTS public.pay_batch_insert_candidates_from_preview(uuid, uuid);
 
 CREATE OR REPLACE FUNCTION public.pay_batch_insert_candidates_from_preview(
   p_pay_batch_id uuid,
-  p_actor_user_id uuid DEFAULT NULL::uuid
+  p_actor_user_id uuid DEFAULT NULL::uuid,
+  p_operation_id uuid DEFAULT NULL::uuid,
+  p_candidate_scope_ids jsonb DEFAULT NULL::jsonb
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -22829,10 +22831,37 @@ AS $function$
 DECLARE
   v_scope text := NULL;
   v_inserted_count integer := 0;
+  v_updated_count integer := 0;
+  v_reused_count integer := 0;
+  v_skipped_count integer := 0;
+  v_failed_count integer := 0;
+  v_existing_count integer := 0;
   v_candidate_ids jsonb := '[]'::jsonb;
 BEGIN
   IF p_pay_batch_id IS NULL THEN
     RAISE EXCEPTION 'pay_batch_id is required';
+  END IF;
+
+  IF p_operation_id IS NOT NULL OR p_candidate_scope_ids IS NOT NULL THEN
+    IF p_operation_id IS NULL THEN
+      RAISE EXCEPTION 'p_operation_id is required when p_candidate_scope_ids is supplied';
+    END IF;
+
+    IF p_candidate_scope_ids IS NULL OR jsonb_typeof(p_candidate_scope_ids) <> 'array' OR jsonb_array_length(p_candidate_scope_ids) = 0 THEN
+      RAISE EXCEPTION 'p_candidate_scope_ids must be a non-empty JSON array when p_operation_id is supplied';
+    END IF;
+
+    IF p_actor_user_id IS NULL THEN
+      RAISE EXCEPTION 'p_actor_user_id is required when p_operation_id is supplied';
+    END IF;
+
+    PERFORM *
+    FROM public.pay_batch_stage_operation_candidate_chunk_context(
+      p_operation_id,
+      p_pay_batch_id,
+      p_candidate_scope_ids,
+      p_actor_user_id
+    );
   END IF;
 
   IF to_regclass('pg_temp.tmp_pay_build_selected_preview_rows') IS NULL THEN
@@ -22843,12 +22872,12 @@ BEGIN
     RAISE EXCEPTION 'tmp_pay_build_candidates_ctx temp table is required';
   END IF;
 
-  SELECT upper(btrim(coalesce(spr.pay_channel, '')))
+  SELECT upper(btrim(coalesce(selected_preview_row.pay_channel, '')))
   INTO v_scope
-  FROM pg_temp.tmp_pay_build_selected_preview_rows spr
-  WHERE upper(btrim(coalesce(spr.pay_channel, ''))) IN ('PAYE', 'UMBRELLA')
-  GROUP BY upper(btrim(coalesce(spr.pay_channel, '')))
-  ORDER BY upper(btrim(coalesce(spr.pay_channel, '')))
+  FROM pg_temp.tmp_pay_build_selected_preview_rows AS selected_preview_row
+  WHERE upper(btrim(coalesce(selected_preview_row.pay_channel, ''))) IN ('PAYE', 'UMBRELLA')
+  GROUP BY upper(btrim(coalesce(selected_preview_row.pay_channel, '')))
+  ORDER BY upper(btrim(coalesce(selected_preview_row.pay_channel, '')))
   LIMIT 1;
 
   IF v_scope IS NULL THEN
@@ -22858,72 +22887,157 @@ BEGIN
   IF (
     SELECT count(*)
     FROM (
-      SELECT distinct upper(btrim(coalesce(spr.pay_channel, ''))) AS pay_channel_scope
-      FROM pg_temp.tmp_pay_build_selected_preview_rows spr
-      WHERE upper(btrim(coalesce(spr.pay_channel, ''))) IN ('PAYE', 'UMBRELLA')
+      SELECT distinct upper(btrim(coalesce(selected_preview_row.pay_channel, ''))) AS pay_channel_scope
+      FROM pg_temp.tmp_pay_build_selected_preview_rows AS selected_preview_row
+      WHERE upper(btrim(coalesce(selected_preview_row.pay_channel, ''))) IN ('PAYE', 'UMBRELLA')
     ) AS pay_channel_scope_rows
   ) <> 1 THEN
     RAISE EXCEPTION 'Selected preview rows must belong to exactly one pay channel scope';
   END IF;
 
-  INSERT INTO public.pay_batch_candidates(
-    pay_batch_id,
-    candidate_id,
-    candidate_tms_ref,
-    candidate_display_name,
-    paye_state,
-    mismatch_settlement_choice,
-    gross_preview,
-    net_bank_amount,
-    debt_created,
-    loan_repayment_taken,
-    overpayment_recovery_taken,
-    awaiting_net_amount,
-    updated_at
+  WITH candidate_source AS (
+    SELECT DISTINCT
+      p_pay_batch_id AS pay_batch_id,
+      candidate_context.id AS candidate_id,
+      candidate_context.tms_ref AS candidate_tms_ref,
+      candidate_context.display_name AS candidate_display_name
+    FROM (
+      SELECT DISTINCT selected_preview_row.candidate_id
+      FROM pg_temp.tmp_pay_build_selected_preview_rows AS selected_preview_row
+    ) AS selected_candidate
+    JOIN pg_temp.tmp_pay_build_candidates_ctx AS candidate_context
+      ON candidate_context.id = selected_candidate.candidate_id
   )
-  SELECT
-    p_pay_batch_id,
-    c.id,
-    c.tms_ref,
-    c.display_name,
-    CASE WHEN v_scope = 'PAYE' THEN 'PENDING_NET' ELSE NULL END,
-    NULL::text,
-    NULL::numeric,
-    NULL::numeric,
-    0::numeric,
-    0::numeric,
-    0::numeric,
-    false,
-    now()
-  FROM (
-    SELECT DISTINCT spr.candidate_id
-    FROM pg_temp.tmp_pay_build_selected_preview_rows spr
-  ) AS sc
-  JOIN pg_temp.tmp_pay_build_candidates_ctx c
-    ON c.id = sc.candidate_id;
+  SELECT count(*)::integer
+  INTO v_existing_count
+  FROM candidate_source
+  JOIN public.pay_batch_candidates AS existing_candidate
+    ON existing_candidate.pay_batch_id = candidate_source.pay_batch_id
+   AND existing_candidate.candidate_id = candidate_source.candidate_id;
 
-  GET DIAGNOSTICS v_inserted_count = ROW_COUNT;
+  WITH candidate_source AS (
+    SELECT DISTINCT
+      p_pay_batch_id AS pay_batch_id,
+      candidate_context.id AS candidate_id,
+      candidate_context.tms_ref AS candidate_tms_ref,
+      candidate_context.display_name AS candidate_display_name
+    FROM (
+      SELECT DISTINCT selected_preview_row.candidate_id
+      FROM pg_temp.tmp_pay_build_selected_preview_rows AS selected_preview_row
+    ) AS selected_candidate
+    JOIN pg_temp.tmp_pay_build_candidates_ctx AS candidate_context
+      ON candidate_context.id = selected_candidate.candidate_id
+  ),
+  updated_candidates AS (
+    UPDATE public.pay_batch_candidates AS existing_candidate
+    SET
+      candidate_tms_ref = candidate_source.candidate_tms_ref,
+      candidate_display_name = candidate_source.candidate_display_name,
+      updated_at = now()
+    FROM candidate_source
+    WHERE existing_candidate.pay_batch_id = candidate_source.pay_batch_id
+      AND existing_candidate.candidate_id = candidate_source.candidate_id
+      AND (
+        existing_candidate.candidate_tms_ref IS DISTINCT FROM candidate_source.candidate_tms_ref
+        OR existing_candidate.candidate_display_name IS DISTINCT FROM candidate_source.candidate_display_name
+      )
+    RETURNING existing_candidate.id
+  )
+  SELECT count(*)::integer
+  INTO v_updated_count
+  FROM updated_candidates;
 
-  SELECT COALESCE(jsonb_agg(sc.candidate_id::text ORDER BY sc.candidate_id::text), '[]'::jsonb)
+  WITH candidate_source AS (
+    SELECT DISTINCT
+      p_pay_batch_id AS pay_batch_id,
+      candidate_context.id AS candidate_id,
+      candidate_context.tms_ref AS candidate_tms_ref,
+      candidate_context.display_name AS candidate_display_name
+    FROM (
+      SELECT DISTINCT selected_preview_row.candidate_id
+      FROM pg_temp.tmp_pay_build_selected_preview_rows AS selected_preview_row
+    ) AS selected_candidate
+    JOIN pg_temp.tmp_pay_build_candidates_ctx AS candidate_context
+      ON candidate_context.id = selected_candidate.candidate_id
+  ),
+  inserted_candidates AS (
+    INSERT INTO public.pay_batch_candidates(
+      pay_batch_id,
+      candidate_id,
+      candidate_tms_ref,
+      candidate_display_name,
+      paye_state,
+      mismatch_settlement_choice,
+      gross_preview,
+      net_bank_amount,
+      debt_created,
+      loan_repayment_taken,
+      overpayment_recovery_taken,
+      awaiting_net_amount,
+      updated_at
+    )
+    SELECT
+      candidate_source.pay_batch_id,
+      candidate_source.candidate_id,
+      candidate_source.candidate_tms_ref,
+      candidate_source.candidate_display_name,
+      CASE WHEN v_scope = 'PAYE' THEN 'PENDING_NET' ELSE NULL END,
+      NULL::text,
+      NULL::numeric,
+      NULL::numeric,
+      0::numeric,
+      0::numeric,
+      0::numeric,
+      false,
+      now()
+    FROM candidate_source
+    WHERE NOT EXISTS (
+      SELECT 1
+      FROM public.pay_batch_candidates AS existing_candidate
+      WHERE existing_candidate.pay_batch_id = candidate_source.pay_batch_id
+        AND existing_candidate.candidate_id = candidate_source.candidate_id
+    )
+    RETURNING id
+  )
+  SELECT count(*)::integer
+  INTO v_inserted_count
+  FROM inserted_candidates;
+
+  SELECT COALESCE(jsonb_agg(selected_candidate.candidate_id::text ORDER BY selected_candidate.candidate_id::text), '[]'::jsonb)
   INTO v_candidate_ids
   FROM (
-    SELECT DISTINCT spr.candidate_id
-    FROM pg_temp.tmp_pay_build_selected_preview_rows spr
-  ) AS sc;
+    SELECT DISTINCT selected_preview_row.candidate_id
+    FROM pg_temp.tmp_pay_build_selected_preview_rows AS selected_preview_row
+  ) AS selected_candidate;
+
+  v_reused_count := coalesce(v_existing_count, 0) - coalesce(v_updated_count, 0);
+
+  IF v_reused_count < 0 THEN
+    v_reused_count := 0;
+  END IF;
 
   RETURN jsonb_build_object(
     'ok', true,
     'pay_batch_id', p_pay_batch_id::text,
+    'operation_id', CASE WHEN p_operation_id IS NULL THEN NULL ELSE p_operation_id::text END,
     'pay_channel_scope', v_scope,
     'inserted_candidate_rows', v_inserted_count,
+    'reused_candidate_rows', v_reused_count,
+    'updated_candidate_rows', v_updated_count,
+    'skipped_candidate_rows', v_skipped_count,
+    'failed_candidate_rows', v_failed_count,
     'candidate_ids', v_candidate_ids
   );
 END;
 $function$;
 
+DROP FUNCTION IF EXISTS public.pay_batch_insert_items_from_preview(uuid, uuid);
+
 CREATE OR REPLACE FUNCTION public.pay_batch_insert_items_from_preview(
   p_pay_batch_id uuid,
-  p_actor_user_id uuid DEFAULT NULL::uuid
+  p_actor_user_id uuid DEFAULT NULL::uuid,
+  p_operation_id uuid DEFAULT NULL::uuid,
+  p_candidate_scope_ids jsonb DEFAULT NULL::jsonb
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -22942,9 +23056,33 @@ DECLARE
   v_week_start date := NULL::date;
   v_rail_provider_default text := NULL;
   v_rail_env_default text := NULL;
+  v_operation_reused_count integer := 0;
 BEGIN
   IF p_pay_batch_id IS NULL THEN
     RAISE EXCEPTION 'pay_batch_id is required';
+  END IF;
+
+
+  IF p_operation_id IS NOT NULL OR p_candidate_scope_ids IS NOT NULL THEN
+    IF p_operation_id IS NULL THEN
+      RAISE EXCEPTION 'p_operation_id is required when p_candidate_scope_ids is supplied';
+    END IF;
+
+    IF p_candidate_scope_ids IS NULL OR jsonb_typeof(p_candidate_scope_ids) <> 'array' OR jsonb_array_length(p_candidate_scope_ids) = 0 THEN
+      RAISE EXCEPTION 'p_candidate_scope_ids must be a non-empty JSON array when p_operation_id is supplied';
+    END IF;
+
+    IF p_actor_user_id IS NULL THEN
+      RAISE EXCEPTION 'p_actor_user_id is required when p_operation_id is supplied';
+    END IF;
+
+    PERFORM *
+    FROM public.pay_batch_stage_operation_candidate_chunk_context(
+      p_operation_id,
+      p_pay_batch_id,
+      p_candidate_scope_ids,
+      p_actor_user_id
+    );
   END IF;
 
   IF to_regclass('pg_temp.tmp_pay_build_selected_preview_rows') IS NULL THEN
@@ -23012,7 +23150,8 @@ v_stage := 'STAGE_12_INSERT_PAY_BATCH_ITEMS';
     frozen_source_amount,
     frozen_target_amount_ex_vat,
     frozen_target_amount_vat,
-    frozen_target_amount_inc_vat
+    frozen_target_amount_inc_vat,
+    operation_source_key
   )
   with all_candidates as (
     select t.cand
@@ -23581,14 +23720,63 @@ v_stage := 'STAGE_12_INSERT_PAY_BATCH_ITEMS';
     round(fi.frozen_source_amount, 2),
     round(fi.amount_ex_vat, 2),
     round(fi.amount_vat, 2),
-    round(fi.amount_inc_vat, 2)
+    round(fi.amount_inc_vat, 2),
+    case
+      when p_operation_id is null then null::text
+      else p_operation_id::text
+        || ':earning:' || v_batch_id::text
+        || ':' || coalesce(operation_scope.id::text, 'no_scope')
+        || ':' || fi.candidate_id::text
+        || ':' || fi.item_type
+        || ':' || coalesce(fi.timesheet_id::text, 'no_timesheet')
+        || ':' || coalesce(fi.segment_key, 'no_segment')
+        || ':' || coalesce(fi.source_ref, 'no_source_ref')
+        || ':' || coalesce(fi.finance_component_id::text, 'no_component')
+    end as operation_source_key
   from final_items fi
   join public.pay_batch_candidates pbc
     on pbc.pay_batch_id = v_batch_id
    and pbc.candidate_id = fi.candidate_id
+  left join public.banking_pay_operation_candidate_scope as operation_scope
+    on p_operation_id is not null
+   and operation_scope.operation_id = p_operation_id
+   and operation_scope.pay_batch_id = v_batch_id
+   and operation_scope.candidate_id = fi.candidate_id
+   and operation_scope.pay_channel = fi.pay_channel
   join pg_temp.tmp_pay_build_candidates_ctx c
-    on c.id = fi.candidate_id;
+    on c.id = fi.candidate_id
+  on conflict (pay_batch_candidate_id, operation_source_key) where operation_source_key is not null do nothing;
   GET DIAGNOSTICS v_rows_ins_items = ROW_COUNT;
+
+  IF p_operation_id IS NOT NULL THEN
+    UPDATE public.pay_batch_items AS inserted_item
+    SET
+      operation_source_key = p_operation_id::text
+        || ':earning:' || v_batch_id::text
+        || ':' || coalesce((
+          select operation_scope.id::text
+          from public.banking_pay_operation_candidate_scope as operation_scope
+          where operation_scope.operation_id = p_operation_id
+            and operation_scope.pay_batch_id = v_batch_id
+            and operation_scope.candidate_id = batch_candidate.candidate_id
+            and operation_scope.pay_channel = inserted_item.pay_channel
+          order by operation_scope.id
+          limit 1
+        ), 'no_scope')
+        || ':' || batch_candidate.candidate_id::text
+        || ':' || inserted_item.item_type
+        || ':' || coalesce(inserted_item.timesheet_id::text, 'no_timesheet')
+        || ':' || coalesce(inserted_item.segment_key, 'no_segment')
+        || ':' || coalesce(inserted_item.source_ref, 'no_source_ref')
+        || ':' || coalesce(inserted_item.finance_component_id::text, 'no_component'),
+      updated_at = now()
+    FROM public.pay_batch_candidates AS batch_candidate
+    WHERE batch_candidate.id = inserted_item.pay_batch_candidate_id
+      AND batch_candidate.pay_batch_id = v_batch_id
+      AND batch_candidate.candidate_id = ANY(v_candidate_ids)
+      AND inserted_item.operation_source_key IS NULL
+      AND inserted_item.item_type IN ('SEGMENT_DELTA', 'EXPENSE_DELTA', 'ADJUSTMENT_DELTA', 'MILEAGE_DELTA');
+  END IF;
 
   begin
     perform public._imp_debug_audit(
@@ -23740,7 +23928,35 @@ v_stage := 'STAGE_12_INSERT_PAY_BATCH_ITEMS';
   where pbi_set.id = pbi_src.pay_batch_item_id;
 
 
-  GET DIAGNOSTICS v_rows_ins_items = ROW_COUNT;
+  IF p_operation_id IS NOT NULL THEN
+    UPDATE public.pay_batch_items AS inserted_item
+    SET
+      operation_source_key = p_operation_id::text
+        || ':earning:' || v_batch_id::text
+        || ':' || coalesce((
+          select operation_scope.id::text
+          from public.banking_pay_operation_candidate_scope as operation_scope
+          where operation_scope.operation_id = p_operation_id
+            and operation_scope.pay_batch_id = v_batch_id
+            and operation_scope.candidate_id = batch_candidate.candidate_id
+            and operation_scope.pay_channel = inserted_item.pay_channel
+          order by operation_scope.id
+          limit 1
+        ), 'no_scope')
+        || ':' || batch_candidate.candidate_id::text
+        || ':' || inserted_item.item_type
+        || ':' || coalesce(inserted_item.timesheet_id::text, 'no_timesheet')
+        || ':' || coalesce(inserted_item.segment_key, 'no_segment')
+        || ':' || coalesce(inserted_item.source_ref, 'no_source_ref')
+        || ':' || coalesce(inserted_item.finance_component_id::text, 'no_component'),
+      updated_at = now()
+    FROM public.pay_batch_candidates AS batch_candidate
+    WHERE batch_candidate.id = inserted_item.pay_batch_candidate_id
+      AND batch_candidate.pay_batch_id = v_batch_id
+      AND batch_candidate.candidate_id = ANY(v_candidate_ids)
+      AND inserted_item.operation_source_key IS NULL
+      AND inserted_item.item_type IN ('SEGMENT_DELTA', 'EXPENSE_DELTA', 'ADJUSTMENT_DELTA', 'MILEAGE_DELTA');
+  END IF;
 
   PERFORM 1
   FROM public.pay_batch_items pbi
@@ -23836,22 +24052,47 @@ v_stage := 'STAGE_12_INSERT_PAY_BATCH_ITEMS';
   WHERE pbi_set.id = pbi_src.pay_batch_item_id;
 
 
+  IF p_operation_id IS NOT NULL THEN
+    SELECT count(*)::integer
+    INTO v_operation_reused_count
+    FROM public.pay_batch_items AS existing_item
+    JOIN public.pay_batch_candidates AS existing_candidate
+      ON existing_candidate.id = existing_item.pay_batch_candidate_id
+    WHERE existing_candidate.pay_batch_id = v_batch_id
+      AND existing_candidate.candidate_id = ANY(v_candidate_ids)
+      AND existing_item.operation_source_key LIKE (p_operation_id::text || ':earning:%');
+
+    v_operation_reused_count := coalesce(v_operation_reused_count, 0) - coalesce(v_rows_ins_items, 0);
+
+    IF v_operation_reused_count < 0 THEN
+      v_operation_reused_count := 0;
+    END IF;
+  END IF;
+
   RETURN jsonb_build_object(
     'ok', true,
     'pay_batch_id', v_batch_id::text,
-    'inserted_item_rows', v_rows_ins_items
+    'operation_id', CASE WHEN p_operation_id IS NULL THEN NULL ELSE p_operation_id::text END,
+    'inserted_item_rows', v_rows_ins_items,
+    'reused_item_rows', coalesce(v_operation_reused_count, 0),
+    'skipped_item_rows', 0,
+    'failed_item_rows', 0
   );
 END;
 $function$;
 
 
 
+DROP FUNCTION IF EXISTS public.pay_batch_apply_finance_adjustments(uuid, text, uuid, numeric, date);
+
 CREATE OR REPLACE FUNCTION public.pay_batch_apply_finance_adjustments(
   p_pay_batch_id uuid,
   p_pay_channel_scope text,
   p_actor_user_id uuid DEFAULT NULL::uuid,
   p_vat_rate_pct numeric DEFAULT NULL::numeric,
-  p_week_start date DEFAULT NULL::date
+  p_week_start date DEFAULT NULL::date,
+  p_operation_id uuid DEFAULT NULL::uuid,
+  p_candidate_scope_ids jsonb DEFAULT NULL::jsonb
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -23891,10 +24132,41 @@ DECLARE
   v_missing_materialised_manual_debt_template_candidate_ids uuid[] := ARRAY[]::uuid[];
   v_staged_manual_debt_template_rows_by_candidate jsonb := '{}'::jsonb;
   v_payout_instruction_freeze_rec record;
+  v_operation_allocation_total integer := 0;
+  v_operation_allocation_done integer := 0;
+  v_operation_mismatch_details jsonb := '{}'::jsonb;
 BEGIN
   IF p_pay_batch_id IS NULL THEN
     RAISE EXCEPTION 'pay_batch_id is required';
   END IF;
+
+  IF p_operation_id IS NOT NULL OR p_candidate_scope_ids IS NOT NULL THEN
+    IF p_operation_id IS NULL THEN
+      RAISE EXCEPTION 'p_operation_id is required when p_candidate_scope_ids is supplied';
+    END IF;
+
+    IF p_candidate_scope_ids IS NULL OR jsonb_typeof(p_candidate_scope_ids) <> 'array' OR jsonb_array_length(p_candidate_scope_ids) = 0 THEN
+      RAISE EXCEPTION 'p_candidate_scope_ids must be a non-empty JSON array when p_operation_id is supplied';
+    END IF;
+
+    IF p_actor_user_id IS NULL THEN
+      RAISE EXCEPTION 'p_actor_user_id is required when p_operation_id is supplied';
+    END IF;
+
+    PERFORM *
+    FROM public.pay_batch_stage_operation_candidate_chunk_context(
+      p_operation_id,
+      p_pay_batch_id,
+      p_candidate_scope_ids,
+      p_actor_user_id
+    );
+
+    SELECT settings_context.vat_rate_pct, settings_context.pay_week_start
+    INTO v_vat_rate_pct, v_week_start
+    FROM pg_temp.tmp_pay_build_settings_context AS settings_context
+    LIMIT 1;
+  END IF;
+
   IF v_scope NOT IN ('PAYE', 'UMBRELLA') THEN
     RAISE EXCEPTION 'pay_channel_scope must be PAYE or UMBRELLA';
   END IF;
@@ -23919,6 +24191,77 @@ BEGIN
   SELECT COALESCE(array_agg(distinct spr.candidate_id), ARRAY[]::uuid[])
   INTO v_candidate_ids
   FROM pg_temp.tmp_pay_build_selected_preview_rows spr;
+
+  IF p_operation_id IS NOT NULL THEN
+    SELECT count(*)::integer,
+           count(*) FILTER (WHERE allocation_row.status = 'ITEM_CREATED' AND allocation_row.pay_batch_item_id IS NOT NULL)::integer
+    INTO v_operation_allocation_total, v_operation_allocation_done
+    FROM public.banking_pay_operation_candidate_allocation_rows AS allocation_row
+    WHERE allocation_row.operation_id = p_operation_id
+      AND allocation_row.candidate_id = ANY(v_candidate_ids)
+      AND allocation_row.pay_channel = v_scope;
+
+    IF coalesce(v_operation_allocation_total, 0) > 0
+       AND coalesce(v_operation_allocation_total, 0) = coalesce(v_operation_allocation_done, 0) THEN
+      RETURN jsonb_build_object(
+        'ok', true,
+        'pay_batch_id', v_batch_id::text,
+        'operation_id', p_operation_id::text,
+        'applied_count', 0,
+        'reused_count', v_operation_allocation_done,
+        'skipped_count', 0,
+        'failed_count', 0,
+        'mismatch_details', '{}'::jsonb
+      );
+    END IF;
+
+    IF coalesce(v_operation_allocation_done, 0) > 0
+       AND coalesce(v_operation_allocation_done, 0) < coalesce(v_operation_allocation_total, 0) THEN
+      IF EXISTS (
+        SELECT 1
+        FROM public.banking_pay_operation_candidate_allocation_rows AS allocation_row
+        JOIN public.pay_batch_items AS linked_item
+          ON linked_item.id = allocation_row.pay_batch_item_id
+        WHERE allocation_row.operation_id = p_operation_id
+          AND allocation_row.candidate_id = ANY(v_candidate_ids)
+          AND allocation_row.pay_channel = v_scope
+          AND allocation_row.status = 'ITEM_CREATED'
+          AND allocation_row.pay_batch_item_id IS NOT NULL
+          AND linked_item.reservation_id IS NOT NULL
+        LIMIT 1
+      ) THEN
+        RAISE EXCEPTION '%', jsonb_build_object(
+          'error', 'PAY_BATCH_APPLY_FINANCE_ADJUSTMENTS',
+          'code', 'OPERATION_ALLOCATION_PARTIAL_RETRY_AFTER_RESERVATION',
+          'message', 'pay_batch_apply_finance_adjustments cannot safely retry a partially-linked finance chunk after reservations have been created',
+          'pay_batch_id', v_batch_id::text,
+          'operation_id', p_operation_id::text,
+          'pay_channel_scope', v_scope
+        )::text;
+      END IF;
+
+      DELETE FROM public.pay_batch_items AS linked_item_delete
+      USING public.banking_pay_operation_candidate_allocation_rows AS allocation_row
+      WHERE allocation_row.operation_id = p_operation_id
+        AND allocation_row.candidate_id = ANY(v_candidate_ids)
+        AND allocation_row.pay_channel = v_scope
+        AND allocation_row.status = 'ITEM_CREATED'
+        AND allocation_row.pay_batch_item_id = linked_item_delete.id
+        AND linked_item_delete.reservation_id IS NULL;
+
+      UPDATE public.banking_pay_operation_candidate_allocation_rows AS allocation_reset
+      SET
+        status = 'PENDING',
+        pay_batch_item_id = NULL,
+        updated_at_utc = now()
+      WHERE allocation_reset.operation_id = p_operation_id
+        AND allocation_reset.candidate_id = ANY(v_candidate_ids)
+        AND allocation_reset.pay_channel = v_scope
+        AND allocation_reset.status = 'ITEM_CREATED';
+
+      v_operation_allocation_done := 0;
+    END IF;
+  END IF;
 
 
   IF EXISTS (
@@ -26655,9 +26998,80 @@ v_stage := 'STAGE_16C1_FREEZE_ALL_FINANCE_ITEM_PAYOUT_INSTRUCTIONS';
   where pbi_set.id = pbi_src.pay_batch_item_id;
 
 
+  IF p_operation_id IS NOT NULL THEN
+    WITH allocation_matches AS (
+      SELECT DISTINCT ON (allocation_row.id)
+        allocation_row.id AS allocation_row_id,
+        batch_item.id AS pay_batch_item_id,
+        allocation_row.operation_source_key AS operation_source_key
+      FROM public.banking_pay_operation_candidate_allocation_rows AS allocation_row
+      JOIN public.pay_batch_candidates AS batch_candidate
+        ON batch_candidate.pay_batch_id = v_batch_id
+       AND batch_candidate.candidate_id = allocation_row.candidate_id
+      JOIN public.pay_batch_items AS batch_item
+        ON batch_item.pay_batch_candidate_id = batch_candidate.id
+       AND batch_item.finance_case_id IS NOT DISTINCT FROM allocation_row.finance_case_id
+       AND batch_item.finance_component_id IS NOT DISTINCT FROM allocation_row.finance_component_id
+       AND round(abs(coalesce(batch_item.amount_ex_vat, 0)), 2) = round(abs(coalesce(allocation_row.allocated_amount, 0)), 2)
+      WHERE allocation_row.operation_id = p_operation_id
+        AND allocation_row.candidate_id = ANY(v_candidate_ids)
+        AND allocation_row.pay_channel = v_scope
+        AND coalesce(batch_item.is_voided, false) = false
+      ORDER BY allocation_row.id, batch_item.created_at NULLS LAST, batch_item.id
+    ),
+    updated_items AS (
+      UPDATE public.pay_batch_items AS batch_item_update
+      SET
+        operation_source_key = allocation_matches.operation_source_key,
+        updated_at = now()
+      FROM allocation_matches
+      WHERE batch_item_update.id = allocation_matches.pay_batch_item_id
+        AND batch_item_update.operation_source_key IS DISTINCT FROM allocation_matches.operation_source_key
+      RETURNING batch_item_update.id
+    )
+    UPDATE public.banking_pay_operation_candidate_allocation_rows AS allocation_update
+    SET
+      status = 'ITEM_CREATED',
+      pay_batch_id = v_batch_id,
+      pay_batch_item_id = allocation_matches.pay_batch_item_id,
+      updated_at_utc = now()
+    FROM allocation_matches
+    WHERE allocation_update.id = allocation_matches.allocation_row_id
+      AND (allocation_update.status <> 'ITEM_CREATED' OR allocation_update.pay_batch_item_id IS DISTINCT FROM allocation_matches.pay_batch_item_id);
+
+    SELECT jsonb_build_object(
+             'allocation_rows_total', count(*)::integer,
+             'allocation_rows_unlinked', count(*) FILTER (WHERE allocation_row.status <> 'ITEM_CREATED' OR allocation_row.pay_batch_item_id IS NULL)::integer
+           )
+    INTO v_operation_mismatch_details
+    FROM public.banking_pay_operation_candidate_allocation_rows AS allocation_row
+    WHERE allocation_row.operation_id = p_operation_id
+      AND allocation_row.candidate_id = ANY(v_candidate_ids)
+      AND allocation_row.pay_channel = v_scope;
+
+    IF coalesce((v_operation_mismatch_details->>'allocation_rows_unlinked')::integer, 0) > 0 THEN
+      RAISE EXCEPTION '%', jsonb_build_object(
+        'error', 'PAY_BATCH_APPLY_FINANCE_ADJUSTMENTS',
+        'code', 'OPERATION_ALLOCATION_ROWS_NOT_LINKED',
+        'message', 'pay_batch_apply_finance_adjustments could not link every operation allocation row to a created pay batch item',
+        'pay_batch_id', v_batch_id::text,
+        'operation_id', p_operation_id::text,
+        'pay_channel_scope', v_scope,
+        'mismatch_details', v_operation_mismatch_details
+      )::text;
+    END IF;
+  END IF;
+
   RETURN jsonb_build_object(
     'ok', true,
     'pay_batch_id', v_batch_id::text,
+    'operation_id', CASE WHEN p_operation_id IS NULL THEN NULL ELSE p_operation_id::text END,
+    'pay_channel_scope', v_scope,
+    'applied_count', (coalesce(v_rows_ins_loan_payout_items, 0) + coalesce(v_rows_ins_manual_credit_payout_items, 0) + coalesce(v_rows_ins_overpayment_recovery_items, 0) + coalesce(v_rows_ins_debt_items, 0) + coalesce(v_rows_ins_loan_items, 0) + coalesce(v_rows_ins_dormant_recovery_template_items, 0) + coalesce(v_rows_ins_dormant_manual_debt_template_items, 0) + coalesce(v_rows_ins_dormant_loan_template_items, 0) + coalesce(v_rows_ins_dormant_overpayment_template_items, 0)),
+    'reused_count', coalesce(v_operation_allocation_done, 0),
+    'skipped_count', (coalesce(v_rows_skipped_dormant_recovery_template_items, 0) + coalesce(v_rows_skipped_dormant_manual_debt_template_items, 0) + coalesce(v_rows_skipped_dormant_loan_template_items, 0) + coalesce(v_rows_skipped_dormant_overpayment_template_items, 0)),
+    'failed_count', 0,
+    'mismatch_details', coalesce(v_operation_mismatch_details, '{}'::jsonb),
     'loan_payout_items_inserted', coalesce(v_rows_ins_loan_payout_items, 0),
     'manual_credit_payout_items_inserted', coalesce(v_rows_ins_manual_credit_payout_items, 0),
     'overpayment_recovery_items_inserted', coalesce(v_rows_ins_overpayment_recovery_items, 0),
@@ -26683,12 +27097,17 @@ $function$;
 
 
 
+DROP FUNCTION IF EXISTS public.pay_batch_finalize_reservations_and_markers(uuid, text, uuid, date, date);
+DROP FUNCTION IF EXISTS public.pay_batch_finalize_reservations_and_markers(uuid, text, uuid, date, date, uuid, jsonb);
+
 CREATE OR REPLACE FUNCTION public.pay_batch_finalize_reservations_and_markers(
   p_pay_batch_id uuid,
   p_pay_channel_scope text,
   p_actor_user_id uuid DEFAULT NULL::uuid,
   p_pay_date date DEFAULT NULL::date,
-  p_week_start date DEFAULT NULL::date
+  p_week_start date DEFAULT NULL::date,
+  p_operation_id uuid DEFAULT NULL::uuid,
+  p_candidate_scope_ids jsonb DEFAULT NULL::jsonb
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -26724,6 +27143,12 @@ DECLARE
   v_rows_upd_candidates_paye_awaiting integer := 0;
   v_rows_upd_candidates_debt integer := 0;
   v_rows_ins_debt_items integer := 0;
+  v_rows_ins_reservations integer := 0;
+  v_rows_reused_reservations integer := 0;
+  v_rows_already_linked_reservations integer := 0;
+  v_rows_preexisting_unlinked_reservations integer := 0;
+  v_rows_mismatched_linked_reservations integer := 0;
+  v_failed_count integer := 0;
 BEGIN
   IF p_pay_batch_id IS NULL THEN
     RAISE EXCEPTION 'pay_batch_id is required';
@@ -26731,8 +27156,39 @@ BEGIN
   IF v_scope NOT IN ('PAYE', 'UMBRELLA') THEN
     RAISE EXCEPTION 'pay_channel_scope must be PAYE or UMBRELLA';
   END IF;
+  IF p_operation_id IS NOT NULL OR p_candidate_scope_ids IS NOT NULL THEN
+    IF p_operation_id IS NULL THEN
+      RAISE EXCEPTION 'p_operation_id is required when p_candidate_scope_ids is supplied';
+    END IF;
+
+    IF p_candidate_scope_ids IS NULL OR jsonb_typeof(p_candidate_scope_ids) <> 'array' OR jsonb_array_length(p_candidate_scope_ids) = 0 THEN
+      RAISE EXCEPTION 'p_candidate_scope_ids must be a non-empty JSON array when p_operation_id is supplied';
+    END IF;
+
+    IF p_actor_user_id IS NULL THEN
+      RAISE EXCEPTION 'p_actor_user_id is required when p_operation_id is supplied';
+    END IF;
+
+    PERFORM *
+    FROM public.pay_batch_stage_operation_candidate_chunk_context(
+      p_operation_id,
+      p_pay_batch_id,
+      p_candidate_scope_ids,
+      p_actor_user_id
+    );
+
+    SELECT settings_context.pay_week_start
+    INTO v_week_start
+    FROM pg_temp.tmp_pay_build_settings_context AS settings_context
+    LIMIT 1;
+  END IF;
+
   IF v_week_start IS NULL THEN
     RAISE EXCEPTION 'week_start is required';
+  END IF;
+
+  IF to_regclass('pg_temp.tmp_pay_build_selected_preview_rows') IS NULL THEN
+    RAISE EXCEPTION 'tmp_pay_build_selected_preview_rows temp table is required';
   END IF;
 
   SELECT count(*)::int INTO v_selected_preview_rows_pre_selection_ct FROM pg_temp.tmp_pay_build_selected_preview_rows;
@@ -26748,10 +27204,12 @@ v_stage := 'STAGE_13_DELETE_EMPTY_CANDIDATES';
   select count(*)::int
   into v_candidate_rows_before_empty_delete
   from public.pay_batch_candidates pbc_before
-  where pbc_before.pay_batch_id = v_batch_id;
+  where pbc_before.pay_batch_id = v_batch_id
+    and (p_operation_id is null or pbc_before.candidate_id = any(v_candidate_ids));
 
   delete from public.pay_batch_candidates pbc_del
   where pbc_del.pay_batch_id = v_batch_id
+    and (p_operation_id is null or pbc_del.candidate_id = any(v_candidate_ids))
     and not exists (
       select 1
       from public.pay_batch_items pbi_chk
@@ -26765,7 +27223,8 @@ v_stage := 'STAGE_13_DELETE_EMPTY_CANDIDATES';
   select count(*)::int
   into v_candidate_rows_after_empty_delete
   from public.pay_batch_candidates pbc_after
-  where pbc_after.pay_batch_id = v_batch_id;
+  where pbc_after.pay_batch_id = v_batch_id
+    and (p_operation_id is null or pbc_after.candidate_id = any(v_candidate_ids));
 
   begin
     perform public._imp_debug_audit(
@@ -26790,6 +27249,7 @@ v_stage := 'STAGE_13_DELETE_EMPTY_CANDIDATES';
     select 1
     from public.pay_batch_candidates pbc_any
     where pbc_any.pay_batch_id = v_batch_id
+      and (p_operation_id is null or pbc_any.candidate_id = any(v_candidate_ids))
     limit 1
   ) then
     begin
@@ -26836,6 +27296,7 @@ v_stage := 'STAGE_13_DELETE_EMPTY_CANDIDATES';
     join lateral public._pay_batch_item_economic_components(null::uuid, array[pbi.id]::uuid[]) as ec
       on true
     where pbc.pay_batch_id = v_batch_id
+      and (p_operation_id is null or pbc.candidate_id = any(v_candidate_ids))
       and pbi.timesheet_id is not null
       and coalesce(pbi.is_voided,false) = false
       and pbi.item_type in ('SEGMENT_DELTA','EXPENSE_DELTA','ADJUSTMENT_DELTA','MILEAGE_DELTA')
@@ -26904,6 +27365,7 @@ v_stage := 'STAGE_13_DELETE_EMPTY_CANDIDATES';
     join public.pay_batch_candidates pbc
       on pbc.id = pbi.pay_batch_candidate_id
     where pbc.pay_batch_id = v_batch_id
+      and (p_operation_id is null or pbc.candidate_id = any(v_candidate_ids))
       and pbi.timesheet_id is not null
   ),
   reserved_raw as (
@@ -27001,6 +27463,7 @@ v_stage := 'STAGE_13_DELETE_EMPTY_CANDIDATES';
     join public.pay_batch_candidates pbc
       on pbc.id = pbi.pay_batch_candidate_id
     where pbc.pay_batch_id = v_batch_id
+      and (p_operation_id is null or pbc.candidate_id = any(v_candidate_ids))
       and pbi.timesheet_id is not null
       and coalesce(pbi.is_voided,false) = false
       and pbi.item_type in ('SEGMENT_DELTA','EXPENSE_DELTA','ADJUSTMENT_DELTA','MILEAGE_DELTA')
@@ -27423,7 +27886,8 @@ v_stage := 'STAGE_16A_SET_PAYE_AWAITING_NET_MARKER';
       )
     ),
     updated_at = v_now_utc
-  where pbc.pay_batch_id = v_batch_id;
+  where pbc.pay_batch_id = v_batch_id
+    and (p_operation_id is null or pbc.candidate_id = any(v_candidate_ids));
 
   get diagnostics v_rows_upd_candidates_paye_awaiting = row_count;
 
@@ -27441,6 +27905,61 @@ v_stage := 'STAGE_16D_CREATE_FINANCE_RESERVATIONS';
       null, null, null, null, null
     );
   exception when others then null; end;
+
+  with scoped_finance_reservation_items as (
+    select
+      pbi.id as pay_batch_item_id,
+      pbi.reservation_id as current_reservation_id,
+      (
+        substr(md5(v_batch_id::text || ':' || pbi.id::text || ':' || coalesce(pbi.finance_case_id::text, 'no_case') || ':' || coalesce(pbi.finance_component_id::text, 'no_component')), 1, 8) || '-' ||
+        substr(md5(v_batch_id::text || ':' || pbi.id::text || ':' || coalesce(pbi.finance_case_id::text, 'no_case') || ':' || coalesce(pbi.finance_component_id::text, 'no_component')), 9, 4) || '-' ||
+        substr(md5(v_batch_id::text || ':' || pbi.id::text || ':' || coalesce(pbi.finance_case_id::text, 'no_case') || ':' || coalesce(pbi.finance_component_id::text, 'no_component')), 13, 4) || '-' ||
+        substr(md5(v_batch_id::text || ':' || pbi.id::text || ':' || coalesce(pbi.finance_case_id::text, 'no_case') || ':' || coalesce(pbi.finance_component_id::text, 'no_component')), 17, 4) || '-' ||
+        substr(md5(v_batch_id::text || ':' || pbi.id::text || ':' || coalesce(pbi.finance_case_id::text, 'no_case') || ':' || coalesce(pbi.finance_component_id::text, 'no_component')), 21, 12)
+      )::uuid as deterministic_reservation_id
+    from public.pay_batch_items as pbi
+    join public.pay_batch_candidates as pbc
+      on pbc.id = pbi.pay_batch_candidate_id
+    where pbc.pay_batch_id = v_batch_id
+      and (p_operation_id is null or pbc.candidate_id = any(v_candidate_ids))
+      and pbi.is_voided = false
+      and pbi.finance_case_id is not null
+  )
+  select
+    count(*) filter (
+      where scoped_item.current_reservation_id is null
+        and existing_reservation.id is not null
+    )::integer,
+    count(*) filter (
+      where scoped_item.current_reservation_id is not null
+        and scoped_item.current_reservation_id = scoped_item.deterministic_reservation_id
+        and linked_reservation.id is not null
+    )::integer,
+    count(*) filter (
+      where scoped_item.current_reservation_id is not null
+        and scoped_item.current_reservation_id <> scoped_item.deterministic_reservation_id
+    )::integer
+  into
+    v_rows_preexisting_unlinked_reservations,
+    v_rows_already_linked_reservations,
+    v_rows_mismatched_linked_reservations
+  from scoped_finance_reservation_items as scoped_item
+  left join public.pay_advance_reservations as existing_reservation
+    on existing_reservation.id = scoped_item.deterministic_reservation_id
+  left join public.pay_advance_reservations as linked_reservation
+    on linked_reservation.id = scoped_item.current_reservation_id;
+
+  if coalesce(v_rows_mismatched_linked_reservations, 0) > 0 then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_BATCH_RESERVATION_NON_DETERMINISTIC_LINK',
+      'stage', v_stage,
+      'pay_batch_id', v_batch_id::text,
+      'message', 'Finance reservation items must use deterministic reservation ids before finalisation can continue',
+      'mismatched_linked_reservation_count', v_rows_mismatched_linked_reservations
+    )::text;
+  end if;
+
+  v_rows_reused_reservations := coalesce(v_rows_preexisting_unlinked_reservations, 0) + coalesce(v_rows_already_linked_reservations, 0);
 
   with ins as (
     insert into public.pay_advance_reservations (
@@ -27474,7 +27993,13 @@ v_stage := 'STAGE_16D_CREATE_FINANCE_RESERVATIONS';
       frozen_rounded_target_amount
     )
     select
-      gen_random_uuid() as id,
+      (
+        substr(md5(v_batch_id::text || ':' || pbi.id::text || ':' || coalesce(pbi.finance_case_id::text, 'no_case') || ':' || coalesce(pbi.finance_component_id::text, 'no_component')), 1, 8) || '-' ||
+        substr(md5(v_batch_id::text || ':' || pbi.id::text || ':' || coalesce(pbi.finance_case_id::text, 'no_case') || ':' || coalesce(pbi.finance_component_id::text, 'no_component')), 9, 4) || '-' ||
+        substr(md5(v_batch_id::text || ':' || pbi.id::text || ':' || coalesce(pbi.finance_case_id::text, 'no_case') || ':' || coalesce(pbi.finance_component_id::text, 'no_component')), 13, 4) || '-' ||
+        substr(md5(v_batch_id::text || ':' || pbi.id::text || ':' || coalesce(pbi.finance_case_id::text, 'no_case') || ':' || coalesce(pbi.finance_component_id::text, 'no_component')), 17, 4) || '-' ||
+        substr(md5(v_batch_id::text || ':' || pbi.id::text || ':' || coalesce(pbi.finance_case_id::text, 'no_case') || ':' || coalesce(pbi.finance_component_id::text, 'no_component')), 21, 12)
+      )::uuid as id,
       pbi.finance_case_id,
       pbi.finance_component_id,
       v_batch_id as pay_batch_id,
@@ -27515,9 +28040,16 @@ v_stage := 'STAGE_16D_CREATE_FINANCE_RESERVATIONS';
     join public.pay_batch_candidates pbc
       on pbc.id = pbi.pay_batch_candidate_id
     where pbc.pay_batch_id = v_batch_id
+      and (p_operation_id is null or pbc.candidate_id = any(v_candidate_ids))
       and pbi.is_voided = false
       and pbi.finance_case_id is not null
       and pbi.reservation_id is null
+    on conflict (id) do update
+    set
+      pay_batch_id = excluded.pay_batch_id,
+      pay_batch_candidate_id = excluded.pay_batch_candidate_id,
+      pay_batch_item_id = excluded.pay_batch_item_id,
+      updated_by_user_id = excluded.updated_by_user_id
     returning id, pay_batch_item_id
   )
   update public.pay_batch_items pbi
@@ -27526,6 +28058,10 @@ v_stage := 'STAGE_16D_CREATE_FINANCE_RESERVATIONS';
     updated_at = v_now_utc
   from ins
   where pbi.id = ins.pay_batch_item_id;
+
+  GET DIAGNOSTICS v_rows_ins_reservations = ROW_COUNT;
+
+  v_rows_ins_reservations := greatest(coalesce(v_rows_ins_reservations, 0) - coalesce(v_rows_preexisting_unlinked_reservations, 0), 0);
 
   v_stage := 'STAGE_17_CLIP_NEGATIVES_TO_DEBT_CREATED';
   -- Part 1E: legacy DEBT_CREATED / negative clipping stage disabled (NO-OP).
@@ -27539,6 +28075,11 @@ v_stage := 'STAGE_16D_CREATE_FINANCE_RESERVATIONS';
   RETURN jsonb_build_object(
     'ok', true,
     'pay_batch_id', v_batch_id::text,
+    'operation_id', CASE WHEN p_operation_id IS NULL THEN NULL ELSE p_operation_id::text END,
+    'reservations_created', coalesce(v_rows_ins_reservations, 0),
+    'reservations_reused', coalesce(v_rows_reused_reservations, 0),
+    'markers_updated', coalesce(v_rows_upd_candidates_paye_awaiting, 0) + coalesce(v_rows_upd_candidates_debt, 0),
+    'failed_count', coalesce(v_failed_count, 0),
     'candidate_rows_before_empty_delete', v_candidate_rows_before_empty_delete,
     'deleted_candidate_rows', v_rows_del_candidates,
     'candidate_rows_after_empty_delete', v_candidate_rows_after_empty_delete,
@@ -27550,10 +28091,16 @@ $function$;
 
 
 
+
+DROP FUNCTION IF EXISTS public.pay_batch_populate_candidate_summaries(uuid, text, uuid);
+DROP FUNCTION IF EXISTS public.pay_batch_populate_candidate_summaries(uuid, text, uuid, uuid, jsonb);
+
 CREATE OR REPLACE FUNCTION public.pay_batch_populate_candidate_summaries(
   p_pay_batch_id uuid,
   p_pay_channel_scope text,
-  p_actor_user_id uuid DEFAULT NULL::uuid
+  p_actor_user_id uuid DEFAULT NULL::uuid,
+  p_operation_id uuid DEFAULT NULL::uuid,
+  p_candidate_scope_ids jsonb DEFAULT NULL::jsonb
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -27566,12 +28113,43 @@ DECLARE
   v_now_utc timestamptz := now();
   v_stage text := NULL;
   v_rows_upd_candidates_summaries integer := 0;
+  v_rows_inserted_summaries integer := 0;
+  v_rows_failed_summaries integer := 0;
+  v_candidate_ids uuid[] := ARRAY[]::uuid[];
 BEGIN
   IF p_pay_batch_id IS NULL THEN
     RAISE EXCEPTION 'pay_batch_id is required';
   END IF;
   IF v_scope NOT IN ('PAYE', 'UMBRELLA') THEN
     RAISE EXCEPTION 'pay_channel_scope must be PAYE or UMBRELLA';
+  END IF;
+
+  IF p_operation_id IS NOT NULL OR p_candidate_scope_ids IS NOT NULL THEN
+    IF p_operation_id IS NULL THEN
+      RAISE EXCEPTION 'p_operation_id is required when p_candidate_scope_ids is supplied';
+    END IF;
+
+    IF p_candidate_scope_ids IS NULL OR jsonb_typeof(p_candidate_scope_ids) <> 'array' OR jsonb_array_length(p_candidate_scope_ids) = 0 THEN
+      RAISE EXCEPTION 'p_candidate_scope_ids must be a non-empty JSON array when p_operation_id is supplied';
+    END IF;
+
+    IF p_actor_user_id IS NULL THEN
+      RAISE EXCEPTION 'p_actor_user_id is required when p_operation_id is supplied';
+    END IF;
+
+    PERFORM *
+    FROM public.pay_batch_stage_operation_candidate_chunk_context(
+      p_operation_id,
+      p_pay_batch_id,
+      p_candidate_scope_ids,
+      p_actor_user_id
+    );
+  END IF;
+
+  IF to_regclass('pg_temp.tmp_pay_build_selected_preview_rows') IS NOT NULL THEN
+    SELECT COALESCE(array_agg(distinct selected_preview_row.candidate_id), ARRAY[]::uuid[])
+    INTO v_candidate_ids
+    FROM pg_temp.tmp_pay_build_selected_preview_rows AS selected_preview_row;
   END IF;
 
 
@@ -27653,6 +28231,7 @@ v_stage := 'STAGE_18_POPULATE_CANDIDATE_SUMMARIES';
     left join public.pay_batch_items pbi
       on pbi.pay_batch_candidate_id = pbc.id
     where pbc.pay_batch_id = v_batch_id
+      and (p_operation_id is null or pbc.candidate_id = any(v_candidate_ids))
     group by pbc.id
   ),
   paye_net as (
@@ -27705,7 +28284,8 @@ v_stage := 'STAGE_18_POPULATE_CANDIDATE_SUMMARIES';
   left join paye_net pn
     on pn.pay_batch_candidate_id = sums.pay_batch_candidate_id
   where pbc.id = sums.pay_batch_candidate_id
-    and pbc.pay_batch_id = v_batch_id;
+    and pbc.pay_batch_id = v_batch_id
+    and (p_operation_id is null or pbc.candidate_id = any(v_candidate_ids));
 
   get diagnostics v_rows_upd_candidates_summaries = row_count;
 
@@ -27714,6 +28294,10 @@ v_stage := 'STAGE_18_POPULATE_CANDIDATE_SUMMARIES';
   RETURN jsonb_build_object(
     'ok', true,
     'pay_batch_id', v_batch_id::text,
+    'operation_id', CASE WHEN p_operation_id IS NULL THEN NULL ELSE p_operation_id::text END,
+    'summaries_inserted', coalesce(v_rows_inserted_summaries, 0),
+    'summaries_updated', coalesce(v_rows_upd_candidates_summaries, 0),
+    'failed_count', coalesce(v_rows_failed_summaries, 0),
     'updated_candidate_rows', coalesce(v_rows_upd_candidates_summaries, 0)
   );
 END;
@@ -27721,9 +28305,14 @@ $function$;
 
 
 
+DROP FUNCTION IF EXISTS public.pay_batch_create_timesheet_snapshots(uuid, uuid);
+DROP FUNCTION IF EXISTS public.pay_batch_create_timesheet_snapshots(uuid, uuid, uuid, jsonb);
+
 CREATE OR REPLACE FUNCTION public.pay_batch_create_timesheet_snapshots(
   p_pay_batch_id uuid,
-  p_actor_user_id uuid DEFAULT NULL::uuid
+  p_actor_user_id uuid DEFAULT NULL::uuid,
+  p_operation_id uuid DEFAULT NULL::uuid,
+  p_candidate_scope_ids jsonb DEFAULT NULL::jsonb
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -27734,10 +28323,42 @@ DECLARE
   v_batch_id uuid := p_pay_batch_id;
   v_stage text := 'STAGE_19_CREATE_TIMESHEET_SNAPSHOTS';
   v_rows_ins_snapshots integer := 0;
+  v_rows_reused_snapshots integer := 0;
+  v_rows_updated_snapshots integer := 0;
+  v_rows_failed_snapshots integer := 0;
   v_missing_snapshot_count integer := 0;
+  v_candidate_ids uuid[] := ARRAY[]::uuid[];
 BEGIN
   IF p_pay_batch_id IS NULL THEN
     RAISE EXCEPTION 'pay_batch_id is required';
+  END IF;
+
+  IF p_operation_id IS NOT NULL OR p_candidate_scope_ids IS NOT NULL THEN
+    IF p_operation_id IS NULL THEN
+      RAISE EXCEPTION 'p_operation_id is required when p_candidate_scope_ids is supplied';
+    END IF;
+
+    IF p_candidate_scope_ids IS NULL OR jsonb_typeof(p_candidate_scope_ids) <> 'array' OR jsonb_array_length(p_candidate_scope_ids) = 0 THEN
+      RAISE EXCEPTION 'p_candidate_scope_ids must be a non-empty JSON array when p_operation_id is supplied';
+    END IF;
+
+    IF p_actor_user_id IS NULL THEN
+      RAISE EXCEPTION 'p_actor_user_id is required when p_operation_id is supplied';
+    END IF;
+
+    PERFORM *
+    FROM public.pay_batch_stage_operation_candidate_chunk_context(
+      p_operation_id,
+      p_pay_batch_id,
+      p_candidate_scope_ids,
+      p_actor_user_id
+    );
+  END IF;
+
+  IF to_regclass('pg_temp.tmp_pay_build_selected_preview_rows') IS NOT NULL THEN
+    SELECT COALESCE(array_agg(distinct selected_preview_row.candidate_id), ARRAY[]::uuid[])
+    INTO v_candidate_ids
+    FROM pg_temp.tmp_pay_build_selected_preview_rows AS selected_preview_row;
   END IF;
 
   IF to_regclass('pg_temp.tmp_pay_build_timesheet_snapshots_ctx') IS NULL THEN
@@ -27752,6 +28373,7 @@ BEGIN
     JOIN public.pay_batch_candidates pbc
       ON pbc.id = pbi.pay_batch_candidate_id
     WHERE pbc.pay_batch_id = v_batch_id
+      AND (p_operation_id IS NULL OR pbc.candidate_id = ANY(v_candidate_ids))
       AND pbi.timesheet_id IS NOT NULL
   ) AS touched_ts
   LEFT JOIN pg_temp.tmp_pay_build_timesheet_snapshots_ctx ts_ctx
@@ -27770,6 +28392,7 @@ BEGIN
       JOIN public.pay_batch_candidates pbc
         ON pbc.id = pbi.pay_batch_candidate_id
       WHERE pbc.pay_batch_id = v_batch_id
+        AND (p_operation_id IS NULL OR pbc.candidate_id = ANY(v_candidate_ids))
         AND pbi.timesheet_id IS NOT NULL
     );
 
@@ -27789,6 +28412,7 @@ BEGIN
     JOIN public.pay_batch_candidates pbc
       ON pbc.id = pbi.pay_batch_candidate_id
     WHERE pbc.pay_batch_id = v_batch_id
+      AND (p_operation_id IS NULL OR pbc.candidate_id = ANY(v_candidate_ids))
       AND pbi.timesheet_id IS NOT NULL
   ),
   ts_channel AS (
@@ -27799,6 +28423,7 @@ BEGIN
     JOIN public.pay_batch_candidates pbc
       ON pbc.id = pbi.pay_batch_candidate_id
     WHERE pbc.pay_batch_id = v_batch_id
+      AND (p_operation_id IS NULL OR pbc.candidate_id = ANY(v_candidate_ids))
       AND pbi.timesheet_id IS NOT NULL
       AND pbi.pay_channel IN ('PAYE', 'UMBRELLA')
     ORDER BY pbi.timesheet_id, pbi.pay_channel DESC, pbi.id DESC
@@ -27814,6 +28439,7 @@ BEGIN
     JOIN public.pay_batch_candidates pbc
       ON pbc.id = pbi.pay_batch_candidate_id
     WHERE pbc.pay_batch_id = v_batch_id
+      AND (p_operation_id IS NULL OR pbc.candidate_id = ANY(v_candidate_ids))
       AND pbi.timesheet_id IS NOT NULL
       AND coalesce(pbi.is_voided, false) = false
       AND pbi.frozen_component_snapshot_json IS NOT NULL
@@ -27870,6 +28496,11 @@ BEGIN
   RETURN jsonb_build_object(
     'ok', true,
     'pay_batch_id', v_batch_id::text,
+    'operation_id', CASE WHEN p_operation_id IS NULL THEN NULL ELSE p_operation_id::text END,
+    'inserted_count', coalesce(v_rows_ins_snapshots, 0),
+    'reused_count', coalesce(v_rows_reused_snapshots, 0),
+    'updated_count', coalesce(v_rows_updated_snapshots, 0),
+    'failed_count', coalesce(v_rows_failed_snapshots, 0),
     'inserted_snapshot_rows', coalesce(v_rows_ins_snapshots, 0),
     'missing_snapshot_count', coalesce(v_missing_snapshot_count, 0)
   );
@@ -27877,9 +28508,15 @@ END;
 $function$;
 
 
+
+DROP FUNCTION IF EXISTS public.pay_batch_build_item_breakdowns(uuid, uuid);
+DROP FUNCTION IF EXISTS public.pay_batch_build_item_breakdowns(uuid, uuid, uuid, jsonb);
+
 CREATE OR REPLACE FUNCTION public.pay_batch_build_item_breakdowns(
   p_pay_batch_id uuid,
-  p_actor_user_id uuid DEFAULT NULL::uuid
+  p_actor_user_id uuid DEFAULT NULL::uuid,
+  p_operation_id uuid DEFAULT NULL::uuid,
+  p_candidate_scope_ids jsonb DEFAULT NULL::jsonb
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -27890,9 +28527,38 @@ DECLARE
   v_batch_id uuid := p_pay_batch_id;
   v_stage text := NULL;
   v_rows_ins_breakdowns integer := 0;
+  v_rows_reused_breakdowns integer := 0;
+  v_rows_failed_breakdowns integer := 0;
+  v_candidate_ids uuid[] := ARRAY[]::uuid[];
 BEGIN
   IF p_pay_batch_id IS NULL THEN
     RAISE EXCEPTION 'pay_batch_id is required';
+  END IF;
+
+  IF p_operation_id IS NOT NULL OR p_candidate_scope_ids IS NOT NULL THEN
+    IF p_operation_id IS NULL THEN
+      RAISE EXCEPTION 'p_operation_id is required when p_candidate_scope_ids is supplied';
+    END IF;
+
+    IF p_candidate_scope_ids IS NULL OR jsonb_typeof(p_candidate_scope_ids) <> 'array' OR jsonb_array_length(p_candidate_scope_ids) = 0 THEN
+      RAISE EXCEPTION 'p_candidate_scope_ids must be a non-empty JSON array when p_operation_id is supplied';
+    END IF;
+
+    IF p_actor_user_id IS NULL THEN
+      RAISE EXCEPTION 'p_actor_user_id is required when p_operation_id is supplied';
+    END IF;
+
+    PERFORM *
+    FROM public.pay_batch_stage_operation_candidate_chunk_context(
+      p_operation_id,
+      p_pay_batch_id,
+      p_candidate_scope_ids,
+      p_actor_user_id
+    );
+
+    SELECT COALESCE(array_agg(distinct selected_preview_row.candidate_id), ARRAY[]::uuid[])
+    INTO v_candidate_ids
+    FROM pg_temp.tmp_pay_build_selected_preview_rows AS selected_preview_row;
   END IF;
 
   v_stage := 'STAGE_20_BUILD_ITEM_BREAKDOWNS';
@@ -27928,6 +28594,7 @@ BEGIN
     JOIN public.pay_batch_candidates AS pbc
       ON pbc.id = pbi.pay_batch_candidate_id
     WHERE pbc.pay_batch_id = v_batch_id
+      AND (p_operation_id IS NULL OR pbc.candidate_id = ANY(v_candidate_ids))
       AND COALESCE(pbi.is_voided, false) = false
       AND NOT EXISTS (
         SELECT 1
@@ -28418,7 +29085,8 @@ BEGIN
     amount_ex_vat,
     amount_vat,
     amount_inc_vat,
-    meta_json
+    meta_json,
+    operation_source_key
   )
   SELECT
     al.pay_batch_item_id,
@@ -28430,10 +29098,39 @@ BEGIN
     al.amount_ex_vat,
     al.amount_vat,
     al.amount_inc_vat,
-    al.meta_json
-  FROM all_lines AS al;
+    al.meta_json,
+    CASE
+      WHEN p_operation_id IS NULL THEN NULL::text
+      ELSE p_operation_id::text
+        || ':breakdown:' || al.pay_batch_item_id::text
+        || ':' || al.line_kind
+        || ':' || coalesce(al.bucket_code, 'no_bucket')
+        || ':' || coalesce(al.unit_name, 'no_unit')
+        || ':' || coalesce(round(coalesce(al.amount_ex_vat, 0), 2)::text, '0')
+    END AS operation_source_key
+  FROM all_lines AS al
+  ON CONFLICT (pay_batch_item_id, operation_source_key) WHERE operation_source_key IS NOT NULL DO NOTHING;
 
   GET DIAGNOSTICS v_rows_ins_breakdowns = ROW_COUNT;
+
+  IF p_operation_id IS NOT NULL THEN
+    SELECT count(*)::integer
+    INTO v_rows_reused_breakdowns
+    FROM public.pay_batch_item_breakdowns AS existing_breakdown
+    JOIN public.pay_batch_items AS existing_item
+      ON existing_item.id = existing_breakdown.pay_batch_item_id
+    JOIN public.pay_batch_candidates AS existing_candidate
+      ON existing_candidate.id = existing_item.pay_batch_candidate_id
+    WHERE existing_candidate.pay_batch_id = v_batch_id
+      AND existing_candidate.candidate_id = ANY(v_candidate_ids)
+      AND existing_breakdown.operation_source_key LIKE (p_operation_id::text || ':breakdown:%');
+
+    v_rows_reused_breakdowns := coalesce(v_rows_reused_breakdowns, 0) - coalesce(v_rows_ins_breakdowns, 0);
+
+    IF v_rows_reused_breakdowns < 0 THEN
+      v_rows_reused_breakdowns := 0;
+    END IF;
+  END IF;
 
   BEGIN
     PERFORM public._imp_debug_audit(
@@ -28453,6 +29150,10 @@ BEGIN
   RETURN jsonb_build_object(
     'ok', true,
     'pay_batch_id', v_batch_id::text,
+    'operation_id', CASE WHEN p_operation_id IS NULL THEN NULL ELSE p_operation_id::text END,
+    'inserted_count', COALESCE(v_rows_ins_breakdowns, 0),
+    'reused_count', COALESCE(v_rows_reused_breakdowns, 0),
+    'failed_count', COALESCE(v_rows_failed_breakdowns, 0),
     'inserted_breakdown_rows', COALESCE(v_rows_ins_breakdowns, 0)
   );
 END;
@@ -28460,9 +29161,13 @@ $function$;
 
 
 
+DROP FUNCTION IF EXISTS public.pay_batch_assert_integrity(uuid, uuid);
+DROP FUNCTION IF EXISTS public.pay_batch_assert_integrity(uuid, uuid, uuid);
+
 CREATE OR REPLACE FUNCTION public.pay_batch_assert_integrity(
   p_pay_batch_id uuid,
-  p_actor_user_id uuid DEFAULT NULL::uuid
+  p_actor_user_id uuid DEFAULT NULL::uuid,
+  p_operation_id uuid DEFAULT NULL::uuid
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -28485,23 +29190,159 @@ DECLARE
   v_candidate_ids uuid[] := ARRAY[]::uuid[];
   v_now_utc timestamptz := now();
   v_override_consume_rec record;
+  v_operation_mismatch_details jsonb := '{}'::jsonb;
+  v_operation_affected_candidate_ids jsonb := '[]'::jsonb;
+  v_operation_mismatch_count integer := 0;
 BEGIN
   IF p_pay_batch_id IS NULL THEN
     RAISE EXCEPTION 'pay_batch_id is required';
   END IF;
 
-  SELECT ctx.rail_provider_default, ctx.rail_env_default, ctx.need_name_check, ctx.requires_payee_map
-  INTO v_rail_provider_default, v_rail_env_default, v_need_name_check, v_requires_payee_map
-  FROM pg_temp.tmp_pay_build_settings_context ctx
-  LIMIT 1;
+  IF to_regclass('pg_temp.tmp_pay_build_settings_context') IS NOT NULL THEN
+    SELECT ctx.rail_provider_default, ctx.rail_env_default, ctx.need_name_check, ctx.requires_payee_map
+    INTO v_rail_provider_default, v_rail_env_default, v_need_name_check, v_requires_payee_map
+    FROM pg_temp.tmp_pay_build_settings_context AS ctx
+    LIMIT 1;
+  END IF;
+
+  IF (v_rail_provider_default IS NULL OR v_rail_env_default IS NULL) AND p_operation_id IS NOT NULL THEN
+    SELECT batch_row.rail_provider_snapshot,
+           batch_row.rail_env_snapshot,
+           (coalesce(settings_row.rail_supports_name_check, false) = true and upper(btrim(coalesce(batch_row.rail_provider_snapshot, ''))) <> 'CSV') AS need_name_check,
+           (upper(btrim(coalesce(batch_row.rail_provider_snapshot, ''))) <> 'CSV') AS requires_payee_map
+    INTO v_rail_provider_default, v_rail_env_default, v_need_name_check, v_requires_payee_map
+    FROM public.pay_batches AS batch_row
+    CROSS JOIN LATERAL (
+      SELECT settings_defaults_row.rail_supports_name_check
+      FROM public.settings_defaults AS settings_defaults_row
+      ORDER BY settings_defaults_row.id ASC
+      LIMIT 1
+    ) AS settings_row
+    WHERE batch_row.id = v_batch_id;
+  END IF;
 
   IF v_rail_provider_default IS NULL OR v_rail_env_default IS NULL THEN
     RAISE EXCEPTION 'tmp_pay_build_settings_context temp table is required';
   END IF;
 
-  SELECT COALESCE(array_agg(distinct spr.candidate_id), ARRAY[]::uuid[])
-  INTO v_candidate_ids
-  FROM pg_temp.tmp_pay_build_selected_preview_rows spr;
+  IF to_regclass('pg_temp.tmp_pay_build_selected_preview_rows') IS NOT NULL THEN
+    SELECT COALESCE(array_agg(distinct spr.candidate_id), ARRAY[]::uuid[])
+    INTO v_candidate_ids
+    FROM pg_temp.tmp_pay_build_selected_preview_rows AS spr;
+  ELSIF p_operation_id IS NOT NULL THEN
+    SELECT COALESCE(array_agg(distinct scope_row.candidate_id), ARRAY[]::uuid[])
+    INTO v_candidate_ids
+    FROM public.banking_pay_operation_candidate_scope AS scope_row
+    WHERE scope_row.operation_id = p_operation_id
+      AND scope_row.pay_batch_id = v_batch_id;
+  END IF;
+
+  IF p_operation_id IS NOT NULL THEN
+    CREATE TEMPORARY TABLE IF NOT EXISTS pg_temp.tmp_pay_build_candidates_ctx (
+      id uuid PRIMARY KEY,
+      tms_ref text,
+      display_name text,
+      pay_method text,
+      umbrella_id uuid,
+      first_name text,
+      last_name text,
+      account_holder text,
+      sort_code text,
+      account_number text,
+      bank_details_hash text,
+      payee_id text,
+      payee_account_id text,
+      umbrella_vat_chargeable boolean
+    ) ON COMMIT DROP;
+
+    INSERT INTO pg_temp.tmp_pay_build_candidates_ctx (
+      id,
+      tms_ref,
+      display_name,
+      pay_method,
+      umbrella_id,
+      first_name,
+      last_name,
+      account_holder,
+      sort_code,
+      account_number,
+      bank_details_hash,
+      payee_id,
+      payee_account_id,
+      umbrella_vat_chargeable
+    )
+    SELECT
+      candidate_row.id,
+      candidate_row.tms_ref,
+      candidate_row.display_name,
+      upper(coalesce(candidate_row.pay_method, '')),
+      candidate_row.umbrella_id,
+      candidate_row.first_name,
+      candidate_row.last_name,
+      candidate_row.account_holder,
+      regexp_replace(coalesce(candidate_row.sort_code, ''), '[^0-9]', '', 'g'),
+      nullif(regexp_replace(coalesce(candidate_row.account_number, ''), '[^0-9]', '', 'g'), ''),
+      candidate_row.bank_details_hash,
+      bank_payee_candidate.payee_id,
+      bank_payee_candidate.payee_account_id,
+      coalesce(umbrella_row.vat_chargeable, false)
+    FROM public.candidates AS candidate_row
+    LEFT JOIN public.umbrellas AS umbrella_row
+      ON umbrella_row.id = candidate_row.umbrella_id
+    LEFT JOIN public.bank_payee_map AS bank_payee_candidate
+      ON upper(coalesce(bank_payee_candidate.rail_provider, '')) = upper(btrim(coalesce(v_rail_provider_default, '')))
+     AND upper(coalesce(bank_payee_candidate.rail_env, '')) = upper(btrim(coalesce(v_rail_env_default, '')))
+     AND upper(coalesce(bank_payee_candidate.entity_kind, '')) = 'CANDIDATE'
+     AND bank_payee_candidate.entity_id = candidate_row.id
+     AND bank_payee_candidate.bank_details_hash = candidate_row.bank_details_hash
+    WHERE candidate_row.id = ANY(v_candidate_ids)
+    ON CONFLICT (id) DO NOTHING;
+
+    CREATE TEMPORARY TABLE IF NOT EXISTS pg_temp.tmp_pay_build_umbrellas_ctx (
+      id uuid PRIMARY KEY,
+      name text,
+      vat_chargeable boolean,
+      sort_code text,
+      account_number text,
+      bank_details_hash text,
+      payee_id text,
+      payee_account_id text
+    ) ON COMMIT DROP;
+
+    INSERT INTO pg_temp.tmp_pay_build_umbrellas_ctx (
+      id,
+      name,
+      vat_chargeable,
+      sort_code,
+      account_number,
+      bank_details_hash,
+      payee_id,
+      payee_account_id
+    )
+    SELECT
+      umbrella_row.id,
+      umbrella_row.name,
+      coalesce(umbrella_row.vat_chargeable, false),
+      regexp_replace(coalesce(umbrella_row.sort_code, ''), '[^0-9]', '', 'g'),
+      nullif(regexp_replace(coalesce(umbrella_row.account_number, ''), '[^0-9]', '', 'g'), ''),
+      umbrella_row.bank_details_hash,
+      bank_payee_umbrella.payee_id,
+      bank_payee_umbrella.payee_account_id
+    FROM public.umbrellas AS umbrella_row
+    JOIN (
+      SELECT DISTINCT candidate_ctx.umbrella_id
+      FROM pg_temp.tmp_pay_build_candidates_ctx AS candidate_ctx
+      WHERE candidate_ctx.umbrella_id IS NOT NULL
+    ) AS required_umbrella
+      ON required_umbrella.umbrella_id = umbrella_row.id
+    LEFT JOIN public.bank_payee_map AS bank_payee_umbrella
+      ON upper(coalesce(bank_payee_umbrella.rail_provider, '')) = upper(btrim(coalesce(v_rail_provider_default, '')))
+     AND upper(coalesce(bank_payee_umbrella.rail_env, '')) = upper(btrim(coalesce(v_rail_env_default, '')))
+     AND upper(coalesce(bank_payee_umbrella.entity_kind, '')) = 'UMBRELLA'
+     AND bank_payee_umbrella.entity_id = umbrella_row.id
+     AND bank_payee_umbrella.bank_details_hash = umbrella_row.bank_details_hash
+    ON CONFLICT (id) DO NOTHING;
+  END IF;
 
 
 v_stage := 'STAGE_21_BREAKDOWN_INTEGRITY_MISSING';
@@ -28513,6 +29354,7 @@ v_stage := 'STAGE_21_BREAKDOWN_INTEGRITY_MISSING';
   join public.pay_batch_candidates pbc_m
     on pbc_m.id = pbi_m.pay_batch_candidate_id
   where pbc_m.pay_batch_id = v_batch_id
+    and (p_operation_id is null or pbc_m.candidate_id = any(v_candidate_ids))
     and coalesce(pbi_m.is_voided, false) = false
     and not exists (
       select 1
@@ -28573,6 +29415,7 @@ v_stage := 'STAGE_21_BREAKDOWN_INTEGRITY_MISSING';
     left join public.pay_batch_item_breakdowns pbib_s
       on pbib_s.pay_batch_item_id = pbi_s.id
     where pbc_s.pay_batch_id = v_batch_id
+      and (p_operation_id is null or pbc_s.candidate_id = any(v_candidate_ids))
       and coalesce(pbi_s.is_voided, false) = false
     group by pbi_s.id, pbi_s.amount_ex_vat, pbi_s.amount_vat, pbi_s.amount_inc_vat
   ),
@@ -28864,6 +29707,7 @@ v_stage := 'STAGE_21_BREAKDOWN_INTEGRITY_MISSING';
               join public.pay_batch_candidates pbc
                 on pbc.id = pbi.pay_batch_candidate_id
               where pbc.pay_batch_id = v_batch_id
+                and (p_operation_id is null or pbc.candidate_id = any(v_candidate_ids))
                 and pbi.timesheet_id = tpo2.timesheet_id
                 and coalesce(pbi.is_voided, false) = false
                 and pbi.item_type in ('SEGMENT_DELTA','EXPENSE_DELTA','ADJUSTMENT_DELTA','MILEAGE_DELTA')
@@ -28979,9 +29823,148 @@ v_stage := 'STAGE_21_BREAKDOWN_INTEGRITY_MISSING';
 
   
 
+
+  IF p_operation_id IS NOT NULL THEN
+    WITH operation_checks AS (
+      SELECT 'MISSING_BATCH_CANDIDATE'::text AS check_code,
+             scope_row.candidate_id,
+             jsonb_build_object(
+               'candidate_scope_id', scope_row.id::text,
+               'candidate_id', scope_row.candidate_id::text,
+               'pay_channel', scope_row.pay_channel
+             ) AS detail_json
+      FROM public.banking_pay_operation_candidate_scope AS scope_row
+      WHERE scope_row.operation_id = p_operation_id
+        AND scope_row.pay_batch_id = v_batch_id
+        AND NOT EXISTS (
+          SELECT 1
+          FROM public.pay_batch_candidates AS batch_candidate
+          WHERE batch_candidate.pay_batch_id = v_batch_id
+            AND batch_candidate.candidate_id = scope_row.candidate_id
+        )
+
+      UNION ALL
+
+      SELECT 'UNLINKED_ALLOCATION_ROW'::text AS check_code,
+             allocation_row.candidate_id,
+             jsonb_build_object(
+               'allocation_row_id', allocation_row.id::text,
+               'candidate_scope_id', allocation_row.candidate_scope_id::text,
+               'candidate_id', allocation_row.candidate_id::text,
+               'pay_channel', allocation_row.pay_channel,
+               'operation_source_key', allocation_row.operation_source_key
+             ) AS detail_json
+      FROM public.banking_pay_operation_candidate_allocation_rows AS allocation_row
+      WHERE allocation_row.operation_id = p_operation_id
+        AND allocation_row.pay_batch_id = v_batch_id
+        AND (allocation_row.status <> 'ITEM_CREATED' OR allocation_row.pay_batch_item_id IS NULL)
+
+      UNION ALL
+
+      SELECT 'DUPLICATE_BATCH_CANDIDATE'::text AS check_code,
+             duplicate_candidate.candidate_id,
+             jsonb_build_object(
+               'candidate_id', duplicate_candidate.candidate_id::text,
+               'duplicate_count', duplicate_candidate.duplicate_count
+             ) AS detail_json
+      FROM (
+        SELECT batch_candidate.candidate_id, count(*)::integer AS duplicate_count
+        FROM public.pay_batch_candidates AS batch_candidate
+        WHERE batch_candidate.pay_batch_id = v_batch_id
+          AND batch_candidate.candidate_id = ANY(v_candidate_ids)
+        GROUP BY batch_candidate.candidate_id
+        HAVING count(*) > 1
+      ) AS duplicate_candidate
+
+      UNION ALL
+
+      SELECT 'DUPLICATE_OPERATION_ITEM_KEY'::text AS check_code,
+             batch_candidate.candidate_id,
+             jsonb_build_object(
+               'candidate_id', batch_candidate.candidate_id::text,
+               'operation_source_key', duplicate_item.operation_source_key,
+               'duplicate_count', duplicate_item.duplicate_count
+             ) AS detail_json
+      FROM (
+        SELECT item_row.pay_batch_candidate_id, item_row.operation_source_key, count(*)::integer AS duplicate_count
+        FROM public.pay_batch_items AS item_row
+        WHERE item_row.operation_source_key IS NOT NULL
+          AND item_row.operation_source_key LIKE (p_operation_id::text || ':%')
+        GROUP BY item_row.pay_batch_candidate_id, item_row.operation_source_key
+        HAVING count(*) > 1
+      ) AS duplicate_item
+      JOIN public.pay_batch_candidates AS batch_candidate
+        ON batch_candidate.id = duplicate_item.pay_batch_candidate_id
+       AND batch_candidate.pay_batch_id = v_batch_id
+
+      UNION ALL
+
+      SELECT 'DUPLICATE_OPERATION_BREAKDOWN_KEY'::text AS check_code,
+             batch_candidate.candidate_id,
+             jsonb_build_object(
+               'candidate_id', batch_candidate.candidate_id::text,
+               'operation_source_key', duplicate_breakdown.operation_source_key,
+               'duplicate_count', duplicate_breakdown.duplicate_count
+             ) AS detail_json
+      FROM (
+        SELECT breakdown_row.pay_batch_item_id, breakdown_row.operation_source_key, count(*)::integer AS duplicate_count
+        FROM public.pay_batch_item_breakdowns AS breakdown_row
+        WHERE breakdown_row.operation_source_key IS NOT NULL
+          AND breakdown_row.operation_source_key LIKE (p_operation_id::text || ':%')
+        GROUP BY breakdown_row.pay_batch_item_id, breakdown_row.operation_source_key
+        HAVING count(*) > 1
+      ) AS duplicate_breakdown
+      JOIN public.pay_batch_items AS item_row
+        ON item_row.id = duplicate_breakdown.pay_batch_item_id
+      JOIN public.pay_batch_candidates AS batch_candidate
+        ON batch_candidate.id = item_row.pay_batch_candidate_id
+       AND batch_candidate.pay_batch_id = v_batch_id
+
+      UNION ALL
+
+      SELECT 'DUPLICATE_TIMESHEET_SNAPSHOT'::text AS check_code,
+             snapshot_duplicate.candidate_id,
+             jsonb_build_object(
+               'timesheet_id', snapshot_duplicate.timesheet_id::text,
+               'candidate_id', snapshot_duplicate.candidate_id::text,
+               'pay_channel', snapshot_duplicate.pay_channel,
+               'duplicate_count', snapshot_duplicate.duplicate_count
+             ) AS detail_json
+      FROM (
+        SELECT snapshot_row.timesheet_id, snapshot_row.candidate_id, snapshot_row.pay_channel, count(*)::integer AS duplicate_count
+        FROM public.pay_batch_timesheet_snapshots AS snapshot_row
+        WHERE snapshot_row.pay_batch_id = v_batch_id
+          AND snapshot_row.candidate_id = ANY(v_candidate_ids)
+        GROUP BY snapshot_row.timesheet_id, snapshot_row.candidate_id, snapshot_row.pay_channel
+        HAVING count(*) > 1
+      ) AS snapshot_duplicate
+    )
+    SELECT count(*)::integer,
+           coalesce(jsonb_agg(operation_checks.detail_json || jsonb_build_object('check_code', operation_checks.check_code) order by operation_checks.check_code, operation_checks.candidate_id::text), '[]'::jsonb),
+           coalesce(jsonb_agg(distinct to_jsonb(operation_checks.candidate_id::text)) filter (where operation_checks.candidate_id is not null), '[]'::jsonb)
+    INTO v_operation_mismatch_count, v_operation_mismatch_details, v_operation_affected_candidate_ids
+    FROM operation_checks;
+
+    IF coalesce(v_operation_mismatch_count, 0) > 0 THEN
+      RAISE EXCEPTION '%', jsonb_build_object(
+        'error', 'PAY_BATCH_OPERATION_INTEGRITY_FAILED',
+        'message', 'Operation draft integrity checks failed',
+        'pay_batch_id', v_batch_id::text,
+        'operation_id', p_operation_id::text,
+        'affected_candidate_ids', v_operation_affected_candidate_ids,
+        'mismatch_details', v_operation_mismatch_details
+      )::text;
+    END IF;
+  END IF;
+
   RETURN jsonb_build_object(
     'ok', true,
     'pay_batch_id', v_batch_id::text,
+    'operation_id', CASE WHEN p_operation_id IS NULL THEN NULL ELSE p_operation_id::text END,
+    'pass', true,
+    'mismatch_details', coalesce(v_operation_mismatch_details, '{}'::jsonb),
+    'affected_candidate_ids', coalesce(v_operation_affected_candidate_ids, '[]'::jsonb),
+    'friendly_error_message', null::text,
     'breakdown_missing_ct', coalesce(v_breakdown_missing_ct, 0),
     'breakdown_bad_ct', coalesce(v_breakdown_bad_ct, 0),
     'blocked_count', jsonb_array_length(coalesce(v_blocked_candidates, '[]'::jsonb)),
@@ -28990,11 +29973,7 @@ v_stage := 'STAGE_21_BREAKDOWN_INTEGRITY_MISSING';
 END;
 $function$;
 
-
-
-
-
-
+DROP FUNCTION IF EXISTS public.pay_build_batch_artifacts_from_preview(date, date, uuid, jsonb, jsonb, uuid, uuid, bigint);
 
 CREATE OR REPLACE FUNCTION public.pay_build_batch_artifacts_from_preview(
   p_pay_date date,
@@ -29004,7 +29983,11 @@ CREATE OR REPLACE FUNCTION public.pay_build_batch_artifacts_from_preview(
   p_selected_preview_row_ids jsonb DEFAULT '[]'::jsonb,
   p_source_workbench_session_id uuid DEFAULT NULL::uuid,
   p_source_snapshot_run_id uuid DEFAULT NULL::uuid,
-  p_source_session_version bigint DEFAULT NULL::bigint
+  p_source_session_version bigint DEFAULT NULL::bigint,
+  p_operation_id uuid DEFAULT NULL::uuid,
+  p_candidate_scope_ids jsonb DEFAULT NULL::jsonb,
+  p_existing_pay_batch_id uuid DEFAULT NULL::uuid,
+  p_allow_legacy_unchunked boolean DEFAULT false
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -29052,7 +30035,139 @@ DECLARE
   v_hidden_template_input_by_pay_channel jsonb := '{}'::jsonb;
   v_hidden_template_staged_manual_debt_by_candidate jsonb := '{}'::jsonb;
   v_missing_manual_debt_template_candidate_ids uuid[] := ARRAY[]::uuid[];
+  v_operation_scope_count integer := 0;
+  v_operation_stage_context_json jsonb := '{}'::jsonb;
+  v_operation_pay_batch public.pay_batches%rowtype;
 BEGIN
+
+  IF p_operation_id IS NOT NULL THEN
+    IF p_actor_user_id IS NULL THEN
+      RAISE EXCEPTION 'actor_user_id is required for operation-mode pay_build_batch_artifacts_from_preview';
+    END IF;
+
+    IF p_existing_pay_batch_id IS NULL THEN
+      RAISE EXCEPTION 'p_existing_pay_batch_id is required when p_operation_id is supplied';
+    END IF;
+
+    IF p_candidate_scope_ids IS NULL OR jsonb_typeof(p_candidate_scope_ids) <> 'array' OR jsonb_array_length(p_candidate_scope_ids) = 0 THEN
+      RAISE EXCEPTION 'p_candidate_scope_ids must be a non-empty JSON array when p_operation_id is supplied';
+    END IF;
+
+    SELECT batch_row.*
+    INTO v_operation_pay_batch
+    FROM public.pay_batches AS batch_row
+    WHERE batch_row.id = p_existing_pay_batch_id
+    FOR UPDATE;
+
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'pay_build_batch_artifacts_from_preview operation-mode pay batch not found: %', p_existing_pay_batch_id;
+    END IF;
+
+    IF v_operation_pay_batch.status <> 'DRAFT' THEN
+      RAISE EXCEPTION 'pay_build_batch_artifacts_from_preview operation-mode pay batch % is not DRAFT: %', p_existing_pay_batch_id, v_operation_pay_batch.status;
+    END IF;
+
+    SELECT upper(btrim(coalesce(scope_row.pay_channel, '')))
+    INTO v_scope
+    FROM public.banking_pay_operation_candidate_scope AS scope_row
+    WHERE scope_row.operation_id = p_operation_id
+      AND scope_row.pay_batch_id = p_existing_pay_batch_id
+      AND scope_row.id IN (
+          SELECT (scope_id.value #>> '{}')::uuid
+          FROM jsonb_array_elements(p_candidate_scope_ids) AS scope_id(value)
+          WHERE (scope_id.value #>> '{}') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+      )
+      AND upper(btrim(coalesce(scope_row.pay_channel, ''))) IN ('PAYE', 'UMBRELLA')
+    GROUP BY upper(btrim(coalesce(scope_row.pay_channel, '')))
+    ORDER BY upper(btrim(coalesce(scope_row.pay_channel, '')))
+    LIMIT 1;
+
+    IF v_scope IS NULL THEN
+      RAISE EXCEPTION 'pay_build_batch_artifacts_from_preview operation-mode cannot determine pay channel scope for operation %', p_operation_id;
+    END IF;
+
+    IF (
+      SELECT count(*)::integer
+      FROM (
+        SELECT DISTINCT upper(btrim(coalesce(scope_row.pay_channel, ''))) AS pay_channel_scope
+        FROM public.banking_pay_operation_candidate_scope AS scope_row
+        WHERE scope_row.operation_id = p_operation_id
+          AND scope_row.pay_batch_id = p_existing_pay_batch_id
+          AND scope_row.id IN (
+              SELECT (scope_id.value #>> '{}')::uuid
+              FROM jsonb_array_elements(p_candidate_scope_ids) AS scope_id(value)
+              WHERE (scope_id.value #>> '{}') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          )
+          AND upper(btrim(coalesce(scope_row.pay_channel, ''))) IN ('PAYE', 'UMBRELLA')
+      ) AS scope_count_rows
+    ) <> 1 THEN
+      RAISE EXCEPTION 'pay_build_batch_artifacts_from_preview operation-mode candidate scope chunk must contain exactly one pay channel scope';
+    END IF;
+
+    SELECT count(*)::integer
+    INTO v_operation_scope_count
+    FROM public.banking_pay_operation_candidate_scope AS scope_row
+    WHERE scope_row.operation_id = p_operation_id
+      AND scope_row.pay_batch_id = p_existing_pay_batch_id
+      AND scope_row.id IN (
+          SELECT (scope_id.value #>> '{}')::uuid
+          FROM jsonb_array_elements(p_candidate_scope_ids) AS scope_id(value)
+          WHERE (scope_id.value #>> '{}') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+      );
+
+    IF v_operation_scope_count <> jsonb_array_length(p_candidate_scope_ids) THEN
+      RAISE EXCEPTION 'pay_build_batch_artifacts_from_preview operation-mode one or more candidate scope ids do not belong to operation % and batch %', p_operation_id, p_existing_pay_batch_id;
+    END IF;
+
+    SELECT to_jsonb(stage_context_row)
+    INTO v_operation_stage_context_json
+    FROM public.pay_batch_stage_operation_candidate_chunk_context(
+      p_operation_id,
+      p_existing_pay_batch_id,
+      p_candidate_scope_ids,
+      p_actor_user_id
+    ) AS stage_context_row;
+
+    v_insert_candidates_json := public.pay_batch_insert_candidates_from_preview(
+      p_existing_pay_batch_id,
+      p_actor_user_id,
+      p_operation_id,
+      p_candidate_scope_ids
+    );
+
+    v_insert_items_json := public.pay_batch_insert_items_from_preview(
+      p_existing_pay_batch_id,
+      p_actor_user_id,
+      p_operation_id,
+      p_candidate_scope_ids
+    );
+
+    v_finance_json := public.pay_batch_apply_finance_adjustments(
+      p_existing_pay_batch_id,
+      v_scope,
+      p_actor_user_id,
+      NULL::numeric,
+      NULL::date,
+      p_operation_id,
+      p_candidate_scope_ids
+    );
+
+    RETURN jsonb_build_object(
+      'ok', true,
+      'operation_mode', true,
+      'pay_batch_id', p_existing_pay_batch_id::text,
+      'operation_id', p_operation_id::text,
+      'candidate_scope_count', v_operation_scope_count,
+      'pay_channel_scope', v_scope,
+      'stages', jsonb_build_object(
+        'stage_context', coalesce(v_operation_stage_context_json, '{}'::jsonb),
+        'insert_candidates', coalesce(v_insert_candidates_json, '{}'::jsonb),
+        'insert_items', coalesce(v_insert_items_json, '{}'::jsonb),
+        'finance_adjustments', coalesce(v_finance_json, '{}'::jsonb)
+      )
+    );
+  END IF;
+
   IF p_pay_date IS NULL THEN
     RAISE EXCEPTION 'pay_date is required';
   END IF;
@@ -29259,6 +30374,11 @@ BEGIN
   SELECT count(*)::int INTO v_selected_preview_row_count FROM pg_temp.tmp_pay_build_selected_preview_rows;
   IF v_selected_preview_row_count = 0 THEN
     RAISE EXCEPTION 'Selected preview rows are not valid for the current preview';
+  END IF;
+
+  IF coalesce(p_allow_legacy_unchunked, false) IS NOT TRUE
+     AND v_selected_preview_row_count > 250 THEN
+    RAISE EXCEPTION 'pay_build_batch_artifacts_from_preview refused legacy unchunked draft creation for % selected rows. Use the Banking Pay operation draft flow for large interactive drafts.', v_selected_preview_row_count;
   END IF;
 
   SELECT upper(btrim(coalesce(spr.pay_channel, '')))
@@ -30109,6 +31229,12 @@ BEGIN
   );
 END;
 $function$;
+
+
+
+
+
+
 
 CREATE OR REPLACE FUNCTION public.pay_create_draft_batch(
   p_pay_date date,
