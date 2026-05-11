@@ -23420,11 +23420,16 @@ DROP FUNCTION IF EXISTS public.pay_remittance_queue_commit_stage(uuid, text, uui
 
 
 
+DROP FUNCTION IF EXISTS public.pay_remittance_queue_commit_stage(uuid, text, uuid, boolean);
+DROP FUNCTION IF EXISTS public.pay_remittance_queue_commit_stage(uuid, text, uuid, boolean, uuid, jsonb);
+
 CREATE OR REPLACE FUNCTION public.pay_remittance_queue_commit_stage(
   p_pay_batch_id uuid,
   p_scope text,
   p_actor_user_id uuid,
-  p_only_confirmed boolean DEFAULT false
+  p_only_confirmed boolean DEFAULT false,
+  p_operation_id uuid DEFAULT NULL::uuid,
+  p_remittance_scope_ids jsonb DEFAULT NULL::jsonb
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -23470,6 +23475,21 @@ declare
   v_settlement_confirmation_json jsonb := '{}'::jsonb;
   v_suppress_remittances boolean := false;
   v_only_confirmed boolean := coalesce(p_only_confirmed, false);
+
+  v_operation_mode boolean := false;
+  v_operation_row public.banking_pay_operations%ROWTYPE;
+  v_requested_scope_count integer := 0;
+  v_matched_scope_count integer := 0;
+  v_already_queued_count integer := 0;
+  v_inserted_outbox_count integer := 0;
+  v_reused_outbox_count integer := 0;
+  v_skipped_count integer := 0;
+  v_failed_count integer := 0;
+  v_remaining_count integer := 0;
+  v_has_more boolean := false;
+  v_operation_scope_ids jsonb := '[]'::jsonb;
+  v_operation_job_results jsonb := '[]'::jsonb;
+  v_legacy_scope_count integer := 0;
 begin
   if p_pay_batch_id is null then
     raise exception 'pay_remittance_queue_commit_stage: pay_batch_id is required';
@@ -23538,6 +23558,372 @@ begin
     v_execution_intent_json->>'suppress_remittances',
     'false'
   ))) in ('true','1','yes','y','on');
+
+  v_operation_mode := (p_operation_id IS NOT NULL OR p_remittance_scope_ids IS NOT NULL);
+
+  IF v_operation_mode THEN
+    IF p_operation_id IS NULL THEN
+      RAISE EXCEPTION 'pay_remittance_queue_commit_stage operation mode requires p_operation_id';
+    END IF;
+    IF p_remittance_scope_ids IS NULL OR jsonb_typeof(p_remittance_scope_ids) <> 'array' OR jsonb_array_length(p_remittance_scope_ids) = 0 THEN
+      RAISE EXCEPTION 'pay_remittance_queue_commit_stage operation mode requires non-empty p_remittance_scope_ids';
+    END IF;
+
+    SELECT operation_row.*
+    INTO v_operation_row
+    FROM public.banking_pay_operations AS operation_row
+    WHERE operation_row.id = p_operation_id
+    FOR UPDATE;
+
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'pay_remittance_queue_commit_stage: operation % not found', p_operation_id;
+    END IF;
+
+    IF v_operation_row.operation_type NOT IN ('REMITTANCE_QUEUE', 'PAYMENT_EXECUTE', 'PAYMENT_SETTLEMENT') THEN
+      RAISE EXCEPTION 'pay_remittance_queue_commit_stage: operation % is not remittance-capable', p_operation_id;
+    END IF;
+
+    IF v_operation_row.pay_batch_id IS NOT NULL AND v_operation_row.pay_batch_id <> p_pay_batch_id THEN
+      RAISE EXCEPTION 'pay_remittance_queue_commit_stage: operation % is for pay batch %, not %', p_operation_id, v_operation_row.pay_batch_id, p_pay_batch_id;
+    END IF;
+
+    IF v_operation_row.actor_user_id IS NOT NULL AND v_operation_row.actor_user_id <> p_actor_user_id THEN
+      RAISE EXCEPTION 'pay_remittance_queue_commit_stage: operation % belongs to a different actor', p_operation_id;
+    END IF;
+
+    WITH requested_scope AS (
+      SELECT DISTINCT (scope_element.value #>> '{}')::uuid AS remittance_scope_id
+      FROM jsonb_array_elements(p_remittance_scope_ids) AS scope_element(value)
+      WHERE (scope_element.value #>> '{}') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+    )
+    SELECT COUNT(*)::integer
+    INTO v_requested_scope_count
+    FROM requested_scope;
+
+    IF v_requested_scope_count <> jsonb_array_length(p_remittance_scope_ids) THEN
+      RAISE EXCEPTION 'pay_remittance_queue_commit_stage operation mode received invalid or duplicate remittance scope ids';
+    END IF;
+
+    WITH requested_scope AS (
+      SELECT DISTINCT (scope_element.value #>> '{}')::uuid AS remittance_scope_id
+      FROM jsonb_array_elements(p_remittance_scope_ids) AS scope_element(value)
+      WHERE (scope_element.value #>> '{}') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+    ), selected_scope AS (
+      SELECT scope_row.*
+      FROM public.banking_pay_operation_remittance_scope AS scope_row
+      JOIN requested_scope
+        ON requested_scope.remittance_scope_id = scope_row.id
+      WHERE scope_row.operation_id = p_operation_id
+        AND scope_row.pay_batch_id = p_pay_batch_id
+      FOR UPDATE OF scope_row
+    )
+    SELECT COUNT(*)::integer,
+           COUNT(*) FILTER (WHERE selected_scope.status = 'QUEUED')::integer,
+           COUNT(*) FILTER (WHERE selected_scope.status = 'SKIPPED')::integer,
+           COUNT(*) FILTER (WHERE selected_scope.status = 'FAILED')::integer,
+           COALESCE(jsonb_agg(to_jsonb(selected_scope.id::text) ORDER BY selected_scope.id::text), '[]'::jsonb)
+    INTO v_matched_scope_count,
+         v_already_queued_count,
+         v_skipped_count,
+         v_failed_count,
+         v_operation_scope_ids
+    FROM selected_scope;
+
+    IF v_matched_scope_count <> v_requested_scope_count THEN
+      RAISE EXCEPTION 'pay_remittance_queue_commit_stage operation mode one or more remittance scope ids do not belong to operation % and batch %', p_operation_id, p_pay_batch_id;
+    END IF;
+
+    IF v_suppress_remittances = true THEN
+      WITH requested_scope AS (
+        SELECT DISTINCT (scope_element.value #>> '{}')::uuid AS remittance_scope_id
+        FROM jsonb_array_elements(p_remittance_scope_ids) AS scope_element(value)
+        WHERE (scope_element.value #>> '{}') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+      ), skipped_scope AS (
+        UPDATE public.banking_pay_operation_remittance_scope AS scope_update
+        SET status = 'SKIPPED',
+            payload_json = jsonb_strip_nulls(COALESCE(scope_update.payload_json, '{}'::jsonb) || jsonb_build_object(
+              'skip_reason', 'SUPPRESSED_BY_EXECUTION_INTENT',
+              'skipped_at_utc', now()::text
+            )),
+            updated_at_utc = now()
+        FROM requested_scope
+        WHERE scope_update.id = requested_scope.remittance_scope_id
+          AND scope_update.operation_id = p_operation_id
+          AND scope_update.pay_batch_id = p_pay_batch_id
+          AND scope_update.status IN ('PENDING', 'FAILED')
+        RETURNING scope_update.id
+      ), selected_scope_after AS (
+        SELECT scope_row.status
+        FROM public.banking_pay_operation_remittance_scope AS scope_row
+        JOIN requested_scope
+          ON requested_scope.remittance_scope_id = scope_row.id
+        WHERE scope_row.operation_id = p_operation_id
+          AND scope_row.pay_batch_id = p_pay_batch_id
+      )
+      SELECT COUNT(*) FILTER (WHERE selected_scope_after.status = 'QUEUED')::integer,
+             COUNT(*) FILTER (WHERE selected_scope_after.status = 'SKIPPED')::integer,
+             COUNT(*) FILTER (WHERE selected_scope_after.status = 'FAILED')::integer
+      INTO v_already_queued_count,
+           v_skipped_count,
+           v_failed_count
+      FROM selected_scope_after;
+
+      SELECT COUNT(*)::integer
+      INTO v_remaining_count
+      FROM public.banking_pay_operation_remittance_scope AS remaining_scope
+      WHERE remaining_scope.operation_id = p_operation_id
+        AND remaining_scope.pay_batch_id = p_pay_batch_id
+        AND remaining_scope.status = 'PENDING';
+
+      v_has_more := COALESCE(v_remaining_count, 0) > 0;
+
+      UPDATE public.banking_pay_operations AS operation_update
+      SET pay_batch_id = p_pay_batch_id,
+          updated_at_utc = now()
+      WHERE operation_update.id = p_operation_id
+        AND operation_update.pay_batch_id IS NULL;
+
+      RETURN jsonb_build_object(
+        'ok', true,
+        'operation_mode', true,
+        'operation_id', p_operation_id::text,
+        'pay_batch_id', p_pay_batch_id::text,
+        'trigger_status', 'SUPPRESSED_BY_EXECUTION_INTENT',
+        'message_kind', 'REMITTANCE',
+        'queued_count', 0,
+        'reused_count', COALESCE(v_already_queued_count, 0),
+        'skipped_count', COALESCE(v_skipped_count, 0),
+        'failed_count', COALESCE(v_failed_count, 0),
+        'remaining', COALESCE(v_remaining_count, 0),
+        'has_more', v_has_more,
+        'dispatch_required', false,
+        'remittance_scope_ids', COALESCE(v_operation_scope_ids, '[]'::jsonb),
+        'job_results', '[]'::jsonb
+      );
+    END IF;
+
+    DROP TABLE IF EXISTS pg_temp.tmp_operation_remittance_targets;
+    CREATE TEMPORARY TABLE pg_temp.tmp_operation_remittance_targets AS
+    WITH requested_scope AS (
+      SELECT DISTINCT (scope_element.value #>> '{}')::uuid AS remittance_scope_id
+      FROM jsonb_array_elements(p_remittance_scope_ids) AS scope_element(value)
+      WHERE (scope_element.value #>> '{}') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+    )
+    SELECT
+      scope_row.id AS remittance_scope_id,
+      scope_row.status,
+      scope_row.pay_batch_candidate_id,
+      scope_row.candidate_id,
+      scope_row.recipient_kind,
+      scope_row.recipient_id,
+      scope_row.remittance_type,
+      scope_row.deterministic_outbox_key,
+      scope_row.payload_json,
+      scope_row.outbox_id,
+      CASE
+        WHEN upper(coalesce(scope_row.recipient_kind, '')) = 'CANDIDATE' THEN candidate_row.email
+        WHEN upper(coalesce(scope_row.recipient_kind, '')) = 'UMBRELLA' THEN umbrella_row.remittance_email
+        ELSE NULL::text
+      END AS recipient_email,
+      CASE
+        WHEN upper(coalesce(scope_row.recipient_kind, '')) = 'CANDIDATE' THEN candidate_row.display_name
+        WHEN upper(coalesce(scope_row.recipient_kind, '')) = 'UMBRELLA' THEN umbrella_row.name
+        ELSE NULL::text
+      END AS recipient_name
+    FROM public.banking_pay_operation_remittance_scope AS scope_row
+    JOIN requested_scope
+      ON requested_scope.remittance_scope_id = scope_row.id
+    LEFT JOIN public.candidates AS candidate_row
+      ON upper(coalesce(scope_row.recipient_kind, '')) = 'CANDIDATE'
+     AND candidate_row.id = scope_row.recipient_id
+    LEFT JOIN public.umbrellas AS umbrella_row
+      ON upper(coalesce(scope_row.recipient_kind, '')) = 'UMBRELLA'
+     AND umbrella_row.id = scope_row.recipient_id
+    WHERE scope_row.operation_id = p_operation_id
+      AND scope_row.pay_batch_id = p_pay_batch_id;
+
+    WITH skipped_missing_recipient AS (
+      UPDATE public.banking_pay_operation_remittance_scope AS scope_update
+      SET status = 'SKIPPED',
+          payload_json = jsonb_strip_nulls(COALESCE(scope_update.payload_json, '{}'::jsonb) || jsonb_build_object(
+            'skip_reason', 'MISSING_REMITTANCE_RECIPIENT_EMAIL',
+            'skipped_at_utc', now()::text
+          )),
+          updated_at_utc = now()
+      FROM pg_temp.tmp_operation_remittance_targets AS target_row
+      WHERE scope_update.id = target_row.remittance_scope_id
+        AND scope_update.status IN ('PENDING', 'FAILED')
+        AND NULLIF(BTRIM(COALESCE(target_row.recipient_email, '')), '') IS NULL
+      RETURNING scope_update.id
+    )
+    SELECT COALESCE(v_skipped_count, 0) + COUNT(*)::integer
+    INTO v_skipped_count
+    FROM skipped_missing_recipient;
+
+    WITH valid_targets AS (
+      SELECT target_row.*
+      FROM pg_temp.tmp_operation_remittance_targets AS target_row
+      WHERE target_row.status IN ('PENDING', 'FAILED')
+        AND NULLIF(BTRIM(COALESCE(target_row.recipient_email, '')), '') IS NOT NULL
+    ), upserted_outbox AS (
+      INSERT INTO public.mail_outbox AS mail_insert (
+        type,
+        "to",
+        cc,
+        subject,
+        body_html,
+        body_text,
+        attachments,
+        status,
+        created_at_utc,
+        created_by,
+        reference,
+        recipient_kind,
+        recipient_id,
+        context_kind,
+        context_id,
+        email_type,
+        importance,
+        scheduled_for_utc,
+        next_attempt_at_utc,
+        payment_scope_json,
+        deterministic_outbox_key
+      )
+      SELECT
+        'REMITTANCE',
+        valid_targets.recipient_email,
+        NULL::text,
+        CASE WHEN upper(coalesce(valid_targets.remittance_type, '')) = 'UMBRELLA_REMITTANCE'
+             THEN 'Umbrella remittance - ' || COALESCE(NULLIF(BTRIM(COALESCE(v_batch.bulk_reference, '')), ''), p_pay_batch_id::text)
+             ELSE 'Payment remittance - ' || COALESCE(NULLIF(BTRIM(COALESCE(v_batch.bulk_reference, '')), ''), p_pay_batch_id::text)
+        END,
+        '<p>Please find the payment remittance information for this payment batch.</p>',
+        'Please find the payment remittance information for this payment batch.',
+        '[]'::jsonb,
+        'QUEUED'::public.mail_status_enum,
+        now(),
+        p_actor_user_id,
+        valid_targets.deterministic_outbox_key,
+        lower(coalesce(valid_targets.recipient_kind, '')),
+        valid_targets.recipient_id,
+        'pay_batch',
+        p_pay_batch_id,
+        'html',
+        'Normal',
+        now(),
+        now(),
+        jsonb_strip_nulls(COALESCE(valid_targets.payload_json, '{}'::jsonb) || jsonb_build_object(
+          'pay_batch_id', p_pay_batch_id::text,
+          'operation_id', p_operation_id::text,
+          'remittance_scope_id', valid_targets.remittance_scope_id::text,
+          'deterministic_outbox_key', valid_targets.deterministic_outbox_key,
+          'remittance_type', valid_targets.remittance_type,
+          'recipient_kind', valid_targets.recipient_kind,
+          'recipient_id', CASE WHEN valid_targets.recipient_id IS NULL THEN NULL ELSE valid_targets.recipient_id::text END
+        )),
+        valid_targets.deterministic_outbox_key
+      FROM valid_targets
+      ON CONFLICT (deterministic_outbox_key)
+      DO UPDATE
+      SET status = CASE WHEN mail_insert.status::text = 'FAILED' THEN 'QUEUED'::public.mail_status_enum ELSE mail_insert.status END,
+          last_error = CASE WHEN mail_insert.status::text = 'FAILED' THEN NULL ELSE mail_insert.last_error END,
+          failed_at = CASE WHEN mail_insert.status::text = 'FAILED' THEN NULL ELSE mail_insert.failed_at END,
+          next_attempt_at_utc = CASE WHEN mail_insert.status::text = 'FAILED' THEN now() ELSE mail_insert.next_attempt_at_utc END,
+          payment_scope_json = CASE WHEN mail_insert.status::text = 'SENT' THEN mail_insert.payment_scope_json ELSE EXCLUDED.payment_scope_json END
+      RETURNING mail_insert.id,
+                mail_insert.deterministic_outbox_key,
+                (xmax = 0) AS was_inserted
+    ), updated_scope AS (
+      UPDATE public.banking_pay_operation_remittance_scope AS scope_update
+      SET status = 'QUEUED',
+          outbox_id = upserted_outbox.id,
+          updated_at_utc = now()
+      FROM upserted_outbox
+      WHERE scope_update.operation_id = p_operation_id
+        AND scope_update.pay_batch_id = p_pay_batch_id
+        AND scope_update.deterministic_outbox_key = upserted_outbox.deterministic_outbox_key
+        AND scope_update.status IN ('PENDING', 'FAILED')
+      RETURNING scope_update.id,
+                scope_update.deterministic_outbox_key,
+                scope_update.outbox_id,
+                upserted_outbox.was_inserted
+    )
+    SELECT COUNT(*) FILTER (WHERE updated_scope.was_inserted)::integer,
+           COUNT(*) FILTER (WHERE updated_scope.was_inserted IS NOT TRUE)::integer,
+           COALESCE(jsonb_agg(jsonb_build_object(
+             'remittance_scope_id', updated_scope.id::text,
+             'deterministic_outbox_key', updated_scope.deterministic_outbox_key,
+             'outbox_id', updated_scope.outbox_id::text,
+             'queued', true,
+             'reused', (updated_scope.was_inserted IS NOT TRUE)
+           ) ORDER BY updated_scope.id::text), '[]'::jsonb)
+    INTO v_inserted_outbox_count,
+         v_reused_outbox_count,
+         v_operation_job_results
+    FROM updated_scope;
+
+    SELECT COUNT(*)::integer
+    INTO v_remaining_count
+    FROM public.banking_pay_operation_remittance_scope AS remaining_scope
+    WHERE remaining_scope.operation_id = p_operation_id
+      AND remaining_scope.pay_batch_id = p_pay_batch_id
+      AND remaining_scope.status = 'PENDING';
+
+    SELECT COUNT(*)::integer
+    INTO v_failed_count
+    FROM public.banking_pay_operation_remittance_scope AS failed_scope
+    WHERE failed_scope.operation_id = p_operation_id
+      AND failed_scope.pay_batch_id = p_pay_batch_id
+      AND failed_scope.id IN (
+        SELECT (scope_element.value #>> '{}')::uuid
+        FROM jsonb_array_elements(p_remittance_scope_ids) AS scope_element(value)
+        WHERE (scope_element.value #>> '{}') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+      )
+      AND failed_scope.status = 'FAILED';
+
+    v_has_more := COALESCE(v_remaining_count, 0) > 0;
+
+    UPDATE public.banking_pay_operations AS operation_update
+    SET pay_batch_id = p_pay_batch_id,
+        updated_at_utc = now()
+    WHERE operation_update.id = p_operation_id
+      AND operation_update.pay_batch_id IS NULL;
+
+    RETURN jsonb_build_object(
+      'ok', true,
+      'operation_mode', true,
+      'operation_id', p_operation_id::text,
+      'pay_batch_id', p_pay_batch_id::text,
+      'trigger_status', CASE WHEN COALESCE(v_inserted_outbox_count, 0) + COALESCE(v_reused_outbox_count, 0) + COALESCE(v_already_queued_count, 0) > 0 THEN 'REMITTANCE_QUEUE_CHUNK_PROCESSED' ELSE 'NO_QUEUEABLE_REMITTANCE_SCOPE' END,
+      'message_kind', 'REMITTANCE',
+      'queued_count', COALESCE(v_inserted_outbox_count, 0),
+      'reused_count', COALESCE(v_reused_outbox_count, 0) + COALESCE(v_already_queued_count, 0),
+      'skipped_count', COALESCE(v_skipped_count, 0),
+      'failed_count', COALESCE(v_failed_count, 0),
+      'remaining', COALESCE(v_remaining_count, 0),
+      'has_more', v_has_more,
+      'dispatch_required', (COALESCE(v_inserted_outbox_count, 0) + COALESCE(v_reused_outbox_count, 0) + COALESCE(v_already_queued_count, 0) > 0),
+      'remittance_scope_ids', COALESCE(v_operation_scope_ids, '[]'::jsonb),
+      'job_results', COALESCE(v_operation_job_results, '[]'::jsonb)
+    );
+  END IF;
+
+  SELECT COUNT(*)::integer
+  INTO v_legacy_scope_count
+  FROM public.pay_batch_candidates AS legacy_candidate_count
+  WHERE legacy_candidate_count.pay_batch_id = p_pay_batch_id
+    AND legacy_candidate_count.remittance_sent_at_utc IS NULL;
+
+  IF COALESCE(v_legacy_scope_count, 0) > 250 THEN
+    RAISE EXCEPTION '%', jsonb_build_object(
+      'error', 'PAY_REMITTANCE_QUEUE_COMMIT_STAGE_OPERATION_REQUIRED',
+      'code', 'REMITTANCE_OPERATION_REQUIRED',
+      'message', 'pay_remittance_queue_commit_stage legacy mode is limited to small batches; use the scalable remittance operation for this payment batch.',
+      'pay_batch_id', p_pay_batch_id::text,
+      'candidate_count', v_legacy_scope_count,
+      'legacy_safe_threshold', 250
+    )::text;
+  END IF;
 
   if v_suppress_remittances = true then
     return jsonb_build_object(
@@ -24831,12 +25217,6 @@ EXCEPTION
     RAISE;
 end;
 $function$;
-
-
-
-
-
-
 
 
 
