@@ -118528,8 +118528,6 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId) {
   }));
 }
 
-
-
 async function handleContractWeekManualDraftUpsert(env, req, weekId) {
   const enc = encodeURIComponent;
   const user = await requireUser(env, req, ['admin']);
@@ -118543,10 +118541,11 @@ async function handleContractWeekManualDraftUpsert(env, req, weekId) {
     return withCORS(env, req, badRequest('Invalid JSON'));
   }
 
-  // Load contract_week (must be a planned/manual draft)
+  // Load contract_week. The schedule draft path remains MANUAL-only, but an
+  // expenses-only draft may be saved for any supported unprocessed planned week.
   const cw = await sbGetOne(
     env,
-    `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}&select=id,contract_id,week_ending_date,timesheet_id,submission_mode_snapshot,planned_schedule_json,totals_json`
+    `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}&select=id,contract_id,week_ending_date,timesheet_id,submission_mode_snapshot,planned_schedule_json,totals_json,status,additional_seq,is_adjustment`
   );
   if (!cw) return withCORS(env, req, notFound('Week not found'));
 
@@ -118555,16 +118554,180 @@ async function handleContractWeekManualDraftUpsert(env, req, weekId) {
   }
 
   const mode = String(cw.submission_mode_snapshot || '').toUpperCase();
-  if (mode !== 'MANUAL') {
-    return withCORS(env, req, badRequest('Draft save is only allowed for MANUAL weeks.'));
-  }
 
-  // Load contract (needed for bucket resolution via client time policy + BH list)
+  // Load contract once. The expenses-only path needs source lineage flags so
+  // original NHSP/HealthRoster/no-timesheet-required weeks stay protected while
+  // additional manual adjustment weeks remain eligible.
   const contract = await sbGetOne(
     env,
-    `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(cw.contract_id)}&select=id,client_id`
+    `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(cw.contract_id)}&select=id,client_id,is_nhsp,autoprocess_hr,no_timesheet_required,weekly_timesheet_source,self_bill`
   );
   if (!contract) return withCORS(env, req, notFound('Contract not found'));
+
+  const hasOwnBody = (key) => !!(body && typeof body === 'object' && Object.prototype.hasOwnProperty.call(body, key));
+  const hasExpensesDraft = hasOwnBody('expenses_draft');
+  const hasScheduleMutation = hasOwnBody('planned_schedule_json') || hasOwnBody('actual_schedule_json') || hasOwnBody('schedule_json');
+  const hasExtrasMutation = hasOwnBody('additional_units_week') || hasOwnBody('additional_units_per_day');
+  const isExpensesOnlyDraftSave = !!(hasExpensesDraft && !hasScheduleMutation && !hasExtrasMutation);
+
+  if (isExpensesOnlyDraftSave) {
+    const status = String(cw.status || '').trim().toUpperCase();
+    const additionalSeq = Number(cw.additional_seq || 0);
+    const isAdditionalAdjustmentWeek = !!(cw.is_adjustment === true || additionalSeq > 0);
+    const weeklySource = String(contract.weekly_timesheet_source || '').trim().toUpperCase();
+    const originalProtectedSource = !!(
+      !isAdditionalAdjustmentWeek &&
+      (
+        contract.is_nhsp === true ||
+        contract.autoprocess_hr === true ||
+        contract.no_timesheet_required === true ||
+        weeklySource === 'NHSP' ||
+        weeklySource === 'HEALTHROSTER'
+      )
+    );
+
+    if (status === 'CANCELLED' || status === 'CANCELED') {
+      return withCORS(env, req, badRequest('Expenses cannot be edited directly for this row.'));
+    }
+    if (status === 'AUTHORISED') {
+      return withCORS(env, req, badRequest('This timesheet is authorised. Unauthorise it before changing expenses.'));
+    }
+    if (status === 'INVOICED') {
+      return withCORS(env, req, badRequest('This timesheet is invoiced, so expenses cannot be amended on it. Create an additional manual adjustment timesheet for the new expense or correction.'));
+    }
+    if (status === 'PAID') {
+      return withCORS(env, req, badRequest('This timesheet is paid, so expenses cannot be amended on it. Create an additional manual adjustment timesheet for the new expense or correction.'));
+    }
+    if (status === 'SUBMITTED') {
+      return withCORS(env, req, badRequest('Expenses cannot be edited directly for this row.'));
+    }
+    if (originalProtectedSource) {
+      return withCORS(env, req, badRequest('Direct expenses are blocked for this source row. Use Add Additional Manual if expenses need to be claimed.'));
+    }
+
+    const round2 = (v) => {
+      const n = Number(v || 0);
+      return Number.isFinite(n) ? Math.round(n * 100) / 100 : 0;
+    };
+    const normaliseExpenseNumber = (value, fieldName) => {
+      if (value == null || value === '') return 0;
+      const n = Number(value);
+      if (!Number.isFinite(n) || n < 0) throw new Error(`Invalid ${fieldName}; value must be >= 0`);
+      return round2(n);
+    };
+    const normaliseExpenseDraftOnly = (src) => {
+      const obj = (src && typeof src === 'object') ? src : {};
+      return {
+        mileage_units: normaliseExpenseNumber(obj.mileage_units, 'expenses_draft.mileage_units'),
+        mileage_pay_rate: obj.mileage_pay_rate == null || obj.mileage_pay_rate === '' ? null : normaliseExpenseNumber(obj.mileage_pay_rate, 'expenses_draft.mileage_pay_rate'),
+        mileage_charge_rate: obj.mileage_charge_rate == null || obj.mileage_charge_rate === '' ? null : normaliseExpenseNumber(obj.mileage_charge_rate, 'expenses_draft.mileage_charge_rate'),
+        travel_pay: normaliseExpenseNumber(obj.travel_pay, 'expenses_draft.travel_pay'),
+        travel_charge: normaliseExpenseNumber(obj.travel_charge, 'expenses_draft.travel_charge'),
+        accommodation_pay: normaliseExpenseNumber(obj.accommodation_pay, 'expenses_draft.accommodation_pay'),
+        accommodation_charge: normaliseExpenseNumber(obj.accommodation_charge, 'expenses_draft.accommodation_charge'),
+        other_pay: normaliseExpenseNumber(obj.other_pay, 'expenses_draft.other_pay'),
+        other_charge: normaliseExpenseNumber(obj.other_charge, 'expenses_draft.other_charge'),
+        note: String(obj.note ?? obj.notes ?? '').trim()
+      };
+    };
+
+    let parsedExpenseDraft = body.expenses_draft;
+    if (parsedExpenseDraft === null) {
+      parsedExpenseDraft = {};
+    } else if (typeof parsedExpenseDraft === 'string') {
+      const s = parsedExpenseDraft.trim();
+      if (!s) {
+        parsedExpenseDraft = {};
+      } else {
+        try {
+          parsedExpenseDraft = JSON.parse(s);
+        } catch {
+          return withCORS(env, req, badRequest('Invalid expenses_draft JSON'));
+        }
+      }
+    }
+    if (parsedExpenseDraft != null && typeof parsedExpenseDraft !== 'object') {
+      return withCORS(env, req, badRequest('expenses_draft must be an object'));
+    }
+
+    let expensesDraft;
+    try {
+      expensesDraft = normaliseExpenseDraftOnly(parsedExpenseDraft || {});
+    } catch (e) {
+      return withCORS(env, req, badRequest(e?.message || 'Invalid expenses_draft'));
+    }
+
+    const requiredEvidence = [];
+    if (Number(expensesDraft.mileage_units || 0) > 0) requiredEvidence.push({ category: 'mileage', required_kind: 'MILEAGE' });
+    if (Number(expensesDraft.travel_pay || 0) > 0 || Number(expensesDraft.travel_charge || 0) > 0) requiredEvidence.push({ category: 'travel', required_kind: 'TRAVEL' });
+    if (Number(expensesDraft.accommodation_pay || 0) > 0 || Number(expensesDraft.accommodation_charge || 0) > 0) requiredEvidence.push({ category: 'accommodation', required_kind: 'ACCOMMODATION' });
+    if (Number(expensesDraft.other_pay || 0) > 0 || Number(expensesDraft.other_charge || 0) > 0) requiredEvidence.push({ category: 'other', required_kind: 'OTHER' });
+
+    if (requiredEvidence.length) {
+      const normaliseKindForEvidence = (k) => {
+        const u = String(k || '').trim().toUpperCase();
+        if (u === 'MILES' || u === 'MILE') return 'MILEAGE';
+        if (u === 'EXPENSE' || u === 'EXPENSES') return 'TRAVEL';
+        if (u === 'ACCOM') return 'ACCOMMODATION';
+        return u;
+      };
+      const aliases = {
+        MILEAGE: new Set(['MILEAGE', 'MILES', 'MILE']),
+        TRAVEL: new Set(['TRAVEL', 'EXPENSE', 'EXPENSES']),
+        ACCOMMODATION: new Set(['ACCOMMODATION', 'ACCOM']),
+        OTHER: new Set(['OTHER'])
+      };
+      const { rows: stagedEvidenceRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue` +
+          `?status=eq.${enc('STAGED')}` +
+          `&meta_json->>contract_week_id=eq.${enc(weekId)}` +
+          `&select=id,meta_json`
+      );
+      const stagedRows = Array.isArray(stagedEvidenceRows) ? stagedEvidenceRows : [];
+      const hasKind = (requiredKind) => stagedRows.some((row) => {
+        const meta = (row?.meta_json && typeof row.meta_json === 'object' && !Array.isArray(row.meta_json)) ? row.meta_json : {};
+        const kind = normaliseKindForEvidence(meta.staged_kind || meta.kind || '');
+        const allowed = aliases[requiredKind] || new Set([requiredKind]);
+        return allowed.has(kind);
+      });
+      const missing = requiredEvidence.filter((item) => !hasKind(item.required_kind));
+      if (missing.length) {
+        return withCORS(env, req, new Response(JSON.stringify({ error: 'EVIDENCE_REQUIRED', error_code: 'EVIDENCE_REQUIRED', missing }), { status: 400, headers: JSON_HEADERS }));
+      }
+    }
+
+    const existingTotals = cw.totals_json && typeof cw.totals_json === 'object' ? cw.totals_json : {};
+    const patch = {
+      totals_json: {
+        ...existingTotals,
+        expenses_draft: expensesDraft
+      },
+      updated_at: nowIso()
+    };
+
+    const res = await fetch(
+      `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}`,
+      {
+        method: 'PATCH',
+        headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+        body: JSON.stringify(patch)
+      }
+    );
+    if (!res.ok) {
+      const txt = await res.text().catch(() => '');
+      return withCORS(env, req, serverError(txt || 'Failed to patch contract_week expenses draft'));
+    }
+    const json = await res.json().catch(() => []);
+    const row = Array.isArray(json) ? (json[0] || null) : json;
+    return withCORS(env, req, ok(row || { updated: true, week_id: weekId, expenses_draft: expensesDraft }));
+  }
+
+  if (mode !== 'MANUAL') {
+    return withCORS(env, req, badRequest('Draft schedule save is only allowed for MANUAL weeks.'));
+  }
+
+  // Contract was loaded above and is reused for bucket resolution via client time policy + BH list.
 
   // ─────────────────────────────────────────────────────────────
   // ✅ Draft schedule is PLANNED (weekly manual draft)
@@ -118899,6 +119062,8 @@ async function handleContractWeekManualDraftUpsert(env, req, weekId) {
     const obj = (src && typeof src === 'object') ? src : {};
     return {
       mileage_units: normaliseExpenseNumber(obj.mileage_units, 'expenses_draft.mileage_units'),
+      mileage_pay_rate: obj.mileage_pay_rate == null || obj.mileage_pay_rate === '' ? null : normaliseExpenseNumber(obj.mileage_pay_rate, 'expenses_draft.mileage_pay_rate'),
+      mileage_charge_rate: obj.mileage_charge_rate == null || obj.mileage_charge_rate === '' ? null : normaliseExpenseNumber(obj.mileage_charge_rate, 'expenses_draft.mileage_charge_rate'),
       travel_pay: normaliseExpenseNumber(obj.travel_pay, 'expenses_draft.travel_pay'),
       travel_charge: normaliseExpenseNumber(obj.travel_charge, 'expenses_draft.travel_charge'),
       accommodation_pay: normaliseExpenseNumber(obj.accommodation_pay, 'expenses_draft.accommodation_pay'),
