@@ -26409,12 +26409,18 @@ DROP FUNCTION IF EXISTS public.pay_execute_bank(uuid, text, uuid);
 
 DROP FUNCTION IF EXISTS public.pay_execute_bank(uuid, text, uuid);
 
+DROP FUNCTION IF EXISTS public.pay_execute_bank(uuid, text, uuid, boolean);
+DROP FUNCTION IF EXISTS public.pay_execute_bank(uuid, text, uuid, boolean, uuid, jsonb, boolean, boolean);
 
-create or replace function public.pay_execute_bank(
+CREATE OR REPLACE FUNCTION public.pay_execute_bank(
   p_pay_batch_id uuid,
   p_pay_channel_scope text,
   p_actor_user_id uuid,
-  p_retry_blocked_funds boolean DEFAULT false
+  p_retry_blocked_funds boolean DEFAULT false,
+  p_operation_id uuid DEFAULT NULL::uuid,
+  p_transfer_scope_ids jsonb DEFAULT NULL::jsonb,
+  p_operation_mode boolean DEFAULT false,
+  p_allow_legacy_unchunked boolean DEFAULT false
 )
 returns jsonb
 language plpgsql
@@ -26475,6 +26481,11 @@ declare
   v_blocked_funds_submission_evidence_json jsonb := '{}'::jsonb;
   v_blocked_funds_active_item_count integer := 0;
   v_blocked_funds_sufficient_text text := null;
+
+  v_operation_mode boolean := false;
+  v_operation_prepare_result jsonb := '{}'::jsonb;
+  v_legacy_safe_transfer_item_threshold integer := 250;
+  v_legacy_transfer_item_count integer := 0;
 begin
   if p_pay_batch_id is null then
     raise exception 'pay_batch_id is required';
@@ -26906,6 +26917,100 @@ begin
   elsif v_batch.status not in ('DRAFT','READY','PARTIAL','WAITING_BANK_CONFIRM','DRAFT_CREATED') then
     raise exception 'pay_batch status not valid for execute (current=%)', v_batch.status;
   end if;
+
+  v_operation_mode := (coalesce(p_operation_mode, false) = true OR p_operation_id IS NOT NULL OR p_transfer_scope_ids IS NOT NULL);
+
+  IF v_operation_mode = true THEN
+    IF p_operation_id IS NULL THEN
+      RAISE EXCEPTION '%', jsonb_build_object(
+        'error', 'PAY_EXECUTE_BANK',
+        'code', 'OPERATION_ID_REQUIRED',
+        'message', 'pay_execute_bank operation mode requires p_operation_id',
+        'pay_batch_id', p_pay_batch_id::text
+      )::text;
+    END IF;
+
+    IF p_transfer_scope_ids IS NULL OR jsonb_typeof(p_transfer_scope_ids) <> 'array' OR jsonb_array_length(p_transfer_scope_ids) = 0 THEN
+      RAISE EXCEPTION '%', jsonb_build_object(
+        'error', 'PAY_EXECUTE_BANK',
+        'code', 'TRANSFER_SCOPE_IDS_REQUIRED',
+        'message', 'pay_execute_bank operation mode requires a non-empty p_transfer_scope_ids JSON array',
+        'pay_batch_id', p_pay_batch_id::text,
+        'operation_id', p_operation_id::text
+      )::text;
+    END IF;
+
+    IF NOT EXISTS (
+      SELECT 1
+      FROM public.banking_pay_operation_transfer_scope AS transfer_scope_check
+      WHERE transfer_scope_check.operation_id = p_operation_id
+        AND transfer_scope_check.pay_batch_id = p_pay_batch_id
+      LIMIT 1
+    ) THEN
+      RAISE EXCEPTION '%', jsonb_build_object(
+        'error', 'PAY_EXECUTE_BANK',
+        'code', 'TRANSFER_SCOPE_NOT_SEEDED',
+        'message', 'pay_execute_bank operation mode requires transfer scope to be seeded before chunk preparation',
+        'pay_batch_id', p_pay_batch_id::text,
+        'operation_id', p_operation_id::text
+      )::text;
+    END IF;
+
+    v_operation_prepare_result := public.pay_execute_bank_transfer_chunk_prepare(
+      p_operation_id => p_operation_id,
+      p_pay_batch_id => p_pay_batch_id,
+      p_transfer_scope_ids => p_transfer_scope_ids,
+      p_actor_user_id => p_actor_user_id
+    );
+
+    RETURN jsonb_build_object(
+      'ok', true,
+      'operation_mode', true,
+      'pay_batch_id', p_pay_batch_id::text,
+      'operation_id', p_operation_id::text,
+      'status', (SELECT pb_status.status FROM public.pay_batches AS pb_status WHERE pb_status.id = p_pay_batch_id),
+      'retry_blocked_funds', v_retry_blocked_funds,
+      'execution_commit_state', (SELECT pb_state.execution_commit_state FROM public.pay_batches AS pb_state WHERE pb_state.id = p_pay_batch_id),
+      'execution_commit_ref', (SELECT pb_state.execution_commit_ref FROM public.pay_batches AS pb_state WHERE pb_state.id = p_pay_batch_id),
+      'execution_committed_at_utc', (SELECT CASE WHEN pb_state.execution_committed_at_utc IS NULL THEN NULL ELSE pb_state.execution_committed_at_utc::text END FROM public.pay_batches AS pb_state WHERE pb_state.id = p_pay_batch_id),
+      'prepared_count', COALESCE((v_operation_prepare_result->>'prepared_count')::integer, 0),
+      'reused_count', COALESCE((v_operation_prepare_result->>'reused_count')::integer, 0),
+      'failed_count', COALESCE((v_operation_prepare_result->>'failed_count')::integer, 0),
+      'remaining_count', COALESCE((v_operation_prepare_result->>'remaining_count')::integer, 0),
+      'provider_submission_events_insertable', false,
+      'provider_submission_event_payloads', '[]'::jsonb,
+      'transfers', '[]'::jsonb,
+      'chunk_result', COALESCE(v_operation_prepare_result, '{}'::jsonb)
+    );
+  END IF;
+
+  IF COALESCE(p_allow_legacy_unchunked, false) IS NOT TRUE THEN
+    SELECT COUNT(*)::integer
+    INTO v_legacy_transfer_item_count
+    FROM public.pay_batch_candidates AS legacy_candidate
+    JOIN public.pay_batch_items AS legacy_item
+      ON legacy_item.pay_batch_candidate_id = legacy_candidate.id
+    WHERE legacy_candidate.pay_batch_id = p_pay_batch_id
+      AND COALESCE(legacy_item.is_voided, false) = false
+      AND legacy_item.item_type <> 'DEBT_CREATED'
+      AND (
+        (v_do_paye = true AND legacy_item.pay_channel = 'PAYE')
+        OR (v_do_umbrella = true AND legacy_item.pay_channel = 'UMBRELLA')
+        OR (v_do_loans = true AND legacy_item.item_type = 'LOAN_PAYOUT')
+      );
+
+    IF COALESCE(v_legacy_transfer_item_count, 0) > v_legacy_safe_transfer_item_threshold THEN
+      RAISE EXCEPTION '%', jsonb_build_object(
+        'error', 'PAY_EXECUTE_BANK',
+        'code', 'PAY_EXECUTE_BANK_LEGACY_UNCHUNKED_TOO_LARGE',
+        'message', 'This payment batch is too large for the legacy all-at-once bank transfer materialisation path. Use the scalable Banking Pay execution operation flow.',
+        'pay_batch_id', p_pay_batch_id::text,
+        'scope', v_scope,
+        'active_item_count', v_legacy_transfer_item_count,
+        'safe_legacy_threshold', v_legacy_safe_transfer_item_threshold
+      )::text;
+    END IF;
+  END IF;
 
   if v_batch.pay_date is null then
     raise exception 'pay_batch pay_date is required';
@@ -28358,6 +28463,9 @@ begin
   );
 end;
 $$;
+
+
+
 
 
 
