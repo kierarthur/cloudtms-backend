@@ -3986,7 +3986,337 @@ end;
 $$;
 
 
+CREATE OR REPLACE FUNCTION public.pay_remittance_maybe_queue_for_trigger(
+  p_pay_batch_id uuid,
+  p_trigger text,
+  p_scope text DEFAULT 'ALL'::text,
+  p_actor_user_id uuid DEFAULT NULL::uuid,
+  p_only_confirmed boolean DEFAULT false
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_batch public.pay_batches%rowtype;
+  v_trigger text;
+  v_scope text;
+  v_timing_setting text := 'ON_EXECUTION';
+  v_effective_actor_user_id uuid;
+  v_is_loans_batch boolean := false;
+  v_suppress_remittances boolean := false;
+  v_suppress_reasons jsonb := '[]'::jsonb;
+  v_auth_suppress_count integer := 0;
+  v_queue_result jsonb := '{}'::jsonb;
+  v_has_remittance_confirmed_overload boolean := false;
+  v_has_finance_confirmed_overload boolean := false;
+  v_has_remittance_legacy_function boolean := false;
+  v_has_finance_legacy_function boolean := false;
+  v_dispatch_required boolean := false;
+  v_job_count integer := 0;
+BEGIN
+  v_trigger := upper(nullif(btrim(COALESCE(p_trigger, '')), ''));
+  v_scope := upper(nullif(btrim(COALESCE(p_scope, 'ALL')), ''));
 
+  PERFORM public._imp_debug_audit(
+    p_actor_user_id,
+    'PAY_REMITTANCE_MAYBE_QUEUE_FOR_TRIGGER_START',
+    jsonb_build_object(
+      'pay_batch_id', p_pay_batch_id,
+      'trigger', v_trigger,
+      'scope', v_scope,
+      'actor_user_id', p_actor_user_id,
+      'only_confirmed', COALESCE(p_only_confirmed, false)
+    ),
+    'pay_remittance',
+    COALESCE(p_pay_batch_id::text, 'NO_BATCH_ID'),
+    NULL::jsonb,
+    NULL::text,
+    NULL::text,
+    NULL::text
+  );
+
+  IF p_pay_batch_id IS NULL THEN
+    RAISE EXCEPTION 'PAY_BATCH_ID_REQUIRED'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object('code', 'PAY_BATCH_ID_REQUIRED')::text;
+  END IF;
+
+  IF v_trigger NOT IN ('ON_EXECUTION', 'ON_PAYMENT_CONFIRMED') THEN
+    RAISE EXCEPTION 'UNSUPPORTED_REMITTANCE_QUEUE_TRIGGER'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object(
+              'code', 'UNSUPPORTED_REMITTANCE_QUEUE_TRIGGER',
+              'trigger', p_trigger,
+              'supported_triggers', jsonb_build_array('ON_EXECUTION', 'ON_PAYMENT_CONFIRMED')
+            )::text;
+  END IF;
+
+  IF v_scope NOT IN ('ALL', 'PAYE', 'UMBRELLA') THEN
+    RAISE EXCEPTION 'UNSUPPORTED_REMITTANCE_QUEUE_SCOPE'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object(
+              'code', 'UNSUPPORTED_REMITTANCE_QUEUE_SCOPE',
+              'scope', p_scope,
+              'supported_scopes', jsonb_build_array('ALL', 'PAYE', 'UMBRELLA')
+            )::text;
+  END IF;
+
+  SELECT public.pay_batches.*
+  INTO v_batch
+  FROM public.pay_batches
+  WHERE public.pay_batches.id = p_pay_batch_id;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'PAY_BATCH_NOT_FOUND'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object(
+              'code', 'PAY_BATCH_NOT_FOUND',
+              'pay_batch_id', p_pay_batch_id
+            )::text;
+  END IF;
+
+  v_effective_actor_user_id := COALESCE(p_actor_user_id, v_batch.created_by_user_id);
+  v_is_loans_batch := upper(btrim(COALESCE(v_batch.batch_kind_fixed, ''))) IN ('LOANS', 'LOAN', 'FINANCE_PAYOUTS', 'PAYOUTS');
+
+  SELECT COALESCE(NULLIF(btrim(public.settings_defaults.payment_remittance_send_timing), ''), 'ON_EXECUTION')
+  INTO v_timing_setting
+  FROM public.settings_defaults
+  ORDER BY public.settings_defaults.id
+  LIMIT 1;
+
+  v_timing_setting := upper(COALESCE(NULLIF(btrim(v_timing_setting), ''), 'ON_EXECUTION'));
+
+  IF v_timing_setting NOT IN ('ON_EXECUTION', 'ON_PAYMENT_CONFIRMED') THEN
+    v_timing_setting := 'ON_EXECUTION';
+  END IF;
+
+  IF v_timing_setting <> v_trigger THEN
+    RETURN jsonb_build_object(
+      'ok', true,
+      'queued', false,
+      'deferred', true,
+      'suppressed', false,
+      'dispatch_required', false,
+      'trigger', v_trigger,
+      'configured_timing', v_timing_setting,
+      'pay_batch_id', p_pay_batch_id,
+      'scope', v_scope,
+      'only_confirmed', COALESCE(p_only_confirmed, false),
+      'message', 'Remittance/payout notice queueing deferred because configured timing does not match this trigger.'
+    );
+  END IF;
+
+  IF lower(btrim(COALESCE(v_batch.execution_intent_json->>'suppress_remittances', 'false'))) IN ('true', '1', 'yes', 'y', 'on') THEN
+    v_suppress_remittances := true;
+    v_suppress_reasons := v_suppress_reasons || jsonb_build_array('batch.execution_intent_json.suppress_remittances');
+  END IF;
+
+  IF lower(btrim(COALESCE(v_batch.settlement_confirmation_json->>'suppress_remittances', 'false'))) IN ('true', '1', 'yes', 'y', 'on') THEN
+    v_suppress_remittances := true;
+    v_suppress_reasons := v_suppress_reasons || jsonb_build_array('batch.settlement_confirmation_json.suppress_remittances');
+  END IF;
+
+  IF lower(btrim(COALESCE(v_batch.execution_intent_json->>'suppress_remittances_pending', 'false'))) IN ('true', '1', 'yes', 'y', 'on') THEN
+    v_suppress_remittances := true;
+    v_suppress_reasons := v_suppress_reasons || jsonb_build_array('batch.execution_intent_json.suppress_remittances_pending');
+  END IF;
+
+  IF lower(btrim(COALESCE(v_batch.settlement_confirmation_json->>'suppress_remittances_pending', 'false'))) IN ('true', '1', 'yes', 'y', 'on') THEN
+    v_suppress_remittances := true;
+    v_suppress_reasons := v_suppress_reasons || jsonb_build_array('batch.settlement_confirmation_json.suppress_remittances_pending');
+  END IF;
+
+  SELECT count(*)::integer
+  INTO v_auth_suppress_count
+  FROM public.pay_batch_auth_requests AS active_auth_requests
+  WHERE active_auth_requests.pay_batch_id = p_pay_batch_id
+    AND active_auth_requests.finalised_at_utc IS NULL
+    AND (
+      lower(btrim(COALESCE(active_auth_requests.execution_intent_json->>'suppress_remittances', 'false'))) IN ('true', '1', 'yes', 'y', 'on')
+      OR lower(btrim(COALESCE(active_auth_requests.execution_intent_json->>'suppress_remittances_pending', 'false'))) IN ('true', '1', 'yes', 'y', 'on')
+    );
+
+  IF v_auth_suppress_count > 0 THEN
+    v_suppress_remittances := true;
+    v_suppress_reasons := v_suppress_reasons || jsonb_build_array('active_auth_request.execution_intent_json.suppress_remittances');
+  END IF;
+
+  IF v_suppress_remittances THEN
+    RETURN jsonb_build_object(
+      'ok', true,
+      'queued', false,
+      'deferred', false,
+      'suppressed', true,
+      'dispatch_required', false,
+      'trigger', v_trigger,
+      'configured_timing', v_timing_setting,
+      'pay_batch_id', p_pay_batch_id,
+      'scope', v_scope,
+      'only_confirmed', COALESCE(p_only_confirmed, false),
+      'suppress_reasons', v_suppress_reasons,
+      'message', 'Remittance/payout notice queueing suppressed by execution or settlement intent.'
+    );
+  END IF;
+
+  IF v_effective_actor_user_id IS NULL THEN
+    RETURN jsonb_build_object(
+      'ok', false,
+      'queued', false,
+      'deferred', false,
+      'suppressed', false,
+      'dispatch_required', false,
+      'trigger', v_trigger,
+      'configured_timing', v_timing_setting,
+      'pay_batch_id', p_pay_batch_id,
+      'scope', v_scope,
+      'only_confirmed', COALESCE(p_only_confirmed, false),
+      'error', 'ACTOR_USER_ID_REQUIRED_FOR_QUEUE_STAGE',
+      'message', 'Queue-stage RPC requires an actor user id and none was supplied or available from the batch creator.'
+    );
+  END IF;
+
+  v_has_remittance_confirmed_overload := to_regprocedure('public.pay_remittance_queue_commit_stage(uuid,text,uuid,boolean)') IS NOT NULL;
+  v_has_finance_confirmed_overload := to_regprocedure('public.pay_finance_payout_notice_queue_commit_stage(uuid,uuid,boolean)') IS NOT NULL;
+  v_has_remittance_legacy_function := to_regprocedure('public.pay_remittance_queue_commit_stage(uuid,text,uuid)') IS NOT NULL;
+  v_has_finance_legacy_function := to_regprocedure('public.pay_finance_payout_notice_queue_commit_stage(uuid,uuid)') IS NOT NULL;
+
+  IF v_is_loans_batch THEN
+    IF v_has_finance_confirmed_overload THEN
+      EXECUTE 'SELECT public.pay_finance_payout_notice_queue_commit_stage($1, $2, $3)'
+      INTO v_queue_result
+      USING p_pay_batch_id, v_effective_actor_user_id, COALESCE(p_only_confirmed, false);
+    ELSIF COALESCE(p_only_confirmed, false) THEN
+      v_queue_result := jsonb_build_object(
+        'ok', true,
+        'trigger_status', 'CONFIRMED_ONLY_QUEUE_STAGE_OVERLOAD_NOT_INSTALLED',
+        'message_kind', 'PAYOUT_NOTICE',
+        'automatic_commit_stage', true,
+        'dispatch_required', false,
+        'pay_batch_id', p_pay_batch_id,
+        'job_count', 0,
+        'jobs', '[]'::jsonb,
+        'message', 'Confirmed-only finance payout notice queue-stage overload is not installed yet.'
+      );
+    ELSIF v_has_finance_legacy_function THEN
+      EXECUTE 'SELECT public.pay_finance_payout_notice_queue_commit_stage($1, $2)'
+      INTO v_queue_result
+      USING p_pay_batch_id, v_effective_actor_user_id;
+    ELSE
+      v_queue_result := jsonb_build_object(
+        'ok', false,
+        'trigger_status', 'PAYOUT_NOTICE_QUEUE_STAGE_FUNCTION_MISSING',
+        'message_kind', 'PAYOUT_NOTICE',
+        'dispatch_required', false,
+        'pay_batch_id', p_pay_batch_id,
+        'job_count', 0,
+        'jobs', '[]'::jsonb,
+        'error', 'pay_finance_payout_notice_queue_commit_stage function not found'
+      );
+    END IF;
+  ELSE
+    IF v_has_remittance_confirmed_overload THEN
+      EXECUTE 'SELECT public.pay_remittance_queue_commit_stage($1, $2, $3, $4)'
+      INTO v_queue_result
+      USING p_pay_batch_id, v_scope, v_effective_actor_user_id, COALESCE(p_only_confirmed, false);
+    ELSIF COALESCE(p_only_confirmed, false) THEN
+      v_queue_result := jsonb_build_object(
+        'ok', true,
+        'trigger_status', 'CONFIRMED_ONLY_QUEUE_STAGE_OVERLOAD_NOT_INSTALLED',
+        'message_kind', 'REMITTANCE',
+        'automatic_commit_stage', true,
+        'dispatch_required', false,
+        'pay_batch_id', p_pay_batch_id,
+        'scope', v_scope,
+        'job_count', 0,
+        'jobs', '[]'::jsonb,
+        'message', 'Confirmed-only remittance queue-stage overload is not installed yet.'
+      );
+    ELSIF v_has_remittance_legacy_function THEN
+      EXECUTE 'SELECT public.pay_remittance_queue_commit_stage($1, $2, $3)'
+      INTO v_queue_result
+      USING p_pay_batch_id, v_scope, v_effective_actor_user_id;
+    ELSE
+      v_queue_result := jsonb_build_object(
+        'ok', false,
+        'trigger_status', 'REMITTANCE_QUEUE_STAGE_FUNCTION_MISSING',
+        'message_kind', 'REMITTANCE',
+        'dispatch_required', false,
+        'pay_batch_id', p_pay_batch_id,
+        'scope', v_scope,
+        'job_count', 0,
+        'jobs', '[]'::jsonb,
+        'error', 'pay_remittance_queue_commit_stage function not found'
+      );
+    END IF;
+  END IF;
+
+  v_dispatch_required := COALESCE((v_queue_result->>'dispatch_required')::boolean, false);
+  v_job_count := COALESCE((v_queue_result->>'job_count')::integer, 0);
+
+  PERFORM public._imp_debug_audit(
+    p_actor_user_id,
+    'PAY_REMITTANCE_MAYBE_QUEUE_FOR_TRIGGER_RESULT',
+    jsonb_build_object(
+      'pay_batch_id', p_pay_batch_id,
+      'trigger', v_trigger,
+      'configured_timing', v_timing_setting,
+      'scope', v_scope,
+      'only_confirmed', COALESCE(p_only_confirmed, false),
+      'is_loans_batch', v_is_loans_batch,
+      'dispatch_required', v_dispatch_required,
+      'job_count', v_job_count,
+      'queue_result_status', v_queue_result->>'trigger_status'
+    ),
+    'pay_remittance',
+    p_pay_batch_id::text,
+    NULL::jsonb,
+    NULL::text,
+    NULL::text,
+    NULL::text
+  );
+
+  RETURN jsonb_build_object(
+    'ok', COALESCE((v_queue_result->>'ok')::boolean, true),
+    'queued', v_dispatch_required,
+    'deferred', false,
+    'suppressed', false,
+    'dispatch_required', v_dispatch_required,
+    'trigger', v_trigger,
+    'configured_timing', v_timing_setting,
+    'pay_batch_id', p_pay_batch_id,
+    'scope', v_scope,
+    'only_confirmed', COALESCE(p_only_confirmed, false),
+    'is_loans_batch', v_is_loans_batch,
+    'effective_actor_user_id', v_effective_actor_user_id,
+    'queue_result', COALESCE(v_queue_result, '{}'::jsonb)
+  );
+
+EXCEPTION
+  WHEN OTHERS THEN
+    PERFORM public._imp_debug_audit(
+      p_actor_user_id,
+      'PAY_REMITTANCE_MAYBE_QUEUE_FOR_TRIGGER_ERROR',
+      jsonb_build_object(
+        'pay_batch_id', p_pay_batch_id,
+        'trigger', p_trigger,
+        'scope', p_scope,
+        'only_confirmed', COALESCE(p_only_confirmed, false),
+        'sqlstate', SQLSTATE,
+        'error_message', SQLERRM
+      ),
+      'pay_remittance',
+      COALESCE(p_pay_batch_id::text, 'NO_BATCH_ID'),
+      NULL::jsonb,
+      NULL::text,
+      NULL::text,
+      NULL::text
+    );
+
+    RAISE;
+END;
+$function$;
 
 
 
