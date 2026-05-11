@@ -20263,12 +20263,95 @@ async function buildPayBatchDetailPdfFromRows(exportObj) {
   return pdfBytes;
 }
 
-
 async function handleBankingPayBatchExportDetailPdf(env, req, user, payBatchId) {
   if (!user) return withCORS(env, req, unauthorized());
 
   const id = String(payBatchId || '').trim();
-  if (!id) return withCORS(env, req, badRequest('pay_batch_id is required'));
+
+  const stringifyFailureValue = (value) => {
+    try {
+      if (value === null || value === undefined) return '';
+      if (typeof value === 'string') return value;
+      if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') return String(value);
+      if (value instanceof Error) return String(value.message || value.name || '');
+      return JSON.stringify(value);
+    } catch {
+      try { return String(value || ''); } catch { return ''; }
+    }
+  };
+
+  const normalizeDetailPdfFailureCode = (value) => {
+    const raw = String(value || '').trim().toUpperCase();
+    if (!raw) return '';
+    const compact = raw.replace(/^ERROR[:\s]+/, '').replace(/^CODE[:\s]+/, '').replace(/[^A-Z0-9_]+/g, '_').replace(/^_+|_+$/g, '');
+    if (!compact || /^[0-9]{5}$/.test(compact) || /^P[0-9A-Z]{4}$/.test(compact)) return '';
+    if (compact === 'PAY_BATCH_VALIDATE_FRESHNESS_FAILED') return 'BATCH_STALE';
+    return compact;
+  };
+
+  const getDetailPdfFailureCopy = (code) => {
+    const normalizedCode = normalizeDetailPdfFailureCode(code) || 'EXPORT_DETAIL_PDF_FAILED';
+    if (normalizedCode === 'BATCH_STALE') {
+      return {
+        title: 'Payment batch has changed',
+        message: 'This payment batch is no longer up to date. No detail PDF was exported. Refresh the batch, review the latest details, then try again.'
+      };
+    }
+    return {
+      title: 'Detailed PDF could not be created',
+      message: 'CloudTMS could not export the payment details. Refresh the batch and try again.'
+    };
+  };
+
+  const buildDetailPdfFailurePayload = (source, fallbackCode = 'EXPORT_DETAIL_PDF_FAILED', fallbackMessage = 'CloudTMS could not export the payment details. Refresh the batch and try again.', details = {}) => {
+    const extracted = _extractDbRaisedJson(source);
+    const code = normalizeDetailPdfFailureCode(
+      (extracted && typeof extracted === 'object' ? (extracted.error_code || extracted.code || extracted.error) : '') || fallbackCode
+    ) || normalizeDetailPdfFailureCode(fallbackCode) || 'EXPORT_DETAIL_PDF_FAILED';
+    const copy = getDetailPdfFailureCopy(code);
+    const safeDetails = (details && typeof details === 'object' && !Array.isArray(details)) ? details : {};
+    const rawMessage = stringifyFailureValue(source);
+    const friendlyPayload = makeBankingFriendlyErrorPayload({
+      ok: false,
+      error_code: code,
+      code,
+      message: copy.message || fallbackMessage,
+      details: {
+        ...safeDetails,
+        pay_batch_id: id || null,
+        reason: code,
+        technical_message: rawMessage || null
+      },
+      reason: rawMessage || code,
+      technical_message: rawMessage || code
+    }, { action: 'EXPORT_DETAIL_PDF' });
+
+    return {
+      ...((friendlyPayload && typeof friendlyPayload === 'object') ? friendlyPayload : {}),
+      ok: false,
+      error_code: code,
+      code,
+      title: copy.title,
+      message: copy.message || fallbackMessage,
+      user_message: copy.message || fallbackMessage,
+      error: copy.message || fallbackMessage,
+      can_retry: true,
+      friendly_error: {
+        ...((friendlyPayload && friendlyPayload.friendly_error && typeof friendlyPayload.friendly_error === 'object') ? friendlyPayload.friendly_error : {}),
+        code,
+        title: copy.title,
+        message: copy.message || fallbackMessage
+      }
+    };
+  };
+
+  const buildDetailPdfFailureResponse = (status, source, fallbackCode = 'EXPORT_DETAIL_PDF_FAILED', fallbackMessage = 'CloudTMS could not export the payment details. Refresh the batch and try again.', details = {}) => {
+    const payload = buildDetailPdfFailurePayload(source, fallbackCode, fallbackMessage, details);
+    const code = String(payload.error_code || payload.code || '').trim().toUpperCase();
+    const resolvedStatus = code === 'BATCH_STALE' ? 409 : (Number.isFinite(Number(status)) ? Math.trunc(Number(status)) : 500);
+    return withCORS(env, req, new Response(JSON.stringify(payload), { status: resolvedStatus, headers: JSON_HEADERS }));
+  };
+
 
   const unwrapRpc = (rpcRes, key) => {
     let payload = rpcRes;
@@ -20327,12 +20410,13 @@ async function handleBankingPayBatchExportDetailPdf(env, req, user, payBatchId) 
   const _maybeStale409 = (e) => {
     const payload = _extractDbRaisedJson(e);
     if (payload && typeof payload === 'object' && String(payload.code || '').toUpperCase() === 'BATCH_STALE') {
-      const headers = new Headers();
-      headers.set('Content-Type', 'application/json; charset=utf-8');
-      return withCORS(env, req, new Response(JSON.stringify(payload), { status: 409, headers }));
+      return buildDetailPdfFailureResponse(409, e, 'BATCH_STALE', 'This payment batch is no longer up to date. No detail PDF was exported. Refresh the batch, review the latest details, then try again.', { reason: 'BATCH_STALE' });
     }
     return null;
   };
+
+
+  if (!id) return buildDetailPdfFailureResponse(400, 'pay_batch_id is required', 'EXPORT_DETAIL_PDF_FAILED', 'CloudTMS could not export the payment details. Refresh the batch and try again.', { field: 'pay_batch_id' });
 
   const safeStr = (v) => (v == null ? '' : String(v));
   const asNum = (v) => {
@@ -20811,7 +20895,7 @@ async function handleBankingPayBatchExportDetailPdf(env, req, user, payBatchId) 
   } catch (e) {
     const stale409 = _maybeStale409(e);
     if (stale409) return stale409;
-    return withCORS(env, req, serverError(String(e?.message || e || 'EXPORT_DETAIL_PDF_FAILED')));
+    return buildDetailPdfFailureResponse(500, e, 'EXPORT_DETAIL_PDF_FAILED', 'CloudTMS could not export the payment details. Refresh the batch and try again.', { stage: 'export_detail_pdf' });
   }
 }
 
@@ -23267,6 +23351,7 @@ async function handleTimesheetCreateManualDaily(env, req) {
   }));
 }
 
+
 async function handleBankingPayCreateDraft(env, req, user) {
   let body = null;
   try { body = await parseJSONBody(req); } catch { body = null; }
@@ -24767,10 +24852,34 @@ const CREATE_DRAFT_CHECKPOINT = 'NONE';
   })();
 
   if (sessionIdText && !uuidRe.test(sessionIdText)) {
-    return withCORS(env, req, badRequest('session_id must be a UUID when supplied'));
+    return buildCreateDraftSessionErrorResponse(
+      400,
+      'BANKING_CREATE_DRAFT_INVALID_INPUT',
+      'Payment batch could not be created. Refresh Banking preview and try again.',
+      {
+        field: 'session_id',
+        pay_date: payDate,
+        week_ending_cutoff: cutoffIso,
+        provided_week_ending_cutoff: providedCutoffIso,
+        pay_channel_scope: payChannelScope || 'ALL'
+      },
+      true
+    );
   }
   if (payChannelScopeRaw && !payChannelScope) {
-    return withCORS(env, req, badRequest('pay_channel_scope must be ALL, PAYE, or UMBRELLA when supplied'));
+    return buildCreateDraftSessionErrorResponse(
+      400,
+      'BANKING_CREATE_DRAFT_INVALID_INPUT',
+      'Payment batch could not be created. Refresh Banking preview and try again.',
+      {
+        field: 'pay_channel_scope',
+        pay_date: payDate,
+        week_ending_cutoff: cutoffIso,
+        provided_week_ending_cutoff: providedCutoffIso,
+        pay_channel_scope_raw: payChannelScopeRaw
+      },
+      true
+    );
   }
 
   if (!sessionIdText) {
@@ -24857,7 +24966,21 @@ const CREATE_DRAFT_CHECKPOINT = 'NONE';
 
     const normalizedSessionDecisions = normalizeBankingPayPreviewDecisions(mergedSessionDecisionInput);
     if (!normalizedSessionDecisions || normalizedSessionDecisions.ok !== true) {
-      return withCORS(env, req, badRequest(String(normalizedSessionDecisions?.error || 'Invalid preview_decisions_json')));
+      return buildCreateDraftSessionErrorResponse(
+        400,
+        'BANKING_CREATE_DRAFT_INVALID_INPUT',
+        'Payment batch could not be created. Review the selected payment rows, refresh the preview, then try again.',
+        {
+          field: 'preview_decisions_json',
+          pay_date: payDate,
+          week_ending_cutoff: cutoffIso,
+          provided_week_ending_cutoff: providedCutoffIso,
+          session_id: sessionIdText,
+          pay_channel_scope: payChannelScope || 'ALL',
+          reason: String(normalizedSessionDecisions?.error || 'Invalid preview_decisions_json')
+        },
+        true
+      );
     }
 
     try {
@@ -24872,10 +24995,37 @@ const CREATE_DRAFT_CHECKPOINT = 'NONE';
 
       sessionRow = (rows && rows[0]) ? rows[0] : null;
       if (!sessionRow) {
-        return withCORS(env, req, notFound('Workbench session not found'));
+        return buildCreateDraftSessionErrorResponse(
+          409,
+          'BANKING_PAY_CREATE_DRAFT_SESSION_STALE',
+          'Payment details changed while the batch was being prepared. Refresh the preview, review the latest payment details, then try again.',
+          {
+            pay_date: payDate,
+            week_ending_cutoff: cutoffIso,
+            provided_week_ending_cutoff: providedCutoffIso,
+            session_id: sessionIdText,
+            pay_channel_scope: payChannelScope || 'ALL',
+            reason: 'Workbench session was not found'
+          },
+          true
+        );
       }
       if (String(sessionRow.status || '').trim().toUpperCase() !== 'OPEN') {
-        return withCORS(env, req, badRequest('Workbench session is not open'));
+        return buildCreateDraftSessionErrorResponse(
+          409,
+          'BANKING_PAY_CREATE_DRAFT_SESSION_STALE',
+          'Payment details changed while the batch was being prepared. Refresh the preview, review the latest payment details, then try again.',
+          {
+            pay_date: payDate,
+            week_ending_cutoff: cutoffIso,
+            provided_week_ending_cutoff: providedCutoffIso,
+            session_id: sessionIdText,
+            session_status: String(sessionRow.status || '').trim().toUpperCase() || null,
+            pay_channel_scope: payChannelScope || 'ALL',
+            reason: 'Workbench session is not open'
+          },
+          true
+        );
       }
 
       const sourceSessionFiltersJson = (sessionRow && sessionRow.filters_json && typeof sessionRow.filters_json === 'object' && !Array.isArray(sessionRow.filters_json))
@@ -26045,7 +26195,24 @@ const CREATE_DRAFT_CHECKPOINT = 'NONE';
             preview_row_universe_count: previewRowUniverse.length
           });
         } catch {}
-        return withCORS(env, req, badRequest('No preview rows selected. Tick at least one preview row or use Tick all.'));
+        return buildCreateDraftSessionErrorResponse(
+          400,
+          'BANKING_CREATE_DRAFT_SELECTED_ROWS_INVALID',
+          'Payment batch could not be created. Review the selected payment rows, refresh the preview, then try again.',
+          {
+            field: 'preview_decisions_json.selected_preview_row_ids',
+            pay_date: payDate,
+            week_ending_cutoff: cutoffIso,
+            provided_week_ending_cutoff: providedCutoffIso,
+            effective_candidate_id: effectiveCandidateId,
+            effective_client_id: effectiveClientId,
+            filter_source: routeFilterSource,
+            filter_was_derived: routeFilterWasDerived,
+            preview_row_universe_count: previewRowUniverse.length,
+            reason: 'No preview rows selected'
+          },
+          true
+        );
       }
 
       if (previewRowUniverse.length > 0) {
@@ -26062,7 +26229,25 @@ const CREATE_DRAFT_CHECKPOINT = 'NONE';
               preview_row_universe_count: previewRowUniverse.length
             });
           } catch {}
-          return withCORS(env, req, badRequest('Selected preview rows are not valid for the current preview. Refresh preview and try again.'));
+          return buildCreateDraftSessionErrorResponse(
+            409,
+            'BANKING_CREATE_DRAFT_SELECTED_ROWS_INVALID',
+            'Payment batch could not be created. Review the selected payment rows, refresh the preview, then try again.',
+            {
+              field: 'preview_decisions_json.selected_preview_row_ids',
+              pay_date: payDate,
+              week_ending_cutoff: cutoffIso,
+              provided_week_ending_cutoff: providedCutoffIso,
+              effective_candidate_id: effectiveCandidateId,
+              effective_client_id: effectiveClientId,
+              filter_source: routeFilterSource,
+              filter_was_derived: routeFilterWasDerived,
+              selected_preview_row_count: normalizedSelectedPreviewRowIds.length,
+              preview_row_universe_count: previewRowUniverse.length,
+              reason: 'Selected preview rows are not valid for the current preview'
+            },
+            true
+          );
         }
 
         previewDecisions.selected_preview_row_ids = filteredSelectedPreviewRowIds;
@@ -26346,7 +26531,6 @@ const CREATE_DRAFT_CHECKPOINT = 'NONE';
     );
   }
 }
-
 
 
 
@@ -33989,13 +34173,221 @@ async function handleBankingPayCorrectionStatus(env, req, user, correctionReques
 }
 
 
-
-
 async function handleBankingPayBatchExportCsv(env, req, user, payBatchId) {
   if (!user) return withCORS(env, req, unauthorized());
 
   const id = String(payBatchId || '').trim();
-  if (!id) return withCORS(env, req, badRequest('pay_batch_id is required'));
+
+  const stringifyFailureValue = (value) => {
+    try {
+      if (value === null || value === undefined) return '';
+      if (typeof value === 'string') return value;
+      if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') return String(value);
+      if (value instanceof Error) return String(value.message || value.name || '');
+      return JSON.stringify(value);
+    } catch {
+      try { return String(value || ''); } catch { return ''; }
+    }
+  };
+
+  const parseJsonObjectCandidate = (raw) => {
+    const source = String(raw || '').trim();
+    if (!source) return null;
+    const candidates = [source];
+    const firstBrace = source.indexOf('{');
+    const lastBrace = source.lastIndexOf('}');
+    if (firstBrace >= 0 && lastBrace > firstBrace) candidates.push(source.slice(firstBrace, lastBrace + 1));
+    for (const candidate of candidates) {
+      try {
+        const parsed = JSON.parse(candidate);
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed;
+      } catch {}
+    }
+    return null;
+  };
+
+  const normalizeExportCsvFailureCode = (value) => {
+    const raw = String(value || '').trim().toUpperCase();
+    if (!raw) return '';
+    const compact = raw.replace(/^ERROR[:\s]+/, '').replace(/^CODE[:\s]+/, '').replace(/[^A-Z0-9_]+/g, '_').replace(/^_+|_+$/g, '');
+    if (!compact || /^[0-9]{5}$/.test(compact) || /^P[0-9A-Z]{4}$/.test(compact)) return '';
+    if (compact === 'PAY_BATCH_VALIDATE_FRESHNESS_FAILED') return 'BATCH_STALE';
+    if (compact === 'MISSING_RAIL_PROVIDER') return 'RAIL_PROVIDER_REQUIRED';
+    if (compact === 'PAY_BATCH_EXPORT_CSV_FAILED') return 'PAY_EXPORT_BANK_CSV_FAILED';
+    return compact;
+  };
+
+  const extractExportCsvFailure = (source, fallbackCode = 'PAY_EXPORT_BANK_CSV_FAILED') => {
+    const knownCodes = [
+      'BATCH_STALE',
+      'PAY_BATCH_VALIDATE_FRESHNESS_FAILED',
+      'PAY_BATCH_NOT_FOUND',
+      'UNKNOWN_RAIL_PROVIDER',
+      'RAIL_PROVIDER_REQUIRED',
+      'MISSING_RAIL_PROVIDER',
+      'RAIL_NOT_CONFIGURED',
+      'PAY_EXPORT_BANK_CSV_FAILED',
+      'PAY_BATCH_EXPORT_CSV_FAILED',
+      'PAY_EXECUTE_BANK_FAILED',
+      'NO_PENDING_TRANSFERS',
+      'NO_PENDING_TRANSFER_ROWS',
+      'NO_ACTIVE_PAYMENTS_IN_BATCH',
+      'CURRENT_TRANSFER_HASH_REQUIRED'
+    ];
+    const queue = [];
+    const seenObjects = new Set();
+    const seenStrings = new Set();
+    const findings = [];
+    const textParts = [];
+    const enqueue = (value) => {
+      if (value === null || value === undefined) return;
+      if (typeof value === 'string') {
+        const text = value.trim();
+        if (!text || seenStrings.has(text)) return;
+        seenStrings.add(text);
+        queue.push(text);
+        return;
+      }
+      if (typeof value === 'object') {
+        if (seenObjects.has(value)) return;
+        seenObjects.add(value);
+      }
+      queue.push(value);
+    };
+    const addFinding = (payload, code, directKnown = false) => {
+      const normalizedCode = normalizeExportCsvFailureCode(code || fallbackCode);
+      if (!normalizedCode) return;
+      const priority = normalizedCode === 'BATCH_STALE' ? 100 : (directKnown ? 80 : 40);
+      findings.push({ code: normalizedCode, payload, priority });
+    };
+
+    enqueue(source);
+    while (queue.length) {
+      const item = queue.shift();
+      if (item instanceof Error) {
+        enqueue({
+          name: item.name,
+          message: item.message,
+          code: item.code,
+          error_code: item.error_code,
+          details: item.details,
+          detail: item.detail,
+          hint: item.hint,
+          cause: item.cause,
+          json: item.json,
+          body: item.body
+        });
+        continue;
+      }
+      if (typeof item === 'string') {
+        const text = item.trim();
+        if (text) textParts.push(text);
+        const parsed = parseJsonObjectCandidate(text);
+        if (parsed) enqueue(parsed);
+        const upper = text.toUpperCase();
+        for (const knownCode of knownCodes) {
+          if (upper.includes(knownCode)) addFinding({ message: text }, knownCode, true);
+        }
+        continue;
+      }
+      if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
+      const directCode = normalizeExportCsvFailureCode(item.error_code || item.errorCode || item.code || item.error || '');
+      if (directCode) addFinding(item, directCode, knownCodes.map((code) => normalizeExportCsvFailureCode(code)).includes(directCode));
+      for (const key of ['error_code', 'errorCode', 'code', 'error', 'message', 'details', 'detail', 'reason', 'hint', 'body', 'json', 'payload', 'data', 'cause', 'response', 'result', 'technical_message', 'technicalMessage']) {
+        const nested = item[key];
+        enqueue(nested);
+        const parsed = parseJsonObjectCandidate(nested);
+        if (parsed) enqueue(parsed);
+      }
+    }
+
+    findings.sort((a, b) => b.priority - a.priority);
+    const best = findings[0] || null;
+    return {
+      code: best ? best.code : normalizeExportCsvFailureCode(fallbackCode) || 'PAY_EXPORT_BANK_CSV_FAILED',
+      raw_message: textParts.find(Boolean) || stringifyFailureValue(source),
+      payload: best ? best.payload : null
+    };
+  };
+
+  const getExportCsvFailureCopy = (code) => {
+    const normalizedCode = normalizeExportCsvFailureCode(code) || 'PAY_EXPORT_BANK_CSV_FAILED';
+    if (normalizedCode === 'BATCH_STALE') {
+      return {
+        title: 'Payment batch has changed',
+        message: 'This payment batch is no longer up to date. No export was created. Refresh the batch, review the latest payment details, then try again.'
+      };
+    }
+    if (['RAIL_PROVIDER_REQUIRED', 'UNKNOWN_RAIL_PROVIDER', 'RAIL_NOT_CONFIGURED'].includes(normalizedCode)) {
+      return {
+        title: 'Banking setup needs attention',
+        message: 'CloudTMS could not create this bank CSV because the banking setup is incomplete or unavailable. Review Banking settings and try again.'
+      };
+    }
+    if (normalizedCode === 'NO_ACTIVE_PAYMENTS_IN_BATCH' || normalizedCode === 'NO_PENDING_TRANSFERS' || normalizedCode === 'NO_PENDING_TRANSFER_ROWS') {
+      return {
+        title: 'Bank CSV could not be created',
+        message: 'This batch has no active payments ready to export. Delete the draft or create a new batch.'
+      };
+    }
+    return {
+      title: 'Bank CSV could not be created',
+      message: 'CloudTMS could not create the bank CSV for this batch. Refresh the batch and try again.'
+    };
+  };
+
+  const buildExportCsvFailurePayload = (source, fallbackCode = 'PAY_EXPORT_BANK_CSV_FAILED', fallbackMessage = 'CloudTMS could not create the bank CSV for this batch. Refresh the batch and try again.', details = {}) => {
+    const failure = extractExportCsvFailure(source, fallbackCode);
+    const code = normalizeExportCsvFailureCode(failure.code || fallbackCode) || normalizeExportCsvFailureCode(fallbackCode) || 'PAY_EXPORT_BANK_CSV_FAILED';
+    const copy = getExportCsvFailureCopy(code);
+    const safeDetails = (details && typeof details === 'object' && !Array.isArray(details)) ? details : {};
+    const friendlyPayload = makeBankingFriendlyErrorPayload({
+      ok: false,
+      error_code: code,
+      code,
+      message: copy.message || fallbackMessage,
+      details: {
+        ...safeDetails,
+        pay_batch_id: id || null,
+        reason: code,
+        technical_message: failure.raw_message || null
+      },
+      reason: failure.raw_message || code,
+      technical_message: failure.raw_message || code
+    }, { action: 'EXPORT_BANK_CSV' });
+
+    return {
+      ...((friendlyPayload && typeof friendlyPayload === 'object') ? friendlyPayload : {}),
+      ok: false,
+      error_code: code,
+      code,
+      title: copy.title,
+      message: copy.message || fallbackMessage,
+      user_message: copy.message || fallbackMessage,
+      error: copy.message || fallbackMessage,
+      can_retry: true,
+      friendly_error: {
+        ...((friendlyPayload && friendlyPayload.friendly_error && typeof friendlyPayload.friendly_error === 'object') ? friendlyPayload.friendly_error : {}),
+        code,
+        title: copy.title,
+        message: copy.message || fallbackMessage
+      }
+    };
+  };
+
+  const statusForExportCsvFailureCode = (code, fallbackStatus = 400) => {
+    const normalizedCode = String(code || '').trim().toUpperCase();
+    if (normalizedCode === 'BATCH_STALE' || normalizedCode === 'NO_PENDING_TRANSFERS' || normalizedCode === 'NO_PENDING_TRANSFER_ROWS' || normalizedCode === 'NO_ACTIVE_PAYMENTS_IN_BATCH' || normalizedCode === 'CURRENT_TRANSFER_HASH_REQUIRED') return 409;
+    if (normalizedCode === 'PAY_BATCH_NOT_FOUND') return 404;
+    return Number.isFinite(Number(fallbackStatus)) ? Math.trunc(Number(fallbackStatus)) : 400;
+  };
+
+  const buildExportCsvFailureResponse = (status, source, fallbackCode = 'PAY_EXPORT_BANK_CSV_FAILED', fallbackMessage = 'CloudTMS could not create the bank CSV for this batch. Refresh the batch and try again.', details = {}) => {
+    const payload = buildExportCsvFailurePayload(source, fallbackCode, fallbackMessage, details);
+    return withCORS(env, req, new Response(JSON.stringify(payload), { status: statusForExportCsvFailureCode(payload.error_code || payload.code, status), headers: JSON_HEADERS }));
+  };
+
+  if (!id) return buildExportCsvFailureResponse(400, 'pay_batch_id is required', 'PAY_EXPORT_BANK_CSV_FAILED', 'CloudTMS could not create the bank CSV for this batch. Refresh the batch and try again.', { field: 'pay_batch_id' });
 
   const requestedScopeFromQuery = (() => {
     try {
@@ -34023,57 +34415,11 @@ async function handleBankingPayBatchExportCsv(env, req, user, payBatchId) {
 
   const normalizeRpcError = (e, fallbackCode = 'RPC_ERROR') => {
     const statusRaw = (e && Number.isFinite(Number(e.status))) ? Number(e.status) : null;
-    const status = (statusRaw && statusRaw >= 400 && statusRaw < 600) ? statusRaw : null;
-
-    let msg = '';
-    try {
-      const jm = (e && e.json && typeof e.json === 'object' && typeof e.json.message === 'string') ? e.json.message : '';
-      msg = jm ? String(jm) : String(e?.message || e || fallbackCode);
-    } catch {
-      msg = String(e?.message || e || fallbackCode);
-    }
-
-    const raw = String(msg || '').trim();
-
-    let parsed = null;
-    try {
-      const firstBrace = raw.indexOf('{');
-      const lastBrace = raw.lastIndexOf('}');
-      if (firstBrace >= 0 && lastBrace > firstBrace) {
-        parsed = JSON.parse(raw.slice(firstBrace, lastBrace + 1));
-      }
-    } catch {
-      parsed = null;
-    }
-
-    const parsedCode =
-      (parsed && typeof parsed === 'object' && typeof parsed.code === 'string' && parsed.code.trim())
-        ? parsed.code.trim()
-        : '';
-    const parsedMessage =
-      (parsed && typeof parsed === 'object' && typeof parsed.message === 'string' && parsed.message.trim())
-        ? parsed.message.trim()
-        : '';
-
-    const errorCode = parsedCode || fallbackCode;
-    const message = parsedMessage || raw || fallbackCode;
-
-    const conflictCodes = new Set([
-      'BATCH_STALE',
-      'NO_PENDING_TRANSFERS',
-      'NO_PENDING_TRANSFER_ROWS',
-      'PAY_EXPORT_BANK_CSV_FAILED',
-      'PAY_EXECUTE_BANK_FAILED'
-    ]);
-
+    const failure = extractExportCsvFailure(e, fallbackCode);
+    const status = statusForExportCsvFailureCode(failure.code, statusRaw || 400);
     return {
-      status: status || (conflictCodes.has(String(errorCode).toUpperCase()) ? 409 : 400),
-      body: {
-        error: errorCode,
-        message,
-        error_code: errorCode,
-        detail: parsed || null
-      }
+      status,
+      body: buildExportCsvFailurePayload(e, fallbackCode, 'CloudTMS could not create the bank CSV for this batch. Refresh the batch and try again.')
     };
   };
 
@@ -34184,13 +34530,11 @@ async function handleBankingPayBatchExportCsv(env, req, user, payBatchId) {
     };
   };
 
-  const noActivePaymentsResponse = () => jsonResponse(409, {
-    ok: false,
-    pay_batch_id: id,
-    error: 'NO_ACTIVE_PAYMENTS_IN_BATCH',
-    message: 'This draft batch has no active payments. Delete the draft or create a new batch.',
-    error_code: 'NO_ACTIVE_PAYMENTS_IN_BATCH'
-  });
+  const noActivePaymentsResponse = () => jsonResponse(409, buildExportCsvFailurePayload(
+    'NO_ACTIVE_PAYMENTS_IN_BATCH',
+    'NO_ACTIVE_PAYMENTS_IN_BATCH',
+    'This batch has no active payments ready to export. Delete the draft or create a new batch.'
+  ));
 
 
   const getAuthoritativeFrozenActivePaymentState = async () => {
@@ -34231,7 +34575,7 @@ async function handleBankingPayBatchExportCsv(env, req, user, payBatchId) {
     const batchObj = (batchGet && typeof batchGet === 'object') ? (batchGet.batch || null) : null;
 
     if (!batchObj || typeof batchObj !== 'object') {
-      return withCORS(env, req, badRequest('PAY_BATCH_NOT_FOUND'));
+      return buildExportCsvFailureResponse(404, 'PAY_BATCH_NOT_FOUND', 'PAY_BATCH_NOT_FOUND', 'CloudTMS could not create the bank CSV for this batch. Refresh the batch and try again.');
     }
 
     const authoritativeActivePaymentState = await getAuthoritativeFrozenActivePaymentState();
@@ -34339,7 +34683,7 @@ async function handleBankingPayBatchExportCsv(env, req, user, payBatchId) {
       };
     };
     const providerMeta = normalizeProvider(batchObj.rail_provider_snapshot || batchGet?.rail_provider_snapshot || null);
-    if (!providerMeta.valid) return withCORS(env, req, badRequest(providerMeta.reason || 'UNKNOWN_RAIL_PROVIDER'));
+    if (!providerMeta.valid) return buildExportCsvFailureResponse(400, providerMeta.reason || 'UNKNOWN_RAIL_PROVIDER', providerMeta.reason || 'UNKNOWN_RAIL_PROVIDER', 'CloudTMS could not create this bank CSV because the banking setup is incomplete or unavailable. Review Banking settings and try again.', { provider: providerMeta.provider || null });
 
     const exportFrozenCsv = async () => {
       return csvAdapter_export(env, id, payChannelScope, user.id);
@@ -34396,11 +34740,7 @@ async function handleBankingPayBatchExportCsv(env, req, user, payBatchId) {
     }, 0);
     const transferHash = String(batchGetAfter?.current_transfer_hash || '').trim();
     if (!transferHash) {
-      return withCORS(env, req, jsonResponse(409, {
-        error: 'CURRENT_TRANSFER_HASH_REQUIRED',
-        message: 'Missing authoritative current_transfer_hash from pay_batch_get after export.',
-        error_code: 'CURRENT_TRANSFER_HASH_REQUIRED'
-      }));
+      return buildExportCsvFailureResponse(409, 'CURRENT_TRANSFER_HASH_REQUIRED', 'PAY_EXPORT_BANK_CSV_FAILED', 'CloudTMS could not create the bank CSV for this batch. Refresh the batch and try again.', { reason: 'CURRENT_TRANSFER_HASH_REQUIRED' });
     }
     const evidence = {
       generated_at_utc: new Date().toISOString(),
@@ -34438,11 +34778,96 @@ async function handleBankingPayBatchExportCsv(env, req, user, payBatchId) {
 }
 
 
+
 async function handleBankingPayBatchExportDetailCsv(env, req, user, payBatchId) {
   if (!user) return withCORS(env, req, unauthorized());
 
   const id = String(payBatchId || '').trim();
-  if (!id) return withCORS(env, req, badRequest('pay_batch_id is required'));
+
+  const stringifyFailureValue = (value) => {
+    try {
+      if (value === null || value === undefined) return '';
+      if (typeof value === 'string') return value;
+      if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') return String(value);
+      if (value instanceof Error) return String(value.message || value.name || '');
+      return JSON.stringify(value);
+    } catch {
+      try { return String(value || ''); } catch { return ''; }
+    }
+  };
+
+  const normalizeDetailCsvFailureCode = (value) => {
+    const raw = String(value || '').trim().toUpperCase();
+    if (!raw) return '';
+    const compact = raw.replace(/^ERROR[:\s]+/, '').replace(/^CODE[:\s]+/, '').replace(/[^A-Z0-9_]+/g, '_').replace(/^_+|_+$/g, '');
+    if (!compact || /^[0-9]{5}$/.test(compact) || /^P[0-9A-Z]{4}$/.test(compact)) return '';
+    if (compact === 'PAY_BATCH_VALIDATE_FRESHNESS_FAILED') return 'BATCH_STALE';
+    return compact;
+  };
+
+  const getDetailCsvFailureCopy = (code) => {
+    const normalizedCode = normalizeDetailCsvFailureCode(code) || 'EXPORT_DETAIL_CSV_FAILED';
+    if (normalizedCode === 'BATCH_STALE') {
+      return {
+        title: 'Payment batch has changed',
+        message: 'This payment batch is no longer up to date. No detail CSV was exported. Refresh the batch, review the latest details, then try again.'
+      };
+    }
+    return {
+      title: 'Detailed CSV could not be created',
+      message: 'CloudTMS could not export the payment details. Refresh the batch and try again.'
+    };
+  };
+
+  const buildDetailCsvFailurePayload = (source, fallbackCode = 'EXPORT_DETAIL_CSV_FAILED', fallbackMessage = 'CloudTMS could not export the payment details. Refresh the batch and try again.', details = {}) => {
+    const extracted = _extractDbRaisedJson(source);
+    const code = normalizeDetailCsvFailureCode(
+      (extracted && typeof extracted === 'object' ? (extracted.error_code || extracted.code || extracted.error) : '') || fallbackCode
+    ) || normalizeDetailCsvFailureCode(fallbackCode) || 'EXPORT_DETAIL_CSV_FAILED';
+    const copy = getDetailCsvFailureCopy(code);
+    const safeDetails = (details && typeof details === 'object' && !Array.isArray(details)) ? details : {};
+    const rawMessage = stringifyFailureValue(source);
+    const friendlyPayload = makeBankingFriendlyErrorPayload({
+      ok: false,
+      error_code: code,
+      code,
+      message: copy.message || fallbackMessage,
+      details: {
+        ...safeDetails,
+        pay_batch_id: id || null,
+        reason: code,
+        technical_message: rawMessage || null
+      },
+      reason: rawMessage || code,
+      technical_message: rawMessage || code
+    }, { action: 'EXPORT_DETAIL_CSV' });
+
+    return {
+      ...((friendlyPayload && typeof friendlyPayload === 'object') ? friendlyPayload : {}),
+      ok: false,
+      error_code: code,
+      code,
+      title: copy.title,
+      message: copy.message || fallbackMessage,
+      user_message: copy.message || fallbackMessage,
+      error: copy.message || fallbackMessage,
+      can_retry: true,
+      friendly_error: {
+        ...((friendlyPayload && friendlyPayload.friendly_error && typeof friendlyPayload.friendly_error === 'object') ? friendlyPayload.friendly_error : {}),
+        code,
+        title: copy.title,
+        message: copy.message || fallbackMessage
+      }
+    };
+  };
+
+  const buildDetailCsvFailureResponse = (status, source, fallbackCode = 'EXPORT_DETAIL_CSV_FAILED', fallbackMessage = 'CloudTMS could not export the payment details. Refresh the batch and try again.', details = {}) => {
+    const payload = buildDetailCsvFailurePayload(source, fallbackCode, fallbackMessage, details);
+    const code = String(payload.error_code || payload.code || '').trim().toUpperCase();
+    const resolvedStatus = code === 'BATCH_STALE' ? 409 : (Number.isFinite(Number(status)) ? Math.trunc(Number(status)) : 500);
+    return withCORS(env, req, new Response(JSON.stringify(payload), { status: resolvedStatus, headers: JSON_HEADERS }));
+  };
+
 
   const unwrapRpc = (rpcRes, key) => {
     let payload = rpcRes;
@@ -34501,12 +34926,13 @@ async function handleBankingPayBatchExportDetailCsv(env, req, user, payBatchId) 
   const _maybeStale409 = (e) => {
     const payload = _extractDbRaisedJson(e);
     if (payload && typeof payload === 'object' && String(payload.code || '').toUpperCase() === 'BATCH_STALE') {
-      const headers = new Headers();
-      headers.set('Content-Type', 'application/json; charset=utf-8');
-      return withCORS(env, req, new Response(JSON.stringify(payload), { status: 409, headers }));
+      return buildDetailCsvFailureResponse(409, e, 'BATCH_STALE', 'This payment batch is no longer up to date. No detail CSV was exported. Refresh the batch, review the latest details, then try again.', { reason: 'BATCH_STALE' });
     }
     return null;
   };
+
+
+  if (!id) return buildDetailCsvFailureResponse(400, 'pay_batch_id is required', 'EXPORT_DETAIL_CSV_FAILED', 'CloudTMS could not export the payment details. Refresh the batch and try again.', { field: 'pay_batch_id' });
 
   const csvEscape = (v) => {
     const s = (v === null || v === undefined) ? '' : String(v);
@@ -34825,21 +35251,214 @@ async function handleBankingPayBatchExportDetailCsv(env, req, user, payBatchId) 
   } catch (e) {
     const stale409 = _maybeStale409(e);
     if (stale409) return stale409;
-    return withCORS(env, req, serverError(String(e?.message || e || 'EXPORT_DETAIL_CSV_FAILED')));
+    return buildDetailCsvFailureResponse(500, e, 'EXPORT_DETAIL_CSV_FAILED', 'CloudTMS could not export the payment details. Refresh the batch and try again.', { stage: 'export_detail_csv' });
   }
 }
 
 
 
-
 async function handleBankingPayBatchPoll(env, req, user, payBatchId) {
   const id = String(payBatchId || '').trim();
-  if (!id) return withCORS(env, req, badRequest('pay_batch_id is required'));
+
+  const stringifyFailureValue = (value) => {
+    try {
+      if (value === null || value === undefined) return '';
+      if (typeof value === 'string') return value;
+      if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') return String(value);
+      if (value instanceof Error) return String(value.message || value.name || '');
+      return JSON.stringify(value);
+    } catch {
+      try { return String(value || ''); } catch { return ''; }
+    }
+  };
+
+  const parseJsonObjectCandidate = (raw) => {
+    const source = String(raw || '').trim();
+    if (!source) return null;
+    const candidates = [source];
+    const firstBrace = source.indexOf('{');
+    const lastBrace = source.lastIndexOf('}');
+    if (firstBrace >= 0 && lastBrace > firstBrace) candidates.push(source.slice(firstBrace, lastBrace + 1));
+    for (const candidate of candidates) {
+      try {
+        const parsed = JSON.parse(candidate);
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed;
+      } catch {}
+    }
+    return null;
+  };
+
+  const normalizePollFailureCode = (value) => {
+    const raw = String(value || '').trim().toUpperCase();
+    if (!raw) return '';
+    const compact = raw.replace(/^ERROR[:\s]+/, '').replace(/^CODE[:\s]+/, '').replace(/[^A-Z0-9_]+/g, '_').replace(/^_+|_+$/g, '');
+    if (!compact || /^[0-9]{5}$/.test(compact) || /^P[0-9A-Z]{4}$/.test(compact)) return '';
+    if (compact === 'PAY_BATCH_VALIDATE_FRESHNESS_FAILED') return 'BATCH_STALE';
+    if (compact === 'MISSING_RAIL_PROVIDER' || compact === 'RAIL_PROVIDER_REQUIRED' || compact === 'RAIL_CAPABILITIES_FAILED') return 'RAIL_NOT_CONFIGURED';
+    return compact;
+  };
+
+  const extractPollFailure = (source, fallbackCode = 'BANKING_PAY_POLL_FAILED') => {
+    const knownCodes = [
+      'BATCH_STALE',
+      'PAY_BATCH_VALIDATE_FRESHNESS_FAILED',
+      'MISSING_RAIL_PROVIDER',
+      'RAIL_PROVIDER_REQUIRED',
+      'RAIL_NOT_CONFIGURED',
+      'UNKNOWN_RAIL_PROVIDER',
+      'POLL_NOT_SUPPORTED_FOR_THIS_RAIL',
+      'RAIL_ENV_MISMATCH',
+      'BANKING_PAY_POLL_FAILED'
+    ];
+    const queue = [];
+    const seenObjects = new Set();
+    const seenStrings = new Set();
+    const findings = [];
+    const textParts = [];
+    const enqueue = (value) => {
+      if (value === null || value === undefined) return;
+      if (typeof value === 'string') {
+        const text = value.trim();
+        if (!text || seenStrings.has(text)) return;
+        seenStrings.add(text);
+        queue.push(text);
+        return;
+      }
+      if (typeof value === 'object') {
+        if (seenObjects.has(value)) return;
+        seenObjects.add(value);
+      }
+      queue.push(value);
+    };
+    const addFinding = (payload, code, directKnown = false) => {
+      const normalizedCode = normalizePollFailureCode(code || fallbackCode);
+      if (!normalizedCode) return;
+      const priority = normalizedCode === 'BATCH_STALE' ? 100 : (directKnown ? 80 : 40);
+      findings.push({ code: normalizedCode, payload, priority });
+    };
+
+    enqueue(source);
+    while (queue.length) {
+      const item = queue.shift();
+      if (item instanceof Error) {
+        const errorPayload = {
+          name: item.name,
+          message: item.message,
+          code: item.code,
+          error_code: item.error_code,
+          details: item.details,
+          detail: item.detail,
+          hint: item.hint,
+          cause: item.cause,
+          json: item.json,
+          body: item.body
+        };
+        enqueue(errorPayload);
+        continue;
+      }
+      if (typeof item === 'string') {
+        const text = item.trim();
+        if (text) textParts.push(text);
+        const parsed = parseJsonObjectCandidate(text);
+        if (parsed) enqueue(parsed);
+        const upper = text.toUpperCase();
+        for (const knownCode of knownCodes) {
+          if (upper.includes(knownCode)) addFinding({ message: text }, knownCode, true);
+        }
+        continue;
+      }
+      if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
+      const directCode = normalizePollFailureCode(item.error_code || item.errorCode || item.code || item.error || '');
+      if (directCode) addFinding(item, directCode, knownCodes.map((code) => normalizePollFailureCode(code)).includes(directCode));
+      for (const key of ['error_code', 'errorCode', 'code', 'error', 'message', 'details', 'detail', 'reason', 'hint', 'body', 'json', 'payload', 'data', 'cause', 'response', 'result', 'technical_message', 'technicalMessage']) {
+        const nested = item[key];
+        enqueue(nested);
+        const parsed = parseJsonObjectCandidate(nested);
+        if (parsed) enqueue(parsed);
+      }
+    }
+
+    findings.sort((a, b) => b.priority - a.priority);
+    const best = findings[0] || null;
+    return {
+      code: best ? best.code : normalizePollFailureCode(fallbackCode) || 'BANKING_PAY_POLL_FAILED',
+      raw_message: textParts.find(Boolean) || stringifyFailureValue(source),
+      payload: best ? best.payload : null
+    };
+  };
+
+  const getPollFailureCopy = (code) => {
+    const normalizedCode = normalizePollFailureCode(code) || 'BANKING_PAY_POLL_FAILED';
+    if (normalizedCode === 'BATCH_STALE') {
+      return {
+        title: 'Payment batch has changed',
+        message: 'This payment batch is no longer up to date. Refresh the batch, review the latest details, then try again.'
+      };
+    }
+    if (['RAIL_NOT_CONFIGURED', 'UNKNOWN_RAIL_PROVIDER', 'POLL_NOT_SUPPORTED_FOR_THIS_RAIL', 'RAIL_ENV_MISMATCH'].includes(normalizedCode)) {
+      return {
+        title: 'Banking setup needs attention',
+        message: 'CloudTMS could not refresh this payment because the banking setup is incomplete or unavailable. Review Banking settings and try again.'
+      };
+    }
+    return {
+      title: 'Payment status could not be refreshed',
+      message: 'CloudTMS could not refresh this payment status. Refresh the batch and try again.'
+    };
+  };
+
+  const buildPollFailurePayload = (source, fallbackCode = 'BANKING_PAY_POLL_FAILED', fallbackMessage = 'CloudTMS could not refresh this payment status. Refresh the batch and try again.', details = {}) => {
+    const failure = extractPollFailure(source, fallbackCode);
+    const code = normalizePollFailureCode(failure.code || fallbackCode) || normalizePollFailureCode(fallbackCode) || 'BANKING_PAY_POLL_FAILED';
+    const copy = getPollFailureCopy(code);
+    const safeDetails = (details && typeof details === 'object' && !Array.isArray(details)) ? details : {};
+    const friendlyPayload = makeBankingFriendlyErrorPayload({
+      ok: false,
+      error_code: code,
+      code,
+      message: copy.message || fallbackMessage,
+      details: {
+        ...safeDetails,
+        pay_batch_id: id || null,
+        reason: code,
+        technical_message: failure.raw_message || null
+      },
+      reason: failure.raw_message || code,
+      technical_message: failure.raw_message || code
+    }, { action: 'POLL_BANK_STATUS' });
+
+    return {
+      ...((friendlyPayload && typeof friendlyPayload === 'object') ? friendlyPayload : {}),
+      ok: false,
+      error_code: code,
+      code,
+      title: copy.title,
+      message: copy.message || fallbackMessage,
+      user_message: copy.message || fallbackMessage,
+      error: copy.message || fallbackMessage,
+      can_retry: true,
+      friendly_error: {
+        ...((friendlyPayload && friendlyPayload.friendly_error && typeof friendlyPayload.friendly_error === 'object') ? friendlyPayload.friendly_error : {}),
+        code,
+        title: copy.title,
+        message: copy.message || fallbackMessage
+      }
+    };
+  };
+
+  const buildPollFailureResponse = (status, source, fallbackCode = 'BANKING_PAY_POLL_FAILED', fallbackMessage = 'CloudTMS could not refresh this payment status. Refresh the batch and try again.', details = {}) => {
+    const payload = buildPollFailurePayload(source, fallbackCode, fallbackMessage, details);
+    const code = String(payload.error_code || payload.code || '').trim().toUpperCase();
+    const resolvedStatus = code === 'BATCH_STALE' ? 409 : (Number.isFinite(Number(status)) ? Math.trunc(Number(status)) : 500);
+    return withCORS(env, req, new Response(JSON.stringify(payload), { status: resolvedStatus, headers: JSON_HEADERS }));
+  };
+
+  if (!id) return buildPollFailureResponse(400, 'pay_batch_id is required', 'BANKING_PAY_POLL_FAILED', 'CloudTMS could not refresh this payment status. Refresh the batch and try again.', { field: 'pay_batch_id' });
 
   let body = null;
   try { body = await parseJSONBody(req); } catch { body = null; }
   if (body !== null && (typeof body !== 'object' || Array.isArray(body))) {
-    return withCORS(env, req, badRequest('Invalid JSON'));
+    return buildPollFailureResponse(400, 'Invalid JSON', 'BANKING_PAY_POLL_FAILED', 'CloudTMS could not refresh this payment status. Refresh the batch and try again.', { field: 'body' });
   }
   body = body || {};
 
@@ -34851,7 +35470,7 @@ async function handleBankingPayBatchPoll(env, req, user, payBatchId) {
   const scopeRaw = scopeProvided ? String(body.scope ?? body.pay_channel_scope ?? body.payChannelScope ?? 'ALL').trim().toUpperCase() : 'ALL';
   const scope = (scopeRaw === 'PAYE' || scopeRaw === 'UMBRELLA' || scopeRaw === 'ALL') ? scopeRaw : null;
   if (!scope) {
-    return withCORS(env, req, badRequest('Invalid scope (ALL|PAYE|UMBRELLA)'));
+    return buildPollFailureResponse(400, 'Invalid scope (ALL|PAYE|UMBRELLA)', 'BANKING_PAY_POLL_FAILED', 'CloudTMS could not refresh this payment status. Refresh the batch and try again.', { field: 'scope' });
   }
 
   const unwrapRpc = (rpcRes, key) => {
@@ -34928,10 +35547,10 @@ async function handleBankingPayBatchPoll(env, req, user, payBatchId) {
     const providerRaw = String(batchObj?.rail_provider_snapshot ?? batchPayload?.rail_provider_snapshot ?? '').trim().toUpperCase();
     const provider = providerRaw === 'REV' ? 'REVOLUT' : providerRaw;
     if (!provider) {
-      return withCORS(env, req, badRequest('MISSING_RAIL_PROVIDER'));
+      return buildPollFailureResponse(400, 'MISSING_RAIL_PROVIDER', 'RAIL_NOT_CONFIGURED', 'CloudTMS could not refresh this payment because the banking setup is incomplete or unavailable. Review Banking settings and try again.', { provider: null });
     }
     if (!['REVOLUT', 'CSV'].includes(provider)) {
-      return withCORS(env, req, badRequest('UNKNOWN_RAIL_PROVIDER'));
+      return buildPollFailureResponse(400, 'UNKNOWN_RAIL_PROVIDER', 'UNKNOWN_RAIL_PROVIDER', 'CloudTMS could not refresh this payment because the banking setup is incomplete or unavailable. Review Banking settings and try again.', { provider });
     }
     const transfers = (batchPayload && typeof batchPayload === 'object' && Array.isArray(batchPayload.transfers)) ? batchPayload.transfers : [];
 
@@ -35103,7 +35722,7 @@ async function handleBankingPayBatchPoll(env, req, user, payBatchId) {
 
     const adapter = getRailAdapter(provider);
     if (!adapter || typeof adapter.pollBatch !== 'function') {
-      return withCORS(env, req, badRequest('POLL_NOT_SUPPORTED_FOR_THIS_RAIL'));
+      return buildPollFailureResponse(400, 'POLL_NOT_SUPPORTED_FOR_THIS_RAIL', 'POLL_NOT_SUPPORTED_FOR_THIS_RAIL', 'CloudTMS could not refresh this payment because the banking setup is incomplete or unavailable. Review Banking settings and try again.', { provider });
     }
 
     try {
@@ -35112,7 +35731,7 @@ async function handleBankingPayBatchPoll(env, req, user, payBatchId) {
         if (caps && typeof caps === 'object') {
           if (caps.available === false) {
             const reason = (caps.reason && String(caps.reason).trim()) ? String(caps.reason).trim() : 'RAIL_NOT_CONFIGURED';
-            return withCORS(env, req, badRequest(reason));
+            return buildPollFailureResponse(400, reason, reason, 'CloudTMS could not refresh this payment because the banking setup is incomplete or unavailable. Review Banking settings and try again.', { provider });
           }
           const sp =
             (caps.supports_polling !== undefined) ? caps.supports_polling
@@ -35120,13 +35739,12 @@ async function handleBankingPayBatchPoll(env, req, user, payBatchId) {
             : (caps.supports_poll !== undefined) ? caps.supports_poll
             : undefined;
           if (sp === false) {
-            return withCORS(env, req, badRequest('POLL_NOT_SUPPORTED_FOR_THIS_RAIL'));
+            return buildPollFailureResponse(400, 'POLL_NOT_SUPPORTED_FOR_THIS_RAIL', 'POLL_NOT_SUPPORTED_FOR_THIS_RAIL', 'CloudTMS could not refresh this payment because the banking setup is incomplete or unavailable. Review Banking settings and try again.', { provider });
           }
         }
       }
     } catch (e) {
-      const msg = (e && e.message) ? String(e.message) : String(e || 'RAIL_CAPABILITIES_FAILED');
-      return withCORS(env, req, badRequest(msg));
+      return buildPollFailureResponse(400, e, 'RAIL_NOT_CONFIGURED', 'CloudTMS could not refresh this payment because the banking setup is incomplete or unavailable. Review Banking settings and try again.', { provider, stage: 'rail_capabilities' });
     }
 
     let polled = null;
@@ -35248,7 +35866,7 @@ async function handleBankingPayBatchPoll(env, req, user, payBatchId) {
     } catch (e) {
       const msg = (e && e.message) ? String(e.message) : String(e || 'POLL_FAILED');
       if (msg.includes('RAIL_ENV_MISMATCH')) {
-        return withCORS(env, req, badRequest(msg));
+        return buildPollFailureResponse(400, e, 'RAIL_ENV_MISMATCH', 'CloudTMS could not refresh this payment because the banking setup is incomplete or unavailable. Review Banking settings and try again.', { provider, stage: 'rail_poll' });
       }
 
       const msgU = msg.toUpperCase();
@@ -35341,10 +35959,9 @@ async function handleBankingPayBatchPoll(env, req, user, payBatchId) {
       execution_committed_at_utc: executionFields.execution_committed_at_utc
     }));
   } catch (e) {
-    return withCORS(env, req, serverError(String(e?.message || e)));
+    return buildPollFailureResponse(500, e, 'BANKING_PAY_POLL_FAILED', 'CloudTMS could not refresh this payment status. Refresh the batch and try again.', { stage: 'batch_poll' });
   }
 }
-
 
 
 async function handleContractsCalendar(env, req, contractId) {
@@ -46066,26 +46683,46 @@ async function getTimesheetEvidenceMutationPolicy(env, timesheetId, opts = {}) {
   if (evidenceId.startsWith('SYS:')) evidenceProtected = true;
 
   if (evidence && typeof evidence === 'object') {
-    const src = String(
-      evidence?.source_system ||
-      evidence?.source_badge ||
-      evidence?.provenance ||
-      evidence?.origin ||
-      ''
-    ).toUpperCase();
+    const hasOwn = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
     const kindU = String(evidence?.kind || '').trim().toUpperCase();
+    const hasEnrichedProtectionMarker = !!(
+      hasOwn(evidence, 'source_system') ||
+      hasOwn(evidence, 'source_badge') ||
+      hasOwn(evidence, 'provenance') ||
+      hasOwn(evidence, 'origin') ||
+      hasOwn(evidence, 'is_system') ||
+      hasOwn(evidence, 'system') ||
+      hasOwn(evidence, 'is_protected') ||
+      hasOwn(evidence, 'from_import') ||
+      hasOwn(evidence, 'import_id')
+    );
+    const src = hasEnrichedProtectionMarker
+      ? String(
+          evidence?.source_system ||
+          evidence?.source_badge ||
+          evidence?.provenance ||
+          evidence?.origin ||
+          ''
+        ).toUpperCase()
+      : '';
+
     if (
-      evidence?.is_system === true ||
-      evidence?.system === true ||
-      evidence?.is_protected === true ||
-      evidence?.from_import === true ||
-      !!evidence?.import_id ||
       evidenceId.startsWith('SYS:') ||
-      src.includes('NHSP') ||
-      src.includes('HEALTHROSTER') ||
-      src.includes('IMPORT') ||
       kindU === 'AUTHORISATION' ||
-      kindU === 'SYSTEM'
+      kindU === 'SYSTEM' ||
+      (
+        hasEnrichedProtectionMarker &&
+        (
+          evidence?.is_system === true ||
+          evidence?.system === true ||
+          evidence?.is_protected === true ||
+          evidence?.from_import === true ||
+          !!evidence?.import_id ||
+          src.includes('NHSP') ||
+          src.includes('HEALTHROSTER') ||
+          src.includes('IMPORT')
+        )
+      )
     ) {
       evidenceProtected = true;
     }
@@ -46857,6 +47494,8 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
   }
 }
 
+
+
 function isImportAuthoritativeEvidenceContext(summary) {
   const up = (v) => String(v || '').trim().toUpperCase();
   const yes = (v) => {
@@ -46979,8 +47618,7 @@ function isImportAuthoritativeEvidenceContext(summary) {
     routeSourceText.includes('IMPORT') ||
     routeSourceText.includes('NHSP') ||
     routeSourceText.includes('HEALTHROSTER') ||
-    routeSourceText.includes('NO_TIMESHEET_REQUIRED') ||
-    routeSourceText.includes('SELF_BILL')
+    routeSourceText.includes('NO_TIMESHEET_REQUIRED')
   );
 
   const explicitImportAuthoritative =
@@ -47031,7 +47669,6 @@ function isImportAuthoritativeEvidenceContext(summary) {
     clientLineageSupportedByRowSource
   );
 }
-
 
 
 async function handleTimesheetEvidenceReturnToQueue(env, req, tsId, evidenceId) {
@@ -95988,6 +96625,67 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
     ...extra
   });
 
+  if (!patch || typeof patch !== 'object' || Array.isArray(patch)) {
+    return blockedResponse(
+      'TSFIN_PATCH_INVALID_PAYLOAD',
+      'TSFIN expense/mileage patch payload is invalid.',
+      400
+    );
+  }
+
+  const topLevelAllowed = new Set(['expected_timesheet_id', 'reason', 'expenses', 'mileage', 'po']);
+  const topLevelUnexpected = Object.keys(patch).filter((key) => !topLevelAllowed.has(key));
+  if (topLevelUnexpected.length) {
+    return blockedResponse(
+      'TSFIN_PATCH_UNSUPPORTED_FIELDS',
+      'TSFIN expense/mileage patch includes unsupported fields.',
+      400,
+      { fields: topLevelUnexpected }
+    );
+  }
+
+  const rejectUnsupportedNestedFields = (sectionName, value, allowedFields) => {
+    if (value === undefined || value === null) return null;
+    if (typeof value !== 'object' || Array.isArray(value)) {
+      return blockedResponse(
+        'TSFIN_PATCH_INVALID_PAYLOAD',
+        `${sectionName} patch payload is invalid.`,
+        400
+      );
+    }
+    const unexpected = Object.keys(value).filter((key) => !allowedFields.has(key));
+    if (!unexpected.length) return null;
+    return blockedResponse(
+      'TSFIN_PATCH_UNSUPPORTED_FIELDS',
+      `${sectionName} patch includes unsupported fields.`,
+      400,
+      { section: sectionName, fields: unexpected }
+    );
+  };
+
+  const expensesFieldError = rejectUnsupportedNestedFields('expenses', patch.expenses, new Set([
+    'travel_pay_ex_vat',
+    'travel_charge_ex_vat',
+    'accommodation_pay_ex_vat',
+    'accommodation_charge_ex_vat',
+    'other_pay_ex_vat',
+    'other_charge_ex_vat',
+    'description'
+  ]));
+  if (expensesFieldError) return expensesFieldError;
+
+  const mileageFieldError = rejectUnsupportedNestedFields('mileage', patch.mileage, new Set([
+    'mileage_units',
+    'pay_ex_vat',
+    'charge_ex_vat',
+    'pay_rate',
+    'charge_rate'
+  ]));
+  if (mileageFieldError) return mileageFieldError;
+
+  const poFieldError = rejectUnsupportedNestedFields('po', patch.po, new Set(['number']));
+  if (poFieldError) return poFieldError;
+
   const expected = (patch && patch.expected_timesheet_id) ? String(patch.expected_timesheet_id) : '';
   if (!expected) {
     return badRequest('expected_timesheet_id is required');
@@ -96565,6 +97263,7 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
     was_stale: !!resolved.was_stale
   });
 }
+
 
 // ============================================================
 // UPDATED: handleTimesheetEvidenceAdd / handleTimesheetEvidenceUpdateKind
@@ -136916,9 +137615,7 @@ if (req.method === 'POST' && p === '/api/healthroster/weekly/qr-reissue-batch') 
       if (req.method === 'POST' && p === '/api/tsfin/mark-ready')            return handleTsfinMarkReady(env, req);
 
       {
-        const tsfinOne = matchPath(p, '/api/tsfin/:timesheet_id');
-        if (tsfinOne && req.method === 'PATCH')                              return handleTsfinPatch(env, req, tsfinOne.timesheet_id);
-
+  
         const tsfinExp = matchPath(p, '/api/tsfin/:timesheet_id/expenses');
         if (tsfinExp && req.method === 'PATCH')                              return handleTsfinPatchExpenses(env, req, tsfinExp.timesheet_id);
 
