@@ -3,6 +3,7 @@
 --   public.contract_weeks.enforce_day_partition, allowed_days_mask, split_boundary_date, worker_note, split_group_key
 -- It is safe to re-run (CREATE OR REPLACE), and it preserves the existing column order by appending new columns at the end.
 
+
 CREATE OR REPLACE VIEW public.v_contract_weeks_enriched AS
 SELECT
   cw.id,
@@ -29,7 +30,8 @@ SELECT
   cw.split_boundary_date,
   cw.worker_note,
   cw.split_group_key,
-  c.is_ad_hoc
+  c.is_ad_hoc,
+  cw.is_adjustment
 
 FROM public.contract_weeks AS cw
 JOIN public.contracts      AS c
