@@ -5572,6 +5572,7 @@ END;
 $function$;
 DROP FUNCTION IF EXISTS public.pay_execute_bank_transfer_scope_seed(uuid, uuid, text, uuid, boolean);
 
+
 CREATE OR REPLACE FUNCTION public.pay_execute_bank_transfer_scope_seed(
   p_operation_id uuid,
   p_pay_batch_id uuid,
@@ -5611,6 +5612,13 @@ DECLARE
   v_prepared_scope_mismatch_count integer := 0;
   v_prepared_scope_mismatch_details jsonb := '[]'::jsonb;
   v_stale_scope_skipped_count integer := 0;
+  v_operation_freshness_status text := NULL::text;
+  v_operation_freshness_result_hash text := NULL::text;
+  v_operation_freshness_scope_hash text := NULL::text;
+  v_batch_freshness_status text := NULL::text;
+  v_freshness_status text := NULL::text;
+  v_freshness_result_hash_used text := NULL::text;
+  v_freshness_scope_hash_used text := NULL::text;
 BEGIN
   IF p_operation_id IS NULL THEN
     RAISE EXCEPTION 'operation_id is required';
@@ -5672,6 +5680,97 @@ BEGIN
     RAISE EXCEPTION 'pay batch % is BLOCKED_FUNDS; retry flag is required', p_pay_batch_id;
   END IF;
 
+  v_batch_freshness_status := upper(nullif(btrim(coalesce(v_batch_row.freshness_validation_status, '')), ''));
+  v_operation_freshness_status := upper(coalesce(
+    nullif(btrim(coalesce(v_operation_row.progress_json #>> '{freshness_validation_status}', '')), ''),
+    nullif(btrim(coalesce(v_operation_row.progress_json #>> '{freshness,status}', '')), ''),
+    nullif(btrim(coalesce(v_operation_row.progress_json #>> '{freshness,result,status}', '')), ''),
+    nullif(btrim(coalesce(v_operation_row.result_json #>> '{freshness_validation_status}', '')), ''),
+    nullif(btrim(coalesce(v_operation_row.result_json #>> '{freshness,status}', '')), ''),
+    nullif(btrim(coalesce(v_operation_row.result_json #>> '{freshness,result,status}', '')), '')
+  ));
+  v_operation_freshness_result_hash := coalesce(
+    nullif(btrim(coalesce(v_operation_row.progress_json #>> '{freshness_result_hash}', '')), ''),
+    nullif(btrim(coalesce(v_operation_row.progress_json #>> '{freshness,result_hash}', '')), ''),
+    nullif(btrim(coalesce(v_operation_row.progress_json #>> '{freshness,result,result_hash}', '')), ''),
+    nullif(btrim(coalesce(v_operation_row.result_json #>> '{freshness_result_hash}', '')), ''),
+    nullif(btrim(coalesce(v_operation_row.result_json #>> '{freshness,result_hash}', '')), ''),
+    nullif(btrim(coalesce(v_operation_row.result_json #>> '{freshness,result,result_hash}', '')), '')
+  );
+  v_operation_freshness_scope_hash := coalesce(
+    nullif(btrim(coalesce(v_operation_row.progress_json #>> '{freshness_scope_hash}', '')), ''),
+    nullif(btrim(coalesce(v_operation_row.progress_json #>> '{freshness,scope_hash}', '')), ''),
+    nullif(btrim(coalesce(v_operation_row.progress_json #>> '{freshness,result,scope_hash}', '')), ''),
+    nullif(btrim(coalesce(v_operation_row.result_json #>> '{freshness_scope_hash}', '')), ''),
+    nullif(btrim(coalesce(v_operation_row.result_json #>> '{freshness,scope_hash}', '')), ''),
+    nullif(btrim(coalesce(v_operation_row.result_json #>> '{freshness,result,scope_hash}', '')), '')
+  );
+
+  IF v_batch_freshness_status IS NOT NULL AND v_batch_freshness_status <> 'PASSED' THEN
+    RAISE EXCEPTION 'PAY_EXECUTE_TRANSFER_SCOPE_BATCH_FRESHNESS_NOT_PASSED'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object(
+              'code', 'PAY_EXECUTE_TRANSFER_SCOPE_BATCH_FRESHNESS_NOT_PASSED',
+              'pay_batch_id', p_pay_batch_id::text,
+              'operation_id', p_operation_id::text,
+              'batch_freshness_validation_status', v_batch_freshness_status,
+              'operation_freshness_validation_status', v_operation_freshness_status
+            )::text;
+  END IF;
+
+  v_freshness_status := coalesce(v_operation_freshness_status, v_batch_freshness_status);
+  v_freshness_result_hash_used := coalesce(v_operation_freshness_result_hash, nullif(btrim(coalesce(v_batch_row.freshness_result_hash, '')), ''));
+  v_freshness_scope_hash_used := coalesce(v_operation_freshness_scope_hash, nullif(btrim(coalesce(v_batch_row.freshness_scope_hash, '')), ''));
+
+  IF coalesce(v_freshness_status, '') <> 'PASSED' THEN
+    RAISE EXCEPTION 'PAY_EXECUTE_TRANSFER_SCOPE_FRESHNESS_REQUIRED'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object(
+              'code', 'PAY_EXECUTE_TRANSFER_SCOPE_FRESHNESS_REQUIRED',
+              'pay_batch_id', p_pay_batch_id::text,
+              'operation_id', p_operation_id::text,
+              'freshness_validation_status', v_freshness_status
+            )::text;
+  END IF;
+
+  IF v_freshness_result_hash_used IS NULL THEN
+    RAISE EXCEPTION 'PAY_EXECUTE_TRANSFER_SCOPE_FRESHNESS_HASH_REQUIRED'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object(
+              'code', 'PAY_EXECUTE_TRANSFER_SCOPE_FRESHNESS_HASH_REQUIRED',
+              'pay_batch_id', p_pay_batch_id::text,
+              'operation_id', p_operation_id::text
+            )::text;
+  END IF;
+
+  IF v_operation_freshness_result_hash IS NOT NULL
+     AND nullif(btrim(coalesce(v_batch_row.freshness_result_hash, '')), '') IS NOT NULL
+     AND v_operation_freshness_result_hash <> nullif(btrim(coalesce(v_batch_row.freshness_result_hash, '')), '') THEN
+    RAISE EXCEPTION 'PAY_EXECUTE_TRANSFER_SCOPE_FRESHNESS_HASH_MISMATCH'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object(
+              'code', 'PAY_EXECUTE_TRANSFER_SCOPE_FRESHNESS_HASH_MISMATCH',
+              'pay_batch_id', p_pay_batch_id::text,
+              'operation_id', p_operation_id::text,
+              'operation_freshness_result_hash', v_operation_freshness_result_hash,
+              'batch_freshness_result_hash', v_batch_row.freshness_result_hash
+            )::text;
+  END IF;
+
+  IF v_operation_freshness_scope_hash IS NOT NULL
+     AND nullif(btrim(coalesce(v_batch_row.freshness_scope_hash, '')), '') IS NOT NULL
+     AND v_operation_freshness_scope_hash <> nullif(btrim(coalesce(v_batch_row.freshness_scope_hash, '')), '') THEN
+    RAISE EXCEPTION 'PAY_EXECUTE_TRANSFER_SCOPE_FRESHNESS_SCOPE_MISMATCH'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object(
+              'code', 'PAY_EXECUTE_TRANSFER_SCOPE_FRESHNESS_SCOPE_MISMATCH',
+              'pay_batch_id', p_pay_batch_id::text,
+              'operation_id', p_operation_id::text,
+              'operation_freshness_scope_hash', v_operation_freshness_scope_hash,
+              'batch_freshness_scope_hash', v_batch_row.freshness_scope_hash
+            )::text;
+  END IF;
+
   v_provider := v_batch_row.rail_provider_snapshot;
   v_env := v_batch_row.rail_env_snapshot;
   v_batch_kind_fixed := upper(btrim(coalesce(v_batch_row.batch_kind_fixed, '')));
@@ -5727,16 +5826,10 @@ BEGIN
         loan_item_check.source_ref IS NULL
         OR btrim(loan_item_check.source_ref) = ''
         OR btrim(loan_item_check.source_ref) !~ '^advance:[0-9a-fA-F-]{36}$'
-        OR NOT EXISTS (
-          SELECT 1
-          FROM public.pay_advances AS pay_advance_check
-          WHERE pay_advance_check.id = replace(loan_item_check.source_ref, 'advance:', '')::uuid
-            AND pay_advance_check.advance_kind = 'LOAN'::public.pay_advance_kind_enum
-        )
       );
 
     IF coalesce(v_invalid_loans_items, 0) > 0 THEN
-      RAISE EXCEPTION 'LOANS_PAYOUT_INVALID: one or more LOAN_PAYOUT items missing/invalid advance reference';
+      RAISE EXCEPTION 'LOANS_PAYOUT_INVALID: one or more frozen LOAN_PAYOUT items are missing a valid frozen advance source reference';
     END IF;
   END IF;
 
@@ -6081,8 +6174,7 @@ BEGIN
         batch_item.item_type,
         COALESCE(batch_item.amount_inc_vat, batch_item.amount_ex_vat, 0)::numeric AS item_amount,
         batch_item.payout_instruction_snapshot_json,
-        candidate_row.first_name AS candidate_first_name,
-        candidate_row.last_name AS candidate_last_name,
+        batch_candidate.candidate_display_name AS frozen_candidate_display_name,
         (batch_item.item_type IN ('LOAN_PAYOUT', 'MANUAL_CREDIT_PAYOUT', 'MANUAL_DEBT_RECOVERY', 'LOAN_REPAYMENT', 'OVERPAYMENT_RECOVERY')) AS is_finance_item,
         (batch_item.payout_instruction_snapshot_json IS NULL) AS is_missing_snapshot,
         upper(coalesce(batch_item.payout_instruction_snapshot_json->>'routing_kind', 'UMBRELLA_COMPANY')) AS routing_kind_txt,
@@ -6104,8 +6196,6 @@ BEGIN
       FROM public.pay_batch_candidates AS batch_candidate
       JOIN public.pay_batch_items AS batch_item
         ON batch_item.pay_batch_candidate_id = batch_candidate.id
-      JOIN public.candidates AS candidate_row
-        ON candidate_row.id = batch_candidate.candidate_id
       WHERE batch_candidate.pay_batch_id = p_pay_batch_id
         AND batch_item.pay_channel = 'UMBRELLA'
         AND batch_item.item_type <> 'DEBT_CREATED'
@@ -6148,7 +6238,7 @@ BEGIN
           WHEN umbrella_item_rows.is_finance_item = false AND upper(coalesce(umbrella_item_rows.routing_kind_txt, '')) = 'UMBRELLA_COMPANY' AND umbrella_item_rows.snapshot_week_ending_bucket IS NULL THEN 'FAILED'
           ELSE 'PENDING'
         END AS status,
-        left(btrim(concat_ws(' ', NULLIF(btrim(coalesce(umbrella_item_rows.candidate_last_name, '')), ''), NULLIF(btrim(coalesce(umbrella_item_rows.candidate_first_name, '')), ''))), 18) AS payment_reference,
+        left(btrim(coalesce(NULLIF(btrim(coalesce(umbrella_item_rows.frozen_candidate_display_name, '')), ''), umbrella_item_rows.candidate_id::text)), 18) AS payment_reference,
         umbrella_item_rows.snapshot_beneficiary_name AS payee_name,
         umbrella_item_rows.snapshot_sort_code AS sort_code,
         umbrella_item_rows.snapshot_account_number AS account_number,
@@ -6492,10 +6582,16 @@ BEGIN
     'created_count', COALESCE(v_created_count, 0),
     'reused_count', COALESCE(v_reused_count, 0),
     'blocked_invalid_count', COALESCE(v_blocked_count, 0) + COALESCE(v_stale_scope_skipped_count, 0),
-    'stale_scope_skipped_count', COALESCE(v_stale_scope_skipped_count, 0)
+    'stale_scope_skipped_count', COALESCE(v_stale_scope_skipped_count, 0),
+    'freshness_validation_status', v_freshness_status,
+    'freshness_result_hash_used', v_freshness_result_hash_used,
+    'freshness_scope_hash_used', v_freshness_scope_hash_used
   );
 END;
 $function$;
+
+
+
 
 DROP FUNCTION IF EXISTS public.pay_bank_transfers_claim_provider_submit_chunk(uuid, uuid, integer, text, integer);
 
