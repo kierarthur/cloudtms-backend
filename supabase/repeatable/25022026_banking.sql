@@ -24083,7 +24083,6 @@ DROP FUNCTION IF EXISTS public.pay_remittance_queue_commit_stage(uuid, text, uui
 
 DROP FUNCTION IF EXISTS public.pay_remittance_queue_commit_stage(uuid, text, uuid, boolean);
 DROP FUNCTION IF EXISTS public.pay_remittance_queue_commit_stage(uuid, text, uuid, boolean, uuid, jsonb);
-
 CREATE OR REPLACE FUNCTION public.pay_remittance_queue_commit_stage(
   p_pay_batch_id uuid,
   p_scope text,
@@ -24357,9 +24356,7 @@ begin
         'failed_count', COALESCE(v_failed_count, 0),
         'remaining', COALESCE(v_remaining_count, 0),
         'has_more', v_has_more,
-        'dispatch_required', false,
-        'remittance_scope_ids', COALESCE(v_operation_scope_ids, '[]'::jsonb),
-        'job_results', '[]'::jsonb
+        'dispatch_required', false
       );
     END IF;
 
@@ -24563,9 +24560,7 @@ begin
       'failed_count', COALESCE(v_failed_count, 0),
       'remaining', COALESCE(v_remaining_count, 0),
       'has_more', v_has_more,
-      'dispatch_required', (COALESCE(v_inserted_outbox_count, 0) + COALESCE(v_reused_outbox_count, 0) + COALESCE(v_already_queued_count, 0) > 0),
-      'remittance_scope_ids', COALESCE(v_operation_scope_ids, '[]'::jsonb),
-      'job_results', COALESCE(v_operation_job_results, '[]'::jsonb)
+      'dispatch_required', (COALESCE(v_inserted_outbox_count, 0) + COALESCE(v_reused_outbox_count, 0) + COALESCE(v_already_queued_count, 0) > 0)
     );
   END IF;
 
@@ -25881,7 +25876,14 @@ $function$;
 
 
 
+
 DROP FUNCTION IF EXISTS public.pay_finance_payout_notice_queue_commit_stage(uuid, uuid);
+
+DROP FUNCTION IF EXISTS public.pay_finance_payout_notice_queue_commit_stage(uuid, uuid);
+DROP FUNCTION IF EXISTS public.pay_finance_payout_notice_queue_commit_stage(uuid, uuid, boolean);
+DROP FUNCTION IF EXISTS public.pay_finance_payout_notice_queue_commit_stage(uuid, uuid, boolean, uuid, jsonb);
+
+
 
 DROP FUNCTION IF EXISTS public.pay_finance_payout_notice_queue_commit_stage(uuid, uuid);
 DROP FUNCTION IF EXISTS public.pay_finance_payout_notice_queue_commit_stage(uuid, uuid, boolean);
@@ -27297,7 +27299,6 @@ EXCEPTION
     RAISE;
 end;
 $function$;
-
 
 
 
