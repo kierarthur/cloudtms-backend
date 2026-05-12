@@ -26995,6 +26995,9 @@ DROP FUNCTION IF EXISTS public.pay_execute_bank(uuid, text, uuid, boolean, uuid,
 DROP FUNCTION IF EXISTS public.pay_execute_bank(uuid, text, uuid, boolean);
 DROP FUNCTION IF EXISTS public.pay_execute_bank(uuid, text, uuid, boolean, uuid, jsonb, boolean, boolean);
 
+
+
+
 CREATE OR REPLACE FUNCTION public.pay_execute_bank(
   p_pay_batch_id uuid,
   p_pay_channel_scope text,
@@ -27380,14 +27383,14 @@ begin
       )::text;
     END IF;
 
-    SELECT operation_row.progress_json->>'freshness_result_hash',
-           operation_row.result_json #>> '{freshness,freshness_result_hash}',
-           operation_row.progress_json->>'freshness_scope_hash',
-           operation_row.result_json #>> '{freshness,freshness_scope_hash}'
+    SELECT nullif(btrim(coalesce(operation_row.progress_json->>'freshness_result_hash', '')), ''),
+           nullif(btrim(coalesce(operation_row.result_json #>> '{freshness,freshness_result_hash}', '')), ''),
+           nullif(btrim(coalesce(operation_row.progress_json->>'freshness_scope_hash', '')), ''),
+           nullif(btrim(coalesce(operation_row.result_json #>> '{freshness,freshness_scope_hash}', '')), '')
     INTO v_operation_expected_freshness_hash,
-         v_stored_freshness_scope_hash,
+         v_stored_freshness_result_hash,
          v_operation_expected_freshness_scope_hash,
-         v_stored_freshness_status
+         v_stored_freshness_scope_hash
     FROM public.banking_pay_operations AS operation_row
     WHERE operation_row.id = p_operation_id
       AND operation_row.pay_batch_id = p_pay_batch_id
@@ -27405,8 +27408,8 @@ begin
       )::text;
     END IF;
 
-    v_operation_expected_freshness_hash := nullif(btrim(coalesce(v_operation_expected_freshness_hash, v_stored_freshness_scope_hash, '')), '');
-    v_operation_expected_freshness_scope_hash := nullif(btrim(coalesce(v_operation_expected_freshness_scope_hash, v_stored_freshness_status, '')), '');
+    v_operation_expected_freshness_hash := nullif(btrim(coalesce(v_operation_expected_freshness_hash, v_stored_freshness_result_hash, '')), '');
+    v_operation_expected_freshness_scope_hash := nullif(btrim(coalesce(v_operation_expected_freshness_scope_hash, v_stored_freshness_scope_hash, '')), '');
 
     SELECT upper(btrim(coalesce(batch_fresh.freshness_validation_status, ''))),
            nullif(btrim(coalesce(batch_fresh.freshness_result_hash, '')), ''),
@@ -27455,7 +27458,20 @@ begin
       )::text;
     END IF;
 
-    IF v_operation_expected_freshness_scope_hash IS NOT NULL AND v_stored_freshness_scope_hash IS DISTINCT FROM v_operation_expected_freshness_scope_hash THEN
+    IF v_operation_expected_freshness_scope_hash IS NULL THEN
+      RAISE EXCEPTION '%', jsonb_build_object(
+        'error', 'PAY_EXECUTE_BANK',
+        'code', 'OPERATION_FRESHNESS_SCOPE_HASH_MISSING',
+        'message', 'pay_execute_bank operation mode requires the operation to carry the completed freshness scope hash',
+        'pay_batch_id', p_pay_batch_id::text,
+        'operation_id', p_operation_id::text,
+        'freshness_validation_status', v_stored_freshness_status,
+        'freshness_result_hash', v_stored_freshness_result_hash,
+        'freshness_scope_hash', v_stored_freshness_scope_hash
+      )::text;
+    END IF;
+
+    IF v_stored_freshness_scope_hash IS DISTINCT FROM v_operation_expected_freshness_scope_hash THEN
       RAISE EXCEPTION '%', jsonb_build_object(
         'error', 'PAY_EXECUTE_BANK',
         'code', 'FRESHNESS_SCOPE_HASH_MISMATCH',
@@ -29146,10 +29162,6 @@ begin
   );
 end;
 $$;
-
-
-
-
 
 
 
