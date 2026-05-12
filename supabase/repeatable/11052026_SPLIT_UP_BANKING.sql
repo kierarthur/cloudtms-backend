@@ -3594,6 +3594,9 @@ DROP FUNCTION IF EXISTS public.pay_remittance_maybe_queue_for_trigger(uuid, text
 DROP FUNCTION IF EXISTS public.pay_remittance_maybe_queue_for_trigger(uuid, text, text, uuid, boolean);
 DROP FUNCTION IF EXISTS public.pay_remittance_maybe_queue_for_trigger(uuid, text, text, uuid, boolean, uuid, boolean);
 
+
+
+
 CREATE OR REPLACE FUNCTION public.pay_remittance_maybe_queue_for_trigger(
   p_pay_batch_id uuid,
   p_trigger text,
@@ -3631,6 +3634,10 @@ DECLARE
   v_operation_kind text := null;
   v_operation_idempotency_key text := null;
   v_operation_input_json jsonb := '{}'::jsonb;
+  v_operation_config_json jsonb := '{}'::jsonb;
+  v_operation_config_snapshot_status text := 'created_or_reused';
+  v_batch_candidate_count integer := 0;
+  v_large_batch_threshold integer := 100;
 BEGIN
   v_trigger := upper(nullif(btrim(COALESCE(p_trigger, '')), ''));
   v_scope := upper(nullif(btrim(COALESCE(p_scope, 'ALL')), ''));
@@ -3814,6 +3821,67 @@ BEGIN
       'source_rpc', 'pay_remittance_maybe_queue_for_trigger'
     );
 
+    WITH operation_config_plan AS (
+      SELECT *
+      FROM (
+        VALUES
+          ('queue_remittance_chunks', 'REMITTANCE_QUEUE', 'QUEUE_REMITTANCE_CHUNKS', 'REMITTANCE'),
+          ('queue_payout_notice_chunks', 'REMITTANCE_QUEUE', 'QUEUE_PAYOUT_NOTICE_CHUNKS', 'PAYOUT_NOTICE')
+      ) AS config_plan(config_key, operation_type, phase, chunk_type)
+    ), operation_config_rows AS (
+      SELECT
+        operation_config_plan.config_key,
+        operation_config_plan.operation_type,
+        operation_config_plan.phase,
+        operation_config_plan.chunk_type,
+        operation_config_get.chunk_size,
+        operation_config_get.min_chunk_size,
+        operation_config_get.max_chunk_size,
+        operation_config_get.max_advance_ms,
+        operation_config_get.lock_seconds
+      FROM operation_config_plan
+      CROSS JOIN LATERAL public.banking_pay_operation_config_get(
+        p_operation_type => operation_config_plan.operation_type,
+        p_phase => operation_config_plan.phase,
+        p_chunk_type => operation_config_plan.chunk_type
+      ) AS operation_config_get(
+        chunk_size integer,
+        min_chunk_size integer,
+        max_chunk_size integer,
+        max_advance_ms integer,
+        lock_seconds integer
+      )
+    )
+    SELECT jsonb_build_object(
+      'source', 'pay_remittance_maybe_queue_for_trigger',
+      'version', 1,
+      'operation_type', 'REMITTANCE_QUEUE',
+      'snapshotted_at_utc', now()::text,
+      'lock_seconds', COALESCE(max(operation_config_rows.lock_seconds), 60),
+      'max_advance_ms', COALESCE(max(operation_config_rows.max_advance_ms), 15000),
+      'chunks', COALESCE(jsonb_object_agg(
+        operation_config_rows.config_key,
+        jsonb_build_object(
+          'operation_type', operation_config_rows.operation_type,
+          'phase', operation_config_rows.phase,
+          'chunk_type', operation_config_rows.chunk_type,
+          'chunk_size', operation_config_rows.chunk_size,
+          'min_chunk_size', operation_config_rows.min_chunk_size,
+          'max_chunk_size', operation_config_rows.max_chunk_size,
+          'max_advance_ms', operation_config_rows.max_advance_ms,
+          'lock_seconds', operation_config_rows.lock_seconds
+        )
+        ORDER BY operation_config_rows.config_key
+      ), '{}'::jsonb)
+    )
+    INTO v_operation_config_json
+    FROM operation_config_rows;
+
+    v_operation_config_json := COALESCE(v_operation_config_json, '{}'::jsonb) || jsonb_build_object(
+      'remittance_chunk_size', COALESCE(NULLIF(v_operation_config_json #>> '{chunks,queue_remittance_chunks,chunk_size}', '')::integer, 100),
+      'payout_notice_chunk_size', COALESCE(NULLIF(v_operation_config_json #>> '{chunks,queue_payout_notice_chunks,chunk_size}', '')::integer, 100)
+    );
+
     SELECT operation_start_row.*
     INTO v_operation_start
     FROM public.banking_pay_operation_start(
@@ -3824,8 +3892,27 @@ BEGIN
       p_pay_batch_id => p_pay_batch_id,
       p_root_operation_id => p_root_operation_id,
       p_input_json => v_operation_input_json,
-      p_config_json => '{}'::jsonb
+      p_config_json => v_operation_config_json
     ) AS operation_start_row;
+
+    v_operation_config_snapshot_status := CASE
+      WHEN v_operation_start.config_json IS NULL OR v_operation_start.config_json = '{}'::jsonb THEN 'repaired'
+      WHEN v_operation_start.is_existing THEN 'reused'
+      ELSE 'created'
+    END;
+
+    IF v_operation_config_snapshot_status = 'repaired' THEN
+      UPDATE public.banking_pay_operations AS operation_update
+      SET config_json = v_operation_config_json,
+          progress_json = COALESCE(operation_update.progress_json, '{}'::jsonb) || jsonb_build_object(
+            'config_snapshot_status', 'repaired',
+            'config_snapshot_repaired_at_utc', now()::text,
+            'config_snapshot_source', 'pay_remittance_maybe_queue_for_trigger'
+          ),
+          updated_at_utc = now()
+      WHERE operation_update.id = v_operation_start.operation_id
+        AND (operation_update.config_json IS NULL OR operation_update.config_json = '{}'::jsonb);
+    END IF;
 
     PERFORM public._imp_debug_audit(
       p_actor_user_id,
@@ -3841,6 +3928,7 @@ BEGIN
         'operation_id', v_operation_start.operation_id,
         'operation_status', v_operation_start.status,
         'operation_phase', v_operation_start.phase,
+        'operation_config_snapshot_status', v_operation_config_snapshot_status,
         'root_operation_id', p_root_operation_id
       ),
       'pay_remittance',
@@ -3871,6 +3959,7 @@ BEGIN
       'operation_type', v_operation_start.operation_type,
       'operation_status', v_operation_start.status,
       'operation_phase', v_operation_start.phase,
+      'operation_config_snapshot_status', v_operation_config_snapshot_status,
       'root_operation_id', CASE WHEN p_root_operation_id IS NULL THEN NULL ELSE p_root_operation_id::text END,
       'queue_result', jsonb_build_object(
         'ok', true,
@@ -3879,12 +3968,76 @@ BEGIN
         'operation_type', v_operation_start.operation_type,
         'status', v_operation_start.status,
         'phase', v_operation_start.phase,
+        'operation_config_snapshot_status', v_operation_config_snapshot_status,
         'pay_batch_id', p_pay_batch_id::text,
         'message_kind', v_operation_kind,
         'trigger_status', 'REMITTANCE_QUEUE_OPERATION_STARTED',
         'dispatch_required', false,
         'job_count', 0,
         'jobs', '[]'::jsonb
+      )
+    );
+  END IF;
+
+  SELECT count(*)::integer
+  INTO v_batch_candidate_count
+  FROM public.pay_batch_candidates AS batch_candidate_count_row
+  WHERE batch_candidate_count_row.pay_batch_id = p_pay_batch_id;
+
+  IF v_batch_candidate_count > v_large_batch_threshold THEN
+    v_operation_kind := CASE WHEN v_is_loans_batch THEN 'PAYOUT_NOTICE' ELSE 'REMITTANCE' END;
+
+    PERFORM public._imp_debug_audit(
+      p_actor_user_id,
+      'PAY_REMITTANCE_MAYBE_QUEUE_FOR_TRIGGER_OPERATION_REQUIRED_FOR_LARGE_BATCH',
+      jsonb_build_object(
+        'pay_batch_id', p_pay_batch_id,
+        'trigger', v_trigger,
+        'configured_timing', v_timing_setting,
+        'scope', v_scope,
+        'only_confirmed', COALESCE(p_only_confirmed, false),
+        'is_loans_batch', v_is_loans_batch,
+        'message_kind', v_operation_kind,
+        'batch_candidate_count', v_batch_candidate_count,
+        'large_batch_threshold', v_large_batch_threshold
+      ),
+      'pay_remittance',
+      p_pay_batch_id::text,
+      NULL::jsonb,
+      NULL::text,
+      NULL::text,
+      NULL::text
+    );
+
+    RETURN jsonb_build_object(
+      'ok', true,
+      'queued', false,
+      'operation_queued', false,
+      'deferred', false,
+      'suppressed', false,
+      'dispatch_required', false,
+      'requires_remittance_operation', true,
+      'operation_id', NULL::text,
+      'operation_status', NULL::text,
+      'operation_phase', NULL::text,
+      'trigger', v_trigger,
+      'configured_timing', v_timing_setting,
+      'pay_batch_id', p_pay_batch_id,
+      'scope', v_scope,
+      'only_confirmed', COALESCE(p_only_confirmed, false),
+      'is_loans_batch', v_is_loans_batch,
+      'message_kind', v_operation_kind,
+      'effective_actor_user_id', v_effective_actor_user_id,
+      'batch_candidate_count', v_batch_candidate_count,
+      'large_batch_threshold', v_large_batch_threshold,
+      'message', 'Large payment batches must queue remittances through a REMITTANCE_QUEUE operation.',
+      'queue_result', jsonb_build_object(
+        'ok', true,
+        'operation_required', true,
+        'trigger_status', 'REMITTANCE_QUEUE_OPERATION_REQUIRED_FOR_LARGE_BATCH',
+        'message_kind', v_operation_kind,
+        'dispatch_required', false,
+        'job_count', 0
       )
     );
   END IF;
@@ -4039,6 +4192,10 @@ EXCEPTION
     RAISE;
 END;
 $function$;
+
+
+
+
 
 
 
