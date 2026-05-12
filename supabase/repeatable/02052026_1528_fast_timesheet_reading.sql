@@ -545,6 +545,8 @@ $function$;
 
 
 
+
+
 CREATE OR REPLACE FUNCTION public.bulk_timesheet_row_decision_v1(p_filters jsonb DEFAULT '{}'::jsonb)
  RETURNS TABLE(row_json jsonb)
  LANGUAGE plpgsql
@@ -983,12 +985,30 @@ BEGIN
       vb.nhsp_shift_deferred_count AS nhsp_shift_deferred_count,
       COALESCE(tv.status::text, vb.validation_status::text) AS validation_status,
       vb.summary_stage AS summary_stage,
-      vb.route_type AS route_type,
+      CASE
+        WHEN (
+          COALESCE(vb.additional_seq, cw.additional_seq, 0) > 0
+          OR COALESCE(vb.is_adjustment, FALSE) = TRUE
+          OR COALESCE(cw.is_adjustment, FALSE) = TRUE
+        )
+        AND (
+          UPPER(COALESCE(vb.route_type, '')) IN ('WEEKLY_NHSP', 'WEEKLY_NHSP_ADJUSTMENT')
+          OR COALESCE(vb.client_is_nhsp, FALSE) = TRUE
+          OR COALESCE(ct.is_nhsp, FALSE) = TRUE
+          OR UPPER(COALESCE(tf.basis::text, vb.basis::text, '')) IN ('NHSP', 'NHSP_ADJUSTMENT')
+        ) THEN 'WEEKLY_NHSP_ADJUSTMENT'
+        ELSE vb.route_type
+      END AS route_type,
       vb.contract_week_id AS contract_week_id,
       vb.contract_week_ending_date AS contract_week_ending_date,
       COALESCE(vb.contract_week_status::text, cw.status::text) AS contract_week_status,
       COALESCE(vb.additional_seq, cw.additional_seq, 0) AS additional_seq,
-      COALESCE(ts.is_adjustment, vb.is_adjustment, cw.is_adjustment, FALSE) AS is_adjustment,
+      (
+        COALESCE(ts.is_adjustment, FALSE) = TRUE
+        OR COALESCE(vb.is_adjustment, FALSE) = TRUE
+        OR COALESCE(cw.is_adjustment, FALSE) = TRUE
+        OR COALESCE(vb.additional_seq, cw.additional_seq, 0) > 0
+      ) AS is_adjustment,
       vb.qr_status::text AS vb_qr_status,
       ts.qr_status::text AS ts_qr_status,
       ts.qr_token AS qr_token,
@@ -1082,6 +1102,7 @@ BEGIN
       ts.manual_pdf_rotation_degrees AS manual_pdf_rotation_degrees,
       ts.generated_pdf_at_utc AS generated_pdf_at_utc,
       ts.actual_schedule_json AS timesheet_actual_schedule_json,
+      tf.actual_schedule_json AS tsfin_actual_schedule_json,
       ts.additional_units_week AS additional_units_week,
       ts.additional_units_per_day AS additional_units_per_day,
       ts.day_references_json AS day_references_json,
@@ -1427,6 +1448,32 @@ BEGIN
     SELECT
       dc.*,
       (dc.is_planned_week_unprocessed OR dc.is_real_row_unprocessed) AS is_unprocessed,
+      (
+        dc.is_adjustment_or_additional = TRUE
+        AND dc.contract_week_id IS NOT NULL
+        AND dc.route_family = 'MANUAL_NON_QR'
+        AND COALESCE(dc.locked, FALSE) = FALSE
+        AND COALESCE(dc.is_authorised, FALSE) = FALSE
+        AND (dc.timesheet_id IS NULL OR dc.is_real_row_unprocessed = TRUE)
+      ) AS supports_unprocessed_expense_draft,
+      (
+        dc.is_adjustment_or_additional = TRUE
+        AND COALESCE(dc.total_hours, 0::numeric) = 0::numeric
+        AND (
+          COALESCE(dc.timesheet_actual_schedule_json, dc.tsfin_actual_schedule_json) IS NULL
+          OR CASE
+            WHEN jsonb_typeof(COALESCE(dc.timesheet_actual_schedule_json, dc.tsfin_actual_schedule_json)) = 'array' THEN jsonb_array_length(COALESCE(dc.timesheet_actual_schedule_json, dc.tsfin_actual_schedule_json)) = 0
+            ELSE FALSE
+          END
+        )
+        AND (
+          dc.contract_week_planned_schedule_json IS NULL
+          OR CASE
+            WHEN jsonb_typeof(dc.contract_week_planned_schedule_json) = 'array' THEN jsonb_array_length(dc.contract_week_planned_schedule_json) = 0
+            ELSE FALSE
+          END
+        )
+      ) AS keep_additional_manual_adjustment_schedule_empty,
       CASE WHEN (dc.is_planned_week_unprocessed OR dc.is_real_row_unprocessed) THEN 'UNPROCESSED' ELSE 'PROCESSED' END AS bulk_process_bucket,
       (dc.hr_validation_required_for_invoice = TRUE AND dc.hr_validation_satisfied = FALSE) AS hr_validation_awaiting,
       (
@@ -1837,6 +1884,15 @@ BEGIN
         'route_family', ar.route_family,
         'route_subfamily', ar.route_subfamily,
         'underlying_channel_family', ar.underlying_channel_family,
+        'is_adjustment', ar.is_adjustment_or_additional,
+        'additional_seq', ar.additional_seq,
+        'actual_schedule_json', CASE WHEN ar.keep_additional_manual_adjustment_schedule_empty THEN '[]'::jsonb ELSE COALESCE(ar.timesheet_actual_schedule_json, ar.tsfin_actual_schedule_json, '[]'::jsonb) END,
+        'planned_schedule_json', CASE WHEN ar.keep_additional_manual_adjustment_schedule_empty THEN '[]'::jsonb ELSE COALESCE(ar.contract_week_planned_schedule_json, '[]'::jsonb) END,
+        'contract_week_totals_json', COALESCE(ar.contract_week_totals_json, '{}'::jsonb),
+        'suppress_standard_schedule_fallback', ar.keep_additional_manual_adjustment_schedule_empty,
+        'keep_additional_manual_adjustment_schedule_empty', ar.keep_additional_manual_adjustment_schedule_empty,
+        '__suppressStandardScheduleFallback', ar.keep_additional_manual_adjustment_schedule_empty,
+        '__keepAdditionalManualAdjustmentScheduleEmpty', ar.keep_additional_manual_adjustment_schedule_empty,
         'is_import_authoritative', ar.route_family = 'IMPORT_AUTHORITATIVE',
         'compare_block_required', ar.compare_block_required,
         'bulk_process_bucket', ar.bulk_process_bucket,
@@ -1856,7 +1912,19 @@ BEGIN
         'can_manage_evidence', ar.can_manage_evidence,
         'can_bulk_authorise', ar.can_bulk_authorise,
         'can_bulk_unauthorise', ar.can_bulk_unauthorise,
-        'can_add_additional_manual', ar.can_add_additional_manual
+        'can_add_additional_manual', ar.can_add_additional_manual,
+        'supportsUnprocessedExpenseDraft', ar.supports_unprocessed_expense_draft,
+        'supports_unprocessed_expense_draft', ar.supports_unprocessed_expense_draft,
+        'expense_storage_target', CASE
+          WHEN ar.supports_unprocessed_expense_draft THEN 'CONTRACT_WEEK_DRAFT'
+          WHEN ar.timesheet_id IS NOT NULL AND ar.route_family = 'MANUAL_NON_QR' THEN 'TSFIN'
+          ELSE NULL::text
+        END,
+        'expense_evidence_storage_target', CASE
+          WHEN ar.supports_unprocessed_expense_draft THEN 'CONTRACT_WEEK_STAGED_EVIDENCE'
+          WHEN ar.timesheet_id IS NOT NULL AND ar.route_family = 'MANUAL_NON_QR' THEN 'TIMESHEET_EVIDENCE'
+          ELSE NULL::text
+        END
       )
       || JSONB_BUILD_OBJECT(
         'is_qr', ar.is_qr_route,
@@ -1983,6 +2051,22 @@ BEGIN
           'route_family', ar.route_family,
           'underlying_channel_family', ar.underlying_channel_family,
           'is_import_authoritative', ar.route_family = 'IMPORT_AUTHORITATIVE',
+          'can_save', ar.can_save,
+          'can_process', ar.can_process,
+          'can_edit_timesheet_data', ar.can_edit_timesheet_data,
+          'can_manage_evidence', ar.can_manage_evidence,
+          'supportsUnprocessedExpenseDraft', ar.supports_unprocessed_expense_draft,
+          'supports_unprocessed_expense_draft', ar.supports_unprocessed_expense_draft,
+          'expense_storage_target', CASE
+            WHEN ar.supports_unprocessed_expense_draft THEN 'CONTRACT_WEEK_DRAFT'
+            WHEN ar.timesheet_id IS NOT NULL AND ar.route_family = 'MANUAL_NON_QR' THEN 'TSFIN'
+            ELSE NULL::text
+          END,
+          'expense_evidence_storage_target', CASE
+            WHEN ar.supports_unprocessed_expense_draft THEN 'CONTRACT_WEEK_STAGED_EVIDENCE'
+            WHEN ar.timesheet_id IS NOT NULL AND ar.route_family = 'MANUAL_NON_QR' THEN 'TIMESHEET_EVIDENCE'
+            ELSE NULL::text
+          END,
           'compare_block_required', ar.compare_block_required,
           'has_primary_artifact', ar.primary_artifact_storage_key IS NOT NULL,
           'primary_left_pane_mode', ar.primary_left_pane_mode,
@@ -2019,6 +2103,20 @@ BEGIN
           'current_timesheet_id', ar.timesheet_id,
           'expected_timesheet_id', ar.timesheet_id,
           'contract_week_id', ar.contract_week_id,
+          'is_adjustment', ar.is_adjustment_or_additional,
+          'additional_seq', ar.additional_seq,
+          'route_type', ar.route_type,
+          'route_family', ar.route_family,
+          'route_subfamily', ar.route_subfamily,
+          'underlying_channel_family', ar.underlying_channel_family,
+          'is_import_authoritative', ar.route_family = 'IMPORT_AUTHORITATIVE',
+          'actual_schedule_json', CASE WHEN ar.keep_additional_manual_adjustment_schedule_empty THEN '[]'::jsonb ELSE COALESCE(ar.timesheet_actual_schedule_json, ar.tsfin_actual_schedule_json, '[]'::jsonb) END,
+          'planned_schedule_json', CASE WHEN ar.keep_additional_manual_adjustment_schedule_empty THEN '[]'::jsonb ELSE COALESCE(ar.contract_week_planned_schedule_json, '[]'::jsonb) END,
+          'total_hours', CASE WHEN ar.keep_additional_manual_adjustment_schedule_empty THEN 0::numeric ELSE ar.total_hours END,
+          'suppress_standard_schedule_fallback', ar.keep_additional_manual_adjustment_schedule_empty,
+          'keep_additional_manual_adjustment_schedule_empty', ar.keep_additional_manual_adjustment_schedule_empty,
+          '__suppressStandardScheduleFallback', ar.keep_additional_manual_adjustment_schedule_empty,
+          '__keepAdditionalManualAdjustmentScheduleEmpty', ar.keep_additional_manual_adjustment_schedule_empty,
           'row_signature', ar.row_signature,
           'previous_row_signature', NULL::text,
           'bulk_process_bucket', ar.bulk_process_bucket,
@@ -2059,6 +2157,9 @@ BEGIN
     ar.row_key ASC;
 END;
 $function$;
+
+
+
 
 CREATE OR REPLACE FUNCTION public.bulk_process_row_context_v1(p_filters jsonb DEFAULT '{}'::jsonb)
  RETURNS jsonb
