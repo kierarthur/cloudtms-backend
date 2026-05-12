@@ -5221,6 +5221,9 @@ $function$;
 
 DROP FUNCTION IF EXISTS public.pay_execute_bank_transfer_chunk_prepare(uuid, uuid, jsonb, uuid);
 
+
+DROP FUNCTION IF EXISTS public.pay_execute_bank_transfer_chunk_prepare(uuid, uuid, jsonb, uuid);
+
 CREATE OR REPLACE FUNCTION public.pay_execute_bank_transfer_chunk_prepare(
   p_operation_id uuid,
   p_pay_batch_id uuid,
@@ -5239,11 +5242,12 @@ DECLARE
   v_scope_count integer := 0;
   v_prepared_count integer := 0;
   v_reused_count integer := 0;
+  v_skipped_count integer := 0;
+  v_existing_skipped_count integer := 0;
+  v_new_skipped_count integer := 0;
   v_failed_count integer := 0;
   v_remaining_count integer := 0;
-  v_non_editable_transfer_count integer := 0;
   v_existing_prepared_reused_count integer := 0;
-  v_current_upsert_reused_count integer := 0;
   v_prepared_link_missing_count integer := 0;
 BEGIN
   IF p_operation_id IS NULL THEN
@@ -5286,68 +5290,69 @@ BEGIN
 
   PERFORM 1
   FROM public.tms_users AS actor_user
-  WHERE actor_user.id = p_actor_user_id;
+  WHERE actor_user.id = p_actor_user_id
+    AND coalesce(actor_user.is_active, false) = true;
 
   IF NOT FOUND THEN
-    RAISE EXCEPTION 'tms_users row % not found', p_actor_user_id;
+    RAISE EXCEPTION 'active tms_users row % not found', p_actor_user_id;
   END IF;
 
-  WITH requested_scope AS (
-    SELECT DISTINCT (scope_element.value #>> '{}')::uuid AS transfer_scope_id
-    FROM jsonb_array_elements(p_transfer_scope_ids) AS scope_element(value)
-    WHERE (scope_element.value #>> '{}') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
-  )
+  CREATE TEMPORARY TABLE IF NOT EXISTS pg_temp.tmp_transfer_scope_request (
+    transfer_scope_id uuid PRIMARY KEY
+  ) ON COMMIT DROP;
+
+  TRUNCATE TABLE pg_temp.tmp_transfer_scope_request;
+
+  INSERT INTO pg_temp.tmp_transfer_scope_request(transfer_scope_id)
+  SELECT DISTINCT (scope_element.value #>> '{}')::uuid AS transfer_scope_id
+  FROM jsonb_array_elements(p_transfer_scope_ids) AS scope_element(value)
+  WHERE (scope_element.value #>> '{}') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$';
+
   SELECT count(*)::integer
   INTO v_requested_count
-  FROM requested_scope;
+  FROM pg_temp.tmp_transfer_scope_request AS requested_scope;
 
   IF v_requested_count <> jsonb_array_length(p_transfer_scope_ids) THEN
     RAISE EXCEPTION 'p_transfer_scope_ids contains invalid uuid values';
   END IF;
 
-  WITH requested_scope AS (
-    SELECT DISTINCT (scope_element.value #>> '{}')::uuid AS transfer_scope_id
-    FROM jsonb_array_elements(p_transfer_scope_ids) AS scope_element(value)
-    WHERE (scope_element.value #>> '{}') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
-  ),
-  scope_rows AS (
+  WITH scope_rows AS (
     SELECT transfer_scope.*
     FROM public.banking_pay_operation_transfer_scope AS transfer_scope
-    JOIN requested_scope
+    JOIN pg_temp.tmp_transfer_scope_request AS requested_scope
       ON requested_scope.transfer_scope_id = transfer_scope.id
     WHERE transfer_scope.operation_id = p_operation_id
       AND transfer_scope.pay_batch_id = p_pay_batch_id
     FOR UPDATE OF transfer_scope
   )
   SELECT count(*)::integer,
-         count(*) FILTER (WHERE scope_rows.status IN ('FAILED', 'SKIPPED'))::integer,
-         count(*) FILTER (
-           WHERE scope_rows.status = 'PREPARED'
-             AND scope_rows.pay_bank_transfer_id IS NOT NULL
-             AND EXISTS (
-               SELECT 1
-               FROM public.pay_bank_transfers AS prepared_transfer
-               WHERE prepared_transfer.id = scope_rows.pay_bank_transfer_id
-                 AND prepared_transfer.pay_batch_id = scope_rows.pay_batch_id
-                 AND prepared_transfer.pay_channel = scope_rows.pay_channel
-                 AND prepared_transfer.transfer_group_key = scope_rows.transfer_group_key
-             )
-         )::integer,
-         count(*) FILTER (
-           WHERE scope_rows.status = 'PREPARED'
-             AND (
-               scope_rows.pay_bank_transfer_id IS NULL
-               OR NOT EXISTS (
-                 SELECT 1
-                 FROM public.pay_bank_transfers AS prepared_transfer
-                 WHERE prepared_transfer.id = scope_rows.pay_bank_transfer_id
-                   AND prepared_transfer.pay_batch_id = scope_rows.pay_batch_id
-                   AND prepared_transfer.pay_channel = scope_rows.pay_channel
-                   AND prepared_transfer.transfer_group_key = scope_rows.transfer_group_key
-               )
-             )
-         )::integer
-  INTO v_scope_count, v_failed_count, v_existing_prepared_reused_count, v_prepared_link_missing_count
+         count(*) FILTER (WHERE scope_rows.status = 'PREPARED'
+                           AND scope_rows.pay_bank_transfer_id IS NOT NULL
+                           AND EXISTS (
+                             SELECT 1
+                             FROM public.pay_bank_transfers AS prepared_transfer
+                             WHERE prepared_transfer.id = scope_rows.pay_bank_transfer_id
+                               AND prepared_transfer.pay_batch_id = scope_rows.pay_batch_id
+                               AND prepared_transfer.pay_channel = scope_rows.pay_channel
+                               AND prepared_transfer.transfer_group_key = scope_rows.transfer_group_key
+                           ))::integer,
+         count(*) FILTER (WHERE scope_rows.status = 'PREPARED'
+                           AND (scope_rows.pay_bank_transfer_id IS NULL
+                                OR NOT EXISTS (
+                                  SELECT 1
+                                  FROM public.pay_bank_transfers AS prepared_transfer
+                                  WHERE prepared_transfer.id = scope_rows.pay_bank_transfer_id
+                                    AND prepared_transfer.pay_batch_id = scope_rows.pay_batch_id
+                                    AND prepared_transfer.pay_channel = scope_rows.pay_channel
+                                    AND prepared_transfer.transfer_group_key = scope_rows.transfer_group_key
+                                )))::integer,
+         count(*) FILTER (WHERE scope_rows.status = 'SKIPPED')::integer,
+         count(*) FILTER (WHERE scope_rows.status = 'FAILED')::integer
+  INTO v_scope_count,
+       v_existing_prepared_reused_count,
+       v_prepared_link_missing_count,
+       v_existing_skipped_count,
+       v_failed_count
   FROM scope_rows;
 
   IF v_scope_count <> v_requested_count THEN
@@ -5364,55 +5369,69 @@ BEGIN
     )::text;
   END IF;
 
-  WITH requested_scope AS (
-    SELECT DISTINCT (scope_element.value #>> '{}')::uuid AS transfer_scope_id
-    FROM jsonb_array_elements(p_transfer_scope_ids) AS scope_element(value)
-    WHERE (scope_element.value #>> '{}') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
-  )
-  SELECT count(*)::integer
-  INTO v_non_editable_transfer_count
-  FROM public.banking_pay_operation_transfer_scope AS transfer_scope
-  JOIN requested_scope
-    ON requested_scope.transfer_scope_id = transfer_scope.id
-  JOIN public.pay_bank_transfers AS bank_transfer
-    ON bank_transfer.pay_batch_id = transfer_scope.pay_batch_id
-   AND bank_transfer.pay_channel = transfer_scope.pay_channel
-   AND bank_transfer.transfer_group_key = transfer_scope.transfer_group_key
-  WHERE transfer_scope.operation_id = p_operation_id
-    AND transfer_scope.pay_batch_id = p_pay_batch_id
-    AND transfer_scope.status = 'PENDING'
-    AND (
-      bank_transfer.rail_tx_id IS NOT NULL
-      OR bank_transfer.completed_at_utc IS NOT NULL
-      OR upper(coalesce(bank_transfer.status, '')) NOT IN ('PENDING', 'BLOCKED', 'FAILED')
-    );
-
-  IF coalesce(v_non_editable_transfer_count, 0) > 0 THEN
-    RAISE EXCEPTION '%', jsonb_build_object(
-      'error', 'PAY_BANK_TRANSFER_ALREADY_SUBMITTED',
-      'message', 'One or more existing bank transfers already has provider evidence or a non-editable status and cannot be re-prepared.',
-      'operation_id', p_operation_id::text,
-      'pay_batch_id', p_pay_batch_id::text,
-      'count', v_non_editable_transfer_count
-    )::text;
-  END IF;
-
-  WITH requested_scope AS (
-    SELECT DISTINCT (scope_element.value #>> '{}')::uuid AS transfer_scope_id
-    FROM jsonb_array_elements(p_transfer_scope_ids) AS scope_element(value)
-    WHERE (scope_element.value #>> '{}') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
-  ),
-  scope_rows AS (
-    SELECT transfer_scope.*
+  WITH provider_evidence_scope AS (
+    SELECT
+      transfer_scope.id AS transfer_scope_id,
+      bank_transfer.id AS pay_bank_transfer_id
     FROM public.banking_pay_operation_transfer_scope AS transfer_scope
-    JOIN requested_scope
+    JOIN pg_temp.tmp_transfer_scope_request AS requested_scope
+      ON requested_scope.transfer_scope_id = transfer_scope.id
+    JOIN public.pay_bank_transfers AS bank_transfer
+      ON bank_transfer.pay_batch_id = transfer_scope.pay_batch_id
+     AND bank_transfer.pay_channel = transfer_scope.pay_channel
+     AND bank_transfer.transfer_group_key = transfer_scope.transfer_group_key
+    WHERE transfer_scope.operation_id = p_operation_id
+      AND transfer_scope.pay_batch_id = p_pay_batch_id
+      AND transfer_scope.status = 'PENDING'
+      AND (
+        nullif(btrim(coalesce(bank_transfer.rail_tx_id, '')), '') IS NOT NULL
+        OR EXISTS (
+          SELECT 1
+          FROM public.pay_bank_transfer_events AS transfer_event
+          WHERE transfer_event.pay_batch_id = bank_transfer.pay_batch_id
+            AND transfer_event.pay_bank_transfer_id = bank_transfer.id
+            AND upper(btrim(coalesce(transfer_event.event_source, ''))) IN ('PROVIDER_RESPONSE','PROVIDER_POLL','PROVIDER_WEBHOOK','WEBHOOK','POLL','RAIL_PROVIDER')
+            AND (
+              nullif(btrim(coalesce(transfer_event.provider_event_id, '')), '') IS NOT NULL
+              OR (
+                nullif(btrim(coalesce(transfer_event.provider_reference, '')), '') IS NOT NULL
+                AND nullif(btrim(coalesce(transfer_event.provider_reference, '')), '') IS DISTINCT FROM nullif(btrim(coalesce(bank_transfer.request_id, '')), '')
+                AND nullif(btrim(coalesce(transfer_event.provider_reference, '')), '') IS DISTINCT FROM nullif(btrim(coalesce(bank_transfer.payment_reference, '')), '')
+                AND nullif(btrim(coalesce(transfer_event.provider_reference, '')), '') IS DISTINCT FROM nullif(btrim(coalesce(bank_transfer.transfer_group_key, '')), '')
+              )
+            )
+        )
+      )
+  ), skipped_scope AS (
+    UPDATE public.banking_pay_operation_transfer_scope AS transfer_scope_update
+    SET status = 'SKIPPED',
+        pay_bank_transfer_id = provider_evidence_scope.pay_bank_transfer_id,
+        updated_at_utc = v_now
+    FROM provider_evidence_scope
+    WHERE transfer_scope_update.id = provider_evidence_scope.transfer_scope_id
+      AND transfer_scope_update.status = 'PENDING'
+    RETURNING transfer_scope_update.id
+  )
+  SELECT coalesce(count(*), 0)::integer
+  INTO v_new_skipped_count
+  FROM skipped_scope;
+
+  v_skipped_count := COALESCE(v_existing_skipped_count, 0) + COALESCE(v_new_skipped_count, 0);
+
+  WITH scope_rows AS (
+    SELECT transfer_scope.*,
+           coalesce(
+             nullif(btrim(coalesce(transfer_scope.request_id, '')), ''),
+             'cltms-' || md5(transfer_scope.pay_batch_id::text || '|' || transfer_scope.pay_channel || '|' || transfer_scope.transfer_group_key)
+           ) AS deterministic_request_id
+    FROM public.banking_pay_operation_transfer_scope AS transfer_scope
+    JOIN pg_temp.tmp_transfer_scope_request AS requested_scope
       ON requested_scope.transfer_scope_id = transfer_scope.id
     WHERE transfer_scope.operation_id = p_operation_id
       AND transfer_scope.pay_batch_id = p_pay_batch_id
       AND transfer_scope.status = 'PENDING'
     FOR UPDATE OF transfer_scope
-  ),
-  upserted_transfers AS (
+  ), upserted_transfers AS (
     INSERT INTO public.pay_bank_transfers (
       id,
       pay_batch_id,
@@ -5462,13 +5481,13 @@ BEGIN
       NULL::text,
       pay_batch.rail_provider_snapshot,
       pay_batch.rail_env_snapshot,
-      transfer_scope.request_id,
+      transfer_scope.deterministic_request_id,
       NULL::text,
       NULL::text,
       jsonb_strip_nulls(jsonb_build_object(
         'operation_id', p_operation_id::text,
         'transfer_scope_id', transfer_scope.id::text,
-        'request_id', transfer_scope.request_id,
+        'request_id', transfer_scope.deterministic_request_id,
         'transfer_group_key', transfer_scope.transfer_group_key,
         'grouping_mode_used', transfer_scope.grouping_mode_used,
         'prepared_at_utc', v_now
@@ -5488,7 +5507,7 @@ BEGIN
         umbrella_id = EXCLUDED.umbrella_id,
         amount = EXCLUDED.amount,
         currency = EXCLUDED.currency,
-        status = CASE WHEN public.pay_bank_transfers.status IN ('PENDING', 'BLOCKED', 'FAILED') THEN EXCLUDED.status ELSE public.pay_bank_transfers.status END,
+        status = CASE WHEN upper(coalesce(public.pay_bank_transfers.status, '')) IN ('PENDING', 'BLOCKED', 'FAILED') THEN EXCLUDED.status ELSE public.pay_bank_transfers.status END,
         payment_reference = EXCLUDED.payment_reference,
         payee_name = EXCLUDED.payee_name,
         sort_code = EXCLUDED.sort_code,
@@ -5502,16 +5521,30 @@ BEGIN
         payee_entity_id = EXCLUDED.payee_entity_id,
         grouping_mode_used = EXCLUDED.grouping_mode_used,
         week_ending_bucket = EXCLUDED.week_ending_bucket
-    WHERE public.pay_bank_transfers.rail_tx_id IS NULL
-      AND public.pay_bank_transfers.completed_at_utc IS NULL
+    WHERE nullif(btrim(coalesce(public.pay_bank_transfers.rail_tx_id, '')), '') IS NULL
+      AND NOT EXISTS (
+        SELECT 1
+        FROM public.pay_bank_transfer_events AS protected_event
+        WHERE protected_event.pay_batch_id = public.pay_bank_transfers.pay_batch_id
+          AND protected_event.pay_bank_transfer_id = public.pay_bank_transfers.id
+          AND upper(btrim(coalesce(protected_event.event_source, ''))) IN ('PROVIDER_RESPONSE','PROVIDER_POLL','PROVIDER_WEBHOOK','WEBHOOK','POLL','RAIL_PROVIDER')
+          AND (
+            nullif(btrim(coalesce(protected_event.provider_event_id, '')), '') IS NOT NULL
+            OR (
+              nullif(btrim(coalesce(protected_event.provider_reference, '')), '') IS NOT NULL
+              AND nullif(btrim(coalesce(protected_event.provider_reference, '')), '') IS DISTINCT FROM nullif(btrim(coalesce(public.pay_bank_transfers.request_id, '')), '')
+              AND nullif(btrim(coalesce(protected_event.provider_reference, '')), '') IS DISTINCT FROM nullif(btrim(coalesce(public.pay_bank_transfers.payment_reference, '')), '')
+              AND nullif(btrim(coalesce(protected_event.provider_reference, '')), '') IS DISTINCT FROM nullif(btrim(coalesce(public.pay_bank_transfers.transfer_group_key, '')), '')
+            )
+          )
+      )
       AND upper(coalesce(public.pay_bank_transfers.status, '')) IN ('PENDING', 'BLOCKED', 'FAILED')
     RETURNING public.pay_bank_transfers.id,
               public.pay_bank_transfers.pay_batch_id,
               public.pay_bank_transfers.pay_channel,
               public.pay_bank_transfers.transfer_group_key,
               (xmax = 0) AS was_inserted
-  ),
-  linked_scope AS (
+  ), linked_scope AS (
     UPDATE public.banking_pay_operation_transfer_scope AS transfer_scope_update
     SET status = 'PREPARED',
         pay_bank_transfer_id = upserted_transfers.id,
@@ -5521,11 +5554,11 @@ BEGIN
       AND transfer_scope_update.pay_batch_id = upserted_transfers.pay_batch_id
       AND transfer_scope_update.pay_channel = upserted_transfers.pay_channel
       AND transfer_scope_update.transfer_group_key = upserted_transfers.transfer_group_key
+      AND transfer_scope_update.status = 'PENDING'
     RETURNING transfer_scope_update.id,
               transfer_scope_update.pay_bank_transfer_id,
               upserted_transfers.was_inserted
-  ),
-  item_links AS (
+  ), item_links AS (
     UPDATE public.pay_batch_items AS batch_item_update
     SET pay_bank_transfer_id = linked_scope.pay_bank_transfer_id,
         bank_reference = COALESCE(batch_item_update.bank_reference, bank_transfer.payment_reference),
@@ -5547,10 +5580,25 @@ BEGIN
   )
   SELECT count(*) FILTER (WHERE linked_scope.was_inserted)::integer,
          count(*) FILTER (WHERE linked_scope.was_inserted IS NOT TRUE)::integer
-  INTO v_prepared_count, v_current_upsert_reused_count
+  INTO v_prepared_count, v_reused_count
   FROM linked_scope;
 
-  v_reused_count := COALESCE(v_existing_prepared_reused_count, 0) + COALESCE(v_current_upsert_reused_count, 0);
+  WITH failed_requested_scope AS (
+    UPDATE public.banking_pay_operation_transfer_scope AS transfer_scope_update
+    SET status = 'FAILED',
+        updated_at_utc = v_now
+    FROM pg_temp.tmp_transfer_scope_request AS requested_scope
+    WHERE transfer_scope_update.id = requested_scope.transfer_scope_id
+      AND transfer_scope_update.operation_id = p_operation_id
+      AND transfer_scope_update.pay_batch_id = p_pay_batch_id
+      AND transfer_scope_update.status = 'PENDING'
+    RETURNING transfer_scope_update.id
+  )
+  SELECT coalesce(v_failed_count, 0) + coalesce(count(*), 0)::integer
+  INTO v_failed_count
+  FROM failed_requested_scope;
+
+  v_reused_count := COALESCE(v_existing_prepared_reused_count, 0) + COALESCE(v_reused_count, 0);
 
   SELECT count(*)::integer
   INTO v_remaining_count
@@ -5565,11 +5613,17 @@ BEGIN
     'pay_batch_id', p_pay_batch_id::text,
     'prepared_count', COALESCE(v_prepared_count, 0),
     'reused_count', COALESCE(v_reused_count, 0),
+    'skipped_count', COALESCE(v_skipped_count, 0),
     'failed_count', COALESCE(v_failed_count, 0),
     'remaining_count', COALESCE(v_remaining_count, 0)
   );
 END;
 $function$;
+
+
+
+
+
 DROP FUNCTION IF EXISTS public.pay_execute_bank_transfer_scope_seed(uuid, uuid, text, uuid, boolean);
 
 
