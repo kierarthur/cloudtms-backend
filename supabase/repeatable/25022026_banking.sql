@@ -16145,7 +16145,14 @@ end;
 $function$;
 
 
-CREATE OR REPLACE FUNCTION public.pay_batch_validate_freshness(p_pay_batch_id uuid, p_actor_user_id uuid)
+DROP FUNCTION IF EXISTS public.pay_batch_validate_freshness(uuid, uuid);
+DROP FUNCTION IF EXISTS public.pay_batch_validate_freshness(uuid, uuid, boolean);
+
+CREATE OR REPLACE FUNCTION public.pay_batch_validate_freshness(
+  p_pay_batch_id uuid,
+  p_actor_user_id uuid,
+  p_allow_large_full_scan boolean DEFAULT false
+)
 returns jsonb
 language plpgsql
 security definer
@@ -16188,7 +16195,23 @@ declare
   v_paye_guardrails jsonb := '{}'::jsonb;
 
   v_diff_limit int := 500;
+
+  -- Scalable execution guard. Normal execute operation flow must use the
+  -- chunked freshness RPCs. This legacy/full validator remains available for
+  -- small/manual diagnostics, or explicit admin diagnostics when
+  -- p_allow_large_full_scan = true. Counts are derived only from frozen
+  -- batch/payment artifacts, never live TSFIN.
+  v_allow_large_full_scan boolean := false;
+  v_candidate_count integer := 0;
+  v_item_count integer := 0;
+  v_item_breakdown_count integer := 0;
+  v_transfer_count integer := 0;
+  v_large_batch boolean := false;
+  v_large_batch_reasons jsonb := '[]'::jsonb;
+  v_chunked_required_diff jsonb := '[]'::jsonb;
 begin
+  v_allow_large_full_scan := coalesce(p_allow_large_full_scan, false);
+
   if p_pay_batch_id is null then
     raise exception 'pay_batch_validate_freshness: pay_batch_id is required';
   end if;
@@ -16215,6 +16238,117 @@ begin
 
   if v_pay_date is null then
     raise exception 'pay_batch_validate_freshness: pay_batch_id not found (%).', p_pay_batch_id::text;
+  end if;
+
+  select count(*)::integer
+  into v_candidate_count
+  from public.pay_batch_candidates as guard_candidate_count
+  where guard_candidate_count.pay_batch_id = p_pay_batch_id;
+
+  select count(*)::integer
+  into v_item_count
+  from public.pay_batch_items as guard_item_count
+  join public.pay_batch_candidates as guard_item_candidate
+    on guard_item_candidate.id = guard_item_count.pay_batch_candidate_id
+  where guard_item_candidate.pay_batch_id = p_pay_batch_id;
+
+  select count(*)::integer
+  into v_item_breakdown_count
+  from public.pay_batch_item_breakdowns as guard_breakdown_count
+  join public.pay_batch_items as guard_breakdown_item
+    on guard_breakdown_item.id = guard_breakdown_count.pay_batch_item_id
+  join public.pay_batch_candidates as guard_breakdown_candidate
+    on guard_breakdown_candidate.id = guard_breakdown_item.pay_batch_candidate_id
+  where guard_breakdown_candidate.pay_batch_id = p_pay_batch_id;
+
+  select count(*)::integer
+  into v_transfer_count
+  from public.pay_bank_transfers as guard_transfer_count
+  where guard_transfer_count.pay_batch_id = p_pay_batch_id;
+
+  v_large_batch := (
+    coalesce(v_candidate_count, 0) > 100
+    or coalesce(v_item_count, 0) > 250
+    or coalesce(v_transfer_count, 0) > 100
+    or coalesce(v_item_breakdown_count, 0) > 500
+  );
+
+  select coalesce(jsonb_agg(guard_reason.reason_json order by guard_reason.reason_key), '[]'::jsonb)
+  into v_large_batch_reasons
+  from (
+    select
+      'candidate_count'::text as reason_key,
+      jsonb_build_object('metric', 'candidate_count', 'count', coalesce(v_candidate_count, 0), 'threshold', 100) as reason_json
+    where coalesce(v_candidate_count, 0) > 100
+
+    union all
+
+    select
+      'item_count'::text as reason_key,
+      jsonb_build_object('metric', 'item_count', 'count', coalesce(v_item_count, 0), 'threshold', 250) as reason_json
+    where coalesce(v_item_count, 0) > 250
+
+    union all
+
+    select
+      'transfer_count'::text as reason_key,
+      jsonb_build_object('metric', 'transfer_count', 'count', coalesce(v_transfer_count, 0), 'threshold', 100) as reason_json
+    where coalesce(v_transfer_count, 0) > 100
+
+    union all
+
+    select
+      'item_breakdown_count'::text as reason_key,
+      jsonb_build_object('metric', 'item_breakdown_count', 'count', coalesce(v_item_breakdown_count, 0), 'threshold', 500) as reason_json
+    where coalesce(v_item_breakdown_count, 0) > 500
+  ) as guard_reason;
+
+  if v_large_batch and v_allow_large_full_scan is not true then
+    v_chunked_required_diff := jsonb_build_array(
+      jsonb_build_object(
+        'timesheet_id', null,
+        'key_type', 'FRESHNESS_MODE',
+        'key_value', 'FULL_BATCH_SCAN_GUARD',
+        'expected', jsonb_build_object(
+          'required_path', 'chunked_freshness',
+          'seed_rpc', 'pay_batch_freshness_scope_seed',
+          'chunk_rpc', 'pay_batch_validate_freshness_chunk',
+          'aggregate_rpc', 'pay_batch_freshness_result_get'
+        ),
+        'actual', jsonb_build_object(
+          'requested_path', 'pay_batch_validate_freshness_full_scan',
+          'p_allow_large_full_scan', v_allow_large_full_scan,
+          'candidate_count', coalesce(v_candidate_count, 0),
+          'item_count', coalesce(v_item_count, 0),
+          'transfer_count', coalesce(v_transfer_count, 0),
+          'item_breakdown_count', coalesce(v_item_breakdown_count, 0),
+          'large_batch_reasons', coalesce(v_large_batch_reasons, '[]'::jsonb)
+        )
+      )
+    );
+
+    return jsonb_build_object(
+      'is_stale', true,
+      'stale_reasons', jsonb_build_array('FULL_BATCH_FRESHNESS_REQUIRES_CHUNKED_VALIDATION'),
+      'diff', v_chunked_required_diff,
+      'requires_chunked_freshness', true,
+      'code', 'FULL_BATCH_FRESHNESS_REQUIRES_CHUNKED_VALIDATION',
+      'message', 'This batch is too large for the legacy full-batch freshness validator. Use the chunked freshness operation path.',
+      'pay_batch_id', p_pay_batch_id::text,
+      'counts', jsonb_build_object(
+        'candidate_count', coalesce(v_candidate_count, 0),
+        'item_count', coalesce(v_item_count, 0),
+        'transfer_count', coalesce(v_transfer_count, 0),
+        'item_breakdown_count', coalesce(v_item_breakdown_count, 0)
+      ),
+      'thresholds', jsonb_build_object(
+        'candidate_count', 100,
+        'item_count', 250,
+        'transfer_count', 100,
+        'item_breakdown_count', 500
+      ),
+      'large_batch_reasons', coalesce(v_large_batch_reasons, '[]'::jsonb)
+    );
   end if;
 
   v_batch_is_active_reservation := public._pay_batch_status_is_active_reservation(v_batch_status);
@@ -18063,8 +18197,6 @@ begin
   );
 end;
 $function$;
-
-
 
 
 
