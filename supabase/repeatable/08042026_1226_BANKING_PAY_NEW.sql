@@ -30207,6 +30207,11 @@ $function$;
 
 DROP FUNCTION IF EXISTS public.pay_build_batch_artifacts_from_preview(date, date, uuid, jsonb, jsonb, uuid, uuid, bigint);
 
+
+
+DROP FUNCTION IF EXISTS public.pay_build_batch_artifacts_from_preview(date, date, uuid, jsonb, jsonb, uuid, uuid, bigint);
+DROP FUNCTION IF EXISTS public.pay_build_batch_artifacts_from_preview(date, date, uuid, jsonb, jsonb, uuid, uuid, bigint, uuid, jsonb, uuid, boolean);
+
 CREATE OR REPLACE FUNCTION public.pay_build_batch_artifacts_from_preview(
   p_pay_date date,
   p_week_ending_cutoff date,
@@ -30608,8 +30613,11 @@ BEGIN
     RAISE EXCEPTION 'Selected preview rows are not valid for the current preview';
   END IF;
 
-  IF coalesce(p_allow_legacy_unchunked, false) IS NOT TRUE
-     AND v_selected_preview_row_count > 250 THEN
+  IF COALESCE(p_allow_legacy_unchunked, false) = false THEN
+    RAISE EXCEPTION 'pay_build_batch_artifacts_from_preview refused legacy unchunked draft creation. Normal draft creation must use the Banking Pay operation draft flow; set p_allow_legacy_unchunked only for explicit small diagnostic/test compatibility.';
+  END IF;
+
+  IF v_selected_preview_row_count > 250 THEN
     RAISE EXCEPTION 'pay_build_batch_artifacts_from_preview refused legacy unchunked draft creation for % selected rows. Use the Banking Pay operation draft flow for large interactive drafts.', v_selected_preview_row_count;
   END IF;
 
@@ -31461,6 +31469,9 @@ BEGIN
   );
 END;
 $function$;
+
+
+
 
 
 DROP FUNCTION IF EXISTS public.pay_create_draft_batch(date, date, text, uuid, jsonb, uuid, uuid, uuid[], text, public.pay_override_mode_enum);
@@ -33355,6 +33366,13 @@ END;
 $function$;
 
 
+DROP FUNCTION IF EXISTS public.pay_workbench_prepare_draft(uuid, uuid, jsonb, text, text, boolean, boolean, uuid, timestamptz);
+DROP FUNCTION IF EXISTS public.pay_workbench_prepare_draft(uuid, uuid, jsonb, text, text, boolean, boolean, uuid, timestamptz, uuid, boolean, boolean);
+
+
+DROP FUNCTION IF EXISTS public.pay_workbench_prepare_draft(uuid, uuid, jsonb, text, text, boolean, boolean, uuid, timestamptz);
+DROP FUNCTION IF EXISTS public.pay_workbench_prepare_draft(uuid, uuid, jsonb, text, text, boolean, boolean, uuid, timestamptz, uuid, boolean, boolean);
+
 CREATE OR REPLACE FUNCTION public.pay_workbench_prepare_draft(
   p_session_id uuid,
   p_actor_user_id uuid,
@@ -33364,7 +33382,10 @@ CREATE OR REPLACE FUNCTION public.pay_workbench_prepare_draft(
   p_override_continue boolean DEFAULT false,
   p_override_verified boolean DEFAULT false,
   p_override_verified_by_user_id uuid DEFAULT NULL::uuid,
-  p_override_verified_at_utc timestamptz DEFAULT NULL::timestamptz
+  p_override_verified_at_utc timestamptz DEFAULT NULL::timestamptz,
+  p_operation_id uuid DEFAULT NULL::uuid,
+  p_operation_mode boolean DEFAULT false,
+  p_allow_legacy_unchunked boolean DEFAULT false
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -33375,6 +33396,9 @@ DECLARE
   v_now timestamptz := now();
   v_scope_filter text := UPPER(BTRIM(COALESCE(p_pay_channel_scope, 'ALL')));
   v_session_row public.banking_pay_workbench_sessions%ROWTYPE;
+  v_operation_row public.banking_pay_operations%ROWTYPE;
+  v_operation_mode boolean := false;
+  v_legacy_selected_preview_row_threshold integer := 250;
   v_selected_preview_row_ids_input jsonb := NULL;
   v_selected_preview_row_ids jsonb := '[]'::jsonb;
   v_selected_preview_row_count integer := 0;
@@ -33470,6 +33494,68 @@ BEGIN
 
   IF NOT FOUND THEN
     RAISE EXCEPTION 'banking_pay_snapshot_runs row % not found for session %', v_session_row.source_snapshot_run_id, p_session_id;
+  END IF;
+
+  v_operation_mode := (COALESCE(p_operation_mode, false) = true OR p_operation_id IS NOT NULL);
+
+  IF v_operation_mode THEN
+    IF p_operation_id IS NULL THEN
+      RAISE EXCEPTION '%', jsonb_build_object(
+        'error', 'PAY_WORKBENCH_PREPARE_DRAFT_OPERATION_ID_REQUIRED',
+        'message', 'pay_workbench_prepare_draft operation mode requires p_operation_id.',
+        'session_id', p_session_id::text
+      )::text;
+    END IF;
+
+    SELECT operation_row.*
+    INTO v_operation_row
+    FROM public.banking_pay_operations AS operation_row
+    WHERE operation_row.id = p_operation_id
+    FOR UPDATE;
+
+    IF NOT FOUND THEN
+      RAISE EXCEPTION '%', jsonb_build_object(
+        'error', 'PAY_WORKBENCH_PREPARE_DRAFT_OPERATION_NOT_FOUND',
+        'message', 'pay_workbench_prepare_draft operation mode could not find the supplied operation.',
+        'session_id', p_session_id::text,
+        'operation_id', p_operation_id::text
+      )::text;
+    END IF;
+
+    IF v_operation_row.operation_type <> 'DRAFT_CREATE' THEN
+      RAISE EXCEPTION '%', jsonb_build_object(
+        'error', 'PAY_WORKBENCH_PREPARE_DRAFT_OPERATION_TYPE_INVALID',
+        'message', 'pay_workbench_prepare_draft operation mode requires a DRAFT_CREATE operation.',
+        'session_id', p_session_id::text,
+        'operation_id', p_operation_id::text,
+        'operation_type', v_operation_row.operation_type
+      )::text;
+    END IF;
+
+    IF v_operation_row.workbench_session_id IS NOT NULL AND v_operation_row.workbench_session_id <> p_session_id THEN
+      RAISE EXCEPTION '%', jsonb_build_object(
+        'error', 'PAY_WORKBENCH_PREPARE_DRAFT_OPERATION_SESSION_MISMATCH',
+        'message', 'pay_workbench_prepare_draft operation belongs to a different workbench session.',
+        'session_id', p_session_id::text,
+        'operation_id', p_operation_id::text,
+        'operation_workbench_session_id', v_operation_row.workbench_session_id::text
+      )::text;
+    END IF;
+
+    IF v_operation_row.actor_user_id IS NOT NULL AND v_operation_row.actor_user_id <> p_actor_user_id THEN
+      RAISE EXCEPTION '%', jsonb_build_object(
+        'error', 'PAY_WORKBENCH_PREPARE_DRAFT_OPERATION_ACTOR_MISMATCH',
+        'message', 'pay_workbench_prepare_draft operation belongs to a different actor.',
+        'session_id', p_session_id::text,
+        'operation_id', p_operation_id::text
+      )::text;
+    END IF;
+
+    UPDATE public.banking_pay_operations AS operation_update
+    SET workbench_session_id = p_session_id,
+        updated_at_utc = v_now
+    WHERE operation_update.id = p_operation_id
+      AND operation_update.workbench_session_id IS NULL;
   END IF;
 
   v_projection_contract_json := public._pay_workbench_candidate_projection_contract();
@@ -33693,6 +33779,10 @@ BEGIN
   FROM pg_temp.tmp_pay_workbench_prepare_requested_rows_any_state
   WHERE pg_temp.tmp_pay_workbench_prepare_requested_rows_any_state.status = 'FAILED'
     AND (v_scope_filter = 'ALL' OR pg_temp.tmp_pay_workbench_prepare_requested_rows_any_state.pay_channel = v_scope_filter);
+
+  IF COALESCE(array_length(v_failed_candidate_ids, 1), 0) > 0 THEN
+    RAISE EXCEPTION 'Cannot prepare draft while touched candidates are failed: %', array_to_string(v_failed_candidate_ids, ',');
+  END IF;
 
   IF (SELECT COUNT(*)::integer FROM pg_temp.tmp_pay_workbench_prepare_selected_rows) = 0 THEN
     RAISE EXCEPTION 'No selected preview rows are available in READY session state for session % and scope %', p_session_id, v_scope_filter;
@@ -33981,6 +34071,183 @@ BEGIN
       'requested_scope', v_scope_filter,
       'candidate_ids', to_jsonb(COALESCE(v_payee_blocked_candidate_ids, ARRAY[]::uuid[])),
       'route_failures', COALESCE(v_payee_blocked_route_details_json, '[]'::jsonb)
+    )::text;
+  END IF;
+
+
+  SELECT COALESCE(jsonb_agg(to_jsonb(selected_rows.preview_row_id) ORDER BY selected_rows.ord), '[]'::jsonb), COUNT(*)::integer
+  INTO v_umbrella_selected_preview_row_ids, v_umbrella_selected_preview_row_count
+  FROM (
+    SELECT DISTINCT ON (pg_temp.tmp_pay_workbench_prepare_selected_rows.preview_row_id)
+      pg_temp.tmp_pay_workbench_prepare_selected_rows.preview_row_id,
+      pg_temp.tmp_pay_workbench_prepare_selected_rows.ord
+    FROM pg_temp.tmp_pay_workbench_prepare_selected_rows
+    WHERE pg_temp.tmp_pay_workbench_prepare_selected_rows.pay_channel = 'UMBRELLA'
+    ORDER BY pg_temp.tmp_pay_workbench_prepare_selected_rows.preview_row_id, pg_temp.tmp_pay_workbench_prepare_selected_rows.ord
+  ) AS selected_rows;
+
+  SELECT COALESCE(jsonb_agg(to_jsonb(selected_rows.preview_row_id) ORDER BY selected_rows.ord), '[]'::jsonb), COUNT(*)::integer
+  INTO v_paye_selected_preview_row_ids, v_paye_selected_preview_row_count
+  FROM (
+    SELECT DISTINCT ON (pg_temp.tmp_pay_workbench_prepare_selected_rows.preview_row_id)
+      pg_temp.tmp_pay_workbench_prepare_selected_rows.preview_row_id,
+      pg_temp.tmp_pay_workbench_prepare_selected_rows.ord
+    FROM pg_temp.tmp_pay_workbench_prepare_selected_rows
+    WHERE pg_temp.tmp_pay_workbench_prepare_selected_rows.pay_channel = 'PAYE'
+    ORDER BY pg_temp.tmp_pay_workbench_prepare_selected_rows.preview_row_id, pg_temp.tmp_pay_workbench_prepare_selected_rows.ord
+  ) AS selected_rows;
+
+  IF v_scope_filter IN ('ALL', 'PAYE') AND v_paye_selected_preview_row_count > 0 THEN
+    PERFORM pg_advisory_xact_lock(94201, 1);
+
+    v_paye_guardrails := public.pay_paye_guardrails(
+      p_pay_date => v_session_row.pay_date,
+      p_ignore_pay_batch_id => NULL::uuid,
+      p_actor_user_id => p_actor_user_id
+    );
+
+    v_paye_create_blocked := COALESCE((v_paye_guardrails->>'create_paye_blocked')::boolean, false);
+    v_paye_override_required := COALESCE((v_paye_guardrails->>'override_required')::boolean, false);
+
+    IF v_paye_create_blocked THEN
+      v_paye_scope_blocked := true;
+      v_paye_status := 'BLOCKED_EXISTING_PAYE_DRAFT';
+      v_paye_block_reason_code := 'PAYE_DRAFT_ALREADY_EXISTS';
+      v_paye_block_message := COALESCE(
+        v_paye_guardrails #>> '{ui,existing_draft_block,message}',
+        'A PAYE draft batch already exists. Cancel or delete the existing PAYE draft before creating another PAYE draft.'
+      );
+    ELSIF v_paye_override_required THEN
+      IF NULLIF(BTRIM(COALESCE(p_override_reason, '')), '') IS NULL THEN
+        v_paye_scope_blocked := true;
+        v_paye_status := 'BLOCKED_SAME_WEEK_OVERRIDE_REQUIRED';
+        v_paye_block_reason_code := 'SAME_WEEK_OVERRIDE_REASON_REQUIRED';
+        v_paye_block_message := 'A same-week PAYE override reason is required before creating another PAYE batch in the same Monday-based payroll week.';
+      ELSIF COALESCE(p_override_continue, false) = false THEN
+        v_paye_scope_blocked := true;
+        v_paye_status := 'BLOCKED_SAME_WEEK_OVERRIDE_REQUIRED';
+        v_paye_block_reason_code := 'SAME_WEEK_OVERRIDE_CONTINUE_REQUIRED';
+        v_paye_block_message := 'Explicit continuation is required before creating another PAYE batch in the same Monday-based payroll week.';
+      ELSIF COALESCE(p_override_verified, false) = false THEN
+        v_paye_scope_blocked := true;
+        v_paye_status := 'BLOCKED_SAME_WEEK_OVERRIDE_REQUIRED';
+        v_paye_block_reason_code := 'SAME_WEEK_OVERRIDE_VERIFICATION_REQUIRED';
+        v_paye_block_message := 'Valid password reauthentication and 2FA verification are required before creating another PAYE batch in the same Monday-based payroll week.';
+      ELSIF p_override_verified_by_user_id IS NULL THEN
+        v_paye_scope_blocked := true;
+        v_paye_status := 'BLOCKED_SAME_WEEK_OVERRIDE_REQUIRED';
+        v_paye_block_reason_code := 'SAME_WEEK_OVERRIDE_VERIFIED_BY_REQUIRED';
+        v_paye_block_message := 'The verified override user id is required for same-week PAYE override.';
+      ELSIF p_override_verified_by_user_id <> p_actor_user_id THEN
+        v_paye_scope_blocked := true;
+        v_paye_status := 'BLOCKED_SAME_WEEK_OVERRIDE_REQUIRED';
+        v_paye_block_reason_code := 'SAME_WEEK_OVERRIDE_VERIFIED_BY_MISMATCH';
+        v_paye_block_message := 'The same-week PAYE override verification must belong to the current actor user.';
+      ELSIF p_override_verified_at_utc IS NULL THEN
+        v_paye_scope_blocked := true;
+        v_paye_status := 'BLOCKED_SAME_WEEK_OVERRIDE_REQUIRED';
+        v_paye_block_reason_code := 'SAME_WEEK_OVERRIDE_VERIFIED_AT_REQUIRED';
+        v_paye_block_message := 'The verification timestamp is required for same-week PAYE override.';
+      END IF;
+    END IF;
+  END IF;
+
+  IF v_operation_mode THEN
+    IF v_scope_filter IN ('ALL', 'UMBRELLA') THEN
+      IF v_umbrella_selected_preview_row_count > 0 THEN
+        v_umbrella_status := 'VALIDATED_READY';
+      ELSE
+        v_umbrella_status := 'NOTHING_RELEVANT';
+      END IF;
+    ELSE
+      v_umbrella_status := 'NOT_RUN';
+    END IF;
+
+    IF v_scope_filter IN ('ALL', 'PAYE') THEN
+      IF v_paye_selected_preview_row_count > 0 THEN
+        IF v_paye_scope_blocked = false THEN
+          v_paye_status := 'VALIDATED_READY';
+        END IF;
+      ELSE
+        v_paye_status := 'NOTHING_RELEVANT';
+      END IF;
+    ELSE
+      v_paye_status := 'NOT_RUN';
+    END IF;
+
+    RETURN jsonb_build_object(
+      'ok', true,
+      'operation_mode', true,
+      'operation_id', p_operation_id::text,
+      'session_id', p_session_id::text,
+      'source_snapshot_run_id', v_session_row.source_snapshot_run_id::text,
+      'session_version', v_session_row.version,
+      'pay_date', CASE WHEN v_session_row.pay_date IS NULL THEN NULL ELSE v_session_row.pay_date::text END,
+      'week_ending_cutoff', CASE WHEN v_session_row.week_ending_cutoff IS NULL THEN NULL ELSE v_session_row.week_ending_cutoff::text END,
+      'pay_channel_scope', v_scope_filter,
+      'selected_preview_row_count', v_selected_preview_row_count,
+      'selected_preview_row_ids', v_selected_preview_row_ids,
+      'touched_candidate_count', v_touched_candidate_count,
+      'touched_candidate_ids', COALESCE(to_jsonb(v_touched_candidate_ids), '[]'::jsonb),
+      'candidate_ready_count', v_touched_candidate_count,
+      'unresolved_selected_preview_row_count', v_unresolved_selected_preview_row_count,
+      'payee_readiness', jsonb_build_object(
+        'blocked_candidate_count', COALESCE(array_length(v_payee_blocked_candidate_ids, 1), 0),
+        'blocked_candidate_ids', COALESCE(to_jsonb(v_payee_blocked_candidate_ids), '[]'::jsonb),
+        'route_details', v_payee_blocked_route_details_json
+      ),
+      'same_week_paye_override', jsonb_build_object(
+        'guardrails', COALESCE(v_paye_guardrails, '{}'::jsonb),
+        'create_blocked', v_paye_create_blocked,
+        'override_required', v_paye_override_required,
+        'scope_blocked', v_paye_scope_blocked,
+        'block_reason_code', v_paye_block_reason_code,
+        'block_message', v_paye_block_message,
+        'override_reason_present', (NULLIF(BTRIM(COALESCE(p_override_reason, '')), '') IS NOT NULL),
+        'override_continue', COALESCE(p_override_continue, false),
+        'override_verified', COALESCE(p_override_verified, false),
+        'override_verified_by_user_id', CASE WHEN p_override_verified_by_user_id IS NULL THEN NULL ELSE p_override_verified_by_user_id::text END,
+        'override_verified_at_utc', CASE WHEN p_override_verified_at_utc IS NULL THEN NULL ELSE p_override_verified_at_utc::text END
+      ),
+      'scopes', jsonb_build_object(
+        'umbrella', jsonb_build_object(
+          'status', v_umbrella_status,
+          'selected_preview_row_count', v_umbrella_selected_preview_row_count,
+          'selected_preview_row_ids', v_umbrella_selected_preview_row_ids
+        ),
+        'paye', jsonb_build_object(
+          'status', v_paye_status,
+          'selected_preview_row_count', v_paye_selected_preview_row_count,
+          'selected_preview_row_ids', v_paye_selected_preview_row_ids,
+          'blocked', v_paye_scope_blocked,
+          'block_reason_code', v_paye_block_reason_code,
+          'block_message', v_paye_block_message
+        )
+      ),
+      'next_phase', CASE WHEN v_paye_scope_blocked THEN 'AWAIT_SAME_WEEK_PAYE_OVERRIDE' ELSE 'SEED_CANDIDATE_SCOPE' END,
+      'message', CASE WHEN v_paye_scope_blocked THEN v_paye_block_message ELSE 'Workbench draft validation passed. Continue with operation-scoped draft creation.' END
+    );
+  END IF;
+
+  IF COALESCE(p_allow_legacy_unchunked, false) = false THEN
+    RAISE EXCEPTION '%', jsonb_build_object(
+      'error', 'PAY_WORKBENCH_PREPARE_DRAFT_OPERATION_REQUIRED',
+      'message', 'pay_workbench_prepare_draft refused legacy all-at-once draft creation. Normal draft creation must use the scalable DRAFT_CREATE operation flow; set p_allow_legacy_unchunked only for explicit small diagnostic/test compatibility.',
+      'session_id', p_session_id::text,
+      'selected_preview_row_count', v_selected_preview_row_count,
+      'safe_legacy_threshold', v_legacy_selected_preview_row_threshold,
+      'allow_legacy_unchunked', COALESCE(p_allow_legacy_unchunked, false)
+    )::text;
+  END IF;
+
+  IF v_selected_preview_row_count > v_legacy_selected_preview_row_threshold THEN
+    RAISE EXCEPTION '%', jsonb_build_object(
+      'error', 'PAY_WORKBENCH_PREPARE_DRAFT_OPERATION_REQUIRED',
+      'message', 'pay_workbench_prepare_draft refused legacy all-at-once draft creation for a large selection. Use the scalable DRAFT_CREATE operation flow.',
+      'session_id', p_session_id::text,
+      'selected_preview_row_count', v_selected_preview_row_count,
+      'safe_legacy_threshold', v_legacy_selected_preview_row_threshold,
+      'allow_legacy_unchunked', COALESCE(p_allow_legacy_unchunked, false)
     )::text;
   END IF;
 
@@ -34436,7 +34703,8 @@ BEGIN
         p_selected_preview_row_ids => v_umbrella_selected_preview_row_ids,
         p_source_workbench_session_id => p_session_id,
         p_source_snapshot_run_id => v_session_row.source_snapshot_run_id,
-        p_source_session_version => v_session_row.version
+        p_source_session_version => v_session_row.version,
+        p_allow_legacy_unchunked => COALESCE(p_allow_legacy_unchunked, false)
       );
 
       IF NULLIF(BTRIM(COALESCE(v_umbrella_build_result->>'pay_batch_id', '')), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
@@ -34516,7 +34784,8 @@ BEGIN
           p_selected_preview_row_ids => v_paye_selected_preview_row_ids,
           p_source_workbench_session_id => p_session_id,
           p_source_snapshot_run_id => v_session_row.source_snapshot_run_id,
-          p_source_session_version => v_session_row.version
+          p_source_session_version => v_session_row.version,
+        p_allow_legacy_unchunked => COALESCE(p_allow_legacy_unchunked, false)
         );
 
         IF NULLIF(BTRIM(COALESCE(v_paye_build_result->>'pay_batch_id', '')), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
@@ -34615,9 +34884,6 @@ BEGIN
   );
 END;
 $$;
-
-
-
 
 
 
