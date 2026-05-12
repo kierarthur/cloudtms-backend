@@ -7684,6 +7684,22 @@ DECLARE
 
   v_outbox public.ts_financials_outbox%ROWTYPE;
   v_write_result record;
+
+  v_numeric_re text := '^-?[0-9]+([.][0-9]+)?$';
+  v_is_additional_manual_adjustment boolean := FALSE;
+  v_force_empty_additional_schedule boolean := FALSE;
+  v_effective_planned_schedule_json jsonb := NULL;
+  v_effective_totals_json jsonb := NULL;
+  v_effective_contract_week_hours_zero boolean := TRUE;
+  v_expenses_pay_ex_vat numeric := 0;
+  v_expenses_charge_ex_vat numeric := 0;
+  v_expenses_margin_ex_vat numeric := 0;
+  v_effective_invoice_breakdown_json jsonb := '{}'::jsonb;
+  v_existing_planned_schedule_json jsonb := NULL;
+  v_existing_totals_json jsonb := NULL;
+  v_existing_contract_week_hours_zero boolean := TRUE;
+  v_existing_contract_week_schedule_empty boolean := FALSE;
+  v_payload_keep_empty_requested boolean := FALSE;
 BEGIN
   IF p_week_id IS NULL THEN
     RAISE EXCEPTION 'p_week_id is required';
@@ -7727,6 +7743,224 @@ BEGIN
 
   IF NOT FOUND THEN
     RAISE EXCEPTION 'CONTRACT_NOT_FOUND';
+  END IF;
+
+  v_is_additional_manual_adjustment :=
+    COALESCE(v_week.is_adjustment, FALSE) = TRUE
+    OR COALESCE(v_week.additional_seq, 0) > 0;
+
+  v_existing_planned_schedule_json := v_week.planned_schedule_json;
+  v_existing_totals_json := v_week.totals_json;
+
+  v_existing_contract_week_schedule_empty :=
+    v_existing_planned_schedule_json IS NULL
+    OR v_existing_planned_schedule_json = 'null'::jsonb
+    OR CASE
+      WHEN jsonb_typeof(v_existing_planned_schedule_json) = 'array' THEN jsonb_array_length(v_existing_planned_schedule_json) = 0
+      ELSE FALSE
+    END;
+
+  SELECT COALESCE(SUM(
+           CASE
+             WHEN NULLIF(BTRIM(COALESCE(existing_hours_value.hour_value, '')), '') ~ v_numeric_re THEN existing_hours_value.hour_value::numeric
+             ELSE 0::numeric
+           END
+         ), 0::numeric) = 0::numeric
+    INTO v_existing_contract_week_hours_zero
+  FROM jsonb_each_text(
+    CASE
+      WHEN jsonb_typeof(v_existing_totals_json->'hours') = 'object' THEN v_existing_totals_json->'hours'
+      ELSE '{}'::jsonb
+    END
+  ) AS existing_hours_value(hour_key, hour_value);
+
+  v_effective_planned_schedule_json := CASE
+    WHEN v_week_patch_json ? 'planned_schedule_json' THEN v_week_patch_json->'planned_schedule_json'
+    ELSE v_week.planned_schedule_json
+  END;
+
+  v_effective_totals_json := CASE
+    WHEN v_week_patch_json ? 'totals_json' THEN v_week_patch_json->'totals_json'
+    ELSE v_week.totals_json
+  END;
+
+  SELECT COALESCE(SUM(
+           CASE
+             WHEN NULLIF(BTRIM(COALESCE(hours_value.value, '')), '') ~ v_numeric_re THEN hours_value.value::numeric
+             ELSE 0::numeric
+           END
+         ), 0::numeric) = 0::numeric
+    INTO v_effective_contract_week_hours_zero
+  FROM jsonb_each_text(
+    CASE
+      WHEN jsonb_typeof(v_effective_totals_json->'hours') = 'object' THEN v_effective_totals_json->'hours'
+      ELSE '{}'::jsonb
+    END
+  ) AS hours_value(key, value);
+
+  v_payload_keep_empty_requested := COALESCE(
+    UPPER(NULLIF(BTRIM(COALESCE(v_week_patch_json->>'keep_additional_manual_adjustment_schedule_empty', '')), '')) IN ('TRUE', 'T', 'YES', 'Y', '1'),
+    UPPER(NULLIF(BTRIM(COALESCE(v_week_patch_json->>'__keepAdditionalManualAdjustmentScheduleEmpty', '')), '')) IN ('TRUE', 'T', 'YES', 'Y', '1'),
+    UPPER(NULLIF(BTRIM(COALESCE(v_week_patch_json->>'suppress_standard_schedule_fallback', '')), '')) IN ('TRUE', 'T', 'YES', 'Y', '1'),
+    UPPER(NULLIF(BTRIM(COALESCE(v_week_patch_json->>'__suppressStandardScheduleFallback', '')), '')) IN ('TRUE', 'T', 'YES', 'Y', '1'),
+    UPPER(NULLIF(BTRIM(COALESCE(v_patch_json->>'keep_additional_manual_adjustment_schedule_empty', '')), '')) IN ('TRUE', 'T', 'YES', 'Y', '1'),
+    UPPER(NULLIF(BTRIM(COALESCE(v_patch_json->>'__keepAdditionalManualAdjustmentScheduleEmpty', '')), '')) IN ('TRUE', 'T', 'YES', 'Y', '1'),
+    UPPER(NULLIF(BTRIM(COALESCE(v_patch_json->>'suppress_standard_schedule_fallback', '')), '')) IN ('TRUE', 'T', 'YES', 'Y', '1'),
+    UPPER(NULLIF(BTRIM(COALESCE(v_patch_json->>'__suppressStandardScheduleFallback', '')), '')) IN ('TRUE', 'T', 'YES', 'Y', '1'),
+    CASE WHEN v_create_json IS NULL THEN NULL ELSE UPPER(NULLIF(BTRIM(COALESCE(v_create_json->>'keep_additional_manual_adjustment_schedule_empty', '')), '')) IN ('TRUE', 'T', 'YES', 'Y', '1') END,
+    CASE WHEN v_create_json IS NULL THEN NULL ELSE UPPER(NULLIF(BTRIM(COALESCE(v_create_json->>'__keepAdditionalManualAdjustmentScheduleEmpty', '')), '')) IN ('TRUE', 'T', 'YES', 'Y', '1') END,
+    CASE WHEN v_create_json IS NULL THEN NULL ELSE UPPER(NULLIF(BTRIM(COALESCE(v_create_json->>'suppress_standard_schedule_fallback', '')), '')) IN ('TRUE', 'T', 'YES', 'Y', '1') END,
+    CASE WHEN v_create_json IS NULL THEN NULL ELSE UPPER(NULLIF(BTRIM(COALESCE(v_create_json->>'__suppressStandardScheduleFallback', '')), '')) IN ('TRUE', 'T', 'YES', 'Y', '1') END,
+    FALSE
+  );
+
+  v_force_empty_additional_schedule :=
+    COALESCE(v_is_additional_manual_adjustment, FALSE) = TRUE
+    AND (
+      COALESCE(v_payload_keep_empty_requested, FALSE) = TRUE
+      OR (
+        COALESCE(v_existing_contract_week_schedule_empty, FALSE) = TRUE
+        AND COALESCE(v_existing_contract_week_hours_zero, TRUE) = TRUE
+      )
+      OR (
+        (
+          v_effective_planned_schedule_json IS NULL
+          OR v_effective_planned_schedule_json = 'null'::jsonb
+          OR CASE
+            WHEN jsonb_typeof(v_effective_planned_schedule_json) = 'array' THEN jsonb_array_length(v_effective_planned_schedule_json) = 0
+            ELSE FALSE
+          END
+        )
+        AND COALESCE(v_effective_contract_week_hours_zero, TRUE) = TRUE
+      )
+    );
+
+  IF COALESCE(v_is_additional_manual_adjustment, FALSE) = TRUE THEN
+    IF v_create_json IS NOT NULL THEN
+      v_create_json := v_create_json || jsonb_build_object('is_adjustment', TRUE);
+    END IF;
+
+    v_patch_json := COALESCE(v_patch_json, '{}'::jsonb) || jsonb_build_object('is_adjustment', TRUE);
+    v_week_patch_json := COALESCE(v_week_patch_json, '{}'::jsonb) || jsonb_build_object('is_adjustment', TRUE);
+  END IF;
+
+  IF COALESCE(v_force_empty_additional_schedule, FALSE) = TRUE THEN
+    v_effective_totals_json := COALESCE(v_effective_totals_json, '{}'::jsonb) || jsonb_build_object(
+      'hours', jsonb_build_object(
+        'day', 0,
+        'night', 0,
+        'sat', 0,
+        'sun', 0,
+        'bh', 0
+      )
+    );
+
+    v_week_patch_json := COALESCE(v_week_patch_json, '{}'::jsonb) || jsonb_build_object(
+      'planned_schedule_json', '[]'::jsonb,
+      'totals_json', v_effective_totals_json
+    );
+
+    IF v_create_json IS NOT NULL THEN
+      v_create_json := v_create_json || jsonb_build_object('actual_schedule_json', '[]'::jsonb);
+    END IF;
+
+    v_patch_json := COALESCE(v_patch_json, '{}'::jsonb) || jsonb_build_object('actual_schedule_json', '[]'::jsonb);
+
+    IF v_tsfin_snapshot_json IS NOT NULL THEN
+      v_expenses_pay_ex_vat :=
+        COALESCE(CASE WHEN NULLIF(BTRIM(COALESCE(v_tsfin_snapshot_json->>'mileage_pay_ex_vat', '')), '') ~ v_numeric_re THEN (v_tsfin_snapshot_json->>'mileage_pay_ex_vat')::numeric ELSE NULL END, 0::numeric)
+        + COALESCE(CASE WHEN NULLIF(BTRIM(COALESCE(v_tsfin_snapshot_json->>'travel_pay_ex_vat', '')), '') ~ v_numeric_re THEN (v_tsfin_snapshot_json->>'travel_pay_ex_vat')::numeric ELSE NULL END, 0::numeric)
+        + COALESCE(CASE WHEN NULLIF(BTRIM(COALESCE(v_tsfin_snapshot_json->>'accommodation_pay_ex_vat', '')), '') ~ v_numeric_re THEN (v_tsfin_snapshot_json->>'accommodation_pay_ex_vat')::numeric ELSE NULL END, 0::numeric)
+        + COALESCE(CASE WHEN NULLIF(BTRIM(COALESCE(v_tsfin_snapshot_json->>'other_pay_ex_vat', '')), '') ~ v_numeric_re THEN (v_tsfin_snapshot_json->>'other_pay_ex_vat')::numeric ELSE NULL END, 0::numeric);
+
+      IF v_expenses_pay_ex_vat = 0::numeric THEN
+        v_expenses_pay_ex_vat := COALESCE(
+          CASE
+            WHEN NULLIF(BTRIM(COALESCE(v_tsfin_snapshot_json->>'expenses_pay_ex_vat', '')), '') ~ v_numeric_re THEN (v_tsfin_snapshot_json->>'expenses_pay_ex_vat')::numeric
+            ELSE NULL
+          END,
+          CASE
+            WHEN NULLIF(BTRIM(COALESCE(v_tsfin_snapshot_json->>'additional_pay_ex_vat', '')), '') ~ v_numeric_re THEN (v_tsfin_snapshot_json->>'additional_pay_ex_vat')::numeric
+            ELSE NULL
+          END,
+          0::numeric
+        );
+      END IF;
+
+      v_expenses_charge_ex_vat :=
+        COALESCE(CASE WHEN NULLIF(BTRIM(COALESCE(v_tsfin_snapshot_json->>'mileage_charge_ex_vat', '')), '') ~ v_numeric_re THEN (v_tsfin_snapshot_json->>'mileage_charge_ex_vat')::numeric ELSE NULL END, 0::numeric)
+        + COALESCE(CASE WHEN NULLIF(BTRIM(COALESCE(v_tsfin_snapshot_json->>'travel_charge_ex_vat', '')), '') ~ v_numeric_re THEN (v_tsfin_snapshot_json->>'travel_charge_ex_vat')::numeric ELSE NULL END, 0::numeric)
+        + COALESCE(CASE WHEN NULLIF(BTRIM(COALESCE(v_tsfin_snapshot_json->>'accommodation_charge_ex_vat', '')), '') ~ v_numeric_re THEN (v_tsfin_snapshot_json->>'accommodation_charge_ex_vat')::numeric ELSE NULL END, 0::numeric)
+        + COALESCE(CASE WHEN NULLIF(BTRIM(COALESCE(v_tsfin_snapshot_json->>'other_charge_ex_vat', '')), '') ~ v_numeric_re THEN (v_tsfin_snapshot_json->>'other_charge_ex_vat')::numeric ELSE NULL END, 0::numeric);
+
+      IF v_expenses_charge_ex_vat = 0::numeric THEN
+        v_expenses_charge_ex_vat := COALESCE(
+          CASE
+            WHEN NULLIF(BTRIM(COALESCE(v_tsfin_snapshot_json->>'expenses_charge_ex_vat', '')), '') ~ v_numeric_re THEN (v_tsfin_snapshot_json->>'expenses_charge_ex_vat')::numeric
+            ELSE NULL
+          END,
+          CASE
+            WHEN NULLIF(BTRIM(COALESCE(v_tsfin_snapshot_json->>'additional_charge_ex_vat', '')), '') ~ v_numeric_re THEN (v_tsfin_snapshot_json->>'additional_charge_ex_vat')::numeric
+            ELSE NULL
+          END,
+          0::numeric
+        );
+      END IF;
+
+      v_expenses_margin_ex_vat := v_expenses_charge_ex_vat - v_expenses_pay_ex_vat;
+
+      v_effective_invoice_breakdown_json := COALESCE(
+        CASE
+          WHEN jsonb_typeof(v_tsfin_snapshot_json->'invoice_breakdown_json') = 'object' THEN v_tsfin_snapshot_json->'invoice_breakdown_json'
+          ELSE '{}'::jsonb
+        END,
+        '{}'::jsonb
+      ) || jsonb_build_object(
+        'mode', 'SEGMENTS',
+        'segments', '[]'::jsonb,
+        'additional', jsonb_build_object(
+          'pay_ex_vat', v_expenses_pay_ex_vat,
+          'charge_ex_vat', v_expenses_charge_ex_vat,
+          'margin_ex_vat', v_expenses_margin_ex_vat
+        ),
+        'totals', jsonb_build_object(
+          'total_hours', 0,
+          'total_pay_ex_vat', v_expenses_pay_ex_vat,
+          'total_charge_ex_vat', v_expenses_charge_ex_vat,
+          'margin_ex_vat', v_expenses_margin_ex_vat
+        )
+      );
+
+      v_tsfin_snapshot_json := v_tsfin_snapshot_json || jsonb_build_object(
+        'hours_day', 0,
+        'hours_night', 0,
+        'hours_sat', 0,
+        'hours_sun', 0,
+        'hours_bh', 0,
+        'pay_day', 0,
+        'pay_night', 0,
+        'pay_sat', 0,
+        'pay_sun', 0,
+        'pay_bh', 0,
+        'charge_day', 0,
+        'charge_night', 0,
+        'charge_sat', 0,
+        'charge_sun', 0,
+        'charge_bh', 0,
+        'total_hours', 0,
+        'expenses_pay_ex_vat', v_expenses_pay_ex_vat,
+        'expenses_charge_ex_vat', v_expenses_charge_ex_vat,
+        'additional_pay_ex_vat', v_expenses_pay_ex_vat,
+        'additional_charge_ex_vat', v_expenses_charge_ex_vat,
+        'additional_margin_ex_vat', v_expenses_margin_ex_vat,
+        'total_pay_ex_vat', v_expenses_pay_ex_vat,
+        'total_charge_ex_vat', v_expenses_charge_ex_vat,
+        'margin_ex_vat', v_expenses_margin_ex_vat,
+        'actual_schedule_json', '[]'::jsonb,
+        'actual_minutes_by_day_json', '{}'::jsonb,
+        'invoice_breakdown_json', v_effective_invoice_breakdown_json
+      );
+    END IF;
   END IF;
 
   IF v_week.timesheet_id IS NOT NULL THEN
@@ -8131,7 +8365,8 @@ BEGIN
       qr_last_sent_hash,
       qr_last_sent_at_utc,
       qr_signed_hash,
-      qr_signed_at_utc
+      qr_signed_at_utc,
+      is_adjustment
     )
     VALUES (
       COALESCE(v_create_rec.timesheet_id, gen_random_uuid()),
@@ -8168,7 +8403,11 @@ BEGIN
       v_create_rec.qr_last_sent_hash,
       v_create_rec.qr_last_sent_at_utc,
       v_create_rec.qr_signed_hash,
-      v_create_rec.qr_signed_at_utc
+      v_create_rec.qr_signed_at_utc,
+      CASE
+        WHEN COALESCE(v_is_additional_manual_adjustment, FALSE) = TRUE THEN TRUE
+        ELSE COALESCE(v_create_rec.is_adjustment, FALSE)
+      END
     )
     RETURNING * INTO v_current_ts;
 
@@ -8352,7 +8591,11 @@ BEGIN
         qr_last_sent_hash = v_patch_rec.qr_last_sent_hash,
         qr_last_sent_at_utc = v_patch_rec.qr_last_sent_at_utc,
         qr_signed_hash = v_patch_rec.qr_signed_hash,
-        qr_signed_at_utc = v_patch_rec.qr_signed_at_utc
+        qr_signed_at_utc = v_patch_rec.qr_signed_at_utc,
+        is_adjustment = CASE
+          WHEN COALESCE(v_is_additional_manual_adjustment, FALSE) = TRUE THEN TRUE
+          ELSE COALESCE(v_patch_rec.is_adjustment, ts.is_adjustment)
+        END
     WHERE ts.timesheet_id = v_current_ts.timesheet_id
       AND ts.is_current = true
     RETURNING * INTO v_current_ts;
@@ -8376,7 +8619,10 @@ BEGIN
         ELSE v_now
       END,
       planned_schedule_json = COALESCE(v_week_patch_rec.planned_schedule_json, cw.planned_schedule_json),
-      is_adjustment = COALESCE(v_week_patch_rec.is_adjustment, cw.is_adjustment),
+      is_adjustment = CASE
+        WHEN COALESCE(v_is_additional_manual_adjustment, FALSE) = TRUE THEN TRUE
+        ELSE COALESCE(v_week_patch_rec.is_adjustment, cw.is_adjustment)
+      END,
       enforce_day_partition = COALESCE(v_week_patch_rec.enforce_day_partition, cw.enforce_day_partition),
       allowed_days_mask = COALESCE(v_week_patch_rec.allowed_days_mask, cw.allowed_days_mask),
       split_boundary_date = COALESCE(v_week_patch_rec.split_boundary_date, cw.split_boundary_date),
@@ -9289,6 +9535,15 @@ DECLARE
     ELSE 'contract_week_manual_upsert_bulk_process'
   END;
   v_next_tsfin_snapshot_json jsonb := COALESCE(p_next_tsfin_snapshot_json, p_tsfin_snapshot_json);
+  v_is_additional_manual_adjustment boolean := FALSE;
+  v_additional_seq integer := 0;
+  v_post_route_type text := NULL;
+  v_post_route_family text := NULL;
+  v_post_route_subfamily text := NULL;
+  v_effective_actual_schedule_json jsonb := NULL;
+  v_effective_planned_schedule_json jsonb := NULL;
+  v_effective_total_hours numeric := NULL;
+  v_keep_empty_additional_schedule boolean := FALSE;
 BEGIN
   IF p_week_id IS NULL THEN
     RETURN JSONB_BUILD_OBJECT(
@@ -9573,6 +9828,89 @@ BEGIN
     );
   END IF;
 
+  v_is_additional_manual_adjustment :=
+    COALESCE(NULLIF(BTRIM(COALESCE(v_timesheet_json->>'is_adjustment', '')), '')::boolean, FALSE) = TRUE
+    OR COALESCE(NULLIF(BTRIM(COALESCE(v_contract_week_json->>'is_adjustment', '')), '')::boolean, FALSE) = TRUE
+    OR COALESCE(NULLIF(BTRIM(COALESCE(v_contract_week_json->>'additional_seq', '')), '')::integer, 0) > 0;
+
+  v_additional_seq := COALESCE(NULLIF(BTRIM(COALESCE(v_contract_week_json->>'additional_seq', '')), '')::integer, 0);
+
+  v_effective_actual_schedule_json := CASE
+    WHEN jsonb_typeof(v_timesheet_json->'actual_schedule_json') = 'array' THEN v_timesheet_json->'actual_schedule_json'
+    WHEN jsonb_typeof(v_timesheet_financials_json->'actual_schedule_json') = 'array' THEN v_timesheet_financials_json->'actual_schedule_json'
+    ELSE COALESCE(v_post_row->'actual_schedule_json', '[]'::jsonb)
+  END;
+
+  v_effective_planned_schedule_json := CASE
+    WHEN jsonb_typeof(v_contract_week_json->'planned_schedule_json') = 'array' THEN v_contract_week_json->'planned_schedule_json'
+    ELSE COALESCE(v_post_row->'planned_schedule_json', '[]'::jsonb)
+  END;
+
+  v_effective_total_hours := COALESCE(
+    NULLIF(BTRIM(COALESCE(v_timesheet_financials_json->>'total_hours', '')), '')::numeric,
+    NULLIF(BTRIM(COALESCE(v_post_row->>'total_hours', '')), '')::numeric,
+    0::numeric
+  );
+
+  v_keep_empty_additional_schedule :=
+    COALESCE(v_is_additional_manual_adjustment, FALSE) = TRUE
+    AND COALESCE(v_effective_total_hours, 0::numeric) = 0::numeric
+    AND (
+      v_effective_actual_schedule_json IS NULL
+      OR CASE
+        WHEN jsonb_typeof(v_effective_actual_schedule_json) = 'array' THEN jsonb_array_length(v_effective_actual_schedule_json) = 0
+        ELSE FALSE
+      END
+    )
+    AND (
+      v_effective_planned_schedule_json IS NULL
+      OR CASE
+        WHEN jsonb_typeof(v_effective_planned_schedule_json) = 'array' THEN jsonb_array_length(v_effective_planned_schedule_json) = 0
+        ELSE FALSE
+      END
+    );
+
+  IF COALESCE(v_keep_empty_additional_schedule, FALSE) = TRUE THEN
+    v_effective_actual_schedule_json := '[]'::jsonb;
+    v_effective_planned_schedule_json := '[]'::jsonb;
+    v_effective_total_hours := 0::numeric;
+  END IF;
+
+  v_post_route_type := CASE
+    WHEN COALESCE(v_is_additional_manual_adjustment, FALSE) = TRUE
+      AND UPPER(COALESCE(v_post_row->>'contract_weekly_mode', '')) = 'NHSP' THEN 'WEEKLY_NHSP_ADJUSTMENT'
+    WHEN COALESCE(v_is_additional_manual_adjustment, FALSE) = TRUE
+      AND UPPER(COALESCE(v_post_row->>'route_type', '')) IN ('WEEKLY_NHSP', 'WEEKLY_NHSP_ADJUSTMENT') THEN 'WEEKLY_NHSP_ADJUSTMENT'
+    ELSE v_post_row->>'route_type'
+  END;
+
+  v_post_route_family := CASE
+    WHEN COALESCE(v_is_additional_manual_adjustment, FALSE) = TRUE THEN 'MANUAL_NON_QR'
+    ELSE v_post_row->>'route_family'
+  END;
+
+  v_post_route_subfamily := CASE
+    WHEN COALESCE(v_is_additional_manual_adjustment, FALSE) = TRUE THEN 'MANUAL_NON_QR'
+    ELSE v_post_row->>'route_subfamily'
+  END;
+
+  v_post_row := v_post_row || JSONB_BUILD_OBJECT(
+    'route_type', v_post_route_type,
+    'route_family', v_post_route_family,
+    'route_subfamily', v_post_route_subfamily,
+    'underlying_channel_family', v_post_route_subfamily,
+    'is_import_authoritative', CASE WHEN COALESCE(v_is_additional_manual_adjustment, FALSE) = TRUE THEN FALSE ELSE COALESCE(NULLIF(BTRIM(COALESCE(v_post_row->>'is_import_authoritative', '')), '')::boolean, FALSE) END,
+    'is_adjustment', COALESCE(v_is_additional_manual_adjustment, FALSE),
+    'additional_seq', v_additional_seq,
+    'actual_schedule_json', COALESCE(v_effective_actual_schedule_json, '[]'::jsonb),
+    'planned_schedule_json', COALESCE(v_effective_planned_schedule_json, '[]'::jsonb),
+    'total_hours', COALESCE(v_effective_total_hours, 0::numeric),
+    'suppress_standard_schedule_fallback', COALESCE(v_keep_empty_additional_schedule, FALSE),
+    'keep_additional_manual_adjustment_schedule_empty', COALESCE(v_keep_empty_additional_schedule, FALSE),
+    '__suppressStandardScheduleFallback', COALESCE(v_keep_empty_additional_schedule, FALSE),
+    '__keepAdditionalManualAdjustmentScheduleEmpty', COALESCE(v_keep_empty_additional_schedule, FALSE)
+  );
+
   v_post_bucket := NULLIF(BTRIM(COALESCE(v_post_row->>'bulk_process_bucket', '')), '');
   v_post_authorise_section := NULLIF(BTRIM(COALESCE(v_post_row->>'bulk_authorise_section', '')), '');
   v_row_key := NULLIF(BTRIM(COALESCE(v_post_row->>'row_key', '')), '');
@@ -9626,6 +9964,20 @@ BEGIN
       'contract_week_id', v_contract_week_id,
       'contract_id', v_contract_id,
       'timesheet_id', v_current_timesheet_id,
+      'is_adjustment', COALESCE(v_is_additional_manual_adjustment, FALSE),
+      'additional_seq', v_additional_seq,
+      'route_type', v_post_route_type,
+      'route_family', v_post_route_family,
+      'route_subfamily', v_post_route_subfamily,
+      'underlying_channel_family', v_post_route_subfamily,
+      'is_import_authoritative', CASE WHEN COALESCE(v_is_additional_manual_adjustment, FALSE) = TRUE THEN FALSE ELSE COALESCE(NULLIF(BTRIM(COALESCE(v_post_row->>'is_import_authoritative', '')), '')::boolean, FALSE) END,
+      'actual_schedule_json', COALESCE(v_effective_actual_schedule_json, '[]'::jsonb),
+      'planned_schedule_json', COALESCE(v_effective_planned_schedule_json, '[]'::jsonb),
+      'total_hours', COALESCE(v_effective_total_hours, 0::numeric),
+      'suppress_standard_schedule_fallback', COALESCE(v_keep_empty_additional_schedule, FALSE),
+      'keep_additional_manual_adjustment_schedule_empty', COALESCE(v_keep_empty_additional_schedule, FALSE),
+      '__suppressStandardScheduleFallback', COALESCE(v_keep_empty_additional_schedule, FALSE),
+      '__keepAdditionalManualAdjustmentScheduleEmpty', COALESCE(v_keep_empty_additional_schedule, FALSE),
       'current_timesheet_id', v_current_timesheet_id,
       'expected_timesheet_id', v_current_timesheet_id,
       'current_version', v_current_timesheet_version,
