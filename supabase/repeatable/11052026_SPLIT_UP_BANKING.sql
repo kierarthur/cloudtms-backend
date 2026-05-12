@@ -4049,6 +4049,10 @@ $$;
 DROP FUNCTION IF EXISTS public.pay_remittance_maybe_queue_for_trigger(uuid, text, text, uuid, boolean);
 DROP FUNCTION IF EXISTS public.pay_remittance_maybe_queue_for_trigger(uuid, text, text, uuid, boolean, uuid, boolean);
 
+DROP FUNCTION IF EXISTS public.pay_remittance_maybe_queue_for_trigger(uuid, text, text, uuid);
+DROP FUNCTION IF EXISTS public.pay_remittance_maybe_queue_for_trigger(uuid, text, text, uuid, boolean);
+DROP FUNCTION IF EXISTS public.pay_remittance_maybe_queue_for_trigger(uuid, text, text, uuid, boolean, uuid, boolean);
+
 CREATE OR REPLACE FUNCTION public.pay_remittance_maybe_queue_for_trigger(
   p_pay_batch_id uuid,
   p_trigger text,
@@ -4494,7 +4498,6 @@ EXCEPTION
     RAISE;
 END;
 $function$;
-
 
 
 
