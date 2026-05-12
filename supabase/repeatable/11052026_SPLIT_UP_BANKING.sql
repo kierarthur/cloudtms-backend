@@ -7750,4 +7750,1999 @@ BEGIN
 END;
 $function$;
 
+create or replace function public.pay_batch_freshness_scope_seed(
+  p_operation_id uuid,
+  p_pay_batch_id uuid,
+  p_actor_user_id uuid default null::uuid,
+  p_chunk_size integer default null::integer
+)
+returns jsonb
+language plpgsql
+security definer
+volatile
+set search_path = public, pg_temp
+as $$
+declare
+  v_operation public.banking_pay_operations%rowtype;
+  v_batch public.pay_batches%rowtype;
+  v_actor_is_valid boolean := true;
+  v_chunk_size integer;
+  v_units_json jsonb := '[]'::jsonb;
+  v_unit_count integer := 0;
+  v_scope_hash text := null;
+  v_existing_scope_hash text := null;
+  v_seed_result record;
+  v_config_candidate text := null;
+begin
+  if p_operation_id is null then
+    raise exception 'PAY_BATCH_FRESHNESS_SCOPE_SEED_OPERATION_ID_REQUIRED'
+      using errcode = 'P0001',
+            detail = jsonb_build_object('code', 'PAY_BATCH_FRESHNESS_SCOPE_SEED_OPERATION_ID_REQUIRED')::text;
+  end if;
+
+  if p_pay_batch_id is null then
+    raise exception 'PAY_BATCH_FRESHNESS_SCOPE_SEED_PAY_BATCH_ID_REQUIRED'
+      using errcode = 'P0001',
+            detail = jsonb_build_object('code', 'PAY_BATCH_FRESHNESS_SCOPE_SEED_PAY_BATCH_ID_REQUIRED')::text;
+  end if;
+
+  select operation_row.*
+  into v_operation
+  from public.banking_pay_operations as operation_row
+  where operation_row.id = p_operation_id
+  for update;
+
+  if not found then
+    raise exception 'PAY_BATCH_FRESHNESS_SCOPE_SEED_OPERATION_NOT_FOUND'
+      using errcode = 'P0001',
+            detail = jsonb_build_object(
+              'code', 'PAY_BATCH_FRESHNESS_SCOPE_SEED_OPERATION_NOT_FOUND',
+              'operation_id', p_operation_id::text
+            )::text;
+  end if;
+
+  if v_operation.operation_type not in ('PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS') then
+    raise exception 'PAY_BATCH_FRESHNESS_SCOPE_SEED_UNSUPPORTED_OPERATION_TYPE'
+      using errcode = 'P0001',
+            detail = jsonb_build_object(
+              'code', 'PAY_BATCH_FRESHNESS_SCOPE_SEED_UNSUPPORTED_OPERATION_TYPE',
+              'operation_id', p_operation_id::text,
+              'operation_type', v_operation.operation_type
+            )::text;
+  end if;
+
+  if v_operation.pay_batch_id is not null and v_operation.pay_batch_id <> p_pay_batch_id then
+    raise exception 'PAY_BATCH_FRESHNESS_SCOPE_SEED_OPERATION_BATCH_MISMATCH'
+      using errcode = 'P0001',
+            detail = jsonb_build_object(
+              'code', 'PAY_BATCH_FRESHNESS_SCOPE_SEED_OPERATION_BATCH_MISMATCH',
+              'operation_id', p_operation_id::text,
+              'operation_pay_batch_id', v_operation.pay_batch_id::text,
+              'pay_batch_id', p_pay_batch_id::text
+            )::text;
+  end if;
+
+  select pay_batch_row.*
+  into v_batch
+  from public.pay_batches as pay_batch_row
+  where pay_batch_row.id = p_pay_batch_id;
+
+  if not found then
+    raise exception 'PAY_BATCH_FRESHNESS_SCOPE_SEED_BATCH_NOT_FOUND'
+      using errcode = 'P0001',
+            detail = jsonb_build_object(
+              'code', 'PAY_BATCH_FRESHNESS_SCOPE_SEED_BATCH_NOT_FOUND',
+              'pay_batch_id', p_pay_batch_id::text
+            )::text;
+  end if;
+
+  if p_actor_user_id is not null then
+    select exists (
+      select 1
+      from public.tms_users as actor_user
+      where actor_user.id = p_actor_user_id
+        and coalesce(actor_user.is_active, false) = true
+    )
+    into v_actor_is_valid;
+
+    if coalesce(v_actor_is_valid, false) is not true then
+      raise exception 'PAY_BATCH_FRESHNESS_SCOPE_SEED_ACTOR_NOT_ALLOWED'
+        using errcode = 'P0001',
+              detail = jsonb_build_object(
+                'code', 'PAY_BATCH_FRESHNESS_SCOPE_SEED_ACTOR_NOT_ALLOWED',
+                'actor_user_id', p_actor_user_id::text
+              )::text;
+    end if;
+  end if;
+
+  v_config_candidate := coalesce(
+    nullif(btrim(v_operation.config_json #>> '{VALIDATE_FRESHNESS,FRESHNESS_VALIDATE,chunk_size}'), ''),
+    nullif(btrim(v_operation.config_json #>> '{freshness,chunk_size}'), ''),
+    nullif(btrim(v_operation.config_json ->> 'freshness_chunk_size'), ''),
+    nullif(btrim(v_operation.config_json ->> 'BANKING_PAY_FRESHNESS_CHUNK_SIZE'), '')
+  );
+
+  if p_chunk_size is not null then
+    v_chunk_size := p_chunk_size;
+  elsif v_config_candidate is not null and v_config_candidate ~ '^[0-9]+$' then
+    v_chunk_size := v_config_candidate::integer;
+  else
+    v_chunk_size := 50;
+  end if;
+
+  if v_chunk_size < 1 then
+    v_chunk_size := 1;
+  elsif v_chunk_size > 250 then
+    v_chunk_size := 250;
+  end if;
+
+  with item_scope as (
+    select
+      pay_batch_item_scope.id as pay_batch_item_id,
+      pay_batch_candidate_scope.id as pay_batch_candidate_id,
+      pay_batch_candidate_scope.candidate_id,
+      pay_batch_item_scope.pay_channel,
+      pay_batch_item_scope.timesheet_id,
+      pay_batch_item_scope.frozen_component_key_type,
+      pay_batch_item_scope.frozen_component_key_value,
+      md5(coalesce(pay_batch_item_scope.frozen_source_basis_json::text, 'null')) as frozen_source_basis_hash
+    from public.pay_batch_items as pay_batch_item_scope
+    join public.pay_batch_candidates as pay_batch_candidate_scope
+      on pay_batch_candidate_scope.id = pay_batch_item_scope.pay_batch_candidate_id
+    where pay_batch_candidate_scope.pay_batch_id = p_pay_batch_id
+      and coalesce(pay_batch_item_scope.is_voided, false) = false
+      and not exists (
+        select 1
+        from public.pay_payment_correction_items as correction_scope_exclusion
+        where correction_scope_exclusion.pay_batch_item_id = pay_batch_item_scope.id
+          and correction_scope_exclusion.status = 'APPLIED'
+          and correction_scope_exclusion.correction_item_kind in ('PRE_BANK_CANCEL', 'NO_MONEY_UNWIND', 'SETTLED_REVERSAL')
+      )
+  ),
+  snapshot_scope as (
+    select
+      timesheet_snapshot_scope.id as snapshot_id,
+      timesheet_snapshot_scope.pay_batch_id,
+      timesheet_snapshot_scope.timesheet_id,
+      timesheet_snapshot_scope.candidate_id,
+      timesheet_snapshot_scope.pay_channel
+    from public.pay_batch_timesheet_snapshots as timesheet_snapshot_scope
+    where timesheet_snapshot_scope.pay_batch_id = p_pay_batch_id
+  ),
+  unit_base as (
+    select
+      coalesce(snapshot_scope.timesheet_id, item_scope.timesheet_id) as timesheet_id,
+      snapshot_scope.snapshot_id,
+      coalesce(snapshot_scope.candidate_id, item_scope.candidate_id) as candidate_id,
+      item_scope.pay_batch_candidate_id,
+      coalesce(snapshot_scope.pay_channel, item_scope.pay_channel) as pay_channel,
+      coalesce(
+        jsonb_agg(item_scope.pay_batch_item_id::text order by item_scope.pay_batch_item_id) filter (where item_scope.pay_batch_item_id is not null),
+        '[]'::jsonb
+      ) as pay_batch_item_ids,
+      coalesce(
+        jsonb_agg(
+          jsonb_build_object(
+            'pay_batch_item_id', item_scope.pay_batch_item_id::text,
+            'frozen_component_key_type', item_scope.frozen_component_key_type,
+            'frozen_component_key_value', item_scope.frozen_component_key_value,
+            'frozen_source_basis_hash', item_scope.frozen_source_basis_hash
+          )
+          order by item_scope.pay_batch_item_id
+        ) filter (where item_scope.pay_batch_item_id is not null),
+        '[]'::jsonb
+      ) as frozen_key_summary
+    from snapshot_scope
+    full join item_scope
+      on item_scope.timesheet_id = snapshot_scope.timesheet_id
+     and item_scope.candidate_id = snapshot_scope.candidate_id
+     and coalesce(item_scope.pay_channel, '') = coalesce(snapshot_scope.pay_channel, '')
+    group by
+      coalesce(snapshot_scope.timesheet_id, item_scope.timesheet_id),
+      snapshot_scope.snapshot_id,
+      coalesce(snapshot_scope.candidate_id, item_scope.candidate_id),
+      item_scope.pay_batch_candidate_id,
+      coalesce(snapshot_scope.pay_channel, item_scope.pay_channel)
+  ),
+  ordered_units as (
+    select
+      unit_base.timesheet_id,
+      unit_base.snapshot_id,
+      unit_base.candidate_id,
+      unit_base.pay_batch_candidate_id,
+      unit_base.pay_channel,
+      unit_base.pay_batch_item_ids,
+      unit_base.frozen_key_summary,
+      row_number() over (
+        order by
+          unit_base.candidate_id nulls last,
+          unit_base.timesheet_id nulls last,
+          unit_base.snapshot_id nulls last,
+          unit_base.pay_batch_candidate_id nulls last,
+          unit_base.pay_channel nulls last
+      ) as unit_ordinal
+    from unit_base
+  )
+  select
+    coalesce(jsonb_agg(
+      jsonb_build_object(
+        'unit_ordinal', ordered_units.unit_ordinal,
+        'timesheet_id', case when ordered_units.timesheet_id is null then null else ordered_units.timesheet_id::text end,
+        'snapshot_id', case when ordered_units.snapshot_id is null then null else ordered_units.snapshot_id::text end,
+        'pay_channel', ordered_units.pay_channel,
+        'candidate_id', case when ordered_units.candidate_id is null then null else ordered_units.candidate_id::text end,
+        'pay_batch_candidate_id', case when ordered_units.pay_batch_candidate_id is null then null else ordered_units.pay_batch_candidate_id::text end,
+        'pay_batch_item_ids', ordered_units.pay_batch_item_ids,
+        'frozen_key_summary', ordered_units.frozen_key_summary
+      )
+      order by ordered_units.unit_ordinal
+    ), '[]'::jsonb)
+  into v_units_json
+  from ordered_units;
+
+  v_unit_count := jsonb_array_length(coalesce(v_units_json, '[]'::jsonb));
+
+  v_scope_hash := md5(jsonb_build_object(
+    'pay_batch_id', p_pay_batch_id::text,
+    'units', coalesce(v_units_json, '[]'::jsonb)
+  )::text);
+
+  v_existing_scope_hash := nullif(btrim(coalesce(v_operation.progress_json->>'freshness_scope_hash', '')), '');
+
+  if v_existing_scope_hash is not null and v_existing_scope_hash <> v_scope_hash then
+    raise exception 'CHUNK_SCOPE_MISMATCH'
+      using errcode = 'P0001',
+            detail = jsonb_build_object(
+              'code', 'CHUNK_SCOPE_MISMATCH',
+              'operation_id', p_operation_id::text,
+              'pay_batch_id', p_pay_batch_id::text,
+              'existing_freshness_scope_hash', v_existing_scope_hash,
+              'requested_freshness_scope_hash', v_scope_hash
+            )::text;
+  end if;
+
+  select seed_result.total_units,
+         seed_result.chunk_count,
+         seed_result.existing_chunk_count,
+         seed_result.new_chunk_count
+  into v_seed_result
+  from public.banking_pay_operation_seed_chunks(
+    p_operation_id,
+    'VALIDATE_FRESHNESS',
+    'FRESHNESS_VALIDATE',
+    v_chunk_size,
+    coalesce(v_units_json, '[]'::jsonb)
+  ) as seed_result;
+
+  update public.banking_pay_operations as operation_update
+  set progress_json = coalesce(operation_update.progress_json, '{}'::jsonb)
+        || jsonb_build_object(
+          'freshness_scope_hash', v_scope_hash,
+          'freshness_unit_count', v_unit_count,
+          'freshness_chunk_count', coalesce(v_seed_result.chunk_count, 0),
+          'freshness_seeded_at_utc', to_jsonb(now())
+        ),
+      total_units = case when coalesce(operation_update.total_units, 0) = 0 then coalesce(v_seed_result.total_units, 0) else operation_update.total_units end,
+      chunk_count = case when coalesce(operation_update.chunk_count, 0) = 0 then coalesce(v_seed_result.chunk_count, 0) else operation_update.chunk_count end,
+      updated_at_utc = now()
+  where operation_update.id = p_operation_id;
+
+  update public.pay_batches as pay_batch_update
+  set freshness_operation_id = p_operation_id,
+      freshness_validation_status = coalesce(pay_batch_update.freshness_validation_status, 'PENDING'),
+      freshness_scope_hash = coalesce(pay_batch_update.freshness_scope_hash, v_scope_hash)
+  where pay_batch_update.id = p_pay_batch_id;
+
+  return jsonb_build_object(
+    'pay_batch_id', p_pay_batch_id::text,
+    'operation_id', p_operation_id::text,
+    'unit_count', coalesce(v_seed_result.total_units, 0),
+    'chunk_count', coalesce(v_seed_result.chunk_count, 0),
+    'existing_chunk_count', coalesce(v_seed_result.existing_chunk_count, 0),
+    'new_chunk_count', coalesce(v_seed_result.new_chunk_count, 0),
+    'freshness_scope_hash', v_scope_hash,
+    'chunk_size', v_chunk_size
+  );
+end;
+$$;
+
+create or replace function public.pay_batch_validate_freshness_chunk(
+  p_operation_id uuid,
+  p_chunk_id uuid,
+  p_pay_batch_id uuid,
+  p_actor_user_id uuid default null::uuid,
+  p_diff_limit integer default 50
+)
+returns jsonb
+language plpgsql
+security definer
+volatile
+set search_path = public, pg_temp
+as $$
+declare
+  v_operation public.banking_pay_operations%rowtype;
+  v_chunk public.banking_pay_operation_chunks%rowtype;
+  v_batch public.pay_batches%rowtype;
+  v_actor_is_valid boolean := true;
+  v_diff_limit integer;
+  v_timesheet_ids uuid[] := array[]::uuid[];
+  v_item_ids uuid[] := array[]::uuid[];
+  v_candidate_ids uuid[] := array[]::uuid[];
+  v_checked_units integer := 0;
+  v_checked_item_count integer := 0;
+  v_checked_timesheet_count integer := 0;
+  v_key_resolution_failure_count integer := 0;
+  v_key_diff_count integer := 0;
+  v_other_reservation_count integer := 0;
+  v_finance_reservation_diff_count integer := 0;
+  v_snooze_count integer := 0;
+  v_restructure_or_writeoff_count integer := 0;
+  v_timesheet_override_count integer := 0;
+  v_deduction_diff_count integer := 0;
+  v_stale_count integer := 0;
+  v_is_stale boolean := false;
+  v_reasons text[] := array[]::text[];
+  v_stale_reason_counts jsonb := '{}'::jsonb;
+  v_diff_sample jsonb := '[]'::jsonb;
+  v_chunk_result_hash text := null;
+  v_result jsonb := '{}'::jsonb;
+begin
+  if p_operation_id is null then
+    raise exception 'PAY_BATCH_VALIDATE_FRESHNESS_CHUNK_OPERATION_ID_REQUIRED'
+      using errcode = 'P0001',
+            detail = jsonb_build_object('code', 'PAY_BATCH_VALIDATE_FRESHNESS_CHUNK_OPERATION_ID_REQUIRED')::text;
+  end if;
+
+  if p_chunk_id is null then
+    raise exception 'PAY_BATCH_VALIDATE_FRESHNESS_CHUNK_CHUNK_ID_REQUIRED'
+      using errcode = 'P0001',
+            detail = jsonb_build_object('code', 'PAY_BATCH_VALIDATE_FRESHNESS_CHUNK_CHUNK_ID_REQUIRED')::text;
+  end if;
+
+  if p_pay_batch_id is null then
+    raise exception 'PAY_BATCH_VALIDATE_FRESHNESS_CHUNK_PAY_BATCH_ID_REQUIRED'
+      using errcode = 'P0001',
+            detail = jsonb_build_object('code', 'PAY_BATCH_VALIDATE_FRESHNESS_CHUNK_PAY_BATCH_ID_REQUIRED')::text;
+  end if;
+
+  v_diff_limit := coalesce(p_diff_limit, 50);
+  if v_diff_limit < 0 then
+    v_diff_limit := 0;
+  elsif v_diff_limit > 250 then
+    v_diff_limit := 250;
+  end if;
+
+  select operation_row.*
+  into v_operation
+  from public.banking_pay_operations as operation_row
+  where operation_row.id = p_operation_id;
+
+  if not found then
+    raise exception 'PAY_BATCH_VALIDATE_FRESHNESS_CHUNK_OPERATION_NOT_FOUND'
+      using errcode = 'P0001',
+            detail = jsonb_build_object(
+              'code', 'PAY_BATCH_VALIDATE_FRESHNESS_CHUNK_OPERATION_NOT_FOUND',
+              'operation_id', p_operation_id::text
+            )::text;
+  end if;
+
+  if v_operation.pay_batch_id is not null and v_operation.pay_batch_id <> p_pay_batch_id then
+    raise exception 'PAY_BATCH_VALIDATE_FRESHNESS_CHUNK_OPERATION_BATCH_MISMATCH'
+      using errcode = 'P0001',
+            detail = jsonb_build_object(
+              'code', 'PAY_BATCH_VALIDATE_FRESHNESS_CHUNK_OPERATION_BATCH_MISMATCH',
+              'operation_id', p_operation_id::text,
+              'operation_pay_batch_id', v_operation.pay_batch_id::text,
+              'pay_batch_id', p_pay_batch_id::text
+            )::text;
+  end if;
+
+  select pay_batch_row.*
+  into v_batch
+  from public.pay_batches as pay_batch_row
+  where pay_batch_row.id = p_pay_batch_id;
+
+  if not found then
+    raise exception 'PAY_BATCH_VALIDATE_FRESHNESS_CHUNK_BATCH_NOT_FOUND'
+      using errcode = 'P0001',
+            detail = jsonb_build_object(
+              'code', 'PAY_BATCH_VALIDATE_FRESHNESS_CHUNK_BATCH_NOT_FOUND',
+              'pay_batch_id', p_pay_batch_id::text
+            )::text;
+  end if;
+
+  if p_actor_user_id is not null then
+    select exists (
+      select 1
+      from public.tms_users as actor_user
+      where actor_user.id = p_actor_user_id
+        and coalesce(actor_user.is_active, false) = true
+    )
+    into v_actor_is_valid;
+
+    if coalesce(v_actor_is_valid, false) is not true then
+      raise exception 'PAY_BATCH_VALIDATE_FRESHNESS_CHUNK_ACTOR_NOT_ALLOWED'
+        using errcode = 'P0001',
+              detail = jsonb_build_object(
+                'code', 'PAY_BATCH_VALIDATE_FRESHNESS_CHUNK_ACTOR_NOT_ALLOWED',
+                'actor_user_id', p_actor_user_id::text
+              )::text;
+    end if;
+  end if;
+
+  select chunk_row.*
+  into v_chunk
+  from public.banking_pay_operation_chunks as chunk_row
+  where chunk_row.id = p_chunk_id;
+
+  if not found then
+    raise exception 'PAY_BATCH_VALIDATE_FRESHNESS_CHUNK_NOT_FOUND'
+      using errcode = 'P0001',
+            detail = jsonb_build_object(
+              'code', 'PAY_BATCH_VALIDATE_FRESHNESS_CHUNK_NOT_FOUND',
+              'chunk_id', p_chunk_id::text
+            )::text;
+  end if;
+
+  if v_chunk.operation_id <> p_operation_id then
+    raise exception 'PAY_BATCH_VALIDATE_FRESHNESS_CHUNK_OPERATION_MISMATCH'
+      using errcode = 'P0001',
+            detail = jsonb_build_object(
+              'code', 'PAY_BATCH_VALIDATE_FRESHNESS_CHUNK_OPERATION_MISMATCH',
+              'chunk_id', p_chunk_id::text,
+              'chunk_operation_id', v_chunk.operation_id::text,
+              'operation_id', p_operation_id::text
+            )::text;
+  end if;
+
+  if v_chunk.phase <> 'VALIDATE_FRESHNESS' or v_chunk.chunk_type <> 'FRESHNESS_VALIDATE' then
+    raise exception 'PAY_BATCH_VALIDATE_FRESHNESS_CHUNK_INVALID_CHUNK_KIND'
+      using errcode = 'P0001',
+            detail = jsonb_build_object(
+              'code', 'PAY_BATCH_VALIDATE_FRESHNESS_CHUNK_INVALID_CHUNK_KIND',
+              'chunk_id', p_chunk_id::text,
+              'phase', v_chunk.phase,
+              'chunk_type', v_chunk.chunk_type
+            )::text;
+  end if;
+
+  if jsonb_typeof(v_chunk.payload_json) <> 'object' or jsonb_typeof(v_chunk.payload_json->'units') <> 'array' then
+    raise exception 'PAY_BATCH_VALIDATE_FRESHNESS_CHUNK_INVALID_PAYLOAD'
+      using errcode = 'P0001',
+            detail = jsonb_build_object(
+              'code', 'PAY_BATCH_VALIDATE_FRESHNESS_CHUNK_INVALID_PAYLOAD',
+              'chunk_id', p_chunk_id::text
+            )::text;
+  end if;
+
+  select coalesce(array_agg(distinct (unit_value->>'timesheet_id')::uuid) filter (where nullif(unit_value->>'timesheet_id', '') is not null), array[]::uuid[]),
+         coalesce(array_agg(distinct (item_id_text.item_id)::uuid) filter (where item_id_text.item_id is not null), array[]::uuid[]),
+         coalesce(array_agg(distinct (unit_value->>'candidate_id')::uuid) filter (where nullif(unit_value->>'candidate_id', '') is not null), array[]::uuid[]),
+         count(*)::integer
+  into v_timesheet_ids, v_item_ids, v_candidate_ids, v_checked_units
+  from jsonb_array_elements(v_chunk.payload_json->'units') as unit_items(unit_value)
+  left join lateral jsonb_array_elements_text(coalesce(unit_items.unit_value->'pay_batch_item_ids', '[]'::jsonb)) as item_id_text(item_id)
+    on true;
+
+  v_checked_timesheet_count := coalesce(array_length(v_timesheet_ids, 1), 0);
+  v_checked_item_count := coalesce(array_length(v_item_ids, 1), 0);
+
+  create temporary table if not exists pg_temp.tmp_validate_freshness_chunk_diffs (
+    reason text not null,
+    timesheet_id uuid null,
+    pay_batch_item_id uuid null,
+    candidate_id uuid null,
+    key_type text null,
+    key_value text null,
+    expected jsonb null,
+    actual jsonb null,
+    ord integer not null
+  ) on commit drop;
+
+  truncate table pg_temp.tmp_validate_freshness_chunk_diffs;
+
+  if v_checked_item_count > 0 then
+  insert into pg_temp.tmp_validate_freshness_chunk_diffs (
+      reason,
+      timesheet_id,
+      pay_batch_item_id,
+      candidate_id,
+      key_type,
+      key_value,
+      expected,
+      actual,
+      ord
+    )
+    select
+      'KEY_RESOLUTION_FAILED',
+      batch_component.timesheet_id,
+      batch_component.pay_batch_item_id,
+      null::uuid,
+      batch_component.key_type,
+      batch_component.key_value,
+      jsonb_build_object('batch_component', batch_component.pay_batch_item_id::text),
+      jsonb_build_object('failure_reason', batch_component.key_resolution_failure_reason),
+      10
+    from public._pay_batch_item_economic_components(null::uuid, v_item_ids) as batch_component
+    where nullif(btrim(coalesce(batch_component.key_resolution_failure_reason, '')), '') is not null;
+  
+    get diagnostics v_key_resolution_failure_count = row_count;
+  
+    insert into pg_temp.tmp_validate_freshness_chunk_diffs (
+      reason,
+      timesheet_id,
+      pay_batch_item_id,
+      candidate_id,
+      key_type,
+      key_value,
+      expected,
+      actual,
+      ord
+    )
+    with batch_components as (
+      select
+        batch_component.timesheet_id,
+        upper(nullif(btrim(coalesce(batch_component.key_type, '')), '')) as key_type,
+        nullif(btrim(coalesce(batch_component.key_value, '')), '') as key_value,
+        round(sum(coalesce(batch_component.source_amount_ex_vat, 0)), 2)::numeric as batch_source_ex_vat
+      from public._pay_batch_item_economic_components(null::uuid, v_item_ids) as batch_component
+      where batch_component.item_type in ('SEGMENT_DELTA', 'EXPENSE_DELTA', 'ADJUSTMENT_DELTA', 'MILEAGE_DELTA')
+        and nullif(btrim(coalesce(batch_component.key_type, '')), '') is not null
+        and nullif(btrim(coalesce(batch_component.key_value, '')), '') is not null
+      group by batch_component.timesheet_id, upper(nullif(btrim(coalesce(batch_component.key_type, '')), '')), nullif(btrim(coalesce(batch_component.key_value, '')), '')
+    ),
+    current_components as (
+      select
+        current_component.timesheet_id,
+        upper(nullif(btrim(coalesce(current_component.key_type, '')), '')) as key_type,
+        nullif(btrim(coalesce(current_component.key_value, '')), '') as key_value,
+        round(sum(coalesce(current_component.truth_ex_vat, 0) - coalesce(current_component.baseline_ex_vat, 0)), 2)::numeric as current_available_ex_vat
+      from public._pay_current_timesheet_entitlement_components(v_timesheet_ids) as current_component
+      where nullif(btrim(coalesce(current_component.key_type, '')), '') is not null
+        and nullif(btrim(coalesce(current_component.key_value, '')), '') is not null
+      group by current_component.timesheet_id, upper(nullif(btrim(coalesce(current_component.key_type, '')), '')), nullif(btrim(coalesce(current_component.key_value, '')), '')
+    ),
+    comparison_keys as (
+      select batch_components.timesheet_id, batch_components.key_type, batch_components.key_value
+      from batch_components
+      union
+      select current_components.timesheet_id, current_components.key_type, current_components.key_value
+      from current_components
+    )
+    select
+      'ECONOMIC_KEY_CHANGED',
+      comparison_keys.timesheet_id,
+      null::uuid,
+      null::uuid,
+      comparison_keys.key_type,
+      comparison_keys.key_value,
+      jsonb_build_object('batch_source_ex_vat', round(coalesce(batch_components.batch_source_ex_vat, 0), 2)),
+      jsonb_build_object('current_available_ex_vat', round(coalesce(current_components.current_available_ex_vat, 0), 2)),
+      20
+    from comparison_keys
+    left join batch_components
+      on batch_components.timesheet_id is not distinct from comparison_keys.timesheet_id
+     and batch_components.key_type = comparison_keys.key_type
+     and batch_components.key_value = comparison_keys.key_value
+    left join current_components
+      on current_components.timesheet_id is not distinct from comparison_keys.timesheet_id
+     and current_components.key_type = comparison_keys.key_type
+     and current_components.key_value = comparison_keys.key_value
+    where round(coalesce(batch_components.batch_source_ex_vat, 0), 2) <> round(coalesce(current_components.current_available_ex_vat, 0), 2);
+  
+    get diagnostics v_key_diff_count = row_count;
+  
+  
+  else
+    v_key_resolution_failure_count := 0;
+    v_key_diff_count := 0;
+  end if;
+
+  insert into pg_temp.tmp_validate_freshness_chunk_diffs (
+    reason,
+    timesheet_id,
+    pay_batch_item_id,
+    candidate_id,
+    key_type,
+    key_value,
+    expected,
+    actual,
+    ord
+  )
+  select
+    'OTHER_ACTIVE_RESERVATION',
+    reserved_item.timesheet_id,
+    reserved_item.id,
+    reserved_candidate.candidate_id,
+    reserved_component.key_type,
+    reserved_component.key_value,
+    jsonb_build_object('this_pay_batch_id', p_pay_batch_id::text),
+    jsonb_build_object('other_pay_batch_id', reserved_candidate.pay_batch_id::text, 'reserved_ex_vat', reserved_component.source_amount_ex_vat),
+    30
+  from public.pay_batch_items as reserved_item
+  join public.pay_batch_candidates as reserved_candidate
+    on reserved_candidate.id = reserved_item.pay_batch_candidate_id
+  join public.pay_batches as reserved_batch
+    on reserved_batch.id = reserved_candidate.pay_batch_id
+  join public._pay_batch_item_economic_components(null::uuid, array[reserved_item.id]) as reserved_component
+    on reserved_component.pay_batch_item_id = reserved_item.id
+  where reserved_item.timesheet_id = any(v_timesheet_ids)
+    and reserved_candidate.pay_batch_id <> p_pay_batch_id
+    and coalesce(reserved_item.is_voided, false) = false
+    and public._pay_batch_status_is_active_reservation(reserved_batch.status)
+    and reserved_item.item_type in ('SEGMENT_DELTA', 'EXPENSE_DELTA', 'ADJUSTMENT_DELTA', 'MILEAGE_DELTA')
+    and not exists (
+      select 1
+      from public.pay_payment_correction_items as reserved_correction_exclusion
+      where reserved_correction_exclusion.pay_batch_item_id = reserved_item.id
+        and reserved_correction_exclusion.status = 'APPLIED'
+        and reserved_correction_exclusion.correction_item_kind in ('PRE_BANK_CANCEL', 'NO_MONEY_UNWIND', 'SETTLED_REVERSAL')
+    );
+
+  get diagnostics v_other_reservation_count = row_count;
+
+  insert into pg_temp.tmp_validate_freshness_chunk_diffs (
+    reason,
+    timesheet_id,
+    pay_batch_item_id,
+    candidate_id,
+    key_type,
+    key_value,
+    expected,
+    actual,
+    ord
+  )
+  select
+    'FINANCE_RESERVATION_CHANGED',
+    batch_item.timesheet_id,
+    batch_item.id,
+    batch_candidate.candidate_id,
+    'FINANCE_RESERVATION',
+    coalesce(batch_item.finance_case_id::text, batch_item.reservation_id::text, batch_item.finance_component_id::text, batch_item.id::text),
+    jsonb_build_object('expected_status', case when upper(coalesce(v_batch.status, '')) in ('AUTHORISED_FOR_PAYMENT', 'SCHEDULED', 'EXECUTING') then 'COMMITTED' else 'RESERVED' end),
+    jsonb_build_object('actual_status', reservation_row.status, 'reservation_id', reservation_row.id::text),
+    40
+  from public.pay_batch_items as batch_item
+  join public.pay_batch_candidates as batch_candidate
+    on batch_candidate.id = batch_item.pay_batch_candidate_id
+  left join public.pay_advance_reservations as reservation_row
+    on reservation_row.pay_batch_item_id = batch_item.id
+  where batch_item.id = any(v_item_ids)
+    and batch_item.finance_case_id is not null
+    and (
+      reservation_row.id is null
+      or upper(coalesce(reservation_row.status, '')) <> case when upper(coalesce(v_batch.status, '')) in ('AUTHORISED_FOR_PAYMENT', 'SCHEDULED', 'EXECUTING') then 'COMMITTED' else 'RESERVED' end
+    );
+
+  get diagnostics v_finance_reservation_diff_count = row_count;
+
+  insert into pg_temp.tmp_validate_freshness_chunk_diffs (
+    reason,
+    timesheet_id,
+    pay_batch_item_id,
+    candidate_id,
+    key_type,
+    key_value,
+    expected,
+    actual,
+    ord
+  )
+  select
+    'ACTIVE_SNOOZE_CHANGED',
+    snooze_row.timesheet_id,
+    null::uuid,
+    snooze_row.candidate_id,
+    'SNOOZE',
+    coalesce(snooze_row.source_ref, snooze_row.segment_stable_key, snooze_row.segment_id, snooze_row.id::text),
+    jsonb_build_object('expected', 'no_active_snooze_affecting_batch_scope'),
+    jsonb_build_object('snooze_id', snooze_row.id::text, 'snooze_kind', snooze_row.snooze_kind, 'snooze_until_date', snooze_row.snooze_until_date),
+    50
+  from public.pay_item_snoozes as snooze_row
+  where snooze_row.cleared_at_utc is null
+    and snooze_row.cancelled_at_utc is null
+    and (
+      snooze_row.timesheet_id = any(v_timesheet_ids)
+      or snooze_row.candidate_id = any(v_candidate_ids)
+    );
+
+  get diagnostics v_snooze_count = row_count;
+
+  insert into pg_temp.tmp_validate_freshness_chunk_diffs (
+    reason,
+    timesheet_id,
+    pay_batch_item_id,
+    candidate_id,
+    key_type,
+    key_value,
+    expected,
+    actual,
+    ord
+  )
+  select
+    'FINANCE_CASE_RESTRUCTURE_OR_WRITEOFF_CHANGED',
+    batch_item.timesheet_id,
+    batch_item.id,
+    batch_candidate.candidate_id,
+    'FINANCE_CASE',
+    batch_item.finance_case_id::text,
+    jsonb_build_object('expected', 'finance_case_open_and_not_written_off'),
+    jsonb_build_object('advance_status', advance_row.status, 'written_off_at_utc', advance_row.written_off_at_utc),
+    60
+  from public.pay_batch_items as batch_item
+  join public.pay_batch_candidates as batch_candidate
+    on batch_candidate.id = batch_item.pay_batch_candidate_id
+  join public.pay_advances as advance_row
+    on advance_row.id = batch_item.finance_case_id
+  where batch_item.id = any(v_item_ids)
+    and batch_item.finance_case_id is not null
+    and (
+      advance_row.written_off_at_utc is not null
+      or upper(coalesce(advance_row.status, '')) in ('CANCELLED', 'PAID_OFF')
+    );
+
+  get diagnostics v_restructure_or_writeoff_count = row_count;
+
+  insert into pg_temp.tmp_validate_freshness_chunk_diffs (
+    reason,
+    timesheet_id,
+    pay_batch_item_id,
+    candidate_id,
+    key_type,
+    key_value,
+    expected,
+    actual,
+    ord
+  )
+  select
+    'TIMESHEET_PAYMENT_OVERRIDE_CHANGED',
+    current_financials.timesheet_id,
+    null::uuid,
+    current_financials.candidate_id,
+    'TIMESHEET_PAYMENT_OVERRIDE',
+    current_financials.timesheet_id::text,
+    jsonb_build_object('expected', 'not_on_hold_or_already_paid_after_batch'),
+    jsonb_build_object('pay_on_hold', current_financials.pay_on_hold, 'pay_on_hold_reason', current_financials.pay_on_hold_reason, 'paid_at_utc', current_financials.paid_at_utc),
+    70
+  from public.timesheets_financials as current_financials
+  where current_financials.timesheet_id = any(v_timesheet_ids)
+    and current_financials.is_current = true
+    and (
+      coalesce(current_financials.pay_on_hold, false) = true
+      or current_financials.paid_at_utc is not null
+    );
+
+  get diagnostics v_timesheet_override_count = row_count;
+
+  insert into pg_temp.tmp_validate_freshness_chunk_diffs (
+    reason,
+    timesheet_id,
+    pay_batch_item_id,
+    candidate_id,
+    key_type,
+    key_value,
+    expected,
+    actual,
+    ord
+  )
+  with finance_item_totals as (
+    select
+      batch_item.finance_case_id,
+      batch_item.finance_component_id,
+      round(sum(abs(coalesce(batch_item.amount_ex_vat, 0))), 2)::numeric as item_total_ex_vat
+    from public.pay_batch_items as batch_item
+    where batch_item.id = any(v_item_ids)
+      and batch_item.item_type in ('LOAN_REPAYMENT', 'OVERPAYMENT_RECOVERY', 'MANUAL_DEBT_ADJUSTMENT', 'MANUAL_CREDIT_ADJUSTMENT')
+      and (batch_item.finance_case_id is not null or batch_item.finance_component_id is not null)
+    group by batch_item.finance_case_id, batch_item.finance_component_id
+  ),
+  reservation_totals as (
+    select
+      reservation_row.finance_case_id,
+      reservation_row.finance_component_id,
+      round(sum(abs(coalesce(reservation_row.reserved_amount, reservation_row.frozen_rounded_target_amount, 0))), 2)::numeric as reservation_total_ex_vat
+    from public.pay_advance_reservations as reservation_row
+    where reservation_row.pay_batch_item_id = any(v_item_ids)
+    group by reservation_row.finance_case_id, reservation_row.finance_component_id
+  )
+  select
+    'DEDUCTION_RECOVERY_CHANGED',
+    null::uuid,
+    null::uuid,
+    null::uuid,
+    'DEDUCTION_RECOVERY',
+    coalesce(finance_item_totals.finance_case_id::text, finance_item_totals.finance_component_id::text),
+    jsonb_build_object('batch_item_total_ex_vat', finance_item_totals.item_total_ex_vat),
+    jsonb_build_object('reservation_total_ex_vat', coalesce(reservation_totals.reservation_total_ex_vat, 0)),
+    80
+  from finance_item_totals
+  left join reservation_totals
+    on reservation_totals.finance_case_id is not distinct from finance_item_totals.finance_case_id
+   and reservation_totals.finance_component_id is not distinct from finance_item_totals.finance_component_id
+  where finance_item_totals.item_total_ex_vat <> coalesce(reservation_totals.reservation_total_ex_vat, 0);
+
+  get diagnostics v_deduction_diff_count = row_count;
+
+  select count(*)::integer
+  into v_stale_count
+  from pg_temp.tmp_validate_freshness_chunk_diffs as diff_count_row;
+
+  v_is_stale := coalesce(v_stale_count, 0) > 0;
+
+  if v_key_resolution_failure_count > 0 then
+    v_reasons := array_append(v_reasons, 'KEY_RESOLUTION_FAILED');
+  end if;
+  if v_key_diff_count > 0 then
+    v_reasons := array_append(v_reasons, 'ECONOMIC_KEY_CHANGED');
+  end if;
+  if v_other_reservation_count > 0 then
+    v_reasons := array_append(v_reasons, 'OTHER_ACTIVE_RESERVATION');
+  end if;
+  if v_finance_reservation_diff_count > 0 then
+    v_reasons := array_append(v_reasons, 'FINANCE_RESERVATION_CHANGED');
+  end if;
+  if v_snooze_count > 0 then
+    v_reasons := array_append(v_reasons, 'ACTIVE_SNOOZE_CHANGED');
+  end if;
+  if v_restructure_or_writeoff_count > 0 then
+    v_reasons := array_append(v_reasons, 'FINANCE_CASE_RESTRUCTURE_OR_WRITEOFF_CHANGED');
+  end if;
+  if v_timesheet_override_count > 0 then
+    v_reasons := array_append(v_reasons, 'TIMESHEET_PAYMENT_OVERRIDE_CHANGED');
+  end if;
+  if v_deduction_diff_count > 0 then
+    v_reasons := array_append(v_reasons, 'DEDUCTION_RECOVERY_CHANGED');
+  end if;
+
+  select coalesce(jsonb_object_agg(reason_counts.reason, reason_counts.reason_count order by reason_counts.reason), '{}'::jsonb)
+  into v_stale_reason_counts
+  from (
+    select diff_rows.reason, count(*)::integer as reason_count
+    from pg_temp.tmp_validate_freshness_chunk_diffs as diff_rows
+    group by diff_rows.reason
+  ) as reason_counts;
+
+  select coalesce(jsonb_agg(
+    jsonb_build_object(
+      'reason', diff_sample_rows.reason,
+      'timesheet_id', case when diff_sample_rows.timesheet_id is null then null else diff_sample_rows.timesheet_id::text end,
+      'pay_batch_item_id', case when diff_sample_rows.pay_batch_item_id is null then null else diff_sample_rows.pay_batch_item_id::text end,
+      'candidate_id', case when diff_sample_rows.candidate_id is null then null else diff_sample_rows.candidate_id::text end,
+      'key_type', diff_sample_rows.key_type,
+      'key_value', diff_sample_rows.key_value,
+      'expected', diff_sample_rows.expected,
+      'actual', diff_sample_rows.actual
+    )
+    order by diff_sample_rows.ord, diff_sample_rows.reason, diff_sample_rows.timesheet_id nulls last, diff_sample_rows.pay_batch_item_id nulls last
+  ), '[]'::jsonb)
+  into v_diff_sample
+  from (
+    select diff_rows.*
+    from pg_temp.tmp_validate_freshness_chunk_diffs as diff_rows
+    order by diff_rows.ord, diff_rows.reason, diff_rows.timesheet_id nulls last, diff_rows.pay_batch_item_id nulls last
+    limit v_diff_limit
+  ) as diff_sample_rows;
+
+  if array_length(v_reasons, 1) is not null then
+    select array_agg(distinct reason_value order by reason_value)
+    into v_reasons
+    from unnest(v_reasons) as reason_values(reason_value);
+  end if;
+
+  v_result := jsonb_build_object(
+    'ok', true,
+    'is_stale', v_is_stale,
+    'checked_units', coalesce(v_checked_units, 0),
+    'checked_count', coalesce(v_checked_units, 0),
+    'checked_item_count', coalesce(v_checked_item_count, 0),
+    'checked_timesheet_count', coalesce(v_checked_timesheet_count, 0),
+    'stale_count', coalesce(v_stale_count, 0),
+    'stale_reasons', coalesce(to_jsonb(v_reasons), '[]'::jsonb),
+    'stale_reason_counts', coalesce(v_stale_reason_counts, '{}'::jsonb),
+    'key_resolution_failure_count', coalesce(v_key_resolution_failure_count, 0),
+    'diff_sample', coalesce(v_diff_sample, '[]'::jsonb),
+    'counts', jsonb_build_object(
+      'economic_key_changed', coalesce(v_key_diff_count, 0),
+      'other_active_reservation', coalesce(v_other_reservation_count, 0),
+      'finance_reservation_changed', coalesce(v_finance_reservation_diff_count, 0),
+      'active_snooze_changed', coalesce(v_snooze_count, 0),
+      'finance_case_restructure_or_writeoff_changed', coalesce(v_restructure_or_writeoff_count, 0),
+      'timesheet_payment_override_changed', coalesce(v_timesheet_override_count, 0),
+      'deduction_recovery_changed', coalesce(v_deduction_diff_count, 0)
+    ),
+    'operation_id', p_operation_id::text,
+    'chunk_id', p_chunk_id::text,
+    'pay_batch_id', p_pay_batch_id::text
+  );
+
+  v_chunk_result_hash := md5(v_result::text);
+  v_result := v_result || jsonb_build_object('chunk_result_hash', v_chunk_result_hash);
+
+  update public.banking_pay_operation_chunks as chunk_update
+  set result_json = v_result,
+      error_json = null,
+      completed_count = coalesce(v_checked_units, 0),
+      failed_count = case when v_is_stale then coalesce(v_stale_count, 0) else 0 end,
+      updated_at_utc = now()
+  where chunk_update.id = p_chunk_id;
+
+  return jsonb_build_object(
+    'ok', true,
+    'is_stale', v_is_stale,
+    'checked_count', coalesce(v_checked_units, 0),
+    'stale_count', coalesce(v_stale_count, 0),
+    'key_resolution_failure_count', coalesce(v_key_resolution_failure_count, 0),
+    'chunk_result_hash', v_chunk_result_hash,
+    'result', v_result
+  );
+end;
+$$;
+
+create or replace function public.pay_batch_get_section_page(
+  p_pay_batch_id uuid,
+  p_section text,
+  p_cursor_json jsonb default null::jsonb,
+  p_limit integer default 100,
+  p_actor_user_id uuid default null::uuid,
+  p_filters_json jsonb default '{}'::jsonb,
+  p_sort_json jsonb default '{}'::jsonb
+)
+returns jsonb
+language plpgsql
+security definer
+stable
+set search_path = public
+as $$
+declare
+  v_batch public.pay_batches%rowtype;
+  v_section text;
+  v_limit integer;
+  v_cursor_id uuid := null;
+  v_items jsonb := '[]'::jsonb;
+  v_next_cursor jsonb := null;
+  v_returned_count integer := 0;
+  v_known_total_count integer := null;
+  v_last_id uuid := null;
+  v_freshness_summary jsonb := '{}'::jsonb;
+  v_batch_status text := null;
+  v_execution_commit_state text := null;
+  v_actor_is_valid boolean := true;
+begin
+  if p_pay_batch_id is null then
+    raise exception 'PAY_BATCH_GET_SECTION_PAGE_PAY_BATCH_ID_REQUIRED'
+      using errcode = 'P0001',
+            detail = jsonb_build_object('code', 'PAY_BATCH_GET_SECTION_PAGE_PAY_BATCH_ID_REQUIRED')::text;
+  end if;
+
+  v_section := lower(btrim(coalesce(p_section, '')));
+
+  if v_section not in (
+    'candidates',
+    'items',
+    'item_breakdowns',
+    'transfers',
+    'finance_case_groups',
+    'remittances',
+    'communications',
+    'auth_history',
+    'events'
+  ) then
+    raise exception 'PAY_BATCH_GET_SECTION_PAGE_UNSUPPORTED_SECTION'
+      using errcode = 'P0001',
+            detail = jsonb_build_object(
+              'code', 'PAY_BATCH_GET_SECTION_PAGE_UNSUPPORTED_SECTION',
+              'section', coalesce(p_section, null),
+              'supported_sections', jsonb_build_array(
+                'candidates',
+                'items',
+                'item_breakdowns',
+                'transfers',
+                'finance_case_groups',
+                'remittances',
+                'communications',
+                'auth_history',
+                'events'
+              )
+            )::text;
+  end if;
+
+  v_limit := coalesce(p_limit, 100);
+  if v_limit < 1 then
+    v_limit := 1;
+  elsif v_limit > 250 then
+    v_limit := 250;
+  end if;
+
+  if p_cursor_json is not null
+     and jsonb_typeof(p_cursor_json) = 'object'
+     and nullif(btrim(coalesce(p_cursor_json->>'last_id', '')), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then
+    v_cursor_id := (p_cursor_json->>'last_id')::uuid;
+  end if;
+
+  select pay_batch_row.*
+  into v_batch
+  from public.pay_batches as pay_batch_row
+  where pay_batch_row.id = p_pay_batch_id;
+
+  if not found then
+    raise exception 'PAY_BATCH_GET_SECTION_PAGE_BATCH_NOT_FOUND'
+      using errcode = 'P0001',
+            detail = jsonb_build_object(
+              'code', 'PAY_BATCH_GET_SECTION_PAGE_BATCH_NOT_FOUND',
+              'pay_batch_id', p_pay_batch_id::text
+            )::text;
+  end if;
+
+  if p_actor_user_id is not null then
+    select exists (
+      select 1
+      from public.tms_users as actor_user
+      where actor_user.id = p_actor_user_id
+        and coalesce(actor_user.is_active, false) = true
+    )
+    into v_actor_is_valid;
+
+    if coalesce(v_actor_is_valid, false) is not true then
+      raise exception 'PAY_BATCH_GET_SECTION_PAGE_ACTOR_NOT_ALLOWED'
+        using errcode = 'P0001',
+              detail = jsonb_build_object(
+                'code', 'PAY_BATCH_GET_SECTION_PAGE_ACTOR_NOT_ALLOWED',
+                'actor_user_id', p_actor_user_id::text
+              )::text;
+    end if;
+  end if;
+
+  v_batch_status := coalesce(v_batch.status, null);
+  v_execution_commit_state := coalesce(v_batch.execution_commit_state, null);
+
+  v_freshness_summary := jsonb_build_object(
+    'freshness_operation_id', case when v_batch.freshness_operation_id is null then null else v_batch.freshness_operation_id::text end,
+    'freshness_validation_status', v_batch.freshness_validation_status,
+    'freshness_checked_at_utc', case when v_batch.freshness_checked_at_utc is null then null else to_jsonb(v_batch.freshness_checked_at_utc) end,
+    'freshness_result_hash', v_batch.freshness_result_hash,
+    'freshness_scope_hash', v_batch.freshness_scope_hash,
+    'freshness_is_stale', upper(coalesce(v_batch.freshness_validation_status, '')) = 'STALE',
+    'freshness_result_summary', coalesce(v_batch.freshness_result_json, '{}'::jsonb)
+  );
+
+  if v_section = 'candidates' then
+    select count(*)::integer
+    into v_known_total_count
+    from public.pay_batch_candidates as pay_batch_candidate_count
+    where pay_batch_candidate_count.pay_batch_id = p_pay_batch_id;
+
+    with page_rows as (
+      select
+        pay_batch_candidate_page.id,
+        pay_batch_candidate_page.pay_batch_id,
+        pay_batch_candidate_page.candidate_id,
+        pay_batch_candidate_page.candidate_tms_ref,
+        pay_batch_candidate_page.candidate_display_name,
+        pay_batch_candidate_page.paye_state,
+        pay_batch_candidate_page.mismatch_settlement_choice,
+        pay_batch_candidate_page.gross_preview,
+        pay_batch_candidate_page.net_bank_amount,
+        pay_batch_candidate_page.debt_created,
+        pay_batch_candidate_page.loan_repayment_taken,
+        pay_batch_candidate_page.overpayment_recovery_taken,
+        pay_batch_candidate_page.awaiting_net_amount,
+        pay_batch_candidate_page.settlement_status,
+        pay_batch_candidate_page.settled_at_utc,
+        pay_batch_candidate_page.settled_via,
+        pay_batch_candidate_page.remittance_trigger_status,
+        pay_batch_candidate_page.remittance_sent_at_utc,
+        pay_batch_candidate_page.last_remittance_error,
+        pay_batch_candidate_page.updated_at
+      from public.pay_batch_candidates as pay_batch_candidate_page
+      where pay_batch_candidate_page.pay_batch_id = p_pay_batch_id
+        and (v_cursor_id is null or pay_batch_candidate_page.id > v_cursor_id)
+      order by pay_batch_candidate_page.id asc
+      limit v_limit
+    )
+    select
+      coalesce(jsonb_agg(
+        jsonb_build_object(
+          'id', page_rows.id::text,
+          'pay_batch_id', page_rows.pay_batch_id::text,
+          'candidate_id', page_rows.candidate_id::text,
+          'candidate_tms_ref', page_rows.candidate_tms_ref,
+          'candidate_display_name', page_rows.candidate_display_name,
+          'paye_state', page_rows.paye_state,
+          'mismatch_settlement_choice', page_rows.mismatch_settlement_choice,
+          'gross_preview', page_rows.gross_preview,
+          'net_bank_amount', page_rows.net_bank_amount,
+          'debt_created', page_rows.debt_created,
+          'loan_repayment_taken', page_rows.loan_repayment_taken,
+          'overpayment_recovery_taken', page_rows.overpayment_recovery_taken,
+          'awaiting_net_amount', page_rows.awaiting_net_amount,
+          'settlement_status', page_rows.settlement_status,
+          'settled_at_utc', page_rows.settled_at_utc,
+          'settled_via', page_rows.settled_via,
+          'remittance_trigger_status', page_rows.remittance_trigger_status,
+          'remittance_sent_at_utc', page_rows.remittance_sent_at_utc,
+          'last_remittance_error', page_rows.last_remittance_error,
+          'updated_at', page_rows.updated_at
+        )
+        order by page_rows.id asc
+      ), '[]'::jsonb),
+      count(*)::integer,
+      (array_agg(page_rows.id order by page_rows.id desc))[1]
+    into v_items, v_returned_count, v_last_id
+    from page_rows;
+
+  elsif v_section = 'items' then
+    select count(*)::integer
+    into v_known_total_count
+    from public.pay_batch_items as pay_batch_item_count
+    join public.pay_batch_candidates as pay_batch_candidate_for_item_count
+      on pay_batch_candidate_for_item_count.id = pay_batch_item_count.pay_batch_candidate_id
+    where pay_batch_candidate_for_item_count.pay_batch_id = p_pay_batch_id;
+
+    with page_rows as (
+      select
+        pay_batch_item_page.id,
+        pay_batch_item_page.pay_batch_candidate_id,
+        pay_batch_candidate_for_item_page.candidate_id,
+        pay_batch_candidate_for_item_page.candidate_display_name,
+        pay_batch_item_page.item_type,
+        pay_batch_item_page.timesheet_id,
+        pay_batch_item_page.segment_key,
+        pay_batch_item_page.source_ref,
+        pay_batch_item_page.description,
+        pay_batch_item_page.amount_ex_vat,
+        pay_batch_item_page.amount_vat,
+        pay_batch_item_page.amount_inc_vat,
+        pay_batch_item_page.pay_channel,
+        pay_batch_item_page.umbrella_id,
+        pay_batch_item_page.bank_reference,
+        pay_batch_item_page.pay_bank_transfer_id,
+        pay_batch_item_page.repayment_week_start,
+        pay_batch_item_page.is_voided,
+        pay_batch_item_page.is_mismatch,
+        pay_batch_item_page.finance_case_id,
+        pay_batch_item_page.finance_component_id,
+        pay_batch_item_page.frozen_component_key_type,
+        pay_batch_item_page.frozen_component_key_value,
+        pay_batch_item_page.operation_source_key,
+        pay_batch_item_page.created_at,
+        pay_batch_item_page.updated_at
+      from public.pay_batch_items as pay_batch_item_page
+      join public.pay_batch_candidates as pay_batch_candidate_for_item_page
+        on pay_batch_candidate_for_item_page.id = pay_batch_item_page.pay_batch_candidate_id
+      where pay_batch_candidate_for_item_page.pay_batch_id = p_pay_batch_id
+        and (v_cursor_id is null or pay_batch_item_page.id > v_cursor_id)
+      order by pay_batch_item_page.id asc
+      limit v_limit
+    )
+    select
+      coalesce(jsonb_agg(
+        jsonb_build_object(
+          'id', page_rows.id::text,
+          'pay_batch_candidate_id', page_rows.pay_batch_candidate_id::text,
+          'candidate_id', page_rows.candidate_id::text,
+          'candidate_display_name', page_rows.candidate_display_name,
+          'item_type', page_rows.item_type,
+          'timesheet_id', case when page_rows.timesheet_id is null then null else page_rows.timesheet_id::text end,
+          'segment_key', page_rows.segment_key,
+          'source_ref', page_rows.source_ref,
+          'description', page_rows.description,
+          'amount_ex_vat', page_rows.amount_ex_vat,
+          'amount_vat', page_rows.amount_vat,
+          'amount_inc_vat', page_rows.amount_inc_vat,
+          'pay_channel', page_rows.pay_channel,
+          'umbrella_id', case when page_rows.umbrella_id is null then null else page_rows.umbrella_id::text end,
+          'bank_reference', page_rows.bank_reference,
+          'pay_bank_transfer_id', case when page_rows.pay_bank_transfer_id is null then null else page_rows.pay_bank_transfer_id::text end,
+          'repayment_week_start', case when page_rows.repayment_week_start is null then null else page_rows.repayment_week_start::text end,
+          'is_voided', page_rows.is_voided,
+          'is_mismatch', page_rows.is_mismatch,
+          'finance_case_id', case when page_rows.finance_case_id is null then null else page_rows.finance_case_id::text end,
+          'finance_component_id', case when page_rows.finance_component_id is null then null else page_rows.finance_component_id::text end,
+          'frozen_component_key_type', page_rows.frozen_component_key_type,
+          'frozen_component_key_value', page_rows.frozen_component_key_value,
+          'operation_source_key', page_rows.operation_source_key,
+          'created_at', page_rows.created_at,
+          'updated_at', page_rows.updated_at
+        )
+        order by page_rows.id asc
+      ), '[]'::jsonb),
+      count(*)::integer,
+      (array_agg(page_rows.id order by page_rows.id desc))[1]
+    into v_items, v_returned_count, v_last_id
+    from page_rows;
+
+  elsif v_section = 'item_breakdowns' then
+    select count(*)::integer
+    into v_known_total_count
+    from public.pay_batch_item_breakdowns as pay_batch_breakdown_count
+    join public.pay_batch_items as pay_batch_item_for_breakdown_count
+      on pay_batch_item_for_breakdown_count.id = pay_batch_breakdown_count.pay_batch_item_id
+    join public.pay_batch_candidates as pay_batch_candidate_for_breakdown_count
+      on pay_batch_candidate_for_breakdown_count.id = pay_batch_item_for_breakdown_count.pay_batch_candidate_id
+    where pay_batch_candidate_for_breakdown_count.pay_batch_id = p_pay_batch_id;
+
+    with page_rows as (
+      select
+        pay_batch_breakdown_page.id,
+        pay_batch_breakdown_page.pay_batch_item_id,
+        pay_batch_item_for_breakdown_page.pay_batch_candidate_id,
+        pay_batch_candidate_for_breakdown_page.candidate_id,
+        pay_batch_breakdown_page.line_kind,
+        pay_batch_breakdown_page.bucket_code,
+        pay_batch_breakdown_page.unit_name,
+        pay_batch_breakdown_page.units,
+        pay_batch_breakdown_page.rate,
+        pay_batch_breakdown_page.amount_ex_vat,
+        pay_batch_breakdown_page.amount_vat,
+        pay_batch_breakdown_page.amount_inc_vat,
+        pay_batch_breakdown_page.meta_json,
+        pay_batch_breakdown_page.operation_source_key,
+        pay_batch_breakdown_page.created_at_utc
+      from public.pay_batch_item_breakdowns as pay_batch_breakdown_page
+      join public.pay_batch_items as pay_batch_item_for_breakdown_page
+        on pay_batch_item_for_breakdown_page.id = pay_batch_breakdown_page.pay_batch_item_id
+      join public.pay_batch_candidates as pay_batch_candidate_for_breakdown_page
+        on pay_batch_candidate_for_breakdown_page.id = pay_batch_item_for_breakdown_page.pay_batch_candidate_id
+      where pay_batch_candidate_for_breakdown_page.pay_batch_id = p_pay_batch_id
+        and (v_cursor_id is null or pay_batch_breakdown_page.id > v_cursor_id)
+      order by pay_batch_breakdown_page.id asc
+      limit v_limit
+    )
+    select
+      coalesce(jsonb_agg(
+        jsonb_build_object(
+          'id', page_rows.id::text,
+          'pay_batch_item_id', page_rows.pay_batch_item_id::text,
+          'pay_batch_candidate_id', page_rows.pay_batch_candidate_id::text,
+          'candidate_id', page_rows.candidate_id::text,
+          'line_kind', page_rows.line_kind,
+          'bucket_code', page_rows.bucket_code,
+          'unit_name', page_rows.unit_name,
+          'units', page_rows.units,
+          'rate', page_rows.rate,
+          'amount_ex_vat', page_rows.amount_ex_vat,
+          'amount_vat', page_rows.amount_vat,
+          'amount_inc_vat', page_rows.amount_inc_vat,
+          'meta_json', coalesce(page_rows.meta_json, '{}'::jsonb),
+          'operation_source_key', page_rows.operation_source_key,
+          'created_at_utc', page_rows.created_at_utc
+        )
+        order by page_rows.id asc
+      ), '[]'::jsonb),
+      count(*)::integer,
+      (array_agg(page_rows.id order by page_rows.id desc))[1]
+    into v_items, v_returned_count, v_last_id
+    from page_rows;
+
+  elsif v_section = 'transfers' then
+    select count(*)::integer
+    into v_known_total_count
+    from public.pay_bank_transfers as transfer_count_row
+    where transfer_count_row.pay_batch_id = p_pay_batch_id;
+
+    with page_rows as (
+      select
+        transfer_page.id,
+        transfer_page.pay_batch_id,
+        transfer_page.candidate_id,
+        transfer_page.umbrella_id,
+        transfer_page.pay_channel,
+        transfer_page.amount,
+        transfer_page.currency,
+        transfer_page.status,
+        transfer_page.payment_reference,
+        transfer_page.payee_name,
+        transfer_page.sort_code,
+        transfer_page.account_number,
+        transfer_page.account_type,
+        transfer_page.created_at_utc,
+        transfer_page.completed_at_utc,
+        transfer_page.failed_reason,
+        transfer_page.rail_provider,
+        transfer_page.rail_env,
+        transfer_page.request_id,
+        transfer_page.rail_tx_id,
+        transfer_page.rail_state,
+        transfer_page.rail_meta_json,
+        transfer_page.bank_details_hash_snapshot,
+        transfer_page.payee_entity_kind,
+        transfer_page.payee_entity_id,
+        transfer_page.transfer_group_key,
+        transfer_page.grouping_mode_used,
+        transfer_page.week_ending_bucket,
+        (
+          nullif(btrim(coalesce(transfer_page.rail_tx_id, '')), '') is not null
+          or exists (
+            select 1
+            from public.pay_bank_transfer_events as provider_event_page
+            where provider_event_page.pay_batch_id = p_pay_batch_id
+              and provider_event_page.pay_bank_transfer_id = transfer_page.id
+              and upper(btrim(coalesce(provider_event_page.event_source, ''))) in ('PROVIDER_RESPONSE','PROVIDER_POLL','PROVIDER_WEBHOOK','WEBHOOK','POLL','RAIL_PROVIDER')
+              and (
+                nullif(btrim(coalesce(provider_event_page.provider_event_id, '')), '') is not null
+                or (
+                  nullif(btrim(coalesce(provider_event_page.provider_reference, '')), '') is not null
+                  and nullif(btrim(coalesce(provider_event_page.provider_reference, '')), '') is distinct from nullif(btrim(coalesce(transfer_page.request_id, '')), '')
+                  and nullif(btrim(coalesce(provider_event_page.provider_reference, '')), '') is distinct from nullif(btrim(coalesce(transfer_page.payment_reference, '')), '')
+                  and nullif(btrim(coalesce(provider_event_page.provider_reference, '')), '') is distinct from nullif(btrim(coalesce(transfer_page.transfer_group_key, '')), '')
+                )
+              )
+          )
+        ) as has_provider_evidence
+      from public.pay_bank_transfers as transfer_page
+      where transfer_page.pay_batch_id = p_pay_batch_id
+        and (v_cursor_id is null or transfer_page.id > v_cursor_id)
+      order by transfer_page.id asc
+      limit v_limit
+    )
+    select
+      coalesce(jsonb_agg(
+        jsonb_build_object(
+          'id', page_rows.id::text,
+          'pay_batch_id', page_rows.pay_batch_id::text,
+          'candidate_id', case when page_rows.candidate_id is null then null else page_rows.candidate_id::text end,
+          'umbrella_id', case when page_rows.umbrella_id is null then null else page_rows.umbrella_id::text end,
+          'pay_channel', page_rows.pay_channel,
+          'amount', page_rows.amount,
+          'currency', page_rows.currency,
+          'status', page_rows.status,
+          'payment_reference', page_rows.payment_reference,
+          'payee_name', page_rows.payee_name,
+          'sort_code', page_rows.sort_code,
+          'account_number', page_rows.account_number,
+          'account_type', page_rows.account_type,
+          'created_at_utc', page_rows.created_at_utc,
+          'completed_at_utc', page_rows.completed_at_utc,
+          'failed_reason', page_rows.failed_reason,
+          'rail_provider', page_rows.rail_provider,
+          'rail_env', page_rows.rail_env,
+          'request_id', page_rows.request_id,
+          'rail_tx_id', page_rows.rail_tx_id,
+          'rail_state', page_rows.rail_state,
+          'rail_meta_json', coalesce(page_rows.rail_meta_json, '{}'::jsonb),
+          'bank_details_hash_snapshot', page_rows.bank_details_hash_snapshot,
+          'payee_entity_kind', page_rows.payee_entity_kind,
+          'payee_entity_id', case when page_rows.payee_entity_id is null then null else page_rows.payee_entity_id::text end,
+          'transfer_group_key', page_rows.transfer_group_key,
+          'grouping_mode_used', page_rows.grouping_mode_used,
+          'week_ending_bucket', case when page_rows.week_ending_bucket is null then null else page_rows.week_ending_bucket::text end,
+          'has_provider_evidence', page_rows.has_provider_evidence
+        )
+        order by page_rows.id asc
+      ), '[]'::jsonb),
+      count(*)::integer,
+      (array_agg(page_rows.id order by page_rows.id desc))[1]
+    into v_items, v_returned_count, v_last_id
+    from page_rows;
+
+  elsif v_section = 'finance_case_groups' then
+    select count(*)::integer
+    into v_known_total_count
+    from (
+      select coalesce(pay_batch_item_finance_count.finance_case_id, pay_batch_item_finance_count.finance_component_id) as group_id
+      from public.pay_batch_items as pay_batch_item_finance_count
+      join public.pay_batch_candidates as pay_batch_candidate_finance_count
+        on pay_batch_candidate_finance_count.id = pay_batch_item_finance_count.pay_batch_candidate_id
+      where pay_batch_candidate_finance_count.pay_batch_id = p_pay_batch_id
+        and (pay_batch_item_finance_count.finance_case_id is not null or pay_batch_item_finance_count.finance_component_id is not null)
+      group by coalesce(pay_batch_item_finance_count.finance_case_id, pay_batch_item_finance_count.finance_component_id)
+    ) as finance_group_count_rows;
+
+    with page_group_keys as (
+      select finance_group_keys.group_id
+      from (
+        select coalesce(pay_batch_item_key.finance_case_id, pay_batch_item_key.finance_component_id) as group_id
+        from public.pay_batch_items as pay_batch_item_key
+        join public.pay_batch_candidates as pay_batch_candidate_key
+          on pay_batch_candidate_key.id = pay_batch_item_key.pay_batch_candidate_id
+        where pay_batch_candidate_key.pay_batch_id = p_pay_batch_id
+          and (pay_batch_item_key.finance_case_id is not null or pay_batch_item_key.finance_component_id is not null)
+        group by coalesce(pay_batch_item_key.finance_case_id, pay_batch_item_key.finance_component_id)
+      ) as finance_group_keys
+      where v_cursor_id is null or finance_group_keys.group_id > v_cursor_id
+      order by finance_group_keys.group_id asc
+      limit v_limit
+    ),
+    page_rows as (
+      select
+        page_group_keys.group_id,
+        max(pay_batch_item_finance_page.finance_case_id) filter (where pay_batch_item_finance_page.finance_case_id is not null) as finance_case_id,
+        max(pay_batch_item_finance_page.finance_component_id) filter (where pay_batch_item_finance_page.finance_component_id is not null) as finance_component_id,
+        count(*)::integer as item_count,
+        round(sum(coalesce(pay_batch_item_finance_page.amount_ex_vat, 0)), 2)::numeric as total_amount_ex_vat,
+        coalesce(jsonb_agg(distinct pay_batch_item_finance_page.item_type) filter (where pay_batch_item_finance_page.item_type is not null), '[]'::jsonb) as item_types,
+        coalesce(jsonb_agg(distinct pay_batch_candidate_finance_page.candidate_id::text) filter (where pay_batch_candidate_finance_page.candidate_id is not null), '[]'::jsonb) as candidate_ids
+      from page_group_keys
+      join public.pay_batch_items as pay_batch_item_finance_page
+        on coalesce(pay_batch_item_finance_page.finance_case_id, pay_batch_item_finance_page.finance_component_id) = page_group_keys.group_id
+      join public.pay_batch_candidates as pay_batch_candidate_finance_page
+        on pay_batch_candidate_finance_page.id = pay_batch_item_finance_page.pay_batch_candidate_id
+      where pay_batch_candidate_finance_page.pay_batch_id = p_pay_batch_id
+      group by page_group_keys.group_id
+    )
+    select
+      coalesce(jsonb_agg(
+        jsonb_build_object(
+          'group_id', page_rows.group_id::text,
+          'finance_case_id', case when page_rows.finance_case_id is null then null else page_rows.finance_case_id::text end,
+          'finance_component_id', case when page_rows.finance_component_id is null then null else page_rows.finance_component_id::text end,
+          'item_count', page_rows.item_count,
+          'total_amount_ex_vat', page_rows.total_amount_ex_vat,
+          'item_types', page_rows.item_types,
+          'candidate_ids', page_rows.candidate_ids
+        )
+        order by page_rows.group_id asc
+      ), '[]'::jsonb),
+      count(*)::integer,
+      (array_agg(page_rows.group_id order by page_rows.group_id desc))[1]
+    into v_items, v_returned_count, v_last_id
+    from page_rows;
+
+  elsif v_section = 'remittances' then
+    select count(*)::integer
+    into v_known_total_count
+    from public.mail_outbox as mail_outbox_count
+    where (
+         mail_outbox_count.payment_scope_json->>'pay_batch_id' = p_pay_batch_id::text
+      or (lower(coalesce(mail_outbox_count.context_kind, '')) in ('pay_batch', 'pay_batches') and mail_outbox_count.context_id = p_pay_batch_id)
+      or mail_outbox_count.reference = p_pay_batch_id::text
+    );
+
+    with page_rows as (
+      select
+        mail_outbox_page.id,
+        mail_outbox_page.type,
+        mail_outbox_page.to,
+        mail_outbox_page.cc,
+        mail_outbox_page.bcc,
+        mail_outbox_page.subject,
+        mail_outbox_page.status,
+        mail_outbox_page.provider_status,
+        mail_outbox_page.recipient_kind,
+        mail_outbox_page.recipient_id,
+        mail_outbox_page.context_kind,
+        mail_outbox_page.context_id,
+        mail_outbox_page.reference,
+        mail_outbox_page.created_at_utc,
+        mail_outbox_page.sent_at,
+        mail_outbox_page.failed_at,
+        mail_outbox_page.last_error,
+        mail_outbox_page.deterministic_outbox_key
+      from public.mail_outbox as mail_outbox_page
+      where (
+           mail_outbox_page.payment_scope_json->>'pay_batch_id' = p_pay_batch_id::text
+        or (lower(coalesce(mail_outbox_page.context_kind, '')) in ('pay_batch', 'pay_batches') and mail_outbox_page.context_id = p_pay_batch_id)
+        or mail_outbox_page.reference = p_pay_batch_id::text
+      )
+        and (v_cursor_id is null or mail_outbox_page.id > v_cursor_id)
+      order by mail_outbox_page.id asc
+      limit v_limit
+    )
+    select
+      coalesce(jsonb_agg(to_jsonb(page_rows) order by page_rows.id asc), '[]'::jsonb),
+      count(*)::integer,
+      (array_agg(page_rows.id order by page_rows.id desc))[1]
+    into v_items, v_returned_count, v_last_id
+    from page_rows;
+
+  elsif v_section = 'communications' then
+    select count(*)::integer
+    into v_known_total_count
+    from public.comms_outbox as comms_outbox_count
+    where (
+         (lower(coalesce(comms_outbox_count.context_kind, '')) in ('pay_batch', 'pay_batches') and comms_outbox_count.context_id = p_pay_batch_id)
+      or comms_outbox_count.provider_payload_json->>'pay_batch_id' = p_pay_batch_id::text
+      or comms_outbox_count.provider_response_json->>'pay_batch_id' = p_pay_batch_id::text
+    );
+
+    with page_rows as (
+      select
+        comms_outbox_page.id,
+        comms_outbox_page.channel,
+        comms_outbox_page.status,
+        comms_outbox_page.to_address,
+        comms_outbox_page.provider_key,
+        comms_outbox_page.provider_message_id,
+        comms_outbox_page.recipient_kind,
+        comms_outbox_page.recipient_id,
+        comms_outbox_page.context_kind,
+        comms_outbox_page.context_id,
+        comms_outbox_page.created_at_utc,
+        comms_outbox_page.sent_at,
+        comms_outbox_page.delivered_at,
+        comms_outbox_page.read_at,
+        comms_outbox_page.failed_at,
+        comms_outbox_page.last_error,
+        comms_outbox_page.deterministic_outbox_key
+      from public.comms_outbox as comms_outbox_page
+      where (
+           (lower(coalesce(comms_outbox_page.context_kind, '')) in ('pay_batch', 'pay_batches') and comms_outbox_page.context_id = p_pay_batch_id)
+        or comms_outbox_page.provider_payload_json->>'pay_batch_id' = p_pay_batch_id::text
+        or comms_outbox_page.provider_response_json->>'pay_batch_id' = p_pay_batch_id::text
+      )
+        and (v_cursor_id is null or comms_outbox_page.id > v_cursor_id)
+      order by comms_outbox_page.id asc
+      limit v_limit
+    )
+    select
+      coalesce(jsonb_agg(to_jsonb(page_rows) order by page_rows.id asc), '[]'::jsonb),
+      count(*)::integer,
+      (array_agg(page_rows.id order by page_rows.id desc))[1]
+    into v_items, v_returned_count, v_last_id
+    from page_rows;
+
+  elsif v_section = 'auth_history' then
+    select count(*)::integer
+    into v_known_total_count
+    from public.pay_batch_auth_requests as auth_request_count
+    where auth_request_count.pay_batch_id = p_pay_batch_id;
+
+    with page_rows as (
+      select
+        auth_request_page.id,
+        auth_request_page.pay_batch_id,
+        auth_request_page.requested_by_user_id,
+        auth_request_page.required_quantity,
+        auth_request_page.schedule_kind,
+        auth_request_page.scheduled_at_utc,
+        auth_request_page.funding_account_ref,
+        auth_request_page.state,
+        auth_request_page.golden_key_used,
+        auth_request_page.golden_key_user_id,
+        auth_request_page.created_at_utc,
+        auth_request_page.finalised_at_utc,
+        auth_request_page.finalised_by_user_id,
+        auth_request_page.execution_intent_json
+      from public.pay_batch_auth_requests as auth_request_page
+      where auth_request_page.pay_batch_id = p_pay_batch_id
+        and (v_cursor_id is null or auth_request_page.id > v_cursor_id)
+      order by auth_request_page.id asc
+      limit v_limit
+    )
+    select
+      coalesce(jsonb_agg(to_jsonb(page_rows) order by page_rows.id asc), '[]'::jsonb),
+      count(*)::integer,
+      (array_agg(page_rows.id order by page_rows.id desc))[1]
+    into v_items, v_returned_count, v_last_id
+    from page_rows;
+
+  elsif v_section = 'events' then
+    select count(*)::integer
+    into v_known_total_count
+    from public.pay_bank_transfer_events as transfer_event_count
+    where transfer_event_count.pay_batch_id = p_pay_batch_id;
+
+    with page_rows as (
+      select
+        transfer_event_page.id,
+        transfer_event_page.pay_batch_id,
+        transfer_event_page.pay_bank_transfer_id,
+        transfer_event_page.candidate_id,
+        transfer_event_page.umbrella_id,
+        transfer_event_page.provider_key,
+        transfer_event_page.provider_event_id,
+        transfer_event_page.provider_reference,
+        transfer_event_page.provider_state,
+        transfer_event_page.normalised_state,
+        transfer_event_page.event_source,
+        transfer_event_page.event_time_utc,
+        transfer_event_page.received_at_utc,
+        transfer_event_page.amount,
+        transfer_event_page.currency,
+        transfer_event_page.mapping_status,
+        transfer_event_page.movement_classification,
+        transfer_event_page.correction_disposition,
+        transfer_event_page.mapping_method,
+        transfer_event_page.created_at_utc
+      from public.pay_bank_transfer_events as transfer_event_page
+      where transfer_event_page.pay_batch_id = p_pay_batch_id
+        and (v_cursor_id is null or transfer_event_page.id > v_cursor_id)
+      order by transfer_event_page.id asc
+      limit v_limit
+    )
+    select
+      coalesce(jsonb_agg(to_jsonb(page_rows) order by page_rows.id asc), '[]'::jsonb),
+      count(*)::integer,
+      (array_agg(page_rows.id order by page_rows.id desc))[1]
+    into v_items, v_returned_count, v_last_id
+    from page_rows;
+  end if;
+
+  if v_last_id is not null and v_returned_count = v_limit then
+    v_next_cursor := jsonb_build_object('last_id', v_last_id::text);
+  else
+    v_next_cursor := null;
+  end if;
+
+  return jsonb_build_object(
+    'section', v_section,
+    'items', coalesce(v_items, '[]'::jsonb),
+    'next_cursor', v_next_cursor,
+    'returned_count', coalesce(v_returned_count, 0),
+    'known_total_count', v_known_total_count,
+    'pay_batch_id', p_pay_batch_id::text,
+    'batch_status', v_batch_status,
+    'execution_commit_state', v_execution_commit_state,
+    'freshness', v_freshness_summary,
+    'limit', v_limit
+  );
+end;
+$$;
+create or replace function public.pay_batch_freshness_result_get(
+  p_operation_id uuid,
+  p_pay_batch_id uuid,
+  p_actor_user_id uuid default null::uuid
+)
+returns jsonb
+language plpgsql
+security definer
+volatile
+set search_path = public, pg_temp
+as $$
+declare
+  v_operation public.banking_pay_operations%rowtype;
+  v_batch public.pay_batches%rowtype;
+  v_actor_is_valid boolean := true;
+  v_total_chunk_count integer := 0;
+  v_pending_chunk_count integer := 0;
+  v_running_chunk_count integer := 0;
+  v_failed_chunk_count integer := 0;
+  v_complete_chunk_count integer := 0;
+  v_validation_complete boolean := false;
+  v_is_stale boolean := false;
+  v_checked_count integer := 0;
+  v_stale_count integer := 0;
+  v_failed_count integer := 0;
+  v_key_resolution_failure_count integer := 0;
+  v_stale_reasons jsonb := '[]'::jsonb;
+  v_stale_reason_counts jsonb := '{}'::jsonb;
+  v_diff_sample jsonb := '[]'::jsonb;
+  v_checked_at_utc timestamptz := now();
+  v_scope_hash text := null;
+  v_result_hash text := null;
+  v_status text := 'PENDING';
+  v_result jsonb := '{}'::jsonb;
+  v_hash_basis jsonb := '{}'::jsonb;
+  v_chunk_result_hashes jsonb := '[]'::jsonb;
+  v_failed_sample jsonb := '[]'::jsonb;
+begin
+  if p_operation_id is null then
+    raise exception 'PAY_BATCH_FRESHNESS_RESULT_GET_OPERATION_ID_REQUIRED'
+      using errcode = 'P0001',
+            detail = jsonb_build_object('code', 'PAY_BATCH_FRESHNESS_RESULT_GET_OPERATION_ID_REQUIRED')::text;
+  end if;
+
+  if p_pay_batch_id is null then
+    raise exception 'PAY_BATCH_FRESHNESS_RESULT_GET_PAY_BATCH_ID_REQUIRED'
+      using errcode = 'P0001',
+            detail = jsonb_build_object('code', 'PAY_BATCH_FRESHNESS_RESULT_GET_PAY_BATCH_ID_REQUIRED')::text;
+  end if;
+
+  select operation_row.*
+  into v_operation
+  from public.banking_pay_operations as operation_row
+  where operation_row.id = p_operation_id
+  for update;
+
+  if not found then
+    raise exception 'PAY_BATCH_FRESHNESS_RESULT_GET_OPERATION_NOT_FOUND'
+      using errcode = 'P0001',
+            detail = jsonb_build_object(
+              'code', 'PAY_BATCH_FRESHNESS_RESULT_GET_OPERATION_NOT_FOUND',
+              'operation_id', p_operation_id::text
+            )::text;
+  end if;
+
+  if v_operation.pay_batch_id is not null and v_operation.pay_batch_id <> p_pay_batch_id then
+    raise exception 'PAY_BATCH_FRESHNESS_RESULT_GET_OPERATION_BATCH_MISMATCH'
+      using errcode = 'P0001',
+            detail = jsonb_build_object(
+              'code', 'PAY_BATCH_FRESHNESS_RESULT_GET_OPERATION_BATCH_MISMATCH',
+              'operation_id', p_operation_id::text,
+              'operation_pay_batch_id', v_operation.pay_batch_id::text,
+              'pay_batch_id', p_pay_batch_id::text
+            )::text;
+  end if;
+
+  select pay_batch_row.*
+  into v_batch
+  from public.pay_batches as pay_batch_row
+  where pay_batch_row.id = p_pay_batch_id
+  for update;
+
+  if not found then
+    raise exception 'PAY_BATCH_FRESHNESS_RESULT_GET_BATCH_NOT_FOUND'
+      using errcode = 'P0001',
+            detail = jsonb_build_object(
+              'code', 'PAY_BATCH_FRESHNESS_RESULT_GET_BATCH_NOT_FOUND',
+              'pay_batch_id', p_pay_batch_id::text
+            )::text;
+  end if;
+
+  if p_actor_user_id is not null then
+    select exists (
+      select 1
+      from public.tms_users as actor_user
+      where actor_user.id = p_actor_user_id
+        and coalesce(actor_user.is_active, false) = true
+    )
+    into v_actor_is_valid;
+
+    if coalesce(v_actor_is_valid, false) is not true then
+      raise exception 'PAY_BATCH_FRESHNESS_RESULT_GET_ACTOR_NOT_ALLOWED'
+        using errcode = 'P0001',
+              detail = jsonb_build_object(
+                'code', 'PAY_BATCH_FRESHNESS_RESULT_GET_ACTOR_NOT_ALLOWED',
+                'actor_user_id', p_actor_user_id::text
+              )::text;
+    end if;
+  end if;
+
+  select
+    count(*)::integer,
+    count(*) filter (where chunk_row.status = 'PENDING')::integer,
+    count(*) filter (where chunk_row.status = 'RUNNING')::integer,
+    count(*) filter (where chunk_row.status = 'FAILED')::integer,
+    count(*) filter (where chunk_row.status = 'COMPLETE')::integer
+  into
+    v_total_chunk_count,
+    v_pending_chunk_count,
+    v_running_chunk_count,
+    v_failed_chunk_count,
+    v_complete_chunk_count
+  from public.banking_pay_operation_chunks as chunk_row
+  where chunk_row.operation_id = p_operation_id
+    and chunk_row.phase = 'VALIDATE_FRESHNESS'
+    and chunk_row.chunk_type = 'FRESHNESS_VALIDATE';
+
+  if coalesce(v_total_chunk_count, 0) = 0 then
+    v_result := jsonb_build_object(
+      'validation_complete', false,
+      'is_stale', false,
+      'status', 'PENDING',
+      'reason', 'NO_FRESHNESS_CHUNKS',
+      'operation_id', p_operation_id::text,
+      'pay_batch_id', p_pay_batch_id::text
+    );
+
+    return v_result;
+  end if;
+
+  v_validation_complete := coalesce(v_pending_chunk_count, 0) = 0
+    and coalesce(v_running_chunk_count, 0) = 0;
+
+  v_scope_hash := nullif(btrim(coalesce(v_operation.progress_json->>'freshness_scope_hash', v_batch.freshness_scope_hash, '')), '');
+
+  if v_validation_complete is not true then
+    v_result := jsonb_build_object(
+      'validation_complete', false,
+      'is_stale', false,
+      'status', 'PENDING',
+      'pending_count', coalesce(v_pending_chunk_count, 0),
+      'running_count', coalesce(v_running_chunk_count, 0),
+      'complete_count', coalesce(v_complete_chunk_count, 0),
+      'failed_count', coalesce(v_failed_chunk_count, 0),
+      'checked_count', 0,
+      'stale_count', 0,
+      'key_resolution_failure_count', 0,
+      'diff_sample', '[]'::jsonb,
+      'freshness_checked_at_utc', null,
+      'freshness_result_hash', null,
+      'freshness_scope_hash', v_scope_hash,
+      'operation_id', p_operation_id::text
+    );
+
+    return v_result;
+  end if;
+
+  with chunk_results as (
+    select
+      chunk_row.id,
+      chunk_row.status,
+      coalesce(chunk_row.result_json, '{}'::jsonb) as result_json,
+      coalesce(chunk_row.error_json, '{}'::jsonb) as error_json
+    from public.banking_pay_operation_chunks as chunk_row
+    where chunk_row.operation_id = p_operation_id
+      and chunk_row.phase = 'VALIDATE_FRESHNESS'
+      and chunk_row.chunk_type = 'FRESHNESS_VALIDATE'
+  ),
+  counts as (
+    select
+      sum(coalesce((chunk_results.result_json->>'checked_count')::integer, 0))::integer as checked_count,
+      sum(coalesce((chunk_results.result_json->>'stale_count')::integer, 0))::integer as stale_count,
+      sum(coalesce((chunk_results.result_json->>'key_resolution_failure_count')::integer, 0))::integer as key_resolution_failure_count,
+      count(*) filter (where chunk_results.status = 'FAILED')::integer as failed_count,
+      bool_or(coalesce((chunk_results.result_json->>'is_stale')::boolean, false)) as any_stale,
+      bool_or(chunk_results.status = 'FAILED') as any_failed
+    from chunk_results
+  )
+  select
+    coalesce(counts.checked_count, 0),
+    coalesce(counts.stale_count, 0),
+    coalesce(counts.key_resolution_failure_count, 0),
+    coalesce(counts.failed_count, 0),
+    coalesce(counts.any_stale, false) or coalesce(counts.any_failed, false) or coalesce(counts.key_resolution_failure_count, 0) > 0
+  into
+    v_checked_count,
+    v_stale_count,
+    v_key_resolution_failure_count,
+    v_failed_count,
+    v_is_stale
+  from counts;
+
+  with reason_values as (
+    select distinct reason_text.reason_value
+    from public.banking_pay_operation_chunks as chunk_row
+    cross join lateral jsonb_array_elements_text(coalesce(chunk_row.result_json->'stale_reasons', '[]'::jsonb)) as reason_text(reason_value)
+    where chunk_row.operation_id = p_operation_id
+      and chunk_row.phase = 'VALIDATE_FRESHNESS'
+      and chunk_row.chunk_type = 'FRESHNESS_VALIDATE'
+      and chunk_row.result_json is not null
+  )
+  select coalesce(jsonb_agg(reason_values.reason_value order by reason_values.reason_value), '[]'::jsonb)
+  into v_stale_reasons
+  from reason_values;
+
+  with reason_pairs as (
+    select
+      reason_entry.key as reason_key,
+      sum(coalesce(reason_entry.value::text::integer, 0))::integer as reason_count
+    from public.banking_pay_operation_chunks as chunk_row
+    cross join lateral jsonb_each(coalesce(chunk_row.result_json->'stale_reason_counts', '{}'::jsonb)) as reason_entry(key, value)
+    where chunk_row.operation_id = p_operation_id
+      and chunk_row.phase = 'VALIDATE_FRESHNESS'
+      and chunk_row.chunk_type = 'FRESHNESS_VALIDATE'
+      and chunk_row.result_json is not null
+    group by reason_entry.key
+  )
+  select coalesce(jsonb_object_agg(reason_pairs.reason_key, reason_pairs.reason_count order by reason_pairs.reason_key), '{}'::jsonb)
+  into v_stale_reason_counts
+  from reason_pairs;
+
+  with diff_items as (
+    select
+      chunk_row.sequence_no,
+      diff_item.diff_value
+    from public.banking_pay_operation_chunks as chunk_row
+    cross join lateral jsonb_array_elements(coalesce(chunk_row.result_json->'diff_sample', '[]'::jsonb)) as diff_item(diff_value)
+    where chunk_row.operation_id = p_operation_id
+      and chunk_row.phase = 'VALIDATE_FRESHNESS'
+      and chunk_row.chunk_type = 'FRESHNESS_VALIDATE'
+      and chunk_row.result_json is not null
+    order by chunk_row.sequence_no, diff_item.diff_value::text
+    limit 50
+  )
+  select coalesce(jsonb_agg(diff_items.diff_value order by diff_items.sequence_no, diff_items.diff_value::text), '[]'::jsonb)
+  into v_diff_sample
+  from diff_items;
+
+  with chunk_hash_rows as (
+    select
+      chunk_row.sequence_no,
+      nullif(btrim(coalesce(chunk_row.result_json->>'chunk_result_hash', '')), '') as chunk_result_hash
+    from public.banking_pay_operation_chunks as chunk_row
+    where chunk_row.operation_id = p_operation_id
+      and chunk_row.phase = 'VALIDATE_FRESHNESS'
+      and chunk_row.chunk_type = 'FRESHNESS_VALIDATE'
+      and nullif(btrim(coalesce(chunk_row.result_json->>'chunk_result_hash', '')), '') is not null
+    order by chunk_row.sequence_no
+  )
+  select coalesce(jsonb_agg(chunk_hash_rows.chunk_result_hash order by chunk_hash_rows.sequence_no), '[]'::jsonb)
+  into v_chunk_result_hashes
+  from chunk_hash_rows;
+
+  with failed_rows as (
+    select
+      chunk_row.sequence_no,
+      jsonb_build_object(
+        'chunk_id', chunk_row.id::text,
+        'sequence_no', chunk_row.sequence_no,
+        'error', coalesce(chunk_row.error_json, '{}'::jsonb)
+      ) as failed_json
+    from public.banking_pay_operation_chunks as chunk_row
+    where chunk_row.operation_id = p_operation_id
+      and chunk_row.phase = 'VALIDATE_FRESHNESS'
+      and chunk_row.chunk_type = 'FRESHNESS_VALIDATE'
+      and chunk_row.status = 'FAILED'
+    order by chunk_row.sequence_no
+    limit 20
+  )
+  select coalesce(jsonb_agg(failed_rows.failed_json order by failed_rows.sequence_no), '[]'::jsonb)
+  into v_failed_sample
+  from failed_rows;
+
+  if coalesce(v_failed_count, 0) > 0 and not (coalesce(v_stale_reasons, '[]'::jsonb) ? 'CHUNK_FAILED') then
+    v_stale_reasons := coalesce(v_stale_reasons, '[]'::jsonb) || jsonb_build_array('CHUNK_FAILED');
+    v_stale_reason_counts := coalesce(v_stale_reason_counts, '{}'::jsonb) || jsonb_build_object('CHUNK_FAILED', coalesce(v_failed_count, 0));
+  end if;
+
+  if coalesce(v_key_resolution_failure_count, 0) > 0 and not (coalesce(v_stale_reasons, '[]'::jsonb) ? 'KEY_RESOLUTION_FAILED') then
+    v_stale_reasons := coalesce(v_stale_reasons, '[]'::jsonb) || jsonb_build_array('KEY_RESOLUTION_FAILED');
+    v_stale_reason_counts := coalesce(v_stale_reason_counts, '{}'::jsonb) || jsonb_build_object('KEY_RESOLUTION_FAILED', coalesce(v_key_resolution_failure_count, 0));
+  end if;
+
+  if coalesce(v_failed_count, 0) > 0 then
+    v_status := 'FAILED';
+  elsif v_is_stale then
+    v_status := 'STALE';
+  else
+    v_status := 'PASSED';
+  end if;
+
+  v_hash_basis := jsonb_build_object(
+    'validation_complete', true,
+    'is_stale', v_is_stale,
+    'status', v_status,
+    'stale_reasons', coalesce(v_stale_reasons, '[]'::jsonb),
+    'stale_reason_counts', coalesce(v_stale_reason_counts, '{}'::jsonb),
+    'checked_count', coalesce(v_checked_count, 0),
+    'stale_count', coalesce(v_stale_count, 0),
+    'failed_count', coalesce(v_failed_count, 0),
+    'key_resolution_failure_count', coalesce(v_key_resolution_failure_count, 0),
+    'diff_sample', coalesce(v_diff_sample, '[]'::jsonb),
+    'failed_sample', coalesce(v_failed_sample, '[]'::jsonb),
+    'freshness_scope_hash', v_scope_hash,
+    'chunk_count', coalesce(v_total_chunk_count, 0),
+    'complete_chunk_count', coalesce(v_complete_chunk_count, 0),
+    'chunk_result_hashes', coalesce(v_chunk_result_hashes, '[]'::jsonb)
+  );
+
+  v_result_hash := md5(v_hash_basis::text);
+
+  if v_batch.freshness_operation_id = p_operation_id
+     and nullif(btrim(coalesce(v_batch.freshness_result_hash, '')), '') = v_result_hash
+     and v_batch.freshness_checked_at_utc is not null then
+    v_checked_at_utc := v_batch.freshness_checked_at_utc;
+  end if;
+
+  v_result := v_hash_basis || jsonb_build_object(
+    'freshness_checked_at_utc', to_jsonb(v_checked_at_utc),
+    'freshness_result_hash', v_result_hash,
+    'operation_id', p_operation_id::text,
+    'pay_batch_id', p_pay_batch_id::text
+  );
+
+  update public.pay_batches as pay_batch_update
+  set freshness_operation_id = p_operation_id,
+      freshness_validation_status = v_status,
+      freshness_checked_at_utc = v_checked_at_utc,
+      freshness_result_hash = v_result_hash,
+      freshness_scope_hash = v_scope_hash,
+      freshness_result_json = jsonb_build_object(
+        'validation_complete', true,
+        'is_stale', v_is_stale,
+        'status', v_status,
+        'stale_reasons', coalesce(v_stale_reasons, '[]'::jsonb),
+        'stale_reason_counts', coalesce(v_stale_reason_counts, '{}'::jsonb),
+        'checked_count', coalesce(v_checked_count, 0),
+        'stale_count', coalesce(v_stale_count, 0),
+        'failed_count', coalesce(v_failed_count, 0),
+        'key_resolution_failure_count', coalesce(v_key_resolution_failure_count, 0),
+        'diff_sample', coalesce(v_diff_sample, '[]'::jsonb),
+        'failed_sample', coalesce(v_failed_sample, '[]'::jsonb),
+        'freshness_result_hash', v_result_hash,
+        'freshness_scope_hash', v_scope_hash,
+        'freshness_checked_at_utc', to_jsonb(v_checked_at_utc)
+      )
+  where pay_batch_update.id = p_pay_batch_id;
+
+  update public.banking_pay_operations as operation_update
+  set progress_json = coalesce(operation_update.progress_json, '{}'::jsonb)
+        || jsonb_build_object(
+          'freshness_validation_status', v_status,
+          'freshness_result_hash', v_result_hash,
+          'freshness_scope_hash', v_scope_hash,
+          'freshness_checked_at_utc', to_jsonb(v_checked_at_utc),
+          'freshness_is_stale', v_is_stale
+        ),
+      result_json = coalesce(operation_update.result_json, '{}'::jsonb)
+        || jsonb_build_object('freshness', v_result),
+      updated_at_utc = now()
+  where operation_update.id = p_operation_id;
+
+  return v_result;
+end;
+$$;
+
+
+
 
