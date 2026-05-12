@@ -2161,6 +2161,8 @@ $function$;
 
 
 
+
+
 CREATE OR REPLACE FUNCTION public.bulk_process_row_context_v1(p_filters jsonb DEFAULT '{}'::jsonb)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -3346,6 +3348,16 @@ BEGIN
         'underlying_channel_family', row_ids.row_json->>'underlying_channel_family',
         'is_import_authoritative', COALESCE((row_ids.row_json->>'is_import_authoritative')::boolean, FALSE),
         'compare_block_required', COALESCE((row_ids.row_json->>'compare_block_required')::boolean, FALSE),
+        'is_adjustment', COALESCE((row_ids.row_json->>'is_adjustment')::boolean, FALSE),
+        'additional_seq', CASE WHEN NULLIF(row_ids.row_json->>'additional_seq', '') IS NULL THEN NULL::integer ELSE (row_ids.row_json->>'additional_seq')::integer END,
+        'actual_schedule_json', COALESCE(row_ids.row_json->'actual_schedule_json', '[]'::jsonb),
+        'planned_schedule_json', COALESCE(row_ids.row_json->'planned_schedule_json', '[]'::jsonb),
+        'contract_week_totals_json', COALESCE(row_ids.row_json->'contract_week_totals_json', '{}'::jsonb),
+        'total_hours', CASE WHEN NULLIF(row_ids.row_json->>'total_hours', '') IS NULL THEN NULL::numeric ELSE (row_ids.row_json->>'total_hours')::numeric END,
+        'suppress_standard_schedule_fallback', COALESCE((row_ids.row_json->>'suppress_standard_schedule_fallback')::boolean, FALSE),
+        'keep_additional_manual_adjustment_schedule_empty', COALESCE((row_ids.row_json->>'keep_additional_manual_adjustment_schedule_empty')::boolean, FALSE),
+        '__suppressStandardScheduleFallback', COALESCE((row_ids.row_json->>'__suppressStandardScheduleFallback')::boolean, FALSE),
+        '__keepAdditionalManualAdjustmentScheduleEmpty', COALESCE((row_ids.row_json->>'__keepAdditionalManualAdjustmentScheduleEmpty')::boolean, FALSE),
         'period_type', row_ids.row_json->>'period_type',
         'timesheet_type_sort_key', CASE WHEN NULLIF(row_ids.row_json->>'timesheet_type_sort_key', '') IS NULL THEN NULL::integer ELSE (row_ids.row_json->>'timesheet_type_sort_key')::integer END,
         'can_save', COALESCE((row_ids.row_json->>'can_save')::boolean, FALSE),
@@ -3414,6 +3426,16 @@ BEGIN
             'effective', JSONB_BUILD_OBJECT(
               'route_type', row_ids.row_json->>'route_type',
               'route_display', row_ids.row_json->>'route_display',
+              'route_family', row_ids.row_json->>'route_family',
+              'route_subfamily', row_ids.row_json->>'route_subfamily',
+              'underlying_channel_family', row_ids.row_json->>'underlying_channel_family',
+              'is_import_authoritative', COALESCE((row_ids.row_json->>'is_import_authoritative')::boolean, FALSE),
+              'is_adjustment', COALESCE((row_ids.row_json->>'is_adjustment')::boolean, FALSE),
+              'additional_seq', CASE WHEN NULLIF(row_ids.row_json->>'additional_seq', '') IS NULL THEN NULL::integer ELSE (row_ids.row_json->>'additional_seq')::integer END,
+              'actual_schedule_json', COALESCE(row_ids.row_json->'actual_schedule_json', '[]'::jsonb),
+              'planned_schedule_json', COALESCE(row_ids.row_json->'planned_schedule_json', '[]'::jsonb),
+              'suppress_standard_schedule_fallback', COALESCE((row_ids.row_json->>'suppress_standard_schedule_fallback')::boolean, FALSE),
+              'keep_additional_manual_adjustment_schedule_empty', COALESCE((row_ids.row_json->>'keep_additional_manual_adjustment_schedule_empty')::boolean, FALSE),
               'summary_stage', row_ids.row_json->>'summary_stage',
               'client_requires_hr', COALESCE((row_ids.row_json->>'client_requires_hr')::boolean, FALSE),
               'client_autoprocess_hr', COALESCE((row_ids.row_json->>'client_autoprocess_hr')::boolean, FALSE),
@@ -3479,6 +3501,16 @@ BEGIN
         'effective', JSONB_BUILD_OBJECT(
           'route_type', row_ids.row_json->>'route_type',
           'route_display', row_ids.row_json->>'route_display',
+          'route_family', row_ids.row_json->>'route_family',
+          'route_subfamily', row_ids.row_json->>'route_subfamily',
+          'underlying_channel_family', row_ids.row_json->>'underlying_channel_family',
+          'is_import_authoritative', COALESCE((row_ids.row_json->>'is_import_authoritative')::boolean, FALSE),
+          'is_adjustment', COALESCE((row_ids.row_json->>'is_adjustment')::boolean, FALSE),
+          'additional_seq', CASE WHEN NULLIF(row_ids.row_json->>'additional_seq', '') IS NULL THEN NULL::integer ELSE (row_ids.row_json->>'additional_seq')::integer END,
+          'actual_schedule_json', COALESCE(row_ids.row_json->'actual_schedule_json', '[]'::jsonb),
+          'planned_schedule_json', COALESCE(row_ids.row_json->'planned_schedule_json', '[]'::jsonb),
+          'suppress_standard_schedule_fallback', COALESCE((row_ids.row_json->>'suppress_standard_schedule_fallback')::boolean, FALSE),
+          'keep_additional_manual_adjustment_schedule_empty', COALESCE((row_ids.row_json->>'keep_additional_manual_adjustment_schedule_empty')::boolean, FALSE),
           'summary_stage', row_ids.row_json->>'summary_stage',
           'client_requires_hr', COALESCE((row_ids.row_json->>'client_requires_hr')::boolean, FALSE),
           'client_autoprocess_hr', COALESCE((row_ids.row_json->>'client_autoprocess_hr')::boolean, FALSE),
@@ -3522,8 +3554,17 @@ BEGIN
         ),
         'evidence', COALESCE(evidence_payload.evidence_json, '[]'::jsonb),
         'evidence_meta', JSONB_BUILD_OBJECT(
-          'has_any_evidence', COALESCE((row_ids.row_json->>'has_any_evidence')::boolean, FALSE),
-          'evidence_badges', COALESCE(row_ids.row_json->'evidence_badges', '[]'::jsonb),
+          'has_any_evidence', (
+            COALESCE((row_ids.row_json->>'has_any_evidence')::boolean, FALSE)
+            OR jsonb_array_length(COALESCE(evidence_payload.evidence_json, '[]'::jsonb)) > 0
+          ),
+          'evidence_badges', JSONB_BUILD_ARRAY(
+            JSONB_BUILD_OBJECT('kind', 'TIMESHEET', 'present', COALESCE((SELECT TRUE FROM jsonb_array_elements(COALESCE(evidence_payload.evidence_json, '[]'::jsonb)) AS evidence_badge_item(item_json) WHERE UPPER(COALESCE(evidence_badge_item.item_json->>'kind', '')) = 'TIMESHEET' LIMIT 1), FALSE), 'has_evidence', COALESCE((SELECT TRUE FROM jsonb_array_elements(COALESCE(evidence_payload.evidence_json, '[]'::jsonb)) AS evidence_badge_item(item_json) WHERE UPPER(COALESCE(evidence_badge_item.item_json->>'kind', '')) = 'TIMESHEET' LIMIT 1), FALSE)),
+            JSONB_BUILD_OBJECT('kind', 'MILEAGE', 'present', COALESCE((SELECT TRUE FROM jsonb_array_elements(COALESCE(evidence_payload.evidence_json, '[]'::jsonb)) AS evidence_badge_item(item_json) WHERE UPPER(COALESCE(evidence_badge_item.item_json->>'kind', '')) = 'MILEAGE' LIMIT 1), FALSE), 'has_evidence', COALESCE((SELECT TRUE FROM jsonb_array_elements(COALESCE(evidence_payload.evidence_json, '[]'::jsonb)) AS evidence_badge_item(item_json) WHERE UPPER(COALESCE(evidence_badge_item.item_json->>'kind', '')) = 'MILEAGE' LIMIT 1), FALSE)),
+            JSONB_BUILD_OBJECT('kind', 'TRAVEL', 'present', COALESCE((SELECT TRUE FROM jsonb_array_elements(COALESCE(evidence_payload.evidence_json, '[]'::jsonb)) AS evidence_badge_item(item_json) WHERE UPPER(COALESCE(evidence_badge_item.item_json->>'kind', '')) = 'TRAVEL' LIMIT 1), FALSE), 'has_evidence', COALESCE((SELECT TRUE FROM jsonb_array_elements(COALESCE(evidence_payload.evidence_json, '[]'::jsonb)) AS evidence_badge_item(item_json) WHERE UPPER(COALESCE(evidence_badge_item.item_json->>'kind', '')) = 'TRAVEL' LIMIT 1), FALSE)),
+            JSONB_BUILD_OBJECT('kind', 'ACCOMMODATION', 'present', COALESCE((SELECT TRUE FROM jsonb_array_elements(COALESCE(evidence_payload.evidence_json, '[]'::jsonb)) AS evidence_badge_item(item_json) WHERE UPPER(COALESCE(evidence_badge_item.item_json->>'kind', '')) = 'ACCOMMODATION' LIMIT 1), FALSE), 'has_evidence', COALESCE((SELECT TRUE FROM jsonb_array_elements(COALESCE(evidence_payload.evidence_json, '[]'::jsonb)) AS evidence_badge_item(item_json) WHERE UPPER(COALESCE(evidence_badge_item.item_json->>'kind', '')) = 'ACCOMMODATION' LIMIT 1), FALSE)),
+            JSONB_BUILD_OBJECT('kind', 'OTHER', 'present', COALESCE((SELECT TRUE FROM jsonb_array_elements(COALESCE(evidence_payload.evidence_json, '[]'::jsonb)) AS evidence_badge_item(item_json) WHERE UPPER(COALESCE(evidence_badge_item.item_json->>'kind', '')) = 'OTHER' LIMIT 1), FALSE), 'has_evidence', COALESCE((SELECT TRUE FROM jsonb_array_elements(COALESCE(evidence_payload.evidence_json, '[]'::jsonb)) AS evidence_badge_item(item_json) WHERE UPPER(COALESCE(evidence_badge_item.item_json->>'kind', '')) = 'OTHER' LIMIT 1), FALSE))
+          ),
           'attached_evidence_count', COALESCE(NULLIF(row_ids.row_json->>'attached_evidence_count', '')::integer, 0),
           'queue_staged_count', COALESCE(NULLIF(row_ids.row_json->>'queue_staged_count', '')::integer, 0),
           'evidence_document_locked', COALESCE((row_ids.row_json->>'evidence_document_locked')::boolean, FALSE),
@@ -3621,7 +3662,6 @@ BEGIN
   ));
 END;
 $function$;
-
 
 
 
@@ -8104,7 +8144,6 @@ BEGIN
 END;
 $function$;
 
-
 CREATE OR REPLACE FUNCTION public.bulk_timesheet_row_patch_v1(
   p_filters jsonb DEFAULT '{}'::jsonb
 )
@@ -8348,7 +8387,20 @@ BEGIN
       timesheet_row.qr_scanned_at AS timesheet_qr_scanned_at,
       contract_week_row.updated_at AS contract_week_updated_at,
       contract_week_row.uploaded_pdf_r2_key,
+      contract_week_row.planned_schedule_json AS contract_week_planned_schedule_json,
+      contract_week_row.totals_json AS contract_week_totals_json,
+      contract_week_row.is_adjustment AS contract_week_is_adjustment,
+      contract_week_row.additional_seq AS contract_week_additional_seq,
+      timesheet_row.actual_schedule_json AS timesheet_actual_schedule_json,
+      timesheet_row.is_adjustment AS timesheet_is_adjustment,
+      timesheet_row.parent_timesheet_id AS timesheet_parent_timesheet_id,
+      timesheet_row.correction_id AS timesheet_correction_id,
+      timesheet_row.correction_kind AS timesheet_correction_kind,
+      timesheet_row.adjustment_origin AS timesheet_adjustment_origin,
       financial_row.updated_at AS tsfin_updated_at,
+      financial_row.actual_schedule_json AS tsfin_actual_schedule_json,
+      financial_row.invoice_breakdown_json AS tsfin_invoice_breakdown_json,
+      financial_row.total_hours AS tsfin_total_hours,
       financial_row.authorised_at_utc AS tsfin_authorised_at_utc,
       financial_row.processed_at_utc AS tsfin_processed_at_utc,
       COALESCE(evidence_summary.attached_evidence_count, 0)::integer AS evidence_attached_count,
@@ -8369,12 +8421,18 @@ BEGIN
         OR timesheet_row.qr_generated_at IS NOT NULL
       ) AS is_qr_route,
       (
-        UPPER(COALESCE(source_rows.submission_mode::text, '')) = 'MANUAL'
+        UPPER(COALESCE(source_rows.submission_mode::text, contract_week_row.submission_mode_snapshot::text, '')) = 'MANUAL'
         AND (
-          COALESCE(source_rows.is_adjusted, FALSE) = TRUE
+          COALESCE(timesheet_row.is_adjustment, FALSE) = TRUE
+          OR COALESCE(contract_week_row.is_adjustment, FALSE) = TRUE
+          OR COALESCE(contract_week_row.additional_seq, source_rows.additional_seq, 0) > 0
           OR COALESCE(source_rows.is_adjustment, FALSE) = TRUE
-          OR COALESCE(source_rows.additional_seq, 0) > 0
-          OR UPPER(COALESCE(source_rows.basis::text, '')) IN ('NHSP_ADJUSTMENT', 'MANUAL_ADJUSTMENT')
+          OR timesheet_row.parent_timesheet_id IS NOT NULL
+        )
+        AND NOT (
+          UPPER(COALESCE(timesheet_row.adjustment_origin, '')) IN ('IMPORT_CORRECTION', 'IMPORT_CANCELLATION')
+          OR NULLIF(BTRIM(COALESCE(timesheet_row.correction_kind, '')), '') IS NOT NULL
+          OR timesheet_row.correction_id IS NOT NULL
         )
       ) AS is_manual_additional_adjustment_calc
     FROM source_rows
@@ -8737,7 +8795,145 @@ BEGIN
         'unprocessed', 0,
         'processed', 0,
         'total', 0
-      ) AS count_deltas_json
+      ) AS count_deltas_json,
+      (
+        COALESCE(signed_rows.is_manual_additional_adjustment_calc, FALSE) = TRUE
+        AND COALESCE(signed_rows.total_hours, signed_rows.tsfin_total_hours, 0::numeric) = 0::numeric
+        AND (
+          COALESCE(signed_rows.timesheet_actual_schedule_json, signed_rows.tsfin_actual_schedule_json) IS NULL
+          OR CASE
+            WHEN jsonb_typeof(COALESCE(signed_rows.timesheet_actual_schedule_json, signed_rows.tsfin_actual_schedule_json)) = 'array' THEN jsonb_array_length(COALESCE(signed_rows.timesheet_actual_schedule_json, signed_rows.tsfin_actual_schedule_json)) = 0
+            ELSE FALSE
+          END
+        )
+        AND (
+          signed_rows.contract_week_planned_schedule_json IS NULL
+          OR CASE
+            WHEN jsonb_typeof(signed_rows.contract_week_planned_schedule_json) = 'array' THEN jsonb_array_length(signed_rows.contract_week_planned_schedule_json) = 0
+            ELSE FALSE
+          END
+        )
+        AND NOT EXISTS (
+          SELECT 1
+          FROM jsonb_array_elements(
+            CASE
+              WHEN signed_rows.tsfin_invoice_breakdown_json IS NULL THEN '[]'::jsonb
+              WHEN jsonb_typeof(signed_rows.tsfin_invoice_breakdown_json) = 'array' THEN signed_rows.tsfin_invoice_breakdown_json
+              WHEN jsonb_typeof(signed_rows.tsfin_invoice_breakdown_json) = 'object'
+               AND jsonb_typeof(signed_rows.tsfin_invoice_breakdown_json->'segments') = 'array' THEN signed_rows.tsfin_invoice_breakdown_json->'segments'
+              ELSE '[]'::jsonb
+            END
+          ) AS keep_empty_segment(segment_json)
+        )
+      ) AS keep_additional_manual_adjustment_schedule_empty_calc,
+      CASE
+        WHEN (
+        COALESCE(signed_rows.is_manual_additional_adjustment_calc, FALSE) = TRUE
+        AND COALESCE(signed_rows.total_hours, signed_rows.tsfin_total_hours, 0::numeric) = 0::numeric
+        AND (
+          COALESCE(signed_rows.timesheet_actual_schedule_json, signed_rows.tsfin_actual_schedule_json) IS NULL
+          OR CASE
+            WHEN jsonb_typeof(COALESCE(signed_rows.timesheet_actual_schedule_json, signed_rows.tsfin_actual_schedule_json)) = 'array' THEN jsonb_array_length(COALESCE(signed_rows.timesheet_actual_schedule_json, signed_rows.tsfin_actual_schedule_json)) = 0
+            ELSE FALSE
+          END
+        )
+        AND (
+          signed_rows.contract_week_planned_schedule_json IS NULL
+          OR CASE
+            WHEN jsonb_typeof(signed_rows.contract_week_planned_schedule_json) = 'array' THEN jsonb_array_length(signed_rows.contract_week_planned_schedule_json) = 0
+            ELSE FALSE
+          END
+        )
+        AND NOT EXISTS (
+          SELECT 1
+          FROM jsonb_array_elements(
+            CASE
+              WHEN signed_rows.tsfin_invoice_breakdown_json IS NULL THEN '[]'::jsonb
+              WHEN jsonb_typeof(signed_rows.tsfin_invoice_breakdown_json) = 'array' THEN signed_rows.tsfin_invoice_breakdown_json
+              WHEN jsonb_typeof(signed_rows.tsfin_invoice_breakdown_json) = 'object'
+               AND jsonb_typeof(signed_rows.tsfin_invoice_breakdown_json->'segments') = 'array' THEN signed_rows.tsfin_invoice_breakdown_json->'segments'
+              ELSE '[]'::jsonb
+            END
+          ) AS keep_empty_segment(segment_json)
+        )
+      ) THEN '[]'::jsonb
+        ELSE COALESCE(signed_rows.timesheet_actual_schedule_json, signed_rows.tsfin_actual_schedule_json, '[]'::jsonb)
+      END AS actual_schedule_json_calc,
+      CASE
+        WHEN (
+        COALESCE(signed_rows.is_manual_additional_adjustment_calc, FALSE) = TRUE
+        AND COALESCE(signed_rows.total_hours, signed_rows.tsfin_total_hours, 0::numeric) = 0::numeric
+        AND (
+          COALESCE(signed_rows.timesheet_actual_schedule_json, signed_rows.tsfin_actual_schedule_json) IS NULL
+          OR CASE
+            WHEN jsonb_typeof(COALESCE(signed_rows.timesheet_actual_schedule_json, signed_rows.tsfin_actual_schedule_json)) = 'array' THEN jsonb_array_length(COALESCE(signed_rows.timesheet_actual_schedule_json, signed_rows.tsfin_actual_schedule_json)) = 0
+            ELSE FALSE
+          END
+        )
+        AND (
+          signed_rows.contract_week_planned_schedule_json IS NULL
+          OR CASE
+            WHEN jsonb_typeof(signed_rows.contract_week_planned_schedule_json) = 'array' THEN jsonb_array_length(signed_rows.contract_week_planned_schedule_json) = 0
+            ELSE FALSE
+          END
+        )
+        AND NOT EXISTS (
+          SELECT 1
+          FROM jsonb_array_elements(
+            CASE
+              WHEN signed_rows.tsfin_invoice_breakdown_json IS NULL THEN '[]'::jsonb
+              WHEN jsonb_typeof(signed_rows.tsfin_invoice_breakdown_json) = 'array' THEN signed_rows.tsfin_invoice_breakdown_json
+              WHEN jsonb_typeof(signed_rows.tsfin_invoice_breakdown_json) = 'object'
+               AND jsonb_typeof(signed_rows.tsfin_invoice_breakdown_json->'segments') = 'array' THEN signed_rows.tsfin_invoice_breakdown_json->'segments'
+              ELSE '[]'::jsonb
+            END
+          ) AS keep_empty_segment(segment_json)
+        )
+      ) THEN '[]'::jsonb
+        ELSE COALESCE(signed_rows.contract_week_planned_schedule_json, '[]'::jsonb)
+      END AS planned_schedule_json_calc,
+      CASE
+        WHEN (
+        COALESCE(signed_rows.is_manual_additional_adjustment_calc, FALSE) = TRUE
+        AND COALESCE(signed_rows.total_hours, signed_rows.tsfin_total_hours, 0::numeric) = 0::numeric
+        AND (
+          COALESCE(signed_rows.timesheet_actual_schedule_json, signed_rows.tsfin_actual_schedule_json) IS NULL
+          OR CASE
+            WHEN jsonb_typeof(COALESCE(signed_rows.timesheet_actual_schedule_json, signed_rows.tsfin_actual_schedule_json)) = 'array' THEN jsonb_array_length(COALESCE(signed_rows.timesheet_actual_schedule_json, signed_rows.tsfin_actual_schedule_json)) = 0
+            ELSE FALSE
+          END
+        )
+        AND (
+          signed_rows.contract_week_planned_schedule_json IS NULL
+          OR CASE
+            WHEN jsonb_typeof(signed_rows.contract_week_planned_schedule_json) = 'array' THEN jsonb_array_length(signed_rows.contract_week_planned_schedule_json) = 0
+            ELSE FALSE
+          END
+        )
+        AND NOT EXISTS (
+          SELECT 1
+          FROM jsonb_array_elements(
+            CASE
+              WHEN signed_rows.tsfin_invoice_breakdown_json IS NULL THEN '[]'::jsonb
+              WHEN jsonb_typeof(signed_rows.tsfin_invoice_breakdown_json) = 'array' THEN signed_rows.tsfin_invoice_breakdown_json
+              WHEN jsonb_typeof(signed_rows.tsfin_invoice_breakdown_json) = 'object'
+               AND jsonb_typeof(signed_rows.tsfin_invoice_breakdown_json->'segments') = 'array' THEN signed_rows.tsfin_invoice_breakdown_json->'segments'
+              ELSE '[]'::jsonb
+            END
+          ) AS keep_empty_segment(segment_json)
+        )
+      ) THEN 0::numeric
+        ELSE COALESCE(signed_rows.total_hours, signed_rows.tsfin_total_hours, 0::numeric)
+      END AS total_hours_calc,
+      (
+        COALESCE(signed_rows.timesheet_is_adjustment, FALSE) = TRUE
+        OR COALESCE(signed_rows.contract_week_is_adjustment, FALSE) = TRUE
+        OR COALESCE(signed_rows.contract_week_additional_seq, signed_rows.additional_seq, 0) > 0
+        OR COALESCE(signed_rows.is_adjustment, FALSE) = TRUE
+        OR signed_rows.timesheet_parent_timesheet_id IS NOT NULL
+        OR signed_rows.timesheet_correction_id IS NOT NULL
+        OR signed_rows.timesheet_correction_kind IS NOT NULL
+      ) AS effective_is_adjustment_calc
     FROM signed_rows
   )
   SELECT
@@ -8787,7 +8983,15 @@ BEGIN
         'submission_mode', payload_rows.submission_mode,
         'submission_mode_snapshot', payload_rows.submission_mode,
         'basis', payload_rows.basis,
-        'route_type', payload_rows.route_type,
+        'route_type', CASE
+          WHEN COALESCE(payload_rows.is_manual_additional_adjustment_calc, FALSE) = TRUE
+           AND (
+             UPPER(COALESCE(payload_rows.route_type, '')) IN ('WEEKLY_NHSP', 'WEEKLY_NHSP_ADJUSTMENT')
+             OR UPPER(COALESCE(payload_rows.basis::text, '')) IN ('NHSP', 'NHSP_ADJUSTMENT')
+             OR COALESCE(payload_rows.client_is_nhsp, FALSE) = TRUE
+           ) THEN 'WEEKLY_NHSP_ADJUSTMENT'
+          ELSE payload_rows.route_type
+        END,
         'route_display', CASE
           WHEN UPPER(COALESCE(payload_rows.route_type, '')) = 'NHSP' THEN 'NHSP'
           WHEN UPPER(COALESCE(payload_rows.route_type, '')) = 'HEALTHROSTER' THEN 'HealthRoster'
@@ -8801,7 +9005,16 @@ BEGIN
         'route_subfamily', payload_rows.route_subfamily_calc,
         'underlying_channel_family', payload_rows.underlying_channel_family_calc,
         'is_import_authoritative', payload_rows.route_family_calc = 'IMPORT_AUTHORITATIVE',
-        'compare_block_required', payload_rows.compare_block_required_calc
+        'compare_block_required', payload_rows.compare_block_required_calc,
+        'is_adjustment', payload_rows.effective_is_adjustment_calc,
+        'additional_seq', COALESCE(payload_rows.contract_week_additional_seq, payload_rows.additional_seq, 0),
+        'actual_schedule_json', payload_rows.actual_schedule_json_calc,
+        'planned_schedule_json', payload_rows.planned_schedule_json_calc,
+        'contract_week_totals_json', COALESCE(payload_rows.contract_week_totals_json, '{}'::jsonb),
+        'suppress_standard_schedule_fallback', payload_rows.keep_additional_manual_adjustment_schedule_empty_calc,
+        'keep_additional_manual_adjustment_schedule_empty', payload_rows.keep_additional_manual_adjustment_schedule_empty_calc,
+        '__suppressStandardScheduleFallback', payload_rows.keep_additional_manual_adjustment_schedule_empty_calc,
+        '__keepAdditionalManualAdjustmentScheduleEmpty', payload_rows.keep_additional_manual_adjustment_schedule_empty_calc
       )
       || jsonb_build_object(
         'processing_status', payload_rows.processing_status::text,
@@ -8830,7 +9043,7 @@ BEGIN
         'can_add_additional_manual', payload_rows.can_add_additional_manual_calc
       )
       || jsonb_build_object(
-        'total_hours', COALESCE(payload_rows.total_hours, 0::numeric),
+        'total_hours', COALESCE(payload_rows.total_hours_calc, 0::numeric),
         'total_pay_ex_vat', COALESCE(payload_rows.total_pay_ex_vat, 0::numeric),
         'total_charge_ex_vat', COALESCE(payload_rows.total_charge_ex_vat, 0::numeric),
         'margin_ex_vat', COALESCE(payload_rows.margin_ex_vat, 0::numeric),
@@ -8892,7 +9105,45 @@ BEGIN
           'can_edit_timesheet_data', payload_rows.can_edit_timesheet_data_calc,
           'can_manage_evidence', payload_rows.can_manage_evidence_calc,
           'can_add_additional_manual', payload_rows.can_add_additional_manual_calc,
-          'review_only', payload_rows.review_only_calc
+          'review_only', payload_rows.review_only_calc,
+          'is_adjustment', payload_rows.effective_is_adjustment_calc,
+          'additional_seq', COALESCE(payload_rows.contract_week_additional_seq, payload_rows.additional_seq, 0),
+          'supportsUnprocessedExpenseDraft', (
+            payload_rows.is_manual_additional_adjustment_calc = TRUE
+            AND payload_rows.contract_week_id IS NOT NULL
+            AND payload_rows.route_family_calc = 'MANUAL_NON_QR'
+            AND payload_rows.locked_calc = FALSE
+            AND payload_rows.is_authorised_calc = FALSE
+            AND (payload_rows.timesheet_id IS NULL OR payload_rows.is_unprocessed_calc = TRUE)
+          ),
+          'supports_unprocessed_expense_draft', (
+            payload_rows.is_manual_additional_adjustment_calc = TRUE
+            AND payload_rows.contract_week_id IS NOT NULL
+            AND payload_rows.route_family_calc = 'MANUAL_NON_QR'
+            AND payload_rows.locked_calc = FALSE
+            AND payload_rows.is_authorised_calc = FALSE
+            AND (payload_rows.timesheet_id IS NULL OR payload_rows.is_unprocessed_calc = TRUE)
+          ),
+          'expense_storage_target', CASE
+            WHEN payload_rows.is_manual_additional_adjustment_calc = TRUE
+             AND payload_rows.contract_week_id IS NOT NULL
+             AND payload_rows.route_family_calc = 'MANUAL_NON_QR'
+             AND payload_rows.locked_calc = FALSE
+             AND payload_rows.is_authorised_calc = FALSE
+             AND (payload_rows.timesheet_id IS NULL OR payload_rows.is_unprocessed_calc = TRUE) THEN 'CONTRACT_WEEK_DRAFT'
+            WHEN payload_rows.timesheet_id IS NOT NULL AND payload_rows.route_family_calc = 'MANUAL_NON_QR' THEN 'TSFIN'
+            ELSE NULL::text
+          END,
+          'expense_evidence_storage_target', CASE
+            WHEN payload_rows.is_manual_additional_adjustment_calc = TRUE
+             AND payload_rows.contract_week_id IS NOT NULL
+             AND payload_rows.route_family_calc = 'MANUAL_NON_QR'
+             AND payload_rows.locked_calc = FALSE
+             AND payload_rows.is_authorised_calc = FALSE
+             AND (payload_rows.timesheet_id IS NULL OR payload_rows.is_unprocessed_calc = TRUE) THEN 'CONTRACT_WEEK_STAGED_EVIDENCE'
+            WHEN payload_rows.timesheet_id IS NOT NULL AND payload_rows.route_family_calc = 'MANUAL_NON_QR' THEN 'TIMESHEET_EVIDENCE'
+            ELSE NULL::text
+          END
         ),
         'artifact_hints', jsonb_build_object(
           'route_family', payload_rows.route_family_calc,
@@ -8941,7 +9192,15 @@ BEGIN
             'submission_mode', payload_rows.submission_mode,
             'submission_mode_snapshot', payload_rows.submission_mode,
             'basis', payload_rows.basis,
-            'route_type', payload_rows.route_type,
+            'route_type', CASE
+              WHEN COALESCE(payload_rows.is_manual_additional_adjustment_calc, FALSE) = TRUE
+               AND (
+                 UPPER(COALESCE(payload_rows.route_type, '')) IN ('WEEKLY_NHSP', 'WEEKLY_NHSP_ADJUSTMENT')
+                 OR UPPER(COALESCE(payload_rows.basis::text, '')) IN ('NHSP', 'NHSP_ADJUSTMENT')
+                 OR COALESCE(payload_rows.client_is_nhsp, FALSE) = TRUE
+               ) THEN 'WEEKLY_NHSP_ADJUSTMENT'
+              ELSE payload_rows.route_type
+            END,
             'route_display', CASE
               WHEN UPPER(COALESCE(payload_rows.route_type, '')) = 'NHSP' THEN 'NHSP'
               WHEN UPPER(COALESCE(payload_rows.route_type, '')) = 'HEALTHROSTER' THEN 'HealthRoster'
@@ -8958,6 +9217,15 @@ BEGIN
             'underlying_channel_family', payload_rows.underlying_channel_family_calc,
             'is_import_authoritative', payload_rows.route_family_calc = 'IMPORT_AUTHORITATIVE',
             'compare_block_required', payload_rows.compare_block_required_calc,
+            'is_adjustment', payload_rows.effective_is_adjustment_calc,
+            'additional_seq', COALESCE(payload_rows.contract_week_additional_seq, payload_rows.additional_seq, 0),
+            'actual_schedule_json', payload_rows.actual_schedule_json_calc,
+            'planned_schedule_json', payload_rows.planned_schedule_json_calc,
+            'contract_week_totals_json', COALESCE(payload_rows.contract_week_totals_json, '{}'::jsonb),
+            'suppress_standard_schedule_fallback', payload_rows.keep_additional_manual_adjustment_schedule_empty_calc,
+            'keep_additional_manual_adjustment_schedule_empty', payload_rows.keep_additional_manual_adjustment_schedule_empty_calc,
+            '__suppressStandardScheduleFallback', payload_rows.keep_additional_manual_adjustment_schedule_empty_calc,
+            '__keepAdditionalManualAdjustmentScheduleEmpty', payload_rows.keep_additional_manual_adjustment_schedule_empty_calc,
             'processing_status', payload_rows.processing_status::text,
             'processing_status_display', payload_rows.processing_status_display,
             'summary_stage', CASE WHEN payload_rows.is_unprocessed_calc THEN 'UNPROCESSED' ELSE payload_rows.summary_stage END,
@@ -8986,7 +9254,7 @@ BEGIN
             'can_add_additional_manual', payload_rows.can_add_additional_manual_calc
           )
           || jsonb_build_object(
-            'total_hours', COALESCE(payload_rows.total_hours, 0::numeric),
+            'total_hours', COALESCE(payload_rows.total_hours_calc, 0::numeric),
             'total_pay_ex_vat', COALESCE(payload_rows.total_pay_ex_vat, 0::numeric),
             'total_charge_ex_vat', COALESCE(payload_rows.total_charge_ex_vat, 0::numeric),
             'margin_ex_vat', COALESCE(payload_rows.margin_ex_vat, 0::numeric),
@@ -9050,6 +9318,9 @@ BEGIN
     payload_rows.row_key_calc ASC;
 END;
 $function$;
+
+
+
 
 
 REVOKE ALL ON FUNCTION public.bulk_timesheet_row_patch_v1(jsonb) FROM PUBLIC;
