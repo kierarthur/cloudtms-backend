@@ -7347,7 +7347,6 @@ BEGIN
   );
 END;
 $function$;
-
 create or replace function public.pay_batch_freshness_scope_seed(
   p_operation_id uuid,
   p_pay_batch_id uuid,
@@ -7369,6 +7368,11 @@ declare
   v_unit_count integer := 0;
   v_scope_hash text := null;
   v_existing_scope_hash text := null;
+  v_existing_batch_scope_hash text := null;
+  v_existing_batch_freshness_status text := null;
+  v_existing_batch_freshness_result_hash text := null;
+  v_existing_batch_freshness_operation_id uuid := null;
+  v_batch_execution_boundary_crossed boolean := false;
   v_seed_result record;
   v_config_candidate text := null;
 begin
@@ -7586,6 +7590,15 @@ begin
   )::text);
 
   v_existing_scope_hash := nullif(btrim(coalesce(v_operation.progress_json->>'freshness_scope_hash', '')), '');
+  v_existing_batch_scope_hash := nullif(btrim(coalesce(v_batch.freshness_scope_hash, '')), '');
+  v_existing_batch_freshness_status := nullif(upper(btrim(coalesce(v_batch.freshness_validation_status, ''))), '');
+  v_existing_batch_freshness_result_hash := nullif(btrim(coalesce(v_batch.freshness_result_hash, '')), '');
+  v_existing_batch_freshness_operation_id := v_batch.freshness_operation_id;
+  v_batch_execution_boundary_crossed := (
+    upper(btrim(coalesce(v_batch.execution_commit_state, 'NOT_SUBMITTED'))) NOT IN ('', 'NOT_SUBMITTED', 'NOT_STARTED', 'DRAFT', 'PENDING')
+    OR upper(btrim(coalesce(v_batch.status, ''))) IN ('EXECUTING', 'EXECUTED', 'COMPLETED', 'SETTLED', 'PAID')
+    OR v_batch.execution_committed_at_utc IS NOT NULL
+  );
 
   if v_existing_scope_hash is not null and v_existing_scope_hash <> v_scope_hash then
     raise exception 'CHUNK_SCOPE_MISMATCH'
@@ -7597,6 +7610,34 @@ begin
               'existing_freshness_scope_hash', v_existing_scope_hash,
               'requested_freshness_scope_hash', v_scope_hash
             )::text;
+  end if;
+
+  if v_existing_batch_scope_hash is not null and v_existing_batch_scope_hash <> v_scope_hash then
+    if v_batch_execution_boundary_crossed then
+      raise exception 'FRESHNESS_SCOPE_CHANGED'
+        using errcode = 'P0001',
+              detail = jsonb_build_object(
+                'code', 'FRESHNESS_SCOPE_CHANGED',
+                'operation_id', p_operation_id::text,
+                'pay_batch_id', p_pay_batch_id::text,
+                'existing_freshness_scope_hash', v_existing_batch_scope_hash,
+                'requested_freshness_scope_hash', v_scope_hash,
+                'freshness_validation_status', v_existing_batch_freshness_status,
+                'freshness_result_hash', v_existing_batch_freshness_result_hash,
+                'freshness_operation_id', case when v_existing_batch_freshness_operation_id is null then null else v_existing_batch_freshness_operation_id::text end,
+                'message', 'Stored freshness scope no longer matches the frozen batch scope after the execution boundary.'
+              )::text;
+    else
+      update public.pay_batches as stale_freshness_reset
+      set freshness_operation_id = null,
+          freshness_validation_status = null,
+          freshness_checked_at_utc = null,
+          freshness_result_hash = null,
+          freshness_scope_hash = null,
+          freshness_result_json = null
+      where stale_freshness_reset.id = p_pay_batch_id
+        and nullif(btrim(coalesce(stale_freshness_reset.freshness_scope_hash, '')), '') = v_existing_batch_scope_hash;
+    end if;
   end if;
 
   select seed_result.total_units,
@@ -7627,8 +7668,17 @@ begin
 
   update public.pay_batches as pay_batch_update
   set freshness_operation_id = p_operation_id,
-      freshness_validation_status = coalesce(pay_batch_update.freshness_validation_status, 'PENDING'),
-      freshness_scope_hash = coalesce(pay_batch_update.freshness_scope_hash, v_scope_hash)
+      freshness_validation_status = 'PENDING',
+      freshness_checked_at_utc = null,
+      freshness_result_hash = null,
+      freshness_scope_hash = v_scope_hash,
+      freshness_result_json = jsonb_build_object(
+        'validation_complete', false,
+        'is_stale', false,
+        'operation_id', p_operation_id::text,
+        'freshness_scope_hash', v_scope_hash,
+        'seeded_at_utc', now()
+      )
   where pay_batch_update.id = p_pay_batch_id;
 
   return jsonb_build_object(
@@ -7643,6 +7693,8 @@ begin
   );
 end;
 $$;
+
+
 
 create or replace function public.pay_batch_validate_freshness_chunk(
   p_operation_id uuid,
