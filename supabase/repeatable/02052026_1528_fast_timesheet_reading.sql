@@ -7744,6 +7744,23 @@ BEGIN
       CASE
         WHEN sr0.sheet_scope = 'DAILY'::public.timesheet_scope_enum AND sr0.submission_mode = 'ELECTRONIC'::public.submission_mode_enum THEN 'DAILY_ELECTRONIC'
         WHEN sr0.sheet_scope = 'DAILY'::public.timesheet_scope_enum AND sr0.submission_mode = 'MANUAL'::public.submission_mode_enum THEN 'DAILY_MANUAL'
+        WHEN sr0.sheet_scope = 'WEEKLY'::public.timesheet_scope_enum
+         AND sr0.submission_mode = 'MANUAL'::public.submission_mode_enum
+         AND (
+           COALESCE(sr0.is_adjustment, FALSE) = TRUE
+           OR COALESCE(sr0.additional_seq, 0) > 0
+           OR COALESCE(sr0.pay_adjustment_count, 0) > 0
+           OR UPPER(COALESCE(sr0.basis::text, '')) IN ('NHSP_ADJUSTMENT', 'MANUAL_ADJUSTMENT')
+         )
+         AND COALESCE(sr0.client_is_nhsp, FALSE) = TRUE THEN 'WEEKLY_NHSP_ADJUSTMENT'
+        WHEN sr0.sheet_scope = 'WEEKLY'::public.timesheet_scope_enum
+         AND sr0.submission_mode = 'MANUAL'::public.submission_mode_enum
+         AND (
+           COALESCE(sr0.is_adjustment, FALSE) = TRUE
+           OR COALESCE(sr0.additional_seq, 0) > 0
+           OR COALESCE(sr0.pay_adjustment_count, 0) > 0
+           OR UPPER(COALESCE(sr0.basis::text, '')) IN ('NHSP_ADJUSTMENT', 'MANUAL_ADJUSTMENT')
+         ) THEN 'WEEKLY_MANUAL'
         WHEN sr0.sheet_scope = 'WEEKLY'::public.timesheet_scope_enum AND COALESCE(sr0.client_autoprocess_hr, FALSE) = TRUE THEN 'WEEKLY_HEALTHROSTER'
         WHEN sr0.sheet_scope = 'WEEKLY'::public.timesheet_scope_enum AND sr0.basis = 'NHSP_ADJUSTMENT'::public.timesheet_fin_basis_enum THEN 'WEEKLY_NHSP_ADJUSTMENT'
         WHEN sr0.sheet_scope = 'WEEKLY'::public.timesheet_scope_enum AND sr0.basis = 'NHSP'::public.timesheet_fin_basis_enum THEN 'WEEKLY_NHSP'
@@ -7985,6 +8002,7 @@ BEGIN
     AND (v_client_id IS NULL OR rr0.client_id = v_client_id);
 END;
 $function$;
+
 
 CREATE OR REPLACE FUNCTION public.bulk_timesheet_row_patch_v1(
   p_filters jsonb DEFAULT '{}'::jsonb
@@ -8248,7 +8266,16 @@ BEGIN
         OR source_rows.qr_status IS NOT NULL
         OR NULLIF(BTRIM(COALESCE(timesheet_row.qr_token, '')), '') IS NOT NULL
         OR timesheet_row.qr_generated_at IS NOT NULL
-      ) AS is_qr_route
+      ) AS is_qr_route,
+      (
+        UPPER(COALESCE(source_rows.submission_mode::text, '')) = 'MANUAL'
+        AND (
+          COALESCE(source_rows.is_adjusted, FALSE) = TRUE
+          OR COALESCE(source_rows.is_adjustment, FALSE) = TRUE
+          OR COALESCE(source_rows.additional_seq, 0) > 0
+          OR UPPER(COALESCE(source_rows.basis::text, '')) IN ('NHSP_ADJUSTMENT', 'MANUAL_ADJUSTMENT')
+        )
+      ) AS is_manual_additional_adjustment_calc
     FROM source_rows
     LEFT JOIN public.timesheets AS timesheet_row
       ON timesheet_row.timesheet_id = source_rows.timesheet_id
@@ -8284,6 +8311,7 @@ BEGIN
     SELECT
       enriched_rows.*,
       CASE
+        WHEN COALESCE(enriched_rows.is_manual_additional_adjustment_calc, FALSE) = TRUE THEN 'MANUAL_NON_QR'
         WHEN (
           enriched_rows.route_type_upper = 'WEEKLY_NHSP'
           OR (
@@ -8300,6 +8328,7 @@ BEGIN
         ELSE 'MANUAL_NON_QR'
       END AS route_family_calc,
       CASE
+        WHEN COALESCE(enriched_rows.is_manual_additional_adjustment_calc, FALSE) = TRUE THEN 'MANUAL_NON_QR'
         WHEN (
           enriched_rows.route_type_upper = 'WEEKLY_NHSP'
           OR (
@@ -8315,6 +8344,7 @@ BEGIN
         ELSE 'MANUAL_NON_QR'
       END AS route_subfamily_calc,
       CASE
+        WHEN COALESCE(enriched_rows.is_manual_additional_adjustment_calc, FALSE) = TRUE THEN 'MANUAL_NON_QR'
         WHEN (
           enriched_rows.route_type_upper = 'WEEKLY_NHSP'
           OR (
@@ -8919,6 +8949,7 @@ BEGIN
     payload_rows.row_key_calc ASC;
 END;
 $function$;
+
 
 REVOKE ALL ON FUNCTION public.bulk_timesheet_row_patch_v1(jsonb) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.bulk_timesheet_row_patch_v1(jsonb) TO authenticated;
