@@ -36613,19 +36613,75 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
     );
   };
 
-  const canProcessEmptyWeeklyManualDraft = ({ schedule, unitsWeekObj, unitsPerDayObj, expenseDraftObj }) => {
+  const hasPositiveNestedUnitValue = (value) => {
+    if (value == null) return false;
+    if (typeof value === 'number' || typeof value === 'string' || typeof value === 'boolean') {
+      const n = Number(value);
+      return Number.isFinite(n) && n > 0;
+    }
+    if (Array.isArray(value)) {
+      return value.some((item) => hasPositiveNestedUnitValue(item));
+    }
+    if (typeof value === 'object') {
+      return Object.values(value).some((item) => hasPositiveNestedUnitValue(item));
+    }
+    return false;
+  };
+
+  const isExplicitlyEmptyScheduleArray = (value) => {
+    if (Array.isArray(value)) return value.length === 0;
+    if (typeof value === 'string') {
+      const raw = value.trim();
+      if (!raw) return false;
+      try {
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) && parsed.length === 0;
+      } catch {
+        return false;
+      }
+    }
+    return false;
+  };
+
+  const hasZeroContractWeekHours = (totalsObj) => {
+    const totals = (totalsObj && typeof totalsObj === 'object') ? totalsObj : {};
+    const hoursObj = (totals.hours && typeof totals.hours === 'object' && !Array.isArray(totals.hours)) ? totals.hours : null;
+    if (!hoursObj) return false;
+    return (
+      Number(hoursObj.day || 0) === 0 &&
+      Number(hoursObj.night || 0) === 0 &&
+      Number(hoursObj.sat || 0) === 0 &&
+      Number(hoursObj.sun || 0) === 0 &&
+      Number(hoursObj.bh || 0) === 0
+    );
+  };
+
+  const isConfirmedAdditionalManualAdjustmentWeek = ({ contractWeekObj, totalsObj }) => {
+    const week = (contractWeekObj && typeof contractWeekObj === 'object') ? contractWeekObj : {};
+    const totals = (totalsObj && typeof totalsObj === 'object') ? totalsObj : {};
+    const additionalSeq = Number(week.additional_seq || 0);
+    const submissionMode = String(week.submission_mode_snapshot || '').trim().toUpperCase();
+    const plannedScheduleExplicitlyEmpty = isExplicitlyEmptyScheduleArray(week.planned_schedule_json);
+
+    return !!(
+      additionalSeq > 0 &&
+      submissionMode === 'MANUAL' &&
+      plannedScheduleExplicitlyEmpty &&
+      hasZeroContractWeekHours(totals)
+    );
+  };
+
+  const canProcessEmptyWeeklyManualDraft = ({ schedule, unitsWeekObj, unitsPerDayObj, expenseDraftObj, contractWeekObj, totalsObj }) => {
     const segCount = Array.isArray(schedule) ? schedule.length : 0;
     if (segCount > 0) return true;
 
-    const weekHasUnits = Object.values(unitsWeekObj || {}).some(v => Number(v || 0) > 0);
-    const perDayHasUnits = Object.values(unitsPerDayObj || {}).some(per =>
-      per && typeof per === 'object' && Object.values(per).some(v => Number(v || 0) > 0)
-    );
-
+    const weekHasUnits = hasPositiveNestedUnitValue(unitsWeekObj || {});
+    const perDayHasUnits = hasPositiveNestedUnitValue(unitsPerDayObj || {});
     const hasAnyUnits = weekHasUnits || perDayHasUnits;
     const hasAnyExpenseClaims = hasPositiveExpenseDraftClaims(expenseDraftObj);
+    const isAdditionalManualAdjustmentWeek = isConfirmedAdditionalManualAdjustmentWeek({ contractWeekObj, totalsObj });
 
-    return hasAnyUnits && !hasAnyExpenseClaims;
+    return !!(isAdditionalManualAdjustmentWeek && (hasAnyUnits || hasAnyExpenseClaims));
   };
 
   const buildStagedTimesheetEvidenceError = (code, message) => {
@@ -37254,18 +37310,29 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
       schedule: actual_schedule_json,
       unitsWeekObj: unitsWeek,
       unitsPerDayObj: unitsPerDay,
-      expenseDraftObj: expensesDraft
+      expenseDraftObj: expensesDraft,
+      contractWeekObj: cw,
+      totalsObj: existingWeekTotalsForDraft
     });
 
     if (!allowEmptyCreate) {
       wlog('bad_request_empty_schedule_for_create', {
-        allow_empty_create: false
+        allow_empty_create: false,
+        additional_seq: cw?.additional_seq ?? null,
+        submission_mode_snapshot: cw?.submission_mode_snapshot || null,
+        planned_schedule_explicitly_empty: isExplicitlyEmptyScheduleArray(cw?.planned_schedule_json),
+        contract_week_hours_zero: hasZeroContractWeekHours(existingWeekTotalsForDraft),
+        has_expense_claims: hasPositiveExpenseDraftClaims(expensesDraft),
+        has_additional_units: hasPositiveNestedUnitValue(unitsWeek || {}) || hasPositiveNestedUnitValue(unitsPerDay || {})
       });
-      return withCORS(env, req, badRequest('Cannot create a timesheet with an empty schedule unless this is an additional-units-only weekly record.'));
+      return withCORS(env, req, badRequest('Cannot create a timesheet with an empty schedule unless this is an additional manual adjustment row with expense claims or additional units.'));
     }
 
-    wlog('allow_empty_schedule_additional_units_only_create', {
-      allow_empty_create: true
+    wlog('allow_empty_schedule_additional_manual_adjustment_create', {
+      allow_empty_create: true,
+      additional_seq: cw?.additional_seq ?? null,
+      has_expense_claims: hasPositiveExpenseDraftClaims(expensesDraft),
+      has_additional_units: hasPositiveNestedUnitValue(unitsWeek || {}) || hasPositiveNestedUnitValue(unitsPerDay || {})
     });
   }
 
@@ -38923,6 +38990,7 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
   }));
 }
 
+ 
 
 
 function formatCloudTmsLondonDate(value) {
