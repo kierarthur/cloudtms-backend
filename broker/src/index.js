@@ -40237,6 +40237,7 @@ async function handleManualTimesheetQueueDelete(env, req, queueId) {
   }
 }
 
+
 async function handleManualTimesheetQueueStageToContractWeek(env, req, queueId) {
   const enc = encodeURIComponent;
 
@@ -40278,25 +40279,18 @@ async function handleManualTimesheetQueueStageToContractWeek(env, req, queueId) 
 
   const now = nowIso();
 
-  const contractWeek = await sbGetOne(
-    env,
-    `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
-      `?id=eq.${enc(contractWeekId)}` +
-      `&select=id,contract_id,week_ending_date,status,submission_mode_snapshot,timesheet_id,uploaded_pdf_r2_key`
-  );
-  if (!contractWeek) {
-    return withCORS(env, req, notFound('Contract week not found'));
+  const evidenceEligibility = await resolveContractWeekDraftEvidenceEligibility(env, contractWeekId, {
+    action: 'stage',
+    queue_id: queueId,
+    kind: requestedKind
+  });
+  if (!evidenceEligibility.ok) {
+    if (evidenceEligibility.reason === 'NOT_FOUND') {
+      return withCORS(env, req, notFound(evidenceEligibility.message || 'Contract week not found'));
+    }
+    return withCORS(env, req, badRequest(evidenceEligibility.message || 'Evidence cannot be uploaded for this row because it does not have a supported expenses draft target.'));
   }
-
-  if (contractWeek.timesheet_id) {
-    return withCORS(env, req, badRequest('Cannot stage evidence to a contract week that already has a real timesheet'));
-  }
-
-  const mode = String(contractWeek.submission_mode_snapshot || '').trim().toUpperCase();
-  if (mode !== 'MANUAL') {
-    return withCORS(env, req, badRequest('Only MANUAL contract weeks support staged evidence'));
-  }
-
+  const contractWeek = evidenceEligibility.contractWeek;
   const { rows: qRows } = await sbFetch(
     env,
     `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue` +
@@ -40475,7 +40469,7 @@ async function handleManualTimesheetQueueStageToContractWeek(env, req, queueId) 
     `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(contractWeekId)}`,
     {
       method: 'PATCH',
-      headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+      headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
       body: JSON.stringify({
         uploaded_pdf_r2_key: uploadedPdfKey,
         updated_at: now
@@ -40507,6 +40501,10 @@ async function handleManualTimesheetQueueStageToContractWeek(env, req, queueId) 
     uploaded_pdf_r2_key: uploadedPdfKey
   }));
 }
+
+
+
+
 async function handleContractWeekStagedEvidenceList(env, req, weekId) {
   const enc = encodeURIComponent;
 
@@ -40526,24 +40524,14 @@ async function handleContractWeekStagedEvidenceList(env, req, weekId) {
     return u;
   };
 
-  const contractWeek = await sbGetOne(
-    env,
-    `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
-      `?id=eq.${enc(weekId)}` +
-      `&select=id,submission_mode_snapshot,timesheet_id,uploaded_pdf_r2_key`
-  );
-  if (!contractWeek) {
-    return withCORS(env, req, notFound('Contract week not found'));
+  const evidenceEligibility = await resolveContractWeekDraftEvidenceEligibility(env, weekId, { action: 'list' });
+  if (!evidenceEligibility.ok) {
+    if (evidenceEligibility.reason === 'NOT_FOUND') {
+      return withCORS(env, req, notFound(evidenceEligibility.message || 'Contract week not found'));
+    }
+    return withCORS(env, req, badRequest(evidenceEligibility.message || 'Evidence cannot be uploaded for this row because it does not have a supported expenses draft target.'));
   }
-
-  const mode = String(contractWeek.submission_mode_snapshot || '').trim().toUpperCase();
-  if (mode !== 'MANUAL') {
-    return withCORS(env, req, badRequest('Only MANUAL contract weeks support staged evidence'));
-  }
-
-  if (contractWeek.timesheet_id) {
-    return withCORS(env, req, badRequest('This contract week already has a real timesheet; use the real evidence list instead'));
-  }
+  const contractWeek = evidenceEligibility.contractWeek;
 
   const { rows } = await sbFetch(
     env,
@@ -40599,6 +40587,9 @@ async function handleContractWeekStagedEvidenceList(env, req, weekId) {
     items
   }));
 }
+
+
+
 async function handleContractWeekStagedEvidenceUpdateKind(env, req, weekId, queueId) {
   const enc = encodeURIComponent;
 
@@ -40635,24 +40626,18 @@ async function handleContractWeekStagedEvidenceUpdateKind(env, req, weekId, queu
     return withCORS(env, req, badRequest('Invalid staged evidence kind'));
   }
 
-  const contractWeek = await sbGetOne(
-    env,
-    `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
-      `?id=eq.${enc(weekId)}` +
-      `&select=id,submission_mode_snapshot,timesheet_id,uploaded_pdf_r2_key`
-  );
-  if (!contractWeek) {
-    return withCORS(env, req, notFound('Contract week not found'));
+  const evidenceEligibility = await resolveContractWeekDraftEvidenceEligibility(env, weekId, {
+    action: 'update_kind',
+    queue_id: queueId,
+    kind: requestedKind
+  });
+  if (!evidenceEligibility.ok) {
+    if (evidenceEligibility.reason === 'NOT_FOUND') {
+      return withCORS(env, req, notFound(evidenceEligibility.message || 'Contract week not found'));
+    }
+    return withCORS(env, req, badRequest(evidenceEligibility.message || 'Evidence cannot be uploaded for this row because it does not have a supported expenses draft target.'));
   }
-
-  const mode = String(contractWeek.submission_mode_snapshot || '').trim().toUpperCase();
-  if (mode !== 'MANUAL') {
-    return withCORS(env, req, badRequest('Only MANUAL contract weeks support staged evidence'));
-  }
-
-  if (contractWeek.timesheet_id) {
-    return withCORS(env, req, badRequest('This contract week already has a real timesheet; staged kind updates are not allowed'));
-  }
+  const contractWeek = evidenceEligibility.contractWeek;
 
   const { rows: qRows } = await sbFetch(
     env,
@@ -40834,24 +40819,17 @@ async function handleContractWeekStagedEvidenceReturnToQueue(env, req, weekId, q
 
   const now = nowIso();
 
-  const contractWeek = await sbGetOne(
-    env,
-    `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
-      `?id=eq.${enc(weekId)}` +
-      `&select=id,submission_mode_snapshot,timesheet_id,uploaded_pdf_r2_key`
-  );
-  if (!contractWeek) {
-    return withCORS(env, req, notFound('Contract week not found'));
+  const evidenceEligibility = await resolveContractWeekDraftEvidenceEligibility(env, weekId, {
+    action: 'return_to_queue',
+    queue_id: queueId
+  });
+  if (!evidenceEligibility.ok) {
+    if (evidenceEligibility.reason === 'NOT_FOUND') {
+      return withCORS(env, req, notFound(evidenceEligibility.message || 'Contract week not found'));
+    }
+    return withCORS(env, req, badRequest(evidenceEligibility.message || 'Evidence cannot be uploaded for this row because it does not have a supported expenses draft target.'));
   }
-
-  const mode = String(contractWeek.submission_mode_snapshot || '').trim().toUpperCase();
-  if (mode !== 'MANUAL') {
-    return withCORS(env, req, badRequest('Only MANUAL contract weeks support staged evidence'));
-  }
-
-  if (contractWeek.timesheet_id) {
-    return withCORS(env, req, badRequest('This contract week already has a real timesheet; staged return-to-queue is not allowed'));
-  }
+  const contractWeek = evidenceEligibility.contractWeek;
 
   const { rows: qRows } = await sbFetch(
     env,
@@ -40948,6 +40926,9 @@ async function handleContractWeekStagedEvidenceReturnToQueue(env, req, weekId, q
   }));
 }
 
+
+
+
 async function handleContractWeekStagedEvidenceDelete(env, req, weekId, queueId) {
   const enc = encodeURIComponent;
 
@@ -40974,24 +40955,17 @@ async function handleContractWeekStagedEvidenceDelete(env, req, weekId, queueId)
 
   const now = nowIso();
 
-  const contractWeek = await sbGetOne(
-    env,
-    `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
-      `?id=eq.${enc(weekId)}` +
-      `&select=id,submission_mode_snapshot,timesheet_id,uploaded_pdf_r2_key`
-  );
-  if (!contractWeek) {
-    return withCORS(env, req, notFound('Contract week not found'));
+  const evidenceEligibility = await resolveContractWeekDraftEvidenceEligibility(env, weekId, {
+    action: 'delete',
+    queue_id: queueId
+  });
+  if (!evidenceEligibility.ok) {
+    if (evidenceEligibility.reason === 'NOT_FOUND') {
+      return withCORS(env, req, notFound(evidenceEligibility.message || 'Contract week not found'));
+    }
+    return withCORS(env, req, badRequest(evidenceEligibility.message || 'Evidence cannot be uploaded for this row because it does not have a supported expenses draft target.'));
   }
-
-  const mode = String(contractWeek.submission_mode_snapshot || '').trim().toUpperCase();
-  if (mode !== 'MANUAL') {
-    return withCORS(env, req, badRequest('Only MANUAL contract weeks support staged evidence'));
-  }
-
-  if (contractWeek.timesheet_id) {
-    return withCORS(env, req, badRequest('This contract week already has a real timesheet; staged delete is not allowed'));
-  }
+  const contractWeek = evidenceEligibility.contractWeek;
 
   const { rows: qRows } = await sbFetch(
     env,
@@ -41097,6 +41071,8 @@ async function handleContractWeekStagedEvidenceDelete(env, req, weekId, queueId)
     uploaded_pdf_r2_key: shouldClearUploadedPdf ? null : (contractWeek.uploaded_pdf_r2_key || null)
   }));
 }
+
+
 // BE FIX: require expected_timesheet_id + resolve to CURRENT; strict 409 payload; patch queue + timesheet using CURRENT id only
 
 async function handleManualTimesheetQueueAttach(env, req, queueId) {
@@ -49816,7 +49792,6 @@ async function handleTimesheetsSummary(env, req) {
 }
 
 
-
 async function handleBulkProcessDataset(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -49856,6 +49831,56 @@ async function handleBulkProcessDataset(env, req) {
     }
     return null;
   };
+
+  const collectBodyValues = (...keys) => {
+    const out = [];
+    for (const key of keys) {
+      if (Object.prototype.hasOwnProperty.call(body, key)) out.push(body[key]);
+      if (Object.prototype.hasOwnProperty.call(bodyFilters, key)) out.push(bodyFilters[key]);
+      if (Object.prototype.hasOwnProperty.call(bodyPFilters, key)) out.push(bodyPFilters[key]);
+    }
+    return out;
+  };
+
+  const collectQueryValues = (...keys) => {
+    const out = [];
+    for (const key of keys) {
+      const values = urlObj.searchParams.getAll(key);
+      if (values && values.length) out.push(...values);
+    }
+    return out;
+  };
+
+  const normalizeTextArray = (...values) => {
+    const out = [];
+    const addOne = (value) => {
+      if (value == null) return;
+      if (Array.isArray(value)) {
+        value.forEach(addOne);
+        return;
+      }
+      if (value instanceof Set) {
+        Array.from(value.values()).forEach(addOne);
+        return;
+      }
+      if (typeof value === 'string') {
+        value.split(',').forEach((part) => {
+          const s = String(part == null ? '' : part).trim();
+          if (s && !out.includes(s)) out.push(s);
+        });
+        return;
+      }
+      const s = String(value == null ? '' : value).trim();
+      if (s && !out.includes(s)) out.push(s);
+    };
+    values.forEach(addOne);
+    return out;
+  };
+
+  const identityValues = (...keys) => normalizeTextArray(
+    collectQueryValues(...keys),
+    collectBodyValues(...keys)
+  );
 
   const param = (...keys) => {
     for (const key of keys) {
@@ -49910,10 +49935,28 @@ async function handleBulkProcessDataset(env, req) {
   const startedAt = Date.now();
   const debugRequested = boolParam(param('debug') || param('debug_performance') || param('debugPerformance'), false);
 
+  const rowKeyValues = identityValues('row_key', 'rowKey', 'focus_row_key', 'focusRowKey', 'active_row_key', 'activeRowKey');
+  const rowKeys = normalizeTextArray(
+    rowKeyValues,
+    identityValues('row_keys', 'rowKeys', 'selected_row_keys', 'selectedRowKeys')
+  );
+  const previousRowKeyValues = identityValues('previous_row_key', 'previousRowKey', 'source_row_key', 'sourceRowKey', 'original_row_key', 'originalRowKey');
+  const timesheetIdValues = identityValues('timesheet_id', 'timesheetId');
+  const timesheetIds = normalizeTextArray(timesheetIdValues, identityValues('timesheet_ids', 'timesheetIds'));
+  const contractWeekIdValues = identityValues('contract_week_id', 'contractWeekId');
+  const contractWeekIds = normalizeTextArray(contractWeekIdValues, identityValues('contract_week_ids', 'contractWeekIds'));
+
   const filters = {
     q: normalizeNullableText(param('q') || param('candidate_text') || param('candidateText') || param('name')),
     candidate_id: normalizeNullableText(param('candidate_id') || param('candidateId')),
     client_id: normalizeNullableText(param('client_id') || param('clientId')),
+    row_key: rowKeyValues[0] || rowKeys[0] || null,
+    row_keys: rowKeys,
+    previous_row_key: previousRowKeyValues[0] || null,
+    timesheet_id: timesheetIdValues[0] || timesheetIds[0] || null,
+    timesheet_ids: timesheetIds,
+    contract_week_id: contractWeekIdValues[0] || contractWeekIds[0] || null,
+    contract_week_ids: contractWeekIds,
     date_from: normalizeNullableText(param('date_from') || param('dateFrom') || param('from_date') || param('fromDate')),
     date_to: normalizeNullableText(param('date_to') || param('dateTo') || param('to_date') || param('toDate')),
     week_ending_from: normalizeNullableText(param('week_ending_from') || param('weekEndingFrom')),
@@ -49930,6 +49973,10 @@ async function handleBulkProcessDataset(env, req) {
   };
 
   for (const key of Object.keys(filters)) {
+    if (Array.isArray(filters[key]) && filters[key].length === 0) {
+      delete filters[key];
+      continue;
+    }
     if (filters[key] == null || filters[key] === '') delete filters[key];
   }
 
@@ -49990,7 +50037,6 @@ async function handleBulkProcessDataset(env, req) {
     return withCORS(env, req, serverError(String(e?.message || e || 'Failed to load bulk process dataset')));
   }
 }
-
 
 function buildBulkAuthoriseEligibility(row, fin, summaryBase, validation, family) {
   const upper = (v) => String(v == null ? '' : v).trim().toUpperCase();
@@ -104949,6 +104995,150 @@ async function handleInvoiceBatchGenerateCandidates(env, req) {
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
 }
+
+
+async function resolveContractWeekDraftEvidenceEligibility(env, weekId, options = {}) {
+  const enc = encodeURIComponent;
+  const id = String(weekId || '').trim();
+  const opts = (options && typeof options === 'object') ? options : {};
+
+  const resultBase = {
+    ok: false,
+    contractWeek: null,
+    mode: '',
+    hasRealTimesheet: false,
+    isCancelled: false,
+    isProtectedOriginalSource: false,
+    isAdditionalManualAdjustment: false,
+    reason: '',
+    message: ''
+  };
+
+  if (!id) {
+    return {
+      ...resultBase,
+      reason: 'MISSING_CONTRACT_WEEK_ID',
+      message: 'Evidence cannot be uploaded for this row because it does not have a supported expenses draft target.'
+    };
+  }
+
+  const contractWeek = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+      `?id=eq.${enc(id)}` +
+      `&select=id,contract_id,week_ending_date,status,submission_mode_snapshot,timesheet_id,uploaded_pdf_r2_key,additional_seq,is_adjustment,totals_json`
+  );
+
+  if (!contractWeek) {
+    return {
+      ...resultBase,
+      reason: 'NOT_FOUND',
+      message: 'Contract week not found'
+    };
+  }
+
+  const mode = String(contractWeek.submission_mode_snapshot || '').trim().toUpperCase();
+  const status = String(contractWeek.status || '').trim().toUpperCase();
+  const hasRealTimesheet = !!contractWeek.timesheet_id;
+  const isCancelled = status === 'CANCELLED' || status === 'CANCELED';
+  const isLockedStatus = status === 'AUTHORISED' || status === 'AUTHORIZED' || status === 'INVOICED' || status === 'PAID' || status === 'LOCKED';
+  const additionalSeq = Number(contractWeek.additional_seq || 0);
+  const isAdditionalManualAdjustment = !!(contractWeek.is_adjustment === true || additionalSeq > 0);
+
+  let contract = null;
+  if (contractWeek.contract_id) {
+    contract = await sbGetOne(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/contracts` +
+        `?id=eq.${enc(contractWeek.contract_id)}` +
+        `&select=id,client_id,is_nhsp,autoprocess_hr,no_timesheet_required,weekly_timesheet_source,self_bill`
+    ).catch(() => null);
+  }
+
+  const weeklySource = String(contract?.weekly_timesheet_source || '').trim().toUpperCase();
+  const isProtectedOriginalSource = !!(
+    !isAdditionalManualAdjustment &&
+    (
+      contract?.is_nhsp === true ||
+      contract?.autoprocess_hr === true ||
+      contract?.no_timesheet_required === true ||
+      weeklySource === 'NHSP' ||
+      weeklySource === 'HEALTHROSTER' ||
+      weeklySource === 'HEALTHROSTER_DAILY'
+    )
+  );
+
+  const allowedMode = !mode || mode === 'MANUAL' || mode === 'ELECTRONIC' || mode === 'QR';
+
+  if (hasRealTimesheet) {
+    return {
+      ...resultBase,
+      contractWeek,
+      mode,
+      hasRealTimesheet,
+      isCancelled,
+      isProtectedOriginalSource,
+      isAdditionalManualAdjustment,
+      reason: 'HAS_REAL_TIMESHEET',
+      message: 'This week already has a timesheet; use the timesheet evidence path.'
+    };
+  }
+
+  if (isCancelled || isLockedStatus) {
+    return {
+      ...resultBase,
+      contractWeek,
+      mode,
+      hasRealTimesheet,
+      isCancelled,
+      isProtectedOriginalSource,
+      isAdditionalManualAdjustment,
+      reason: isCancelled ? 'CANCELLED' : 'LOCKED',
+      message: 'Evidence cannot be uploaded for this row because it does not have a supported expenses draft target.'
+    };
+  }
+
+  if (isProtectedOriginalSource) {
+    return {
+      ...resultBase,
+      contractWeek,
+      mode,
+      hasRealTimesheet,
+      isCancelled,
+      isProtectedOriginalSource,
+      isAdditionalManualAdjustment,
+      reason: 'PROTECTED_ORIGINAL_SOURCE',
+      message: 'Evidence cannot be uploaded directly for this source row. Use Add Additional Manual if expenses need to be claimed.'
+    };
+  }
+
+  if (!allowedMode) {
+    return {
+      ...resultBase,
+      contractWeek,
+      mode,
+      hasRealTimesheet,
+      isCancelled,
+      isProtectedOriginalSource,
+      isAdditionalManualAdjustment,
+      reason: 'UNSUPPORTED_MODE',
+      message: 'Evidence cannot be uploaded for this row because it does not have a supported expenses draft target.'
+    };
+  }
+
+  return {
+    ok: true,
+    contractWeek,
+    mode,
+    hasRealTimesheet,
+    isCancelled,
+    isProtectedOriginalSource,
+    isAdditionalManualAdjustment,
+    reason: '',
+    message: ''
+  };
+}
+
 
 async function handleInvoiceBatchGenerateConfirm(env, req) {
   const user = await requireUser(env, req, ['admin']);
