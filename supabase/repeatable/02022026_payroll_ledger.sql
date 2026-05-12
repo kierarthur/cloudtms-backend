@@ -1345,8 +1345,6 @@ end;
 $$;
 
 
-
-
 create or replace function public.pay_set_paye_net_from_sage(
   p_pay_batch_id uuid,
   p_csv_raw text,
@@ -1385,6 +1383,10 @@ declare
 
   v_batch record;
   v_week_start date;
+  v_batch_status_upper text := null;
+  v_execution_commit_state text := 'NOT_SUBMITTED';
+  v_execution_commit_ref text := null;
+  v_execution_committed_at_utc timestamptz := null;
 
   v_fresh jsonb := null;
   v_is_stale boolean := false;
@@ -1412,8 +1414,13 @@ begin
 
   select
     pb.id,
+    pb.status,
     pb.pay_date,
-    pb.batch_kind_fixed
+    pb.batch_kind_fixed,
+    pb.cancelled_at_utc,
+    pb.execution_commit_state,
+    pb.execution_commit_ref,
+    pb.execution_committed_at_utc
   into v_batch
   from public.pay_batches pb
   where pb.id = p_pay_batch_id
@@ -1433,7 +1440,37 @@ begin
 
   v_week_start := public._pay_week_start_monday(v_batch.pay_date);
 
-  v_fresh := public.pay_batch_validate_freshness(p_pay_batch_id, p_actor_user_id);
+  v_batch_status_upper := upper(btrim(coalesce(v_batch.status, '')));
+  v_execution_commit_state := upper(btrim(coalesce(v_batch.execution_commit_state, 'NOT_SUBMITTED')));
+  if v_execution_commit_state not in ('NOT_SUBMITTED', 'SUBMITTED_NOT_COMMITTED', 'COMMITTED') then
+    v_execution_commit_state := 'NOT_SUBMITTED';
+  end if;
+  v_execution_commit_ref := nullif(btrim(coalesce(v_batch.execution_commit_ref, '')), '');
+  v_execution_committed_at_utc := v_batch.execution_committed_at_utc;
+
+  if v_batch.cancelled_at_utc is not null
+     or v_batch_status_upper in ('CANCELLED', 'CANCELED', 'SCHEDULED', 'SUBMITTED', 'SUBMITTED_NOT_COMMITTED', 'COMMITTED', 'EXECUTED', 'PAID', 'SETTLED')
+     or v_execution_commit_state <> 'NOT_SUBMITTED'
+     or v_execution_commit_ref is not null
+     or v_execution_committed_at_utc is not null then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_SET_PAYE_NET_SAGE',
+      'code', 'PAYE_NET_MUTATION_BLOCKED_BY_LIFECYCLE',
+      'message', 'pay_set_paye_net_from_sage: PAYE net cannot be changed after the payment batch has crossed the execution/cancellation lifecycle boundary',
+      'pay_batch_id', p_pay_batch_id::text,
+      'status', v_batch.status,
+      'cancelled_at_utc', case when v_batch.cancelled_at_utc is null then null else v_batch.cancelled_at_utc::text end,
+      'execution_commit_state', v_execution_commit_state,
+      'execution_commit_ref', v_execution_commit_ref,
+      'execution_committed_at_utc', case when v_execution_committed_at_utc is null then null else v_execution_committed_at_utc::text end
+    )::text;
+  end if;
+
+  v_fresh := public.pay_batch_validate_freshness(
+    p_pay_batch_id => p_pay_batch_id,
+    p_actor_user_id => p_actor_user_id,
+    p_allow_large_full_scan => false
+  );
   v_is_stale := coalesce((v_fresh->>'is_stale')::boolean, false);
   v_stale_reasons := coalesce(v_fresh->'stale_reasons', '[]'::jsonb);
 
@@ -1448,8 +1485,8 @@ begin
 
     raise exception '%', jsonb_build_object(
       'error', 'PAY_SET_PAYE_NET_SAGE',
-      'code', 'BATCH_STALE',
-      'message', 'pay_set_paye_net_from_sage: batch is stale; regenerate draft before importing PAYE net',
+      'code', case when coalesce((v_fresh->>'requires_chunked_freshness')::boolean, false) then 'FRESHNESS_REQUIRES_CHUNKED_VALIDATION' else 'BATCH_STALE' end,
+      'message', case when coalesce((v_fresh->>'requires_chunked_freshness')::boolean, false) then 'pay_set_paye_net_from_sage: chunked freshness validation is required before changing PAYE net' else 'pay_set_paye_net_from_sage: batch is stale; regenerate draft before importing PAYE net' end,
       'pay_batch_id', p_pay_batch_id::text,
       'stale_reasons', v_stale_reasons,
       'diff', v_diff_sample
@@ -2343,6 +2380,10 @@ declare
 
   v_batch record;
   v_week_start date;
+  v_batch_status_upper text := null;
+  v_execution_commit_state text := 'NOT_SUBMITTED';
+  v_execution_commit_ref text := null;
+  v_execution_committed_at_utc timestamptz := null;
 
   v_fresh jsonb := null;
   v_is_stale boolean := false;
@@ -2379,8 +2420,13 @@ begin
 
   select
     pb.id,
+    pb.status,
     pb.pay_date,
-    pb.batch_kind_fixed
+    pb.batch_kind_fixed,
+    pb.cancelled_at_utc,
+    pb.execution_commit_state,
+    pb.execution_commit_ref,
+    pb.execution_committed_at_utc
   into v_batch
   from public.pay_batches pb
   where pb.id = p_pay_batch_id
@@ -2400,7 +2446,37 @@ begin
 
   v_week_start := public._pay_week_start_monday(v_batch.pay_date);
 
-  v_fresh := public.pay_batch_validate_freshness(p_pay_batch_id, p_actor_user_id);
+  v_batch_status_upper := upper(btrim(coalesce(v_batch.status, '')));
+  v_execution_commit_state := upper(btrim(coalesce(v_batch.execution_commit_state, 'NOT_SUBMITTED')));
+  if v_execution_commit_state not in ('NOT_SUBMITTED', 'SUBMITTED_NOT_COMMITTED', 'COMMITTED') then
+    v_execution_commit_state := 'NOT_SUBMITTED';
+  end if;
+  v_execution_commit_ref := nullif(btrim(coalesce(v_batch.execution_commit_ref, '')), '');
+  v_execution_committed_at_utc := v_batch.execution_committed_at_utc;
+
+  if v_batch.cancelled_at_utc is not null
+     or v_batch_status_upper in ('CANCELLED', 'CANCELED', 'SCHEDULED', 'SUBMITTED', 'SUBMITTED_NOT_COMMITTED', 'COMMITTED', 'EXECUTED', 'PAID', 'SETTLED')
+     or v_execution_commit_state <> 'NOT_SUBMITTED'
+     or v_execution_commit_ref is not null
+     or v_execution_committed_at_utc is not null then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_SET_PAYE_NET_MANUAL',
+      'code', 'PAYE_NET_MUTATION_BLOCKED_BY_LIFECYCLE',
+      'message', 'pay_set_paye_net_manual: PAYE net cannot be changed after the payment batch has crossed the execution/cancellation lifecycle boundary',
+      'pay_batch_id', p_pay_batch_id::text,
+      'status', v_batch.status,
+      'cancelled_at_utc', case when v_batch.cancelled_at_utc is null then null else v_batch.cancelled_at_utc::text end,
+      'execution_commit_state', v_execution_commit_state,
+      'execution_commit_ref', v_execution_commit_ref,
+      'execution_committed_at_utc', case when v_execution_committed_at_utc is null then null else v_execution_committed_at_utc::text end
+    )::text;
+  end if;
+
+  v_fresh := public.pay_batch_validate_freshness(
+    p_pay_batch_id => p_pay_batch_id,
+    p_actor_user_id => p_actor_user_id,
+    p_allow_large_full_scan => false
+  );
   v_is_stale := coalesce((v_fresh->>'is_stale')::boolean, false);
   v_stale_reasons := coalesce(v_fresh->'stale_reasons', '[]'::jsonb);
 
@@ -2415,8 +2491,8 @@ begin
 
     raise exception '%', jsonb_build_object(
       'error', 'PAY_SET_PAYE_NET_MANUAL',
-      'code', 'BATCH_STALE',
-      'message', 'pay_set_paye_net_manual: batch is stale; regenerate draft before setting PAYE net',
+      'code', case when coalesce((v_fresh->>'requires_chunked_freshness')::boolean, false) then 'FRESHNESS_REQUIRES_CHUNKED_VALIDATION' else 'BATCH_STALE' end,
+      'message', case when coalesce((v_fresh->>'requires_chunked_freshness')::boolean, false) then 'pay_set_paye_net_manual: chunked freshness validation is required before changing PAYE net' else 'pay_set_paye_net_manual: batch is stale; regenerate draft before setting PAYE net' end,
       'pay_batch_id', p_pay_batch_id::text,
       'stale_reasons', v_stale_reasons,
       'diff', v_diff_sample
