@@ -7222,6 +7222,8 @@ DROP FUNCTION IF EXISTS public.pay_settle_rail(uuid, jsonb, uuid, uuid, jsonb);
 
 
 
+
+
 create or replace function public.pay_settle_rail(
   p_pay_batch_id uuid,
   p_settlement_json jsonb,
@@ -7481,7 +7483,36 @@ begin
       NULLIF(BTRIM(COALESCE(update_element.value->>'rail_tx_id', '')), ''),
       NULLIF(BTRIM(COALESCE(update_element.value->>'rail_state', update_element.value->>'provider_state', '')), ''),
       CASE WHEN update_element.value ? 'rail_meta_json' THEN update_element.value->'rail_meta_json' ELSE '{}'::jsonb END,
-      NULLIF(BTRIM(COALESCE(update_element.value->>'provider_reference', update_element.value->>'provider_submission_id', update_element.value->>'provider_transfer_id', update_element.value->>'provider_payment_id', update_element.value->>'rail_tx_id', '')), ''),
+      NULLIF(BTRIM(COALESCE(
+        update_element.value->>'provider_reference',
+        update_element.value->>'provider_event_id',
+        update_element.value->>'provider_submission_id',
+        update_element.value->>'submission_id',
+        update_element.value->>'rail_submission_id',
+        update_element.value->>'provider_transfer_id',
+        update_element.value->>'provider_payment_id',
+        update_element.value->>'payment_id',
+        update_element.value->>'external_payment_id',
+        update_element.value->>'revolut_payment_id',
+        update_element.value->>'external_transfer_id',
+        update_element.value->>'provider_transaction_id',
+        update_element.value->>'transaction_id',
+        update_element.value #>> '{rail_meta_json,provider_reference}',
+        update_element.value #>> '{rail_meta_json,provider_event_id}',
+        update_element.value #>> '{rail_meta_json,provider_submission_id}',
+        update_element.value #>> '{rail_meta_json,submission_id}',
+        update_element.value #>> '{rail_meta_json,rail_submission_id}',
+        update_element.value #>> '{rail_meta_json,provider_transfer_id}',
+        update_element.value #>> '{rail_meta_json,provider_payment_id}',
+        update_element.value #>> '{rail_meta_json,payment_id}',
+        update_element.value #>> '{rail_meta_json,external_payment_id}',
+        update_element.value #>> '{rail_meta_json,revolut_payment_id}',
+        update_element.value #>> '{rail_meta_json,external_transfer_id}',
+        update_element.value #>> '{rail_meta_json,provider_transaction_id}',
+        update_element.value #>> '{rail_meta_json,transaction_id}',
+        update_element.value->>'rail_tx_id',
+        ''
+      )), ''),
       NULLIF(BTRIM(COALESCE(update_element.value->>'provider_state', update_element.value->>'rail_state', update_element.value->>'status', '')), ''),
       CASE WHEN NULLIF(BTRIM(COALESCE(update_element.value->>'event_time_utc', '')), '') IS NOT NULL THEN NULLIF(BTRIM(COALESCE(update_element.value->>'event_time_utc', '')), '')::timestamptz ELSE v_now END,
       update_element.value
@@ -7568,6 +7599,69 @@ begin
         'operation_id', p_operation_id::text,
         'out_of_scope_transfer_ids', v_out_of_scope_transfer_ids
       )::text;
+    END IF;
+
+    IF EXISTS (
+      SELECT 1
+      FROM pg_temp.tmp_operation_rail_settlement_updates AS update_row
+      JOIN public.pay_bank_transfers AS bank_transfer
+        ON bank_transfer.id = update_row.transfer_id
+       AND bank_transfer.pay_batch_id = p_pay_batch_id
+      WHERE update_row.status = 'COMPLETED'
+        AND NOT EXISTS (
+          SELECT 1
+          FROM (VALUES
+            (update_row.provider_reference),
+            (update_row.rail_tx_id),
+            (update_row.rail_meta_json #>> '{provider_reference}'),
+            (update_row.rail_meta_json #>> '{provider_event_id}'),
+            (update_row.rail_meta_json #>> '{provider_submission_id}'),
+            (update_row.rail_meta_json #>> '{submission_id}'),
+            (update_row.rail_meta_json #>> '{rail_submission_id}'),
+            (update_row.rail_meta_json #>> '{provider_payment_id}'),
+            (update_row.rail_meta_json #>> '{payment_id}'),
+            (update_row.rail_meta_json #>> '{external_payment_id}'),
+            (update_row.rail_meta_json #>> '{revolut_payment_id}'),
+            (update_row.rail_meta_json #>> '{provider_transfer_id}'),
+            (update_row.rail_meta_json #>> '{transfer_id}'),
+            (update_row.rail_meta_json #>> '{external_transfer_id}'),
+            (update_row.rail_meta_json #>> '{provider_transaction_id}'),
+            (update_row.rail_meta_json #>> '{transaction_id}')
+          ) AS provider_identifier(identifier_value)
+          WHERE NULLIF(BTRIM(COALESCE(provider_identifier.identifier_value, '')), '') IS NOT NULL
+            AND NOT (
+              NULLIF(BTRIM(COALESCE(provider_identifier.identifier_value, '')), '') = ANY(
+                ARRAY_REMOVE(ARRAY[
+                  bank_transfer.id::text,
+                  NULLIF(BTRIM(COALESCE(bank_transfer.request_id, '')), ''),
+                  NULLIF(BTRIM(COALESCE(bank_transfer.payment_reference, '')), ''),
+                  NULLIF(BTRIM(COALESCE(v_batch.bulk_reference, '')), ''),
+                  NULLIF(BTRIM(COALESCE(bank_transfer.rail_meta_json #>> '{request_id}', '')), ''),
+                  NULLIF(BTRIM(COALESCE(bank_transfer.rail_meta_json #>> '{idempotency_key}', '')), ''),
+                  NULLIF(BTRIM(COALESCE(bank_transfer.rail_meta_json #>> '{payment_reference}', '')), ''),
+                  NULLIF(BTRIM(COALESCE(bank_transfer.rail_meta_json #>> '{bulk_reference}', '')), ''),
+                  NULLIF(BTRIM(COALESCE(update_row.input_json #>> '{request_id}', '')), ''),
+                  NULLIF(BTRIM(COALESCE(update_row.input_json #>> '{idempotency_key}', '')), ''),
+                  NULLIF(BTRIM(COALESCE(update_row.input_json #>> '{payment_reference}', '')), ''),
+                  NULLIF(BTRIM(COALESCE(update_row.input_json #>> '{bulk_reference}', '')), ''),
+                  NULLIF(BTRIM(COALESCE(update_row.rail_meta_json #>> '{request_id}', '')), ''),
+                  NULLIF(BTRIM(COALESCE(update_row.rail_meta_json #>> '{idempotency_key}', '')), ''),
+                  NULLIF(BTRIM(COALESCE(update_row.rail_meta_json #>> '{payment_reference}', '')), ''),
+                  NULLIF(BTRIM(COALESCE(update_row.rail_meta_json #>> '{bulk_reference}', '')), '')
+                ]::text[], NULL::text)
+              )
+            )
+        )
+      LIMIT 1
+    ) THEN
+      RAISE EXCEPTION 'PAY_SETTLE_RAIL_PROVIDER_EVIDENCE_REQUIRED'
+        USING ERRCODE = 'P0001',
+              DETAIL = jsonb_build_object(
+                'code', 'PAY_SETTLE_RAIL_PROVIDER_EVIDENCE_REQUIRED',
+                'pay_batch_id', p_pay_batch_id::text,
+                'operation_id', p_operation_id::text,
+                'message', 'STANDARD_BANK rail settlement marked as completed requires genuine provider or bank evidence, not local request/payment references.'
+              )::text;
     END IF;
 
     WITH requested_scope AS (
@@ -7672,22 +7766,97 @@ begin
         CASE
           WHEN NULLIF(BTRIM(COALESCE(matched_updates.provider_reference, '')), '') IS NOT NULL
            AND NULLIF(BTRIM(COALESCE(matched_updates.provider_reference, '')), '') NOT IN (
+             COALESCE(bank_transfer.id::text, '__no_transfer_id__'),
              COALESCE(NULLIF(BTRIM(COALESCE(bank_transfer.request_id, '')), ''), '__no_request_id__'),
              COALESCE(NULLIF(BTRIM(COALESCE(bank_transfer.payment_reference, '')), ''), '__no_payment_reference__'),
              COALESCE(NULLIF(BTRIM(COALESCE(v_batch.bulk_reference, '')), ''), '__no_bulk_reference__')
            )
             THEN NULLIF(BTRIM(COALESCE(matched_updates.provider_reference, '')), '')
           WHEN NULLIF(BTRIM(COALESCE(matched_updates.rail_tx_id, '')), '') IS NOT NULL
+           AND NULLIF(BTRIM(COALESCE(matched_updates.rail_tx_id, '')), '') NOT IN (
+             COALESCE(bank_transfer.id::text, '__no_transfer_id__'),
+             COALESCE(NULLIF(BTRIM(COALESCE(bank_transfer.request_id, '')), ''), '__no_request_id__'),
+             COALESCE(NULLIF(BTRIM(COALESCE(bank_transfer.payment_reference, '')), ''), '__no_payment_reference__'),
+             COALESCE(NULLIF(BTRIM(COALESCE(v_batch.bulk_reference, '')), ''), '__no_bulk_reference__')
+           )
             THEN NULLIF(BTRIM(COALESCE(matched_updates.rail_tx_id, '')), '')
           ELSE NULL::text
         END,
         COALESCE(
-          NULLIF(BTRIM(COALESCE(matched_updates.provider_reference, '')), ''),
-          NULLIF(BTRIM(COALESCE(matched_updates.rail_tx_id, '')), ''),
-          NULLIF(BTRIM(COALESCE(bank_transfer.rail_tx_id, '')), '')
+          CASE
+            WHEN NULLIF(BTRIM(COALESCE(matched_updates.provider_reference, '')), '') IS NOT NULL
+             AND NULLIF(BTRIM(COALESCE(matched_updates.provider_reference, '')), '') NOT IN (
+               COALESCE(NULLIF(BTRIM(COALESCE(bank_transfer.request_id, '')), ''), '__no_request_id__'),
+               COALESCE(NULLIF(BTRIM(COALESCE(bank_transfer.payment_reference, '')), ''), '__no_payment_reference__'),
+               COALESCE(NULLIF(BTRIM(COALESCE(v_batch.bulk_reference, '')), ''), '__no_bulk_reference__')
+             )
+              THEN NULLIF(BTRIM(COALESCE(matched_updates.provider_reference, '')), '')
+            ELSE NULL::text
+          END,
+          CASE
+            WHEN NULLIF(BTRIM(COALESCE(matched_updates.rail_tx_id, '')), '') IS NOT NULL
+             AND NULLIF(BTRIM(COALESCE(matched_updates.rail_tx_id, '')), '') NOT IN (
+               COALESCE(NULLIF(BTRIM(COALESCE(bank_transfer.request_id, '')), ''), '__no_request_id__'),
+               COALESCE(NULLIF(BTRIM(COALESCE(bank_transfer.payment_reference, '')), ''), '__no_payment_reference__'),
+               COALESCE(NULLIF(BTRIM(COALESCE(v_batch.bulk_reference, '')), ''), '__no_bulk_reference__')
+             )
+              THEN NULLIF(BTRIM(COALESCE(matched_updates.rail_tx_id, '')), '')
+            ELSE NULL::text
+          END,
+          CASE
+            WHEN NULLIF(BTRIM(COALESCE(bank_transfer.rail_tx_id, '')), '') IS NOT NULL
+             AND NULLIF(BTRIM(COALESCE(bank_transfer.rail_tx_id, '')), '') NOT IN (
+               COALESCE(NULLIF(BTRIM(COALESCE(bank_transfer.request_id, '')), ''), '__no_request_id__'),
+               COALESCE(NULLIF(BTRIM(COALESCE(bank_transfer.payment_reference, '')), ''), '__no_payment_reference__'),
+               COALESCE(NULLIF(BTRIM(COALESCE(v_batch.bulk_reference, '')), ''), '__no_bulk_reference__')
+             )
+              THEN NULLIF(BTRIM(COALESCE(bank_transfer.rail_tx_id, '')), '')
+            ELSE NULL::text
+          END
         ),
-        COALESCE(matched_updates.provider_state, matched_updates.rail_state, matched_updates.status),
-        CASE WHEN matched_updates.status IN ('COMPLETED', 'FAILED', 'RETURNED', 'CANCELLED', 'PENDING', 'PROCESSING', 'UNKNOWN') THEN matched_updates.status ELSE 'UNKNOWN' END,
+        CASE
+          WHEN matched_updates.status = 'COMPLETED' AND ((
+              NULLIF(BTRIM(COALESCE(matched_updates.provider_reference, '')), '') IS NOT NULL
+              AND NULLIF(BTRIM(COALESCE(matched_updates.provider_reference, '')), '') NOT IN (
+                COALESCE(NULLIF(BTRIM(COALESCE(bank_transfer.request_id, '')), ''), '__no_request_id__'),
+                COALESCE(NULLIF(BTRIM(COALESCE(bank_transfer.payment_reference, '')), ''), '__no_payment_reference__'),
+                COALESCE(NULLIF(BTRIM(COALESCE(v_batch.bulk_reference, '')), ''), '__no_bulk_reference__')
+              )
+            )
+            OR (
+              NULLIF(BTRIM(COALESCE(matched_updates.rail_tx_id, '')), '') IS NOT NULL
+              AND NULLIF(BTRIM(COALESCE(matched_updates.rail_tx_id, '')), '') NOT IN (
+                COALESCE(NULLIF(BTRIM(COALESCE(bank_transfer.request_id, '')), ''), '__no_request_id__'),
+                COALESCE(NULLIF(BTRIM(COALESCE(bank_transfer.payment_reference, '')), ''), '__no_payment_reference__'),
+                COALESCE(NULLIF(BTRIM(COALESCE(v_batch.bulk_reference, '')), ''), '__no_bulk_reference__')
+              )
+            )
+            OR lower(btrim(coalesce(matched_updates.rail_meta_json #>> '{last_update_provider_evidence}', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')) THEN COALESCE(matched_updates.provider_state, matched_updates.rail_state, matched_updates.status)
+          WHEN matched_updates.status = 'COMPLETED' THEN 'UNKNOWN'
+          ELSE COALESCE(matched_updates.provider_state, matched_updates.rail_state, matched_updates.status)
+        END,
+        CASE
+          WHEN matched_updates.status = 'COMPLETED' AND ((
+              NULLIF(BTRIM(COALESCE(matched_updates.provider_reference, '')), '') IS NOT NULL
+              AND NULLIF(BTRIM(COALESCE(matched_updates.provider_reference, '')), '') NOT IN (
+                COALESCE(NULLIF(BTRIM(COALESCE(bank_transfer.request_id, '')), ''), '__no_request_id__'),
+                COALESCE(NULLIF(BTRIM(COALESCE(bank_transfer.payment_reference, '')), ''), '__no_payment_reference__'),
+                COALESCE(NULLIF(BTRIM(COALESCE(v_batch.bulk_reference, '')), ''), '__no_bulk_reference__')
+              )
+            )
+            OR (
+              NULLIF(BTRIM(COALESCE(matched_updates.rail_tx_id, '')), '') IS NOT NULL
+              AND NULLIF(BTRIM(COALESCE(matched_updates.rail_tx_id, '')), '') NOT IN (
+                COALESCE(NULLIF(BTRIM(COALESCE(bank_transfer.request_id, '')), ''), '__no_request_id__'),
+                COALESCE(NULLIF(BTRIM(COALESCE(bank_transfer.payment_reference, '')), ''), '__no_payment_reference__'),
+                COALESCE(NULLIF(BTRIM(COALESCE(v_batch.bulk_reference, '')), ''), '__no_bulk_reference__')
+              )
+            )
+            OR lower(btrim(coalesce(matched_updates.rail_meta_json #>> '{last_update_provider_evidence}', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')) THEN 'COMPLETED'
+          WHEN matched_updates.status = 'COMPLETED' THEN 'UNKNOWN'
+          WHEN matched_updates.status IN ('FAILED', 'RETURNED', 'CANCELLED', 'PENDING', 'PROCESSING', 'UNKNOWN') THEN matched_updates.status
+          ELSE 'UNKNOWN'
+        END,
         'PROVIDER_SETTLEMENT',
         COALESCE(matched_updates.event_time_utc, v_now),
         v_now,
@@ -7734,20 +7903,79 @@ begin
     ), transfer_updates AS (
       UPDATE public.pay_bank_transfers AS transfer_update
       SET status = CASE
-            WHEN matched_updates.status = 'COMPLETED' THEN 'COMPLETED'
+            WHEN matched_updates.status = 'COMPLETED' AND ((
+              NULLIF(BTRIM(COALESCE(matched_updates.provider_reference, '')), '') IS NOT NULL
+              AND NULLIF(BTRIM(COALESCE(matched_updates.provider_reference, '')), '') NOT IN (
+                COALESCE(transfer_update.id::text, '__no_transfer_id__'),
+                COALESCE(NULLIF(BTRIM(COALESCE(transfer_update.request_id, '')), ''), '__no_request_id__'),
+                COALESCE(NULLIF(BTRIM(COALESCE(transfer_update.payment_reference, '')), ''), '__no_payment_reference__'),
+                COALESCE(NULLIF(BTRIM(COALESCE(v_batch.bulk_reference, '')), ''), '__no_bulk_reference__')
+              )
+            )
+            OR (
+              NULLIF(BTRIM(COALESCE(matched_updates.rail_tx_id, '')), '') IS NOT NULL
+              AND NULLIF(BTRIM(COALESCE(matched_updates.rail_tx_id, '')), '') NOT IN (
+                COALESCE(transfer_update.id::text, '__no_transfer_id__'),
+                COALESCE(NULLIF(BTRIM(COALESCE(transfer_update.request_id, '')), ''), '__no_request_id__'),
+                COALESCE(NULLIF(BTRIM(COALESCE(transfer_update.payment_reference, '')), ''), '__no_payment_reference__'),
+                COALESCE(NULLIF(BTRIM(COALESCE(v_batch.bulk_reference, '')), ''), '__no_bulk_reference__')
+              )
+            )
+            OR lower(btrim(coalesce(matched_updates.rail_meta_json #>> '{last_update_provider_evidence}', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')) THEN 'COMPLETED'
+            WHEN matched_updates.status = 'COMPLETED' THEN 'UNKNOWN'
             WHEN matched_updates.status IN ('FAILED', 'DECLINED', 'REJECTED', 'CANCELLED', 'RETURNED', 'REVERTED') THEN matched_updates.status
             WHEN matched_updates.status = 'PROCESSING' THEN 'PROCESSING'
             WHEN matched_updates.status = 'UNKNOWN' THEN 'UNKNOWN'
             ELSE 'PENDING'
           END,
-          rail_tx_id = COALESCE(matched_updates.rail_tx_id, transfer_update.rail_tx_id),
+          rail_tx_id = CASE
+            WHEN matched_updates.status = 'COMPLETED' AND ((
+              NULLIF(BTRIM(COALESCE(matched_updates.provider_reference, '')), '') IS NOT NULL
+              AND NULLIF(BTRIM(COALESCE(matched_updates.provider_reference, '')), '') NOT IN (
+                COALESCE(transfer_update.id::text, '__no_transfer_id__'),
+                COALESCE(NULLIF(BTRIM(COALESCE(transfer_update.request_id, '')), ''), '__no_request_id__'),
+                COALESCE(NULLIF(BTRIM(COALESCE(transfer_update.payment_reference, '')), ''), '__no_payment_reference__'),
+                COALESCE(NULLIF(BTRIM(COALESCE(v_batch.bulk_reference, '')), ''), '__no_bulk_reference__')
+              )
+            )
+            OR (
+              NULLIF(BTRIM(COALESCE(matched_updates.rail_tx_id, '')), '') IS NOT NULL
+              AND NULLIF(BTRIM(COALESCE(matched_updates.rail_tx_id, '')), '') NOT IN (
+                COALESCE(transfer_update.id::text, '__no_transfer_id__'),
+                COALESCE(NULLIF(BTRIM(COALESCE(transfer_update.request_id, '')), ''), '__no_request_id__'),
+                COALESCE(NULLIF(BTRIM(COALESCE(transfer_update.payment_reference, '')), ''), '__no_payment_reference__'),
+                COALESCE(NULLIF(BTRIM(COALESCE(v_batch.bulk_reference, '')), ''), '__no_bulk_reference__')
+              )
+            )
+            OR lower(btrim(coalesce(matched_updates.rail_meta_json #>> '{last_update_provider_evidence}', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')) THEN COALESCE(matched_updates.rail_tx_id, transfer_update.rail_tx_id)
+            WHEN matched_updates.status <> 'COMPLETED' THEN COALESCE(matched_updates.rail_tx_id, transfer_update.rail_tx_id)
+            ELSE transfer_update.rail_tx_id
+          END,
           rail_state = COALESCE(matched_updates.rail_state, matched_updates.provider_state, transfer_update.rail_state),
           rail_meta_json = jsonb_strip_nulls(COALESCE(transfer_update.rail_meta_json, '{}'::jsonb) || COALESCE(matched_updates.rail_meta_json, '{}'::jsonb) || jsonb_build_object(
             'provider_reference', matched_updates.provider_reference,
             'provider_state', matched_updates.provider_state,
             'settlement_operation_id', p_operation_id::text
           )),
-          completed_at_utc = CASE WHEN matched_updates.status = 'COMPLETED' THEN COALESCE(transfer_update.completed_at_utc, matched_updates.event_time_utc, v_now) ELSE transfer_update.completed_at_utc END,
+          completed_at_utc = CASE WHEN matched_updates.status = 'COMPLETED' AND ((
+              NULLIF(BTRIM(COALESCE(matched_updates.provider_reference, '')), '') IS NOT NULL
+              AND NULLIF(BTRIM(COALESCE(matched_updates.provider_reference, '')), '') NOT IN (
+                COALESCE(transfer_update.id::text, '__no_transfer_id__'),
+                COALESCE(NULLIF(BTRIM(COALESCE(transfer_update.request_id, '')), ''), '__no_request_id__'),
+                COALESCE(NULLIF(BTRIM(COALESCE(transfer_update.payment_reference, '')), ''), '__no_payment_reference__'),
+                COALESCE(NULLIF(BTRIM(COALESCE(v_batch.bulk_reference, '')), ''), '__no_bulk_reference__')
+              )
+            )
+            OR (
+              NULLIF(BTRIM(COALESCE(matched_updates.rail_tx_id, '')), '') IS NOT NULL
+              AND NULLIF(BTRIM(COALESCE(matched_updates.rail_tx_id, '')), '') NOT IN (
+                COALESCE(transfer_update.id::text, '__no_transfer_id__'),
+                COALESCE(NULLIF(BTRIM(COALESCE(transfer_update.request_id, '')), ''), '__no_request_id__'),
+                COALESCE(NULLIF(BTRIM(COALESCE(transfer_update.payment_reference, '')), ''), '__no_payment_reference__'),
+                COALESCE(NULLIF(BTRIM(COALESCE(v_batch.bulk_reference, '')), ''), '__no_bulk_reference__')
+              )
+            )
+            OR lower(btrim(coalesce(matched_updates.rail_meta_json #>> '{last_update_provider_evidence}', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')) THEN COALESCE(transfer_update.completed_at_utc, matched_updates.event_time_utc, v_now) ELSE transfer_update.completed_at_utc END,
           failed_reason = CASE WHEN matched_updates.status IN ('FAILED', 'DECLINED', 'REJECTED', 'CANCELLED', 'RETURNED', 'REVERTED') THEN COALESCE(transfer_update.failed_reason, matched_updates.provider_state, matched_updates.rail_state, matched_updates.status) ELSE transfer_update.failed_reason END
       FROM matched_updates
       WHERE transfer_update.id = matched_updates.pay_bank_transfer_id
@@ -7885,6 +8113,7 @@ begin
     pb.authoritative_payment_date_source,
     pb.rail_provider_snapshot,
     pb.rail_env_snapshot,
+    pb.bulk_reference,
     pb.batch_kind_fixed,
     pb.execution_intent_json,
     pb.settlement_confirmation_json,
@@ -8035,6 +8264,64 @@ begin
     raise exception 'pay_settle_rail: one or more transfer_id values do not belong to the specified pay batch';
   end if;
 
+  if v_settlement_mode = 'STANDARD_BANK' and exists (
+    select 1
+    from _tmp_settle_in as t
+    join public.pay_bank_transfers as pbt
+      on pbt.id = t.transfer_id
+     and pbt.pay_batch_id = p_pay_batch_id
+    where t.status = 'COMPLETED'
+      and not exists (
+        select 1
+        from (values
+          (t.rail_tx_id),
+          (t.rail_meta_json #>> '{provider_reference}'),
+          (t.rail_meta_json #>> '{provider_event_id}'),
+          (t.rail_meta_json #>> '{provider_submission_id}'),
+          (t.rail_meta_json #>> '{submission_id}'),
+          (t.rail_meta_json #>> '{rail_submission_id}'),
+          (t.rail_meta_json #>> '{provider_payment_id}'),
+          (t.rail_meta_json #>> '{payment_id}'),
+          (t.rail_meta_json #>> '{external_payment_id}'),
+          (t.rail_meta_json #>> '{revolut_payment_id}'),
+          (t.rail_meta_json #>> '{provider_transfer_id}'),
+          (t.rail_meta_json #>> '{transfer_id}'),
+          (t.rail_meta_json #>> '{external_transfer_id}'),
+          (t.rail_meta_json #>> '{provider_transaction_id}'),
+          (t.rail_meta_json #>> '{transaction_id}')
+        ) as provider_identifier(identifier_value)
+        where nullif(btrim(coalesce(provider_identifier.identifier_value, '')), '') is not null
+          and not (
+            nullif(btrim(coalesce(provider_identifier.identifier_value, '')), '') = any(
+              array_remove(array[
+                pbt.id::text,
+                nullif(btrim(coalesce(pbt.request_id, '')), ''),
+                nullif(btrim(coalesce(pbt.payment_reference, '')), ''),
+                nullif(btrim(coalesce(v_batch.bulk_reference, '')), ''),
+                nullif(btrim(coalesce(pbt.rail_meta_json #>> '{request_id}', '')), ''),
+                nullif(btrim(coalesce(pbt.rail_meta_json #>> '{idempotency_key}', '')), ''),
+                nullif(btrim(coalesce(pbt.rail_meta_json #>> '{payment_reference}', '')), ''),
+                nullif(btrim(coalesce(pbt.rail_meta_json #>> '{bulk_reference}', '')), ''),
+                nullif(btrim(coalesce(t.rail_meta_json #>> '{request_id}', '')), ''),
+                nullif(btrim(coalesce(t.rail_meta_json #>> '{idempotency_key}', '')), ''),
+                nullif(btrim(coalesce(t.rail_meta_json #>> '{payment_reference}', '')), ''),
+                nullif(btrim(coalesce(t.rail_meta_json #>> '{bulk_reference}', '')), '')
+              ]::text[], null::text)
+            )
+          )
+      )
+    limit 1
+  ) then
+    raise exception 'PAY_SETTLE_RAIL_PROVIDER_EVIDENCE_REQUIRED'
+      using errcode = 'P0001',
+            detail = jsonb_build_object(
+              'code', 'PAY_SETTLE_RAIL_PROVIDER_EVIDENCE_REQUIRED',
+              'pay_batch_id', p_pay_batch_id::text,
+              'message', 'STANDARD_BANK settlement marked as completed requires genuine provider or bank evidence, not local request/payment references.'
+            )::text;
+  end if;
+
+
   update public.pay_bank_transfers pbt
   set
     status = CASE
@@ -8075,7 +8362,99 @@ begin
         'pay_batch_id', p_pay_batch_id::text,
         'pay_bank_transfer_id', settle_event_rows.transfer_id::text,
         'provider_key', COALESCE(v_batch.rail_provider_snapshot, 'UNKNOWN'),
-        'provider_reference', COALESCE(settle_event_rows.rail_tx_id, bank_transfer_for_event.rail_tx_id, bank_transfer_for_event.request_id, bank_transfer_for_event.payment_reference),
+        'provider_reference', CASE
+          WHEN v_settlement_mode IN ('CSV_SETTLEMENT','EXTERNAL_SETTLEMENT') THEN COALESCE(settle_event_rows.rail_tx_id, bank_transfer_for_event.rail_tx_id, bank_transfer_for_event.request_id, bank_transfer_for_event.payment_reference)
+          ELSE COALESCE(
+            CASE
+              WHEN NULLIF(BTRIM(COALESCE(settle_event_rows.rail_tx_id, '')), '') IS NOT NULL
+               AND NULLIF(BTRIM(COALESCE(settle_event_rows.rail_tx_id, '')), '') NOT IN (
+                 COALESCE(bank_transfer_for_event.id::text, '__no_transfer_id__'),
+                 COALESCE(NULLIF(BTRIM(COALESCE(bank_transfer_for_event.request_id, '')), ''), '__no_request_id__'),
+                 COALESCE(NULLIF(BTRIM(COALESCE(bank_transfer_for_event.payment_reference, '')), ''), '__no_payment_reference__'),
+                 COALESCE(NULLIF(BTRIM(COALESCE(v_batch.bulk_reference, '')), ''), '__no_bulk_reference__')
+               )
+                THEN NULLIF(BTRIM(COALESCE(settle_event_rows.rail_tx_id, '')), '')
+              ELSE NULL::text
+            END,
+            CASE
+              WHEN NULLIF(BTRIM(COALESCE(settle_event_rows.rail_meta_json #>> '{provider_reference}', '')), '') IS NOT NULL
+               AND NULLIF(BTRIM(COALESCE(settle_event_rows.rail_meta_json #>> '{provider_reference}', '')), '') NOT IN (
+                 COALESCE(bank_transfer_for_event.id::text, '__no_transfer_id__'),
+                 COALESCE(NULLIF(BTRIM(COALESCE(bank_transfer_for_event.request_id, '')), ''), '__no_request_id__'),
+                 COALESCE(NULLIF(BTRIM(COALESCE(bank_transfer_for_event.payment_reference, '')), ''), '__no_payment_reference__'),
+                 COALESCE(NULLIF(BTRIM(COALESCE(v_batch.bulk_reference, '')), ''), '__no_bulk_reference__')
+               )
+                THEN NULLIF(BTRIM(COALESCE(settle_event_rows.rail_meta_json #>> '{provider_reference}', '')), '')
+              ELSE NULL::text
+            END,
+            CASE
+              WHEN NULLIF(BTRIM(COALESCE(settle_event_rows.rail_meta_json #>> '{provider_event_id}', '')), '') IS NOT NULL
+               AND NULLIF(BTRIM(COALESCE(settle_event_rows.rail_meta_json #>> '{provider_event_id}', '')), '') NOT IN (
+                 COALESCE(bank_transfer_for_event.id::text, '__no_transfer_id__'),
+                 COALESCE(NULLIF(BTRIM(COALESCE(bank_transfer_for_event.request_id, '')), ''), '__no_request_id__'),
+                 COALESCE(NULLIF(BTRIM(COALESCE(bank_transfer_for_event.payment_reference, '')), ''), '__no_payment_reference__'),
+                 COALESCE(NULLIF(BTRIM(COALESCE(v_batch.bulk_reference, '')), ''), '__no_bulk_reference__')
+               )
+                THEN NULLIF(BTRIM(COALESCE(settle_event_rows.rail_meta_json #>> '{provider_event_id}', '')), '')
+              ELSE NULL::text
+            END,
+            CASE
+              WHEN NULLIF(BTRIM(COALESCE(settle_event_rows.rail_meta_json #>> '{provider_submission_id}', '')), '') IS NOT NULL
+               AND NULLIF(BTRIM(COALESCE(settle_event_rows.rail_meta_json #>> '{provider_submission_id}', '')), '') NOT IN (
+                 COALESCE(bank_transfer_for_event.id::text, '__no_transfer_id__'),
+                 COALESCE(NULLIF(BTRIM(COALESCE(bank_transfer_for_event.request_id, '')), ''), '__no_request_id__'),
+                 COALESCE(NULLIF(BTRIM(COALESCE(bank_transfer_for_event.payment_reference, '')), ''), '__no_payment_reference__'),
+                 COALESCE(NULLIF(BTRIM(COALESCE(v_batch.bulk_reference, '')), ''), '__no_bulk_reference__')
+               )
+                THEN NULLIF(BTRIM(COALESCE(settle_event_rows.rail_meta_json #>> '{provider_submission_id}', '')), '')
+              ELSE NULL::text
+            END,
+            CASE
+              WHEN NULLIF(BTRIM(COALESCE(settle_event_rows.rail_meta_json #>> '{provider_payment_id}', '')), '') IS NOT NULL
+               AND NULLIF(BTRIM(COALESCE(settle_event_rows.rail_meta_json #>> '{provider_payment_id}', '')), '') NOT IN (
+                 COALESCE(bank_transfer_for_event.id::text, '__no_transfer_id__'),
+                 COALESCE(NULLIF(BTRIM(COALESCE(bank_transfer_for_event.request_id, '')), ''), '__no_request_id__'),
+                 COALESCE(NULLIF(BTRIM(COALESCE(bank_transfer_for_event.payment_reference, '')), ''), '__no_payment_reference__'),
+                 COALESCE(NULLIF(BTRIM(COALESCE(v_batch.bulk_reference, '')), ''), '__no_bulk_reference__')
+               )
+                THEN NULLIF(BTRIM(COALESCE(settle_event_rows.rail_meta_json #>> '{provider_payment_id}', '')), '')
+              ELSE NULL::text
+            END,
+            CASE
+              WHEN NULLIF(BTRIM(COALESCE(settle_event_rows.rail_meta_json #>> '{provider_transfer_id}', '')), '') IS NOT NULL
+               AND NULLIF(BTRIM(COALESCE(settle_event_rows.rail_meta_json #>> '{provider_transfer_id}', '')), '') NOT IN (
+                 COALESCE(bank_transfer_for_event.id::text, '__no_transfer_id__'),
+                 COALESCE(NULLIF(BTRIM(COALESCE(bank_transfer_for_event.request_id, '')), ''), '__no_request_id__'),
+                 COALESCE(NULLIF(BTRIM(COALESCE(bank_transfer_for_event.payment_reference, '')), ''), '__no_payment_reference__'),
+                 COALESCE(NULLIF(BTRIM(COALESCE(v_batch.bulk_reference, '')), ''), '__no_bulk_reference__')
+               )
+                THEN NULLIF(BTRIM(COALESCE(settle_event_rows.rail_meta_json #>> '{provider_transfer_id}', '')), '')
+              ELSE NULL::text
+            END,
+            CASE
+              WHEN NULLIF(BTRIM(COALESCE(settle_event_rows.rail_meta_json #>> '{provider_transaction_id}', '')), '') IS NOT NULL
+               AND NULLIF(BTRIM(COALESCE(settle_event_rows.rail_meta_json #>> '{provider_transaction_id}', '')), '') NOT IN (
+                 COALESCE(bank_transfer_for_event.id::text, '__no_transfer_id__'),
+                 COALESCE(NULLIF(BTRIM(COALESCE(bank_transfer_for_event.request_id, '')), ''), '__no_request_id__'),
+                 COALESCE(NULLIF(BTRIM(COALESCE(bank_transfer_for_event.payment_reference, '')), ''), '__no_payment_reference__'),
+                 COALESCE(NULLIF(BTRIM(COALESCE(v_batch.bulk_reference, '')), ''), '__no_bulk_reference__')
+               )
+                THEN NULLIF(BTRIM(COALESCE(settle_event_rows.rail_meta_json #>> '{provider_transaction_id}', '')), '')
+              ELSE NULL::text
+            END,
+            CASE
+              WHEN NULLIF(BTRIM(COALESCE(bank_transfer_for_event.rail_tx_id, '')), '') IS NOT NULL
+               AND NULLIF(BTRIM(COALESCE(bank_transfer_for_event.rail_tx_id, '')), '') NOT IN (
+                 COALESCE(bank_transfer_for_event.id::text, '__no_transfer_id__'),
+                 COALESCE(NULLIF(BTRIM(COALESCE(bank_transfer_for_event.request_id, '')), ''), '__no_request_id__'),
+                 COALESCE(NULLIF(BTRIM(COALESCE(bank_transfer_for_event.payment_reference, '')), ''), '__no_payment_reference__'),
+                 COALESCE(NULLIF(BTRIM(COALESCE(v_batch.bulk_reference, '')), ''), '__no_bulk_reference__')
+               )
+                THEN NULLIF(BTRIM(COALESCE(bank_transfer_for_event.rail_tx_id, '')), '')
+              ELSE NULL::text
+            END
+          )
+        END,
         'provider_state', COALESCE(settle_event_rows.rail_state, settle_event_rows.status),
         'normalised_state', settle_event_rows.status,
         'event_source', CASE WHEN v_settlement_mode IN ('CSV_SETTLEMENT','EXTERNAL_SETTLEMENT') THEN 'MANUAL_CONFIRM' ELSE 'PROVIDER_POLL' END,
@@ -8099,58 +8478,140 @@ begin
   INTO v_bank_event_ingest_results, v_bank_event_ingest_count
   FROM pg_temp._tmp_settle_bank_event_ingest_results AS ingest_rows;
 
-  select
-    count(*) filter (
-      where upper(coalesce(pbt_exec.status,'')) = 'COMPLETED'
-         or pbt_exec.completed_at_utc is not null
-         or upper(coalesce(pbt_exec.rail_state,'')) in ('COMPLETED','SETTLED','COMMITTED','PAID','EXECUTED')
-         or lower(btrim(coalesce(pbt_exec.rail_meta_json->>'completed','false'))) in ('true', '1', 'yes', 'y', 'on')
-         or lower(btrim(coalesce(pbt_exec.rail_meta_json->>'committed','false'))) in ('true', '1', 'yes', 'y', 'on')
-         or lower(btrim(coalesce(pbt_exec.rail_meta_json->>'settled','false'))) in ('true', '1', 'yes', 'y', 'on')
-         or lower(btrim(coalesce(pbt_exec.rail_meta_json->>'paid','false'))) in ('true', '1', 'yes', 'y', 'on')
-         or lower(btrim(coalesce(pbt_exec.rail_meta_json->>'executed','false'))) in ('true', '1', 'yes', 'y', 'on')
-    )::int,
-    (
-      select nullif(btrim(coalesce(pbt_exec_ref.rail_tx_id,'')), '')
-      from public.pay_bank_transfers pbt_exec_ref
-      where pbt_exec_ref.pay_batch_id = p_pay_batch_id
-        and (
-          upper(coalesce(pbt_exec_ref.status,'')) = 'COMPLETED'
-          or pbt_exec_ref.completed_at_utc is not null
-          or upper(coalesce(pbt_exec_ref.rail_state,'')) in ('COMPLETED','SETTLED','COMMITTED','PAID','EXECUTED')
-          or lower(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'completed','false'))) in ('true', '1', 'yes', 'y', 'on')
-          or lower(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'committed','false'))) in ('true', '1', 'yes', 'y', 'on')
-          or lower(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'settled','false'))) in ('true', '1', 'yes', 'y', 'on')
-          or lower(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'paid','false'))) in ('true', '1', 'yes', 'y', 'on')
-          or lower(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'executed','false'))) in ('true', '1', 'yes', 'y', 'on')
+  DROP TABLE IF EXISTS pg_temp._tmp_settle_external_completed_transfers;
+  CREATE TEMP TABLE _tmp_settle_external_completed_transfers ON COMMIT DROP AS
+  WITH completed_transfer_base AS (
+    SELECT
+      completed_transfer.id AS transfer_id,
+      completed_transfer.rail_tx_id,
+      completed_transfer.completed_at_utc,
+      completed_transfer.status,
+      completed_transfer.rail_state,
+      COALESCE(completed_transfer.rail_meta_json, '{}'::jsonb) AS rail_meta_json,
+      lower(btrim(coalesce(completed_transfer.rail_meta_json #>> '{last_update_provider_evidence}', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on') AS last_update_was_provider_evidence,
+      ARRAY_REMOVE(ARRAY[
+        completed_transfer.id::text,
+        NULLIF(BTRIM(COALESCE(completed_transfer.request_id, '')), ''),
+        NULLIF(BTRIM(COALESCE(completed_transfer.payment_reference, '')), ''),
+        NULLIF(BTRIM(COALESCE(v_batch.bulk_reference, '')), ''),
+        NULLIF(BTRIM(COALESCE(completed_transfer.rail_meta_json #>> '{request_id}', '')), ''),
+        NULLIF(BTRIM(COALESCE(completed_transfer.rail_meta_json #>> '{idempotency_key}', '')), ''),
+        NULLIF(BTRIM(COALESCE(completed_transfer.rail_meta_json #>> '{payment_reference}', '')), ''),
+        NULLIF(BTRIM(COALESCE(completed_transfer.rail_meta_json #>> '{bulk_reference}', '')), '')
+      ]::text[], NULL::text) AS local_identity_values
+    FROM public.pay_bank_transfers AS completed_transfer
+    WHERE completed_transfer.pay_batch_id = p_pay_batch_id
+      AND (
+        upper(coalesce(completed_transfer.status, '')) IN ('COMPLETED', 'COMMITTED', 'SETTLED', 'PAID', 'EXECUTED')
+        OR completed_transfer.completed_at_utc IS NOT NULL
+        OR upper(coalesce(completed_transfer.rail_state, '')) IN ('COMPLETED', 'SETTLED', 'COMMITTED', 'PAID', 'EXECUTED')
+        OR lower(btrim(coalesce(completed_transfer.rail_meta_json->>'completed','false'))) IN ('true', '1', 'yes', 'y', 'on')
+        OR lower(btrim(coalesce(completed_transfer.rail_meta_json->>'committed','false'))) IN ('true', '1', 'yes', 'y', 'on')
+        OR lower(btrim(coalesce(completed_transfer.rail_meta_json->>'settled','false'))) IN ('true', '1', 'yes', 'y', 'on')
+        OR lower(btrim(coalesce(completed_transfer.rail_meta_json->>'paid','false'))) IN ('true', '1', 'yes', 'y', 'on')
+        OR lower(btrim(coalesce(completed_transfer.rail_meta_json->>'executed','false'))) IN ('true', '1', 'yes', 'y', 'on')
+      )
+  ), externally_supported_completed AS (
+    SELECT
+      completed_transfer_base.transfer_id,
+      completed_transfer_base.rail_tx_id,
+      completed_transfer_base.completed_at_utc,
+      (
+        v_settlement_mode IN ('CSV_SETTLEMENT', 'EXTERNAL_SETTLEMENT')
+        OR EXISTS (
+          SELECT 1
+          FROM public.pay_bank_transfer_events AS completed_event
+          WHERE completed_event.pay_bank_transfer_id = completed_transfer_base.transfer_id
+            AND upper(btrim(coalesce(completed_event.event_source, ''))) IN ('PROVIDER_RESPONSE', 'PROVIDER_POLL', 'PROVIDER_WEBHOOK', 'WEBHOOK', 'POLL', 'RAIL_PROVIDER', 'PROVIDER', 'PROVIDER_SETTLEMENT')
+            AND (
+              upper(btrim(coalesce(completed_event.normalised_state, ''))) IN ('COMPLETED', 'COMMITTED', 'SETTLED', 'PAID', 'EXECUTED')
+              OR upper(btrim(coalesce(completed_event.provider_state, ''))) IN ('COMPLETED', 'COMMITTED', 'SETTLED', 'PAID', 'EXECUTED')
+            )
+            AND EXISTS (
+              SELECT 1
+              FROM (VALUES
+                (completed_event.provider_event_id),
+                (completed_event.provider_reference),
+                (completed_event.raw_payload #>> '{provider_event_id}'),
+                (completed_event.raw_payload #>> '{provider_reference}'),
+                (completed_event.raw_payload #>> '{provider_submission_id}'),
+                (completed_event.raw_payload #>> '{submission_id}'),
+                (completed_event.raw_payload #>> '{rail_submission_id}'),
+                (completed_event.raw_payload #>> '{provider_payment_id}'),
+                (completed_event.raw_payload #>> '{payment_id}'),
+                (completed_event.raw_payload #>> '{external_payment_id}'),
+                (completed_event.raw_payload #>> '{revolut_payment_id}'),
+                (completed_event.raw_payload #>> '{provider_transfer_id}'),
+                (completed_event.raw_payload #>> '{transfer_id}'),
+                (completed_event.raw_payload #>> '{external_transfer_id}'),
+                (completed_event.raw_payload #>> '{provider_transaction_id}'),
+                (completed_event.raw_payload #>> '{transaction_id}')
+              ) AS completed_event_identifier(identifier_value)
+              WHERE NULLIF(BTRIM(COALESCE(completed_event_identifier.identifier_value, '')), '') IS NOT NULL
+                AND NOT (NULLIF(BTRIM(COALESCE(completed_event_identifier.identifier_value, '')), '') = ANY(completed_transfer_base.local_identity_values))
+            )
         )
-        and nullif(btrim(coalesce(pbt_exec_ref.rail_tx_id,'')), '') is not null
-      order by pbt_exec_ref.completed_at_utc desc nulls last, pbt_exec_ref.id desc
+        OR (
+          completed_transfer_base.last_update_was_provider_evidence IS TRUE
+          AND EXISTS (
+            SELECT 1
+            FROM (VALUES
+              (completed_transfer_base.rail_tx_id),
+              (completed_transfer_base.rail_meta_json #>> '{provider_event_id}'),
+              (completed_transfer_base.rail_meta_json #>> '{provider_reference}'),
+              (completed_transfer_base.rail_meta_json #>> '{provider_submission_id}'),
+              (completed_transfer_base.rail_meta_json #>> '{submission_id}'),
+              (completed_transfer_base.rail_meta_json #>> '{rail_submission_id}'),
+              (completed_transfer_base.rail_meta_json #>> '{provider_payment_id}'),
+              (completed_transfer_base.rail_meta_json #>> '{payment_id}'),
+              (completed_transfer_base.rail_meta_json #>> '{external_payment_id}'),
+              (completed_transfer_base.rail_meta_json #>> '{revolut_payment_id}'),
+              (completed_transfer_base.rail_meta_json #>> '{provider_transfer_id}'),
+              (completed_transfer_base.rail_meta_json #>> '{transfer_id}'),
+              (completed_transfer_base.rail_meta_json #>> '{external_transfer_id}'),
+              (completed_transfer_base.rail_meta_json #>> '{provider_transaction_id}'),
+              (completed_transfer_base.rail_meta_json #>> '{transaction_id}')
+            ) AS completed_transfer_identifier(identifier_value)
+            WHERE NULLIF(BTRIM(COALESCE(completed_transfer_identifier.identifier_value, '')), '') IS NOT NULL
+              AND NOT (NULLIF(BTRIM(COALESCE(completed_transfer_identifier.identifier_value, '')), '') = ANY(completed_transfer_base.local_identity_values))
+          )
+        )
+      ) AS has_external_completion_evidence
+    FROM completed_transfer_base
+  )
+  SELECT
+    externally_supported_completed.transfer_id,
+    externally_supported_completed.rail_tx_id,
+    externally_supported_completed.completed_at_utc
+  FROM externally_supported_completed
+  WHERE externally_supported_completed.has_external_completion_evidence IS TRUE;
+
+  select
+    count(*)::int,
+    (
+      select nullif(btrim(coalesce(completed_transfer_ref.rail_tx_id, bank_transfer_ref.rail_tx_id, '')), '')
+      from pg_temp._tmp_settle_external_completed_transfers as completed_transfer_ref
+      join public.pay_bank_transfers as bank_transfer_ref
+        on bank_transfer_ref.id = completed_transfer_ref.transfer_id
+       and bank_transfer_ref.pay_batch_id = p_pay_batch_id
+      where nullif(btrim(coalesce(completed_transfer_ref.rail_tx_id, bank_transfer_ref.rail_tx_id, '')), '') is not null
+      order by coalesce(completed_transfer_ref.completed_at_utc, bank_transfer_ref.completed_at_utc) desc nulls last, bank_transfer_ref.id desc
       limit 1
     ),
     (
-      select pbt_exec_ts.completed_at_utc
-      from public.pay_bank_transfers pbt_exec_ts
-      where pbt_exec_ts.pay_batch_id = p_pay_batch_id
-        and (
-          upper(coalesce(pbt_exec_ts.status,'')) = 'COMPLETED'
-          or pbt_exec_ts.completed_at_utc is not null
-          or upper(coalesce(pbt_exec_ts.rail_state,'')) in ('COMPLETED','SETTLED','COMMITTED','PAID','EXECUTED')
-          or lower(btrim(coalesce(pbt_exec_ts.rail_meta_json->>'completed','false'))) in ('true', '1', 'yes', 'y', 'on')
-          or lower(btrim(coalesce(pbt_exec_ts.rail_meta_json->>'committed','false'))) in ('true', '1', 'yes', 'y', 'on')
-          or lower(btrim(coalesce(pbt_exec_ts.rail_meta_json->>'settled','false'))) in ('true', '1', 'yes', 'y', 'on')
-          or lower(btrim(coalesce(pbt_exec_ts.rail_meta_json->>'paid','false'))) in ('true', '1', 'yes', 'y', 'on')
-          or lower(btrim(coalesce(pbt_exec_ts.rail_meta_json->>'executed','false'))) in ('true', '1', 'yes', 'y', 'on')
-        )
-      order by pbt_exec_ts.completed_at_utc desc nulls last, pbt_exec_ts.id desc
+      select coalesce(completed_transfer_ts.completed_at_utc, bank_transfer_ts.completed_at_utc)
+      from pg_temp._tmp_settle_external_completed_transfers as completed_transfer_ts
+      join public.pay_bank_transfers as bank_transfer_ts
+        on bank_transfer_ts.id = completed_transfer_ts.transfer_id
+       and bank_transfer_ts.pay_batch_id = p_pay_batch_id
+      order by coalesce(completed_transfer_ts.completed_at_utc, bank_transfer_ts.completed_at_utc) desc nulls last, bank_transfer_ts.id desc
       limit 1
     )
   into
     v_completed_transfer_count,
     v_detected_execution_commit_ref,
     v_detected_execution_committed_at_utc
-  from public.pay_bank_transfers pbt_exec
-  where pbt_exec.pay_batch_id = p_pay_batch_id;
+  from pg_temp._tmp_settle_external_completed_transfers as completed_transfer_count_row;
 
   if coalesce(v_completed_transfer_count, 0) > 0 then
     v_execution_commit_state := 'COMMITTED';
@@ -8199,7 +8660,7 @@ begin
         where pbi.item_type <> 'DEBT_CREATED'
           and pbi.is_voided = false
           and pbi.pay_bank_transfer_id is not null
-          and upper(coalesce(pbt.status,'')) = 'COMPLETED'
+          and external_completed_candidate_transfer.transfer_id is not null
       ) as completed_transfers
     from public.pay_batch_candidates pbc
     left join public.pay_batch_items pbi
@@ -8207,6 +8668,8 @@ begin
     left join public.pay_bank_transfers pbt
       on pbt.id = pbi.pay_bank_transfer_id
      and pbt.pay_batch_id = p_pay_batch_id
+    left join pg_temp._tmp_settle_external_completed_transfers as external_completed_candidate_transfer
+      on external_completed_candidate_transfer.transfer_id = pbi.pay_bank_transfer_id
     where pbc.pay_batch_id = p_pay_batch_id
     group by pbc.candidate_id
   ),
@@ -9027,12 +9490,13 @@ begin
     join public.pay_bank_transfers pbt
       on pbt.id = pbi.pay_bank_transfer_id
      and pbt.pay_batch_id = p_pay_batch_id
+    join pg_temp._tmp_settle_external_completed_transfers as external_completed_payout_transfer
+      on external_completed_payout_transfer.transfer_id = pbt.id
     where pbc.pay_batch_id = p_pay_batch_id
       and pbc.candidate_id in (select t.candidate_id from _tmp_newly_settled_candidates t)
       and pbi.is_voided = false
       and pbi.item_type in ('LOAN_PAYOUT','MANUAL_CREDIT_PAYOUT')
       and pbi.pay_bank_transfer_id is not null
-      and upper(coalesce(pbt.status,'')) = 'COMPLETED'
       and coalesce(
         pbi.finance_case_id,
         nullif(btrim(replace(coalesce(pbi.source_ref,''), 'advance:', '')),'')::uuid
@@ -9097,11 +9561,12 @@ begin
     join public.pay_bank_transfers pbt
       on pbt.id = pbi.pay_bank_transfer_id
      and pbt.pay_batch_id = p_pay_batch_id
+    join pg_temp._tmp_settle_external_completed_transfers as external_completed_payout_event_transfer
+      on external_completed_payout_event_transfer.transfer_id = pbt.id
     where pbc.pay_batch_id = p_pay_batch_id
       and pbc.candidate_id in (select t.candidate_id from _tmp_newly_settled_candidates t)
       and pbi.is_voided = false
       and pbi.item_type in ('LOAN_PAYOUT','MANUAL_CREDIT_PAYOUT')
-      and upper(coalesce(pbt.status,'')) = 'COMPLETED'
       and pa.case_type in ('PAYMENT_ADVANCE'::public.pay_finance_case_type_enum, 'MANUAL_CREDIT_ADJUSTMENT'::public.pay_finance_case_type_enum)
   ) upd;
 
@@ -9118,9 +9583,10 @@ begin
   ),
   stats as (
     select
+      count(*)::int as total_ct,
       sum(case when upper(coalesce(pbt.status,'')) in ('PENDING','PROCESSING','UNKNOWN') then 1 else 0 end)::int as pending_ct,
-      sum(case when upper(coalesce(pbt.status,'')) = 'COMPLETED' then 1 else 0 end)::int as completed_ct,
-      sum(case when upper(coalesce(pbt.status,'')) = 'COMPLETED' or pbt.completed_at_utc is not null then 1 else 0 end)::int as settled_evidence_ct,
+      sum(case when external_completed_status_transfer.transfer_id is not null then 1 else 0 end)::int as completed_ct,
+      sum(case when external_completed_status_transfer.transfer_id is not null then 1 else 0 end)::int as settled_evidence_ct,
       sum(case when upper(coalesce(pbt.status,'')) in ('FAILED','DECLINED','REJECTED','CANCELLED') then 1 else 0 end)::int as failed_ct,
       sum(case when upper(coalesce(pbt.status,'')) in ('RETURNED','REVERTED') then 1 else 0 end)::int as returned_ct,
       sum(case when upper(coalesce(pbt.status,'')) = 'BLOCKED' then 1 else 0 end)::int as blocked_ct
@@ -9128,13 +9594,17 @@ begin
     join public.pay_bank_transfers pbt
       on pbt.id = pti.transfer_id
      and pbt.pay_batch_id = p_pay_batch_id
+    left join pg_temp._tmp_settle_external_completed_transfers as external_completed_status_transfer
+      on external_completed_status_transfer.transfer_id = pbt.id
   )
   select
     case
+      when coalesce(s.total_ct, 0) = 0 then 'SETTLED'
       when coalesce(s.pending_ct,0) = 0
        and coalesce(s.failed_ct,0) = 0
        and coalesce(s.blocked_ct,0) = 0
        and coalesce(s.returned_ct,0) = 0
+       and coalesce(s.settled_evidence_ct,0) >= coalesce(s.total_ct,0)
         then 'SETTLED'
       when coalesce(s.pending_ct,0) = 0
        and coalesce(s.failed_ct,0) = 0
