@@ -3480,13 +3480,18 @@ $function$;
 
 
 
+DROP FUNCTION IF EXISTS public.pay_batch_schedule(uuid, text, timestamptz, text, jsonb, uuid);
+DROP FUNCTION IF EXISTS public.pay_batch_schedule(uuid, text, timestamptz, text, jsonb, uuid, uuid, text);
+
 create or replace function public.pay_batch_schedule(
   p_pay_batch_id uuid,
   p_schedule_kind text,
   p_scheduled_at_utc timestamptz,
   p_funding_account_ref text,
   p_warning_hours_json jsonb,
-  p_actor_user_id uuid
+  p_actor_user_id uuid,
+  p_operation_id uuid DEFAULT NULL::uuid,
+  p_freshness_result_hash text DEFAULT NULL::text
 )
 returns jsonb
 language plpgsql
@@ -3550,8 +3555,16 @@ declare
   v_execution_mode text := 'STANDARD_BANK';
   v_suppress_remittances boolean := false;
   v_has_external_submission_evidence boolean := false;
+  v_submission_evidence_json jsonb := '{}'::jsonb;
   v_intent_payment_date date := null;
   v_batch_status_upper text := null;
+  v_operation_row public.banking_pay_operations%ROWTYPE;
+  v_operation_mode boolean := false;
+  v_expected_freshness_hash text := null;
+  v_expected_freshness_scope_hash text := null;
+  v_stored_freshness_status text := null;
+  v_stored_freshness_hash text := null;
+  v_stored_freshness_scope_hash text := null;
 begin
   if p_pay_batch_id is null then
     raise exception '%', jsonb_build_object(
@@ -3590,7 +3603,10 @@ begin
     pb.execution_commit_state,
     pb.execution_commit_ref,
     pb.execution_committed_at_utc,
-    pb.execution_intent_json
+    pb.execution_intent_json,
+    pb.freshness_validation_status,
+    pb.freshness_result_hash,
+    pb.freshness_scope_hash
   into v_batch
   from public.pay_batches pb
   where pb.id = p_pay_batch_id
@@ -3676,43 +3692,155 @@ begin
     v_intent_payment_date := null;
   end if;
 
-  v_fresh := public.pay_batch_validate_freshness(p_pay_batch_id, p_actor_user_id);
-  v_is_stale := coalesce((v_fresh->>'is_stale')::boolean, false);
-  v_stale_reasons := coalesce(v_fresh->'stale_reasons', '[]'::jsonb);
+  v_operation_mode := p_operation_id IS NOT NULL OR nullif(btrim(coalesce(p_freshness_result_hash, '')), '') IS NOT NULL;
+  v_stored_freshness_status := upper(btrim(coalesce(v_batch.freshness_validation_status, '')));
+  v_stored_freshness_hash := nullif(btrim(coalesce(v_batch.freshness_result_hash, '')), '');
+  v_stored_freshness_scope_hash := nullif(btrim(coalesce(v_batch.freshness_scope_hash, '')), '');
 
-  if v_is_stale = true then
-    select coalesce(jsonb_agg(x.elem), '[]'::jsonb)
-      into v_diff_sample
-    from (
-      select elem
-      from jsonb_array_elements(coalesce(v_fresh->'diff','[]'::jsonb)) as elem
-      limit 50
-    ) x;
+  if p_operation_id is not null then
+    select operation_row.*
+    into v_operation_row
+    from public.banking_pay_operations as operation_row
+    where operation_row.id = p_operation_id
+    for update;
 
-    begin
-      perform public._imp_debug_audit(
-        p_actor_user_id,
-        'PAY_BATCH_SCHEDULE:STALE',
-        jsonb_build_object(
-          'pay_batch_id', p_pay_batch_id::text,
-          'stale_reasons', v_stale_reasons,
-          'diff_sample', v_diff_sample
-        ),
-        'pay_batches',
-        p_pay_batch_id::text
-      );
-    exception when others then
-      null;
-    end;
+    if not found then
+      raise exception '%', jsonb_build_object(
+        'error', 'PAY_BATCH_SCHEDULE',
+        'code', 'OPERATION_NOT_FOUND',
+        'message', 'pay_batch_schedule: operation was not found',
+        'pay_batch_id', p_pay_batch_id::text,
+        'operation_id', p_operation_id::text
+      )::text;
+    end if;
 
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_BATCH_SCHEDULE',
-      'code', 'BATCH_STALE',
-      'message', 'pay_batch_schedule: batch is stale; regenerate draft before proceeding',
-      'pay_batch_id', p_pay_batch_id::text,
-      'stale_reasons', v_stale_reasons,
-      'diff', v_diff_sample
-    )::text;
+    if v_operation_row.pay_batch_id is not null and v_operation_row.pay_batch_id <> p_pay_batch_id then
+      raise exception '%', jsonb_build_object(
+        'error', 'PAY_BATCH_SCHEDULE',
+        'code', 'OPERATION_BATCH_MISMATCH',
+        'message', 'pay_batch_schedule: operation belongs to another batch',
+        'pay_batch_id', p_pay_batch_id::text,
+        'operation_id', p_operation_id::text,
+        'operation_pay_batch_id', v_operation_row.pay_batch_id::text
+      )::text;
+    end if;
+
+    if v_operation_row.actor_user_id is not null and v_operation_row.actor_user_id <> p_actor_user_id then
+      raise exception '%', jsonb_build_object(
+        'error', 'PAY_BATCH_SCHEDULE',
+        'code', 'OPERATION_ACTOR_MISMATCH',
+        'message', 'pay_batch_schedule: operation belongs to another actor',
+        'pay_batch_id', p_pay_batch_id::text,
+        'operation_id', p_operation_id::text
+      )::text;
+    end if;
+
+    v_expected_freshness_hash := coalesce(
+      nullif(btrim(coalesce(p_freshness_result_hash, '')), ''),
+      nullif(btrim(coalesce(v_operation_row.progress_json->>'freshness_result_hash', '')), ''),
+      nullif(btrim(coalesce(v_operation_row.result_json #>> '{freshness,freshness_result_hash}', '')), '')
+    );
+    v_expected_freshness_scope_hash := coalesce(
+      nullif(btrim(coalesce(v_operation_row.progress_json->>'freshness_scope_hash', '')), ''),
+      nullif(btrim(coalesce(v_operation_row.result_json #>> '{freshness,freshness_scope_hash}', '')), '')
+    );
+  else
+    v_expected_freshness_hash := nullif(btrim(coalesce(p_freshness_result_hash, '')), '');
+  end if;
+
+  if v_operation_mode then
+    if v_stored_freshness_status <> 'PASSED' then
+      raise exception '%', jsonb_build_object(
+        'error', 'PAY_BATCH_SCHEDULE',
+        'code', 'FRESHNESS_NOT_PASSED',
+        'message', 'pay_batch_schedule: completed passing chunked freshness is required before scheduling',
+        'pay_batch_id', p_pay_batch_id::text,
+        'operation_id', case when p_operation_id is null then null else p_operation_id::text end,
+        'freshness_validation_status', v_stored_freshness_status,
+        'freshness_result_hash', v_stored_freshness_hash,
+        'freshness_scope_hash', v_stored_freshness_scope_hash
+      )::text;
+    end if;
+
+    if p_operation_id is not null and v_expected_freshness_hash is null then
+      raise exception '%', jsonb_build_object(
+        'error', 'PAY_BATCH_SCHEDULE',
+        'code', 'OPERATION_FRESHNESS_RESULT_HASH_MISSING',
+        'message', 'pay_batch_schedule: operation mode requires the operation to carry the completed freshness result hash',
+        'pay_batch_id', p_pay_batch_id::text,
+        'operation_id', p_operation_id::text,
+        'freshness_validation_status', v_stored_freshness_status,
+        'freshness_result_hash', v_stored_freshness_hash,
+        'freshness_scope_hash', v_stored_freshness_scope_hash
+      )::text;
+    end if;
+
+    if v_expected_freshness_hash is not null and v_stored_freshness_hash is distinct from v_expected_freshness_hash then
+      raise exception '%', jsonb_build_object(
+        'error', 'PAY_BATCH_SCHEDULE',
+        'code', 'FRESHNESS_RESULT_HASH_MISMATCH',
+        'message', 'pay_batch_schedule: operation freshness hash does not match stored batch freshness hash',
+        'pay_batch_id', p_pay_batch_id::text,
+        'operation_id', case when p_operation_id is null then null else p_operation_id::text end,
+        'expected_freshness_result_hash', v_expected_freshness_hash,
+        'actual_freshness_result_hash', v_stored_freshness_hash
+      )::text;
+    end if;
+
+    if v_expected_freshness_scope_hash is not null and v_stored_freshness_scope_hash is distinct from v_expected_freshness_scope_hash then
+      raise exception '%', jsonb_build_object(
+        'error', 'PAY_BATCH_SCHEDULE',
+        'code', 'FRESHNESS_SCOPE_HASH_MISMATCH',
+        'message', 'pay_batch_schedule: operation freshness scope hash does not match stored batch freshness scope hash',
+        'pay_batch_id', p_pay_batch_id::text,
+        'operation_id', case when p_operation_id is null then null else p_operation_id::text end,
+        'expected_freshness_scope_hash', v_expected_freshness_scope_hash,
+        'actual_freshness_scope_hash', v_stored_freshness_scope_hash
+      )::text;
+    end if;
+  else
+    v_fresh := public.pay_batch_validate_freshness(
+      p_pay_batch_id => p_pay_batch_id,
+      p_actor_user_id => p_actor_user_id,
+      p_allow_large_full_scan => false
+    );
+    v_is_stale := coalesce((v_fresh->>'is_stale')::boolean, false);
+    v_stale_reasons := coalesce(v_fresh->'stale_reasons', '[]'::jsonb);
+
+    if v_is_stale = true then
+      select coalesce(jsonb_agg(x.elem), '[]'::jsonb)
+        into v_diff_sample
+      from (
+        select elem
+        from jsonb_array_elements(coalesce(v_fresh->'diff','[]'::jsonb)) as elem
+        limit 50
+      ) x;
+
+      begin
+        perform public._imp_debug_audit(
+          p_actor_user_id,
+          'PAY_BATCH_SCHEDULE:STALE',
+          jsonb_build_object(
+            'pay_batch_id', p_pay_batch_id::text,
+            'stale_reasons', v_stale_reasons,
+            'diff_sample', v_diff_sample
+          ),
+          'pay_batches',
+          p_pay_batch_id::text
+        );
+      exception when others then
+        null;
+      end;
+
+      raise exception '%', jsonb_build_object(
+        'error', 'PAY_BATCH_SCHEDULE',
+        'code', case when coalesce((v_fresh->>'requires_chunked_freshness')::boolean, false) then 'FRESHNESS_REQUIRES_CHUNKED_VALIDATION' else 'BATCH_STALE' end,
+        'message', case when coalesce((v_fresh->>'requires_chunked_freshness')::boolean, false) then 'pay_batch_schedule: chunked freshness validation is required before proceeding' else 'pay_batch_schedule: batch is stale; regenerate draft before proceeding' end,
+        'pay_batch_id', p_pay_batch_id::text,
+        'stale_reasons', v_stale_reasons,
+        'diff', v_diff_sample
+      )::text;
+    end if;
   end if;
 
   v_provider := upper(btrim(coalesce(v_batch.rail_provider_snapshot,'')));
@@ -3840,38 +3968,8 @@ begin
       end if;
     end if;
 
-    select exists(
-      select 1
-      from public.pay_bank_transfers pbt_non_native_sub
-      where pbt_non_native_sub.pay_batch_id = p_pay_batch_id
-        and upper(coalesce(pbt_non_native_sub.status,'')) <> 'BLOCKED'
-        and (
-          nullif(btrim(coalesce(pbt_non_native_sub.rail_tx_id,'')), '') is not null
-          or upper(coalesce(pbt_non_native_sub.rail_state,'')) in ('SUBMITTED','QUEUED','ACCEPTED','SENT','PROCESSING','IN_FLIGHT','PENDING_SETTLEMENT','PENDING_CONFIRMATION','PENDING_SUBMISSION','COMPLETED','SETTLED','COMMITTED','PAID','EXECUTED')
-          or lower(btrim(coalesce(pbt_non_native_sub.rail_meta_json->>'submitted','false'))) in ('true','1','yes','y','on')
-          or lower(btrim(coalesce(pbt_non_native_sub.rail_meta_json->>'queued','false'))) in ('true','1','yes','y','on')
-          or lower(btrim(coalesce(pbt_non_native_sub.rail_meta_json->>'accepted','false'))) in ('true','1','yes','y','on')
-          or lower(btrim(coalesce(pbt_non_native_sub.rail_meta_json->>'sent','false'))) in ('true','1','yes','y','on')
-          or lower(btrim(coalesce(pbt_non_native_sub.rail_meta_json->>'processing','false'))) in ('true','1','yes','y','on')
-          or lower(btrim(coalesce(pbt_non_native_sub.rail_meta_json->>'completed','false'))) in ('true','1','yes','y','on')
-          or lower(btrim(coalesce(pbt_non_native_sub.rail_meta_json->>'committed','false'))) in ('true','1','yes','y','on')
-          or lower(btrim(coalesce(pbt_non_native_sub.rail_meta_json->>'settled','false'))) in ('true','1','yes','y','on')
-          or lower(btrim(coalesce(pbt_non_native_sub.rail_meta_json->>'paid','false'))) in ('true','1','yes','y','on')
-          or coalesce(
-            nullif(btrim(coalesce(pbt_non_native_sub.rail_meta_json->>'provider_submission_id','')), ''),
-            nullif(btrim(coalesce(pbt_non_native_sub.rail_meta_json->>'submission_id','')), ''),
-            nullif(btrim(coalesce(pbt_non_native_sub.rail_meta_json->>'provider_transfer_id','')), ''),
-            nullif(btrim(coalesce(pbt_non_native_sub.rail_meta_json->>'transfer_id','')), ''),
-            nullif(btrim(coalesce(pbt_non_native_sub.rail_meta_json->>'external_transfer_id','')), ''),
-            nullif(btrim(coalesce(pbt_non_native_sub.rail_meta_json->>'provider_payment_id','')), ''),
-            nullif(btrim(coalesce(pbt_non_native_sub.rail_meta_json->>'payment_id','')), ''),
-            nullif(btrim(coalesce(pbt_non_native_sub.rail_meta_json->>'external_payment_id','')), ''),
-            nullif(btrim(coalesce(pbt_non_native_sub.rail_meta_json->>'transaction_id','')), ''),
-            nullif(btrim(coalesce(pbt_non_native_sub.rail_meta_json->>'id','')), '')
-          ) is not null
-        )
-    )
-    into v_has_external_submission_evidence;
+    v_submission_evidence_json := public.pay_batch_submission_evidence(p_pay_batch_id);
+    v_has_external_submission_evidence := coalesce((v_submission_evidence_json->>'has_external_submission_evidence')::boolean, false);
 
     if v_has_external_submission_evidence = true then
       raise exception '%', jsonb_build_object(
@@ -3897,7 +3995,10 @@ begin
         'payment_date', v_authoritative_payment_date::text,
         'schedule_kind', v_kind,
         'scheduled_at_utc', v_sched_at::text,
-        'suppress_remittances', v_suppress_remittances
+        'suppress_remittances', v_suppress_remittances,
+        'operation_id', case when p_operation_id is null then null else p_operation_id::text end,
+        'freshness_result_hash', v_stored_freshness_hash,
+        'freshness_scope_hash', v_stored_freshness_scope_hash
       ),
       execution_commit_state = coalesce(nullif(btrim(coalesce(pb_non_native.execution_commit_state, '')), ''), 'NOT_SUBMITTED')
     where pb_non_native.id = p_pay_batch_id;
@@ -4439,7 +4540,16 @@ begin
     status = 'SCHEDULED',
     execution_commit_state = v_execution_commit_state,
     execution_commit_ref = v_execution_commit_ref,
-    execution_committed_at_utc = v_execution_committed_at_utc
+    execution_committed_at_utc = v_execution_committed_at_utc,
+    execution_intent_json = coalesce(v_execution_intent_json, '{}'::jsonb) || jsonb_build_object(
+      'execution_mode', v_execution_mode,
+      'payment_date', v_authoritative_payment_date::text,
+      'schedule_kind', v_kind,
+      'scheduled_at_utc', case when v_sched_at is null then null else v_sched_at::text end,
+      'operation_id', case when p_operation_id is null then null else p_operation_id::text end,
+      'freshness_result_hash', v_stored_freshness_hash,
+      'freshness_scope_hash', v_stored_freshness_scope_hash
+    )
   where pb.id = p_pay_batch_id;
 
   update public.pay_advance_reservations par
@@ -4696,14 +4806,17 @@ $$;
 
 
 
-
+DROP FUNCTION IF EXISTS public.pay_batch_prepare(uuid, uuid);
 
 
 DROP FUNCTION IF EXISTS public.pay_batch_prepare(uuid, uuid);
+DROP FUNCTION IF EXISTS public.pay_batch_prepare(uuid, uuid, uuid, text);
 
 CREATE OR REPLACE FUNCTION public.pay_batch_prepare(
   p_pay_batch_id uuid,
-  p_actor_user_id uuid
+  p_actor_user_id uuid,
+  p_operation_id uuid DEFAULT NULL::uuid,
+  p_freshness_result_hash text DEFAULT NULL::text
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -4713,6 +4826,7 @@ AS $function$
 DECLARE
   v_now timestamptz := now();
   v_batch_row public.pay_batches%ROWTYPE;
+  v_operation_row public.banking_pay_operations%ROWTYPE;
   v_summary_json jsonb := '{}'::jsonb;
   v_fresh_json jsonb := '{}'::jsonb;
   v_blockers_json jsonb := '[]'::jsonb;
@@ -4721,6 +4835,7 @@ DECLARE
   v_ready boolean := false;
   v_is_stale boolean := false;
   v_batch_status text := NULL::text;
+  v_execution_commit_state text := 'NOT_SUBMITTED';
   v_execution_mode text := 'STANDARD_BANK';
   v_candidate_count integer := 0;
   v_item_count integer := 0;
@@ -4733,6 +4848,14 @@ DECLARE
   v_blocker_count integer := 0;
   v_warning_count integer := 0;
   v_diff_sample jsonb := '[]'::jsonb;
+  v_operation_mode boolean := false;
+  v_expected_freshness_hash text := null;
+  v_expected_freshness_scope_hash text := null;
+  v_batch_freshness_hash text := null;
+  v_batch_freshness_scope_hash text := null;
+  v_batch_freshness_status text := null;
+  v_batch_freshness_json jsonb := '{}'::jsonb;
+  v_large_batch boolean := false;
 BEGIN
   IF p_pay_batch_id IS NULL THEN
     RAISE EXCEPTION '%', jsonb_build_object(
@@ -4753,13 +4876,14 @@ BEGIN
 
   PERFORM 1
   FROM public.tms_users AS actor_user
-  WHERE actor_user.id = p_actor_user_id;
+  WHERE actor_user.id = p_actor_user_id
+    AND coalesce(actor_user.is_active, false) = true;
 
   IF NOT FOUND THEN
     RAISE EXCEPTION '%', jsonb_build_object(
       'error', 'PAY_BATCH_PREPARE',
       'code', 'ACTOR_USER_NOT_FOUND',
-      'message', 'pay_batch_prepare: actor_user was not found',
+      'message', 'pay_batch_prepare: actor_user was not found or is inactive',
       'actor_user_id', p_actor_user_id::text,
       'pay_batch_id', p_pay_batch_id::text
     )::text;
@@ -4768,7 +4892,8 @@ BEGIN
   SELECT batch_row.*
   INTO v_batch_row
   FROM public.pay_batches AS batch_row
-  WHERE batch_row.id = p_pay_batch_id;
+  WHERE batch_row.id = p_pay_batch_id
+  FOR UPDATE;
 
   IF NOT FOUND THEN
     RAISE EXCEPTION '%', jsonb_build_object(
@@ -4780,6 +4905,63 @@ BEGIN
   END IF;
 
   v_batch_status := upper(btrim(coalesce(v_batch_row.status, '')));
+  v_execution_commit_state := upper(btrim(coalesce(v_batch_row.execution_commit_state, 'NOT_SUBMITTED')));
+  IF v_execution_commit_state NOT IN ('NOT_SUBMITTED', 'SUBMITTED_NOT_COMMITTED', 'COMMITTED') THEN
+    v_execution_commit_state := 'NOT_SUBMITTED';
+  END IF;
+
+  v_operation_mode := p_operation_id IS NOT NULL OR nullif(btrim(coalesce(p_freshness_result_hash, '')), '') IS NOT NULL;
+
+  IF p_operation_id IS NOT NULL THEN
+    SELECT operation_row.*
+    INTO v_operation_row
+    FROM public.banking_pay_operations AS operation_row
+    WHERE operation_row.id = p_operation_id
+    FOR UPDATE;
+
+    IF NOT FOUND THEN
+      RAISE EXCEPTION '%', jsonb_build_object(
+        'error', 'PAY_BATCH_PREPARE',
+        'code', 'OPERATION_NOT_FOUND',
+        'message', 'pay_batch_prepare: operation was not found',
+        'pay_batch_id', p_pay_batch_id::text,
+        'operation_id', p_operation_id::text
+      )::text;
+    END IF;
+
+    IF v_operation_row.pay_batch_id IS NOT NULL AND v_operation_row.pay_batch_id <> p_pay_batch_id THEN
+      RAISE EXCEPTION '%', jsonb_build_object(
+        'error', 'PAY_BATCH_PREPARE',
+        'code', 'OPERATION_BATCH_MISMATCH',
+        'message', 'pay_batch_prepare: operation belongs to another batch',
+        'pay_batch_id', p_pay_batch_id::text,
+        'operation_id', p_operation_id::text,
+        'operation_pay_batch_id', v_operation_row.pay_batch_id::text
+      )::text;
+    END IF;
+
+    IF v_operation_row.actor_user_id IS NOT NULL AND v_operation_row.actor_user_id <> p_actor_user_id THEN
+      RAISE EXCEPTION '%', jsonb_build_object(
+        'error', 'PAY_BATCH_PREPARE',
+        'code', 'OPERATION_ACTOR_MISMATCH',
+        'message', 'pay_batch_prepare: operation belongs to another actor',
+        'pay_batch_id', p_pay_batch_id::text,
+        'operation_id', p_operation_id::text
+      )::text;
+    END IF;
+
+    v_expected_freshness_hash := coalesce(
+      nullif(btrim(coalesce(p_freshness_result_hash, '')), ''),
+      nullif(btrim(coalesce(v_operation_row.progress_json->>'freshness_result_hash', '')), ''),
+      nullif(btrim(coalesce(v_operation_row.result_json #>> '{freshness,freshness_result_hash}', '')), '')
+    );
+    v_expected_freshness_scope_hash := coalesce(
+      nullif(btrim(coalesce(v_operation_row.progress_json->>'freshness_scope_hash', '')), ''),
+      nullif(btrim(coalesce(v_operation_row.result_json #>> '{freshness,freshness_scope_hash}', '')), '')
+    );
+  ELSE
+    v_expected_freshness_hash := nullif(btrim(coalesce(p_freshness_result_hash, '')), '');
+  END IF;
 
   v_summary_json := public.pay_batch_execution_summary_get(
     p_pay_batch_id => p_pay_batch_id,
@@ -4799,26 +4981,96 @@ BEGIN
   v_pending_transfer_count := coalesce(NULLIF(v_summary_json->>'pending_transfer_count', '')::integer, 0);
   v_failed_transfer_count := coalesce(NULLIF(v_summary_json->>'failed_transfer_count', '')::integer, 0);
   v_blocked_transfer_count := coalesce(NULLIF(v_summary_json->>'blocked_transfer_count', '')::integer, 0);
-  v_submitted_transfer_count := coalesce(NULLIF(v_summary_json->>'submitted_transfer_count', '')::integer, 0);
+  v_submitted_transfer_count := coalesce(NULLIF(v_summary_json->>'provider_submitted_transfer_count', '')::integer, coalesce(NULLIF(v_summary_json->>'submitted_transfer_count', '')::integer, 0));
 
-  v_fresh_json := public.pay_batch_validate_freshness(p_pay_batch_id, p_actor_user_id);
-  v_is_stale := coalesce((v_fresh_json->>'is_stale')::boolean, false);
+  v_batch_freshness_status := upper(btrim(coalesce(v_batch_row.freshness_validation_status, '')));
+  v_batch_freshness_hash := nullif(btrim(coalesce(v_batch_row.freshness_result_hash, '')), '');
+  v_batch_freshness_scope_hash := nullif(btrim(coalesce(v_batch_row.freshness_scope_hash, '')), '');
+  v_batch_freshness_json := coalesce(v_batch_row.freshness_result_json, '{}'::jsonb);
 
-  IF v_is_stale THEN
-    SELECT coalesce(jsonb_agg(diff_row.elem), '[]'::jsonb)
-    INTO v_diff_sample
-    FROM (
-      SELECT diff_elem.elem
-      FROM jsonb_array_elements(coalesce(v_fresh_json->'diff', '[]'::jsonb)) AS diff_elem(elem)
-      LIMIT 20
-    ) AS diff_row;
-
+  IF v_execution_commit_state <> 'NOT_SUBMITTED'
+     OR nullif(btrim(coalesce(v_batch_row.execution_commit_ref, '')), '') IS NOT NULL
+     OR v_batch_row.execution_committed_at_utc IS NOT NULL THEN
     v_blockers_json := v_blockers_json || jsonb_build_array(jsonb_build_object(
-      'code', 'BATCH_STALE',
-      'message', 'The payment batch is no longer up to date and must be regenerated before payment can continue.',
-      'stale_reasons', coalesce(v_fresh_json->'stale_reasons', '[]'::jsonb),
-      'diff_sample', v_diff_sample
+      'code', 'EXECUTION_STATE_CONFLICT',
+      'message', 'This payment batch has already crossed the execution boundary and cannot be prepared again.',
+      'execution_commit_state', v_execution_commit_state,
+      'execution_commit_ref', v_batch_row.execution_commit_ref,
+      'execution_committed_at_utc', CASE WHEN v_batch_row.execution_committed_at_utc IS NULL THEN NULL ELSE v_batch_row.execution_committed_at_utc::text END
     ));
+  ELSIF v_operation_mode THEN
+    IF v_batch_freshness_status <> 'PASSED' THEN
+      v_blockers_json := v_blockers_json || jsonb_build_array(jsonb_build_object(
+        'code', CASE WHEN v_batch_freshness_status = 'STALE' THEN 'BATCH_STALE' ELSE 'FRESHNESS_REQUIRED' END,
+        'message', 'Chunked freshness must pass before this payment batch can be prepared.',
+        'freshness_validation_status', nullif(v_batch_freshness_status, ''),
+        'freshness_operation_id', CASE WHEN v_batch_row.freshness_operation_id IS NULL THEN NULL ELSE v_batch_row.freshness_operation_id::text END,
+        'freshness_result_hash', v_batch_freshness_hash,
+        'freshness_scope_hash', v_batch_freshness_scope_hash,
+        'stale_reasons', coalesce(v_batch_freshness_json->'stale_reasons', '[]'::jsonb),
+        'diff_sample', coalesce(v_batch_freshness_json->'diff_sample', '[]'::jsonb)
+      ));
+    ELSIF p_operation_id IS NOT NULL AND v_expected_freshness_hash IS NULL THEN
+      v_blockers_json := v_blockers_json || jsonb_build_array(jsonb_build_object(
+        'code', 'OPERATION_FRESHNESS_RESULT_HASH_MISSING',
+        'message', 'The payment operation does not carry a completed freshness result hash.',
+        'freshness_validation_status', nullif(v_batch_freshness_status, ''),
+        'freshness_result_hash', v_batch_freshness_hash,
+        'freshness_scope_hash', v_batch_freshness_scope_hash
+      ));
+    ELSIF v_expected_freshness_hash IS NOT NULL AND v_batch_freshness_hash IS DISTINCT FROM v_expected_freshness_hash THEN
+      v_blockers_json := v_blockers_json || jsonb_build_array(jsonb_build_object(
+        'code', 'FRESHNESS_RESULT_HASH_MISMATCH',
+        'message', 'The stored freshness result does not match the operation freshness result.',
+        'expected_freshness_result_hash', v_expected_freshness_hash,
+        'actual_freshness_result_hash', v_batch_freshness_hash,
+        'freshness_scope_hash', v_batch_freshness_scope_hash
+      ));
+    ELSIF v_expected_freshness_scope_hash IS NOT NULL AND v_batch_freshness_scope_hash IS DISTINCT FROM v_expected_freshness_scope_hash THEN
+      v_blockers_json := v_blockers_json || jsonb_build_array(jsonb_build_object(
+        'code', 'FRESHNESS_SCOPE_HASH_MISMATCH',
+        'message', 'The stored freshness scope does not match the operation freshness scope.',
+        'expected_freshness_scope_hash', v_expected_freshness_scope_hash,
+        'actual_freshness_scope_hash', v_batch_freshness_scope_hash,
+        'freshness_result_hash', v_batch_freshness_hash
+      ));
+    END IF;
+  ELSE
+    v_large_batch := coalesce(v_candidate_count, 0) > 100 OR coalesce(v_item_count, 0) > 250 OR coalesce(v_transfer_count, 0) > 100;
+
+    IF v_large_batch THEN
+      v_blockers_json := v_blockers_json || jsonb_build_array(jsonb_build_object(
+        'code', 'FRESHNESS_REQUIRES_CHUNKED_VALIDATION',
+        'message', 'This batch must use chunked freshness validation before payment can continue.',
+        'candidate_count', v_candidate_count,
+        'item_count', v_item_count,
+        'transfer_count', v_transfer_count
+      ));
+    ELSE
+      v_fresh_json := public.pay_batch_validate_freshness(
+        p_pay_batch_id => p_pay_batch_id,
+        p_actor_user_id => p_actor_user_id,
+        p_allow_large_full_scan => false
+      );
+      v_is_stale := coalesce((v_fresh_json->>'is_stale')::boolean, false);
+
+      IF v_is_stale THEN
+        SELECT coalesce(jsonb_agg(diff_row.elem), '[]'::jsonb)
+        INTO v_diff_sample
+        FROM (
+          SELECT diff_elem.elem
+          FROM jsonb_array_elements(coalesce(v_fresh_json->'diff', '[]'::jsonb)) AS diff_elem(elem)
+          LIMIT 20
+        ) AS diff_row;
+
+        v_blockers_json := v_blockers_json || jsonb_build_array(jsonb_build_object(
+          'code', CASE WHEN coalesce((v_fresh_json->>'requires_chunked_freshness')::boolean, false) THEN 'FRESHNESS_REQUIRES_CHUNKED_VALIDATION' ELSE 'BATCH_STALE' END,
+          'message', CASE WHEN coalesce((v_fresh_json->>'requires_chunked_freshness')::boolean, false) THEN 'This batch must use chunked freshness validation before payment can continue.' ELSE 'The payment batch is no longer up to date and must be regenerated before payment can continue.' END,
+          'stale_reasons', coalesce(v_fresh_json->'stale_reasons', '[]'::jsonb),
+          'diff_sample', v_diff_sample
+        ));
+      END IF;
+    END IF;
   END IF;
 
   IF v_batch_status IN ('CANCELLED', 'CANCELED') THEN
@@ -4856,7 +5108,7 @@ BEGIN
     ));
   END IF;
 
-  IF v_execution_mode NOT IN ('CSV', 'EXTERNAL', 'EXTERNAL_SETTLEMENT', 'MANUAL_SETTLEMENT') THEN
+  IF v_execution_mode NOT IN ('CSV', 'CSV_SETTLEMENT', 'EXTERNAL', 'EXTERNAL_SETTLEMENT', 'MANUAL_SETTLEMENT') THEN
     IF v_transfer_count <= 0 THEN
       v_blockers_json := v_blockers_json || jsonb_build_array(jsonb_build_object(
         'code', 'BANK_TRANSFERS_NOT_PREPARED',
@@ -4893,9 +5145,10 @@ BEGIN
   v_ready := v_blocker_count = 0;
 
   v_next_required_phase := CASE
-    WHEN v_is_stale THEN 'REGENERATE_DRAFT'
+    WHEN v_execution_commit_state <> 'NOT_SUBMITTED' THEN 'STOP_EXECUTION_BOUNDARY_CROSSED'
+    WHEN EXISTS (SELECT 1 FROM jsonb_array_elements(v_blockers_json) AS blocker(elem) WHERE blocker.elem->>'code' IN ('BATCH_STALE','FRESHNESS_REQUIRED','FRESHNESS_REQUIRES_CHUNKED_VALIDATION','FRESHNESS_RESULT_HASH_MISMATCH')) THEN 'VALIDATE_FRESHNESS'
     WHEN v_batch_status IN ('CANCELLED', 'CANCELED') THEN 'STOP_CANCELLED'
-    WHEN v_execution_mode IN ('CSV', 'EXTERNAL', 'EXTERNAL_SETTLEMENT', 'MANUAL_SETTLEMENT') AND v_ready THEN 'SETTLEMENT'
+    WHEN v_execution_mode IN ('CSV', 'CSV_SETTLEMENT', 'EXTERNAL', 'EXTERNAL_SETTLEMENT', 'MANUAL_SETTLEMENT') AND v_ready THEN 'SETTLEMENT'
     WHEN v_transfer_count <= 0 THEN 'PREPARE_TRANSFER_SCOPE'
     WHEN v_blocker_count > 0 THEN 'RESOLVE_BLOCKERS'
     ELSE 'START_AUTHORISATION'
@@ -4904,6 +5157,7 @@ BEGIN
   RETURN jsonb_build_object(
     'ok', true,
     'pay_batch_id', p_pay_batch_id::text,
+    'operation_id', CASE WHEN p_operation_id IS NULL THEN NULL ELSE p_operation_id::text END,
     'ready', v_ready,
     'ready_flag', v_ready,
     'blocker_count', v_blocker_count,
@@ -4913,7 +5167,16 @@ BEGIN
     'next_required_phase', v_next_required_phase,
     'execution_summary', v_summary_json,
     'batch_status', v_batch_row.status,
+    'execution_commit_state', v_execution_commit_state,
     'execution_mode', v_execution_mode,
+    'freshness', jsonb_build_object(
+      'freshness_validation_status', v_batch_freshness_status,
+      'freshness_result_hash', v_batch_freshness_hash,
+      'freshness_scope_hash', v_batch_freshness_scope_hash,
+      'freshness_operation_id', CASE WHEN v_batch_row.freshness_operation_id IS NULL THEN NULL ELSE v_batch_row.freshness_operation_id::text END,
+      'expected_freshness_result_hash', v_expected_freshness_hash,
+      'freshness_result_json', v_batch_freshness_json
+    ),
     'schedule_state', coalesce(v_summary_json->'schedule_state', '{}'::jsonb),
     'authorisation_state', coalesce(v_summary_json->'authorisation_state', '{}'::jsonb),
     'blocked_funds_state', coalesce(v_summary_json->'blocked_funds_state', '{}'::jsonb),
@@ -4923,6 +5186,7 @@ BEGIN
   );
 END;
 $function$;
+
 
 
 
@@ -5384,6 +5648,16 @@ declare
   v_digits text;
 
   v_batch_created_by_user_id uuid := null;
+  v_batch_status text := null;
+  v_cancelled_at_utc timestamptz := null;
+  v_execution_commit_state text := 'NOT_SUBMITTED';
+  v_execution_commit_ref text := null;
+  v_execution_committed_at_utc timestamptz := null;
+  v_freshness_validation_status text := null;
+  v_freshness_result_hash text := null;
+  v_freshness_scope_hash text := null;
+  v_freshness_result_json jsonb := '{}'::jsonb;
+  v_pre_execution_export boolean := false;
   v_fresh jsonb := null;
   v_is_stale boolean := false;
   v_stale_reasons jsonb := '[]'::jsonb;
@@ -5396,8 +5670,27 @@ begin
   end if;
 
   select
-    pb.created_by_user_id
-  into v_batch_created_by_user_id
+    pb.created_by_user_id,
+    upper(btrim(coalesce(pb.status, ''))),
+    pb.cancelled_at_utc,
+    upper(btrim(coalesce(pb.execution_commit_state, 'NOT_SUBMITTED'))),
+    nullif(btrim(coalesce(pb.execution_commit_ref, '')), ''),
+    pb.execution_committed_at_utc,
+    upper(btrim(coalesce(pb.freshness_validation_status, ''))),
+    nullif(btrim(coalesce(pb.freshness_result_hash, '')), ''),
+    nullif(btrim(coalesce(pb.freshness_scope_hash, '')), ''),
+    coalesce(pb.freshness_result_json, '{}'::jsonb)
+  into
+    v_batch_created_by_user_id,
+    v_batch_status,
+    v_cancelled_at_utc,
+    v_execution_commit_state,
+    v_execution_commit_ref,
+    v_execution_committed_at_utc,
+    v_freshness_validation_status,
+    v_freshness_result_hash,
+    v_freshness_scope_hash,
+    v_freshness_result_json
   from public.pay_batches pb
   where pb.id = p_pay_batch_id
   limit 1;
@@ -5406,30 +5699,76 @@ begin
     raise exception 'pay_export_bank_csv: pay batch % not found.', p_pay_batch_id;
   end if;
 
-  v_fresh := public.pay_batch_validate_freshness(
-    p_pay_batch_id,
-    coalesce(v_batch_created_by_user_id, '00000000-0000-0000-0000-000000000000'::uuid)
+  if v_execution_commit_state not in ('NOT_SUBMITTED', 'SUBMITTED_NOT_COMMITTED', 'COMMITTED') then
+    v_execution_commit_state := 'NOT_SUBMITTED';
+  end if;
+
+  v_pre_execution_export := (
+    v_cancelled_at_utc is null
+    and v_batch_status not in ('CANCELLED', 'CANCELED')
+    and v_execution_commit_state = 'NOT_SUBMITTED'
+    and v_execution_commit_ref is null
+    and v_execution_committed_at_utc is null
   );
-  v_is_stale := coalesce((v_fresh->>'is_stale')::boolean, false);
-  v_stale_reasons := coalesce(v_fresh->'stale_reasons', '[]'::jsonb);
 
-  select coalesce(jsonb_agg(x.elem), '[]'::jsonb)
-  into v_diff_sample
-  from (
-    select elem
-    from jsonb_array_elements(coalesce(v_fresh->'diff','[]'::jsonb)) as elem
-    limit 50
-  ) x;
+  if v_pre_execution_export then
+    if v_freshness_validation_status = 'PASSED' and v_freshness_result_hash is not null then
+      v_fresh := jsonb_build_object(
+        'is_stale', false,
+        'stale_reasons', coalesce(v_freshness_result_json->'stale_reasons', '[]'::jsonb),
+        'diff', coalesce(v_freshness_result_json->'diff_sample', '[]'::jsonb),
+        'freshness_validation_status', v_freshness_validation_status,
+        'freshness_result_hash', v_freshness_result_hash,
+        'freshness_scope_hash', v_freshness_scope_hash,
+        'source', 'stored_chunked_freshness'
+      );
+      v_is_stale := false;
+      v_stale_reasons := coalesce(v_freshness_result_json->'stale_reasons', '[]'::jsonb);
+      v_diff_sample := coalesce(v_freshness_result_json->'diff_sample', '[]'::jsonb);
+    else
+      v_fresh := public.pay_batch_validate_freshness(
+        p_pay_batch_id,
+        coalesce(v_batch_created_by_user_id, '00000000-0000-0000-0000-000000000000'::uuid),
+        false
+      );
+      v_is_stale := coalesce((v_fresh->>'is_stale')::boolean, false);
+      v_stale_reasons := coalesce(v_fresh->'stale_reasons', '[]'::jsonb);
 
-  if v_is_stale = true then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_EXPORT_BANK_CSV',
-      'code', 'BATCH_STALE',
-      'message', 'pay_export_bank_csv: batch is stale; regenerate draft before exporting',
-      'pay_batch_id', p_pay_batch_id::text,
-      'stale_reasons', v_stale_reasons,
-      'diff', v_diff_sample
-    )::text;
+      select coalesce(jsonb_agg(x.elem), '[]'::jsonb)
+      into v_diff_sample
+      from (
+        select elem
+        from jsonb_array_elements(coalesce(v_fresh->'diff','[]'::jsonb)) as elem
+        limit 50
+      ) x;
+
+      if v_is_stale = true then
+        raise exception '%', jsonb_build_object(
+          'error', 'PAY_EXPORT_BANK_CSV',
+          'code', case when coalesce((v_fresh->>'requires_chunked_freshness')::boolean, false) then 'FRESHNESS_REQUIRES_CHUNKED_VALIDATION' else 'BATCH_STALE' end,
+          'message', case when coalesce((v_fresh->>'requires_chunked_freshness')::boolean, false) then 'pay_export_bank_csv: chunked freshness validation is required before payment-initiation export' else 'pay_export_bank_csv: batch is stale; regenerate draft before exporting' end,
+          'pay_batch_id', p_pay_batch_id::text,
+          'stale_reasons', v_stale_reasons,
+          'diff', v_diff_sample,
+          'freshness_validation_status', v_freshness_validation_status,
+          'freshness_result_hash', v_freshness_result_hash,
+          'freshness_scope_hash', v_freshness_scope_hash
+        )::text;
+      end if;
+    end if;
+  else
+    v_fresh := jsonb_build_object(
+      'is_stale', coalesce(v_freshness_validation_status in ('STALE', 'FAILED'), false),
+      'stale_reasons', coalesce(v_freshness_result_json->'stale_reasons', '[]'::jsonb),
+      'diff', coalesce(v_freshness_result_json->'diff_sample', '[]'::jsonb),
+      'freshness_validation_status', nullif(v_freshness_validation_status, ''),
+      'freshness_result_hash', v_freshness_result_hash,
+      'freshness_scope_hash', v_freshness_scope_hash,
+      'source', 'stored_freshness_metadata_non_blocking'
+    );
+    v_is_stale := coalesce(v_freshness_validation_status in ('STALE', 'FAILED'), false);
+    v_stale_reasons := coalesce(v_freshness_result_json->'stale_reasons', '[]'::jsonb);
+    v_diff_sample := coalesce(v_freshness_result_json->'diff_sample', '[]'::jsonb);
   end if;
 
   -- Load configured CSV column order and formatting.
@@ -5546,13 +5885,18 @@ begin
     raise exception 'pay_export_bank_csv: duplicate column keys in pay_export_csv_columns_json';
   end if;
 
-  -- Ensure required snapshot fields exist for all pending transfers in scope, but only for fields actually exported.
+  -- Ensure required snapshot fields exist for all exportable transfers in scope, but only for fields actually exported.
+  -- Pre-execution payment-initiation export is limited to PENDING transfers.
+  -- Post-execution/cancelled historical re-download uses materialised frozen transfer rows and does not block on current freshness.
   select count(*)::int
   into v_missing_count
   from public.pay_bank_transfers pbt
   where pbt.pay_batch_id = p_pay_batch_id
     and (v_scope = 'ALL' or pbt.pay_channel = v_scope)
-    and upper(coalesce(pbt.status,'')) = 'PENDING'
+    and (
+      (v_pre_execution_export = true and upper(coalesce(pbt.status,'')) = 'PENDING')
+      or (v_pre_execution_export = false and upper(coalesce(pbt.status,'')) <> 'BLOCKED')
+    )
     and (
       (array_position(v_cols,'payment_reference') is not null and pbt.payment_reference is null)
       or (array_position(v_cols,'payee_name') is not null and pbt.payee_name is null)
@@ -5576,7 +5920,7 @@ begin
     );
 
   if v_missing_count > 0 then
-    raise exception 'pay_export_bank_csv: % pending transfer(s) missing one or more required fields for the configured export. Execute-bank must populate these first.', v_missing_count;
+    raise exception 'pay_export_bank_csv: % exportable transfer(s) missing one or more required fields for the configured export. Execute-bank must populate these first.', v_missing_count;
   end if;
 
   -- If no rows, raise to avoid silent empty file.
@@ -5585,10 +5929,13 @@ begin
   from public.pay_bank_transfers pbt
   where pbt.pay_batch_id = p_pay_batch_id
     and (v_scope = 'ALL' or pbt.pay_channel = v_scope)
-    and upper(coalesce(pbt.status,'')) = 'PENDING';
+    and (
+      (v_pre_execution_export = true and upper(coalesce(pbt.status,'')) = 'PENDING')
+      or (v_pre_execution_export = false and upper(coalesce(pbt.status,'')) <> 'BLOCKED')
+    );
 
   if v_row_count = 0 then
-    raise exception 'pay_export_bank_csv: no pending transfers found for batch % (scope=%).', p_pay_batch_id, v_scope;
+    raise exception 'pay_export_bank_csv: no exportable transfers found for batch % (scope=%).', p_pay_batch_id, v_scope;
   end if;
 
   -- Build header from configured columns and optional user overrides.
@@ -5668,7 +6015,10 @@ begin
     from public.pay_bank_transfers pbt
     where pbt.pay_batch_id = p_pay_batch_id
       and (v_scope = 'ALL' or pbt.pay_channel = v_scope)
-      and upper(coalesce(pbt.status,'')) = 'PENDING'
+      and (
+        (v_pre_execution_export = true and upper(coalesce(pbt.status,'')) = 'PENDING')
+        or (v_pre_execution_export = false and upper(coalesce(pbt.status,'')) <> 'BLOCKED')
+      )
     order by pbt.id
   loop
     v_line := '';
@@ -5781,6 +6131,9 @@ begin
   return v_csv;
 end;
 $$;
+
+
+
 
 drop function if exists public.pay_settle_manual_confirm(uuid, text, text, date, uuid);
 
@@ -6859,6 +7212,8 @@ $$;
 DROP FUNCTION IF EXISTS public.pay_settle_rail(uuid, jsonb, uuid);
 DROP FUNCTION IF EXISTS public.pay_settle_rail(uuid, jsonb, uuid, uuid, jsonb);
 
+
+
 create or replace function public.pay_settle_rail(
   p_pay_batch_id uuid,
   p_settlement_json jsonb,
@@ -6909,6 +7264,11 @@ declare
   v_is_stale boolean := false;
   v_stale_reasons jsonb := '[]'::jsonb;
   v_diff_sample jsonb := '[]'::jsonb;
+  v_stored_freshness_status text := null;
+  v_stored_freshness_result_hash text := null;
+  v_stored_freshness_scope_hash text := null;
+  v_stored_freshness_result_json jsonb := '{}'::jsonb;
+  v_stored_freshness_operation_id uuid := null;
 
   v_overpay_patched_ct int := 0;
   v_payment_advance_recovery_patched_ct int := 0;
@@ -7026,6 +7386,12 @@ begin
     IF v_batch.id IS NULL THEN
       RAISE EXCEPTION 'pay_settle_rail: pay_batch not found';
     END IF;
+
+    v_stored_freshness_status := upper(btrim(coalesce(v_batch.freshness_validation_status, '')));
+    v_stored_freshness_result_hash := nullif(btrim(coalesce(v_batch.freshness_result_hash, '')), '');
+    v_stored_freshness_scope_hash := nullif(btrim(coalesce(v_batch.freshness_scope_hash, '')), '');
+    v_stored_freshness_result_json := coalesce(v_batch.freshness_result_json, '{}'::jsonb);
+    v_stored_freshness_operation_id := v_batch.freshness_operation_id;
 
     WITH requested_scope AS (
       SELECT DISTINCT (scope_element.value #>> '{}')::uuid AS settlement_scope_id
@@ -7492,6 +7858,13 @@ begin
       'has_more', v_has_more,
       'remittance_ready', COALESCE(v_remaining_scope_count, 0) = 0 AND COALESCE(v_total_failed_scope_count, 0) = 0,
       'remittance_queued', false,
+      'freshness', jsonb_build_object(
+        'freshness_validation_status', nullif(v_stored_freshness_status, ''),
+        'freshness_result_hash', v_stored_freshness_result_hash,
+        'freshness_scope_hash', v_stored_freshness_scope_hash,
+        'freshness_operation_id', case when v_stored_freshness_operation_id is null then null else v_stored_freshness_operation_id::text end,
+        'source', 'stored_freshness_metadata_non_blocking'
+      ),
       'message', 'Rail settlement chunk processed; remittance queueing is handled by a separate operation.'
     );
   END IF;
@@ -7509,7 +7882,12 @@ begin
     pb.settlement_confirmation_json,
     pb.execution_commit_state,
     pb.execution_commit_ref,
-    pb.execution_committed_at_utc
+    pb.execution_committed_at_utc,
+    pb.freshness_validation_status,
+    pb.freshness_result_hash,
+    pb.freshness_scope_hash,
+    pb.freshness_result_json,
+    pb.freshness_operation_id
   into v_batch
   from public.pay_batches pb
   where pb.id = p_pay_batch_id
@@ -7518,6 +7896,12 @@ begin
   if v_batch.id is null then
     raise exception 'pay_settle_rail: pay_batch not found';
   end if;
+
+  v_stored_freshness_status := upper(btrim(coalesce(v_batch.freshness_validation_status, '')));
+  v_stored_freshness_result_hash := nullif(btrim(coalesce(v_batch.freshness_result_hash, '')), '');
+  v_stored_freshness_scope_hash := nullif(btrim(coalesce(v_batch.freshness_scope_hash, '')), '');
+  v_stored_freshness_result_json := coalesce(v_batch.freshness_result_json, '{}'::jsonb);
+  v_stored_freshness_operation_id := v_batch.freshness_operation_id;
 
   if v_batch.execution_intent_json is not null and jsonb_typeof(v_batch.execution_intent_json) = 'object' then
     v_execution_intent_json := v_batch.execution_intent_json;
@@ -7539,25 +7923,33 @@ begin
   v_execution_commit_ref := v_batch.execution_commit_ref;
   v_execution_committed_at_utc := v_batch.execution_committed_at_utc;
 
-  v_fresh := public.pay_batch_validate_freshness(p_pay_batch_id, p_actor_user_id);
-  v_is_stale := coalesce((v_fresh->>'is_stale')::boolean, false);
-  v_stale_reasons := coalesce(v_fresh->'stale_reasons', '[]'::jsonb);
+  -- Settlement follows bank/provider truth after the execution boundary.
+  -- Do not run current/live freshness as a blocking settlement check here.
+  -- Stored freshness-at-execution metadata is carried as informational context only.
+  v_fresh := jsonb_build_object(
+    'is_stale', coalesce(v_stored_freshness_status in ('STALE', 'FAILED'), false),
+    'stale_reasons', coalesce(v_stored_freshness_result_json->'stale_reasons', '[]'::jsonb),
+    'diff', coalesce(v_stored_freshness_result_json->'diff_sample', '[]'::jsonb),
+    'freshness_validation_status', nullif(v_stored_freshness_status, ''),
+    'freshness_result_hash', v_stored_freshness_result_hash,
+    'freshness_scope_hash', v_stored_freshness_scope_hash,
+    'freshness_operation_id', case when v_stored_freshness_operation_id is null then null else v_stored_freshness_operation_id::text end,
+    'source', 'stored_freshness_metadata_non_blocking'
+  );
+  v_is_stale := coalesce(v_stored_freshness_status in ('STALE', 'FAILED'), false);
+  v_stale_reasons := coalesce(v_stored_freshness_result_json->'stale_reasons', '[]'::jsonb);
+  v_diff_sample := coalesce(v_stored_freshness_result_json->'diff_sample', '[]'::jsonb);
 
   if v_is_stale = true then
-    select coalesce(jsonb_agg(x.elem), '[]'::jsonb)
-      into v_diff_sample
-    from (
-      select elem
-      from jsonb_array_elements(coalesce(v_fresh->'diff','[]'::jsonb)) as elem
-      limit 50
-    ) x;
-
     begin
       perform public._imp_debug_audit(
         p_actor_user_id,
-        'PAY_SETTLE_RAIL:STALE_PROCEEDING',
+        'PAY_SETTLE_RAIL:STORED_STALE_METADATA_PROCEEDING',
         jsonb_build_object(
           'pay_batch_id', p_pay_batch_id::text,
+          'freshness_validation_status', v_stored_freshness_status,
+          'freshness_result_hash', v_stored_freshness_result_hash,
+          'freshness_scope_hash', v_stored_freshness_scope_hash,
           'stale_reasons', v_stale_reasons,
           'diff_sample', v_diff_sample
         ),
@@ -9287,7 +9679,12 @@ begin
     'freshness', jsonb_build_object(
       'is_stale', v_is_stale,
       'stale_reasons', v_stale_reasons,
-      'diff_sample', v_diff_sample
+      'diff_sample', v_diff_sample,
+      'freshness_validation_status', nullif(v_stored_freshness_status, ''),
+      'freshness_result_hash', v_stored_freshness_result_hash,
+      'freshness_scope_hash', v_stored_freshness_scope_hash,
+      'freshness_operation_id', case when v_stored_freshness_operation_id is null then null else v_stored_freshness_operation_id::text end,
+      'source', coalesce(v_fresh->>'source', 'stored_freshness_metadata_non_blocking')
     ),
     'patch_summary', jsonb_build_object(
       'overpayment_patches_applied', v_overpay_patched_ct,
@@ -15068,6 +15465,10 @@ DROP FUNCTION IF EXISTS public.pay_batch_auth_start(uuid, text, timestamptz, tex
 DROP FUNCTION IF EXISTS public.pay_batch_auth_start(uuid, text, timestamptz, text, jsonb, uuid, text, text, date, text, boolean, boolean, boolean, text, text);
 DROP FUNCTION IF EXISTS public.pay_batch_auth_start(uuid, text, timestamptz, text, jsonb, uuid, text, text, date, text, boolean, boolean, boolean, text, text, uuid, text);
 
+
+DROP FUNCTION IF EXISTS public.pay_batch_auth_start(uuid, text, timestamptz, text, jsonb, uuid, text, text, date, text, boolean, boolean, boolean, text, text, uuid, text);
+DROP FUNCTION IF EXISTS public.pay_batch_auth_start(uuid, text, timestamptz, text, jsonb, uuid, text, text, date, text, boolean, boolean, boolean, text, text, uuid, text, text);
+
 CREATE OR REPLACE FUNCTION public.pay_batch_auth_start(
   p_pay_batch_id uuid,
   p_schedule_kind text,
@@ -15085,7 +15486,8 @@ CREATE OR REPLACE FUNCTION public.pay_batch_auth_start(
   p_csv_bank_confirm_ref text DEFAULT NULL::text,
   p_external_settlement_comment text DEFAULT NULL::text,
   p_operation_id uuid DEFAULT NULL::uuid,
-  p_idempotency_key text DEFAULT NULL::text
+  p_idempotency_key text DEFAULT NULL::text,
+  p_freshness_result_hash text DEFAULT NULL::text
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -15136,7 +15538,7 @@ BEGIN
     RAISE EXCEPTION 'pay_batch_auth_start: invalid pay_channel_scope';
   END IF;
 
-  IF v_execution_mode NOT IN ('STANDARD_BANK', 'BANK', 'CSV', 'EXTERNAL', 'EXTERNAL_SETTLEMENT', 'MANUAL_SETTLEMENT') THEN
+  IF v_execution_mode NOT IN ('STANDARD_BANK', 'BANK', 'CSV', 'CSV_SETTLEMENT', 'EXTERNAL', 'EXTERNAL_SETTLEMENT', 'MANUAL_SETTLEMENT') THEN
     RAISE EXCEPTION 'pay_batch_auth_start: invalid execution_mode';
   END IF;
 
@@ -15251,7 +15653,12 @@ BEGIN
     RAISE EXCEPTION 'pay_batch_auth_start: suppress_remittances requires explicit user confirmation';
   END IF;
 
-  v_prepare_json := public.pay_batch_prepare(p_pay_batch_id, p_actor_user_id);
+  v_prepare_json := public.pay_batch_prepare(
+    p_pay_batch_id => p_pay_batch_id,
+    p_actor_user_id => p_actor_user_id,
+    p_operation_id => p_operation_id,
+    p_freshness_result_hash => p_freshness_result_hash
+  );
   v_ready := coalesce((v_prepare_json->>'ready')::boolean, false);
   v_blocker_count := coalesce(NULLIF(v_prepare_json->>'blocker_count', '')::integer, 0);
 
@@ -15282,6 +15689,8 @@ BEGIN
   v_execution_intent_json := jsonb_strip_nulls(jsonb_build_object(
     'operation_id', CASE WHEN p_operation_id IS NULL THEN NULL ELSE p_operation_id::text END,
     'idempotency_key', nullif(btrim(coalesce(p_idempotency_key, '')), ''),
+    'freshness_result_hash', nullif(btrim(coalesce(p_freshness_result_hash, v_prepare_json #>> '{freshness,freshness_result_hash}', '')), ''),
+    'freshness_scope_hash', nullif(btrim(coalesce(v_prepare_json #>> '{freshness,freshness_scope_hash}', '')), ''),
     'execution_mode', v_execution_mode,
     'payment_date', v_payment_date::text,
     'pay_channel_scope', v_pay_channel_scope,
@@ -15330,6 +15739,14 @@ BEGIN
                  THEN jsonb_build_object('idempotency_key', nullif(btrim(coalesce(p_idempotency_key, '')), ''))
                ELSE '{}'::jsonb
              END
+          || CASE
+               WHEN nullif(btrim(coalesce(p_freshness_result_hash, v_prepare_json #>> '{freshness,freshness_result_hash}', '')), '') IS NOT NULL
+                 THEN jsonb_build_object(
+                   'freshness_result_hash', nullif(btrim(coalesce(p_freshness_result_hash, v_prepare_json #>> '{freshness,freshness_result_hash}', '')), ''),
+                   'freshness_scope_hash', nullif(btrim(coalesce(v_prepare_json #>> '{freshness,freshness_scope_hash}', '')), '')
+                 )
+               ELSE '{}'::jsonb
+             END
         )
     WHERE auth_request_update.id = v_existing_auth_id
     RETURNING auth_request_update.state,
@@ -15347,7 +15764,7 @@ BEGIN
       v_execution_mode
     )));
 
-    IF v_execution_mode NOT IN ('STANDARD_BANK', 'BANK', 'CSV', 'EXTERNAL', 'EXTERNAL_SETTLEMENT', 'MANUAL_SETTLEMENT') THEN
+    IF v_execution_mode NOT IN ('STANDARD_BANK', 'BANK', 'CSV', 'CSV_SETTLEMENT', 'EXTERNAL', 'EXTERNAL_SETTLEMENT', 'MANUAL_SETTLEMENT') THEN
       v_execution_mode := upper(btrim(coalesce(p_execution_mode, 'STANDARD_BANK')));
     END IF;
 
@@ -15358,7 +15775,7 @@ BEGIN
     END IF;
 
     v_next_required_phase := CASE
-      WHEN v_auth_state = 'AUTHORISED' AND v_execution_mode IN ('CSV', 'EXTERNAL', 'EXTERNAL_SETTLEMENT', 'MANUAL_SETTLEMENT') THEN 'SETTLEMENT'
+      WHEN v_auth_state = 'AUTHORISED' AND v_execution_mode IN ('CSV', 'CSV_SETTLEMENT', 'EXTERNAL', 'EXTERNAL_SETTLEMENT', 'MANUAL_SETTLEMENT') THEN 'SETTLEMENT'
       WHEN v_auth_state = 'AUTHORISED' AND v_kind = 'SCHEDULED' THEN 'WAIT_FOR_SCHEDULE'
       WHEN v_auth_state = 'AUTHORISED' THEN 'SUBMIT_PROVIDER_TRANSFERS'
       ELSE 'WAIT_FOR_AUTHORISATION'
@@ -15372,6 +15789,8 @@ BEGIN
       'auth_state', v_auth_state,
       'operation_id', v_execution_intent_json->>'operation_id',
       'idempotency_key', v_execution_intent_json->>'idempotency_key',
+      'freshness_result_hash', v_execution_intent_json->>'freshness_result_hash',
+      'freshness_scope_hash', v_execution_intent_json->>'freshness_scope_hash',
       'next_required_phase', v_next_required_phase,
       'execution_mode', v_execution_mode,
       'schedule_kind', v_kind,
@@ -15464,7 +15883,7 @@ BEGIN
   END IF;
 
   v_next_required_phase := CASE
-    WHEN v_auth_state = 'AUTHORISED' AND v_execution_mode IN ('CSV', 'EXTERNAL', 'EXTERNAL_SETTLEMENT', 'MANUAL_SETTLEMENT') THEN 'SETTLEMENT'
+    WHEN v_auth_state = 'AUTHORISED' AND v_execution_mode IN ('CSV', 'CSV_SETTLEMENT', 'EXTERNAL', 'EXTERNAL_SETTLEMENT', 'MANUAL_SETTLEMENT') THEN 'SETTLEMENT'
     WHEN v_auth_state = 'AUTHORISED' AND v_kind = 'SCHEDULED' THEN 'WAIT_FOR_SCHEDULE'
     WHEN v_auth_state = 'AUTHORISED' THEN 'SUBMIT_PROVIDER_TRANSFERS'
     ELSE 'WAIT_FOR_AUTHORISATION'
@@ -15478,6 +15897,8 @@ BEGIN
     'auth_state', v_auth_state,
     'operation_id', CASE WHEN p_operation_id IS NULL THEN NULL ELSE p_operation_id::text END,
     'idempotency_key', nullif(btrim(coalesce(p_idempotency_key, '')), ''),
+    'freshness_result_hash', v_execution_intent_json->>'freshness_result_hash',
+    'freshness_scope_hash', v_execution_intent_json->>'freshness_scope_hash',
     'next_required_phase', v_next_required_phase,
     'execution_mode', v_execution_mode,
     'schedule_kind', v_kind,
@@ -15489,7 +15910,6 @@ BEGIN
   );
 END;
 $function$;
-
 
 
 
@@ -18218,6 +18638,14 @@ declare
   v_channels text[] := null;
 
   v_is_cancelled boolean := false;
+  v_execution_commit_state text := 'NOT_SUBMITTED';
+  v_execution_commit_ref text := null;
+  v_execution_committed_at_utc timestamptz := null;
+  v_pre_execution_export boolean := false;
+  v_freshness_validation_status text := null;
+  v_freshness_result_hash text := null;
+  v_freshness_scope_hash text := null;
+  v_freshness_result_json jsonb := '{}'::jsonb;
 
   v_fresh jsonb := null;
   v_is_stale boolean := false;
@@ -18250,7 +18678,15 @@ begin
     pb.status,
     pb.pay_date,
     pb.cancelled_at_utc,
-    pb.batch_kind_fixed
+    pb.batch_kind_fixed,
+    pb.execution_commit_state,
+    pb.execution_commit_ref,
+    pb.execution_committed_at_utc,
+    pb.freshness_validation_status,
+    pb.freshness_result_hash,
+    pb.freshness_scope_hash,
+    pb.freshness_result_json,
+    pb.freshness_operation_id
   into v_batch
   from public.pay_batches pb
   where pb.id = p_pay_batch_id
@@ -18265,7 +18701,26 @@ begin
     )::text;
   end if;
 
-  v_is_cancelled := (v_batch.cancelled_at_utc is not null);
+  v_is_cancelled := (
+    v_batch.cancelled_at_utc is not null
+    or upper(btrim(coalesce(v_batch.status, ''))) in ('CANCELLED', 'CANCELED')
+  );
+  v_execution_commit_state := upper(btrim(coalesce(v_batch.execution_commit_state, 'NOT_SUBMITTED')));
+  if v_execution_commit_state not in ('NOT_SUBMITTED', 'SUBMITTED_NOT_COMMITTED', 'COMMITTED') then
+    v_execution_commit_state := 'NOT_SUBMITTED';
+  end if;
+  v_execution_commit_ref := nullif(btrim(coalesce(v_batch.execution_commit_ref, '')), '');
+  v_execution_committed_at_utc := v_batch.execution_committed_at_utc;
+  v_freshness_validation_status := upper(btrim(coalesce(v_batch.freshness_validation_status, '')));
+  v_freshness_result_hash := nullif(btrim(coalesce(v_batch.freshness_result_hash, '')), '');
+  v_freshness_scope_hash := nullif(btrim(coalesce(v_batch.freshness_scope_hash, '')), '');
+  v_freshness_result_json := coalesce(v_batch.freshness_result_json, '{}'::jsonb);
+  v_pre_execution_export := (
+    v_is_cancelled = false
+    and v_execution_commit_state = 'NOT_SUBMITTED'
+    and v_execution_commit_ref is null
+    and v_execution_committed_at_utc is null
+  );
 
   select ch.channels
   into v_channels
@@ -18293,28 +18748,65 @@ begin
     v_batch_kind := 'LOANS';
   end if;
 
-  v_fresh := public.pay_batch_validate_freshness(p_pay_batch_id, p_actor_user_id);
+  if v_pre_execution_export then
+    if v_freshness_validation_status = 'PASSED' and v_freshness_result_hash is not null then
+      v_fresh := jsonb_build_object(
+        'is_stale', false,
+        'stale_reasons', coalesce(v_freshness_result_json->'stale_reasons', '[]'::jsonb),
+        'diff', coalesce(v_freshness_result_json->'diff_sample', '[]'::jsonb),
+        'freshness_validation_status', v_freshness_validation_status,
+        'freshness_result_hash', v_freshness_result_hash,
+        'freshness_scope_hash', v_freshness_scope_hash,
+        'source', 'stored_chunked_freshness'
+      );
+      v_is_stale := false;
+      v_stale_reasons := coalesce(v_freshness_result_json->'stale_reasons', '[]'::jsonb);
+      v_diff_sample := coalesce(v_freshness_result_json->'diff_sample', '[]'::jsonb);
+    else
+      v_fresh := public.pay_batch_validate_freshness(
+        p_pay_batch_id => p_pay_batch_id,
+        p_actor_user_id => p_actor_user_id,
+        p_allow_large_full_scan => false
+      );
 
-  v_is_stale := coalesce((v_fresh->>'is_stale')::boolean, false);
-  v_stale_reasons := coalesce(v_fresh->'stale_reasons', '[]'::jsonb);
+      v_is_stale := coalesce((v_fresh->>'is_stale')::boolean, false);
+      v_stale_reasons := coalesce(v_fresh->'stale_reasons', '[]'::jsonb);
 
-  select coalesce(jsonb_agg(x.elem), '[]'::jsonb)
-  into v_diff_sample
-  from (
-    select elem
-    from jsonb_array_elements(coalesce(v_fresh->'diff','[]'::jsonb)) as elem
-    limit 50
-  ) x;
+      select coalesce(jsonb_agg(x.elem), '[]'::jsonb)
+      into v_diff_sample
+      from (
+        select elem
+        from jsonb_array_elements(coalesce(v_fresh->'diff','[]'::jsonb)) as elem
+        limit 50
+      ) x;
 
-  if v_is_cancelled = false and v_is_stale = true then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_BATCH_EXPORT_CSV_ROWS',
-      'code', 'BATCH_STALE',
-      'message', 'pay_batch_export_csv_rows: batch is stale; regenerate draft before exporting',
-      'pay_batch_id', p_pay_batch_id::text,
-      'stale_reasons', v_stale_reasons,
-      'diff', v_diff_sample
-    )::text;
+      if v_is_stale = true then
+        raise exception '%', jsonb_build_object(
+          'error', 'PAY_BATCH_EXPORT_CSV_ROWS',
+          'code', case when coalesce((v_fresh->>'requires_chunked_freshness')::boolean, false) then 'FRESHNESS_REQUIRES_CHUNKED_VALIDATION' else 'BATCH_STALE' end,
+          'message', case when coalesce((v_fresh->>'requires_chunked_freshness')::boolean, false) then 'pay_batch_export_csv_rows: chunked freshness validation is required before payment-initiation export' else 'pay_batch_export_csv_rows: batch is stale; regenerate draft before exporting' end,
+          'pay_batch_id', p_pay_batch_id::text,
+          'stale_reasons', v_stale_reasons,
+          'diff', v_diff_sample,
+          'freshness_validation_status', v_freshness_validation_status,
+          'freshness_result_hash', v_freshness_result_hash,
+          'freshness_scope_hash', v_freshness_scope_hash
+        )::text;
+      end if;
+    end if;
+  else
+    v_fresh := jsonb_build_object(
+      'is_stale', coalesce(v_freshness_validation_status in ('STALE', 'FAILED'), false),
+      'stale_reasons', coalesce(v_freshness_result_json->'stale_reasons', '[]'::jsonb),
+      'diff', coalesce(v_freshness_result_json->'diff_sample', '[]'::jsonb),
+      'freshness_validation_status', nullif(v_freshness_validation_status, ''),
+      'freshness_result_hash', v_freshness_result_hash,
+      'freshness_scope_hash', v_freshness_scope_hash,
+      'source', 'stored_freshness_metadata_non_blocking'
+    );
+    v_is_stale := coalesce(v_freshness_validation_status in ('STALE', 'FAILED'), false);
+    v_stale_reasons := coalesce(v_freshness_result_json->'stale_reasons', '[]'::jsonb);
+    v_diff_sample := coalesce(v_freshness_result_json->'diff_sample', '[]'::jsonb);
   end if;
 
   create temp table if not exists _tmp_pay_export_rows (
@@ -18942,7 +19434,12 @@ begin
     'freshness', jsonb_build_object(
       'is_stale', v_is_stale,
       'stale_reasons', v_stale_reasons,
-      'diff_sample', v_diff_sample
+      'diff_sample', v_diff_sample,
+      'freshness_validation_status', nullif(v_freshness_validation_status, ''),
+      'freshness_result_hash', v_freshness_result_hash,
+      'freshness_scope_hash', v_freshness_scope_hash,
+      'freshness_operation_id', case when v_batch.freshness_operation_id is null then null else v_batch.freshness_operation_id::text end,
+      'source', coalesce(v_fresh->>'source', case when v_pre_execution_export then 'legacy_or_stored_pre_execution' else 'stored_freshness_metadata_non_blocking' end)
     ),
     'summary', jsonb_build_object(
       'row_count', v_row_count,
@@ -18953,6 +19450,8 @@ begin
 end;
 $$;
 
+DROP FUNCTION IF EXISTS public.pay_settle_rail(uuid, jsonb, uuid);
+DROP FUNCTION IF EXISTS public.pay_settle_rail(uuid, jsonb, uuid, uuid, jsonb);
 
 
 
