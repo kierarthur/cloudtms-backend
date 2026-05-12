@@ -24,6 +24,8 @@ declare
   v_deleted_shifts int := 0;
 
   v_current_timesheet_id uuid := null;
+  v_invalid_parent_target boolean := false;
+  v_manual_contract_week_targeted boolean := false;
 
   v_before jsonb := null;
   v_after jsonb := null;
@@ -33,6 +35,10 @@ begin
   end if;
 
   v_preview := public.timesheet_weekly_chain_delete_preview(p_timesheet_id, p_actor_user_id);
+
+  if coalesce(v_preview->>'kind', '') <> 'WEEKLY_CHAIN_DELETE_PARENT' then
+    raise exception 'timesheet_weekly_chain_delete_apply: unexpected preview kind: %', coalesce(v_preview->>'kind', '');
+  end if;
 
   v_eligible := coalesce((v_preview->>'eligible')::boolean, false);
 
@@ -44,16 +50,51 @@ begin
   v_contract_id := nullif(v_preview->>'contract_id','')::uuid;
   v_week_ending_date := (v_preview->>'week_ending_date')::date;
 
-  -- Extract arrays from preview JSON
-  select coalesce(array_agg(x::uuid), array[]::uuid[])
+  select coalesce(array_agg(timesheet_id_values.timesheet_id_value::uuid), array[]::uuid[])
   into v_timesheet_ids
-  from jsonb_array_elements_text(coalesce(v_preview->'timesheet_ids','[]'::jsonb)) as e(x);
+  from jsonb_array_elements_text(coalesce(v_preview->'timesheet_ids','[]'::jsonb)) as timesheet_id_values(timesheet_id_value);
 
-  select coalesce(array_agg(y::uuid), array[]::uuid[])
+  select coalesce(array_agg(contract_week_id_values.contract_week_id_value::uuid), array[]::uuid[])
   into v_contract_week_ids
-  from jsonb_array_elements_text(coalesce(v_preview->'contract_week_ids','[]'::jsonb)) as e2(y);
+  from jsonb_array_elements_text(coalesce(v_preview->'contract_week_ids','[]'::jsonb)) as contract_week_id_values(contract_week_id_value);
 
-  -- Snapshot for audit
+  select exists(
+    select 1
+    from public.timesheets as current_timesheet_check
+    left join public.contract_weeks as current_contract_week_check
+      on current_contract_week_check.timesheet_id = current_timesheet_check.timesheet_id
+    where current_timesheet_check.timesheet_id = v_current_timesheet_id
+      and (
+        current_timesheet_check.is_adjustment is true
+        or coalesce(current_contract_week_check.is_adjustment, false) = true
+        or coalesce(current_contract_week_check.additional_seq, 0) > 0
+      )
+  )
+  into v_invalid_parent_target;
+
+  if coalesce(v_invalid_parent_target, false) = true then
+    raise exception 'timesheet_weekly_chain_delete_apply: refusing parent-chain delete for an adjustment/additional timesheet %', v_current_timesheet_id;
+  end if;
+
+  select exists(
+    select 1
+    from public.contract_weeks as guarded_contract_week
+    left join public.timesheets as guarded_timesheet
+      on guarded_timesheet.timesheet_id = guarded_contract_week.timesheet_id
+    where guarded_contract_week.id = any(v_contract_week_ids)
+      and (coalesce(guarded_contract_week.is_adjustment, false) = true or coalesce(guarded_contract_week.additional_seq, 0) > 0)
+      and not (
+        upper(coalesce(guarded_timesheet.adjustment_origin,'')) in ('IMPORT_CORRECTION','IMPORT_CANCELLATION')
+        or nullif(btrim(coalesce(guarded_timesheet.correction_kind,'')),'') is not null
+        or guarded_timesheet.correction_id is not null
+      )
+  )
+  into v_manual_contract_week_targeted;
+
+  if coalesce(v_manual_contract_week_targeted, false) = true then
+    raise exception 'timesheet_weekly_chain_delete_apply: refusing parent-chain delete because the target set contains a manual additional contract_week: %', to_jsonb(v_contract_week_ids)::text;
+  end if;
+
   v_before := jsonb_build_object(
     'requested_timesheet_id', p_timesheet_id::text,
     'current_timesheet_id', v_current_timesheet_id::text,
@@ -63,70 +104,55 @@ begin
     'contract_week_ids', to_jsonb(coalesce(v_contract_week_ids, array[]::uuid[]))
   );
 
-  -- ─────────────────────────────────────────────────────────────
-  -- Deletions (transactional)
-  -- ─────────────────────────────────────────────────────────────
-
-  -- NHSP/HR shifts: delete week truth rows (as if shifts never happened) + any rows linked to timesheets being deleted
+  -- NHSP/HR shifts: delete week truth rows only for verified parent-chain deletes.
   if v_contract_id is not null and v_week_ending_date is not null then
-    delete from public.nhsp_shifts ns
-    where (ns.contract_id = v_contract_id
-           and ns.week_ending_date = v_week_ending_date
-           and ns.source_system in ('NHSP'::public.hr_source_enum, 'HEALTHROSTER'::public.hr_source_enum))
-       or (ns.timesheet_id = any(v_timesheet_ids));
+    delete from public.nhsp_shifts as nhsp_shift_delete
+    where (nhsp_shift_delete.contract_id = v_contract_id
+           and nhsp_shift_delete.week_ending_date = v_week_ending_date
+           and nhsp_shift_delete.source_system in ('NHSP'::public.hr_source_enum, 'HEALTHROSTER'::public.hr_source_enum))
+       or (nhsp_shift_delete.timesheet_id = any(v_timesheet_ids));
   else
-    -- Fallback: just detach any remaining nhsp_shifts references (should be none for eligible chain)
-    update public.nhsp_shifts ns2
+    update public.nhsp_shifts as nhsp_shift_detach
     set timesheet_id = null
-    where ns2.timesheet_id = any(v_timesheet_ids);
+    where nhsp_shift_detach.timesheet_id = any(v_timesheet_ids);
   end if;
 
   get diagnostics v_deleted_shifts = row_count;
 
-  -- Dependent rows (same pattern used elsewhere in your import cleanup)
-  delete from public.pay_item_snoozes ps where ps.timesheet_id = any(v_timesheet_ids);
-  delete from public.pay_batch_items pbi where pbi.timesheet_id = any(v_timesheet_ids);
-  delete from public.ts_pay_adjustments tpa where tpa.timesheet_id = any(v_timesheet_ids);
-  delete from public.timesheet_pay_state_history tpsh where tpsh.timesheet_id = any(v_timesheet_ids);
-  delete from public.timesheet_pay_state tps where tps.timesheet_id = any(v_timesheet_ids);
+  delete from public.pay_item_snoozes as pay_item_snooze_delete where pay_item_snooze_delete.timesheet_id = any(v_timesheet_ids);
+  delete from public.pay_batch_items as pay_batch_item_delete where pay_batch_item_delete.timesheet_id = any(v_timesheet_ids);
+  delete from public.ts_pay_adjustments as ts_pay_adjustment_delete where ts_pay_adjustment_delete.timesheet_id = any(v_timesheet_ids);
+  delete from public.timesheet_pay_state_history as timesheet_pay_state_history_delete where timesheet_pay_state_history_delete.timesheet_id = any(v_timesheet_ids);
+  delete from public.timesheet_pay_state as timesheet_pay_state_delete where timesheet_pay_state_delete.timesheet_id = any(v_timesheet_ids);
 
-  delete from public.timesheet_validations tv where tv.timesheet_id = any(v_timesheet_ids);
-  delete from public.hr_results hr where hr.timesheet_id = any(v_timesheet_ids);
-  delete from public.hr_issue_emails hie where hie.timesheet_id = any(v_timesheet_ids);
+  delete from public.timesheet_validations as timesheet_validation_delete where timesheet_validation_delete.timesheet_id = any(v_timesheet_ids);
+  delete from public.hr_results as hr_result_delete where hr_result_delete.timesheet_id = any(v_timesheet_ids);
+  delete from public.hr_issue_emails as hr_issue_email_delete where hr_issue_email_delete.timesheet_id = any(v_timesheet_ids);
 
-  delete from public.timesheet_evidence te where te.timesheet_id = any(v_timesheet_ids);
-  delete from public.manual_timesheet_queue mtq where mtq.timesheet_id = any(v_timesheet_ids);
-  delete from public.ts_pdfs_outbox tpo where tpo.timesheet_id = any(v_timesheet_ids);
-  delete from public.ts_financials_outbox tfo where tfo.timesheet_id = any(v_timesheet_ids);
+  delete from public.timesheet_evidence as timesheet_evidence_delete where timesheet_evidence_delete.timesheet_id = any(v_timesheet_ids);
+  delete from public.manual_timesheet_queue as manual_timesheet_queue_delete where manual_timesheet_queue_delete.timesheet_id = any(v_timesheet_ids);
+  delete from public.ts_pdfs_outbox as ts_pdfs_outbox_delete where ts_pdfs_outbox_delete.timesheet_id = any(v_timesheet_ids);
+  delete from public.ts_financials_outbox as ts_financials_outbox_delete where ts_financials_outbox_delete.timesheet_id = any(v_timesheet_ids);
 
-  -- TSFIN rows
-  delete from public.timesheets_financials tfz where tfz.timesheet_id = any(v_timesheet_ids);
+  delete from public.timesheets_financials as timesheet_financials_delete where timesheet_financials_delete.timesheet_id = any(v_timesheet_ids);
 
-  -- Contract weeks must be explicitly removed (FK is ON DELETE SET NULL)
-  delete from public.contract_weeks cwz
-  where cwz.id = any(v_contract_week_ids)
-     or cwz.timesheet_id = any(v_timesheet_ids)
-     or (v_contract_id is not null and v_week_ending_date is not null
-         and cwz.contract_id = v_contract_id
-         and cwz.week_ending_date = v_week_ending_date
-         and cwz.is_adjustment is true
-         and cwz.additional_seq > 0
-         and cwz.timesheet_id is null);
+  delete from public.contract_weeks as contract_week_delete
+  where contract_week_delete.id = any(v_contract_week_ids);
 
   get diagnostics v_deleted_contract_weeks = row_count;
 
-  -- Timesheets (all versions already included)
-  delete from public.timesheets tz where tz.timesheet_id = any(v_timesheet_ids);
+  delete from public.timesheets as timesheet_delete where timesheet_delete.timesheet_id = any(v_timesheet_ids);
 
   get diagnostics v_deleted_timesheets = row_count;
 
   v_after := jsonb_build_object(
     'deleted_timesheets', v_deleted_timesheets,
     'deleted_contract_weeks', v_deleted_contract_weeks,
-    'deleted_nhsp_shifts', v_deleted_shifts
+    'deleted_nhsp_shifts', v_deleted_shifts,
+    'deleted_timesheet_ids', to_jsonb(coalesce(v_timesheet_ids, array[]::uuid[])),
+    'deleted_contract_week_ids', to_jsonb(coalesce(v_contract_week_ids, array[]::uuid[]))
   );
 
-  -- Ungated user-facing audit
   begin
     perform public._audit_insert(
       'timesheets',
@@ -147,11 +173,12 @@ begin
     'current_timesheet_id', coalesce(v_current_timesheet_id::text, p_timesheet_id::text),
     'deleted_timesheets', v_deleted_timesheets,
     'deleted_contract_weeks', v_deleted_contract_weeks,
-    'deleted_nhsp_shifts', v_deleted_shifts
+    'deleted_nhsp_shifts', v_deleted_shifts,
+    'deleted_timesheet_ids', to_jsonb(coalesce(v_timesheet_ids, array[]::uuid[])),
+    'deleted_contract_week_ids', to_jsonb(coalesce(v_contract_week_ids, array[]::uuid[]))
   );
 end;
 $function$;
-
 
 
 
@@ -271,8 +298,6 @@ end;
 $function$;
 
 
-
-
 CREATE OR REPLACE FUNCTION public.timesheet_weekly_chain_delete_preview(
   p_timesheet_id uuid,
   p_actor_user_id uuid
@@ -294,6 +319,7 @@ declare
   v_booking_ids text[] := array[]::text[];
   v_timesheet_ids uuid[] := array[]::uuid[];
   v_contract_week_ids uuid[] := array[]::uuid[];
+  v_current_contract_week_ids uuid[] := array[]::uuid[];
   v_nhsp_shift_ids uuid[] := array[]::uuid[];
 
   v_blocked jsonb := '[]'::jsonb;
@@ -302,6 +328,8 @@ declare
   v_has_seg_locks boolean := false;
   v_has_invoice_lines boolean := false;
   v_has_pay_state boolean := false;
+  v_current_effective_adjustment boolean := false;
+  v_manual_contract_week_targeted boolean := false;
 
   v_invoice_info jsonb := '[]'::jsonb;
 
@@ -313,7 +341,7 @@ begin
 
   select t.*
   into v_in_ts
-  from public.timesheets t
+  from public.timesheets as t
   where t.timesheet_id = p_timesheet_id;
 
   if not found then
@@ -325,7 +353,7 @@ begin
   -- Resolve "current" by booking_id (robust even if is_current flags drift)
   select tcur.*
   into v_current_ts
-  from public.timesheets tcur
+  from public.timesheets as tcur
   where tcur.booking_id = v_base_booking_id
   order by tcur.is_current desc, tcur.version desc
   limit 1;
@@ -334,7 +362,15 @@ begin
     raise exception 'timesheet_weekly_chain_delete_preview: booking_id % not found', v_base_booking_id;
   end if;
 
-  -- Must be WEEKLY parent (not adjustment)
+  select
+    coalesce(array_agg(distinct cw_current.id), array[]::uuid[]),
+    coalesce(bool_or(coalesce(cw_current.is_adjustment, false) = true OR coalesce(cw_current.additional_seq, 0) > 0), false)
+  into v_current_contract_week_ids,
+       v_current_effective_adjustment
+  from public.contract_weeks as cw_current
+  where cw_current.timesheet_id = v_current_ts.timesheet_id;
+
+  -- Must be WEEKLY parent (not adjustment and not linked to an additional/manual adjustment contract_week)
   if v_current_ts.sheet_scope <> 'WEEKLY'::public.timesheet_scope_enum then
     v_blocked := v_blocked || jsonb_build_array(jsonb_build_object(
       'code','NOT_WEEKLY',
@@ -343,11 +379,12 @@ begin
     ));
   end if;
 
-  if v_current_ts.is_adjustment is true then
+  if v_current_ts.is_adjustment is true OR coalesce(v_current_effective_adjustment, false) = true then
     v_blocked := v_blocked || jsonb_build_array(jsonb_build_object(
       'code','NOT_PARENT',
-      'message','Timesheet is an adjustment; parent-chain delete can only be requested for a non-adjustment WEEKLY parent timesheet.',
-      'timesheet_id', v_current_ts.timesheet_id::text
+      'message','Timesheet is an adjustment/additional manual row; parent-chain delete can only be requested for a non-adjustment WEEKLY parent timesheet.',
+      'timesheet_id', v_current_ts.timesheet_id::text,
+      'contract_week_ids', to_jsonb(coalesce(v_current_contract_week_ids, array[]::uuid[]))
     ));
   end if;
 
@@ -366,86 +403,114 @@ begin
   -- - the parent booking_id
   -- - import-derived weekly adjustments in the same contract/week (NHSP/HR corrections/cancellations)
   if v_contract_id is not null and v_week_ending_date is not null then
-    select coalesce(array_agg(distinct s.booking_id), array[]::text[])
+    select coalesce(array_agg(distinct scoped_booking.booking_id), array[]::text[])
     into v_booking_ids
     from (
       select v_current_ts.booking_id as booking_id
       union all
-      select t_adj.booking_id
-      from public.timesheets t_adj
-      where t_adj.contract_id = v_contract_id
-        and t_adj.week_ending_date = v_week_ending_date
-        and t_adj.sheet_scope = 'WEEKLY'::public.timesheet_scope_enum
-        and t_adj.is_adjustment is true
+      select import_adjustment_timesheet.booking_id
+      from public.timesheets as import_adjustment_timesheet
+      where import_adjustment_timesheet.contract_id = v_contract_id
+        and import_adjustment_timesheet.week_ending_date = v_week_ending_date
+        and import_adjustment_timesheet.sheet_scope = 'WEEKLY'::public.timesheet_scope_enum
+        and import_adjustment_timesheet.is_adjustment is true
         and (
-          upper(coalesce(t_adj.adjustment_origin,'')) in ('IMPORT_CORRECTION','IMPORT_CANCELLATION')
-          or nullif(btrim(coalesce(t_adj.correction_kind,'')),'') is not null
-          or nullif(btrim(coalesce(t_adj.correction_id,'')),'') is not null
+          upper(coalesce(import_adjustment_timesheet.adjustment_origin,'')) in ('IMPORT_CORRECTION','IMPORT_CANCELLATION')
+          or nullif(btrim(coalesce(import_adjustment_timesheet.correction_kind,'')),'') is not null
+          or import_adjustment_timesheet.correction_id is not null
         )
-    ) s;
+    ) as scoped_booking;
   else
     v_booking_ids := array[v_current_ts.booking_id];
   end if;
 
   -- All timesheet IDs (all versions) for those booking IDs
-  select coalesce(array_agg(t_all.timesheet_id), array[]::uuid[])
+  select coalesce(array_agg(all_versions.timesheet_id), array[]::uuid[])
   into v_timesheet_ids
-  from public.timesheets t_all
-  where t_all.booking_id = any(v_booking_ids);
+  from public.timesheets as all_versions
+  where all_versions.booking_id = any(v_booking_ids);
 
-  -- Contract-week IDs to delete:
-  -- (a) base week row additional_seq=0 (if exists)
-  -- (b) any contract_week row linked to any timesheet in scope
-  -- (c) orphan adjustment contract weeks for this contract/week (timesheet_id null)
+  -- Contract-week IDs to delete for a true parent chain only:
+  -- (a) base week row additional_seq=0 / non-adjustment
+  -- (b) contract_week rows linked to timesheets in scope, but only when they are base rows or import-derived children
+  -- Manual additional contract_weeks are deliberately excluded and guarded against.
   if v_contract_id is not null and v_week_ending_date is not null then
-    select coalesce(array_agg(distinct s2.cw_id), array[]::uuid[])
+    select coalesce(array_agg(distinct scoped_contract_week.cw_id), array[]::uuid[])
     into v_contract_week_ids
     from (
-      select cw0.id as cw_id
-      from public.contract_weeks cw0
-      where cw0.contract_id = v_contract_id
-        and cw0.week_ending_date = v_week_ending_date
-        and cw0.additional_seq = 0
+      select base_contract_week.id as cw_id
+      from public.contract_weeks as base_contract_week
+      where base_contract_week.contract_id = v_contract_id
+        and base_contract_week.week_ending_date = v_week_ending_date
+        and coalesce(base_contract_week.additional_seq, 0) = 0
+        and coalesce(base_contract_week.is_adjustment, false) = false
       union all
-      select cw1.id as cw_id
-      from public.contract_weeks cw1
-      where cw1.timesheet_id = any(v_timesheet_ids)
-      union all
-      select cw2.id as cw_id
-      from public.contract_weeks cw2
-      where cw2.contract_id = v_contract_id
-        and cw2.week_ending_date = v_week_ending_date
-        and cw2.is_adjustment is true
-        and cw2.additional_seq > 0
-        and cw2.timesheet_id is null
-    ) s2;
+      select linked_contract_week.id as cw_id
+      from public.contract_weeks as linked_contract_week
+      join public.timesheets as linked_timesheet
+        on linked_timesheet.timesheet_id = linked_contract_week.timesheet_id
+      where linked_contract_week.timesheet_id = any(v_timesheet_ids)
+        and (
+          (
+            coalesce(linked_contract_week.is_adjustment, false) = false
+            and coalesce(linked_contract_week.additional_seq, 0) = 0
+          )
+          or (
+            (coalesce(linked_contract_week.is_adjustment, false) = true or coalesce(linked_contract_week.additional_seq, 0) > 0)
+            and (
+              upper(coalesce(linked_timesheet.adjustment_origin,'')) in ('IMPORT_CORRECTION','IMPORT_CANCELLATION')
+              or nullif(btrim(coalesce(linked_timesheet.correction_kind,'')),'') is not null
+              or linked_timesheet.correction_id is not null
+            )
+          )
+        )
+    ) as scoped_contract_week;
   else
     v_contract_week_ids := array[]::uuid[];
   end if;
 
+  select exists(
+    select 1
+    from public.contract_weeks as guarded_contract_week
+    left join public.timesheets as guarded_timesheet
+      on guarded_timesheet.timesheet_id = guarded_contract_week.timesheet_id
+    where guarded_contract_week.id = any(v_contract_week_ids)
+      and (coalesce(guarded_contract_week.is_adjustment, false) = true or coalesce(guarded_contract_week.additional_seq, 0) > 0)
+      and not (
+        upper(coalesce(guarded_timesheet.adjustment_origin,'')) in ('IMPORT_CORRECTION','IMPORT_CANCELLATION')
+        or nullif(btrim(coalesce(guarded_timesheet.correction_kind,'')),'') is not null
+        or guarded_timesheet.correction_id is not null
+      )
+  )
+  into v_manual_contract_week_targeted;
+
+  if coalesce(v_manual_contract_week_targeted, false) = true then
+    v_blocked := v_blocked || jsonb_build_array(jsonb_build_object(
+      'code','MANUAL_ADJUSTMENT_CONTRACT_WEEK_IN_CHAIN',
+      'message','Parent-chain delete would target a manual additional contract_week. Use additional-only delete for manual adjustment rows.',
+      'contract_week_ids', to_jsonb(coalesce(v_contract_week_ids, array[]::uuid[]))
+    ));
+  end if;
+
   -- NHSP/HR truth rows in this contract/week (for informational preview)
   if v_contract_id is not null and v_week_ending_date is not null then
-    select coalesce(array_agg(ns.id), array[]::uuid[])
+    select coalesce(array_agg(nhsp_shift.id), array[]::uuid[])
     into v_nhsp_shift_ids
-    from public.nhsp_shifts ns
-    where ns.contract_id = v_contract_id
-      and ns.week_ending_date = v_week_ending_date
-      and ns.source_system in ('NHSP'::public.hr_source_enum, 'HEALTHROSTER'::public.hr_source_enum);
+    from public.nhsp_shifts as nhsp_shift
+    where nhsp_shift.contract_id = v_contract_id
+      and nhsp_shift.week_ending_date = v_week_ending_date
+      and nhsp_shift.source_system in ('NHSP'::public.hr_source_enum, 'HEALTHROSTER'::public.hr_source_enum);
   else
     v_nhsp_shift_ids := array[]::uuid[];
   end if;
 
-  -- ─────────────────────────────────────────────────────────────
-  -- Safety gates (must be chain-safe across all versions)
-  -- ─────────────────────────────────────────────────────────────
-
   -- TSFIN lock/paid markers (current snapshots only)
   select exists(
     select 1
-    from public.timesheets_financials tf
-    where tf.timesheet_id = any(v_timesheet_ids)
-      and tf.is_current is true
-      and (tf.locked_by_invoice_id is not null or tf.paid_at_utc is not null)
+    from public.timesheets_financials as timesheet_financials_lock
+    where timesheet_financials_lock.timesheet_id = any(v_timesheet_ids)
+      and timesheet_financials_lock.is_current is true
+      and (timesheet_financials_lock.locked_by_invoice_id is not null or timesheet_financials_lock.paid_at_utc is not null)
   )
   into v_has_tsfin_lock;
 
@@ -459,18 +524,18 @@ begin
   -- Segment-level invoice locks (SEGMENTS mode)
   select exists(
     select 1
-    from public.timesheets_financials tf2
+    from public.timesheets_financials as timesheet_financials_segment_lock
     cross join lateral jsonb_array_elements(
       case
-        when upper(coalesce(tf2.invoice_breakdown_json->>'mode','')) = 'SEGMENTS'
-             and jsonb_typeof(tf2.invoice_breakdown_json->'segments') = 'array'
-          then tf2.invoice_breakdown_json->'segments'
+        when upper(coalesce(timesheet_financials_segment_lock.invoice_breakdown_json->>'mode','')) = 'SEGMENTS'
+             and jsonb_typeof(timesheet_financials_segment_lock.invoice_breakdown_json->'segments') = 'array'
+          then timesheet_financials_segment_lock.invoice_breakdown_json->'segments'
         else '[]'::jsonb
       end
-    ) seg(seg_elem)
-    where tf2.timesheet_id = any(v_timesheet_ids)
-      and tf2.is_current is true
-      and nullif(btrim(coalesce(seg.seg_elem->>'invoice_locked_invoice_id','')),'') is not null
+    ) as segment_lock(segment_json)
+    where timesheet_financials_segment_lock.timesheet_id = any(v_timesheet_ids)
+      and timesheet_financials_segment_lock.is_current is true
+      and nullif(btrim(coalesce(segment_lock.segment_json->>'invoice_locked_invoice_id','')),'') is not null
   )
   into v_has_seg_locks;
 
@@ -484,26 +549,26 @@ begin
   -- Any invoice_lines referencing any timesheet/booking in scope blocks delete
   select exists(
     select 1
-    from public.invoice_lines il
-    where (il.timesheet_id is not null and il.timesheet_id = any(v_timesheet_ids))
-       or (il.booking_id is not null and il.booking_id = any(v_booking_ids))
+    from public.invoice_lines as invoice_line_check
+    where (invoice_line_check.timesheet_id is not null and invoice_line_check.timesheet_id = any(v_timesheet_ids))
+       or (invoice_line_check.booking_id is not null and invoice_line_check.booking_id = any(v_booking_ids))
   )
   into v_has_invoice_lines;
 
   if v_has_invoice_lines then
     select coalesce(
       jsonb_agg(distinct jsonb_build_object(
-        'invoice_id', inv.id::text,
-        'status', inv.status::text
+        'invoice_id', invoice_header.id::text,
+        'status', invoice_header.status::text
       )),
       '[]'::jsonb
     )
     into v_invoice_info
-    from public.invoice_lines il2
-    join public.invoices inv
-      on inv.id = il2.invoice_id
-    where (il2.timesheet_id is not null and il2.timesheet_id = any(v_timesheet_ids))
-       or (il2.booking_id is not null and il2.booking_id = any(v_booking_ids));
+    from public.invoice_lines as invoice_line_info
+    join public.invoices as invoice_header
+      on invoice_header.id = invoice_line_info.invoice_id
+    where (invoice_line_info.timesheet_id is not null and invoice_line_info.timesheet_id = any(v_timesheet_ids))
+       or (invoice_line_info.booking_id is not null and invoice_line_info.booking_id = any(v_booking_ids));
 
     v_blocked := v_blocked || jsonb_build_array(jsonb_build_object(
       'code','INVOICE_LINES_PRESENT',
@@ -516,13 +581,13 @@ begin
   select (
     exists(
       select 1
-      from public.timesheet_pay_state tps
-      where tps.timesheet_id = any(v_timesheet_ids)
+      from public.timesheet_pay_state as timesheet_pay_state_check
+      where timesheet_pay_state_check.timesheet_id = any(v_timesheet_ids)
     )
     or exists(
       select 1
-      from public.timesheet_pay_state_history tpsh
-      where tpsh.timesheet_id = any(v_timesheet_ids)
+      from public.timesheet_pay_state_history as timesheet_pay_state_history_check
+      where timesheet_pay_state_history_check.timesheet_id = any(v_timesheet_ids)
     )
   )
   into v_has_pay_state;
@@ -534,55 +599,51 @@ begin
     ));
   end if;
 
-  -- ─────────────────────────────────────────────────────────────
-  -- delete_items[] for warning modal (one "display row" per booking_id)
-  -- Use best-current row per booking_id (is_current desc, version desc).
-  -- Totals pulled from current TSFIN row for that timesheet_id.
-  -- ─────────────────────────────────────────────────────────────
+  -- delete_items[] for warning modal (one display row per booking_id)
   select coalesce(
     jsonb_agg(
       jsonb_build_object(
-        'timesheet_id', tsel.timesheet_id::text,
-        'booking_id', tsel.booking_id,
-        'week_ending_date', tsel.week_ending_date::text,
-        'status', tsel.status::text,
-        'is_adjustment', tsel.is_adjustment,
-        'adjustment_origin', tsel.adjustment_origin,
-        'correction_id', tsel.correction_id,
-        'correction_kind', tsel.correction_kind,
+        'timesheet_id', selected_timesheet.timesheet_id::text,
+        'booking_id', selected_timesheet.booking_id,
+        'week_ending_date', selected_timesheet.week_ending_date::text,
+        'status', selected_timesheet.status::text,
+        'is_adjustment', selected_timesheet.is_adjustment,
+        'adjustment_origin', selected_timesheet.adjustment_origin,
+        'correction_id', selected_timesheet.correction_id,
+        'correction_kind', selected_timesheet.correction_kind,
         'display_role',
           case
-            when tsel.booking_id = v_current_ts.booking_id then 'PARENT'
+            when selected_timesheet.booking_id = v_current_ts.booking_id then 'PARENT'
             else 'ADJUSTMENT'
           end,
-        'total_hours', coalesce(tfsel.total_hours, 0),
-        'total_pay_ex_vat', coalesce(tfsel.total_pay_ex_vat, 0),
-        'total_charge_ex_vat', coalesce(tfsel.total_charge_ex_vat, 0)
+        'total_hours', coalesce(selected_tsfin.total_hours, 0),
+        'total_pay_ex_vat', coalesce(selected_tsfin.total_pay_ex_vat, 0),
+        'total_charge_ex_vat', coalesce(selected_tsfin.total_charge_ex_vat, 0)
       )
       ORDER BY
-        (case when tsel.booking_id = v_current_ts.booking_id then 0 else 1 end),
-        tsel.booking_id
+        (case when selected_timesheet.booking_id = v_current_ts.booking_id then 0 else 1 end),
+        selected_timesheet.booking_id
     ),
     '[]'::jsonb
   )
   into v_delete_items
   from (
-    select distinct on (t_pick.booking_id)
-      t_pick.booking_id,
-      t_pick.timesheet_id,
-      t_pick.week_ending_date,
-      t_pick.status,
-      t_pick.is_adjustment,
-      t_pick.adjustment_origin,
-      t_pick.correction_id,
-      t_pick.correction_kind
-    from public.timesheets t_pick
-    where t_pick.booking_id = any(v_booking_ids)
-    order by t_pick.booking_id, t_pick.is_current desc, t_pick.version desc
-  ) tsel
-  left join public.timesheets_financials tfsel
-    on tfsel.timesheet_id = tsel.timesheet_id
-   and tfsel.is_current is true;
+    select distinct on (timesheet_pick.booking_id)
+      timesheet_pick.booking_id,
+      timesheet_pick.timesheet_id,
+      timesheet_pick.week_ending_date,
+      timesheet_pick.status,
+      timesheet_pick.is_adjustment,
+      timesheet_pick.adjustment_origin,
+      timesheet_pick.correction_id,
+      timesheet_pick.correction_kind
+    from public.timesheets as timesheet_pick
+    where timesheet_pick.booking_id = any(v_booking_ids)
+    order by timesheet_pick.booking_id, timesheet_pick.is_current desc, timesheet_pick.version desc
+  ) as selected_timesheet
+  left join public.timesheets_financials as selected_tsfin
+    on selected_tsfin.timesheet_id = selected_timesheet.timesheet_id
+   and selected_tsfin.is_current is true;
 
   return jsonb_build_object(
     'kind', 'WEEKLY_CHAIN_DELETE_PARENT',
