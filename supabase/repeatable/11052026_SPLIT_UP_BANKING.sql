@@ -48,7 +48,7 @@ begin
     v_phase := coalesce(nullif(btrim(p_phase), ''), 'ALL');
     v_chunk_type := coalesce(nullif(btrim(p_chunk_type), ''), 'CANDIDATE_SCOPE');
 
-    if v_chunk_type in ('TRANSFER_SUBMIT', 'PAYEE_READINESS') then
+    if v_chunk_type in ('TRANSFER_SUBMIT', 'PAYEE_READINESS', 'FRESHNESS_VALIDATE') then
         v_default_chunk_size := 50;
         v_default_min_chunk_size := 1;
         v_default_max_chunk_size := 250;
@@ -1206,6 +1206,8 @@ begin
         v_operation.failed_at_utc;
 end;
 $$;
+
+
 create or replace function public.banking_pay_operation_claim_chunk(
     p_operation_id uuid,
     p_phase text,
@@ -1268,9 +1270,14 @@ begin
         'SETTLEMENT',
         'REMITTANCE',
         'PAYOUT_NOTICE',
-        'PREVIEW_PAGE'
+        'PREVIEW_PAGE',
+        'FRESHNESS_VALIDATE'
     ) then
         raise exception 'Unsupported banking pay operation chunk_type: %', v_chunk_type;
+    end if;
+
+    if v_chunk_type = 'FRESHNESS_VALIDATE' and v_phase <> 'VALIDATE_FRESHNESS' then
+        raise exception 'FRESHNESS_VALIDATE chunks must be claimed with phase VALIDATE_FRESHNESS';
     end if;
 
     if v_lock_seconds < 5 then
@@ -1336,6 +1343,9 @@ begin
         v_chunk.updated_at_utc;
 end;
 $$;
+
+
+
 create or replace function public.banking_pay_operation_finish_chunk(
     p_chunk_id uuid,
     p_status text,
@@ -1697,7 +1707,8 @@ begin
         'SETTLEMENT',
         'REMITTANCE',
         'PAYOUT_NOTICE',
-        'PREVIEW_PAGE'
+        'PREVIEW_PAGE',
+        'FRESHNESS_VALIDATE'
     ) then
         raise exception 'Unsupported banking pay operation chunk_type: %', v_chunk_type;
     end if;
@@ -1736,7 +1747,14 @@ begin
               and existing_empty_check_chunk.phase = v_phase
               and existing_empty_check_chunk.chunk_type = v_chunk_type
         ) then
-            raise exception 'banking_pay_operation_seed_chunks received an empty unit list but chunks already exist for operation %, phase %, chunk_type %', p_operation_id, v_phase, v_chunk_type;
+            raise exception 'CHUNK_SCOPE_MISMATCH: empty unit list does not match existing chunks for operation %, phase %, chunk_type %', p_operation_id, v_phase, v_chunk_type
+              using errcode = 'P0001',
+                    detail = jsonb_build_object(
+                        'code', 'CHUNK_SCOPE_MISMATCH',
+                        'operation_id', p_operation_id::text,
+                        'phase', v_phase,
+                        'chunk_type', v_chunk_type
+                    )::text;
         end if;
 
         return query
@@ -1768,6 +1786,34 @@ begin
             )
         ) then
             raise exception 'CANDIDATE_SCOPE chunks contain a candidate scope id that does not belong to the operation';
+        end if;
+    end if;
+
+    if v_chunk_type = 'FRESHNESS_VALIDATE' then
+        if v_phase <> 'VALIDATE_FRESHNESS' then
+            raise exception 'FRESHNESS_VALIDATE chunks must use phase VALIDATE_FRESHNESS';
+        end if;
+
+        if exists (
+            select 1
+            from jsonb_array_elements(v_units_json) as freshness_unit(unit_value)
+            where jsonb_typeof(freshness_unit.unit_value) <> 'object'
+               or (
+                    not (freshness_unit.unit_value ? 'timesheet_id')
+                and not (freshness_unit.unit_value ? 'snapshot_id')
+                and not (freshness_unit.unit_value ? 'pay_batch_item_ids')
+               )
+        ) then
+            raise exception 'FRESHNESS_VALIDATE chunks require bounded frozen batch unit objects containing timesheet_id, snapshot_id, or pay_batch_item_ids';
+        end if;
+
+        if exists (
+            select 1
+            from jsonb_array_elements(v_units_json) as freshness_unit(unit_value)
+            where (freshness_unit.unit_value ? 'pay_batch_item_ids')
+              and jsonb_typeof(freshness_unit.unit_value->'pay_batch_item_ids') <> 'array'
+        ) then
+            raise exception 'FRESHNESS_VALIDATE unit pay_batch_item_ids must be a JSON array when supplied';
         end if;
     end if;
 
@@ -1803,7 +1849,15 @@ begin
        or existing_chunk.payload_json is distinct from expected_chunk.payload_json;
 
     if v_mismatched_chunk_count > 0 then
-        raise exception 'banking_pay_operation_seed_chunks found existing chunks with different payloads for operation %, phase %, chunk_type %', p_operation_id, v_phase, v_chunk_type;
+        raise exception 'CHUNK_SCOPE_MISMATCH: existing chunks differ for operation %, phase %, chunk_type %', p_operation_id, v_phase, v_chunk_type
+          using errcode = 'P0001',
+                detail = jsonb_build_object(
+                    'code', 'CHUNK_SCOPE_MISMATCH',
+                    'operation_id', p_operation_id::text,
+                    'phase', v_phase,
+                    'chunk_type', v_chunk_type,
+                    'mismatched_chunk_count', v_mismatched_chunk_count
+                )::text;
     end if;
 
     select count(*)::integer
@@ -1815,7 +1869,15 @@ begin
       and extra_chunk.sequence_no > v_chunk_count;
 
     if v_extra_chunk_count > 0 then
-        raise exception 'banking_pay_operation_seed_chunks found extra existing chunks for operation %, phase %, chunk_type %', p_operation_id, v_phase, v_chunk_type;
+        raise exception 'CHUNK_SCOPE_MISMATCH: extra existing chunks for operation %, phase %, chunk_type %', p_operation_id, v_phase, v_chunk_type
+          using errcode = 'P0001',
+                detail = jsonb_build_object(
+                    'code', 'CHUNK_SCOPE_MISMATCH',
+                    'operation_id', p_operation_id::text,
+                    'phase', v_phase,
+                    'chunk_type', v_chunk_type,
+                    'extra_chunk_count', v_extra_chunk_count
+                )::text;
     end if;
 
     with ordered_units as (
@@ -1881,7 +1943,6 @@ begin
         v_new_chunk_count;
 end;
 $$;
-
 
 
 create or replace function public.pay_batch_stage_operation_candidate_chunk_context(
@@ -4984,6 +5045,8 @@ END;
 $function$;
 DROP FUNCTION IF EXISTS public.pay_batch_execution_summary_get(uuid, uuid);
 
+
+
 CREATE OR REPLACE FUNCTION public.pay_batch_execution_summary_get(
   p_pay_batch_id uuid,
   p_actor_user_id uuid DEFAULT NULL::uuid
@@ -4997,17 +5060,24 @@ DECLARE
   v_batch_row public.pay_batches%ROWTYPE;
   v_candidate_count integer := 0;
   v_item_count integer := 0;
+  v_active_payment_count integer := 0;
   v_total_amount numeric := 0;
   v_transfer_count integer := 0;
-  v_pending_transfer_count integer := 0;
   v_prepared_transfer_count integer := 0;
-  v_submitted_transfer_count integer := 0;
+  v_provider_submitted_transfer_count integer := 0;
+  v_local_only_transfer_count integer := 0;
+  v_pending_transfer_count integer := 0;
   v_failed_transfer_count integer := 0;
+  v_ambiguous_transfer_count integer := 0;
   v_blocked_transfer_count integer := 0;
   v_settled_candidate_count integer := 0;
   v_remittance_sent_count integer := 0;
   v_active_operation_id uuid := NULL::uuid;
   v_active_operation_type text := NULL;
+  v_active_operation_status text := NULL;
+  v_submission_evidence_json jsonb := '{}'::jsonb;
+  v_freshness_result_json jsonb := '{}'::jsonb;
+  v_freshness_is_stale boolean := false;
 BEGIN
   IF p_pay_batch_id IS NULL THEN
     RAISE EXCEPTION 'pay_batch_id is required';
@@ -5032,6 +5102,10 @@ BEGIN
     RAISE EXCEPTION 'pay_batches row % not found', p_pay_batch_id;
   END IF;
 
+  v_freshness_result_json := coalesce(v_batch_row.freshness_result_json, '{}'::jsonb);
+  v_freshness_is_stale := upper(coalesce(v_batch_row.freshness_validation_status, '')) = 'STALE'
+    OR lower(btrim(coalesce(v_freshness_result_json->>'is_stale', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on');
+
   SELECT count(*)::integer,
          count(*) FILTER (WHERE upper(coalesce(batch_candidate.settlement_status, '')) IN ('SETTLED', 'PAID', 'CONFIRMED'))::integer,
          count(*) FILTER (WHERE batch_candidate.remittance_sent_at_utc IS NOT NULL)::integer
@@ -5040,49 +5114,35 @@ BEGIN
   WHERE batch_candidate.pay_batch_id = p_pay_batch_id;
 
   SELECT count(*)::integer,
+         count(*) FILTER (
+           WHERE coalesce(batch_item.is_voided, false) = false
+             AND coalesce(batch_item.amount_inc_vat, batch_item.amount_ex_vat, 0) <> 0
+         )::integer,
          round(coalesce(sum(CASE WHEN coalesce(batch_item.is_voided, false) = false THEN coalesce(batch_item.amount_inc_vat, batch_item.amount_ex_vat, 0) ELSE 0 END), 0), 2)
-  INTO v_item_count, v_total_amount
+  INTO v_item_count, v_active_payment_count, v_total_amount
   FROM public.pay_batch_items AS batch_item
   JOIN public.pay_batch_candidates AS batch_candidate
     ON batch_candidate.id = batch_item.pay_batch_candidate_id
   WHERE batch_candidate.pay_batch_id = p_pay_batch_id;
 
+  v_submission_evidence_json := public.pay_batch_submission_evidence(p_pay_batch_id);
+  v_transfer_count := coalesce((v_submission_evidence_json->>'transfer_count')::integer, 0);
+  v_provider_submitted_transfer_count := coalesce((v_submission_evidence_json->>'provider_submitted_count')::integer, 0);
+  v_local_only_transfer_count := coalesce((v_submission_evidence_json->>'local_only_count')::integer, coalesce((v_submission_evidence_json->>'local_idempotency_only_count')::integer, 0));
+  v_pending_transfer_count := coalesce((v_submission_evidence_json->>'pending_count')::integer, 0);
+  v_failed_transfer_count := coalesce((v_submission_evidence_json->>'failed_count')::integer, 0);
+  v_ambiguous_transfer_count := coalesce((v_submission_evidence_json->>'ambiguous_count')::integer, 0);
+
   SELECT count(*)::integer,
-         count(*) FILTER (WHERE upper(coalesce(transfer_row.status, '')) = 'BLOCKED')::integer,
-         count(*) FILTER (
-           WHERE upper(coalesce(transfer_row.status, '')) NOT IN ('FAILED', 'DECLINED', 'REJECTED', 'CANCELLED', 'CANCELED', 'BLOCKED')
-             AND (
-               transfer_row.rail_tx_id IS NOT NULL
-               OR upper(coalesce(transfer_row.rail_state, '')) IN ('SUBMITTED', 'QUEUED', 'ACCEPTED', 'SENT', 'PROCESSING', 'IN_FLIGHT', 'PENDING_SETTLEMENT', 'PENDING_CONFIRMATION', 'PENDING_SUBMISSION', 'COMPLETED', 'SETTLED', 'COMMITTED', 'PAID', 'EXECUTED')
-               OR lower(btrim(coalesce(transfer_row.rail_meta_json->>'submitted', 'false'))) IN ('true', '1', 'yes', 'y', 'on')
-               OR lower(btrim(coalesce(transfer_row.rail_meta_json->>'queued', 'false'))) IN ('true', '1', 'yes', 'y', 'on')
-               OR lower(btrim(coalesce(transfer_row.rail_meta_json->>'accepted', 'false'))) IN ('true', '1', 'yes', 'y', 'on')
-               OR lower(btrim(coalesce(transfer_row.rail_meta_json->>'sent', 'false'))) IN ('true', '1', 'yes', 'y', 'on')
-               OR coalesce(
-                    nullif(btrim(coalesce(transfer_row.rail_meta_json->>'provider_submission_id', '')), ''),
-                    nullif(btrim(coalesce(transfer_row.rail_meta_json->>'submission_id', '')), ''),
-                    nullif(btrim(coalesce(transfer_row.rail_meta_json->>'provider_transfer_id', '')), ''),
-                    nullif(btrim(coalesce(transfer_row.rail_meta_json->>'transfer_id', '')), ''),
-                    nullif(btrim(coalesce(transfer_row.rail_meta_json->>'external_transfer_id', '')), ''),
-                    nullif(btrim(coalesce(transfer_row.rail_meta_json->>'provider_payment_id', '')), ''),
-                    nullif(btrim(coalesce(transfer_row.rail_meta_json->>'payment_id', '')), '')
-                  ) IS NOT NULL
-             )
-         )::integer,
-         count(*) FILTER (
-           WHERE upper(coalesce(transfer_row.status, '')) IN ('FAILED', 'DECLINED', 'REJECTED', 'CANCELLED', 'CANCELED')
-              OR upper(coalesce(transfer_row.rail_state, '')) IN ('FAILED', 'DECLINED', 'REJECTED', 'CANCELLED', 'CANCELED', 'RETURNED', 'REVERTED')
-         )::integer
-  INTO v_transfer_count, v_blocked_transfer_count, v_submitted_transfer_count, v_failed_transfer_count
+         count(*) FILTER (WHERE upper(coalesce(transfer_row.status, '')) = 'BLOCKED')::integer
+  INTO v_prepared_transfer_count, v_blocked_transfer_count
   FROM public.pay_bank_transfers AS transfer_row
   WHERE transfer_row.pay_batch_id = p_pay_batch_id;
 
-  v_prepared_transfer_count := GREATEST(COALESCE(v_transfer_count, 0) - COALESCE(v_blocked_transfer_count, 0), 0);
-  v_pending_transfer_count := GREATEST(COALESCE(v_transfer_count, 0) - COALESCE(v_submitted_transfer_count, 0) - COALESCE(v_failed_transfer_count, 0) - COALESCE(v_blocked_transfer_count, 0), 0);
-
   SELECT operation_row.id,
-         operation_row.operation_type
-  INTO v_active_operation_id, v_active_operation_type
+         operation_row.operation_type,
+         operation_row.status
+  INTO v_active_operation_id, v_active_operation_type, v_active_operation_status
   FROM public.banking_pay_operations AS operation_row
   WHERE operation_row.pay_batch_id = p_pay_batch_id
     AND operation_row.status NOT IN ('COMPLETE', 'FAILED', 'CANCELLED', 'REVIEW_REQUIRED')
@@ -5096,46 +5156,67 @@ BEGIN
     'batch_status', v_batch_row.status,
     'status', v_batch_row.status,
     'batch_kind_fixed', v_batch_row.batch_kind_fixed,
-    'execution_mode', COALESCE(NULLIF(BTRIM(COALESCE(v_batch_row.execution_intent_json->>'execution_mode', '')), ''), NULLIF(BTRIM(COALESCE(v_batch_row.execution_intent_json->>'mode', '')), ''), CASE WHEN upper(coalesce(v_batch_row.rail_provider_snapshot, '')) = 'CSV' THEN 'CSV' ELSE 'BANK' END),
+    'pay_channel', v_batch_row.batch_kind_fixed,
+    'provider', v_batch_row.rail_provider_snapshot,
+    'provider_environment', v_batch_row.rail_env_snapshot,
+    'rail_provider_snapshot', v_batch_row.rail_provider_snapshot,
+    'rail_env_snapshot', v_batch_row.rail_env_snapshot,
+    'execution_commit_state', v_batch_row.execution_commit_state,
+    'execution_mode', coalesce(nullif(btrim(coalesce(v_batch_row.execution_intent_json->>'execution_mode', '')), ''), nullif(btrim(coalesce(v_batch_row.execution_intent_json->>'mode', '')), ''), case when upper(coalesce(v_batch_row.rail_provider_snapshot, '')) = 'CSV' then 'CSV' else 'BANK' end),
+    'freshness_validation_status', v_batch_row.freshness_validation_status,
+    'freshness_checked_at_utc', v_batch_row.freshness_checked_at_utc,
+    'freshness_result_hash', v_batch_row.freshness_result_hash,
+    'freshness_scope_hash', v_batch_row.freshness_scope_hash,
+    'freshness_operation_id', case when v_batch_row.freshness_operation_id is null then null else v_batch_row.freshness_operation_id::text end,
+    'freshness_is_stale', coalesce(v_freshness_is_stale, false),
+    'freshness_stale_reason_counts', coalesce(v_freshness_result_json->'stale_reason_counts', '{}'::jsonb),
     'schedule_state', jsonb_build_object(
       'schedule_kind', v_batch_row.schedule_kind,
       'scheduled_at_utc', v_batch_row.scheduled_at_utc,
-      'scheduled_by_user_id', CASE WHEN v_batch_row.scheduled_by_user_id IS NULL THEN NULL ELSE v_batch_row.scheduled_by_user_id::text END
+      'scheduled_by_user_id', case when v_batch_row.scheduled_by_user_id is null then null else v_batch_row.scheduled_by_user_id::text end
     ),
     'authorisation_state', jsonb_build_object(
       'execution_commit_state', v_batch_row.execution_commit_state,
       'execution_commit_ref', v_batch_row.execution_commit_ref,
       'execution_committed_at_utc', v_batch_row.execution_committed_at_utc
     ),
-    'candidate_count', COALESCE(v_candidate_count, 0),
-    'item_count', COALESCE(v_item_count, 0),
-    'total_amount', COALESCE(v_total_amount, 0),
-    'transfer_count', COALESCE(v_transfer_count, 0),
-    'pending_transfer_count', COALESCE(v_pending_transfer_count, 0),
-    'prepared_transfer_count', COALESCE(v_prepared_transfer_count, 0),
-    'submitted_transfer_count', COALESCE(v_submitted_transfer_count, 0),
-    'failed_transfer_count', COALESCE(v_failed_transfer_count, 0),
-    'blocked_transfer_count', COALESCE(v_blocked_transfer_count, 0),
+    'candidate_count', coalesce(v_candidate_count, 0),
+    'item_count', coalesce(v_item_count, 0),
+    'active_payment_count', coalesce(v_active_payment_count, 0),
+    'total_amount', coalesce(v_total_amount, 0),
+    'transfer_count', coalesce(v_transfer_count, 0),
+    'prepared_transfer_count', coalesce(v_prepared_transfer_count, 0),
+    'submitted_transfer_count', coalesce(v_provider_submitted_transfer_count, 0),
+    'provider_submitted_transfer_count', coalesce(v_provider_submitted_transfer_count, 0),
+    'local_only_transfer_count', coalesce(v_local_only_transfer_count, 0),
+    'pending_transfer_count', coalesce(v_pending_transfer_count, 0),
+    'failed_transfer_count', coalesce(v_failed_transfer_count, 0),
+    'ambiguous_transfer_count', coalesce(v_ambiguous_transfer_count, 0),
+    'blocked_transfer_count', coalesce(v_blocked_transfer_count, 0),
+    'submission_evidence', coalesce(v_submission_evidence_json, '{}'::jsonb),
     'blocked_funds_state', jsonb_build_object(
       'is_blocked_funds', upper(coalesce(v_batch_row.status, '')) = 'BLOCKED_FUNDS',
       'last_funds_check_at_utc', v_batch_row.last_funds_check_at_utc,
-      'last_funds_check_json', COALESCE(v_batch_row.last_funds_check_json, '{}'::jsonb),
+      'last_funds_check_json', coalesce(v_batch_row.last_funds_check_json, '{}'::jsonb),
       'funding_account_ref', v_batch_row.funding_account_ref
     ),
     'settlement_state', jsonb_build_object(
-      'settled_candidate_count', COALESCE(v_settled_candidate_count, 0),
-      'candidate_count', COALESCE(v_candidate_count, 0),
-      'settlement_confirmation_json', COALESCE(v_batch_row.settlement_confirmation_json, '{}'::jsonb)
+      'settled_candidate_count', coalesce(v_settled_candidate_count, 0),
+      'candidate_count', coalesce(v_candidate_count, 0),
+      'settlement_confirmation_json', coalesce(v_batch_row.settlement_confirmation_json, '{}'::jsonb)
     ),
     'remittance_state', jsonb_build_object(
-      'remittance_sent_count', COALESCE(v_remittance_sent_count, 0),
-      'candidate_count', COALESCE(v_candidate_count, 0)
+      'remittance_sent_count', coalesce(v_remittance_sent_count, 0),
+      'candidate_count', coalesce(v_candidate_count, 0)
     ),
-    'active_operation_id', CASE WHEN v_active_operation_id IS NULL THEN NULL ELSE v_active_operation_id::text END,
-    'active_operation_type', v_active_operation_type
+    'active_operation_id', case when v_active_operation_id is null then null else v_active_operation_id::text end,
+    'active_operation_type', v_active_operation_type,
+    'active_operation_status', v_active_operation_status
   );
 END;
 $function$;
+
+
 
 
 DROP FUNCTION IF EXISTS public.pay_execute_bank_transfer_chunk_prepare(uuid, uuid, jsonb, uuid);
