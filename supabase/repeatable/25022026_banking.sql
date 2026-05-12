@@ -1964,6 +1964,8 @@ DROP FUNCTION IF EXISTS public.pay_create_draft_batches_split(
 DROP FUNCTION IF EXISTS public.pay_create_draft_batches_split(date, date, uuid, jsonb, uuid, uuid, uuid[], text, public.pay_override_mode_enum, boolean, boolean, uuid, timestamptz);
 DROP FUNCTION IF EXISTS public.pay_create_draft_batches_split(date, date, uuid, jsonb, uuid, uuid, uuid[], text, public.pay_override_mode_enum, boolean, boolean, uuid, timestamptz, uuid, boolean);
 
+
+
 CREATE OR REPLACE FUNCTION public.pay_create_draft_batches_split(
   p_pay_date date,
   p_week_ending_cutoff date,
@@ -2082,6 +2084,16 @@ BEGIN
     );
   END IF;
 
+  IF COALESCE(p_allow_legacy_unchunked, false) IS NOT TRUE THEN
+    RAISE EXCEPTION '%', jsonb_build_object(
+      'error', 'PAY_CREATE_DRAFT_BATCHES_SPLIT_OPERATION_REQUIRED',
+      'code', 'DRAFT_CREATE_OPERATION_REQUIRED',
+      'message', 'pay_create_draft_batches_split refused legacy split all-at-once draft creation. Normal frontend draft creation must use the scalable Banking Pay DRAFT_CREATE operation flow; set p_allow_legacy_unchunked only for explicit small diagnostic/test compatibility.',
+      'safe_legacy_threshold', v_legacy_safe_selected_row_threshold,
+      'allow_legacy_unchunked', COALESCE(p_allow_legacy_unchunked, false)
+    )::text;
+  END IF;
+
   IF COALESCE(p_override_mode, 'NONE'::public.pay_override_mode_enum) = 'TIMESHEET_ADVANCE'::public.pay_override_mode_enum THEN
     RAISE EXCEPTION 'TIMESHEET_ADVANCE is no longer supported by pay_create_draft_batches_split';
   END IF;
@@ -2175,26 +2187,26 @@ BEGIN
     END IF;
   END IF;
 
-  IF COALESCE(p_allow_legacy_unchunked, false) IS NOT TRUE
-     AND v_selected_preview_row_ids_supplied = true
+  IF v_selected_preview_row_ids_supplied = true
      AND COALESCE(v_selected_preview_row_ids_sanitized_count, 0) > v_legacy_safe_selected_row_threshold THEN
     RAISE EXCEPTION '%', jsonb_build_object(
       'error', 'PAY_CREATE_DRAFT_BATCHES_SPLIT_LEGACY_UNCHUNKED_TOO_LARGE',
       'code', 'DRAFT_CREATE_OPERATION_REQUIRED',
-      'message', 'This draft selection is too large for the legacy split all-at-once path. Use the scalable Banking Pay draft operation flow.',
+      'message', 'This draft selection is too large for the legacy split all-at-once path. Even explicit legacy/test compatibility is limited to small selections; use the scalable Banking Pay draft operation flow.',
       'selected_preview_row_count', v_selected_preview_row_ids_sanitized_count,
-      'safe_legacy_threshold', v_legacy_safe_selected_row_threshold
+      'safe_legacy_threshold', v_legacy_safe_selected_row_threshold,
+      'allow_legacy_unchunked', COALESCE(p_allow_legacy_unchunked, false)
     )::text;
   END IF;
 
-  IF COALESCE(p_allow_legacy_unchunked, false) IS NOT TRUE
-     AND v_selected_preview_row_ids_supplied = false
+  IF v_selected_preview_row_ids_supplied = false
      AND p_candidate_id IS NULL THEN
     RAISE EXCEPTION '%', jsonb_build_object(
       'error', 'PAY_CREATE_DRAFT_BATCHES_SPLIT_UNBOUNDED_LEGACY_DISABLED',
       'code', 'DRAFT_CREATE_OPERATION_REQUIRED',
-      'message', 'Unbounded or client-wide legacy split draft creation is disabled. Use the scalable Banking Pay draft operation flow, or supply an explicit small candidate/test scope or selected preview rows.',
-      'client_id', CASE WHEN p_client_id IS NULL THEN NULL ELSE p_client_id::text END
+      'message', 'Unbounded or client-wide legacy split draft creation is disabled. Even explicit legacy/test compatibility must supply a small candidate/test scope or selected preview rows.',
+      'client_id', CASE WHEN p_client_id IS NULL THEN NULL ELSE p_client_id::text END,
+      'allow_legacy_unchunked', COALESCE(p_allow_legacy_unchunked, false)
     )::text;
   END IF;
 
@@ -2721,10 +2733,6 @@ BEGIN
   );
 END;
 $$;
-
-
-
-
 
 
 
