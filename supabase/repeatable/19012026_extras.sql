@@ -6966,6 +6966,35 @@ BEGIN
 
       source_rows.route_type,
       CASE
+        WHEN (
+          source_rows.submission_mode = 'MANUAL'::public.submission_mode_enum
+          AND (
+            COALESCE(source_rows.is_adjusted, FALSE) = TRUE
+            OR COALESCE(source_rows.is_adjustment, FALSE) = TRUE
+            OR COALESCE(source_rows.additional_seq, 0) > 0
+            OR UPPER(COALESCE(source_rows.basis::text, '')) IN ('NHSP_ADJUSTMENT', 'MANUAL_ADJUSTMENT')
+          )
+        )
+         AND COALESCE(source_rows.client_is_nhsp, FALSE) = TRUE THEN 'NHSP Manual Adjustment'
+        WHEN (
+          source_rows.submission_mode = 'MANUAL'::public.submission_mode_enum
+          AND (
+            COALESCE(source_rows.is_adjusted, FALSE) = TRUE
+            OR COALESCE(source_rows.is_adjustment, FALSE) = TRUE
+            OR COALESCE(source_rows.additional_seq, 0) > 0
+            OR UPPER(COALESCE(source_rows.basis::text, '')) IN ('NHSP_ADJUSTMENT', 'MANUAL_ADJUSTMENT')
+          )
+        )
+         AND COALESCE(source_rows.client_autoprocess_hr, FALSE) = TRUE THEN 'HealthRoster Manual Adjustment'
+        WHEN (
+          source_rows.submission_mode = 'MANUAL'::public.submission_mode_enum
+          AND (
+            COALESCE(source_rows.is_adjusted, FALSE) = TRUE
+            OR COALESCE(source_rows.is_adjustment, FALSE) = TRUE
+            OR COALESCE(source_rows.additional_seq, 0) > 0
+            OR UPPER(COALESCE(source_rows.basis::text, '')) IN ('NHSP_ADJUSTMENT', 'MANUAL_ADJUSTMENT')
+          )
+        ) THEN 'Manual Adjustment'
         WHEN UPPER(COALESCE(source_rows.route_type, '')) = 'NHSP' THEN 'NHSP'
         WHEN UPPER(COALESCE(source_rows.route_type, '')) = 'HEALTHROSTER' THEN 'HealthRoster'
         WHEN UPPER(COALESCE(source_rows.route_type, '')) = 'HEALTHROSTER_DAILY' THEN 'HealthRoster Daily'
@@ -6976,6 +7005,15 @@ BEGIN
       END AS route_display,
 
       CASE
+        WHEN (
+          source_rows.submission_mode = 'MANUAL'::public.submission_mode_enum
+          AND (
+            COALESCE(source_rows.is_adjusted, FALSE) = TRUE
+            OR COALESCE(source_rows.is_adjustment, FALSE) = TRUE
+            OR COALESCE(source_rows.additional_seq, 0) > 0
+            OR UPPER(COALESCE(source_rows.basis::text, '')) IN ('NHSP_ADJUSTMENT', 'MANUAL_ADJUSTMENT')
+          )
+        ) THEN 'MANUAL'
         WHEN UPPER(COALESCE(source_rows.route_type, '')) LIKE '%NHSP%' THEN 'NHSP'
         WHEN UPPER(COALESCE(source_rows.route_type, '')) LIKE '%HEALTHROSTER%' THEN 'HEALTHROSTER'
         WHEN COALESCE(source_rows.is_qr, FALSE) THEN 'QR'
@@ -6984,12 +7022,30 @@ BEGIN
       END AS route_family,
 
       CASE
+        WHEN (
+          source_rows.submission_mode = 'MANUAL'::public.submission_mode_enum
+          AND (
+            COALESCE(source_rows.is_adjusted, FALSE) = TRUE
+            OR COALESCE(source_rows.is_adjustment, FALSE) = TRUE
+            OR COALESCE(source_rows.additional_seq, 0) > 0
+            OR UPPER(COALESCE(source_rows.basis::text, '')) IN ('NHSP_ADJUSTMENT', 'MANUAL_ADJUSTMENT')
+          )
+        ) THEN 'MANUAL_ADJUSTMENT'
         WHEN UPPER(COALESCE(source_rows.route_type, '')) = 'HEALTHROSTER_DAILY' THEN 'DAILY'
         WHEN source_rows.sheet_scope = 'DAILY'::public.timesheet_scope_enum THEN 'DAILY'
         ELSE 'WEEKLY'
       END AS route_subfamily,
 
       CASE
+        WHEN (
+          source_rows.submission_mode = 'MANUAL'::public.submission_mode_enum
+          AND (
+            COALESCE(source_rows.is_adjusted, FALSE) = TRUE
+            OR COALESCE(source_rows.is_adjustment, FALSE) = TRUE
+            OR COALESCE(source_rows.additional_seq, 0) > 0
+            OR UPPER(COALESCE(source_rows.basis::text, '')) IN ('NHSP_ADJUSTMENT', 'MANUAL_ADJUSTMENT')
+          )
+        ) THEN 'MANUAL'
         WHEN UPPER(COALESCE(source_rows.route_type, '')) LIKE '%NHSP%' THEN 'IMPORT'
         WHEN UPPER(COALESCE(source_rows.route_type, '')) LIKE '%HEALTHROSTER%' THEN 'IMPORT'
         WHEN COALESCE(source_rows.is_qr, FALSE) THEN 'QR'
@@ -7190,7 +7246,7 @@ BEGIN
         OR (
           v_route_type = 'nhsp'
           AND (
-            UPPER(COALESCE(enriched_row.route_type, '')) IN ('WEEKLY_NHSP', 'WEEKLY_NHSP_ADJUSTMENT', 'NHSP')
+            UPPER(COALESCE(enriched_row.route_type, '')) IN ('WEEKLY_NHSP', 'NHSP')
             OR UPPER(COALESCE(enriched_row.route_family, '')) = 'NHSP'
           )
         )
@@ -7502,6 +7558,7 @@ BEGIN
   OFFSET v_offset;
 END;
 $function$;
+
 
 REVOKE ALL ON FUNCTION public.timesheet_summary_lightweight_rows_v1(jsonb) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.timesheet_summary_lightweight_rows_v1(jsonb) TO authenticated;
