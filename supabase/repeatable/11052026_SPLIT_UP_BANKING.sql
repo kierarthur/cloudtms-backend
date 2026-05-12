@@ -5119,25 +5119,93 @@ BEGIN
       ON bank_transfer.pay_batch_id = transfer_scope.pay_batch_id
      AND bank_transfer.pay_channel = transfer_scope.pay_channel
      AND bank_transfer.transfer_group_key = transfer_scope.transfer_group_key
+    JOIN public.pay_batches AS batch_row
+      ON batch_row.id = bank_transfer.pay_batch_id
     WHERE transfer_scope.operation_id = p_operation_id
       AND transfer_scope.pay_batch_id = p_pay_batch_id
       AND transfer_scope.status = 'PENDING'
       AND (
-        nullif(btrim(coalesce(bank_transfer.rail_tx_id, '')), '') IS NOT NULL
+        (
+          lower(btrim(coalesce(bank_transfer.rail_meta_json #>> '{last_update_provider_evidence}', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+          AND EXISTS (
+            SELECT 1
+            FROM (VALUES
+              (bank_transfer.rail_tx_id),
+              (bank_transfer.rail_meta_json #>> '{provider_event_id}'),
+              (bank_transfer.rail_meta_json #>> '{provider_reference}'),
+              (bank_transfer.rail_meta_json #>> '{provider_submission_id}'),
+              (bank_transfer.rail_meta_json #>> '{submission_id}'),
+              (bank_transfer.rail_meta_json #>> '{rail_submission_id}'),
+              (bank_transfer.rail_meta_json #>> '{provider_payment_id}'),
+              (bank_transfer.rail_meta_json #>> '{payment_id}'),
+              (bank_transfer.rail_meta_json #>> '{external_payment_id}'),
+              (bank_transfer.rail_meta_json #>> '{revolut_payment_id}'),
+              (bank_transfer.rail_meta_json #>> '{provider_transfer_id}'),
+              (bank_transfer.rail_meta_json #>> '{transfer_id}'),
+              (bank_transfer.rail_meta_json #>> '{external_transfer_id}'),
+              (bank_transfer.rail_meta_json #>> '{provider_transaction_id}'),
+              (bank_transfer.rail_meta_json #>> '{transaction_id}')
+            ) AS bank_identifier(identifier_value)
+            WHERE NULLIF(BTRIM(COALESCE(bank_identifier.identifier_value, '')), '') IS NOT NULL
+              AND NOT (
+                NULLIF(BTRIM(COALESCE(bank_identifier.identifier_value, '')), '') = ANY(
+                  ARRAY_REMOVE(ARRAY[
+                    bank_transfer.id::text,
+                    NULLIF(BTRIM(COALESCE(bank_transfer.request_id, '')), ''),
+                    NULLIF(BTRIM(COALESCE(bank_transfer.payment_reference, '')), ''),
+                    NULLIF(BTRIM(COALESCE(batch_row.bulk_reference, '')), ''),
+                    NULLIF(BTRIM(COALESCE(bank_transfer.transfer_group_key, '')), ''),
+                    NULLIF(BTRIM(COALESCE(bank_transfer.rail_meta_json #>> '{request_id}', '')), ''),
+                    NULLIF(BTRIM(COALESCE(bank_transfer.rail_meta_json #>> '{idempotency_key}', '')), ''),
+                    NULLIF(BTRIM(COALESCE(bank_transfer.rail_meta_json #>> '{payment_reference}', '')), ''),
+                    NULLIF(BTRIM(COALESCE(bank_transfer.rail_meta_json #>> '{bulk_reference}', '')), '')
+                  ]::text[], NULL::text)
+                )
+              )
+          )
+        )
         OR EXISTS (
           SELECT 1
           FROM public.pay_bank_transfer_events AS transfer_event
           WHERE transfer_event.pay_batch_id = bank_transfer.pay_batch_id
             AND transfer_event.pay_bank_transfer_id = bank_transfer.id
-            AND upper(btrim(coalesce(transfer_event.event_source, ''))) IN ('PROVIDER_RESPONSE','PROVIDER_POLL','PROVIDER_WEBHOOK','WEBHOOK','POLL','RAIL_PROVIDER')
-            AND (
-              nullif(btrim(coalesce(transfer_event.provider_event_id, '')), '') IS NOT NULL
-              OR (
-                nullif(btrim(coalesce(transfer_event.provider_reference, '')), '') IS NOT NULL
-                AND nullif(btrim(coalesce(transfer_event.provider_reference, '')), '') IS DISTINCT FROM nullif(btrim(coalesce(bank_transfer.request_id, '')), '')
-                AND nullif(btrim(coalesce(transfer_event.provider_reference, '')), '') IS DISTINCT FROM nullif(btrim(coalesce(bank_transfer.payment_reference, '')), '')
-                AND nullif(btrim(coalesce(transfer_event.provider_reference, '')), '') IS DISTINCT FROM nullif(btrim(coalesce(bank_transfer.transfer_group_key, '')), '')
-              )
+            AND upper(btrim(coalesce(transfer_event.event_source, ''))) IN ('PROVIDER_RESPONSE','PROVIDER_POLL','PROVIDER_WEBHOOK','WEBHOOK','POLL','RAIL_PROVIDER','PROVIDER','PROVIDER_SETTLEMENT')
+            AND EXISTS (
+              SELECT 1
+              FROM (VALUES
+                (transfer_event.provider_event_id),
+                (transfer_event.provider_reference),
+                (transfer_event.raw_payload #>> '{provider_event_id}'),
+                (transfer_event.raw_payload #>> '{provider_reference}'),
+                (transfer_event.raw_payload #>> '{provider_submission_id}'),
+                (transfer_event.raw_payload #>> '{submission_id}'),
+                (transfer_event.raw_payload #>> '{rail_submission_id}'),
+                (transfer_event.raw_payload #>> '{provider_payment_id}'),
+                (transfer_event.raw_payload #>> '{payment_id}'),
+                (transfer_event.raw_payload #>> '{external_payment_id}'),
+                (transfer_event.raw_payload #>> '{revolut_payment_id}'),
+                (transfer_event.raw_payload #>> '{provider_transfer_id}'),
+                (transfer_event.raw_payload #>> '{transfer_id}'),
+                (transfer_event.raw_payload #>> '{external_transfer_id}'),
+                (transfer_event.raw_payload #>> '{provider_transaction_id}'),
+                (transfer_event.raw_payload #>> '{transaction_id}')
+              ) AS event_identifier(identifier_value)
+              WHERE NULLIF(BTRIM(COALESCE(event_identifier.identifier_value, '')), '') IS NOT NULL
+                AND NOT (
+                  NULLIF(BTRIM(COALESCE(event_identifier.identifier_value, '')), '') = ANY(
+                    ARRAY_REMOVE(ARRAY[
+                      bank_transfer.id::text,
+                      NULLIF(BTRIM(COALESCE(bank_transfer.request_id, '')), ''),
+                      NULLIF(BTRIM(COALESCE(bank_transfer.payment_reference, '')), ''),
+                      NULLIF(BTRIM(COALESCE(batch_row.bulk_reference, '')), ''),
+                      NULLIF(BTRIM(COALESCE(bank_transfer.transfer_group_key, '')), ''),
+                      NULLIF(BTRIM(COALESCE(bank_transfer.rail_meta_json #>> '{request_id}', '')), ''),
+                      NULLIF(BTRIM(COALESCE(bank_transfer.rail_meta_json #>> '{idempotency_key}', '')), ''),
+                      NULLIF(BTRIM(COALESCE(bank_transfer.rail_meta_json #>> '{payment_reference}', '')), ''),
+                      NULLIF(BTRIM(COALESCE(bank_transfer.rail_meta_json #>> '{bulk_reference}', '')), '')
+                    ]::text[], NULL::text)
+                  )
+                )
             )
         )
       )
@@ -5246,7 +5314,7 @@ BEGIN
         umbrella_id = EXCLUDED.umbrella_id,
         amount = EXCLUDED.amount,
         currency = EXCLUDED.currency,
-        status = CASE WHEN upper(coalesce(public.pay_bank_transfers.status, '')) IN ('PENDING', 'BLOCKED', 'FAILED') THEN EXCLUDED.status ELSE public.pay_bank_transfers.status END,
+        status = EXCLUDED.status,
         payment_reference = EXCLUDED.payment_reference,
         payee_name = EXCLUDED.payee_name,
         sort_code = EXCLUDED.sort_code,
@@ -5260,24 +5328,90 @@ BEGIN
         payee_entity_id = EXCLUDED.payee_entity_id,
         grouping_mode_used = EXCLUDED.grouping_mode_used,
         week_ending_bucket = EXCLUDED.week_ending_bucket
-    WHERE nullif(btrim(coalesce(public.pay_bank_transfers.rail_tx_id, '')), '') IS NULL
+    WHERE NOT (
+        lower(btrim(coalesce(public.pay_bank_transfers.rail_meta_json #>> '{last_update_provider_evidence}', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+        AND EXISTS (
+          SELECT 1
+          FROM (VALUES
+            (public.pay_bank_transfers.rail_tx_id),
+            (public.pay_bank_transfers.rail_meta_json #>> '{provider_event_id}'),
+            (public.pay_bank_transfers.rail_meta_json #>> '{provider_reference}'),
+            (public.pay_bank_transfers.rail_meta_json #>> '{provider_submission_id}'),
+            (public.pay_bank_transfers.rail_meta_json #>> '{submission_id}'),
+            (public.pay_bank_transfers.rail_meta_json #>> '{rail_submission_id}'),
+            (public.pay_bank_transfers.rail_meta_json #>> '{provider_payment_id}'),
+            (public.pay_bank_transfers.rail_meta_json #>> '{payment_id}'),
+            (public.pay_bank_transfers.rail_meta_json #>> '{external_payment_id}'),
+            (public.pay_bank_transfers.rail_meta_json #>> '{revolut_payment_id}'),
+            (public.pay_bank_transfers.rail_meta_json #>> '{provider_transfer_id}'),
+            (public.pay_bank_transfers.rail_meta_json #>> '{transfer_id}'),
+            (public.pay_bank_transfers.rail_meta_json #>> '{external_transfer_id}'),
+            (public.pay_bank_transfers.rail_meta_json #>> '{provider_transaction_id}'),
+            (public.pay_bank_transfers.rail_meta_json #>> '{transaction_id}')
+          ) AS transfer_identifier(identifier_value)
+          WHERE NULLIF(BTRIM(COALESCE(transfer_identifier.identifier_value, '')), '') IS NOT NULL
+            AND NOT (
+              NULLIF(BTRIM(COALESCE(transfer_identifier.identifier_value, '')), '') = ANY(
+                ARRAY_REMOVE(ARRAY[
+                  public.pay_bank_transfers.id::text,
+                  NULLIF(BTRIM(COALESCE(public.pay_bank_transfers.request_id, '')), ''),
+                  NULLIF(BTRIM(COALESCE(public.pay_bank_transfers.payment_reference, '')), ''),
+                  NULLIF(BTRIM(COALESCE(public.pay_bank_transfers.transfer_group_key, '')), ''),
+                  NULLIF(BTRIM(COALESCE((SELECT protected_batch.bulk_reference FROM public.pay_batches AS protected_batch WHERE protected_batch.id = public.pay_bank_transfers.pay_batch_id), '')), ''),
+                  NULLIF(BTRIM(COALESCE(public.pay_bank_transfers.rail_meta_json #>> '{request_id}', '')), ''),
+                  NULLIF(BTRIM(COALESCE(public.pay_bank_transfers.rail_meta_json #>> '{idempotency_key}', '')), ''),
+                  NULLIF(BTRIM(COALESCE(public.pay_bank_transfers.rail_meta_json #>> '{payment_reference}', '')), ''),
+                  NULLIF(BTRIM(COALESCE(public.pay_bank_transfers.rail_meta_json #>> '{bulk_reference}', '')), '')
+                ]::text[], NULL::text)
+              )
+            )
+        )
+      )
       AND NOT EXISTS (
         SELECT 1
         FROM public.pay_bank_transfer_events AS protected_event
         WHERE protected_event.pay_batch_id = public.pay_bank_transfers.pay_batch_id
           AND protected_event.pay_bank_transfer_id = public.pay_bank_transfers.id
-          AND upper(btrim(coalesce(protected_event.event_source, ''))) IN ('PROVIDER_RESPONSE','PROVIDER_POLL','PROVIDER_WEBHOOK','WEBHOOK','POLL','RAIL_PROVIDER')
-          AND (
-            nullif(btrim(coalesce(protected_event.provider_event_id, '')), '') IS NOT NULL
-            OR (
-              nullif(btrim(coalesce(protected_event.provider_reference, '')), '') IS NOT NULL
-              AND nullif(btrim(coalesce(protected_event.provider_reference, '')), '') IS DISTINCT FROM nullif(btrim(coalesce(public.pay_bank_transfers.request_id, '')), '')
-              AND nullif(btrim(coalesce(protected_event.provider_reference, '')), '') IS DISTINCT FROM nullif(btrim(coalesce(public.pay_bank_transfers.payment_reference, '')), '')
-              AND nullif(btrim(coalesce(protected_event.provider_reference, '')), '') IS DISTINCT FROM nullif(btrim(coalesce(public.pay_bank_transfers.transfer_group_key, '')), '')
-            )
+          AND upper(btrim(coalesce(protected_event.event_source, ''))) IN ('PROVIDER_RESPONSE','PROVIDER_POLL','PROVIDER_WEBHOOK','WEBHOOK','POLL','RAIL_PROVIDER','PROVIDER','PROVIDER_SETTLEMENT')
+          AND EXISTS (
+            SELECT 1
+            FROM (VALUES
+              (protected_event.provider_event_id),
+              (protected_event.provider_reference),
+              (protected_event.raw_payload #>> '{provider_event_id}'),
+              (protected_event.raw_payload #>> '{provider_reference}'),
+              (protected_event.raw_payload #>> '{provider_submission_id}'),
+              (protected_event.raw_payload #>> '{submission_id}'),
+              (protected_event.raw_payload #>> '{rail_submission_id}'),
+              (protected_event.raw_payload #>> '{provider_payment_id}'),
+              (protected_event.raw_payload #>> '{payment_id}'),
+              (protected_event.raw_payload #>> '{external_payment_id}'),
+              (protected_event.raw_payload #>> '{revolut_payment_id}'),
+              (protected_event.raw_payload #>> '{provider_transfer_id}'),
+              (protected_event.raw_payload #>> '{transfer_id}'),
+              (protected_event.raw_payload #>> '{external_transfer_id}'),
+              (protected_event.raw_payload #>> '{provider_transaction_id}'),
+              (protected_event.raw_payload #>> '{transaction_id}')
+            ) AS protected_identifier(identifier_value)
+            WHERE NULLIF(BTRIM(COALESCE(protected_identifier.identifier_value, '')), '') IS NOT NULL
+              AND NOT (
+                NULLIF(BTRIM(COALESCE(protected_identifier.identifier_value, '')), '') = ANY(
+                  ARRAY_REMOVE(ARRAY[
+                    public.pay_bank_transfers.id::text,
+                    NULLIF(BTRIM(COALESCE(public.pay_bank_transfers.request_id, '')), ''),
+                    NULLIF(BTRIM(COALESCE(public.pay_bank_transfers.payment_reference, '')), ''),
+                    NULLIF(BTRIM(COALESCE(public.pay_bank_transfers.transfer_group_key, '')), ''),
+                    NULLIF(BTRIM(COALESCE((SELECT protected_batch.bulk_reference FROM public.pay_batches AS protected_batch WHERE protected_batch.id = public.pay_bank_transfers.pay_batch_id), '')), ''),
+                    NULLIF(BTRIM(COALESCE(public.pay_bank_transfers.rail_meta_json #>> '{request_id}', '')), ''),
+                    NULLIF(BTRIM(COALESCE(public.pay_bank_transfers.rail_meta_json #>> '{idempotency_key}', '')), ''),
+                    NULLIF(BTRIM(COALESCE(public.pay_bank_transfers.rail_meta_json #>> '{payment_reference}', '')), ''),
+                    NULLIF(BTRIM(COALESCE(public.pay_bank_transfers.rail_meta_json #>> '{bulk_reference}', '')), '')
+                  ]::text[], NULL::text)
+                )
+              )
           )
       )
-      AND upper(coalesce(public.pay_bank_transfers.status, '')) IN ('PENDING', 'BLOCKED', 'FAILED')
+      AND upper(coalesce(public.pay_bank_transfers.status, '')) NOT IN ('CANCELLED', 'CANCELED', 'RETURNED', 'REVERTED')
     RETURNING public.pay_bank_transfers.id,
               public.pay_bank_transfers.pay_batch_id,
               public.pay_bank_transfers.pay_channel,
@@ -5307,13 +5441,16 @@ BEGIN
       ON transfer_scope.id = linked_scope.id
     JOIN public.pay_bank_transfers AS bank_transfer
       ON bank_transfer.id = linked_scope.pay_bank_transfer_id
-    JOIN public.pay_batch_candidates AS batch_candidate
-      ON batch_candidate.id = batch_item_update.pay_batch_candidate_id
-     AND batch_candidate.pay_batch_id = p_pay_batch_id
     WHERE batch_item_update.id IN (
         SELECT (item_id.value #>> '{}')::uuid
         FROM jsonb_array_elements(COALESCE(transfer_scope.pay_batch_item_ids_json, '[]'::jsonb)) AS item_id(value)
         WHERE (item_id.value #>> '{}') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+      )
+      AND EXISTS (
+        SELECT 1
+        FROM public.pay_batch_candidates AS batch_candidate
+        WHERE batch_candidate.id = batch_item_update.pay_batch_candidate_id
+          AND batch_candidate.pay_batch_id = p_pay_batch_id
       )
     RETURNING batch_item_update.id
   )
