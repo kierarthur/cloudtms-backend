@@ -29396,6 +29396,7 @@ $function$;
 DROP FUNCTION IF EXISTS public.pay_batch_assert_integrity(uuid, uuid);
 DROP FUNCTION IF EXISTS public.pay_batch_assert_integrity(uuid, uuid, uuid);
 
+
 CREATE OR REPLACE FUNCTION public.pay_batch_assert_integrity(
   p_pay_batch_id uuid,
   p_actor_user_id uuid DEFAULT NULL::uuid,
@@ -29627,6 +29628,25 @@ v_stage := 'STAGE_21_BREAKDOWN_INTEGRITY_MISSING';
       );
     exception when others then null; end;
 
+    IF p_operation_id IS NOT NULL THEN
+      RETURN jsonb_build_object(
+        'ok', false,
+        'pay_batch_id', v_batch_id::text,
+        'operation_id', p_operation_id::text,
+        'pass', false,
+        'mismatch_details', jsonb_build_array(jsonb_build_object(
+          'check_code', 'PAY_BATCH_BREAKDOWN_MISSING',
+          'breakdown_missing_ct', coalesce(v_breakdown_missing_ct, 0)
+        )),
+        'affected_candidate_ids', coalesce(to_jsonb(v_candidate_ids), '[]'::jsonb),
+        'friendly_error_message', 'Draft integrity failed because one or more active batch items have no breakdown rows.',
+        'breakdown_missing_ct', coalesce(v_breakdown_missing_ct, 0),
+        'breakdown_bad_ct', coalesce(v_breakdown_bad_ct, 0),
+        'blocked_count', jsonb_array_length(coalesce(v_blocked_candidates, '[]'::jsonb)),
+        'consumed_timesheet_override_count', coalesce(v_rows_upd_timesheet_overrides_consumed, 0)
+      );
+    END IF;
+
     raise exception 'PAY_BATCH_BREAKDOWN_MISSING: % items have no breakdown rows', v_breakdown_missing_ct;
   end if;
 
@@ -29724,6 +29744,22 @@ v_stage := 'STAGE_21_BREAKDOWN_INTEGRITY_MISSING';
         null, null, null, null, null
       );
     exception when others then null; end;
+
+    IF p_operation_id IS NOT NULL THEN
+      RETURN jsonb_build_object(
+        'ok', false,
+        'pay_batch_id', v_batch_id::text,
+        'operation_id', p_operation_id::text,
+        'pass', false,
+        'mismatch_details', coalesce(v_breakdown_bad, '[]'::jsonb),
+        'affected_candidate_ids', coalesce(to_jsonb(v_candidate_ids), '[]'::jsonb),
+        'friendly_error_message', 'Draft integrity failed because one or more item breakdown totals do not match their batch item totals.',
+        'breakdown_missing_ct', coalesce(v_breakdown_missing_ct, 0),
+        'breakdown_bad_ct', coalesce(v_breakdown_bad_ct, 0),
+        'blocked_count', jsonb_array_length(coalesce(v_blocked_candidates, '[]'::jsonb)),
+        'consumed_timesheet_override_count', coalesce(v_rows_upd_timesheet_overrides_consumed, 0)
+      );
+    END IF;
 
     raise exception 'PAY_BATCH_BREAKDOWN_MISMATCH %', v_breakdown_bad::text;
   end if;
@@ -29907,6 +29943,26 @@ v_stage := 'STAGE_21_BREAKDOWN_INTEGRITY_MISSING';
         null, null, null, null, null
       );
     exception when others then null; end;
+
+    IF p_operation_id IS NOT NULL THEN
+      RETURN jsonb_build_object(
+        'ok', false,
+        'pay_batch_id', v_batch_id::text,
+        'operation_id', p_operation_id::text,
+        'pass', false,
+        'mismatch_details', coalesce(v_blocked_candidates, '[]'::jsonb),
+        'affected_candidate_ids', coalesce((
+          SELECT jsonb_agg(DISTINCT blocked_candidate.value->>'candidate_id')
+          FROM jsonb_array_elements(coalesce(v_blocked_candidates, '[]'::jsonb)) AS blocked_candidate(value)
+          WHERE NULLIF(blocked_candidate.value->>'candidate_id', '') IS NOT NULL
+        ), '[]'::jsonb),
+        'friendly_error_message', 'Draft integrity failed because the draft contains blocked payment destinations.',
+        'breakdown_missing_ct', coalesce(v_breakdown_missing_ct, 0),
+        'breakdown_bad_ct', coalesce(v_breakdown_bad_ct, 0),
+        'blocked_count', jsonb_array_length(coalesce(v_blocked_candidates, '[]'::jsonb)),
+        'consumed_timesheet_override_count', coalesce(v_rows_upd_timesheet_overrides_consumed, 0)
+      );
+    END IF;
 
     raise exception 'DRAFT_CONTAINS_BLOCKED_ITEMS %', v_blocked_candidates::text;
   end if;
@@ -30170,6 +30226,166 @@ v_stage := 'STAGE_21_BREAKDOWN_INTEGRITY_MISSING';
         GROUP BY snapshot_row.timesheet_id, snapshot_row.candidate_id, snapshot_row.pay_channel
         HAVING count(*) > 1
       ) AS snapshot_duplicate
+
+      UNION ALL
+
+      SELECT 'MISSING_SELECTED_PREVIEW_ROW_ITEM'::text AS check_code,
+             selected_line.candidate_id,
+             jsonb_build_object(
+               'candidate_scope_id', selected_line.candidate_scope_id::text,
+               'candidate_id', selected_line.candidate_id::text,
+               'pay_channel', selected_line.pay_channel,
+               'preview_row_id', selected_line.preview_row_id,
+               'finance_case_id', CASE WHEN selected_line.finance_case_id IS NULL THEN NULL ELSE selected_line.finance_case_id::text END,
+               'timesheet_id', CASE WHEN selected_line.timesheet_id IS NULL THEN NULL ELSE selected_line.timesheet_id::text END
+             ) AS detail_json
+      FROM (
+        SELECT
+          scope_row.id AS candidate_scope_id,
+          scope_row.candidate_id,
+          scope_row.pay_channel,
+          coalesce(
+            nullif(btrim(coalesce(line_element.value->>'preview_row_id', '')), ''),
+            nullif(btrim(coalesce(line_element.value->>'line_id', '')), ''),
+            nullif(btrim(coalesce(line_element.value->>'row_id', '')), ''),
+            nullif(btrim(coalesce(line_element.value->>'id', '')), '')
+          ) AS preview_row_id,
+          CASE WHEN coalesce(line_element.value->>'finance_case_id', '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN (line_element.value->>'finance_case_id')::uuid ELSE NULL::uuid END AS finance_case_id,
+          CASE WHEN coalesce(line_element.value->>'timesheet_id', '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN (line_element.value->>'timesheet_id')::uuid ELSE NULL::uuid END AS timesheet_id,
+          upper(btrim(coalesce(line_element.value->>'line_type', line_element.value->>'item_type', line_element.value->>'case_type', ''))) AS line_type,
+          round(coalesce(
+            CASE WHEN coalesce(line_element.value->>'amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN (line_element.value->>'amount_ex_vat')::numeric ELSE NULL::numeric END,
+            CASE WHEN coalesce(line_element.value->>'preview_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN (line_element.value->>'preview_amount_ex_vat')::numeric ELSE NULL::numeric END,
+            0::numeric
+          ), 2) AS expected_amount_ex_vat
+        FROM public.banking_pay_operation_candidate_scope AS scope_row
+        CROSS JOIN LATERAL jsonb_array_elements(coalesce(scope_row.selected_canonical_preview_lines_json, '[]'::jsonb)) AS line_element(value)
+        WHERE scope_row.operation_id = p_operation_id
+          AND scope_row.pay_batch_id = v_batch_id
+          AND jsonb_typeof(line_element.value) = 'object'
+          AND coalesce(CASE WHEN lower(coalesce(line_element.value->>'draftable', 'true')) IN ('true','false') THEN (line_element.value->>'draftable')::boolean ELSE true END, true) = true
+      ) AS selected_line
+      WHERE selected_line.preview_row_id IS NOT NULL
+        AND NOT EXISTS (
+          SELECT 1
+          FROM public.pay_batch_candidates AS batch_candidate
+          JOIN public.pay_batch_items AS item_row
+            ON item_row.pay_batch_candidate_id = batch_candidate.id
+          WHERE batch_candidate.pay_batch_id = v_batch_id
+            AND batch_candidate.candidate_id = selected_line.candidate_id
+            AND coalesce(item_row.is_voided, false) = false
+            AND (
+              (item_row.operation_source_key IS NOT NULL AND item_row.operation_source_key LIKE (p_operation_id::text || ':%') AND item_row.operation_source_key LIKE ('%' || selected_line.preview_row_id || '%'))
+              OR (selected_line.finance_case_id IS NOT NULL AND item_row.finance_case_id = selected_line.finance_case_id)
+              OR (selected_line.timesheet_id IS NOT NULL AND item_row.timesheet_id = selected_line.timesheet_id AND item_row.item_type IN ('SEGMENT_DELTA','EXPENSE_DELTA','ADJUSTMENT_DELTA','MILEAGE_DELTA'))
+            )
+          LIMIT 1
+        )
+
+      UNION ALL
+
+      SELECT 'CANDIDATE_SCOPE_TOTAL_MISMATCH'::text AS check_code,
+             scope_totals.candidate_id,
+             jsonb_build_object(
+               'candidate_scope_id', scope_totals.candidate_scope_id::text,
+               'candidate_id', scope_totals.candidate_id::text,
+               'pay_channel', scope_totals.pay_channel,
+               'expected_amount_ex_vat', scope_totals.expected_amount_ex_vat,
+               'actual_amount_ex_vat', scope_totals.actual_amount_ex_vat
+             ) AS detail_json
+      FROM (
+        SELECT
+          scope_row.id AS candidate_scope_id,
+          scope_row.candidate_id,
+          scope_row.pay_channel,
+          round(coalesce(
+            CASE WHEN coalesce(scope_row.candidate_totals_json->>'selected_earnings_total', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN (scope_row.candidate_totals_json->>'selected_earnings_total')::numeric ELSE NULL::numeric END,
+            CASE WHEN coalesce(scope_row.candidate_totals_json->>'selected_total_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN (scope_row.candidate_totals_json->>'selected_total_amount_ex_vat')::numeric ELSE NULL::numeric END,
+            CASE WHEN coalesce(scope_row.candidate_totals_json->>'total_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN (scope_row.candidate_totals_json->>'total_amount_ex_vat')::numeric ELSE NULL::numeric END,
+            CASE WHEN coalesce(scope_row.effective_summary_fragment_json->>'total_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN (scope_row.effective_summary_fragment_json->>'total_amount_ex_vat')::numeric ELSE NULL::numeric END
+          ), 2) AS expected_amount_ex_vat,
+          round(coalesce((
+            SELECT sum(coalesce(item_row.amount_ex_vat, 0))
+            FROM public.pay_batch_candidates AS batch_candidate
+            JOIN public.pay_batch_items AS item_row
+              ON item_row.pay_batch_candidate_id = batch_candidate.id
+            WHERE batch_candidate.pay_batch_id = v_batch_id
+              AND batch_candidate.candidate_id = scope_row.candidate_id
+              AND upper(coalesce(item_row.pay_channel, '')) = upper(coalesce(scope_row.pay_channel, ''))
+              AND coalesce(item_row.is_voided, false) = false
+          ), 0), 2) AS actual_amount_ex_vat
+        FROM public.banking_pay_operation_candidate_scope AS scope_row
+        WHERE scope_row.operation_id = p_operation_id
+          AND scope_row.pay_batch_id = v_batch_id
+      ) AS scope_totals
+      WHERE scope_totals.expected_amount_ex_vat IS NOT NULL
+        AND scope_totals.expected_amount_ex_vat <> scope_totals.actual_amount_ex_vat
+
+      UNION ALL
+
+      SELECT 'ALLOCATION_ITEM_AMOUNT_MISMATCH'::text AS check_code,
+             allocation_row.candidate_id,
+             jsonb_build_object(
+               'allocation_row_id', allocation_row.id::text,
+               'pay_batch_item_id', CASE WHEN item_row.id IS NULL THEN NULL ELSE item_row.id::text END,
+               'candidate_id', allocation_row.candidate_id::text,
+               'pay_channel', allocation_row.pay_channel,
+               'operation_source_key', allocation_row.operation_source_key,
+               'expected_allocated_amount', round(coalesce(allocation_row.allocated_amount, 0), 2),
+               'actual_item_amount_ex_vat', CASE WHEN item_row.id IS NULL THEN NULL ELSE round(coalesce(item_row.amount_ex_vat, 0), 2) END
+             ) AS detail_json
+      FROM public.banking_pay_operation_candidate_allocation_rows AS allocation_row
+      LEFT JOIN public.pay_batch_items AS item_row
+        ON item_row.id = allocation_row.pay_batch_item_id
+       AND coalesce(item_row.is_voided, false) = false
+      WHERE allocation_row.operation_id = p_operation_id
+        AND allocation_row.pay_batch_id = v_batch_id
+        AND allocation_row.status = 'ITEM_CREATED'
+        AND (
+          item_row.id IS NULL
+          OR round(coalesce(item_row.amount_ex_vat, 0), 2) <> round(coalesce(allocation_row.allocated_amount, 0), 2)
+        )
+
+      UNION ALL
+
+      SELECT 'PAY_CHANNEL_SCOPE_TOTAL_MISMATCH'::text AS check_code,
+             NULL::uuid AS candidate_id,
+             jsonb_build_object(
+               'pay_channel', channel_totals.pay_channel,
+               'expected_amount_ex_vat', channel_totals.expected_amount_ex_vat,
+               'actual_amount_ex_vat', channel_totals.actual_amount_ex_vat
+             ) AS detail_json
+      FROM (
+        SELECT
+          expected_channel.pay_channel,
+          round(sum(expected_channel.expected_amount_ex_vat), 2) AS expected_amount_ex_vat,
+          round(coalesce((
+            SELECT sum(coalesce(item_row.amount_ex_vat, 0))
+            FROM public.pay_batch_items AS item_row
+            JOIN public.pay_batch_candidates AS batch_candidate
+              ON batch_candidate.id = item_row.pay_batch_candidate_id
+            WHERE batch_candidate.pay_batch_id = v_batch_id
+              AND upper(coalesce(item_row.pay_channel, '')) = expected_channel.pay_channel
+              AND coalesce(item_row.is_voided, false) = false
+          ), 0), 2) AS actual_amount_ex_vat
+        FROM (
+          SELECT
+            upper(btrim(coalesce(scope_row.pay_channel, ''))) AS pay_channel,
+            round(coalesce(
+              CASE WHEN coalesce(line_element.value->>'amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN (line_element.value->>'amount_ex_vat')::numeric ELSE NULL::numeric END,
+              CASE WHEN coalesce(line_element.value->>'preview_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN (line_element.value->>'preview_amount_ex_vat')::numeric ELSE NULL::numeric END,
+              0::numeric
+            ), 2) AS expected_amount_ex_vat
+          FROM public.banking_pay_operation_candidate_scope AS scope_row
+          CROSS JOIN LATERAL jsonb_array_elements(coalesce(scope_row.selected_canonical_preview_lines_json, '[]'::jsonb)) AS line_element(value)
+          WHERE scope_row.operation_id = p_operation_id
+            AND scope_row.pay_batch_id = v_batch_id
+            AND jsonb_typeof(line_element.value) = 'object'
+        ) AS expected_channel
+        WHERE expected_channel.pay_channel IN ('PAYE','UMBRELLA')
+        GROUP BY expected_channel.pay_channel
+      ) AS channel_totals
+      WHERE channel_totals.expected_amount_ex_vat <> channel_totals.actual_amount_ex_vat
     )
     SELECT count(*)::integer,
            coalesce(jsonb_agg(operation_checks.detail_json || jsonb_build_object('check_code', operation_checks.check_code) order by operation_checks.check_code, operation_checks.candidate_id::text), '[]'::jsonb),
@@ -30178,14 +30394,19 @@ v_stage := 'STAGE_21_BREAKDOWN_INTEGRITY_MISSING';
     FROM operation_checks;
 
     IF coalesce(v_operation_mismatch_count, 0) > 0 THEN
-      RAISE EXCEPTION '%', jsonb_build_object(
-        'error', 'PAY_BATCH_OPERATION_INTEGRITY_FAILED',
-        'message', 'Operation draft integrity checks failed',
+      RETURN jsonb_build_object(
+        'ok', false,
         'pay_batch_id', v_batch_id::text,
         'operation_id', p_operation_id::text,
-        'affected_candidate_ids', v_operation_affected_candidate_ids,
-        'mismatch_details', v_operation_mismatch_details
-      )::text;
+        'pass', false,
+        'mismatch_details', coalesce(v_operation_mismatch_details, '[]'::jsonb),
+        'affected_candidate_ids', coalesce(v_operation_affected_candidate_ids, '[]'::jsonb),
+        'friendly_error_message', 'Operation draft integrity checks failed. The chunked draft does not exactly match the snapshotted operation scope.',
+        'breakdown_missing_ct', coalesce(v_breakdown_missing_ct, 0),
+        'breakdown_bad_ct', coalesce(v_breakdown_bad_ct, 0),
+        'blocked_count', jsonb_array_length(coalesce(v_blocked_candidates, '[]'::jsonb)),
+        'consumed_timesheet_override_count', coalesce(v_rows_upd_timesheet_overrides_consumed, 0)
+      );
     END IF;
   END IF;
 
@@ -30204,6 +30425,8 @@ v_stage := 'STAGE_21_BREAKDOWN_INTEGRITY_MISSING';
   );
 END;
 $function$;
+
+
 
 DROP FUNCTION IF EXISTS public.pay_build_batch_artifacts_from_preview(date, date, uuid, jsonb, jsonb, uuid, uuid, bigint);
 
@@ -31477,6 +31700,9 @@ $function$;
 DROP FUNCTION IF EXISTS public.pay_create_draft_batch(date, date, text, uuid, jsonb, uuid, uuid, uuid[], text, public.pay_override_mode_enum);
 DROP FUNCTION IF EXISTS public.pay_create_draft_batch(date, date, text, uuid, jsonb, uuid, uuid, uuid[], text, public.pay_override_mode_enum, uuid, boolean);
 
+
+
+
 CREATE OR REPLACE FUNCTION public.pay_create_draft_batch(
   p_pay_date date,
   p_week_ending_cutoff date,
@@ -31572,6 +31798,17 @@ BEGIN
     );
   END IF;
 
+  IF COALESCE(p_allow_legacy_unchunked, false) IS NOT TRUE THEN
+    RAISE EXCEPTION '%', jsonb_build_object(
+      'error', 'PAY_CREATE_DRAFT_BATCH_OPERATION_REQUIRED',
+      'code', 'DRAFT_CREATE_OPERATION_REQUIRED',
+      'message', 'pay_create_draft_batch refused legacy all-at-once draft creation. Normal draft creation must use the scalable Banking Pay DRAFT_CREATE operation flow; set p_allow_legacy_unchunked only for explicit small diagnostic/test compatibility.',
+      'pay_channel_scope', v_scope,
+      'safe_legacy_threshold', v_legacy_safe_selected_row_threshold,
+      'allow_legacy_unchunked', COALESCE(p_allow_legacy_unchunked, false)
+    )::text;
+  END IF;
+
   IF (p_force_include_timesheet_ids IS NOT NULL AND coalesce(array_length(p_force_include_timesheet_ids, 1), 0) > 0)
      OR p_override_reason IS NOT NULL
      OR p_override_mode IS DISTINCT FROM 'NONE'::public.pay_override_mode_enum THEN
@@ -31613,28 +31850,28 @@ BEGIN
     WHERE btrim(sel.value) <> ''
   ) AS requested_rows;
 
-  IF COALESCE(p_allow_legacy_unchunked, false) IS NOT TRUE
-     AND v_selected_preview_rows_supplied = true
+  IF v_selected_preview_rows_supplied = true
      AND COALESCE(v_requested_selected_preview_row_count, 0) > v_legacy_safe_selected_row_threshold THEN
     RAISE EXCEPTION '%', jsonb_build_object(
       'error', 'PAY_CREATE_DRAFT_BATCH_LEGACY_SELECTED_SCOPE_TOO_LARGE',
       'code', 'DRAFT_CREATE_OPERATION_REQUIRED',
-      'message', 'This draft selection is too large for the legacy all-at-once path. Use the scalable Banking Pay draft operation flow.',
+      'message', 'This draft selection is too large for the legacy all-at-once path. Even explicit legacy/test compatibility is limited to small selections; use the scalable Banking Pay draft operation flow.',
       'selected_preview_row_count', v_requested_selected_preview_row_count,
       'safe_legacy_threshold', v_legacy_safe_selected_row_threshold,
-      'pay_channel_scope', v_scope
+      'pay_channel_scope', v_scope,
+      'allow_legacy_unchunked', COALESCE(p_allow_legacy_unchunked, false)
     )::text;
   END IF;
 
-  IF COALESCE(p_allow_legacy_unchunked, false) IS NOT TRUE
-     AND v_selected_preview_rows_supplied = false
+  IF v_selected_preview_rows_supplied = false
      AND p_candidate_id IS NULL THEN
     RAISE EXCEPTION '%', jsonb_build_object(
       'error', 'PAY_CREATE_DRAFT_BATCH_UNBOUNDED_LEGACY_DISABLED',
       'code', 'DRAFT_CREATE_OPERATION_REQUIRED',
-      'message', 'Unbounded or client-wide legacy draft creation is disabled. Use the scalable Banking Pay draft operation flow, or supply an explicit small candidate/test scope or selected preview rows.',
+      'message', 'Unbounded or client-wide legacy draft creation is disabled. Even explicit legacy/test compatibility must supply a small candidate/test scope or selected preview rows.',
       'pay_channel_scope', v_scope,
-      'client_id', CASE WHEN p_client_id IS NULL THEN NULL ELSE p_client_id::text END
+      'client_id', CASE WHEN p_client_id IS NULL THEN NULL ELSE p_client_id::text END,
+      'allow_legacy_unchunked', COALESCE(p_allow_legacy_unchunked, false)
     )::text;
   END IF;
 
@@ -31714,15 +31951,15 @@ BEGIN
     RAISE EXCEPTION 'Selected preview rows did not resolve fully within requested pay channel scope %', v_scope;
   END IF;
 
-  IF COALESCE(p_allow_legacy_unchunked, false) IS NOT TRUE
-     AND v_selected_preview_row_count > v_legacy_safe_selected_row_threshold THEN
+  IF v_selected_preview_row_count > v_legacy_safe_selected_row_threshold THEN
     RAISE EXCEPTION '%', jsonb_build_object(
       'error', 'PAY_CREATE_DRAFT_BATCH_LEGACY_UNCHUNKED_TOO_LARGE',
       'code', 'DRAFT_CREATE_OPERATION_REQUIRED',
-      'message', 'This draft contains too many payment rows for the legacy all-at-once path. Use the scalable Banking Pay draft operation flow.',
+      'message', 'This draft contains too many payment rows for the legacy all-at-once path. Even explicit legacy/test compatibility is limited to small selections; use the scalable Banking Pay draft operation flow.',
       'selected_preview_row_count', v_selected_preview_row_count,
       'safe_legacy_threshold', v_legacy_safe_selected_row_threshold,
-      'pay_channel_scope', v_scope
+      'pay_channel_scope', v_scope,
+      'allow_legacy_unchunked', COALESCE(p_allow_legacy_unchunked, false)
     )::text;
   END IF;
 
@@ -31815,12 +32052,6 @@ BEGIN
   );
 END;
 $function$;
-
-
-
-
-
-
 
 
 
