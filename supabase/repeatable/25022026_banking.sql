@@ -19463,11 +19463,6 @@ $$;
 
 
 
-DROP FUNCTION IF EXISTS public.pay_settle_rail(uuid, jsonb, uuid);
-DROP FUNCTION IF EXISTS public.pay_settle_rail(uuid, jsonb, uuid, uuid, jsonb);
-
-
-
 CREATE OR REPLACE FUNCTION public.timesheet_pay_state(
   p_timesheet_id uuid,
   p_actor_user_id uuid DEFAULT NULL
