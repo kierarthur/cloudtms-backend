@@ -4017,7 +4017,9 @@ begin
         p_trigger => 'ON_EXECUTION',
         p_scope => 'ALL',
         p_actor_user_id => p_actor_user_id,
-        p_only_confirmed => false
+        p_only_confirmed => false,
+        p_root_operation_id => CASE WHEN v_operation_mode THEN p_operation_id ELSE NULL::uuid END,
+        p_operation_mode => v_operation_mode
       );
 
       if coalesce((v_comm_result->>'ok')::boolean, true) = false then
@@ -4615,7 +4617,9 @@ begin
       p_trigger => 'ON_EXECUTION',
       p_scope => 'ALL',
       p_actor_user_id => p_actor_user_id,
-      p_only_confirmed => false
+      p_only_confirmed => false,
+      p_root_operation_id => CASE WHEN v_operation_mode THEN p_operation_id ELSE NULL::uuid END,
+      p_operation_mode => v_operation_mode
     );
 
     if coalesce((v_comm_result->>'ok')::boolean, true) = false then
@@ -15150,6 +15154,8 @@ $$;
 
 DROP FUNCTION IF EXISTS public.pay_batches_claim_due_scheduled(integer, timestamptz);
 
+
+
 CREATE OR REPLACE FUNCTION public.pay_batches_claim_due_scheduled(
   p_limit integer DEFAULT 50,
   p_now_utc timestamptz DEFAULT NULL::timestamptz
@@ -15172,6 +15178,8 @@ DECLARE
   v_summary_json jsonb := '{}'::jsonb;
   v_operations_json jsonb := '[]'::jsonb;
   v_claimed_count integer := 0;
+  v_operation_config_json jsonb := '{}'::jsonb;
+  v_operation_config_snapshot_status text := 'unknown';
 BEGIN
   FOR v_batch_record IN
     SELECT
@@ -15212,6 +15220,79 @@ BEGIN
       'rail_env_snapshot', v_batch_record.rail_env_snapshot,
       'claimed_at_utc', v_now::text
     ));
+
+    WITH operation_config_plan AS (
+      SELECT *
+      FROM (
+        VALUES
+          ('validate_freshness', 'PAYMENT_EXECUTE', 'VALIDATE_FRESHNESS', 'FRESHNESS_VALIDATE'),
+          ('prepare_transfer_scope', 'PAYMENT_EXECUTE', 'PREPARE_TRANSFER_SCOPE', 'TRANSFER_GROUP'),
+          ('prepare_transfer_chunks', 'PAYMENT_EXECUTE', 'PREPARE_TRANSFER_CHUNKS', 'TRANSFER_GROUP'),
+          ('submit_provider_transfers', 'PAYMENT_EXECUTE', 'SUBMIT_PROVIDER_TRANSFERS', 'TRANSFER_SUBMIT'),
+          ('apply_rail_updates', 'PAYMENT_EXECUTE', 'APPLY_RAIL_UPDATES', 'RAIL_UPDATE'),
+          ('settlement_apply_chunks', 'PAYMENT_SETTLEMENT', 'APPLY_SETTLEMENT_CHUNKS', 'SETTLEMENT'),
+          ('remittance_queue_chunks', 'REMITTANCE_QUEUE', 'QUEUE_REMITTANCE_CHUNKS', 'REMITTANCE'),
+          ('payout_notice_queue_chunks', 'REMITTANCE_QUEUE', 'QUEUE_PAYOUT_NOTICE_CHUNKS', 'PAYOUT_NOTICE')
+      ) AS config_plan(config_key, operation_type, phase, chunk_type)
+    ), operation_config_rows AS (
+      SELECT
+        operation_config_plan.config_key,
+        operation_config_plan.operation_type,
+        operation_config_plan.phase,
+        operation_config_plan.chunk_type,
+        operation_config_get.chunk_size,
+        operation_config_get.min_chunk_size,
+        operation_config_get.max_chunk_size,
+        operation_config_get.max_advance_ms,
+        operation_config_get.lock_seconds
+      FROM operation_config_plan
+      CROSS JOIN LATERAL public.banking_pay_operation_config_get(
+        p_operation_type => operation_config_plan.operation_type,
+        p_phase => operation_config_plan.phase,
+        p_chunk_type => operation_config_plan.chunk_type
+      ) AS operation_config_get(
+        chunk_size integer,
+        min_chunk_size integer,
+        max_chunk_size integer,
+        max_advance_ms integer,
+        lock_seconds integer
+      )
+    )
+    SELECT jsonb_build_object(
+      'source', 'pay_batches_claim_due_scheduled',
+      'version', 1,
+      'operation_type', 'PAYMENT_EXECUTE',
+      'snapshotted_at_utc', v_now::text,
+      'lock_seconds', COALESCE(max(operation_config_rows.lock_seconds), 60),
+      'max_advance_ms', COALESCE(max(operation_config_rows.max_advance_ms), 15000),
+      'chunks', COALESCE(jsonb_object_agg(
+        operation_config_rows.config_key,
+        jsonb_build_object(
+          'operation_type', operation_config_rows.operation_type,
+          'phase', operation_config_rows.phase,
+          'chunk_type', operation_config_rows.chunk_type,
+          'chunk_size', operation_config_rows.chunk_size,
+          'min_chunk_size', operation_config_rows.min_chunk_size,
+          'max_chunk_size', operation_config_rows.max_chunk_size,
+          'max_advance_ms', operation_config_rows.max_advance_ms,
+          'lock_seconds', operation_config_rows.lock_seconds
+        )
+        ORDER BY operation_config_rows.config_key
+      ), '{}'::jsonb)
+    )
+    INTO v_operation_config_json
+    FROM operation_config_rows;
+
+    v_operation_config_json := COALESCE(v_operation_config_json, '{}'::jsonb) || jsonb_build_object(
+      'freshness_chunk_size', COALESCE(NULLIF(v_operation_config_json #>> '{chunks,validate_freshness,chunk_size}', '')::integer, 50),
+      'transfer_scope_chunk_size', COALESCE(NULLIF(v_operation_config_json #>> '{chunks,prepare_transfer_scope,chunk_size}', '')::integer, 100),
+      'transfer_prepare_chunk_size', COALESCE(NULLIF(v_operation_config_json #>> '{chunks,prepare_transfer_chunks,chunk_size}', '')::integer, 100),
+      'provider_submit_chunk_size', COALESCE(NULLIF(v_operation_config_json #>> '{chunks,submit_provider_transfers,chunk_size}', '')::integer, 50),
+      'rail_update_chunk_size', COALESCE(NULLIF(v_operation_config_json #>> '{chunks,apply_rail_updates,chunk_size}', '')::integer, 100),
+      'settlement_chunk_size', COALESCE(NULLIF(v_operation_config_json #>> '{chunks,settlement_apply_chunks,chunk_size}', '')::integer, 100),
+      'remittance_chunk_size', COALESCE(NULLIF(v_operation_config_json #>> '{chunks,remittance_queue_chunks,chunk_size}', '')::integer, 100),
+      'payout_notice_chunk_size', COALESCE(NULLIF(v_operation_config_json #>> '{chunks,payout_notice_queue_chunks,chunk_size}', '')::integer, 100)
+    );
 
     SELECT operation_row.id
     INTO v_operation_id
@@ -15264,7 +15345,7 @@ BEGIN
         NULL::uuid,
         v_idempotency_key,
         v_input_json,
-        '{}'::jsonb,
+        v_operation_config_json,
         jsonb_build_object(
           'title', 'Scheduled payment queued',
           'status_text', 'Scheduled payment is ready to continue through the scalable execution operation.',
@@ -15287,6 +15368,28 @@ BEGIN
       )
       RETURNING id INTO v_operation_id;
       v_operation_created := true;
+      v_operation_config_snapshot_status := 'created';
+    ELSE
+      SELECT CASE
+        WHEN operation_existing.config_json IS NULL OR operation_existing.config_json = '{}'::jsonb THEN 'repaired'
+        ELSE 'reused'
+      END
+      INTO v_operation_config_snapshot_status
+      FROM public.banking_pay_operations AS operation_existing
+      WHERE operation_existing.id = v_operation_id;
+
+      IF v_operation_config_snapshot_status = 'repaired' THEN
+        UPDATE public.banking_pay_operations AS operation_update
+        SET config_json = v_operation_config_json,
+            progress_json = COALESCE(operation_update.progress_json, '{}'::jsonb) || jsonb_build_object(
+              'config_snapshot_status', 'repaired',
+              'config_snapshot_repaired_at_utc', v_now::text,
+              'config_snapshot_source', 'pay_batches_claim_due_scheduled'
+            ),
+            updated_at_utc = v_now
+        WHERE operation_update.id = v_operation_id
+          AND (operation_update.config_json IS NULL OR operation_update.config_json = '{}'::jsonb);
+      END IF;
     END IF;
 
     UPDATE public.pay_batches AS batch_update
@@ -15305,6 +15408,7 @@ BEGIN
       'pay_batch_id', v_batch_record.id::text,
       'operation_id', v_operation_id::text,
       'operation_created', v_operation_created,
+      'operation_config_snapshot_status', v_operation_config_snapshot_status,
       'operation_type', 'PAYMENT_EXECUTE',
       'idempotency_key', v_idempotency_key,
       'scheduled_at_utc', v_batch_record.scheduled_at_utc,
@@ -15326,6 +15430,12 @@ BEGIN
   );
 END;
 $function$;
+
+
+
+
+
+
 
 
 
