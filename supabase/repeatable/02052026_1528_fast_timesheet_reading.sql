@@ -8210,17 +8210,32 @@ BEGIN
            COALESCE(sr0.is_adjustment, FALSE) = TRUE
            OR COALESCE(sr0.additional_seq, 0) > 0
            OR COALESCE(sr0.pay_adjustment_count, 0) > 0
-           OR UPPER(COALESCE(sr0.basis::text, '')) IN ('NHSP_ADJUSTMENT', 'MANUAL_ADJUSTMENT')
+           OR UPPER(COALESCE(sr0.basis::text, '')) IN ('NHSP_ADJUSTMENT', 'HEALTHROSTER_ADJUSTMENT', 'MANUAL_ADJUSTMENT')
          )
-         AND COALESCE(sr0.client_is_nhsp, FALSE) = TRUE THEN 'WEEKLY_NHSP_ADJUSTMENT'
+         AND (
+           COALESCE(sr0.client_is_nhsp, FALSE) = TRUE
+           OR UPPER(COALESCE(sr0.basis::text, '')) IN ('NHSP', 'NHSP_ADJUSTMENT')
+         ) THEN 'WEEKLY_NHSP_ADJUSTMENT'
         WHEN sr0.sheet_scope = 'WEEKLY'::public.timesheet_scope_enum
          AND sr0.submission_mode = 'MANUAL'::public.submission_mode_enum
          AND (
            COALESCE(sr0.is_adjustment, FALSE) = TRUE
            OR COALESCE(sr0.additional_seq, 0) > 0
            OR COALESCE(sr0.pay_adjustment_count, 0) > 0
-           OR UPPER(COALESCE(sr0.basis::text, '')) IN ('NHSP_ADJUSTMENT', 'MANUAL_ADJUSTMENT')
-         ) THEN 'WEEKLY_MANUAL'
+           OR UPPER(COALESCE(sr0.basis::text, '')) IN ('NHSP_ADJUSTMENT', 'HEALTHROSTER_ADJUSTMENT', 'MANUAL_ADJUSTMENT')
+         )
+         AND (
+           COALESCE(sr0.client_autoprocess_hr, FALSE) = TRUE
+           OR UPPER(COALESCE(sr0.basis::text, '')) IN ('HEALTHROSTER_ADJUSTMENT', 'HEALTHROSTER_SELF_BILL')
+         ) THEN 'WEEKLY_HEALTHROSTER_ADJUSTMENT'
+        WHEN sr0.sheet_scope = 'WEEKLY'::public.timesheet_scope_enum
+         AND sr0.submission_mode = 'MANUAL'::public.submission_mode_enum
+         AND (
+           COALESCE(sr0.is_adjustment, FALSE) = TRUE
+           OR COALESCE(sr0.additional_seq, 0) > 0
+           OR COALESCE(sr0.pay_adjustment_count, 0) > 0
+           OR UPPER(COALESCE(sr0.basis::text, '')) IN ('NHSP_ADJUSTMENT', 'HEALTHROSTER_ADJUSTMENT', 'MANUAL_ADJUSTMENT')
+         ) THEN 'WEEKLY_MANUAL_ADJUSTMENT'
         WHEN sr0.sheet_scope = 'WEEKLY'::public.timesheet_scope_enum AND COALESCE(sr0.client_autoprocess_hr, FALSE) = TRUE THEN 'WEEKLY_HEALTHROSTER'
         WHEN sr0.sheet_scope = 'WEEKLY'::public.timesheet_scope_enum AND sr0.basis = 'NHSP_ADJUSTMENT'::public.timesheet_fin_basis_enum THEN 'WEEKLY_NHSP_ADJUSTMENT'
         WHEN sr0.sheet_scope = 'WEEKLY'::public.timesheet_scope_enum AND sr0.basis = 'NHSP'::public.timesheet_fin_basis_enum THEN 'WEEKLY_NHSP'
@@ -9357,6 +9372,25 @@ BEGIN
       ) THEN 0::numeric
         ELSE COALESCE(signed_rows.total_hours, signed_rows.tsfin_total_hours, 0::numeric)
       END AS total_hours_calc,
+      CASE
+        WHEN signed_rows.sheet_scope = 'WEEKLY'::public.timesheet_scope_enum
+         AND COALESCE(signed_rows.is_manual_additional_adjustment_calc, FALSE) = TRUE
+         AND (
+           UPPER(COALESCE(signed_rows.route_type, '')) IN ('WEEKLY_NHSP', 'WEEKLY_NHSP_ADJUSTMENT', 'NHSP')
+           OR UPPER(COALESCE(signed_rows.basis::text, '')) IN ('NHSP', 'NHSP_ADJUSTMENT')
+           OR COALESCE(signed_rows.client_is_nhsp, FALSE) = TRUE
+         ) THEN 'WEEKLY_NHSP_ADJUSTMENT'
+        WHEN signed_rows.sheet_scope = 'WEEKLY'::public.timesheet_scope_enum
+         AND COALESCE(signed_rows.is_manual_additional_adjustment_calc, FALSE) = TRUE
+         AND (
+           UPPER(COALESCE(signed_rows.route_type, '')) IN ('WEEKLY_HEALTHROSTER', 'WEEKLY_HEALTHROSTER_ADJUSTMENT', 'HEALTHROSTER', 'HEALTHROSTER_DAILY')
+           OR UPPER(COALESCE(signed_rows.basis::text, '')) IN ('HEALTHROSTER_ADJUSTMENT', 'HEALTHROSTER_SELF_BILL')
+           OR COALESCE(signed_rows.client_autoprocess_hr, FALSE) = TRUE
+         ) THEN 'WEEKLY_HEALTHROSTER_ADJUSTMENT'
+        WHEN signed_rows.sheet_scope = 'WEEKLY'::public.timesheet_scope_enum
+         AND COALESCE(signed_rows.is_manual_additional_adjustment_calc, FALSE) = TRUE THEN 'WEEKLY_MANUAL_ADJUSTMENT'
+        ELSE signed_rows.route_type
+      END AS effective_route_type_calc,
       (
         COALESCE(signed_rows.timesheet_is_adjustment, FALSE) = TRUE
         OR COALESCE(signed_rows.contract_week_is_adjustment, FALSE) = TRUE
@@ -9415,22 +9449,17 @@ BEGIN
         'submission_mode', payload_rows.submission_mode,
         'submission_mode_snapshot', payload_rows.submission_mode,
         'basis', payload_rows.basis,
-        'route_type', CASE
-          WHEN COALESCE(payload_rows.is_manual_additional_adjustment_calc, FALSE) = TRUE
-           AND (
-             UPPER(COALESCE(payload_rows.route_type, '')) IN ('WEEKLY_NHSP', 'WEEKLY_NHSP_ADJUSTMENT')
-             OR UPPER(COALESCE(payload_rows.basis::text, '')) IN ('NHSP', 'NHSP_ADJUSTMENT')
-             OR COALESCE(payload_rows.client_is_nhsp, FALSE) = TRUE
-           ) THEN 'WEEKLY_NHSP_ADJUSTMENT'
-          ELSE payload_rows.route_type
-        END,
+        'route_type', payload_rows.effective_route_type_calc,
         'route_display', CASE
-          WHEN UPPER(COALESCE(payload_rows.route_type, '')) = 'NHSP' THEN 'NHSP'
-          WHEN UPPER(COALESCE(payload_rows.route_type, '')) = 'HEALTHROSTER' THEN 'HealthRoster'
-          WHEN UPPER(COALESCE(payload_rows.route_type, '')) = 'HEALTHROSTER_DAILY' THEN 'HealthRoster Daily'
-          WHEN UPPER(COALESCE(payload_rows.route_type, '')) = 'QR' THEN 'QR'
-          WHEN UPPER(COALESCE(payload_rows.route_type, '')) = 'NO_TIMESHEET_REQUIRED' THEN 'No timesheet required'
-          WHEN COALESCE(payload_rows.route_type, '') <> '' THEN initcap(replace(payload_rows.route_type, '_', ' '))
+          WHEN UPPER(COALESCE(payload_rows.effective_route_type_calc, '')) IN ('NHSP', 'WEEKLY_NHSP') THEN 'NHSP'
+          WHEN UPPER(COALESCE(payload_rows.effective_route_type_calc, '')) = 'WEEKLY_NHSP_ADJUSTMENT' THEN 'NHSP Adjustment'
+          WHEN UPPER(COALESCE(payload_rows.effective_route_type_calc, '')) IN ('HEALTHROSTER', 'WEEKLY_HEALTHROSTER') THEN 'HealthRoster'
+          WHEN UPPER(COALESCE(payload_rows.effective_route_type_calc, '')) = 'WEEKLY_HEALTHROSTER_ADJUSTMENT' THEN 'HealthRoster Adjustment'
+          WHEN UPPER(COALESCE(payload_rows.effective_route_type_calc, '')) = 'HEALTHROSTER_DAILY' THEN 'HealthRoster Daily'
+          WHEN UPPER(COALESCE(payload_rows.effective_route_type_calc, '')) = 'WEEKLY_MANUAL_ADJUSTMENT' THEN 'Manual Adjustment'
+          WHEN UPPER(COALESCE(payload_rows.effective_route_type_calc, '')) = 'QR' THEN 'QR'
+          WHEN UPPER(COALESCE(payload_rows.effective_route_type_calc, '')) = 'NO_TIMESHEET_REQUIRED' THEN 'No timesheet required'
+          WHEN COALESCE(payload_rows.effective_route_type_calc, '') <> '' THEN initcap(replace(payload_rows.effective_route_type_calc, '_', ' '))
           ELSE 'Manual'
         END,
         'route_family', payload_rows.route_family_calc,
@@ -9629,24 +9658,19 @@ BEGIN
             'submission_mode', payload_rows.submission_mode,
             'submission_mode_snapshot', payload_rows.submission_mode,
             'basis', payload_rows.basis,
-            'route_type', CASE
-              WHEN COALESCE(payload_rows.is_manual_additional_adjustment_calc, FALSE) = TRUE
-               AND (
-                 UPPER(COALESCE(payload_rows.route_type, '')) IN ('WEEKLY_NHSP', 'WEEKLY_NHSP_ADJUSTMENT')
-                 OR UPPER(COALESCE(payload_rows.basis::text, '')) IN ('NHSP', 'NHSP_ADJUSTMENT')
-                 OR COALESCE(payload_rows.client_is_nhsp, FALSE) = TRUE
-               ) THEN 'WEEKLY_NHSP_ADJUSTMENT'
-              ELSE payload_rows.route_type
-            END,
+            'route_type', payload_rows.effective_route_type_calc,
             'route_display', CASE
-              WHEN UPPER(COALESCE(payload_rows.route_type, '')) = 'NHSP' THEN 'NHSP'
-              WHEN UPPER(COALESCE(payload_rows.route_type, '')) = 'HEALTHROSTER' THEN 'HealthRoster'
-              WHEN UPPER(COALESCE(payload_rows.route_type, '')) = 'HEALTHROSTER_DAILY' THEN 'HealthRoster Daily'
-              WHEN UPPER(COALESCE(payload_rows.route_type, '')) = 'QR' THEN 'QR'
-              WHEN UPPER(COALESCE(payload_rows.route_type, '')) = 'NO_TIMESHEET_REQUIRED' THEN 'No timesheet required'
-              WHEN COALESCE(payload_rows.route_type, '') <> '' THEN initcap(replace(payload_rows.route_type, '_', ' '))
-              ELSE 'Manual'
-            END,
+          WHEN UPPER(COALESCE(payload_rows.effective_route_type_calc, '')) IN ('NHSP', 'WEEKLY_NHSP') THEN 'NHSP'
+          WHEN UPPER(COALESCE(payload_rows.effective_route_type_calc, '')) = 'WEEKLY_NHSP_ADJUSTMENT' THEN 'NHSP Adjustment'
+          WHEN UPPER(COALESCE(payload_rows.effective_route_type_calc, '')) IN ('HEALTHROSTER', 'WEEKLY_HEALTHROSTER') THEN 'HealthRoster'
+          WHEN UPPER(COALESCE(payload_rows.effective_route_type_calc, '')) = 'WEEKLY_HEALTHROSTER_ADJUSTMENT' THEN 'HealthRoster Adjustment'
+          WHEN UPPER(COALESCE(payload_rows.effective_route_type_calc, '')) = 'HEALTHROSTER_DAILY' THEN 'HealthRoster Daily'
+          WHEN UPPER(COALESCE(payload_rows.effective_route_type_calc, '')) = 'WEEKLY_MANUAL_ADJUSTMENT' THEN 'Manual Adjustment'
+          WHEN UPPER(COALESCE(payload_rows.effective_route_type_calc, '')) = 'QR' THEN 'QR'
+          WHEN UPPER(COALESCE(payload_rows.effective_route_type_calc, '')) = 'NO_TIMESHEET_REQUIRED' THEN 'No timesheet required'
+          WHEN COALESCE(payload_rows.effective_route_type_calc, '') <> '' THEN initcap(replace(payload_rows.effective_route_type_calc, '_', ' '))
+          ELSE 'Manual'
+        END,
             'route_family', payload_rows.route_family_calc,
             'route_subfamily', payload_rows.route_subfamily_calc
           )
@@ -9758,7 +9782,6 @@ BEGIN
     payload_rows.row_key_calc ASC;
 END;
 $function$;
-
 
 
 
