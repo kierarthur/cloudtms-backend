@@ -9516,7 +9516,6 @@ DROP FUNCTION IF EXISTS public.contract_week_manual_upsert_bulk_process_atomic(u
 DROP FUNCTION IF EXISTS public.contract_week_manual_upsert_bulk_process_atomic(uuid, uuid, jsonb, jsonb, jsonb, jsonb, jsonb, uuid, boolean, timestamp with time zone, text);
 
 
-
 CREATE OR REPLACE FUNCTION public.contract_week_manual_upsert_bulk_process_atomic(
   p_week_id uuid,
   p_expected_timesheet_id uuid DEFAULT NULL,
@@ -9951,9 +9950,19 @@ BEGIN
 
   v_post_route_type := CASE
     WHEN COALESCE(v_is_additional_manual_adjustment, FALSE) = TRUE
-      AND UPPER(COALESCE(v_post_row->>'contract_weekly_mode', '')) = 'NHSP' THEN 'WEEKLY_NHSP_ADJUSTMENT'
+      AND (
+        UPPER(COALESCE(v_post_row->>'contract_weekly_mode', '')) = 'NHSP'
+        OR UPPER(COALESCE(v_post_row->>'route_type', '')) IN ('WEEKLY_NHSP', 'WEEKLY_NHSP_ADJUSTMENT')
+        OR UPPER(COALESCE(v_timesheet_financials_json->>'basis', '')) IN ('NHSP', 'NHSP_ADJUSTMENT')
+        OR COALESCE(NULLIF(BTRIM(COALESCE(v_post_row->>'client_is_nhsp', '')), '')::boolean, FALSE) = TRUE
+      ) THEN 'WEEKLY_NHSP_ADJUSTMENT'
     WHEN COALESCE(v_is_additional_manual_adjustment, FALSE) = TRUE
-      AND UPPER(COALESCE(v_post_row->>'route_type', '')) IN ('WEEKLY_NHSP', 'WEEKLY_NHSP_ADJUSTMENT') THEN 'WEEKLY_NHSP_ADJUSTMENT'
+      AND (
+        UPPER(COALESCE(v_post_row->>'contract_weekly_mode', '')) = 'HEALTHROSTER'
+        OR UPPER(COALESCE(v_post_row->>'route_type', '')) IN ('WEEKLY_HEALTHROSTER', 'WEEKLY_HEALTHROSTER_ADJUSTMENT')
+        OR UPPER(COALESCE(v_timesheet_financials_json->>'basis', '')) IN ('HEALTHROSTER_ADJUSTMENT', 'HEALTHROSTER_SELF_BILL')
+        OR COALESCE(NULLIF(BTRIM(COALESCE(v_post_row->>'client_autoprocess_hr', '')), '')::boolean, FALSE) = TRUE
+      ) THEN 'WEEKLY_HEALTHROSTER_ADJUSTMENT'
     ELSE v_post_row->>'route_type'
   END;
 
@@ -10316,6 +10325,8 @@ EXCEPTION WHEN OTHERS THEN
   );
 END;
 $function$;
+
+
 
 
 
