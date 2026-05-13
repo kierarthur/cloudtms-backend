@@ -182,6 +182,7 @@ $function$;
 
 
 
+
 CREATE OR REPLACE FUNCTION public.timesheet_weekly_manual_adjustment_delete_apply(
   p_timesheet_id uuid,
   p_actor_user_id uuid
@@ -201,9 +202,16 @@ declare
   v_contract_week_id uuid := null;
 
   v_timesheet_ids uuid[] := array[]::uuid[];
+  v_contract_week_ids uuid[] := array[]::uuid[];
+  v_preserved_source_timesheet_ids uuid[] := array[]::uuid[];
+  v_preserved_source_contract_week_ids uuid[] := array[]::uuid[];
 
   v_deleted_timesheets int := 0;
   v_deleted_contract_weeks int := 0;
+
+  v_invalid_contract_week_targets boolean := false;
+  v_missing_preserved_source_timesheets boolean := false;
+  v_missing_preserved_source_contract_weeks boolean := false;
 
   v_before jsonb := null;
   v_after jsonb := null;
@@ -213,6 +221,11 @@ begin
   end if;
 
   v_preview := public.timesheet_weekly_manual_adjustment_delete_preview(p_timesheet_id, p_actor_user_id);
+
+  if coalesce(v_preview->>'kind', '') <> 'WEEKLY_MANUAL_ADJUSTMENT_DELETE' then
+    raise exception 'timesheet_weekly_manual_adjustment_delete_apply: unexpected preview kind: %', coalesce(v_preview->>'kind', '');
+  end if;
+
   v_eligible := coalesce((v_preview->>'eligible')::boolean, false);
 
   if not v_eligible then
@@ -222,55 +235,142 @@ begin
   v_current_timesheet_id := nullif(v_preview->>'current_timesheet_id','')::uuid;
   v_contract_week_id := nullif(v_preview->>'contract_week_id','')::uuid;
 
-  select coalesce(array_agg(x::uuid), array[]::uuid[])
+  select coalesce(array_agg(timesheet_id_values.timesheet_id_value::uuid order by timesheet_id_values.timesheet_id_value::uuid), array[]::uuid[])
   into v_timesheet_ids
-  from jsonb_array_elements_text(coalesce(v_preview->'timesheet_ids','[]'::jsonb)) as e(x);
+  from jsonb_array_elements_text(coalesce(v_preview->'timesheet_ids','[]'::jsonb)) as timesheet_id_values(timesheet_id_value);
+
+  select coalesce(array_agg(contract_week_id_values.contract_week_id_value::uuid order by contract_week_id_values.contract_week_id_value::uuid), array[]::uuid[])
+  into v_contract_week_ids
+  from jsonb_array_elements_text(coalesce(v_preview->'contract_week_ids','[]'::jsonb)) as contract_week_id_values(contract_week_id_value);
+
+  select coalesce(array_agg(preserved_timesheet_id_values.preserved_timesheet_id_value::uuid order by preserved_timesheet_id_values.preserved_timesheet_id_value::uuid), array[]::uuid[])
+  into v_preserved_source_timesheet_ids
+  from jsonb_array_elements_text(coalesce(v_preview->'preserved_source_timesheet_ids','[]'::jsonb)) as preserved_timesheet_id_values(preserved_timesheet_id_value);
+
+  select coalesce(array_agg(preserved_contract_week_id_values.preserved_contract_week_id_value::uuid order by preserved_contract_week_id_values.preserved_contract_week_id_value::uuid), array[]::uuid[])
+  into v_preserved_source_contract_week_ids
+  from jsonb_array_elements_text(coalesce(v_preview->'preserved_source_contract_week_ids','[]'::jsonb)) as preserved_contract_week_id_values(preserved_contract_week_id_value);
+
+  if coalesce(array_length(v_timesheet_ids, 1), 0) = 0 then
+    raise exception 'timesheet_weekly_manual_adjustment_delete_apply: preview returned no timesheet_ids';
+  end if;
+
+  if coalesce(array_length(v_contract_week_ids, 1), 0) = 0 then
+    raise exception 'timesheet_weekly_manual_adjustment_delete_apply: preview returned no contract_week_ids';
+  end if;
+
+  select exists(
+    select 1
+    from unnest(coalesce(v_contract_week_ids, array[]::uuid[])) as requested_contract_week(contract_week_id)
+    left join public.contract_weeks as contract_week_check
+      on contract_week_check.id = requested_contract_week.contract_week_id
+    where contract_week_check.id is null
+       or coalesce(contract_week_check.is_adjustment, false) is not true
+       or coalesce(contract_week_check.additional_seq, 0) <= 0
+  )
+  into v_invalid_contract_week_targets;
+
+  if coalesce(v_invalid_contract_week_targets, false) = true then
+    raise exception 'timesheet_weekly_manual_adjustment_delete_apply: refusing delete because target contract_week_ids are not all additional/manual adjustment rows: %', to_jsonb(v_contract_week_ids)::text;
+  end if;
 
   v_before := jsonb_build_object(
     'requested_timesheet_id', p_timesheet_id::text,
     'current_timesheet_id', v_current_timesheet_id::text,
     'contract_week_id', v_contract_week_id::text,
-    'timesheet_ids', to_jsonb(coalesce(v_timesheet_ids, array[]::uuid[]))
+    'timesheet_ids', to_jsonb(coalesce(v_timesheet_ids, array[]::uuid[])),
+    'contract_week_ids', to_jsonb(coalesce(v_contract_week_ids, array[]::uuid[])),
+    'preserved_source_timesheet_ids', to_jsonb(coalesce(v_preserved_source_timesheet_ids, array[]::uuid[])),
+    'preserved_source_contract_week_ids', to_jsonb(coalesce(v_preserved_source_contract_week_ids, array[]::uuid[]))
   );
 
-  -- Detach any unexpected nhsp_shifts references (preserve truth rows)
-  update public.nhsp_shifts ns
+  update public.nhsp_shifts as nhsp_shift_detach
   set timesheet_id = null
-  where ns.timesheet_id = any(v_timesheet_ids);
+  where nhsp_shift_detach.timesheet_id = any(v_timesheet_ids);
 
-  -- Dependent rows
-  delete from public.pay_item_snoozes ps where ps.timesheet_id = any(v_timesheet_ids);
-  delete from public.pay_batch_items pbi where pbi.timesheet_id = any(v_timesheet_ids);
-  delete from public.ts_pay_adjustments tpa where tpa.timesheet_id = any(v_timesheet_ids);
-  delete from public.timesheet_pay_state_history tpsh where tpsh.timesheet_id = any(v_timesheet_ids);
-  delete from public.timesheet_pay_state tps where tps.timesheet_id = any(v_timesheet_ids);
+  delete from public.pay_item_snoozes as pay_item_snooze_delete where pay_item_snooze_delete.timesheet_id = any(v_timesheet_ids);
+  delete from public.ts_pay_adjustments as ts_pay_adjustment_delete where ts_pay_adjustment_delete.timesheet_id = any(v_timesheet_ids);
+  delete from public.timesheet_pay_state_history as timesheet_pay_state_history_delete where timesheet_pay_state_history_delete.timesheet_id = any(v_timesheet_ids);
+  delete from public.timesheet_pay_state as timesheet_pay_state_delete where timesheet_pay_state_delete.timesheet_id = any(v_timesheet_ids);
 
-  delete from public.timesheet_validations tv where tv.timesheet_id = any(v_timesheet_ids);
-  delete from public.hr_results hr where hr.timesheet_id = any(v_timesheet_ids);
-  delete from public.hr_issue_emails hie where hie.timesheet_id = any(v_timesheet_ids);
+  delete from public.timesheet_validations as timesheet_validation_delete where timesheet_validation_delete.timesheet_id = any(v_timesheet_ids);
+  delete from public.hr_results as hr_result_delete where hr_result_delete.timesheet_id = any(v_timesheet_ids);
+  delete from public.hr_issue_emails as hr_issue_email_delete where hr_issue_email_delete.timesheet_id = any(v_timesheet_ids);
 
-  delete from public.timesheet_evidence te where te.timesheet_id = any(v_timesheet_ids);
-  delete from public.manual_timesheet_queue mtq where mtq.timesheet_id = any(v_timesheet_ids);
-  delete from public.ts_pdfs_outbox tpo where tpo.timesheet_id = any(v_timesheet_ids);
-  delete from public.ts_financials_outbox tfo where tfo.timesheet_id = any(v_timesheet_ids);
+  delete from public.timesheet_evidence as timesheet_evidence_delete where timesheet_evidence_delete.timesheet_id = any(v_timesheet_ids);
+  delete from public.manual_timesheet_queue as manual_timesheet_queue_delete
+  where manual_timesheet_queue_delete.timesheet_id = any(v_timesheet_ids)
+     or (
+       manual_timesheet_queue_delete.meta_json ? 'contract_week_id'
+       and manual_timesheet_queue_delete.meta_json->>'contract_week_id' in (
+        select selected_contract_week.selected_contract_week_id::text
+        from unnest(v_contract_week_ids) as selected_contract_week(selected_contract_week_id)
+      )
+     );
+  delete from public.ts_pdfs_outbox as ts_pdfs_outbox_delete where ts_pdfs_outbox_delete.timesheet_id = any(v_timesheet_ids);
+  delete from public.ts_financials_outbox as ts_financials_outbox_delete where ts_financials_outbox_delete.timesheet_id = any(v_timesheet_ids);
 
-  delete from public.timesheets_financials tfz where tfz.timesheet_id = any(v_timesheet_ids);
+  delete from public.timesheets_financials as timesheet_financials_delete where timesheet_financials_delete.timesheet_id = any(v_timesheet_ids);
 
-  -- Contract-week row MUST be deleted (avoid orphan adjustment week)
-  delete from public.contract_weeks cw
-  where cw.id = v_contract_week_id
-     or cw.timesheet_id = any(v_timesheet_ids);
+  delete from public.contract_weeks as contract_week_delete
+  where contract_week_delete.id = any(v_contract_week_ids)
+    and coalesce(contract_week_delete.is_adjustment, false) = true
+    and coalesce(contract_week_delete.additional_seq, 0) > 0;
 
   get diagnostics v_deleted_contract_weeks = row_count;
 
-  delete from public.timesheets tdel
-  where tdel.timesheet_id = any(v_timesheet_ids);
+  if v_deleted_contract_weeks <> coalesce(array_length(v_contract_week_ids, 1), 0) then
+    raise exception 'timesheet_weekly_manual_adjustment_delete_apply: contract_week delete count mismatch; expected %, deleted %', coalesce(array_length(v_contract_week_ids, 1), 0), v_deleted_contract_weeks;
+  end if;
+
+  delete from public.timesheets as timesheet_delete
+  where timesheet_delete.timesheet_id = any(v_timesheet_ids);
 
   get diagnostics v_deleted_timesheets = row_count;
 
+  if v_deleted_timesheets <> coalesce(array_length(v_timesheet_ids, 1), 0) then
+    raise exception 'timesheet_weekly_manual_adjustment_delete_apply: timesheet delete count mismatch; expected %, deleted %', coalesce(array_length(v_timesheet_ids, 1), 0), v_deleted_timesheets;
+  end if;
+
+  if coalesce(array_length(v_preserved_source_timesheet_ids, 1), 0) > 0 then
+    select exists(
+      select 1
+      from unnest(v_preserved_source_timesheet_ids) as preserved_source_timesheet(preserved_timesheet_id)
+      left join public.timesheets as source_timesheet_check
+        on source_timesheet_check.timesheet_id = preserved_source_timesheet.preserved_timesheet_id
+      where source_timesheet_check.timesheet_id is null
+    )
+    into v_missing_preserved_source_timesheets;
+
+    if coalesce(v_missing_preserved_source_timesheets, false) = true then
+      raise exception 'timesheet_weekly_manual_adjustment_delete_apply: preserved source timesheet missing after delete: %', to_jsonb(v_preserved_source_timesheet_ids)::text;
+    end if;
+  end if;
+
+  if coalesce(array_length(v_preserved_source_contract_week_ids, 1), 0) > 0 then
+    select exists(
+      select 1
+      from unnest(v_preserved_source_contract_week_ids) as preserved_source_contract_week(preserved_contract_week_id)
+      left join public.contract_weeks as source_contract_week_check
+        on source_contract_week_check.id = preserved_source_contract_week.preserved_contract_week_id
+      where source_contract_week_check.id is null
+         or coalesce(source_contract_week_check.is_adjustment, false) = true
+         or coalesce(source_contract_week_check.additional_seq, 0) <> 0
+    )
+    into v_missing_preserved_source_contract_weeks;
+
+    if coalesce(v_missing_preserved_source_contract_weeks, false) = true then
+      raise exception 'timesheet_weekly_manual_adjustment_delete_apply: preserved source contract_week missing or mutated after delete: %', to_jsonb(v_preserved_source_contract_week_ids)::text;
+    end if;
+  end if;
+
   v_after := jsonb_build_object(
     'deleted_timesheets', v_deleted_timesheets,
-    'deleted_contract_weeks', v_deleted_contract_weeks
+    'deleted_contract_weeks', v_deleted_contract_weeks,
+    'deleted_timesheet_ids', to_jsonb(coalesce(v_timesheet_ids, array[]::uuid[])),
+    'deleted_contract_week_ids', to_jsonb(coalesce(v_contract_week_ids, array[]::uuid[])),
+    'preserved_source_timesheet_ids', to_jsonb(coalesce(v_preserved_source_timesheet_ids, array[]::uuid[])),
+    'preserved_source_contract_week_ids', to_jsonb(coalesce(v_preserved_source_contract_week_ids, array[]::uuid[]))
   );
 
   begin
@@ -292,10 +392,17 @@ begin
     'kind', 'WEEKLY_MANUAL_ADJUSTMENT_DELETE',
     'current_timesheet_id', coalesce(v_current_timesheet_id::text, p_timesheet_id::text),
     'deleted_timesheets', v_deleted_timesheets,
-    'deleted_contract_weeks', v_deleted_contract_weeks
+    'deleted_contract_weeks', v_deleted_contract_weeks,
+    'deleted_timesheet_ids', to_jsonb(coalesce(v_timesheet_ids, array[]::uuid[])),
+    'deleted_contract_week_ids', to_jsonb(coalesce(v_contract_week_ids, array[]::uuid[])),
+    'preserved_source_timesheet_ids', to_jsonb(coalesce(v_preserved_source_timesheet_ids, array[]::uuid[])),
+    'preserved_source_contract_week_ids', to_jsonb(coalesce(v_preserved_source_contract_week_ids, array[]::uuid[]))
   );
 end;
 $function$;
+
+
+
 
 
 CREATE OR REPLACE FUNCTION public.timesheet_weekly_chain_delete_preview(
@@ -663,7 +770,6 @@ end;
 $function$;
 
 
-
 CREATE OR REPLACE FUNCTION public.timesheet_weekly_manual_adjustment_delete_preview(
   p_timesheet_id uuid,
   p_actor_user_id uuid
@@ -682,6 +788,11 @@ declare
   v_timesheet_ids uuid[] := array[]::uuid[];
   v_contract_week_ids uuid[] := array[]::uuid[];
   v_contract_week_id uuid := null;
+  v_preserved_source_contract_week_ids uuid[] := array[]::uuid[];
+  v_preserved_source_timesheet_ids uuid[] := array[]::uuid[];
+  v_effective_manual_adjustment boolean := false;
+  v_linked_adjustment_contract_week_exists boolean := false;
+  v_has_base_contract_week_target boolean := false;
 
   v_blocked jsonb := '[]'::jsonb;
 
@@ -689,8 +800,10 @@ declare
   v_has_seg_locks boolean := false;
   v_has_invoice_lines boolean := false;
   v_has_pay_state boolean := false;
+  v_has_pay_batch_items boolean := false;
 
   v_invoice_info jsonb := '[]'::jsonb;
+  v_pay_batch_info jsonb := '[]'::jsonb;
 
   v_delete_items jsonb := '[]'::jsonb;
 begin
@@ -698,10 +811,10 @@ begin
     raise exception 'timesheet_weekly_manual_adjustment_delete_preview: timesheet_id is required';
   end if;
 
-  select t.*
+  select input_timesheet.*
   into v_in_ts
-  from public.timesheets t
-  where t.timesheet_id = p_timesheet_id;
+  from public.timesheets as input_timesheet
+  where input_timesheet.timesheet_id = p_timesheet_id;
 
   if not found then
     raise exception 'timesheet_weekly_manual_adjustment_delete_preview: timesheet % not found', p_timesheet_id;
@@ -709,19 +822,72 @@ begin
 
   v_booking_id := v_in_ts.booking_id;
 
-  -- Resolve "current" by booking_id (robust even if is_current flags drift)
-  select tcur.*
+  select current_timesheet.*
   into v_current_ts
-  from public.timesheets tcur
-  where tcur.booking_id = v_booking_id
-  order by tcur.is_current desc, tcur.version desc
+  from public.timesheets as current_timesheet
+  where current_timesheet.booking_id = v_booking_id
+  order by current_timesheet.is_current desc, current_timesheet.version desc, current_timesheet.updated_at desc nulls last, current_timesheet.created_at desc nulls last, current_timesheet.timesheet_id desc
   limit 1;
 
   if not found then
     raise exception 'timesheet_weekly_manual_adjustment_delete_preview: booking_id % not found', v_booking_id;
   end if;
 
-  -- Must be WEEKLY + adjustment
+  select coalesce(array_agg(all_versions.timesheet_id order by all_versions.version asc nulls last, all_versions.created_at asc nulls last, all_versions.timesheet_id asc), array[]::uuid[])
+  into v_timesheet_ids
+  from public.timesheets as all_versions
+  where all_versions.booking_id = v_current_ts.booking_id;
+
+  select
+    coalesce(bool_or(coalesce(linked_contract_week.is_adjustment, false) = true or coalesce(linked_contract_week.additional_seq, 0) > 0), false),
+    coalesce(bool_or(coalesce(linked_contract_week.is_adjustment, false) = false or coalesce(linked_contract_week.additional_seq, 0) <= 0), false)
+  into v_linked_adjustment_contract_week_exists,
+       v_has_base_contract_week_target
+  from public.contract_weeks as linked_contract_week
+  where linked_contract_week.timesheet_id = any(v_timesheet_ids);
+
+  select coalesce(array_agg(distinct adjustment_contract_week.id order by adjustment_contract_week.id), array[]::uuid[])
+  into v_contract_week_ids
+  from public.contract_weeks as adjustment_contract_week
+  where adjustment_contract_week.timesheet_id = any(v_timesheet_ids)
+    and coalesce(adjustment_contract_week.is_adjustment, false) = true
+    and coalesce(adjustment_contract_week.additional_seq, 0) > 0;
+
+  v_effective_manual_adjustment :=
+    coalesce(v_current_ts.is_adjustment, false) = true
+    or coalesce(v_linked_adjustment_contract_week_exists, false) = true
+    or v_current_ts.parent_timesheet_id is not null
+    or v_current_ts.correction_id is not null
+    or nullif(btrim(coalesce(v_current_ts.correction_kind, '')), '') is not null
+    or upper(coalesce(v_current_ts.adjustment_origin, '')) in ('MANUAL_ADJUSTMENT', 'IMPORT_CORRECTION', 'IMPORT_CANCELLATION');
+
+  if coalesce(array_length(v_contract_week_ids, 1), 0) > 0 then
+    v_contract_week_id := v_contract_week_ids[1];
+  end if;
+
+  select coalesce(array_agg(distinct source_contract_week.id order by source_contract_week.id), array[]::uuid[])
+  into v_preserved_source_contract_week_ids
+  from public.contract_weeks as adjustment_contract_week_for_source
+  join public.contract_weeks as source_contract_week
+    on source_contract_week.contract_id = adjustment_contract_week_for_source.contract_id
+   and source_contract_week.week_ending_date = adjustment_contract_week_for_source.week_ending_date
+   and coalesce(source_contract_week.additional_seq, 0) = 0
+   and coalesce(source_contract_week.is_adjustment, false) = false
+  where adjustment_contract_week_for_source.id = any(v_contract_week_ids);
+
+  select coalesce(array_agg(distinct preserved_timesheet_id order by preserved_timesheet_id), array[]::uuid[])
+  into v_preserved_source_timesheet_ids
+  from (
+    select source_contract_week_for_ts.timesheet_id as preserved_timesheet_id
+    from public.contract_weeks as source_contract_week_for_ts
+    where source_contract_week_for_ts.id = any(v_preserved_source_contract_week_ids)
+      and source_contract_week_for_ts.timesheet_id is not null
+    union
+    select v_current_ts.parent_timesheet_id as preserved_timesheet_id
+    where v_current_ts.parent_timesheet_id is not null
+  ) as preserved_source_timesheet_ids
+  where preserved_source_timesheet_ids.preserved_timesheet_id is not null;
+
   if v_current_ts.sheet_scope <> 'WEEKLY'::public.timesheet_scope_enum then
     v_blocked := v_blocked || jsonb_build_array(jsonb_build_object(
       'code','NOT_WEEKLY',
@@ -730,19 +896,19 @@ begin
     ));
   end if;
 
-  if v_current_ts.is_adjustment is not true then
+  if coalesce(v_effective_manual_adjustment, false) is not true then
     v_blocked := v_blocked || jsonb_build_array(jsonb_build_object(
       'code','NOT_ADJUSTMENT',
-      'message','Timesheet is not an adjustment; this preview is only for WEEKLY manual adjustment deletes.',
-      'timesheet_id', v_current_ts.timesheet_id::text
+      'message','Timesheet is not an adjustment/additional manual row; this preview is only for WEEKLY manual adjustment deletes.',
+      'timesheet_id', v_current_ts.timesheet_id::text,
+      'contract_week_ids', to_jsonb(coalesce(v_contract_week_ids, array[]::uuid[]))
     ));
   end if;
 
-  -- Must NOT be import-derived (manual adjustment must never delete parent or chain)
   if (
     upper(coalesce(v_current_ts.adjustment_origin,'')) in ('IMPORT_CORRECTION','IMPORT_CANCELLATION')
     or nullif(btrim(coalesce(v_current_ts.correction_kind,'')),'') is not null
-    or nullif(btrim(coalesce(v_current_ts.correction_id,'')),'') is not null
+    or v_current_ts.correction_id is not null
   ) then
     v_blocked := v_blocked || jsonb_build_array(jsonb_build_object(
       'code','IMPORT_DERIVED_CHILD',
@@ -754,43 +920,29 @@ begin
     ));
   end if;
 
-  -- Expand to all versions for this single booking_id (manual adjustment only)
-  select coalesce(array_agg(t_all.timesheet_id), array[]::uuid[])
-  into v_timesheet_ids
-  from public.timesheets t_all
-  where t_all.booking_id = v_current_ts.booking_id;
-
-  -- Find linked adjustment contract_week row (may point at any version in the booking series)
-  select coalesce(array_agg(distinct cw.id), array[]::uuid[])
-  into v_contract_week_ids
-  from public.contract_weeks cw
-  where cw.timesheet_id = any(v_timesheet_ids)
-    and cw.is_adjustment is true
-    and cw.additional_seq > 0;
-
   if coalesce(array_length(v_contract_week_ids,1),0) = 0 then
     v_blocked := v_blocked || jsonb_build_array(jsonb_build_object(
       'code','MISSING_CONTRACT_WEEK',
-      'message','No linked adjustment contract_week found for this weekly manual adjustment; refusing delete to avoid orphan/corruption.',
+      'message','No linked additional/manual adjustment contract_week found for this weekly manual adjustment; refusing delete to avoid orphan/corruption.',
       'timesheet_id', v_current_ts.timesheet_id::text
     ));
   end if;
 
-  -- Choose one contract_week_id for convenience (still return full list)
-  if coalesce(array_length(v_contract_week_ids,1),0) > 0 then
-    v_contract_week_id := v_contract_week_ids[1];
+  if coalesce(v_has_base_contract_week_target, false) = true then
+    v_blocked := v_blocked || jsonb_build_array(jsonb_build_object(
+      'code','BASE_CONTRACT_WEEK_TARGETED',
+      'message','Delete preview resolved a base/source contract_week for a manual adjustment delete; refusing delete to protect the parent/source row.',
+      'contract_week_ids', to_jsonb(coalesce(v_contract_week_ids, array[]::uuid[])),
+      'preserved_source_contract_week_ids', to_jsonb(coalesce(v_preserved_source_contract_week_ids, array[]::uuid[]))
+    ));
   end if;
-
-  -- ─────────────────────────────────────────────────────────────
-  -- Safety gates (apply to all versions in this single booking_id)
-  -- ─────────────────────────────────────────────────────────────
 
   select exists(
     select 1
-    from public.timesheets_financials tf
-    where tf.timesheet_id = any(v_timesheet_ids)
-      and tf.is_current is true
-      and (tf.locked_by_invoice_id is not null or tf.paid_at_utc is not null)
+    from public.timesheets_financials as timesheet_financials_lock
+    where timesheet_financials_lock.timesheet_id = any(v_timesheet_ids)
+      and timesheet_financials_lock.is_current is true
+      and (timesheet_financials_lock.locked_by_invoice_id is not null or timesheet_financials_lock.paid_at_utc is not null)
   )
   into v_has_tsfin_lock;
 
@@ -803,18 +955,18 @@ begin
 
   select exists(
     select 1
-    from public.timesheets_financials tf2
+    from public.timesheets_financials as timesheet_financials_segment_lock
     cross join lateral jsonb_array_elements(
       case
-        when upper(coalesce(tf2.invoice_breakdown_json->>'mode','')) = 'SEGMENTS'
-             and jsonb_typeof(tf2.invoice_breakdown_json->'segments') = 'array'
-          then tf2.invoice_breakdown_json->'segments'
+        when upper(coalesce(timesheet_financials_segment_lock.invoice_breakdown_json->>'mode','')) = 'SEGMENTS'
+             and jsonb_typeof(timesheet_financials_segment_lock.invoice_breakdown_json->'segments') = 'array'
+          then timesheet_financials_segment_lock.invoice_breakdown_json->'segments'
         else '[]'::jsonb
       end
-    ) seg(seg_elem)
-    where tf2.timesheet_id = any(v_timesheet_ids)
-      and tf2.is_current is true
-      and nullif(btrim(coalesce(seg.seg_elem->>'invoice_locked_invoice_id','')),'') is not null
+    ) as segment_lock(segment_json)
+    where timesheet_financials_segment_lock.timesheet_id = any(v_timesheet_ids)
+      and timesheet_financials_segment_lock.is_current is true
+      and nullif(btrim(coalesce(segment_lock.segment_json->>'invoice_locked_invoice_id','')),'') is not null
   )
   into v_has_seg_locks;
 
@@ -827,26 +979,26 @@ begin
 
   select exists(
     select 1
-    from public.invoice_lines il
-    where (il.timesheet_id is not null and il.timesheet_id = any(v_timesheet_ids))
-       or (il.booking_id is not null and il.booking_id = v_current_ts.booking_id)
+    from public.invoice_lines as invoice_line_check
+    where (invoice_line_check.timesheet_id is not null and invoice_line_check.timesheet_id = any(v_timesheet_ids))
+       or (invoice_line_check.booking_id is not null and invoice_line_check.booking_id = v_current_ts.booking_id)
   )
   into v_has_invoice_lines;
 
   if v_has_invoice_lines then
     select coalesce(
       jsonb_agg(distinct jsonb_build_object(
-        'invoice_id', inv.id::text,
-        'status', inv.status::text
+        'invoice_id', invoice_header.id::text,
+        'status', invoice_header.status::text
       )),
       '[]'::jsonb
     )
     into v_invoice_info
-    from public.invoice_lines il2
-    join public.invoices inv
-      on inv.id = il2.invoice_id
-    where (il2.timesheet_id is not null and il2.timesheet_id = any(v_timesheet_ids))
-       or (il2.booking_id is not null and il2.booking_id = v_current_ts.booking_id);
+    from public.invoice_lines as invoice_line_info
+    join public.invoices as invoice_header
+      on invoice_header.id = invoice_line_info.invoice_id
+    where (invoice_line_info.timesheet_id is not null and invoice_line_info.timesheet_id = any(v_timesheet_ids))
+       or (invoice_line_info.booking_id is not null and invoice_line_info.booking_id = v_current_ts.booking_id);
 
     v_blocked := v_blocked || jsonb_build_array(jsonb_build_object(
       'code','INVOICE_LINES_PRESENT',
@@ -858,13 +1010,13 @@ begin
   select (
     exists(
       select 1
-      from public.timesheet_pay_state tps
-      where tps.timesheet_id = any(v_timesheet_ids)
+      from public.timesheet_pay_state as timesheet_pay_state_check
+      where timesheet_pay_state_check.timesheet_id = any(v_timesheet_ids)
     )
     or exists(
       select 1
-      from public.timesheet_pay_state_history tpsh
-      where tpsh.timesheet_id = any(v_timesheet_ids)
+      from public.timesheet_pay_state_history as timesheet_pay_state_history_check
+      where timesheet_pay_state_history_check.timesheet_id = any(v_timesheet_ids)
     )
   )
   into v_has_pay_state;
@@ -876,9 +1028,41 @@ begin
     ));
   end if;
 
-  -- ─────────────────────────────────────────────────────────────
-  -- delete_items[] for warning modal (exactly one display row: this manual adjustment)
-  -- ─────────────────────────────────────────────────────────────
+  select exists(
+    select 1
+    from public.pay_batch_items as pay_batch_item_check
+    where pay_batch_item_check.timesheet_id = any(v_timesheet_ids)
+  )
+  into v_has_pay_batch_items;
+
+  if v_has_pay_batch_items then
+    select coalesce(
+      jsonb_agg(distinct jsonb_build_object(
+        'pay_batch_id', pay_batch_header.id::text,
+        'pay_batch_status', pay_batch_header.status,
+        'pay_batch_cancelled_at_utc', pay_batch_header.cancelled_at_utc,
+        'pay_batch_item_id', pay_batch_item_info.id::text,
+        'pay_batch_candidate_id', pay_batch_item_info.pay_batch_candidate_id::text,
+        'item_type', pay_batch_item_info.item_type,
+        'is_voided', coalesce(pay_batch_item_info.is_voided, false)
+      )),
+      '[]'::jsonb
+    )
+    into v_pay_batch_info
+    from public.pay_batch_items as pay_batch_item_info
+    left join public.pay_batch_candidates as pay_batch_candidate_info
+      on pay_batch_candidate_info.id = pay_batch_item_info.pay_batch_candidate_id
+    left join public.pay_batches as pay_batch_header
+      on pay_batch_header.id = pay_batch_candidate_info.pay_batch_id
+    where pay_batch_item_info.timesheet_id = any(v_timesheet_ids);
+
+    v_blocked := v_blocked || jsonb_build_array(jsonb_build_object(
+      'code','PAY_BATCH_ITEMS_PRESENT',
+      'message','Timesheet is represented in one or more pay batch artifacts; delete is blocked to preserve frozen payment batch history.',
+      'pay_batches', v_pay_batch_info
+    ));
+  end if;
+
   select coalesce(
     jsonb_agg(
       jsonb_build_object(
@@ -886,31 +1070,30 @@ begin
         'booking_id', v_current_ts.booking_id,
         'week_ending_date', v_current_ts.week_ending_date::text,
         'status', v_current_ts.status::text,
-        'is_adjustment', v_current_ts.is_adjustment,
+        'is_adjustment', coalesce(v_effective_manual_adjustment, false),
         'adjustment_origin', v_current_ts.adjustment_origin,
         'correction_id', v_current_ts.correction_id,
         'correction_kind', v_current_ts.correction_kind,
         'display_role', 'MANUAL_ADJUSTMENT',
-        'total_hours', coalesce(tfsel.total_hours, 0),
-        'total_pay_ex_vat', coalesce(tfsel.total_pay_ex_vat, 0),
-        'total_charge_ex_vat', coalesce(tfsel.total_charge_ex_vat, 0)
+        'total_hours', coalesce(selected_tsfin.total_hours, 0),
+        'total_pay_ex_vat', coalesce(selected_tsfin.total_pay_ex_vat, 0),
+        'total_charge_ex_vat', coalesce(selected_tsfin.total_charge_ex_vat, 0)
       )
     ),
     '[]'::jsonb
   )
   into v_delete_items
-  from public.timesheets_financials tfsel
-  where tfsel.timesheet_id = v_current_ts.timesheet_id
-    and tfsel.is_current is true;
+  from public.timesheets_financials as selected_tsfin
+  where selected_tsfin.timesheet_id = v_current_ts.timesheet_id
+    and selected_tsfin.is_current is true;
 
-  -- If there is no TSFIN row for any reason, still return a single item with zeros
   if jsonb_array_length(v_delete_items) = 0 then
     v_delete_items := jsonb_build_array(jsonb_build_object(
       'timesheet_id', v_current_ts.timesheet_id::text,
       'booking_id', v_current_ts.booking_id,
       'week_ending_date', v_current_ts.week_ending_date::text,
       'status', v_current_ts.status::text,
-      'is_adjustment', v_current_ts.is_adjustment,
+      'is_adjustment', coalesce(v_effective_manual_adjustment, false),
       'adjustment_origin', v_current_ts.adjustment_origin,
       'correction_id', v_current_ts.correction_id,
       'correction_kind', v_current_ts.correction_kind,
@@ -929,10 +1112,13 @@ begin
     'contract_week_id', case when v_contract_week_id is null then null else v_contract_week_id::text end,
     'contract_week_ids', to_jsonb(coalesce(v_contract_week_ids, array[]::uuid[])),
     'timesheet_ids', to_jsonb(coalesce(v_timesheet_ids, array[]::uuid[])),
+    'preserved_source_timesheet_ids', to_jsonb(coalesce(v_preserved_source_timesheet_ids, array[]::uuid[])),
+    'preserved_source_contract_week_ids', to_jsonb(coalesce(v_preserved_source_contract_week_ids, array[]::uuid[])),
     'delete_items', v_delete_items,
     'eligible', (jsonb_array_length(v_blocked) = 0),
     'blocked_reasons', v_blocked
   );
 end;
 $function$;
+
 
