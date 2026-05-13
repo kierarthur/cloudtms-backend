@@ -21597,6 +21597,8 @@ DROP FUNCTION IF EXISTS public.pay_batch_get(uuid);
 DROP FUNCTION IF EXISTS public.pay_batch_get(uuid, uuid);
 
 
+
+
 create or replace function public.pay_batch_get(
   p_pay_batch_id uuid,
   p_actor_user_id uuid DEFAULT NULL::uuid,
@@ -21762,6 +21764,7 @@ declare
   v_pending_transfer_count integer := 0;
   v_failed_transfer_count integer := 0;
   v_ambiguous_transfer_count integer := 0;
+  v_attempted_but_unproven_transfer_count integer := 0;
   v_remittance_status_summary jsonb := '{}'::jsonb;
   v_settlement_status_summary jsonb := '{}'::jsonb;
   v_active_operation_id uuid := NULL::uuid;
@@ -21957,12 +21960,17 @@ begin
   FROM public.pay_bank_transfers AS transfer_count_scope
   WHERE transfer_count_scope.pay_batch_id = p_pay_batch_id;
 
-  v_submission_evidence := public.pay_batch_submission_evidence(p_pay_batch_id);
+  -- Use counts-only evidence for the summary/bootstrap path so large batch open
+  -- does not build evidence samples or event-detail arrays. Full mode refreshes
+  -- v_submission_evidence later with p_counts_only = false before detailed
+  -- blocked-funds/evidence payload construction.
+  v_submission_evidence := public.pay_batch_submission_evidence(p_pay_batch_id, true);
   v_provider_submitted_transfer_count := COALESCE(NULLIF(v_submission_evidence ->> 'provider_submitted_count', '')::integer, 0);
   v_local_only_transfer_count := COALESCE(NULLIF(v_submission_evidence ->> 'local_only_count', '')::integer, COALESCE(NULLIF(v_submission_evidence ->> 'local_idempotency_only_count', '')::integer, 0));
   v_pending_transfer_count := COALESCE(NULLIF(v_submission_evidence ->> 'pending_count', '')::integer, 0);
   v_failed_transfer_count := COALESCE(NULLIF(v_submission_evidence ->> 'failed_count', '')::integer, 0);
   v_ambiguous_transfer_count := COALESCE(NULLIF(v_submission_evidence ->> 'ambiguous_count', '')::integer, 0);
+  v_attempted_but_unproven_transfer_count := COALESCE(NULLIF(v_submission_evidence ->> 'attempted_but_unproven_count', '')::integer, 0);
   v_has_external_submission_evidence := COALESCE((v_submission_evidence ->> 'has_external_submission_evidence')::boolean, false);
 
   v_total_amount := COALESCE(v_batch.total_bank_out, v_active_effective_amount_inc_vat, v_active_effective_amount_ex_vat, 0);
@@ -22136,6 +22144,8 @@ begin
         'pending_transfer_count', COALESCE(v_pending_transfer_count, 0),
         'failed_transfer_count', COALESCE(v_failed_transfer_count, 0),
         'ambiguous_transfer_count', COALESCE(v_ambiguous_transfer_count, 0),
+        'attempted_but_unproven_transfer_count', COALESCE(v_attempted_but_unproven_transfer_count, 0),
+        'attempted_but_unproven_count', COALESCE(v_attempted_but_unproven_transfer_count, 0),
         'remittance_summary', v_remittance_status_summary,
         'settlement_summary', v_settlement_status_summary,
         'active_operation', CASE
@@ -22216,6 +22226,8 @@ begin
             'pending_transfer_count', COALESCE(v_pending_transfer_count, 0),
             'failed_transfer_count', COALESCE(v_failed_transfer_count, 0),
             'ambiguous_transfer_count', COALESCE(v_ambiguous_transfer_count, 0),
+            'attempted_but_unproven_transfer_count', COALESCE(v_attempted_but_unproven_transfer_count, 0),
+            'attempted_but_unproven_count', COALESCE(v_attempted_but_unproven_transfer_count, 0),
             'rail_provider_snapshot', v_batch.rail_provider_snapshot,
             'rail_env_snapshot', v_batch.rail_env_snapshot,
             'provider_environment_summary', v_provider_environment_summary,
@@ -22759,7 +22771,7 @@ begin
     and v_bank_csv_export_hash is not null
   );
 
-  v_submission_evidence := public.pay_batch_submission_evidence(p_pay_batch_id);
+  v_submission_evidence := public.pay_batch_submission_evidence(p_pay_batch_id, false);
 
   v_has_external_submission_evidence := COALESCE(
     (v_submission_evidence ->> 'has_external_submission_evidence')::boolean,
@@ -25388,6 +25400,8 @@ begin
       'pending_transfer_count', COALESCE(v_pending_transfer_count, 0),
       'failed_transfer_count', COALESCE(v_failed_transfer_count, 0),
       'ambiguous_transfer_count', COALESCE(v_ambiguous_transfer_count, 0),
+      'attempted_but_unproven_transfer_count', COALESCE(v_attempted_but_unproven_transfer_count, 0),
+      'attempted_but_unproven_count', COALESCE(v_attempted_but_unproven_transfer_count, 0),
       'freshness', jsonb_build_object(
         'freshness_validation_status', to_jsonb(v_batch) ->> 'freshness_validation_status',
         'freshness_checked_at_utc', to_jsonb(v_batch) ->> 'freshness_checked_at_utc',
@@ -25498,6 +25512,8 @@ begin
           'pending_transfer_count', COALESCE(v_pending_transfer_count, 0),
           'failed_transfer_count', COALESCE(v_failed_transfer_count, 0),
           'ambiguous_transfer_count', COALESCE(v_ambiguous_transfer_count, 0),
+          'attempted_but_unproven_transfer_count', COALESCE(v_attempted_but_unproven_transfer_count, 0),
+          'attempted_but_unproven_count', COALESCE(v_attempted_but_unproven_transfer_count, 0),
           'freshness_validation_status', to_jsonb(v_batch) ->> 'freshness_validation_status',
           'freshness_checked_at_utc', to_jsonb(v_batch) ->> 'freshness_checked_at_utc',
           'freshness_result_hash', to_jsonb(v_batch) ->> 'freshness_result_hash',
@@ -25605,7 +25621,6 @@ begin
     );
 end;
 $$;
-
 
 
 
