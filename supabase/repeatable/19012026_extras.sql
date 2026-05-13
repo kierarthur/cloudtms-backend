@@ -7773,6 +7773,7 @@ DECLARE
   v_existing_contract_week_hours_zero boolean := TRUE;
   v_existing_contract_week_schedule_empty boolean := FALSE;
   v_payload_keep_empty_requested boolean := FALSE;
+  v_payload_explicit_schedule_edit boolean := FALSE;
 BEGIN
   IF p_week_id IS NULL THEN
     RAISE EXCEPTION 'p_week_id is required';
@@ -7871,24 +7872,40 @@ BEGIN
     END
   ) AS hours_value(key, value);
 
-  v_payload_keep_empty_requested := COALESCE(
-    UPPER(NULLIF(BTRIM(COALESCE(v_week_patch_json->>'keep_additional_manual_adjustment_schedule_empty', '')), '')) IN ('TRUE', 'T', 'YES', 'Y', '1'),
-    UPPER(NULLIF(BTRIM(COALESCE(v_week_patch_json->>'__keepAdditionalManualAdjustmentScheduleEmpty', '')), '')) IN ('TRUE', 'T', 'YES', 'Y', '1'),
-    UPPER(NULLIF(BTRIM(COALESCE(v_week_patch_json->>'suppress_standard_schedule_fallback', '')), '')) IN ('TRUE', 'T', 'YES', 'Y', '1'),
-    UPPER(NULLIF(BTRIM(COALESCE(v_week_patch_json->>'__suppressStandardScheduleFallback', '')), '')) IN ('TRUE', 'T', 'YES', 'Y', '1'),
-    UPPER(NULLIF(BTRIM(COALESCE(v_patch_json->>'keep_additional_manual_adjustment_schedule_empty', '')), '')) IN ('TRUE', 'T', 'YES', 'Y', '1'),
-    UPPER(NULLIF(BTRIM(COALESCE(v_patch_json->>'__keepAdditionalManualAdjustmentScheduleEmpty', '')), '')) IN ('TRUE', 'T', 'YES', 'Y', '1'),
-    UPPER(NULLIF(BTRIM(COALESCE(v_patch_json->>'suppress_standard_schedule_fallback', '')), '')) IN ('TRUE', 'T', 'YES', 'Y', '1'),
-    UPPER(NULLIF(BTRIM(COALESCE(v_patch_json->>'__suppressStandardScheduleFallback', '')), '')) IN ('TRUE', 'T', 'YES', 'Y', '1'),
-    CASE WHEN v_create_json IS NULL THEN NULL ELSE UPPER(NULLIF(BTRIM(COALESCE(v_create_json->>'keep_additional_manual_adjustment_schedule_empty', '')), '')) IN ('TRUE', 'T', 'YES', 'Y', '1') END,
-    CASE WHEN v_create_json IS NULL THEN NULL ELSE UPPER(NULLIF(BTRIM(COALESCE(v_create_json->>'__keepAdditionalManualAdjustmentScheduleEmpty', '')), '')) IN ('TRUE', 'T', 'YES', 'Y', '1') END,
-    CASE WHEN v_create_json IS NULL THEN NULL ELSE UPPER(NULLIF(BTRIM(COALESCE(v_create_json->>'suppress_standard_schedule_fallback', '')), '')) IN ('TRUE', 'T', 'YES', 'Y', '1') END,
-    CASE WHEN v_create_json IS NULL THEN NULL ELSE UPPER(NULLIF(BTRIM(COALESCE(v_create_json->>'__suppressStandardScheduleFallback', '')), '')) IN ('TRUE', 'T', 'YES', 'Y', '1') END,
-    FALSE
-  );
+  v_payload_keep_empty_requested :=
+    COALESCE(UPPER(NULLIF(BTRIM(COALESCE(v_week_patch_json->>'keep_additional_manual_adjustment_schedule_empty', '')), '')) IN ('TRUE', 'T', 'YES', 'Y', '1'), FALSE)
+    OR COALESCE(UPPER(NULLIF(BTRIM(COALESCE(v_week_patch_json->>'__keepAdditionalManualAdjustmentScheduleEmpty', '')), '')) IN ('TRUE', 'T', 'YES', 'Y', '1'), FALSE)
+    OR COALESCE(UPPER(NULLIF(BTRIM(COALESCE(v_week_patch_json->>'suppress_standard_schedule_fallback', '')), '')) IN ('TRUE', 'T', 'YES', 'Y', '1'), FALSE)
+    OR COALESCE(UPPER(NULLIF(BTRIM(COALESCE(v_week_patch_json->>'__suppressStandardScheduleFallback', '')), '')) IN ('TRUE', 'T', 'YES', 'Y', '1'), FALSE)
+    OR COALESCE(UPPER(NULLIF(BTRIM(COALESCE(v_patch_json->>'keep_additional_manual_adjustment_schedule_empty', '')), '')) IN ('TRUE', 'T', 'YES', 'Y', '1'), FALSE)
+    OR COALESCE(UPPER(NULLIF(BTRIM(COALESCE(v_patch_json->>'__keepAdditionalManualAdjustmentScheduleEmpty', '')), '')) IN ('TRUE', 'T', 'YES', 'Y', '1'), FALSE)
+    OR COALESCE(UPPER(NULLIF(BTRIM(COALESCE(v_patch_json->>'suppress_standard_schedule_fallback', '')), '')) IN ('TRUE', 'T', 'YES', 'Y', '1'), FALSE)
+    OR COALESCE(UPPER(NULLIF(BTRIM(COALESCE(v_patch_json->>'__suppressStandardScheduleFallback', '')), '')) IN ('TRUE', 'T', 'YES', 'Y', '1'), FALSE)
+    OR COALESCE(CASE WHEN v_create_json IS NULL THEN NULL ELSE UPPER(NULLIF(BTRIM(COALESCE(v_create_json->>'keep_additional_manual_adjustment_schedule_empty', '')), '')) IN ('TRUE', 'T', 'YES', 'Y', '1') END, FALSE)
+    OR COALESCE(CASE WHEN v_create_json IS NULL THEN NULL ELSE UPPER(NULLIF(BTRIM(COALESCE(v_create_json->>'__keepAdditionalManualAdjustmentScheduleEmpty', '')), '')) IN ('TRUE', 'T', 'YES', 'Y', '1') END, FALSE)
+    OR COALESCE(CASE WHEN v_create_json IS NULL THEN NULL ELSE UPPER(NULLIF(BTRIM(COALESCE(v_create_json->>'suppress_standard_schedule_fallback', '')), '')) IN ('TRUE', 'T', 'YES', 'Y', '1') END, FALSE)
+    OR COALESCE(CASE WHEN v_create_json IS NULL THEN NULL ELSE UPPER(NULLIF(BTRIM(COALESCE(v_create_json->>'__suppressStandardScheduleFallback', '')), '')) IN ('TRUE', 'T', 'YES', 'Y', '1') END, FALSE);
+
+  v_payload_explicit_schedule_edit :=
+    COALESCE(UPPER(NULLIF(BTRIM(COALESCE(v_week_patch_json->>'explicit_schedule_edit', '')), '')) IN ('TRUE', 'T', 'YES', 'Y', '1'), FALSE)
+    OR COALESCE(UPPER(NULLIF(BTRIM(COALESCE(v_week_patch_json->>'schedule_user_edited', '')), '')) IN ('TRUE', 'T', 'YES', 'Y', '1'), FALSE)
+    OR COALESCE(UPPER(NULLIF(BTRIM(COALESCE(v_week_patch_json->>'__scheduleUserEdited', '')), '')) IN ('TRUE', 'T', 'YES', 'Y', '1'), FALSE)
+    OR COALESCE(UPPER(NULLIF(BTRIM(COALESCE(v_week_patch_json->>'user_entered_schedule', '')), '')) IN ('TRUE', 'T', 'YES', 'Y', '1'), FALSE)
+    OR COALESCE(UPPER(NULLIF(BTRIM(COALESCE(v_week_patch_json->>'manual_schedule_user_edited', '')), '')) IN ('TRUE', 'T', 'YES', 'Y', '1'), FALSE)
+    OR COALESCE(UPPER(NULLIF(BTRIM(COALESCE(v_patch_json->>'explicit_schedule_edit', '')), '')) IN ('TRUE', 'T', 'YES', 'Y', '1'), FALSE)
+    OR COALESCE(UPPER(NULLIF(BTRIM(COALESCE(v_patch_json->>'schedule_user_edited', '')), '')) IN ('TRUE', 'T', 'YES', 'Y', '1'), FALSE)
+    OR COALESCE(UPPER(NULLIF(BTRIM(COALESCE(v_patch_json->>'__scheduleUserEdited', '')), '')) IN ('TRUE', 'T', 'YES', 'Y', '1'), FALSE)
+    OR COALESCE(UPPER(NULLIF(BTRIM(COALESCE(v_patch_json->>'user_entered_schedule', '')), '')) IN ('TRUE', 'T', 'YES', 'Y', '1'), FALSE)
+    OR COALESCE(UPPER(NULLIF(BTRIM(COALESCE(v_patch_json->>'manual_schedule_user_edited', '')), '')) IN ('TRUE', 'T', 'YES', 'Y', '1'), FALSE)
+    OR COALESCE(CASE WHEN v_create_json IS NULL THEN NULL ELSE UPPER(NULLIF(BTRIM(COALESCE(v_create_json->>'explicit_schedule_edit', '')), '')) IN ('TRUE', 'T', 'YES', 'Y', '1') END, FALSE)
+    OR COALESCE(CASE WHEN v_create_json IS NULL THEN NULL ELSE UPPER(NULLIF(BTRIM(COALESCE(v_create_json->>'schedule_user_edited', '')), '')) IN ('TRUE', 'T', 'YES', 'Y', '1') END, FALSE)
+    OR COALESCE(CASE WHEN v_create_json IS NULL THEN NULL ELSE UPPER(NULLIF(BTRIM(COALESCE(v_create_json->>'__scheduleUserEdited', '')), '')) IN ('TRUE', 'T', 'YES', 'Y', '1') END, FALSE)
+    OR COALESCE(CASE WHEN v_create_json IS NULL THEN NULL ELSE UPPER(NULLIF(BTRIM(COALESCE(v_create_json->>'user_entered_schedule', '')), '')) IN ('TRUE', 'T', 'YES', 'Y', '1') END, FALSE)
+    OR COALESCE(CASE WHEN v_create_json IS NULL THEN NULL ELSE UPPER(NULLIF(BTRIM(COALESCE(v_create_json->>'manual_schedule_user_edited', '')), '')) IN ('TRUE', 'T', 'YES', 'Y', '1') END, FALSE);
 
   v_force_empty_additional_schedule :=
     COALESCE(v_is_additional_manual_adjustment, FALSE) = TRUE
+    AND COALESCE(v_payload_explicit_schedule_edit, FALSE) = FALSE
     AND (
       COALESCE(v_payload_keep_empty_requested, FALSE) = TRUE
       OR (
@@ -9035,6 +9052,9 @@ BEGIN
   RETURN NEXT;
 END;
 $function$;
+
+
+
 
 
 
