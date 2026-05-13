@@ -4497,12 +4497,23 @@ DECLARE
   v_session_row public.banking_pay_workbench_sessions%ROWTYPE;
   v_section text := lower(btrim(coalesce(p_section, '')));
   v_cursor_json jsonb := CASE WHEN jsonb_typeof(COALESCE(p_cursor_json, '{}'::jsonb)) = 'object' THEN COALESCE(p_cursor_json, '{}'::jsonb) ELSE '{}'::jsonb END;
-  v_offset integer := 0;
   v_limit integer := 100;
   v_items jsonb := '[]'::jsonb;
-  v_known_count integer := 0;
+  v_known_count integer := NULL;
   v_returned_count integer := 0;
+  v_page_row_count integer := 0;
   v_next_cursor jsonb := NULL::jsonb;
+  v_cursor_candidate_id uuid := NULL::uuid;
+  v_cursor_item_order integer := 0;
+  v_cursor_ordinality bigint := 0;
+  v_last_candidate_id uuid := NULL::uuid;
+  v_last_item_order integer := 0;
+  v_last_ordinality bigint := 0;
+  v_has_more boolean := false;
+  v_state_row record;
+  v_candidate_item_json jsonb := '{}'::jsonb;
+  v_candidate_items jsonb := '[]'::jsonb;
+  v_item_record record;
 BEGIN
   IF p_session_id IS NULL THEN
     RAISE EXCEPTION 'session_id is required';
@@ -4522,228 +4533,167 @@ BEGIN
   END IF;
 
   v_limit := LEAST(GREATEST(COALESCE(p_limit, 100), 1), 500);
-  v_offset := COALESCE(
-    CASE
-      WHEN COALESCE(v_cursor_json->>'offset', '') ~ '^[0-9]+$'
-        THEN (v_cursor_json->>'offset')::integer
-      ELSE 0
-    END,
-    0
-  );
 
-  IF v_section = 'candidates' THEN
-    WITH flattened AS (
-      SELECT
-        state_row.candidate_id,
-        1 AS item_order,
-        jsonb_strip_nulls(
-          COALESCE(state_row.effective_paye_candidate_json, '{}'::jsonb)
-          || jsonb_build_object('candidate_id', state_row.candidate_id::text, 'preview_section', 'paye_candidates')
-        ) AS item_json
-      FROM public.banking_pay_workbench_session_candidate_state AS state_row
-      WHERE state_row.session_id = p_session_id
-        AND state_row.status = 'READY'
-        AND jsonb_typeof(state_row.effective_paye_candidate_json) = 'object'
-
-      UNION ALL
-
-      SELECT
-        state_row.candidate_id,
-        2 AS item_order,
-        jsonb_strip_nulls(
-          COALESCE(state_row.effective_non_paye_payee_json, '{}'::jsonb)
-          || jsonb_build_object('candidate_id', state_row.candidate_id::text, 'preview_section', 'non_paye_payees')
-        ) AS item_json
-      FROM public.banking_pay_workbench_session_candidate_state AS state_row
-      WHERE state_row.session_id = p_session_id
-        AND state_row.status = 'READY'
-        AND jsonb_typeof(state_row.effective_non_paye_payee_json) = 'object'
-    ),
-    numbered AS (
-      SELECT
-        flattened.item_json,
-        row_number() OVER (ORDER BY flattened.candidate_id, flattened.item_order) AS row_num,
-        count(*) OVER () AS total_count
-      FROM flattened
-    )
-    SELECT COALESCE(jsonb_agg(numbered.item_json ORDER BY numbered.row_num), '[]'::jsonb),
-           COALESCE(max(numbered.total_count), 0)::integer,
-           count(*)::integer
-    INTO v_items, v_known_count, v_returned_count
-    FROM numbered
-    WHERE numbered.row_num > v_offset
-      AND numbered.row_num <= v_offset + v_limit;
-  ELSIF v_section = 'canonical_preview_lines' THEN
-    WITH flattened AS (
-      SELECT
-        state_row.candidate_id,
-        line_element.ordinality,
-        line_element.value AS item_json
-      FROM public.banking_pay_workbench_session_candidate_state AS state_row
-      CROSS JOIN LATERAL jsonb_array_elements(
-        CASE WHEN jsonb_typeof(COALESCE(state_row.effective_canonical_preview_lines_json, '[]'::jsonb)) = 'array' THEN COALESCE(state_row.effective_canonical_preview_lines_json, '[]'::jsonb) ELSE '[]'::jsonb END
-      ) WITH ORDINALITY AS line_element(value, ordinality)
-      WHERE state_row.session_id = p_session_id
-        AND state_row.status = 'READY'
-        AND jsonb_typeof(line_element.value) = 'object'
-    ),
-    numbered AS (
-      SELECT flattened.item_json,
-             row_number() OVER (ORDER BY flattened.candidate_id, flattened.ordinality) AS row_num,
-             count(*) OVER () AS total_count
-      FROM flattened
-    )
-    SELECT COALESCE(jsonb_agg(numbered.item_json ORDER BY numbered.row_num), '[]'::jsonb),
-           COALESCE(max(numbered.total_count), 0)::integer,
-           count(*)::integer
-    INTO v_items, v_known_count, v_returned_count
-    FROM numbered
-    WHERE numbered.row_num > v_offset
-      AND numbered.row_num <= v_offset + v_limit;
-  ELSIF v_section = 'itemisation' THEN
-    WITH flattened AS (
-      SELECT state_row.candidate_id, item_element.ordinality, item_element.value AS item_json
-      FROM public.banking_pay_workbench_session_candidate_state AS state_row
-      CROSS JOIN LATERAL jsonb_array_elements(
-        CASE WHEN jsonb_typeof(COALESCE(state_row.effective_candidate_fragment_json->'itemisation', '[]'::jsonb)) = 'array' THEN COALESCE(state_row.effective_candidate_fragment_json->'itemisation', '[]'::jsonb) ELSE '[]'::jsonb END
-      ) WITH ORDINALITY AS item_element(value, ordinality)
-      WHERE state_row.session_id = p_session_id
-        AND state_row.status = 'READY'
-        AND jsonb_typeof(item_element.value) = 'object'
-    ),
-    numbered AS (
-      SELECT flattened.item_json,
-             row_number() OVER (ORDER BY flattened.candidate_id, flattened.ordinality) AS row_num,
-             count(*) OVER () AS total_count
-      FROM flattened
-    )
-    SELECT COALESCE(jsonb_agg(numbered.item_json ORDER BY numbered.row_num), '[]'::jsonb),
-           COALESCE(max(numbered.total_count), 0)::integer,
-           count(*)::integer
-    INTO v_items, v_known_count, v_returned_count
-    FROM numbered
-    WHERE numbered.row_num > v_offset
-      AND numbered.row_num <= v_offset + v_limit;
-  ELSIF v_section = 'blocked_items' THEN
-    WITH flattened AS (
-      SELECT state_row.candidate_id, item_element.ordinality, item_element.value AS item_json
-      FROM public.banking_pay_workbench_session_candidate_state AS state_row
-      CROSS JOIN LATERAL jsonb_array_elements(
-        CASE WHEN jsonb_typeof(COALESCE(state_row.effective_candidate_fragment_json->'blocked_items', '[]'::jsonb)) = 'array' THEN COALESCE(state_row.effective_candidate_fragment_json->'blocked_items', '[]'::jsonb) ELSE '[]'::jsonb END
-      ) WITH ORDINALITY AS item_element(value, ordinality)
-      WHERE state_row.session_id = p_session_id
-        AND state_row.status = 'READY'
-        AND jsonb_typeof(item_element.value) = 'object'
-    ),
-    numbered AS (
-      SELECT flattened.item_json,
-             row_number() OVER (ORDER BY flattened.candidate_id, flattened.ordinality) AS row_num,
-             count(*) OVER () AS total_count
-      FROM flattened
-    )
-    SELECT COALESCE(jsonb_agg(numbered.item_json ORDER BY numbered.row_num), '[]'::jsonb),
-           COALESCE(max(numbered.total_count), 0)::integer,
-           count(*)::integer
-    INTO v_items, v_known_count, v_returned_count
-    FROM numbered
-    WHERE numbered.row_num > v_offset
-      AND numbered.row_num <= v_offset + v_limit;
-  ELSIF v_section = 'do_not_pay_items' THEN
-    WITH flattened AS (
-      SELECT state_row.candidate_id, item_element.ordinality, item_element.value AS item_json
-      FROM public.banking_pay_workbench_session_candidate_state AS state_row
-      CROSS JOIN LATERAL jsonb_array_elements(
-        CASE WHEN jsonb_typeof(COALESCE(state_row.effective_candidate_fragment_json->'do_not_pay_items', '[]'::jsonb)) = 'array' THEN COALESCE(state_row.effective_candidate_fragment_json->'do_not_pay_items', '[]'::jsonb) ELSE '[]'::jsonb END
-      ) WITH ORDINALITY AS item_element(value, ordinality)
-      WHERE state_row.session_id = p_session_id
-        AND state_row.status = 'READY'
-        AND jsonb_typeof(item_element.value) = 'object'
-    ),
-    numbered AS (
-      SELECT flattened.item_json,
-             row_number() OVER (ORDER BY flattened.candidate_id, flattened.ordinality) AS row_num,
-             count(*) OVER () AS total_count
-      FROM flattened
-    )
-    SELECT COALESCE(jsonb_agg(numbered.item_json ORDER BY numbered.row_num), '[]'::jsonb),
-           COALESCE(max(numbered.total_count), 0)::integer,
-           count(*)::integer
-    INTO v_items, v_known_count, v_returned_count
-    FROM numbered
-    WHERE numbered.row_num > v_offset
-      AND numbered.row_num <= v_offset + v_limit;
-  ELSIF v_section = 'snoozed_items' THEN
-    WITH flattened AS (
-      SELECT state_row.candidate_id, item_element.ordinality, item_element.value AS item_json
-      FROM public.banking_pay_workbench_session_candidate_state AS state_row
-      CROSS JOIN LATERAL jsonb_array_elements(
-        CASE WHEN jsonb_typeof(COALESCE(state_row.effective_candidate_fragment_json->'snoozed_items', '[]'::jsonb)) = 'array' THEN COALESCE(state_row.effective_candidate_fragment_json->'snoozed_items', '[]'::jsonb) ELSE '[]'::jsonb END
-      ) WITH ORDINALITY AS item_element(value, ordinality)
-      WHERE state_row.session_id = p_session_id
-        AND state_row.status = 'READY'
-        AND jsonb_typeof(item_element.value) = 'object'
-    ),
-    numbered AS (
-      SELECT flattened.item_json,
-             row_number() OVER (ORDER BY flattened.candidate_id, flattened.ordinality) AS row_num,
-             count(*) OVER () AS total_count
-      FROM flattened
-    )
-    SELECT COALESCE(jsonb_agg(numbered.item_json ORDER BY numbered.row_num), '[]'::jsonb),
-           COALESCE(max(numbered.total_count), 0)::integer,
-           count(*)::integer
-    INTO v_items, v_known_count, v_returned_count
-    FROM numbered
-    WHERE numbered.row_num > v_offset
-      AND numbered.row_num <= v_offset + v_limit;
-  ELSE
-    WITH flattened AS (
-      SELECT state_row.candidate_id, item_element.ordinality, item_element.value AS item_json
-      FROM public.banking_pay_workbench_session_candidate_state AS state_row
-      CROSS JOIN LATERAL jsonb_array_elements(
-        CASE WHEN jsonb_typeof(COALESCE(state_row.effective_candidate_fragment_json->'baseline_component_rows', '[]'::jsonb)) = 'array' THEN COALESCE(state_row.effective_candidate_fragment_json->'baseline_component_rows', '[]'::jsonb) ELSE '[]'::jsonb END
-      ) WITH ORDINALITY AS item_element(value, ordinality)
-      WHERE state_row.session_id = p_session_id
-        AND state_row.status = 'READY'
-        AND jsonb_typeof(item_element.value) = 'object'
-    ),
-    numbered AS (
-      SELECT flattened.item_json,
-             row_number() OVER (ORDER BY flattened.candidate_id, flattened.ordinality) AS row_num,
-             count(*) OVER () AS total_count
-      FROM flattened
-    )
-    SELECT COALESCE(jsonb_agg(numbered.item_json ORDER BY numbered.row_num), '[]'::jsonb),
-           COALESCE(max(numbered.total_count), 0)::integer,
-           count(*)::integer
-    INTO v_items, v_known_count, v_returned_count
-    FROM numbered
-    WHERE numbered.row_num > v_offset
-      AND numbered.row_num <= v_offset + v_limit;
+  IF COALESCE(v_cursor_json->>'last_candidate_id', '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
+    v_cursor_candidate_id := (v_cursor_json->>'last_candidate_id')::uuid;
+  ELSIF COALESCE(v_cursor_json->>'candidate_id', '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
+    v_cursor_candidate_id := (v_cursor_json->>'candidate_id')::uuid;
   END IF;
 
-  IF v_offset + v_limit < COALESCE(v_known_count, 0) THEN
-    v_next_cursor := jsonb_build_object('offset', v_offset + v_limit);
+  IF COALESCE(v_cursor_json->>'last_item_order', '') ~ '^[0-9]+$' THEN
+    v_cursor_item_order := (v_cursor_json->>'last_item_order')::integer;
+  ELSIF COALESCE(v_cursor_json->>'item_order', '') ~ '^[0-9]+$' THEN
+    v_cursor_item_order := (v_cursor_json->>'item_order')::integer;
+  END IF;
+
+  IF COALESCE(v_cursor_json->>'last_ordinality', '') ~ '^[0-9]+$' THEN
+    v_cursor_ordinality := (v_cursor_json->>'last_ordinality')::bigint;
+  ELSIF COALESCE(v_cursor_json->>'ordinality', '') ~ '^[0-9]+$' THEN
+    v_cursor_ordinality := (v_cursor_json->>'ordinality')::bigint;
+  END IF;
+
+  FOR v_state_row IN
+    SELECT state_row.candidate_id,
+           state_row.effective_paye_candidate_json,
+           state_row.effective_non_paye_payee_json,
+           state_row.effective_candidate_fragment_json,
+           state_row.effective_canonical_preview_lines_json
+    FROM public.banking_pay_workbench_session_candidate_state AS state_row
+    WHERE state_row.session_id = p_session_id
+      AND state_row.status = 'READY'
+      AND (v_cursor_candidate_id IS NULL OR state_row.candidate_id >= v_cursor_candidate_id)
+    ORDER BY state_row.candidate_id ASC
+  LOOP
+    IF v_section = 'candidates' THEN
+      IF jsonb_typeof(v_state_row.effective_paye_candidate_json) = 'object'
+         AND (
+           v_cursor_candidate_id IS NULL
+           OR v_state_row.candidate_id > v_cursor_candidate_id
+           OR (v_state_row.candidate_id = v_cursor_candidate_id AND 1 > v_cursor_item_order)
+         ) THEN
+        v_candidate_item_json := jsonb_strip_nulls(
+          COALESCE(v_state_row.effective_paye_candidate_json, '{}'::jsonb)
+          || jsonb_build_object('candidate_id', v_state_row.candidate_id::text, 'preview_section', 'paye_candidates')
+        );
+
+        v_page_row_count := v_page_row_count + 1;
+        IF v_page_row_count <= v_limit THEN
+          v_items := COALESCE(v_items, '[]'::jsonb) || jsonb_build_array(v_candidate_item_json);
+          v_returned_count := v_returned_count + 1;
+          v_last_candidate_id := v_state_row.candidate_id;
+          v_last_item_order := 1;
+          v_last_ordinality := 0;
+        ELSE
+          v_has_more := true;
+          EXIT;
+        END IF;
+      END IF;
+
+      IF jsonb_typeof(v_state_row.effective_non_paye_payee_json) = 'object'
+         AND (
+           v_cursor_candidate_id IS NULL
+           OR v_state_row.candidate_id > v_cursor_candidate_id
+           OR (v_state_row.candidate_id = v_cursor_candidate_id AND 2 > v_cursor_item_order)
+         ) THEN
+        v_candidate_item_json := jsonb_strip_nulls(
+          COALESCE(v_state_row.effective_non_paye_payee_json, '{}'::jsonb)
+          || jsonb_build_object('candidate_id', v_state_row.candidate_id::text, 'preview_section', 'non_paye_payees')
+        );
+
+        v_page_row_count := v_page_row_count + 1;
+        IF v_page_row_count <= v_limit THEN
+          v_items := COALESCE(v_items, '[]'::jsonb) || jsonb_build_array(v_candidate_item_json);
+          v_returned_count := v_returned_count + 1;
+          v_last_candidate_id := v_state_row.candidate_id;
+          v_last_item_order := 2;
+          v_last_ordinality := 0;
+        ELSE
+          v_has_more := true;
+          EXIT;
+        END IF;
+      END IF;
+    ELSE
+      v_candidate_items := CASE
+        WHEN v_section = 'canonical_preview_lines' AND jsonb_typeof(COALESCE(v_state_row.effective_canonical_preview_lines_json, '[]'::jsonb)) = 'array'
+          THEN COALESCE(v_state_row.effective_canonical_preview_lines_json, '[]'::jsonb)
+        WHEN v_section = 'itemisation' AND jsonb_typeof(COALESCE(v_state_row.effective_candidate_fragment_json->'itemisation', '[]'::jsonb)) = 'array'
+          THEN COALESCE(v_state_row.effective_candidate_fragment_json->'itemisation', '[]'::jsonb)
+        WHEN v_section = 'blocked_items' AND jsonb_typeof(COALESCE(v_state_row.effective_candidate_fragment_json->'blocked_items', '[]'::jsonb)) = 'array'
+          THEN COALESCE(v_state_row.effective_candidate_fragment_json->'blocked_items', '[]'::jsonb)
+        WHEN v_section = 'do_not_pay_items' AND jsonb_typeof(COALESCE(v_state_row.effective_candidate_fragment_json->'do_not_pay_items', '[]'::jsonb)) = 'array'
+          THEN COALESCE(v_state_row.effective_candidate_fragment_json->'do_not_pay_items', '[]'::jsonb)
+        WHEN v_section = 'snoozed_items' AND jsonb_typeof(COALESCE(v_state_row.effective_candidate_fragment_json->'snoozed_items', '[]'::jsonb)) = 'array'
+          THEN COALESCE(v_state_row.effective_candidate_fragment_json->'snoozed_items', '[]'::jsonb)
+        WHEN v_section = 'baseline_component_rows' AND jsonb_typeof(COALESCE(v_state_row.effective_candidate_fragment_json->'baseline_component_rows', '[]'::jsonb)) = 'array'
+          THEN COALESCE(v_state_row.effective_candidate_fragment_json->'baseline_component_rows', '[]'::jsonb)
+        ELSE '[]'::jsonb
+      END;
+
+      IF jsonb_typeof(v_candidate_items) = 'array' THEN
+        FOR v_item_record IN
+          SELECT item_element.value AS item_json,
+                 item_element.ordinality::bigint AS ordinality
+          FROM jsonb_array_elements(v_candidate_items) WITH ORDINALITY AS item_element(value, ordinality)
+          WHERE jsonb_typeof(item_element.value) = 'object'
+            AND (
+              v_cursor_candidate_id IS NULL
+              OR v_state_row.candidate_id > v_cursor_candidate_id
+              OR (v_state_row.candidate_id = v_cursor_candidate_id AND item_element.ordinality::bigint > v_cursor_ordinality)
+            )
+          ORDER BY item_element.ordinality ASC
+        LOOP
+          v_page_row_count := v_page_row_count + 1;
+          IF v_page_row_count <= v_limit THEN
+            v_items := COALESCE(v_items, '[]'::jsonb) || jsonb_build_array(v_item_record.item_json);
+            v_returned_count := v_returned_count + 1;
+            v_last_candidate_id := v_state_row.candidate_id;
+            v_last_item_order := 0;
+            v_last_ordinality := v_item_record.ordinality;
+          ELSE
+            v_has_more := true;
+            EXIT;
+          END IF;
+        END LOOP;
+      END IF;
+    END IF;
+
+    IF v_has_more THEN
+      EXIT;
+    END IF;
+  END LOOP;
+
+  IF v_has_more AND v_last_candidate_id IS NOT NULL THEN
+    IF v_section = 'candidates' THEN
+      v_next_cursor := jsonb_build_object(
+        'last_candidate_id', v_last_candidate_id::text,
+        'last_item_order', COALESCE(v_last_item_order, 0)
+      );
+    ELSE
+      v_next_cursor := jsonb_build_object(
+        'last_candidate_id', v_last_candidate_id::text,
+        'last_ordinality', COALESCE(v_last_ordinality, 0)
+      );
+    END IF;
   ELSE
     v_next_cursor := NULL::jsonb;
   END IF;
 
   RETURN jsonb_build_object(
-    'ok', true,
+    'ok', TRUE,
     'session_id', p_session_id::text,
     'section', v_section,
     'items', COALESCE(v_items, '[]'::jsonb),
-    'next_cursor', v_next_cursor,
-    'known_count', COALESCE(v_known_count, 0),
+    'known_count', v_known_count,
     'returned_count', COALESCE(v_returned_count, 0),
-    'limit', v_limit,
-    'offset', v_offset,
+    'next_cursor', v_next_cursor,
     'session_version', v_session_row.version,
     'session_signature', v_session_row.session_signature,
-    'snapshot_run_id', CASE WHEN v_session_row.source_snapshot_run_id IS NULL THEN NULL ELSE v_session_row.source_snapshot_run_id::text END
+    'ready', TRUE,
+    'paging_mode', 'plpgsql_keyset_limit_plus_one'
   );
 END;
 $function$;
+
 DROP FUNCTION IF EXISTS public.pay_batch_execution_summary_get(uuid, uuid);
 
 
@@ -6687,6 +6637,8 @@ DROP FUNCTION IF EXISTS public.pay_bank_transfers_claim_provider_submit_chunk(uu
 
 
 
+
+
 CREATE OR REPLACE FUNCTION public.pay_bank_transfers_claim_provider_submit_chunk(
   p_operation_id uuid,
   p_pay_batch_id uuid,
@@ -6713,6 +6665,13 @@ DECLARE
   v_transfer_count integer := 0;
   v_remaining_count integer := 0;
   v_retry_mode boolean := false;
+  v_unattempted_eligible_count integer := 0;
+  v_attempted_but_unproven_count integer := 0;
+  v_provider_evidence_present_count integer := 0;
+  v_failed_or_retryable_count integer := 0;
+  v_terminal_count integer := 0;
+  v_remaining_provider_evidence_required integer := 0;
+  v_has_unproven_attempts boolean := false;
 BEGIN
   IF p_operation_id IS NULL THEN
     RAISE EXCEPTION 'operation_id is required';
@@ -6755,12 +6714,14 @@ BEGIN
 
   v_retry_mode := (v_operation_row.operation_type = 'PAYMENT_RETRY_BLOCKED_FUNDS');
 
-  CREATE TEMPORARY TABLE IF NOT EXISTS pg_temp.tmp_provider_submit_eligible_transfer_ids (
-    transfer_id uuid PRIMARY KEY
+  CREATE TEMPORARY TABLE IF NOT EXISTS pg_temp.tmp_provider_submit_classified_transfers (
+    transfer_id uuid PRIMARY KEY,
+    evidence_classification text NOT NULL,
+    is_eligible_for_submit boolean NOT NULL DEFAULT false
   ) ON COMMIT DROP;
-  TRUNCATE TABLE pg_temp.tmp_provider_submit_eligible_transfer_ids;
+  TRUNCATE TABLE pg_temp.tmp_provider_submit_classified_transfers;
 
-  INSERT INTO pg_temp.tmp_provider_submit_eligible_transfer_ids (transfer_id)
+  INSERT INTO pg_temp.tmp_provider_submit_classified_transfers (transfer_id, evidence_classification, is_eligible_for_submit)
   WITH transfer_base AS (
     SELECT
       transfer_row.id AS transfer_id,
@@ -6782,10 +6743,14 @@ BEGIN
       transfer_row.payee_entity_id,
       coalesce(transfer_row.rail_meta_json, '{}'::jsonb) AS rail_meta_json,
       lower(btrim(coalesce(transfer_row.rail_meta_json #>> '{last_update_provider_evidence}', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on') AS last_update_was_provider_evidence,
+      lower(btrim(coalesce(transfer_row.rail_meta_json #>> '{last_update_provider_source}', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on') AS last_update_was_provider_source,
+      lower(btrim(coalesce(transfer_row.rail_meta_json #>> '{provider_attempt_without_external_id}', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on') AS last_update_was_provider_attempt_without_external_id,
       ARRAY_REMOVE(ARRAY[
+        transfer_row.id::text,
         NULLIF(btrim(coalesce(transfer_row.request_id, '')), ''),
         NULLIF(btrim(coalesce(transfer_row.payment_reference, '')), ''),
         NULLIF(btrim(coalesce(v_batch_row.bulk_reference, '')), ''),
+        NULLIF(btrim(coalesce(transfer_row.transfer_group_key, '')), ''),
         NULLIF(btrim(coalesce(transfer_row.rail_meta_json #>> '{request_id}', '')), ''),
         NULLIF(btrim(coalesce(transfer_row.rail_meta_json #>> '{idempotency_key}', '')), ''),
         NULLIF(btrim(coalesce(transfer_row.rail_meta_json #>> '{payment_reference}', '')), ''),
@@ -6793,7 +6758,7 @@ BEGIN
       ]::text[], NULL::text) AS local_identity_values
     FROM public.pay_bank_transfers AS transfer_row
     WHERE transfer_row.pay_batch_id = p_pay_batch_id
-  ), evidence_flags AS (
+  ), transfer_event_flags AS (
     SELECT
       transfer_base.transfer_id,
       EXISTS (
@@ -6801,75 +6766,56 @@ BEGIN
         FROM public.pay_bank_transfer_events AS evidence_event
         WHERE evidence_event.pay_bank_transfer_id = transfer_base.transfer_id
           AND upper(btrim(coalesce(evidence_event.event_source, ''))) IN ('PROVIDER_RESPONSE', 'PROVIDER_POLL', 'PROVIDER_WEBHOOK', 'WEBHOOK', 'POLL', 'RAIL_PROVIDER', 'PROVIDER', 'PROVIDER_SETTLEMENT')
-          AND (
-            (
-              NULLIF(btrim(coalesce(evidence_event.provider_event_id, '')), '') IS NOT NULL
-              AND NOT (NULLIF(btrim(coalesce(evidence_event.provider_event_id, '')), '') = ANY(transfer_base.local_identity_values))
-            )
-            OR (
-              NULLIF(btrim(coalesce(evidence_event.provider_reference, '')), '') IS NOT NULL
-              AND NOT (NULLIF(btrim(coalesce(evidence_event.provider_reference, '')), '') = ANY(transfer_base.local_identity_values))
-            )
-            OR (
-              NULLIF(btrim(coalesce(evidence_event.raw_payload #>> '{provider_event_id}', '')), '') IS NOT NULL
-              AND NOT (NULLIF(btrim(coalesce(evidence_event.raw_payload #>> '{provider_event_id}', '')), '') = ANY(transfer_base.local_identity_values))
-            )
-            OR (
-              NULLIF(btrim(coalesce(evidence_event.raw_payload #>> '{provider_reference}', '')), '') IS NOT NULL
-              AND NOT (NULLIF(btrim(coalesce(evidence_event.raw_payload #>> '{provider_reference}', '')), '') = ANY(transfer_base.local_identity_values))
-            )
-            OR (
-              NULLIF(btrim(coalesce(evidence_event.raw_payload #>> '{provider_submission_id}', '')), '') IS NOT NULL
-              AND NOT (NULLIF(btrim(coalesce(evidence_event.raw_payload #>> '{provider_submission_id}', '')), '') = ANY(transfer_base.local_identity_values))
-            )
-            OR (
-              NULLIF(btrim(coalesce(evidence_event.raw_payload #>> '{submission_id}', '')), '') IS NOT NULL
-              AND NOT (NULLIF(btrim(coalesce(evidence_event.raw_payload #>> '{submission_id}', '')), '') = ANY(transfer_base.local_identity_values))
-            )
-            OR (
-              NULLIF(btrim(coalesce(evidence_event.raw_payload #>> '{rail_submission_id}', '')), '') IS NOT NULL
-              AND NOT (NULLIF(btrim(coalesce(evidence_event.raw_payload #>> '{rail_submission_id}', '')), '') = ANY(transfer_base.local_identity_values))
-            )
-            OR (
-              NULLIF(btrim(coalesce(evidence_event.raw_payload #>> '{provider_payment_id}', '')), '') IS NOT NULL
-              AND NOT (NULLIF(btrim(coalesce(evidence_event.raw_payload #>> '{provider_payment_id}', '')), '') = ANY(transfer_base.local_identity_values))
-            )
-            OR (
-              NULLIF(btrim(coalesce(evidence_event.raw_payload #>> '{payment_id}', '')), '') IS NOT NULL
-              AND NOT (NULLIF(btrim(coalesce(evidence_event.raw_payload #>> '{payment_id}', '')), '') = ANY(transfer_base.local_identity_values))
-            )
-            OR (
-              NULLIF(btrim(coalesce(evidence_event.raw_payload #>> '{external_payment_id}', '')), '') IS NOT NULL
-              AND NOT (NULLIF(btrim(coalesce(evidence_event.raw_payload #>> '{external_payment_id}', '')), '') = ANY(transfer_base.local_identity_values))
-            )
-            OR (
-              NULLIF(btrim(coalesce(evidence_event.raw_payload #>> '{revolut_payment_id}', '')), '') IS NOT NULL
-              AND NOT (NULLIF(btrim(coalesce(evidence_event.raw_payload #>> '{revolut_payment_id}', '')), '') = ANY(transfer_base.local_identity_values))
-            )
-            OR (
-              NULLIF(btrim(coalesce(evidence_event.raw_payload #>> '{provider_transfer_id}', '')), '') IS NOT NULL
-              AND NOT (NULLIF(btrim(coalesce(evidence_event.raw_payload #>> '{provider_transfer_id}', '')), '') = ANY(transfer_base.local_identity_values))
-            )
-            OR (
-              NULLIF(btrim(coalesce(evidence_event.raw_payload #>> '{transfer_id}', '')), '') IS NOT NULL
-              AND NOT (NULLIF(btrim(coalesce(evidence_event.raw_payload #>> '{transfer_id}', '')), '') = ANY(transfer_base.local_identity_values))
-            )
-            OR (
-              NULLIF(btrim(coalesce(evidence_event.raw_payload #>> '{external_transfer_id}', '')), '') IS NOT NULL
-              AND NOT (NULLIF(btrim(coalesce(evidence_event.raw_payload #>> '{external_transfer_id}', '')), '') = ANY(transfer_base.local_identity_values))
-            )
-            OR (
-              NULLIF(btrim(coalesce(evidence_event.raw_payload #>> '{provider_transaction_id}', '')), '') IS NOT NULL
-              AND NOT (NULLIF(btrim(coalesce(evidence_event.raw_payload #>> '{provider_transaction_id}', '')), '') = ANY(transfer_base.local_identity_values))
-            )
-            OR (
-              NULLIF(btrim(coalesce(evidence_event.raw_payload #>> '{transaction_id}', '')), '') IS NOT NULL
-              AND NOT (NULLIF(btrim(coalesce(evidence_event.raw_payload #>> '{transaction_id}', '')), '') = ANY(transfer_base.local_identity_values))
-            )
-            OR upper(btrim(coalesce(evidence_event.normalised_state, ''))) IN ('SUBMITTED', 'QUEUED', 'ACCEPTED', 'SENT', 'PROCESSING', 'IN_FLIGHT', 'PENDING_SETTLEMENT', 'PENDING_CONFIRMATION', 'PENDING_SUBMISSION', 'COMPLETED', 'COMMITTED', 'SETTLED', 'PAID', 'EXECUTED')
-            OR upper(btrim(coalesce(evidence_event.provider_state, ''))) IN ('SUBMITTED', 'QUEUED', 'ACCEPTED', 'SENT', 'PROCESSING', 'IN_FLIGHT', 'PENDING_SETTLEMENT', 'PENDING_CONFIRMATION', 'PENDING_SUBMISSION', 'COMPLETED', 'COMMITTED', 'SETTLED', 'PAID', 'EXECUTED')
+      ) AS has_provider_attempt_event,
+      EXISTS (
+        SELECT 1
+        FROM public.pay_bank_transfer_events AS evidence_event
+        WHERE evidence_event.pay_bank_transfer_id = transfer_base.transfer_id
+          AND upper(btrim(coalesce(evidence_event.event_source, ''))) IN ('PROVIDER_RESPONSE', 'PROVIDER_POLL', 'PROVIDER_WEBHOOK', 'WEBHOOK', 'POLL', 'RAIL_PROVIDER', 'PROVIDER', 'PROVIDER_SETTLEMENT')
+          AND EXISTS (
+            SELECT 1
+            FROM (VALUES
+              (evidence_event.provider_event_id),
+              (evidence_event.provider_reference),
+              (evidence_event.raw_payload #>> '{provider_event_id}'),
+              (evidence_event.raw_payload #>> '{provider_reference}'),
+              (evidence_event.raw_payload #>> '{provider_submission_id}'),
+              (evidence_event.raw_payload #>> '{submission_id}'),
+              (evidence_event.raw_payload #>> '{rail_submission_id}'),
+              (evidence_event.raw_payload #>> '{provider_payment_id}'),
+              (evidence_event.raw_payload #>> '{payment_id}'),
+              (evidence_event.raw_payload #>> '{external_payment_id}'),
+              (evidence_event.raw_payload #>> '{revolut_payment_id}'),
+              (evidence_event.raw_payload #>> '{provider_transfer_id}'),
+              (evidence_event.raw_payload #>> '{transfer_id}'),
+              (evidence_event.raw_payload #>> '{external_transfer_id}'),
+              (evidence_event.raw_payload #>> '{provider_transaction_id}'),
+              (evidence_event.raw_payload #>> '{transaction_id}')
+            ) AS provider_identifier(identifier_value)
+            WHERE NULLIF(btrim(coalesce(provider_identifier.identifier_value, '')), '') IS NOT NULL
+              AND NOT (NULLIF(btrim(coalesce(provider_identifier.identifier_value, '')), '') = ANY(transfer_base.local_identity_values))
           )
-      ) AS has_provider_event_evidence
+      ) AS has_genuine_provider_evidence,
+      EXISTS (
+        SELECT 1
+        FROM public.pay_bank_transfer_events AS ambiguous_event
+        WHERE ambiguous_event.pay_bank_transfer_id = transfer_base.transfer_id
+          AND (
+            upper(btrim(coalesce(ambiguous_event.mapping_status, ''))) IN ('AMBIGUOUS', 'UNMATCHED', 'NO_MATCH', 'MULTIPLE_MATCHES')
+            OR upper(btrim(coalesce(ambiguous_event.normalised_state, ''))) IN ('UNKNOWN', 'TIMEOUT', 'TIMED_OUT', 'PENDING_REVIEW')
+            OR upper(btrim(coalesce(ambiguous_event.provider_state, ''))) IN ('UNKNOWN', 'TIMEOUT', 'TIMED_OUT', 'PENDING_REVIEW')
+          )
+      ) AS has_ambiguous_event,
+      EXISTS (
+        SELECT 1
+        FROM public.banking_pay_operation_chunks AS submit_chunk
+        CROSS JOIN LATERAL jsonb_array_elements_text(COALESCE(submit_chunk.payload_json->'transfer_ids', '[]'::jsonb)) AS submitted_transfer_id(value)
+        WHERE submit_chunk.operation_id = p_operation_id
+          AND submit_chunk.chunk_type = 'TRANSFER_SUBMIT'
+          AND submit_chunk.status IN ('RUNNING', 'COMPLETE')
+          AND submitted_transfer_id.value ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          AND submitted_transfer_id.value::uuid = transfer_base.transfer_id
+      ) AS has_operation_submit_attempt
     FROM transfer_base
   ), classified_transfers AS (
     SELECT
@@ -6886,11 +6832,11 @@ BEGIN
       transfer_base.payee_entity_kind,
       transfer_base.payee_entity_id,
       (
-        evidence_flags.has_provider_event_evidence
+        transfer_event_flags.has_genuine_provider_evidence
         OR (
           NULLIF(btrim(coalesce(transfer_base.rail_tx_id, '')), '') IS NOT NULL
           AND NOT (NULLIF(btrim(coalesce(transfer_base.rail_tx_id, '')), '') = ANY(transfer_base.local_identity_values))
-          AND (transfer_base.last_update_was_provider_evidence OR evidence_flags.has_provider_event_evidence)
+          AND (transfer_base.last_update_was_provider_evidence OR transfer_event_flags.has_genuine_provider_evidence)
         )
         OR (
           transfer_base.last_update_was_provider_evidence IS TRUE
@@ -6915,35 +6861,112 @@ BEGIN
               AND NOT (NULLIF(btrim(coalesce(provider_identifier.identifier_value, '')), '') = ANY(transfer_base.local_identity_values))
           )
         )
-      ) AS has_genuine_provider_evidence
+      ) AS has_genuine_provider_evidence,
+      transfer_event_flags.has_provider_attempt_event,
+      transfer_event_flags.has_operation_submit_attempt,
+      transfer_event_flags.has_ambiguous_event,
+      transfer_base.last_update_was_provider_source,
+      transfer_base.last_update_was_provider_attempt_without_external_id,
+      (
+        transfer_base.status_upper IN ('FAILED', 'REJECTED', 'BLOCKED', 'ERROR')
+        OR transfer_base.rail_state_upper IN ('FAILED', 'REJECTED', 'BLOCKED', 'ERROR')
+        OR NULLIF(btrim(coalesce(transfer_base.failed_reason, '')), '') IS NOT NULL
+      ) AS is_failed_or_retryable,
+      (
+        transfer_base.status_upper IN ('COMPLETED', 'COMMITTED', 'SETTLED', 'PAID', 'EXECUTED', 'CANCELLED', 'CANCELED', 'RETURNED', 'REVERTED')
+        OR transfer_base.rail_state_upper IN ('COMPLETED', 'COMMITTED', 'SETTLED', 'PAID', 'EXECUTED', 'CANCELLED', 'CANCELED', 'RETURNED', 'REVERTED')
+        OR transfer_base.completed_at_utc IS NOT NULL
+      ) AS is_terminal,
+      (
+        coalesce(transfer_base.amount, 0) > 0
+        AND (
+          (transfer_base.payee_entity_kind IS NOT NULL AND transfer_base.payee_entity_id IS NOT NULL)
+          OR (
+            NULLIF(btrim(coalesce(transfer_base.payee_name, '')), '') IS NOT NULL
+            AND NULLIF(btrim(coalesce(transfer_base.sort_code, '')), '') IS NOT NULL
+            AND NULLIF(btrim(coalesce(transfer_base.account_number, '')), '') IS NOT NULL
+          )
+          OR NULLIF(btrim(coalesce(transfer_base.bank_details_hash_snapshot, '')), '') IS NOT NULL
+        )
+      ) AS has_route_ready
     FROM transfer_base
-    JOIN evidence_flags
-      ON evidence_flags.transfer_id = transfer_base.transfer_id
+    JOIN transfer_event_flags
+      ON transfer_event_flags.transfer_id = transfer_base.transfer_id
+  ), labelled_transfers AS (
+    SELECT
+      classified_transfers.transfer_id,
+      CASE
+        WHEN classified_transfers.has_genuine_provider_evidence THEN 'provider_evidence_present'
+        WHEN classified_transfers.is_terminal THEN 'terminal'
+        WHEN classified_transfers.is_failed_or_retryable THEN 'failed_or_retryable'
+        WHEN classified_transfers.has_ambiguous_event
+          OR classified_transfers.has_provider_attempt_event
+          OR classified_transfers.has_operation_submit_attempt
+          OR classified_transfers.last_update_was_provider_source
+          OR classified_transfers.last_update_was_provider_attempt_without_external_id THEN 'attempted_but_unproven'
+        ELSE 'unattempted_and_eligible_for_submit'
+      END AS evidence_classification,
+      (
+        classified_transfers.has_route_ready
+        AND classified_transfers.has_genuine_provider_evidence IS NOT TRUE
+        AND classified_transfers.is_terminal IS NOT TRUE
+        AND (
+          (
+            v_retry_mode IS FALSE
+            AND classified_transfers.is_failed_or_retryable IS NOT TRUE
+            AND classified_transfers.has_ambiguous_event IS NOT TRUE
+            AND classified_transfers.has_provider_attempt_event IS NOT TRUE
+            AND classified_transfers.has_operation_submit_attempt IS NOT TRUE
+            AND classified_transfers.last_update_was_provider_source IS NOT TRUE
+            AND classified_transfers.last_update_was_provider_attempt_without_external_id IS NOT TRUE
+          )
+          OR (
+            v_retry_mode IS TRUE
+            AND (
+              classified_transfers.is_failed_or_retryable IS TRUE
+              OR classified_transfers.has_ambiguous_event IS TRUE
+              OR classified_transfers.has_provider_attempt_event IS TRUE
+              OR classified_transfers.has_operation_submit_attempt IS TRUE
+              OR classified_transfers.last_update_was_provider_source IS TRUE
+              OR classified_transfers.last_update_was_provider_attempt_without_external_id IS TRUE
+              OR classified_transfers.status_upper IN ('PENDING', 'READY', 'PREPARED', 'QUEUED', 'SUBMITTED', 'SENT', 'PROCESSING', 'IN_FLIGHT', 'PENDING_SUBMISSION', 'PENDING_CONFIRMATION', 'PENDING_SETTLEMENT')
+            )
+          )
+        )
+      ) AS is_eligible_for_submit
+    FROM classified_transfers
   )
-  SELECT classified_transfers.transfer_id
-  FROM classified_transfers
-  WHERE (
-      classified_transfers.status_upper IN ('PENDING', 'READY', 'PREPARED', 'QUEUED', 'SUBMITTED', 'SENT', 'PROCESSING', 'IN_FLIGHT', 'PENDING_SUBMISSION', 'PENDING_CONFIRMATION', 'PENDING_SETTLEMENT')
-      OR (
-        v_retry_mode = true
-        AND classified_transfers.status_upper IN ('FAILED', 'BLOCKED')
-      )
-    )
-    AND classified_transfers.status_upper NOT IN ('COMPLETED', 'COMMITTED', 'SETTLED', 'PAID', 'EXECUTED', 'CANCELLED', 'CANCELED', 'RETURNED', 'REVERTED')
-    AND classified_transfers.rail_state_upper NOT IN ('COMPLETED', 'COMMITTED', 'SETTLED', 'PAID', 'EXECUTED', 'CANCELLED', 'CANCELED', 'RETURNED', 'REVERTED')
-    AND classified_transfers.completed_at_utc IS NULL
-    AND (NULLIF(btrim(coalesce(classified_transfers.failed_reason, '')), '') IS NULL OR v_retry_mode = true)
-    AND coalesce(classified_transfers.amount, 0) > 0
-    AND (
-      (classified_transfers.payee_entity_kind IS NOT NULL AND classified_transfers.payee_entity_id IS NOT NULL)
-      OR (
-        NULLIF(btrim(coalesce(classified_transfers.payee_name, '')), '') IS NOT NULL
-        AND NULLIF(btrim(coalesce(classified_transfers.sort_code, '')), '') IS NOT NULL
-        AND NULLIF(btrim(coalesce(classified_transfers.account_number, '')), '') IS NOT NULL
-      )
-      OR NULLIF(btrim(coalesce(classified_transfers.bank_details_hash_snapshot, '')), '') IS NOT NULL
-    )
-    AND classified_transfers.has_genuine_provider_evidence IS NOT TRUE;
+  SELECT labelled_transfers.transfer_id,
+         labelled_transfers.evidence_classification,
+         labelled_transfers.is_eligible_for_submit
+  FROM labelled_transfers;
+
+  SELECT
+    COUNT(*) FILTER (WHERE classified.evidence_classification = 'unattempted_and_eligible_for_submit' AND classified.is_eligible_for_submit = true)::integer,
+    COUNT(*) FILTER (WHERE classified.evidence_classification = 'attempted_but_unproven')::integer,
+    COUNT(*) FILTER (WHERE classified.evidence_classification = 'provider_evidence_present')::integer,
+    COUNT(*) FILTER (WHERE classified.evidence_classification = 'failed_or_retryable')::integer,
+    COUNT(*) FILTER (WHERE classified.evidence_classification = 'terminal')::integer,
+    COUNT(*) FILTER (WHERE classified.evidence_classification IN ('unattempted_and_eligible_for_submit', 'attempted_but_unproven'))::integer,
+    BOOL_OR(classified.evidence_classification = 'attempted_but_unproven')
+  INTO v_unattempted_eligible_count,
+       v_attempted_but_unproven_count,
+       v_provider_evidence_present_count,
+       v_failed_or_retryable_count,
+       v_terminal_count,
+       v_remaining_provider_evidence_required,
+       v_has_unproven_attempts
+  FROM pg_temp.tmp_provider_submit_classified_transfers AS classified;
+
+  CREATE TEMPORARY TABLE IF NOT EXISTS pg_temp.tmp_provider_submit_eligible_transfer_ids (
+    transfer_id uuid PRIMARY KEY
+  ) ON COMMIT DROP;
+  TRUNCATE TABLE pg_temp.tmp_provider_submit_eligible_transfer_ids;
+
+  INSERT INTO pg_temp.tmp_provider_submit_eligible_transfer_ids (transfer_id)
+  SELECT classified.transfer_id
+  FROM pg_temp.tmp_provider_submit_classified_transfers AS classified
+  WHERE classified.is_eligible_for_submit = true;
 
   WITH claimable_chunk AS (
     SELECT operation_chunk.id
@@ -7107,8 +7130,18 @@ BEGIN
       'transfer_ids', COALESCE(v_transfer_ids, '[]'::jsonb),
       'transfers', COALESCE(v_transfer_rows, '[]'::jsonb),
       'unit_count', COALESCE(v_transfer_count, 0),
+      'claimed_count', COALESCE(v_transfer_count, 0),
+      'unattempted_eligible_count', COALESCE(v_unattempted_eligible_count, 0),
+      'attempted_but_unproven_count', COALESCE(v_attempted_but_unproven_count, 0),
+      'provider_evidence_present_count', COALESCE(v_provider_evidence_present_count, 0),
+      'failed_or_retryable_count', COALESCE(v_failed_or_retryable_count, 0),
+      'terminal_count', COALESCE(v_terminal_count, 0),
       'remaining_count', COALESCE(v_remaining_count, 0),
+      'remaining_submit_attempt_required', COALESCE(v_remaining_count, 0),
+      'remaining_provider_evidence_required', COALESCE(v_remaining_provider_evidence_required, 0),
       'has_more', COALESCE(v_remaining_count, 0) > 0,
+      'has_more_submit_attempts', COALESCE(v_remaining_count, 0) > 0,
+      'has_unproven_attempts', COALESCE(v_has_unproven_attempts, false),
       'idempotent_reuse', true
     );
   END IF;
@@ -7186,8 +7219,18 @@ BEGIN
       'transfer_ids', '[]'::jsonb,
       'transfers', '[]'::jsonb,
       'unit_count', 0,
+      'claimed_count', 0,
+      'unattempted_eligible_count', COALESCE(v_unattempted_eligible_count, 0),
+      'attempted_but_unproven_count', COALESCE(v_attempted_but_unproven_count, 0),
+      'provider_evidence_present_count', COALESCE(v_provider_evidence_present_count, 0),
+      'failed_or_retryable_count', COALESCE(v_failed_or_retryable_count, 0),
+      'terminal_count', COALESCE(v_terminal_count, 0),
       'remaining_count', 0,
-      'has_more', false
+      'remaining_submit_attempt_required', 0,
+      'remaining_provider_evidence_required', COALESCE(v_remaining_provider_evidence_required, 0),
+      'has_more', false,
+      'has_more_submit_attempts', false,
+      'has_unproven_attempts', COALESCE(v_has_unproven_attempts, false)
     );
   END IF;
 
@@ -7273,18 +7316,21 @@ BEGIN
     'transfer_ids', COALESCE(v_transfer_ids, '[]'::jsonb),
     'transfers', COALESCE(v_transfer_rows, '[]'::jsonb),
     'unit_count', COALESCE(v_transfer_count, 0),
+    'claimed_count', COALESCE(v_transfer_count, 0),
+    'unattempted_eligible_count', COALESCE(v_unattempted_eligible_count, 0),
+    'attempted_but_unproven_count', COALESCE(v_attempted_but_unproven_count, 0),
+    'provider_evidence_present_count', COALESCE(v_provider_evidence_present_count, 0),
+    'failed_or_retryable_count', COALESCE(v_failed_or_retryable_count, 0),
+    'terminal_count', COALESCE(v_terminal_count, 0),
     'remaining_count', COALESCE(v_remaining_count, 0),
-    'has_more', COALESCE(v_remaining_count, 0) > 0
+    'remaining_submit_attempt_required', COALESCE(v_remaining_count, 0),
+    'remaining_provider_evidence_required', COALESCE(v_remaining_provider_evidence_required, 0),
+    'has_more', COALESCE(v_remaining_count, 0) > 0,
+    'has_more_submit_attempts', COALESCE(v_remaining_count, 0) > 0,
+    'has_unproven_attempts', COALESCE(v_has_unproven_attempts, false)
   );
 END;
 $function$;
-
-
-
-
-
-
-
 
 
 
@@ -8900,6 +8946,7 @@ $$;
 
 
 
+
 create or replace function public.pay_batch_get_section_page(
   p_pay_batch_id uuid,
   p_section text,
@@ -9028,10 +9075,7 @@ begin
   );
 
   if v_section = 'candidates' then
-    select count(*)::integer
-    into v_known_total_count
-    from public.pay_batch_candidates as pay_batch_candidate_count
-    where pay_batch_candidate_count.pay_batch_id = p_pay_batch_id;
+    v_known_total_count := null;
 
     with page_rows as (
       select
@@ -9059,7 +9103,7 @@ begin
       where pay_batch_candidate_page.pay_batch_id = p_pay_batch_id
         and (v_cursor_id is null or pay_batch_candidate_page.id > v_cursor_id)
       order by pay_batch_candidate_page.id asc
-      limit v_limit
+      limit (v_limit + 1)
     )
     select
       coalesce(jsonb_agg(
@@ -9093,12 +9137,7 @@ begin
     from page_rows;
 
   elsif v_section = 'items' then
-    select count(*)::integer
-    into v_known_total_count
-    from public.pay_batch_items as pay_batch_item_count
-    join public.pay_batch_candidates as pay_batch_candidate_for_item_count
-      on pay_batch_candidate_for_item_count.id = pay_batch_item_count.pay_batch_candidate_id
-    where pay_batch_candidate_for_item_count.pay_batch_id = p_pay_batch_id;
+    v_known_total_count := null;
 
     with page_rows as (
       select
@@ -9134,7 +9173,7 @@ begin
       where pay_batch_candidate_for_item_page.pay_batch_id = p_pay_batch_id
         and (v_cursor_id is null or pay_batch_item_page.id > v_cursor_id)
       order by pay_batch_item_page.id asc
-      limit v_limit
+      limit (v_limit + 1)
     )
     select
       coalesce(jsonb_agg(
@@ -9174,14 +9213,7 @@ begin
     from page_rows;
 
   elsif v_section = 'item_breakdowns' then
-    select count(*)::integer
-    into v_known_total_count
-    from public.pay_batch_item_breakdowns as pay_batch_breakdown_count
-    join public.pay_batch_items as pay_batch_item_for_breakdown_count
-      on pay_batch_item_for_breakdown_count.id = pay_batch_breakdown_count.pay_batch_item_id
-    join public.pay_batch_candidates as pay_batch_candidate_for_breakdown_count
-      on pay_batch_candidate_for_breakdown_count.id = pay_batch_item_for_breakdown_count.pay_batch_candidate_id
-    where pay_batch_candidate_for_breakdown_count.pay_batch_id = p_pay_batch_id;
+    v_known_total_count := null;
 
     with page_rows as (
       select
@@ -9208,7 +9240,7 @@ begin
       where pay_batch_candidate_for_breakdown_page.pay_batch_id = p_pay_batch_id
         and (v_cursor_id is null or pay_batch_breakdown_page.id > v_cursor_id)
       order by pay_batch_breakdown_page.id asc
-      limit v_limit
+      limit (v_limit + 1)
     )
     select
       coalesce(jsonb_agg(
@@ -9237,10 +9269,7 @@ begin
     from page_rows;
 
   elsif v_section = 'transfers' then
-    select count(*)::integer
-    into v_known_total_count
-    from public.pay_bank_transfers as transfer_count_row
-    where transfer_count_row.pay_batch_id = p_pay_batch_id;
+    v_known_total_count := null;
 
     with page_rows as (
       select
@@ -9273,21 +9302,87 @@ begin
         transfer_page.grouping_mode_used,
         transfer_page.week_ending_bucket,
         (
-          nullif(btrim(coalesce(transfer_page.rail_tx_id, '')), '') is not null
+          (
+            lower(btrim(coalesce(transfer_page.rail_meta_json #>> '{last_update_provider_evidence}', 'false'))) in ('true', 't', '1', 'yes', 'y', 'on')
+            and exists (
+              select 1
+              from (values
+                (transfer_page.rail_tx_id),
+                (transfer_page.rail_meta_json #>> '{provider_event_id}'),
+                (transfer_page.rail_meta_json #>> '{provider_reference}'),
+                (transfer_page.rail_meta_json #>> '{provider_submission_id}'),
+                (transfer_page.rail_meta_json #>> '{submission_id}'),
+                (transfer_page.rail_meta_json #>> '{rail_submission_id}'),
+                (transfer_page.rail_meta_json #>> '{provider_payment_id}'),
+                (transfer_page.rail_meta_json #>> '{payment_id}'),
+                (transfer_page.rail_meta_json #>> '{external_payment_id}'),
+                (transfer_page.rail_meta_json #>> '{revolut_payment_id}'),
+                (transfer_page.rail_meta_json #>> '{provider_transfer_id}'),
+                (transfer_page.rail_meta_json #>> '{transfer_id}'),
+                (transfer_page.rail_meta_json #>> '{external_transfer_id}'),
+                (transfer_page.rail_meta_json #>> '{provider_transaction_id}'),
+                (transfer_page.rail_meta_json #>> '{transaction_id}')
+              ) as transfer_identifier(identifier_value)
+              where nullif(btrim(coalesce(transfer_identifier.identifier_value, '')), '') is not null
+                and not (
+                  nullif(btrim(coalesce(transfer_identifier.identifier_value, '')), '') = any(
+                    array_remove(array[
+                      transfer_page.id::text,
+                      nullif(btrim(coalesce(transfer_page.request_id, '')), ''),
+                      nullif(btrim(coalesce(transfer_page.payment_reference, '')), ''),
+                      nullif(btrim(coalesce(transfer_page.transfer_group_key, '')), ''),
+                      nullif(btrim(coalesce(v_batch.bulk_reference, '')), ''),
+                      nullif(btrim(coalesce(transfer_page.rail_meta_json #>> '{request_id}', '')), ''),
+                      nullif(btrim(coalesce(transfer_page.rail_meta_json #>> '{idempotency_key}', '')), ''),
+                      nullif(btrim(coalesce(transfer_page.rail_meta_json #>> '{payment_reference}', '')), ''),
+                      nullif(btrim(coalesce(transfer_page.rail_meta_json #>> '{bulk_reference}', '')), '')
+                    ]::text[], null::text)
+                  )
+                )
+            )
+          )
           or exists (
             select 1
             from public.pay_bank_transfer_events as provider_event_page
             where provider_event_page.pay_batch_id = p_pay_batch_id
               and provider_event_page.pay_bank_transfer_id = transfer_page.id
-              and upper(btrim(coalesce(provider_event_page.event_source, ''))) in ('PROVIDER_RESPONSE','PROVIDER_POLL','PROVIDER_WEBHOOK','WEBHOOK','POLL','RAIL_PROVIDER')
-              and (
-                nullif(btrim(coalesce(provider_event_page.provider_event_id, '')), '') is not null
-                or (
-                  nullif(btrim(coalesce(provider_event_page.provider_reference, '')), '') is not null
-                  and nullif(btrim(coalesce(provider_event_page.provider_reference, '')), '') is distinct from nullif(btrim(coalesce(transfer_page.request_id, '')), '')
-                  and nullif(btrim(coalesce(provider_event_page.provider_reference, '')), '') is distinct from nullif(btrim(coalesce(transfer_page.payment_reference, '')), '')
-                  and nullif(btrim(coalesce(provider_event_page.provider_reference, '')), '') is distinct from nullif(btrim(coalesce(transfer_page.transfer_group_key, '')), '')
-                )
+              and upper(btrim(coalesce(provider_event_page.event_source, ''))) in ('PROVIDER_RESPONSE','PROVIDER_POLL','PROVIDER_WEBHOOK','WEBHOOK','POLL','RAIL_PROVIDER','PROVIDER','PROVIDER_SETTLEMENT')
+              and exists (
+                select 1
+                from (values
+                  (provider_event_page.provider_event_id),
+                  (provider_event_page.provider_reference),
+                  (provider_event_page.raw_payload #>> '{provider_event_id}'),
+                  (provider_event_page.raw_payload #>> '{provider_reference}'),
+                  (provider_event_page.raw_payload #>> '{provider_submission_id}'),
+                  (provider_event_page.raw_payload #>> '{submission_id}'),
+                  (provider_event_page.raw_payload #>> '{rail_submission_id}'),
+                  (provider_event_page.raw_payload #>> '{provider_payment_id}'),
+                  (provider_event_page.raw_payload #>> '{payment_id}'),
+                  (provider_event_page.raw_payload #>> '{external_payment_id}'),
+                  (provider_event_page.raw_payload #>> '{revolut_payment_id}'),
+                  (provider_event_page.raw_payload #>> '{provider_transfer_id}'),
+                  (provider_event_page.raw_payload #>> '{transfer_id}'),
+                  (provider_event_page.raw_payload #>> '{external_transfer_id}'),
+                  (provider_event_page.raw_payload #>> '{provider_transaction_id}'),
+                  (provider_event_page.raw_payload #>> '{transaction_id}')
+                ) as provider_identifier(identifier_value)
+                where nullif(btrim(coalesce(provider_identifier.identifier_value, '')), '') is not null
+                  and not (
+                    nullif(btrim(coalesce(provider_identifier.identifier_value, '')), '') = any(
+                      array_remove(array[
+                        transfer_page.id::text,
+                        nullif(btrim(coalesce(transfer_page.request_id, '')), ''),
+                        nullif(btrim(coalesce(transfer_page.payment_reference, '')), ''),
+                        nullif(btrim(coalesce(transfer_page.transfer_group_key, '')), ''),
+                        nullif(btrim(coalesce(v_batch.bulk_reference, '')), ''),
+                        nullif(btrim(coalesce(transfer_page.rail_meta_json #>> '{request_id}', '')), ''),
+                        nullif(btrim(coalesce(transfer_page.rail_meta_json #>> '{idempotency_key}', '')), ''),
+                        nullif(btrim(coalesce(transfer_page.rail_meta_json #>> '{payment_reference}', '')), ''),
+                        nullif(btrim(coalesce(transfer_page.rail_meta_json #>> '{bulk_reference}', '')), '')
+                      ]::text[], null::text)
+                    )
+                  )
               )
           )
         ) as has_provider_evidence
@@ -9295,7 +9390,7 @@ begin
       where transfer_page.pay_batch_id = p_pay_batch_id
         and (v_cursor_id is null or transfer_page.id > v_cursor_id)
       order by transfer_page.id asc
-      limit v_limit
+      limit (v_limit + 1)
     )
     select
       coalesce(jsonb_agg(
@@ -9338,17 +9433,7 @@ begin
     from page_rows;
 
   elsif v_section = 'finance_case_groups' then
-    select count(*)::integer
-    into v_known_total_count
-    from (
-      select coalesce(pay_batch_item_finance_count.finance_case_id, pay_batch_item_finance_count.finance_component_id) as group_id
-      from public.pay_batch_items as pay_batch_item_finance_count
-      join public.pay_batch_candidates as pay_batch_candidate_finance_count
-        on pay_batch_candidate_finance_count.id = pay_batch_item_finance_count.pay_batch_candidate_id
-      where pay_batch_candidate_finance_count.pay_batch_id = p_pay_batch_id
-        and (pay_batch_item_finance_count.finance_case_id is not null or pay_batch_item_finance_count.finance_component_id is not null)
-      group by coalesce(pay_batch_item_finance_count.finance_case_id, pay_batch_item_finance_count.finance_component_id)
-    ) as finance_group_count_rows;
+    v_known_total_count := null;
 
     with page_group_keys as (
       select finance_group_keys.group_id
@@ -9363,7 +9448,7 @@ begin
       ) as finance_group_keys
       where v_cursor_id is null or finance_group_keys.group_id > v_cursor_id
       order by finance_group_keys.group_id asc
-      limit v_limit
+      limit (v_limit + 1)
     ),
     page_rows as (
       select
@@ -9401,14 +9486,7 @@ begin
     from page_rows;
 
   elsif v_section = 'remittances' then
-    select count(*)::integer
-    into v_known_total_count
-    from public.mail_outbox as mail_outbox_count
-    where (
-         mail_outbox_count.payment_scope_json->>'pay_batch_id' = p_pay_batch_id::text
-      or (lower(coalesce(mail_outbox_count.context_kind, '')) in ('pay_batch', 'pay_batches') and mail_outbox_count.context_id = p_pay_batch_id)
-      or mail_outbox_count.reference = p_pay_batch_id::text
-    );
+    v_known_total_count := null;
 
     with page_rows as (
       select
@@ -9438,7 +9516,7 @@ begin
       )
         and (v_cursor_id is null or mail_outbox_page.id > v_cursor_id)
       order by mail_outbox_page.id asc
-      limit v_limit
+      limit (v_limit + 1)
     )
     select
       coalesce(jsonb_agg(to_jsonb(page_rows) order by page_rows.id asc), '[]'::jsonb),
@@ -9448,14 +9526,7 @@ begin
     from page_rows;
 
   elsif v_section = 'communications' then
-    select count(*)::integer
-    into v_known_total_count
-    from public.comms_outbox as comms_outbox_count
-    where (
-         (lower(coalesce(comms_outbox_count.context_kind, '')) in ('pay_batch', 'pay_batches') and comms_outbox_count.context_id = p_pay_batch_id)
-      or comms_outbox_count.provider_payload_json->>'pay_batch_id' = p_pay_batch_id::text
-      or comms_outbox_count.provider_response_json->>'pay_batch_id' = p_pay_batch_id::text
-    );
+    v_known_total_count := null;
 
     with page_rows as (
       select
@@ -9484,7 +9555,7 @@ begin
       )
         and (v_cursor_id is null or comms_outbox_page.id > v_cursor_id)
       order by comms_outbox_page.id asc
-      limit v_limit
+      limit (v_limit + 1)
     )
     select
       coalesce(jsonb_agg(to_jsonb(page_rows) order by page_rows.id asc), '[]'::jsonb),
@@ -9494,10 +9565,7 @@ begin
     from page_rows;
 
   elsif v_section = 'auth_history' then
-    select count(*)::integer
-    into v_known_total_count
-    from public.pay_batch_auth_requests as auth_request_count
-    where auth_request_count.pay_batch_id = p_pay_batch_id;
+    v_known_total_count := null;
 
     with page_rows as (
       select
@@ -9519,7 +9587,7 @@ begin
       where auth_request_page.pay_batch_id = p_pay_batch_id
         and (v_cursor_id is null or auth_request_page.id > v_cursor_id)
       order by auth_request_page.id asc
-      limit v_limit
+      limit (v_limit + 1)
     )
     select
       coalesce(jsonb_agg(to_jsonb(page_rows) order by page_rows.id asc), '[]'::jsonb),
@@ -9529,10 +9597,7 @@ begin
     from page_rows;
 
   elsif v_section = 'events' then
-    select count(*)::integer
-    into v_known_total_count
-    from public.pay_bank_transfer_events as transfer_event_count
-    where transfer_event_count.pay_batch_id = p_pay_batch_id;
+    v_known_total_count := null;
 
     with page_rows as (
       select
@@ -9560,7 +9625,7 @@ begin
       where transfer_event_page.pay_batch_id = p_pay_batch_id
         and (v_cursor_id is null or transfer_event_page.id > v_cursor_id)
       order by transfer_event_page.id asc
-      limit v_limit
+      limit (v_limit + 1)
     )
     select
       coalesce(jsonb_agg(to_jsonb(page_rows) order by page_rows.id asc), '[]'::jsonb),
@@ -9570,10 +9635,24 @@ begin
     from page_rows;
   end if;
 
-  if v_last_id is not null and v_returned_count = v_limit then
-    v_next_cursor := jsonb_build_object('last_id', v_last_id::text);
+  if coalesce(v_returned_count, 0) > v_limit then
+    v_next_cursor := jsonb_build_object(
+      'last_id',
+      coalesce(
+        v_items -> (v_limit - 1) ->> 'id',
+        v_items -> (v_limit - 1) ->> 'group_id'
+      )
+    );
+
+    select coalesce(jsonb_agg(trimmed_items.value order by trimmed_items.ordinality), '[]'::jsonb)
+    into v_items
+    from jsonb_array_elements(coalesce(v_items, '[]'::jsonb)) with ordinality as trimmed_items(value, ordinality)
+    where trimmed_items.ordinality <= v_limit;
+
+    v_returned_count := v_limit;
   else
     v_next_cursor := null;
+    v_returned_count := coalesce(v_returned_count, 0);
   end if;
 
   return jsonb_build_object(
@@ -9590,6 +9669,8 @@ begin
   );
 end;
 $$;
+
+
 create or replace function public.pay_batch_freshness_result_get(
   p_operation_id uuid,
   p_pay_batch_id uuid,
