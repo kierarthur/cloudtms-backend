@@ -545,8 +545,6 @@ $function$;
 
 
 
-
-
 CREATE OR REPLACE FUNCTION public.bulk_timesheet_row_decision_v1(p_filters jsonb DEFAULT '{}'::jsonb)
  RETURNS TABLE(row_json jsonb)
  LANGUAGE plpgsql
@@ -916,6 +914,11 @@ BEGIN
       mq0.last_rotation_deg,
       mq0.meta_json,
       NULLIF(BTRIM(COALESCE(mq0.meta_json->>'contract_week_id', '')), '') AS contract_week_id_text,
+      CASE
+        WHEN UPPER(COALESCE(NULLIF(BTRIM(COALESCE(mq0.meta_json->>'staged_kind', mq0.meta_json->>'kind', '')), ''), 'TIMESHEET')) IN ('TIMESHEET', 'MILEAGE', 'TRAVEL', 'ACCOMMODATION', 'OTHER')
+          THEN UPPER(COALESCE(NULLIF(BTRIM(COALESCE(mq0.meta_json->>'staged_kind', mq0.meta_json->>'kind', '')), ''), 'TIMESHEET'))
+        ELSE 'OTHER'
+      END AS staged_kind_upper,
       ROW_NUMBER() OVER (
         PARTITION BY NULLIF(BTRIM(COALESCE(mq0.meta_json->>'contract_week_id', '')), '')
         ORDER BY mq0.uploaded_at_utc ASC NULLS LAST, mq0.id ASC
@@ -936,7 +939,8 @@ BEGIN
       mq1.original_filename,
       mq1.mime_type,
       mq1.last_rotation_deg,
-      mq1.contract_week_id_text
+      mq1.contract_week_id_text,
+      mq1.staged_kind_upper
     FROM mq_ranked AS mq1
     WHERE mq1.rn = 1
   ),
@@ -944,7 +948,12 @@ BEGIN
     SELECT
       mq2.contract_week_id_text,
       COUNT(mq2.id)::integer AS queue_staged_count,
-      MAX(mq2.uploaded_at_utc) AS queue_updated_at
+      MAX(mq2.uploaded_at_utc) AS queue_updated_at,
+      COALESCE(BOOL_OR(mq2.staged_kind_upper = 'TIMESHEET'), FALSE) AS has_staged_timesheet_evidence,
+      COALESCE(BOOL_OR(mq2.staged_kind_upper = 'MILEAGE'), FALSE) AS has_staged_mileage_evidence,
+      COALESCE(BOOL_OR(mq2.staged_kind_upper = 'TRAVEL'), FALSE) AS has_staged_travel_evidence,
+      COALESCE(BOOL_OR(mq2.staged_kind_upper = 'ACCOMMODATION'), FALSE) AS has_staged_accommodation_evidence,
+      COALESCE(BOOL_OR(mq2.staged_kind_upper = 'OTHER'), FALSE) AS has_staged_other_evidence
     FROM mq_ranked AS mq2
     GROUP BY mq2.contract_week_id_text
   ),
@@ -990,6 +999,9 @@ BEGIN
           COALESCE(vb.additional_seq, cw.additional_seq, 0) > 0
           OR COALESCE(vb.is_adjustment, FALSE) = TRUE
           OR COALESCE(cw.is_adjustment, FALSE) = TRUE
+          OR ts.parent_timesheet_id IS NOT NULL
+          OR ts.correction_id IS NOT NULL
+          OR ts.correction_kind IS NOT NULL
         )
         AND (
           UPPER(COALESCE(vb.route_type, '')) IN ('WEEKLY_NHSP', 'WEEKLY_NHSP_ADJUSTMENT')
@@ -997,6 +1009,28 @@ BEGIN
           OR COALESCE(ct.is_nhsp, FALSE) = TRUE
           OR UPPER(COALESCE(tf.basis::text, vb.basis::text, '')) IN ('NHSP', 'NHSP_ADJUSTMENT')
         ) THEN 'WEEKLY_NHSP_ADJUSTMENT'
+        WHEN (
+          COALESCE(vb.additional_seq, cw.additional_seq, 0) > 0
+          OR COALESCE(vb.is_adjustment, FALSE) = TRUE
+          OR COALESCE(cw.is_adjustment, FALSE) = TRUE
+          OR ts.parent_timesheet_id IS NOT NULL
+          OR ts.correction_id IS NOT NULL
+          OR ts.correction_kind IS NOT NULL
+        )
+        AND (
+          UPPER(COALESCE(vb.route_type, '')) IN ('WEEKLY_HEALTHROSTER', 'WEEKLY_HEALTHROSTER_ADJUSTMENT')
+          OR COALESCE(vb.client_autoprocess_hr, FALSE) = TRUE
+          OR COALESCE(ct.autoprocess_hr, FALSE) = TRUE
+          OR UPPER(COALESCE(tf.basis::text, vb.basis::text, '')) IN ('HEALTHROSTER_ADJUSTMENT', 'HEALTHROSTER_SELF_BILL')
+        ) THEN 'WEEKLY_HEALTHROSTER_ADJUSTMENT'
+        WHEN (
+          COALESCE(vb.additional_seq, cw.additional_seq, 0) > 0
+          OR COALESCE(vb.is_adjustment, FALSE) = TRUE
+          OR COALESCE(cw.is_adjustment, FALSE) = TRUE
+          OR ts.parent_timesheet_id IS NOT NULL
+          OR ts.correction_id IS NOT NULL
+          OR ts.correction_kind IS NOT NULL
+        ) THEN 'WEEKLY_MANUAL_ADJUSTMENT'
         ELSE vb.route_type
       END AS route_type,
       vb.contract_week_id AS contract_week_id,
@@ -1151,11 +1185,17 @@ BEGIN
       tep.storage_key AS primary_evidence_storage_key,
       COALESCE(mqa.queue_staged_count, 0) AS queue_staged_count,
       mqa.queue_updated_at AS queue_updated_at,
+      COALESCE(mqa.has_staged_timesheet_evidence, FALSE) AS staged_ev_timesheet,
+      COALESCE(mqa.has_staged_mileage_evidence, FALSE) AS staged_ev_mileage,
+      COALESCE(mqa.has_staged_travel_evidence, FALSE) AS staged_ev_travel,
+      COALESCE(mqa.has_staged_accommodation_evidence, FALSE) AS staged_ev_accommodation,
+      COALESCE(mqa.has_staged_other_evidence, FALSE) AS staged_ev_other,
       mqp.id AS primary_queue_id,
       mqp.r2_key AS primary_queue_r2_key,
       mqp.original_filename AS primary_queue_original_filename,
       mqp.mime_type AS primary_queue_mime_type,
       mqp.last_rotation_deg AS primary_queue_rotation_degrees,
+      mqp.staged_kind_upper AS primary_queue_staged_kind,
       EXISTS (
         SELECT 1
         FROM public.timesheets AS hist_electronic
@@ -1300,6 +1340,9 @@ BEGIN
     SELECT
       cl.*,
       CASE
+        WHEN cl.is_adjustment_or_additional = TRUE
+          AND cl.route_type_upper IN ('WEEKLY_NHSP_ADJUSTMENT', 'WEEKLY_HEALTHROSTER_ADJUSTMENT', 'WEEKLY_MANUAL_ADJUSTMENT')
+          AND cl.submission_mode_upper = 'MANUAL' THEN 'MANUAL_NON_QR'
         WHEN (
           cl.route_type_upper = 'WEEKLY_NHSP'
           OR (cl.route_type_upper = 'WEEKLY_NHSP_ADJUSTMENT' AND NOT (cl.is_adjustment_or_additional AND cl.submission_mode_upper = 'MANUAL'))
@@ -1310,6 +1353,9 @@ BEGIN
         ELSE 'MANUAL_NON_QR'
       END AS route_family,
       CASE
+        WHEN cl.is_adjustment_or_additional = TRUE
+          AND cl.route_type_upper IN ('WEEKLY_NHSP_ADJUSTMENT', 'WEEKLY_HEALTHROSTER_ADJUSTMENT', 'WEEKLY_MANUAL_ADJUSTMENT')
+          AND cl.submission_mode_upper = 'MANUAL' THEN 'MANUAL_NON_QR'
         WHEN (
           cl.route_type_upper = 'WEEKLY_NHSP'
           OR (cl.route_type_upper = 'WEEKLY_NHSP_ADJUSTMENT' AND NOT (cl.is_adjustment_or_additional AND cl.submission_mode_upper = 'MANUAL'))
@@ -1321,6 +1367,9 @@ BEGIN
         ELSE 'MANUAL_NON_QR'
       END AS route_subfamily,
       CASE
+        WHEN cl.is_adjustment_or_additional = TRUE
+          AND cl.route_type_upper IN ('WEEKLY_NHSP_ADJUSTMENT', 'WEEKLY_HEALTHROSTER_ADJUSTMENT', 'WEEKLY_MANUAL_ADJUSTMENT')
+          AND cl.submission_mode_upper = 'MANUAL' THEN 'MANUAL_NON_QR'
         WHEN (
           cl.route_type_upper = 'WEEKLY_NHSP'
           OR (cl.route_type_upper = 'WEEKLY_NHSP_ADJUSTMENT' AND NOT (cl.is_adjustment_or_additional AND cl.submission_mode_upper = 'MANUAL'))
@@ -1427,19 +1476,21 @@ BEGIN
         WHEN rt.route_type_upper = 'WEEKLY_ELECTRONIC' THEN 'Weekly Electronic'
         WHEN rt.route_type_upper = 'WEEKLY_MANUAL' THEN 'Weekly Manual'
         WHEN rt.route_type_upper = 'WEEKLY_NHSP' THEN 'Weekly NHSP'
-        WHEN rt.route_type_upper = 'WEEKLY_NHSP_ADJUSTMENT' THEN 'Weekly NHSP'
+        WHEN rt.route_type_upper = 'WEEKLY_NHSP_ADJUSTMENT' THEN 'Weekly NHSP Adjustment'
         WHEN rt.route_type_upper = 'WEEKLY_HEALTHROSTER' THEN 'Weekly HealthRoster'
+        WHEN rt.route_type_upper = 'WEEKLY_HEALTHROSTER_ADJUSTMENT' THEN 'Weekly HealthRoster Adjustment'
+        WHEN rt.route_type_upper = 'WEEKLY_MANUAL_ADJUSTMENT' THEN 'Weekly Manual Adjustment'
         ELSE 'Unknown'
       END AS route_display,
       CASE
         WHEN rt.route_type_upper IN ('WEEKLY_NHSP', 'WEEKLY_NHSP_ADJUSTMENT') OR COALESCE(rt.client_is_nhsp, FALSE) = TRUE OR COALESCE(rt.contract_is_nhsp, FALSE) = TRUE THEN 'NHSP'
-        WHEN rt.route_type_upper = 'WEEKLY_HEALTHROSTER' THEN 'HEALTHROSTER'
+        WHEN rt.route_type_upper IN ('WEEKLY_HEALTHROSTER', 'WEEKLY_HEALTHROSTER_ADJUSTMENT') THEN 'HEALTHROSTER'
         WHEN rt.period_type = 'WEEKLY' THEN 'NONE'
         ELSE NULL::text
       END AS contract_weekly_mode,
       CASE
-        WHEN rt.route_type_upper = 'WEEKLY_HEALTHROSTER' AND COALESCE(rt.client_no_timesheet_required, FALSE) = TRUE THEN 'CREATE'
-        WHEN rt.route_type_upper = 'WEEKLY_HEALTHROSTER' THEN 'VERIFY'
+        WHEN rt.route_type_upper IN ('WEEKLY_HEALTHROSTER', 'WEEKLY_HEALTHROSTER_ADJUSTMENT') AND COALESCE(rt.client_no_timesheet_required, FALSE) = TRUE THEN 'CREATE'
+        WHEN rt.route_type_upper IN ('WEEKLY_HEALTHROSTER', 'WEEKLY_HEALTHROSTER_ADJUSTMENT') THEN 'VERIFY'
         ELSE ''
       END AS contract_hr_weekly_behaviour
     FROM routed AS rt
@@ -1725,6 +1776,12 @@ BEGIN
         COALESCE(dc.primary_evidence_id::text, ''),
         COALESCE(dc.primary_evidence_kind, ''),
         COALESCE(dc.queue_staged_count::text, ''),
+        COALESCE(dc.staged_ev_timesheet::text, ''),
+        COALESCE(dc.staged_ev_mileage::text, ''),
+        COALESCE(dc.staged_ev_travel::text, ''),
+        COALESCE(dc.staged_ev_accommodation::text, ''),
+        COALESCE(dc.staged_ev_other::text, ''),
+        COALESCE(dc.primary_queue_staged_kind, ''),
         COALESCE(dc.primary_evidence_storage_key, ''),
         COALESCE(dc.manual_pdf_r2_key, ''),
         COALESCE(dc.uploaded_pdf_r2_key, ''),
@@ -1758,16 +1815,16 @@ BEGIN
       CASE
         WHEN fr.primary_artifact_source = 'DOCUMENT' THEN 'TIMESHEET'
         WHEN fr.primary_artifact_source = 'EVIDENCE' THEN UPPER(COALESCE(NULLIF(BTRIM(fr.primary_evidence_kind), ''), 'TIMESHEET'))
-        WHEN fr.primary_artifact_source = 'QUEUE' THEN 'TIMESHEET'
+        WHEN fr.primary_artifact_source = 'QUEUE' THEN UPPER(COALESCE(NULLIF(BTRIM(fr.primary_queue_staged_kind), ''), 'TIMESHEET'))
         WHEN fr.primary_artifact_storage_key IS NOT NULL THEN 'TIMESHEET'
         WHEN fr.primary_evidence_kind IS NOT NULL THEN UPPER(fr.primary_evidence_kind)
-        WHEN fr.primary_queue_id IS NOT NULL THEN 'TIMESHEET'
+        WHEN fr.primary_queue_id IS NOT NULL THEN UPPER(COALESCE(NULLIF(BTRIM(fr.primary_queue_staged_kind), ''), 'TIMESHEET'))
         ELSE NULL::text
       END AS primary_artifact_kind,
       CASE
         WHEN fr.primary_artifact_source = 'DOCUMENT' THEN 'Timesheet PDF'
         WHEN fr.primary_artifact_source = 'EVIDENCE' THEN COALESCE(NULLIF(BTRIM(fr.primary_evidence_display_name), ''), 'Evidence')
-        WHEN fr.primary_artifact_source = 'QUEUE' THEN COALESCE(NULLIF(BTRIM(fr.primary_queue_original_filename), ''), 'Staged timesheet evidence')
+        WHEN fr.primary_artifact_source = 'QUEUE' THEN COALESCE(NULLIF(BTRIM(fr.primary_queue_original_filename), ''), 'Staged evidence')
         WHEN fr.primary_artifact_storage_key IS NOT NULL THEN 'Timesheet PDF'
         WHEN fr.primary_evidence_display_name IS NOT NULL THEN fr.primary_evidence_display_name
         WHEN fr.primary_queue_original_filename IS NOT NULL THEN fr.primary_queue_original_filename
@@ -1789,16 +1846,20 @@ BEGIN
         OR COALESCE(fr.ev_travel, FALSE)
         OR COALESCE(fr.ev_accommodation, FALSE)
         OR COALESCE(fr.ev_other, FALSE)
+        OR COALESCE(fr.staged_ev_timesheet, FALSE)
+        OR COALESCE(fr.staged_ev_mileage, FALSE)
+        OR COALESCE(fr.staged_ev_travel, FALSE)
+        OR COALESCE(fr.staged_ev_accommodation, FALSE)
+        OR COALESCE(fr.staged_ev_other, FALSE)
         OR NULLIF(BTRIM(COALESCE(fr.manual_pdf_r2_key, '')), '') IS NOT NULL
         OR NULLIF(BTRIM(COALESCE(fr.uploaded_pdf_r2_key, '')), '') IS NOT NULL
-        OR NULLIF(BTRIM(COALESCE(fr.primary_queue_r2_key, '')), '') IS NOT NULL
       ) AS has_any_evidence,
       JSONB_BUILD_ARRAY(
-        JSONB_BUILD_OBJECT('kind', 'TIMESHEET', 'present', (COALESCE(fr.ev_timesheet, FALSE) OR NULLIF(BTRIM(COALESCE(fr.manual_pdf_r2_key, '')), '') IS NOT NULL OR NULLIF(BTRIM(COALESCE(fr.uploaded_pdf_r2_key, '')), '') IS NOT NULL OR NULLIF(BTRIM(COALESCE(fr.primary_queue_r2_key, '')), '') IS NOT NULL), 'has_evidence', (COALESCE(fr.ev_timesheet, FALSE) OR NULLIF(BTRIM(COALESCE(fr.manual_pdf_r2_key, '')), '') IS NOT NULL OR NULLIF(BTRIM(COALESCE(fr.uploaded_pdf_r2_key, '')), '') IS NOT NULL OR NULLIF(BTRIM(COALESCE(fr.primary_queue_r2_key, '')), '') IS NOT NULL)),
-        JSONB_BUILD_OBJECT('kind', 'MILEAGE', 'present', COALESCE(fr.ev_mileage, FALSE), 'has_evidence', COALESCE(fr.ev_mileage, FALSE)),
-        JSONB_BUILD_OBJECT('kind', 'TRAVEL', 'present', COALESCE(fr.ev_travel, FALSE), 'has_evidence', COALESCE(fr.ev_travel, FALSE)),
-        JSONB_BUILD_OBJECT('kind', 'ACCOMMODATION', 'present', COALESCE(fr.ev_accommodation, FALSE), 'has_evidence', COALESCE(fr.ev_accommodation, FALSE)),
-        JSONB_BUILD_OBJECT('kind', 'OTHER', 'present', COALESCE(fr.ev_other, FALSE), 'has_evidence', COALESCE(fr.ev_other, FALSE))
+        JSONB_BUILD_OBJECT('kind', 'TIMESHEET', 'present', (COALESCE(fr.ev_timesheet, FALSE) OR COALESCE(fr.staged_ev_timesheet, FALSE) OR NULLIF(BTRIM(COALESCE(fr.manual_pdf_r2_key, '')), '') IS NOT NULL OR NULLIF(BTRIM(COALESCE(fr.uploaded_pdf_r2_key, '')), '') IS NOT NULL), 'has_evidence', (COALESCE(fr.ev_timesheet, FALSE) OR COALESCE(fr.staged_ev_timesheet, FALSE) OR NULLIF(BTRIM(COALESCE(fr.manual_pdf_r2_key, '')), '') IS NOT NULL OR NULLIF(BTRIM(COALESCE(fr.uploaded_pdf_r2_key, '')), '') IS NOT NULL)),
+        JSONB_BUILD_OBJECT('kind', 'MILEAGE', 'present', (COALESCE(fr.ev_mileage, FALSE) OR COALESCE(fr.staged_ev_mileage, FALSE)), 'has_evidence', (COALESCE(fr.ev_mileage, FALSE) OR COALESCE(fr.staged_ev_mileage, FALSE))),
+        JSONB_BUILD_OBJECT('kind', 'TRAVEL', 'present', (COALESCE(fr.ev_travel, FALSE) OR COALESCE(fr.staged_ev_travel, FALSE)), 'has_evidence', (COALESCE(fr.ev_travel, FALSE) OR COALESCE(fr.staged_ev_travel, FALSE))),
+        JSONB_BUILD_OBJECT('kind', 'ACCOMMODATION', 'present', (COALESCE(fr.ev_accommodation, FALSE) OR COALESCE(fr.staged_ev_accommodation, FALSE)), 'has_evidence', (COALESCE(fr.ev_accommodation, FALSE) OR COALESCE(fr.staged_ev_accommodation, FALSE))),
+        JSONB_BUILD_OBJECT('kind', 'OTHER', 'present', (COALESCE(fr.ev_other, FALSE) OR COALESCE(fr.staged_ev_other, FALSE)), 'has_evidence', (COALESCE(fr.ev_other, FALSE) OR COALESCE(fr.staged_ev_other, FALSE)))
       ) AS evidence_badges
     FROM final_rows AS fr
   )
@@ -2162,7 +2223,6 @@ $function$;
 
 
 
-
 CREATE OR REPLACE FUNCTION public.bulk_process_row_context_v1(p_filters jsonb DEFAULT '{}'::jsonb)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -2185,6 +2245,21 @@ DECLARE
   v_header_row_json jsonb := NULL;
   v_uuid_re text := '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$';
   v_out jsonb;
+  v_effective_has_any_evidence boolean := FALSE;
+  v_effective_badge_timesheet boolean := FALSE;
+  v_effective_badge_mileage boolean := FALSE;
+  v_effective_badge_travel boolean := FALSE;
+  v_effective_badge_accommodation boolean := FALSE;
+  v_effective_badge_other boolean := FALSE;
+  v_effective_evidence_badges jsonb := '[]'::jsonb;
+  v_effective_evidence_meta jsonb := '{}'::jsonb;
+  v_effective_row_patch jsonb := '{}'::jsonb;
+  v_effective_row jsonb := '{}'::jsonb;
+  v_effective_data_row jsonb := '{}'::jsonb;
+  v_effective_artifact_hints jsonb := '{}'::jsonb;
+  v_effective_action_flags jsonb := '{}'::jsonb;
+  v_effective_details jsonb := '{}'::jsonb;
+  v_effective_left_pane jsonb := '{}'::jsonb;
 BEGIN
   v_has_identity := (
     NULLIF(BTRIM(COALESCE(v_filters->>'row_key', v_filters->>'rowKey', '')), '') IS NOT NULL
@@ -3630,28 +3705,273 @@ BEGIN
     LEFT JOIN evidence_payload ON TRUE
     LEFT JOIN related_payload ON TRUE
   ),
+  effective_evidence_payload AS (
+    SELECT
+      base_payload.payload_json,
+      COALESCE((base_payload.payload_json#>>'{evidence_meta,has_any_evidence}')::boolean, FALSE) AS effective_has_any_evidence,
+      COALESCE(base_payload.payload_json#>'{evidence_meta,evidence_badges}', '[]'::jsonb) AS effective_evidence_badges,
+      COALESCE(base_payload.payload_json->'primary_artifact', base_payload.payload_json#>'{details,primary_artifact}', NULL::jsonb) AS effective_primary_artifact,
+      COALESCE(
+        NULLIF(BTRIM(COALESCE(base_payload.payload_json->>'primary_artifact_storage_key', '')), ''),
+        NULLIF(BTRIM(COALESCE(base_payload.payload_json#>>'{primary_artifact,storage_key}', '')), ''),
+        NULLIF(BTRIM(COALESCE(base_payload.payload_json#>>'{details,primary_artifact,storage_key}', '')), ''),
+        NULLIF(BTRIM(COALESCE(base_payload.payload_json->>'preview_storage_key', '')), '')
+      ) AS effective_primary_artifact_storage_key,
+      COALESCE(
+        NULLIF(BTRIM(COALESCE(base_payload.payload_json->>'primary_artifact_preview_mode', '')), ''),
+        NULLIF(BTRIM(COALESCE(base_payload.payload_json#>>'{primary_artifact,preview_mode}', '')), ''),
+        NULLIF(BTRIM(COALESCE(base_payload.payload_json#>>'{details,primary_artifact,preview_mode}', '')), '')
+      ) AS effective_primary_artifact_preview_mode
+    FROM base_payload
+  ),
   final_payload AS (
     SELECT
-      base_payload.payload_json
+      effective_evidence_payload.payload_json
       || JSONB_BUILD_OBJECT(
-        'details', COALESCE(base_payload.payload_json->'details', JSONB_BUILD_OBJECT()),
+        'row',
+          COALESCE(effective_evidence_payload.payload_json->'row', JSONB_BUILD_OBJECT())
+          || JSONB_BUILD_OBJECT(
+            'has_any_evidence', effective_evidence_payload.effective_has_any_evidence,
+            'evidence_badges', effective_evidence_payload.effective_evidence_badges,
+            'primary_artifact', effective_evidence_payload.effective_primary_artifact,
+            'primary_artifact_storage_key', effective_evidence_payload.effective_primary_artifact_storage_key,
+            'primary_artifact_preview_mode', effective_evidence_payload.effective_primary_artifact_preview_mode
+          ),
+        'data_row',
+          COALESCE(effective_evidence_payload.payload_json->'row', JSONB_BUILD_OBJECT())
+          || JSONB_BUILD_OBJECT(
+            'has_any_evidence', effective_evidence_payload.effective_has_any_evidence,
+            'evidence_badges', effective_evidence_payload.effective_evidence_badges,
+            'primary_artifact', effective_evidence_payload.effective_primary_artifact,
+            'primary_artifact_storage_key', effective_evidence_payload.effective_primary_artifact_storage_key,
+            'primary_artifact_preview_mode', effective_evidence_payload.effective_primary_artifact_preview_mode
+          ),
+        'row_patch',
+          COALESCE(effective_evidence_payload.payload_json->'row_patch', JSONB_BUILD_OBJECT())
+          || JSONB_BUILD_OBJECT(
+            'has_any_evidence', effective_evidence_payload.effective_has_any_evidence,
+            'evidence_badges', effective_evidence_payload.effective_evidence_badges,
+            'primary_artifact', effective_evidence_payload.effective_primary_artifact,
+            'primary_artifact_storage_key', effective_evidence_payload.effective_primary_artifact_storage_key,
+            'primary_artifact_preview_mode', effective_evidence_payload.effective_primary_artifact_preview_mode
+          ),
+        'artifact_hints',
+          COALESCE(effective_evidence_payload.payload_json->'artifact_hints', JSONB_BUILD_OBJECT())
+          || JSONB_BUILD_OBJECT(
+            'has_any_evidence', effective_evidence_payload.effective_has_any_evidence,
+            'evidence_badges', effective_evidence_payload.effective_evidence_badges,
+            'primary_artifact', effective_evidence_payload.effective_primary_artifact,
+            'primary_artifact_storage_key', effective_evidence_payload.effective_primary_artifact_storage_key,
+            'primary_artifact_preview_mode', effective_evidence_payload.effective_primary_artifact_preview_mode
+          ),
+        'details',
+          COALESCE(effective_evidence_payload.payload_json->'details', JSONB_BUILD_OBJECT())
+          || JSONB_BUILD_OBJECT(
+            'primary_artifact', effective_evidence_payload.effective_primary_artifact,
+            'preview_storage_key', effective_evidence_payload.effective_primary_artifact_storage_key,
+            'primary_artifact_storage_key', effective_evidence_payload.effective_primary_artifact_storage_key,
+            'primary_artifact_preview_mode', effective_evidence_payload.effective_primary_artifact_preview_mode,
+            'evidence_meta', COALESCE(effective_evidence_payload.payload_json->'evidence_meta', JSONB_BUILD_OBJECT()),
+            'artifact_hints',
+              COALESCE(effective_evidence_payload.payload_json#>'{details,artifact_hints}', JSONB_BUILD_OBJECT())
+              || JSONB_BUILD_OBJECT(
+                'has_any_evidence', effective_evidence_payload.effective_has_any_evidence,
+                'evidence_badges', effective_evidence_payload.effective_evidence_badges,
+                'primary_artifact', effective_evidence_payload.effective_primary_artifact,
+                'primary_artifact_storage_key', effective_evidence_payload.effective_primary_artifact_storage_key,
+                'primary_artifact_preview_mode', effective_evidence_payload.effective_primary_artifact_preview_mode
+              )
+          ),
         'left_pane', JSONB_BUILD_OBJECT(
-          'route_family', base_payload.payload_json->>'route_family',
-          'route_subfamily', base_payload.payload_json->>'route_subfamily',
-          'underlying_channel_family', base_payload.payload_json->>'underlying_channel_family',
-          'is_import_authoritative', COALESCE((base_payload.payload_json->>'is_import_authoritative')::boolean, FALSE),
-          'compare_block_required', COALESCE((base_payload.payload_json->>'compare_block_required')::boolean, FALSE),
-          'primary_artifact', COALESCE(base_payload.payload_json->'primary_artifact', NULL::jsonb),
+          'route_family', effective_evidence_payload.payload_json->>'route_family',
+          'route_subfamily', effective_evidence_payload.payload_json->>'route_subfamily',
+          'underlying_channel_family', effective_evidence_payload.payload_json->>'underlying_channel_family',
+          'is_import_authoritative', COALESCE((effective_evidence_payload.payload_json->>'is_import_authoritative')::boolean, FALSE),
+          'compare_block_required', COALESCE((effective_evidence_payload.payload_json->>'compare_block_required')::boolean, FALSE),
+          'primary_artifact', effective_evidence_payload.effective_primary_artifact,
           'source_items', '[]'::jsonb,
-          'primary_left_pane_mode', base_payload.payload_json->>'primary_left_pane_mode'
-        ),
-        'data_row', COALESCE(base_payload.payload_json->'row', JSONB_BUILD_OBJECT())
+          'evidence', COALESCE(effective_evidence_payload.payload_json->'evidence', '[]'::jsonb),
+          'evidence_meta', COALESCE(effective_evidence_payload.payload_json->'evidence_meta', JSONB_BUILD_OBJECT()),
+          'primary_left_pane_mode', effective_evidence_payload.payload_json->>'primary_left_pane_mode'
+        )
       ) AS payload_json
-    FROM base_payload
+    FROM effective_evidence_payload
   )
   SELECT final_payload.payload_json
     INTO v_out
   FROM final_payload;
+
+  IF v_out IS NOT NULL AND COALESCE(v_include_evidence, FALSE) = TRUE THEN
+    SELECT
+      (
+        COALESCE(NULLIF(BTRIM(COALESCE(v_out->'row'->>'has_any_evidence', '')), '')::boolean, FALSE)
+        OR COALESCE(NULLIF(BTRIM(COALESCE(v_out->'data_row'->>'has_any_evidence', '')), '')::boolean, FALSE)
+        OR COALESCE(jsonb_array_length(COALESCE(v_out->'evidence', '[]'::jsonb)), 0) > 0
+      ),
+      (
+        COALESCE((
+          SELECT TRUE
+          FROM jsonb_array_elements(COALESCE(v_out->'evidence', '[]'::jsonb)) AS evidence_item(item_json)
+          WHERE UPPER(COALESCE(evidence_item.item_json->>'kind', evidence_item.item_json->>'staged_kind', '')) = 'TIMESHEET'
+          LIMIT 1
+        ), FALSE)
+        OR COALESCE((
+          SELECT TRUE
+          FROM jsonb_array_elements(COALESCE(v_out->'row'->'evidence_badges', '[]'::jsonb)) AS row_badge(badge_json)
+          WHERE UPPER(COALESCE(row_badge.badge_json->>'kind', '')) = 'TIMESHEET'
+            AND COALESCE(NULLIF(BTRIM(COALESCE(row_badge.badge_json->>'present', row_badge.badge_json->>'has_evidence', '')), '')::boolean, FALSE) = TRUE
+          LIMIT 1
+        ), FALSE)
+      ),
+      (
+        COALESCE((
+          SELECT TRUE
+          FROM jsonb_array_elements(COALESCE(v_out->'evidence', '[]'::jsonb)) AS evidence_item(item_json)
+          WHERE UPPER(COALESCE(evidence_item.item_json->>'kind', evidence_item.item_json->>'staged_kind', '')) = 'MILEAGE'
+          LIMIT 1
+        ), FALSE)
+        OR COALESCE((
+          SELECT TRUE
+          FROM jsonb_array_elements(COALESCE(v_out->'row'->'evidence_badges', '[]'::jsonb)) AS row_badge(badge_json)
+          WHERE UPPER(COALESCE(row_badge.badge_json->>'kind', '')) = 'MILEAGE'
+            AND COALESCE(NULLIF(BTRIM(COALESCE(row_badge.badge_json->>'present', row_badge.badge_json->>'has_evidence', '')), '')::boolean, FALSE) = TRUE
+          LIMIT 1
+        ), FALSE)
+      ),
+      (
+        COALESCE((
+          SELECT TRUE
+          FROM jsonb_array_elements(COALESCE(v_out->'evidence', '[]'::jsonb)) AS evidence_item(item_json)
+          WHERE UPPER(COALESCE(evidence_item.item_json->>'kind', evidence_item.item_json->>'staged_kind', '')) = 'TRAVEL'
+          LIMIT 1
+        ), FALSE)
+        OR COALESCE((
+          SELECT TRUE
+          FROM jsonb_array_elements(COALESCE(v_out->'row'->'evidence_badges', '[]'::jsonb)) AS row_badge(badge_json)
+          WHERE UPPER(COALESCE(row_badge.badge_json->>'kind', '')) = 'TRAVEL'
+            AND COALESCE(NULLIF(BTRIM(COALESCE(row_badge.badge_json->>'present', row_badge.badge_json->>'has_evidence', '')), '')::boolean, FALSE) = TRUE
+          LIMIT 1
+        ), FALSE)
+      ),
+      (
+        COALESCE((
+          SELECT TRUE
+          FROM jsonb_array_elements(COALESCE(v_out->'evidence', '[]'::jsonb)) AS evidence_item(item_json)
+          WHERE UPPER(COALESCE(evidence_item.item_json->>'kind', evidence_item.item_json->>'staged_kind', '')) = 'ACCOMMODATION'
+          LIMIT 1
+        ), FALSE)
+        OR COALESCE((
+          SELECT TRUE
+          FROM jsonb_array_elements(COALESCE(v_out->'row'->'evidence_badges', '[]'::jsonb)) AS row_badge(badge_json)
+          WHERE UPPER(COALESCE(row_badge.badge_json->>'kind', '')) = 'ACCOMMODATION'
+            AND COALESCE(NULLIF(BTRIM(COALESCE(row_badge.badge_json->>'present', row_badge.badge_json->>'has_evidence', '')), '')::boolean, FALSE) = TRUE
+          LIMIT 1
+        ), FALSE)
+      ),
+      (
+        COALESCE((
+          SELECT TRUE
+          FROM jsonb_array_elements(COALESCE(v_out->'evidence', '[]'::jsonb)) AS evidence_item(item_json)
+          WHERE UPPER(COALESCE(evidence_item.item_json->>'kind', evidence_item.item_json->>'staged_kind', '')) = 'OTHER'
+          LIMIT 1
+        ), FALSE)
+        OR COALESCE((
+          SELECT TRUE
+          FROM jsonb_array_elements(COALESCE(v_out->'row'->'evidence_badges', '[]'::jsonb)) AS row_badge(badge_json)
+          WHERE UPPER(COALESCE(row_badge.badge_json->>'kind', '')) = 'OTHER'
+            AND COALESCE(NULLIF(BTRIM(COALESCE(row_badge.badge_json->>'present', row_badge.badge_json->>'has_evidence', '')), '')::boolean, FALSE) = TRUE
+          LIMIT 1
+        ), FALSE)
+      )
+    INTO
+      v_effective_has_any_evidence,
+      v_effective_badge_timesheet,
+      v_effective_badge_mileage,
+      v_effective_badge_travel,
+      v_effective_badge_accommodation,
+      v_effective_badge_other;
+
+    v_effective_evidence_badges := JSONB_BUILD_ARRAY(
+      JSONB_BUILD_OBJECT('kind', 'TIMESHEET', 'present', COALESCE(v_effective_badge_timesheet, FALSE), 'has_evidence', COALESCE(v_effective_badge_timesheet, FALSE)),
+      JSONB_BUILD_OBJECT('kind', 'MILEAGE', 'present', COALESCE(v_effective_badge_mileage, FALSE), 'has_evidence', COALESCE(v_effective_badge_mileage, FALSE)),
+      JSONB_BUILD_OBJECT('kind', 'TRAVEL', 'present', COALESCE(v_effective_badge_travel, FALSE), 'has_evidence', COALESCE(v_effective_badge_travel, FALSE)),
+      JSONB_BUILD_OBJECT('kind', 'ACCOMMODATION', 'present', COALESCE(v_effective_badge_accommodation, FALSE), 'has_evidence', COALESCE(v_effective_badge_accommodation, FALSE)),
+      JSONB_BUILD_OBJECT('kind', 'OTHER', 'present', COALESCE(v_effective_badge_other, FALSE), 'has_evidence', COALESCE(v_effective_badge_other, FALSE))
+    );
+
+    v_effective_evidence_meta := COALESCE(v_out->'evidence_meta', JSONB_BUILD_OBJECT()) || JSONB_BUILD_OBJECT(
+      'has_any_evidence', COALESCE(v_effective_has_any_evidence, FALSE),
+      'evidence_badges', v_effective_evidence_badges
+    );
+
+    v_effective_artifact_hints := COALESCE(v_out->'artifact_hints', JSONB_BUILD_OBJECT()) || JSONB_BUILD_OBJECT(
+      'has_any_evidence', COALESCE(v_effective_has_any_evidence, FALSE),
+      'evidence_badges', v_effective_evidence_badges
+    );
+
+    v_effective_action_flags := COALESCE(v_out->'action_flags', JSONB_BUILD_OBJECT()) || JSONB_BUILD_OBJECT(
+      'has_any_evidence', COALESCE(v_effective_has_any_evidence, FALSE),
+      'evidence_badges', v_effective_evidence_badges
+    );
+
+    v_effective_row_patch := COALESCE(v_out->'row_patch', JSONB_BUILD_OBJECT()) || JSONB_BUILD_OBJECT(
+      'has_any_evidence', COALESCE(v_effective_has_any_evidence, FALSE),
+      'evidence_badges', v_effective_evidence_badges,
+      'artifact_hints', v_effective_artifact_hints
+    );
+
+    v_effective_row := COALESCE(v_out->'row', JSONB_BUILD_OBJECT()) || JSONB_BUILD_OBJECT(
+      'has_any_evidence', COALESCE(v_effective_has_any_evidence, FALSE),
+      'evidence_badges', v_effective_evidence_badges,
+      'artifact_hints', v_effective_artifact_hints,
+      'action_flags', COALESCE(v_out->'row'->'action_flags', JSONB_BUILD_OBJECT()) || JSONB_BUILD_OBJECT(
+        'has_any_evidence', COALESCE(v_effective_has_any_evidence, FALSE),
+        'evidence_badges', v_effective_evidence_badges
+      ),
+      'row_patch', v_effective_row_patch
+    );
+
+    v_effective_data_row := COALESCE(v_out->'data_row', JSONB_BUILD_OBJECT()) || JSONB_BUILD_OBJECT(
+      'has_any_evidence', COALESCE(v_effective_has_any_evidence, FALSE),
+      'evidence_badges', v_effective_evidence_badges,
+      'artifact_hints', v_effective_artifact_hints,
+      'action_flags', COALESCE(v_out->'data_row'->'action_flags', JSONB_BUILD_OBJECT()) || JSONB_BUILD_OBJECT(
+        'has_any_evidence', COALESCE(v_effective_has_any_evidence, FALSE),
+        'evidence_badges', v_effective_evidence_badges
+      ),
+      'row_patch', v_effective_row_patch
+    );
+
+    v_effective_details := COALESCE(v_out->'details', JSONB_BUILD_OBJECT()) || JSONB_BUILD_OBJECT(
+      'evidence', COALESCE(v_out->'evidence', '[]'::jsonb),
+      'evidence_meta', v_effective_evidence_meta,
+      'artifact_hints', v_effective_artifact_hints,
+      'action_flags', COALESCE(v_out->'details'->'action_flags', v_effective_action_flags) || JSONB_BUILD_OBJECT(
+        'has_any_evidence', COALESCE(v_effective_has_any_evidence, FALSE),
+        'evidence_badges', v_effective_evidence_badges
+      )
+    );
+
+    v_effective_left_pane := COALESCE(v_out->'left_pane', JSONB_BUILD_OBJECT()) || JSONB_BUILD_OBJECT(
+      'evidence', COALESCE(v_out->'evidence', '[]'::jsonb),
+      'has_any_evidence', COALESCE(v_effective_has_any_evidence, FALSE),
+      'evidence_badges', v_effective_evidence_badges,
+      'artifact_hints', v_effective_artifact_hints
+    );
+
+    v_out := v_out || JSONB_BUILD_OBJECT(
+      'has_any_evidence', COALESCE(v_effective_has_any_evidence, FALSE),
+      'evidence_badges', v_effective_evidence_badges,
+      'evidence_meta', v_effective_evidence_meta,
+      'artifact_hints', v_effective_artifact_hints,
+      'action_flags', v_effective_action_flags,
+      'row_patch', v_effective_row_patch,
+      'row', v_effective_row,
+      'data_row', v_effective_data_row,
+      'details', v_effective_details,
+      'left_pane', v_effective_left_pane
+    );
+  END IF;
 
   RETURN COALESCE(v_out, JSONB_BUILD_OBJECT(
     'ok', FALSE,
@@ -3662,7 +3982,6 @@ BEGIN
   ));
 END;
 $function$;
-
 
 
 
