@@ -10047,6 +10047,343 @@ begin
 end;
 $$;
 
+CREATE OR REPLACE FUNCTION public.pay_bank_csv_export_summary_get(
+    p_pay_batch_id uuid,
+    p_scope text DEFAULT 'ALL'::text,
+    p_actor_user_id uuid DEFAULT NULL::uuid
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $function$
+DECLARE
+    v_scope text := upper(btrim(coalesce(p_scope, 'ALL')));
+    v_batch_row public.pay_batches%ROWTYPE;
+    v_batch_status_upper text := NULL;
+    v_execution_commit_state text := 'NOT_SUBMITTED';
+    v_execution_commit_ref text := NULL;
+    v_execution_committed_at_utc timestamptz := NULL;
+    v_pre_execution_export boolean := false;
+
+    v_row_count integer := 0;
+    v_total_amount numeric := 0;
+    v_current_transfer_hash text := NULL;
+    v_current_transfer_hash_basis text := NULL;
+
+    v_pending_row_count integer := 0;
+    v_pending_total_amount numeric := 0;
+    v_pending_transfer_hash text := NULL;
+
+    v_stable_row_count integer := 0;
+    v_stable_total_amount numeric := 0;
+    v_stable_transfer_hash text := NULL;
+
+    v_blocked_row_count integer := 0;
+    v_all_transfer_count integer := 0;
+    v_pay_channels_included jsonb := '[]'::jsonb;
+    v_status_counts jsonb := '{}'::jsonb;
+    v_provider_counts jsonb := '{}'::jsonb;
+    v_rail_env_counts jsonb := '{}'::jsonb;
+    v_exportable_status_filter text := NULL;
+    v_bank_csv_export_hash text := NULL;
+BEGIN
+    IF p_pay_batch_id IS NULL THEN
+        RAISE EXCEPTION '%', jsonb_build_object(
+            'error', 'PAY_BANK_CSV_EXPORT_SUMMARY_GET',
+            'code', 'PAY_BATCH_ID_REQUIRED',
+            'message', 'pay_bank_csv_export_summary_get: pay_batch_id is required'
+        )::text;
+    END IF;
+
+    IF v_scope NOT IN ('ALL', 'PAYE', 'UMBRELLA') THEN
+        RAISE EXCEPTION '%', jsonb_build_object(
+            'error', 'PAY_BANK_CSV_EXPORT_SUMMARY_GET',
+            'code', 'INVALID_SCOPE',
+            'message', 'pay_bank_csv_export_summary_get: scope must be ALL, PAYE, or UMBRELLA',
+            'scope', p_scope
+        )::text;
+    END IF;
+
+    IF p_actor_user_id IS NOT NULL THEN
+        PERFORM 1
+        FROM public.tms_users AS actor_user
+        WHERE actor_user.id = p_actor_user_id;
+
+        IF NOT FOUND THEN
+            RAISE EXCEPTION '%', jsonb_build_object(
+                'error', 'PAY_BANK_CSV_EXPORT_SUMMARY_GET',
+                'code', 'ACTOR_USER_NOT_FOUND',
+                'message', 'pay_bank_csv_export_summary_get: actor user was not found',
+                'actor_user_id', p_actor_user_id::text,
+                'pay_batch_id', p_pay_batch_id::text
+            )::text;
+        END IF;
+    END IF;
+
+    SELECT pay_batch.*
+    INTO v_batch_row
+    FROM public.pay_batches AS pay_batch
+    WHERE pay_batch.id = p_pay_batch_id;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION '%', jsonb_build_object(
+            'error', 'PAY_BANK_CSV_EXPORT_SUMMARY_GET',
+            'code', 'PAY_BATCH_NOT_FOUND',
+            'message', 'pay_bank_csv_export_summary_get: pay batch was not found',
+            'pay_batch_id', p_pay_batch_id::text
+        )::text;
+    END IF;
+
+    v_batch_status_upper := upper(btrim(coalesce(v_batch_row.status, '')));
+    v_execution_commit_state := upper(btrim(coalesce(v_batch_row.execution_commit_state, 'NOT_SUBMITTED')));
+
+    IF v_execution_commit_state NOT IN ('NOT_SUBMITTED', 'SUBMITTED_NOT_COMMITTED', 'COMMITTED') THEN
+        v_execution_commit_state := 'NOT_SUBMITTED';
+    END IF;
+
+    v_execution_commit_ref := nullif(btrim(coalesce(v_batch_row.execution_commit_ref, '')), '');
+    v_execution_committed_at_utc := v_batch_row.execution_committed_at_utc;
+    v_bank_csv_export_hash := nullif(btrim(coalesce(v_batch_row.bank_csv_export_json->>'transfer_hash', '')), '');
+
+    v_pre_execution_export := (
+        v_batch_row.cancelled_at_utc IS NULL
+        AND v_batch_status_upper NOT IN ('CANCELLED', 'CANCELED')
+        AND v_execution_commit_state = 'NOT_SUBMITTED'
+        AND v_execution_commit_ref IS NULL
+        AND v_execution_committed_at_utc IS NULL
+    );
+
+    SELECT
+        count(*)::integer,
+        round(coalesce(sum(CASE WHEN upper(coalesce(pending_transfer.status, '')) = 'PENDING' THEN pending_transfer.amount ELSE 0 END), 0), 2),
+        md5(coalesce(jsonb_agg(
+            jsonb_build_object(
+                'id', pending_transfer.id,
+                'candidate_id', pending_transfer.candidate_id,
+                'umbrella_id', pending_transfer.umbrella_id,
+                'pay_channel', pending_transfer.pay_channel,
+                'amount', pending_transfer.amount,
+                'currency', pending_transfer.currency,
+                'payment_reference', pending_transfer.payment_reference,
+                'payee_name', pending_transfer.payee_name,
+                'sort_code_digits', pending_transfer.sort_code_digits,
+                'account_number_digits', pending_transfer.account_number_digits,
+                'account_type', pending_transfer.account_type,
+                'bank_details_hash_snapshot', pending_transfer.bank_details_hash_snapshot,
+                'payee_entity_kind', pending_transfer.payee_entity_kind,
+                'payee_entity_id', pending_transfer.payee_entity_id,
+                'transfer_group_key', pending_transfer.transfer_group_key
+            )
+            ORDER BY pending_transfer.id
+        )::text, '[]'))
+    INTO
+        v_pending_row_count,
+        v_pending_total_amount,
+        v_pending_transfer_hash
+    FROM (
+        SELECT
+            transfer_row.id::text AS id,
+            CASE WHEN transfer_row.candidate_id IS NULL THEN NULL ELSE transfer_row.candidate_id::text END AS candidate_id,
+            CASE WHEN transfer_row.umbrella_id IS NULL THEN NULL ELSE transfer_row.umbrella_id::text END AS umbrella_id,
+            transfer_row.pay_channel AS pay_channel,
+            round(transfer_row.amount, 2) AS amount,
+            transfer_row.currency AS currency,
+            transfer_row.payment_reference AS payment_reference,
+            transfer_row.payee_name AS payee_name,
+            regexp_replace(coalesce(transfer_row.sort_code, ''), '[^0-9]', '', 'g') AS sort_code_digits,
+            regexp_replace(coalesce(transfer_row.account_number, ''), '[^0-9]', '', 'g') AS account_number_digits,
+            transfer_row.account_type AS account_type,
+            transfer_row.bank_details_hash_snapshot AS bank_details_hash_snapshot,
+            transfer_row.payee_entity_kind AS payee_entity_kind,
+            CASE WHEN transfer_row.payee_entity_id IS NULL THEN NULL ELSE transfer_row.payee_entity_id::text END AS payee_entity_id,
+            transfer_row.transfer_group_key AS transfer_group_key,
+            transfer_row.status AS status
+        FROM public.pay_bank_transfers AS transfer_row
+        WHERE transfer_row.pay_batch_id = p_pay_batch_id
+          AND (v_scope = 'ALL' OR upper(coalesce(transfer_row.pay_channel, '')) = v_scope)
+          AND upper(coalesce(transfer_row.status, '')) = 'PENDING'
+        ORDER BY transfer_row.id
+    ) AS pending_transfer;
+
+    SELECT
+        count(*)::integer,
+        round(coalesce(sum(stable_transfer.amount), 0), 2),
+        md5(coalesce(jsonb_agg(
+            jsonb_build_object(
+                'id', stable_transfer.id,
+                'candidate_id', stable_transfer.candidate_id,
+                'umbrella_id', stable_transfer.umbrella_id,
+                'pay_channel', stable_transfer.pay_channel,
+                'amount', stable_transfer.amount,
+                'currency', stable_transfer.currency,
+                'payment_reference', stable_transfer.payment_reference,
+                'payee_name', stable_transfer.payee_name,
+                'sort_code_digits', stable_transfer.sort_code_digits,
+                'account_number_digits', stable_transfer.account_number_digits,
+                'account_type', stable_transfer.account_type,
+                'bank_details_hash_snapshot', stable_transfer.bank_details_hash_snapshot,
+                'payee_entity_kind', stable_transfer.payee_entity_kind,
+                'payee_entity_id', stable_transfer.payee_entity_id,
+                'transfer_group_key', stable_transfer.transfer_group_key
+            )
+            ORDER BY stable_transfer.id
+        )::text, '[]'))
+    INTO
+        v_stable_row_count,
+        v_stable_total_amount,
+        v_stable_transfer_hash
+    FROM (
+        SELECT
+            transfer_row.id::text AS id,
+            CASE WHEN transfer_row.candidate_id IS NULL THEN NULL ELSE transfer_row.candidate_id::text END AS candidate_id,
+            CASE WHEN transfer_row.umbrella_id IS NULL THEN NULL ELSE transfer_row.umbrella_id::text END AS umbrella_id,
+            transfer_row.pay_channel AS pay_channel,
+            round(transfer_row.amount, 2) AS amount,
+            transfer_row.currency AS currency,
+            transfer_row.payment_reference AS payment_reference,
+            transfer_row.payee_name AS payee_name,
+            regexp_replace(coalesce(transfer_row.sort_code, ''), '[^0-9]', '', 'g') AS sort_code_digits,
+            regexp_replace(coalesce(transfer_row.account_number, ''), '[^0-9]', '', 'g') AS account_number_digits,
+            transfer_row.account_type AS account_type,
+            transfer_row.bank_details_hash_snapshot AS bank_details_hash_snapshot,
+            transfer_row.payee_entity_kind AS payee_entity_kind,
+            CASE WHEN transfer_row.payee_entity_id IS NULL THEN NULL ELSE transfer_row.payee_entity_id::text END AS payee_entity_id,
+            transfer_row.transfer_group_key AS transfer_group_key
+        FROM public.pay_bank_transfers AS transfer_row
+        WHERE transfer_row.pay_batch_id = p_pay_batch_id
+          AND (v_scope = 'ALL' OR upper(coalesce(transfer_row.pay_channel, '')) = v_scope)
+          AND upper(coalesce(transfer_row.status, '')) <> 'BLOCKED'
+        ORDER BY transfer_row.id
+    ) AS stable_transfer;
+
+    IF v_pre_execution_export THEN
+        v_row_count := coalesce(v_pending_row_count, 0);
+        v_total_amount := coalesce(v_pending_total_amount, 0);
+        v_current_transfer_hash := v_pending_transfer_hash;
+        v_current_transfer_hash_basis := 'PENDING_TRANSFER_HASH';
+        v_exportable_status_filter := 'PENDING';
+    ELSE
+        v_row_count := coalesce(v_stable_row_count, 0);
+        v_total_amount := coalesce(v_stable_total_amount, 0);
+        v_current_transfer_hash := v_stable_transfer_hash;
+        v_current_transfer_hash_basis := 'STABLE_ALL_NON_BLOCKED_TRANSFER_HASH';
+        v_exportable_status_filter := 'ALL_NON_BLOCKED';
+    END IF;
+
+    SELECT count(*)::integer
+    INTO v_all_transfer_count
+    FROM public.pay_bank_transfers AS transfer_row
+    WHERE transfer_row.pay_batch_id = p_pay_batch_id
+      AND (v_scope = 'ALL' OR upper(coalesce(transfer_row.pay_channel, '')) = v_scope);
+
+    SELECT count(*)::integer
+    INTO v_blocked_row_count
+    FROM public.pay_bank_transfers AS transfer_row
+    WHERE transfer_row.pay_batch_id = p_pay_batch_id
+      AND (v_scope = 'ALL' OR upper(coalesce(transfer_row.pay_channel, '')) = v_scope)
+      AND upper(coalesce(transfer_row.status, '')) = 'BLOCKED';
+
+    SELECT coalesce(jsonb_agg(to_jsonb(pay_channel_values.pay_channel) ORDER BY pay_channel_values.pay_channel), '[]'::jsonb)
+    INTO v_pay_channels_included
+    FROM (
+        SELECT DISTINCT upper(coalesce(transfer_row.pay_channel, '')) AS pay_channel
+        FROM public.pay_bank_transfers AS transfer_row
+        WHERE transfer_row.pay_batch_id = p_pay_batch_id
+          AND (v_scope = 'ALL' OR upper(coalesce(transfer_row.pay_channel, '')) = v_scope)
+          AND (
+              (v_pre_execution_export = true AND upper(coalesce(transfer_row.status, '')) = 'PENDING')
+              OR (v_pre_execution_export = false AND upper(coalesce(transfer_row.status, '')) <> 'BLOCKED')
+          )
+    ) AS pay_channel_values
+    WHERE pay_channel_values.pay_channel <> '';
+
+    SELECT coalesce(jsonb_object_agg(status_counts.status_key, status_counts.status_count ORDER BY status_counts.status_key), '{}'::jsonb)
+    INTO v_status_counts
+    FROM (
+        SELECT
+            upper(coalesce(transfer_row.status, '')) AS status_key,
+            count(*)::integer AS status_count
+        FROM public.pay_bank_transfers AS transfer_row
+        WHERE transfer_row.pay_batch_id = p_pay_batch_id
+          AND (v_scope = 'ALL' OR upper(coalesce(transfer_row.pay_channel, '')) = v_scope)
+        GROUP BY upper(coalesce(transfer_row.status, ''))
+    ) AS status_counts
+    WHERE status_counts.status_key <> '';
+
+    SELECT coalesce(jsonb_object_agg(provider_counts.provider_key, provider_counts.provider_count ORDER BY provider_counts.provider_key), '{}'::jsonb)
+    INTO v_provider_counts
+    FROM (
+        SELECT
+            upper(coalesce(transfer_row.rail_provider, '')) AS provider_key,
+            count(*)::integer AS provider_count
+        FROM public.pay_bank_transfers AS transfer_row
+        WHERE transfer_row.pay_batch_id = p_pay_batch_id
+          AND (v_scope = 'ALL' OR upper(coalesce(transfer_row.pay_channel, '')) = v_scope)
+          AND (
+              (v_pre_execution_export = true AND upper(coalesce(transfer_row.status, '')) = 'PENDING')
+              OR (v_pre_execution_export = false AND upper(coalesce(transfer_row.status, '')) <> 'BLOCKED')
+          )
+        GROUP BY upper(coalesce(transfer_row.rail_provider, ''))
+    ) AS provider_counts
+    WHERE provider_counts.provider_key <> '';
+
+    SELECT coalesce(jsonb_object_agg(env_counts.env_key, env_counts.env_count ORDER BY env_counts.env_key), '{}'::jsonb)
+    INTO v_rail_env_counts
+    FROM (
+        SELECT
+            upper(coalesce(transfer_row.rail_env, '')) AS env_key,
+            count(*)::integer AS env_count
+        FROM public.pay_bank_transfers AS transfer_row
+        WHERE transfer_row.pay_batch_id = p_pay_batch_id
+          AND (v_scope = 'ALL' OR upper(coalesce(transfer_row.pay_channel, '')) = v_scope)
+          AND (
+              (v_pre_execution_export = true AND upper(coalesce(transfer_row.status, '')) = 'PENDING')
+              OR (v_pre_execution_export = false AND upper(coalesce(transfer_row.status, '')) <> 'BLOCKED')
+          )
+        GROUP BY upper(coalesce(transfer_row.rail_env, ''))
+    ) AS env_counts
+    WHERE env_counts.env_key <> '';
+
+    RETURN jsonb_strip_nulls(jsonb_build_object(
+        'ok', true,
+        'pay_batch_id', p_pay_batch_id::text,
+        'scope', v_scope,
+        'pay_channel_scope', v_scope,
+        'pre_execution_export', v_pre_execution_export,
+        'exportable_status_filter', v_exportable_status_filter,
+        'row_count', coalesce(v_row_count, 0),
+        'total_amount', coalesce(v_total_amount, 0),
+        'transfer_hash', v_current_transfer_hash,
+        'current_transfer_hash', v_current_transfer_hash,
+        'current_transfer_hash_basis', v_current_transfer_hash_basis,
+        'pending_transfer_hash', v_pending_transfer_hash,
+        'stable_transfer_hash', v_stable_transfer_hash,
+        'provider_snapshot', nullif(btrim(coalesce(v_batch_row.rail_provider_snapshot, '')), ''),
+        'rail_env_snapshot', nullif(btrim(coalesce(v_batch_row.rail_env_snapshot, '')), ''),
+        'freshness_validation_status', nullif(upper(btrim(coalesce(v_batch_row.freshness_validation_status, ''))), ''),
+        'freshness_checked_at_utc', CASE WHEN v_batch_row.freshness_checked_at_utc IS NULL THEN NULL ELSE v_batch_row.freshness_checked_at_utc::text END,
+        'freshness_result_hash', nullif(btrim(coalesce(v_batch_row.freshness_result_hash, '')), ''),
+        'freshness_scope_hash', nullif(btrim(coalesce(v_batch_row.freshness_scope_hash, '')), ''),
+        'freshness_operation_id', CASE WHEN v_batch_row.freshness_operation_id IS NULL THEN NULL ELSE v_batch_row.freshness_operation_id::text END,
+        'bank_csv_export_hash', v_bank_csv_export_hash,
+        'csv_export_matches_current_transfers', CASE WHEN v_bank_csv_export_hash IS NULL OR v_current_transfer_hash IS NULL THEN NULL ELSE v_bank_csv_export_hash = v_current_transfer_hash END,
+        'pending_row_count', coalesce(v_pending_row_count, 0),
+        'pending_total_amount', coalesce(v_pending_total_amount, 0),
+        'stable_row_count', coalesce(v_stable_row_count, 0),
+        'stable_total_amount', coalesce(v_stable_total_amount, 0),
+        'blocked_row_count', coalesce(v_blocked_row_count, 0),
+        'all_transfer_count', coalesce(v_all_transfer_count, 0),
+        'pay_channels_included', coalesce(v_pay_channels_included, '[]'::jsonb),
+        'status_counts', coalesce(v_status_counts, '{}'::jsonb),
+        'provider_counts', coalesce(v_provider_counts, '{}'::jsonb),
+        'rail_env_counts', coalesce(v_rail_env_counts, '{}'::jsonb),
+        'summary_source', 'pay_bank_transfers',
+        'policy_x_authority', 'FROZEN_MATERIALISED_TRANSFER_ROWS',
+        'generated_at_utc', now()::text
+    ));
+END;
+$function$;
 
 
 
