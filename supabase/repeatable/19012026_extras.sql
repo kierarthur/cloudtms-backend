@@ -1,3 +1,76 @@
+DO $$
+DECLARE
+  v_modern_oid oid;
+  v_legacy_oid oid;
+BEGIN
+  /*
+    Retire only the legacy seven-argument overload:
+
+      public.contract_week_manual_upsert_atomic(
+        uuid,
+        uuid,
+        jsonb,
+        jsonb,
+        jsonb,
+        jsonb,
+        timestamp with time zone
+      )
+
+    This block is safe to rerun:
+      - If the legacy overload is already gone, it only raises a NOTICE.
+      - If the legacy overload exists but the modern overload is missing, it aborts.
+      - It does not use CASCADE, so dependent objects cannot be silently dropped.
+  */
+
+  SELECT pg_proc_entry.oid
+    INTO v_modern_oid
+  FROM pg_proc AS pg_proc_entry
+  JOIN pg_namespace AS pg_namespace_entry
+    ON pg_namespace_entry.oid = pg_proc_entry.pronamespace
+  WHERE pg_namespace_entry.nspname = 'public'
+    AND pg_proc_entry.proname = 'contract_week_manual_upsert_atomic'
+    AND pg_get_function_identity_arguments(pg_proc_entry.oid) =
+      'p_week_id uuid, p_expected_timesheet_id uuid, p_timesheet_create_json jsonb, p_timesheet_patch_json jsonb, p_contract_week_patch_json jsonb, p_tsfin_snapshot_json jsonb, p_rotation_json jsonb, p_actor_user_id uuid, p_materialise_staged_evidence boolean, p_now_utc timestamp with time zone, p_expected_row_signature text'
+  LIMIT 1;
+
+  SELECT pg_proc_entry.oid
+    INTO v_legacy_oid
+  FROM pg_proc AS pg_proc_entry
+  JOIN pg_namespace AS pg_namespace_entry
+    ON pg_namespace_entry.oid = pg_proc_entry.pronamespace
+  WHERE pg_namespace_entry.nspname = 'public'
+    AND pg_proc_entry.proname = 'contract_week_manual_upsert_atomic'
+    AND pg_get_function_identity_arguments(pg_proc_entry.oid) =
+      'p_week_id uuid, p_expected_timesheet_id uuid, p_timesheet_create_json jsonb, p_timesheet_patch_json jsonb, p_contract_week_patch_json jsonb, p_tsfin_snapshot_json jsonb, p_now_utc timestamp with time zone'
+  LIMIT 1;
+
+  IF v_legacy_oid IS NULL THEN
+    RAISE NOTICE 'Legacy seven-argument contract_week_manual_upsert_atomic overload is not present; nothing to drop.';
+    RETURN;
+  END IF;
+
+  IF v_modern_oid IS NULL THEN
+    RAISE EXCEPTION
+      'Refusing to drop legacy seven-argument contract_week_manual_upsert_atomic overload because the modern eleven-argument overload was not found.';
+  END IF;
+
+  DROP FUNCTION IF EXISTS public.contract_week_manual_upsert_atomic(
+    uuid,
+    uuid,
+    jsonb,
+    jsonb,
+    jsonb,
+    jsonb,
+    timestamp with time zone
+  );
+
+  RAISE NOTICE 'Dropped legacy seven-argument contract_week_manual_upsert_atomic overload.';
+END;
+$$;
+
+
+
+
 CREATE OR REPLACE FUNCTION public.enqueue_ts_financials(_timesheet_id uuid, _reason ts_fin_reason_enum)
 RETURNS void
 LANGUAGE plpgsql
