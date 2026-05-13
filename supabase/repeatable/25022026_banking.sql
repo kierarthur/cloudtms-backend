@@ -15457,7 +15457,6 @@ DROP FUNCTION IF EXISTS public.pay_bank_transfers_apply_rail_updates(uuid, jsonb
 
 
 
-
 CREATE OR REPLACE FUNCTION public.pay_bank_transfers_apply_rail_updates(
   p_pay_batch_id uuid,
   p_updates jsonb,
@@ -15487,6 +15486,12 @@ DECLARE
   v_failed_count integer := 0;
   v_pending_count integer := 0;
   v_ambiguous_count integer := 0;
+  v_attempted_but_unproven_count integer := 0;
+  v_provider_attempt_without_external_id_count integer := 0;
+  v_remaining_submit_attempt_required integer := 0;
+  v_remaining_provider_evidence_required integer := 0;
+  v_requires_provider_poll boolean := false;
+  v_requires_review boolean := false;
   v_remaining_unsubmitted_count integer := 0;
   v_execution_commit_state text := 'NOT_SUBMITTED';
   v_execution_commit_ref text := NULL::text;
@@ -15580,7 +15585,9 @@ BEGIN
     raw_payload jsonb NULL,
     idempotency_key text NULL,
     input_json jsonb NOT NULL,
-    is_provider_evidence boolean NOT NULL DEFAULT false
+    is_provider_source boolean NOT NULL DEFAULT false,
+    is_provider_evidence boolean NOT NULL DEFAULT false,
+    is_attempted_but_unproven boolean NOT NULL DEFAULT false
   ) ON COMMIT DROP;
 
   TRUNCATE TABLE pg_temp.tmp_pay_bank_transfer_updates;
@@ -15639,9 +15646,12 @@ BEGIN
   SET event_source = CASE
     WHEN update_source.event_source IN ('PROVIDER_RESPONSE', 'PROVIDER_POLL', 'PROVIDER_WEBHOOK', 'LOCAL_STATE') THEN update_source.event_source
     WHEN update_source.event_source IN ('WEBHOOK') THEN 'PROVIDER_WEBHOOK'
-    WHEN update_source.event_source IN ('POLL', 'RAIL_PROVIDER', 'PROVIDER') THEN 'PROVIDER_POLL'
+    WHEN update_source.event_source IN ('POLL', 'RAIL_PROVIDER', 'PROVIDER', 'PROVIDER_SETTLEMENT', 'RAIL_PROVIDER_SETTLEMENT') THEN 'PROVIDER_POLL'
     ELSE 'LOCAL_STATE'
   END;
+
+  UPDATE pg_temp.tmp_pay_bank_transfer_updates AS update_source
+  SET is_provider_source = update_source.event_source IN ('PROVIDER_RESPONSE', 'PROVIDER_POLL', 'PROVIDER_WEBHOOK');
 
   SELECT count(*)::integer
   INTO v_input_count
@@ -15780,6 +15790,10 @@ BEGIN
       AND transfer_for_evidence.pay_batch_id = p_pay_batch_id
   ), false);
 
+  UPDATE pg_temp.tmp_pay_bank_transfer_updates AS update_attempt
+  SET is_attempted_but_unproven = update_attempt.is_provider_source IS TRUE
+    AND update_attempt.is_provider_evidence IS NOT TRUE;
+
   UPDATE pg_temp.tmp_pay_bank_transfer_updates AS update_key
   SET idempotency_key = COALESCE(
     update_key.idempotency_key,
@@ -15854,16 +15868,24 @@ BEGIN
       transfer_row.candidate_id,
       transfer_row.umbrella_id,
       update_row.provider_key,
-      CASE WHEN update_row.is_provider_evidence IS TRUE THEN update_row.provider_event_id ELSE NULL::text END,
-      CASE WHEN update_row.is_provider_evidence IS TRUE THEN update_row.provider_reference ELSE NULL::text END,
+      CASE WHEN update_row.is_provider_source IS TRUE THEN update_row.provider_event_id ELSE NULL::text END,
+      CASE WHEN update_row.is_provider_source IS TRUE THEN update_row.provider_reference ELSE NULL::text END,
       update_row.provider_state,
       update_row.normalised_state,
-      CASE WHEN update_row.is_provider_evidence IS TRUE THEN update_row.event_source ELSE 'LOCAL_STATE' END,
+      update_row.event_source,
       COALESCE(update_row.event_time_utc, v_now),
       v_now,
       COALESCE(update_row.amount, transfer_row.amount),
       COALESCE(NULLIF(BTRIM(update_row.currency), ''), transfer_row.currency, 'GBP'),
-      COALESCE(update_row.raw_payload, update_row.input_json),
+      jsonb_strip_nulls((CASE
+        WHEN jsonb_typeof(COALESCE(update_row.raw_payload, update_row.input_json)) = 'object'
+          THEN COALESCE(update_row.raw_payload, update_row.input_json)
+        ELSE jsonb_build_object('payload', COALESCE(update_row.raw_payload, update_row.input_json))
+      END) || jsonb_build_object(
+        'provider_evidence', update_row.is_provider_evidence,
+        'provider_source', update_row.is_provider_source,
+        'provider_attempt_without_external_id', update_row.is_attempted_but_unproven
+      )),
       update_row.idempotency_key
     FROM pg_temp.tmp_pay_bank_transfer_updates AS update_row
     JOIN public.pay_bank_transfers AS transfer_row
@@ -15919,14 +15941,17 @@ BEGIN
       || jsonb_build_object(
         'last_update_event_source', update_row.event_source,
         'last_update_at_utc', v_now,
-        'last_update_provider_evidence', CASE WHEN update_row.is_provider_evidence IS TRUE THEN true WHEN existing_evidence.has_provider_evidence IS TRUE THEN true ELSE false END
+        'last_update_provider_source', update_row.is_provider_source,
+        'last_update_provider_evidence', CASE WHEN update_row.is_provider_evidence IS TRUE THEN true WHEN existing_evidence.has_provider_evidence IS TRUE THEN true ELSE false END,
+        'provider_attempt_without_external_id', update_row.is_attempted_but_unproven
       )
       || CASE
-           WHEN update_row.is_provider_evidence IS TRUE THEN jsonb_strip_nulls(jsonb_build_object(
+           WHEN update_row.is_provider_source IS TRUE THEN jsonb_strip_nulls(jsonb_build_object(
              'provider_event_id', update_row.provider_event_id,
              'provider_reference', update_row.provider_reference,
              'provider_state', update_row.provider_state,
-             'normalised_state', update_row.normalised_state
+             'normalised_state', update_row.normalised_state,
+             'provider_attempt_without_external_id', update_row.is_attempted_but_unproven
            ))
            ELSE '{}'::jsonb
          END
@@ -16056,7 +16081,13 @@ BEGIN
   v_failed_count := coalesce((v_submission_evidence_json->>'failed_count')::integer, 0);
   v_pending_count := coalesce((v_submission_evidence_json->>'pending_count')::integer, 0);
   v_ambiguous_count := coalesce((v_submission_evidence_json->>'ambiguous_count')::integer, 0);
-  v_remaining_unsubmitted_count := coalesce((v_submission_evidence_json->>'remaining_provider_submission_required')::integer, 0);
+  v_attempted_but_unproven_count := coalesce((v_submission_evidence_json->>'attempted_but_unproven_count')::integer, 0);
+  v_provider_attempt_without_external_id_count := coalesce((v_submission_evidence_json->>'provider_attempt_without_external_id_count')::integer, 0);
+  v_remaining_submit_attempt_required := coalesce((v_submission_evidence_json->>'remaining_submit_attempt_required')::integer, 0);
+  v_remaining_provider_evidence_required := coalesce((v_submission_evidence_json->>'remaining_provider_evidence_required')::integer, 0);
+  v_remaining_unsubmitted_count := v_remaining_submit_attempt_required;
+  v_requires_provider_poll := lower(btrim(coalesce(v_submission_evidence_json->>'requires_provider_poll', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on');
+  v_requires_review := lower(btrim(coalesce(v_submission_evidence_json->>'requires_review', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on');
   v_can_mark_submitted := lower(btrim(coalesce(v_submission_evidence_json->>'can_mark_submitted', v_submission_evidence_json->>'batch_can_be_marked_submitted', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on');
   v_can_mark_committed := lower(btrim(coalesce(v_submission_evidence_json->>'can_mark_committed', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on');
 
@@ -16211,7 +16242,13 @@ BEGIN
           'failed_count', v_failed_count,
           'pending_count', v_pending_count,
           'ambiguous_count', v_ambiguous_count,
-          'remaining_unsubmitted_count', v_remaining_unsubmitted_count
+          'attempted_but_unproven_count', v_attempted_but_unproven_count,
+          'provider_attempt_without_external_id_count', v_provider_attempt_without_external_id_count,
+          'remaining_submit_attempt_required', v_remaining_submit_attempt_required,
+          'remaining_provider_evidence_required', v_remaining_provider_evidence_required,
+          'remaining_unsubmitted_count', v_remaining_unsubmitted_count,
+          'requires_provider_poll', v_requires_provider_poll,
+          'requires_review', v_requires_review
         )),
         updated_at_utc = v_now
     WHERE chunk_update.id = p_chunk_id
@@ -16233,7 +16270,13 @@ BEGIN
     'failed_count', v_failed_count,
     'pending_count', v_pending_count,
     'ambiguous_count', v_ambiguous_count,
+    'attempted_but_unproven_count', v_attempted_but_unproven_count,
+    'provider_attempt_without_external_id_count', v_provider_attempt_without_external_id_count,
+    'remaining_submit_attempt_required', v_remaining_submit_attempt_required,
+    'remaining_provider_evidence_required', v_remaining_provider_evidence_required,
     'remaining_unsubmitted_count', v_remaining_unsubmitted_count,
+    'requires_provider_poll', v_requires_provider_poll,
+    'requires_review', v_requires_review,
     'blocked_funds_state', COALESCE(v_summary_json->'blocked_funds_state', '{}'::jsonb),
     'batch_execution_state', jsonb_build_object(
       'execution_commit_state', v_execution_commit_state,
@@ -16250,9 +16293,6 @@ BEGIN
   );
 END;
 $function$;
-
-
-
 
 
 
