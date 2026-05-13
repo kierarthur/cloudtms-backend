@@ -8463,6 +8463,7 @@ BEGIN
 END;
 $function$;
 
+
 CREATE OR REPLACE FUNCTION public.bulk_timesheet_row_patch_v1(
   p_filters jsonb DEFAULT '{}'::jsonb
 )
@@ -8725,7 +8726,26 @@ BEGIN
       COALESCE(evidence_summary.attached_evidence_count, 0)::integer AS evidence_attached_count,
       evidence_summary.primary_storage_key AS evidence_primary_storage_key,
       evidence_summary.primary_display_name AS evidence_primary_display_name,
-      evidence_summary.evidence_updated_at AS evidence_updated_at,
+      CASE
+        WHEN evidence_summary.evidence_updated_at IS NOT NULL
+         AND staged_evidence_summary.staged_evidence_updated_at IS NOT NULL
+          THEN GREATEST(evidence_summary.evidence_updated_at, staged_evidence_summary.staged_evidence_updated_at)
+        ELSE COALESCE(evidence_summary.evidence_updated_at, staged_evidence_summary.staged_evidence_updated_at)
+      END AS evidence_updated_at,
+      COALESCE(evidence_summary.has_attached_timesheet_evidence, FALSE) AS evidence_has_attached_timesheet,
+      COALESCE(evidence_summary.has_attached_mileage_evidence, FALSE) AS evidence_has_attached_mileage,
+      COALESCE(evidence_summary.has_attached_travel_evidence, FALSE) AS evidence_has_attached_travel,
+      COALESCE(evidence_summary.has_attached_accommodation_evidence, FALSE) AS evidence_has_attached_accommodation,
+      COALESCE(evidence_summary.has_attached_other_evidence, FALSE) AS evidence_has_attached_other,
+      COALESCE(staged_evidence_summary.staged_evidence_count, 0)::integer AS evidence_staged_count,
+      staged_evidence_summary.primary_staged_storage_key AS evidence_primary_staged_storage_key,
+      staged_evidence_summary.primary_staged_display_name AS evidence_primary_staged_display_name,
+      staged_evidence_summary.primary_staged_kind AS evidence_primary_staged_kind,
+      COALESCE(staged_evidence_summary.has_staged_timesheet_evidence, FALSE) AS evidence_has_staged_timesheet,
+      COALESCE(staged_evidence_summary.has_staged_mileage_evidence, FALSE) AS evidence_has_staged_mileage,
+      COALESCE(staged_evidence_summary.has_staged_travel_evidence, FALSE) AS evidence_has_staged_travel,
+      COALESCE(staged_evidence_summary.has_staged_accommodation_evidence, FALSE) AS evidence_has_staged_accommodation,
+      COALESCE(staged_evidence_summary.has_staged_other_evidence, FALSE) AS evidence_has_staged_other,
       UPPER(COALESCE(source_rows.route_type, '')) AS route_type_upper,
       UPPER(COALESCE(source_rows.submission_mode::text, '')) AS submission_mode_upper,
       CASE
@@ -8766,6 +8786,11 @@ BEGIN
     LEFT JOIN LATERAL (
       SELECT
         COUNT(timesheet_evidence_row.id)::integer AS attached_evidence_count,
+        COALESCE(BOOL_OR(UPPER(COALESCE(timesheet_evidence_row.kind, '')) = 'TIMESHEET'), FALSE) AS has_attached_timesheet_evidence,
+        COALESCE(BOOL_OR(UPPER(COALESCE(timesheet_evidence_row.kind, '')) = 'MILEAGE'), FALSE) AS has_attached_mileage_evidence,
+        COALESCE(BOOL_OR(UPPER(COALESCE(timesheet_evidence_row.kind, '')) = 'TRAVEL'), FALSE) AS has_attached_travel_evidence,
+        COALESCE(BOOL_OR(UPPER(COALESCE(timesheet_evidence_row.kind, '')) = 'ACCOMMODATION'), FALSE) AS has_attached_accommodation_evidence,
+        COALESCE(BOOL_OR(UPPER(COALESCE(timesheet_evidence_row.kind, '')) = 'OTHER'), FALSE) AS has_attached_other_evidence,
         (ARRAY_AGG(
           timesheet_evidence_row.storage_key
           ORDER BY
@@ -8784,6 +8809,86 @@ BEGIN
       FROM public.timesheet_evidence AS timesheet_evidence_row
       WHERE timesheet_evidence_row.timesheet_id = source_rows.timesheet_id
     ) AS evidence_summary ON TRUE
+    LEFT JOIN LATERAL (
+      SELECT
+        COUNT(staged_queue_row.id)::integer AS staged_evidence_count,
+        MAX(staged_queue_row.uploaded_at_utc) AS staged_evidence_updated_at,
+        COALESCE(BOOL_OR(staged_queue_row.staged_kind_upper = 'TIMESHEET'), FALSE) AS has_staged_timesheet_evidence,
+        COALESCE(BOOL_OR(staged_queue_row.staged_kind_upper = 'MILEAGE'), FALSE) AS has_staged_mileage_evidence,
+        COALESCE(BOOL_OR(staged_queue_row.staged_kind_upper = 'TRAVEL'), FALSE) AS has_staged_travel_evidence,
+        COALESCE(BOOL_OR(staged_queue_row.staged_kind_upper = 'ACCOMMODATION'), FALSE) AS has_staged_accommodation_evidence,
+        COALESCE(BOOL_OR(staged_queue_row.staged_kind_upper = 'OTHER'), FALSE) AS has_staged_other_evidence,
+        (ARRAY_AGG(
+          staged_queue_row.r2_key
+          ORDER BY
+            (staged_queue_row.staged_kind_upper = 'TIMESHEET') DESC,
+            staged_queue_row.uploaded_at_utc DESC NULLS LAST,
+            staged_queue_row.id DESC
+        ) FILTER (
+          WHERE NULLIF(BTRIM(COALESCE(staged_queue_row.r2_key, '')), '') IS NOT NULL
+            AND NULLIF(BTRIM(COALESCE(staged_queue_row.display_name, '')), '') IS NOT NULL
+        ))[1] AS primary_staged_storage_key,
+        (ARRAY_AGG(
+          staged_queue_row.display_name
+          ORDER BY
+            (staged_queue_row.staged_kind_upper = 'TIMESHEET') DESC,
+            staged_queue_row.uploaded_at_utc DESC NULLS LAST,
+            staged_queue_row.id DESC
+        ) FILTER (
+          WHERE NULLIF(BTRIM(COALESCE(staged_queue_row.r2_key, '')), '') IS NOT NULL
+            AND NULLIF(BTRIM(COALESCE(staged_queue_row.display_name, '')), '') IS NOT NULL
+        ))[1] AS primary_staged_display_name,
+        (ARRAY_AGG(
+          staged_queue_row.staged_kind_upper
+          ORDER BY
+            (staged_queue_row.staged_kind_upper = 'TIMESHEET') DESC,
+            staged_queue_row.uploaded_at_utc DESC NULLS LAST,
+            staged_queue_row.id DESC
+        ) FILTER (
+          WHERE NULLIF(BTRIM(COALESCE(staged_queue_row.r2_key, '')), '') IS NOT NULL
+            AND NULLIF(BTRIM(COALESCE(staged_queue_row.display_name, '')), '') IS NOT NULL
+        ))[1] AS primary_staged_kind
+      FROM (
+        SELECT
+          manual_queue_row.id,
+          manual_queue_row.r2_key,
+          manual_queue_row.uploaded_at_utc,
+          COALESCE(
+            NULLIF(BTRIM(COALESCE(manual_queue_row.original_filename, '')), ''),
+            NULLIF(BTRIM(COALESCE(manual_queue_row.meta_json->>'display_name', manual_queue_row.meta_json->>'displayName', manual_queue_row.meta_json->>'filename', manual_queue_row.meta_json->>'original_filename', manual_queue_row.meta_json->>'originalFilename', '')), '')
+          ) AS display_name,
+          CASE
+            WHEN UPPER(COALESCE(NULLIF(BTRIM(COALESCE(
+              manual_queue_row.meta_json->>'staged_kind',
+              manual_queue_row.meta_json->>'stagedKind',
+              manual_queue_row.meta_json->>'evidence_kind',
+              manual_queue_row.meta_json->>'evidenceKind',
+              manual_queue_row.meta_json->>'kind',
+              manual_queue_row.meta_json->>'type',
+              manual_queue_row.meta_json->>'evidence_type',
+              manual_queue_row.meta_json->>'evidenceType',
+              ''
+            )), ''), 'TIMESHEET')) IN ('TIMESHEET', 'MILEAGE', 'TRAVEL', 'ACCOMMODATION', 'OTHER')
+              THEN UPPER(COALESCE(NULLIF(BTRIM(COALESCE(
+                manual_queue_row.meta_json->>'staged_kind',
+                manual_queue_row.meta_json->>'stagedKind',
+                manual_queue_row.meta_json->>'evidence_kind',
+                manual_queue_row.meta_json->>'evidenceKind',
+                manual_queue_row.meta_json->>'kind',
+                manual_queue_row.meta_json->>'type',
+                manual_queue_row.meta_json->>'evidence_type',
+                manual_queue_row.meta_json->>'evidenceType',
+                ''
+              )), ''), 'TIMESHEET'))
+            ELSE 'OTHER'
+          END AS staged_kind_upper
+        FROM public.manual_timesheet_queue AS manual_queue_row
+        WHERE source_rows.timesheet_id IS NULL
+          AND source_rows.contract_week_id IS NOT NULL
+          AND UPPER(COALESCE(manual_queue_row.status, '')) = 'STAGED'
+          AND NULLIF(BTRIM(COALESCE(manual_queue_row.meta_json->>'contract_week_id', '')), '') = source_rows.contract_week_id::text
+      ) AS staged_queue_row
+    ) AS staged_evidence_summary ON TRUE
   ),
   classified_rows AS MATERIALIZED (
     SELECT
@@ -8891,12 +8996,14 @@ BEGIN
       ) AS qr_signed_returned_calc,
       COALESCE(
         enriched_rows.evidence_primary_storage_key,
+        enriched_rows.evidence_primary_staged_storage_key,
         NULLIF(enriched_rows.manual_pdf_r2_key, ''),
         NULLIF(enriched_rows.qr_r2_key, ''),
         NULLIF(enriched_rows.uploaded_pdf_r2_key, '')
       ) AS primary_artifact_storage_key_calc,
       COALESCE(
         enriched_rows.evidence_primary_display_name,
+        enriched_rows.evidence_primary_staged_display_name,
         CASE WHEN NULLIF(enriched_rows.manual_pdf_r2_key, '') IS NOT NULL THEN 'Manual timesheet PDF' END,
         CASE WHEN NULLIF(enriched_rows.qr_r2_key, '') IS NOT NULL THEN 'QR timesheet' END,
         CASE WHEN NULLIF(enriched_rows.uploaded_pdf_r2_key, '') IS NOT NULL THEN 'Uploaded weekly PDF' END
@@ -9021,6 +9128,12 @@ BEGIN
         COALESCE(final_rows.contract_week_updated_at::text, ''),
         COALESCE(final_rows.tsfin_updated_at::text, ''),
         COALESCE(final_rows.evidence_updated_at::text, ''),
+        COALESCE(final_rows.evidence_staged_count::text, ''),
+        COALESCE(final_rows.evidence_has_staged_timesheet::text, ''),
+        COALESCE(final_rows.evidence_has_staged_mileage::text, ''),
+        COALESCE(final_rows.evidence_has_staged_travel::text, ''),
+        COALESCE(final_rows.evidence_has_staged_accommodation::text, ''),
+        COALESCE(final_rows.evidence_has_staged_other::text, ''),
         COALESCE(final_rows.processing_status::text, ''),
         COALESCE(final_rows.summary_stage, ''),
         COALESCE(final_rows.tools_stage, ''),
@@ -9398,18 +9511,21 @@ BEGIN
         'client_is_nhsp', COALESCE(payload_rows.client_is_nhsp, FALSE),
         'has_any_evidence', (
           COALESCE(payload_rows.evidence_attached_count, 0) > 0
+          OR COALESCE(payload_rows.evidence_staged_count, 0) > 0
           OR payload_rows.primary_artifact_storage_key_calc IS NOT NULL
         ),
         'attached_evidence_count', COALESCE(payload_rows.evidence_attached_count, 0),
+        'queue_staged_count', COALESCE(payload_rows.evidence_staged_count, 0),
+        'evidence_count', COALESCE(payload_rows.evidence_attached_count, 0) + COALESCE(payload_rows.evidence_staged_count, 0),
         'primary_artifact_storage_key', payload_rows.primary_artifact_storage_key_calc,
         'primary_artifact_display_name', payload_rows.primary_artifact_display_name_calc,
         'primary_artifact_preview_mode', payload_rows.primary_artifact_preview_mode_calc,
         'evidence_badges', jsonb_build_array(
-          jsonb_build_object('kind', 'TIMESHEET', 'present', (COALESCE(payload_rows.evidence_attached_count, 0) > 0 OR payload_rows.primary_artifact_storage_key_calc IS NOT NULL), 'has_evidence', (COALESCE(payload_rows.evidence_attached_count, 0) > 0 OR payload_rows.primary_artifact_storage_key_calc IS NOT NULL)),
-          jsonb_build_object('kind', 'MILEAGE', 'present', payload_rows.mileage_units IS NOT NULL AND COALESCE(payload_rows.mileage_units, 0::numeric) <> 0::numeric, 'has_evidence', payload_rows.mileage_units IS NOT NULL AND COALESCE(payload_rows.mileage_units, 0::numeric) <> 0::numeric),
-          jsonb_build_object('kind', 'TRAVEL', 'present', COALESCE(payload_rows.travel_pay_ex_vat, 0::numeric) <> 0::numeric OR COALESCE(payload_rows.travel_charge_ex_vat, 0::numeric) <> 0::numeric, 'has_evidence', COALESCE(payload_rows.travel_pay_ex_vat, 0::numeric) <> 0::numeric OR COALESCE(payload_rows.travel_charge_ex_vat, 0::numeric) <> 0::numeric),
-          jsonb_build_object('kind', 'ACCOMMODATION', 'present', COALESCE(payload_rows.accommodation_pay_ex_vat, 0::numeric) <> 0::numeric OR COALESCE(payload_rows.accommodation_charge_ex_vat, 0::numeric) <> 0::numeric, 'has_evidence', COALESCE(payload_rows.accommodation_pay_ex_vat, 0::numeric) <> 0::numeric OR COALESCE(payload_rows.accommodation_charge_ex_vat, 0::numeric) <> 0::numeric),
-          jsonb_build_object('kind', 'OTHER', 'present', COALESCE(payload_rows.other_pay_ex_vat, 0::numeric) <> 0::numeric OR COALESCE(payload_rows.other_charge_ex_vat, 0::numeric) <> 0::numeric, 'has_evidence', COALESCE(payload_rows.other_pay_ex_vat, 0::numeric) <> 0::numeric OR COALESCE(payload_rows.other_charge_ex_vat, 0::numeric) <> 0::numeric)
+          jsonb_build_object('kind', 'TIMESHEET', 'present', (COALESCE(payload_rows.evidence_has_attached_timesheet, FALSE) OR COALESCE(payload_rows.evidence_has_staged_timesheet, FALSE) OR NULLIF(BTRIM(COALESCE(payload_rows.manual_pdf_r2_key, '')), '') IS NOT NULL OR NULLIF(BTRIM(COALESCE(payload_rows.qr_r2_key, '')), '') IS NOT NULL OR NULLIF(BTRIM(COALESCE(payload_rows.uploaded_pdf_r2_key, '')), '') IS NOT NULL), 'has_evidence', (COALESCE(payload_rows.evidence_has_attached_timesheet, FALSE) OR COALESCE(payload_rows.evidence_has_staged_timesheet, FALSE) OR NULLIF(BTRIM(COALESCE(payload_rows.manual_pdf_r2_key, '')), '') IS NOT NULL OR NULLIF(BTRIM(COALESCE(payload_rows.qr_r2_key, '')), '') IS NOT NULL OR NULLIF(BTRIM(COALESCE(payload_rows.uploaded_pdf_r2_key, '')), '') IS NOT NULL)),
+          jsonb_build_object('kind', 'MILEAGE', 'present', (COALESCE(payload_rows.evidence_has_attached_mileage, FALSE) OR COALESCE(payload_rows.evidence_has_staged_mileage, FALSE)), 'has_evidence', (COALESCE(payload_rows.evidence_has_attached_mileage, FALSE) OR COALESCE(payload_rows.evidence_has_staged_mileage, FALSE))),
+          jsonb_build_object('kind', 'TRAVEL', 'present', (COALESCE(payload_rows.evidence_has_attached_travel, FALSE) OR COALESCE(payload_rows.evidence_has_staged_travel, FALSE)), 'has_evidence', (COALESCE(payload_rows.evidence_has_attached_travel, FALSE) OR COALESCE(payload_rows.evidence_has_staged_travel, FALSE))),
+          jsonb_build_object('kind', 'ACCOMMODATION', 'present', (COALESCE(payload_rows.evidence_has_attached_accommodation, FALSE) OR COALESCE(payload_rows.evidence_has_staged_accommodation, FALSE)), 'has_evidence', (COALESCE(payload_rows.evidence_has_attached_accommodation, FALSE) OR COALESCE(payload_rows.evidence_has_staged_accommodation, FALSE))),
+          jsonb_build_object('kind', 'OTHER', 'present', (COALESCE(payload_rows.evidence_has_attached_other, FALSE) OR COALESCE(payload_rows.evidence_has_staged_other, FALSE)), 'has_evidence', (COALESCE(payload_rows.evidence_has_attached_other, FALSE) OR COALESCE(payload_rows.evidence_has_staged_other, FALSE)))
         )
       )
       || jsonb_build_object(
@@ -9470,7 +9586,9 @@ BEGIN
           'underlying_channel_family', payload_rows.underlying_channel_family_calc,
           'primary_artifact_storage_key', payload_rows.primary_artifact_storage_key_calc,
           'primary_artifact_preview_mode', payload_rows.primary_artifact_preview_mode_calc,
-          'has_any_evidence', (COALESCE(payload_rows.evidence_attached_count, 0) > 0 OR payload_rows.primary_artifact_storage_key_calc IS NOT NULL)
+          'has_any_evidence', (COALESCE(payload_rows.evidence_attached_count, 0) > 0 OR COALESCE(payload_rows.evidence_staged_count, 0) > 0 OR payload_rows.primary_artifact_storage_key_calc IS NOT NULL),
+          'attached_evidence_count', COALESCE(payload_rows.evidence_attached_count, 0),
+          'queue_staged_count', COALESCE(payload_rows.evidence_staged_count, 0)
         ),
         'row_patch', (
           jsonb_build_object(
@@ -9609,19 +9727,22 @@ BEGIN
             'client_is_nhsp', COALESCE(payload_rows.client_is_nhsp, FALSE),
             'has_any_evidence', (
               COALESCE(payload_rows.evidence_attached_count, 0) > 0
+              OR COALESCE(payload_rows.evidence_staged_count, 0) > 0
               OR payload_rows.primary_artifact_storage_key_calc IS NOT NULL
             ),
             'attached_evidence_count', COALESCE(payload_rows.evidence_attached_count, 0),
+            'queue_staged_count', COALESCE(payload_rows.evidence_staged_count, 0),
+            'evidence_count', COALESCE(payload_rows.evidence_attached_count, 0) + COALESCE(payload_rows.evidence_staged_count, 0),
             'primary_artifact_storage_key', payload_rows.primary_artifact_storage_key_calc,
             'previous_primary_artifact_storage_key', NULL::text,
             'primary_artifact_display_name', payload_rows.primary_artifact_display_name_calc,
             'primary_artifact_preview_mode', payload_rows.primary_artifact_preview_mode_calc,
             'evidence_badges', jsonb_build_array(
-              jsonb_build_object('kind', 'TIMESHEET', 'present', (COALESCE(payload_rows.evidence_attached_count, 0) > 0 OR payload_rows.primary_artifact_storage_key_calc IS NOT NULL), 'has_evidence', (COALESCE(payload_rows.evidence_attached_count, 0) > 0 OR payload_rows.primary_artifact_storage_key_calc IS NOT NULL)),
-              jsonb_build_object('kind', 'MILEAGE', 'present', payload_rows.mileage_units IS NOT NULL AND COALESCE(payload_rows.mileage_units, 0::numeric) <> 0::numeric, 'has_evidence', payload_rows.mileage_units IS NOT NULL AND COALESCE(payload_rows.mileage_units, 0::numeric) <> 0::numeric),
-              jsonb_build_object('kind', 'TRAVEL', 'present', COALESCE(payload_rows.travel_pay_ex_vat, 0::numeric) <> 0::numeric OR COALESCE(payload_rows.travel_charge_ex_vat, 0::numeric) <> 0::numeric, 'has_evidence', COALESCE(payload_rows.travel_pay_ex_vat, 0::numeric) <> 0::numeric OR COALESCE(payload_rows.travel_charge_ex_vat, 0::numeric) <> 0::numeric),
-              jsonb_build_object('kind', 'ACCOMMODATION', 'present', COALESCE(payload_rows.accommodation_pay_ex_vat, 0::numeric) <> 0::numeric OR COALESCE(payload_rows.accommodation_charge_ex_vat, 0::numeric) <> 0::numeric, 'has_evidence', COALESCE(payload_rows.accommodation_pay_ex_vat, 0::numeric) <> 0::numeric OR COALESCE(payload_rows.accommodation_charge_ex_vat, 0::numeric) <> 0::numeric),
-              jsonb_build_object('kind', 'OTHER', 'present', COALESCE(payload_rows.other_pay_ex_vat, 0::numeric) <> 0::numeric OR COALESCE(payload_rows.other_charge_ex_vat, 0::numeric) <> 0::numeric, 'has_evidence', COALESCE(payload_rows.other_pay_ex_vat, 0::numeric) <> 0::numeric OR COALESCE(payload_rows.other_charge_ex_vat, 0::numeric) <> 0::numeric)
+              jsonb_build_object('kind', 'TIMESHEET', 'present', (COALESCE(payload_rows.evidence_has_attached_timesheet, FALSE) OR COALESCE(payload_rows.evidence_has_staged_timesheet, FALSE) OR NULLIF(BTRIM(COALESCE(payload_rows.manual_pdf_r2_key, '')), '') IS NOT NULL OR NULLIF(BTRIM(COALESCE(payload_rows.qr_r2_key, '')), '') IS NOT NULL OR NULLIF(BTRIM(COALESCE(payload_rows.uploaded_pdf_r2_key, '')), '') IS NOT NULL), 'has_evidence', (COALESCE(payload_rows.evidence_has_attached_timesheet, FALSE) OR COALESCE(payload_rows.evidence_has_staged_timesheet, FALSE) OR NULLIF(BTRIM(COALESCE(payload_rows.manual_pdf_r2_key, '')), '') IS NOT NULL OR NULLIF(BTRIM(COALESCE(payload_rows.qr_r2_key, '')), '') IS NOT NULL OR NULLIF(BTRIM(COALESCE(payload_rows.uploaded_pdf_r2_key, '')), '') IS NOT NULL)),
+              jsonb_build_object('kind', 'MILEAGE', 'present', (COALESCE(payload_rows.evidence_has_attached_mileage, FALSE) OR COALESCE(payload_rows.evidence_has_staged_mileage, FALSE)), 'has_evidence', (COALESCE(payload_rows.evidence_has_attached_mileage, FALSE) OR COALESCE(payload_rows.evidence_has_staged_mileage, FALSE))),
+              jsonb_build_object('kind', 'TRAVEL', 'present', (COALESCE(payload_rows.evidence_has_attached_travel, FALSE) OR COALESCE(payload_rows.evidence_has_staged_travel, FALSE)), 'has_evidence', (COALESCE(payload_rows.evidence_has_attached_travel, FALSE) OR COALESCE(payload_rows.evidence_has_staged_travel, FALSE))),
+              jsonb_build_object('kind', 'ACCOMMODATION', 'present', (COALESCE(payload_rows.evidence_has_attached_accommodation, FALSE) OR COALESCE(payload_rows.evidence_has_staged_accommodation, FALSE)), 'has_evidence', (COALESCE(payload_rows.evidence_has_attached_accommodation, FALSE) OR COALESCE(payload_rows.evidence_has_staged_accommodation, FALSE))),
+              jsonb_build_object('kind', 'OTHER', 'present', (COALESCE(payload_rows.evidence_has_attached_other, FALSE) OR COALESCE(payload_rows.evidence_has_staged_other, FALSE)), 'has_evidence', (COALESCE(payload_rows.evidence_has_attached_other, FALSE) OR COALESCE(payload_rows.evidence_has_staged_other, FALSE)))
             ),
             'count_deltas', payload_rows.count_deltas_json,
             'cache_invalidation_hints', payload_rows.cache_hints_json
@@ -9637,7 +9758,6 @@ BEGIN
     payload_rows.row_key_calc ASC;
 END;
 $function$;
-
 
 
 
