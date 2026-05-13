@@ -3099,7 +3099,6 @@ SELECT
   CASE
     WHEN wi.sheet_scope = 'DAILY'::timesheet_scope_enum AND wi.submission_mode = 'ELECTRONIC'::submission_mode_enum THEN 'DAILY_ELECTRONIC'
     WHEN wi.sheet_scope = 'DAILY'::timesheet_scope_enum AND wi.submission_mode = 'MANUAL'::submission_mode_enum THEN 'DAILY_MANUAL'
-    WHEN wi.sheet_scope = 'WEEKLY'::timesheet_scope_enum AND wi.client_autoprocess_hr IS TRUE THEN 'WEEKLY_HEALTHROSTER'
     WHEN wi.sheet_scope = 'WEEKLY'::timesheet_scope_enum
       AND (
         COALESCE(wi.is_adjustment, FALSE) = TRUE
@@ -3110,9 +3109,26 @@ SELECT
         OR wi.basis = 'NHSP'::timesheet_fin_basis_enum
         OR COALESCE(wi.client_is_nhsp, FALSE) = TRUE
       ) THEN 'WEEKLY_NHSP_ADJUSTMENT'
+    WHEN wi.sheet_scope = 'WEEKLY'::timesheet_scope_enum
+      AND (
+        COALESCE(wi.is_adjustment, FALSE) = TRUE
+        OR COALESCE(wi.additional_seq, 0) > 0
+      )
+      AND (
+        wi.basis = 'HEALTHROSTER_ADJUSTMENT'::timesheet_fin_basis_enum
+        OR wi.basis = 'HEALTHROSTER_SELF_BILL'::timesheet_fin_basis_enum
+        OR COALESCE(wi.client_autoprocess_hr, FALSE) = TRUE
+      ) THEN 'WEEKLY_HEALTHROSTER_ADJUSTMENT'
+    WHEN wi.sheet_scope = 'WEEKLY'::timesheet_scope_enum
+      AND (
+        COALESCE(wi.is_adjustment, FALSE) = TRUE
+        OR COALESCE(wi.additional_seq, 0) > 0
+      ) THEN 'WEEKLY_MANUAL_ADJUSTMENT'
     WHEN wi.sheet_scope = 'WEEKLY'::timesheet_scope_enum AND wi.basis = 'NHSP_ADJUSTMENT'::timesheet_fin_basis_enum THEN 'WEEKLY_NHSP_ADJUSTMENT'
+    WHEN wi.sheet_scope = 'WEEKLY'::timesheet_scope_enum AND wi.basis = 'HEALTHROSTER_ADJUSTMENT'::timesheet_fin_basis_enum THEN 'WEEKLY_HEALTHROSTER_ADJUSTMENT'
     WHEN wi.sheet_scope = 'WEEKLY'::timesheet_scope_enum AND wi.basis = 'NHSP'::timesheet_fin_basis_enum THEN 'WEEKLY_NHSP'
     WHEN wi.sheet_scope = 'WEEKLY'::timesheet_scope_enum AND wi.client_is_nhsp IS TRUE THEN 'WEEKLY_NHSP'
+    WHEN wi.sheet_scope = 'WEEKLY'::timesheet_scope_enum AND (wi.client_autoprocess_hr IS TRUE OR wi.basis = 'HEALTHROSTER_SELF_BILL'::timesheet_fin_basis_enum) THEN 'WEEKLY_HEALTHROSTER'
     WHEN wi.sheet_scope = 'WEEKLY'::timesheet_scope_enum AND wi.submission_mode = 'ELECTRONIC'::submission_mode_enum THEN 'WEEKLY_ELECTRONIC'
     WHEN wi.sheet_scope = 'WEEKLY'::timesheet_scope_enum AND wi.submission_mode = 'MANUAL'::submission_mode_enum THEN 'WEEKLY_MANUAL'
     ELSE 'UNKNOWN'
