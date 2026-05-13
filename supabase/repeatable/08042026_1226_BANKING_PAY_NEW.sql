@@ -42415,9 +42415,7 @@ $function$;
 DROP FUNCTION IF EXISTS public.pay_batch_submission_evidence(uuid);
 
 
-
-
-CREATE OR REPLACE FUNCTION public.pay_batch_submission_evidence(p_pay_batch_id uuid)
+CREATE OR REPLACE FUNCTION public.pay_batch_submission_evidence(p_pay_batch_id uuid, p_counts_only boolean DEFAULT false)
 RETURNS jsonb
 LANGUAGE plpgsql
 VOLATILE
@@ -42745,6 +42743,7 @@ BEGIN
     ) FILTER (
       WHERE classified_rows.evidence_classification IN ('local_only_evidence', 'attempted_but_unproven', 'ambiguous', 'failed', 'pending')
         AND classified_rows.evidence_sample_ordinality <= 50
+        AND coalesce(p_counts_only, false) IS NOT TRUE
     ), '[]'::jsonb)
   INTO
     v_transfer_count,
@@ -42767,6 +42766,65 @@ BEGIN
   INTO v_transfer_event_count
   FROM public.pay_bank_transfer_events AS event_row
   WHERE event_row.pay_batch_id = p_pay_batch_id;
+
+
+  IF coalesce(p_counts_only, false) IS TRUE THEN
+    v_remaining_submit_attempt_required := coalesce(v_pending_count, 0) + coalesce(v_local_only_count, 0);
+    v_remaining_provider_evidence_required := coalesce(v_pending_count, 0)
+      + coalesce(v_local_only_count, 0)
+      + coalesce(v_ambiguous_count, 0)
+      + coalesce(v_attempted_but_unproven_count, 0);
+    v_remaining_provider_submission_required := v_remaining_provider_evidence_required;
+
+    v_can_mark_submitted := coalesce(v_transfer_count, 0) > 0
+      AND coalesce(v_provider_submitted_count, 0) = coalesce(v_transfer_count, 0)
+      AND coalesce(v_failed_count, 0) = 0
+      AND coalesce(v_ambiguous_count, 0) = 0
+      AND coalesce(v_local_only_count, 0) = 0
+      AND coalesce(v_pending_count, 0) = 0
+      AND coalesce(v_attempted_but_unproven_count, 0) = 0;
+    v_can_mark_committed := v_can_mark_submitted
+      AND coalesce(v_committed_count, 0) = coalesce(v_transfer_count, 0);
+
+    RETURN jsonb_build_object(
+      'ok', true,
+      'pay_batch_id', p_pay_batch_id::text,
+      'counts_only', true,
+      'transfer_count', coalesce(v_transfer_count, 0),
+      'transfer_event_count', coalesce(v_transfer_event_count, 0),
+      'has_transfer_events', coalesce(v_transfer_event_count, 0) > 0,
+      'provider_submitted_count', coalesce(v_provider_submitted_count, 0),
+      'provider_evidence_present_count', coalesce(v_provider_submitted_count, 0),
+      'local_idempotency_only_count', coalesce(v_local_only_count, 0),
+      'local_only_count', coalesce(v_local_only_count, 0),
+      'local_only_evidence_count', coalesce(v_local_only_count, 0),
+      'pending_count', coalesce(v_pending_count, 0),
+      'failed_count', coalesce(v_failed_count, 0),
+      'ambiguous_count', coalesce(v_ambiguous_count, 0),
+      'attempted_but_unproven_count', coalesce(v_attempted_but_unproven_count, 0),
+      'provider_attempt_without_external_id_count', coalesce(v_provider_attempt_without_external_id_count, 0),
+      'requires_provider_poll_count', coalesce(v_requires_provider_poll_count, 0),
+      'remaining_submit_attempt_required', coalesce(v_remaining_submit_attempt_required, 0),
+      'remaining_provider_evidence_required', coalesce(v_remaining_provider_evidence_required, 0),
+      'remaining_provider_submission_required', coalesce(v_remaining_provider_submission_required, 0),
+      'batch_can_be_marked_submitted', coalesce(v_can_mark_submitted, false),
+      'can_mark_submitted', coalesce(v_can_mark_submitted, false),
+      'can_mark_committed', coalesce(v_can_mark_committed, false),
+      'has_rail_tx_id', coalesce(v_has_rail_tx_id, false),
+      'has_local_generated_request_identity', coalesce(v_has_local_generated_request_identity, false),
+      'has_external_submission_evidence', coalesce(v_has_external_submission_evidence, false),
+      'no_submission_evidence', coalesce(v_has_external_submission_evidence, false) = false,
+      'evidence_sample', '[]'::jsonb,
+      'has_possible_provider_attempt_evidence', coalesce(v_has_external_submission_evidence, false) OR coalesce(v_attempted_but_unproven_count, 0) > 0,
+      'has_provider_attempt_request_or_idempotency_reference', coalesce(v_provider_submitted_count, 0) > 0 OR coalesce(v_attempted_but_unproven_count, 0) > 0,
+      'has_request_or_idempotency_reference', coalesce(v_local_only_count, 0) > 0 OR coalesce(v_provider_submitted_count, 0) > 0 OR coalesce(v_attempted_but_unproven_count, 0) > 0,
+      'has_submitted_state', coalesce(v_provider_submitted_count, 0) > 0,
+      'has_failed_or_rejected_provider_state', coalesce(v_failed_count, 0) > 0,
+      'has_unknown_or_timeout_state', coalesce(v_ambiguous_count, 0) > 0,
+      'requires_provider_poll', coalesce(v_requires_provider_poll_count, 0) > 0,
+      'requires_review', coalesce(v_ambiguous_count, 0) > 0 OR (coalesce(v_attempted_but_unproven_count, 0) > 0 AND coalesce(v_requires_provider_poll_count, 0) = 0)
+    );
+  END IF;
 
   SELECT coalesce(jsonb_agg(status_item.status_value ORDER BY status_item.status_value), '[]'::jsonb)
   INTO v_transfer_statuses
@@ -42866,6 +42924,7 @@ BEGIN
   );
 END;
 $function$;
+
 
 
 
