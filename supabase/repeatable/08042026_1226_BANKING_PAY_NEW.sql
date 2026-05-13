@@ -33142,8 +33142,8 @@ BEGIN
   END IF;
 
   WITH scoped_candidates AS (
-    SELECT scope_candidate.scope_candidate_id_value AS candidate_id
-    FROM unnest(COALESCE(v_session_row.scope_candidate_ids, ARRAY[]::uuid[])) AS scope_candidate(scope_candidate_id_value)
+    SELECT scoped_candidate.scoped_candidate_id AS candidate_id
+    FROM unnest(COALESCE(v_session_row.scope_candidate_ids, ARRAY[]::uuid[])) AS scoped_candidate(scoped_candidate_id)
   ),
   candidate_status_rows AS (
     SELECT
@@ -33158,7 +33158,7 @@ BEGIN
              AND UPPER(COALESCE(latest_session_state.status, '')) = 'FAILED'
              AND COALESCE(latest_session_state.session_version, 0) >= v_session_row.version
              AND COALESCE(latest_session_state.source_change_seq, 0) >= COALESCE(live_change_counter.seq, 0)
-             AND blocking_pending_job.id IS NULL
+             AND selected_pending_job.id IS NULL
           THEN 'FAILED'
         ELSE 'PENDING'
       END AS status,
@@ -33166,15 +33166,15 @@ BEGIN
       COALESCE(latest_session_state.session_version, v_session_row.version) AS session_version,
       COALESCE(live_change_counter.seq, 0) AS required_source_change_seq,
       v_session_row.version AS required_session_version,
-      blocking_pending_job.id AS pending_job_id,
+      selected_pending_job.id AS pending_job_id,
       latest_session_state.last_recomputed_at_utc,
-      COALESCE(latest_session_state.last_error_json, latest_recompute_job.last_error_json) AS last_error_json,
-      latest_recompute_job.id AS latest_job_id,
-      latest_recompute_job.job_type AS latest_job_type,
-      latest_recompute_job.status AS latest_job_status,
-      latest_recompute_job.attempt_count AS latest_job_attempt_count,
-      latest_recompute_job.max_attempts AS latest_job_max_attempts,
-      latest_recompute_job.last_error_json AS latest_job_last_error_json
+      COALESCE(latest_session_state.last_error_json, selected_latest_job.last_error_json) AS last_error_json,
+      selected_latest_job.id AS latest_job_id,
+      selected_latest_job.job_type AS latest_job_type,
+      selected_latest_job.status AS latest_job_status,
+      selected_latest_job.attempt_count AS latest_job_attempt_count,
+      selected_latest_job.max_attempts AS latest_job_max_attempts,
+      selected_latest_job.last_error_json AS latest_job_last_error_json
     FROM scoped_candidates
     LEFT JOIN public.app_change_counters AS live_change_counter
       ON live_change_counter.entity_key = 'pay_candidate:' || scoped_candidates.candidate_id::text
@@ -33189,53 +33189,43 @@ BEGIN
     LEFT JOIN LATERAL (
       SELECT
         public.banking_pay_workbench_jobs.id,
+        public.banking_pay_workbench_jobs.job_type,
         public.banking_pay_workbench_jobs.status,
         public.banking_pay_workbench_jobs.attempt_count,
         public.banking_pay_workbench_jobs.max_attempts,
         public.banking_pay_workbench_jobs.last_error_json,
-        public.banking_pay_workbench_jobs.job_type
+        public.banking_pay_workbench_jobs.updated_at_utc,
+        public.banking_pay_workbench_jobs.created_at_utc,
+        CASE
+          WHEN latest_session_state.pending_job_id IS NOT NULL
+               AND public.banking_pay_workbench_jobs.id = latest_session_state.pending_job_id THEN 1
+          WHEN public.banking_pay_workbench_jobs.payload_json->>'session_id' = p_session_id::text THEN 2
+          WHEN public.banking_pay_workbench_jobs.session_id = p_session_id THEN 3
+          WHEN public.banking_pay_workbench_jobs.job_type = 'SNAPSHOT_CANDIDATE_REFRESH'
+               AND public.banking_pay_workbench_jobs.snapshot_run_id = v_session_row.source_snapshot_run_id
+               AND public.banking_pay_workbench_jobs.candidate_id = scoped_candidates.candidate_id THEN 4
+          ELSE 99
+        END AS match_rank
       FROM public.banking_pay_workbench_jobs
-      WHERE public.banking_pay_workbench_jobs.session_id = p_session_id
+      WHERE public.banking_pay_workbench_jobs.status IN ('QUEUED', 'RUNNING')
         AND public.banking_pay_workbench_jobs.candidate_id = scoped_candidates.candidate_id
-        AND public.banking_pay_workbench_jobs.job_type = 'SESSION_CANDIDATE_RECOMPUTE'
-        AND public.banking_pay_workbench_jobs.status IN ('QUEUED', 'RUNNING')
-        AND COALESCE(
-              CASE
-                WHEN COALESCE(public.banking_pay_workbench_jobs.payload_json->>'session_version', '') ~ '^[0-9]+$'
-                  THEN (public.banking_pay_workbench_jobs.payload_json->>'session_version')::bigint
-                ELSE 0::bigint
-              END,
-              0::bigint
-            ) >= v_session_row.version
-        AND COALESCE(
-              CASE
-                WHEN COALESCE(public.banking_pay_workbench_jobs.payload_json->>'source_change_seq', '') ~ '^[0-9]+$'
-                  THEN (public.banking_pay_workbench_jobs.payload_json->>'source_change_seq')::bigint
-                ELSE 0::bigint
-              END,
-              0::bigint
-            ) >= COALESCE(live_change_counter.seq, 0)
+        AND (
+          (latest_session_state.pending_job_id IS NOT NULL AND public.banking_pay_workbench_jobs.id = latest_session_state.pending_job_id)
+          OR public.banking_pay_workbench_jobs.payload_json->>'session_id' = p_session_id::text
+          OR public.banking_pay_workbench_jobs.session_id = p_session_id
+          OR (
+            public.banking_pay_workbench_jobs.job_type = 'SNAPSHOT_CANDIDATE_REFRESH'
+            AND public.banking_pay_workbench_jobs.snapshot_run_id = v_session_row.source_snapshot_run_id
+            AND public.banking_pay_workbench_jobs.candidate_id = scoped_candidates.candidate_id
+          )
+        )
       ORDER BY
-        COALESCE(
-          CASE
-            WHEN COALESCE(public.banking_pay_workbench_jobs.payload_json->>'session_version', '') ~ '^[0-9]+$'
-              THEN (public.banking_pay_workbench_jobs.payload_json->>'session_version')::bigint
-            ELSE 0::bigint
-          END,
-          0::bigint
-        ) DESC,
-        COALESCE(
-          CASE
-            WHEN COALESCE(public.banking_pay_workbench_jobs.payload_json->>'source_change_seq', '') ~ '^[0-9]+$'
-              THEN (public.banking_pay_workbench_jobs.payload_json->>'source_change_seq')::bigint
-            ELSE 0::bigint
-          END,
-          0::bigint
-        ) DESC,
+        match_rank ASC,
         public.banking_pay_workbench_jobs.updated_at_utc DESC,
+        public.banking_pay_workbench_jobs.created_at_utc DESC,
         public.banking_pay_workbench_jobs.id DESC
       LIMIT 1
-    ) AS blocking_pending_job ON true
+    ) AS selected_pending_job ON true
     LEFT JOIN LATERAL (
       SELECT
         public.banking_pay_workbench_jobs.id,
@@ -33243,14 +33233,41 @@ BEGIN
         public.banking_pay_workbench_jobs.status,
         public.banking_pay_workbench_jobs.attempt_count,
         public.banking_pay_workbench_jobs.max_attempts,
-        public.banking_pay_workbench_jobs.last_error_json
+        public.banking_pay_workbench_jobs.last_error_json,
+        public.banking_pay_workbench_jobs.updated_at_utc,
+        public.banking_pay_workbench_jobs.created_at_utc,
+        CASE
+          WHEN selected_pending_job.id IS NOT NULL
+               AND public.banking_pay_workbench_jobs.id = selected_pending_job.id THEN 1
+          WHEN latest_session_state.pending_job_id IS NOT NULL
+               AND public.banking_pay_workbench_jobs.id = latest_session_state.pending_job_id THEN 2
+          WHEN public.banking_pay_workbench_jobs.payload_json->>'session_id' = p_session_id::text THEN 3
+          WHEN public.banking_pay_workbench_jobs.session_id = p_session_id THEN 4
+          WHEN public.banking_pay_workbench_jobs.job_type = 'SNAPSHOT_CANDIDATE_REFRESH'
+               AND public.banking_pay_workbench_jobs.snapshot_run_id = v_session_row.source_snapshot_run_id
+               AND public.banking_pay_workbench_jobs.candidate_id = scoped_candidates.candidate_id THEN 5
+          ELSE 99
+        END AS match_rank
       FROM public.banking_pay_workbench_jobs
-      WHERE public.banking_pay_workbench_jobs.session_id = p_session_id
-        AND public.banking_pay_workbench_jobs.candidate_id = scoped_candidates.candidate_id
-        AND public.banking_pay_workbench_jobs.job_type = 'SESSION_CANDIDATE_RECOMPUTE'
-      ORDER BY public.banking_pay_workbench_jobs.updated_at_utc DESC, public.banking_pay_workbench_jobs.id DESC
+      WHERE public.banking_pay_workbench_jobs.candidate_id = scoped_candidates.candidate_id
+        AND (
+          (selected_pending_job.id IS NOT NULL AND public.banking_pay_workbench_jobs.id = selected_pending_job.id)
+          OR (latest_session_state.pending_job_id IS NOT NULL AND public.banking_pay_workbench_jobs.id = latest_session_state.pending_job_id)
+          OR public.banking_pay_workbench_jobs.payload_json->>'session_id' = p_session_id::text
+          OR public.banking_pay_workbench_jobs.session_id = p_session_id
+          OR (
+            public.banking_pay_workbench_jobs.job_type = 'SNAPSHOT_CANDIDATE_REFRESH'
+            AND public.banking_pay_workbench_jobs.snapshot_run_id = v_session_row.source_snapshot_run_id
+            AND public.banking_pay_workbench_jobs.candidate_id = scoped_candidates.candidate_id
+          )
+        )
+      ORDER BY
+        match_rank ASC,
+        public.banking_pay_workbench_jobs.updated_at_utc DESC,
+        public.banking_pay_workbench_jobs.created_at_utc DESC,
+        public.banking_pay_workbench_jobs.id DESC
       LIMIT 1
-    ) AS latest_recompute_job ON true
+    ) AS selected_latest_job ON true
   )
   SELECT
     COALESCE(
@@ -33279,7 +33296,8 @@ BEGIN
           'latest_job_attempt_count', candidate_status_rows.latest_job_attempt_count,
           'latest_job_max_attempts', candidate_status_rows.latest_job_max_attempts,
           'last_recomputed_at_utc', candidate_status_rows.last_recomputed_at_utc,
-          'last_error_json', COALESCE(candidate_status_rows.last_error_json, candidate_status_rows.latest_job_last_error_json)
+          'last_error_json', COALESCE(candidate_status_rows.last_error_json, candidate_status_rows.latest_job_last_error_json),
+          'latest_job_last_error_json', candidate_status_rows.latest_job_last_error_json
         )
         ORDER BY candidate_status_rows.candidate_id
       ),
@@ -33313,6 +33331,9 @@ BEGIN
                'run_at_utc', recent_jobs.run_at_utc,
                'attempt_count', recent_jobs.attempt_count,
                'max_attempts', recent_jobs.max_attempts,
+               'snapshot_run_id', CASE WHEN recent_jobs.snapshot_run_id IS NULL THEN NULL ELSE recent_jobs.snapshot_run_id::text END,
+               'session_id', CASE WHEN recent_jobs.session_id IS NULL THEN NULL ELSE recent_jobs.session_id::text END,
+               'payload_session_id', NULLIF(recent_jobs.payload_json->>'session_id', ''),
                'candidate_id', CASE WHEN recent_jobs.candidate_id IS NULL THEN NULL ELSE recent_jobs.candidate_id::text END,
                'started_at_utc', recent_jobs.started_at_utc,
                'completed_at_utc', recent_jobs.completed_at_utc,
@@ -33328,6 +33349,17 @@ BEGIN
     SELECT public.banking_pay_workbench_jobs.*
     FROM public.banking_pay_workbench_jobs
     WHERE public.banking_pay_workbench_jobs.session_id = p_session_id
+       OR public.banking_pay_workbench_jobs.payload_json->>'session_id' = p_session_id::text
+       OR public.banking_pay_workbench_jobs.id IN (
+            SELECT public.banking_pay_workbench_session_candidate_state.pending_job_id
+            FROM public.banking_pay_workbench_session_candidate_state
+            WHERE public.banking_pay_workbench_session_candidate_state.session_id = p_session_id
+              AND public.banking_pay_workbench_session_candidate_state.pending_job_id IS NOT NULL
+          )
+       OR (
+            public.banking_pay_workbench_jobs.snapshot_run_id = v_session_row.source_snapshot_run_id
+            AND public.banking_pay_workbench_jobs.candidate_id = ANY(COALESCE(v_session_row.scope_candidate_ids, ARRAY[]::uuid[]))
+          )
     ORDER BY public.banking_pay_workbench_jobs.updated_at_utc DESC, public.banking_pay_workbench_jobs.id DESC
     LIMIT 50
   ) AS recent_jobs;
@@ -33353,20 +33385,19 @@ BEGIN
   RETURN jsonb_build_object(
     'ok', true,
     'session_id', p_session_id::text,
-    'snapshot_run_id', v_session_row.source_snapshot_run_id::text,
+    'snapshot_run_id', CASE WHEN v_session_row.source_snapshot_run_id IS NULL THEN NULL ELSE v_session_row.source_snapshot_run_id::text END,
+    'source_snapshot_run_id', CASE WHEN v_session_row.source_snapshot_run_id IS NULL THEN NULL ELSE v_session_row.source_snapshot_run_id::text END,
     'session_status', v_session_row.status,
     'session_version', v_session_row.version,
     'ready_flag', v_ready_flag,
     'ready', v_ready_flag,
     'total_count', v_total_count,
     'completed_count', v_completed_count,
+    'ready_count', v_ready_count,
     'pending_count', v_pending_count,
     'failed_count', v_failed_count,
     'phase', v_phase,
     'status_text', v_status_text,
-    'ready_count', v_ready_count,
-    'pending_count', v_pending_count,
-    'failed_count', v_failed_count,
     'pending_candidate_ids', v_pending_candidate_ids_jsonb,
     'failed_candidate_ids', v_failed_candidate_ids_jsonb,
     'pending_job_ids', v_pending_job_ids_jsonb,
@@ -33376,9 +33407,6 @@ BEGIN
   );
 END;
 $function$;
-
-
-
 
 
 
