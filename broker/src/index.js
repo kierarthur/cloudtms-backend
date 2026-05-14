@@ -33561,6 +33561,8 @@ async function getBankingPayOperationConfig(env, operationType, options = {}) {
 
   return snapshot;
 }
+
+
 function buildBankingPayOperationPublicPayload(operationRow, options = {}) {
   const unwrapRow = (value) => {
     let row = value;
@@ -33575,8 +33577,21 @@ function buildBankingPayOperationPublicPayload(operationRow, options = {}) {
     return (row && typeof row === 'object' && !Array.isArray(row)) ? row : {};
   };
 
+  const asPlainObject = (value) => {
+    if (value && typeof value === 'object' && !Array.isArray(value)) return value;
+    if (typeof value === 'string') {
+      const text = value.trim();
+      if (!text) return {};
+      try {
+        const parsed = JSON.parse(text);
+        return (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) ? parsed : {};
+      } catch {}
+    }
+    return {};
+  };
+
   const row = unwrapRow(operationRow);
-  const progress = (row.progress_json && typeof row.progress_json === 'object' && !Array.isArray(row.progress_json)) ? row.progress_json : {};
+  const progress = asPlainObject(row.progress_json);
   const status = String(row.status || progress.status || '').trim().toUpperCase() || 'UNKNOWN';
   const phase = String(row.phase || progress.phase || '').trim().toUpperCase() || 'UNKNOWN';
   const operationType = String(row.operation_type || progress.operation_type || '').trim().toUpperCase() || 'UNKNOWN';
@@ -33649,8 +33664,10 @@ function buildBankingPayOperationPublicPayload(operationRow, options = {}) {
     'COMPLETE'
   ].includes(phase);
 
-  const resultJson = (row.result_json && typeof row.result_json === 'object' && !Array.isArray(row.result_json)) ? row.result_json : null;
-  const errorJson = (row.error_json && typeof row.error_json === 'object' && !Array.isArray(row.error_json)) ? row.error_json : null;
+  const resultObject = asPlainObject(row.result_json);
+  const resultJson = Object.keys(resultObject).length ? resultObject : null;
+  const errorObject = asPlainObject(row.error_json);
+  const errorJson = Object.keys(errorObject).length ? errorObject : null;
 
   const title = String(progress.title || options.title || defaultTitles[operationType] || 'Banking operation').trim();
   const statusText = String(
@@ -33660,6 +33677,154 @@ function buildBankingPayOperationPublicPayload(operationRow, options = {}) {
     || phaseLabels[phase]
     || phase
   ).trim();
+
+  const nestedResultObject = asPlainObject(resultObject.result);
+  const progressLastChunkResult = asPlainObject(progress.last_chunk_result);
+  const resultSources = [resultObject, nestedResultObject, progressLastChunkResult, progress].filter((source) => source && typeof source === 'object' && !Array.isArray(source));
+  const trimText = (value) => String(value == null ? '' : value).trim();
+  const firstText = (...values) => {
+    for (const value of values) {
+      const text = trimText(value);
+      if (text) return text;
+    }
+    return '';
+  };
+  const addUnique = (target, value) => {
+    const text = trimText(value);
+    if (!text || target.includes(text)) return;
+    target.push(text);
+  };
+  const addArrayValues = (target, value) => {
+    if (!Array.isArray(value)) return;
+    for (const item of value) addUnique(target, item);
+  };
+  const pickPayChannel = (entry) => {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return '';
+    return firstText(
+      entry.pay_channel,
+      entry.payChannel,
+      entry.channel,
+      entry.batch_kind,
+      entry.batchKind,
+      entry.scope && entry.scope.pay_channel,
+      entry.scope && entry.scope.batch_kind,
+      entry.result && entry.result.pay_channel,
+      entry.result && entry.result.batch_kind,
+      entry.batch && entry.batch.pay_channel,
+      entry.batch && entry.batch.batch_kind
+    );
+  };
+  const pickPayBatchId = (entry) => {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return '';
+    return firstText(
+      entry.pay_batch_id,
+      entry.payBatchId,
+      entry.primary_pay_batch_id,
+      entry.primaryBatchId,
+      entry.id,
+      entry.result && entry.result.pay_batch_id,
+      entry.result && entry.result.payBatchId,
+      entry.result && entry.result.primary_pay_batch_id,
+      entry.batch && entry.batch.pay_batch_id,
+      entry.batch && entry.batch.id
+    );
+  };
+  const addCreatedBatch = (target, seen, entry, fallbackPayChannel = null) => {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return;
+    const payBatchId = pickPayBatchId(entry);
+    if (!payBatchId || seen.has(payBatchId)) return;
+    seen.add(payBatchId);
+    target.push({
+      ...entry,
+      pay_batch_id: payBatchId,
+      pay_channel: firstText(pickPayChannel(entry), fallbackPayChannel) || null
+    });
+  };
+  const normaliseCreatedBatches = (...values) => {
+    const out = [];
+    const seen = new Set();
+    for (const value of values) {
+      if (!Array.isArray(value)) continue;
+      for (const entry of value) addCreatedBatch(out, seen, entry);
+    }
+    return out;
+  };
+
+  const createdBatches = normaliseCreatedBatches(
+    resultObject.created_batches,
+    resultObject.createdBatches,
+    resultObject.batch_shells,
+    resultObject.batchShells,
+    resultObject.results,
+    nestedResultObject.created_batches,
+    nestedResultObject.createdBatches,
+    nestedResultObject.batch_shells,
+    nestedResultObject.batchShells,
+    nestedResultObject.results,
+    progress.batch_shells,
+    progress.batchShells,
+    progressLastChunkResult.created_batches,
+    progressLastChunkResult.createdBatches,
+    progressLastChunkResult.batch_shells,
+    progressLastChunkResult.batchShells,
+    progressLastChunkResult.results
+  );
+  const payBatchIds = [];
+  const createdPayBatchIds = [];
+
+  addUnique(payBatchIds, row.pay_batch_id);
+  for (const source of resultSources) {
+    addUnique(payBatchIds, source.pay_batch_id);
+    addUnique(payBatchIds, source.primary_pay_batch_id);
+    addUnique(payBatchIds, source.primaryBatchId);
+    addUnique(payBatchIds, source.paye_pay_batch_id);
+    addUnique(payBatchIds, source.umbrella_pay_batch_id);
+    addArrayValues(payBatchIds, source.pay_batch_ids);
+    addArrayValues(payBatchIds, source.created_pay_batch_ids);
+    addArrayValues(payBatchIds, source.createdBatchIds);
+
+    if (operationType === 'DRAFT_CREATE') {
+      addArrayValues(createdPayBatchIds, source.created_pay_batch_ids);
+      addArrayValues(createdPayBatchIds, source.createdBatchIds);
+      addUnique(createdPayBatchIds, source.pay_batch_id);
+      addUnique(createdPayBatchIds, source.primary_pay_batch_id);
+      addUnique(createdPayBatchIds, source.primaryBatchId);
+      addUnique(createdPayBatchIds, source.paye_pay_batch_id);
+      addUnique(createdPayBatchIds, source.umbrella_pay_batch_id);
+    }
+  }
+
+  for (const createdBatch of createdBatches) {
+    addUnique(payBatchIds, createdBatch.pay_batch_id);
+    addUnique(createdPayBatchIds, createdBatch.pay_batch_id);
+  }
+
+  const derivedPayBatchId = firstText(row.pay_batch_id, resultObject.pay_batch_id, nestedResultObject.pay_batch_id, progress.pay_batch_id, payBatchIds[0]) || null;
+  const derivedPayePayBatchId = firstText(
+    resultObject.paye_pay_batch_id,
+    nestedResultObject.paye_pay_batch_id,
+    progress.paye_pay_batch_id,
+    createdBatches.find((batch) => String(batch.pay_channel || '').trim().toUpperCase() === 'PAYE')?.pay_batch_id
+  ) || null;
+  const derivedUmbrellaPayBatchId = firstText(
+    resultObject.umbrella_pay_batch_id,
+    nestedResultObject.umbrella_pay_batch_id,
+    progress.umbrella_pay_batch_id,
+    createdBatches.find((batch) => ['UMBRELLA', 'NON_PAYE', 'NONPAYE'].includes(String(batch.pay_channel || '').trim().toUpperCase()))?.pay_batch_id
+  ) || null;
+
+  if (operationType === 'DRAFT_CREATE' && !createdBatches.length) {
+    const fabricated = [];
+    const fabricatedSeen = new Set();
+    if (derivedPayePayBatchId) addCreatedBatch(fabricated, fabricatedSeen, { pay_batch_id: derivedPayePayBatchId, pay_channel: 'PAYE' }, 'PAYE');
+    if (derivedUmbrellaPayBatchId) addCreatedBatch(fabricated, fabricatedSeen, { pay_batch_id: derivedUmbrellaPayBatchId, pay_channel: 'UMBRELLA' }, 'UMBRELLA');
+    if (derivedPayBatchId) addCreatedBatch(fabricated, fabricatedSeen, { pay_batch_id: derivedPayBatchId, pay_channel: firstText(resultObject.pay_channel, nestedResultObject.pay_channel, progress.pay_channel, resultObject.batch_kind, nestedResultObject.batch_kind, progress.batch_kind) || null });
+    for (const fabricatedBatch of fabricated) {
+      createdBatches.push(fabricatedBatch);
+      addUnique(payBatchIds, fabricatedBatch.pay_batch_id);
+      addUnique(createdPayBatchIds, fabricatedBatch.pay_batch_id);
+    }
+  }
 
   const payload = {
     ok: status !== 'FAILED',
@@ -33680,7 +33845,12 @@ function buildBankingPayOperationPublicPayload(operationRow, options = {}) {
     can_cancel: !terminal && !providerSubmissionStarted,
     terminal,
     waiting: status === 'WAITING',
-    pay_batch_id: row.pay_batch_id ? String(row.pay_batch_id) : null,
+    pay_batch_id: derivedPayBatchId,
+    pay_batch_ids: payBatchIds,
+    created_pay_batch_ids: operationType === 'DRAFT_CREATE' ? createdPayBatchIds : [],
+    paye_pay_batch_id: derivedPayePayBatchId,
+    umbrella_pay_batch_id: derivedUmbrellaPayBatchId,
+    created_batches: operationType === 'DRAFT_CREATE' ? createdBatches : [],
     workbench_session_id: row.workbench_session_id ? String(row.workbench_session_id) : null,
     root_operation_id: row.root_operation_id ? String(row.root_operation_id) : null,
     idempotency_key: row.idempotency_key ? String(row.idempotency_key) : null,
@@ -33717,6 +33887,9 @@ function buildBankingPayOperationPublicPayload(operationRow, options = {}) {
 
   return payload;
 }
+
+
+
 
 async function startBankingPayOperation(env, input = {}, options = {}) {
   const unwrapRpcPayload = (rpcRes, key) => {
