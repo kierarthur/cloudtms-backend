@@ -5252,7 +5252,15 @@ BEGIN
       'PENDING',
       transfer_scope.payment_reference,
       transfer_scope.payee_name,
-      regexp_replace(COALESCE(transfer_scope.sort_code, ''), '[^0-9]', '', 'g'),
+      CASE
+        WHEN NULLIF(BTRIM(COALESCE(transfer_scope.sort_code, '')), '') IS NULL THEN NULL::text
+        WHEN BTRIM(transfer_scope.sort_code) ~ '^[0-9]{2}-[0-9]{2}-[0-9]{2}$' THEN BTRIM(transfer_scope.sort_code)
+        WHEN regexp_replace(transfer_scope.sort_code, '[^0-9]', '', 'g') ~ '^[0-9]{6}$' THEN
+          substring(regexp_replace(transfer_scope.sort_code, '[^0-9]', '', 'g') from 1 for 2)
+          || '-' || substring(regexp_replace(transfer_scope.sort_code, '[^0-9]', '', 'g') from 3 for 2)
+          || '-' || substring(regexp_replace(transfer_scope.sort_code, '[^0-9]', '', 'g') from 5 for 2)
+        ELSE BTRIM(transfer_scope.sort_code)
+      END,
       regexp_replace(COALESCE(transfer_scope.account_number, ''), '[^0-9]', '', 'g'),
       transfer_scope.account_type,
       v_now,
@@ -5467,6 +5475,7 @@ BEGIN
   );
 END;
 $function$;
+
 
 
 
