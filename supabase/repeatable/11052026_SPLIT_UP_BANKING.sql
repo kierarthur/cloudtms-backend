@@ -10242,5 +10242,525 @@ BEGIN
 END;
 $function$;
 
+CREATE OR REPLACE FUNCTION public.pay_workbench_prepare_draft_scope_seed(p_operation_id uuid, p_workbench_session_id uuid, p_actor_user_id uuid, p_selected_preview_row_ids jsonb DEFAULT NULL::jsonb, p_pay_channel_scope text DEFAULT NULL::text, p_same_week_paye_override_json jsonb DEFAULT '{}'::jsonb)
+ RETURNS TABLE(candidate_scope_count integer, selected_row_count integer, timesheet_count integer, finance_case_count integer, pay_channel_count integer)
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+declare
+    v_operation public.banking_pay_operations%rowtype;
+    v_session public.banking_pay_workbench_sessions%rowtype;
+    v_scope_filter text;
+    v_selected_input jsonb;
+    v_selected_row_count integer;
+    v_existing_mismatch_count integer;
+    v_same_week_paye_override_json jsonb;
+    v_candidate_scope_count integer;
+    v_selected_count integer;
+    v_timesheet_count integer;
+    v_finance_case_count integer;
+    v_pay_channel_count integer;
+begin
+    v_scope_filter := upper(coalesce(nullif(btrim(p_pay_channel_scope), ''), 'ALL'));
+    v_same_week_paye_override_json := coalesce(p_same_week_paye_override_json, '{}'::jsonb);
+
+    if v_scope_filter not in ('ALL', 'PAYE', 'UMBRELLA') then
+        raise exception 'pay_workbench_prepare_draft_scope_seed unsupported pay channel scope: %', v_scope_filter;
+    end if;
+
+    if jsonb_typeof(v_same_week_paye_override_json) <> 'object' then
+        raise exception 'pay_workbench_prepare_draft_scope_seed requires p_same_week_paye_override_json to be a JSON object';
+    end if;
+
+    select operation_row.*
+    into v_operation
+    from public.banking_pay_operations as operation_row
+    where operation_row.id = p_operation_id
+    for update;
+
+    if not found then
+        raise exception 'pay_workbench_prepare_draft_scope_seed operation not found: %', p_operation_id;
+    end if;
+
+    if v_operation.operation_type <> 'DRAFT_CREATE' then
+        raise exception 'pay_workbench_prepare_draft_scope_seed expected DRAFT_CREATE operation %, got %', p_operation_id, v_operation.operation_type;
+    end if;
+
+    if v_operation.status in ('COMPLETE', 'FAILED', 'CANCELLED', 'REVIEW_REQUIRED') then
+        raise exception 'pay_workbench_prepare_draft_scope_seed cannot seed terminal operation % with status %', p_operation_id, v_operation.status;
+    end if;
+
+    if v_operation.workbench_session_id is not null and v_operation.workbench_session_id <> p_workbench_session_id then
+        raise exception 'pay_workbench_prepare_draft_scope_seed operation % belongs to a different workbench session', p_operation_id;
+    end if;
+
+    if p_actor_user_id is not null and v_operation.actor_user_id is not null and v_operation.actor_user_id <> p_actor_user_id then
+        raise exception 'pay_workbench_prepare_draft_scope_seed operation % belongs to a different actor', p_operation_id;
+    end if;
+
+    select session_row.*
+    into v_session
+    from public.banking_pay_workbench_sessions as session_row
+    where session_row.id = p_workbench_session_id
+    for update;
+
+    if not found then
+        raise exception 'pay_workbench_prepare_draft_scope_seed workbench session not found: %', p_workbench_session_id;
+    end if;
+
+    if v_session.status <> 'OPEN' then
+        raise exception 'pay_workbench_prepare_draft_scope_seed workbench session % is not OPEN: %', p_workbench_session_id, v_session.status;
+    end if;
+
+    if v_session.discarded_at_utc is not null then
+        raise exception 'pay_workbench_prepare_draft_scope_seed workbench session % has been discarded', p_workbench_session_id;
+    end if;
+
+    if p_actor_user_id is not null and v_session.actor_user_id <> p_actor_user_id then
+        raise exception 'pay_workbench_prepare_draft_scope_seed workbench session % belongs to a different actor', p_workbench_session_id;
+    end if;
+
+    if p_selected_preview_row_ids is not null then
+        if jsonb_typeof(p_selected_preview_row_ids) <> 'array' then
+            raise exception 'pay_workbench_prepare_draft_scope_seed requires p_selected_preview_row_ids to be null or a JSON array';
+        end if;
+
+        select coalesce(jsonb_agg(to_jsonb(normalized_selection.preview_row_id) order by normalized_selection.ord), '[]'::jsonb), count(*)::integer
+        into v_selected_input, v_selected_row_count
+        from (
+            select distinct on (raw_selection.preview_row_id)
+                raw_selection.preview_row_id,
+                raw_selection.ord
+            from (
+                select btrim(selection_element.value) as preview_row_id,
+                       selection_element.ord
+                from jsonb_array_elements_text(p_selected_preview_row_ids) with ordinality as selection_element(value, ord)
+                where btrim(selection_element.value) <> ''
+            ) as raw_selection
+            order by raw_selection.preview_row_id, raw_selection.ord
+        ) as normalized_selection;
+    else
+        if coalesce(v_session.server_selected_preview_row_ids_provided, false) is not true then
+            raise exception 'pay_workbench_prepare_draft_scope_seed requires server-selected preview rows for session %', p_workbench_session_id;
+        end if;
+
+        if jsonb_typeof(coalesce(v_session.server_selected_preview_row_ids, '[]'::jsonb)) <> 'array' then
+            raise exception 'pay_workbench_prepare_draft_scope_seed session % has invalid server_selected_preview_row_ids', p_workbench_session_id;
+        end if;
+
+        select coalesce(jsonb_agg(to_jsonb(normalized_selection.preview_row_id) order by normalized_selection.ord), '[]'::jsonb), count(*)::integer
+        into v_selected_input, v_selected_row_count
+        from (
+            select distinct on (raw_selection.preview_row_id)
+                raw_selection.preview_row_id,
+                raw_selection.ord
+            from (
+                select btrim(selection_element.value) as preview_row_id,
+                       selection_element.ord
+                from jsonb_array_elements_text(coalesce(v_session.server_selected_preview_row_ids, '[]'::jsonb)) with ordinality as selection_element(value, ord)
+                where btrim(selection_element.value) <> ''
+            ) as raw_selection
+            order by raw_selection.preview_row_id, raw_selection.ord
+        ) as normalized_selection;
+    end if;
+
+    if coalesce(v_selected_row_count, 0) = 0 then
+        raise exception 'pay_workbench_prepare_draft_scope_seed requires at least one selected preview row';
+    end if;
+
+    if coalesce(v_session.server_selected_preview_row_ids_provided, false) is not true then
+        raise exception 'pay_workbench_prepare_draft_scope_seed session % does not have persisted server-selected preview rows', p_workbench_session_id;
+    end if;
+
+    if v_selected_input is distinct from coalesce(v_session.server_selected_preview_row_ids, '[]'::jsonb) then
+        raise exception 'pay_workbench_prepare_draft_scope_seed supplied selected preview rows do not match session server-selected preview rows for session %', p_workbench_session_id;
+    end if;
+
+    drop table if exists pg_temp.tmp_pay_workbench_scope_seed_requested_rows;
+    create temporary table pg_temp.tmp_pay_workbench_scope_seed_requested_rows (
+        preview_row_id text primary key,
+        ord bigint not null
+    ) on commit drop;
+
+    insert into pg_temp.tmp_pay_workbench_scope_seed_requested_rows(preview_row_id, ord)
+    select normalized_selection.preview_row_id,
+           normalized_selection.ord
+    from (
+        select distinct on (raw_selection.preview_row_id)
+            raw_selection.preview_row_id,
+            raw_selection.ord
+        from (
+            select btrim(selection_element.value) as preview_row_id,
+                   selection_element.ord
+            from jsonb_array_elements_text(v_selected_input) with ordinality as selection_element(value, ord)
+            where btrim(selection_element.value) <> ''
+        ) as raw_selection
+        order by raw_selection.preview_row_id, raw_selection.ord
+    ) as normalized_selection;
+
+    drop table if exists pg_temp.tmp_pay_workbench_scope_seed_ready_state;
+    create temporary table pg_temp.tmp_pay_workbench_scope_seed_ready_state as
+    select distinct on (state_row.candidate_id)
+        state_row.id as candidate_state_id,
+        state_row.session_id,
+        state_row.candidate_id,
+        state_row.status,
+        state_row.effective_candidate_fragment_json,
+        state_row.effective_summary_fragment_json,
+        state_row.effective_paye_candidate_json,
+        state_row.effective_non_paye_payee_json,
+        state_row.effective_payees_json,
+        state_row.effective_case_resolution_states_json,
+        state_row.effective_canonical_preview_lines_json,
+        state_row.session_version,
+        state_row.updated_at_utc
+    from public.banking_pay_workbench_session_candidate_state as state_row
+    where state_row.session_id = p_workbench_session_id
+      and state_row.status = 'READY'
+    order by state_row.candidate_id, state_row.updated_at_utc desc, state_row.id desc;
+
+    drop table if exists pg_temp.tmp_pay_workbench_scope_seed_selected_lines;
+    create temporary table pg_temp.tmp_pay_workbench_scope_seed_selected_lines as
+    select
+        ready_state.candidate_state_id,
+        ready_state.candidate_id,
+        upper(btrim(coalesce(line_element.value->>'pay_channel', ''))) as pay_channel,
+        btrim(coalesce(
+            line_element.value->>'preview_row_id',
+            line_element.value->>'line_id',
+            line_element.value->>'row_id',
+            line_element.value->>'id',
+            ''
+        )) as preview_row_id,
+        requested_rows.ord,
+        line_element.value as line_json,
+        ready_state.effective_candidate_fragment_json,
+        ready_state.effective_summary_fragment_json,
+        ready_state.effective_paye_candidate_json,
+        ready_state.effective_non_paye_payee_json,
+        ready_state.effective_payees_json,
+        ready_state.effective_case_resolution_states_json,
+        ready_state.effective_canonical_preview_lines_json,
+        ready_state.session_version
+    from pg_temp.tmp_pay_workbench_scope_seed_ready_state as ready_state
+    cross join lateral jsonb_array_elements(
+        case
+            when jsonb_typeof(coalesce(ready_state.effective_canonical_preview_lines_json, '[]'::jsonb)) = 'array' then coalesce(ready_state.effective_canonical_preview_lines_json, '[]'::jsonb)
+            else '[]'::jsonb
+        end
+    ) as line_element(value)
+    join pg_temp.tmp_pay_workbench_scope_seed_requested_rows as requested_rows
+      on requested_rows.preview_row_id = btrim(coalesce(
+             line_element.value->>'preview_row_id',
+             line_element.value->>'line_id',
+             line_element.value->>'row_id',
+             line_element.value->>'id',
+             ''
+         ))
+    where jsonb_typeof(line_element.value) = 'object'
+      and btrim(coalesce(
+             line_element.value->>'preview_row_id',
+             line_element.value->>'line_id',
+             line_element.value->>'row_id',
+             line_element.value->>'id',
+             ''
+         )) <> ''
+      and upper(btrim(coalesce(line_element.value->>'pay_channel', ''))) in ('PAYE', 'UMBRELLA')
+      and (v_scope_filter = 'ALL' or upper(btrim(coalesce(line_element.value->>'pay_channel', ''))) = v_scope_filter);
+
+    select count(*)::integer
+    into v_selected_count
+    from pg_temp.tmp_pay_workbench_scope_seed_selected_lines as selected_line;
+
+    if coalesce(v_selected_count, 0) = 0 then
+        raise exception 'pay_workbench_prepare_draft_scope_seed found no READY selected rows for session %, scope %', p_workbench_session_id, v_scope_filter;
+    end if;
+
+    select count(*)::integer
+    into v_existing_mismatch_count
+    from (
+        select requested_rows.preview_row_id
+        from pg_temp.tmp_pay_workbench_scope_seed_requested_rows as requested_rows
+        where not exists (
+            select 1
+            from pg_temp.tmp_pay_workbench_scope_seed_selected_lines as selected_line
+            where selected_line.preview_row_id = requested_rows.preview_row_id
+        )
+    ) as unresolved_rows
+    where v_scope_filter = 'ALL';
+
+    if coalesce(v_existing_mismatch_count, 0) > 0 then
+        raise exception 'pay_workbench_prepare_draft_scope_seed selected rows did not resolve against READY session state for session %', p_workbench_session_id;
+    end if;
+
+    drop table if exists pg_temp.tmp_pay_workbench_scope_seed_scopes;
+    create temporary table pg_temp.tmp_pay_workbench_scope_seed_scopes as
+    select
+        p_operation_id as operation_id,
+        p_workbench_session_id as workbench_session_id,
+        v_session.source_snapshot_run_id as source_snapshot_run_id,
+        v_session.version as source_session_version,
+        grouped_lines.candidate_state_id,
+        grouped_lines.candidate_id,
+        grouped_lines.pay_channel,
+        coalesce(jsonb_agg(to_jsonb(grouped_lines.preview_row_id) order by grouped_lines.ord), '[]'::jsonb) as selected_preview_row_ids_json,
+        coalesce(jsonb_agg(distinct to_jsonb(grouped_lines.timesheet_id_text)) filter (where grouped_lines.timesheet_id_text is not null), '[]'::jsonb) as selected_timesheet_ids_json,
+        coalesce(jsonb_agg(distinct to_jsonb(grouped_lines.finance_case_id_text)) filter (where grouped_lines.finance_case_id_text is not null), '[]'::jsonb) as selected_finance_case_ids_json,
+        grouped_lines.effective_candidate_fragment_json,
+        grouped_lines.effective_summary_fragment_json,
+        grouped_lines.effective_paye_candidate_json,
+        grouped_lines.effective_non_paye_payee_json,
+        grouped_lines.effective_payees_json,
+        grouped_lines.effective_case_resolution_states_json,
+        grouped_lines.effective_canonical_preview_lines_json,
+        coalesce(jsonb_agg(grouped_lines.line_json order by grouped_lines.ord), '[]'::jsonb) as selected_canonical_preview_lines_json,
+        case
+            when jsonb_typeof(grouped_lines.effective_candidate_fragment_json->'baseline_component_rows') = 'array' then coalesce(grouped_lines.effective_candidate_fragment_json->'baseline_component_rows', '[]'::jsonb)
+            else '[]'::jsonb
+        end as baseline_component_rows_json,
+        case
+            when jsonb_typeof(grouped_lines.effective_candidate_fragment_json->'hidden_recovery_template_lines') = 'array' then coalesce(grouped_lines.effective_candidate_fragment_json->'hidden_recovery_template_lines', '[]'::jsonb)
+            else '[]'::jsonb
+        end as hidden_recovery_template_lines_json,
+        jsonb_build_object(
+            'selected_preview_row_count', count(*)::integer,
+            'selected_timesheet_count', count(distinct grouped_lines.timesheet_id_text) filter (where grouped_lines.timesheet_id_text is not null),
+            'selected_finance_case_count', count(distinct grouped_lines.finance_case_id_text) filter (where grouped_lines.finance_case_id_text is not null),
+            'selected_amount_ex_vat', round(coalesce(sum(grouped_lines.amount_ex_vat), 0), 2),
+            'pay_channel', grouped_lines.pay_channel
+        ) as candidate_totals_json,
+        jsonb_build_object(
+            'source', 'banking_pay_workbench_session_candidate_state',
+            'same_week_paye_override', v_same_week_paye_override_json,
+            'pay_channel_scope', v_scope_filter,
+            'session_signature', v_session.session_signature,
+            'session_version', v_session.version
+        ) as allocation_basis_json
+    from (
+        select
+            selected_line.candidate_state_id,
+            selected_line.candidate_id,
+            selected_line.pay_channel,
+            selected_line.preview_row_id,
+            selected_line.ord,
+            selected_line.line_json,
+            selected_line.effective_candidate_fragment_json,
+            selected_line.effective_summary_fragment_json,
+            case when jsonb_typeof(selected_line.effective_paye_candidate_json) = 'object' then selected_line.effective_paye_candidate_json else '{}'::jsonb end as effective_paye_candidate_json,
+            case when jsonb_typeof(selected_line.effective_non_paye_payee_json) = 'object' then selected_line.effective_non_paye_payee_json else '{}'::jsonb end as effective_non_paye_payee_json,
+            case when jsonb_typeof(selected_line.effective_payees_json) = 'array' then selected_line.effective_payees_json else '[]'::jsonb end as effective_payees_json,
+            case
+                when jsonb_typeof(selected_line.effective_case_resolution_states_json) = 'array' then jsonb_build_object('rows', selected_line.effective_case_resolution_states_json)
+                when jsonb_typeof(selected_line.effective_case_resolution_states_json) = 'object' then selected_line.effective_case_resolution_states_json
+                else jsonb_build_object('rows', '[]'::jsonb)
+            end as effective_case_resolution_states_json,
+            case when jsonb_typeof(selected_line.effective_canonical_preview_lines_json) = 'array' then selected_line.effective_canonical_preview_lines_json else '[]'::jsonb end as effective_canonical_preview_lines_json,
+            case
+                when coalesce(selected_line.line_json->>'timesheet_id', '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then selected_line.line_json->>'timesheet_id'
+                else null::text
+            end as timesheet_id_text,
+            case
+                when coalesce(selected_line.line_json->>'finance_case_id', '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then selected_line.line_json->>'finance_case_id'
+                else null::text
+            end as finance_case_id_text,
+            case
+                when coalesce(selected_line.line_json->>'amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' then (selected_line.line_json->>'amount_ex_vat')::numeric
+                when coalesce(selected_line.line_json->>'preview_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' then (selected_line.line_json->>'preview_amount_ex_vat')::numeric
+                when coalesce(selected_line.line_json->>'amount', '') ~ '^-?[0-9]+(\.[0-9]+)?$' then (selected_line.line_json->>'amount')::numeric
+                else 0::numeric
+            end as amount_ex_vat
+        from pg_temp.tmp_pay_workbench_scope_seed_selected_lines as selected_line
+    ) as grouped_lines
+    group by
+        grouped_lines.candidate_state_id,
+        grouped_lines.candidate_id,
+        grouped_lines.pay_channel,
+        grouped_lines.effective_candidate_fragment_json,
+        grouped_lines.effective_summary_fragment_json,
+        grouped_lines.effective_paye_candidate_json,
+        grouped_lines.effective_non_paye_payee_json,
+        grouped_lines.effective_payees_json,
+        grouped_lines.effective_case_resolution_states_json,
+        grouped_lines.effective_canonical_preview_lines_json;
+
+    update pg_temp.tmp_pay_workbench_scope_seed_scopes as proposed_scope_update
+    set
+        selected_timesheet_ids_json = (
+            select coalesce(jsonb_agg(to_jsonb(timesheet_ids.timesheet_id_text) order by timesheet_ids.timesheet_id_text), '[]'::jsonb)
+            from (
+                select distinct line_element.value->>'timesheet_id' as timesheet_id_text
+                from jsonb_array_elements(proposed_scope_update.selected_canonical_preview_lines_json) as line_element(value)
+                where coalesce(line_element.value->>'timesheet_id', '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+            ) as timesheet_ids
+        ),
+        selected_finance_case_ids_json = (
+            select coalesce(jsonb_agg(to_jsonb(finance_case_ids.finance_case_id_text) order by finance_case_ids.finance_case_id_text), '[]'::jsonb)
+            from (
+                select distinct line_element.value->>'finance_case_id' as finance_case_id_text
+                from jsonb_array_elements(proposed_scope_update.selected_canonical_preview_lines_json) as line_element(value)
+                where coalesce(line_element.value->>'finance_case_id', '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+            ) as finance_case_ids
+        )
+    where proposed_scope_update.operation_id = p_operation_id
+      and proposed_scope_update.workbench_session_id = p_workbench_session_id;
+
+    if exists (
+        select 1
+        from pg_temp.tmp_pay_workbench_scope_seed_scopes as proposed_scope
+        join public.banking_pay_operation_candidate_scope as existing_scope
+          on existing_scope.operation_id = proposed_scope.operation_id
+         and existing_scope.candidate_id = proposed_scope.candidate_id
+         and existing_scope.pay_channel = proposed_scope.pay_channel
+        where existing_scope.scope_hash is distinct from encode(digest(jsonb_build_object(
+            'operation_id', proposed_scope.operation_id::text,
+            'workbench_session_id', proposed_scope.workbench_session_id::text,
+            'source_snapshot_run_id', case when proposed_scope.source_snapshot_run_id is null then null else proposed_scope.source_snapshot_run_id::text end,
+            'source_session_version', proposed_scope.source_session_version,
+            'candidate_state_id', case when proposed_scope.candidate_state_id is null then null else proposed_scope.candidate_state_id::text end,
+            'candidate_id', proposed_scope.candidate_id::text,
+            'pay_channel', proposed_scope.pay_channel,
+            'selected_preview_row_ids_json', proposed_scope.selected_preview_row_ids_json,
+            'selected_timesheet_ids_json', proposed_scope.selected_timesheet_ids_json,
+            'selected_finance_case_ids_json', proposed_scope.selected_finance_case_ids_json,
+            'selected_canonical_preview_lines_json', proposed_scope.selected_canonical_preview_lines_json,
+            'candidate_totals_json', proposed_scope.candidate_totals_json,
+            'allocation_basis_json', proposed_scope.allocation_basis_json
+        )::text::bytea, 'sha256'), 'hex')
+    ) then
+        raise exception 'pay_workbench_prepare_draft_scope_seed found existing candidate scope rows with a different scope hash for operation %', p_operation_id;
+    end if;
+
+    insert into public.banking_pay_operation_candidate_scope (
+        operation_id,
+        workbench_session_id,
+        source_snapshot_run_id,
+        source_session_version,
+        candidate_state_id,
+        candidate_id,
+        pay_channel,
+        selected_preview_row_ids_json,
+        selected_timesheet_ids_json,
+        selected_finance_case_ids_json,
+        effective_candidate_fragment_json,
+        effective_summary_fragment_json,
+        effective_paye_candidate_json,
+        effective_non_paye_payee_json,
+        effective_payees_json,
+        effective_case_resolution_states_json,
+        effective_canonical_preview_lines_json,
+        selected_canonical_preview_lines_json,
+        baseline_component_rows_json,
+        hidden_recovery_template_lines_json,
+        candidate_totals_json,
+        allocation_basis_json,
+        scope_hash,
+        chunk_sequence,
+        status
+    )
+    select
+        proposed_scope.operation_id,
+        proposed_scope.workbench_session_id,
+        proposed_scope.source_snapshot_run_id,
+        proposed_scope.source_session_version,
+        proposed_scope.candidate_state_id,
+        proposed_scope.candidate_id,
+        proposed_scope.pay_channel,
+        proposed_scope.selected_preview_row_ids_json,
+        proposed_scope.selected_timesheet_ids_json,
+        proposed_scope.selected_finance_case_ids_json,
+        proposed_scope.effective_candidate_fragment_json,
+        proposed_scope.effective_summary_fragment_json,
+        proposed_scope.effective_paye_candidate_json,
+        proposed_scope.effective_non_paye_payee_json,
+        proposed_scope.effective_payees_json,
+        proposed_scope.effective_case_resolution_states_json,
+        proposed_scope.effective_canonical_preview_lines_json,
+        proposed_scope.selected_canonical_preview_lines_json,
+        proposed_scope.baseline_component_rows_json,
+        proposed_scope.hidden_recovery_template_lines_json,
+        proposed_scope.candidate_totals_json,
+        proposed_scope.allocation_basis_json,
+        encode(digest(jsonb_build_object(
+            'operation_id', proposed_scope.operation_id::text,
+            'workbench_session_id', proposed_scope.workbench_session_id::text,
+            'source_snapshot_run_id', case when proposed_scope.source_snapshot_run_id is null then null else proposed_scope.source_snapshot_run_id::text end,
+            'source_session_version', proposed_scope.source_session_version,
+            'candidate_state_id', case when proposed_scope.candidate_state_id is null then null else proposed_scope.candidate_state_id::text end,
+            'candidate_id', proposed_scope.candidate_id::text,
+            'pay_channel', proposed_scope.pay_channel,
+            'selected_preview_row_ids_json', proposed_scope.selected_preview_row_ids_json,
+            'selected_timesheet_ids_json', proposed_scope.selected_timesheet_ids_json,
+            'selected_finance_case_ids_json', proposed_scope.selected_finance_case_ids_json,
+            'selected_canonical_preview_lines_json', proposed_scope.selected_canonical_preview_lines_json,
+            'candidate_totals_json', proposed_scope.candidate_totals_json,
+            'allocation_basis_json', proposed_scope.allocation_basis_json
+        )::text::bytea, 'sha256'), 'hex'),
+        row_number() over (order by proposed_scope.pay_channel, proposed_scope.candidate_id),
+        'SCOPED'
+    from pg_temp.tmp_pay_workbench_scope_seed_scopes as proposed_scope
+    on conflict (operation_id, candidate_id, pay_channel) do update
+    set
+        selected_preview_row_ids_json = excluded.selected_preview_row_ids_json,
+        selected_timesheet_ids_json = excluded.selected_timesheet_ids_json,
+        selected_finance_case_ids_json = excluded.selected_finance_case_ids_json,
+        effective_candidate_fragment_json = excluded.effective_candidate_fragment_json,
+        effective_summary_fragment_json = excluded.effective_summary_fragment_json,
+        effective_paye_candidate_json = excluded.effective_paye_candidate_json,
+        effective_non_paye_payee_json = excluded.effective_non_paye_payee_json,
+        effective_payees_json = excluded.effective_payees_json,
+        effective_case_resolution_states_json = excluded.effective_case_resolution_states_json,
+        effective_canonical_preview_lines_json = excluded.effective_canonical_preview_lines_json,
+        selected_canonical_preview_lines_json = excluded.selected_canonical_preview_lines_json,
+        baseline_component_rows_json = excluded.baseline_component_rows_json,
+        hidden_recovery_template_lines_json = excluded.hidden_recovery_template_lines_json,
+        candidate_totals_json = excluded.candidate_totals_json,
+        allocation_basis_json = excluded.allocation_basis_json,
+        scope_hash = excluded.scope_hash,
+        chunk_sequence = excluded.chunk_sequence,
+        status = case
+            when public.banking_pay_operation_candidate_scope.status = 'PENDING' then 'SCOPED'
+            else public.banking_pay_operation_candidate_scope.status
+        end,
+        updated_at_utc = now();
+
+    select count(*)::integer
+    into v_candidate_scope_count
+    from public.banking_pay_operation_candidate_scope as scope_row
+    where scope_row.operation_id = p_operation_id
+      and exists (
+          select 1
+          from pg_temp.tmp_pay_workbench_scope_seed_scopes as proposed_scope
+          where proposed_scope.candidate_id = scope_row.candidate_id
+            and proposed_scope.pay_channel = scope_row.pay_channel
+      );
+
+    select count(distinct selected_line.preview_row_id)::integer
+    into v_selected_count
+    from pg_temp.tmp_pay_workbench_scope_seed_selected_lines as selected_line;
+
+    select count(distinct selected_line.line_json->>'timesheet_id')::integer
+    into v_timesheet_count
+    from pg_temp.tmp_pay_workbench_scope_seed_selected_lines as selected_line
+    where coalesce(selected_line.line_json->>'timesheet_id', '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$';
+
+    select count(distinct selected_line.line_json->>'finance_case_id')::integer
+    into v_finance_case_count
+    from pg_temp.tmp_pay_workbench_scope_seed_selected_lines as selected_line
+    where coalesce(selected_line.line_json->>'finance_case_id', '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$';
+
+    select count(distinct selected_line.pay_channel)::integer
+    into v_pay_channel_count
+    from pg_temp.tmp_pay_workbench_scope_seed_selected_lines as selected_line;
+
+    return query
+    select
+        coalesce(v_candidate_scope_count, 0),
+        coalesce(v_selected_count, 0),
+        coalesce(v_timesheet_count, 0),
+        coalesce(v_finance_case_count, 0),
+        coalesce(v_pay_channel_count, 0);
+end;
+$function$;
 
 
