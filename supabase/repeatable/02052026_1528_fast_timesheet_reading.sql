@@ -2260,6 +2260,7 @@ DECLARE
   v_effective_action_flags jsonb := '{}'::jsonb;
   v_effective_details jsonb := '{}'::jsonb;
   v_effective_left_pane jsonb := '{}'::jsonb;
+  v_effective_attached_evidence_count integer := 0;
 BEGIN
   v_has_identity := (
     NULLIF(BTRIM(COALESCE(v_filters->>'row_key', v_filters->>'rowKey', '')), '') IS NOT NULL
@@ -2870,8 +2871,8 @@ BEGIN
           ELSE NULL::text
         END,
         'uploaded_at_utc', row_ids.row_json->>'updated_at',
-        'rotation_degrees', COALESCE(NULLIF(row_ids.row_json->>'manual_pdf_rotation_degrees', '')::integer, 0),
-        'last_rotation_deg', COALESCE(NULLIF(row_ids.row_json->>'manual_pdf_rotation_degrees', '')::integer, 0),
+        'rotation_degrees', CASE WHEN COALESCE(row_ids.row_json->>'manual_pdf_rotation_degrees', '') ~ '^-?[0-9]+$' THEN (row_ids.row_json->>'manual_pdf_rotation_degrees')::integer ELSE 0 END,
+        'last_rotation_deg', CASE WHEN COALESCE(row_ids.row_json->>'manual_pdf_rotation_degrees', '') ~ '^-?[0-9]+$' THEN (row_ids.row_json->>'manual_pdf_rotation_degrees')::integer ELSE 0 END,
         'page_count', NULL::integer,
         'pages', '[]'::jsonb,
         'system', TRUE,
@@ -2969,12 +2970,12 @@ BEGIN
         'page_count', NULL::integer,
         'pages', '[]'::jsonb,
         'system', FALSE,
-        'is_view_only', NOT COALESCE((ids.row_json->>'can_manage_evidence')::boolean, FALSE),
-        'can_delete', COALESCE((ids.row_json->>'can_manage_evidence')::boolean, FALSE),
-        'can_reclassify', COALESCE((ids.row_json->>'can_manage_evidence')::boolean, FALSE),
-        'can_edit_kind', COALESCE((ids.row_json->>'can_manage_evidence')::boolean, FALSE),
-        'can_edit_type', COALESCE((ids.row_json->>'can_manage_evidence')::boolean, FALSE),
-        'can_return_to_queue', COALESCE((ids.row_json->>'can_manage_evidence')::boolean, FALSE),
+        'is_view_only', NOT COALESCE(LOWER(NULLIF(BTRIM(COALESCE(ids.row_json->>'can_manage_evidence', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE),
+        'can_delete', COALESCE(LOWER(NULLIF(BTRIM(COALESCE(ids.row_json->>'can_manage_evidence', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE),
+        'can_reclassify', COALESCE(LOWER(NULLIF(BTRIM(COALESCE(ids.row_json->>'can_manage_evidence', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE),
+        'can_edit_kind', COALESCE(LOWER(NULLIF(BTRIM(COALESCE(ids.row_json->>'can_manage_evidence', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE),
+        'can_edit_type', COALESCE(LOWER(NULLIF(BTRIM(COALESCE(ids.row_json->>'can_manage_evidence', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE),
+        'can_return_to_queue', COALESCE(LOWER(NULLIF(BTRIM(COALESCE(ids.row_json->>'can_manage_evidence', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE),
         'preview_mode', CASE
           WHEN LOWER(COALESCE(te0.storage_key, '')) ~ '\.pdf($|[?#])' THEN 'PDF'
           WHEN LOWER(COALESCE(te0.storage_key, '')) ~ '\.(png|jpe?g|gif|webp|bmp|svg|tif|tiff|heic|heif|avif)($|[?#])' THEN 'IMAGE'
@@ -3006,26 +3007,58 @@ BEGIN
         'r2_key', mq0.r2_key,
         'file_key', mq0.r2_key,
         'download_storage_key', mq0.r2_key,
-        'mime_type', mq0.mime_type,
-        'content_type', mq0.mime_type,
+        'mime_type', COALESCE(NULLIF(BTRIM(mq0.mime_type), ''), CASE
+          WHEN LOWER(CONCAT_WS(' ', COALESCE(mq0.r2_key, ''), COALESCE(mq0.original_filename, ''))) ~ '\.pdf($|[?#])' THEN 'application/pdf'
+          WHEN LOWER(CONCAT_WS(' ', COALESCE(mq0.r2_key, ''), COALESCE(mq0.original_filename, ''))) ~ '\.png($|[?#])' THEN 'image/png'
+          WHEN LOWER(CONCAT_WS(' ', COALESCE(mq0.r2_key, ''), COALESCE(mq0.original_filename, ''))) ~ '\.jpe?g($|[?#])' THEN 'image/jpeg'
+          WHEN LOWER(CONCAT_WS(' ', COALESCE(mq0.r2_key, ''), COALESCE(mq0.original_filename, ''))) ~ '\.gif($|[?#])' THEN 'image/gif'
+          WHEN LOWER(CONCAT_WS(' ', COALESCE(mq0.r2_key, ''), COALESCE(mq0.original_filename, ''))) ~ '\.webp($|[?#])' THEN 'image/webp'
+          WHEN LOWER(CONCAT_WS(' ', COALESCE(mq0.r2_key, ''), COALESCE(mq0.original_filename, ''))) ~ '\.bmp($|[?#])' THEN 'image/bmp'
+          WHEN LOWER(CONCAT_WS(' ', COALESCE(mq0.r2_key, ''), COALESCE(mq0.original_filename, ''))) ~ '\.svg($|[?#])' THEN 'image/svg+xml'
+          WHEN LOWER(CONCAT_WS(' ', COALESCE(mq0.r2_key, ''), COALESCE(mq0.original_filename, ''))) ~ '\.tiff?($|[?#])' THEN 'image/tiff'
+          WHEN LOWER(CONCAT_WS(' ', COALESCE(mq0.r2_key, ''), COALESCE(mq0.original_filename, ''))) ~ '\.heic($|[?#])' THEN 'image/heic'
+          WHEN LOWER(CONCAT_WS(' ', COALESCE(mq0.r2_key, ''), COALESCE(mq0.original_filename, ''))) ~ '\.heif($|[?#])' THEN 'image/heif'
+          WHEN LOWER(CONCAT_WS(' ', COALESCE(mq0.r2_key, ''), COALESCE(mq0.original_filename, ''))) ~ '\.avif($|[?#])' THEN 'image/avif'
+          ELSE NULL::text
+        END),
+        'content_type', COALESCE(NULLIF(BTRIM(mq0.mime_type), ''), CASE
+          WHEN LOWER(CONCAT_WS(' ', COALESCE(mq0.r2_key, ''), COALESCE(mq0.original_filename, ''))) ~ '\.pdf($|[?#])' THEN 'application/pdf'
+          WHEN LOWER(CONCAT_WS(' ', COALESCE(mq0.r2_key, ''), COALESCE(mq0.original_filename, ''))) ~ '\.png($|[?#])' THEN 'image/png'
+          WHEN LOWER(CONCAT_WS(' ', COALESCE(mq0.r2_key, ''), COALESCE(mq0.original_filename, ''))) ~ '\.jpe?g($|[?#])' THEN 'image/jpeg'
+          WHEN LOWER(CONCAT_WS(' ', COALESCE(mq0.r2_key, ''), COALESCE(mq0.original_filename, ''))) ~ '\.gif($|[?#])' THEN 'image/gif'
+          WHEN LOWER(CONCAT_WS(' ', COALESCE(mq0.r2_key, ''), COALESCE(mq0.original_filename, ''))) ~ '\.webp($|[?#])' THEN 'image/webp'
+          WHEN LOWER(CONCAT_WS(' ', COALESCE(mq0.r2_key, ''), COALESCE(mq0.original_filename, ''))) ~ '\.bmp($|[?#])' THEN 'image/bmp'
+          WHEN LOWER(CONCAT_WS(' ', COALESCE(mq0.r2_key, ''), COALESCE(mq0.original_filename, ''))) ~ '\.svg($|[?#])' THEN 'image/svg+xml'
+          WHEN LOWER(CONCAT_WS(' ', COALESCE(mq0.r2_key, ''), COALESCE(mq0.original_filename, ''))) ~ '\.tiff?($|[?#])' THEN 'image/tiff'
+          WHEN LOWER(CONCAT_WS(' ', COALESCE(mq0.r2_key, ''), COALESCE(mq0.original_filename, ''))) ~ '\.heic($|[?#])' THEN 'image/heic'
+          WHEN LOWER(CONCAT_WS(' ', COALESCE(mq0.r2_key, ''), COALESCE(mq0.original_filename, ''))) ~ '\.heif($|[?#])' THEN 'image/heif'
+          WHEN LOWER(CONCAT_WS(' ', COALESCE(mq0.r2_key, ''), COALESCE(mq0.original_filename, ''))) ~ '\.avif($|[?#])' THEN 'image/avif'
+          ELSE NULL::text
+        END),
         'content_hash', mq0.content_hash,
         'uploaded_at_utc', mq0.uploaded_at_utc,
         'staged_at_utc', COALESCE(mq0.meta_json->>'staged_at_utc', mq0.uploaded_at_utc::text),
-        'staged_by_user_id', mq0.uploaded_by_user_id,
+        'staged_by_user_id', COALESCE(NULLIF(BTRIM(mq0.meta_json->>'staged_by_user_id'), ''), mq0.uploaded_by_user_id::text),
         'rotation_degrees', COALESCE(mq0.last_rotation_deg::integer, 0),
         'last_rotation_deg', COALESCE(mq0.last_rotation_deg::integer, 0),
         'page_count', CASE WHEN COALESCE(mq0.meta_json->>'page_count', '') ~ '^[0-9]+$' THEN (mq0.meta_json->>'page_count')::integer ELSE NULL::integer END,
         'pages', '[]'::jsonb,
         'status', mq0.status,
         'system', FALSE,
-        'is_view_only', NOT COALESCE((ids.row_json->>'can_manage_evidence')::boolean, FALSE),
-        'can_delete', COALESCE((ids.row_json->>'can_manage_evidence')::boolean, FALSE),
-        'can_reclassify', COALESCE((ids.row_json->>'can_manage_evidence')::boolean, FALSE),
-        'can_edit_kind', COALESCE((ids.row_json->>'can_manage_evidence')::boolean, FALSE),
-        'can_edit_type', COALESCE((ids.row_json->>'can_manage_evidence')::boolean, FALSE),
-        'can_return_to_queue', COALESCE((ids.row_json->>'can_manage_evidence')::boolean, FALSE),
+        'is_view_only', NOT COALESCE(LOWER(NULLIF(BTRIM(COALESCE(ids.row_json->>'can_manage_evidence', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE),
+        'can_delete', COALESCE(LOWER(NULLIF(BTRIM(COALESCE(ids.row_json->>'can_manage_evidence', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE),
+        'can_reclassify', COALESCE(LOWER(NULLIF(BTRIM(COALESCE(ids.row_json->>'can_manage_evidence', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE),
+        'can_edit_kind', COALESCE(LOWER(NULLIF(BTRIM(COALESCE(ids.row_json->>'can_manage_evidence', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE),
+        'can_edit_type', COALESCE(LOWER(NULLIF(BTRIM(COALESCE(ids.row_json->>'can_manage_evidence', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE),
+        'can_return_to_queue', COALESCE(LOWER(NULLIF(BTRIM(COALESCE(ids.row_json->>'can_manage_evidence', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE),
         'is_staged_context', TRUE,
-        'preview_mode', 'PDF',
+        'preview_mode', CASE
+          WHEN LOWER(COALESCE(mq0.mime_type, '')) LIKE 'image/%'
+            OR LOWER(CONCAT_WS(' ', COALESCE(mq0.r2_key, ''), COALESCE(mq0.original_filename, ''))) ~ '\.(png|jpe?g|gif|webp|bmp|svg|tif|tiff|heic|heif|avif)($|[?#])' THEN 'IMAGE'
+          WHEN LOWER(COALESCE(mq0.mime_type, '')) = 'application/pdf'
+            OR LOWER(CONCAT_WS(' ', COALESCE(mq0.r2_key, ''), COALESCE(mq0.original_filename, ''))) ~ '\.pdf($|[?#])' THEN 'PDF'
+          ELSE 'FILE'
+        END,
         'source_label', COALESCE(NULLIF(BTRIM(mq0.meta_json->>'source_label'), ''), 'Staged'),
         'source_badge', COALESCE(NULLIF(BTRIM(mq0.meta_json->>'source_label'), ''), 'Staged')
       ) AS item_json
@@ -3408,44 +3441,44 @@ BEGIN
         'requested_timesheet_id', row_ids.row_json->>'requested_timesheet_id',
         'current_timesheet_id', row_ids.row_json->>'current_timesheet_id',
         'expected_timesheet_id', row_ids.row_json->>'expected_timesheet_id',
-        'current_version', NULLIF(row_ids.row_json->>'timesheet_version', '')::integer,
+        'current_version', CASE WHEN COALESCE(row_ids.row_json->>'timesheet_version', '') ~ '^[0-9]+$' THEN (row_ids.row_json->>'timesheet_version')::integer ELSE NULL::integer END,
         'contract_week_id', row_ids.row_json->>'contract_week_id',
         'row_key', row_ids.row_json->>'row_key',
         'row_signature', row_ids.row_json->>'row_signature',
-        'was_stale', COALESCE((row_ids.row_json->>'was_stale')::boolean, FALSE),
-        'has_timesheet', COALESCE((row_ids.row_json->>'has_timesheet')::boolean, FALSE),
-        'locked', COALESCE((row_ids.row_json->>'locked')::boolean, FALSE),
+        'was_stale', COALESCE(LOWER(NULLIF(BTRIM(COALESCE(row_ids.row_json->>'was_stale', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE),
+        'has_timesheet', COALESCE(LOWER(NULLIF(BTRIM(COALESCE(row_ids.row_json->>'has_timesheet', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE),
+        'locked', COALESCE(LOWER(NULLIF(BTRIM(COALESCE(row_ids.row_json->>'locked', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE),
         'bulk_process_bucket', row_ids.row_json->>'bulk_process_bucket',
         'bulk_authorise_classification', row_ids.row_json->>'bulk_authorise_classification',
         'bulk_authorise_section', row_ids.row_json->>'bulk_authorise_section',
         'route_family', row_ids.row_json->>'route_family',
         'route_subfamily', row_ids.row_json->>'route_subfamily',
         'underlying_channel_family', row_ids.row_json->>'underlying_channel_family',
-        'is_import_authoritative', COALESCE((row_ids.row_json->>'is_import_authoritative')::boolean, FALSE),
-        'compare_block_required', COALESCE((row_ids.row_json->>'compare_block_required')::boolean, FALSE),
-        'is_adjustment', COALESCE((row_ids.row_json->>'is_adjustment')::boolean, FALSE),
-        'additional_seq', CASE WHEN NULLIF(row_ids.row_json->>'additional_seq', '') IS NULL THEN NULL::integer ELSE (row_ids.row_json->>'additional_seq')::integer END,
+        'is_import_authoritative', COALESCE(LOWER(NULLIF(BTRIM(COALESCE(row_ids.row_json->>'is_import_authoritative', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE),
+        'compare_block_required', COALESCE(LOWER(NULLIF(BTRIM(COALESCE(row_ids.row_json->>'compare_block_required', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE),
+        'is_adjustment', COALESCE(LOWER(NULLIF(BTRIM(COALESCE(row_ids.row_json->>'is_adjustment', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE),
+        'additional_seq', CASE WHEN COALESCE(row_ids.row_json->>'additional_seq', '') ~ '^-?[0-9]+$' THEN (row_ids.row_json->>'additional_seq')::integer ELSE NULL::integer END,
         'actual_schedule_json', COALESCE(row_ids.row_json->'actual_schedule_json', '[]'::jsonb),
         'planned_schedule_json', COALESCE(row_ids.row_json->'planned_schedule_json', '[]'::jsonb),
         'contract_week_totals_json', COALESCE(row_ids.row_json->'contract_week_totals_json', '{}'::jsonb),
-        'total_hours', CASE WHEN NULLIF(row_ids.row_json->>'total_hours', '') IS NULL THEN NULL::numeric ELSE (row_ids.row_json->>'total_hours')::numeric END,
-        'suppress_standard_schedule_fallback', COALESCE((row_ids.row_json->>'suppress_standard_schedule_fallback')::boolean, FALSE),
-        'keep_additional_manual_adjustment_schedule_empty', COALESCE((row_ids.row_json->>'keep_additional_manual_adjustment_schedule_empty')::boolean, FALSE),
-        '__suppressStandardScheduleFallback', COALESCE((row_ids.row_json->>'__suppressStandardScheduleFallback')::boolean, FALSE),
-        '__keepAdditionalManualAdjustmentScheduleEmpty', COALESCE((row_ids.row_json->>'__keepAdditionalManualAdjustmentScheduleEmpty')::boolean, FALSE),
+        'total_hours', CASE WHEN COALESCE(row_ids.row_json->>'total_hours', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN (row_ids.row_json->>'total_hours')::numeric ELSE NULL::numeric END,
+        'suppress_standard_schedule_fallback', COALESCE(LOWER(NULLIF(BTRIM(COALESCE(row_ids.row_json->>'suppress_standard_schedule_fallback', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE),
+        'keep_additional_manual_adjustment_schedule_empty', COALESCE(LOWER(NULLIF(BTRIM(COALESCE(row_ids.row_json->>'keep_additional_manual_adjustment_schedule_empty', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE),
+        '__suppressStandardScheduleFallback', COALESCE(LOWER(NULLIF(BTRIM(COALESCE(row_ids.row_json->>'__suppressStandardScheduleFallback', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE),
+        '__keepAdditionalManualAdjustmentScheduleEmpty', COALESCE(LOWER(NULLIF(BTRIM(COALESCE(row_ids.row_json->>'__keepAdditionalManualAdjustmentScheduleEmpty', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE),
         'period_type', row_ids.row_json->>'period_type',
-        'timesheet_type_sort_key', CASE WHEN NULLIF(row_ids.row_json->>'timesheet_type_sort_key', '') IS NULL THEN NULL::integer ELSE (row_ids.row_json->>'timesheet_type_sort_key')::integer END,
-        'can_save', COALESCE((row_ids.row_json->>'can_save')::boolean, FALSE),
-        'can_process', COALESCE((row_ids.row_json->>'can_process')::boolean, FALSE),
-        'can_unprocess', COALESCE((row_ids.row_json->>'can_unprocess')::boolean, FALSE),
-        'can_edit_timesheet_data', COALESCE((row_ids.row_json->>'can_edit_timesheet_data')::boolean, FALSE),
-        'can_manage_evidence', COALESCE((row_ids.row_json->>'can_manage_evidence')::boolean, FALSE),
-        'can_add_additional_manual', COALESCE((row_ids.row_json->>'can_add_additional_manual')::boolean, FALSE),
-        'review_only', COALESCE((row_ids.row_json->>'review_only')::boolean, FALSE),
-        'hr_validation_required_for_invoice', COALESCE((row_ids.row_json->>'hr_validation_required_for_invoice')::boolean, FALSE),
+        'timesheet_type_sort_key', CASE WHEN COALESCE(row_ids.row_json->>'timesheet_type_sort_key', '') ~ '^-?[0-9]+$' THEN (row_ids.row_json->>'timesheet_type_sort_key')::integer ELSE NULL::integer END,
+        'can_save', COALESCE(LOWER(NULLIF(BTRIM(COALESCE(row_ids.row_json->>'can_save', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE),
+        'can_process', COALESCE(LOWER(NULLIF(BTRIM(COALESCE(row_ids.row_json->>'can_process', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE),
+        'can_unprocess', COALESCE(LOWER(NULLIF(BTRIM(COALESCE(row_ids.row_json->>'can_unprocess', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE),
+        'can_edit_timesheet_data', COALESCE(LOWER(NULLIF(BTRIM(COALESCE(row_ids.row_json->>'can_edit_timesheet_data', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE),
+        'can_manage_evidence', COALESCE(LOWER(NULLIF(BTRIM(COALESCE(row_ids.row_json->>'can_manage_evidence', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE),
+        'can_add_additional_manual', COALESCE(LOWER(NULLIF(BTRIM(COALESCE(row_ids.row_json->>'can_add_additional_manual', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE),
+        'review_only', COALESCE(LOWER(NULLIF(BTRIM(COALESCE(row_ids.row_json->>'review_only', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE),
+        'hr_validation_required_for_invoice', COALESCE(LOWER(NULLIF(BTRIM(COALESCE(row_ids.row_json->>'hr_validation_required_for_invoice', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE),
         'validation_status', row_ids.row_json->>'validation_status',
-        'validation_pre_validated', COALESCE((row_ids.row_json->>'validation_pre_validated')::boolean, FALSE),
-        'has_deviation_marker', COALESCE((row_ids.row_json->>'has_deviation_marker')::boolean, FALSE),
+        'validation_pre_validated', COALESCE(LOWER(NULLIF(BTRIM(COALESCE(row_ids.row_json->>'validation_pre_validated', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE),
+        'has_deviation_marker', COALESCE(LOWER(NULLIF(BTRIM(COALESCE(row_ids.row_json->>'has_deviation_marker', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE),
         'deviation_marker_reason', row_ids.row_json->>'deviation_marker_reason'
       )
       || JSONB_BUILD_OBJECT(
@@ -3456,8 +3489,8 @@ BEGIN
             'requested_timesheet_id', row_ids.row_json->>'requested_timesheet_id',
             'current_timesheet_id', row_ids.row_json->>'current_timesheet_id',
             'expected_timesheet_id', row_ids.row_json->>'expected_timesheet_id',
-            'current_version', NULLIF(row_ids.row_json->>'timesheet_version', '')::integer,
-            'was_stale', COALESCE((row_ids.row_json->>'was_stale')::boolean, FALSE),
+            'current_version', CASE WHEN COALESCE(row_ids.row_json->>'timesheet_version', '') ~ '^[0-9]+$' THEN (row_ids.row_json->>'timesheet_version')::integer ELSE NULL::integer END,
+            'was_stale', COALESCE(LOWER(NULLIF(BTRIM(COALESCE(row_ids.row_json->>'was_stale', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE),
             'booking_id', row_ids.row_json->>'booking_id',
             'timesheet', COALESCE(timesheet_payload.timesheet_json, NULL::jsonb),
             'tsfin', COALESCE(tsfin_payload.tsfin_json, NULL::jsonb),
@@ -3471,9 +3504,9 @@ BEGIN
             'validations', COALESCE(validation_payload.validations_json, '[]'::jsonb),
             'validation_summary', JSONB_BUILD_OBJECT(
               'status', row_ids.row_json->>'validation_status',
-              'pre_validated', COALESCE((row_ids.row_json->>'validation_pre_validated')::boolean, FALSE),
-              'hr_validation_satisfied', COALESCE((row_ids.row_json->>'hr_validation_satisfied')::boolean, FALSE),
-              'hr_validation_awaiting', COALESCE((row_ids.row_json->>'hr_validation_awaiting')::boolean, FALSE),
+              'pre_validated', COALESCE(LOWER(NULLIF(BTRIM(COALESCE(row_ids.row_json->>'validation_pre_validated', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE),
+              'hr_validation_satisfied', COALESCE(LOWER(NULLIF(BTRIM(COALESCE(row_ids.row_json->>'hr_validation_satisfied', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE),
+              'hr_validation_awaiting', COALESCE(LOWER(NULLIF(BTRIM(COALESCE(row_ids.row_json->>'hr_validation_awaiting', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE),
               'latest', COALESCE(validation_payload.latest_validation_json, NULL::jsonb)
             ),
             'shifts', '[]'::jsonb,
@@ -3492,10 +3525,10 @@ BEGIN
               || JSONB_BUILD_OBJECT(
                 'weekly_mode', row_ids.row_json->>'contract_weekly_mode',
                 'hr_weekly_behaviour', row_ids.row_json->>'contract_hr_weekly_behaviour',
-                'requires_hr', COALESCE((row_ids.row_json->>'client_requires_hr')::boolean, FALSE),
-                'autoprocess_hr', COALESCE((row_ids.row_json->>'client_autoprocess_hr')::boolean, FALSE),
-                'no_timesheet_required', COALESCE((row_ids.row_json->>'client_no_timesheet_required')::boolean, FALSE),
-                'is_nhsp', COALESCE((row_ids.row_json->>'client_is_nhsp')::boolean, FALSE)
+                'requires_hr', COALESCE(LOWER(NULLIF(BTRIM(COALESCE(row_ids.row_json->>'client_requires_hr', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE),
+                'autoprocess_hr', COALESCE(LOWER(NULLIF(BTRIM(COALESCE(row_ids.row_json->>'client_autoprocess_hr', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE),
+                'no_timesheet_required', COALESCE(LOWER(NULLIF(BTRIM(COALESCE(row_ids.row_json->>'client_no_timesheet_required', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE),
+                'is_nhsp', COALESCE(LOWER(NULLIF(BTRIM(COALESCE(row_ids.row_json->>'client_is_nhsp', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE)
               )
             ),
             'effective', JSONB_BUILD_OBJECT(
@@ -3504,23 +3537,23 @@ BEGIN
               'route_family', row_ids.row_json->>'route_family',
               'route_subfamily', row_ids.row_json->>'route_subfamily',
               'underlying_channel_family', row_ids.row_json->>'underlying_channel_family',
-              'is_import_authoritative', COALESCE((row_ids.row_json->>'is_import_authoritative')::boolean, FALSE),
-              'is_adjustment', COALESCE((row_ids.row_json->>'is_adjustment')::boolean, FALSE),
-              'additional_seq', CASE WHEN NULLIF(row_ids.row_json->>'additional_seq', '') IS NULL THEN NULL::integer ELSE (row_ids.row_json->>'additional_seq')::integer END,
+              'is_import_authoritative', COALESCE(LOWER(NULLIF(BTRIM(COALESCE(row_ids.row_json->>'is_import_authoritative', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE),
+              'is_adjustment', COALESCE(LOWER(NULLIF(BTRIM(COALESCE(row_ids.row_json->>'is_adjustment', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE),
+              'additional_seq', CASE WHEN COALESCE(row_ids.row_json->>'additional_seq', '') ~ '^-?[0-9]+$' THEN (row_ids.row_json->>'additional_seq')::integer ELSE NULL::integer END,
               'actual_schedule_json', COALESCE(row_ids.row_json->'actual_schedule_json', '[]'::jsonb),
               'planned_schedule_json', COALESCE(row_ids.row_json->'planned_schedule_json', '[]'::jsonb),
-              'suppress_standard_schedule_fallback', COALESCE((row_ids.row_json->>'suppress_standard_schedule_fallback')::boolean, FALSE),
-              'keep_additional_manual_adjustment_schedule_empty', COALESCE((row_ids.row_json->>'keep_additional_manual_adjustment_schedule_empty')::boolean, FALSE),
+              'suppress_standard_schedule_fallback', COALESCE(LOWER(NULLIF(BTRIM(COALESCE(row_ids.row_json->>'suppress_standard_schedule_fallback', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE),
+              'keep_additional_manual_adjustment_schedule_empty', COALESCE(LOWER(NULLIF(BTRIM(COALESCE(row_ids.row_json->>'keep_additional_manual_adjustment_schedule_empty', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE),
               'summary_stage', row_ids.row_json->>'summary_stage',
-              'client_requires_hr', COALESCE((row_ids.row_json->>'client_requires_hr')::boolean, FALSE),
-              'client_autoprocess_hr', COALESCE((row_ids.row_json->>'client_autoprocess_hr')::boolean, FALSE),
-              'client_no_timesheet_required', COALESCE((row_ids.row_json->>'client_no_timesheet_required')::boolean, FALSE),
-              'client_is_nhsp', COALESCE((row_ids.row_json->>'client_is_nhsp')::boolean, FALSE),
+              'client_requires_hr', COALESCE(LOWER(NULLIF(BTRIM(COALESCE(row_ids.row_json->>'client_requires_hr', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE),
+              'client_autoprocess_hr', COALESCE(LOWER(NULLIF(BTRIM(COALESCE(row_ids.row_json->>'client_autoprocess_hr', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE),
+              'client_no_timesheet_required', COALESCE(LOWER(NULLIF(BTRIM(COALESCE(row_ids.row_json->>'client_no_timesheet_required', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE),
+              'client_is_nhsp', COALESCE(LOWER(NULLIF(BTRIM(COALESCE(row_ids.row_json->>'client_is_nhsp', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE),
               'contract_id', row_ids.row_json->>'contract_id',
-              'ready_to_pay', COALESCE((row_ids.row_json->>'ready_to_pay')::boolean, FALSE),
+              'ready_to_pay', COALESCE(LOWER(NULLIF(BTRIM(COALESCE(row_ids.row_json->>'ready_to_pay', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE),
               'issue_codes', COALESCE(row_ids.row_json->'issue_codes', '[]'::jsonb)
             ),
-            'ready_to_pay', COALESCE((row_ids.row_json->>'ready_to_pay')::boolean, FALSE),
+            'ready_to_pay', COALESCE(LOWER(NULLIF(BTRIM(COALESCE(row_ids.row_json->>'ready_to_pay', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE),
             'summary_stage', row_ids.row_json->>'summary_stage',
             'route_type', row_ids.row_json->>'route_type',
             'route_display', row_ids.row_json->>'route_display',
@@ -3565,9 +3598,9 @@ BEGIN
         'validations', COALESCE(validation_payload.validations_json, '[]'::jsonb),
         'validation_summary', JSONB_BUILD_OBJECT(
           'status', row_ids.row_json->>'validation_status',
-          'pre_validated', COALESCE((row_ids.row_json->>'validation_pre_validated')::boolean, FALSE),
-          'hr_validation_satisfied', COALESCE((row_ids.row_json->>'hr_validation_satisfied')::boolean, FALSE),
-          'hr_validation_awaiting', COALESCE((row_ids.row_json->>'hr_validation_awaiting')::boolean, FALSE),
+          'pre_validated', COALESCE(LOWER(NULLIF(BTRIM(COALESCE(row_ids.row_json->>'validation_pre_validated', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE),
+          'hr_validation_satisfied', COALESCE(LOWER(NULLIF(BTRIM(COALESCE(row_ids.row_json->>'hr_validation_satisfied', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE),
+          'hr_validation_awaiting', COALESCE(LOWER(NULLIF(BTRIM(COALESCE(row_ids.row_json->>'hr_validation_awaiting', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE),
           'latest', COALESCE(validation_payload.latest_validation_json, NULL::jsonb)
         ),
         'shifts', '[]'::jsonb
@@ -3579,23 +3612,23 @@ BEGIN
           'route_family', row_ids.row_json->>'route_family',
           'route_subfamily', row_ids.row_json->>'route_subfamily',
           'underlying_channel_family', row_ids.row_json->>'underlying_channel_family',
-          'is_import_authoritative', COALESCE((row_ids.row_json->>'is_import_authoritative')::boolean, FALSE),
-          'is_adjustment', COALESCE((row_ids.row_json->>'is_adjustment')::boolean, FALSE),
-          'additional_seq', CASE WHEN NULLIF(row_ids.row_json->>'additional_seq', '') IS NULL THEN NULL::integer ELSE (row_ids.row_json->>'additional_seq')::integer END,
+          'is_import_authoritative', COALESCE(LOWER(NULLIF(BTRIM(COALESCE(row_ids.row_json->>'is_import_authoritative', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE),
+          'is_adjustment', COALESCE(LOWER(NULLIF(BTRIM(COALESCE(row_ids.row_json->>'is_adjustment', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE),
+          'additional_seq', CASE WHEN COALESCE(row_ids.row_json->>'additional_seq', '') ~ '^-?[0-9]+$' THEN (row_ids.row_json->>'additional_seq')::integer ELSE NULL::integer END,
           'actual_schedule_json', COALESCE(row_ids.row_json->'actual_schedule_json', '[]'::jsonb),
           'planned_schedule_json', COALESCE(row_ids.row_json->'planned_schedule_json', '[]'::jsonb),
-          'suppress_standard_schedule_fallback', COALESCE((row_ids.row_json->>'suppress_standard_schedule_fallback')::boolean, FALSE),
-          'keep_additional_manual_adjustment_schedule_empty', COALESCE((row_ids.row_json->>'keep_additional_manual_adjustment_schedule_empty')::boolean, FALSE),
+          'suppress_standard_schedule_fallback', COALESCE(LOWER(NULLIF(BTRIM(COALESCE(row_ids.row_json->>'suppress_standard_schedule_fallback', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE),
+          'keep_additional_manual_adjustment_schedule_empty', COALESCE(LOWER(NULLIF(BTRIM(COALESCE(row_ids.row_json->>'keep_additional_manual_adjustment_schedule_empty', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE),
           'summary_stage', row_ids.row_json->>'summary_stage',
-          'client_requires_hr', COALESCE((row_ids.row_json->>'client_requires_hr')::boolean, FALSE),
-          'client_autoprocess_hr', COALESCE((row_ids.row_json->>'client_autoprocess_hr')::boolean, FALSE),
-          'client_no_timesheet_required', COALESCE((row_ids.row_json->>'client_no_timesheet_required')::boolean, FALSE),
-          'client_is_nhsp', COALESCE((row_ids.row_json->>'client_is_nhsp')::boolean, FALSE),
+          'client_requires_hr', COALESCE(LOWER(NULLIF(BTRIM(COALESCE(row_ids.row_json->>'client_requires_hr', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE),
+          'client_autoprocess_hr', COALESCE(LOWER(NULLIF(BTRIM(COALESCE(row_ids.row_json->>'client_autoprocess_hr', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE),
+          'client_no_timesheet_required', COALESCE(LOWER(NULLIF(BTRIM(COALESCE(row_ids.row_json->>'client_no_timesheet_required', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE),
+          'client_is_nhsp', COALESCE(LOWER(NULLIF(BTRIM(COALESCE(row_ids.row_json->>'client_is_nhsp', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE),
           'contract_id', row_ids.row_json->>'contract_id',
-          'ready_to_pay', COALESCE((row_ids.row_json->>'ready_to_pay')::boolean, FALSE),
+          'ready_to_pay', COALESCE(LOWER(NULLIF(BTRIM(COALESCE(row_ids.row_json->>'ready_to_pay', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE),
           'issue_codes', COALESCE(row_ids.row_json->'issue_codes', '[]'::jsonb)
         ),
-        'ready_to_pay', COALESCE((row_ids.row_json->>'ready_to_pay')::boolean, FALSE),
+        'ready_to_pay', COALESCE(LOWER(NULLIF(BTRIM(COALESCE(row_ids.row_json->>'ready_to_pay', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE),
         'summary_stage', row_ids.row_json->>'summary_stage',
         'route_type', row_ids.row_json->>'route_type',
         'route_display', row_ids.row_json->>'route_display',
@@ -3621,16 +3654,16 @@ BEGIN
           || JSONB_BUILD_OBJECT(
             'weekly_mode', row_ids.row_json->>'contract_weekly_mode',
             'hr_weekly_behaviour', row_ids.row_json->>'contract_hr_weekly_behaviour',
-            'requires_hr', COALESCE((row_ids.row_json->>'client_requires_hr')::boolean, FALSE),
-            'autoprocess_hr', COALESCE((row_ids.row_json->>'client_autoprocess_hr')::boolean, FALSE),
-            'no_timesheet_required', COALESCE((row_ids.row_json->>'client_no_timesheet_required')::boolean, FALSE),
-            'is_nhsp', COALESCE((row_ids.row_json->>'client_is_nhsp')::boolean, FALSE)
+            'requires_hr', COALESCE(LOWER(NULLIF(BTRIM(COALESCE(row_ids.row_json->>'client_requires_hr', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE),
+            'autoprocess_hr', COALESCE(LOWER(NULLIF(BTRIM(COALESCE(row_ids.row_json->>'client_autoprocess_hr', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE),
+            'no_timesheet_required', COALESCE(LOWER(NULLIF(BTRIM(COALESCE(row_ids.row_json->>'client_no_timesheet_required', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE),
+            'is_nhsp', COALESCE(LOWER(NULLIF(BTRIM(COALESCE(row_ids.row_json->>'client_is_nhsp', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE)
           )
         ),
         'evidence', COALESCE(evidence_payload.evidence_json, '[]'::jsonb),
         'evidence_meta', JSONB_BUILD_OBJECT(
           'has_any_evidence', (
-            COALESCE((row_ids.row_json->>'has_any_evidence')::boolean, FALSE)
+            COALESCE(LOWER(NULLIF(BTRIM(COALESCE(row_ids.row_json->>'has_any_evidence', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE)
             OR jsonb_array_length(COALESCE(evidence_payload.evidence_json, '[]'::jsonb)) > 0
           ),
           'evidence_badges', JSONB_BUILD_ARRAY(
@@ -3640,9 +3673,12 @@ BEGIN
             JSONB_BUILD_OBJECT('kind', 'ACCOMMODATION', 'present', COALESCE((SELECT TRUE FROM jsonb_array_elements(COALESCE(evidence_payload.evidence_json, '[]'::jsonb)) AS evidence_badge_item(item_json) WHERE UPPER(COALESCE(evidence_badge_item.item_json->>'kind', '')) = 'ACCOMMODATION' LIMIT 1), FALSE), 'has_evidence', COALESCE((SELECT TRUE FROM jsonb_array_elements(COALESCE(evidence_payload.evidence_json, '[]'::jsonb)) AS evidence_badge_item(item_json) WHERE UPPER(COALESCE(evidence_badge_item.item_json->>'kind', '')) = 'ACCOMMODATION' LIMIT 1), FALSE)),
             JSONB_BUILD_OBJECT('kind', 'OTHER', 'present', COALESCE((SELECT TRUE FROM jsonb_array_elements(COALESCE(evidence_payload.evidence_json, '[]'::jsonb)) AS evidence_badge_item(item_json) WHERE UPPER(COALESCE(evidence_badge_item.item_json->>'kind', '')) = 'OTHER' LIMIT 1), FALSE), 'has_evidence', COALESCE((SELECT TRUE FROM jsonb_array_elements(COALESCE(evidence_payload.evidence_json, '[]'::jsonb)) AS evidence_badge_item(item_json) WHERE UPPER(COALESCE(evidence_badge_item.item_json->>'kind', '')) = 'OTHER' LIMIT 1), FALSE))
           ),
-          'attached_evidence_count', COALESCE(NULLIF(row_ids.row_json->>'attached_evidence_count', '')::integer, 0),
-          'queue_staged_count', COALESCE(NULLIF(row_ids.row_json->>'queue_staged_count', '')::integer, 0),
-          'evidence_document_locked', COALESCE((row_ids.row_json->>'evidence_document_locked')::boolean, FALSE),
+          'attached_evidence_count', GREATEST(
+            CASE WHEN COALESCE(row_ids.row_json->>'attached_evidence_count', '') ~ '^[0-9]+$' THEN (row_ids.row_json->>'attached_evidence_count')::integer ELSE 0 END,
+            COALESCE(jsonb_array_length(COALESCE(evidence_payload.evidence_json, '[]'::jsonb)), 0)
+          ),
+          'queue_staged_count', CASE WHEN COALESCE(row_ids.row_json->>'queue_staged_count', '') ~ '^[0-9]+$' THEN (row_ids.row_json->>'queue_staged_count')::integer ELSE 0 END,
+          'evidence_document_locked', COALESCE(LOWER(NULLIF(BTRIM(COALESCE(row_ids.row_json->>'evidence_document_locked', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE),
           'evidence_lock_reason', row_ids.row_json->>'evidence_lock_reason'
         ),
         'primary_artifact', CASE
@@ -3664,8 +3700,8 @@ BEGIN
           'route_family', row_ids.row_json->>'route_family',
           'route_subfamily', row_ids.row_json->>'route_subfamily',
           'underlying_channel_family', row_ids.row_json->>'underlying_channel_family',
-          'is_import_authoritative', COALESCE((row_ids.row_json->>'is_import_authoritative')::boolean, FALSE),
-          'compare_block_required', COALESCE((row_ids.row_json->>'compare_block_required')::boolean, FALSE),
+          'is_import_authoritative', COALESCE(LOWER(NULLIF(BTRIM(COALESCE(row_ids.row_json->>'is_import_authoritative', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE),
+          'compare_block_required', COALESCE(LOWER(NULLIF(BTRIM(COALESCE(row_ids.row_json->>'compare_block_required', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE),
           'primary_artifact', CASE
             WHEN NULLIF(BTRIM(COALESCE(row_ids.row_json->>'primary_artifact_id', '')), '') IS NOT NULL THEN JSONB_BUILD_OBJECT(
               'id', row_ids.row_json->>'primary_artifact_id',
@@ -3708,7 +3744,7 @@ BEGIN
   effective_evidence_payload AS (
     SELECT
       base_payload.payload_json,
-      COALESCE((base_payload.payload_json#>>'{evidence_meta,has_any_evidence}')::boolean, FALSE) AS effective_has_any_evidence,
+      COALESCE(LOWER(NULLIF(BTRIM(COALESCE(base_payload.payload_json#>>'{evidence_meta,has_any_evidence}', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE) AS effective_has_any_evidence,
       COALESCE(base_payload.payload_json#>'{evidence_meta,evidence_badges}', '[]'::jsonb) AS effective_evidence_badges,
       COALESCE(base_payload.payload_json->'primary_artifact', base_payload.payload_json#>'{details,primary_artifact}', NULL::jsonb) AS effective_primary_artifact,
       COALESCE(
@@ -3786,8 +3822,8 @@ BEGIN
           'route_family', effective_evidence_payload.payload_json->>'route_family',
           'route_subfamily', effective_evidence_payload.payload_json->>'route_subfamily',
           'underlying_channel_family', effective_evidence_payload.payload_json->>'underlying_channel_family',
-          'is_import_authoritative', COALESCE((effective_evidence_payload.payload_json->>'is_import_authoritative')::boolean, FALSE),
-          'compare_block_required', COALESCE((effective_evidence_payload.payload_json->>'compare_block_required')::boolean, FALSE),
+          'is_import_authoritative', COALESCE(LOWER(NULLIF(BTRIM(COALESCE(effective_evidence_payload.payload_json->>'is_import_authoritative', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE),
+          'compare_block_required', COALESCE(LOWER(NULLIF(BTRIM(COALESCE(effective_evidence_payload.payload_json->>'compare_block_required', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE),
           'primary_artifact', effective_evidence_payload.effective_primary_artifact,
           'source_items', '[]'::jsonb,
           'evidence', COALESCE(effective_evidence_payload.payload_json->'evidence', '[]'::jsonb),
@@ -3804,8 +3840,8 @@ BEGIN
   IF v_out IS NOT NULL AND COALESCE(v_include_evidence, FALSE) = TRUE THEN
     SELECT
       (
-        COALESCE(NULLIF(BTRIM(COALESCE(v_out->'row'->>'has_any_evidence', '')), '')::boolean, FALSE)
-        OR COALESCE(NULLIF(BTRIM(COALESCE(v_out->'data_row'->>'has_any_evidence', '')), '')::boolean, FALSE)
+        COALESCE(LOWER(NULLIF(BTRIM(COALESCE(v_out->'row'->>'has_any_evidence', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE)
+        OR COALESCE(LOWER(NULLIF(BTRIM(COALESCE(v_out->'data_row'->>'has_any_evidence', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE)
         OR COALESCE(jsonb_array_length(COALESCE(v_out->'evidence', '[]'::jsonb)), 0) > 0
       ),
       (
@@ -3819,7 +3855,7 @@ BEGIN
           SELECT TRUE
           FROM jsonb_array_elements(COALESCE(v_out->'row'->'evidence_badges', '[]'::jsonb)) AS row_badge(badge_json)
           WHERE UPPER(COALESCE(row_badge.badge_json->>'kind', '')) = 'TIMESHEET'
-            AND COALESCE(NULLIF(BTRIM(COALESCE(row_badge.badge_json->>'present', row_badge.badge_json->>'has_evidence', '')), '')::boolean, FALSE) = TRUE
+            AND COALESCE(LOWER(NULLIF(BTRIM(COALESCE(row_badge.badge_json->>'present', row_badge.badge_json->>'has_evidence', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE) = TRUE
           LIMIT 1
         ), FALSE)
       ),
@@ -3834,7 +3870,7 @@ BEGIN
           SELECT TRUE
           FROM jsonb_array_elements(COALESCE(v_out->'row'->'evidence_badges', '[]'::jsonb)) AS row_badge(badge_json)
           WHERE UPPER(COALESCE(row_badge.badge_json->>'kind', '')) = 'MILEAGE'
-            AND COALESCE(NULLIF(BTRIM(COALESCE(row_badge.badge_json->>'present', row_badge.badge_json->>'has_evidence', '')), '')::boolean, FALSE) = TRUE
+            AND COALESCE(LOWER(NULLIF(BTRIM(COALESCE(row_badge.badge_json->>'present', row_badge.badge_json->>'has_evidence', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE) = TRUE
           LIMIT 1
         ), FALSE)
       ),
@@ -3849,7 +3885,7 @@ BEGIN
           SELECT TRUE
           FROM jsonb_array_elements(COALESCE(v_out->'row'->'evidence_badges', '[]'::jsonb)) AS row_badge(badge_json)
           WHERE UPPER(COALESCE(row_badge.badge_json->>'kind', '')) = 'TRAVEL'
-            AND COALESCE(NULLIF(BTRIM(COALESCE(row_badge.badge_json->>'present', row_badge.badge_json->>'has_evidence', '')), '')::boolean, FALSE) = TRUE
+            AND COALESCE(LOWER(NULLIF(BTRIM(COALESCE(row_badge.badge_json->>'present', row_badge.badge_json->>'has_evidence', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE) = TRUE
           LIMIT 1
         ), FALSE)
       ),
@@ -3864,7 +3900,7 @@ BEGIN
           SELECT TRUE
           FROM jsonb_array_elements(COALESCE(v_out->'row'->'evidence_badges', '[]'::jsonb)) AS row_badge(badge_json)
           WHERE UPPER(COALESCE(row_badge.badge_json->>'kind', '')) = 'ACCOMMODATION'
-            AND COALESCE(NULLIF(BTRIM(COALESCE(row_badge.badge_json->>'present', row_badge.badge_json->>'has_evidence', '')), '')::boolean, FALSE) = TRUE
+            AND COALESCE(LOWER(NULLIF(BTRIM(COALESCE(row_badge.badge_json->>'present', row_badge.badge_json->>'has_evidence', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE) = TRUE
           LIMIT 1
         ), FALSE)
       ),
@@ -3879,7 +3915,7 @@ BEGIN
           SELECT TRUE
           FROM jsonb_array_elements(COALESCE(v_out->'row'->'evidence_badges', '[]'::jsonb)) AS row_badge(badge_json)
           WHERE UPPER(COALESCE(row_badge.badge_json->>'kind', '')) = 'OTHER'
-            AND COALESCE(NULLIF(BTRIM(COALESCE(row_badge.badge_json->>'present', row_badge.badge_json->>'has_evidence', '')), '')::boolean, FALSE) = TRUE
+            AND COALESCE(LOWER(NULLIF(BTRIM(COALESCE(row_badge.badge_json->>'present', row_badge.badge_json->>'has_evidence', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE) = TRUE
           LIMIT 1
         ), FALSE)
       )
@@ -3891,6 +3927,8 @@ BEGIN
       v_effective_badge_accommodation,
       v_effective_badge_other;
 
+    v_effective_attached_evidence_count := COALESCE(jsonb_array_length(COALESCE(v_out->'evidence', '[]'::jsonb)), 0);
+
     v_effective_evidence_badges := JSONB_BUILD_ARRAY(
       JSONB_BUILD_OBJECT('kind', 'TIMESHEET', 'present', COALESCE(v_effective_badge_timesheet, FALSE), 'has_evidence', COALESCE(v_effective_badge_timesheet, FALSE)),
       JSONB_BUILD_OBJECT('kind', 'MILEAGE', 'present', COALESCE(v_effective_badge_mileage, FALSE), 'has_evidence', COALESCE(v_effective_badge_mileage, FALSE)),
@@ -3901,28 +3939,33 @@ BEGIN
 
     v_effective_evidence_meta := COALESCE(v_out->'evidence_meta', JSONB_BUILD_OBJECT()) || JSONB_BUILD_OBJECT(
       'has_any_evidence', COALESCE(v_effective_has_any_evidence, FALSE),
-      'evidence_badges', v_effective_evidence_badges
+      'evidence_badges', v_effective_evidence_badges,
+      'attached_evidence_count', COALESCE(v_effective_attached_evidence_count, 0)
     );
 
     v_effective_artifact_hints := COALESCE(v_out->'artifact_hints', JSONB_BUILD_OBJECT()) || JSONB_BUILD_OBJECT(
       'has_any_evidence', COALESCE(v_effective_has_any_evidence, FALSE),
-      'evidence_badges', v_effective_evidence_badges
+      'evidence_badges', v_effective_evidence_badges,
+      'attached_evidence_count', COALESCE(v_effective_attached_evidence_count, 0)
     );
 
     v_effective_action_flags := COALESCE(v_out->'action_flags', JSONB_BUILD_OBJECT()) || JSONB_BUILD_OBJECT(
       'has_any_evidence', COALESCE(v_effective_has_any_evidence, FALSE),
-      'evidence_badges', v_effective_evidence_badges
+      'evidence_badges', v_effective_evidence_badges,
+      'attached_evidence_count', COALESCE(v_effective_attached_evidence_count, 0)
     );
 
     v_effective_row_patch := COALESCE(v_out->'row_patch', JSONB_BUILD_OBJECT()) || JSONB_BUILD_OBJECT(
       'has_any_evidence', COALESCE(v_effective_has_any_evidence, FALSE),
       'evidence_badges', v_effective_evidence_badges,
+      'attached_evidence_count', COALESCE(v_effective_attached_evidence_count, 0),
       'artifact_hints', v_effective_artifact_hints
     );
 
     v_effective_row := COALESCE(v_out->'row', JSONB_BUILD_OBJECT()) || JSONB_BUILD_OBJECT(
       'has_any_evidence', COALESCE(v_effective_has_any_evidence, FALSE),
       'evidence_badges', v_effective_evidence_badges,
+      'attached_evidence_count', COALESCE(v_effective_attached_evidence_count, 0),
       'artifact_hints', v_effective_artifact_hints,
       'action_flags', COALESCE(v_out->'row'->'action_flags', JSONB_BUILD_OBJECT()) || JSONB_BUILD_OBJECT(
         'has_any_evidence', COALESCE(v_effective_has_any_evidence, FALSE),
@@ -3934,6 +3977,7 @@ BEGIN
     v_effective_data_row := COALESCE(v_out->'data_row', JSONB_BUILD_OBJECT()) || JSONB_BUILD_OBJECT(
       'has_any_evidence', COALESCE(v_effective_has_any_evidence, FALSE),
       'evidence_badges', v_effective_evidence_badges,
+      'attached_evidence_count', COALESCE(v_effective_attached_evidence_count, 0),
       'artifact_hints', v_effective_artifact_hints,
       'action_flags', COALESCE(v_out->'data_row'->'action_flags', JSONB_BUILD_OBJECT()) || JSONB_BUILD_OBJECT(
         'has_any_evidence', COALESCE(v_effective_has_any_evidence, FALSE),
@@ -3956,12 +4000,14 @@ BEGIN
       'evidence', COALESCE(v_out->'evidence', '[]'::jsonb),
       'has_any_evidence', COALESCE(v_effective_has_any_evidence, FALSE),
       'evidence_badges', v_effective_evidence_badges,
+      'attached_evidence_count', COALESCE(v_effective_attached_evidence_count, 0),
       'artifact_hints', v_effective_artifact_hints
     );
 
     v_out := v_out || JSONB_BUILD_OBJECT(
       'has_any_evidence', COALESCE(v_effective_has_any_evidence, FALSE),
       'evidence_badges', v_effective_evidence_badges,
+      'attached_evidence_count', COALESCE(v_effective_attached_evidence_count, 0),
       'evidence_meta', v_effective_evidence_meta,
       'artifact_hints', v_effective_artifact_hints,
       'action_flags', v_effective_action_flags,
@@ -3982,9 +4028,6 @@ BEGIN
   ));
 END;
 $function$;
-
-
-
 
 
 
