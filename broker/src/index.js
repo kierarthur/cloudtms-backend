@@ -36071,7 +36071,6 @@ async function handleManualTimesheetQueueDelete(env, req, queueId) {
   }
 }
 
-
 async function handleManualTimesheetQueueStageToContractWeek(env, req, queueId) {
   const enc = encodeURIComponent;
 
@@ -36110,6 +36109,44 @@ async function handleManualTimesheetQueueStageToContractWeek(env, req, queueId) 
   if (!allowedKinds.has(requestedKind)) {
     return withCORS(env, req, badRequest('Invalid staged evidence kind'));
   }
+
+  const buildStagedEvidenceResponse = (itemRow, metaInput, kind, uploadedPdfKey) => {
+    const meta = (metaInput && typeof metaInput === 'object' && !Array.isArray(metaInput)) ? metaInput : {};
+    const stagedKind = normaliseKind(kind || meta.staged_kind || meta.kind || 'TIMESHEET') || 'TIMESHEET';
+    const r2Key = String(itemRow?.r2_key || '').trim() || null;
+    const displayName = String(itemRow?.original_filename || '').trim() || 'Staged evidence';
+    const mimeType = String(itemRow?.mime_type || '').trim() || null;
+    return {
+      staged: true,
+      id: itemRow.id,
+      queue_id: itemRow.id,
+      contract_week_id: contractWeekId,
+      timesheet_id: null,
+      kind: stagedKind,
+      staged_kind: stagedKind,
+      r2_key: r2Key,
+      storage_key: r2Key,
+      file_key: r2Key,
+      download_storage_key: r2Key,
+      original_filename: itemRow?.original_filename || displayName,
+      display_name: displayName,
+      filename: displayName,
+      mime_type: mimeType,
+      content_type: mimeType,
+      content_hash: itemRow?.content_hash || null,
+      uploaded_at_utc: itemRow?.uploaded_at_utc || null,
+      staged_at_utc: meta.staged_at_utc || now,
+      staged_by_user_id: meta.staged_by_user_id || user.id || null,
+      last_rotation_deg: Number.isFinite(Number(itemRow?.last_rotation_deg)) ? Number(itemRow.last_rotation_deg) : 0,
+      rotation_degrees: Number.isFinite(Number(itemRow?.last_rotation_deg)) ? Number(itemRow.last_rotation_deg) : 0,
+      status: 'STAGED',
+      is_staged_context: true,
+      source_label: 'Staged',
+      source_badge: 'Staged',
+      uploaded_pdf_r2_key: uploadedPdfKey || null,
+      meta_json: meta
+    };
+  };
 
   const now = nowIso();
 
@@ -36175,15 +36212,25 @@ async function handleManualTimesheetQueueStageToContractWeek(env, req, queueId) 
         }
       }
 
-      if (requestedKind !== currentStagedKind) {
-        const nextMeta = {
-          ...currentMeta,
-          contract_week_id: contractWeekId,
-          staged_kind: requestedKind,
-          staged_at_utc: String(currentMeta?.staged_at_utc || now),
-          staged_by_user_id: currentMeta?.staged_by_user_id || user.id
-        };
+      const ensuredMeta = {
+        ...currentMeta,
+        contract_week_id: contractWeekId,
+        staged_kind: requestedKind || currentStagedKind || 'TIMESHEET',
+        staged_at_utc: String(currentMeta?.staged_at_utc || now),
+        staged_by_user_id: currentMeta?.staged_by_user_id || user.id
+      };
+      const stagedMetaNeedsPatch = !!(
+        requestedKind !== currentStagedKind ||
+        currentStagedContractWeekId !== contractWeekId ||
+        String(currentMeta?.staged_at_utc || '').trim() === '' ||
+        String(currentMeta?.staged_by_user_id || '').trim() === '' ||
+        String(currentMeta?.contract_week_id || '').trim() !== contractWeekId ||
+        normaliseKind(currentMeta?.staged_kind || currentMeta?.kind || '') !== (requestedKind || currentStagedKind || 'TIMESHEET')
+      );
 
+      let responseUploadedPdfKey = (requestedKind === 'TIMESHEET' ? (item.r2_key || null) : (contractWeek.uploaded_pdf_r2_key || null));
+
+      if (stagedMetaNeedsPatch) {
         const patchRes = await fetch(
           `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue?id=eq.${enc(queueId)}`,
           {
@@ -36192,7 +36239,7 @@ async function handleManualTimesheetQueueStageToContractWeek(env, req, queueId) 
             body: JSON.stringify({
               status: 'STAGED',
               timesheet_id: null,
-              meta_json: nextMeta
+              meta_json: ensuredMeta
             })
           }
         );
@@ -36224,6 +36271,8 @@ async function handleManualTimesheetQueueStageToContractWeek(env, req, queueId) 
           nextUploadedPdfKey = otherTimesheet?.r2_key || null;
         }
 
+        responseUploadedPdfKey = nextUploadedPdfKey;
+
         await fetch(
           `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(contractWeekId)}`,
           {
@@ -36237,13 +36286,7 @@ async function handleManualTimesheetQueueStageToContractWeek(env, req, queueId) 
         ).catch(() => {});
       }
 
-      return withCORS(env, req, ok({
-        staged: true,
-        id: item.id,
-        contract_week_id: contractWeekId,
-        kind: requestedKind,
-        uploaded_pdf_r2_key: (requestedKind === 'TIMESHEET' ? (item.r2_key || null) : (contractWeek.uploaded_pdf_r2_key || null))
-      }));
+      return withCORS(env, req, ok(buildStagedEvidenceResponse(item, ensuredMeta, requestedKind, responseUploadedPdfKey)));
     }
 
     return withCORS(env, req, badRequest('Queue item is already staged to a different contract week'));
@@ -36327,15 +36370,8 @@ async function handleManualTimesheetQueueStageToContractWeek(env, req, queueId) 
     );
   } catch {}
 
-  return withCORS(env, req, ok({
-    staged: true,
-    id: item.id,
-    contract_week_id: contractWeekId,
-    kind: requestedKind,
-    uploaded_pdf_r2_key: uploadedPdfKey
-  }));
+  return withCORS(env, req, ok(buildStagedEvidenceResponse(item, nextMeta, requestedKind, uploadedPdfKey)));
 }
-
 
 
 
@@ -47351,8 +47387,6 @@ async function handleBulkAuthoriseDataset(env, req) {
     return withCORS(env, req, serverError(String(e?.message || e || 'Failed to load bulk authorise dataset')));
   }
 }
-
-
 async function handleBulkProcessRowContext(env, req, rowIdentity = null) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -47666,9 +47700,14 @@ async function handleBulkProcessRowContext(env, req, rowIdentity = null) {
 
   const baseOnly = boolParam(q('base_only') || q('baseOnly'), false);
   const profile = normalizeProfile(q('profile') || q('context_profile') || q('contextProfile'), baseOnly);
-  const includeEvidence = ['active_row_visible', 'evidence', 'full'].includes(profile);
-  const includeCompare = ['compare_import', 'full'].includes(profile);
-  const includeImportSourceRows = ['compare_import', 'full'].includes(profile);
+  const includeEvidenceParam = q('include_evidence') || q('includeEvidence') || q('load_evidence') || q('loadEvidence');
+  const includeCompareParam = q('include_compare') || q('includeCompare') || q('load_compare') || q('loadCompare');
+  const includeImportSourceRowsParam = q('include_import_source_rows') || q('includeImportSourceRows') || q('load_import_source_rows') || q('loadImportSourceRows');
+  const explicitIncludeEvidenceRequested = boolParam(includeEvidenceParam, false);
+  const evidenceRefreshContextRequested = explicitIncludeEvidenceRequested || profile === 'evidence';
+  const includeEvidence = ['active_row_visible', 'evidence', 'full'].includes(profile) || explicitIncludeEvidenceRequested;
+  const includeCompare = ['compare_import', 'full'].includes(profile) || boolParam(includeCompareParam, false);
+  const includeImportSourceRows = ['compare_import', 'full'].includes(profile) || boolParam(includeImportSourceRowsParam, false);
 
   const filters = {
     row_key: trimStr(q('row_key') || q('rowKey') || ''),
@@ -47718,14 +47757,128 @@ async function handleBulkProcessRowContext(env, req, rowIdentity = null) {
     return withCORS(env, req, badRequest('bulk process row context requires row_key, timesheet_id, or contract_week_id'));
   }
 
+  const isContractWeekEvidenceRefresh = !!(
+    evidenceRefreshContextRequested &&
+    compactFilters.contract_week_id &&
+    !compactFilters.timesheet_id &&
+    !compactFilters.current_timesheet_id &&
+    !compactFilters.requested_timesheet_id &&
+    (String(compactFilters.row_key || '').startsWith('contract_week:') || compactFilters.contract_week_id)
+  );
+
+  const buildStagedEvidenceFallbackRows = async (contractWeekId) => {
+    if (!contractWeekId) return [];
+    try {
+      const { rows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue` +
+          `?status=eq.${encodeURIComponent('STAGED')}` +
+          `&timesheet_id=is.null` +
+          `&meta_json->>contract_week_id=eq.${encodeURIComponent(contractWeekId)}` +
+          `&select=id,status,timesheet_id,r2_key,original_filename,mime_type,content_hash,uploaded_by_user_id,uploaded_at_utc,last_rotation_deg,meta_json`
+      );
+
+      return (rows || []).map((item) => {
+        const meta = (item?.meta_json && typeof item.meta_json === 'object' && !Array.isArray(item.meta_json)) ? item.meta_json : {};
+        const kind = String(meta.staged_kind || meta.kind || 'TIMESHEET').trim().toUpperCase() || 'TIMESHEET';
+        const displayName = String(item.original_filename || '').trim() || 'Staged evidence';
+        const storageKey = String(item.r2_key || '').trim() || null;
+        const mimeType = String(item.mime_type || '').trim() || null;
+        let previewMode = 'FILE';
+        const keyForPreview = `${storageKey || ''} ${displayName}`.toLowerCase();
+        if ((mimeType || '').toLowerCase().startsWith('image/') || /\.(png|jpe?g|gif|webp|bmp|svg|tif|tiff|heic|heif|avif)(?:$|[?#])/.test(keyForPreview)) {
+          previewMode = 'IMAGE';
+        } else if ((mimeType || '').toLowerCase() === 'application/pdf' || /\.pdf(?:$|[?#])/.test(keyForPreview)) {
+          previewMode = 'PDF';
+        }
+        return {
+          id: item.id,
+          queue_id: item.id,
+          evidence_id: null,
+          timesheet_id: null,
+          contract_week_id: contractWeekId,
+          kind,
+          staged_kind: kind,
+          display_name: displayName,
+          filename: displayName,
+          original_filename: item.original_filename || displayName,
+          storage_key: storageKey,
+          r2_key: storageKey,
+          file_key: storageKey,
+          download_storage_key: storageKey,
+          mime_type: mimeType,
+          content_type: mimeType,
+          content_hash: item.content_hash || null,
+          uploaded_at_utc: item.uploaded_at_utc || null,
+          staged_at_utc: meta.staged_at_utc || item.uploaded_at_utc || null,
+          staged_by_user_id: meta.staged_by_user_id || item.uploaded_by_user_id || null,
+          rotation_degrees: Number.isFinite(Number(item.last_rotation_deg)) ? Number(item.last_rotation_deg) : 0,
+          last_rotation_deg: Number.isFinite(Number(item.last_rotation_deg)) ? Number(item.last_rotation_deg) : 0,
+          status: item.status || 'STAGED',
+          is_staged_context: true,
+          preview_mode: previewMode,
+          source_label: 'Staged',
+          source_badge: 'Staged',
+          meta_json: meta
+        };
+      });
+    } catch (fallbackErr) {
+      console.warn('[TS][BULK-PROCESS][ROW-CONTEXT][EVIDENCE-FALLBACK-FAILED]', {
+        contract_week_id: contractWeekId,
+        error: String(fallbackErr?.message || fallbackErr || '')
+      });
+      return [];
+    }
+  };
+
   try {
+    console.info('[TS][BULK-PROCESS][ROW-CONTEXT][RPC]', {
+      row_key: compactFilters.row_key || null,
+      contract_week_id: compactFilters.contract_week_id || null,
+      timesheet_id: compactFilters.timesheet_id || compactFilters.current_timesheet_id || compactFilters.requested_timesheet_id || null,
+      profile: compactFilters.profile || null,
+      include_evidence: compactFilters.include_evidence === true,
+      base_only: compactFilters.base_only === true
+    });
     const rpcRes = await sbRpc(env, 'bulk_process_row_context_v1', { p_filters: compactFilters }, { timeoutMs: 45000 });
     const payload = normaliseReturnedContext(unwrapRpcPayload(rpcRes, 'bulk_process_row_context_v1'));
     return withCORS(env, req, ok(payload));
   } catch (err) {
-    return withCORS(env, req, serverError(String(err?.message || err || 'Failed to load bulk process row context')));
+    const message = String(err?.message || err || 'Failed to load bulk process row context');
+    console.warn('[TS][BULK-PROCESS][ROW-CONTEXT][RPC-FAILED]', {
+      row_key: compactFilters.row_key || null,
+      contract_week_id: compactFilters.contract_week_id || null,
+      timesheet_id: compactFilters.timesheet_id || compactFilters.current_timesheet_id || compactFilters.requested_timesheet_id || null,
+      profile: compactFilters.profile || null,
+      include_evidence: compactFilters.include_evidence === true,
+      base_only: compactFilters.base_only === true,
+      evidence_refresh_failed: isContractWeekEvidenceRefresh,
+      error: message
+    });
+
+    if (isContractWeekEvidenceRefresh) {
+      const stagedEvidence = await buildStagedEvidenceFallbackRows(compactFilters.contract_week_id);
+      return withCORS(env, req, ok({
+        ok: false,
+        context_kind: 'bulk_process_row_context',
+        context_profile: compactFilters.profile || profile,
+        profile: compactFilters.profile || profile,
+        evidence_refresh_failed: true,
+        row_key: compactFilters.row_key || (compactFilters.contract_week_id ? `contract_week:${compactFilters.contract_week_id}` : null),
+        contract_week_id: compactFilters.contract_week_id || null,
+        timesheet_id: compactFilters.timesheet_id || compactFilters.current_timesheet_id || compactFilters.requested_timesheet_id || null,
+        evidence_loaded: false,
+        evidence: stagedEvidence,
+        staged_evidence: stagedEvidence,
+        message: 'Evidence was attached, but the row context could not be refreshed. Please refresh the row or reopen Bulk Process.',
+        error: 'EVIDENCE_ROW_CONTEXT_REFRESH_FAILED'
+      }));
+    }
+
+    return withCORS(env, req, serverError(message));
   }
 }
+
 
 
 function classifyBulkAuthoriseRow(row, fin, summaryBase) {
