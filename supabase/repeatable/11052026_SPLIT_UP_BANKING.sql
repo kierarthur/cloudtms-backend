@@ -10242,6 +10242,7 @@ BEGIN
 END;
 $function$;
 
+
 CREATE OR REPLACE FUNCTION public.pay_workbench_prepare_draft_scope_seed(p_operation_id uuid, p_workbench_session_id uuid, p_actor_user_id uuid, p_selected_preview_row_ids jsonb DEFAULT NULL::jsonb, p_pay_channel_scope text DEFAULT NULL::text, p_same_week_paye_override_json jsonb DEFAULT '{}'::jsonb)
  RETURNS TABLE(candidate_scope_count integer, selected_row_count integer, timesheet_count integer, finance_case_count integer, pay_channel_count integer)
  LANGUAGE plpgsql
@@ -10584,6 +10585,118 @@ begin
         grouped_lines.effective_case_resolution_states_json,
         grouped_lines.effective_canonical_preview_lines_json;
 
+    drop table if exists pg_temp.tmp_pay_workbench_scope_seed_required_payees;
+    create temporary table pg_temp.tmp_pay_workbench_scope_seed_required_payees as
+    with selected_line_routes as (
+        select
+            proposed_scope.operation_id,
+            proposed_scope.workbench_session_id,
+            proposed_scope.candidate_id,
+            proposed_scope.pay_channel,
+            selected_line_element.ord as line_ord,
+            selected_line_element.value as line_json,
+            case
+                when upper(btrim(coalesce(selected_line_element.value->>'payee_entity_kind', selected_line_element.value->>'line_payee_entity_kind', selected_line_element.value->>'entity_kind', ''))) = 'UMBRELLA_COMPANY' then 'UMBRELLA'
+                else upper(btrim(coalesce(selected_line_element.value->>'payee_entity_kind', selected_line_element.value->>'line_payee_entity_kind', selected_line_element.value->>'entity_kind', '')))
+            end as line_payee_entity_kind,
+            case
+                when btrim(coalesce(selected_line_element.value->>'payee_entity_id', selected_line_element.value->>'line_payee_entity_id', selected_line_element.value->>'entity_id', '')) ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+                    then btrim(coalesce(selected_line_element.value->>'payee_entity_id', selected_line_element.value->>'line_payee_entity_id', selected_line_element.value->>'entity_id', ''))::uuid
+                else null::uuid
+            end as line_payee_entity_id,
+            case
+                when btrim(coalesce(proposed_scope.effective_non_paye_payee_json->>'payee_entity_id', proposed_scope.effective_non_paye_payee_json->>'umbrella_id', '')) ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+                    then btrim(coalesce(proposed_scope.effective_non_paye_payee_json->>'payee_entity_id', proposed_scope.effective_non_paye_payee_json->>'umbrella_id', ''))::uuid
+                else null::uuid
+            end as non_paye_payee_entity_id
+        from pg_temp.tmp_pay_workbench_scope_seed_scopes as proposed_scope
+        cross join lateral jsonb_array_elements(
+            case
+                when jsonb_typeof(coalesce(proposed_scope.selected_canonical_preview_lines_json, '[]'::jsonb)) = 'array' then coalesce(proposed_scope.selected_canonical_preview_lines_json, '[]'::jsonb)
+                else '[]'::jsonb
+            end
+        ) with ordinality as selected_line_element(value, ord)
+        where proposed_scope.operation_id = p_operation_id
+          and proposed_scope.workbench_session_id = p_workbench_session_id
+          and jsonb_typeof(selected_line_element.value) = 'object'
+    ),
+    selected_required_routes as (
+        select
+            selected_line_routes.operation_id,
+            selected_line_routes.workbench_session_id,
+            selected_line_routes.candidate_id,
+            selected_line_routes.pay_channel,
+            selected_line_routes.line_ord,
+            case
+                when selected_line_routes.line_payee_entity_kind in ('CANDIDATE', 'UMBRELLA') then selected_line_routes.line_payee_entity_kind
+                when lower(btrim(coalesce(selected_line_routes.line_json->>'is_candidate_directed_oneoff_payout', ''))) in ('true', 't', '1', 'yes', 'y') then 'CANDIDATE'
+                when upper(btrim(coalesce(selected_line_routes.line_json->>'routing_kind', selected_line_routes.line_json->>'route_type', ''))) in ('CANDIDATE', 'CANDIDATE_DIRECT', 'CANDIDATE_DIRECTED', 'CANDIDATE_ONEOFF', 'CANDIDATE_ONE_OFF') then 'CANDIDATE'
+                when selected_line_routes.pay_channel = 'PAYE' then 'CANDIDATE'
+                when selected_line_routes.pay_channel = 'UMBRELLA' then 'UMBRELLA'
+                else null::text
+            end as required_payee_entity_kind,
+            case
+                when selected_line_routes.line_payee_entity_kind = 'CANDIDATE' then coalesce(selected_line_routes.line_payee_entity_id, selected_line_routes.candidate_id)
+                when selected_line_routes.line_payee_entity_kind = 'UMBRELLA' then coalesce(selected_line_routes.line_payee_entity_id, selected_line_routes.non_paye_payee_entity_id)
+                when lower(btrim(coalesce(selected_line_routes.line_json->>'is_candidate_directed_oneoff_payout', ''))) in ('true', 't', '1', 'yes', 'y') then selected_line_routes.candidate_id
+                when upper(btrim(coalesce(selected_line_routes.line_json->>'routing_kind', selected_line_routes.line_json->>'route_type', ''))) in ('CANDIDATE', 'CANDIDATE_DIRECT', 'CANDIDATE_DIRECTED', 'CANDIDATE_ONEOFF', 'CANDIDATE_ONE_OFF') then selected_line_routes.candidate_id
+                when selected_line_routes.pay_channel = 'PAYE' then selected_line_routes.candidate_id
+                when selected_line_routes.pay_channel = 'UMBRELLA' then selected_line_routes.non_paye_payee_entity_id
+                else null::uuid
+            end as required_payee_entity_id
+        from selected_line_routes
+    )
+    select distinct
+        selected_required_routes.operation_id,
+        selected_required_routes.workbench_session_id,
+        selected_required_routes.candidate_id,
+        selected_required_routes.pay_channel,
+        selected_required_routes.required_payee_entity_kind,
+        selected_required_routes.required_payee_entity_id
+    from selected_required_routes
+    where selected_required_routes.required_payee_entity_kind in ('CANDIDATE', 'UMBRELLA');
+
+    update pg_temp.tmp_pay_workbench_scope_seed_scopes as proposed_scope_update
+    set effective_payees_json = coalesce((
+        select jsonb_agg(payee_element.value order by payee_element.ord)
+        from jsonb_array_elements(
+            case
+                when jsonb_typeof(coalesce(proposed_scope_update.effective_payees_json, '[]'::jsonb)) = 'array' then coalesce(proposed_scope_update.effective_payees_json, '[]'::jsonb)
+                else '[]'::jsonb
+            end
+        ) with ordinality as payee_element(value, ord)
+        where jsonb_typeof(payee_element.value) = 'object'
+          and exists (
+              select 1
+              from pg_temp.tmp_pay_workbench_scope_seed_required_payees as required_payee
+              where required_payee.operation_id = proposed_scope_update.operation_id
+                and required_payee.workbench_session_id = proposed_scope_update.workbench_session_id
+                and required_payee.candidate_id = proposed_scope_update.candidate_id
+                and required_payee.pay_channel = proposed_scope_update.pay_channel
+                and required_payee.required_payee_entity_kind = case
+                    when upper(btrim(coalesce(payee_element.value->>'payee_entity_kind', payee_element.value->>'entity_kind', ''))) = 'UMBRELLA_COMPANY' then 'UMBRELLA'
+                    else upper(btrim(coalesce(payee_element.value->>'payee_entity_kind', payee_element.value->>'entity_kind', '')))
+                end
+                and (
+                    required_payee.required_payee_entity_id is null
+                    or (
+                        btrim(coalesce(payee_element.value->>'payee_entity_id', payee_element.value->>'entity_id', '')) ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+                        and btrim(coalesce(payee_element.value->>'payee_entity_id', payee_element.value->>'entity_id', ''))::uuid = required_payee.required_payee_entity_id
+                    )
+                )
+          )
+    ), '[]'::jsonb)
+    where proposed_scope_update.operation_id = p_operation_id
+      and proposed_scope_update.workbench_session_id = p_workbench_session_id
+      and exists (
+          select 1
+          from pg_temp.tmp_pay_workbench_scope_seed_required_payees as required_payee
+          where required_payee.operation_id = proposed_scope_update.operation_id
+            and required_payee.workbench_session_id = proposed_scope_update.workbench_session_id
+            and required_payee.candidate_id = proposed_scope_update.candidate_id
+            and required_payee.pay_channel = proposed_scope_update.pay_channel
+      );
+
     update pg_temp.tmp_pay_workbench_scope_seed_scopes as proposed_scope_update
     set
         selected_timesheet_ids_json = (
@@ -10762,6 +10875,4 @@ begin
         coalesce(v_pay_channel_count, 0);
 end;
 $function$;
-
-
 
