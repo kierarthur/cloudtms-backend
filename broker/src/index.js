@@ -34196,7 +34196,6 @@ async function advanceBankingPaySettlementOperation(env, operationRow, user, opt
   }
 }
 
-
 async function advanceBankingPayDraftCreateOperation(env, operationRow, user, options = {}) {
   const unwrapRpcPayload = (rpcRes, key) => {
     let payload = rpcRes;
@@ -34344,6 +34343,210 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
     return Array.from(map.values());
   };
 
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  const isUuid = (value) => uuidRe.test(String(value || '').trim());
+  const uniqueUuidArray = (values) => {
+    const out = [];
+    const seen = new Set();
+    for (const value of values || []) {
+      const text = String(value || '').trim();
+      if (!isUuid(text) || seen.has(text)) continue;
+      seen.add(text);
+      out.push(text);
+    }
+    return out;
+  };
+  const collectPayBatchIdsFromValue = (value, out = new Set()) => {
+    const seenObjects = new WeakSet();
+
+    const visit = (node, keyHint = '') => {
+      if (node == null) return;
+      const hint = String(keyHint || '').trim().toLowerCase();
+
+      if (typeof node === 'string' || typeof node === 'number' || typeof node === 'boolean') {
+        const text = String(node || '').trim();
+        if (hint.includes('pay_batch_id') && isUuid(text)) out.add(text);
+        return;
+      }
+
+      if (Array.isArray(node)) {
+        for (const item of node) visit(item, hint);
+        return;
+      }
+
+      if (typeof node !== 'object') return;
+      if (seenObjects.has(node)) return;
+      seenObjects.add(node);
+
+      for (const [key, child] of Object.entries(node)) {
+        const childKey = String(key || '').trim().toLowerCase();
+        const isBatchIdKey = childKey === 'pay_batch_id' || childKey.endsWith('_pay_batch_id');
+        const isBatchIdsKey = childKey === 'pay_batch_ids' || childKey === 'created_pay_batch_ids' || childKey.endsWith('_pay_batch_ids');
+
+        if (isBatchIdKey) {
+          if (isUuid(child)) out.add(String(child).trim());
+          continue;
+        }
+
+        if (isBatchIdsKey && Array.isArray(child)) {
+          for (const item of child) {
+            if (isUuid(item)) out.add(String(item).trim());
+          }
+          continue;
+        }
+
+        visit(child, childKey);
+      }
+    };
+
+    visit(value, '');
+    return out;
+  };
+  const fetchOperationChunkRowsForCleanup = async () => {
+    try {
+      const { rows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/banking_pay_operation_chunks?operation_id=eq.${enc(operationId)}&select=phase,status,result_json,error_json&limit=50000`,
+        false
+      );
+      return Array.isArray(rows) ? rows : [];
+    } catch {
+      return [];
+    }
+  };
+  const fetchPayBatchRowsForCleanup = async (payBatchIds) => {
+    const ids = uniqueUuidArray(payBatchIds);
+    if (!ids.length) return [];
+    try {
+      const { rows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/pay_batches?id=in.(${ids.map(enc).join(',')})&select=id,status,execution_commit_state,batch_kind_fixed,source_workbench_session_id,source_snapshot_run_id,created_at_utc&limit=${Math.max(1, ids.length)}`,
+        false
+      );
+      return Array.isArray(rows) ? rows : [];
+    } catch {
+      return [];
+    }
+  };
+  const discoverCreatedDraftBatchIds = async (...extraValues) => {
+    const ids = new Set();
+    collectPayBatchIdsFromValue(progressJson, ids);
+    collectPayBatchIdsFromValue(inputJson, ids);
+    for (const value of extraValues || []) collectPayBatchIdsFromValue(value, ids);
+
+    try {
+      const scopes = await fetchCandidateScopes('&limit=50000');
+      for (const scope of scopes || []) {
+        const batchId = String(scope.pay_batch_id || '').trim();
+        if (isUuid(batchId)) ids.add(batchId);
+      }
+    } catch {}
+
+    const chunks = await fetchOperationChunkRowsForCleanup();
+    for (const chunk of chunks || []) {
+      collectPayBatchIdsFromValue(chunk?.result_json, ids);
+      collectPayBatchIdsFromValue(chunk?.error_json, ids);
+    }
+
+    return uniqueUuidArray(Array.from(ids));
+  };
+  const cancelCreatedDraftBatchesForFailure = async (failureErrorJson = {}, cleanupOptions = {}) => {
+    const failurePayload = safeObject(failureErrorJson);
+    const failurePhase = String(cleanupOptions.phase || failurePayload.phase || phase || '').trim().toUpperCase() || 'UNKNOWN';
+    const failureCode = String(failurePayload.code || failurePayload.error_code || 'DRAFT_CREATE_OPERATION_FAILED').trim().toUpperCase() || 'DRAFT_CREATE_OPERATION_FAILED';
+    const discoveredBatchIds = await discoverCreatedDraftBatchIds(failurePayload, cleanupOptions);
+    const batchRows = await fetchPayBatchRowsForCleanup(discoveredBatchIds);
+    const batchRowById = new Map(batchRows.map((row) => [String(row.id || '').trim(), row]));
+    const results = [];
+
+    for (const batchId of discoveredBatchIds) {
+      const row = batchRowById.get(batchId) || null;
+      const status = String(row?.status || '').trim().toUpperCase();
+      const executionCommitState = String(row?.execution_commit_state || '').trim().toUpperCase();
+
+      if (!row) {
+        results.push({ pay_batch_id: batchId, ok: false, skipped: true, reason: 'PAY_BATCH_ROW_NOT_FOUND' });
+        continue;
+      }
+
+      if (status === 'CANCELLED') {
+        results.push({ pay_batch_id: batchId, ok: true, skipped: true, already_cancelled: true, status, execution_commit_state: executionCommitState || null });
+        continue;
+      }
+
+      if (status !== 'DRAFT') {
+        results.push({ pay_batch_id: batchId, ok: false, skipped: true, reason: 'PAY_BATCH_NOT_DRAFT', status, execution_commit_state: executionCommitState || null });
+        continue;
+      }
+
+      if (executionCommitState && executionCommitState !== 'NOT_SUBMITTED') {
+        results.push({ pay_batch_id: batchId, ok: false, skipped: true, reason: 'PAY_BATCH_ALREADY_SUBMITTED_OR_COMMITTED', status, execution_commit_state: executionCommitState });
+        continue;
+      }
+
+      const cancelReason = `Draft creation failed during ${failurePhase}: ${failureCode}`.slice(0, 500);
+      try {
+        const cancelPayload = unwrapRpcPayload(await sbRpc(env, 'pay_batch_cancel', {
+          p_pay_batch_id: batchId,
+          p_actor_user_id: actorUserId,
+          p_reason: cancelReason
+        }), 'pay_batch_cancel');
+        const cancelStatus = String(cancelPayload.status || '').trim().toUpperCase();
+        const cancelOk = cancelPayload.ok === true || cancelStatus === 'CANCELLED' || !!String(cancelPayload.cancelled_at_utc || '').trim();
+        results.push({
+          pay_batch_id: batchId,
+          ok: cancelOk,
+          status_before: status,
+          execution_commit_state_before: executionCommitState || null,
+          cancel_reason: cancelReason,
+          cancel_status: cancelStatus || null,
+          cancellation_outcome: cancelPayload.cancellation_outcome || null,
+          cancelled_at_utc: cancelPayload.cancelled_at_utc || null,
+          payload: cancelPayload
+        });
+      } catch (cancelError) {
+        results.push({
+          pay_batch_id: batchId,
+          ok: false,
+          status_before: status,
+          execution_commit_state_before: executionCommitState || null,
+          cancel_reason: cancelReason,
+          error: String(cancelError?.message || cancelError || '')
+        });
+      }
+    }
+
+    const attempted = discoveredBatchIds.length > 0;
+    const cancelled = results.filter((result) => result.ok === true && result.skipped !== true).map((result) => result.pay_batch_id);
+    const alreadyCancelled = results.filter((result) => result.ok === true && result.already_cancelled === true).map((result) => result.pay_batch_id);
+    const failed = results.filter((result) => result.ok !== true).map((result) => result.pay_batch_id);
+
+    return {
+      ok: failed.length === 0,
+      attempted,
+      operation_id: operationId,
+      workbench_session_id: workbenchSessionId,
+      failure_phase: failurePhase,
+      failure_code: failureCode,
+      discovered_pay_batch_ids: discoveredBatchIds,
+      cancelled_pay_batch_ids: cancelled,
+      already_cancelled_pay_batch_ids: alreadyCancelled,
+      failed_pay_batch_ids: failed,
+      result_count: results.length,
+      results
+    };
+  };
+  const finishFailedWithCleanup = async (resultJson = null, errorJson = null, cleanupOptions = {}) => {
+    const baseError = safeObject(errorJson);
+    const cleanup = await cancelCreatedDraftBatchesForFailure(baseError, cleanupOptions);
+    return finish('FAILED', resultJson, {
+      ...baseError,
+      cleanup_required: cleanup.attempted === true,
+      cleanup_status: cleanup.ok === true ? (cleanup.attempted ? 'COMPLETE' : 'NOT_REQUIRED') : 'FAILED',
+      created_batch_cleanup: cleanup
+    });
+  };
+
   try {
     if (phase === 'INITIALISE' || phase === 'VALIDATE_SESSION') {
       const validation = unwrapRpcPayload(await sbRpc(env, 'pay_workbench_prepare_draft', {
@@ -34360,7 +34563,7 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
         p_operation_mode: true,
         p_allow_legacy_unchunked: false
       }), 'pay_workbench_prepare_draft');
-      if (validation.ok === false) return finish('FAILED', null, { code: 'DRAFT_SESSION_VALIDATION_FAILED', message: 'Draft session validation failed.', validation });
+      if (validation.ok === false) return finishFailedWithCleanup( null, { code: 'DRAFT_SESSION_VALIDATION_FAILED', message: 'Draft session validation failed.', validation });
       return lockProgress('RUNNING', 'SYNC_SELECTED_ROWS', { status_text: 'Selected payment rows checked.', validation });
     }
 
@@ -34392,7 +34595,7 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
         const tailRetryCount = Number.isFinite(Number(progressJson.tsfin_drain_tail_retry_count)) ? Math.max(0, Math.trunc(Number(progressJson.tsfin_drain_tail_retry_count))) : 0;
 
         if (failedCount > 0) {
-          return finish('FAILED', null, {
+          return finishFailedWithCleanup( null, {
             code: 'DRAFT_TSFIN_READINESS_FAILED',
             message: 'Timesheet financials could not be prepared for draft creation.',
             tsfin_drain: drain || null
@@ -34402,7 +34605,7 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
         if (remaining > 0 || stillPending > 0) {
           const retrySameTail = nextCursor === null;
           if (retrySameTail && stillPending > 0 && madeReady <= 0 && tailRetryCount >= 2) {
-            return finish('FAILED', null, {
+            return finishFailedWithCleanup( null, {
               code: 'DRAFT_TSFIN_READINESS_PENDING',
               message: 'Timesheet financials are still pending after repeated draft-readiness attempts.',
               tsfin_drain: drain || null
@@ -34449,7 +34652,7 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
         };
 
         if (failedCount > 0) {
-          return finish('FAILED', null, {
+          return finishFailedWithCleanup( null, {
             code: 'DRAFT_PAYEE_READINESS_FAILED',
             message: 'Provider payee readiness could not be completed for draft creation.',
             payee_readiness: readinessProgress
@@ -34539,7 +34742,7 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
         });
       } catch (e) {
         await finishChunk(chunk.chunk_id, 'FAILED', 0, scopeIds.length || 1, null, { code: 'SEED_ALLOCATION_ROWS_CHUNK_FAILED', message: String(e?.message || e || '') });
-        return finish('FAILED', null, { code: 'SEED_ALLOCATION_ROWS_CHUNK_FAILED', message: 'Draft allocation seeding chunk failed.', error: String(e?.message || e || '') });
+        return finishFailedWithCleanup( null, { code: 'SEED_ALLOCATION_ROWS_CHUNK_FAILED', message: 'Draft allocation seeding chunk failed.', error: String(e?.message || e || '') });
       }
     }
 
@@ -34622,7 +34825,7 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
         return lockProgress('RUNNING', phase, { status_text: `Processed one ${phase} draft chunk.`, last_chunk_result: { phase, results } }, { current_chunk_index: chunk.sequence_no || null });
       } catch (e) {
         await finishChunk(chunk.chunk_id, 'FAILED', 0, scopeIds.length || 1, null, { code: `${phase}_CHUNK_FAILED`, message: String(e?.message || e || '') });
-        return finish('FAILED', null, { code: `${phase}_CHUNK_FAILED`, message: `Draft ${phase} chunk failed.`, error: String(e?.message || e || '') });
+        return finishFailedWithCleanup( null, { code: `${phase}_CHUNK_FAILED`, message: `Draft ${phase} chunk failed.`, error: String(e?.message || e || '') });
       }
     }
 
@@ -34638,7 +34841,7 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
         }), 'pay_batch_assert_integrity');
         integrityResults.push({ pay_batch_id: batchId, result: integrity });
         if (integrity.ok === false || integrity.pass === false) {
-          return finish('FAILED', null, { code: 'DRAFT_INTEGRITY_FAILED', message: 'Draft integrity check failed.', integrity_results: integrityResults });
+          return finishFailedWithCleanup( null, { code: 'DRAFT_INTEGRITY_FAILED', message: 'Draft integrity check failed.', integrity_results: integrityResults });
         }
       }
       return lockProgress('RUNNING', 'POST_CREATE_REFRESH', { status_text: 'Draft integrity checked.', integrity_results: integrityResults });
@@ -34716,9 +34919,9 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
       }, null);
     }
 
-    return finish('FAILED', null, { code: 'UNKNOWN_DRAFT_PHASE', message: `Unknown draft operation phase: ${phase}`, phase });
+    return finishFailedWithCleanup( null, { code: 'UNKNOWN_DRAFT_PHASE', message: `Unknown draft operation phase: ${phase}`, phase });
   } catch (e) {
-    return finish('FAILED', null, { code: 'DRAFT_CREATE_OPERATION_FAILED', message: 'Draft create operation failed.', phase, error: String(e?.message || e || '') });
+    return finishFailedWithCleanup( null, { code: 'DRAFT_CREATE_OPERATION_FAILED', message: 'Draft create operation failed.', phase, error: String(e?.message || e || '') });
   }
 }
 
