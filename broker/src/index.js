@@ -34197,8 +34197,6 @@ async function advanceBankingPaySettlementOperation(env, operationRow, user, opt
 }
 
 
-
-
 async function advanceBankingPayDraftCreateOperation(env, operationRow, user, options = {}) {
   const unwrapRpcPayload = (rpcRes, key) => {
     let payload = rpcRes;
@@ -34271,6 +34269,64 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
   const fetchCandidateScopes = async (extraQuery = '') => {
     const { rows } = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/banking_pay_operation_candidate_scope?operation_id=eq.${enc(operationId)}&select=id,candidate_id,pay_channel,pay_batch_id,chunk_sequence,status${extraQuery}`);
     return rows || [];
+  };
+  const fetchOperationScopedPayeesForReadiness = async () => {
+    const scopedPayChannels = payChannelScope === 'PAYE' ? ['PAYE'] : (payChannelScope === 'UMBRELLA' ? ['UMBRELLA'] : null);
+    const payChannelFilter = Array.isArray(scopedPayChannels) && scopedPayChannels.length
+      ? `&pay_channel=in.(${scopedPayChannels.map(enc).join(',')})`
+      : '';
+    const { rows } = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/banking_pay_operation_candidate_scope?operation_id=eq.${enc(operationId)}${payChannelFilter}&select=id,candidate_id,pay_channel,status,effective_payees_json&order=chunk_sequence.asc,id.asc&limit=50000`);
+    const scopeRows = Array.isArray(rows) ? rows : [];
+    const scopedPayees = [];
+    const seenKeys = new Set();
+
+    const asArray = (value) => {
+      if (Array.isArray(value)) return value;
+      if (typeof value === 'string') {
+        try {
+          const parsed = JSON.parse(value);
+          return Array.isArray(parsed) ? parsed : [];
+        } catch {}
+      }
+      return [];
+    };
+
+    const normaliseKind = (value) => {
+      const kind = String(value || '').trim().toUpperCase();
+      return kind === 'UMBRELLA_COMPANY' ? 'UMBRELLA' : kind;
+    };
+
+    for (const scopeRow of scopeRows) {
+      const scopePayChannel = String(scopeRow.pay_channel || '').trim().toUpperCase();
+      if (payChannelScope === 'PAYE' && scopePayChannel !== 'PAYE') continue;
+      if (payChannelScope === 'UMBRELLA' && scopePayChannel !== 'UMBRELLA') continue;
+
+      for (const payeeValue of asArray(scopeRow.effective_payees_json)) {
+        const payee = safeObject(payeeValue);
+        if (!Object.keys(payee).length) continue;
+
+        const payeeMap = safeObject(payee.payee_map);
+        const payeeKind = normaliseKind(payee.payee_entity_kind || payee.entity_kind);
+        const payeeEntityId = String(payee.payee_entity_id || payee.entity_id || '').trim();
+        const bankDetailsHash = String(payee.bank_details_hash || payee.bank_details_hash_snapshot || '').trim();
+        const payeeId = String(payeeMap.payee_id || payee.payee_id || '').trim();
+        const payeeAccountId = String(payeeMap.payee_account_id || payee.payee_account_id || '').trim();
+        const payeeKey = [payeeKind, payeeEntityId, bankDetailsHash, payeeId, payeeAccountId].join('|');
+
+        if (!payeeKind && !payeeEntityId && !bankDetailsHash && !payeeId && !payeeAccountId) continue;
+        if (seenKeys.has(payeeKey)) continue;
+
+        seenKeys.add(payeeKey);
+        scopedPayees.push(payee);
+      }
+    }
+
+    return {
+      payees: scopedPayees,
+      scope_count: scopeRows.length,
+      payee_count: scopedPayees.length,
+      source: 'banking_pay_operation_candidate_scope.effective_payees_json'
+    };
   };
   const groupScopeIdsByBatch = async (candidateScopeIds) => {
     const ids = (candidateScopeIds || []).map((x) => String(x || '').trim()).filter(Boolean);
@@ -34372,7 +34428,10 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
 
     if (phase === 'ENSURE_PAYEE_READINESS') {
       if (typeof revolutEnsurePayeesReadyFromPreview === 'function') {
-        const ready = await revolutEnsurePayeesReadyFromPreview(env, inputJson.rail_env_snapshot || inputJson.rail_env || null, inputJson.payees || [], actorUserId, {
+        const scopedPayeeReadiness = await fetchOperationScopedPayeesForReadiness();
+        const fallbackInputPayees = Array.isArray(inputJson.payees) ? inputJson.payees : [];
+        const payeesForReadiness = scopedPayeeReadiness.scope_count > 0 ? scopedPayeeReadiness.payees : fallbackInputPayees;
+        const ready = await revolutEnsurePayeesReadyFromPreview(env, inputJson.rail_env_snapshot || inputJson.rail_env || null, payeesForReadiness, actorUserId, {
           operationId,
           chunkSize: numberFrom(configJson.payee_readiness_chunk_size, 50),
           lockOwner,
@@ -34381,25 +34440,32 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
         const nextCursor = Number.isFinite(Number(ready?.next_cursor)) ? Math.max(0, Math.trunc(Number(ready.next_cursor))) : null;
         const remaining = Number.isFinite(Number(ready?.remaining)) ? Math.max(0, Math.trunc(Number(ready.remaining))) : 0;
         const failedCount = Number.isFinite(Number(ready?.failed ?? ready?.failed_count)) ? Math.max(0, Math.trunc(Number(ready.failed ?? ready.failed_count))) : 0;
+        const readinessProgress = {
+          ...(ready && typeof ready === 'object' && !Array.isArray(ready) ? ready : {}),
+          operation_scoped_payee_source: scopedPayeeReadiness.source,
+          operation_scoped_scope_count: scopedPayeeReadiness.scope_count,
+          operation_scoped_payee_count: scopedPayeeReadiness.payee_count,
+          used_input_payee_fallback: scopedPayeeReadiness.scope_count <= 0
+        };
 
         if (failedCount > 0) {
           return finish('FAILED', null, {
             code: 'DRAFT_PAYEE_READINESS_FAILED',
             message: 'Provider payee readiness could not be completed for draft creation.',
-            payee_readiness: ready || null
+            payee_readiness: readinessProgress
           });
         }
 
         if (nextCursor !== null && remaining > 0) {
           return lockProgress('RUNNING', 'ENSURE_PAYEE_READINESS', {
             status_text: 'Checked one payee readiness chunk.',
-            payee_readiness: ready || null,
+            payee_readiness: readinessProgress,
             payee_readiness_cursor: nextCursor
           });
         }
         return lockProgress('RUNNING', 'SEED_ALLOCATION_ROWS', {
           status_text: 'Payee readiness checked.',
-          payee_readiness: ready || null,
+          payee_readiness: readinessProgress,
           payee_readiness_cursor: nextCursor
         });
       }
@@ -34655,6 +34721,7 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
     return finish('FAILED', null, { code: 'DRAFT_CREATE_OPERATION_FAILED', message: 'Draft create operation failed.', phase, error: String(e?.message || e || '') });
   }
 }
+
 
 
 async function advanceBankingPayExecuteOperation(env, operationRow, user, options = {}) {
