@@ -8074,7 +8074,6 @@ $$;
 
 
 
-
 create or replace function public.pay_batch_validate_freshness_chunk(
   p_operation_id uuid,
   p_chunk_id uuid,
@@ -8797,7 +8796,7 @@ begin
       updated_at_utc = now()
   where chunk_update.id = p_chunk_id;
 
-  return jsonb_build_object(
+    return jsonb_build_object(
     'ok', true,
     'is_stale', v_is_stale,
     'checked_count', coalesce(v_checked_units, 0),
@@ -8807,6 +8806,8 @@ begin
     'result', v_result
   );
 end;
+$$;
+
 
 
 
