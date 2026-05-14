@@ -8071,6 +8071,10 @@ end;
 $$;
 
 
+
+
+
+
 create or replace function public.pay_batch_validate_freshness_chunk(
   p_operation_id uuid,
   p_chunk_id uuid,
@@ -8572,7 +8576,7 @@ begin
     and batch_item.finance_case_id is not null
     and (
       advance_row.written_off_at_utc is not null
-      or upper(coalesce(advance_row.status, '')) in ('CANCELLED', 'PAID_OFF')
+      or upper(coalesce(advance_row.status::text, '')) in ('CANCELLED', 'PAID_OFF')
     );
 
   get diagnostics v_restructure_or_writeoff_count = row_count;
@@ -8803,10 +8807,6 @@ begin
     'result', v_result
   );
 end;
-$$;
-
-
-
 
 
 
