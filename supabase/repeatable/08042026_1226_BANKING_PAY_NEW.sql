@@ -33632,6 +33632,11 @@ DROP FUNCTION IF EXISTS public.pay_workbench_prepare_draft(uuid, uuid, jsonb, te
 DROP FUNCTION IF EXISTS public.pay_workbench_prepare_draft(uuid, uuid, jsonb, text, text, boolean, boolean, uuid, timestamptz);
 DROP FUNCTION IF EXISTS public.pay_workbench_prepare_draft(uuid, uuid, jsonb, text, text, boolean, boolean, uuid, timestamptz, uuid, boolean, boolean);
 
+
+
+
+
+
 CREATE OR REPLACE FUNCTION public.pay_workbench_prepare_draft(
   p_session_id uuid,
   p_actor_user_id uuid,
@@ -34303,7 +34308,41 @@ BEGIN
     LOOP
       SELECT public.pay_workbench_enqueue_payee_readiness_ensure(
         p_candidate_id => v_filter_candidate_id,
-        p_payees_json => COALESCE(session_candidate.effective_payees_json, '[]'::jsonb),
+        p_payees_json => COALESCE((
+          SELECT jsonb_agg(payee_element.value ORDER BY payee_element.ord)
+          FROM jsonb_array_elements(
+            CASE
+              WHEN jsonb_typeof(COALESCE(session_candidate.effective_payees_json, '[]'::jsonb)) = 'array' THEN COALESCE(session_candidate.effective_payees_json, '[]'::jsonb)
+              ELSE '[]'::jsonb
+            END
+          ) WITH ORDINALITY AS payee_element(value, ord)
+          WHERE jsonb_typeof(payee_element.value) = 'object'
+            AND EXISTS (
+              SELECT 1
+              FROM jsonb_array_elements(
+                CASE
+                  WHEN jsonb_typeof(COALESCE(v_payee_blocked_route_details_json, '[]'::jsonb)) = 'array' THEN COALESCE(v_payee_blocked_route_details_json, '[]'::jsonb)
+                  ELSE '[]'::jsonb
+                END
+              ) AS blocked_route(route_json)
+              WHERE jsonb_typeof(blocked_route.route_json) = 'object'
+                AND blocked_route.route_json->>'candidate_id' = v_filter_candidate_id::text
+                AND (
+                  CASE
+                    WHEN UPPER(BTRIM(COALESCE(payee_element.value->>'payee_entity_kind', payee_element.value->>'entity_kind', ''))) = 'UMBRELLA_COMPANY' THEN 'UMBRELLA'
+                    ELSE UPPER(BTRIM(COALESCE(payee_element.value->>'payee_entity_kind', payee_element.value->>'entity_kind', '')))
+                  END
+                ) = UPPER(BTRIM(COALESCE(blocked_route.route_json->>'required_payee_entity_kind', '')))
+                AND (
+                  NULLIF(BTRIM(COALESCE(blocked_route.route_json->>'required_payee_entity_id', '')), '') IS NULL
+                  OR (
+                    BTRIM(COALESCE(blocked_route.route_json->>'required_payee_entity_id', '')) ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+                    AND BTRIM(COALESCE(payee_element.value->>'payee_entity_id', payee_element.value->>'entity_id', '')) ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+                    AND BTRIM(COALESCE(payee_element.value->>'payee_entity_id', payee_element.value->>'entity_id', ''))::uuid = BTRIM(COALESCE(blocked_route.route_json->>'required_payee_entity_id', ''))::uuid
+                  )
+                )
+            )
+        ), '[]'::jsonb),
         p_snapshot_run_id => v_session_row.source_snapshot_run_id,
         p_session_id => p_session_id,
         p_reason => 'WORKBENCH_PREPARE_DRAFT',
@@ -35143,6 +35182,7 @@ BEGIN
   );
 END;
 $$;
+
 
 
 
