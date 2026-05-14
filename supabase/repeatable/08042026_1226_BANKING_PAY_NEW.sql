@@ -30298,12 +30298,18 @@ v_stage := 'STAGE_21_BREAKDOWN_INTEGRITY_MISSING';
           scope_row.id AS candidate_scope_id,
           scope_row.candidate_id,
           scope_row.pay_channel,
-          round(coalesce(
-            CASE WHEN coalesce(scope_row.candidate_totals_json->>'selected_earnings_total', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN (scope_row.candidate_totals_json->>'selected_earnings_total')::numeric ELSE NULL::numeric END,
-            CASE WHEN coalesce(scope_row.candidate_totals_json->>'selected_total_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN (scope_row.candidate_totals_json->>'selected_total_amount_ex_vat')::numeric ELSE NULL::numeric END,
-            CASE WHEN coalesce(scope_row.candidate_totals_json->>'total_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN (scope_row.candidate_totals_json->>'total_amount_ex_vat')::numeric ELSE NULL::numeric END,
-            CASE WHEN coalesce(scope_row.effective_summary_fragment_json->>'total_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN (scope_row.effective_summary_fragment_json->>'total_amount_ex_vat')::numeric ELSE NULL::numeric END
-          ), 2) AS expected_amount_ex_vat,
+          round(coalesce((
+            SELECT sum(
+              round(coalesce(
+                CASE WHEN coalesce(selected_line_element.value->>'amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN (selected_line_element.value->>'amount_ex_vat')::numeric ELSE NULL::numeric END,
+                CASE WHEN coalesce(selected_line_element.value->>'preview_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN (selected_line_element.value->>'preview_amount_ex_vat')::numeric ELSE NULL::numeric END,
+                0::numeric
+              ), 2)
+            )
+            FROM jsonb_array_elements(coalesce(scope_row.selected_canonical_preview_lines_json, '[]'::jsonb)) AS selected_line_element(value)
+            WHERE jsonb_typeof(selected_line_element.value) = 'object'
+              AND coalesce(CASE WHEN lower(coalesce(selected_line_element.value->>'draftable', 'true')) IN ('true','false') THEN (selected_line_element.value->>'draftable')::boolean ELSE true END, true) = true
+          ), 0::numeric), 2) AS expected_amount_ex_vat,
           round(coalesce((
             SELECT sum(coalesce(item_row.amount_ex_vat, 0))
             FROM public.pay_batch_candidates AS batch_candidate
@@ -30381,6 +30387,7 @@ v_stage := 'STAGE_21_BREAKDOWN_INTEGRITY_MISSING';
           WHERE scope_row.operation_id = p_operation_id
             AND scope_row.pay_batch_id = v_batch_id
             AND jsonb_typeof(line_element.value) = 'object'
+            AND coalesce(CASE WHEN lower(coalesce(line_element.value->>'draftable', 'true')) IN ('true','false') THEN (line_element.value->>'draftable')::boolean ELSE true END, true) = true
         ) AS expected_channel
         WHERE expected_channel.pay_channel IN ('PAYE','UMBRELLA')
         GROUP BY expected_channel.pay_channel
