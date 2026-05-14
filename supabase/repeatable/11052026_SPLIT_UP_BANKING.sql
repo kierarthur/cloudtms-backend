@@ -3214,6 +3214,8 @@ begin
         0::integer;
 end;
 $$;
+
+
 create or replace function public.pay_batch_shell_ensure_from_operation(
     p_operation_id uuid,
     p_workbench_session_id uuid,
@@ -3255,7 +3257,11 @@ declare
 begin
     v_input_json := coalesce(p_input_json, '{}'::jsonb);
     v_batch_kind := upper(coalesce(nullif(btrim(p_batch_kind), ''), nullif(btrim(p_pay_channel), ''), 'MIXED'));
-    v_pay_channel := upper(coalesce(nullif(btrim(p_pay_channel), ''), v_batch_kind));
+    v_pay_channel := upper(coalesce(nullif(btrim(p_pay_channel), ''), nullif(v_batch_kind, 'STANDARD_PAYRUN'), 'MIXED'));
+
+    if v_batch_kind = 'STANDARD_PAYRUN' then
+        v_batch_kind := v_pay_channel;
+    end if;
 
     if jsonb_typeof(v_input_json) <> 'object' then
         raise exception 'pay_batch_shell_ensure_from_operation requires p_input_json to be a JSON object';
@@ -3586,6 +3592,8 @@ begin
         );
 end;
 $$;
+
+
 
 DROP FUNCTION IF EXISTS public.pay_remittance_maybe_queue_for_trigger(uuid, text, text, uuid, boolean);
 DROP FUNCTION IF EXISTS public.pay_remittance_maybe_queue_for_trigger(uuid, text, text, uuid, boolean, uuid, boolean);
