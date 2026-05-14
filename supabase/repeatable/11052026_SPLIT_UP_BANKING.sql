@@ -10612,7 +10612,7 @@ begin
           on existing_scope.operation_id = proposed_scope.operation_id
          and existing_scope.candidate_id = proposed_scope.candidate_id
          and existing_scope.pay_channel = proposed_scope.pay_channel
-        where existing_scope.scope_hash is distinct from encode(extensions.digest(jsonb_build_object(
+        where existing_scope.scope_hash is distinct from encode(extensions.digest(convert_to(jsonb_build_object(
             'operation_id', proposed_scope.operation_id::text,
             'workbench_session_id', proposed_scope.workbench_session_id::text,
             'source_snapshot_run_id', case when proposed_scope.source_snapshot_run_id is null then null else proposed_scope.source_snapshot_run_id::text end,
@@ -10626,7 +10626,7 @@ begin
             'selected_canonical_preview_lines_json', proposed_scope.selected_canonical_preview_lines_json,
             'candidate_totals_json', proposed_scope.candidate_totals_json,
             'allocation_basis_json', proposed_scope.allocation_basis_json
-        )::text::bytea, 'sha256'::text), 'hex')
+        )::text, 'UTF8'), 'sha256'::text), 'hex')
     ) then
         raise exception 'pay_workbench_prepare_draft_scope_seed found existing candidate scope rows with a different scope hash for operation %', p_operation_id;
     end if;
@@ -10681,7 +10681,7 @@ begin
         proposed_scope.hidden_recovery_template_lines_json,
         proposed_scope.candidate_totals_json,
         proposed_scope.allocation_basis_json,
-        encode(extensions.digest(jsonb_build_object(
+        encode(extensions.digest(convert_to(jsonb_build_object(
             'operation_id', proposed_scope.operation_id::text,
             'workbench_session_id', proposed_scope.workbench_session_id::text,
             'source_snapshot_run_id', case when proposed_scope.source_snapshot_run_id is null then null else proposed_scope.source_snapshot_run_id::text end,
@@ -10695,7 +10695,7 @@ begin
             'selected_canonical_preview_lines_json', proposed_scope.selected_canonical_preview_lines_json,
             'candidate_totals_json', proposed_scope.candidate_totals_json,
             'allocation_basis_json', proposed_scope.allocation_basis_json
-        )::text::bytea, 'sha256'::text), 'hex'),
+        )::text, 'UTF8'), 'sha256'::text), 'hex'),
         row_number() over (order by proposed_scope.pay_channel, proposed_scope.candidate_id),
         'SCOPED'
     from pg_temp.tmp_pay_workbench_scope_seed_scopes as proposed_scope
