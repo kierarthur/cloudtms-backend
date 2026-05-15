@@ -4845,8 +4845,6 @@ DROP FUNCTION IF EXISTS public.pay_batch_execution_summary_get(uuid, uuid);
 
 
 
-
-
 CREATE OR REPLACE FUNCTION public.pay_batch_execution_summary_get(
   p_pay_batch_id uuid,
   p_actor_user_id uuid DEFAULT NULL::uuid
@@ -4893,6 +4891,18 @@ DECLARE
   v_submission_evidence_json jsonb := '{}'::jsonb;
   v_freshness_result_json jsonb := '{}'::jsonb;
   v_freshness_is_stale boolean := false;
+  v_active_operation_pay_channel_scope text := 'ALL';
+  v_operation_scope_count integer := 0;
+  v_operation_scope_prepared_count integer := 0;
+  v_operation_scope_pending_count integer := 0;
+  v_operation_scope_failed_count integer := 0;
+  v_operation_scope_skipped_count integer := 0;
+  v_operation_scope_without_transfer_count integer := 0;
+  v_operation_scope_authorisation_ready_count integer := 0;
+  v_all_operation_scopes_authorisation_ready boolean := false;
+  v_cancellable_local_auth_request_count integer := 0;
+  v_non_cancellable_auth_request_count integer := 0;
+  v_auth_request_retry_blocker_count integer := 0;
 BEGIN
   IF p_pay_batch_id IS NULL THEN
     RAISE EXCEPTION 'pay_batch_id is required';
@@ -4954,6 +4964,9 @@ BEGIN
   v_safe_local_cleanup_transfer_count := coalesce(nullif(v_submission_evidence_json->>'safe_local_cleanup_count', '')::integer, 0);
   v_provider_attempt_or_evidence_transfer_count := coalesce(nullif(v_submission_evidence_json->>'provider_attempt_or_evidence_count', '')::integer, 0);
   v_provider_or_ambiguous_evidence_transfer_count := coalesce(nullif(v_submission_evidence_json->>'provider_or_ambiguous_evidence_count', '')::integer, 0);
+  v_cancellable_local_auth_request_count := coalesce(nullif(v_submission_evidence_json->>'cancellable_local_auth_request_count', '')::integer, 0);
+  v_non_cancellable_auth_request_count := coalesce(nullif(v_submission_evidence_json->>'non_cancellable_auth_request_count', '')::integer, 0);
+  v_auth_request_retry_blocker_count := coalesce(nullif(v_submission_evidence_json->>'auth_request_retry_blocker_count', '')::integer, 0);
   v_failed_transfer_count := coalesce(nullif(v_submission_evidence_json->>'failed_count', '')::integer, 0);
   v_ambiguous_transfer_count := coalesce(nullif(v_submission_evidence_json->>'ambiguous_count', '')::integer, 0);
   v_attempted_but_unproven_transfer_count := coalesce(nullif(v_submission_evidence_json->>'attempted_but_unproven_count', '')::integer, 0);
@@ -5006,6 +5019,62 @@ BEGIN
   ORDER BY operation_row.updated_at_utc DESC NULLS LAST, operation_row.created_at_utc DESC NULLS LAST, operation_row.id DESC
   LIMIT 1;
 
+  IF v_active_operation_id IS NOT NULL THEN
+    SELECT upper(btrim(coalesce(
+             nullif(btrim(coalesce(operation_scope_row.input_json->>'pay_channel_scope', '')), ''),
+             nullif(btrim(coalesce(operation_scope_row.input_json->>'payChannelScope', '')), ''),
+             nullif(btrim(coalesce(operation_scope_row.config_json->>'pay_channel_scope', '')), ''),
+             nullif(btrim(coalesce(operation_scope_row.config_json->>'payChannelScope', '')), ''),
+             'ALL'
+           )))
+    INTO v_active_operation_pay_channel_scope
+    FROM public.banking_pay_operations AS operation_scope_row
+    WHERE operation_scope_row.id = v_active_operation_id;
+
+    IF v_active_operation_pay_channel_scope NOT IN ('PAYE', 'UMBRELLA', 'LOANS', 'ALL') THEN
+      v_active_operation_pay_channel_scope := 'ALL';
+    END IF;
+
+    SELECT count(*)::integer,
+           count(*) FILTER (WHERE upper(btrim(coalesce(operation_scope.status, ''))) = 'PREPARED')::integer,
+           count(*) FILTER (WHERE upper(btrim(coalesce(operation_scope.status, ''))) = 'PENDING')::integer,
+           count(*) FILTER (WHERE upper(btrim(coalesce(operation_scope.status, ''))) = 'FAILED')::integer,
+           count(*) FILTER (WHERE upper(btrim(coalesce(operation_scope.status, ''))) = 'SKIPPED')::integer,
+           count(*) FILTER (WHERE operation_scope.pay_bank_transfer_id IS NULL)::integer
+    INTO v_operation_scope_count,
+         v_operation_scope_prepared_count,
+         v_operation_scope_pending_count,
+         v_operation_scope_failed_count,
+         v_operation_scope_skipped_count,
+         v_operation_scope_without_transfer_count
+    FROM public.banking_pay_operation_transfer_scope AS operation_scope
+    WHERE operation_scope.pay_batch_id = p_pay_batch_id
+      AND operation_scope.operation_id = v_active_operation_id
+      AND (
+        v_active_operation_pay_channel_scope IN ('ALL', 'ANY', '*')
+        OR upper(btrim(coalesce(operation_scope.pay_channel, ''))) = v_active_operation_pay_channel_scope
+      );
+
+    SELECT count(*) FILTER (WHERE operation_classification.is_authorisation_ready)::integer
+    INTO v_operation_scope_authorisation_ready_count
+    FROM public.pay_bank_transfer_execution_classify(
+      p_pay_batch_id => p_pay_batch_id,
+      p_pay_channel_scope => v_active_operation_pay_channel_scope,
+      p_operation_id => v_active_operation_id,
+      p_include_unscoped_transfers => false
+    ) AS operation_classification;
+
+    v_all_operation_scopes_authorisation_ready := (
+      COALESCE(v_operation_scope_count, 0) > 0
+      AND COALESCE(v_operation_scope_prepared_count, 0) = COALESCE(v_operation_scope_count, 0)
+      AND COALESCE(v_operation_scope_pending_count, 0) = 0
+      AND COALESCE(v_operation_scope_failed_count, 0) = 0
+      AND COALESCE(v_operation_scope_skipped_count, 0) = 0
+      AND COALESCE(v_operation_scope_without_transfer_count, 0) = 0
+      AND COALESCE(v_operation_scope_authorisation_ready_count, 0) = COALESCE(v_operation_scope_count, 0)
+    );
+  END IF;
+
   RETURN jsonb_build_object(
     'ok', true,
     'pay_batch_id', p_pay_batch_id::text,
@@ -5050,6 +5119,18 @@ BEGIN
     'evidence_pending_transfer_count', coalesce(v_evidence_pending_transfer_count, 0),
     'canonical_pending_status_transfer_count', coalesce(v_canonical_pending_status_transfer_count, 0),
     'authorisation_ready_transfer_count', coalesce(v_authorisation_ready_transfer_count, 0),
+    'operation_scope_count', coalesce(v_operation_scope_count, 0),
+    'operation_scope_prepared_count', coalesce(v_operation_scope_prepared_count, 0),
+    'operation_scope_pending_count', coalesce(v_operation_scope_pending_count, 0),
+    'operation_scope_failed_count', coalesce(v_operation_scope_failed_count, 0),
+    'operation_scope_skipped_count', coalesce(v_operation_scope_skipped_count, 0),
+    'operation_scope_without_transfer_count', coalesce(v_operation_scope_without_transfer_count, 0),
+    'operation_scope_authorisation_ready_count', coalesce(v_operation_scope_authorisation_ready_count, 0),
+    'all_operation_scopes_authorisation_ready', coalesce(v_all_operation_scopes_authorisation_ready, false),
+    'cancellable_local_auth_request_count', coalesce(v_cancellable_local_auth_request_count, 0),
+    'non_cancellable_auth_request_count', coalesce(v_non_cancellable_auth_request_count, 0),
+    'auth_request_retry_blocker_count', coalesce(v_auth_request_retry_blocker_count, 0),
+    'pending_transfer_count_semantics', 'evidence-level pending classification; not an authorisation gate',
     'unattempted_submit_eligible_transfer_count', coalesce(v_unattempted_submit_eligible_transfer_count, 0),
     'safe_local_cleanup_transfer_count', coalesce(v_safe_local_cleanup_transfer_count, 0),
     'provider_attempt_or_evidence_transfer_count', coalesce(v_provider_attempt_or_evidence_transfer_count, 0),
@@ -5090,7 +5171,6 @@ BEGIN
   );
 END;
 $function$;
-
 
 
 
