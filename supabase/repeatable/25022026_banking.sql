@@ -4853,6 +4853,14 @@ DECLARE
   v_item_count integer := 0;
   v_transfer_count integer := 0;
   v_pending_transfer_count integer := 0;
+  v_authorisation_ready_transfer_count integer := 0;
+  v_unattempted_submit_eligible_transfer_count integer := 0;
+  v_provider_attempt_or_evidence_transfer_count integer := 0;
+  v_provider_or_ambiguous_evidence_transfer_count integer := 0;
+  v_local_only_transfer_count integer := 0;
+  v_canonical_pending_status_transfer_count integer := 0;
+  v_safe_local_cleanup_transfer_count integer := 0;
+  v_pay_channel_scope text := 'ALL';
   v_failed_transfer_count integer := 0;
   v_blocked_transfer_count integer := 0;
   v_submitted_transfer_count integer := 0;
@@ -4971,6 +4979,16 @@ BEGIN
       nullif(btrim(coalesce(v_operation_row.progress_json->>'freshness_scope_hash', '')), ''),
       nullif(btrim(coalesce(v_operation_row.result_json #>> '{freshness,freshness_scope_hash}', '')), '')
     );
+    v_pay_channel_scope := upper(btrim(coalesce(
+      nullif(btrim(coalesce(v_operation_row.input_json->>'pay_channel_scope', '')), ''),
+      nullif(btrim(coalesce(v_operation_row.input_json->>'payChannelScope', '')), ''),
+      nullif(btrim(coalesce(v_operation_row.config_json->>'pay_channel_scope', '')), ''),
+      nullif(btrim(coalesce(v_operation_row.config_json->>'payChannelScope', '')), ''),
+      'ALL'
+    )));
+    IF v_pay_channel_scope NOT IN ('PAYE', 'UMBRELLA', 'LOANS', 'ALL') THEN
+      v_pay_channel_scope := 'ALL';
+    END IF;
   ELSE
     v_expected_freshness_hash := nullif(btrim(coalesce(p_freshness_result_hash, '')), '');
   END IF;
@@ -4991,6 +5009,30 @@ BEGIN
   v_item_count := coalesce(NULLIF(v_summary_json->>'item_count', '')::integer, 0);
   v_transfer_count := coalesce(NULLIF(v_summary_json->>'transfer_count', '')::integer, 0);
   v_pending_transfer_count := coalesce(NULLIF(v_summary_json->>'pending_transfer_count', '')::integer, 0);
+  v_authorisation_ready_transfer_count := coalesce(NULLIF(v_summary_json->>'authorisation_ready_transfer_count', '')::integer, 0);
+  v_unattempted_submit_eligible_transfer_count := coalesce(NULLIF(v_summary_json->>'unattempted_submit_eligible_transfer_count', '')::integer, 0);
+  v_provider_attempt_or_evidence_transfer_count := coalesce(NULLIF(v_summary_json->>'provider_attempt_or_evidence_transfer_count', '')::integer, 0);
+  v_provider_or_ambiguous_evidence_transfer_count := coalesce(NULLIF(v_summary_json->>'provider_or_ambiguous_evidence_transfer_count', '')::integer, 0);
+  v_local_only_transfer_count := coalesce(NULLIF(v_summary_json->>'local_only_transfer_count', '')::integer, 0);
+  v_canonical_pending_status_transfer_count := coalesce(NULLIF(v_summary_json->>'canonical_pending_status_transfer_count', '')::integer, 0);
+  v_safe_local_cleanup_transfer_count := coalesce(NULLIF(v_summary_json->>'safe_local_cleanup_transfer_count', '')::integer, 0);
+  SELECT
+    count(*) FILTER (WHERE classified_transfer.is_authorisation_ready)::integer,
+    count(*) FILTER (WHERE classified_transfer.is_unattempted_submit_eligible)::integer,
+    count(*) FILTER (WHERE classified_transfer.has_provider_submission_evidence OR classified_transfer.has_provider_event_evidence OR classified_transfer.has_provider_attempt_without_external_id OR classified_transfer.has_operation_submit_attempt)::integer,
+    count(*) FILTER (WHERE classified_transfer.has_provider_submission_evidence OR classified_transfer.has_provider_event_evidence OR classified_transfer.has_provider_attempt_without_external_id OR classified_transfer.has_operation_submit_attempt OR classified_transfer.has_ambiguous_external_evidence)::integer,
+    count(*) FILTER (WHERE classified_transfer.status_upper = 'PENDING')::integer
+  INTO v_authorisation_ready_transfer_count,
+       v_unattempted_submit_eligible_transfer_count,
+       v_provider_attempt_or_evidence_transfer_count,
+       v_provider_or_ambiguous_evidence_transfer_count,
+       v_canonical_pending_status_transfer_count
+  FROM public.pay_bank_transfer_execution_classify(
+    p_pay_batch_id => p_pay_batch_id,
+    p_pay_channel_scope => v_pay_channel_scope,
+    p_operation_id => p_operation_id,
+    p_include_unscoped_transfers => true
+  ) AS classified_transfer;
   v_failed_transfer_count := coalesce(NULLIF(v_summary_json->>'failed_transfer_count', '')::integer, 0);
   v_blocked_transfer_count := coalesce(NULLIF(v_summary_json->>'blocked_transfer_count', '')::integer, 0);
   v_submitted_transfer_count := coalesce(NULLIF(v_summary_json->>'provider_submitted_transfer_count', '')::integer, coalesce(NULLIF(v_summary_json->>'submitted_transfer_count', '')::integer, 0));
@@ -5144,10 +5186,35 @@ BEGIN
       ));
     END IF;
 
-    IF v_pending_transfer_count <= 0 AND v_submitted_transfer_count <= 0 AND v_transfer_count > 0 THEN
+    IF v_authorisation_ready_transfer_count <= 0 AND v_transfer_count > 0 THEN
+      IF v_provider_or_ambiguous_evidence_transfer_count > 0 OR v_submitted_transfer_count > 0 THEN
+        v_blockers_json := v_blockers_json || jsonb_build_array(jsonb_build_object(
+          'code', 'BANK_TRANSFER_PROVIDER_REVIEW_REQUIRED',
+          'message', 'One or more bank transfers have provider submission evidence or ambiguous provider state and must be reviewed before this batch can be authorised again.',
+          'authorisation_ready_transfer_count', COALESCE(v_authorisation_ready_transfer_count, 0),
+          'provider_attempt_or_evidence_transfer_count', COALESCE(v_provider_attempt_or_evidence_transfer_count, 0),
+          'provider_or_ambiguous_evidence_transfer_count', COALESCE(v_provider_or_ambiguous_evidence_transfer_count, 0),
+          'submitted_transfer_count', COALESCE(v_submitted_transfer_count, 0),
+          'pay_channel_scope', v_pay_channel_scope
+        ));
+      ELSE
+        v_blockers_json := v_blockers_json || jsonb_build_array(jsonb_build_object(
+          'code', 'NO_AUTHORISATION_READY_TRANSFERS',
+          'message', 'No safe locally prepared bank transfers are available for authorisation.',
+          'authorisation_ready_transfer_count', COALESCE(v_authorisation_ready_transfer_count, 0),
+          'canonical_pending_status_transfer_count', COALESCE(v_canonical_pending_status_transfer_count, 0),
+          'local_only_transfer_count', COALESCE(v_local_only_transfer_count, 0),
+          'safe_local_cleanup_transfer_count', COALESCE(v_safe_local_cleanup_transfer_count, 0),
+          'pay_channel_scope', v_pay_channel_scope
+        ));
+      END IF;
+    ELSIF v_pending_transfer_count <= 0 AND v_authorisation_ready_transfer_count > 0 THEN
       v_warnings_json := v_warnings_json || jsonb_build_array(jsonb_build_object(
-        'code', 'NO_PENDING_TRANSFERS',
-        'message', 'No pending bank transfers are waiting to be submitted.'
+        'code', 'EVIDENCE_PENDING_COUNT_ZERO_AUTHORISATION_READY_PRESENT',
+        'message', 'Evidence pending count is zero, but safe local transfers are ready for authorisation.',
+        'authorisation_ready_transfer_count', COALESCE(v_authorisation_ready_transfer_count, 0),
+        'evidence_pending_transfer_count', COALESCE(v_pending_transfer_count, 0),
+        'pay_channel_scope', v_pay_channel_scope
       ));
     END IF;
   END IF;
@@ -5163,6 +5230,7 @@ BEGIN
     WHEN v_execution_mode IN ('CSV', 'CSV_SETTLEMENT', 'EXTERNAL', 'EXTERNAL_SETTLEMENT', 'MANUAL_SETTLEMENT') AND v_ready THEN 'SETTLEMENT'
     WHEN v_transfer_count <= 0 THEN 'PREPARE_TRANSFER_SCOPE'
     WHEN v_blocker_count > 0 THEN 'RESOLVE_BLOCKERS'
+    WHEN v_execution_mode IN ('STANDARD_BANK', 'BANK') AND v_authorisation_ready_transfer_count <= 0 THEN 'RESOLVE_BLOCKERS'
     ELSE 'START_AUTHORISATION'
   END;
 
@@ -5181,6 +5249,13 @@ BEGIN
     'batch_status', v_batch_row.status,
     'execution_commit_state', v_execution_commit_state,
     'execution_mode', v_execution_mode,
+    'pay_channel_scope', v_pay_channel_scope,
+    'authorisation_ready_transfer_count', COALESCE(v_authorisation_ready_transfer_count, 0),
+    'unattempted_submit_eligible_transfer_count', COALESCE(v_unattempted_submit_eligible_transfer_count, 0),
+    'provider_attempt_or_evidence_transfer_count', COALESCE(v_provider_attempt_or_evidence_transfer_count, 0),
+    'provider_or_ambiguous_evidence_transfer_count', COALESCE(v_provider_or_ambiguous_evidence_transfer_count, 0),
+    'canonical_pending_status_transfer_count', COALESCE(v_canonical_pending_status_transfer_count, 0),
+    'evidence_pending_transfer_count', COALESCE(v_pending_transfer_count, 0),
     'freshness', jsonb_build_object(
       'freshness_validation_status', v_batch_freshness_status,
       'freshness_result_hash', v_batch_freshness_hash,
@@ -16306,6 +16381,8 @@ DROP FUNCTION IF EXISTS public.pay_batch_auth_start(uuid, text, timestamptz, tex
 DROP FUNCTION IF EXISTS public.pay_batch_auth_start(uuid, text, timestamptz, text, jsonb, uuid, text, text, date, text, boolean, boolean, boolean, text, text, uuid, text);
 DROP FUNCTION IF EXISTS public.pay_batch_auth_start(uuid, text, timestamptz, text, jsonb, uuid, text, text, date, text, boolean, boolean, boolean, text, text, uuid, text, text);
 
+
+
 CREATE OR REPLACE FUNCTION public.pay_batch_auth_start(
   p_pay_batch_id uuid,
   p_schedule_kind text,
@@ -16357,6 +16434,12 @@ DECLARE
   v_ready boolean := false;
   v_blocker_count integer := 0;
   v_pending_transfer_count integer := 0;
+  v_authorisation_ready_transfer_count integer := 0;
+  v_local_only_transfer_count integer := 0;
+  v_provider_attempt_or_evidence_transfer_count integer := 0;
+  v_provider_or_ambiguous_evidence_transfer_count integer := 0;
+  v_blocked_transfer_count integer := 0;
+  v_canonical_pending_status_transfer_count integer := 0;
   v_execution_commit_state text := 'NOT_SUBMITTED';
 BEGIN
   IF p_pay_batch_id IS NULL THEN
@@ -16513,14 +16596,42 @@ BEGIN
   v_summary_json := coalesce(v_prepare_json->'execution_summary', public.pay_batch_execution_summary_get(p_pay_batch_id, p_actor_user_id));
   v_pending_transfer_count := coalesce(NULLIF(v_summary_json->>'pending_transfer_count', '')::integer, 0);
 
-  IF v_execution_mode IN ('STANDARD_BANK', 'BANK') AND v_pending_transfer_count <= 0 THEN
-    RAISE EXCEPTION '%', jsonb_build_object(
-      'error', 'PAY_BATCH_AUTH_START',
-      'code', 'NO_PENDING_TRANSFERS',
-      'message', 'pay_batch_auth_start: no PENDING transfers exist for this batch and scope.',
-      'pay_batch_id', p_pay_batch_id::text,
-      'pay_channel_scope', v_pay_channel_scope
-    )::text;
+  IF v_execution_mode IN ('STANDARD_BANK', 'BANK') THEN
+    SELECT
+      count(*) FILTER (WHERE classified_transfer.is_authorisation_ready)::integer,
+      count(*) FILTER (WHERE classified_transfer.evidence_classification = 'local_only_evidence')::integer,
+      count(*) FILTER (WHERE classified_transfer.has_provider_submission_evidence OR classified_transfer.has_provider_event_evidence OR classified_transfer.has_provider_attempt_without_external_id OR classified_transfer.has_operation_submit_attempt)::integer,
+      count(*) FILTER (WHERE classified_transfer.has_provider_submission_evidence OR classified_transfer.has_provider_event_evidence OR classified_transfer.has_provider_attempt_without_external_id OR classified_transfer.has_operation_submit_attempt OR classified_transfer.has_ambiguous_external_evidence)::integer,
+      count(*) FILTER (WHERE classified_transfer.is_failed_or_blocked)::integer,
+      count(*) FILTER (WHERE classified_transfer.status_upper = 'PENDING')::integer
+    INTO v_authorisation_ready_transfer_count,
+         v_local_only_transfer_count,
+         v_provider_attempt_or_evidence_transfer_count,
+         v_provider_or_ambiguous_evidence_transfer_count,
+         v_blocked_transfer_count,
+         v_canonical_pending_status_transfer_count
+    FROM public.pay_bank_transfer_execution_classify(
+      p_pay_batch_id => p_pay_batch_id,
+      p_pay_channel_scope => v_pay_channel_scope,
+      p_operation_id => p_operation_id,
+      p_include_unscoped_transfers => true
+    ) AS classified_transfer;
+
+    IF COALESCE(v_authorisation_ready_transfer_count, 0) <= 0 THEN
+      RAISE EXCEPTION '%', jsonb_build_object(
+        'error', 'PAY_BATCH_AUTH_START',
+        'code', CASE WHEN COALESCE(v_provider_or_ambiguous_evidence_transfer_count, 0) > 0 THEN 'BANK_TRANSFER_PROVIDER_REVIEW_REQUIRED' ELSE 'NO_AUTHORISATION_READY_TRANSFERS' END,
+        'message', CASE WHEN COALESCE(v_provider_or_ambiguous_evidence_transfer_count, 0) > 0 THEN 'pay_batch_auth_start: one or more transfers have provider submission evidence or ambiguous provider state and cannot be authorised as fresh local transfers.' ELSE 'pay_batch_auth_start: no safe locally prepared transfers are available for authorisation.' END,
+        'pay_batch_id', p_pay_batch_id::text,
+        'pay_channel_scope', v_pay_channel_scope,
+        'authorisation_ready_transfer_count', COALESCE(v_authorisation_ready_transfer_count, 0),
+        'canonical_pending_status_transfer_count', COALESCE(v_canonical_pending_status_transfer_count, 0),
+        'local_only_transfer_count', COALESCE(v_local_only_transfer_count, 0),
+        'provider_attempt_or_evidence_transfer_count', COALESCE(v_provider_attempt_or_evidence_transfer_count, 0),
+        'provider_or_ambiguous_evidence_transfer_count', COALESCE(v_provider_or_ambiguous_evidence_transfer_count, 0),
+        'blocked_transfer_count', COALESCE(v_blocked_transfer_count, 0)
+      )::text;
+    END IF;
   END IF;
 
   v_execution_intent_json := jsonb_strip_nulls(jsonb_build_object(
@@ -16665,7 +16776,7 @@ BEGIN
     p_actor_user_id,
     v_required_quantity,
     v_kind,
-    CASE WHEN v_kind = 'SCHEDULED' THEN v_scheduled_at_utc ELSE NULL END,
+    v_scheduled_at_utc,
     v_funding_account_ref,
     v_warning_hours_json,
     v_execution_intent_json,
@@ -16739,8 +16850,11 @@ BEGIN
     'next_required_phase', v_next_required_phase,
     'execution_mode', v_execution_mode,
     'schedule_kind', v_kind,
-    'scheduled_at_utc', CASE WHEN v_kind = 'SCHEDULED' THEN v_scheduled_at_utc::text ELSE NULL END,
+    'scheduled_at_utc', CASE WHEN v_scheduled_at_utc IS NULL THEN NULL ELSE v_scheduled_at_utc::text END,
     'funding_account_ref', v_funding_account_ref,
+    'authorisation_ready_transfer_count', COALESCE(v_authorisation_ready_transfer_count, 0),
+    'provider_attempt_or_evidence_transfer_count', COALESCE(v_provider_attempt_or_evidence_transfer_count, 0),
+    'canonical_pending_status_transfer_count', COALESCE(v_canonical_pending_status_transfer_count, 0),
     'payment_date', v_payment_date::text,
     'required_quantity', v_required_quantity,
     'execution_intent_json', v_execution_intent_json
