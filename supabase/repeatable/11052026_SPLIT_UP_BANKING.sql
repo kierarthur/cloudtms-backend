@@ -4960,6 +4960,7 @@ DROP FUNCTION IF EXISTS public.pay_execute_bank_transfer_chunk_prepare(uuid, uui
 DROP FUNCTION IF EXISTS public.pay_execute_bank_transfer_chunk_prepare(uuid, uuid, jsonb, uuid);
 
 
+
 CREATE OR REPLACE FUNCTION public.pay_execute_bank_transfer_chunk_prepare(
   p_operation_id uuid,
   p_pay_batch_id uuid,
@@ -4988,7 +4989,12 @@ DECLARE
   v_authorisation_ready_count integer := 0;
   v_not_authorisation_ready_count integer := 0;
   v_provider_evidence_blocked_count integer := 0;
+  v_conflict_provider_evidence_blocked_count integer := 0;
+  v_conflict_failed_count integer := 0;
   v_normalised_transfer_count integer := 0;
+  v_unsafe_transfer_count integer := 0;
+  v_unsafe_transfer_ids jsonb := '[]'::jsonb;
+  v_unsafe_reasons jsonb := '[]'::jsonb;
 BEGIN
   IF p_operation_id IS NULL THEN
     RAISE EXCEPTION 'operation_id is required';
@@ -5115,122 +5121,170 @@ BEGIN
     )::text;
   END IF;
 
-  WITH provider_evidence_scope AS (
-    SELECT
-      transfer_scope.id AS transfer_scope_id,
-      bank_transfer.id AS pay_bank_transfer_id
-    FROM public.banking_pay_operation_transfer_scope AS transfer_scope
-    JOIN pg_temp.tmp_transfer_scope_request AS requested_scope
-      ON requested_scope.transfer_scope_id = transfer_scope.id
-    JOIN public.pay_bank_transfers AS bank_transfer
-      ON bank_transfer.pay_batch_id = transfer_scope.pay_batch_id
-     AND bank_transfer.pay_channel = transfer_scope.pay_channel
-     AND bank_transfer.transfer_group_key = transfer_scope.transfer_group_key
-    JOIN public.pay_batches AS batch_row
-      ON batch_row.id = bank_transfer.pay_batch_id
-    WHERE transfer_scope.operation_id = p_operation_id
-      AND transfer_scope.pay_batch_id = p_pay_batch_id
-      AND transfer_scope.status = 'PENDING'
-      AND (
-        (
-          lower(btrim(coalesce(bank_transfer.rail_meta_json #>> '{last_update_provider_evidence}', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
-          AND EXISTS (
-            SELECT 1
-            FROM (VALUES
-              (bank_transfer.rail_tx_id),
-              (bank_transfer.rail_meta_json #>> '{provider_event_id}'),
-              (bank_transfer.rail_meta_json #>> '{provider_reference}'),
-              (bank_transfer.rail_meta_json #>> '{provider_submission_id}'),
-              (bank_transfer.rail_meta_json #>> '{submission_id}'),
-              (bank_transfer.rail_meta_json #>> '{rail_submission_id}'),
-              (bank_transfer.rail_meta_json #>> '{provider_payment_id}'),
-              (bank_transfer.rail_meta_json #>> '{payment_id}'),
-              (bank_transfer.rail_meta_json #>> '{external_payment_id}'),
-              (bank_transfer.rail_meta_json #>> '{revolut_payment_id}'),
-              (bank_transfer.rail_meta_json #>> '{provider_transfer_id}'),
-              (bank_transfer.rail_meta_json #>> '{transfer_id}'),
-              (bank_transfer.rail_meta_json #>> '{external_transfer_id}'),
-              (bank_transfer.rail_meta_json #>> '{provider_transaction_id}'),
-              (bank_transfer.rail_meta_json #>> '{transaction_id}')
-            ) AS bank_identifier(identifier_value)
-            WHERE NULLIF(BTRIM(COALESCE(bank_identifier.identifier_value, '')), '') IS NOT NULL
-              AND NOT (
-                NULLIF(BTRIM(COALESCE(bank_identifier.identifier_value, '')), '') = ANY(
-                  ARRAY_REMOVE(ARRAY[
-                    bank_transfer.id::text,
-                    NULLIF(BTRIM(COALESCE(bank_transfer.request_id, '')), ''),
-                    NULLIF(BTRIM(COALESCE(bank_transfer.payment_reference, '')), ''),
-                    NULLIF(BTRIM(COALESCE(batch_row.bulk_reference, '')), ''),
-                    NULLIF(BTRIM(COALESCE(bank_transfer.transfer_group_key, '')), ''),
-                    NULLIF(BTRIM(COALESCE(bank_transfer.rail_meta_json #>> '{request_id}', '')), ''),
-                    NULLIF(BTRIM(COALESCE(bank_transfer.rail_meta_json #>> '{idempotency_key}', '')), ''),
-                    NULLIF(BTRIM(COALESCE(bank_transfer.rail_meta_json #>> '{payment_reference}', '')), ''),
-                    NULLIF(BTRIM(COALESCE(bank_transfer.rail_meta_json #>> '{bulk_reference}', '')), '')
-                  ]::text[], NULL::text)
-                )
-              )
-          )
-        )
-        OR EXISTS (
-          SELECT 1
-          FROM public.pay_bank_transfer_events AS transfer_event
-          WHERE transfer_event.pay_batch_id = bank_transfer.pay_batch_id
-            AND transfer_event.pay_bank_transfer_id = bank_transfer.id
-            AND upper(btrim(coalesce(transfer_event.event_source, ''))) IN ('PROVIDER_RESPONSE','PROVIDER_POLL','PROVIDER_WEBHOOK','WEBHOOK','POLL','RAIL_PROVIDER','PROVIDER','PROVIDER_SETTLEMENT')
-            AND EXISTS (
-              SELECT 1
-              FROM (VALUES
-                (transfer_event.provider_event_id),
-                (transfer_event.provider_reference),
-                (transfer_event.raw_payload #>> '{provider_event_id}'),
-                (transfer_event.raw_payload #>> '{provider_reference}'),
-                (transfer_event.raw_payload #>> '{provider_submission_id}'),
-                (transfer_event.raw_payload #>> '{submission_id}'),
-                (transfer_event.raw_payload #>> '{rail_submission_id}'),
-                (transfer_event.raw_payload #>> '{provider_payment_id}'),
-                (transfer_event.raw_payload #>> '{payment_id}'),
-                (transfer_event.raw_payload #>> '{external_payment_id}'),
-                (transfer_event.raw_payload #>> '{revolut_payment_id}'),
-                (transfer_event.raw_payload #>> '{provider_transfer_id}'),
-                (transfer_event.raw_payload #>> '{transfer_id}'),
-                (transfer_event.raw_payload #>> '{external_transfer_id}'),
-                (transfer_event.raw_payload #>> '{provider_transaction_id}'),
-                (transfer_event.raw_payload #>> '{transaction_id}')
-              ) AS event_identifier(identifier_value)
-              WHERE NULLIF(BTRIM(COALESCE(event_identifier.identifier_value, '')), '') IS NOT NULL
-                AND NOT (
-                  NULLIF(BTRIM(COALESCE(event_identifier.identifier_value, '')), '') = ANY(
-                    ARRAY_REMOVE(ARRAY[
-                      bank_transfer.id::text,
-                      NULLIF(BTRIM(COALESCE(bank_transfer.request_id, '')), ''),
-                      NULLIF(BTRIM(COALESCE(bank_transfer.payment_reference, '')), ''),
-                      NULLIF(BTRIM(COALESCE(batch_row.bulk_reference, '')), ''),
-                      NULLIF(BTRIM(COALESCE(bank_transfer.transfer_group_key, '')), ''),
-                      NULLIF(BTRIM(COALESCE(bank_transfer.rail_meta_json #>> '{request_id}', '')), ''),
-                      NULLIF(BTRIM(COALESCE(bank_transfer.rail_meta_json #>> '{idempotency_key}', '')), ''),
-                      NULLIF(BTRIM(COALESCE(bank_transfer.rail_meta_json #>> '{payment_reference}', '')), ''),
-                      NULLIF(BTRIM(COALESCE(bank_transfer.rail_meta_json #>> '{bulk_reference}', '')), '')
-                    ]::text[], NULL::text)
-                  )
-                )
-            )
-        )
-      )
-  ), skipped_scope AS (
+  v_skipped_count := COALESCE(v_existing_skipped_count, 0);
+
+  DROP TABLE IF EXISTS pg_temp.tmp_prepare_existing_transfer_classification;
+  CREATE TEMPORARY TABLE pg_temp.tmp_prepare_existing_transfer_classification (
+    transfer_scope_id uuid PRIMARY KEY,
+    pay_bank_transfer_id uuid NOT NULL,
+    status_upper text,
+    evidence_classification text,
+    is_authorisation_ready boolean NOT NULL DEFAULT false,
+    is_safe_local_cleanup boolean NOT NULL DEFAULT false,
+    is_canonical_pending_status boolean NOT NULL DEFAULT false,
+    has_provider_submission_evidence boolean NOT NULL DEFAULT false,
+    has_provider_event_evidence boolean NOT NULL DEFAULT false,
+    has_provider_attempt_without_external_id boolean NOT NULL DEFAULT false,
+    has_operation_submit_attempt boolean NOT NULL DEFAULT false,
+    has_ambiguous_external_evidence boolean NOT NULL DEFAULT false,
+    is_failed_or_blocked boolean NOT NULL DEFAULT false,
+    is_terminal_or_completed boolean NOT NULL DEFAULT false,
+    has_different_operation_scope boolean NOT NULL DEFAULT false,
+    has_stale_auth_request_evidence boolean NOT NULL DEFAULT false,
+    allow_prepare_update boolean NOT NULL DEFAULT false,
+    unsafe_reason text
+  ) ON COMMIT DROP;
+
+  DROP TABLE IF EXISTS pg_temp.tmp_prepare_unsafe_transfer_reasons;
+  CREATE TEMPORARY TABLE pg_temp.tmp_prepare_unsafe_transfer_reasons (
+    transfer_scope_id uuid,
+    pay_bank_transfer_id uuid,
+    pay_channel text,
+    transfer_group_key text,
+    unsafe_reason text
+  ) ON COMMIT DROP;
+
+  INSERT INTO pg_temp.tmp_prepare_existing_transfer_classification (
+    transfer_scope_id,
+    pay_bank_transfer_id,
+    status_upper,
+    evidence_classification,
+    is_authorisation_ready,
+    is_safe_local_cleanup,
+    is_canonical_pending_status,
+    has_provider_submission_evidence,
+    has_provider_event_evidence,
+    has_provider_attempt_without_external_id,
+    has_operation_submit_attempt,
+    has_ambiguous_external_evidence,
+    is_failed_or_blocked,
+    is_terminal_or_completed,
+    has_different_operation_scope,
+    has_stale_auth_request_evidence,
+    allow_prepare_update,
+    unsafe_reason
+  )
+  SELECT transfer_scope.id AS transfer_scope_id,
+         bank_transfer.id AS pay_bank_transfer_id,
+         classified_transfer.status_upper,
+         classified_transfer.evidence_classification,
+         COALESCE(classified_transfer.is_authorisation_ready, false) AS is_authorisation_ready,
+         COALESCE(classified_transfer.is_safe_local_cleanup, false) AS is_safe_local_cleanup,
+         COALESCE(classified_transfer.is_canonical_pending_status, false) AS is_canonical_pending_status,
+         COALESCE(classified_transfer.has_provider_submission_evidence, false) AS has_provider_submission_evidence,
+         COALESCE(classified_transfer.has_provider_event_evidence, false) AS has_provider_event_evidence,
+         COALESCE(classified_transfer.has_provider_attempt_without_external_id, false) AS has_provider_attempt_without_external_id,
+         COALESCE(classified_transfer.has_operation_submit_attempt, false) AS has_operation_submit_attempt,
+         COALESCE(classified_transfer.has_ambiguous_external_evidence, false) AS has_ambiguous_external_evidence,
+         COALESCE(classified_transfer.is_failed_or_blocked, false) AS is_failed_or_blocked,
+         COALESCE(classified_transfer.is_terminal_or_completed, false) AS is_terminal_or_completed,
+         COALESCE(classified_transfer.has_different_operation_scope, false) AS has_different_operation_scope,
+         COALESCE(classified_transfer.has_stale_auth_request_evidence, false) AS has_stale_auth_request_evidence,
+         (
+           COALESCE(classified_transfer.is_authorisation_ready, false) IS TRUE
+           OR (
+             COALESCE(classified_transfer.is_safe_local_cleanup, false) IS TRUE
+             AND COALESCE(classified_transfer.has_provider_submission_evidence, false) IS NOT TRUE
+             AND COALESCE(classified_transfer.has_provider_event_evidence, false) IS NOT TRUE
+             AND COALESCE(classified_transfer.has_provider_attempt_without_external_id, false) IS NOT TRUE
+             AND COALESCE(classified_transfer.has_operation_submit_attempt, false) IS NOT TRUE
+             AND COALESCE(classified_transfer.has_ambiguous_external_evidence, false) IS NOT TRUE
+             AND COALESCE(classified_transfer.is_failed_or_blocked, false) IS NOT TRUE
+             AND COALESCE(classified_transfer.is_terminal_or_completed, false) IS NOT TRUE
+             AND COALESCE(classified_transfer.has_different_operation_scope, false) IS NOT TRUE
+             AND COALESCE(classified_transfer.has_stale_auth_request_evidence, false) IS NOT TRUE
+           )
+         ) AS allow_prepare_update,
+         COALESCE(classified_transfer.unsafe_reason, 'TRANSFER_CONFLICT_NOT_AUTHORISATION_READY_OR_SAFE_TO_REPAIR') AS unsafe_reason
+  FROM public.banking_pay_operation_transfer_scope AS transfer_scope
+  JOIN pg_temp.tmp_transfer_scope_request AS requested_scope
+    ON requested_scope.transfer_scope_id = transfer_scope.id
+  JOIN public.pay_bank_transfers AS bank_transfer
+    ON bank_transfer.pay_batch_id = transfer_scope.pay_batch_id
+   AND bank_transfer.pay_channel = transfer_scope.pay_channel
+   AND bank_transfer.transfer_group_key = transfer_scope.transfer_group_key
+  LEFT JOIN LATERAL (
+    SELECT classified_inner.*
+    FROM public.pay_bank_transfer_execution_classify(
+      p_pay_batch_id => p_pay_batch_id,
+      p_pay_channel_scope => transfer_scope.pay_channel,
+      p_operation_id => p_operation_id,
+      p_include_unscoped_transfers => true
+    ) AS classified_inner
+    WHERE classified_inner.pay_bank_transfer_id = bank_transfer.id
+    ORDER BY
+      CASE WHEN classified_inner.scope_operation_id = p_operation_id THEN 0 ELSE 1 END,
+      classified_inner.scope_id NULLS LAST,
+      classified_inner.pay_bank_transfer_id
+    LIMIT 1
+  ) AS classified_transfer ON true
+  WHERE transfer_scope.operation_id = p_operation_id
+    AND transfer_scope.pay_batch_id = p_pay_batch_id
+    AND transfer_scope.status = 'PENDING';
+
+  INSERT INTO pg_temp.tmp_prepare_unsafe_transfer_reasons (
+    transfer_scope_id,
+    pay_bank_transfer_id,
+    pay_channel,
+    transfer_group_key,
+    unsafe_reason
+  )
+  SELECT transfer_scope.id,
+         classified_conflict.pay_bank_transfer_id,
+         transfer_scope.pay_channel,
+         transfer_scope.transfer_group_key,
+         COALESCE(classified_conflict.unsafe_reason, 'TRANSFER_CONFLICT_NOT_AUTHORISATION_READY_OR_SAFE_TO_REPAIR')
+  FROM pg_temp.tmp_prepare_existing_transfer_classification AS classified_conflict
+  JOIN public.banking_pay_operation_transfer_scope AS transfer_scope
+    ON transfer_scope.id = classified_conflict.transfer_scope_id
+  WHERE classified_conflict.allow_prepare_update IS NOT TRUE;
+
+  WITH blocked_conflict_scope AS (
     UPDATE public.banking_pay_operation_transfer_scope AS transfer_scope_update
-    SET status = 'SKIPPED',
-        pay_bank_transfer_id = provider_evidence_scope.pay_bank_transfer_id,
+    SET status = 'FAILED',
         updated_at_utc = v_now
-    FROM provider_evidence_scope
-    WHERE transfer_scope_update.id = provider_evidence_scope.transfer_scope_id
+    FROM pg_temp.tmp_prepare_existing_transfer_classification AS classified_conflict
+    WHERE transfer_scope_update.id = classified_conflict.transfer_scope_id
+      AND transfer_scope_update.operation_id = p_operation_id
+      AND transfer_scope_update.pay_batch_id = p_pay_batch_id
       AND transfer_scope_update.status = 'PENDING'
+      AND classified_conflict.allow_prepare_update IS NOT TRUE
     RETURNING transfer_scope_update.id
   )
-  SELECT coalesce(count(*), 0)::integer
-  INTO v_new_skipped_count
-  FROM skipped_scope;
+  SELECT COALESCE(COUNT(*), 0)::integer
+  INTO v_conflict_failed_count
+  FROM blocked_conflict_scope;
 
-  v_skipped_count := COALESCE(v_existing_skipped_count, 0) + COALESCE(v_new_skipped_count, 0);
+  SELECT COALESCE(COUNT(*), 0)::integer
+  INTO v_conflict_provider_evidence_blocked_count
+  FROM pg_temp.tmp_prepare_existing_transfer_classification AS classified_conflict
+  WHERE classified_conflict.allow_prepare_update IS NOT TRUE
+    AND (
+      classified_conflict.has_provider_submission_evidence
+      OR classified_conflict.has_provider_event_evidence
+      OR classified_conflict.has_provider_attempt_without_external_id
+      OR classified_conflict.has_operation_submit_attempt
+      OR classified_conflict.has_ambiguous_external_evidence
+      OR classified_conflict.has_stale_auth_request_evidence
+    );
+
+  SELECT COALESCE(COUNT(*), 0)::integer
+  INTO v_normalised_transfer_count
+  FROM pg_temp.tmp_prepare_existing_transfer_classification AS classified_conflict
+  WHERE classified_conflict.allow_prepare_update IS TRUE
+    AND COALESCE(classified_conflict.is_canonical_pending_status, false) IS NOT TRUE;
+
+  v_failed_count := COALESCE(v_failed_count, 0) + COALESCE(v_conflict_failed_count, 0);
 
   WITH scope_rows AS (
     SELECT transfer_scope.*,
@@ -5338,98 +5392,22 @@ BEGIN
         rail_provider = EXCLUDED.rail_provider,
         rail_env = EXCLUDED.rail_env,
         request_id = COALESCE(NULLIF(public.pay_bank_transfers.request_id, ''), EXCLUDED.request_id),
+        rail_tx_id = NULL::text,
+        rail_state = NULL::text,
+        completed_at_utc = NULL::timestamptz,
+        failed_reason = NULL::text,
+        rail_meta_json = jsonb_strip_nulls(COALESCE(public.pay_bank_transfers.rail_meta_json, '{}'::jsonb) || COALESCE(EXCLUDED.rail_meta_json, '{}'::jsonb)),
         bank_details_hash_snapshot = EXCLUDED.bank_details_hash_snapshot,
         payee_entity_kind = EXCLUDED.payee_entity_kind,
         payee_entity_id = EXCLUDED.payee_entity_id,
         grouping_mode_used = EXCLUDED.grouping_mode_used,
         week_ending_bucket = EXCLUDED.week_ending_bucket
-    WHERE NOT (
-        lower(btrim(coalesce(public.pay_bank_transfers.rail_meta_json #>> '{last_update_provider_evidence}', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
-        AND EXISTS (
-          SELECT 1
-          FROM (VALUES
-            (public.pay_bank_transfers.rail_tx_id),
-            (public.pay_bank_transfers.rail_meta_json #>> '{provider_event_id}'),
-            (public.pay_bank_transfers.rail_meta_json #>> '{provider_reference}'),
-            (public.pay_bank_transfers.rail_meta_json #>> '{provider_submission_id}'),
-            (public.pay_bank_transfers.rail_meta_json #>> '{submission_id}'),
-            (public.pay_bank_transfers.rail_meta_json #>> '{rail_submission_id}'),
-            (public.pay_bank_transfers.rail_meta_json #>> '{provider_payment_id}'),
-            (public.pay_bank_transfers.rail_meta_json #>> '{payment_id}'),
-            (public.pay_bank_transfers.rail_meta_json #>> '{external_payment_id}'),
-            (public.pay_bank_transfers.rail_meta_json #>> '{revolut_payment_id}'),
-            (public.pay_bank_transfers.rail_meta_json #>> '{provider_transfer_id}'),
-            (public.pay_bank_transfers.rail_meta_json #>> '{transfer_id}'),
-            (public.pay_bank_transfers.rail_meta_json #>> '{external_transfer_id}'),
-            (public.pay_bank_transfers.rail_meta_json #>> '{provider_transaction_id}'),
-            (public.pay_bank_transfers.rail_meta_json #>> '{transaction_id}')
-          ) AS transfer_identifier(identifier_value)
-          WHERE NULLIF(BTRIM(COALESCE(transfer_identifier.identifier_value, '')), '') IS NOT NULL
-            AND NOT (
-              NULLIF(BTRIM(COALESCE(transfer_identifier.identifier_value, '')), '') = ANY(
-                ARRAY_REMOVE(ARRAY[
-                  public.pay_bank_transfers.id::text,
-                  NULLIF(BTRIM(COALESCE(public.pay_bank_transfers.request_id, '')), ''),
-                  NULLIF(BTRIM(COALESCE(public.pay_bank_transfers.payment_reference, '')), ''),
-                  NULLIF(BTRIM(COALESCE(public.pay_bank_transfers.transfer_group_key, '')), ''),
-                  NULLIF(BTRIM(COALESCE((SELECT protected_batch.bulk_reference FROM public.pay_batches AS protected_batch WHERE protected_batch.id = public.pay_bank_transfers.pay_batch_id), '')), ''),
-                  NULLIF(BTRIM(COALESCE(public.pay_bank_transfers.rail_meta_json #>> '{request_id}', '')), ''),
-                  NULLIF(BTRIM(COALESCE(public.pay_bank_transfers.rail_meta_json #>> '{idempotency_key}', '')), ''),
-                  NULLIF(BTRIM(COALESCE(public.pay_bank_transfers.rail_meta_json #>> '{payment_reference}', '')), ''),
-                  NULLIF(BTRIM(COALESCE(public.pay_bank_transfers.rail_meta_json #>> '{bulk_reference}', '')), '')
-                ]::text[], NULL::text)
-              )
-            )
-        )
-      )
-      AND NOT EXISTS (
-        SELECT 1
-        FROM public.pay_bank_transfer_events AS protected_event
-        WHERE protected_event.pay_batch_id = public.pay_bank_transfers.pay_batch_id
-          AND protected_event.pay_bank_transfer_id = public.pay_bank_transfers.id
-          AND upper(btrim(coalesce(protected_event.event_source, ''))) IN ('PROVIDER_RESPONSE','PROVIDER_POLL','PROVIDER_WEBHOOK','WEBHOOK','POLL','RAIL_PROVIDER','PROVIDER','PROVIDER_SETTLEMENT')
-          AND EXISTS (
-            SELECT 1
-            FROM (VALUES
-              (protected_event.provider_event_id),
-              (protected_event.provider_reference),
-              (protected_event.raw_payload #>> '{provider_event_id}'),
-              (protected_event.raw_payload #>> '{provider_reference}'),
-              (protected_event.raw_payload #>> '{provider_submission_id}'),
-              (protected_event.raw_payload #>> '{submission_id}'),
-              (protected_event.raw_payload #>> '{rail_submission_id}'),
-              (protected_event.raw_payload #>> '{provider_payment_id}'),
-              (protected_event.raw_payload #>> '{payment_id}'),
-              (protected_event.raw_payload #>> '{external_payment_id}'),
-              (protected_event.raw_payload #>> '{revolut_payment_id}'),
-              (protected_event.raw_payload #>> '{provider_transfer_id}'),
-              (protected_event.raw_payload #>> '{transfer_id}'),
-              (protected_event.raw_payload #>> '{external_transfer_id}'),
-              (protected_event.raw_payload #>> '{provider_transaction_id}'),
-              (protected_event.raw_payload #>> '{transaction_id}')
-            ) AS protected_identifier(identifier_value)
-            WHERE NULLIF(BTRIM(COALESCE(protected_identifier.identifier_value, '')), '') IS NOT NULL
-              AND NOT (
-                NULLIF(BTRIM(COALESCE(protected_identifier.identifier_value, '')), '') = ANY(
-                  ARRAY_REMOVE(ARRAY[
-                    public.pay_bank_transfers.id::text,
-                    NULLIF(BTRIM(COALESCE(public.pay_bank_transfers.request_id, '')), ''),
-                    NULLIF(BTRIM(COALESCE(public.pay_bank_transfers.payment_reference, '')), ''),
-                    NULLIF(BTRIM(COALESCE(public.pay_bank_transfers.transfer_group_key, '')), ''),
-                    NULLIF(BTRIM(COALESCE((SELECT protected_batch.bulk_reference FROM public.pay_batches AS protected_batch WHERE protected_batch.id = public.pay_bank_transfers.pay_batch_id), '')), ''),
-                    NULLIF(BTRIM(COALESCE(public.pay_bank_transfers.rail_meta_json #>> '{request_id}', '')), ''),
-                    NULLIF(BTRIM(COALESCE(public.pay_bank_transfers.rail_meta_json #>> '{idempotency_key}', '')), ''),
-                    NULLIF(BTRIM(COALESCE(public.pay_bank_transfers.rail_meta_json #>> '{payment_reference}', '')), ''),
-                    NULLIF(BTRIM(COALESCE(public.pay_bank_transfers.rail_meta_json #>> '{bulk_reference}', '')), '')
-                  ]::text[], NULL::text)
-                )
-              )
-          )
-      )
-      AND upper(btrim(coalesce(public.pay_bank_transfers.status, ''))) NOT IN ('FAILED', 'DECLINED', 'REJECTED', 'RETURNED', 'REVERTED', 'CANCELLED', 'CANCELED', 'BLOCKED', 'SKIPPED', 'COMPLETED', 'COMMITTED', 'SETTLED', 'PAID', 'EXECUTED', 'SUBMITTED', 'SENT', 'PROCESSING', 'IN_FLIGHT')
-      AND upper(btrim(coalesce(public.pay_bank_transfers.rail_state, ''))) NOT IN ('FAILED', 'DECLINED', 'REJECTED', 'RETURNED', 'REVERTED', 'CANCELLED', 'CANCELED', 'BLOCKED', 'SKIPPED', 'COMPLETED', 'COMMITTED', 'SETTLED', 'PAID', 'EXECUTED', 'SUBMITTED', 'SENT', 'PROCESSING', 'IN_FLIGHT')
-      AND public.pay_bank_transfers.completed_at_utc IS NULL
-      AND NULLIF(btrim(coalesce(public.pay_bank_transfers.failed_reason, '')), '') IS NULL
+    WHERE EXISTS (
+      SELECT 1
+      FROM pg_temp.tmp_prepare_existing_transfer_classification AS classified_conflict
+      WHERE classified_conflict.pay_bank_transfer_id = public.pay_bank_transfers.id
+        AND classified_conflict.allow_prepare_update IS TRUE
+    )
     RETURNING public.pay_bank_transfers.id,
               public.pay_bank_transfers.pay_batch_id,
               public.pay_bank_transfers.pay_channel,
@@ -5514,6 +5492,7 @@ BEGIN
            COALESCE(classified_transfer.has_provider_attempt_without_external_id, false) AS has_provider_attempt_without_external_id,
            COALESCE(classified_transfer.has_operation_submit_attempt, false) AS has_operation_submit_attempt,
            COALESCE(classified_transfer.has_ambiguous_external_evidence, false) AS has_ambiguous_external_evidence,
+           COALESCE(classified_transfer.has_stale_auth_request_evidence, false) AS has_stale_auth_request_evidence,
            classified_transfer.unsafe_reason
     FROM requested_prepared_scope
     LEFT JOIN LATERAL public.pay_bank_transfer_execution_classify(
@@ -5523,6 +5502,25 @@ BEGIN
       p_include_unscoped_transfers => true
     ) AS classified_transfer
       ON classified_transfer.pay_bank_transfer_id = requested_prepared_scope.pay_bank_transfer_id
+  ), unsafe_not_ready_scope AS (
+    INSERT INTO pg_temp.tmp_prepare_unsafe_transfer_reasons (
+      transfer_scope_id,
+      pay_bank_transfer_id,
+      pay_channel,
+      transfer_group_key,
+      unsafe_reason
+    )
+    SELECT transfer_scope.id,
+           classified_prepared_scope.pay_bank_transfer_id,
+           transfer_scope.pay_channel,
+           transfer_scope.transfer_group_key,
+           COALESCE(classified_prepared_scope.unsafe_reason, 'PREPARED_TRANSFER_NOT_AUTHORISATION_READY')
+    FROM classified_prepared_scope
+    JOIN public.banking_pay_operation_transfer_scope AS transfer_scope
+      ON transfer_scope.id = classified_prepared_scope.transfer_scope_id
+    WHERE classified_prepared_scope.is_authorisation_ready IS NOT TRUE
+    ON CONFLICT DO NOTHING
+    RETURNING transfer_scope_id
   ), failed_not_ready_scope AS (
     UPDATE public.banking_pay_operation_transfer_scope AS transfer_scope_update
     SET status = 'FAILED',
@@ -5543,6 +5541,7 @@ BEGIN
           OR classified_prepared_scope.has_provider_attempt_without_external_id
           OR classified_prepared_scope.has_operation_submit_attempt
           OR classified_prepared_scope.has_ambiguous_external_evidence
+          OR classified_prepared_scope.has_stale_auth_request_evidence
         )
     )::integer
   INTO v_authorisation_ready_count,
@@ -5551,6 +5550,21 @@ BEGIN
   FROM classified_prepared_scope;
 
   v_failed_count := COALESCE(v_failed_count, 0) + COALESCE(v_not_authorisation_ready_count, 0);
+  v_provider_evidence_blocked_count := COALESCE(v_provider_evidence_blocked_count, 0) + COALESCE(v_conflict_provider_evidence_blocked_count, 0);
+
+  SELECT COALESCE(COUNT(DISTINCT unsafe_reason_row.pay_bank_transfer_id) FILTER (WHERE unsafe_reason_row.pay_bank_transfer_id IS NOT NULL), 0)::integer,
+         COALESCE(jsonb_agg(DISTINCT to_jsonb(unsafe_reason_row.pay_bank_transfer_id::text)) FILTER (WHERE unsafe_reason_row.pay_bank_transfer_id IS NOT NULL), '[]'::jsonb),
+         COALESCE(jsonb_agg(jsonb_strip_nulls(jsonb_build_object(
+           'transfer_scope_id', CASE WHEN unsafe_reason_row.transfer_scope_id IS NULL THEN NULL ELSE unsafe_reason_row.transfer_scope_id::text END,
+           'pay_bank_transfer_id', CASE WHEN unsafe_reason_row.pay_bank_transfer_id IS NULL THEN NULL ELSE unsafe_reason_row.pay_bank_transfer_id::text END,
+           'pay_channel', unsafe_reason_row.pay_channel,
+           'transfer_group_key', unsafe_reason_row.transfer_group_key,
+           'reason', unsafe_reason_row.unsafe_reason
+         )) ORDER BY unsafe_reason_row.pay_channel NULLS LAST, unsafe_reason_row.transfer_group_key NULLS LAST, unsafe_reason_row.pay_bank_transfer_id NULLS LAST, unsafe_reason_row.transfer_scope_id NULLS LAST), '[]'::jsonb)
+  INTO v_unsafe_transfer_count,
+       v_unsafe_transfer_ids,
+       v_unsafe_reasons
+  FROM pg_temp.tmp_prepare_unsafe_transfer_reasons AS unsafe_reason_row;
 
   SELECT count(*)::integer
   INTO v_remaining_count
@@ -5569,6 +5583,9 @@ BEGIN
     'not_authorisation_ready_count', COALESCE(v_not_authorisation_ready_count, 0),
     'provider_evidence_blocked_count', COALESCE(v_provider_evidence_blocked_count, 0),
     'normalised_transfer_count', COALESCE(v_normalised_transfer_count, 0),
+    'unsafe_transfer_count', COALESCE(v_unsafe_transfer_count, 0),
+    'unsafe_transfer_ids', COALESCE(v_unsafe_transfer_ids, '[]'::jsonb),
+    'unsafe_reasons', COALESCE(v_unsafe_reasons, '[]'::jsonb),
     'reused_count', COALESCE(v_reused_count, 0),
     'skipped_count', COALESCE(v_skipped_count, 0),
     'failed_count', COALESCE(v_failed_count, 0),
@@ -5580,7 +5597,9 @@ $function$;
 
 
 
+
 DROP FUNCTION IF EXISTS public.pay_execute_bank_transfer_scope_seed(uuid, uuid, text, uuid, boolean);
+
 
 CREATE OR REPLACE FUNCTION public.pay_execute_bank_transfer_scope_seed(
   p_operation_id uuid,
@@ -5621,8 +5640,10 @@ DECLARE
   v_prepared_scope_mismatch_count integer := 0;
   v_prepared_scope_mismatch_details jsonb := '[]'::jsonb;
   v_stale_scope_skipped_count integer := 0;
+  v_stale_previous_operation_cleanup_attempted_count integer := 0;
   v_stale_previous_operation_scope_cleaned_count integer := 0;
   v_stale_previous_operation_scope_blocked_count integer := 0;
+  v_cleanup_retry_blocked_count integer := 0;
   v_stale_previous_operation_ids jsonb := '[]'::jsonb;
   v_blocked_transfer_group_keys jsonb := '[]'::jsonb;
   v_operation_freshness_status text := NULL::text;
@@ -6484,11 +6505,10 @@ BEGIN
     transfer_scope_id uuid PRIMARY KEY,
     previous_operation_id uuid NOT NULL,
     previous_operation_status text,
+    previous_operation_type text,
     pay_bank_transfer_id uuid,
     pay_channel text NOT NULL,
-    transfer_group_key text NOT NULL,
-    is_safe_local_cleanup boolean NOT NULL DEFAULT false,
-    unsafe_reason text
+    transfer_group_key text NOT NULL
   ) ON COMMIT DROP;
 
   TRUNCATE TABLE pg_temp.tmp_transfer_scope_previous_conflicts;
@@ -6497,50 +6517,118 @@ BEGIN
     transfer_scope_id,
     previous_operation_id,
     previous_operation_status,
+    previous_operation_type,
     pay_bank_transfer_id,
     pay_channel,
-    transfer_group_key,
-    is_safe_local_cleanup,
-    unsafe_reason
+    transfer_group_key
   )
   SELECT previous_scope.id,
          previous_scope.operation_id,
          upper(btrim(coalesce(previous_operation.status, ''))),
+         upper(btrim(coalesce(previous_operation.operation_type, ''))),
          previous_scope.pay_bank_transfer_id,
          previous_scope.pay_channel,
-         previous_scope.transfer_group_key,
-         CASE
-           WHEN previous_scope.pay_bank_transfer_id IS NULL THEN true
-           ELSE coalesce(previous_classification.is_safe_local_cleanup, false)
-         END,
-         previous_classification.unsafe_reason
+         previous_scope.transfer_group_key
   FROM public.banking_pay_operation_transfer_scope AS previous_scope
   JOIN pg_temp.tmp_operation_transfer_groups AS incoming_group
     ON incoming_group.pay_channel = previous_scope.pay_channel
    AND incoming_group.transfer_group_key = previous_scope.transfer_group_key
   LEFT JOIN public.banking_pay_operations AS previous_operation
     ON previous_operation.id = previous_scope.operation_id
-  LEFT JOIN LATERAL public.pay_bank_transfer_execution_classify(
-    p_pay_batch_id => p_pay_batch_id,
-    p_pay_channel_scope => previous_scope.pay_channel,
-    p_operation_id => previous_scope.operation_id,
-    p_include_unscoped_transfers => true
-  ) AS previous_classification
-    ON previous_classification.pay_bank_transfer_id = previous_scope.pay_bank_transfer_id
   WHERE previous_scope.pay_batch_id = p_pay_batch_id
     AND previous_scope.operation_id <> p_operation_id;
 
-  SELECT count(*)::integer,
-         coalesce(jsonb_agg(DISTINCT to_jsonb(previous_conflict.previous_operation_id::text)), '[]'::jsonb),
-         coalesce(jsonb_agg(DISTINCT to_jsonb(previous_conflict.transfer_group_key)), '[]'::jsonb)
+  CREATE TEMPORARY TABLE IF NOT EXISTS pg_temp.tmp_transfer_scope_previous_cleanup_results (
+    previous_operation_id uuid PRIMARY KEY,
+    cleanup_result jsonb NOT NULL
+  ) ON COMMIT DROP;
+
+  TRUNCATE TABLE pg_temp.tmp_transfer_scope_previous_cleanup_results;
+
+  INSERT INTO pg_temp.tmp_transfer_scope_previous_cleanup_results (
+    previous_operation_id,
+    cleanup_result
+  )
+  SELECT cleanup_operation.previous_operation_id,
+         public.pay_execute_operation_cleanup_failed_local_artifacts(
+           p_operation_id => cleanup_operation.previous_operation_id,
+           p_actor_user_id => p_actor_user_id,
+           p_failure_phase => 'PREPARE_TRANSFER_SCOPE_RETRY_CONFLICT',
+           p_failure_error_json => jsonb_build_object(
+             'code', 'TRANSFER_SCOPE_RETRY_CONFLICT_CLEANUP_REQUESTED',
+             'requested_by_operation_id', p_operation_id::text,
+             'pay_batch_id', p_pay_batch_id::text
+           ),
+           p_dry_run => false
+         ) AS cleanup_result
+  FROM (
+    SELECT DISTINCT previous_conflict.previous_operation_id
+    FROM pg_temp.tmp_transfer_scope_previous_conflicts AS previous_conflict
+    WHERE previous_conflict.previous_operation_type = 'PAYMENT_EXECUTE'
+      AND previous_conflict.previous_operation_status IN ('FAILED', 'CANCELLED', 'CANCELED')
+  ) AS cleanup_operation;
+
+  SELECT COUNT(*)::integer,
+         COALESCE((COUNT(*) FILTER (
+           WHERE COALESCE((cleanup_result_row.cleanup_result->>'retry_blocked')::boolean, false) IS TRUE
+              OR COALESCE((cleanup_result_row.cleanup_result->>'review_required')::boolean, false) IS TRUE
+              OR COALESCE((cleanup_result_row.cleanup_result->>'safe_to_retry')::boolean, false) IS NOT TRUE
+         )), 0)::integer
+  INTO v_stale_previous_operation_cleanup_attempted_count,
+       v_cleanup_retry_blocked_count
+  FROM pg_temp.tmp_transfer_scope_previous_cleanup_results AS cleanup_result_row;
+
+  SELECT COUNT(*)::integer
+  INTO v_stale_previous_operation_scope_cleaned_count
+  FROM pg_temp.tmp_transfer_scope_previous_conflicts AS previous_conflict
+  WHERE NOT EXISTS (
+    SELECT 1
+    FROM public.banking_pay_operation_transfer_scope AS remaining_previous_scope
+    WHERE remaining_previous_scope.id = previous_conflict.transfer_scope_id
+  );
+
+  SELECT COUNT(*)::integer,
+         COALESCE(jsonb_agg(DISTINCT to_jsonb(remaining_conflict.previous_operation_id::text)), '[]'::jsonb),
+         COALESCE(jsonb_agg(DISTINCT to_jsonb(remaining_conflict.transfer_group_key)), '[]'::jsonb)
   INTO v_stale_previous_operation_scope_blocked_count,
        v_stale_previous_operation_ids,
        v_blocked_transfer_group_keys
-  FROM pg_temp.tmp_transfer_scope_previous_conflicts AS previous_conflict
-  WHERE NOT (
-    previous_conflict.previous_operation_status IN ('FAILED', 'CANCELLED', 'CANCELED')
-    AND previous_conflict.is_safe_local_cleanup
-  );
+  FROM (
+    SELECT previous_scope.operation_id AS previous_operation_id,
+           previous_scope.transfer_group_key AS transfer_group_key
+    FROM public.banking_pay_operation_transfer_scope AS previous_scope
+    JOIN pg_temp.tmp_operation_transfer_groups AS incoming_group
+      ON incoming_group.pay_channel = previous_scope.pay_channel
+     AND incoming_group.transfer_group_key = previous_scope.transfer_group_key
+    WHERE previous_scope.pay_batch_id = p_pay_batch_id
+      AND previous_scope.operation_id <> p_operation_id
+  ) AS remaining_conflict;
+
+  IF COALESCE(v_cleanup_retry_blocked_count, 0) > 0
+     AND COALESCE(v_stale_previous_operation_scope_blocked_count, 0) = 0 THEN
+    SELECT COALESCE(jsonb_agg(DISTINCT to_jsonb(cleanup_result_row.previous_operation_id::text)), '[]'::jsonb)
+    INTO v_stale_previous_operation_ids
+    FROM pg_temp.tmp_transfer_scope_previous_cleanup_results AS cleanup_result_row
+    WHERE COALESCE((cleanup_result_row.cleanup_result->>'retry_blocked')::boolean, false) IS TRUE
+       OR COALESCE((cleanup_result_row.cleanup_result->>'review_required')::boolean, false) IS TRUE
+       OR COALESCE((cleanup_result_row.cleanup_result->>'safe_to_retry')::boolean, false) IS NOT TRUE;
+
+    SELECT COALESCE(jsonb_agg(DISTINCT to_jsonb(previous_conflict.transfer_group_key)), '[]'::jsonb)
+    INTO v_blocked_transfer_group_keys
+    FROM pg_temp.tmp_transfer_scope_previous_conflicts AS previous_conflict
+    WHERE EXISTS (
+      SELECT 1
+      FROM pg_temp.tmp_transfer_scope_previous_cleanup_results AS cleanup_result_row
+      WHERE cleanup_result_row.previous_operation_id = previous_conflict.previous_operation_id
+        AND (
+          COALESCE((cleanup_result_row.cleanup_result->>'retry_blocked')::boolean, false) IS TRUE
+          OR COALESCE((cleanup_result_row.cleanup_result->>'review_required')::boolean, false) IS TRUE
+          OR COALESCE((cleanup_result_row.cleanup_result->>'safe_to_retry')::boolean, false) IS NOT TRUE
+        )
+    );
+
+    v_stale_previous_operation_scope_blocked_count := COALESCE(v_cleanup_retry_blocked_count, 0);
+  END IF;
 
   IF COALESCE(v_stale_previous_operation_scope_blocked_count, 0) > 0 THEN
     RAISE EXCEPTION '%', jsonb_build_object(
@@ -6550,62 +6638,13 @@ BEGIN
       'operation_id', p_operation_id::text,
       'pay_batch_id', p_pay_batch_id::text,
       'blocked_count', v_stale_previous_operation_scope_blocked_count,
+      'stale_previous_operation_cleanup_attempted_count', COALESCE(v_stale_previous_operation_cleanup_attempted_count, 0),
+      'stale_previous_operation_scope_cleaned_count', COALESCE(v_stale_previous_operation_scope_cleaned_count, 0),
+      'cleanup_retry_blocked_count', COALESCE(v_cleanup_retry_blocked_count, 0),
       'stale_previous_operation_ids', v_stale_previous_operation_ids,
       'blocked_transfer_group_keys', v_blocked_transfer_group_keys
-    )::text;
+    )::text USING ERRCODE = 'P0001';
   END IF;
-
-  WITH safe_previous_conflicts AS (
-    SELECT previous_conflict.transfer_scope_id,
-           previous_conflict.pay_bank_transfer_id
-    FROM pg_temp.tmp_transfer_scope_previous_conflicts AS previous_conflict
-    WHERE previous_conflict.previous_operation_status IN ('FAILED', 'CANCELLED', 'CANCELED')
-      AND previous_conflict.is_safe_local_cleanup
-  ), cleared_item_links AS (
-    UPDATE public.pay_batch_items AS batch_item_update
-    SET pay_bank_transfer_id = NULL,
-        bank_reference = CASE
-          WHEN batch_item_update.bank_reference = bank_transfer.payment_reference THEN NULL
-          ELSE batch_item_update.bank_reference
-        END,
-        updated_at = v_now
-    FROM safe_previous_conflicts
-    JOIN public.pay_bank_transfers AS bank_transfer
-      ON bank_transfer.id = safe_previous_conflicts.pay_bank_transfer_id
-    JOIN public.pay_batch_candidates AS batch_candidate
-      ON batch_candidate.id = batch_item_update.pay_batch_candidate_id
-    WHERE batch_candidate.pay_batch_id = p_pay_batch_id
-      AND batch_item_update.pay_bank_transfer_id = safe_previous_conflicts.pay_bank_transfer_id
-    RETURNING batch_item_update.id
-  ), deleted_safe_previous_scope AS (
-    DELETE FROM public.banking_pay_operation_transfer_scope AS scope_delete
-    USING safe_previous_conflicts
-    WHERE scope_delete.id = safe_previous_conflicts.transfer_scope_id
-    RETURNING scope_delete.id,
-              safe_previous_conflicts.pay_bank_transfer_id
-  ), deleted_safe_previous_transfer AS (
-    DELETE FROM public.pay_bank_transfers AS transfer_delete
-    USING (
-      SELECT DISTINCT deleted_safe_previous_scope.pay_bank_transfer_id
-      FROM deleted_safe_previous_scope
-      WHERE deleted_safe_previous_scope.pay_bank_transfer_id IS NOT NULL
-    ) AS safe_transfer
-    WHERE transfer_delete.id = safe_transfer.pay_bank_transfer_id
-      AND NOT EXISTS (
-        SELECT 1
-        FROM public.banking_pay_operation_transfer_scope AS remaining_scope
-        WHERE remaining_scope.pay_bank_transfer_id = transfer_delete.id
-      )
-      AND NOT EXISTS (
-        SELECT 1
-        FROM public.pay_bank_transfer_events AS transfer_event
-        WHERE transfer_event.pay_bank_transfer_id = transfer_delete.id
-      )
-    RETURNING transfer_delete.id
-  )
-  SELECT count(*)::integer
-  INTO v_stale_previous_operation_scope_cleaned_count
-  FROM deleted_safe_previous_scope;
 
   WITH existing_scope AS (
     SELECT scope_row.id,
@@ -6724,8 +6763,10 @@ BEGIN
     'reused_count', COALESCE(v_reused_count, 0),
     'blocked_invalid_count', COALESCE(v_blocked_count, 0) + COALESCE(v_stale_scope_skipped_count, 0),
     'stale_scope_skipped_count', COALESCE(v_stale_scope_skipped_count, 0),
+    'stale_previous_operation_cleanup_attempted_count', COALESCE(v_stale_previous_operation_cleanup_attempted_count, 0),
     'stale_previous_operation_scope_cleaned_count', COALESCE(v_stale_previous_operation_scope_cleaned_count, 0),
     'stale_previous_operation_scope_blocked_count', COALESCE(v_stale_previous_operation_scope_blocked_count, 0),
+    'cleanup_retry_blocked_count', COALESCE(v_cleanup_retry_blocked_count, 0),
     'stale_previous_operation_ids', COALESCE(v_stale_previous_operation_ids, '[]'::jsonb),
     'blocked_transfer_group_keys', COALESCE(v_blocked_transfer_group_keys, '[]'::jsonb),
     'freshness_validation_status', v_freshness_status,
@@ -6734,6 +6775,7 @@ BEGIN
   );
 END;
 $function$;
+
 
 
 
@@ -10949,6 +10991,9 @@ begin
         coalesce(v_pay_channel_count, 0);
 end;
 $function$;
+
+
+DROP FUNCTION IF EXISTS public.pay_bank_transfer_execution_classify(uuid, text, uuid, boolean);
 CREATE OR REPLACE FUNCTION public.pay_bank_transfer_execution_classify(
   p_pay_batch_id uuid,
   p_pay_channel_scope text DEFAULT 'ALL'::text,
@@ -10981,6 +11026,10 @@ RETURNS TABLE (
   is_authorisation_ready boolean,
   is_unattempted_submit_eligible boolean,
   is_safe_local_cleanup boolean,
+  is_canonical_pending_status boolean,
+  has_auth_prepared_scope boolean,
+  has_different_operation_scope boolean,
+  has_stale_auth_request_evidence boolean,
   unsafe_reason text
 )
 LANGUAGE plpgsql
@@ -11195,7 +11244,10 @@ BEGIN
         NULLIF(btrim(coalesce(combined_source.transfer_rail_meta_json #>> '{request_id}', '')), ''),
         NULLIF(btrim(coalesce(combined_source.transfer_rail_meta_json #>> '{idempotency_key}', '')), ''),
         NULLIF(btrim(coalesce(combined_source.transfer_rail_meta_json #>> '{payment_reference}', '')), ''),
-        NULLIF(btrim(coalesce(combined_source.transfer_rail_meta_json #>> '{bulk_reference}', '')), '')
+        NULLIF(btrim(coalesce(combined_source.transfer_rail_meta_json #>> '{bulk_reference}', '')), ''),
+        NULLIF(btrim(coalesce(combined_source.transfer_rail_meta_json #>> '{operation_id}', '')), ''),
+        NULLIF(btrim(coalesce(combined_source.transfer_rail_meta_json #>> '{created_by_operation_id}', '')), ''),
+        NULLIF(btrim(coalesce(combined_source.transfer_rail_meta_json #>> '{payment_execute_operation_id}', '')), '')
       ]::text[], NULL::text) AS local_identity_values
     FROM combined_source
     JOIN batch_context AS batch_context_row
@@ -11217,6 +11269,9 @@ BEGIN
         OR nullif(btrim(coalesce(normalised_rows.transfer_rail_meta_json #>> '{request_id}', '')), '') IS NOT NULL
         OR nullif(btrim(coalesce(normalised_rows.transfer_rail_meta_json #>> '{idempotency_key}', '')), '') IS NOT NULL
         OR nullif(btrim(coalesce(normalised_rows.transfer_rail_meta_json #>> '{payment_reference}', '')), '') IS NOT NULL
+        OR nullif(btrim(coalesce(normalised_rows.transfer_rail_meta_json #>> '{operation_id}', '')), '') IS NOT NULL
+        OR nullif(btrim(coalesce(normalised_rows.transfer_rail_meta_json #>> '{created_by_operation_id}', '')), '') IS NOT NULL
+        OR nullif(btrim(coalesce(normalised_rows.transfer_rail_meta_json #>> '{payment_execute_operation_id}', '')), '') IS NOT NULL
       ) AS calc_has_local_prepare_identity,
       EXISTS (
         SELECT 1
@@ -11340,7 +11395,17 @@ BEGIN
         FROM public.banking_pay_operations AS operation_row
         WHERE operation_row.id = normalised_rows.scope_operation_id
           AND operation_row.status IN ('FAILED', 'CANCELLED', 'CANCELED', 'REVIEW_REQUIRED')
-      ) AS calc_scope_owner_is_terminal_cleanup_candidate
+      ) AS calc_scope_owner_is_terminal_cleanup_candidate,
+      (
+        p_operation_id IS NOT NULL
+        AND EXISTS (
+          SELECT 1
+          FROM public.pay_batch_auth_requests AS auth_request
+          WHERE auth_request.pay_batch_id = p_pay_batch_id
+            AND auth_request.state IN ('AWAITING', 'PENDING_AUTHORISATION', 'AUTHORISED')
+            AND COALESCE(NULLIF(BTRIM(COALESCE(auth_request.execution_intent_json->>'operation_id', '')), ''), '') <> p_operation_id::text
+        )
+      ) AS calc_has_stale_auth_request_evidence
     FROM normalised_rows
   ), labelled_rows AS (
     SELECT
@@ -11403,6 +11468,10 @@ BEGIN
       AND (v_scope IN ('ALL', 'ANY', '*') OR upper(btrim(coalesce(final_rows.transfer_pay_channel, ''))) = v_scope)
       AND final_rows.status_upper = 'PENDING'
       AND final_rows.calc_has_route_ready IS TRUE
+      AND (
+        p_operation_id IS NULL
+        OR upper(btrim(coalesce(final_rows.scope_status, ''))) = 'PREPARED'
+      )
       AND final_rows.calc_has_provider_submission_evidence IS NOT TRUE
       AND final_rows.calc_has_provider_event_evidence IS NOT TRUE
       AND final_rows.calc_has_provider_attempt_without_external_id IS NOT TRUE
@@ -11411,10 +11480,30 @@ BEGIN
       AND final_rows.calc_is_failed_or_blocked IS NOT TRUE
       AND final_rows.calc_is_terminal_or_completed IS NOT TRUE
       AND final_rows.batch_execution_boundary_crossed IS NOT TRUE
+      AND final_rows.calc_has_stale_auth_request_evidence IS NOT TRUE
+      AND NOT (
+        p_operation_id IS NOT NULL
+        AND final_rows.scope_operation_id IS NOT NULL
+        AND final_rows.scope_operation_id <> p_operation_id
+      )
+      AND (
+        p_operation_id IS NULL
+        OR final_rows.scope_operation_id = p_operation_id
+        OR btrim(coalesce(final_rows.transfer_rail_meta_json #>> '{operation_id}', '')) = p_operation_id::text
+        OR btrim(coalesce(final_rows.transfer_rail_meta_json #>> '{created_by_operation_id}', '')) = p_operation_id::text
+        OR btrim(coalesce(final_rows.transfer_rail_meta_json #>> '{payment_execute_operation_id}', '')) = p_operation_id::text
+      )
     ) AS is_authorisation_ready,
     (
       final_rows.transfer_id IS NOT NULL
+      AND final_rows.transfer_pay_batch_id = p_pay_batch_id
+      AND (v_scope IN ('ALL', 'ANY', '*') OR upper(btrim(coalesce(final_rows.transfer_pay_channel, ''))) = v_scope)
+      AND final_rows.status_upper = 'PENDING'
       AND final_rows.calc_has_route_ready IS TRUE
+      AND (
+        p_operation_id IS NULL
+        OR upper(btrim(coalesce(final_rows.scope_status, ''))) = 'PREPARED'
+      )
       AND final_rows.calc_has_provider_submission_evidence IS NOT TRUE
       AND final_rows.calc_has_provider_event_evidence IS NOT TRUE
       AND final_rows.calc_has_provider_attempt_without_external_id IS NOT TRUE
@@ -11423,6 +11512,19 @@ BEGIN
       AND final_rows.calc_is_failed_or_blocked IS NOT TRUE
       AND final_rows.calc_is_terminal_or_completed IS NOT TRUE
       AND final_rows.batch_execution_boundary_crossed IS NOT TRUE
+      AND final_rows.calc_has_stale_auth_request_evidence IS NOT TRUE
+      AND NOT (
+        p_operation_id IS NOT NULL
+        AND final_rows.scope_operation_id IS NOT NULL
+        AND final_rows.scope_operation_id <> p_operation_id
+      )
+      AND (
+        p_operation_id IS NULL
+        OR final_rows.scope_operation_id = p_operation_id
+        OR btrim(coalesce(final_rows.transfer_rail_meta_json #>> '{operation_id}', '')) = p_operation_id::text
+        OR btrim(coalesce(final_rows.transfer_rail_meta_json #>> '{created_by_operation_id}', '')) = p_operation_id::text
+        OR btrim(coalesce(final_rows.transfer_rail_meta_json #>> '{payment_execute_operation_id}', '')) = p_operation_id::text
+      )
     ) AS is_unattempted_submit_eligible,
     (
       final_rows.calc_is_operation_owned IS TRUE
@@ -11444,8 +11546,20 @@ BEGIN
         )
       )
     ) AS is_safe_local_cleanup,
+    (
+      final_rows.transfer_id IS NOT NULL
+      AND final_rows.status_upper = 'PENDING'
+    ) AS is_canonical_pending_status,
+    (upper(btrim(coalesce(final_rows.scope_status, ''))) = 'PREPARED') AS has_auth_prepared_scope,
+    (
+      p_operation_id IS NOT NULL
+      AND final_rows.scope_operation_id IS NOT NULL
+      AND final_rows.scope_operation_id <> p_operation_id
+    ) AS has_different_operation_scope,
+    final_rows.calc_has_stale_auth_request_evidence AS has_stale_auth_request_evidence,
     CASE
       WHEN final_rows.batch_execution_boundary_crossed THEN 'BATCH_EXECUTION_BOUNDARY_CROSSED'
+      WHEN p_operation_id IS NOT NULL AND final_rows.transfer_id IS NOT NULL AND upper(btrim(coalesce(final_rows.scope_status, ''))) <> 'PREPARED' THEN 'AUTH_PREPARED_SCOPE_REQUIRED'
       WHEN final_rows.calc_has_provider_event_evidence THEN 'PROVIDER_EVENT_EVIDENCE_PRESENT'
       WHEN final_rows.calc_has_non_local_rail_tx_id THEN 'NON_LOCAL_RAIL_TX_ID_PRESENT'
       WHEN final_rows.calc_has_non_local_rail_meta_identifier THEN 'NON_LOCAL_PROVIDER_IDENTIFIER_PRESENT'
@@ -11455,6 +11569,8 @@ BEGIN
       WHEN final_rows.calc_has_ambiguous_external_evidence THEN 'AMBIGUOUS_EXTERNAL_EVIDENCE'
       WHEN final_rows.calc_is_terminal_or_completed THEN 'TERMINAL_OR_COMPLETED_TRANSFER_STATE'
       WHEN final_rows.calc_is_failed_or_blocked THEN 'FAILED_OR_BLOCKED_TRANSFER_STATE'
+      WHEN final_rows.calc_has_stale_auth_request_evidence THEN 'STALE_AUTH_REQUEST_EVIDENCE_PRESENT'
+      WHEN p_operation_id IS NOT NULL AND final_rows.scope_operation_id IS NOT NULL AND final_rows.scope_operation_id <> p_operation_id THEN 'TRANSFER_SCOPE_OWNED_BY_DIFFERENT_OPERATION'
       WHEN final_rows.transfer_id IS NULL AND final_rows.calc_scope_owner_is_terminal_cleanup_candidate IS NOT TRUE THEN 'SCOPE_WITHOUT_TRANSFER_NOT_TERMINAL_OPERATION'
       WHEN final_rows.transfer_id IS NOT NULL AND final_rows.calc_has_route_ready IS NOT TRUE THEN 'TRANSFER_ROUTE_NOT_READY'
       WHEN final_rows.transfer_id IS NOT NULL AND final_rows.status_upper <> 'PENDING' THEN 'TRANSFER_NOT_PENDING'
@@ -11468,6 +11584,10 @@ BEGIN
     final_rows.scope_id NULLS LAST;
 END;
 $function$;
+
+
+
+
 CREATE OR REPLACE FUNCTION public.pay_execute_operation_cleanup_failed_local_artifacts(
   p_operation_id uuid,
   p_actor_user_id uuid DEFAULT NULL::uuid,
