@@ -16406,7 +16406,6 @@ DROP FUNCTION IF EXISTS public.pay_batch_auth_start(uuid, text, timestamptz, tex
 DROP FUNCTION IF EXISTS public.pay_batch_auth_start(uuid, text, timestamptz, text, jsonb, uuid, text, text, date, text, boolean, boolean, boolean, text, text, uuid, text, text);
 
 
-
 CREATE OR REPLACE FUNCTION public.pay_batch_auth_start(
   p_pay_batch_id uuid,
   p_schedule_kind text,
@@ -16445,6 +16444,17 @@ DECLARE
   v_prepare_json jsonb := '{}'::jsonb;
   v_summary_json jsonb := '{}'::jsonb;
   v_existing_auth_id uuid := NULL::uuid;
+  v_existing_auth_state text := NULL::text;
+  v_existing_auth_intent_json jsonb := '{}'::jsonb;
+  v_existing_auth_operation_id text := NULL::text;
+  v_existing_auth_idempotency_key text := NULL::text;
+  v_conflicting_auth_id uuid := NULL::uuid;
+  v_conflicting_auth_state text := NULL::text;
+  v_conflicting_auth_operation_id text := NULL::text;
+  v_conflicting_auth_idempotency_key text := NULL::text;
+  v_requested_idempotency_key text := NULL::text;
+  v_effective_freshness_result_hash text := NULL::text;
+  v_effective_freshness_scope_hash text := NULL::text;
   v_auth_id uuid := NULL::uuid;
   v_auth_state text := 'AWAITING';
   v_required_quantity integer := 1;
@@ -16485,6 +16495,8 @@ BEGIN
   IF v_execution_mode NOT IN ('STANDARD_BANK', 'BANK', 'CSV', 'CSV_SETTLEMENT', 'EXTERNAL', 'EXTERNAL_SETTLEMENT', 'MANUAL_SETTLEMENT') THEN
     RAISE EXCEPTION 'pay_batch_auth_start: invalid execution_mode';
   END IF;
+
+  v_requested_idempotency_key := nullif(btrim(coalesce(p_idempotency_key, '')), '');
 
   SELECT actor_user.id,
          actor_user.is_active,
@@ -16550,7 +16562,7 @@ BEGIN
     RAISE EXCEPTION '%', jsonb_build_object(
       'error', 'PAY_BATCH_AUTH_START',
       'code', 'EXECUTION_STATE_CONFLICT',
-      'message', 'pay_batch_auth_start: batch has already crossed the execution submission boundary',
+      'message', 'This payment batch has already crossed the execution submission boundary and cannot be authorised again.',
       'pay_batch_id', p_pay_batch_id::text,
       'execution_commit_state', v_execution_commit_state
     )::text;
@@ -16597,6 +16609,53 @@ BEGIN
     RAISE EXCEPTION 'pay_batch_auth_start: suppress_remittances requires explicit user confirmation';
   END IF;
 
+  SELECT auth_request.id,
+         auth_request.state,
+         nullif(btrim(coalesce(auth_request.execution_intent_json->>'operation_id', '')), '') AS existing_operation_id,
+         nullif(btrim(coalesce(auth_request.execution_intent_json->>'idempotency_key', '')), '') AS existing_idempotency_key
+  INTO v_conflicting_auth_id,
+       v_conflicting_auth_state,
+       v_conflicting_auth_operation_id,
+       v_conflicting_auth_idempotency_key
+  FROM public.pay_batch_auth_requests AS auth_request
+  WHERE auth_request.pay_batch_id = p_pay_batch_id
+    AND auth_request.state IN ('AWAITING', 'PENDING_AUTHORISATION', 'AUTHORISED')
+    AND (
+      auth_request.state = 'PENDING_AUTHORISATION'
+      OR NOT (
+        (
+          p_operation_id IS NOT NULL
+          AND nullif(btrim(coalesce(auth_request.execution_intent_json->>'operation_id', '')), '') = p_operation_id::text
+        )
+        OR (
+          v_requested_idempotency_key IS NOT NULL
+          AND nullif(btrim(coalesce(auth_request.execution_intent_json->>'idempotency_key', '')), '') = v_requested_idempotency_key
+        )
+        OR (
+          nullif(btrim(coalesce(auth_request.execution_intent_json->>'operation_id', '')), '') IS NULL
+          AND nullif(btrim(coalesce(auth_request.execution_intent_json->>'idempotency_key', '')), '') IS NULL
+        )
+      )
+    )
+  ORDER BY auth_request.created_at_utc DESC NULLS LAST,
+           auth_request.id DESC
+  LIMIT 1;
+
+  IF v_conflicting_auth_id IS NOT NULL THEN
+    RAISE EXCEPTION '%', jsonb_build_object(
+      'error', 'PAY_BATCH_AUTH_START',
+      'code', 'AUTH_REQUEST_HELD_BY_PREVIOUS_OPERATION',
+      'message', 'An active authorisation request already belongs to another payment execution attempt or is in a non-reusable authorisation state. Review or reconcile that authorisation request before retrying.',
+      'pay_batch_id', p_pay_batch_id::text,
+      'auth_request_id', v_conflicting_auth_id::text,
+      'auth_request_state', v_conflicting_auth_state,
+      'auth_request_operation_id', v_conflicting_auth_operation_id,
+      'auth_request_idempotency_key_present', v_conflicting_auth_idempotency_key IS NOT NULL,
+      'operation_id', CASE WHEN p_operation_id IS NULL THEN NULL ELSE p_operation_id::text END,
+      'idempotency_key_present', v_requested_idempotency_key IS NOT NULL
+    )::text USING ERRCODE = 'P0001';
+  END IF;
+
   v_prepare_json := public.pay_batch_prepare(
     p_pay_batch_id => p_pay_batch_id,
     p_actor_user_id => p_actor_user_id,
@@ -16605,6 +16664,8 @@ BEGIN
   );
   v_ready := coalesce((v_prepare_json->>'ready')::boolean, false);
   v_blocker_count := coalesce(NULLIF(v_prepare_json->>'blocker_count', '')::integer, 0);
+  v_effective_freshness_result_hash := nullif(btrim(coalesce(p_freshness_result_hash, v_prepare_json #>> '{freshness,freshness_result_hash}', '')), '');
+  v_effective_freshness_scope_hash := nullif(btrim(coalesce(v_prepare_json #>> '{freshness,freshness_scope_hash}', '')), '');
 
   IF v_ready IS NOT TRUE THEN
     RAISE EXCEPTION '%', jsonb_build_object(
@@ -16645,7 +16706,7 @@ BEGIN
       RAISE EXCEPTION '%', jsonb_build_object(
         'error', 'PAY_BATCH_AUTH_START',
         'code', CASE WHEN COALESCE(v_provider_or_ambiguous_evidence_transfer_count, 0) > 0 THEN 'BANK_TRANSFER_PROVIDER_REVIEW_REQUIRED' ELSE 'NO_AUTHORISATION_READY_TRANSFERS' END,
-        'message', CASE WHEN COALESCE(v_provider_or_ambiguous_evidence_transfer_count, 0) > 0 THEN 'pay_batch_auth_start: one or more transfers have provider submission evidence or ambiguous provider state and cannot be authorised as fresh local transfers.' ELSE 'pay_batch_auth_start: no safe locally prepared transfers are available for authorisation.' END,
+        'message', CASE WHEN COALESCE(v_provider_or_ambiguous_evidence_transfer_count, 0) > 0 THEN 'One or more transfers have provider submission evidence or ambiguous provider state and must be reviewed before authorisation can continue.' ELSE 'No safe locally prepared transfers are available for authorisation.' END,
         'pay_batch_id', p_pay_batch_id::text,
         'pay_channel_scope', v_pay_channel_scope,
         'authorisation_ready_transfer_count', COALESCE(v_authorisation_ready_transfer_count, 0),
@@ -16660,9 +16721,9 @@ BEGIN
 
   v_execution_intent_json := jsonb_strip_nulls(jsonb_build_object(
     'operation_id', CASE WHEN p_operation_id IS NULL THEN NULL ELSE p_operation_id::text END,
-    'idempotency_key', nullif(btrim(coalesce(p_idempotency_key, '')), ''),
-    'freshness_result_hash', nullif(btrim(coalesce(p_freshness_result_hash, v_prepare_json #>> '{freshness,freshness_result_hash}', '')), ''),
-    'freshness_scope_hash', nullif(btrim(coalesce(v_prepare_json #>> '{freshness,freshness_scope_hash}', '')), ''),
+    'idempotency_key', v_requested_idempotency_key,
+    'freshness_result_hash', v_effective_freshness_result_hash,
+    'freshness_scope_hash', v_effective_freshness_scope_hash,
     'execution_mode', v_execution_mode,
     'payment_date', v_payment_date::text,
     'pay_channel_scope', v_pay_channel_scope,
@@ -16676,59 +16737,244 @@ BEGIN
     'external_settlement_comment', nullif(btrim(coalesce(p_external_settlement_comment, '')), '')
   ));
 
-  SELECT auth_request.id
-  INTO v_existing_auth_id
+  SELECT auth_request.id,
+         auth_request.state,
+         nullif(btrim(coalesce(auth_request.execution_intent_json->>'operation_id', '')), '') AS existing_operation_id,
+         nullif(btrim(coalesce(auth_request.execution_intent_json->>'idempotency_key', '')), '') AS existing_idempotency_key
+  INTO v_conflicting_auth_id,
+       v_conflicting_auth_state,
+       v_conflicting_auth_operation_id,
+       v_conflicting_auth_idempotency_key
+  FROM public.pay_batch_auth_requests AS auth_request
+  WHERE auth_request.pay_batch_id = p_pay_batch_id
+    AND auth_request.state IN ('AWAITING', 'PENDING_AUTHORISATION', 'AUTHORISED')
+    AND (
+      auth_request.state = 'PENDING_AUTHORISATION'
+      OR NOT (
+        (
+          p_operation_id IS NOT NULL
+          AND nullif(btrim(coalesce(auth_request.execution_intent_json->>'operation_id', '')), '') = p_operation_id::text
+        )
+        OR (
+          v_requested_idempotency_key IS NOT NULL
+          AND nullif(btrim(coalesce(auth_request.execution_intent_json->>'idempotency_key', '')), '') = v_requested_idempotency_key
+        )
+        OR (
+          nullif(btrim(coalesce(auth_request.execution_intent_json->>'operation_id', '')), '') IS NULL
+          AND nullif(btrim(coalesce(auth_request.execution_intent_json->>'idempotency_key', '')), '') IS NULL
+          AND upper(btrim(coalesce(auth_request.schedule_kind, ''))) = v_kind
+          AND (
+            v_kind <> 'SCHEDULED'
+            OR auth_request.scheduled_at_utc = v_scheduled_at_utc
+          )
+          AND (
+            (v_execution_mode NOT IN ('STANDARD_BANK', 'BANK') AND nullif(btrim(coalesce(auth_request.funding_account_ref, '')), '') IS NULL)
+            OR nullif(btrim(coalesce(auth_request.funding_account_ref, '')), '') = v_funding_account_ref
+          )
+          AND (
+            nullif(btrim(coalesce(auth_request.execution_intent_json->>'execution_mode', auth_request.execution_intent_json->>'mode', '')), '') IS NULL
+            OR upper(btrim(coalesce(auth_request.execution_intent_json->>'execution_mode', auth_request.execution_intent_json->>'mode', ''))) = v_execution_mode
+          )
+          AND (
+            nullif(btrim(coalesce(auth_request.execution_intent_json->>'pay_channel_scope', auth_request.execution_intent_json->>'payChannelScope', '')), '') IS NULL
+            OR upper(btrim(coalesce(auth_request.execution_intent_json->>'pay_channel_scope', auth_request.execution_intent_json->>'payChannelScope', ''))) = v_pay_channel_scope
+          )
+          AND (
+            nullif(btrim(coalesce(auth_request.execution_intent_json->>'schedule_kind', '')), '') IS NULL
+            OR upper(btrim(coalesce(auth_request.execution_intent_json->>'schedule_kind', ''))) = v_kind
+          )
+          AND (
+            nullif(btrim(coalesce(auth_request.execution_intent_json->>'payment_date', '')), '') IS NULL
+            OR nullif(btrim(coalesce(auth_request.execution_intent_json->>'payment_date', '')), '') = v_payment_date::text
+          )
+          AND (
+            nullif(btrim(coalesce(auth_request.execution_intent_json->>'funding_account_ref', '')), '') IS NULL
+            OR nullif(btrim(coalesce(auth_request.execution_intent_json->>'funding_account_ref', '')), '') = v_funding_account_ref
+          )
+          AND (
+            nullif(btrim(coalesce(auth_request.execution_intent_json->>'freshness_result_hash', '')), '') IS NULL
+            OR nullif(btrim(coalesce(auth_request.execution_intent_json->>'freshness_result_hash', '')), '') = v_effective_freshness_result_hash
+          )
+          AND (
+            nullif(btrim(coalesce(auth_request.execution_intent_json->>'freshness_scope_hash', '')), '') IS NULL
+            OR nullif(btrim(coalesce(auth_request.execution_intent_json->>'freshness_scope_hash', '')), '') = v_effective_freshness_scope_hash
+          )
+        )
+      )
+    )
+  ORDER BY auth_request.created_at_utc DESC NULLS LAST,
+           auth_request.id DESC
+  LIMIT 1;
+
+  IF v_conflicting_auth_id IS NOT NULL THEN
+    RAISE EXCEPTION '%', jsonb_build_object(
+      'error', 'PAY_BATCH_AUTH_START',
+      'code', 'AUTH_REQUEST_HELD_BY_PREVIOUS_OPERATION',
+      'message', 'An active authorisation request already belongs to another payment execution attempt, is in a non-reusable authorisation state, or has execution intent that is not safe to attach to this attempt. Review or reconcile that authorisation request before retrying.',
+      'pay_batch_id', p_pay_batch_id::text,
+      'auth_request_id', v_conflicting_auth_id::text,
+      'auth_request_state', v_conflicting_auth_state,
+      'auth_request_operation_id', v_conflicting_auth_operation_id,
+      'auth_request_idempotency_key_present', v_conflicting_auth_idempotency_key IS NOT NULL,
+      'operation_id', CASE WHEN p_operation_id IS NULL THEN NULL ELSE p_operation_id::text END,
+      'idempotency_key_present', v_requested_idempotency_key IS NOT NULL
+    )::text USING ERRCODE = 'P0001';
+  END IF;
+
+  SELECT auth_request.id,
+         auth_request.state,
+         coalesce(auth_request.execution_intent_json, '{}'::jsonb),
+         nullif(btrim(coalesce(auth_request.execution_intent_json->>'operation_id', '')), '') AS existing_operation_id,
+         nullif(btrim(coalesce(auth_request.execution_intent_json->>'idempotency_key', '')), '') AS existing_idempotency_key
+  INTO v_existing_auth_id,
+       v_existing_auth_state,
+       v_existing_auth_intent_json,
+       v_existing_auth_operation_id,
+       v_existing_auth_idempotency_key
   FROM public.pay_batch_auth_requests AS auth_request
   WHERE auth_request.pay_batch_id = p_pay_batch_id
     AND auth_request.state IN ('AWAITING', 'AUTHORISED')
+    AND (
+      (
+        p_operation_id IS NOT NULL
+        AND nullif(btrim(coalesce(auth_request.execution_intent_json->>'operation_id', '')), '') = p_operation_id::text
+      )
+      OR (
+        v_requested_idempotency_key IS NOT NULL
+        AND nullif(btrim(coalesce(auth_request.execution_intent_json->>'idempotency_key', '')), '') = v_requested_idempotency_key
+      )
+      OR (
+        nullif(btrim(coalesce(auth_request.execution_intent_json->>'operation_id', '')), '') IS NULL
+        AND nullif(btrim(coalesce(auth_request.execution_intent_json->>'idempotency_key', '')), '') IS NULL
+        AND upper(btrim(coalesce(auth_request.schedule_kind, ''))) = v_kind
+        AND (
+          v_kind <> 'SCHEDULED'
+          OR auth_request.scheduled_at_utc = v_scheduled_at_utc
+        )
+        AND (
+          (v_execution_mode NOT IN ('STANDARD_BANK', 'BANK') AND nullif(btrim(coalesce(auth_request.funding_account_ref, '')), '') IS NULL)
+          OR nullif(btrim(coalesce(auth_request.funding_account_ref, '')), '') = v_funding_account_ref
+        )
+        AND (
+          nullif(btrim(coalesce(auth_request.execution_intent_json->>'execution_mode', auth_request.execution_intent_json->>'mode', '')), '') IS NULL
+          OR upper(btrim(coalesce(auth_request.execution_intent_json->>'execution_mode', auth_request.execution_intent_json->>'mode', ''))) = v_execution_mode
+        )
+        AND (
+          nullif(btrim(coalesce(auth_request.execution_intent_json->>'pay_channel_scope', auth_request.execution_intent_json->>'payChannelScope', '')), '') IS NULL
+          OR upper(btrim(coalesce(auth_request.execution_intent_json->>'pay_channel_scope', auth_request.execution_intent_json->>'payChannelScope', ''))) = v_pay_channel_scope
+        )
+        AND (
+          nullif(btrim(coalesce(auth_request.execution_intent_json->>'schedule_kind', '')), '') IS NULL
+          OR upper(btrim(coalesce(auth_request.execution_intent_json->>'schedule_kind', ''))) = v_kind
+        )
+        AND (
+          nullif(btrim(coalesce(auth_request.execution_intent_json->>'payment_date', '')), '') IS NULL
+          OR nullif(btrim(coalesce(auth_request.execution_intent_json->>'payment_date', '')), '') = v_payment_date::text
+        )
+        AND (
+          nullif(btrim(coalesce(auth_request.execution_intent_json->>'funding_account_ref', '')), '') IS NULL
+          OR nullif(btrim(coalesce(auth_request.execution_intent_json->>'funding_account_ref', '')), '') = v_funding_account_ref
+        )
+        AND (
+          nullif(btrim(coalesce(auth_request.execution_intent_json->>'freshness_result_hash', '')), '') IS NULL
+          OR nullif(btrim(coalesce(auth_request.execution_intent_json->>'freshness_result_hash', '')), '') = v_effective_freshness_result_hash
+        )
+        AND (
+          nullif(btrim(coalesce(auth_request.execution_intent_json->>'freshness_scope_hash', '')), '') IS NULL
+          OR nullif(btrim(coalesce(auth_request.execution_intent_json->>'freshness_scope_hash', '')), '') = v_effective_freshness_scope_hash
+        )
+      )
+    )
   ORDER BY
     CASE
       WHEN p_operation_id IS NOT NULL
-       AND auth_request.execution_intent_json->>'operation_id' = p_operation_id::text THEN 0
-      WHEN nullif(btrim(coalesce(p_idempotency_key, '')), '') IS NOT NULL
-       AND auth_request.execution_intent_json->>'idempotency_key' = nullif(btrim(coalesce(p_idempotency_key, '')), '') THEN 1
-      WHEN auth_request.execution_intent_json->>'operation_id' IS NULL
-       AND auth_request.execution_intent_json->>'idempotency_key' IS NULL THEN 2
-      ELSE 3
+       AND nullif(btrim(coalesce(auth_request.execution_intent_json->>'operation_id', '')), '') = p_operation_id::text THEN 0
+      WHEN v_requested_idempotency_key IS NOT NULL
+       AND nullif(btrim(coalesce(auth_request.execution_intent_json->>'idempotency_key', '')), '') = v_requested_idempotency_key THEN 1
+      ELSE 2
     END,
-    auth_request.created_at_utc DESC,
+    auth_request.created_at_utc DESC NULLS LAST,
     auth_request.id DESC
   LIMIT 1;
 
   IF v_existing_auth_id IS NOT NULL THEN
     UPDATE public.pay_batch_auth_requests AS auth_request_update
-    SET execution_intent_json = jsonb_strip_nulls(
-          coalesce(auth_request_update.execution_intent_json, '{}'::jsonb)
-          || CASE
-               WHEN p_operation_id IS NOT NULL
-                AND nullif(btrim(coalesce(auth_request_update.execution_intent_json->>'operation_id', '')), '') IS NULL
-                 THEN jsonb_build_object('operation_id', p_operation_id::text)
-               ELSE '{}'::jsonb
-             END
-          || CASE
-               WHEN nullif(btrim(coalesce(p_idempotency_key, '')), '') IS NOT NULL
-                AND nullif(btrim(coalesce(auth_request_update.execution_intent_json->>'idempotency_key', '')), '') IS NULL
-                 THEN jsonb_build_object('idempotency_key', nullif(btrim(coalesce(p_idempotency_key, '')), ''))
-               ELSE '{}'::jsonb
-             END
-          || CASE
-               WHEN nullif(btrim(coalesce(p_freshness_result_hash, v_prepare_json #>> '{freshness,freshness_result_hash}', '')), '') IS NOT NULL
-                 THEN jsonb_build_object(
-                   'freshness_result_hash', nullif(btrim(coalesce(p_freshness_result_hash, v_prepare_json #>> '{freshness,freshness_result_hash}', '')), ''),
-                   'freshness_scope_hash', nullif(btrim(coalesce(v_prepare_json #>> '{freshness,freshness_scope_hash}', '')), '')
-                 )
-               ELSE '{}'::jsonb
-             END
-        )
+    SET required_quantity = CASE
+          WHEN v_existing_auth_operation_id IS NULL
+           AND v_existing_auth_idempotency_key IS NULL
+           AND auth_request_update.state = 'AWAITING' THEN v_required_quantity
+          ELSE auth_request_update.required_quantity
+        END,
+        schedule_kind = CASE
+          WHEN v_existing_auth_operation_id IS NULL
+           AND v_existing_auth_idempotency_key IS NULL THEN v_kind
+          ELSE auth_request_update.schedule_kind
+        END,
+        scheduled_at_utc = CASE
+          WHEN v_existing_auth_operation_id IS NULL
+           AND v_existing_auth_idempotency_key IS NULL THEN v_scheduled_at_utc
+          ELSE auth_request_update.scheduled_at_utc
+        END,
+        funding_account_ref = CASE
+          WHEN v_existing_auth_operation_id IS NULL
+           AND v_existing_auth_idempotency_key IS NULL THEN v_funding_account_ref
+          ELSE auth_request_update.funding_account_ref
+        END,
+        funds_warning_hours_json = CASE
+          WHEN v_existing_auth_operation_id IS NULL
+           AND v_existing_auth_idempotency_key IS NULL THEN v_warning_hours_json
+          ELSE auth_request_update.funds_warning_hours_json
+        END,
+        execution_intent_json = CASE
+          WHEN v_existing_auth_operation_id IS NULL AND v_existing_auth_idempotency_key IS NULL THEN
+            jsonb_strip_nulls(coalesce(auth_request_update.execution_intent_json, '{}'::jsonb) || v_execution_intent_json)
+          ELSE
+            jsonb_strip_nulls(
+              coalesce(auth_request_update.execution_intent_json, '{}'::jsonb)
+              || CASE
+                   WHEN p_operation_id IS NOT NULL
+                    AND nullif(btrim(coalesce(auth_request_update.execution_intent_json->>'operation_id', '')), '') IS NULL
+                     THEN jsonb_build_object('operation_id', p_operation_id::text)
+                   ELSE '{}'::jsonb
+                 END
+              || CASE
+                   WHEN v_requested_idempotency_key IS NOT NULL
+                    AND nullif(btrim(coalesce(auth_request_update.execution_intent_json->>'idempotency_key', '')), '') IS NULL
+                     THEN jsonb_build_object('idempotency_key', v_requested_idempotency_key)
+                   ELSE '{}'::jsonb
+                 END
+              || CASE
+                   WHEN v_effective_freshness_result_hash IS NOT NULL
+                     THEN jsonb_build_object(
+                       'freshness_result_hash', v_effective_freshness_result_hash,
+                       'freshness_scope_hash', v_effective_freshness_scope_hash
+                     )
+                   ELSE '{}'::jsonb
+                 END
+            )
+        END
     WHERE auth_request_update.id = v_existing_auth_id
     RETURNING auth_request_update.state,
               auth_request_update.execution_intent_json
     INTO v_auth_state,
          v_execution_intent_json;
 
-    UPDATE public.pay_batches AS batch_existing_auth_update
-    SET execution_intent_json = v_execution_intent_json
-    WHERE batch_existing_auth_update.id = p_pay_batch_id;
+    IF v_existing_auth_operation_id IS NULL AND v_existing_auth_idempotency_key IS NULL THEN
+      UPDATE public.pay_batches AS batch_existing_auth_update
+      SET schedule_kind = v_kind,
+          scheduled_at_utc = CASE WHEN v_kind = 'SCHEDULED' THEN v_scheduled_at_utc ELSE NULL END,
+          scheduled_by_user_id = CASE WHEN v_kind = 'SCHEDULED' THEN p_actor_user_id ELSE NULL END,
+          funding_account_ref = v_funding_account_ref,
+          funds_warning_hours_json = v_warning_hours_json,
+          authoritative_payment_date = v_payment_date,
+          authoritative_payment_date_source = 'PAY_BATCH_AUTH_START',
+          execution_intent_json = v_execution_intent_json
+      WHERE batch_existing_auth_update.id = p_pay_batch_id;
+    ELSE
+      UPDATE public.pay_batches AS batch_existing_auth_update
+      SET execution_intent_json = v_execution_intent_json
+      WHERE batch_existing_auth_update.id = p_pay_batch_id;
+    END IF;
 
     v_execution_mode := upper(btrim(coalesce(
       v_execution_intent_json->>'execution_mode',
@@ -16766,6 +17012,12 @@ BEGIN
       'next_required_phase', v_next_required_phase,
       'execution_mode', v_execution_mode,
       'schedule_kind', v_kind,
+      'auth_request_reuse_reason', CASE
+        WHEN p_operation_id IS NOT NULL AND v_existing_auth_operation_id = p_operation_id::text THEN 'SAME_OPERATION'
+        WHEN v_requested_idempotency_key IS NOT NULL AND v_existing_auth_idempotency_key = v_requested_idempotency_key THEN 'SAME_IDEMPOTENCY_KEY'
+        WHEN v_existing_auth_operation_id IS NULL AND v_existing_auth_idempotency_key IS NULL THEN 'UNOWNED_AUTH_REQUEST_ATTACHED'
+        ELSE 'SAFE_AUTH_REQUEST_REUSE'
+      END,
       'execution_intent_json', v_execution_intent_json
     );
   END IF;
@@ -16868,7 +17120,7 @@ BEGIN
     'auth_request_id', v_auth_id::text,
     'auth_state', v_auth_state,
     'operation_id', CASE WHEN p_operation_id IS NULL THEN NULL ELSE p_operation_id::text END,
-    'idempotency_key', nullif(btrim(coalesce(p_idempotency_key, '')), ''),
+    'idempotency_key', v_requested_idempotency_key,
     'freshness_result_hash', v_execution_intent_json->>'freshness_result_hash',
     'freshness_scope_hash', v_execution_intent_json->>'freshness_scope_hash',
     'next_required_phase', v_next_required_phase,
@@ -16885,7 +17137,6 @@ BEGIN
   );
 END;
 $function$;
-
 
 
 
