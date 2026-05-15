@@ -4209,6 +4209,8 @@ $function$;
 
 DROP FUNCTION IF EXISTS public.pay_workbench_enqueue_candidate_refresh_many(uuid, jsonb, text, uuid);
 
+
+
 CREATE OR REPLACE FUNCTION public.pay_workbench_enqueue_candidate_refresh_many(
   p_session_id uuid,
   p_candidate_ids jsonb,
@@ -4234,6 +4236,13 @@ DECLARE
   v_required_projection_version integer := 0;
   v_required_hidden_recovery_template_projection_version integer := 0;
   v_requires_hidden_recovery_templates boolean := false;
+  v_reason text := COALESCE(NULLIF(BTRIM(COALESCE(p_reason, '')), ''), 'BULK_SESSION_CANDIDATE_RECOMPUTE');
+  v_reason_upper text := UPPER(COALESCE(NULLIF(BTRIM(COALESCE(p_reason, '')), ''), 'BULK_SESSION_CANDIDATE_RECOMPUTE'));
+  v_is_batch_mutation boolean := false;
+  v_candidate_id uuid := NULL::uuid;
+  v_snapshot_refresh jsonb := '{}'::jsonb;
+  v_snapshot_refresh_job_ids_jsonb jsonb := '[]'::jsonb;
+  v_session_recompute_job_ids_jsonb jsonb := '[]'::jsonb;
 BEGIN
   IF p_session_id IS NULL THEN
     RAISE EXCEPTION 'session_id is required';
@@ -4291,6 +4300,79 @@ BEGIN
     RAISE EXCEPTION 'one or more candidate ids do not belong to session % scope', p_session_id;
   END IF;
 
+  v_is_batch_mutation := v_reason_upper IN ('DRAFT_CREATED', 'DRAFT_CANCELLED', 'PAY_BATCH_CANCELLED', 'BATCH_MUTATION');
+
+  IF v_is_batch_mutation THEN
+    FOREACH v_candidate_id IN ARRAY v_candidate_ids
+    LOOP
+      PERFORM public._change_bump('pay_candidate:' || v_candidate_id::text);
+
+      IF v_session_row.source_snapshot_run_id IS NOT NULL THEN
+        v_snapshot_refresh := public.pay_workbench_enqueue_candidate_refresh(
+          p_snapshot_run_id => v_session_row.source_snapshot_run_id,
+          p_candidate_id => v_candidate_id,
+          p_reason => v_reason,
+          p_actor_user_id => p_actor_user_id,
+          p_payload_json => jsonb_build_object(
+            'source_session_id', p_session_id::text,
+            'source_session_signature', v_session_row.session_signature,
+            'source_session_version', COALESCE(v_session_row.version, 0),
+            'mutation_reason', v_reason,
+            'refresh_reason', v_reason,
+            'requires_new_session', true,
+            'source_session_discard_required', true
+          )
+        );
+
+        IF NULLIF(BTRIM(COALESCE(v_snapshot_refresh->>'job_id', '')), '') IS NOT NULL THEN
+          v_snapshot_refresh_job_ids_jsonb := v_snapshot_refresh_job_ids_jsonb || to_jsonb(v_snapshot_refresh->>'job_id');
+        END IF;
+      END IF;
+    END LOOP;
+
+    SELECT COALESCE(jsonb_agg(to_jsonb(candidate_id_text.candidate_id) ORDER BY candidate_id_text.candidate_id), '[]'::jsonb)
+    INTO v_candidate_ids_jsonb
+    FROM (
+      SELECT unnest(v_candidate_ids)::text AS candidate_id
+    ) AS candidate_id_text;
+
+    UPDATE public.banking_pay_workbench_session_candidate_state AS state_row
+    SET status = 'PENDING',
+        effective_candidate_fragment_json = '{}'::jsonb,
+        effective_summary_fragment_json = '{}'::jsonb,
+        effective_paye_candidate_json = NULL::jsonb,
+        effective_non_paye_payee_json = NULL::jsonb,
+        effective_payees_json = '[]'::jsonb,
+        effective_case_resolution_states_json = '[]'::jsonb,
+        effective_canonical_preview_lines_json = '[]'::jsonb,
+        updated_at_utc = v_now,
+        last_recomputed_at_utc = NULL::timestamptz,
+        last_error_json = NULL::jsonb
+    WHERE state_row.session_id = p_session_id
+      AND state_row.candidate_id = ANY(v_candidate_ids);
+
+    RETURN jsonb_build_object(
+      'ok', true,
+      'session_id', p_session_id::text,
+      'source_session_id', p_session_id::text,
+      'snapshot_run_id', CASE WHEN v_session_row.source_snapshot_run_id IS NULL THEN NULL ELSE v_session_row.source_snapshot_run_id::text END,
+      'source_snapshot_run_id', CASE WHEN v_session_row.source_snapshot_run_id IS NULL THEN NULL ELSE v_session_row.source_snapshot_run_id::text END,
+      'reason', v_reason,
+      'mutation_reason', v_reason,
+      'requires_new_session', true,
+      'source_session_discard_required', true,
+      'dirty_candidate_ids', COALESCE(v_candidate_ids_jsonb, '[]'::jsonb),
+      'candidate_ids', COALESCE(v_candidate_ids_jsonb, '[]'::jsonb),
+      'candidate_count', COALESCE(array_length(v_candidate_ids, 1), 0),
+      'snapshot_refresh_job_ids', COALESCE(v_snapshot_refresh_job_ids_jsonb, '[]'::jsonb),
+      'refresh_job_ids', COALESCE(v_snapshot_refresh_job_ids_jsonb, '[]'::jsonb),
+      'job_ids', COALESCE(v_snapshot_refresh_job_ids_jsonb, '[]'::jsonb),
+      'session_recompute_job_ids', COALESCE(v_session_recompute_job_ids_jsonb, '[]'::jsonb),
+      'queued_count', COALESCE(jsonb_array_length(v_snapshot_refresh_job_ids_jsonb), 0),
+      'reused_count', 0
+    );
+  END IF;
+
   v_projection_contract_json := public._pay_workbench_candidate_projection_contract();
   v_required_projection_version := COALESCE(
     CASE
@@ -4336,7 +4418,7 @@ BEGIN
         || ':pv' || v_required_projection_version::text
         || ':ht' || v_required_hidden_recovery_template_projection_version::text AS dedupe_key,
       jsonb_build_object(
-        'reason', COALESCE(NULLIF(BTRIM(COALESCE(p_reason, '')), ''), 'BULK_SESSION_CANDIDATE_RECOMPUTE'),
+        'reason', v_reason,
         'actor_user_id', p_actor_user_id::text,
         'session_id', p_session_id::text,
         'session_signature', v_session_row.session_signature,
@@ -4347,7 +4429,7 @@ BEGIN
         'projection_version', v_required_projection_version,
         'hidden_recovery_template_projection_version', v_required_hidden_recovery_template_projection_version,
         'requires_hidden_recovery_templates', v_requires_hidden_recovery_templates,
-        'refresh_reason', COALESCE(NULLIF(BTRIM(COALESCE(p_reason, '')), ''), 'BULK_SESSION_CANDIDATE_RECOMPUTE'),
+        'refresh_reason', v_reason,
         'job_type', 'SESSION_CANDIDATE_RECOMPUTE'
       ) AS payload_json
     FROM candidate_scope
@@ -4484,10 +4566,21 @@ BEGIN
     'queued_count', COALESCE(v_queued_count, 0),
     'reused_count', COALESCE(v_reused_count, 0),
     'candidate_ids', COALESCE(v_candidate_ids_jsonb, '[]'::jsonb),
-    'job_ids', COALESCE(v_job_ids_jsonb, '[]'::jsonb)
+    'job_ids', COALESCE(v_job_ids_jsonb, '[]'::jsonb),
+    'session_recompute_job_ids', COALESCE(v_job_ids_jsonb, '[]'::jsonb),
+    'requires_new_session', false,
+    'source_session_discard_required', false
   );
 END;
 $function$;
+
+
+
+
+
+
+
+
 DROP FUNCTION IF EXISTS public.pay_workbench_session_get_preview_page(uuid, text, jsonb, integer);
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_session_get_preview_page(
