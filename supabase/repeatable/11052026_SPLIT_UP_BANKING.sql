@@ -10893,4 +10893,523 @@ begin
         coalesce(v_pay_channel_count, 0);
 end;
 $function$;
+CREATE OR REPLACE FUNCTION public.pay_bank_transfer_execution_classify(
+  p_pay_batch_id uuid,
+  p_pay_channel_scope text DEFAULT 'ALL'::text,
+  p_operation_id uuid DEFAULT NULL::uuid,
+  p_include_unscoped_transfers boolean DEFAULT true
+)
+RETURNS TABLE (
+  pay_bank_transfer_id uuid,
+  pay_batch_id uuid,
+  pay_channel text,
+  transfer_group_key text,
+  scope_id uuid,
+  scope_operation_id uuid,
+  scope_status text,
+  scope_request_id text,
+  status_upper text,
+  rail_state_upper text,
+  amount numeric,
+  currency text,
+  has_route_ready boolean,
+  has_local_prepare_identity boolean,
+  has_provider_submission_evidence boolean,
+  has_provider_event_evidence boolean,
+  has_provider_attempt_without_external_id boolean,
+  has_operation_submit_attempt boolean,
+  has_ambiguous_external_evidence boolean,
+  is_failed_or_blocked boolean,
+  is_terminal_or_completed boolean,
+  evidence_classification text,
+  is_authorisation_ready boolean,
+  is_unattempted_submit_eligible boolean,
+  is_safe_local_cleanup boolean,
+  unsafe_reason text
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_scope text := 'ALL';
+BEGIN
+  v_scope := upper(btrim(coalesce(p_pay_channel_scope, 'ALL')));
+  IF v_scope = '' THEN
+    v_scope := 'ALL';
+  END IF;
+
+  RETURN QUERY
+  WITH batch_context AS (
+    SELECT
+      batch_row.id AS batch_id,
+      batch_row.bulk_reference AS batch_bulk_reference,
+      upper(btrim(coalesce(batch_row.execution_commit_state, 'NOT_SUBMITTED'))) AS execution_commit_state_upper,
+      batch_row.execution_commit_ref AS execution_commit_ref,
+      batch_row.execution_committed_at_utc AS execution_committed_at_utc,
+      (
+        upper(btrim(coalesce(batch_row.execution_commit_state, 'NOT_SUBMITTED'))) <> 'NOT_SUBMITTED'
+        OR nullif(btrim(coalesce(batch_row.execution_commit_ref, '')), '') IS NOT NULL
+        OR batch_row.execution_committed_at_utc IS NOT NULL
+      ) AS batch_execution_boundary_crossed
+    FROM public.pay_batches AS batch_row
+    WHERE batch_row.id = p_pay_batch_id
+  ), transfer_source AS (
+    SELECT
+      transfer_row.id AS transfer_id,
+      transfer_row.pay_batch_id AS transfer_pay_batch_id,
+      transfer_row.pay_channel AS transfer_pay_channel,
+      transfer_row.transfer_group_key AS transfer_group_key,
+      transfer_row.status AS transfer_status,
+      transfer_row.rail_state AS transfer_rail_state,
+      transfer_row.amount AS transfer_amount,
+      transfer_row.currency AS transfer_currency,
+      transfer_row.payee_name AS transfer_payee_name,
+      transfer_row.sort_code AS transfer_sort_code,
+      transfer_row.account_number AS transfer_account_number,
+      transfer_row.account_type AS transfer_account_type,
+      transfer_row.payment_reference AS transfer_payment_reference,
+      transfer_row.request_id AS transfer_request_id,
+      transfer_row.rail_tx_id AS transfer_rail_tx_id,
+      transfer_row.rail_meta_json AS transfer_rail_meta_json,
+      transfer_row.completed_at_utc AS transfer_completed_at_utc,
+      transfer_row.failed_reason AS transfer_failed_reason,
+      transfer_row.bank_details_hash_snapshot AS transfer_bank_details_hash_snapshot,
+      transfer_row.payee_entity_kind AS transfer_payee_entity_kind,
+      transfer_row.payee_entity_id AS transfer_payee_entity_id,
+      transfer_row.grouping_mode_used AS transfer_grouping_mode_used,
+      transfer_row.week_ending_bucket AS transfer_week_ending_bucket,
+      scope_pick.scope_id,
+      scope_pick.scope_operation_id,
+      scope_pick.scope_status,
+      scope_pick.scope_request_id,
+      scope_pick.scope_payment_reference,
+      scope_pick.scope_currency,
+      scope_pick.scope_amount,
+      scope_pick.scope_payee_name,
+      scope_pick.scope_sort_code,
+      scope_pick.scope_account_number,
+      scope_pick.scope_account_type,
+      scope_pick.scope_bank_details_hash_snapshot
+    FROM public.pay_bank_transfers AS transfer_row
+    JOIN batch_context AS batch_context_row
+      ON batch_context_row.batch_id = transfer_row.pay_batch_id
+    LEFT JOIN LATERAL (
+      SELECT
+        scope_row.id AS scope_id,
+        scope_row.operation_id AS scope_operation_id,
+        scope_row.status AS scope_status,
+        scope_row.request_id AS scope_request_id,
+        scope_row.payment_reference AS scope_payment_reference,
+        scope_row.currency AS scope_currency,
+        scope_row.amount AS scope_amount,
+        scope_row.payee_name AS scope_payee_name,
+        scope_row.sort_code AS scope_sort_code,
+        scope_row.account_number AS scope_account_number,
+        scope_row.account_type AS scope_account_type,
+        scope_row.bank_details_hash_snapshot AS scope_bank_details_hash_snapshot
+      FROM public.banking_pay_operation_transfer_scope AS scope_row
+      WHERE scope_row.pay_batch_id = transfer_row.pay_batch_id
+        AND scope_row.pay_channel = transfer_row.pay_channel
+        AND (
+          scope_row.pay_bank_transfer_id = transfer_row.id
+          OR (
+            scope_row.pay_bank_transfer_id IS NULL
+            AND nullif(btrim(coalesce(scope_row.transfer_group_key, '')), '') IS NOT NULL
+            AND scope_row.transfer_group_key = transfer_row.transfer_group_key
+          )
+        )
+      ORDER BY
+        CASE WHEN p_operation_id IS NOT NULL AND scope_row.operation_id = p_operation_id THEN 0 ELSE 1 END,
+        CASE WHEN scope_row.pay_bank_transfer_id = transfer_row.id THEN 0 ELSE 1 END,
+        scope_row.updated_at_utc DESC NULLS LAST,
+        scope_row.created_at_utc DESC NULLS LAST,
+        scope_row.id DESC
+      LIMIT 1
+    ) AS scope_pick ON true
+    WHERE transfer_row.pay_batch_id = p_pay_batch_id
+      AND (v_scope IN ('ALL', 'ANY', '*') OR upper(btrim(coalesce(transfer_row.pay_channel, ''))) = v_scope)
+      AND (
+        coalesce(p_include_unscoped_transfers, true) IS TRUE
+        OR p_operation_id IS NULL
+        OR scope_pick.scope_operation_id = p_operation_id
+        OR btrim(coalesce(transfer_row.rail_meta_json #>> '{operation_id}', '')) = p_operation_id::text
+        OR btrim(coalesce(transfer_row.rail_meta_json #>> '{created_by_operation_id}', '')) = p_operation_id::text
+        OR btrim(coalesce(transfer_row.rail_meta_json #>> '{payment_execute_operation_id}', '')) = p_operation_id::text
+      )
+  ), scope_without_transfer_source AS (
+    SELECT
+      NULL::uuid AS transfer_id,
+      scope_row.pay_batch_id AS transfer_pay_batch_id,
+      scope_row.pay_channel AS transfer_pay_channel,
+      scope_row.transfer_group_key AS transfer_group_key,
+      NULL::text AS transfer_status,
+      NULL::text AS transfer_rail_state,
+      scope_row.amount AS transfer_amount,
+      scope_row.currency AS transfer_currency,
+      scope_row.payee_name AS transfer_payee_name,
+      scope_row.sort_code AS transfer_sort_code,
+      scope_row.account_number AS transfer_account_number,
+      scope_row.account_type AS transfer_account_type,
+      scope_row.payment_reference AS transfer_payment_reference,
+      scope_row.request_id AS transfer_request_id,
+      NULL::text AS transfer_rail_tx_id,
+      '{}'::jsonb AS transfer_rail_meta_json,
+      NULL::timestamptz AS transfer_completed_at_utc,
+      NULL::text AS transfer_failed_reason,
+      scope_row.bank_details_hash_snapshot AS transfer_bank_details_hash_snapshot,
+      scope_row.payee_entity_kind AS transfer_payee_entity_kind,
+      scope_row.payee_entity_id AS transfer_payee_entity_id,
+      scope_row.grouping_mode_used AS transfer_grouping_mode_used,
+      scope_row.week_ending_bucket AS transfer_week_ending_bucket,
+      scope_row.id AS scope_id,
+      scope_row.operation_id AS scope_operation_id,
+      scope_row.status AS scope_status,
+      scope_row.request_id AS scope_request_id,
+      scope_row.payment_reference AS scope_payment_reference,
+      scope_row.currency AS scope_currency,
+      scope_row.amount AS scope_amount,
+      scope_row.payee_name AS scope_payee_name,
+      scope_row.sort_code AS scope_sort_code,
+      scope_row.account_number AS scope_account_number,
+      scope_row.account_type AS scope_account_type,
+      scope_row.bank_details_hash_snapshot AS scope_bank_details_hash_snapshot
+    FROM public.banking_pay_operation_transfer_scope AS scope_row
+    JOIN batch_context AS batch_context_row
+      ON batch_context_row.batch_id = scope_row.pay_batch_id
+    WHERE scope_row.pay_batch_id = p_pay_batch_id
+      AND (v_scope IN ('ALL', 'ANY', '*') OR upper(btrim(coalesce(scope_row.pay_channel, ''))) = v_scope)
+      AND (p_operation_id IS NULL OR scope_row.operation_id = p_operation_id)
+      AND NOT EXISTS (
+        SELECT 1
+        FROM public.pay_bank_transfers AS transfer_row
+        WHERE transfer_row.pay_batch_id = scope_row.pay_batch_id
+          AND transfer_row.pay_channel = scope_row.pay_channel
+          AND (
+            transfer_row.id = scope_row.pay_bank_transfer_id
+            OR (
+              scope_row.pay_bank_transfer_id IS NULL
+              AND nullif(btrim(coalesce(scope_row.transfer_group_key, '')), '') IS NOT NULL
+              AND transfer_row.transfer_group_key = scope_row.transfer_group_key
+            )
+          )
+      )
+  ), combined_source AS (
+    SELECT transfer_source.*
+    FROM transfer_source
+    UNION ALL
+    SELECT scope_without_transfer_source.*
+    FROM scope_without_transfer_source
+  ), normalised_rows AS (
+    SELECT
+      combined_source.transfer_id,
+      combined_source.transfer_pay_batch_id,
+      combined_source.transfer_pay_channel,
+      combined_source.transfer_group_key,
+      combined_source.scope_id,
+      combined_source.scope_operation_id,
+      combined_source.scope_status,
+      combined_source.scope_request_id,
+      upper(btrim(coalesce(combined_source.transfer_status, ''))) AS status_upper,
+      upper(btrim(coalesce(combined_source.transfer_rail_state, ''))) AS rail_state_upper,
+      combined_source.transfer_amount,
+      combined_source.transfer_currency,
+      combined_source.transfer_payee_name,
+      combined_source.transfer_sort_code,
+      combined_source.transfer_account_number,
+      combined_source.transfer_payment_reference,
+      combined_source.transfer_request_id,
+      combined_source.transfer_rail_tx_id,
+      coalesce(combined_source.transfer_rail_meta_json, '{}'::jsonb) AS transfer_rail_meta_json,
+      combined_source.transfer_completed_at_utc,
+      combined_source.transfer_failed_reason,
+      combined_source.transfer_bank_details_hash_snapshot,
+      combined_source.transfer_payee_entity_kind,
+      combined_source.transfer_payee_entity_id,
+      batch_context_row.batch_bulk_reference,
+      batch_context_row.batch_execution_boundary_crossed,
+      ARRAY_REMOVE(ARRAY[
+        combined_source.transfer_id::text,
+        NULLIF(btrim(coalesce(combined_source.transfer_request_id, '')), ''),
+        NULLIF(btrim(coalesce(combined_source.transfer_payment_reference, '')), ''),
+        NULLIF(btrim(coalesce(combined_source.scope_request_id, '')), ''),
+        NULLIF(btrim(coalesce(combined_source.scope_payment_reference, '')), ''),
+        NULLIF(btrim(coalesce(batch_context_row.batch_bulk_reference, '')), ''),
+        NULLIF(btrim(coalesce(combined_source.transfer_group_key, '')), ''),
+        NULLIF(btrim(coalesce(combined_source.transfer_rail_meta_json #>> '{request_id}', '')), ''),
+        NULLIF(btrim(coalesce(combined_source.transfer_rail_meta_json #>> '{idempotency_key}', '')), ''),
+        NULLIF(btrim(coalesce(combined_source.transfer_rail_meta_json #>> '{payment_reference}', '')), ''),
+        NULLIF(btrim(coalesce(combined_source.transfer_rail_meta_json #>> '{bulk_reference}', '')), '')
+      ]::text[], NULL::text) AS local_identity_values
+    FROM combined_source
+    JOIN batch_context AS batch_context_row
+      ON batch_context_row.batch_id = combined_source.transfer_pay_batch_id
+  ), classified_rows AS (
+    SELECT
+      normalised_rows.*,
+      (
+        coalesce(normalised_rows.transfer_amount, 0) > 0
+        AND nullif(btrim(coalesce(normalised_rows.transfer_currency, '')), '') IS NOT NULL
+        AND nullif(btrim(coalesce(normalised_rows.transfer_payee_name, '')), '') IS NOT NULL
+        AND nullif(btrim(coalesce(normalised_rows.transfer_sort_code, '')), '') IS NOT NULL
+        AND nullif(btrim(coalesce(normalised_rows.transfer_account_number, '')), '') IS NOT NULL
+      ) AS calc_has_route_ready,
+      (
+        nullif(btrim(coalesce(normalised_rows.transfer_request_id, '')), '') IS NOT NULL
+        OR nullif(btrim(coalesce(normalised_rows.transfer_payment_reference, '')), '') IS NOT NULL
+        OR nullif(btrim(coalesce(normalised_rows.scope_request_id, '')), '') IS NOT NULL
+        OR nullif(btrim(coalesce(normalised_rows.transfer_rail_meta_json #>> '{request_id}', '')), '') IS NOT NULL
+        OR nullif(btrim(coalesce(normalised_rows.transfer_rail_meta_json #>> '{idempotency_key}', '')), '') IS NOT NULL
+        OR nullif(btrim(coalesce(normalised_rows.transfer_rail_meta_json #>> '{payment_reference}', '')), '') IS NOT NULL
+      ) AS calc_has_local_prepare_identity,
+      EXISTS (
+        SELECT 1
+        FROM public.pay_bank_transfer_events AS event_row
+        WHERE event_row.pay_bank_transfer_id = normalised_rows.transfer_id
+          AND (
+            upper(btrim(coalesce(event_row.event_source, ''))) IN ('PROVIDER_RESPONSE', 'PROVIDER_POLL', 'PROVIDER_WEBHOOK', 'WEBHOOK', 'POLL', 'RAIL_PROVIDER', 'PROVIDER', 'PROVIDER_SETTLEMENT')
+            OR nullif(btrim(coalesce(event_row.provider_event_id, '')), '') IS NOT NULL
+            OR nullif(btrim(coalesce(event_row.provider_reference, '')), '') IS NOT NULL
+            OR EXISTS (
+              SELECT 1
+              FROM (VALUES
+                (event_row.raw_payload #>> '{provider_event_id}'),
+                (event_row.raw_payload #>> '{provider_reference}'),
+                (event_row.raw_payload #>> '{provider_submission_id}'),
+                (event_row.raw_payload #>> '{submission_id}'),
+                (event_row.raw_payload #>> '{rail_submission_id}'),
+                (event_row.raw_payload #>> '{provider_payment_id}'),
+                (event_row.raw_payload #>> '{payment_id}'),
+                (event_row.raw_payload #>> '{external_payment_id}'),
+                (event_row.raw_payload #>> '{revolut_payment_id}'),
+                (event_row.raw_payload #>> '{provider_transfer_id}'),
+                (event_row.raw_payload #>> '{transfer_id}'),
+                (event_row.raw_payload #>> '{external_transfer_id}'),
+                (event_row.raw_payload #>> '{provider_transaction_id}'),
+                (event_row.raw_payload #>> '{transaction_id}')
+              ) AS provider_identifier(identifier_value)
+              WHERE nullif(btrim(coalesce(provider_identifier.identifier_value, '')), '') IS NOT NULL
+                AND NOT (nullif(btrim(coalesce(provider_identifier.identifier_value, '')), '') = ANY(normalised_rows.local_identity_values))
+            )
+          )
+      ) AS calc_has_provider_event_evidence,
+      EXISTS (
+        SELECT 1
+        FROM public.pay_bank_transfer_events AS event_row
+        WHERE event_row.pay_bank_transfer_id = normalised_rows.transfer_id
+          AND (
+            upper(btrim(coalesce(event_row.mapping_status, ''))) IN ('AMBIGUOUS', 'UNMATCHED', 'NO_MATCH', 'MULTIPLE_MATCHES')
+            OR upper(btrim(coalesce(event_row.normalised_state, ''))) IN ('UNKNOWN', 'TIMEOUT', 'TIMED_OUT', 'PENDING_REVIEW')
+            OR upper(btrim(coalesce(event_row.provider_state, ''))) IN ('UNKNOWN', 'TIMEOUT', 'TIMED_OUT', 'PENDING_REVIEW')
+          )
+      ) AS calc_has_ambiguous_event,
+      EXISTS (
+        SELECT 1
+        FROM public.banking_pay_operation_chunks AS chunk_row
+        JOIN public.banking_pay_operations AS chunk_operation_row
+          ON chunk_operation_row.id = chunk_row.operation_id
+        WHERE chunk_operation_row.pay_batch_id = p_pay_batch_id
+          AND chunk_row.phase = 'SUBMIT_PROVIDER_TRANSFERS'
+          AND chunk_row.chunk_type = 'TRANSFER_SUBMIT'
+          AND chunk_row.status IN ('RUNNING', 'COMPLETE')
+          AND normalised_rows.transfer_id IS NOT NULL
+          AND position(lower(normalised_rows.transfer_id::text) in lower(coalesce(chunk_row.payload_json::text, '') || coalesce(chunk_row.result_json::text, ''))) > 0
+      ) AS calc_has_operation_submit_attempt,
+      EXISTS (
+        SELECT 1
+        FROM (VALUES
+          (normalised_rows.transfer_rail_meta_json #>> '{rail_tx_id}'),
+          (normalised_rows.transfer_rail_meta_json #>> '{provider_event_id}'),
+          (normalised_rows.transfer_rail_meta_json #>> '{provider_reference}'),
+          (normalised_rows.transfer_rail_meta_json #>> '{provider_submission_id}'),
+          (normalised_rows.transfer_rail_meta_json #>> '{submission_id}'),
+          (normalised_rows.transfer_rail_meta_json #>> '{rail_submission_id}'),
+          (normalised_rows.transfer_rail_meta_json #>> '{provider_payment_id}'),
+          (normalised_rows.transfer_rail_meta_json #>> '{payment_id}'),
+          (normalised_rows.transfer_rail_meta_json #>> '{external_payment_id}'),
+          (normalised_rows.transfer_rail_meta_json #>> '{revolut_payment_id}'),
+          (normalised_rows.transfer_rail_meta_json #>> '{provider_transfer_id}'),
+          (normalised_rows.transfer_rail_meta_json #>> '{transfer_id}'),
+          (normalised_rows.transfer_rail_meta_json #>> '{external_transfer_id}'),
+          (normalised_rows.transfer_rail_meta_json #>> '{provider_transaction_id}'),
+          (normalised_rows.transfer_rail_meta_json #>> '{transaction_id}'),
+          (normalised_rows.transfer_rail_meta_json #>> '{external_id}'),
+          (normalised_rows.transfer_rail_meta_json #>> '{provider_id}'),
+          (normalised_rows.transfer_rail_meta_json #>> '{bank_transfer_id}')
+        ) AS rail_identifier(identifier_value)
+        WHERE nullif(btrim(coalesce(rail_identifier.identifier_value, '')), '') IS NOT NULL
+          AND NOT (nullif(btrim(coalesce(rail_identifier.identifier_value, '')), '') = ANY(normalised_rows.local_identity_values))
+      ) AS calc_has_non_local_rail_meta_identifier,
+      (
+        nullif(btrim(coalesce(normalised_rows.transfer_rail_tx_id, '')), '') IS NOT NULL
+        AND NOT (nullif(btrim(coalesce(normalised_rows.transfer_rail_tx_id, '')), '') = ANY(normalised_rows.local_identity_values))
+      ) AS calc_has_non_local_rail_tx_id,
+      (
+        lower(btrim(coalesce(normalised_rows.transfer_rail_meta_json #>> '{provider_attempt_without_external_id}', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+        OR lower(btrim(coalesce(normalised_rows.transfer_rail_meta_json #>> '{last_update_provider_source}', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+      ) AS calc_has_provider_attempt_without_external_id,
+      (
+        lower(btrim(coalesce(normalised_rows.transfer_rail_meta_json #>> '{last_update_provider_evidence}', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+        OR lower(btrim(coalesce(normalised_rows.transfer_rail_meta_json #>> '{last_update_provider_source}', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+      ) AS calc_has_provider_source_flag,
+      (
+        normalised_rows.status_upper IN ('FAILED', 'REJECTED', 'DECLINED', 'BLOCKED', 'ERROR')
+        OR normalised_rows.rail_state_upper IN ('FAILED', 'REJECTED', 'DECLINED', 'BLOCKED', 'ERROR')
+        OR nullif(btrim(coalesce(normalised_rows.transfer_failed_reason, '')), '') IS NOT NULL
+      ) AS calc_is_failed_or_blocked,
+      (
+        normalised_rows.status_upper IN ('COMPLETED', 'COMMITTED', 'SETTLED', 'PAID', 'EXECUTED', 'CANCELLED', 'CANCELED', 'RETURNED', 'REVERTED')
+        OR normalised_rows.rail_state_upper IN ('COMPLETED', 'COMMITTED', 'SETTLED', 'PAID', 'EXECUTED', 'CANCELLED', 'CANCELED', 'RETURNED', 'REVERTED')
+        OR normalised_rows.transfer_completed_at_utc IS NOT NULL
+      ) AS calc_is_terminal_or_completed,
+      (
+        normalised_rows.status_upper IN ('SUBMITTED', 'QUEUED', 'ACCEPTED', 'SENT', 'PROCESSING', 'IN_FLIGHT', 'PENDING_SETTLEMENT', 'PENDING_CONFIRMATION', 'PENDING_SUBMISSION', 'COMPLETED', 'COMMITTED', 'SETTLED', 'PAID', 'EXECUTED', 'RETURNED', 'REVERTED')
+        OR normalised_rows.rail_state_upper IN ('SUBMITTED', 'QUEUED', 'ACCEPTED', 'SENT', 'PROCESSING', 'IN_FLIGHT', 'PENDING_SETTLEMENT', 'PENDING_CONFIRMATION', 'PENDING_SUBMISSION', 'COMPLETED', 'COMMITTED', 'SETTLED', 'PAID', 'EXECUTED', 'RETURNED', 'REVERTED')
+      ) AS calc_has_provider_like_state,
+      (
+        normalised_rows.status_upper IN ('UNKNOWN', 'TIMEOUT', 'TIMED_OUT', 'PENDING_REVIEW')
+        OR normalised_rows.rail_state_upper IN ('UNKNOWN', 'TIMEOUT', 'TIMED_OUT', 'PENDING_REVIEW')
+      ) AS calc_has_unknown_or_review_state,
+      (
+        p_operation_id IS NOT NULL
+        AND (
+          normalised_rows.scope_operation_id = p_operation_id
+          OR btrim(coalesce(normalised_rows.transfer_rail_meta_json #>> '{operation_id}', '')) = p_operation_id::text
+          OR btrim(coalesce(normalised_rows.transfer_rail_meta_json #>> '{created_by_operation_id}', '')) = p_operation_id::text
+          OR btrim(coalesce(normalised_rows.transfer_rail_meta_json #>> '{payment_execute_operation_id}', '')) = p_operation_id::text
+        )
+      ) AS calc_is_operation_owned,
+      EXISTS (
+        SELECT 1
+        FROM public.banking_pay_operations AS operation_row
+        WHERE operation_row.id = normalised_rows.scope_operation_id
+          AND operation_row.status IN ('FAILED', 'CANCELLED', 'CANCELED', 'REVIEW_REQUIRED')
+      ) AS calc_scope_owner_is_terminal_cleanup_candidate
+    FROM normalised_rows
+  ), labelled_rows AS (
+    SELECT
+      classified_rows.*,
+      (
+        classified_rows.calc_has_provider_event_evidence
+        OR classified_rows.calc_has_non_local_rail_tx_id
+        OR classified_rows.calc_has_non_local_rail_meta_identifier
+        OR classified_rows.calc_has_provider_source_flag
+        OR classified_rows.calc_has_provider_like_state
+      ) AS calc_has_provider_submission_evidence,
+      (
+        classified_rows.calc_has_ambiguous_event
+        OR classified_rows.calc_has_unknown_or_review_state
+        OR classified_rows.calc_has_provider_attempt_without_external_id
+        OR classified_rows.calc_has_operation_submit_attempt
+      ) AS calc_has_ambiguous_external_evidence
+    FROM classified_rows
+  ), final_rows AS (
+    SELECT
+      labelled_rows.*,
+      CASE
+        WHEN labelled_rows.transfer_id IS NULL THEN 'scope_without_transfer'
+        WHEN labelled_rows.calc_is_failed_or_blocked THEN 'failed'
+        WHEN labelled_rows.calc_is_terminal_or_completed THEN 'terminal'
+        WHEN labelled_rows.calc_has_ambiguous_external_evidence THEN 'ambiguous'
+        WHEN labelled_rows.calc_has_provider_submission_evidence THEN 'provider_evidence_present'
+        WHEN labelled_rows.calc_has_local_prepare_identity THEN 'local_only_evidence'
+        WHEN labelled_rows.status_upper = 'PENDING' THEN 'pending'
+        ELSE 'unclassified_local'
+      END AS calc_evidence_classification
+    FROM labelled_rows
+  )
+  SELECT
+    final_rows.transfer_id AS pay_bank_transfer_id,
+    final_rows.transfer_pay_batch_id AS pay_batch_id,
+    final_rows.transfer_pay_channel AS pay_channel,
+    final_rows.transfer_group_key AS transfer_group_key,
+    final_rows.scope_id AS scope_id,
+    final_rows.scope_operation_id AS scope_operation_id,
+    final_rows.scope_status AS scope_status,
+    final_rows.scope_request_id AS scope_request_id,
+    final_rows.status_upper AS status_upper,
+    final_rows.rail_state_upper AS rail_state_upper,
+    final_rows.transfer_amount AS amount,
+    final_rows.transfer_currency AS currency,
+    final_rows.calc_has_route_ready AS has_route_ready,
+    final_rows.calc_has_local_prepare_identity AS has_local_prepare_identity,
+    final_rows.calc_has_provider_submission_evidence AS has_provider_submission_evidence,
+    final_rows.calc_has_provider_event_evidence AS has_provider_event_evidence,
+    final_rows.calc_has_provider_attempt_without_external_id AS has_provider_attempt_without_external_id,
+    final_rows.calc_has_operation_submit_attempt AS has_operation_submit_attempt,
+    final_rows.calc_has_ambiguous_external_evidence AS has_ambiguous_external_evidence,
+    final_rows.calc_is_failed_or_blocked AS is_failed_or_blocked,
+    final_rows.calc_is_terminal_or_completed AS is_terminal_or_completed,
+    final_rows.calc_evidence_classification AS evidence_classification,
+    (
+      final_rows.transfer_id IS NOT NULL
+      AND final_rows.transfer_pay_batch_id = p_pay_batch_id
+      AND (v_scope IN ('ALL', 'ANY', '*') OR upper(btrim(coalesce(final_rows.transfer_pay_channel, ''))) = v_scope)
+      AND final_rows.status_upper = 'PENDING'
+      AND final_rows.calc_has_route_ready IS TRUE
+      AND final_rows.calc_has_provider_submission_evidence IS NOT TRUE
+      AND final_rows.calc_has_provider_event_evidence IS NOT TRUE
+      AND final_rows.calc_has_provider_attempt_without_external_id IS NOT TRUE
+      AND final_rows.calc_has_operation_submit_attempt IS NOT TRUE
+      AND final_rows.calc_has_ambiguous_external_evidence IS NOT TRUE
+      AND final_rows.calc_is_failed_or_blocked IS NOT TRUE
+      AND final_rows.calc_is_terminal_or_completed IS NOT TRUE
+      AND final_rows.batch_execution_boundary_crossed IS NOT TRUE
+    ) AS is_authorisation_ready,
+    (
+      final_rows.transfer_id IS NOT NULL
+      AND final_rows.calc_has_route_ready IS TRUE
+      AND final_rows.calc_has_provider_submission_evidence IS NOT TRUE
+      AND final_rows.calc_has_provider_event_evidence IS NOT TRUE
+      AND final_rows.calc_has_provider_attempt_without_external_id IS NOT TRUE
+      AND final_rows.calc_has_operation_submit_attempt IS NOT TRUE
+      AND final_rows.calc_has_ambiguous_external_evidence IS NOT TRUE
+      AND final_rows.calc_is_failed_or_blocked IS NOT TRUE
+      AND final_rows.calc_is_terminal_or_completed IS NOT TRUE
+      AND final_rows.batch_execution_boundary_crossed IS NOT TRUE
+    ) AS is_unattempted_submit_eligible,
+    (
+      final_rows.calc_is_operation_owned IS TRUE
+      AND final_rows.batch_execution_boundary_crossed IS NOT TRUE
+      AND (
+        (
+          final_rows.transfer_id IS NOT NULL
+          AND final_rows.calc_has_provider_submission_evidence IS NOT TRUE
+          AND final_rows.calc_has_provider_event_evidence IS NOT TRUE
+          AND final_rows.calc_has_provider_attempt_without_external_id IS NOT TRUE
+          AND final_rows.calc_has_operation_submit_attempt IS NOT TRUE
+          AND final_rows.calc_has_ambiguous_external_evidence IS NOT TRUE
+          AND final_rows.calc_is_failed_or_blocked IS NOT TRUE
+          AND final_rows.calc_is_terminal_or_completed IS NOT TRUE
+        )
+        OR (
+          final_rows.transfer_id IS NULL
+          AND final_rows.calc_scope_owner_is_terminal_cleanup_candidate IS TRUE
+        )
+      )
+    ) AS is_safe_local_cleanup,
+    CASE
+      WHEN final_rows.batch_execution_boundary_crossed THEN 'BATCH_EXECUTION_BOUNDARY_CROSSED'
+      WHEN final_rows.calc_has_provider_event_evidence THEN 'PROVIDER_EVENT_EVIDENCE_PRESENT'
+      WHEN final_rows.calc_has_non_local_rail_tx_id THEN 'NON_LOCAL_RAIL_TX_ID_PRESENT'
+      WHEN final_rows.calc_has_non_local_rail_meta_identifier THEN 'NON_LOCAL_PROVIDER_IDENTIFIER_PRESENT'
+      WHEN final_rows.calc_has_provider_source_flag THEN 'PROVIDER_SOURCE_FLAG_PRESENT'
+      WHEN final_rows.calc_has_operation_submit_attempt THEN 'PROVIDER_SUBMIT_CHUNK_ATTEMPT_PRESENT'
+      WHEN final_rows.calc_has_provider_attempt_without_external_id THEN 'PROVIDER_ATTEMPT_WITHOUT_EXTERNAL_ID'
+      WHEN final_rows.calc_has_ambiguous_external_evidence THEN 'AMBIGUOUS_EXTERNAL_EVIDENCE'
+      WHEN final_rows.calc_is_terminal_or_completed THEN 'TERMINAL_OR_COMPLETED_TRANSFER_STATE'
+      WHEN final_rows.calc_is_failed_or_blocked THEN 'FAILED_OR_BLOCKED_TRANSFER_STATE'
+      WHEN final_rows.transfer_id IS NULL AND final_rows.calc_scope_owner_is_terminal_cleanup_candidate IS NOT TRUE THEN 'SCOPE_WITHOUT_TRANSFER_NOT_TERMINAL_OPERATION'
+      WHEN final_rows.transfer_id IS NOT NULL AND final_rows.calc_has_route_ready IS NOT TRUE THEN 'TRANSFER_ROUTE_NOT_READY'
+      WHEN final_rows.transfer_id IS NOT NULL AND final_rows.status_upper <> 'PENDING' THEN 'TRANSFER_NOT_PENDING'
+      ELSE NULL::text
+    END AS unsafe_reason
+  FROM final_rows
+  ORDER BY
+    final_rows.transfer_pay_channel,
+    final_rows.transfer_group_key NULLS LAST,
+    final_rows.transfer_id NULLS LAST,
+    final_rows.scope_id NULLS LAST;
+END;
+$function$;
 
