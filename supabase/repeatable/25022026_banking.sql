@@ -4826,6 +4826,7 @@ DROP FUNCTION IF EXISTS public.pay_batch_prepare(uuid, uuid, uuid, text);
 
 
 
+
 CREATE OR REPLACE FUNCTION public.pay_batch_prepare(
   p_pay_batch_id uuid,
   p_actor_user_id uuid,
@@ -4864,6 +4865,17 @@ DECLARE
   v_canonical_pending_status_transfer_count integer := 0;
   v_safe_local_cleanup_transfer_count integer := 0;
   v_unsafe_transfer_count integer := 0;
+  v_scoped_failed_or_blocked_transfer_count integer := 0;
+  v_scoped_blocked_transfer_count integer := 0;
+  v_scoped_operation_scope_count integer := 0;
+  v_scoped_scope_prepared_count integer := 0;
+  v_scoped_scope_pending_count integer := 0;
+  v_scoped_scope_failed_count integer := 0;
+  v_scoped_scope_skipped_count integer := 0;
+  v_scoped_scope_without_transfer_count integer := 0;
+  v_non_cancellable_auth_request_count integer := 0;
+  v_auth_request_retry_blocker_count integer := 0;
+  v_all_scoped_operation_scopes_authorisation_ready boolean := false;
   v_pay_channel_scope text := 'ALL';
   v_failed_transfer_count integer := 0;
   v_blocked_transfer_count integer := 0;
@@ -5040,7 +5052,25 @@ BEGIN
           OR classified_transfer.is_terminal_or_completed
           OR classified_transfer.has_different_operation_scope
           OR classified_transfer.has_stale_auth_request_evidence
+          OR classified_transfer.has_non_cancellable_auth_request
           OR NULLIF(BTRIM(COALESCE(classified_transfer.unsafe_reason, '')), '') IS NOT NULL
+        )
+    )::integer,
+    count(*) FILTER (WHERE classified_transfer.is_failed_or_blocked IS TRUE)::integer,
+    count(*) FILTER (
+      WHERE classified_transfer.status_upper = 'BLOCKED'
+         OR classified_transfer.rail_state_upper = 'BLOCKED'
+    )::integer,
+    count(DISTINCT classified_transfer.auth_request_id) FILTER (
+      WHERE classified_transfer.auth_request_id IS NOT NULL
+        AND classified_transfer.has_non_cancellable_auth_request IS TRUE
+    )::integer,
+    count(DISTINCT classified_transfer.auth_request_id) FILTER (
+      WHERE classified_transfer.auth_request_id IS NOT NULL
+        AND (
+          classified_transfer.has_non_cancellable_auth_request IS TRUE
+          OR classified_transfer.has_auth_request_provider_risk IS TRUE
+          OR classified_transfer.has_other_operation_active_auth_request IS TRUE
         )
     )::integer
   INTO v_authorisation_ready_transfer_count,
@@ -5048,13 +5078,71 @@ BEGIN
        v_provider_attempt_or_evidence_transfer_count,
        v_provider_or_ambiguous_evidence_transfer_count,
        v_canonical_pending_status_transfer_count,
-       v_unsafe_transfer_count
+       v_unsafe_transfer_count,
+       v_scoped_failed_or_blocked_transfer_count,
+       v_scoped_blocked_transfer_count,
+       v_non_cancellable_auth_request_count,
+       v_auth_request_retry_blocker_count
   FROM public.pay_bank_transfer_execution_classify(
     p_pay_batch_id => p_pay_batch_id,
     p_pay_channel_scope => v_pay_channel_scope,
     p_operation_id => p_operation_id,
-    p_include_unscoped_transfers => true
-  ) AS classified_transfer;
+    p_include_unscoped_transfers => CASE WHEN p_operation_id IS NULL THEN true ELSE false END
+  ) AS classified_transfer
+  WHERE (
+    p_operation_id IS NULL
+    OR EXISTS (
+      SELECT 1
+      FROM public.banking_pay_operation_transfer_scope AS scoped_operation_filter
+      WHERE scoped_operation_filter.pay_batch_id = p_pay_batch_id
+        AND scoped_operation_filter.operation_id = p_operation_id
+        AND (
+          v_pay_channel_scope IN ('ALL', 'ANY', '*')
+          OR upper(btrim(coalesce(scoped_operation_filter.pay_channel, ''))) = v_pay_channel_scope
+        )
+        AND (
+          scoped_operation_filter.id = classified_transfer.scope_id
+          OR (
+            classified_transfer.pay_bank_transfer_id IS NOT NULL
+            AND scoped_operation_filter.pay_bank_transfer_id = classified_transfer.pay_bank_transfer_id
+          )
+        )
+    )
+  );
+
+  IF p_operation_id IS NOT NULL THEN
+    SELECT count(*)::integer,
+           count(*) FILTER (WHERE upper(btrim(coalesce(operation_scope.status, ''))) = 'PREPARED')::integer,
+           count(*) FILTER (WHERE upper(btrim(coalesce(operation_scope.status, ''))) = 'PENDING')::integer,
+           count(*) FILTER (WHERE upper(btrim(coalesce(operation_scope.status, ''))) = 'FAILED')::integer,
+           count(*) FILTER (WHERE upper(btrim(coalesce(operation_scope.status, ''))) = 'SKIPPED')::integer,
+           count(*) FILTER (WHERE operation_scope.pay_bank_transfer_id IS NULL)::integer
+    INTO v_scoped_operation_scope_count,
+         v_scoped_scope_prepared_count,
+         v_scoped_scope_pending_count,
+         v_scoped_scope_failed_count,
+         v_scoped_scope_skipped_count,
+         v_scoped_scope_without_transfer_count
+    FROM public.banking_pay_operation_transfer_scope AS operation_scope
+    WHERE operation_scope.pay_batch_id = p_pay_batch_id
+      AND operation_scope.operation_id = p_operation_id
+      AND (
+        v_pay_channel_scope IN ('ALL', 'ANY', '*')
+        OR upper(btrim(coalesce(operation_scope.pay_channel, ''))) = v_pay_channel_scope
+      );
+
+    v_all_scoped_operation_scopes_authorisation_ready := (
+      COALESCE(v_scoped_operation_scope_count, 0) > 0
+      AND COALESCE(v_scoped_scope_prepared_count, 0) = COALESCE(v_scoped_operation_scope_count, 0)
+      AND COALESCE(v_scoped_scope_pending_count, 0) = 0
+      AND COALESCE(v_scoped_scope_failed_count, 0) = 0
+      AND COALESCE(v_scoped_scope_skipped_count, 0) = 0
+      AND COALESCE(v_scoped_scope_without_transfer_count, 0) = 0
+      AND COALESCE(v_authorisation_ready_transfer_count, 0) = COALESCE(v_scoped_operation_scope_count, 0)
+      AND COALESCE(v_provider_or_ambiguous_evidence_transfer_count, 0) = 0
+      AND COALESCE(v_non_cancellable_auth_request_count, 0) = 0
+    );
+  END IF;
   v_remaining_unattempted_submit_required := COALESCE(v_unattempted_submit_eligible_transfer_count, 0);
   v_failed_transfer_count := coalesce(NULLIF(v_summary_json->>'failed_transfer_count', '')::integer, 0);
   v_blocked_transfer_count := coalesce(NULLIF(v_summary_json->>'blocked_transfer_count', '')::integer, 0);
@@ -5193,38 +5281,107 @@ BEGIN
       ));
     END IF;
 
-    IF v_blocked_transfer_count > 0 THEN
-      v_blockers_json := v_blockers_json || jsonb_build_array(jsonb_build_object(
-        'code', 'BLOCKED_TRANSFERS',
-        'message', 'One or more bank transfers are blocked and must be corrected before submission.',
-        'blocked_transfer_count', v_blocked_transfer_count
-      ));
+    IF p_operation_id IS NULL THEN
+      IF v_blocked_transfer_count > 0 THEN
+        v_blockers_json := v_blockers_json || jsonb_build_array(jsonb_build_object(
+          'code', 'BLOCKED_TRANSFERS',
+          'message', 'One or more bank transfers are blocked and must be corrected before submission.',
+          'blocked_transfer_count', v_blocked_transfer_count
+        ));
+      END IF;
+
+      IF v_failed_transfer_count > 0 THEN
+        v_blockers_json := v_blockers_json || jsonb_build_array(jsonb_build_object(
+          'code', 'FAILED_TRANSFERS',
+          'message', 'One or more bank transfers are failed and must be corrected before submission.',
+          'failed_transfer_count', v_failed_transfer_count
+        ));
+      END IF;
+    ELSE
+      IF COALESCE(v_scoped_blocked_transfer_count, 0) > 0 THEN
+        v_blockers_json := v_blockers_json || jsonb_build_array(jsonb_build_object(
+          'code', 'BLOCKED_TRANSFERS',
+          'message', 'One or more scoped bank transfers are blocked and must be corrected before submission.',
+          'operation_id', p_operation_id::text,
+          'blocked_transfer_count', COALESCE(v_scoped_blocked_transfer_count, 0),
+          'pay_channel_scope', v_pay_channel_scope
+        ));
+      END IF;
+
+      IF COALESCE(v_scoped_failed_or_blocked_transfer_count, 0) > 0 THEN
+        v_blockers_json := v_blockers_json || jsonb_build_array(jsonb_build_object(
+          'code', 'FAILED_TRANSFERS',
+          'message', 'One or more scoped bank transfers are failed or blocked and must be corrected before submission.',
+          'operation_id', p_operation_id::text,
+          'failed_transfer_count', COALESCE(v_scoped_failed_or_blocked_transfer_count, 0),
+          'pay_channel_scope', v_pay_channel_scope
+        ));
+      END IF;
     END IF;
 
-    IF v_failed_transfer_count > 0 THEN
-      v_blockers_json := v_blockers_json || jsonb_build_array(jsonb_build_object(
-        'code', 'FAILED_TRANSFERS',
-        'message', 'One or more bank transfers are failed and must be corrected before submission.',
-        'failed_transfer_count', v_failed_transfer_count
-      ));
-    END IF;
+    IF p_operation_id IS NOT NULL THEN
+      IF COALESCE(v_scoped_operation_scope_count, 0) <= 0 THEN
+        v_blockers_json := v_blockers_json || jsonb_build_array(jsonb_build_object(
+          'code', 'OPERATION_TRANSFER_SCOPE_NOT_PREPARED',
+          'message', 'No operation-scoped bank transfer groups are prepared for this payment execution attempt.',
+          'operation_id', p_operation_id::text,
+          'pay_channel_scope', v_pay_channel_scope
+        ));
+      END IF;
 
-    IF v_authorisation_ready_transfer_count <= 0 AND v_transfer_count > 0 THEN
-      IF v_provider_or_ambiguous_evidence_transfer_count > 0 OR v_submitted_transfer_count > 0 THEN
+      IF COALESCE(v_scoped_scope_prepared_count, 0) <> COALESCE(v_scoped_operation_scope_count, 0)
+         OR COALESCE(v_scoped_scope_pending_count, 0) > 0
+         OR COALESCE(v_scoped_scope_failed_count, 0) > 0
+         OR COALESCE(v_scoped_scope_skipped_count, 0) > 0
+         OR COALESCE(v_scoped_scope_without_transfer_count, 0) > 0 THEN
+        v_blockers_json := v_blockers_json || jsonb_build_array(jsonb_build_object(
+          'code', 'OPERATION_TRANSFER_SCOPE_NOT_FULLY_PREPARED',
+          'message', 'Every scoped transfer group must be prepared and linked to a safe local bank transfer before authorisation can start.',
+          'operation_id', p_operation_id::text,
+          'scoped_operation_scope_count', COALESCE(v_scoped_operation_scope_count, 0),
+          'scoped_scope_prepared_count', COALESCE(v_scoped_scope_prepared_count, 0),
+          'scoped_scope_pending_count', COALESCE(v_scoped_scope_pending_count, 0),
+          'scoped_scope_failed_count', COALESCE(v_scoped_scope_failed_count, 0),
+          'scoped_scope_skipped_count', COALESCE(v_scoped_scope_skipped_count, 0),
+          'scoped_scope_without_transfer_count', COALESCE(v_scoped_scope_without_transfer_count, 0),
+          'pay_channel_scope', v_pay_channel_scope
+        ));
+      END IF;
+
+      IF COALESCE(v_non_cancellable_auth_request_count, 0) > 0 THEN
+        v_blockers_json := v_blockers_json || jsonb_build_array(jsonb_build_object(
+          'code', 'AUTH_REQUEST_HELD_BY_PREVIOUS_OPERATION',
+          'message', 'An active authorisation request is not safe to reuse or cancel automatically for this payment execution attempt.',
+          'operation_id', p_operation_id::text,
+          'non_cancellable_auth_request_count', COALESCE(v_non_cancellable_auth_request_count, 0),
+          'auth_request_retry_blocker_count', COALESCE(v_auth_request_retry_blocker_count, 0),
+          'pay_channel_scope', v_pay_channel_scope
+        ));
+      END IF;
+
+      IF COALESCE(v_provider_or_ambiguous_evidence_transfer_count, 0) > 0 THEN
         v_blockers_json := v_blockers_json || jsonb_build_array(jsonb_build_object(
           'code', 'BANK_TRANSFER_PROVIDER_REVIEW_REQUIRED',
-          'message', 'One or more bank transfers have provider submission evidence or ambiguous provider state and must be reviewed before this batch can be authorised again.',
+          'message', 'One or more scoped bank transfers have provider submission evidence or ambiguous provider state and must be reviewed before this batch can be authorised again.',
+          'operation_id', p_operation_id::text,
+          'scoped_operation_scope_count', COALESCE(v_scoped_operation_scope_count, 0),
           'authorisation_ready_transfer_count', COALESCE(v_authorisation_ready_transfer_count, 0),
           'provider_attempt_or_evidence_transfer_count', COALESCE(v_provider_attempt_or_evidence_transfer_count, 0),
           'provider_or_ambiguous_evidence_transfer_count', COALESCE(v_provider_or_ambiguous_evidence_transfer_count, 0),
           'unsafe_transfer_count', COALESCE(v_unsafe_transfer_count, 0),
-          'submitted_transfer_count', COALESCE(v_submitted_transfer_count, 0),
+          'batch_submitted_transfer_count', COALESCE(v_submitted_transfer_count, 0),
           'pay_channel_scope', v_pay_channel_scope
         ));
-      ELSE
+      END IF;
+
+      IF COALESCE(v_scoped_operation_scope_count, 0) > 0
+         AND COALESCE(v_authorisation_ready_transfer_count, 0) <> COALESCE(v_scoped_operation_scope_count, 0)
+         AND COALESCE(v_provider_or_ambiguous_evidence_transfer_count, 0) = 0 THEN
         v_blockers_json := v_blockers_json || jsonb_build_array(jsonb_build_object(
           'code', 'NO_AUTHORISATION_READY_TRANSFERS',
-          'message', 'No safe locally prepared bank transfers are available for authorisation.',
+          'message', 'All scoped bank transfer groups must be authorisation-ready before authorisation can start.',
+          'operation_id', p_operation_id::text,
+          'scoped_operation_scope_count', COALESCE(v_scoped_operation_scope_count, 0),
           'authorisation_ready_transfer_count', COALESCE(v_authorisation_ready_transfer_count, 0),
           'canonical_pending_status_transfer_count', COALESCE(v_canonical_pending_status_transfer_count, 0),
           'local_only_transfer_count', COALESCE(v_local_only_transfer_count, 0),
@@ -5233,6 +5390,40 @@ BEGIN
           'pay_channel_scope', v_pay_channel_scope
         ));
       END IF;
+    END IF;
+
+    IF p_operation_id IS NULL AND COALESCE(v_non_cancellable_auth_request_count, 0) > 0 THEN
+      v_blockers_json := v_blockers_json || jsonb_build_array(jsonb_build_object(
+        'code', 'AUTH_REQUEST_HELD_BY_PREVIOUS_OPERATION',
+        'message', 'An active authorisation request is not safe to reuse or cancel automatically for this payment batch.',
+        'non_cancellable_auth_request_count', COALESCE(v_non_cancellable_auth_request_count, 0),
+        'auth_request_retry_blocker_count', COALESCE(v_auth_request_retry_blocker_count, 0),
+        'pay_channel_scope', v_pay_channel_scope
+      ));
+    END IF;
+
+    IF p_operation_id IS NULL AND v_provider_or_ambiguous_evidence_transfer_count > 0 AND v_transfer_count > 0 THEN
+      v_blockers_json := v_blockers_json || jsonb_build_array(jsonb_build_object(
+        'code', 'BANK_TRANSFER_PROVIDER_REVIEW_REQUIRED',
+        'message', 'One or more bank transfers have provider submission evidence or ambiguous provider state and must be reviewed before this batch can be authorised again.',
+        'authorisation_ready_transfer_count', COALESCE(v_authorisation_ready_transfer_count, 0),
+        'provider_attempt_or_evidence_transfer_count', COALESCE(v_provider_attempt_or_evidence_transfer_count, 0),
+        'provider_or_ambiguous_evidence_transfer_count', COALESCE(v_provider_or_ambiguous_evidence_transfer_count, 0),
+        'unsafe_transfer_count', COALESCE(v_unsafe_transfer_count, 0),
+        'submitted_transfer_count', COALESCE(v_submitted_transfer_count, 0),
+        'pay_channel_scope', v_pay_channel_scope
+      ));
+    ELSIF p_operation_id IS NULL AND v_authorisation_ready_transfer_count <= 0 AND v_transfer_count > 0 THEN
+      v_blockers_json := v_blockers_json || jsonb_build_array(jsonb_build_object(
+        'code', 'NO_AUTHORISATION_READY_TRANSFERS',
+        'message', 'No safe locally prepared bank transfers are available for authorisation.',
+        'authorisation_ready_transfer_count', COALESCE(v_authorisation_ready_transfer_count, 0),
+        'canonical_pending_status_transfer_count', COALESCE(v_canonical_pending_status_transfer_count, 0),
+        'local_only_transfer_count', COALESCE(v_local_only_transfer_count, 0),
+        'safe_local_cleanup_transfer_count', COALESCE(v_safe_local_cleanup_transfer_count, 0),
+        'unsafe_transfer_count', COALESCE(v_unsafe_transfer_count, 0),
+        'pay_channel_scope', v_pay_channel_scope
+      ));
     ELSIF v_pending_transfer_count <= 0 AND v_authorisation_ready_transfer_count > 0 THEN
       v_warnings_json := v_warnings_json || jsonb_build_array(jsonb_build_object(
         'code', 'EVIDENCE_PENDING_COUNT_ZERO_AUTHORISATION_READY_PRESENT',
@@ -5255,6 +5446,7 @@ BEGIN
     WHEN v_execution_mode IN ('CSV', 'CSV_SETTLEMENT', 'EXTERNAL', 'EXTERNAL_SETTLEMENT', 'MANUAL_SETTLEMENT') AND v_ready THEN 'SETTLEMENT'
     WHEN v_transfer_count <= 0 THEN 'PREPARE_TRANSFER_SCOPE'
     WHEN v_blocker_count > 0 THEN 'RESOLVE_BLOCKERS'
+    WHEN v_execution_mode IN ('STANDARD_BANK', 'BANK') AND p_operation_id IS NOT NULL AND COALESCE(v_all_scoped_operation_scopes_authorisation_ready, false) IS NOT TRUE THEN 'RESOLVE_BLOCKERS'
     WHEN v_execution_mode IN ('STANDARD_BANK', 'BANK') AND v_authorisation_ready_transfer_count <= 0 THEN 'RESOLVE_BLOCKERS'
     ELSE 'START_AUTHORISATION'
   END;
@@ -5276,12 +5468,23 @@ BEGIN
     'execution_mode', v_execution_mode,
     'pay_channel_scope', v_pay_channel_scope,
     'authorisation_ready_transfer_count', COALESCE(v_authorisation_ready_transfer_count, 0),
+    'scoped_operation_scope_count', COALESCE(v_scoped_operation_scope_count, 0),
+    'scoped_scope_prepared_count', COALESCE(v_scoped_scope_prepared_count, 0),
+    'scoped_scope_pending_count', COALESCE(v_scoped_scope_pending_count, 0),
+    'scoped_scope_failed_count', COALESCE(v_scoped_scope_failed_count, 0),
+    'scoped_scope_skipped_count', COALESCE(v_scoped_scope_skipped_count, 0),
+    'scoped_scope_without_transfer_count', COALESCE(v_scoped_scope_without_transfer_count, 0),
+    'all_scoped_operation_scopes_authorisation_ready', COALESCE(v_all_scoped_operation_scopes_authorisation_ready, false),
+    'non_cancellable_auth_request_count', COALESCE(v_non_cancellable_auth_request_count, 0),
+    'auth_request_retry_blocker_count', COALESCE(v_auth_request_retry_blocker_count, 0),
     'unattempted_submit_eligible_transfer_count', COALESCE(v_unattempted_submit_eligible_transfer_count, 0),
     'remaining_unattempted_submit_required', COALESCE(v_remaining_unattempted_submit_required, 0),
     'provider_attempt_or_evidence_transfer_count', COALESCE(v_provider_attempt_or_evidence_transfer_count, 0),
     'provider_or_ambiguous_evidence_transfer_count', COALESCE(v_provider_or_ambiguous_evidence_transfer_count, 0),
     'canonical_pending_status_transfer_count', COALESCE(v_canonical_pending_status_transfer_count, 0),
     'unsafe_transfer_count', COALESCE(v_unsafe_transfer_count, 0),
+    'scoped_failed_or_blocked_transfer_count', COALESCE(v_scoped_failed_or_blocked_transfer_count, 0),
+    'scoped_blocked_transfer_count', COALESCE(v_scoped_blocked_transfer_count, 0),
     'evidence_pending_transfer_count', COALESCE(v_pending_transfer_count, 0),
     'freshness', jsonb_build_object(
       'freshness_validation_status', v_batch_freshness_status,
@@ -5300,6 +5503,10 @@ BEGIN
   );
 END;
 $function$;
+
+
+
+
 
 CREATE OR REPLACE FUNCTION public.pay_batch_mark_blocked_funds(
   p_pay_batch_id uuid,
