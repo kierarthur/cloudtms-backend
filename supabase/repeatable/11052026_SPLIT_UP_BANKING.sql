@@ -9296,8 +9296,6 @@ $$;
 
 
 
-
-
 create or replace function public.pay_batch_get_section_page(
   p_pay_batch_id uuid,
   p_section text,
@@ -9804,8 +9802,8 @@ begin
     page_rows as (
       select
         page_group_keys.group_id,
-        max(pay_batch_item_finance_page.finance_case_id) filter (where pay_batch_item_finance_page.finance_case_id is not null) as finance_case_id,
-        max(pay_batch_item_finance_page.finance_component_id) filter (where pay_batch_item_finance_page.finance_component_id is not null) as finance_component_id,
+        (array_agg(pay_batch_item_finance_page.finance_case_id ORDER BY pay_batch_item_finance_page.finance_case_id::text) FILTER (WHERE pay_batch_item_finance_page.finance_case_id IS NOT NULL))[1] AS finance_case_id,
+        (array_agg(pay_batch_item_finance_page.finance_component_id ORDER BY pay_batch_item_finance_page.finance_component_id::text) FILTER (WHERE pay_batch_item_finance_page.finance_component_id IS NOT NULL))[1] AS finance_component_id,
         count(*)::integer as item_count,
         round(sum(coalesce(pay_batch_item_finance_page.amount_ex_vat, 0)), 2)::numeric as total_amount_ex_vat,
         coalesce(jsonb_agg(distinct pay_batch_item_finance_page.item_type) filter (where pay_batch_item_finance_page.item_type is not null), '[]'::jsonb) as item_types,
@@ -10020,6 +10018,9 @@ begin
   );
 end;
 $$;
+
+
+
 
 
 create or replace function public.pay_batch_freshness_result_get(
