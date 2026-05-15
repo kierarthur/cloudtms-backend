@@ -42489,6 +42489,7 @@ $function$;
 
 DROP FUNCTION IF EXISTS public.pay_batch_submission_evidence(uuid);
 
+
 CREATE OR REPLACE FUNCTION public.pay_batch_submission_evidence(p_pay_batch_id uuid, p_counts_only boolean DEFAULT false)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -42508,6 +42509,8 @@ DECLARE
   v_provider_attempt_without_external_id_count integer := 0;
   v_requires_provider_poll_count integer := 0;
   v_remaining_submit_attempt_required integer := 0;
+  v_remaining_unattempted_submit_required integer := 0;
+  v_remaining_evidence_unresolved_count integer := 0;
   v_remaining_provider_evidence_required integer := 0;
   v_remaining_provider_submission_required integer := 0;
   v_can_mark_submitted boolean := false;
@@ -42574,6 +42577,10 @@ BEGIN
       classification_row.is_authorisation_ready,
       classification_row.is_unattempted_submit_eligible,
       classification_row.is_safe_local_cleanup,
+      classification_row.is_canonical_pending_status,
+      classification_row.has_auth_prepared_scope,
+      classification_row.has_different_operation_scope,
+      classification_row.has_stale_auth_request_evidence,
       classification_row.unsafe_reason
     FROM public.pay_bank_transfer_execution_classify(
       p_pay_batch_id,
@@ -42656,6 +42663,10 @@ BEGIN
         'is_authorisation_ready', classified_rows.is_authorisation_ready,
         'is_unattempted_submit_eligible', classified_rows.is_unattempted_submit_eligible,
         'is_safe_local_cleanup', classified_rows.is_safe_local_cleanup,
+        'is_canonical_pending_status', classified_rows.is_canonical_pending_status,
+        'has_auth_prepared_scope', classified_rows.has_auth_prepared_scope,
+        'has_different_operation_scope', classified_rows.has_different_operation_scope,
+        'has_stale_auth_request_evidence', classified_rows.has_stale_auth_request_evidence,
         'unsafe_reason', classified_rows.unsafe_reason
       ))
       ORDER BY classified_rows.pay_bank_transfer_id NULLS LAST, classified_rows.scope_id NULLS LAST
@@ -42684,6 +42695,10 @@ BEGIN
         'is_authorisation_ready', classified_rows.is_authorisation_ready,
         'is_unattempted_submit_eligible', classified_rows.is_unattempted_submit_eligible,
         'is_safe_local_cleanup', classified_rows.is_safe_local_cleanup,
+        'is_canonical_pending_status', classified_rows.is_canonical_pending_status,
+        'has_auth_prepared_scope', classified_rows.has_auth_prepared_scope,
+        'has_different_operation_scope', classified_rows.has_different_operation_scope,
+        'has_stale_auth_request_evidence', classified_rows.has_stale_auth_request_evidence,
         'unsafe_reason', classified_rows.unsafe_reason
       ))
       ORDER BY classified_rows.pay_bank_transfer_id NULLS LAST, classified_rows.scope_id NULLS LAST
@@ -42720,12 +42735,13 @@ BEGIN
   FROM public.pay_bank_transfer_events AS event_row
   WHERE event_row.pay_batch_id = p_pay_batch_id;
 
-  v_remaining_submit_attempt_required := coalesce(v_pending_count, 0) + coalesce(v_local_only_count, 0);
-  v_remaining_provider_evidence_required := coalesce(v_pending_count, 0)
-    + coalesce(v_local_only_count, 0)
+  v_remaining_unattempted_submit_required := coalesce(v_unattempted_submit_eligible_count, 0);
+  v_remaining_evidence_unresolved_count := coalesce(v_pending_count, 0) + coalesce(v_local_only_count, 0);
+  v_remaining_submit_attempt_required := v_remaining_unattempted_submit_required;
+  v_remaining_provider_evidence_required := coalesce(v_remaining_evidence_unresolved_count, 0)
     + coalesce(v_ambiguous_count, 0)
     + coalesce(v_attempted_but_unproven_count, 0);
-  v_remaining_provider_submission_required := v_remaining_provider_evidence_required;
+  v_remaining_provider_submission_required := v_remaining_unattempted_submit_required;
 
   v_can_mark_submitted := coalesce(v_transfer_count, 0) > 0
     AND coalesce(v_provider_submitted_count, 0) = coalesce(v_transfer_count, 0)
@@ -42763,8 +42779,16 @@ BEGIN
       'provider_attempt_or_evidence_count', coalesce(v_provider_attempt_or_evidence_count, 0),
       'provider_or_ambiguous_evidence_count', coalesce(v_provider_or_ambiguous_evidence_count, 0),
       'remaining_submit_attempt_required', coalesce(v_remaining_submit_attempt_required, 0),
+      'remaining_unattempted_submit_required', coalesce(v_remaining_unattempted_submit_required, 0),
+      'remaining_evidence_unresolved_count', coalesce(v_remaining_evidence_unresolved_count, 0),
+      'remaining_submit_attempt_required_definition', 'unattempted_submit_eligible_count',
       'remaining_provider_evidence_required', coalesce(v_remaining_provider_evidence_required, 0),
       'remaining_provider_submission_required', coalesce(v_remaining_provider_submission_required, 0),
+      'submission_count_semantics', jsonb_build_object(
+        'remaining_submit_attempt_required', 'count of transfers currently eligible for an unattempted provider submit',
+        'remaining_evidence_unresolved_count', 'legacy evidence-pending plus local-only count kept separate from submit eligibility',
+        'pending_count', 'evidence-level pending classification, not submit eligibility'
+      ),
       'batch_can_be_marked_submitted', coalesce(v_can_mark_submitted, false),
       'can_mark_submitted', coalesce(v_can_mark_submitted, false),
       'can_mark_committed', coalesce(v_can_mark_committed, false),
@@ -42845,8 +42869,16 @@ BEGIN
     'provider_attempt_or_evidence_count', coalesce(v_provider_attempt_or_evidence_count, 0),
     'provider_or_ambiguous_evidence_count', coalesce(v_provider_or_ambiguous_evidence_count, 0),
     'remaining_submit_attempt_required', coalesce(v_remaining_submit_attempt_required, 0),
+    'remaining_unattempted_submit_required', coalesce(v_remaining_unattempted_submit_required, 0),
+    'remaining_evidence_unresolved_count', coalesce(v_remaining_evidence_unresolved_count, 0),
+    'remaining_submit_attempt_required_definition', 'unattempted_submit_eligible_count',
     'remaining_provider_evidence_required', coalesce(v_remaining_provider_evidence_required, 0),
     'remaining_provider_submission_required', coalesce(v_remaining_provider_submission_required, 0),
+    'submission_count_semantics', jsonb_build_object(
+      'remaining_submit_attempt_required', 'count of transfers currently eligible for an unattempted provider submit',
+      'remaining_evidence_unresolved_count', 'legacy evidence-pending plus local-only count kept separate from submit eligibility',
+      'pending_count', 'evidence-level pending classification, not submit eligibility'
+    ),
     'batch_can_be_marked_submitted', coalesce(v_can_mark_submitted, false),
     'can_mark_submitted', coalesce(v_can_mark_submitted, false),
     'can_mark_committed', coalesce(v_can_mark_committed, false),
@@ -42873,6 +42905,7 @@ BEGIN
   );
 END;
 $function$;
+
 
 
 
