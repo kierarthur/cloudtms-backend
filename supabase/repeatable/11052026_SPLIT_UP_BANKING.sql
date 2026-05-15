@@ -4583,6 +4583,8 @@ $function$;
 
 DROP FUNCTION IF EXISTS public.pay_workbench_session_get_preview_page(uuid, text, jsonb, integer);
 
+
+
 CREATE OR REPLACE FUNCTION public.pay_workbench_session_get_preview_page(
   p_session_id uuid,
   p_section text,
@@ -4630,7 +4632,48 @@ BEGIN
   WHERE session_row.id = p_session_id;
 
   IF NOT FOUND THEN
-    RAISE EXCEPTION 'banking_pay_workbench_sessions row % not found', p_session_id;
+    RETURN jsonb_build_object(
+      'ok', false,
+      'error_code', 'WORKBENCH_SESSION_NOT_FOUND',
+      'code', 'WORKBENCH_SESSION_NOT_FOUND',
+      'rebase_required', true,
+      'requires_new_session', true,
+      'session_id', p_session_id::text,
+      'section', v_section,
+      'items', '[]'::jsonb,
+      'rows', '[]'::jsonb,
+      'next_cursor', NULL::jsonb,
+      'returned_count', 0,
+      'ready', false,
+      'ready_flag', false,
+      'phase', 'REBASE_REQUIRED',
+      'status_text', 'Payment preview needs refreshing.',
+      'message', 'Payment preview needs refreshing.'
+    );
+  END IF;
+
+  IF UPPER(COALESCE(v_session_row.status, '')) <> 'OPEN' OR v_session_row.discarded_at_utc IS NOT NULL THEN
+    RETURN jsonb_build_object(
+      'ok', false,
+      'error_code', 'OBSOLETE_SESSION',
+      'code', 'OBSOLETE_SESSION',
+      'rebase_required', true,
+      'requires_new_session', true,
+      'session_id', p_session_id::text,
+      'section', v_section,
+      'status', v_session_row.status,
+      'session_status', v_session_row.status,
+      'discarded_at_utc', v_session_row.discarded_at_utc,
+      'items', '[]'::jsonb,
+      'rows', '[]'::jsonb,
+      'next_cursor', NULL::jsonb,
+      'returned_count', 0,
+      'ready', false,
+      'ready_flag', false,
+      'phase', 'REBASE_REQUIRED',
+      'status_text', 'Payment preview needs refreshing.',
+      'message', 'Payment preview needs refreshing.'
+    );
   END IF;
 
   v_limit := LEAST(GREATEST(COALESCE(p_limit, 100), 1), 500);
@@ -4794,6 +4837,8 @@ BEGIN
   );
 END;
 $function$;
+
+
 
 DROP FUNCTION IF EXISTS public.pay_batch_execution_summary_get(uuid, uuid);
 
