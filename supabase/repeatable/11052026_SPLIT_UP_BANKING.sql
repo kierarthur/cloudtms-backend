@@ -4847,9 +4847,6 @@ DROP FUNCTION IF EXISTS public.pay_batch_execution_summary_get(uuid, uuid);
 
 
 
-
-
-
 CREATE OR REPLACE FUNCTION public.pay_batch_execution_summary_get(
   p_pay_batch_id uuid,
   p_actor_user_id uuid DEFAULT NULL::uuid
@@ -4883,6 +4880,8 @@ DECLARE
   v_provider_attempt_without_external_id_count integer := 0;
   v_requires_provider_poll_count integer := 0;
   v_remaining_submit_attempt_required integer := 0;
+  v_remaining_unattempted_submit_required integer := 0;
+  v_remaining_evidence_unresolved_count integer := 0;
   v_remaining_provider_evidence_required integer := 0;
   v_remaining_provider_submission_required integer := 0;
   v_blocked_transfer_count integer := 0;
@@ -4960,9 +4959,11 @@ BEGIN
   v_attempted_but_unproven_transfer_count := coalesce(nullif(v_submission_evidence_json->>'attempted_but_unproven_count', '')::integer, 0);
   v_provider_attempt_without_external_id_count := coalesce(nullif(v_submission_evidence_json->>'provider_attempt_without_external_id_count', '')::integer, 0);
   v_requires_provider_poll_count := coalesce(nullif(v_submission_evidence_json->>'requires_provider_poll_count', '')::integer, 0);
-  v_remaining_submit_attempt_required := coalesce(nullif(v_submission_evidence_json->>'remaining_submit_attempt_required', '')::integer, 0);
+  v_remaining_unattempted_submit_required := coalesce(nullif(v_submission_evidence_json->>'remaining_unattempted_submit_required', '')::integer, coalesce(nullif(v_submission_evidence_json->>'unattempted_submit_eligible_count', '')::integer, 0));
+  v_remaining_evidence_unresolved_count := coalesce(nullif(v_submission_evidence_json->>'remaining_evidence_unresolved_count', '')::integer, coalesce(v_pending_transfer_count, 0) + coalesce(v_local_only_transfer_count, 0));
+  v_remaining_submit_attempt_required := coalesce(nullif(v_submission_evidence_json->>'remaining_submit_attempt_required', '')::integer, v_remaining_unattempted_submit_required);
   v_remaining_provider_evidence_required := coalesce(nullif(v_submission_evidence_json->>'remaining_provider_evidence_required', '')::integer, 0);
-  v_remaining_provider_submission_required := coalesce(nullif(v_submission_evidence_json->>'remaining_provider_submission_required', '')::integer, v_remaining_provider_evidence_required);
+  v_remaining_provider_submission_required := coalesce(nullif(v_submission_evidence_json->>'remaining_provider_submission_required', '')::integer, v_remaining_unattempted_submit_required);
 
   SELECT count(*)::integer
   INTO v_canonical_pending_status_transfer_count
@@ -5060,6 +5061,9 @@ BEGIN
     'provider_attempt_without_external_id_count', coalesce(v_provider_attempt_without_external_id_count, 0),
     'requires_provider_poll_count', coalesce(v_requires_provider_poll_count, 0),
     'remaining_submit_attempt_required', coalesce(v_remaining_submit_attempt_required, 0),
+    'remaining_unattempted_submit_required', coalesce(v_remaining_unattempted_submit_required, 0),
+    'remaining_evidence_unresolved_count', coalesce(v_remaining_evidence_unresolved_count, 0),
+    'remaining_submit_attempt_required_definition', 'unattempted_submit_eligible_count',
     'remaining_provider_evidence_required', coalesce(v_remaining_provider_evidence_required, 0),
     'remaining_provider_submission_required', coalesce(v_remaining_provider_submission_required, 0),
     'blocked_transfer_count', coalesce(v_blocked_transfer_count, 0),
@@ -6926,8 +6930,6 @@ DROP FUNCTION IF EXISTS public.pay_bank_transfers_claim_provider_submit_chunk(uu
 
 
 
-
-
 CREATE OR REPLACE FUNCTION public.pay_bank_transfers_claim_provider_submit_chunk(
   p_operation_id uuid,
   p_pay_batch_id uuid,
@@ -6958,9 +6960,13 @@ DECLARE
   v_unattempted_eligible_count integer := 0;
   v_attempted_but_unproven_count integer := 0;
   v_provider_evidence_present_count integer := 0;
+  v_provider_attempt_or_evidence_count integer := 0;
+  v_unsafe_transfer_count integer := 0;
   v_failed_or_retryable_count integer := 0;
   v_terminal_count integer := 0;
   v_remaining_provider_evidence_required integer := 0;
+  v_remaining_unattempted_submit_required integer := 0;
+  v_classification_source text := 'pay_bank_transfer_execution_classify.is_unattempted_submit_eligible';
   v_has_unproven_attempts boolean := false;
 BEGIN
   IF p_operation_id IS NULL THEN
@@ -7003,6 +7009,10 @@ BEGIN
   END IF;
 
   v_retry_mode := (v_operation_row.operation_type = 'PAYMENT_RETRY_BLOCKED_FUNDS');
+  v_classification_source := CASE
+    WHEN v_retry_mode IS TRUE THEN 'pay_bank_transfer_execution_classify.blocked_funds_retry_conservative'
+    ELSE 'pay_bank_transfer_execution_classify.is_unattempted_submit_eligible'
+  END;
   v_pay_channel_scope := upper(btrim(coalesce(
     nullif(btrim(coalesce(v_operation_row.input_json->>'pay_channel_scope', '')), ''),
     nullif(btrim(coalesce(v_operation_row.input_json->>'payChannelScope', '')), ''),
@@ -7017,37 +7027,91 @@ BEGIN
   CREATE TEMPORARY TABLE IF NOT EXISTS pg_temp.tmp_provider_submit_classified_transfers (
     transfer_id uuid PRIMARY KEY,
     evidence_classification text NOT NULL,
-    is_eligible_for_submit boolean NOT NULL DEFAULT false
+    is_eligible_for_submit boolean NOT NULL DEFAULT false,
+    has_provider_attempt_or_evidence boolean NOT NULL DEFAULT false,
+    is_unsafe_transfer boolean NOT NULL DEFAULT false
   ) ON COMMIT DROP;
   TRUNCATE TABLE pg_temp.tmp_provider_submit_classified_transfers;
 
-  INSERT INTO pg_temp.tmp_provider_submit_classified_transfers (transfer_id, evidence_classification, is_eligible_for_submit)
+  INSERT INTO pg_temp.tmp_provider_submit_classified_transfers (
+    transfer_id,
+    evidence_classification,
+    is_eligible_for_submit,
+    has_provider_attempt_or_evidence,
+    is_unsafe_transfer
+  )
   SELECT classified_transfer.pay_bank_transfer_id,
          CASE
            WHEN classified_transfer.has_provider_submission_evidence OR classified_transfer.has_provider_event_evidence THEN 'provider_evidence_present'
            WHEN classified_transfer.is_terminal_or_completed THEN 'terminal'
-           WHEN classified_transfer.is_failed_or_blocked THEN 'failed_or_retryable'
+           WHEN classified_transfer.is_failed_or_blocked AND v_retry_mode IS NOT TRUE THEN 'failed_or_retryable'
            WHEN classified_transfer.has_ambiguous_external_evidence
              OR classified_transfer.has_provider_attempt_without_external_id
              OR classified_transfer.has_operation_submit_attempt THEN 'attempted_but_unproven'
-           ELSE 'unattempted_and_eligible_for_submit'
+           WHEN v_retry_mode IS FALSE AND COALESCE(classified_transfer.is_unattempted_submit_eligible, false) THEN 'unattempted_and_eligible_for_submit'
+           WHEN v_retry_mode IS TRUE
+            AND COALESCE(classified_transfer.has_route_ready, false) IS TRUE
+            AND upper(btrim(coalesce(v_batch_row.execution_commit_state, 'NOT_SUBMITTED'))) = 'NOT_SUBMITTED'
+            AND NULLIF(BTRIM(COALESCE(v_batch_row.execution_commit_ref, '')), '') IS NULL
+            AND v_batch_row.execution_committed_at_utc IS NULL
+            AND classified_transfer.status_upper IN ('PENDING', 'BLOCKED')
+            AND COALESCE(classified_transfer.is_terminal_or_completed, false) IS NOT TRUE
+            AND COALESCE(classified_transfer.has_provider_submission_evidence, false) IS NOT TRUE
+            AND COALESCE(classified_transfer.has_provider_event_evidence, false) IS NOT TRUE
+            AND COALESCE(classified_transfer.has_provider_attempt_without_external_id, false) IS NOT TRUE
+            AND COALESCE(classified_transfer.has_operation_submit_attempt, false) IS NOT TRUE
+            AND COALESCE(classified_transfer.has_ambiguous_external_evidence, false) IS NOT TRUE
+            AND COALESCE(classified_transfer.has_different_operation_scope, false) IS NOT TRUE
+            AND COALESCE(classified_transfer.has_stale_auth_request_evidence, false) IS NOT TRUE
+            AND (p_operation_id IS NULL OR COALESCE(classified_transfer.has_auth_prepared_scope, false) IS TRUE) THEN 'unattempted_and_eligible_for_submit'
+           ELSE 'unsafe_or_not_submit_eligible'
          END AS evidence_classification,
          CASE
-           WHEN v_retry_mode IS FALSE THEN classified_transfer.is_unattempted_submit_eligible
+           WHEN v_retry_mode IS FALSE THEN COALESCE(classified_transfer.is_unattempted_submit_eligible, false)
            ELSE (
-             classified_transfer.has_route_ready
-             AND classified_transfer.is_terminal_or_completed IS NOT TRUE
-             AND classified_transfer.has_provider_submission_evidence IS NOT TRUE
-             AND classified_transfer.has_provider_event_evidence IS NOT TRUE
-             AND (
-               classified_transfer.is_failed_or_blocked
-               OR classified_transfer.has_ambiguous_external_evidence
-               OR classified_transfer.has_provider_attempt_without_external_id
-               OR classified_transfer.has_operation_submit_attempt
-               OR classified_transfer.status_upper IN ('PENDING', 'READY', 'PREPARED', 'QUEUED', 'SUBMITTED', 'SENT', 'PROCESSING', 'IN_FLIGHT', 'PENDING_SUBMISSION', 'PENDING_CONFIRMATION', 'PENDING_SETTLEMENT')
-             )
+             COALESCE(classified_transfer.has_route_ready, false) IS TRUE
+             AND upper(btrim(coalesce(v_batch_row.execution_commit_state, 'NOT_SUBMITTED'))) = 'NOT_SUBMITTED'
+             AND NULLIF(BTRIM(COALESCE(v_batch_row.execution_commit_ref, '')), '') IS NULL
+             AND v_batch_row.execution_committed_at_utc IS NULL
+             AND classified_transfer.status_upper IN ('PENDING', 'BLOCKED')
+             AND COALESCE(classified_transfer.is_terminal_or_completed, false) IS NOT TRUE
+             AND COALESCE(classified_transfer.has_provider_submission_evidence, false) IS NOT TRUE
+             AND COALESCE(classified_transfer.has_provider_event_evidence, false) IS NOT TRUE
+             AND COALESCE(classified_transfer.has_provider_attempt_without_external_id, false) IS NOT TRUE
+             AND COALESCE(classified_transfer.has_operation_submit_attempt, false) IS NOT TRUE
+             AND COALESCE(classified_transfer.has_ambiguous_external_evidence, false) IS NOT TRUE
+             AND COALESCE(classified_transfer.has_different_operation_scope, false) IS NOT TRUE
+             AND COALESCE(classified_transfer.has_stale_auth_request_evidence, false) IS NOT TRUE
+             AND (p_operation_id IS NULL OR COALESCE(classified_transfer.has_auth_prepared_scope, false) IS TRUE)
            )
-         END AS is_eligible_for_submit
+         END AS is_eligible_for_submit,
+         (
+           COALESCE(classified_transfer.has_provider_submission_evidence, false)
+           OR COALESCE(classified_transfer.has_provider_event_evidence, false)
+           OR COALESCE(classified_transfer.has_provider_attempt_without_external_id, false)
+           OR COALESCE(classified_transfer.has_operation_submit_attempt, false)
+         ) AS has_provider_attempt_or_evidence,
+         (
+           CASE
+             WHEN v_retry_mode IS FALSE THEN COALESCE(classified_transfer.is_unattempted_submit_eligible, false) IS NOT TRUE
+             ELSE NOT (
+               COALESCE(classified_transfer.has_route_ready, false) IS TRUE
+               AND upper(btrim(coalesce(v_batch_row.execution_commit_state, 'NOT_SUBMITTED'))) = 'NOT_SUBMITTED'
+               AND NULLIF(BTRIM(COALESCE(v_batch_row.execution_commit_ref, '')), '') IS NULL
+               AND v_batch_row.execution_committed_at_utc IS NULL
+               AND classified_transfer.status_upper IN ('PENDING', 'BLOCKED')
+               AND COALESCE(classified_transfer.is_terminal_or_completed, false) IS NOT TRUE
+               AND COALESCE(classified_transfer.has_provider_submission_evidence, false) IS NOT TRUE
+               AND COALESCE(classified_transfer.has_provider_event_evidence, false) IS NOT TRUE
+               AND COALESCE(classified_transfer.has_provider_attempt_without_external_id, false) IS NOT TRUE
+               AND COALESCE(classified_transfer.has_operation_submit_attempt, false) IS NOT TRUE
+               AND COALESCE(classified_transfer.has_ambiguous_external_evidence, false) IS NOT TRUE
+               AND COALESCE(classified_transfer.has_different_operation_scope, false) IS NOT TRUE
+               AND COALESCE(classified_transfer.has_stale_auth_request_evidence, false) IS NOT TRUE
+               AND (p_operation_id IS NULL OR COALESCE(classified_transfer.has_auth_prepared_scope, false) IS TRUE)
+             )
+           END
+         ) AS is_unsafe_transfer
   FROM public.pay_bank_transfer_execution_classify(
     p_pay_batch_id => p_pay_batch_id,
     p_pay_channel_scope => v_pay_channel_scope,
@@ -7062,7 +7126,10 @@ BEGIN
     COUNT(*) FILTER (WHERE classified.evidence_classification = 'provider_evidence_present')::integer,
     COUNT(*) FILTER (WHERE classified.evidence_classification = 'failed_or_retryable')::integer,
     COUNT(*) FILTER (WHERE classified.evidence_classification = 'terminal')::integer,
-    COUNT(*) FILTER (WHERE classified.evidence_classification IN ('unattempted_and_eligible_for_submit', 'attempted_but_unproven'))::integer,
+    COUNT(*) FILTER (WHERE classified.evidence_classification = 'attempted_but_unproven')::integer,
+    COUNT(*) FILTER (WHERE classified.has_provider_attempt_or_evidence)::integer,
+    COUNT(*) FILTER (WHERE classified.is_unsafe_transfer)::integer,
+    COUNT(*) FILTER (WHERE classified.is_eligible_for_submit = true)::integer,
     BOOL_OR(classified.evidence_classification = 'attempted_but_unproven')
   INTO v_unattempted_eligible_count,
        v_attempted_but_unproven_count,
@@ -7070,6 +7137,9 @@ BEGIN
        v_failed_or_retryable_count,
        v_terminal_count,
        v_remaining_provider_evidence_required,
+       v_provider_attempt_or_evidence_count,
+       v_unsafe_transfer_count,
+       v_remaining_unattempted_submit_required,
        v_has_unproven_attempts
   FROM pg_temp.tmp_provider_submit_classified_transfers AS classified;
 
@@ -7249,10 +7319,16 @@ BEGIN
       'unattempted_eligible_count', COALESCE(v_unattempted_eligible_count, 0),
       'attempted_but_unproven_count', COALESCE(v_attempted_but_unproven_count, 0),
       'provider_evidence_present_count', COALESCE(v_provider_evidence_present_count, 0),
+      'provider_attempt_or_evidence_count', COALESCE(v_provider_attempt_or_evidence_count, 0),
+      'unsafe_transfer_count', COALESCE(v_unsafe_transfer_count, 0),
+      'classification_source', v_classification_source,
+      'retry_mode', COALESCE(v_retry_mode, false),
       'failed_or_retryable_count', COALESCE(v_failed_or_retryable_count, 0),
       'terminal_count', COALESCE(v_terminal_count, 0),
       'remaining_count', COALESCE(v_remaining_count, 0),
       'remaining_submit_attempt_required', COALESCE(v_remaining_count, 0),
+      'remaining_unattempted_submit_required', COALESCE(v_remaining_count, 0),
+      'remaining_provider_submission_required', COALESCE(v_remaining_count, 0),
       'remaining_provider_evidence_required', COALESCE(v_remaining_provider_evidence_required, 0),
       'has_more', COALESCE(v_remaining_count, 0) > 0,
       'has_more_submit_attempts', COALESCE(v_remaining_count, 0) > 0,
@@ -7338,10 +7414,16 @@ BEGIN
       'unattempted_eligible_count', COALESCE(v_unattempted_eligible_count, 0),
       'attempted_but_unproven_count', COALESCE(v_attempted_but_unproven_count, 0),
       'provider_evidence_present_count', COALESCE(v_provider_evidence_present_count, 0),
+      'provider_attempt_or_evidence_count', COALESCE(v_provider_attempt_or_evidence_count, 0),
+      'unsafe_transfer_count', COALESCE(v_unsafe_transfer_count, 0),
+      'classification_source', v_classification_source,
+      'retry_mode', COALESCE(v_retry_mode, false),
       'failed_or_retryable_count', COALESCE(v_failed_or_retryable_count, 0),
       'terminal_count', COALESCE(v_terminal_count, 0),
       'remaining_count', 0,
       'remaining_submit_attempt_required', 0,
+      'remaining_unattempted_submit_required', 0,
+      'remaining_provider_submission_required', 0,
       'remaining_provider_evidence_required', COALESCE(v_remaining_provider_evidence_required, 0),
       'has_more', false,
       'has_more_submit_attempts', false,
@@ -7435,10 +7517,16 @@ BEGIN
     'unattempted_eligible_count', COALESCE(v_unattempted_eligible_count, 0),
     'attempted_but_unproven_count', COALESCE(v_attempted_but_unproven_count, 0),
     'provider_evidence_present_count', COALESCE(v_provider_evidence_present_count, 0),
+    'provider_attempt_or_evidence_count', COALESCE(v_provider_attempt_or_evidence_count, 0),
+    'unsafe_transfer_count', COALESCE(v_unsafe_transfer_count, 0),
+    'classification_source', v_classification_source,
+    'retry_mode', COALESCE(v_retry_mode, false),
     'failed_or_retryable_count', COALESCE(v_failed_or_retryable_count, 0),
     'terminal_count', COALESCE(v_terminal_count, 0),
     'remaining_count', COALESCE(v_remaining_count, 0),
     'remaining_submit_attempt_required', COALESCE(v_remaining_count, 0),
+    'remaining_unattempted_submit_required', COALESCE(v_remaining_count, 0),
+    'remaining_provider_submission_required', COALESCE(v_remaining_count, 0),
     'remaining_provider_evidence_required', COALESCE(v_remaining_provider_evidence_required, 0),
     'has_more', COALESCE(v_remaining_count, 0) > 0,
     'has_more_submit_attempts', COALESCE(v_remaining_count, 0) > 0,
