@@ -5738,7 +5738,6 @@ $function$;
 
 DROP FUNCTION IF EXISTS public.pay_execute_bank_transfer_scope_seed(uuid, uuid, text, uuid, boolean);
 
-
 CREATE OR REPLACE FUNCTION public.pay_execute_bank_transfer_scope_seed(
   p_operation_id uuid,
   p_pay_batch_id uuid,
@@ -6779,6 +6778,7 @@ BEGIN
       'stale_previous_operation_cleanup_attempted_count', COALESCE(v_stale_previous_operation_cleanup_attempted_count, 0),
       'stale_previous_operation_scope_cleaned_count', COALESCE(v_stale_previous_operation_scope_cleaned_count, 0),
       'cleanup_retry_blocked_count', COALESCE(v_cleanup_retry_blocked_count, 0),
+      'blocked_previous_operation_ids', v_stale_previous_operation_ids,
       'stale_previous_operation_ids', v_stale_previous_operation_ids,
       'blocked_transfer_group_keys', v_blocked_transfer_group_keys
     )::text USING ERRCODE = 'P0001';
@@ -6905,6 +6905,7 @@ BEGIN
     'stale_previous_operation_scope_cleaned_count', COALESCE(v_stale_previous_operation_scope_cleaned_count, 0),
     'stale_previous_operation_scope_blocked_count', COALESCE(v_stale_previous_operation_scope_blocked_count, 0),
     'cleanup_retry_blocked_count', COALESCE(v_cleanup_retry_blocked_count, 0),
+    'blocked_previous_operation_ids', COALESCE(v_stale_previous_operation_ids, '[]'::jsonb),
     'stale_previous_operation_ids', COALESCE(v_stale_previous_operation_ids, '[]'::jsonb),
     'blocked_transfer_group_keys', COALESCE(v_blocked_transfer_group_keys, '[]'::jsonb),
     'freshness_validation_status', v_freshness_status,
@@ -6913,6 +6914,8 @@ BEGIN
   );
 END;
 $function$;
+
+
 
 
 
