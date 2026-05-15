@@ -13094,6 +13094,9 @@ async function handleBankingPayWorkbenchSessionGet(env, req, user, sessionId) {
     return buildFriendlyFailure(400, { code: 'STALE_SESSION' }, { preserveSafeLocalMessage: true, localTitle: 'Payment preview needs refreshing', localMessage: 'Refresh Banking Pay preview, review the latest details, then try again.' });
   }
 
+  let candidateStateEvidence = null;
+  let sessionScopeCandidateIds = [];
+
   const enc = encodeURIComponent;
   const isPlainObject = (value) => !!value && typeof value === 'object' && !Array.isArray(value);
   const normaliseProgress = (payload, fallback = {}) => {
@@ -13210,12 +13213,207 @@ async function handleBankingPayWorkbenchSessionGet(env, req, user, sessionId) {
     }), { status: 409, headers: JSON_HEADERS }));
   };
 
+  const pendingRefreshResponse = (payload = {}, fallbackCode = 'REFRESHING_CANDIDATES') => {
+    const obj = isPlainObject(payload) ? payload : {};
+    const code = normaliseSessionCode(obj.error_code || obj.code || fallbackCode) || fallbackCode;
+    const pendingCandidateIds = Array.isArray(obj.pending_candidate_ids) ? obj.pending_candidate_ids : [];
+    const failedCandidateIds = Array.isArray(obj.failed_candidate_ids) ? obj.failed_candidate_ids : [];
+    const pendingJobIds = Array.isArray(obj.pending_job_ids) ? obj.pending_job_ids : [];
+    const candidateStatusRows = Array.isArray(obj.candidate_status_rows) ? obj.candidate_status_rows : (Array.isArray(obj.candidate_statuses) ? obj.candidate_statuses : []);
+    const recentJobs = Array.isArray(obj.recent_jobs) ? obj.recent_jobs : [];
+    return withCORS(env, req, ok({
+      ok: false,
+      ...obj,
+      error_code: code,
+      code,
+      rebase_required: false,
+      requires_new_session: false,
+      session_id: id,
+      ready: false,
+      ready_flag: false,
+      ready_empty: false,
+      progress_only: true,
+      deferred: true,
+      pending_candidate_ids: pendingCandidateIds,
+      failed_candidate_ids: failedCandidateIds,
+      pending_job_ids: pendingJobIds,
+      pending_candidates: Number.isFinite(Number(obj.pending_candidates ?? obj.pending_count)) ? Math.max(0, Number(obj.pending_candidates ?? obj.pending_count)) : pendingCandidateIds.length,
+      pending_count: Number.isFinite(Number(obj.pending_count ?? obj.pending_candidates)) ? Math.max(0, Number(obj.pending_count ?? obj.pending_candidates)) : pendingCandidateIds.length,
+      candidate_status_rows: candidateStatusRows,
+      candidate_statuses: candidateStatusRows,
+      recent_jobs: recentJobs,
+      phase: 'REFRESHING_CANDIDATES',
+      status_text: String(obj.status_text || obj.message || 'Payment preview is still refreshing.').trim() || 'Payment preview is still refreshing.',
+      message: String(obj.message || obj.status_text || 'Payment preview is still refreshing.').trim() || 'Payment preview is still refreshing.'
+    }));
+  };
+  const readyEmptySessionResponse = (payload = {}) => {
+    const obj = isPlainObject(payload) ? payload : {};
+    return withCORS(env, req, ok({
+      ok: true,
+      ...obj,
+      session_id: id,
+      ready: true,
+      ready_flag: true,
+      ready_empty: true,
+      rebase_required: false,
+      requires_new_session: false,
+      progress_only: true,
+      deferred: false,
+      total_candidates: 0,
+      total_count: 0,
+      completed_candidates: 0,
+      completed_count: 0,
+      ready_candidates: 0,
+      ready_count: 0,
+      pending_candidates: 0,
+      pending_count: 0,
+      failed_candidates: 0,
+      failed_count: 0,
+      pending_candidate_ids: [],
+      failed_candidate_ids: [],
+      pending_job_ids: [],
+      preview: {
+        ok: true,
+        ready: true,
+        ready_empty: true,
+        paye_candidates: [],
+        non_paye_payees: [],
+        canonical_preview_lines: [],
+        preview_rows: [],
+        rows: [],
+        componentStateCache: {
+          case_resolution_states: [],
+          blocked_case_states: [],
+          safe_case_states: [],
+          reusable_component_resolutions: {},
+          stale_component_resolutions: {},
+          draftable_now: [],
+          blocked_now: [],
+          ready_to_pay_now: [],
+          blocked_for_pay_now: [],
+          hidden_indefinite_snoozes: [],
+          ready_preview_lines: [],
+          blocked_preview_lines: [],
+          hidden_preview_lines: []
+        }
+      },
+      phase: 'READY_EMPTY',
+      status_text: String(obj.status_text || obj.message || 'Payment preview is ready. No eligible payment candidates remain for this scope.').trim() || 'Payment preview is ready. No eligible payment candidates remain for this scope.',
+      message: String(obj.message || obj.status_text || 'Payment preview is ready. No eligible payment candidates remain for this scope.').trim() || 'Payment preview is ready. No eligible payment candidates remain for this scope.'
+    }));
+  };
+  const isFatalPreviewError = (value) => {
+    const text = String(value == null ? '' : (typeof value === 'string' ? value : (() => { try { return JSON.stringify(value); } catch { return String(value || ''); } })())).toUpperCase();
+    if (!text) return false;
+    if (/(AUTHORIZATION|AUTHORISATION|UNAUTHORIZED|UNAUTHORISED|FORBIDDEN|PERMISSION DENIED|RLS|ROW LEVEL SECURITY|POLICY)/i.test(text)) return true;
+    if (/(INTEGRITY|DATA_CORRUPTION|CORRUPTION|MALFORMED|INVALID_JSON|ASSERT_INTEGRITY)/i.test(text)) return true;
+    if (/(SQLSTATE|POSTGRES|SUPABASE|POSTGREST|INVALID INPUT SYNTAX|AMBIGUOUS|CONSTRAINT|VIOLATES)/i.test(text)) return true;
+    if (/\b(RELATION|COLUMN|FUNCTION|TABLE|SCHEMA|TYPE|OPERATOR|TRIGGER|INDEX)\b[^\n]*\b(DOES NOT EXIST|NOT FOUND|IS AMBIGUOUS)\b/i.test(text)) return true;
+    return false;
+  };
+  const hasRefreshInFlightEvidence = (payload) => {
+    const obj = isPlainObject(payload) ? payload : {};
+    if (progressHasPendingWork(obj)) return true;
+    const phase = normaliseSessionCode(obj.phase || obj.current_phase || obj.status_phase || obj.status || '');
+    if (['PENDING', 'REFRESHING', 'REFRESHING_CANDIDATES', 'SNAPSHOT_REFRESH_PENDING', 'SNAPSHOT_REBUILD_PENDING', 'WORKBENCH_REFRESH_PENDING', 'WORKBENCH_JOBS_RUNNING', 'PROGRESS_ONLY'].includes(phase)) return true;
+    const rows = Array.isArray(obj.candidate_status_rows) ? obj.candidate_status_rows : (Array.isArray(obj.candidate_statuses) ? obj.candidate_statuses : []);
+    const expectedScopeCount = Number(obj.expected_scope_candidate_count ?? obj.scope_candidate_count ?? (Array.isArray(sessionScopeCandidateIds) ? sessionScopeCandidateIds.length : 0) ?? 0);
+    const total = Number(obj.total_count ?? obj.total_candidates ?? obj.candidate_count ?? 0);
+    if (Number.isFinite(expectedScopeCount) && expectedScopeCount > 0 && Number.isFinite(total) && total === 0 && rows.length === 0) return true;
+    return rows.some((row) => {
+      const status = String(row && row.status ? row.status : '').trim().toUpperCase();
+      const pendingJobId = String(row && (row.pending_job_id || row.latest_job_id || row.job_id) ? (row.pending_job_id || row.latest_job_id || row.job_id) : '').trim();
+      return status === 'PENDING' || (!!pendingJobId && !['SUCCEEDED', 'SUCCESS', 'COMPLETED', 'COMPLETE', 'DONE', 'READY', 'FAILED', 'ERROR', 'CANCELLED', 'CANCELED', 'SKIPPED'].includes(status));
+    });
+  };
+  const hasReadyEmptyEvidence = (payload) => {
+    const obj = isPlainObject(payload) ? payload : {};
+    const total = Number(obj.total_count ?? obj.total_candidates ?? obj.candidate_count ?? 0);
+    const pending = Number(obj.pending_count ?? obj.pending_candidates ?? 0);
+    const failed = Number(obj.failed_count ?? obj.failed_candidates ?? 0);
+    const rows = Array.isArray(obj.candidate_status_rows) ? obj.candidate_status_rows : (Array.isArray(obj.candidate_statuses) ? obj.candidate_statuses : []);
+    const expectedScopeCount = Number(obj.expected_scope_candidate_count ?? obj.scope_candidate_count ?? (Array.isArray(sessionScopeCandidateIds) ? sessionScopeCandidateIds.length : 0) ?? 0);
+    if (Number.isFinite(expectedScopeCount) && expectedScopeCount > 0 && Number.isFinite(total) && total === 0) return false;
+    if (obj.ready_empty === true) return true;
+    return Number.isFinite(total) && total === 0 && (!Number.isFinite(pending) || pending === 0) && (!Number.isFinite(failed) || failed === 0) && rows.length === 0 && !hasRefreshInFlightEvidence(obj);
+  };
+  const fetchCandidateStateEvidence = async () => {
+    try {
+      const { rows } = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/banking_pay_workbench_session_candidate_state?session_id=eq.${enc(id)}&select=session_id,candidate_id,status,pending_job_id,last_error_json&limit=2000`, false);
+      const stateRows = Array.isArray(rows) ? rows.filter((row) => row && typeof row === 'object' && !Array.isArray(row)) : [];
+      const pendingRows = stateRows.filter((row) => String(row.status || '').trim().toUpperCase() === 'PENDING');
+      const failedRows = stateRows.filter((row) => String(row.status || '').trim().toUpperCase() === 'FAILED');
+      const readyRows = stateRows.filter((row) => String(row.status || '').trim().toUpperCase() === 'READY');
+      const missingStatePendingIds = stateRows.length === 0 && sessionScopeCandidateIds.length > 0 ? [...sessionScopeCandidateIds] : [];
+      const pendingJobIds = pendingRows.map((row) => String(row.pending_job_id || '').trim()).filter(Boolean);
+      const explicitPendingCandidateIds = Array.from(new Set([
+        ...pendingRows.map((row) => String(row.candidate_id || '').trim()).filter(Boolean),
+        ...missingStatePendingIds
+      ]));
+      const candidateStatusRows = stateRows.length > 0
+        ? stateRows.map((row) => ({
+            candidate_id: String(row.candidate_id || '').trim(),
+            status: String(row.status || '').trim().toUpperCase(),
+            pending_job_id: String(row.pending_job_id || '').trim() || null,
+            latest_error_json: isPlainObject(row.last_error_json) ? row.last_error_json : null
+          }))
+        : missingStatePendingIds.map((candidateId) => ({
+            candidate_id: candidateId,
+            status: 'PENDING',
+            pending_job_id: null,
+            latest_error_json: null
+          }));
+      const hasMissingStatePendingWork = missingStatePendingIds.length > 0;
+      return {
+        session_id: id,
+        total_candidates: stateRows.length,
+        total_count: stateRows.length,
+        scope_candidate_ids: [...sessionScopeCandidateIds],
+        scope_candidate_count: sessionScopeCandidateIds.length,
+        expected_scope_candidate_count: sessionScopeCandidateIds.length,
+        completed_candidates: readyRows.length,
+        completed_count: readyRows.length,
+        ready_candidates: readyRows.length,
+        ready_count: readyRows.length,
+        pending_candidates: pendingRows.length + missingStatePendingIds.length,
+        pending_count: pendingRows.length + missingStatePendingIds.length,
+        failed_candidates: failedRows.length,
+        failed_count: failedRows.length,
+        pending_candidate_ids: explicitPendingCandidateIds,
+        failed_candidate_ids: failedRows.map((row) => String(row.candidate_id || '').trim()).filter(Boolean),
+        pending_job_ids: pendingJobIds,
+        candidate_status_rows: candidateStatusRows,
+        candidate_statuses: candidateStatusRows,
+        recent_jobs: [],
+        phase: (pendingRows.length > 0 || hasMissingStatePendingWork) ? 'REFRESHING_CANDIDATES' : (stateRows.length === 0 ? 'READY_EMPTY' : 'READY'),
+        status_text: (pendingRows.length > 0 || hasMissingStatePendingWork) ? 'Payment preview is still refreshing.' : (stateRows.length === 0 ? 'Payment preview is ready. No eligible payment candidates remain for this scope.' : 'Payment preview is ready.'),
+        ready: pendingRows.length === 0 && failedRows.length === 0 && !hasMissingStatePendingWork,
+        ready_flag: pendingRows.length === 0 && failedRows.length === 0 && !hasMissingStatePendingWork,
+        ready_empty: stateRows.length === 0 && !hasMissingStatePendingWork
+      };
+    } catch (evidenceError) {
+      return {
+        session_id: id,
+        evidence_error: String(evidenceError && evidenceError.message ? evidenceError.message : evidenceError || ''),
+        total_candidates: -1,
+        total_count: -1,
+        pending_candidate_ids: [],
+        failed_candidate_ids: [],
+        pending_job_ids: [],
+        candidate_status_rows: [],
+        candidate_statuses: [],
+        recent_jobs: []
+      };
+    }
+  };
+
   try {
     const { rows } = await sbFetch(
       env,
       `${env.SUPABASE_URL}/rest/v1/banking_pay_workbench_sessions` +
       `?id=eq.${enc(id)}` +
-      `&select=id,actor_user_id,status,source_snapshot_run_id,discarded_at_utc` +
+      `&select=id,actor_user_id,status,source_snapshot_run_id,discarded_at_utc,scope_candidate_ids` +
       `&limit=1`,
       false
     );
@@ -13225,6 +13423,7 @@ async function handleBankingPayWorkbenchSessionGet(env, req, user, sessionId) {
       return buildFriendlyFailure(404, { code: 'STALE_SESSION' }, { preserveSafeLocalMessage: true, localTitle: 'Payment preview needs refreshing', localMessage: 'Refresh Banking Pay preview, review the latest details, then try again.' });
     }
 
+    sessionScopeCandidateIds = Array.isArray(sessionRow.scope_candidate_ids) ? sessionRow.scope_candidate_ids.map((value) => String(value || '').trim()).filter(Boolean) : [];
     const sessionStatus = String(sessionRow.status || '').trim().toUpperCase();
     const discardedAtUtc = String(sessionRow.discarded_at_utc || '').trim();
     if (sessionStatus !== 'OPEN' || discardedAtUtc) {
@@ -13241,6 +13440,9 @@ async function handleBankingPayWorkbenchSessionGet(env, req, user, sessionId) {
       }), { status: 409, headers: JSON_HEADERS }));
     }
 
+    candidateStateEvidence = await fetchCandidateStateEvidence();
+    if (hasReadyEmptyEvidence(candidateStateEvidence)) return readyEmptySessionResponse(candidateStateEvidence);
+
     const fetchProgressPayload = async () => {
       const progressRpc = await sbRpc(env, 'pay_workbench_session_get_progress', { p_session_id: id });
       return normaliseProgress(unwrapRpc(progressRpc, 'pay_workbench_session_get_progress'), { session_id: id });
@@ -13250,12 +13452,17 @@ async function handleBankingPayWorkbenchSessionGet(env, req, user, sessionId) {
     try {
       progressPayload = await fetchProgressPayload();
       if (isRebaseRequiredPayload(progressPayload)) return rebaseRequiredResponse(progressPayload);
+      if (hasReadyEmptyEvidence(progressPayload)) return readyEmptySessionResponse(progressPayload);
       if (progressPayload.ready !== true && progressHasPendingWork(progressPayload)) {
         workerState = await runSmallWorkbenchDrainForSession(progressPayload, 'session_get_interactive_nudge', id);
         if (workerState && workerState.attempted === true) {
           progressPayload = await fetchProgressPayload();
           if (isRebaseRequiredPayload(progressPayload)) return rebaseRequiredResponse(progressPayload);
+          if (hasReadyEmptyEvidence(progressPayload)) return readyEmptySessionResponse(progressPayload);
         }
+      }
+      if (progressPayload && progressPayload.ready !== true && hasRefreshInFlightEvidence(progressPayload)) {
+        return pendingRefreshResponse(Object.assign({}, progressPayload, { worker_state: workerState }));
       }
     } catch (progressOrDrainError) {
       workerState = {
@@ -13264,6 +13471,13 @@ async function handleBankingPayWorkbenchSessionGet(env, req, user, sessionId) {
         error_code: 'WORKBENCH_SESSION_GET_DRAIN_OR_PROGRESS_FAILED',
         error: String(progressOrDrainError && progressOrDrainError.message ? progressOrDrainError.message : progressOrDrainError || 'unknown')
       };
+      if (!isFatalPreviewError(progressOrDrainError)) {
+        if (!candidateStateEvidence) candidateStateEvidence = await fetchCandidateStateEvidence();
+        if (hasReadyEmptyEvidence(candidateStateEvidence)) return readyEmptySessionResponse(candidateStateEvidence);
+        if (hasRefreshInFlightEvidence(candidateStateEvidence)) {
+          return pendingRefreshResponse(Object.assign({}, candidateStateEvidence, { worker_state: workerState }));
+        }
+      }
     }
 
     const previewRpc = await sbRpc(env, 'pay_workbench_session_get_preview', {
@@ -13271,6 +13485,11 @@ async function handleBankingPayWorkbenchSessionGet(env, req, user, sessionId) {
     });
 
     const previewPayload = unwrapRpc(previewRpc, 'pay_workbench_session_get_preview');
+    if (isRebaseRequiredPayload(previewPayload)) return rebaseRequiredResponse(previewPayload);
+    if (hasReadyEmptyEvidence(previewPayload)) return readyEmptySessionResponse(previewPayload);
+    if (hasRefreshInFlightEvidence(previewPayload) || previewPayload.progress_only === true || previewPayload.pending_refresh === true || previewPayload.refreshing === true) {
+      return pendingRefreshResponse(previewPayload);
+    }
     if (progressPayload && typeof progressPayload === 'object' && !Array.isArray(progressPayload)) {
       previewPayload.progress = progressPayload;
       previewPayload.worker_state = workerState;
@@ -13284,7 +13503,41 @@ async function handleBankingPayWorkbenchSessionGet(env, req, user, sessionId) {
     return withCORS(env, req, ok(previewPayload));
   } catch (e) {
     const msg = String(e?.message || e || '');
-    const staleLike = /(STALE_SESSION|OBSOLETE_SESSION|BATCH_STALE)/i.test(msg);
+    const code = normaliseSessionCode(e?.error_code || e?.errorCode || e?.code || e?.json?.error_code || e?.json?.code || e?.payload?.error_code || e?.payload?.code || '');
+    const combined = `${code}
+${msg}`;
+    const staleLike = staleSessionCodes.has(code) || /(STALE_SESSION|OBSOLETE_SESSION|REBASE_REQUIRED|WORKBENCH_SESSION_NOT_OPEN|WORKBENCH_SESSION_DISCARDED|WORKBENCH_SESSION_NOT_FOUND|WORKBENCH_SESSION_INVALID|BATCH_STALE|needs refreshing|preview needs refreshing)/i.test(combined);
+    const runningLike = /(still running|in progress|temporarily unavailable|timeout|timed out|PENDING|refreshing|refresh queued|job still running|candidate refresh|snapshot refresh|snapshot rebuild|please retry)/i.test(combined);
+    const fatalLike = isFatalPreviewError(combined) || isFatalPreviewError(e?.payload || e?.json || e);
+
+    if (!fatalLike) {
+      if (!candidateStateEvidence) candidateStateEvidence = await fetchCandidateStateEvidence();
+      if (hasReadyEmptyEvidence(candidateStateEvidence)) return readyEmptySessionResponse(candidateStateEvidence);
+      if (hasRefreshInFlightEvidence(candidateStateEvidence)) {
+        return pendingRefreshResponse(Object.assign({}, candidateStateEvidence, {
+          error_code: 'REFRESHING_CANDIDATES',
+          code: 'REFRESHING_CANDIDATES',
+          technical_message: msg || code || null
+        }), 'REFRESHING_CANDIDATES');
+      }
+    }
+
+    if (staleLike && !fatalLike) return rebaseRequiredResponse({
+      error_code: code && staleSessionCodes.has(code) ? code : 'STALE_SESSION',
+      code: code && staleSessionCodes.has(code) ? code : 'STALE_SESSION',
+      message: 'Payment preview needs refreshing',
+      status_text: 'Payment preview needs refreshing',
+      technical_message: msg || code || null
+    }, code && staleSessionCodes.has(code) ? code : 'STALE_SESSION');
+
+    if (runningLike && !fatalLike) return pendingRefreshResponse({
+      error_code: 'REFRESHING_CANDIDATES',
+      code: 'REFRESHING_CANDIDATES',
+      message: 'Payment preview is still refreshing.',
+      status_text: 'Payment preview is still refreshing.',
+      technical_message: msg || code || null
+    }, 'REFRESHING_CANDIDATES');
+
     return buildFriendlyFailure(
       staleLike ? 409 : 500,
       {
@@ -129841,588 +130094,6 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
   return summary;
 }
 
-async function handleBankingPayWorkbenchSessionGet(env, req, user, sessionId) {
-  const buildFriendlyFailure = (status, errorInput, options = {}, extra = null) => {
-
-    const isErrorObject = errorInput instanceof Error;
-    const errorInputObject = (errorInput && typeof errorInput === 'object' && !Array.isArray(errorInput) && !isErrorObject) ? errorInput : {};
-    const detailsObject = (errorInputObject.details && typeof errorInputObject.details === 'object' && !Array.isArray(errorInputObject.details)) ? errorInputObject.details : {};
-    const originalError = isErrorObject
-      ? errorInput
-      : (errorInputObject.original_error || errorInputObject.originalError || errorInputObject.rpc_error || errorInputObject.rpcError || detailsObject.original_error || detailsObject.originalError || detailsObject.rpc_error || detailsObject.rpcError || null);
-    const reasonText = String(
-      errorInputObject.reason ??
-      detailsObject.reason ??
-      errorInputObject.message ??
-      (isErrorObject ? errorInput.message : errorInput) ??
-      ''
-    ).trim();
-    const normaliserInput = {
-      ...errorInputObject,
-      ...(isErrorObject ? { message: errorInput.message, error: errorInput.message, name: errorInput.name } : {}),
-      details: {
-        ...detailsObject,
-        reason: detailsObject.reason ?? errorInputObject.reason ?? reasonText,
-        rpc_error: detailsObject.rpc_error || detailsObject.rpcError || errorInputObject.rpc_error || errorInputObject.rpcError || originalError || null,
-        original_error: detailsObject.original_error || detailsObject.originalError || errorInputObject.original_error || errorInputObject.originalError || originalError || null
-      },
-      reason: errorInputObject.reason ?? detailsObject.reason ?? reasonText,
-      technical_message: errorInputObject.technical_message ?? errorInputObject.technicalMessage ?? detailsObject.reason ?? reasonText,
-      rpc_error: errorInputObject.rpc_error || errorInputObject.rpcError || originalError || null,
-      original_error: errorInputObject.original_error || errorInputObject.originalError || originalError || null,
-      response: errorInputObject.response || detailsObject.response || null
-    };
-    const friendlyPayload = makeBankingFriendlyErrorPayload(normaliserInput, { action: 'PREVIEW', ...options });
-    const base = (friendlyPayload && typeof friendlyPayload === 'object') ? friendlyPayload : {};
-    const reserved = new Set(['ok', 'error_code', 'code', 'title', 'message', 'user_message', 'friendly_error', 'user_action', 'confirm_label']);
-    const mergedExtra = Object.fromEntries(Object.entries((extra && typeof extra === 'object' && !Array.isArray(extra)) ? extra : {}).filter(([k]) => !reserved.has(k)));
-    const payload = { ...base, ...mergedExtra, ok: false };
-    const normalisedCode = String(payload.error_code || payload.code || '').trim().toUpperCase();
-
-    const genericFallbackCodes = new Set([
-      'BANKING_ACTION_FAILED',
-      'BANKING_PAY_PREVIEW_FAILED',
-      'BANKING_PAY_PREVIEW_SESSION_BACKED_FAILED',
-      'BANKING_PAY_CREATE_DRAFT_FAILED',
-      'BANKING_PAY_CREATE_DRAFT_SESSION_BACKED_FAILED',
-      'BANKING_PAY_CREATE_DRAFT_ROUTE_FAILED',
-      'BANKING_PAY_WORKBENCH_SESSION_OPEN_FAILED',
-      'BANKING_PAY_WORKBENCH_SESSION_GET_FAILED',
-      'BANKING_PAY_WORKBENCH_SESSION_GET_CANDIDATE_FAILED',
-      'BANKING_PAY_WORKBENCH_SESSION_PROGRESS_FAILED',
-      'BANKING_ALERT_ACKNOWLEDGE_FAILED',
-      'WORKBENCH_MODAL_ACTION_INVALID_JSON',
-      'WORKBENCH_MODAL_ACTION_INVALID_CASE_RESOLUTION',
-      'WORKBENCH_MODAL_ACTION_INVALID_CASE_KEY',
-      'WORKBENCH_MODAL_ACTION_INVALID_CANDIDATE',
-      'WORKBENCH_MODAL_ACTION_INVALID_FINANCE_CASE',
-      'WORKBENCH_MODAL_ACTION_INVALID_TIMESHEET',
-      'WORKBENCH_MODAL_ACTION_INVALID_PAY_DATE',
-      'WORKBENCH_MODAL_ACTION_INVALID_AMOUNT',
-      'WORKBENCH_MODAL_ACTION_INVALID_EXCLUSION',
-      'WORKBENCH_MODAL_ACTION_INVALID_SELECTED_ROWS',
-      'WORKBENCH_SESSION_INVALID',
-      'WORKBENCH_SESSION_NOT_FOUND',
-      'STALE_SESSION',
-      'OBSOLETE_SESSION',
-      'BANKING_PAY_WORKBENCH_SESSION_OPEN_CONTEXT_MISMATCH'
-    ]);
-    const validationStatusCodes = new Set([
-      'PAYE_NOT_READY',
-      'PAYE_NET_MISSING',
-      'PAYE_NET_INVALID',
-      'PAYE_NET_REQUIRED',
-      'PAYE_NET_BANK_AMOUNT_MISSING',
-      'PAYE_NET_BANK_AMOUNT_INVALID',
-      'BLOCKED_BANK_DETAILS',
-      'SELECTED_PAYEE_ROUTE_NOT_READY',
-      'HAS_HARD_BLOCKERS',
-      'FUNDING_ACCOUNT_MISSING',
-      'RAIL_ENV_MISMATCH',
-      'RAIL_NOT_CONFIGURED',
-      'UNKNOWN_RAIL_PROVIDER',
-      'MISSING_RAIL_PROVIDER'
-    ]);
-    const isGenericNormalisedCode = (code) => {
-      const c = String(code || '').trim().toUpperCase();
-      if (!c) return true;
-      if (genericFallbackCodes.has(c)) return true;
-      if (c.startsWith('BANKING_PAY_') && c.endsWith('_FAILED')) return true;
-      if (c.startsWith('BANKING_') && c.endsWith('_FAILED')) return true;
-      if (c.startsWith('WORKBENCH_MODAL_ACTION_INVALID_')) return true;
-      return false;
-    };
-    const resolveStatus = (code, fallbackStatus) => {
-      const c = String(code || '').trim().toUpperCase();
-      if (c === 'BATCH_STALE') return 409;
-      if (validationStatusCodes.has(c)) return 400;
-      return fallbackStatus;
-    };
-    if (options.preserveSafeLocalMessage === true && isGenericNormalisedCode(normalisedCode)) {
-      const localTitle = String(options.localTitle || '').trim();
-      const localMessage = String(options.localMessage || '').trim();
-      if (localTitle && localMessage) {
-        payload.title = localTitle;
-        payload.message = localMessage;
-        payload.user_message = localMessage;
-        payload.error = localMessage;
-        payload.friendly_error = { ...((payload.friendly_error && typeof payload.friendly_error === 'object') ? payload.friendly_error : {}), title: localTitle, message: localMessage };
-      }
-    }
-    return withCORS(env, req, new Response(JSON.stringify(payload), { status: resolveStatus(normalisedCode, status), headers: JSON_HEADERS }));
-  };
-  const id = String(sessionId || '').trim();
-  const actorUserId = String(user?.id || '').trim();
-  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
-  if (!uuidRe.test(actorUserId)) {
-    return withCORS(env, req, unauthorized('Unauthorized'));
-  }
-  if (!uuidRe.test(id)) {
-    return buildFriendlyFailure(400, { code: 'STALE_SESSION' }, { preserveSafeLocalMessage: true, localTitle: 'Payment preview needs refreshing', localMessage: 'Refresh Banking Pay preview, review the latest details, then try again.' });
-  }
-
-  let candidateStateEvidence = null;
-  let sessionScopeCandidateIds = [];
-
-  const enc = encodeURIComponent;
-  const isPlainObject = (value) => !!value && typeof value === 'object' && !Array.isArray(value);
-  const normaliseProgress = (payload, fallback = {}) => {
-    const src = isPlainObject(payload) ? payload : {};
-    const total = Number(src.total_count ?? src.total_candidates ?? src.candidate_count ?? src.total ?? 0);
-    const completed = Number(src.completed_count ?? src.ready_count ?? src.ready_candidates ?? src.completed_candidates ?? 0);
-    const pending = Number(src.pending_count ?? src.pending_candidates ?? Math.max(0, (Number.isFinite(total) ? total : 0) - (Number.isFinite(completed) ? completed : 0)));
-    const failed = Number(src.failed_count ?? src.failed_candidates ?? 0);
-    const explicitReady = src.ready === true || src.ready_flag === true || src.ready_empty === true || String(src.status || '').trim().toUpperCase() === 'READY';
-    const explicitNotReady = src.ready === false || src.ready_flag === false;
-    const ready = explicitReady || (!explicitNotReady && Number.isFinite(total) && total > 0 && Number.isFinite(completed) && completed >= total && (!Number.isFinite(failed) || failed === 0));
-    return {
-      ...src,
-      session_id: String(src.session_id || fallback.session_id || id).trim(),
-      ready,
-      ready_flag: ready,
-      ready_empty: ready && (!Number.isFinite(total) || total <= 0),
-      total_candidates: Number.isFinite(total) ? total : 0,
-      total_count: Number.isFinite(total) ? total : 0,
-      completed_candidates: Number.isFinite(completed) ? completed : 0,
-      completed_count: Number.isFinite(completed) ? completed : 0,
-      ready_candidates: Number.isFinite(completed) ? completed : 0,
-      pending_candidates: Number.isFinite(pending) ? Math.max(0, pending) : 0,
-      pending_count: Number.isFinite(pending) ? Math.max(0, pending) : 0,
-      failed_candidates: Number.isFinite(failed) ? failed : 0,
-      failed_count: Number.isFinite(failed) ? failed : 0,
-      phase: String(src.phase || src.current_phase || fallback.phase || (ready ? 'READY' : 'REFRESHING')).trim(),
-      status_text: String(src.status_text || src.message || fallback.status_text || (ready ? 'Payment preview is ready.' : 'Payment preview is still refreshing.')).trim(),
-      pending_candidate_ids: Array.isArray(src.pending_candidate_ids) ? src.pending_candidate_ids : [],
-      failed_candidate_ids: Array.isArray(src.failed_candidate_ids) ? src.failed_candidate_ids : [],
-      pending_job_ids: Array.isArray(src.pending_job_ids) ? src.pending_job_ids : [],
-      candidate_status_rows: Array.isArray(src.candidate_status_rows) ? src.candidate_status_rows : (Array.isArray(src.candidate_statuses) ? src.candidate_statuses : []),
-      candidate_statuses: Array.isArray(src.candidate_statuses) ? src.candidate_statuses : (Array.isArray(src.candidate_status_rows) ? src.candidate_status_rows : []),
-      recent_jobs: Array.isArray(src.recent_jobs) ? src.recent_jobs : []
-    };
-  };
-
-  const workbenchInlineWarmupEnabled = () => {
-    const raw = String(env && Object.prototype.hasOwnProperty.call(env, 'BANKING_PAY_WORKBENCH_INLINE_WARMUP') ? env.BANKING_PAY_WORKBENCH_INLINE_WARMUP : '').trim().toLowerCase();
-    return !(raw === '0' || raw === 'false' || raw === 'no' || raw === 'off' || raw === 'disabled');
-  };
-  const progressHasPendingWork = (progress) => {
-    const p = isPlainObject(progress) ? progress : {};
-    const pendingCount = Number(p.pending_count ?? p.pending_candidates ?? 0);
-    const pendingIds = Array.isArray(p.pending_candidate_ids) ? p.pending_candidate_ids : [];
-    const pendingJobs = Array.isArray(p.pending_job_ids) ? p.pending_job_ids : [];
-    return (Number.isFinite(pendingCount) && pendingCount > 0) || pendingIds.length > 0 || pendingJobs.length > 0;
-  };
-  const runSmallWorkbenchDrainForSession = async (progress, origin, drainSessionId) => {
-    const p = isPlainObject(progress) ? progress : {};
-    const pendingCountRaw = Number(p.pending_count ?? p.pending_candidates ?? 0);
-    const totalCountRaw = Number(p.total_count ?? p.total_candidates ?? p.candidate_count ?? 0);
-    const pendingCount = Number.isFinite(pendingCountRaw) ? Math.max(0, pendingCountRaw) : 0;
-    const totalCount = Number.isFinite(totalCountRaw) ? Math.max(0, totalCountRaw) : 0;
-    const pendingJobIds = Array.isArray(p.pending_job_ids) ? p.pending_job_ids.filter(Boolean) : [];
-    const smallEnough = (pendingCount > 0 && pendingCount <= 5) || (totalCount > 0 && totalCount <= 5) || pendingJobIds.length <= 2;
-    if (p.ready === true || p.ready_flag === true) return { attempted: false, reason: 'READY' };
-    if (!progressHasPendingWork(p)) return { attempted: false, reason: 'NO_PENDING_WORK' };
-    if (!smallEnough) return { attempted: false, reason: 'TOO_MANY_PENDING_CANDIDATES', pending_count: pendingCount, total_count: totalCount };
-    if (!workbenchInlineWarmupEnabled()) return { attempted: false, reason: 'INLINE_WARMUP_DISABLED' };
-    if (typeof drainBankingPayWorkbenchJobs !== 'function') return { attempted: false, reason: 'DRAIN_HELPER_MISSING' };
-    const claimLimit = Math.max(1, Math.min(5, pendingJobIds.length || pendingCount || totalCount || 1));
-    const drainResult = await drainBankingPayWorkbenchJobs(env, {
-      origin,
-      nowUtc: new Date().toISOString(),
-      claimLimit,
-      maxPasses: origin === 'session_open_interactive_warmup' ? 2 : 1,
-      sessionId: drainSessionId,
-      actorUserId,
-      allowInteractive: true,
-      allowedJobTypes: ['SNAPSHOT_CANDIDATE_REFRESH', 'SESSION_CANDIDATE_RECOMPUTE']
-    });
-    return {
-      attempted: true,
-      origin,
-      pending_count: pendingCount,
-      total_count: totalCount,
-      pending_job_ids: pendingJobIds,
-      drain: drainResult && typeof drainResult === 'object' && !Array.isArray(drainResult) ? drainResult : null
-    };
-  };
-
-  const unwrapRpc = (rpcRes, key) => {
-    let payload = rpcRes;
-    try {
-      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') {
-        payload = rpcRes[0];
-      }
-      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) {
-        payload = payload[key];
-      }
-    } catch {}
-    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
-  };
-  const staleSessionCodes = new Set(['OBSOLETE_SESSION', 'STALE_SESSION', 'REBASE_REQUIRED', 'WORKBENCH_SESSION_NOT_OPEN', 'WORKBENCH_SESSION_DISCARDED', 'WORKBENCH_SESSION_NOT_FOUND', 'WORKBENCH_SESSION_INVALID']);
-  const normaliseSessionCode = (value) => String(value || '').trim().toUpperCase().replace(/[^A-Z0-9_]+/g, '_').replace(/^_+|_+$/g, '');
-  const isRebaseRequiredPayload = (payload) => {
-    const obj = isPlainObject(payload) ? payload : {};
-    const code = normaliseSessionCode(obj.error_code || obj.code || obj.reason_code || '');
-    return obj.rebase_required === true || obj.requires_new_session === true || staleSessionCodes.has(code);
-  };
-  const rebaseRequiredResponse = (payload = {}, fallbackCode = 'OBSOLETE_SESSION') => {
-    const obj = isPlainObject(payload) ? payload : {};
-    const code = normaliseSessionCode(obj.error_code || obj.code || fallbackCode) || fallbackCode;
-    return withCORS(env, req, new Response(JSON.stringify({
-      ok: false,
-      ...obj,
-      error_code: code,
-      code,
-      rebase_required: true,
-      requires_new_session: true,
-      session_id: id,
-      message: String(obj.message || obj.status_text || 'Payment preview needs refreshing').trim() || 'Payment preview needs refreshing'
-    }), { status: 409, headers: JSON_HEADERS }));
-  };
-
-  const pendingRefreshResponse = (payload = {}, fallbackCode = 'REFRESHING_CANDIDATES') => {
-    const obj = isPlainObject(payload) ? payload : {};
-    const code = normaliseSessionCode(obj.error_code || obj.code || fallbackCode) || fallbackCode;
-    const pendingCandidateIds = Array.isArray(obj.pending_candidate_ids) ? obj.pending_candidate_ids : [];
-    const failedCandidateIds = Array.isArray(obj.failed_candidate_ids) ? obj.failed_candidate_ids : [];
-    const pendingJobIds = Array.isArray(obj.pending_job_ids) ? obj.pending_job_ids : [];
-    const candidateStatusRows = Array.isArray(obj.candidate_status_rows) ? obj.candidate_status_rows : (Array.isArray(obj.candidate_statuses) ? obj.candidate_statuses : []);
-    const recentJobs = Array.isArray(obj.recent_jobs) ? obj.recent_jobs : [];
-    return withCORS(env, req, ok({
-      ok: false,
-      ...obj,
-      error_code: code,
-      code,
-      rebase_required: false,
-      requires_new_session: false,
-      session_id: id,
-      ready: false,
-      ready_flag: false,
-      ready_empty: false,
-      progress_only: true,
-      deferred: true,
-      pending_candidate_ids: pendingCandidateIds,
-      failed_candidate_ids: failedCandidateIds,
-      pending_job_ids: pendingJobIds,
-      pending_candidates: Number.isFinite(Number(obj.pending_candidates ?? obj.pending_count)) ? Math.max(0, Number(obj.pending_candidates ?? obj.pending_count)) : pendingCandidateIds.length,
-      pending_count: Number.isFinite(Number(obj.pending_count ?? obj.pending_candidates)) ? Math.max(0, Number(obj.pending_count ?? obj.pending_candidates)) : pendingCandidateIds.length,
-      candidate_status_rows: candidateStatusRows,
-      candidate_statuses: candidateStatusRows,
-      recent_jobs: recentJobs,
-      phase: 'REFRESHING_CANDIDATES',
-      status_text: String(obj.status_text || obj.message || 'Payment preview is still refreshing.').trim() || 'Payment preview is still refreshing.',
-      message: String(obj.message || obj.status_text || 'Payment preview is still refreshing.').trim() || 'Payment preview is still refreshing.'
-    }));
-  };
-  const readyEmptySessionResponse = (payload = {}) => {
-    const obj = isPlainObject(payload) ? payload : {};
-    return withCORS(env, req, ok({
-      ok: true,
-      ...obj,
-      session_id: id,
-      ready: true,
-      ready_flag: true,
-      ready_empty: true,
-      rebase_required: false,
-      requires_new_session: false,
-      progress_only: true,
-      deferred: false,
-      total_candidates: 0,
-      total_count: 0,
-      completed_candidates: 0,
-      completed_count: 0,
-      ready_candidates: 0,
-      ready_count: 0,
-      pending_candidates: 0,
-      pending_count: 0,
-      failed_candidates: 0,
-      failed_count: 0,
-      pending_candidate_ids: [],
-      failed_candidate_ids: [],
-      pending_job_ids: [],
-      preview: {
-        ok: true,
-        ready: true,
-        ready_empty: true,
-        paye_candidates: [],
-        non_paye_payees: [],
-        canonical_preview_lines: [],
-        preview_rows: [],
-        rows: [],
-        componentStateCache: {
-          case_resolution_states: [],
-          blocked_case_states: [],
-          safe_case_states: [],
-          reusable_component_resolutions: {},
-          stale_component_resolutions: {},
-          draftable_now: [],
-          blocked_now: [],
-          ready_to_pay_now: [],
-          blocked_for_pay_now: [],
-          hidden_indefinite_snoozes: [],
-          ready_preview_lines: [],
-          blocked_preview_lines: [],
-          hidden_preview_lines: []
-        }
-      },
-      phase: 'READY_EMPTY',
-      status_text: String(obj.status_text || obj.message || 'Payment preview is ready. No eligible payment candidates remain for this scope.').trim() || 'Payment preview is ready. No eligible payment candidates remain for this scope.',
-      message: String(obj.message || obj.status_text || 'Payment preview is ready. No eligible payment candidates remain for this scope.').trim() || 'Payment preview is ready. No eligible payment candidates remain for this scope.'
-    }));
-  };
-  const isFatalPreviewError = (value) => {
-    const text = String(value == null ? '' : (typeof value === 'string' ? value : (() => { try { return JSON.stringify(value); } catch { return String(value || ''); } })())).toUpperCase();
-    if (!text) return false;
-    if (/(AUTHORIZATION|AUTHORISATION|UNAUTHORIZED|UNAUTHORISED|FORBIDDEN|PERMISSION DENIED|RLS|ROW LEVEL SECURITY|POLICY)/i.test(text)) return true;
-    if (/(INTEGRITY|DATA_CORRUPTION|CORRUPTION|MALFORMED|INVALID_JSON|ASSERT_INTEGRITY)/i.test(text)) return true;
-    if (/(SQLSTATE|POSTGRES|SUPABASE|POSTGREST|INVALID INPUT SYNTAX|AMBIGUOUS|CONSTRAINT|VIOLATES)/i.test(text)) return true;
-    if (/\b(RELATION|COLUMN|FUNCTION|TABLE|SCHEMA|TYPE|OPERATOR|TRIGGER|INDEX)\b[^\n]*\b(DOES NOT EXIST|NOT FOUND|IS AMBIGUOUS)\b/i.test(text)) return true;
-    return false;
-  };
-  const hasRefreshInFlightEvidence = (payload) => {
-    const obj = isPlainObject(payload) ? payload : {};
-    if (progressHasPendingWork(obj)) return true;
-    const phase = normaliseSessionCode(obj.phase || obj.current_phase || obj.status_phase || obj.status || '');
-    if (['PENDING', 'REFRESHING', 'REFRESHING_CANDIDATES', 'SNAPSHOT_REFRESH_PENDING', 'SNAPSHOT_REBUILD_PENDING', 'WORKBENCH_REFRESH_PENDING', 'WORKBENCH_JOBS_RUNNING', 'PROGRESS_ONLY'].includes(phase)) return true;
-    const rows = Array.isArray(obj.candidate_status_rows) ? obj.candidate_status_rows : (Array.isArray(obj.candidate_statuses) ? obj.candidate_statuses : []);
-    const expectedScopeCount = Number(obj.expected_scope_candidate_count ?? obj.scope_candidate_count ?? (Array.isArray(sessionScopeCandidateIds) ? sessionScopeCandidateIds.length : 0) ?? 0);
-    const total = Number(obj.total_count ?? obj.total_candidates ?? obj.candidate_count ?? 0);
-    if (Number.isFinite(expectedScopeCount) && expectedScopeCount > 0 && Number.isFinite(total) && total === 0 && rows.length === 0) return true;
-    return rows.some((row) => {
-      const status = String(row && row.status ? row.status : '').trim().toUpperCase();
-      const pendingJobId = String(row && (row.pending_job_id || row.latest_job_id || row.job_id) ? (row.pending_job_id || row.latest_job_id || row.job_id) : '').trim();
-      return status === 'PENDING' || (!!pendingJobId && !['SUCCEEDED', 'SUCCESS', 'COMPLETED', 'COMPLETE', 'DONE', 'READY', 'FAILED', 'ERROR', 'CANCELLED', 'CANCELED', 'SKIPPED'].includes(status));
-    });
-  };
-  const hasReadyEmptyEvidence = (payload) => {
-    const obj = isPlainObject(payload) ? payload : {};
-    const total = Number(obj.total_count ?? obj.total_candidates ?? obj.candidate_count ?? 0);
-    const pending = Number(obj.pending_count ?? obj.pending_candidates ?? 0);
-    const failed = Number(obj.failed_count ?? obj.failed_candidates ?? 0);
-    const rows = Array.isArray(obj.candidate_status_rows) ? obj.candidate_status_rows : (Array.isArray(obj.candidate_statuses) ? obj.candidate_statuses : []);
-    const expectedScopeCount = Number(obj.expected_scope_candidate_count ?? obj.scope_candidate_count ?? (Array.isArray(sessionScopeCandidateIds) ? sessionScopeCandidateIds.length : 0) ?? 0);
-    if (Number.isFinite(expectedScopeCount) && expectedScopeCount > 0 && Number.isFinite(total) && total === 0) return false;
-    if (obj.ready_empty === true) return true;
-    return Number.isFinite(total) && total === 0 && (!Number.isFinite(pending) || pending === 0) && (!Number.isFinite(failed) || failed === 0) && rows.length === 0 && !hasRefreshInFlightEvidence(obj);
-  };
-  const fetchCandidateStateEvidence = async () => {
-    try {
-      const { rows } = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/banking_pay_workbench_session_candidate_state?session_id=eq.${enc(id)}&select=session_id,candidate_id,status,pending_job_id,last_error_json&limit=2000`, false);
-      const stateRows = Array.isArray(rows) ? rows.filter((row) => row && typeof row === 'object' && !Array.isArray(row)) : [];
-      const pendingRows = stateRows.filter((row) => String(row.status || '').trim().toUpperCase() === 'PENDING');
-      const failedRows = stateRows.filter((row) => String(row.status || '').trim().toUpperCase() === 'FAILED');
-      const readyRows = stateRows.filter((row) => String(row.status || '').trim().toUpperCase() === 'READY');
-      const missingStatePendingIds = stateRows.length === 0 && sessionScopeCandidateIds.length > 0 ? [...sessionScopeCandidateIds] : [];
-      const pendingJobIds = pendingRows.map((row) => String(row.pending_job_id || '').trim()).filter(Boolean);
-      const explicitPendingCandidateIds = Array.from(new Set([
-        ...pendingRows.map((row) => String(row.candidate_id || '').trim()).filter(Boolean),
-        ...missingStatePendingIds
-      ]));
-      const candidateStatusRows = stateRows.length > 0
-        ? stateRows.map((row) => ({
-            candidate_id: String(row.candidate_id || '').trim(),
-            status: String(row.status || '').trim().toUpperCase(),
-            pending_job_id: String(row.pending_job_id || '').trim() || null,
-            latest_error_json: isPlainObject(row.last_error_json) ? row.last_error_json : null
-          }))
-        : missingStatePendingIds.map((candidateId) => ({
-            candidate_id: candidateId,
-            status: 'PENDING',
-            pending_job_id: null,
-            latest_error_json: null
-          }));
-      const hasMissingStatePendingWork = missingStatePendingIds.length > 0;
-      return {
-        session_id: id,
-        total_candidates: stateRows.length,
-        total_count: stateRows.length,
-        scope_candidate_ids: [...sessionScopeCandidateIds],
-        scope_candidate_count: sessionScopeCandidateIds.length,
-        expected_scope_candidate_count: sessionScopeCandidateIds.length,
-        completed_candidates: readyRows.length,
-        completed_count: readyRows.length,
-        ready_candidates: readyRows.length,
-        ready_count: readyRows.length,
-        pending_candidates: pendingRows.length + missingStatePendingIds.length,
-        pending_count: pendingRows.length + missingStatePendingIds.length,
-        failed_candidates: failedRows.length,
-        failed_count: failedRows.length,
-        pending_candidate_ids: explicitPendingCandidateIds,
-        failed_candidate_ids: failedRows.map((row) => String(row.candidate_id || '').trim()).filter(Boolean),
-        pending_job_ids: pendingJobIds,
-        candidate_status_rows: candidateStatusRows,
-        candidate_statuses: candidateStatusRows,
-        recent_jobs: [],
-        phase: (pendingRows.length > 0 || hasMissingStatePendingWork) ? 'REFRESHING_CANDIDATES' : (stateRows.length === 0 ? 'READY_EMPTY' : 'READY'),
-        status_text: (pendingRows.length > 0 || hasMissingStatePendingWork) ? 'Payment preview is still refreshing.' : (stateRows.length === 0 ? 'Payment preview is ready. No eligible payment candidates remain for this scope.' : 'Payment preview is ready.'),
-        ready: pendingRows.length === 0 && failedRows.length === 0 && !hasMissingStatePendingWork,
-        ready_flag: pendingRows.length === 0 && failedRows.length === 0 && !hasMissingStatePendingWork,
-        ready_empty: stateRows.length === 0 && !hasMissingStatePendingWork
-      };
-    } catch (evidenceError) {
-      return {
-        session_id: id,
-        evidence_error: String(evidenceError && evidenceError.message ? evidenceError.message : evidenceError || ''),
-        total_candidates: -1,
-        total_count: -1,
-        pending_candidate_ids: [],
-        failed_candidate_ids: [],
-        pending_job_ids: [],
-        candidate_status_rows: [],
-        candidate_statuses: [],
-        recent_jobs: []
-      };
-    }
-  };
-
-  try {
-    const { rows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/banking_pay_workbench_sessions` +
-      `?id=eq.${enc(id)}` +
-      `&select=id,actor_user_id,status,source_snapshot_run_id,discarded_at_utc,scope_candidate_ids` +
-      `&limit=1`,
-      false
-    );
-
-    const sessionRow = (rows && rows[0]) ? rows[0] : null;
-    if (!sessionRow) {
-      return buildFriendlyFailure(404, { code: 'STALE_SESSION' }, { preserveSafeLocalMessage: true, localTitle: 'Payment preview needs refreshing', localMessage: 'Refresh Banking Pay preview, review the latest details, then try again.' });
-    }
-
-    sessionScopeCandidateIds = Array.isArray(sessionRow.scope_candidate_ids) ? sessionRow.scope_candidate_ids.map((value) => String(value || '').trim()).filter(Boolean) : [];
-    const sessionStatus = String(sessionRow.status || '').trim().toUpperCase();
-    const discardedAtUtc = String(sessionRow.discarded_at_utc || '').trim();
-    if (sessionStatus !== 'OPEN' || discardedAtUtc) {
-      return withCORS(env, req, new Response(JSON.stringify({
-        ok: false,
-        error_code: 'OBSOLETE_SESSION',
-        code: 'OBSOLETE_SESSION',
-        rebase_required: true,
-        requires_new_session: true,
-        session_id: id,
-        status: sessionStatus || null,
-        discarded_at_utc: discardedAtUtc || null,
-        message: 'Payment preview needs refreshing'
-      }), { status: 409, headers: JSON_HEADERS }));
-    }
-
-    candidateStateEvidence = await fetchCandidateStateEvidence();
-    if (hasReadyEmptyEvidence(candidateStateEvidence)) return readyEmptySessionResponse(candidateStateEvidence);
-
-    const fetchProgressPayload = async () => {
-      const progressRpc = await sbRpc(env, 'pay_workbench_session_get_progress', { p_session_id: id });
-      return normaliseProgress(unwrapRpc(progressRpc, 'pay_workbench_session_get_progress'), { session_id: id });
-    };
-    let progressPayload = null;
-    let workerState = { nudge_attempted: false, origin: 'session_get_interactive_nudge' };
-    try {
-      progressPayload = await fetchProgressPayload();
-      if (isRebaseRequiredPayload(progressPayload)) return rebaseRequiredResponse(progressPayload);
-      if (hasReadyEmptyEvidence(progressPayload)) return readyEmptySessionResponse(progressPayload);
-      if (progressPayload.ready !== true && progressHasPendingWork(progressPayload)) {
-        workerState = await runSmallWorkbenchDrainForSession(progressPayload, 'session_get_interactive_nudge', id);
-        if (workerState && workerState.attempted === true) {
-          progressPayload = await fetchProgressPayload();
-          if (isRebaseRequiredPayload(progressPayload)) return rebaseRequiredResponse(progressPayload);
-          if (hasReadyEmptyEvidence(progressPayload)) return readyEmptySessionResponse(progressPayload);
-        }
-      }
-      if (progressPayload && progressPayload.ready !== true && hasRefreshInFlightEvidence(progressPayload)) {
-        return pendingRefreshResponse(Object.assign({}, progressPayload, { worker_state: workerState }));
-      }
-    } catch (progressOrDrainError) {
-      workerState = {
-        nudge_attempted: true,
-        origin: 'session_get_interactive_nudge',
-        error_code: 'WORKBENCH_SESSION_GET_DRAIN_OR_PROGRESS_FAILED',
-        error: String(progressOrDrainError && progressOrDrainError.message ? progressOrDrainError.message : progressOrDrainError || 'unknown')
-      };
-      if (!isFatalPreviewError(progressOrDrainError)) {
-        if (!candidateStateEvidence) candidateStateEvidence = await fetchCandidateStateEvidence();
-        if (hasReadyEmptyEvidence(candidateStateEvidence)) return readyEmptySessionResponse(candidateStateEvidence);
-        if (hasRefreshInFlightEvidence(candidateStateEvidence)) {
-          return pendingRefreshResponse(Object.assign({}, candidateStateEvidence, { worker_state: workerState }));
-        }
-      }
-    }
-
-    const previewRpc = await sbRpc(env, 'pay_workbench_session_get_preview', {
-      p_session_id: id
-    });
-
-    const previewPayload = unwrapRpc(previewRpc, 'pay_workbench_session_get_preview');
-    if (isRebaseRequiredPayload(previewPayload)) return rebaseRequiredResponse(previewPayload);
-    if (hasReadyEmptyEvidence(previewPayload)) return readyEmptySessionResponse(previewPayload);
-    if (hasRefreshInFlightEvidence(previewPayload) || previewPayload.progress_only === true || previewPayload.pending_refresh === true || previewPayload.refreshing === true) {
-      return pendingRefreshResponse(previewPayload);
-    }
-    if (progressPayload && typeof progressPayload === 'object' && !Array.isArray(progressPayload)) {
-      previewPayload.progress = progressPayload;
-      previewPayload.worker_state = workerState;
-      previewPayload.pending_candidate_ids = Array.isArray(previewPayload.pending_candidate_ids) ? previewPayload.pending_candidate_ids : progressPayload.pending_candidate_ids;
-      previewPayload.failed_candidate_ids = Array.isArray(previewPayload.failed_candidate_ids) ? previewPayload.failed_candidate_ids : progressPayload.failed_candidate_ids;
-      previewPayload.pending_job_ids = Array.isArray(previewPayload.pending_job_ids) ? previewPayload.pending_job_ids : progressPayload.pending_job_ids;
-      previewPayload.candidate_status_rows = Array.isArray(previewPayload.candidate_status_rows) ? previewPayload.candidate_status_rows : progressPayload.candidate_status_rows;
-      previewPayload.candidate_statuses = Array.isArray(previewPayload.candidate_statuses) ? previewPayload.candidate_statuses : progressPayload.candidate_statuses;
-      previewPayload.recent_jobs = Array.isArray(previewPayload.recent_jobs) ? previewPayload.recent_jobs : progressPayload.recent_jobs;
-    }
-    return withCORS(env, req, ok(previewPayload));
-  } catch (e) {
-    const msg = String(e?.message || e || '');
-    const code = normaliseSessionCode(e?.error_code || e?.errorCode || e?.code || e?.json?.error_code || e?.json?.code || e?.payload?.error_code || e?.payload?.code || '');
-    const combined = `${code}
-${msg}`;
-    const staleLike = staleSessionCodes.has(code) || /(STALE_SESSION|OBSOLETE_SESSION|REBASE_REQUIRED|WORKBENCH_SESSION_NOT_OPEN|WORKBENCH_SESSION_DISCARDED|WORKBENCH_SESSION_NOT_FOUND|WORKBENCH_SESSION_INVALID|BATCH_STALE|needs refreshing|preview needs refreshing)/i.test(combined);
-    const runningLike = /(still running|in progress|temporarily unavailable|timeout|timed out|PENDING|refreshing|refresh queued|job still running|candidate refresh|snapshot refresh|snapshot rebuild|please retry)/i.test(combined);
-    const fatalLike = isFatalPreviewError(combined) || isFatalPreviewError(e?.payload || e?.json || e);
-
-    if (!fatalLike) {
-      if (!candidateStateEvidence) candidateStateEvidence = await fetchCandidateStateEvidence();
-      if (hasReadyEmptyEvidence(candidateStateEvidence)) return readyEmptySessionResponse(candidateStateEvidence);
-      if (hasRefreshInFlightEvidence(candidateStateEvidence)) {
-        return pendingRefreshResponse(Object.assign({}, candidateStateEvidence, {
-          error_code: 'REFRESHING_CANDIDATES',
-          code: 'REFRESHING_CANDIDATES',
-          technical_message: msg || code || null
-        }), 'REFRESHING_CANDIDATES');
-      }
-    }
-
-    if (staleLike && !fatalLike) return rebaseRequiredResponse({
-      error_code: code && staleSessionCodes.has(code) ? code : 'STALE_SESSION',
-      code: code && staleSessionCodes.has(code) ? code : 'STALE_SESSION',
-      message: 'Payment preview needs refreshing',
-      status_text: 'Payment preview needs refreshing',
-      technical_message: msg || code || null
-    }, code && staleSessionCodes.has(code) ? code : 'STALE_SESSION');
-
-    if (runningLike && !fatalLike) return pendingRefreshResponse({
-      error_code: 'REFRESHING_CANDIDATES',
-      code: 'REFRESHING_CANDIDATES',
-      message: 'Payment preview is still refreshing.',
-      status_text: 'Payment preview is still refreshing.',
-      technical_message: msg || code || null
-    }, 'REFRESHING_CANDIDATES');
-
-    return buildFriendlyFailure(
-      staleLike ? 409 : 500,
-      {
-        code: staleLike ? 'STALE_SESSION' : 'BANKING_PAY_WORKBENCH_SESSION_GET_FAILED',
-        message: msg,
-        details: { reason: msg, rpc_error: e, original_error: e },
-        rpc_error: e,
-        original_error: e
-      },
-      {
-        preserveSafeLocalMessage: true,
-        localTitle: staleLike ? 'Payment preview needs refreshing' : 'Payment preview could not be loaded',
-        localMessage: staleLike ? 'Refresh Banking Pay preview, review the latest details, then try again.' : 'CloudTMS could not calculate the payment preview. Refresh Banking and try again.'
-      }
-    );
-  }
-}
 
 
 function normalizeBankingPayPreviewDecisions(input, options = {}) {
