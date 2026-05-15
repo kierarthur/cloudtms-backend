@@ -4824,6 +4824,8 @@ DROP FUNCTION IF EXISTS public.pay_batch_prepare(uuid, uuid);
 DROP FUNCTION IF EXISTS public.pay_batch_prepare(uuid, uuid);
 DROP FUNCTION IF EXISTS public.pay_batch_prepare(uuid, uuid, uuid, text);
 
+
+
 CREATE OR REPLACE FUNCTION public.pay_batch_prepare(
   p_pay_batch_id uuid,
   p_actor_user_id uuid,
@@ -4855,11 +4857,13 @@ DECLARE
   v_pending_transfer_count integer := 0;
   v_authorisation_ready_transfer_count integer := 0;
   v_unattempted_submit_eligible_transfer_count integer := 0;
+  v_remaining_unattempted_submit_required integer := 0;
   v_provider_attempt_or_evidence_transfer_count integer := 0;
   v_provider_or_ambiguous_evidence_transfer_count integer := 0;
   v_local_only_transfer_count integer := 0;
   v_canonical_pending_status_transfer_count integer := 0;
   v_safe_local_cleanup_transfer_count integer := 0;
+  v_unsafe_transfer_count integer := 0;
   v_pay_channel_scope text := 'ALL';
   v_failed_transfer_count integer := 0;
   v_blocked_transfer_count integer := 0;
@@ -5011,6 +5015,7 @@ BEGIN
   v_pending_transfer_count := coalesce(NULLIF(v_summary_json->>'pending_transfer_count', '')::integer, 0);
   v_authorisation_ready_transfer_count := coalesce(NULLIF(v_summary_json->>'authorisation_ready_transfer_count', '')::integer, 0);
   v_unattempted_submit_eligible_transfer_count := coalesce(NULLIF(v_summary_json->>'unattempted_submit_eligible_transfer_count', '')::integer, 0);
+  v_remaining_unattempted_submit_required := coalesce(NULLIF(v_summary_json->>'remaining_unattempted_submit_required', '')::integer, v_unattempted_submit_eligible_transfer_count);
   v_provider_attempt_or_evidence_transfer_count := coalesce(NULLIF(v_summary_json->>'provider_attempt_or_evidence_transfer_count', '')::integer, 0);
   v_provider_or_ambiguous_evidence_transfer_count := coalesce(NULLIF(v_summary_json->>'provider_or_ambiguous_evidence_transfer_count', '')::integer, 0);
   v_local_only_transfer_count := coalesce(NULLIF(v_summary_json->>'local_only_transfer_count', '')::integer, 0);
@@ -5021,18 +5026,36 @@ BEGIN
     count(*) FILTER (WHERE classified_transfer.is_unattempted_submit_eligible)::integer,
     count(*) FILTER (WHERE classified_transfer.has_provider_submission_evidence OR classified_transfer.has_provider_event_evidence OR classified_transfer.has_provider_attempt_without_external_id OR classified_transfer.has_operation_submit_attempt)::integer,
     count(*) FILTER (WHERE classified_transfer.has_provider_submission_evidence OR classified_transfer.has_provider_event_evidence OR classified_transfer.has_provider_attempt_without_external_id OR classified_transfer.has_operation_submit_attempt OR classified_transfer.has_ambiguous_external_evidence)::integer,
-    count(*) FILTER (WHERE classified_transfer.status_upper = 'PENDING')::integer
+    count(*) FILTER (WHERE classified_transfer.status_upper = 'PENDING')::integer,
+    count(*) FILTER (
+      WHERE classified_transfer.pay_bank_transfer_id IS NOT NULL
+        AND classified_transfer.is_authorisation_ready IS NOT TRUE
+        AND (
+          classified_transfer.has_provider_submission_evidence
+          OR classified_transfer.has_provider_event_evidence
+          OR classified_transfer.has_provider_attempt_without_external_id
+          OR classified_transfer.has_operation_submit_attempt
+          OR classified_transfer.has_ambiguous_external_evidence
+          OR classified_transfer.is_failed_or_blocked
+          OR classified_transfer.is_terminal_or_completed
+          OR classified_transfer.has_different_operation_scope
+          OR classified_transfer.has_stale_auth_request_evidence
+          OR NULLIF(BTRIM(COALESCE(classified_transfer.unsafe_reason, '')), '') IS NOT NULL
+        )
+    )::integer
   INTO v_authorisation_ready_transfer_count,
        v_unattempted_submit_eligible_transfer_count,
        v_provider_attempt_or_evidence_transfer_count,
        v_provider_or_ambiguous_evidence_transfer_count,
-       v_canonical_pending_status_transfer_count
+       v_canonical_pending_status_transfer_count,
+       v_unsafe_transfer_count
   FROM public.pay_bank_transfer_execution_classify(
     p_pay_batch_id => p_pay_batch_id,
     p_pay_channel_scope => v_pay_channel_scope,
     p_operation_id => p_operation_id,
     p_include_unscoped_transfers => true
   ) AS classified_transfer;
+  v_remaining_unattempted_submit_required := COALESCE(v_unattempted_submit_eligible_transfer_count, 0);
   v_failed_transfer_count := coalesce(NULLIF(v_summary_json->>'failed_transfer_count', '')::integer, 0);
   v_blocked_transfer_count := coalesce(NULLIF(v_summary_json->>'blocked_transfer_count', '')::integer, 0);
   v_submitted_transfer_count := coalesce(NULLIF(v_summary_json->>'provider_submitted_transfer_count', '')::integer, coalesce(NULLIF(v_summary_json->>'submitted_transfer_count', '')::integer, 0));
@@ -5194,6 +5217,7 @@ BEGIN
           'authorisation_ready_transfer_count', COALESCE(v_authorisation_ready_transfer_count, 0),
           'provider_attempt_or_evidence_transfer_count', COALESCE(v_provider_attempt_or_evidence_transfer_count, 0),
           'provider_or_ambiguous_evidence_transfer_count', COALESCE(v_provider_or_ambiguous_evidence_transfer_count, 0),
+          'unsafe_transfer_count', COALESCE(v_unsafe_transfer_count, 0),
           'submitted_transfer_count', COALESCE(v_submitted_transfer_count, 0),
           'pay_channel_scope', v_pay_channel_scope
         ));
@@ -5205,6 +5229,7 @@ BEGIN
           'canonical_pending_status_transfer_count', COALESCE(v_canonical_pending_status_transfer_count, 0),
           'local_only_transfer_count', COALESCE(v_local_only_transfer_count, 0),
           'safe_local_cleanup_transfer_count', COALESCE(v_safe_local_cleanup_transfer_count, 0),
+          'unsafe_transfer_count', COALESCE(v_unsafe_transfer_count, 0),
           'pay_channel_scope', v_pay_channel_scope
         ));
       END IF;
@@ -5252,9 +5277,11 @@ BEGIN
     'pay_channel_scope', v_pay_channel_scope,
     'authorisation_ready_transfer_count', COALESCE(v_authorisation_ready_transfer_count, 0),
     'unattempted_submit_eligible_transfer_count', COALESCE(v_unattempted_submit_eligible_transfer_count, 0),
+    'remaining_unattempted_submit_required', COALESCE(v_remaining_unattempted_submit_required, 0),
     'provider_attempt_or_evidence_transfer_count', COALESCE(v_provider_attempt_or_evidence_transfer_count, 0),
     'provider_or_ambiguous_evidence_transfer_count', COALESCE(v_provider_or_ambiguous_evidence_transfer_count, 0),
     'canonical_pending_status_transfer_count', COALESCE(v_canonical_pending_status_transfer_count, 0),
+    'unsafe_transfer_count', COALESCE(v_unsafe_transfer_count, 0),
     'evidence_pending_transfer_count', COALESCE(v_pending_transfer_count, 0),
     'freshness', jsonb_build_object(
       'freshness_validation_status', v_batch_freshness_status,
@@ -5273,9 +5300,6 @@ BEGIN
   );
 END;
 $function$;
-
-
-
 
 CREATE OR REPLACE FUNCTION public.pay_batch_mark_blocked_funds(
   p_pay_batch_id uuid,
