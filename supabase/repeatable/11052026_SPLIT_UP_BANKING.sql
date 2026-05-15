@@ -5181,8 +5181,6 @@ DROP FUNCTION IF EXISTS public.pay_execute_bank_transfer_chunk_prepare(uuid, uui
 
 DROP FUNCTION IF EXISTS public.pay_execute_bank_transfer_chunk_prepare(uuid, uuid, jsonb, uuid);
 
-
-
 CREATE OR REPLACE FUNCTION public.pay_execute_bank_transfer_chunk_prepare(
   p_operation_id uuid,
   p_pay_batch_id uuid,
@@ -5215,6 +5213,13 @@ DECLARE
   v_conflict_failed_count integer := 0;
   v_normalised_transfer_count integer := 0;
   v_unsafe_transfer_count integer := 0;
+  v_final_scope_prepared_count integer := 0;
+  v_final_scope_failed_count integer := 0;
+  v_final_scope_skipped_count integer := 0;
+  v_final_scope_without_transfer_count integer := 0;
+  v_all_requested_scopes_authorisation_ready boolean := false;
+  v_hard_blocker boolean := false;
+  v_result_code text := NULL::text;
   v_unsafe_transfer_ids jsonb := '[]'::jsonb;
   v_unsafe_reasons jsonb := '[]'::jsonb;
 BEGIN
@@ -5795,10 +5800,59 @@ BEGIN
     AND remaining_scope.pay_batch_id = p_pay_batch_id
     AND remaining_scope.status = 'PENDING';
 
+  SELECT count(*) FILTER (WHERE upper(btrim(coalesce(final_scope.status, ''))) = 'PREPARED')::integer,
+         count(*) FILTER (WHERE upper(btrim(coalesce(final_scope.status, ''))) = 'FAILED')::integer,
+         count(*) FILTER (WHERE upper(btrim(coalesce(final_scope.status, ''))) = 'SKIPPED')::integer,
+         count(*) FILTER (WHERE final_scope.pay_bank_transfer_id IS NULL)::integer
+  INTO v_final_scope_prepared_count,
+       v_final_scope_failed_count,
+       v_final_scope_skipped_count,
+       v_final_scope_without_transfer_count
+  FROM public.banking_pay_operation_transfer_scope AS final_scope
+  JOIN pg_temp.tmp_transfer_scope_request AS requested_scope
+    ON requested_scope.transfer_scope_id = final_scope.id
+  WHERE final_scope.operation_id = p_operation_id
+    AND final_scope.pay_batch_id = p_pay_batch_id;
+
+  v_all_requested_scopes_authorisation_ready := (
+    COALESCE(v_requested_count, 0) > 0
+    AND COALESCE(v_authorisation_ready_count, 0) = COALESCE(v_requested_count, 0)
+    AND COALESCE(v_not_authorisation_ready_count, 0) = 0
+    AND COALESCE(v_provider_evidence_blocked_count, 0) = 0
+    AND COALESCE(v_unsafe_transfer_count, 0) = 0
+    AND COALESCE(v_failed_count, 0) = 0
+    AND COALESCE(v_final_scope_failed_count, 0) = 0
+    AND COALESCE(v_final_scope_skipped_count, 0) = 0
+    AND COALESCE(v_final_scope_without_transfer_count, 0) = 0
+    AND COALESCE(v_remaining_count, 0) = 0
+  );
+
+  v_hard_blocker := COALESCE(v_all_requested_scopes_authorisation_ready, false) IS NOT TRUE;
+
+  v_result_code := CASE
+    WHEN COALESCE(v_all_requested_scopes_authorisation_ready, false) IS TRUE THEN NULL::text
+    WHEN COALESCE(v_provider_evidence_blocked_count, 0) > 0 THEN 'TRANSFER_PREPARATION_BLOCKED_BY_PROVIDER_EVIDENCE'
+    WHEN COALESCE(v_unsafe_transfer_count, 0) > 0 THEN 'TRANSFER_PREPARATION_UNSAFE_TRANSFER'
+    WHEN COALESCE(v_final_scope_without_transfer_count, 0) > 0 THEN 'TRANSFER_PREPARATION_SCOPE_WITHOUT_TRANSFER'
+    WHEN COALESCE(v_failed_count, 0) > 0 OR COALESCE(v_final_scope_failed_count, 0) > 0 THEN 'TRANSFER_PREPARATION_SCOPE_FAILED'
+    WHEN COALESCE(v_final_scope_skipped_count, 0) > 0 THEN 'TRANSFER_PREPARATION_SCOPE_SKIPPED'
+    WHEN COALESCE(v_not_authorisation_ready_count, 0) > 0 THEN 'TRANSFER_PREPARATION_NOT_AUTHORISATION_READY'
+    WHEN COALESCE(v_remaining_count, 0) > 0 THEN 'TRANSFER_PREPARATION_SCOPE_REMAINING'
+    ELSE 'TRANSFER_PREPARATION_NOT_AUTHORISATION_READY'
+  END;
+
   RETURN jsonb_build_object(
-    'ok', true,
+    'ok', COALESCE(v_all_requested_scopes_authorisation_ready, false),
+    'hard_blocker', COALESCE(v_hard_blocker, false),
+    'code', v_result_code,
     'operation_id', p_operation_id::text,
     'pay_batch_id', p_pay_batch_id::text,
+    'requested_scope_count', COALESCE(v_requested_count, 0),
+    'prepared_scope_count', COALESCE(v_final_scope_prepared_count, 0),
+    'scope_failed_count', COALESCE(v_final_scope_failed_count, 0),
+    'scope_skipped_count', COALESCE(v_final_scope_skipped_count, 0),
+    'scope_without_transfer_count', COALESCE(v_final_scope_without_transfer_count, 0),
+    'all_requested_scopes_authorisation_ready', COALESCE(v_all_requested_scopes_authorisation_ready, false),
     'prepared_count', COALESCE(v_authorisation_ready_count, 0),
     'linked_transfer_count', COALESCE(v_prepared_count, 0) + COALESCE(v_reused_count, 0),
     'authorisation_ready_count', COALESCE(v_authorisation_ready_count, 0),
@@ -5819,8 +5873,9 @@ $function$;
 
 
 
-
 DROP FUNCTION IF EXISTS public.pay_execute_bank_transfer_scope_seed(uuid, uuid, text, uuid, boolean);
+
+
 
 CREATE OR REPLACE FUNCTION public.pay_execute_bank_transfer_scope_seed(
   p_operation_id uuid,
@@ -5863,6 +5918,9 @@ DECLARE
   v_stale_scope_skipped_count integer := 0;
   v_stale_previous_operation_cleanup_attempted_count integer := 0;
   v_stale_previous_operation_scope_cleaned_count integer := 0;
+  v_stale_previous_operation_transfer_cleaned_count integer := 0;
+  v_stale_previous_operation_auth_requests_cancelled_count integer := 0;
+  v_stale_previous_operation_batch_execution_intent_cleared_count integer := 0;
   v_stale_previous_operation_scope_blocked_count integer := 0;
   v_cleanup_retry_blocked_count integer := 0;
   v_stale_previous_operation_ids jsonb := '[]'::jsonb;
@@ -6799,6 +6857,14 @@ BEGIN
        v_cleanup_retry_blocked_count
   FROM pg_temp.tmp_transfer_scope_previous_cleanup_results AS cleanup_result_row;
 
+  SELECT COALESCE(SUM(COALESCE(NULLIF(cleanup_result_row.cleanup_result->>'transfer_rows_deleted', '')::integer, 0)), 0)::integer,
+         COALESCE(SUM(COALESCE(NULLIF(cleanup_result_row.cleanup_result->>'auth_requests_cancelled', '')::integer, 0)), 0)::integer,
+         COALESCE(SUM(COALESCE(NULLIF(cleanup_result_row.cleanup_result->>'batch_execution_intent_cleared', '')::integer, 0)), 0)::integer
+  INTO v_stale_previous_operation_transfer_cleaned_count,
+       v_stale_previous_operation_auth_requests_cancelled_count,
+       v_stale_previous_operation_batch_execution_intent_cleared_count
+  FROM pg_temp.tmp_transfer_scope_previous_cleanup_results AS cleanup_result_row;
+
   SELECT COUNT(*)::integer
   INTO v_stale_previous_operation_scope_cleaned_count
   FROM pg_temp.tmp_transfer_scope_previous_conflicts AS previous_conflict
@@ -6861,6 +6927,9 @@ BEGIN
       'blocked_count', v_stale_previous_operation_scope_blocked_count,
       'stale_previous_operation_cleanup_attempted_count', COALESCE(v_stale_previous_operation_cleanup_attempted_count, 0),
       'stale_previous_operation_scope_cleaned_count', COALESCE(v_stale_previous_operation_scope_cleaned_count, 0),
+      'stale_previous_operation_transfer_cleaned_count', COALESCE(v_stale_previous_operation_transfer_cleaned_count, 0),
+      'stale_previous_operation_auth_requests_cancelled_count', COALESCE(v_stale_previous_operation_auth_requests_cancelled_count, 0),
+      'stale_previous_operation_batch_execution_intent_cleared_count', COALESCE(v_stale_previous_operation_batch_execution_intent_cleared_count, 0),
       'cleanup_retry_blocked_count', COALESCE(v_cleanup_retry_blocked_count, 0),
       'blocked_previous_operation_ids', v_stale_previous_operation_ids,
       'stale_previous_operation_ids', v_stale_previous_operation_ids,
@@ -6987,6 +7056,9 @@ BEGIN
     'stale_scope_skipped_count', COALESCE(v_stale_scope_skipped_count, 0),
     'stale_previous_operation_cleanup_attempted_count', COALESCE(v_stale_previous_operation_cleanup_attempted_count, 0),
     'stale_previous_operation_scope_cleaned_count', COALESCE(v_stale_previous_operation_scope_cleaned_count, 0),
+    'stale_previous_operation_transfer_cleaned_count', COALESCE(v_stale_previous_operation_transfer_cleaned_count, 0),
+    'stale_previous_operation_auth_requests_cancelled_count', COALESCE(v_stale_previous_operation_auth_requests_cancelled_count, 0),
+    'stale_previous_operation_batch_execution_intent_cleared_count', COALESCE(v_stale_previous_operation_batch_execution_intent_cleared_count, 0),
     'stale_previous_operation_scope_blocked_count', COALESCE(v_stale_previous_operation_scope_blocked_count, 0),
     'cleanup_retry_blocked_count', COALESCE(v_cleanup_retry_blocked_count, 0),
     'blocked_previous_operation_ids', COALESCE(v_stale_previous_operation_ids, '[]'::jsonb),
@@ -6998,9 +7070,6 @@ BEGIN
   );
 END;
 $function$;
-
-
-
 
 
 
@@ -12173,8 +12242,6 @@ END;
 $function$;
 
 
-
-
 CREATE OR REPLACE FUNCTION public.pay_execute_operation_cleanup_failed_local_artifacts(
   p_operation_id uuid,
   p_actor_user_id uuid DEFAULT NULL::uuid,
@@ -12196,8 +12263,17 @@ DECLARE
   v_failure_error_json jsonb := '{}'::jsonb;
   v_batch_execution_boundary_crossed boolean := false;
   v_active_auth_request_count integer := 0;
+  v_initial_active_auth_request_count integer := 0;
   v_operation_active_auth_request_count integer := 0;
   v_active_auth_request_ids jsonb := '[]'::jsonb;
+  v_auth_requests_cancelled integer := 0;
+  v_auth_tokens_voided integer := 0;
+  v_batch_execution_intent_cleared integer := 0;
+  v_active_auth_request_blocker_count integer := 0;
+  v_authorised_auth_request_review_count integer := 0;
+  v_cancellable_auth_request_count integer := 0;
+  v_non_cancellable_auth_request_count integer := 0;
+  v_cancelled_auth_request_ids jsonb := '[]'::jsonb;
   v_provider_submit_chunk_attempt_count integer := 0;
   v_deletion_allowed boolean := false;
   v_scope_rows_considered integer := 0;
@@ -12334,6 +12410,8 @@ BEGIN
   WHERE auth_request.pay_batch_id = v_operation_row.pay_batch_id
     AND auth_request.state IN ('AWAITING', 'PENDING_AUTHORISATION', 'AUTHORISED');
 
+  v_initial_active_auth_request_count := COALESCE(v_active_auth_request_count, 0);
+
   SELECT COUNT(*)::integer
   INTO v_provider_submit_chunk_attempt_count
   FROM public.banking_pay_operation_chunks AS provider_submit_chunk
@@ -12349,11 +12427,7 @@ BEGIN
       OR (provider_submit_chunk.error_json IS NOT NULL AND provider_submit_chunk.error_json <> '{}'::jsonb)
     );
 
-  v_deletion_allowed := (
-    v_batch_execution_boundary_crossed IS NOT TRUE
-    AND COALESCE(v_active_auth_request_count, 0) = 0
-    AND COALESCE(v_provider_submit_chunk_attempt_count, 0) = 0
-  );
+  v_deletion_allowed := false;
 
   DROP TABLE IF EXISTS pg_temp.tmp_pay_execute_cleanup_scope_classified;
   CREATE TEMPORARY TABLE pg_temp.tmp_pay_execute_cleanup_scope_classified (
@@ -12436,7 +12510,6 @@ BEGIN
          classifier_row.evidence_classification,
          CASE
            WHEN v_batch_execution_boundary_crossed THEN 'BATCH_EXECUTION_BOUNDARY_CROSSED'
-           WHEN COALESCE(v_active_auth_request_count, 0) > 0 THEN 'ACTIVE_AUTH_REQUEST_PRESENT'
            WHEN scope_row.pay_bank_transfer_id IS NULL THEN NULL::text
            ELSE classifier_row.unsafe_reason
          END
@@ -12499,7 +12572,6 @@ BEGIN
          classifier_row.evidence_classification,
          CASE
            WHEN v_batch_execution_boundary_crossed THEN 'BATCH_EXECUTION_BOUNDARY_CROSSED'
-           WHEN COALESCE(v_active_auth_request_count, 0) > 0 THEN 'ACTIVE_AUTH_REQUEST_PRESENT'
            WHEN classifier_row.pay_bank_transfer_id IS NULL THEN 'TRANSFER_CLASSIFICATION_MISSING'
            ELSE classifier_row.unsafe_reason
          END
@@ -12635,6 +12707,267 @@ BEGIN
     COALESCE(v_provider_evidence_count, 0),
     COALESCE(v_provider_submit_chunk_attempt_count, 0)
   );
+
+  DROP TABLE IF EXISTS pg_temp.tmp_pay_execute_cleanup_auth_requests;
+  CREATE TEMPORARY TABLE pg_temp.tmp_pay_execute_cleanup_auth_requests (
+    auth_request_id uuid PRIMARY KEY,
+    auth_request_state text NOT NULL,
+    auth_request_operation_id uuid,
+    owner_operation_status text,
+    is_same_operation boolean NOT NULL DEFAULT false,
+    is_other_operation boolean NOT NULL DEFAULT false,
+    has_auth_request_provider_risk boolean NOT NULL DEFAULT false,
+    is_cancellable_local_auth_request boolean NOT NULL DEFAULT false,
+    is_non_cancellable_auth_request boolean NOT NULL DEFAULT false,
+    unsafe_reason text
+  ) ON COMMIT DROP;
+
+  INSERT INTO pg_temp.tmp_pay_execute_cleanup_auth_requests (
+    auth_request_id,
+    auth_request_state,
+    auth_request_operation_id,
+    owner_operation_status,
+    is_same_operation,
+    is_other_operation,
+    has_auth_request_provider_risk,
+    is_cancellable_local_auth_request,
+    is_non_cancellable_auth_request,
+    unsafe_reason
+  )
+  SELECT auth_request.id,
+         upper(btrim(coalesce(auth_request.state, ''))) AS auth_request_state,
+         CASE
+           WHEN auth_intent.auth_operation_id_text ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+             THEN auth_intent.auth_operation_id_text::uuid
+           ELSE NULL::uuid
+         END AS auth_request_operation_id,
+         upper(btrim(coalesce(owner_operation.status, ''))) AS owner_operation_status,
+         (
+           auth_intent.auth_operation_id_text = p_operation_id::text
+         ) AS is_same_operation,
+         (
+           auth_intent.auth_operation_id_text IS NULL
+           OR auth_intent.auth_operation_id_text <> p_operation_id::text
+         ) AS is_other_operation,
+         (
+           v_batch_execution_boundary_crossed IS TRUE
+           OR COALESCE(v_provider_submit_chunk_attempt_count, 0) > 0
+           OR COALESCE(v_provider_evidence_count, 0) > 0
+         ) AS has_auth_request_provider_risk,
+         COALESCE((
+           upper(btrim(coalesce(auth_request.state, ''))) IN ('AWAITING', 'AUTHORISED')
+           AND v_batch_execution_boundary_crossed IS NOT TRUE
+           AND COALESCE(v_provider_submit_chunk_attempt_count, 0) = 0
+           AND COALESCE(v_provider_evidence_count, 0) = 0
+           AND (
+             auth_intent.auth_operation_id_text = p_operation_id::text
+             OR (
+               auth_intent.auth_operation_id_text IS NOT NULL
+               AND auth_intent.auth_operation_id_text <> p_operation_id::text
+               AND upper(btrim(coalesce(owner_operation.status, ''))) IN ('FAILED', 'CANCELLED', 'CANCELED')
+             )
+           )
+         ), false) AS is_cancellable_local_auth_request,
+         NOT COALESCE((
+           upper(btrim(coalesce(auth_request.state, ''))) IN ('AWAITING', 'AUTHORISED')
+           AND v_batch_execution_boundary_crossed IS NOT TRUE
+           AND COALESCE(v_provider_submit_chunk_attempt_count, 0) = 0
+           AND COALESCE(v_provider_evidence_count, 0) = 0
+           AND (
+             auth_intent.auth_operation_id_text = p_operation_id::text
+             OR (
+               auth_intent.auth_operation_id_text IS NOT NULL
+               AND auth_intent.auth_operation_id_text <> p_operation_id::text
+               AND upper(btrim(coalesce(owner_operation.status, ''))) IN ('FAILED', 'CANCELLED', 'CANCELED')
+             )
+           )
+         ), false) AS is_non_cancellable_auth_request,
+         CASE
+           WHEN v_batch_execution_boundary_crossed THEN 'AUTH_REQUEST_BATCH_EXECUTION_BOUNDARY_CROSSED'
+           WHEN COALESCE(v_provider_submit_chunk_attempt_count, 0) > 0 THEN 'AUTH_REQUEST_PROVIDER_SUBMIT_CHUNK_ATTEMPT_PRESENT'
+           WHEN COALESCE(v_provider_evidence_count, 0) > 0 THEN 'AUTH_REQUEST_PROVIDER_OR_AMBIGUOUS_TRANSFER_EVIDENCE_PRESENT'
+           WHEN upper(btrim(coalesce(auth_request.state, ''))) = 'PENDING_AUTHORISATION' THEN 'AUTH_REQUEST_PENDING_AUTHORISATION'
+           WHEN auth_intent.auth_operation_id_text IS NULL THEN 'AUTH_REQUEST_OPERATION_ID_MISSING'
+           WHEN auth_intent.auth_operation_id_text <> p_operation_id::text
+             AND upper(btrim(coalesce(owner_operation.status, ''))) IN ('FAILED', 'CANCELLED', 'CANCELED') THEN NULL::text
+           WHEN auth_intent.auth_operation_id_text <> p_operation_id::text THEN 'AUTH_REQUEST_OWNED_BY_DIFFERENT_OPERATION'
+           ELSE NULL::text
+         END AS unsafe_reason
+  FROM public.pay_batch_auth_requests AS auth_request
+  LEFT JOIN LATERAL (
+    SELECT nullif(btrim(coalesce(auth_request.execution_intent_json->>'operation_id', '')), '') AS auth_operation_id_text
+  ) AS auth_intent ON true
+  LEFT JOIN public.banking_pay_operations AS owner_operation
+    ON owner_operation.id = CASE
+      WHEN auth_intent.auth_operation_id_text ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+        THEN auth_intent.auth_operation_id_text::uuid
+      ELSE NULL::uuid
+    END
+  WHERE auth_request.pay_batch_id = v_operation_row.pay_batch_id
+    AND upper(btrim(coalesce(auth_request.state, ''))) IN ('AWAITING', 'PENDING_AUTHORISATION', 'AUTHORISED');
+
+  SELECT COUNT(*) FILTER (WHERE auth_classification.is_cancellable_local_auth_request)::integer,
+         COUNT(*) FILTER (WHERE auth_classification.is_non_cancellable_auth_request)::integer,
+         COUNT(*) FILTER (WHERE auth_classification.auth_request_state = 'AUTHORISED' AND auth_classification.is_non_cancellable_auth_request)::integer
+  INTO v_cancellable_auth_request_count,
+       v_non_cancellable_auth_request_count,
+       v_authorised_auth_request_review_count
+  FROM pg_temp.tmp_pay_execute_cleanup_auth_requests AS auth_classification;
+
+  DROP TABLE IF EXISTS pg_temp.tmp_pay_execute_cleanup_cancelled_auth_request_ids;
+  CREATE TEMPORARY TABLE pg_temp.tmp_pay_execute_cleanup_cancelled_auth_request_ids (
+    auth_request_id uuid PRIMARY KEY
+  ) ON COMMIT DROP;
+
+  IF COALESCE(p_dry_run, false) IS TRUE THEN
+    INSERT INTO pg_temp.tmp_pay_execute_cleanup_cancelled_auth_request_ids (auth_request_id)
+    SELECT auth_classification.auth_request_id
+    FROM pg_temp.tmp_pay_execute_cleanup_auth_requests AS auth_classification
+    WHERE auth_classification.is_cancellable_local_auth_request IS TRUE
+    ON CONFLICT DO NOTHING;
+
+    v_auth_requests_cancelled := COALESCE(v_cancellable_auth_request_count, 0);
+  ELSE
+    WITH cancellable_auth_requests AS (
+      SELECT auth_classification.auth_request_id
+      FROM pg_temp.tmp_pay_execute_cleanup_auth_requests AS auth_classification
+      WHERE auth_classification.is_cancellable_local_auth_request IS TRUE
+    ), cancelled_auth_requests AS (
+      UPDATE public.pay_batch_auth_requests AS auth_request_update
+      SET state = 'CANCELLED',
+          finalised_at_utc = COALESCE(auth_request_update.finalised_at_utc, v_now),
+          finalised_by_user_id = COALESCE(auth_request_update.finalised_by_user_id, v_effective_actor_user_id),
+          execution_intent_json = jsonb_strip_nulls(
+            COALESCE(auth_request_update.execution_intent_json, '{}'::jsonb)
+            || jsonb_build_object(
+              'cancelled_by_failed_execution_cleanup', true,
+              'cleanup_operation_id', p_operation_id::text,
+              'cleanup_at_utc', v_now::text,
+              'failure_phase', v_failure_phase
+            )
+          )
+      FROM cancellable_auth_requests
+      WHERE auth_request_update.id = cancellable_auth_requests.auth_request_id
+        AND auth_request_update.pay_batch_id = v_operation_row.pay_batch_id
+        AND upper(btrim(coalesce(auth_request_update.state, ''))) IN ('AWAITING', 'AUTHORISED')
+      RETURNING auth_request_update.id
+    ), inserted_cancelled AS (
+      INSERT INTO pg_temp.tmp_pay_execute_cleanup_cancelled_auth_request_ids (auth_request_id)
+      SELECT cancelled_auth_requests.id
+      FROM cancelled_auth_requests
+      ON CONFLICT DO NOTHING
+      RETURNING auth_request_id
+    )
+    SELECT COUNT(*)::integer,
+           COALESCE(jsonb_agg(to_jsonb(inserted_cancelled.auth_request_id::text) ORDER BY inserted_cancelled.auth_request_id), '[]'::jsonb)
+    INTO v_auth_requests_cancelled,
+         v_cancelled_auth_request_ids
+    FROM inserted_cancelled;
+
+    WITH voided_tokens AS (
+      UPDATE public.pay_batch_auth_tokens AS auth_token_update
+      SET used_at_utc = COALESCE(auth_token_update.used_at_utc, v_now),
+          expires_at_utc = CASE
+            WHEN auth_token_update.expires_at_utc > v_now THEN v_now
+            ELSE auth_token_update.expires_at_utc
+          END
+      FROM pg_temp.tmp_pay_execute_cleanup_cancelled_auth_request_ids AS cancelled_auth_request
+      WHERE auth_token_update.auth_request_id = cancelled_auth_request.auth_request_id
+        AND (auth_token_update.used_at_utc IS NULL OR auth_token_update.expires_at_utc > v_now)
+      RETURNING auth_token_update.token
+    )
+    SELECT COUNT(*)::integer
+    INTO v_auth_tokens_voided
+    FROM voided_tokens;
+
+    WITH cleared_batch_intent AS (
+      UPDATE public.pay_batches AS batch_update
+      SET schedule_kind = NULL::text,
+          scheduled_at_utc = NULL::timestamptz,
+          scheduled_by_user_id = NULL::uuid,
+          funding_account_ref = NULL::text,
+          funds_warning_hours_json = NULL::jsonb,
+          execution_intent_json = NULL::jsonb
+      WHERE batch_update.id = v_operation_row.pay_batch_id
+        AND v_batch_execution_boundary_crossed IS NOT TRUE
+        AND COALESCE(v_provider_submit_chunk_attempt_count, 0) = 0
+        AND COALESCE(v_provider_evidence_count, 0) = 0
+        AND (
+          NULLIF(BTRIM(COALESCE(batch_update.execution_intent_json->>'operation_id', '')), '') = p_operation_id::text
+          OR EXISTS (
+            SELECT 1
+            FROM pg_temp.tmp_pay_execute_cleanup_cancelled_auth_request_ids AS cancelled_auth_request
+            WHERE NULLIF(BTRIM(COALESCE(batch_update.execution_intent_json->>'auth_request_id', '')), '') = cancelled_auth_request.auth_request_id::text
+          )
+        )
+      RETURNING batch_update.id
+    )
+    SELECT COUNT(*)::integer
+    INTO v_batch_execution_intent_cleared
+    FROM cleared_batch_intent;
+  END IF;
+
+  SELECT COUNT(*)::integer,
+         COALESCE(jsonb_agg(to_jsonb(cancelled_auth_request.auth_request_id::text) ORDER BY cancelled_auth_request.auth_request_id), '[]'::jsonb)
+  INTO v_auth_requests_cancelled,
+       v_cancelled_auth_request_ids
+  FROM pg_temp.tmp_pay_execute_cleanup_cancelled_auth_request_ids AS cancelled_auth_request;
+
+  SELECT COUNT(*)::integer,
+         (COUNT(*) FILTER (WHERE auth_request.execution_intent_json->>'operation_id' = p_operation_id::text))::integer,
+         COALESCE(jsonb_agg(to_jsonb(auth_request.id::text) ORDER BY auth_request.created_at_utc NULLS LAST, auth_request.id), '[]'::jsonb)
+  INTO v_active_auth_request_count,
+       v_operation_active_auth_request_count,
+       v_active_auth_request_ids
+  FROM public.pay_batch_auth_requests AS auth_request
+  WHERE auth_request.pay_batch_id = v_operation_row.pay_batch_id
+    AND auth_request.state IN ('AWAITING', 'PENDING_AUTHORISATION', 'AUTHORISED');
+
+  IF COALESCE(p_dry_run, false) IS TRUE THEN
+    v_active_auth_request_blocker_count := COALESCE(v_non_cancellable_auth_request_count, 0);
+  ELSE
+    v_active_auth_request_blocker_count := COALESCE(v_active_auth_request_count, 0);
+  END IF;
+
+  v_deletion_allowed := (
+    v_batch_execution_boundary_crossed IS NOT TRUE
+    AND COALESCE(v_provider_submit_chunk_attempt_count, 0) = 0
+    AND COALESCE(v_provider_evidence_count, 0) = 0
+    AND COALESCE(v_active_auth_request_blocker_count, 0) = 0
+  );
+
+  IF v_deletion_allowed IS TRUE THEN
+    UPDATE pg_temp.tmp_pay_execute_cleanup_transfer_classified AS classified_transfer_update
+    SET is_safe_local_cleanup = true,
+        unsafe_reason = NULL::text
+    WHERE classified_transfer_update.has_provider_submission_evidence IS NOT TRUE
+      AND classified_transfer_update.has_provider_event_evidence IS NOT TRUE
+      AND classified_transfer_update.has_provider_attempt_without_external_id IS NOT TRUE
+      AND classified_transfer_update.has_operation_submit_attempt IS NOT TRUE
+      AND classified_transfer_update.has_ambiguous_external_evidence IS NOT TRUE
+      AND classified_transfer_update.is_failed_or_blocked IS NOT TRUE
+      AND classified_transfer_update.is_terminal_or_completed IS NOT TRUE;
+
+    UPDATE pg_temp.tmp_pay_execute_cleanup_scope_classified AS classified_scope_update
+    SET classifier_is_safe_local_cleanup = true,
+        unsafe_reason = NULL::text
+    WHERE (
+        classified_scope_update.pay_bank_transfer_id IS NULL
+        OR EXISTS (
+          SELECT 1
+          FROM pg_temp.tmp_pay_execute_cleanup_transfer_classified AS classified_transfer
+          WHERE classified_transfer.pay_bank_transfer_id = classified_scope_update.pay_bank_transfer_id
+            AND classified_transfer.is_safe_local_cleanup IS TRUE
+        )
+      )
+      AND classified_scope_update.has_provider_submission_evidence IS NOT TRUE
+      AND classified_scope_update.has_provider_event_evidence IS NOT TRUE
+      AND classified_scope_update.has_provider_attempt_without_external_id IS NOT TRUE
+      AND classified_scope_update.has_operation_submit_attempt IS NOT TRUE
+      AND classified_scope_update.has_ambiguous_external_evidence IS NOT TRUE
+      AND classified_scope_update.is_failed_or_blocked IS NOT TRUE
+      AND classified_scope_update.is_terminal_or_completed IS NOT TRUE;
+  END IF;
 
   DROP TABLE IF EXISTS pg_temp.tmp_pay_execute_cleanup_safe_transfer_ids;
   CREATE TEMPORARY TABLE pg_temp.tmp_pay_execute_cleanup_safe_transfer_ids (
@@ -12790,7 +13123,7 @@ BEGIN
          classified_scope.transfer_group_key,
          COALESCE(
            CASE WHEN v_batch_execution_boundary_crossed THEN 'BATCH_EXECUTION_BOUNDARY_CROSSED' ELSE NULL::text END,
-           CASE WHEN COALESCE(v_active_auth_request_count, 0) > 0 THEN 'ACTIVE_AUTH_REQUEST_PRESENT' ELSE NULL::text END,
+           CASE WHEN COALESCE(v_active_auth_request_blocker_count, 0) > 0 THEN 'ACTIVE_AUTH_REQUEST_PRESENT' ELSE NULL::text END,
            CASE WHEN COALESCE(v_provider_submit_chunk_attempt_count, 0) > 0 THEN 'PROVIDER_SUBMIT_OPERATION_CHUNK_ATTEMPT_PRESENT' ELSE NULL::text END,
            CASE WHEN classified_scope.has_provider_event_evidence THEN 'PROVIDER_EVENT_EVIDENCE_PRESENT' ELSE NULL::text END,
            CASE WHEN classified_scope.has_provider_submission_evidence THEN 'PROVIDER_SUBMISSION_EVIDENCE_PRESENT' ELSE NULL::text END,
@@ -12822,7 +13155,7 @@ BEGIN
          classified_transfer.transfer_group_key,
          COALESCE(
            CASE WHEN v_batch_execution_boundary_crossed THEN 'BATCH_EXECUTION_BOUNDARY_CROSSED' ELSE NULL::text END,
-           CASE WHEN COALESCE(v_active_auth_request_count, 0) > 0 THEN 'ACTIVE_AUTH_REQUEST_PRESENT' ELSE NULL::text END,
+           CASE WHEN COALESCE(v_active_auth_request_blocker_count, 0) > 0 THEN 'ACTIVE_AUTH_REQUEST_PRESENT' ELSE NULL::text END,
            CASE WHEN COALESCE(v_provider_submit_chunk_attempt_count, 0) > 0 THEN 'PROVIDER_SUBMIT_OPERATION_CHUNK_ATTEMPT_PRESENT' ELSE NULL::text END,
            CASE WHEN classified_transfer.has_provider_event_evidence THEN 'PROVIDER_EVENT_EVIDENCE_PRESENT' ELSE NULL::text END,
            CASE WHEN classified_transfer.has_provider_submission_evidence THEN 'PROVIDER_SUBMISSION_EVIDENCE_PRESENT' ELSE NULL::text END,
@@ -13185,7 +13518,7 @@ BEGIN
   IF COALESCE(p_dry_run, false) IS TRUE THEN
     v_retry_blocked := (
       v_batch_execution_boundary_crossed IS TRUE
-      OR COALESCE(v_active_auth_request_count, 0) > 0
+      OR COALESCE(v_active_auth_request_blocker_count, 0) > 0
       OR COALESCE(v_provider_evidence_count, 0) > 0
       OR COALESCE(v_provider_submit_chunk_attempt_count, 0) > 0
       OR COALESCE(v_unsafe_transfer_count, 0) > 0
@@ -13194,7 +13527,7 @@ BEGIN
   ELSE
     v_retry_blocked := (
       v_batch_execution_boundary_crossed IS TRUE
-      OR COALESCE(v_active_auth_request_count, 0) > 0
+      OR COALESCE(v_active_auth_request_blocker_count, 0) > 0
       OR COALESCE(v_provider_evidence_count, 0) > 0
       OR COALESCE(v_provider_submit_chunk_attempt_count, 0) > 0
       OR COALESCE(v_unsafe_transfer_count, 0) > 0
@@ -13210,7 +13543,7 @@ BEGIN
   v_cleanup_mode := CASE
     WHEN COALESCE(p_dry_run, false) IS TRUE THEN 'DRY_RUN'
     WHEN v_batch_execution_boundary_crossed THEN 'REVIEW_REQUIRED_BATCH_EXECUTION_BOUNDARY'
-    WHEN COALESCE(v_active_auth_request_count, 0) > 0 THEN 'REVIEW_REQUIRED_ACTIVE_AUTH_REQUEST'
+    WHEN COALESCE(v_active_auth_request_blocker_count, 0) > 0 THEN 'REVIEW_REQUIRED_ACTIVE_AUTH_REQUEST'
     WHEN COALESCE(v_provider_evidence_count, 0) > 0 OR COALESCE(v_provider_submit_chunk_attempt_count, 0) > 0 THEN 'REVIEW_REQUIRED_PROVIDER_EVIDENCE'
     WHEN COALESCE(v_unsafe_transfer_count, 0) > 0 OR COALESCE(v_unsafe_scope_count, 0) > 0 THEN 'REVIEW_REQUIRED_UNSAFE_LOCAL_ARTIFACTS'
     WHEN COALESCE(v_remaining_operation_scope_count, 0) > 0 OR COALESCE(v_remaining_operation_transfer_count, 0) > 0 THEN 'REVIEW_REQUIRED_RETRY_BLOCKER_REMAINS'
@@ -13247,9 +13580,18 @@ BEGIN
     'unsafe_reasons', COALESCE(v_unsafe_reasons, '[]'::jsonb),
     'safe_scope_ids', CASE WHEN COALESCE(p_dry_run, false) THEN COALESCE(v_safe_scope_ids, '[]'::jsonb) ELSE COALESCE(v_deleted_scope_ids, '[]'::jsonb) END,
     'safe_transfer_ids', CASE WHEN COALESCE(p_dry_run, false) THEN COALESCE(v_safe_transfer_ids, '[]'::jsonb) ELSE COALESCE(v_deleted_transfer_ids, '[]'::jsonb) END,
+    'initial_active_auth_request_count', COALESCE(v_initial_active_auth_request_count, 0),
     'active_auth_request_count', COALESCE(v_active_auth_request_count, 0),
     'operation_active_auth_request_count', COALESCE(v_operation_active_auth_request_count, 0),
     'active_auth_request_ids', COALESCE(v_active_auth_request_ids, '[]'::jsonb),
+    'auth_requests_cancelled', COALESCE(v_auth_requests_cancelled, 0),
+    'auth_tokens_voided', COALESCE(v_auth_tokens_voided, 0),
+    'batch_execution_intent_cleared', COALESCE(v_batch_execution_intent_cleared, 0),
+    'active_auth_request_blocker_count', COALESCE(v_active_auth_request_blocker_count, 0),
+    'authorised_auth_request_review_count', COALESCE(v_authorised_auth_request_review_count, 0),
+    'cancellable_auth_request_count', COALESCE(v_cancellable_auth_request_count, 0),
+    'non_cancellable_auth_request_count', COALESCE(v_non_cancellable_auth_request_count, 0),
+    'cancelled_auth_request_ids', COALESCE(v_cancelled_auth_request_ids, '[]'::jsonb),
     'provider_submit_chunk_attempt_count', COALESCE(v_provider_submit_chunk_attempt_count, 0),
     'batch_execution_boundary_crossed', v_batch_execution_boundary_crossed,
     'execution_commit_state', upper(BTRIM(COALESCE(v_batch_row.execution_commit_state, 'NOT_SUBMITTED'))),
