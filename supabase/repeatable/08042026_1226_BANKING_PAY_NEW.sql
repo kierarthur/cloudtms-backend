@@ -19191,6 +19191,9 @@ DROP FUNCTION IF EXISTS public.pay_workbench_session_open(uuid, date, date, json
 
 DROP FUNCTION IF EXISTS public.pay_workbench_session_open(uuid, date, date, jsonb, text);
 
+
+
+
 CREATE OR REPLACE FUNCTION public.pay_workbench_session_open(
   p_actor_user_id uuid,
   p_pay_date date,
@@ -19286,6 +19289,18 @@ DECLARE
   v_previous_session_id uuid := NULL::uuid;
   v_source_session_discarded boolean := false;
   v_source_session_discard_json jsonb := NULL::jsonb;
+  v_dirty_candidate_ids uuid[] := ARRAY[]::uuid[];
+  v_dirty_candidate_ids_jsonb jsonb := '[]'::jsonb;
+  v_created_pay_batch_ids_jsonb jsonb := '[]'::jsonb;
+  v_refresh_job_ids uuid[] := ARRAY[]::uuid[];
+  v_refresh_job_ids_jsonb jsonb := '[]'::jsonb;
+  v_post_mutation_requires_refresh boolean := false;
+  v_mutation_refresh_reason text := 'SESSION_OPEN_WARMUP';
+  v_candidate_is_dirty boolean := false;
+  v_candidate_refresh_reason text := 'SESSION_OPEN_WARMUP';
+  v_pending_candidate_ids_jsonb jsonb := '[]'::jsonb;
+  v_pending_dirty_candidate_ids_jsonb jsonb := '[]'::jsonb;
+  v_pending_dirty_candidate_count integer := 0;
 BEGIN
   IF p_actor_user_id IS NULL THEN
     RAISE EXCEPTION 'actor_user_id is required';
@@ -19329,6 +19344,74 @@ BEGIN
     SELECT v_source_session_id
     WHERE v_source_session_id IS NOT NULL
   ) AS obsolete_input;
+
+  SELECT
+    COALESCE(array_agg(DISTINCT dirty_input.dirty_candidate_id ORDER BY dirty_input.dirty_candidate_id), ARRAY[]::uuid[]),
+    COALESCE(jsonb_agg(to_jsonb(dirty_input.dirty_candidate_id::text) ORDER BY dirty_input.dirty_candidate_id::text), '[]'::jsonb)
+  INTO v_dirty_candidate_ids, v_dirty_candidate_ids_jsonb
+  FROM (
+    SELECT DISTINCT NULLIF(BTRIM(dirty_element.value), '')::uuid AS dirty_candidate_id
+    FROM jsonb_array_elements_text(
+      CASE
+        WHEN jsonb_typeof(COALESCE(p_dirty_candidate_ids, '[]'::jsonb)) = 'array' THEN COALESCE(p_dirty_candidate_ids, '[]'::jsonb)
+        ELSE '[]'::jsonb
+      END
+    ) AS dirty_element(value)
+    WHERE NULLIF(BTRIM(dirty_element.value), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+  ) AS dirty_input;
+
+  SELECT COALESCE(jsonb_agg(to_jsonb(created_batch_input.created_pay_batch_id::text) ORDER BY created_batch_input.created_pay_batch_id::text), '[]'::jsonb)
+  INTO v_created_pay_batch_ids_jsonb
+  FROM (
+    SELECT DISTINCT NULLIF(BTRIM(created_batch_element.value), '')::uuid AS created_pay_batch_id
+    FROM jsonb_array_elements_text(
+      CASE
+        WHEN jsonb_typeof(COALESCE(p_created_pay_batch_ids, '[]'::jsonb)) = 'array' THEN COALESCE(p_created_pay_batch_ids, '[]'::jsonb)
+        ELSE '[]'::jsonb
+      END
+    ) AS created_batch_element(value)
+    WHERE NULLIF(BTRIM(created_batch_element.value), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+  ) AS created_batch_input;
+
+  SELECT
+    COALESCE(array_agg(DISTINCT refresh_job_input.refresh_job_id ORDER BY refresh_job_input.refresh_job_id), ARRAY[]::uuid[]),
+    COALESCE(jsonb_agg(to_jsonb(refresh_job_input.refresh_job_id::text) ORDER BY refresh_job_input.refresh_job_id::text), '[]'::jsonb)
+  INTO v_refresh_job_ids, v_refresh_job_ids_jsonb
+  FROM (
+    SELECT DISTINCT NULLIF(BTRIM(refresh_job_element.value), '')::uuid AS refresh_job_id
+    FROM jsonb_array_elements_text(
+      CASE
+        WHEN jsonb_typeof(COALESCE(p_refresh_job_ids, '[]'::jsonb)) = 'array' THEN COALESCE(p_refresh_job_ids, '[]'::jsonb)
+        ELSE '[]'::jsonb
+      END
+    ) AS refresh_job_element(value)
+    WHERE NULLIF(BTRIM(refresh_job_element.value), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+  ) AS refresh_job_input;
+
+  v_post_mutation_requires_refresh := (
+    v_mutation_context IS NOT NULL
+    OR COALESCE(array_length(v_dirty_candidate_ids, 1), 0) > 0
+    OR COALESCE(jsonb_array_length(v_created_pay_batch_ids_jsonb), 0) > 0
+    OR COALESCE(array_length(v_refresh_job_ids, 1), 0) > 0
+  );
+
+  v_mutation_refresh_reason := CASE
+    WHEN UPPER(COALESCE(v_mutation_context, '')) IN ('CREATE_DRAFT_SUCCESS', 'POST_DRAFT_CREATE_PREVIEW_REFRESH', 'POST_DRAFT_CREATE_DISCARD_AND_REOPEN', 'DRAFT_CREATED')
+      OR COALESCE(jsonb_array_length(v_created_pay_batch_ids_jsonb), 0) > 0
+      THEN 'DRAFT_CREATED'
+    WHEN UPPER(COALESCE(v_mutation_context, '')) IN ('CANCEL_DELETE_DRAFT_SUCCESS', 'POST_DRAFT_CANCEL_PREVIEW_REFRESH', 'POST_DRAFT_CANCEL_DISCARD_AND_REOPEN', 'DRAFT_CANCELLED', 'DRAFT_CANCELED')
+      THEN 'DRAFT_CANCELLED'
+    WHEN UPPER(COALESCE(v_mutation_context, '')) IN ('PAY_BATCH_CANCELLED', 'PAY_BATCH_CANCELED', 'BATCH_CANCELLED', 'BATCH_CANCELED')
+      OR UPPER(COALESCE(v_mutation_context, '')) LIKE '%PAY_BATCH_CANCEL%'
+      THEN 'PAY_BATCH_CANCELLED'
+    WHEN v_post_mutation_requires_refresh THEN 'SESSION_OPEN_POST_MUTATION'
+    ELSE 'SESSION_OPEN_WARMUP'
+  END;
+
+  IF v_post_mutation_requires_refresh THEN
+    v_force_new_session := true;
+    v_discard_source_session := true;
+  END IF;
 
   v_projection_contract_json := public._pay_workbench_candidate_projection_contract();
   v_required_projection_version := COALESCE(
@@ -19761,6 +19844,11 @@ BEGIN
     v_pending_job_id := NULL::uuid;
     v_existing_snapshot_job_id := NULL::uuid;
     v_existing_snapshot_job_source_change_seq := 0;
+    v_candidate_is_dirty := v_scope_candidate_id = ANY(COALESCE(v_dirty_candidate_ids, ARRAY[]::uuid[]));
+    v_candidate_refresh_reason := CASE
+      WHEN v_candidate_is_dirty AND v_post_mutation_requires_refresh THEN v_mutation_refresh_reason
+      ELSE 'SESSION_OPEN_WARMUP'
+    END;
 
     SELECT COALESCE(acc.seq, 0)
     INTO v_scope_live_change_seq
@@ -19835,7 +19923,8 @@ BEGIN
            )
     INTO v_snapshot_has_matching_hidden_paye_manual_debt_template;
 
-    IF v_snapshot_candidate_row.id IS NOT NULL
+    IF v_candidate_is_dirty = false
+       AND v_snapshot_candidate_row.id IS NOT NULL
        AND UPPER(COALESCE(v_snapshot_candidate_row.status, '')) = 'READY'
        AND COALESCE(v_snapshot_candidate_row.source_change_seq, 0) >= v_scope_live_change_seq
        AND v_snapshot_projection_version >= v_required_projection_version
@@ -19905,7 +19994,7 @@ BEGIN
       v_enqueue_candidate_refresh_json := public.pay_workbench_enqueue_candidate_refresh(
         p_snapshot_run_id => v_snapshot_run_id,
         p_candidate_id => v_scope_candidate_id,
-        p_reason => 'SESSION_OPEN_WARMUP',
+        p_reason => v_candidate_refresh_reason,
         p_actor_user_id => p_actor_user_id,
         p_payload_json => jsonb_build_object(
           'session_id', v_session_id::text,
@@ -19915,7 +20004,13 @@ BEGIN
           'projection_version', v_required_projection_version,
           'hidden_recovery_template_projection_version', v_required_hidden_recovery_template_projection_version,
           'requires_hidden_recovery_templates', v_requires_hidden_recovery_templates,
+          'mutation_context', v_mutation_context,
+          'created_pay_batch_ids', v_created_pay_batch_ids_jsonb,
+          'dirty_candidate_ids', v_dirty_candidate_ids_jsonb,
+          'input_refresh_job_ids', v_refresh_job_ids_jsonb,
+          'post_mutation_candidate_dirty', v_candidate_is_dirty,
           'refresh_reason', CASE
+            WHEN v_candidate_is_dirty AND v_post_mutation_requires_refresh THEN v_candidate_refresh_reason
             WHEN v_snapshot_candidate_row.id IS NULL THEN 'SNAPSHOT_CANDIDATE_MISSING'
             WHEN UPPER(COALESCE(v_snapshot_candidate_row.status, '')) <> 'READY' THEN 'SNAPSHOT_CANDIDATE_NOT_READY'
             WHEN COALESCE(v_snapshot_candidate_row.source_change_seq, 0) < v_scope_live_change_seq THEN 'SOURCE_CHANGE_STALE'
@@ -19988,6 +20083,30 @@ BEGIN
     END IF;
   END LOOP;
 
+  SELECT COALESCE(jsonb_agg(to_jsonb(pending_state.candidate_id::text) ORDER BY pending_state.candidate_id::text), '[]'::jsonb)
+  INTO v_pending_candidate_ids_jsonb
+  FROM (
+    SELECT session_candidate_state.candidate_id AS candidate_id
+    FROM public.banking_pay_workbench_session_candidate_state AS session_candidate_state
+    WHERE session_candidate_state.session_id = v_session_id
+      AND UPPER(COALESCE(session_candidate_state.status, '')) = 'PENDING'
+      AND session_candidate_state.candidate_id IS NOT NULL
+  ) AS pending_state;
+
+  SELECT
+    COALESCE(jsonb_agg(to_jsonb(pending_dirty_state.candidate_id::text) ORDER BY pending_dirty_state.candidate_id::text), '[]'::jsonb),
+    COALESCE(count(*)::integer, 0)
+  INTO v_pending_dirty_candidate_ids_jsonb,
+       v_pending_dirty_candidate_count
+  FROM (
+    SELECT session_candidate_state.candidate_id AS candidate_id
+    FROM public.banking_pay_workbench_session_candidate_state AS session_candidate_state
+    WHERE session_candidate_state.session_id = v_session_id
+      AND UPPER(COALESCE(session_candidate_state.status, '')) = 'PENDING'
+      AND session_candidate_state.candidate_id = ANY(COALESCE(v_dirty_candidate_ids, ARRAY[]::uuid[]))
+      AND session_candidate_state.candidate_id IS NOT NULL
+  ) AS pending_dirty_state;
+
   v_audit_after_json := jsonb_build_object(
     'id', v_session_id::text,
     'actor_user_id', p_actor_user_id::text,
@@ -19999,6 +20118,14 @@ BEGIN
     'source_snapshot_run_id', v_snapshot_run_id::text,
     'status', 'OPEN',
     'version', v_session_version,
+    'mutation_context', v_mutation_context,
+    'post_mutation_requires_refresh', v_post_mutation_requires_refresh,
+    'post_mutation_refresh_reason', v_mutation_refresh_reason,
+    'created_pay_batch_ids', v_created_pay_batch_ids_jsonb,
+    'dirty_candidate_ids', v_dirty_candidate_ids_jsonb,
+    'pending_candidate_ids', v_pending_candidate_ids_jsonb,
+    'pending_dirty_candidate_ids', v_pending_dirty_candidate_ids_jsonb,
+    'input_refresh_job_ids', v_refresh_job_ids_jsonb,
     'server_selected_preview_row_ids', v_server_selected_preview_row_ids,
     'server_selected_preview_row_ids_provided', v_server_selected_preview_row_ids_provided
   );
@@ -20046,6 +20173,33 @@ BEGIN
     ELSE (v_open_ready_flag = true AND COALESCE(v_open_total_count, 0) = 0)
   END;
 
+  IF v_post_mutation_requires_refresh = true
+     AND COALESCE(array_length(v_scope_candidate_ids, 1), 0) = 0 THEN
+    v_open_ready_flag := true;
+    v_open_ready_empty := true;
+    v_open_total_count := 0;
+    v_open_completed_count := 0;
+    v_open_pending_count := 0;
+    v_open_failed_count := 0;
+    v_open_progress_json := COALESCE(v_open_progress_json, '{}'::jsonb) || jsonb_build_object(
+      'ready', true,
+      'ready_flag', true,
+      'ready_empty', true,
+      'total_count', 0,
+      'total_candidates', 0,
+      'completed_count', 0,
+      'completed_candidates', 0,
+      'ready_count', 0,
+      'ready_candidates', 0,
+      'pending_count', 0,
+      'pending_candidates', 0,
+      'failed_count', 0,
+      'failed_candidates', 0,
+      'phase', 'READY_EMPTY',
+      'status_text', 'Payment preview is ready. No eligible payment candidates remain for this scope.'
+    );
+  END IF;
+
   RETURN jsonb_build_object(
     'ok', true,
     'session_id', v_session_id::text,
@@ -20057,6 +20211,11 @@ BEGIN
     'requires_new_session', false,
     'obsolete_session_ids', COALESCE(v_obsolete_session_ids_jsonb, '[]'::jsonb),
     'mutation_context', v_mutation_context,
+    'post_mutation_requires_refresh', v_post_mutation_requires_refresh,
+    'post_mutation_refresh_reason', v_mutation_refresh_reason,
+    'created_pay_batch_ids', v_created_pay_batch_ids_jsonb,
+    'dirty_candidate_ids', v_dirty_candidate_ids_jsonb,
+    'input_refresh_job_ids', v_refresh_job_ids_jsonb,
     'snapshot_run_id', v_snapshot_run_id::text,
     'session_signature', v_session_signature,
     'pay_date', v_effective_pay_date::text,
@@ -20069,6 +20228,9 @@ BEGIN
     'completed_count', v_open_completed_count,
     'pending_count', v_open_pending_count,
     'failed_count', v_open_failed_count,
+    'pending_candidate_ids', v_pending_candidate_ids_jsonb,
+    'pending_dirty_candidate_ids', v_pending_dirty_candidate_ids_jsonb,
+    'pending_dirty_candidate_count', v_pending_dirty_candidate_count,
     'candidate_counts', jsonb_build_object(
       'total', v_open_total_count,
       'ready', COALESCE(CASE WHEN COALESCE(v_open_progress_json->>'ready_count', '') ~ '^[0-9]+$' THEN (v_open_progress_json->>'ready_count')::integer ELSE NULL::integer END, 0),
