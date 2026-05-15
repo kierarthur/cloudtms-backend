@@ -42695,7 +42695,6 @@ $function$;
 
 DROP FUNCTION IF EXISTS public.pay_batch_submission_evidence(uuid);
 
-
 CREATE OR REPLACE FUNCTION public.pay_batch_submission_evidence(p_pay_batch_id uuid, p_counts_only boolean DEFAULT false)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -42736,6 +42735,12 @@ DECLARE
   v_safe_local_cleanup_count integer := 0;
   v_provider_attempt_or_evidence_count integer := 0;
   v_provider_or_ambiguous_evidence_count integer := 0;
+  v_cancellable_local_auth_request_count integer := 0;
+  v_non_cancellable_auth_request_count integer := 0;
+  v_same_operation_active_auth_request_count integer := 0;
+  v_other_operation_active_auth_request_count integer := 0;
+  v_auth_request_provider_risk_count integer := 0;
+  v_auth_request_retry_blocker_count integer := 0;
 BEGIN
   IF p_pay_batch_id IS NULL THEN
     RAISE EXCEPTION 'PAY_BATCH_SUBMISSION_EVIDENCE_PAY_BATCH_ID_REQUIRED'
@@ -42787,6 +42792,16 @@ BEGIN
       classification_row.has_auth_prepared_scope,
       classification_row.has_different_operation_scope,
       classification_row.has_stale_auth_request_evidence,
+      classification_row.auth_request_id,
+      classification_row.auth_request_state,
+      classification_row.auth_request_operation_id,
+      classification_row.has_same_operation_active_auth_request,
+      classification_row.has_other_operation_active_auth_request,
+      classification_row.has_cancellable_local_auth_request,
+      classification_row.has_non_cancellable_auth_request,
+      classification_row.has_authorised_auth_without_provider_submission,
+      classification_row.has_auth_request_provider_risk,
+      classification_row.auth_request_unsafe_reason,
       classification_row.unsafe_reason
     FROM public.pay_bank_transfer_execution_classify(
       p_pay_batch_id,
@@ -42852,6 +42867,34 @@ BEGIN
          OR classified_rows.has_provider_event_evidence IS TRUE
          OR classified_rows.has_ambiguous_external_evidence IS TRUE
     )::integer,
+    count(DISTINCT classified_rows.auth_request_id) FILTER (
+      WHERE classified_rows.auth_request_id IS NOT NULL
+        AND classified_rows.has_cancellable_local_auth_request IS TRUE
+    )::integer,
+    count(DISTINCT classified_rows.auth_request_id) FILTER (
+      WHERE classified_rows.auth_request_id IS NOT NULL
+        AND classified_rows.has_non_cancellable_auth_request IS TRUE
+    )::integer,
+    count(DISTINCT classified_rows.auth_request_id) FILTER (
+      WHERE classified_rows.auth_request_id IS NOT NULL
+        AND classified_rows.has_same_operation_active_auth_request IS TRUE
+    )::integer,
+    count(DISTINCT classified_rows.auth_request_id) FILTER (
+      WHERE classified_rows.auth_request_id IS NOT NULL
+        AND classified_rows.has_other_operation_active_auth_request IS TRUE
+    )::integer,
+    count(DISTINCT classified_rows.auth_request_id) FILTER (
+      WHERE classified_rows.auth_request_id IS NOT NULL
+        AND classified_rows.has_auth_request_provider_risk IS TRUE
+    )::integer,
+    count(DISTINCT classified_rows.auth_request_id) FILTER (
+      WHERE classified_rows.auth_request_id IS NOT NULL
+        AND (
+          classified_rows.has_non_cancellable_auth_request IS TRUE
+          OR classified_rows.has_auth_request_provider_risk IS TRUE
+          OR classified_rows.has_other_operation_active_auth_request IS TRUE
+        )
+    )::integer,
     coalesce(jsonb_agg(
       jsonb_strip_nulls(jsonb_build_object(
         'pay_bank_transfer_id', CASE WHEN classified_rows.pay_bank_transfer_id IS NULL THEN NULL ELSE classified_rows.pay_bank_transfer_id::text END,
@@ -42873,6 +42916,16 @@ BEGIN
         'has_auth_prepared_scope', classified_rows.has_auth_prepared_scope,
         'has_different_operation_scope', classified_rows.has_different_operation_scope,
         'has_stale_auth_request_evidence', classified_rows.has_stale_auth_request_evidence,
+        'auth_request_id', CASE WHEN classified_rows.auth_request_id IS NULL THEN NULL ELSE classified_rows.auth_request_id::text END,
+        'auth_request_state', classified_rows.auth_request_state,
+        'auth_request_operation_id', CASE WHEN classified_rows.auth_request_operation_id IS NULL THEN NULL ELSE classified_rows.auth_request_operation_id::text END,
+        'has_same_operation_active_auth_request', classified_rows.has_same_operation_active_auth_request,
+        'has_other_operation_active_auth_request', classified_rows.has_other_operation_active_auth_request,
+        'has_cancellable_local_auth_request', classified_rows.has_cancellable_local_auth_request,
+        'has_non_cancellable_auth_request', classified_rows.has_non_cancellable_auth_request,
+        'has_authorised_auth_without_provider_submission', classified_rows.has_authorised_auth_without_provider_submission,
+        'has_auth_request_provider_risk', classified_rows.has_auth_request_provider_risk,
+        'auth_request_unsafe_reason', classified_rows.auth_request_unsafe_reason,
         'unsafe_reason', classified_rows.unsafe_reason
       ))
       ORDER BY classified_rows.pay_bank_transfer_id NULLS LAST, classified_rows.scope_id NULLS LAST
@@ -42905,6 +42958,16 @@ BEGIN
         'has_auth_prepared_scope', classified_rows.has_auth_prepared_scope,
         'has_different_operation_scope', classified_rows.has_different_operation_scope,
         'has_stale_auth_request_evidence', classified_rows.has_stale_auth_request_evidence,
+        'auth_request_id', CASE WHEN classified_rows.auth_request_id IS NULL THEN NULL ELSE classified_rows.auth_request_id::text END,
+        'auth_request_state', classified_rows.auth_request_state,
+        'auth_request_operation_id', CASE WHEN classified_rows.auth_request_operation_id IS NULL THEN NULL ELSE classified_rows.auth_request_operation_id::text END,
+        'has_same_operation_active_auth_request', classified_rows.has_same_operation_active_auth_request,
+        'has_other_operation_active_auth_request', classified_rows.has_other_operation_active_auth_request,
+        'has_cancellable_local_auth_request', classified_rows.has_cancellable_local_auth_request,
+        'has_non_cancellable_auth_request', classified_rows.has_non_cancellable_auth_request,
+        'has_authorised_auth_without_provider_submission', classified_rows.has_authorised_auth_without_provider_submission,
+        'has_auth_request_provider_risk', classified_rows.has_auth_request_provider_risk,
+        'auth_request_unsafe_reason', classified_rows.auth_request_unsafe_reason,
         'unsafe_reason', classified_rows.unsafe_reason
       ))
       ORDER BY classified_rows.pay_bank_transfer_id NULLS LAST, classified_rows.scope_id NULLS LAST
@@ -42932,6 +42995,12 @@ BEGIN
     v_safe_local_cleanup_count,
     v_provider_attempt_or_evidence_count,
     v_provider_or_ambiguous_evidence_count,
+    v_cancellable_local_auth_request_count,
+    v_non_cancellable_auth_request_count,
+    v_same_operation_active_auth_request_count,
+    v_other_operation_active_auth_request_count,
+    v_auth_request_provider_risk_count,
+    v_auth_request_retry_blocker_count,
     v_evidence_sample,
     v_execution_classification_sample
   FROM classified_rows_with_sample AS classified_rows;
@@ -42984,6 +43053,12 @@ BEGIN
       'safe_local_cleanup_count', coalesce(v_safe_local_cleanup_count, 0),
       'provider_attempt_or_evidence_count', coalesce(v_provider_attempt_or_evidence_count, 0),
       'provider_or_ambiguous_evidence_count', coalesce(v_provider_or_ambiguous_evidence_count, 0),
+      'cancellable_local_auth_request_count', coalesce(v_cancellable_local_auth_request_count, 0),
+      'non_cancellable_auth_request_count', coalesce(v_non_cancellable_auth_request_count, 0),
+      'same_operation_active_auth_request_count', coalesce(v_same_operation_active_auth_request_count, 0),
+      'other_operation_active_auth_request_count', coalesce(v_other_operation_active_auth_request_count, 0),
+      'auth_request_provider_risk_count', coalesce(v_auth_request_provider_risk_count, 0),
+      'auth_request_retry_blocker_count', coalesce(v_auth_request_retry_blocker_count, 0),
       'remaining_submit_attempt_required', coalesce(v_remaining_submit_attempt_required, 0),
       'remaining_unattempted_submit_required', coalesce(v_remaining_unattempted_submit_required, 0),
       'remaining_evidence_unresolved_count', coalesce(v_remaining_evidence_unresolved_count, 0),
@@ -43074,6 +43149,12 @@ BEGIN
     'safe_local_cleanup_count', coalesce(v_safe_local_cleanup_count, 0),
     'provider_attempt_or_evidence_count', coalesce(v_provider_attempt_or_evidence_count, 0),
     'provider_or_ambiguous_evidence_count', coalesce(v_provider_or_ambiguous_evidence_count, 0),
+    'cancellable_local_auth_request_count', coalesce(v_cancellable_local_auth_request_count, 0),
+    'non_cancellable_auth_request_count', coalesce(v_non_cancellable_auth_request_count, 0),
+    'same_operation_active_auth_request_count', coalesce(v_same_operation_active_auth_request_count, 0),
+    'other_operation_active_auth_request_count', coalesce(v_other_operation_active_auth_request_count, 0),
+    'auth_request_provider_risk_count', coalesce(v_auth_request_provider_risk_count, 0),
+    'auth_request_retry_blocker_count', coalesce(v_auth_request_retry_blocker_count, 0),
     'remaining_submit_attempt_required', coalesce(v_remaining_submit_attempt_required, 0),
     'remaining_unattempted_submit_required', coalesce(v_remaining_unattempted_submit_required, 0),
     'remaining_evidence_unresolved_count', coalesce(v_remaining_evidence_unresolved_count, 0),
