@@ -63,89 +63,526 @@ BEGIN
     v_week_ending_to := NULL;
   END;
 
-  WITH decision_rows AS MATERIALIZED (
-    SELECT patch_result.row_json
-    FROM public.bulk_timesheet_row_patch_v1(
-      v_filters
-      || JSONB_BUILD_OBJECT(
-           'dataset_mode', 'process',
-           'projection', COALESCE(NULLIF(BTRIM(COALESCE(v_filters->>'projection', v_filters->>'projectionMode', '')), ''), 'dataset_row'),
-           'profile', COALESCE(NULLIF(BTRIM(COALESCE(v_filters->>'profile', '')), ''), 'list')
-         )
-    ) AS patch_result(row_json)
+  WITH lightweight_rows AS MATERIALIZED (
+    SELECT summary_row.*
+    FROM public.timesheet_summary_lightweight_rows_v1(
+      v_filters || JSONB_BUILD_OBJECT(
+        'disable_paging', TRUE,
+        'disablePaging', TRUE,
+        'apply_paging', FALSE,
+        'applyPaging', FALSE,
+        'profile', 'list',
+        'context_profile', 'list',
+        'include_evidence', FALSE,
+        'include_compare', FALSE,
+        'include_import_source_rows', FALSE
+      )
+    ) AS summary_row
+    WHERE summary_row.timesheet_id IS NOT NULL
+       OR summary_row.contract_week_id IS NOT NULL
   ),
-  list_rows AS MATERIALIZED (
+  classified_rows AS MATERIALIZED (
     SELECT
-      decision_rows.row_json || jsonb_build_object(
-        'timesheet_version', COALESCE(decision_rows.row_json->'timesheet_version', 'null'::jsonb),
-        'updated_at', COALESCE(decision_rows.row_json->'updated_at', 'null'::jsonb),
-        'is_current', COALESCE(decision_rows.row_json->'is_current', to_jsonb(true)),
-        'was_stale', COALESCE(decision_rows.row_json->'was_stale', to_jsonb(false)),
-        'candidate_first_name', COALESCE(decision_rows.row_json->'candidate_first_name', 'null'::jsonb),
-        'candidate_surname', COALESCE(decision_rows.row_json->'candidate_surname', 'null'::jsonb),
-        'site_name', COALESCE(decision_rows.row_json->'site_name', COALESCE(decision_rows.row_json->'hospital_name', decision_rows.row_json->'hospital_norm', 'null'::jsonb)),
-        'ward_name', COALESCE(decision_rows.row_json->'ward_name', COALESCE(decision_rows.row_json->'ward_name', decision_rows.row_json->'ward_norm', 'null'::jsonb)),
-        'ward_norm', COALESCE(decision_rows.row_json->'ward_norm', 'null'::jsonb),
-        'external_ref', COALESCE(decision_rows.row_json->'external_ref', COALESCE(decision_rows.row_json->'booking_ref', decision_rows.row_json->'booking_id', 'null'::jsonb)),
-        'contract_week_ending_date', COALESCE(decision_rows.row_json->'contract_week_ending_date', COALESCE(decision_rows.row_json->'contract_week_ending_date', decision_rows.row_json->'week_ending_date', 'null'::jsonb)),
-        'date', COALESCE(decision_rows.row_json->'date', COALESCE(decision_rows.row_json->'date', decision_rows.row_json->'work_date', decision_rows.row_json->'week_ending_date', 'null'::jsonb)),
-        'shift_date', COALESCE(decision_rows.row_json->'shift_date', COALESCE(decision_rows.row_json->'shift_date', decision_rows.row_json->'work_date', 'null'::jsonb)),
-        'timesheet_type_sort_key', COALESCE(decision_rows.row_json->'timesheet_type_sort_key', 'null'::jsonb),
-        'processed_by_user_id', COALESCE(decision_rows.row_json->'processed_by_user_id', 'null'::jsonb),
-        'processed_by_display', COALESCE(decision_rows.row_json->'processed_by_display', 'null'::jsonb),
-        'authorised_by_user_id', COALESCE(decision_rows.row_json->'authorised_by_user_id', 'null'::jsonb),
-        'authorised_by_display', COALESCE(decision_rows.row_json->'authorised_by_display', 'null'::jsonb),
-        'ready_to_pay', COALESCE(decision_rows.row_json->'ready_to_pay', to_jsonb(false)),
-        'pay_on_hold', COALESCE(decision_rows.row_json->'pay_on_hold', to_jsonb(false)),
-        'has_timesheet', COALESCE(decision_rows.row_json->'has_timesheet', to_jsonb(NULLIF(BTRIM(COALESCE(decision_rows.row_json->>'timesheet_id', '')), '') IS NOT NULL)),
-        'is_contract_week_only', COALESCE(decision_rows.row_json->'is_contract_week_only', to_jsonb(NULLIF(BTRIM(COALESCE(decision_rows.row_json->>'timesheet_id', '')), '') IS NULL AND NULLIF(BTRIM(COALESCE(decision_rows.row_json->>'contract_week_id', '')), '') IS NOT NULL)),
-        'qr_signed_at_utc', COALESCE(decision_rows.row_json->'qr_signed_at_utc', 'null'::jsonb),
-        'can_allow_qr_again', COALESCE(decision_rows.row_json->'can_allow_qr_again', to_jsonb(false)),
-        'can_allow_electronic_again', COALESCE(decision_rows.row_json->'can_allow_electronic_again', to_jsonb(false)),
-        'can_switch_to_manual', COALESCE(decision_rows.row_json->'can_switch_to_manual', to_jsonb(false)),
-        'can_revert_to_electronic', COALESCE(decision_rows.row_json->'can_revert_to_electronic', to_jsonb(false)),
-        'can_convert_qr_to_manual_only', COALESCE(decision_rows.row_json->'can_convert_qr_to_manual_only', to_jsonb(false)),
-        'qr_email_can_send_now', COALESCE(decision_rows.row_json->'qr_email_can_send_now', to_jsonb(false)),
-        'qr_email_recipient_available', COALESCE(decision_rows.row_json->'qr_email_recipient_available', to_jsonb(false)),
-        'hr_validation_required_for_invoice', COALESCE(decision_rows.row_json->'hr_validation_required_for_invoice', to_jsonb(false)),
-        'validation_pre_validated', COALESCE(decision_rows.row_json->'validation_pre_validated', to_jsonb(false)),
-        'hr_validation_satisfied', COALESCE(decision_rows.row_json->'hr_validation_satisfied', to_jsonb(false)),
-        'has_deviation_marker', COALESCE(decision_rows.row_json->'has_deviation_marker', to_jsonb(false)),
-        'deviation_marker_reason', COALESCE(decision_rows.row_json->'deviation_marker_reason', 'null'::jsonb),
-        'nhsp_highlight_red', COALESCE(decision_rows.row_json->'nhsp_highlight_red', to_jsonb(false)),
-        'nhsp_highlight_reason', COALESCE(decision_rows.row_json->'nhsp_highlight_reason', 'null'::jsonb),
-        'nhsp_deviation_pct', COALESCE(decision_rows.row_json->'nhsp_deviation_pct', 'null'::jsonb),
-        'nhsp_is_ad_hoc', COALESCE(decision_rows.row_json->'nhsp_is_ad_hoc', to_jsonb(false)),
-        'primary_artifact_id', COALESCE(decision_rows.row_json->'primary_artifact_id', 'null'::jsonb),
-        'primary_artifact_kind', COALESCE(decision_rows.row_json->'primary_artifact_kind', 'null'::jsonb),
-        'manual_pdf_r2_key', COALESCE(decision_rows.row_json->'manual_pdf_r2_key', 'null'::jsonb),
-        'uploaded_pdf_r2_key', COALESCE(decision_rows.row_json->'uploaded_pdf_r2_key', 'null'::jsonb),
-        'generated_pdf_at_utc', COALESCE(decision_rows.row_json->'generated_pdf_at_utc', 'null'::jsonb),
-        'manual_pdf_rotation_degrees', COALESCE(decision_rows.row_json->'manual_pdf_rotation_degrees', to_jsonb(0)),
-        'queue_staged_count', COALESCE(decision_rows.row_json->'queue_staged_count', to_jsonb(0)),
-        'evidence_document_locked', COALESCE(decision_rows.row_json->'evidence_document_locked', to_jsonb(false)),
-        'evidence_lock_reason', COALESCE(decision_rows.row_json->'evidence_lock_reason', 'null'::jsonb)
-      ) AS row_json
+      lightweight_rows.*,
+      CASE
+        WHEN lightweight_rows.timesheet_id IS NOT NULL THEN 'timesheet:' || lightweight_rows.timesheet_id::text
+        WHEN lightweight_rows.contract_week_id IS NOT NULL THEN 'contract_week:' || lightweight_rows.contract_week_id::text
+        ELSE NULL::text
+      END AS row_key_calc,
+      CASE
+        WHEN UPPER(COALESCE(lightweight_rows.route_type, '')) IN ('WEEKLY_NHSP', 'WEEKLY_NHSP_ADJUSTMENT', 'NHSP')
+          AND NOT (COALESCE(lightweight_rows.is_adjusted, FALSE) = TRUE AND UPPER(COALESCE(lightweight_rows.submission_mode, '')) = 'MANUAL') THEN 'IMPORT_AUTHORITATIVE'
+        WHEN UPPER(COALESCE(lightweight_rows.route_type, '')) IN ('WEEKLY_HEALTHROSTER', 'HEALTHROSTER', 'HEALTHROSTER_DAILY')
+          AND COALESCE(lightweight_rows.client_no_timesheet_required, FALSE) = TRUE THEN 'IMPORT_AUTHORITATIVE'
+        WHEN UPPER(COALESCE(lightweight_rows.route_family, '')) = 'QR' OR COALESCE(lightweight_rows.is_qr, FALSE) = TRUE THEN 'QR'
+        WHEN UPPER(COALESCE(lightweight_rows.route_family, '')) = 'ELECTRONIC' OR UPPER(COALESCE(lightweight_rows.submission_mode, '')) = 'ELECTRONIC' THEN 'ELECTRONIC'
+        ELSE 'MANUAL_NON_QR'
+      END AS route_family_calc,
+      CASE
+        WHEN UPPER(COALESCE(lightweight_rows.route_type, '')) IN ('WEEKLY_HEALTHROSTER', 'HEALTHROSTER', 'HEALTHROSTER_DAILY')
+          AND COALESCE(lightweight_rows.client_no_timesheet_required, FALSE) = TRUE THEN 'HEALTHROSTER_NO_TIMESHEET'
+        WHEN UPPER(COALESCE(lightweight_rows.route_type, '')) IN ('WEEKLY_HEALTHROSTER', 'HEALTHROSTER', 'HEALTHROSTER_DAILY') THEN 'HEALTHROSTER_TIMESHEET_REQUIRED'
+        WHEN UPPER(COALESCE(lightweight_rows.route_type, '')) IN ('WEEKLY_NHSP', 'WEEKLY_NHSP_ADJUSTMENT', 'NHSP')
+          AND NOT (COALESCE(lightweight_rows.is_adjusted, FALSE) = TRUE AND UPPER(COALESCE(lightweight_rows.submission_mode, '')) = 'MANUAL') THEN 'NHSP'
+        WHEN UPPER(COALESCE(lightweight_rows.route_family, '')) = 'QR' OR COALESCE(lightweight_rows.is_qr, FALSE) = TRUE THEN 'QR'
+        WHEN UPPER(COALESCE(lightweight_rows.route_family, '')) = 'ELECTRONIC' OR UPPER(COALESCE(lightweight_rows.submission_mode, '')) = 'ELECTRONIC' THEN 'ELECTRONIC'
+        ELSE 'MANUAL_NON_QR'
+      END AS route_subfamily_calc,
+      CASE
+        WHEN UPPER(COALESCE(lightweight_rows.route_type, '')) IN ('WEEKLY_NHSP', 'WEEKLY_NHSP_ADJUSTMENT', 'NHSP')
+          AND NOT (COALESCE(lightweight_rows.is_adjusted, FALSE) = TRUE AND UPPER(COALESCE(lightweight_rows.submission_mode, '')) = 'MANUAL') THEN 'IMPORT'
+        WHEN UPPER(COALESCE(lightweight_rows.route_type, '')) IN ('WEEKLY_HEALTHROSTER', 'HEALTHROSTER', 'HEALTHROSTER_DAILY')
+          AND COALESCE(lightweight_rows.client_no_timesheet_required, FALSE) = TRUE THEN 'IMPORT'
+        WHEN UPPER(COALESCE(lightweight_rows.underlying_channel_family, lightweight_rows.route_family, '')) = 'QR' OR COALESCE(lightweight_rows.is_qr, FALSE) = TRUE THEN 'QR'
+        WHEN UPPER(COALESCE(lightweight_rows.underlying_channel_family, lightweight_rows.route_family, '')) = 'ELECTRONIC' OR UPPER(COALESCE(lightweight_rows.submission_mode, '')) = 'ELECTRONIC' THEN 'ELECTRONIC'
+        ELSE 'MANUAL_NON_QR'
+      END AS underlying_channel_family_calc,
+      CASE
+        WHEN UPPER(COALESCE(lightweight_rows.sheet_scope, lightweight_rows.route_subfamily, '')) = 'DAILY' THEN 'DAILY'
+        ELSE 'WEEKLY'
+      END AS period_type_calc,
+      CASE
+        WHEN lightweight_rows.timesheet_id IS NULL
+          OR UPPER(COALESCE(lightweight_rows.processing_status, lightweight_rows.tools_stage, lightweight_rows.summary_stage, '')) IN ('UNPROCESSED', 'UNASSIGNED')
+          OR UPPER(COALESCE(lightweight_rows.summary_stage, '')) = 'UNPROCESSED' THEN 'UNPROCESSED'
+        ELSE 'PROCESSED'
+      END AS bulk_process_bucket_calc,
+      (
+        COALESCE(lightweight_rows.paid_at_utc, lightweight_rows.pay_paid_at_utc) IS NOT NULL
+        OR COALESCE(lightweight_rows.invoice_is_paid, FALSE) = TRUE
+        OR COALESCE(lightweight_rows.invoice_segments_locked, 0) > 0
+      ) AS locked_calc,
+      COALESCE(lightweight_rows.is_authorised, FALSE) AS authorised_calc,
+      (
+        UPPER(COALESCE(lightweight_rows.processing_status, '')) = 'PENDING_AUTH'
+        OR UPPER(COALESCE(lightweight_rows.processing_status, '')) = 'READY_FOR_HR'
+      ) AS requires_authorisation_calc,
+      (
+        UPPER(COALESCE(lightweight_rows.qr_status, '')) = 'PENDING'
+        AND lightweight_rows.timesheet_id IS NOT NULL
+      ) AS qr_unsigned_blocked_calc,
+      (
+        COALESCE(lightweight_rows.validation_status, '') <> ''
+        AND UPPER(COALESCE(lightweight_rows.validation_status, '')) NOT IN ('VALIDATION_OK', 'OVERRIDDEN', 'OK', 'VALID')
+      ) AS hr_validation_awaiting_calc,
+      CASE
+        WHEN UPPER(COALESCE(lightweight_rows.route_type, '')) IN ('WEEKLY_HEALTHROSTER', 'HEALTHROSTER', 'HEALTHROSTER_DAILY')
+          AND COALESCE(lightweight_rows.client_no_timesheet_required, FALSE) = TRUE THEN 'HR'
+        WHEN UPPER(COALESCE(lightweight_rows.route_type, '')) IN ('WEEKLY_NHSP', 'WEEKLY_NHSP_ADJUSTMENT', 'NHSP')
+          AND NOT (COALESCE(lightweight_rows.is_adjusted, FALSE) = TRUE AND UPPER(COALESCE(lightweight_rows.submission_mode, '')) = 'MANUAL') THEN 'NHSP'
+        ELSE 'TIMESHEETS'
+      END AS bulk_authorise_classification_calc,
+      MD5(CONCAT_WS('|',
+        COALESCE(lightweight_rows.timesheet_id::text, ''),
+        COALESCE(lightweight_rows.contract_week_id::text, ''),
+        COALESCE(lightweight_rows.processing_status, ''),
+        COALESCE(lightweight_rows.summary_stage, ''),
+        COALESCE(lightweight_rows.tools_stage, ''),
+        COALESCE(lightweight_rows.authorised_at_utc::text, ''),
+        COALESCE(lightweight_rows.authorised_at_server::text, ''),
+        COALESCE(lightweight_rows.processed_at_utc::text, ''),
+        COALESCE(lightweight_rows.paid_at_utc::text, ''),
+        COALESCE(lightweight_rows.invoice_segments_locked::text, ''),
+        COALESCE(lightweight_rows.route_family, ''),
+        COALESCE(lightweight_rows.route_subfamily, ''),
+        COALESCE(lightweight_rows.validation_status, ''),
+        COALESCE(lightweight_rows.attached_evidence_count::text, ''),
+        COALESCE(lightweight_rows.primary_artifact_storage_key, '')
+      )) AS row_signature_calc
+    FROM lightweight_rows
+    WHERE (v_week_ending_from IS NULL OR lightweight_rows.week_ending_date >= v_week_ending_from)
+      AND (v_week_ending_to IS NULL OR lightweight_rows.week_ending_date <= v_week_ending_to)
+  ),
+  decision_rows AS MATERIALIZED (
+    SELECT
+      classified_rows.*,
+      (
+        (classified_rows.timesheet_id IS NOT NULL OR classified_rows.contract_week_id IS NOT NULL)
+        AND classified_rows.locked_calc = FALSE
+        AND classified_rows.authorised_calc = FALSE
+        AND classified_rows.route_family_calc = 'MANUAL_NON_QR'
+      ) AS can_save_calc,
+      (
+        (classified_rows.timesheet_id IS NOT NULL OR classified_rows.contract_week_id IS NOT NULL)
+        AND classified_rows.locked_calc = FALSE
+        AND classified_rows.authorised_calc = FALSE
+        AND classified_rows.route_family_calc = 'MANUAL_NON_QR'
+      ) AS can_edit_timesheet_data_calc,
+      (
+        (classified_rows.timesheet_id IS NOT NULL OR classified_rows.contract_week_id IS NOT NULL)
+        AND classified_rows.locked_calc = FALSE
+        AND classified_rows.authorised_calc = FALSE
+        AND classified_rows.route_family_calc = 'MANUAL_NON_QR'
+        AND classified_rows.bulk_process_bucket_calc = 'UNPROCESSED'
+      ) AS can_process_calc,
+      (
+        classified_rows.timesheet_id IS NOT NULL
+        AND classified_rows.locked_calc = FALSE
+        AND classified_rows.authorised_calc = FALSE
+        AND classified_rows.route_family_calc = 'MANUAL_NON_QR'
+        AND classified_rows.bulk_process_bucket_calc = 'PROCESSED'
+      ) AS can_unprocess_calc,
+      (
+        classified_rows.timesheet_id IS NOT NULL
+        AND classified_rows.locked_calc = FALSE
+        AND classified_rows.requires_authorisation_calc = TRUE
+        AND classified_rows.authorised_calc = FALSE
+        AND classified_rows.qr_unsigned_blocked_calc = FALSE
+      ) AS can_bulk_authorise_calc,
+      (
+        classified_rows.timesheet_id IS NOT NULL
+        AND classified_rows.locked_calc = FALSE
+        AND classified_rows.authorised_calc = TRUE
+      ) AS can_bulk_unauthorise_calc,
+      (
+        (classified_rows.timesheet_id IS NOT NULL OR (classified_rows.contract_week_id IS NOT NULL AND classified_rows.route_family_calc = 'MANUAL_NON_QR'))
+        AND classified_rows.locked_calc = FALSE
+        AND classified_rows.route_family_calc <> 'IMPORT_AUTHORITATIVE'
+      ) AS can_manage_evidence_calc,
+      (
+        classified_rows.locked_calc = FALSE
+        AND classified_rows.authorised_calc = FALSE
+        AND COALESCE(classified_rows.is_adjusted, FALSE) = FALSE
+      ) AS can_add_additional_manual_calc,
+      (
+        classified_rows.locked_calc = TRUE
+        OR classified_rows.authorised_calc = TRUE
+        OR classified_rows.route_family_calc <> 'MANUAL_NON_QR'
+      ) AS review_only_calc
+    FROM classified_rows
+  ),
+  payload_rows AS MATERIALIZED (
+    SELECT
+      (JSONB_BUILD_OBJECT(
+        'row_key',
+        decision_rows.row_key_calc,
+        'stable_row_id',
+        COALESCE(decision_rows.timesheet_id::text, decision_rows.contract_week_id::text),
+        'row_type',
+        CASE WHEN decision_rows.timesheet_id IS NOT NULL THEN 'timesheet' ELSE 'contract_week' END,
+        'timesheet_id',
+        decision_rows.timesheet_id,
+        'current_timesheet_id',
+        decision_rows.timesheet_id,
+        'requested_timesheet_id',
+        decision_rows.timesheet_id,
+        'expected_timesheet_id',
+        decision_rows.timesheet_id,
+        'contract_week_id',
+        decision_rows.contract_week_id,
+        'contract_id',
+        decision_rows.contract_id,
+        'candidate_id',
+        decision_rows.candidate_id,
+        'candidate_name',
+        decision_rows.candidate_name,
+        'candidate_display_name',
+        decision_rows.candidate_display_name,
+        'candidate_first_name',
+        NULL::text,
+        'candidate_surname',
+        NULL::text,
+        'client_id',
+        decision_rows.client_id,
+        'client_name',
+        decision_rows.client_name,
+        'booking_id',
+        decision_rows.booking_id,
+        'external_ref',
+        decision_rows.booking_id,
+        'occupant_key_norm',
+        decision_rows.occupant_key_norm,
+        'hospital_norm',
+        decision_rows.hospital_norm,
+        'candidate_hint_text',
+        COALESCE(decision_rows.candidate_hint_text, '{}'::jsonb),
+        'week_ending_date',
+        decision_rows.week_ending_date,
+        'contract_week_ending_date',
+        decision_rows.week_ending_date,
+        'work_date',
+        decision_rows.work_date,
+        'date',
+        COALESCE(decision_rows.work_date, decision_rows.week_ending_date),
+        'shift_date',
+        decision_rows.work_date,
+        'period_type',
+        decision_rows.period_type_calc,
+        'sheet_scope',
+        decision_rows.sheet_scope,
+        'submission_mode',
+        decision_rows.submission_mode,
+        'submission_mode_snapshot',
+        decision_rows.submission_mode_snapshot,
+        'basis',
+        decision_rows.basis,
+        'route_type',
+        decision_rows.route_type,
+        'route_display',
+        decision_rows.route_display,
+        'route_family',
+        decision_rows.route_family_calc,
+        'route_subfamily',
+        decision_rows.route_subfamily_calc,
+        'underlying_channel_family',
+        decision_rows.underlying_channel_family_calc,
+        'summary_stage',
+        decision_rows.summary_stage,
+        'tools_stage',
+        decision_rows.tools_stage,
+        'processing_status',
+        decision_rows.processing_status,
+        'processing_status_display',
+        decision_rows.processing_status_display
+      )
+      || JSONB_BUILD_OBJECT(
+        'bulk_process_bucket',
+        decision_rows.bulk_process_bucket_calc,
+        'bulk_authorise_classification',
+        decision_rows.bulk_authorise_classification_calc,
+        'bulk_authorise_section',
+        CASE WHEN decision_rows.can_bulk_authorise_calc THEN 'processed_eligible' WHEN decision_rows.can_bulk_unauthorise_calc THEN 'authorised_eligible' ELSE NULL::text END,
+        'authorised_at_utc',
+        decision_rows.authorised_at_utc,
+        'authorised_at_server',
+        decision_rows.authorised_at_server,
+        'processed_at_utc',
+        decision_rows.processed_at_utc,
+        'is_authorised',
+        decision_rows.authorised_calc,
+        'locked',
+        decision_rows.locked_calc,
+        'total_hours',
+        decision_rows.total_hours,
+        'total_pay_ex_vat',
+        decision_rows.total_pay_ex_vat,
+        'total_charge_ex_vat',
+        decision_rows.total_charge_ex_vat,
+        'margin_ex_vat',
+        decision_rows.margin_ex_vat,
+        'net_delta_ex_vat',
+        decision_rows.net_delta_ex_vat,
+        'paid_at_utc',
+        decision_rows.paid_at_utc,
+        'pay_icon_code',
+        decision_rows.pay_icon_code,
+        'pay_status_code',
+        decision_rows.pay_status_code,
+        'pay_paid_at_utc',
+        decision_rows.pay_paid_at_utc,
+        'ready_to_pay',
+        FALSE,
+        'pay_on_hold',
+        FALSE,
+        'invoice_is_paid',
+        decision_rows.invoice_is_paid,
+        'invoice_issue_stage',
+        decision_rows.invoice_issue_stage,
+        'invoice_segment_stage',
+        decision_rows.invoice_segment_stage,
+        'invoice_segments_total',
+        COALESCE(decision_rows.invoice_segments_total, 0),
+        'invoice_segments_locked',
+        COALESCE(decision_rows.invoice_segments_locked, 0),
+        'invoice_segments_unlocked',
+        COALESCE(decision_rows.invoice_segments_unlocked, 0),
+        'issue_codes',
+        COALESCE(TO_JSONB(decision_rows.issue_codes), '[]'::jsonb),
+        'validation_status',
+        decision_rows.validation_status,
+        'validation_summary',
+        decision_rows.validation_summary,
+        'validation_pre_validated',
+        FALSE,
+        'hr_validation_awaiting',
+        decision_rows.hr_validation_awaiting_calc,
+        'hr_validation_required_for_invoice',
+        decision_rows.hr_validation_awaiting_calc,
+        'hr_validation_satisfied',
+        NOT decision_rows.hr_validation_awaiting_calc,
+        'hr_crosscheck_status',
+        decision_rows.hr_crosscheck_status,
+        'hr_crosscheck_issues',
+        COALESCE(TO_JSONB(decision_rows.hr_crosscheck_issues), '[]'::jsonb),
+        'qr_status',
+        decision_rows.qr_status,
+        'is_qr',
+        decision_rows.is_qr,
+        'qr_signed_at_utc',
+        NULL::text,
+        'can_allow_qr_again',
+        FALSE,
+        'can_allow_electronic_again',
+        FALSE,
+        'can_switch_to_manual',
+        FALSE
+      )
+      || JSONB_BUILD_OBJECT(
+        'can_revert_to_electronic',
+        FALSE,
+        'can_convert_qr_to_manual_only',
+        FALSE,
+        'qr_email_can_send_now',
+        FALSE,
+        'qr_email_recipient_available',
+        FALSE,
+        'is_adjusted',
+        decision_rows.is_adjusted,
+        'is_adjustment',
+        decision_rows.is_adjusted,
+        'needs_attention',
+        decision_rows.needs_attention,
+        'has_rate_issue',
+        decision_rows.has_rate_issue,
+        'has_pay_channel_issue',
+        decision_rows.has_pay_channel_issue,
+        'client_no_timesheet_required',
+        decision_rows.client_no_timesheet_required,
+        'client_autoprocess_hr',
+        decision_rows.client_autoprocess_hr,
+        'client_is_nhsp',
+        decision_rows.client_is_nhsp,
+        'has_deviation_marker',
+        FALSE,
+        'deviation_marker_reason',
+        NULL::text,
+        'nhsp_highlight_red',
+        FALSE,
+        'nhsp_highlight_reason',
+        NULL::text,
+        'nhsp_deviation_pct',
+        NULL::numeric,
+        'nhsp_is_ad_hoc',
+        FALSE,
+        'has_any_evidence',
+        decision_rows.has_any_evidence,
+        'attached_evidence_count',
+        decision_rows.attached_evidence_count,
+        'evidence_count',
+        decision_rows.attached_evidence_count,
+        'primary_artifact_id',
+        NULL::text,
+        'primary_artifact_kind',
+        CASE WHEN decision_rows.primary_artifact_storage_key IS NOT NULL THEN 'TIMESHEET' ELSE NULL::text END,
+        'primary_artifact_storage_key',
+        decision_rows.primary_artifact_storage_key,
+        'primary_artifact_display_name',
+        decision_rows.primary_artifact_display_name,
+        'primary_artifact_preview_mode',
+        decision_rows.primary_artifact_preview_mode,
+        'manual_pdf_r2_key',
+        NULL::text,
+        'uploaded_pdf_r2_key',
+        NULL::text,
+        'generated_pdf_at_utc',
+        NULL::text,
+        'manual_pdf_rotation_degrees',
+        0,
+        'queue_staged_count',
+        0,
+        'evidence_document_locked',
+        decision_rows.locked_calc,
+        'evidence_lock_reason',
+        CASE WHEN decision_rows.locked_calc THEN 'locked_or_paid' ELSE NULL::text END,
+        'has_timesheet',
+        decision_rows.timesheet_id IS NOT NULL,
+        'is_contract_week_only',
+        decision_rows.timesheet_id IS NULL AND decision_rows.contract_week_id IS NOT NULL,
+        'timesheet_version',
+        NULL::integer,
+        'updated_at',
+        NULL::text,
+        'is_current',
+        TRUE,
+        'was_stale',
+        FALSE,
+        'timesheet_type_sort_key',
+        NULL::text
+      )
+      || JSONB_BUILD_OBJECT(
+        'processed_by_user_id',
+        NULL::text,
+        'processed_by_display',
+        NULL::text,
+        'authorised_by_user_id',
+        NULL::text,
+        'authorised_by_display',
+        NULL::text,
+        'can_save',
+        decision_rows.can_save_calc,
+        'can_process',
+        decision_rows.can_process_calc,
+        'can_unprocess',
+        decision_rows.can_unprocess_calc,
+        'can_bulk_authorise',
+        decision_rows.can_bulk_authorise_calc,
+        'can_bulk_unauthorise',
+        decision_rows.can_bulk_unauthorise_calc,
+        'can_edit_timesheet_data',
+        decision_rows.can_edit_timesheet_data_calc,
+        'can_manage_evidence',
+        decision_rows.can_manage_evidence_calc,
+        'can_add_additional_manual',
+        decision_rows.can_add_additional_manual_calc,
+        'review_only',
+        decision_rows.review_only_calc,
+        'row_signature',
+        decision_rows.row_signature_calc,
+        'evidence_badges',
+        JSONB_BUILD_ARRAY(
+          JSONB_BUILD_OBJECT('kind', 'TIMESHEET', 'present', COALESCE(decision_rows.has_any_evidence, FALSE), 'has_evidence', COALESCE(decision_rows.has_any_evidence, FALSE)),
+          JSONB_BUILD_OBJECT('kind', 'MILEAGE', 'present', FALSE, 'has_evidence', FALSE),
+          JSONB_BUILD_OBJECT('kind', 'TRAVEL', 'present', FALSE, 'has_evidence', FALSE),
+          JSONB_BUILD_OBJECT('kind', 'ACCOMMODATION', 'present', FALSE, 'has_evidence', FALSE),
+          JSONB_BUILD_OBJECT('kind', 'OTHER', 'present', FALSE, 'has_evidence', FALSE)
+        ),
+        'artifact_hints',
+        JSONB_BUILD_OBJECT(
+          'has_any_evidence', decision_rows.has_any_evidence,
+          'attached_evidence_count', decision_rows.attached_evidence_count,
+          'primary_artifact_storage_key', decision_rows.primary_artifact_storage_key,
+          'primary_artifact_display_name', decision_rows.primary_artifact_display_name,
+          'primary_artifact_preview_mode', decision_rows.primary_artifact_preview_mode
+        ),
+        'action_flags',
+        JSONB_BUILD_OBJECT(
+          'can_save', decision_rows.can_save_calc,
+          'can_process', decision_rows.can_process_calc,
+          'can_unprocess', decision_rows.can_unprocess_calc,
+          'can_bulk_authorise', decision_rows.can_bulk_authorise_calc,
+          'can_bulk_unauthorise', decision_rows.can_bulk_unauthorise_calc,
+          'can_edit_timesheet_data', decision_rows.can_edit_timesheet_data_calc,
+          'can_manage_evidence', decision_rows.can_manage_evidence_calc,
+          'can_add_additional_manual', decision_rows.can_add_additional_manual_calc,
+          'review_only', decision_rows.review_only_calc
+        ),
+        'row_patch',
+        JSONB_BUILD_OBJECT(),
+        'cache_invalidation_hints',
+        JSONB_BUILD_OBJECT(),
+        'count_deltas',
+        JSONB_BUILD_OBJECT(),
+        'header_loaded',
+        TRUE,
+        'header_only',
+        TRUE,
+        'editor_loaded',
+        FALSE,
+        'evidence_loaded',
+        FALSE,
+        'compare_loaded',
+        FALSE,
+        'full_loaded',
+        FALSE,
+        'schedule_pending',
+        TRUE,
+        'schedule_authoritative',
+        FALSE,
+        'loaded_layers',
+        JSONB_BUILD_ARRAY('dataset_row'),
+        'dataset_source',
+        'timesheet_summary_lightweight_rows_v1'
+      )) AS row_json
     FROM decision_rows
   ),
-  manual_rows AS (
-    SELECT list_rows.row_json
-    FROM list_rows
-    WHERE UPPER(COALESCE(list_rows.row_json->>'route_family', '')) = 'MANUAL_NON_QR'
+  manual_rows AS MATERIALIZED (
+    SELECT payload_rows.row_json
+    FROM payload_rows
+    WHERE UPPER(COALESCE(payload_rows.row_json->>'route_family', '')) = 'MANUAL_NON_QR'
       AND (
-        (UPPER(COALESCE(list_rows.row_json->>'period_type', list_rows.row_json->>'sheet_scope', '')) = 'WEEKLY' AND v_show_weekly_manual = TRUE)
-        OR (UPPER(COALESCE(list_rows.row_json->>'period_type', list_rows.row_json->>'sheet_scope', '')) = 'DAILY' AND v_show_daily_manual = TRUE)
-        OR UPPER(COALESCE(list_rows.row_json->>'period_type', list_rows.row_json->>'sheet_scope', '')) NOT IN ('WEEKLY', 'DAILY')
+        (UPPER(COALESCE(payload_rows.row_json->>'period_type', payload_rows.row_json->>'sheet_scope', '')) = 'WEEKLY' AND v_show_weekly_manual = TRUE)
+        OR (UPPER(COALESCE(payload_rows.row_json->>'period_type', payload_rows.row_json->>'sheet_scope', '')) = 'DAILY' AND v_show_daily_manual = TRUE)
+        OR UPPER(COALESCE(payload_rows.row_json->>'period_type', payload_rows.row_json->>'sheet_scope', '')) NOT IN ('WEEKLY', 'DAILY')
       )
   ),
-  unprocessed_rows AS (
+  unprocessed_rows AS MATERIALIZED (
     SELECT manual_rows.row_json
     FROM manual_rows
     WHERE UPPER(COALESCE(manual_rows.row_json->>'bulk_process_bucket', '')) = 'UNPROCESSED'
       AND (v_bucket IS NULL OR v_bucket = 'UNPROCESSED')
       AND COALESCE((manual_rows.row_json->>'can_process')::boolean, FALSE) = TRUE
   ),
-  processed_rows AS (
+  processed_rows AS MATERIALIZED (
     SELECT manual_rows.row_json
     FROM manual_rows
     WHERE UPPER(COALESCE(manual_rows.row_json->>'bulk_process_bucket', '')) = 'PROCESSED'
@@ -153,14 +590,14 @@ BEGIN
       AND NULLIF(BTRIM(COALESCE(manual_rows.row_json->>'timesheet_id', '')), '') IS NOT NULL
       AND COALESCE((manual_rows.row_json->>'can_unprocess')::boolean, FALSE) = TRUE
   ),
-  paged_unprocessed_rows AS (
+  paged_unprocessed_rows AS MATERIALIZED (
     SELECT unprocessed_rows.row_json
     FROM unprocessed_rows
     ORDER BY unprocessed_rows.row_json->>'week_ending_date', unprocessed_rows.row_json->>'client_name', unprocessed_rows.row_json->>'candidate_name', unprocessed_rows.row_json->>'row_key'
     OFFSET v_offset
     LIMIT COALESCE(v_limit, 2147483647)
   ),
-  paged_processed_rows AS (
+  paged_processed_rows AS MATERIALIZED (
     SELECT processed_rows.row_json
     FROM processed_rows
     ORDER BY processed_rows.row_json->>'week_ending_date', processed_rows.row_json->>'client_name', processed_rows.row_json->>'candidate_name', processed_rows.row_json->>'row_key'
@@ -186,7 +623,8 @@ BEGIN
       'week_ending_from', v_week_ending_from,
       'week_ending_to', v_week_ending_to,
       'limit', v_limit,
-      'offset', v_offset
+      'offset', v_offset,
+      'dataset_source', 'timesheet_summary_lightweight_rows_v1'
     ),
     'counts', JSONB_BUILD_OBJECT(
       'unprocessed', counts.unprocessed_count,
@@ -219,7 +657,8 @@ BEGIN
       'week_ending_from', v_week_ending_from,
       'week_ending_to', v_week_ending_to,
       'limit', v_limit,
-      'offset', v_offset
+      'offset', v_offset,
+      'dataset_source', 'timesheet_summary_lightweight_rows_v1'
     ),
     'counts', JSONB_BUILD_OBJECT('unprocessed', 0, 'processed', 0, 'total', 0),
     'unprocessed_rows', '[]'::jsonb,
@@ -227,8 +666,6 @@ BEGIN
   ));
 END;
 $function$;
-
-
 
 
 
@@ -315,77 +752,512 @@ BEGIN
     v_offset := GREATEST(v_offset_text::integer, 0);
   END IF;
 
-  WITH decision_rows AS MATERIALIZED (
-    SELECT patch_result.row_json
-    FROM public.bulk_timesheet_row_patch_v1(
-      v_filters
-      || JSONB_BUILD_OBJECT(
-           'dataset_mode', 'authorise',
-           'projection', COALESCE(NULLIF(BTRIM(COALESCE(v_filters->>'projection', v_filters->>'projectionMode', '')), ''), 'dataset_row'),
-           'profile', COALESCE(NULLIF(BTRIM(COALESCE(v_filters->>'profile', '')), ''), 'list')
-         )
-    ) AS patch_result(row_json)
+  WITH lightweight_rows AS MATERIALIZED (
+    SELECT summary_row.*
+    FROM public.timesheet_summary_lightweight_rows_v1(
+      v_filters || JSONB_BUILD_OBJECT(
+        'disable_paging', TRUE,
+        'disablePaging', TRUE,
+        'apply_paging', FALSE,
+        'applyPaging', FALSE,
+        'profile', 'list',
+        'context_profile', 'list',
+        'include_evidence', FALSE,
+        'include_compare', FALSE,
+        'include_import_source_rows', FALSE
+      )
+    ) AS summary_row
+    WHERE summary_row.timesheet_id IS NOT NULL
+       OR summary_row.contract_week_id IS NOT NULL
   ),
-  list_rows AS MATERIALIZED (
+  classified_rows AS MATERIALIZED (
     SELECT
-      decision_rows.row_json || jsonb_build_object(
-        'timesheet_version', COALESCE(decision_rows.row_json->'timesheet_version', 'null'::jsonb),
-        'updated_at', COALESCE(decision_rows.row_json->'updated_at', 'null'::jsonb),
-        'is_current', COALESCE(decision_rows.row_json->'is_current', to_jsonb(true)),
-        'was_stale', COALESCE(decision_rows.row_json->'was_stale', to_jsonb(false)),
-        'candidate_first_name', COALESCE(decision_rows.row_json->'candidate_first_name', 'null'::jsonb),
-        'candidate_surname', COALESCE(decision_rows.row_json->'candidate_surname', 'null'::jsonb),
-        'site_name', COALESCE(decision_rows.row_json->'site_name', COALESCE(decision_rows.row_json->'hospital_name', decision_rows.row_json->'hospital_norm', 'null'::jsonb)),
-        'ward_name', COALESCE(decision_rows.row_json->'ward_name', COALESCE(decision_rows.row_json->'ward_name', decision_rows.row_json->'ward_norm', 'null'::jsonb)),
-        'ward_norm', COALESCE(decision_rows.row_json->'ward_norm', 'null'::jsonb),
-        'external_ref', COALESCE(decision_rows.row_json->'external_ref', COALESCE(decision_rows.row_json->'booking_ref', decision_rows.row_json->'booking_id', 'null'::jsonb)),
-        'contract_week_ending_date', COALESCE(decision_rows.row_json->'contract_week_ending_date', COALESCE(decision_rows.row_json->'contract_week_ending_date', decision_rows.row_json->'week_ending_date', 'null'::jsonb)),
-        'date', COALESCE(decision_rows.row_json->'date', COALESCE(decision_rows.row_json->'date', decision_rows.row_json->'work_date', decision_rows.row_json->'week_ending_date', 'null'::jsonb)),
-        'shift_date', COALESCE(decision_rows.row_json->'shift_date', COALESCE(decision_rows.row_json->'shift_date', decision_rows.row_json->'work_date', 'null'::jsonb)),
-        'timesheet_type_sort_key', COALESCE(decision_rows.row_json->'timesheet_type_sort_key', 'null'::jsonb),
-        'processed_by_user_id', COALESCE(decision_rows.row_json->'processed_by_user_id', 'null'::jsonb),
-        'processed_by_display', COALESCE(decision_rows.row_json->'processed_by_display', 'null'::jsonb),
-        'authorised_by_user_id', COALESCE(decision_rows.row_json->'authorised_by_user_id', 'null'::jsonb),
-        'authorised_by_display', COALESCE(decision_rows.row_json->'authorised_by_display', 'null'::jsonb),
-        'ready_to_pay', COALESCE(decision_rows.row_json->'ready_to_pay', to_jsonb(false)),
-        'pay_on_hold', COALESCE(decision_rows.row_json->'pay_on_hold', to_jsonb(false)),
-        'has_timesheet', COALESCE(decision_rows.row_json->'has_timesheet', to_jsonb(NULLIF(BTRIM(COALESCE(decision_rows.row_json->>'timesheet_id', '')), '') IS NOT NULL)),
-        'is_contract_week_only', COALESCE(decision_rows.row_json->'is_contract_week_only', to_jsonb(NULLIF(BTRIM(COALESCE(decision_rows.row_json->>'timesheet_id', '')), '') IS NULL AND NULLIF(BTRIM(COALESCE(decision_rows.row_json->>'contract_week_id', '')), '') IS NOT NULL)),
-        'qr_signed_at_utc', COALESCE(decision_rows.row_json->'qr_signed_at_utc', 'null'::jsonb),
-        'can_allow_qr_again', COALESCE(decision_rows.row_json->'can_allow_qr_again', to_jsonb(false)),
-        'can_allow_electronic_again', COALESCE(decision_rows.row_json->'can_allow_electronic_again', to_jsonb(false)),
-        'can_switch_to_manual', COALESCE(decision_rows.row_json->'can_switch_to_manual', to_jsonb(false)),
-        'can_revert_to_electronic', COALESCE(decision_rows.row_json->'can_revert_to_electronic', to_jsonb(false)),
-        'can_convert_qr_to_manual_only', COALESCE(decision_rows.row_json->'can_convert_qr_to_manual_only', to_jsonb(false)),
-        'qr_email_can_send_now', COALESCE(decision_rows.row_json->'qr_email_can_send_now', to_jsonb(false)),
-        'qr_email_recipient_available', COALESCE(decision_rows.row_json->'qr_email_recipient_available', to_jsonb(false)),
-        'hr_validation_required_for_invoice', COALESCE(decision_rows.row_json->'hr_validation_required_for_invoice', to_jsonb(false)),
-        'validation_pre_validated', COALESCE(decision_rows.row_json->'validation_pre_validated', to_jsonb(false)),
-        'hr_validation_satisfied', COALESCE(decision_rows.row_json->'hr_validation_satisfied', to_jsonb(false)),
-        'has_deviation_marker', COALESCE(decision_rows.row_json->'has_deviation_marker', to_jsonb(false)),
-        'deviation_marker_reason', COALESCE(decision_rows.row_json->'deviation_marker_reason', 'null'::jsonb),
-        'nhsp_highlight_red', COALESCE(decision_rows.row_json->'nhsp_highlight_red', to_jsonb(false)),
-        'nhsp_highlight_reason', COALESCE(decision_rows.row_json->'nhsp_highlight_reason', 'null'::jsonb),
-        'nhsp_deviation_pct', COALESCE(decision_rows.row_json->'nhsp_deviation_pct', 'null'::jsonb),
-        'nhsp_is_ad_hoc', COALESCE(decision_rows.row_json->'nhsp_is_ad_hoc', to_jsonb(false)),
-        'primary_artifact_id', COALESCE(decision_rows.row_json->'primary_artifact_id', 'null'::jsonb),
-        'primary_artifact_kind', COALESCE(decision_rows.row_json->'primary_artifact_kind', 'null'::jsonb),
-        'manual_pdf_r2_key', COALESCE(decision_rows.row_json->'manual_pdf_r2_key', 'null'::jsonb),
-        'uploaded_pdf_r2_key', COALESCE(decision_rows.row_json->'uploaded_pdf_r2_key', 'null'::jsonb),
-        'generated_pdf_at_utc', COALESCE(decision_rows.row_json->'generated_pdf_at_utc', 'null'::jsonb),
-        'manual_pdf_rotation_degrees', COALESCE(decision_rows.row_json->'manual_pdf_rotation_degrees', to_jsonb(0)),
-        'queue_staged_count', COALESCE(decision_rows.row_json->'queue_staged_count', to_jsonb(0)),
-        'evidence_document_locked', COALESCE(decision_rows.row_json->'evidence_document_locked', to_jsonb(false)),
-        'evidence_lock_reason', COALESCE(decision_rows.row_json->'evidence_lock_reason', 'null'::jsonb)
-      ) AS row_json
+      lightweight_rows.*,
+      CASE
+        WHEN lightweight_rows.timesheet_id IS NOT NULL THEN 'timesheet:' || lightweight_rows.timesheet_id::text
+        WHEN lightweight_rows.contract_week_id IS NOT NULL THEN 'contract_week:' || lightweight_rows.contract_week_id::text
+        ELSE NULL::text
+      END AS row_key_calc,
+      CASE
+        WHEN UPPER(COALESCE(lightweight_rows.route_type, '')) IN ('WEEKLY_NHSP', 'WEEKLY_NHSP_ADJUSTMENT', 'NHSP')
+          AND NOT (COALESCE(lightweight_rows.is_adjusted, FALSE) = TRUE AND UPPER(COALESCE(lightweight_rows.submission_mode, '')) = 'MANUAL') THEN 'IMPORT_AUTHORITATIVE'
+        WHEN UPPER(COALESCE(lightweight_rows.route_type, '')) IN ('WEEKLY_HEALTHROSTER', 'HEALTHROSTER', 'HEALTHROSTER_DAILY')
+          AND COALESCE(lightweight_rows.client_no_timesheet_required, FALSE) = TRUE THEN 'IMPORT_AUTHORITATIVE'
+        WHEN UPPER(COALESCE(lightweight_rows.route_family, '')) = 'QR' OR COALESCE(lightweight_rows.is_qr, FALSE) = TRUE THEN 'QR'
+        WHEN UPPER(COALESCE(lightweight_rows.route_family, '')) = 'ELECTRONIC' OR UPPER(COALESCE(lightweight_rows.submission_mode, '')) = 'ELECTRONIC' THEN 'ELECTRONIC'
+        ELSE 'MANUAL_NON_QR'
+      END AS route_family_calc,
+      CASE
+        WHEN UPPER(COALESCE(lightweight_rows.route_type, '')) IN ('WEEKLY_HEALTHROSTER', 'HEALTHROSTER', 'HEALTHROSTER_DAILY')
+          AND COALESCE(lightweight_rows.client_no_timesheet_required, FALSE) = TRUE THEN 'HEALTHROSTER_NO_TIMESHEET'
+        WHEN UPPER(COALESCE(lightweight_rows.route_type, '')) IN ('WEEKLY_HEALTHROSTER', 'HEALTHROSTER', 'HEALTHROSTER_DAILY') THEN 'HEALTHROSTER_TIMESHEET_REQUIRED'
+        WHEN UPPER(COALESCE(lightweight_rows.route_type, '')) IN ('WEEKLY_NHSP', 'WEEKLY_NHSP_ADJUSTMENT', 'NHSP')
+          AND NOT (COALESCE(lightweight_rows.is_adjusted, FALSE) = TRUE AND UPPER(COALESCE(lightweight_rows.submission_mode, '')) = 'MANUAL') THEN 'NHSP'
+        WHEN UPPER(COALESCE(lightweight_rows.route_family, '')) = 'QR' OR COALESCE(lightweight_rows.is_qr, FALSE) = TRUE THEN 'QR'
+        WHEN UPPER(COALESCE(lightweight_rows.route_family, '')) = 'ELECTRONIC' OR UPPER(COALESCE(lightweight_rows.submission_mode, '')) = 'ELECTRONIC' THEN 'ELECTRONIC'
+        ELSE 'MANUAL_NON_QR'
+      END AS route_subfamily_calc,
+      CASE
+        WHEN UPPER(COALESCE(lightweight_rows.route_type, '')) IN ('WEEKLY_NHSP', 'WEEKLY_NHSP_ADJUSTMENT', 'NHSP')
+          AND NOT (COALESCE(lightweight_rows.is_adjusted, FALSE) = TRUE AND UPPER(COALESCE(lightweight_rows.submission_mode, '')) = 'MANUAL') THEN 'IMPORT'
+        WHEN UPPER(COALESCE(lightweight_rows.route_type, '')) IN ('WEEKLY_HEALTHROSTER', 'HEALTHROSTER', 'HEALTHROSTER_DAILY')
+          AND COALESCE(lightweight_rows.client_no_timesheet_required, FALSE) = TRUE THEN 'IMPORT'
+        WHEN UPPER(COALESCE(lightweight_rows.underlying_channel_family, lightweight_rows.route_family, '')) = 'QR' OR COALESCE(lightweight_rows.is_qr, FALSE) = TRUE THEN 'QR'
+        WHEN UPPER(COALESCE(lightweight_rows.underlying_channel_family, lightweight_rows.route_family, '')) = 'ELECTRONIC' OR UPPER(COALESCE(lightweight_rows.submission_mode, '')) = 'ELECTRONIC' THEN 'ELECTRONIC'
+        ELSE 'MANUAL_NON_QR'
+      END AS underlying_channel_family_calc,
+      CASE
+        WHEN UPPER(COALESCE(lightweight_rows.sheet_scope, lightweight_rows.route_subfamily, '')) = 'DAILY' THEN 'DAILY'
+        ELSE 'WEEKLY'
+      END AS period_type_calc,
+      CASE
+        WHEN lightweight_rows.timesheet_id IS NULL
+          OR UPPER(COALESCE(lightweight_rows.processing_status, lightweight_rows.tools_stage, lightweight_rows.summary_stage, '')) IN ('UNPROCESSED', 'UNASSIGNED')
+          OR UPPER(COALESCE(lightweight_rows.summary_stage, '')) = 'UNPROCESSED' THEN 'UNPROCESSED'
+        ELSE 'PROCESSED'
+      END AS bulk_process_bucket_calc,
+      (
+        COALESCE(lightweight_rows.paid_at_utc, lightweight_rows.pay_paid_at_utc) IS NOT NULL
+        OR COALESCE(lightweight_rows.invoice_is_paid, FALSE) = TRUE
+        OR COALESCE(lightweight_rows.invoice_segments_locked, 0) > 0
+      ) AS locked_calc,
+      COALESCE(lightweight_rows.is_authorised, FALSE) AS authorised_calc,
+      (
+        UPPER(COALESCE(lightweight_rows.processing_status, '')) = 'PENDING_AUTH'
+        OR UPPER(COALESCE(lightweight_rows.processing_status, '')) = 'READY_FOR_HR'
+      ) AS requires_authorisation_calc,
+      (
+        UPPER(COALESCE(lightweight_rows.qr_status, '')) = 'PENDING'
+        AND lightweight_rows.timesheet_id IS NOT NULL
+      ) AS qr_unsigned_blocked_calc,
+      (
+        COALESCE(lightweight_rows.validation_status, '') <> ''
+        AND UPPER(COALESCE(lightweight_rows.validation_status, '')) NOT IN ('VALIDATION_OK', 'OVERRIDDEN', 'OK', 'VALID')
+      ) AS hr_validation_awaiting_calc,
+      CASE
+        WHEN UPPER(COALESCE(lightweight_rows.route_type, '')) IN ('WEEKLY_HEALTHROSTER', 'HEALTHROSTER', 'HEALTHROSTER_DAILY')
+          AND COALESCE(lightweight_rows.client_no_timesheet_required, FALSE) = TRUE THEN 'HR'
+        WHEN UPPER(COALESCE(lightweight_rows.route_type, '')) IN ('WEEKLY_NHSP', 'WEEKLY_NHSP_ADJUSTMENT', 'NHSP')
+          AND NOT (COALESCE(lightweight_rows.is_adjusted, FALSE) = TRUE AND UPPER(COALESCE(lightweight_rows.submission_mode, '')) = 'MANUAL') THEN 'NHSP'
+        ELSE 'TIMESHEETS'
+      END AS bulk_authorise_classification_calc,
+      MD5(CONCAT_WS('|',
+        COALESCE(lightweight_rows.timesheet_id::text, ''),
+        COALESCE(lightweight_rows.contract_week_id::text, ''),
+        COALESCE(lightweight_rows.processing_status, ''),
+        COALESCE(lightweight_rows.summary_stage, ''),
+        COALESCE(lightweight_rows.tools_stage, ''),
+        COALESCE(lightweight_rows.authorised_at_utc::text, ''),
+        COALESCE(lightweight_rows.authorised_at_server::text, ''),
+        COALESCE(lightweight_rows.processed_at_utc::text, ''),
+        COALESCE(lightweight_rows.paid_at_utc::text, ''),
+        COALESCE(lightweight_rows.invoice_segments_locked::text, ''),
+        COALESCE(lightweight_rows.route_family, ''),
+        COALESCE(lightweight_rows.route_subfamily, ''),
+        COALESCE(lightweight_rows.validation_status, ''),
+        COALESCE(lightweight_rows.attached_evidence_count::text, ''),
+        COALESCE(lightweight_rows.primary_artifact_storage_key, '')
+      )) AS row_signature_calc
+    FROM lightweight_rows
+  ),
+  decision_rows AS MATERIALIZED (
+    SELECT
+      classified_rows.*,
+      (
+        classified_rows.timesheet_id IS NOT NULL
+        AND classified_rows.locked_calc = FALSE
+        AND classified_rows.requires_authorisation_calc = TRUE
+        AND classified_rows.authorised_calc = FALSE
+        AND classified_rows.qr_unsigned_blocked_calc = FALSE
+      ) AS can_bulk_authorise_calc,
+      (
+        classified_rows.timesheet_id IS NOT NULL
+        AND classified_rows.locked_calc = FALSE
+        AND classified_rows.authorised_calc = TRUE
+      ) AS can_bulk_unauthorise_calc,
+      (
+        (classified_rows.timesheet_id IS NOT NULL OR classified_rows.contract_week_id IS NOT NULL)
+        AND classified_rows.locked_calc = FALSE
+        AND classified_rows.authorised_calc = FALSE
+        AND classified_rows.route_family_calc = 'MANUAL_NON_QR'
+      ) AS can_save_calc,
+      (
+        (classified_rows.timesheet_id IS NOT NULL OR classified_rows.contract_week_id IS NOT NULL)
+        AND classified_rows.locked_calc = FALSE
+        AND classified_rows.authorised_calc = FALSE
+        AND classified_rows.route_family_calc = 'MANUAL_NON_QR'
+      ) AS can_edit_timesheet_data_calc,
+      (
+        (classified_rows.timesheet_id IS NOT NULL OR classified_rows.contract_week_id IS NOT NULL)
+        AND classified_rows.locked_calc = FALSE
+        AND classified_rows.authorised_calc = FALSE
+        AND classified_rows.route_family_calc = 'MANUAL_NON_QR'
+        AND classified_rows.bulk_process_bucket_calc = 'UNPROCESSED'
+      ) AS can_process_calc,
+      (
+        classified_rows.timesheet_id IS NOT NULL
+        AND classified_rows.locked_calc = FALSE
+        AND classified_rows.authorised_calc = FALSE
+        AND classified_rows.route_family_calc = 'MANUAL_NON_QR'
+        AND classified_rows.bulk_process_bucket_calc = 'PROCESSED'
+      ) AS can_unprocess_calc,
+      (
+        (classified_rows.timesheet_id IS NOT NULL OR (classified_rows.contract_week_id IS NOT NULL AND classified_rows.route_family_calc = 'MANUAL_NON_QR'))
+        AND classified_rows.locked_calc = FALSE
+        AND classified_rows.route_family_calc <> 'IMPORT_AUTHORITATIVE'
+      ) AS can_manage_evidence_calc,
+      (
+        classified_rows.locked_calc = FALSE
+        AND classified_rows.authorised_calc = FALSE
+        AND COALESCE(classified_rows.is_adjusted, FALSE) = FALSE
+      ) AS can_add_additional_manual_calc,
+      (
+        classified_rows.locked_calc = TRUE
+        OR classified_rows.authorised_calc = TRUE
+        OR classified_rows.route_family_calc <> 'MANUAL_NON_QR'
+      ) AS review_only_calc
+    FROM classified_rows
+  ),
+  payload_rows AS MATERIALIZED (
+    SELECT
+      (JSONB_BUILD_OBJECT(
+        'row_key',
+        decision_rows.row_key_calc,
+        'stable_row_id',
+        COALESCE(decision_rows.timesheet_id::text, decision_rows.contract_week_id::text),
+        'row_type',
+        CASE WHEN decision_rows.timesheet_id IS NOT NULL THEN 'timesheet' ELSE 'contract_week' END,
+        'timesheet_id',
+        decision_rows.timesheet_id,
+        'current_timesheet_id',
+        decision_rows.timesheet_id,
+        'requested_timesheet_id',
+        decision_rows.timesheet_id,
+        'expected_timesheet_id',
+        decision_rows.timesheet_id,
+        'contract_week_id',
+        decision_rows.contract_week_id,
+        'contract_id',
+        decision_rows.contract_id,
+        'candidate_id',
+        decision_rows.candidate_id,
+        'candidate_name',
+        decision_rows.candidate_name,
+        'candidate_display_name',
+        decision_rows.candidate_display_name,
+        'candidate_first_name',
+        NULL::text,
+        'candidate_surname',
+        NULL::text,
+        'client_id',
+        decision_rows.client_id,
+        'client_name',
+        decision_rows.client_name,
+        'booking_id',
+        decision_rows.booking_id,
+        'external_ref',
+        decision_rows.booking_id,
+        'occupant_key_norm',
+        decision_rows.occupant_key_norm,
+        'hospital_norm',
+        decision_rows.hospital_norm,
+        'candidate_hint_text',
+        COALESCE(decision_rows.candidate_hint_text, '{}'::jsonb),
+        'week_ending_date',
+        decision_rows.week_ending_date,
+        'contract_week_ending_date',
+        decision_rows.week_ending_date,
+        'work_date',
+        decision_rows.work_date,
+        'date',
+        COALESCE(decision_rows.work_date, decision_rows.week_ending_date),
+        'shift_date',
+        decision_rows.work_date,
+        'period_type',
+        decision_rows.period_type_calc,
+        'sheet_scope',
+        decision_rows.sheet_scope,
+        'submission_mode',
+        decision_rows.submission_mode,
+        'submission_mode_snapshot',
+        decision_rows.submission_mode_snapshot,
+        'basis',
+        decision_rows.basis,
+        'route_type',
+        decision_rows.route_type,
+        'route_display',
+        decision_rows.route_display,
+        'route_family',
+        decision_rows.route_family_calc,
+        'route_subfamily',
+        decision_rows.route_subfamily_calc,
+        'underlying_channel_family',
+        decision_rows.underlying_channel_family_calc,
+        'summary_stage',
+        decision_rows.summary_stage,
+        'tools_stage',
+        decision_rows.tools_stage,
+        'processing_status',
+        decision_rows.processing_status,
+        'processing_status_display',
+        decision_rows.processing_status_display
+      )
+      || JSONB_BUILD_OBJECT(
+        'bulk_process_bucket',
+        decision_rows.bulk_process_bucket_calc,
+        'bulk_authorise_classification',
+        decision_rows.bulk_authorise_classification_calc,
+        'bulk_authorise_section',
+        CASE WHEN decision_rows.can_bulk_authorise_calc THEN 'processed_eligible' WHEN decision_rows.can_bulk_unauthorise_calc THEN 'authorised_eligible' ELSE NULL::text END,
+        'authorised_at_utc',
+        decision_rows.authorised_at_utc,
+        'authorised_at_server',
+        decision_rows.authorised_at_server,
+        'processed_at_utc',
+        decision_rows.processed_at_utc,
+        'is_authorised',
+        decision_rows.authorised_calc,
+        'locked',
+        decision_rows.locked_calc,
+        'total_hours',
+        decision_rows.total_hours,
+        'total_pay_ex_vat',
+        decision_rows.total_pay_ex_vat,
+        'total_charge_ex_vat',
+        decision_rows.total_charge_ex_vat,
+        'margin_ex_vat',
+        decision_rows.margin_ex_vat,
+        'net_delta_ex_vat',
+        decision_rows.net_delta_ex_vat,
+        'paid_at_utc',
+        decision_rows.paid_at_utc,
+        'pay_icon_code',
+        decision_rows.pay_icon_code,
+        'pay_status_code',
+        decision_rows.pay_status_code,
+        'pay_paid_at_utc',
+        decision_rows.pay_paid_at_utc,
+        'ready_to_pay',
+        FALSE,
+        'pay_on_hold',
+        FALSE,
+        'invoice_is_paid',
+        decision_rows.invoice_is_paid,
+        'invoice_issue_stage',
+        decision_rows.invoice_issue_stage,
+        'invoice_segment_stage',
+        decision_rows.invoice_segment_stage,
+        'invoice_segments_total',
+        COALESCE(decision_rows.invoice_segments_total, 0),
+        'invoice_segments_locked',
+        COALESCE(decision_rows.invoice_segments_locked, 0),
+        'invoice_segments_unlocked',
+        COALESCE(decision_rows.invoice_segments_unlocked, 0),
+        'issue_codes',
+        COALESCE(TO_JSONB(decision_rows.issue_codes), '[]'::jsonb),
+        'validation_status',
+        decision_rows.validation_status,
+        'validation_summary',
+        decision_rows.validation_summary,
+        'validation_pre_validated',
+        FALSE,
+        'hr_validation_awaiting',
+        decision_rows.hr_validation_awaiting_calc,
+        'hr_validation_required_for_invoice',
+        decision_rows.hr_validation_awaiting_calc,
+        'hr_validation_satisfied',
+        NOT decision_rows.hr_validation_awaiting_calc,
+        'hr_crosscheck_status',
+        decision_rows.hr_crosscheck_status,
+        'hr_crosscheck_issues',
+        COALESCE(TO_JSONB(decision_rows.hr_crosscheck_issues), '[]'::jsonb),
+        'qr_status',
+        decision_rows.qr_status,
+        'is_qr',
+        decision_rows.is_qr,
+        'qr_signed_at_utc',
+        NULL::text,
+        'can_allow_qr_again',
+        FALSE,
+        'can_allow_electronic_again',
+        FALSE,
+        'can_switch_to_manual',
+        FALSE
+      )
+      || JSONB_BUILD_OBJECT(
+        'can_revert_to_electronic',
+        FALSE,
+        'can_convert_qr_to_manual_only',
+        FALSE,
+        'qr_email_can_send_now',
+        FALSE,
+        'qr_email_recipient_available',
+        FALSE,
+        'is_adjusted',
+        decision_rows.is_adjusted,
+        'is_adjustment',
+        decision_rows.is_adjusted,
+        'needs_attention',
+        decision_rows.needs_attention,
+        'has_rate_issue',
+        decision_rows.has_rate_issue,
+        'has_pay_channel_issue',
+        decision_rows.has_pay_channel_issue,
+        'client_no_timesheet_required',
+        decision_rows.client_no_timesheet_required,
+        'client_autoprocess_hr',
+        decision_rows.client_autoprocess_hr,
+        'client_is_nhsp',
+        decision_rows.client_is_nhsp,
+        'has_deviation_marker',
+        FALSE,
+        'deviation_marker_reason',
+        NULL::text,
+        'nhsp_highlight_red',
+        FALSE,
+        'nhsp_highlight_reason',
+        NULL::text,
+        'nhsp_deviation_pct',
+        NULL::numeric,
+        'nhsp_is_ad_hoc',
+        FALSE,
+        'has_any_evidence',
+        decision_rows.has_any_evidence,
+        'attached_evidence_count',
+        decision_rows.attached_evidence_count,
+        'evidence_count',
+        decision_rows.attached_evidence_count,
+        'primary_artifact_id',
+        NULL::text,
+        'primary_artifact_kind',
+        CASE WHEN decision_rows.primary_artifact_storage_key IS NOT NULL THEN 'TIMESHEET' ELSE NULL::text END,
+        'primary_artifact_storage_key',
+        decision_rows.primary_artifact_storage_key,
+        'primary_artifact_display_name',
+        decision_rows.primary_artifact_display_name,
+        'primary_artifact_preview_mode',
+        decision_rows.primary_artifact_preview_mode,
+        'manual_pdf_r2_key',
+        NULL::text,
+        'uploaded_pdf_r2_key',
+        NULL::text,
+        'generated_pdf_at_utc',
+        NULL::text,
+        'manual_pdf_rotation_degrees',
+        0,
+        'queue_staged_count',
+        0,
+        'evidence_document_locked',
+        decision_rows.locked_calc,
+        'evidence_lock_reason',
+        CASE WHEN decision_rows.locked_calc THEN 'locked_or_paid' ELSE NULL::text END,
+        'has_timesheet',
+        decision_rows.timesheet_id IS NOT NULL,
+        'is_contract_week_only',
+        decision_rows.timesheet_id IS NULL AND decision_rows.contract_week_id IS NOT NULL,
+        'timesheet_version',
+        NULL::integer,
+        'updated_at',
+        NULL::text,
+        'is_current',
+        TRUE,
+        'was_stale',
+        FALSE,
+        'timesheet_type_sort_key',
+        NULL::text
+      )
+      || JSONB_BUILD_OBJECT(
+        'processed_by_user_id',
+        NULL::text,
+        'processed_by_display',
+        NULL::text,
+        'authorised_by_user_id',
+        NULL::text,
+        'authorised_by_display',
+        NULL::text,
+        'can_save',
+        decision_rows.can_save_calc,
+        'can_process',
+        decision_rows.can_process_calc,
+        'can_unprocess',
+        decision_rows.can_unprocess_calc,
+        'can_bulk_authorise',
+        decision_rows.can_bulk_authorise_calc,
+        'can_bulk_unauthorise',
+        decision_rows.can_bulk_unauthorise_calc,
+        'can_edit_timesheet_data',
+        decision_rows.can_edit_timesheet_data_calc,
+        'can_manage_evidence',
+        decision_rows.can_manage_evidence_calc,
+        'can_add_additional_manual',
+        decision_rows.can_add_additional_manual_calc,
+        'review_only',
+        decision_rows.review_only_calc,
+        'row_signature',
+        decision_rows.row_signature_calc,
+        'evidence_badges',
+        JSONB_BUILD_ARRAY(
+          JSONB_BUILD_OBJECT('kind', 'TIMESHEET', 'present', COALESCE(decision_rows.has_any_evidence, FALSE), 'has_evidence', COALESCE(decision_rows.has_any_evidence, FALSE)),
+          JSONB_BUILD_OBJECT('kind', 'MILEAGE', 'present', FALSE, 'has_evidence', FALSE),
+          JSONB_BUILD_OBJECT('kind', 'TRAVEL', 'present', FALSE, 'has_evidence', FALSE),
+          JSONB_BUILD_OBJECT('kind', 'ACCOMMODATION', 'present', FALSE, 'has_evidence', FALSE),
+          JSONB_BUILD_OBJECT('kind', 'OTHER', 'present', FALSE, 'has_evidence', FALSE)
+        ),
+        'artifact_hints',
+        JSONB_BUILD_OBJECT(
+          'has_any_evidence', decision_rows.has_any_evidence,
+          'attached_evidence_count', decision_rows.attached_evidence_count,
+          'primary_artifact_storage_key', decision_rows.primary_artifact_storage_key,
+          'primary_artifact_display_name', decision_rows.primary_artifact_display_name,
+          'primary_artifact_preview_mode', decision_rows.primary_artifact_preview_mode
+        ),
+        'action_flags',
+        JSONB_BUILD_OBJECT(
+          'can_save', decision_rows.can_save_calc,
+          'can_process', decision_rows.can_process_calc,
+          'can_unprocess', decision_rows.can_unprocess_calc,
+          'can_bulk_authorise', decision_rows.can_bulk_authorise_calc,
+          'can_bulk_unauthorise', decision_rows.can_bulk_unauthorise_calc,
+          'can_edit_timesheet_data', decision_rows.can_edit_timesheet_data_calc,
+          'can_manage_evidence', decision_rows.can_manage_evidence_calc,
+          'can_add_additional_manual', decision_rows.can_add_additional_manual_calc,
+          'review_only', decision_rows.review_only_calc
+        ),
+        'row_patch',
+        JSONB_BUILD_OBJECT(),
+        'cache_invalidation_hints',
+        JSONB_BUILD_OBJECT(),
+        'count_deltas',
+        JSONB_BUILD_OBJECT(),
+        'header_loaded',
+        TRUE,
+        'header_only',
+        TRUE,
+        'editor_loaded',
+        FALSE,
+        'evidence_loaded',
+        FALSE,
+        'compare_loaded',
+        FALSE,
+        'full_loaded',
+        FALSE,
+        'schedule_pending',
+        TRUE,
+        'schedule_authoritative',
+        FALSE,
+        'loaded_layers',
+        JSONB_BUILD_ARRAY('dataset_row'),
+        'dataset_source',
+        'timesheet_summary_lightweight_rows_v1'
+      )) AS row_json
     FROM decision_rows
   ),
   eligible_rows_before_classification AS MATERIALIZED (
-    SELECT list_rows.row_json
-    FROM list_rows
-    WHERE NULLIF(BTRIM(COALESCE(list_rows.row_json->>'timesheet_id', '')), '') IS NOT NULL
-      AND UPPER(COALESCE(list_rows.row_json->>'bulk_process_bucket', '')) <> 'UNPROCESSED'
-      AND NULLIF(BTRIM(COALESCE(list_rows.row_json->>'bulk_authorise_section', '')), '') IS NOT NULL
+    SELECT payload_rows.row_json
+    FROM payload_rows
+    WHERE NULLIF(BTRIM(COALESCE(payload_rows.row_json->>'timesheet_id', '')), '') IS NOT NULL
+      AND UPPER(COALESCE(payload_rows.row_json->>'bulk_process_bucket', '')) <> 'UNPROCESSED'
+      AND NULLIF(BTRIM(COALESCE(payload_rows.row_json->>'bulk_authorise_section', '')), '') IS NOT NULL
   ),
   classification_filtered_rows AS MATERIALIZED (
     SELECT eligible_rows_before_classification.row_json
@@ -470,7 +1342,8 @@ BEGIN
       'date_to', NULLIF(BTRIM(COALESCE(v_filters->>'date_to', v_filters->>'dateTo', v_filters->>'to_date', v_filters->>'toDate', '')), ''),
       'week_ending_date', NULLIF(BTRIM(COALESCE(v_filters->>'week_ending_date', v_filters->>'weekEndingDate', v_filters->>'week_ending', v_filters->>'weekEnding', '')), ''),
       'limit', v_limit,
-      'offset', v_offset
+      'offset', v_offset,
+      'dataset_source', 'timesheet_summary_lightweight_rows_v1'
     ),
     'counts', JSONB_BUILD_OBJECT(
       'total', COALESCE(visible_counts.total_count, 0),
@@ -522,7 +1395,8 @@ BEGIN
       'date_to', NULLIF(BTRIM(COALESCE(v_filters->>'date_to', v_filters->>'dateTo', v_filters->>'to_date', v_filters->>'toDate', '')), ''),
       'week_ending_date', NULLIF(BTRIM(COALESCE(v_filters->>'week_ending_date', v_filters->>'weekEndingDate', v_filters->>'week_ending', v_filters->>'weekEnding', '')), ''),
       'limit', v_limit,
-      'offset', v_offset
+      'offset', v_offset,
+      'dataset_source', 'timesheet_summary_lightweight_rows_v1'
     ),
     'counts', JSONB_BUILD_OBJECT(
       'total', 0,
@@ -536,6 +1410,7 @@ BEGIN
   ));
 END;
 $function$;
+
 
 
 
@@ -2221,8 +3096,6 @@ $function$;
 
 
 
-
-
 CREATE OR REPLACE FUNCTION public.bulk_process_row_context_v1(p_filters jsonb DEFAULT '{}'::jsonb)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -2245,6 +3118,11 @@ DECLARE
   v_header_row_json jsonb := NULL;
   v_uuid_re text := '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$';
   v_out jsonb;
+  v_editor_layer jsonb := NULL;
+  v_evidence_layer jsonb := NULL;
+  v_compare_layer jsonb := NULL;
+  v_layer_errors jsonb := '[]'::jsonb;
+  v_layer_names jsonb := '[]'::jsonb;
   v_effective_has_any_evidence boolean := FALSE;
   v_effective_badge_timesheet boolean := FALSE;
   v_effective_badge_mileage boolean := FALSE;
@@ -2267,18 +3145,41 @@ BEGIN
     OR NULLIF(BTRIM(COALESCE(v_filters->>'timesheet_id', v_filters->>'timesheetId', '')), '') IS NOT NULL
     OR NULLIF(BTRIM(COALESCE(v_filters->>'current_timesheet_id', v_filters->>'currentTimesheetId', '')), '') IS NOT NULL
     OR NULLIF(BTRIM(COALESCE(v_filters->>'requested_timesheet_id', v_filters->>'requestedTimesheetId', '')), '') IS NOT NULL
+    OR NULLIF(BTRIM(COALESCE(v_filters->>'expected_timesheet_id', v_filters->>'expectedTimesheetId', '')), '') IS NOT NULL
     OR NULLIF(BTRIM(COALESCE(v_filters->>'contract_week_id', v_filters->>'contractWeekId', '')), '') IS NOT NULL
     OR NULLIF(BTRIM(COALESCE(v_filters->>'week_id', v_filters->>'weekId', '')), '') IS NOT NULL
     OR NULLIF(BTRIM(COALESCE(v_filters->>'id', '')), '') IS NOT NULL
     OR (v_filters ? 'row_keys' AND jsonb_typeof(v_filters->'row_keys') = 'array' AND jsonb_array_length(v_filters->'row_keys') > 0)
     OR (v_filters ? 'timesheet_ids' AND jsonb_typeof(v_filters->'timesheet_ids') = 'array' AND jsonb_array_length(v_filters->'timesheet_ids') > 0)
     OR (v_filters ? 'contract_week_ids' AND jsonb_typeof(v_filters->'contract_week_ids') = 'array' AND jsonb_array_length(v_filters->'contract_week_ids') > 0)
+    OR NULLIF(BTRIM(COALESCE(v_filters->>'row_keys', v_filters->>'rowKeys', '')), '') IS NOT NULL
+    OR NULLIF(BTRIM(COALESCE(v_filters->>'timesheet_ids', v_filters->>'timesheetIds', '')), '') IS NOT NULL
+    OR NULLIF(BTRIM(COALESCE(v_filters->>'contract_week_ids', v_filters->>'contractWeekIds', '')), '') IS NOT NULL
+    OR (v_filters ? 'rowKeys' AND jsonb_typeof(v_filters->'rowKeys') = 'array' AND jsonb_array_length(v_filters->'rowKeys') > 0)
+    OR (v_filters ? 'timesheetIds' AND jsonb_typeof(v_filters->'timesheetIds') = 'array' AND jsonb_array_length(v_filters->'timesheetIds') > 0)
+    OR (v_filters ? 'contractWeekIds' AND jsonb_typeof(v_filters->'contractWeekIds') = 'array' AND jsonb_array_length(v_filters->'contractWeekIds') > 0)
+    OR (v_filters ? 'ids' AND jsonb_typeof(v_filters->'ids') = 'array' AND jsonb_array_length(v_filters->'ids') > 0)
+    OR NULLIF(BTRIM(COALESCE(v_filters->>'ids', '')), '') IS NOT NULL
   );
 
   IF v_has_identity = FALSE THEN
     RETURN JSONB_BUILD_OBJECT(
       'ok', FALSE,
       'context_kind', 'bulk_process_row_context',
+      'context_profile', 'status_header',
+      'profile', 'status_header',
+      'soft_failure', TRUE,
+      'context_degraded', TRUE,
+      'degraded_reason', 'ROW_CONTEXT_IDENTITY_REQUIRED',
+      'header_loaded', FALSE,
+      'header_only', FALSE,
+      'editor_loaded', FALSE,
+      'evidence_loaded', FALSE,
+      'compare_loaded', FALSE,
+      'full_loaded', FALSE,
+      'schedule_pending', TRUE,
+      'schedule_authoritative', FALSE,
+      'loaded_layers', '[]'::jsonb,
       'error', 'ROW_CONTEXT_IDENTITY_REQUIRED',
       'message', 'bulk_process_row_context_v1 requires row_key, timesheet_id, or contract_week_id.',
       'filters', v_filters
@@ -2286,9 +3187,94 @@ BEGIN
   END IF;
 
   v_row_key := NULLIF(BTRIM(COALESCE(v_filters->>'row_key', v_filters->>'rowKey', '')), '');
-  v_timesheet_id_text := NULLIF(BTRIM(COALESCE(v_filters->>'timesheet_id', v_filters->>'timesheetId', v_filters->>'current_timesheet_id', v_filters->>'currentTimesheetId', v_filters->>'requested_timesheet_id', v_filters->>'requestedTimesheetId', '')), '');
+  v_timesheet_id_text := NULLIF(BTRIM(COALESCE(v_filters->>'timesheet_id', v_filters->>'timesheetId', v_filters->>'current_timesheet_id', v_filters->>'currentTimesheetId', v_filters->>'requested_timesheet_id', v_filters->>'requestedTimesheetId', v_filters->>'expected_timesheet_id', v_filters->>'expectedTimesheetId', '')), '');
   v_contract_week_id_text := NULLIF(BTRIM(COALESCE(v_filters->>'contract_week_id', v_filters->>'contractWeekId', v_filters->>'week_id', v_filters->>'weekId', '')), '');
   v_id_text := NULLIF(BTRIM(COALESCE(v_filters->>'id', '')), '');
+
+  IF v_row_key IS NULL AND v_filters ? 'row_keys' AND jsonb_typeof(v_filters->'row_keys') = 'array' THEN
+    SELECT NULLIF(BTRIM(row_key_values.value), '')
+      INTO v_row_key
+    FROM jsonb_array_elements_text(v_filters->'row_keys') WITH ORDINALITY AS row_key_values(value, ordinal_position)
+    WHERE NULLIF(BTRIM(row_key_values.value), '') IS NOT NULL
+    ORDER BY row_key_values.ordinal_position ASC
+    LIMIT 1;
+  END IF;
+
+  IF v_row_key IS NULL AND v_filters ? 'rowKeys' AND jsonb_typeof(v_filters->'rowKeys') = 'array' THEN
+    SELECT NULLIF(BTRIM(row_key_values.value), '')
+      INTO v_row_key
+    FROM jsonb_array_elements_text(v_filters->'rowKeys') WITH ORDINALITY AS row_key_values(value, ordinal_position)
+    WHERE NULLIF(BTRIM(row_key_values.value), '') IS NOT NULL
+    ORDER BY row_key_values.ordinal_position ASC
+    LIMIT 1;
+  END IF;
+
+  IF v_row_key IS NULL AND NULLIF(BTRIM(COALESCE(v_filters->>'row_keys', v_filters->>'rowKeys', '')), '') IS NOT NULL THEN
+    v_row_key := NULLIF(BTRIM(SPLIT_PART(COALESCE(v_filters->>'row_keys', v_filters->>'rowKeys'), ',', 1)), '');
+  END IF;
+
+  IF v_timesheet_id_text IS NULL AND v_filters ? 'timesheet_ids' AND jsonb_typeof(v_filters->'timesheet_ids') = 'array' THEN
+    SELECT NULLIF(BTRIM(timesheet_id_values.value), '')
+      INTO v_timesheet_id_text
+    FROM jsonb_array_elements_text(v_filters->'timesheet_ids') WITH ORDINALITY AS timesheet_id_values(value, ordinal_position)
+    WHERE timesheet_id_values.value ~* v_uuid_re
+    ORDER BY timesheet_id_values.ordinal_position ASC
+    LIMIT 1;
+  END IF;
+
+  IF v_timesheet_id_text IS NULL AND v_filters ? 'timesheetIds' AND jsonb_typeof(v_filters->'timesheetIds') = 'array' THEN
+    SELECT NULLIF(BTRIM(timesheet_id_values.value), '')
+      INTO v_timesheet_id_text
+    FROM jsonb_array_elements_text(v_filters->'timesheetIds') WITH ORDINALITY AS timesheet_id_values(value, ordinal_position)
+    WHERE timesheet_id_values.value ~* v_uuid_re
+    ORDER BY timesheet_id_values.ordinal_position ASC
+    LIMIT 1;
+  END IF;
+
+  IF v_timesheet_id_text IS NULL
+     AND NULLIF(BTRIM(COALESCE(v_filters->>'timesheet_ids', v_filters->>'timesheetIds', '')), '') IS NOT NULL
+     AND NULLIF(BTRIM(SPLIT_PART(COALESCE(v_filters->>'timesheet_ids', v_filters->>'timesheetIds'), ',', 1)), '') ~* v_uuid_re THEN
+    v_timesheet_id_text := NULLIF(BTRIM(SPLIT_PART(COALESCE(v_filters->>'timesheet_ids', v_filters->>'timesheetIds'), ',', 1)), '');
+  END IF;
+
+  IF v_contract_week_id_text IS NULL AND v_filters ? 'contract_week_ids' AND jsonb_typeof(v_filters->'contract_week_ids') = 'array' THEN
+    SELECT NULLIF(BTRIM(contract_week_id_values.value), '')
+      INTO v_contract_week_id_text
+    FROM jsonb_array_elements_text(v_filters->'contract_week_ids') WITH ORDINALITY AS contract_week_id_values(value, ordinal_position)
+    WHERE contract_week_id_values.value ~* v_uuid_re
+    ORDER BY contract_week_id_values.ordinal_position ASC
+    LIMIT 1;
+  END IF;
+
+  IF v_contract_week_id_text IS NULL AND v_filters ? 'contractWeekIds' AND jsonb_typeof(v_filters->'contractWeekIds') = 'array' THEN
+    SELECT NULLIF(BTRIM(contract_week_id_values.value), '')
+      INTO v_contract_week_id_text
+    FROM jsonb_array_elements_text(v_filters->'contractWeekIds') WITH ORDINALITY AS contract_week_id_values(value, ordinal_position)
+    WHERE contract_week_id_values.value ~* v_uuid_re
+    ORDER BY contract_week_id_values.ordinal_position ASC
+    LIMIT 1;
+  END IF;
+
+  IF v_contract_week_id_text IS NULL
+     AND NULLIF(BTRIM(COALESCE(v_filters->>'contract_week_ids', v_filters->>'contractWeekIds', '')), '') IS NOT NULL
+     AND NULLIF(BTRIM(SPLIT_PART(COALESCE(v_filters->>'contract_week_ids', v_filters->>'contractWeekIds'), ',', 1)), '') ~* v_uuid_re THEN
+    v_contract_week_id_text := NULLIF(BTRIM(SPLIT_PART(COALESCE(v_filters->>'contract_week_ids', v_filters->>'contractWeekIds'), ',', 1)), '');
+  END IF;
+
+  IF v_id_text IS NULL AND v_filters ? 'ids' AND jsonb_typeof(v_filters->'ids') = 'array' THEN
+    SELECT NULLIF(BTRIM(id_values.value), '')
+      INTO v_id_text
+    FROM jsonb_array_elements_text(v_filters->'ids') WITH ORDINALITY AS id_values(value, ordinal_position)
+    WHERE id_values.value ~* v_uuid_re
+    ORDER BY id_values.ordinal_position ASC
+    LIMIT 1;
+  END IF;
+
+  IF v_id_text IS NULL
+     AND NULLIF(BTRIM(COALESCE(v_filters->>'ids', '')), '') IS NOT NULL
+     AND NULLIF(BTRIM(SPLIT_PART(v_filters->>'ids', ',', 1)), '') ~* v_uuid_re THEN
+    v_id_text := NULLIF(BTRIM(SPLIT_PART(v_filters->>'ids', ',', 1)), '');
+  END IF;
 
   IF v_row_key IS NOT NULL AND v_timesheet_id_text IS NULL AND v_row_key LIKE 'timesheet:%' THEN
     v_timesheet_id_text := NULLIF(BTRIM(SUBSTRING(v_row_key FROM 11)), '');
@@ -2339,19 +3325,16 @@ BEGIN
   v_profile := LOWER(NULLIF(BTRIM(COALESCE(v_filters->>'profile', v_filters->>'context_profile', v_filters->>'contextProfile', '')), ''));
 
   IF v_profile IS NULL THEN
-    IF v_base_only THEN
-      v_profile := 'status_header';
-    ELSE
-      v_profile := 'active_row_visible';
-    END IF;
+    v_profile := 'status_header';
   END IF;
 
   IF v_profile NOT IN ('active_row_visible', 'status_header', 'editor', 'evidence', 'compare_import', 'full') THEN
-    v_profile := 'active_row_visible';
+    v_profile := 'status_header';
   END IF;
 
   v_include_evidence := CASE
-    WHEN v_profile IN ('active_row_visible', 'evidence', 'full') THEN TRUE
+    WHEN v_profile = 'evidence' THEN TRUE
+    WHEN v_profile = 'full' THEN TRUE
     WHEN LOWER(NULLIF(BTRIM(COALESCE(v_filters->>'include_evidence', v_filters->>'includeEvidence', v_filters->>'load_evidence', v_filters->>'loadEvidence', '')), '')) IN ('true', '1', 'yes', 'y', 'on') THEN TRUE
     ELSE FALSE
   END;
@@ -2368,51 +3351,1588 @@ BEGIN
     ELSE FALSE
   END;
 
-  IF v_profile = 'status_header' THEN
-    SELECT patch_result.row_json
-      INTO v_header_row_json
-    FROM public.bulk_timesheet_row_patch_v1(
+
+  IF v_profile = 'active_row_visible' AND (
+    COALESCE(v_include_evidence, FALSE) = TRUE
+    OR COALESCE(v_include_compare, FALSE) = TRUE
+    OR COALESCE(v_include_import_source_rows, FALSE) = TRUE
+  ) THEN
+    v_layer_errors := '[]'::jsonb;
+    v_layer_names := JSONB_BUILD_ARRAY('header', 'editor');
+
+    v_editor_layer := public.bulk_process_row_context_v1(
       v_decision_filters
       || JSONB_BUILD_OBJECT(
-           'dataset_mode', 'process',
-           'projection', 'active_row_header',
-           'profile', 'status_header'
+           'profile', 'editor',
+           'context_profile', 'editor',
+           'include_evidence', FALSE,
+           'include_compare', FALSE,
+           'include_import_source_rows', FALSE
          )
-    ) AS patch_result(row_json)
-    ORDER BY patch_result.row_json->>'row_key'
-    LIMIT 1;
+    );
 
-    IF v_header_row_json IS NULL THEN
-      RETURN JSONB_BUILD_OBJECT(
+    IF COALESCE(LOWER(NULLIF(BTRIM(COALESCE(v_editor_layer->>'ok', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE) = FALSE THEN
+      RETURN COALESCE(v_editor_layer, JSONB_BUILD_OBJECT()) || JSONB_BUILD_OBJECT(
         'ok', FALSE,
         'context_kind', 'bulk_process_row_context',
-        'context_profile', v_profile,
-        'error', 'ROW_NOT_FOUND',
-        'message', 'No bulk process status-header context was found for the supplied identity',
+        'context_profile', 'active_row_visible',
+        'profile', 'active_row_visible',
+        'soft_failure', TRUE,
+        'context_degraded', TRUE,
+        'degraded_reason', COALESCE(v_editor_layer->>'degraded_reason', v_editor_layer->>'error', 'EDITOR_LAYER_FAILED'),
+        'header_loaded', COALESCE(LOWER(NULLIF(BTRIM(COALESCE(v_editor_layer->>'header_loaded', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE),
+        'editor_loaded', FALSE,
+        'evidence_loaded', FALSE,
+        'compare_loaded', FALSE,
+        'full_loaded', FALSE,
+        'loaded_layers', COALESCE(v_editor_layer->'loaded_layers', '[]'::jsonb),
         'filters', v_filters
       );
     END IF;
 
-    RETURN JSONB_BUILD_OBJECT(
-      'ok', TRUE,
+    v_out := v_editor_layer || JSONB_BUILD_OBJECT(
       'context_kind', 'bulk_process_row_context',
-      'context_profile', v_profile,
-      'profile', v_profile,
-      'row_key', v_header_row_json->>'row_key',
-      'timesheet_id', v_header_row_json->>'timesheet_id',
-      'current_timesheet_id', v_header_row_json->>'current_timesheet_id',
-      'requested_timesheet_id', v_header_row_json->>'requested_timesheet_id',
-      'expected_timesheet_id', v_header_row_json->>'expected_timesheet_id',
-      'contract_week_id', v_header_row_json->>'contract_week_id',
-      'row_signature', v_header_row_json->>'row_signature',
-      'data_row', v_header_row_json,
-      'row', v_header_row_json,
-      'row_patch', COALESCE(v_header_row_json->'row_patch', JSONB_BUILD_OBJECT()),
-      'action_flags', COALESCE(v_header_row_json->'action_flags', JSONB_BUILD_OBJECT()),
-      'cache_invalidation_hints', COALESCE(v_header_row_json->'cache_invalidation_hints', JSONB_BUILD_OBJECT()),
-      'count_deltas', COALESCE(v_header_row_json->'count_deltas', JSONB_BUILD_OBJECT()),
+      'context_profile', 'active_row_visible',
+      'profile', 'active_row_visible',
+      'context_type', 'bulk_process',
+      'header_loaded', TRUE,
+      'header_only', FALSE,
+      'editor_loaded', TRUE,
+      'evidence_loaded', FALSE,
+      'compare_loaded', FALSE,
+      'full_loaded', FALSE,
+      'schedule_pending', FALSE,
+      'schedule_authoritative', TRUE,
+      'soft_failure', FALSE,
+      'context_degraded', FALSE,
+      'degraded_reason', NULL::text,
+      'loaded_layers', v_layer_names
+    );
+
+    IF COALESCE(v_include_evidence, FALSE) = TRUE THEN
+      v_evidence_layer := public.bulk_process_row_context_v1(
+        v_decision_filters
+        || JSONB_BUILD_OBJECT(
+             'profile', 'evidence',
+             'context_profile', 'evidence',
+             'include_evidence', TRUE,
+             'include_compare', FALSE,
+             'include_import_source_rows', FALSE
+           )
+      );
+
+      IF COALESCE(LOWER(NULLIF(BTRIM(COALESCE(v_evidence_layer->>'ok', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE) = TRUE THEN
+        v_layer_names := v_layer_names || JSONB_BUILD_ARRAY('evidence');
+        v_out := v_out
+          || JSONB_BUILD_OBJECT(
+            'evidence_loaded', TRUE,
+            'evidence', COALESCE(v_evidence_layer->'evidence', '[]'::jsonb),
+            'attached_evidence', COALESCE(v_evidence_layer->'attached_evidence', v_evidence_layer->'evidence', '[]'::jsonb),
+            'attachedRows', COALESCE(v_evidence_layer->'attachedRows', v_evidence_layer->'attached_evidence', v_evidence_layer->'evidence', '[]'::jsonb),
+            'primary_artifact', COALESCE(v_evidence_layer->'primary_artifact', v_out->'primary_artifact', v_out#>'{details,primary_artifact}', JSONB_BUILD_OBJECT()),
+            'preview_storage_key', COALESCE(NULLIF(BTRIM(COALESCE(v_evidence_layer->>'preview_storage_key', '')), ''), NULLIF(BTRIM(COALESCE(v_evidence_layer->>'primary_artifact_storage_key', '')), ''), NULLIF(BTRIM(COALESCE(v_out->>'preview_storage_key', '')), '')),
+            'primary_artifact_storage_key', COALESCE(NULLIF(BTRIM(COALESCE(v_evidence_layer->>'primary_artifact_storage_key', '')), ''), NULLIF(BTRIM(COALESCE(v_evidence_layer->>'preview_storage_key', '')), ''), NULLIF(BTRIM(COALESCE(v_out->>'primary_artifact_storage_key', '')), '')),
+            'primary_artifact_preview_mode', COALESCE(NULLIF(BTRIM(COALESCE(v_evidence_layer->>'primary_artifact_preview_mode', '')), ''), NULLIF(BTRIM(COALESCE(v_out->>'primary_artifact_preview_mode', '')), '')),
+            'has_any_evidence', COALESCE(LOWER(NULLIF(BTRIM(COALESCE(v_evidence_layer->>'has_any_evidence', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE),
+            'attached_evidence_count', CASE WHEN COALESCE(v_evidence_layer->>'attached_evidence_count', '') ~ '^[0-9]+$' THEN (v_evidence_layer->>'attached_evidence_count')::integer ELSE COALESCE(JSONB_ARRAY_LENGTH(COALESCE(v_evidence_layer->'evidence', '[]'::jsonb)), 0) END,
+            'evidence_count', CASE WHEN COALESCE(v_evidence_layer->>'evidence_count', '') ~ '^[0-9]+$' THEN (v_evidence_layer->>'evidence_count')::integer ELSE COALESCE(JSONB_ARRAY_LENGTH(COALESCE(v_evidence_layer->'evidence', '[]'::jsonb)), 0) END,
+            'evidence_badges', COALESCE(v_evidence_layer->'evidence_badges', v_evidence_layer#>'{evidence_meta,evidence_badges}', '[]'::jsonb),
+            'evidence_meta', COALESCE(v_evidence_layer->'evidence_meta', JSONB_BUILD_OBJECT('evidence_loaded', TRUE)) || JSONB_BUILD_OBJECT('evidence_loaded', TRUE),
+            'row', COALESCE(v_out->'row', JSONB_BUILD_OBJECT()) || COALESCE(v_evidence_layer->'row', JSONB_BUILD_OBJECT()),
+            'data_row', COALESCE(v_out->'data_row', v_out->'row', JSONB_BUILD_OBJECT()) || COALESCE(v_evidence_layer->'data_row', v_evidence_layer->'row', JSONB_BUILD_OBJECT()),
+            'row_patch', COALESCE(v_out->'row_patch', JSONB_BUILD_OBJECT()) || COALESCE(v_evidence_layer->'row_patch', JSONB_BUILD_OBJECT()),
+            'action_flags', COALESCE(v_out->'action_flags', JSONB_BUILD_OBJECT()) || COALESCE(v_evidence_layer->'action_flags', JSONB_BUILD_OBJECT()),
+            'details', COALESCE(v_out->'details', JSONB_BUILD_OBJECT()) || JSONB_BUILD_OBJECT(
+              'evidence', COALESCE(v_evidence_layer->'evidence', '[]'::jsonb),
+              'evidence_meta', COALESCE(v_evidence_layer->'evidence_meta', JSONB_BUILD_OBJECT('evidence_loaded', TRUE)) || JSONB_BUILD_OBJECT('evidence_loaded', TRUE)
+            ),
+            'left_pane', COALESCE(v_out->'left_pane', JSONB_BUILD_OBJECT()) || JSONB_BUILD_OBJECT(
+              'evidence', COALESCE(v_evidence_layer->'evidence', '[]'::jsonb),
+              'evidence_meta', COALESCE(v_evidence_layer->'evidence_meta', JSONB_BUILD_OBJECT('evidence_loaded', TRUE)) || JSONB_BUILD_OBJECT('evidence_loaded', TRUE)
+            )
+          );
+      ELSE
+        v_layer_errors := v_layer_errors || JSONB_BUILD_ARRAY(COALESCE(v_evidence_layer->>'degraded_reason', v_evidence_layer->>'error', 'EVIDENCE_LAYER_FAILED'));
+        v_out := v_out || JSONB_BUILD_OBJECT(
+          'evidence_loaded', FALSE,
+          'soft_failure', TRUE,
+          'context_degraded', TRUE,
+          'degraded_reason', 'EVIDENCE_LAYER_FAILED',
+          'evidence_layer_failure', COALESCE(v_evidence_layer, JSONB_BUILD_OBJECT())
+        );
+      END IF;
+    END IF;
+
+    IF COALESCE(v_include_compare, FALSE) = TRUE OR COALESCE(v_include_import_source_rows, FALSE) = TRUE THEN
+      v_compare_layer := public.bulk_process_row_context_v1(
+        v_decision_filters
+        || JSONB_BUILD_OBJECT(
+             'profile', 'compare_import',
+             'context_profile', 'compare_import',
+             'include_evidence', FALSE,
+             'include_compare', COALESCE(v_include_compare, FALSE),
+             'include_import_source_rows', COALESCE(v_include_import_source_rows, FALSE)
+           )
+      );
+
+      IF COALESCE(LOWER(NULLIF(BTRIM(COALESCE(v_compare_layer->>'ok', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE) = TRUE THEN
+        v_layer_names := v_layer_names || JSONB_BUILD_ARRAY('compare_import');
+        v_out := v_out || JSONB_BUILD_OBJECT(
+          'compare_loaded', TRUE,
+          'compare', COALESCE(v_compare_layer->'compare', JSONB_BUILD_OBJECT()),
+          'compare_payload', COALESCE(v_compare_layer->'compare_payload', v_compare_layer->'compare', JSONB_BUILD_OBJECT()),
+          'details', COALESCE(v_out->'details', JSONB_BUILD_OBJECT()) || JSONB_BUILD_OBJECT(
+            'source_rows', COALESCE(v_compare_layer#>'{details,source_rows}', v_compare_layer#>'{compare,source_rows}', '[]'::jsonb),
+            'external_source_rows_json', COALESCE(v_compare_layer#>'{details,external_source_rows_json}', v_compare_layer#>'{compare,external_source_rows_json}', '[]'::jsonb)
+          ),
+          'left_pane', COALESCE(v_out->'left_pane', JSONB_BUILD_OBJECT()) || JSONB_BUILD_OBJECT(
+            'source_items', COALESCE(v_compare_layer#>'{left_pane,source_items}', v_compare_layer#>'{details,source_rows}', v_compare_layer#>'{compare,source_rows}', '[]'::jsonb)
+          )
+        );
+      ELSE
+        v_layer_errors := v_layer_errors || JSONB_BUILD_ARRAY(COALESCE(v_compare_layer->>'degraded_reason', v_compare_layer->>'error', 'COMPARE_IMPORT_LAYER_FAILED'));
+        v_out := v_out || JSONB_BUILD_OBJECT(
+          'compare_loaded', FALSE,
+          'soft_failure', TRUE,
+          'context_degraded', TRUE,
+          'degraded_reason', CASE WHEN JSONB_ARRAY_LENGTH(v_layer_errors) > 0 THEN 'LAYER_FAILURE' ELSE 'COMPARE_IMPORT_LAYER_FAILED' END,
+          'compare_import_layer_failure', COALESCE(v_compare_layer, JSONB_BUILD_OBJECT())
+        );
+      END IF;
+    END IF;
+
+    v_out := v_out || JSONB_BUILD_OBJECT(
+      'context_kind', 'bulk_process_row_context',
+      'context_profile', 'active_row_visible',
+      'profile', 'active_row_visible',
+      'context_type', 'bulk_process',
+      'header_loaded', TRUE,
+      'header_only', FALSE,
+      'editor_loaded', TRUE,
+      'full_loaded', FALSE,
+      'schedule_pending', FALSE,
+      'schedule_authoritative', TRUE,
+      'loaded_layers', v_layer_names,
+      'layer_errors', v_layer_errors,
       'filters', v_filters
     );
+
+    RETURN v_out;
+  END IF;
+
+
+  IF v_profile IN ('status_header', 'editor') OR (v_profile = 'active_row_visible' AND COALESCE(v_include_evidence, FALSE) = FALSE) THEN
+    WITH input_ids AS (
+      SELECT
+        CASE WHEN v_timesheet_id_text IS NOT NULL AND v_timesheet_id_text ~* v_uuid_re THEN v_timesheet_id_text::uuid ELSE NULL::uuid END AS input_timesheet_id,
+        CASE WHEN v_contract_week_id_text IS NOT NULL AND v_contract_week_id_text ~* v_uuid_re THEN v_contract_week_id_text::uuid ELSE NULL::uuid END AS input_contract_week_id
+    ),
+    summary_row AS (
+      SELECT summary_source.*
+      FROM public.timesheet_summary_lightweight_rows_v1(
+        v_decision_filters || JSONB_BUILD_OBJECT('disable_paging', TRUE, 'limit', 25)
+      ) AS summary_source
+      CROSS JOIN input_ids AS summary_ids
+      WHERE (
+          summary_ids.input_timesheet_id IS NULL
+          OR summary_source.timesheet_id = summary_ids.input_timesheet_id
+        )
+        AND (
+          summary_ids.input_contract_week_id IS NULL
+          OR summary_source.contract_week_id = summary_ids.input_contract_week_id
+        )
+      ORDER BY
+        CASE WHEN summary_ids.input_timesheet_id IS NOT NULL AND summary_source.timesheet_id = summary_ids.input_timesheet_id THEN 0 ELSE 1 END,
+        CASE WHEN summary_ids.input_contract_week_id IS NOT NULL AND summary_source.contract_week_id = summary_ids.input_contract_week_id THEN 0 ELSE 1 END,
+        summary_source.timesheet_id NULLS LAST,
+        summary_source.contract_week_id NULLS LAST
+      LIMIT 1
+    ),
+    contract_week_row AS (
+      SELECT cw0.*
+      FROM public.contract_weeks AS cw0
+      CROSS JOIN input_ids AS cw_ids
+      WHERE (
+          cw_ids.input_contract_week_id IS NOT NULL
+          AND cw0.id = cw_ids.input_contract_week_id
+        )
+        OR (
+          cw_ids.input_timesheet_id IS NOT NULL
+          AND cw0.timesheet_id = cw_ids.input_timesheet_id
+        )
+      ORDER BY cw0.updated_at DESC NULLS LAST, cw0.created_at DESC NULLS LAST, cw0.id DESC
+      LIMIT 1
+    ),
+    timesheet_row AS (
+      SELECT ts0.*
+      FROM public.timesheets AS ts0
+      CROSS JOIN input_ids AS ts_ids
+      LEFT JOIN contract_week_row AS cw_for_ts ON TRUE
+      WHERE ts0.is_current = TRUE
+        AND (
+          (ts_ids.input_timesheet_id IS NOT NULL AND ts0.timesheet_id = ts_ids.input_timesheet_id)
+          OR (ts_ids.input_timesheet_id IS NULL AND cw_for_ts.timesheet_id IS NOT NULL AND ts0.timesheet_id = cw_for_ts.timesheet_id)
+        )
+      ORDER BY ts0.version DESC NULLS LAST, ts0.updated_at DESC NULLS LAST, ts0.created_at DESC NULLS LAST
+      LIMIT 1
+    ),
+    tsfin_row AS (
+      SELECT tf0.*
+      FROM public.timesheets_financials AS tf0
+      LEFT JOIN timesheet_row AS ts_for_tf ON TRUE
+      WHERE tf0.is_current = TRUE
+        AND ts_for_tf.timesheet_id IS NOT NULL
+        AND tf0.timesheet_id = ts_for_tf.timesheet_id
+      ORDER BY tf0.created_at DESC NULLS LAST, tf0.updated_at DESC NULLS LAST, tf0.id DESC
+      LIMIT 1
+    ),
+    contract_row AS (
+      SELECT ct0.*
+      FROM public.contracts AS ct0
+      LEFT JOIN timesheet_row AS ts_for_ct ON TRUE
+      LEFT JOIN contract_week_row AS cw_for_ct ON TRUE
+      WHERE ct0.id = COALESCE(ts_for_ct.contract_id, cw_for_ct.contract_id)
+      ORDER BY ct0.updated_at DESC NULLS LAST, ct0.created_at DESC NULLS LAST, ct0.id DESC
+      LIMIT 1
+    ),
+    candidate_row AS (
+      SELECT cand0.*
+      FROM public.candidates AS cand0
+      LEFT JOIN contract_row AS ct_for_cand ON TRUE
+      WHERE cand0.id = ct_for_cand.candidate_id
+      LIMIT 1
+    ),
+    client_row AS (
+      SELECT cli0.*
+      FROM public.clients AS cli0
+      LEFT JOIN contract_row AS ct_for_cli ON TRUE
+      WHERE cli0.id = ct_for_cli.client_id
+      LIMIT 1
+    ),
+    validation_rows AS (
+      SELECT tv0.*
+      FROM public.timesheet_validations AS tv0
+      LEFT JOIN timesheet_row AS ts_for_tv ON TRUE
+      WHERE ts_for_tv.timesheet_id IS NOT NULL
+        AND tv0.timesheet_id = ts_for_tv.timesheet_id
+      ORDER BY tv0.validated_at_utc DESC NULLS LAST, tv0.created_at DESC NULLS LAST, tv0.id DESC
+    ),
+    validation_payload AS (
+      SELECT
+        COALESCE(JSONB_AGG(
+          JSONB_BUILD_OBJECT(
+            'id', validation_rows.id,
+            'timesheet_id', validation_rows.timesheet_id,
+            'booking_id', validation_rows.booking_id,
+            'status', validation_rows.status,
+            'reason_code', validation_rows.reason_code,
+            'hr_request_id', validation_rows.hr_request_id,
+            'validated_at_utc', validation_rows.validated_at_utc,
+            'override_requested_at_utc', validation_rows.override_requested_at_utc,
+            'override_requested_by', validation_rows.override_requested_by,
+            'override_confirmed_at_utc', validation_rows.override_confirmed_at_utc,
+            'override_confirmed_by', validation_rows.override_confirmed_by,
+            'override_reason', validation_rows.override_reason,
+            'override_cleared_at_utc', validation_rows.override_cleared_at_utc,
+            'last_source', validation_rows.last_source,
+            'created_at', validation_rows.created_at,
+            'updated_at', validation_rows.updated_at,
+            'hr_request_source', validation_rows.hr_request_source,
+            'hr_request_set_by', validation_rows.hr_request_set_by,
+            'hr_request_set_at_utc', validation_rows.hr_request_set_at_utc,
+            'pre_validated', validation_rows.pre_validated
+          ) ORDER BY validation_rows.validated_at_utc DESC NULLS LAST, validation_rows.created_at DESC NULLS LAST, validation_rows.id DESC
+        ), '[]'::jsonb) AS validations_json,
+        (
+          SELECT JSONB_BUILD_OBJECT(
+            'id', validation_latest.id,
+            'status', validation_latest.status,
+            'reason_code', validation_latest.reason_code,
+            'hr_request_id', validation_latest.hr_request_id,
+            'validated_at_utc', validation_latest.validated_at_utc,
+            'pre_validated', COALESCE(validation_latest.pre_validated, FALSE),
+            'updated_at', validation_latest.updated_at
+          )
+          FROM validation_rows AS validation_latest
+          ORDER BY validation_latest.validated_at_utc DESC NULLS LAST, validation_latest.created_at DESC NULLS LAST, validation_latest.id DESC
+          LIMIT 1
+        ) AS latest_validation_json
+      FROM validation_rows
+    ),
+    core_row AS (
+      SELECT
+        COALESCE(summary_row.timesheet_id, timesheet_row.timesheet_id, contract_week_row.timesheet_id) AS resolved_timesheet_id,
+        COALESCE(summary_row.contract_week_id, contract_week_row.id) AS resolved_contract_week_id,
+        COALESCE(summary_row.contract_id, timesheet_row.contract_id, contract_week_row.contract_id, contract_row.id) AS resolved_contract_id,
+        COALESCE(summary_row.candidate_id, contract_row.candidate_id, candidate_row.id) AS resolved_candidate_id,
+        COALESCE(summary_row.client_id, contract_row.client_id, client_row.id) AS resolved_client_id,
+        COALESCE(NULLIF(BTRIM(summary_row.candidate_name), ''), NULLIF(BTRIM(summary_row.candidate_display_name), ''), NULLIF(BTRIM(candidate_row.display_name), ''), NULLIF(BTRIM(CONCAT_WS(' ', candidate_row.first_name, candidate_row.last_name)), '')) AS candidate_name,
+        COALESCE(NULLIF(BTRIM(summary_row.candidate_display_name), ''), NULLIF(BTRIM(summary_row.candidate_name), ''), NULLIF(BTRIM(candidate_row.display_name), ''), NULLIF(BTRIM(CONCAT_WS(' ', candidate_row.first_name, candidate_row.last_name)), '')) AS candidate_display_name,
+        COALESCE(NULLIF(BTRIM(summary_row.client_name), ''), NULLIF(BTRIM(client_row.name), '')) AS client_name,
+        COALESCE(summary_row.week_ending_date, timesheet_row.week_ending_date, contract_week_row.week_ending_date) AS week_ending_date,
+        COALESCE(summary_row.work_date, timesheet_row.worked_start_iso::date, contract_week_row.week_ending_date) AS work_date,
+        COALESCE(summary_row.booking_id, timesheet_row.booking_id) AS booking_id,
+        COALESCE(summary_row.occupant_key_norm, timesheet_row.occupant_key_norm, tsfin_row.occupant_key_norm) AS occupant_key_norm,
+        COALESCE(summary_row.hospital_norm, timesheet_row.hospital_norm) AS hospital_norm,
+        COALESCE(summary_row.candidate_hint_text, timesheet_row.candidate_hint_text, JSONB_BUILD_OBJECT()) AS candidate_hint_text,
+        COALESCE(summary_row.sheet_scope, timesheet_row.sheet_scope::text) AS sheet_scope,
+        COALESCE(summary_row.submission_mode, timesheet_row.submission_mode::text) AS submission_mode,
+        COALESCE(summary_row.submission_mode_snapshot, contract_week_row.submission_mode_snapshot::text) AS submission_mode_snapshot,
+        COALESCE(summary_row.basis, tsfin_row.basis::text) AS basis,
+        summary_row.route_type AS route_type,
+        summary_row.route_display AS route_display,
+        COALESCE(summary_row.route_family, CASE WHEN COALESCE(timesheet_row.qr_status::text, '') <> '' THEN 'QR' WHEN UPPER(COALESCE(timesheet_row.submission_mode::text, contract_week_row.submission_mode_snapshot::text, '')) = 'ELECTRONIC' THEN 'ELECTRONIC' ELSE 'MANUAL_NON_QR' END) AS route_family,
+        summary_row.route_subfamily AS route_subfamily,
+        summary_row.underlying_channel_family AS underlying_channel_family,
+        COALESCE(summary_row.summary_stage, CASE WHEN timesheet_row.timesheet_id IS NULL THEN 'UNPROCESSED' ELSE 'PROCESSED' END) AS summary_stage,
+        COALESCE(summary_row.tools_stage, CASE WHEN timesheet_row.timesheet_id IS NULL THEN 'UNPROCESSED' ELSE COALESCE(tsfin_row.processing_status::text, timesheet_row.status::text) END) AS tools_stage,
+        COALESCE(summary_row.processing_status, tsfin_row.processing_status::text) AS processing_status,
+        summary_row.processing_status_display AS processing_status_display,
+        COALESCE(summary_row.authorised_at_utc, tsfin_row.authorised_at_utc) AS authorised_at_utc,
+        COALESCE(summary_row.authorised_at_server, timesheet_row.authorised_at_server) AS authorised_at_server,
+        COALESCE(summary_row.processed_at_utc, tsfin_row.processed_at_utc) AS processed_at_utc,
+        COALESCE(summary_row.is_authorised, tsfin_row.authorised_at_utc IS NOT NULL, timesheet_row.authorised_at_server IS NOT NULL, FALSE) AS is_authorised,
+        COALESCE(summary_row.total_hours, tsfin_row.total_hours) AS total_hours,
+        COALESCE(summary_row.total_pay_ex_vat, tsfin_row.total_pay_ex_vat) AS total_pay_ex_vat,
+        COALESCE(summary_row.total_charge_ex_vat, tsfin_row.total_charge_ex_vat) AS total_charge_ex_vat,
+        COALESCE(summary_row.margin_ex_vat, tsfin_row.margin_ex_vat) AS margin_ex_vat,
+        summary_row.net_delta_ex_vat AS net_delta_ex_vat,
+        COALESCE(summary_row.paid_at_utc, tsfin_row.paid_at_utc) AS paid_at_utc,
+        summary_row.pay_icon_code AS pay_icon_code,
+        summary_row.pay_status_code AS pay_status_code,
+        summary_row.pay_paid_at_utc AS pay_paid_at_utc,
+        COALESCE(summary_row.invoice_is_paid, FALSE) AS invoice_is_paid,
+        summary_row.invoice_issue_stage AS invoice_issue_stage,
+        summary_row.invoice_segment_stage AS invoice_segment_stage,
+        COALESCE(summary_row.invoice_segments_total, 0) AS invoice_segments_total,
+        COALESCE(summary_row.invoice_segments_locked, 0) AS invoice_segments_locked,
+        COALESCE(summary_row.invoice_segments_unlocked, 0) AS invoice_segments_unlocked,
+        COALESCE(TO_JSONB(summary_row.issue_codes), '[]'::jsonb) AS issue_codes_json,
+        COALESCE(summary_row.validation_status, validation_payload.latest_validation_json->>'status') AS validation_status,
+        summary_row.validation_summary AS validation_summary,
+        COALESCE(summary_row.hr_crosscheck_status, tsfin_row.hr_crosscheck_status) AS hr_crosscheck_status,
+        COALESCE(TO_JSONB(summary_row.hr_crosscheck_issues), TO_JSONB(tsfin_row.hr_crosscheck_issues), '[]'::jsonb) AS hr_crosscheck_issues_json,
+        COALESCE(summary_row.qr_status, timesheet_row.qr_status::text) AS qr_status,
+        COALESCE(summary_row.is_qr, timesheet_row.qr_status IS NOT NULL, FALSE) AS is_qr,
+        COALESCE(summary_row.is_adjusted, timesheet_row.is_adjustment, contract_week_row.is_adjustment, FALSE) AS is_adjusted,
+        COALESCE(summary_row.needs_attention, FALSE) AS needs_attention,
+        COALESCE(summary_row.has_rate_issue, tsfin_row.has_rate_issue, FALSE) AS has_rate_issue,
+        COALESCE(summary_row.has_pay_channel_issue, tsfin_row.has_pay_channel_issue, FALSE) AS has_pay_channel_issue,
+        COALESCE(summary_row.client_no_timesheet_required, contract_row.no_timesheet_required, FALSE) AS client_no_timesheet_required,
+        COALESCE(summary_row.client_autoprocess_hr, contract_row.autoprocess_hr, FALSE) AS client_autoprocess_hr,
+        COALESCE(summary_row.client_is_nhsp, contract_row.is_nhsp, FALSE) AS client_is_nhsp,
+        COALESCE(summary_row.has_any_evidence, FALSE) AS has_any_evidence,
+        COALESCE(summary_row.attached_evidence_count, 0) AS attached_evidence_count,
+        summary_row.primary_artifact_storage_key AS primary_artifact_storage_key,
+        summary_row.primary_artifact_display_name AS primary_artifact_display_name,
+        summary_row.primary_artifact_preview_mode AS primary_artifact_preview_mode,
+        timesheet_row.updated_at AS timesheet_updated_at,
+        contract_week_row.updated_at AS contract_week_updated_at,
+        tsfin_row.updated_at AS tsfin_updated_at,
+        timesheet_row.version AS timesheet_version,
+        timesheet_row.status AS timesheet_status,
+        timesheet_row.manual_pdf_r2_key AS manual_pdf_r2_key,
+        timesheet_row.qr_r2_key AS qr_r2_key,
+        timesheet_row.manual_pdf_rotation_degrees AS manual_pdf_rotation_degrees,
+        timesheet_row.generated_pdf_at_utc AS generated_pdf_at_utc,
+        timesheet_row.actual_schedule_json AS timesheet_actual_schedule_json,
+        timesheet_row.additional_units_week AS timesheet_additional_units_week,
+        timesheet_row.additional_units_per_day AS timesheet_additional_units_per_day,
+        timesheet_row.sheet_scope AS timesheet_sheet_scope,
+        timesheet_row.worked_start_iso AS timesheet_worked_start_iso,
+        timesheet_row.worked_end_iso AS timesheet_worked_end_iso,
+        timesheet_row.break_start_iso AS timesheet_break_start_iso,
+        timesheet_row.break_end_iso AS timesheet_break_end_iso,
+        timesheet_row.break_minutes AS timesheet_break_minutes,
+        timesheet_row.worked_minutes AS timesheet_worked_minutes,
+        timesheet_row.auth_name AS timesheet_auth_name,
+        timesheet_row.auth_job_title AS timesheet_auth_job_title,
+        timesheet_row.reference_number AS timesheet_reference_number,
+        timesheet_row.reference_set_at AS timesheet_reference_set_at,
+        timesheet_row.created_at AS timesheet_created_at,
+        timesheet_row.is_adjustment AS timesheet_is_adjustment,
+        timesheet_row.parent_timesheet_id AS timesheet_parent_timesheet_id,
+        timesheet_row.adjustment_origin AS timesheet_adjustment_origin,
+        contract_week_row.uploaded_pdf_r2_key AS uploaded_pdf_r2_key,
+        contract_week_row.day_entries_json AS contract_week_day_entries_json,
+        contract_week_row.totals_json AS contract_week_totals_json,
+        contract_week_row.planned_schedule_json AS contract_week_planned_schedule_json,
+        contract_week_row.additional_seq AS contract_week_additional_seq,
+        contract_week_row.status AS contract_week_status,
+        contract_week_row.created_at AS contract_week_created_at,
+        contract_week_row.is_adjustment AS contract_week_is_adjustment,
+        contract_week_row.enforce_day_partition AS contract_week_enforce_day_partition,
+        contract_week_row.allowed_days_mask AS contract_week_allowed_days_mask,
+        contract_week_row.split_boundary_date AS contract_week_split_boundary_date,
+        contract_week_row.worker_note AS contract_week_worker_note,
+        contract_week_row.split_group_key AS contract_week_split_group_key,
+        contract_row.id AS contract_id,
+        contract_row.role AS contract_role,
+        contract_row.band AS contract_band,
+        contract_row.display_site AS contract_display_site,
+        contract_row.ward_hint AS contract_ward_hint,
+        contract_row.default_submission_mode AS contract_default_submission_mode,
+        contract_row.std_schedule_json AS contract_std_schedule_json,
+        contract_row.additional_rates_json AS contract_additional_rates_json,
+        contract_row.weekly_timesheet_source AS contract_weekly_timesheet_source,
+        contract_row.no_timesheet_required AS contract_no_timesheet_required,
+        contract_row.autoprocess_hr AS contract_autoprocess_hr,
+        contract_row.requires_hr AS contract_requires_hr,
+        contract_row.hr_attach_to_invoice AS contract_hr_attach_to_invoice,
+        contract_row.ts_attach_to_invoice AS contract_ts_attach_to_invoice,
+        contract_row.is_nhsp AS contract_is_nhsp,
+        candidate_row.id AS candidate_id,
+        candidate_row.tms_ref AS candidate_tms_ref,
+        candidate_row.first_name AS candidate_first_name,
+        candidate_row.last_name AS candidate_last_name,
+        candidate_row.display_name AS candidate_display_name_raw,
+        candidate_row.email AS candidate_email,
+        candidate_row.phone AS candidate_phone,
+        candidate_row.key_norm AS candidate_key_norm,
+        candidate_row.band AS candidate_band,
+        client_row.id AS client_id,
+        client_row.cli_ref AS client_cli_ref,
+        client_row.name AS client_name_raw,
+        client_row.vat_chargeable AS client_vat_chargeable,
+        client_row.ts_queries_email AS client_ts_queries_email,
+        tsfin_row.id AS tsfin_id,
+        tsfin_row.timesheet_version AS tsfin_timesheet_version,
+        tsfin_row.basis AS tsfin_basis,
+        tsfin_row.is_current AS tsfin_is_current,
+        tsfin_row.is_stale AS tsfin_is_stale,
+        tsfin_row.stale_reason AS tsfin_stale_reason,
+        tsfin_row.actual_schedule_json AS tsfin_actual_schedule_json,
+        tsfin_row.actual_minutes_by_day_json AS tsfin_actual_minutes_by_day_json,
+        tsfin_row.additional_units_json AS tsfin_additional_units_json,
+        tsfin_row.processing_status AS tsfin_processing_status,
+        tsfin_row.locked_by_invoice_id AS tsfin_locked_by_invoice_id,
+        tsfin_row.locked_at_utc AS tsfin_locked_at_utc,
+        tsfin_row.paid_at_utc AS tsfin_paid_at_utc,
+        tsfin_row.processed_at_utc AS tsfin_processed_at_utc,
+        tsfin_row.authorised_at_utc AS tsfin_authorised_at_utc,
+        tsfin_row.external_source_rows_json AS tsfin_external_source_rows_json,
+        validation_payload.validations_json AS validations_json,
+        validation_payload.latest_validation_json AS latest_validation_json
+      FROM input_ids
+      LEFT JOIN summary_row ON TRUE
+      LEFT JOIN timesheet_row ON TRUE
+      LEFT JOIN tsfin_row ON TRUE
+      LEFT JOIN contract_week_row ON TRUE
+      LEFT JOIN contract_row ON TRUE
+      LEFT JOIN candidate_row ON TRUE
+      LEFT JOIN client_row ON TRUE
+      LEFT JOIN validation_payload ON TRUE
+    ),
+    flags AS (
+      SELECT
+        core_row.*,
+        (core_row.resolved_timesheet_id IS NOT NULL OR core_row.resolved_contract_week_id IS NOT NULL) AS row_found,
+        (
+          core_row.tsfin_locked_by_invoice_id IS NOT NULL
+          OR core_row.tsfin_paid_at_utc IS NOT NULL
+          OR core_row.paid_at_utc IS NOT NULL
+          OR COALESCE(core_row.invoice_segments_locked, 0) > 0
+          OR COALESCE(core_row.invoice_is_paid, FALSE) = TRUE
+        ) AS locked_bool,
+        COALESCE(core_row.is_authorised, FALSE) AS authorised_bool,
+        (
+          core_row.resolved_timesheet_id IS NULL
+          OR UPPER(COALESCE(core_row.processing_status, core_row.tools_stage, core_row.summary_stage, '')) IN ('UNPROCESSED', 'UNASSIGNED')
+        ) AS unprocessed_bool,
+        (
+          UPPER(COALESCE(core_row.processing_status, '')) = 'PENDING_AUTH'
+          OR (
+            COALESCE(core_row.contract_requires_hr, FALSE) = TRUE
+            AND COALESCE(core_row.contract_autoprocess_hr, FALSE) = FALSE
+            AND UPPER(COALESCE(core_row.processing_status, '')) = 'READY_FOR_HR'
+          )
+        ) AS requires_authorisation_bool,
+        (
+          UPPER(COALESCE(core_row.qr_status, '')) = 'PENDING'
+          AND core_row.resolved_timesheet_id IS NOT NULL
+        ) AS qr_unsigned_blocked_bool,
+        (
+          COALESCE(core_row.timesheet_is_adjustment, core_row.contract_week_is_adjustment, FALSE) = TRUE
+          AND COALESCE(core_row.contract_week_additional_seq, 0) > 0
+          AND (
+            core_row.timesheet_actual_schedule_json IS NULL
+            OR core_row.timesheet_actual_schedule_json = '[]'::jsonb
+            OR (jsonb_typeof(core_row.timesheet_actual_schedule_json) = 'array' AND jsonb_array_length(core_row.timesheet_actual_schedule_json) = 0)
+          )
+        ) AS keep_blank_additional_schedule_bool
+      FROM core_row
+    ),
+    row_payload AS (
+      SELECT
+        JSONB_BUILD_OBJECT(
+          'ok', TRUE,
+          'context_kind', 'bulk_process_row_context',
+          'context_profile', v_profile,
+          'profile', v_profile,
+          'context_type', CASE WHEN 'bulk_process_row_context' = 'bulk_authorise_row_context' THEN 'bulk_authorise' ELSE 'bulk_process' END,
+          'slim_context', TRUE,
+          'header_loaded', TRUE,
+          'header_only', (v_profile = 'status_header'),
+          'editor_loaded', (v_profile IN ('editor', 'active_row_visible')),
+          'evidence_loaded', FALSE,
+          'compare_loaded', FALSE,
+          'full_loaded', FALSE,
+          'schedule_pending', NOT (v_profile IN ('editor', 'active_row_visible')),
+          'schedule_authoritative', (v_profile IN ('editor', 'active_row_visible')),
+          'loaded_layers', CASE WHEN v_profile = 'status_header' THEN JSONB_BUILD_ARRAY('header') ELSE JSONB_BUILD_ARRAY('header', 'editor') END,
+          'soft_failure', FALSE,
+          'context_degraded', FALSE,
+          'degraded_reason', NULL::text,
+          'row_key', CASE WHEN flags.resolved_timesheet_id IS NOT NULL THEN 'timesheet:' || flags.resolved_timesheet_id::text ELSE 'contract_week:' || flags.resolved_contract_week_id::text END,
+          'timesheet_id', flags.resolved_timesheet_id,
+          'current_timesheet_id', flags.resolved_timesheet_id,
+          'requested_timesheet_id', flags.resolved_timesheet_id,
+          'expected_timesheet_id', flags.resolved_timesheet_id,
+          'contract_week_id', flags.resolved_contract_week_id,
+          'row_signature', MD5(CONCAT_WS('|', COALESCE(flags.resolved_timesheet_id::text, ''), COALESCE(flags.resolved_contract_week_id::text, ''), COALESCE(flags.timesheet_version::text, ''), COALESCE(flags.timesheet_updated_at::text, ''), COALESCE(flags.contract_week_updated_at::text, ''), COALESCE(flags.tsfin_updated_at::text, ''), v_profile)),
+          'filters', v_filters
+        )
+        || JSONB_BUILD_OBJECT(
+          'row', (
+            JSONB_BUILD_OBJECT(
+              'row_key', CASE WHEN flags.resolved_timesheet_id IS NOT NULL THEN 'timesheet:' || flags.resolved_timesheet_id::text ELSE 'contract_week:' || flags.resolved_contract_week_id::text END,
+              'timesheet_id', flags.resolved_timesheet_id,
+              'current_timesheet_id', flags.resolved_timesheet_id,
+              'requested_timesheet_id', flags.resolved_timesheet_id,
+              'expected_timesheet_id', flags.resolved_timesheet_id,
+              'contract_week_id', flags.resolved_contract_week_id,
+              'contract_id', flags.resolved_contract_id,
+              'candidate_id', flags.resolved_candidate_id,
+              'candidate_name', flags.candidate_name,
+              'candidate_display_name', flags.candidate_display_name,
+              'client_id', flags.resolved_client_id,
+              'client_name', flags.client_name,
+              'booking_id', flags.booking_id,
+              'occupant_key_norm', flags.occupant_key_norm,
+              'hospital_norm', flags.hospital_norm,
+              'candidate_hint_text', flags.candidate_hint_text,
+              'week_ending_date', flags.week_ending_date,
+              'work_date', flags.work_date,
+              'sheet_scope', flags.sheet_scope,
+              'submission_mode', flags.submission_mode,
+              'submission_mode_snapshot', flags.submission_mode_snapshot,
+              'basis', flags.basis,
+              'status', flags.timesheet_status,
+              'contract_week_status', flags.contract_week_status,
+              'route_type', flags.route_type,
+              'route_display', flags.route_display,
+              'route_family', flags.route_family,
+              'route_subfamily', flags.route_subfamily,
+              'underlying_channel_family', flags.underlying_channel_family,
+              'summary_stage', flags.summary_stage,
+              'tools_stage', flags.tools_stage,
+              'processing_status', flags.processing_status,
+              'processing_status_display', flags.processing_status_display,
+              'authorised_at_utc', flags.authorised_at_utc,
+              'authorised_at_server', flags.authorised_at_server,
+              'processed_at_utc', flags.processed_at_utc,
+              'is_authorised', flags.authorised_bool,
+              'locked', flags.locked_bool,
+              'has_timesheet', flags.resolved_timesheet_id IS NOT NULL
+            )
+            || JSONB_BUILD_OBJECT(
+              'total_hours', flags.total_hours,
+              'total_pay_ex_vat', flags.total_pay_ex_vat,
+              'total_charge_ex_vat', flags.total_charge_ex_vat,
+              'margin_ex_vat', flags.margin_ex_vat,
+              'net_delta_ex_vat', flags.net_delta_ex_vat,
+              'paid_at_utc', flags.paid_at_utc,
+              'pay_icon_code', flags.pay_icon_code,
+              'pay_status_code', flags.pay_status_code,
+              'pay_paid_at_utc', flags.pay_paid_at_utc,
+              'invoice_is_paid', flags.invoice_is_paid,
+              'invoice_issue_stage', flags.invoice_issue_stage,
+              'invoice_segment_stage', flags.invoice_segment_stage,
+              'invoice_segments_total', flags.invoice_segments_total,
+              'invoice_segments_locked', flags.invoice_segments_locked,
+              'invoice_segments_unlocked', flags.invoice_segments_unlocked,
+              'issue_codes', flags.issue_codes_json,
+              'validation_status', flags.validation_status,
+              'validation_summary', flags.validation_summary,
+              'hr_crosscheck_status', flags.hr_crosscheck_status,
+              'hr_crosscheck_issues', flags.hr_crosscheck_issues_json,
+              'qr_status', flags.qr_status,
+              'is_qr', flags.is_qr,
+              'is_adjusted', flags.is_adjusted,
+              'needs_attention', flags.needs_attention,
+              'has_rate_issue', flags.has_rate_issue,
+              'has_pay_channel_issue', flags.has_pay_channel_issue,
+              'client_no_timesheet_required', flags.client_no_timesheet_required,
+              'client_autoprocess_hr', flags.client_autoprocess_hr,
+              'client_is_nhsp', flags.client_is_nhsp
+            )
+            || JSONB_BUILD_OBJECT(
+              'has_any_evidence', flags.has_any_evidence,
+              'attached_evidence_count', flags.attached_evidence_count,
+              'evidence_count', flags.attached_evidence_count,
+              'primary_artifact_storage_key', flags.primary_artifact_storage_key,
+              'primary_artifact_display_name', flags.primary_artifact_display_name,
+              'primary_artifact_preview_mode', flags.primary_artifact_preview_mode,
+              'manual_pdf_r2_key', flags.manual_pdf_r2_key,
+              'qr_r2_key', flags.qr_r2_key,
+              'uploaded_pdf_r2_key', flags.uploaded_pdf_r2_key,
+              'generated_pdf_at_utc', flags.generated_pdf_at_utc,
+              'manual_pdf_rotation_degrees', flags.manual_pdf_rotation_degrees,
+              'is_adjustment', COALESCE(flags.timesheet_is_adjustment, flags.contract_week_is_adjustment, FALSE),
+              'additional_seq', flags.contract_week_additional_seq,
+              'period_type', CASE WHEN flags.resolved_contract_week_id IS NOT NULL THEN 'WEEKLY' ELSE 'DAILY' END,
+              'suppress_standard_schedule_fallback', flags.keep_blank_additional_schedule_bool,
+              'keep_additional_manual_adjustment_schedule_empty', flags.keep_blank_additional_schedule_bool,
+              '__suppressStandardScheduleFallback', flags.keep_blank_additional_schedule_bool,
+              '__keepAdditionalManualAdjustmentScheduleEmpty', flags.keep_blank_additional_schedule_bool
+            )
+            || CASE WHEN v_profile IN ('editor', 'active_row_visible') THEN JSONB_BUILD_OBJECT(
+              'actual_schedule_json', COALESCE(flags.tsfin_actual_schedule_json, flags.timesheet_actual_schedule_json, '[]'::jsonb),
+              'planned_schedule_json', COALESCE(flags.contract_week_planned_schedule_json, '[]'::jsonb),
+              'contract_week_totals_json', COALESCE(flags.contract_week_totals_json, '{}'::jsonb),
+              'actual_minutes_by_day_json', COALESCE(flags.tsfin_actual_minutes_by_day_json, '{}'::jsonb),
+              'additional_units_json', COALESCE(flags.tsfin_additional_units_json, flags.timesheet_additional_units_week, '{}'::jsonb),
+              'additional_units_week', COALESCE(flags.timesheet_additional_units_week, '{}'::jsonb),
+              'additional_units_per_day', COALESCE(flags.timesheet_additional_units_per_day, '{}'::jsonb)
+            ) ELSE JSONB_BUILD_OBJECT() END
+            || JSONB_BUILD_OBJECT(
+              'action_flags', JSONB_BUILD_OBJECT(
+                'can_save', ((flags.resolved_timesheet_id IS NOT NULL OR flags.resolved_contract_week_id IS NOT NULL) AND flags.locked_bool = FALSE AND flags.authorised_bool = FALSE AND flags.route_family = 'MANUAL_NON_QR'),
+                'can_process', ((flags.resolved_timesheet_id IS NOT NULL OR flags.resolved_contract_week_id IS NOT NULL) AND flags.locked_bool = FALSE AND flags.authorised_bool = FALSE AND flags.route_family = 'MANUAL_NON_QR' AND flags.unprocessed_bool = TRUE),
+                'can_unprocess', (flags.resolved_timesheet_id IS NOT NULL AND flags.locked_bool = FALSE AND flags.authorised_bool = FALSE AND flags.route_family = 'MANUAL_NON_QR' AND flags.unprocessed_bool = FALSE),
+                'can_bulk_authorise', (flags.resolved_timesheet_id IS NOT NULL AND flags.locked_bool = FALSE AND flags.requires_authorisation_bool = TRUE AND flags.authorised_bool = FALSE AND flags.qr_unsigned_blocked_bool = FALSE),
+                'can_bulk_unauthorise', (flags.resolved_timesheet_id IS NOT NULL AND flags.locked_bool = FALSE AND flags.authorised_bool = TRUE),
+                'can_edit_timesheet_data', ((flags.resolved_timesheet_id IS NOT NULL OR flags.resolved_contract_week_id IS NOT NULL) AND flags.locked_bool = FALSE AND flags.authorised_bool = FALSE AND flags.route_family = 'MANUAL_NON_QR'),
+                'can_manage_evidence', ((flags.resolved_timesheet_id IS NOT NULL OR (flags.resolved_contract_week_id IS NOT NULL AND flags.route_family = 'MANUAL_NON_QR')) AND flags.locked_bool = FALSE AND flags.route_family <> 'IMPORT_AUTHORITATIVE'),
+                'can_add_additional_manual', (flags.locked_bool = FALSE AND flags.authorised_bool = FALSE AND COALESCE(flags.is_adjusted, FALSE) = FALSE),
+                'review_only', (flags.locked_bool = TRUE OR flags.authorised_bool = TRUE OR flags.route_family <> 'MANUAL_NON_QR'),
+                'is_adjustment', COALESCE(flags.timesheet_is_adjustment, flags.contract_week_is_adjustment, FALSE),
+                'additional_seq', flags.contract_week_additional_seq,
+                'has_any_evidence', flags.has_any_evidence,
+                'attached_evidence_count', flags.attached_evidence_count
+              ),
+              'row_patch', JSONB_BUILD_OBJECT(),
+              'artifact_hints', JSONB_BUILD_OBJECT(
+                'has_any_evidence', flags.has_any_evidence,
+                'attached_evidence_count', flags.attached_evidence_count,
+                'primary_artifact_storage_key', flags.primary_artifact_storage_key,
+                'primary_artifact_display_name', flags.primary_artifact_display_name,
+                'primary_artifact_preview_mode', flags.primary_artifact_preview_mode
+              ),
+              'evidence_badges', JSONB_BUILD_ARRAY(
+                JSONB_BUILD_OBJECT('kind', 'TIMESHEET', 'present', COALESCE(flags.has_any_evidence, FALSE), 'has_evidence', COALESCE(flags.has_any_evidence, FALSE)),
+                JSONB_BUILD_OBJECT('kind', 'MILEAGE', 'present', FALSE, 'has_evidence', FALSE),
+                JSONB_BUILD_OBJECT('kind', 'TRAVEL', 'present', FALSE, 'has_evidence', FALSE),
+                JSONB_BUILD_OBJECT('kind', 'ACCOMMODATION', 'present', FALSE, 'has_evidence', FALSE),
+                JSONB_BUILD_OBJECT('kind', 'OTHER', 'present', FALSE, 'has_evidence', FALSE)
+              )
+            )
+          ),
+          'evidence', '[]'::jsonb
+        )
+        || JSONB_BUILD_OBJECT(
+          'row_patch', JSONB_BUILD_OBJECT(),
+          'action_flags', JSONB_BUILD_OBJECT(
+            'can_save', ((flags.resolved_timesheet_id IS NOT NULL OR flags.resolved_contract_week_id IS NOT NULL) AND flags.locked_bool = FALSE AND flags.authorised_bool = FALSE AND flags.route_family = 'MANUAL_NON_QR'),
+            'can_process', ((flags.resolved_timesheet_id IS NOT NULL OR flags.resolved_contract_week_id IS NOT NULL) AND flags.locked_bool = FALSE AND flags.authorised_bool = FALSE AND flags.route_family = 'MANUAL_NON_QR' AND flags.unprocessed_bool = TRUE),
+            'can_unprocess', (flags.resolved_timesheet_id IS NOT NULL AND flags.locked_bool = FALSE AND flags.authorised_bool = FALSE AND flags.route_family = 'MANUAL_NON_QR' AND flags.unprocessed_bool = FALSE),
+            'can_bulk_authorise', (flags.resolved_timesheet_id IS NOT NULL AND flags.locked_bool = FALSE AND flags.requires_authorisation_bool = TRUE AND flags.authorised_bool = FALSE AND flags.qr_unsigned_blocked_bool = FALSE),
+            'can_bulk_unauthorise', (flags.resolved_timesheet_id IS NOT NULL AND flags.locked_bool = FALSE AND flags.authorised_bool = TRUE),
+            'can_edit_timesheet_data', ((flags.resolved_timesheet_id IS NOT NULL OR flags.resolved_contract_week_id IS NOT NULL) AND flags.locked_bool = FALSE AND flags.authorised_bool = FALSE AND flags.route_family = 'MANUAL_NON_QR'),
+            'can_manage_evidence', ((flags.resolved_timesheet_id IS NOT NULL OR (flags.resolved_contract_week_id IS NOT NULL AND flags.route_family = 'MANUAL_NON_QR')) AND flags.locked_bool = FALSE AND flags.route_family <> 'IMPORT_AUTHORITATIVE'),
+            'can_add_additional_manual', (flags.locked_bool = FALSE AND flags.authorised_bool = FALSE AND COALESCE(flags.is_adjusted, FALSE) = FALSE),
+            'review_only', (flags.locked_bool = TRUE OR flags.authorised_bool = TRUE OR flags.route_family <> 'MANUAL_NON_QR'),
+            'has_any_evidence', flags.has_any_evidence,
+            'attached_evidence_count', flags.attached_evidence_count
+          ),
+          'cache_invalidation_hints', JSONB_BUILD_OBJECT(),
+          'count_deltas', JSONB_BUILD_OBJECT()
+        )
+        || CASE WHEN v_profile IN ('editor', 'active_row_visible') THEN JSONB_BUILD_OBJECT(
+          'details', JSONB_BUILD_OBJECT(
+            'requested_timesheet_id', flags.resolved_timesheet_id,
+            'current_timesheet_id', flags.resolved_timesheet_id,
+            'expected_timesheet_id', flags.resolved_timesheet_id,
+            'current_version', flags.timesheet_version,
+            'was_stale', COALESCE(flags.tsfin_is_stale, FALSE),
+            'booking_id', flags.booking_id,
+            'timesheet', JSONB_BUILD_OBJECT(
+              'timesheet_id', flags.resolved_timesheet_id,
+              'booking_id', flags.booking_id,
+              'occupant_key_norm', flags.occupant_key_norm,
+              'hospital_norm', flags.hospital_norm,
+              'worked_start_iso', flags.timesheet_worked_start_iso,
+              'worked_end_iso', flags.timesheet_worked_end_iso,
+              'break_start_iso', flags.timesheet_break_start_iso,
+              'break_end_iso', flags.timesheet_break_end_iso,
+              'break_minutes', flags.timesheet_break_minutes,
+              'worked_minutes', flags.timesheet_worked_minutes,
+              'week_ending_date', flags.week_ending_date,
+              'auth_name', flags.timesheet_auth_name,
+              'auth_job_title', flags.timesheet_auth_job_title,
+              'authorised_at_server', flags.authorised_at_server,
+              'reference_number', flags.timesheet_reference_number,
+              'reference_set_at', flags.timesheet_reference_set_at,
+              'status', flags.timesheet_status,
+              'created_at', flags.timesheet_created_at,
+              'updated_at', flags.timesheet_updated_at,
+              'version', flags.timesheet_version,
+              'is_current', flags.resolved_timesheet_id IS NOT NULL,
+              'contract_id', flags.resolved_contract_id,
+              'submission_mode', flags.submission_mode,
+              'manual_pdf_r2_key', flags.manual_pdf_r2_key,
+              'sheet_scope', flags.sheet_scope,
+              'actual_schedule_json', COALESCE(flags.timesheet_actual_schedule_json, '[]'::jsonb),
+              'additional_units_week', COALESCE(flags.timesheet_additional_units_week, '{}'::jsonb),
+              'additional_units_per_day', COALESCE(flags.timesheet_additional_units_per_day, '{}'::jsonb),
+              'qr_status', flags.qr_status,
+              'qr_r2_key', flags.qr_r2_key,
+              'manual_pdf_rotation_degrees', flags.manual_pdf_rotation_degrees,
+              'generated_pdf_at_utc', flags.generated_pdf_at_utc,
+              'candidate_hint_text', flags.candidate_hint_text,
+              'is_adjustment', flags.timesheet_is_adjustment,
+              'parent_timesheet_id', flags.timesheet_parent_timesheet_id,
+              'adjustment_origin', flags.timesheet_adjustment_origin
+            ),
+            'tsfin', JSONB_BUILD_OBJECT(
+              'id', flags.tsfin_id,
+              'timesheet_id', flags.resolved_timesheet_id,
+              'timesheet_version', flags.tsfin_timesheet_version,
+              'basis', flags.tsfin_basis,
+              'is_current', flags.tsfin_is_current,
+              'is_stale', flags.tsfin_is_stale,
+              'stale_reason', flags.tsfin_stale_reason,
+              'processing_status', flags.tsfin_processing_status,
+              'total_hours', flags.total_hours,
+              'locked_by_invoice_id', flags.tsfin_locked_by_invoice_id,
+              'locked_at_utc', flags.tsfin_locked_at_utc,
+              'paid_at_utc', flags.tsfin_paid_at_utc,
+              'processed_at_utc', flags.tsfin_processed_at_utc,
+              'authorised_at_utc', flags.tsfin_authorised_at_utc,
+              'actual_schedule_json', COALESCE(flags.tsfin_actual_schedule_json, flags.timesheet_actual_schedule_json, '[]'::jsonb),
+              'actual_minutes_by_day_json', COALESCE(flags.tsfin_actual_minutes_by_day_json, '{}'::jsonb),
+              'additional_units_json', COALESCE(flags.tsfin_additional_units_json, '{}'::jsonb),
+              'has_rate_issue', flags.has_rate_issue,
+              'has_pay_channel_issue', flags.has_pay_channel_issue,
+              'hr_crosscheck_status', flags.hr_crosscheck_status,
+              'hr_crosscheck_issues', flags.hr_crosscheck_issues_json
+            ),
+            'validations', COALESCE(flags.validations_json, '[]'::jsonb),
+            'validation_summary', JSONB_BUILD_OBJECT(
+              'status', flags.validation_status,
+              'pre_validated', COALESCE((flags.latest_validation_json->>'pre_validated')::boolean, FALSE),
+              'latest', flags.latest_validation_json
+            ),
+            'contract_week_id', flags.resolved_contract_week_id,
+            'contract_week', JSONB_BUILD_OBJECT(
+              'id', flags.resolved_contract_week_id,
+              'contract_id', flags.resolved_contract_id,
+              'week_ending_date', flags.week_ending_date,
+              'additional_seq', flags.contract_week_additional_seq,
+              'status', flags.contract_week_status,
+              'submission_mode_snapshot', flags.submission_mode_snapshot,
+              'timesheet_id', flags.resolved_timesheet_id,
+              'uploaded_pdf_r2_key', flags.uploaded_pdf_r2_key,
+              'day_entries_json', COALESCE(flags.contract_week_day_entries_json, '[]'::jsonb),
+              'totals_json', COALESCE(flags.contract_week_totals_json, '{}'::jsonb),
+              'created_at', flags.contract_week_created_at,
+              'updated_at', flags.contract_week_updated_at,
+              'planned_schedule_json', COALESCE(flags.contract_week_planned_schedule_json, '[]'::jsonb),
+              'is_adjustment', flags.contract_week_is_adjustment,
+              'enforce_day_partition', flags.contract_week_enforce_day_partition,
+              'allowed_days_mask', flags.contract_week_allowed_days_mask,
+              'split_boundary_date', flags.contract_week_split_boundary_date,
+              'worker_note', flags.contract_week_worker_note,
+              'split_group_key', flags.contract_week_split_group_key
+            ),
+            'related', JSONB_BUILD_OBJECT(
+              'contract', JSONB_BUILD_OBJECT(
+                'id', flags.resolved_contract_id,
+                'candidate_id', flags.resolved_candidate_id,
+                'client_id', flags.resolved_client_id,
+                'role', flags.contract_role,
+                'band', flags.contract_band,
+                'display_site', flags.contract_display_site,
+                'ward_hint', flags.contract_ward_hint,
+                'default_submission_mode', flags.contract_default_submission_mode,
+                'std_schedule_json', COALESCE(flags.contract_std_schedule_json, '[]'::jsonb),
+                'additional_rates_json', COALESCE(flags.contract_additional_rates_json, '{}'::jsonb),
+                'weekly_timesheet_source', flags.contract_weekly_timesheet_source,
+                'no_timesheet_required', flags.contract_no_timesheet_required,
+                'autoprocess_hr', flags.contract_autoprocess_hr,
+                'requires_hr', flags.contract_requires_hr,
+                'hr_attach_to_invoice', flags.contract_hr_attach_to_invoice,
+                'ts_attach_to_invoice', flags.contract_ts_attach_to_invoice,
+                'is_nhsp', flags.contract_is_nhsp
+              ),
+              'candidate', JSONB_BUILD_OBJECT(
+                'id', flags.resolved_candidate_id,
+                'tms_ref', flags.candidate_tms_ref,
+                'first_name', flags.candidate_first_name,
+                'last_name', flags.candidate_last_name,
+                'display_name', flags.candidate_display_name_raw,
+                'email', flags.candidate_email,
+                'phone', flags.candidate_phone,
+                'key_norm', flags.candidate_key_norm,
+                'band', flags.candidate_band
+              ),
+              'client', JSONB_BUILD_OBJECT(
+                'id', flags.resolved_client_id,
+                'cli_ref', flags.client_cli_ref,
+                'name', flags.client_name_raw,
+                'vat_chargeable', flags.client_vat_chargeable,
+                'ts_queries_email', flags.client_ts_queries_email
+              )
+            ),
+            'evidence', '[]'::jsonb,
+            'policy', JSONB_BUILD_OBJECT(
+              'weekly_mode', flags.contract_weekly_timesheet_source,
+              'requires_hr', flags.contract_requires_hr,
+              'autoprocess_hr', flags.contract_autoprocess_hr,
+              'no_timesheet_required', flags.contract_no_timesheet_required,
+              'is_nhsp', flags.contract_is_nhsp
+            ),
+            'effective', JSONB_BUILD_OBJECT(
+              'route_type', flags.route_type,
+              'route_display', flags.route_display,
+              'route_family', flags.route_family,
+              'route_subfamily', flags.route_subfamily,
+              'underlying_channel_family', flags.underlying_channel_family,
+              'is_adjustment', COALESCE(flags.timesheet_is_adjustment, flags.contract_week_is_adjustment, FALSE),
+              'additional_seq', flags.contract_week_additional_seq,
+              'actual_schedule_json', COALESCE(flags.tsfin_actual_schedule_json, flags.timesheet_actual_schedule_json, '[]'::jsonb),
+              'planned_schedule_json', COALESCE(flags.contract_week_planned_schedule_json, '[]'::jsonb),
+              'suppress_standard_schedule_fallback', flags.keep_blank_additional_schedule_bool,
+              'keep_additional_manual_adjustment_schedule_empty', flags.keep_blank_additional_schedule_bool,
+              'summary_stage', flags.summary_stage,
+              'client_requires_hr', flags.contract_requires_hr,
+              'client_autoprocess_hr', flags.contract_autoprocess_hr,
+              'client_no_timesheet_required', flags.contract_no_timesheet_required,
+              'client_is_nhsp', flags.contract_is_nhsp,
+              'contract_id', flags.resolved_contract_id,
+              'issue_codes', flags.issue_codes_json
+            )
+          ),
+          'timesheet', JSONB_BUILD_OBJECT(
+            'timesheet_id', flags.resolved_timesheet_id,
+            'booking_id', flags.booking_id,
+            'worked_start_iso', flags.timesheet_worked_start_iso,
+            'worked_end_iso', flags.timesheet_worked_end_iso,
+            'break_start_iso', flags.timesheet_break_start_iso,
+            'break_end_iso', flags.timesheet_break_end_iso,
+            'break_minutes', flags.timesheet_break_minutes,
+            'worked_minutes', flags.timesheet_worked_minutes,
+            'week_ending_date', flags.week_ending_date,
+            'actual_schedule_json', COALESCE(flags.timesheet_actual_schedule_json, '[]'::jsonb),
+            'additional_units_week', COALESCE(flags.timesheet_additional_units_week, '{}'::jsonb),
+            'additional_units_per_day', COALESCE(flags.timesheet_additional_units_per_day, '{}'::jsonb)
+          ),
+          'tsfin', JSONB_BUILD_OBJECT(
+            'id', flags.tsfin_id,
+            'timesheet_id', flags.resolved_timesheet_id,
+            'basis', flags.tsfin_basis,
+            'processing_status', flags.tsfin_processing_status,
+            'total_hours', flags.total_hours,
+            'actual_schedule_json', COALESCE(flags.tsfin_actual_schedule_json, flags.timesheet_actual_schedule_json, '[]'::jsonb),
+            'actual_minutes_by_day_json', COALESCE(flags.tsfin_actual_minutes_by_day_json, '{}'::jsonb),
+            'additional_units_json', COALESCE(flags.tsfin_additional_units_json, '{}'::jsonb),
+            'locked_by_invoice_id', flags.tsfin_locked_by_invoice_id,
+            'paid_at_utc', flags.tsfin_paid_at_utc,
+            'processed_at_utc', flags.tsfin_processed_at_utc,
+            'authorised_at_utc', flags.tsfin_authorised_at_utc
+          ),
+          'contract_week', JSONB_BUILD_OBJECT(
+            'id', flags.resolved_contract_week_id,
+            'contract_id', flags.resolved_contract_id,
+            'week_ending_date', flags.week_ending_date,
+            'day_entries_json', COALESCE(flags.contract_week_day_entries_json, '[]'::jsonb),
+            'totals_json', COALESCE(flags.contract_week_totals_json, '{}'::jsonb),
+            'planned_schedule_json', COALESCE(flags.contract_week_planned_schedule_json, '[]'::jsonb),
+            'additional_seq', flags.contract_week_additional_seq,
+            'is_adjustment', flags.contract_week_is_adjustment
+          ),
+          'evidence_meta', JSONB_BUILD_OBJECT('evidence_loaded', FALSE, 'has_any_evidence', flags.has_any_evidence, 'attached_evidence_count', flags.attached_evidence_count),
+          'left_pane', JSONB_BUILD_OBJECT('evidence', '[]'::jsonb, 'evidence_meta', JSONB_BUILD_OBJECT('evidence_loaded', FALSE, 'has_any_evidence', flags.has_any_evidence, 'attached_evidence_count', flags.attached_evidence_count))
+        ) ELSE JSONB_BUILD_OBJECT(
+          'details', JSONB_BUILD_OBJECT(),
+          'evidence_meta', JSONB_BUILD_OBJECT('evidence_loaded', FALSE, 'has_any_evidence', flags.has_any_evidence, 'attached_evidence_count', flags.attached_evidence_count),
+          'left_pane', JSONB_BUILD_OBJECT('evidence', '[]'::jsonb, 'evidence_meta', JSONB_BUILD_OBJECT('evidence_loaded', FALSE, 'has_any_evidence', flags.has_any_evidence, 'attached_evidence_count', flags.attached_evidence_count))
+        ) END AS payload_json
+      FROM flags
+      WHERE flags.row_found = TRUE
+    )
+    SELECT row_payload.payload_json || JSONB_BUILD_OBJECT(
+        'data_row', row_payload.payload_json->'row',
+        'row_patch', COALESCE(row_payload.payload_json->'row_patch', JSONB_BUILD_OBJECT()) || JSONB_BUILD_OBJECT('row_key', row_payload.payload_json->>'row_key')
+      )
+      INTO v_out
+    FROM row_payload;
+
+    IF v_out IS NULL THEN
+      RETURN JSONB_BUILD_OBJECT(
+        'ok', FALSE,
+        'context_kind', 'bulk_process_row_context',
+        'context_profile', v_profile,
+        'profile', v_profile,
+        'soft_failure', TRUE,
+        'context_degraded', TRUE,
+        'degraded_reason', 'ROW_NOT_FOUND',
+        'header_loaded', FALSE,
+        'editor_loaded', FALSE,
+        'evidence_loaded', FALSE,
+        'compare_loaded', FALSE,
+        'full_loaded', FALSE,
+        'header_only', FALSE,
+        'schedule_pending', TRUE,
+        'schedule_authoritative', FALSE,
+        'loaded_layers', '[]'::jsonb,
+        'error', 'ROW_NOT_FOUND',
+        'message', 'No bulk process row context was found for the supplied identity',
+        'filters', v_filters
+      );
+    END IF;
+
+    RETURN v_out;
+  END IF;
+
+  IF v_profile = 'evidence' THEN
+    WITH input_ids AS (
+      SELECT
+        CASE WHEN v_timesheet_id_text IS NOT NULL AND v_timesheet_id_text ~* v_uuid_re THEN v_timesheet_id_text::uuid ELSE NULL::uuid END AS input_timesheet_id,
+        CASE WHEN v_contract_week_id_text IS NOT NULL AND v_contract_week_id_text ~* v_uuid_re THEN v_contract_week_id_text::uuid ELSE NULL::uuid END AS input_contract_week_id
+    ),
+    contract_week_row AS (
+      SELECT cw0.*
+      FROM public.contract_weeks AS cw0
+      CROSS JOIN input_ids AS cw_ids
+      WHERE (cw_ids.input_contract_week_id IS NOT NULL AND cw0.id = cw_ids.input_contract_week_id)
+         OR (cw_ids.input_timesheet_id IS NOT NULL AND cw0.timesheet_id = cw_ids.input_timesheet_id)
+      ORDER BY cw0.updated_at DESC NULLS LAST, cw0.created_at DESC NULLS LAST, cw0.id DESC
+      LIMIT 1
+    ),
+    timesheet_row AS (
+      SELECT ts0.*
+      FROM public.timesheets AS ts0
+      CROSS JOIN input_ids AS ts_ids
+      LEFT JOIN contract_week_row AS cw_for_ts ON TRUE
+      WHERE ts0.is_current = TRUE
+        AND (
+          (ts_ids.input_timesheet_id IS NOT NULL AND ts0.timesheet_id = ts_ids.input_timesheet_id)
+          OR (ts_ids.input_timesheet_id IS NULL AND cw_for_ts.timesheet_id IS NOT NULL AND ts0.timesheet_id = cw_for_ts.timesheet_id)
+        )
+      ORDER BY ts0.version DESC NULLS LAST, ts0.updated_at DESC NULLS LAST, ts0.created_at DESC NULLS LAST
+      LIMIT 1
+    ),
+    summary_row AS (
+      SELECT summary_source.*
+      FROM public.timesheet_summary_lightweight_rows_v1(
+        v_decision_filters || JSONB_BUILD_OBJECT('disable_paging', TRUE, 'limit', 25)
+      ) AS summary_source
+      CROSS JOIN input_ids AS summary_ids
+      WHERE (
+          summary_ids.input_timesheet_id IS NULL
+          OR summary_source.timesheet_id = summary_ids.input_timesheet_id
+        )
+        AND (
+          summary_ids.input_contract_week_id IS NULL
+          OR summary_source.contract_week_id = summary_ids.input_contract_week_id
+        )
+      ORDER BY
+        CASE WHEN summary_ids.input_timesheet_id IS NOT NULL AND summary_source.timesheet_id = summary_ids.input_timesheet_id THEN 0 ELSE 1 END,
+        CASE WHEN summary_ids.input_contract_week_id IS NOT NULL AND summary_source.contract_week_id = summary_ids.input_contract_week_id THEN 0 ELSE 1 END,
+        summary_source.timesheet_id NULLS LAST,
+        summary_source.contract_week_id NULLS LAST
+      LIMIT 1
+    ),
+    resolved AS (
+      SELECT
+        COALESCE(summary_row.timesheet_id, timesheet_row.timesheet_id, contract_week_row.timesheet_id) AS resolved_timesheet_id,
+        COALESCE(summary_row.contract_week_id, contract_week_row.id) AS resolved_contract_week_id,
+        COALESCE(summary_row.contract_id, timesheet_row.contract_id, contract_week_row.contract_id) AS resolved_contract_id,
+        summary_row.candidate_id AS candidate_id,
+        summary_row.client_id AS client_id,
+        summary_row.candidate_name AS candidate_name,
+        summary_row.candidate_display_name AS candidate_display_name,
+        summary_row.client_name AS client_name,
+        COALESCE(summary_row.week_ending_date, timesheet_row.week_ending_date, contract_week_row.week_ending_date) AS week_ending_date,
+        COALESCE(summary_row.route_family, CASE WHEN COALESCE(timesheet_row.qr_status::text, '') <> '' THEN 'QR' WHEN UPPER(COALESCE(timesheet_row.submission_mode::text, contract_week_row.submission_mode_snapshot::text, '')) = 'ELECTRONIC' THEN 'ELECTRONIC' ELSE 'MANUAL_NON_QR' END) AS route_family,
+        COALESCE(summary_row.has_any_evidence, FALSE) AS summary_has_any_evidence,
+        COALESCE(summary_row.attached_evidence_count, 0) AS summary_attached_evidence_count,
+        summary_row.primary_artifact_storage_key AS summary_primary_artifact_storage_key,
+        summary_row.primary_artifact_display_name AS summary_primary_artifact_display_name,
+        summary_row.primary_artifact_preview_mode AS summary_primary_artifact_preview_mode,
+        timesheet_row.manual_pdf_r2_key AS manual_pdf_r2_key,
+        timesheet_row.qr_r2_key AS qr_r2_key,
+        timesheet_row.manual_pdf_rotation_degrees AS manual_pdf_rotation_degrees,
+        timesheet_row.updated_at AS timesheet_updated_at,
+        contract_week_row.uploaded_pdf_r2_key AS uploaded_pdf_r2_key,
+        contract_week_row.updated_at AS contract_week_updated_at
+      FROM input_ids
+      LEFT JOIN summary_row ON TRUE
+      LEFT JOIN timesheet_row ON TRUE
+      LEFT JOIN contract_week_row ON TRUE
+    ),
+    evidence_items AS (
+      SELECT
+        0::integer AS sort_order,
+        JSONB_BUILD_OBJECT(
+          'id', 'sys:manual_pdf:' || resolved.resolved_timesheet_id::text,
+          'evidence_id', NULL::uuid,
+          'queue_id', NULL::uuid,
+          'timesheet_id', resolved.resolved_timesheet_id,
+          'contract_week_id', resolved.resolved_contract_week_id,
+          'kind', 'TIMESHEET',
+          'display_name', 'Timesheet PDF',
+          'filename', 'Timesheet PDF',
+          'storage_key', resolved.manual_pdf_r2_key,
+          'r2_key', resolved.manual_pdf_r2_key,
+          'file_key', resolved.manual_pdf_r2_key,
+          'download_storage_key', resolved.manual_pdf_r2_key,
+          'original_filename', 'Timesheet PDF',
+          'mime_type', 'application/pdf',
+          'content_type', 'application/pdf',
+          'uploaded_at_utc', resolved.timesheet_updated_at,
+          'rotation_degrees', COALESCE(resolved.manual_pdf_rotation_degrees, 0),
+          'last_rotation_deg', COALESCE(resolved.manual_pdf_rotation_degrees, 0),
+          'page_count', NULL::integer,
+          'pages', '[]'::jsonb,
+          'system', TRUE,
+          'is_view_only', TRUE,
+          'can_delete', FALSE,
+          'can_reclassify', FALSE,
+          'can_edit_kind', FALSE,
+          'can_edit_type', FALSE,
+          'can_return_to_queue', FALSE,
+          'preview_mode', 'PDF',
+          'source_label', 'System',
+          'source_badge', 'System'
+        ) AS item_json
+      FROM resolved
+      WHERE resolved.resolved_timesheet_id IS NOT NULL
+        AND NULLIF(BTRIM(COALESCE(resolved.manual_pdf_r2_key, '')), '') IS NOT NULL
+        AND NOT EXISTS (
+          SELECT 1
+          FROM public.timesheet_evidence AS te_manual_pdf_duplicate
+          WHERE te_manual_pdf_duplicate.timesheet_id = resolved.resolved_timesheet_id
+            AND te_manual_pdf_duplicate.storage_key = resolved.manual_pdf_r2_key
+        )
+      UNION ALL
+      SELECT
+        1::integer AS sort_order,
+        JSONB_BUILD_OBJECT(
+          'id', 'sys:qr_pdf:' || resolved.resolved_timesheet_id::text,
+          'evidence_id', NULL::uuid,
+          'queue_id', NULL::uuid,
+          'timesheet_id', resolved.resolved_timesheet_id,
+          'contract_week_id', resolved.resolved_contract_week_id,
+          'kind', 'TIMESHEET',
+          'display_name', 'Signed QR Timesheet',
+          'filename', 'Signed QR Timesheet',
+          'storage_key', resolved.qr_r2_key,
+          'r2_key', resolved.qr_r2_key,
+          'file_key', resolved.qr_r2_key,
+          'download_storage_key', resolved.qr_r2_key,
+          'original_filename', 'Signed QR Timesheet',
+          'mime_type', 'application/pdf',
+          'content_type', 'application/pdf',
+          'uploaded_at_utc', resolved.timesheet_updated_at,
+          'rotation_degrees', 0,
+          'last_rotation_deg', 0,
+          'page_count', NULL::integer,
+          'pages', '[]'::jsonb,
+          'system', TRUE,
+          'is_view_only', TRUE,
+          'can_delete', FALSE,
+          'can_reclassify', FALSE,
+          'can_edit_kind', FALSE,
+          'can_edit_type', FALSE,
+          'can_return_to_queue', FALSE,
+          'preview_mode', 'PDF',
+          'source_label', 'System',
+          'source_badge', 'System'
+        ) AS item_json
+      FROM resolved
+      WHERE resolved.resolved_timesheet_id IS NOT NULL
+        AND NULLIF(BTRIM(COALESCE(resolved.qr_r2_key, '')), '') IS NOT NULL
+        AND NOT EXISTS (
+          SELECT 1
+          FROM public.timesheet_evidence AS te_qr_pdf_duplicate
+          WHERE te_qr_pdf_duplicate.timesheet_id = resolved.resolved_timesheet_id
+            AND te_qr_pdf_duplicate.storage_key = resolved.qr_r2_key
+        )
+      UNION ALL
+      SELECT
+        2::integer AS sort_order,
+        JSONB_BUILD_OBJECT(
+          'id', 'sys:contract_week_pdf:' || resolved.resolved_contract_week_id::text,
+          'evidence_id', NULL::uuid,
+          'queue_id', NULL::uuid,
+          'timesheet_id', resolved.resolved_timesheet_id,
+          'contract_week_id', resolved.resolved_contract_week_id,
+          'kind', 'TIMESHEET',
+          'display_name', 'Uploaded timesheet PDF',
+          'filename', 'Uploaded timesheet PDF',
+          'storage_key', resolved.uploaded_pdf_r2_key,
+          'r2_key', resolved.uploaded_pdf_r2_key,
+          'file_key', resolved.uploaded_pdf_r2_key,
+          'download_storage_key', resolved.uploaded_pdf_r2_key,
+          'original_filename', 'Uploaded timesheet PDF',
+          'mime_type', 'application/pdf',
+          'content_type', 'application/pdf',
+          'uploaded_at_utc', resolved.contract_week_updated_at,
+          'rotation_degrees', 0,
+          'last_rotation_deg', 0,
+          'page_count', NULL::integer,
+          'pages', '[]'::jsonb,
+          'system', TRUE,
+          'is_view_only', TRUE,
+          'can_delete', FALSE,
+          'can_reclassify', FALSE,
+          'can_edit_kind', FALSE,
+          'can_edit_type', FALSE,
+          'can_return_to_queue', FALSE,
+          'preview_mode', 'PDF',
+          'source_label', 'System',
+          'source_badge', 'System'
+        ) AS item_json
+      FROM resolved
+      WHERE resolved.resolved_contract_week_id IS NOT NULL
+        AND NULLIF(BTRIM(COALESCE(resolved.uploaded_pdf_r2_key, '')), '') IS NOT NULL
+        AND NOT EXISTS (
+          SELECT 1
+          FROM public.timesheet_evidence AS te_contract_week_pdf_duplicate
+          WHERE te_contract_week_pdf_duplicate.timesheet_id = resolved.resolved_timesheet_id
+            AND te_contract_week_pdf_duplicate.storage_key = resolved.uploaded_pdf_r2_key
+        )
+      UNION ALL
+      SELECT
+        10::integer AS sort_order,
+        JSONB_BUILD_OBJECT(
+          'id', te0.id,
+          'evidence_id', te0.id,
+          'queue_id', NULL::uuid,
+          'timesheet_id', te0.timesheet_id,
+          'contract_week_id', resolved.resolved_contract_week_id,
+          'kind', UPPER(COALESCE(NULLIF(BTRIM(te0.kind), ''), 'TIMESHEET')),
+          'display_name', COALESCE(NULLIF(BTRIM(te0.display_name), ''), NULLIF(BTRIM(REGEXP_REPLACE(COALESCE(te0.storage_key, ''), '^.*/', '')), ''), 'Evidence'),
+          'filename', COALESCE(NULLIF(BTRIM(te0.display_name), ''), NULLIF(BTRIM(REGEXP_REPLACE(COALESCE(te0.storage_key, ''), '^.*/', '')), ''), 'Evidence'),
+          'storage_key', te0.storage_key,
+          'r2_key', te0.storage_key,
+          'file_key', te0.storage_key,
+          'download_storage_key', te0.storage_key,
+          'original_filename', COALESCE(NULLIF(BTRIM(te0.display_name), ''), NULLIF(BTRIM(REGEXP_REPLACE(COALESCE(te0.storage_key, ''), '^.*/', '')), ''), 'Evidence'),
+          'mime_type', CASE
+            WHEN LOWER(COALESCE(te0.storage_key, '')) ~ '\.pdf($|[?#])' THEN 'application/pdf'
+            WHEN LOWER(COALESCE(te0.storage_key, '')) ~ '\.png($|[?#])' THEN 'image/png'
+            WHEN LOWER(COALESCE(te0.storage_key, '')) ~ '\.jpe?g($|[?#])' THEN 'image/jpeg'
+            WHEN LOWER(COALESCE(te0.storage_key, '')) ~ '\.gif($|[?#])' THEN 'image/gif'
+            WHEN LOWER(COALESCE(te0.storage_key, '')) ~ '\.webp($|[?#])' THEN 'image/webp'
+            ELSE NULL::text
+          END,
+          'content_type', CASE
+            WHEN LOWER(COALESCE(te0.storage_key, '')) ~ '\.pdf($|[?#])' THEN 'application/pdf'
+            WHEN LOWER(COALESCE(te0.storage_key, '')) ~ '\.png($|[?#])' THEN 'image/png'
+            WHEN LOWER(COALESCE(te0.storage_key, '')) ~ '\.jpe?g($|[?#])' THEN 'image/jpeg'
+            WHEN LOWER(COALESCE(te0.storage_key, '')) ~ '\.gif($|[?#])' THEN 'image/gif'
+            WHEN LOWER(COALESCE(te0.storage_key, '')) ~ '\.webp($|[?#])' THEN 'image/webp'
+            ELSE NULL::text
+          END,
+          'uploaded_at_utc', te0.created_at,
+          'created_at', te0.created_at,
+          'created_by', te0.created_by,
+          'rotation', 0,
+          'rotation_degrees', 0,
+          'last_rotation_deg', 0,
+          'page_count', NULL::integer,
+          'pages', '[]'::jsonb,
+          'system', FALSE,
+          'is_view_only', FALSE,
+          'can_delete', TRUE,
+          'can_reclassify', TRUE,
+          'can_edit_kind', TRUE,
+          'can_edit_type', TRUE,
+          'can_return_to_queue', TRUE,
+          'preview_mode', CASE
+            WHEN LOWER(COALESCE(te0.storage_key, '')) ~ '\.pdf($|[?#])' THEN 'PDF'
+            WHEN LOWER(COALESCE(te0.storage_key, '')) ~ '\.(png|jpe?g|gif|webp|bmp|svg|tif|tiff|heic|heif|avif)($|[?#])' THEN 'IMAGE'
+            ELSE 'FILE'
+          END,
+          'source_label', 'Attached',
+          'source_badge', 'Attached'
+        ) AS item_json
+      FROM public.timesheet_evidence AS te0
+      CROSS JOIN resolved
+      WHERE resolved.resolved_timesheet_id IS NOT NULL
+        AND te0.timesheet_id = resolved.resolved_timesheet_id
+      UNION ALL
+      SELECT
+        20::integer AS sort_order,
+        JSONB_BUILD_OBJECT(
+          'id', mq0.id,
+          'evidence_id', NULL::uuid,
+          'queue_id', mq0.id,
+          'timesheet_id', NULL::uuid,
+          'contract_week_id', resolved.resolved_contract_week_id,
+          'kind', UPPER(COALESCE(NULLIF(BTRIM(COALESCE(mq0.meta_json->>'staged_kind', mq0.meta_json->>'kind', '')), ''), 'TIMESHEET')),
+          'staged_kind', UPPER(COALESCE(NULLIF(BTRIM(COALESCE(mq0.meta_json->>'staged_kind', mq0.meta_json->>'kind', '')), ''), 'TIMESHEET')),
+          'display_name', COALESCE(NULLIF(BTRIM(mq0.original_filename), ''), 'Staged timesheet evidence'),
+          'filename', COALESCE(NULLIF(BTRIM(mq0.original_filename), ''), 'Staged timesheet evidence'),
+          'original_filename', mq0.original_filename,
+          'storage_key', mq0.r2_key,
+          'r2_key', mq0.r2_key,
+          'file_key', mq0.r2_key,
+          'download_storage_key', mq0.r2_key,
+          'mime_type', mq0.mime_type,
+          'content_type', mq0.mime_type,
+          'content_hash', mq0.content_hash,
+          'uploaded_at_utc', mq0.uploaded_at_utc,
+          'staged_at_utc', COALESCE(mq0.meta_json->>'staged_at_utc', mq0.uploaded_at_utc::text),
+          'staged_by_user_id', COALESCE(NULLIF(BTRIM(mq0.meta_json->>'staged_by_user_id'), ''), mq0.uploaded_by_user_id::text),
+          'rotation_degrees', COALESCE(mq0.last_rotation_deg::integer, 0),
+          'last_rotation_deg', COALESCE(mq0.last_rotation_deg::integer, 0),
+          'page_count', CASE WHEN COALESCE(mq0.meta_json->>'page_count', '') ~ '^[0-9]+$' THEN (mq0.meta_json->>'page_count')::integer ELSE NULL::integer END,
+          'pages', '[]'::jsonb,
+          'status', mq0.status,
+          'system', FALSE,
+          'is_view_only', FALSE,
+          'can_delete', TRUE,
+          'can_reclassify', TRUE,
+          'can_edit_kind', TRUE,
+          'can_edit_type', TRUE,
+          'can_return_to_queue', TRUE,
+          'is_staged_context', TRUE,
+          'preview_mode', CASE
+            WHEN LOWER(COALESCE(mq0.mime_type, '')) LIKE 'image/%' THEN 'IMAGE'
+            WHEN LOWER(COALESCE(mq0.mime_type, '')) = 'application/pdf' THEN 'PDF'
+            ELSE 'FILE'
+          END,
+          'source_label', COALESCE(NULLIF(BTRIM(mq0.meta_json->>'source_label'), ''), 'Staged'),
+          'source_badge', COALESCE(NULLIF(BTRIM(mq0.meta_json->>'source_label'), ''), 'Staged')
+        ) AS item_json
+      FROM public.manual_timesheet_queue AS mq0
+      CROSS JOIN resolved
+      WHERE resolved.resolved_timesheet_id IS NULL
+        AND resolved.resolved_contract_week_id IS NOT NULL
+        AND UPPER(COALESCE(mq0.status, '')) = 'STAGED'
+        AND NULLIF(BTRIM(COALESCE(mq0.meta_json->>'contract_week_id', '')), '') = resolved.resolved_contract_week_id::text
+    ),
+    evidence_ranked AS (
+      SELECT evidence_items.sort_order, evidence_items.item_json
+      FROM evidence_items
+      WHERE NULLIF(BTRIM(COALESCE(evidence_items.item_json->>'storage_key', evidence_items.item_json->>'r2_key', '')), '') IS NOT NULL
+    ),
+    evidence_payload AS (
+      SELECT
+        COALESCE(JSONB_AGG(evidence_ranked.item_json ORDER BY evidence_ranked.sort_order ASC, evidence_ranked.item_json->>'id' ASC), '[]'::jsonb) AS evidence_json,
+        COUNT(*)::integer AS evidence_count,
+        BOOL_OR(UPPER(COALESCE(evidence_ranked.item_json->>'kind', evidence_ranked.item_json->>'staged_kind', '')) = 'TIMESHEET') AS has_timesheet,
+        BOOL_OR(UPPER(COALESCE(evidence_ranked.item_json->>'kind', evidence_ranked.item_json->>'staged_kind', '')) = 'MILEAGE') AS has_mileage,
+        BOOL_OR(UPPER(COALESCE(evidence_ranked.item_json->>'kind', evidence_ranked.item_json->>'staged_kind', '')) = 'TRAVEL') AS has_travel,
+        BOOL_OR(UPPER(COALESCE(evidence_ranked.item_json->>'kind', evidence_ranked.item_json->>'staged_kind', '')) = 'ACCOMMODATION') AS has_accommodation,
+        BOOL_OR(UPPER(COALESCE(evidence_ranked.item_json->>'kind', evidence_ranked.item_json->>'staged_kind', '')) = 'OTHER') AS has_other,
+        (SELECT er1.item_json FROM evidence_ranked AS er1 ORDER BY er1.sort_order ASC, er1.item_json->>'id' ASC LIMIT 1) AS primary_evidence_json
+      FROM evidence_ranked
+    ),
+    final_payload AS (
+      SELECT
+        JSONB_BUILD_OBJECT(
+          'ok', TRUE,
+          'context_kind', 'bulk_process_row_context',
+          'context_profile', 'evidence',
+          'profile', 'evidence',
+          'context_type', CASE WHEN 'bulk_process_row_context' = 'bulk_authorise_row_context' THEN 'bulk_authorise' ELSE 'bulk_process' END,
+          'slim_context', TRUE,
+          'header_loaded', FALSE,
+          'header_only', FALSE,
+          'editor_loaded', FALSE,
+          'evidence_loaded', TRUE,
+          'compare_loaded', FALSE,
+          'full_loaded', FALSE,
+          'schedule_pending', TRUE,
+          'schedule_authoritative', FALSE,
+          'loaded_layers', JSONB_BUILD_ARRAY('evidence'),
+          'soft_failure', FALSE,
+          'context_degraded', FALSE,
+          'degraded_reason', NULL::text,
+          'row_key', CASE WHEN resolved.resolved_timesheet_id IS NOT NULL THEN 'timesheet:' || resolved.resolved_timesheet_id::text ELSE 'contract_week:' || resolved.resolved_contract_week_id::text END,
+          'timesheet_id', resolved.resolved_timesheet_id,
+          'current_timesheet_id', resolved.resolved_timesheet_id,
+          'requested_timesheet_id', resolved.resolved_timesheet_id,
+          'expected_timesheet_id', resolved.resolved_timesheet_id,
+          'contract_week_id', resolved.resolved_contract_week_id,
+          'row_signature', MD5(CONCAT_WS('|', COALESCE(resolved.resolved_timesheet_id::text, ''), COALESCE(resolved.resolved_contract_week_id::text, ''), COALESCE(resolved.timesheet_updated_at::text, ''), COALESCE(resolved.contract_week_updated_at::text, ''), 'evidence')),
+          'evidence', COALESCE(evidence_payload.evidence_json, '[]'::jsonb),
+          'attached_evidence', COALESCE(evidence_payload.evidence_json, '[]'::jsonb),
+          'attachedRows', COALESCE(evidence_payload.evidence_json, '[]'::jsonb),
+          'primary_artifact', COALESCE(evidence_payload.primary_evidence_json, JSONB_BUILD_OBJECT()),
+          'preview_storage_key', COALESCE(evidence_payload.primary_evidence_json->>'storage_key', resolved.summary_primary_artifact_storage_key),
+          'primary_artifact_storage_key', COALESCE(evidence_payload.primary_evidence_json->>'storage_key', resolved.summary_primary_artifact_storage_key),
+          'primary_artifact_preview_mode', COALESCE(evidence_payload.primary_evidence_json->>'preview_mode', resolved.summary_primary_artifact_preview_mode),
+          'has_any_evidence', (COALESCE(evidence_payload.evidence_count, 0) > 0),
+          'attached_evidence_count', COALESCE(evidence_payload.evidence_count, 0),
+          'evidence_count', COALESCE(evidence_payload.evidence_count, 0),
+          'evidence_badges', JSONB_BUILD_ARRAY(
+            JSONB_BUILD_OBJECT('kind', 'TIMESHEET', 'present', COALESCE(evidence_payload.has_timesheet, FALSE), 'has_evidence', COALESCE(evidence_payload.has_timesheet, FALSE)),
+            JSONB_BUILD_OBJECT('kind', 'MILEAGE', 'present', COALESCE(evidence_payload.has_mileage, FALSE), 'has_evidence', COALESCE(evidence_payload.has_mileage, FALSE)),
+            JSONB_BUILD_OBJECT('kind', 'TRAVEL', 'present', COALESCE(evidence_payload.has_travel, FALSE), 'has_evidence', COALESCE(evidence_payload.has_travel, FALSE)),
+            JSONB_BUILD_OBJECT('kind', 'ACCOMMODATION', 'present', COALESCE(evidence_payload.has_accommodation, FALSE), 'has_evidence', COALESCE(evidence_payload.has_accommodation, FALSE)),
+            JSONB_BUILD_OBJECT('kind', 'OTHER', 'present', COALESCE(evidence_payload.has_other, FALSE), 'has_evidence', COALESCE(evidence_payload.has_other, FALSE))
+          ),
+          'evidence_meta', JSONB_BUILD_OBJECT(
+            'evidence_loaded', TRUE,
+            'has_any_evidence', (COALESCE(evidence_payload.evidence_count, 0) > 0),
+            'attached_evidence_count', COALESCE(evidence_payload.evidence_count, 0),
+            'evidence_badges', JSONB_BUILD_ARRAY(
+              JSONB_BUILD_OBJECT('kind', 'TIMESHEET', 'present', COALESCE(evidence_payload.has_timesheet, FALSE), 'has_evidence', COALESCE(evidence_payload.has_timesheet, FALSE)),
+              JSONB_BUILD_OBJECT('kind', 'MILEAGE', 'present', COALESCE(evidence_payload.has_mileage, FALSE), 'has_evidence', COALESCE(evidence_payload.has_mileage, FALSE)),
+              JSONB_BUILD_OBJECT('kind', 'TRAVEL', 'present', COALESCE(evidence_payload.has_travel, FALSE), 'has_evidence', COALESCE(evidence_payload.has_travel, FALSE)),
+              JSONB_BUILD_OBJECT('kind', 'ACCOMMODATION', 'present', COALESCE(evidence_payload.has_accommodation, FALSE), 'has_evidence', COALESCE(evidence_payload.has_accommodation, FALSE)),
+              JSONB_BUILD_OBJECT('kind', 'OTHER', 'present', COALESCE(evidence_payload.has_other, FALSE), 'has_evidence', COALESCE(evidence_payload.has_other, FALSE))
+            )
+          ),
+          'row', JSONB_BUILD_OBJECT(
+            'row_key', CASE WHEN resolved.resolved_timesheet_id IS NOT NULL THEN 'timesheet:' || resolved.resolved_timesheet_id::text ELSE 'contract_week:' || resolved.resolved_contract_week_id::text END,
+            'timesheet_id', resolved.resolved_timesheet_id,
+            'current_timesheet_id', resolved.resolved_timesheet_id,
+            'requested_timesheet_id', resolved.resolved_timesheet_id,
+            'expected_timesheet_id', resolved.resolved_timesheet_id,
+            'contract_week_id', resolved.resolved_contract_week_id,
+            'contract_id', resolved.resolved_contract_id,
+            'candidate_id', resolved.candidate_id,
+            'candidate_name', resolved.candidate_name,
+            'candidate_display_name', resolved.candidate_display_name,
+            'client_id', resolved.client_id,
+            'client_name', resolved.client_name,
+            'week_ending_date', resolved.week_ending_date,
+            'route_family', resolved.route_family,
+            'has_any_evidence', (COALESCE(evidence_payload.evidence_count, 0) > 0),
+            'attached_evidence_count', COALESCE(evidence_payload.evidence_count, 0),
+            'primary_artifact', COALESCE(evidence_payload.primary_evidence_json, JSONB_BUILD_OBJECT()),
+            'primary_artifact_storage_key', COALESCE(evidence_payload.primary_evidence_json->>'storage_key', resolved.summary_primary_artifact_storage_key),
+            'primary_artifact_preview_mode', COALESCE(evidence_payload.primary_evidence_json->>'preview_mode', resolved.summary_primary_artifact_preview_mode),
+            'evidence_badges', JSONB_BUILD_ARRAY(
+              JSONB_BUILD_OBJECT('kind', 'TIMESHEET', 'present', COALESCE(evidence_payload.has_timesheet, FALSE), 'has_evidence', COALESCE(evidence_payload.has_timesheet, FALSE)),
+              JSONB_BUILD_OBJECT('kind', 'MILEAGE', 'present', COALESCE(evidence_payload.has_mileage, FALSE), 'has_evidence', COALESCE(evidence_payload.has_mileage, FALSE)),
+              JSONB_BUILD_OBJECT('kind', 'TRAVEL', 'present', COALESCE(evidence_payload.has_travel, FALSE), 'has_evidence', COALESCE(evidence_payload.has_travel, FALSE)),
+              JSONB_BUILD_OBJECT('kind', 'ACCOMMODATION', 'present', COALESCE(evidence_payload.has_accommodation, FALSE), 'has_evidence', COALESCE(evidence_payload.has_accommodation, FALSE)),
+              JSONB_BUILD_OBJECT('kind', 'OTHER', 'present', COALESCE(evidence_payload.has_other, FALSE), 'has_evidence', COALESCE(evidence_payload.has_other, FALSE))
+            )
+          ),
+          'row_patch', JSONB_BUILD_OBJECT(),
+          'action_flags', JSONB_BUILD_OBJECT('has_any_evidence', (COALESCE(evidence_payload.evidence_count, 0) > 0), 'attached_evidence_count', COALESCE(evidence_payload.evidence_count, 0)),
+          'details', JSONB_BUILD_OBJECT('evidence', COALESCE(evidence_payload.evidence_json, '[]'::jsonb), 'evidence_meta', JSONB_BUILD_OBJECT('evidence_loaded', TRUE, 'has_any_evidence', (COALESCE(evidence_payload.evidence_count, 0) > 0), 'attached_evidence_count', COALESCE(evidence_payload.evidence_count, 0))),
+          'left_pane', JSONB_BUILD_OBJECT('evidence', COALESCE(evidence_payload.evidence_json, '[]'::jsonb), 'evidence_meta', JSONB_BUILD_OBJECT('evidence_loaded', TRUE, 'has_any_evidence', (COALESCE(evidence_payload.evidence_count, 0) > 0), 'attached_evidence_count', COALESCE(evidence_payload.evidence_count, 0))),
+          'cache_invalidation_hints', JSONB_BUILD_OBJECT(),
+          'count_deltas', JSONB_BUILD_OBJECT(),
+          'filters', v_filters
+        ) AS payload_json
+      FROM resolved
+      LEFT JOIN evidence_payload ON TRUE
+      WHERE resolved.resolved_timesheet_id IS NOT NULL OR resolved.resolved_contract_week_id IS NOT NULL
+    )
+    SELECT final_payload.payload_json || JSONB_BUILD_OBJECT('data_row', final_payload.payload_json->'row')
+      INTO v_out
+    FROM final_payload;
+
+    IF v_out IS NULL THEN
+      RETURN JSONB_BUILD_OBJECT(
+        'ok', FALSE,
+        'context_kind', 'bulk_process_row_context',
+        'context_profile', 'evidence',
+        'profile', 'evidence',
+        'soft_failure', TRUE,
+        'context_degraded', TRUE,
+        'degraded_reason', 'ROW_NOT_FOUND',
+        'header_loaded', FALSE,
+        'editor_loaded', FALSE,
+        'evidence_loaded', FALSE,
+        'compare_loaded', FALSE,
+        'full_loaded', FALSE,
+        'header_only', FALSE,
+        'schedule_pending', TRUE,
+        'schedule_authoritative', FALSE,
+        'loaded_layers', '[]'::jsonb,
+        'error', 'ROW_NOT_FOUND',
+        'message', 'No bulk process evidence context was found for the supplied identity',
+        'filters', v_filters
+      );
+    END IF;
+
+    RETURN v_out;
+  END IF;
+
+  IF v_profile = 'compare_import' THEN
+    WITH input_ids AS (
+      SELECT
+        CASE WHEN v_timesheet_id_text IS NOT NULL AND v_timesheet_id_text ~* v_uuid_re THEN v_timesheet_id_text::uuid ELSE NULL::uuid END AS input_timesheet_id,
+        CASE WHEN v_contract_week_id_text IS NOT NULL AND v_contract_week_id_text ~* v_uuid_re THEN v_contract_week_id_text::uuid ELSE NULL::uuid END AS input_contract_week_id
+    ),
+    contract_week_row AS (
+      SELECT cw0.*
+      FROM public.contract_weeks AS cw0
+      CROSS JOIN input_ids AS cw_ids
+      WHERE (cw_ids.input_contract_week_id IS NOT NULL AND cw0.id = cw_ids.input_contract_week_id)
+         OR (cw_ids.input_timesheet_id IS NOT NULL AND cw0.timesheet_id = cw_ids.input_timesheet_id)
+      ORDER BY cw0.updated_at DESC NULLS LAST, cw0.created_at DESC NULLS LAST, cw0.id DESC
+      LIMIT 1
+    ),
+    timesheet_row AS (
+      SELECT ts0.*
+      FROM public.timesheets AS ts0
+      CROSS JOIN input_ids AS ts_ids
+      LEFT JOIN contract_week_row AS cw_for_ts ON TRUE
+      WHERE ts0.is_current = TRUE
+        AND (
+          (ts_ids.input_timesheet_id IS NOT NULL AND ts0.timesheet_id = ts_ids.input_timesheet_id)
+          OR (ts_ids.input_timesheet_id IS NULL AND cw_for_ts.timesheet_id IS NOT NULL AND ts0.timesheet_id = cw_for_ts.timesheet_id)
+        )
+      ORDER BY ts0.version DESC NULLS LAST, ts0.updated_at DESC NULLS LAST, ts0.created_at DESC NULLS LAST
+      LIMIT 1
+    ),
+    tsfin_row AS (
+      SELECT tf0.*
+      FROM public.timesheets_financials AS tf0
+      LEFT JOIN timesheet_row AS ts_for_tf ON TRUE
+      WHERE tf0.is_current = TRUE
+        AND ts_for_tf.timesheet_id IS NOT NULL
+        AND tf0.timesheet_id = ts_for_tf.timesheet_id
+      ORDER BY tf0.created_at DESC NULLS LAST, tf0.updated_at DESC NULLS LAST, tf0.id DESC
+      LIMIT 1
+    ),
+    summary_row AS (
+      SELECT summary_source.*
+      FROM public.timesheet_summary_lightweight_rows_v1(v_decision_filters || JSONB_BUILD_OBJECT('disable_paging', TRUE, 'limit', 25)) AS summary_source
+      CROSS JOIN input_ids AS summary_ids
+      WHERE (summary_ids.input_timesheet_id IS NULL OR summary_source.timesheet_id = summary_ids.input_timesheet_id)
+        AND (summary_ids.input_contract_week_id IS NULL OR summary_source.contract_week_id = summary_ids.input_contract_week_id)
+      ORDER BY summary_source.timesheet_id NULLS LAST, summary_source.contract_week_id NULLS LAST
+      LIMIT 1
+    ),
+    resolved AS (
+      SELECT
+        COALESCE(summary_row.timesheet_id, timesheet_row.timesheet_id, contract_week_row.timesheet_id) AS resolved_timesheet_id,
+        COALESCE(summary_row.contract_week_id, contract_week_row.id) AS resolved_contract_week_id,
+        COALESCE(summary_row.contract_id, timesheet_row.contract_id, contract_week_row.contract_id) AS resolved_contract_id,
+        summary_row.candidate_id AS candidate_id,
+        summary_row.client_id AS client_id,
+        summary_row.candidate_name AS candidate_name,
+        summary_row.client_name AS client_name,
+        summary_row.week_ending_date AS week_ending_date,
+        summary_row.route_family AS route_family,
+        tsfin_row.external_source_rows_json AS external_source_rows_json,
+        tsfin_row.updated_at AS tsfin_updated_at,
+        timesheet_row.updated_at AS timesheet_updated_at,
+        contract_week_row.updated_at AS contract_week_updated_at
+      FROM input_ids
+      LEFT JOIN summary_row ON TRUE
+      LEFT JOIN timesheet_row ON TRUE
+      LEFT JOIN contract_week_row ON TRUE
+      LEFT JOIN tsfin_row ON TRUE
+    )
+    SELECT JSONB_BUILD_OBJECT(
+        'ok', TRUE,
+        'context_kind', 'bulk_process_row_context',
+        'context_profile', 'compare_import',
+        'profile', 'compare_import',
+        'context_type', CASE WHEN 'bulk_process_row_context' = 'bulk_authorise_row_context' THEN 'bulk_authorise' ELSE 'bulk_process' END,
+        'slim_context', TRUE,
+        'header_loaded', TRUE,
+        'header_only', FALSE,
+        'editor_loaded', FALSE,
+        'evidence_loaded', FALSE,
+        'compare_loaded', TRUE,
+        'full_loaded', FALSE,
+        'schedule_pending', TRUE,
+        'schedule_authoritative', FALSE,
+        'loaded_layers', JSONB_BUILD_ARRAY('header', 'compare_import'),
+        'soft_failure', FALSE,
+        'context_degraded', FALSE,
+        'degraded_reason', NULL::text,
+        'row_key', CASE WHEN resolved.resolved_timesheet_id IS NOT NULL THEN 'timesheet:' || resolved.resolved_timesheet_id::text ELSE 'contract_week:' || resolved.resolved_contract_week_id::text END,
+        'timesheet_id', resolved.resolved_timesheet_id,
+        'current_timesheet_id', resolved.resolved_timesheet_id,
+        'requested_timesheet_id', resolved.resolved_timesheet_id,
+        'expected_timesheet_id', resolved.resolved_timesheet_id,
+        'contract_week_id', resolved.resolved_contract_week_id,
+        'row_signature', MD5(CONCAT_WS('|', COALESCE(resolved.resolved_timesheet_id::text, ''), COALESCE(resolved.resolved_contract_week_id::text, ''), COALESCE(resolved.timesheet_updated_at::text, ''), COALESCE(resolved.contract_week_updated_at::text, ''), COALESCE(resolved.tsfin_updated_at::text, ''), 'compare_import')),
+        'row', JSONB_BUILD_OBJECT(
+          'row_key', CASE WHEN resolved.resolved_timesheet_id IS NOT NULL THEN 'timesheet:' || resolved.resolved_timesheet_id::text ELSE 'contract_week:' || resolved.resolved_contract_week_id::text END,
+          'timesheet_id', resolved.resolved_timesheet_id,
+          'current_timesheet_id', resolved.resolved_timesheet_id,
+          'requested_timesheet_id', resolved.resolved_timesheet_id,
+          'expected_timesheet_id', resolved.resolved_timesheet_id,
+          'contract_week_id', resolved.resolved_contract_week_id,
+          'contract_id', resolved.resolved_contract_id,
+          'candidate_id', resolved.candidate_id,
+          'candidate_name', resolved.candidate_name,
+          'client_id', resolved.client_id,
+          'client_name', resolved.client_name,
+          'week_ending_date', resolved.week_ending_date,
+          'route_family', resolved.route_family
+        ),
+        'data_row', JSONB_BUILD_OBJECT(
+          'row_key', CASE WHEN resolved.resolved_timesheet_id IS NOT NULL THEN 'timesheet:' || resolved.resolved_timesheet_id::text ELSE 'contract_week:' || resolved.resolved_contract_week_id::text END,
+          'timesheet_id', resolved.resolved_timesheet_id,
+          'current_timesheet_id', resolved.resolved_timesheet_id,
+          'requested_timesheet_id', resolved.resolved_timesheet_id,
+          'expected_timesheet_id', resolved.resolved_timesheet_id,
+          'contract_week_id', resolved.resolved_contract_week_id,
+          'contract_id', resolved.resolved_contract_id,
+          'candidate_id', resolved.candidate_id,
+          'candidate_name', resolved.candidate_name,
+          'client_id', resolved.client_id,
+          'client_name', resolved.client_name,
+          'week_ending_date', resolved.week_ending_date,
+          'route_family', resolved.route_family
+        ),
+        'row_patch', JSONB_BUILD_OBJECT(),
+        'action_flags', JSONB_BUILD_OBJECT(),
+        'compare', JSONB_BUILD_OBJECT(
+          'source_rows', CASE WHEN v_include_import_source_rows THEN COALESCE(resolved.external_source_rows_json, '[]'::jsonb) ELSE '[]'::jsonb END,
+          'external_source_rows_json', CASE WHEN v_include_import_source_rows THEN COALESCE(resolved.external_source_rows_json, '[]'::jsonb) ELSE '[]'::jsonb END,
+          'include_import_source_rows', v_include_import_source_rows
+        ),
+        'details', JSONB_BUILD_OBJECT(
+          'source_rows', CASE WHEN v_include_import_source_rows THEN COALESCE(resolved.external_source_rows_json, '[]'::jsonb) ELSE '[]'::jsonb END,
+          'external_source_rows_json', CASE WHEN v_include_import_source_rows THEN COALESCE(resolved.external_source_rows_json, '[]'::jsonb) ELSE '[]'::jsonb END,
+          'evidence', '[]'::jsonb
+        ),
+        'left_pane', JSONB_BUILD_OBJECT('source_items', CASE WHEN v_include_import_source_rows THEN COALESCE(resolved.external_source_rows_json, '[]'::jsonb) ELSE '[]'::jsonb END, 'evidence', '[]'::jsonb),
+        'evidence', '[]'::jsonb,
+        'evidence_meta', JSONB_BUILD_OBJECT('evidence_loaded', FALSE),
+        'cache_invalidation_hints', JSONB_BUILD_OBJECT(),
+        'count_deltas', JSONB_BUILD_OBJECT(),
+        'filters', v_filters
+      )
+      INTO v_out
+    FROM resolved
+    WHERE resolved.resolved_timesheet_id IS NOT NULL OR resolved.resolved_contract_week_id IS NOT NULL;
+
+    IF v_out IS NULL THEN
+      RETURN JSONB_BUILD_OBJECT(
+        'ok', FALSE,
+        'context_kind', 'bulk_process_row_context',
+        'context_profile', 'compare_import',
+        'profile', 'compare_import',
+        'soft_failure', TRUE,
+        'context_degraded', TRUE,
+        'degraded_reason', 'ROW_NOT_FOUND',
+        'header_loaded', FALSE,
+        'editor_loaded', FALSE,
+        'evidence_loaded', FALSE,
+        'compare_loaded', FALSE,
+        'full_loaded', FALSE,
+        'header_only', FALSE,
+        'schedule_pending', TRUE,
+        'schedule_authoritative', FALSE,
+        'loaded_layers', '[]'::jsonb,
+        'error', 'ROW_NOT_FOUND',
+        'message', 'No bulk process compare/import context was found for the supplied identity',
+        'filters', v_filters
+      );
+    END IF;
+
+    RETURN v_out;
   END IF;
 
   WITH decision_row AS (
@@ -3837,6 +6357,29 @@ BEGIN
     INTO v_out
   FROM final_payload;
 
+  IF v_out IS NOT NULL THEN
+    v_out := v_out || JSONB_BUILD_OBJECT(
+      'header_loaded', TRUE,
+      'header_only', FALSE,
+      'editor_loaded', TRUE,
+      'evidence_loaded', COALESCE(v_include_evidence, FALSE),
+      'compare_loaded', COALESCE(v_include_compare, FALSE),
+      'full_loaded', (v_profile = 'full'),
+      'schedule_pending', FALSE,
+      'schedule_authoritative', TRUE,
+      'soft_failure', FALSE,
+      'context_degraded', FALSE,
+      'degraded_reason', NULL::text,
+      'loaded_layers', CASE
+        WHEN v_profile = 'full' THEN JSONB_BUILD_ARRAY('header', 'editor', 'evidence', 'compare_import', 'full')
+        WHEN COALESCE(v_include_evidence, FALSE) = TRUE AND COALESCE(v_include_compare, FALSE) = TRUE THEN JSONB_BUILD_ARRAY('header', 'editor', 'evidence', 'compare_import')
+        WHEN COALESCE(v_include_evidence, FALSE) = TRUE THEN JSONB_BUILD_ARRAY('header', 'editor', 'evidence')
+        WHEN COALESCE(v_include_compare, FALSE) = TRUE THEN JSONB_BUILD_ARRAY('header', 'editor', 'compare_import')
+        ELSE JSONB_BUILD_ARRAY('header', 'editor')
+      END
+    );
+  END IF;
+
   IF v_out IS NOT NULL AND COALESCE(v_include_evidence, FALSE) = TRUE THEN
     SELECT
       (
@@ -4022,16 +6565,26 @@ BEGIN
   RETURN COALESCE(v_out, JSONB_BUILD_OBJECT(
     'ok', FALSE,
     'context_kind', 'bulk_process_row_context',
+    'context_profile', v_profile,
+    'profile', v_profile,
+    'soft_failure', TRUE,
+    'context_degraded', TRUE,
+    'degraded_reason', 'ROW_NOT_FOUND',
+    'header_loaded', FALSE,
+    'header_only', FALSE,
+    'editor_loaded', FALSE,
+    'evidence_loaded', FALSE,
+    'compare_loaded', FALSE,
+    'full_loaded', FALSE,
+    'schedule_pending', TRUE,
+    'schedule_authoritative', FALSE,
+    'loaded_layers', '[]'::jsonb,
     'error', 'ROW_NOT_FOUND',
     'message', 'No bulk process row context was found for the supplied identity',
     'filters', v_filters
   ));
 END;
 $function$;
-
-
-
-
 
 CREATE OR REPLACE FUNCTION public.bulk_authorise_row_context_v1(p_filters jsonb DEFAULT '{}'::jsonb)
  RETURNS jsonb
@@ -4055,24 +6608,52 @@ DECLARE
   v_header_row_json jsonb := NULL;
   v_uuid_re text := '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$';
   v_out jsonb;
+  v_editor_layer jsonb := NULL;
+  v_evidence_layer jsonb := NULL;
+  v_compare_layer jsonb := NULL;
+  v_layer_errors jsonb := '[]'::jsonb;
+  v_layer_names jsonb := '[]'::jsonb;
 BEGIN
   v_has_identity := (
     NULLIF(BTRIM(COALESCE(v_filters->>'row_key', v_filters->>'rowKey', '')), '') IS NOT NULL
     OR NULLIF(BTRIM(COALESCE(v_filters->>'timesheet_id', v_filters->>'timesheetId', '')), '') IS NOT NULL
     OR NULLIF(BTRIM(COALESCE(v_filters->>'current_timesheet_id', v_filters->>'currentTimesheetId', '')), '') IS NOT NULL
     OR NULLIF(BTRIM(COALESCE(v_filters->>'requested_timesheet_id', v_filters->>'requestedTimesheetId', '')), '') IS NOT NULL
+    OR NULLIF(BTRIM(COALESCE(v_filters->>'expected_timesheet_id', v_filters->>'expectedTimesheetId', '')), '') IS NOT NULL
     OR NULLIF(BTRIM(COALESCE(v_filters->>'contract_week_id', v_filters->>'contractWeekId', '')), '') IS NOT NULL
     OR NULLIF(BTRIM(COALESCE(v_filters->>'week_id', v_filters->>'weekId', '')), '') IS NOT NULL
     OR NULLIF(BTRIM(COALESCE(v_filters->>'id', '')), '') IS NOT NULL
     OR (v_filters ? 'row_keys' AND jsonb_typeof(v_filters->'row_keys') = 'array' AND jsonb_array_length(v_filters->'row_keys') > 0)
     OR (v_filters ? 'timesheet_ids' AND jsonb_typeof(v_filters->'timesheet_ids') = 'array' AND jsonb_array_length(v_filters->'timesheet_ids') > 0)
     OR (v_filters ? 'contract_week_ids' AND jsonb_typeof(v_filters->'contract_week_ids') = 'array' AND jsonb_array_length(v_filters->'contract_week_ids') > 0)
+    OR NULLIF(BTRIM(COALESCE(v_filters->>'row_keys', v_filters->>'rowKeys', '')), '') IS NOT NULL
+    OR NULLIF(BTRIM(COALESCE(v_filters->>'timesheet_ids', v_filters->>'timesheetIds', '')), '') IS NOT NULL
+    OR NULLIF(BTRIM(COALESCE(v_filters->>'contract_week_ids', v_filters->>'contractWeekIds', '')), '') IS NOT NULL
+    OR (v_filters ? 'rowKeys' AND jsonb_typeof(v_filters->'rowKeys') = 'array' AND jsonb_array_length(v_filters->'rowKeys') > 0)
+    OR (v_filters ? 'timesheetIds' AND jsonb_typeof(v_filters->'timesheetIds') = 'array' AND jsonb_array_length(v_filters->'timesheetIds') > 0)
+    OR (v_filters ? 'contractWeekIds' AND jsonb_typeof(v_filters->'contractWeekIds') = 'array' AND jsonb_array_length(v_filters->'contractWeekIds') > 0)
+    OR (v_filters ? 'ids' AND jsonb_typeof(v_filters->'ids') = 'array' AND jsonb_array_length(v_filters->'ids') > 0)
+    OR NULLIF(BTRIM(COALESCE(v_filters->>'ids', '')), '') IS NOT NULL
   );
 
   IF v_has_identity = FALSE THEN
     RETURN JSONB_BUILD_OBJECT(
       'ok', FALSE,
       'context_kind', 'bulk_authorise_row_context',
+      'context_profile', 'status_header',
+      'profile', 'status_header',
+      'soft_failure', TRUE,
+      'context_degraded', TRUE,
+      'degraded_reason', 'ROW_CONTEXT_IDENTITY_REQUIRED',
+      'header_loaded', FALSE,
+      'header_only', FALSE,
+      'editor_loaded', FALSE,
+      'evidence_loaded', FALSE,
+      'compare_loaded', FALSE,
+      'full_loaded', FALSE,
+      'schedule_pending', TRUE,
+      'schedule_authoritative', FALSE,
+      'loaded_layers', '[]'::jsonb,
       'error', 'ROW_CONTEXT_IDENTITY_REQUIRED',
       'message', 'bulk_authorise_row_context_v1 requires row_key, timesheet_id, or contract_week_id.',
       'filters', v_filters
@@ -4080,9 +6661,94 @@ BEGIN
   END IF;
 
   v_row_key := NULLIF(BTRIM(COALESCE(v_filters->>'row_key', v_filters->>'rowKey', '')), '');
-  v_timesheet_id_text := NULLIF(BTRIM(COALESCE(v_filters->>'timesheet_id', v_filters->>'timesheetId', v_filters->>'current_timesheet_id', v_filters->>'currentTimesheetId', v_filters->>'requested_timesheet_id', v_filters->>'requestedTimesheetId', '')), '');
+  v_timesheet_id_text := NULLIF(BTRIM(COALESCE(v_filters->>'timesheet_id', v_filters->>'timesheetId', v_filters->>'current_timesheet_id', v_filters->>'currentTimesheetId', v_filters->>'requested_timesheet_id', v_filters->>'requestedTimesheetId', v_filters->>'expected_timesheet_id', v_filters->>'expectedTimesheetId', '')), '');
   v_contract_week_id_text := NULLIF(BTRIM(COALESCE(v_filters->>'contract_week_id', v_filters->>'contractWeekId', v_filters->>'week_id', v_filters->>'weekId', '')), '');
   v_id_text := NULLIF(BTRIM(COALESCE(v_filters->>'id', '')), '');
+
+  IF v_row_key IS NULL AND v_filters ? 'row_keys' AND jsonb_typeof(v_filters->'row_keys') = 'array' THEN
+    SELECT NULLIF(BTRIM(row_key_values.value), '')
+      INTO v_row_key
+    FROM jsonb_array_elements_text(v_filters->'row_keys') WITH ORDINALITY AS row_key_values(value, ordinal_position)
+    WHERE NULLIF(BTRIM(row_key_values.value), '') IS NOT NULL
+    ORDER BY row_key_values.ordinal_position ASC
+    LIMIT 1;
+  END IF;
+
+  IF v_row_key IS NULL AND v_filters ? 'rowKeys' AND jsonb_typeof(v_filters->'rowKeys') = 'array' THEN
+    SELECT NULLIF(BTRIM(row_key_values.value), '')
+      INTO v_row_key
+    FROM jsonb_array_elements_text(v_filters->'rowKeys') WITH ORDINALITY AS row_key_values(value, ordinal_position)
+    WHERE NULLIF(BTRIM(row_key_values.value), '') IS NOT NULL
+    ORDER BY row_key_values.ordinal_position ASC
+    LIMIT 1;
+  END IF;
+
+  IF v_row_key IS NULL AND NULLIF(BTRIM(COALESCE(v_filters->>'row_keys', v_filters->>'rowKeys', '')), '') IS NOT NULL THEN
+    v_row_key := NULLIF(BTRIM(SPLIT_PART(COALESCE(v_filters->>'row_keys', v_filters->>'rowKeys'), ',', 1)), '');
+  END IF;
+
+  IF v_timesheet_id_text IS NULL AND v_filters ? 'timesheet_ids' AND jsonb_typeof(v_filters->'timesheet_ids') = 'array' THEN
+    SELECT NULLIF(BTRIM(timesheet_id_values.value), '')
+      INTO v_timesheet_id_text
+    FROM jsonb_array_elements_text(v_filters->'timesheet_ids') WITH ORDINALITY AS timesheet_id_values(value, ordinal_position)
+    WHERE timesheet_id_values.value ~* v_uuid_re
+    ORDER BY timesheet_id_values.ordinal_position ASC
+    LIMIT 1;
+  END IF;
+
+  IF v_timesheet_id_text IS NULL AND v_filters ? 'timesheetIds' AND jsonb_typeof(v_filters->'timesheetIds') = 'array' THEN
+    SELECT NULLIF(BTRIM(timesheet_id_values.value), '')
+      INTO v_timesheet_id_text
+    FROM jsonb_array_elements_text(v_filters->'timesheetIds') WITH ORDINALITY AS timesheet_id_values(value, ordinal_position)
+    WHERE timesheet_id_values.value ~* v_uuid_re
+    ORDER BY timesheet_id_values.ordinal_position ASC
+    LIMIT 1;
+  END IF;
+
+  IF v_timesheet_id_text IS NULL
+     AND NULLIF(BTRIM(COALESCE(v_filters->>'timesheet_ids', v_filters->>'timesheetIds', '')), '') IS NOT NULL
+     AND NULLIF(BTRIM(SPLIT_PART(COALESCE(v_filters->>'timesheet_ids', v_filters->>'timesheetIds'), ',', 1)), '') ~* v_uuid_re THEN
+    v_timesheet_id_text := NULLIF(BTRIM(SPLIT_PART(COALESCE(v_filters->>'timesheet_ids', v_filters->>'timesheetIds'), ',', 1)), '');
+  END IF;
+
+  IF v_contract_week_id_text IS NULL AND v_filters ? 'contract_week_ids' AND jsonb_typeof(v_filters->'contract_week_ids') = 'array' THEN
+    SELECT NULLIF(BTRIM(contract_week_id_values.value), '')
+      INTO v_contract_week_id_text
+    FROM jsonb_array_elements_text(v_filters->'contract_week_ids') WITH ORDINALITY AS contract_week_id_values(value, ordinal_position)
+    WHERE contract_week_id_values.value ~* v_uuid_re
+    ORDER BY contract_week_id_values.ordinal_position ASC
+    LIMIT 1;
+  END IF;
+
+  IF v_contract_week_id_text IS NULL AND v_filters ? 'contractWeekIds' AND jsonb_typeof(v_filters->'contractWeekIds') = 'array' THEN
+    SELECT NULLIF(BTRIM(contract_week_id_values.value), '')
+      INTO v_contract_week_id_text
+    FROM jsonb_array_elements_text(v_filters->'contractWeekIds') WITH ORDINALITY AS contract_week_id_values(value, ordinal_position)
+    WHERE contract_week_id_values.value ~* v_uuid_re
+    ORDER BY contract_week_id_values.ordinal_position ASC
+    LIMIT 1;
+  END IF;
+
+  IF v_contract_week_id_text IS NULL
+     AND NULLIF(BTRIM(COALESCE(v_filters->>'contract_week_ids', v_filters->>'contractWeekIds', '')), '') IS NOT NULL
+     AND NULLIF(BTRIM(SPLIT_PART(COALESCE(v_filters->>'contract_week_ids', v_filters->>'contractWeekIds'), ',', 1)), '') ~* v_uuid_re THEN
+    v_contract_week_id_text := NULLIF(BTRIM(SPLIT_PART(COALESCE(v_filters->>'contract_week_ids', v_filters->>'contractWeekIds'), ',', 1)), '');
+  END IF;
+
+  IF v_id_text IS NULL AND v_filters ? 'ids' AND jsonb_typeof(v_filters->'ids') = 'array' THEN
+    SELECT NULLIF(BTRIM(id_values.value), '')
+      INTO v_id_text
+    FROM jsonb_array_elements_text(v_filters->'ids') WITH ORDINALITY AS id_values(value, ordinal_position)
+    WHERE id_values.value ~* v_uuid_re
+    ORDER BY id_values.ordinal_position ASC
+    LIMIT 1;
+  END IF;
+
+  IF v_id_text IS NULL
+     AND NULLIF(BTRIM(COALESCE(v_filters->>'ids', '')), '') IS NOT NULL
+     AND NULLIF(BTRIM(SPLIT_PART(v_filters->>'ids', ',', 1)), '') ~* v_uuid_re THEN
+    v_id_text := NULLIF(BTRIM(SPLIT_PART(v_filters->>'ids', ',', 1)), '');
+  END IF;
 
   IF v_row_key IS NOT NULL AND v_timesheet_id_text IS NULL AND v_row_key LIKE 'timesheet:%' THEN
     v_timesheet_id_text := NULLIF(BTRIM(SUBSTRING(v_row_key FROM 11)), '');
@@ -4133,19 +6799,16 @@ BEGIN
   v_profile := LOWER(NULLIF(BTRIM(COALESCE(v_filters->>'profile', v_filters->>'context_profile', v_filters->>'contextProfile', '')), ''));
 
   IF v_profile IS NULL THEN
-    IF v_base_only THEN
-      v_profile := 'status_header';
-    ELSE
-      v_profile := 'active_row_visible';
-    END IF;
+    v_profile := 'status_header';
   END IF;
 
   IF v_profile NOT IN ('active_row_visible', 'status_header', 'editor', 'evidence', 'compare_import', 'full') THEN
-    v_profile := 'active_row_visible';
+    v_profile := 'status_header';
   END IF;
 
   v_include_evidence := CASE
-    WHEN v_profile IN ('active_row_visible', 'evidence', 'full') THEN TRUE
+    WHEN v_profile = 'evidence' THEN TRUE
+    WHEN v_profile = 'full' THEN TRUE
     WHEN LOWER(NULLIF(BTRIM(COALESCE(v_filters->>'include_evidence', v_filters->>'includeEvidence', v_filters->>'load_evidence', v_filters->>'loadEvidence', '')), '')) IN ('true', '1', 'yes', 'y', 'on') THEN TRUE
     ELSE FALSE
   END;
@@ -4162,51 +6825,1588 @@ BEGIN
     ELSE FALSE
   END;
 
-  IF v_profile = 'status_header' THEN
-    SELECT patch_result.row_json
-      INTO v_header_row_json
-    FROM public.bulk_timesheet_row_patch_v1(
+
+  IF v_profile = 'active_row_visible' AND (
+    COALESCE(v_include_evidence, FALSE) = TRUE
+    OR COALESCE(v_include_compare, FALSE) = TRUE
+    OR COALESCE(v_include_import_source_rows, FALSE) = TRUE
+  ) THEN
+    v_layer_errors := '[]'::jsonb;
+    v_layer_names := JSONB_BUILD_ARRAY('header', 'editor');
+
+    v_editor_layer := public.bulk_authorise_row_context_v1(
       v_decision_filters
       || JSONB_BUILD_OBJECT(
-           'dataset_mode', 'authorise',
-           'projection', 'active_row_header',
-           'profile', 'status_header'
+           'profile', 'editor',
+           'context_profile', 'editor',
+           'include_evidence', FALSE,
+           'include_compare', FALSE,
+           'include_import_source_rows', FALSE
          )
-    ) AS patch_result(row_json)
-    ORDER BY patch_result.row_json->>'row_key'
-    LIMIT 1;
+    );
 
-    IF v_header_row_json IS NULL THEN
-      RETURN JSONB_BUILD_OBJECT(
+    IF COALESCE(LOWER(NULLIF(BTRIM(COALESCE(v_editor_layer->>'ok', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE) = FALSE THEN
+      RETURN COALESCE(v_editor_layer, JSONB_BUILD_OBJECT()) || JSONB_BUILD_OBJECT(
         'ok', FALSE,
         'context_kind', 'bulk_authorise_row_context',
-        'context_profile', v_profile,
-        'error', 'ROW_NOT_FOUND',
-        'message', 'No bulk authorise status-header context was found for the supplied identity',
+        'context_profile', 'active_row_visible',
+        'profile', 'active_row_visible',
+        'soft_failure', TRUE,
+        'context_degraded', TRUE,
+        'degraded_reason', COALESCE(v_editor_layer->>'degraded_reason', v_editor_layer->>'error', 'EDITOR_LAYER_FAILED'),
+        'header_loaded', COALESCE(LOWER(NULLIF(BTRIM(COALESCE(v_editor_layer->>'header_loaded', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE),
+        'editor_loaded', FALSE,
+        'evidence_loaded', FALSE,
+        'compare_loaded', FALSE,
+        'full_loaded', FALSE,
+        'loaded_layers', COALESCE(v_editor_layer->'loaded_layers', '[]'::jsonb),
         'filters', v_filters
       );
     END IF;
 
-    RETURN JSONB_BUILD_OBJECT(
-      'ok', TRUE,
+    v_out := v_editor_layer || JSONB_BUILD_OBJECT(
       'context_kind', 'bulk_authorise_row_context',
-      'context_profile', v_profile,
-      'profile', v_profile,
-      'row_key', v_header_row_json->>'row_key',
-      'timesheet_id', v_header_row_json->>'timesheet_id',
-      'current_timesheet_id', v_header_row_json->>'current_timesheet_id',
-      'requested_timesheet_id', v_header_row_json->>'requested_timesheet_id',
-      'expected_timesheet_id', v_header_row_json->>'expected_timesheet_id',
-      'contract_week_id', v_header_row_json->>'contract_week_id',
-      'row_signature', v_header_row_json->>'row_signature',
-      'data_row', v_header_row_json,
-      'row', v_header_row_json,
-      'row_patch', COALESCE(v_header_row_json->'row_patch', JSONB_BUILD_OBJECT()),
-      'action_flags', COALESCE(v_header_row_json->'action_flags', JSONB_BUILD_OBJECT()),
-      'cache_invalidation_hints', COALESCE(v_header_row_json->'cache_invalidation_hints', JSONB_BUILD_OBJECT()),
-      'count_deltas', COALESCE(v_header_row_json->'count_deltas', JSONB_BUILD_OBJECT()),
+      'context_profile', 'active_row_visible',
+      'profile', 'active_row_visible',
+      'context_type', 'bulk_authorise',
+      'header_loaded', TRUE,
+      'header_only', FALSE,
+      'editor_loaded', TRUE,
+      'evidence_loaded', FALSE,
+      'compare_loaded', FALSE,
+      'full_loaded', FALSE,
+      'schedule_pending', FALSE,
+      'schedule_authoritative', TRUE,
+      'soft_failure', FALSE,
+      'context_degraded', FALSE,
+      'degraded_reason', NULL::text,
+      'loaded_layers', v_layer_names
+    );
+
+    IF COALESCE(v_include_evidence, FALSE) = TRUE THEN
+      v_evidence_layer := public.bulk_authorise_row_context_v1(
+        v_decision_filters
+        || JSONB_BUILD_OBJECT(
+             'profile', 'evidence',
+             'context_profile', 'evidence',
+             'include_evidence', TRUE,
+             'include_compare', FALSE,
+             'include_import_source_rows', FALSE
+           )
+      );
+
+      IF COALESCE(LOWER(NULLIF(BTRIM(COALESCE(v_evidence_layer->>'ok', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE) = TRUE THEN
+        v_layer_names := v_layer_names || JSONB_BUILD_ARRAY('evidence');
+        v_out := v_out
+          || JSONB_BUILD_OBJECT(
+            'evidence_loaded', TRUE,
+            'evidence', COALESCE(v_evidence_layer->'evidence', '[]'::jsonb),
+            'attached_evidence', COALESCE(v_evidence_layer->'attached_evidence', v_evidence_layer->'evidence', '[]'::jsonb),
+            'attachedRows', COALESCE(v_evidence_layer->'attachedRows', v_evidence_layer->'attached_evidence', v_evidence_layer->'evidence', '[]'::jsonb),
+            'primary_artifact', COALESCE(v_evidence_layer->'primary_artifact', v_out->'primary_artifact', v_out#>'{details,primary_artifact}', JSONB_BUILD_OBJECT()),
+            'preview_storage_key', COALESCE(NULLIF(BTRIM(COALESCE(v_evidence_layer->>'preview_storage_key', '')), ''), NULLIF(BTRIM(COALESCE(v_evidence_layer->>'primary_artifact_storage_key', '')), ''), NULLIF(BTRIM(COALESCE(v_out->>'preview_storage_key', '')), '')),
+            'primary_artifact_storage_key', COALESCE(NULLIF(BTRIM(COALESCE(v_evidence_layer->>'primary_artifact_storage_key', '')), ''), NULLIF(BTRIM(COALESCE(v_evidence_layer->>'preview_storage_key', '')), ''), NULLIF(BTRIM(COALESCE(v_out->>'primary_artifact_storage_key', '')), '')),
+            'primary_artifact_preview_mode', COALESCE(NULLIF(BTRIM(COALESCE(v_evidence_layer->>'primary_artifact_preview_mode', '')), ''), NULLIF(BTRIM(COALESCE(v_out->>'primary_artifact_preview_mode', '')), '')),
+            'has_any_evidence', COALESCE(LOWER(NULLIF(BTRIM(COALESCE(v_evidence_layer->>'has_any_evidence', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE),
+            'attached_evidence_count', CASE WHEN COALESCE(v_evidence_layer->>'attached_evidence_count', '') ~ '^[0-9]+$' THEN (v_evidence_layer->>'attached_evidence_count')::integer ELSE COALESCE(JSONB_ARRAY_LENGTH(COALESCE(v_evidence_layer->'evidence', '[]'::jsonb)), 0) END,
+            'evidence_count', CASE WHEN COALESCE(v_evidence_layer->>'evidence_count', '') ~ '^[0-9]+$' THEN (v_evidence_layer->>'evidence_count')::integer ELSE COALESCE(JSONB_ARRAY_LENGTH(COALESCE(v_evidence_layer->'evidence', '[]'::jsonb)), 0) END,
+            'evidence_badges', COALESCE(v_evidence_layer->'evidence_badges', v_evidence_layer#>'{evidence_meta,evidence_badges}', '[]'::jsonb),
+            'evidence_meta', COALESCE(v_evidence_layer->'evidence_meta', JSONB_BUILD_OBJECT('evidence_loaded', TRUE)) || JSONB_BUILD_OBJECT('evidence_loaded', TRUE),
+            'row', COALESCE(v_out->'row', JSONB_BUILD_OBJECT()) || COALESCE(v_evidence_layer->'row', JSONB_BUILD_OBJECT()),
+            'data_row', COALESCE(v_out->'data_row', v_out->'row', JSONB_BUILD_OBJECT()) || COALESCE(v_evidence_layer->'data_row', v_evidence_layer->'row', JSONB_BUILD_OBJECT()),
+            'row_patch', COALESCE(v_out->'row_patch', JSONB_BUILD_OBJECT()) || COALESCE(v_evidence_layer->'row_patch', JSONB_BUILD_OBJECT()),
+            'action_flags', COALESCE(v_out->'action_flags', JSONB_BUILD_OBJECT()) || COALESCE(v_evidence_layer->'action_flags', JSONB_BUILD_OBJECT()),
+            'details', COALESCE(v_out->'details', JSONB_BUILD_OBJECT()) || JSONB_BUILD_OBJECT(
+              'evidence', COALESCE(v_evidence_layer->'evidence', '[]'::jsonb),
+              'evidence_meta', COALESCE(v_evidence_layer->'evidence_meta', JSONB_BUILD_OBJECT('evidence_loaded', TRUE)) || JSONB_BUILD_OBJECT('evidence_loaded', TRUE)
+            ),
+            'left_pane', COALESCE(v_out->'left_pane', JSONB_BUILD_OBJECT()) || JSONB_BUILD_OBJECT(
+              'evidence', COALESCE(v_evidence_layer->'evidence', '[]'::jsonb),
+              'evidence_meta', COALESCE(v_evidence_layer->'evidence_meta', JSONB_BUILD_OBJECT('evidence_loaded', TRUE)) || JSONB_BUILD_OBJECT('evidence_loaded', TRUE)
+            )
+          );
+      ELSE
+        v_layer_errors := v_layer_errors || JSONB_BUILD_ARRAY(COALESCE(v_evidence_layer->>'degraded_reason', v_evidence_layer->>'error', 'EVIDENCE_LAYER_FAILED'));
+        v_out := v_out || JSONB_BUILD_OBJECT(
+          'evidence_loaded', FALSE,
+          'soft_failure', TRUE,
+          'context_degraded', TRUE,
+          'degraded_reason', 'EVIDENCE_LAYER_FAILED',
+          'evidence_layer_failure', COALESCE(v_evidence_layer, JSONB_BUILD_OBJECT())
+        );
+      END IF;
+    END IF;
+
+    IF COALESCE(v_include_compare, FALSE) = TRUE OR COALESCE(v_include_import_source_rows, FALSE) = TRUE THEN
+      v_compare_layer := public.bulk_authorise_row_context_v1(
+        v_decision_filters
+        || JSONB_BUILD_OBJECT(
+             'profile', 'compare_import',
+             'context_profile', 'compare_import',
+             'include_evidence', FALSE,
+             'include_compare', COALESCE(v_include_compare, FALSE),
+             'include_import_source_rows', COALESCE(v_include_import_source_rows, FALSE)
+           )
+      );
+
+      IF COALESCE(LOWER(NULLIF(BTRIM(COALESCE(v_compare_layer->>'ok', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE) = TRUE THEN
+        v_layer_names := v_layer_names || JSONB_BUILD_ARRAY('compare_import');
+        v_out := v_out || JSONB_BUILD_OBJECT(
+          'compare_loaded', TRUE,
+          'compare', COALESCE(v_compare_layer->'compare', JSONB_BUILD_OBJECT()),
+          'compare_payload', COALESCE(v_compare_layer->'compare_payload', v_compare_layer->'compare', JSONB_BUILD_OBJECT()),
+          'details', COALESCE(v_out->'details', JSONB_BUILD_OBJECT()) || JSONB_BUILD_OBJECT(
+            'source_rows', COALESCE(v_compare_layer#>'{details,source_rows}', v_compare_layer#>'{compare,source_rows}', '[]'::jsonb),
+            'external_source_rows_json', COALESCE(v_compare_layer#>'{details,external_source_rows_json}', v_compare_layer#>'{compare,external_source_rows_json}', '[]'::jsonb)
+          ),
+          'left_pane', COALESCE(v_out->'left_pane', JSONB_BUILD_OBJECT()) || JSONB_BUILD_OBJECT(
+            'source_items', COALESCE(v_compare_layer#>'{left_pane,source_items}', v_compare_layer#>'{details,source_rows}', v_compare_layer#>'{compare,source_rows}', '[]'::jsonb)
+          )
+        );
+      ELSE
+        v_layer_errors := v_layer_errors || JSONB_BUILD_ARRAY(COALESCE(v_compare_layer->>'degraded_reason', v_compare_layer->>'error', 'COMPARE_IMPORT_LAYER_FAILED'));
+        v_out := v_out || JSONB_BUILD_OBJECT(
+          'compare_loaded', FALSE,
+          'soft_failure', TRUE,
+          'context_degraded', TRUE,
+          'degraded_reason', CASE WHEN JSONB_ARRAY_LENGTH(v_layer_errors) > 0 THEN 'LAYER_FAILURE' ELSE 'COMPARE_IMPORT_LAYER_FAILED' END,
+          'compare_import_layer_failure', COALESCE(v_compare_layer, JSONB_BUILD_OBJECT())
+        );
+      END IF;
+    END IF;
+
+    v_out := v_out || JSONB_BUILD_OBJECT(
+      'context_kind', 'bulk_authorise_row_context',
+      'context_profile', 'active_row_visible',
+      'profile', 'active_row_visible',
+      'context_type', 'bulk_authorise',
+      'header_loaded', TRUE,
+      'header_only', FALSE,
+      'editor_loaded', TRUE,
+      'full_loaded', FALSE,
+      'schedule_pending', FALSE,
+      'schedule_authoritative', TRUE,
+      'loaded_layers', v_layer_names,
+      'layer_errors', v_layer_errors,
       'filters', v_filters
     );
+
+    RETURN v_out;
+  END IF;
+
+
+  IF v_profile IN ('status_header', 'editor') OR (v_profile = 'active_row_visible' AND COALESCE(v_include_evidence, FALSE) = FALSE) THEN
+    WITH input_ids AS (
+      SELECT
+        CASE WHEN v_timesheet_id_text IS NOT NULL AND v_timesheet_id_text ~* v_uuid_re THEN v_timesheet_id_text::uuid ELSE NULL::uuid END AS input_timesheet_id,
+        CASE WHEN v_contract_week_id_text IS NOT NULL AND v_contract_week_id_text ~* v_uuid_re THEN v_contract_week_id_text::uuid ELSE NULL::uuid END AS input_contract_week_id
+    ),
+    summary_row AS (
+      SELECT summary_source.*
+      FROM public.timesheet_summary_lightweight_rows_v1(
+        v_decision_filters || JSONB_BUILD_OBJECT('disable_paging', TRUE, 'limit', 25)
+      ) AS summary_source
+      CROSS JOIN input_ids AS summary_ids
+      WHERE (
+          summary_ids.input_timesheet_id IS NULL
+          OR summary_source.timesheet_id = summary_ids.input_timesheet_id
+        )
+        AND (
+          summary_ids.input_contract_week_id IS NULL
+          OR summary_source.contract_week_id = summary_ids.input_contract_week_id
+        )
+      ORDER BY
+        CASE WHEN summary_ids.input_timesheet_id IS NOT NULL AND summary_source.timesheet_id = summary_ids.input_timesheet_id THEN 0 ELSE 1 END,
+        CASE WHEN summary_ids.input_contract_week_id IS NOT NULL AND summary_source.contract_week_id = summary_ids.input_contract_week_id THEN 0 ELSE 1 END,
+        summary_source.timesheet_id NULLS LAST,
+        summary_source.contract_week_id NULLS LAST
+      LIMIT 1
+    ),
+    contract_week_row AS (
+      SELECT cw0.*
+      FROM public.contract_weeks AS cw0
+      CROSS JOIN input_ids AS cw_ids
+      WHERE (
+          cw_ids.input_contract_week_id IS NOT NULL
+          AND cw0.id = cw_ids.input_contract_week_id
+        )
+        OR (
+          cw_ids.input_timesheet_id IS NOT NULL
+          AND cw0.timesheet_id = cw_ids.input_timesheet_id
+        )
+      ORDER BY cw0.updated_at DESC NULLS LAST, cw0.created_at DESC NULLS LAST, cw0.id DESC
+      LIMIT 1
+    ),
+    timesheet_row AS (
+      SELECT ts0.*
+      FROM public.timesheets AS ts0
+      CROSS JOIN input_ids AS ts_ids
+      LEFT JOIN contract_week_row AS cw_for_ts ON TRUE
+      WHERE ts0.is_current = TRUE
+        AND (
+          (ts_ids.input_timesheet_id IS NOT NULL AND ts0.timesheet_id = ts_ids.input_timesheet_id)
+          OR (ts_ids.input_timesheet_id IS NULL AND cw_for_ts.timesheet_id IS NOT NULL AND ts0.timesheet_id = cw_for_ts.timesheet_id)
+        )
+      ORDER BY ts0.version DESC NULLS LAST, ts0.updated_at DESC NULLS LAST, ts0.created_at DESC NULLS LAST
+      LIMIT 1
+    ),
+    tsfin_row AS (
+      SELECT tf0.*
+      FROM public.timesheets_financials AS tf0
+      LEFT JOIN timesheet_row AS ts_for_tf ON TRUE
+      WHERE tf0.is_current = TRUE
+        AND ts_for_tf.timesheet_id IS NOT NULL
+        AND tf0.timesheet_id = ts_for_tf.timesheet_id
+      ORDER BY tf0.created_at DESC NULLS LAST, tf0.updated_at DESC NULLS LAST, tf0.id DESC
+      LIMIT 1
+    ),
+    contract_row AS (
+      SELECT ct0.*
+      FROM public.contracts AS ct0
+      LEFT JOIN timesheet_row AS ts_for_ct ON TRUE
+      LEFT JOIN contract_week_row AS cw_for_ct ON TRUE
+      WHERE ct0.id = COALESCE(ts_for_ct.contract_id, cw_for_ct.contract_id)
+      ORDER BY ct0.updated_at DESC NULLS LAST, ct0.created_at DESC NULLS LAST, ct0.id DESC
+      LIMIT 1
+    ),
+    candidate_row AS (
+      SELECT cand0.*
+      FROM public.candidates AS cand0
+      LEFT JOIN contract_row AS ct_for_cand ON TRUE
+      WHERE cand0.id = ct_for_cand.candidate_id
+      LIMIT 1
+    ),
+    client_row AS (
+      SELECT cli0.*
+      FROM public.clients AS cli0
+      LEFT JOIN contract_row AS ct_for_cli ON TRUE
+      WHERE cli0.id = ct_for_cli.client_id
+      LIMIT 1
+    ),
+    validation_rows AS (
+      SELECT tv0.*
+      FROM public.timesheet_validations AS tv0
+      LEFT JOIN timesheet_row AS ts_for_tv ON TRUE
+      WHERE ts_for_tv.timesheet_id IS NOT NULL
+        AND tv0.timesheet_id = ts_for_tv.timesheet_id
+      ORDER BY tv0.validated_at_utc DESC NULLS LAST, tv0.created_at DESC NULLS LAST, tv0.id DESC
+    ),
+    validation_payload AS (
+      SELECT
+        COALESCE(JSONB_AGG(
+          JSONB_BUILD_OBJECT(
+            'id', validation_rows.id,
+            'timesheet_id', validation_rows.timesheet_id,
+            'booking_id', validation_rows.booking_id,
+            'status', validation_rows.status,
+            'reason_code', validation_rows.reason_code,
+            'hr_request_id', validation_rows.hr_request_id,
+            'validated_at_utc', validation_rows.validated_at_utc,
+            'override_requested_at_utc', validation_rows.override_requested_at_utc,
+            'override_requested_by', validation_rows.override_requested_by,
+            'override_confirmed_at_utc', validation_rows.override_confirmed_at_utc,
+            'override_confirmed_by', validation_rows.override_confirmed_by,
+            'override_reason', validation_rows.override_reason,
+            'override_cleared_at_utc', validation_rows.override_cleared_at_utc,
+            'last_source', validation_rows.last_source,
+            'created_at', validation_rows.created_at,
+            'updated_at', validation_rows.updated_at,
+            'hr_request_source', validation_rows.hr_request_source,
+            'hr_request_set_by', validation_rows.hr_request_set_by,
+            'hr_request_set_at_utc', validation_rows.hr_request_set_at_utc,
+            'pre_validated', validation_rows.pre_validated
+          ) ORDER BY validation_rows.validated_at_utc DESC NULLS LAST, validation_rows.created_at DESC NULLS LAST, validation_rows.id DESC
+        ), '[]'::jsonb) AS validations_json,
+        (
+          SELECT JSONB_BUILD_OBJECT(
+            'id', validation_latest.id,
+            'status', validation_latest.status,
+            'reason_code', validation_latest.reason_code,
+            'hr_request_id', validation_latest.hr_request_id,
+            'validated_at_utc', validation_latest.validated_at_utc,
+            'pre_validated', COALESCE(validation_latest.pre_validated, FALSE),
+            'updated_at', validation_latest.updated_at
+          )
+          FROM validation_rows AS validation_latest
+          ORDER BY validation_latest.validated_at_utc DESC NULLS LAST, validation_latest.created_at DESC NULLS LAST, validation_latest.id DESC
+          LIMIT 1
+        ) AS latest_validation_json
+      FROM validation_rows
+    ),
+    core_row AS (
+      SELECT
+        COALESCE(summary_row.timesheet_id, timesheet_row.timesheet_id, contract_week_row.timesheet_id) AS resolved_timesheet_id,
+        COALESCE(summary_row.contract_week_id, contract_week_row.id) AS resolved_contract_week_id,
+        COALESCE(summary_row.contract_id, timesheet_row.contract_id, contract_week_row.contract_id, contract_row.id) AS resolved_contract_id,
+        COALESCE(summary_row.candidate_id, contract_row.candidate_id, candidate_row.id) AS resolved_candidate_id,
+        COALESCE(summary_row.client_id, contract_row.client_id, client_row.id) AS resolved_client_id,
+        COALESCE(NULLIF(BTRIM(summary_row.candidate_name), ''), NULLIF(BTRIM(summary_row.candidate_display_name), ''), NULLIF(BTRIM(candidate_row.display_name), ''), NULLIF(BTRIM(CONCAT_WS(' ', candidate_row.first_name, candidate_row.last_name)), '')) AS candidate_name,
+        COALESCE(NULLIF(BTRIM(summary_row.candidate_display_name), ''), NULLIF(BTRIM(summary_row.candidate_name), ''), NULLIF(BTRIM(candidate_row.display_name), ''), NULLIF(BTRIM(CONCAT_WS(' ', candidate_row.first_name, candidate_row.last_name)), '')) AS candidate_display_name,
+        COALESCE(NULLIF(BTRIM(summary_row.client_name), ''), NULLIF(BTRIM(client_row.name), '')) AS client_name,
+        COALESCE(summary_row.week_ending_date, timesheet_row.week_ending_date, contract_week_row.week_ending_date) AS week_ending_date,
+        COALESCE(summary_row.work_date, timesheet_row.worked_start_iso::date, contract_week_row.week_ending_date) AS work_date,
+        COALESCE(summary_row.booking_id, timesheet_row.booking_id) AS booking_id,
+        COALESCE(summary_row.occupant_key_norm, timesheet_row.occupant_key_norm, tsfin_row.occupant_key_norm) AS occupant_key_norm,
+        COALESCE(summary_row.hospital_norm, timesheet_row.hospital_norm) AS hospital_norm,
+        COALESCE(summary_row.candidate_hint_text, timesheet_row.candidate_hint_text, JSONB_BUILD_OBJECT()) AS candidate_hint_text,
+        COALESCE(summary_row.sheet_scope, timesheet_row.sheet_scope::text) AS sheet_scope,
+        COALESCE(summary_row.submission_mode, timesheet_row.submission_mode::text) AS submission_mode,
+        COALESCE(summary_row.submission_mode_snapshot, contract_week_row.submission_mode_snapshot::text) AS submission_mode_snapshot,
+        COALESCE(summary_row.basis, tsfin_row.basis::text) AS basis,
+        summary_row.route_type AS route_type,
+        summary_row.route_display AS route_display,
+        COALESCE(summary_row.route_family, CASE WHEN COALESCE(timesheet_row.qr_status::text, '') <> '' THEN 'QR' WHEN UPPER(COALESCE(timesheet_row.submission_mode::text, contract_week_row.submission_mode_snapshot::text, '')) = 'ELECTRONIC' THEN 'ELECTRONIC' ELSE 'MANUAL_NON_QR' END) AS route_family,
+        summary_row.route_subfamily AS route_subfamily,
+        summary_row.underlying_channel_family AS underlying_channel_family,
+        COALESCE(summary_row.summary_stage, CASE WHEN timesheet_row.timesheet_id IS NULL THEN 'UNPROCESSED' ELSE 'PROCESSED' END) AS summary_stage,
+        COALESCE(summary_row.tools_stage, CASE WHEN timesheet_row.timesheet_id IS NULL THEN 'UNPROCESSED' ELSE COALESCE(tsfin_row.processing_status::text, timesheet_row.status::text) END) AS tools_stage,
+        COALESCE(summary_row.processing_status, tsfin_row.processing_status::text) AS processing_status,
+        summary_row.processing_status_display AS processing_status_display,
+        COALESCE(summary_row.authorised_at_utc, tsfin_row.authorised_at_utc) AS authorised_at_utc,
+        COALESCE(summary_row.authorised_at_server, timesheet_row.authorised_at_server) AS authorised_at_server,
+        COALESCE(summary_row.processed_at_utc, tsfin_row.processed_at_utc) AS processed_at_utc,
+        COALESCE(summary_row.is_authorised, tsfin_row.authorised_at_utc IS NOT NULL, timesheet_row.authorised_at_server IS NOT NULL, FALSE) AS is_authorised,
+        COALESCE(summary_row.total_hours, tsfin_row.total_hours) AS total_hours,
+        COALESCE(summary_row.total_pay_ex_vat, tsfin_row.total_pay_ex_vat) AS total_pay_ex_vat,
+        COALESCE(summary_row.total_charge_ex_vat, tsfin_row.total_charge_ex_vat) AS total_charge_ex_vat,
+        COALESCE(summary_row.margin_ex_vat, tsfin_row.margin_ex_vat) AS margin_ex_vat,
+        summary_row.net_delta_ex_vat AS net_delta_ex_vat,
+        COALESCE(summary_row.paid_at_utc, tsfin_row.paid_at_utc) AS paid_at_utc,
+        summary_row.pay_icon_code AS pay_icon_code,
+        summary_row.pay_status_code AS pay_status_code,
+        summary_row.pay_paid_at_utc AS pay_paid_at_utc,
+        COALESCE(summary_row.invoice_is_paid, FALSE) AS invoice_is_paid,
+        summary_row.invoice_issue_stage AS invoice_issue_stage,
+        summary_row.invoice_segment_stage AS invoice_segment_stage,
+        COALESCE(summary_row.invoice_segments_total, 0) AS invoice_segments_total,
+        COALESCE(summary_row.invoice_segments_locked, 0) AS invoice_segments_locked,
+        COALESCE(summary_row.invoice_segments_unlocked, 0) AS invoice_segments_unlocked,
+        COALESCE(TO_JSONB(summary_row.issue_codes), '[]'::jsonb) AS issue_codes_json,
+        COALESCE(summary_row.validation_status, validation_payload.latest_validation_json->>'status') AS validation_status,
+        summary_row.validation_summary AS validation_summary,
+        COALESCE(summary_row.hr_crosscheck_status, tsfin_row.hr_crosscheck_status) AS hr_crosscheck_status,
+        COALESCE(TO_JSONB(summary_row.hr_crosscheck_issues), TO_JSONB(tsfin_row.hr_crosscheck_issues), '[]'::jsonb) AS hr_crosscheck_issues_json,
+        COALESCE(summary_row.qr_status, timesheet_row.qr_status::text) AS qr_status,
+        COALESCE(summary_row.is_qr, timesheet_row.qr_status IS NOT NULL, FALSE) AS is_qr,
+        COALESCE(summary_row.is_adjusted, timesheet_row.is_adjustment, contract_week_row.is_adjustment, FALSE) AS is_adjusted,
+        COALESCE(summary_row.needs_attention, FALSE) AS needs_attention,
+        COALESCE(summary_row.has_rate_issue, tsfin_row.has_rate_issue, FALSE) AS has_rate_issue,
+        COALESCE(summary_row.has_pay_channel_issue, tsfin_row.has_pay_channel_issue, FALSE) AS has_pay_channel_issue,
+        COALESCE(summary_row.client_no_timesheet_required, contract_row.no_timesheet_required, FALSE) AS client_no_timesheet_required,
+        COALESCE(summary_row.client_autoprocess_hr, contract_row.autoprocess_hr, FALSE) AS client_autoprocess_hr,
+        COALESCE(summary_row.client_is_nhsp, contract_row.is_nhsp, FALSE) AS client_is_nhsp,
+        COALESCE(summary_row.has_any_evidence, FALSE) AS has_any_evidence,
+        COALESCE(summary_row.attached_evidence_count, 0) AS attached_evidence_count,
+        summary_row.primary_artifact_storage_key AS primary_artifact_storage_key,
+        summary_row.primary_artifact_display_name AS primary_artifact_display_name,
+        summary_row.primary_artifact_preview_mode AS primary_artifact_preview_mode,
+        timesheet_row.updated_at AS timesheet_updated_at,
+        contract_week_row.updated_at AS contract_week_updated_at,
+        tsfin_row.updated_at AS tsfin_updated_at,
+        timesheet_row.version AS timesheet_version,
+        timesheet_row.status AS timesheet_status,
+        timesheet_row.manual_pdf_r2_key AS manual_pdf_r2_key,
+        timesheet_row.qr_r2_key AS qr_r2_key,
+        timesheet_row.manual_pdf_rotation_degrees AS manual_pdf_rotation_degrees,
+        timesheet_row.generated_pdf_at_utc AS generated_pdf_at_utc,
+        timesheet_row.actual_schedule_json AS timesheet_actual_schedule_json,
+        timesheet_row.additional_units_week AS timesheet_additional_units_week,
+        timesheet_row.additional_units_per_day AS timesheet_additional_units_per_day,
+        timesheet_row.sheet_scope AS timesheet_sheet_scope,
+        timesheet_row.worked_start_iso AS timesheet_worked_start_iso,
+        timesheet_row.worked_end_iso AS timesheet_worked_end_iso,
+        timesheet_row.break_start_iso AS timesheet_break_start_iso,
+        timesheet_row.break_end_iso AS timesheet_break_end_iso,
+        timesheet_row.break_minutes AS timesheet_break_minutes,
+        timesheet_row.worked_minutes AS timesheet_worked_minutes,
+        timesheet_row.auth_name AS timesheet_auth_name,
+        timesheet_row.auth_job_title AS timesheet_auth_job_title,
+        timesheet_row.reference_number AS timesheet_reference_number,
+        timesheet_row.reference_set_at AS timesheet_reference_set_at,
+        timesheet_row.created_at AS timesheet_created_at,
+        timesheet_row.is_adjustment AS timesheet_is_adjustment,
+        timesheet_row.parent_timesheet_id AS timesheet_parent_timesheet_id,
+        timesheet_row.adjustment_origin AS timesheet_adjustment_origin,
+        contract_week_row.uploaded_pdf_r2_key AS uploaded_pdf_r2_key,
+        contract_week_row.day_entries_json AS contract_week_day_entries_json,
+        contract_week_row.totals_json AS contract_week_totals_json,
+        contract_week_row.planned_schedule_json AS contract_week_planned_schedule_json,
+        contract_week_row.additional_seq AS contract_week_additional_seq,
+        contract_week_row.status AS contract_week_status,
+        contract_week_row.created_at AS contract_week_created_at,
+        contract_week_row.is_adjustment AS contract_week_is_adjustment,
+        contract_week_row.enforce_day_partition AS contract_week_enforce_day_partition,
+        contract_week_row.allowed_days_mask AS contract_week_allowed_days_mask,
+        contract_week_row.split_boundary_date AS contract_week_split_boundary_date,
+        contract_week_row.worker_note AS contract_week_worker_note,
+        contract_week_row.split_group_key AS contract_week_split_group_key,
+        contract_row.id AS contract_id,
+        contract_row.role AS contract_role,
+        contract_row.band AS contract_band,
+        contract_row.display_site AS contract_display_site,
+        contract_row.ward_hint AS contract_ward_hint,
+        contract_row.default_submission_mode AS contract_default_submission_mode,
+        contract_row.std_schedule_json AS contract_std_schedule_json,
+        contract_row.additional_rates_json AS contract_additional_rates_json,
+        contract_row.weekly_timesheet_source AS contract_weekly_timesheet_source,
+        contract_row.no_timesheet_required AS contract_no_timesheet_required,
+        contract_row.autoprocess_hr AS contract_autoprocess_hr,
+        contract_row.requires_hr AS contract_requires_hr,
+        contract_row.hr_attach_to_invoice AS contract_hr_attach_to_invoice,
+        contract_row.ts_attach_to_invoice AS contract_ts_attach_to_invoice,
+        contract_row.is_nhsp AS contract_is_nhsp,
+        candidate_row.id AS candidate_id,
+        candidate_row.tms_ref AS candidate_tms_ref,
+        candidate_row.first_name AS candidate_first_name,
+        candidate_row.last_name AS candidate_last_name,
+        candidate_row.display_name AS candidate_display_name_raw,
+        candidate_row.email AS candidate_email,
+        candidate_row.phone AS candidate_phone,
+        candidate_row.key_norm AS candidate_key_norm,
+        candidate_row.band AS candidate_band,
+        client_row.id AS client_id,
+        client_row.cli_ref AS client_cli_ref,
+        client_row.name AS client_name_raw,
+        client_row.vat_chargeable AS client_vat_chargeable,
+        client_row.ts_queries_email AS client_ts_queries_email,
+        tsfin_row.id AS tsfin_id,
+        tsfin_row.timesheet_version AS tsfin_timesheet_version,
+        tsfin_row.basis AS tsfin_basis,
+        tsfin_row.is_current AS tsfin_is_current,
+        tsfin_row.is_stale AS tsfin_is_stale,
+        tsfin_row.stale_reason AS tsfin_stale_reason,
+        tsfin_row.actual_schedule_json AS tsfin_actual_schedule_json,
+        tsfin_row.actual_minutes_by_day_json AS tsfin_actual_minutes_by_day_json,
+        tsfin_row.additional_units_json AS tsfin_additional_units_json,
+        tsfin_row.processing_status AS tsfin_processing_status,
+        tsfin_row.locked_by_invoice_id AS tsfin_locked_by_invoice_id,
+        tsfin_row.locked_at_utc AS tsfin_locked_at_utc,
+        tsfin_row.paid_at_utc AS tsfin_paid_at_utc,
+        tsfin_row.processed_at_utc AS tsfin_processed_at_utc,
+        tsfin_row.authorised_at_utc AS tsfin_authorised_at_utc,
+        tsfin_row.external_source_rows_json AS tsfin_external_source_rows_json,
+        validation_payload.validations_json AS validations_json,
+        validation_payload.latest_validation_json AS latest_validation_json
+      FROM input_ids
+      LEFT JOIN summary_row ON TRUE
+      LEFT JOIN timesheet_row ON TRUE
+      LEFT JOIN tsfin_row ON TRUE
+      LEFT JOIN contract_week_row ON TRUE
+      LEFT JOIN contract_row ON TRUE
+      LEFT JOIN candidate_row ON TRUE
+      LEFT JOIN client_row ON TRUE
+      LEFT JOIN validation_payload ON TRUE
+    ),
+    flags AS (
+      SELECT
+        core_row.*,
+        (core_row.resolved_timesheet_id IS NOT NULL OR core_row.resolved_contract_week_id IS NOT NULL) AS row_found,
+        (
+          core_row.tsfin_locked_by_invoice_id IS NOT NULL
+          OR core_row.tsfin_paid_at_utc IS NOT NULL
+          OR core_row.paid_at_utc IS NOT NULL
+          OR COALESCE(core_row.invoice_segments_locked, 0) > 0
+          OR COALESCE(core_row.invoice_is_paid, FALSE) = TRUE
+        ) AS locked_bool,
+        COALESCE(core_row.is_authorised, FALSE) AS authorised_bool,
+        (
+          core_row.resolved_timesheet_id IS NULL
+          OR UPPER(COALESCE(core_row.processing_status, core_row.tools_stage, core_row.summary_stage, '')) IN ('UNPROCESSED', 'UNASSIGNED')
+        ) AS unprocessed_bool,
+        (
+          UPPER(COALESCE(core_row.processing_status, '')) = 'PENDING_AUTH'
+          OR (
+            COALESCE(core_row.contract_requires_hr, FALSE) = TRUE
+            AND COALESCE(core_row.contract_autoprocess_hr, FALSE) = FALSE
+            AND UPPER(COALESCE(core_row.processing_status, '')) = 'READY_FOR_HR'
+          )
+        ) AS requires_authorisation_bool,
+        (
+          UPPER(COALESCE(core_row.qr_status, '')) = 'PENDING'
+          AND core_row.resolved_timesheet_id IS NOT NULL
+        ) AS qr_unsigned_blocked_bool,
+        (
+          COALESCE(core_row.timesheet_is_adjustment, core_row.contract_week_is_adjustment, FALSE) = TRUE
+          AND COALESCE(core_row.contract_week_additional_seq, 0) > 0
+          AND (
+            core_row.timesheet_actual_schedule_json IS NULL
+            OR core_row.timesheet_actual_schedule_json = '[]'::jsonb
+            OR (jsonb_typeof(core_row.timesheet_actual_schedule_json) = 'array' AND jsonb_array_length(core_row.timesheet_actual_schedule_json) = 0)
+          )
+        ) AS keep_blank_additional_schedule_bool
+      FROM core_row
+    ),
+    row_payload AS (
+      SELECT
+        JSONB_BUILD_OBJECT(
+          'ok', TRUE,
+          'context_kind', 'bulk_authorise_row_context',
+          'context_profile', v_profile,
+          'profile', v_profile,
+          'context_type', CASE WHEN 'bulk_authorise_row_context' = 'bulk_authorise_row_context' THEN 'bulk_authorise' ELSE 'bulk_process' END,
+          'slim_context', TRUE,
+          'header_loaded', TRUE,
+          'header_only', (v_profile = 'status_header'),
+          'editor_loaded', (v_profile IN ('editor', 'active_row_visible')),
+          'evidence_loaded', FALSE,
+          'compare_loaded', FALSE,
+          'full_loaded', FALSE,
+          'schedule_pending', NOT (v_profile IN ('editor', 'active_row_visible')),
+          'schedule_authoritative', (v_profile IN ('editor', 'active_row_visible')),
+          'loaded_layers', CASE WHEN v_profile = 'status_header' THEN JSONB_BUILD_ARRAY('header') ELSE JSONB_BUILD_ARRAY('header', 'editor') END,
+          'soft_failure', FALSE,
+          'context_degraded', FALSE,
+          'degraded_reason', NULL::text,
+          'row_key', CASE WHEN flags.resolved_timesheet_id IS NOT NULL THEN 'timesheet:' || flags.resolved_timesheet_id::text ELSE 'contract_week:' || flags.resolved_contract_week_id::text END,
+          'timesheet_id', flags.resolved_timesheet_id,
+          'current_timesheet_id', flags.resolved_timesheet_id,
+          'requested_timesheet_id', flags.resolved_timesheet_id,
+          'expected_timesheet_id', flags.resolved_timesheet_id,
+          'contract_week_id', flags.resolved_contract_week_id,
+          'row_signature', MD5(CONCAT_WS('|', COALESCE(flags.resolved_timesheet_id::text, ''), COALESCE(flags.resolved_contract_week_id::text, ''), COALESCE(flags.timesheet_version::text, ''), COALESCE(flags.timesheet_updated_at::text, ''), COALESCE(flags.contract_week_updated_at::text, ''), COALESCE(flags.tsfin_updated_at::text, ''), v_profile)),
+          'filters', v_filters
+        )
+        || JSONB_BUILD_OBJECT(
+          'row', (
+            JSONB_BUILD_OBJECT(
+              'row_key', CASE WHEN flags.resolved_timesheet_id IS NOT NULL THEN 'timesheet:' || flags.resolved_timesheet_id::text ELSE 'contract_week:' || flags.resolved_contract_week_id::text END,
+              'timesheet_id', flags.resolved_timesheet_id,
+              'current_timesheet_id', flags.resolved_timesheet_id,
+              'requested_timesheet_id', flags.resolved_timesheet_id,
+              'expected_timesheet_id', flags.resolved_timesheet_id,
+              'contract_week_id', flags.resolved_contract_week_id,
+              'contract_id', flags.resolved_contract_id,
+              'candidate_id', flags.resolved_candidate_id,
+              'candidate_name', flags.candidate_name,
+              'candidate_display_name', flags.candidate_display_name,
+              'client_id', flags.resolved_client_id,
+              'client_name', flags.client_name,
+              'booking_id', flags.booking_id,
+              'occupant_key_norm', flags.occupant_key_norm,
+              'hospital_norm', flags.hospital_norm,
+              'candidate_hint_text', flags.candidate_hint_text,
+              'week_ending_date', flags.week_ending_date,
+              'work_date', flags.work_date,
+              'sheet_scope', flags.sheet_scope,
+              'submission_mode', flags.submission_mode,
+              'submission_mode_snapshot', flags.submission_mode_snapshot,
+              'basis', flags.basis,
+              'status', flags.timesheet_status,
+              'contract_week_status', flags.contract_week_status,
+              'route_type', flags.route_type,
+              'route_display', flags.route_display,
+              'route_family', flags.route_family,
+              'route_subfamily', flags.route_subfamily,
+              'underlying_channel_family', flags.underlying_channel_family,
+              'summary_stage', flags.summary_stage,
+              'tools_stage', flags.tools_stage,
+              'processing_status', flags.processing_status,
+              'processing_status_display', flags.processing_status_display,
+              'authorised_at_utc', flags.authorised_at_utc,
+              'authorised_at_server', flags.authorised_at_server,
+              'processed_at_utc', flags.processed_at_utc,
+              'is_authorised', flags.authorised_bool,
+              'locked', flags.locked_bool,
+              'has_timesheet', flags.resolved_timesheet_id IS NOT NULL
+            )
+            || JSONB_BUILD_OBJECT(
+              'total_hours', flags.total_hours,
+              'total_pay_ex_vat', flags.total_pay_ex_vat,
+              'total_charge_ex_vat', flags.total_charge_ex_vat,
+              'margin_ex_vat', flags.margin_ex_vat,
+              'net_delta_ex_vat', flags.net_delta_ex_vat,
+              'paid_at_utc', flags.paid_at_utc,
+              'pay_icon_code', flags.pay_icon_code,
+              'pay_status_code', flags.pay_status_code,
+              'pay_paid_at_utc', flags.pay_paid_at_utc,
+              'invoice_is_paid', flags.invoice_is_paid,
+              'invoice_issue_stage', flags.invoice_issue_stage,
+              'invoice_segment_stage', flags.invoice_segment_stage,
+              'invoice_segments_total', flags.invoice_segments_total,
+              'invoice_segments_locked', flags.invoice_segments_locked,
+              'invoice_segments_unlocked', flags.invoice_segments_unlocked,
+              'issue_codes', flags.issue_codes_json,
+              'validation_status', flags.validation_status,
+              'validation_summary', flags.validation_summary,
+              'hr_crosscheck_status', flags.hr_crosscheck_status,
+              'hr_crosscheck_issues', flags.hr_crosscheck_issues_json,
+              'qr_status', flags.qr_status,
+              'is_qr', flags.is_qr,
+              'is_adjusted', flags.is_adjusted,
+              'needs_attention', flags.needs_attention,
+              'has_rate_issue', flags.has_rate_issue,
+              'has_pay_channel_issue', flags.has_pay_channel_issue,
+              'client_no_timesheet_required', flags.client_no_timesheet_required,
+              'client_autoprocess_hr', flags.client_autoprocess_hr,
+              'client_is_nhsp', flags.client_is_nhsp
+            )
+            || JSONB_BUILD_OBJECT(
+              'has_any_evidence', flags.has_any_evidence,
+              'attached_evidence_count', flags.attached_evidence_count,
+              'evidence_count', flags.attached_evidence_count,
+              'primary_artifact_storage_key', flags.primary_artifact_storage_key,
+              'primary_artifact_display_name', flags.primary_artifact_display_name,
+              'primary_artifact_preview_mode', flags.primary_artifact_preview_mode,
+              'manual_pdf_r2_key', flags.manual_pdf_r2_key,
+              'qr_r2_key', flags.qr_r2_key,
+              'uploaded_pdf_r2_key', flags.uploaded_pdf_r2_key,
+              'generated_pdf_at_utc', flags.generated_pdf_at_utc,
+              'manual_pdf_rotation_degrees', flags.manual_pdf_rotation_degrees,
+              'is_adjustment', COALESCE(flags.timesheet_is_adjustment, flags.contract_week_is_adjustment, FALSE),
+              'additional_seq', flags.contract_week_additional_seq,
+              'period_type', CASE WHEN flags.resolved_contract_week_id IS NOT NULL THEN 'WEEKLY' ELSE 'DAILY' END,
+              'suppress_standard_schedule_fallback', flags.keep_blank_additional_schedule_bool,
+              'keep_additional_manual_adjustment_schedule_empty', flags.keep_blank_additional_schedule_bool,
+              '__suppressStandardScheduleFallback', flags.keep_blank_additional_schedule_bool,
+              '__keepAdditionalManualAdjustmentScheduleEmpty', flags.keep_blank_additional_schedule_bool
+            )
+            || CASE WHEN v_profile IN ('editor', 'active_row_visible') THEN JSONB_BUILD_OBJECT(
+              'actual_schedule_json', COALESCE(flags.tsfin_actual_schedule_json, flags.timesheet_actual_schedule_json, '[]'::jsonb),
+              'planned_schedule_json', COALESCE(flags.contract_week_planned_schedule_json, '[]'::jsonb),
+              'contract_week_totals_json', COALESCE(flags.contract_week_totals_json, '{}'::jsonb),
+              'actual_minutes_by_day_json', COALESCE(flags.tsfin_actual_minutes_by_day_json, '{}'::jsonb),
+              'additional_units_json', COALESCE(flags.tsfin_additional_units_json, flags.timesheet_additional_units_week, '{}'::jsonb),
+              'additional_units_week', COALESCE(flags.timesheet_additional_units_week, '{}'::jsonb),
+              'additional_units_per_day', COALESCE(flags.timesheet_additional_units_per_day, '{}'::jsonb)
+            ) ELSE JSONB_BUILD_OBJECT() END
+            || JSONB_BUILD_OBJECT(
+              'action_flags', JSONB_BUILD_OBJECT(
+                'can_save', ((flags.resolved_timesheet_id IS NOT NULL OR flags.resolved_contract_week_id IS NOT NULL) AND flags.locked_bool = FALSE AND flags.authorised_bool = FALSE AND flags.route_family = 'MANUAL_NON_QR'),
+                'can_process', ((flags.resolved_timesheet_id IS NOT NULL OR flags.resolved_contract_week_id IS NOT NULL) AND flags.locked_bool = FALSE AND flags.authorised_bool = FALSE AND flags.route_family = 'MANUAL_NON_QR' AND flags.unprocessed_bool = TRUE),
+                'can_unprocess', (flags.resolved_timesheet_id IS NOT NULL AND flags.locked_bool = FALSE AND flags.authorised_bool = FALSE AND flags.route_family = 'MANUAL_NON_QR' AND flags.unprocessed_bool = FALSE),
+                'can_bulk_authorise', (flags.resolved_timesheet_id IS NOT NULL AND flags.locked_bool = FALSE AND flags.requires_authorisation_bool = TRUE AND flags.authorised_bool = FALSE AND flags.qr_unsigned_blocked_bool = FALSE),
+                'can_bulk_unauthorise', (flags.resolved_timesheet_id IS NOT NULL AND flags.locked_bool = FALSE AND flags.authorised_bool = TRUE),
+                'can_edit_timesheet_data', ((flags.resolved_timesheet_id IS NOT NULL OR flags.resolved_contract_week_id IS NOT NULL) AND flags.locked_bool = FALSE AND flags.authorised_bool = FALSE AND flags.route_family = 'MANUAL_NON_QR'),
+                'can_manage_evidence', ((flags.resolved_timesheet_id IS NOT NULL OR (flags.resolved_contract_week_id IS NOT NULL AND flags.route_family = 'MANUAL_NON_QR')) AND flags.locked_bool = FALSE AND flags.route_family <> 'IMPORT_AUTHORITATIVE'),
+                'can_add_additional_manual', (flags.locked_bool = FALSE AND flags.authorised_bool = FALSE AND COALESCE(flags.is_adjusted, FALSE) = FALSE),
+                'review_only', (flags.locked_bool = TRUE OR flags.authorised_bool = TRUE OR flags.route_family <> 'MANUAL_NON_QR'),
+                'is_adjustment', COALESCE(flags.timesheet_is_adjustment, flags.contract_week_is_adjustment, FALSE),
+                'additional_seq', flags.contract_week_additional_seq,
+                'has_any_evidence', flags.has_any_evidence,
+                'attached_evidence_count', flags.attached_evidence_count
+              ),
+              'row_patch', JSONB_BUILD_OBJECT(),
+              'artifact_hints', JSONB_BUILD_OBJECT(
+                'has_any_evidence', flags.has_any_evidence,
+                'attached_evidence_count', flags.attached_evidence_count,
+                'primary_artifact_storage_key', flags.primary_artifact_storage_key,
+                'primary_artifact_display_name', flags.primary_artifact_display_name,
+                'primary_artifact_preview_mode', flags.primary_artifact_preview_mode
+              ),
+              'evidence_badges', JSONB_BUILD_ARRAY(
+                JSONB_BUILD_OBJECT('kind', 'TIMESHEET', 'present', COALESCE(flags.has_any_evidence, FALSE), 'has_evidence', COALESCE(flags.has_any_evidence, FALSE)),
+                JSONB_BUILD_OBJECT('kind', 'MILEAGE', 'present', FALSE, 'has_evidence', FALSE),
+                JSONB_BUILD_OBJECT('kind', 'TRAVEL', 'present', FALSE, 'has_evidence', FALSE),
+                JSONB_BUILD_OBJECT('kind', 'ACCOMMODATION', 'present', FALSE, 'has_evidence', FALSE),
+                JSONB_BUILD_OBJECT('kind', 'OTHER', 'present', FALSE, 'has_evidence', FALSE)
+              )
+            )
+          ),
+          'evidence', '[]'::jsonb
+        )
+        || JSONB_BUILD_OBJECT(
+          'row_patch', JSONB_BUILD_OBJECT(),
+          'action_flags', JSONB_BUILD_OBJECT(
+            'can_save', ((flags.resolved_timesheet_id IS NOT NULL OR flags.resolved_contract_week_id IS NOT NULL) AND flags.locked_bool = FALSE AND flags.authorised_bool = FALSE AND flags.route_family = 'MANUAL_NON_QR'),
+            'can_process', ((flags.resolved_timesheet_id IS NOT NULL OR flags.resolved_contract_week_id IS NOT NULL) AND flags.locked_bool = FALSE AND flags.authorised_bool = FALSE AND flags.route_family = 'MANUAL_NON_QR' AND flags.unprocessed_bool = TRUE),
+            'can_unprocess', (flags.resolved_timesheet_id IS NOT NULL AND flags.locked_bool = FALSE AND flags.authorised_bool = FALSE AND flags.route_family = 'MANUAL_NON_QR' AND flags.unprocessed_bool = FALSE),
+            'can_bulk_authorise', (flags.resolved_timesheet_id IS NOT NULL AND flags.locked_bool = FALSE AND flags.requires_authorisation_bool = TRUE AND flags.authorised_bool = FALSE AND flags.qr_unsigned_blocked_bool = FALSE),
+            'can_bulk_unauthorise', (flags.resolved_timesheet_id IS NOT NULL AND flags.locked_bool = FALSE AND flags.authorised_bool = TRUE),
+            'can_edit_timesheet_data', ((flags.resolved_timesheet_id IS NOT NULL OR flags.resolved_contract_week_id IS NOT NULL) AND flags.locked_bool = FALSE AND flags.authorised_bool = FALSE AND flags.route_family = 'MANUAL_NON_QR'),
+            'can_manage_evidence', ((flags.resolved_timesheet_id IS NOT NULL OR (flags.resolved_contract_week_id IS NOT NULL AND flags.route_family = 'MANUAL_NON_QR')) AND flags.locked_bool = FALSE AND flags.route_family <> 'IMPORT_AUTHORITATIVE'),
+            'can_add_additional_manual', (flags.locked_bool = FALSE AND flags.authorised_bool = FALSE AND COALESCE(flags.is_adjusted, FALSE) = FALSE),
+            'review_only', (flags.locked_bool = TRUE OR flags.authorised_bool = TRUE OR flags.route_family <> 'MANUAL_NON_QR'),
+            'has_any_evidence', flags.has_any_evidence,
+            'attached_evidence_count', flags.attached_evidence_count
+          ),
+          'cache_invalidation_hints', JSONB_BUILD_OBJECT(),
+          'count_deltas', JSONB_BUILD_OBJECT()
+        )
+        || CASE WHEN v_profile IN ('editor', 'active_row_visible') THEN JSONB_BUILD_OBJECT(
+          'details', JSONB_BUILD_OBJECT(
+            'requested_timesheet_id', flags.resolved_timesheet_id,
+            'current_timesheet_id', flags.resolved_timesheet_id,
+            'expected_timesheet_id', flags.resolved_timesheet_id,
+            'current_version', flags.timesheet_version,
+            'was_stale', COALESCE(flags.tsfin_is_stale, FALSE),
+            'booking_id', flags.booking_id,
+            'timesheet', JSONB_BUILD_OBJECT(
+              'timesheet_id', flags.resolved_timesheet_id,
+              'booking_id', flags.booking_id,
+              'occupant_key_norm', flags.occupant_key_norm,
+              'hospital_norm', flags.hospital_norm,
+              'worked_start_iso', flags.timesheet_worked_start_iso,
+              'worked_end_iso', flags.timesheet_worked_end_iso,
+              'break_start_iso', flags.timesheet_break_start_iso,
+              'break_end_iso', flags.timesheet_break_end_iso,
+              'break_minutes', flags.timesheet_break_minutes,
+              'worked_minutes', flags.timesheet_worked_minutes,
+              'week_ending_date', flags.week_ending_date,
+              'auth_name', flags.timesheet_auth_name,
+              'auth_job_title', flags.timesheet_auth_job_title,
+              'authorised_at_server', flags.authorised_at_server,
+              'reference_number', flags.timesheet_reference_number,
+              'reference_set_at', flags.timesheet_reference_set_at,
+              'status', flags.timesheet_status,
+              'created_at', flags.timesheet_created_at,
+              'updated_at', flags.timesheet_updated_at,
+              'version', flags.timesheet_version,
+              'is_current', flags.resolved_timesheet_id IS NOT NULL,
+              'contract_id', flags.resolved_contract_id,
+              'submission_mode', flags.submission_mode,
+              'manual_pdf_r2_key', flags.manual_pdf_r2_key,
+              'sheet_scope', flags.sheet_scope,
+              'actual_schedule_json', COALESCE(flags.timesheet_actual_schedule_json, '[]'::jsonb),
+              'additional_units_week', COALESCE(flags.timesheet_additional_units_week, '{}'::jsonb),
+              'additional_units_per_day', COALESCE(flags.timesheet_additional_units_per_day, '{}'::jsonb),
+              'qr_status', flags.qr_status,
+              'qr_r2_key', flags.qr_r2_key,
+              'manual_pdf_rotation_degrees', flags.manual_pdf_rotation_degrees,
+              'generated_pdf_at_utc', flags.generated_pdf_at_utc,
+              'candidate_hint_text', flags.candidate_hint_text,
+              'is_adjustment', flags.timesheet_is_adjustment,
+              'parent_timesheet_id', flags.timesheet_parent_timesheet_id,
+              'adjustment_origin', flags.timesheet_adjustment_origin
+            ),
+            'tsfin', JSONB_BUILD_OBJECT(
+              'id', flags.tsfin_id,
+              'timesheet_id', flags.resolved_timesheet_id,
+              'timesheet_version', flags.tsfin_timesheet_version,
+              'basis', flags.tsfin_basis,
+              'is_current', flags.tsfin_is_current,
+              'is_stale', flags.tsfin_is_stale,
+              'stale_reason', flags.tsfin_stale_reason,
+              'processing_status', flags.tsfin_processing_status,
+              'total_hours', flags.total_hours,
+              'locked_by_invoice_id', flags.tsfin_locked_by_invoice_id,
+              'locked_at_utc', flags.tsfin_locked_at_utc,
+              'paid_at_utc', flags.tsfin_paid_at_utc,
+              'processed_at_utc', flags.tsfin_processed_at_utc,
+              'authorised_at_utc', flags.tsfin_authorised_at_utc,
+              'actual_schedule_json', COALESCE(flags.tsfin_actual_schedule_json, flags.timesheet_actual_schedule_json, '[]'::jsonb),
+              'actual_minutes_by_day_json', COALESCE(flags.tsfin_actual_minutes_by_day_json, '{}'::jsonb),
+              'additional_units_json', COALESCE(flags.tsfin_additional_units_json, '{}'::jsonb),
+              'has_rate_issue', flags.has_rate_issue,
+              'has_pay_channel_issue', flags.has_pay_channel_issue,
+              'hr_crosscheck_status', flags.hr_crosscheck_status,
+              'hr_crosscheck_issues', flags.hr_crosscheck_issues_json
+            ),
+            'validations', COALESCE(flags.validations_json, '[]'::jsonb),
+            'validation_summary', JSONB_BUILD_OBJECT(
+              'status', flags.validation_status,
+              'pre_validated', COALESCE((flags.latest_validation_json->>'pre_validated')::boolean, FALSE),
+              'latest', flags.latest_validation_json
+            ),
+            'contract_week_id', flags.resolved_contract_week_id,
+            'contract_week', JSONB_BUILD_OBJECT(
+              'id', flags.resolved_contract_week_id,
+              'contract_id', flags.resolved_contract_id,
+              'week_ending_date', flags.week_ending_date,
+              'additional_seq', flags.contract_week_additional_seq,
+              'status', flags.contract_week_status,
+              'submission_mode_snapshot', flags.submission_mode_snapshot,
+              'timesheet_id', flags.resolved_timesheet_id,
+              'uploaded_pdf_r2_key', flags.uploaded_pdf_r2_key,
+              'day_entries_json', COALESCE(flags.contract_week_day_entries_json, '[]'::jsonb),
+              'totals_json', COALESCE(flags.contract_week_totals_json, '{}'::jsonb),
+              'created_at', flags.contract_week_created_at,
+              'updated_at', flags.contract_week_updated_at,
+              'planned_schedule_json', COALESCE(flags.contract_week_planned_schedule_json, '[]'::jsonb),
+              'is_adjustment', flags.contract_week_is_adjustment,
+              'enforce_day_partition', flags.contract_week_enforce_day_partition,
+              'allowed_days_mask', flags.contract_week_allowed_days_mask,
+              'split_boundary_date', flags.contract_week_split_boundary_date,
+              'worker_note', flags.contract_week_worker_note,
+              'split_group_key', flags.contract_week_split_group_key
+            ),
+            'related', JSONB_BUILD_OBJECT(
+              'contract', JSONB_BUILD_OBJECT(
+                'id', flags.resolved_contract_id,
+                'candidate_id', flags.resolved_candidate_id,
+                'client_id', flags.resolved_client_id,
+                'role', flags.contract_role,
+                'band', flags.contract_band,
+                'display_site', flags.contract_display_site,
+                'ward_hint', flags.contract_ward_hint,
+                'default_submission_mode', flags.contract_default_submission_mode,
+                'std_schedule_json', COALESCE(flags.contract_std_schedule_json, '[]'::jsonb),
+                'additional_rates_json', COALESCE(flags.contract_additional_rates_json, '{}'::jsonb),
+                'weekly_timesheet_source', flags.contract_weekly_timesheet_source,
+                'no_timesheet_required', flags.contract_no_timesheet_required,
+                'autoprocess_hr', flags.contract_autoprocess_hr,
+                'requires_hr', flags.contract_requires_hr,
+                'hr_attach_to_invoice', flags.contract_hr_attach_to_invoice,
+                'ts_attach_to_invoice', flags.contract_ts_attach_to_invoice,
+                'is_nhsp', flags.contract_is_nhsp
+              ),
+              'candidate', JSONB_BUILD_OBJECT(
+                'id', flags.resolved_candidate_id,
+                'tms_ref', flags.candidate_tms_ref,
+                'first_name', flags.candidate_first_name,
+                'last_name', flags.candidate_last_name,
+                'display_name', flags.candidate_display_name_raw,
+                'email', flags.candidate_email,
+                'phone', flags.candidate_phone,
+                'key_norm', flags.candidate_key_norm,
+                'band', flags.candidate_band
+              ),
+              'client', JSONB_BUILD_OBJECT(
+                'id', flags.resolved_client_id,
+                'cli_ref', flags.client_cli_ref,
+                'name', flags.client_name_raw,
+                'vat_chargeable', flags.client_vat_chargeable,
+                'ts_queries_email', flags.client_ts_queries_email
+              )
+            ),
+            'evidence', '[]'::jsonb,
+            'policy', JSONB_BUILD_OBJECT(
+              'weekly_mode', flags.contract_weekly_timesheet_source,
+              'requires_hr', flags.contract_requires_hr,
+              'autoprocess_hr', flags.contract_autoprocess_hr,
+              'no_timesheet_required', flags.contract_no_timesheet_required,
+              'is_nhsp', flags.contract_is_nhsp
+            ),
+            'effective', JSONB_BUILD_OBJECT(
+              'route_type', flags.route_type,
+              'route_display', flags.route_display,
+              'route_family', flags.route_family,
+              'route_subfamily', flags.route_subfamily,
+              'underlying_channel_family', flags.underlying_channel_family,
+              'is_adjustment', COALESCE(flags.timesheet_is_adjustment, flags.contract_week_is_adjustment, FALSE),
+              'additional_seq', flags.contract_week_additional_seq,
+              'actual_schedule_json', COALESCE(flags.tsfin_actual_schedule_json, flags.timesheet_actual_schedule_json, '[]'::jsonb),
+              'planned_schedule_json', COALESCE(flags.contract_week_planned_schedule_json, '[]'::jsonb),
+              'suppress_standard_schedule_fallback', flags.keep_blank_additional_schedule_bool,
+              'keep_additional_manual_adjustment_schedule_empty', flags.keep_blank_additional_schedule_bool,
+              'summary_stage', flags.summary_stage,
+              'client_requires_hr', flags.contract_requires_hr,
+              'client_autoprocess_hr', flags.contract_autoprocess_hr,
+              'client_no_timesheet_required', flags.contract_no_timesheet_required,
+              'client_is_nhsp', flags.contract_is_nhsp,
+              'contract_id', flags.resolved_contract_id,
+              'issue_codes', flags.issue_codes_json
+            )
+          ),
+          'timesheet', JSONB_BUILD_OBJECT(
+            'timesheet_id', flags.resolved_timesheet_id,
+            'booking_id', flags.booking_id,
+            'worked_start_iso', flags.timesheet_worked_start_iso,
+            'worked_end_iso', flags.timesheet_worked_end_iso,
+            'break_start_iso', flags.timesheet_break_start_iso,
+            'break_end_iso', flags.timesheet_break_end_iso,
+            'break_minutes', flags.timesheet_break_minutes,
+            'worked_minutes', flags.timesheet_worked_minutes,
+            'week_ending_date', flags.week_ending_date,
+            'actual_schedule_json', COALESCE(flags.timesheet_actual_schedule_json, '[]'::jsonb),
+            'additional_units_week', COALESCE(flags.timesheet_additional_units_week, '{}'::jsonb),
+            'additional_units_per_day', COALESCE(flags.timesheet_additional_units_per_day, '{}'::jsonb)
+          ),
+          'tsfin', JSONB_BUILD_OBJECT(
+            'id', flags.tsfin_id,
+            'timesheet_id', flags.resolved_timesheet_id,
+            'basis', flags.tsfin_basis,
+            'processing_status', flags.tsfin_processing_status,
+            'total_hours', flags.total_hours,
+            'actual_schedule_json', COALESCE(flags.tsfin_actual_schedule_json, flags.timesheet_actual_schedule_json, '[]'::jsonb),
+            'actual_minutes_by_day_json', COALESCE(flags.tsfin_actual_minutes_by_day_json, '{}'::jsonb),
+            'additional_units_json', COALESCE(flags.tsfin_additional_units_json, '{}'::jsonb),
+            'locked_by_invoice_id', flags.tsfin_locked_by_invoice_id,
+            'paid_at_utc', flags.tsfin_paid_at_utc,
+            'processed_at_utc', flags.tsfin_processed_at_utc,
+            'authorised_at_utc', flags.tsfin_authorised_at_utc
+          ),
+          'contract_week', JSONB_BUILD_OBJECT(
+            'id', flags.resolved_contract_week_id,
+            'contract_id', flags.resolved_contract_id,
+            'week_ending_date', flags.week_ending_date,
+            'day_entries_json', COALESCE(flags.contract_week_day_entries_json, '[]'::jsonb),
+            'totals_json', COALESCE(flags.contract_week_totals_json, '{}'::jsonb),
+            'planned_schedule_json', COALESCE(flags.contract_week_planned_schedule_json, '[]'::jsonb),
+            'additional_seq', flags.contract_week_additional_seq,
+            'is_adjustment', flags.contract_week_is_adjustment
+          ),
+          'evidence_meta', JSONB_BUILD_OBJECT('evidence_loaded', FALSE, 'has_any_evidence', flags.has_any_evidence, 'attached_evidence_count', flags.attached_evidence_count),
+          'left_pane', JSONB_BUILD_OBJECT('evidence', '[]'::jsonb, 'evidence_meta', JSONB_BUILD_OBJECT('evidence_loaded', FALSE, 'has_any_evidence', flags.has_any_evidence, 'attached_evidence_count', flags.attached_evidence_count))
+        ) ELSE JSONB_BUILD_OBJECT(
+          'details', JSONB_BUILD_OBJECT(),
+          'evidence_meta', JSONB_BUILD_OBJECT('evidence_loaded', FALSE, 'has_any_evidence', flags.has_any_evidence, 'attached_evidence_count', flags.attached_evidence_count),
+          'left_pane', JSONB_BUILD_OBJECT('evidence', '[]'::jsonb, 'evidence_meta', JSONB_BUILD_OBJECT('evidence_loaded', FALSE, 'has_any_evidence', flags.has_any_evidence, 'attached_evidence_count', flags.attached_evidence_count))
+        ) END AS payload_json
+      FROM flags
+      WHERE flags.row_found = TRUE
+    )
+    SELECT row_payload.payload_json || JSONB_BUILD_OBJECT(
+        'data_row', row_payload.payload_json->'row',
+        'row_patch', COALESCE(row_payload.payload_json->'row_patch', JSONB_BUILD_OBJECT()) || JSONB_BUILD_OBJECT('row_key', row_payload.payload_json->>'row_key')
+      )
+      INTO v_out
+    FROM row_payload;
+
+    IF v_out IS NULL THEN
+      RETURN JSONB_BUILD_OBJECT(
+        'ok', FALSE,
+        'context_kind', 'bulk_authorise_row_context',
+        'context_profile', v_profile,
+        'profile', v_profile,
+        'soft_failure', TRUE,
+        'context_degraded', TRUE,
+        'degraded_reason', 'ROW_NOT_FOUND',
+        'header_loaded', FALSE,
+        'editor_loaded', FALSE,
+        'evidence_loaded', FALSE,
+        'compare_loaded', FALSE,
+        'full_loaded', FALSE,
+        'header_only', FALSE,
+        'schedule_pending', TRUE,
+        'schedule_authoritative', FALSE,
+        'loaded_layers', '[]'::jsonb,
+        'error', 'ROW_NOT_FOUND',
+        'message', 'No bulk authorise row context was found for the supplied identity',
+        'filters', v_filters
+      );
+    END IF;
+
+    RETURN v_out;
+  END IF;
+
+  IF v_profile = 'evidence' THEN
+    WITH input_ids AS (
+      SELECT
+        CASE WHEN v_timesheet_id_text IS NOT NULL AND v_timesheet_id_text ~* v_uuid_re THEN v_timesheet_id_text::uuid ELSE NULL::uuid END AS input_timesheet_id,
+        CASE WHEN v_contract_week_id_text IS NOT NULL AND v_contract_week_id_text ~* v_uuid_re THEN v_contract_week_id_text::uuid ELSE NULL::uuid END AS input_contract_week_id
+    ),
+    contract_week_row AS (
+      SELECT cw0.*
+      FROM public.contract_weeks AS cw0
+      CROSS JOIN input_ids AS cw_ids
+      WHERE (cw_ids.input_contract_week_id IS NOT NULL AND cw0.id = cw_ids.input_contract_week_id)
+         OR (cw_ids.input_timesheet_id IS NOT NULL AND cw0.timesheet_id = cw_ids.input_timesheet_id)
+      ORDER BY cw0.updated_at DESC NULLS LAST, cw0.created_at DESC NULLS LAST, cw0.id DESC
+      LIMIT 1
+    ),
+    timesheet_row AS (
+      SELECT ts0.*
+      FROM public.timesheets AS ts0
+      CROSS JOIN input_ids AS ts_ids
+      LEFT JOIN contract_week_row AS cw_for_ts ON TRUE
+      WHERE ts0.is_current = TRUE
+        AND (
+          (ts_ids.input_timesheet_id IS NOT NULL AND ts0.timesheet_id = ts_ids.input_timesheet_id)
+          OR (ts_ids.input_timesheet_id IS NULL AND cw_for_ts.timesheet_id IS NOT NULL AND ts0.timesheet_id = cw_for_ts.timesheet_id)
+        )
+      ORDER BY ts0.version DESC NULLS LAST, ts0.updated_at DESC NULLS LAST, ts0.created_at DESC NULLS LAST
+      LIMIT 1
+    ),
+    summary_row AS (
+      SELECT summary_source.*
+      FROM public.timesheet_summary_lightweight_rows_v1(
+        v_decision_filters || JSONB_BUILD_OBJECT('disable_paging', TRUE, 'limit', 25)
+      ) AS summary_source
+      CROSS JOIN input_ids AS summary_ids
+      WHERE (
+          summary_ids.input_timesheet_id IS NULL
+          OR summary_source.timesheet_id = summary_ids.input_timesheet_id
+        )
+        AND (
+          summary_ids.input_contract_week_id IS NULL
+          OR summary_source.contract_week_id = summary_ids.input_contract_week_id
+        )
+      ORDER BY
+        CASE WHEN summary_ids.input_timesheet_id IS NOT NULL AND summary_source.timesheet_id = summary_ids.input_timesheet_id THEN 0 ELSE 1 END,
+        CASE WHEN summary_ids.input_contract_week_id IS NOT NULL AND summary_source.contract_week_id = summary_ids.input_contract_week_id THEN 0 ELSE 1 END,
+        summary_source.timesheet_id NULLS LAST,
+        summary_source.contract_week_id NULLS LAST
+      LIMIT 1
+    ),
+    resolved AS (
+      SELECT
+        COALESCE(summary_row.timesheet_id, timesheet_row.timesheet_id, contract_week_row.timesheet_id) AS resolved_timesheet_id,
+        COALESCE(summary_row.contract_week_id, contract_week_row.id) AS resolved_contract_week_id,
+        COALESCE(summary_row.contract_id, timesheet_row.contract_id, contract_week_row.contract_id) AS resolved_contract_id,
+        summary_row.candidate_id AS candidate_id,
+        summary_row.client_id AS client_id,
+        summary_row.candidate_name AS candidate_name,
+        summary_row.candidate_display_name AS candidate_display_name,
+        summary_row.client_name AS client_name,
+        COALESCE(summary_row.week_ending_date, timesheet_row.week_ending_date, contract_week_row.week_ending_date) AS week_ending_date,
+        COALESCE(summary_row.route_family, CASE WHEN COALESCE(timesheet_row.qr_status::text, '') <> '' THEN 'QR' WHEN UPPER(COALESCE(timesheet_row.submission_mode::text, contract_week_row.submission_mode_snapshot::text, '')) = 'ELECTRONIC' THEN 'ELECTRONIC' ELSE 'MANUAL_NON_QR' END) AS route_family,
+        COALESCE(summary_row.has_any_evidence, FALSE) AS summary_has_any_evidence,
+        COALESCE(summary_row.attached_evidence_count, 0) AS summary_attached_evidence_count,
+        summary_row.primary_artifact_storage_key AS summary_primary_artifact_storage_key,
+        summary_row.primary_artifact_display_name AS summary_primary_artifact_display_name,
+        summary_row.primary_artifact_preview_mode AS summary_primary_artifact_preview_mode,
+        timesheet_row.manual_pdf_r2_key AS manual_pdf_r2_key,
+        timesheet_row.qr_r2_key AS qr_r2_key,
+        timesheet_row.manual_pdf_rotation_degrees AS manual_pdf_rotation_degrees,
+        timesheet_row.updated_at AS timesheet_updated_at,
+        contract_week_row.uploaded_pdf_r2_key AS uploaded_pdf_r2_key,
+        contract_week_row.updated_at AS contract_week_updated_at
+      FROM input_ids
+      LEFT JOIN summary_row ON TRUE
+      LEFT JOIN timesheet_row ON TRUE
+      LEFT JOIN contract_week_row ON TRUE
+    ),
+    evidence_items AS (
+      SELECT
+        0::integer AS sort_order,
+        JSONB_BUILD_OBJECT(
+          'id', 'sys:manual_pdf:' || resolved.resolved_timesheet_id::text,
+          'evidence_id', NULL::uuid,
+          'queue_id', NULL::uuid,
+          'timesheet_id', resolved.resolved_timesheet_id,
+          'contract_week_id', resolved.resolved_contract_week_id,
+          'kind', 'TIMESHEET',
+          'display_name', 'Timesheet PDF',
+          'filename', 'Timesheet PDF',
+          'storage_key', resolved.manual_pdf_r2_key,
+          'r2_key', resolved.manual_pdf_r2_key,
+          'file_key', resolved.manual_pdf_r2_key,
+          'download_storage_key', resolved.manual_pdf_r2_key,
+          'original_filename', 'Timesheet PDF',
+          'mime_type', 'application/pdf',
+          'content_type', 'application/pdf',
+          'uploaded_at_utc', resolved.timesheet_updated_at,
+          'rotation_degrees', COALESCE(resolved.manual_pdf_rotation_degrees, 0),
+          'last_rotation_deg', COALESCE(resolved.manual_pdf_rotation_degrees, 0),
+          'page_count', NULL::integer,
+          'pages', '[]'::jsonb,
+          'system', TRUE,
+          'is_view_only', TRUE,
+          'can_delete', FALSE,
+          'can_reclassify', FALSE,
+          'can_edit_kind', FALSE,
+          'can_edit_type', FALSE,
+          'can_return_to_queue', FALSE,
+          'preview_mode', 'PDF',
+          'source_label', 'System',
+          'source_badge', 'System'
+        ) AS item_json
+      FROM resolved
+      WHERE resolved.resolved_timesheet_id IS NOT NULL
+        AND NULLIF(BTRIM(COALESCE(resolved.manual_pdf_r2_key, '')), '') IS NOT NULL
+        AND NOT EXISTS (
+          SELECT 1
+          FROM public.timesheet_evidence AS te_manual_pdf_duplicate
+          WHERE te_manual_pdf_duplicate.timesheet_id = resolved.resolved_timesheet_id
+            AND te_manual_pdf_duplicate.storage_key = resolved.manual_pdf_r2_key
+        )
+      UNION ALL
+      SELECT
+        1::integer AS sort_order,
+        JSONB_BUILD_OBJECT(
+          'id', 'sys:qr_pdf:' || resolved.resolved_timesheet_id::text,
+          'evidence_id', NULL::uuid,
+          'queue_id', NULL::uuid,
+          'timesheet_id', resolved.resolved_timesheet_id,
+          'contract_week_id', resolved.resolved_contract_week_id,
+          'kind', 'TIMESHEET',
+          'display_name', 'Signed QR Timesheet',
+          'filename', 'Signed QR Timesheet',
+          'storage_key', resolved.qr_r2_key,
+          'r2_key', resolved.qr_r2_key,
+          'file_key', resolved.qr_r2_key,
+          'download_storage_key', resolved.qr_r2_key,
+          'original_filename', 'Signed QR Timesheet',
+          'mime_type', 'application/pdf',
+          'content_type', 'application/pdf',
+          'uploaded_at_utc', resolved.timesheet_updated_at,
+          'rotation_degrees', 0,
+          'last_rotation_deg', 0,
+          'page_count', NULL::integer,
+          'pages', '[]'::jsonb,
+          'system', TRUE,
+          'is_view_only', TRUE,
+          'can_delete', FALSE,
+          'can_reclassify', FALSE,
+          'can_edit_kind', FALSE,
+          'can_edit_type', FALSE,
+          'can_return_to_queue', FALSE,
+          'preview_mode', 'PDF',
+          'source_label', 'System',
+          'source_badge', 'System'
+        ) AS item_json
+      FROM resolved
+      WHERE resolved.resolved_timesheet_id IS NOT NULL
+        AND NULLIF(BTRIM(COALESCE(resolved.qr_r2_key, '')), '') IS NOT NULL
+        AND NOT EXISTS (
+          SELECT 1
+          FROM public.timesheet_evidence AS te_qr_pdf_duplicate
+          WHERE te_qr_pdf_duplicate.timesheet_id = resolved.resolved_timesheet_id
+            AND te_qr_pdf_duplicate.storage_key = resolved.qr_r2_key
+        )
+      UNION ALL
+      SELECT
+        2::integer AS sort_order,
+        JSONB_BUILD_OBJECT(
+          'id', 'sys:contract_week_pdf:' || resolved.resolved_contract_week_id::text,
+          'evidence_id', NULL::uuid,
+          'queue_id', NULL::uuid,
+          'timesheet_id', resolved.resolved_timesheet_id,
+          'contract_week_id', resolved.resolved_contract_week_id,
+          'kind', 'TIMESHEET',
+          'display_name', 'Uploaded timesheet PDF',
+          'filename', 'Uploaded timesheet PDF',
+          'storage_key', resolved.uploaded_pdf_r2_key,
+          'r2_key', resolved.uploaded_pdf_r2_key,
+          'file_key', resolved.uploaded_pdf_r2_key,
+          'download_storage_key', resolved.uploaded_pdf_r2_key,
+          'original_filename', 'Uploaded timesheet PDF',
+          'mime_type', 'application/pdf',
+          'content_type', 'application/pdf',
+          'uploaded_at_utc', resolved.contract_week_updated_at,
+          'rotation_degrees', 0,
+          'last_rotation_deg', 0,
+          'page_count', NULL::integer,
+          'pages', '[]'::jsonb,
+          'system', TRUE,
+          'is_view_only', TRUE,
+          'can_delete', FALSE,
+          'can_reclassify', FALSE,
+          'can_edit_kind', FALSE,
+          'can_edit_type', FALSE,
+          'can_return_to_queue', FALSE,
+          'preview_mode', 'PDF',
+          'source_label', 'System',
+          'source_badge', 'System'
+        ) AS item_json
+      FROM resolved
+      WHERE resolved.resolved_contract_week_id IS NOT NULL
+        AND NULLIF(BTRIM(COALESCE(resolved.uploaded_pdf_r2_key, '')), '') IS NOT NULL
+        AND NOT EXISTS (
+          SELECT 1
+          FROM public.timesheet_evidence AS te_contract_week_pdf_duplicate
+          WHERE te_contract_week_pdf_duplicate.timesheet_id = resolved.resolved_timesheet_id
+            AND te_contract_week_pdf_duplicate.storage_key = resolved.uploaded_pdf_r2_key
+        )
+      UNION ALL
+      SELECT
+        10::integer AS sort_order,
+        JSONB_BUILD_OBJECT(
+          'id', te0.id,
+          'evidence_id', te0.id,
+          'queue_id', NULL::uuid,
+          'timesheet_id', te0.timesheet_id,
+          'contract_week_id', resolved.resolved_contract_week_id,
+          'kind', UPPER(COALESCE(NULLIF(BTRIM(te0.kind), ''), 'TIMESHEET')),
+          'display_name', COALESCE(NULLIF(BTRIM(te0.display_name), ''), NULLIF(BTRIM(REGEXP_REPLACE(COALESCE(te0.storage_key, ''), '^.*/', '')), ''), 'Evidence'),
+          'filename', COALESCE(NULLIF(BTRIM(te0.display_name), ''), NULLIF(BTRIM(REGEXP_REPLACE(COALESCE(te0.storage_key, ''), '^.*/', '')), ''), 'Evidence'),
+          'storage_key', te0.storage_key,
+          'r2_key', te0.storage_key,
+          'file_key', te0.storage_key,
+          'download_storage_key', te0.storage_key,
+          'original_filename', COALESCE(NULLIF(BTRIM(te0.display_name), ''), NULLIF(BTRIM(REGEXP_REPLACE(COALESCE(te0.storage_key, ''), '^.*/', '')), ''), 'Evidence'),
+          'mime_type', CASE
+            WHEN LOWER(COALESCE(te0.storage_key, '')) ~ '\.pdf($|[?#])' THEN 'application/pdf'
+            WHEN LOWER(COALESCE(te0.storage_key, '')) ~ '\.png($|[?#])' THEN 'image/png'
+            WHEN LOWER(COALESCE(te0.storage_key, '')) ~ '\.jpe?g($|[?#])' THEN 'image/jpeg'
+            WHEN LOWER(COALESCE(te0.storage_key, '')) ~ '\.gif($|[?#])' THEN 'image/gif'
+            WHEN LOWER(COALESCE(te0.storage_key, '')) ~ '\.webp($|[?#])' THEN 'image/webp'
+            ELSE NULL::text
+          END,
+          'content_type', CASE
+            WHEN LOWER(COALESCE(te0.storage_key, '')) ~ '\.pdf($|[?#])' THEN 'application/pdf'
+            WHEN LOWER(COALESCE(te0.storage_key, '')) ~ '\.png($|[?#])' THEN 'image/png'
+            WHEN LOWER(COALESCE(te0.storage_key, '')) ~ '\.jpe?g($|[?#])' THEN 'image/jpeg'
+            WHEN LOWER(COALESCE(te0.storage_key, '')) ~ '\.gif($|[?#])' THEN 'image/gif'
+            WHEN LOWER(COALESCE(te0.storage_key, '')) ~ '\.webp($|[?#])' THEN 'image/webp'
+            ELSE NULL::text
+          END,
+          'uploaded_at_utc', te0.created_at,
+          'created_at', te0.created_at,
+          'created_by', te0.created_by,
+          'rotation', 0,
+          'rotation_degrees', 0,
+          'last_rotation_deg', 0,
+          'page_count', NULL::integer,
+          'pages', '[]'::jsonb,
+          'system', FALSE,
+          'is_view_only', FALSE,
+          'can_delete', TRUE,
+          'can_reclassify', TRUE,
+          'can_edit_kind', TRUE,
+          'can_edit_type', TRUE,
+          'can_return_to_queue', TRUE,
+          'preview_mode', CASE
+            WHEN LOWER(COALESCE(te0.storage_key, '')) ~ '\.pdf($|[?#])' THEN 'PDF'
+            WHEN LOWER(COALESCE(te0.storage_key, '')) ~ '\.(png|jpe?g|gif|webp|bmp|svg|tif|tiff|heic|heif|avif)($|[?#])' THEN 'IMAGE'
+            ELSE 'FILE'
+          END,
+          'source_label', 'Attached',
+          'source_badge', 'Attached'
+        ) AS item_json
+      FROM public.timesheet_evidence AS te0
+      CROSS JOIN resolved
+      WHERE resolved.resolved_timesheet_id IS NOT NULL
+        AND te0.timesheet_id = resolved.resolved_timesheet_id
+      UNION ALL
+      SELECT
+        20::integer AS sort_order,
+        JSONB_BUILD_OBJECT(
+          'id', mq0.id,
+          'evidence_id', NULL::uuid,
+          'queue_id', mq0.id,
+          'timesheet_id', NULL::uuid,
+          'contract_week_id', resolved.resolved_contract_week_id,
+          'kind', UPPER(COALESCE(NULLIF(BTRIM(COALESCE(mq0.meta_json->>'staged_kind', mq0.meta_json->>'kind', '')), ''), 'TIMESHEET')),
+          'staged_kind', UPPER(COALESCE(NULLIF(BTRIM(COALESCE(mq0.meta_json->>'staged_kind', mq0.meta_json->>'kind', '')), ''), 'TIMESHEET')),
+          'display_name', COALESCE(NULLIF(BTRIM(mq0.original_filename), ''), 'Staged timesheet evidence'),
+          'filename', COALESCE(NULLIF(BTRIM(mq0.original_filename), ''), 'Staged timesheet evidence'),
+          'original_filename', mq0.original_filename,
+          'storage_key', mq0.r2_key,
+          'r2_key', mq0.r2_key,
+          'file_key', mq0.r2_key,
+          'download_storage_key', mq0.r2_key,
+          'mime_type', mq0.mime_type,
+          'content_type', mq0.mime_type,
+          'content_hash', mq0.content_hash,
+          'uploaded_at_utc', mq0.uploaded_at_utc,
+          'staged_at_utc', COALESCE(mq0.meta_json->>'staged_at_utc', mq0.uploaded_at_utc::text),
+          'staged_by_user_id', COALESCE(NULLIF(BTRIM(mq0.meta_json->>'staged_by_user_id'), ''), mq0.uploaded_by_user_id::text),
+          'rotation_degrees', COALESCE(mq0.last_rotation_deg::integer, 0),
+          'last_rotation_deg', COALESCE(mq0.last_rotation_deg::integer, 0),
+          'page_count', CASE WHEN COALESCE(mq0.meta_json->>'page_count', '') ~ '^[0-9]+$' THEN (mq0.meta_json->>'page_count')::integer ELSE NULL::integer END,
+          'pages', '[]'::jsonb,
+          'status', mq0.status,
+          'system', FALSE,
+          'is_view_only', FALSE,
+          'can_delete', TRUE,
+          'can_reclassify', TRUE,
+          'can_edit_kind', TRUE,
+          'can_edit_type', TRUE,
+          'can_return_to_queue', TRUE,
+          'is_staged_context', TRUE,
+          'preview_mode', CASE
+            WHEN LOWER(COALESCE(mq0.mime_type, '')) LIKE 'image/%' THEN 'IMAGE'
+            WHEN LOWER(COALESCE(mq0.mime_type, '')) = 'application/pdf' THEN 'PDF'
+            ELSE 'FILE'
+          END,
+          'source_label', COALESCE(NULLIF(BTRIM(mq0.meta_json->>'source_label'), ''), 'Staged'),
+          'source_badge', COALESCE(NULLIF(BTRIM(mq0.meta_json->>'source_label'), ''), 'Staged')
+        ) AS item_json
+      FROM public.manual_timesheet_queue AS mq0
+      CROSS JOIN resolved
+      WHERE resolved.resolved_timesheet_id IS NULL
+        AND resolved.resolved_contract_week_id IS NOT NULL
+        AND UPPER(COALESCE(mq0.status, '')) = 'STAGED'
+        AND NULLIF(BTRIM(COALESCE(mq0.meta_json->>'contract_week_id', '')), '') = resolved.resolved_contract_week_id::text
+    ),
+    evidence_ranked AS (
+      SELECT evidence_items.sort_order, evidence_items.item_json
+      FROM evidence_items
+      WHERE NULLIF(BTRIM(COALESCE(evidence_items.item_json->>'storage_key', evidence_items.item_json->>'r2_key', '')), '') IS NOT NULL
+    ),
+    evidence_payload AS (
+      SELECT
+        COALESCE(JSONB_AGG(evidence_ranked.item_json ORDER BY evidence_ranked.sort_order ASC, evidence_ranked.item_json->>'id' ASC), '[]'::jsonb) AS evidence_json,
+        COUNT(*)::integer AS evidence_count,
+        BOOL_OR(UPPER(COALESCE(evidence_ranked.item_json->>'kind', evidence_ranked.item_json->>'staged_kind', '')) = 'TIMESHEET') AS has_timesheet,
+        BOOL_OR(UPPER(COALESCE(evidence_ranked.item_json->>'kind', evidence_ranked.item_json->>'staged_kind', '')) = 'MILEAGE') AS has_mileage,
+        BOOL_OR(UPPER(COALESCE(evidence_ranked.item_json->>'kind', evidence_ranked.item_json->>'staged_kind', '')) = 'TRAVEL') AS has_travel,
+        BOOL_OR(UPPER(COALESCE(evidence_ranked.item_json->>'kind', evidence_ranked.item_json->>'staged_kind', '')) = 'ACCOMMODATION') AS has_accommodation,
+        BOOL_OR(UPPER(COALESCE(evidence_ranked.item_json->>'kind', evidence_ranked.item_json->>'staged_kind', '')) = 'OTHER') AS has_other,
+        (SELECT er1.item_json FROM evidence_ranked AS er1 ORDER BY er1.sort_order ASC, er1.item_json->>'id' ASC LIMIT 1) AS primary_evidence_json
+      FROM evidence_ranked
+    ),
+    final_payload AS (
+      SELECT
+        JSONB_BUILD_OBJECT(
+          'ok', TRUE,
+          'context_kind', 'bulk_authorise_row_context',
+          'context_profile', 'evidence',
+          'profile', 'evidence',
+          'context_type', CASE WHEN 'bulk_authorise_row_context' = 'bulk_authorise_row_context' THEN 'bulk_authorise' ELSE 'bulk_process' END,
+          'slim_context', TRUE,
+          'header_loaded', FALSE,
+          'header_only', FALSE,
+          'editor_loaded', FALSE,
+          'evidence_loaded', TRUE,
+          'compare_loaded', FALSE,
+          'full_loaded', FALSE,
+          'schedule_pending', TRUE,
+          'schedule_authoritative', FALSE,
+          'loaded_layers', JSONB_BUILD_ARRAY('evidence'),
+          'soft_failure', FALSE,
+          'context_degraded', FALSE,
+          'degraded_reason', NULL::text,
+          'row_key', CASE WHEN resolved.resolved_timesheet_id IS NOT NULL THEN 'timesheet:' || resolved.resolved_timesheet_id::text ELSE 'contract_week:' || resolved.resolved_contract_week_id::text END,
+          'timesheet_id', resolved.resolved_timesheet_id,
+          'current_timesheet_id', resolved.resolved_timesheet_id,
+          'requested_timesheet_id', resolved.resolved_timesheet_id,
+          'expected_timesheet_id', resolved.resolved_timesheet_id,
+          'contract_week_id', resolved.resolved_contract_week_id,
+          'row_signature', MD5(CONCAT_WS('|', COALESCE(resolved.resolved_timesheet_id::text, ''), COALESCE(resolved.resolved_contract_week_id::text, ''), COALESCE(resolved.timesheet_updated_at::text, ''), COALESCE(resolved.contract_week_updated_at::text, ''), 'evidence')),
+          'evidence', COALESCE(evidence_payload.evidence_json, '[]'::jsonb),
+          'attached_evidence', COALESCE(evidence_payload.evidence_json, '[]'::jsonb),
+          'attachedRows', COALESCE(evidence_payload.evidence_json, '[]'::jsonb),
+          'primary_artifact', COALESCE(evidence_payload.primary_evidence_json, JSONB_BUILD_OBJECT()),
+          'preview_storage_key', COALESCE(evidence_payload.primary_evidence_json->>'storage_key', resolved.summary_primary_artifact_storage_key),
+          'primary_artifact_storage_key', COALESCE(evidence_payload.primary_evidence_json->>'storage_key', resolved.summary_primary_artifact_storage_key),
+          'primary_artifact_preview_mode', COALESCE(evidence_payload.primary_evidence_json->>'preview_mode', resolved.summary_primary_artifact_preview_mode),
+          'has_any_evidence', (COALESCE(evidence_payload.evidence_count, 0) > 0),
+          'attached_evidence_count', COALESCE(evidence_payload.evidence_count, 0),
+          'evidence_count', COALESCE(evidence_payload.evidence_count, 0),
+          'evidence_badges', JSONB_BUILD_ARRAY(
+            JSONB_BUILD_OBJECT('kind', 'TIMESHEET', 'present', COALESCE(evidence_payload.has_timesheet, FALSE), 'has_evidence', COALESCE(evidence_payload.has_timesheet, FALSE)),
+            JSONB_BUILD_OBJECT('kind', 'MILEAGE', 'present', COALESCE(evidence_payload.has_mileage, FALSE), 'has_evidence', COALESCE(evidence_payload.has_mileage, FALSE)),
+            JSONB_BUILD_OBJECT('kind', 'TRAVEL', 'present', COALESCE(evidence_payload.has_travel, FALSE), 'has_evidence', COALESCE(evidence_payload.has_travel, FALSE)),
+            JSONB_BUILD_OBJECT('kind', 'ACCOMMODATION', 'present', COALESCE(evidence_payload.has_accommodation, FALSE), 'has_evidence', COALESCE(evidence_payload.has_accommodation, FALSE)),
+            JSONB_BUILD_OBJECT('kind', 'OTHER', 'present', COALESCE(evidence_payload.has_other, FALSE), 'has_evidence', COALESCE(evidence_payload.has_other, FALSE))
+          ),
+          'evidence_meta', JSONB_BUILD_OBJECT(
+            'evidence_loaded', TRUE,
+            'has_any_evidence', (COALESCE(evidence_payload.evidence_count, 0) > 0),
+            'attached_evidence_count', COALESCE(evidence_payload.evidence_count, 0),
+            'evidence_badges', JSONB_BUILD_ARRAY(
+              JSONB_BUILD_OBJECT('kind', 'TIMESHEET', 'present', COALESCE(evidence_payload.has_timesheet, FALSE), 'has_evidence', COALESCE(evidence_payload.has_timesheet, FALSE)),
+              JSONB_BUILD_OBJECT('kind', 'MILEAGE', 'present', COALESCE(evidence_payload.has_mileage, FALSE), 'has_evidence', COALESCE(evidence_payload.has_mileage, FALSE)),
+              JSONB_BUILD_OBJECT('kind', 'TRAVEL', 'present', COALESCE(evidence_payload.has_travel, FALSE), 'has_evidence', COALESCE(evidence_payload.has_travel, FALSE)),
+              JSONB_BUILD_OBJECT('kind', 'ACCOMMODATION', 'present', COALESCE(evidence_payload.has_accommodation, FALSE), 'has_evidence', COALESCE(evidence_payload.has_accommodation, FALSE)),
+              JSONB_BUILD_OBJECT('kind', 'OTHER', 'present', COALESCE(evidence_payload.has_other, FALSE), 'has_evidence', COALESCE(evidence_payload.has_other, FALSE))
+            )
+          ),
+          'row', JSONB_BUILD_OBJECT(
+            'row_key', CASE WHEN resolved.resolved_timesheet_id IS NOT NULL THEN 'timesheet:' || resolved.resolved_timesheet_id::text ELSE 'contract_week:' || resolved.resolved_contract_week_id::text END,
+            'timesheet_id', resolved.resolved_timesheet_id,
+            'current_timesheet_id', resolved.resolved_timesheet_id,
+            'requested_timesheet_id', resolved.resolved_timesheet_id,
+            'expected_timesheet_id', resolved.resolved_timesheet_id,
+            'contract_week_id', resolved.resolved_contract_week_id,
+            'contract_id', resolved.resolved_contract_id,
+            'candidate_id', resolved.candidate_id,
+            'candidate_name', resolved.candidate_name,
+            'candidate_display_name', resolved.candidate_display_name,
+            'client_id', resolved.client_id,
+            'client_name', resolved.client_name,
+            'week_ending_date', resolved.week_ending_date,
+            'route_family', resolved.route_family,
+            'has_any_evidence', (COALESCE(evidence_payload.evidence_count, 0) > 0),
+            'attached_evidence_count', COALESCE(evidence_payload.evidence_count, 0),
+            'primary_artifact', COALESCE(evidence_payload.primary_evidence_json, JSONB_BUILD_OBJECT()),
+            'primary_artifact_storage_key', COALESCE(evidence_payload.primary_evidence_json->>'storage_key', resolved.summary_primary_artifact_storage_key),
+            'primary_artifact_preview_mode', COALESCE(evidence_payload.primary_evidence_json->>'preview_mode', resolved.summary_primary_artifact_preview_mode),
+            'evidence_badges', JSONB_BUILD_ARRAY(
+              JSONB_BUILD_OBJECT('kind', 'TIMESHEET', 'present', COALESCE(evidence_payload.has_timesheet, FALSE), 'has_evidence', COALESCE(evidence_payload.has_timesheet, FALSE)),
+              JSONB_BUILD_OBJECT('kind', 'MILEAGE', 'present', COALESCE(evidence_payload.has_mileage, FALSE), 'has_evidence', COALESCE(evidence_payload.has_mileage, FALSE)),
+              JSONB_BUILD_OBJECT('kind', 'TRAVEL', 'present', COALESCE(evidence_payload.has_travel, FALSE), 'has_evidence', COALESCE(evidence_payload.has_travel, FALSE)),
+              JSONB_BUILD_OBJECT('kind', 'ACCOMMODATION', 'present', COALESCE(evidence_payload.has_accommodation, FALSE), 'has_evidence', COALESCE(evidence_payload.has_accommodation, FALSE)),
+              JSONB_BUILD_OBJECT('kind', 'OTHER', 'present', COALESCE(evidence_payload.has_other, FALSE), 'has_evidence', COALESCE(evidence_payload.has_other, FALSE))
+            )
+          ),
+          'row_patch', JSONB_BUILD_OBJECT(),
+          'action_flags', JSONB_BUILD_OBJECT('has_any_evidence', (COALESCE(evidence_payload.evidence_count, 0) > 0), 'attached_evidence_count', COALESCE(evidence_payload.evidence_count, 0)),
+          'details', JSONB_BUILD_OBJECT('evidence', COALESCE(evidence_payload.evidence_json, '[]'::jsonb), 'evidence_meta', JSONB_BUILD_OBJECT('evidence_loaded', TRUE, 'has_any_evidence', (COALESCE(evidence_payload.evidence_count, 0) > 0), 'attached_evidence_count', COALESCE(evidence_payload.evidence_count, 0))),
+          'left_pane', JSONB_BUILD_OBJECT('evidence', COALESCE(evidence_payload.evidence_json, '[]'::jsonb), 'evidence_meta', JSONB_BUILD_OBJECT('evidence_loaded', TRUE, 'has_any_evidence', (COALESCE(evidence_payload.evidence_count, 0) > 0), 'attached_evidence_count', COALESCE(evidence_payload.evidence_count, 0))),
+          'cache_invalidation_hints', JSONB_BUILD_OBJECT(),
+          'count_deltas', JSONB_BUILD_OBJECT(),
+          'filters', v_filters
+        ) AS payload_json
+      FROM resolved
+      LEFT JOIN evidence_payload ON TRUE
+      WHERE resolved.resolved_timesheet_id IS NOT NULL OR resolved.resolved_contract_week_id IS NOT NULL
+    )
+    SELECT final_payload.payload_json || JSONB_BUILD_OBJECT('data_row', final_payload.payload_json->'row')
+      INTO v_out
+    FROM final_payload;
+
+    IF v_out IS NULL THEN
+      RETURN JSONB_BUILD_OBJECT(
+        'ok', FALSE,
+        'context_kind', 'bulk_authorise_row_context',
+        'context_profile', 'evidence',
+        'profile', 'evidence',
+        'soft_failure', TRUE,
+        'context_degraded', TRUE,
+        'degraded_reason', 'ROW_NOT_FOUND',
+        'header_loaded', FALSE,
+        'editor_loaded', FALSE,
+        'evidence_loaded', FALSE,
+        'compare_loaded', FALSE,
+        'full_loaded', FALSE,
+        'header_only', FALSE,
+        'schedule_pending', TRUE,
+        'schedule_authoritative', FALSE,
+        'loaded_layers', '[]'::jsonb,
+        'error', 'ROW_NOT_FOUND',
+        'message', 'No bulk authorise evidence context was found for the supplied identity',
+        'filters', v_filters
+      );
+    END IF;
+
+    RETURN v_out;
+  END IF;
+
+  IF v_profile = 'compare_import' THEN
+    WITH input_ids AS (
+      SELECT
+        CASE WHEN v_timesheet_id_text IS NOT NULL AND v_timesheet_id_text ~* v_uuid_re THEN v_timesheet_id_text::uuid ELSE NULL::uuid END AS input_timesheet_id,
+        CASE WHEN v_contract_week_id_text IS NOT NULL AND v_contract_week_id_text ~* v_uuid_re THEN v_contract_week_id_text::uuid ELSE NULL::uuid END AS input_contract_week_id
+    ),
+    contract_week_row AS (
+      SELECT cw0.*
+      FROM public.contract_weeks AS cw0
+      CROSS JOIN input_ids AS cw_ids
+      WHERE (cw_ids.input_contract_week_id IS NOT NULL AND cw0.id = cw_ids.input_contract_week_id)
+         OR (cw_ids.input_timesheet_id IS NOT NULL AND cw0.timesheet_id = cw_ids.input_timesheet_id)
+      ORDER BY cw0.updated_at DESC NULLS LAST, cw0.created_at DESC NULLS LAST, cw0.id DESC
+      LIMIT 1
+    ),
+    timesheet_row AS (
+      SELECT ts0.*
+      FROM public.timesheets AS ts0
+      CROSS JOIN input_ids AS ts_ids
+      LEFT JOIN contract_week_row AS cw_for_ts ON TRUE
+      WHERE ts0.is_current = TRUE
+        AND (
+          (ts_ids.input_timesheet_id IS NOT NULL AND ts0.timesheet_id = ts_ids.input_timesheet_id)
+          OR (ts_ids.input_timesheet_id IS NULL AND cw_for_ts.timesheet_id IS NOT NULL AND ts0.timesheet_id = cw_for_ts.timesheet_id)
+        )
+      ORDER BY ts0.version DESC NULLS LAST, ts0.updated_at DESC NULLS LAST, ts0.created_at DESC NULLS LAST
+      LIMIT 1
+    ),
+    tsfin_row AS (
+      SELECT tf0.*
+      FROM public.timesheets_financials AS tf0
+      LEFT JOIN timesheet_row AS ts_for_tf ON TRUE
+      WHERE tf0.is_current = TRUE
+        AND ts_for_tf.timesheet_id IS NOT NULL
+        AND tf0.timesheet_id = ts_for_tf.timesheet_id
+      ORDER BY tf0.created_at DESC NULLS LAST, tf0.updated_at DESC NULLS LAST, tf0.id DESC
+      LIMIT 1
+    ),
+    summary_row AS (
+      SELECT summary_source.*
+      FROM public.timesheet_summary_lightweight_rows_v1(v_decision_filters || JSONB_BUILD_OBJECT('disable_paging', TRUE, 'limit', 25)) AS summary_source
+      CROSS JOIN input_ids AS summary_ids
+      WHERE (summary_ids.input_timesheet_id IS NULL OR summary_source.timesheet_id = summary_ids.input_timesheet_id)
+        AND (summary_ids.input_contract_week_id IS NULL OR summary_source.contract_week_id = summary_ids.input_contract_week_id)
+      ORDER BY summary_source.timesheet_id NULLS LAST, summary_source.contract_week_id NULLS LAST
+      LIMIT 1
+    ),
+    resolved AS (
+      SELECT
+        COALESCE(summary_row.timesheet_id, timesheet_row.timesheet_id, contract_week_row.timesheet_id) AS resolved_timesheet_id,
+        COALESCE(summary_row.contract_week_id, contract_week_row.id) AS resolved_contract_week_id,
+        COALESCE(summary_row.contract_id, timesheet_row.contract_id, contract_week_row.contract_id) AS resolved_contract_id,
+        summary_row.candidate_id AS candidate_id,
+        summary_row.client_id AS client_id,
+        summary_row.candidate_name AS candidate_name,
+        summary_row.client_name AS client_name,
+        summary_row.week_ending_date AS week_ending_date,
+        summary_row.route_family AS route_family,
+        tsfin_row.external_source_rows_json AS external_source_rows_json,
+        tsfin_row.updated_at AS tsfin_updated_at,
+        timesheet_row.updated_at AS timesheet_updated_at,
+        contract_week_row.updated_at AS contract_week_updated_at
+      FROM input_ids
+      LEFT JOIN summary_row ON TRUE
+      LEFT JOIN timesheet_row ON TRUE
+      LEFT JOIN contract_week_row ON TRUE
+      LEFT JOIN tsfin_row ON TRUE
+    )
+    SELECT JSONB_BUILD_OBJECT(
+        'ok', TRUE,
+        'context_kind', 'bulk_authorise_row_context',
+        'context_profile', 'compare_import',
+        'profile', 'compare_import',
+        'context_type', CASE WHEN 'bulk_authorise_row_context' = 'bulk_authorise_row_context' THEN 'bulk_authorise' ELSE 'bulk_process' END,
+        'slim_context', TRUE,
+        'header_loaded', TRUE,
+        'header_only', FALSE,
+        'editor_loaded', FALSE,
+        'evidence_loaded', FALSE,
+        'compare_loaded', TRUE,
+        'full_loaded', FALSE,
+        'schedule_pending', TRUE,
+        'schedule_authoritative', FALSE,
+        'loaded_layers', JSONB_BUILD_ARRAY('header', 'compare_import'),
+        'soft_failure', FALSE,
+        'context_degraded', FALSE,
+        'degraded_reason', NULL::text,
+        'row_key', CASE WHEN resolved.resolved_timesheet_id IS NOT NULL THEN 'timesheet:' || resolved.resolved_timesheet_id::text ELSE 'contract_week:' || resolved.resolved_contract_week_id::text END,
+        'timesheet_id', resolved.resolved_timesheet_id,
+        'current_timesheet_id', resolved.resolved_timesheet_id,
+        'requested_timesheet_id', resolved.resolved_timesheet_id,
+        'expected_timesheet_id', resolved.resolved_timesheet_id,
+        'contract_week_id', resolved.resolved_contract_week_id,
+        'row_signature', MD5(CONCAT_WS('|', COALESCE(resolved.resolved_timesheet_id::text, ''), COALESCE(resolved.resolved_contract_week_id::text, ''), COALESCE(resolved.timesheet_updated_at::text, ''), COALESCE(resolved.contract_week_updated_at::text, ''), COALESCE(resolved.tsfin_updated_at::text, ''), 'compare_import')),
+        'row', JSONB_BUILD_OBJECT(
+          'row_key', CASE WHEN resolved.resolved_timesheet_id IS NOT NULL THEN 'timesheet:' || resolved.resolved_timesheet_id::text ELSE 'contract_week:' || resolved.resolved_contract_week_id::text END,
+          'timesheet_id', resolved.resolved_timesheet_id,
+          'current_timesheet_id', resolved.resolved_timesheet_id,
+          'requested_timesheet_id', resolved.resolved_timesheet_id,
+          'expected_timesheet_id', resolved.resolved_timesheet_id,
+          'contract_week_id', resolved.resolved_contract_week_id,
+          'contract_id', resolved.resolved_contract_id,
+          'candidate_id', resolved.candidate_id,
+          'candidate_name', resolved.candidate_name,
+          'client_id', resolved.client_id,
+          'client_name', resolved.client_name,
+          'week_ending_date', resolved.week_ending_date,
+          'route_family', resolved.route_family
+        ),
+        'data_row', JSONB_BUILD_OBJECT(
+          'row_key', CASE WHEN resolved.resolved_timesheet_id IS NOT NULL THEN 'timesheet:' || resolved.resolved_timesheet_id::text ELSE 'contract_week:' || resolved.resolved_contract_week_id::text END,
+          'timesheet_id', resolved.resolved_timesheet_id,
+          'current_timesheet_id', resolved.resolved_timesheet_id,
+          'requested_timesheet_id', resolved.resolved_timesheet_id,
+          'expected_timesheet_id', resolved.resolved_timesheet_id,
+          'contract_week_id', resolved.resolved_contract_week_id,
+          'contract_id', resolved.resolved_contract_id,
+          'candidate_id', resolved.candidate_id,
+          'candidate_name', resolved.candidate_name,
+          'client_id', resolved.client_id,
+          'client_name', resolved.client_name,
+          'week_ending_date', resolved.week_ending_date,
+          'route_family', resolved.route_family
+        ),
+        'row_patch', JSONB_BUILD_OBJECT(),
+        'action_flags', JSONB_BUILD_OBJECT(),
+        'compare', JSONB_BUILD_OBJECT(
+          'source_rows', CASE WHEN v_include_import_source_rows THEN COALESCE(resolved.external_source_rows_json, '[]'::jsonb) ELSE '[]'::jsonb END,
+          'external_source_rows_json', CASE WHEN v_include_import_source_rows THEN COALESCE(resolved.external_source_rows_json, '[]'::jsonb) ELSE '[]'::jsonb END,
+          'include_import_source_rows', v_include_import_source_rows
+        ),
+        'details', JSONB_BUILD_OBJECT(
+          'source_rows', CASE WHEN v_include_import_source_rows THEN COALESCE(resolved.external_source_rows_json, '[]'::jsonb) ELSE '[]'::jsonb END,
+          'external_source_rows_json', CASE WHEN v_include_import_source_rows THEN COALESCE(resolved.external_source_rows_json, '[]'::jsonb) ELSE '[]'::jsonb END,
+          'evidence', '[]'::jsonb
+        ),
+        'left_pane', JSONB_BUILD_OBJECT('source_items', CASE WHEN v_include_import_source_rows THEN COALESCE(resolved.external_source_rows_json, '[]'::jsonb) ELSE '[]'::jsonb END, 'evidence', '[]'::jsonb),
+        'evidence', '[]'::jsonb,
+        'evidence_meta', JSONB_BUILD_OBJECT('evidence_loaded', FALSE),
+        'cache_invalidation_hints', JSONB_BUILD_OBJECT(),
+        'count_deltas', JSONB_BUILD_OBJECT(),
+        'filters', v_filters
+      )
+      INTO v_out
+    FROM resolved
+    WHERE resolved.resolved_timesheet_id IS NOT NULL OR resolved.resolved_contract_week_id IS NOT NULL;
+
+    IF v_out IS NULL THEN
+      RETURN JSONB_BUILD_OBJECT(
+        'ok', FALSE,
+        'context_kind', 'bulk_authorise_row_context',
+        'context_profile', 'compare_import',
+        'profile', 'compare_import',
+        'soft_failure', TRUE,
+        'context_degraded', TRUE,
+        'degraded_reason', 'ROW_NOT_FOUND',
+        'header_loaded', FALSE,
+        'editor_loaded', FALSE,
+        'evidence_loaded', FALSE,
+        'compare_loaded', FALSE,
+        'full_loaded', FALSE,
+        'header_only', FALSE,
+        'schedule_pending', TRUE,
+        'schedule_authoritative', FALSE,
+        'loaded_layers', '[]'::jsonb,
+        'error', 'ROW_NOT_FOUND',
+        'message', 'No bulk authorise compare/import context was found for the supplied identity',
+        'filters', v_filters
+      );
+    END IF;
+
+    RETURN v_out;
   END IF;
 
   WITH decision_row AS (
@@ -5585,11 +9785,46 @@ BEGIN
     INTO v_out
   FROM final_payload;
 
+  IF v_out IS NOT NULL THEN
+    v_out := v_out || JSONB_BUILD_OBJECT(
+      'header_loaded', TRUE,
+      'header_only', FALSE,
+      'editor_loaded', TRUE,
+      'evidence_loaded', COALESCE(v_include_evidence, FALSE),
+      'compare_loaded', COALESCE(v_include_compare, FALSE),
+      'full_loaded', (v_profile = 'full'),
+      'schedule_pending', FALSE,
+      'schedule_authoritative', TRUE,
+      'soft_failure', FALSE,
+      'context_degraded', FALSE,
+      'degraded_reason', NULL::text,
+      'loaded_layers', CASE
+        WHEN v_profile = 'full' THEN JSONB_BUILD_ARRAY('header', 'editor', 'evidence', 'compare_import', 'full')
+        WHEN COALESCE(v_include_evidence, FALSE) = TRUE AND COALESCE(v_include_compare, FALSE) = TRUE THEN JSONB_BUILD_ARRAY('header', 'editor', 'evidence', 'compare_import')
+        WHEN COALESCE(v_include_evidence, FALSE) = TRUE THEN JSONB_BUILD_ARRAY('header', 'editor', 'evidence')
+        WHEN COALESCE(v_include_compare, FALSE) = TRUE THEN JSONB_BUILD_ARRAY('header', 'editor', 'compare_import')
+        ELSE JSONB_BUILD_ARRAY('header', 'editor')
+      END
+    );
+  END IF;
+
   RETURN COALESCE(v_out, JSONB_BUILD_OBJECT(
     'ok', FALSE,
     'context_kind', 'bulk_authorise_row_context',
     'context_profile', v_profile,
     'profile', v_profile,
+    'soft_failure', TRUE,
+    'context_degraded', TRUE,
+    'degraded_reason', 'ROW_NOT_FOUND',
+    'header_loaded', FALSE,
+    'header_only', FALSE,
+    'editor_loaded', FALSE,
+    'evidence_loaded', FALSE,
+    'compare_loaded', FALSE,
+    'full_loaded', FALSE,
+    'schedule_pending', TRUE,
+    'schedule_authoritative', FALSE,
+    'loaded_layers', '[]'::jsonb,
     'error', 'ROW_NOT_FOUND',
     'message', 'No bulk authorise row context was found for the supplied identity',
     'filters', v_filters
