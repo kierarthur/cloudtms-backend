@@ -21964,7 +21964,297 @@ begin
   -- does not build evidence samples or event-detail arrays. Full mode refreshes
   -- v_submission_evidence later with p_counts_only = false before detailed
   -- blocked-funds/evidence payload construction.
-  v_submission_evidence := public.pay_batch_submission_evidence(p_pay_batch_id, true);
+  WITH classified_rows AS (
+    SELECT
+      classification_row.pay_bank_transfer_id,
+      classification_row.pay_batch_id,
+      classification_row.pay_channel,
+      classification_row.transfer_group_key,
+      classification_row.scope_id,
+      classification_row.scope_operation_id,
+      classification_row.scope_status,
+      classification_row.scope_request_id,
+      classification_row.status_upper,
+      classification_row.rail_state_upper,
+      classification_row.amount,
+      classification_row.currency,
+      classification_row.has_route_ready,
+      classification_row.has_local_prepare_identity,
+      classification_row.has_provider_submission_evidence,
+      classification_row.has_provider_event_evidence,
+      classification_row.has_provider_attempt_without_external_id,
+      classification_row.has_operation_submit_attempt,
+      classification_row.has_ambiguous_external_evidence,
+      classification_row.is_failed_or_blocked,
+      classification_row.is_terminal_or_completed,
+      classification_row.evidence_classification,
+      classification_row.is_authorisation_ready,
+      classification_row.is_unattempted_submit_eligible,
+      classification_row.is_safe_local_cleanup,
+      classification_row.is_canonical_pending_status,
+      classification_row.has_auth_prepared_scope,
+      classification_row.has_different_operation_scope,
+      classification_row.has_stale_auth_request_evidence,
+      classification_row.unsafe_reason
+    FROM public.pay_bank_transfer_execution_classify(
+      p_pay_batch_id,
+      'ALL'::text,
+      NULL::uuid,
+      true
+    ) AS classification_row
+  ), classified_rows_with_sample AS (
+    SELECT
+      classified_rows.*,
+      row_number() OVER (
+        ORDER BY
+          CASE
+            WHEN classified_rows.evidence_classification IN ('local_only_evidence', 'attempted_but_unproven', 'ambiguous', 'failed', 'pending', 'scope_without_transfer') THEN 0
+            ELSE 1
+          END,
+          classified_rows.pay_bank_transfer_id NULLS LAST,
+          classified_rows.scope_id NULLS LAST
+      ) AS evidence_sample_ordinality
+    FROM classified_rows
+  ), evidence_counts AS (
+    SELECT
+      count(*) FILTER (WHERE classified_rows.pay_bank_transfer_id IS NOT NULL)::integer AS transfer_count,
+      count(*) FILTER (WHERE classified_rows.evidence_classification = 'provider_evidence_present')::integer AS provider_submitted_count,
+      count(*) FILTER (WHERE classified_rows.evidence_classification = 'local_only_evidence')::integer AS local_only_count,
+      count(*) FILTER (WHERE classified_rows.evidence_classification = 'pending')::integer AS pending_count,
+      count(*) FILTER (WHERE classified_rows.evidence_classification = 'failed' OR classified_rows.is_failed_or_blocked IS TRUE)::integer AS failed_count,
+      count(*) FILTER (WHERE classified_rows.evidence_classification = 'ambiguous' OR classified_rows.has_ambiguous_external_evidence IS TRUE)::integer AS ambiguous_count,
+      count(*) FILTER (
+        WHERE classified_rows.has_provider_attempt_without_external_id IS TRUE
+           OR classified_rows.has_operation_submit_attempt IS TRUE
+      )::integer AS attempted_but_unproven_count,
+      count(*) FILTER (WHERE classified_rows.has_provider_attempt_without_external_id IS TRUE)::integer AS provider_attempt_without_external_id_count,
+      count(*) FILTER (
+        WHERE classified_rows.evidence_classification = 'ambiguous'
+           OR classified_rows.has_ambiguous_external_evidence IS TRUE
+           OR classified_rows.has_provider_attempt_without_external_id IS TRUE
+           OR classified_rows.has_operation_submit_attempt IS TRUE
+      )::integer AS requires_provider_poll_count,
+      count(*) FILTER (WHERE classified_rows.is_terminal_or_completed IS TRUE)::integer AS committed_count,
+      COALESCE(bool_or(
+        EXISTS (
+          SELECT 1
+          FROM public.pay_bank_transfers AS transfer_row
+          WHERE transfer_row.id = classified_rows.pay_bank_transfer_id
+            AND nullif(btrim(coalesce(transfer_row.rail_tx_id, '')), '') IS NOT NULL
+        )
+      ), false) AS has_rail_tx_id,
+      COALESCE(bool_or(classified_rows.has_local_prepare_identity IS TRUE), false) AS has_local_generated_request_identity,
+      COALESCE(bool_or(classified_rows.has_provider_submission_evidence IS TRUE OR classified_rows.has_provider_event_evidence IS TRUE), false) AS has_external_submission_evidence,
+      count(*) FILTER (WHERE classified_rows.is_authorisation_ready IS TRUE)::integer AS authorisation_ready_count,
+      count(*) FILTER (WHERE classified_rows.is_authorisation_ready IS TRUE)::integer AS authorisation_ready_transfer_count,
+      count(*) FILTER (WHERE classified_rows.is_unattempted_submit_eligible IS TRUE)::integer AS unattempted_submit_eligible_count,
+      count(*) FILTER (WHERE classified_rows.is_safe_local_cleanup IS TRUE)::integer AS safe_local_cleanup_count,
+      count(*) FILTER (
+        WHERE classified_rows.has_provider_submission_evidence IS TRUE
+           OR classified_rows.has_provider_event_evidence IS TRUE
+           OR classified_rows.has_provider_attempt_without_external_id IS TRUE
+           OR classified_rows.has_operation_submit_attempt IS TRUE
+      )::integer AS provider_attempt_or_evidence_count,
+      count(*) FILTER (
+        WHERE classified_rows.has_provider_submission_evidence IS TRUE
+           OR classified_rows.has_provider_event_evidence IS TRUE
+           OR classified_rows.has_ambiguous_external_evidence IS TRUE
+      )::integer AS provider_or_ambiguous_evidence_count,
+      COALESCE(jsonb_agg(
+        jsonb_strip_nulls(jsonb_build_object(
+          'pay_bank_transfer_id', CASE WHEN classified_rows.pay_bank_transfer_id IS NULL THEN NULL ELSE classified_rows.pay_bank_transfer_id::text END,
+          'scope_id', CASE WHEN classified_rows.scope_id IS NULL THEN NULL ELSE classified_rows.scope_id::text END,
+          'scope_operation_id', CASE WHEN classified_rows.scope_operation_id IS NULL THEN NULL ELSE classified_rows.scope_operation_id::text END,
+          'pay_channel', classified_rows.pay_channel,
+          'classification', classified_rows.evidence_classification,
+          'status', classified_rows.status_upper,
+          'rail_state', classified_rows.rail_state_upper,
+          'has_provider_submission_evidence', classified_rows.has_provider_submission_evidence,
+          'has_provider_event_evidence', classified_rows.has_provider_event_evidence,
+          'has_provider_attempt_without_external_id', classified_rows.has_provider_attempt_without_external_id,
+          'has_operation_submit_attempt', classified_rows.has_operation_submit_attempt,
+          'has_ambiguous_external_evidence', classified_rows.has_ambiguous_external_evidence,
+          'is_authorisation_ready', classified_rows.is_authorisation_ready,
+          'is_unattempted_submit_eligible', classified_rows.is_unattempted_submit_eligible,
+          'is_safe_local_cleanup', classified_rows.is_safe_local_cleanup,
+          'is_canonical_pending_status', classified_rows.is_canonical_pending_status,
+          'has_auth_prepared_scope', classified_rows.has_auth_prepared_scope,
+          'has_different_operation_scope', classified_rows.has_different_operation_scope,
+          'has_stale_auth_request_evidence', classified_rows.has_stale_auth_request_evidence,
+          'unsafe_reason', classified_rows.unsafe_reason
+        ))
+        ORDER BY classified_rows.pay_bank_transfer_id NULLS LAST, classified_rows.scope_id NULLS LAST
+      ) FILTER (WHERE classified_rows.evidence_sample_ordinality <= 50 AND false), '[]'::jsonb) AS evidence_sample,
+      COALESCE(jsonb_agg(
+        jsonb_strip_nulls(jsonb_build_object(
+          'pay_bank_transfer_id', CASE WHEN classified_rows.pay_bank_transfer_id IS NULL THEN NULL ELSE classified_rows.pay_bank_transfer_id::text END,
+          'scope_id', CASE WHEN classified_rows.scope_id IS NULL THEN NULL ELSE classified_rows.scope_id::text END,
+          'scope_operation_id', CASE WHEN classified_rows.scope_operation_id IS NULL THEN NULL ELSE classified_rows.scope_operation_id::text END,
+          'pay_channel', classified_rows.pay_channel,
+          'evidence_classification', classified_rows.evidence_classification,
+          'status', classified_rows.status_upper,
+          'rail_state', classified_rows.rail_state_upper,
+          'has_route_ready', classified_rows.has_route_ready,
+          'has_local_prepare_identity', classified_rows.has_local_prepare_identity,
+          'has_provider_submission_evidence', classified_rows.has_provider_submission_evidence,
+          'has_provider_event_evidence', classified_rows.has_provider_event_evidence,
+          'has_provider_attempt_without_external_id', classified_rows.has_provider_attempt_without_external_id,
+          'has_operation_submit_attempt', classified_rows.has_operation_submit_attempt,
+          'has_ambiguous_external_evidence', classified_rows.has_ambiguous_external_evidence,
+          'is_failed_or_blocked', classified_rows.is_failed_or_blocked,
+          'is_terminal_or_completed', classified_rows.is_terminal_or_completed,
+          'is_authorisation_ready', classified_rows.is_authorisation_ready,
+          'is_unattempted_submit_eligible', classified_rows.is_unattempted_submit_eligible,
+          'is_safe_local_cleanup', classified_rows.is_safe_local_cleanup,
+          'is_canonical_pending_status', classified_rows.is_canonical_pending_status,
+          'has_auth_prepared_scope', classified_rows.has_auth_prepared_scope,
+          'has_different_operation_scope', classified_rows.has_different_operation_scope,
+          'has_stale_auth_request_evidence', classified_rows.has_stale_auth_request_evidence,
+          'unsafe_reason', classified_rows.unsafe_reason
+        ))
+        ORDER BY classified_rows.pay_bank_transfer_id NULLS LAST, classified_rows.scope_id NULLS LAST
+      ) FILTER (WHERE classified_rows.evidence_sample_ordinality <= 50 AND false), '[]'::jsonb) AS execution_classification_sample
+    FROM classified_rows_with_sample AS classified_rows
+  ), status_sets AS (
+    SELECT
+      COALESCE((
+        SELECT jsonb_agg(status_item.status_value ORDER BY status_item.status_value)
+        FROM (
+          SELECT DISTINCT upper(btrim(coalesce(transfer_row.status, ''))) AS status_value
+          FROM public.pay_bank_transfers AS transfer_row
+          WHERE transfer_row.pay_batch_id = p_pay_batch_id
+            AND nullif(btrim(coalesce(transfer_row.status, '')), '') IS NOT NULL
+        ) AS status_item
+      ), '[]'::jsonb) AS transfer_statuses,
+      COALESCE((
+        SELECT jsonb_agg(rail_state_item.rail_state_value ORDER BY rail_state_item.rail_state_value)
+        FROM (
+          SELECT DISTINCT upper(btrim(coalesce(transfer_row.rail_state, ''))) AS rail_state_value
+          FROM public.pay_bank_transfers AS transfer_row
+          WHERE transfer_row.pay_batch_id = p_pay_batch_id
+            AND nullif(btrim(coalesce(transfer_row.rail_state, '')), '') IS NOT NULL
+        ) AS rail_state_item
+      ), '[]'::jsonb) AS transfer_rail_states,
+      COALESCE((
+        SELECT jsonb_agg(event_state_item.normalised_state_value ORDER BY event_state_item.normalised_state_value)
+        FROM (
+          SELECT DISTINCT upper(btrim(coalesce(event_row.normalised_state, ''))) AS normalised_state_value
+          FROM public.pay_bank_transfer_events AS event_row
+          WHERE event_row.pay_batch_id = p_pay_batch_id
+            AND nullif(btrim(coalesce(event_row.normalised_state, '')), '') IS NOT NULL
+        ) AS event_state_item
+      ), '[]'::jsonb) AS event_normalised_states,
+      COALESCE((
+        SELECT jsonb_agg(provider_state_item.provider_state_value ORDER BY provider_state_item.provider_state_value)
+        FROM (
+          SELECT DISTINCT upper(btrim(coalesce(event_row.provider_state, ''))) AS provider_state_value
+          FROM public.pay_bank_transfer_events AS event_row
+          WHERE event_row.pay_batch_id = p_pay_batch_id
+            AND nullif(btrim(coalesce(event_row.provider_state, '')), '') IS NOT NULL
+        ) AS provider_state_item
+      ), '[]'::jsonb) AS event_provider_states,
+      (SELECT count(*)::integer FROM public.pay_bank_transfer_events AS event_row WHERE event_row.pay_batch_id = p_pay_batch_id) AS transfer_event_count
+  ), prepared_counts AS (
+    SELECT
+      evidence_counts.*,
+      status_sets.*,
+      COALESCE(evidence_counts.unattempted_submit_eligible_count, 0) AS remaining_unattempted_submit_required,
+      COALESCE(evidence_counts.pending_count, 0) + COALESCE(evidence_counts.local_only_count, 0) AS remaining_evidence_unresolved_count,
+      COALESCE(evidence_counts.unattempted_submit_eligible_count, 0) AS remaining_submit_attempt_required,
+      COALESCE(evidence_counts.pending_count, 0) + COALESCE(evidence_counts.local_only_count, 0) + COALESCE(evidence_counts.ambiguous_count, 0) + COALESCE(evidence_counts.attempted_but_unproven_count, 0) AS remaining_provider_evidence_required,
+      COALESCE(evidence_counts.unattempted_submit_eligible_count, 0) AS remaining_provider_submission_required,
+      (
+        COALESCE(evidence_counts.transfer_count, 0) > 0
+        AND COALESCE(evidence_counts.provider_submitted_count, 0) = COALESCE(evidence_counts.transfer_count, 0)
+        AND COALESCE(evidence_counts.failed_count, 0) = 0
+        AND COALESCE(evidence_counts.ambiguous_count, 0) = 0
+        AND COALESCE(evidence_counts.local_only_count, 0) = 0
+        AND COALESCE(evidence_counts.pending_count, 0) = 0
+        AND COALESCE(evidence_counts.attempted_but_unproven_count, 0) = 0
+      ) AS can_mark_submitted
+    FROM evidence_counts
+    CROSS JOIN status_sets
+  )
+  SELECT
+    jsonb_build_object(
+      'ok', true,
+      'pay_batch_id', p_pay_batch_id::text,
+      'counts_only', true,
+      'transfer_count', COALESCE(prepared_counts.transfer_count, 0),
+      'transfer_event_count', COALESCE(prepared_counts.transfer_event_count, 0),
+      'has_transfer_events', COALESCE(prepared_counts.transfer_event_count, 0) > 0,
+      'provider_submitted_count', COALESCE(prepared_counts.provider_submitted_count, 0),
+      'provider_evidence_present_count', COALESCE(prepared_counts.provider_submitted_count, 0),
+      'local_idempotency_only_count', COALESCE(prepared_counts.local_only_count, 0),
+      'local_only_count', COALESCE(prepared_counts.local_only_count, 0),
+      'local_only_evidence_count', COALESCE(prepared_counts.local_only_count, 0),
+      'pending_count', COALESCE(prepared_counts.pending_count, 0),
+      'failed_count', COALESCE(prepared_counts.failed_count, 0),
+      'ambiguous_count', COALESCE(prepared_counts.ambiguous_count, 0),
+      'attempted_but_unproven_count', COALESCE(prepared_counts.attempted_but_unproven_count, 0),
+      'provider_attempt_without_external_id_count', COALESCE(prepared_counts.provider_attempt_without_external_id_count, 0)
+    )
+    || jsonb_build_object(
+      'requires_provider_poll_count', COALESCE(prepared_counts.requires_provider_poll_count, 0),
+      'authorisation_ready_count', COALESCE(prepared_counts.authorisation_ready_count, 0),
+      'authorisation_ready_transfer_count', COALESCE(prepared_counts.authorisation_ready_transfer_count, 0),
+      'unattempted_submit_eligible_count', COALESCE(prepared_counts.unattempted_submit_eligible_count, 0),
+      'safe_local_cleanup_count', COALESCE(prepared_counts.safe_local_cleanup_count, 0),
+      'provider_attempt_or_evidence_count', COALESCE(prepared_counts.provider_attempt_or_evidence_count, 0),
+      'provider_or_ambiguous_evidence_count', COALESCE(prepared_counts.provider_or_ambiguous_evidence_count, 0),
+      'cancellable_local_auth_request_count', 0,
+      'non_cancellable_auth_request_count', 0,
+      'same_operation_active_auth_request_count', 0,
+      'other_operation_active_auth_request_count', 0,
+      'auth_request_provider_risk_count', 0,
+      'auth_request_retry_blocker_count', 0,
+      'remaining_submit_attempt_required', COALESCE(prepared_counts.remaining_submit_attempt_required, 0),
+      'remaining_unattempted_submit_required', COALESCE(prepared_counts.remaining_unattempted_submit_required, 0),
+      'remaining_evidence_unresolved_count', COALESCE(prepared_counts.remaining_evidence_unresolved_count, 0)
+    )
+    || jsonb_build_object(
+      'remaining_submit_attempt_required_definition', 'unattempted_submit_eligible_count',
+      'remaining_provider_evidence_required', COALESCE(prepared_counts.remaining_provider_evidence_required, 0),
+      'remaining_provider_submission_required', COALESCE(prepared_counts.remaining_provider_submission_required, 0),
+      'submission_count_semantics', jsonb_build_object(
+        'remaining_submit_attempt_required', 'count of transfers currently eligible for an unattempted provider submit',
+        'remaining_evidence_unresolved_count', 'legacy evidence-pending plus local-only count kept separate from submit eligibility',
+        'pending_count', 'evidence-level pending classification, not submit eligibility'
+      ),
+      'batch_can_be_marked_submitted', COALESCE(prepared_counts.can_mark_submitted, false),
+      'can_mark_submitted', COALESCE(prepared_counts.can_mark_submitted, false),
+      'can_mark_committed', COALESCE(prepared_counts.can_mark_submitted, false) AND COALESCE(prepared_counts.committed_count, 0) = COALESCE(prepared_counts.transfer_count, 0),
+      'has_rail_tx_id', COALESCE(prepared_counts.has_rail_tx_id, false),
+      'has_local_generated_request_identity', COALESCE(prepared_counts.has_local_generated_request_identity, false),
+      'has_external_submission_evidence', COALESCE(prepared_counts.has_external_submission_evidence, false),
+      'no_submission_evidence', COALESCE(prepared_counts.has_external_submission_evidence, false) = false,
+      'transfer_statuses', COALESCE(prepared_counts.transfer_statuses, '[]'::jsonb),
+      'transfer_rail_states', COALESCE(prepared_counts.transfer_rail_states, '[]'::jsonb),
+      'event_normalised_states', COALESCE(prepared_counts.event_normalised_states, '[]'::jsonb),
+      'event_provider_states', COALESCE(prepared_counts.event_provider_states, '[]'::jsonb)
+    )
+    || jsonb_build_object(
+      'evidence_sample', CASE WHEN false THEN COALESCE(prepared_counts.evidence_sample, '[]'::jsonb) ELSE '[]'::jsonb END,
+      'execution_classification_sample', CASE WHEN false THEN COALESCE(prepared_counts.execution_classification_sample, '[]'::jsonb) ELSE '[]'::jsonb END,
+      'has_possible_provider_attempt_evidence', COALESCE(prepared_counts.has_external_submission_evidence, false) OR COALESCE(prepared_counts.attempted_but_unproven_count, 0) > 0,
+      'has_provider_attempt_request_or_idempotency_reference', COALESCE(prepared_counts.provider_submitted_count, 0) > 0 OR COALESCE(prepared_counts.attempted_but_unproven_count, 0) > 0,
+      'has_request_or_idempotency_reference', COALESCE(prepared_counts.local_only_count, 0) > 0 OR COALESCE(prepared_counts.provider_submitted_count, 0) > 0 OR COALESCE(prepared_counts.attempted_but_unproven_count, 0) > 0,
+      'has_submitted_state', COALESCE(prepared_counts.provider_submitted_count, 0) > 0,
+      'has_processing_state', COALESCE(prepared_counts.transfer_rail_states, '[]'::jsonb) ?| array['PROCESSING','IN_FLIGHT','PENDING_SETTLEMENT','PENDING_CONFIRMATION'],
+      'has_completed_state', COALESCE(prepared_counts.committed_count, 0) > 0,
+      'has_failed_or_rejected_provider_state', COALESCE(prepared_counts.failed_count, 0) > 0,
+      'has_unknown_or_timeout_state', COALESCE(prepared_counts.ambiguous_count, 0) > 0,
+      'requires_provider_poll', COALESCE(prepared_counts.requires_provider_poll_count, 0) > 0,
+      'requires_review', COALESCE(prepared_counts.ambiguous_count, 0) > 0 OR (COALESCE(prepared_counts.attempted_but_unproven_count, 0) > 0 AND COALESCE(prepared_counts.requires_provider_poll_count, 0) = 0),
+      'has_provider_submission_reference', COALESCE(prepared_counts.provider_submitted_count, 0) > 0,
+      'has_provider_payment_reference', COALESCE(prepared_counts.provider_submitted_count, 0) > 0,
+      'has_provider_transfer_reference', COALESCE(prepared_counts.provider_submitted_count, 0) > 0,
+      'has_provider_transaction_reference', COALESCE(prepared_counts.provider_submitted_count, 0) > 0,
+      'has_external_payment_reference', COALESCE(prepared_counts.has_external_submission_evidence, false),
+      'has_external_transfer_reference', COALESCE(prepared_counts.has_external_submission_evidence, false)
+    )
+  INTO v_submission_evidence
+  FROM prepared_counts;
   v_provider_submitted_transfer_count := COALESCE(NULLIF(v_submission_evidence ->> 'provider_submitted_count', '')::integer, 0);
   v_local_only_transfer_count := COALESCE(NULLIF(v_submission_evidence ->> 'local_only_count', '')::integer, COALESCE(NULLIF(v_submission_evidence ->> 'local_idempotency_only_count', '')::integer, 0));
   v_pending_transfer_count := COALESCE(NULLIF(v_submission_evidence ->> 'pending_count', '')::integer, 0);
@@ -22771,7 +23061,297 @@ begin
     and v_bank_csv_export_hash is not null
   );
 
-  v_submission_evidence := public.pay_batch_submission_evidence(p_pay_batch_id, false);
+  WITH classified_rows AS (
+    SELECT
+      classification_row.pay_bank_transfer_id,
+      classification_row.pay_batch_id,
+      classification_row.pay_channel,
+      classification_row.transfer_group_key,
+      classification_row.scope_id,
+      classification_row.scope_operation_id,
+      classification_row.scope_status,
+      classification_row.scope_request_id,
+      classification_row.status_upper,
+      classification_row.rail_state_upper,
+      classification_row.amount,
+      classification_row.currency,
+      classification_row.has_route_ready,
+      classification_row.has_local_prepare_identity,
+      classification_row.has_provider_submission_evidence,
+      classification_row.has_provider_event_evidence,
+      classification_row.has_provider_attempt_without_external_id,
+      classification_row.has_operation_submit_attempt,
+      classification_row.has_ambiguous_external_evidence,
+      classification_row.is_failed_or_blocked,
+      classification_row.is_terminal_or_completed,
+      classification_row.evidence_classification,
+      classification_row.is_authorisation_ready,
+      classification_row.is_unattempted_submit_eligible,
+      classification_row.is_safe_local_cleanup,
+      classification_row.is_canonical_pending_status,
+      classification_row.has_auth_prepared_scope,
+      classification_row.has_different_operation_scope,
+      classification_row.has_stale_auth_request_evidence,
+      classification_row.unsafe_reason
+    FROM public.pay_bank_transfer_execution_classify(
+      p_pay_batch_id,
+      'ALL'::text,
+      NULL::uuid,
+      true
+    ) AS classification_row
+  ), classified_rows_with_sample AS (
+    SELECT
+      classified_rows.*,
+      row_number() OVER (
+        ORDER BY
+          CASE
+            WHEN classified_rows.evidence_classification IN ('local_only_evidence', 'attempted_but_unproven', 'ambiguous', 'failed', 'pending', 'scope_without_transfer') THEN 0
+            ELSE 1
+          END,
+          classified_rows.pay_bank_transfer_id NULLS LAST,
+          classified_rows.scope_id NULLS LAST
+      ) AS evidence_sample_ordinality
+    FROM classified_rows
+  ), evidence_counts AS (
+    SELECT
+      count(*) FILTER (WHERE classified_rows.pay_bank_transfer_id IS NOT NULL)::integer AS transfer_count,
+      count(*) FILTER (WHERE classified_rows.evidence_classification = 'provider_evidence_present')::integer AS provider_submitted_count,
+      count(*) FILTER (WHERE classified_rows.evidence_classification = 'local_only_evidence')::integer AS local_only_count,
+      count(*) FILTER (WHERE classified_rows.evidence_classification = 'pending')::integer AS pending_count,
+      count(*) FILTER (WHERE classified_rows.evidence_classification = 'failed' OR classified_rows.is_failed_or_blocked IS TRUE)::integer AS failed_count,
+      count(*) FILTER (WHERE classified_rows.evidence_classification = 'ambiguous' OR classified_rows.has_ambiguous_external_evidence IS TRUE)::integer AS ambiguous_count,
+      count(*) FILTER (
+        WHERE classified_rows.has_provider_attempt_without_external_id IS TRUE
+           OR classified_rows.has_operation_submit_attempt IS TRUE
+      )::integer AS attempted_but_unproven_count,
+      count(*) FILTER (WHERE classified_rows.has_provider_attempt_without_external_id IS TRUE)::integer AS provider_attempt_without_external_id_count,
+      count(*) FILTER (
+        WHERE classified_rows.evidence_classification = 'ambiguous'
+           OR classified_rows.has_ambiguous_external_evidence IS TRUE
+           OR classified_rows.has_provider_attempt_without_external_id IS TRUE
+           OR classified_rows.has_operation_submit_attempt IS TRUE
+      )::integer AS requires_provider_poll_count,
+      count(*) FILTER (WHERE classified_rows.is_terminal_or_completed IS TRUE)::integer AS committed_count,
+      COALESCE(bool_or(
+        EXISTS (
+          SELECT 1
+          FROM public.pay_bank_transfers AS transfer_row
+          WHERE transfer_row.id = classified_rows.pay_bank_transfer_id
+            AND nullif(btrim(coalesce(transfer_row.rail_tx_id, '')), '') IS NOT NULL
+        )
+      ), false) AS has_rail_tx_id,
+      COALESCE(bool_or(classified_rows.has_local_prepare_identity IS TRUE), false) AS has_local_generated_request_identity,
+      COALESCE(bool_or(classified_rows.has_provider_submission_evidence IS TRUE OR classified_rows.has_provider_event_evidence IS TRUE), false) AS has_external_submission_evidence,
+      count(*) FILTER (WHERE classified_rows.is_authorisation_ready IS TRUE)::integer AS authorisation_ready_count,
+      count(*) FILTER (WHERE classified_rows.is_authorisation_ready IS TRUE)::integer AS authorisation_ready_transfer_count,
+      count(*) FILTER (WHERE classified_rows.is_unattempted_submit_eligible IS TRUE)::integer AS unattempted_submit_eligible_count,
+      count(*) FILTER (WHERE classified_rows.is_safe_local_cleanup IS TRUE)::integer AS safe_local_cleanup_count,
+      count(*) FILTER (
+        WHERE classified_rows.has_provider_submission_evidence IS TRUE
+           OR classified_rows.has_provider_event_evidence IS TRUE
+           OR classified_rows.has_provider_attempt_without_external_id IS TRUE
+           OR classified_rows.has_operation_submit_attempt IS TRUE
+      )::integer AS provider_attempt_or_evidence_count,
+      count(*) FILTER (
+        WHERE classified_rows.has_provider_submission_evidence IS TRUE
+           OR classified_rows.has_provider_event_evidence IS TRUE
+           OR classified_rows.has_ambiguous_external_evidence IS TRUE
+      )::integer AS provider_or_ambiguous_evidence_count,
+      COALESCE(jsonb_agg(
+        jsonb_strip_nulls(jsonb_build_object(
+          'pay_bank_transfer_id', CASE WHEN classified_rows.pay_bank_transfer_id IS NULL THEN NULL ELSE classified_rows.pay_bank_transfer_id::text END,
+          'scope_id', CASE WHEN classified_rows.scope_id IS NULL THEN NULL ELSE classified_rows.scope_id::text END,
+          'scope_operation_id', CASE WHEN classified_rows.scope_operation_id IS NULL THEN NULL ELSE classified_rows.scope_operation_id::text END,
+          'pay_channel', classified_rows.pay_channel,
+          'classification', classified_rows.evidence_classification,
+          'status', classified_rows.status_upper,
+          'rail_state', classified_rows.rail_state_upper,
+          'has_provider_submission_evidence', classified_rows.has_provider_submission_evidence,
+          'has_provider_event_evidence', classified_rows.has_provider_event_evidence,
+          'has_provider_attempt_without_external_id', classified_rows.has_provider_attempt_without_external_id,
+          'has_operation_submit_attempt', classified_rows.has_operation_submit_attempt,
+          'has_ambiguous_external_evidence', classified_rows.has_ambiguous_external_evidence,
+          'is_authorisation_ready', classified_rows.is_authorisation_ready,
+          'is_unattempted_submit_eligible', classified_rows.is_unattempted_submit_eligible,
+          'is_safe_local_cleanup', classified_rows.is_safe_local_cleanup,
+          'is_canonical_pending_status', classified_rows.is_canonical_pending_status,
+          'has_auth_prepared_scope', classified_rows.has_auth_prepared_scope,
+          'has_different_operation_scope', classified_rows.has_different_operation_scope,
+          'has_stale_auth_request_evidence', classified_rows.has_stale_auth_request_evidence,
+          'unsafe_reason', classified_rows.unsafe_reason
+        ))
+        ORDER BY classified_rows.pay_bank_transfer_id NULLS LAST, classified_rows.scope_id NULLS LAST
+      ) FILTER (WHERE classified_rows.evidence_sample_ordinality <= 50 AND true), '[]'::jsonb) AS evidence_sample,
+      COALESCE(jsonb_agg(
+        jsonb_strip_nulls(jsonb_build_object(
+          'pay_bank_transfer_id', CASE WHEN classified_rows.pay_bank_transfer_id IS NULL THEN NULL ELSE classified_rows.pay_bank_transfer_id::text END,
+          'scope_id', CASE WHEN classified_rows.scope_id IS NULL THEN NULL ELSE classified_rows.scope_id::text END,
+          'scope_operation_id', CASE WHEN classified_rows.scope_operation_id IS NULL THEN NULL ELSE classified_rows.scope_operation_id::text END,
+          'pay_channel', classified_rows.pay_channel,
+          'evidence_classification', classified_rows.evidence_classification,
+          'status', classified_rows.status_upper,
+          'rail_state', classified_rows.rail_state_upper,
+          'has_route_ready', classified_rows.has_route_ready,
+          'has_local_prepare_identity', classified_rows.has_local_prepare_identity,
+          'has_provider_submission_evidence', classified_rows.has_provider_submission_evidence,
+          'has_provider_event_evidence', classified_rows.has_provider_event_evidence,
+          'has_provider_attempt_without_external_id', classified_rows.has_provider_attempt_without_external_id,
+          'has_operation_submit_attempt', classified_rows.has_operation_submit_attempt,
+          'has_ambiguous_external_evidence', classified_rows.has_ambiguous_external_evidence,
+          'is_failed_or_blocked', classified_rows.is_failed_or_blocked,
+          'is_terminal_or_completed', classified_rows.is_terminal_or_completed,
+          'is_authorisation_ready', classified_rows.is_authorisation_ready,
+          'is_unattempted_submit_eligible', classified_rows.is_unattempted_submit_eligible,
+          'is_safe_local_cleanup', classified_rows.is_safe_local_cleanup,
+          'is_canonical_pending_status', classified_rows.is_canonical_pending_status,
+          'has_auth_prepared_scope', classified_rows.has_auth_prepared_scope,
+          'has_different_operation_scope', classified_rows.has_different_operation_scope,
+          'has_stale_auth_request_evidence', classified_rows.has_stale_auth_request_evidence,
+          'unsafe_reason', classified_rows.unsafe_reason
+        ))
+        ORDER BY classified_rows.pay_bank_transfer_id NULLS LAST, classified_rows.scope_id NULLS LAST
+      ) FILTER (WHERE classified_rows.evidence_sample_ordinality <= 50 AND true), '[]'::jsonb) AS execution_classification_sample
+    FROM classified_rows_with_sample AS classified_rows
+  ), status_sets AS (
+    SELECT
+      COALESCE((
+        SELECT jsonb_agg(status_item.status_value ORDER BY status_item.status_value)
+        FROM (
+          SELECT DISTINCT upper(btrim(coalesce(transfer_row.status, ''))) AS status_value
+          FROM public.pay_bank_transfers AS transfer_row
+          WHERE transfer_row.pay_batch_id = p_pay_batch_id
+            AND nullif(btrim(coalesce(transfer_row.status, '')), '') IS NOT NULL
+        ) AS status_item
+      ), '[]'::jsonb) AS transfer_statuses,
+      COALESCE((
+        SELECT jsonb_agg(rail_state_item.rail_state_value ORDER BY rail_state_item.rail_state_value)
+        FROM (
+          SELECT DISTINCT upper(btrim(coalesce(transfer_row.rail_state, ''))) AS rail_state_value
+          FROM public.pay_bank_transfers AS transfer_row
+          WHERE transfer_row.pay_batch_id = p_pay_batch_id
+            AND nullif(btrim(coalesce(transfer_row.rail_state, '')), '') IS NOT NULL
+        ) AS rail_state_item
+      ), '[]'::jsonb) AS transfer_rail_states,
+      COALESCE((
+        SELECT jsonb_agg(event_state_item.normalised_state_value ORDER BY event_state_item.normalised_state_value)
+        FROM (
+          SELECT DISTINCT upper(btrim(coalesce(event_row.normalised_state, ''))) AS normalised_state_value
+          FROM public.pay_bank_transfer_events AS event_row
+          WHERE event_row.pay_batch_id = p_pay_batch_id
+            AND nullif(btrim(coalesce(event_row.normalised_state, '')), '') IS NOT NULL
+        ) AS event_state_item
+      ), '[]'::jsonb) AS event_normalised_states,
+      COALESCE((
+        SELECT jsonb_agg(provider_state_item.provider_state_value ORDER BY provider_state_item.provider_state_value)
+        FROM (
+          SELECT DISTINCT upper(btrim(coalesce(event_row.provider_state, ''))) AS provider_state_value
+          FROM public.pay_bank_transfer_events AS event_row
+          WHERE event_row.pay_batch_id = p_pay_batch_id
+            AND nullif(btrim(coalesce(event_row.provider_state, '')), '') IS NOT NULL
+        ) AS provider_state_item
+      ), '[]'::jsonb) AS event_provider_states,
+      (SELECT count(*)::integer FROM public.pay_bank_transfer_events AS event_row WHERE event_row.pay_batch_id = p_pay_batch_id) AS transfer_event_count
+  ), prepared_counts AS (
+    SELECT
+      evidence_counts.*,
+      status_sets.*,
+      COALESCE(evidence_counts.unattempted_submit_eligible_count, 0) AS remaining_unattempted_submit_required,
+      COALESCE(evidence_counts.pending_count, 0) + COALESCE(evidence_counts.local_only_count, 0) AS remaining_evidence_unresolved_count,
+      COALESCE(evidence_counts.unattempted_submit_eligible_count, 0) AS remaining_submit_attempt_required,
+      COALESCE(evidence_counts.pending_count, 0) + COALESCE(evidence_counts.local_only_count, 0) + COALESCE(evidence_counts.ambiguous_count, 0) + COALESCE(evidence_counts.attempted_but_unproven_count, 0) AS remaining_provider_evidence_required,
+      COALESCE(evidence_counts.unattempted_submit_eligible_count, 0) AS remaining_provider_submission_required,
+      (
+        COALESCE(evidence_counts.transfer_count, 0) > 0
+        AND COALESCE(evidence_counts.provider_submitted_count, 0) = COALESCE(evidence_counts.transfer_count, 0)
+        AND COALESCE(evidence_counts.failed_count, 0) = 0
+        AND COALESCE(evidence_counts.ambiguous_count, 0) = 0
+        AND COALESCE(evidence_counts.local_only_count, 0) = 0
+        AND COALESCE(evidence_counts.pending_count, 0) = 0
+        AND COALESCE(evidence_counts.attempted_but_unproven_count, 0) = 0
+      ) AS can_mark_submitted
+    FROM evidence_counts
+    CROSS JOIN status_sets
+  )
+  SELECT
+    jsonb_build_object(
+      'ok', true,
+      'pay_batch_id', p_pay_batch_id::text,
+      'counts_only', false,
+      'transfer_count', COALESCE(prepared_counts.transfer_count, 0),
+      'transfer_event_count', COALESCE(prepared_counts.transfer_event_count, 0),
+      'has_transfer_events', COALESCE(prepared_counts.transfer_event_count, 0) > 0,
+      'provider_submitted_count', COALESCE(prepared_counts.provider_submitted_count, 0),
+      'provider_evidence_present_count', COALESCE(prepared_counts.provider_submitted_count, 0),
+      'local_idempotency_only_count', COALESCE(prepared_counts.local_only_count, 0),
+      'local_only_count', COALESCE(prepared_counts.local_only_count, 0),
+      'local_only_evidence_count', COALESCE(prepared_counts.local_only_count, 0),
+      'pending_count', COALESCE(prepared_counts.pending_count, 0),
+      'failed_count', COALESCE(prepared_counts.failed_count, 0),
+      'ambiguous_count', COALESCE(prepared_counts.ambiguous_count, 0),
+      'attempted_but_unproven_count', COALESCE(prepared_counts.attempted_but_unproven_count, 0),
+      'provider_attempt_without_external_id_count', COALESCE(prepared_counts.provider_attempt_without_external_id_count, 0)
+    )
+    || jsonb_build_object(
+      'requires_provider_poll_count', COALESCE(prepared_counts.requires_provider_poll_count, 0),
+      'authorisation_ready_count', COALESCE(prepared_counts.authorisation_ready_count, 0),
+      'authorisation_ready_transfer_count', COALESCE(prepared_counts.authorisation_ready_transfer_count, 0),
+      'unattempted_submit_eligible_count', COALESCE(prepared_counts.unattempted_submit_eligible_count, 0),
+      'safe_local_cleanup_count', COALESCE(prepared_counts.safe_local_cleanup_count, 0),
+      'provider_attempt_or_evidence_count', COALESCE(prepared_counts.provider_attempt_or_evidence_count, 0),
+      'provider_or_ambiguous_evidence_count', COALESCE(prepared_counts.provider_or_ambiguous_evidence_count, 0),
+      'cancellable_local_auth_request_count', 0,
+      'non_cancellable_auth_request_count', 0,
+      'same_operation_active_auth_request_count', 0,
+      'other_operation_active_auth_request_count', 0,
+      'auth_request_provider_risk_count', 0,
+      'auth_request_retry_blocker_count', 0,
+      'remaining_submit_attempt_required', COALESCE(prepared_counts.remaining_submit_attempt_required, 0),
+      'remaining_unattempted_submit_required', COALESCE(prepared_counts.remaining_unattempted_submit_required, 0),
+      'remaining_evidence_unresolved_count', COALESCE(prepared_counts.remaining_evidence_unresolved_count, 0)
+    )
+    || jsonb_build_object(
+      'remaining_submit_attempt_required_definition', 'unattempted_submit_eligible_count',
+      'remaining_provider_evidence_required', COALESCE(prepared_counts.remaining_provider_evidence_required, 0),
+      'remaining_provider_submission_required', COALESCE(prepared_counts.remaining_provider_submission_required, 0),
+      'submission_count_semantics', jsonb_build_object(
+        'remaining_submit_attempt_required', 'count of transfers currently eligible for an unattempted provider submit',
+        'remaining_evidence_unresolved_count', 'legacy evidence-pending plus local-only count kept separate from submit eligibility',
+        'pending_count', 'evidence-level pending classification, not submit eligibility'
+      ),
+      'batch_can_be_marked_submitted', COALESCE(prepared_counts.can_mark_submitted, false),
+      'can_mark_submitted', COALESCE(prepared_counts.can_mark_submitted, false),
+      'can_mark_committed', COALESCE(prepared_counts.can_mark_submitted, false) AND COALESCE(prepared_counts.committed_count, 0) = COALESCE(prepared_counts.transfer_count, 0),
+      'has_rail_tx_id', COALESCE(prepared_counts.has_rail_tx_id, false),
+      'has_local_generated_request_identity', COALESCE(prepared_counts.has_local_generated_request_identity, false),
+      'has_external_submission_evidence', COALESCE(prepared_counts.has_external_submission_evidence, false),
+      'no_submission_evidence', COALESCE(prepared_counts.has_external_submission_evidence, false) = false,
+      'transfer_statuses', COALESCE(prepared_counts.transfer_statuses, '[]'::jsonb),
+      'transfer_rail_states', COALESCE(prepared_counts.transfer_rail_states, '[]'::jsonb),
+      'event_normalised_states', COALESCE(prepared_counts.event_normalised_states, '[]'::jsonb),
+      'event_provider_states', COALESCE(prepared_counts.event_provider_states, '[]'::jsonb)
+    )
+    || jsonb_build_object(
+      'evidence_sample', CASE WHEN true THEN COALESCE(prepared_counts.evidence_sample, '[]'::jsonb) ELSE '[]'::jsonb END,
+      'execution_classification_sample', CASE WHEN true THEN COALESCE(prepared_counts.execution_classification_sample, '[]'::jsonb) ELSE '[]'::jsonb END,
+      'has_possible_provider_attempt_evidence', COALESCE(prepared_counts.has_external_submission_evidence, false) OR COALESCE(prepared_counts.attempted_but_unproven_count, 0) > 0,
+      'has_provider_attempt_request_or_idempotency_reference', COALESCE(prepared_counts.provider_submitted_count, 0) > 0 OR COALESCE(prepared_counts.attempted_but_unproven_count, 0) > 0,
+      'has_request_or_idempotency_reference', COALESCE(prepared_counts.local_only_count, 0) > 0 OR COALESCE(prepared_counts.provider_submitted_count, 0) > 0 OR COALESCE(prepared_counts.attempted_but_unproven_count, 0) > 0,
+      'has_submitted_state', COALESCE(prepared_counts.provider_submitted_count, 0) > 0,
+      'has_processing_state', COALESCE(prepared_counts.transfer_rail_states, '[]'::jsonb) ?| array['PROCESSING','IN_FLIGHT','PENDING_SETTLEMENT','PENDING_CONFIRMATION'],
+      'has_completed_state', COALESCE(prepared_counts.committed_count, 0) > 0,
+      'has_failed_or_rejected_provider_state', COALESCE(prepared_counts.failed_count, 0) > 0,
+      'has_unknown_or_timeout_state', COALESCE(prepared_counts.ambiguous_count, 0) > 0,
+      'requires_provider_poll', COALESCE(prepared_counts.requires_provider_poll_count, 0) > 0,
+      'requires_review', COALESCE(prepared_counts.ambiguous_count, 0) > 0 OR (COALESCE(prepared_counts.attempted_but_unproven_count, 0) > 0 AND COALESCE(prepared_counts.requires_provider_poll_count, 0) = 0),
+      'has_provider_submission_reference', COALESCE(prepared_counts.provider_submitted_count, 0) > 0,
+      'has_provider_payment_reference', COALESCE(prepared_counts.provider_submitted_count, 0) > 0,
+      'has_provider_transfer_reference', COALESCE(prepared_counts.provider_submitted_count, 0) > 0,
+      'has_provider_transaction_reference', COALESCE(prepared_counts.provider_submitted_count, 0) > 0,
+      'has_external_payment_reference', COALESCE(prepared_counts.has_external_submission_evidence, false),
+      'has_external_transfer_reference', COALESCE(prepared_counts.has_external_submission_evidence, false)
+    )
+  INTO v_submission_evidence
+  FROM prepared_counts;
 
   v_has_external_submission_evidence := COALESCE(
     (v_submission_evidence ->> 'has_external_submission_evidence')::boolean,
@@ -25621,9 +26201,6 @@ begin
     );
 end;
 $$;
-
-
-
 
 
 DROP FUNCTION IF EXISTS public.pay_batches_list(integer, integer, text);
