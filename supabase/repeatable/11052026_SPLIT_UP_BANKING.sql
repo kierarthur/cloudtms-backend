@@ -11227,6 +11227,10 @@ DROP FUNCTION IF EXISTS public.pay_bank_transfer_execution_classify(uuid, text, 
 
 
 DROP FUNCTION IF EXISTS public.pay_bank_transfer_execution_classify(uuid, text, uuid, boolean);
+
+
+
+DROP FUNCTION IF EXISTS public.pay_bank_transfer_execution_classify(uuid, text, uuid, boolean);
 CREATE OR REPLACE FUNCTION public.pay_bank_transfer_execution_classify(
   p_pay_batch_id uuid,
   p_pay_channel_scope text DEFAULT 'ALL'::text,
@@ -11263,6 +11267,16 @@ RETURNS TABLE (
   has_auth_prepared_scope boolean,
   has_different_operation_scope boolean,
   has_stale_auth_request_evidence boolean,
+  auth_request_id uuid,
+  auth_request_state text,
+  auth_request_operation_id uuid,
+  has_same_operation_active_auth_request boolean,
+  has_other_operation_active_auth_request boolean,
+  has_cancellable_local_auth_request boolean,
+  has_non_cancellable_auth_request boolean,
+  has_authorised_auth_without_provider_submission boolean,
+  has_auth_request_provider_risk boolean,
+  auth_request_unsafe_reason text,
   unsafe_reason text
 )
 LANGUAGE plpgsql
@@ -11667,16 +11681,7 @@ BEGIN
         WHERE operation_row.id = normalised_rows.scope_operation_id
           AND operation_row.status IN ('FAILED', 'CANCELLED', 'CANCELED', 'REVIEW_REQUIRED')
       ) AS calc_scope_owner_is_terminal_cleanup_candidate,
-      (
-        p_operation_id IS NOT NULL
-        AND EXISTS (
-          SELECT 1
-          FROM public.pay_batch_auth_requests AS auth_request
-          WHERE auth_request.pay_batch_id = p_pay_batch_id
-            AND auth_request.state IN ('AWAITING', 'PENDING_AUTHORISATION', 'AUTHORISED')
-            AND COALESCE(NULLIF(BTRIM(COALESCE(auth_request.execution_intent_json->>'operation_id', '')), ''), '') <> p_operation_id::text
-        )
-      ) AS calc_has_stale_auth_request_evidence
+      false AS calc_has_stale_auth_request_evidence
     FROM normalised_rows
   ), labelled_rows AS (
     SELECT
@@ -11709,6 +11714,93 @@ BEGIN
         ELSE 'unclassified_local'
       END AS calc_evidence_classification
     FROM labelled_rows
+  ), auth_request_rows AS (
+    SELECT
+      auth_request.id AS auth_request_id,
+      upper(btrim(coalesce(auth_request.state, ''))) AS auth_request_state_upper,
+      auth_intent.auth_operation_id_text,
+      CASE
+        WHEN auth_intent.auth_operation_id_text ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          THEN auth_intent.auth_operation_id_text::uuid
+        ELSE NULL::uuid
+      END AS auth_request_operation_id,
+      auth_intent.auth_pay_channel_scope_upper,
+      upper(btrim(coalesce(auth_owner_operation.status, ''))) AS auth_owner_operation_status_upper,
+      auth_request.created_at_utc AS auth_request_created_at_utc,
+      (
+        p_operation_id IS NOT NULL
+        AND auth_intent.auth_operation_id_text = p_operation_id::text
+      ) AS is_same_operation_auth_request,
+      (
+        p_operation_id IS NULL
+        OR auth_intent.auth_operation_id_text IS NULL
+        OR auth_intent.auth_operation_id_text <> p_operation_id::text
+      ) AS is_other_operation_auth_request,
+      (
+        upper(btrim(coalesce(auth_owner_operation.status, ''))) IN ('FAILED', 'CANCELLED', 'CANCELED')
+      ) AS owner_operation_is_terminal_cleanup_candidate
+    FROM public.pay_batch_auth_requests AS auth_request
+    LEFT JOIN LATERAL (
+      SELECT
+        nullif(btrim(coalesce(auth_request.execution_intent_json->>'operation_id', '')), '') AS auth_operation_id_text,
+        upper(btrim(coalesce(
+          nullif(btrim(coalesce(auth_request.execution_intent_json->>'pay_channel_scope', '')), ''),
+          nullif(btrim(coalesce(auth_request.execution_intent_json->>'payChannelScope', '')), ''),
+          'ALL'
+        ))) AS auth_pay_channel_scope_upper
+    ) AS auth_intent ON true
+    LEFT JOIN public.banking_pay_operations AS auth_owner_operation
+      ON auth_owner_operation.id = CASE
+        WHEN auth_intent.auth_operation_id_text ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          THEN auth_intent.auth_operation_id_text::uuid
+        ELSE NULL::uuid
+      END
+    WHERE auth_request.pay_batch_id = p_pay_batch_id
+      AND upper(btrim(coalesce(auth_request.state, ''))) IN ('AWAITING', 'PENDING_AUTHORISATION', 'AUTHORISED')
+      AND (
+        v_scope IN ('ALL', 'ANY', '*')
+        OR auth_intent.auth_pay_channel_scope_upper IN ('', 'ALL', 'ANY', '*')
+        OR auth_intent.auth_pay_channel_scope_upper = v_scope
+      )
+  ), auth_request_ranked AS (
+    SELECT
+      auth_request_rows.*,
+      row_number() OVER (
+        ORDER BY
+          CASE WHEN auth_request_rows.is_same_operation_auth_request THEN 0 ELSE 1 END,
+          CASE
+            WHEN auth_request_rows.auth_request_state_upper = 'AWAITING' THEN 0
+            WHEN auth_request_rows.auth_request_state_upper = 'AUTHORISED' THEN 1
+            WHEN auth_request_rows.auth_request_state_upper = 'PENDING_AUTHORISATION' THEN 2
+            ELSE 3
+          END,
+          auth_request_rows.auth_request_created_at_utc DESC NULLS LAST,
+          auth_request_rows.auth_request_id DESC
+      ) AS auth_request_rank
+    FROM auth_request_rows
+  ), auth_context AS (
+    SELECT
+      (SELECT auth_request_ranked.auth_request_id FROM auth_request_ranked WHERE auth_request_ranked.auth_request_rank = 1) AS auth_request_id,
+      (SELECT auth_request_ranked.auth_request_state_upper FROM auth_request_ranked WHERE auth_request_ranked.auth_request_rank = 1) AS auth_request_state,
+      (SELECT auth_request_ranked.auth_request_operation_id FROM auth_request_ranked WHERE auth_request_ranked.auth_request_rank = 1) AS auth_request_operation_id,
+      EXISTS (SELECT 1 FROM auth_request_rows) AS has_active_auth_request,
+      EXISTS (SELECT 1 FROM auth_request_rows WHERE auth_request_rows.is_same_operation_auth_request) AS has_same_operation_active_auth_request,
+      EXISTS (SELECT 1 FROM auth_request_rows WHERE auth_request_rows.is_other_operation_auth_request) AS has_other_operation_active_auth_request,
+      EXISTS (SELECT 1 FROM auth_request_rows WHERE auth_request_rows.is_same_operation_auth_request AND auth_request_rows.auth_request_state_upper = 'AWAITING') AS has_same_operation_awaiting_auth_request,
+      EXISTS (SELECT 1 FROM auth_request_rows WHERE auth_request_rows.is_same_operation_auth_request AND auth_request_rows.auth_request_state_upper = 'AUTHORISED') AS has_same_operation_authorised_auth_request,
+      EXISTS (SELECT 1 FROM auth_request_rows WHERE auth_request_rows.auth_request_state_upper = 'PENDING_AUTHORISATION') AS has_pending_authorisation_auth_request,
+      EXISTS (
+        SELECT 1
+        FROM auth_request_rows
+        WHERE auth_request_rows.is_other_operation_auth_request
+          AND auth_request_rows.owner_operation_is_terminal_cleanup_candidate IS NOT TRUE
+      ) AS has_non_terminal_other_operation_auth_request,
+      EXISTS (
+        SELECT 1
+        FROM auth_request_rows
+        WHERE auth_request_rows.is_other_operation_auth_request
+          AND auth_request_rows.owner_operation_is_terminal_cleanup_candidate IS TRUE
+      ) AS has_terminal_other_operation_auth_request
   )
   SELECT
     final_rows.transfer_id AS pay_bank_transfer_id,
@@ -11751,6 +11843,7 @@ BEGIN
       AND final_rows.calc_is_failed_or_blocked IS NOT TRUE
       AND final_rows.calc_is_terminal_or_completed IS NOT TRUE
       AND final_rows.batch_execution_boundary_crossed IS NOT TRUE
+      AND auth_context.has_active_auth_request IS NOT TRUE
       AND final_rows.calc_has_stale_auth_request_evidence IS NOT TRUE
       AND NOT (
         p_operation_id IS NOT NULL
@@ -11783,6 +11876,7 @@ BEGIN
       AND final_rows.calc_is_failed_or_blocked IS NOT TRUE
       AND final_rows.calc_is_terminal_or_completed IS NOT TRUE
       AND final_rows.batch_execution_boundary_crossed IS NOT TRUE
+      AND auth_context.has_active_auth_request IS NOT TRUE
       AND final_rows.calc_has_stale_auth_request_evidence IS NOT TRUE
       AND NOT (
         p_operation_id IS NOT NULL
@@ -11800,6 +11894,24 @@ BEGIN
     (
       final_rows.calc_is_operation_owned IS TRUE
       AND final_rows.batch_execution_boundary_crossed IS NOT TRUE
+      AND (
+        auth_context.has_active_auth_request IS NOT TRUE
+        OR (
+          (auth_context.has_same_operation_awaiting_auth_request OR auth_context.has_same_operation_authorised_auth_request)
+          AND auth_context.has_pending_authorisation_auth_request IS NOT TRUE
+          AND auth_context.has_other_operation_active_auth_request IS NOT TRUE
+          AND (
+            final_rows.calc_has_provider_submission_evidence IS NOT TRUE
+            AND final_rows.calc_has_provider_event_evidence IS NOT TRUE
+            AND final_rows.calc_has_provider_attempt_without_external_id IS NOT TRUE
+            AND final_rows.calc_has_operation_submit_attempt IS NOT TRUE
+            AND final_rows.calc_has_ambiguous_external_evidence IS NOT TRUE
+            AND final_rows.calc_has_non_local_rail_tx_id IS NOT TRUE
+            AND final_rows.calc_has_non_local_rail_meta_identifier IS NOT TRUE
+            AND final_rows.calc_has_provider_source_flag IS NOT TRUE
+          )
+        )
+      )
       AND (
         (
           final_rows.transfer_id IS NOT NULL
@@ -11827,7 +11939,102 @@ BEGIN
       AND final_rows.scope_operation_id IS NOT NULL
       AND final_rows.scope_operation_id <> p_operation_id
     ) AS has_different_operation_scope,
-    final_rows.calc_has_stale_auth_request_evidence AS has_stale_auth_request_evidence,
+    (
+      auth_context.has_active_auth_request IS TRUE
+      AND NOT (
+        (auth_context.has_same_operation_awaiting_auth_request OR auth_context.has_same_operation_authorised_auth_request)
+        AND auth_context.has_pending_authorisation_auth_request IS NOT TRUE
+        AND auth_context.has_other_operation_active_auth_request IS NOT TRUE
+        AND final_rows.batch_execution_boundary_crossed IS NOT TRUE
+        AND final_rows.calc_has_provider_submission_evidence IS NOT TRUE
+        AND final_rows.calc_has_provider_event_evidence IS NOT TRUE
+        AND final_rows.calc_has_provider_attempt_without_external_id IS NOT TRUE
+        AND final_rows.calc_has_operation_submit_attempt IS NOT TRUE
+        AND final_rows.calc_has_ambiguous_external_evidence IS NOT TRUE
+        AND final_rows.calc_has_non_local_rail_tx_id IS NOT TRUE
+        AND final_rows.calc_has_non_local_rail_meta_identifier IS NOT TRUE
+        AND final_rows.calc_has_provider_source_flag IS NOT TRUE
+      )
+    ) AS has_stale_auth_request_evidence,
+    auth_context.auth_request_id AS auth_request_id,
+    auth_context.auth_request_state AS auth_request_state,
+    auth_context.auth_request_operation_id AS auth_request_operation_id,
+    auth_context.has_same_operation_active_auth_request AS has_same_operation_active_auth_request,
+    auth_context.has_other_operation_active_auth_request AS has_other_operation_active_auth_request,
+    (
+      auth_context.has_active_auth_request IS TRUE
+      AND (auth_context.has_same_operation_awaiting_auth_request OR auth_context.has_same_operation_authorised_auth_request)
+      AND auth_context.has_pending_authorisation_auth_request IS NOT TRUE
+      AND auth_context.has_other_operation_active_auth_request IS NOT TRUE
+      AND final_rows.batch_execution_boundary_crossed IS NOT TRUE
+      AND final_rows.calc_has_provider_submission_evidence IS NOT TRUE
+      AND final_rows.calc_has_provider_event_evidence IS NOT TRUE
+      AND final_rows.calc_has_provider_attempt_without_external_id IS NOT TRUE
+      AND final_rows.calc_has_operation_submit_attempt IS NOT TRUE
+      AND final_rows.calc_has_ambiguous_external_evidence IS NOT TRUE
+      AND final_rows.calc_has_non_local_rail_tx_id IS NOT TRUE
+      AND final_rows.calc_has_non_local_rail_meta_identifier IS NOT TRUE
+      AND final_rows.calc_has_provider_source_flag IS NOT TRUE
+    ) AS has_cancellable_local_auth_request,
+    (
+      auth_context.has_active_auth_request IS TRUE
+      AND NOT (
+        (auth_context.has_same_operation_awaiting_auth_request OR auth_context.has_same_operation_authorised_auth_request)
+        AND auth_context.has_pending_authorisation_auth_request IS NOT TRUE
+        AND auth_context.has_other_operation_active_auth_request IS NOT TRUE
+        AND final_rows.batch_execution_boundary_crossed IS NOT TRUE
+        AND final_rows.calc_has_provider_submission_evidence IS NOT TRUE
+        AND final_rows.calc_has_provider_event_evidence IS NOT TRUE
+        AND final_rows.calc_has_provider_attempt_without_external_id IS NOT TRUE
+        AND final_rows.calc_has_operation_submit_attempt IS NOT TRUE
+        AND final_rows.calc_has_ambiguous_external_evidence IS NOT TRUE
+        AND final_rows.calc_has_non_local_rail_tx_id IS NOT TRUE
+        AND final_rows.calc_has_non_local_rail_meta_identifier IS NOT TRUE
+        AND final_rows.calc_has_provider_source_flag IS NOT TRUE
+      )
+    ) AS has_non_cancellable_auth_request,
+    (
+      auth_context.has_same_operation_authorised_auth_request IS TRUE
+      AND final_rows.batch_execution_boundary_crossed IS NOT TRUE
+      AND final_rows.calc_has_provider_submission_evidence IS NOT TRUE
+      AND final_rows.calc_has_provider_event_evidence IS NOT TRUE
+      AND final_rows.calc_has_provider_attempt_without_external_id IS NOT TRUE
+      AND final_rows.calc_has_operation_submit_attempt IS NOT TRUE
+      AND final_rows.calc_has_ambiguous_external_evidence IS NOT TRUE
+      AND final_rows.calc_has_non_local_rail_tx_id IS NOT TRUE
+      AND final_rows.calc_has_non_local_rail_meta_identifier IS NOT TRUE
+      AND final_rows.calc_has_provider_source_flag IS NOT TRUE
+    ) AS has_authorised_auth_without_provider_submission,
+    (
+      auth_context.has_active_auth_request IS TRUE
+      AND (
+        final_rows.batch_execution_boundary_crossed IS TRUE
+        OR final_rows.calc_has_provider_submission_evidence IS TRUE
+        OR final_rows.calc_has_provider_event_evidence IS TRUE
+        OR final_rows.calc_has_provider_attempt_without_external_id IS TRUE
+        OR final_rows.calc_has_operation_submit_attempt IS TRUE
+        OR final_rows.calc_has_ambiguous_external_evidence IS TRUE
+        OR final_rows.calc_has_non_local_rail_tx_id IS TRUE
+        OR final_rows.calc_has_non_local_rail_meta_identifier IS TRUE
+        OR final_rows.calc_has_provider_source_flag IS TRUE
+      )
+    ) AS has_auth_request_provider_risk,
+    CASE
+      WHEN auth_context.has_active_auth_request IS NOT TRUE THEN NULL::text
+      WHEN final_rows.batch_execution_boundary_crossed THEN 'AUTH_REQUEST_BATCH_EXECUTION_BOUNDARY_CROSSED'
+      WHEN final_rows.calc_has_provider_event_evidence THEN 'AUTH_REQUEST_PROVIDER_EVENT_EVIDENCE_PRESENT'
+      WHEN final_rows.calc_has_provider_submission_evidence THEN 'AUTH_REQUEST_PROVIDER_SUBMISSION_EVIDENCE_PRESENT'
+      WHEN final_rows.calc_has_operation_submit_attempt THEN 'AUTH_REQUEST_PROVIDER_SUBMIT_CHUNK_ATTEMPT_PRESENT'
+      WHEN final_rows.calc_has_provider_attempt_without_external_id THEN 'AUTH_REQUEST_PROVIDER_ATTEMPT_WITHOUT_EXTERNAL_ID'
+      WHEN final_rows.calc_has_ambiguous_external_evidence THEN 'AUTH_REQUEST_AMBIGUOUS_EXTERNAL_EVIDENCE'
+      WHEN final_rows.calc_has_non_local_rail_tx_id THEN 'AUTH_REQUEST_NON_LOCAL_RAIL_TX_ID_PRESENT'
+      WHEN final_rows.calc_has_non_local_rail_meta_identifier THEN 'AUTH_REQUEST_NON_LOCAL_PROVIDER_IDENTIFIER_PRESENT'
+      WHEN final_rows.calc_has_provider_source_flag THEN 'AUTH_REQUEST_PROVIDER_SOURCE_FLAG_PRESENT'
+      WHEN auth_context.has_pending_authorisation_auth_request THEN 'AUTH_REQUEST_PENDING_AUTHORISATION'
+      WHEN auth_context.has_other_operation_active_auth_request THEN 'AUTH_REQUEST_OWNED_BY_PREVIOUS_OPERATION'
+      WHEN auth_context.has_same_operation_awaiting_auth_request OR auth_context.has_same_operation_authorised_auth_request THEN NULL::text
+      ELSE 'ACTIVE_AUTH_REQUEST_NOT_CANCELLABLE'
+    END AS auth_request_unsafe_reason,
     CASE
       WHEN final_rows.batch_execution_boundary_crossed THEN 'BATCH_EXECUTION_BOUNDARY_CROSSED'
       WHEN p_operation_id IS NOT NULL AND final_rows.transfer_id IS NOT NULL AND upper(btrim(coalesce(final_rows.scope_status, ''))) <> 'PREPARED' THEN 'AUTH_PREPARED_SCOPE_REQUIRED'
@@ -11840,6 +12047,34 @@ BEGIN
       WHEN final_rows.calc_has_ambiguous_external_evidence THEN 'AMBIGUOUS_EXTERNAL_EVIDENCE'
       WHEN final_rows.calc_is_terminal_or_completed THEN 'TERMINAL_OR_COMPLETED_TRANSFER_STATE'
       WHEN final_rows.calc_is_failed_or_blocked THEN 'FAILED_OR_BLOCKED_TRANSFER_STATE'
+      WHEN auth_context.has_active_auth_request IS TRUE
+        AND NOT (
+          (auth_context.has_same_operation_awaiting_auth_request OR auth_context.has_same_operation_authorised_auth_request)
+          AND auth_context.has_pending_authorisation_auth_request IS NOT TRUE
+          AND auth_context.has_other_operation_active_auth_request IS NOT TRUE
+          AND final_rows.batch_execution_boundary_crossed IS NOT TRUE
+          AND final_rows.calc_has_provider_submission_evidence IS NOT TRUE
+          AND final_rows.calc_has_provider_event_evidence IS NOT TRUE
+          AND final_rows.calc_has_provider_attempt_without_external_id IS NOT TRUE
+          AND final_rows.calc_has_operation_submit_attempt IS NOT TRUE
+          AND final_rows.calc_has_ambiguous_external_evidence IS NOT TRUE
+          AND final_rows.calc_has_non_local_rail_tx_id IS NOT TRUE
+          AND final_rows.calc_has_non_local_rail_meta_identifier IS NOT TRUE
+          AND final_rows.calc_has_provider_source_flag IS NOT TRUE
+        ) THEN CASE
+          WHEN final_rows.batch_execution_boundary_crossed THEN 'AUTH_REQUEST_BATCH_EXECUTION_BOUNDARY_CROSSED'
+          WHEN final_rows.calc_has_provider_event_evidence THEN 'AUTH_REQUEST_PROVIDER_EVENT_EVIDENCE_PRESENT'
+          WHEN final_rows.calc_has_provider_submission_evidence THEN 'AUTH_REQUEST_PROVIDER_SUBMISSION_EVIDENCE_PRESENT'
+          WHEN final_rows.calc_has_operation_submit_attempt THEN 'AUTH_REQUEST_PROVIDER_SUBMIT_CHUNK_ATTEMPT_PRESENT'
+          WHEN final_rows.calc_has_provider_attempt_without_external_id THEN 'AUTH_REQUEST_PROVIDER_ATTEMPT_WITHOUT_EXTERNAL_ID'
+          WHEN final_rows.calc_has_ambiguous_external_evidence THEN 'AUTH_REQUEST_AMBIGUOUS_EXTERNAL_EVIDENCE'
+          WHEN final_rows.calc_has_non_local_rail_tx_id THEN 'AUTH_REQUEST_NON_LOCAL_RAIL_TX_ID_PRESENT'
+          WHEN final_rows.calc_has_non_local_rail_meta_identifier THEN 'AUTH_REQUEST_NON_LOCAL_PROVIDER_IDENTIFIER_PRESENT'
+          WHEN final_rows.calc_has_provider_source_flag THEN 'AUTH_REQUEST_PROVIDER_SOURCE_FLAG_PRESENT'
+          WHEN auth_context.has_pending_authorisation_auth_request THEN 'AUTH_REQUEST_PENDING_AUTHORISATION'
+          WHEN auth_context.has_other_operation_active_auth_request THEN 'AUTH_REQUEST_OWNED_BY_PREVIOUS_OPERATION'
+          ELSE 'ACTIVE_AUTH_REQUEST_NOT_CANCELLABLE'
+        END
       WHEN final_rows.calc_has_stale_auth_request_evidence THEN 'STALE_AUTH_REQUEST_EVIDENCE_PRESENT'
       WHEN p_operation_id IS NOT NULL AND final_rows.scope_operation_id IS NOT NULL AND final_rows.scope_operation_id <> p_operation_id THEN 'TRANSFER_SCOPE_OWNED_BY_DIFFERENT_OPERATION'
       WHEN final_rows.transfer_id IS NULL AND final_rows.calc_scope_owner_is_terminal_cleanup_candidate IS NOT TRUE THEN 'SCOPE_WITHOUT_TRANSFER_NOT_TERMINAL_OPERATION'
@@ -11848,6 +12083,7 @@ BEGIN
       ELSE NULL::text
     END AS unsafe_reason
   FROM final_rows
+  CROSS JOIN auth_context AS auth_context
   ORDER BY
     final_rows.transfer_pay_channel,
     final_rows.transfer_group_key NULLS LAST,
@@ -11855,10 +12091,6 @@ BEGIN
     final_rows.scope_id NULLS LAST;
 END;
 $function$;
-
-
-
-
 
 
 
