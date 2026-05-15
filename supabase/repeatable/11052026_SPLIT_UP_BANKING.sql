@@ -11135,6 +11135,10 @@ $function$;
 
 
 DROP FUNCTION IF EXISTS public.pay_bank_transfer_execution_classify(uuid, text, uuid, boolean);
+
+
+
+DROP FUNCTION IF EXISTS public.pay_bank_transfer_execution_classify(uuid, text, uuid, boolean);
 CREATE OR REPLACE FUNCTION public.pay_bank_transfer_execution_classify(
   p_pay_batch_id uuid,
   p_pay_channel_scope text DEFAULT 'ALL'::text,
@@ -11363,6 +11367,7 @@ BEGIN
       combined_source.transfer_payee_name,
       combined_source.transfer_sort_code,
       combined_source.transfer_account_number,
+      combined_source.transfer_account_type,
       combined_source.transfer_payment_reference,
       combined_source.transfer_request_id,
       combined_source.transfer_rail_tx_id,
@@ -11402,6 +11407,7 @@ BEGIN
         AND nullif(btrim(coalesce(normalised_rows.transfer_payee_name, '')), '') IS NOT NULL
         AND nullif(btrim(coalesce(normalised_rows.transfer_sort_code, '')), '') IS NOT NULL
         AND nullif(btrim(coalesce(normalised_rows.transfer_account_number, '')), '') IS NOT NULL
+        AND nullif(btrim(coalesce(normalised_rows.transfer_account_type, '')), '') IS NOT NULL
       ) AS calc_has_route_ready,
       (
         nullif(btrim(coalesce(normalised_rows.transfer_request_id, '')), '') IS NOT NULL
@@ -11417,7 +11423,25 @@ BEGIN
       EXISTS (
         SELECT 1
         FROM public.pay_bank_transfer_events AS event_row
-        WHERE event_row.pay_bank_transfer_id = normalised_rows.transfer_id
+        WHERE event_row.pay_batch_id = normalised_rows.transfer_pay_batch_id
+          AND normalised_rows.transfer_id IS NOT NULL
+          AND (
+            event_row.pay_bank_transfer_id = normalised_rows.transfer_id
+            OR (
+              event_row.pay_bank_transfer_id IS NULL
+              AND (
+                NULLIF(BTRIM(COALESCE(event_row.provider_reference, '')), '') = ANY(normalised_rows.local_identity_values)
+                OR NULLIF(BTRIM(COALESCE(event_row.provider_event_id, '')), '') = ANY(normalised_rows.local_identity_values)
+                OR NULLIF(BTRIM(COALESCE(event_row.idempotency_key, '')), '') = ANY(normalised_rows.local_identity_values)
+                OR EXISTS (
+                  SELECT 1
+                  FROM unnest(normalised_rows.local_identity_values) AS local_event_identity(identity_value)
+                  WHERE LENGTH(NULLIF(BTRIM(COALESCE(local_event_identity.identity_value, '')), '')) >= 8
+                    AND POSITION(lower(NULLIF(BTRIM(COALESCE(local_event_identity.identity_value, '')), '')) IN lower(COALESCE(event_row.raw_payload::text, ''))) > 0
+                )
+              )
+            )
+          )
           AND (
             upper(btrim(coalesce(event_row.event_source, ''))) IN ('PROVIDER_RESPONSE', 'PROVIDER_POLL', 'PROVIDER_WEBHOOK', 'WEBHOOK', 'POLL', 'RAIL_PROVIDER', 'PROVIDER', 'PROVIDER_SETTLEMENT')
             OR nullif(btrim(coalesce(event_row.provider_event_id, '')), '') IS NOT NULL
@@ -11448,7 +11472,25 @@ BEGIN
       EXISTS (
         SELECT 1
         FROM public.pay_bank_transfer_events AS event_row
-        WHERE event_row.pay_bank_transfer_id = normalised_rows.transfer_id
+        WHERE event_row.pay_batch_id = normalised_rows.transfer_pay_batch_id
+          AND normalised_rows.transfer_id IS NOT NULL
+          AND (
+            event_row.pay_bank_transfer_id = normalised_rows.transfer_id
+            OR (
+              event_row.pay_bank_transfer_id IS NULL
+              AND (
+                NULLIF(BTRIM(COALESCE(event_row.provider_reference, '')), '') = ANY(normalised_rows.local_identity_values)
+                OR NULLIF(BTRIM(COALESCE(event_row.provider_event_id, '')), '') = ANY(normalised_rows.local_identity_values)
+                OR NULLIF(BTRIM(COALESCE(event_row.idempotency_key, '')), '') = ANY(normalised_rows.local_identity_values)
+                OR EXISTS (
+                  SELECT 1
+                  FROM unnest(normalised_rows.local_identity_values) AS local_event_identity(identity_value)
+                  WHERE LENGTH(NULLIF(BTRIM(COALESCE(local_event_identity.identity_value, '')), '')) >= 8
+                    AND POSITION(lower(NULLIF(BTRIM(COALESCE(local_event_identity.identity_value, '')), '')) IN lower(COALESCE(event_row.raw_payload::text, ''))) > 0
+                )
+              )
+            )
+          )
           AND (
             upper(btrim(coalesce(event_row.mapping_status, ''))) IN ('AMBIGUOUS', 'UNMATCHED', 'NO_MATCH', 'MULTIPLE_MATCHES')
             OR upper(btrim(coalesce(event_row.normalised_state, ''))) IN ('UNKNOWN', 'TIMEOUT', 'TIMED_OUT', 'PENDING_REVIEW')
@@ -11725,6 +11767,10 @@ BEGIN
     final_rows.scope_id NULLS LAST;
 END;
 $function$;
+
+
+
+
 
 
 
