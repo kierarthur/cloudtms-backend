@@ -11511,6 +11511,8 @@ DROP FUNCTION IF EXISTS public.pay_bank_transfer_execution_classify(uuid, text, 
 
 
 DROP FUNCTION IF EXISTS public.pay_bank_transfer_execution_classify(uuid, text, uuid, boolean);
+
+DROP FUNCTION IF EXISTS public.pay_bank_transfer_execution_classify(uuid, text, uuid, boolean);
 CREATE OR REPLACE FUNCTION public.pay_bank_transfer_execution_classify(
   p_pay_batch_id uuid,
   p_pay_channel_scope text DEFAULT 'ALL'::text,
@@ -11557,7 +11559,12 @@ RETURNS TABLE (
   has_authorised_auth_without_provider_submission boolean,
   has_auth_request_provider_risk boolean,
   auth_request_unsafe_reason text,
-  unsafe_reason text
+  unsafe_reason text,
+  has_same_operation_authorised_auth_request boolean,
+  has_pending_authorisation_auth_request boolean,
+  is_provider_submit_ready boolean,
+  provider_submit_unsafe_reason text,
+  has_provider_submit_blocker boolean
 )
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -11789,7 +11796,6 @@ BEGIN
         AND nullif(btrim(coalesce(normalised_rows.transfer_payee_name, '')), '') IS NOT NULL
         AND nullif(btrim(coalesce(normalised_rows.transfer_sort_code, '')), '') IS NOT NULL
         AND nullif(btrim(coalesce(normalised_rows.transfer_account_number, '')), '') IS NOT NULL
-        AND nullif(btrim(coalesce(normalised_rows.transfer_account_type, '')), '') IS NOT NULL
       ) AS calc_has_route_ready,
       (
         nullif(btrim(coalesce(normalised_rows.transfer_request_id, '')), '') IS NOT NULL
@@ -11887,9 +11893,20 @@ BEGIN
         WHERE chunk_operation_row.pay_batch_id = p_pay_batch_id
           AND chunk_row.phase = 'SUBMIT_PROVIDER_TRANSFERS'
           AND chunk_row.chunk_type = 'TRANSFER_SUBMIT'
-          AND chunk_row.status IN ('RUNNING', 'COMPLETE')
+          AND (
+            upper(btrim(coalesce(chunk_row.status, ''))) IN ('RUNNING', 'COMPLETE', 'FAILED')
+            OR chunk_row.started_at_utc IS NOT NULL
+            OR (chunk_row.result_json IS NOT NULL AND chunk_row.result_json <> '{}'::jsonb)
+            OR (chunk_row.error_json IS NOT NULL AND chunk_row.error_json <> '{}'::jsonb)
+          )
           AND normalised_rows.transfer_id IS NOT NULL
-          AND position(lower(normalised_rows.transfer_id::text) in lower(coalesce(chunk_row.payload_json::text, '') || coalesce(chunk_row.result_json::text, ''))) > 0
+          AND position(
+            lower(normalised_rows.transfer_id::text) IN lower(
+              coalesce(chunk_row.payload_json::text, '')
+              || coalesce(chunk_row.result_json::text, '')
+              || coalesce(chunk_row.error_json::text, '')
+            )
+          ) > 0
       ) AS calc_has_operation_submit_attempt,
       EXISTS (
         SELECT 1
@@ -12361,7 +12378,112 @@ BEGIN
       WHEN final_rows.transfer_id IS NOT NULL AND final_rows.calc_has_route_ready IS NOT TRUE THEN 'TRANSFER_ROUTE_NOT_READY'
       WHEN final_rows.transfer_id IS NOT NULL AND final_rows.status_upper <> 'PENDING' THEN 'TRANSFER_NOT_PENDING'
       ELSE NULL::text
-    END AS unsafe_reason
+    END AS unsafe_reason,
+    auth_context.has_same_operation_authorised_auth_request AS has_same_operation_authorised_auth_request,
+    auth_context.has_pending_authorisation_auth_request AS has_pending_authorisation_auth_request,
+    (
+      p_operation_id IS NOT NULL
+      AND final_rows.transfer_id IS NOT NULL
+      AND final_rows.transfer_pay_batch_id = p_pay_batch_id
+      AND (v_scope IN ('ALL', 'ANY', '*') OR upper(btrim(coalesce(final_rows.transfer_pay_channel, ''))) = v_scope)
+      AND final_rows.status_upper = 'PENDING'
+      AND final_rows.calc_has_route_ready IS TRUE
+      AND upper(btrim(coalesce(final_rows.scope_status, ''))) = 'PREPARED'
+      AND (
+        final_rows.scope_operation_id = p_operation_id
+        OR btrim(coalesce(final_rows.transfer_rail_meta_json #>> '{operation_id}', '')) = p_operation_id::text
+        OR btrim(coalesce(final_rows.transfer_rail_meta_json #>> '{created_by_operation_id}', '')) = p_operation_id::text
+        OR btrim(coalesce(final_rows.transfer_rail_meta_json #>> '{payment_execute_operation_id}', '')) = p_operation_id::text
+      )
+      AND auth_context.has_same_operation_authorised_auth_request IS TRUE
+      AND auth_context.has_pending_authorisation_auth_request IS NOT TRUE
+      AND auth_context.has_other_operation_active_auth_request IS NOT TRUE
+      AND final_rows.calc_has_provider_submission_evidence IS NOT TRUE
+      AND final_rows.calc_has_provider_event_evidence IS NOT TRUE
+      AND final_rows.calc_has_provider_attempt_without_external_id IS NOT TRUE
+      AND final_rows.calc_has_operation_submit_attempt IS NOT TRUE
+      AND final_rows.calc_has_ambiguous_external_evidence IS NOT TRUE
+      AND final_rows.calc_has_non_local_rail_tx_id IS NOT TRUE
+      AND final_rows.calc_has_non_local_rail_meta_identifier IS NOT TRUE
+      AND final_rows.calc_has_provider_source_flag IS NOT TRUE
+      AND final_rows.calc_is_failed_or_blocked IS NOT TRUE
+      AND final_rows.calc_is_terminal_or_completed IS NOT TRUE
+      AND final_rows.batch_execution_boundary_crossed IS NOT TRUE
+      AND final_rows.calc_has_stale_auth_request_evidence IS NOT TRUE
+      AND NOT (
+        final_rows.scope_operation_id IS NOT NULL
+        AND final_rows.scope_operation_id <> p_operation_id
+      )
+    ) AS is_provider_submit_ready,
+    CASE
+      WHEN p_operation_id IS NULL THEN 'PROVIDER_SUBMIT_OPERATION_ID_REQUIRED'
+      WHEN final_rows.transfer_id IS NULL THEN 'PROVIDER_SUBMIT_TRANSFER_REQUIRED'
+      WHEN final_rows.batch_execution_boundary_crossed THEN 'PROVIDER_SUBMIT_BATCH_EXECUTION_BOUNDARY_CROSSED'
+      WHEN final_rows.calc_has_provider_event_evidence THEN 'PROVIDER_SUBMIT_PROVIDER_EVENT_EVIDENCE_PRESENT'
+      WHEN final_rows.calc_has_provider_submission_evidence THEN 'PROVIDER_SUBMIT_PROVIDER_SUBMISSION_EVIDENCE_PRESENT'
+      WHEN final_rows.calc_has_operation_submit_attempt THEN 'PROVIDER_SUBMIT_CHUNK_ATTEMPT_PRESENT'
+      WHEN final_rows.calc_has_provider_attempt_without_external_id THEN 'PROVIDER_SUBMIT_PROVIDER_ATTEMPT_WITHOUT_EXTERNAL_ID'
+      WHEN final_rows.calc_has_ambiguous_external_evidence THEN 'PROVIDER_SUBMIT_AMBIGUOUS_EXTERNAL_EVIDENCE'
+      WHEN final_rows.calc_has_non_local_rail_tx_id THEN 'PROVIDER_SUBMIT_NON_LOCAL_RAIL_TX_ID_PRESENT'
+      WHEN final_rows.calc_has_non_local_rail_meta_identifier THEN 'PROVIDER_SUBMIT_NON_LOCAL_PROVIDER_IDENTIFIER_PRESENT'
+      WHEN final_rows.calc_has_provider_source_flag THEN 'PROVIDER_SUBMIT_PROVIDER_SOURCE_FLAG_PRESENT'
+      WHEN final_rows.calc_is_terminal_or_completed THEN 'PROVIDER_SUBMIT_TERMINAL_OR_COMPLETED_TRANSFER_STATE'
+      WHEN final_rows.calc_is_failed_or_blocked THEN 'PROVIDER_SUBMIT_FAILED_OR_BLOCKED_TRANSFER_STATE'
+      WHEN final_rows.calc_has_stale_auth_request_evidence THEN 'PROVIDER_SUBMIT_STALE_AUTH_REQUEST_EVIDENCE_PRESENT'
+      WHEN final_rows.status_upper <> 'PENDING' THEN 'PROVIDER_SUBMIT_TRANSFER_NOT_PENDING'
+      WHEN final_rows.calc_has_route_ready IS NOT TRUE THEN 'PROVIDER_SUBMIT_TRANSFER_ROUTE_NOT_READY'
+      WHEN upper(btrim(coalesce(final_rows.scope_status, ''))) <> 'PREPARED' THEN 'PROVIDER_SUBMIT_PREPARED_SCOPE_REQUIRED'
+      WHEN (
+        final_rows.scope_operation_id IS NULL
+        AND btrim(coalesce(final_rows.transfer_rail_meta_json #>> '{operation_id}', '')) <> p_operation_id::text
+        AND btrim(coalesce(final_rows.transfer_rail_meta_json #>> '{created_by_operation_id}', '')) <> p_operation_id::text
+        AND btrim(coalesce(final_rows.transfer_rail_meta_json #>> '{payment_execute_operation_id}', '')) <> p_operation_id::text
+      ) THEN 'PROVIDER_SUBMIT_OPERATION_OWNERSHIP_REQUIRED'
+      WHEN final_rows.scope_operation_id IS NOT NULL AND final_rows.scope_operation_id <> p_operation_id THEN 'PROVIDER_SUBMIT_SCOPE_OWNED_BY_DIFFERENT_OPERATION'
+      WHEN auth_context.has_same_operation_authorised_auth_request IS NOT TRUE THEN 'PROVIDER_SUBMIT_SAME_OPERATION_AUTHORISED_AUTH_REQUIRED'
+      WHEN auth_context.has_pending_authorisation_auth_request THEN 'PROVIDER_SUBMIT_PENDING_AUTHORISATION_AUTH_REQUEST_PRESENT'
+      WHEN auth_context.has_other_operation_active_auth_request THEN 'PROVIDER_SUBMIT_OTHER_OPERATION_ACTIVE_AUTH_REQUEST_PRESENT'
+      ELSE NULL::text
+    END AS provider_submit_unsafe_reason,
+    (
+      p_operation_id IS NOT NULL
+      AND final_rows.transfer_id IS NOT NULL
+      AND auth_context.has_same_operation_authorised_auth_request IS TRUE
+      AND (
+      p_operation_id IS NOT NULL
+      AND final_rows.transfer_id IS NOT NULL
+      AND final_rows.transfer_pay_batch_id = p_pay_batch_id
+      AND (v_scope IN ('ALL', 'ANY', '*') OR upper(btrim(coalesce(final_rows.transfer_pay_channel, ''))) = v_scope)
+      AND final_rows.status_upper = 'PENDING'
+      AND final_rows.calc_has_route_ready IS TRUE
+      AND upper(btrim(coalesce(final_rows.scope_status, ''))) = 'PREPARED'
+      AND (
+        final_rows.scope_operation_id = p_operation_id
+        OR btrim(coalesce(final_rows.transfer_rail_meta_json #>> '{operation_id}', '')) = p_operation_id::text
+        OR btrim(coalesce(final_rows.transfer_rail_meta_json #>> '{created_by_operation_id}', '')) = p_operation_id::text
+        OR btrim(coalesce(final_rows.transfer_rail_meta_json #>> '{payment_execute_operation_id}', '')) = p_operation_id::text
+      )
+      AND auth_context.has_same_operation_authorised_auth_request IS TRUE
+      AND auth_context.has_pending_authorisation_auth_request IS NOT TRUE
+      AND auth_context.has_other_operation_active_auth_request IS NOT TRUE
+      AND final_rows.calc_has_provider_submission_evidence IS NOT TRUE
+      AND final_rows.calc_has_provider_event_evidence IS NOT TRUE
+      AND final_rows.calc_has_provider_attempt_without_external_id IS NOT TRUE
+      AND final_rows.calc_has_operation_submit_attempt IS NOT TRUE
+      AND final_rows.calc_has_ambiguous_external_evidence IS NOT TRUE
+      AND final_rows.calc_has_non_local_rail_tx_id IS NOT TRUE
+      AND final_rows.calc_has_non_local_rail_meta_identifier IS NOT TRUE
+      AND final_rows.calc_has_provider_source_flag IS NOT TRUE
+      AND final_rows.calc_is_failed_or_blocked IS NOT TRUE
+      AND final_rows.calc_is_terminal_or_completed IS NOT TRUE
+      AND final_rows.batch_execution_boundary_crossed IS NOT TRUE
+      AND final_rows.calc_has_stale_auth_request_evidence IS NOT TRUE
+      AND NOT (
+        final_rows.scope_operation_id IS NOT NULL
+        AND final_rows.scope_operation_id <> p_operation_id
+      )
+    ) IS NOT TRUE
+    ) AS has_provider_submit_blocker
   FROM final_rows
   CROSS JOIN auth_context AS auth_context
   ORDER BY
@@ -12371,6 +12493,7 @@ BEGIN
     final_rows.scope_id NULLS LAST;
 END;
 $function$;
+
 
 
 CREATE OR REPLACE FUNCTION public.pay_execute_operation_cleanup_failed_local_artifacts(
