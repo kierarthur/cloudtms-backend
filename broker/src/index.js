@@ -35897,20 +35897,55 @@ async function advanceBankingPaySettlementOperation(env, operationRow, user, opt
         });
       }
 
-      const child = await startBankingPayOperation(env, {
-        operation_type: 'REMITTANCE_QUEUE',
-        actor_user_id: actorUserId,
-        idempotency_key: `remittance-queue:batch:${payBatchId}:root:${operationId}:settlement`,
-        pay_batch_id: payBatchId,
-        root_operation_id: operationId,
-        input_json: {
-          source: 'advanceBankingPaySettlementOperation',
-          trigger: 'ON_PAYMENT_CONFIRMED',
-          scope: inputJson.scope || 'ALL',
-          only_confirmed: true
-        }
+      const gate = await queueRemittanceViaTimingGate(env, {
+        payBatchId,
+        actorUserId,
+        rootOperationId: operationId,
+        trigger: 'ON_PAYMENT_CONFIRMED',
+        scope: inputJson.scope || 'ALL',
+        onlyConfirmed: true,
+        source: 'advanceBankingPaySettlementOperation'
       });
-      return save('RUNNING', 'COMPLETE', { status_text: 'Settlement remittance operation has been started.', child_operation_id: child.operation_id, remittance_operation: child });
+
+      if (gate.deferred === true) {
+        return save('RUNNING', 'COMPLETE', {
+          status_text: 'Confirmed-payment remittances deferred by configured timing.',
+          remittance_deferred_by_timing: true,
+          trigger: 'ON_PAYMENT_CONFIRMED',
+          configured_timing: gate.configuredTiming || null,
+          remittance_timing_gate: gate.raw || null
+        });
+      }
+
+      if (gate.suppressed === true) {
+        return save('RUNNING', 'COMPLETE', {
+          status_text: 'Settlement remittance messages are suppressed for this payment operation.',
+          remittance_suppressed: true,
+          suppress_remittances: true,
+          remittance_suppressed_by_timing_gate: true,
+          trigger: 'ON_PAYMENT_CONFIRMED',
+          configured_timing: gate.configuredTiming || null,
+          remittance_timing_gate: gate.raw || null
+        });
+      }
+
+      if (!gate.childOperationId) {
+        return finish('FAILED', null, {
+          code: 'REMITTANCE_QUEUE_OPERATION_MISSING',
+          message: 'Remittance timing gate did not return a confirmed-payment remittance queue operation.',
+          phase,
+          trigger: 'ON_PAYMENT_CONFIRMED',
+          configured_timing: gate.configuredTiming || null,
+          remittance_timing_gate: gate.raw || null
+        });
+      }
+
+      return save('RUNNING', 'COMPLETE', {
+        status_text: 'Settlement remittance operation has been started or reused.',
+        child_operation_id: gate.childOperationId,
+        remittance_operation: gate,
+        remittance_timing_gate: gate.raw || null
+      });
     }
 
     if (phase === 'COMPLETE') {
@@ -36839,7 +36874,6 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
     return finishFailedWithCleanup( null, { code: 'DRAFT_CREATE_OPERATION_FAILED', message: 'Draft create operation failed.', phase, error: String(e?.message || e || '') });
   }
 }
-
 
 
 async function advanceBankingPayExecuteOperation(env, operationRow, user, options = {}) {
@@ -37903,10 +37937,84 @@ if (currentPhase === 'SCHEDULE_OR_SUBMIT') {
       p_operation_id: operationId,
       p_freshness_result_hash: freshnessHash
     }), 'pay_batch_schedule');
+
+    const initialRemittanceGate = normaliseRemittanceTimingGateResult({
+      ...scheduled,
+      remittance_queue_stage_result: scheduled.remittance_queue_stage_result,
+      worker_communications: scheduled.worker_communications
+    });
+
+    let remittanceGate = initialRemittanceGate;
+    let remittanceAdvance = null;
+    let remittanceFallbackGate = null;
+    const initialGateQueuedWithoutChild = initialRemittanceGate.deferred !== true
+      && initialRemittanceGate.suppressed !== true
+      && !initialRemittanceGate.childOperationId
+      && (
+        initialRemittanceGate.operationQueued === true
+        || initialRemittanceGate.requiresRemittanceOperation === true
+        || String(initialRemittanceGate.triggerStatus || '').trim().toUpperCase().includes('QUEUE')
+      );
+
+    if (initialGateQueuedWithoutChild) {
+      remittanceFallbackGate = await queueRemittanceViaTimingGate(env, {
+        payBatchId,
+        actorUserId,
+        rootOperationId: operationId,
+        trigger: 'ON_EXECUTION',
+        scope: 'ALL',
+        onlyConfirmed: false,
+        source: 'advanceBankingPayExecuteOperation.schedule'
+      });
+      remittanceGate = remittanceFallbackGate;
+    }
+
+    if (remittanceGate.childOperationId && remittanceGate.deferred !== true && remittanceGate.suppressed !== true) {
+      try {
+        remittanceAdvance = await advanceChildOperationOnce(remittanceGate.childOperationId, 'scheduled-remittance-child');
+      } catch (remittanceAdvanceError) {
+        remittanceAdvance = {
+          ok: false,
+          terminal: true,
+          status: 'FAILED',
+          error: {
+            code: 'SCHEDULED_REMITTANCE_CHILD_ADVANCE_FAILED',
+            message: String(remittanceAdvanceError?.message || remittanceAdvanceError || 'Scheduled remittance child operation could not be advanced.')
+          }
+        };
+      }
+    }
+
+    const scheduledRemittanceTiming = {
+      trigger: remittanceGate.trigger || 'ON_EXECUTION',
+      configured_timing: remittanceGate.configuredTiming,
+      deferred: remittanceGate.deferred === true,
+      suppressed: remittanceGate.suppressed === true,
+      operation_queued: remittanceGate.operationQueued === true,
+      child_operation_id: remittanceGate.childOperationId || null,
+      operation_status: remittanceGate.operationStatus || null,
+      operation_phase: remittanceGate.operationPhase || null,
+      trigger_status: remittanceGate.triggerStatus || null,
+      message_kind: remittanceGate.messageKind || null,
+      fallback_gate_used: remittanceFallbackGate ? true : false
+    };
+
     return finish('COMPLETE', {
+      ok: true,
       scheduled: true,
-      pay_batch_schedule: scheduled,
       pay_batch_id: payBatchId,
+      pay_batch_schedule: scheduled,
+      scheduled_remittance_timing: scheduledRemittanceTiming,
+      child_operation_id: remittanceGate.childOperationId || null,
+      remittance_child_advance: remittanceAdvance || null,
+      remittance_deferred_by_timing: remittanceGate.deferred === true,
+      remittance_trigger: 'ON_EXECUTION',
+      configured_timing: remittanceGate.configuredTiming || null,
+      remittances_suppressed: remittanceGate.suppressed === true,
+      suppress_remittances: remittanceGate.suppressed === true,
+      remittance_suppressed_by_timing_gate: remittanceGate.suppressed === true,
+      remittance_timing_gate: remittanceGate.raw || null,
+      remittance_fallback_timing_gate: remittanceFallbackGate ? remittanceFallbackGate.raw : null,
       next_required_phase: nextRequiredPhase || null
     }, null);
   }
@@ -38246,38 +38354,70 @@ if (currentPhase === 'QUEUE_REMITTANCES') {
     });
   }
 
-  const child = await startBankingPayOperation(env, {
-    operation_type: 'REMITTANCE_QUEUE',
-    actor_user_id: actorUserId,
-    idempotency_key: `remittance-queue:batch:${payBatchId}:root:${operationId}`,
-    pay_batch_id: payBatchId,
-    root_operation_id: operationId,
-    input_json: {
-      source: 'advanceBankingPayExecuteOperation',
-      trigger: 'ON_EXECUTION',
-      scope: 'ALL',
-      only_confirmed: false
-    }
+  const gate = await queueRemittanceViaTimingGate(env, {
+    payBatchId,
+    actorUserId,
+    rootOperationId: operationId,
+    trigger: 'ON_EXECUTION',
+    scope: 'ALL',
+    onlyConfirmed: false,
+    source: 'advanceBankingPayExecuteOperation'
   });
-  const remittanceAdvance = await advanceChildOperationOnce(child.operation_id, 'remittance-child');
+
+  if (gate.deferred === true) {
+    return phaseProgress('RUNNING', 'COMPLETE', {
+      status_text: 'Execution-time remittances deferred by configured timing.',
+      remittance_deferred_by_timing: true,
+      trigger: 'ON_EXECUTION',
+      configured_timing: gate.configuredTiming || null,
+      remittance_timing_gate: gate.raw || null
+    });
+  }
+
+  if (gate.suppressed === true) {
+    return phaseProgress('RUNNING', 'COMPLETE', {
+      status_text: 'Remittance messages are suppressed for this payment operation.',
+      remittance_suppressed: true,
+      suppress_remittances: true,
+      remittance_suppressed_by_timing_gate: true,
+      trigger: 'ON_EXECUTION',
+      configured_timing: gate.configuredTiming || null,
+      remittance_timing_gate: gate.raw || null
+    });
+  }
+
+  if (!gate.childOperationId) {
+    return fail('REMITTANCE_QUEUE_OPERATION_MISSING', 'Remittance timing gate did not return a remittance queue operation.', {
+      phase: currentPhase,
+      trigger: 'ON_EXECUTION',
+      configured_timing: gate.configuredTiming || null,
+      remittance_timing_gate: gate.raw || null
+    });
+  }
+
+  const remittanceAdvance = await advanceChildOperationOnce(gate.childOperationId, 'remittance-child');
   const remittanceStatus = String(remittanceAdvance.status || '').trim().toUpperCase();
   if (remittanceAdvance.terminal === true && remittanceStatus === 'COMPLETE') {
     return phaseProgress('RUNNING', 'COMPLETE', {
       status_text: 'Remittance operation completed.',
-      child_operation_id: child.operation_id,
-      remittance_operation: remittanceAdvance
+      child_operation_id: gate.childOperationId,
+      remittance_operation: remittanceAdvance,
+      remittance_timing_gate: gate.raw || null
     });
   }
   if (remittanceAdvance.terminal === true && remittanceStatus !== 'COMPLETE') {
     return fail('REMITTANCE_OPERATION_REVIEW_REQUIRED', 'Payment remittance operation needs review.', {
       phase: currentPhase,
-      remittance_operation: remittanceAdvance
+      child_operation_id: gate.childOperationId,
+      remittance_operation: remittanceAdvance,
+      remittance_timing_gate: gate.raw || null
     });
   }
   return phaseProgress('RUNNING', 'QUEUE_REMITTANCES', {
     status_text: 'Advanced one remittance operation step.',
-    child_operation_id: child.operation_id,
-    remittance_operation: remittanceAdvance
+    child_operation_id: gate.childOperationId,
+    remittance_operation: remittanceAdvance,
+    remittance_timing_gate: gate.raw || null
   });
 }
 
@@ -38350,8 +38490,6 @@ error: String(e?.message || e || '')
 });
 }
 }
-
-
 
 
 
@@ -38431,47 +38569,215 @@ async function advanceBankingPayRemittanceOperation(env, operationRow, user, opt
       .filter(Boolean);
   };
 
+  const readBool = (value, fallback = false) => {
+    if (typeof value === 'boolean') return value;
+    if (typeof value === 'number') return value !== 0;
+    if (value === null || value === undefined) return !!fallback;
+    const text = String(value).trim().toLowerCase();
+    if (['true', '1', 'yes', 'y', 'on'].includes(text)) return true;
+    if (['false', '0', 'no', 'n', 'off'].includes(text)) return false;
+    return !!fallback;
+  };
+
+  const onlyConfirmed = readBool(inputJson.only_confirmed ?? inputJson.onlyConfirmed, false);
+  const trigger = String(inputJson.trigger || '').trim().toUpperCase() || (onlyConfirmed ? 'ON_PAYMENT_CONFIRMED' : 'ON_EXECUTION');
+
+  const getPaymentRemittanceSendTiming = async () => {
+    const { rows } = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/settings_defaults?select=payment_remittance_send_timing&order=id.asc&limit=1`);
+    const rawTiming = String((rows && rows[0] && rows[0].payment_remittance_send_timing) || 'ON_EXECUTION').trim().toUpperCase() || 'ON_EXECUTION';
+    return rawTiming === 'ON_PAYMENT_CONFIRMED' ? 'ON_PAYMENT_CONFIRMED' : 'ON_EXECUTION';
+  };
+
+  const getBatchRemittanceIntent = async () => {
+    const { rows } = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/pay_batches?id=eq.${enc(payBatchId)}&select=id,execution_intent_json,settlement_confirmation_json&limit=1`);
+    const row = rows && rows[0] ? rows[0] : {};
+    return {
+      execution_intent_json: safeObject(row.execution_intent_json),
+      settlement_confirmation_json: safeObject(row.settlement_confirmation_json)
+    };
+  };
+
+  const evaluateRemittanceOperationGuard = async () => {
+    const configuredTiming = await getPaymentRemittanceSendTiming();
+    if (!['ON_EXECUTION', 'ON_PAYMENT_CONFIRMED'].includes(trigger)) {
+      return {
+        finish: true,
+        status: 'FAILED',
+        result: null,
+        error: {
+          code: 'UNSUPPORTED_REMITTANCE_TRIGGER',
+          message: `Unsupported remittance trigger: ${trigger}`,
+          trigger,
+          configured_timing: configuredTiming
+        }
+      };
+    }
+    if (configuredTiming !== trigger) {
+      return {
+        finish: true,
+        status: 'COMPLETE',
+        result: {
+          ok: true,
+          pay_batch_id: payBatchId,
+          operation_id: operationId,
+          remittance_queue_complete: true,
+          remittance_deferred_by_timing: true,
+          trigger,
+          configured_timing: configuredTiming,
+          queued_count: 0,
+          reused_count: 0,
+          skipped_count: 0,
+          failed_count: 0,
+          message: 'Remittance queue deferred because configured timing does not match this operation trigger.'
+        },
+        error: null
+      };
+    }
+
+    const batchIntent = await getBatchRemittanceIntent();
+    const executionIntent = safeObject(batchIntent.execution_intent_json);
+    const settlementConfirmation = safeObject(batchIntent.settlement_confirmation_json);
+    const suppressRemittances = readBool(inputJson.suppress_remittances, false)
+      || readBool(inputJson.do_not_send_remittances, false)
+      || readBool(executionIntent.suppress_remittances, false)
+      || readBool(executionIntent.suppress_remittances_pending, false)
+      || readBool(settlementConfirmation.suppress_remittances, false)
+      || readBool(settlementConfirmation.suppress_remittances_pending, false);
+
+    if (suppressRemittances) {
+      return {
+        finish: true,
+        status: 'COMPLETE',
+        result: {
+          ok: true,
+          pay_batch_id: payBatchId,
+          operation_id: operationId,
+          remittance_queue_complete: true,
+          remittance_suppressed: true,
+          suppress_remittances: true,
+          trigger,
+          configured_timing: configuredTiming,
+          queued_count: 0,
+          reused_count: 0,
+          skipped_count: 0,
+          failed_count: 0,
+          message: 'Remittance queue suppressed for this payment operation.'
+        },
+        error: null
+      };
+    }
+
+    return {
+      finish: false,
+      configured_timing: configuredTiming,
+      trigger
+    };
+  };
+
   try {
     if (phase === 'INITIALISE' || phase === 'VALIDATE_BATCH') {
+      const guard = await evaluateRemittanceOperationGuard();
+      if (guard.finish === true) return finish(guard.status, guard.result, guard.error);
       const summary = unwrapRpcPayload(await sbRpc(env, 'pay_batch_execution_summary_get', {
         p_pay_batch_id: payBatchId,
         p_actor_user_id: actorUserId
       }), 'pay_batch_execution_summary_get');
-      return save('RUNNING', 'SEED_REMITTANCE_SCOPE', { status_text: 'Remittance batch checked.', batch_summary: summary });
+      return save('RUNNING', 'SEED_REMITTANCE_SCOPE', {
+        status_text: 'Remittance batch checked.',
+        batch_summary: summary,
+        trigger: guard.trigger,
+        configured_timing: guard.configured_timing
+      });
     }
 
     if (phase === 'SEED_REMITTANCE_SCOPE') {
+      const guard = await evaluateRemittanceOperationGuard();
+      if (guard.finish === true) return finish(guard.status, guard.result, guard.error);
       const seeded = unwrapRpcPayload(await sbRpc(env, 'pay_operation_remittance_scope_seed', {
         p_operation_id: operationId,
         p_pay_batch_id: payBatchId,
         p_scope: inputJson.scope || 'ALL',
         p_actor_user_id: actorUserId
       }), 'pay_operation_remittance_scope_seed');
+
+      if (seeded.deferred === true) {
+        return finish('COMPLETE', {
+          ok: true,
+          pay_batch_id: payBatchId,
+          operation_id: operationId,
+          remittance_queue_complete: true,
+          remittance_deferred_by_timing: true,
+          trigger: seeded.trigger || trigger,
+          configured_timing: seeded.configured_timing || guard.configured_timing,
+          queued_count: 0,
+          reused_count: 0,
+          skipped_count: 0,
+          failed_count: 0,
+          remittance_scope_seed: seeded,
+          message: 'Remittance queue deferred by configured timing.'
+        }, null);
+      }
+
+      if (seeded.suppressed === true) {
+        return finish('COMPLETE', {
+          ok: true,
+          pay_batch_id: payBatchId,
+          operation_id: operationId,
+          remittance_queue_complete: true,
+          remittance_suppressed: true,
+          suppress_remittances: true,
+          trigger: seeded.trigger || trigger,
+          configured_timing: seeded.configured_timing || guard.configured_timing,
+          queued_count: 0,
+          reused_count: 0,
+          skipped_count: 0,
+          failed_count: 0,
+          remittance_scope_seed: seeded,
+          message: 'Remittance queue suppressed for this payment operation.'
+        }, null);
+      }
+
       const remittanceIds = await fetchScopeIds('REMITTANCE');
       const payoutIds = await fetchScopeIds('PAYOUT_NOTICE');
-      const remittanceSeed = unwrapRpcPayload(await sbRpc(env, 'banking_pay_operation_seed_chunks', {
+      const totalScopeIds = remittanceIds.length + payoutIds.length;
+      if (totalScopeIds <= 0) {
+        return save('RUNNING', 'COMPLETE', {
+          status_text: 'No queueable remittance scope rows were found.',
+          no_queueable_remittance_scope: true,
+          trigger: seeded.trigger || trigger,
+          configured_timing: seeded.configured_timing || guard.configured_timing,
+          trigger_status: seeded.trigger_status || 'NO_QUEUEABLE_REMITTANCE_SCOPE',
+          remittance_scope_seed: seeded
+        }, { total_units: 0, completed_units: 0, failed_units: 0, current_chunk_index: 0, chunk_count: 0 });
+      }
+
+      const remittanceSeed = remittanceIds.length > 0 ? unwrapRpcPayload(await sbRpc(env, 'banking_pay_operation_seed_chunks', {
         p_operation_id: operationId,
         p_phase: 'QUEUE_REMITTANCE_CHUNKS',
         p_chunk_type: 'REMITTANCE',
         p_chunk_size: chunkSize('remittance_chunk_size', 100),
         p_units_json: remittanceIds
-      }), 'banking_pay_operation_seed_chunks');
-      const payoutSeed = unwrapRpcPayload(await sbRpc(env, 'banking_pay_operation_seed_chunks', {
+      }), 'banking_pay_operation_seed_chunks') : { chunk_count: 0, total_units: 0 };
+      const payoutSeed = payoutIds.length > 0 ? unwrapRpcPayload(await sbRpc(env, 'banking_pay_operation_seed_chunks', {
         p_operation_id: operationId,
         p_phase: 'QUEUE_PAYOUT_NOTICE_CHUNKS',
         p_chunk_type: 'PAYOUT_NOTICE',
         p_chunk_size: chunkSize('payout_notice_chunk_size', 100),
         p_units_json: payoutIds
-      }), 'banking_pay_operation_seed_chunks');
-      return save('RUNNING', 'QUEUE_REMITTANCE_CHUNKS', {
+      }), 'banking_pay_operation_seed_chunks') : { chunk_count: 0, total_units: 0 };
+      return save('RUNNING', remittanceIds.length > 0 ? 'QUEUE_REMITTANCE_CHUNKS' : 'QUEUE_PAYOUT_NOTICE_CHUNKS', {
         status_text: 'Remittance chunks are ready.',
+        trigger: seeded.trigger || trigger,
+        configured_timing: seeded.configured_timing || guard.configured_timing,
         remittance_scope_seed: seeded,
         remittance_chunk_seed: remittanceSeed,
         payout_notice_chunk_seed: payoutSeed
-      }, { total_units: remittanceIds.length + payoutIds.length, completed_units: 0, failed_units: 0, current_chunk_index: 0, chunk_count: Number(remittanceSeed.chunk_count || 0) + Number(payoutSeed.chunk_count || 0) });
+      }, { total_units: totalScopeIds, completed_units: 0, failed_units: 0, current_chunk_index: 0, chunk_count: Number(remittanceSeed.chunk_count || 0) + Number(payoutSeed.chunk_count || 0) });
     }
 
     if (phase === 'QUEUE_REMITTANCE_CHUNKS') {
+      const guard = await evaluateRemittanceOperationGuard();
+      if (guard.finish === true) return finish(guard.status, guard.result, guard.error);
       const chunk = await claim('QUEUE_REMITTANCE_CHUNKS', 'REMITTANCE');
       if (chunk && chunk.chunk_id) {
         const ids = Array.isArray(chunk.payload_json?.units) ? chunk.payload_json.units.map((x) => String(x || '').trim()).filter(Boolean) : [];
@@ -38480,7 +38786,7 @@ async function advanceBankingPayRemittanceOperation(env, operationRow, user, opt
             p_pay_batch_id: payBatchId,
             p_scope: inputJson.scope || 'ALL',
             p_actor_user_id: actorUserId,
-            p_only_confirmed: inputJson.only_confirmed === true,
+            p_only_confirmed: onlyConfirmed,
             p_operation_id: operationId,
             p_remittance_scope_ids: ids
           }), 'pay_remittance_queue_commit_stage');
@@ -38495,6 +38801,8 @@ async function advanceBankingPayRemittanceOperation(env, operationRow, user, opt
     }
 
     if (phase === 'QUEUE_PAYOUT_NOTICE_CHUNKS') {
+      const guard = await evaluateRemittanceOperationGuard();
+      if (guard.finish === true) return finish(guard.status, guard.result, guard.error);
       const chunk = await claim('QUEUE_PAYOUT_NOTICE_CHUNKS', 'PAYOUT_NOTICE');
       if (chunk && chunk.chunk_id) {
         const ids = Array.isArray(chunk.payload_json?.units) ? chunk.payload_json.units.map((x) => String(x || '').trim()).filter(Boolean) : [];
@@ -38502,7 +38810,7 @@ async function advanceBankingPayRemittanceOperation(env, operationRow, user, opt
           const queued = unwrapRpcPayload(await sbRpc(env, 'pay_finance_payout_notice_queue_commit_stage', {
             p_pay_batch_id: payBatchId,
             p_actor_user_id: actorUserId,
-            p_only_confirmed: inputJson.only_confirmed === true,
+            p_only_confirmed: onlyConfirmed,
             p_operation_id: operationId,
             p_remittance_scope_ids: ids
           }), 'pay_finance_payout_notice_queue_commit_stage');
@@ -38517,7 +38825,14 @@ async function advanceBankingPayRemittanceOperation(env, operationRow, user, opt
     }
 
     if (phase === 'COMPLETE') {
-      return finish('COMPLETE', { ok: true, pay_batch_id: payBatchId, operation_id: operationId, remittance_queue_complete: true }, null);
+      return finish('COMPLETE', {
+        ok: true,
+        pay_batch_id: payBatchId,
+        operation_id: operationId,
+        remittance_queue_complete: true,
+        trigger,
+        only_confirmed: onlyConfirmed
+      }, null);
     }
 
     return finish('FAILED', null, { code: 'UNKNOWN_REMITTANCE_PHASE', message: `Unknown remittance operation phase: ${phase}`, phase });
@@ -103065,6 +103380,553 @@ return withCORS(env, req, ok({
     return withCORS(env, req, serverError("Failed to update candidate"));
   }
 }
+
+function normaliseRemittanceTimingGateResult(result) {
+  const unwrapRpcPayload = (value) => {
+    let payload = value;
+    for (let i = 0; i < 4; i += 1) {
+      if (Array.isArray(payload) && payload.length === 1 && payload[0] && typeof payload[0] === 'object') {
+        payload = payload[0];
+        continue;
+      }
+      if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
+        const wrapperKeys = [
+          'pay_remittance_maybe_queue_for_trigger',
+          'pay_batch_schedule',
+          'pay_remittance_queue_commit_stage',
+          'pay_finance_payout_notice_queue_commit_stage'
+        ];
+        let unwrapped = false;
+        for (const key of wrapperKeys) {
+          if (Object.prototype.hasOwnProperty.call(payload, key)) {
+            payload = payload[key];
+            unwrapped = true;
+            break;
+          }
+        }
+        if (unwrapped) continue;
+      }
+      break;
+    }
+    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+  };
+
+  const raw = unwrapRpcPayload(result);
+
+  const getPath = (source, path) => {
+    if (!source || typeof source !== 'object') return undefined;
+    let cursor = source;
+    for (const part of path) {
+      if (!cursor || typeof cursor !== 'object' || !Object.prototype.hasOwnProperty.call(cursor, part)) return undefined;
+      cursor = cursor[part];
+    }
+    return cursor;
+  };
+
+  function firstValue() {
+    for (const value of Array.from(arguments)) {
+      if (value === null || value === undefined) continue;
+      if (typeof value === 'string' && value.trim() === '') continue;
+      return value;
+    }
+    return undefined;
+  }
+
+  const textOrNull = (value) => {
+    if (value === null || value === undefined) return null;
+    const text = String(value).trim();
+    return text ? text : null;
+  };
+
+  const upperTextOrNull = (value) => {
+    const text = textOrNull(value);
+    return text ? text.toUpperCase() : null;
+  };
+
+  const readBool = (value, fallback = false) => {
+    if (typeof value === 'boolean') return value;
+    if (typeof value === 'number') return value !== 0;
+    if (value === null || value === undefined) return !!fallback;
+    const text = String(value).trim().toLowerCase();
+    if (['true', '1', 'yes', 'y', 'on'].includes(text)) return true;
+    if (['false', '0', 'no', 'n', 'off'].includes(text)) return false;
+    return !!fallback;
+  };
+
+  const nestedRemittanceStage = firstValue(
+    getPath(raw, ['remittance_queue_stage_result']),
+    getPath(raw, ['worker_communications', 'remittance_queue_stage_result'])
+  );
+
+  const nestedWorkerCommunications = firstValue(
+    getPath(raw, ['worker_communications']),
+    getPath(raw, ['workerCommunications'])
+  );
+
+  const queueResultRaw = firstValue(
+    getPath(raw, ['queue_result']),
+    getPath(raw, ['queueResult']),
+    getPath(raw, ['remittance', 'queue_result']),
+    getPath(raw, ['remittance', 'queueResult']),
+    getPath(raw, ['payout_notice', 'queue_result']),
+    getPath(raw, ['payout_notice', 'queueResult']),
+    getPath(raw, ['remittance_queue_stage_result', 'queue_result']),
+    getPath(raw, ['remittance_queue_stage_result', 'queueResult']),
+    getPath(raw, ['worker_communications', 'remittance_queue_stage_result', 'queue_result']),
+    getPath(raw, ['worker_communications', 'remittance_queue_stage_result', 'queueResult'])
+  );
+
+  const queueResult = unwrapRpcPayload(queueResultRaw);
+  const remittanceStage = unwrapRpcPayload(nestedRemittanceStage);
+  const workerCommunications = unwrapRpcPayload(nestedWorkerCommunications);
+
+  const childOperationId = textOrNull(firstValue(
+    getPath(raw, ['child_operation_id']),
+    getPath(raw, ['childOperationId']),
+    getPath(raw, ['operation_id']),
+    getPath(raw, ['operationId']),
+    getPath(raw, ['queue_result', 'operation_id']),
+    getPath(raw, ['queueResult', 'operationId']),
+    getPath(raw, ['queueResult', 'operation_id']),
+    getPath(raw, ['remittance', 'operation_id']),
+    getPath(raw, ['remittance', 'operationId']),
+    getPath(raw, ['remittance', 'queue_result', 'operation_id']),
+    getPath(raw, ['remittance', 'queueResult', 'operationId']),
+    getPath(raw, ['payout_notice', 'operation_id']),
+    getPath(raw, ['payout_notice', 'operationId']),
+    getPath(raw, ['payout_notice', 'queue_result', 'operation_id']),
+    getPath(raw, ['payout_notice', 'queueResult', 'operationId']),
+    getPath(raw, ['remittance_queue_stage_result', 'operation_id']),
+    getPath(raw, ['remittance_queue_stage_result', 'operationId']),
+    getPath(raw, ['remittance_queue_stage_result', 'queue_result', 'operation_id']),
+    getPath(raw, ['remittance_queue_stage_result', 'queueResult', 'operationId']),
+    getPath(raw, ['worker_communications', 'remittance_queue_stage_result', 'operation_id']),
+    getPath(raw, ['worker_communications', 'remittance_queue_stage_result', 'operationId']),
+    getPath(raw, ['worker_communications', 'remittance_queue_stage_result', 'queue_result', 'operation_id']),
+    getPath(raw, ['worker_communications', 'remittance_queue_stage_result', 'queueResult', 'operationId'])
+  ));
+
+  const trigger = upperTextOrNull(firstValue(
+    getPath(raw, ['trigger']),
+    getPath(raw, ['remittance_trigger']),
+    getPath(raw, ['remittanceTrigger']),
+    getPath(queueResult, ['trigger']),
+    getPath(remittanceStage, ['trigger']),
+    getPath(workerCommunications, ['trigger'])
+  ));
+
+  const configuredTiming = upperTextOrNull(firstValue(
+    getPath(raw, ['configured_timing']),
+    getPath(raw, ['configuredTiming']),
+    getPath(raw, ['remittance_configured_timing']),
+    getPath(raw, ['remittanceConfiguredTiming']),
+    getPath(queueResult, ['configured_timing']),
+    getPath(queueResult, ['configuredTiming']),
+    getPath(remittanceStage, ['configured_timing']),
+    getPath(remittanceStage, ['configuredTiming']),
+    getPath(workerCommunications, ['configured_timing']),
+    getPath(workerCommunications, ['configuredTiming'])
+  ));
+
+  const deferred = readBool(firstValue(
+    getPath(raw, ['deferred']),
+    getPath(raw, ['remittance_deferred']),
+    getPath(raw, ['remittanceDeferred']),
+    getPath(queueResult, ['deferred']),
+    getPath(remittanceStage, ['deferred']),
+    getPath(workerCommunications, ['deferred'])
+  ), false);
+
+  const suppressed = readBool(firstValue(
+    getPath(raw, ['suppressed']),
+    getPath(raw, ['suppress_remittances']),
+    getPath(raw, ['remittance_suppressed']),
+    getPath(raw, ['remittanceSuppressed']),
+    getPath(queueResult, ['suppressed']),
+    getPath(queueResult, ['suppress_remittances']),
+    getPath(remittanceStage, ['suppressed']),
+    getPath(remittanceStage, ['suppress_remittances']),
+    getPath(workerCommunications, ['suppressed']),
+    getPath(workerCommunications, ['suppress_remittances'])
+  ), false);
+
+  const dispatchRequired = readBool(firstValue(
+    getPath(raw, ['dispatch_required']),
+    getPath(raw, ['dispatchRequired']),
+    getPath(queueResult, ['dispatch_required']),
+    getPath(queueResult, ['dispatchRequired']),
+    getPath(remittanceStage, ['dispatch_required']),
+    getPath(remittanceStage, ['dispatchRequired'])
+  ), false);
+
+  const explicitOperationQueued = readBool(firstValue(
+    getPath(raw, ['operation_queued']),
+    getPath(raw, ['operationQueued']),
+    getPath(raw, ['queued']),
+    getPath(raw, ['remittance_operation_queued']),
+    getPath(raw, ['remittanceOperationQueued']),
+    getPath(queueResult, ['operation_queued']),
+    getPath(queueResult, ['operationQueued']),
+    getPath(queueResult, ['queued']),
+    getPath(remittanceStage, ['operation_queued']),
+    getPath(remittanceStage, ['operationQueued']),
+    getPath(remittanceStage, ['queued'])
+  ), false);
+
+  const operationQueued = explicitOperationQueued || (!!childOperationId && !deferred && !suppressed);
+
+  const requiresRemittanceOperation = readBool(firstValue(
+    getPath(raw, ['requires_remittance_operation']),
+    getPath(raw, ['requiresRemittanceOperation']),
+    getPath(raw, ['operation_started']),
+    getPath(raw, ['operationStarted']),
+    getPath(queueResult, ['requires_remittance_operation']),
+    getPath(queueResult, ['requiresRemittanceOperation']),
+    getPath(queueResult, ['operation_started']),
+    getPath(remittanceStage, ['requires_remittance_operation']),
+    getPath(remittanceStage, ['requiresRemittanceOperation'])
+  ), operationQueued || !!childOperationId);
+
+  const operationStatus = upperTextOrNull(firstValue(
+    getPath(raw, ['operation_status']),
+    getPath(raw, ['operationStatus']),
+    getPath(queueResult, ['operation_status']),
+    getPath(queueResult, ['operationStatus']),
+    getPath(remittanceStage, ['operation_status']),
+    getPath(remittanceStage, ['operationStatus'])
+  ));
+
+  const operationPhase = upperTextOrNull(firstValue(
+    getPath(raw, ['operation_phase']),
+    getPath(raw, ['operationPhase']),
+    getPath(queueResult, ['operation_phase']),
+    getPath(queueResult, ['operationPhase']),
+    getPath(remittanceStage, ['operation_phase']),
+    getPath(remittanceStage, ['operationPhase'])
+  ));
+
+  const triggerStatus = upperTextOrNull(firstValue(
+    getPath(raw, ['trigger_status']),
+    getPath(raw, ['triggerStatus']),
+    getPath(raw, ['remittance_trigger_status']),
+    getPath(raw, ['remittanceTriggerStatus']),
+    getPath(queueResult, ['trigger_status']),
+    getPath(queueResult, ['triggerStatus']),
+    getPath(remittanceStage, ['trigger_status']),
+    getPath(remittanceStage, ['triggerStatus']),
+    getPath(workerCommunications, ['trigger_status']),
+    getPath(workerCommunications, ['triggerStatus'])
+  ));
+
+  const messageKind = upperTextOrNull(firstValue(
+    getPath(raw, ['message_kind']),
+    getPath(raw, ['messageKind']),
+    getPath(raw, ['remittance_message_kind']),
+    getPath(raw, ['remittanceMessageKind']),
+    getPath(queueResult, ['message_kind']),
+    getPath(queueResult, ['messageKind']),
+    getPath(remittanceStage, ['message_kind']),
+    getPath(remittanceStage, ['messageKind']),
+    getPath(workerCommunications, ['message_kind']),
+    getPath(workerCommunications, ['messageKind'])
+  ));
+
+  const ok = readBool(firstValue(
+    getPath(raw, ['ok']),
+    getPath(queueResult, ['ok']),
+    getPath(remittanceStage, ['ok'])
+  ), true);
+
+  return {
+    ok,
+    trigger,
+    configuredTiming,
+    deferred,
+    suppressed,
+    dispatchRequired,
+    operationQueued,
+    requiresRemittanceOperation,
+    childOperationId,
+    operationStatus,
+    operationPhase,
+    triggerStatus,
+    messageKind,
+    queueResult,
+    raw
+  };
+}
+
+
+async function findExistingRemittanceChildOperation(env, options = {}) {
+  const trimStr = (value) => String(value == null ? '' : value).trim();
+  const upperTrim = (value) => trimStr(value).toUpperCase();
+  const readBool = (value, fallback = false) => {
+    if (typeof value === 'boolean') return value;
+    if (typeof value === 'number') return value !== 0;
+    if (value === null || value === undefined) return !!fallback;
+    const text = String(value).trim().toLowerCase();
+    if (['true', '1', 'yes', 'y', 'on'].includes(text)) return true;
+    if (['false', '0', 'no', 'n', 'off'].includes(text)) return false;
+    return !!fallback;
+  };
+
+  const getInputJson = (row) => {
+    const input = row && row.input_json;
+    return (input && typeof input === 'object' && !Array.isArray(input)) ? input : {};
+  };
+
+  const normaliseTrigger = (value, onlyConfirmed) => {
+    const trigger = upperTrim(value) || (onlyConfirmed ? 'ON_PAYMENT_CONFIRMED' : 'ON_EXECUTION');
+    return trigger === 'ON_PAYMENT_CONFIRMED' ? 'ON_PAYMENT_CONFIRMED' : 'ON_EXECUTION';
+  };
+
+  const normaliseScope = (value) => {
+    const scope = upperTrim(value) || 'ALL';
+    return ['ALL', 'PAYE', 'UMBRELLA'].includes(scope) ? scope : 'ALL';
+  };
+
+  const requestedOnlyConfirmed = readBool(options.onlyConfirmed ?? options.only_confirmed, false);
+  const payBatchId = trimStr(options.payBatchId ?? options.pay_batch_id);
+  const rootOperationId = trimStr(options.rootOperationId ?? options.root_operation_id);
+  const trigger = normaliseTrigger(options.trigger, requestedOnlyConfirmed);
+  const scope = normaliseScope(options.scope);
+  const onlyConfirmed = requestedOnlyConfirmed;
+  const messageKind = upperTrim(options.messageKind ?? options.message_kind);
+
+  const emptyResult = {
+    found: false,
+    operationId: null,
+    status: null,
+    phase: null,
+    terminal: false,
+    row: null
+  };
+
+  if (!payBatchId || !rootOperationId) return emptyResult;
+
+  const enc = encodeURIComponent;
+  const select = [
+    'id',
+    'operation_type',
+    'status',
+    'phase',
+    'actor_user_id',
+    'pay_batch_id',
+    'root_operation_id',
+    'idempotency_key',
+    'input_json',
+    'result_json',
+    'error_json',
+    'created_at_utc',
+    'started_at_utc',
+    'updated_at_utc',
+    'completed_at_utc',
+    'failed_at_utc'
+  ].join(',');
+
+  const url = `${env.SUPABASE_URL}/rest/v1/banking_pay_operations` +
+    `?operation_type=eq.REMITTANCE_QUEUE` +
+    `&pay_batch_id=eq.${enc(payBatchId)}` +
+    `&root_operation_id=eq.${enc(rootOperationId)}` +
+    `&select=${enc(select)}` +
+    `&order=updated_at_utc.desc` +
+    `&limit=25`;
+
+  const { rows } = await sbFetch(env, url);
+  const sourceRows = Array.isArray(rows) ? rows : [];
+
+  const matches = sourceRows.filter((row) => {
+    const input = getInputJson(row);
+    const rowOnlyConfirmed = readBool(input.only_confirmed ?? input.onlyConfirmed, false);
+    const rowTrigger = normaliseTrigger(input.trigger ?? input.remittance_trigger ?? input.remittanceTrigger, rowOnlyConfirmed);
+    const rowScope = normaliseScope(input.scope ?? input.pay_channel_scope ?? input.payChannelScope);
+    const rowMessageKind = upperTrim(input.message_kind ?? input.messageKind);
+
+    if (rowTrigger !== trigger) return false;
+    if (rowScope !== scope) return false;
+    if (rowOnlyConfirmed !== onlyConfirmed) return false;
+    if (messageKind && rowMessageKind && rowMessageKind !== messageKind) return false;
+    return true;
+  });
+
+  if (!matches.length) return emptyResult;
+
+  const activeStatuses = new Set(['QUEUED', 'RUNNING', 'WAITING']);
+  const successTerminalStatuses = new Set(['COMPLETE', 'COMPLETED', 'SUCCEEDED', 'SUCCESS']);
+  const terminalStatuses = new Set(['COMPLETE', 'COMPLETED', 'SUCCEEDED', 'SUCCESS', 'FAILED', 'CANCELLED', 'CANCELED']);
+
+  const activeRow = matches.find((row) => activeStatuses.has(upperTrim(row.status)));
+  const completedRow = matches.find((row) => successTerminalStatuses.has(upperTrim(row.status)));
+  const diagnosticRow = activeRow || completedRow || matches[0];
+  const diagnosticStatus = upperTrim(diagnosticRow && diagnosticRow.status);
+  const diagnosticPhase = upperTrim(diagnosticRow && diagnosticRow.phase);
+
+  if (activeRow) {
+    return {
+      found: true,
+      operationId: trimStr(activeRow.id) || null,
+      status: upperTrim(activeRow.status) || null,
+      phase: upperTrim(activeRow.phase) || null,
+      terminal: terminalStatuses.has(upperTrim(activeRow.status)),
+      row: activeRow
+    };
+  }
+
+  if (completedRow) {
+    return {
+      found: true,
+      operationId: trimStr(completedRow.id) || null,
+      status: upperTrim(completedRow.status) || null,
+      phase: upperTrim(completedRow.phase) || null,
+      terminal: true,
+      row: completedRow
+    };
+  }
+
+  return {
+    found: false,
+    operationId: trimStr(diagnosticRow && diagnosticRow.id) || null,
+    status: diagnosticStatus || null,
+    phase: diagnosticPhase || null,
+    terminal: terminalStatuses.has(diagnosticStatus),
+    row: diagnosticRow || null
+  };
+}
+async function queueRemittanceViaTimingGate(env, options = {}) {
+  const trimStr = (value) => String(value == null ? '' : value).trim();
+  const upperTrim = (value) => trimStr(value).toUpperCase();
+  const readBool = (value, fallback = false) => {
+    if (typeof value === 'boolean') return value;
+    if (typeof value === 'number') return value !== 0;
+    if (value === null || value === undefined) return !!fallback;
+    const text = String(value).trim().toLowerCase();
+    if (['true', '1', 'yes', 'y', 'on'].includes(text)) return true;
+    if (['false', '0', 'no', 'n', 'off'].includes(text)) return false;
+    return !!fallback;
+  };
+
+  const normaliseTrigger = (value, onlyConfirmed) => {
+    const trigger = upperTrim(value) || (onlyConfirmed ? 'ON_PAYMENT_CONFIRMED' : 'ON_EXECUTION');
+    return trigger === 'ON_PAYMENT_CONFIRMED' ? 'ON_PAYMENT_CONFIRMED' : 'ON_EXECUTION';
+  };
+
+  const normaliseScope = (value) => {
+    const scope = upperTrim(value) || 'ALL';
+    return ['ALL', 'PAYE', 'UMBRELLA'].includes(scope) ? scope : 'ALL';
+  };
+
+  const unwrapRpcPayload = (value, key) => {
+    let payload = value;
+    for (let i = 0; i < 4; i += 1) {
+      if (Array.isArray(payload) && payload.length === 1 && payload[0] && typeof payload[0] === 'object') {
+        payload = payload[0];
+        continue;
+      }
+      if (payload && typeof payload === 'object' && !Array.isArray(payload) && key && Object.prototype.hasOwnProperty.call(payload, key)) {
+        payload = payload[key];
+        continue;
+      }
+      break;
+    }
+    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+  };
+
+  const onlyConfirmed = readBool(options.onlyConfirmed ?? options.only_confirmed, false);
+  const payBatchId = trimStr(options.payBatchId ?? options.pay_batch_id);
+  const actorUserId = trimStr(options.actorUserId ?? options.actor_user_id ?? options.user_id);
+  const rootOperationId = trimStr(options.rootOperationId ?? options.root_operation_id);
+  const trigger = normaliseTrigger(options.trigger, onlyConfirmed);
+  const scope = normaliseScope(options.scope);
+  const source = trimStr(options.source) || 'queueRemittanceViaTimingGate';
+  const messageKind = upperTrim(options.messageKind ?? options.message_kind);
+
+  if (!payBatchId) throw new Error('queueRemittanceViaTimingGate: pay_batch_id is required');
+  if (!actorUserId) throw new Error('queueRemittanceViaTimingGate: actor_user_id is required');
+  if (!rootOperationId) throw new Error('queueRemittanceViaTimingGate: root_operation_id is required');
+
+  const existing = await findExistingRemittanceChildOperation(env, {
+    payBatchId,
+    rootOperationId,
+    actorUserId,
+    trigger,
+    scope,
+    onlyConfirmed,
+    messageKind
+  });
+
+  if (existing && existing.found && existing.operationId) {
+    return normaliseRemittanceTimingGateResult({
+      ok: true,
+      trigger,
+      configured_timing: null,
+      deferred: false,
+      suppressed: false,
+      dispatch_required: false,
+      operation_queued: true,
+      requires_remittance_operation: true,
+      operation_id: existing.operationId,
+      operation_status: existing.status,
+      operation_phase: existing.phase,
+      trigger_status: existing.terminal ? 'REMITTANCE_OPERATION_ALREADY_COMPLETED' : 'REMITTANCE_OPERATION_ALREADY_EXISTS',
+      message_kind: messageKind || null,
+      already_exists: true,
+      operation_created: false,
+      operation_reused: true,
+      source,
+      existing_operation: {
+        id: existing.operationId,
+        status: existing.status,
+        phase: existing.phase,
+        terminal: existing.terminal
+      },
+      queue_result: {
+        ok: true,
+        operation_id: existing.operationId,
+        operation_status: existing.status,
+        operation_phase: existing.phase,
+        trigger,
+        scope,
+        only_confirmed: onlyConfirmed,
+        already_exists: true,
+        operation_created: false,
+        operation_reused: true
+      }
+    });
+  }
+
+  const rpcPayload = unwrapRpcPayload(await sbRpc(env, 'pay_remittance_maybe_queue_for_trigger', {
+    p_pay_batch_id: payBatchId,
+    p_trigger: trigger,
+    p_scope: scope,
+    p_actor_user_id: actorUserId,
+    p_only_confirmed: onlyConfirmed,
+    p_root_operation_id: rootOperationId,
+    p_operation_mode: true
+  }), 'pay_remittance_maybe_queue_for_trigger');
+
+  const timingGatePayload = Object.assign({}, rpcPayload, {
+    trigger: rpcPayload.trigger || trigger,
+    scope: rpcPayload.scope || scope,
+    only_confirmed: Object.prototype.hasOwnProperty.call(rpcPayload, 'only_confirmed') ? rpcPayload.only_confirmed : onlyConfirmed,
+    source,
+    queue_result: rpcPayload.queue_result || rpcPayload.queueResult || rpcPayload
+  });
+
+  const normalised = normaliseRemittanceTimingGateResult(timingGatePayload);
+  const finalRaw = Object.assign({}, normalised.raw || {}, {
+    source,
+    pay_batch_id: payBatchId,
+    root_operation_id: rootOperationId,
+    scope,
+    only_confirmed: onlyConfirmed,
+    trigger
+  });
+
+  return Object.assign({}, normalised, { raw: finalRaw });
+}
+
+
+
 
 async function handleGetCandidate(env, req, candidateId) {
   const enc  = encodeURIComponent;
