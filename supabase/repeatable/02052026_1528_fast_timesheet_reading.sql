@@ -3529,10 +3529,15 @@ BEGIN
     ),
     summary_row AS (
       SELECT summary_source.*
-      FROM public.timesheet_summary_lightweight_rows_v1(
+      FROM (
+        SELECT input_ids.*
+        FROM input_ids
+        WHERE input_ids.input_timesheet_id IS NULL
+          AND input_ids.input_contract_week_id IS NULL
+      ) AS summary_ids
+      CROSS JOIN LATERAL public.timesheet_summary_lightweight_rows_v1(
         v_decision_filters || JSONB_BUILD_OBJECT('disable_paging', TRUE, 'limit', 25)
       ) AS summary_source
-      CROSS JOIN input_ids AS summary_ids
       WHERE (
           summary_ids.input_timesheet_id IS NULL
           OR summary_source.timesheet_id = summary_ids.input_timesheet_id
@@ -4325,10 +4330,15 @@ BEGIN
     ),
     summary_row AS (
       SELECT summary_source.*
-      FROM public.timesheet_summary_lightweight_rows_v1(
+      FROM (
+        SELECT input_ids.*
+        FROM input_ids
+        WHERE input_ids.input_timesheet_id IS NULL
+          AND input_ids.input_contract_week_id IS NULL
+      ) AS summary_ids
+      CROSS JOIN LATERAL public.timesheet_summary_lightweight_rows_v1(
         v_decision_filters || JSONB_BUILD_OBJECT('disable_paging', TRUE, 'limit', 25)
       ) AS summary_source
-      CROSS JOIN input_ids AS summary_ids
       WHERE (
           summary_ids.input_timesheet_id IS NULL
           OR summary_source.timesheet_id = summary_ids.input_timesheet_id
@@ -6586,6 +6596,16 @@ BEGIN
 END;
 $function$;
 
+
+
+
+
+
+
+
+
+
+
 CREATE OR REPLACE FUNCTION public.bulk_authorise_row_context_v1(p_filters jsonb DEFAULT '{}'::jsonb)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -7003,10 +7023,15 @@ BEGIN
     ),
     summary_row AS (
       SELECT summary_source.*
-      FROM public.timesheet_summary_lightweight_rows_v1(
+      FROM (
+        SELECT input_ids.*
+        FROM input_ids
+        WHERE input_ids.input_timesheet_id IS NULL
+          AND input_ids.input_contract_week_id IS NULL
+      ) AS summary_ids
+      CROSS JOIN LATERAL public.timesheet_summary_lightweight_rows_v1(
         v_decision_filters || JSONB_BUILD_OBJECT('disable_paging', TRUE, 'limit', 25)
       ) AS summary_source
-      CROSS JOIN input_ids AS summary_ids
       WHERE (
           summary_ids.input_timesheet_id IS NULL
           OR summary_source.timesheet_id = summary_ids.input_timesheet_id
@@ -7799,10 +7824,15 @@ BEGIN
     ),
     summary_row AS (
       SELECT summary_source.*
-      FROM public.timesheet_summary_lightweight_rows_v1(
+      FROM (
+        SELECT input_ids.*
+        FROM input_ids
+        WHERE input_ids.input_timesheet_id IS NULL
+          AND input_ids.input_contract_week_id IS NULL
+      ) AS summary_ids
+      CROSS JOIN LATERAL public.timesheet_summary_lightweight_rows_v1(
         v_decision_filters || JSONB_BUILD_OBJECT('disable_paging', TRUE, 'limit', 25)
       ) AS summary_source
-      CROSS JOIN input_ids AS summary_ids
       WHERE (
           summary_ids.input_timesheet_id IS NULL
           OR summary_source.timesheet_id = summary_ids.input_timesheet_id
@@ -9831,7 +9861,6 @@ BEGIN
   ));
 END;
 $function$;
-
 
 
 CREATE OR REPLACE FUNCTION public.timesheet_qr_send_enqueue_v1(
