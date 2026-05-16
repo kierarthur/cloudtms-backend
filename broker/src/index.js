@@ -6604,7 +6604,6 @@ async function handleContractsCreate(env, req) {
 // (joins based on FK: contracts.candidate_id → candidates.id, contracts.client_id → clients.id)  :contentReference[oaicite:0]{index=0}
 
 
-
 function makeBankingFriendlyErrorPayload(input, options = {}) {
   const isPlainObject = (value) => Boolean(value && typeof value === 'object' && !Array.isArray(value));
 
@@ -7045,6 +7044,7 @@ function makeBankingFriendlyErrorPayload(input, options = {}) {
   };
 
   const detectCodeFromText = () => {
+    if (rawUpper.includes('BLOCKED_FUNDS') || rawUpper.includes('INSUFFICIENT FUNDS') || rawUpper.includes('INSUFFICIENT_FUNDS')) return 'BLOCKED_FUNDS';
     for (const knownCode of knownErrorCodes) {
       if (knownCode === 'BLOCKED_FUNDS') continue;
       if (containsErrorCodeToken(rawUpper, knownCode)) return canonicaliseCode(knownCode);
@@ -7156,6 +7156,7 @@ function makeBankingFriendlyErrorPayload(input, options = {}) {
     'PROVIDER_SUBMIT_NO_ELIGIBLE_TRANSFERS',
     'PAYMENT_RETRY_BLOCKED_FUNDS_CLEANUP_NOT_SAFE',
     'BATCH_STALE',
+    'BLOCKED_FUNDS',
     'NO_AUTHORISATION_READY_TRANSFERS',
     'TRANSFER_SCOPE_RETRY_BLOCKER_DETECTED',
     'TRANSFER_SCOPE_GROUP_HELD_BY_ACTIVE_OR_UNSAFE_OPERATION',
@@ -7205,7 +7206,34 @@ function makeBankingFriendlyErrorPayload(input, options = {}) {
 
   let errorCode = priorityBusinessCode || explicitSpecificKnownCode || detectedSpecificTextCode || explicitSafeNonTransportCode || explicitWrapperKnownCode || detectedWrapperTextCode || explicitGenericKnownCode || detectedTextCode || 'BANKING_ACTION_FAILED';
 
-  const hasBlockedFundsFlag = payloads.some((payload) => payload && payload.blocked_funds === true);
+  const hasBlockedFundsFlag = payloads.some((payload) => payload && (payload.blocked_funds === true || payload.blockedFunds === true));
+  const payloadHasFalseSufficientFunds = (payload) => {
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return false;
+    if (payload.sufficient === false) return true;
+    for (const key of ['funds_check_json', 'fundsCheckJson', 'funds_check', 'fundsCheck', 'last_funds_check_json', 'lastFundsCheckJson']) {
+      const nested = payload[key];
+      if (nested && typeof nested === 'object' && !Array.isArray(nested) && nested.sufficient === false) return true;
+    }
+    return false;
+  };
+  const hasInsufficientFundsEvidence = payloads.some(payloadHasFalseSufficientFunds)
+    || sourceObject.sufficient === false
+    || primaryPayload.sufficient === false
+    || /"sufficient"\s*:\s*false/i.test(rawText)
+    || /'sufficient'\s*:\s*false/i.test(rawText)
+    || rawUpper.includes('INSUFFICIENT FUNDS')
+    || rawUpper.includes('INSUFFICIENT_FUNDS')
+    || rawUpper.includes('NOT ENOUGH AVAILABLE BALANCE')
+    || rawUpper.includes('DOES NOT HAVE ENOUGH MONEY')
+    || rawUpper.includes('DOES NOT HAVE ENOUGH AVAILABLE BALANCE');
+  const providerSubmissionAttemptedFalse = payloads.some((payload) => payload && payload.provider_submission_attempted === false)
+    || sourceObject.provider_submission_attempted === false
+    || primaryPayload.provider_submission_attempted === false
+    || optionObject.provider_submission_attempted === false;
+  const submittedToBankFalse = payloads.some((payload) => payload && payload.submitted_to_bank === false)
+    || sourceObject.submitted_to_bank === false
+    || primaryPayload.submitted_to_bank === false
+    || optionObject.submitted_to_bank === false;
   const blockedFundsStatusValues = [
     sourceObject.status,
     sourceObject.post_execution_status,
@@ -7242,9 +7270,18 @@ function makeBankingFriendlyErrorPayload(input, options = {}) {
     || rawUpper.includes('BLOCKED_FUNDS_RETRY_FUNDING_ACCOUNT_MISMATCH')
     || rawUpper.includes('BLOCKED_FUNDS_RETRY_STANDARD_BANK_ONLY');
 
-  if (hasExplicitBlockedFundsCode && !priorityBusinessCode && !hasSpecificNonBlockedFundsCode) {
-    errorCode = 'BLOCKED_FUNDS';
-  } else if ((sourceObject.blocked_funds === true || primaryPayload.blocked_funds === true || hasBlockedFundsFlag || hasBlockedFundsStatus) && !hasSpecificNonBlockedFundsCode && !hasBlockedFundsFailureContext) {
+  if (
+    (hasExplicitBlockedFundsCode || hasBlockedFundsStatus || hasBlockedFundsFlag || hasInsufficientFundsEvidence)
+    && !hasBlockedFundsFailureContext
+    && (
+      !hasSpecificNonBlockedFundsCode
+      || errorCode === 'PAYMENT_EXECUTE_CLEANUP_FAILED'
+      || errorCode === 'BANKING_EXECUTE_PAYMENT_FAILED'
+      || errorCode === 'BANKING_ACTION_FAILED'
+      || providerSubmissionAttemptedFalse
+      || submittedToBankFalse
+    )
+  ) {
     errorCode = 'BLOCKED_FUNDS';
   }
 
@@ -7424,6 +7461,7 @@ function makeBankingFriendlyErrorPayload(input, options = {}) {
       confirm_label: 'OK',
       blocked_funds: true,
       submitted_to_bank: false,
+      provider_submission_attempted: false,
       status: 'BLOCKED_FUNDS',
       post_execution_status: 'BLOCKED_FUNDS'
     },
@@ -8455,9 +8493,48 @@ function makeBankingFriendlyErrorPayload(input, options = {}) {
   );
   if (diagnosticStage) payload.diagnostic_stage = diagnosticStage;
 
+  const firstSafeNumber = (...values) => {
+    for (const value of values) {
+      const numeric = Number(value);
+      if (Number.isFinite(numeric)) return numeric;
+    }
+    return null;
+  };
+  const firstSafeText = (...values) => {
+    for (const value of values) {
+      const text = safeTrim(value);
+      if (text && !looksTechnicalUserText(text) && text.length <= 160) return text;
+    }
+    return '';
+  };
+  const nestedFundsCheck = (() => {
+    const candidates = [];
+    for (const payload of payloads) {
+      if (payload && typeof payload === 'object') {
+        candidates.push(payload.funds_check_json, payload.fundsCheckJson, payload.funds_check, payload.fundsCheck, payload.last_funds_check_json, payload.lastFundsCheckJson);
+      }
+    }
+    candidates.push(sourceObject.funds_check_json, sourceObject.fundsCheckJson, primaryPayload.funds_check_json, primaryPayload.fundsCheckJson, optionObject.funds_check_json, optionObject.fundsCheckJson);
+    for (const candidate of candidates) {
+      if (candidate && typeof candidate === 'object' && !Array.isArray(candidate)) return candidate;
+    }
+    return {};
+  })();
+
   if (errorCode === 'BLOCKED_FUNDS') {
     payload.blocked_funds = true;
     payload.submitted_to_bank = false;
+    payload.provider_submission_attempted = false;
+    const requiredGbp = firstSafeNumber(optionObject.required_gbp, optionObject.requiredGbp, sourceObject.required_gbp, sourceObject.requiredGbp, primaryPayload.required_gbp, primaryPayload.requiredGbp, nestedFundsCheck.required_gbp, nestedFundsCheck.requiredGbp);
+    const availableGbp = firstSafeNumber(optionObject.available_gbp, optionObject.availableGbp, sourceObject.available_gbp, sourceObject.availableGbp, primaryPayload.available_gbp, primaryPayload.availableGbp, nestedFundsCheck.available_gbp, nestedFundsCheck.availableGbp);
+    const fundingAccountRef = firstSafeText(optionObject.funding_account_ref, optionObject.fundingAccountRef, sourceObject.funding_account_ref, sourceObject.fundingAccountRef, primaryPayload.funding_account_ref, primaryPayload.fundingAccountRef, nestedFundsCheck.funding_account_ref, nestedFundsCheck.fundingAccountRef);
+    const railProvider = firstSafeText(optionObject.rail_provider, optionObject.railProvider, sourceObject.rail_provider, sourceObject.railProvider, primaryPayload.rail_provider, primaryPayload.railProvider, nestedFundsCheck.rail_provider, nestedFundsCheck.railProvider);
+    const railEnv = firstSafeText(optionObject.rail_env, optionObject.railEnv, sourceObject.rail_env, sourceObject.railEnv, primaryPayload.rail_env, primaryPayload.railEnv, nestedFundsCheck.rail_env, nestedFundsCheck.railEnv);
+    if (requiredGbp !== null) payload.required_gbp = requiredGbp;
+    if (availableGbp !== null) payload.available_gbp = availableGbp;
+    if (fundingAccountRef) payload.funding_account_ref = fundingAccountRef;
+    if (railProvider) payload.rail_provider = railProvider;
+    if (railEnv) payload.rail_env = railEnv;
   } else {
     if (Object.prototype.hasOwnProperty.call(template, 'submitted_to_bank')) payload.submitted_to_bank = template.submitted_to_bank;
     if (Object.prototype.hasOwnProperty.call(optionObject, 'submitted_to_bank')) payload.submitted_to_bank = optionObject.submitted_to_bank === true;
@@ -34751,8 +34828,6 @@ async function getBankingPayOperationConfig(env, operationType, options = {}) {
   return snapshot;
 }
 
-
-
 function buildBankingPayOperationPublicPayload(operationRow, options = {}) {
   const unwrapRow = (value) => {
     let row = value;
@@ -34858,6 +34933,101 @@ function buildBankingPayOperationPublicPayload(operationRow, options = {}) {
   const resultJson = Object.keys(resultObject).length ? resultObject : null;
   const errorObject = asPlainObject(row.error_json);
   const errorJson = Object.keys(errorObject).length ? errorObject : null;
+  const collectOperationalObjects = (...values) => {
+    const out = [];
+    const queue = [...values];
+    const seen = new Set();
+    const nestedKeys = [
+      'result', 'error', 'details', 'payload', 'data', 'response', 'progress',
+      'provider_submission', 'funds_check_json', 'fundsCheckJson', 'funds_check', 'fundsCheck',
+      'last_funds_check_json', 'lastFundsCheckJson', 'blocked_funds', 'blockedFunds',
+      'blocked_funds_rows', 'blockedFundsRows', 'blocked_funds_state', 'blockedFundsState',
+      'last_chunk_result', 'batch_summary', 'summary', 'friendly_error'
+    ];
+    while (queue.length) {
+      const value = queue.shift();
+      if (value == null) continue;
+      if (Array.isArray(value)) {
+        for (const item of value) queue.push(item);
+        continue;
+      }
+      if (typeof value === 'string') {
+        const text = value.trim();
+        if (!text) continue;
+        try {
+          const parsed = JSON.parse(text);
+          if (parsed && typeof parsed === 'object') queue.push(parsed);
+        } catch {}
+        continue;
+      }
+      if (typeof value !== 'object') continue;
+      if (seen.has(value)) continue;
+      seen.add(value);
+      out.push(value);
+      for (const key of nestedKeys) {
+        if (Object.prototype.hasOwnProperty.call(value, key)) queue.push(value[key]);
+      }
+    }
+    return out;
+  };
+
+  const blockedFundsSources = collectOperationalObjects(resultObject, errorObject, progress, row);
+  const safeTrimOperationalText = (value) => String(value == null ? '' : value).trim();
+  const safeUpperOperationalText = (value) => safeTrimOperationalText(value).toUpperCase();
+  const sourceHasFalseSufficientFunds = (source) => {
+    if (!source || typeof source !== 'object' || Array.isArray(source)) return false;
+    if (source.sufficient === false) return true;
+    const fundsCheckJson = asPlainObject(source.funds_check_json || source.fundsCheckJson || source.funds_check || source.fundsCheck || source.last_funds_check_json || source.lastFundsCheckJson);
+    return fundsCheckJson.sufficient === false;
+  };
+  const sourceHasBlockedFundsIdentity = (source) => {
+    if (!source || typeof source !== 'object' || Array.isArray(source)) return false;
+    if (source.blocked_funds === true || source.blockedFunds === true) return true;
+    if (Array.isArray(source.blocked_funds) && source.blocked_funds.length > 0) return true;
+    if (Array.isArray(source.blockedFunds) && source.blockedFunds.length > 0) return true;
+    const code = safeUpperOperationalText(source.code || source.error_code || source.errorCode || source.business_code || source.businessCode || source.claim_blocker_code || source.claimBlockerCode);
+    const state = safeUpperOperationalText(source.status || source.post_execution_status || source.postExecutionStatus || source.provider_submission_status || source.providerSubmissionStatus);
+    return code === 'BLOCKED_FUNDS' || state === 'BLOCKED_FUNDS';
+  };
+  const hasBlockedFundsEvidence = blockedFundsSources.some((source) => sourceHasBlockedFundsIdentity(source) || sourceHasFalseSufficientFunds(source));
+  const blockedFundsNumeric = (...keys) => {
+    for (const source of blockedFundsSources) {
+      if (!source || typeof source !== 'object' || Array.isArray(source)) continue;
+      for (const key of keys) {
+        const value = source[key];
+        if (Number.isFinite(Number(value))) return Number(value);
+      }
+    }
+    return null;
+  };
+  const blockedFundsText = (...keys) => {
+    for (const source of blockedFundsSources) {
+      if (!source || typeof source !== 'object' || Array.isArray(source)) continue;
+      for (const key of keys) {
+        const value = safeTrimOperationalText(source[key]);
+        if (value && value.length <= 160) return value;
+      }
+    }
+    return null;
+  };
+  const blockedFundsObject = (...keys) => {
+    for (const source of blockedFundsSources) {
+      if (!source || typeof source !== 'object' || Array.isArray(source)) continue;
+      for (const key of keys) {
+        const value = asPlainObject(source[key]);
+        if (Object.keys(value).length) return value;
+      }
+    }
+    return {};
+  };
+  const blockedFundsDiagnostics = hasBlockedFundsEvidence ? {
+    required_gbp: blockedFundsNumeric('required_gbp', 'requiredGbp', 'required_amount', 'requiredAmount'),
+    available_gbp: blockedFundsNumeric('available_gbp', 'availableGbp', 'available_amount', 'availableAmount'),
+    funding_account_ref: blockedFundsText('funding_account_ref', 'fundingAccountRef'),
+    rail_provider: blockedFundsText('rail_provider', 'railProvider', 'provider'),
+    rail_env: blockedFundsText('rail_env', 'railEnv', 'provider_environment', 'providerEnvironment'),
+    funds_check_json: blockedFundsObject('funds_check_json', 'fundsCheckJson', 'funds_check', 'fundsCheck', 'last_funds_check_json', 'lastFundsCheckJson')
+  } : null;
 
   const sanitizeTerminalOperationError = (value, fallbackCode = status, fallbackMessage = statusText) => {
     const source = asPlainObject(value);
@@ -34896,6 +35066,7 @@ function buildBankingPayOperationPublicPayload(operationRow, options = {}) {
       TRANSFER_SCOPE_GROUP_HELD_BY_ACTIVE_OR_UNSAFE_OPERATION: 'A previous payment attempt still owns local transfer artefacts for this batch. Review the payment state before retrying.',
       EXECUTION_RETRY_BLOCKED_BY_PROVIDER_EVIDENCE: 'This payment may already have reached the banking provider. Review or reconcile the transfer before retrying.',
       PAYMENT_EXECUTE_CLEANUP_FAILED: 'The payment failed and some local execution artefacts could not be cleaned up automatically.',
+      BLOCKED_FUNDS: 'The selected funding account does not have enough available balance to make this payment. No bank submission was attempted.',
       BANK_TRANSFER_PROVIDER_REVIEW_REQUIRED: 'This payment may already have reached the banking provider. Review or reconcile the transfer before retrying.',
       AUTH_REQUEST_HELD_BY_PREVIOUS_OPERATION: 'A previous authorisation request is still attached to this batch. Review or reconcile that request before retrying.',
       NO_SAFE_LOCAL_CLEANUP_AVAILABLE: 'The payment retry needs review because CloudTMS could not confirm that local execution artefacts are safe to clean.',
@@ -34970,14 +35141,19 @@ function buildBankingPayOperationPublicPayload(operationRow, options = {}) {
     return safeError;
   };
 
-  const title = String(progress.title || options.title || defaultTitles[operationType] || 'Banking operation').trim();
-  const statusText = String(
+  let title = String(progress.title || options.title || defaultTitles[operationType] || 'Banking operation').trim();
+  let statusText = String(
     progress.status_text
     || progress.message
     || options.status_text
     || phaseLabels[phase]
     || phase
   ).trim();
+
+  if (hasBlockedFundsEvidence) {
+    title = 'Payment blocked — insufficient funds';
+    statusText = 'The selected funding account does not have enough available balance to make this payment.';
+  }
 
   const nestedResultObject = asPlainObject(resultObject.result);
   const progressLastChunkResult = asPlainObject(progress.last_chunk_result);
@@ -35175,6 +35351,56 @@ function buildBankingPayOperationPublicPayload(operationRow, options = {}) {
     payload.error = null;
   }
 
+  if (hasBlockedFundsEvidence) {
+    const safeBlockedFundsError = {
+      code: 'BLOCKED_FUNDS',
+      message: 'The selected funding account does not have enough available balance to make this payment. No bank submission was attempted.',
+      phase,
+      blocked_funds: true,
+      submitted_to_bank: false,
+      provider_submission_attempted: false,
+      retry_blocked: true,
+      review_required: false,
+      safe_retry_available: false
+    };
+    if (blockedFundsDiagnostics) {
+      if (Number.isFinite(Number(blockedFundsDiagnostics.required_gbp))) safeBlockedFundsError.required_gbp = Number(blockedFundsDiagnostics.required_gbp);
+      if (Number.isFinite(Number(blockedFundsDiagnostics.available_gbp))) safeBlockedFundsError.available_gbp = Number(blockedFundsDiagnostics.available_gbp);
+      if (blockedFundsDiagnostics.funding_account_ref) safeBlockedFundsError.funding_account_ref = blockedFundsDiagnostics.funding_account_ref;
+      if (blockedFundsDiagnostics.rail_provider) safeBlockedFundsError.rail_provider = blockedFundsDiagnostics.rail_provider;
+      if (blockedFundsDiagnostics.rail_env) safeBlockedFundsError.rail_env = blockedFundsDiagnostics.rail_env;
+      if (blockedFundsDiagnostics.funds_check_json && Object.keys(blockedFundsDiagnostics.funds_check_json).length) safeBlockedFundsError.funds_check_json = blockedFundsDiagnostics.funds_check_json;
+    }
+    payload.ok = true;
+    payload.title = 'Payment blocked — insufficient funds';
+    payload.status_text = 'The selected funding account does not have enough available balance to make this payment.';
+    payload.blocked_funds = true;
+    payload.submitted_to_bank = false;
+    payload.provider_submission_attempted = false;
+    payload.retry_blocked = true;
+    payload.review_required = false;
+    payload.safe_retry_available = false;
+    payload.post_execution_status = 'BLOCKED_FUNDS';
+    payload.business_code = 'BLOCKED_FUNDS';
+    payload.error = safeBlockedFundsError;
+    payload.result = Object.assign({}, resultJson || {}, {
+      code: 'BLOCKED_FUNDS',
+      business_code: 'BLOCKED_FUNDS',
+      blocked_funds: true,
+      submitted_to_bank: false,
+      provider_submission_attempted: false,
+      retry_blocked: true,
+      review_required: false,
+      safe_retry_available: false,
+      required_gbp: safeBlockedFundsError.required_gbp ?? null,
+      available_gbp: safeBlockedFundsError.available_gbp ?? null,
+      funding_account_ref: safeBlockedFundsError.funding_account_ref ?? null,
+      rail_provider: safeBlockedFundsError.rail_provider ?? null,
+      rail_env: safeBlockedFundsError.rail_env ?? null,
+      funds_check_json: safeBlockedFundsError.funds_check_json ?? null
+    });
+  }
+
   if (progress && typeof progress === 'object') {
     payload.progress = {
       freshness_validation_status: progress.freshness_validation_status || null,
@@ -35188,7 +35414,6 @@ function buildBankingPayOperationPublicPayload(operationRow, options = {}) {
 
   return payload;
 }
-
 
 
 async function startBankingPayOperation(env, input = {}, options = {}) {
@@ -36616,6 +36841,7 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
 }
 
 
+
 async function advanceBankingPayExecuteOperation(env, operationRow, user, options = {}) {
 const unwrapRpcPayload = (rpcRes, key) => {
 let payload = rpcRes;
@@ -37754,13 +37980,57 @@ if (currentPhase === 'SUBMIT_PROVIDER_TRANSFERS') {
     lockOwner
   });
   if (submitted && Array.isArray(submitted.blocked_funds) && submitted.blocked_funds.length) {
-    return fail('BLOCKED_FUNDS', 'Bank rejected payment — blocked funds.', {
+    const blockedFundsRows = submitted.blocked_funds;
+    const firstBlockedFunds = safeObject(blockedFundsRows[0]);
+    const fundsCheckJson = safeObject(submitted.funds_check_json || submitted.fundsCheckJson || submitted.funds_check || submitted.fundsCheck || firstBlockedFunds.funds_check_json || firstBlockedFunds.fundsCheckJson);
+    const requiredGbp = Number(firstBlockedFunds.required_gbp ?? firstBlockedFunds.requiredGbp ?? fundsCheckJson.required_gbp ?? fundsCheckJson.requiredGbp ?? 0);
+    const availableGbp = Number(firstBlockedFunds.available_gbp ?? firstBlockedFunds.availableGbp ?? fundsCheckJson.available_gbp ?? fundsCheckJson.availableGbp ?? 0);
+    const blockedFundsPayload = {
+      ok: false,
+      code: 'BLOCKED_FUNDS',
+      business_code: 'BLOCKED_FUNDS',
+      status: 'BLOCKED_FUNDS',
+      post_execution_status: 'BLOCKED_FUNDS',
+      pay_batch_id: payBatchId,
+      operation_id: operationId,
       phase: currentPhase,
       provider_submission_status: 'BLOCKED_FUNDS',
-      provider_attempt_or_evidence_transfer_count: Number(submitted.provider_attempt_or_evidence_count || submitted.providerAttemptOrEvidenceCount || 0),
-      unsafe_transfer_count: Number(submitted.unsafe_transfer_count || submitted.unsafeTransferCount || 0),
-      remaining_submit_attempt_required: Number(submitted.remaining_submit_attempt_required || submitted.remainingSubmitAttemptRequired || 0),
-      attempted_but_unproven_count: Number(submitted.attempted_but_unproven_count || submitted.attemptedButUnprovenCount || 0)
+      blocked_funds: true,
+      submitted_to_bank: false,
+      provider_submission_attempted: false,
+      retry_blocked: true,
+      review_required: false,
+      safe_retry_available: false,
+      claim_blocker_code: 'BLOCKED_FUNDS',
+      required_gbp: Number.isFinite(requiredGbp) ? requiredGbp : null,
+      available_gbp: Number.isFinite(availableGbp) ? availableGbp : null,
+      funding_account_ref: firstBlockedFunds.funding_account_ref || fundsCheckJson.funding_account_ref || fundingAccountRef || null,
+      rail_provider: firstBlockedFunds.rail_provider || fundsCheckJson.rail_provider || provider || null,
+      rail_env: firstBlockedFunds.rail_env || fundsCheckJson.rail_env || null,
+      funds_check_json: Object.keys(fundsCheckJson).length ? fundsCheckJson : null,
+      blocked_funds_rows: blockedFundsRows,
+      provider_submission: submitted,
+      message: 'The selected funding account does not have enough available balance to make this payment.'
+    };
+    return finish('FAILED', blockedFundsPayload, {
+      code: 'BLOCKED_FUNDS',
+      business_code: 'BLOCKED_FUNDS',
+      message: blockedFundsPayload.message,
+      phase: currentPhase,
+      pay_batch_id: payBatchId,
+      operation_id: operationId,
+      blocked_funds: true,
+      submitted_to_bank: false,
+      provider_submission_attempted: false,
+      retry_blocked: true,
+      review_required: false,
+      safe_retry_available: false,
+      required_gbp: blockedFundsPayload.required_gbp,
+      available_gbp: blockedFundsPayload.available_gbp,
+      funding_account_ref: blockedFundsPayload.funding_account_ref,
+      rail_provider: blockedFundsPayload.rail_provider,
+      rail_env: blockedFundsPayload.rail_env,
+      funds_check_json: blockedFundsPayload.funds_check_json
     });
   }
   if (submitted && Array.isArray(submitted.errors) && submitted.errors.length) {
@@ -102985,7 +103255,6 @@ async function handleGetCandidate(env, req, candidateId) {
   }
 }
 
-
 async function handleChangesPing(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -103169,7 +103438,27 @@ async function handleChangesPing(env, req) {
       status: e?.status,
       body: e?.body
     });
-    return withCORS(env, req, serverError('Failed to ping changes'));
+
+    const degradedPayload = {
+      ok: true,
+      degraded: true,
+      changes_ping_degraded: true,
+      changed: [],
+      seqs: {},
+      server_utc: new Date().toISOString(),
+      banking_alert_hash: previousBankingAlertHash || '',
+      banking_alert_summary_signature: previousBankingAlertHash || '',
+      banking_alert_summary_changed: false,
+      banking_alert_summary_included: false,
+      banking_alert_summary_deferred: true,
+      banking_unacknowledged_alert_count: 0,
+      banking_highest_alert_label: '',
+      banking_highest_alert_severity: '',
+      warning_code: 'CHANGES_PING_DEGRADED',
+      warning: 'Live change heartbeat is temporarily degraded. Continue working and refresh if the page appears out of date.'
+    };
+
+    return withCORS(env, req, ok(degradedPayload));
   }
 }
 
@@ -127918,6 +128207,7 @@ async function cleanupStaleRailPayeeMappingsForHash(env, { entity_kind, entity_i
   return out;
 }
 
+
 function getRailAdapter(provider) {
   // -----------------------------
   // Single source of truth registry
@@ -128718,6 +129008,168 @@ function getRailAdapter(provider) {
           const chunkLockSeconds = Number.isFinite(Number(lock_seconds)) ? Math.max(10, Math.min(3600, Math.trunc(Number(lock_seconds)))) : 60;
           const chunkLockOwner = String(lockOwner || `provider-submit:${opId}`).trim();
 
+          let preflightFundsCheckJson = null;
+          let preflightFundingRef = null;
+          let preflightRequired = null;
+          let preflightAvailable = null;
+          let preflightSufficient = null;
+          let preflightToken = null;
+          let preflightPayrollTesting = null;
+
+          try {
+            const batchUrl = `${env.SUPABASE_URL}/rest/v1/pay_batches?id=eq.${encodeURIComponent(batchId)}&select=id,funding_account_ref,rail_env_snapshot&limit=1`;
+            const batchRes = await sbFetch(env, batchUrl, false);
+            const batchRow = batchRes && Array.isArray(batchRes.rows) && batchRes.rows.length ? batchRes.rows[0] : null;
+            const batchFundingRef = String(batchRow && batchRow.funding_account_ref || '').trim();
+            const batchRailEnv = String(batchRow && batchRow.rail_env_snapshot || 'PROD').trim().toUpperCase() || 'PROD';
+            const expectedEnv = normalizeEnv(batchRailEnv, 'PROD');
+            if (expectedEnv !== workerEnv) {
+              throw new Error(`RAIL_ENV_MISMATCH expected_env=${expectedEnv} worker_env=${workerEnv} api_base=${apiBase || ''}`);
+            }
+
+            const scopeSelect = [
+              'id',
+              'pay_bank_transfer_id',
+              'amount',
+              'currency',
+              'request_id',
+              'pay_channel',
+              'transfer_group_key',
+              'candidate_id',
+              'umbrella_id',
+              'payee_entity_kind',
+              'payee_entity_id',
+              'payment_reference',
+              'payee_name',
+              'sort_code',
+              'account_number',
+              'account_type',
+              'bank_details_hash_snapshot'
+            ].join(',');
+            const scopeUrl = `${env.SUPABASE_URL}/rest/v1/banking_pay_operation_transfer_scope?operation_id=eq.${encodeURIComponent(opId)}&pay_batch_id=eq.${encodeURIComponent(batchId)}&status=eq.PREPARED&select=${scopeSelect}&order=created_at_utc.asc,id.asc&limit=${submitLimit}`;
+            const scopeRes = await sbFetch(env, scopeUrl, false);
+            const scopeRows = scopeRes && Array.isArray(scopeRes.rows) ? scopeRes.rows : [];
+            const preflightTransfers = scopeRows
+              .map((scopeRow) => ({
+                ...scopeRow,
+                transfer_id: scopeRow.pay_bank_transfer_id,
+                pay_batch_id: batchId,
+                rail_provider: 'REVOLUT',
+                rail_env: expectedEnv,
+                funding_account_ref: batchFundingRef
+              }))
+              .filter((scopeRow) => String(scopeRow.pay_bank_transfer_id || '').trim());
+
+            preflightFundingRef = batchFundingRef;
+            preflightRequired = sumRequired(preflightTransfers);
+            preflightPayrollTesting = await _fetchPayrollTestingFlag(env);
+
+            if (!batchFundingRef && preflightTransfers.length) {
+              out.ok = false;
+              out.claim_blocker_code = 'SCHEDULED_BATCH_MISSING_FUNDING_ACCOUNT_REF';
+              out.errors.push({
+                code: 'SCHEDULED_BATCH_MISSING_FUNDING_ACCOUNT_REF',
+                pay_batch_id: batchId,
+                message: 'Funding account reference is required for provider submission.'
+              });
+              return out;
+            }
+
+            if (preflightTransfers.length && preflightPayrollTesting !== true && preflightRequired > 0) {
+              preflightToken = await revolutAuth_getAccessToken(env);
+              const accounts = await revolutAccounts_list(env, preflightToken);
+              const match = (accounts || []).find((acct) => acct && String(acct.id || acct.account_id || '').trim() === batchFundingRef);
+              preflightAvailable = parseAvailable(match);
+              if (preflightAvailable === null) throw new Error('REVOLUT_FUNDING_ACCOUNT_BALANCE_UNAVAILABLE');
+              preflightSufficient = (preflightAvailable + 1e-9) >= preflightRequired;
+              preflightFundsCheckJson = {
+                checked_at_utc: nowIso,
+                rail_provider: 'REVOLUT',
+                rail_env: expectedEnv,
+                funding_account_ref: batchFundingRef,
+                required_gbp: preflightRequired,
+                available_gbp: preflightAvailable,
+                sufficient: preflightSufficient,
+                simulated: false,
+                mode: 'LIVE'
+              };
+              await patchBatchFundsCheck(batchId, preflightFundsCheckJson);
+
+              if (!preflightSufficient) {
+                await sbRpc(env, 'pay_batch_mark_blocked_funds', {
+                  p_pay_batch_id: batchId,
+                  p_actor_user_id: actor,
+                  p_funds_check_json: preflightFundsCheckJson
+                });
+                out.ok = false;
+                out.claimed = 0;
+                out.submitted_this_chunk = 0;
+                out.failed_this_chunk = 0;
+                out.remaining_unsubmitted = 0;
+                out.remaining_submit_attempt_required = 0;
+                out.remaining_provider_evidence_required = 0;
+                out.attempted_but_unproven_count = 0;
+                out.provider_attempt_without_external_id_count = 0;
+                out.provider_attempt_or_evidence_count = 0;
+                out.unsafe_transfer_count = 0;
+                out.requires_poll_or_review = false;
+                out.requires_provider_poll = false;
+                out.requires_review = false;
+                out.has_more = false;
+                out.claim_blocker_code = 'BLOCKED_FUNDS';
+                out.funds_check_json = preflightFundsCheckJson;
+                out.provider_submission_attempted = false;
+                out.submitted_to_bank = false;
+                out.blocked_funds.push({
+                  pay_batch_id: batchId,
+                  required_gbp: preflightRequired,
+                  available_gbp: preflightAvailable,
+                  funding_account_ref: batchFundingRef,
+                  rail_provider: 'REVOLUT',
+                  rail_env: expectedEnv,
+                  funds_check_json: preflightFundsCheckJson
+                });
+                out.errors.push({
+                  code: 'BLOCKED_FUNDS',
+                  message: 'The selected funding account does not have enough available balance to make this payment.',
+                  pay_batch_id: batchId,
+                  required_gbp: preflightRequired,
+                  available_gbp: preflightAvailable,
+                  funding_account_ref: batchFundingRef,
+                  provider_submission_attempted: false,
+                  submitted_to_bank: false
+                });
+                return out;
+              }
+            } else if (preflightTransfers.length && preflightPayrollTesting === true) {
+              preflightAvailable = null;
+              preflightSufficient = true;
+              preflightFundsCheckJson = {
+                checked_at_utc: nowIso,
+                rail_provider: 'REVOLUT',
+                rail_env: expectedEnv,
+                funding_account_ref: batchFundingRef,
+                required_gbp: preflightRequired,
+                available_gbp: null,
+                sufficient: true,
+                simulated: true,
+                mode: 'PAYROLL_TESTING'
+              };
+              await patchBatchFundsCheck(batchId, preflightFundsCheckJson);
+            }
+          } catch (preflightError) {
+            out.ok = false;
+            out.claim_blocker_code = 'FUNDS_CHECK_FAILED';
+            out.errors.push({
+              code: 'FUNDS_CHECK_FAILED',
+              pay_batch_id: batchId,
+              message: String(preflightError?.message || preflightError || 'Funds check failed.'),
+              provider_submission_attempted: false,
+              submitted_to_bank: false
+            });
+            return out;
+          }
+
           const claim = unwrapRpcPayload(await sbRpc(env, 'pay_bank_transfers_claim_provider_submit_chunk', {
             p_operation_id: opId,
             p_pay_batch_id: batchId,
@@ -128847,14 +129299,23 @@ function getRailAdapter(provider) {
             return out;
           }
 
-          const payrollTesting = await _fetchPayrollTestingFlag(env);
+          const payrollTesting = preflightPayrollTesting !== null && preflightPayrollTesting !== undefined ? preflightPayrollTesting : await _fetchPayrollTestingFlag(env);
           const required = sumRequired(transfers);
           let available = null;
           let sufficient = true;
-          let token = null;
+          let token = preflightToken || null;
+          let fundsCheckJson = null;
+          const canReusePreflightFundsCheck = preflightFundsCheckJson
+            && preflightFundingRef === fundingRef
+            && Number.isFinite(Number(preflightRequired))
+            && Math.abs(Number(preflightRequired) - Number(required)) < 0.01;
 
-          if (!payrollTesting) {
-            token = await revolutAuth_getAccessToken(env);
+          if (canReusePreflightFundsCheck) {
+            available = preflightAvailable;
+            sufficient = preflightSufficient !== false;
+            fundsCheckJson = preflightFundsCheckJson;
+          } else if (!payrollTesting) {
+            token = token || await revolutAuth_getAccessToken(env);
             try {
               const accounts = await revolutAccounts_list(env, token);
               const match = (accounts || []).find((acct) => acct && String(acct.id || acct.account_id || '').trim() === fundingRef);
@@ -128862,30 +129323,32 @@ function getRailAdapter(provider) {
               if (available === null) throw new Error('REVOLUT_FUNDING_ACCOUNT_BALANCE_UNAVAILABLE');
               sufficient = (available + 1e-9) >= required;
             } catch (e) {
-              out.errors.push({ code: 'FUNDS_CHECK_FAILED', pay_batch_id: batchId, error: String(e?.message || e || 'unknown') });
+              out.errors.push({ code: 'FUNDS_CHECK_FAILED', pay_batch_id: batchId, error: String(e?.message || e || 'unknown'), provider_submission_attempted: false, submitted_to_bank: false });
               await sbRpc(env, 'banking_pay_operation_finish_chunk', {
                 p_chunk_id: chunkId,
                 p_status: 'FAILED',
                 p_completed_count: 0,
                 p_failed_count: transfers.length,
                 p_result_json: out,
-                p_error_json: { code: 'FUNDS_CHECK_FAILED', message: String(e?.message || e || 'Funds check failed.') }
+                p_error_json: { code: 'FUNDS_CHECK_FAILED', message: String(e?.message || e || 'Funds check failed.'), provider_submission_attempted: false, submitted_to_bank: false }
               });
               return out;
             }
           }
 
-          const fundsCheckJson = {
-            checked_at_utc: nowIso,
-            rail_provider: 'REVOLUT',
-            rail_env: expectedEnv,
-            funding_account_ref: fundingRef,
-            required_gbp: required,
-            available_gbp: available,
-            sufficient,
-            simulated: payrollTesting === true,
-            mode: payrollTesting === true ? 'PAYROLL_TESTING' : 'LIVE'
-          };
+          if (!fundsCheckJson) {
+            fundsCheckJson = {
+              checked_at_utc: nowIso,
+              rail_provider: 'REVOLUT',
+              rail_env: expectedEnv,
+              funding_account_ref: fundingRef,
+              required_gbp: required,
+              available_gbp: available,
+              sufficient,
+              simulated: payrollTesting === true,
+              mode: payrollTesting === true ? 'PAYROLL_TESTING' : 'LIVE'
+            };
+          }
           await patchBatchFundsCheck(batchId, fundsCheckJson);
 
           if (!sufficient) {
@@ -128894,15 +129357,19 @@ function getRailAdapter(provider) {
               p_actor_user_id: actor,
               p_funds_check_json: fundsCheckJson
             });
-            out.blocked_funds.push({ pay_batch_id: batchId, required_gbp: required, available_gbp: available });
+            out.ok = false;
+            out.claim_blocker_code = 'BLOCKED_FUNDS';
+            out.blocked_funds.push({ pay_batch_id: batchId, required_gbp: required, available_gbp: available, funding_account_ref: fundingRef, rail_provider: 'REVOLUT', rail_env: expectedEnv, funds_check_json: fundsCheckJson });
             out.failed_this_chunk = transfers.length;
+            out.provider_submission_attempted = false;
+            out.submitted_to_bank = false;
             await sbRpc(env, 'banking_pay_operation_finish_chunk', {
               p_chunk_id: chunkId,
               p_status: 'FAILED',
               p_completed_count: 0,
               p_failed_count: transfers.length,
               p_result_json: out,
-              p_error_json: { code: 'BLOCKED_FUNDS', message: 'Bank rejected payment — blocked funds.' }
+              p_error_json: { code: 'BLOCKED_FUNDS', message: 'Bank rejected payment — blocked funds.', provider_submission_attempted: false, submitted_to_bank: false }
             });
             return out;
           }
