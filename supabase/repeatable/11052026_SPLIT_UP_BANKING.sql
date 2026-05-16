@@ -5875,8 +5875,6 @@ $function$;
 
 DROP FUNCTION IF EXISTS public.pay_execute_bank_transfer_scope_seed(uuid, uuid, text, uuid, boolean);
 
-
-
 CREATE OR REPLACE FUNCTION public.pay_execute_bank_transfer_scope_seed(
   p_operation_id uuid,
   p_pay_batch_id uuid,
@@ -5918,6 +5916,7 @@ DECLARE
   v_stale_scope_skipped_count integer := 0;
   v_stale_previous_operation_cleanup_attempted_count integer := 0;
   v_stale_previous_operation_scope_cleaned_count integer := 0;
+  v_stale_previous_retry_operation_scope_cleaned_count integer := 0;
   v_stale_previous_operation_transfer_cleaned_count integer := 0;
   v_stale_previous_operation_auth_requests_cancelled_count integer := 0;
   v_stale_previous_operation_batch_execution_intent_cleared_count integer := 0;
@@ -5925,6 +5924,9 @@ DECLARE
   v_cleanup_retry_blocked_count integer := 0;
   v_stale_previous_operation_ids jsonb := '[]'::jsonb;
   v_blocked_transfer_group_keys jsonb := '[]'::jsonb;
+  v_blocked_previous_operation_types jsonb := '[]'::jsonb;
+  v_blocked_previous_operation_statuses jsonb := '[]'::jsonb;
+  v_blocked_cleanup_reasons jsonb := '[]'::jsonb;
   v_operation_freshness_status text := NULL::text;
   v_operation_freshness_result_hash text := NULL::text;
   v_operation_freshness_scope_hash text := NULL::text;
@@ -6843,7 +6845,7 @@ BEGIN
   FROM (
     SELECT DISTINCT previous_conflict.previous_operation_id
     FROM pg_temp.tmp_transfer_scope_previous_conflicts AS previous_conflict
-    WHERE previous_conflict.previous_operation_type = 'PAYMENT_EXECUTE'
+    WHERE previous_conflict.previous_operation_type IN ('PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS')
       AND previous_conflict.previous_operation_status IN ('FAILED', 'CANCELLED', 'CANCELED')
   ) AS cleanup_operation;
 
@@ -6874,16 +6876,34 @@ BEGIN
     WHERE remaining_previous_scope.id = previous_conflict.transfer_scope_id
   );
 
+  SELECT COUNT(*)::integer
+  INTO v_stale_previous_retry_operation_scope_cleaned_count
+  FROM pg_temp.tmp_transfer_scope_previous_conflicts AS previous_conflict
+  WHERE previous_conflict.previous_operation_type = 'PAYMENT_RETRY_BLOCKED_FUNDS'
+    AND NOT EXISTS (
+      SELECT 1
+      FROM public.banking_pay_operation_transfer_scope AS remaining_previous_scope
+      WHERE remaining_previous_scope.id = previous_conflict.transfer_scope_id
+    );
+
   SELECT COUNT(*)::integer,
          COALESCE(jsonb_agg(DISTINCT to_jsonb(remaining_conflict.previous_operation_id::text)), '[]'::jsonb),
-         COALESCE(jsonb_agg(DISTINCT to_jsonb(remaining_conflict.transfer_group_key)), '[]'::jsonb)
+         COALESCE(jsonb_agg(DISTINCT to_jsonb(remaining_conflict.transfer_group_key)), '[]'::jsonb),
+         COALESCE(jsonb_agg(DISTINCT to_jsonb(remaining_conflict.previous_operation_type)) FILTER (WHERE remaining_conflict.previous_operation_type IS NOT NULL), '[]'::jsonb),
+         COALESCE(jsonb_agg(DISTINCT to_jsonb(remaining_conflict.previous_operation_status)) FILTER (WHERE remaining_conflict.previous_operation_status IS NOT NULL), '[]'::jsonb)
   INTO v_stale_previous_operation_scope_blocked_count,
        v_stale_previous_operation_ids,
-       v_blocked_transfer_group_keys
+       v_blocked_transfer_group_keys,
+       v_blocked_previous_operation_types,
+       v_blocked_previous_operation_statuses
   FROM (
     SELECT previous_scope.operation_id AS previous_operation_id,
-           previous_scope.transfer_group_key AS transfer_group_key
+           previous_scope.transfer_group_key AS transfer_group_key,
+           upper(btrim(coalesce(previous_operation.operation_type, ''))) AS previous_operation_type,
+           upper(btrim(coalesce(previous_operation.status, ''))) AS previous_operation_status
     FROM public.banking_pay_operation_transfer_scope AS previous_scope
+    LEFT JOIN public.banking_pay_operations AS previous_operation
+      ON previous_operation.id = previous_scope.operation_id
     JOIN pg_temp.tmp_operation_transfer_groups AS incoming_group
       ON incoming_group.pay_channel = previous_scope.pay_channel
      AND incoming_group.transfer_group_key = previous_scope.transfer_group_key
@@ -6914,6 +6934,14 @@ BEGIN
         )
     );
 
+    SELECT COALESCE(jsonb_agg(DISTINCT to_jsonb(NULLIF(btrim(coalesce(cleanup_result_row.cleanup_result->>'retry_blocked_reason', '')), '')))
+                    FILTER (WHERE NULLIF(btrim(coalesce(cleanup_result_row.cleanup_result->>'retry_blocked_reason', '')), '') IS NOT NULL), '[]'::jsonb)
+    INTO v_blocked_cleanup_reasons
+    FROM pg_temp.tmp_transfer_scope_previous_cleanup_results AS cleanup_result_row
+    WHERE COALESCE((cleanup_result_row.cleanup_result->>'retry_blocked')::boolean, false) IS TRUE
+       OR COALESCE((cleanup_result_row.cleanup_result->>'review_required')::boolean, false) IS TRUE
+       OR COALESCE((cleanup_result_row.cleanup_result->>'safe_to_retry')::boolean, false) IS NOT TRUE;
+
     v_stale_previous_operation_scope_blocked_count := COALESCE(v_cleanup_retry_blocked_count, 0);
   END IF;
 
@@ -6927,13 +6955,17 @@ BEGIN
       'blocked_count', v_stale_previous_operation_scope_blocked_count,
       'stale_previous_operation_cleanup_attempted_count', COALESCE(v_stale_previous_operation_cleanup_attempted_count, 0),
       'stale_previous_operation_scope_cleaned_count', COALESCE(v_stale_previous_operation_scope_cleaned_count, 0),
+      'stale_previous_retry_operation_scope_cleaned_count', COALESCE(v_stale_previous_retry_operation_scope_cleaned_count, 0),
       'stale_previous_operation_transfer_cleaned_count', COALESCE(v_stale_previous_operation_transfer_cleaned_count, 0),
       'stale_previous_operation_auth_requests_cancelled_count', COALESCE(v_stale_previous_operation_auth_requests_cancelled_count, 0),
       'stale_previous_operation_batch_execution_intent_cleared_count', COALESCE(v_stale_previous_operation_batch_execution_intent_cleared_count, 0),
       'cleanup_retry_blocked_count', COALESCE(v_cleanup_retry_blocked_count, 0),
       'blocked_previous_operation_ids', v_stale_previous_operation_ids,
       'stale_previous_operation_ids', v_stale_previous_operation_ids,
-      'blocked_transfer_group_keys', v_blocked_transfer_group_keys
+      'blocked_previous_operation_types', v_blocked_previous_operation_types,
+      'blocked_previous_operation_statuses', v_blocked_previous_operation_statuses,
+      'blocked_transfer_group_keys', v_blocked_transfer_group_keys,
+      'blocked_cleanup_reasons', v_blocked_cleanup_reasons
     )::text USING ERRCODE = 'P0001';
   END IF;
 
@@ -7056,6 +7088,7 @@ BEGIN
     'stale_scope_skipped_count', COALESCE(v_stale_scope_skipped_count, 0),
     'stale_previous_operation_cleanup_attempted_count', COALESCE(v_stale_previous_operation_cleanup_attempted_count, 0),
     'stale_previous_operation_scope_cleaned_count', COALESCE(v_stale_previous_operation_scope_cleaned_count, 0),
+    'stale_previous_retry_operation_scope_cleaned_count', COALESCE(v_stale_previous_retry_operation_scope_cleaned_count, 0),
     'stale_previous_operation_transfer_cleaned_count', COALESCE(v_stale_previous_operation_transfer_cleaned_count, 0),
     'stale_previous_operation_auth_requests_cancelled_count', COALESCE(v_stale_previous_operation_auth_requests_cancelled_count, 0),
     'stale_previous_operation_batch_execution_intent_cleared_count', COALESCE(v_stale_previous_operation_batch_execution_intent_cleared_count, 0),
@@ -7063,14 +7096,16 @@ BEGIN
     'cleanup_retry_blocked_count', COALESCE(v_cleanup_retry_blocked_count, 0),
     'blocked_previous_operation_ids', COALESCE(v_stale_previous_operation_ids, '[]'::jsonb),
     'stale_previous_operation_ids', COALESCE(v_stale_previous_operation_ids, '[]'::jsonb),
+    'blocked_previous_operation_types', COALESCE(v_blocked_previous_operation_types, '[]'::jsonb),
+    'blocked_previous_operation_statuses', COALESCE(v_blocked_previous_operation_statuses, '[]'::jsonb),
     'blocked_transfer_group_keys', COALESCE(v_blocked_transfer_group_keys, '[]'::jsonb),
+    'blocked_cleanup_reasons', COALESCE(v_blocked_cleanup_reasons, '[]'::jsonb),
     'freshness_validation_status', v_freshness_status,
     'freshness_result_hash_used', v_freshness_result_hash_used,
     'freshness_scope_hash_used', v_freshness_scope_hash_used
   );
 END;
 $function$;
-
 
 
 DROP FUNCTION IF EXISTS public.pay_bank_transfers_claim_provider_submit_chunk(uuid, uuid, integer, text, integer);
@@ -12331,6 +12366,9 @@ DECLARE
   v_now timestamptz := now();
   v_operation_row public.banking_pay_operations%ROWTYPE;
   v_batch_row public.pay_batches%ROWTYPE;
+  v_operation_type_upper text := NULL::text;
+  v_operation_type_cleanup_mode text := NULL::text;
+  v_retry_blocked_reason text := NULL::text;
   v_effective_actor_user_id uuid := NULL::uuid;
   v_failure_phase text := NULL::text;
   v_failure_error_json jsonb := '{}'::jsonb;
@@ -12340,6 +12378,8 @@ DECLARE
   v_operation_active_auth_request_count integer := 0;
   v_active_auth_request_ids jsonb := '[]'::jsonb;
   v_auth_requests_cancelled integer := 0;
+  v_awaiting_auth_requests_cancelled integer := 0;
+  v_authorised_auth_requests_cancelled integer := 0;
   v_auth_tokens_voided integer := 0;
   v_batch_execution_intent_cleared integer := 0;
   v_active_auth_request_blocker_count integer := 0;
@@ -12419,13 +12459,21 @@ BEGIN
     v_effective_actor_user_id := NULL::uuid;
   END IF;
 
-  IF upper(BTRIM(COALESCE(v_operation_row.operation_type, ''))) <> 'PAYMENT_EXECUTE' THEN
+  v_operation_type_upper := upper(BTRIM(COALESCE(v_operation_row.operation_type, '')));
+  v_operation_type_cleanup_mode := CASE
+    WHEN v_operation_type_upper = 'PAYMENT_EXECUTE' THEN 'STANDARD_PAYMENT_EXECUTE_LOCAL_ARTIFACT_CLEANUP'
+    WHEN v_operation_type_upper = 'PAYMENT_RETRY_BLOCKED_FUNDS' THEN 'CONDITIONAL_BLOCKED_FUNDS_RETRY_LOCAL_ARTIFACT_CLEANUP'
+    ELSE 'UNSUPPORTED_OPERATION_TYPE'
+  END;
+
+  IF v_operation_type_upper NOT IN ('PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS') THEN
     RAISE EXCEPTION '%', jsonb_build_object(
       'error', 'PAY_EXECUTE_OPERATION_CLEANUP_FAILED_LOCAL_ARTIFACTS',
       'code', 'OPERATION_TYPE_NOT_SUPPORTED',
-      'message', 'pay_execute_operation_cleanup_failed_local_artifacts: only PAYMENT_EXECUTE operations are supported',
+      'message', 'pay_execute_operation_cleanup_failed_local_artifacts: only PAYMENT_EXECUTE and proven local PAYMENT_RETRY_BLOCKED_FUNDS operations are supported',
       'operation_id', p_operation_id::text,
-      'operation_type', v_operation_row.operation_type
+      'operation_type', v_operation_row.operation_type,
+      'operation_types_supported', jsonb_build_array('PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS')
     )::text USING ERRCODE = 'P0001';
   END IF;
 
@@ -12887,6 +12935,12 @@ BEGIN
        v_authorised_auth_request_review_count
   FROM pg_temp.tmp_pay_execute_cleanup_auth_requests AS auth_classification;
 
+  SELECT COUNT(*) FILTER (WHERE auth_classification.is_cancellable_local_auth_request AND auth_classification.auth_request_state = 'AWAITING')::integer,
+         COUNT(*) FILTER (WHERE auth_classification.is_cancellable_local_auth_request AND auth_classification.auth_request_state = 'AUTHORISED')::integer
+  INTO v_awaiting_auth_requests_cancelled,
+       v_authorised_auth_requests_cancelled
+  FROM pg_temp.tmp_pay_execute_cleanup_auth_requests AS auth_classification;
+
   DROP TABLE IF EXISTS pg_temp.tmp_pay_execute_cleanup_cancelled_auth_request_ids;
   CREATE TEMPORARY TABLE pg_temp.tmp_pay_execute_cleanup_cancelled_auth_request_ids (
     auth_request_id uuid PRIMARY KEY
@@ -12985,6 +13039,14 @@ BEGIN
   INTO v_auth_requests_cancelled,
        v_cancelled_auth_request_ids
   FROM pg_temp.tmp_pay_execute_cleanup_cancelled_auth_request_ids AS cancelled_auth_request;
+
+  SELECT COUNT(*) FILTER (WHERE auth_classification.auth_request_state = 'AWAITING')::integer,
+         COUNT(*) FILTER (WHERE auth_classification.auth_request_state = 'AUTHORISED')::integer
+  INTO v_awaiting_auth_requests_cancelled,
+       v_authorised_auth_requests_cancelled
+  FROM pg_temp.tmp_pay_execute_cleanup_cancelled_auth_request_ids AS cancelled_auth_request
+  JOIN pg_temp.tmp_pay_execute_cleanup_auth_requests AS auth_classification
+    ON auth_classification.auth_request_id = cancelled_auth_request.auth_request_id;
 
   SELECT COUNT(*)::integer,
          (COUNT(*) FILTER (WHERE auth_request.execution_intent_json->>'operation_id' = p_operation_id::text))::integer,
@@ -13624,6 +13686,26 @@ BEGIN
     ELSE 'NO_LOCAL_ARTIFACTS_TO_CLEAN'
   END;
 
+  v_retry_blocked_reason := CASE
+    WHEN v_retry_blocked IS NOT TRUE THEN NULL::text
+    WHEN v_operation_type_upper = 'PAYMENT_RETRY_BLOCKED_FUNDS'
+      AND COALESCE(v_provider_evidence_count, 0) > 0 THEN 'PAYMENT_RETRY_BLOCKED_FUNDS_CLEANUP_NOT_SAFE_PROVIDER_EVIDENCE'
+    WHEN v_operation_type_upper = 'PAYMENT_RETRY_BLOCKED_FUNDS'
+      AND COALESCE(v_provider_submit_chunk_attempt_count, 0) > 0 THEN 'PAYMENT_RETRY_BLOCKED_FUNDS_CLEANUP_NOT_SAFE_PROVIDER_SUBMIT_CHUNK'
+    WHEN v_operation_type_upper = 'PAYMENT_RETRY_BLOCKED_FUNDS'
+      AND COALESCE(v_unsafe_transfer_count, 0) > 0 THEN 'PAYMENT_RETRY_BLOCKED_FUNDS_CLEANUP_NOT_SAFE_UNSAFE_TRANSFER'
+    WHEN v_operation_type_upper = 'PAYMENT_RETRY_BLOCKED_FUNDS'
+      AND COALESCE(v_unsafe_scope_count, 0) > 0 THEN 'PAYMENT_RETRY_BLOCKED_FUNDS_CLEANUP_NOT_SAFE_UNSAFE_SCOPE'
+    WHEN v_operation_type_upper = 'PAYMENT_RETRY_BLOCKED_FUNDS' THEN 'PAYMENT_RETRY_BLOCKED_FUNDS_CLEANUP_NOT_SAFE'
+    WHEN v_batch_execution_boundary_crossed THEN 'BATCH_EXECUTION_BOUNDARY_CROSSED'
+    WHEN COALESCE(v_active_auth_request_blocker_count, 0) > 0 THEN 'ACTIVE_AUTH_REQUEST_PRESENT'
+    WHEN COALESCE(v_provider_evidence_count, 0) > 0 THEN 'PROVIDER_OR_AMBIGUOUS_TRANSFER_EVIDENCE_PRESENT'
+    WHEN COALESCE(v_provider_submit_chunk_attempt_count, 0) > 0 THEN 'PROVIDER_SUBMIT_CHUNK_ATTEMPT_PRESENT'
+    WHEN COALESCE(v_unsafe_transfer_count, 0) > 0 OR COALESCE(v_unsafe_scope_count, 0) > 0 THEN 'UNSAFE_LOCAL_ARTIFACTS_REMAIN'
+    WHEN COALESCE(v_remaining_operation_scope_count, 0) > 0 OR COALESCE(v_remaining_operation_transfer_count, 0) > 0 THEN 'RETRY_BLOCKER_REMAINS'
+    ELSE 'RETRY_BLOCKED'
+  END;
+
   v_result := jsonb_strip_nulls(jsonb_build_object(
     'ok', true,
     'dry_run', COALESCE(p_dry_run, false),
@@ -13632,6 +13714,9 @@ BEGIN
     'pay_batch_id', v_operation_row.pay_batch_id::text,
     'failure_phase', v_failure_phase,
     'cleanup_mode', v_cleanup_mode,
+    'operation_types_supported', jsonb_build_array('PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS'),
+    'operation_type_cleanup_mode', v_operation_type_cleanup_mode,
+    'retry_blocked_reason', v_retry_blocked_reason,
     'safe_to_retry', v_safe_to_retry,
     'retry_blocked', v_retry_blocked,
     'review_required', v_review_required,
@@ -13639,6 +13724,7 @@ BEGIN
     'transfer_rows_considered', COALESCE(v_transfer_rows_considered, 0),
     'safe_scope_candidate_count', COALESCE(v_safe_scope_candidate_count, 0),
     'safe_transfer_candidate_count', COALESCE(v_safe_transfer_candidate_count, 0),
+    'safe_local_transfer_count', COALESCE(v_safe_transfer_candidate_count, 0),
     'scope_rows_deleted', COALESCE(v_scope_rows_deleted, 0),
     'transfer_rows_deleted', COALESCE(v_transfer_rows_deleted, 0),
     'item_links_cleared', COALESCE(v_item_links_cleared, 0),
@@ -13658,6 +13744,9 @@ BEGIN
     'operation_active_auth_request_count', COALESCE(v_operation_active_auth_request_count, 0),
     'active_auth_request_ids', COALESCE(v_active_auth_request_ids, '[]'::jsonb),
     'auth_requests_cancelled', COALESCE(v_auth_requests_cancelled, 0),
+    'awaiting_auth_requests_cancelled', COALESCE(v_awaiting_auth_requests_cancelled, 0),
+    'authorised_auth_requests_cancelled', COALESCE(v_authorised_auth_requests_cancelled, 0),
+    'auth_request_cleanup_mode', CASE WHEN COALESCE(v_auth_requests_cancelled, 0) > 0 THEN 'CANCELLED_SAFE_LOCAL_AUTH_REQUESTS' WHEN COALESCE(v_non_cancellable_auth_request_count, 0) > 0 THEN 'AUTH_REQUEST_REVIEW_REQUIRED' ELSE 'NO_AUTH_REQUEST_CLEANUP_REQUIRED' END,
     'auth_tokens_voided', COALESCE(v_auth_tokens_voided, 0),
     'batch_execution_intent_cleared', COALESCE(v_batch_execution_intent_cleared, 0),
     'active_auth_request_blocker_count', COALESCE(v_active_auth_request_blocker_count, 0),
