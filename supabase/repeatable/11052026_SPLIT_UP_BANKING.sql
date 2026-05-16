@@ -4845,6 +4845,7 @@ DROP FUNCTION IF EXISTS public.pay_batch_execution_summary_get(uuid, uuid);
 
 
 
+
 CREATE OR REPLACE FUNCTION public.pay_batch_execution_summary_get(
   p_pay_batch_id uuid,
   p_actor_user_id uuid DEFAULT NULL::uuid
@@ -5089,7 +5090,8 @@ BEGIN
     );
   END IF;
 
-  RETURN jsonb_build_object(
+  RETURN (
+  jsonb_build_object(
     'ok', true,
     'pay_batch_id', p_pay_batch_id::text,
     'batch_id', p_pay_batch_id::text,
@@ -5129,7 +5131,10 @@ BEGIN
     'submitted_transfer_count', coalesce(v_provider_submitted_transfer_count, 0),
     'provider_submitted_transfer_count', coalesce(v_provider_submitted_transfer_count, 0),
     'local_only_transfer_count', coalesce(v_local_only_transfer_count, 0),
-    'pending_transfer_count', coalesce(v_pending_transfer_count, 0),
+    'pending_transfer_count', coalesce(v_pending_transfer_count, 0)
+  )
+  ||
+  jsonb_build_object(
     'evidence_pending_transfer_count', coalesce(v_evidence_pending_transfer_count, 0),
     'canonical_pending_status_transfer_count', coalesce(v_canonical_pending_status_transfer_count, 0),
     'authorisation_ready_transfer_count', coalesce(v_authorisation_ready_transfer_count, 0),
@@ -5161,7 +5166,10 @@ BEGIN
     'failed_transfer_count', coalesce(v_failed_transfer_count, 0),
     'ambiguous_transfer_count', coalesce(v_ambiguous_transfer_count, 0),
     'attempted_but_unproven_transfer_count', coalesce(v_attempted_but_unproven_transfer_count, 0),
-    'attempted_but_unproven_count', coalesce(v_attempted_but_unproven_transfer_count, 0),
+    'attempted_but_unproven_count', coalesce(v_attempted_but_unproven_transfer_count, 0)
+  )
+  ||
+  jsonb_build_object(
     'provider_attempt_without_external_id_count', coalesce(v_provider_attempt_without_external_id_count, 0),
     'requires_provider_poll_count', coalesce(v_requires_provider_poll_count, 0),
     'remaining_submit_attempt_required', coalesce(v_remaining_submit_attempt_required, 0),
@@ -5192,9 +5200,11 @@ BEGIN
     'active_operation_id', case when v_active_operation_id is null then null else v_active_operation_id::text end,
     'active_operation_type', v_active_operation_type,
     'active_operation_status', v_active_operation_status
+  )
   );
 END;
 $function$;
+
 
 
 
