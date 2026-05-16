@@ -26223,15 +26223,38 @@ declare
   v_banking_highest_alert_label text := NULL::text;
   v_banking_highest_alert_severity text := NULL::text;
   v_alert_actor_user_id uuid := COALESCE(p_actor_user_id, '00000000-0000-0000-0000-000000000000'::uuid);
+  v_alert_metadata_degraded boolean := false;
+  v_alert_metadata_warning jsonb := NULL::jsonb;
 begin
-  v_alert_registry := public.banking_alerts_active_for_user(
-    v_alert_actor_user_id,
-    NULL::text,
-    NULL::uuid,
-    true,
-    0
-  );
+  BEGIN
+    v_alert_registry := public.banking_alerts_active_for_user(
+      v_alert_actor_user_id,
+      NULL::text,
+      NULL::uuid,
+      true,
+      0
+    );
+  EXCEPTION WHEN OTHERS THEN
+    v_alert_registry := jsonb_build_object(
+      'ok', true,
+      'alerts', '[]'::jsonb,
+      'unacknowledged_count', 0,
+      'highest_severity', NULL::text,
+      'highest_label', NULL::text,
+      'alert_hash', NULL::text,
+      'degraded', true
+    );
+    v_alert_metadata_degraded := true;
+    v_alert_metadata_warning := jsonb_build_object(
+      'code', 'PAY_BATCHES_LIST_ALERT_METADATA_DEGRADED',
+      'message', 'Banking payment batch list was loaded without live alert metadata because alert enrichment failed.',
+      'source', 'banking_alerts_active_for_user',
+      'sqlstate', SQLSTATE,
+      'error', SQLERRM
+    );
+  END;
 
+  BEGIN
   SELECT
     COALESCE(jsonb_agg(nav_alerts.alert_json ORDER BY nav_alerts.severity_rank DESC, nav_alerts.sort_at_utc DESC NULLS LAST, nav_alerts.alert_fingerprint ASC), '[]'::jsonb),
     count(*)::integer,
@@ -26251,12 +26274,37 @@ begin
       END AS severity_rank,
       CASE
         WHEN NULLIF(alert_items.alert_json ->> 'sort_at_utc', '') IS NULL THEN NULL::timestamptz
-        ELSE (alert_items.alert_json ->> 'sort_at_utc')::timestamptz
+        WHEN (alert_items.alert_json ->> 'sort_at_utc') ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}[T ][0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?(Z|[+-][0-9]{2}:?[0-9]{2})?$' THEN (alert_items.alert_json ->> 'sort_at_utc')::timestamptz
+        ELSE NULL::timestamptz
       END AS sort_at_utc,
       alert_items.alert_json ->> 'alert_fingerprint' AS alert_fingerprint
-    FROM jsonb_array_elements(COALESCE(v_alert_registry -> 'alerts', '[]'::jsonb)) AS alert_items(alert_json)
-    WHERE COALESCE((alert_items.alert_json ->> 'acknowledged_for_current_user')::boolean, false) = false
+    FROM jsonb_array_elements(
+      CASE
+        WHEN jsonb_typeof(COALESCE(v_alert_registry -> 'alerts', '[]'::jsonb)) = 'array' THEN COALESCE(v_alert_registry -> 'alerts', '[]'::jsonb)
+        ELSE '[]'::jsonb
+      END
+    ) AS alert_items(alert_json)
+    WHERE (
+      CASE
+        WHEN lower(btrim(coalesce(alert_items.alert_json ->> 'acknowledged_for_current_user', 'false'))) in ('true','t','1','yes','y','on') THEN true
+        ELSE false
+      END
+    ) = false
   ) AS nav_alerts;
+  EXCEPTION WHEN OTHERS THEN
+    v_nav_alerts := '[]'::jsonb;
+    v_banking_unacknowledged_alert_count := 0;
+    v_banking_highest_alert_label := NULL::text;
+    v_banking_highest_alert_severity := NULL::text;
+    v_alert_metadata_degraded := true;
+    v_alert_metadata_warning := COALESCE(v_alert_metadata_warning, jsonb_build_object(
+      'code', 'PAY_BATCHES_LIST_ALERT_EXPANSION_DEGRADED',
+      'message', 'Banking payment batch list was loaded without live alert expansion because alert metadata could not be parsed safely.',
+      'source', 'pay_batches_list.nav_alert_expansion',
+      'sqlstate', SQLSTATE,
+      'error', SQLERRM
+    ));
+  END;
 
   v_nav_alerts := COALESCE(v_nav_alerts, '[]'::jsonb);
   v_banking_unacknowledged_alert_count := COALESCE(v_banking_unacknowledged_alert_count, 0);
@@ -26582,10 +26630,19 @@ begin
           END AS severity_rank,
           CASE
             WHEN NULLIF(alert_items.alert_json ->> 'sort_at_utc', '') IS NULL THEN NULL::timestamptz
-            ELSE (alert_items.alert_json ->> 'sort_at_utc')::timestamptz
+            WHEN (alert_items.alert_json ->> 'sort_at_utc') ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}[T ][0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?(Z|[+-][0-9]{2}:?[0-9]{2})?$' THEN (alert_items.alert_json ->> 'sort_at_utc')::timestamptz
+            ELSE NULL::timestamptz
           END AS sort_at_utc,
-          COALESCE((alert_items.alert_json ->> 'acknowledged_for_current_user')::boolean, false) AS acknowledged_for_current_user
-        FROM jsonb_array_elements(COALESCE(v_alert_registry -> 'alerts', '[]'::jsonb)) AS alert_items(alert_json)
+          CASE
+            WHEN lower(btrim(coalesce(alert_items.alert_json ->> 'acknowledged_for_current_user', 'false'))) in ('true','t','1','yes','y','on') THEN true
+            ELSE false
+          END AS acknowledged_for_current_user
+        FROM jsonb_array_elements(
+          CASE
+            WHEN jsonb_typeof(COALESCE(v_alert_registry -> 'alerts', '[]'::jsonb)) = 'array' THEN COALESCE(v_alert_registry -> 'alerts', '[]'::jsonb)
+            ELSE '[]'::jsonb
+          END
+        ) AS alert_items(alert_json)
         WHERE alert_items.alert_json ->> 'pay_batch_id' = pb0.id::text
       ) AS alert_scope
     ) ba on true
@@ -26863,12 +26920,27 @@ begin
     'offset', v_offset,
     'rows', v_rows,
     'banking_alerts', v_nav_alerts,
+    'banking_alert_summary', jsonb_build_object(
+      'ok', true,
+      'alerts', v_nav_alerts,
+      'unacknowledged_count', v_banking_unacknowledged_alert_count,
+      'highest_severity', v_banking_highest_alert_severity,
+      'highest_label', v_banking_highest_alert_label,
+      'alert_hash', NULL::text,
+      'degraded', v_alert_metadata_degraded,
+      'warning', v_alert_metadata_warning
+    ),
     'banking_unacknowledged_alert_count', v_banking_unacknowledged_alert_count,
     'banking_highest_alert_label', v_banking_highest_alert_label,
-    'banking_highest_alert_severity', v_banking_highest_alert_severity
+    'banking_highest_alert_severity', v_banking_highest_alert_severity,
+    'alert_metadata_degraded', v_alert_metadata_degraded,
+    'alert_metadata_warning', v_alert_metadata_warning
   );
 end;
 $function$;
+
+
+
 
 
 
