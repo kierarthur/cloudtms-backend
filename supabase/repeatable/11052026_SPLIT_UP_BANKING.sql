@@ -4868,6 +4868,13 @@ DECLARE
   v_evidence_pending_transfer_count integer := 0;
   v_authorisation_ready_transfer_count integer := 0;
   v_unattempted_submit_eligible_transfer_count integer := 0;
+  v_provider_submit_ready_transfer_count integer := 0;
+  v_authorised_without_provider_submission_transfer_count integer := 0;
+  v_authorised_but_not_submit_ready_transfer_count integer := 0;
+  v_remaining_provider_submit_ready_transfer_count integer := 0;
+  v_provider_submit_phase_active boolean := false;
+  v_authorisation_phase_active boolean := false;
+  v_remaining_submit_attempt_required_phase text := NULL::text;
   v_safe_local_cleanup_transfer_count integer := 0;
   v_provider_attempt_or_evidence_transfer_count integer := 0;
   v_provider_or_ambiguous_evidence_transfer_count integer := 0;
@@ -4961,6 +4968,13 @@ BEGIN
   v_evidence_pending_transfer_count := v_pending_transfer_count;
   v_authorisation_ready_transfer_count := coalesce(nullif(v_submission_evidence_json->>'authorisation_ready_transfer_count', '')::integer, coalesce(nullif(v_submission_evidence_json->>'authorisation_ready_count', '')::integer, 0));
   v_unattempted_submit_eligible_transfer_count := coalesce(nullif(v_submission_evidence_json->>'unattempted_submit_eligible_count', '')::integer, 0);
+  v_provider_submit_ready_transfer_count := coalesce(nullif(v_submission_evidence_json->>'provider_submit_ready_transfer_count', '')::integer, coalesce(nullif(v_submission_evidence_json->>'provider_submit_ready_count', '')::integer, 0));
+  v_authorised_without_provider_submission_transfer_count := coalesce(nullif(v_submission_evidence_json->>'authorised_without_provider_submission_count', '')::integer, 0);
+  v_authorised_but_not_submit_ready_transfer_count := coalesce(nullif(v_submission_evidence_json->>'authorised_but_not_submit_ready_count', '')::integer, 0);
+  v_remaining_provider_submit_ready_transfer_count := v_provider_submit_ready_transfer_count;
+  v_provider_submit_phase_active := coalesce((v_submission_evidence_json->>'provider_submit_phase_active')::boolean, false);
+  v_authorisation_phase_active := coalesce((v_submission_evidence_json->>'authorisation_phase_active')::boolean, false);
+  v_remaining_submit_attempt_required_phase := nullif(btrim(coalesce(v_submission_evidence_json->>'remaining_submit_attempt_required_phase', '')), '');
   v_safe_local_cleanup_transfer_count := coalesce(nullif(v_submission_evidence_json->>'safe_local_cleanup_count', '')::integer, 0);
   v_provider_attempt_or_evidence_transfer_count := coalesce(nullif(v_submission_evidence_json->>'provider_attempt_or_evidence_count', '')::integer, 0);
   v_provider_or_ambiguous_evidence_transfer_count := coalesce(nullif(v_submission_evidence_json->>'provider_or_ambiguous_evidence_count', '')::integer, 0);
@@ -5015,7 +5029,7 @@ BEGIN
   INTO v_active_operation_id, v_active_operation_type, v_active_operation_status
   FROM public.banking_pay_operations AS operation_row
   WHERE operation_row.pay_batch_id = p_pay_batch_id
-    AND operation_row.status NOT IN ('COMPLETE', 'FAILED', 'CANCELLED', 'REVIEW_REQUIRED')
+    AND upper(btrim(coalesce(operation_row.status, ''))) NOT IN ('COMPLETE', 'FAILED', 'CANCELLED', 'CANCELED', 'REVIEW_REQUIRED')
   ORDER BY operation_row.updated_at_utc DESC NULLS LAST, operation_row.created_at_utc DESC NULLS LAST, operation_row.id DESC
   LIMIT 1;
 
@@ -5130,8 +5144,17 @@ BEGIN
     'cancellable_local_auth_request_count', coalesce(v_cancellable_local_auth_request_count, 0),
     'non_cancellable_auth_request_count', coalesce(v_non_cancellable_auth_request_count, 0),
     'auth_request_retry_blocker_count', coalesce(v_auth_request_retry_blocker_count, 0),
-    'pending_transfer_count_semantics', 'evidence-level pending classification; not an authorisation gate',
+    'pending_transfer_count_semantics', 'evidence-level pending classification; not an authorisation or provider-submit gate',
+    'pending_transfer_count_definition', 'evidence_level_pending_count',
+    'authorisation_ready_transfer_count_definition', 'pre_authorisation_ready_local_transfers',
+    'provider_submit_ready_transfer_count_definition', 'same_operation_authorised_local_transfers_safe_to_submit',
     'unattempted_submit_eligible_transfer_count', coalesce(v_unattempted_submit_eligible_transfer_count, 0),
+    'provider_submit_ready_transfer_count', coalesce(v_provider_submit_ready_transfer_count, 0),
+    'authorised_without_provider_submission_transfer_count', coalesce(v_authorised_without_provider_submission_transfer_count, 0),
+    'authorised_but_not_submit_ready_transfer_count', coalesce(v_authorised_but_not_submit_ready_transfer_count, 0),
+    'remaining_provider_submit_ready_transfer_count', coalesce(v_remaining_provider_submit_ready_transfer_count, 0),
+    'provider_submit_phase_active', coalesce(v_provider_submit_phase_active, false),
+    'authorisation_phase_active', coalesce(v_authorisation_phase_active, false),
     'safe_local_cleanup_transfer_count', coalesce(v_safe_local_cleanup_transfer_count, 0),
     'provider_attempt_or_evidence_transfer_count', coalesce(v_provider_attempt_or_evidence_transfer_count, 0),
     'provider_or_ambiguous_evidence_transfer_count', coalesce(v_provider_or_ambiguous_evidence_transfer_count, 0),
@@ -5144,7 +5167,8 @@ BEGIN
     'remaining_submit_attempt_required', coalesce(v_remaining_submit_attempt_required, 0),
     'remaining_unattempted_submit_required', coalesce(v_remaining_unattempted_submit_required, 0),
     'remaining_evidence_unresolved_count', coalesce(v_remaining_evidence_unresolved_count, 0),
-    'remaining_submit_attempt_required_definition', 'unattempted_submit_eligible_count',
+    'remaining_submit_attempt_required_definition', 'phase_dependent_provider_submit_ready_count',
+    'remaining_submit_attempt_required_phase', COALESCE(v_remaining_submit_attempt_required_phase, CASE WHEN COALESCE(v_provider_submit_phase_active, false) THEN 'PROVIDER_SUBMIT' WHEN COALESCE(v_authorisation_phase_active, false) THEN 'AUTHORISATION' ELSE 'NOT_PROVIDER_SUBMIT_PHASE' END),
     'remaining_provider_evidence_required', coalesce(v_remaining_provider_evidence_required, 0),
     'remaining_provider_submission_required', coalesce(v_remaining_provider_submission_required, 0),
     'blocked_transfer_count', coalesce(v_blocked_transfer_count, 0),
@@ -5171,7 +5195,6 @@ BEGIN
   );
 END;
 $function$;
-
 
 
 
