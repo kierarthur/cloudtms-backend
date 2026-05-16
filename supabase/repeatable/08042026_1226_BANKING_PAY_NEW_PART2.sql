@@ -19890,6 +19890,8 @@ DROP FUNCTION IF EXISTS public.pay_batch_submission_evidence(uuid);
 
 
 
+
+
 CREATE OR REPLACE FUNCTION public.pay_batch_submission_evidence(p_pay_batch_id uuid, p_counts_only boolean DEFAULT false)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -20311,74 +20313,79 @@ BEGIN
     AND coalesce(v_committed_count, 0) = coalesce(v_transfer_count, 0);
 
   IF coalesce(p_counts_only, false) IS TRUE THEN
-    RETURN jsonb_build_object(
-      'ok', true,
-      'pay_batch_id', p_pay_batch_id::text,
-      'counts_only', true,
-      'transfer_count', coalesce(v_transfer_count, 0),
-      'transfer_event_count', coalesce(v_transfer_event_count, 0),
-      'has_transfer_events', coalesce(v_transfer_event_count, 0) > 0,
-      'provider_submitted_count', coalesce(v_provider_submitted_count, 0),
-      'provider_evidence_present_count', coalesce(v_provider_submitted_count, 0),
-      'local_idempotency_only_count', coalesce(v_local_only_count, 0),
-      'local_only_count', coalesce(v_local_only_count, 0),
-      'local_only_evidence_count', coalesce(v_local_only_count, 0),
-      'pending_count', coalesce(v_pending_count, 0),
-      'failed_count', coalesce(v_failed_count, 0),
-      'ambiguous_count', coalesce(v_ambiguous_count, 0),
-      'attempted_but_unproven_count', coalesce(v_attempted_but_unproven_count, 0),
-      'provider_attempt_without_external_id_count', coalesce(v_provider_attempt_without_external_id_count, 0),
-      'requires_provider_poll_count', coalesce(v_requires_provider_poll_count, 0),
-      'authorisation_ready_count', coalesce(v_authorisation_ready_count, 0),
-      'authorisation_ready_transfer_count', coalesce(v_authorisation_ready_transfer_count, 0),
-      'unattempted_submit_eligible_count', coalesce(v_unattempted_submit_eligible_count, 0),
-      'provider_submit_ready_count', coalesce(v_provider_submit_ready_count, 0),
-      'provider_submit_ready_transfer_count', coalesce(v_provider_submit_ready_transfer_count, 0),
-      'authorised_without_provider_submission_count', coalesce(v_authorised_without_provider_submission_count, 0),
-      'authorised_but_not_submit_ready_count', coalesce(v_authorised_but_not_submit_ready_count, 0),
-      'provider_submit_blocked_count', coalesce(v_provider_submit_blocked_count, 0),
-      'same_operation_authorised_auth_request_count', coalesce(v_same_operation_authorised_auth_request_count, 0),
-      'provider_submit_phase_active', coalesce(v_provider_submit_phase_active, false),
-      'authorisation_phase_active', coalesce(v_authorisation_phase_active, false),
-      'safe_local_cleanup_count', coalesce(v_safe_local_cleanup_count, 0),
-      'provider_attempt_or_evidence_count', coalesce(v_provider_attempt_or_evidence_count, 0),
-      'provider_or_ambiguous_evidence_count', coalesce(v_provider_or_ambiguous_evidence_count, 0),
-      'cancellable_local_auth_request_count', coalesce(v_cancellable_local_auth_request_count, 0),
-      'non_cancellable_auth_request_count', coalesce(v_non_cancellable_auth_request_count, 0),
-      'same_operation_active_auth_request_count', coalesce(v_same_operation_active_auth_request_count, 0),
-      'other_operation_active_auth_request_count', coalesce(v_other_operation_active_auth_request_count, 0),
-      'auth_request_provider_risk_count', coalesce(v_auth_request_provider_risk_count, 0),
-      'auth_request_retry_blocker_count', coalesce(v_auth_request_retry_blocker_count, 0),
-      'remaining_submit_attempt_required', coalesce(v_remaining_submit_attempt_required, 0),
-      'remaining_unattempted_submit_required', coalesce(v_remaining_unattempted_submit_required, 0),
-      'remaining_evidence_unresolved_count', coalesce(v_remaining_evidence_unresolved_count, 0),
-      'remaining_submit_attempt_required_definition', 'phase_dependent_provider_submit_ready_count',
-      'remaining_submit_attempt_required_phase', v_remaining_submit_attempt_required_phase,
-      'remaining_provider_evidence_required', coalesce(v_remaining_provider_evidence_required, 0),
-      'remaining_provider_submission_required', coalesce(v_remaining_provider_submission_required, 0),
-      'submission_count_semantics', jsonb_build_object(
+    RETURN (
+  jsonb_build_object(
+    'ok', true,
+    'pay_batch_id', p_pay_batch_id::text,
+    'counts_only', true,
+    'transfer_count', coalesce(v_transfer_count, 0),
+    'transfer_event_count', coalesce(v_transfer_event_count, 0),
+    'has_transfer_events', coalesce(v_transfer_event_count, 0) > 0,
+    'provider_submitted_count', coalesce(v_provider_submitted_count, 0),
+    'provider_evidence_present_count', coalesce(v_provider_submitted_count, 0),
+    'local_idempotency_only_count', coalesce(v_local_only_count, 0),
+    'local_only_count', coalesce(v_local_only_count, 0),
+    'local_only_evidence_count', coalesce(v_local_only_count, 0),
+    'pending_count', coalesce(v_pending_count, 0),
+    'failed_count', coalesce(v_failed_count, 0),
+    'ambiguous_count', coalesce(v_ambiguous_count, 0),
+    'attempted_but_unproven_count', coalesce(v_attempted_but_unproven_count, 0),
+    'provider_attempt_without_external_id_count', coalesce(v_provider_attempt_without_external_id_count, 0),
+    'requires_provider_poll_count', coalesce(v_requires_provider_poll_count, 0),
+    'authorisation_ready_count', coalesce(v_authorisation_ready_count, 0),
+    'authorisation_ready_transfer_count', coalesce(v_authorisation_ready_transfer_count, 0),
+    'unattempted_submit_eligible_count', coalesce(v_unattempted_submit_eligible_count, 0),
+    'provider_submit_ready_count', coalesce(v_provider_submit_ready_count, 0),
+    'provider_submit_ready_transfer_count', coalesce(v_provider_submit_ready_transfer_count, 0),
+    'authorised_without_provider_submission_count', coalesce(v_authorised_without_provider_submission_count, 0),
+    'authorised_but_not_submit_ready_count', coalesce(v_authorised_but_not_submit_ready_count, 0),
+    'provider_submit_blocked_count', coalesce(v_provider_submit_blocked_count, 0),
+    'same_operation_authorised_auth_request_count', coalesce(v_same_operation_authorised_auth_request_count, 0),
+    'provider_submit_phase_active', coalesce(v_provider_submit_phase_active, false),
+    'authorisation_phase_active', coalesce(v_authorisation_phase_active, false),
+    'safe_local_cleanup_count', coalesce(v_safe_local_cleanup_count, 0),
+    'provider_attempt_or_evidence_count', coalesce(v_provider_attempt_or_evidence_count, 0),
+    'provider_or_ambiguous_evidence_count', coalesce(v_provider_or_ambiguous_evidence_count, 0),
+    'cancellable_local_auth_request_count', coalesce(v_cancellable_local_auth_request_count, 0)
+  )
+  ||
+  jsonb_build_object(
+    'non_cancellable_auth_request_count', coalesce(v_non_cancellable_auth_request_count, 0),
+    'same_operation_active_auth_request_count', coalesce(v_same_operation_active_auth_request_count, 0),
+    'other_operation_active_auth_request_count', coalesce(v_other_operation_active_auth_request_count, 0),
+    'auth_request_provider_risk_count', coalesce(v_auth_request_provider_risk_count, 0),
+    'auth_request_retry_blocker_count', coalesce(v_auth_request_retry_blocker_count, 0),
+    'remaining_submit_attempt_required', coalesce(v_remaining_submit_attempt_required, 0),
+    'remaining_unattempted_submit_required', coalesce(v_remaining_unattempted_submit_required, 0),
+    'remaining_evidence_unresolved_count', coalesce(v_remaining_evidence_unresolved_count, 0),
+    'remaining_submit_attempt_required_definition', 'phase_dependent_provider_submit_ready_count',
+    'remaining_submit_attempt_required_phase', v_remaining_submit_attempt_required_phase,
+    'remaining_provider_evidence_required', coalesce(v_remaining_provider_evidence_required, 0),
+    'remaining_provider_submission_required', coalesce(v_remaining_provider_submission_required, 0),
+    'submission_count_semantics', jsonb_build_object(
         'remaining_submit_attempt_required', 'phase-dependent count: provider-submit-ready authorised transfers only when provider-submit phase is active',
         'remaining_evidence_unresolved_count', 'legacy evidence-pending plus local-only count kept separate from submit eligibility',
         'pending_count', 'evidence-level pending classification, not authorisation or submit eligibility'
       ),
-      'batch_can_be_marked_submitted', coalesce(v_can_mark_submitted, false),
-      'can_mark_submitted', coalesce(v_can_mark_submitted, false),
-      'can_mark_committed', coalesce(v_can_mark_committed, false),
-      'has_rail_tx_id', coalesce(v_has_rail_tx_id, false),
-      'has_local_generated_request_identity', coalesce(v_has_local_generated_request_identity, false),
-      'has_external_submission_evidence', coalesce(v_has_external_submission_evidence, false),
-      'no_submission_evidence', coalesce(v_has_external_submission_evidence, false) = false,
-      'evidence_sample', '[]'::jsonb,
-      'execution_classification_sample', '[]'::jsonb,
-      'has_possible_provider_attempt_evidence', coalesce(v_has_external_submission_evidence, false) OR coalesce(v_attempted_but_unproven_count, 0) > 0,
-      'has_provider_attempt_request_or_idempotency_reference', coalesce(v_provider_submitted_count, 0) > 0 OR coalesce(v_attempted_but_unproven_count, 0) > 0,
-      'has_request_or_idempotency_reference', coalesce(v_local_only_count, 0) > 0 OR coalesce(v_provider_submitted_count, 0) > 0 OR coalesce(v_attempted_but_unproven_count, 0) > 0,
-      'has_submitted_state', coalesce(v_provider_submitted_count, 0) > 0,
-      'has_failed_or_rejected_provider_state', coalesce(v_failed_count, 0) > 0,
-      'has_unknown_or_timeout_state', coalesce(v_ambiguous_count, 0) > 0,
-      'requires_provider_poll', coalesce(v_requires_provider_poll_count, 0) > 0,
-      'requires_review', coalesce(v_ambiguous_count, 0) > 0 OR (coalesce(v_attempted_but_unproven_count, 0) > 0 AND coalesce(v_requires_provider_poll_count, 0) = 0)
-    );
+    'batch_can_be_marked_submitted', coalesce(v_can_mark_submitted, false),
+    'can_mark_submitted', coalesce(v_can_mark_submitted, false),
+    'can_mark_committed', coalesce(v_can_mark_committed, false),
+    'has_rail_tx_id', coalesce(v_has_rail_tx_id, false),
+    'has_local_generated_request_identity', coalesce(v_has_local_generated_request_identity, false),
+    'has_external_submission_evidence', coalesce(v_has_external_submission_evidence, false),
+    'no_submission_evidence', coalesce(v_has_external_submission_evidence, false) = false,
+    'evidence_sample', '[]'::jsonb,
+    'execution_classification_sample', '[]'::jsonb,
+    'has_possible_provider_attempt_evidence', coalesce(v_has_external_submission_evidence, false) OR coalesce(v_attempted_but_unproven_count, 0) > 0,
+    'has_provider_attempt_request_or_idempotency_reference', coalesce(v_provider_submitted_count, 0) > 0 OR coalesce(v_attempted_but_unproven_count, 0) > 0,
+    'has_request_or_idempotency_reference', coalesce(v_local_only_count, 0) > 0 OR coalesce(v_provider_submitted_count, 0) > 0 OR coalesce(v_attempted_but_unproven_count, 0) > 0,
+    'has_submitted_state', coalesce(v_provider_submitted_count, 0) > 0,
+    'has_failed_or_rejected_provider_state', coalesce(v_failed_count, 0) > 0,
+    'has_unknown_or_timeout_state', coalesce(v_ambiguous_count, 0) > 0,
+    'requires_provider_poll', coalesce(v_requires_provider_poll_count, 0) > 0,
+    'requires_review', coalesce(v_ambiguous_count, 0) > 0 OR (coalesce(v_attempted_but_unproven_count, 0) > 0 AND coalesce(v_requires_provider_poll_count, 0) = 0)
+  )
+  );
   END IF;
 
   SELECT coalesce(jsonb_agg(status_item.status_value ORDER BY status_item.status_value), '[]'::jsonb)
@@ -20417,7 +20424,8 @@ BEGIN
       AND nullif(btrim(coalesce(event_row.provider_state, '')), '') IS NOT NULL
   ) AS provider_state_item;
 
-  RETURN jsonb_build_object(
+  RETURN (
+  jsonb_build_object(
     'ok', true,
     'pay_batch_id', p_pay_batch_id::text,
     'transfer_count', coalesce(v_transfer_count, 0),
@@ -20449,7 +20457,10 @@ BEGIN
     'provider_attempt_or_evidence_count', coalesce(v_provider_attempt_or_evidence_count, 0),
     'provider_or_ambiguous_evidence_count', coalesce(v_provider_or_ambiguous_evidence_count, 0),
     'cancellable_local_auth_request_count', coalesce(v_cancellable_local_auth_request_count, 0),
-    'non_cancellable_auth_request_count', coalesce(v_non_cancellable_auth_request_count, 0),
+    'non_cancellable_auth_request_count', coalesce(v_non_cancellable_auth_request_count, 0)
+  )
+  ||
+  jsonb_build_object(
     'same_operation_active_auth_request_count', coalesce(v_same_operation_active_auth_request_count, 0),
     'other_operation_active_auth_request_count', coalesce(v_other_operation_active_auth_request_count, 0),
     'auth_request_provider_risk_count', coalesce(v_auth_request_provider_risk_count, 0),
@@ -20485,10 +20496,14 @@ BEGIN
     'has_submitted_state', coalesce(v_provider_submitted_count, 0) > 0,
     'has_processing_state', coalesce(v_transfer_rail_states, '[]'::jsonb) ?| array['PROCESSING','IN_FLIGHT','PENDING_SETTLEMENT','PENDING_CONFIRMATION'],
     'has_completed_state', coalesce(v_committed_count, 0) > 0,
-    'has_failed_or_rejected_provider_state', coalesce(v_failed_count, 0) > 0,
+    'has_failed_or_rejected_provider_state', coalesce(v_failed_count, 0) > 0
+  )
+  ||
+  jsonb_build_object(
     'has_unknown_or_timeout_state', coalesce(v_ambiguous_count, 0) > 0,
     'requires_provider_poll', coalesce(v_requires_provider_poll_count, 0) > 0,
     'requires_review', coalesce(v_ambiguous_count, 0) > 0 OR (coalesce(v_attempted_but_unproven_count, 0) > 0 AND coalesce(v_requires_provider_poll_count, 0) = 0)
+  )
   );
 END;
 $function$;
