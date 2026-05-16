@@ -23706,9 +23706,6 @@ async function handleBankingPayBatchGet(env, req, user, payBatchId) {
   }
 }
 
-
-
-
 async function handleBankingPayBatchesList(env, req, user) {
   try {
     const u = new URL(req.url);
@@ -23720,6 +23717,307 @@ async function handleBankingPayBatchesList(env, req, user) {
       if (v < lo) return lo;
       if (v > hi) return hi;
       return v;
+    };
+
+    const normaliseListRpcPayload = (rpcRes) => {
+      let payload = rpcRes;
+      try {
+        if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') {
+          payload = rpcRes[0];
+        }
+        if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'pay_batches_list')) {
+          payload = payload.pay_batches_list;
+        }
+      } catch {}
+      const obj = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+      const items = Array.isArray(obj.rows) ? obj.rows : [];
+      const count = Number.isFinite(Number(obj.total_count)) ? Math.trunc(Number(obj.total_count)) : items.length;
+      const bankingAlerts = Array.isArray(obj.banking_alerts) ? obj.banking_alerts : [];
+      const bankingUnacknowledgedAlertCount = Number.isFinite(Number(obj.banking_unacknowledged_alert_count))
+        ? Math.max(0, Math.trunc(Number(obj.banking_unacknowledged_alert_count)))
+        : bankingAlerts.filter((alert) => alert && alert.acknowledged_for_current_user !== true).length;
+
+      return {
+        ok: true,
+        items,
+        count,
+        limit: Number.isFinite(Number(obj.limit)) ? Math.trunc(Number(obj.limit)) : limit,
+        offset: Number.isFinite(Number(obj.offset)) ? Math.trunc(Number(obj.offset)) : offset,
+        banking_alerts: bankingAlerts,
+        banking_alert_summary: obj.banking_alert_summary || null,
+        banking_unacknowledged_alert_count: bankingUnacknowledgedAlertCount,
+        banking_highest_alert_label: obj.banking_highest_alert_label || null,
+        banking_highest_alert_severity: obj.banking_highest_alert_severity || null,
+        banking_alert_hash: obj.banking_alert_hash || obj.banking_alert_summary?.alert_hash || null,
+        alert_metadata_degraded: obj.alert_metadata_degraded === true,
+        alert_metadata_warning: obj.alert_metadata_warning || null,
+        list_degraded: obj.list_degraded === true
+      };
+    };
+
+    const stringifyErrorForDetection = (error) => {
+      try {
+        if (error == null) return '';
+        if (typeof error === 'string') return error;
+        if (error instanceof Error) {
+          return [error.name, error.message, error.code, error.error_code, error.details, error.hint, error.stack].filter(Boolean).join('\n');
+        }
+        if (typeof error === 'object') {
+          const seen = new WeakSet();
+          return JSON.stringify(error, (_key, value) => {
+            if (typeof value === 'bigint') return value.toString();
+            if (value instanceof Error) {
+              return {
+                name: value.name,
+                message: value.message,
+                code: value.code,
+                error_code: value.error_code,
+                details: value.details,
+                hint: value.hint,
+                stack: value.stack
+              };
+            }
+            if (value && typeof value === 'object') {
+              if (seen.has(value)) return '[Circular]';
+              seen.add(value);
+            }
+            return value;
+          });
+        }
+        return String(error);
+      } catch {
+        return String(error?.message || error || '');
+      }
+    };
+
+    const isDegradablePayBatchesListRpcError = (error) => {
+      const text = stringifyErrorForDetection(error);
+      const lower = text.toLowerCase();
+      const upper = text.toUpperCase();
+      const code = String(error?.code || error?.error_code || error?.status || '').trim().toUpperCase();
+
+      const hardFailureMarkers = [
+        'permission denied',
+        'row-level security',
+        'rls',
+        '42501',
+        'auth',
+        'jwt',
+        'not authenticated',
+        'not authorized',
+        'unauthorized',
+        'invalid input syntax',
+        '22p02',
+        'malformed array literal',
+        'malformed json',
+        'invalid filter',
+        'missing required',
+        'relation "public.pay_batches" does not exist',
+        'relation pay_batches does not exist',
+        'column "',
+        'column ',
+        'does not exist',
+        '42p01',
+        '42703',
+        '42883',
+        '42601',
+        'syntax error',
+        'schema cache',
+        'pgrst'
+      ];
+      const isAlertRelated = lower.includes('banking_alerts_active_for_user')
+        || lower.includes('banking alerts')
+        || lower.includes('banking_alert')
+        || lower.includes('alert registry')
+        || lower.includes('alert hydration')
+        || lower.includes('alert expansion')
+        || lower.includes('alert json')
+        || lower.includes('jsonb_array_elements')
+        || lower.includes('acknowledged_for_current_user')
+        || lower.includes('alert_fingerprint');
+      const isDebugHookRelated = lower.includes('pldbgapi2')
+        || lower.includes('cannot find parent statement')
+        || lower.includes('debug hook')
+        || lower.includes('debugger');
+      const isInternalAlertDebug = code === 'XX000' || upper.includes('XX000') || isDebugHookRelated;
+
+      if (!isAlertRelated && !isDebugHookRelated && !isInternalAlertDebug) return false;
+
+      if (hardFailureMarkers.some((marker) => lower.includes(marker)) && !isAlertRelated && !isDebugHookRelated && code !== 'XX000') {
+        return false;
+      }
+
+      if ((lower.includes('relation') || lower.includes('column')) && lower.includes('does not exist') && !isAlertRelated && !isDebugHookRelated) {
+        return false;
+      }
+
+      return isAlertRelated || isDebugHookRelated || isInternalAlertDebug;
+    };
+
+    const normaliseFallbackPayBatchListRows = (rows) => {
+      return (Array.isArray(rows) ? rows : []).map((row) => {
+        const source = row && typeof row === 'object' && !Array.isArray(row) ? row : {};
+        return {
+          id: source.id ? String(source.id) : null,
+          pay_date: source.pay_date || null,
+          authoritative_payment_date: source.authoritative_payment_date || null,
+          authoritative_payment_date_source: source.authoritative_payment_date_source || null,
+          created_at_utc: source.created_at_utc || null,
+          created_by_user_id: source.created_by_user_id ? String(source.created_by_user_id) : null,
+          status: source.status || null,
+          banking_system_snapshot: source.banking_system_snapshot || null,
+          external_paye_system_snapshot: source.external_paye_system_snapshot || null,
+          batch_kind_fixed: source.batch_kind_fixed || null,
+          batch_kind: source.batch_kind_fixed || null,
+          pay_channels_present: [],
+          batch_display_classification: null,
+          same_week_paye_override_used: source.same_week_paye_override_used === true,
+          same_week_paye_override_reason: source.same_week_paye_override_reason || null,
+          same_week_paye_override_verified_at_utc: source.same_week_paye_override_verified_at_utc || null,
+          same_week_paye_override_verified_by_user_id: source.same_week_paye_override_verified_by_user_id ? String(source.same_week_paye_override_verified_by_user_id) : null,
+          source_workbench_session_id: source.source_workbench_session_id ? String(source.source_workbench_session_id) : null,
+          source_snapshot_run_id: source.source_snapshot_run_id ? String(source.source_snapshot_run_id) : null,
+          source_session_version: source.source_session_version ?? null,
+          execution_commit_state: source.execution_commit_state || null,
+          execution_commit_ref: source.execution_commit_ref || null,
+          execution_committed_at_utc: source.execution_committed_at_utc || null,
+          remittance_summary: {
+            candidate_count: null,
+            sent_count: null,
+            unsent_count: null,
+            error_count: null,
+            latest_sent_at_utc: null,
+            all_sent: null,
+            trigger_statuses: []
+          },
+          rail_provider_snapshot: source.rail_provider_snapshot || null,
+          rail_env_snapshot: source.rail_env_snapshot || null,
+          schedule_kind: source.schedule_kind || null,
+          scheduled_at_utc: source.scheduled_at_utc || null,
+          executing_started_at_utc: source.executing_started_at_utc || null,
+          last_status_checked_at_utc: source.last_status_checked_at_utc || null,
+          last_funds_check_at_utc: source.last_funds_check_at_utc || null,
+          last_funds_check_json: source.last_funds_check_json || null,
+          funding_account_ref: source.funding_account_ref || null,
+          blocked_funds_required_gbp: null,
+          blocked_funds_available_gbp: null,
+          blocked_funds_provider: source.rail_provider_snapshot || null,
+          blocked_funds_env: source.rail_env_snapshot || null,
+          blocked_funds_account_ref: source.funding_account_ref || null,
+          banking_alerts: [],
+          banking_alert_kind: null,
+          banking_alert_severity: null,
+          banking_alert_label: null,
+          banking_alert_reason: null,
+          banking_alert_fingerprint: null,
+          banking_alert_acknowledged_for_user: false,
+          banking_alert_requires_attention: false,
+          manual_confirmed_at_utc: source.monzo_confirmed_at_utc || null,
+          manual_confirmed_by_user_id: source.monzo_confirmed_by_user_id ? String(source.monzo_confirmed_by_user_id) : null,
+          monzo_confirmed_at_utc: source.monzo_confirmed_at_utc || null,
+          monzo_confirmed_by_user_id: source.monzo_confirmed_by_user_id ? String(source.monzo_confirmed_by_user_id) : null,
+          total_bank_out: source.total_bank_out ?? null,
+          total_debt_created: source.total_debt_created ?? null,
+          bulk_ref_num: source.bulk_ref_num || null,
+          bulk_ref_date: source.bulk_ref_date || null,
+          bulk_reference: source.bulk_reference || null,
+          auth_required_quantity: null,
+          auth_approved_count: null,
+          auth_label: null,
+          auth_state: null,
+          movement_classification: null,
+          correction_status: null,
+          correction_required_count: null,
+          failed_returned_event_count: null,
+          unwound_amount_inc_vat: null,
+          reversed_amount_inc_vat: null,
+          remaining_paid_amount_inc_vat: null,
+          latest_bank_failure_at_utc: null,
+          latest_correction_action_at_utc: null,
+          latest_correction_request_status: null,
+          latest_correction_request_kind: null,
+          correction_processing_count: null,
+          correction_waiting_approval_count: null,
+          correction_blocked_count: null,
+          correction_failed_count: null,
+          correction_work_blocked_count: null,
+          correction_work_failed_retryable_count: null,
+          correction_work_failed_final_count: null,
+          correction_work_pending_count: null,
+          correction_work_processing_count: null,
+          correction_requires_user_action: false
+        };
+      });
+    };
+
+    const fetchPayBatchesListFallback = async ({ limit, offset, status, warning }) => {
+      const enc = encodeURIComponent;
+      const statusFilter = status ? `&status=eq.${enc(status)}` : '';
+      const rowSelect = [
+        'id',
+        'pay_date',
+        'authoritative_payment_date',
+        'authoritative_payment_date_source',
+        'created_at_utc',
+        'created_by_user_id',
+        'status',
+        'banking_system_snapshot',
+        'external_paye_system_snapshot',
+        'batch_kind_fixed',
+        'same_week_paye_override_used',
+        'same_week_paye_override_reason',
+        'same_week_paye_override_verified_at_utc',
+        'same_week_paye_override_verified_by_user_id',
+        'source_workbench_session_id',
+        'source_snapshot_run_id',
+        'source_session_version',
+        'execution_commit_state',
+        'execution_commit_ref',
+        'execution_committed_at_utc',
+        'rail_provider_snapshot',
+        'rail_env_snapshot',
+        'schedule_kind',
+        'scheduled_at_utc',
+        'executing_started_at_utc',
+        'last_status_checked_at_utc',
+        'last_funds_check_at_utc',
+        'last_funds_check_json',
+        'funding_account_ref',
+        'monzo_confirmed_at_utc',
+        'monzo_confirmed_by_user_id',
+        'total_bank_out',
+        'total_debt_created',
+        'bulk_ref_num',
+        'bulk_ref_date',
+        'bulk_reference'
+      ].join(',');
+
+      const countUrl = `${env.SUPABASE_URL}/rest/v1/pay_batches?select=id${statusFilter}&order=created_at_utc.desc,id.desc&limit=50000`;
+      const rowsUrl = `${env.SUPABASE_URL}/rest/v1/pay_batches?select=${enc(rowSelect)}${statusFilter}&order=created_at_utc.desc,id.desc&limit=${limit}&offset=${offset}`;
+      const [countRes, rowRes] = await Promise.all([
+        sbFetch(env, countUrl, false),
+        sbFetch(env, rowsUrl, false)
+      ]);
+      const countRows = countRes && Array.isArray(countRes.rows) ? countRes.rows : [];
+      const rawRows = rowRes && Array.isArray(rowRes.rows) ? rowRes.rows : [];
+      const items = normaliseFallbackPayBatchListRows(rawRows);
+
+      return {
+        ok: true,
+        items,
+        count: countRows.length,
+        limit,
+        offset,
+        banking_alerts: [],
+        banking_alert_summary: null,
+        banking_unacknowledged_alert_count: 0,
+        banking_highest_alert_severity: null,
+        banking_highest_alert_label: null,
+        banking_alert_hash: null,
+        alert_metadata_degraded: true,
+        list_degraded: true,
+        warning
+      };
     };
 
     const limit = clampInt(u.searchParams.get('limit'), 50, 1, 500);
@@ -23739,42 +24037,28 @@ async function handleBankingPayBatchesList(env, req, user) {
       rpcArgs.p_actor_user_id = actorUserId;
     }
 
-    const rpcRes = await sbRpc(env, 'pay_batches_list', rpcArgs);
-
-    let payload = rpcRes;
+    let responsePayload;
     try {
-      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') {
-        payload = rpcRes[0];
-      }
-      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'pay_batches_list')) {
-        payload = payload.pay_batches_list;
-      }
-    } catch {}
+      const rpcRes = await sbRpc(env, 'pay_batches_list', rpcArgs);
+      responsePayload = normaliseListRpcPayload(rpcRes);
+    } catch (rpcError) {
+      if (!isDegradablePayBatchesListRpcError(rpcError)) throw rpcError;
+      const warning = {
+        code: 'PAY_BATCHES_LIST_ALERT_METADATA_DEGRADED',
+        message: 'Banking payment batch list was loaded without live alert metadata because alert enrichment failed.',
+        source: 'pay_batches_list',
+        error: String(rpcError?.message || rpcError || ''),
+        error_code: rpcError?.code || rpcError?.error_code || null
+      };
+      responsePayload = await fetchPayBatchesListFallback({ limit, offset, status, warning });
+    }
 
-    const obj = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
-    const items = Array.isArray(obj.rows) ? obj.rows : [];
-    const count = Number.isFinite(Number(obj.total_count)) ? Math.trunc(Number(obj.total_count)) : items.length;
-
-    const bankingAlerts = Array.isArray(obj.banking_alerts) ? obj.banking_alerts : [];
-    const bankingUnacknowledgedAlertCount = Number.isFinite(Number(obj.banking_unacknowledged_alert_count))
-      ? Math.max(0, Math.trunc(Number(obj.banking_unacknowledged_alert_count)))
-      : bankingAlerts.filter((alert) => alert && alert.acknowledged_for_current_user !== true).length;
-
-    return withCORS(env, req, ok({
-      ok: true,
-      items,
-      count,
-      limit: Number.isFinite(Number(obj.limit)) ? Math.trunc(Number(obj.limit)) : limit,
-      offset: Number.isFinite(Number(obj.offset)) ? Math.trunc(Number(obj.offset)) : offset,
-      banking_alerts: bankingAlerts,
-      banking_unacknowledged_alert_count: bankingUnacknowledgedAlertCount,
-      banking_highest_alert_label: obj.banking_highest_alert_label || null,
-      banking_highest_alert_severity: obj.banking_highest_alert_severity || null
-    }));
+    return withCORS(env, req, ok(responsePayload));
   } catch (e) {
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
 }
+
 
 
 async function handleBankingIdLedgerList(env, req, user) {
@@ -37526,6 +37810,171 @@ const scopedReadinessFailurePayload = (phaseText, payload = {}) => {
   };
 };
 
+const upperString = (value) => String(value == null ? '' : value).trim().toUpperCase();
+const firstNonBlank = (...values) => {
+  for (const value of values) {
+    if (value === null || value === undefined) continue;
+    const text = String(value).trim();
+    if (text) return text;
+  }
+  return null;
+};
+const collectSubmittedErrorCodes = (submitted) => {
+  const source = safeObject(submitted);
+  const codes = [];
+  const push = (value) => {
+    const code = upperString(value);
+    if (code && !codes.includes(code)) codes.push(code);
+  };
+  push(source.code);
+  push(source.error_code);
+  push(source.business_code);
+  push(source.claim_blocker_code);
+  push(source.claimBlockerCode);
+  for (const err of Array.isArray(source.errors) ? source.errors : []) {
+    if (!err || typeof err !== 'object') continue;
+    push(err.code);
+    push(err.error_code);
+    push(err.errorCode);
+    push(err.business_code);
+    push(err.claim_blocker_code);
+    push(err.claimBlockerCode);
+  }
+  return codes;
+};
+const extractFundsCheckJson = (submitted) => {
+  const source = safeObject(submitted);
+  const direct = safeObject(source.funds_check_json || source.fundsCheckJson || source.funds_check || source.fundsCheck);
+  if (Object.keys(direct).length) return direct;
+  for (const err of Array.isArray(source.errors) ? source.errors : []) {
+    const candidate = safeObject(err && (err.funds_check_json || err.fundsCheckJson || err.funds_check || err.fundsCheck));
+    if (Object.keys(candidate).length) return candidate;
+  }
+  return {};
+};
+const countSubmittedProviderEvidence = (submitted) => {
+  const source = safeObject(submitted);
+  const fundsCheckJson = extractFundsCheckJson(source);
+  const roots = [source, fundsCheckJson, ...((Array.isArray(source.errors) ? source.errors : []).map((err) => safeObject(err)))];
+  let maxCount = 0;
+  for (const obj of roots) {
+    maxCount = Math.max(
+      maxCount,
+      numField(obj, 'provider_attempt_or_evidence_count', 'providerAttemptOrEvidenceCount', 'provider_attempt_or_evidence_transfer_count', 'providerAttemptOrEvidenceTransferCount'),
+      numField(obj, 'provider_or_ambiguous_evidence_count', 'providerOrAmbiguousEvidenceCount', 'provider_or_ambiguous_evidence_transfer_count', 'providerOrAmbiguousEvidenceTransferCount'),
+      numField(obj, 'provider_evidence_count', 'providerEvidenceCount'),
+      numField(obj, 'remaining_provider_evidence_required', 'remainingProviderEvidenceRequired'),
+      numField(obj, 'attempted_but_unproven_count', 'attemptedButUnprovenCount'),
+      numField(obj, 'provider_attempt_without_external_id_count', 'providerAttemptWithoutExternalIdCount'),
+      numField(obj, 'ambiguous_count', 'ambiguousCount')
+    );
+  }
+  return maxCount;
+};
+const hasProviderEvidenceFromSubmitted = (submitted) => countSubmittedProviderEvidence(submitted) > 0;
+const extractFundingPreflightDiagnostics = (submitted) => {
+  const source = safeObject(submitted);
+  const firstError = Array.isArray(source.errors) && source.errors.length ? safeObject(source.errors[0]) : {};
+  const fundsCheckJson = extractFundsCheckJson(source);
+  const codes = collectSubmittedErrorCodes(source);
+  const sufficientValue = fundsCheckJson.sufficient;
+  const fundsCheckSaysBlocked = sufficientValue === false || String(sufficientValue).trim().toLowerCase() === 'false';
+  let code = codes.find((item) => item === 'BLOCKED_FUNDS') || null;
+  if (!code && fundsCheckSaysBlocked) code = 'BLOCKED_FUNDS';
+  if (!code) code = codes.find((item) => ['FUNDS_CHECK_FAILED', 'FUNDING_ACCOUNT_REF_MISSING', 'SCHEDULED_BATCH_MISSING_FUNDING_ACCOUNT_REF'].includes(item)) || null;
+  const rawText = stringifyForDetection(source).toUpperCase();
+  if (!code && (rawText.includes('INSUFFICIENT') || rawText.includes('BLOCKED_FUNDS'))) code = 'BLOCKED_FUNDS';
+  if (!code && (rawText.includes('FUNDING_ACCOUNT_REF_MISSING') || rawText.includes('SCHEDULED_BATCH_MISSING_FUNDING_ACCOUNT_REF') || rawText.includes('FUNDING ACCOUNT REFERENCE IS REQUIRED'))) code = 'FUNDING_ACCOUNT_REF_MISSING';
+  if (!code && rawText.includes('FUNDS_CHECK_FAILED')) code = 'FUNDS_CHECK_FAILED';
+  const normalisedCode = code === 'SCHEDULED_BATCH_MISSING_FUNDING_ACCOUNT_REF' ? 'FUNDING_ACCOUNT_REF_MISSING' : code;
+  return {
+    code: normalisedCode,
+    original_code: code,
+    message: firstNonBlank(source.message, firstError.message, firstError.error, normalisedCode === 'BLOCKED_FUNDS' ? 'The selected funding account does not have enough available balance to make this payment.' : null, 'Funding preflight failed.'),
+    funds_check_json: fundsCheckJson,
+    required_gbp: Number(source.required_gbp ?? source.requiredGbp ?? firstError.required_gbp ?? firstError.requiredGbp ?? fundsCheckJson.required_gbp ?? fundsCheckJson.requiredGbp),
+    available_gbp: Number(source.available_gbp ?? source.availableGbp ?? firstError.available_gbp ?? firstError.availableGbp ?? fundsCheckJson.available_gbp ?? fundsCheckJson.availableGbp),
+    funding_account_ref: firstNonBlank(source.funding_account_ref, source.fundingAccountRef, firstError.funding_account_ref, firstError.fundingAccountRef, fundsCheckJson.funding_account_ref, fundsCheckJson.fundingAccountRef, fundingAccountRef),
+    funding_account_ref_source: firstNonBlank(source.funding_account_ref_source, firstError.funding_account_ref_source, fundsCheckJson.funding_account_ref_source),
+    funding_account_ref_fallback_used: boolField(source, 'funding_account_ref_fallback_used') || boolField(firstError, 'funding_account_ref_fallback_used') || boolField(fundsCheckJson, 'funding_account_ref_fallback_used'),
+    funding_account_ref_candidates_checked: Array.isArray(source.funding_account_ref_candidates_checked) ? source.funding_account_ref_candidates_checked : (Array.isArray(firstError.funding_account_ref_candidates_checked) ? firstError.funding_account_ref_candidates_checked : (Array.isArray(fundsCheckJson.funding_account_ref_candidates_checked) ? fundsCheckJson.funding_account_ref_candidates_checked : [])),
+    funding_account_ref_resolution_json: safeObject(source.funding_account_ref_resolution_json || firstError.funding_account_ref_resolution_json || fundsCheckJson.funding_account_ref_resolution_json),
+    provider_submission_attempted: boolField(source, 'provider_submission_attempted', 'submitted_to_bank') || boolField(firstError, 'provider_submission_attempted', 'submitted_to_bank')
+  };
+};
+const isFundingPreflightError = (submitted) => {
+  const diagnostics = extractFundingPreflightDiagnostics(submitted);
+  if (['BLOCKED_FUNDS', 'FUNDS_CHECK_FAILED', 'FUNDING_ACCOUNT_REF_MISSING'].includes(diagnostics.code)) return true;
+  const rawText = stringifyForDetection(submitted).toUpperCase();
+  return rawText.includes('INSUFFICIENT FUNDS')
+    || rawText.includes('BLOCKED_FUNDS')
+    || rawText.includes('FUNDS_CHECK_FAILED')
+    || rawText.includes('FUNDING_ACCOUNT_REF_MISSING')
+    || rawText.includes('SCHEDULED_BATCH_MISSING_FUNDING_ACCOUNT_REF')
+    || rawText.includes('FUNDING ACCOUNT REFERENCE IS REQUIRED');
+};
+const buildControlledFundingFailurePayload = (submitted) => {
+  const diagnostics = extractFundingPreflightDiagnostics(submitted);
+  const isBlocked = diagnostics.code === 'BLOCKED_FUNDS';
+  const code = isBlocked ? 'BLOCKED_FUNDS' : (diagnostics.code || 'FUNDS_CHECK_FAILED');
+  const message = isBlocked
+    ? 'The selected funding account does not have enough available balance to make this payment.'
+    : (code === 'FUNDING_ACCOUNT_REF_MISSING'
+      ? 'Funding account reference is required for provider submission.'
+      : 'Funds check failed before provider submission.');
+  const result = {
+    ok: false,
+    code,
+    business_code: code,
+    status: isBlocked ? 'BLOCKED_FUNDS' : 'FAILED',
+    post_execution_status: isBlocked ? 'BLOCKED_FUNDS' : 'FAILED',
+    pay_batch_id: payBatchId,
+    operation_id: operationId,
+    phase: currentPhase,
+    provider_submission_status: code,
+    blocked_funds: isBlocked,
+    submitted_to_bank: false,
+    provider_submission_attempted: false,
+    retry_blocked: isBlocked,
+    review_required: false,
+    safe_retry_available: isBlocked ? false : true,
+    claim_blocker_code: code,
+    required_gbp: Number.isFinite(diagnostics.required_gbp) ? diagnostics.required_gbp : null,
+    available_gbp: Number.isFinite(diagnostics.available_gbp) ? diagnostics.available_gbp : null,
+    funding_account_ref: diagnostics.funding_account_ref || null,
+    funding_account_ref_source: diagnostics.funding_account_ref_source || null,
+    funding_account_ref_fallback_used: diagnostics.funding_account_ref_fallback_used === true,
+    funding_account_ref_candidates_checked: diagnostics.funding_account_ref_candidates_checked,
+    funding_account_ref_resolution_json: Object.keys(diagnostics.funding_account_ref_resolution_json).length ? diagnostics.funding_account_ref_resolution_json : null,
+    funds_check_json: Object.keys(diagnostics.funds_check_json).length ? diagnostics.funds_check_json : null,
+    provider_submission: submitted,
+    message
+  };
+  const error = {
+    code,
+    business_code: code,
+    message,
+    phase: currentPhase,
+    pay_batch_id: payBatchId,
+    operation_id: operationId,
+    blocked_funds: isBlocked,
+    submitted_to_bank: false,
+    provider_submission_attempted: false,
+    retry_blocked: isBlocked,
+    review_required: false,
+    safe_retry_available: isBlocked ? false : true,
+    required_gbp: result.required_gbp,
+    available_gbp: result.available_gbp,
+    funding_account_ref: result.funding_account_ref,
+    funding_account_ref_source: result.funding_account_ref_source,
+    funding_account_ref_fallback_used: result.funding_account_ref_fallback_used,
+    funding_account_ref_candidates_checked: result.funding_account_ref_candidates_checked,
+    funding_account_ref_resolution_json: result.funding_account_ref_resolution_json,
+    funds_check_json: result.funds_check_json
+  };
+  return { code, isBlocked, diagnostics, result, error };
+};
+
 try {
 if (currentPhase === 'INITIALISE' || currentPhase === 'VALIDATE_BATCH') {
 const summary = unwrapRpcPayload(await sbRpc(env, 'pay_batch_execution_summary_get', {
@@ -38113,6 +38562,10 @@ if (currentPhase === 'SUBMIT_PROVIDER_TRANSFERS') {
       required_gbp: Number.isFinite(requiredGbp) ? requiredGbp : null,
       available_gbp: Number.isFinite(availableGbp) ? availableGbp : null,
       funding_account_ref: firstBlockedFunds.funding_account_ref || fundsCheckJson.funding_account_ref || fundingAccountRef || null,
+      funding_account_ref_source: firstBlockedFunds.funding_account_ref_source || fundsCheckJson.funding_account_ref_source || submitted.funding_account_ref_source || null,
+      funding_account_ref_fallback_used: boolField(firstBlockedFunds, 'funding_account_ref_fallback_used') || boolField(fundsCheckJson, 'funding_account_ref_fallback_used') || boolField(submitted, 'funding_account_ref_fallback_used'),
+      funding_account_ref_candidates_checked: Array.isArray(firstBlockedFunds.funding_account_ref_candidates_checked) ? firstBlockedFunds.funding_account_ref_candidates_checked : (Array.isArray(fundsCheckJson.funding_account_ref_candidates_checked) ? fundsCheckJson.funding_account_ref_candidates_checked : (Array.isArray(submitted.funding_account_ref_candidates_checked) ? submitted.funding_account_ref_candidates_checked : [])),
+      funding_account_ref_resolution_json: safeObject(firstBlockedFunds.funding_account_ref_resolution_json || fundsCheckJson.funding_account_ref_resolution_json || submitted.funding_account_ref_resolution_json),
       rail_provider: firstBlockedFunds.rail_provider || fundsCheckJson.rail_provider || provider || null,
       rail_env: firstBlockedFunds.rail_env || fundsCheckJson.rail_env || null,
       funds_check_json: Object.keys(fundsCheckJson).length ? fundsCheckJson : null,
@@ -38136,10 +38589,27 @@ if (currentPhase === 'SUBMIT_PROVIDER_TRANSFERS') {
       required_gbp: blockedFundsPayload.required_gbp,
       available_gbp: blockedFundsPayload.available_gbp,
       funding_account_ref: blockedFundsPayload.funding_account_ref,
+      funding_account_ref_source: blockedFundsPayload.funding_account_ref_source,
+      funding_account_ref_fallback_used: blockedFundsPayload.funding_account_ref_fallback_used,
+      funding_account_ref_candidates_checked: blockedFundsPayload.funding_account_ref_candidates_checked,
+      funding_account_ref_resolution_json: blockedFundsPayload.funding_account_ref_resolution_json,
       rail_provider: blockedFundsPayload.rail_provider,
       rail_env: blockedFundsPayload.rail_env,
       funds_check_json: blockedFundsPayload.funds_check_json
     });
+  }
+  if (submitted && isFundingPreflightError(submitted) && !hasProviderEvidenceFromSubmitted(submitted)) {
+    const controlledFundingFailure = buildControlledFundingFailurePayload(submitted);
+    if (controlledFundingFailure.isBlocked && controlledFundingFailure.result.funds_check_json) {
+      try {
+        await sbRpc(env, 'pay_batch_mark_blocked_funds', {
+          p_pay_batch_id: payBatchId,
+          p_actor_user_id: actorUserId,
+          p_funds_check_json: controlledFundingFailure.result.funds_check_json
+        });
+      } catch {}
+    }
+    return finish('FAILED', controlledFundingFailure.result, controlledFundingFailure.error);
   }
   if (submitted && Array.isArray(submitted.errors) && submitted.errors.length) {
     const submittedErrorCodes = submitted.errors
@@ -38331,15 +38801,41 @@ if (currentPhase === 'APPLY_RAIL_UPDATES') {
     }
   }
 
-  if (!canMarkSubmitted && (remainingProviderEvidenceRequired > 0 || attemptedButUnprovenCount > 0 || localOnlyCount > 0 || ambiguousCount > 0 || executionMode === 'STANDARD_BANK')) {
+  const providerAttemptOrEvidenceFromEvidence = Number(evidence.provider_attempt_or_evidence_count || evidence.providerAttemptOrEvidenceCount || 0);
+  const providerOrAmbiguousEvidenceFromEvidence = Number(evidence.provider_or_ambiguous_evidence_count || evidence.providerOrAmbiguousEvidenceCount || 0);
+  const unsafeTransferFromEvidence = Number(evidence.unsafe_transfer_count || evidence.unsafeTransferCount || 0);
+  const hasProviderEvidenceOrAmbiguity = [
+    remainingProviderEvidenceRequired,
+    attemptedButUnprovenCount,
+    localOnlyCount,
+    ambiguousCount,
+    providerAttemptOrEvidenceFromEvidence,
+    providerOrAmbiguousEvidenceFromEvidence,
+    unsafeTransferFromEvidence
+  ].some((value) => Number.isFinite(Number(value)) && Number(value) > 0);
+
+  if (!canMarkSubmitted && hasProviderEvidenceOrAmbiguity) {
     return fail('PROVIDER_SUBMISSION_EVIDENCE_REQUIRED', 'Bank submission needs provider evidence before CloudTMS can mark the payment as submitted.', {
       phase: currentPhase,
-      provider_attempt_or_evidence_transfer_count: Number(evidence.provider_attempt_or_evidence_count || evidence.providerAttemptOrEvidenceCount || 0),
-      provider_or_ambiguous_evidence_transfer_count: Number(evidence.provider_or_ambiguous_evidence_count || evidence.providerOrAmbiguousEvidenceCount || 0),
-      unsafe_transfer_count: Number(evidence.unsafe_transfer_count || evidence.unsafeTransferCount || 0),
+      provider_attempt_or_evidence_transfer_count: providerAttemptOrEvidenceFromEvidence,
+      provider_or_ambiguous_evidence_transfer_count: providerOrAmbiguousEvidenceFromEvidence,
+      unsafe_transfer_count: unsafeTransferFromEvidence,
       remaining_submit_attempt_required: Number(evidence.remaining_submit_attempt_required || evidence.remainingSubmitAttemptRequired || 0),
       remaining_provider_evidence_required: Number(evidence.remaining_provider_evidence_required || evidence.remainingProviderEvidenceRequired || 0),
       attempted_but_unproven_count: Number(evidence.attempted_but_unproven_count || evidence.attemptedButUnprovenCount || 0)
+    });
+  }
+
+  if (!canMarkSubmitted && executionMode === 'STANDARD_BANK') {
+    return fail('PROVIDER_SUBMIT_NO_ELIGIBLE_TRANSFERS', 'The authorised bank transfer could not be safely claimed for provider submission and no provider submission evidence was found.', {
+      phase: currentPhase,
+      provider_attempt_or_evidence_transfer_count: providerAttemptOrEvidenceFromEvidence,
+      provider_or_ambiguous_evidence_transfer_count: providerOrAmbiguousEvidenceFromEvidence,
+      unsafe_transfer_count: unsafeTransferFromEvidence,
+      remaining_submit_attempt_required: Number(evidence.remaining_submit_attempt_required || evidence.remainingSubmitAttemptRequired || 0),
+      remaining_provider_evidence_required: Number(evidence.remaining_provider_evidence_required || evidence.remainingProviderEvidenceRequired || 0),
+      attempted_but_unproven_count: Number(evidence.attempted_but_unproven_count || evidence.attemptedButUnprovenCount || 0),
+      no_provider_evidence_found: true
     });
   }
   return phaseProgress('RUNNING', 'QUEUE_REMITTANCES', { status_text: 'Bank submission evidence checked.', submission_evidence: evidence });
@@ -129070,6 +129566,7 @@ async function cleanupStaleRailPayeeMappingsForHash(env, { entity_kind, entity_i
 }
 
 
+
 function getRailAdapter(provider) {
   // -----------------------------
   // Single source of truth registry
@@ -129741,7 +130238,7 @@ function getRailAdapter(provider) {
           });
         },
 
-        async executeDueBatches(env, { nowUtc, limit, claimedRows, actorUserId, perBatchSubmitLimit, operationMode, operation_id, operationId, pay_batch_id, payBatchId, providerSubmitChunkSize, lockOwner, lock_seconds } = {}) {
+        async executeDueBatches(env, { nowUtc, limit, claimedRows, actorUserId, perBatchSubmitLimit, operationMode, operation_id, operationId, pay_batch_id, payBatchId, providerSubmitChunkSize, lockOwner, lock_seconds, fundingAccountRef, funding_account_ref } = {}) {
           const nowIso = nowUtc ? String(nowUtc) : new Date().toISOString();
           const apiBase = (env && env.REVOLUT_API_BASE !== undefined && env.REVOLUT_API_BASE !== null) ? String(env.REVOLUT_API_BASE) : '';
           const workerEnv = getRevolutWorkerEnv(env);
@@ -129805,6 +130302,137 @@ function getRailAdapter(provider) {
             return null;
           };
 
+          const readObject = (value) => (value && typeof value === 'object' && !Array.isArray(value)) ? value : {};
+          const readFundingRef = (value) => {
+            const text = String(value === undefined || value === null ? '' : value).trim();
+            return text || null;
+          };
+          const addFundingCandidate = (candidates, source, sourceDetail, value, meta = {}) => {
+            candidates.push({
+              source,
+              source_detail: sourceDetail,
+              present: !!readFundingRef(value),
+              funding_account_ref: readFundingRef(value),
+              ...readObject(meta)
+            });
+          };
+          const firstFundingFromObject = (obj) => {
+            const source = readObject(obj);
+            return readFundingRef(source.funding_account_ref)
+              || readFundingRef(source.fundingAccountRef)
+              || readFundingRef(source.funding_account)
+              || readFundingRef(source.fundingAccount)
+              || readFundingRef(source.source_account_id)
+              || readFundingRef(source.sourceAccountId)
+              || null;
+          };
+          const extractFundingCandidatesFromObject = (candidates, source, sourceDetail, obj, meta = {}) => {
+            const root = readObject(obj);
+            addFundingCandidate(candidates, source, sourceDetail, firstFundingFromObject(root), meta);
+            for (const key of ['auth', 'authorisation', 'authorization', 'execution_intent_json', 'executionIntentJson', 'execution_intent', 'executionIntent', 'settlement_confirmation_json', 'settlementConfirmationJson', 'payment_intent', 'paymentIntent']) {
+              if (root[key] && typeof root[key] === 'object' && !Array.isArray(root[key])) {
+                addFundingCandidate(candidates, source, `${sourceDetail}.${key}`, firstFundingFromObject(root[key]), meta);
+              }
+            }
+          };
+          const fetchOperationFundingContext = async (operationIdText) => {
+            const id = String(operationIdText || '').trim();
+            if (!id) return null;
+            try {
+              const url = `${env.SUPABASE_URL}/rest/v1/banking_pay_operations?id=eq.${encodeURIComponent(id)}&select=id,input_json,progress_json,result_json&limit=1`;
+              const res = await sbFetch(env, url, false);
+              return res && Array.isArray(res.rows) && res.rows.length ? res.rows[0] : null;
+            } catch {
+              return null;
+            }
+          };
+          const fetchAuthRequestFundingContext = async (batchIdText) => {
+            const id = String(batchIdText || '').trim();
+            if (!id) return [];
+            try {
+              const url = `${env.SUPABASE_URL}/rest/v1/pay_batch_auth_requests` +
+                `?pay_batch_id=eq.${encodeURIComponent(id)}` +
+                `&select=id,pay_batch_id,state,funding_account_ref,execution_intent_json,created_at_utc,finalised_at_utc` +
+                `&order=finalised_at_utc.desc.nullslast,created_at_utc.desc,id.desc` +
+                `&limit=10`;
+              const res = await sbFetch(env, url, false);
+              const rows = res && Array.isArray(res.rows) ? res.rows : [];
+              const stateRank = (row) => {
+                const state = String(row && row.state || '').trim().toUpperCase();
+                if (['AUTHORISED', 'AUTHORIZED', 'APPROVED', 'CONFIRMED', 'FINALIZED', 'FINALISED', 'COMPLETE', 'COMPLETED'].includes(state)) return 0;
+                if (row && row.finalised_at_utc) return 1;
+                if (['AWAITING', 'PENDING', 'PENDING_AUTHORISATION', 'PENDING_AUTHORIZATION'].includes(state)) return 2;
+                return 3;
+              };
+              return rows.slice().sort((a, b) => {
+                const rank = stateRank(a) - stateRank(b);
+                if (rank !== 0) return rank;
+                const ad = Date.parse(a && (a.finalised_at_utc || a.created_at_utc) || '') || 0;
+                const bd = Date.parse(b && (b.finalised_at_utc || b.created_at_utc) || '') || 0;
+                return bd - ad;
+              });
+            } catch {
+              return [];
+            }
+          };
+          const resolveExecutionFundingAccountRef = async ({ batchRow, batchIdText, operationIdText }) => {
+            const candidates = [];
+            const batch = readObject(batchRow);
+            const batchValuePresent = !!readFundingRef(batch.funding_account_ref);
+            addFundingCandidate(candidates, 'batch', 'pay_batches.funding_account_ref', batch.funding_account_ref);
+            addFundingCandidate(candidates, 'request', 'adapter.options.fundingAccountRef', fundingAccountRef);
+            addFundingCandidate(candidates, 'request', 'adapter.options.funding_account_ref', funding_account_ref);
+
+            const operationRow = await fetchOperationFundingContext(operationIdText);
+            if (operationRow) {
+              const opInput = readObject(operationRow.input_json);
+              addFundingCandidate(candidates, 'operation', 'banking_pay_operations.input_json.funding_account_ref', opInput.funding_account_ref, { operation_id: operationIdText });
+              addFundingCandidate(candidates, 'operation', 'banking_pay_operations.input_json.fundingAccountRef', opInput.fundingAccountRef, { operation_id: operationIdText });
+              extractFundingCandidatesFromObject(candidates, 'operation', 'banking_pay_operations.progress_json', operationRow.progress_json, { operation_id: operationIdText });
+              extractFundingCandidatesFromObject(candidates, 'operation', 'banking_pay_operations.result_json', operationRow.result_json, { operation_id: operationIdText });
+            }
+
+            const authRows = await fetchAuthRequestFundingContext(batchIdText);
+            for (const authRow of authRows) {
+              const authId = String(authRow && authRow.id || '').trim() || null;
+              const authState = String(authRow && authRow.state || '').trim().toUpperCase() || null;
+              addFundingCandidate(candidates, 'auth', 'pay_batch_auth_requests.funding_account_ref', authRow && authRow.funding_account_ref, { auth_request_id: authId, auth_state: authState });
+            }
+            for (const authRow of authRows) {
+              const authId = String(authRow && authRow.id || '').trim() || null;
+              const authState = String(authRow && authRow.state || '').trim().toUpperCase() || null;
+              addFundingCandidate(candidates, 'auth', 'pay_batch_auth_requests.execution_intent_json.funding_account_ref', firstFundingFromObject(authRow && authRow.execution_intent_json), { auth_request_id: authId, auth_state: authState });
+            }
+
+            addFundingCandidate(candidates, 'batch', 'pay_batches.execution_intent_json.funding_account_ref', firstFundingFromObject(batch.execution_intent_json));
+
+            const selected = candidates.find((candidate) => candidate && candidate.funding_account_ref) || null;
+            const source = selected ? selected.source : null;
+            const resolutionJson = {
+              selected_source: source,
+              selected_source_detail: selected ? selected.source_detail : null,
+              fallback_used: !!(selected && selected.source !== 'batch'),
+              batch_value_present: batchValuePresent,
+              candidates_checked: candidates.map((candidate) => ({
+                source: candidate.source,
+                source_detail: candidate.source_detail,
+                present: candidate.present === true,
+                selected: selected ? candidate === selected : false,
+                auth_request_id: candidate.auth_request_id || null,
+                auth_state: candidate.auth_state || null,
+                operation_id: candidate.operation_id || null
+              }))
+            };
+            return {
+              funding_account_ref: selected ? selected.funding_account_ref : null,
+              funding_account_ref_source: source,
+              funding_account_ref_fallback_used: !!(selected && selected.source !== 'batch'),
+              funding_account_ref_batch_value_present: batchValuePresent,
+              funding_account_ref_candidates_checked: resolutionJson.candidates_checked,
+              funding_account_ref_resolution_json: resolutionJson
+            };
+          };
+
           const out = {
             ok: true,
             operation_mode: !!(operationMode || operationId || operation_id),
@@ -129834,7 +130462,13 @@ function getRailAdapter(provider) {
             requires_poll_or_review: false,
             requires_provider_poll: false,
             requires_review: false,
-            has_more: false
+            has_more: false,
+            funding_account_ref: null,
+            funding_account_ref_source: null,
+            funding_account_ref_fallback_used: false,
+            funding_account_ref_batch_value_present: false,
+            funding_account_ref_candidates_checked: [],
+            funding_account_ref_resolution_json: null
           };
 
           if (!(operationMode || operationId || operation_id)) {
@@ -129877,12 +130511,20 @@ function getRailAdapter(provider) {
           let preflightSufficient = null;
           let preflightToken = null;
           let preflightPayrollTesting = null;
+          let fundingAccountResolution = null;
 
           try {
-            const batchUrl = `${env.SUPABASE_URL}/rest/v1/pay_batches?id=eq.${encodeURIComponent(batchId)}&select=id,funding_account_ref,rail_env_snapshot&limit=1`;
+            const batchUrl = `${env.SUPABASE_URL}/rest/v1/pay_batches?id=eq.${encodeURIComponent(batchId)}&select=id,funding_account_ref,rail_env_snapshot,execution_intent_json&limit=1`;
             const batchRes = await sbFetch(env, batchUrl, false);
             const batchRow = batchRes && Array.isArray(batchRes.rows) && batchRes.rows.length ? batchRes.rows[0] : null;
-            const batchFundingRef = String(batchRow && batchRow.funding_account_ref || '').trim();
+            fundingAccountResolution = await resolveExecutionFundingAccountRef({ batchRow, batchIdText: batchId, operationIdText: opId });
+            out.funding_account_ref_source = fundingAccountResolution.funding_account_ref_source;
+            out.funding_account_ref_fallback_used = fundingAccountResolution.funding_account_ref_fallback_used;
+            out.funding_account_ref_batch_value_present = fundingAccountResolution.funding_account_ref_batch_value_present;
+            out.funding_account_ref_candidates_checked = fundingAccountResolution.funding_account_ref_candidates_checked;
+            out.funding_account_ref_resolution_json = fundingAccountResolution.funding_account_ref_resolution_json;
+            const batchFundingRef = String(fundingAccountResolution.funding_account_ref || '').trim();
+            out.funding_account_ref = batchFundingRef || null;
             const batchRailEnv = String(batchRow && batchRow.rail_env_snapshot || 'PROD').trim().toUpperCase() || 'PROD';
             const expectedEnv = normalizeEnv(batchRailEnv, 'PROD');
             if (expectedEnv !== workerEnv) {
@@ -129926,13 +130568,23 @@ function getRailAdapter(provider) {
             preflightRequired = sumRequired(preflightTransfers);
             preflightPayrollTesting = await _fetchPayrollTestingFlag(env);
 
-            if (!batchFundingRef && preflightTransfers.length) {
+            if (!batchFundingRef) {
               out.ok = false;
-              out.claim_blocker_code = 'SCHEDULED_BATCH_MISSING_FUNDING_ACCOUNT_REF';
+              out.claim_blocker_code = 'FUNDING_ACCOUNT_REF_MISSING';
+              out.provider_submission_attempted = false;
+              out.submitted_to_bank = false;
               out.errors.push({
-                code: 'SCHEDULED_BATCH_MISSING_FUNDING_ACCOUNT_REF',
+                code: 'FUNDING_ACCOUNT_REF_MISSING',
                 pay_batch_id: batchId,
-                message: 'Funding account reference is required for provider submission.'
+                message: 'Funding account reference is required for provider submission.',
+                provider_submission_attempted: false,
+                submitted_to_bank: false,
+                prepared_transfer_count: preflightTransfers.length,
+                funding_account_ref_source: null,
+                funding_account_ref_fallback_used: false,
+                funding_account_ref_batch_value_present: fundingAccountResolution ? fundingAccountResolution.funding_account_ref_batch_value_present : false,
+                funding_account_ref_candidates_checked: fundingAccountResolution ? fundingAccountResolution.funding_account_ref_candidates_checked : [],
+                funding_account_ref_resolution_json: fundingAccountResolution ? fundingAccountResolution.funding_account_ref_resolution_json : null
               });
               return out;
             }
@@ -129949,6 +130601,11 @@ function getRailAdapter(provider) {
                 rail_provider: 'REVOLUT',
                 rail_env: expectedEnv,
                 funding_account_ref: batchFundingRef,
+                funding_account_ref_source: fundingAccountResolution ? fundingAccountResolution.funding_account_ref_source : null,
+                funding_account_ref_fallback_used: fundingAccountResolution ? fundingAccountResolution.funding_account_ref_fallback_used : false,
+                funding_account_ref_batch_value_present: fundingAccountResolution ? fundingAccountResolution.funding_account_ref_batch_value_present : false,
+                funding_account_ref_candidates_checked: fundingAccountResolution ? fundingAccountResolution.funding_account_ref_candidates_checked : [],
+                funding_account_ref_resolution_json: fundingAccountResolution ? fundingAccountResolution.funding_account_ref_resolution_json : null,
                 required_gbp: preflightRequired,
                 available_gbp: preflightAvailable,
                 sufficient: preflightSufficient,
@@ -129987,6 +130644,10 @@ function getRailAdapter(provider) {
                   required_gbp: preflightRequired,
                   available_gbp: preflightAvailable,
                   funding_account_ref: batchFundingRef,
+                  funding_account_ref_source: fundingAccountResolution ? fundingAccountResolution.funding_account_ref_source : null,
+                  funding_account_ref_fallback_used: fundingAccountResolution ? fundingAccountResolution.funding_account_ref_fallback_used : false,
+                  funding_account_ref_candidates_checked: fundingAccountResolution ? fundingAccountResolution.funding_account_ref_candidates_checked : [],
+                  funding_account_ref_resolution_json: fundingAccountResolution ? fundingAccountResolution.funding_account_ref_resolution_json : null,
                   rail_provider: 'REVOLUT',
                   rail_env: expectedEnv,
                   funds_check_json: preflightFundsCheckJson
@@ -129998,6 +130659,10 @@ function getRailAdapter(provider) {
                   required_gbp: preflightRequired,
                   available_gbp: preflightAvailable,
                   funding_account_ref: batchFundingRef,
+                  funding_account_ref_source: fundingAccountResolution ? fundingAccountResolution.funding_account_ref_source : null,
+                  funding_account_ref_fallback_used: fundingAccountResolution ? fundingAccountResolution.funding_account_ref_fallback_used : false,
+                  funding_account_ref_candidates_checked: fundingAccountResolution ? fundingAccountResolution.funding_account_ref_candidates_checked : [],
+                  funding_account_ref_resolution_json: fundingAccountResolution ? fundingAccountResolution.funding_account_ref_resolution_json : null,
                   provider_submission_attempted: false,
                   submitted_to_bank: false
                 });
@@ -130011,6 +130676,11 @@ function getRailAdapter(provider) {
                 rail_provider: 'REVOLUT',
                 rail_env: expectedEnv,
                 funding_account_ref: batchFundingRef,
+                funding_account_ref_source: fundingAccountResolution ? fundingAccountResolution.funding_account_ref_source : null,
+                funding_account_ref_fallback_used: fundingAccountResolution ? fundingAccountResolution.funding_account_ref_fallback_used : false,
+                funding_account_ref_batch_value_present: fundingAccountResolution ? fundingAccountResolution.funding_account_ref_batch_value_present : false,
+                funding_account_ref_candidates_checked: fundingAccountResolution ? fundingAccountResolution.funding_account_ref_candidates_checked : [],
+                funding_account_ref_resolution_json: fundingAccountResolution ? fundingAccountResolution.funding_account_ref_resolution_json : null,
                 required_gbp: preflightRequired,
                 available_gbp: null,
                 sufficient: true,
@@ -130027,7 +130697,11 @@ function getRailAdapter(provider) {
               pay_batch_id: batchId,
               message: String(preflightError?.message || preflightError || 'Funds check failed.'),
               provider_submission_attempted: false,
-              submitted_to_bank: false
+              submitted_to_bank: false,
+              funding_account_ref_source: fundingAccountResolution ? fundingAccountResolution.funding_account_ref_source : null,
+              funding_account_ref_fallback_used: fundingAccountResolution ? fundingAccountResolution.funding_account_ref_fallback_used : false,
+              funding_account_ref_candidates_checked: fundingAccountResolution ? fundingAccountResolution.funding_account_ref_candidates_checked : [],
+              funding_account_ref_resolution_json: fundingAccountResolution ? fundingAccountResolution.funding_account_ref_resolution_json : null
             });
             return out;
           }
@@ -130147,16 +130821,37 @@ function getRailAdapter(provider) {
             throw new Error(`RAIL_ENV_MISMATCH expected_env=${expectedEnv} worker_env=${workerEnv} api_base=${apiBase || ''}`);
           }
 
-          const fundingRef = String(transfers[0]?.funding_account_ref || '').trim();
+          const fundingRef = String(preflightFundingRef || transfers[0]?.funding_account_ref || '').trim();
+          if (fundingRef) out.funding_account_ref = fundingRef;
           if (!fundingRef) {
-            out.errors.push({ code: 'SCHEDULED_BATCH_MISSING_FUNDING_ACCOUNT_REF', pay_batch_id: batchId });
+            out.ok = false;
+            out.claim_blocker_code = 'FUNDING_ACCOUNT_REF_MISSING';
+            out.provider_submission_attempted = false;
+            out.submitted_to_bank = false;
+            out.errors.push({
+              code: 'FUNDING_ACCOUNT_REF_MISSING',
+              pay_batch_id: batchId,
+              message: 'Funding account reference is required for provider submission.',
+              provider_submission_attempted: false,
+              submitted_to_bank: false,
+              funding_account_ref_source: fundingAccountResolution ? fundingAccountResolution.funding_account_ref_source : null,
+              funding_account_ref_fallback_used: fundingAccountResolution ? fundingAccountResolution.funding_account_ref_fallback_used : false,
+              funding_account_ref_candidates_checked: fundingAccountResolution ? fundingAccountResolution.funding_account_ref_candidates_checked : [],
+              funding_account_ref_resolution_json: fundingAccountResolution ? fundingAccountResolution.funding_account_ref_resolution_json : null
+            });
             await sbRpc(env, 'banking_pay_operation_finish_chunk', {
               p_chunk_id: chunkId,
               p_status: 'FAILED',
               p_completed_count: 0,
               p_failed_count: transfers.length,
               p_result_json: out,
-              p_error_json: { code: 'SCHEDULED_BATCH_MISSING_FUNDING_ACCOUNT_REF', message: 'Funding account reference is required for provider submission.' }
+              p_error_json: {
+                code: 'FUNDING_ACCOUNT_REF_MISSING',
+                message: 'Funding account reference is required for provider submission.',
+                provider_submission_attempted: false,
+                submitted_to_bank: false,
+                funding_account_ref_resolution_json: fundingAccountResolution ? fundingAccountResolution.funding_account_ref_resolution_json : null
+              }
             });
             return out;
           }
@@ -130185,14 +130880,37 @@ function getRailAdapter(provider) {
               if (available === null) throw new Error('REVOLUT_FUNDING_ACCOUNT_BALANCE_UNAVAILABLE');
               sufficient = (available + 1e-9) >= required;
             } catch (e) {
-              out.errors.push({ code: 'FUNDS_CHECK_FAILED', pay_batch_id: batchId, error: String(e?.message || e || 'unknown'), provider_submission_attempted: false, submitted_to_bank: false });
+              out.ok = false;
+              out.claim_blocker_code = 'FUNDS_CHECK_FAILED';
+              out.provider_submission_attempted = false;
+              out.submitted_to_bank = false;
+              out.funding_account_ref = fundingRef || out.funding_account_ref || null;
+              out.errors.push({
+                code: 'FUNDS_CHECK_FAILED',
+                pay_batch_id: batchId,
+                error: String(e?.message || e || 'unknown'),
+                provider_submission_attempted: false,
+                submitted_to_bank: false,
+                funding_account_ref: fundingRef,
+                funding_account_ref_source: fundingAccountResolution ? fundingAccountResolution.funding_account_ref_source : null,
+                funding_account_ref_fallback_used: fundingAccountResolution ? fundingAccountResolution.funding_account_ref_fallback_used : false,
+                funding_account_ref_candidates_checked: fundingAccountResolution ? fundingAccountResolution.funding_account_ref_candidates_checked : [],
+                funding_account_ref_resolution_json: fundingAccountResolution ? fundingAccountResolution.funding_account_ref_resolution_json : null
+              });
               await sbRpc(env, 'banking_pay_operation_finish_chunk', {
                 p_chunk_id: chunkId,
                 p_status: 'FAILED',
                 p_completed_count: 0,
                 p_failed_count: transfers.length,
                 p_result_json: out,
-                p_error_json: { code: 'FUNDS_CHECK_FAILED', message: String(e?.message || e || 'Funds check failed.'), provider_submission_attempted: false, submitted_to_bank: false }
+                p_error_json: {
+                  code: 'FUNDS_CHECK_FAILED',
+                  message: String(e?.message || e || 'Funds check failed.'),
+                  provider_submission_attempted: false,
+                  submitted_to_bank: false,
+                  funding_account_ref: fundingRef,
+                  funding_account_ref_resolution_json: fundingAccountResolution ? fundingAccountResolution.funding_account_ref_resolution_json : null
+                }
               });
               return out;
             }
@@ -130204,6 +130922,11 @@ function getRailAdapter(provider) {
               rail_provider: 'REVOLUT',
               rail_env: expectedEnv,
               funding_account_ref: fundingRef,
+              funding_account_ref_source: fundingAccountResolution ? fundingAccountResolution.funding_account_ref_source : null,
+              funding_account_ref_fallback_used: fundingAccountResolution ? fundingAccountResolution.funding_account_ref_fallback_used : false,
+              funding_account_ref_batch_value_present: fundingAccountResolution ? fundingAccountResolution.funding_account_ref_batch_value_present : false,
+              funding_account_ref_candidates_checked: fundingAccountResolution ? fundingAccountResolution.funding_account_ref_candidates_checked : [],
+              funding_account_ref_resolution_json: fundingAccountResolution ? fundingAccountResolution.funding_account_ref_resolution_json : null,
               required_gbp: required,
               available_gbp: available,
               sufficient,
@@ -130221,7 +130944,26 @@ function getRailAdapter(provider) {
             });
             out.ok = false;
             out.claim_blocker_code = 'BLOCKED_FUNDS';
-            out.blocked_funds.push({ pay_batch_id: batchId, required_gbp: required, available_gbp: available, funding_account_ref: fundingRef, rail_provider: 'REVOLUT', rail_env: expectedEnv, funds_check_json: fundsCheckJson });
+            out.funds_check_json = fundsCheckJson;
+            out.funding_account_ref = fundingRef || out.funding_account_ref || null;
+            out.funding_account_ref_source = fundingAccountResolution ? fundingAccountResolution.funding_account_ref_source : out.funding_account_ref_source;
+            out.funding_account_ref_fallback_used = fundingAccountResolution ? fundingAccountResolution.funding_account_ref_fallback_used : out.funding_account_ref_fallback_used;
+            out.funding_account_ref_batch_value_present = fundingAccountResolution ? fundingAccountResolution.funding_account_ref_batch_value_present : out.funding_account_ref_batch_value_present;
+            out.funding_account_ref_candidates_checked = fundingAccountResolution ? fundingAccountResolution.funding_account_ref_candidates_checked : out.funding_account_ref_candidates_checked;
+            out.funding_account_ref_resolution_json = fundingAccountResolution ? fundingAccountResolution.funding_account_ref_resolution_json : out.funding_account_ref_resolution_json;
+            out.blocked_funds.push({
+              pay_batch_id: batchId,
+              required_gbp: required,
+              available_gbp: available,
+              funding_account_ref: fundingRef,
+              funding_account_ref_source: fundingAccountResolution ? fundingAccountResolution.funding_account_ref_source : null,
+              funding_account_ref_fallback_used: fundingAccountResolution ? fundingAccountResolution.funding_account_ref_fallback_used : false,
+              funding_account_ref_candidates_checked: fundingAccountResolution ? fundingAccountResolution.funding_account_ref_candidates_checked : [],
+              funding_account_ref_resolution_json: fundingAccountResolution ? fundingAccountResolution.funding_account_ref_resolution_json : null,
+              rail_provider: 'REVOLUT',
+              rail_env: expectedEnv,
+              funds_check_json: fundsCheckJson
+            });
             out.failed_this_chunk = transfers.length;
             out.provider_submission_attempted = false;
             out.submitted_to_bank = false;
@@ -130851,7 +131593,6 @@ function getRailAdapter(provider) {
   const mk = getRailAdapter.__RAIL_REGISTRY[p];
   return (typeof mk === 'function') ? mk() : null;
 }
-
 
 
 
