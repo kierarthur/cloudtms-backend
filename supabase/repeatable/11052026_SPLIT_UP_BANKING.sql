@@ -12504,8 +12504,6 @@ BEGIN
 END;
 $function$;
 
-
-
 CREATE OR REPLACE FUNCTION public.pay_execute_operation_cleanup_failed_local_artifacts(
   p_operation_id uuid,
   p_actor_user_id uuid DEFAULT NULL::uuid,
@@ -13862,62 +13860,67 @@ BEGIN
     ELSE 'RETRY_BLOCKED'
   END;
 
-  v_result := jsonb_strip_nulls(jsonb_build_object(
-    'ok', true,
-    'dry_run', COALESCE(p_dry_run, false),
-    'dry_run_counts_are_prospective', COALESCE(p_dry_run, false),
-    'operation_id', p_operation_id::text,
-    'pay_batch_id', v_operation_row.pay_batch_id::text,
-    'failure_phase', v_failure_phase,
-    'cleanup_mode', v_cleanup_mode,
-    'operation_types_supported', jsonb_build_array('PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS'),
-    'operation_type_cleanup_mode', v_operation_type_cleanup_mode,
-    'retry_blocked_reason', v_retry_blocked_reason,
-    'safe_to_retry', v_safe_to_retry,
-    'retry_blocked', v_retry_blocked,
-    'review_required', v_review_required,
-    'scope_rows_considered', COALESCE(v_scope_rows_considered, 0),
-    'transfer_rows_considered', COALESCE(v_transfer_rows_considered, 0),
-    'safe_scope_candidate_count', COALESCE(v_safe_scope_candidate_count, 0),
-    'safe_transfer_candidate_count', COALESCE(v_safe_transfer_candidate_count, 0),
-    'safe_local_transfer_count', COALESCE(v_safe_transfer_candidate_count, 0),
-    'scope_rows_deleted', COALESCE(v_scope_rows_deleted, 0),
-    'transfer_rows_deleted', COALESCE(v_transfer_rows_deleted, 0),
-    'item_links_cleared', COALESCE(v_item_links_cleared, 0),
-    'bank_references_cleared', COALESCE(v_bank_references_cleared, 0),
-    'chunks_marked_failed', COALESCE(v_chunks_marked_failed, 0),
-    'chunks_marked_skipped', COALESCE(v_chunks_marked_skipped, 0),
-    'locks_released', COALESCE(v_locks_released, 0),
-    'provider_evidence_count', COALESCE(v_provider_evidence_count, 0),
-    'unsafe_transfer_count', COALESCE(v_unsafe_transfer_count, 0),
-    'unsafe_scope_count', COALESCE(v_unsafe_scope_count, 0),
-    'unsafe_transfer_ids', COALESCE(v_unsafe_transfer_ids, '[]'::jsonb),
-    'unsafe_reasons', COALESCE(v_unsafe_reasons, '[]'::jsonb),
-    'safe_scope_ids', CASE WHEN COALESCE(p_dry_run, false) THEN COALESCE(v_safe_scope_ids, '[]'::jsonb) ELSE COALESCE(v_deleted_scope_ids, '[]'::jsonb) END,
-    'safe_transfer_ids', CASE WHEN COALESCE(p_dry_run, false) THEN COALESCE(v_safe_transfer_ids, '[]'::jsonb) ELSE COALESCE(v_deleted_transfer_ids, '[]'::jsonb) END,
-    'initial_active_auth_request_count', COALESCE(v_initial_active_auth_request_count, 0),
-    'active_auth_request_count', COALESCE(v_active_auth_request_count, 0),
-    'operation_active_auth_request_count', COALESCE(v_operation_active_auth_request_count, 0),
-    'active_auth_request_ids', COALESCE(v_active_auth_request_ids, '[]'::jsonb),
-    'auth_requests_cancelled', COALESCE(v_auth_requests_cancelled, 0),
-    'awaiting_auth_requests_cancelled', COALESCE(v_awaiting_auth_requests_cancelled, 0),
-    'authorised_auth_requests_cancelled', COALESCE(v_authorised_auth_requests_cancelled, 0),
-    'auth_request_cleanup_mode', CASE WHEN COALESCE(v_auth_requests_cancelled, 0) > 0 THEN 'CANCELLED_SAFE_LOCAL_AUTH_REQUESTS' WHEN COALESCE(v_non_cancellable_auth_request_count, 0) > 0 THEN 'AUTH_REQUEST_REVIEW_REQUIRED' ELSE 'NO_AUTH_REQUEST_CLEANUP_REQUIRED' END,
-    'auth_tokens_voided', COALESCE(v_auth_tokens_voided, 0),
-    'batch_execution_intent_cleared', COALESCE(v_batch_execution_intent_cleared, 0),
-    'active_auth_request_blocker_count', COALESCE(v_active_auth_request_blocker_count, 0),
-    'authorised_auth_request_review_count', COALESCE(v_authorised_auth_request_review_count, 0),
-    'cancellable_auth_request_count', COALESCE(v_cancellable_auth_request_count, 0),
-    'non_cancellable_auth_request_count', COALESCE(v_non_cancellable_auth_request_count, 0),
-    'cancelled_auth_request_ids', COALESCE(v_cancelled_auth_request_ids, '[]'::jsonb),
-    'provider_submit_chunk_attempt_count', COALESCE(v_provider_submit_chunk_attempt_count, 0),
-    'batch_execution_boundary_crossed', v_batch_execution_boundary_crossed,
-    'execution_commit_state', upper(BTRIM(COALESCE(v_batch_row.execution_commit_state, 'NOT_SUBMITTED'))),
-    'execution_commit_ref_present', NULLIF(BTRIM(COALESCE(v_batch_row.execution_commit_ref, '')), '') IS NOT NULL,
-    'execution_committed_at_utc_present', v_batch_row.execution_committed_at_utc IS NOT NULL,
-    'remaining_operation_scope_count', COALESCE(v_remaining_operation_scope_count, 0),
-    'remaining_operation_transfer_count', COALESCE(v_remaining_operation_transfer_count, 0)
-  ));
+  v_result := jsonb_strip_nulls(
+    jsonb_build_object(
+      'ok', true,
+      'dry_run', COALESCE(p_dry_run, false),
+      'dry_run_counts_are_prospective', COALESCE(p_dry_run, false),
+      'operation_id', p_operation_id::text,
+      'pay_batch_id', v_operation_row.pay_batch_id::text,
+      'failure_phase', v_failure_phase,
+      'cleanup_mode', v_cleanup_mode,
+      'operation_types_supported', jsonb_build_array('PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS'),
+      'operation_type_cleanup_mode', v_operation_type_cleanup_mode,
+      'retry_blocked_reason', v_retry_blocked_reason,
+      'safe_to_retry', v_safe_to_retry,
+      'retry_blocked', v_retry_blocked,
+      'review_required', v_review_required,
+      'scope_rows_considered', COALESCE(v_scope_rows_considered, 0),
+      'transfer_rows_considered', COALESCE(v_transfer_rows_considered, 0),
+      'safe_scope_candidate_count', COALESCE(v_safe_scope_candidate_count, 0),
+      'safe_transfer_candidate_count', COALESCE(v_safe_transfer_candidate_count, 0),
+      'safe_local_transfer_count', COALESCE(v_safe_transfer_candidate_count, 0),
+      'scope_rows_deleted', COALESCE(v_scope_rows_deleted, 0),
+      'transfer_rows_deleted', COALESCE(v_transfer_rows_deleted, 0),
+      'item_links_cleared', COALESCE(v_item_links_cleared, 0),
+      'bank_references_cleared', COALESCE(v_bank_references_cleared, 0),
+      'chunks_marked_failed', COALESCE(v_chunks_marked_failed, 0),
+      'chunks_marked_skipped', COALESCE(v_chunks_marked_skipped, 0),
+      'locks_released', COALESCE(v_locks_released, 0),
+      'provider_evidence_count', COALESCE(v_provider_evidence_count, 0),
+      'unsafe_transfer_count', COALESCE(v_unsafe_transfer_count, 0),
+      'unsafe_scope_count', COALESCE(v_unsafe_scope_count, 0),
+      'unsafe_transfer_ids', COALESCE(v_unsafe_transfer_ids, '[]'::jsonb),
+      'unsafe_reasons', COALESCE(v_unsafe_reasons, '[]'::jsonb)
+    )
+    ||
+    jsonb_build_object(
+      'safe_scope_ids', CASE WHEN COALESCE(p_dry_run, false) THEN COALESCE(v_safe_scope_ids, '[]'::jsonb) ELSE COALESCE(v_deleted_scope_ids, '[]'::jsonb) END,
+      'safe_transfer_ids', CASE WHEN COALESCE(p_dry_run, false) THEN COALESCE(v_safe_transfer_ids, '[]'::jsonb) ELSE COALESCE(v_deleted_transfer_ids, '[]'::jsonb) END,
+      'initial_active_auth_request_count', COALESCE(v_initial_active_auth_request_count, 0),
+      'active_auth_request_count', COALESCE(v_active_auth_request_count, 0),
+      'operation_active_auth_request_count', COALESCE(v_operation_active_auth_request_count, 0),
+      'active_auth_request_ids', COALESCE(v_active_auth_request_ids, '[]'::jsonb),
+      'auth_requests_cancelled', COALESCE(v_auth_requests_cancelled, 0),
+      'awaiting_auth_requests_cancelled', COALESCE(v_awaiting_auth_requests_cancelled, 0),
+      'authorised_auth_requests_cancelled', COALESCE(v_authorised_auth_requests_cancelled, 0),
+      'auth_request_cleanup_mode', CASE WHEN COALESCE(v_auth_requests_cancelled, 0) > 0 THEN 'CANCELLED_SAFE_LOCAL_AUTH_REQUESTS' WHEN COALESCE(v_non_cancellable_auth_request_count, 0) > 0 THEN 'AUTH_REQUEST_REVIEW_REQUIRED' ELSE 'NO_AUTH_REQUEST_CLEANUP_REQUIRED' END,
+      'auth_tokens_voided', COALESCE(v_auth_tokens_voided, 0),
+      'batch_execution_intent_cleared', COALESCE(v_batch_execution_intent_cleared, 0),
+      'active_auth_request_blocker_count', COALESCE(v_active_auth_request_blocker_count, 0),
+      'authorised_auth_request_review_count', COALESCE(v_authorised_auth_request_review_count, 0),
+      'cancellable_auth_request_count', COALESCE(v_cancellable_auth_request_count, 0),
+      'non_cancellable_auth_request_count', COALESCE(v_non_cancellable_auth_request_count, 0),
+      'cancelled_auth_request_ids', COALESCE(v_cancelled_auth_request_ids, '[]'::jsonb),
+      'provider_submit_chunk_attempt_count', COALESCE(v_provider_submit_chunk_attempt_count, 0),
+      'batch_execution_boundary_crossed', v_batch_execution_boundary_crossed,
+      'execution_commit_state', upper(BTRIM(COALESCE(v_batch_row.execution_commit_state, 'NOT_SUBMITTED'))),
+      'execution_commit_ref_present', NULLIF(BTRIM(COALESCE(v_batch_row.execution_commit_ref, '')), '') IS NOT NULL,
+      'execution_committed_at_utc_present', v_batch_row.execution_committed_at_utc IS NOT NULL,
+      'remaining_operation_scope_count', COALESCE(v_remaining_operation_scope_count, 0),
+      'remaining_operation_transfer_count', COALESCE(v_remaining_operation_transfer_count, 0)
+    )
+  );
 
   IF COALESCE(p_dry_run, false) IS NOT TRUE THEN
     BEGIN
@@ -13939,4 +13942,5 @@ BEGIN
   RETURN v_result;
 END;
 $function$;
+
 
