@@ -25896,6 +25896,8 @@ DROP FUNCTION IF EXISTS public.pay_remittance_queue_commit_stage(uuid, text, uui
 
 DROP FUNCTION IF EXISTS public.pay_remittance_queue_commit_stage(uuid, text, uuid, boolean);
 DROP FUNCTION IF EXISTS public.pay_remittance_queue_commit_stage(uuid, text, uuid, boolean, uuid, jsonb);
+
+
 CREATE OR REPLACE FUNCTION public.pay_remittance_queue_commit_stage(
   p_pay_batch_id uuid,
   p_scope text,
@@ -26161,6 +26163,9 @@ begin
         'operation_mode', true,
         'operation_id', p_operation_id::text,
         'pay_batch_id', p_pay_batch_id::text,
+        'trigger', coalesce(v_operation_row.input_json->>'trigger', CASE WHEN v_only_confirmed THEN 'ON_PAYMENT_CONFIRMED' ELSE 'ON_EXECUTION' END),
+        'configured_timing', v_operation_row.input_json->>'configured_timing',
+        'only_confirmed', v_only_confirmed,
         'trigger_status', 'SUPPRESSED_BY_EXECUTION_INTENT',
         'message_kind', 'REMITTANCE',
         'queued_count', 0,
@@ -26365,6 +26370,9 @@ begin
       'operation_mode', true,
       'operation_id', p_operation_id::text,
       'pay_batch_id', p_pay_batch_id::text,
+      'trigger', coalesce(v_operation_row.input_json->>'trigger', CASE WHEN v_only_confirmed THEN 'ON_PAYMENT_CONFIRMED' ELSE 'ON_EXECUTION' END),
+      'configured_timing', v_operation_row.input_json->>'configured_timing',
+      'only_confirmed', v_only_confirmed,
       'trigger_status', CASE WHEN COALESCE(v_inserted_outbox_count, 0) + COALESCE(v_reused_outbox_count, 0) + COALESCE(v_already_queued_count, 0) > 0 THEN 'REMITTANCE_QUEUE_CHUNK_PROCESSED' ELSE 'NO_QUEUEABLE_REMITTANCE_SCOPE' END,
       'message_kind', 'REMITTANCE',
       'queued_count', COALESCE(v_inserted_outbox_count, 0),
@@ -27686,6 +27694,12 @@ EXCEPTION
     RAISE;
 end;
 $function$;
+
+
+
+
+
+
 
 
 
