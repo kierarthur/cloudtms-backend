@@ -3573,6 +3573,7 @@ declare
   v_stored_freshness_status text := null;
   v_stored_freshness_hash text := null;
   v_stored_freshness_scope_hash text := null;
+  v_timing_setting_if_known text := null;
 begin
   if p_pay_batch_id is null then
     raise exception '%', jsonb_build_object(
@@ -3701,6 +3702,19 @@ begin
   end if;
 
   v_operation_mode := p_operation_id IS NOT NULL OR nullif(btrim(coalesce(p_freshness_result_hash, '')), '') IS NOT NULL;
+
+  SELECT COALESCE(NULLIF(btrim(public.settings_defaults.payment_remittance_send_timing), ''), 'ON_EXECUTION')
+  INTO v_timing_setting_if_known
+  FROM public.settings_defaults
+  ORDER BY public.settings_defaults.id
+  LIMIT 1;
+
+  v_timing_setting_if_known := upper(coalesce(nullif(btrim(v_timing_setting_if_known), ''), 'ON_EXECUTION'));
+
+  IF v_timing_setting_if_known NOT IN ('ON_EXECUTION','ON_PAYMENT_CONFIRMED') THEN
+    v_timing_setting_if_known := 'ON_EXECUTION';
+  END IF;
+
   v_stored_freshness_status := upper(btrim(coalesce(v_batch.freshness_validation_status, '')));
   v_stored_freshness_hash := nullif(btrim(coalesce(v_batch.freshness_result_hash, '')), '');
   v_stored_freshness_scope_hash := nullif(btrim(coalesce(v_batch.freshness_scope_hash, '')), '');
@@ -4036,6 +4050,7 @@ begin
       );
 
       v_comm_trigger_status := coalesce(
+        nullif(btrim(coalesce(v_comm_result->>'trigger_status', '')), ''),
         nullif(btrim(coalesce(v_comm_result #>> '{queue_result,trigger_status}', '')), ''),
         case
           when lower(btrim(coalesce(v_comm_result->>'deferred', 'false'))) in ('true','1','yes','y','on') then 'REMITTANCE_QUEUE_DEFERRED_BY_TIMING'
@@ -4125,19 +4140,35 @@ begin
       v_remittance_targeted_count := 0;
       v_comm_result := jsonb_build_object(
         'ok', false,
+        'trigger', 'ON_EXECUTION',
+        'configured_timing', v_timing_setting_if_known,
         'trigger_status', v_comm_trigger_status,
         'error', v_comm_error,
         'message_kind', v_comm_message_kind,
         'automatic_commit_stage', true,
         'dispatch_required', false,
+        'operation_id', NULL::text,
+        'deferred', false,
+        'suppressed', false,
         'payout_notice', coalesce(v_payout_notice_result, '{}'::jsonb),
         'remittance', coalesce(v_remittance_result, '{}'::jsonb),
-        'queue_result', '{}'::jsonb,
+        'queue_result', jsonb_build_object(
+          'ok', false,
+          'trigger', 'ON_EXECUTION',
+          'configured_timing', v_timing_setting_if_known,
+          'trigger_status', v_comm_trigger_status,
+          'error', v_comm_error,
+          'operation_id', NULL::text,
+          'deferred', false,
+          'suppressed', false
+        ),
         'execution_mode', v_execution_mode
       );
     end;
 
     v_comm_result := coalesce(v_comm_result, '{}'::jsonb) || jsonb_build_object(
+      'trigger', coalesce(nullif(btrim(coalesce(v_comm_result->>'trigger', '')), ''), 'ON_EXECUTION'),
+      'configured_timing', coalesce(nullif(btrim(coalesce(v_comm_result->>'configured_timing', '')), ''), nullif(btrim(coalesce(v_comm_result#>>'{queue_result,configured_timing}', '')), ''), v_timing_setting_if_known),
       'payout_notice', coalesce(v_payout_notice_result, '{}'::jsonb),
       'remittance', coalesce(v_remittance_result, '{}'::jsonb)
     );
@@ -4197,6 +4228,21 @@ begin
         'committed_count', 0,
         'committed_amount', 0
       ),
+      'remittance_trigger', 'ON_EXECUTION',
+      'remittance_configured_timing', coalesce(v_comm_result->>'configured_timing', v_comm_result#>>'{queue_result,configured_timing}'),
+      'remittance_deferred', lower(btrim(coalesce(v_comm_result->>'deferred', 'false'))) in ('true','1','yes','y','on'),
+      'remittance_suppressed', lower(btrim(coalesce(v_comm_result->>'suppressed', 'false'))) in ('true','1','yes','y','on'),
+      'remittance_operation_queued', lower(btrim(coalesce(v_comm_result->>'operation_queued', 'false'))) in ('true','1','yes','y','on'),
+      'remittance_child_operation_id', coalesce(
+        nullif(btrim(coalesce(v_comm_result->>'operation_id', '')), ''),
+        nullif(btrim(coalesce(v_comm_result#>>'{queue_result,operation_id}', '')), '')
+      ),
+      'remittance_trigger_status', coalesce(
+        nullif(btrim(coalesce(v_comm_result->>'trigger_status', '')), ''),
+        nullif(btrim(coalesce(v_comm_result#>>'{queue_result,trigger_status}', '')), ''),
+        v_comm_trigger_status
+      ),
+      'remittance_message_kind', v_comm_message_kind,
       'worker_communications', v_worker_communications,
       'remittance_queue_stage_result', coalesce(v_comm_result, '{}'::jsonb)
     );
@@ -4631,9 +4677,14 @@ begin
 
     v_comm_trigger_status := coalesce(
       nullif(btrim(coalesce(v_comm_result->>'trigger_status','')), ''),
-      nullif(btrim(coalesce(v_comm_result->>'configured_timing','')), ''),
       nullif(btrim(coalesce(v_comm_result#>>'{queue_result,trigger_status}','')), ''),
-      'ON_EXECUTION_QUEUE_GATE_PROCESSED'
+      case
+        when lower(btrim(coalesce(v_comm_result->>'deferred', 'false'))) in ('true','1','yes','y','on') then 'REMITTANCE_QUEUE_DEFERRED_BY_TIMING'
+        when lower(btrim(coalesce(v_comm_result->>'suppressed', 'false'))) in ('true','1','yes','y','on') then 'SUPPRESSED_BY_EXECUTION_INTENT'
+        when lower(btrim(coalesce(v_comm_result->>'operation_queued', 'false'))) in ('true','1','yes','y','on') then 'REMITTANCE_QUEUE_OPERATION_READY'
+        when lower(btrim(coalesce(v_comm_result->>'dispatch_required', v_comm_result#>>'{queue_result,dispatch_required}', 'false'))) in ('true','1','yes','y','on') then 'QUEUE_STAGE_BUILD_READY'
+        else 'ON_EXECUTION_QUEUE_GATE_PROCESSED'
+      end
     );
     v_comm_message_kind := coalesce(
       nullif(btrim(coalesce(v_comm_result->>'message_kind','')), ''),
@@ -4702,18 +4753,33 @@ begin
       'commit_stage_communication_timing_gate'
     );
   exception when others then
-    v_comm_trigger_status := 'COMMIT_STAGE_QUEUE_GATE_ERROR';
+    v_comm_trigger_status := 'COMMIT_STAGE_QUEUE_TIMING_GATE_ERROR';
     v_comm_error := left(coalesce(SQLERRM,'UNKNOWN_COMMS_ERROR'), 1000);
     v_comm_message_kind := coalesce(v_comm_message_kind, 'PAYOUT_NOTICE_AND_REMITTANCE');
     v_comm_result := jsonb_build_object(
       'ok', false,
+      'trigger', 'ON_EXECUTION',
+      'configured_timing', v_timing_setting_if_known,
       'trigger_status', v_comm_trigger_status,
       'error', v_comm_error,
       'message_kind', v_comm_message_kind,
       'automatic_commit_stage', (v_provider <> 'CSV'),
       'dispatch_required', false,
+      'operation_id', NULL::text,
+      'deferred', false,
+      'suppressed', false,
       'payout_notice', coalesce(v_payout_notice_result, '{}'::jsonb),
-      'remittance', coalesce(v_remittance_result, '{}'::jsonb)
+      'remittance', coalesce(v_remittance_result, '{}'::jsonb),
+      'queue_result', jsonb_build_object(
+        'ok', false,
+        'trigger', 'ON_EXECUTION',
+        'configured_timing', v_timing_setting_if_known,
+        'trigger_status', v_comm_trigger_status,
+        'error', v_comm_error,
+        'operation_id', NULL::text,
+        'deferred', false,
+        'suppressed', false
+      )
     );
 
     begin
@@ -4810,6 +4876,21 @@ begin
       'committed_count', v_reservations_committed_count,
       'committed_amount', v_reservations_committed_amount
     ),
+    'remittance_trigger', 'ON_EXECUTION',
+    'remittance_configured_timing', coalesce(v_comm_result->>'configured_timing', v_comm_result#>>'{queue_result,configured_timing}'),
+    'remittance_deferred', lower(btrim(coalesce(v_comm_result->>'deferred', 'false'))) in ('true','1','yes','y','on'),
+    'remittance_suppressed', lower(btrim(coalesce(v_comm_result->>'suppressed', 'false'))) in ('true','1','yes','y','on'),
+    'remittance_operation_queued', lower(btrim(coalesce(v_comm_result->>'operation_queued', 'false'))) in ('true','1','yes','y','on'),
+    'remittance_child_operation_id', coalesce(
+      nullif(btrim(coalesce(v_comm_result->>'operation_id', '')), ''),
+      nullif(btrim(coalesce(v_comm_result#>>'{queue_result,operation_id}', '')), '')
+    ),
+    'remittance_trigger_status', coalesce(
+      nullif(btrim(coalesce(v_comm_result->>'trigger_status', '')), ''),
+      nullif(btrim(coalesce(v_comm_result#>>'{queue_result,trigger_status}', '')), ''),
+      v_comm_trigger_status
+    ),
+    'remittance_message_kind', v_comm_message_kind,
     'worker_communications', v_worker_communications,
     'remittance_queue_stage_result', coalesce(v_comm_result, '{}'::jsonb)
   );
