@@ -6604,6 +6604,7 @@ async function handleContractsCreate(env, req) {
 // (joins based on FK: contracts.candidate_id → candidates.id, contracts.client_id → clients.id)  :contentReference[oaicite:0]{index=0}
 
 
+
 function makeBankingFriendlyErrorPayload(input, options = {}) {
   const isPlainObject = (value) => Boolean(value && typeof value === 'object' && !Array.isArray(value));
 
@@ -6881,6 +6882,18 @@ function makeBankingFriendlyErrorPayload(input, options = {}) {
   addCodeCandidate(sourceObject.code);
 
   const knownErrorCodes = [
+    'EXECUTE_PAYMENT_INVALID_REQUEST',
+    'EXECUTE_PAYMENT_INVALID_MODE',
+    'EXECUTE_PAYMENT_INVALID_PAYMENT_DATE',
+    'EXECUTE_PAYMENT_INVALID_SCHEDULE',
+    'EXECUTE_PAYMENT_SCHEDULE_TIME_REQUIRED',
+    'EXECUTE_PAYMENT_WARNING_HOURS_INVALID',
+    'PAYMENT_OPERATION_START_INVALID_INPUT',
+    'PAYMENT_EXECUTE_OPERATION_CONFIG_FAILED',
+    'PAYMENT_EXECUTE_OPERATION_START_FAILED',
+    'AUTHORISED_TRANSFER_NOT_PROVIDER_SUBMIT_READY',
+    'PROVIDER_SUBMIT_NO_ELIGIBLE_TRANSFERS',
+    'PAYMENT_RETRY_BLOCKED_FUNDS_CLEANUP_NOT_SAFE',
     'BATCH_STALE',
     'BLOCKED_FUNDS',
     'NO_AUTHORISATION_READY_TRANSFERS',
@@ -6988,6 +7001,12 @@ function makeBankingFriendlyErrorPayload(input, options = {}) {
     if (code === 'PAY_EXECUTE_OPERATION_CLEANUP_FAILED_LOCAL_ARTIFACTS') return 'PAYMENT_EXECUTE_CLEANUP_FAILED';
     if (code === 'BANK_TRANSFER_PROVIDER_REVIEW_REQUIRED' || code === 'PROVIDER_SUBMISSION_EVIDENCE_REQUIRED') return 'EXECUTION_RETRY_BLOCKED_BY_PROVIDER_EVIDENCE';
     if (code === 'PAY_BATCH_VALIDATE_FRESHNESS_FAILED') return 'BATCH_STALE';
+    if (code === 'PAYMENT_OPERATION_START_INVALID_INPUT') return 'PAYMENT_OPERATION_START_INVALID_INPUT';
+    if (code === 'PAYMENT_EXECUTE_OPERATION_CONFIG_FAILED') return 'PAYMENT_EXECUTE_OPERATION_CONFIG_FAILED';
+    if (code === 'PAYMENT_EXECUTE_OPERATION_START_FAILED') return 'PAYMENT_EXECUTE_OPERATION_START_FAILED';
+    if (code === 'AUTHORISED_TRANSFER_NOT_PROVIDER_SUBMIT_READY') return 'AUTHORISED_TRANSFER_NOT_PROVIDER_SUBMIT_READY';
+    if (code === 'PROVIDER_SUBMIT_NO_ELIGIBLE_TRANSFERS') return 'PROVIDER_SUBMIT_NO_ELIGIBLE_TRANSFERS';
+    if (code === 'PAYMENT_RETRY_BLOCKED_FUNDS_CLEANUP_NOT_SAFE') return 'PAYMENT_RETRY_BLOCKED_FUNDS_CLEANUP_NOT_SAFE';
     if (code === 'PAY_EXECUTE_BANK_FAILED') return 'BANKING_EXECUTE_PAYMENT_FAILED';
     if (code === 'STANDARD_BANK_FUNDING_ACCOUNT_REQUIRED') return 'FUNDING_ACCOUNT_MISSING';
     if (code === 'CSV_UPLOADED_CONFIRMED_MUST_BE_TRUE' || code === 'CSV_UPLOADED_CONFIRMATION_MISSING') return 'CSV_UPLOADED_CONFIRMATION_REQUIRED';
@@ -7054,6 +7073,18 @@ function makeBankingFriendlyErrorPayload(input, options = {}) {
     if (rawUpper.includes('PAYMENT_EXECUTE_CLEANUP_FAILED') || rawUpper.includes('PAY_EXECUTE_OPERATION_CLEANUP_FAILED_LOCAL_ARTIFACTS')) return 'PAYMENT_EXECUTE_CLEANUP_FAILED';
     if (rawUpper.includes('NO_SAFE_LOCAL_CLEANUP_AVAILABLE')) return 'NO_SAFE_LOCAL_CLEANUP_AVAILABLE';
     if (rawUpper.includes('AUTH_REQUEST_HELD_BY_PREVIOUS_OPERATION')) return 'AUTH_REQUEST_HELD_BY_PREVIOUS_OPERATION';
+    if (rawUpper.includes('EXECUTE_PAYMENT_INVALID_REQUEST')) return 'EXECUTE_PAYMENT_INVALID_REQUEST';
+    if (rawUpper.includes('EXECUTE_PAYMENT_INVALID_MODE')) return 'EXECUTE_PAYMENT_INVALID_MODE';
+    if (rawUpper.includes('EXECUTE_PAYMENT_INVALID_PAYMENT_DATE')) return 'EXECUTE_PAYMENT_INVALID_PAYMENT_DATE';
+    if (rawUpper.includes('EXECUTE_PAYMENT_INVALID_SCHEDULE')) return 'EXECUTE_PAYMENT_INVALID_SCHEDULE';
+    if (rawUpper.includes('EXECUTE_PAYMENT_SCHEDULE_TIME_REQUIRED')) return 'EXECUTE_PAYMENT_SCHEDULE_TIME_REQUIRED';
+    if (rawUpper.includes('EXECUTE_PAYMENT_WARNING_HOURS_INVALID')) return 'EXECUTE_PAYMENT_WARNING_HOURS_INVALID';
+    if (rawUpper.includes('PAYMENT_OPERATION_START_INVALID_INPUT')) return 'PAYMENT_OPERATION_START_INVALID_INPUT';
+    if (rawUpper.includes('PAYMENT_EXECUTE_OPERATION_CONFIG_FAILED')) return 'PAYMENT_EXECUTE_OPERATION_CONFIG_FAILED';
+    if (rawUpper.includes('PAYMENT_EXECUTE_OPERATION_START_FAILED')) return 'PAYMENT_EXECUTE_OPERATION_START_FAILED';
+    if (rawUpper.includes('AUTHORISED_TRANSFER_NOT_PROVIDER_SUBMIT_READY')) return 'AUTHORISED_TRANSFER_NOT_PROVIDER_SUBMIT_READY';
+    if (rawUpper.includes('PROVIDER_SUBMIT_NO_ELIGIBLE_TRANSFERS')) return 'PROVIDER_SUBMIT_NO_ELIGIBLE_TRANSFERS';
+    if (rawUpper.includes('PAYMENT_RETRY_BLOCKED_FUNDS_CLEANUP_NOT_SAFE')) return 'PAYMENT_RETRY_BLOCKED_FUNDS_CLEANUP_NOT_SAFE';
 
     if (rawUpper.includes('23505') && rawUpper.includes('UQ_BANKING_ALERT_ACK_USER_FINGERPRINT_SCOPE')) return 'ACKNOWLEDGEMENT_ALREADY_EXISTS';
     if (rawUpper.includes('DUPLICATE KEY') && rawUpper.includes('UQ_BANKING_ALERT_ACK_USER_FINGERPRINT_SCOPE')) return 'ACKNOWLEDGEMENT_ALREADY_EXISTS';
@@ -7112,6 +7143,18 @@ function makeBankingFriendlyErrorPayload(input, options = {}) {
   });
 
   const priorityBusinessCodes = [
+    'EXECUTE_PAYMENT_INVALID_REQUEST',
+    'EXECUTE_PAYMENT_INVALID_MODE',
+    'EXECUTE_PAYMENT_INVALID_PAYMENT_DATE',
+    'EXECUTE_PAYMENT_INVALID_SCHEDULE',
+    'EXECUTE_PAYMENT_SCHEDULE_TIME_REQUIRED',
+    'EXECUTE_PAYMENT_WARNING_HOURS_INVALID',
+    'PAYMENT_OPERATION_START_INVALID_INPUT',
+    'PAYMENT_EXECUTE_OPERATION_CONFIG_FAILED',
+    'PAYMENT_EXECUTE_OPERATION_START_FAILED',
+    'AUTHORISED_TRANSFER_NOT_PROVIDER_SUBMIT_READY',
+    'PROVIDER_SUBMIT_NO_ELIGIBLE_TRANSFERS',
+    'PAYMENT_RETRY_BLOCKED_FUNDS_CLEANUP_NOT_SAFE',
     'BATCH_STALE',
     'NO_AUTHORISATION_READY_TRANSFERS',
     'TRANSFER_SCOPE_RETRY_BLOCKER_DETECTED',
@@ -7206,6 +7249,162 @@ function makeBankingFriendlyErrorPayload(input, options = {}) {
   }
 
   const defaultMessages = {
+    EXECUTE_PAYMENT_INVALID_REQUEST: {
+      ok: false,
+      http_status: 400,
+      severity: 'warning',
+      title: 'Payment execution could not be started',
+      message: 'CloudTMS could not start the payment execution operation. No bank submission was attempted. Refresh the batch and try again.',
+      user_action: 'REFRESH_BATCH',
+      confirm_label: 'OK',
+      show_modal: true,
+      operation_created: false,
+      execute_payment_operation_started: false,
+      submitted_to_bank: false,
+      provider_submission_attempted: false
+    },
+    EXECUTE_PAYMENT_INVALID_MODE: {
+      ok: false,
+      http_status: 400,
+      severity: 'warning',
+      title: 'Payment execution could not be started',
+      message: 'CloudTMS could not start the payment execution operation because the requested execution mode is invalid. No bank submission was attempted. Refresh the batch and try again.',
+      user_action: 'REFRESH_BATCH',
+      confirm_label: 'OK',
+      show_modal: true,
+      operation_created: false,
+      execute_payment_operation_started: false,
+      submitted_to_bank: false,
+      provider_submission_attempted: false
+    },
+    EXECUTE_PAYMENT_INVALID_PAYMENT_DATE: {
+      ok: false,
+      http_status: 400,
+      severity: 'warning',
+      title: 'Payment execution could not be started',
+      message: 'CloudTMS could not start the payment execution operation because the payment date is invalid. No bank submission was attempted. Refresh the batch and try again.',
+      user_action: 'REFRESH_BATCH',
+      confirm_label: 'OK',
+      show_modal: true,
+      operation_created: false,
+      execute_payment_operation_started: false,
+      submitted_to_bank: false,
+      provider_submission_attempted: false
+    },
+    EXECUTE_PAYMENT_INVALID_SCHEDULE: {
+      ok: false,
+      http_status: 400,
+      severity: 'warning',
+      title: 'Payment execution could not be started',
+      message: 'CloudTMS could not start the payment execution operation because the payment schedule is invalid. No bank submission was attempted. Refresh the batch and try again.',
+      user_action: 'REFRESH_BATCH',
+      confirm_label: 'OK',
+      show_modal: true,
+      operation_created: false,
+      execute_payment_operation_started: false,
+      submitted_to_bank: false,
+      provider_submission_attempted: false
+    },
+    EXECUTE_PAYMENT_SCHEDULE_TIME_REQUIRED: {
+      ok: false,
+      http_status: 400,
+      severity: 'warning',
+      title: 'Payment execution could not be started',
+      message: 'CloudTMS could not start the payment execution operation because a scheduled payment time is required. No bank submission was attempted. Refresh the batch and try again.',
+      user_action: 'REFRESH_BATCH',
+      confirm_label: 'OK',
+      show_modal: true,
+      operation_created: false,
+      execute_payment_operation_started: false,
+      submitted_to_bank: false,
+      provider_submission_attempted: false
+    },
+    EXECUTE_PAYMENT_WARNING_HOURS_INVALID: {
+      ok: false,
+      http_status: 400,
+      severity: 'warning',
+      title: 'Payment execution could not be started',
+      message: 'CloudTMS could not start the payment execution operation because the warning-hours payload is invalid. No bank submission was attempted. Refresh the batch and try again.',
+      user_action: 'REFRESH_BATCH',
+      confirm_label: 'OK',
+      show_modal: true,
+      operation_created: false,
+      execute_payment_operation_started: false,
+      submitted_to_bank: false,
+      provider_submission_attempted: false
+    },
+    PAYMENT_OPERATION_START_INVALID_INPUT: {
+      ok: false,
+      http_status: 400,
+      severity: 'warning',
+      title: 'Payment execution could not be started',
+      message: 'CloudTMS could not start the payment execution operation. No bank submission was attempted. Refresh the batch and try again.',
+      user_action: 'REFRESH_BATCH',
+      confirm_label: 'OK',
+      show_modal: true,
+      operation_created: false,
+      execute_payment_operation_started: false,
+      submitted_to_bank: false,
+      provider_submission_attempted: false
+    },
+    PAYMENT_EXECUTE_OPERATION_CONFIG_FAILED: {
+      ok: false,
+      http_status: 400,
+      severity: 'warning',
+      title: 'Payment execution could not be started',
+      message: 'CloudTMS could not start the payment execution operation. No bank submission was attempted. Refresh the batch and try again.',
+      user_action: 'REFRESH_BATCH',
+      confirm_label: 'OK',
+      show_modal: true,
+      operation_created: false,
+      execute_payment_operation_started: false,
+      submitted_to_bank: false,
+      provider_submission_attempted: false
+    },
+    PAYMENT_EXECUTE_OPERATION_START_FAILED: {
+      ok: false,
+      http_status: 400,
+      severity: 'warning',
+      title: 'Payment execution could not be started',
+      message: 'CloudTMS could not start the payment execution operation. No bank submission was attempted. Refresh the batch and try again.',
+      user_action: 'REFRESH_BATCH',
+      confirm_label: 'OK',
+      show_modal: true,
+      operation_created: false,
+      execute_payment_operation_started: false,
+      submitted_to_bank: false,
+      provider_submission_attempted: false
+    },
+    AUTHORISED_TRANSFER_NOT_PROVIDER_SUBMIT_READY: {
+      ok: false,
+      http_status: 409,
+      severity: 'warning',
+      title: 'Payment authorised but not submitted',
+      message: 'The payment was authorised, but CloudTMS could not find a bank transfer that was safe to submit. Refresh the batch and retry if CloudTMS says retry is safe; otherwise review the transfer.',
+      user_action: 'REVIEW_PAYMENT_ISSUES',
+      confirm_label: 'OK',
+      show_modal: true
+    },
+    PROVIDER_SUBMIT_NO_ELIGIBLE_TRANSFERS: {
+      ok: false,
+      http_status: 409,
+      severity: 'warning',
+      title: 'Payment authorised but not submitted',
+      message: 'The payment was authorised, but CloudTMS could not find a bank transfer that was safe to submit. Refresh the batch and retry if CloudTMS says retry is safe; otherwise review the transfer.',
+      user_action: 'REVIEW_PAYMENT_ISSUES',
+      confirm_label: 'OK',
+      show_modal: true
+    },
+    PAYMENT_RETRY_BLOCKED_FUNDS_CLEANUP_NOT_SAFE: {
+      ok: false,
+      http_status: 409,
+      severity: 'critical',
+      title: 'Payment retry needs review',
+      message: 'The blocked-funds retry needs review because CloudTMS could not confirm that its local execution artefacts are safe to clean.',
+      user_action: 'REVIEW_PAYMENT_ISSUES',
+      confirm_label: 'OK',
+      show_modal: true
+    },
     BATCH_STALE: {
       ok: false,
       http_status: 409,
@@ -8232,6 +8431,29 @@ function makeBankingFriendlyErrorPayload(input, options = {}) {
 
   if (payBatchId) payload.pay_batch_id = payBatchId;
   if (entityId) payload.entity_id = entityId;
+
+  for (const safeFlagKey of [
+    'operation_created',
+    'execute_payment_operation_started',
+    'submitted_to_bank',
+    'provider_submission_attempted',
+    'safe_retry_available',
+    'retry_blocked',
+    'review_required',
+    'cleanup_retry_safe'
+  ]) {
+    if (Object.prototype.hasOwnProperty.call(template, safeFlagKey) && typeof template[safeFlagKey] === 'boolean') payload[safeFlagKey] = template[safeFlagKey];
+    if (Object.prototype.hasOwnProperty.call(optionObject, safeFlagKey) && typeof optionObject[safeFlagKey] === 'boolean') payload[safeFlagKey] = optionObject[safeFlagKey];
+    if (Object.prototype.hasOwnProperty.call(sourceObject, safeFlagKey) && typeof sourceObject[safeFlagKey] === 'boolean') payload[safeFlagKey] = sourceObject[safeFlagKey];
+    if (Object.prototype.hasOwnProperty.call(primaryPayload, safeFlagKey) && typeof primaryPayload[safeFlagKey] === 'boolean') payload[safeFlagKey] = primaryPayload[safeFlagKey];
+  }
+
+  const diagnosticStage = pickSafeOperationalText(
+    [optionObject.diagnostic_stage, optionObject.diagnosticStage, optionObject.stage, sourceObject.diagnostic_stage, sourceObject.diagnosticStage, sourceObject.stage, primaryPayload.diagnostic_stage, primaryPayload.diagnosticStage, primaryPayload.stage],
+    '',
+    { uppercase: true, maxLength: 80, pattern: /^[A-Z0-9_:-]+$/i }
+  );
+  if (diagnosticStage) payload.diagnostic_stage = diagnosticStage;
 
   if (errorCode === 'BLOCKED_FUNDS') {
     payload.blocked_funds = true;
@@ -23568,17 +23790,23 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
     headers.set('Content-Type', 'application/json; charset=utf-8');
     return withCORS(env, req, new Response(JSON.stringify({
       ok: false,
-      error_code: 'BANKING_EXECUTE_PAYMENT_FAILED',
-      code: 'BANKING_EXECUTE_PAYMENT_FAILED',
-      title: 'Payment execution failed',
-      message: 'CloudTMS could not execute this payment. No successful bank submission has been confirmed. Refresh the batch and review Payment Issues before trying again.',
-      error: 'CloudTMS could not execute this payment. No successful bank submission has been confirmed. Refresh the batch and review Payment Issues before trying again.',
-      user_message: 'CloudTMS could not execute this payment. No successful bank submission has been confirmed. Refresh the batch and review Payment Issues before trying again.',
-      user_action: 'REVIEW_PAYMENT_ISSUES',
+      error_code: 'EXECUTE_PAYMENT_INVALID_REQUEST',
+      code: 'EXECUTE_PAYMENT_INVALID_REQUEST',
+      title: 'Payment execution could not be started',
+      message: 'CloudTMS could not start the payment execution operation. No bank submission was attempted. Refresh the batch and try again.',
+      error: 'CloudTMS could not start the payment execution operation. No bank submission was attempted. Refresh the batch and try again.',
+      user_message: 'CloudTMS could not start the payment execution operation. No bank submission was attempted. Refresh the batch and try again.',
+      user_action: 'REFRESH_BATCH',
       confirm_label: 'OK',
-      severity: 'critical',
+      severity: 'warning',
       http_status: 400,
-      status_code: 400
+      status_code: 400,
+      operation_created: false,
+      execute_payment_operation_started: false,
+      submitted_to_bank: false,
+      provider_submission_attempted: false,
+      diagnostic_stage: 'PARSE_INPUT',
+      pay_batch_id: null
     }), { status: 400, headers }));
   }
 
@@ -23586,24 +23814,52 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
   if (!actorUserId) return withCORS(env, req, unauthorized('Unauthorized'));
 
   const friendlyExecutePayload = (input, options = {}) => {
+    let payload = null;
     try {
-      if (typeof makeBankingFriendlyErrorPayload === 'function') return makeBankingFriendlyErrorPayload(input, options);
+      if (typeof makeBankingFriendlyErrorPayload === 'function') payload = makeBankingFriendlyErrorPayload(input, options);
     } catch {}
-    const code = String(options.fallbackCode || options.error_code || input?.error_code || input?.code || 'BANKING_EXECUTE_PAYMENT_FAILED').trim().toUpperCase() || 'BANKING_EXECUTE_PAYMENT_FAILED';
-    return {
-      ok: false,
-      error_code: code,
-      code,
-      title: 'Payment execution failed',
-      message: 'CloudTMS could not execute this payment. No successful bank submission has been confirmed. Refresh the batch and review Payment Issues before trying again.',
-      error: 'CloudTMS could not execute this payment. No successful bank submission has been confirmed. Refresh the batch and review Payment Issues before trying again.',
-      user_message: 'CloudTMS could not execute this payment. No successful bank submission has been confirmed. Refresh the batch and review Payment Issues before trying again.',
-      user_action: 'REVIEW_PAYMENT_ISSUES',
-      confirm_label: 'OK',
-      severity: 'critical',
-      http_status: 400,
-      status_code: 400
-    };
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+      const code = String(options.fallbackCode || options.error_code || input?.error_code || input?.code || 'BANKING_EXECUTE_PAYMENT_FAILED').trim().toUpperCase() || 'BANKING_EXECUTE_PAYMENT_FAILED';
+      payload = {
+        ok: false,
+        error_code: code,
+        code,
+        title: 'Payment execution failed',
+        message: 'CloudTMS could not execute this payment. No successful bank submission has been confirmed. Refresh the batch and review Payment Issues before trying again.',
+        error: 'CloudTMS could not execute this payment. No successful bank submission has been confirmed. Refresh the batch and review Payment Issues before trying again.',
+        user_message: 'CloudTMS could not execute this payment. No successful bank submission has been confirmed. Refresh the batch and review Payment Issues before trying again.',
+        user_action: 'REVIEW_PAYMENT_ISSUES',
+        confirm_label: 'OK',
+        severity: 'critical',
+        http_status: 400,
+        status_code: 400
+      };
+    }
+    if (!operationCreated && !startedOperationId) {
+      payload = {
+        ...payload,
+        operation_created: false,
+        execute_payment_operation_started: false,
+        submitted_to_bank: false,
+        provider_submission_attempted: false,
+        diagnostic_stage: String(options.diagnostic_stage || options.diagnosticStage || payload.diagnostic_stage || diagnosticStage || 'PARSE_INPUT').trim().toUpperCase() || 'PARSE_INPUT',
+        pay_batch_id: id
+      };
+      if (payload.error_code === 'BANKING_EXECUTE_PAYMENT_FAILED' || payload.code === 'BANKING_EXECUTE_PAYMENT_FAILED') {
+        const message = 'CloudTMS could not start the payment execution operation. No bank submission was attempted. Refresh the batch and try again.';
+        payload.error_code = 'PAYMENT_EXECUTE_OPERATION_START_FAILED';
+        payload.code = 'PAYMENT_EXECUTE_OPERATION_START_FAILED';
+        payload.title = 'Payment execution could not be started';
+        payload.message = message;
+        payload.error = message;
+        payload.user_message = message;
+        payload.user_action = 'REFRESH_BATCH';
+        payload.severity = 'warning';
+        payload.http_status = 400;
+        payload.status_code = 400;
+      }
+    }
+    return payload;
   };
 
   const friendlyExecuteResponse = (input, options = {}) => {
@@ -23617,6 +23873,64 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
     try { bodyOut = JSON.stringify(friendlyPayload); }
     catch { bodyOut = JSON.stringify({ ok: false, error_code: 'BANKING_EXECUTE_PAYMENT_FAILED', message: 'CloudTMS could not execute this payment. No successful bank submission has been confirmed. Refresh the batch and review Payment Issues before trying again.' }); }
     return withCORS(env, req, new Response(bodyOut, { status, headers }));
+  };
+
+  let diagnosticStage = 'PARSE_INPUT';
+  let operationCreated = false;
+  let startedOperationId = '';
+  let providerSubmissionAttempted = false;
+
+  const preOperationFailurePayload = (input, overrides = {}) => {
+    const source = (input && typeof input === 'object' && !Array.isArray(input)) ? input : {};
+    const override = (overrides && typeof overrides === 'object' && !Array.isArray(overrides)) ? overrides : {};
+    const code = String(
+      override.code ||
+      override.error_code ||
+      override.fallbackCode ||
+      source.error_code ||
+      source.errorCode ||
+      source.code ||
+      'PAYMENT_EXECUTE_OPERATION_START_FAILED'
+    ).trim().toUpperCase() || 'PAYMENT_EXECUTE_OPERATION_START_FAILED';
+    const stage = String(override.diagnostic_stage || override.stage || source.diagnostic_stage || source.stage || diagnosticStage || 'PARSE_INPUT').trim().toUpperCase() || 'PARSE_INPUT';
+    const message = String(
+      override.message ||
+      source.safe_message ||
+      source.user_message ||
+      source.message ||
+      'CloudTMS could not start the payment execution operation. No bank submission was attempted. Refresh the batch and try again.'
+    ).trim() || 'CloudTMS could not start the payment execution operation. No bank submission was attempted. Refresh the batch and try again.';
+    const status = Number.isFinite(Number(override.http_status || override.status_code || source.http_status || source.status_code))
+      ? Math.max(400, Math.min(599, Math.trunc(Number(override.http_status || override.status_code || source.http_status || source.status_code))))
+      : 400;
+    return {
+      ok: false,
+      error_code: code,
+      code,
+      title: 'Payment execution could not be started',
+      message,
+      error: message,
+      user_message: message,
+      user_action: 'REFRESH_BATCH',
+      confirm_label: 'OK',
+      severity: 'warning',
+      http_status: status,
+      status_code: status,
+      pay_batch_id: id,
+      operation_created: operationCreated === true || !!startedOperationId,
+      execute_payment_operation_started: operationCreated === true || !!startedOperationId,
+      operation_id: startedOperationId || null,
+      submitted_to_bank: false,
+      provider_submission_attempted: providerSubmissionAttempted === true,
+      diagnostic_stage: stage
+    };
+  };
+
+  const preOperationFailureResponse = (input, overrides = {}) => {
+    const payload = preOperationFailurePayload(input, overrides);
+    const headers = new Headers();
+    headers.set('Content-Type', 'application/json; charset=utf-8');
+    return withCORS(env, req, new Response(JSON.stringify(payload), { status: payload.http_status || 400, headers }));
   };
 
   const unwrapRpc = (rpcRes, key) => {
@@ -23678,8 +23992,9 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
 
   let body = null;
   try { body = await parseJSONBody(req); } catch { body = null; }
-  if (body !== null && (typeof body !== 'object' || Array.isArray(body))) return friendlyExecuteResponse({ error_code: 'BANKING_EXECUTE_PAYMENT_FAILED' }, { fallbackCode: 'BANKING_EXECUTE_PAYMENT_FAILED', pay_batch_id: id });
+  if (body !== null && (typeof body !== 'object' || Array.isArray(body))) return preOperationFailureResponse({ error_code: 'EXECUTE_PAYMENT_INVALID_REQUEST' }, { code: 'EXECUTE_PAYMENT_INVALID_REQUEST', diagnostic_stage: 'PARSE_INPUT', http_status: 400 });
   body = body || {};
+  diagnosticStage = 'VALIDATE_REQUEST';
 
   const scopeRaw = String(body.pay_channel_scope || body.scope || 'ALL').trim().toUpperCase();
   const payChannelScope = (scopeRaw === 'PAYE' || scopeRaw === 'UMBRELLA' || scopeRaw === 'ALL') ? scopeRaw : 'ALL';
@@ -23693,7 +24008,7 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
   let warningHoursJson = null;
   if (body.warning_hours_json === null || body.warning_hours_json === undefined) warningHoursJson = null;
   else if (Array.isArray(body.warning_hours_json)) warningHoursJson = body.warning_hours_json;
-  else return friendlyExecuteResponse({ error_code: 'BANKING_EXECUTE_PAYMENT_FAILED', pay_batch_id: id }, { fallbackCode: 'BANKING_EXECUTE_PAYMENT_FAILED', pay_batch_id: id });
+  else return preOperationFailureResponse({ error_code: 'EXECUTE_PAYMENT_WARNING_HOURS_INVALID', pay_batch_id: id }, { code: 'EXECUTE_PAYMENT_WARNING_HOURS_INVALID', diagnostic_stage: 'VALIDATE_REQUEST', http_status: 400 });
 
   const actorIntentRaw = String(body.actor_intent || body.actorIntent || '').trim().toUpperCase();
   const actorIntent = actorIntentRaw === 'USE_GOLDEN_KEY' ? 'USE_GOLDEN_KEY' : null;
@@ -23727,10 +24042,10 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
   const externalSettlementComment = String(body.external_settlement_comment ?? '').trim() || null;
   const reauthToken = String(body.reauth_token || '').trim();
 
-  if (!scheduleKind) return friendlyExecuteResponse({ error_code: 'BANKING_EXECUTE_PAYMENT_FAILED', pay_batch_id: id }, { fallbackCode: 'BANKING_EXECUTE_PAYMENT_FAILED', pay_batch_id: id });
-  if (!['STANDARD_BANK', 'CSV_SETTLEMENT', 'EXTERNAL_SETTLEMENT'].includes(executionMode)) return friendlyExecuteResponse({ error_code: 'BANKING_EXECUTE_PAYMENT_FAILED', pay_batch_id: id }, { fallbackCode: 'BANKING_EXECUTE_PAYMENT_FAILED', pay_batch_id: id });
+  if (!scheduleKind) return preOperationFailureResponse({ error_code: 'EXECUTE_PAYMENT_INVALID_SCHEDULE', pay_batch_id: id }, { code: 'EXECUTE_PAYMENT_INVALID_SCHEDULE', diagnostic_stage: 'VALIDATE_REQUEST', http_status: 400 });
+  if (!['STANDARD_BANK', 'CSV_SETTLEMENT', 'EXTERNAL_SETTLEMENT'].includes(executionMode)) return preOperationFailureResponse({ error_code: 'EXECUTE_PAYMENT_INVALID_MODE', pay_batch_id: id }, { code: 'EXECUTE_PAYMENT_INVALID_MODE', diagnostic_stage: 'VALIDATE_REQUEST', http_status: 400 });
   if (executionMode === 'CSV_SETTLEMENT' && payChannelScope !== 'ALL') return friendlyExecuteResponse({ error_code: 'CSV_SETTLEMENT_SCOPE_MUST_BE_ALL', pay_batch_id: id }, { fallbackCode: 'CSV_SETTLEMENT_SCOPE_MUST_BE_ALL', pay_batch_id: id });
-  if (scheduleKind === 'SCHEDULED' && !scheduledAtUtc) return friendlyExecuteResponse({ error_code: 'BANKING_EXECUTE_PAYMENT_FAILED', pay_batch_id: id }, { fallbackCode: 'BANKING_EXECUTE_PAYMENT_FAILED', pay_batch_id: id });
+  if (scheduleKind === 'SCHEDULED' && !scheduledAtUtc) return preOperationFailureResponse({ error_code: 'EXECUTE_PAYMENT_SCHEDULE_TIME_REQUIRED', pay_batch_id: id }, { code: 'EXECUTE_PAYMENT_SCHEDULE_TIME_REQUIRED', diagnostic_stage: 'VALIDATE_REQUEST', http_status: 400 });
 
   const effectivePaymentDate = (() => {
     if (executionMode === 'STANDARD_BANK') {
@@ -23740,7 +24055,7 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
     return isYmd(paymentDate) ? paymentDate : null;
   })();
 
-  if (!effectivePaymentDate || !isYmd(effectivePaymentDate)) return friendlyExecuteResponse({ error_code: 'BANKING_EXECUTE_PAYMENT_FAILED', pay_batch_id: id }, { fallbackCode: 'BANKING_EXECUTE_PAYMENT_FAILED', pay_batch_id: id });
+  if (!effectivePaymentDate || !isYmd(effectivePaymentDate)) return preOperationFailureResponse({ error_code: 'EXECUTE_PAYMENT_INVALID_PAYMENT_DATE', pay_batch_id: id }, { code: 'EXECUTE_PAYMENT_INVALID_PAYMENT_DATE', diagnostic_stage: 'VALIDATE_REQUEST', http_status: 400 });
   if (suppressRemittances && !suppressRemittancesConfirmed) return friendlyExecuteResponse({ error_code: 'SUPPRESS_REMITTANCES_CONFIRM_REQUIRED', pay_batch_id: id }, { fallbackCode: 'SUPPRESS_REMITTANCES_CONFIRM_REQUIRED', pay_batch_id: id });
   if (executionMode === 'CSV_SETTLEMENT') {
     if (csvUploadedConfirmed !== true) return friendlyExecuteResponse({ error_code: 'CSV_UPLOADED_CONFIRMATION_REQUIRED', pay_batch_id: id }, { fallbackCode: 'CSV_UPLOADED_CONFIRMATION_REQUIRED', pay_batch_id: id });
@@ -23749,9 +24064,29 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
   if (executionMode === 'EXTERNAL_SETTLEMENT' && !externalSettlementComment) return friendlyExecuteResponse({ error_code: 'EXTERNAL_SETTLEMENT_COMMENT_REQUIRED', pay_batch_id: id }, { fallbackCode: 'EXTERNAL_SETTLEMENT_COMMENT_REQUIRED', pay_batch_id: id });
 
   try {
+    diagnosticStage = 'VERIFY_REAUTH';
     const reauthCheck = await verifyPaymentScheduleReauth(env, user, reauthToken);
-    if (!reauthCheck.ok) return withCORS(env, req, reauthCheck.response);
+    if (!reauthCheck.ok) {
+      return friendlyExecuteResponse({
+        error_code: 'PAYMENT_REAUTH_REQUIRED',
+        pay_batch_id: id,
+        operation_created: false,
+        execute_payment_operation_started: false,
+        submitted_to_bank: false,
+        provider_submission_attempted: false,
+        diagnostic_stage: 'VERIFY_REAUTH'
+      }, {
+        fallbackCode: 'PAYMENT_REAUTH_REQUIRED',
+        pay_batch_id: id,
+        diagnostic_stage: 'VERIFY_REAUTH',
+        operation_created: false,
+        execute_payment_operation_started: false,
+        submitted_to_bank: false,
+        provider_submission_attempted: false
+      });
+    }
 
+    diagnosticStage = 'LOAD_AUTHORISER';
     const enc = encodeURIComponent;
     const { rows: userRows } = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/tms_users?id=eq.${enc(actorUserId)}&select=id,is_active,email,display_name,payment_authoriser,payment_golden_key&limit=1`);
     const actorRow = Array.isArray(userRows) && userRows.length ? userRows[0] : null;
@@ -23759,10 +24094,13 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
     if (actorRow.payment_authoriser !== true && actorRow.payment_golden_key !== true) return friendlyExecuteResponse({ error_code: 'PAYMENT_AUTHORISER_REQUIRED', pay_batch_id: id }, { fallbackCode: 'PAYMENT_AUTHORISER_REQUIRED', pay_batch_id: id });
     if (actorIntent === 'USE_GOLDEN_KEY' && actorRow.payment_golden_key !== true) return friendlyExecuteResponse({ error_code: 'PAYMENT_GOLDEN_KEY_REQUIRED', pay_batch_id: id }, { fallbackCode: 'PAYMENT_GOLDEN_KEY_REQUIRED', pay_batch_id: id });
 
+    diagnosticStage = 'LOAD_EXECUTION_SUMMARY';
     const summary = unwrapRpc(await sbRpc(env, 'pay_batch_execution_summary_get', {
       p_pay_batch_id: id,
       p_actor_user_id: actorUserId
     }), 'pay_batch_execution_summary_get');
+
+    diagnosticStage = 'VALIDATE_PRECHECKS';
 
     if (summary.ok === false) return friendlyExecuteResponse(summary, { fallbackCode: String(summary.code || summary.error_code || 'PAY_BATCH_SUMMARY_FAILED'), pay_batch_id: id });
 
@@ -23780,6 +24118,7 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
       return friendlyExecuteResponse({ error_code: 'NO_ACTIVE_PAYMENTS_IN_BATCH', pay_batch_id: id }, { fallbackCode: 'NO_ACTIVE_PAYMENTS_IN_BATCH', pay_batch_id: id });
     }
 
+    diagnosticStage = 'RESOLVE_RAIL';
     const providerRaw = String(summary.rail_provider_snapshot || summary.provider || '').trim().toUpperCase();
     const provider = providerRaw === 'REV' ? 'REVOLUT' : providerRaw;
     if (!provider) return friendlyExecuteResponse({ error_code: 'UNKNOWN_RAIL_PROVIDER', pay_batch_id: id }, { fallbackCode: 'UNKNOWN_RAIL_PROVIDER', pay_batch_id: id });
@@ -23810,6 +24149,7 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
         return friendlyExecuteResponse({ error_code: 'RAIL_NOT_CONFIGURED', pay_batch_id: id }, { fallbackCode: 'RAIL_NOT_CONFIGURED', pay_batch_id: id });
       }
 
+      diagnosticStage = 'RESOLVE_FUNDING_ACCOUNT';
       if (!fundingAccountRef) {
         try {
           const { rows: defaultFundingRows } = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/settings_defaults?select=rail_default_funding_account_ref&limit=1`, false);
@@ -23822,6 +24162,7 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
       if (!fundingAccountRef) return friendlyExecuteResponse({ error_code: 'STANDARD_BANK_FUNDING_ACCOUNT_REQUIRED', pay_batch_id: id }, { fallbackCode: 'STANDARD_BANK_FUNDING_ACCOUNT_REQUIRED', pay_batch_id: id });
     }
 
+    diagnosticStage = 'BUILD_OPERATION_START';
     const reauthFingerprint = await sha256Hex(reauthToken ? `reauth:${reauthToken}` : 'reauth:none');
     const idempotencyInput = {
       actor_user_id: actorUserId,
@@ -23840,6 +24181,7 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
       suppress_remittances_confirmed: suppressRemittancesConfirmed
     };
     const idempotencyHash = await sha256Hex(stableStringify(idempotencyInput));
+    diagnosticStage = 'START_OPERATION';
     const operationPayload = await startBankingPayOperation(env, {
       operation_type: 'PAYMENT_EXECUTE',
       actor_user_id: actorUserId,
@@ -23869,9 +24211,15 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
       }
     });
 
+    operationCreated = true;
+    startedOperationId = String(operationPayload?.operation_id || operationPayload?.id || '').trim();
+    diagnosticStage = 'RETURN_OPERATION_PAYLOAD';
+
     return withCORS(env, req, ok({
       ...operationPayload,
+      operation_created: true,
       execute_payment_operation_started: true,
+      provider_submission_attempted: false,
       pay_batch_id: id,
       execution_mode: executionMode,
       payment_date: effectivePaymentDate,
@@ -23880,9 +24228,37 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
       submitted_to_bank: false
     }));
   } catch (e) {
-    return friendlyExecuteResponse(e, { fallbackCode: 'BANKING_EXECUTE_PAYMENT_FAILED', pay_batch_id: id });
+    const source = (e && typeof e === 'object' && !Array.isArray(e)) ? e : {};
+    const preOperationCode = String(
+      source.error_code ||
+      source.errorCode ||
+      source.code ||
+      (
+        diagnosticStage === 'BUILD_OPERATION_START' ? 'PAYMENT_EXECUTE_OPERATION_CONFIG_FAILED'
+        : diagnosticStage === 'START_OPERATION' ? 'PAYMENT_EXECUTE_OPERATION_START_FAILED'
+        : 'PAYMENT_EXECUTE_OPERATION_START_FAILED'
+      )
+    ).trim().toUpperCase() || 'PAYMENT_EXECUTE_OPERATION_START_FAILED';
+    if (!operationCreated && !startedOperationId) {
+      return preOperationFailureResponse(source, {
+        code: preOperationCode,
+        diagnostic_stage: source.diagnostic_stage || source.stage || diagnosticStage,
+        message: source.safe_message || source.message || 'CloudTMS could not start the payment execution operation. No bank submission was attempted. Refresh the batch and try again.',
+        http_status: source.http_status || source.status_code || 400
+      });
+    }
+    return friendlyExecuteResponse(e, {
+      fallbackCode: 'BANKING_EXECUTE_PAYMENT_FAILED',
+      pay_batch_id: id,
+      diagnostic_stage: diagnosticStage,
+      operation_created: operationCreated === true,
+      execute_payment_operation_started: operationCreated === true,
+      submitted_to_bank: false,
+      provider_submission_attempted: providerSubmissionAttempted === true
+    });
   }
 }
+
 
 
 async function verifyPaymentScheduleReauth(env, user, reauthToken) {
@@ -27440,8 +27816,6 @@ async function handleBankingPayBatchNotifyScheduled(env, req, user, payBatchId) 
   }
 }
 
-
-
 async function handleBankingPayBatchCancel(env, req, user, payBatchId) {
   const id = String(payBatchId || '').trim();
   if (!id) return withCORS(env, req, badRequest('pay_batch_id is required'));
@@ -27847,27 +28221,52 @@ async function handleBankingPayBatchCancel(env, req, user, payBatchId) {
 
     const sessionDiscardResult = _buildSessionDiscardResult(payload);
     const sourceSessionId = trimStr(sessionDiscardResult.discarded_session_id || trimStr(payload?.source_workbench_session_id || ''));
+    const snapshotRebuild = isPlainObject(payload?.snapshot_rebuild) ? payload.snapshot_rebuild : {};
+    const snapshotRefresh = isPlainObject(payload?.snapshot_refresh) ? payload.snapshot_refresh : {};
+    const dirtiedCandidates = isPlainObject(payload?.dirtied_candidates) ? payload.dirtied_candidates : {};
+    const dirtiedCandidatesCamel = isPlainObject(payload?.dirtiedCandidates) ? payload.dirtiedCandidates : {};
+
     const dirtyCandidateIds = _extractUuidArray(
       payload?.dirty_candidate_ids,
       payload?.dirtied_candidate_ids,
       payload?.touched_candidate_ids,
-      payload?.affected_candidate_ids
+      payload?.affected_candidate_ids,
+      dirtiedCandidates?.candidate_ids,
+      dirtiedCandidatesCamel?.candidateIds,
+      snapshotRebuild?.dirtied_candidates?.candidate_ids,
+      snapshotRebuild?.dirty_candidate_ids
+    );
+    const snapshotRefreshJobIds = _extractUuidArray(
+      snapshotRefresh?.job_ids,
+      snapshotRefresh?.jobIds
+    );
+    const snapshotRebuildRunIds = _extractUuidArray(
+      snapshotRebuild?.snapshot_run_ids,
+      snapshotRebuild?.snapshotRunIds,
+      snapshotRebuild?.run_ids,
+      snapshotRebuild?.runIds
     );
     const refreshJobIds = _extractUuidArray(
       payload?.refresh_job_ids,
-      payload?.job_ids
+      payload?.job_ids,
+      snapshotRefreshJobIds,
+      snapshotRebuildRunIds
     );
 
     const postCancelRefresh = {
       source_session_id: sourceSessionId || null,
       source_session_discard_result: sessionDiscardResult.result,
       source_session_consumed: sessionDiscardResult.ok === true,
+      requires_new_session: true,
       replacement_session_id: null,
       replacement_session_signature: null,
       replacement_snapshot_run_id: null,
       replacement_session_version: null,
       dirty_candidate_ids: dirtyCandidateIds,
+      pending_candidate_ids: dirtyCandidateIds,
       refresh_job_ids: refreshJobIds,
+      snapshot_refresh_job_ids: snapshotRefreshJobIds,
+      snapshot_rebuild_run_ids: snapshotRebuildRunIds,
       warnings: []
     };
 
@@ -27932,12 +28331,20 @@ async function handleBankingPayBatchCancel(env, req, user, payBatchId) {
       });
     } else {
       try {
+        const obsoleteSessionIds = _extractUuidArray(sourceSessionId, currentSessionId);
         const sessionOpenRpc = await sbRpc(env, 'pay_workbench_session_open', {
           p_actor_user_id: String(user.id || '').trim(),
           p_pay_date: replacementPayDate,
           p_week_ending_cutoff: replacementCutoff,
           p_filters_json: replacementFiltersJson,
-          p_session_signature: replacementSessionSignature || null
+          p_session_signature: replacementSessionSignature || null,
+          p_force_new_session: true,
+          p_discard_source_session: true,
+          p_source_session_id: sourceSessionId || null,
+          p_obsolete_session_ids: obsoleteSessionIds,
+          p_mutation_context: 'CANCEL_DELETE_DRAFT_SUCCESS',
+          p_dirty_candidate_ids: dirtyCandidateIds,
+          p_refresh_job_ids: refreshJobIds
         });
 
         let sessionOpenPayload = sessionOpenRpc;
@@ -28021,6 +28428,7 @@ async function handleBankingPayBatchCancel(env, req, user, payBatchId) {
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
 }
+
 
 
 
@@ -34490,7 +34898,12 @@ function buildBankingPayOperationPublicPayload(operationRow, options = {}) {
       PAYMENT_EXECUTE_CLEANUP_FAILED: 'The payment failed and some local execution artefacts could not be cleaned up automatically.',
       BANK_TRANSFER_PROVIDER_REVIEW_REQUIRED: 'This payment may already have reached the banking provider. Review or reconcile the transfer before retrying.',
       AUTH_REQUEST_HELD_BY_PREVIOUS_OPERATION: 'A previous authorisation request is still attached to this batch. Review or reconcile that request before retrying.',
-      NO_SAFE_LOCAL_CLEANUP_AVAILABLE: 'The payment retry needs review because CloudTMS could not confirm that local execution artefacts are safe to clean.'
+      NO_SAFE_LOCAL_CLEANUP_AVAILABLE: 'The payment retry needs review because CloudTMS could not confirm that local execution artefacts are safe to clean.',
+      AUTHORISED_TRANSFER_NOT_PROVIDER_SUBMIT_READY: 'The payment was authorised, but CloudTMS could not find a bank transfer that was safe to submit. Refresh the batch and retry if CloudTMS says retry is safe; otherwise review the transfer.',
+      PROVIDER_SUBMIT_NO_ELIGIBLE_TRANSFERS: 'The payment was authorised, but CloudTMS could not find a bank transfer that was safe to submit. Refresh the batch and retry if CloudTMS says retry is safe; otherwise review the transfer.',
+      PAYMENT_EXECUTE_OPERATION_START_FAILED: 'CloudTMS could not start the payment execution operation. No bank submission was attempted. Refresh the batch and try again.',
+      PAYMENT_EXECUTE_OPERATION_CONFIG_FAILED: 'CloudTMS could not start the payment execution operation. No bank submission was attempted. Refresh the batch and try again.',
+      PAYMENT_OPERATION_START_INVALID_INPUT: 'CloudTMS could not start the payment execution operation. No bank submission was attempted. Refresh the batch and try again.'
     };
     const code = normaliseSafeCode(source.code || source.error_code || source.errorCode || fallbackCode) || normaliseSafeCode(fallbackCode) || 'BANKING_OPERATION_FAILED';
     const sourceMessage = safeTrimText(source.message || source.user_message || source.error || fallbackMessage);
@@ -34521,7 +34934,12 @@ function buildBankingPayOperationPublicPayload(operationRow, options = {}) {
       'locks_released',
       'provider_evidence_count',
       'unsafe_transfer_count',
-      'unsafe_scope_count'
+      'unsafe_scope_count',
+      'provider_submit_ready_count',
+      'provider_submit_ready_transfer_count',
+      'authorised_without_provider_submission_count',
+      'authorised_but_not_submit_ready_count',
+      'same_operation_authorised_auth_count'
     ]) {
       const rawValue = Object.prototype.hasOwnProperty.call(cleanupSource, key) ? cleanupSource[key] : source[key];
       if (Number.isFinite(Number(rawValue))) {
@@ -34542,6 +34960,11 @@ function buildBankingPayOperationPublicPayload(operationRow, options = {}) {
         if (typeof rawValue === 'boolean') cleanupSummary[key] = rawValue;
         else if (safeTrimText(rawValue)) cleanupSummary[key] = safeTrimText(rawValue);
       }
+    }
+    for (const safeTextKey of ['auth_request_state', 'auth_request_unsafe_reason', 'classification_source']) {
+      const rawValue = source[safeTextKey];
+      const safeValue = safeTrimText(rawValue);
+      if (safeValue && !looksTechnical(safeValue) && safeValue.length <= 160) safeError[safeTextKey] = safeTextKey === 'auth_request_state' ? safeValue.toUpperCase() : safeValue;
     }
     if (Object.keys(cleanupSummary).length) safeError.cleanup_summary = cleanupSummary;
     return safeError;
@@ -34779,12 +35202,30 @@ async function startBankingPayOperation(env, input = {}, options = {}) {
     return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
   };
 
+  const makeOperationStartError = (code, safeMessage, details = {}) => {
+    const error = new Error(String(safeMessage || 'CloudTMS could not start the payment execution operation. No bank submission was attempted. Refresh the batch and try again.'));
+    const detailObject = (details && typeof details === 'object' && !Array.isArray(details)) ? details : {};
+    error.code = code;
+    error.error_code = code;
+    error.operation_type = String(detailObject.operation_type || detailObject.operationType || '').trim().toUpperCase() || null;
+    error.operation_created = false;
+    error.execute_payment_operation_started = false;
+    error.submitted_to_bank = false;
+    error.provider_submission_attempted = false;
+    error.stage = 'operation_start';
+    error.diagnostic_stage = 'START_OPERATION';
+    error.safe_message = String(safeMessage || 'CloudTMS could not start the payment execution operation. No bank submission was attempted. Refresh the batch and try again.');
+    error.internal_diagnostic = String(detailObject.internal_diagnostic || detailObject.internalDiagnostic || safeMessage || code || '').slice(0, 500);
+    if (detailObject.pay_batch_id || detailObject.payBatchId) error.pay_batch_id = detailObject.pay_batch_id || detailObject.payBatchId;
+    return error;
+  };
+
   const operationType = String(input.operation_type || input.operationType || '').trim().toUpperCase();
-  if (!operationType) throw new Error('startBankingPayOperation: operation_type is required');
+  if (!operationType) throw makeOperationStartError('PAYMENT_OPERATION_START_INVALID_INPUT', 'CloudTMS could not start the payment execution operation. No bank submission was attempted. Refresh the batch and try again.', { internal_diagnostic: 'operation_type is required' });
 
   const actorUserId = input.actor_user_id || input.actorUserId || options.actor_user_id || options.actorUserId || null;
   const idempotencyKey = String(input.idempotency_key || input.idempotencyKey || '').trim();
-  if (!idempotencyKey) throw new Error('startBankingPayOperation: idempotency_key is required');
+  if (!idempotencyKey) throw makeOperationStartError('PAYMENT_OPERATION_START_INVALID_INPUT', 'CloudTMS could not start the payment execution operation. No bank submission was attempted. Refresh the batch and try again.', { operation_type: operationType, pay_batch_id: input.pay_batch_id || input.payBatchId || null, internal_diagnostic: 'idempotency_key is required' });
 
   const workbenchSessionId = input.workbench_session_id || input.workbenchSessionId || null;
   const payBatchId = input.pay_batch_id || input.payBatchId || null;
@@ -34796,32 +35237,60 @@ async function startBankingPayOperation(env, input = {}, options = {}) {
   const suppliedConfig = (input.config_json && typeof input.config_json === 'object' && !Array.isArray(input.config_json))
     ? input.config_json
     : ((input.configJson && typeof input.configJson === 'object' && !Array.isArray(input.configJson)) ? input.configJson : null);
-  const configJson = suppliedConfig && Object.keys(suppliedConfig).length
-    ? suppliedConfig
-    : await getBankingPayOperationConfig(env, operationType, options.configOptions || {});
-
-  if (!configJson || typeof configJson !== 'object' || Array.isArray(configJson) || !Object.keys(configJson).length) {
-    throw new Error('startBankingPayOperation: operation config snapshot could not be built');
+  let configJson = null;
+  try {
+    configJson = suppliedConfig && Object.keys(suppliedConfig).length
+      ? suppliedConfig
+      : await getBankingPayOperationConfig(env, operationType, options.configOptions || {});
+  } catch (configError) {
+    const configCode = operationType === 'PAYMENT_EXECUTE' ? 'PAYMENT_EXECUTE_OPERATION_CONFIG_FAILED' : 'PAYMENT_OPERATION_START_INVALID_INPUT';
+    const startError = makeOperationStartError(configCode, 'CloudTMS could not start the payment execution operation. No bank submission was attempted. Refresh the batch and try again.', {
+      operation_type: operationType,
+      pay_batch_id: payBatchId,
+      internal_diagnostic: String(configError?.message || configError || 'operation config snapshot could not be built')
+    });
+    startError.cause = configError;
+    throw startError;
   }
 
-  const rpcRes = await sbRpc(env, 'banking_pay_operation_start', {
-    p_operation_type: operationType,
-    p_actor_user_id: actorUserId,
-    p_idempotency_key: idempotencyKey,
-    p_workbench_session_id: workbenchSessionId,
-    p_pay_batch_id: payBatchId,
-    p_root_operation_id: rootOperationId,
-    p_input_json: inputJson,
-    p_config_json: configJson
-  });
+  if (!configJson || typeof configJson !== 'object' || Array.isArray(configJson) || !Object.keys(configJson).length) {
+    const configCode = operationType === 'PAYMENT_EXECUTE' ? 'PAYMENT_EXECUTE_OPERATION_CONFIG_FAILED' : 'PAYMENT_OPERATION_START_INVALID_INPUT';
+    throw makeOperationStartError(configCode, 'CloudTMS could not start the payment execution operation. No bank submission was attempted. Refresh the batch and try again.', { operation_type: operationType, pay_batch_id: payBatchId, internal_diagnostic: 'operation config snapshot could not be built' });
+  }
+
+  let rpcRes = null;
+  try {
+    rpcRes = await sbRpc(env, 'banking_pay_operation_start', {
+      p_operation_type: operationType,
+      p_actor_user_id: actorUserId,
+      p_idempotency_key: idempotencyKey,
+      p_workbench_session_id: workbenchSessionId,
+      p_pay_batch_id: payBatchId,
+      p_root_operation_id: rootOperationId,
+      p_input_json: inputJson,
+      p_config_json: configJson
+    });
+  } catch (rpcError) {
+    const startError = makeOperationStartError('PAYMENT_EXECUTE_OPERATION_START_FAILED', 'CloudTMS could not start the payment execution operation. No bank submission was attempted. Refresh the batch and try again.', {
+      operation_type: operationType,
+      pay_batch_id: payBatchId,
+      internal_diagnostic: String(rpcError?.message || rpcError || 'banking_pay_operation_start failed')
+    });
+    startError.cause = rpcError;
+    throw startError;
+  }
 
   const row = unwrapRpcPayload(rpcRes, 'banking_pay_operation_start');
   if (!row || !row.operation_id) {
-    throw new Error('startBankingPayOperation: banking_pay_operation_start did not return an operation_id');
+    throw makeOperationStartError('PAYMENT_EXECUTE_OPERATION_START_FAILED', 'CloudTMS could not start the payment execution operation. No bank submission was attempted. Refresh the batch and try again.', { operation_type: operationType, pay_batch_id: payBatchId, internal_diagnostic: 'banking_pay_operation_start did not return an operation_id' });
   }
 
   return buildBankingPayOperationPublicPayload(row, options.publicPayloadOptions || {});
 }
+
+
+
+
 
 async function handleBankingPayOperationGet(env, req, user, operationId) {
   const id = String(operationId || '').trim();
@@ -36145,6 +36614,8 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
     return finishFailedWithCleanup( null, { code: 'DRAFT_CREATE_OPERATION_FAILED', message: 'Draft create operation failed.', phase, error: String(e?.message || e || '') });
   }
 }
+
+
 async function advanceBankingPayExecuteOperation(env, operationRow, user, options = {}) {
 const unwrapRpcPayload = (rpcRes, key) => {
 let payload = rpcRes;
@@ -36404,6 +36875,25 @@ if (businessCode === 'TRANSFER_SCOPE_GROUP_HELD_BY_ACTIVE_OR_UNSAFE_OPERATION' |
 if (hasToken('UX_BANKING_PAY_OPERATION_TRANSFER_SCOPE_BATCH_GROUP') || (hasToken('DUPLICATE KEY') && hasToken('BANKING_PAY_OPERATION_TRANSFER_SCOPE'))) {
   businessCode = 'TRANSFER_SCOPE_RETRY_BLOCKER_DETECTED';
 }
+if (businessCode === 'AUTHORISED_TRANSFER_NOT_PROVIDER_SUBMIT_READY' || hasToken('AUTHORISED_TRANSFER_NOT_PROVIDER_SUBMIT_READY')) {
+  businessCode = 'AUTHORISED_TRANSFER_NOT_PROVIDER_SUBMIT_READY';
+}
+if (businessCode === 'PROVIDER_SUBMIT_NO_ELIGIBLE_TRANSFERS' || hasToken('PROVIDER_SUBMIT_NO_ELIGIBLE_TRANSFERS')) {
+  businessCode = 'PROVIDER_SUBMIT_NO_ELIGIBLE_TRANSFERS';
+}
+if (businessCode === 'PAYMENT_RETRY_BLOCKED_FUNDS_CLEANUP_NOT_SAFE' || hasToken('PAYMENT_RETRY_BLOCKED_FUNDS_CLEANUP_NOT_SAFE')) {
+  businessCode = 'PAYMENT_RETRY_BLOCKED_FUNDS_CLEANUP_NOT_SAFE';
+}
+const providerEvidenceCountForFailure = Math.max(
+  Number.isFinite(Number(extraObj.provider_attempt_or_evidence_count)) ? Number(extraObj.provider_attempt_or_evidence_count) : 0,
+  Number.isFinite(Number(extraObj.provider_attempt_or_evidence_transfer_count)) ? Number(extraObj.provider_attempt_or_evidence_transfer_count) : 0,
+  Number.isFinite(Number(extraObj.provider_or_ambiguous_evidence_count)) ? Number(extraObj.provider_or_ambiguous_evidence_count) : 0,
+  Number.isFinite(Number(extraObj.provider_or_ambiguous_evidence_transfer_count)) ? Number(extraObj.provider_or_ambiguous_evidence_transfer_count) : 0,
+  Number.isFinite(Number(extraObj.provider_evidence_count)) ? Number(extraObj.provider_evidence_count) : 0
+);
+if (providerEvidenceCountForFailure > 0 && !['BLOCKED_FUNDS'].includes(businessCode)) {
+  businessCode = 'EXECUTION_RETRY_BLOCKED_BY_PROVIDER_EVIDENCE';
+}
 if (
   businessCode === 'BANK_TRANSFER_PROVIDER_REVIEW_REQUIRED'
   || businessCode === 'PROVIDER_SUBMISSION_EVIDENCE_REQUIRED'
@@ -36437,7 +36927,10 @@ const messageByCode = {
   PAYMENT_EXECUTE_CLEANUP_FAILED: 'The payment failed and some local execution artefacts could not be cleaned up automatically.',
   BANK_TRANSFER_PROVIDER_REVIEW_REQUIRED: 'This payment may already have reached the banking provider. Review or reconcile the transfer before retrying.',
   AUTH_REQUEST_HELD_BY_PREVIOUS_OPERATION: 'A previous authorisation request is still attached to this batch. Review or reconcile that request before retrying.',
-  NO_SAFE_LOCAL_CLEANUP_AVAILABLE: 'The payment retry needs review because CloudTMS could not confirm that local execution artefacts are safe to clean.'
+  NO_SAFE_LOCAL_CLEANUP_AVAILABLE: 'The payment retry needs review because CloudTMS could not confirm that local execution artefacts are safe to clean.',
+  AUTHORISED_TRANSFER_NOT_PROVIDER_SUBMIT_READY: 'The payment was authorised, but CloudTMS could not find a bank transfer that was safe to submit. Refresh the batch and retry if CloudTMS says retry is safe; otherwise review the transfer.',
+  PROVIDER_SUBMIT_NO_ELIGIBLE_TRANSFERS: 'The payment was authorised, but no eligible bank transfer could be safely claimed for provider submission. Refresh the batch and retry if CloudTMS says retry is safe; otherwise review the transfer.',
+  PAYMENT_RETRY_BLOCKED_FUNDS_CLEANUP_NOT_SAFE: 'The blocked-funds retry needs review because CloudTMS could not confirm that its local execution artefacts are safe to clean.'
 };
 
 const phaseText = String(extraObj.phase || currentPhase || '').trim().toUpperCase() || currentPhase;
@@ -36454,6 +36947,16 @@ const publicError = {
 for (const key of [
   'blocker_count',
   'authorisation_ready_transfer_count',
+  'provider_submit_ready_count',
+  'provider_submit_ready_transfer_count',
+  'authorised_without_provider_submission_count',
+  'authorised_without_provider_submission_transfer_count',
+  'authorised_but_not_submit_ready_count',
+  'authorised_but_not_submit_ready_transfer_count',
+  'same_operation_authorised_auth_count',
+  'same_operation_authorised_auth_request_count',
+  'claimed',
+  'submitted_this_chunk',
   'canonical_pending_status_transfer_count',
   'local_only_transfer_count',
   'provider_attempt_or_evidence_transfer_count',
@@ -36493,10 +36996,23 @@ return {
 
 };
 
+const retryBlockedFundsCleanupPhases = new Set([
+'PREPARE_TRANSFER_SCOPE',
+'SEED_TRANSFER_CHUNKS',
+'PREPARE_TRANSFER_CHUNKS',
+'PREPARE_BATCH',
+'START_AUTHORISATION',
+'WAIT_FOR_AUTHORISATION',
+'SCHEDULE_OR_SUBMIT',
+'SUBMIT_PROVIDER_TRANSFERS',
+'APPLY_RAIL_UPDATES'
+]);
+
 const shouldCleanupFailedPaymentExecution = (phaseText) => {
-if (operationType !== 'PAYMENT_EXECUTE') return false;
 const phaseValue = String(phaseText || currentPhase || '').trim().toUpperCase();
-return executionCleanupPhases.has(phaseValue);
+if (operationType === 'PAYMENT_EXECUTE') return executionCleanupPhases.has(phaseValue);
+if (operationType === 'PAYMENT_RETRY_BLOCKED_FUNDS') return retryBlockedFundsCleanupPhases.has(phaseValue);
+return false;
 };
 
 const cleanupFailedPaymentExecution = async (normalisedFailure, phaseText) => {
@@ -37248,6 +37764,25 @@ if (currentPhase === 'SUBMIT_PROVIDER_TRANSFERS') {
     });
   }
   if (submitted && Array.isArray(submitted.errors) && submitted.errors.length) {
+    const submittedErrorCodes = submitted.errors
+      .map((err) => String(err?.code || err?.error_code || '').trim().toUpperCase())
+      .filter(Boolean);
+    const providerSubmitBlockerCode = submittedErrorCodes.find((errCode) => errCode === 'AUTHORISED_TRANSFER_NOT_PROVIDER_SUBMIT_READY' || errCode === 'PROVIDER_SUBMIT_NO_ELIGIBLE_TRANSFERS') || String(submitted.claim_blocker_code || submitted.claimBlockerCode || '').trim().toUpperCase();
+    if (providerSubmitBlockerCode === 'AUTHORISED_TRANSFER_NOT_PROVIDER_SUBMIT_READY' || providerSubmitBlockerCode === 'PROVIDER_SUBMIT_NO_ELIGIBLE_TRANSFERS') {
+      return fail(providerSubmitBlockerCode, 'The authorised bank transfer could not be safely claimed for provider submission.', {
+        phase: currentPhase,
+        provider_submission: submitted,
+        claimed: Number(submitted.claimed || submitted.claimed_count || submitted.claimedCount || 0),
+        submitted_this_chunk: Number(submitted.submitted_this_chunk || submitted.submittedThisChunk || submitted.submitted_count || submitted.submittedCount || 0),
+        provider_submit_ready_count: Number(submitted.provider_submit_ready_count || submitted.providerSubmitReadyCount || submitted.provider_submit_ready_transfer_count || submitted.providerSubmitReadyTransferCount || 0),
+        authorised_without_provider_submission_count: Number(submitted.authorised_without_provider_submission_count || submitted.authorisedWithoutProviderSubmissionCount || submitted.authorised_without_provider_submission_transfer_count || submitted.authorisedWithoutProviderSubmissionTransferCount || 0),
+        authorised_but_not_submit_ready_count: Number(submitted.authorised_but_not_submit_ready_count || submitted.authorisedButNotSubmitReadyCount || submitted.authorised_but_not_submit_ready_transfer_count || submitted.authorisedButNotSubmitReadyTransferCount || 0),
+        same_operation_authorised_auth_count: Number(submitted.same_operation_authorised_auth_count || submitted.sameOperationAuthorisedAuthCount || submitted.same_operation_authorised_auth_request_count || submitted.sameOperationAuthorisedAuthRequestCount || 0),
+        provider_attempt_or_evidence_count: Number(submitted.provider_attempt_or_evidence_count || submitted.providerAttemptOrEvidenceCount || submitted.provider_attempt_or_evidence_transfer_count || submitted.providerAttemptOrEvidenceTransferCount || 0),
+        unsafe_transfer_count: Number(submitted.unsafe_transfer_count || submitted.unsafeTransferCount || 0),
+        remaining_submit_attempt_required: Number(submitted.remaining_submit_attempt_required || submitted.remainingSubmitAttemptRequired || 0)
+      });
+    }
     return fail('PROVIDER_SUBMISSION_REVIEW_REQUIRED', 'Provider submission needs review.', {
       phase: currentPhase,
       provider_attempt_or_evidence_transfer_count: Number(submitted.provider_attempt_or_evidence_count || submitted.providerAttemptOrEvidenceCount || 0),
@@ -37256,12 +37791,75 @@ if (currentPhase === 'SUBMIT_PROVIDER_TRANSFERS') {
       attempted_but_unproven_count: Number(submitted.attempted_but_unproven_count || submitted.attemptedButUnprovenCount || 0)
     });
   }
-  const remainingSubmitAttemptRequired = Number(submitted?.remaining_submit_attempt_required ?? submitted?.remaining_unsubmitted ?? 0);
-  const remainingProviderEvidenceRequired = Number(submitted?.remaining_provider_evidence_required ?? 0);
-  const attemptedButUnprovenCount = Number(submitted?.attempted_but_unproven_count ?? 0);
+  const claimedTransferCount = Number(submitted?.claimed ?? submitted?.claimed_count ?? submitted?.claimedCount ?? 0);
+  const submittedThisChunk = Number(submitted?.submitted_this_chunk ?? submitted?.submittedThisChunk ?? submitted?.submitted_count ?? submitted?.submittedCount ?? 0);
+  const remainingSubmitAttemptRequired = Number(submitted?.remaining_submit_attempt_required ?? submitted?.remainingSubmitAttemptRequired ?? submitted?.remaining_unsubmitted ?? 0);
+  const remainingProviderEvidenceRequired = Number(submitted?.remaining_provider_evidence_required ?? submitted?.remainingProviderEvidenceRequired ?? 0);
+  const attemptedButUnprovenCount = Number(submitted?.attempted_but_unproven_count ?? submitted?.attemptedButUnprovenCount ?? 0);
+  const providerSubmitReadyCount = Number(submitted?.provider_submit_ready_count ?? submitted?.providerSubmitReadyCount ?? submitted?.provider_submit_ready_transfer_count ?? submitted?.providerSubmitReadyTransferCount ?? 0);
+  const authorisedWithoutProviderSubmissionCount = Number(submitted?.authorised_without_provider_submission_count ?? submitted?.authorisedWithoutProviderSubmissionCount ?? submitted?.authorised_without_provider_submission_transfer_count ?? submitted?.authorisedWithoutProviderSubmissionTransferCount ?? 0);
+  const authorisedButNotSubmitReadyCount = Number(submitted?.authorised_but_not_submit_ready_count ?? submitted?.authorisedButNotSubmitReadyCount ?? submitted?.authorised_but_not_submit_ready_transfer_count ?? submitted?.authorisedButNotSubmitReadyTransferCount ?? 0);
+  const sameOperationAuthorisedAuthCount = Number(submitted?.same_operation_authorised_auth_count ?? submitted?.sameOperationAuthorisedAuthCount ?? submitted?.same_operation_authorised_auth_request_count ?? submitted?.sameOperationAuthorisedAuthRequestCount ?? 0);
+  const providerAttemptOrEvidenceCount = Number(submitted?.provider_attempt_or_evidence_count ?? submitted?.providerAttemptOrEvidenceCount ?? submitted?.provider_attempt_or_evidence_transfer_count ?? submitted?.providerAttemptOrEvidenceTransferCount ?? 0);
+  const unsafeTransferCount = Number(submitted?.unsafe_transfer_count ?? submitted?.unsafeTransferCount ?? 0);
+  const claimBlockerCode = String(submitted?.claim_blocker_code || submitted?.claimBlockerCode || '').trim().toUpperCase();
+  const standardBankSubmitMode = executionMode === 'STANDARD_BANK' && retryBlockedFunds !== true;
+  const hasSameOperationAuthorisedOrLocalTransferEvidence = [
+    providerSubmitReadyCount,
+    authorisedWithoutProviderSubmissionCount,
+    authorisedButNotSubmitReadyCount,
+    sameOperationAuthorisedAuthCount
+  ].some((value) => Number.isFinite(value) && value > 0);
   const requiresPollOrReview = submitted?.requires_poll_or_review === true
+    || submitted?.requires_provider_poll === true
+    || submitted?.requires_review === true
     || (Number.isFinite(attemptedButUnprovenCount) && attemptedButUnprovenCount > 0)
     || (Number.isFinite(remainingProviderEvidenceRequired) && remainingProviderEvidenceRequired > 0 && !(Number.isFinite(remainingSubmitAttemptRequired) && remainingSubmitAttemptRequired > 0));
+
+  if (
+    standardBankSubmitMode
+    && (claimBlockerCode === 'AUTHORISED_TRANSFER_NOT_PROVIDER_SUBMIT_READY' || claimBlockerCode === 'PROVIDER_SUBMIT_NO_ELIGIBLE_TRANSFERS')
+  ) {
+    return fail(claimBlockerCode, 'The authorised bank transfer could not be safely claimed for provider submission.', {
+      phase: currentPhase,
+      provider_submission: submitted,
+      claimed: Number.isFinite(claimedTransferCount) ? claimedTransferCount : 0,
+      submitted_this_chunk: Number.isFinite(submittedThisChunk) ? submittedThisChunk : 0,
+      provider_submit_ready_count: Number.isFinite(providerSubmitReadyCount) ? providerSubmitReadyCount : 0,
+      authorised_without_provider_submission_count: Number.isFinite(authorisedWithoutProviderSubmissionCount) ? authorisedWithoutProviderSubmissionCount : 0,
+      authorised_but_not_submit_ready_count: Number.isFinite(authorisedButNotSubmitReadyCount) ? authorisedButNotSubmitReadyCount : 0,
+      same_operation_authorised_auth_count: Number.isFinite(sameOperationAuthorisedAuthCount) ? sameOperationAuthorisedAuthCount : 0,
+      provider_attempt_or_evidence_count: Number.isFinite(providerAttemptOrEvidenceCount) ? providerAttemptOrEvidenceCount : 0,
+      unsafe_transfer_count: Number.isFinite(unsafeTransferCount) ? unsafeTransferCount : 0,
+      remaining_submit_attempt_required: Number.isFinite(remainingSubmitAttemptRequired) ? remainingSubmitAttemptRequired : 0
+    });
+  }
+
+  if (
+    standardBankSubmitMode
+    && (!Number.isFinite(claimedTransferCount) || claimedTransferCount <= 0)
+    && (!Number.isFinite(submittedThisChunk) || submittedThisChunk <= 0)
+    && (!Number.isFinite(providerAttemptOrEvidenceCount) || providerAttemptOrEvidenceCount <= 0)
+    && requiresPollOrReview !== true
+    && hasSameOperationAuthorisedOrLocalTransferEvidence
+  ) {
+    const blockerCode = authorisedWithoutProviderSubmissionCount > 0 || authorisedButNotSubmitReadyCount > 0
+      ? 'AUTHORISED_TRANSFER_NOT_PROVIDER_SUBMIT_READY'
+      : 'PROVIDER_SUBMIT_NO_ELIGIBLE_TRANSFERS';
+    return fail(blockerCode, 'The authorised bank transfer could not be safely claimed for provider submission.', {
+      phase: currentPhase,
+      provider_submission: submitted,
+      claimed: Number.isFinite(claimedTransferCount) ? claimedTransferCount : 0,
+      submitted_this_chunk: Number.isFinite(submittedThisChunk) ? submittedThisChunk : 0,
+      provider_submit_ready_count: Number.isFinite(providerSubmitReadyCount) ? providerSubmitReadyCount : 0,
+      authorised_without_provider_submission_count: Number.isFinite(authorisedWithoutProviderSubmissionCount) ? authorisedWithoutProviderSubmissionCount : 0,
+      authorised_but_not_submit_ready_count: Number.isFinite(authorisedButNotSubmitReadyCount) ? authorisedButNotSubmitReadyCount : 0,
+      same_operation_authorised_auth_count: Number.isFinite(sameOperationAuthorisedAuthCount) ? sameOperationAuthorisedAuthCount : 0,
+      provider_attempt_or_evidence_count: Number.isFinite(providerAttemptOrEvidenceCount) ? providerAttemptOrEvidenceCount : 0,
+      unsafe_transfer_count: Number.isFinite(unsafeTransferCount) ? unsafeTransferCount : 0,
+      remaining_submit_attempt_required: Number.isFinite(remainingSubmitAttemptRequired) ? remainingSubmitAttemptRequired : 0
+    });
+  }
 
   if (Number.isFinite(remainingSubmitAttemptRequired) && remainingSubmitAttemptRequired > 0) {
     return phaseProgress('RUNNING', 'SUBMIT_PROVIDER_TRANSFERS', { status_text: 'Submitted one provider transfer chunk.', provider_submission: submitted });
@@ -37277,7 +37875,15 @@ if (currentPhase === 'SUBMIT_PROVIDER_TRANSFERS') {
 
 if (currentPhase === 'APPLY_RAIL_UPDATES') {
   let evidence = unwrapRpcPayload(await sbRpc(env, 'pay_batch_submission_evidence', { p_pay_batch_id: payBatchId, p_counts_only: true }), 'pay_batch_submission_evidence');
-  let remainingSubmitAttemptRequired = Number(evidence.remaining_submit_attempt_required ?? evidence.pending_count ?? 0);
+  let remainingSubmitAttemptRequired = Number(
+    evidence.remaining_submit_attempt_required
+    ?? evidence.remainingSubmitAttemptRequired
+    ?? evidence.provider_submit_ready_count
+    ?? evidence.providerSubmitReadyCount
+    ?? evidence.provider_submit_ready_transfer_count
+    ?? evidence.providerSubmitReadyTransferCount
+    ?? 0
+  );
   let remainingProviderEvidenceRequired = Number(evidence.remaining_provider_evidence_required ?? evidence.remaining_provider_submission_required ?? 0);
   let attemptedButUnprovenCount = Number(evidence.attempted_but_unproven_count ?? 0);
   let localOnlyCount = Number(evidence.local_only_count || evidence.local_idempotency_only_count || 0);
@@ -37309,7 +37915,15 @@ if (currentPhase === 'APPLY_RAIL_UPDATES') {
         operation_id: operationId
       });
       evidence = unwrapRpcPayload(await sbRpc(env, 'pay_batch_submission_evidence', { p_pay_batch_id: payBatchId, p_counts_only: true }), 'pay_batch_submission_evidence');
-      remainingSubmitAttemptRequired = Number(evidence.remaining_submit_attempt_required ?? evidence.pending_count ?? 0);
+      remainingSubmitAttemptRequired = Number(
+        evidence.remaining_submit_attempt_required
+        ?? evidence.remainingSubmitAttemptRequired
+        ?? evidence.provider_submit_ready_count
+        ?? evidence.providerSubmitReadyCount
+        ?? evidence.provider_submit_ready_transfer_count
+        ?? evidence.providerSubmitReadyTransferCount
+        ?? 0
+      );
       remainingProviderEvidenceRequired = Number(evidence.remaining_provider_evidence_required ?? evidence.remaining_provider_submission_required ?? 0);
       attemptedButUnprovenCount = Number(evidence.attempted_but_unproven_count ?? 0);
       localOnlyCount = Number(evidence.local_only_count || evidence.local_idempotency_only_count || 0);
@@ -37466,6 +38080,8 @@ error: String(e?.message || e || '')
 });
 }
 }
+
+
 
 
 
@@ -49424,6 +50040,7 @@ async function handleBulkAuthoriseDataset(env, req) {
     return withCORS(env, req, serverError(String(e?.message || e || 'Failed to load bulk authorise dataset')));
   }
 }
+
 async function handleBulkProcessRowContext(env, req, rowIdentity = null) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -49496,6 +50113,7 @@ async function handleBulkProcessRowContext(env, req, rowIdentity = null) {
     const headerOnly = toBool(first(payload.header_only, details.header_only, row.header_only, dataRow.header_only));
     const editorLoaded = toBool(first(payload.editor_loaded, details.editor_loaded, row.editor_loaded, dataRow.editor_loaded));
     const evidenceLoaded = toBool(first(payload.evidence_loaded, details.evidence_loaded, details.evidence_meta?.evidence_loaded, row.evidence_loaded, dataRow.evidence_loaded));
+    const evidencePartialLoaded = toBool(first(payload.evidence_partial_loaded, details.evidence_partial_loaded, details.evidence_meta?.evidence_partial_loaded, row.evidence_partial_loaded, dataRow.evidence_partial_loaded));
     const compareLoaded = toBool(first(payload.compare_loaded, details.compare_loaded, row.compare_loaded, dataRow.compare_loaded));
     const fullLoaded = toBool(first(payload.full_loaded, details.full_loaded, row.full_loaded, dataRow.full_loaded));
     const schedulePending = toBool(first(payload.schedule_pending, details.schedule_pending, row.schedule_pending, dataRow.schedule_pending));
@@ -49577,17 +50195,41 @@ async function handleBulkProcessRowContext(env, req, rowIdentity = null) {
     const plannedSchedule = asArrayJson(first(row.planned_schedule_json, dataRow.planned_schedule_json, effective.planned_schedule_json, contractWeek.planned_schedule_json));
     const totalHours = toNumber(first(row.total_hours, dataRow.total_hours, effective.total_hours, tsfin.total_hours));
     const segments = Array.isArray(tsfin?.invoice_breakdown_json?.segments) ? tsfin.invoice_breakdown_json.segments : [];
+    const scheduleLayerCanAuthorise = !!(
+      scheduleAuthoritative ||
+      editorLoaded ||
+      fullLoaded ||
+      contextProfile === 'editor' ||
+      contextProfile === 'full'
+    );
+    const explicitBlankScheduleProtection = !!(
+      toBool(first(payload.suppress_standard_schedule_fallback, row.suppress_standard_schedule_fallback, dataRow.suppress_standard_schedule_fallback, effective.suppress_standard_schedule_fallback, details.suppress_standard_schedule_fallback)) ||
+      toBool(first(payload.keep_additional_manual_adjustment_schedule_empty, row.keep_additional_manual_adjustment_schedule_empty, dataRow.keep_additional_manual_adjustment_schedule_empty, effective.keep_additional_manual_adjustment_schedule_empty, details.keep_additional_manual_adjustment_schedule_empty)) ||
+      toBool(first(payload.__suppressStandardScheduleFallback, row.__suppressStandardScheduleFallback, dataRow.__suppressStandardScheduleFallback, effective.__suppressStandardScheduleFallback, details.__suppressStandardScheduleFallback)) ||
+      toBool(first(payload.__keepAdditionalManualAdjustmentScheduleEmpty, row.__keepAdditionalManualAdjustmentScheduleEmpty, dataRow.__keepAdditionalManualAdjustmentScheduleEmpty, effective.__keepAdditionalManualAdjustmentScheduleEmpty, details.__keepAdditionalManualAdjustmentScheduleEmpty))
+    );
     const keepEmpty = !!(
       manualAdditional &&
       totalHours === 0 &&
       actualSchedule.length === 0 &&
       plannedSchedule.length === 0 &&
-      segments.length === 0
+      segments.length === 0 &&
+      (scheduleLayerCanAuthorise || explicitBlankScheduleProtection)
     );
 
     const normalisedActualSchedule = keepEmpty ? [] : actualSchedule;
     const normalisedPlannedSchedule = keepEmpty ? [] : plannedSchedule;
     const normalisedTotalHours = keepEmpty ? 0 : totalHours;
+    const shouldMergeScheduleFields = scheduleLayerCanAuthorise || keepEmpty;
+    const scheduleFieldPatch = shouldMergeScheduleFields ? {
+      actual_schedule_json: normalisedActualSchedule,
+      planned_schedule_json: normalisedPlannedSchedule,
+      total_hours: normalisedTotalHours,
+      suppress_standard_schedule_fallback: keepEmpty,
+      keep_additional_manual_adjustment_schedule_empty: keepEmpty,
+      __suppressStandardScheduleFallback: keepEmpty,
+      __keepAdditionalManualAdjustmentScheduleEmpty: keepEmpty
+    } : {};
     const isImportAuthoritative = manualAdditional ? false : toBool(first(row.is_import_authoritative, dataRow.is_import_authoritative, effective.is_import_authoritative, payload.is_import_authoritative));
 
     const evidenceItems = Array.isArray(payload.evidence)
@@ -49656,13 +50298,7 @@ async function handleBulkProcessRowContext(env, req, rowIdentity = null) {
       additional_seq: additionalSeq,
       contract_week_id: contractWeekId,
       timesheet_id: timesheetId,
-      actual_schedule_json: normalisedActualSchedule,
-      planned_schedule_json: normalisedPlannedSchedule,
-      total_hours: normalisedTotalHours,
-      suppress_standard_schedule_fallback: keepEmpty,
-      keep_additional_manual_adjustment_schedule_empty: keepEmpty,
-      __suppressStandardScheduleFallback: keepEmpty,
-      __keepAdditionalManualAdjustmentScheduleEmpty: keepEmpty
+      ...scheduleFieldPatch
     };
 
     const nextDataRow = {
@@ -49677,13 +50313,7 @@ async function handleBulkProcessRowContext(env, req, rowIdentity = null) {
       contract_week_id: contractWeekId,
       timesheet_id: timesheetId,
       current_timesheet_id: timesheetId,
-      actual_schedule_json: normalisedActualSchedule,
-      planned_schedule_json: normalisedPlannedSchedule,
-      total_hours: normalisedTotalHours,
-      suppress_standard_schedule_fallback: keepEmpty,
-      keep_additional_manual_adjustment_schedule_empty: keepEmpty,
-      __suppressStandardScheduleFallback: keepEmpty,
-      __keepAdditionalManualAdjustmentScheduleEmpty: keepEmpty,
+      ...scheduleFieldPatch,
       has_any_evidence: effectiveHasAnyEvidence,
       evidence_badges: effectiveEvidenceBadges,
       evidence_meta: effectiveEvidenceMeta,
@@ -49715,7 +50345,7 @@ async function handleBulkProcessRowContext(env, req, rowIdentity = null) {
         ...contractWeek,
         is_adjustment: isAdjustment || toBool(contractWeek.is_adjustment),
         additional_seq: additionalSeq,
-        planned_schedule_json: normalisedPlannedSchedule
+        ...(shouldMergeScheduleFields ? { planned_schedule_json: normalisedPlannedSchedule } : {})
       } : details.contract_week,
       action_flags: { ...(((details.action_flags && typeof details.action_flags === 'object') ? details.action_flags : {})), ...actionFlags },
       evidence_meta: effectiveEvidenceMeta,
@@ -49735,6 +50365,7 @@ async function handleBulkProcessRowContext(env, req, rowIdentity = null) {
       header_only: headerOnly,
       editor_loaded: editorLoaded,
       evidence_loaded: evidenceLoaded,
+      evidence_partial_loaded: evidencePartialLoaded,
       compare_loaded: compareLoaded,
       full_loaded: fullLoaded,
       schedule_pending: schedulePending,
@@ -49763,13 +50394,7 @@ async function handleBulkProcessRowContext(env, req, rowIdentity = null) {
       contract_week_id: contractWeekId,
       timesheet_id: timesheetId,
       current_timesheet_id: timesheetId,
-      actual_schedule_json: normalisedActualSchedule,
-      planned_schedule_json: normalisedPlannedSchedule,
-      total_hours: normalisedTotalHours,
-      suppress_standard_schedule_fallback: keepEmpty,
-      keep_additional_manual_adjustment_schedule_empty: keepEmpty,
-      __suppressStandardScheduleFallback: keepEmpty,
-      __keepAdditionalManualAdjustmentScheduleEmpty: keepEmpty
+      ...scheduleFieldPatch
     };
   };
 
@@ -49834,7 +50459,32 @@ async function handleBulkProcessRowContext(env, req, rowIdentity = null) {
   );
 
   if (!hasIdentity) {
-    return withCORS(env, req, badRequest('bulk process row context requires row_key, timesheet_id, or contract_week_id'));
+    return withCORS(env, req, ok({
+      ok: false,
+      context_kind: 'bulk_process_row_context',
+      context_profile: profile,
+      profile,
+      row_key: null,
+      contract_week_id: null,
+      timesheet_id: null,
+      current_timesheet_id: null,
+      requested_timesheet_id: null,
+      header_loaded: false,
+      header_only: false,
+      editor_loaded: false,
+      evidence_loaded: false,
+      evidence_partial_loaded: false,
+      compare_loaded: false,
+      full_loaded: false,
+      schedule_pending: true,
+      schedule_authoritative: false,
+      soft_failure: true,
+      context_degraded: true,
+      degraded_reason: 'ROW_CONTEXT_IDENTITY_REQUIRED',
+      loaded_layers: [],
+      message: 'bulk process row context requires row_key, timesheet_id, or contract_week_id',
+      error: 'ROW_CONTEXT_IDENTITY_REQUIRED'
+    }));
   }
 
   const isContractWeekEvidenceRefresh = !!(
@@ -49938,32 +50588,38 @@ async function handleBulkProcessRowContext(env, req, rowIdentity = null) {
 
     if (isContractWeekEvidenceRefresh) {
       const stagedEvidence = await buildStagedEvidenceFallbackRows(compactFilters.contract_week_id);
+      const hasFallbackEvidenceRows = Array.isArray(stagedEvidence) && stagedEvidence.length > 0;
       return withCORS(env, req, ok({
-        ok: false,
+        ok: hasFallbackEvidenceRows,
         context_kind: 'bulk_process_row_context',
         context_profile: compactFilters.profile || profile,
         profile: compactFilters.profile || profile,
-        evidence_refresh_failed: true,
+        evidence_refresh_failed: hasFallbackEvidenceRows ? false : true,
         row_key: compactFilters.row_key || (compactFilters.contract_week_id ? `contract_week:${compactFilters.contract_week_id}` : null),
         contract_week_id: compactFilters.contract_week_id || null,
         timesheet_id: compactFilters.timesheet_id || compactFilters.current_timesheet_id || compactFilters.requested_timesheet_id || null,
+        current_timesheet_id: compactFilters.current_timesheet_id || compactFilters.timesheet_id || compactFilters.requested_timesheet_id || null,
+        requested_timesheet_id: compactFilters.requested_timesheet_id || compactFilters.timesheet_id || compactFilters.current_timesheet_id || null,
         header_loaded: false,
         header_only: false,
         editor_loaded: false,
-        evidence_loaded: false,
+        evidence_loaded: hasFallbackEvidenceRows,
+        evidence_partial_loaded: hasFallbackEvidenceRows,
         compare_loaded: false,
         full_loaded: false,
         schedule_pending: true,
         schedule_authoritative: false,
         soft_failure: true,
         context_degraded: true,
-        degraded_reason: 'EVIDENCE_ROW_CONTEXT_REFRESH_FAILED',
-        loaded_layers: [],
+        degraded_reason: hasFallbackEvidenceRows ? 'RPC_FAILED_STAGED_FALLBACK_USED' : 'EVIDENCE_ROW_CONTEXT_REFRESH_FAILED',
+        loaded_layers: hasFallbackEvidenceRows ? ['evidence'] : [],
         evidence_source: 'contract_week_staged_fallback',
         evidence: stagedEvidence,
         staged_evidence: stagedEvidence,
-        message: 'Evidence was attached, but the row context could not be refreshed. Please refresh the row or reopen Bulk Process.',
-        error: 'EVIDENCE_ROW_CONTEXT_REFRESH_FAILED'
+        message: hasFallbackEvidenceRows
+          ? 'Evidence was attached and staged evidence has been returned while the row context refresh is degraded.'
+          : 'Evidence was attached, but the row context could not be refreshed. Please refresh the row or reopen Bulk Process.',
+        error: hasFallbackEvidenceRows ? null : 'EVIDENCE_ROW_CONTEXT_REFRESH_FAILED'
       }));
     }
 
@@ -49979,6 +50635,7 @@ async function handleBulkProcessRowContext(env, req, rowIdentity = null) {
       header_only: false,
       editor_loaded: false,
       evidence_loaded: false,
+      evidence_partial_loaded: false,
       compare_loaded: false,
       full_loaded: false,
       schedule_pending: true,
@@ -49992,7 +50649,6 @@ async function handleBulkProcessRowContext(env, req, rowIdentity = null) {
     }));
   }
 }
-
 
 
 
@@ -50315,6 +50971,50 @@ async function handleTimesheetBulkAuthoriseContext(env, req, timesheetId = null)
     return (out && typeof out === 'object' && !Array.isArray(out)) ? out : {};
   };
 
+
+  const normaliseReturnedContext = (payloadInput) => {
+    const payload = (payloadInput && typeof payloadInput === 'object' && !Array.isArray(payloadInput)) ? { ...payloadInput } : {};
+    const details = (payload.details && typeof payload.details === 'object' && !Array.isArray(payload.details)) ? payload.details : {};
+    const row = (payload.row && typeof payload.row === 'object' && !Array.isArray(payload.row)) ? payload.row : {};
+    const dataRow = (payload.data_row && typeof payload.data_row === 'object' && !Array.isArray(payload.data_row)) ? payload.data_row : row;
+    const contextProfile = trimStr(payload.context_profile || payload.profile || details.context_profile || details.profile || '').toLowerCase();
+    const toBool = (value, fallback = false) => {
+      if (value === true) return true;
+      if (value === false) return false;
+      if (value == null || trimStr(value) === '') return fallback;
+      return boolParam(value, fallback);
+    };
+    const loadedLayers = Array.isArray(payload.loaded_layers)
+      ? payload.loaded_layers
+      : (Array.isArray(details.loaded_layers) ? details.loaded_layers : []);
+    const headerLoaded = toBool(payload.header_loaded ?? details.header_loaded ?? row.header_loaded ?? dataRow.header_loaded, loadedLayers.includes('header'));
+    const headerOnly = toBool(payload.header_only ?? details.header_only ?? row.header_only ?? dataRow.header_only, contextProfile === 'status_header');
+    const editorLoaded = toBool(payload.editor_loaded ?? details.editor_loaded ?? row.editor_loaded ?? dataRow.editor_loaded, loadedLayers.includes('editor'));
+    const evidenceLoaded = toBool(payload.evidence_loaded ?? details.evidence_loaded ?? row.evidence_loaded ?? dataRow.evidence_loaded, loadedLayers.includes('evidence'));
+    const compareLoaded = toBool(payload.compare_loaded ?? details.compare_loaded ?? row.compare_loaded ?? dataRow.compare_loaded, loadedLayers.includes('compare_import') || loadedLayers.includes('compare'));
+    const fullLoaded = toBool(payload.full_loaded ?? details.full_loaded ?? row.full_loaded ?? dataRow.full_loaded, contextProfile === 'full' || loadedLayers.includes('full'));
+    const schedulePending = toBool(payload.schedule_pending ?? details.schedule_pending ?? row.schedule_pending ?? dataRow.schedule_pending, !editorLoaded);
+    const scheduleAuthoritative = toBool(payload.schedule_authoritative ?? details.schedule_authoritative ?? row.schedule_authoritative ?? dataRow.schedule_authoritative, editorLoaded || fullLoaded);
+    const contextDegraded = toBool(payload.context_degraded ?? details.context_degraded ?? row.context_degraded ?? dataRow.context_degraded, false);
+    const softFailure = toBool(payload.soft_failure ?? details.soft_failure ?? row.soft_failure ?? dataRow.soft_failure, false);
+    return {
+      ...payload,
+      context_profile: contextProfile || payload.context_profile || payload.profile || null,
+      profile: contextProfile || payload.profile || payload.context_profile || null,
+      header_loaded: headerLoaded,
+      header_only: headerOnly,
+      editor_loaded: editorLoaded,
+      evidence_loaded: evidenceLoaded,
+      compare_loaded: compareLoaded,
+      full_loaded: fullLoaded,
+      schedule_pending: schedulePending,
+      schedule_authoritative: scheduleAuthoritative,
+      loaded_layers: loadedLayers,
+      context_degraded: contextDegraded,
+      soft_failure: softFailure
+    };
+  };
+
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   const routeIdentity = trimStr(timesheetId || '');
 
@@ -50407,7 +51107,7 @@ async function handleTimesheetBulkAuthoriseContext(env, req, timesheetId = null)
       base_only: compactFilters.base_only === true
     });
     const rpcRes = await sbRpc(env, 'bulk_authorise_row_context_v1', { p_filters: compactFilters }, { timeoutMs: 45000 });
-    const payload = unwrapRpcPayload(rpcRes, 'bulk_authorise_row_context_v1');
+    const payload = normaliseReturnedContext(unwrapRpcPayload(rpcRes, 'bulk_authorise_row_context_v1'));
     return withCORS(env, req, ok(payload));
   } catch (err) {
     const message = String(err?.message || err || 'Failed to load bulk authorise row context');
@@ -50445,6 +51145,9 @@ async function handleTimesheetBulkAuthoriseContext(env, req, timesheetId = null)
     }));
   }
 }
+
+
+
 async function handleBankingPayCorrectionStart(env, req, user, payBatchId) {
   const id = String(payBatchId || '').trim();
   if (!id) return withCORS(env, req, badRequest('pay_batch_id is required'));
@@ -127215,7 +127918,6 @@ async function cleanupStaleRailPayeeMappingsForHash(env, { entity_kind, entity_i
   return out;
 }
 
-
 function getRailAdapter(provider) {
   // -----------------------------
   // Single source of truth registry
@@ -127967,6 +128669,16 @@ function getRailAdapter(provider) {
             remaining_provider_evidence_required: 0,
             attempted_but_unproven_count: 0,
             provider_attempt_without_external_id_count: 0,
+            provider_submit_ready_count: 0,
+            authorised_without_provider_submission_count: 0,
+            authorised_but_not_submit_ready_count: 0,
+            same_operation_authorised_auth_count: 0,
+            auth_request_state: null,
+            auth_request_unsafe_reason: null,
+            unsafe_transfer_count: 0,
+            provider_attempt_or_evidence_count: 0,
+            classification_source: null,
+            claim_blocker_code: null,
             requires_poll_or_review: false,
             requires_provider_poll: false,
             requires_review: false,
@@ -128018,21 +128730,48 @@ function getRailAdapter(provider) {
           const transfers = Array.isArray(claim.transfers) ? claim.transfers : [];
           const transferIds = Array.isArray(claim.transfer_ids) ? claim.transfer_ids.map((x) => String(x || '').trim()).filter(Boolean) : transfers.map((t) => String(t.transfer_id || t.pay_bank_transfer_id || '').trim()).filter(Boolean);
           const remainingSubmitAttemptRequiredFromClaim = Math.max(0, Math.trunc(asNumber(
-            claim.remaining_submit_attempt_required ?? claim.remaining_count ?? 0,
+            claim.remaining_submit_attempt_required ?? claim.remainingSubmitAttemptRequired ?? claim.remaining_count ?? 0,
             0
           )));
           const remainingProviderEvidenceRequiredFromClaim = Math.max(0, Math.trunc(asNumber(
-            claim.remaining_provider_evidence_required ?? 0,
+            claim.remaining_provider_evidence_required ?? claim.remainingProviderEvidenceRequired ?? 0,
             0
           )));
           const attemptedButUnprovenFromClaim = Math.max(0, Math.trunc(asNumber(
-            claim.attempted_but_unproven_count ?? 0,
+            claim.attempted_but_unproven_count ?? claim.attemptedButUnprovenCount ?? 0,
             0
           )));
           const providerAttemptWithoutExternalIdFromClaim = Math.max(0, Math.trunc(asNumber(
-            claim.provider_attempt_without_external_id_count ?? 0,
+            claim.provider_attempt_without_external_id_count ?? claim.providerAttemptWithoutExternalIdCount ?? 0,
             0
           )));
+          const providerSubmitReadyFromClaim = Math.max(0, Math.trunc(asNumber(
+            claim.provider_submit_ready_count ?? claim.providerSubmitReadyCount ?? claim.provider_submit_ready_transfer_count ?? claim.providerSubmitReadyTransferCount ?? 0,
+            0
+          )));
+          const authorisedWithoutProviderSubmissionFromClaim = Math.max(0, Math.trunc(asNumber(
+            claim.authorised_without_provider_submission_count ?? claim.authorisedWithoutProviderSubmissionCount ?? 0,
+            0
+          )));
+          const authorisedButNotSubmitReadyFromClaim = Math.max(0, Math.trunc(asNumber(
+            claim.authorised_but_not_submit_ready_count ?? claim.authorisedButNotSubmitReadyCount ?? 0,
+            0
+          )));
+          const sameOperationAuthorisedAuthFromClaim = Math.max(0, Math.trunc(asNumber(
+            claim.same_operation_authorised_auth_count ?? claim.sameOperationAuthorisedAuthCount ?? claim.same_operation_authorised_auth_request_count ?? claim.sameOperationAuthorisedAuthRequestCount ?? 0,
+            0
+          )));
+          const providerAttemptOrEvidenceFromClaim = Math.max(0, Math.trunc(asNumber(
+            claim.provider_attempt_or_evidence_count ?? claim.providerAttemptOrEvidenceCount ?? 0,
+            0
+          )));
+          const unsafeTransferFromClaim = Math.max(0, Math.trunc(asNumber(
+            claim.unsafe_transfer_count ?? claim.unsafeTransferCount ?? 0,
+            0
+          )));
+          const classificationSourceFromClaim = String(claim.classification_source || claim.classificationSource || '').trim() || null;
+          const claimBlockerCodeFromClaim = String(claim.claim_blocker_code || claim.claimBlockerCode || '').trim().toUpperCase() || null;
+          const standardProviderSubmitMode = !String(classificationSourceFromClaim || '').toLowerCase().includes('blocked_funds_retry');
           out.claimed = transfers.length;
           out.batches = [{ pay_batch_id: batchId, operation_id: opId, chunk_id: chunkId }];
           out.remaining_unsubmitted = remainingSubmitAttemptRequiredFromClaim;
@@ -128040,6 +128779,16 @@ function getRailAdapter(provider) {
           out.remaining_provider_evidence_required = remainingProviderEvidenceRequiredFromClaim;
           out.attempted_but_unproven_count = attemptedButUnprovenFromClaim;
           out.provider_attempt_without_external_id_count = providerAttemptWithoutExternalIdFromClaim;
+          out.provider_submit_ready_count = providerSubmitReadyFromClaim;
+          out.authorised_without_provider_submission_count = authorisedWithoutProviderSubmissionFromClaim;
+          out.authorised_but_not_submit_ready_count = authorisedButNotSubmitReadyFromClaim;
+          out.same_operation_authorised_auth_count = sameOperationAuthorisedAuthFromClaim;
+          out.auth_request_state = claim.auth_request_state || claim.authRequestState || null;
+          out.auth_request_unsafe_reason = claim.auth_request_unsafe_reason || claim.authRequestUnsafeReason || null;
+          out.provider_attempt_or_evidence_count = providerAttemptOrEvidenceFromClaim;
+          out.unsafe_transfer_count = unsafeTransferFromClaim;
+          out.classification_source = classificationSourceFromClaim;
+          out.claim_blocker_code = claimBlockerCodeFromClaim;
           out.requires_provider_poll = claim.requires_provider_poll === true || claim.has_unproven_attempts === true || attemptedButUnprovenFromClaim > 0 || providerAttemptWithoutExternalIdFromClaim > 0;
           out.requires_review = claim.requires_review === true;
           out.requires_poll_or_review = remainingSubmitAttemptRequiredFromClaim <= 0
@@ -128047,6 +128796,34 @@ function getRailAdapter(provider) {
           out.has_more = claim.has_more_submit_attempts === true || claim.has_more === true || remainingSubmitAttemptRequiredFromClaim > 0;
 
           if (!chunkId || transfers.length === 0) {
+            const sameOperationAuthorisedLocalEvidenceExists = providerSubmitReadyFromClaim > 0
+              || authorisedWithoutProviderSubmissionFromClaim > 0
+              || authorisedButNotSubmitReadyFromClaim > 0
+              || sameOperationAuthorisedAuthFromClaim > 0;
+            const shouldReturnProviderSubmitBlocker = standardProviderSubmitMode === true
+              && providerAttemptOrEvidenceFromClaim <= 0
+              && (claimBlockerCodeFromClaim === 'AUTHORISED_TRANSFER_NOT_PROVIDER_SUBMIT_READY'
+                || claimBlockerCodeFromClaim === 'PROVIDER_SUBMIT_NO_ELIGIBLE_TRANSFERS'
+                || sameOperationAuthorisedLocalEvidenceExists === true);
+            if (shouldReturnProviderSubmitBlocker) {
+              const blockerCode = claimBlockerCodeFromClaim
+                || (authorisedWithoutProviderSubmissionFromClaim > 0 || authorisedButNotSubmitReadyFromClaim > 0
+                  ? 'AUTHORISED_TRANSFER_NOT_PROVIDER_SUBMIT_READY'
+                  : 'PROVIDER_SUBMIT_NO_ELIGIBLE_TRANSFERS');
+              out.ok = false;
+              out.claim_blocker_code = blockerCode;
+              out.errors.push({
+                code: blockerCode,
+                message: 'The authorised bank transfer could not be safely claimed for provider submission.',
+                provider_submit_ready_count: providerSubmitReadyFromClaim,
+                authorised_without_provider_submission_count: authorisedWithoutProviderSubmissionFromClaim,
+                authorised_but_not_submit_ready_count: authorisedButNotSubmitReadyFromClaim,
+                same_operation_authorised_auth_count: sameOperationAuthorisedAuthFromClaim,
+                auth_request_state: out.auth_request_state,
+                auth_request_unsafe_reason: out.auth_request_unsafe_reason,
+                classification_source: classificationSourceFromClaim
+              });
+            }
             return out;
           }
 
@@ -128286,6 +129063,12 @@ function getRailAdapter(provider) {
           out.remaining_provider_evidence_required = remainingProviderEvidenceRequired;
           out.attempted_but_unproven_count = attemptedButUnprovenCount;
           out.provider_attempt_without_external_id_count = providerAttemptWithoutExternalIdCount;
+          out.provider_attempt_or_evidence_count = Math.max(
+            providerAttemptOrEvidenceFromClaim,
+            attemptedButUnprovenCount,
+            providerAttemptWithoutExternalIdCount,
+            remainingProviderEvidenceRequired
+          );
           out.requires_poll_or_review = remainingSubmitAttemptRequired <= 0 && (requiresProviderPoll || requiresReview || remainingProviderEvidenceRequired > 0);
           out.requires_provider_poll = requiresProviderPoll;
           out.requires_review = requiresReview;
@@ -128739,6 +129522,8 @@ function getRailAdapter(provider) {
   const mk = getRailAdapter.__RAIL_REGISTRY[p];
   return (typeof mk === 'function') ? mk() : null;
 }
+
+
 
 
 async function revolutAuth_getAccessToken(env) {
