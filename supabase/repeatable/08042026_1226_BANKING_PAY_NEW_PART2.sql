@@ -19887,6 +19887,9 @@ $function$;
 
 DROP FUNCTION IF EXISTS public.pay_batch_submission_evidence(uuid);
 
+
+
+
 CREATE OR REPLACE FUNCTION public.pay_batch_submission_evidence(p_pay_batch_id uuid, p_counts_only boolean DEFAULT false)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -19921,9 +19924,20 @@ DECLARE
   v_event_provider_states jsonb := '[]'::jsonb;
   v_evidence_sample jsonb := '[]'::jsonb;
   v_execution_classification_sample jsonb := '[]'::jsonb;
+  v_active_operation_id uuid := NULL::uuid;
+  v_active_operation_pay_channel_scope text := 'ALL';
   v_authorisation_ready_count integer := 0;
   v_authorisation_ready_transfer_count integer := 0;
   v_unattempted_submit_eligible_count integer := 0;
+  v_provider_submit_ready_count integer := 0;
+  v_provider_submit_ready_transfer_count integer := 0;
+  v_authorised_without_provider_submission_count integer := 0;
+  v_authorised_but_not_submit_ready_count integer := 0;
+  v_provider_submit_blocked_count integer := 0;
+  v_same_operation_authorised_auth_request_count integer := 0;
+  v_provider_submit_phase_active boolean := false;
+  v_authorisation_phase_active boolean := false;
+  v_remaining_submit_attempt_required_phase text := 'NOT_PROVIDER_SUBMIT_PHASE';
   v_safe_local_cleanup_count integer := 0;
   v_provider_attempt_or_evidence_count integer := 0;
   v_provider_or_ambiguous_evidence_count integer := 0;
@@ -19953,6 +19967,29 @@ BEGIN
             )::text;
   END IF;
 
+  SELECT operation_row.id,
+         upper(btrim(coalesce(
+           nullif(btrim(coalesce(operation_row.input_json->>'pay_channel_scope', '')), ''),
+           nullif(btrim(coalesce(operation_row.input_json->>'payChannelScope', '')), ''),
+           nullif(btrim(coalesce(operation_row.config_json->>'pay_channel_scope', '')), ''),
+           nullif(btrim(coalesce(operation_row.config_json->>'payChannelScope', '')), ''),
+           'ALL'
+         )))
+  INTO v_active_operation_id,
+       v_active_operation_pay_channel_scope
+  FROM public.banking_pay_operations AS operation_row
+  WHERE operation_row.pay_batch_id = p_pay_batch_id
+    AND operation_row.operation_type IN ('PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS')
+    AND operation_row.status NOT IN ('COMPLETE', 'FAILED', 'CANCELLED', 'CANCELED', 'REVIEW_REQUIRED')
+  ORDER BY operation_row.updated_at_utc DESC NULLS LAST,
+           operation_row.created_at_utc DESC NULLS LAST,
+           operation_row.id DESC
+  LIMIT 1;
+
+  IF v_active_operation_pay_channel_scope NOT IN ('PAYE', 'UMBRELLA', 'LOANS', 'ALL', 'ANY', '*') THEN
+    v_active_operation_pay_channel_scope := 'ALL';
+  END IF;
+
   WITH classified_rows AS (
     SELECT
       classification_row.pay_bank_transfer_id,
@@ -19979,6 +20016,9 @@ BEGIN
       classification_row.evidence_classification,
       classification_row.is_authorisation_ready,
       classification_row.is_unattempted_submit_eligible,
+      classification_row.is_provider_submit_ready,
+      classification_row.provider_submit_unsafe_reason,
+      classification_row.has_provider_submit_blocker,
       classification_row.is_safe_local_cleanup,
       classification_row.is_canonical_pending_status,
       classification_row.has_auth_prepared_scope,
@@ -19988,7 +20028,9 @@ BEGIN
       classification_row.auth_request_state,
       classification_row.auth_request_operation_id,
       classification_row.has_same_operation_active_auth_request,
+      classification_row.has_same_operation_authorised_auth_request,
       classification_row.has_other_operation_active_auth_request,
+      classification_row.has_pending_authorisation_auth_request,
       classification_row.has_cancellable_local_auth_request,
       classification_row.has_non_cancellable_auth_request,
       classification_row.has_authorised_auth_without_provider_submission,
@@ -19997,8 +20039,8 @@ BEGIN
       classification_row.unsafe_reason
     FROM public.pay_bank_transfer_execution_classify(
       p_pay_batch_id,
-      'ALL'::text,
-      NULL::uuid,
+      COALESCE(v_active_operation_pay_channel_scope, 'ALL')::text,
+      v_active_operation_id,
       true
     ) AS classification_row
   ), classified_rows_with_sample AS (
@@ -20047,6 +20089,15 @@ BEGIN
     count(*) FILTER (WHERE classified_rows.is_authorisation_ready IS TRUE)::integer,
     count(*) FILTER (WHERE classified_rows.is_authorisation_ready IS TRUE)::integer,
     count(*) FILTER (WHERE classified_rows.is_unattempted_submit_eligible IS TRUE)::integer,
+    count(*) FILTER (WHERE classified_rows.is_provider_submit_ready IS TRUE)::integer,
+    count(*) FILTER (WHERE classified_rows.is_provider_submit_ready IS TRUE)::integer,
+    count(*) FILTER (WHERE classified_rows.has_authorised_auth_without_provider_submission IS TRUE)::integer,
+    count(*) FILTER (WHERE classified_rows.has_authorised_auth_without_provider_submission IS TRUE AND classified_rows.is_provider_submit_ready IS NOT TRUE)::integer,
+    count(*) FILTER (WHERE classified_rows.has_provider_submit_blocker IS TRUE)::integer,
+    count(DISTINCT classified_rows.auth_request_id) FILTER (
+      WHERE classified_rows.auth_request_id IS NOT NULL
+        AND classified_rows.has_same_operation_authorised_auth_request IS TRUE
+    )::integer,
     count(*) FILTER (WHERE classified_rows.is_safe_local_cleanup IS TRUE)::integer,
     count(*) FILTER (
       WHERE classified_rows.has_provider_submission_evidence IS TRUE
@@ -20103,6 +20154,9 @@ BEGIN
         'has_ambiguous_external_evidence', classified_rows.has_ambiguous_external_evidence,
         'is_authorisation_ready', classified_rows.is_authorisation_ready,
         'is_unattempted_submit_eligible', classified_rows.is_unattempted_submit_eligible,
+        'is_provider_submit_ready', classified_rows.is_provider_submit_ready,
+        'provider_submit_unsafe_reason', classified_rows.provider_submit_unsafe_reason,
+        'has_provider_submit_blocker', classified_rows.has_provider_submit_blocker,
         'is_safe_local_cleanup', classified_rows.is_safe_local_cleanup,
         'is_canonical_pending_status', classified_rows.is_canonical_pending_status,
         'has_auth_prepared_scope', classified_rows.has_auth_prepared_scope,
@@ -20112,7 +20166,9 @@ BEGIN
         'auth_request_state', classified_rows.auth_request_state,
         'auth_request_operation_id', CASE WHEN classified_rows.auth_request_operation_id IS NULL THEN NULL ELSE classified_rows.auth_request_operation_id::text END,
         'has_same_operation_active_auth_request', classified_rows.has_same_operation_active_auth_request,
+        'has_same_operation_authorised_auth_request', classified_rows.has_same_operation_authorised_auth_request,
         'has_other_operation_active_auth_request', classified_rows.has_other_operation_active_auth_request,
+        'has_pending_authorisation_auth_request', classified_rows.has_pending_authorisation_auth_request,
         'has_cancellable_local_auth_request', classified_rows.has_cancellable_local_auth_request,
         'has_non_cancellable_auth_request', classified_rows.has_non_cancellable_auth_request,
         'has_authorised_auth_without_provider_submission', classified_rows.has_authorised_auth_without_provider_submission,
@@ -20145,6 +20201,9 @@ BEGIN
         'is_terminal_or_completed', classified_rows.is_terminal_or_completed,
         'is_authorisation_ready', classified_rows.is_authorisation_ready,
         'is_unattempted_submit_eligible', classified_rows.is_unattempted_submit_eligible,
+        'is_provider_submit_ready', classified_rows.is_provider_submit_ready,
+        'provider_submit_unsafe_reason', classified_rows.provider_submit_unsafe_reason,
+        'has_provider_submit_blocker', classified_rows.has_provider_submit_blocker,
         'is_safe_local_cleanup', classified_rows.is_safe_local_cleanup,
         'is_canonical_pending_status', classified_rows.is_canonical_pending_status,
         'has_auth_prepared_scope', classified_rows.has_auth_prepared_scope,
@@ -20154,7 +20213,9 @@ BEGIN
         'auth_request_state', classified_rows.auth_request_state,
         'auth_request_operation_id', CASE WHEN classified_rows.auth_request_operation_id IS NULL THEN NULL ELSE classified_rows.auth_request_operation_id::text END,
         'has_same_operation_active_auth_request', classified_rows.has_same_operation_active_auth_request,
+        'has_same_operation_authorised_auth_request', classified_rows.has_same_operation_authorised_auth_request,
         'has_other_operation_active_auth_request', classified_rows.has_other_operation_active_auth_request,
+        'has_pending_authorisation_auth_request', classified_rows.has_pending_authorisation_auth_request,
         'has_cancellable_local_auth_request', classified_rows.has_cancellable_local_auth_request,
         'has_non_cancellable_auth_request', classified_rows.has_non_cancellable_auth_request,
         'has_authorised_auth_without_provider_submission', classified_rows.has_authorised_auth_without_provider_submission,
@@ -20184,6 +20245,12 @@ BEGIN
     v_authorisation_ready_count,
     v_authorisation_ready_transfer_count,
     v_unattempted_submit_eligible_count,
+    v_provider_submit_ready_count,
+    v_provider_submit_ready_transfer_count,
+    v_authorised_without_provider_submission_count,
+    v_authorised_but_not_submit_ready_count,
+    v_provider_submit_blocked_count,
+    v_same_operation_authorised_auth_request_count,
     v_safe_local_cleanup_count,
     v_provider_attempt_or_evidence_count,
     v_provider_or_ambiguous_evidence_count,
@@ -20202,13 +20269,36 @@ BEGIN
   FROM public.pay_bank_transfer_events AS event_row
   WHERE event_row.pay_batch_id = p_pay_batch_id;
 
-  v_remaining_unattempted_submit_required := coalesce(v_unattempted_submit_eligible_count, 0);
+  v_provider_submit_phase_active := (
+    COALESCE(v_same_operation_authorised_auth_request_count, 0) > 0
+    OR COALESCE(v_provider_submit_ready_count, 0) > 0
+    OR COALESCE(v_authorised_without_provider_submission_count, 0) > 0
+    OR COALESCE(v_authorised_but_not_submit_ready_count, 0) > 0
+  );
+  v_authorisation_phase_active := (
+    COALESCE(v_provider_submit_phase_active, false) IS NOT TRUE
+    AND COALESCE(v_authorisation_ready_count, 0) > 0
+  );
+
+  IF COALESCE(v_provider_submit_phase_active, false) IS TRUE THEN
+    v_remaining_unattempted_submit_required := coalesce(v_provider_submit_ready_count, 0);
+    v_remaining_submit_attempt_required := v_remaining_unattempted_submit_required;
+    v_remaining_provider_submission_required := v_remaining_unattempted_submit_required;
+    v_remaining_submit_attempt_required_phase := 'PROVIDER_SUBMIT';
+  ELSE
+    v_remaining_unattempted_submit_required := 0;
+    v_remaining_submit_attempt_required := 0;
+    v_remaining_provider_submission_required := 0;
+    v_remaining_submit_attempt_required_phase := CASE
+      WHEN COALESCE(v_authorisation_phase_active, false) THEN 'AUTHORISATION'
+      ELSE 'NOT_PROVIDER_SUBMIT_PHASE'
+    END;
+  END IF;
+
   v_remaining_evidence_unresolved_count := coalesce(v_pending_count, 0) + coalesce(v_local_only_count, 0);
-  v_remaining_submit_attempt_required := v_remaining_unattempted_submit_required;
   v_remaining_provider_evidence_required := coalesce(v_remaining_evidence_unresolved_count, 0)
     + coalesce(v_ambiguous_count, 0)
     + coalesce(v_attempted_but_unproven_count, 0);
-  v_remaining_provider_submission_required := v_remaining_unattempted_submit_required;
 
   v_can_mark_submitted := coalesce(v_transfer_count, 0) > 0
     AND coalesce(v_provider_submitted_count, 0) = coalesce(v_transfer_count, 0)
@@ -20242,6 +20332,14 @@ BEGIN
       'authorisation_ready_count', coalesce(v_authorisation_ready_count, 0),
       'authorisation_ready_transfer_count', coalesce(v_authorisation_ready_transfer_count, 0),
       'unattempted_submit_eligible_count', coalesce(v_unattempted_submit_eligible_count, 0),
+      'provider_submit_ready_count', coalesce(v_provider_submit_ready_count, 0),
+      'provider_submit_ready_transfer_count', coalesce(v_provider_submit_ready_transfer_count, 0),
+      'authorised_without_provider_submission_count', coalesce(v_authorised_without_provider_submission_count, 0),
+      'authorised_but_not_submit_ready_count', coalesce(v_authorised_but_not_submit_ready_count, 0),
+      'provider_submit_blocked_count', coalesce(v_provider_submit_blocked_count, 0),
+      'same_operation_authorised_auth_request_count', coalesce(v_same_operation_authorised_auth_request_count, 0),
+      'provider_submit_phase_active', coalesce(v_provider_submit_phase_active, false),
+      'authorisation_phase_active', coalesce(v_authorisation_phase_active, false),
       'safe_local_cleanup_count', coalesce(v_safe_local_cleanup_count, 0),
       'provider_attempt_or_evidence_count', coalesce(v_provider_attempt_or_evidence_count, 0),
       'provider_or_ambiguous_evidence_count', coalesce(v_provider_or_ambiguous_evidence_count, 0),
@@ -20254,13 +20352,14 @@ BEGIN
       'remaining_submit_attempt_required', coalesce(v_remaining_submit_attempt_required, 0),
       'remaining_unattempted_submit_required', coalesce(v_remaining_unattempted_submit_required, 0),
       'remaining_evidence_unresolved_count', coalesce(v_remaining_evidence_unresolved_count, 0),
-      'remaining_submit_attempt_required_definition', 'unattempted_submit_eligible_count',
+      'remaining_submit_attempt_required_definition', 'phase_dependent_provider_submit_ready_count',
+      'remaining_submit_attempt_required_phase', v_remaining_submit_attempt_required_phase,
       'remaining_provider_evidence_required', coalesce(v_remaining_provider_evidence_required, 0),
       'remaining_provider_submission_required', coalesce(v_remaining_provider_submission_required, 0),
       'submission_count_semantics', jsonb_build_object(
-        'remaining_submit_attempt_required', 'count of transfers currently eligible for an unattempted provider submit',
+        'remaining_submit_attempt_required', 'phase-dependent count: provider-submit-ready authorised transfers only when provider-submit phase is active',
         'remaining_evidence_unresolved_count', 'legacy evidence-pending plus local-only count kept separate from submit eligibility',
-        'pending_count', 'evidence-level pending classification, not submit eligibility'
+        'pending_count', 'evidence-level pending classification, not authorisation or submit eligibility'
       ),
       'batch_can_be_marked_submitted', coalesce(v_can_mark_submitted, false),
       'can_mark_submitted', coalesce(v_can_mark_submitted, false),
@@ -20338,6 +20437,14 @@ BEGIN
     'authorisation_ready_count', coalesce(v_authorisation_ready_count, 0),
     'authorisation_ready_transfer_count', coalesce(v_authorisation_ready_transfer_count, 0),
     'unattempted_submit_eligible_count', coalesce(v_unattempted_submit_eligible_count, 0),
+    'provider_submit_ready_count', coalesce(v_provider_submit_ready_count, 0),
+    'provider_submit_ready_transfer_count', coalesce(v_provider_submit_ready_transfer_count, 0),
+    'authorised_without_provider_submission_count', coalesce(v_authorised_without_provider_submission_count, 0),
+    'authorised_but_not_submit_ready_count', coalesce(v_authorised_but_not_submit_ready_count, 0),
+    'provider_submit_blocked_count', coalesce(v_provider_submit_blocked_count, 0),
+    'same_operation_authorised_auth_request_count', coalesce(v_same_operation_authorised_auth_request_count, 0),
+    'provider_submit_phase_active', coalesce(v_provider_submit_phase_active, false),
+    'authorisation_phase_active', coalesce(v_authorisation_phase_active, false),
     'safe_local_cleanup_count', coalesce(v_safe_local_cleanup_count, 0),
     'provider_attempt_or_evidence_count', coalesce(v_provider_attempt_or_evidence_count, 0),
     'provider_or_ambiguous_evidence_count', coalesce(v_provider_or_ambiguous_evidence_count, 0),
@@ -20350,13 +20457,14 @@ BEGIN
     'remaining_submit_attempt_required', coalesce(v_remaining_submit_attempt_required, 0),
     'remaining_unattempted_submit_required', coalesce(v_remaining_unattempted_submit_required, 0),
     'remaining_evidence_unresolved_count', coalesce(v_remaining_evidence_unresolved_count, 0),
-    'remaining_submit_attempt_required_definition', 'unattempted_submit_eligible_count',
+    'remaining_submit_attempt_required_definition', 'phase_dependent_provider_submit_ready_count',
+    'remaining_submit_attempt_required_phase', v_remaining_submit_attempt_required_phase,
     'remaining_provider_evidence_required', coalesce(v_remaining_provider_evidence_required, 0),
     'remaining_provider_submission_required', coalesce(v_remaining_provider_submission_required, 0),
     'submission_count_semantics', jsonb_build_object(
-      'remaining_submit_attempt_required', 'count of transfers currently eligible for an unattempted provider submit',
+      'remaining_submit_attempt_required', 'phase-dependent count: provider-submit-ready authorised transfers only when provider-submit phase is active',
       'remaining_evidence_unresolved_count', 'legacy evidence-pending plus local-only count kept separate from submit eligibility',
-      'pending_count', 'evidence-level pending classification, not submit eligibility'
+      'pending_count', 'evidence-level pending classification, not authorisation or submit eligibility'
     ),
     'batch_can_be_marked_submitted', coalesce(v_can_mark_submitted, false),
     'can_mark_submitted', coalesce(v_can_mark_submitted, false),
@@ -20384,7 +20492,6 @@ BEGIN
   );
 END;
 $function$;
-
 
 
 
