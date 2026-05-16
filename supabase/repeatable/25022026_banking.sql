@@ -5506,8 +5506,6 @@ $function$;
 
 
 
-
-
 CREATE OR REPLACE FUNCTION public.pay_batch_mark_blocked_funds(
   p_pay_batch_id uuid,
   p_actor_user_id uuid,
@@ -5536,6 +5534,14 @@ DECLARE
   v_alert_payload jsonb := '{}'::jsonb;
   v_alert_fingerprint text := NULL::text;
   v_notice_result jsonb := '{}'::jsonb;
+  v_current_operation_id_text text := NULL::text;
+  v_current_operation_id uuid := NULL::uuid;
+  v_cancelled_auth_request_ids jsonb := '[]'::jsonb;
+  v_auth_requests_cancelled integer := 0;
+  v_auth_tokens_voided integer := 0;
+  v_transfer_scope_rows_skipped integer := 0;
+  v_item_links_cleared integer := 0;
+  v_transfer_rows_deleted integer := 0;
 BEGIN
   IF p_pay_batch_id IS NULL THEN
     RAISE EXCEPTION 'pay_batch_mark_blocked_funds: pay_batch_id is required';
@@ -5563,7 +5569,8 @@ BEGIN
     public.pay_batches.rail_env_snapshot,
     public.pay_batches.funding_account_ref,
     public.pay_batches.pay_date,
-    public.pay_batches.bulk_reference
+    public.pay_batches.bulk_reference,
+    public.pay_batches.execution_intent_json
   INTO v_batch
   FROM public.pay_batches
   WHERE public.pay_batches.id = p_pay_batch_id
@@ -5573,8 +5580,8 @@ BEGIN
     RAISE EXCEPTION 'pay_batch_mark_blocked_funds: pay_batch not found';
   END IF;
 
-  IF upper(btrim(coalesce(v_batch.status, ''))) NOT IN ('READY', 'SCHEDULED', 'EXECUTING', 'AUTHORISED_FOR_PAYMENT', 'BLOCKED_FUNDS') THEN
-    RAISE EXCEPTION 'pay_batch_mark_blocked_funds: batch status must be READY, SCHEDULED, EXECUTING, AUTHORISED_FOR_PAYMENT or BLOCKED_FUNDS (current=%)', v_batch.status;
+  IF upper(btrim(coalesce(v_batch.status, ''))) NOT IN ('DRAFT', 'READY', 'SCHEDULED', 'EXECUTING', 'AUTHORISED_FOR_PAYMENT', 'BLOCKED_FUNDS') THEN
+    RAISE EXCEPTION 'pay_batch_mark_blocked_funds: batch status must be DRAFT, READY, SCHEDULED, EXECUTING, AUTHORISED_FOR_PAYMENT or BLOCKED_FUNDS (current=%)', v_batch.status;
   END IF;
 
   IF upper(btrim(coalesce(v_batch.execution_commit_state, 'NOT_SUBMITTED'))) <> 'NOT_SUBMITTED' THEN
@@ -5587,6 +5594,16 @@ BEGIN
 
   IF v_batch.execution_committed_at_utc IS NOT NULL THEN
     RAISE EXCEPTION 'pay_batch_mark_blocked_funds: batch has execution_committed_at_utc and cannot be marked blocked funds safely';
+  END IF;
+
+  v_current_operation_id_text := NULLIF(BTRIM(COALESCE(v_batch.execution_intent_json ->> 'operation_id', '')), '');
+
+  IF v_current_operation_id_text IS NOT NULL THEN
+    IF v_current_operation_id_text !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
+      RAISE EXCEPTION 'pay_batch_mark_blocked_funds: execution_intent_json.operation_id is not a valid uuid';
+    END IF;
+
+    v_current_operation_id := v_current_operation_id_text::uuid;
   END IF;
 
   v_submission_evidence := public.pay_batch_submission_evidence(p_pay_batch_id);
@@ -5623,6 +5640,69 @@ BEGIN
     RAISE EXCEPTION 'pay_batch_mark_blocked_funds: no active frozen batch items exist for this batch';
   END IF;
 
+  CREATE TEMPORARY TABLE IF NOT EXISTS pg_temp.tmp_mark_blocked_cancelled_auth_requests (
+    auth_request_id uuid PRIMARY KEY
+  ) ON COMMIT DROP;
+
+  TRUNCATE TABLE pg_temp.tmp_mark_blocked_cancelled_auth_requests;
+
+  WITH cancelled_auth_requests AS (
+    UPDATE public.pay_batch_auth_requests AS auth_request_to_cancel
+    SET
+      state = 'CANCELLED',
+      finalised_at_utc = COALESCE(auth_request_to_cancel.finalised_at_utc, v_now),
+      finalised_by_user_id = COALESCE(auth_request_to_cancel.finalised_by_user_id, p_actor_user_id),
+      execution_intent_json = jsonb_strip_nulls(
+        COALESCE(auth_request_to_cancel.execution_intent_json, '{}'::jsonb)
+        || jsonb_build_object(
+          'cancelled_by_blocked_funds', true,
+          'blocked_funds_at_utc', v_now::text,
+          'blocked_funds_by_user_id', p_actor_user_id::text,
+          'blocked_funds_operation_id', CASE WHEN v_current_operation_id IS NULL THEN NULL ELSE v_current_operation_id::text END
+        )
+      )
+    WHERE auth_request_to_cancel.pay_batch_id = p_pay_batch_id
+      AND upper(btrim(coalesce(auth_request_to_cancel.state, ''))) IN ('AWAITING', 'PENDING_AUTHORISATION', 'AUTHORISED')
+      AND (
+        v_current_operation_id IS NULL
+        OR NULLIF(BTRIM(COALESCE(auth_request_to_cancel.execution_intent_json ->> 'operation_id', '')), '') IS NULL
+        OR NULLIF(BTRIM(COALESCE(auth_request_to_cancel.execution_intent_json ->> 'operation_id', '')), '') = v_current_operation_id::text
+      )
+    RETURNING auth_request_to_cancel.id
+  )
+  INSERT INTO pg_temp.tmp_mark_blocked_cancelled_auth_requests (auth_request_id)
+  SELECT cancelled_auth_requests.id
+  FROM cancelled_auth_requests
+  ON CONFLICT DO NOTHING;
+
+  SELECT COUNT(*)::integer,
+         COALESCE(jsonb_agg(to_jsonb(cancelled_auth_request.auth_request_id::text) ORDER BY cancelled_auth_request.auth_request_id), '[]'::jsonb)
+  INTO v_auth_requests_cancelled,
+       v_cancelled_auth_request_ids
+  FROM pg_temp.tmp_mark_blocked_cancelled_auth_requests AS cancelled_auth_request;
+
+  WITH voided_tokens AS (
+    UPDATE public.pay_batch_auth_tokens AS auth_token_to_void
+    SET
+      used_at_utc = COALESCE(auth_token_to_void.used_at_utc, v_now),
+      expires_at_utc = CASE
+        WHEN auth_token_to_void.expires_at_utc IS NULL THEN v_now
+        WHEN auth_token_to_void.expires_at_utc > v_now THEN v_now
+        ELSE auth_token_to_void.expires_at_utc
+      END
+    FROM pg_temp.tmp_mark_blocked_cancelled_auth_requests AS cancelled_auth_request
+    WHERE auth_token_to_void.auth_request_id = cancelled_auth_request.auth_request_id
+      AND (
+        auth_token_to_void.used_at_utc IS NULL
+        OR auth_token_to_void.expires_at_utc IS NULL
+        OR auth_token_to_void.expires_at_utc > v_now
+      )
+    RETURNING auth_token_to_void.token
+  )
+  SELECT COUNT(*)::integer
+  INTO v_auth_tokens_voided
+  FROM voided_tokens;
+
   v_authoritative_payment_date := v_batch.authoritative_payment_date;
   v_authoritative_payment_date_source := v_batch.authoritative_payment_date_source;
 
@@ -5658,6 +5738,20 @@ BEGIN
     NULLIF(BTRIM(v_batch.rail_env_snapshot), '')
   );
 
+  IF v_current_operation_id IS NOT NULL THEN
+    UPDATE public.banking_pay_operation_transfer_scope AS scope_to_skip
+    SET
+      status = 'SKIPPED',
+      pay_bank_transfer_id = NULL,
+      updated_at_utc = v_now
+    WHERE scope_to_skip.pay_batch_id = p_pay_batch_id
+      AND scope_to_skip.operation_id = v_current_operation_id
+      AND upper(btrim(coalesce(scope_to_skip.status, ''))) IN ('PENDING', 'PREPARED')
+      AND scope_to_skip.pay_bank_transfer_id IS NOT NULL;
+
+    GET DIAGNOSTICS v_transfer_scope_rows_skipped = ROW_COUNT;
+  END IF;
+
   UPDATE public.pay_batch_items AS batch_item_to_unlink
   SET pay_bank_transfer_id = NULL
   FROM public.pay_batch_candidates AS batch_candidate_to_unlink
@@ -5665,8 +5759,12 @@ BEGIN
     AND batch_candidate_to_unlink.pay_batch_id = p_pay_batch_id
     AND batch_item_to_unlink.pay_bank_transfer_id IS NOT NULL;
 
+  GET DIAGNOSTICS v_item_links_cleared = ROW_COUNT;
+
   DELETE FROM public.pay_bank_transfers AS transfer_to_delete
   WHERE transfer_to_delete.pay_batch_id = p_pay_batch_id;
+
+  GET DIAGNOSTICS v_transfer_rows_deleted = ROW_COUNT;
 
   CREATE TEMPORARY TABLE IF NOT EXISTS pg_temp.tmp_mark_blocked_rewound_reservations (
     reservation_id uuid NOT NULL,
@@ -5762,7 +5860,18 @@ BEGIN
     last_funds_check_json = v_funds_check_json,
     schedule_kind = NULL,
     scheduled_at_utc = NULL,
-    scheduled_by_user_id = NULL
+    scheduled_by_user_id = NULL,
+    execution_intent_json = jsonb_strip_nulls(
+      COALESCE(blocked_batch.execution_intent_json, '{}'::jsonb)
+      || jsonb_build_object(
+        'blocked_funds', true,
+        'blocked_funds_at_utc', v_now::text,
+        'blocked_funds_by_user_id', p_actor_user_id::text,
+        'blocked_funds_operation_id', CASE WHEN v_current_operation_id IS NULL THEN NULL ELSE v_current_operation_id::text END,
+        'blocked_funds_auth_requests_cancelled', COALESCE(v_auth_requests_cancelled, 0),
+        'blocked_funds_cancelled_auth_request_ids', COALESCE(v_cancelled_auth_request_ids, '[]'::jsonb)
+      )
+    )
   WHERE blocked_batch.id = p_pay_batch_id;
 
   v_alert_payload := public.banking_alert_payload_for_pay_batch('BLOCKED_FUNDS', p_pay_batch_id);
@@ -5860,6 +5969,11 @@ BEGIN
         'reservation_status_summary', v_reservation_status_summary,
         'funds_check_json', v_funds_check_json,
         'submission_evidence', v_submission_evidence,
+        'auth_requests_cancelled', COALESCE(v_auth_requests_cancelled, 0),
+        'auth_tokens_voided', COALESCE(v_auth_tokens_voided, 0),
+        'transfer_scope_rows_skipped', COALESCE(v_transfer_scope_rows_skipped, 0),
+        'item_links_cleared', COALESCE(v_item_links_cleared, 0),
+        'transfer_rows_deleted', COALESCE(v_transfer_rows_deleted, 0),
         'banking_alert_fingerprint', v_alert_fingerprint,
         'admin_notice_result', v_notice_result
       ),
@@ -5884,6 +5998,12 @@ BEGIN
     'authoritative_payment_date_source', v_authoritative_payment_date_source,
     'reservation_status_summary', v_reservation_status_summary,
     'submission_evidence', v_submission_evidence,
+    'auth_requests_cancelled', COALESCE(v_auth_requests_cancelled, 0),
+    'cancelled_auth_request_ids', COALESCE(v_cancelled_auth_request_ids, '[]'::jsonb),
+    'auth_tokens_voided', COALESCE(v_auth_tokens_voided, 0),
+    'transfer_scope_rows_skipped', COALESCE(v_transfer_scope_rows_skipped, 0),
+    'item_links_cleared', COALESCE(v_item_links_cleared, 0),
+    'transfer_rows_deleted', COALESCE(v_transfer_rows_deleted, 0),
     'banking_alert_kind', 'BLOCKED_FUNDS',
     'banking_alert_fingerprint', v_alert_fingerprint,
     'banking_alert_payload', v_alert_payload,
@@ -5896,6 +6016,12 @@ BEGIN
   );
 END;
 $function$;
+
+
+
+
+
+
 
 
 
