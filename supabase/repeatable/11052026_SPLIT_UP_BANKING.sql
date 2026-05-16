@@ -1,5 +1,5 @@
 -- ============================================================
--- NEW - Banking Pay operation RPCs 1-5
+-- NEW - Banking Pay  operation RPCs 1-5
 -- CloudTMS scalable Banking Pay operations foundation
 --
 -- Functions included only:
