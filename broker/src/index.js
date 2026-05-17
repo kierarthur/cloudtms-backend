@@ -40421,6 +40421,59 @@ async function handleContractWeekStagedEvidenceReturnToQueue(env, req, weekId, q
     return src;
   };
 
+  const queueStatus = (row) => String(row?.status || '').trim().toUpperCase();
+  const queueRowIsAlreadyAvailable = (row) => ['QUEUED', 'IN_PROGRESS'].includes(queueStatus(row));
+  const fetchExistingAvailableQueueRow = async (sourceItem) => {
+    const sourceId = trimStr(sourceItem?.id);
+    const sourceHash = trimStr(sourceItem?.content_hash);
+    const sourceStorageKey = trimStr(sourceItem?.r2_key).replace(/^\/+/, '');
+    const queries = [];
+
+    if (sourceHash) {
+      queries.push(
+        `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue` +
+          `?content_hash=eq.${enc(sourceHash)}` +
+          `&status=in.(QUEUED,IN_PROGRESS)` +
+          `&select=id,status,timesheet_id,r2_key,original_filename,mime_type,content_hash,uploaded_by_user_id,uploaded_at_utc,last_rotation_deg,meta_json` +
+          `&order=uploaded_at_utc.desc` +
+          `&limit=10`
+      );
+    }
+
+    if (sourceStorageKey) {
+      queries.push(
+        `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue` +
+          `?r2_key=eq.${enc(sourceStorageKey)}` +
+          `&status=in.(QUEUED,IN_PROGRESS)` +
+          `&select=id,status,timesheet_id,r2_key,original_filename,mime_type,content_hash,uploaded_by_user_id,uploaded_at_utc,last_rotation_deg,meta_json` +
+          `&order=uploaded_at_utc.desc` +
+          `&limit=10`
+      );
+    }
+
+    for (const url of queries) {
+      const { rows } = await sbFetch(env, url);
+      const candidates = Array.isArray(rows) ? rows : [];
+      const found = candidates.find((row) => trimStr(row?.id) && trimStr(row?.id) !== sourceId && queueRowIsAlreadyAvailable(row));
+      if (found) return found;
+    }
+
+    return null;
+  };
+  const deleteStagedQueueRow = async (id, errorPrefix) => {
+    const delRes = await fetch(
+      `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue?id=eq.${enc(id)}`,
+      { method: 'DELETE', headers: { ...sbHeaders(env), Prefer: 'return=minimal' } }
+    );
+
+    if (!delRes.ok) {
+      const txt = await delRes.text().catch(() => '');
+      return { ok: false, response: withCORS(env, req, serverError(`${errorPrefix}: ${txt}`)) };
+    }
+
+    return { ok: true };
+  };
+
   const now = nowIso();
 
   const evidenceEligibility = await resolveContractWeekDraftEvidenceEligibility(env, weekId, {
@@ -40439,7 +40492,7 @@ async function handleContractWeekStagedEvidenceReturnToQueue(env, req, weekId, q
     env,
     `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue` +
       `?id=eq.${enc(queueId)}` +
-      `&select=id,status,timesheet_id,r2_key,original_filename,meta_json` +
+      `&select=id,status,timesheet_id,r2_key,original_filename,mime_type,content_hash,uploaded_by_user_id,uploaded_at_utc,last_rotation_deg,meta_json` +
       `&limit=1`
   );
   const item = qRows?.[0] || null;
@@ -40463,24 +40516,6 @@ async function handleContractWeekStagedEvidenceReturnToQueue(env, req, weekId, q
 
   const stagedKind = normaliseKind(currentMeta?.staged_kind || currentMeta?.kind || 'TIMESHEET') || 'TIMESHEET';
 
-  const patchQueueRes = await fetch(
-    `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue?id=eq.${enc(queueId)}`,
-    {
-      method: 'PATCH',
-      headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
-      body: JSON.stringify({
-        status: 'QUEUED',
-        timesheet_id: null,
-        meta_json: stripStagedMeta(currentMeta)
-      })
-    }
-  );
-
-  if (!patchQueueRes.ok) {
-    const txt = await patchQueueRes.text().catch(() => '');
-    return withCORS(env, req, serverError(`Failed to return staged evidence to queue: ${txt}`));
-  }
-
   const currentUploadedPdfKey = trimStr(contractWeek.uploaded_pdf_r2_key).replace(/^\/+/, '');
   const itemStorageKey = trimStr(item.r2_key).replace(/^\/+/, '');
   const shouldClearUploadedPdf = (
@@ -40489,6 +40524,51 @@ async function handleContractWeekStagedEvidenceReturnToQueue(env, req, weekId, q
     itemStorageKey &&
     currentUploadedPdfKey === itemStorageKey
   );
+
+  let queueRowId = item.id;
+  let reusedExistingQueueRow = false;
+  let removedStagedQueueId = null;
+  let existingAvailableQueueRow = await fetchExistingAvailableQueueRow(item);
+
+  if (existingAvailableQueueRow?.id) {
+    const deleteResult = await deleteStagedQueueRow(item.id, 'Failed to remove staged evidence after finding an existing queue item');
+    if (!deleteResult.ok) return deleteResult.response;
+    queueRowId = existingAvailableQueueRow.id;
+    reusedExistingQueueRow = true;
+    removedStagedQueueId = item.id;
+  } else {
+    const patchQueueRes = await fetch(
+      `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue?id=eq.${enc(queueId)}`,
+      {
+        method: 'PATCH',
+        headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+        body: JSON.stringify({
+          status: 'QUEUED',
+          timesheet_id: null,
+          meta_json: stripStagedMeta(currentMeta)
+        })
+      }
+    );
+
+    if (!patchQueueRes.ok) {
+      const txt = await patchQueueRes.text().catch(() => '');
+      const duplicateContentHash = /manual_timesheet_queue_content_hash_active_idx|duplicate key value|23505/i.test(txt || '');
+      if (duplicateContentHash) {
+        existingAvailableQueueRow = await fetchExistingAvailableQueueRow(item);
+        if (existingAvailableQueueRow?.id) {
+          const deleteResult = await deleteStagedQueueRow(item.id, 'Failed to remove staged evidence after duplicate queue content was detected');
+          if (!deleteResult.ok) return deleteResult.response;
+          queueRowId = existingAvailableQueueRow.id;
+          reusedExistingQueueRow = true;
+          removedStagedQueueId = item.id;
+        } else {
+          return withCORS(env, req, serverError(`Failed to return staged evidence to queue: ${txt}`));
+        }
+      } else {
+        return withCORS(env, req, serverError(`Failed to return staged evidence to queue: ${txt}`));
+      }
+    }
+  }
 
   if (shouldClearUploadedPdf) {
     await fetch(
@@ -40508,28 +40588,36 @@ async function handleContractWeekStagedEvidenceReturnToQueue(env, req, weekId, q
     await writeAudit(
       env,
       user,
-      'MANUAL_TIMESHEET_QUEUE_STAGED_RETURNED_TO_QUEUE',
+      reusedExistingQueueRow
+        ? 'MANUAL_TIMESHEET_QUEUE_STAGED_REMOVED_EXISTING_QUEUE_REUSED'
+        : 'MANUAL_TIMESHEET_QUEUE_STAGED_RETURNED_TO_QUEUE',
       {
-        queue_id: item.id,
+        queue_id: queueRowId,
+        original_staged_queue_id: item.id,
+        removed_staged_queue_id: removedStagedQueueId,
+        reused_existing_queue_row: reusedExistingQueueRow,
         contract_week_id: weekId,
         r2_key: item.r2_key || null,
         original_filename: item.original_filename || null,
         staged_kind: stagedKind,
+        content_hash: item.content_hash || null,
         cleared_uploaded_pdf_r2_key: !!shouldClearUploadedPdf
       },
-      { entity: 'manual_timesheet_queue', subject_id: item.id, req }
+      { entity: 'manual_timesheet_queue', subject_id: queueRowId || item.id, req }
     );
   } catch {}
 
   return withCORS(env, req, ok({
     returned_to_queue: true,
-    id: item.id,
+    id: queueRowId,
+    original_staged_queue_id: item.id,
+    removed_staged_queue_id: removedStagedQueueId,
+    reused_existing_queue_row: reusedExistingQueueRow,
     contract_week_id: weekId,
     kind: stagedKind,
     uploaded_pdf_r2_key: shouldClearUploadedPdf ? null : (contractWeek.uploaded_pdf_r2_key || null)
   }));
 }
-
 
 
 
@@ -47565,6 +47653,39 @@ async function handleTimesheetEvidenceReturnToQueue(env, req, tsId, evidenceId) 
     return src;
   };
 
+  const queueStatus = (row) => String(row?.status || '').trim().toUpperCase();
+  const queueRowIsAlreadyAvailable = (row) => ['QUEUED', 'IN_PROGRESS'].includes(queueStatus(row));
+  const fetchExistingAvailableQueueRowByContentHash = async (contentHash, excludeId = '') => {
+    const cleanHash = trimStr(contentHash);
+    if (!cleanHash) return null;
+    const { rows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue` +
+        `?content_hash=eq.${enc(cleanHash)}` +
+        `&status=in.(QUEUED,IN_PROGRESS)` +
+        `&select=id,r2_key,original_filename,mime_type,content_hash,uploaded_by_user_id,uploaded_at_utc,status,timesheet_id,last_rotation_deg,meta_json` +
+        `&order=uploaded_at_utc.desc` +
+        `&limit=10`
+    );
+    const candidates = Array.isArray(rows) ? rows : [];
+    return candidates.find((row) => trimStr(row?.id) && (!excludeId || trimStr(row.id) !== trimStr(excludeId)) && queueRowIsAlreadyAvailable(row)) || null;
+  };
+  const deleteQueueRowIfPresent = async (id, errorPrefix) => {
+    const cleanId = trimStr(id);
+    if (!cleanId) return { ok: true };
+    const delRes = await fetch(
+      `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue?id=eq.${enc(cleanId)}`,
+      { method: 'DELETE', headers: { ...sbHeaders(env), Prefer: 'return=minimal' } }
+    );
+
+    if (!delRes.ok) {
+      const txt = await delRes.text().catch(() => '');
+      return { ok: false, response: withCORS(env, req, serverError(`${errorPrefix}: ${txt}`)) };
+    }
+
+    return { ok: true };
+  };
+
   try {
     const evidencePolicy = await getTimesheetEvidenceMutationPolicy(env, currentTsId);
     if (!evidencePolicy?.can_manage_evidence) {
@@ -47611,23 +47732,29 @@ async function handleTimesheetEvidenceReturnToQueue(env, req, tsId, evidenceId) 
 
     const queueCandidates = Array.isArray(queueRows) ? queueRows : [];
 
-    let reusableQueueRow =
-      queueCandidates.find(row =>
-        String(row?.timesheet_id || '') === String(currentTsId) &&
-        String(row?.status || '').trim().toUpperCase() === 'ATTACHED'
-      ) || null;
+    const alreadyAvailableQueueRow = queueCandidates.find(row => queueRowIsAlreadyAvailable(row)) || null;
+    const attachedQueueRow = queueCandidates.find(row =>
+      String(row?.timesheet_id || '') === String(currentTsId) &&
+      queueStatus(row) === 'ATTACHED'
+    ) || null;
+
+    let reusableQueueRow = attachedQueueRow || null;
+
+    if (!reusableQueueRow) {
+      reusableQueueRow = alreadyAvailableQueueRow || null;
+    }
 
     if (!reusableQueueRow) {
       reusableQueueRow =
         queueCandidates.find(row =>
-          ['QUEUED', 'IN_PROGRESS', 'DISCARDED'].includes(String(row?.status || '').trim().toUpperCase())
+          ['DISCARDED'].includes(queueStatus(row))
         ) || null;
     }
 
     if (!reusableQueueRow) {
       reusableQueueRow =
         queueCandidates.find(row =>
-          String(row?.status || '').trim().toUpperCase() !== 'STAGED'
+          !['STAGED'].includes(queueStatus(row))
         ) || null;
     }
 
@@ -47635,8 +47762,23 @@ async function handleTimesheetEvidenceReturnToQueue(env, req, tsId, evidenceId) 
     const evKind = normalizeKind(ev.kind || '') || 'OTHER';
 
     let queueRowId = null;
+    let reusedExistingQueueRow = false;
+    let removedAttachedQueueId = null;
 
-    if (reusableQueueRow?.id) {
+    const activeDuplicateByHash = alreadyAvailableQueueRow || await fetchExistingAvailableQueueRowByContentHash(
+      attachedQueueRow?.content_hash || reusableQueueRow?.content_hash || '',
+      attachedQueueRow?.id || reusableQueueRow?.id || ''
+    );
+
+    if (activeDuplicateByHash?.id) {
+      queueRowId = activeDuplicateByHash.id;
+      reusedExistingQueueRow = true;
+      if (attachedQueueRow?.id && trimStr(attachedQueueRow.id) !== trimStr(activeDuplicateByHash.id)) {
+        const deleteAttachedQueueResult = await deleteQueueRowIfPresent(attachedQueueRow.id, 'Failed to remove attached queue row after finding an existing queue item');
+        if (!deleteAttachedQueueResult.ok) return deleteAttachedQueueResult.response;
+        removedAttachedQueueId = attachedQueueRow.id;
+      }
+    } else if (reusableQueueRow?.id) {
       const currentMeta = (reusableQueueRow.meta_json && typeof reusableQueueRow.meta_json === 'object' && !Array.isArray(reusableQueueRow.meta_json))
         ? reusableQueueRow.meta_json
         : {};
@@ -47666,10 +47808,26 @@ async function handleTimesheetEvidenceReturnToQueue(env, req, tsId, evidenceId) 
 
       if (!patchQueueRes.ok) {
         const txt = await patchQueueRes.text().catch(() => '');
-        return withCORS(env, req, serverError(`Failed to reuse queue row for return-to-queue: ${txt}`));
+        const duplicateContentHash = /manual_timesheet_queue_content_hash_active_idx|duplicate key value|23505/i.test(txt || '');
+        if (duplicateContentHash) {
+          const duplicateQueueRow = await fetchExistingAvailableQueueRowByContentHash(reusableQueueRow.content_hash, reusableQueueRow.id);
+          if (duplicateQueueRow?.id) {
+            queueRowId = duplicateQueueRow.id;
+            reusedExistingQueueRow = true;
+            if (queueStatus(reusableQueueRow) === 'ATTACHED' && String(reusableQueueRow?.timesheet_id || '') === String(currentTsId)) {
+              const deleteAttachedQueueResult = await deleteQueueRowIfPresent(reusableQueueRow.id, 'Failed to remove attached queue row after duplicate queue content was detected');
+              if (!deleteAttachedQueueResult.ok) return deleteAttachedQueueResult.response;
+              removedAttachedQueueId = reusableQueueRow.id;
+            }
+          } else {
+            return withCORS(env, req, serverError(`Failed to reuse queue row for return-to-queue: ${txt}`));
+          }
+        } else {
+          return withCORS(env, req, serverError(`Failed to reuse queue row for return-to-queue: ${txt}`));
+        }
+      } else {
+        queueRowId = reusableQueueRow.id;
       }
-
-      queueRowId = reusableQueueRow.id;
     } else {
       const syntheticHash = `RETURNED:${storageKey}`;
 
@@ -47697,22 +47855,33 @@ async function handleTimesheetEvidenceReturnToQueue(env, req, tsId, evidenceId) 
 
       const txt = await insertRes.text().catch(() => '');
       if (!insertRes.ok) {
-        return withCORS(env, req, serverError(`Failed to create queue row for return-to-queue: ${txt}`));
-      }
+        const duplicateContentHash = /manual_timesheet_queue_content_hash_active_idx|duplicate key value|23505/i.test(txt || '');
+        if (duplicateContentHash) {
+          const duplicateQueueRow = await fetchExistingAvailableQueueRowByContentHash(syntheticHash, '');
+          if (duplicateQueueRow?.id) {
+            queueRowId = duplicateQueueRow.id;
+            reusedExistingQueueRow = true;
+          } else {
+            return withCORS(env, req, serverError(`Failed to create queue row for return-to-queue: ${txt}`));
+          }
+        } else {
+          return withCORS(env, req, serverError(`Failed to create queue row for return-to-queue: ${txt}`));
+        }
+      } else {
+        let inserted = null;
+        try {
+          const json = txt ? JSON.parse(txt) : [];
+          inserted = Array.isArray(json) ? json[0] : json;
+        } catch {
+          inserted = null;
+        }
 
-      let inserted = null;
-      try {
-        const json = txt ? JSON.parse(txt) : [];
-        inserted = Array.isArray(json) ? json[0] : json;
-      } catch {
-        inserted = null;
-      }
+        if (!inserted?.id) {
+          return withCORS(env, req, serverError('Failed to create queue row for return-to-queue'));
+        }
 
-      if (!inserted?.id) {
-        return withCORS(env, req, serverError('Failed to create queue row for return-to-queue'));
+        queueRowId = inserted.id;
       }
-
-      queueRowId = inserted.id;
     }
 
     const delRes = await fetch(
@@ -47750,11 +47919,15 @@ async function handleTimesheetEvidenceReturnToQueue(env, req, tsId, evidenceId) 
       await writeAudit(
         env,
         user,
-        'TIMESHEET_EVIDENCE_RETURNED_TO_QUEUE',
+        reusedExistingQueueRow
+          ? 'TIMESHEET_EVIDENCE_REMOVED_EXISTING_QUEUE_REUSED'
+          : 'TIMESHEET_EVIDENCE_RETURNED_TO_QUEUE',
         {
           timesheet_id: currentTsId,
           evidence_id: evidenceId,
           queue_id: queueRowId,
+          removed_attached_queue_id: removedAttachedQueueId,
+          reused_existing_queue_row: reusedExistingQueueRow,
           kind: ev.kind || null,
           display_name: ev.display_name || null,
           storage_key: ev.storage_key || null,
@@ -47774,12 +47947,15 @@ async function handleTimesheetEvidenceReturnToQueue(env, req, tsId, evidenceId) 
       current_timesheet_id: currentTsId,
       was_stale: !!resolved.was_stale,
       queue_id: queueRowId,
+      removed_attached_queue_id: removedAttachedQueueId,
+      reused_existing_queue_row: reusedExistingQueueRow,
       cleared_manual_pdf_r2_key: shouldClearManualPdf
     }));
   } catch (e) {
     return withCORS(env, req, serverError(`Failed to return timesheet evidence to queue: ${e?.message || e}`));
   }
 }
+
 
 
 // POST /api/timesheets/:id/evidence
