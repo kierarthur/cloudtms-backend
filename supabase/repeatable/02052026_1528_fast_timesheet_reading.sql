@@ -680,6 +680,12 @@ $function$;
 
 
 
+
+
+
+
+
+
 CREATE OR REPLACE FUNCTION public.bulk_authorise_dataset_v1(p_filters jsonb DEFAULT '{}'::jsonb)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -1252,12 +1258,42 @@ BEGIN
       )) AS row_json
     FROM decision_rows
   ),
-  eligible_rows_before_classification AS MATERIALIZED (
-    SELECT payload_rows.row_json
+  canonical_authorise_signature_rows AS MATERIALIZED (
+    SELECT canonical_patch.row_json
+    FROM public.bulk_timesheet_row_patch_v1(
+      JSONB_BUILD_OBJECT(
+        'dataset_mode', 'authorise',
+        'projection', 'dataset_row',
+        'row_keys', COALESCE((
+          SELECT JSONB_AGG(payload_rows.row_json->>'row_key' ORDER BY payload_rows.row_json->>'row_key')
+          FROM payload_rows
+          WHERE NULLIF(BTRIM(COALESCE(payload_rows.row_json->>'row_key', '')), '') IS NOT NULL
+        ), '[]'::jsonb)
+      )
+    ) AS canonical_patch(row_json)
+  ),
+  canonical_payload_rows AS MATERIALIZED (
+    SELECT
+      CASE
+        WHEN NULLIF(BTRIM(COALESCE(canonical_authorise_signature_rows.row_json->>'row_signature', '')), '') IS NOT NULL THEN
+          JSONB_SET(
+            payload_rows.row_json,
+            '{row_signature}',
+            TO_JSONB(canonical_authorise_signature_rows.row_json->>'row_signature'),
+            TRUE
+          )
+        ELSE payload_rows.row_json
+      END AS row_json
     FROM payload_rows
-    WHERE NULLIF(BTRIM(COALESCE(payload_rows.row_json->>'timesheet_id', '')), '') IS NOT NULL
-      AND UPPER(COALESCE(payload_rows.row_json->>'bulk_process_bucket', '')) <> 'UNPROCESSED'
-      AND NULLIF(BTRIM(COALESCE(payload_rows.row_json->>'bulk_authorise_section', '')), '') IS NOT NULL
+    LEFT JOIN canonical_authorise_signature_rows
+      ON canonical_authorise_signature_rows.row_json->>'row_key' = payload_rows.row_json->>'row_key'
+  ),
+  eligible_rows_before_classification AS MATERIALIZED (
+    SELECT canonical_payload_rows.row_json
+    FROM canonical_payload_rows
+    WHERE NULLIF(BTRIM(COALESCE(canonical_payload_rows.row_json->>'timesheet_id', '')), '') IS NOT NULL
+      AND UPPER(COALESCE(canonical_payload_rows.row_json->>'bulk_process_bucket', '')) <> 'UNPROCESSED'
+      AND NULLIF(BTRIM(COALESCE(canonical_payload_rows.row_json->>'bulk_authorise_section', '')), '') IS NOT NULL
   ),
   classification_filtered_rows AS MATERIALIZED (
     SELECT eligible_rows_before_classification.row_json
@@ -1410,6 +1446,9 @@ BEGIN
   ));
 END;
 $function$;
+
+
+
 
 
 
