@@ -31986,95 +31986,318 @@ async function handleAuditEventsList(env, req) {
      };
    };
  
-   const validateExpenseDraftEvidenceAgainstKinds = async (targetTimesheetId, expenseDraftObj) => {
+   const expenseEvidenceKindCategories = {
+     MILEAGE: 'mileage',
+     TRAVEL: 'travel',
+     ACCOMMODATION: 'accommodation',
+     OTHER: 'other'
+   };
+
+   const isExpenseEvidenceKind = (kind) => Object.prototype.hasOwnProperty.call(
+     expenseEvidenceKindCategories,
+     String(kind || '').trim().toUpperCase()
+   );
+
+   const expenseEvidenceKindsRequiredByDraft = (expenseDraftObj) => {
      const draft = (expenseDraftObj && typeof expenseDraftObj === 'object') ? expenseDraftObj : {};
+     const kinds = [];
+     if (Number(draft.mileage_units || 0) > 0) kinds.push('MILEAGE');
+     if (Number(draft.travel_pay || 0) > 0 || Number(draft.travel_charge || 0) > 0) kinds.push('TRAVEL');
+     if (Number(draft.accommodation_pay || 0) > 0 || Number(draft.accommodation_charge || 0) > 0) kinds.push('ACCOMMODATION');
+     if (Number(draft.other_pay || 0) > 0 || Number(draft.other_charge || 0) > 0) kinds.push('OTHER');
+     return [...new Set(kinds)];
+   };
+
+   const evidenceSourceKeyOf = (item) => String(
+     item?.storage_key ||
+     item?.r2_key ||
+     item?.file_key ||
+     item?.download_storage_key ||
+     item?.preview_storage_key ||
+     ''
+   ).trim().replace(/^\/+/, '');
+
+   const buildExpenseEvidenceIssue = (kind, code, message, item = null) => ({
+     category: expenseEvidenceKindCategories[String(kind || '').trim().toUpperCase()] || String(kind || '').trim().toLowerCase() || null,
+     required_kind: String(kind || '').trim().toUpperCase() || null,
+     code,
+     message,
+     queue_item_id: item?.id || item?.queue_id || null
+   });
+
+   const validateExpenseDraftEvidenceAgainstKinds = async (targetTimesheetId, expenseDraftObj) => {
+     const requiredKinds = expenseEvidenceKindsRequiredByDraft(expenseDraftObj);
      const missing = [];
- 
+     const invalid = [];
+
      const hasKind = async (kind) => {
        const { rows } = await sbFetch(
          env,
          `${env.SUPABASE_URL}/rest/v1/timesheet_evidence` +
            `?timesheet_id=eq.${enc(targetTimesheetId)}` +
            `&kind=eq.${enc(kind)}` +
-           `&select=id` +
-           `&limit=1`
+           `&select=id,storage_key` +
+           `&limit=10`
        );
-       return !!(rows && rows[0] && rows[0].id);
+       const items = Array.isArray(rows) ? rows : [];
+       const hasValid = items.some((row) => String(row?.storage_key || '').trim() !== '');
+       if (!hasValid && items.length) {
+         invalid.push(buildExpenseEvidenceIssue(kind, 'MISSING_STORAGE_KEY', `Attached ${kind} evidence is missing storage_key`, items[0]));
+       }
+       return hasValid;
      };
- 
-     if (Number(draft.mileage_units || 0) > 0) {
-       const ok = await hasKind('MILEAGE');
-       if (!ok) missing.push({ category: 'mileage', required_kind: 'MILEAGE' });
+
+     for (const kind of requiredKinds) {
+       const ok = await hasKind(kind);
+       if (!ok) missing.push({ category: expenseEvidenceKindCategories[kind], required_kind: kind });
      }
- 
-     if (Number(draft.travel_pay || 0) > 0 || Number(draft.travel_charge || 0) > 0) {
-       const ok = await hasKind('TRAVEL');
-       if (!ok) missing.push({ category: 'travel', required_kind: 'TRAVEL' });
-     }
- 
-     if (Number(draft.accommodation_pay || 0) > 0 || Number(draft.accommodation_charge || 0) > 0) {
-       const ok = await hasKind('ACCOMMODATION');
-       if (!ok) missing.push({ category: 'accommodation', required_kind: 'ACCOMMODATION' });
-     }
- 
-     if (Number(draft.other_pay || 0) > 0 || Number(draft.other_charge || 0) > 0) {
-       const ok = await hasKind('OTHER');
-       if (!ok) missing.push({ category: 'other', required_kind: 'OTHER' });
-     }
- 
-     return { ok: missing.length === 0, missing };
+
+     return { ok: missing.length === 0 && invalid.length === 0, missing, invalid };
    };
- 
+
    const validateExpenseDraftEvidencePreflight = async ({ currentTimesheetId, contractWeekId, willCreateNow, expenseDraftObj }) => {
-     const draft = (expenseDraftObj && typeof expenseDraftObj === 'object') ? expenseDraftObj : {};
-     const needsMileage = Number(draft.mileage_units || 0) > 0;
-     const needsTravel = Number(draft.travel_pay || 0) > 0 || Number(draft.travel_charge || 0) > 0;
-     const needsAccommodation = Number(draft.accommodation_pay || 0) > 0 || Number(draft.accommodation_charge || 0) > 0;
-     const needsOther = Number(draft.other_pay || 0) > 0 || Number(draft.other_charge || 0) > 0;
- 
-     if (!needsMileage && !needsTravel && !needsAccommodation && !needsOther) {
-       return { ok: true, missing: [] };
+     const requiredKinds = expenseEvidenceKindsRequiredByDraft(expenseDraftObj);
+
+     if (!requiredKinds.length) {
+       return { ok: true, missing: [], invalid: [] };
      }
- 
+
      const availableKinds = new Set();
- 
+     const invalid = [];
+
      if (willCreateNow) {
-       const { rows } = await sbFetch(
-         env,
-         `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue` +
-           `?status=eq.${enc('STAGED')}` +
-           `&meta_json->>contract_week_id=eq.${enc(contractWeekId)}` +
-           `&select=meta_json`
-       );
- 
-       for (const row of (Array.isArray(rows) ? rows : [])) {
-         const meta = (row?.meta_json && typeof row.meta_json === 'object') ? row.meta_json : {};
-         const kindRaw = String(meta?.staged_kind || meta?.kind || '').trim().toUpperCase();
-         if (kindRaw) availableKinds.add(kindRaw);
+       const stagedItems = await loadContractWeekStagedTimesheetQueueItems(contractWeekId);
+       for (const kind of requiredKinds) {
+         const kindItems = stagedItems.filter(item => String(item?.staged_kind || '').trim().toUpperCase() === kind);
+         const validKindItems = kindItems.filter(item => evidenceSourceKeyOf(item));
+         if (validKindItems.length) {
+           availableKinds.add(kind);
+         } else if (kindItems.length) {
+           invalid.push(buildExpenseEvidenceIssue(kind, 'MISSING_STORAGE_KEY', `Staged ${kind} evidence is missing storage_key`, kindItems[0]));
+         }
        }
      } else if (currentTimesheetId) {
        const { rows } = await sbFetch(
          env,
          `${env.SUPABASE_URL}/rest/v1/timesheet_evidence` +
            `?timesheet_id=eq.${enc(currentTimesheetId)}` +
-           `&select=kind`
+           `&select=id,kind,storage_key`
        );
- 
-       for (const row of (Array.isArray(rows) ? rows : [])) {
-         const kindRaw = String(row?.kind || '').trim().toUpperCase();
-         if (kindRaw) availableKinds.add(kindRaw);
+
+       for (const kind of requiredKinds) {
+         const kindRows = (Array.isArray(rows) ? rows : []).filter((row) => String(row?.kind || '').trim().toUpperCase() === kind);
+         const validKindRows = kindRows.filter((row) => String(row?.storage_key || '').trim() !== '');
+         if (validKindRows.length) {
+           availableKinds.add(kind);
+         } else if (kindRows.length) {
+           invalid.push(buildExpenseEvidenceIssue(kind, 'MISSING_STORAGE_KEY', `Attached ${kind} evidence is missing storage_key`, kindRows[0]));
+         }
        }
      }
- 
+
      const missing = [];
-     if (needsMileage && !availableKinds.has('MILEAGE')) missing.push({ category: 'mileage', required_kind: 'MILEAGE' });
-     if (needsTravel && !availableKinds.has('TRAVEL')) missing.push({ category: 'travel', required_kind: 'TRAVEL' });
-     if (needsAccommodation && !availableKinds.has('ACCOMMODATION')) missing.push({ category: 'accommodation', required_kind: 'ACCOMMODATION' });
-     if (needsOther && !availableKinds.has('OTHER')) missing.push({ category: 'other', required_kind: 'OTHER' });
- 
-     return { ok: missing.length === 0, missing };
+     for (const kind of requiredKinds) {
+       if (!availableKinds.has(kind)) {
+         missing.push({ category: expenseEvidenceKindCategories[kind], required_kind: kind });
+       }
+     }
+
+     return { ok: missing.length === 0 && invalid.length === 0, missing, invalid };
    };
- 
+
+   const prepareContractWeekStagedExpenseEvidence = async (contractWeekId, requiredKindsInput = []) => {
+     const requiredKinds = [...new Set(
+       (Array.isArray(requiredKindsInput) ? requiredKindsInput : [])
+         .map((kind) => String(kind || '').trim().toUpperCase())
+         .filter((kind) => isExpenseEvidenceKind(kind))
+     )];
+
+     if (!requiredKinds.length) return [];
+
+     const items = await loadContractWeekStagedTimesheetQueueItems(contractWeekId);
+     const prepared = [];
+
+     for (const kind of requiredKinds) {
+       const kindItems = items.filter(item => String(item?.staged_kind || '').trim().toUpperCase() === kind);
+       if (!kindItems.length) {
+         throw buildStagedTimesheetEvidenceError(
+           'EVIDENCE_REQUIRED',
+           `${kind} evidence is required before this timesheet can be processed`
+         );
+       }
+
+       let validCount = 0;
+       for (const item of kindItems) {
+         const sourceKey = evidenceSourceKeyOf(item);
+         if (!sourceKey) {
+           throw buildStagedTimesheetEvidenceError(
+             'INVALID_EXPENSE_EVIDENCE',
+             `Staged ${kind} evidence is missing storage_key`
+           );
+         }
+
+         try {
+           if (typeof r2Exists === 'function') {
+             const exists = await r2Exists(env, sourceKey);
+             if (!exists) {
+               throw new Error(`Staged ${kind} evidence storage_key does not exist in R2`);
+             }
+           }
+
+           if (typeof r2GetBytes === 'function') {
+             const sourceBytes = await r2GetBytes(env, sourceKey);
+             if (!sourceBytes?.length) {
+               throw new Error(`Staged ${kind} evidence source file is missing or empty`);
+             }
+           }
+         } catch (e) {
+           throw buildStagedTimesheetEvidenceError(
+             'INVALID_EXPENSE_EVIDENCE',
+             e?.message || `Invalid staged ${kind} evidence`
+           );
+         }
+
+         validCount += 1;
+         prepared.push({
+           queue_item_id: item.id,
+           kind,
+           display_name: item.original_filename || null,
+           storage_key: sourceKey,
+           created_at: item.uploaded_at_utc || nowIso(),
+           created_by: item.uploaded_by_user_id || user?.id || null,
+           meta_json: item.meta_json,
+           source_r2_key: sourceKey
+         });
+       }
+
+       if (!validCount) {
+         throw buildStagedTimesheetEvidenceError(
+           'EVIDENCE_REQUIRED',
+           `${kind} evidence is required before this timesheet can be processed`
+         );
+       }
+     }
+
+     return prepared;
+   };
+
+   const materialiseContractWeekStagedExpenseEvidenceToTimesheet = async (contractWeekId, targetTimesheetId, preparedExpenseEvidenceList = []) => {
+     const preparedList = Array.isArray(preparedExpenseEvidenceList) ? preparedExpenseEvidenceList : [];
+     if (!preparedList.length) {
+       return {
+         attached_count: 0,
+         storage_keys: [],
+         kinds: []
+       };
+     }
+
+     const storageKeys = [];
+     const kinds = [];
+     let attachedCount = 0;
+
+     for (const prepared of preparedList) {
+       const kind = String(prepared?.kind || '').trim().toUpperCase();
+       if (!isExpenseEvidenceKind(kind)) continue;
+
+       const storageKey = String(prepared?.storage_key || '').trim().replace(/^\/+/, '');
+       if (!storageKey) {
+         throw buildStagedTimesheetEvidenceError(
+           'INVALID_EXPENSE_EVIDENCE',
+           `Staged ${kind} evidence is missing storage_key`
+         );
+       }
+
+       const existingEvidenceRows = await sbFetch(
+         env,
+         `${env.SUPABASE_URL}/rest/v1/timesheet_evidence` +
+           `?timesheet_id=eq.${enc(targetTimesheetId)}` +
+           `&kind=eq.${enc(kind)}` +
+           `&storage_key=eq.${enc(storageKey)}` +
+           `&select=id` +
+           `&limit=1`
+       ).catch(() => ({ rows: [] }));
+
+       const existingEvidence = Array.isArray(existingEvidenceRows?.rows)
+         ? (existingEvidenceRows.rows[0] || null)
+         : null;
+
+       if (!existingEvidence?.id) {
+         const evidenceInsert = await fetch(`${env.SUPABASE_URL}/rest/v1/timesheet_evidence`, {
+           method: 'POST',
+           headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+           body: JSON.stringify([{
+             timesheet_id: targetTimesheetId,
+             kind,
+             display_name: prepared.display_name,
+             storage_key: storageKey,
+             created_at: prepared.created_at,
+             created_by: prepared.created_by
+           }])
+         });
+
+         if (!evidenceInsert.ok) {
+           const txt = await evidenceInsert.text().catch(() => '');
+           throw buildStagedTimesheetEvidenceError(
+             'STAGED_EVIDENCE_WRITE_FAILED',
+             `Failed to materialise staged ${kind} evidence: ${txt || 'insert failed'}`
+           );
+         }
+
+         attachedCount += 1;
+       }
+
+       const currentQueueRow = await sbGetOne(
+         env,
+         `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue?id=eq.${enc(prepared.queue_item_id)}&select=id,meta_json`
+       ).catch(() => null);
+
+       const currentQueueMeta = (currentQueueRow?.meta_json && typeof currentQueueRow.meta_json === 'object')
+         ? currentQueueRow.meta_json
+         : (prepared.meta_json || {});
+
+       const nextMeta = {
+         ...currentQueueMeta,
+         contract_week_id: String(contractWeekId),
+         staged_kind: kind,
+         materialisation_deferred_to_backend: false,
+         deferred_target_timesheet_id: String(targetTimesheetId),
+         materialised_to_timesheet_id: String(targetTimesheetId),
+         materialised_at_utc: nowIso(),
+         materialised_storage_key: storageKey
+       };
+
+       const queuePatch = await fetch(
+         `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue?id=eq.${enc(prepared.queue_item_id)}`,
+         {
+           method: 'PATCH',
+           headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+           body: JSON.stringify({
+             status: 'ATTACHED',
+             timesheet_id: targetTimesheetId,
+             meta_json: nextMeta
+           })
+         }
+       );
+
+       if (!queuePatch.ok) {
+         const txt = await queuePatch.text().catch(() => '');
+         throw buildStagedTimesheetEvidenceError(
+           'STAGED_EVIDENCE_WRITE_FAILED',
+           `Failed to update staged ${kind} queue provenance: ${txt || 'queue patch failed'}`
+         );
+       }
+
+       storageKeys.push(storageKey);
+       kinds.push(kind);
+     }
+
+     return {
+       attached_count: attachedCount,
+       storage_keys: [...new Set(storageKeys)],
+       kinds: [...new Set(kinds)]
+     };
+   };
+
    // ─────────────────────────────────────────────────────────────
    // ✅ SCHEDULE-DRIVEN ONLY (weekly manual)
    // Require actual_schedule_json (array; may be empty for "clear schedule")
@@ -32114,7 +32337,115 @@ async function handleAuditEventsList(env, req) {
      return d;
    };
  
-   const normaliseSchedule = (arr) => {
+   const hasPositiveNumberForBulkProcessSchedule = (value) => {
+    if (value == null || value === '') return false;
+    if (Array.isArray(value)) return value.some((item) => hasPositiveNumberForBulkProcessSchedule(item));
+    if (typeof value === 'object') return Object.values(value).some((item) => hasPositiveNumberForBulkProcessSchedule(item));
+    const n = Number(value);
+    return Number.isFinite(n) && n > 0;
+  };
+ 
+  const firstNonBlankBulkProcessScheduleValue = (...values) => {
+    for (const value of values) {
+      const text = String(value == null ? '' : value).trim();
+      if (text) return text;
+    }
+    return '';
+  };
+ 
+  const hasBreakWindowForBulkProcessSchedule = (value) => {
+    if (value == null) return false;
+    if (Array.isArray(value)) return value.some((item) => hasBreakWindowForBulkProcessSchedule(item));
+    if (typeof value === 'object') {
+      return Object.values(value).some((item) => {
+        if (item && typeof item === 'object') return hasBreakWindowForBulkProcessSchedule(item);
+        return String(item == null ? '' : item).trim() !== '' || hasPositiveNumberForBulkProcessSchedule(item);
+      });
+    }
+    return String(value == null ? '' : value).trim() !== '' || hasPositiveNumberForBulkProcessSchedule(value);
+  };
+ 
+  const hasAnyUtcScheduleValue = (seg) => !!(
+    firstNonBlankBulkProcessScheduleValue(
+      seg?.start_utc,
+      seg?.startUtc,
+      seg?.start_iso,
+      seg?.startIso,
+      seg?.end_utc,
+      seg?.endUtc,
+      seg?.end_iso,
+      seg?.endIso
+    )
+  );
+ 
+  const isPureBlankNonWorkingBulkProcessScheduleRow = (seg) => {
+    if (!seg || typeof seg !== 'object' || Array.isArray(seg)) return false;
+ 
+    const localStart = firstNonBlankBulkProcessScheduleValue(
+      seg.start,
+      seg.start_time,
+      seg.actual_start,
+      seg.shift_start,
+      seg.worked_start,
+      seg.from
+    );
+    const localEnd = firstNonBlankBulkProcessScheduleValue(
+      seg.end,
+      seg.end_time,
+      seg.actual_end,
+      seg.shift_end,
+      seg.worked_end,
+      seg.to
+    );
+    if (localStart || localEnd) return false;
+ 
+    if (hasAnyUtcScheduleValue(seg)) return false;
+ 
+    if (
+      hasPositiveNumberForBulkProcessSchedule(seg.expected_minutes) ||
+      hasPositiveNumberForBulkProcessSchedule(seg.expected_mins) ||
+      hasPositiveNumberForBulkProcessSchedule(seg.planned_minutes) ||
+      hasPositiveNumberForBulkProcessSchedule(seg.expected_hours) ||
+      hasPositiveNumberForBulkProcessSchedule(seg.worked_minutes) ||
+      hasPositiveNumberForBulkProcessSchedule(seg.paid_minutes) ||
+      hasPositiveNumberForBulkProcessSchedule(seg.duration_minutes) ||
+      hasPositiveNumberForBulkProcessSchedule(seg.total_minutes) ||
+      hasPositiveNumberForBulkProcessSchedule(seg.minutes) ||
+      hasPositiveNumberForBulkProcessSchedule(seg.actual_minutes) ||
+      hasPositiveNumberForBulkProcessSchedule(seg.worked_hours) ||
+      hasPositiveNumberForBulkProcessSchedule(seg.paid_hours) ||
+      hasPositiveNumberForBulkProcessSchedule(seg.total_hours) ||
+      hasPositiveNumberForBulkProcessSchedule(seg.hours) ||
+      hasPositiveNumberForBulkProcessSchedule(seg.actual_hours) ||
+      hasPositiveNumberForBulkProcessSchedule(seg.break_minutes) ||
+      hasPositiveNumberForBulkProcessSchedule(seg.break_mins) ||
+      hasPositiveNumberForBulkProcessSchedule(seg.unpaid_break_minutes) ||
+      hasPositiveNumberForBulkProcessSchedule(seg.break_hours) ||
+      hasPositiveNumberForBulkProcessSchedule(seg.unpaid_break_hours)
+    ) return false;
+ 
+    if (
+      hasBreakWindowForBulkProcessSchedule(seg.breaks) ||
+      hasBreakWindowForBulkProcessSchedule(seg.break_windows) ||
+      hasBreakWindowForBulkProcessSchedule(seg.break_start) ||
+      hasBreakWindowForBulkProcessSchedule(seg.break_end) ||
+      hasBreakWindowForBulkProcessSchedule(seg.break_start_time) ||
+      hasBreakWindowForBulkProcessSchedule(seg.break_end_time) ||
+      hasBreakWindowForBulkProcessSchedule(seg.breakStart) ||
+      hasBreakWindowForBulkProcessSchedule(seg.breakEnd)
+    ) return false;
+ 
+    return true;
+  };
+ 
+  const normaliseBulkProcessActualScheduleForManualUpsert = (schedule) => {
+    if (!Array.isArray(schedule)) return schedule;
+    return schedule
+      .filter((seg) => !isPureBlankNonWorkingBulkProcessScheduleRow(seg))
+      .map((seg) => ({ ...seg }));
+  };
+ 
+  const normaliseSchedule = (arr) => {
      const out = [];
      for (const raw of (arr || [])) {
        const seg = (raw && typeof raw === 'object') ? { ...raw } : null;
@@ -32186,6 +32517,19 @@ async function handleAuditEventsList(env, req) {
    };
  
    actual_schedule_json = normaliseSchedule(actual_schedule_json);
+ 
+   if (bulkProcessResponseRequested && Array.isArray(actual_schedule_json)) {
+     const beforeBulkProcessScheduleRows = actual_schedule_json.length;
+     actual_schedule_json = normaliseBulkProcessActualScheduleForManualUpsert(actual_schedule_json);
+     const afterBulkProcessScheduleRows = actual_schedule_json.length;
+     if (beforeBulkProcessScheduleRows !== afterBulkProcessScheduleRows) {
+       wlog('bulk_process_actual_schedule_normalised', {
+         input_rows: beforeBulkProcessScheduleRows,
+         output_rows: afterBulkProcessScheduleRows,
+         removed_blank_non_working_rows: Math.max(0, beforeBulkProcessScheduleRows - afterBulkProcessScheduleRows)
+       });
+     }
+   }
  
    const requestedSuppressTimesheetEvidenceMaterialisation = !!(
      isTruthyPayloadFlag(body?.suppress_timesheet_evidence_materialisation) ||
@@ -32769,6 +33113,7 @@ async function handleAuditEventsList(env, req) {
        ? 'AWAITING_MANUAL_SIGNATURE'
        : 'PENDING_AUTH';
  
+   const requiredExpenseEvidenceKindsForProcess = expenseEvidenceKindsRequiredByDraft(expensesDraft);
    const expenseEvidencePreflight = await validateExpenseDraftEvidencePreflight({
      currentTimesheetId: ts?.timesheet_id || null,
      contractWeekId: cw.id,
@@ -32776,18 +33121,23 @@ async function handleAuditEventsList(env, req) {
      expenseDraftObj: expensesDraft
    });
    if (!expenseEvidencePreflight.ok) {
-     wlog('bad_request_expense_draft_evidence_missing_preflight', {
+     const invalidExpenseEvidence = Array.isArray(expenseEvidencePreflight.invalid) ? expenseEvidencePreflight.invalid : [];
+     const missingExpenseEvidence = Array.isArray(expenseEvidencePreflight.missing) ? expenseEvidencePreflight.missing : [];
+     const responseError = invalidExpenseEvidence.length ? 'INVALID_EXPENSE_EVIDENCE' : 'EVIDENCE_REQUIRED';
+     wlog(invalidExpenseEvidence.length ? 'bad_request_expense_draft_evidence_invalid_preflight' : 'bad_request_expense_draft_evidence_missing_preflight', {
        timesheet_id: ts?.timesheet_id || null,
        contract_week_id: cw.id,
-       missing: expenseEvidencePreflight.missing
+       missing: missingExpenseEvidence,
+       invalid: invalidExpenseEvidence
      });
      return withCORS(
        env,
        req,
        new Response(
          JSON.stringify({
-           error: 'EVIDENCE_REQUIRED',
-           missing: expenseEvidencePreflight.missing
+           error: responseError,
+           missing: missingExpenseEvidence,
+           invalid: invalidExpenseEvidence
          }),
          {
            status: 400,
@@ -33419,6 +33769,61 @@ async function handleAuditEventsList(env, req) {
      });
    }
  
+   let preparedStagedExpenseEvidence = [];
+   if (willCreateNow && targetTimesheetIdForWrite && Array.isArray(requiredExpenseEvidenceKindsForProcess) && requiredExpenseEvidenceKindsForProcess.length) {
+     try {
+       preparedStagedExpenseEvidence = await prepareContractWeekStagedExpenseEvidence(
+         cw.id,
+         requiredExpenseEvidenceKindsForProcess
+       );
+       wlog('prepared_staged_expense_evidence', {
+         contract_week_id: cw.id,
+         target_timesheet_id: targetTimesheetIdForWrite,
+         required_kinds: requiredExpenseEvidenceKindsForProcess,
+         prepared_count: preparedStagedExpenseEvidence.length,
+         storage_keys: preparedStagedExpenseEvidence.map((item) => item.storage_key).filter(Boolean)
+       });
+     } catch (e) {
+       wlog('prepare_staged_expense_evidence_failed', {
+         contract_week_id: cw.id,
+         target_timesheet_id: targetTimesheetIdForWrite,
+         required_kinds: requiredExpenseEvidenceKindsForProcess,
+         code: e?.code || null,
+         err: e?.message || String(e)
+       });
+       if (e?.code === 'EVIDENCE_REQUIRED') {
+         return withCORS(
+           env,
+           req,
+           new Response(
+             JSON.stringify({
+               error: 'EVIDENCE_REQUIRED',
+               missing: requiredExpenseEvidenceKindsForProcess.map((kind) => ({
+                 category: expenseEvidenceKindCategories[kind] || String(kind || '').toLowerCase(),
+                 required_kind: kind
+               }))
+             }),
+             { status: 400, headers: { 'Content-Type': 'application/json' } }
+           )
+         );
+       }
+       if (e?.code === 'INVALID_EXPENSE_EVIDENCE') {
+         return withCORS(
+           env,
+           req,
+           new Response(
+             JSON.stringify({
+               error: 'INVALID_EXPENSE_EVIDENCE',
+               message: e?.message || 'Invalid staged expense evidence'
+             }),
+             { status: 400, headers: { 'Content-Type': 'application/json' } }
+           )
+         );
+       }
+       return withCORS(env, req, serverError(e?.message || 'Failed to prepare staged expense evidence'));
+     }
+   }
+
    const expectedCurrentTsfinSnapshotJson = (() => {
      const raw =
        body?.expected_current_tsfin_snapshot_json ??
@@ -33912,6 +34317,136 @@ async function handleAuditEventsList(env, req) {
        }
      }
  
+     if (bulkCurrentTimesheetId && Array.isArray(preparedStagedExpenseEvidence) && preparedStagedExpenseEvidence.length) {
+       try {
+         const stagedExpenseMaterialisation = await materialiseContractWeekStagedExpenseEvidenceToTimesheet(
+           cw.id,
+           bulkCurrentTimesheetId,
+           preparedStagedExpenseEvidence
+         );
+
+         if (stagedExpenseMaterialisation?.attached_count || (Array.isArray(stagedExpenseMaterialisation?.storage_keys) && stagedExpenseMaterialisation.storage_keys.length)) {
+           const currentEvidenceHints = (bulkPayload.evidence_hints && typeof bulkPayload.evidence_hints === 'object') ? { ...bulkPayload.evidence_hints } : {};
+           const currentCacheHints = (bulkPayload.cache_invalidation_hints && typeof bulkPayload.cache_invalidation_hints === 'object') ? { ...bulkPayload.cache_invalidation_hints } : {};
+           const materialisedStorageKeys = Array.isArray(stagedExpenseMaterialisation.storage_keys) ? stagedExpenseMaterialisation.storage_keys.filter(Boolean) : [];
+           const existingStorageKeys = Array.isArray(currentCacheHints.storage_keys) ? currentCacheHints.storage_keys.slice() : [];
+           const storageKeys = [...new Set([...existingStorageKeys, ...materialisedStorageKeys])];
+
+           bulkPayload = {
+             ...bulkPayload,
+             evidence_hints: {
+               ...currentEvidenceHints,
+               has_any_evidence: true,
+               attached_evidence_count: Math.max(
+                 Number(currentEvidenceHints.attached_evidence_count || 0),
+                 Number(currentEvidenceHints.attached_evidence_count || 0) + Number(stagedExpenseMaterialisation.attached_count || 0)
+               )
+             },
+             cache_invalidation_hints: {
+               ...currentCacheHints,
+               storage_keys: storageKeys,
+               evidence_changed: true,
+               storage_changed: storageKeys.length > 0,
+               status_only: false,
+               invalidate_context: false,
+               invalidate_row_context: false,
+               invalidate_preview: true,
+               invalidate_evidence: true
+             }
+           };
+
+           const freshPatchRow = await loadFreshBulkProcessPatchRow({
+             timesheetId: bulkCurrentTimesheetId,
+             contractWeekId: cw.id,
+             changedDomains: ['evidence', 'storage']
+           });
+           if (freshPatchRow) {
+             const freshStorageKey = String(freshPatchRow.primary_artifact_storage_key || '').trim() || null;
+             const freshPreviewMode = String(freshPatchRow.primary_artifact_preview_mode || 'PDF').trim() || 'PDF';
+             const freshEvidenceHints = {
+               has_any_evidence: freshPatchRow.has_any_evidence === true,
+               evidence_badges: Array.isArray(freshPatchRow.evidence_badges) ? freshPatchRow.evidence_badges : [],
+               attached_evidence_count: Number(freshPatchRow.attached_evidence_count || 0) || 0,
+               queue_staged_count: Number(freshPatchRow.queue_staged_count || 0) || 0,
+               evidence_document_locked: freshPatchRow.evidence_document_locked === true,
+               evidence_lock_reason: freshPatchRow.evidence_lock_reason || null
+             };
+             const freshPreviewHints = {
+               primary_artifact_id: freshPatchRow.primary_artifact_id || null,
+               primary_artifact_kind: freshPatchRow.primary_artifact_kind || null,
+               primary_artifact_display_name: freshPatchRow.primary_artifact_display_name || null,
+               primary_artifact_storage_key: freshStorageKey,
+               primary_artifact_preview_mode: freshPreviewMode,
+               preview_storage_key: freshStorageKey,
+               primary_left_pane_mode: freshPatchRow.primary_left_pane_mode || null
+             };
+             bulkPayload = {
+               ...bulkPayload,
+               row: freshPatchRow,
+               data_row: freshPatchRow,
+               row_patch: (freshPatchRow.row_patch && typeof freshPatchRow.row_patch === 'object') ? freshPatchRow.row_patch : {},
+               row_key: freshPatchRow.row_key || bulkPayload.row_key || null,
+               new_row_key: freshPatchRow.row_key || bulkPayload.new_row_key || bulkPayload.row_key || null,
+               row_signature: freshPatchRow.row_signature || bulkPayload.row_signature || null,
+               bulk_process_bucket: freshPatchRow.bulk_process_bucket || bulkPayload.bulk_process_bucket || null,
+               evidence_hints: freshEvidenceHints,
+               preview_hints: freshPreviewHints,
+               artifact_hints: (freshPatchRow.artifact_hints && typeof freshPatchRow.artifact_hints === 'object') ? freshPatchRow.artifact_hints : {
+                 route_family: freshPatchRow.route_family || null,
+                 route_subfamily: freshPatchRow.route_subfamily || null,
+                 underlying_channel_family: freshPatchRow.underlying_channel_family || null,
+                 primary_artifact_storage_key: freshStorageKey,
+                 primary_artifact_preview_mode: freshPreviewMode,
+                 has_any_evidence: freshPatchRow.has_any_evidence === true,
+                 evidence_badges: Array.isArray(freshPatchRow.evidence_badges) ? freshPatchRow.evidence_badges : []
+               },
+               cache_invalidation_hints: {
+                 ...((bulkPayload.cache_invalidation_hints && typeof bulkPayload.cache_invalidation_hints === 'object') ? bulkPayload.cache_invalidation_hints : {}),
+                 storage_keys: [...new Set([...(storageKeys || []), freshStorageKey].filter(Boolean))],
+                 row_signature: freshPatchRow.row_signature || bulkPayload.row_signature || null,
+                 evidence_changed: true,
+                 storage_changed: true,
+                 status_only: false,
+                 invalidate_context: false,
+                 invalidate_row_context: false,
+                 invalidate_preview: true,
+                 invalidate_evidence: true
+               }
+             };
+           }
+         }
+
+         wlog('materialised_staged_expense_evidence_bulk_process', {
+           contract_week_id: cw.id,
+           timesheet_id: bulkCurrentTimesheetId,
+           attached_count: stagedExpenseMaterialisation?.attached_count || 0,
+           storage_keys: Array.isArray(stagedExpenseMaterialisation?.storage_keys) ? stagedExpenseMaterialisation.storage_keys : [],
+           kinds: Array.isArray(stagedExpenseMaterialisation?.kinds) ? stagedExpenseMaterialisation.kinds : []
+         });
+       } catch (e) {
+         wlog('materialise_staged_expense_evidence_bulk_process_failed', {
+           contract_week_id: cw.id,
+           timesheet_id: bulkCurrentTimesheetId || null,
+           code: e?.code || null,
+           err: e?.message || String(e)
+         });
+         if (e?.code === 'INVALID_EXPENSE_EVIDENCE') {
+           return withCORS(
+             env,
+             req,
+             new Response(
+               JSON.stringify({
+                 error: 'INVALID_EXPENSE_EVIDENCE',
+                 message: e?.message || 'Invalid staged expense evidence'
+               }),
+               { status: 400, headers: { 'Content-Type': 'application/json' } }
+             )
+           );
+         }
+         return withCORS(env, req, serverError(e?.message || 'Failed to materialise staged expense evidence'));
+       }
+     }
+
      const finalBulkTimesheet = parseMaybeJsonObj(bulkPayload.timesheet_json) || parseMaybeJsonObj(bulkPayload.timesheet) || bulkTimesheet || null;
      const finalBulkTsfin = parseMaybeJsonObj(bulkPayload.timesheet_financials_json) || parseMaybeJsonObj(bulkPayload.tsfin) || bulkTsfin || null;
      const finalBulkContractWeek = parseMaybeJsonObj(bulkPayload.contract_week_json) || parseMaybeJsonObj(bulkPayload.contract_week) || bulkContractWeek || null;
@@ -34097,6 +34632,45 @@ async function handleAuditEventsList(env, req) {
      }
    }
  
+   if (ts?.timesheet_id && Array.isArray(preparedStagedExpenseEvidence) && preparedStagedExpenseEvidence.length) {
+     try {
+       const stagedExpenseMaterialisation = await materialiseContractWeekStagedExpenseEvidenceToTimesheet(
+         cw.id,
+         ts.timesheet_id,
+         preparedStagedExpenseEvidence
+       );
+
+       wlog('materialised_staged_expense_evidence', {
+         contract_week_id: cw.id,
+         timesheet_id: ts.timesheet_id,
+         attached_count: stagedExpenseMaterialisation?.attached_count || 0,
+         storage_keys: Array.isArray(stagedExpenseMaterialisation?.storage_keys) ? stagedExpenseMaterialisation.storage_keys : [],
+         kinds: Array.isArray(stagedExpenseMaterialisation?.kinds) ? stagedExpenseMaterialisation.kinds : []
+       });
+     } catch (e) {
+       wlog('materialise_staged_expense_evidence_failed', {
+         contract_week_id: cw.id,
+         timesheet_id: ts?.timesheet_id || null,
+         code: e?.code || null,
+         err: e?.message || String(e)
+       });
+       if (e?.code === 'INVALID_EXPENSE_EVIDENCE') {
+         return withCORS(
+           env,
+           req,
+           new Response(
+             JSON.stringify({
+               error: 'INVALID_EXPENSE_EVIDENCE',
+               message: e?.message || 'Invalid staged expense evidence'
+             }),
+             { status: 400, headers: { 'Content-Type': 'application/json' } }
+           )
+         );
+       }
+       return withCORS(env, req, serverError(e?.message || 'Failed to materialise staged expense evidence'));
+     }
+   }
+
    if (createdNow) {
      wlog('created_new_timesheet', {
        timesheet_id: ts?.timesheet_id || null,
