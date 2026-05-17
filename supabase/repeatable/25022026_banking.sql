@@ -3490,7 +3490,6 @@ $function$;
 
 DROP FUNCTION IF EXISTS public.pay_batch_schedule(uuid, text, timestamptz, text, jsonb, uuid);
 DROP FUNCTION IF EXISTS public.pay_batch_schedule(uuid, text, timestamptz, text, jsonb, uuid, uuid, text);
-
 create or replace function public.pay_batch_schedule(
   p_pay_batch_id uuid,
   p_schedule_kind text,
@@ -3607,6 +3606,11 @@ begin
     pb.pay_date,
     pb.authoritative_payment_date,
     pb.authoritative_payment_date_source,
+    pb.schedule_kind,
+    pb.scheduled_at_utc,
+    pb.scheduled_by_user_id,
+    pb.funding_account_ref,
+    pb.funds_warning_hours_json,
     pb.rail_provider_snapshot,
     pb.rail_env_snapshot,
     pb.execution_commit_state,
@@ -4814,6 +4818,44 @@ begin
     exception when others then
       null;
     end;
+
+    if v_execution_commit_state = 'NOT_SUBMITTED' then
+      begin
+        update public.pay_batches as pb_schedule_rollback
+        set
+          status = v_batch.status,
+          schedule_kind = v_batch.schedule_kind,
+          scheduled_at_utc = v_batch.scheduled_at_utc,
+          scheduled_by_user_id = v_batch.scheduled_by_user_id,
+          funding_account_ref = v_batch.funding_account_ref,
+          funds_warning_hours_json = v_batch.funds_warning_hours_json,
+          pay_date = v_batch.pay_date,
+          authoritative_payment_date = v_batch.authoritative_payment_date,
+          authoritative_payment_date_source = v_batch.authoritative_payment_date_source,
+          execution_commit_state = v_execution_commit_state,
+          execution_commit_ref = v_execution_commit_ref,
+          execution_committed_at_utc = v_execution_committed_at_utc,
+          execution_intent_json = v_batch.execution_intent_json
+        where pb_schedule_rollback.id = p_pay_batch_id
+          and upper(coalesce(pb_schedule_rollback.execution_commit_state, 'NOT_SUBMITTED')) = 'NOT_SUBMITTED'
+          and not exists (
+            select 1
+            from public.pay_bank_transfer_events as rollback_transfer_event
+            where rollback_transfer_event.pay_batch_id = p_pay_batch_id
+          )
+          and not exists (
+            select 1
+            from public.pay_bank_transfers as rollback_transfer
+            where rollback_transfer.pay_batch_id = p_pay_batch_id
+              and (
+                nullif(btrim(coalesce(rollback_transfer.rail_tx_id, '')), '') is not null
+                or upper(coalesce(rollback_transfer.status, '')) in ('SUBMITTED', 'PROCESSING', 'SENT', 'COMPLETED', 'PAID', 'SETTLED')
+              )
+          );
+      exception when others then
+        null;
+      end;
+    end if;
   end;
   v_worker_communications := jsonb_build_object(
     'automatic_commit_stage', (v_provider <> 'CSV'),
@@ -4858,12 +4900,12 @@ begin
     'ok', true,
     'pay_batch_id', p_pay_batch_id::text,
     'status', (select pb2.status from public.pay_batches pb2 where pb2.id = p_pay_batch_id),
-    'schedule_kind', v_kind,
-    'scheduled_at_utc', v_sched_at::text,
-    'authoritative_payment_date', v_authoritative_payment_date::text,
-    'authoritative_payment_date_source', 'SCHEDULED_AT_UTC',
-    'funding_account_ref', v_funding,
-    'funds_warning_hours_json', v_warn,
+    'schedule_kind', (select pb2.schedule_kind from public.pay_batches pb2 where pb2.id = p_pay_batch_id),
+    'scheduled_at_utc', (select case when pb2.scheduled_at_utc is null then null else pb2.scheduled_at_utc::text end from public.pay_batches pb2 where pb2.id = p_pay_batch_id),
+    'authoritative_payment_date', (select case when pb2.authoritative_payment_date is null then null else pb2.authoritative_payment_date::text end from public.pay_batches pb2 where pb2.id = p_pay_batch_id),
+    'authoritative_payment_date_source', (select pb2.authoritative_payment_date_source from public.pay_batches pb2 where pb2.id = p_pay_batch_id),
+    'funding_account_ref', (select pb2.funding_account_ref from public.pay_batches pb2 where pb2.id = p_pay_batch_id),
+    'funds_warning_hours_json', (select pb2.funds_warning_hours_json from public.pay_batches pb2 where pb2.id = p_pay_batch_id),
     'rail_provider_snapshot', v_batch.rail_provider_snapshot,
     'rail_env_snapshot', v_batch.rail_env_snapshot,
     'execution_commit_state', (select pb2.execution_commit_state from public.pay_batches pb2 where pb2.id = p_pay_batch_id),
