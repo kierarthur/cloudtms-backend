@@ -3096,6 +3096,8 @@ $function$;
 
 
 
+
+
 CREATE OR REPLACE FUNCTION public.bulk_process_row_context_v1(p_filters jsonb DEFAULT '{}'::jsonb)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -3139,6 +3141,11 @@ DECLARE
   v_effective_details jsonb := '{}'::jsonb;
   v_effective_left_pane jsonb := '{}'::jsonb;
   v_effective_attached_evidence_count integer := 0;
+  v_canonical_row_json jsonb := NULL;
+  v_canonical_row_signature text := NULL;
+  v_canonical_row_key text := NULL;
+  v_canonical_timesheet_id text := NULL;
+  v_canonical_contract_week_id text := NULL;
 BEGIN
   v_has_identity := (
     NULLIF(BTRIM(COALESCE(v_filters->>'row_key', v_filters->>'rowKey', '')), '') IS NOT NULL
@@ -3516,6 +3523,52 @@ BEGIN
       'layer_errors', v_layer_errors,
       'filters', v_filters
     );
+
+
+    IF v_out IS NOT NULL AND COALESCE(LOWER(NULLIF(BTRIM(COALESCE(v_out->>'ok', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE) = TRUE THEN
+      v_canonical_row_json := NULL;
+      v_canonical_row_signature := NULL;
+      v_canonical_row_key := NULLIF(BTRIM(COALESCE(v_out->>'row_key', v_out#>>'{row,row_key}', v_out#>>'{data_row,row_key}', v_out#>>'{row_patch,row_key}', '')), '');
+      v_canonical_timesheet_id := NULLIF(BTRIM(COALESCE(v_out->>'timesheet_id', v_out->>'current_timesheet_id', v_out#>>'{row,timesheet_id}', v_out#>>'{row,current_timesheet_id}', v_out#>>'{data_row,timesheet_id}', v_out#>>'{data_row,current_timesheet_id}', v_out#>>'{row_patch,timesheet_id}', v_out#>>'{row_patch,current_timesheet_id}', '')), '');
+      v_canonical_contract_week_id := CASE
+        WHEN v_canonical_timesheet_id IS NULL THEN NULLIF(BTRIM(COALESCE(v_out->>'contract_week_id', v_out#>>'{row,contract_week_id}', v_out#>>'{data_row,contract_week_id}', v_out#>>'{row_patch,contract_week_id}', '')), '')
+        ELSE NULL
+      END;
+
+      IF v_canonical_row_key IS NOT NULL OR v_canonical_timesheet_id IS NOT NULL OR v_canonical_contract_week_id IS NOT NULL THEN
+        SELECT canonical_result.row_json
+        INTO v_canonical_row_json
+        FROM public.bulk_timesheet_row_patch_v1(
+          JSONB_STRIP_NULLS(
+            JSONB_BUILD_OBJECT(
+              'dataset_mode', 'process',
+              'projection', 'active_row_header',
+              'profile', COALESCE(NULLIF(BTRIM(v_profile), ''), 'status_header'),
+              'row_key', v_canonical_row_key,
+              'timesheet_id', v_canonical_timesheet_id,
+              'current_timesheet_id', v_canonical_timesheet_id,
+              'requested_timesheet_id', v_canonical_timesheet_id,
+              'expected_timesheet_id', v_canonical_timesheet_id,
+              'contract_week_id', v_canonical_contract_week_id
+            )
+          )
+        ) AS canonical_result(row_json)
+        WHERE canonical_result.row_json IS NOT NULL
+        ORDER BY canonical_result.row_json->>'row_key'
+        LIMIT 1;
+
+        v_canonical_row_signature := NULLIF(BTRIM(COALESCE(v_canonical_row_json->>'row_signature', '')), '');
+        IF v_canonical_row_signature IS NOT NULL THEN
+          v_out := v_out || JSONB_BUILD_OBJECT(
+            'row_signature', v_canonical_row_signature,
+            'row', COALESCE(v_out->'row', JSONB_BUILD_OBJECT()) || JSONB_BUILD_OBJECT('row_signature', v_canonical_row_signature),
+            'data_row', COALESCE(v_out->'data_row', v_out->'row', JSONB_BUILD_OBJECT()) || JSONB_BUILD_OBJECT('row_signature', v_canonical_row_signature),
+            'row_patch', COALESCE(v_out->'row_patch', JSONB_BUILD_OBJECT()) || JSONB_BUILD_OBJECT('row_signature', v_canonical_row_signature),
+            'details', COALESCE(v_out->'details', JSONB_BUILD_OBJECT()) || JSONB_BUILD_OBJECT('row_signature', v_canonical_row_signature)
+          );
+        END IF;
+      END IF;
+    END IF;
 
     RETURN v_out;
   END IF;
@@ -4297,6 +4350,52 @@ BEGIN
       );
     END IF;
 
+
+    IF v_out IS NOT NULL AND COALESCE(LOWER(NULLIF(BTRIM(COALESCE(v_out->>'ok', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE) = TRUE THEN
+      v_canonical_row_json := NULL;
+      v_canonical_row_signature := NULL;
+      v_canonical_row_key := NULLIF(BTRIM(COALESCE(v_out->>'row_key', v_out#>>'{row,row_key}', v_out#>>'{data_row,row_key}', v_out#>>'{row_patch,row_key}', '')), '');
+      v_canonical_timesheet_id := NULLIF(BTRIM(COALESCE(v_out->>'timesheet_id', v_out->>'current_timesheet_id', v_out#>>'{row,timesheet_id}', v_out#>>'{row,current_timesheet_id}', v_out#>>'{data_row,timesheet_id}', v_out#>>'{data_row,current_timesheet_id}', v_out#>>'{row_patch,timesheet_id}', v_out#>>'{row_patch,current_timesheet_id}', '')), '');
+      v_canonical_contract_week_id := CASE
+        WHEN v_canonical_timesheet_id IS NULL THEN NULLIF(BTRIM(COALESCE(v_out->>'contract_week_id', v_out#>>'{row,contract_week_id}', v_out#>>'{data_row,contract_week_id}', v_out#>>'{row_patch,contract_week_id}', '')), '')
+        ELSE NULL
+      END;
+
+      IF v_canonical_row_key IS NOT NULL OR v_canonical_timesheet_id IS NOT NULL OR v_canonical_contract_week_id IS NOT NULL THEN
+        SELECT canonical_result.row_json
+        INTO v_canonical_row_json
+        FROM public.bulk_timesheet_row_patch_v1(
+          JSONB_STRIP_NULLS(
+            JSONB_BUILD_OBJECT(
+              'dataset_mode', 'process',
+              'projection', 'active_row_header',
+              'profile', COALESCE(NULLIF(BTRIM(v_profile), ''), 'status_header'),
+              'row_key', v_canonical_row_key,
+              'timesheet_id', v_canonical_timesheet_id,
+              'current_timesheet_id', v_canonical_timesheet_id,
+              'requested_timesheet_id', v_canonical_timesheet_id,
+              'expected_timesheet_id', v_canonical_timesheet_id,
+              'contract_week_id', v_canonical_contract_week_id
+            )
+          )
+        ) AS canonical_result(row_json)
+        WHERE canonical_result.row_json IS NOT NULL
+        ORDER BY canonical_result.row_json->>'row_key'
+        LIMIT 1;
+
+        v_canonical_row_signature := NULLIF(BTRIM(COALESCE(v_canonical_row_json->>'row_signature', '')), '');
+        IF v_canonical_row_signature IS NOT NULL THEN
+          v_out := v_out || JSONB_BUILD_OBJECT(
+            'row_signature', v_canonical_row_signature,
+            'row', COALESCE(v_out->'row', JSONB_BUILD_OBJECT()) || JSONB_BUILD_OBJECT('row_signature', v_canonical_row_signature),
+            'data_row', COALESCE(v_out->'data_row', v_out->'row', JSONB_BUILD_OBJECT()) || JSONB_BUILD_OBJECT('row_signature', v_canonical_row_signature),
+            'row_patch', COALESCE(v_out->'row_patch', JSONB_BUILD_OBJECT()) || JSONB_BUILD_OBJECT('row_signature', v_canonical_row_signature),
+            'details', COALESCE(v_out->'details', JSONB_BUILD_OBJECT()) || JSONB_BUILD_OBJECT('row_signature', v_canonical_row_signature)
+          );
+        END IF;
+      END IF;
+    END IF;
+
     RETURN v_out;
   END IF;
 
@@ -4768,6 +4867,52 @@ BEGIN
       );
     END IF;
 
+
+    IF v_out IS NOT NULL AND COALESCE(LOWER(NULLIF(BTRIM(COALESCE(v_out->>'ok', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE) = TRUE THEN
+      v_canonical_row_json := NULL;
+      v_canonical_row_signature := NULL;
+      v_canonical_row_key := NULLIF(BTRIM(COALESCE(v_out->>'row_key', v_out#>>'{row,row_key}', v_out#>>'{data_row,row_key}', v_out#>>'{row_patch,row_key}', '')), '');
+      v_canonical_timesheet_id := NULLIF(BTRIM(COALESCE(v_out->>'timesheet_id', v_out->>'current_timesheet_id', v_out#>>'{row,timesheet_id}', v_out#>>'{row,current_timesheet_id}', v_out#>>'{data_row,timesheet_id}', v_out#>>'{data_row,current_timesheet_id}', v_out#>>'{row_patch,timesheet_id}', v_out#>>'{row_patch,current_timesheet_id}', '')), '');
+      v_canonical_contract_week_id := CASE
+        WHEN v_canonical_timesheet_id IS NULL THEN NULLIF(BTRIM(COALESCE(v_out->>'contract_week_id', v_out#>>'{row,contract_week_id}', v_out#>>'{data_row,contract_week_id}', v_out#>>'{row_patch,contract_week_id}', '')), '')
+        ELSE NULL
+      END;
+
+      IF v_canonical_row_key IS NOT NULL OR v_canonical_timesheet_id IS NOT NULL OR v_canonical_contract_week_id IS NOT NULL THEN
+        SELECT canonical_result.row_json
+        INTO v_canonical_row_json
+        FROM public.bulk_timesheet_row_patch_v1(
+          JSONB_STRIP_NULLS(
+            JSONB_BUILD_OBJECT(
+              'dataset_mode', 'process',
+              'projection', 'active_row_header',
+              'profile', COALESCE(NULLIF(BTRIM(v_profile), ''), 'status_header'),
+              'row_key', v_canonical_row_key,
+              'timesheet_id', v_canonical_timesheet_id,
+              'current_timesheet_id', v_canonical_timesheet_id,
+              'requested_timesheet_id', v_canonical_timesheet_id,
+              'expected_timesheet_id', v_canonical_timesheet_id,
+              'contract_week_id', v_canonical_contract_week_id
+            )
+          )
+        ) AS canonical_result(row_json)
+        WHERE canonical_result.row_json IS NOT NULL
+        ORDER BY canonical_result.row_json->>'row_key'
+        LIMIT 1;
+
+        v_canonical_row_signature := NULLIF(BTRIM(COALESCE(v_canonical_row_json->>'row_signature', '')), '');
+        IF v_canonical_row_signature IS NOT NULL THEN
+          v_out := v_out || JSONB_BUILD_OBJECT(
+            'row_signature', v_canonical_row_signature,
+            'row', COALESCE(v_out->'row', JSONB_BUILD_OBJECT()) || JSONB_BUILD_OBJECT('row_signature', v_canonical_row_signature),
+            'data_row', COALESCE(v_out->'data_row', v_out->'row', JSONB_BUILD_OBJECT()) || JSONB_BUILD_OBJECT('row_signature', v_canonical_row_signature),
+            'row_patch', COALESCE(v_out->'row_patch', JSONB_BUILD_OBJECT()) || JSONB_BUILD_OBJECT('row_signature', v_canonical_row_signature),
+            'details', COALESCE(v_out->'details', JSONB_BUILD_OBJECT()) || JSONB_BUILD_OBJECT('row_signature', v_canonical_row_signature)
+          );
+        END IF;
+      END IF;
+    END IF;
+
     RETURN v_out;
   END IF;
 
@@ -4940,6 +5085,52 @@ BEGIN
         'message', 'No bulk process compare/import context was found for the supplied identity',
         'filters', v_filters
       );
+    END IF;
+
+
+    IF v_out IS NOT NULL AND COALESCE(LOWER(NULLIF(BTRIM(COALESCE(v_out->>'ok', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE) = TRUE THEN
+      v_canonical_row_json := NULL;
+      v_canonical_row_signature := NULL;
+      v_canonical_row_key := NULLIF(BTRIM(COALESCE(v_out->>'row_key', v_out#>>'{row,row_key}', v_out#>>'{data_row,row_key}', v_out#>>'{row_patch,row_key}', '')), '');
+      v_canonical_timesheet_id := NULLIF(BTRIM(COALESCE(v_out->>'timesheet_id', v_out->>'current_timesheet_id', v_out#>>'{row,timesheet_id}', v_out#>>'{row,current_timesheet_id}', v_out#>>'{data_row,timesheet_id}', v_out#>>'{data_row,current_timesheet_id}', v_out#>>'{row_patch,timesheet_id}', v_out#>>'{row_patch,current_timesheet_id}', '')), '');
+      v_canonical_contract_week_id := CASE
+        WHEN v_canonical_timesheet_id IS NULL THEN NULLIF(BTRIM(COALESCE(v_out->>'contract_week_id', v_out#>>'{row,contract_week_id}', v_out#>>'{data_row,contract_week_id}', v_out#>>'{row_patch,contract_week_id}', '')), '')
+        ELSE NULL
+      END;
+
+      IF v_canonical_row_key IS NOT NULL OR v_canonical_timesheet_id IS NOT NULL OR v_canonical_contract_week_id IS NOT NULL THEN
+        SELECT canonical_result.row_json
+        INTO v_canonical_row_json
+        FROM public.bulk_timesheet_row_patch_v1(
+          JSONB_STRIP_NULLS(
+            JSONB_BUILD_OBJECT(
+              'dataset_mode', 'process',
+              'projection', 'active_row_header',
+              'profile', COALESCE(NULLIF(BTRIM(v_profile), ''), 'status_header'),
+              'row_key', v_canonical_row_key,
+              'timesheet_id', v_canonical_timesheet_id,
+              'current_timesheet_id', v_canonical_timesheet_id,
+              'requested_timesheet_id', v_canonical_timesheet_id,
+              'expected_timesheet_id', v_canonical_timesheet_id,
+              'contract_week_id', v_canonical_contract_week_id
+            )
+          )
+        ) AS canonical_result(row_json)
+        WHERE canonical_result.row_json IS NOT NULL
+        ORDER BY canonical_result.row_json->>'row_key'
+        LIMIT 1;
+
+        v_canonical_row_signature := NULLIF(BTRIM(COALESCE(v_canonical_row_json->>'row_signature', '')), '');
+        IF v_canonical_row_signature IS NOT NULL THEN
+          v_out := v_out || JSONB_BUILD_OBJECT(
+            'row_signature', v_canonical_row_signature,
+            'row', COALESCE(v_out->'row', JSONB_BUILD_OBJECT()) || JSONB_BUILD_OBJECT('row_signature', v_canonical_row_signature),
+            'data_row', COALESCE(v_out->'data_row', v_out->'row', JSONB_BUILD_OBJECT()) || JSONB_BUILD_OBJECT('row_signature', v_canonical_row_signature),
+            'row_patch', COALESCE(v_out->'row_patch', JSONB_BUILD_OBJECT()) || JSONB_BUILD_OBJECT('row_signature', v_canonical_row_signature),
+            'details', COALESCE(v_out->'details', JSONB_BUILD_OBJECT()) || JSONB_BUILD_OBJECT('row_signature', v_canonical_row_signature)
+          );
+        END IF;
+      END IF;
     END IF;
 
     RETURN v_out;
@@ -6572,6 +6763,52 @@ BEGIN
     );
   END IF;
 
+
+  IF v_out IS NOT NULL AND COALESCE(LOWER(NULLIF(BTRIM(COALESCE(v_out->>'ok', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE) = TRUE THEN
+    v_canonical_row_json := NULL;
+    v_canonical_row_signature := NULL;
+    v_canonical_row_key := NULLIF(BTRIM(COALESCE(v_out->>'row_key', v_out#>>'{row,row_key}', v_out#>>'{data_row,row_key}', v_out#>>'{row_patch,row_key}', '')), '');
+    v_canonical_timesheet_id := NULLIF(BTRIM(COALESCE(v_out->>'timesheet_id', v_out->>'current_timesheet_id', v_out#>>'{row,timesheet_id}', v_out#>>'{row,current_timesheet_id}', v_out#>>'{data_row,timesheet_id}', v_out#>>'{data_row,current_timesheet_id}', v_out#>>'{row_patch,timesheet_id}', v_out#>>'{row_patch,current_timesheet_id}', '')), '');
+    v_canonical_contract_week_id := CASE
+      WHEN v_canonical_timesheet_id IS NULL THEN NULLIF(BTRIM(COALESCE(v_out->>'contract_week_id', v_out#>>'{row,contract_week_id}', v_out#>>'{data_row,contract_week_id}', v_out#>>'{row_patch,contract_week_id}', '')), '')
+      ELSE NULL
+    END;
+
+    IF v_canonical_row_key IS NOT NULL OR v_canonical_timesheet_id IS NOT NULL OR v_canonical_contract_week_id IS NOT NULL THEN
+      SELECT canonical_result.row_json
+      INTO v_canonical_row_json
+      FROM public.bulk_timesheet_row_patch_v1(
+        JSONB_STRIP_NULLS(
+          JSONB_BUILD_OBJECT(
+            'dataset_mode', 'process',
+            'projection', 'active_row_header',
+            'profile', COALESCE(NULLIF(BTRIM(v_profile), ''), 'status_header'),
+            'row_key', v_canonical_row_key,
+            'timesheet_id', v_canonical_timesheet_id,
+            'current_timesheet_id', v_canonical_timesheet_id,
+            'requested_timesheet_id', v_canonical_timesheet_id,
+            'expected_timesheet_id', v_canonical_timesheet_id,
+            'contract_week_id', v_canonical_contract_week_id
+          )
+        )
+      ) AS canonical_result(row_json)
+      WHERE canonical_result.row_json IS NOT NULL
+      ORDER BY canonical_result.row_json->>'row_key'
+      LIMIT 1;
+
+      v_canonical_row_signature := NULLIF(BTRIM(COALESCE(v_canonical_row_json->>'row_signature', '')), '');
+      IF v_canonical_row_signature IS NOT NULL THEN
+        v_out := v_out || JSONB_BUILD_OBJECT(
+          'row_signature', v_canonical_row_signature,
+          'row', COALESCE(v_out->'row', JSONB_BUILD_OBJECT()) || JSONB_BUILD_OBJECT('row_signature', v_canonical_row_signature),
+          'data_row', COALESCE(v_out->'data_row', v_out->'row', JSONB_BUILD_OBJECT()) || JSONB_BUILD_OBJECT('row_signature', v_canonical_row_signature),
+          'row_patch', COALESCE(v_out->'row_patch', JSONB_BUILD_OBJECT()) || JSONB_BUILD_OBJECT('row_signature', v_canonical_row_signature),
+          'details', COALESCE(v_out->'details', JSONB_BUILD_OBJECT()) || JSONB_BUILD_OBJECT('row_signature', v_canonical_row_signature)
+        );
+      END IF;
+    END IF;
+  END IF;
+
   RETURN COALESCE(v_out, JSONB_BUILD_OBJECT(
     'ok', FALSE,
     'context_kind', 'bulk_process_row_context',
@@ -6595,7 +6832,6 @@ BEGIN
   ));
 END;
 $function$;
-
 
 
 
