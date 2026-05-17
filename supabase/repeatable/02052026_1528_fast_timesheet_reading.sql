@@ -6839,9 +6839,6 @@ $function$;
 
 
 
-
-
-
 CREATE OR REPLACE FUNCTION public.bulk_authorise_row_context_v1(p_filters jsonb DEFAULT '{}'::jsonb)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -6869,6 +6866,8 @@ DECLARE
   v_compare_layer jsonb := NULL;
   v_layer_errors jsonb := '[]'::jsonb;
   v_layer_names jsonb := '[]'::jsonb;
+  v_canonical_authorise_row_json jsonb := NULL;
+  v_canonical_authorise_row_signature text := NULL;
 BEGIN
   v_has_identity := (
     NULLIF(BTRIM(COALESCE(v_filters->>'row_key', v_filters->>'rowKey', '')), '') IS NOT NULL
@@ -7246,6 +7245,70 @@ BEGIN
       'layer_errors', v_layer_errors,
       'filters', v_filters
     );
+
+
+    v_canonical_authorise_row_json := NULL;
+    v_canonical_authorise_row_signature := NULL;
+
+    IF v_out IS NOT NULL AND COALESCE(LOWER(NULLIF(BTRIM(COALESCE(v_out->>'ok', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE) = TRUE THEN
+      SELECT canonical_patch.row_json,
+             canonical_patch.row_json->>'row_signature'
+        INTO v_canonical_authorise_row_json,
+             v_canonical_authorise_row_signature
+      FROM public.bulk_timesheet_row_patch_v1(
+        (
+          v_decision_filters
+          - 'row_key' - 'rowKey' - 'row_keys' - 'rowKeys'
+          - 'timesheet_id' - 'timesheetId' - 'timesheet_ids' - 'timesheetIds'
+          - 'current_timesheet_id' - 'currentTimesheetId'
+          - 'requested_timesheet_id' - 'requestedTimesheetId'
+          - 'expected_timesheet_id' - 'expectedTimesheetId'
+          - 'contract_week_id' - 'contractWeekId' - 'contract_week_ids' - 'contractWeekIds'
+          - 'week_id' - 'weekId' - 'id' - 'ids'
+        )
+        || jsonb_strip_nulls(JSONB_BUILD_OBJECT(
+             'dataset_mode', 'authorise',
+             'projection', 'active_row_header',
+             'profile', COALESCE(NULLIF(BTRIM(COALESCE(v_out->>'profile', '')), ''), v_profile, 'status_header'),
+             'row_key', NULLIF(BTRIM(COALESCE(v_out->>'row_key', '')), ''),
+             'timesheet_id', NULLIF(BTRIM(COALESCE(v_out->>'timesheet_id', '')), ''),
+             'current_timesheet_id', NULLIF(BTRIM(COALESCE(v_out->>'current_timesheet_id', '')), ''),
+             'requested_timesheet_id', NULLIF(BTRIM(COALESCE(v_out->>'requested_timesheet_id', '')), ''),
+             'expected_timesheet_id', NULLIF(BTRIM(COALESCE(v_out->>'expected_timesheet_id', '')), ''),
+             'contract_week_id', NULLIF(BTRIM(COALESCE(v_out->>'contract_week_id', '')), '')
+           ))
+      ) AS canonical_patch(row_json)
+      WHERE NULLIF(BTRIM(COALESCE(canonical_patch.row_json->>'row_signature', '')), '') IS NOT NULL
+      ORDER BY
+        CASE
+          WHEN NULLIF(BTRIM(COALESCE(v_out->>'row_key', '')), '') IS NOT NULL
+           AND canonical_patch.row_json->>'row_key' = v_out->>'row_key'
+            THEN 0
+          ELSE 1
+        END,
+        canonical_patch.row_json->>'row_key'
+      LIMIT 1;
+
+      IF NULLIF(BTRIM(COALESCE(v_canonical_authorise_row_signature, '')), '') IS NOT NULL THEN
+        v_out := JSONB_SET(v_out, '{row_signature}', TO_JSONB(v_canonical_authorise_row_signature), TRUE);
+
+        IF JSONB_TYPEOF(v_out->'row') = 'object' THEN
+          v_out := JSONB_SET(v_out, '{row,row_signature}', TO_JSONB(v_canonical_authorise_row_signature), TRUE);
+        END IF;
+
+        IF JSONB_TYPEOF(v_out->'data_row') = 'object' THEN
+          v_out := JSONB_SET(v_out, '{data_row,row_signature}', TO_JSONB(v_canonical_authorise_row_signature), TRUE);
+        END IF;
+
+        IF JSONB_TYPEOF(v_out->'row_patch') = 'object' THEN
+          v_out := JSONB_SET(v_out, '{row_patch,row_signature}', TO_JSONB(v_canonical_authorise_row_signature), TRUE);
+        END IF;
+
+        IF JSONB_TYPEOF(v_out->'details') = 'object' THEN
+          v_out := JSONB_SET(v_out, '{details,row_signature}', TO_JSONB(v_canonical_authorise_row_signature), TRUE);
+        END IF;
+      END IF;
+    END IF;
 
     RETURN v_out;
   END IF;
@@ -8027,6 +8090,70 @@ BEGIN
       );
     END IF;
 
+
+    v_canonical_authorise_row_json := NULL;
+    v_canonical_authorise_row_signature := NULL;
+
+    IF v_out IS NOT NULL AND COALESCE(LOWER(NULLIF(BTRIM(COALESCE(v_out->>'ok', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE) = TRUE THEN
+      SELECT canonical_patch.row_json,
+             canonical_patch.row_json->>'row_signature'
+        INTO v_canonical_authorise_row_json,
+             v_canonical_authorise_row_signature
+      FROM public.bulk_timesheet_row_patch_v1(
+        (
+          v_decision_filters
+          - 'row_key' - 'rowKey' - 'row_keys' - 'rowKeys'
+          - 'timesheet_id' - 'timesheetId' - 'timesheet_ids' - 'timesheetIds'
+          - 'current_timesheet_id' - 'currentTimesheetId'
+          - 'requested_timesheet_id' - 'requestedTimesheetId'
+          - 'expected_timesheet_id' - 'expectedTimesheetId'
+          - 'contract_week_id' - 'contractWeekId' - 'contract_week_ids' - 'contractWeekIds'
+          - 'week_id' - 'weekId' - 'id' - 'ids'
+        )
+        || jsonb_strip_nulls(JSONB_BUILD_OBJECT(
+             'dataset_mode', 'authorise',
+             'projection', 'active_row_header',
+             'profile', COALESCE(NULLIF(BTRIM(COALESCE(v_out->>'profile', '')), ''), v_profile, 'status_header'),
+             'row_key', NULLIF(BTRIM(COALESCE(v_out->>'row_key', '')), ''),
+             'timesheet_id', NULLIF(BTRIM(COALESCE(v_out->>'timesheet_id', '')), ''),
+             'current_timesheet_id', NULLIF(BTRIM(COALESCE(v_out->>'current_timesheet_id', '')), ''),
+             'requested_timesheet_id', NULLIF(BTRIM(COALESCE(v_out->>'requested_timesheet_id', '')), ''),
+             'expected_timesheet_id', NULLIF(BTRIM(COALESCE(v_out->>'expected_timesheet_id', '')), ''),
+             'contract_week_id', NULLIF(BTRIM(COALESCE(v_out->>'contract_week_id', '')), '')
+           ))
+      ) AS canonical_patch(row_json)
+      WHERE NULLIF(BTRIM(COALESCE(canonical_patch.row_json->>'row_signature', '')), '') IS NOT NULL
+      ORDER BY
+        CASE
+          WHEN NULLIF(BTRIM(COALESCE(v_out->>'row_key', '')), '') IS NOT NULL
+           AND canonical_patch.row_json->>'row_key' = v_out->>'row_key'
+            THEN 0
+          ELSE 1
+        END,
+        canonical_patch.row_json->>'row_key'
+      LIMIT 1;
+
+      IF NULLIF(BTRIM(COALESCE(v_canonical_authorise_row_signature, '')), '') IS NOT NULL THEN
+        v_out := JSONB_SET(v_out, '{row_signature}', TO_JSONB(v_canonical_authorise_row_signature), TRUE);
+
+        IF JSONB_TYPEOF(v_out->'row') = 'object' THEN
+          v_out := JSONB_SET(v_out, '{row,row_signature}', TO_JSONB(v_canonical_authorise_row_signature), TRUE);
+        END IF;
+
+        IF JSONB_TYPEOF(v_out->'data_row') = 'object' THEN
+          v_out := JSONB_SET(v_out, '{data_row,row_signature}', TO_JSONB(v_canonical_authorise_row_signature), TRUE);
+        END IF;
+
+        IF JSONB_TYPEOF(v_out->'row_patch') = 'object' THEN
+          v_out := JSONB_SET(v_out, '{row_patch,row_signature}', TO_JSONB(v_canonical_authorise_row_signature), TRUE);
+        END IF;
+
+        IF JSONB_TYPEOF(v_out->'details') = 'object' THEN
+          v_out := JSONB_SET(v_out, '{details,row_signature}', TO_JSONB(v_canonical_authorise_row_signature), TRUE);
+        END IF;
+      END IF;
+    END IF;
+
     RETURN v_out;
   END IF;
 
@@ -8498,6 +8625,70 @@ BEGIN
       );
     END IF;
 
+
+    v_canonical_authorise_row_json := NULL;
+    v_canonical_authorise_row_signature := NULL;
+
+    IF v_out IS NOT NULL AND COALESCE(LOWER(NULLIF(BTRIM(COALESCE(v_out->>'ok', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE) = TRUE THEN
+      SELECT canonical_patch.row_json,
+             canonical_patch.row_json->>'row_signature'
+        INTO v_canonical_authorise_row_json,
+             v_canonical_authorise_row_signature
+      FROM public.bulk_timesheet_row_patch_v1(
+        (
+          v_decision_filters
+          - 'row_key' - 'rowKey' - 'row_keys' - 'rowKeys'
+          - 'timesheet_id' - 'timesheetId' - 'timesheet_ids' - 'timesheetIds'
+          - 'current_timesheet_id' - 'currentTimesheetId'
+          - 'requested_timesheet_id' - 'requestedTimesheetId'
+          - 'expected_timesheet_id' - 'expectedTimesheetId'
+          - 'contract_week_id' - 'contractWeekId' - 'contract_week_ids' - 'contractWeekIds'
+          - 'week_id' - 'weekId' - 'id' - 'ids'
+        )
+        || jsonb_strip_nulls(JSONB_BUILD_OBJECT(
+             'dataset_mode', 'authorise',
+             'projection', 'active_row_header',
+             'profile', COALESCE(NULLIF(BTRIM(COALESCE(v_out->>'profile', '')), ''), v_profile, 'status_header'),
+             'row_key', NULLIF(BTRIM(COALESCE(v_out->>'row_key', '')), ''),
+             'timesheet_id', NULLIF(BTRIM(COALESCE(v_out->>'timesheet_id', '')), ''),
+             'current_timesheet_id', NULLIF(BTRIM(COALESCE(v_out->>'current_timesheet_id', '')), ''),
+             'requested_timesheet_id', NULLIF(BTRIM(COALESCE(v_out->>'requested_timesheet_id', '')), ''),
+             'expected_timesheet_id', NULLIF(BTRIM(COALESCE(v_out->>'expected_timesheet_id', '')), ''),
+             'contract_week_id', NULLIF(BTRIM(COALESCE(v_out->>'contract_week_id', '')), '')
+           ))
+      ) AS canonical_patch(row_json)
+      WHERE NULLIF(BTRIM(COALESCE(canonical_patch.row_json->>'row_signature', '')), '') IS NOT NULL
+      ORDER BY
+        CASE
+          WHEN NULLIF(BTRIM(COALESCE(v_out->>'row_key', '')), '') IS NOT NULL
+           AND canonical_patch.row_json->>'row_key' = v_out->>'row_key'
+            THEN 0
+          ELSE 1
+        END,
+        canonical_patch.row_json->>'row_key'
+      LIMIT 1;
+
+      IF NULLIF(BTRIM(COALESCE(v_canonical_authorise_row_signature, '')), '') IS NOT NULL THEN
+        v_out := JSONB_SET(v_out, '{row_signature}', TO_JSONB(v_canonical_authorise_row_signature), TRUE);
+
+        IF JSONB_TYPEOF(v_out->'row') = 'object' THEN
+          v_out := JSONB_SET(v_out, '{row,row_signature}', TO_JSONB(v_canonical_authorise_row_signature), TRUE);
+        END IF;
+
+        IF JSONB_TYPEOF(v_out->'data_row') = 'object' THEN
+          v_out := JSONB_SET(v_out, '{data_row,row_signature}', TO_JSONB(v_canonical_authorise_row_signature), TRUE);
+        END IF;
+
+        IF JSONB_TYPEOF(v_out->'row_patch') = 'object' THEN
+          v_out := JSONB_SET(v_out, '{row_patch,row_signature}', TO_JSONB(v_canonical_authorise_row_signature), TRUE);
+        END IF;
+
+        IF JSONB_TYPEOF(v_out->'details') = 'object' THEN
+          v_out := JSONB_SET(v_out, '{details,row_signature}', TO_JSONB(v_canonical_authorise_row_signature), TRUE);
+        END IF;
+      END IF;
+    END IF;
+
     RETURN v_out;
   END IF;
 
@@ -8670,6 +8861,70 @@ BEGIN
         'message', 'No bulk authorise compare/import context was found for the supplied identity',
         'filters', v_filters
       );
+    END IF;
+
+
+    v_canonical_authorise_row_json := NULL;
+    v_canonical_authorise_row_signature := NULL;
+
+    IF v_out IS NOT NULL AND COALESCE(LOWER(NULLIF(BTRIM(COALESCE(v_out->>'ok', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE) = TRUE THEN
+      SELECT canonical_patch.row_json,
+             canonical_patch.row_json->>'row_signature'
+        INTO v_canonical_authorise_row_json,
+             v_canonical_authorise_row_signature
+      FROM public.bulk_timesheet_row_patch_v1(
+        (
+          v_decision_filters
+          - 'row_key' - 'rowKey' - 'row_keys' - 'rowKeys'
+          - 'timesheet_id' - 'timesheetId' - 'timesheet_ids' - 'timesheetIds'
+          - 'current_timesheet_id' - 'currentTimesheetId'
+          - 'requested_timesheet_id' - 'requestedTimesheetId'
+          - 'expected_timesheet_id' - 'expectedTimesheetId'
+          - 'contract_week_id' - 'contractWeekId' - 'contract_week_ids' - 'contractWeekIds'
+          - 'week_id' - 'weekId' - 'id' - 'ids'
+        )
+        || jsonb_strip_nulls(JSONB_BUILD_OBJECT(
+             'dataset_mode', 'authorise',
+             'projection', 'active_row_header',
+             'profile', COALESCE(NULLIF(BTRIM(COALESCE(v_out->>'profile', '')), ''), v_profile, 'status_header'),
+             'row_key', NULLIF(BTRIM(COALESCE(v_out->>'row_key', '')), ''),
+             'timesheet_id', NULLIF(BTRIM(COALESCE(v_out->>'timesheet_id', '')), ''),
+             'current_timesheet_id', NULLIF(BTRIM(COALESCE(v_out->>'current_timesheet_id', '')), ''),
+             'requested_timesheet_id', NULLIF(BTRIM(COALESCE(v_out->>'requested_timesheet_id', '')), ''),
+             'expected_timesheet_id', NULLIF(BTRIM(COALESCE(v_out->>'expected_timesheet_id', '')), ''),
+             'contract_week_id', NULLIF(BTRIM(COALESCE(v_out->>'contract_week_id', '')), '')
+           ))
+      ) AS canonical_patch(row_json)
+      WHERE NULLIF(BTRIM(COALESCE(canonical_patch.row_json->>'row_signature', '')), '') IS NOT NULL
+      ORDER BY
+        CASE
+          WHEN NULLIF(BTRIM(COALESCE(v_out->>'row_key', '')), '') IS NOT NULL
+           AND canonical_patch.row_json->>'row_key' = v_out->>'row_key'
+            THEN 0
+          ELSE 1
+        END,
+        canonical_patch.row_json->>'row_key'
+      LIMIT 1;
+
+      IF NULLIF(BTRIM(COALESCE(v_canonical_authorise_row_signature, '')), '') IS NOT NULL THEN
+        v_out := JSONB_SET(v_out, '{row_signature}', TO_JSONB(v_canonical_authorise_row_signature), TRUE);
+
+        IF JSONB_TYPEOF(v_out->'row') = 'object' THEN
+          v_out := JSONB_SET(v_out, '{row,row_signature}', TO_JSONB(v_canonical_authorise_row_signature), TRUE);
+        END IF;
+
+        IF JSONB_TYPEOF(v_out->'data_row') = 'object' THEN
+          v_out := JSONB_SET(v_out, '{data_row,row_signature}', TO_JSONB(v_canonical_authorise_row_signature), TRUE);
+        END IF;
+
+        IF JSONB_TYPEOF(v_out->'row_patch') = 'object' THEN
+          v_out := JSONB_SET(v_out, '{row_patch,row_signature}', TO_JSONB(v_canonical_authorise_row_signature), TRUE);
+        END IF;
+
+        IF JSONB_TYPEOF(v_out->'details') = 'object' THEN
+          v_out := JSONB_SET(v_out, '{details,row_signature}', TO_JSONB(v_canonical_authorise_row_signature), TRUE);
+        END IF;
+      END IF;
     END IF;
 
     RETURN v_out;
@@ -10074,6 +10329,70 @@ BEGIN
     );
   END IF;
 
+
+  v_canonical_authorise_row_json := NULL;
+  v_canonical_authorise_row_signature := NULL;
+
+  IF v_out IS NOT NULL AND COALESCE(LOWER(NULLIF(BTRIM(COALESCE(v_out->>'ok', '')), '')) IN ('true', '1', 'yes', 'y', 'on'), FALSE) = TRUE THEN
+    SELECT canonical_patch.row_json,
+           canonical_patch.row_json->>'row_signature'
+      INTO v_canonical_authorise_row_json,
+           v_canonical_authorise_row_signature
+    FROM public.bulk_timesheet_row_patch_v1(
+      (
+        v_decision_filters
+        - 'row_key' - 'rowKey' - 'row_keys' - 'rowKeys'
+        - 'timesheet_id' - 'timesheetId' - 'timesheet_ids' - 'timesheetIds'
+        - 'current_timesheet_id' - 'currentTimesheetId'
+        - 'requested_timesheet_id' - 'requestedTimesheetId'
+        - 'expected_timesheet_id' - 'expectedTimesheetId'
+        - 'contract_week_id' - 'contractWeekId' - 'contract_week_ids' - 'contractWeekIds'
+        - 'week_id' - 'weekId' - 'id' - 'ids'
+      )
+      || jsonb_strip_nulls(JSONB_BUILD_OBJECT(
+           'dataset_mode', 'authorise',
+           'projection', 'active_row_header',
+           'profile', COALESCE(NULLIF(BTRIM(COALESCE(v_out->>'profile', '')), ''), v_profile, 'status_header'),
+           'row_key', NULLIF(BTRIM(COALESCE(v_out->>'row_key', '')), ''),
+           'timesheet_id', NULLIF(BTRIM(COALESCE(v_out->>'timesheet_id', '')), ''),
+           'current_timesheet_id', NULLIF(BTRIM(COALESCE(v_out->>'current_timesheet_id', '')), ''),
+           'requested_timesheet_id', NULLIF(BTRIM(COALESCE(v_out->>'requested_timesheet_id', '')), ''),
+           'expected_timesheet_id', NULLIF(BTRIM(COALESCE(v_out->>'expected_timesheet_id', '')), ''),
+           'contract_week_id', NULLIF(BTRIM(COALESCE(v_out->>'contract_week_id', '')), '')
+         ))
+    ) AS canonical_patch(row_json)
+    WHERE NULLIF(BTRIM(COALESCE(canonical_patch.row_json->>'row_signature', '')), '') IS NOT NULL
+    ORDER BY
+      CASE
+        WHEN NULLIF(BTRIM(COALESCE(v_out->>'row_key', '')), '') IS NOT NULL
+         AND canonical_patch.row_json->>'row_key' = v_out->>'row_key'
+          THEN 0
+        ELSE 1
+      END,
+      canonical_patch.row_json->>'row_key'
+    LIMIT 1;
+
+    IF NULLIF(BTRIM(COALESCE(v_canonical_authorise_row_signature, '')), '') IS NOT NULL THEN
+      v_out := JSONB_SET(v_out, '{row_signature}', TO_JSONB(v_canonical_authorise_row_signature), TRUE);
+
+      IF JSONB_TYPEOF(v_out->'row') = 'object' THEN
+        v_out := JSONB_SET(v_out, '{row,row_signature}', TO_JSONB(v_canonical_authorise_row_signature), TRUE);
+      END IF;
+
+      IF JSONB_TYPEOF(v_out->'data_row') = 'object' THEN
+        v_out := JSONB_SET(v_out, '{data_row,row_signature}', TO_JSONB(v_canonical_authorise_row_signature), TRUE);
+      END IF;
+
+      IF JSONB_TYPEOF(v_out->'row_patch') = 'object' THEN
+        v_out := JSONB_SET(v_out, '{row_patch,row_signature}', TO_JSONB(v_canonical_authorise_row_signature), TRUE);
+      END IF;
+
+      IF JSONB_TYPEOF(v_out->'details') = 'object' THEN
+        v_out := JSONB_SET(v_out, '{details,row_signature}', TO_JSONB(v_canonical_authorise_row_signature), TRUE);
+      END IF;
+    END IF;
+  END IF;
+
   RETURN COALESCE(v_out, JSONB_BUILD_OBJECT(
     'ok', FALSE,
     'context_kind', 'bulk_authorise_row_context',
@@ -10097,6 +10416,10 @@ BEGIN
   ));
 END;
 $function$;
+
+
+
+
 
 
 CREATE OR REPLACE FUNCTION public.timesheet_qr_send_enqueue_v1(
