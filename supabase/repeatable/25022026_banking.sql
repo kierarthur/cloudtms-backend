@@ -3490,6 +3490,8 @@ $function$;
 
 DROP FUNCTION IF EXISTS public.pay_batch_schedule(uuid, text, timestamptz, text, jsonb, uuid);
 DROP FUNCTION IF EXISTS public.pay_batch_schedule(uuid, text, timestamptz, text, jsonb, uuid, uuid, text);
+
+
 create or replace function public.pay_batch_schedule(
   p_pay_batch_id uuid,
   p_schedule_kind text,
@@ -4856,6 +4858,50 @@ begin
         null;
       end;
     end if;
+
+    v_worker_communications := jsonb_build_object(
+      'automatic_commit_stage', (v_provider <> 'CSV'),
+      'message_kind', coalesce(nullif(btrim(coalesce(v_comm_result->>'message_kind','')), ''), v_comm_message_kind, 'PAYOUT_NOTICE_AND_REMITTANCE'),
+      'trigger_status', v_comm_trigger_status,
+      'error', v_comm_error,
+      'dispatch_required', false,
+      'payout_notice', coalesce(v_payout_notice_result, '{}'::jsonb),
+      'remittance', coalesce(v_remittance_result, '{}'::jsonb),
+      'result', coalesce(v_comm_result, '{}'::jsonb),
+      'execution_mode', v_execution_mode,
+      'suppress_remittances', v_suppress_remittances
+    );
+
+    return jsonb_build_object(
+      'ok', false,
+      'error', 'PAY_BATCH_COMMIT_STAGE_COMMUNICATION_ERROR',
+      'code', 'COMMIT_STAGE_COMMUNICATION_ERROR',
+      'message', 'pay_batch_schedule: commit-stage communication failed before provider submission boundary',
+      'pay_batch_id', p_pay_batch_id::text,
+      'status', (select pb2.status from public.pay_batches as pb2 where pb2.id = p_pay_batch_id),
+      'schedule_kind', (select pb2.schedule_kind from public.pay_batches as pb2 where pb2.id = p_pay_batch_id),
+      'scheduled_at_utc', (select case when pb2.scheduled_at_utc is null then null else pb2.scheduled_at_utc::text end from public.pay_batches as pb2 where pb2.id = p_pay_batch_id),
+      'authoritative_payment_date', (select case when pb2.authoritative_payment_date is null then null else pb2.authoritative_payment_date::text end from public.pay_batches as pb2 where pb2.id = p_pay_batch_id),
+      'authoritative_payment_date_source', (select pb2.authoritative_payment_date_source from public.pay_batches as pb2 where pb2.id = p_pay_batch_id),
+      'funding_account_ref', (select pb2.funding_account_ref from public.pay_batches as pb2 where pb2.id = p_pay_batch_id),
+      'funds_warning_hours_json', (select pb2.funds_warning_hours_json from public.pay_batches as pb2 where pb2.id = p_pay_batch_id),
+      'execution_commit_state', (select pb2.execution_commit_state from public.pay_batches as pb2 where pb2.id = p_pay_batch_id),
+      'execution_commit_ref', (select pb2.execution_commit_ref from public.pay_batches as pb2 where pb2.id = p_pay_batch_id),
+      'execution_committed_at_utc', (select case when pb2.execution_committed_at_utc is null then null else pb2.execution_committed_at_utc::text end from public.pay_batches as pb2 where pb2.id = p_pay_batch_id),
+      'execution_intent_json', (select pb2.execution_intent_json from public.pay_batches as pb2 where pb2.id = p_pay_batch_id),
+      'execution_mode', v_execution_mode,
+      'suppress_remittances', v_suppress_remittances,
+      'remittance_trigger', 'ON_EXECUTION',
+      'remittance_configured_timing', coalesce(v_comm_result->>'configured_timing', v_comm_result#>>'{queue_result,configured_timing}'),
+      'remittance_deferred', false,
+      'remittance_suppressed', false,
+      'remittance_operation_queued', false,
+      'remittance_child_operation_id', null,
+      'remittance_trigger_status', v_comm_trigger_status,
+      'remittance_message_kind', v_comm_message_kind,
+      'worker_communications', v_worker_communications,
+      'remittance_queue_stage_result', coalesce(v_comm_result, '{}'::jsonb)
+    );
   end;
   v_worker_communications := jsonb_build_object(
     'automatic_commit_stage', (v_provider <> 'CSV'),
@@ -4938,6 +4984,7 @@ begin
   );
 end;
 $$;
+
 
 
 
@@ -15709,8 +15756,6 @@ $$;
 
 DROP FUNCTION IF EXISTS public.pay_batches_claim_due_scheduled(integer, timestamptz);
 
-
-
 CREATE OR REPLACE FUNCTION public.pay_batches_claim_due_scheduled(
   p_limit integer DEFAULT 50,
   p_now_utc timestamptz DEFAULT NULL::timestamptz
@@ -15805,13 +15850,7 @@ BEGIN
         p_operation_type => operation_config_plan.operation_type,
         p_phase => operation_config_plan.phase,
         p_chunk_type => operation_config_plan.chunk_type
-      ) AS operation_config_get(
-        chunk_size integer,
-        min_chunk_size integer,
-        max_chunk_size integer,
-        max_advance_ms integer,
-        lock_seconds integer
-      )
+      ) AS operation_config_get
     )
     SELECT jsonb_build_object(
       'source', 'pay_batches_claim_due_scheduled',
@@ -15985,8 +16024,6 @@ BEGIN
   );
 END;
 $function$;
-
-
 
 
 
