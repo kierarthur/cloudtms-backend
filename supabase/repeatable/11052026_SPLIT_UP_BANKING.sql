@@ -3603,7 +3603,6 @@ DROP FUNCTION IF EXISTS public.pay_remittance_maybe_queue_for_trigger(uuid, text
 DROP FUNCTION IF EXISTS public.pay_remittance_maybe_queue_for_trigger(uuid, text, text, uuid, boolean, uuid, boolean);
 
 
-
 CREATE OR REPLACE FUNCTION public.pay_remittance_maybe_queue_for_trigger(
   p_pay_batch_id uuid,
   p_trigger text,
@@ -3878,13 +3877,7 @@ BEGIN
         p_operation_type => operation_config_plan.operation_type,
         p_phase => operation_config_plan.phase,
         p_chunk_type => operation_config_plan.chunk_type
-      ) AS operation_config_get(
-        chunk_size integer,
-        min_chunk_size integer,
-        max_chunk_size integer,
-        max_advance_ms integer,
-        lock_seconds integer
-      )
+      ) AS operation_config_get
     )
     SELECT jsonb_build_object(
       'source', 'pay_remittance_maybe_queue_for_trigger',
@@ -4268,6 +4261,9 @@ EXCEPTION
     RAISE;
 END;
 $function$;
+
+
+
 
 
 
