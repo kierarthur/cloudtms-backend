@@ -43839,6 +43839,7 @@ async function handleTimesheetDailyManualProcess(env, req, timesheetId) {
       code === 'TIMESHEET_ALREADY_AUTHORISED' ||
       code === 'NOT_UNPROCESSED' ||
       code === 'TSFIN_PATCH_MISMATCH' ||
+      code === 'TIMESHEET_PATCH_REQUIRES_RECALCULATION' ||
       code === 'AUTHORITATIVE_TSFIN_MISSING' ||
       code === 'AUTHORITATIVE_TSFIN_INCOMPLETE' ||
       code === 'AUTHORITATIVE_TSFIN_TOTALS_MISSING'
