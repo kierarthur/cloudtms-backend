@@ -16048,7 +16048,6 @@ DROP FUNCTION IF EXISTS public.pay_bank_transfers_apply_rail_updates(uuid, jsonb
 DROP FUNCTION IF EXISTS public.pay_bank_transfers_apply_rail_updates(uuid, jsonb, uuid, uuid, jsonb, uuid);
 
 
-
 CREATE OR REPLACE FUNCTION public.pay_bank_transfers_apply_rail_updates(
   p_pay_batch_id uuid,
   p_updates jsonb,
@@ -16091,6 +16090,12 @@ DECLARE
   v_can_mark_submitted boolean := false;
   v_can_mark_committed boolean := false;
   v_chunk_transfer_ids jsonb := NULL::jsonb;
+  v_provider_submit_diagnostic jsonb := '{}'::jsonb;
+  v_transfer_provider_outcomes jsonb := '[]'::jsonb;
+  v_provider_acceptance_evidence_count integer := 0;
+  v_provider_response_present_count integer := 0;
+  v_provider_request_sent_count integer := 0;
+  v_provider_submission_unknown_count integer := 0;
 BEGIN
   IF p_pay_batch_id IS NULL THEN
     RAISE EXCEPTION 'pay_bank_transfers_apply_rail_updates: pay_batch_id is required';
@@ -16177,6 +16182,23 @@ BEGIN
     raw_payload jsonb NULL,
     idempotency_key text NULL,
     input_json jsonb NOT NULL,
+    provider_submit_diagnostic jsonb NOT NULL DEFAULT '{}'::jsonb,
+    provider_submission_status text NULL,
+    provider_submission_attempted boolean NOT NULL DEFAULT false,
+    provider_request_sent boolean NOT NULL DEFAULT false,
+    provider_response_received boolean NOT NULL DEFAULT false,
+    provider_response_present boolean NOT NULL DEFAULT false,
+    provider_submission_unknown boolean NOT NULL DEFAULT false,
+    provider_acceptance_evidence_present boolean NOT NULL DEFAULT false,
+    manual_resolution_required boolean NOT NULL DEFAULT false,
+    safe_retry_available boolean NOT NULL DEFAULT false,
+    provider_http_status integer NULL,
+    provider_error_code text NULL,
+    provider_error_message_redacted text NULL,
+    provider_response_redacted jsonb NULL,
+    provider_error_redacted jsonb NULL,
+    request_id text NULL,
+    local_provider_request_id text NULL,
     is_provider_source boolean NOT NULL DEFAULT false,
     is_provider_evidence boolean NOT NULL DEFAULT false,
     is_attempted_but_unproven boolean NOT NULL DEFAULT false
@@ -16204,7 +16226,24 @@ BEGIN
     currency,
     raw_payload,
     idempotency_key,
-    input_json
+    input_json,
+    provider_submit_diagnostic,
+    provider_submission_status,
+    provider_submission_attempted,
+    provider_request_sent,
+    provider_response_received,
+    provider_response_present,
+    provider_submission_unknown,
+    provider_acceptance_evidence_present,
+    manual_resolution_required,
+    safe_retry_available,
+    provider_http_status,
+    provider_error_code,
+    provider_error_message_redacted,
+    provider_response_redacted,
+    provider_error_redacted,
+    request_id,
+    local_provider_request_id
   )
   SELECT
     update_element.ordinality::integer,
@@ -16229,8 +16268,48 @@ BEGIN
     CASE WHEN nullif(btrim(coalesce(update_element.value->>'amount', '')), '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN nullif(btrim(coalesce(update_element.value->>'amount', '')), '')::numeric ELSE NULL::numeric END,
     upper(btrim(coalesce(nullif(update_element.value->>'currency', ''), 'GBP'))),
     CASE WHEN update_element.value ? 'raw_payload' THEN update_element.value->'raw_payload' ELSE update_element.value END,
-    nullif(btrim(coalesce(update_element.value->>'idempotency_key', '')), ''),
-    update_element.value
+    nullif(btrim(coalesce(
+      update_element.value->>'idempotency_key',
+      update_element.value->'provider_submit_diagnostic'->>'idempotency_key',
+      update_element.value->'rail_meta_json'->'provider_submit_diagnostic'->>'idempotency_key',
+      update_element.value->'raw_payload'->'provider_submit_diagnostic'->>'idempotency_key',
+      update_element.value->'raw_payload'->>'idempotency_key',
+      update_element.value->>'request_id',
+      update_element.value->'provider_submit_diagnostic'->>'request_id',
+      update_element.value->'rail_meta_json'->'provider_submit_diagnostic'->>'request_id',
+      update_element.value->'raw_payload'->'provider_submit_diagnostic'->>'request_id',
+      update_element.value->'raw_payload'->>'request_id',
+      ''
+    )), ''),
+    update_element.value,
+    COALESCE(
+      CASE WHEN jsonb_typeof(update_element.value->'provider_submit_diagnostic') = 'object' THEN update_element.value->'provider_submit_diagnostic' ELSE NULL::jsonb END,
+      CASE WHEN jsonb_typeof(update_element.value->'rail_meta_json'->'provider_submit_diagnostic') = 'object' THEN update_element.value->'rail_meta_json'->'provider_submit_diagnostic' ELSE NULL::jsonb END,
+      CASE WHEN jsonb_typeof(update_element.value->'raw_payload'->'provider_submit_diagnostic') = 'object' THEN update_element.value->'raw_payload'->'provider_submit_diagnostic' ELSE NULL::jsonb END,
+      '{}'::jsonb
+    ),
+    upper(btrim(coalesce(
+      nullif(update_element.value->>'provider_submission_status', ''),
+      nullif(update_element.value->'provider_submit_diagnostic'->>'provider_submission_status', ''),
+      nullif(update_element.value->'rail_meta_json'->'provider_submit_diagnostic'->>'provider_submission_status', ''),
+      nullif(update_element.value->'raw_payload'->'provider_submit_diagnostic'->>'provider_submission_status', ''),
+      ''
+    ))),
+    lower(btrim(coalesce(update_element.value->>'provider_submission_attempted', update_element.value->'provider_submit_diagnostic'->>'provider_submission_attempted', update_element.value->'rail_meta_json'->'provider_submit_diagnostic'->>'provider_submission_attempted', update_element.value->'raw_payload'->'provider_submit_diagnostic'->>'provider_submission_attempted', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on'),
+    lower(btrim(coalesce(update_element.value->>'provider_request_sent', update_element.value->'provider_submit_diagnostic'->>'provider_request_sent', update_element.value->'rail_meta_json'->'provider_submit_diagnostic'->>'provider_request_sent', update_element.value->'raw_payload'->'provider_submit_diagnostic'->>'provider_request_sent', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on'),
+    lower(btrim(coalesce(update_element.value->>'provider_response_received', update_element.value->'provider_submit_diagnostic'->>'provider_response_received', update_element.value->'rail_meta_json'->'provider_submit_diagnostic'->>'provider_response_received', update_element.value->'raw_payload'->'provider_submit_diagnostic'->>'provider_response_received', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on'),
+    lower(btrim(coalesce(update_element.value->>'provider_response_present', update_element.value->'provider_submit_diagnostic'->>'provider_response_present', update_element.value->'rail_meta_json'->'provider_submit_diagnostic'->>'provider_response_present', update_element.value->'raw_payload'->'provider_submit_diagnostic'->>'provider_response_present', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on'),
+    lower(btrim(coalesce(update_element.value->>'provider_submission_unknown', update_element.value->'provider_submit_diagnostic'->>'provider_submission_unknown', update_element.value->'rail_meta_json'->'provider_submit_diagnostic'->>'provider_submission_unknown', update_element.value->'raw_payload'->'provider_submit_diagnostic'->>'provider_submission_unknown', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on'),
+    lower(btrim(coalesce(update_element.value->>'provider_acceptance_evidence_present', update_element.value->'provider_submit_diagnostic'->>'provider_acceptance_evidence_present', update_element.value->'rail_meta_json'->'provider_submit_diagnostic'->>'provider_acceptance_evidence_present', update_element.value->'raw_payload'->'provider_submit_diagnostic'->>'provider_acceptance_evidence_present', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on'),
+    lower(btrim(coalesce(update_element.value->>'manual_resolution_required', update_element.value->'provider_submit_diagnostic'->>'manual_resolution_required', update_element.value->'rail_meta_json'->'provider_submit_diagnostic'->>'manual_resolution_required', update_element.value->'raw_payload'->'provider_submit_diagnostic'->>'manual_resolution_required', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on'),
+    lower(btrim(coalesce(update_element.value->>'safe_retry_available', update_element.value->'provider_submit_diagnostic'->>'safe_retry_available', update_element.value->'rail_meta_json'->'provider_submit_diagnostic'->>'safe_retry_available', update_element.value->'raw_payload'->'provider_submit_diagnostic'->>'safe_retry_available', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on'),
+    CASE WHEN nullif(btrim(coalesce(update_element.value->>'provider_http_status', update_element.value->'provider_submit_diagnostic'->>'provider_http_status', update_element.value->'rail_meta_json'->'provider_submit_diagnostic'->>'provider_http_status', update_element.value->'raw_payload'->'provider_submit_diagnostic'->>'provider_http_status', '')), '') ~ '^[0-9]+$' THEN nullif(btrim(coalesce(update_element.value->>'provider_http_status', update_element.value->'provider_submit_diagnostic'->>'provider_http_status', update_element.value->'rail_meta_json'->'provider_submit_diagnostic'->>'provider_http_status', update_element.value->'raw_payload'->'provider_submit_diagnostic'->>'provider_http_status', '')), '')::integer ELSE NULL::integer END,
+    nullif(btrim(coalesce(update_element.value->>'provider_error_code', update_element.value->'provider_submit_diagnostic'->>'provider_error_code', update_element.value->'rail_meta_json'->'provider_submit_diagnostic'->>'provider_error_code', update_element.value->'raw_payload'->'provider_submit_diagnostic'->>'provider_error_code', '')), ''),
+    nullif(btrim(coalesce(update_element.value->>'provider_error_message_redacted', update_element.value->'provider_submit_diagnostic'->>'provider_error_message_redacted', update_element.value->'rail_meta_json'->'provider_submit_diagnostic'->>'provider_error_message_redacted', update_element.value->'raw_payload'->'provider_submit_diagnostic'->>'provider_error_message_redacted', '')), ''),
+    COALESCE(update_element.value->'provider_response_redacted', update_element.value->'provider_submit_diagnostic'->'provider_response_redacted', update_element.value->'rail_meta_json'->'provider_submit_diagnostic'->'provider_response_redacted', update_element.value->'raw_payload'->'provider_submit_diagnostic'->'provider_response_redacted'),
+    COALESCE(update_element.value->'provider_error_redacted', update_element.value->'provider_submit_diagnostic'->'provider_error_redacted', update_element.value->'rail_meta_json'->'provider_submit_diagnostic'->'provider_error_redacted', update_element.value->'raw_payload'->'provider_submit_diagnostic'->'provider_error_redacted'),
+    nullif(btrim(coalesce(update_element.value->>'request_id', update_element.value->'provider_submit_diagnostic'->>'request_id', update_element.value->'rail_meta_json'->'provider_submit_diagnostic'->>'request_id', update_element.value->'raw_payload'->'provider_submit_diagnostic'->>'request_id', update_element.value->'raw_payload'->>'request_id', '')), ''),
+    nullif(btrim(coalesce(update_element.value->>'local_provider_request_id', update_element.value->'provider_submit_diagnostic'->>'local_provider_request_id', update_element.value->'rail_meta_json'->'provider_submit_diagnostic'->>'local_provider_request_id', update_element.value->'raw_payload'->'provider_submit_diagnostic'->>'local_provider_request_id', update_element.value->'raw_payload'->>'local_provider_request_id', '')), '')
   FROM jsonb_array_elements(p_updates) WITH ORDINALITY AS update_element(value, ordinality)
   WHERE jsonb_typeof(update_element.value) = 'object';
 
@@ -16243,7 +16322,44 @@ BEGIN
   END;
 
   UPDATE pg_temp.tmp_pay_bank_transfer_updates AS update_source
+  SET event_source = CASE
+    WHEN update_source.provider_submission_status IN ('PROVIDER_SUBMISSION_ACCEPTED', 'PROVIDER_SUBMISSION_REJECTED', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE') THEN 'PROVIDER_RESPONSE'
+    WHEN update_source.provider_submission_status IN ('UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK', 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL') THEN 'LOCAL_STATE'
+    ELSE update_source.event_source
+  END;
+
+  UPDATE pg_temp.tmp_pay_bank_transfer_updates AS update_source
   SET is_provider_source = update_source.event_source IN ('PROVIDER_RESPONSE', 'PROVIDER_POLL', 'PROVIDER_WEBHOOK');
+
+  UPDATE pg_temp.tmp_pay_bank_transfer_updates AS update_diag
+  SET provider_submit_diagnostic = jsonb_strip_nulls(
+    COALESCE(update_diag.provider_submit_diagnostic, '{}'::jsonb)
+    || jsonb_build_object(
+      'diagnostic_version', 1,
+      'generated_at_utc', v_now::text,
+      'provider_submission_status', NULLIF(update_diag.provider_submission_status, ''),
+      'provider_submission_attempted', update_diag.provider_submission_attempted,
+      'provider_request_sent', update_diag.provider_request_sent,
+      'provider_response_received', update_diag.provider_response_received,
+      'provider_response_present', update_diag.provider_response_present,
+      'provider_submission_unknown', update_diag.provider_submission_unknown,
+      'provider_acceptance_evidence_present', update_diag.provider_acceptance_evidence_present,
+      'manual_resolution_required', update_diag.manual_resolution_required,
+      'safe_retry_available', update_diag.safe_retry_available,
+      'provider_http_status', update_diag.provider_http_status,
+      'provider_error_code', update_diag.provider_error_code,
+      'provider_error_message_redacted', update_diag.provider_error_message_redacted,
+      'provider_response_redacted', update_diag.provider_response_redacted,
+      'provider_error_redacted', update_diag.provider_error_redacted,
+      'request_id', update_diag.request_id,
+      'idempotency_key', update_diag.idempotency_key,
+      'local_provider_request_id', update_diag.local_provider_request_id,
+      'rail_tx_id', update_diag.rail_tx_id,
+      'rail_state', update_diag.rail_state,
+      'provider_reference', update_diag.provider_reference,
+      'provider_state', update_diag.provider_state
+    )
+  );
 
   SELECT count(*)::integer
   INTO v_input_count
@@ -16363,14 +16479,23 @@ BEGIN
                  NULLIF(BTRIM(COALESCE(v_batch_row.bulk_reference, '')), ''),
                  NULLIF(BTRIM(COALESCE(transfer_for_evidence.rail_meta_json #>> '{request_id}', '')), ''),
                  NULLIF(BTRIM(COALESCE(transfer_for_evidence.rail_meta_json #>> '{idempotency_key}', '')), ''),
+                 NULLIF(BTRIM(COALESCE(transfer_for_evidence.rail_meta_json #>> '{local_provider_request_id}', '')), ''),
+                 NULLIF(BTRIM(COALESCE(transfer_for_evidence.rail_meta_json #>> '{provider_submit_diagnostic,local_provider_request_id}', '')), ''),
                  NULLIF(BTRIM(COALESCE(transfer_for_evidence.rail_meta_json #>> '{payment_reference}', '')), ''),
                  NULLIF(BTRIM(COALESCE(transfer_for_evidence.rail_meta_json #>> '{bulk_reference}', '')), ''),
                  NULLIF(BTRIM(COALESCE(update_evidence.input_json #>> '{request_id}', '')), ''),
                  NULLIF(BTRIM(COALESCE(update_evidence.input_json #>> '{idempotency_key}', '')), ''),
+                 NULLIF(BTRIM(COALESCE(update_evidence.local_provider_request_id, '')), ''),
+                 NULLIF(BTRIM(COALESCE(update_evidence.input_json #>> '{local_provider_request_id}', '')), ''),
+                 NULLIF(BTRIM(COALESCE(update_evidence.input_json #>> '{provider_submit_diagnostic,local_provider_request_id}', '')), ''),
+                 NULLIF(BTRIM(COALESCE(update_evidence.input_json #>> '{raw_payload,local_provider_request_id}', '')), ''),
+                 NULLIF(BTRIM(COALESCE(update_evidence.input_json #>> '{raw_payload,provider_submit_diagnostic,local_provider_request_id}', '')), ''),
                  NULLIF(BTRIM(COALESCE(update_evidence.input_json #>> '{payment_reference}', '')), ''),
                  NULLIF(BTRIM(COALESCE(update_evidence.input_json #>> '{bulk_reference}', '')), ''),
                  NULLIF(BTRIM(COALESCE(update_evidence.rail_meta_json #>> '{request_id}', '')), ''),
                  NULLIF(BTRIM(COALESCE(update_evidence.rail_meta_json #>> '{idempotency_key}', '')), ''),
+                 NULLIF(BTRIM(COALESCE(update_evidence.rail_meta_json #>> '{local_provider_request_id}', '')), ''),
+                 NULLIF(BTRIM(COALESCE(update_evidence.rail_meta_json #>> '{provider_submit_diagnostic,local_provider_request_id}', '')), ''),
                  NULLIF(BTRIM(COALESCE(update_evidence.rail_meta_json #>> '{payment_reference}', '')), ''),
                  NULLIF(BTRIM(COALESCE(update_evidence.rail_meta_json #>> '{bulk_reference}', '')), '')
                ]::text[], NULL::text)
@@ -16383,7 +16508,13 @@ BEGIN
   ), false);
 
   UPDATE pg_temp.tmp_pay_bank_transfer_updates AS update_attempt
-  SET is_attempted_but_unproven = update_attempt.is_provider_source IS TRUE
+  SET is_attempted_but_unproven = (
+      update_attempt.is_provider_source IS TRUE
+      OR update_attempt.provider_request_sent IS TRUE
+      OR update_attempt.provider_response_received IS TRUE
+      OR update_attempt.provider_response_present IS TRUE
+      OR update_attempt.provider_submission_unknown IS TRUE
+    )
     AND update_attempt.is_provider_evidence IS NOT TRUE;
 
   UPDATE pg_temp.tmp_pay_bank_transfer_updates AS update_key
@@ -16451,6 +16582,8 @@ BEGIN
       received_at_utc,
       amount,
       currency,
+      mapping_status,
+      mapping_method,
       raw_payload,
       idempotency_key
     )
@@ -16469,6 +16602,8 @@ BEGIN
       v_now,
       COALESCE(update_row.amount, transfer_row.amount),
       COALESCE(NULLIF(BTRIM(update_row.currency), ''), transfer_row.currency, 'GBP'),
+      'MATCHED'::text,
+      'TRANSFER_ID'::text,
       jsonb_strip_nulls((CASE
         WHEN jsonb_typeof(COALESCE(update_row.raw_payload, update_row.input_json)) = 'object'
           THEN COALESCE(update_row.raw_payload, update_row.input_json)
@@ -16476,7 +16611,29 @@ BEGIN
       END) || jsonb_build_object(
         'provider_evidence', update_row.is_provider_evidence,
         'provider_source', update_row.is_provider_source,
-        'provider_attempt_without_external_id', update_row.is_attempted_but_unproven
+        'provider_attempt_without_external_id', update_row.is_attempted_but_unproven,
+        'provider_submit_diagnostic', update_row.provider_submit_diagnostic,
+        'event_kind', COALESCE(
+          NULLIF(BTRIM(COALESCE(update_row.raw_payload #>> '{event_kind}', '')), ''),
+          NULLIF(BTRIM(COALESCE(update_row.input_json #>> '{event_kind}', '')), ''),
+          CASE
+            WHEN update_row.event_source = 'LOCAL_STATE'
+             AND update_row.provider_submission_status = 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL' THEN 'PROVIDER_SUBMIT_BLOCKED_PRE_CALL'
+            WHEN update_row.event_source = 'LOCAL_STATE'
+             AND update_row.provider_submission_status = 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME'
+             AND (
+               lower(BTRIM(COALESCE(update_row.provider_error_code, ''))) LIKE '%timeout%'
+               OR lower(BTRIM(COALESCE(update_row.provider_error_message_redacted, ''))) LIKE '%timeout%'
+             ) THEN 'PROVIDER_SUBMIT_TIMEOUT'
+            WHEN update_row.event_source = 'LOCAL_STATE'
+             AND update_row.provider_submission_status IN ('UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK') THEN 'PROVIDER_SUBMIT_UNKNOWN'
+            WHEN update_row.event_source = 'LOCAL_STATE' THEN 'LOCAL_STATE'
+            ELSE NULL::text
+          END
+        ),
+        'request_id', update_row.request_id,
+        'idempotency_key', update_row.idempotency_key,
+        'local_provider_request_id', update_row.local_provider_request_id
       )),
       update_row.idempotency_key
     FROM pg_temp.tmp_pay_bank_transfer_updates AS update_row
@@ -16535,7 +16692,42 @@ BEGIN
         'last_update_at_utc', v_now,
         'last_update_provider_source', update_row.is_provider_source,
         'last_update_provider_evidence', CASE WHEN update_row.is_provider_evidence IS TRUE THEN true WHEN existing_evidence.has_provider_evidence IS TRUE THEN true ELSE false END,
-        'provider_attempt_without_external_id', update_row.is_attempted_but_unproven
+        'provider_attempt_without_external_id', update_row.is_attempted_but_unproven,
+        'provider_submit_diagnostic', CASE
+          WHEN COALESCE(transfer_update.rail_meta_json #>> '{provider_submit_diagnostic,provider_submission_status}', '') = 'PROVIDER_SUBMISSION_ACCEPTED'
+           AND COALESCE(update_row.provider_submission_status, '') <> 'PROVIDER_SUBMISSION_ACCEPTED' THEN transfer_update.rail_meta_json->'provider_submit_diagnostic'
+          WHEN COALESCE(transfer_update.rail_meta_json #>> '{provider_submit_diagnostic,provider_submission_status}', '') = 'PROVIDER_SUBMISSION_REJECTED'
+           AND update_row.is_provider_source IS NOT TRUE
+           AND COALESCE(update_row.provider_submission_status, '') IN (
+             '',
+             'NO_PROVIDER_SUBMISSION_ATTEMPTED',
+             'CLAIMED_NOT_PROVIDER_CALLED_YET',
+             'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL',
+             'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME',
+             'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK'
+           ) THEN transfer_update.rail_meta_json->'provider_submit_diagnostic'
+          WHEN COALESCE(transfer_update.rail_meta_json #>> '{provider_submit_diagnostic,provider_submission_status}', '') IN (
+             'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME',
+             'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK',
+             'PROVIDER_SUBMISSION_MALFORMED_RESPONSE'
+           )
+           AND update_row.is_provider_source IS NOT TRUE
+           AND COALESCE(update_row.provider_submission_status, '') IN (
+             '',
+             'NO_PROVIDER_SUBMISSION_ATTEMPTED',
+             'CLAIMED_NOT_PROVIDER_CALLED_YET',
+             'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL'
+           ) THEN transfer_update.rail_meta_json->'provider_submit_diagnostic'
+          WHEN COALESCE(transfer_update.rail_meta_json #>> '{provider_submit_diagnostic,provider_submission_status}', '') = 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL'
+           AND update_row.is_provider_source IS NOT TRUE
+           AND COALESCE(update_row.provider_submission_status, '') IN (
+             '',
+             'NO_PROVIDER_SUBMISSION_ATTEMPTED',
+             'CLAIMED_NOT_PROVIDER_CALLED_YET'
+           ) THEN transfer_update.rail_meta_json->'provider_submit_diagnostic'
+          WHEN jsonb_typeof(update_row.provider_submit_diagnostic) = 'object' THEN update_row.provider_submit_diagnostic
+          ELSE transfer_update.rail_meta_json->'provider_submit_diagnostic'
+        END
       )
       || CASE
            WHEN update_row.is_provider_source IS TRUE THEN jsonb_strip_nulls(jsonb_build_object(
@@ -16610,6 +16802,8 @@ BEGIN
                       NULLIF(BTRIM(COALESCE(v_batch_row.bulk_reference, '')), ''),
                       NULLIF(BTRIM(COALESCE(existing_transfer.rail_meta_json #>> '{request_id}', '')), ''),
                       NULLIF(BTRIM(COALESCE(existing_transfer.rail_meta_json #>> '{idempotency_key}', '')), ''),
+                      NULLIF(BTRIM(COALESCE(existing_transfer.rail_meta_json #>> '{local_provider_request_id}', '')), ''),
+                      NULLIF(BTRIM(COALESCE(existing_transfer.rail_meta_json #>> '{provider_submit_diagnostic,local_provider_request_id}', '')), ''),
                       NULLIF(BTRIM(COALESCE(existing_transfer.rail_meta_json #>> '{payment_reference}', '')), ''),
                       NULLIF(BTRIM(COALESCE(existing_transfer.rail_meta_json #>> '{bulk_reference}', '')), '')
                     ]::text[], NULL::text)
@@ -16653,7 +16847,9 @@ BEGIN
                         NULLIF(BTRIM(COALESCE(existing_transfer.rail_meta_json #>> '{request_id}', '')), ''),
                         NULLIF(BTRIM(COALESCE(existing_transfer.rail_meta_json #>> '{idempotency_key}', '')), ''),
                         NULLIF(BTRIM(COALESCE(existing_transfer.rail_meta_json #>> '{payment_reference}', '')), ''),
-                        NULLIF(BTRIM(COALESCE(existing_transfer.rail_meta_json #>> '{bulk_reference}', '')), '')
+                        NULLIF(BTRIM(COALESCE(existing_transfer.rail_meta_json #>> '{bulk_reference}', '')), ''),
+                        NULLIF(BTRIM(COALESCE(existing_event.raw_payload #>> '{local_provider_request_id}', '')), ''),
+                        NULLIF(BTRIM(COALESCE(existing_event.raw_payload #>> '{provider_submit_diagnostic,local_provider_request_id}', '')), '')
                       ]::text[], NULL::text)
                     )
                   )
@@ -16701,6 +16897,8 @@ BEGIN
                 AND NULLIF(BTRIM(COALESCE(reference_transfer.rail_tx_id, '')), '') NOT IN (
                   COALESCE(reference_transfer.id::text, '__no_transfer_id__'),
                   COALESCE(NULLIF(BTRIM(COALESCE(reference_transfer.request_id, '')), ''), '__no_request_id__'),
+                  COALESCE(NULLIF(BTRIM(COALESCE(reference_transfer.rail_meta_json #>> '{local_provider_request_id}', '')), ''), '__no_local_provider_request_id__'),
+                  COALESCE(NULLIF(BTRIM(COALESCE(reference_transfer.rail_meta_json #>> '{provider_submit_diagnostic,local_provider_request_id}', '')), ''), '__no_provider_diag_local_provider_request_id__'),
                   COALESCE(NULLIF(BTRIM(COALESCE(reference_transfer.payment_reference, '')), ''), '__no_payment_reference__'),
                   COALESCE(NULLIF(BTRIM(COALESCE(v_batch_row.bulk_reference, '')), ''), '__no_bulk_reference__')
                 )
@@ -16713,6 +16911,8 @@ BEGIN
                 AND NULLIF(BTRIM(COALESCE(reference_transfer.rail_meta_json->>'provider_event_id', '')), '') NOT IN (
                   COALESCE(reference_transfer.id::text, '__no_transfer_id__'),
                   COALESCE(NULLIF(BTRIM(COALESCE(reference_transfer.request_id, '')), ''), '__no_request_id__'),
+                  COALESCE(NULLIF(BTRIM(COALESCE(reference_transfer.rail_meta_json #>> '{local_provider_request_id}', '')), ''), '__no_local_provider_request_id__'),
+                  COALESCE(NULLIF(BTRIM(COALESCE(reference_transfer.rail_meta_json #>> '{provider_submit_diagnostic,local_provider_request_id}', '')), ''), '__no_provider_diag_local_provider_request_id__'),
                   COALESCE(NULLIF(BTRIM(COALESCE(reference_transfer.payment_reference, '')), ''), '__no_payment_reference__'),
                   COALESCE(NULLIF(BTRIM(COALESCE(v_batch_row.bulk_reference, '')), ''), '__no_bulk_reference__')
                 )
@@ -16725,6 +16925,8 @@ BEGIN
                 AND NULLIF(BTRIM(COALESCE(reference_transfer.rail_meta_json->>'provider_reference', '')), '') NOT IN (
                   COALESCE(reference_transfer.id::text, '__no_transfer_id__'),
                   COALESCE(NULLIF(BTRIM(COALESCE(reference_transfer.request_id, '')), ''), '__no_request_id__'),
+                  COALESCE(NULLIF(BTRIM(COALESCE(reference_transfer.rail_meta_json #>> '{local_provider_request_id}', '')), ''), '__no_local_provider_request_id__'),
+                  COALESCE(NULLIF(BTRIM(COALESCE(reference_transfer.rail_meta_json #>> '{provider_submit_diagnostic,local_provider_request_id}', '')), ''), '__no_provider_diag_local_provider_request_id__'),
                   COALESCE(NULLIF(BTRIM(COALESCE(reference_transfer.payment_reference, '')), ''), '__no_payment_reference__'),
                   COALESCE(NULLIF(BTRIM(COALESCE(v_batch_row.bulk_reference, '')), ''), '__no_bulk_reference__')
                 )
@@ -16764,6 +16966,10 @@ BEGIN
             AND NULLIF(BTRIM(COALESCE(reference_event_identifier.identifier_value, '')), '') NOT IN (
               COALESCE(reference_transfer.id::text, '__no_transfer_id__'),
               COALESCE(NULLIF(BTRIM(COALESCE(reference_transfer.request_id, '')), ''), '__no_request_id__'),
+              COALESCE(NULLIF(BTRIM(COALESCE(reference_transfer.rail_meta_json #>> '{local_provider_request_id}', '')), ''), '__no_local_provider_request_id__'),
+              COALESCE(NULLIF(BTRIM(COALESCE(reference_transfer.rail_meta_json #>> '{provider_submit_diagnostic,local_provider_request_id}', '')), ''), '__no_provider_diag_local_provider_request_id__'),
+              COALESCE(NULLIF(BTRIM(COALESCE(event_row.raw_payload #>> '{local_provider_request_id}', '')), ''), '__no_event_local_provider_request_id__'),
+              COALESCE(NULLIF(BTRIM(COALESCE(event_row.raw_payload #>> '{provider_submit_diagnostic,local_provider_request_id}', '')), ''), '__no_event_provider_diag_local_provider_request_id__'),
               COALESCE(NULLIF(BTRIM(COALESCE(reference_transfer.payment_reference, '')), ''), '__no_payment_reference__'),
               COALESCE(NULLIF(BTRIM(COALESCE(v_batch_row.bulk_reference, '')), ''), '__no_bulk_reference__')
             )
@@ -16788,6 +16994,8 @@ BEGIN
               AND NULLIF(BTRIM(COALESCE(reference_identifier.identifier_value, '')), '') NOT IN (
                 COALESCE(reference_transfer.id::text, '__no_transfer_id__'),
                 COALESCE(NULLIF(BTRIM(COALESCE(reference_transfer.request_id, '')), ''), '__no_request_id__'),
+                COALESCE(NULLIF(BTRIM(COALESCE(reference_transfer.rail_meta_json #>> '{local_provider_request_id}', '')), ''), '__no_local_provider_request_id__'),
+                COALESCE(NULLIF(BTRIM(COALESCE(reference_transfer.rail_meta_json #>> '{provider_submit_diagnostic,local_provider_request_id}', '')), ''), '__no_provider_diag_local_provider_request_id__'),
                 COALESCE(NULLIF(BTRIM(COALESCE(reference_transfer.payment_reference, '')), ''), '__no_payment_reference__'),
                 COALESCE(NULLIF(BTRIM(COALESCE(v_batch_row.bulk_reference, '')), ''), '__no_bulk_reference__')
               )
@@ -16822,6 +17030,46 @@ BEGIN
       execution_committed_at_utc = CASE WHEN v_execution_commit_state = 'COMMITTED' THEN COALESCE(v_execution_committed_at_utc, v_now) ELSE NULL::timestamptz END
   WHERE batch_update.id = p_pay_batch_id;
 
+  SELECT
+    COUNT(*) FILTER (WHERE update_row.is_provider_evidence IS TRUE)::integer,
+    COUNT(*) FILTER (WHERE update_row.provider_response_present IS TRUE OR update_row.provider_response_received IS TRUE)::integer,
+    COUNT(*) FILTER (WHERE update_row.provider_request_sent IS TRUE)::integer,
+    COUNT(*) FILTER (WHERE update_row.provider_submission_unknown IS TRUE OR update_row.provider_submission_status IN ('UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE'))::integer,
+    COALESCE(jsonb_agg(jsonb_strip_nulls(jsonb_build_object(
+      'transfer_id', update_row.transfer_id::text,
+      'provider_submission_status', update_row.provider_submission_status,
+      'provider_request_sent', update_row.provider_request_sent,
+      'provider_response_received', update_row.provider_response_received,
+      'provider_response_present', update_row.provider_response_present,
+      'provider_acceptance_evidence_present', update_row.is_provider_evidence,
+      'rail_tx_id', update_row.rail_tx_id,
+      'rail_state', update_row.rail_state,
+      'provider_http_status', update_row.provider_http_status,
+      'provider_error_code', update_row.provider_error_code,
+      'request_id', update_row.request_id,
+      'idempotency_key', update_row.idempotency_key,
+      'manual_resolution_required', update_row.manual_resolution_required,
+      'safe_retry_available', update_row.safe_retry_available
+    )) ORDER BY update_row.row_seq), '[]'::jsonb)
+  INTO v_provider_acceptance_evidence_count,
+       v_provider_response_present_count,
+       v_provider_request_sent_count,
+       v_provider_submission_unknown_count,
+       v_transfer_provider_outcomes
+  FROM pg_temp.tmp_pay_bank_transfer_updates AS update_row;
+
+  SELECT COALESCE(update_row.provider_submit_diagnostic, '{}'::jsonb)
+  INTO v_provider_submit_diagnostic
+  FROM pg_temp.tmp_pay_bank_transfer_updates AS update_row
+  ORDER BY CASE
+      WHEN update_row.provider_submission_status = 'PROVIDER_SUBMISSION_ACCEPTED' THEN 0
+      WHEN update_row.provider_submission_status = 'PROVIDER_SUBMISSION_REJECTED' THEN 1
+      WHEN update_row.provider_submission_status IN ('UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE') THEN 2
+      ELSE 3
+    END,
+    update_row.row_seq
+  LIMIT 1;
+
   v_summary_json := public.pay_batch_execution_summary_get(p_pay_batch_id, p_actor_user_id);
 
   IF p_chunk_id IS NOT NULL THEN
@@ -16840,7 +17088,13 @@ BEGIN
           'remaining_provider_evidence_required', v_remaining_provider_evidence_required,
           'remaining_unsubmitted_count', v_remaining_unsubmitted_count,
           'requires_provider_poll', v_requires_provider_poll,
-          'requires_review', v_requires_review
+          'requires_review', v_requires_review,
+          'provider_submit_diagnostic', COALESCE(v_provider_submit_diagnostic, '{}'::jsonb),
+          'transfer_provider_outcomes', COALESCE(v_transfer_provider_outcomes, '[]'::jsonb),
+          'provider_submission_status', COALESCE(v_provider_submit_diagnostic->>'provider_submission_status', NULL),
+          'provider_acceptance_evidence_count', COALESCE(v_provider_acceptance_evidence_count, 0),
+          'provider_response_present_count', COALESCE(v_provider_response_present_count, 0),
+          'provider_submission_unknown_count', COALESCE(v_provider_submission_unknown_count, 0)
         )),
         updated_at_utc = v_now
     WHERE chunk_update.id = p_chunk_id
@@ -16869,6 +17123,13 @@ BEGIN
     'remaining_unsubmitted_count', v_remaining_unsubmitted_count,
     'requires_provider_poll', v_requires_provider_poll,
     'requires_review', v_requires_review,
+    'provider_submit_diagnostic', COALESCE(v_provider_submit_diagnostic, '{}'::jsonb),
+    'transfer_provider_outcomes', COALESCE(v_transfer_provider_outcomes, '[]'::jsonb),
+    'provider_submission_status', COALESCE(v_provider_submit_diagnostic->>'provider_submission_status', NULL),
+    'provider_acceptance_evidence_count', COALESCE(v_provider_acceptance_evidence_count, 0),
+    'provider_response_present_count', COALESCE(v_provider_response_present_count, 0),
+    'provider_request_sent_count', COALESCE(v_provider_request_sent_count, 0),
+    'provider_submission_unknown_count', COALESCE(v_provider_submission_unknown_count, 0),
     'blocked_funds_state', COALESCE(v_summary_json->'blocked_funds_state', '{}'::jsonb),
     'batch_execution_state', jsonb_build_object(
       'execution_commit_state', v_execution_commit_state,
