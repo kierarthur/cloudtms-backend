@@ -7208,7 +7208,6 @@ DROP FUNCTION IF EXISTS public.pay_bank_transfers_claim_provider_submit_chunk(uu
 
 DROP FUNCTION IF EXISTS public.pay_operation_remittance_scope_seed(uuid, uuid, text, uuid);
 
-
 CREATE OR REPLACE FUNCTION public.pay_bank_transfers_claim_provider_submit_chunk(
   p_operation_id uuid,
   p_pay_batch_id uuid,
@@ -7822,9 +7821,8 @@ BEGIN
       'provider_submit_diagnostic', v_provider_submit_diagnostic,
       'provider_submission_status', v_provider_submission_status,
       'review_reason_code', v_review_reason_code,
-      'chunk_ids', COALESCE(v_claim_blocked_chunk_ids, '[]'::jsonb),
-      'transfer_ids', COALESCE(v_claim_blocked_transfer_ids, '[]'::jsonb),
-      'manual_resolution_required', true,
+      'chunk_ids', jsonb_build_array(v_chunk_id::text),
+      'manual_resolution_required', false,
       'safe_retry_available', false,
       'provider_acceptance_evidence_count', COALESCE(v_provider_acceptance_evidence_count, 0),
       'provider_response_present_count', COALESCE(v_provider_response_present_count, 0),
@@ -7941,9 +7939,8 @@ BEGIN
       'provider_submit_diagnostic', v_provider_submit_diagnostic,
       'provider_submission_status', v_provider_submission_status,
       'review_reason_code', v_review_reason_code,
-      'chunk_ids', COALESCE(v_claim_blocked_chunk_ids, '[]'::jsonb),
-      'transfer_ids', COALESCE(v_claim_blocked_transfer_ids, '[]'::jsonb),
-      'manual_resolution_required', true,
+      'chunk_ids', '[]'::jsonb,
+      'manual_resolution_required', false,
       'safe_retry_available', false,
       'provider_acceptance_evidence_count', COALESCE(v_provider_acceptance_evidence_count, 0),
       'provider_response_present_count', COALESCE(v_provider_response_present_count, 0),
@@ -7977,6 +7974,8 @@ BEGIN
     'provider_response_received', false,
     'provider_response_present', false,
     'provider_acceptance_evidence_present', false,
+    'crash_safety_status_if_lock_expires', 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK',
+    'provider_request_impossible', false,
     'stale_submit_chunk', false,
     'unfinalised_submit_chunk', true,
     'manual_resolution_required', false,
@@ -8093,9 +8092,8 @@ BEGIN
     'provider_submit_diagnostic', v_provider_submit_diagnostic,
       'provider_submission_status', v_provider_submission_status,
       'review_reason_code', v_review_reason_code,
-      'chunk_ids', COALESCE(v_claim_blocked_chunk_ids, '[]'::jsonb),
-      'transfer_ids', COALESCE(v_claim_blocked_transfer_ids, '[]'::jsonb),
-      'manual_resolution_required', true,
+      'chunk_ids', jsonb_build_array(v_chunk_id::text),
+      'manual_resolution_required', false,
       'safe_retry_available', false,
       'provider_acceptance_evidence_count', COALESCE(v_provider_acceptance_evidence_count, 0),
       'provider_response_present_count', COALESCE(v_provider_response_present_count, 0),
@@ -8111,7 +8109,6 @@ BEGIN
   );
 END;
 $function$;
-
 
 
 CREATE OR REPLACE FUNCTION public.pay_operation_remittance_scope_seed(
