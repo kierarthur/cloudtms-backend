@@ -40555,7 +40555,7 @@ async function handleManualTimesheetQueueStageToContractWeek(env, req, queueId) 
     env,
     `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue` +
       `?id=eq.${enc(queueId)}` +
-      `&select=id,status,timesheet_id,r2_key,original_filename,mime_type,content_hash,uploaded_by_user_id,uploaded_at_utc,last_rotation_deg,meta_json` +
+      `&select=id,status,timesheet_id,contract_week_id,r2_key,original_filename,mime_type,content_hash,uploaded_by_user_id,uploaded_at_utc,last_rotation_deg,meta_json` +
       `&limit=1`
   );
   const item = qRows?.[0] || null;
@@ -40575,26 +40575,29 @@ async function handleManualTimesheetQueueStageToContractWeek(env, req, queueId) 
     return withCORS(env, req, badRequest('Cannot stage a discarded queue item'));
   }
 
-  const currentStagedContractWeekId = String(currentMeta?.contract_week_id || '').trim();
+  const currentTopLevelContractWeekId = String(item.contract_week_id || '').trim();
+  const currentStagedContractWeekId = currentTopLevelContractWeekId || String(currentMeta?.contract_week_id || '').trim();
   const currentStagedKind = normaliseKind(currentMeta?.staged_kind || currentMeta?.kind || '');
 
   if (status === 'STAGED') {
-    if (currentStagedContractWeekId === contractWeekId) {
+    if (currentStagedContractWeekId === contractWeekId || currentStagedContractWeekId === '') {
       if (requestedKind === 'TIMESHEET') {
         const { rows: existingTimesheetRows } = await sbFetch(
           env,
           `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue` +
             `?status=eq.${enc('STAGED')}` +
             `&meta_json->>contract_week_id=eq.${enc(contractWeekId)}` +
-            `&select=id,meta_json,r2_key`
+            `&select=id,contract_week_id,meta_json,r2_key`
         );
         const duplicateTimesheet = (existingTimesheetRows || []).find(row => {
           const rowId = String(row?.id || '').trim();
+          const rowContractWeekId = String(row?.contract_week_id || '').trim();
           const rowMeta = (row?.meta_json && typeof row.meta_json === 'object' && !Array.isArray(row.meta_json))
             ? row.meta_json
             : {};
+          const rowMetaContractWeekId = String(rowMeta?.contract_week_id || '').trim();
           const rowKind = normaliseKind(rowMeta?.staged_kind || rowMeta?.kind || '');
-          return rowId !== String(item.id) && rowKind === 'TIMESHEET';
+          return rowId !== String(item.id) && rowKind === 'TIMESHEET' && (rowContractWeekId === contractWeekId || rowMetaContractWeekId === contractWeekId);
         });
         if (duplicateTimesheet) {
           return withCORS(env, req, badRequest('Only one staged TIMESHEET file may exist for a contract week at a time'));
@@ -40611,6 +40614,7 @@ async function handleManualTimesheetQueueStageToContractWeek(env, req, queueId) 
       const stagedMetaNeedsPatch = !!(
         requestedKind !== currentStagedKind ||
         currentStagedContractWeekId !== contractWeekId ||
+        currentTopLevelContractWeekId !== contractWeekId ||
         String(currentMeta?.staged_at_utc || '').trim() === '' ||
         String(currentMeta?.staged_by_user_id || '').trim() === '' ||
         String(currentMeta?.contract_week_id || '').trim() !== contractWeekId ||
@@ -40628,6 +40632,7 @@ async function handleManualTimesheetQueueStageToContractWeek(env, req, queueId) 
             body: JSON.stringify({
               status: 'STAGED',
               timesheet_id: null,
+              contract_week_id: contractWeekId,
               meta_json: ensuredMeta
             })
           }
@@ -40646,16 +40651,18 @@ async function handleManualTimesheetQueueStageToContractWeek(env, req, queueId) 
             `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue` +
               `?status=eq.${enc('STAGED')}` +
               `&meta_json->>contract_week_id=eq.${enc(contractWeekId)}` +
-              `&select=id,meta_json,r2_key`
+              `&select=id,contract_week_id,meta_json,r2_key`
           );
           const otherTimesheet = (remainingTimesheetRows || []).find(row => {
             const rowId = String(row?.id || '').trim();
             if (rowId === String(item.id)) return false;
+            const rowContractWeekId = String(row?.contract_week_id || '').trim();
             const rowMeta = (row?.meta_json && typeof row.meta_json === 'object' && !Array.isArray(row.meta_json))
               ? row.meta_json
               : {};
+            const rowMetaContractWeekId = String(rowMeta?.contract_week_id || '').trim();
             const rowKind = normaliseKind(rowMeta?.staged_kind || rowMeta?.kind || '');
-            return rowKind === 'TIMESHEET';
+            return rowKind === 'TIMESHEET' && (rowContractWeekId === contractWeekId || rowMetaContractWeekId === contractWeekId);
           });
           nextUploadedPdfKey = otherTimesheet?.r2_key || null;
         }
@@ -40687,15 +40694,17 @@ async function handleManualTimesheetQueueStageToContractWeek(env, req, queueId) 
       `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue` +
         `?status=eq.${enc('STAGED')}` +
         `&meta_json->>contract_week_id=eq.${enc(contractWeekId)}` +
-        `&select=id,meta_json`
+        `&select=id,contract_week_id,meta_json`
     );
 
     const existingTimesheet = (stagedRows || []).find(row => {
+      const rowContractWeekId = String(row?.contract_week_id || '').trim();
       const rowMeta = (row?.meta_json && typeof row.meta_json === 'object' && !Array.isArray(row.meta_json))
         ? row.meta_json
         : {};
+      const rowMetaContractWeekId = String(rowMeta?.contract_week_id || '').trim();
       const rowKind = normaliseKind(rowMeta?.staged_kind || rowMeta?.kind || '');
-      return rowKind === 'TIMESHEET';
+      return rowKind === 'TIMESHEET' && (rowContractWeekId === contractWeekId || rowMetaContractWeekId === contractWeekId);
     });
 
     if (existingTimesheet) {
@@ -40719,6 +40728,7 @@ async function handleManualTimesheetQueueStageToContractWeek(env, req, queueId) 
       body: JSON.stringify({
         status: 'STAGED',
         timesheet_id: null,
+        contract_week_id: contractWeekId,
         meta_json: nextMeta
       })
     }
