@@ -19889,8 +19889,6 @@ DROP FUNCTION IF EXISTS public.pay_batch_submission_evidence(uuid);
 
 
 
-
-
 CREATE OR REPLACE FUNCTION public.pay_batch_submission_evidence(p_pay_batch_id uuid, p_counts_only boolean DEFAULT false)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -19948,6 +19946,25 @@ DECLARE
   v_other_operation_active_auth_request_count integer := 0;
   v_auth_request_provider_risk_count integer := 0;
   v_auth_request_retry_blocker_count integer := 0;
+  v_provider_submit_diagnostic_result jsonb := '{}'::jsonb;
+  v_provider_submit_diagnostic jsonb := '{}'::jsonb;
+  v_provider_submission_status text := NULL::text;
+  v_provider_submit_review_reason_code text := NULL::text;
+  v_provider_acceptance_evidence_count integer := 0;
+  v_provider_response_present_count integer := 0;
+  v_provider_request_sent_count integer := 0;
+  v_provider_submission_unknown_count integer := 0;
+  v_stale_unresolved_submit_chunk_count integer := 0;
+  v_stale_empty_submit_chunk_count integer := 0;
+  v_unfinalised_submit_chunk_count integer := 0;
+  v_provider_submission_rejected_count integer := 0;
+  v_provider_submission_accepted_count integer := 0;
+  v_provider_submission_blocked_pre_call_count integer := 0;
+  v_provider_submission_malformed_response_count integer := 0;
+  v_provider_manual_resolution_required boolean := false;
+  v_provider_safe_retry_available boolean := false;
+  v_provider_recommended_action text := NULL::text;
+  v_provider_submit_review_active boolean := false;
 BEGIN
   IF p_pay_batch_id IS NULL THEN
     RAISE EXCEPTION 'PAY_BATCH_SUBMISSION_EVIDENCE_PAY_BATCH_ID_REQUIRED'
@@ -19990,6 +20007,76 @@ BEGIN
   IF v_active_operation_pay_channel_scope NOT IN ('PAYE', 'UMBRELLA', 'LOANS', 'ALL', 'ANY', '*') THEN
     v_active_operation_pay_channel_scope := 'ALL';
   END IF;
+
+  BEGIN
+    v_provider_submit_diagnostic_result := public.pay_provider_submit_diagnostic_get(
+      p_pay_batch_id := p_pay_batch_id,
+      p_operation_id := NULL::uuid,
+      p_transfer_id := NULL::uuid,
+      p_chunk_id := NULL::uuid,
+      p_counts_only := true
+    );
+  EXCEPTION
+    WHEN undefined_function THEN
+      v_provider_submit_diagnostic_result := '{}'::jsonb;
+    WHEN OTHERS THEN
+      v_provider_submit_diagnostic_result := '{}'::jsonb;
+  END;
+
+  v_provider_submit_diagnostic := COALESCE(v_provider_submit_diagnostic_result->'provider_submit_diagnostic', '{}'::jsonb);
+  v_provider_submission_status := NULLIF(BTRIM(COALESCE(v_provider_submit_diagnostic->>'provider_submission_status', v_provider_submit_diagnostic_result->>'provider_submission_status', '')), '');
+  v_provider_submit_review_reason_code := NULLIF(BTRIM(COALESCE(v_provider_submit_diagnostic->>'review_reason_code', v_provider_submit_diagnostic_result->>'review_reason_code', '')), '');
+  v_provider_recommended_action := NULLIF(BTRIM(COALESCE(v_provider_submit_diagnostic->>'recommended_action', v_provider_submit_diagnostic_result->>'recommended_action', '')), '');
+  v_provider_manual_resolution_required := lower(BTRIM(COALESCE(v_provider_submit_diagnostic->>'manual_resolution_required', v_provider_submit_diagnostic_result->>'manual_resolution_required', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on');
+  v_provider_safe_retry_available := lower(BTRIM(COALESCE(v_provider_submit_diagnostic->>'safe_retry_available', v_provider_submit_diagnostic_result->>'safe_retry_available', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on');
+
+  IF COALESCE(v_provider_submit_diagnostic_result #>> '{counts,provider_acceptance_evidence_count}', '') ~ '^[0-9]+$' THEN
+    v_provider_acceptance_evidence_count := (v_provider_submit_diagnostic_result #>> '{counts,provider_acceptance_evidence_count}')::integer;
+  END IF;
+  IF COALESCE(v_provider_submit_diagnostic_result #>> '{counts,provider_response_present_count}', '') ~ '^[0-9]+$' THEN
+    v_provider_response_present_count := (v_provider_submit_diagnostic_result #>> '{counts,provider_response_present_count}')::integer;
+  END IF;
+  IF COALESCE(v_provider_submit_diagnostic_result #>> '{counts,provider_request_sent_count}', '') ~ '^[0-9]+$' THEN
+    v_provider_request_sent_count := (v_provider_submit_diagnostic_result #>> '{counts,provider_request_sent_count}')::integer;
+  END IF;
+  IF COALESCE(v_provider_submit_diagnostic_result #>> '{counts,provider_submission_unknown_count}', '') ~ '^[0-9]+$' THEN
+    v_provider_submission_unknown_count := (v_provider_submit_diagnostic_result #>> '{counts,provider_submission_unknown_count}')::integer;
+  END IF;
+  IF COALESCE(v_provider_submit_diagnostic_result #>> '{counts,stale_unresolved_submit_chunk_count}', v_provider_submit_diagnostic_result #>> '{counts,stale_empty_submit_chunk_count}', '') ~ '^[0-9]+$' THEN
+    v_stale_unresolved_submit_chunk_count := COALESCE(v_provider_submit_diagnostic_result #>> '{counts,stale_unresolved_submit_chunk_count}', v_provider_submit_diagnostic_result #>> '{counts,stale_empty_submit_chunk_count}')::integer;
+  END IF;
+  IF COALESCE(v_provider_submit_diagnostic_result #>> '{counts,stale_empty_submit_chunk_count}', '') ~ '^[0-9]+$' THEN
+    v_stale_empty_submit_chunk_count := (v_provider_submit_diagnostic_result #>> '{counts,stale_empty_submit_chunk_count}')::integer;
+  ELSE
+    v_stale_empty_submit_chunk_count := COALESCE(v_stale_unresolved_submit_chunk_count, 0);
+  END IF;
+  IF COALESCE(v_provider_submit_diagnostic_result #>> '{counts,unfinalised_submit_chunk_count}', '') ~ '^[0-9]+$' THEN
+    v_unfinalised_submit_chunk_count := (v_provider_submit_diagnostic_result #>> '{counts,unfinalised_submit_chunk_count}')::integer;
+  END IF;
+  IF COALESCE(v_provider_submit_diagnostic_result #>> '{counts,provider_submission_rejected_count}', '') ~ '^[0-9]+$' THEN
+    v_provider_submission_rejected_count := (v_provider_submit_diagnostic_result #>> '{counts,provider_submission_rejected_count}')::integer;
+  END IF;
+  IF COALESCE(v_provider_submit_diagnostic_result #>> '{counts,provider_submission_accepted_count}', '') ~ '^[0-9]+$' THEN
+    v_provider_submission_accepted_count := (v_provider_submit_diagnostic_result #>> '{counts,provider_submission_accepted_count}')::integer;
+  END IF;
+  IF COALESCE(v_provider_submit_diagnostic_result #>> '{counts,provider_submission_blocked_pre_call_count}', '') ~ '^[0-9]+$' THEN
+    v_provider_submission_blocked_pre_call_count := (v_provider_submit_diagnostic_result #>> '{counts,provider_submission_blocked_pre_call_count}')::integer;
+  END IF;
+  IF COALESCE(v_provider_submit_diagnostic_result #>> '{counts,provider_submission_malformed_response_count}', '') ~ '^[0-9]+$' THEN
+    v_provider_submission_malformed_response_count := (v_provider_submit_diagnostic_result #>> '{counts,provider_submission_malformed_response_count}')::integer;
+  END IF;
+
+  v_provider_submit_review_active := COALESCE(v_provider_request_sent_count, 0) > 0
+    OR COALESCE(v_provider_response_present_count, 0) > 0
+    OR COALESCE(v_provider_acceptance_evidence_count, 0) > 0
+    OR COALESCE(v_provider_submission_unknown_count, 0) > 0
+    OR COALESCE(v_stale_unresolved_submit_chunk_count, 0) > 0
+    OR COALESCE(v_unfinalised_submit_chunk_count, 0) > 0
+    OR COALESCE(v_provider_submission_malformed_response_count, 0) > 0
+    OR COALESCE(v_provider_submission_rejected_count, 0) > 0
+    OR COALESCE(v_provider_submission_accepted_count, 0) > 0
+    OR COALESCE(v_provider_submission_blocked_pre_call_count, 0) > 0
+    OR COALESCE(v_provider_submission_status, '') NOT IN ('', 'NO_PROVIDER_SUBMISSION_ATTEMPTED');
 
   WITH classified_rows AS (
     SELECT
@@ -20262,6 +20349,25 @@ BEGIN
     v_execution_classification_sample
   FROM classified_rows_with_sample AS classified_rows;
 
+  v_provider_submitted_count := GREATEST(COALESCE(v_provider_submitted_count, 0), COALESCE(v_provider_acceptance_evidence_count, 0));
+  v_provider_attempt_or_evidence_count := COALESCE(v_provider_request_sent_count, 0) + COALESCE(v_provider_response_present_count, 0) + COALESCE(v_provider_acceptance_evidence_count, 0);
+  v_attempted_but_unproven_count := GREATEST(COALESCE(v_attempted_but_unproven_count, 0), COALESCE(v_provider_submission_unknown_count, 0));
+  v_provider_attempt_without_external_id_count := GREATEST(COALESCE(v_provider_attempt_without_external_id_count, 0), COALESCE(v_provider_submission_unknown_count, 0));
+  v_ambiguous_count := GREATEST(
+    COALESCE(v_ambiguous_count, 0),
+    COALESCE(v_provider_submission_unknown_count, 0)
+      + COALESCE(v_stale_unresolved_submit_chunk_count, 0)
+      + COALESCE(v_provider_submission_malformed_response_count, 0)
+  );
+  v_requires_provider_poll_count := GREATEST(COALESCE(v_requires_provider_poll_count, 0), COALESCE(v_provider_submission_unknown_count, 0));
+  v_provider_or_ambiguous_evidence_count := COALESCE(v_provider_acceptance_evidence_count, 0)
+    + COALESCE(v_provider_response_present_count, 0)
+    + COALESCE(v_provider_submission_unknown_count, 0)
+    + COALESCE(v_stale_unresolved_submit_chunk_count, 0)
+    + COALESCE(v_provider_submission_malformed_response_count, 0);
+  v_has_external_submission_evidence := COALESCE(v_provider_acceptance_evidence_count, 0) > 0;
+  v_has_rail_tx_id := COALESCE(v_has_rail_tx_id, false) OR COALESCE(v_provider_acceptance_evidence_count, 0) > 0;
+
   SELECT count(*)::integer
   INTO v_transfer_event_count
   FROM public.pay_bank_transfer_events AS event_row
@@ -20318,7 +20424,7 @@ BEGIN
     'transfer_event_count', coalesce(v_transfer_event_count, 0),
     'has_transfer_events', coalesce(v_transfer_event_count, 0) > 0,
     'provider_submitted_count', coalesce(v_provider_submitted_count, 0),
-    'provider_evidence_present_count', coalesce(v_provider_submitted_count, 0),
+    'provider_evidence_present_count', coalesce(v_provider_acceptance_evidence_count, 0),
     'local_idempotency_only_count', coalesce(v_local_only_count, 0),
     'local_only_count', coalesce(v_local_only_count, 0),
     'local_only_evidence_count', coalesce(v_local_only_count, 0),
@@ -20378,8 +20484,25 @@ BEGIN
     'has_submitted_state', coalesce(v_provider_submitted_count, 0) > 0,
     'has_failed_or_rejected_provider_state', coalesce(v_failed_count, 0) > 0,
     'has_unknown_or_timeout_state', coalesce(v_ambiguous_count, 0) > 0,
+    'provider_submit_diagnostic', CASE WHEN v_provider_submit_review_active THEN COALESCE(v_provider_submit_diagnostic, '{}'::jsonb) ELSE '{}'::jsonb END,
+    'provider_submission_status', v_provider_submission_status,
+    'review_reason_code', v_provider_submit_review_reason_code,
+    'provider_acceptance_evidence_count', COALESCE(v_provider_acceptance_evidence_count, 0),
+    'provider_response_present_count', COALESCE(v_provider_response_present_count, 0),
+    'provider_request_sent_count', COALESCE(v_provider_request_sent_count, 0),
+    'provider_submission_unknown_count', COALESCE(v_provider_submission_unknown_count, 0),
+    'stale_unresolved_submit_chunk_count', COALESCE(v_stale_unresolved_submit_chunk_count, 0),
+    'stale_empty_submit_chunk_count', COALESCE(v_stale_empty_submit_chunk_count, 0),
+    'unfinalised_submit_chunk_count', COALESCE(v_unfinalised_submit_chunk_count, 0),
+    'provider_submission_rejected_count', COALESCE(v_provider_submission_rejected_count, 0),
+    'provider_submission_accepted_count', COALESCE(v_provider_submission_accepted_count, 0),
+    'provider_submission_blocked_pre_call_count', COALESCE(v_provider_submission_blocked_pre_call_count, 0),
+    'provider_submission_malformed_response_count', COALESCE(v_provider_submission_malformed_response_count, 0),
+    'manual_resolution_required', COALESCE(v_provider_manual_resolution_required, false),
+    'safe_retry_available', COALESCE(v_provider_safe_retry_available, false),
+    'recommended_action', v_provider_recommended_action,
     'requires_provider_poll', coalesce(v_requires_provider_poll_count, 0) > 0,
-    'requires_review', coalesce(v_ambiguous_count, 0) > 0 OR (coalesce(v_attempted_but_unproven_count, 0) > 0 AND coalesce(v_requires_provider_poll_count, 0) = 0)
+    'requires_review', COALESCE(v_provider_manual_resolution_required, false) OR coalesce(v_ambiguous_count, 0) > 0 OR (coalesce(v_attempted_but_unproven_count, 0) > 0 AND coalesce(v_requires_provider_poll_count, 0) = 0)
   )
   );
   END IF;
@@ -20428,7 +20551,7 @@ BEGIN
     'transfer_event_count', coalesce(v_transfer_event_count, 0),
     'has_transfer_events', coalesce(v_transfer_event_count, 0) > 0,
     'provider_submitted_count', coalesce(v_provider_submitted_count, 0),
-    'provider_evidence_present_count', coalesce(v_provider_submitted_count, 0),
+    'provider_evidence_present_count', coalesce(v_provider_acceptance_evidence_count, 0),
     'local_idempotency_only_count', coalesce(v_local_only_count, 0),
     'local_only_count', coalesce(v_local_only_count, 0),
     'local_only_evidence_count', coalesce(v_local_only_count, 0),
@@ -20497,8 +20620,25 @@ BEGIN
   ||
   jsonb_build_object(
     'has_unknown_or_timeout_state', coalesce(v_ambiguous_count, 0) > 0,
+    'provider_submit_diagnostic', CASE WHEN v_provider_submit_review_active THEN COALESCE(v_provider_submit_diagnostic, '{}'::jsonb) ELSE '{}'::jsonb END,
+    'provider_submission_status', v_provider_submission_status,
+    'review_reason_code', v_provider_submit_review_reason_code,
+    'provider_acceptance_evidence_count', COALESCE(v_provider_acceptance_evidence_count, 0),
+    'provider_response_present_count', COALESCE(v_provider_response_present_count, 0),
+    'provider_request_sent_count', COALESCE(v_provider_request_sent_count, 0),
+    'provider_submission_unknown_count', COALESCE(v_provider_submission_unknown_count, 0),
+    'stale_unresolved_submit_chunk_count', COALESCE(v_stale_unresolved_submit_chunk_count, 0),
+    'stale_empty_submit_chunk_count', COALESCE(v_stale_empty_submit_chunk_count, 0),
+    'unfinalised_submit_chunk_count', COALESCE(v_unfinalised_submit_chunk_count, 0),
+    'provider_submission_rejected_count', COALESCE(v_provider_submission_rejected_count, 0),
+    'provider_submission_accepted_count', COALESCE(v_provider_submission_accepted_count, 0),
+    'provider_submission_blocked_pre_call_count', COALESCE(v_provider_submission_blocked_pre_call_count, 0),
+    'provider_submission_malformed_response_count', COALESCE(v_provider_submission_malformed_response_count, 0),
+    'manual_resolution_required', COALESCE(v_provider_manual_resolution_required, false),
+    'safe_retry_available', COALESCE(v_provider_safe_retry_available, false),
+    'recommended_action', v_provider_recommended_action,
     'requires_provider_poll', coalesce(v_requires_provider_poll_count, 0) > 0,
-    'requires_review', coalesce(v_ambiguous_count, 0) > 0 OR (coalesce(v_attempted_but_unproven_count, 0) > 0 AND coalesce(v_requires_provider_poll_count, 0) = 0)
+    'requires_review', COALESCE(v_provider_manual_resolution_required, false) OR coalesce(v_ambiguous_count, 0) > 0 OR (coalesce(v_attempted_but_unproven_count, 0) > 0 AND coalesce(v_requires_provider_poll_count, 0) = 0)
   )
   );
 END;
