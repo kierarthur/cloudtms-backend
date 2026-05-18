@@ -1,3 +1,5 @@
+
+
 CREATE OR REPLACE FUNCTION public.bulk_process_dataset_v1(p_filters jsonb DEFAULT '{}'::jsonb)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -231,6 +233,120 @@ BEGIN
       ) AS review_only_calc
     FROM classified_rows
   ),
+  evidence_target_rows AS MATERIALIZED (
+    SELECT DISTINCT
+      decision_rows.row_key_calc AS row_key_calc,
+      decision_rows.timesheet_id AS timesheet_id,
+      decision_rows.contract_week_id AS contract_week_id
+    FROM decision_rows
+    WHERE decision_rows.row_key_calc IS NOT NULL
+      AND decision_rows.route_family_calc = 'MANUAL_NON_QR'
+      AND (
+        (UPPER(COALESCE(decision_rows.period_type_calc, decision_rows.sheet_scope, '')) = 'WEEKLY' AND v_show_weekly_manual = TRUE)
+        OR (UPPER(COALESCE(decision_rows.period_type_calc, decision_rows.sheet_scope, '')) = 'DAILY' AND v_show_daily_manual = TRUE)
+        OR UPPER(COALESCE(decision_rows.period_type_calc, decision_rows.sheet_scope, '')) NOT IN ('WEEKLY', 'DAILY')
+      )
+      AND (
+        (
+          decision_rows.bulk_process_bucket_calc = 'UNPROCESSED'
+          AND (v_bucket IS NULL OR v_bucket = 'UNPROCESSED')
+          AND decision_rows.can_process_calc = TRUE
+        )
+        OR (
+          decision_rows.bulk_process_bucket_calc = 'PROCESSED'
+          AND (v_bucket IS NULL OR v_bucket = 'PROCESSED')
+          AND decision_rows.timesheet_id IS NOT NULL
+          AND decision_rows.can_unprocess_calc = TRUE
+        )
+      )
+  ),
+  evidence_kind_rows AS MATERIALIZED (
+    SELECT
+      evidence_target_rows.row_key_calc AS row_key_calc,
+      evidence_target_rows.timesheet_id AS timesheet_id,
+      evidence_target_rows.contract_week_id AS contract_week_id,
+      timesheet_evidence.id AS evidence_id,
+      CASE
+        WHEN UPPER(NULLIF(BTRIM(COALESCE(timesheet_evidence.kind::text, '')), '')) IN ('TIMESHEET', 'TS') THEN 'TIMESHEET'
+        WHEN UPPER(NULLIF(BTRIM(COALESCE(timesheet_evidence.kind::text, '')), '')) IN ('MILEAGE', 'MILES', 'MILE') THEN 'MILEAGE'
+        WHEN UPPER(NULLIF(BTRIM(COALESCE(timesheet_evidence.kind::text, '')), '')) IN ('TRAVEL', 'EXPENSE', 'EXPENSES') THEN 'TRAVEL'
+        WHEN UPPER(NULLIF(BTRIM(COALESCE(timesheet_evidence.kind::text, '')), '')) IN ('ACCOMMODATION', 'ACCOM') THEN 'ACCOMMODATION'
+        WHEN UPPER(NULLIF(BTRIM(COALESCE(timesheet_evidence.kind::text, '')), '')) = 'OTHER' THEN 'OTHER'
+        ELSE 'OTHER'
+      END AS evidence_kind_norm,
+      NULLIF(BTRIM(COALESCE(timesheet_evidence.display_name, '')), '') AS evidence_display_name,
+      NULLIF(BTRIM(COALESCE(timesheet_evidence.storage_key, '')), '') AS evidence_storage_key,
+      timesheet_evidence.created_at AS evidence_created_at
+    FROM evidence_target_rows AS evidence_target_rows
+    JOIN public.timesheet_evidence AS timesheet_evidence
+      ON timesheet_evidence.timesheet_id = evidence_target_rows.timesheet_id
+    WHERE evidence_target_rows.timesheet_id IS NOT NULL
+      AND NULLIF(BTRIM(COALESCE(timesheet_evidence.storage_key, '')), '') IS NOT NULL
+
+    UNION ALL
+
+    SELECT
+      evidence_target_rows.row_key_calc AS row_key_calc,
+      NULL::uuid AS timesheet_id,
+      evidence_target_rows.contract_week_id AS contract_week_id,
+      manual_timesheet_queue.id AS evidence_id,
+      CASE
+        WHEN UPPER(NULLIF(BTRIM(COALESCE(manual_timesheet_queue.meta_json->>'staged_kind', manual_timesheet_queue.meta_json->>'kind', '')), '')) IN ('TIMESHEET', 'TS') THEN 'TIMESHEET'
+        WHEN UPPER(NULLIF(BTRIM(COALESCE(manual_timesheet_queue.meta_json->>'staged_kind', manual_timesheet_queue.meta_json->>'kind', '')), '')) IN ('MILEAGE', 'MILES', 'MILE') THEN 'MILEAGE'
+        WHEN UPPER(NULLIF(BTRIM(COALESCE(manual_timesheet_queue.meta_json->>'staged_kind', manual_timesheet_queue.meta_json->>'kind', '')), '')) IN ('TRAVEL', 'EXPENSE', 'EXPENSES') THEN 'TRAVEL'
+        WHEN UPPER(NULLIF(BTRIM(COALESCE(manual_timesheet_queue.meta_json->>'staged_kind', manual_timesheet_queue.meta_json->>'kind', '')), '')) IN ('ACCOMMODATION', 'ACCOM') THEN 'ACCOMMODATION'
+        WHEN UPPER(NULLIF(BTRIM(COALESCE(manual_timesheet_queue.meta_json->>'staged_kind', manual_timesheet_queue.meta_json->>'kind', '')), '')) = 'OTHER' THEN 'OTHER'
+        ELSE 'OTHER'
+      END AS evidence_kind_norm,
+      NULLIF(BTRIM(COALESCE(manual_timesheet_queue.original_filename, '')), '') AS evidence_display_name,
+      NULLIF(BTRIM(COALESCE(manual_timesheet_queue.r2_key, '')), '') AS evidence_storage_key,
+      manual_timesheet_queue.uploaded_at_utc AS evidence_created_at
+    FROM evidence_target_rows AS evidence_target_rows
+    JOIN public.manual_timesheet_queue AS manual_timesheet_queue
+      ON evidence_target_rows.timesheet_id IS NULL
+     AND evidence_target_rows.contract_week_id IS NOT NULL
+     AND NULLIF(BTRIM(COALESCE(manual_timesheet_queue.meta_json->>'contract_week_id', '')), '') = evidence_target_rows.contract_week_id::text
+    WHERE UPPER(NULLIF(BTRIM(COALESCE(manual_timesheet_queue.status, '')), '')) = 'STAGED'
+      AND manual_timesheet_queue.timesheet_id IS NULL
+      AND NULLIF(BTRIM(COALESCE(manual_timesheet_queue.r2_key, '')), '') IS NOT NULL
+  ),
+  evidence_kind_ranked AS MATERIALIZED (
+    SELECT
+      evidence_kind_rows.*,
+      ROW_NUMBER() OVER (
+        PARTITION BY evidence_kind_rows.row_key_calc
+        ORDER BY
+          CASE evidence_kind_rows.evidence_kind_norm
+            WHEN 'TIMESHEET' THEN 1
+            WHEN 'TRAVEL' THEN 2
+            WHEN 'MILEAGE' THEN 3
+            WHEN 'ACCOMMODATION' THEN 4
+            WHEN 'OTHER' THEN 5
+            ELSE 6
+          END,
+          evidence_kind_rows.evidence_created_at ASC NULLS LAST,
+          evidence_kind_rows.evidence_id ASC
+      ) AS evidence_rank
+    FROM evidence_kind_rows
+  ),
+  evidence_kind_summary AS MATERIALIZED (
+    SELECT
+      evidence_kind_ranked.row_key_calc AS row_key_calc,
+      NULLIF(MAX(evidence_kind_ranked.timesheet_id::text), '')::uuid AS timesheet_id,
+      NULLIF(MAX(evidence_kind_ranked.contract_week_id::text), '')::uuid AS contract_week_id,
+      COUNT(*)::integer AS total_evidence_count,
+      COUNT(*) FILTER (WHERE evidence_kind_ranked.evidence_kind_norm = 'TIMESHEET')::integer AS timesheet_evidence_count,
+      COUNT(*) FILTER (WHERE evidence_kind_ranked.evidence_kind_norm = 'MILEAGE')::integer AS mileage_evidence_count,
+      COUNT(*) FILTER (WHERE evidence_kind_ranked.evidence_kind_norm = 'TRAVEL')::integer AS travel_evidence_count,
+      COUNT(*) FILTER (WHERE evidence_kind_ranked.evidence_kind_norm = 'ACCOMMODATION')::integer AS accommodation_evidence_count,
+      COUNT(*) FILTER (WHERE evidence_kind_ranked.evidence_kind_norm = 'OTHER')::integer AS other_evidence_count,
+      MAX(CASE WHEN evidence_kind_ranked.evidence_rank = 1 THEN evidence_kind_ranked.evidence_id::text ELSE NULL::text END) AS primary_artifact_id,
+      MAX(CASE WHEN evidence_kind_ranked.evidence_rank = 1 THEN evidence_kind_ranked.evidence_kind_norm ELSE NULL::text END) AS primary_artifact_kind,
+      MAX(CASE WHEN evidence_kind_ranked.evidence_rank = 1 THEN evidence_kind_ranked.evidence_storage_key ELSE NULL::text END) AS primary_artifact_storage_key,
+      MAX(CASE WHEN evidence_kind_ranked.evidence_rank = 1 THEN COALESCE(evidence_kind_ranked.evidence_display_name, REGEXP_REPLACE(evidence_kind_ranked.evidence_storage_key, '^.*/', '')) ELSE NULL::text END) AS primary_artifact_display_name
+    FROM evidence_kind_ranked
+    GROUP BY evidence_kind_ranked.row_key_calc
+  ),
   payload_rows AS MATERIALIZED (
     SELECT
       (JSONB_BUILD_OBJECT(
@@ -435,19 +551,19 @@ BEGIN
         'nhsp_is_ad_hoc',
         FALSE,
         'has_any_evidence',
-        decision_rows.has_any_evidence,
+        COALESCE(evidence_kind_summary.total_evidence_count > 0, decision_rows.has_any_evidence),
         'attached_evidence_count',
-        decision_rows.attached_evidence_count,
+        COALESCE(evidence_kind_summary.total_evidence_count, decision_rows.attached_evidence_count, 0),
         'evidence_count',
-        decision_rows.attached_evidence_count,
+        COALESCE(evidence_kind_summary.total_evidence_count, decision_rows.attached_evidence_count, 0),
         'primary_artifact_id',
-        NULL::text,
+        evidence_kind_summary.primary_artifact_id,
         'primary_artifact_kind',
-        CASE WHEN decision_rows.primary_artifact_storage_key IS NOT NULL THEN 'TIMESHEET' ELSE NULL::text END,
+        evidence_kind_summary.primary_artifact_kind,
         'primary_artifact_storage_key',
-        decision_rows.primary_artifact_storage_key,
+        COALESCE(evidence_kind_summary.primary_artifact_storage_key, decision_rows.primary_artifact_storage_key),
         'primary_artifact_display_name',
-        decision_rows.primary_artifact_display_name,
+        COALESCE(evidence_kind_summary.primary_artifact_display_name, decision_rows.primary_artifact_display_name),
         'primary_artifact_preview_mode',
         decision_rows.primary_artifact_preview_mode,
         'manual_pdf_r2_key',
@@ -507,22 +623,39 @@ BEGIN
         'review_only',
         decision_rows.review_only_calc,
         'row_signature',
-        decision_rows.row_signature_calc,
+        MD5(CONCAT_WS('|',
+          decision_rows.row_signature_calc,
+          COALESCE(evidence_kind_summary.primary_artifact_kind, ''),
+          COALESCE(evidence_kind_summary.timesheet_evidence_count::text, '0'),
+          COALESCE(evidence_kind_summary.mileage_evidence_count::text, '0'),
+          COALESCE(evidence_kind_summary.travel_evidence_count::text, '0'),
+          COALESCE(evidence_kind_summary.accommodation_evidence_count::text, '0'),
+          COALESCE(evidence_kind_summary.other_evidence_count::text, '0')
+        )),
         'evidence_badges',
         JSONB_BUILD_ARRAY(
-          JSONB_BUILD_OBJECT('kind', 'TIMESHEET', 'present', COALESCE(decision_rows.has_any_evidence, FALSE), 'has_evidence', COALESCE(decision_rows.has_any_evidence, FALSE)),
-          JSONB_BUILD_OBJECT('kind', 'MILEAGE', 'present', FALSE, 'has_evidence', FALSE),
-          JSONB_BUILD_OBJECT('kind', 'TRAVEL', 'present', FALSE, 'has_evidence', FALSE),
-          JSONB_BUILD_OBJECT('kind', 'ACCOMMODATION', 'present', FALSE, 'has_evidence', FALSE),
-          JSONB_BUILD_OBJECT('kind', 'OTHER', 'present', FALSE, 'has_evidence', FALSE)
+          JSONB_BUILD_OBJECT('kind', 'TIMESHEET', 'present', COALESCE(evidence_kind_summary.timesheet_evidence_count, 0) > 0, 'has_evidence', COALESCE(evidence_kind_summary.timesheet_evidence_count, 0) > 0, 'count', COALESCE(evidence_kind_summary.timesheet_evidence_count, 0)),
+          JSONB_BUILD_OBJECT('kind', 'MILEAGE', 'present', COALESCE(evidence_kind_summary.mileage_evidence_count, 0) > 0, 'has_evidence', COALESCE(evidence_kind_summary.mileage_evidence_count, 0) > 0, 'count', COALESCE(evidence_kind_summary.mileage_evidence_count, 0)),
+          JSONB_BUILD_OBJECT('kind', 'TRAVEL', 'present', COALESCE(evidence_kind_summary.travel_evidence_count, 0) > 0, 'has_evidence', COALESCE(evidence_kind_summary.travel_evidence_count, 0) > 0, 'count', COALESCE(evidence_kind_summary.travel_evidence_count, 0)),
+          JSONB_BUILD_OBJECT('kind', 'ACCOMMODATION', 'present', COALESCE(evidence_kind_summary.accommodation_evidence_count, 0) > 0, 'has_evidence', COALESCE(evidence_kind_summary.accommodation_evidence_count, 0) > 0, 'count', COALESCE(evidence_kind_summary.accommodation_evidence_count, 0)),
+          JSONB_BUILD_OBJECT('kind', 'OTHER', 'present', COALESCE(evidence_kind_summary.other_evidence_count, 0) > 0, 'has_evidence', COALESCE(evidence_kind_summary.other_evidence_count, 0) > 0, 'count', COALESCE(evidence_kind_summary.other_evidence_count, 0))
         ),
         'artifact_hints',
         JSONB_BUILD_OBJECT(
-          'has_any_evidence', decision_rows.has_any_evidence,
-          'attached_evidence_count', decision_rows.attached_evidence_count,
-          'primary_artifact_storage_key', decision_rows.primary_artifact_storage_key,
-          'primary_artifact_display_name', decision_rows.primary_artifact_display_name,
-          'primary_artifact_preview_mode', decision_rows.primary_artifact_preview_mode
+          'has_any_evidence', COALESCE(evidence_kind_summary.total_evidence_count > 0, decision_rows.has_any_evidence),
+          'attached_evidence_count', COALESCE(evidence_kind_summary.total_evidence_count, decision_rows.attached_evidence_count, 0),
+          'primary_artifact_id', evidence_kind_summary.primary_artifact_id,
+          'primary_artifact_kind', evidence_kind_summary.primary_artifact_kind,
+          'primary_artifact_storage_key', COALESCE(evidence_kind_summary.primary_artifact_storage_key, decision_rows.primary_artifact_storage_key),
+          'primary_artifact_display_name', COALESCE(evidence_kind_summary.primary_artifact_display_name, decision_rows.primary_artifact_display_name),
+          'primary_artifact_preview_mode', decision_rows.primary_artifact_preview_mode,
+          'evidence_badges', JSONB_BUILD_ARRAY(
+            JSONB_BUILD_OBJECT('kind', 'TIMESHEET', 'present', COALESCE(evidence_kind_summary.timesheet_evidence_count, 0) > 0, 'has_evidence', COALESCE(evidence_kind_summary.timesheet_evidence_count, 0) > 0, 'count', COALESCE(evidence_kind_summary.timesheet_evidence_count, 0)),
+            JSONB_BUILD_OBJECT('kind', 'MILEAGE', 'present', COALESCE(evidence_kind_summary.mileage_evidence_count, 0) > 0, 'has_evidence', COALESCE(evidence_kind_summary.mileage_evidence_count, 0) > 0, 'count', COALESCE(evidence_kind_summary.mileage_evidence_count, 0)),
+            JSONB_BUILD_OBJECT('kind', 'TRAVEL', 'present', COALESCE(evidence_kind_summary.travel_evidence_count, 0) > 0, 'has_evidence', COALESCE(evidence_kind_summary.travel_evidence_count, 0) > 0, 'count', COALESCE(evidence_kind_summary.travel_evidence_count, 0)),
+            JSONB_BUILD_OBJECT('kind', 'ACCOMMODATION', 'present', COALESCE(evidence_kind_summary.accommodation_evidence_count, 0) > 0, 'has_evidence', COALESCE(evidence_kind_summary.accommodation_evidence_count, 0) > 0, 'count', COALESCE(evidence_kind_summary.accommodation_evidence_count, 0)),
+            JSONB_BUILD_OBJECT('kind', 'OTHER', 'present', COALESCE(evidence_kind_summary.other_evidence_count, 0) > 0, 'has_evidence', COALESCE(evidence_kind_summary.other_evidence_count, 0) > 0, 'count', COALESCE(evidence_kind_summary.other_evidence_count, 0))
+          )
         ),
         'action_flags',
         JSONB_BUILD_OBJECT(
@@ -564,6 +697,8 @@ BEGIN
         'timesheet_summary_lightweight_rows_v1'
       )) AS row_json
     FROM decision_rows
+    LEFT JOIN evidence_kind_summary AS evidence_kind_summary
+      ON evidence_kind_summary.row_key_calc = decision_rows.row_key_calc
   ),
   manual_rows AS MATERIALIZED (
     SELECT payload_rows.row_json
@@ -666,10 +801,6 @@ BEGIN
   ));
 END;
 $function$;
-
-
-
-
 
 
 
