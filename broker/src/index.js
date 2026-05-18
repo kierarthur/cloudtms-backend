@@ -38221,7 +38221,6 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
   }
 }
 
-
 async function advanceBankingPayExecuteOperation(env, operationRow, user, options = {}) {
 const unwrapRpcPayload = (rpcRes, key) => {
 let payload = rpcRes;
@@ -38310,11 +38309,51 @@ return buildBankingPayOperationPublicPayload(saved);
 };
 
 const finish = async (status, resultJson = null, errorJson = null) => {
+const finishStatus = String(status || '').trim().toUpperCase();
+let finalResultJson = resultJson;
+let finalErrorJson = errorJson;
+if (['REVIEW_REQUIRED', 'FAILED', 'COMPLETE'].includes(finishStatus) && typeof finaliseProviderSubmitBeforeTerminal === 'function') {
+  const finalisePayload = await finaliseProviderSubmitBeforeTerminal(`OPERATION_FINISH_${finishStatus}`, {
+    status: finishStatus,
+    result_json: resultJson,
+    error_json: errorJson
+  });
+  const finaliseDiagnostic = extractProviderSubmitDiagnostic(finalisePayload);
+  const finaliseStatus = providerSubmitStatusFrom(finalisePayload);
+  const finaliseReviewReason = providerSubmitReviewCodeFrom(finalisePayload);
+  if (Object.keys(finaliseDiagnostic).length) {
+    if (finishStatus === 'COMPLETE') {
+      finalResultJson = {
+        ...safeObject(finalResultJson),
+        provider_submit_diagnostic: finaliseDiagnostic,
+        provider_submission_status: finaliseStatus || safeObject(finalResultJson).provider_submission_status || undefined,
+        review_reason_code: finaliseReviewReason || safeObject(finalResultJson).review_reason_code || undefined
+      };
+    } else {
+      finalErrorJson = {
+        ...safeObject(finalErrorJson),
+        provider_submit_diagnostic: finaliseDiagnostic,
+        provider_submission_status: finaliseStatus || safeObject(finalErrorJson).provider_submission_status || undefined,
+        provider_submit_review_reason_code: finaliseReviewReason || safeObject(finalErrorJson).provider_submit_review_reason_code || undefined,
+        review_reason_code: finaliseReviewReason || safeObject(finalErrorJson).review_reason_code || undefined
+      };
+      if (finishStatus === 'REVIEW_REQUIRED') {
+        finalResultJson = {
+          ...safeObject(finalResultJson),
+          provider_submit_diagnostic: finaliseDiagnostic,
+          provider_submission_status: finaliseStatus || safeObject(finalResultJson).provider_submission_status || undefined,
+          review_reason_code: finaliseReviewReason || safeObject(finalResultJson).review_reason_code || undefined,
+          review_required: true
+        };
+      }
+    }
+  }
+}
 const finished = await sbRpc(env, 'banking_pay_operation_finish', {
 p_operation_id: operationId,
 p_status: status,
-p_result_json: resultJson,
-p_error_json: errorJson
+p_result_json: finalResultJson,
+p_error_json: finalErrorJson
 });
 return buildBankingPayOperationPublicPayload(finished);
 };
@@ -38535,34 +38574,58 @@ if (
 ) {
   businessCode = 'PROVIDER_SUBMISSION_REJECTED';
 }
-const providerEvidenceCountForFailure = Math.max(
-  Number.isFinite(Number(extraObj.provider_attempt_or_evidence_count)) ? Number(extraObj.provider_attempt_or_evidence_count) : 0,
-  Number.isFinite(Number(extraObj.provider_attempt_or_evidence_transfer_count)) ? Number(extraObj.provider_attempt_or_evidence_transfer_count) : 0,
-  Number.isFinite(Number(extraObj.provider_or_ambiguous_evidence_count)) ? Number(extraObj.provider_or_ambiguous_evidence_count) : 0,
-  Number.isFinite(Number(extraObj.provider_or_ambiguous_evidence_transfer_count)) ? Number(extraObj.provider_or_ambiguous_evidence_transfer_count) : 0,
-  Number.isFinite(Number(extraObj.provider_evidence_count)) ? Number(extraObj.provider_evidence_count) : 0
+const providerAcceptanceEvidenceCountForFailure = Math.max(
+  Number.isFinite(Number(extraObj.provider_acceptance_evidence_count)) ? Number(extraObj.provider_acceptance_evidence_count) : 0,
+  Number.isFinite(Number(extraObj.providerAcceptanceEvidenceCount)) ? Number(extraObj.providerAcceptanceEvidenceCount) : 0,
+  Number.isFinite(Number(extraObj.provider_evidence_count)) ? Number(extraObj.provider_evidence_count) : 0,
+  boolField(providerSubmitDiagnosticForFailure, 'provider_acceptance_evidence_present', 'providerAcceptanceEvidencePresent') ? 1 : 0
 );
-if (providerEvidenceCountForFailure > 0 && ![
+const providerAmbiguousRiskCountForFailure = Math.max(
+  Number.isFinite(Number(extraObj.provider_submission_unknown_count)) ? Number(extraObj.provider_submission_unknown_count) : 0,
+  Number.isFinite(Number(extraObj.stale_unresolved_submit_chunk_count)) ? Number(extraObj.stale_unresolved_submit_chunk_count) : 0,
+  Number.isFinite(Number(extraObj.stale_empty_submit_chunk_count)) ? Number(extraObj.stale_empty_submit_chunk_count) : 0,
+  Number.isFinite(Number(extraObj.unfinalised_submit_chunk_count)) ? Number(extraObj.unfinalised_submit_chunk_count) : 0,
+  Number.isFinite(Number(extraObj.provider_response_present_count)) ? Number(extraObj.provider_response_present_count) : 0,
+  Number.isFinite(Number(extraObj.provider_request_sent_count)) ? Number(extraObj.provider_request_sent_count) : 0
+);
+if (providerAcceptanceEvidenceCountForFailure > 0 && ![
   'BLOCKED_FUNDS',
   'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK',
   'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME',
   'PROVIDER_SUBMISSION_MALFORMED_RESPONSE',
-  'PROVIDER_SUBMISSION_REJECTED'
+  'PROVIDER_SUBMISSION_REJECTED',
+  'PROVIDER_SUBMISSION_ACCEPTED'
 ].includes(businessCode)) {
   businessCode = 'EXECUTION_RETRY_BLOCKED_BY_PROVIDER_EVIDENCE';
 }
+if (providerSubmitStatusForFailure === 'PROVIDER_SUBMISSION_ACCEPTED' && providerAcceptanceEvidenceCountForFailure > 0) {
+  businessCode = 'PROVIDER_SUBMISSION_ACCEPTED';
+}
+if (providerAmbiguousRiskCountForFailure > 0 && !providerSubmitStatusForFailure && businessCode === 'PAYMENT_EXECUTE_OPERATION_FAILED') {
+  businessCode = 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME';
+}
 if (
-  businessCode === 'BANK_TRANSFER_PROVIDER_REVIEW_REQUIRED'
-  || businessCode === 'PROVIDER_SUBMISSION_EVIDENCE_REQUIRED'
-  || businessCode === 'EXECUTION_RETRY_BLOCKED_BY_PROVIDER_EVIDENCE'
-  || businessCode === 'AUTH_REQUEST_CLEANUP_BLOCKED_BY_PROVIDER_EVIDENCE'
-  || hasToken('PROVIDER_REVIEW_REQUIRED')
-  || hasToken('PROVIDER EVIDENCE')
-  || hasToken('PROVIDER_EVIDENCE')
-  || hasToken('AMBIGUOUS PROVIDER')
-  || hasToken('BANK_TRANSFER_PROVIDER_REVIEW_REQUIRED')
-  || hasToken('EXECUTION_RETRY_BLOCKED_BY_PROVIDER_EVIDENCE')
-  || hasToken('AUTH_REQUEST_CLEANUP_BLOCKED_BY_PROVIDER_EVIDENCE')
+  ![
+    'PROVIDER_SUBMISSION_ACCEPTED',
+    'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK',
+    'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME',
+    'PROVIDER_SUBMISSION_MALFORMED_RESPONSE',
+    'PROVIDER_SUBMISSION_REJECTED',
+    'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL'
+  ].includes(businessCode)
+  && (
+    businessCode === 'BANK_TRANSFER_PROVIDER_REVIEW_REQUIRED'
+    || businessCode === 'PROVIDER_SUBMISSION_EVIDENCE_REQUIRED'
+    || businessCode === 'EXECUTION_RETRY_BLOCKED_BY_PROVIDER_EVIDENCE'
+    || businessCode === 'AUTH_REQUEST_CLEANUP_BLOCKED_BY_PROVIDER_EVIDENCE'
+    || hasToken('PROVIDER_REVIEW_REQUIRED')
+    || hasToken('PROVIDER EVIDENCE')
+    || hasToken('PROVIDER_EVIDENCE')
+    || hasToken('AMBIGUOUS PROVIDER')
+    || hasToken('BANK_TRANSFER_PROVIDER_REVIEW_REQUIRED')
+    || hasToken('EXECUTION_RETRY_BLOCKED_BY_PROVIDER_EVIDENCE')
+    || hasToken('AUTH_REQUEST_CLEANUP_BLOCKED_BY_PROVIDER_EVIDENCE')
+  )
 ) {
   businessCode = 'EXECUTION_RETRY_BLOCKED_BY_PROVIDER_EVIDENCE';
 }
@@ -38591,7 +38654,8 @@ const messageByCode = {
   PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK: 'Provider submission outcome is unknown because the submit chunk became stale without a provider response. Check Revolut or bank records before retrying.',
   UNKNOWN_PROVIDER_SUBMISSION_OUTCOME: 'Provider submission outcome is unknown because CloudTMS sent or may have sent the provider request but did not receive a usable response. Check Revolut or bank records before retrying.',
   PROVIDER_SUBMISSION_MALFORMED_RESPONSE: 'Provider submission returned an unusable response. Check Revolut or bank records before retrying.',
-  PROVIDER_SUBMISSION_REJECTED: 'The banking provider rejected the payment submission. Review the provider response before retrying.'
+  PROVIDER_SUBMISSION_REJECTED: 'The banking provider rejected the payment submission. Review the provider response before retrying.',
+  PROVIDER_SUBMISSION_ACCEPTED: 'Provider acceptance evidence exists. Do not retry unless reconciled.'
 };
 
 const phaseText = String(extraObj.phase || currentPhase || '').trim().toUpperCase() || currentPhase;
@@ -38647,6 +38711,7 @@ for (const key of [
   'provider_request_sent_count',
   'provider_submission_unknown_count',
   'stale_empty_submit_chunk_count',
+  'stale_unresolved_submit_chunk_count',
   'unfinalised_submit_chunk_count',
   'scope_rows_deleted',
   'transfer_rows_deleted',
@@ -38698,16 +38763,29 @@ cleanup_status: 'NOT_REQUIRED'
 }
 
 try {
+  const providerSubmitFinalise = await finaliseProviderSubmitBeforeTerminal('BEFORE_FAILED_EXECUTION_LOCAL_ARTIFACT_CLEANUP', normalisedFailure.publicError);
+  const providerSubmitFinaliseDiagnostic = extractProviderSubmitDiagnostic(providerSubmitFinalise);
+  const cleanupFailureErrorJson = {
+    ...safeObject(normalisedFailure.publicError),
+    provider_submit_finalise_result: Object.keys(safeObject(providerSubmitFinalise)).length ? providerSubmitFinalise : undefined
+  };
+  if (Object.keys(providerSubmitFinaliseDiagnostic).length) {
+    cleanupFailureErrorJson.provider_submit_diagnostic = providerSubmitFinaliseDiagnostic;
+    cleanupFailureErrorJson.provider_submission_status = providerSubmitStatusFrom(providerSubmitFinalise) || cleanupFailureErrorJson.provider_submission_status;
+    cleanupFailureErrorJson.provider_submit_review_reason_code = providerSubmitReviewCodeFrom(providerSubmitFinalise) || cleanupFailureErrorJson.provider_submit_review_reason_code;
+    cleanupFailureErrorJson.review_reason_code = providerSubmitReviewCodeFrom(providerSubmitFinalise) || cleanupFailureErrorJson.review_reason_code;
+  }
   const cleanupRaw = await sbRpc(env, 'pay_execute_operation_cleanup_failed_local_artifacts', {
     p_operation_id: operationId,
     p_actor_user_id: actorUserId,
     p_failure_phase: String(phaseText || currentPhase || '').trim().toUpperCase(),
-    p_failure_error_json: normalisedFailure.publicError,
+    p_failure_error_json: cleanupFailureErrorJson,
     p_dry_run: false
   });
   const cleanup = unwrapRpcPayload(cleanupRaw, 'pay_execute_operation_cleanup_failed_local_artifacts');
   return {
     attempted: true,
+    provider_submit_finalise_result: providerSubmitFinalise,
     cleanup_status: cleanup.retry_blocked === true || cleanup.review_required === true ? 'REVIEW_REQUIRED' : 'COMPLETE',
     ...safeObject(cleanup)
   };
@@ -38744,6 +38822,9 @@ if (cleanup.cleanup_failed === true) {
   });
 }
 
+const cleanupProviderSubmitDiagnostic = extractProviderSubmitDiagnostic(cleanup) || {};
+const cleanupProviderSubmitStatus = providerSubmitStatusFrom(cleanup);
+const cleanupProviderSubmitReviewReason = providerSubmitReviewCodeFrom(cleanup);
 const cleanupSummary = {
   cleanup_status: cleanup.cleanup_status || (cleanup.attempted ? 'COMPLETE' : 'NOT_REQUIRED'),
   cleanup_retry_safe: cleanup.safe_to_retry === true,
@@ -38758,6 +38839,16 @@ const cleanupSummary = {
   chunks_marked_skipped: Number(cleanup.chunks_marked_skipped || 0),
   locks_released: Number(cleanup.locks_released || 0),
   provider_evidence_count: Number(cleanup.provider_evidence_count || 0),
+  provider_acceptance_evidence_count: Number(cleanup.provider_acceptance_evidence_count || 0),
+  provider_response_present_count: Number(cleanup.provider_response_present_count || 0),
+  provider_request_sent_count: Number(cleanup.provider_request_sent_count || 0),
+  provider_submission_unknown_count: Number(cleanup.provider_submission_unknown_count || 0),
+  stale_unresolved_submit_chunk_count: Number(cleanup.stale_unresolved_submit_chunk_count || cleanup.stale_empty_submit_chunk_count || 0),
+  unfinalised_submit_chunk_count: Number(cleanup.unfinalised_submit_chunk_count || 0),
+  provider_submission_status: cleanupProviderSubmitStatus || undefined,
+  review_reason_code: cleanupProviderSubmitReviewReason || undefined,
+  provider_submit_diagnostic: Object.keys(cleanupProviderSubmitDiagnostic).length ? cleanupProviderSubmitDiagnostic : undefined,
+  manual_resolution_required: cleanup.manual_resolution_required === true || boolField(cleanupProviderSubmitDiagnostic, 'manual_resolution_required', 'manualResolutionRequired'),
   unsafe_transfer_count: Number(cleanup.unsafe_transfer_count || 0),
   unsafe_scope_count: Number(cleanup.unsafe_scope_count || 0)
 };
@@ -38769,14 +38860,22 @@ const terminalError = {
   cleanup_status: cleanupSummary.cleanup_status,
   cleanup_retry_safe: cleanupSummary.cleanup_retry_safe,
   safe_retry_available: cleanupSummary.safe_retry_available,
-  cleanup_summary: cleanupSummary
+  cleanup_summary: cleanupSummary,
+  provider_submit_diagnostic: Object.keys(cleanupProviderSubmitDiagnostic).length ? cleanupProviderSubmitDiagnostic : normalisedFailure.publicError.provider_submit_diagnostic,
+  provider_submission_status: cleanupProviderSubmitStatus || normalisedFailure.publicError.provider_submission_status,
+  provider_submit_review_reason_code: cleanupProviderSubmitReviewReason || normalisedFailure.publicError.provider_submit_review_reason_code,
+  review_reason_code: cleanupProviderSubmitReviewReason || normalisedFailure.publicError.review_reason_code,
+  manual_resolution_required: cleanupSummary.manual_resolution_required === true || normalisedFailure.publicError.manual_resolution_required === true
 };
 
 if (Array.isArray(cleanup.unsafe_reasons) && cleanup.unsafe_reasons.length) {
   terminalError.unsafe_reasons = cleanup.unsafe_reasons;
 }
 
-const terminalStatus = cleanup.retry_blocked === true || cleanup.review_required === true ? 'REVIEW_REQUIRED' : 'FAILED';
+const terminalProviderStatus = cleanupProviderSubmitStatus || String(terminalError.provider_submission_status || '').trim().toUpperCase();
+const terminalStatus = cleanup.retry_blocked === true || cleanup.review_required === true || providerSubmitReviewStatuses.has(terminalProviderStatus)
+  ? 'REVIEW_REQUIRED'
+  : 'FAILED';
 const terminalResult = terminalStatus === 'REVIEW_REQUIRED'
   ? {
     pay_batch_id: payBatchId,
@@ -38784,7 +38883,10 @@ const terminalResult = terminalStatus === 'REVIEW_REQUIRED'
     phase: phaseText,
     review_required: true,
     retry_blocked: true,
-    cleanup_summary: cleanupSummary
+    cleanup_summary: cleanupSummary,
+    provider_submit_diagnostic: Object.keys(cleanupProviderSubmitDiagnostic).length ? cleanupProviderSubmitDiagnostic : terminalError.provider_submit_diagnostic,
+    provider_submission_status: terminalProviderStatus || undefined,
+    review_reason_code: cleanupProviderSubmitReviewReason || terminalError.review_reason_code || undefined
   }
   : null;
 
@@ -38987,13 +39089,11 @@ const countSubmittedProviderEvidence = (submitted) => {
   for (const obj of roots) {
     maxCount = Math.max(
       maxCount,
-      numField(obj, 'provider_attempt_or_evidence_count', 'providerAttemptOrEvidenceCount', 'provider_attempt_or_evidence_transfer_count', 'providerAttemptOrEvidenceTransferCount'),
-      numField(obj, 'provider_or_ambiguous_evidence_count', 'providerOrAmbiguousEvidenceCount', 'provider_or_ambiguous_evidence_transfer_count', 'providerOrAmbiguousEvidenceTransferCount'),
+      numField(obj, 'provider_acceptance_evidence_count', 'providerAcceptanceEvidenceCount'),
       numField(obj, 'provider_evidence_count', 'providerEvidenceCount'),
-      numField(obj, 'remaining_provider_evidence_required', 'remainingProviderEvidenceRequired'),
-      numField(obj, 'attempted_but_unproven_count', 'attemptedButUnprovenCount'),
-      numField(obj, 'provider_attempt_without_external_id_count', 'providerAttemptWithoutExternalIdCount'),
-      numField(obj, 'ambiguous_count', 'ambiguousCount')
+      numField(obj, 'provider_submitted_count', 'providerSubmittedCount'),
+      boolField(obj, 'provider_acceptance_evidence_present', 'providerAcceptanceEvidencePresent') ? 1 : 0,
+      providerSubmitStatusFrom(obj) === 'PROVIDER_SUBMISSION_ACCEPTED' ? 1 : 0
     );
   }
   return maxCount;
@@ -39051,12 +39151,108 @@ const providerSubmitDiagnosticFailurePayload = (source = {}) => {
     provider_request_sent_count: numField(source, 'provider_request_sent_count', 'providerRequestSentCount', 'provider_call_sent_count', 'providerCallSentCount'),
     provider_submission_unknown_count: numField(source, 'provider_submission_unknown_count', 'providerSubmissionUnknownCount'),
     stale_empty_submit_chunk_count: numField(source, 'stale_empty_submit_chunk_count', 'staleEmptySubmitChunkCount'),
+    stale_unresolved_submit_chunk_count: numField(source, 'stale_unresolved_submit_chunk_count', 'staleUnresolvedSubmitChunkCount'),
     unfinalised_submit_chunk_count: numField(source, 'unfinalised_submit_chunk_count', 'unfinalisedSubmitChunkCount'),
     claim_blocked: source?.claim_blocked === true || source?.claimBlocked === true,
     claim_blocker_code: String(source?.claim_blocker_code || source?.claimBlockerCode || '').trim().toUpperCase() || undefined,
     requires_review: source?.requires_review === true || source?.requiresReview === true || providerSubmitManualResolutionRequired(source),
     manual_resolution_required: providerSubmitManualResolutionRequired(source),
     safe_retry_available: boolField(source, 'safe_retry_available', 'safeRetryAvailable')
+  };
+};
+
+const providerSubmitTerminalFinalisePhases = new Set(['SUBMIT_PROVIDER_TRANSFERS', 'APPLY_RAIL_UPDATES', 'COMPLETE']);
+const providerSubmitReviewStatuses = new Set([
+  'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK',
+  'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME',
+  'PROVIDER_SUBMISSION_MALFORMED_RESPONSE',
+  'PROVIDER_SUBMISSION_ACCEPTED'
+]);
+const providerSubmitFailureCodeFromStatus = (status, reviewReason = '') => {
+  const statusUpper = String(status || '').trim().toUpperCase();
+  const reasonUpper = String(reviewReason || '').trim().toUpperCase();
+  if (statusUpper === 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK' || reasonUpper === 'STALE_RUNNING_PROVIDER_SUBMIT_CHUNK') return 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK';
+  if (statusUpper === 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME' || reasonUpper === 'PROVIDER_REQUEST_SENT_NO_RESPONSE') return 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME';
+  if (statusUpper === 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE' || reasonUpper === 'PROVIDER_RESPONSE_MALFORMED') return 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE';
+  if (statusUpper === 'PROVIDER_SUBMISSION_ACCEPTED' || reasonUpper === 'PROVIDER_ACCEPTANCE_EVIDENCE_PRESENT') return 'PROVIDER_SUBMISSION_ACCEPTED';
+  if (statusUpper === 'PROVIDER_SUBMISSION_REJECTED' || reasonUpper === 'PROVIDER_REJECTED_PAYMENT') return 'PROVIDER_SUBMISSION_REJECTED';
+  if (statusUpper === 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL' || reasonUpper === 'PROVIDER_SUBMIT_BLOCKED_PRE_CALL') return 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL';
+  return statusUpper || reasonUpper || 'PROVIDER_SUBMISSION_REVIEW_REQUIRED';
+};
+const providerSubmitMessageFromCode = (code) => {
+  const codeUpper = String(code || '').trim().toUpperCase();
+  if (codeUpper === 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK') return 'Provider submission outcome is unknown because the submit chunk became stale without a provider response. Check Revolut or bank records before retrying.';
+  if (codeUpper === 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME') return 'Provider request may have been sent, but no usable provider response was recorded. Check Revolut or bank records before retrying.';
+  if (codeUpper === 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE') return 'Provider returned an unusable response. Check Revolut or bank records before retrying.';
+  if (codeUpper === 'PROVIDER_SUBMISSION_ACCEPTED') return 'Provider acceptance evidence exists. Do not retry unless reconciled.';
+  if (codeUpper === 'PROVIDER_SUBMISSION_REJECTED') return 'Provider rejected the payment submission. Review the provider error before retrying.';
+  if (codeUpper === 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL') return 'Provider was not called. Submission failed before the provider payment request was sent.';
+  return 'Provider submission outcome needs review before retry.';
+};
+const finaliseProviderSubmitBeforeTerminal = async (reasonCode, extra = {}) => {
+  const phaseValue = String(safeObject(extra).phase || currentPhase || '').trim().toUpperCase();
+  if (!['PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS'].includes(operationType)) return {};
+  if (!providerSubmitTerminalFinalisePhases.has(phaseValue)) return {};
+  const extraObj = safeObject(extra);
+  const suppliedDiagnostic = extractProviderSubmitDiagnostic(extraObj);
+  const failureErrorJson = {
+    ...extraObj,
+    phase: phaseValue,
+    pay_batch_id: payBatchId,
+    operation_id: operationId
+  };
+  if (Object.keys(suppliedDiagnostic).length) failureErrorJson.provider_submit_diagnostic = suppliedDiagnostic;
+  try {
+    const finaliseRaw = await sbRpc(env, 'pay_provider_submit_chunk_diagnostic_finalise', {
+      p_operation_id: operationId,
+      p_pay_batch_id: payBatchId,
+      p_chunk_id: null,
+      p_actor_user_id: actorUserId,
+      p_reason_code: String(reasonCode || 'PAYMENT_EXECUTE_PROVIDER_SUBMIT_TERMINAL_GUARD').trim().toUpperCase(),
+      p_failure_error_json: failureErrorJson
+    });
+    const finaliseResult = unwrapRpcPayload(finaliseRaw, 'pay_provider_submit_chunk_diagnostic_finalise');
+    const finaliseDiagnostic = extractProviderSubmitDiagnostic(finaliseResult);
+    return {
+      ...safeObject(finaliseResult),
+      provider_submit_diagnostic: Object.keys(finaliseDiagnostic).length ? finaliseDiagnostic : safeObject(finaliseResult.provider_submit_diagnostic),
+      provider_submission_status: providerSubmitStatusFrom(finaliseResult) || finaliseResult.provider_submission_status || null,
+      review_reason_code: providerSubmitReviewCodeFrom(finaliseResult) || finaliseResult.review_reason_code || null
+    };
+  } catch (finaliseError) {
+    return {
+      ok: false,
+      finalise_failed: true,
+      provider_submit_finalise_failed: true,
+      code: 'PROVIDER_SUBMIT_DIAGNOSTIC_FINALISE_FAILED',
+      message: String(finaliseError?.message || finaliseError || 'Provider-submit diagnostic finalisation failed.'),
+      phase: phaseValue,
+      pay_batch_id: payBatchId,
+      operation_id: operationId,
+      provider_submit_diagnostic: suppliedDiagnostic
+    };
+  }
+};
+const providerSubmitTerminalPayload = (source = {}, extra = {}) => {
+  const sourceObj = safeObject(source);
+  const extraObj = safeObject(extra);
+  const diag = extractProviderSubmitDiagnostic(sourceObj);
+  const status = providerSubmitStatusFrom(sourceObj) || providerSubmitStatusFrom(diag);
+  const reviewReason = providerSubmitReviewCodeFrom(sourceObj) || providerSubmitReviewCodeFrom(diag);
+  const code = providerSubmitFailureCodeFromStatus(status, reviewReason);
+  return {
+    code,
+    message: providerSubmitMessageFromCode(code),
+    payload: {
+      phase: currentPhase,
+      ...extraObj,
+      provider_submit_diagnostic: Object.keys(diag).length ? diag : undefined,
+      provider_submission_status: status || undefined,
+      provider_submit_review_reason_code: reviewReason || undefined,
+      review_reason_code: reviewReason || undefined,
+      manual_resolution_required: providerSubmitManualResolutionRequired(sourceObj),
+      safe_retry_available: boolField(sourceObj, 'safe_retry_available', 'safeRetryAvailable')
+    }
   };
 };
 const extractFundingPreflightDiagnostics = (submitted) => {
@@ -39711,18 +39907,33 @@ if (currentPhase === 'SUBMIT_PROVIDER_TRANSFERS') {
   const provider = providerRaw === 'REV' ? 'REVOLUT' : providerRaw;
   const adapter = typeof getRailAdapter === 'function' ? getRailAdapter(provider) : null;
   if (!adapter || typeof adapter.executeDueBatches !== 'function') return fail('MISSING_RAIL_PROVIDER', 'Rail provider adapter is not available for operation submission.', { provider });
-  const submitted = await adapter.executeDueBatches(env, {
-    operationMode: true,
-    operation_id: operationId,
-    operationId,
-    pay_batch_id: payBatchId,
-    payBatchId,
-    actorUserId,
-    nowUtc: new Date().toISOString(),
-    providerSubmitChunkSize: cfgNumber('provider_submit_chunk_size', 50),
-    perBatchSubmitLimit: cfgNumber('provider_submit_chunk_size', 50),
-    lockOwner
-  });
+  let submitted;
+  try {
+    submitted = await adapter.executeDueBatches(env, {
+      operationMode: true,
+      operation_id: operationId,
+      operationId,
+      pay_batch_id: payBatchId,
+      payBatchId,
+      actorUserId,
+      nowUtc: new Date().toISOString(),
+      providerSubmitChunkSize: cfgNumber('provider_submit_chunk_size', 50),
+      perBatchSubmitLimit: cfgNumber('provider_submit_chunk_size', 50),
+      lockOwner
+    });
+  } catch (adapterError) {
+    const providerSubmitFinalise = await finaliseProviderSubmitBeforeTerminal('SUBMIT_PROVIDER_TRANSFERS_ADAPTER_THROW', {
+      phase: currentPhase,
+      code: 'SUBMIT_PROVIDER_TRANSFERS_ADAPTER_THROW',
+      message: String(adapterError?.message || adapterError || 'Provider submit adapter failed.'),
+      error: String(adapterError?.message || adapterError || '')
+    });
+    const providerReview = providerSubmitTerminalPayload(providerSubmitFinalise, {
+      provider_submit_finalise_result: providerSubmitFinalise,
+      adapter_error: String(adapterError?.message || adapterError || '')
+    });
+    return fail(providerReview.code, providerReview.message, providerReview.payload);
+  }
   if (submitted && Array.isArray(submitted.blocked_funds) && submitted.blocked_funds.length) {
     const blockedFundsRows = submitted.blocked_funds;
     const firstBlockedFunds = safeObject(blockedFundsRows[0]);
@@ -39945,6 +40156,52 @@ if (currentPhase === 'APPLY_RAIL_UPDATES') {
   let ambiguousCount = Number(evidence.ambiguous_count || 0);
   let requiresProviderPoll = evidence.requires_provider_poll === true || Number(evidence.requires_provider_poll_count || 0) > 0 || attemptedButUnprovenCount > 0;
   let canMarkSubmitted = evidence.can_mark_submitted === true;
+  let evidenceProviderStatus = providerSubmitStatusFrom(evidence);
+  let evidenceProviderReviewReason = providerSubmitReviewCodeFrom(evidence);
+  let evidenceProviderDiagnostic = extractProviderSubmitDiagnostic(evidence);
+  const evidenceProviderAcceptanceCount = numField(evidence, 'provider_acceptance_evidence_count', 'providerAcceptanceEvidenceCount');
+  const evidenceProviderReviewCode = providerSubmitFailureCodeFromStatus(evidenceProviderStatus, evidenceProviderReviewReason);
+  if (['PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK', 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE'].includes(evidenceProviderReviewCode)) {
+    return fail(evidenceProviderReviewCode, providerSubmitMessageFromCode(evidenceProviderReviewCode), {
+      phase: currentPhase,
+      submission_evidence: evidence,
+      provider_submit_diagnostic: Object.keys(evidenceProviderDiagnostic).length ? evidenceProviderDiagnostic : undefined,
+      provider_submission_status: evidenceProviderStatus || evidenceProviderReviewCode,
+      provider_submit_review_reason_code: evidenceProviderReviewReason || undefined,
+      review_reason_code: evidenceProviderReviewReason || undefined,
+      provider_acceptance_evidence_count: evidenceProviderAcceptanceCount,
+      provider_response_present_count: numField(evidence, 'provider_response_present_count', 'providerResponsePresentCount'),
+      provider_request_sent_count: numField(evidence, 'provider_request_sent_count', 'providerRequestSentCount'),
+      provider_submission_unknown_count: numField(evidence, 'provider_submission_unknown_count', 'providerSubmissionUnknownCount'),
+      stale_unresolved_submit_chunk_count: numField(evidence, 'stale_unresolved_submit_chunk_count', 'staleUnresolvedSubmitChunkCount', 'stale_empty_submit_chunk_count', 'staleEmptySubmitChunkCount'),
+      unfinalised_submit_chunk_count: numField(evidence, 'unfinalised_submit_chunk_count', 'unfinalisedSubmitChunkCount'),
+      manual_resolution_required: true,
+      safe_retry_available: false
+    });
+  }
+  if (evidenceProviderReviewCode === 'PROVIDER_SUBMISSION_ACCEPTED' && canMarkSubmitted !== true) {
+    return fail('PROVIDER_SUBMISSION_ACCEPTED', providerSubmitMessageFromCode('PROVIDER_SUBMISSION_ACCEPTED'), {
+      phase: currentPhase,
+      submission_evidence: evidence,
+      provider_submit_diagnostic: Object.keys(evidenceProviderDiagnostic).length ? evidenceProviderDiagnostic : undefined,
+      provider_submission_status: evidenceProviderStatus || 'PROVIDER_SUBMISSION_ACCEPTED',
+      provider_submit_review_reason_code: evidenceProviderReviewReason || 'PROVIDER_ACCEPTANCE_EVIDENCE_PRESENT',
+      review_reason_code: evidenceProviderReviewReason || 'PROVIDER_ACCEPTANCE_EVIDENCE_PRESENT',
+      provider_acceptance_evidence_count: evidenceProviderAcceptanceCount,
+      manual_resolution_required: true,
+      safe_retry_available: false
+    });
+  }
+  if (evidenceProviderReviewCode === 'PROVIDER_SUBMISSION_REJECTED') {
+    return fail('PROVIDER_SUBMISSION_REJECTED', providerSubmitMessageFromCode('PROVIDER_SUBMISSION_REJECTED'), {
+      phase: currentPhase,
+      submission_evidence: evidence,
+      provider_submit_diagnostic: Object.keys(evidenceProviderDiagnostic).length ? evidenceProviderDiagnostic : undefined,
+      provider_submission_status: evidenceProviderStatus || 'PROVIDER_SUBMISSION_REJECTED',
+      provider_submit_review_reason_code: evidenceProviderReviewReason || 'PROVIDER_REJECTED_PAYMENT',
+      review_reason_code: evidenceProviderReviewReason || 'PROVIDER_REJECTED_PAYMENT'
+    });
+  }
 
   if (canMarkSubmitted) {
     return phaseProgress('RUNNING', 'QUEUE_REMITTANCES', { status_text: 'Bank submission evidence checked.', submission_evidence: evidence });
@@ -39984,6 +40241,23 @@ if (currentPhase === 'APPLY_RAIL_UPDATES') {
       localOnlyCount = Number(evidence.local_only_count || evidence.local_idempotency_only_count || 0);
       ambiguousCount = Number(evidence.ambiguous_count || 0);
       canMarkSubmitted = evidence.can_mark_submitted === true;
+      evidenceProviderStatus = providerSubmitStatusFrom(evidence);
+      evidenceProviderReviewReason = providerSubmitReviewCodeFrom(evidence);
+      evidenceProviderDiagnostic = extractProviderSubmitDiagnostic(evidence);
+      const pollEvidenceProviderReviewCode = providerSubmitFailureCodeFromStatus(evidenceProviderStatus, evidenceProviderReviewReason);
+      if (['PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK', 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE'].includes(pollEvidenceProviderReviewCode)) {
+        return fail(pollEvidenceProviderReviewCode, providerSubmitMessageFromCode(pollEvidenceProviderReviewCode), {
+          phase: currentPhase,
+          rail_poll_result: pollResult,
+          submission_evidence: evidence,
+          provider_submit_diagnostic: Object.keys(evidenceProviderDiagnostic).length ? evidenceProviderDiagnostic : undefined,
+          provider_submission_status: evidenceProviderStatus || pollEvidenceProviderReviewCode,
+          provider_submit_review_reason_code: evidenceProviderReviewReason || undefined,
+          review_reason_code: evidenceProviderReviewReason || undefined,
+          manual_resolution_required: true,
+          safe_retry_available: false
+        });
+      }
 
       if (canMarkSubmitted) {
         return phaseProgress('RUNNING', 'QUEUE_REMITTANCES', { status_text: 'Bank submission evidence confirmed.', rail_poll_result: pollResult, submission_evidence: evidence });
@@ -40131,6 +40405,22 @@ if (currentPhase === 'COMPLETE') {
   }), 'pay_batch_execution_summary_get');
   const evidence = unwrapRpcPayload(await sbRpc(env, 'pay_batch_submission_evidence', { p_pay_batch_id: payBatchId, p_counts_only: true }), 'pay_batch_submission_evidence');
   const canMarkSubmitted = evidence.can_mark_submitted === true;
+  const completeProviderStatus = providerSubmitStatusFrom(evidence);
+  const completeProviderReviewReason = providerSubmitReviewCodeFrom(evidence);
+  const completeProviderDiagnostic = extractProviderSubmitDiagnostic(evidence);
+  const completeProviderReviewCode = providerSubmitFailureCodeFromStatus(completeProviderStatus, completeProviderReviewReason);
+  if (executionMode === 'STANDARD_BANK' && ['PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK', 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE'].includes(completeProviderReviewCode)) {
+    return fail(completeProviderReviewCode, providerSubmitMessageFromCode(completeProviderReviewCode), {
+      phase: currentPhase,
+      submission_evidence: evidence,
+      provider_submit_diagnostic: Object.keys(completeProviderDiagnostic).length ? completeProviderDiagnostic : undefined,
+      provider_submission_status: completeProviderStatus || completeProviderReviewCode,
+      provider_submit_review_reason_code: completeProviderReviewReason || undefined,
+      review_reason_code: completeProviderReviewReason || undefined,
+      manual_resolution_required: true,
+      safe_retry_available: false
+    });
+  }
   const settlementOperation = safeObject(progressJson.settlement_operation);
   const remittanceOperation = safeObject(progressJson.remittance_operation);
   const childOperationId = progressJson.child_operation_id || null;
@@ -40187,9 +40477,23 @@ if (currentPhase === 'COMPLETE') {
 return fail('UNKNOWN_EXECUTE_PHASE', `Unknown payment execution phase: ${currentPhase}`, { phase: currentPhase });
 
 } catch (e) {
-return fail('PAYMENT_EXECUTE_OPERATION_FAILED', 'Payment execution operation failed.', {
+const topLevelFinalise = await finaliseProviderSubmitBeforeTerminal('PAYMENT_EXECUTE_TOP_LEVEL_CATCH', {
 phase: currentPhase,
+code: 'PAYMENT_EXECUTE_OPERATION_FAILED',
+message: String(e?.message || e || 'Payment execution operation failed.'),
 error: String(e?.message || e || '')
+});
+const topLevelDiagnostic = extractProviderSubmitDiagnostic(topLevelFinalise);
+const topLevelStatus = providerSubmitStatusFrom(topLevelFinalise);
+const topLevelReviewReason = providerSubmitReviewCodeFrom(topLevelFinalise);
+return fail(providerSubmitFailureCodeFromStatus(topLevelStatus, topLevelReviewReason) || 'PAYMENT_EXECUTE_OPERATION_FAILED', 'Payment execution operation failed.', {
+phase: currentPhase,
+error: String(e?.message || e || ''),
+provider_submit_finalise_result: topLevelFinalise,
+provider_submit_diagnostic: Object.keys(topLevelDiagnostic).length ? topLevelDiagnostic : undefined,
+provider_submission_status: topLevelStatus || undefined,
+provider_submit_review_reason_code: topLevelReviewReason || undefined,
+review_reason_code: topLevelReviewReason || undefined
 });
 }
 }
@@ -131984,6 +132288,50 @@ function getRailAdapter(provider) {
             return providerSubmitDiagnostic;
           };
 
+          const persistProviderSubmitStage = async (stage, patch = {}, options = {}) => {
+            const opts = readObject(options);
+            const diagnostic = setProviderSubmitStage(stage, patch);
+            if (!chunkIdForFinalise) return diagnostic;
+            try {
+              await sbRpc(env, 'pay_provider_submit_chunk_stage_record', {
+                p_operation_id: opId,
+                p_pay_batch_id: batchId,
+                p_chunk_id: chunkIdForFinalise,
+                p_transfer_ids: Array.isArray(transferIds) ? transferIds : [],
+                p_stage: String(stage || '').trim(),
+                p_provider_submit_diagnostic: diagnostic,
+                p_actor_user_id: actor
+              });
+            } catch (stageError) {
+              const warning = {
+                code: 'PROVIDER_SUBMIT_STAGE_RECORD_FAILED',
+                stage: String(stage || '').trim(),
+                message: String(stageError?.message || stageError || 'Provider-submit stage persistence failed.')
+              };
+              try {
+                out.warnings.push(warning);
+              } catch {}
+              if (opts.failure_stage || opts.failure_patch) {
+                setProviderSubmitStage(opts.failure_stage || 'PROVIDER_SUBMIT_STAGE_RECORD_FAILED', opts.failure_patch || {
+                  provider_submission_status: 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL',
+                  review_reason_code: 'PROVIDER_SUBMIT_BLOCKED_PRE_CALL',
+                  provider_submission_attempted: false,
+                  provider_request_sent: false,
+                  provider_response_received: false,
+                  provider_response_present: false,
+                  provider_acceptance_evidence_present: false,
+                  manual_resolution_required: false,
+                  safe_retry_available: false,
+                  provider_error_code: 'PROVIDER_SUBMIT_STAGE_RECORD_FAILED',
+                  provider_error_message_redacted: warning.message,
+                  recommended_action: 'Provider was not called because CloudTMS could not persist provider-submit stage evidence.'
+                });
+              }
+              if (opts.throw_on_failure === true) throw stageError;
+            }
+            return providerSubmitDiagnostic || diagnostic;
+          };
+
           const recordTransferProviderOutcome = (transferId, outcome = {}) => {
             const id = String(transferId || '').trim();
             if (!id) return null;
@@ -132010,7 +132358,7 @@ function getRailAdapter(provider) {
 
           const finishProviderSubmitChunkOnce = async (status, resultPatch = {}, errorPatch = null) => {
             if (chunkFinalised === true || !chunkIdForFinalise) return null;
-            setProviderSubmitStage('CHUNK_FINALISATION_STARTED', {});
+            await persistProviderSubmitStage('CHUNK_FINALISATION_STARTED', {});
             const transferOutcomeRows = Object.values(transferProviderOutcomes);
             const diagnostic = {
               ...(providerSubmitDiagnostic || makeProviderSubmitDiagnostic({ transfer_ids: transferIds || [] })),
@@ -132050,7 +132398,7 @@ function getRailAdapter(provider) {
               p_error_json: errorJson
             });
             chunkFinalised = true;
-            setProviderSubmitStage('CHUNK_FINALISED', { unfinalised_submit_chunk: false });
+            await persistProviderSubmitStage('CHUNK_FINALISED', { unfinalised_submit_chunk: false });
             return finishResult;
           };
 
@@ -132490,8 +132838,19 @@ function getRailAdapter(provider) {
               transfer_ids: transferIds || []
             });
             out.provider_submit_diagnostic = providerSubmitDiagnostic;
+            await persistProviderSubmitStage('PROVIDER_SUBMIT_CHUNK_CLAIMED', {
+              provider_submission_status: 'NO_PROVIDER_SUBMISSION_ATTEMPTED',
+              provider_submission_attempted: false,
+              provider_request_sent: false,
+              provider_response_received: false,
+              provider_response_present: false,
+              provider_acceptance_evidence_present: false,
+              manual_resolution_required: false,
+              safe_retry_available: false,
+              unfinalised_submit_chunk: true
+            });
             if (expectedEnv !== workerEnv) {
-              setProviderSubmitStage('PROVIDER_SUBMIT_CHUNK_CLAIMED', {
+              await persistProviderSubmitStage('PROVIDER_SUBMIT_CHUNK_CLAIMED', {
                 provider_submission_status: 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL',
                 review_reason_code: 'PROVIDER_SUBMIT_BLOCKED_PRE_CALL',
                 provider_submission_attempted: false,
@@ -132524,7 +132883,7 @@ function getRailAdapter(provider) {
               funding_account_ref_candidates_checked: fundingAccountResolution ? fundingAccountResolution.funding_account_ref_candidates_checked : [],
               funding_account_ref_resolution_json: fundingAccountResolution ? fundingAccountResolution.funding_account_ref_resolution_json : null
             });
-            setProviderSubmitStage('FUNDING_ACCOUNT_MISSING', {
+            await persistProviderSubmitStage('FUNDING_ACCOUNT_MISSING', {
               provider_submission_status: 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL',
               review_reason_code: 'PROVIDER_SUBMIT_BLOCKED_PRE_CALL',
               provider_submission_attempted: false,
@@ -132588,7 +132947,7 @@ function getRailAdapter(provider) {
                 funding_account_ref_candidates_checked: fundingAccountResolution ? fundingAccountResolution.funding_account_ref_candidates_checked : [],
                 funding_account_ref_resolution_json: fundingAccountResolution ? fundingAccountResolution.funding_account_ref_resolution_json : null
               });
-              setProviderSubmitStage('FUNDING_CHECK_FAILED', {
+              await persistProviderSubmitStage('FUNDING_CHECK_FAILED', {
                 provider_submission_status: 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL',
                 review_reason_code: 'PROVIDER_SUBMIT_BLOCKED_PRE_CALL',
                 provider_submission_attempted: false,
@@ -132665,7 +133024,7 @@ function getRailAdapter(provider) {
             out.failed_this_chunk = transfers.length;
             out.provider_submission_attempted = false;
             out.submitted_to_bank = false;
-            setProviderSubmitStage('FUNDING_CHECK_FAILED', {
+            await persistProviderSubmitStage('FUNDING_CHECK_FAILED', {
               provider_submission_status: 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL',
               review_reason_code: 'PROVIDER_SUBMIT_BLOCKED_PRE_CALL',
               provider_submission_attempted: false,
@@ -132712,7 +133071,7 @@ function getRailAdapter(provider) {
                   transfer_ids: transferIds || []
                 });
                 recordTransferProviderOutcome(transferId, simulatedDiagnostic);
-                setProviderSubmitStage('PROVIDER_PAYMENT_CREATE_RESPONSE_RECEIVED', {
+                await persistProviderSubmitStage('PROVIDER_PAYMENT_CREATE_ACCEPTED', {
                   provider_submission_status: 'PROVIDER_SUBMISSION_ACCEPTED',
                   provider_submission_attempted: true,
                   provider_request_sent: true,
@@ -132748,7 +133107,7 @@ function getRailAdapter(provider) {
 
               let map = null;
               try {
-                setProviderSubmitStage('COUNTERPARTY_MAPPING_STARTED', {
+                await persistProviderSubmitStage('PROVIDER_PRECALL_VALIDATION_STARTED', {
                   provider_submission_status: providerSubmitDiagnostic?.provider_submission_status || 'NO_PROVIDER_SUBMISSION_ATTEMPTED',
                   provider_submission_attempted: false,
                   provider_request_sent: false
@@ -132787,7 +133146,7 @@ function getRailAdapter(provider) {
                   transfer_ids: transferIds || [],
                   recommended_action: 'Provider was not called. Resolve the local counterparty mapping blocker and retry.'
                 });
-                setProviderSubmitStage('COUNTERPARTY_MAPPING_FAILED', diagnostic);
+                await persistProviderSubmitStage('COUNTERPARTY_MAPPING_FAILED', diagnostic);
                 recordTransferProviderOutcome(transferId, diagnostic);
                 errors.push({ transfer_id: transferId, code: errorCode, error: errorMessage, provider_submit_diagnostic: diagnostic });
                 updates.push({
@@ -132815,14 +133174,95 @@ function getRailAdapter(provider) {
               }
 
               let payRes = null;
-              try {
-                setProviderSubmitStage('PROVIDER_PAYMENT_CREATE_STARTED', {
-                  provider_submission_status: 'NO_PROVIDER_SUBMISSION_ATTEMPTED',
-                  provider_submission_attempted: true,
+              await persistProviderSubmitStage('PROVIDER_PAYMENT_CREATE_STARTED', {
+                provider_submission_status: 'NO_PROVIDER_SUBMISSION_ATTEMPTED',
+                provider_submission_attempted: true,
+                provider_request_sent: false,
+                provider_response_received: false,
+                provider_response_present: false,
+                provider_acceptance_evidence_present: false,
+                manual_resolution_required: false,
+                safe_retry_available: false,
+                request_id: requestId,
+                idempotency_key: requestId
+              }, {
+                throw_on_failure: true,
+                failure_stage: 'PROVIDER_SUBMIT_STAGE_RECORD_FAILED',
+                failure_patch: {
+                  provider_submission_status: 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL',
+                  review_reason_code: 'PROVIDER_SUBMIT_BLOCKED_PRE_CALL',
+                  provider_submission_attempted: false,
                   provider_request_sent: false,
-                  request_id: requestId,
-                  idempotency_key: requestId
-                });
+                  provider_response_received: false,
+                  provider_response_present: false,
+                  provider_acceptance_evidence_present: false,
+                  manual_resolution_required: false,
+                  safe_retry_available: false,
+                  provider_error_code: 'PROVIDER_SUBMIT_STAGE_RECORD_FAILED',
+                  recommended_action: 'Provider was not called because CloudTMS could not persist provider-submit stage evidence.'
+                }
+              });
+              await persistProviderSubmitStage('PROVIDER_PAYMENT_CREATE_REQUEST_SENDING', {
+                provider_submission_status: 'NO_PROVIDER_SUBMISSION_ATTEMPTED',
+                provider_submission_attempted: true,
+                provider_request_sent: false,
+                provider_response_received: false,
+                provider_response_present: false,
+                provider_acceptance_evidence_present: false,
+                manual_resolution_required: false,
+                safe_retry_available: false,
+                request_id: requestId,
+                idempotency_key: requestId
+              }, {
+                throw_on_failure: true,
+                failure_stage: 'PROVIDER_SUBMIT_STAGE_RECORD_FAILED',
+                failure_patch: {
+                  provider_submission_status: 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL',
+                  review_reason_code: 'PROVIDER_SUBMIT_BLOCKED_PRE_CALL',
+                  provider_submission_attempted: false,
+                  provider_request_sent: false,
+                  provider_response_received: false,
+                  provider_response_present: false,
+                  provider_acceptance_evidence_present: false,
+                  manual_resolution_required: false,
+                  safe_retry_available: false,
+                  provider_error_code: 'PROVIDER_SUBMIT_STAGE_RECORD_FAILED',
+                  recommended_action: 'Provider was not called because CloudTMS could not persist provider-submit stage evidence.'
+                }
+              });
+              await persistProviderSubmitStage('PROVIDER_PAYMENT_CREATE_REQUEST_SENT', {
+                provider_submission_status: 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME',
+                review_reason_code: 'PROVIDER_REQUEST_SENT_NO_RESPONSE',
+                provider_submission_attempted: true,
+                provider_request_sent: true,
+                provider_response_received: false,
+                provider_response_present: false,
+                provider_acceptance_evidence_present: false,
+                provider_submission_unknown: true,
+                manual_resolution_required: true,
+                safe_retry_available: false,
+                request_id: requestId,
+                idempotency_key: requestId,
+                request_sent_at_utc: new Date().toISOString(),
+                recommended_action: 'Provider request may have been sent. Check Revolut/bank records before retry.'
+              }, {
+                throw_on_failure: true,
+                failure_stage: 'PROVIDER_SUBMIT_STAGE_RECORD_FAILED',
+                failure_patch: {
+                  provider_submission_status: 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL',
+                  review_reason_code: 'PROVIDER_SUBMIT_BLOCKED_PRE_CALL',
+                  provider_submission_attempted: false,
+                  provider_request_sent: false,
+                  provider_response_received: false,
+                  provider_response_present: false,
+                  provider_acceptance_evidence_present: false,
+                  manual_resolution_required: false,
+                  safe_retry_available: false,
+                  provider_error_code: 'PROVIDER_SUBMIT_STAGE_RECORD_FAILED',
+                  recommended_action: 'Provider was not called because CloudTMS could not persist provider-submit stage evidence.'
+                }
+              });
+              try {
                 payRes = await revolutPayment_create(env, token, {
                   request_id: requestId,
                   source_account_id: fundingRef,
@@ -132889,7 +133329,7 @@ function getRailAdapter(provider) {
               const unknown = status === 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME';
               const blocked = status === 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL';
               const stage = accepted
-                ? 'PROVIDER_PAYMENT_CREATE_RESPONSE_RECEIVED'
+                ? 'PROVIDER_PAYMENT_CREATE_ACCEPTED'
                 : rejected
                   ? 'PROVIDER_PAYMENT_CREATE_REJECTED'
                   : malformed
@@ -132897,9 +133337,12 @@ function getRailAdapter(provider) {
                     : unknown
                       ? 'PROVIDER_PAYMENT_CREATE_UNKNOWN'
                       : blocked
-                        ? 'COUNTERPARTY_MAPPING_FAILED'
+                        ? 'PROVIDER_SUBMIT_BLOCKED_PRE_CALL'
                         : 'PROVIDER_PAYMENT_CREATE_RESPONSE_RECEIVED';
-              setProviderSubmitStage(stage, diagnostic);
+              if (diagnostic.provider_response_received === true || diagnostic.provider_response_present === true) {
+                await persistProviderSubmitStage('PROVIDER_PAYMENT_CREATE_RESPONSE_RECEIVED', diagnostic);
+              }
+              await persistProviderSubmitStage(stage, diagnostic);
               recordTransferProviderOutcome(transferId, diagnostic);
 
               if (accepted) {
@@ -132982,6 +133425,16 @@ function getRailAdapter(provider) {
 
           let applyUpdates = null;
           if (updates.length) {
+            await persistProviderSubmitStage('RAIL_UPDATE_APPLY_STARTED', {
+              provider_submission_status: providerSubmitDiagnostic?.provider_submission_status || (errors.length ? 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME' : 'PROVIDER_SUBMISSION_ACCEPTED'),
+              provider_submission_attempted: Object.values(transferProviderOutcomes).some((row) => row.provider_submission_attempted === true || row.provider_request_sent === true),
+              provider_request_sent: Object.values(transferProviderOutcomes).some((row) => row.provider_request_sent === true),
+              provider_response_received: Object.values(transferProviderOutcomes).some((row) => row.provider_response_received === true),
+              provider_response_present: Object.values(transferProviderOutcomes).some((row) => row.provider_response_present === true),
+              provider_acceptance_evidence_present: Object.values(transferProviderOutcomes).some((row) => row.provider_acceptance_evidence_present === true),
+              manual_resolution_required: Object.values(transferProviderOutcomes).some((row) => row.manual_resolution_required === true),
+              safe_retry_available: false
+            });
             applyUpdates = unwrapRpcPayload(await sbRpc(env, 'pay_bank_transfers_apply_rail_updates', {
               p_pay_batch_id: batchId,
               p_updates: updates,
@@ -133037,7 +133490,7 @@ function getRailAdapter(provider) {
           out.remaining_unsubmitted = remainingSubmitAttemptRequired;
           out.has_more = remainingSubmitAttemptRequired > 0;
 
-          setProviderSubmitStage(errors.length ? (providerSubmitDiagnostic?.provider_call_stage || 'PROVIDER_PAYMENT_CREATE_UNKNOWN') : 'RAIL_UPDATE_APPLY_STARTED', {
+          await persistProviderSubmitStage(errors.length ? (providerSubmitDiagnostic?.provider_call_stage || 'PROVIDER_PAYMENT_CREATE_UNKNOWN') : 'RAIL_UPDATE_APPLY_COMPLETE', {
             provider_submission_status: errors.length ? (providerSubmitDiagnostic?.provider_submission_status || 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME') : 'PROVIDER_SUBMISSION_ACCEPTED',
             provider_submission_attempted: true,
             provider_request_sent: Object.values(transferProviderOutcomes).some((row) => row.provider_request_sent === true),
@@ -133055,19 +133508,35 @@ function getRailAdapter(provider) {
           } finally {
             if (chunkClaimed === true && chunkFinalised !== true && chunkIdForFinalise) {
               const requestSent = providerSubmitDiagnostic && providerSubmitDiagnostic.provider_request_sent === true;
-              setProviderSubmitStage(requestSent ? 'PROVIDER_PAYMENT_CREATE_UNKNOWN' : 'CHUNK_FINALISATION_STARTED', {
-                provider_submission_status: requestSent ? 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME' : 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL',
-                review_reason_code: requestSent ? 'PROVIDER_REQUEST_SENT_NO_RESPONSE' : 'PROVIDER_SUBMIT_BLOCKED_PRE_CALL',
-                provider_submission_attempted: requestSent,
-                provider_request_sent: requestSent,
-                provider_response_received: false,
-                provider_response_present: false,
-                provider_acceptance_evidence_present: false,
-                provider_submission_unknown: requestSent,
-                manual_resolution_required: requestSent,
-                safe_retry_available: false,
-                recommended_action: requestSent ? 'Provider request may have been sent. Check Revolut/bank records before retry.' : 'Provider was not called. Resolve the local blocker and retry through payment execution.'
-              });
+              try {
+                await persistProviderSubmitStage(requestSent ? 'PROVIDER_PAYMENT_CREATE_UNKNOWN' : 'CHUNK_FINALISATION_STARTED', {
+                  provider_submission_status: requestSent ? 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME' : 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL',
+                  review_reason_code: requestSent ? 'PROVIDER_REQUEST_SENT_NO_RESPONSE' : 'PROVIDER_SUBMIT_BLOCKED_PRE_CALL',
+                  provider_submission_attempted: requestSent,
+                  provider_request_sent: requestSent,
+                  provider_response_received: false,
+                  provider_response_present: false,
+                  provider_acceptance_evidence_present: false,
+                  provider_submission_unknown: requestSent,
+                  manual_resolution_required: requestSent,
+                  safe_retry_available: false,
+                  recommended_action: requestSent ? 'Provider request may have been sent. Check Revolut/bank records before retry.' : 'Provider was not called. Resolve the local blocker and retry through payment execution.'
+                });
+              } catch {
+                setProviderSubmitStage(requestSent ? 'PROVIDER_PAYMENT_CREATE_UNKNOWN' : 'CHUNK_FINALISATION_STARTED', {
+                  provider_submission_status: requestSent ? 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME' : 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL',
+                  review_reason_code: requestSent ? 'PROVIDER_REQUEST_SENT_NO_RESPONSE' : 'PROVIDER_SUBMIT_BLOCKED_PRE_CALL',
+                  provider_submission_attempted: requestSent,
+                  provider_request_sent: requestSent,
+                  provider_response_received: false,
+                  provider_response_present: false,
+                  provider_acceptance_evidence_present: false,
+                  provider_submission_unknown: requestSent,
+                  manual_resolution_required: requestSent,
+                  safe_retry_available: false,
+                  recommended_action: requestSent ? 'Provider request may have been sent. Check Revolut/bank records before retry.' : 'Provider was not called. Resolve the local blocker and retry through payment execution.'
+                });
+              }
               out.failed_this_chunk = Math.max(out.failed_this_chunk || 0, (transfers || []).length || 1);
               try {
                 await finishProviderSubmitChunkOnce('FAILED', out, {
@@ -133859,7 +134328,9 @@ async function revolutNameCheck_perform(env, token, { payee_name, sort_code, acc
     result_json: json
   };
 }
-async function revolutPayment_create(env, token, { request_id, source_account_id, counterparty_id, counterparty_account_id, amount, currency, reference }) {
+
+
+async function revolutPayment_create(env, token, { request_id, source_account_id, counterparty_id, counterparty_account_id, amount, currency, reference, provider_timeout_ms } = {}) {
   const redactProviderPayload = (value) => {
     const sensitiveKeys = new Set([
       'access_token',
@@ -133908,6 +134379,34 @@ async function revolutPayment_create(env, token, { request_id, source_account_id
   const ccy = safeString(currency || 'GBP').toUpperCase() || 'GBP';
   const ref = safeString(reference);
   const amtNum = Number(amount);
+  const timeoutRaw = Number(provider_timeout_ms ?? (env && env.REVOLUT_PAY_CREATE_TIMEOUT_MS) ?? (env && env.REVOLUT_PROVIDER_TIMEOUT_MS) ?? 30000);
+  const providerTimeoutMs = Number.isFinite(timeoutRaw) && timeoutRaw > 0 ? Math.max(1000, Math.min(120000, Math.trunc(timeoutRaw))) : 30000;
+
+  const localIdentitySet = new Set([reqId, ref].map((value) => safeString(value).toLowerCase()).filter(Boolean));
+  const extractProviderTransactionId = (payload) => {
+    const source = payload && typeof payload === 'object' && !Array.isArray(payload) ? payload : {};
+    for (const candidate of [source.id, source.payment_id, source.transaction_id, source.transfer_id, source.provider_transaction_id, source.provider_payment_id, source.external_payment_id, source.external_transfer_id]) {
+      const text = safeString(candidate);
+      if (text && !localIdentitySet.has(text.toLowerCase())) return text;
+    }
+    return '';
+  };
+  const upperText = (value) => safeString(value).toUpperCase();
+  const providerStateIsRejected = (payload) => {
+    const source = payload && typeof payload === 'object' && !Array.isArray(payload) ? payload : {};
+    const state = upperText(source.state || source.status || source.code || source.error_code || source.error || source.type);
+    return ['REJECTED', 'FAILED', 'ERROR', 'DECLINED', 'CANCELLED', 'CANCELED', 'INSUFFICIENT_FUNDS', 'VALIDATION_FAILED'].some((token) => state.includes(token));
+  };
+  const responseLooksLikeIdempotencyReplay = (statusCode, payload, bodyText) => {
+    const source = payload && typeof payload === 'object' && !Array.isArray(payload) ? payload : {};
+    const raw = `${statusCode || ''} ${upperText(source.code)} ${upperText(source.error_code)} ${upperText(source.error)} ${upperText(source.type)} ${upperText(source.message)} ${upperText(source.error_description)} ${upperText(bodyText)}`;
+    return Number(statusCode) === 409
+      || raw.includes('IDEMPOTEN')
+      || raw.includes('DUPLICATE')
+      || raw.includes('REPLAY')
+      || raw.includes('ALREADY')
+      || raw.includes('CONFLICT');
+  };
 
   const baseResult = (patch = {}) => {
     const status = patch.provider_submission_status || 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL';
@@ -133948,6 +134447,7 @@ async function revolutPayment_create(env, token, { request_id, source_account_id
       request_sent_at_utc: requestSentAtUtc,
       response_received_at_utc: responseReceivedAtUtc,
       provider_http_status: patch.provider_http_status ?? null,
+      provider_timeout_ms: patch.provider_timeout_ms ?? null,
       provider_error_code: patch.provider_error_code || null,
       provider_error_message_redacted: patch.provider_error_message_redacted || null,
       provider_transaction_id: patch.provider_transaction_id || null,
@@ -133971,6 +134471,7 @@ async function revolutPayment_create(env, token, { request_id, source_account_id
       manual_resolution_required: patch.manual_resolution_required === true,
       safe_retry_available: patch.safe_retry_available === true,
       provider_http_status: patch.provider_http_status ?? null,
+      provider_timeout_ms: patch.provider_timeout_ms ?? null,
       provider_error_code: patch.provider_error_code || null,
       provider_error_message_redacted: patch.provider_error_message_redacted || null,
       provider_response_redacted: patch.provider_response_redacted || null,
@@ -134038,8 +134539,11 @@ async function revolutPayment_create(env, token, { request_id, source_account_id
   const url = `${apiBase}/pay`;
   const requestSentAtUtc = new Date().toISOString();
   let res;
+  let timeoutHandle = null;
+  let timedOut = false;
+  let abortController = null;
   try {
-    res = await fetch(url, {
+    const fetchOptions = {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${t}`,
@@ -134047,9 +134551,34 @@ async function revolutPayment_create(env, token, { request_id, source_account_id
         Accept: 'application/json'
       },
       body: JSON.stringify(body)
+    };
+
+    if (typeof AbortController === 'function') {
+      abortController = new AbortController();
+      fetchOptions.signal = abortController.signal;
+    }
+
+    const timeoutPromise = new Promise((_, reject) => {
+      timeoutHandle = setTimeout(() => {
+        timedOut = true;
+        try {
+          if (abortController) abortController.abort();
+        } catch {}
+        const timeoutError = new Error(`Revolut /pay request timed out after ${providerTimeoutMs}ms`);
+        timeoutError.name = 'AbortError';
+        timeoutError.code = 'REVOLUT_PAY_CREATE_TIMEOUT';
+        reject(timeoutError);
+      }, providerTimeoutMs);
     });
+
+    res = await Promise.race([
+      fetch(url, fetchOptions),
+      timeoutPromise
+    ]);
   } catch (error) {
-    const errorCode = safeString(error && (error.code || error.name)) || 'REVOLUT_PAY_CREATE_NETWORK_ERROR';
+    const errorName = safeString(error && (error.name || error.code));
+    const isTimeout = timedOut === true || errorName === 'AbortError' || errorName === 'TimeoutError' || errorName === 'REVOLUT_PAY_CREATE_TIMEOUT';
+    const errorCode = isTimeout ? 'REVOLUT_PAY_CREATE_TIMEOUT' : (safeString(error && (error.code || error.name)) || 'REVOLUT_PAY_CREATE_NETWORK_ERROR');
     return baseResult({
       ok: false,
       provider_called: true,
@@ -134063,10 +134592,14 @@ async function revolutPayment_create(env, token, { request_id, source_account_id
       manual_resolution_required: true,
       safe_retry_available: false,
       provider_error_code: errorCode,
-      provider_error_message_redacted: safeString(error && error.message) || 'Provider request threw before a response was received.',
+      provider_timeout_ms: isTimeout ? providerTimeoutMs : null,
+      provider_error_message_redacted: isTimeout ? `Revolut /pay request timed out after ${providerTimeoutMs}ms without a usable response.` : (safeString(error && error.message) || 'Provider request threw before a response was received.'),
       request_sent_at_utc: requestSentAtUtc,
+      response_received_at_utc: null,
       recommended_action: 'Provider request may have been sent. Check Revolut/bank records before retry.'
     });
+  } finally {
+    if (timeoutHandle !== null) clearTimeout(timeoutHandle);
   }
 
   const responseReceivedAtUtc = new Date().toISOString();
@@ -134077,6 +134610,89 @@ async function revolutPayment_create(env, token, { request_id, source_account_id
 
   if (!res.ok) {
     const providerErrorCode = safeString(json && (json.code || json.error_code || json.error || json.type)) || `REVOLUT_PAY_CREATE_FAILED_${res.status}`;
+    const providerErrorMessage = safeString(json && (json.message || json.error_description || json.error)) || `Revolut rejected payment create with HTTP ${res.status}.`;
+    const replayOrConflict = responseLooksLikeIdempotencyReplay(res.status, json, text);
+    const providerTxIdFromError = extractProviderTransactionId(json);
+    const providerReferenceFromError = safeString(json && (json.reference || json.provider_reference || json.payment_reference));
+    const providerStateFromError = safeString(json && (json.state || json.status)) || null;
+    const clearProviderRejection = providerStateIsRejected(json) || !replayOrConflict;
+
+    if (providerTxIdFromError) {
+      const stateFromError = providerStateFromError || 'PENDING';
+      return baseResult({
+        ok: true,
+        provider_called: true,
+        provider_request_sent: true,
+        provider_response_received: true,
+        provider_response_present: true,
+        provider_accepted: true,
+        provider_submission_status: 'PROVIDER_SUBMISSION_ACCEPTED',
+        outcome_code: 'PROVIDER_SUBMISSION_ACCEPTED',
+        review_reason_code: 'PROVIDER_ACCEPTANCE_EVIDENCE_PRESENT',
+        manual_resolution_required: false,
+        safe_retry_available: false,
+        provider_http_status: res.status,
+        provider_acceptance_evidence_present: true,
+        rail_tx_id: providerTxIdFromError,
+        rail_state: stateFromError,
+        provider_transaction_id: providerTxIdFromError,
+        provider_state: stateFromError,
+        provider_reference: providerReferenceFromError || providerTxIdFromError,
+        provider_response_redacted: redactedBody,
+        request_sent_at_utc: requestSentAtUtc,
+        response_received_at_utc: responseReceivedAtUtc,
+        rail_meta_json: {
+          provider_submit_diagnostic: {
+            provider_submission_status: 'PROVIDER_SUBMISSION_ACCEPTED',
+            review_reason_code: 'PROVIDER_ACCEPTANCE_EVIDENCE_PRESENT',
+            provider_http_status: res.status,
+            provider_transaction_id: providerTxIdFromError,
+            provider_reference: providerReferenceFromError || providerTxIdFromError,
+            rail_tx_id: providerTxIdFromError,
+            rail_state: stateFromError,
+            request_id: reqId,
+            idempotency_key: reqId
+          },
+          revolut_response: redactedBody
+        },
+        recommended_action: 'Provider acceptance evidence exists. Do not retry unless reconciled.'
+      });
+    }
+
+    if (replayOrConflict && clearProviderRejection !== true) {
+      return baseResult({
+        ok: false,
+        provider_called: true,
+        provider_request_sent: true,
+        provider_response_received: true,
+        provider_response_present: true,
+        provider_unknown: true,
+        provider_submission_status: 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME',
+        outcome_code: providerErrorCode || 'REVOLUT_PAY_CREATE_IDEMPOTENCY_REPLAY_AMBIGUOUS',
+        review_reason_code: 'PROVIDER_REQUEST_SENT_NO_RESPONSE',
+        manual_resolution_required: true,
+        safe_retry_available: false,
+        provider_http_status: res.status,
+        provider_error_code: providerErrorCode || 'REVOLUT_PAY_CREATE_IDEMPOTENCY_REPLAY_AMBIGUOUS',
+        provider_error_message_redacted: providerErrorMessage,
+        provider_error_redacted: redactedBody,
+        request_sent_at_utc: requestSentAtUtc,
+        response_received_at_utc: responseReceivedAtUtc,
+        rail_meta_json: {
+          provider_submit_diagnostic: {
+            provider_submission_status: 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME',
+            review_reason_code: 'PROVIDER_REQUEST_SENT_NO_RESPONSE',
+            provider_http_status: res.status,
+            provider_error_code: providerErrorCode,
+            request_id: reqId,
+            idempotency_key: reqId
+          },
+          revolut_response: redactedBody
+        },
+        recommended_action: 'Provider returned an ambiguous idempotency/conflict response without an external payment id. Check Revolut/bank records before retry.'
+      });
+    }
+
     return baseResult({
       ok: false,
       provider_called: true,
@@ -134091,7 +134707,7 @@ async function revolutPayment_create(env, token, { request_id, source_account_id
       safe_retry_available: false,
       provider_http_status: res.status,
       provider_error_code: providerErrorCode,
-      provider_error_message_redacted: safeString(json && (json.message || json.error_description || json.error)) || `Revolut rejected payment create with HTTP ${res.status}.`,
+      provider_error_message_redacted: providerErrorMessage,
       provider_error_redacted: redactedBody,
       request_sent_at_utc: requestSentAtUtc,
       response_received_at_utc: responseReceivedAtUtc,
@@ -134110,7 +134726,7 @@ async function revolutPayment_create(env, token, { request_id, source_account_id
     });
   }
 
-  const txId = safeString(json && (json.id || json.payment_id || json.transaction_id || json.transfer_id));
+  const txId = extractProviderTransactionId(json);
   const providerReference = safeString(json && (json.reference || json.provider_reference || json.payment_reference));
   const state = safeString(json && (json.state || json.status)) || 'PENDING';
 
@@ -134208,8 +134824,6 @@ async function revolutPayment_create(env, token, { request_id, source_account_id
     recommended_action: 'Provider acceptance evidence exists. Do not retry unless reconciled.'
   });
 }
-
-
 
 
 
