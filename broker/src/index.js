@@ -102371,7 +102371,7 @@ async function handleUpdateUmbrella(env, req, umbrellaId) {
   const data = await parseJSONBody(req);
   if (!data) return withCORS(env, req, badRequest("Invalid JSON"));
 
-  // ✅ NEW: normalise remittance override booleans on update (accept 'on'/'true'/1, empty => false)
+  // Normalise boolean fields on update (accept 'on'/'true'/'yes'/1, empty => false)
   const normalizeBoolish = (v) => {
     if (typeof v === 'boolean') return v;
     if (v === null || v === undefined) return false;
@@ -102386,6 +102386,8 @@ async function handleUpdateUmbrella(env, req, umbrellaId) {
     if (!Object.prototype.hasOwnProperty.call(obj, key)) return;
     obj[key] = normalizeBoolish(obj[key]);
   };
+
+  normalizeBoolField(data, 'vat_chargeable');
   normalizeBoolField(data, 'remittance_overrides_enabled');
   normalizeBoolField(data, 'remittances_detailed_breakdown');
 
@@ -102393,7 +102395,7 @@ async function handleUpdateUmbrella(env, req, umbrellaId) {
     // 1) Load current umbrella (for change detection)
     const { rows: beforeRows } = await sbFetch(
       env,
-      `${env.SUPABASE_URL}/rest/v1/umbrellas?id=eq.${encodeURIComponent(umbrellaId)}&select=name,bank_name,sort_code,account_number,bank_details_hash`
+      `${env.SUPABASE_URL}/rest/v1/umbrellas?id=eq.${encodeURIComponent(umbrellaId)}&select=name,bank_name,sort_code,account_number,bank_details_hash,vat_chargeable`
     );
     const before = beforeRows?.[0] || {};
 
@@ -102414,9 +102416,15 @@ async function handleUpdateUmbrella(env, req, umbrellaId) {
     const oldHash = (before && before.bank_details_hash != null) ? String(before.bank_details_hash).trim() : '';
     const newHash = (umbrella && umbrella.bank_details_hash != null) ? String(umbrella.bank_details_hash).trim() : '';
 
-    // 3) Detect pay-channel impacting changes
-    const watched = ['name','bank_name','sort_code','account_number'];
-    const changed = watched.some(k => umbrella?.[k] !== before?.[k]);
+    // 3) Detect pay-channel / TSFIN-impacting changes.
+    // VAT chargeability must be included because umbrella payment inc-VAT is frozen from this setting.
+    const watched = ['name','bank_name','sort_code','account_number','vat_chargeable'];
+    const changed = watched.some((k) => {
+      if (k === 'vat_chargeable') {
+        return normalizeBoolish(umbrella?.[k]) !== normalizeBoolish(before?.[k]);
+      }
+      return (umbrella?.[k] ?? null) !== (before?.[k] ?? null);
+    });
 
     if (changed) {
       // Enqueue recompute for all candidates on this umbrella (current & unlocked TSFIN only)
