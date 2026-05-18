@@ -31296,9 +31296,7 @@ async function handleAuditEventsList(env, req) {
 // - Returns the updated contract_week row (representation)
 // ============================================================================
 
-
-
- async function handleContractWeekManualUpsert(env, req, weekId) {
+async function handleContractWeekManualUpsert(env, req, weekId) {
    const enc = encodeURIComponent;
    const WLOG = true;
    const wlog = (step, extra = {}) => {
@@ -33835,6 +33833,11 @@ async function handleAuditEventsList(env, req) {
      return (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) ? parsed : null;
    })();
  
+   const shouldMaterialiseStagedEvidenceInRpc = !!(
+     !suppressTimesheetEvidenceMaterialisation ||
+     (willCreateNow && Array.isArray(preparedStagedExpenseEvidence) && preparedStagedExpenseEvidence.length > 0)
+   );
+
    const rpcFunctionName = bulkPatchResponseRequested
      ? 'contract_week_manual_upsert_bulk_process_atomic'
      : 'contract_week_manual_upsert_atomic';
@@ -33850,7 +33853,7 @@ async function handleAuditEventsList(env, req) {
          p_next_tsfin_snapshot_json: snap,
          p_rotation_json: rotationRpcJson,
          p_actor_user_id: user?.id || null,
-         p_materialise_staged_evidence: !suppressTimesheetEvidenceMaterialisation,
+         p_materialise_staged_evidence: shouldMaterialiseStagedEvidenceInRpc,
          p_now_utc: nowIso2,
          p_expected_row_signature: expectedRowSignature || null,
          p_response_context: bulkResponseContext
@@ -33864,7 +33867,7 @@ async function handleAuditEventsList(env, req) {
          p_tsfin_snapshot_json: snap,
          p_rotation_json: rotationRpcJson,
          p_actor_user_id: user?.id || null,
-         p_materialise_staged_evidence: !suppressTimesheetEvidenceMaterialisation,
+         p_materialise_staged_evidence: shouldMaterialiseStagedEvidenceInRpc,
          p_now_utc: nowIso2
        };
  
@@ -34738,7 +34741,6 @@ async function handleAuditEventsList(env, req) {
      created_now: !!createdNow
    }));
  }
- 
 
 function formatCloudTmsLondonDate(value) {
   const fallback = 'Not recorded';
