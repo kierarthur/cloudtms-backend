@@ -16048,6 +16048,7 @@ DROP FUNCTION IF EXISTS public.pay_bank_transfers_apply_rail_updates(uuid, jsonb
 DROP FUNCTION IF EXISTS public.pay_bank_transfers_apply_rail_updates(uuid, jsonb, uuid, uuid, jsonb, uuid);
 
 
+
 CREATE OR REPLACE FUNCTION public.pay_bank_transfers_apply_rail_updates(
   p_pay_batch_id uuid,
   p_updates jsonb,
@@ -16331,6 +16332,41 @@ BEGIN
   UPDATE pg_temp.tmp_pay_bank_transfer_updates AS update_source
   SET is_provider_source = update_source.event_source IN ('PROVIDER_RESPONSE', 'PROVIDER_POLL', 'PROVIDER_WEBHOOK');
 
+  UPDATE pg_temp.tmp_pay_bank_transfer_updates AS update_normalise_provider
+  SET provider_submission_status = CASE
+        WHEN NULLIF(BTRIM(COALESCE(update_normalise_provider.provider_submission_status, '')), '') IS NOT NULL THEN update_normalise_provider.provider_submission_status
+        WHEN update_normalise_provider.event_source IN ('PROVIDER_RESPONSE', 'PROVIDER_POLL', 'PROVIDER_WEBHOOK')
+         AND update_normalise_provider.normalised_state IN ('REJECTED', 'FAILED', 'ERROR', 'DECLINED', 'CANCELLED', 'CANCELED') THEN 'PROVIDER_SUBMISSION_REJECTED'
+        WHEN update_normalise_provider.event_source IN ('PROVIDER_RESPONSE', 'PROVIDER_POLL', 'PROVIDER_WEBHOOK')
+         AND update_normalise_provider.normalised_state IN ('COMPLETED', 'COMMITTED', 'SETTLED', 'PAID', 'EXECUTED', 'ACCEPTED', 'SUBMITTED', 'SENT', 'PROCESSING', 'PENDING') THEN 'PROVIDER_SUBMISSION_ACCEPTED'
+        WHEN update_normalise_provider.provider_request_sent IS TRUE
+         AND update_normalise_provider.provider_response_present IS NOT TRUE
+         AND update_normalise_provider.provider_response_received IS NOT TRUE THEN 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME'
+        ELSE update_normalise_provider.provider_submission_status
+      END,
+      provider_submission_attempted = update_normalise_provider.provider_submission_attempted
+        OR update_normalise_provider.provider_request_sent
+        OR update_normalise_provider.provider_response_received
+        OR update_normalise_provider.provider_response_present
+        OR update_normalise_provider.event_source IN ('PROVIDER_RESPONSE', 'PROVIDER_POLL', 'PROVIDER_WEBHOOK'),
+      provider_request_sent = update_normalise_provider.provider_request_sent
+        OR update_normalise_provider.event_source IN ('PROVIDER_RESPONSE', 'PROVIDER_POLL', 'PROVIDER_WEBHOOK')
+        OR update_normalise_provider.provider_submission_status IN ('PROVIDER_SUBMISSION_ACCEPTED', 'PROVIDER_SUBMISSION_REJECTED', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE', 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME'),
+      provider_response_received = update_normalise_provider.provider_response_received
+        OR update_normalise_provider.event_source IN ('PROVIDER_RESPONSE', 'PROVIDER_POLL', 'PROVIDER_WEBHOOK')
+        OR update_normalise_provider.provider_submission_status IN ('PROVIDER_SUBMISSION_ACCEPTED', 'PROVIDER_SUBMISSION_REJECTED', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE'),
+      provider_response_present = update_normalise_provider.provider_response_present
+        OR update_normalise_provider.event_source IN ('PROVIDER_RESPONSE', 'PROVIDER_POLL', 'PROVIDER_WEBHOOK')
+        OR update_normalise_provider.provider_submission_status IN ('PROVIDER_SUBMISSION_ACCEPTED', 'PROVIDER_SUBMISSION_REJECTED', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE')
+        OR update_normalise_provider.provider_http_status IS NOT NULL
+        OR NULLIF(BTRIM(COALESCE(update_normalise_provider.provider_error_code, '')), '') IS NOT NULL,
+      provider_submission_unknown = update_normalise_provider.provider_submission_unknown
+        OR update_normalise_provider.provider_submission_status IN ('UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE', 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID'),
+      manual_resolution_required = update_normalise_provider.manual_resolution_required
+        OR update_normalise_provider.provider_submission_status IN ('UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE', 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID'),
+      safe_retry_available = update_normalise_provider.safe_retry_available
+        AND update_normalise_provider.provider_submission_status NOT IN ('PROVIDER_SUBMISSION_ACCEPTED', 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE', 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID');
+
   UPDATE pg_temp.tmp_pay_bank_transfer_updates AS update_diag
   SET provider_submit_diagnostic = jsonb_strip_nulls(
     COALESCE(update_diag.provider_submit_diagnostic, '{}'::jsonb)
@@ -16420,6 +16456,22 @@ BEGIN
   UPDATE pg_temp.tmp_pay_bank_transfer_updates AS update_evidence
   SET is_provider_evidence = COALESCE((
     SELECT update_evidence.event_source IN ('PROVIDER_RESPONSE', 'PROVIDER_POLL', 'PROVIDER_WEBHOOK')
+       AND COALESCE(update_evidence.provider_submission_status, '') NOT IN (
+         'PROVIDER_SUBMISSION_REJECTED',
+         'PROVIDER_SUBMISSION_FAILED',
+         'PROVIDER_SUBMISSION_MALFORMED_RESPONSE',
+         'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME',
+         'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK',
+         'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL',
+         'NO_PROVIDER_SUBMISSION_ATTEMPTED',
+         'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID'
+       )
+       AND upper(BTRIM(COALESCE(update_evidence.normalised_state, update_evidence.provider_state, ''))) NOT IN ('REJECTED', 'FAILED', 'ERROR', 'DECLINED', 'CANCELLED', 'CANCELED', 'MALFORMED', 'UNKNOWN')
+       AND (
+         update_evidence.provider_submission_status = 'PROVIDER_SUBMISSION_ACCEPTED'
+         OR update_evidence.provider_acceptance_evidence_present IS TRUE
+         OR upper(BTRIM(COALESCE(update_evidence.normalised_state, update_evidence.provider_state, ''))) IN ('ACCEPTED', 'SUBMITTED', 'PROCESSING', 'SENT', 'COMPLETED', 'COMMITTED', 'SETTLED', 'PAID', 'EXECUTED')
+       )
        AND EXISTS (
          SELECT 1
          FROM (VALUES
@@ -16436,10 +16488,13 @@ BEGIN
            (update_evidence.raw_payload #>> '{external_payment_id}'),
            (update_evidence.raw_payload #>> '{revolut_payment_id}'),
            (update_evidence.raw_payload #>> '{provider_transfer_id}'),
-           (update_evidence.raw_payload #>> '{transfer_id}'),
            (update_evidence.raw_payload #>> '{external_transfer_id}'),
            (update_evidence.raw_payload #>> '{provider_transaction_id}'),
            (update_evidence.raw_payload #>> '{transaction_id}'),
+           (update_evidence.raw_payload #>> '{provider_submit_diagnostic,provider_transaction_id}'),
+           (update_evidence.raw_payload #>> '{provider_submit_diagnostic,provider_payment_id}'),
+           (update_evidence.raw_payload #>> '{provider_submit_diagnostic,rail_tx_id}'),
+           (update_evidence.raw_payload #>> '{provider_submit_diagnostic,provider_reference}'),
            (update_evidence.rail_meta_json #>> '{provider_event_id}'),
            (update_evidence.rail_meta_json #>> '{provider_reference}'),
            (update_evidence.rail_meta_json #>> '{provider_submission_id}'),
@@ -16450,10 +16505,13 @@ BEGIN
            (update_evidence.rail_meta_json #>> '{external_payment_id}'),
            (update_evidence.rail_meta_json #>> '{revolut_payment_id}'),
            (update_evidence.rail_meta_json #>> '{provider_transfer_id}'),
-           (update_evidence.rail_meta_json #>> '{transfer_id}'),
            (update_evidence.rail_meta_json #>> '{external_transfer_id}'),
            (update_evidence.rail_meta_json #>> '{provider_transaction_id}'),
            (update_evidence.rail_meta_json #>> '{transaction_id}'),
+           (update_evidence.rail_meta_json #>> '{provider_submit_diagnostic,provider_transaction_id}'),
+           (update_evidence.rail_meta_json #>> '{provider_submit_diagnostic,provider_payment_id}'),
+           (update_evidence.rail_meta_json #>> '{provider_submit_diagnostic,rail_tx_id}'),
+           (update_evidence.rail_meta_json #>> '{provider_submit_diagnostic,provider_reference}'),
            (update_evidence.input_json #>> '{provider_event_id}'),
            (update_evidence.input_json #>> '{provider_reference}'),
            (update_evidence.input_json #>> '{provider_submission_id}'),
@@ -16464,10 +16522,13 @@ BEGIN
            (update_evidence.input_json #>> '{external_payment_id}'),
            (update_evidence.input_json #>> '{revolut_payment_id}'),
            (update_evidence.input_json #>> '{provider_transfer_id}'),
-           (update_evidence.input_json #>> '{transfer_id}'),
            (update_evidence.input_json #>> '{external_transfer_id}'),
            (update_evidence.input_json #>> '{provider_transaction_id}'),
-           (update_evidence.input_json #>> '{transaction_id}')
+           (update_evidence.input_json #>> '{transaction_id}'),
+           (update_evidence.input_json #>> '{provider_submit_diagnostic,provider_transaction_id}'),
+           (update_evidence.input_json #>> '{provider_submit_diagnostic,provider_payment_id}'),
+           (update_evidence.input_json #>> '{provider_submit_diagnostic,rail_tx_id}'),
+           (update_evidence.input_json #>> '{provider_submit_diagnostic,provider_reference}')
          ) AS provider_identifier(identifier_value)
          WHERE NULLIF(BTRIM(COALESCE(provider_identifier.identifier_value, '')), '') IS NOT NULL
            AND NOT (
@@ -16483,9 +16544,11 @@ BEGIN
                  NULLIF(BTRIM(COALESCE(transfer_for_evidence.rail_meta_json #>> '{provider_submit_diagnostic,local_provider_request_id}', '')), ''),
                  NULLIF(BTRIM(COALESCE(transfer_for_evidence.rail_meta_json #>> '{payment_reference}', '')), ''),
                  NULLIF(BTRIM(COALESCE(transfer_for_evidence.rail_meta_json #>> '{bulk_reference}', '')), ''),
+                 NULLIF(BTRIM(COALESCE(update_evidence.request_id, '')), ''),
+                 NULLIF(BTRIM(COALESCE(update_evidence.idempotency_key, '')), ''),
+                 NULLIF(BTRIM(COALESCE(update_evidence.local_provider_request_id, '')), ''),
                  NULLIF(BTRIM(COALESCE(update_evidence.input_json #>> '{request_id}', '')), ''),
                  NULLIF(BTRIM(COALESCE(update_evidence.input_json #>> '{idempotency_key}', '')), ''),
-                 NULLIF(BTRIM(COALESCE(update_evidence.local_provider_request_id, '')), ''),
                  NULLIF(BTRIM(COALESCE(update_evidence.input_json #>> '{local_provider_request_id}', '')), ''),
                  NULLIF(BTRIM(COALESCE(update_evidence.input_json #>> '{provider_submit_diagnostic,local_provider_request_id}', '')), ''),
                  NULLIF(BTRIM(COALESCE(update_evidence.input_json #>> '{raw_payload,local_provider_request_id}', '')), ''),
@@ -16506,6 +16569,25 @@ BEGIN
     WHERE transfer_for_evidence.id = update_evidence.transfer_id
       AND transfer_for_evidence.pay_batch_id = p_pay_batch_id
   ), false);
+
+  UPDATE pg_temp.tmp_pay_bank_transfer_updates AS update_diag
+  SET provider_acceptance_evidence_present = update_diag.is_provider_evidence,
+      provider_submit_diagnostic = jsonb_strip_nulls(
+        COALESCE(update_diag.provider_submit_diagnostic, '{}'::jsonb)
+        || jsonb_build_object(
+          'provider_acceptance_evidence_present', update_diag.is_provider_evidence,
+          'provider_submission_status', CASE
+            WHEN update_diag.is_provider_evidence IS TRUE THEN 'PROVIDER_SUBMISSION_ACCEPTED'
+            WHEN NULLIF(BTRIM(COALESCE(update_diag.provider_submission_status, '')), '') IS NOT NULL THEN update_diag.provider_submission_status
+            ELSE NULL::text
+          END,
+          'provider_request_sent', update_diag.provider_request_sent OR update_diag.is_provider_source OR update_diag.is_provider_evidence,
+          'provider_response_received', update_diag.provider_response_received OR update_diag.is_provider_source,
+          'provider_response_present', update_diag.provider_response_present OR update_diag.is_provider_source,
+          'manual_resolution_required', update_diag.manual_resolution_required,
+          'safe_retry_available', update_diag.safe_retry_available
+        )
+      );
 
   UPDATE pg_temp.tmp_pay_bank_transfer_updates AS update_attempt
   SET is_attempted_but_unproven = (
@@ -16816,6 +16898,8 @@ BEGIN
             FROM public.pay_bank_transfer_events AS existing_event
             WHERE existing_event.pay_bank_transfer_id = existing_transfer.id
               AND upper(BTRIM(COALESCE(existing_event.event_source, ''))) IN ('PROVIDER_RESPONSE', 'PROVIDER_POLL', 'PROVIDER_WEBHOOK', 'WEBHOOK', 'POLL', 'RAIL_PROVIDER', 'PROVIDER', 'PROVIDER_SETTLEMENT')
+              AND upper(BTRIM(COALESCE(existing_event.normalised_state, existing_event.provider_state, existing_event.raw_payload #>> '{provider_submit_diagnostic,provider_state}', ''))) NOT IN ('REJECTED', 'FAILED', 'ERROR', 'DECLINED', 'CANCELLED', 'CANCELED', 'MALFORMED', 'UNKNOWN')
+              AND upper(BTRIM(COALESCE(existing_event.raw_payload #>> '{provider_submit_diagnostic,provider_submission_status}', ''))) NOT IN ('PROVIDER_SUBMISSION_REJECTED', 'PROVIDER_SUBMISSION_FAILED', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE', 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK', 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL', 'NO_PROVIDER_SUBMISSION_ATTEMPTED', 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID')
               AND EXISTS (
                 SELECT 1
                 FROM (VALUES
@@ -16942,6 +17026,8 @@ BEGIN
       FROM public.pay_bank_transfer_events AS event_row
       WHERE event_row.pay_bank_transfer_id = reference_transfer.id
         AND upper(BTRIM(COALESCE(event_row.event_source, ''))) IN ('PROVIDER_RESPONSE', 'PROVIDER_POLL', 'PROVIDER_WEBHOOK', 'WEBHOOK', 'POLL', 'RAIL_PROVIDER', 'PROVIDER', 'PROVIDER_SETTLEMENT')
+        AND upper(BTRIM(COALESCE(event_row.normalised_state, event_row.provider_state, event_row.raw_payload #>> '{provider_submit_diagnostic,provider_state}', ''))) NOT IN ('REJECTED', 'FAILED', 'ERROR', 'DECLINED', 'CANCELLED', 'CANCELED', 'MALFORMED', 'UNKNOWN')
+        AND upper(BTRIM(COALESCE(event_row.raw_payload #>> '{provider_submit_diagnostic,provider_submission_status}', ''))) NOT IN ('PROVIDER_SUBMISSION_REJECTED', 'PROVIDER_SUBMISSION_FAILED', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE', 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK', 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL', 'NO_PROVIDER_SUBMISSION_ATTEMPTED', 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID')
         AND EXISTS (
           SELECT 1
           FROM (VALUES
@@ -17032,9 +17118,9 @@ BEGIN
 
   SELECT
     COUNT(*) FILTER (WHERE update_row.is_provider_evidence IS TRUE)::integer,
-    COUNT(*) FILTER (WHERE update_row.provider_response_present IS TRUE OR update_row.provider_response_received IS TRUE)::integer,
-    COUNT(*) FILTER (WHERE update_row.provider_request_sent IS TRUE)::integer,
-    COUNT(*) FILTER (WHERE update_row.provider_submission_unknown IS TRUE OR update_row.provider_submission_status IN ('UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE'))::integer,
+    COUNT(*) FILTER (WHERE update_row.provider_response_present IS TRUE OR update_row.provider_response_received IS TRUE OR update_row.is_provider_source IS TRUE)::integer,
+    COUNT(*) FILTER (WHERE update_row.provider_request_sent IS TRUE OR update_row.provider_response_present IS TRUE OR update_row.provider_response_received IS TRUE OR update_row.is_provider_source IS TRUE OR update_row.is_provider_evidence IS TRUE)::integer,
+    COUNT(*) FILTER (WHERE update_row.provider_submission_unknown IS TRUE OR update_row.is_attempted_but_unproven IS TRUE OR update_row.provider_submission_status IN ('UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE', 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID'))::integer,
     COALESCE(jsonb_agg(jsonb_strip_nulls(jsonb_build_object(
       'transfer_id', update_row.transfer_id::text,
       'provider_submission_status', update_row.provider_submission_status,
@@ -17146,6 +17232,7 @@ BEGIN
   );
 END;
 $function$;
+
 
 
 
