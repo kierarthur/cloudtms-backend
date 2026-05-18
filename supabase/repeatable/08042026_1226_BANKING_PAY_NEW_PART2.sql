@@ -19891,7 +19891,6 @@ DROP FUNCTION IF EXISTS public.pay_batch_submission_evidence(uuid);
 
 
 
-
 CREATE OR REPLACE FUNCTION public.pay_batch_submission_evidence(p_pay_batch_id uuid, p_counts_only boolean DEFAULT false)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -20068,14 +20067,12 @@ BEGIN
     count(*) FILTER (WHERE classified_rows.evidence_classification = 'ambiguous' OR classified_rows.has_ambiguous_external_evidence IS TRUE)::integer,
     count(*) FILTER (
       WHERE classified_rows.has_provider_attempt_without_external_id IS TRUE
-         OR classified_rows.has_operation_submit_attempt IS TRUE
     )::integer,
     count(*) FILTER (WHERE classified_rows.has_provider_attempt_without_external_id IS TRUE)::integer,
     count(*) FILTER (
       WHERE classified_rows.evidence_classification = 'ambiguous'
          OR classified_rows.has_ambiguous_external_evidence IS TRUE
          OR classified_rows.has_provider_attempt_without_external_id IS TRUE
-         OR classified_rows.has_operation_submit_attempt IS TRUE
     )::integer,
     count(*) FILTER (WHERE classified_rows.is_terminal_or_completed IS TRUE)::integer,
     bool_or(
@@ -20105,7 +20102,6 @@ BEGIN
       WHERE classified_rows.has_provider_submission_evidence IS TRUE
          OR classified_rows.has_provider_event_evidence IS TRUE
          OR classified_rows.has_provider_attempt_without_external_id IS TRUE
-         OR classified_rows.has_operation_submit_attempt IS TRUE
     )::integer,
     count(*) FILTER (
       WHERE classified_rows.has_provider_submission_evidence IS TRUE
@@ -20507,6 +20503,10 @@ BEGIN
   );
 END;
 $function$;
+
+
+
+
 
 
 
