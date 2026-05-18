@@ -11747,6 +11747,9 @@ DROP FUNCTION IF EXISTS public.pay_bank_transfer_execution_classify(uuid, text, 
 
 
 
+
+
+
 CREATE OR REPLACE FUNCTION public.pay_bank_transfer_execution_classify(
   p_pay_batch_id uuid,
   p_pay_channel_scope text DEFAULT 'ALL'::text,
@@ -12000,6 +12003,7 @@ BEGIN
       lower(btrim(coalesce(combined_source.transfer_rail_meta_json #>> '{provider_submit_diagnostic,provider_response_received}', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on') AS provider_submit_response_received,
       lower(btrim(coalesce(combined_source.transfer_rail_meta_json #>> '{provider_submit_diagnostic,provider_response_present}', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on') AS provider_submit_response_present,
       lower(btrim(coalesce(combined_source.transfer_rail_meta_json #>> '{provider_submit_diagnostic,provider_acceptance_evidence_present}', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on') AS provider_submit_acceptance_evidence_present,
+      upper(btrim(coalesce(combined_source.transfer_rail_meta_json #>> '{provider_submit_diagnostic,provider_submission_status}', ''))) = 'MANUAL_RESOLVED_NO_PAYMENT_MADE' AS provider_submit_manual_resolved_no_payment,
       combined_source.transfer_completed_at_utc,
       combined_source.transfer_failed_reason,
       combined_source.transfer_bank_details_hash_snapshot,
@@ -12069,13 +12073,25 @@ BEGIN
               )
             )
           )
+          AND upper(btrim(coalesce(event_row.event_source, ''))) IN ('PROVIDER_RESPONSE', 'PROVIDER_POLL', 'PROVIDER_WEBHOOK', 'WEBHOOK', 'POLL', 'RAIL_PROVIDER', 'PROVIDER', 'PROVIDER_SETTLEMENT')
+          AND upper(btrim(coalesce(event_row.normalised_state, event_row.provider_state, event_row.raw_payload #>> '{provider_submit_diagnostic,provider_state}', ''))) NOT IN ('REJECTED', 'FAILED', 'ERROR', 'DECLINED', 'CANCELLED', 'CANCELED', 'MALFORMED', 'UNKNOWN', 'TIMEOUT', 'TIMED_OUT')
+          AND upper(btrim(coalesce(event_row.raw_payload #>> '{provider_submit_diagnostic,provider_submission_status}', ''))) NOT IN (
+            'PROVIDER_SUBMISSION_REJECTED',
+            'PROVIDER_SUBMISSION_FAILED',
+            'PROVIDER_SUBMISSION_MALFORMED_RESPONSE',
+            'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME',
+            'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK',
+            'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL',
+            'NO_PROVIDER_SUBMISSION_ATTEMPTED',
+            'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID',
+            'MANUAL_RESOLVED_NO_PAYMENT_MADE'
+          )
           AND (
-            upper(btrim(coalesce(event_row.event_source, ''))) IN ('PROVIDER_RESPONSE', 'PROVIDER_POLL', 'PROVIDER_WEBHOOK', 'WEBHOOK', 'POLL', 'RAIL_PROVIDER', 'PROVIDER', 'PROVIDER_SETTLEMENT')
-            OR nullif(btrim(coalesce(event_row.provider_event_id, '')), '') IS NOT NULL
-            OR nullif(btrim(coalesce(event_row.provider_reference, '')), '') IS NOT NULL
-            OR EXISTS (
+            EXISTS (
               SELECT 1
               FROM (VALUES
+                (event_row.provider_event_id),
+                (event_row.provider_reference),
                 (event_row.raw_payload #>> '{provider_event_id}'),
                 (event_row.raw_payload #>> '{provider_reference}'),
                 (event_row.raw_payload #>> '{provider_submission_id}'),
@@ -12086,14 +12102,18 @@ BEGIN
                 (event_row.raw_payload #>> '{external_payment_id}'),
                 (event_row.raw_payload #>> '{revolut_payment_id}'),
                 (event_row.raw_payload #>> '{provider_transfer_id}'),
-                (event_row.raw_payload #>> '{transfer_id}'),
                 (event_row.raw_payload #>> '{external_transfer_id}'),
                 (event_row.raw_payload #>> '{provider_transaction_id}'),
-                (event_row.raw_payload #>> '{transaction_id}')
+                (event_row.raw_payload #>> '{transaction_id}'),
+                (event_row.raw_payload #>> '{provider_submit_diagnostic,provider_transaction_id}'),
+                (event_row.raw_payload #>> '{provider_submit_diagnostic,provider_payment_id}'),
+                (event_row.raw_payload #>> '{provider_submit_diagnostic,rail_tx_id}'),
+                (event_row.raw_payload #>> '{provider_submit_diagnostic,provider_reference}')
               ) AS provider_identifier(identifier_value)
               WHERE nullif(btrim(coalesce(provider_identifier.identifier_value, '')), '') IS NOT NULL
                 AND NOT (nullif(btrim(coalesce(provider_identifier.identifier_value, '')), '') = ANY(normalised_rows.local_identity_values))
             )
+            OR upper(btrim(coalesce(event_row.provider_state, event_row.normalised_state, event_row.raw_payload #>> '{provider_submit_diagnostic,provider_state}', ''))) IN ('ACCEPTED', 'SUBMITTED', 'PROCESSING', 'SENT', 'COMPLETED', 'COMPLETE', 'APPROVED', 'EXECUTED', 'PAID')
           )
       ) AS calc_has_provider_event_evidence,
       EXISTS (
@@ -12158,14 +12178,16 @@ BEGIN
           AND upper(btrim(coalesce(stale_chunk_row.status, ''))) = 'RUNNING'
           AND (stale_chunk_row.lock_expires_at_utc IS NULL OR stale_chunk_row.lock_expires_at_utc <= now())
           AND normalised_rows.transfer_id IS NOT NULL
+          AND normalised_rows.provider_submit_manual_resolved_no_payment IS NOT TRUE
           AND position(lower(normalised_rows.transfer_id::text) IN lower(coalesce(stale_chunk_row.payload_json::text, '') || coalesce(stale_chunk_row.result_json::text, '') || coalesce(stale_chunk_row.error_json::text, ''))) > 0
           AND (
             stale_chunk_row.result_json IS NULL
             OR stale_chunk_row.result_json = '{}'::jsonb
             OR jsonb_typeof(stale_chunk_row.result_json->'provider_submit_diagnostic') IS DISTINCT FROM 'object'
-            OR upper(btrim(coalesce(stale_chunk_row.result_json #>> '{provider_submit_diagnostic,provider_submission_status}', ''))) IN ('', 'NO_PROVIDER_SUBMISSION_ATTEMPTED', 'CLAIMED_NOT_PROVIDER_CALLED_YET')
+            OR upper(btrim(coalesce(stale_chunk_row.result_json #>> '{provider_submit_diagnostic,provider_submission_status}', ''))) IN ('', 'NO_PROVIDER_SUBMISSION_ATTEMPTED', 'CLAIMED_NOT_PROVIDER_CALLED_YET', 'PROVIDER_SUBMIT_CHUNK_CLAIMED', 'PROVIDER_PRECALL_VALIDATION_STARTED', 'PROVIDER_PAYMENT_CREATE_STARTED', 'PROVIDER_PAYMENT_CREATE_REQUEST_SENDING', 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL')
           )
           AND (stale_chunk_row.error_json IS NULL OR stale_chunk_row.error_json = '{}'::jsonb OR jsonb_typeof(stale_chunk_row.error_json->'provider_submit_diagnostic') IS DISTINCT FROM 'object')
+          AND lower(btrim(coalesce(stale_chunk_row.result_json #>> '{provider_submit_diagnostic,provider_request_impossible}', stale_chunk_row.result_json #>> '{provider_submit_diagnostic,durable_provider_request_impossible}', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
       ) AS calc_has_stale_provider_submit_chunk,
       EXISTS (
         SELECT 1
@@ -12185,6 +12207,10 @@ BEGIN
           (normalised_rows.transfer_rail_meta_json #>> '{external_transfer_id}'),
           (normalised_rows.transfer_rail_meta_json #>> '{provider_transaction_id}'),
           (normalised_rows.transfer_rail_meta_json #>> '{transaction_id}'),
+          (normalised_rows.transfer_rail_meta_json #>> '{provider_submit_diagnostic,provider_transaction_id}'),
+          (normalised_rows.transfer_rail_meta_json #>> '{provider_submit_diagnostic,provider_payment_id}'),
+          (normalised_rows.transfer_rail_meta_json #>> '{provider_submit_diagnostic,rail_tx_id}'),
+          (normalised_rows.transfer_rail_meta_json #>> '{provider_submit_diagnostic,provider_reference}'),
           (normalised_rows.transfer_rail_meta_json #>> '{external_id}'),
           (normalised_rows.transfer_rail_meta_json #>> '{provider_id}'),
           (normalised_rows.transfer_rail_meta_json #>> '{bank_transfer_id}')
@@ -12197,14 +12223,21 @@ BEGIN
         AND NOT (nullif(btrim(coalesce(normalised_rows.transfer_rail_tx_id, '')), '') = ANY(normalised_rows.local_identity_values))
       ) AS calc_has_non_local_rail_tx_id,
       (
-        lower(btrim(coalesce(normalised_rows.transfer_rail_meta_json #>> '{provider_attempt_without_external_id}', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
-        OR normalised_rows.provider_submit_request_sent IS TRUE
-        OR normalised_rows.provider_submit_response_received IS TRUE
-        OR normalised_rows.provider_submit_response_present IS TRUE
+        normalised_rows.provider_submit_manual_resolved_no_payment IS NOT TRUE
+        AND normalised_rows.provider_submit_acceptance_evidence_present IS NOT TRUE
+        AND (
+          lower(btrim(coalesce(normalised_rows.transfer_rail_meta_json #>> '{provider_attempt_without_external_id}', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+          OR normalised_rows.provider_submit_request_sent IS TRUE
+          OR normalised_rows.provider_submit_response_received IS TRUE
+          OR normalised_rows.provider_submit_response_present IS TRUE
+        )
       ) AS calc_has_provider_attempt_without_external_id,
       (
-        lower(btrim(coalesce(normalised_rows.transfer_rail_meta_json #>> '{last_update_provider_evidence}', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
-        OR lower(btrim(coalesce(normalised_rows.transfer_rail_meta_json #>> '{last_update_provider_source}', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+        normalised_rows.provider_submit_manual_resolved_no_payment IS NOT TRUE
+        AND (
+          lower(btrim(coalesce(normalised_rows.transfer_rail_meta_json #>> '{last_update_provider_evidence}', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+          OR lower(btrim(coalesce(normalised_rows.transfer_rail_meta_json #>> '{last_update_provider_source}', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+        )
       ) AS calc_has_provider_source_flag,
       (
         normalised_rows.status_upper IN ('FAILED', 'REJECTED', 'DECLINED', 'BLOCKED', 'ERROR')
@@ -12245,17 +12278,22 @@ BEGIN
     SELECT
       classified_rows.*,
       (
-        classified_rows.calc_has_provider_event_evidence
-        OR classified_rows.calc_has_non_local_rail_tx_id
-        OR classified_rows.calc_has_non_local_rail_meta_identifier
-        OR classified_rows.provider_submit_acceptance_evidence_present IS TRUE
-        OR classified_rows.provider_submit_status_upper = 'PROVIDER_SUBMISSION_ACCEPTED'
+        classified_rows.provider_submit_manual_resolved_no_payment IS NOT TRUE
+        AND (
+          classified_rows.calc_has_provider_event_evidence
+          OR classified_rows.calc_has_non_local_rail_tx_id
+          OR classified_rows.calc_has_non_local_rail_meta_identifier
+          OR classified_rows.provider_submit_acceptance_evidence_present IS TRUE
+        )
       ) AS calc_has_provider_submission_evidence,
       (
-        classified_rows.calc_has_ambiguous_event
-        OR classified_rows.calc_has_unknown_or_review_state
-        OR classified_rows.calc_has_stale_provider_submit_chunk
-        OR classified_rows.provider_submit_status_upper IN ('UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE', 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK')
+        classified_rows.provider_submit_manual_resolved_no_payment IS NOT TRUE
+        AND (
+          classified_rows.calc_has_ambiguous_event
+          OR classified_rows.calc_has_unknown_or_review_state
+          OR classified_rows.calc_has_stale_provider_submit_chunk
+          OR classified_rows.provider_submit_status_upper IN ('UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE', 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK')
+        )
       ) AS calc_has_ambiguous_external_evidence
     FROM classified_rows
   ), final_rows AS (
@@ -12396,7 +12434,6 @@ BEGIN
       AND final_rows.calc_has_provider_submission_evidence IS NOT TRUE
       AND final_rows.calc_has_provider_event_evidence IS NOT TRUE
       AND final_rows.calc_has_provider_attempt_without_external_id IS NOT TRUE
-      AND final_rows.calc_has_operation_submit_attempt IS NOT TRUE
       AND final_rows.calc_has_ambiguous_external_evidence IS NOT TRUE
       AND final_rows.calc_is_failed_or_blocked IS NOT TRUE
       AND final_rows.calc_is_terminal_or_completed IS NOT TRUE
@@ -12429,7 +12466,6 @@ BEGIN
       AND final_rows.calc_has_provider_submission_evidence IS NOT TRUE
       AND final_rows.calc_has_provider_event_evidence IS NOT TRUE
       AND final_rows.calc_has_provider_attempt_without_external_id IS NOT TRUE
-      AND final_rows.calc_has_operation_submit_attempt IS NOT TRUE
       AND final_rows.calc_has_ambiguous_external_evidence IS NOT TRUE
       AND final_rows.calc_is_failed_or_blocked IS NOT TRUE
       AND final_rows.calc_is_terminal_or_completed IS NOT TRUE
@@ -12462,8 +12498,7 @@ BEGIN
             final_rows.calc_has_provider_submission_evidence IS NOT TRUE
             AND final_rows.calc_has_provider_event_evidence IS NOT TRUE
             AND final_rows.calc_has_provider_attempt_without_external_id IS NOT TRUE
-            AND final_rows.calc_has_operation_submit_attempt IS NOT TRUE
-            AND final_rows.calc_has_ambiguous_external_evidence IS NOT TRUE
+                  AND final_rows.calc_has_ambiguous_external_evidence IS NOT TRUE
             AND final_rows.calc_has_non_local_rail_tx_id IS NOT TRUE
             AND final_rows.calc_has_non_local_rail_meta_identifier IS NOT TRUE
             AND final_rows.calc_has_provider_source_flag IS NOT TRUE
@@ -12476,8 +12511,7 @@ BEGIN
           AND final_rows.calc_has_provider_submission_evidence IS NOT TRUE
           AND final_rows.calc_has_provider_event_evidence IS NOT TRUE
           AND final_rows.calc_has_provider_attempt_without_external_id IS NOT TRUE
-          AND final_rows.calc_has_operation_submit_attempt IS NOT TRUE
-          AND final_rows.calc_has_ambiguous_external_evidence IS NOT TRUE
+              AND final_rows.calc_has_ambiguous_external_evidence IS NOT TRUE
           AND final_rows.calc_is_failed_or_blocked IS NOT TRUE
           AND final_rows.calc_is_terminal_or_completed IS NOT TRUE
         )
@@ -12507,8 +12541,7 @@ BEGIN
         AND final_rows.calc_has_provider_submission_evidence IS NOT TRUE
         AND final_rows.calc_has_provider_event_evidence IS NOT TRUE
         AND final_rows.calc_has_provider_attempt_without_external_id IS NOT TRUE
-        AND final_rows.calc_has_operation_submit_attempt IS NOT TRUE
-        AND final_rows.calc_has_ambiguous_external_evidence IS NOT TRUE
+          AND final_rows.calc_has_ambiguous_external_evidence IS NOT TRUE
         AND final_rows.calc_has_non_local_rail_tx_id IS NOT TRUE
         AND final_rows.calc_has_non_local_rail_meta_identifier IS NOT TRUE
         AND final_rows.calc_has_provider_source_flag IS NOT TRUE
@@ -12528,7 +12561,6 @@ BEGIN
       AND final_rows.calc_has_provider_submission_evidence IS NOT TRUE
       AND final_rows.calc_has_provider_event_evidence IS NOT TRUE
       AND final_rows.calc_has_provider_attempt_without_external_id IS NOT TRUE
-      AND final_rows.calc_has_operation_submit_attempt IS NOT TRUE
       AND final_rows.calc_has_ambiguous_external_evidence IS NOT TRUE
       AND final_rows.calc_has_non_local_rail_tx_id IS NOT TRUE
       AND final_rows.calc_has_non_local_rail_meta_identifier IS NOT TRUE
@@ -12544,8 +12576,7 @@ BEGIN
         AND final_rows.calc_has_provider_submission_evidence IS NOT TRUE
         AND final_rows.calc_has_provider_event_evidence IS NOT TRUE
         AND final_rows.calc_has_provider_attempt_without_external_id IS NOT TRUE
-        AND final_rows.calc_has_operation_submit_attempt IS NOT TRUE
-        AND final_rows.calc_has_ambiguous_external_evidence IS NOT TRUE
+          AND final_rows.calc_has_ambiguous_external_evidence IS NOT TRUE
         AND final_rows.calc_has_non_local_rail_tx_id IS NOT TRUE
         AND final_rows.calc_has_non_local_rail_meta_identifier IS NOT TRUE
         AND final_rows.calc_has_provider_source_flag IS NOT TRUE
@@ -12557,7 +12588,6 @@ BEGIN
       AND final_rows.calc_has_provider_submission_evidence IS NOT TRUE
       AND final_rows.calc_has_provider_event_evidence IS NOT TRUE
       AND final_rows.calc_has_provider_attempt_without_external_id IS NOT TRUE
-      AND final_rows.calc_has_operation_submit_attempt IS NOT TRUE
       AND final_rows.calc_has_ambiguous_external_evidence IS NOT TRUE
       AND final_rows.calc_has_non_local_rail_tx_id IS NOT TRUE
       AND final_rows.calc_has_non_local_rail_meta_identifier IS NOT TRUE
@@ -12570,7 +12600,6 @@ BEGIN
         OR final_rows.calc_has_provider_submission_evidence IS TRUE
         OR final_rows.calc_has_provider_event_evidence IS TRUE
         OR final_rows.calc_has_provider_attempt_without_external_id IS TRUE
-        OR final_rows.calc_has_operation_submit_attempt IS TRUE
         OR final_rows.calc_has_ambiguous_external_evidence IS TRUE
         OR final_rows.calc_has_non_local_rail_tx_id IS TRUE
         OR final_rows.calc_has_non_local_rail_meta_identifier IS TRUE
@@ -12585,7 +12614,6 @@ BEGIN
       WHEN final_rows.calc_has_stale_provider_submit_chunk THEN 'AUTH_REQUEST_PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK'
       WHEN final_rows.calc_has_ambiguous_external_evidence THEN 'AUTH_REQUEST_AMBIGUOUS_EXTERNAL_EVIDENCE'
       WHEN final_rows.calc_has_provider_attempt_without_external_id THEN 'AUTH_REQUEST_PROVIDER_ATTEMPT_WITHOUT_EXTERNAL_ID'
-      WHEN final_rows.calc_has_operation_submit_attempt THEN 'AUTH_REQUEST_PROVIDER_SUBMIT_CHUNK_ATTEMPT_PRESENT'
       WHEN final_rows.calc_has_non_local_rail_tx_id THEN 'AUTH_REQUEST_NON_LOCAL_RAIL_TX_ID_PRESENT'
       WHEN final_rows.calc_has_non_local_rail_meta_identifier THEN 'AUTH_REQUEST_NON_LOCAL_PROVIDER_IDENTIFIER_PRESENT'
       WHEN final_rows.calc_has_provider_source_flag THEN 'AUTH_REQUEST_PROVIDER_SOURCE_FLAG_PRESENT'
@@ -12604,7 +12632,6 @@ BEGIN
       WHEN final_rows.calc_has_stale_provider_submit_chunk THEN 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK'
       WHEN final_rows.calc_has_ambiguous_external_evidence THEN COALESCE(NULLIF(final_rows.provider_submit_status_upper, ''), 'AMBIGUOUS_EXTERNAL_EVIDENCE')
       WHEN final_rows.calc_has_provider_attempt_without_external_id THEN 'PROVIDER_ATTEMPT_WITHOUT_EXTERNAL_ID'
-      WHEN final_rows.calc_has_operation_submit_attempt THEN 'PROVIDER_SUBMIT_CHUNK_ATTEMPT_PRESENT'
       WHEN final_rows.calc_is_terminal_or_completed THEN 'TERMINAL_OR_COMPLETED_TRANSFER_STATE'
       WHEN final_rows.calc_is_failed_or_blocked THEN 'FAILED_OR_BLOCKED_TRANSFER_STATE'
       WHEN auth_context.has_active_auth_request IS TRUE
@@ -12616,8 +12643,7 @@ BEGIN
           AND final_rows.calc_has_provider_submission_evidence IS NOT TRUE
           AND final_rows.calc_has_provider_event_evidence IS NOT TRUE
           AND final_rows.calc_has_provider_attempt_without_external_id IS NOT TRUE
-          AND final_rows.calc_has_operation_submit_attempt IS NOT TRUE
-          AND final_rows.calc_has_ambiguous_external_evidence IS NOT TRUE
+              AND final_rows.calc_has_ambiguous_external_evidence IS NOT TRUE
           AND final_rows.calc_has_non_local_rail_tx_id IS NOT TRUE
           AND final_rows.calc_has_non_local_rail_meta_identifier IS NOT TRUE
           AND final_rows.calc_has_provider_source_flag IS NOT TRUE
@@ -12628,8 +12654,7 @@ BEGIN
           WHEN final_rows.calc_has_stale_provider_submit_chunk THEN 'AUTH_REQUEST_PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK'
           WHEN final_rows.calc_has_ambiguous_external_evidence THEN 'AUTH_REQUEST_AMBIGUOUS_EXTERNAL_EVIDENCE'
           WHEN final_rows.calc_has_provider_attempt_without_external_id THEN 'AUTH_REQUEST_PROVIDER_ATTEMPT_WITHOUT_EXTERNAL_ID'
-          WHEN final_rows.calc_has_operation_submit_attempt THEN 'AUTH_REQUEST_PROVIDER_SUBMIT_CHUNK_ATTEMPT_PRESENT'
-          WHEN final_rows.calc_has_non_local_rail_tx_id THEN 'AUTH_REQUEST_NON_LOCAL_RAIL_TX_ID_PRESENT'
+              WHEN final_rows.calc_has_non_local_rail_tx_id THEN 'AUTH_REQUEST_NON_LOCAL_RAIL_TX_ID_PRESENT'
           WHEN final_rows.calc_has_non_local_rail_meta_identifier THEN 'AUTH_REQUEST_NON_LOCAL_PROVIDER_IDENTIFIER_PRESENT'
           WHEN final_rows.calc_has_provider_source_flag THEN 'AUTH_REQUEST_PROVIDER_SOURCE_FLAG_PRESENT'
           WHEN auth_context.has_pending_authorisation_auth_request THEN 'AUTH_REQUEST_PENDING_AUTHORISATION'
@@ -12665,7 +12690,6 @@ BEGIN
       AND final_rows.calc_has_provider_submission_evidence IS NOT TRUE
       AND final_rows.calc_has_provider_event_evidence IS NOT TRUE
       AND final_rows.calc_has_provider_attempt_without_external_id IS NOT TRUE
-      AND final_rows.calc_has_operation_submit_attempt IS NOT TRUE
       AND final_rows.calc_has_ambiguous_external_evidence IS NOT TRUE
       AND final_rows.calc_has_non_local_rail_tx_id IS NOT TRUE
       AND final_rows.calc_has_non_local_rail_meta_identifier IS NOT TRUE
@@ -12688,7 +12712,6 @@ BEGIN
       WHEN final_rows.calc_has_stale_provider_submit_chunk THEN 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK'
       WHEN final_rows.calc_has_ambiguous_external_evidence THEN COALESCE(NULLIF(final_rows.provider_submit_status_upper, ''), 'PROVIDER_SUBMIT_AMBIGUOUS_EXTERNAL_EVIDENCE')
       WHEN final_rows.calc_has_provider_attempt_without_external_id THEN 'PROVIDER_SUBMIT_PROVIDER_ATTEMPT_WITHOUT_EXTERNAL_ID'
-      WHEN final_rows.calc_has_operation_submit_attempt THEN 'PROVIDER_SUBMIT_CHUNK_ATTEMPT_PRESENT'
       WHEN final_rows.calc_has_non_local_rail_tx_id THEN 'PROVIDER_SUBMIT_NON_LOCAL_RAIL_TX_ID_PRESENT'
       WHEN final_rows.calc_has_non_local_rail_meta_identifier THEN 'PROVIDER_SUBMIT_NON_LOCAL_PROVIDER_IDENTIFIER_PRESENT'
       WHEN final_rows.calc_has_provider_source_flag THEN 'PROVIDER_SUBMIT_PROVIDER_SOURCE_FLAG_PRESENT'
@@ -12734,7 +12757,6 @@ BEGIN
       AND final_rows.calc_has_provider_submission_evidence IS NOT TRUE
       AND final_rows.calc_has_provider_event_evidence IS NOT TRUE
       AND final_rows.calc_has_provider_attempt_without_external_id IS NOT TRUE
-      AND final_rows.calc_has_operation_submit_attempt IS NOT TRUE
       AND final_rows.calc_has_ambiguous_external_evidence IS NOT TRUE
       AND final_rows.calc_has_non_local_rail_tx_id IS NOT TRUE
       AND final_rows.calc_has_non_local_rail_meta_identifier IS NOT TRUE
@@ -12758,12 +12780,6 @@ BEGIN
     final_rows.scope_id NULLS LAST;
 END;
 $function$;
-
-
-
-
-
-
 
 
 
