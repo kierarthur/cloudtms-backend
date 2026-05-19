@@ -11821,6 +11821,8 @@ DROP FUNCTION IF EXISTS public.pay_bank_transfer_execution_classify(uuid, text, 
 
 
 
+
+
 CREATE OR REPLACE FUNCTION public.pay_bank_transfer_execution_classify(
   p_pay_batch_id uuid,
   p_pay_channel_scope text DEFAULT 'ALL'::text,
@@ -12084,6 +12086,9 @@ BEGIN
       batch_context_row.batch_execution_boundary_crossed,
       ARRAY_REMOVE(ARRAY[
         combined_source.transfer_id::text,
+        CASE WHEN p_operation_id IS NULL THEN NULL::text ELSE p_operation_id::text END,
+        NULLIF(btrim(coalesce(combined_source.transfer_rail_meta_json #>> '{provider_submit_diagnostic,operation_id}', '')), ''),
+        NULLIF(btrim(coalesce(combined_source.transfer_rail_meta_json #>> '{provider_submit_diagnostic,chunk_id}', '')), ''),
         NULLIF(btrim(coalesce(combined_source.transfer_request_id, '')), ''),
         NULLIF(btrim(coalesce(combined_source.transfer_payment_reference, '')), ''),
         NULLIF(btrim(coalesce(combined_source.scope_request_id, '')), ''),
@@ -14652,7 +14657,6 @@ $function$;
 
 
 
-
 CREATE OR REPLACE FUNCTION public.pay_provider_submit_diagnostic_get(
   p_pay_batch_id uuid DEFAULT NULL::uuid,
   p_operation_id uuid DEFAULT NULL::uuid,
@@ -15271,6 +15275,8 @@ BEGIN
            (
              NULLIF(BTRIM(COALESCE(selected_transfer.rail_tx_id, '')), '') IS NOT NULL
              AND NULLIF(BTRIM(COALESCE(selected_transfer.rail_tx_id, '')), '') <> selected_transfer.transfer_id::text
+             AND NULLIF(BTRIM(COALESCE(selected_transfer.rail_tx_id, '')), '') <> COALESCE(CASE WHEN p_operation_id IS NULL THEN NULL::text ELSE p_operation_id::text END, '__NO_OPERATION_ID__')
+             AND NULLIF(BTRIM(COALESCE(selected_transfer.rail_tx_id, '')), '') <> COALESCE(CASE WHEN p_chunk_id IS NULL THEN NULL::text ELSE p_chunk_id::text END, '__NO_CHUNK_ID__')
              AND NULLIF(BTRIM(COALESCE(selected_transfer.rail_tx_id, '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(selected_transfer.request_id, '')), ''), '__NO_REQUEST_ID__')
              AND NULLIF(BTRIM(COALESCE(selected_transfer.rail_tx_id, '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(selected_transfer.payment_reference, '')), ''), '__NO_PAYMENT_REFERENCE__')
              AND UPPER(BTRIM(COALESCE(selected_transfer.rail_meta_json #>> '{provider_submit_diagnostic,provider_submission_status}', ''))) NOT IN ('PROVIDER_SUBMISSION_REJECTED', 'PROVIDER_SUBMISSION_FAILED', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE', 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK', 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL', 'NO_PROVIDER_SUBMISSION_ATTEMPTED', 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID')
@@ -15278,6 +15284,10 @@ BEGIN
            OR COALESCE(BOOL_OR(
              NULLIF(BTRIM(COALESCE(selected_source.provider_transaction_id, selected_source.rail_tx_id, '')), '') IS NOT NULL
              AND NULLIF(BTRIM(COALESCE(selected_source.provider_transaction_id, selected_source.rail_tx_id, '')), '') <> selected_transfer.transfer_id::text
+             AND NULLIF(BTRIM(COALESCE(selected_source.provider_transaction_id, selected_source.rail_tx_id, '')), '') <> COALESCE(CASE WHEN selected_source.operation_id IS NULL THEN NULL::text ELSE selected_source.operation_id::text END, '__NO_SOURCE_OPERATION_ID__')
+             AND NULLIF(BTRIM(COALESCE(selected_source.provider_transaction_id, selected_source.rail_tx_id, '')), '') <> COALESCE(CASE WHEN selected_source.chunk_id IS NULL THEN NULL::text ELSE selected_source.chunk_id::text END, '__NO_SOURCE_CHUNK_ID__')
+             AND NULLIF(BTRIM(COALESCE(selected_source.provider_transaction_id, selected_source.rail_tx_id, '')), '') <> COALESCE(CASE WHEN p_operation_id IS NULL THEN NULL::text ELSE p_operation_id::text END, '__NO_OPERATION_ID__')
+             AND NULLIF(BTRIM(COALESCE(selected_source.provider_transaction_id, selected_source.rail_tx_id, '')), '') <> COALESCE(CASE WHEN p_chunk_id IS NULL THEN NULL::text ELSE p_chunk_id::text END, '__NO_CHUNK_ID__')
              AND NULLIF(BTRIM(COALESCE(selected_source.provider_transaction_id, selected_source.rail_tx_id, '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(selected_transfer.request_id, '')), ''), '__NO_REQUEST_ID__')
              AND NULLIF(BTRIM(COALESCE(selected_source.provider_transaction_id, selected_source.rail_tx_id, '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(selected_source.idempotency_key, '')), ''), '__NO_IDEMPOTENCY_KEY__')
              AND NULLIF(BTRIM(COALESCE(selected_source.provider_transaction_id, selected_source.rail_tx_id, '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(selected_source.local_provider_request_id, '')), ''), '__NO_LOCAL_PROVIDER_REQUEST_ID__')
@@ -15289,6 +15299,10 @@ BEGIN
            OR COALESCE(BOOL_OR(
              NULLIF(BTRIM(COALESCE(selected_source.provider_reference, '')), '') IS NOT NULL
              AND NULLIF(BTRIM(COALESCE(selected_source.provider_reference, '')), '') <> selected_transfer.transfer_id::text
+             AND NULLIF(BTRIM(COALESCE(selected_source.provider_reference, '')), '') <> COALESCE(CASE WHEN selected_source.operation_id IS NULL THEN NULL::text ELSE selected_source.operation_id::text END, '__NO_SOURCE_OPERATION_ID__')
+             AND NULLIF(BTRIM(COALESCE(selected_source.provider_reference, '')), '') <> COALESCE(CASE WHEN selected_source.chunk_id IS NULL THEN NULL::text ELSE selected_source.chunk_id::text END, '__NO_SOURCE_CHUNK_ID__')
+             AND NULLIF(BTRIM(COALESCE(selected_source.provider_reference, '')), '') <> COALESCE(CASE WHEN p_operation_id IS NULL THEN NULL::text ELSE p_operation_id::text END, '__NO_OPERATION_ID__')
+             AND NULLIF(BTRIM(COALESCE(selected_source.provider_reference, '')), '') <> COALESCE(CASE WHEN p_chunk_id IS NULL THEN NULL::text ELSE p_chunk_id::text END, '__NO_CHUNK_ID__')
              AND NULLIF(BTRIM(COALESCE(selected_source.provider_reference, '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(selected_transfer.request_id, '')), ''), '__NO_REQUEST_ID__')
              AND NULLIF(BTRIM(COALESCE(selected_source.provider_reference, '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(selected_source.idempotency_key, '')), ''), '__NO_IDEMPOTENCY_KEY__')
              AND NULLIF(BTRIM(COALESCE(selected_source.provider_reference, '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(selected_source.local_provider_request_id, '')), ''), '__NO_LOCAL_PROVIDER_REQUEST_ID__')
@@ -15318,6 +15332,8 @@ BEGIN
                   ) AS provider_identifier(identifier_value)
                   WHERE NULLIF(BTRIM(COALESCE(provider_identifier.identifier_value, '')), '') IS NOT NULL
                     AND NULLIF(BTRIM(COALESCE(provider_identifier.identifier_value, '')), '') <> selected_transfer.transfer_id::text
+                    AND NULLIF(BTRIM(COALESCE(provider_identifier.identifier_value, '')), '') <> COALESCE(CASE WHEN p_operation_id IS NULL THEN NULL::text ELSE p_operation_id::text END, '__NO_OPERATION_ID__')
+                    AND NULLIF(BTRIM(COALESCE(provider_identifier.identifier_value, '')), '') <> COALESCE(CASE WHEN p_chunk_id IS NULL THEN NULL::text ELSE p_chunk_id::text END, '__NO_CHUNK_ID__')
                     AND NULLIF(BTRIM(COALESCE(provider_identifier.identifier_value, '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(selected_transfer.request_id, '')), ''), '__NO_REQUEST_ID__')
                     AND NULLIF(BTRIM(COALESCE(provider_identifier.identifier_value, '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(selected_transfer.payment_reference, '')), ''), '__NO_PAYMENT_REFERENCE__')
                     AND NULLIF(BTRIM(COALESCE(provider_identifier.identifier_value, '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(transfer_event.idempotency_key, '')), ''), '__NO_EVENT_IDEMPOTENCY_KEY__')
@@ -15425,6 +15441,10 @@ BEGIN
              OR COALESCE(BOOL_OR(
                NULLIF(BTRIM(COALESCE(selected_source.provider_transaction_id, selected_source.rail_tx_id, '')), '') IS NOT NULL
                AND NULLIF(BTRIM(COALESCE(selected_source.provider_transaction_id, selected_source.rail_tx_id, '')), '') <> COALESCE(selected_source.chunk_id::text, '__NO_CHUNK_ID__')
+               AND NULLIF(BTRIM(COALESCE(selected_source.provider_transaction_id, selected_source.rail_tx_id, '')), '') <> COALESCE(CASE WHEN selected_source.operation_id IS NULL THEN NULL::text ELSE selected_source.operation_id::text END, '__NO_SOURCE_OPERATION_ID__')
+               AND NULLIF(BTRIM(COALESCE(selected_source.provider_transaction_id, selected_source.rail_tx_id, '')), '') <> COALESCE(CASE WHEN selected_source.chunk_id IS NULL THEN NULL::text ELSE selected_source.chunk_id::text END, '__NO_SOURCE_CHUNK_ID__')
+               AND NULLIF(BTRIM(COALESCE(selected_source.provider_transaction_id, selected_source.rail_tx_id, '')), '') <> COALESCE(CASE WHEN p_operation_id IS NULL THEN NULL::text ELSE p_operation_id::text END, '__NO_OPERATION_ID__')
+               AND NULLIF(BTRIM(COALESCE(selected_source.provider_transaction_id, selected_source.rail_tx_id, '')), '') <> COALESCE(CASE WHEN p_chunk_id IS NULL THEN NULL::text ELSE p_chunk_id::text END, '__NO_CHUNK_ID__')
                AND NULLIF(BTRIM(COALESCE(selected_source.provider_transaction_id, selected_source.rail_tx_id, '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(selected_source.request_id, '')), ''), '__NO_REQUEST_ID__')
                AND NULLIF(BTRIM(COALESCE(selected_source.provider_transaction_id, selected_source.rail_tx_id, '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(selected_source.idempotency_key, '')), ''), '__NO_IDEMPOTENCY_KEY__')
                AND NULLIF(BTRIM(COALESCE(selected_source.provider_transaction_id, selected_source.rail_tx_id, '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(selected_source.local_provider_request_id, '')), ''), '__NO_LOCAL_PROVIDER_REQUEST_ID__')
@@ -15435,6 +15455,10 @@ BEGIN
              OR COALESCE(BOOL_OR(
                NULLIF(BTRIM(COALESCE(selected_source.provider_reference, '')), '') IS NOT NULL
                AND NULLIF(BTRIM(COALESCE(selected_source.provider_reference, '')), '') <> COALESCE(selected_source.chunk_id::text, '__NO_CHUNK_ID__')
+               AND NULLIF(BTRIM(COALESCE(selected_source.provider_reference, '')), '') <> COALESCE(CASE WHEN selected_source.operation_id IS NULL THEN NULL::text ELSE selected_source.operation_id::text END, '__NO_SOURCE_OPERATION_ID__')
+               AND NULLIF(BTRIM(COALESCE(selected_source.provider_reference, '')), '') <> COALESCE(CASE WHEN selected_source.chunk_id IS NULL THEN NULL::text ELSE selected_source.chunk_id::text END, '__NO_SOURCE_CHUNK_ID__')
+               AND NULLIF(BTRIM(COALESCE(selected_source.provider_reference, '')), '') <> COALESCE(CASE WHEN p_operation_id IS NULL THEN NULL::text ELSE p_operation_id::text END, '__NO_OPERATION_ID__')
+               AND NULLIF(BTRIM(COALESCE(selected_source.provider_reference, '')), '') <> COALESCE(CASE WHEN p_chunk_id IS NULL THEN NULL::text ELSE p_chunk_id::text END, '__NO_CHUNK_ID__')
                AND NULLIF(BTRIM(COALESCE(selected_source.provider_reference, '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(selected_source.request_id, '')), ''), '__NO_REQUEST_ID__')
                AND NULLIF(BTRIM(COALESCE(selected_source.provider_reference, '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(selected_source.idempotency_key, '')), ''), '__NO_IDEMPOTENCY_KEY__')
                AND NULLIF(BTRIM(COALESCE(selected_source.provider_reference, '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(selected_source.local_provider_request_id, '')), ''), '__NO_LOCAL_PROVIDER_REQUEST_ID__')
@@ -15488,6 +15512,9 @@ BEGIN
                OR COALESCE(BOOL_OR(
                  NULLIF(BTRIM(COALESCE(selected_source.provider_transaction_id, selected_source.rail_tx_id, '')), '') IS NOT NULL
                  AND NULLIF(BTRIM(COALESCE(selected_source.provider_transaction_id, selected_source.rail_tx_id, '')), '') <> COALESCE(selected_source.chunk_id::text, '__NO_CHUNK_ID__')
+                 AND NULLIF(BTRIM(COALESCE(selected_source.provider_transaction_id, selected_source.rail_tx_id, '')), '') <> COALESCE(CASE WHEN selected_source.operation_id IS NULL THEN NULL::text ELSE selected_source.operation_id::text END, '__NO_SOURCE_OPERATION_ID__')
+                 AND NULLIF(BTRIM(COALESCE(selected_source.provider_transaction_id, selected_source.rail_tx_id, '')), '') <> COALESCE(CASE WHEN p_operation_id IS NULL THEN NULL::text ELSE p_operation_id::text END, '__NO_OPERATION_ID__')
+                 AND NULLIF(BTRIM(COALESCE(selected_source.provider_transaction_id, selected_source.rail_tx_id, '')), '') <> COALESCE(CASE WHEN p_chunk_id IS NULL THEN NULL::text ELSE p_chunk_id::text END, '__NO_CHUNK_ID_PARAM__')
                  AND NULLIF(BTRIM(COALESCE(selected_source.provider_transaction_id, selected_source.rail_tx_id, '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(selected_source.request_id, '')), ''), '__NO_REQUEST_ID__')
                  AND NULLIF(BTRIM(COALESCE(selected_source.provider_transaction_id, selected_source.rail_tx_id, '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(selected_source.idempotency_key, '')), ''), '__NO_IDEMPOTENCY_KEY__')
                  AND NULLIF(BTRIM(COALESCE(selected_source.provider_transaction_id, selected_source.rail_tx_id, '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(selected_source.local_provider_request_id, '')), ''), '__NO_LOCAL_PROVIDER_REQUEST_ID__')
@@ -15498,6 +15525,9 @@ BEGIN
                OR COALESCE(BOOL_OR(
                  NULLIF(BTRIM(COALESCE(selected_source.provider_reference, '')), '') IS NOT NULL
                  AND NULLIF(BTRIM(COALESCE(selected_source.provider_reference, '')), '') <> COALESCE(selected_source.chunk_id::text, '__NO_CHUNK_ID__')
+                 AND NULLIF(BTRIM(COALESCE(selected_source.provider_reference, '')), '') <> COALESCE(CASE WHEN selected_source.operation_id IS NULL THEN NULL::text ELSE selected_source.operation_id::text END, '__NO_SOURCE_OPERATION_ID__')
+                 AND NULLIF(BTRIM(COALESCE(selected_source.provider_reference, '')), '') <> COALESCE(CASE WHEN p_operation_id IS NULL THEN NULL::text ELSE p_operation_id::text END, '__NO_OPERATION_ID__')
+                 AND NULLIF(BTRIM(COALESCE(selected_source.provider_reference, '')), '') <> COALESCE(CASE WHEN p_chunk_id IS NULL THEN NULL::text ELSE p_chunk_id::text END, '__NO_CHUNK_ID_PARAM__')
                  AND NULLIF(BTRIM(COALESCE(selected_source.provider_reference, '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(selected_source.request_id, '')), ''), '__NO_REQUEST_ID__')
                  AND NULLIF(BTRIM(COALESCE(selected_source.provider_reference, '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(selected_source.idempotency_key, '')), ''), '__NO_IDEMPOTENCY_KEY__')
                  AND NULLIF(BTRIM(COALESCE(selected_source.provider_reference, '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(selected_source.local_provider_request_id, '')), ''), '__NO_LOCAL_PROVIDER_REQUEST_ID__')
@@ -15584,13 +15614,13 @@ BEGIN
   v_stale_empty_submit_chunk_count := COALESCE(v_stale_unresolved_submit_chunk_count, 0);
 
   SELECT COALESCE(jsonb_agg(to_jsonb(selected_operation.operation_id::text) ORDER BY selected_operation.operation_id), '[]'::jsonb),
-         MIN(selected_operation.operation_id)::text
+         MIN(selected_operation.operation_id::text)
   INTO v_operation_ids,
        v_primary_operation_id
   FROM pg_temp.tmp_provider_submit_diagnostic_operations AS selected_operation;
 
   SELECT COALESCE(jsonb_agg(to_jsonb(selected_chunk.chunk_id::text) ORDER BY selected_chunk.chunk_id), '[]'::jsonb),
-         MIN(selected_chunk.chunk_id)::text,
+         MIN(selected_chunk.chunk_id::text),
          MIN(selected_chunk.started_at_utc)::text,
          MIN(selected_chunk.completed_at_utc)::text,
          MIN(selected_chunk.lock_expires_at_utc)::text
@@ -15602,7 +15632,7 @@ BEGIN
   FROM pg_temp.tmp_provider_submit_diagnostic_chunks AS selected_chunk;
 
   SELECT COALESCE(jsonb_agg(to_jsonb(selected_transfer.transfer_id::text) ORDER BY selected_transfer.transfer_id), '[]'::jsonb),
-         MIN(selected_transfer.transfer_id)::text,
+         MIN(selected_transfer.transfer_id::text),
          MIN(selected_transfer.rail_provider),
          MIN(selected_transfer.rail_env),
          MIN(NULLIF(BTRIM(COALESCE(selected_transfer.rail_tx_id, '')), '')),
@@ -15675,6 +15705,8 @@ BEGIN
   IF v_primary_provider_reference IS NOT NULL
      AND v_primary_provider_reference IN (
        COALESCE(v_primary_request_id, '__NO_REQUEST_ID__'),
+       COALESCE(CASE WHEN p_operation_id IS NULL THEN NULL::text ELSE p_operation_id::text END, '__NO_OPERATION_ID__'),
+       COALESCE(CASE WHEN p_chunk_id IS NULL THEN NULL::text ELSE p_chunk_id::text END, '__NO_CHUNK_ID__'),
        COALESCE(v_primary_idempotency_key, '__NO_IDEMPOTENCY_KEY__'),
        COALESCE(v_primary_local_provider_request_id, '__NO_LOCAL_PROVIDER_REQUEST_ID__'),
        COALESCE(v_primary_transfer_id, '__NO_TRANSFER_ID__')
@@ -15685,6 +15717,8 @@ BEGIN
   IF v_primary_provider_transaction_id IS NOT NULL
      AND v_primary_provider_transaction_id IN (
        COALESCE(v_primary_request_id, '__NO_REQUEST_ID__'),
+       COALESCE(CASE WHEN p_operation_id IS NULL THEN NULL::text ELSE p_operation_id::text END, '__NO_OPERATION_ID__'),
+       COALESCE(CASE WHEN p_chunk_id IS NULL THEN NULL::text ELSE p_chunk_id::text END, '__NO_CHUNK_ID__'),
        COALESCE(v_primary_idempotency_key, '__NO_IDEMPOTENCY_KEY__'),
        COALESCE(v_primary_local_provider_request_id, '__NO_LOCAL_PROVIDER_REQUEST_ID__'),
        COALESCE(v_primary_transfer_id, '__NO_TRANSFER_ID__')
@@ -15693,7 +15727,7 @@ BEGIN
   END IF;
 
   SELECT COALESCE(jsonb_agg(to_jsonb(scope_values.transfer_scope_id::text) ORDER BY scope_values.transfer_scope_id), '[]'::jsonb),
-         MIN(scope_values.transfer_scope_id)::text
+         MIN(scope_values.transfer_scope_id::text)
   INTO v_transfer_scope_ids,
        v_primary_transfer_scope_id
   FROM (
@@ -15712,7 +15746,7 @@ BEGIN
 
   SELECT COUNT(*)::integer,
          COALESCE(jsonb_agg(to_jsonb(auth_values.auth_request_id::text) ORDER BY auth_values.auth_request_id), '[]'::jsonb),
-         MIN(auth_values.auth_request_id)::text
+         MIN(auth_values.auth_request_id::text)
   INTO v_active_auth_request_count,
        v_auth_request_ids,
        v_primary_auth_request_id
@@ -15947,8 +15981,6 @@ $function$;
 
 
 
-
-
 CREATE OR REPLACE FUNCTION public.pay_provider_submit_chunk_diagnostic_finalise(
   p_operation_id uuid,
   p_pay_batch_id uuid DEFAULT NULL::uuid,
@@ -16172,22 +16204,37 @@ BEGIN
              WHERE (
                   NULLIF(BTRIM(COALESCE(transfer_row.rail_tx_id, '')), '') IS NOT NULL
                   AND NULLIF(BTRIM(COALESCE(transfer_row.rail_tx_id, '')), '') <> transfer_row.id::text
+                  AND NULLIF(BTRIM(COALESCE(transfer_row.rail_tx_id, '')), '') <> p_operation_id::text
+                  AND NULLIF(BTRIM(COALESCE(transfer_row.rail_tx_id, '')), '') <> v_target_chunk_row.id::text
                   AND NULLIF(BTRIM(COALESCE(transfer_row.rail_tx_id, '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(transfer_row.request_id, '')), ''), '__NO_REQUEST_ID__')
                   AND NULLIF(BTRIM(COALESCE(transfer_row.rail_tx_id, '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(transfer_row.payment_reference, '')), ''), '__NO_PAYMENT_REFERENCE__')
+                  AND NULLIF(BTRIM(COALESCE(transfer_row.rail_tx_id, '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{local_provider_request_id}', transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,local_provider_request_id}', '')), ''), '__NO_LOCAL_PROVIDER_REQUEST_ID__')
+                  AND NULLIF(BTRIM(COALESCE(transfer_row.rail_tx_id, '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{idempotency_key}', transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,idempotency_key}', '')), ''), '__NO_IDEMPOTENCY_KEY__')
+                  AND NULLIF(BTRIM(COALESCE(transfer_row.rail_tx_id, '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{bulk_reference}', '')), ''), '__NO_BULK_REFERENCE__')
                   AND UPPER(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_submission_status}', ''))) NOT IN ('PROVIDER_SUBMISSION_REJECTED', 'PROVIDER_SUBMISSION_FAILED', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE', 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK', 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL', 'NO_PROVIDER_SUBMISSION_ATTEMPTED', 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID')
                 )
                 OR (
                   NULLIF(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_transaction_id}', transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_payment_id}', transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,rail_tx_id}', '')), '') IS NOT NULL
                   AND NULLIF(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_transaction_id}', transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_payment_id}', transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,rail_tx_id}', '')), '') <> transfer_row.id::text
+                  AND NULLIF(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_transaction_id}', transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_payment_id}', transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,rail_tx_id}', '')), '') <> p_operation_id::text
+                  AND NULLIF(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_transaction_id}', transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_payment_id}', transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,rail_tx_id}', '')), '') <> v_target_chunk_row.id::text
                   AND NULLIF(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_transaction_id}', transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_payment_id}', transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,rail_tx_id}', '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(transfer_row.request_id, '')), ''), '__NO_REQUEST_ID__')
                   AND NULLIF(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_transaction_id}', transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_payment_id}', transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,rail_tx_id}', '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(transfer_row.payment_reference, '')), ''), '__NO_PAYMENT_REFERENCE__')
+                  AND NULLIF(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_transaction_id}', transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_payment_id}', transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,rail_tx_id}', '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{local_provider_request_id}', transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,local_provider_request_id}', '')), ''), '__NO_LOCAL_PROVIDER_REQUEST_ID__')
+                  AND NULLIF(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_transaction_id}', transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_payment_id}', transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,rail_tx_id}', '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{idempotency_key}', transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,idempotency_key}', '')), ''), '__NO_IDEMPOTENCY_KEY__')
+                  AND NULLIF(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_transaction_id}', transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_payment_id}', transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,rail_tx_id}', '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{bulk_reference}', '')), ''), '__NO_BULK_REFERENCE__')
                   AND UPPER(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_submission_status}', ''))) NOT IN ('PROVIDER_SUBMISSION_REJECTED', 'PROVIDER_SUBMISSION_FAILED', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE', 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK', 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL', 'NO_PROVIDER_SUBMISSION_ATTEMPTED', 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID')
                 )
                 OR (
                   NULLIF(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_reference}', '')), '') IS NOT NULL
                   AND NULLIF(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_reference}', '')), '') <> transfer_row.id::text
+                  AND NULLIF(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_reference}', '')), '') <> p_operation_id::text
+                  AND NULLIF(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_reference}', '')), '') <> v_target_chunk_row.id::text
                   AND NULLIF(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_reference}', '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(transfer_row.request_id, '')), ''), '__NO_REQUEST_ID__')
                   AND NULLIF(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_reference}', '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(transfer_row.payment_reference, '')), ''), '__NO_PAYMENT_REFERENCE__')
+                  AND NULLIF(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_reference}', '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{local_provider_request_id}', transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,local_provider_request_id}', '')), ''), '__NO_LOCAL_PROVIDER_REQUEST_ID__')
+                  AND NULLIF(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_reference}', '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{idempotency_key}', transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,idempotency_key}', '')), ''), '__NO_IDEMPOTENCY_KEY__')
+                  AND NULLIF(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_reference}', '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{bulk_reference}', '')), ''), '__NO_BULK_REFERENCE__')
                   AND UPPER(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_submission_status}', ''))) NOT IN ('PROVIDER_SUBMISSION_REJECTED', 'PROVIDER_SUBMISSION_FAILED', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE', 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK', 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL', 'NO_PROVIDER_SUBMISSION_ATTEMPTED', 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID')
                 )
           )::integer,
@@ -16369,6 +16416,17 @@ BEGIN
     ) AS finish_result
     LIMIT 1;
 
+    IF COALESCE(v_finished, false) IS TRUE THEN
+      UPDATE public.banking_pay_operation_chunks AS chunk_lock_clear
+      SET locked_by = NULL::text,
+          lock_expires_at_utc = NULL::timestamptz,
+          completed_at_utc = COALESCE(chunk_lock_clear.completed_at_utc, v_now),
+          updated_at_utc = v_now
+      WHERE chunk_lock_clear.id = v_target_chunk_row.id
+        AND chunk_lock_clear.operation_id = p_operation_id
+        AND chunk_lock_clear.status IN ('COMPLETE', 'FAILED');
+    END IF;
+
     SELECT operation_chunk_after.*
     INTO v_after_chunk_row
     FROM public.banking_pay_operation_chunks AS operation_chunk_after
@@ -16512,10 +16570,6 @@ BEGIN
   );
 END;
 $function$;
-
-
-
-
 
 
 
