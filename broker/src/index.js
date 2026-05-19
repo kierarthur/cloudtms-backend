@@ -31444,19 +31444,6 @@ async function handleBankingPayProviderSubmitReviewResolution(env, req, user, pa
 
 async function handleContractWeekManualUpsert(env, req, weekId) {
    const enc = encodeURIComponent;
-   const WLOG = true;
-   const wlog = (step, extra = {}) => {
-     if (!WLOG) return;
-     try {
-       console.log(JSON.stringify({
-         tag: 'CW_MANUAL_UPSERT',
-         step,
-         at_utc: new Date().toISOString(),
-         week_id: String(weekId || ''),
-         ...(extra && typeof extra === 'object' ? extra : {})
-       }));
-     } catch {}
-   };
  
    const user = await requireUser(env, req, ['admin']);
    if (!user) return withCORS(env, req, unauthorized());
@@ -31502,13 +31489,82 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
      ''
    ).trim();
  
-   wlog('start', {
+   const headerValueForManualUpsertDebug = (name) => {
+     try {
+       return req?.headers?.get?.(name);
+     } catch {
+       return null;
+     }
+   };
+   const manualUpsertDebugParams = (() => {
+     try {
+       return new URL(req?.url || '').searchParams;
+     } catch {
+       return null;
+     }
+   })();
+   const isTruthyManualUpsertDebugFlag = (value) => {
+     if (value === true || value === 1) return true;
+     const text = String(value ?? '').trim().toLowerCase();
+     return text === 'true' || text === '1' || text === 'yes' || text === 'y' || text === 'on';
+   };
+   const manualUpsertTimingDebugEnabled = !!(
+     isTruthyManualUpsertDebugFlag(body?.debug) ||
+     isTruthyManualUpsertDebugFlag(body?.debug_timing) ||
+     isTruthyManualUpsertDebugFlag(body?.debugTiming) ||
+     isTruthyManualUpsertDebugFlag(body?.timing_debug) ||
+     isTruthyManualUpsertDebugFlag(body?.timingDebug) ||
+     isTruthyManualUpsertDebugFlag(body?.cw_manual_upsert_debug) ||
+     isTruthyManualUpsertDebugFlag(body?.cwManualUpsertDebug) ||
+     isTruthyManualUpsertDebugFlag(headerValueForManualUpsertDebug('x-debug')) ||
+     isTruthyManualUpsertDebugFlag(headerValueForManualUpsertDebug('x-debug-timing')) ||
+     isTruthyManualUpsertDebugFlag(headerValueForManualUpsertDebug('x-cw-manual-upsert-debug')) ||
+     isTruthyManualUpsertDebugFlag(headerValueForManualUpsertDebug('x-bulk-process-debug')) ||
+     isTruthyManualUpsertDebugFlag(manualUpsertDebugParams?.get('debug')) ||
+     isTruthyManualUpsertDebugFlag(manualUpsertDebugParams?.get('debug_timing')) ||
+     isTruthyManualUpsertDebugFlag(manualUpsertDebugParams?.get('timing_debug')) ||
+     isTruthyManualUpsertDebugFlag(manualUpsertDebugParams?.get('cw_manual_upsert_debug')) ||
+     isTruthyManualUpsertDebugFlag(env?.CW_MANUAL_UPSERT_DEBUG) ||
+     isTruthyManualUpsertDebugFlag(env?.BULK_PROCESS_DEBUG) ||
+     isTruthyManualUpsertDebugFlag(env?.DEBUG_TIMINGS) ||
+     (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true)
+   );
+   const manualUpsertTimingStartedAtMs = Date.now();
+   let manualUpsertTimingPreviousAtMs = manualUpsertTimingStartedAtMs;
+   let manualUpsertTimingContractWeekId = String(weekId || '').trim() || null;
+   let manualUpsertTimingTimesheetId = null;
+   const isManualUpsertErrorLogStep = (step) => /(?:fail|error|bad_request|conflict|not_found|missing|invalid|collision|mismatch|blocked|server_error)/i.test(String(step || ''));
+   const wlog = (step, extra = {}) => {
+     const shouldLog = manualUpsertTimingDebugEnabled || isManualUpsertErrorLogStep(step);
+     if (!shouldLog) return;
+     const nowMs = Date.now();
+     const extraObj = (extra && typeof extra === 'object' && !Array.isArray(extra)) ? extra : {};
+     const payload = {
+       tag: 'CW_MANUAL_UPSERT',
+       route: 'CW_MANUAL_UPSERT',
+       step,
+       at_utc: new Date(nowMs).toISOString(),
+       elapsed_ms: nowMs - manualUpsertTimingStartedAtMs,
+       duration_ms: nowMs - manualUpsertTimingPreviousAtMs,
+       week_id: String(weekId || ''),
+       contract_week_id: manualUpsertTimingContractWeekId,
+       timesheet_id: manualUpsertTimingTimesheetId,
+       response_context: bulkResponseContext,
+       bulk_process_response_requested: bulkProcessResponseRequested,
+       bulk_authorise_response_requested: bulkAuthoriseResponseRequested,
+       ...extraObj
+     };
+     manualUpsertTimingPreviousAtMs = nowMs;
+     try {
+       console.log(JSON.stringify(payload));
+     } catch {}
+   };
+ 
+   wlog('request_parsed', {
      actor_user_id: user?.id || null,
      body_keys: (body && typeof body === 'object') ? Object.keys(body) : [],
      expected_timesheet_id: body?.expected_timesheet_id ? String(body.expected_timesheet_id) : '',
      qr_action: String(body?.qr_action || body?.qrAction || '').trim().toUpperCase() || null,
-     bulk_process_response_requested: bulkProcessResponseRequested,
-     bulk_authorise_response_requested: bulkAuthoriseResponseRequested,
      bulk_patch_response_requested: bulkPatchResponseRequested,
      bulk_response_context: bulkResponseContext,
      expected_row_signature_present: !!expectedRowSignature
@@ -31540,12 +31596,25 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
      `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}&select=*`
    );
    if (!cw) return withCORS(env, req, notFound('Week not found'));
+   manualUpsertTimingContractWeekId = String(cw?.id || weekId || '').trim() || manualUpsertTimingContractWeekId;
+   wlog('contract_week_loaded', {
+     contract_week_timesheet_id: cw?.timesheet_id || null,
+     contract_id: cw?.contract_id || null,
+     contract_week_status: cw?.status || null,
+     week_ending_date: cw?.week_ending_date || null
+   });
  
    const contract = await sbGetOne(
      env,
      `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(cw.contract_id)}&select=*`
    );
    if (!contract) return withCORS(env, req, notFound('Contract not found'));
+ 
+   wlog('contract_loaded', {
+     contract_id: contract?.id || null,
+     contract_candidate_id: contract?.candidate_id || null,
+     contract_client_id: contract?.client_id || null
+   });
  
    wlog('loaded_week_and_contract', {
      contract_week_timesheet_id: cw?.timesheet_id || null,
@@ -31562,10 +31631,18 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
    // ✅ Resolve cw.timesheet_id to the current timesheet id (if one exists)
    let currentTimesheetIdForWeek = cw.timesheet_id || null;
    let wasStaleWeekTs = false;
+   if (currentTimesheetIdForWeek) {
+     manualUpsertTimingTimesheetId = String(currentTimesheetIdForWeek || '').trim() || manualUpsertTimingTimesheetId;
+   }
  
    if (currentTimesheetIdForWeek) {
      const resTs = await resolveTimesheetToCurrent(env, currentTimesheetIdForWeek);
      if (!resTs) return withCORS(env, req, notFound('Timesheet not found'));
+ 
+     const resolvedCurrentTimesheetId = String(resTs.current_timesheet_id || currentTimesheetIdForWeek || '').trim();
+     if (resolvedCurrentTimesheetId) {
+       manualUpsertTimingTimesheetId = resolvedCurrentTimesheetId;
+     }
  
      wlog('resolved_existing_week_timesheet', {
        requested_timesheet_id: currentTimesheetIdForWeek,
@@ -31575,6 +31652,7 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
      if (String(resTs.current_timesheet_id) !== String(currentTimesheetIdForWeek)) {
        wasStaleWeekTs = true;
        currentTimesheetIdForWeek = resTs.current_timesheet_id;
+       manualUpsertTimingTimesheetId = String(currentTimesheetIdForWeek || '').trim() || manualUpsertTimingTimesheetId;
  
        wlog('week_pointer_stale', {
          old_timesheet_id: cw?.timesheet_id || null,
@@ -31624,6 +31702,14 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
            `?id=eq.${enc(contract.client_id)}&select=id,name,mileage_charge_rate`
        )
      : null;
+ 
+   wlog('contract_client_candidate_loaded', {
+     contract_id: contract?.id || null,
+     candidate_id: candidate?.id || contract?.candidate_id || null,
+     client_id: client?.id || contract?.client_id || null,
+     candidate_loaded: !!candidate,
+     client_loaded: !!client
+   });
  
    const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
    const asNumberLocal = (v) => (v == null ? 0 : Number(v) || 0);
@@ -31903,7 +31989,39 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
      return err;
    };
  
-   const loadContractWeekStagedTimesheetQueueItems = async (contractWeekId) => {
+   let stagedQueuePreflightCacheValid = true;
+   const stagedQueuePreflightCache = new Map();
+   const cloneStagedQueueItemsForManualUpsert = (items) => (Array.isArray(items) ? items : []).map((item) => ({
+     ...item,
+     meta_json: (item?.meta_json && typeof item.meta_json === 'object') ? { ...item.meta_json } : {}
+   }));
+   const invalidateStagedQueuePreflightCache = () => {
+     if (!stagedQueuePreflightCacheValid && stagedQueuePreflightCache.size === 0) return;
+     stagedQueuePreflightCacheValid = false;
+     stagedQueuePreflightCache.clear();
+     wlog('staged_queue_preflight_cache_invalidated');
+   };
+
+   const loadContractWeekStagedTimesheetQueueItems = async (contractWeekId, options = {}) => {
+     const cacheKey = String(contractWeekId || '').trim();
+     const allowPreflightCache = !!(
+       bulkProcessResponseRequested &&
+       stagedQueuePreflightCacheValid &&
+       options?.usePreflightCache === true &&
+       cacheKey
+     );
+
+     if (allowPreflightCache && stagedQueuePreflightCache.has(cacheKey)) {
+       const cachedItems = cloneStagedQueueItemsForManualUpsert(stagedQueuePreflightCache.get(cacheKey));
+       wlog('staged_queue_loaded', {
+         contract_week_id: cacheKey,
+         source: 'request_preflight_cache',
+         item_count: cachedItems.length,
+         staged_kinds: [...new Set(cachedItems.map((item) => item.staged_kind).filter(Boolean))]
+       });
+       return cachedItems;
+     }
+
      const { rows } = await sbFetch(
        env,
        `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue` +
@@ -31914,11 +32032,9 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
      );
  
      const items = Array.isArray(rows) ? rows : [];
-     if (!items.length) return [];
- 
      const allowedKinds = new Set(['TIMESHEET', 'MILEAGE', 'TRAVEL', 'ACCOMMODATION', 'OTHER']);
  
-     return items.map((item) => {
+     const normalisedItems = items.map((item) => {
        const meta = (item?.meta_json && typeof item.meta_json === 'object') ? item.meta_json : {};
        const kindRaw = String(meta?.staged_kind || meta?.kind || 'TIMESHEET').trim().toUpperCase();
        const kind = allowedKinds.has(kindRaw) ? kindRaw : 'OTHER';
@@ -31928,10 +32044,23 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
          staged_kind: kind
        };
      });
+
+     if (allowPreflightCache) {
+       stagedQueuePreflightCache.set(cacheKey, cloneStagedQueueItemsForManualUpsert(normalisedItems));
+     }
+
+     wlog('staged_queue_loaded', {
+       contract_week_id: cacheKey || String(contractWeekId || ''),
+       source: 'db',
+       item_count: normalisedItems.length,
+       staged_kinds: [...new Set(normalisedItems.map((item) => item.staged_kind).filter(Boolean))]
+     });
+
+     return cloneStagedQueueItemsForManualUpsert(normalisedItems);
    };
  
-   const prepareContractWeekStagedTimesheetEvidence = async (contractWeekId, targetTimesheetId) => {
-     const items = await loadContractWeekStagedTimesheetQueueItems(contractWeekId);
+   const prepareContractWeekStagedTimesheetEvidence = async (contractWeekId, targetTimesheetId, options = {}) => {
+     const items = await loadContractWeekStagedTimesheetQueueItems(contractWeekId, options);
      if (!items.length) return null;
  
      const timesheetKindItems = items.filter(item => item.staged_kind === 'TIMESHEET');
@@ -31955,30 +32084,6 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
  
      const rotationDeg = normaliseRotation(primary.last_rotation_deg);
  
-     try {
-       if (typeof r2Exists === 'function') {
-         const exists = await r2Exists(env, sourceKey);
-         if (!exists) {
-           throw new Error('Staged TIMESHEET evidence storage_key does not exist in R2');
-         }
-       }
- 
-       const sourceBytes = await r2GetBytes(env, sourceKey);
-       if (!sourceBytes?.length) {
-         throw new Error('Staged TIMESHEET evidence source file is missing or empty');
-       }
- 
-       const contentKind = detectPdfOrImageContentKind(sourceBytes);
-       if (contentKind !== 'application/pdf' && contentKind !== 'image/png' && contentKind !== 'image/jpeg') {
-         throw new Error(`Staged TIMESHEET evidence must be a PDF or supported image (PNG/JPEG). Detected: ${contentKind}`);
-       }
-     } catch (e) {
-       throw buildStagedTimesheetEvidenceError(
-         'INVALID_TIMESHEET_EVIDENCE',
-         e?.message || 'Unsupported staged TIMESHEET evidence'
-       );
-     }
- 
      return {
        queue_item_id: primary.id,
        display_name: primary.original_filename || null,
@@ -31992,7 +32097,7 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
    };
  
    const materialiseContractWeekStagedEvidenceToTimesheet = async (contractWeekId, targetTimesheetId, preparedTimesheetEvidence = null) => {
-     const prepared = preparedTimesheetEvidence || await prepareContractWeekStagedTimesheetEvidence(contractWeekId, targetTimesheetId);
+     const prepared = preparedTimesheetEvidence || await prepareContractWeekStagedTimesheetEvidence(contractWeekId, targetTimesheetId, { usePreflightCache: false });
      if (!prepared) {
        return {
          attached_count: 0,
@@ -32122,6 +32227,8 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
          `Failed to update staged queue provenance: ${txt || 'queue patch failed'}`
        );
      }
+
+     invalidateStagedQueuePreflightCache();
  
      return {
        attached_count: 1,
@@ -32210,7 +32317,7 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
      const invalid = [];
 
      if (willCreateNow) {
-       const stagedItems = await loadContractWeekStagedTimesheetQueueItems(contractWeekId);
+       const stagedItems = await loadContractWeekStagedTimesheetQueueItems(contractWeekId, { usePreflightCache: true });
        for (const kind of requiredKinds) {
          const kindItems = stagedItems.filter(item => String(item?.staged_kind || '').trim().toUpperCase() === kind);
          const validKindItems = kindItems.filter(item => evidenceSourceKeyOf(item));
@@ -32249,7 +32356,7 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
      return { ok: missing.length === 0 && invalid.length === 0, missing, invalid };
    };
 
-   const prepareContractWeekStagedExpenseEvidence = async (contractWeekId, requiredKindsInput = []) => {
+   const prepareContractWeekStagedExpenseEvidence = async (contractWeekId, requiredKindsInput = [], options = {}) => {
      const requiredKinds = [...new Set(
        (Array.isArray(requiredKindsInput) ? requiredKindsInput : [])
          .map((kind) => String(kind || '').trim().toUpperCase())
@@ -32258,7 +32365,7 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
 
      if (!requiredKinds.length) return [];
 
-     const items = await loadContractWeekStagedTimesheetQueueItems(contractWeekId);
+     const items = await loadContractWeekStagedTimesheetQueueItems(contractWeekId, options);
      const prepared = [];
 
      for (const kind of requiredKinds) {
@@ -32277,27 +32384,6 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
            throw buildStagedTimesheetEvidenceError(
              'INVALID_EXPENSE_EVIDENCE',
              `Staged ${kind} evidence is missing storage_key`
-           );
-         }
-
-         try {
-           if (typeof r2Exists === 'function') {
-             const exists = await r2Exists(env, sourceKey);
-             if (!exists) {
-               throw new Error(`Staged ${kind} evidence storage_key does not exist in R2`);
-             }
-           }
-
-           if (typeof r2GetBytes === 'function') {
-             const sourceBytes = await r2GetBytes(env, sourceKey);
-             if (!sourceBytes?.length) {
-               throw new Error(`Staged ${kind} evidence source file is missing or empty`);
-             }
-           }
-         } catch (e) {
-           throw buildStagedTimesheetEvidenceError(
-             'INVALID_EXPENSE_EVIDENCE',
-             e?.message || `Invalid staged ${kind} evidence`
            );
          }
 
@@ -32430,6 +32516,8 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
            `Failed to update staged ${kind} queue provenance: ${txt || 'queue patch failed'}`
          );
        }
+
+       invalidateStagedQueuePreflightCache();
 
        storageKeys.push(storageKey);
        kinds.push(kind);
@@ -33394,6 +33482,8 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
      if (hasUnitsWeekKey) rpcTimesheetPatchJson.additional_units_week = unitsWeek || {};
      if (hasUnitsPerDayKey) rpcTimesheetPatchJson.additional_units_per_day = unitsPerDay || {};
    }
+
+   manualUpsertTimingTimesheetId = targetTimesheetIdForWrite || currentTimesheetIdForWeek || null;
  
    let policySnapshot = {};
    try {
@@ -33882,13 +33972,27 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
    let preparedStagedTimesheetEvidence = null;
    if (targetTimesheetIdForWrite && !suppressTimesheetEvidenceMaterialisation) {
      try {
-       preparedStagedTimesheetEvidence = await prepareContractWeekStagedTimesheetEvidence(cw.id, targetTimesheetIdForWrite);
+       preparedStagedTimesheetEvidence = await prepareContractWeekStagedTimesheetEvidence(cw.id, targetTimesheetIdForWrite, { usePreflightCache: true });
+       wlog('staged_timesheet_evidence_prepared', {
+         contract_week_id: cw.id,
+         target_timesheet_id: targetTimesheetIdForWrite,
+         prepared: !!preparedStagedTimesheetEvidence,
+         queue_item_id: preparedStagedTimesheetEvidence?.queue_item_id || null,
+         storage_key_present: !!preparedStagedTimesheetEvidence?.storage_key
+       });
        if (preparedStagedTimesheetEvidence?.storage_key) {
          wlog('prepared_staged_timesheet_evidence', {
            contract_week_id: cw.id,
            target_timesheet_id: targetTimesheetIdForWrite,
+           prepared: true,
            queue_item_id: preparedStagedTimesheetEvidence.queue_item_id || null,
            storage_key: preparedStagedTimesheetEvidence.storage_key
+         });
+       } else {
+         wlog('prepared_staged_timesheet_evidence', {
+           contract_week_id: cw.id,
+           target_timesheet_id: targetTimesheetIdForWrite,
+           prepared: false
          });
        }
      } catch (e) {
@@ -33911,6 +34015,13 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
        no_hours_timesheet_image_suppressed: requestMarksNoHoursTimesheetImageSuppressed,
        has_worked_hours_for_timesheet_evidence: actualScheduleHasWorkedHoursForMaterialisation
      });
+     wlog('staged_timesheet_evidence_prepared', {
+       contract_week_id: cw.id,
+       target_timesheet_id: targetTimesheetIdForWrite,
+       prepared: false,
+       skipped: true,
+       suppress_timesheet_evidence_materialisation: true
+     });
    }
  
    let preparedStagedExpenseEvidence = [];
@@ -33918,8 +34029,16 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
      try {
        preparedStagedExpenseEvidence = await prepareContractWeekStagedExpenseEvidence(
          cw.id,
-         requiredExpenseEvidenceKindsForProcess
+         requiredExpenseEvidenceKindsForProcess,
+         { usePreflightCache: true }
        );
+       wlog('staged_expense_evidence_prepared', {
+         contract_week_id: cw.id,
+         target_timesheet_id: targetTimesheetIdForWrite,
+         required_kinds: requiredExpenseEvidenceKindsForProcess,
+         prepared_count: preparedStagedExpenseEvidence.length,
+         storage_key_count: preparedStagedExpenseEvidence.map((item) => item.storage_key).filter(Boolean).length
+       });
        wlog('prepared_staged_expense_evidence', {
          contract_week_id: cw.id,
          target_timesheet_id: targetTimesheetIdForWrite,
@@ -33966,6 +34085,26 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
        }
        return withCORS(env, req, serverError(e?.message || 'Failed to prepare staged expense evidence'));
      }
+   }
+
+   if (!(willCreateNow && targetTimesheetIdForWrite && Array.isArray(requiredExpenseEvidenceKindsForProcess) && requiredExpenseEvidenceKindsForProcess.length)) {
+     wlog('prepared_staged_expense_evidence', {
+       contract_week_id: cw.id,
+       target_timesheet_id: targetTimesheetIdForWrite || null,
+       required_kinds: Array.isArray(requiredExpenseEvidenceKindsForProcess) ? requiredExpenseEvidenceKindsForProcess : [],
+       prepared_count: 0,
+       skipped: true
+     });
+   }
+
+   if (!(willCreateNow && targetTimesheetIdForWrite && Array.isArray(requiredExpenseEvidenceKindsForProcess) && requiredExpenseEvidenceKindsForProcess.length)) {
+     wlog('staged_expense_evidence_prepared', {
+       contract_week_id: cw.id,
+       target_timesheet_id: targetTimesheetIdForWrite || null,
+       required_kinds: Array.isArray(requiredExpenseEvidenceKindsForProcess) ? requiredExpenseEvidenceKindsForProcess : [],
+       prepared_count: 0,
+       skipped: true
+     });
    }
 
    const expectedCurrentTsfinSnapshotJson = (() => {
@@ -34019,7 +34158,19 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
  
    let rpcRes;
    try {
+     wlog('sql_rpc_started', {
+       rpc_function_name: rpcFunctionName,
+       contract_week_id: cw.id || null,
+       timesheet_id: targetTimesheetIdForWrite || currentTimesheetIdForWeek || null,
+       response_context: bulkResponseContext
+     });
      rpcRes = await sbRpc(env, rpcFunctionName, rpcArgs);
+     wlog('sql_rpc_completed', {
+       rpc_function_name: rpcFunctionName,
+       contract_week_id: cw.id || null,
+       timesheet_id: targetTimesheetIdForWrite || currentTimesheetIdForWeek || null,
+       response_context: bulkResponseContext
+     });
    } catch (e) {
      const rpcErr = parseRpcFailure(e);
      const detailObj = parseMaybeJsonObj(rpcErr.details);
@@ -34304,10 +34455,102 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
      const bulkTsfin = parseMaybeJsonObj(bulkPayload.timesheet_financials_json) || parseMaybeJsonObj(bulkPayload.tsfin) || null;
      const bulkContractWeek = parseMaybeJsonObj(bulkPayload.contract_week_json) || parseMaybeJsonObj(bulkPayload.contract_week) || null;
      const bulkCurrentTimesheetId = String(bulkPayload.current_timesheet_id || bulkTimesheet?.timesheet_id || targetTimesheetIdForWrite || '').trim();
+     manualUpsertTimingTimesheetId = bulkCurrentTimesheetId || manualUpsertTimingTimesheetId;
      let stagedMaterialisation = null;
- 
+     let bulkProcessEvidencePatchRefreshNeeded = false;
+     const bulkProcessEvidenceChangedDomains = new Set();
+     const bulkProcessMaterialisedStorageKeys = new Set();
+
+     const markBulkProcessEvidencePatchRefreshNeeded = (storageKeys = []) => {
+       if (!bulkProcessResponseRequested) return false;
+       bulkProcessEvidencePatchRefreshNeeded = true;
+       bulkProcessEvidenceChangedDomains.add('evidence');
+       const keys = Array.isArray(storageKeys) ? storageKeys : [storageKeys];
+       for (const key of keys) {
+         const cleanKey = String(key || '').trim();
+         if (!cleanKey) continue;
+         bulkProcessMaterialisedStorageKeys.add(cleanKey);
+         bulkProcessEvidenceChangedDomains.add('storage');
+       }
+       return true;
+     };
+
+     const applyFreshBulkProcessPatchRowToPayload = (freshPatchRow) => {
+       if (!freshPatchRow || typeof freshPatchRow !== 'object') return;
+
+       const currentDataRow = (bulkPayload.data_row && typeof bulkPayload.data_row === 'object')
+         ? { ...bulkPayload.data_row }
+         : ((bulkPayload.row && typeof bulkPayload.row === 'object') ? { ...bulkPayload.row } : {});
+       const currentPreviewHints = (bulkPayload.preview_hints && typeof bulkPayload.preview_hints === 'object') ? { ...bulkPayload.preview_hints } : {};
+       const currentCacheHints = (bulkPayload.cache_invalidation_hints && typeof bulkPayload.cache_invalidation_hints === 'object') ? { ...bulkPayload.cache_invalidation_hints } : {};
+       const existingStorageKeys = Array.isArray(currentCacheHints.storage_keys) ? currentCacheHints.storage_keys.slice() : [];
+       const freshStorageKey = String(freshPatchRow.primary_artifact_storage_key || currentPreviewHints.primary_artifact_storage_key || currentDataRow.primary_artifact_storage_key || '').trim() || null;
+       const freshPreviewMode = String(freshPatchRow.primary_artifact_preview_mode || currentPreviewHints.primary_artifact_preview_mode || currentDataRow.primary_artifact_preview_mode || 'PDF').trim() || 'PDF';
+       const mergedStorageKeys = [...new Set([
+         ...existingStorageKeys,
+         ...Array.from(bulkProcessMaterialisedStorageKeys),
+         freshStorageKey
+       ].filter(Boolean))];
+       const freshEvidenceHints = {
+         has_any_evidence: freshPatchRow.has_any_evidence === true,
+         evidence_badges: Array.isArray(freshPatchRow.evidence_badges) ? freshPatchRow.evidence_badges : [],
+         attached_evidence_count: Number(freshPatchRow.attached_evidence_count || 0) || 0,
+         queue_staged_count: Number(freshPatchRow.queue_staged_count || 0) || 0,
+         evidence_document_locked: freshPatchRow.evidence_document_locked === true,
+         evidence_lock_reason: freshPatchRow.evidence_lock_reason || null
+       };
+       const freshPreviewHints = {
+         primary_artifact_id: freshPatchRow.primary_artifact_id || null,
+         primary_artifact_kind: freshPatchRow.primary_artifact_kind || null,
+         primary_artifact_display_name: freshPatchRow.primary_artifact_display_name || null,
+         primary_artifact_storage_key: freshStorageKey,
+         primary_artifact_preview_mode: freshPreviewMode,
+         preview_storage_key: freshStorageKey,
+         primary_left_pane_mode: freshPatchRow.primary_left_pane_mode || null
+       };
+
+       bulkPayload = {
+         ...bulkPayload,
+         row: freshPatchRow,
+         data_row: freshPatchRow,
+         row_patch: (freshPatchRow.row_patch && typeof freshPatchRow.row_patch === 'object') ? freshPatchRow.row_patch : {},
+         row_key: freshPatchRow.row_key || bulkPayload.row_key || null,
+         new_row_key: freshPatchRow.row_key || bulkPayload.new_row_key || bulkPayload.row_key || null,
+         row_signature: freshPatchRow.row_signature || bulkPayload.row_signature || null,
+         bulk_process_bucket: freshPatchRow.bulk_process_bucket || bulkPayload.bulk_process_bucket || null,
+         evidence_hints: freshEvidenceHints,
+         preview_hints: freshPreviewHints,
+         artifact_hints: (freshPatchRow.artifact_hints && typeof freshPatchRow.artifact_hints === 'object') ? freshPatchRow.artifact_hints : {
+           route_family: freshPatchRow.route_family || null,
+           route_subfamily: freshPatchRow.route_subfamily || null,
+           underlying_channel_family: freshPatchRow.underlying_channel_family || null,
+           primary_artifact_storage_key: freshStorageKey,
+           primary_artifact_preview_mode: freshPreviewMode,
+           has_any_evidence: freshPatchRow.has_any_evidence === true,
+           evidence_badges: Array.isArray(freshPatchRow.evidence_badges) ? freshPatchRow.evidence_badges : []
+         },
+         cache_invalidation_hints: {
+           ...currentCacheHints,
+           storage_keys: mergedStorageKeys,
+           row_signature: freshPatchRow.row_signature || bulkPayload.row_signature || null,
+           evidence_changed: true,
+           storage_changed: mergedStorageKeys.length > 0,
+           status_only: false,
+           invalidate_context: false,
+           invalidate_row_context: false,
+           invalidate_preview: true,
+           invalidate_evidence: true
+         }
+       };
+     };
+
      if (bulkCurrentTimesheetId && preparedStagedTimesheetEvidence) {
        try {
+         wlog('staged_timesheet_evidence_materialisation_started', {
+           contract_week_id: cw.id,
+           timesheet_id: bulkCurrentTimesheetId,
+           queue_item_id: preparedStagedTimesheetEvidence?.queue_item_id || null
+         });
          stagedMaterialisation = await materialiseContractWeekStagedEvidenceToTimesheet(
            cw.id,
            bulkCurrentTimesheetId,
@@ -34383,68 +34626,41 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
                invalidate_evidence: true
              }
            };
- 
-           const freshPatchRow = await loadFreshBulkProcessPatchRow({
-             timesheetId: bulkCurrentTimesheetId,
-             contractWeekId: cw.id,
-             changedDomains: ['evidence', 'storage']
-           });
-           if (freshPatchRow) {
-             const freshStorageKey = String(freshPatchRow.primary_artifact_storage_key || storageKey || '').trim() || null;
-             const freshPreviewMode = String(freshPatchRow.primary_artifact_preview_mode || currentPreviewHints.primary_artifact_preview_mode || 'PDF').trim() || 'PDF';
-             const freshEvidenceHints = {
-               has_any_evidence: freshPatchRow.has_any_evidence === true,
-               evidence_badges: Array.isArray(freshPatchRow.evidence_badges) ? freshPatchRow.evidence_badges : [],
-               attached_evidence_count: Number(freshPatchRow.attached_evidence_count || 0) || 0,
-               queue_staged_count: Number(freshPatchRow.queue_staged_count || 0) || 0,
-               evidence_document_locked: freshPatchRow.evidence_document_locked === true,
-               evidence_lock_reason: freshPatchRow.evidence_lock_reason || null
-             };
-             const freshPreviewHints = {
-               primary_artifact_id: freshPatchRow.primary_artifact_id || null,
-               primary_artifact_kind: freshPatchRow.primary_artifact_kind || null,
-               primary_artifact_display_name: freshPatchRow.primary_artifact_display_name || null,
-               primary_artifact_storage_key: freshStorageKey,
-               primary_artifact_preview_mode: freshPreviewMode,
-               preview_storage_key: freshStorageKey,
-               primary_left_pane_mode: freshPatchRow.primary_left_pane_mode || null
-             };
-             bulkPayload = {
-               ...bulkPayload,
-               row: freshPatchRow,
-               data_row: freshPatchRow,
-               row_patch: (freshPatchRow.row_patch && typeof freshPatchRow.row_patch === 'object') ? freshPatchRow.row_patch : {},
-               row_key: freshPatchRow.row_key || bulkPayload.row_key || null,
-               new_row_key: freshPatchRow.row_key || bulkPayload.new_row_key || bulkPayload.row_key || null,
-               row_signature: freshPatchRow.row_signature || bulkPayload.row_signature || null,
-               bulk_process_bucket: freshPatchRow.bulk_process_bucket || bulkPayload.bulk_process_bucket || null,
-               evidence_hints: freshEvidenceHints,
-               preview_hints: freshPreviewHints,
-               artifact_hints: (freshPatchRow.artifact_hints && typeof freshPatchRow.artifact_hints === 'object') ? freshPatchRow.artifact_hints : {
-                 route_family: freshPatchRow.route_family || null,
-                 route_subfamily: freshPatchRow.route_subfamily || null,
-                 underlying_channel_family: freshPatchRow.underlying_channel_family || null,
-                 primary_artifact_storage_key: freshStorageKey,
-                 primary_artifact_preview_mode: freshPreviewMode,
-                 has_any_evidence: freshPatchRow.has_any_evidence === true,
-                 evidence_badges: Array.isArray(freshPatchRow.evidence_badges) ? freshPatchRow.evidence_badges : []
-               },
-               cache_invalidation_hints: {
-                 ...((bulkPayload.cache_invalidation_hints && typeof bulkPayload.cache_invalidation_hints === 'object') ? bulkPayload.cache_invalidation_hints : {}),
-                 storage_keys: freshStorageKey ? [...new Set([...(storageKeys || []), freshStorageKey].filter(Boolean))] : storageKeys,
-                 row_signature: freshPatchRow.row_signature || bulkPayload.row_signature || null,
-                 evidence_changed: true,
-                 storage_changed: true,
-                 status_only: false,
-                 invalidate_context: false,
-                 invalidate_row_context: false,
-                 invalidate_preview: true,
-                 invalidate_evidence: true
-               }
-             };
+           markBulkProcessEvidencePatchRefreshNeeded(storageKey);
+           if (!bulkProcessResponseRequested) {
+             const changedDomains = ['evidence', 'storage'];
+             wlog('final_bulk_row_patch_refresh_started', {
+               reason: 'timesheet_evidence_materialised',
+               contract_week_id: cw.id,
+               timesheet_id: bulkCurrentTimesheetId,
+               changed_domains: changedDomains
+             });
+             const freshPatchRow = await loadFreshBulkProcessPatchRow({
+               timesheetId: bulkCurrentTimesheetId,
+               contractWeekId: cw.id,
+               changedDomains
+             });
+             wlog('final_bulk_row_patch_refresh_completed', {
+               reason: 'timesheet_evidence_materialised',
+               contract_week_id: cw.id,
+               timesheet_id: bulkCurrentTimesheetId,
+               changed_domains: changedDomains,
+               refreshed: !!freshPatchRow
+             });
+             if (freshPatchRow) {
+               applyFreshBulkProcessPatchRowToPayload(freshPatchRow);
+             }
            }
          }
  
+         wlog('staged_timesheet_evidence_materialised', {
+           contract_week_id: cw.id,
+           timesheet_id: bulkCurrentTimesheetId,
+           attached_count: stagedMaterialisation?.attached_count || 0,
+           primary_timesheet_storage_key_present: !!stagedMaterialisation?.primary_timesheet_storage_key,
+           primary_timesheet_rotation_deg: stagedMaterialisation?.primary_timesheet_rotation_deg || 0,
+           response_context: bulkResponseContext
+         });
          wlog('materialised_staged_timesheet_evidence_bulk_process', {
            contract_week_id: cw.id,
            timesheet_id: bulkCurrentTimesheetId,
@@ -34468,6 +34684,12 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
  
      if (bulkCurrentTimesheetId && Array.isArray(preparedStagedExpenseEvidence) && preparedStagedExpenseEvidence.length) {
        try {
+         wlog('staged_expense_evidence_materialisation_started', {
+           contract_week_id: cw.id,
+           timesheet_id: bulkCurrentTimesheetId,
+           prepared_count: preparedStagedExpenseEvidence.length,
+           kinds: [...new Set(preparedStagedExpenseEvidence.map((item) => item?.kind).filter(Boolean))]
+         });
          const stagedExpenseMaterialisation = await materialiseContractWeekStagedExpenseEvidenceToTimesheet(
            cw.id,
            bulkCurrentTimesheetId,
@@ -34503,68 +34725,41 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
                invalidate_evidence: true
              }
            };
-
-           const freshPatchRow = await loadFreshBulkProcessPatchRow({
-             timesheetId: bulkCurrentTimesheetId,
-             contractWeekId: cw.id,
-             changedDomains: ['evidence', 'storage']
-           });
-           if (freshPatchRow) {
-             const freshStorageKey = String(freshPatchRow.primary_artifact_storage_key || '').trim() || null;
-             const freshPreviewMode = String(freshPatchRow.primary_artifact_preview_mode || 'PDF').trim() || 'PDF';
-             const freshEvidenceHints = {
-               has_any_evidence: freshPatchRow.has_any_evidence === true,
-               evidence_badges: Array.isArray(freshPatchRow.evidence_badges) ? freshPatchRow.evidence_badges : [],
-               attached_evidence_count: Number(freshPatchRow.attached_evidence_count || 0) || 0,
-               queue_staged_count: Number(freshPatchRow.queue_staged_count || 0) || 0,
-               evidence_document_locked: freshPatchRow.evidence_document_locked === true,
-               evidence_lock_reason: freshPatchRow.evidence_lock_reason || null
-             };
-             const freshPreviewHints = {
-               primary_artifact_id: freshPatchRow.primary_artifact_id || null,
-               primary_artifact_kind: freshPatchRow.primary_artifact_kind || null,
-               primary_artifact_display_name: freshPatchRow.primary_artifact_display_name || null,
-               primary_artifact_storage_key: freshStorageKey,
-               primary_artifact_preview_mode: freshPreviewMode,
-               preview_storage_key: freshStorageKey,
-               primary_left_pane_mode: freshPatchRow.primary_left_pane_mode || null
-             };
-             bulkPayload = {
-               ...bulkPayload,
-               row: freshPatchRow,
-               data_row: freshPatchRow,
-               row_patch: (freshPatchRow.row_patch && typeof freshPatchRow.row_patch === 'object') ? freshPatchRow.row_patch : {},
-               row_key: freshPatchRow.row_key || bulkPayload.row_key || null,
-               new_row_key: freshPatchRow.row_key || bulkPayload.new_row_key || bulkPayload.row_key || null,
-               row_signature: freshPatchRow.row_signature || bulkPayload.row_signature || null,
-               bulk_process_bucket: freshPatchRow.bulk_process_bucket || bulkPayload.bulk_process_bucket || null,
-               evidence_hints: freshEvidenceHints,
-               preview_hints: freshPreviewHints,
-               artifact_hints: (freshPatchRow.artifact_hints && typeof freshPatchRow.artifact_hints === 'object') ? freshPatchRow.artifact_hints : {
-                 route_family: freshPatchRow.route_family || null,
-                 route_subfamily: freshPatchRow.route_subfamily || null,
-                 underlying_channel_family: freshPatchRow.underlying_channel_family || null,
-                 primary_artifact_storage_key: freshStorageKey,
-                 primary_artifact_preview_mode: freshPreviewMode,
-                 has_any_evidence: freshPatchRow.has_any_evidence === true,
-                 evidence_badges: Array.isArray(freshPatchRow.evidence_badges) ? freshPatchRow.evidence_badges : []
-               },
-               cache_invalidation_hints: {
-                 ...((bulkPayload.cache_invalidation_hints && typeof bulkPayload.cache_invalidation_hints === 'object') ? bulkPayload.cache_invalidation_hints : {}),
-                 storage_keys: [...new Set([...(storageKeys || []), freshStorageKey].filter(Boolean))],
-                 row_signature: freshPatchRow.row_signature || bulkPayload.row_signature || null,
-                 evidence_changed: true,
-                 storage_changed: true,
-                 status_only: false,
-                 invalidate_context: false,
-                 invalidate_row_context: false,
-                 invalidate_preview: true,
-                 invalidate_evidence: true
-               }
-             };
+           markBulkProcessEvidencePatchRefreshNeeded(materialisedStorageKeys);
+           if (!bulkProcessResponseRequested) {
+             const changedDomains = ['evidence', 'storage'];
+             wlog('final_bulk_row_patch_refresh_started', {
+               reason: 'expense_evidence_materialised',
+               contract_week_id: cw.id,
+               timesheet_id: bulkCurrentTimesheetId,
+               changed_domains: changedDomains
+             });
+             const freshPatchRow = await loadFreshBulkProcessPatchRow({
+               timesheetId: bulkCurrentTimesheetId,
+               contractWeekId: cw.id,
+               changedDomains
+             });
+             wlog('final_bulk_row_patch_refresh_completed', {
+               reason: 'expense_evidence_materialised',
+               contract_week_id: cw.id,
+               timesheet_id: bulkCurrentTimesheetId,
+               changed_domains: changedDomains,
+               refreshed: !!freshPatchRow
+             });
+             if (freshPatchRow) {
+               applyFreshBulkProcessPatchRowToPayload(freshPatchRow);
+             }
            }
          }
 
+         wlog('staged_expense_evidence_materialised', {
+           contract_week_id: cw.id,
+           timesheet_id: bulkCurrentTimesheetId,
+           attached_count: stagedExpenseMaterialisation?.attached_count || 0,
+           storage_key_count: Array.isArray(stagedExpenseMaterialisation?.storage_keys) ? stagedExpenseMaterialisation.storage_keys.length : 0,
+           kinds: Array.isArray(stagedExpenseMaterialisation?.kinds) ? stagedExpenseMaterialisation.kinds : [],
+           response_context: bulkResponseContext
+         });
          wlog('materialised_staged_expense_evidence_bulk_process', {
            contract_week_id: cw.id,
            timesheet_id: bulkCurrentTimesheetId,
@@ -34593,6 +34788,29 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
            );
          }
          return withCORS(env, req, serverError(e?.message || 'Failed to materialise staged expense evidence'));
+       }
+     }
+
+     if (bulkProcessResponseRequested && bulkCurrentTimesheetId && bulkProcessEvidencePatchRefreshNeeded) {
+       const changedDomains = Array.from(bulkProcessEvidenceChangedDomains);
+       wlog('final_bulk_row_patch_refresh_started', {
+         contract_week_id: cw.id,
+         timesheet_id: bulkCurrentTimesheetId,
+         changed_domains: changedDomains
+       });
+       const freshPatchRow = await loadFreshBulkProcessPatchRow({
+         timesheetId: bulkCurrentTimesheetId,
+         contractWeekId: cw.id,
+         changedDomains
+       });
+       wlog('final_bulk_row_patch_refresh_completed', {
+         contract_week_id: cw.id,
+         timesheet_id: bulkCurrentTimesheetId,
+         changed_domains: changedDomains,
+         refreshed: !!freshPatchRow
+       });
+       if (freshPatchRow) {
+         applyFreshBulkProcessPatchRowToPayload(freshPatchRow);
        }
      }
 
@@ -34646,6 +34864,22 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
        ? bulkPayload.row_patches
        : (Object.keys(finalRowPatch || {}).length ? [finalRowPatch] : []);
  
+     wlog('audit_completed', {
+       contract_week_id: cw.id || null,
+       timesheet_id: finalCurrentTimesheetId || null,
+       response_context: bulkResponseContext,
+       source: 'atomic_rpc'
+     });
+
+     wlog('response_built', {
+       contract_week_id: cw.id || null,
+       timesheet_id: finalCurrentTimesheetId || null,
+       response_context: bulkResponseContext,
+       row_key: rowKey,
+       previous_row_key: previousRowKey,
+       bulk_process_bucket: bulkProcessBucket
+     });
+
      wlog(bulkAuthoriseResponseRequested ? 'finish_bulk_authorise' : 'finish_bulk_process', {
        final_timesheet_id: finalCurrentTimesheetId || null,
        final_booking_id: finalBulkTimesheet?.booking_id || null,
@@ -34760,6 +34994,14 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
          };
        }
  
+       wlog('staged_timesheet_evidence_materialised', {
+         contract_week_id: cw.id,
+         timesheet_id: ts.timesheet_id,
+         attached_count: stagedMaterialisation?.attached_count || 0,
+         primary_timesheet_storage_key_present: !!stagedMaterialisation?.primary_timesheet_storage_key,
+         primary_timesheet_rotation_deg: stagedMaterialisation?.primary_timesheet_rotation_deg || 0,
+         response_context: bulkResponseContext
+       });
        wlog('materialised_staged_timesheet_evidence', {
          contract_week_id: cw.id,
          timesheet_id: ts.timesheet_id,
@@ -34789,6 +35031,14 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
          preparedStagedExpenseEvidence
        );
 
+       wlog('staged_expense_evidence_materialised', {
+         contract_week_id: cw.id,
+         timesheet_id: ts.timesheet_id,
+         attached_count: stagedExpenseMaterialisation?.attached_count || 0,
+         storage_key_count: Array.isArray(stagedExpenseMaterialisation?.storage_keys) ? stagedExpenseMaterialisation.storage_keys.length : 0,
+         kinds: Array.isArray(stagedExpenseMaterialisation?.kinds) ? stagedExpenseMaterialisation.kinds : [],
+         response_context: bulkResponseContext
+       });
        wlog('materialised_staged_expense_evidence', {
          contract_week_id: cw.id,
          timesheet_id: ts.timesheet_id,
@@ -34828,6 +35078,7 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
        is_current: ts?.is_current ?? null
      });
  
+     let createdTimesheetAuditWritten = false;
      try {
        await writeAudit(
          env,
@@ -34844,8 +35095,25 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
          },
          { entity: 'timesheets', subject_id: ts.timesheet_id, req }
        );
+       createdTimesheetAuditWritten = true;
      } catch {}
+     wlog('audit_completed', {
+       audit_source: 'writeAudit',
+       attempted: true,
+       completed: createdTimesheetAuditWritten,
+       contract_week_id: cw.id || null,
+       timesheet_id: ts?.timesheet_id || null,
+       response_context: bulkResponseContext
+     });
    } else {
+     wlog('audit_completed', {
+       audit_source: 'none_required',
+       attempted: false,
+       completed: true,
+       contract_week_id: cw.id || null,
+       timesheet_id: ts?.timesheet_id || null,
+       response_context: bulkResponseContext
+     });
      wlog('patched_existing_current_timesheet', {
        timesheet_id: ts?.timesheet_id || null,
        booking_id: ts?.booking_id || null,
@@ -34866,6 +35134,14 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
      }
    }
  
+   wlog('response_built', {
+     contract_week_id: cw.id || null,
+     timesheet_id: ts?.timesheet_id || null,
+     response_context: bulkResponseContext,
+     created_now: !!createdNow,
+     was_stale: !!wasStaleWeekTs
+   });
+
    wlog('finish', {
      final_timesheet_id: ts?.timesheet_id || null,
      final_booking_id: ts?.booking_id || null,
@@ -34887,6 +35163,14 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
      created_now: !!createdNow
    }));
  }
+
+
+
+
+
+
+
+
 
 function formatCloudTmsLondonDate(value) {
   const fallback = 'Not recorded';
@@ -35915,6 +36199,7 @@ async function getBankingPayOperationConfig(env, operationType, options = {}) {
   return snapshot;
 }
 
+
 function buildBankingPayOperationPublicPayload(operationRow, options = {}) {
   const unwrapRow = (value) => {
     let row = value;
@@ -36052,6 +36337,58 @@ function buildBankingPayOperationPublicPayload(operationRow, options = {}) {
     return out.length ? out : undefined;
   };
 
+  const providerStrictExternalEvidencePresentForDiagnostic = (sourceValue, sanitizedValue = {}) => {
+    const localRefs = new Set();
+    const addLocal = (value) => {
+      const text = String(value == null ? '' : value).trim();
+      if (text) localRefs.add(text.toLowerCase());
+    };
+    const collectObject = (value) => (value && typeof value === 'object' && !Array.isArray(value)) ? value : {};
+    const source = collectObject(sourceValue);
+    const sanitized = collectObject(sanitizedValue);
+    const nestedObjects = [
+      source,
+      sanitized,
+      collectObject(source.rail_meta_json || source.railMetaJson),
+      collectObject(source.raw_payload || source.rawPayload),
+      collectObject(source.provider_submit_diagnostic || source.providerSubmitDiagnostic),
+      collectObject(sanitized.rail_meta_json || sanitized.railMetaJson),
+      collectObject(sanitized.raw_payload || sanitized.rawPayload),
+      collectObject(sanitized.provider_submit_diagnostic || sanitized.providerSubmitDiagnostic)
+    ];
+    const localKeys = [
+      'id', 'operation_id', 'operationId', 'chunk_id', 'chunkId', 'transfer_id', 'transferId',
+      'pay_bank_transfer_id', 'payBankTransferId', 'transfer_scope_id', 'transferScopeId',
+      'scope_id', 'scopeId', 'auth_request_id', 'authRequestId', 'pay_batch_id', 'payBatchId',
+      'batch_id', 'batchId', 'request_id', 'requestId', 'idempotency_key', 'idempotencyKey',
+      'local_provider_request_id', 'localProviderRequestId', 'provider_request_id', 'providerRequestId',
+      'reference', 'referenceId', 'local_reference', 'localReference', 'provider_request_reference', 'providerRequestReference',
+      'payment_reference', 'paymentReference', 'bulk_reference', 'bulkReference', 'correlation_id', 'correlationId'
+    ];
+    for (const obj of nestedObjects) {
+      for (const key of localKeys) addLocal(obj[key]);
+    }
+    const externalKeys = [
+      'rail_tx_id', 'railTxId', 'provider_transaction_id', 'providerTransactionId',
+      'provider_payment_id', 'providerPaymentId', 'provider_event_id', 'providerEventId',
+      'provider_reference', 'providerReference', 'provider_submission_id', 'providerSubmissionId',
+      'submission_id', 'submissionId', 'rail_submission_id', 'railSubmissionId',
+      'external_payment_id', 'externalPaymentId', 'revolut_payment_id', 'revolutPaymentId',
+      'provider_transfer_id', 'providerTransferId', 'external_transfer_id', 'externalTransferId',
+      'external_reference', 'externalReference', 'bank_reference', 'bankReference',
+      'transaction_id', 'transactionId', 'payment_id', 'paymentId'
+    ];
+    for (const obj of nestedObjects) {
+      for (const key of externalKeys) {
+        const text = String(obj[key] == null ? '' : obj[key]).trim();
+        if (!text) continue;
+        if (localRefs.has(text.toLowerCase())) continue;
+        return true;
+      }
+    }
+    return false;
+  };
+
   const sanitizeProviderSubmitDiagnostic = (diagnostic) => {
     const source = asPlainObject(diagnostic);
     if (!Object.keys(source).length) return {};
@@ -36084,12 +36421,16 @@ function buildBankingPayOperationPublicPayload(operationRow, options = {}) {
     copyText('provider_submission_status', 'provider_submission_status', 'providerSubmissionStatus', 'outcome_code', 'outcomeCode');
     copyText('provider_call_stage', 'provider_call_stage', 'providerCallStage');
     copyBool('provider_submission_attempted', 'provider_submission_attempted', 'providerSubmissionAttempted', 'provider_called', 'providerCalled');
+    copyBool('provider_called', 'provider_called', 'providerCalled');
     copyBool('provider_request_sent', 'provider_request_sent', 'providerRequestSent');
+    copyBool('provider_request_sent_confirmed', 'provider_request_sent_confirmed', 'providerRequestSentConfirmed');
+    copyText('provider_request_dispatched_at_utc', 'provider_request_dispatched_at_utc', 'providerRequestDispatchedAtUtc', 'request_sent_at_utc', 'requestSentAtUtc');
     copyBool('provider_response_received', 'provider_response_received', 'providerResponseReceived');
     copyBool('provider_response_present', 'provider_response_present', 'providerResponsePresent');
     copyBool('provider_submission_accepted', 'provider_submission_accepted', 'providerSubmissionAccepted', 'provider_accepted', 'providerAccepted');
     copyBool('provider_submission_rejected', 'provider_submission_rejected', 'providerSubmissionRejected', 'provider_rejected', 'providerRejected');
     copyBool('provider_submission_unknown', 'provider_submission_unknown', 'providerSubmissionUnknown', 'provider_unknown', 'providerUnknown');
+    copyBool('provider_external_evidence_present', 'provider_external_evidence_present', 'providerExternalEvidencePresent');
     copyBool('provider_acceptance_evidence_present', 'provider_acceptance_evidence_present', 'providerAcceptanceEvidencePresent');
     copyBool('stale_submit_chunk', 'stale_submit_chunk', 'staleSubmitChunk');
     copyBool('unfinalised_submit_chunk', 'unfinalised_submit_chunk', 'unfinalisedSubmitChunk');
@@ -36113,20 +36454,47 @@ function buildBankingPayOperationPublicPayload(operationRow, options = {}) {
     copyText('rail_env', 'rail_env', 'railEnv');
     copyText('rail_tx_id', 'rail_tx_id', 'railTxId');
     copyText('rail_state', 'rail_state', 'railState');
+    copyText('provider_transaction_id', 'provider_transaction_id', 'providerTransactionId', 'provider_payment_id', 'providerPaymentId', 'transaction_id', 'transactionId', 'payment_id', 'paymentId');
+    copyText('provider_reference', 'provider_reference', 'providerReference', 'external_reference', 'externalReference', 'bank_reference', 'bankReference');
+    copyText('provider_state', 'provider_state', 'providerState');
     copyText('request_id', 'request_id', 'requestId');
     copyText('idempotency_key', 'idempotency_key', 'idempotencyKey');
     copyNumber('provider_http_status', 'provider_http_status', 'providerHttpStatus');
     copyText('provider_error_code', 'provider_error_code', 'providerErrorCode');
     copyText('provider_error_message_redacted', 'provider_error_message_redacted', 'providerErrorMessageRedacted');
+    copyText('response_received_at_utc', 'response_received_at_utc', 'responseReceivedAtUtc');
+
+    const statusUpper = String(out.provider_submission_status || '').trim().toUpperCase();
+    const rejectedOrUnusable = [
+      'PROVIDER_SUBMISSION_REJECTED',
+      'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME',
+      'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK',
+      'PROVIDER_SUBMISSION_MALFORMED_RESPONSE',
+      'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID',
+      'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL'
+    ].includes(statusUpper);
+    const hasExternalEvidence = providerStrictExternalEvidencePresentForDiagnostic(source, out) === true;
+    out.provider_external_evidence_present = hasExternalEvidence;
+    out.provider_acceptance_evidence_present = statusUpper === 'PROVIDER_SUBMISSION_ACCEPTED' && hasExternalEvidence === true && rejectedOrUnusable !== true;
+    out.provider_submission_accepted = out.provider_acceptance_evidence_present === true;
+    if (out.provider_acceptance_evidence_present !== true) out.rail_tx_id = undefined;
+    if (hasExternalEvidence !== true) {
+      out.provider_transaction_id = undefined;
+      out.provider_reference = undefined;
+    }
     return out;
   };
 
-  const providerSubmitStatusMessage = (statusValue) => {
+  const providerSubmitStatusMessage = (statusValue, acceptanceEvidencePresent = false) => {
     const statusTextValue = String(statusValue || '').trim().toUpperCase();
+    if (statusTextValue === 'PROVIDER_SUBMISSION_ACCEPTED' && acceptanceEvidencePresent !== true) {
+      return 'Provider response/status was recorded, but no usable external provider transaction/reference was stored. Manual reconciliation is required before retry.';
+    }
     const messages = {
       PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK: 'Provider submission outcome unknown. The submit chunk became stale before any provider response, transfer event, rail transaction ID, or rail state was recorded. Check Revolut/bank records before retry.',
       UNKNOWN_PROVIDER_SUBMISSION_OUTCOME: 'Provider request may have been sent, but no usable provider response was recorded. Check Revolut/bank records before retry.',
       PROVIDER_SUBMISSION_MALFORMED_RESPONSE: 'Provider returned an unusable response. Manual reconciliation is required before retry.',
+      PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID: 'Provider response/status was recorded, but no usable external provider transaction/reference was stored. Manual reconciliation is required before retry.',
       PROVIDER_SUBMISSION_REJECTED: 'Provider rejected the payment submission. Review the provider error before retry.',
       PROVIDER_SUBMISSION_BLOCKED_PRE_CALL: 'Provider was not called. Submission failed before the provider payment request was sent.',
       NO_PROVIDER_SUBMISSION_ATTEMPTED: 'Provider submission was not attempted.',
@@ -36165,7 +36533,7 @@ function buildBankingPayOperationPublicPayload(operationRow, options = {}) {
   const providerSubmitRecommendedAction = providerSubmitDiagnostic.recommended_action || '';
   const providerSubmitManualResolutionRequired = providerSubmitDiagnostic.manual_resolution_required === true;
   const providerSubmitSafeRetryAvailable = providerSubmitDiagnostic.safe_retry_available === true;
-  const providerSubmitMessage = providerSubmitStatusMessage(providerSubmissionStatus);
+  const providerSubmitMessage = providerSubmitStatusMessage(providerSubmissionStatus, providerSubmitDiagnostic.provider_acceptance_evidence_present === true);
   const collectOperationalObjects = (...values) => {
     const out = [];
     const queue = [...values];
@@ -36314,7 +36682,7 @@ function buildBankingPayOperationPublicPayload(operationRow, options = {}) {
       PROVIDER_SUBMISSION_REJECTED: providerSubmitStatusMessage('PROVIDER_SUBMISSION_REJECTED'),
       PROVIDER_SUBMISSION_BLOCKED_PRE_CALL: providerSubmitStatusMessage('PROVIDER_SUBMISSION_BLOCKED_PRE_CALL'),
       NO_PROVIDER_SUBMISSION_ATTEMPTED: providerSubmitStatusMessage('NO_PROVIDER_SUBMISSION_ATTEMPTED'),
-      PROVIDER_SUBMISSION_ACCEPTED: providerSubmitStatusMessage('PROVIDER_SUBMISSION_ACCEPTED')
+      PROVIDER_SUBMISSION_ACCEPTED: providerSubmitStatusMessage('PROVIDER_SUBMISSION_ACCEPTED', providerSubmitDiagnostic.provider_acceptance_evidence_present === true)
     };
     const code = normaliseSafeCode(source.code || source.error_code || source.errorCode || fallbackCode) || normaliseSafeCode(fallbackCode) || 'BANKING_OPERATION_FAILED';
     const sourceMessage = safeTrimText(source.message || source.user_message || source.error || fallbackMessage);
@@ -36590,6 +36958,13 @@ function buildBankingPayOperationPublicPayload(operationRow, options = {}) {
     payload.manual_resolution_required = providerSubmitManualResolutionRequired;
     payload.safe_retry_available = providerSubmitSafeRetryAvailable;
     payload.recommended_action = providerSubmitRecommendedAction || null;
+    payload.provider_called = providerSubmitDiagnostic.provider_called === true;
+    payload.provider_request_sent = providerSubmitDiagnostic.provider_request_sent === true;
+    payload.provider_request_sent_confirmed = providerSubmitDiagnostic.provider_request_sent_confirmed === true;
+    payload.provider_request_dispatched_at_utc = providerSubmitDiagnostic.provider_request_dispatched_at_utc || null;
+    payload.provider_response_present = providerSubmitDiagnostic.provider_response_present === true;
+    payload.provider_external_evidence_present = providerSubmitDiagnostic.provider_external_evidence_present === true;
+    payload.provider_acceptance_evidence_present = providerSubmitDiagnostic.provider_acceptance_evidence_present === true;
   }
 
   if (terminal && status === 'COMPLETE') {
@@ -36613,6 +36988,10 @@ function buildBankingPayOperationPublicPayload(operationRow, options = {}) {
       payload.error.manual_resolution_required = providerSubmitManualResolutionRequired;
       payload.error.safe_retry_available = providerSubmitSafeRetryAvailable;
       payload.error.recommended_action = providerSubmitRecommendedAction || null;
+      payload.error.provider_request_sent_confirmed = providerSubmitDiagnostic.provider_request_sent_confirmed === true;
+      payload.error.provider_request_dispatched_at_utc = providerSubmitDiagnostic.provider_request_dispatched_at_utc || null;
+      payload.error.provider_external_evidence_present = providerSubmitDiagnostic.provider_external_evidence_present === true;
+      payload.error.provider_acceptance_evidence_present = providerSubmitDiagnostic.provider_acceptance_evidence_present === true;
       if (status === 'REVIEW_REQUIRED' && providerSubmitMessage) payload.error.message = providerSubmitMessage;
     }
     if (payload.result && typeof payload.result === 'object') {
@@ -36622,6 +37001,16 @@ function buildBankingPayOperationPublicPayload(operationRow, options = {}) {
       payload.result.manual_resolution_required = payload.result.manual_resolution_required === true || providerSubmitManualResolutionRequired;
       payload.result.safe_retry_available = payload.result.safe_retry_available === true || providerSubmitSafeRetryAvailable;
       payload.result.recommended_action = payload.result.recommended_action || providerSubmitRecommendedAction || null;
+      payload.result.provider_request_sent_confirmed = providerSubmitDiagnostic.provider_request_sent_confirmed === true;
+      payload.result.provider_request_dispatched_at_utc = providerSubmitDiagnostic.provider_request_dispatched_at_utc || payload.result.provider_request_dispatched_at_utc || null;
+      payload.result.provider_external_evidence_present = providerSubmitDiagnostic.provider_external_evidence_present === true;
+      payload.result.provider_acceptance_evidence_present = providerSubmitDiagnostic.provider_acceptance_evidence_present === true;
+      payload.result.provider_submission_accepted = providerSubmitDiagnostic.provider_acceptance_evidence_present === true;
+      payload.result.rail_tx_id = providerSubmitDiagnostic.provider_acceptance_evidence_present === true
+        ? (providerSubmitDiagnostic.rail_tx_id || providerSubmitDiagnostic.provider_transaction_id || payload.result.rail_tx_id || null)
+        : null;
+      payload.result.provider_transaction_id = providerSubmitDiagnostic.provider_transaction_id || null;
+      payload.result.provider_reference = providerSubmitDiagnostic.provider_reference || null;
     }
   }
 
@@ -36688,7 +37077,6 @@ function buildBankingPayOperationPublicPayload(operationRow, options = {}) {
 
   return payload;
 }
-
 
 
 async function startBankingPayOperation(env, input = {}, options = {}) {
@@ -36791,7 +37179,6 @@ async function startBankingPayOperation(env, input = {}, options = {}) {
 
 
 
-
 async function handleBankingPayOperationGet(env, req, user, operationId) {
   const id = String(operationId || '').trim();
   if (!id) return withCORS(env, req, badRequest('operation_id is required'));
@@ -36807,6 +37194,45 @@ async function handleBankingPayOperationGet(env, req, user, operationId) {
     return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
   };
 
+  const asPlainObject = (value) => {
+    if (value && typeof value === 'object' && !Array.isArray(value)) return value;
+    if (typeof value === 'string') {
+      const text = value.trim();
+      if (!text) return {};
+      try {
+        const parsed = JSON.parse(text);
+        return (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) ? parsed : {};
+      } catch {}
+    }
+    return {};
+  };
+
+  const extractProviderSubmitDiagnostic = (row, extra = {}) => {
+    const source = asPlainObject(row);
+    const resultJson = asPlainObject(source.result_json);
+    const errorJson = asPlainObject(source.error_json);
+    const progressJson = asPlainObject(source.progress_json);
+    const extraObj = asPlainObject(extra);
+    const candidates = [
+      extraObj.provider_submit_diagnostic,
+      extraObj.providerSubmitDiagnostic,
+      source.provider_submit_diagnostic,
+      source.providerSubmitDiagnostic,
+      resultJson.provider_submit_diagnostic,
+      resultJson.providerSubmitDiagnostic,
+      errorJson.provider_submit_diagnostic,
+      errorJson.providerSubmitDiagnostic,
+      progressJson.provider_submit_diagnostic,
+      progressJson.providerSubmitDiagnostic,
+      asPlainObject(resultJson.cleanup_summary).provider_submit_diagnostic,
+      asPlainObject(errorJson.cleanup_summary).provider_submit_diagnostic
+    ];
+    for (const candidate of candidates) {
+      if (candidate && typeof candidate === 'object' && !Array.isArray(candidate) && Object.keys(candidate).length) return candidate;
+    }
+    return {};
+  };
+
   const shouldFinaliseProviderSubmitDiagnostic = (row) => {
     const operationType = String(row?.operation_type || row?.operationType || '').trim().toUpperCase();
     const status = String(row?.status || '').trim().toUpperCase();
@@ -36817,18 +37243,60 @@ async function handleBankingPayOperationGet(env, req, user, operationId) {
       && String(row?.pay_batch_id || row?.payBatchId || '').trim();
   };
 
-  const finaliseProviderSubmitDiagnosticIfNeeded = async (row) => {
-    if (!shouldFinaliseProviderSubmitDiagnostic(row)) return row;
-    await sbRpc(env, 'pay_provider_submit_chunk_diagnostic_finalise', {
-      p_operation_id: id,
-      p_pay_batch_id: row.pay_batch_id || row.payBatchId,
-      p_actor_user_id: user.id,
-      p_reason_code: 'OPERATION_GET_TERMINAL_PROVIDER_SUBMIT_DIAGNOSTIC'
-    });
-    return unwrapRpcPayload(await sbRpc(env, 'banking_pay_operation_get', {
-      p_operation_id: id,
-      p_actor_user_id: user.id
-    }), 'banking_pay_operation_get');
+  const buildProviderSubmitFinaliseFailurePayload = (row, finaliseFailure, reasonCode, finalisePayload = {}) => {
+    const finaliseObj = asPlainObject(finalisePayload);
+    const diagnostic = extractProviderSubmitDiagnostic(row, finaliseObj);
+    const payload = buildBankingPayOperationPublicPayload(row, Object.keys(diagnostic).length ? { providerSubmitDiagnostic: diagnostic } : {});
+    const message = String(finaliseFailure?.message || finaliseObj.message || 'Provider-submit diagnostic finalisation failed.').trim();
+    const providerStatus = String(finaliseObj.provider_submission_status || diagnostic.provider_submission_status || payload.provider_submission_status || '').trim() || null;
+    const reviewReason = String(finaliseObj.review_reason_code || finaliseObj.provider_submit_review_reason_code || diagnostic.review_reason_code || payload.review_reason_code || reasonCode || '').trim() || null;
+    return {
+      ...payload,
+      ok: true,
+      provider_submit_finalise_failed: true,
+      provider_submit_finalise_result: Object.keys(finaliseObj).length ? finaliseObj : null,
+      provider_submit_diagnostic: Object.keys(diagnostic).length ? diagnostic : (payload.provider_submit_diagnostic || null),
+      provider_submission_status: providerStatus,
+      review_reason_code: reviewReason,
+      manual_resolution_required: true,
+      safe_retry_available: false,
+      recommended_action: 'Provider-submit diagnostic finalisation failed. Retry operation advance or escalate support before retrying payment.',
+      status_text: 'Provider-submit diagnostic finalisation failed. The payment operation has not been treated as safely resolved.',
+      error: {
+        ...(payload.error && typeof payload.error === 'object' ? payload.error : {}),
+        code: 'PROVIDER_SUBMIT_DIAGNOSTIC_FINALISE_FAILED',
+        message,
+        provider_submit_finalise_failed: true,
+        provider_submit_diagnostic: Object.keys(diagnostic).length ? diagnostic : undefined,
+        provider_submission_status: providerStatus,
+        review_reason_code: reviewReason,
+        manual_resolution_required: true,
+        safe_retry_available: false
+      }
+    };
+  };
+
+  const finaliseProviderSubmitDiagnosticIfNeeded = async (row, reasonCode) => {
+    if (!shouldFinaliseProviderSubmitDiagnostic(row)) return { row, finalise_failed_payload: null };
+    try {
+      const finaliseRaw = await sbRpc(env, 'pay_provider_submit_chunk_diagnostic_finalise', {
+        p_operation_id: id,
+        p_pay_batch_id: row.pay_batch_id || row.payBatchId,
+        p_actor_user_id: user.id,
+        p_reason_code: reasonCode
+      });
+      const finalisePayload = unwrapRpcPayload(finaliseRaw, 'pay_provider_submit_chunk_diagnostic_finalise');
+      if (finalisePayload.finalise_failed === true || finalisePayload.provider_submit_finalise_failed === true || finalisePayload.ok === false) {
+        return { row, finalise_failed_payload: buildProviderSubmitFinaliseFailurePayload(row, null, reasonCode, finalisePayload) };
+      }
+      const reloadedRow = unwrapRpcPayload(await sbRpc(env, 'banking_pay_operation_get', {
+        p_operation_id: id,
+        p_actor_user_id: user.id
+      }), 'banking_pay_operation_get');
+      return { row: reloadedRow, finalise_failed_payload: null };
+    } catch (finaliseError) {
+      return { row, finalise_failed_payload: buildProviderSubmitFinaliseFailurePayload(row, finaliseError, reasonCode) };
+    }
   };
 
   try {
@@ -36838,7 +37306,9 @@ async function handleBankingPayOperationGet(env, req, user, operationId) {
     });
     let row = unwrapRpcPayload(rpcRes, 'banking_pay_operation_get');
     if (!row.operation_id && !row.id) return withCORS(env, req, notFound('Operation not found'));
-    row = await finaliseProviderSubmitDiagnosticIfNeeded(row);
+    const finalised = await finaliseProviderSubmitDiagnosticIfNeeded(row, 'OPERATION_GET_TERMINAL_PROVIDER_SUBMIT_DIAGNOSTIC');
+    if (finalised.finalise_failed_payload) return withCORS(env, req, ok(finalised.finalise_failed_payload));
+    row = finalised.row;
     const payload = buildBankingPayOperationPublicPayload(row);
     if (!payload.operation_id) return withCORS(env, req, notFound('Operation not found'));
     return withCORS(env, req, ok(payload));
@@ -36849,6 +37319,7 @@ async function handleBankingPayOperationGet(env, req, user, operationId) {
     return withCORS(env, req, new Response(JSON.stringify(friendly), { status: Number(friendly.http_status || friendly.status || 500) || 500, headers: JSON_HEADERS }));
   }
 }
+
 
 async function handleBankingPayOperationAdvance(env, req, user, operationId) {
   const id = String(operationId || '').trim();
@@ -36867,6 +37338,45 @@ async function handleBankingPayOperationAdvance(env, req, user, operationId) {
     return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
   };
 
+  const asPlainObject = (value) => {
+    if (value && typeof value === 'object' && !Array.isArray(value)) return value;
+    if (typeof value === 'string') {
+      const text = value.trim();
+      if (!text) return {};
+      try {
+        const parsed = JSON.parse(text);
+        return (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) ? parsed : {};
+      } catch {}
+    }
+    return {};
+  };
+
+  const extractProviderSubmitDiagnostic = (row, extra = {}) => {
+    const source = asPlainObject(row);
+    const resultJson = asPlainObject(source.result_json);
+    const errorJson = asPlainObject(source.error_json);
+    const progressJson = asPlainObject(source.progress_json);
+    const extraObj = asPlainObject(extra);
+    const candidates = [
+      extraObj.provider_submit_diagnostic,
+      extraObj.providerSubmitDiagnostic,
+      source.provider_submit_diagnostic,
+      source.providerSubmitDiagnostic,
+      resultJson.provider_submit_diagnostic,
+      resultJson.providerSubmitDiagnostic,
+      errorJson.provider_submit_diagnostic,
+      errorJson.providerSubmitDiagnostic,
+      progressJson.provider_submit_diagnostic,
+      progressJson.providerSubmitDiagnostic,
+      asPlainObject(resultJson.cleanup_summary).provider_submit_diagnostic,
+      asPlainObject(errorJson.cleanup_summary).provider_submit_diagnostic
+    ];
+    for (const candidate of candidates) {
+      if (candidate && typeof candidate === 'object' && !Array.isArray(candidate) && Object.keys(candidate).length) return candidate;
+    }
+    return {};
+  };
+
   const shouldFinaliseProviderSubmitDiagnostic = (row) => {
     const operationType = String(row?.operation_type || row?.operationType || '').trim().toUpperCase();
     const status = String(row?.status || '').trim().toUpperCase();
@@ -36877,18 +37387,62 @@ async function handleBankingPayOperationAdvance(env, req, user, operationId) {
       && String(row?.pay_batch_id || row?.payBatchId || '').trim();
   };
 
+  const buildProviderSubmitFinaliseFailurePayload = (row, finaliseFailure, reasonCode, finalisePayload = {}) => {
+    const finaliseObj = asPlainObject(finalisePayload);
+    const diagnostic = extractProviderSubmitDiagnostic(row, finaliseObj);
+    const payload = buildBankingPayOperationPublicPayload(row, Object.keys(diagnostic).length ? { providerSubmitDiagnostic: diagnostic } : {});
+    const message = String(finaliseFailure?.message || finaliseObj.message || 'Provider-submit diagnostic finalisation failed.').trim();
+    const providerStatus = String(finaliseObj.provider_submission_status || diagnostic.provider_submission_status || payload.provider_submission_status || '').trim() || null;
+    const reviewReason = String(finaliseObj.review_reason_code || finaliseObj.provider_submit_review_reason_code || diagnostic.review_reason_code || payload.review_reason_code || reasonCode || '').trim() || null;
+    return {
+      ...payload,
+      ok: true,
+      provider_submit_finalise_failed: true,
+      provider_submit_finalise_result: Object.keys(finaliseObj).length ? finaliseObj : null,
+      provider_submit_diagnostic: Object.keys(diagnostic).length ? diagnostic : (payload.provider_submit_diagnostic || null),
+      provider_submission_status: providerStatus,
+      review_reason_code: reviewReason,
+      manual_resolution_required: true,
+      safe_retry_available: false,
+      recommended_action: 'Provider-submit diagnostic finalisation failed. Retry operation advance or escalate support before retrying payment.',
+      status_text: 'Provider-submit diagnostic finalisation failed. CloudTMS has not marked this provider-submit state as safely resolved.',
+      can_advance: true,
+      terminal: false,
+      error: {
+        ...(payload.error && typeof payload.error === 'object' ? payload.error : {}),
+        code: 'PROVIDER_SUBMIT_DIAGNOSTIC_FINALISE_FAILED',
+        message,
+        provider_submit_finalise_failed: true,
+        provider_submit_diagnostic: Object.keys(diagnostic).length ? diagnostic : undefined,
+        provider_submission_status: providerStatus,
+        review_reason_code: reviewReason,
+        manual_resolution_required: true,
+        safe_retry_available: false
+      }
+    };
+  };
+
   const finaliseProviderSubmitDiagnosticIfNeeded = async (row, reasonCode) => {
-    if (!shouldFinaliseProviderSubmitDiagnostic(row)) return row;
-    await sbRpc(env, 'pay_provider_submit_chunk_diagnostic_finalise', {
-      p_operation_id: id,
-      p_pay_batch_id: row.pay_batch_id || row.payBatchId,
-      p_actor_user_id: user.id,
-      p_reason_code: reasonCode
-    });
-    return unwrapRpcPayload(await sbRpc(env, 'banking_pay_operation_get', {
-      p_operation_id: id,
-      p_actor_user_id: user.id
-    }), 'banking_pay_operation_get');
+    if (!shouldFinaliseProviderSubmitDiagnostic(row)) return { row, finalise_failed_payload: null };
+    try {
+      const finaliseRaw = await sbRpc(env, 'pay_provider_submit_chunk_diagnostic_finalise', {
+        p_operation_id: id,
+        p_pay_batch_id: row.pay_batch_id || row.payBatchId,
+        p_actor_user_id: user.id,
+        p_reason_code: reasonCode
+      });
+      const finalisePayload = unwrapRpcPayload(finaliseRaw, 'pay_provider_submit_chunk_diagnostic_finalise');
+      if (finalisePayload.finalise_failed === true || finalisePayload.provider_submit_finalise_failed === true || finalisePayload.ok === false) {
+        return { row, finalise_failed_payload: buildProviderSubmitFinaliseFailurePayload(row, null, reasonCode, finalisePayload) };
+      }
+      const reloadedRow = unwrapRpcPayload(await sbRpc(env, 'banking_pay_operation_get', {
+        p_operation_id: id,
+        p_actor_user_id: user.id
+      }), 'banking_pay_operation_get');
+      return { row: reloadedRow, finalise_failed_payload: null };
+    } catch (finaliseError) {
+      return { row, finalise_failed_payload: buildProviderSubmitFinaliseFailurePayload(row, finaliseError, reasonCode) };
+    }
   };
 
   try {
@@ -36901,7 +37455,9 @@ async function handleBankingPayOperationAdvance(env, req, user, operationId) {
 
     const terminalStatuses = new Set(['COMPLETE', 'FAILED', 'CANCELLED', 'REVIEW_REQUIRED']);
     if (terminalStatuses.has(String(currentRow.status || '').toUpperCase())) {
-      currentRow = await finaliseProviderSubmitDiagnosticIfNeeded(currentRow, 'OPERATION_ADVANCE_TERMINAL_PROVIDER_SUBMIT_DIAGNOSTIC');
+      const finalised = await finaliseProviderSubmitDiagnosticIfNeeded(currentRow, 'OPERATION_ADVANCE_TERMINAL_PROVIDER_SUBMIT_DIAGNOSTIC');
+      if (finalised.finalise_failed_payload) return withCORS(env, req, ok(finalised.finalise_failed_payload));
+      currentRow = finalised.row;
       return withCORS(env, req, ok(buildBankingPayOperationPublicPayload(currentRow)));
     }
 
@@ -36942,8 +37498,9 @@ async function handleBankingPayOperationAdvance(env, req, user, operationId) {
         p_operation_id: id,
         p_actor_user_id: user.id
       }), 'banking_pay_operation_get');
-      const finalisedRow = await finaliseProviderSubmitDiagnosticIfNeeded(reloadedRow, 'OPERATION_ADVANCE_TERMINAL_PROVIDER_SUBMIT_DIAGNOSTIC');
-      return withCORS(env, req, ok(buildBankingPayOperationPublicPayload(finalisedRow)));
+      const finalised = await finaliseProviderSubmitDiagnosticIfNeeded(reloadedRow, 'OPERATION_ADVANCE_TERMINAL_PROVIDER_SUBMIT_DIAGNOSTIC');
+      if (finalised.finalise_failed_payload) return withCORS(env, req, ok(finalised.finalise_failed_payload));
+      return withCORS(env, req, ok(buildBankingPayOperationPublicPayload(finalised.row)));
     }
     return withCORS(env, req, ok(advancedPayload));
   } catch (e) {
@@ -38291,6 +38848,117 @@ const boolField = (obj, ...keys) => {
   return false;
 };
 
+const strictExternalProviderIdentifierPresent = (value) => {
+  const normalise = (raw) => String(raw == null ? '' : raw).trim();
+  const keyOf = (raw) => normalise(raw).toLowerCase();
+  const collectObject = (obj) => (obj && typeof obj === 'object' && !Array.isArray(obj)) ? obj : {};
+  const root = collectObject(value);
+  const railMeta = collectObject(root.rail_meta_json || root.railMetaJson);
+  const rawPayload = collectObject(root.raw_payload || root.rawPayload);
+  const diag = collectObject(root.provider_submit_diagnostic || root.providerSubmitDiagnostic);
+  const railDiag = collectObject(railMeta.provider_submit_diagnostic || railMeta.providerSubmitDiagnostic);
+  const rawDiag = collectObject(rawPayload.provider_submit_diagnostic || rawPayload.providerSubmitDiagnostic);
+  const sources = [root, railMeta, rawPayload, diag, railDiag, rawDiag];
+  const localRefs = new Set();
+  const localKeys = [
+    'id', 'operation_id', 'operationId', 'chunk_id', 'chunkId', 'transfer_id', 'transferId',
+    'pay_bank_transfer_id', 'payBankTransferId', 'scope_id', 'scopeId', 'request_id', 'requestId',
+    'idempotency_key', 'idempotencyKey', 'local_provider_request_id', 'localProviderRequestId',
+    'payment_reference', 'paymentReference', 'bulk_reference', 'bulkReference'
+  ];
+  for (const source of sources) {
+    for (const key of localKeys) {
+      const value = source[key];
+      const text = keyOf(value);
+      if (text) localRefs.add(text);
+    }
+  }
+  const externalKeys = [
+    'rail_tx_id', 'railTxId', 'provider_transaction_id', 'providerTransactionId',
+    'provider_payment_id', 'providerPaymentId', 'provider_event_id', 'providerEventId',
+    'provider_reference', 'providerReference', 'provider_submission_id', 'providerSubmissionId',
+    'submission_id', 'submissionId', 'rail_submission_id', 'railSubmissionId',
+    'external_payment_id', 'externalPaymentId', 'revolut_payment_id', 'revolutPaymentId',
+    'provider_transfer_id', 'providerTransferId', 'external_transfer_id', 'externalTransferId',
+    'transaction_id', 'transactionId', 'payment_id', 'paymentId'
+  ];
+  for (const source of sources) {
+    for (const key of externalKeys) {
+      const text = normalise(source[key]);
+      if (!text) continue;
+      if (localRefs.has(text.toLowerCase())) continue;
+      return true;
+    }
+  }
+  return false;
+};
+
+const strictProviderAcceptanceEvidenceCount = (value) => {
+  const source = safeObject(value);
+  const collectObject = (obj) => (obj && typeof obj === 'object' && !Array.isArray(obj)) ? obj : {};
+  const railMeta = collectObject(source.rail_meta_json || source.railMetaJson);
+  const rawPayload = collectObject(source.raw_payload || source.rawPayload);
+  const diag = collectObject(source.provider_submit_diagnostic || source.providerSubmitDiagnostic);
+  const railDiag = collectObject(railMeta.provider_submit_diagnostic || railMeta.providerSubmitDiagnostic);
+  const rawDiag = collectObject(rawPayload.provider_submit_diagnostic || rawPayload.providerSubmitDiagnostic);
+  const toUpperTokens = (values) => values
+    .map((item) => String(item == null ? '' : item).trim().toUpperCase())
+    .filter(Boolean)
+    .join(' ');
+  const providerScopedText = toUpperTokens([
+    source.provider_submission_status, source.providerSubmissionStatus,
+    source.review_reason_code, source.reviewReasonCode,
+    source.provider_state, source.providerState, source.rail_state, source.railState,
+    source.normalised_state, source.normalized_state,
+    diag.provider_submission_status, diag.providerSubmissionStatus, diag.review_reason_code, diag.reviewReasonCode, diag.provider_state, diag.providerState, diag.rail_state, diag.railState,
+    railDiag.provider_submission_status, railDiag.providerSubmissionStatus, railDiag.review_reason_code, railDiag.reviewReasonCode, railDiag.provider_state, railDiag.providerState, railDiag.rail_state, railDiag.railState,
+    rawDiag.provider_submission_status, rawDiag.providerSubmissionStatus, rawDiag.review_reason_code, rawDiag.reviewReasonCode, rawDiag.provider_state, rawDiag.providerState, rawDiag.rail_state, rawDiag.railState
+  ]);
+  const genericProviderText = toUpperTokens([
+    source.status, source.state, source.code, source.error_code, source.errorCode,
+    diag.status, diag.state, diag.code, diag.error_code, diag.errorCode,
+    railDiag.status, railDiag.state, railDiag.code, railDiag.error_code, railDiag.errorCode,
+    rawDiag.status, rawDiag.state, rawDiag.code, rawDiag.error_code, rawDiag.errorCode
+  ]);
+  const providerScopedRejectedOrUnusable = [
+    'PROVIDER_SUBMISSION_REJECTED',
+    'PROVIDER_REJECTED_PAYMENT',
+    'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME',
+    'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK',
+    'PROVIDER_SUBMISSION_MALFORMED_RESPONSE',
+    'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID',
+    'PROVIDER_RESPONSE_MALFORMED',
+    'PROVIDER_RESPONSE_MISSING_EXTERNAL_ID',
+    'STALE_RUNNING_PROVIDER_SUBMIT_CHUNK',
+    'REJECTED',
+    'DECLINED',
+    'FAILED',
+    'ERROR',
+    'CANCELLED',
+    'CANCELED',
+    'RETURNED',
+    'REVERTED',
+    'INSUFFICIENT_FUNDS',
+    'VALIDATION_FAILED'
+  ].some((token) => providerScopedText.includes(token));
+  const genericProviderRejectedOrUnusable = [
+    'PROVIDER_SUBMISSION_REJECTED',
+    'PROVIDER_REJECTED_PAYMENT',
+    'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME',
+    'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK',
+    'PROVIDER_SUBMISSION_MALFORMED_RESPONSE',
+    'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID',
+    'PROVIDER_RESPONSE_MALFORMED',
+    'PROVIDER_RESPONSE_MISSING_EXTERNAL_ID',
+    'STALE_RUNNING_PROVIDER_SUBMIT_CHUNK'
+  ].some((token) => genericProviderText.includes(token));
+  if (providerScopedRejectedOrUnusable || genericProviderRejectedOrUnusable) return 0;
+  const numeric = Math.max(
+    numField(source, 'provider_acceptance_evidence_count', 'providerAcceptanceEvidenceCount'),
+    numField(source, 'strict_provider_acceptance_evidence_count', 'strictProviderAcceptanceEvidenceCount')
+  );
+  return Math.max(numeric, strictExternalProviderIdentifierPresent(source) ? 1 : 0);
+};
 const lockSeconds = numberFrom(configJson.lock_seconds, 60);
 const phaseProgress = async (status, phase, progressJson = {}, counters = {}) => {
 const saved = await sbRpc(env, 'banking_pay_operation_save_progress', {
@@ -38310,6 +38978,7 @@ return buildBankingPayOperationPublicPayload(saved);
 
 const finish = async (status, resultJson = null, errorJson = null) => {
 const finishStatus = String(status || '').trim().toUpperCase();
+let terminalStatus = finishStatus;
 let finalResultJson = resultJson;
 let finalErrorJson = errorJson;
 if (['REVIEW_REQUIRED', 'FAILED', 'COMPLETE'].includes(finishStatus) && typeof finaliseProviderSubmitBeforeTerminal === 'function') {
@@ -38321,29 +38990,74 @@ if (['REVIEW_REQUIRED', 'FAILED', 'COMPLETE'].includes(finishStatus) && typeof f
   const finaliseDiagnostic = extractProviderSubmitDiagnostic(finalisePayload);
   const finaliseStatus = providerSubmitStatusFrom(finalisePayload);
   const finaliseReviewReason = providerSubmitReviewCodeFrom(finalisePayload);
-  if (Object.keys(finaliseDiagnostic).length) {
-    if (finishStatus === 'COMPLETE') {
+  const finaliseCode = providerSubmitFailureCodeFromStatus(finaliseStatus, finaliseReviewReason);
+  const finaliseFailed = finalisePayload && (finalisePayload.finalise_failed === true || finalisePayload.provider_submit_finalise_failed === true);
+  const finaliseManualResolutionRequired = boolField(finalisePayload, 'manual_resolution_required', 'manualResolutionRequired')
+    || boolField(finaliseDiagnostic, 'manual_resolution_required', 'manualResolutionRequired');
+  const finaliseHasReviewDiagnostic = providerSubmitReviewStatuses.has(finaliseCode)
+    || finaliseManualResolutionRequired === true;
+  const finaliseHasFailureDiagnostic = [
+    'PROVIDER_SUBMISSION_REJECTED',
+    'PROVIDER_SUBMISSION_FAILED',
+    'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL'
+  ].includes(finaliseCode);
+
+  if (finaliseFailed) {
+    return phaseProgress('RUNNING', currentPhase, {
+      status_text: 'Provider-submit diagnostic finalisation failed. The operation has not been marked terminal because the provider-submit chunk may still be unresolved.',
+      provider_submit_finalise_failed: true,
+      provider_submit_finalise_result: Object.keys(safeObject(finalisePayload)).length ? finalisePayload : undefined,
+      provider_submit_diagnostic: Object.keys(finaliseDiagnostic).length ? finaliseDiagnostic : undefined,
+      provider_submission_status: finaliseStatus || undefined,
+      review_reason_code: finaliseReviewReason || undefined,
+      manual_resolution_required: finaliseManualResolutionRequired === true,
+      safe_retry_available: false,
+      attempted_terminal_status: finishStatus,
+      attempted_result_json: safeObject(resultJson),
+      attempted_error_json: safeObject(errorJson)
+    });
+  }
+
+  if (finishStatus === 'COMPLETE' && (finaliseFailed || finaliseHasReviewDiagnostic || finaliseHasFailureDiagnostic)) {
+    terminalStatus = finaliseHasFailureDiagnostic && finaliseHasReviewDiagnostic !== true ? 'FAILED' : 'REVIEW_REQUIRED';
+  }
+
+  if (Object.keys(finaliseDiagnostic).length || finaliseFailed) {
+    const diagnosticPayload = Object.keys(finaliseDiagnostic).length ? finaliseDiagnostic : undefined;
+    if (terminalStatus === 'COMPLETE') {
       finalResultJson = {
         ...safeObject(finalResultJson),
-        provider_submit_diagnostic: finaliseDiagnostic,
+        provider_submit_diagnostic: diagnosticPayload,
         provider_submission_status: finaliseStatus || safeObject(finalResultJson).provider_submission_status || undefined,
         review_reason_code: finaliseReviewReason || safeObject(finalResultJson).review_reason_code || undefined
       };
     } else {
       finalErrorJson = {
         ...safeObject(finalErrorJson),
-        provider_submit_diagnostic: finaliseDiagnostic,
+        code: finaliseFailed ? 'PROVIDER_SUBMIT_DIAGNOSTIC_FINALISE_FAILED' : (finaliseCode || safeObject(finalErrorJson).code),
+        message: finaliseFailed
+          ? 'Provider-submit diagnostic finalisation failed. Review provider submission before retry.'
+          : (safeObject(finalErrorJson).message || providerSubmitMessageFromCode(finaliseCode)),
+        provider_submit_diagnostic: diagnosticPayload,
         provider_submission_status: finaliseStatus || safeObject(finalErrorJson).provider_submission_status || undefined,
         provider_submit_review_reason_code: finaliseReviewReason || safeObject(finalErrorJson).provider_submit_review_reason_code || undefined,
-        review_reason_code: finaliseReviewReason || safeObject(finalErrorJson).review_reason_code || undefined
+        review_reason_code: finaliseReviewReason || safeObject(finalErrorJson).review_reason_code || undefined,
+        provider_submit_finalise_result: Object.keys(safeObject(finalisePayload)).length ? finalisePayload : undefined,
+        review_required: terminalStatus === 'REVIEW_REQUIRED' ? true : safeObject(finalErrorJson).review_required,
+        retry_blocked: terminalStatus === 'REVIEW_REQUIRED' ? true : safeObject(finalErrorJson).retry_blocked,
+        manual_resolution_required: finaliseManualResolutionRequired === true || safeObject(finalErrorJson).manual_resolution_required === true,
+        safe_retry_available: boolField(finalisePayload, 'safe_retry_available', 'safeRetryAvailable') || safeObject(finalErrorJson).safe_retry_available
       };
-      if (finishStatus === 'REVIEW_REQUIRED') {
+      if (terminalStatus === 'REVIEW_REQUIRED') {
         finalResultJson = {
           ...safeObject(finalResultJson),
-          provider_submit_diagnostic: finaliseDiagnostic,
+          provider_submit_diagnostic: diagnosticPayload,
           provider_submission_status: finaliseStatus || safeObject(finalResultJson).provider_submission_status || undefined,
           review_reason_code: finaliseReviewReason || safeObject(finalResultJson).review_reason_code || undefined,
-          review_required: true
+          review_required: true,
+          retry_blocked: true,
+          manual_resolution_required: finaliseManualResolutionRequired === true || safeObject(finalResultJson).manual_resolution_required === true,
+          safe_retry_available: boolField(finalisePayload, 'safe_retry_available', 'safeRetryAvailable') || safeObject(finalResultJson).safe_retry_available
         };
       }
     }
@@ -38351,7 +39065,7 @@ if (['REVIEW_REQUIRED', 'FAILED', 'COMPLETE'].includes(finishStatus) && typeof f
 }
 const finished = await sbRpc(env, 'banking_pay_operation_finish', {
 p_operation_id: operationId,
-p_status: status,
+p_status: terminalStatus,
 p_result_json: finalResultJson,
 p_error_json: finalErrorJson
 });
@@ -38568,17 +39282,29 @@ if (
 ) {
   businessCode = 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE';
 } else if (
+  providerSubmitStatusForFailure === 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID'
+  || businessCode === 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID'
+  || hasToken('PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID')
+  || hasToken('PROVIDER_RESPONSE_PRESENT_NO_EXTERNAL_ID')
+) {
+  businessCode = 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID';
+} else if (
   providerSubmitStatusForFailure === 'PROVIDER_SUBMISSION_REJECTED'
   || businessCode === 'PROVIDER_SUBMISSION_REJECTED'
   || hasToken('PROVIDER_REJECTED_PAYMENT')
 ) {
   businessCode = 'PROVIDER_SUBMISSION_REJECTED';
+} else if (
+  providerSubmitStatusForFailure === 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL'
+  || businessCode === 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL'
+  || hasToken('PROVIDER_SUBMISSION_BLOCKED_PRE_CALL')
+  || hasToken('PROVIDER_SUBMIT_BLOCKED_PRE_CALL')
+) {
+  businessCode = 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL';
 }
 const providerAcceptanceEvidenceCountForFailure = Math.max(
-  Number.isFinite(Number(extraObj.provider_acceptance_evidence_count)) ? Number(extraObj.provider_acceptance_evidence_count) : 0,
-  Number.isFinite(Number(extraObj.providerAcceptanceEvidenceCount)) ? Number(extraObj.providerAcceptanceEvidenceCount) : 0,
-  Number.isFinite(Number(extraObj.provider_evidence_count)) ? Number(extraObj.provider_evidence_count) : 0,
-  boolField(providerSubmitDiagnosticForFailure, 'provider_acceptance_evidence_present', 'providerAcceptanceEvidencePresent') ? 1 : 0
+  strictProviderAcceptanceEvidenceCount(extraObj),
+  strictProviderAcceptanceEvidenceCount(providerSubmitDiagnosticForFailure)
 );
 const providerAmbiguousRiskCountForFailure = Math.max(
   Number.isFinite(Number(extraObj.provider_submission_unknown_count)) ? Number(extraObj.provider_submission_unknown_count) : 0,
@@ -38593,6 +39319,7 @@ if (providerAcceptanceEvidenceCountForFailure > 0 && ![
   'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK',
   'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME',
   'PROVIDER_SUBMISSION_MALFORMED_RESPONSE',
+  'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID',
   'PROVIDER_SUBMISSION_REJECTED',
   'PROVIDER_SUBMISSION_ACCEPTED'
 ].includes(businessCode)) {
@@ -38610,6 +39337,7 @@ if (
     'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK',
     'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME',
     'PROVIDER_SUBMISSION_MALFORMED_RESPONSE',
+    'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID',
     'PROVIDER_SUBMISSION_REJECTED',
     'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL'
   ].includes(businessCode)
@@ -38654,7 +39382,9 @@ const messageByCode = {
   PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK: 'Provider submission outcome is unknown because the submit chunk became stale without a provider response. Check Revolut or bank records before retrying.',
   UNKNOWN_PROVIDER_SUBMISSION_OUTCOME: 'Provider submission outcome is unknown because CloudTMS sent or may have sent the provider request but did not receive a usable response. Check Revolut or bank records before retrying.',
   PROVIDER_SUBMISSION_MALFORMED_RESPONSE: 'Provider submission returned an unusable response. Check Revolut or bank records before retrying.',
+  PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID: 'Provider response/status was recorded, but no usable external provider transaction or reference was stored. Check Revolut or bank records before retrying.',
   PROVIDER_SUBMISSION_REJECTED: 'The banking provider rejected the payment submission. Review the provider response before retrying.',
+  PROVIDER_SUBMISSION_BLOCKED_PRE_CALL: 'Provider was not called. Submission failed before the provider payment request was sent.',
   PROVIDER_SUBMISSION_ACCEPTED: 'Provider acceptance evidence exists. Do not retry unless reconciled.'
 };
 
@@ -39087,14 +39817,7 @@ const countSubmittedProviderEvidence = (submitted) => {
   const roots = [source, fundsCheckJson, ...((Array.isArray(source.errors) ? source.errors : []).map((err) => safeObject(err)))];
   let maxCount = 0;
   for (const obj of roots) {
-    maxCount = Math.max(
-      maxCount,
-      numField(obj, 'provider_acceptance_evidence_count', 'providerAcceptanceEvidenceCount'),
-      numField(obj, 'provider_evidence_count', 'providerEvidenceCount'),
-      numField(obj, 'provider_submitted_count', 'providerSubmittedCount'),
-      boolField(obj, 'provider_acceptance_evidence_present', 'providerAcceptanceEvidencePresent') ? 1 : 0,
-      providerSubmitStatusFrom(obj) === 'PROVIDER_SUBMISSION_ACCEPTED' ? 1 : 0
-    );
+    maxCount = Math.max(maxCount, strictProviderAcceptanceEvidenceCount(obj));
   }
   return maxCount;
 };
@@ -39134,7 +39857,8 @@ const providerSubmitManualResolutionRequired = (source) => {
     || [
       'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME',
       'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK',
-      'PROVIDER_SUBMISSION_MALFORMED_RESPONSE'
+      'PROVIDER_SUBMISSION_MALFORMED_RESPONSE',
+      'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID'
     ].includes(providerSubmitStatusFrom(source));
 };
 const providerSubmitDiagnosticFailurePayload = (source = {}) => {
@@ -39166,6 +39890,7 @@ const providerSubmitReviewStatuses = new Set([
   'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK',
   'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME',
   'PROVIDER_SUBMISSION_MALFORMED_RESPONSE',
+  'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID',
   'PROVIDER_SUBMISSION_ACCEPTED'
 ]);
 const providerSubmitFailureCodeFromStatus = (status, reviewReason = '') => {
@@ -39174,6 +39899,7 @@ const providerSubmitFailureCodeFromStatus = (status, reviewReason = '') => {
   if (statusUpper === 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK' || reasonUpper === 'STALE_RUNNING_PROVIDER_SUBMIT_CHUNK') return 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK';
   if (statusUpper === 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME' || reasonUpper === 'PROVIDER_REQUEST_SENT_NO_RESPONSE') return 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME';
   if (statusUpper === 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE' || reasonUpper === 'PROVIDER_RESPONSE_MALFORMED') return 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE';
+  if (statusUpper === 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID' || reasonUpper === 'PROVIDER_RESPONSE_PRESENT_NO_EXTERNAL_ID') return 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID';
   if (statusUpper === 'PROVIDER_SUBMISSION_ACCEPTED' || reasonUpper === 'PROVIDER_ACCEPTANCE_EVIDENCE_PRESENT') return 'PROVIDER_SUBMISSION_ACCEPTED';
   if (statusUpper === 'PROVIDER_SUBMISSION_REJECTED' || reasonUpper === 'PROVIDER_REJECTED_PAYMENT') return 'PROVIDER_SUBMISSION_REJECTED';
   if (statusUpper === 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL' || reasonUpper === 'PROVIDER_SUBMIT_BLOCKED_PRE_CALL') return 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL';
@@ -39184,6 +39910,7 @@ const providerSubmitMessageFromCode = (code) => {
   if (codeUpper === 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK') return 'Provider submission outcome is unknown because the submit chunk became stale without a provider response. Check Revolut or bank records before retrying.';
   if (codeUpper === 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME') return 'Provider request may have been sent, but no usable provider response was recorded. Check Revolut or bank records before retrying.';
   if (codeUpper === 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE') return 'Provider returned an unusable response. Check Revolut or bank records before retrying.';
+  if (codeUpper === 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID') return 'Provider response/status was recorded, but no usable external provider transaction or reference was stored. Check Revolut or bank records before retrying.';
   if (codeUpper === 'PROVIDER_SUBMISSION_ACCEPTED') return 'Provider acceptance evidence exists. Do not retry unless reconciled.';
   if (codeUpper === 'PROVIDER_SUBMISSION_REJECTED') return 'Provider rejected the payment submission. Review the provider error before retrying.';
   if (codeUpper === 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL') return 'Provider was not called. Submission failed before the provider payment request was sent.';
@@ -40017,7 +40744,8 @@ if (currentPhase === 'SUBMIT_PROVIDER_TRANSFERS') {
     || [
       'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK',
       'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME',
-      'PROVIDER_SUBMISSION_MALFORMED_RESPONSE'
+      'PROVIDER_SUBMISSION_MALFORMED_RESPONSE',
+      'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID'
     ].includes(submittedProviderSubmissionStatus)
     || submittedProviderReviewReason === 'STALE_RUNNING_PROVIDER_SUBMIT_CHUNK';
   if (submitted && submittedProviderNeedsManualReview) {
@@ -40161,7 +40889,7 @@ if (currentPhase === 'APPLY_RAIL_UPDATES') {
   let evidenceProviderDiagnostic = extractProviderSubmitDiagnostic(evidence);
   const evidenceProviderAcceptanceCount = numField(evidence, 'provider_acceptance_evidence_count', 'providerAcceptanceEvidenceCount');
   const evidenceProviderReviewCode = providerSubmitFailureCodeFromStatus(evidenceProviderStatus, evidenceProviderReviewReason);
-  if (['PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK', 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE'].includes(evidenceProviderReviewCode)) {
+  if (['PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK', 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE', 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID'].includes(evidenceProviderReviewCode)) {
     return fail(evidenceProviderReviewCode, providerSubmitMessageFromCode(evidenceProviderReviewCode), {
       phase: currentPhase,
       submission_evidence: evidence,
@@ -40245,7 +40973,7 @@ if (currentPhase === 'APPLY_RAIL_UPDATES') {
       evidenceProviderReviewReason = providerSubmitReviewCodeFrom(evidence);
       evidenceProviderDiagnostic = extractProviderSubmitDiagnostic(evidence);
       const pollEvidenceProviderReviewCode = providerSubmitFailureCodeFromStatus(evidenceProviderStatus, evidenceProviderReviewReason);
-      if (['PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK', 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE'].includes(pollEvidenceProviderReviewCode)) {
+      if (['PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK', 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE', 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID'].includes(pollEvidenceProviderReviewCode)) {
         return fail(pollEvidenceProviderReviewCode, providerSubmitMessageFromCode(pollEvidenceProviderReviewCode), {
           phase: currentPhase,
           rail_poll_result: pollResult,
@@ -40409,7 +41137,7 @@ if (currentPhase === 'COMPLETE') {
   const completeProviderReviewReason = providerSubmitReviewCodeFrom(evidence);
   const completeProviderDiagnostic = extractProviderSubmitDiagnostic(evidence);
   const completeProviderReviewCode = providerSubmitFailureCodeFromStatus(completeProviderStatus, completeProviderReviewReason);
-  if (executionMode === 'STANDARD_BANK' && ['PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK', 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE'].includes(completeProviderReviewCode)) {
+  if (executionMode === 'STANDARD_BANK' && ['PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK', 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE', 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID'].includes(completeProviderReviewCode)) {
     return fail(completeProviderReviewCode, providerSubmitMessageFromCode(completeProviderReviewCode), {
       phase: currentPhase,
       submission_evidence: evidence,
@@ -40497,8 +41225,6 @@ review_reason_code: topLevelReviewReason || undefined
 });
 }
 }
-
-
 
 
 
@@ -46532,8 +47258,6 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
 }
 
 
-
-
 async function handleContractWeekDeleteTimesheet(env, req, weekId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -46650,6 +47374,89 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
     body?.rowSignature ||
     ''
   ).trim();
+
+  const headerValueForContractWeekUnprocessDebug = (name) => {
+    try {
+      return req?.headers?.get?.(name);
+    } catch {
+      return null;
+    }
+  };
+  const contractWeekUnprocessDebugParams = (() => {
+    try {
+      return new URL(req?.url || '').searchParams;
+    } catch {
+      return null;
+    }
+  })();
+  const isTruthyContractWeekUnprocessDebugFlag = (value) => {
+    if (value === true || value === 1) return true;
+    const text = String(value ?? '').trim().toLowerCase();
+    return text === 'true' || text === '1' || text === 'yes' || text === 'y' || text === 'on';
+  };
+  const contractWeekUnprocessTimingDebugEnabled = !!(
+    isTruthyContractWeekUnprocessDebugFlag(body?.debug) ||
+    isTruthyContractWeekUnprocessDebugFlag(body?.debug_timing) ||
+    isTruthyContractWeekUnprocessDebugFlag(body?.debugTiming) ||
+    isTruthyContractWeekUnprocessDebugFlag(body?.timing_debug) ||
+    isTruthyContractWeekUnprocessDebugFlag(body?.timingDebug) ||
+    isTruthyContractWeekUnprocessDebugFlag(body?.cw_unprocess_debug) ||
+    isTruthyContractWeekUnprocessDebugFlag(body?.cwUnprocessDebug) ||
+    isTruthyContractWeekUnprocessDebugFlag(headerValueForContractWeekUnprocessDebug('x-debug')) ||
+    isTruthyContractWeekUnprocessDebugFlag(headerValueForContractWeekUnprocessDebug('x-debug-timing')) ||
+    isTruthyContractWeekUnprocessDebugFlag(headerValueForContractWeekUnprocessDebug('x-cw-unprocess-debug')) ||
+    isTruthyContractWeekUnprocessDebugFlag(headerValueForContractWeekUnprocessDebug('x-bulk-process-debug')) ||
+    isTruthyContractWeekUnprocessDebugFlag(contractWeekUnprocessDebugParams?.get('debug')) ||
+    isTruthyContractWeekUnprocessDebugFlag(contractWeekUnprocessDebugParams?.get('debug_timing')) ||
+    isTruthyContractWeekUnprocessDebugFlag(contractWeekUnprocessDebugParams?.get('timing_debug')) ||
+    isTruthyContractWeekUnprocessDebugFlag(contractWeekUnprocessDebugParams?.get('cw_unprocess_debug')) ||
+    isTruthyContractWeekUnprocessDebugFlag(env?.CW_UNPROCESS_DEBUG) ||
+    isTruthyContractWeekUnprocessDebugFlag(env?.BULK_PROCESS_DEBUG) ||
+    isTruthyContractWeekUnprocessDebugFlag(env?.DEBUG_TIMINGS) ||
+    (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true)
+  );
+  const contractWeekUnprocessTimingStartedAtMs = Date.now();
+  let contractWeekUnprocessTimingPreviousAtMs = contractWeekUnprocessTimingStartedAtMs;
+  let contractWeekUnprocessTimingContractWeekId = String(weekId || '').trim() || null;
+  let contractWeekUnprocessTimingCurrentTimesheetId = null;
+  let contractWeekUnprocessTimingBookingId = null;
+  let contractWeekUnprocessTimingAllIdsCount = 0;
+  const wlogUnprocess = (step, extra = {}) => {
+    if (!contractWeekUnprocessTimingDebugEnabled) return;
+    const nowMs = Date.now();
+    const extraObj = (extra && typeof extra === 'object' && !Array.isArray(extra)) ? extra : {};
+    const payload = {
+      tag: 'CW_UNPROCESS',
+      route: 'CW_UNPROCESS',
+      step,
+      at_utc: new Date(nowMs).toISOString(),
+      elapsed_ms: nowMs - contractWeekUnprocessTimingStartedAtMs,
+      duration_ms: nowMs - contractWeekUnprocessTimingPreviousAtMs,
+      week_id: String(weekId || ''),
+      contract_week_id: contractWeekUnprocessTimingContractWeekId,
+      current_timesheet_id: contractWeekUnprocessTimingCurrentTimesheetId,
+      booking_id: contractWeekUnprocessTimingBookingId,
+      all_ids_count: contractWeekUnprocessTimingAllIdsCount,
+      bulk_dataset_mode: bulkDatasetMode,
+      bulk_process_mode: bulkMode && bulkDatasetMode === 'process',
+      bulk_mode: bulkMode,
+      ...extraObj
+    };
+    contractWeekUnprocessTimingPreviousAtMs = nowMs;
+    try {
+      console.log(JSON.stringify(payload));
+    } catch {}
+  };
+
+  wlogUnprocess('request_parsed', {
+    actor_user_id: user?.id || null,
+    body_keys: (body && typeof body === 'object') ? Object.keys(body) : [],
+    expected_timesheet_id_present: !!body?.expected_timesheet_id,
+    expected_row_signature_present: !!expectedRowSignature,
+    bulk_mode: bulkMode,
+    bulk_dataset_mode: bulkDatasetMode,
+    bulk_process_mode: bulkMode && bulkDatasetMode === 'process'
+  });
   const parseBulkPatchRow = (value) => {
     if (!value) return null;
     if (typeof value === 'string') {
@@ -46785,6 +47592,13 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
   if (!cw) {
     return withCORS(env, req, notFound('Week not found'));
   }
+  contractWeekUnprocessTimingContractWeekId = String(cw?.id || weekId || '').trim() || contractWeekUnprocessTimingContractWeekId;
+  wlogUnprocess('contract_week_loaded', {
+    contract_week_timesheet_id: cw?.timesheet_id || null,
+    contract_id: cw?.contract_id || null,
+    contract_week_status: cw?.status || null,
+    week_ending_date: cw?.week_ending_date || null
+  });
 
   if (!cw.timesheet_id) {
     return handleContractWeekDeletePlanned(env, req, weekId);
@@ -46798,6 +47612,13 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
     return withCORS(env, req, serverError('Failed to resolve current timesheet for contract week'));
   }
   const currentTimesheetId = String(resolved.current_timesheet_id);
+  contractWeekUnprocessTimingCurrentTimesheetId = currentTimesheetId || contractWeekUnprocessTimingCurrentTimesheetId;
+  wlogUnprocess('current_timesheet_resolved', {
+    requested_timesheet_id: cw?.timesheet_id || null,
+    current_timesheet_id: currentTimesheetId || null,
+    resolved_booking_id: resolved?.booking_id || null,
+    was_stale: !!resolved?.was_stale
+  });
 
   if (String(expected) !== String(currentTimesheetId)) {
     return withCORS(
@@ -46814,9 +47635,22 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
     return withCORS(env, req, serverError('Failed to resolve booking_id for contract week timesheet'));
   }
   const bookingId = String(resolved.booking_id);
+  contractWeekUnprocessTimingBookingId = bookingId || contractWeekUnprocessTimingBookingId;
 
+  wlogUnprocess('bulk_pre_deletion_patch_load_started', {
+    current_timesheet_id: currentTimesheetId || null,
+    contract_week_id: weekId || null,
+    bulk_mode: bulkMode
+  });
   const bulkPreDeletionError = await ensureBulkPreDeletionPatch(currentTimesheetId, weekId);
   if (bulkPreDeletionError) return withCORS(env, req, bulkPreDeletionError);
+  wlogUnprocess('bulk_pre_deletion_patch_loaded', {
+    current_timesheet_id: currentTimesheetId || null,
+    contract_week_id: weekId || null,
+    loaded: !!bulkPrePatchRow,
+    previous_row_key: bulkPreviousRowKey || null,
+    skipped: !bulkMode
+  });
 
   const currentWeeklyTs = await sbGetOne(
     env,
@@ -46828,6 +47662,11 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
   if (!currentWeeklyTs) {
     return withCORS(env, req, serverError('Failed to load current weekly timesheet for contract week reopen'));
   }
+  wlogUnprocess('current_weekly_timesheet_loaded', {
+    current_timesheet_id: currentWeeklyTs?.timesheet_id || currentTimesheetId || null,
+    submission_mode_present: currentWeeklyTs?.submission_mode != null,
+    manual_pdf_r2_key_present: !!currentWeeklyTs?.manual_pdf_r2_key
+  });
 
   const currentWeeklyTsfin = await sbGetOne(
     env,
@@ -46839,6 +47678,11 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
   if (!currentWeeklyTsfin) {
     return withCORS(env, req, serverError('Failed to load current weekly TSFIN for contract week reopen'));
   }
+  wlogUnprocess('current_financial_row_loaded', {
+    current_timesheet_id: currentWeeklyTsfin?.timesheet_id || currentTimesheetId || null,
+    total_hours: currentWeeklyTsfin?.total_hours ?? null,
+    has_expenses_description: currentWeeklyTsfin?.expenses_description != null
+  });
 
   const dematerialiseTimesheetEvidenceToContractWeekStage = async (contractWeekRow, bookingIdArg, seriesIdsArg, currentTsIdArg) => {
     const ids = Array.isArray(seriesIdsArg)
@@ -47037,13 +47881,19 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
 
   let reopenSnapshot = '';
   try {
-    const tsRow = await sbGetOne(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(currentTimesheetId)}&is_current=eq.true&select=submission_mode`
-    );
-    const sm = tsRow?.submission_mode != null ? String(tsRow.submission_mode).trim().toUpperCase() : '';
+    const sm = currentWeeklyTs?.submission_mode != null ? String(currentWeeklyTs.submission_mode).trim().toUpperCase() : '';
     if (sm) reopenSnapshot = sm;
   } catch {}
+  if (!reopenSnapshot) {
+    try {
+      const tsRow = await sbGetOne(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(currentTimesheetId)}&is_current=eq.true&select=submission_mode`
+      );
+      const sm = tsRow?.submission_mode != null ? String(tsRow.submission_mode).trim().toUpperCase() : '';
+      if (sm) reopenSnapshot = sm;
+    } catch {}
+  }
   if (!reopenSnapshot) {
     reopenSnapshot = (cw.submission_mode_snapshot != null ? String(cw.submission_mode_snapshot).trim().toUpperCase() : '') || 'MANUAL';
   }
@@ -47056,6 +47906,11 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
       `&select=timesheet_id`
   );
   const allIds = (tsRowsAll || []).map(r => r.timesheet_id).filter(Boolean);
+  contractWeekUnprocessTimingAllIdsCount = allIds.length;
+  wlogUnprocess('all_booking_timesheet_ids_loaded', {
+    booking_id: bookingId || null,
+    all_ids_count: allIds.length
+  });
 
   if (allIds.length) {
     const inList = allIds.map(x => `"${String(x).replace(/"/g, '')}"`).join(',');
@@ -47068,12 +47923,34 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
 
     for (const f of (finRows || [])) {
       if (f?.paid_at_utc) {
+        wlogUnprocess('paid_locked_invoice_guard_checked', {
+          blocked: true,
+          reason: 'paid',
+          timesheet_id: f?.timesheet_id || null,
+          checked_financial_rows: Array.isArray(finRows) ? finRows.length : 0
+        });
         return withCORS(env, req, badRequest('Cannot delete: already paid'));
       }
       if (f?.locked_by_invoice_id) {
+        wlogUnprocess('paid_locked_invoice_guard_checked', {
+          blocked: true,
+          reason: 'invoiced',
+          timesheet_id: f?.timesheet_id || null,
+          checked_financial_rows: Array.isArray(finRows) ? finRows.length : 0
+        });
         return withCORS(env, req, badRequest('Cannot delete: invoiced'));
       }
     }
+    wlogUnprocess('paid_locked_invoice_guard_checked', {
+      blocked: false,
+      checked_financial_rows: Array.isArray(finRows) ? finRows.length : 0
+    });
+  } else {
+    wlogUnprocess('paid_locked_invoice_guard_checked', {
+      blocked: false,
+      checked_financial_rows: 0,
+      skipped: true
+    });
   }
 
   const collectActiveTimesheetSnoozes = async (bookingIdArg, timesheetIdsArg) => {
@@ -47194,8 +48071,18 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
   };
 
   const snoozesToClear = await collectActiveTimesheetSnoozes(bookingId, allIds);
+  wlogUnprocess('snoozes_collected', {
+    snooze_count: Array.isArray(snoozesToClear) ? snoozesToClear.length : 0,
+    booking_id: bookingId || null,
+    all_ids_count: allIds.length
+  });
 
   let dematerialised = { staged_count: 0, primary_timesheet_storage_key: null };
+  wlogUnprocess('evidence_dematerialisation_started', {
+    contract_week_id: weekId || null,
+    booking_id: bookingId || null,
+    all_ids_count: allIds.length
+  });
   try {
     dematerialised = await dematerialiseTimesheetEvidenceToContractWeekStage(
       cw,
@@ -47206,30 +48093,53 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
   } catch (e) {
     return withCORS(env, req, serverError(`Failed to preserve weekly evidence during unprocess: ${e?.message || String(e)}`));
   }
+  wlogUnprocess('evidence_dematerialisation_completed', {
+    contract_week_id: weekId || null,
+    booking_id: bookingId || null,
+    all_ids_count: allIds.length,
+    staged_count: Number(dematerialised?.staged_count || 0),
+    primary_timesheet_storage_key_present: !!dematerialised?.primary_timesheet_storage_key
+  });
 
   if (allIds.length) {
     const inParam = allIds.map(enc).join(',');
 
-    await fetch(
-      `${env.SUPABASE_URL}/rest/v1/ts_pdfs_outbox?timesheet_id=in.(${inParam})`,
-      { method: 'DELETE', headers: { ...sbHeaders(env), Prefer: 'return=minimal' } }
-    ).catch(() => {});
+    wlogUnprocess('cleanup_deletes_started', {
+      all_ids_count: allIds.length
+    });
+    await Promise.all([
+      fetch(
+        `${env.SUPABASE_URL}/rest/v1/ts_pdfs_outbox?timesheet_id=in.(${inParam})`,
+        { method: 'DELETE', headers: { ...sbHeaders(env), Prefer: 'return=minimal' } }
+      ).catch(() => {}),
 
-    await fetch(
-      `${env.SUPABASE_URL}/rest/v1/ts_financials_outbox?timesheet_id=in.(${inParam})`,
-      { method: 'DELETE', headers: { ...sbHeaders(env), Prefer: 'return=minimal' } }
-    ).catch(() => {});
+      fetch(
+        `${env.SUPABASE_URL}/rest/v1/ts_financials_outbox?timesheet_id=in.(${inParam})`,
+        { method: 'DELETE', headers: { ...sbHeaders(env), Prefer: 'return=minimal' } }
+      ).catch(() => {}),
 
-    await fetch(
-      `${env.SUPABASE_URL}/rest/v1/timesheet_validations?timesheet_id=in.(${inParam})`,
-      { method: 'DELETE', headers: { ...sbHeaders(env), Prefer: 'return=minimal' } }
-    ).catch(() => {});
+      fetch(
+        `${env.SUPABASE_URL}/rest/v1/timesheet_validations?timesheet_id=in.(${inParam})`,
+        { method: 'DELETE', headers: { ...sbHeaders(env), Prefer: 'return=minimal' } }
+      ).catch(() => {}),
 
-    await fetch(
-      `${env.SUPABASE_URL}/rest/v1/timesheets_financials?timesheet_id=in.(${inParam})`,
-      { method: 'DELETE', headers: { ...sbHeaders(env), Prefer: 'return=minimal' } }
-    ).catch(() => {});
+      fetch(
+        `${env.SUPABASE_URL}/rest/v1/timesheets_financials?timesheet_id=in.(${inParam})`,
+        { method: 'DELETE', headers: { ...sbHeaders(env), Prefer: 'return=minimal' } }
+      ).catch(() => {})
+    ]);
+    wlogUnprocess('cleanup_deletes_completed', {
+      all_ids_count: allIds.length
+    });
+  } else {
+    wlogUnprocess('cleanup_deletes_started', { all_ids_count: 0, skipped: true });
+    wlogUnprocess('cleanup_deletes_completed', { all_ids_count: 0, skipped: true });
   }
+
+  wlogUnprocess('timesheets_delete_started', {
+    booking_id: bookingId || null,
+    all_ids_count: allIds.length
+  });
 
   const delTs = await fetch(
     `${env.SUPABASE_URL}/rest/v1/timesheets?booking_id=eq.${enc(bookingId)}`,
@@ -47238,6 +48148,10 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
   if (!delTs.ok) {
     return withCORS(env, req, serverError(await delTs.text()));
   }
+  wlogUnprocess('timesheets_delete_completed', {
+    booking_id: bookingId || null,
+    all_ids_count: allIds.length
+  });
 
   const existingTotalsJson = parseMaybeJsonObj(cw.totals_json) || {};
   const reopenedTotalsJson = {
@@ -47261,6 +48175,10 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
     return null;
   })();
 
+  wlogUnprocess('contract_week_reopen_patch_started', {
+    contract_week_id: weekId || null,
+    reopen_submission_mode_snapshot: reopenSnapshot || null
+  });
   const contractWeekPatchRes = await fetch(
     `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}`,
     {
@@ -47281,11 +48199,20 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
   if (!contractWeekPatchRes.ok) {
     return withCORS(env, req, serverError(await contractWeekPatchRes.text().catch(() => 'Failed to reopen contract week')));
   }
+  wlogUnprocess('contract_week_reopen_patch_completed', {
+    contract_week_id: weekId || null,
+    reopen_submission_mode_snapshot: reopenSnapshot || null
+  });
 
   const snoozeClearResult = await clearCollectedSnoozes(
     snoozesToClear,
     'TIMESHEET_DELETED_NOT_REQUIRED'
   );
+  wlogUnprocess('snoozes_cleared', {
+    requested_snooze_count: Array.isArray(snoozesToClear) ? snoozesToClear.length : 0,
+    cleared_count: Array.isArray(snoozeClearResult?.clearedIds) ? snoozeClearResult.clearedIds.length : 0,
+    failed_count: Array.isArray(snoozeClearResult?.failedIds) ? snoozeClearResult.failedIds.length : 0
+  });
 
   let reopenedContractWeek = null;
   try {
@@ -47297,6 +48224,10 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
   } catch {
     reopenedContractWeek = null;
   }
+  wlogUnprocess('reopened_contract_week_refetched', {
+    contract_week_id: weekId || null,
+    found: !!reopenedContractWeek
+  });
 
   if (!reopenedContractWeek) {
     reopenedContractWeek = {
@@ -47335,6 +48266,7 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
         : reopenSnapshot)
   };
 
+  let auditCompleted = false;
   try {
     await writeAudit(
       env,
@@ -47352,11 +48284,23 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
       },
       { entity: 'contract_weeks', subject_id: weekId, req }
     );
+    auditCompleted = true;
   } catch {}
+  wlogUnprocess('audit_completed', {
+    attempted: true,
+    completed: auditCompleted,
+    contract_week_id: weekId || null,
+    current_timesheet_id: currentTimesheetId || null
+  });
 
   if (bulkMode) {
     let bulkPatch = null;
     try {
+      wlogUnprocess('final_bulk_mutation_patch_started', {
+        previous_timesheet_id: currentTimesheetId || null,
+        contract_week_id: weekId || null,
+        bulk_dataset_mode: bulkDatasetMode
+      });
       bulkPatch = await buildBulkDeletePatchPayload({
         previousTimesheetIdForPatch: currentTimesheetId,
         currentContractWeekIdForPatch: weekId,
@@ -47366,6 +48310,13 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
           postDecisionRow: null,
           previousBulkProcessBucket: firstBulkString(bulkPrePatchRow?.bulk_process_bucket, 'PROCESSED')
         }
+      });
+      wlogUnprocess('final_bulk_mutation_patch_completed', {
+        previous_timesheet_id: currentTimesheetId || null,
+        contract_week_id: weekId || null,
+        bulk_dataset_mode: bulkDatasetMode,
+        row_key: bulkPatch?.row_key || bulkPatch?.new_row_key || bulkPatch?.data_row?.row_key || null,
+        row_signature_present: !!(bulkPatch?.row_signature || bulkPatch?.data_row?.row_signature)
       });
     } catch (e) {
       return withCORS(env, req, serverError(`Failed to build bulk weekly unprocess patch: ${e?.message || String(e)}`));
@@ -47384,6 +48335,13 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
       previous_bulk_process_bucket: firstBulkString(bulkPrePatchRow?.bulk_process_bucket, bulkPatch?.previous_bulk_process_bucket, 'PROCESSED'),
       bulk_process_bucket: firstBulkString(bulkPatch?.bulk_process_bucket, bulkPatch?.data_row?.bulk_process_bucket, 'UNPROCESSED')
     };
+
+    wlogUnprocess('response_built', {
+      response_type: 'bulk',
+      contract_week_id: weekId || null,
+      previous_timesheet_id: currentTimesheetId || null,
+      row_key: bulkPatch?.row_key || bulkPatch?.new_row_key || bulkPatch?.data_row?.row_key || null
+    });
 
     return withCORS(env, req, ok({
       ...bulkPatch,
@@ -47428,6 +48386,12 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
       snooze_clear_failed_ids: snoozeClearResult.failedIds
     }));
   }
+
+  wlogUnprocess('response_built', {
+    response_type: 'standard',
+    contract_week_id: weekId || null,
+    previous_timesheet_id: currentTimesheetId || null
+  });
 
   return withCORS(env, req, ok({
     deleted: true,
@@ -52850,6 +53814,7 @@ async function handleBulkAuthoriseDataset(env, req) {
   }
 }
 
+
 async function handleBulkProcessRowContext(env, req, rowIdentity = null) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -52887,8 +53852,27 @@ async function handleBulkProcessRowContext(env, req, rowIdentity = null) {
     return (out && typeof out === 'object' && !Array.isArray(out)) ? out : {};
   };
 
+  const normalizeBulkProcessEvidenceKind = (value) => {
+    const raw = trimStr(value);
+    if (!raw) return '';
+    const upper = raw.toUpperCase();
+    if (upper === 'TIMESHEET' || upper === 'TS') return 'TIMESHEET';
+    if (upper === 'MILEAGE' || upper === 'MILES' || upper === 'MILE') return 'MILEAGE';
+    if (upper === 'TRAVEL') return 'TRAVEL';
+    if (upper === 'ACCOMMODATION' || upper === 'ACCOM') return 'ACCOMMODATION';
+    if (upper === 'OTHER') return 'OTHER';
+    if (upper === 'EXPENSE' || upper === 'EXPENSES') return 'EXPENSE';
+    return upper;
+  };
 
-  const normaliseReturnedContext = (payloadInput) => {
+  const bulkProcessEvidenceBadgeOrder = ['TIMESHEET', 'MILEAGE', 'TRAVEL', 'ACCOMMODATION', 'OTHER'];
+  const bulkProcessEvidenceBadgeSortKey = (kind) => {
+    const idx = bulkProcessEvidenceBadgeOrder.indexOf(normalizeBulkProcessEvidenceKind(kind));
+    return idx === -1 ? 1000 : idx;
+  };
+
+
+  const normaliseReturnedContext = (payloadInput, contextOptions = {}) => {
     const payload = (payloadInput && typeof payloadInput === 'object' && !Array.isArray(payloadInput)) ? { ...payloadInput } : {};
     const row = (payload.row && typeof payload.row === 'object' && !Array.isArray(payload.row)) ? { ...payload.row } : {};
     const dataRow = (payload.data_row && typeof payload.data_row === 'object' && !Array.isArray(payload.data_row)) ? { ...payload.data_row } : row;
@@ -52917,12 +53901,30 @@ async function handleBulkProcessRowContext(env, req, rowIdentity = null) {
     };
     const asArrayJson = (value) => Array.isArray(value) ? value : [];
 
-    const contextProfile = trimStr(first(payload.context_profile, payload.profile, details.context_profile, details.profile)).toLowerCase();
+    const contextProfile = trimStr(first(payload.context_profile, payload.profile, details.context_profile, details.profile, contextOptions.profile)).toLowerCase();
+    const includeEvidenceSignalValue = first(
+      payload.include_evidence,
+      payload.includeEvidence,
+      payload.__context_options?.include_evidence,
+      payload.__context_options?.includeEvidence,
+      details.include_evidence,
+      details.includeEvidence,
+      row.include_evidence,
+      dataRow.include_evidence,
+      contextOptions.includeEvidence
+    );
+    const includeEvidenceSignalPresent = includeEvidenceSignalValue !== null;
+    const includeEvidenceSignal = toBool(includeEvidenceSignalValue);
+    const includeEvidenceExplicitlyFalse = includeEvidenceSignalPresent && includeEvidenceSignal === false;
     const headerLoaded = toBool(first(payload.header_loaded, details.header_loaded, row.header_loaded, dataRow.header_loaded));
     const headerOnly = toBool(first(payload.header_only, details.header_only, row.header_only, dataRow.header_only));
     const editorLoaded = toBool(first(payload.editor_loaded, details.editor_loaded, row.editor_loaded, dataRow.editor_loaded));
-    const evidenceLoaded = toBool(first(payload.evidence_loaded, details.evidence_loaded, details.evidence_meta?.evidence_loaded, row.evidence_loaded, dataRow.evidence_loaded));
-    const evidencePartialLoaded = toBool(first(payload.evidence_partial_loaded, details.evidence_partial_loaded, details.evidence_meta?.evidence_partial_loaded, row.evidence_partial_loaded, dataRow.evidence_partial_loaded));
+    const rawEvidenceLoaded = toBool(first(payload.evidence_loaded, details.evidence_loaded, details.evidence_meta?.evidence_loaded, row.evidence_loaded, dataRow.evidence_loaded));
+    const rawEvidencePartialLoaded = toBool(first(payload.evidence_partial_loaded, details.evidence_partial_loaded, details.evidence_meta?.evidence_partial_loaded, row.evidence_partial_loaded, dataRow.evidence_partial_loaded));
+    const rawEvidenceAuthoritative = toBool(first(payload.evidence_authoritative, details.evidence_authoritative, details.evidence_meta?.evidence_authoritative, row.evidence_authoritative, dataRow.evidence_authoritative));
+    let evidenceLoaded = rawEvidenceLoaded;
+    let evidencePartialLoaded = rawEvidencePartialLoaded;
+    let evidenceAuthoritative = rawEvidenceAuthoritative;
     const compareLoaded = toBool(first(payload.compare_loaded, details.compare_loaded, row.compare_loaded, dataRow.compare_loaded));
     const fullLoaded = toBool(first(payload.full_loaded, details.full_loaded, row.full_loaded, dataRow.full_loaded));
     const schedulePending = toBool(first(payload.schedule_pending, details.schedule_pending, row.schedule_pending, dataRow.schedule_pending));
@@ -52967,15 +53969,20 @@ async function handleBulkProcessRowContext(env, req, rowIdentity = null) {
     const clientIsNhsp = toBool(first(row.client_is_nhsp, dataRow.client_is_nhsp, effective.client_is_nhsp));
     const clientAutoprocessHr = toBool(first(row.client_autoprocess_hr, dataRow.client_autoprocess_hr, effective.client_autoprocess_hr));
     const adjustmentOriginUpper = trimStr(first(row.adjustment_origin, dataRow.adjustment_origin, timesheet.adjustment_origin)).toUpperCase();
-    const importDerivedChild = !!(
-      adjustmentOriginUpper === 'IMPORT_CORRECTION' ||
-      adjustmentOriginUpper === 'IMPORT_CANCELLATION' ||
-      trimStr(first(row.correction_id, dataRow.correction_id, timesheet.correction_id)) ||
-      trimStr(first(row.correction_kind, dataRow.correction_kind, timesheet.correction_kind))
+    const currentRowCorrectionId = trimStr(first(row.correction_id, dataRow.correction_id, timesheet.correction_id));
+    const currentRowCorrectionKind = trimStr(first(row.correction_kind, dataRow.correction_kind, timesheet.correction_kind));
+    const isImportDerivedAdjustment = !!(
+      isAdjustment &&
+      (
+        adjustmentOriginUpper.startsWith('IMPORT_') ||
+        currentRowCorrectionId !== '' ||
+        currentRowCorrectionKind !== ''
+      )
     );
+    const importDerivedChild = isImportDerivedAdjustment;
     const manualAdditional = !!(
       isAdjustment &&
-      !importDerivedChild &&
+      !isImportDerivedAdjustment &&
       (
         routeTypeUpper === 'WEEKLY_NHSP_ADJUSTMENT' ||
         routeTypeUpper === 'WEEKLY_HEALTHROSTER_ADJUSTMENT' ||
@@ -52986,8 +53993,40 @@ async function handleBulkProcessRowContext(env, req, rowIdentity = null) {
         trimStr(first(row.submission_mode, dataRow.submission_mode, contractWeek.submission_mode_snapshot, timesheet.submission_mode)).toUpperCase() === 'MANUAL'
       )
     );
+    const qrAdjustmentRouteSignal = !!(
+      trimStr(routeFamily).toUpperCase() === 'QR' ||
+      trimStr(routeSubfamily).toUpperCase() === 'QR' ||
+      trimStr(underlyingChannelFamily).toUpperCase() === 'QR' ||
+      toBool(first(row.is_qr, dataRow.is_qr, effective.is_qr, payload.is_qr)) ||
+      trimStr(first(row.qr_status, dataRow.qr_status, effective.qr_status, payload.qr_status)).toUpperCase() !== ''
+    );
+    const isUserCreatedManualQrAdjustment = !!(
+      isAdjustment &&
+      !isImportDerivedAdjustment &&
+      (
+        manualAdditional ||
+        qrAdjustmentRouteSignal
+      )
+    );
+    const userCreatedManualQrAdjustment = isUserCreatedManualQrAdjustment;
+    const bulkProcessUserAdjustmentRoute = !!(
+      isUserCreatedManualQrAdjustment &&
+      !isImportDerivedAdjustment
+    );
 
-    if (manualAdditional) {
+    if (importDerivedChild) {
+      routeFamily = 'IMPORT_AUTHORITATIVE';
+      underlyingChannelFamily = 'IMPORT';
+      if (routeTypeUpper === 'WEEKLY_NHSP' || routeTypeUpper === 'WEEKLY_NHSP_ADJUSTMENT' || basisUpper === 'NHSP' || basisUpper === 'NHSP_ADJUSTMENT' || clientIsNhsp) {
+        routeType = 'WEEKLY_NHSP_ADJUSTMENT';
+        routeSubfamily = 'NHSP';
+      } else if (routeTypeUpper === 'WEEKLY_HEALTHROSTER' || routeTypeUpper === 'WEEKLY_HEALTHROSTER_ADJUSTMENT' || basisUpper === 'HEALTHROSTER_ADJUSTMENT' || basisUpper === 'HEALTHROSTER_SELF_BILL' || clientAutoprocessHr) {
+        routeType = 'WEEKLY_HEALTHROSTER_ADJUSTMENT';
+        routeSubfamily = 'HEALTHROSTER_NO_TIMESHEET';
+      } else {
+        routeSubfamily = 'IMPORT_AUTHORITATIVE';
+      }
+    } else if (manualAdditional) {
       routeFamily = 'MANUAL_NON_QR';
       routeSubfamily = 'MANUAL_NON_QR';
       underlyingChannelFamily = 'MANUAL_NON_QR';
@@ -52998,6 +54037,10 @@ async function handleBulkProcessRowContext(env, req, rowIdentity = null) {
       } else if (!routeType) {
         routeType = 'WEEKLY_MANUAL_ADJUSTMENT';
       }
+    } else if (bulkProcessUserAdjustmentRoute && qrAdjustmentRouteSignal) {
+      if (!routeFamily || trimStr(routeFamily).toUpperCase() === 'IMPORT_AUTHORITATIVE') routeFamily = 'QR';
+      if (!routeSubfamily || trimStr(routeSubfamily).toUpperCase() === 'IMPORT_AUTHORITATIVE') routeSubfamily = 'QR';
+      if (!underlyingChannelFamily || trimStr(underlyingChannelFamily).toUpperCase() === 'IMPORT') underlyingChannelFamily = 'QR';
     }
 
     const actualSchedule = asArrayJson(first(row.actual_schedule_json, dataRow.actual_schedule_json, effective.actual_schedule_json, timesheet.actual_schedule_json, tsfin.actual_schedule_json));
@@ -53018,7 +54061,7 @@ async function handleBulkProcessRowContext(env, req, rowIdentity = null) {
       toBool(first(payload.__keepAdditionalManualAdjustmentScheduleEmpty, row.__keepAdditionalManualAdjustmentScheduleEmpty, dataRow.__keepAdditionalManualAdjustmentScheduleEmpty, effective.__keepAdditionalManualAdjustmentScheduleEmpty, details.__keepAdditionalManualAdjustmentScheduleEmpty))
     );
     const keepEmpty = !!(
-      manualAdditional &&
+      bulkProcessUserAdjustmentRoute &&
       totalHours === 0 &&
       actualSchedule.length === 0 &&
       plannedSchedule.length === 0 &&
@@ -53039,62 +54082,183 @@ async function handleBulkProcessRowContext(env, req, rowIdentity = null) {
       __suppressStandardScheduleFallback: keepEmpty,
       __keepAdditionalManualAdjustmentScheduleEmpty: keepEmpty
     } : {};
-    const isImportAuthoritative = manualAdditional ? false : toBool(first(row.is_import_authoritative, dataRow.is_import_authoritative, effective.is_import_authoritative, payload.is_import_authoritative));
+    const isImportAuthoritative = isImportDerivedAdjustment ? true : (bulkProcessUserAdjustmentRoute ? false : toBool(first(row.is_import_authoritative, dataRow.is_import_authoritative, effective.is_import_authoritative, payload.is_import_authoritative)));
 
-    const evidenceItems = Array.isArray(payload.evidence)
-      ? payload.evidence
-      : (Array.isArray(details.evidence) ? details.evidence : []);
+    const evidenceArrays = [
+      payload.evidence,
+      details.evidence,
+      row.evidence,
+      dataRow.evidence,
+      payload.attached_evidence,
+      details.attached_evidence,
+      row.attached_evidence,
+      dataRow.attached_evidence,
+      payload.attachedRows,
+      details.attachedRows,
+      row.attachedRows,
+      dataRow.attachedRows,
+      payload.staged_evidence,
+      details.staged_evidence,
+      row.staged_evidence,
+      dataRow.staged_evidence,
+      payload.contract_week_staged_evidence,
+      details.contract_week_staged_evidence,
+      row.contract_week_staged_evidence,
+      dataRow.contract_week_staged_evidence
+    ];
+    const evidenceItems = [];
+    for (const evidenceArray of evidenceArrays) {
+      if (Array.isArray(evidenceArray)) evidenceItems.push(...evidenceArray);
+    }
+    const evidenceArraysExplicitlyPresent = evidenceArrays.some((value) => Array.isArray(value));
     const payloadEvidenceMeta = (payload.evidence_meta && typeof payload.evidence_meta === 'object' && !Array.isArray(payload.evidence_meta))
       ? payload.evidence_meta
       : ((details.evidence_meta && typeof details.evidence_meta === 'object' && !Array.isArray(details.evidence_meta)) ? details.evidence_meta : {});
+    const payloadArtifactHints = (payload.artifact_hints && typeof payload.artifact_hints === 'object' && !Array.isArray(payload.artifact_hints))
+      ? payload.artifact_hints
+      : {};
+    const detailsArtifactHints = (details.artifact_hints && typeof details.artifact_hints === 'object' && !Array.isArray(details.artifact_hints))
+      ? details.artifact_hints
+      : {};
     const rowEvidenceBadges = [
+      ...(Array.isArray(payload.evidence_badges) ? payload.evidence_badges : []),
+      ...(Array.isArray(details.evidence_badges) ? details.evidence_badges : []),
       ...(Array.isArray(row.evidence_badges) ? row.evidence_badges : []),
       ...(Array.isArray(dataRow.evidence_badges) ? dataRow.evidence_badges : []),
-      ...(Array.isArray(payloadEvidenceMeta.evidence_badges) ? payloadEvidenceMeta.evidence_badges : [])
+      ...(Array.isArray(payloadEvidenceMeta.evidence_badges) ? payloadEvidenceMeta.evidence_badges : []),
+      ...(Array.isArray(payloadArtifactHints.evidence_badges) ? payloadArtifactHints.evidence_badges : []),
+      ...(Array.isArray(detailsArtifactHints.evidence_badges) ? detailsArtifactHints.evidence_badges : [])
     ];
-    const evidenceKindPresent = (kind) => {
-      const targetKind = trimStr(kind).toUpperCase();
-      return evidenceItems.some((item) => trimStr(first(item?.kind, item?.staged_kind)).toUpperCase() === targetKind) ||
-        rowEvidenceBadges.some((badge) => (
-          trimStr(badge?.kind).toUpperCase() === targetKind &&
-          (toBool(badge?.present) || toBool(badge?.has_evidence))
-        ));
+    const evidenceKindCounts = new Map();
+    const noteEvidenceKind = (kind, countValue = 1) => {
+      const normalizedKind = normalizeBulkProcessEvidenceKind(kind);
+      if (!normalizedKind) return;
+      const numericCount = Number(countValue);
+      const count = Number.isFinite(numericCount) && numericCount > 0 ? numericCount : 1;
+      const existingCount = evidenceKindCounts.get(normalizedKind) || 0;
+      evidenceKindCounts.set(normalizedKind, Math.max(existingCount, count));
     };
-    const effectiveBadgeTimesheet = evidenceKindPresent('TIMESHEET');
-    const effectiveBadgeMileage = evidenceKindPresent('MILEAGE');
-    const effectiveBadgeTravel = evidenceKindPresent('TRAVEL');
-    const effectiveBadgeAccommodation = evidenceKindPresent('ACCOMMODATION');
-    const effectiveBadgeOther = evidenceKindPresent('OTHER');
-    const effectiveHasAnyEvidence = !!(
-      toBool(first(row.has_any_evidence, dataRow.has_any_evidence, payload.has_any_evidence, payloadEvidenceMeta.has_any_evidence)) ||
-      evidenceItems.length > 0 ||
-      effectiveBadgeTimesheet ||
-      effectiveBadgeMileage ||
-      effectiveBadgeTravel ||
-      effectiveBadgeAccommodation ||
-      effectiveBadgeOther
-    );
-    const effectiveEvidenceBadges = [
-      { kind: 'TIMESHEET', present: effectiveBadgeTimesheet, has_evidence: effectiveBadgeTimesheet },
-      { kind: 'MILEAGE', present: effectiveBadgeMileage, has_evidence: effectiveBadgeMileage },
-      { kind: 'TRAVEL', present: effectiveBadgeTravel, has_evidence: effectiveBadgeTravel },
-      { kind: 'ACCOMMODATION', present: effectiveBadgeAccommodation, has_evidence: effectiveBadgeAccommodation },
-      { kind: 'OTHER', present: effectiveBadgeOther, has_evidence: effectiveBadgeOther }
+    const realEvidenceItems = evidenceItems.filter((item) => {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) return false;
+      const storageKey = first(item.storage_key, item.r2_key, item.file_key, item.download_storage_key);
+      const evidenceIdentity = first(item.evidence_id, item.queue_id, item.manual_timesheet_queue_id, item.id);
+      return trimStr(storageKey) !== '' || trimStr(evidenceIdentity) !== '';
+    });
+    for (const item of realEvidenceItems) {
+      noteEvidenceKind(first(item.kind, item.staged_kind, item.evidence_kind, item.category), 1);
+    }
+    for (const badge of rowEvidenceBadges) {
+      if (!badge || typeof badge !== 'object' || Array.isArray(badge)) continue;
+      if (toBool(badge.present) || toBool(badge.has_evidence) || toNumber(badge.count) > 0) {
+        noteEvidenceKind(badge.kind, toNumber(badge.count) || 1);
+      }
+    }
+    const orderedEvidenceKinds = [
+      ...bulkProcessEvidenceBadgeOrder,
+      ...Array.from(evidenceKindCounts.keys())
+        .filter((kind) => !bulkProcessEvidenceBadgeOrder.includes(kind))
+        .sort((left, right) => {
+          const sortDiff = bulkProcessEvidenceBadgeSortKey(left) - bulkProcessEvidenceBadgeSortKey(right);
+          if (sortDiff !== 0) return sortDiff;
+          return String(left).localeCompare(String(right));
+        })
     ];
+    const effectiveEvidenceBadges = orderedEvidenceKinds.map((kind) => {
+      const count = evidenceKindCounts.get(kind) || 0;
+      return {
+        kind,
+        present: count > 0,
+        has_evidence: count > 0,
+        count
+      };
+    });
+    const positiveBadgeEvidenceCount = Array.from(evidenceKindCounts.values()).reduce((sum, count) => sum + (Number.isFinite(Number(count)) ? Number(count) : 0), 0);
+    const rawAttachedEvidenceCount = Math.max(
+      toNumber(first(payload.attached_evidence_count, row.attached_evidence_count, dataRow.attached_evidence_count, payloadEvidenceMeta.attached_evidence_count, payloadArtifactHints.attached_evidence_count, detailsArtifactHints.attached_evidence_count)),
+      toNumber(first(payload.evidence_count, row.evidence_count, dataRow.evidence_count, payloadEvidenceMeta.evidence_count)),
+      realEvidenceItems.length,
+      positiveBadgeEvidenceCount
+    );
+    const hasPositiveEvidenceExpectation = !!(
+      toBool(first(row.has_any_evidence, dataRow.has_any_evidence, payload.has_any_evidence, payloadEvidenceMeta.has_any_evidence, payloadArtifactHints.has_any_evidence, detailsArtifactHints.has_any_evidence)) ||
+      rawAttachedEvidenceCount > 0 ||
+      realEvidenceItems.length > 0 ||
+      positiveBadgeEvidenceCount > 0
+    );
+    const contextRequestsEvidence = !!(contextProfile === 'evidence' || contextProfile === 'full' || includeEvidenceSignal === true);
+    const lightweightNonEvidenceContext = !!(
+      !contextRequestsEvidence &&
+      realEvidenceItems.length === 0 &&
+      (
+        contextProfile === 'status_header' ||
+        contextProfile === 'editor' ||
+        contextProfile === 'list' ||
+        contextProfile === 'active_row_visible' ||
+        headerOnly ||
+        includeEvidenceExplicitlyFalse
+      )
+    );
+    const evidenceContextLoadedRows = realEvidenceItems.length > 0;
+    const evidenceContextLoadedEmpty = !!(
+      !lightweightNonEvidenceContext &&
+      !contextDegraded &&
+      !softFailure &&
+      contextRequestsEvidence &&
+      evidenceArraysExplicitlyPresent &&
+      realEvidenceItems.length === 0
+    );
+    evidenceLoaded = !!(
+      !lightweightNonEvidenceContext &&
+      (rawEvidenceLoaded || rawEvidenceAuthoritative || evidenceContextLoadedRows || evidenceContextLoadedEmpty)
+    );
+    evidencePartialLoaded = !!(
+      !lightweightNonEvidenceContext &&
+      (rawEvidencePartialLoaded || evidenceLoaded || evidenceContextLoadedRows)
+    );
+    evidenceAuthoritative = !!(
+      !lightweightNonEvidenceContext &&
+      (rawEvidenceAuthoritative || evidenceLoaded || evidenceContextLoadedRows)
+    );
+    const effectiveHasAnyEvidence = !!hasPositiveEvidenceExpectation;
+    const effectiveAttachedEvidenceCount = rawAttachedEvidenceCount > 0 ? rawAttachedEvidenceCount : (hasPositiveEvidenceExpectation ? 1 : 0);
     const effectivePrimaryArtifact = (payload.primary_artifact && typeof payload.primary_artifact === 'object' && !Array.isArray(payload.primary_artifact))
       ? payload.primary_artifact
       : ((details.primary_artifact && typeof details.primary_artifact === 'object' && !Array.isArray(details.primary_artifact)) ? details.primary_artifact : null);
     const effectiveEvidenceMeta = {
       ...payloadEvidenceMeta,
       has_any_evidence: effectiveHasAnyEvidence,
-      evidence_badges: effectiveEvidenceBadges
+      attached_evidence_count: effectiveAttachedEvidenceCount,
+      evidence_count: effectiveAttachedEvidenceCount,
+      evidence_badges: effectiveEvidenceBadges,
+      evidence_loaded: evidenceLoaded,
+      evidence_authoritative: evidenceAuthoritative
     };
     const effectiveArtifactHints = {
-      ...(((payload.artifact_hints && typeof payload.artifact_hints === 'object' && !Array.isArray(payload.artifact_hints)) ? payload.artifact_hints : {})),
+      ...payloadArtifactHints,
       has_any_evidence: effectiveHasAnyEvidence,
+      attached_evidence_count: effectiveAttachedEvidenceCount,
+      evidence_count: effectiveAttachedEvidenceCount,
       evidence_badges: effectiveEvidenceBadges,
       primary_artifact: effectivePrimaryArtifact
     };
+
+    const manualAdditionalNoTimesheetPatch = bulkProcessUserAdjustmentRoute && !timesheetId && contractWeekId ? {
+      supportsUnprocessedExpenseDraft: true,
+      supports_unprocessed_expense_draft: true,
+      expense_storage_target: 'CONTRACT_WEEK_DRAFT',
+      expense_evidence_storage_target: 'CONTRACT_WEEK_STAGED_EVIDENCE'
+    } : {};
+    const importDerivedExclusionPatch = importDerivedChild ? {
+      adjustment_source: 'IMPORT_DERIVED',
+      bulk_process_excluded_reason: 'IMPORT_AUTHORITATIVE_ADJUSTED_HOURS',
+      review_only: true,
+      can_process: false,
+      can_unprocess: false,
+      can_save: false,
+      can_edit_timesheet_data: false,
+      can_manage_evidence: false,
+      bulk_process_user_adjustment_route: false
+    } : {};
 
     const nextEffective = {
       ...effective,
@@ -53103,11 +54267,18 @@ async function handleBulkProcessRowContext(env, req, rowIdentity = null) {
       route_subfamily: routeSubfamily || null,
       underlying_channel_family: underlyingChannelFamily || null,
       is_import_authoritative: isImportAuthoritative,
+      is_import_derived_adjustment: importDerivedChild,
+      is_user_created_manual_qr_adjustment: userCreatedManualQrAdjustment,
+      bulk_process_user_adjustment_route: bulkProcessUserAdjustmentRoute,
+      adjustment_source: importDerivedChild ? 'IMPORT_DERIVED' : (userCreatedManualQrAdjustment ? 'USER_CREATED_MANUAL_QR' : effective.adjustment_source || null),
+      bulk_process_excluded_reason: importDerivedChild ? 'IMPORT_AUTHORITATIVE_ADJUSTED_HOURS' : (effective.bulk_process_excluded_reason || null),
       is_adjustment: isAdjustment,
       additional_seq: additionalSeq,
       contract_week_id: contractWeekId,
       timesheet_id: timesheetId,
-      ...scheduleFieldPatch
+      ...manualAdditionalNoTimesheetPatch,
+      ...scheduleFieldPatch,
+      ...importDerivedExclusionPatch
     };
 
     const nextDataRow = {
@@ -53122,9 +54293,21 @@ async function handleBulkProcessRowContext(env, req, rowIdentity = null) {
       contract_week_id: contractWeekId,
       timesheet_id: timesheetId,
       current_timesheet_id: timesheetId,
+      ...manualAdditionalNoTimesheetPatch,
       ...scheduleFieldPatch,
+      ...importDerivedExclusionPatch,
+      is_import_derived_adjustment: importDerivedChild,
+      is_user_created_manual_qr_adjustment: userCreatedManualQrAdjustment,
+      bulk_process_user_adjustment_route: bulkProcessUserAdjustmentRoute,
+      adjustment_source: importDerivedChild ? 'IMPORT_DERIVED' : (userCreatedManualQrAdjustment ? 'USER_CREATED_MANUAL_QR' : dataRow.adjustment_source || row.adjustment_source || null),
+      bulk_process_excluded_reason: importDerivedChild ? 'IMPORT_AUTHORITATIVE_ADJUSTED_HOURS' : (dataRow.bulk_process_excluded_reason || row.bulk_process_excluded_reason || null),
       has_any_evidence: effectiveHasAnyEvidence,
+      has_attached_evidence: effectiveAttachedEvidenceCount > 0,
+      attached_evidence_count: effectiveAttachedEvidenceCount,
+      evidence_count: effectiveAttachedEvidenceCount,
       evidence_badges: effectiveEvidenceBadges,
+      evidence_loaded: evidenceLoaded,
+      evidence_authoritative: evidenceAuthoritative,
       evidence_meta: effectiveEvidenceMeta,
       artifact_hints: effectiveArtifactHints,
       primary_artifact: effectivePrimaryArtifact
@@ -53133,9 +54316,10 @@ async function handleBulkProcessRowContext(env, req, rowIdentity = null) {
     const actionFlags = (payload.action_flags && typeof payload.action_flags === 'object' && !Array.isArray(payload.action_flags))
       ? { ...payload.action_flags }
       : ((nextDataRow.action_flags && typeof nextDataRow.action_flags === 'object' && !Array.isArray(nextDataRow.action_flags)) ? { ...nextDataRow.action_flags } : {});
-    if (manualAdditional) {
+    if (bulkProcessUserAdjustmentRoute) {
       actionFlags.is_adjustment = true;
       actionFlags.additional_seq = additionalSeq;
+      actionFlags.bulk_process_user_adjustment_route = true;
       if (!timesheetId && contractWeekId) {
         actionFlags.supportsUnprocessedExpenseDraft = actionFlags.supportsUnprocessedExpenseDraft !== false;
         actionFlags.supports_unprocessed_expense_draft = actionFlags.supports_unprocessed_expense_draft !== false;
@@ -53144,7 +54328,61 @@ async function handleBulkProcessRowContext(env, req, rowIdentity = null) {
       }
     }
     actionFlags.has_any_evidence = effectiveHasAnyEvidence;
+    actionFlags.has_attached_evidence = effectiveAttachedEvidenceCount > 0;
+    actionFlags.attached_evidence_count = effectiveAttachedEvidenceCount;
+    actionFlags.evidence_count = effectiveAttachedEvidenceCount;
     actionFlags.evidence_badges = effectiveEvidenceBadges;
+
+    const actionReasonText = trimStr(first(
+      actionFlags.process_block_reason,
+      actionFlags.can_process_reason,
+      actionFlags.block_reason,
+      actionFlags.disabled_reason,
+      nextDataRow.process_block_reason,
+      nextDataRow.can_process_reason,
+      nextDataRow.block_reason,
+      nextDataRow.disabled_reason,
+      row.process_block_reason,
+      row.can_process_reason,
+      dataRow.process_block_reason,
+      dataRow.can_process_reason
+    )).toUpperCase();
+    const hasNonEvidenceActionBlock = !!(
+      importDerivedChild ||
+      toBool(first(actionFlags.review_only, nextDataRow.review_only, row.review_only, dataRow.review_only, payload.review_only)) ||
+      toBool(first(nextDataRow.locked, row.locked, dataRow.locked, payload.locked)) ||
+      toBool(first(nextDataRow.is_authorised, row.is_authorised, dataRow.is_authorised, payload.is_authorised)) ||
+      toBool(first(nextDataRow.authorised, row.authorised, dataRow.authorised, payload.authorised)) ||
+      toBool(first(nextDataRow.invoice_is_paid, row.invoice_is_paid, dataRow.invoice_is_paid, payload.invoice_is_paid)) ||
+      toBool(first(nextDataRow.evidence_document_locked, row.evidence_document_locked, dataRow.evidence_document_locked, payload.evidence_document_locked)) ||
+      trimStr(first(nextDataRow.bulk_process_excluded_reason, row.bulk_process_excluded_reason, dataRow.bulk_process_excluded_reason, payload.bulk_process_excluded_reason)) !== ''
+    );
+    const disableReasonIsEvidenceOnly = !!(
+      actionReasonText.includes('EVIDENCE') ||
+      actionReasonText.includes('ATTACH') ||
+      actionReasonText.includes('ARTIFACT') ||
+      actionReasonText.includes('DOCUMENT')
+    );
+    const stripEvidenceDerivedActionDisables = !!(
+      lightweightNonEvidenceContext &&
+      effectiveHasAnyEvidence &&
+      !hasNonEvidenceActionBlock &&
+      (disableReasonIsEvidenceOnly || actionReasonText === '')
+    );
+    if (stripEvidenceDerivedActionDisables) {
+      for (const flagKey of ['can_process', 'can_save', 'can_edit_timesheet_data', 'can_manage_evidence']) {
+        if (actionFlags[flagKey] === false) delete actionFlags[flagKey];
+        if (nextDataRow[flagKey] === false) delete nextDataRow[flagKey];
+      }
+    }
+    if (importDerivedChild) {
+      actionFlags.can_process = false;
+      actionFlags.can_unprocess = false;
+      actionFlags.can_save = false;
+      actionFlags.can_edit_timesheet_data = false;
+      actionFlags.can_manage_evidence = false;
+      actionFlags.review_only = true;
+    }
     nextDataRow.action_flags = { ...(nextDataRow.action_flags || {}), ...actionFlags };
 
     const nextDetails = {
@@ -53163,7 +54401,21 @@ async function handleBulkProcessRowContext(env, req, rowIdentity = null) {
     };
 
     const nextRowPatch = (payload.row_patch && typeof payload.row_patch === 'object')
-      ? { ...payload.row_patch, ...nextDataRow, has_any_evidence: effectiveHasAnyEvidence, evidence_badges: effectiveEvidenceBadges, evidence_meta: effectiveEvidenceMeta, artifact_hints: effectiveArtifactHints, primary_artifact: effectivePrimaryArtifact }
+      ? {
+        ...payload.row_patch,
+        ...nextDataRow,
+        has_any_evidence: effectiveHasAnyEvidence,
+        has_attached_evidence: effectiveAttachedEvidenceCount > 0,
+        attached_evidence_count: effectiveAttachedEvidenceCount,
+        evidence_count: effectiveAttachedEvidenceCount,
+        evidence_badges: effectiveEvidenceBadges,
+        evidence_loaded: evidenceLoaded,
+        evidence_authoritative: evidenceAuthoritative,
+        evidence_meta: effectiveEvidenceMeta,
+        artifact_hints: effectiveArtifactHints,
+        primary_artifact: effectivePrimaryArtifact,
+        action_flags: actionFlags
+      }
       : nextDataRow;
 
     return {
@@ -53175,6 +54427,8 @@ async function handleBulkProcessRowContext(env, req, rowIdentity = null) {
       editor_loaded: editorLoaded,
       evidence_loaded: evidenceLoaded,
       evidence_partial_loaded: evidencePartialLoaded,
+      evidence_authoritative: evidenceAuthoritative,
+      include_evidence: evidenceLoaded,
       compare_loaded: compareLoaded,
       full_loaded: fullLoaded,
       schedule_pending: schedulePending,
@@ -53189,6 +54443,9 @@ async function handleBulkProcessRowContext(env, req, rowIdentity = null) {
       action_flags: actionFlags,
       effective: nextEffective,
       has_any_evidence: effectiveHasAnyEvidence,
+      has_attached_evidence: effectiveAttachedEvidenceCount > 0,
+      attached_evidence_count: effectiveAttachedEvidenceCount,
+      evidence_count: effectiveAttachedEvidenceCount,
       evidence_badges: effectiveEvidenceBadges,
       evidence_meta: effectiveEvidenceMeta,
       artifact_hints: effectiveArtifactHints,
@@ -53198,12 +54455,19 @@ async function handleBulkProcessRowContext(env, req, rowIdentity = null) {
       route_subfamily: routeSubfamily || null,
       underlying_channel_family: underlyingChannelFamily || null,
       is_import_authoritative: isImportAuthoritative,
+      is_import_derived_adjustment: importDerivedChild,
+      is_user_created_manual_qr_adjustment: userCreatedManualQrAdjustment,
+      bulk_process_user_adjustment_route: bulkProcessUserAdjustmentRoute,
+      adjustment_source: importDerivedChild ? 'IMPORT_DERIVED' : (userCreatedManualQrAdjustment ? 'USER_CREATED_MANUAL_QR' : payload.adjustment_source || row.adjustment_source || dataRow.adjustment_source || null),
+      bulk_process_excluded_reason: importDerivedChild ? 'IMPORT_AUTHORITATIVE_ADJUSTED_HOURS' : (payload.bulk_process_excluded_reason || row.bulk_process_excluded_reason || dataRow.bulk_process_excluded_reason || null),
       is_adjustment: isAdjustment,
       additional_seq: additionalSeq,
       contract_week_id: contractWeekId,
       timesheet_id: timesheetId,
       current_timesheet_id: timesheetId,
-      ...scheduleFieldPatch
+      ...manualAdditionalNoTimesheetPatch,
+      ...scheduleFieldPatch,
+      ...importDerivedExclusionPatch
     };
   };
 
@@ -53319,7 +54583,8 @@ async function handleBulkProcessRowContext(env, req, rowIdentity = null) {
 
       return (rows || []).map((item) => {
         const meta = (item?.meta_json && typeof item.meta_json === 'object' && !Array.isArray(item.meta_json)) ? item.meta_json : {};
-        const kind = String(meta.staged_kind || meta.kind || 'TIMESHEET').trim().toUpperCase() || 'TIMESHEET';
+        const storedKind = normalizeBulkProcessEvidenceKind(meta.staged_kind || meta.kind || meta.evidence_kind || meta.required_kind || meta.category);
+        const kind = storedKind || 'EVIDENCE';
         const displayName = String(item.original_filename || '').trim() || 'Staged evidence';
         const storageKey = String(item.r2_key || '').trim() || null;
         const mimeType = String(item.mime_type || '').trim() || null;
@@ -53380,7 +54645,7 @@ async function handleBulkProcessRowContext(env, req, rowIdentity = null) {
       base_only: compactFilters.base_only === true
     });
     const rpcRes = await sbRpc(env, 'bulk_process_row_context_v1', { p_filters: compactFilters }, { timeoutMs: 45000 });
-    const payload = normaliseReturnedContext(unwrapRpcPayload(rpcRes, 'bulk_process_row_context_v1'));
+    const payload = normaliseReturnedContext(unwrapRpcPayload(rpcRes, 'bulk_process_row_context_v1'), { profile, includeEvidence, baseOnly: profile === 'status_header' });
     return withCORS(env, req, ok(payload));
   } catch (err) {
     const message = String(err?.message || err || 'Failed to load bulk process row context');
@@ -53398,7 +54663,7 @@ async function handleBulkProcessRowContext(env, req, rowIdentity = null) {
     if (isContractWeekEvidenceRefresh) {
       const stagedEvidence = await buildStagedEvidenceFallbackRows(compactFilters.contract_week_id);
       const hasFallbackEvidenceRows = Array.isArray(stagedEvidence) && stagedEvidence.length > 0;
-      return withCORS(env, req, ok({
+      const fallbackPayload = {
         ok: hasFallbackEvidenceRows,
         context_kind: 'bulk_process_row_context',
         context_profile: compactFilters.profile || profile,
@@ -53414,6 +54679,8 @@ async function handleBulkProcessRowContext(env, req, rowIdentity = null) {
         editor_loaded: false,
         evidence_loaded: hasFallbackEvidenceRows,
         evidence_partial_loaded: hasFallbackEvidenceRows,
+        evidence_authoritative: hasFallbackEvidenceRows,
+        include_evidence: hasFallbackEvidenceRows,
         compare_loaded: false,
         full_loaded: false,
         schedule_pending: true,
@@ -53423,13 +54690,33 @@ async function handleBulkProcessRowContext(env, req, rowIdentity = null) {
         degraded_reason: hasFallbackEvidenceRows ? 'RPC_FAILED_STAGED_FALLBACK_USED' : 'EVIDENCE_ROW_CONTEXT_REFRESH_FAILED',
         loaded_layers: hasFallbackEvidenceRows ? ['evidence'] : [],
         evidence_source: 'contract_week_staged_fallback',
+        has_any_evidence: hasFallbackEvidenceRows,
+        has_attached_evidence: hasFallbackEvidenceRows,
+        attached_evidence_count: hasFallbackEvidenceRows ? stagedEvidence.length : 0,
+        evidence_count: hasFallbackEvidenceRows ? stagedEvidence.length : 0,
         evidence: stagedEvidence,
+        attached_evidence: stagedEvidence,
         staged_evidence: stagedEvidence,
+        contract_week_staged_evidence: stagedEvidence,
+        details: {
+          evidence: stagedEvidence,
+          attached_evidence: stagedEvidence,
+          staged_evidence: stagedEvidence,
+          contract_week_staged_evidence: stagedEvidence,
+          evidence_meta: {
+            evidence_loaded: hasFallbackEvidenceRows,
+            evidence_authoritative: hasFallbackEvidenceRows,
+            has_any_evidence: hasFallbackEvidenceRows,
+            attached_evidence_count: hasFallbackEvidenceRows ? stagedEvidence.length : 0,
+            evidence_count: hasFallbackEvidenceRows ? stagedEvidence.length : 0
+          }
+        },
         message: hasFallbackEvidenceRows
           ? 'Evidence was attached and staged evidence has been returned while the row context refresh is degraded.'
           : 'Evidence was attached, but the row context could not be refreshed. Please refresh the row or reopen Bulk Process.',
         error: hasFallbackEvidenceRows ? null : 'EVIDENCE_ROW_CONTEXT_REFRESH_FAILED'
-      }));
+      };
+      return withCORS(env, req, ok(normaliseReturnedContext(fallbackPayload)));
     }
 
     return withCORS(env, req, ok({
@@ -108762,58 +110049,259 @@ async function handleInvoiceIssue(env, req, invoiceId) {
         pdf_rows_affected = 0;
       }
 
-      // ✅ Email eligibility (for frontend prompt)
+      // ✅ Email eligibility (for frontend prompt) — must match handleInvoiceEmail routing
       let email_eligible = false;
       let email_block_reason = null;
       let email_to_suggest = null;
 
       try {
+        const nonEmpty = (value) => String(value ?? '').trim() !== '';
+        const isImportDerivedAdjustmentLine = (t) => {
+          const origin = String(t?.adjustment_origin ?? '').trim().toUpperCase();
+          return !!(
+            origin.startsWith('IMPORT_') ||
+            nonEmpty(t?.correction_id) ||
+            nonEmpty(t?.correction_kind)
+          );
+        };
+        const isManualOrQrLine = (t) => {
+          const sub = String(t?.submission_mode || '').trim().toUpperCase();
+          const qrStatus = String(t?.qr_status ?? '').trim();
+          const qrToken = String(t?.qr_token ?? '').trim();
+          return sub === 'MANUAL' || sub === 'QR' || !!qrStatus || !!qrToken;
+        };
+
         const { rows: invRows } = await sbFetch(
           env,
           `${env.SUPABASE_URL}/rest/v1/invoices` +
             `?id=eq.${enc(String(invoiceId))}` +
-            `&select=id,do_not_send,header_snapshot_json,client:clients(primary_invoice_email,name)` +
+            `&select=id,client_id,status,issued_at_utc,do_not_send,header_snapshot_json,client:clients(primary_invoice_email,name)` +
             `&limit=1`,
           false
         );
 
         const inv = invRows?.[0] || null;
-        const doNotSend = (inv?.do_not_send === true);
+        if (!inv) {
+          email_eligible = false;
+          email_block_reason = 'INVOICE_NOT_FOUND';
+          email_to_suggest = null;
+        } else {
+          const doNotSend = (inv?.do_not_send === true);
 
-        const header = (inv?.header_snapshot_json && typeof inv.header_snapshot_json === 'object')
-          ? inv.header_snapshot_json
-          : {};
+          const header = (inv?.header_snapshot_json && typeof inv.header_snapshot_json === 'object')
+            ? inv.header_snapshot_json
+            : {};
 
-        const meta = (header?.meta && typeof header.meta === 'object') ? header.meta : {};
+          const meta = (header?.meta && typeof header.meta === 'object') ? header.meta : {};
 
-        const selfBillFlag = (() => {
-          const v = meta?.self_bill;
-          if (v === true) return true;
-          if (v === false) return false;
-          const s0 = String(v ?? '').trim().toLowerCase();
-          return (s0 === 'true' || s0 === '1' || s0 === 'yes' || s0 === 'y' || s0 === 'on');
-        })();
+          const selfBillFlag = (() => {
+            const v = meta?.self_bill;
+            if (v === true) return true;
+            if (v === false) return false;
+            const s0 = String(v ?? '').trim().toLowerCase();
+            return (s0 === 'true' || s0 === '1' || s0 === 'yes' || s0 === 'y' || s0 === 'on');
+          })();
 
-        const src = String(meta?.source || '').trim().toUpperCase();
-        const isSelfBill = (selfBillFlag === true) || (src === 'TSFIN_SEGMENTS');
+          const src = String(meta?.source || '').trim().toUpperCase();
+          const isSelfBill = (selfBillFlag === true) || (src === 'TSFIN_SEGMENTS');
 
-        const hdrEmail = (typeof header?.client_primary_invoice_email === 'string') ? header.client_primary_invoice_email.trim() : '';
-        const cliEmail = (typeof inv?.client?.primary_invoice_email === 'string') ? inv.client.primary_invoice_email.trim() : '';
+          if (doNotSend) {
+            email_eligible = false;
+            email_block_reason = 'DO_NOT_SEND';
+            email_to_suggest = null;
+          } else if (isSelfBill) {
+            email_eligible = false;
+            email_block_reason = 'SELF_BILL';
+            email_to_suggest = null;
+          } else if (!inv.client_id) {
+            email_eligible = false;
+            email_block_reason = 'EMAIL_ROUTING_CHECK_FAILED';
+            email_to_suggest = null;
+          } else {
+            const clientId = String(inv.client_id);
+            const hdrEmail = (typeof header?.client_primary_invoice_email === 'string') ? header.client_primary_invoice_email.trim() : '';
+            const cliEmail = (typeof inv?.client?.primary_invoice_email === 'string') ? inv.client.primary_invoice_email.trim() : '';
+            const primaryEmail = (hdrEmail || cliEmail) ? (hdrEmail || cliEmail) : null;
 
-        email_to_suggest = (hdrEmail || cliEmail) ? (hdrEmail || cliEmail) : null;
+            let cs = null;
+            const { rows: csRows } = await sbFetch(
+              env,
+              `${env.SUPABASE_URL}/rest/v1/client_settings` +
+                `?client_id=eq.${enc(clientId)}` +
+                `&select=send_manual_invoices_to_different_email,manual_invoices_alt_email_address,effective_from,created_at` +
+                `&order=effective_from.desc,created_at.desc&limit=1`
+            );
+            cs = csRows?.[0] || null;
 
-        email_eligible = (!doNotSend && !isSelfBill && !!email_to_suggest);
+            const altEnabled = (cs && cs.send_manual_invoices_to_different_email === true);
+            const altEmail = (cs && typeof cs.manual_invoices_alt_email_address === 'string')
+              ? cs.manual_invoices_alt_email_address.trim()
+              : null;
 
-        if (!email_eligible) {
-          if (doNotSend) email_block_reason = 'DO_NOT_SEND';
-          else if (isSelfBill) email_block_reason = 'SELF_BILL';
-          else if (!email_to_suggest) email_block_reason = 'NO_CLIENT_EMAIL';
-          else email_block_reason = 'NOT_ELIGIBLE';
+            let hasUserCreatedManualQrAdjustment = false;
+            const contractAltEmails = new Map();
+
+            const { rows: lineRows } = await sbFetch(
+              env,
+              `${env.SUPABASE_URL}/rest/v1/invoice_lines` +
+                `?invoice_id=eq.${enc(String(invoiceId))}` +
+                `&select=timesheet_id`
+            );
+
+            const tsIds = Array.from(
+              new Set((lineRows || []).map(r => r?.timesheet_id).filter(Boolean).map(String))
+            );
+
+            if (tsIds.length) {
+              const chunkSize = 200;
+              const tsById = new Map();
+
+              for (let i = 0; i < tsIds.length; i += chunkSize) {
+                const chunk = tsIds.slice(i, i + chunkSize);
+                const { rows: tsRows } = await sbFetch(
+                  env,
+                  `${env.SUPABASE_URL}/rest/v1/timesheets` +
+                    `?timesheet_id=in.(${chunk.map(enc).join(',')})` +
+                    `&is_current=eq.true` +
+                    `&select=timesheet_id,submission_mode,sheet_scope,qr_status,qr_token,is_adjustment,contract_id,parent_timesheet_id,adjustment_origin,correction_id,correction_kind`
+                );
+                for (const t of (tsRows || [])) {
+                  if (t && t.timesheet_id) tsById.set(String(t.timesheet_id), t);
+                }
+              }
+
+              const missingTsIds = tsIds.filter(tsId => !tsById.has(String(tsId)));
+              if (missingTsIds.length) {
+                throw new Error(`Current timesheet data missing for: ${missingTsIds.join(', ')}`);
+              }
+
+              const cwAdjSet = new Set();
+              const cwContractByTsId = new Map();
+              for (let i = 0; i < tsIds.length; i += chunkSize) {
+                const chunk = tsIds.slice(i, i + chunkSize);
+                const { rows: cwRows } = await sbFetch(
+                  env,
+                  `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+                    `?timesheet_id=in.(${chunk.map(enc).join(',')})` +
+                    `&select=timesheet_id,is_adjustment,contract_id`
+                );
+                for (const w of (cwRows || [])) {
+                  if (!w || !w.timesheet_id) continue;
+                  const tid = String(w.timesheet_id);
+                  if (w.is_adjustment === true) cwAdjSet.add(tid);
+                  if (w.contract_id && !cwContractByTsId.has(tid)) cwContractByTsId.set(tid, String(w.contract_id));
+                }
+              }
+
+              const userCreatedContractIds = [];
+              const missingUserCreatedContractTimesheetIds = [];
+              for (const tsId of tsIds) {
+                const t = tsById.get(String(tsId)) || null;
+                if (!t) continue;
+
+                const isImportDerived = isImportDerivedAdjustmentLine(t);
+                const isAdj = (t.is_adjustment === true) || cwAdjSet.has(String(tsId));
+                const isManualOrQr = isManualOrQrLine(t);
+                const isUserCreatedManualQrAdjustment = !!(isAdj && isManualOrQr && !isImportDerived);
+
+                if (!isUserCreatedManualQrAdjustment) continue;
+
+                hasUserCreatedManualQrAdjustment = true;
+
+                const contractId = (t?.contract_id != null && String(t.contract_id))
+                  ? String(t.contract_id)
+                  : (cwContractByTsId.get(String(tsId)) || null);
+
+                if (contractId) userCreatedContractIds.push(contractId);
+                else missingUserCreatedContractTimesheetIds.push(String(tsId));
+              }
+
+              if (missingUserCreatedContractTimesheetIds.length) {
+                email_eligible = false;
+                email_block_reason = 'CONTRACT_ROUTING_CHECK_FAILED';
+                email_to_suggest = null;
+                throw new Error(`Contract data could not be resolved for user-created manual/QR adjustment timesheet(s): ${missingUserCreatedContractTimesheetIds.join(', ')}`);
+              }
+
+              const contractIds = Array.from(new Set(userCreatedContractIds.filter(Boolean)));
+              const contractById = new Map();
+              if (contractIds.length) {
+                for (let i = 0; i < contractIds.length; i += chunkSize) {
+                  const chunk = contractIds.slice(i, i + chunkSize);
+                  const { rows: cRows } = await sbFetch(
+                    env,
+                    `${env.SUPABASE_URL}/rest/v1/contracts` +
+                      `?id=in.(${chunk.map(enc).join(',')})` +
+                      `&select=id,overrideclientsettings,send_manual_invoices_to_different_email,manual_invoices_alt_email_address`
+                  );
+                  for (const c of (cRows || [])) {
+                    if (c && c.id) contractById.set(String(c.id), c);
+                  }
+                }
+
+                const missingContracts = contractIds.filter(contractId => !contractById.has(String(contractId)));
+                if (missingContracts.length) {
+                  throw new Error(`Contract data missing for: ${missingContracts.join(', ')}`);
+                }
+              }
+
+              for (const contractId of contractIds) {
+                const cRow = contractById.get(String(contractId)) || null;
+                const contractOverrideEnabled =
+                  !!(cRow && cRow.overrideclientsettings === true && cRow.send_manual_invoices_to_different_email === true);
+
+                if (!contractOverrideEnabled) continue;
+
+                const email = (cRow && typeof cRow.manual_invoices_alt_email_address === 'string')
+                  ? cRow.manual_invoices_alt_email_address.trim()
+                  : '';
+
+                if (!email) {
+                  email_eligible = false;
+                  email_block_reason = 'CONTRACT_MANUAL_EMAIL_MISSING';
+                  email_to_suggest = null;
+                  throw new Error(`Contract manual invoice email missing for contract_id=${contractId}`);
+                }
+
+                if (!contractAltEmails.has(email)) contractAltEmails.set(email, new Set());
+                contractAltEmails.get(email).add(String(contractId));
+              }
+            }
+
+            if (contractAltEmails.size > 0) {
+              const emails = Array.from(contractAltEmails.keys());
+              if (emails.length > 1) {
+                email_eligible = false;
+                email_block_reason = 'CONTRACT_MANUAL_EMAIL_CONFLICT';
+                email_to_suggest = null;
+              } else {
+                email_to_suggest = emails[0];
+                email_eligible = true;
+                email_block_reason = null;
+              }
+            } else if (hasUserCreatedManualQrAdjustment && altEnabled) {
+              if (!altEmail) {
+                email_eligible = false;
+                email_block_reason = 'CLIENT_MANUAL_EMAIL_MISSING';
+                email_to_suggest = null;
+              } else {
+                email_to_suggest = altEmail;
+                email_eligible = true;
+                email_block_reason = null;
+              }
+            } else {
+              email_to_suggest = primaryEmail;
+              email_eligible = !!email_to_suggest;
+              email_block_reason = email_eligible ? null : 'NO_CLIENT_EMAIL';
+            }
+          }
         }
       } catch {
-        email_eligible = false;
-        email_block_reason = 'ELIGIBILITY_CHECK_FAILED';
-        email_to_suggest = null;
+        if (!email_block_reason || email_block_reason === 'NO_CLIENT_EMAIL') {
+          email_eligible = false;
+          email_block_reason = 'EMAIL_ROUTING_CHECK_FAILED';
+          email_to_suggest = null;
+        }
       }
 
       return withCORS(env, req, ok({
@@ -108836,6 +110324,7 @@ async function handleInvoiceIssue(env, req, invoiceId) {
     return withCORS(env, req, serverError('Failed to issue invoice'));
   }
 }
+
 
 
 async function handleInvoiceBatchIssueConfirm(env, req) {
@@ -109275,6 +110764,27 @@ async function handleInvoiceEmail(env, req, invoiceId) {
     const clientId = inv?.client_id || null;
     if (!clientId) return withCORS(env, req, badRequest('Invoice client_id missing'));
 
+    const truthy = (value) => {
+      if (value === true || value === 1) return true;
+      const s = String(value ?? '').trim().toLowerCase();
+      return ['true', 't', '1', 'yes', 'y', 'on'].includes(s);
+    };
+    const nonEmpty = (value) => String(value ?? '').trim() !== '';
+    const isImportDerivedAdjustmentLine = (t) => {
+      const origin = String(t?.adjustment_origin ?? '').trim().toUpperCase();
+      return !!(
+        origin.startsWith('IMPORT_') ||
+        nonEmpty(t?.correction_id) ||
+        nonEmpty(t?.correction_kind)
+      );
+    };
+    const isManualOrQrLine = (t) => {
+      const sub = String(t?.submission_mode || '').trim().toUpperCase();
+      const qrStatus = String(t?.qr_status ?? '').trim();
+      const qrToken = String(t?.qr_token ?? '').trim();
+      return sub === 'MANUAL' || sub === 'QR' || !!qrStatus || !!qrToken;
+    };
+
     // Load latest client_settings (fallback behaviour when no contract override applies)
     let cs = null;
     try {
@@ -109286,8 +110796,8 @@ async function handleInvoiceEmail(env, req, invoiceId) {
           `&order=effective_from.desc,created_at.desc&limit=1`
       );
       cs = csRows?.[0] || null;
-    } catch {
-      cs = null;
+    } catch (err) {
+      return withCORS(env, req, serverError(`Failed to load invoice email routing settings: ${String(err?.message || err || '')}`));
     }
 
     const altEnabled = (cs && cs.send_manual_invoices_to_different_email === true);
@@ -109295,139 +110805,170 @@ async function handleInvoiceEmail(env, req, invoiceId) {
       ? cs.manual_invoices_alt_email_address.trim()
       : null;
 
-    // Determine whether THIS invoice relates to a manual/QR adjustment timesheet,
+    // Determine whether THIS invoice relates to a user-created manual/QR adjustment timesheet,
     // and resolve any contract-level manual invoice email override(s).
     let hasManualOrQrAdjustment = false;
+    let hasImportDerivedAdjustment = false;
     const contractAltEmails = new Map(); // email -> Set(contract_id)
 
-    try {
-      const { rows: lineRows } = await sbFetch(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/invoice_lines` +
-          `?invoice_id=eq.${enc(invoiceId)}` +
-          `&select=timesheet_id`
-      );
+    const { rows: lineRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/invoice_lines` +
+        `?invoice_id=eq.${enc(invoiceId)}` +
+        `&select=timesheet_id`
+    );
 
-      const tsIds = Array.from(
-        new Set((lineRows || []).map(r => r?.timesheet_id).filter(Boolean).map(String))
-      );
+    const tsIds = Array.from(
+      new Set((lineRows || []).map(r => r?.timesheet_id).filter(Boolean).map(String))
+    );
 
-      if (tsIds.length) {
-        const chunkSize = 200;
+    if (tsIds.length) {
+      const chunkSize = 200;
 
-        const tsById = new Map();
-        for (let i = 0; i < tsIds.length; i += chunkSize) {
-          const chunk = tsIds.slice(i, i + chunkSize);
-          const { rows: tsRows } = await sbFetch(
-            env,
-            `${env.SUPABASE_URL}/rest/v1/timesheets` +
-              `?timesheet_id=in.(${chunk.map(enc).join(',')})` +
-              `&is_current=eq.true` +
-              `&select=timesheet_id,submission_mode,sheet_scope,qr_status,qr_token,is_adjustment,contract_id`
-          );
-          for (const t of (tsRows || [])) {
-            if (t && t.timesheet_id) tsById.set(String(t.timesheet_id), t);
-          }
-        }
-
-        const cwAdjSet = new Set();
-        const cwContractByTsId = new Map();
-        for (let i = 0; i < tsIds.length; i += chunkSize) {
-          const chunk = tsIds.slice(i, i + chunkSize);
-          const { rows: cwRows } = await sbFetch(
-            env,
-            `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
-              `?timesheet_id=in.(${chunk.map(enc).join(',')})` +
-              `&select=timesheet_id,is_adjustment,contract_id`
-          );
-          for (const w of (cwRows || [])) {
-            if (!w || !w.timesheet_id) continue;
-            const tid = String(w.timesheet_id);
-            if (w.is_adjustment === true) cwAdjSet.add(tid);
-            if (w.contract_id) cwContractByTsId.set(tid, String(w.contract_id));
-          }
-        }
-
-        // Load relevant contracts (for contract-level email override)
-        const contractIds = Array.from(new Set(tsIds.map((tsId) => {
-          const t = tsById.get(String(tsId)) || null;
-          const cid = t?.contract_id || cwContractByTsId.get(String(tsId)) || null;
-          return cid ? String(cid) : null;
-        }).filter(Boolean)));
-
-        const contractById = new Map();
-        if (contractIds.length) {
-          for (let i = 0; i < contractIds.length; i += chunkSize) {
-            const chunk = contractIds.slice(i, i + chunkSize);
-            const { rows: cRows } = await sbFetch(
-              env,
-              `${env.SUPABASE_URL}/rest/v1/contracts` +
-                `?id=in.(${chunk.map(enc).join(',')})` +
-                `&select=id,overrideclientsettings,send_manual_invoices_to_different_email,manual_invoices_alt_email_address`
-            );
-            for (const c of (cRows || [])) {
-              if (c && c.id) contractById.set(String(c.id), c);
-            }
-          }
-        }
-
-        for (const tsId of tsIds) {
-          const t = tsById.get(String(tsId)) || null;
-
-          const sub = String(t?.submission_mode || '').toUpperCase();
-          const isManual = (sub === 'MANUAL');
-
-          const qrStatus = (t?.qr_status != null) ? String(t.qr_status).trim() : '';
-          const qrToken  = (t?.qr_token  != null) ? String(t.qr_token).trim()  : '';
-          const isQrish  = !!(qrStatus || qrToken);
-
-          const isDailyAdj = (t && t.is_adjustment === true);
-          const isWeeklyAdj = cwAdjSet.has(String(tsId));
-
-          const isAdj = (isDailyAdj || isWeeklyAdj);
-          const isManualOrQr = (isManual || isQrish);
-
-          if (!(isAdj && isManualOrQr)) continue;
-
-          hasManualOrQrAdjustment = true;
-
-          const contractId = (t?.contract_id != null && String(t.contract_id))
-            ? String(t.contract_id)
-            : (cwContractByTsId.get(String(tsId)) || null);
-
-          if (!contractId) continue;
-
-          const cRow = contractById.get(String(contractId)) || null;
-
-          // Contract-level override applies only when overrideclientsettings=true AND the manual-email flag is enabled.
-          const contractOverrideEnabled =
-            !!(cRow && cRow.overrideclientsettings === true && cRow.send_manual_invoices_to_different_email === true);
-
-          if (!contractOverrideEnabled) continue;
-
-          const email = (cRow && typeof cRow.manual_invoices_alt_email_address === 'string')
-            ? cRow.manual_invoices_alt_email_address.trim()
-            : '';
-
-          if (!email) {
-            return withCORS(
-              env,
-              req,
-              badRequest(`Contract manual invoice email is enabled but no alternate email address is configured (contract_id=${contractId}).`)
-            );
-          }
-
-          if (!contractAltEmails.has(email)) contractAltEmails.set(email, new Set());
-          contractAltEmails.get(email).add(String(contractId));
+      const tsById = new Map();
+      for (let i = 0; i < tsIds.length; i += chunkSize) {
+        const chunk = tsIds.slice(i, i + chunkSize);
+        const { rows: tsRows } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/timesheets` +
+            `?timesheet_id=in.(${chunk.map(enc).join(',')})` +
+            `&is_current=eq.true` +
+            `&select=timesheet_id,submission_mode,sheet_scope,qr_status,qr_token,is_adjustment,contract_id,parent_timesheet_id,adjustment_origin,correction_id,correction_kind`
+        );
+        for (const t of (tsRows || [])) {
+          if (t && t.timesheet_id) tsById.set(String(t.timesheet_id), t);
         }
       }
-    } catch {
-      hasManualOrQrAdjustment = false;
-      contractAltEmails.clear();
+
+      const missingTsIds = tsIds.filter(tsId => !tsById.has(String(tsId)));
+      if (missingTsIds.length) {
+        return withCORS(
+          env,
+          req,
+          badRequest(`Invoice email routing could not be checked because current timesheet data could not be loaded for: ${missingTsIds.join(', ')}.`)
+        );
+      }
+
+      const cwAdjSet = new Set();
+      const cwContractByTsId = new Map();
+      for (let i = 0; i < tsIds.length; i += chunkSize) {
+        const chunk = tsIds.slice(i, i + chunkSize);
+        const { rows: cwRows } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+            `?timesheet_id=in.(${chunk.map(enc).join(',')})` +
+            `&select=timesheet_id,is_adjustment,contract_id`
+        );
+        for (const w of (cwRows || [])) {
+          if (!w || !w.timesheet_id) continue;
+          const tid = String(w.timesheet_id);
+          if (w.is_adjustment === true) cwAdjSet.add(tid);
+          if (w.contract_id && !cwContractByTsId.has(tid)) cwContractByTsId.set(tid, String(w.contract_id));
+        }
+      }
+
+      const userCreatedManualQrContractIds = [];
+      const missingUserCreatedManualQrContractTimesheetIds = [];
+      for (const tsId of tsIds) {
+        const t = tsById.get(String(tsId)) || null;
+        if (!t) continue;
+
+        const isImportDerived = isImportDerivedAdjustmentLine(t);
+        if (isImportDerived) hasImportDerivedAdjustment = true;
+
+        const isDailyAdj = (t && t.is_adjustment === true);
+        const isWeeklyAdj = cwAdjSet.has(String(tsId));
+        const isAdj = (isDailyAdj || isWeeklyAdj);
+        const isManualOrQr = isManualOrQrLine(t);
+        const isUserCreatedManualQrAdjustment = !!(isAdj && isManualOrQr && !isImportDerived);
+
+        if (!isUserCreatedManualQrAdjustment) continue;
+
+        hasManualOrQrAdjustment = true;
+
+        const contractId = (t?.contract_id != null && String(t.contract_id))
+          ? String(t.contract_id)
+          : (cwContractByTsId.get(String(tsId)) || null);
+
+        if (contractId) userCreatedManualQrContractIds.push(contractId);
+        else missingUserCreatedManualQrContractTimesheetIds.push(String(tsId));
+      }
+
+      if (missingUserCreatedManualQrContractTimesheetIds.length) {
+        return withCORS(
+          env,
+          req,
+          badRequest(`Invoice email routing could not be checked because contract data could not be resolved for user-created manual/QR adjustment timesheet(s): ${missingUserCreatedManualQrContractTimesheetIds.join(', ')}.`)
+        );
+      }
+
+      // Load relevant contracts (for contract-level email override) only for user-created manual/QR adjustments.
+      const contractIds = Array.from(new Set(userCreatedManualQrContractIds.filter(Boolean)));
+
+      const contractById = new Map();
+      if (contractIds.length) {
+        for (let i = 0; i < contractIds.length; i += chunkSize) {
+          const chunk = contractIds.slice(i, i + chunkSize);
+          const { rows: cRows } = await sbFetch(
+            env,
+            `${env.SUPABASE_URL}/rest/v1/contracts` +
+              `?id=in.(${chunk.map(enc).join(',')})` +
+              `&select=id,overrideclientsettings,send_manual_invoices_to_different_email,manual_invoices_alt_email_address`
+          );
+          for (const c of (cRows || [])) {
+            if (c && c.id) contractById.set(String(c.id), c);
+          }
+        }
+
+        const missingContracts = contractIds.filter(contractId => !contractById.has(String(contractId)));
+        if (missingContracts.length) {
+          return withCORS(
+            env,
+            req,
+            badRequest(`Invoice email routing could not be checked because contract data could not be loaded for: ${missingContracts.join(', ')}.`)
+          );
+        }
+      }
+
+      for (const contractId of contractIds) {
+        const cRow = contractById.get(String(contractId)) || null;
+
+        // Contract-level override applies only when overrideclientsettings=true AND the manual-email flag is enabled.
+        const contractOverrideEnabled =
+          !!(cRow && cRow.overrideclientsettings === true && cRow.send_manual_invoices_to_different_email === true);
+
+        if (!contractOverrideEnabled) continue;
+
+        const email = (cRow && typeof cRow.manual_invoices_alt_email_address === 'string')
+          ? cRow.manual_invoices_alt_email_address.trim()
+          : '';
+
+        if (!email) {
+          return withCORS(
+            env,
+            req,
+            badRequest(`Contract manual invoice email is enabled but no alternate email address is configured (contract_id=${contractId}).`)
+          );
+        }
+
+        if (!contractAltEmails.has(email)) contractAltEmails.set(email, new Set());
+        contractAltEmails.get(email).add(String(contractId));
+      }
     }
 
-    // Decide recipient
-    let to = inv.client?.primary_invoice_email || null;
+    // Decide recipient. Match the ordinary primary invoice path used by issue/batch:
+    // prefer the issued invoice header snapshot email when present, then client primary email.
+    const headerPrimaryInvoiceEmail = (typeof header?.client_primary_invoice_email === 'string')
+      ? header.client_primary_invoice_email.trim()
+      : '';
+    const clientPrimaryInvoiceEmail = (typeof inv?.client?.primary_invoice_email === 'string')
+      ? inv.client.primary_invoice_email.trim()
+      : '';
+    const primaryInvoiceEmail = (headerPrimaryInvoiceEmail || clientPrimaryInvoiceEmail)
+      ? (headerPrimaryInvoiceEmail || clientPrimaryInvoiceEmail)
+      : null;
+
+    let to = primaryInvoiceEmail;
 
     // Prefer contract-level routing when present
     if (contractAltEmails.size > 0) {
@@ -109445,13 +110986,12 @@ async function handleInvoiceEmail(env, req, invoiceId) {
       }
       to = emails[0];
     } else if (hasManualOrQrAdjustment && altEnabled) {
-      // Fallback: client_settings manual-adjustment routing (legacy behaviour)
+      // Fallback: client_settings manual-adjustment routing applies only to user-created manual/QR adjustments.
       if (!altEmail) {
         return withCORS(env, req, badRequest('Client manual adjustment email is enabled but no alternate email address is configured.'));
       }
       to = altEmail;
     }
-
     if (!to) return withCORS(env, req, badRequest('Client invoice email not configured'));
 
     // ✅ Queue mail_outbox (NO inline rendering here)
@@ -109531,7 +111071,8 @@ async function handleInvoiceEmail(env, req, invoiceId) {
         routing: {
           used_contract_alt_manual_email: contractAltEmails.size > 0,
           used_alt_manual_email: !!(contractAltEmails.size === 0 && hasManualOrQrAdjustment && altEnabled),
-          has_manual_or_qr_adjustment: !!hasManualOrQrAdjustment
+          has_manual_or_qr_adjustment: !!hasManualOrQrAdjustment,
+          has_import_derived_adjustment: !!hasImportDerivedAdjustment
         },
         invpdf: {
           queued: !!pdf_queued,
@@ -109550,10 +111091,10 @@ async function handleInvoiceEmail(env, req, invoiceId) {
       pdf_rows_affected: pdf_rows_affected
     }));
   } catch (e) {
-    return withCORS(env, req, serverError('Failed to queue invoice email'));
+    const msg = String(e?.message || e || '').trim();
+    return withCORS(env, req, serverError(msg ? `Failed to queue invoice email: ${msg}` : 'Failed to queue invoice email'));
   }
 }
-
 
 async function handleInvoiceDeleteOne(env, req, invoiceId) {
   const user = await requireUser(env, req, ['admin']);
@@ -132008,7 +133549,7 @@ function getRailAdapter(provider) {
           });
         },
 
-      async executeDueBatches(env, { nowUtc, limit, claimedRows, actorUserId, perBatchSubmitLimit, operationMode, operation_id, operationId, pay_batch_id, payBatchId, providerSubmitChunkSize, lockOwner, lock_seconds, fundingAccountRef, funding_account_ref } = {}) {
+     async executeDueBatches(env, { nowUtc, limit, claimedRows, actorUserId, perBatchSubmitLimit, operationMode, operation_id, operationId, pay_batch_id, payBatchId, providerSubmitChunkSize, lockOwner, lock_seconds, fundingAccountRef, funding_account_ref } = {}) {
           const nowIso = nowUtc ? String(nowUtc) : new Date().toISOString();
           const apiBase = (env && env.REVOLUT_API_BASE !== undefined && env.REVOLUT_API_BASE !== null) ? String(env.REVOLUT_API_BASE) : '';
           const workerEnv = getRevolutWorkerEnv(env);
@@ -132077,6 +133618,154 @@ function getRailAdapter(provider) {
             const text = String(value === undefined || value === null ? '' : value).trim();
             return text || null;
           };
+          const normaliseProviderIdentity = (value) => String(value === undefined || value === null ? '' : value).trim();
+          const collectLocalProviderIdentities = (...sources) => {
+            const locals = new Set();
+            const add = (value) => {
+              const text = normaliseProviderIdentity(value);
+              if (text) locals.add(text.toLowerCase());
+            };
+            const visit = (source, depth = 0) => {
+              if (!source || typeof source !== 'object' || Array.isArray(source) || depth > 3) return;
+              add(source.request_id);
+              add(source.idempotency_key);
+              add(source.local_provider_request_id);
+              add(source.payment_reference);
+              add(source.reference);
+              add(source.transfer_group_key);
+              add(source.transfer_id);
+              add(source.pay_bank_transfer_id);
+              add(source.operation_id);
+              add(source.chunk_id);
+              if (source.provider_submit_diagnostic && typeof source.provider_submit_diagnostic === 'object') visit(source.provider_submit_diagnostic, depth + 1);
+              if (source.rail_meta_json && typeof source.rail_meta_json === 'object') visit(source.rail_meta_json, depth + 1);
+              if (source.raw_payload && typeof source.raw_payload === 'object') visit(source.raw_payload, depth + 1);
+            };
+            for (const source of sources) visit(source);
+            return locals;
+          };
+          const isStrictExternalProviderIdentity = (value, ...localSources) => {
+            const text = normaliseProviderIdentity(value);
+            if (!text) return false;
+            const lower = text.toLowerCase();
+            if (lower.startsWith('simulated:')) return true;
+            const locals = collectLocalProviderIdentities(...localSources);
+            return !locals.has(lower);
+          };
+          const providerSubmitStateTexts = (...sources) => {
+            const texts = [];
+            const add = (value) => {
+              const text = normaliseProviderIdentity(value);
+              if (text) texts.push(text.toUpperCase());
+            };
+            const visit = (source, depth = 0) => {
+              if (!source || typeof source !== 'object' || Array.isArray(source) || depth > 3) return;
+              add(source.provider_submission_status);
+              add(source.providerSubmissionStatus);
+              add(source.review_reason_code);
+              add(source.reviewReasonCode);
+              add(source.provider_state);
+              add(source.providerState);
+              add(source.rail_state);
+              add(source.railState);
+              add(source.normalised_state);
+              add(source.normalized_state);
+              add(source.status);
+              add(source.state);
+              add(source.code);
+              add(source.error_code);
+              add(source.errorCode);
+              add(source.outcome_code);
+              add(source.outcomeCode);
+              if (source.provider_submit_diagnostic && typeof source.provider_submit_diagnostic === 'object') visit(source.provider_submit_diagnostic, depth + 1);
+              if (source.providerSubmitDiagnostic && typeof source.providerSubmitDiagnostic === 'object') visit(source.providerSubmitDiagnostic, depth + 1);
+              if (source.rail_meta_json && typeof source.rail_meta_json === 'object') visit(source.rail_meta_json, depth + 1);
+              if (source.raw_payload && typeof source.raw_payload === 'object') visit(source.raw_payload, depth + 1);
+            };
+            for (const source of sources) visit(source);
+            return texts;
+          };
+          const providerSubmitTextsContain = (texts, tokens) => texts.some((text) => tokens.some((token) => text.includes(token)));
+          const providerSubmitTextsAreRejected = (texts) => providerSubmitTextsContain(texts, [
+            'PROVIDER_SUBMISSION_REJECTED',
+            'PROVIDER_REJECTED_PAYMENT',
+            'REJECTED',
+            'DECLINED',
+            'FAILED',
+            'ERROR',
+            'CANCELLED',
+            'CANCELED',
+            'RETURNED',
+            'REVERTED',
+            'INSUFFICIENT_FUNDS',
+            'VALIDATION_FAILED'
+          ]);
+          const providerSubmitTextsAreUnknownOrUnusable = (texts) => providerSubmitTextsContain(texts, [
+            'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME',
+            'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK',
+            'PROVIDER_SUBMISSION_MALFORMED_RESPONSE',
+            'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID',
+            'PROVIDER_RESPONSE_MALFORMED',
+            'PROVIDER_RESPONSE_MISSING_EXTERNAL_ID',
+            'STALE_RUNNING_PROVIDER_SUBMIT_CHUNK'
+          ]);
+          const hasStrictProviderExternalEvidence = (...sources) => {
+            for (const source of sources) {
+              if (!source || typeof source !== 'object' || Array.isArray(source)) continue;
+              const meta = readObject(source.rail_meta_json);
+              const diagnostic = readObject(source.provider_submit_diagnostic);
+              const metaDiagnostic = readObject(meta.provider_submit_diagnostic);
+              const rawPayload = readObject(source.raw_payload);
+              const rawDiagnostic = readObject(rawPayload.provider_submit_diagnostic);
+              const candidates = [
+                source.rail_tx_id,
+                source.provider_transaction_id,
+                source.provider_payment_id,
+                source.provider_transfer_id,
+                source.provider_event_id,
+                source.provider_reference,
+                diagnostic.rail_tx_id,
+                diagnostic.provider_transaction_id,
+                diagnostic.provider_payment_id,
+                diagnostic.provider_transfer_id,
+                diagnostic.provider_event_id,
+                diagnostic.provider_reference,
+                meta.rail_tx_id,
+                meta.provider_transaction_id,
+                meta.provider_payment_id,
+                meta.provider_transfer_id,
+                meta.provider_event_id,
+                meta.provider_reference,
+                metaDiagnostic.rail_tx_id,
+                metaDiagnostic.provider_transaction_id,
+                metaDiagnostic.provider_payment_id,
+                metaDiagnostic.provider_transfer_id,
+                metaDiagnostic.provider_event_id,
+                metaDiagnostic.provider_reference,
+                rawPayload.rail_tx_id,
+                rawPayload.provider_transaction_id,
+                rawPayload.provider_payment_id,
+                rawPayload.provider_transfer_id,
+                rawPayload.provider_event_id,
+                rawPayload.provider_reference,
+                rawDiagnostic.rail_tx_id,
+                rawDiagnostic.provider_transaction_id,
+                rawDiagnostic.provider_payment_id,
+                rawDiagnostic.provider_transfer_id,
+                rawDiagnostic.provider_event_id,
+                rawDiagnostic.provider_reference
+              ];
+              if (candidates.some((candidate) => isStrictExternalProviderIdentity(candidate, source, diagnostic, meta, metaDiagnostic, rawPayload, rawDiagnostic))) return true;
+            }
+            return false;
+          };
+          const hasStrictProviderAcceptanceEvidence = (...sources) => {
+            if (hasStrictProviderExternalEvidence(...sources) !== true) return false;
+            const texts = providerSubmitStateTexts(...sources);
+            if (providerSubmitTextsAreRejected(texts) || providerSubmitTextsAreUnknownOrUnusable(texts)) return false;
+            return true;
+          };
+          const strictProviderReferenceOrNull = (value, ...localSources) => isStrictExternalProviderIdentity(value, ...localSources) ? normaliseProviderIdentity(value) : null;
           const addFundingCandidate = (candidates, source, sourceDetail, value, meta = {}) => {
             candidates.push({
               source,
@@ -132209,43 +133898,114 @@ function getRailAdapter(provider) {
           let chunkFinalised = false;
           let chunkIdForFinalise = null;
           let providerSubmitRailEnv = null;
+          let currentTransferScopeIds = [];
+          let currentAuthRequestIds = [];
+
+          const uniqueTextIds = (values) => {
+            const out = [];
+            const seen = new Set();
+            for (const value of Array.isArray(values) ? values : []) {
+              const text = String(value === undefined || value === null ? '' : value).trim();
+              if (!text) continue;
+              const key = text.toLowerCase();
+              if (seen.has(key)) continue;
+              seen.add(key);
+              out.push(text);
+            }
+            return out;
+          };
+
+          const extractTransferScopeIdsFromRows = (rows) => uniqueTextIds((Array.isArray(rows) ? rows : []).map((row) => {
+            if (!row || typeof row !== 'object') return null;
+            return row.transfer_scope_id
+              || row.operation_transfer_scope_id
+              || row.banking_pay_operation_transfer_scope_id
+              || row.scope_id
+              || row.scope_row_id
+              || row.id
+              || null;
+          }));
+
+          const extractAuthRequestIdsFromClaim = (claimPayload, rows = []) => {
+            const source = readObject(claimPayload);
+            const values = [];
+            if (Array.isArray(source.auth_request_ids)) values.push(...source.auth_request_ids);
+            if (Array.isArray(source.authorisation_request_ids)) values.push(...source.authorisation_request_ids);
+            if (Array.isArray(source.authorization_request_ids)) values.push(...source.authorization_request_ids);
+            values.push(
+              source.auth_request_id,
+              source.authorisation_request_id,
+              source.authorization_request_id,
+              source.same_operation_authorised_auth_request_id,
+              source.same_operation_authorized_auth_request_id
+            );
+            for (const row of Array.isArray(rows) ? rows : []) {
+              if (!row || typeof row !== 'object') continue;
+              values.push(
+                row.auth_request_id,
+                row.authorisation_request_id,
+                row.authorization_request_id,
+                row.pay_batch_auth_request_id
+              );
+            }
+            return uniqueTextIds(values);
+          };
 
           const makeProviderSubmitDiagnostic = (base = {}) => {
             const nowForDiagnostic = new Date().toISOString();
             const status = String(base.provider_submission_status || 'NO_PROVIDER_SUBMISSION_ATTEMPTED').trim() || 'NO_PROVIDER_SUBMISSION_ATTEMPTED';
+            const strictEvidence = hasStrictProviderAcceptanceEvidence(base);
+            const acceptedWithEvidence = status === 'PROVIDER_SUBMISSION_ACCEPTED' && strictEvidence === true;
+            const diagnosticTransferIds = uniqueTextIds(Array.isArray(base.transfer_ids) ? base.transfer_ids : []);
+            const diagnosticTransferScopeIds = uniqueTextIds(Array.isArray(base.transfer_scope_ids) ? base.transfer_scope_ids : currentTransferScopeIds);
+            const diagnosticAuthRequestIds = uniqueTextIds(Array.isArray(base.auth_request_ids) ? base.auth_request_ids : currentAuthRequestIds);
+            const firstTransferId = normaliseProviderIdentity(base.transfer_id) || diagnosticTransferIds[0] || null;
+            const firstTransferScopeId = normaliseProviderIdentity(base.transfer_scope_id) || diagnosticTransferScopeIds[0] || null;
+            const firstAuthRequestId = normaliseProviderIdentity(base.auth_request_id) || diagnosticAuthRequestIds[0] || null;
             return {
               diagnostic_version: 1,
               generated_at_utc: nowForDiagnostic,
               pay_batch_id: batchId || null,
               operation_id: opId || null,
               chunk_id: chunkIdForFinalise || base.chunk_id || null,
-              transfer_ids: Array.isArray(base.transfer_ids) ? base.transfer_ids : [],
+              transfer_id: firstTransferId,
+              transfer_ids: diagnosticTransferIds,
+              transfer_scope_id: firstTransferScopeId,
+              transfer_scope_ids: diagnosticTransferScopeIds,
+              auth_request_id: firstAuthRequestId,
+              auth_request_ids: diagnosticAuthRequestIds,
               rail_provider: 'REVOLUT',
               rail_env: providerSubmitRailEnv || base.rail_env || null,
               provider_call_stage: base.provider_call_stage || null,
               provider_submission_status: status,
               review_reason_code: base.review_reason_code || null,
               provider_submission_attempted: base.provider_submission_attempted === true,
+              provider_called: base.provider_called === true,
               provider_request_sent: base.provider_request_sent === true,
+              provider_request_sent_confirmed: base.provider_request_sent_confirmed === true,
               provider_response_received: base.provider_response_received === true,
               provider_response_present: base.provider_response_present === true,
-              provider_submission_accepted: base.provider_submission_accepted === true || status === 'PROVIDER_SUBMISSION_ACCEPTED',
+              provider_submission_accepted: acceptedWithEvidence || (base.provider_submission_accepted === true && strictEvidence === true),
               provider_submission_rejected: base.provider_submission_rejected === true || status === 'PROVIDER_SUBMISSION_REJECTED',
               provider_submission_failed: base.provider_submission_failed === true || status === 'PROVIDER_SUBMISSION_FAILED',
-              provider_submission_unknown: base.provider_submission_unknown === true || ['UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE'].includes(status),
-              provider_acceptance_evidence_present: base.provider_acceptance_evidence_present === true || status === 'PROVIDER_SUBMISSION_ACCEPTED',
+              provider_submission_unknown: base.provider_submission_unknown === true || ['UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE', 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID'].includes(status),
+              provider_external_evidence_present: hasStrictProviderExternalEvidence(base) === true,
+              provider_acceptance_evidence_present: strictEvidence === true,
               provider_http_status: base.provider_http_status ?? null,
               provider_error_code: base.provider_error_code || null,
               provider_error_message_redacted: base.provider_error_message_redacted || null,
-              rail_tx_id: base.rail_tx_id || null,
+              provider_response_redacted: base.provider_response_redacted || null,
+              provider_error_redacted: base.provider_error_redacted || null,
+              rail_tx_id: strictProviderReferenceOrNull(base.rail_tx_id, base) || null,
               rail_state: base.rail_state || null,
-              provider_transaction_id: base.provider_transaction_id || null,
-              provider_reference: base.provider_reference || null,
+              provider_transaction_id: strictProviderReferenceOrNull(base.provider_transaction_id, base) || null,
+              provider_reference: strictProviderReferenceOrNull(base.provider_reference, base) || null,
               provider_state: base.provider_state || null,
               request_id: base.request_id || null,
               idempotency_key: base.idempotency_key || base.request_id || null,
               local_provider_request_id: base.local_provider_request_id || base.request_id || null,
               request_sent_at_utc: base.request_sent_at_utc || null,
+              provider_request_dispatched_at_utc: base.provider_request_dispatched_at_utc || base.request_sent_at_utc || null,
               response_received_at_utc: base.response_received_at_utc || null,
               stale_submit_chunk: base.stale_submit_chunk === true,
               unfinalised_submit_chunk: base.unfinalised_submit_chunk === true,
@@ -132270,14 +134030,15 @@ function getRailAdapter(provider) {
               rail_provider: 'REVOLUT',
               rail_env: providerSubmitRailEnv || (providerSubmitDiagnostic && providerSubmitDiagnostic.rail_env) || null
             };
-            if (providerSubmitDiagnostic.provider_submission_status === 'PROVIDER_SUBMISSION_ACCEPTED') {
-              providerSubmitDiagnostic.provider_submission_accepted = true;
-              providerSubmitDiagnostic.provider_acceptance_evidence_present = true;
-            }
+            const strictExternalEvidenceForStage = hasStrictProviderExternalEvidence(providerSubmitDiagnostic);
+            const strictEvidenceForStage = hasStrictProviderAcceptanceEvidence(providerSubmitDiagnostic);
+            providerSubmitDiagnostic.provider_external_evidence_present = strictExternalEvidenceForStage === true;
+            providerSubmitDiagnostic.provider_acceptance_evidence_present = strictEvidenceForStage === true;
+            providerSubmitDiagnostic.provider_submission_accepted = providerSubmitDiagnostic.provider_submission_status === 'PROVIDER_SUBMISSION_ACCEPTED' && strictEvidenceForStage === true;
             if (providerSubmitDiagnostic.provider_submission_status === 'PROVIDER_SUBMISSION_REJECTED') {
               providerSubmitDiagnostic.provider_submission_rejected = true;
             }
-            if (['UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE'].includes(providerSubmitDiagnostic.provider_submission_status)) {
+            if (['UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE', 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID'].includes(providerSubmitDiagnostic.provider_submission_status)) {
               providerSubmitDiagnostic.provider_submission_unknown = true;
             }
             out.provider_submit_diagnostic = providerSubmitDiagnostic;
@@ -132335,16 +134096,23 @@ function getRailAdapter(provider) {
           const recordTransferProviderOutcome = (transferId, outcome = {}) => {
             const id = String(transferId || '').trim();
             if (!id) return null;
+            const strictExternalEvidenceForOutcome = hasStrictProviderExternalEvidence(outcome);
+            const strictEvidenceForOutcome = hasStrictProviderAcceptanceEvidence(outcome);
             const row = {
               transfer_id: id,
               provider_submission_status: outcome.provider_submission_status || null,
               provider_submission_attempted: outcome.provider_submission_attempted === true,
+              provider_called: outcome.provider_called === true,
               provider_request_sent: outcome.provider_request_sent === true,
+              provider_request_sent_confirmed: outcome.provider_request_sent_confirmed === true,
               provider_response_received: outcome.provider_response_received === true,
               provider_response_present: outcome.provider_response_present === true,
-              provider_acceptance_evidence_present: outcome.provider_acceptance_evidence_present === true,
-              rail_tx_id: outcome.rail_tx_id || null,
+              provider_external_evidence_present: strictExternalEvidenceForOutcome === true,
+              provider_acceptance_evidence_present: strictEvidenceForOutcome === true,
+              rail_tx_id: strictProviderReferenceOrNull(outcome.rail_tx_id, outcome) || null,
               rail_state: outcome.rail_state || null,
+              provider_transaction_id: strictProviderReferenceOrNull(outcome.provider_transaction_id, outcome) || null,
+              provider_reference: strictProviderReferenceOrNull(outcome.provider_reference, outcome) || null,
               provider_http_status: outcome.provider_http_status ?? null,
               provider_error_code: outcome.provider_error_code || null,
               request_id: outcome.request_id || null,
@@ -132692,6 +134460,8 @@ function getRailAdapter(provider) {
           const chunkId = String(claim.chunk_id || '').trim() || null;
           const transfers = Array.isArray(claim.transfers) ? claim.transfers : [];
           const transferIds = Array.isArray(claim.transfer_ids) ? claim.transfer_ids.map((x) => String(x || '').trim()).filter(Boolean) : transfers.map((t) => String(t.transfer_id || t.pay_bank_transfer_id || '').trim()).filter(Boolean);
+          currentTransferScopeIds = extractTransferScopeIdsFromRows(transfers);
+          currentAuthRequestIds = extractAuthRequestIdsFromClaim(claim, transfers);
           const remainingSubmitAttemptRequiredFromClaim = Math.max(0, Math.trunc(asNumber(
             claim.remaining_submit_attempt_required ?? claim.remainingSubmitAttemptRequired ?? claim.remaining_count ?? 0,
             0
@@ -132736,7 +134506,13 @@ function getRailAdapter(provider) {
           const claimBlockerCodeFromClaim = String(claim.claim_blocker_code || claim.claimBlockerCode || '').trim().toUpperCase() || null;
           const claimProviderSubmitDiagnostic = (claim.provider_submit_diagnostic && typeof claim.provider_submit_diagnostic === 'object' && !Array.isArray(claim.provider_submit_diagnostic)) ? claim.provider_submit_diagnostic : null;
           if (claimProviderSubmitDiagnostic) {
-            providerSubmitDiagnostic = { ...makeProviderSubmitDiagnostic({ transfer_ids: transferIds || [] }), ...claimProviderSubmitDiagnostic };
+            providerSubmitDiagnostic = makeProviderSubmitDiagnostic({
+              ...claimProviderSubmitDiagnostic,
+              chunk_id: chunkId,
+              transfer_ids: transferIds || [],
+              transfer_scope_ids: currentTransferScopeIds,
+              auth_request_ids: currentAuthRequestIds
+            });
             out.provider_submit_diagnostic = providerSubmitDiagnostic;
             out.provider_submission_status = providerSubmitDiagnostic.provider_submission_status || null;
             out.review_reason_code = providerSubmitDiagnostic.review_reason_code || null;
@@ -133230,21 +135006,23 @@ function getRailAdapter(provider) {
                   recommended_action: 'Provider was not called because CloudTMS could not persist provider-submit stage evidence.'
                 }
               });
-              await persistProviderSubmitStage('PROVIDER_PAYMENT_CREATE_REQUEST_SENT', {
-                provider_submission_status: 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME',
-                review_reason_code: 'PROVIDER_REQUEST_SENT_NO_RESPONSE',
+              await persistProviderSubmitStage('PROVIDER_PAYMENT_CREATE_HANDOFF_STARTED', {
+                provider_submission_status: 'NO_PROVIDER_SUBMISSION_ATTEMPTED',
+                review_reason_code: null,
                 provider_submission_attempted: true,
-                provider_request_sent: true,
+                provider_called: false,
+                provider_request_sent: false,
+                provider_request_sent_confirmed: false,
                 provider_response_received: false,
                 provider_response_present: false,
                 provider_acceptance_evidence_present: false,
-                provider_submission_unknown: true,
-                manual_resolution_required: true,
+                provider_submission_unknown: false,
+                manual_resolution_required: false,
                 safe_retry_available: false,
                 request_id: requestId,
                 idempotency_key: requestId,
-                request_sent_at_utc: new Date().toISOString(),
-                recommended_action: 'Provider request may have been sent. Check Revolut/bank records before retry.'
+                local_provider_request_id: requestId,
+                recommended_action: null
               }, {
                 throw_on_failure: true,
                 failure_stage: 'PROVIDER_SUBMIT_STAGE_RECORD_FAILED',
@@ -133277,14 +135055,15 @@ function getRailAdapter(provider) {
                 const errorMessage = String(e?.message || e || 'Provider create threw an unstructured error.');
                 payRes = {
                   ok: false,
-                  provider_called: true,
-                  provider_request_sent: true,
+                  provider_called: false,
+                  provider_request_sent: false,
+                  provider_request_sent_confirmed: false,
                   provider_response_received: false,
                   provider_response_present: false,
                   provider_unknown: true,
                   provider_submission_status: 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME',
                   outcome_code: errorCode,
-                  review_reason_code: 'PROVIDER_REQUEST_SENT_NO_RESPONSE',
+                  review_reason_code: 'PROVIDER_CREATE_RETURNED_UNSTRUCTURED_ERROR',
                   manual_resolution_required: true,
                   safe_retry_available: false,
                   provider_error_code: errorCode,
@@ -133293,11 +135072,13 @@ function getRailAdapter(provider) {
                   idempotency_key: requestId,
                   local_provider_request_id: requestId,
                   provider_submit_diagnostic: makeProviderSubmitDiagnostic({
-                    provider_call_stage: 'PROVIDER_PAYMENT_CREATE_UNKNOWN',
+                    provider_call_stage: 'PROVIDER_PAYMENT_CREATE_UNSTRUCTURED_ERROR',
                     provider_submission_status: 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME',
-                    review_reason_code: 'PROVIDER_REQUEST_SENT_NO_RESPONSE',
+                    review_reason_code: 'PROVIDER_CREATE_RETURNED_UNSTRUCTURED_ERROR',
                     provider_submission_attempted: true,
-                    provider_request_sent: true,
+                    provider_called: false,
+                    provider_request_sent: false,
+                    provider_request_sent_confirmed: false,
                     provider_response_received: false,
                     provider_response_present: false,
                     provider_submission_unknown: true,
@@ -133308,24 +135089,42 @@ function getRailAdapter(provider) {
                     provider_error_message_redacted: errorMessage,
                     request_id: requestId,
                     idempotency_key: requestId,
+                    local_provider_request_id: requestId,
                     transfer_ids: transferIds || [],
-                    recommended_action: 'Provider request may have been sent. Check Revolut/bank records before retry.'
+                    recommended_action: 'Provider create returned an unstructured error before CloudTMS could confirm dispatch. Check Revolut/bank records before retry.'
                   })
                 };
               }
 
-              const diagnostic = {
+              let diagnostic = {
                 ...makeProviderSubmitDiagnostic({ transfer_ids: transferIds || [] }),
                 ...(payRes.provider_submit_diagnostic || {}),
+                provider_request_sent_confirmed: payRes.provider_request_sent_confirmed === true || (payRes.provider_submit_diagnostic && payRes.provider_submit_diagnostic.provider_request_sent_confirmed === true),
+                provider_request_dispatched_at_utc: payRes.provider_request_dispatched_at_utc || (payRes.provider_submit_diagnostic && payRes.provider_submit_diagnostic.provider_request_dispatched_at_utc) || payRes.request_sent_at_utc || null,
                 request_id: payRes.request_id || requestId,
                 idempotency_key: payRes.idempotency_key || requestId,
                 local_provider_request_id: payRes.local_provider_request_id || requestId,
                 transfer_ids: transferIds || []
               };
-              const status = String(payRes.provider_submission_status || diagnostic.provider_submission_status || '').trim().toUpperCase();
-              const accepted = payRes.ok === true && status === 'PROVIDER_SUBMISSION_ACCEPTED';
+              diagnostic.provider_acceptance_evidence_present = hasStrictProviderAcceptanceEvidence(diagnostic, payRes);
+              diagnostic.provider_submission_accepted = diagnostic.provider_submission_status === 'PROVIDER_SUBMISSION_ACCEPTED' && diagnostic.provider_acceptance_evidence_present === true;
+              if (diagnostic.provider_submission_status === 'PROVIDER_SUBMISSION_ACCEPTED' && diagnostic.provider_acceptance_evidence_present !== true) {
+                diagnostic = {
+                  ...diagnostic,
+                  provider_submission_status: 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID',
+                  review_reason_code: diagnostic.review_reason_code || 'PROVIDER_RESPONSE_MISSING_EXTERNAL_ID',
+                  provider_submission_accepted: false,
+                  provider_submission_unknown: true,
+                  manual_resolution_required: true,
+                  safe_retry_available: false,
+                  recommended_action: diagnostic.recommended_action || 'Provider response/status did not include usable external acceptance evidence. Manually reconcile before retry.'
+                };
+              }
+              const status = String(diagnostic.provider_submission_status || payRes.provider_submission_status || '').trim().toUpperCase();
+              const accepted = payRes.ok === true && status === 'PROVIDER_SUBMISSION_ACCEPTED' && diagnostic.provider_acceptance_evidence_present === true;
               const rejected = status === 'PROVIDER_SUBMISSION_REJECTED';
-              const malformed = status === 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE';
+              const noExternalId = status === 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID';
+              const malformed = status === 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE' || noExternalId;
               const unknown = status === 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME';
               const blocked = status === 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL';
               const stage = accepted
@@ -133350,8 +135149,8 @@ function getRailAdapter(provider) {
                   transfer_id: transferId,
                   pay_batch_id: batchId,
                   provider_key: 'REVOLUT',
-                  provider_event_id: String(payRes.provider_transaction_id || payRes.rail_tx_id || '').trim() || null,
-                  provider_reference: String(payRes.provider_reference || payRes.rail_tx_id || '').trim() || null,
+                  provider_event_id: strictProviderReferenceOrNull(payRes.provider_transaction_id || payRes.rail_tx_id, payRes, diagnostic) || null,
+                  provider_reference: strictProviderReferenceOrNull(payRes.provider_reference || payRes.rail_tx_id || payRes.provider_transaction_id, payRes, diagnostic) || null,
                   provider_state: String(payRes.provider_state || payRes.rail_state || 'PENDING').trim() || 'PENDING',
                   normalised_state: 'PENDING',
                   event_source: 'PROVIDER_RESPONSE',
@@ -133386,8 +135185,8 @@ function getRailAdapter(provider) {
                 transfer_id: transferId,
                 pay_batch_id: batchId,
                 provider_key: 'REVOLUT',
-                provider_event_id: accepted ? String(payRes.provider_transaction_id || payRes.rail_tx_id || '').trim() || null : null,
-                provider_reference: accepted ? String(payRes.provider_reference || payRes.rail_tx_id || '').trim() || null : null,
+                provider_event_id: accepted ? strictProviderReferenceOrNull(payRes.provider_transaction_id || payRes.rail_tx_id, payRes, diagnostic) || null : null,
+                provider_reference: accepted ? strictProviderReferenceOrNull(payRes.provider_reference || payRes.rail_tx_id || payRes.provider_transaction_id, payRes, diagnostic) || null : null,
                 provider_state: String(payRes.provider_state || payRes.rail_state || status || 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME').slice(0, 500),
                 normalised_state: rejected ? 'FAILED' : 'UNKNOWN',
                 event_source: rejected ? 'PROVIDER_RESPONSE' : 'LOCAL_STATE',
@@ -133409,7 +135208,7 @@ function getRailAdapter(provider) {
                   provider_response_redacted: payRes.provider_response_redacted || null
                 },
                 status: rejected ? 'FAILED' : 'PENDING',
-                rail_tx_id: payRes.rail_tx_id || null,
+                rail_tx_id: null,
                 rail_state: rejected ? (payRes.rail_state || 'REJECTED') : (malformed ? 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE' : unknown ? 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME' : null),
                 rail_meta_json: {
                   ...(payRes.rail_meta_json || {}),
@@ -133429,6 +135228,7 @@ function getRailAdapter(provider) {
               provider_submission_status: providerSubmitDiagnostic?.provider_submission_status || (errors.length ? 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME' : 'PROVIDER_SUBMISSION_ACCEPTED'),
               provider_submission_attempted: Object.values(transferProviderOutcomes).some((row) => row.provider_submission_attempted === true || row.provider_request_sent === true),
               provider_request_sent: Object.values(transferProviderOutcomes).some((row) => row.provider_request_sent === true),
+              provider_request_sent_confirmed: Object.values(transferProviderOutcomes).some((row) => row.provider_request_sent_confirmed === true),
               provider_response_received: Object.values(transferProviderOutcomes).some((row) => row.provider_response_received === true),
               provider_response_present: Object.values(transferProviderOutcomes).some((row) => row.provider_response_present === true),
               provider_acceptance_evidence_present: Object.values(transferProviderOutcomes).some((row) => row.provider_acceptance_evidence_present === true),
@@ -133494,6 +135294,7 @@ function getRailAdapter(provider) {
             provider_submission_status: errors.length ? (providerSubmitDiagnostic?.provider_submission_status || 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME') : 'PROVIDER_SUBMISSION_ACCEPTED',
             provider_submission_attempted: true,
             provider_request_sent: Object.values(transferProviderOutcomes).some((row) => row.provider_request_sent === true),
+            provider_request_sent_confirmed: Object.values(transferProviderOutcomes).some((row) => row.provider_request_sent_confirmed === true),
             provider_response_received: Object.values(transferProviderOutcomes).some((row) => row.provider_response_received === true),
             provider_response_present: Object.values(transferProviderOutcomes).some((row) => row.provider_response_present === true),
             provider_acceptance_evidence_present: Object.values(transferProviderOutcomes).some((row) => row.provider_acceptance_evidence_present === true),
@@ -133507,7 +135308,7 @@ function getRailAdapter(provider) {
           return out;
           } finally {
             if (chunkClaimed === true && chunkFinalised !== true && chunkIdForFinalise) {
-              const requestSent = providerSubmitDiagnostic && providerSubmitDiagnostic.provider_request_sent === true;
+              const requestSent = providerSubmitDiagnostic && (providerSubmitDiagnostic.provider_request_sent_confirmed === true || providerSubmitDiagnostic.provider_request_sent === true);
               try {
                 await persistProviderSubmitStage(requestSent ? 'PROVIDER_PAYMENT_CREATE_UNKNOWN' : 'CHUNK_FINALISATION_STARTED', {
                   provider_submission_status: requestSent ? 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME' : 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL',
@@ -133544,7 +135345,22 @@ function getRailAdapter(provider) {
                   message: 'Provider-submit chunk was finalised by lifecycle guard.',
                   provider_submit_diagnostic: providerSubmitDiagnostic
                 });
-              } catch {}
+              } catch (finaliseError) {
+                const hardFinaliseError = new Error('Provider-submit chunk finalisation failed after provider-submit chunk was claimed. The payment operation must not be marked terminal until this chunk is finalised.');
+                hardFinaliseError.code = 'PROVIDER_SUBMIT_CHUNK_FINALISATION_FAILED';
+                hardFinaliseError.provider_submit_finalise_failed = true;
+                hardFinaliseError.manual_resolution_required = true;
+                hardFinaliseError.safe_retry_available = false;
+                hardFinaliseError.pay_batch_id = batchId;
+                hardFinaliseError.operation_id = opId;
+                hardFinaliseError.chunk_id = chunkIdForFinalise;
+                hardFinaliseError.transfer_ids = Array.isArray(transferIds) ? transferIds : [];
+                hardFinaliseError.provider_submission_status = providerSubmitDiagnostic && providerSubmitDiagnostic.provider_submission_status || null;
+                hardFinaliseError.review_reason_code = providerSubmitDiagnostic && providerSubmitDiagnostic.review_reason_code || null;
+                hardFinaliseError.provider_submit_diagnostic = providerSubmitDiagnostic || null;
+                hardFinaliseError.cause_message = String(finaliseError?.message || finaliseError || 'Provider-submit chunk finalisation failed.');
+                throw hardFinaliseError;
+              }
             }
           }
         },
@@ -134329,7 +136145,6 @@ async function revolutNameCheck_perform(env, token, { payee_name, sort_code, acc
   };
 }
 
-
 async function revolutPayment_create(env, token, { request_id, source_account_id, counterparty_id, counterparty_account_id, amount, currency, reference, provider_timeout_ms } = {}) {
   const redactProviderPayload = (value) => {
     const sensitiveKeys = new Set([
@@ -134342,6 +136157,11 @@ async function revolutPayment_create(env, token, { request_id, source_account_id
       'secret',
       'password',
       'account_number',
+      'account_id',
+      'source_account_id',
+      'counterparty_account_id',
+      'receiver_account_id',
+      'bank_account_id',
       'sort_code',
       'iban',
       'bic',
@@ -134383,6 +136203,18 @@ async function revolutPayment_create(env, token, { request_id, source_account_id
   const providerTimeoutMs = Number.isFinite(timeoutRaw) && timeoutRaw > 0 ? Math.max(1000, Math.min(120000, Math.trunc(timeoutRaw))) : 30000;
 
   const localIdentitySet = new Set([reqId, ref].map((value) => safeString(value).toLowerCase()).filter(Boolean));
+  const isExternalProviderIdentity = (value) => {
+    const text = safeString(value);
+    if (!text) return false;
+    return !localIdentitySet.has(text.toLowerCase());
+  };
+  const externalProviderReferenceOrNull = (value, fallback = '') => {
+    const primary = safeString(value);
+    if (isExternalProviderIdentity(primary)) return primary;
+    const secondary = safeString(fallback);
+    if (isExternalProviderIdentity(secondary)) return secondary;
+    return null;
+  };
   const extractProviderTransactionId = (payload) => {
     const source = payload && typeof payload === 'object' && !Array.isArray(payload) ? payload : {};
     for (const candidate of [source.id, source.payment_id, source.transaction_id, source.transfer_id, source.provider_transaction_id, source.provider_payment_id, source.external_payment_id, source.external_transfer_id]) {
@@ -134417,8 +136249,16 @@ async function revolutPayment_create(env, token, { request_id, source_account_id
     const providerUnknown = patch.provider_unknown === true;
     const providerResponsePresent = patch.provider_response_present === true;
     const providerResponseReceived = patch.provider_response_received === true;
-    const providerRequestSent = patch.provider_request_sent === true;
-    const providerCalled = patch.provider_called === true;
+    const providerRequestSentConfirmed = patch.provider_request_sent_confirmed === true;
+    const providerRequestSent = patch.provider_request_sent === true || providerRequestSentConfirmed === true;
+    const providerCalled = patch.provider_called === true || providerRequestSentConfirmed === true;
+    const providerRequestDispatchedAtUtc = patch.provider_request_dispatched_at_utc || requestSentAtUtc || null;
+    const providerTransactionId = externalProviderReferenceOrNull(patch.provider_transaction_id || patch.rail_tx_id);
+    const explicitRailTxId = patch.provider_acceptance_evidence_present === true ? externalProviderReferenceOrNull(patch.rail_tx_id) : null;
+    const railTxId = explicitRailTxId || (patch.provider_acceptance_evidence_present === true ? externalProviderReferenceOrNull(patch.provider_transaction_id) : null);
+    const providerReference = externalProviderReferenceOrNull(patch.provider_reference, providerTransactionId || railTxId || '');
+    const providerExternalEvidencePresent = (patch.provider_external_evidence_present === true || patch.provider_acceptance_evidence_present === true) && !!(providerTransactionId || railTxId || providerReference);
+    const providerAcceptanceEvidencePresent = patch.provider_acceptance_evidence_present === true && !!(providerTransactionId || railTxId || providerReference);
     const providerSubmitDiagnostic = {
       diagnostic_version: 1,
       generated_at_utc: new Date().toISOString(),
@@ -134428,13 +136268,16 @@ async function revolutPayment_create(env, token, { request_id, source_account_id
       provider_submission_attempted: providerRequestSent || providerCalled,
       provider_called: providerCalled,
       provider_request_sent: providerRequestSent,
+      provider_request_sent_confirmed: providerRequestSentConfirmed,
+      provider_request_dispatched_at_utc: providerRequestDispatchedAtUtc,
       provider_response_received: providerResponseReceived,
       provider_response_present: providerResponsePresent,
-      provider_submission_accepted: providerAccepted,
+      provider_external_evidence_present: providerExternalEvidencePresent === true,
+      provider_submission_accepted: providerAccepted && providerAcceptanceEvidencePresent === true,
       provider_submission_rejected: providerRejected,
       provider_submission_failed: patch.provider_submission_failed === true,
       provider_submission_unknown: providerUnknown,
-      provider_acceptance_evidence_present: patch.provider_acceptance_evidence_present === true,
+      provider_acceptance_evidence_present: providerAcceptanceEvidencePresent === true,
       manual_resolution_required: patch.manual_resolution_required === true,
       safe_retry_available: patch.safe_retry_available === true,
       retry_blocked_reason: patch.retry_blocked_reason || null,
@@ -134445,24 +136288,27 @@ async function revolutPayment_create(env, token, { request_id, source_account_id
       idempotency_key: reqId || null,
       local_provider_request_id: reqId || null,
       request_sent_at_utc: requestSentAtUtc,
+      provider_request_dispatched_at_utc: providerRequestDispatchedAtUtc,
       response_received_at_utc: responseReceivedAtUtc,
       provider_http_status: patch.provider_http_status ?? null,
       provider_timeout_ms: patch.provider_timeout_ms ?? null,
       provider_error_code: patch.provider_error_code || null,
       provider_error_message_redacted: patch.provider_error_message_redacted || null,
-      provider_transaction_id: patch.provider_transaction_id || null,
-      provider_reference: patch.provider_reference || null,
+      provider_transaction_id: providerTransactionId || null,
+      provider_reference: providerReference || null,
       provider_state: patch.provider_state || null,
-      rail_tx_id: patch.rail_tx_id || null,
+      rail_tx_id: railTxId || null,
       rail_state: patch.rail_state || null
     };
     return {
       ok: patch.ok === true,
       provider_called: providerCalled,
       provider_request_sent: providerRequestSent,
+      provider_request_sent_confirmed: providerRequestSentConfirmed,
+      provider_request_dispatched_at_utc: providerRequestDispatchedAtUtc,
       provider_response_received: providerResponseReceived,
       provider_response_present: providerResponsePresent,
-      provider_accepted: providerAccepted,
+      provider_accepted: providerAccepted && providerAcceptanceEvidencePresent === true,
       provider_rejected: providerRejected,
       provider_unknown: providerUnknown,
       provider_submission_status: status,
@@ -134476,16 +136322,18 @@ async function revolutPayment_create(env, token, { request_id, source_account_id
       provider_error_message_redacted: patch.provider_error_message_redacted || null,
       provider_response_redacted: patch.provider_response_redacted || null,
       provider_error_redacted: patch.provider_error_redacted || null,
-      provider_acceptance_evidence_present: patch.provider_acceptance_evidence_present === true,
-      rail_tx_id: patch.rail_tx_id || null,
+      provider_external_evidence_present: providerExternalEvidencePresent === true,
+      provider_acceptance_evidence_present: providerAcceptanceEvidencePresent === true,
+      rail_tx_id: railTxId || null,
       rail_state: patch.rail_state || null,
-      provider_transaction_id: patch.provider_transaction_id || null,
+      provider_transaction_id: providerTransactionId || null,
       provider_state: patch.provider_state || null,
-      provider_reference: patch.provider_reference || null,
+      provider_reference: providerReference || null,
       request_id: reqId || null,
       idempotency_key: reqId || null,
       local_provider_request_id: reqId || null,
       request_sent_at_utc: requestSentAtUtc,
+      provider_request_dispatched_at_utc: providerRequestDispatchedAtUtc,
       response_received_at_utc: responseReceivedAtUtc,
       rail_meta_json: patch.rail_meta_json || null,
       provider_submit_diagnostic: providerSubmitDiagnostic
@@ -134506,6 +136354,7 @@ async function revolutPayment_create(env, token, { request_id, source_account_id
       ok: false,
       provider_called: false,
       provider_request_sent: false,
+      provider_request_sent_confirmed: false,
       provider_response_received: false,
       provider_response_present: false,
       provider_submission_status: 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL',
@@ -134537,7 +136386,7 @@ async function revolutPayment_create(env, token, { request_id, source_account_id
   if (ref) body.reference = ref;
 
   const url = `${apiBase}/pay`;
-  const requestSentAtUtc = new Date().toISOString();
+  let requestSentAtUtc = null;
   let res;
   let timeoutHandle = null;
   let timedOut = false;
@@ -134571,6 +136420,7 @@ async function revolutPayment_create(env, token, { request_id, source_account_id
       }, providerTimeoutMs);
     });
 
+    requestSentAtUtc = new Date().toISOString();
     res = await Promise.race([
       fetch(url, fetchOptions),
       timeoutPromise
@@ -134583,6 +136433,7 @@ async function revolutPayment_create(env, token, { request_id, source_account_id
       ok: false,
       provider_called: true,
       provider_request_sent: true,
+      provider_request_sent_confirmed: true,
       provider_response_received: false,
       provider_response_present: false,
       provider_unknown: true,
@@ -134603,7 +136454,34 @@ async function revolutPayment_create(env, token, { request_id, source_account_id
   }
 
   const responseReceivedAtUtc = new Date().toISOString();
-  const text = await res.text();
+  let text = '';
+  try {
+    text = await res.text();
+  } catch (bodyReadError) {
+    const errorCode = 'REVOLUT_PAY_CREATE_RESPONSE_READ_FAILED';
+    const errorMessage = safeString(bodyReadError && bodyReadError.message) || 'Revolut returned a response, but CloudTMS could not read the provider response body.';
+    return baseResult({
+      ok: false,
+      provider_called: true,
+      provider_request_sent: true,
+      provider_request_sent_confirmed: true,
+      provider_response_received: true,
+      provider_response_present: true,
+      provider_unknown: res && res.ok === true,
+      provider_rejected: !(res && res.ok === true),
+      provider_submission_status: res && res.ok === true ? 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE' : 'PROVIDER_SUBMISSION_REJECTED',
+      outcome_code: errorCode,
+      review_reason_code: res && res.ok === true ? 'PROVIDER_RESPONSE_MALFORMED' : 'PROVIDER_REJECTED_PAYMENT',
+      manual_resolution_required: res && res.ok === true,
+      safe_retry_available: false,
+      provider_http_status: res ? res.status : null,
+      provider_error_code: errorCode,
+      provider_error_message_redacted: errorMessage,
+      request_sent_at_utc: requestSentAtUtc,
+      response_received_at_utc: responseReceivedAtUtc,
+      recommended_action: res && res.ok === true ? 'Provider returned an unreadable response. Manually reconcile before retry.' : 'Review the provider rejection/error and retry only after the blocker is corrected.'
+    });
+  }
   let json = null;
   try { json = text ? JSON.parse(text) : null; } catch { json = null; }
   const redactedBody = json !== null ? redactProviderPayload(json) : (text ? redactProviderPayload({ text }) : null);
@@ -134614,15 +136492,18 @@ async function revolutPayment_create(env, token, { request_id, source_account_id
     const replayOrConflict = responseLooksLikeIdempotencyReplay(res.status, json, text);
     const providerTxIdFromError = extractProviderTransactionId(json);
     const providerReferenceFromError = safeString(json && (json.reference || json.provider_reference || json.payment_reference));
+    const providerReferenceFromErrorExternal = externalProviderReferenceOrNull(providerReferenceFromError, providerTxIdFromError);
+    const providerExternalEvidenceFromError = providerTxIdFromError || providerReferenceFromErrorExternal || null;
     const providerStateFromError = safeString(json && (json.state || json.status)) || null;
     const clearProviderRejection = providerStateIsRejected(json) || !replayOrConflict;
 
-    if (providerTxIdFromError) {
+    if (providerExternalEvidenceFromError && replayOrConflict && clearProviderRejection !== true) {
       const stateFromError = providerStateFromError || 'PENDING';
       return baseResult({
         ok: true,
         provider_called: true,
         provider_request_sent: true,
+        provider_request_sent_confirmed: true,
         provider_response_received: true,
         provider_response_present: true,
         provider_accepted: true,
@@ -134632,12 +136513,13 @@ async function revolutPayment_create(env, token, { request_id, source_account_id
         manual_resolution_required: false,
         safe_retry_available: false,
         provider_http_status: res.status,
+        provider_external_evidence_present: true,
         provider_acceptance_evidence_present: true,
-        rail_tx_id: providerTxIdFromError,
+        rail_tx_id: providerTxIdFromError || null,
         rail_state: stateFromError,
-        provider_transaction_id: providerTxIdFromError,
+        provider_transaction_id: providerTxIdFromError || null,
         provider_state: stateFromError,
-        provider_reference: providerReferenceFromError || providerTxIdFromError,
+        provider_reference: providerReferenceFromErrorExternal || providerTxIdFromError || null,
         provider_response_redacted: redactedBody,
         request_sent_at_utc: requestSentAtUtc,
         response_received_at_utc: responseReceivedAtUtc,
@@ -134646,9 +136528,11 @@ async function revolutPayment_create(env, token, { request_id, source_account_id
             provider_submission_status: 'PROVIDER_SUBMISSION_ACCEPTED',
             review_reason_code: 'PROVIDER_ACCEPTANCE_EVIDENCE_PRESENT',
             provider_http_status: res.status,
-            provider_transaction_id: providerTxIdFromError,
-            provider_reference: providerReferenceFromError || providerTxIdFromError,
-            rail_tx_id: providerTxIdFromError,
+            provider_external_evidence_present: true,
+            provider_acceptance_evidence_present: true,
+            provider_transaction_id: providerTxIdFromError || null,
+            provider_reference: providerReferenceFromErrorExternal || providerTxIdFromError || null,
+            rail_tx_id: providerTxIdFromError || null,
             rail_state: stateFromError,
             request_id: reqId,
             idempotency_key: reqId
@@ -134659,11 +136543,61 @@ async function revolutPayment_create(env, token, { request_id, source_account_id
       });
     }
 
+    if (providerExternalEvidenceFromError) {
+      const stateFromError = providerStateFromError || 'REJECTED';
+      return baseResult({
+        ok: false,
+        provider_called: true,
+        provider_request_sent: true,
+        provider_request_sent_confirmed: true,
+        provider_response_received: true,
+        provider_response_present: true,
+        provider_rejected: true,
+        provider_submission_status: 'PROVIDER_SUBMISSION_REJECTED',
+        outcome_code: providerErrorCode,
+        review_reason_code: 'PROVIDER_REJECTED_PAYMENT',
+        manual_resolution_required: false,
+        safe_retry_available: false,
+        provider_http_status: res.status,
+        provider_external_evidence_present: true,
+        provider_acceptance_evidence_present: false,
+        rail_tx_id: null,
+        rail_state: stateFromError,
+        provider_transaction_id: providerTxIdFromError || null,
+        provider_state: stateFromError,
+        provider_reference: providerReferenceFromErrorExternal || providerTxIdFromError || null,
+        provider_error_code: providerErrorCode,
+        provider_error_message_redacted: providerErrorMessage,
+        provider_error_redacted: redactedBody,
+        request_sent_at_utc: requestSentAtUtc,
+        response_received_at_utc: responseReceivedAtUtc,
+        rail_meta_json: {
+          provider_submit_diagnostic: {
+            provider_submission_status: 'PROVIDER_SUBMISSION_REJECTED',
+            review_reason_code: 'PROVIDER_REJECTED_PAYMENT',
+            provider_http_status: res.status,
+            provider_error_code: providerErrorCode,
+            provider_external_evidence_present: true,
+            provider_acceptance_evidence_present: false,
+            provider_transaction_id: providerTxIdFromError || null,
+            provider_reference: providerReferenceFromErrorExternal || providerTxIdFromError || null,
+            rail_tx_id: null,
+            rail_state: stateFromError,
+            request_id: reqId,
+            idempotency_key: reqId
+          },
+          revolut_response: redactedBody
+        },
+        recommended_action: 'Provider rejected the payment submission but returned external provider evidence. Review/reconcile the provider record before retry.'
+      });
+    }
+
     if (replayOrConflict && clearProviderRejection !== true) {
       return baseResult({
         ok: false,
         provider_called: true,
         provider_request_sent: true,
+      provider_request_sent_confirmed: true,
         provider_response_received: true,
         provider_response_present: true,
         provider_unknown: true,
@@ -134697,6 +136631,7 @@ async function revolutPayment_create(env, token, { request_id, source_account_id
       ok: false,
       provider_called: true,
       provider_request_sent: true,
+      provider_request_sent_confirmed: true,
       provider_response_received: true,
       provider_response_present: true,
       provider_rejected: true,
@@ -134728,13 +136663,15 @@ async function revolutPayment_create(env, token, { request_id, source_account_id
 
   const txId = extractProviderTransactionId(json);
   const providerReference = safeString(json && (json.reference || json.provider_reference || json.payment_reference));
+  const providerReferenceExternal = externalProviderReferenceOrNull(providerReference, txId);
   const state = safeString(json && (json.state || json.status)) || 'PENDING';
 
-  if (!txId) {
+  if (!txId && !providerReferenceExternal) {
     return baseResult({
       ok: false,
       provider_called: true,
       provider_request_sent: true,
+      provider_request_sent_confirmed: true,
       provider_response_received: true,
       provider_response_present: true,
       provider_unknown: true,
@@ -134745,10 +136682,10 @@ async function revolutPayment_create(env, token, { request_id, source_account_id
       safe_retry_available: false,
       provider_http_status: res.status,
       provider_error_code: 'REVOLUT_PAY_CREATE_MALFORMED_RESPONSE',
-      provider_error_message_redacted: 'Revolut returned a 2xx response without a usable payment/transaction id.',
+      provider_error_message_redacted: 'Revolut returned a 2xx response without a usable external payment/transaction id or provider reference.',
       provider_response_redacted: redactedBody,
       provider_state: state || null,
-      provider_reference: providerReference || null,
+      provider_reference: null,
       request_sent_at_utc: requestSentAtUtc,
       response_received_at_utc: responseReceivedAtUtc,
       rail_meta_json: {
@@ -134774,8 +136711,10 @@ async function revolutPayment_create(env, token, { request_id, source_account_id
       provider_submission_status: 'PROVIDER_SUBMISSION_ACCEPTED',
       provider_called: true,
       provider_request_sent: true,
+      provider_request_sent_confirmed: true,
       provider_response_received: true,
       provider_response_present: true,
+      provider_external_evidence_present: true,
       provider_submission_attempted: true,
       provider_submission_accepted: true,
       provider_submission_rejected: false,
@@ -134788,10 +136727,11 @@ async function revolutPayment_create(env, token, { request_id, source_account_id
       idempotency_key: reqId,
       local_provider_request_id: reqId,
       request_sent_at_utc: requestSentAtUtc,
+      provider_request_dispatched_at_utc: requestSentAtUtc,
       response_received_at_utc: responseReceivedAtUtc,
       provider_http_status: res.status,
       provider_transaction_id: txId,
-      provider_reference: providerReference || txId,
+      provider_reference: providerReferenceExternal || txId,
       provider_state: state || 'PENDING',
       rail_tx_id: txId,
       rail_state: state || 'PENDING'
@@ -134802,6 +136742,7 @@ async function revolutPayment_create(env, token, { request_id, source_account_id
     ok: true,
     provider_called: true,
     provider_request_sent: true,
+      provider_request_sent_confirmed: true,
     provider_response_received: true,
     provider_response_present: true,
     provider_accepted: true,
@@ -134811,12 +136752,13 @@ async function revolutPayment_create(env, token, { request_id, source_account_id
     manual_resolution_required: false,
     safe_retry_available: false,
     provider_http_status: res.status,
+    provider_external_evidence_present: true,
     provider_acceptance_evidence_present: true,
     rail_tx_id: txId,
     rail_state: state || 'PENDING',
     provider_transaction_id: txId,
     provider_state: state || 'PENDING',
-    provider_reference: providerReference || txId,
+    provider_reference: providerReferenceExternal || txId,
     provider_response_redacted: redactedBody,
     request_sent_at_utc: requestSentAtUtc,
     response_received_at_utc: responseReceivedAtUtc,
@@ -134825,56 +136767,87 @@ async function revolutPayment_create(env, token, { request_id, source_account_id
   });
 }
 
-
-
-
 async function revolutPayment_poll(env, token, { request_id, transfer_id = null, pay_batch_id = null, amount = null, currency = null } = {}) {
-  const t = token ? String(token).trim() : '';
-  if (!t) throw new Error('REVOLUT_POLL_NO_TOKEN');
+  const safeString = (value) => String(value === undefined || value === null ? '' : value).trim();
+  const upperText = (value) => safeString(value).toUpperCase();
+  const t = safeString(token);
+  const reqId = safeString(request_id);
+  const transferIdText = safeString(transfer_id) || null;
+  const payBatchIdText = safeString(pay_batch_id) || null;
 
-  const apiBase = (env && env.REVOLUT_API_BASE && String(env.REVOLUT_API_BASE).trim())
-    ? String(env.REVOLUT_API_BASE).trim()
-    : 'https://b2b.revolut.com/api/1.0';
+  const redactProviderPayload = (value) => {
+    const sensitiveKeys = new Set([
+      'access_token',
+      'refresh_token',
+      'authorization',
+      'auth',
+      'bearer',
+      'token',
+      'secret',
+      'password',
+      'account_number',
+      'account_id',
+      'source_account_id',
+      'counterparty_account_id',
+      'receiver_account_id',
+      'bank_account_id',
+      'sort_code',
+      'iban',
+      'bic',
+      'routing_number',
+      'swift',
+      'card_number',
+      'pan'
+    ]);
+    const visit = (input, depth = 0) => {
+      if (input === null || input === undefined) return input;
+      if (typeof input === 'string') return input.length > 2000 ? `${input.slice(0, 2000)}…` : input;
+      if (typeof input !== 'object') return input;
+      if (depth > 8) return '[redacted_depth_limit]';
+      if (Array.isArray(input)) return input.slice(0, 50).map((item) => visit(item, depth + 1));
+      const out = {};
+      for (const [key, raw] of Object.entries(input)) {
+        const normalisedKey = safeString(key).toLowerCase();
+        if (sensitiveKeys.has(normalisedKey) || /account.*number/.test(normalisedKey) || /sort.*code/.test(normalisedKey)) {
+          out[key] = raw === null || raw === undefined || safeString(raw) === '' ? null : '[redacted]';
+        } else {
+          out[key] = visit(raw, depth + 1);
+        }
+      }
+      return out;
+    };
+    return visit(value);
+  };
 
-  const reqId = String(request_id || '').trim();
-  if (!reqId) throw new Error('REVOLUT_POLL_REQUEST_ID_REQUIRED');
+  const isExternalProviderIdentity = (value) => {
+    const text = safeString(value);
+    if (!text) return false;
+    return text.toLowerCase() !== reqId.toLowerCase();
+  };
 
-  const url = `${apiBase}/transaction/${encodeURIComponent(reqId)}?id_type=request_id`;
-
-  const res = await fetch(url, {
-    method: 'GET',
-    headers: {
-      Authorization: `Bearer ${t}`,
-      Accept: 'application/json'
+  const externalProviderReferenceOrNull = (...values) => {
+    for (const value of values) {
+      const text = safeString(value);
+      if (isExternalProviderIdentity(text)) return text;
     }
-  });
+    return null;
+  };
 
-  const text = await res.text();
-  let json;
-  try { json = text ? JSON.parse(text) : null; } catch { json = null; }
+  const extractProviderTransactionId = (payload) => {
+    const source = payload && typeof payload === 'object' && !Array.isArray(payload) ? payload : {};
+    return externalProviderReferenceOrNull(
+      source.id,
+      source.payment_id,
+      source.transaction_id,
+      source.transfer_id,
+      source.provider_transaction_id,
+      source.provider_payment_id,
+      source.external_payment_id,
+      source.external_transfer_id
+    );
+  };
 
-  if (!res.ok) {
-    throw new Error(`REVOLUT_POLL_FAILED_${res.status}: ${text}`);
-  }
-
-  const txId = json && json.id ? String(json.id).trim() : null;
-  const rawState = json && json.state ? String(json.state).trim() : '';
-  const state = rawState.toLowerCase();
-
-  const normalisedState = (() => {
-    if (state === 'completed' || state === 'settled' || state === 'paid') return 'COMPLETED';
-    if (state === 'declined') return 'DECLINED';
-    if (state === 'rejected') return 'REJECTED';
-    if (state === 'failed') return 'FAILED';
-    if (state === 'cancelled' || state === 'canceled') return 'CANCELLED';
-    if (state === 'returned') return 'RETURNED';
-    if (state === 'reverted' || state === 'reversed') return 'REVERTED';
-    if (state === 'processing') return 'PROCESSING';
-    if (state === 'pending' || state === 'created' || state === 'queued' || state === 'accepted') return 'PENDING';
-    return 'UNKNOWN';
-  })();
-
-  const resolvedAmount = (() => {
+  const resolvedAmountFrom = (json) => {
     const candidates = [
       amount,
       json && json.amount,
@@ -134893,9 +136866,9 @@ async function revolutPayment_poll(env, token, { request_id, transfer_id = null,
       if (Number.isFinite(n)) return n;
     }
     return null;
-  })();
+  };
 
-  const resolvedCurrency = (() => {
+  const resolvedCurrencyFrom = (json) => {
     const candidates = [
       currency,
       json && json.currency,
@@ -134904,13 +136877,13 @@ async function revolutPayment_poll(env, token, { request_id, transfer_id = null,
       json && json.transaction_amount && typeof json.transaction_amount === 'object' ? json.transaction_amount.currency : null
     ];
     for (const value of candidates) {
-      const s = String(value == null ? '' : value).trim().toUpperCase();
+      const s = upperText(value);
       if (s) return s;
     }
     return 'GBP';
-  })();
+  };
 
-  const eventTimeUtc = (() => {
+  const eventTimeUtcFrom = (json) => {
     const candidates = [
       json && json.updated_at,
       json && json.completed_at,
@@ -134919,42 +136892,327 @@ async function revolutPayment_poll(env, token, { request_id, transfer_id = null,
       json && json.timestamp
     ];
     for (const value of candidates) {
-      const s = String(value == null ? '' : value).trim();
+      const s = safeString(value);
       if (!s) continue;
       const d = new Date(s);
       if (Number.isFinite(d.getTime())) return d.toISOString();
     }
     return new Date().toISOString();
+  };
+
+  const buildResult = (patch = {}) => {
+    const diagnosticStatus = patch.provider_submission_status || 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME';
+    const eventTimeUtc = patch.event_time_utc || new Date().toISOString();
+    const providerTxId = externalProviderReferenceOrNull(patch.provider_transaction_id, patch.rail_tx_id);
+    const providerReference = externalProviderReferenceOrNull(patch.provider_reference, providerTxId);
+    const explicitRailTxId = patch.provider_acceptance_evidence_present === true ? externalProviderReferenceOrNull(patch.rail_tx_id) : null;
+    const railTxId = explicitRailTxId || (patch.provider_acceptance_evidence_present === true ? providerTxId : null);
+    const externalEvidencePresent = patch.provider_external_evidence_present === true && !!(providerTxId || providerReference || railTxId);
+    const acceptanceEvidencePresent = patch.provider_acceptance_evidence_present === true && !!(providerTxId || providerReference || railTxId);
+    const providerSubmitDiagnostic = {
+      diagnostic_version: 1,
+      generated_at_utc: new Date().toISOString(),
+      review_reason_code: patch.review_reason_code || null,
+      provider_submission_status: diagnosticStatus,
+      provider_call_stage: patch.provider_call_stage || null,
+      provider_submission_attempted: patch.provider_submission_attempted === true,
+      provider_called: patch.provider_called === true,
+      provider_request_sent: patch.provider_request_sent === true,
+      provider_request_sent_confirmed: patch.provider_request_sent_confirmed === true,
+      provider_response_received: patch.provider_response_received === true,
+      provider_response_present: patch.provider_response_present === true,
+      provider_external_evidence_present: externalEvidencePresent === true,
+      provider_submission_accepted: patch.provider_submission_accepted === true && acceptanceEvidencePresent === true,
+      provider_submission_rejected: patch.provider_submission_rejected === true,
+      provider_submission_unknown: patch.provider_submission_unknown === true,
+      provider_acceptance_evidence_present: acceptanceEvidencePresent === true,
+      manual_resolution_required: patch.manual_resolution_required === true,
+      safe_retry_available: patch.safe_retry_available === true,
+      rail_provider: 'REVOLUT',
+      request_id: reqId || null,
+      idempotency_key: reqId || null,
+      local_provider_request_id: reqId || null,
+      response_received_at_utc: patch.response_received_at_utc || eventTimeUtc,
+      provider_http_status: patch.provider_http_status ?? null,
+      provider_error_code: patch.provider_error_code || null,
+      provider_error_message_redacted: patch.provider_error_message_redacted || null,
+      provider_error_redacted: patch.provider_error_redacted || null,
+      provider_response_redacted: patch.provider_response_redacted || null,
+      provider_transaction_id: providerTxId || null,
+      provider_reference: providerReference || null,
+      provider_state: patch.provider_state || null,
+      rail_tx_id: railTxId || null,
+      rail_state: patch.rail_state || null
+    };
+    const rawPayload = {
+      ...(patch.raw_payload && typeof patch.raw_payload === 'object' && !Array.isArray(patch.raw_payload) ? patch.raw_payload : {}),
+      request_id: reqId || null,
+      local_provider_request_id: reqId || null,
+      provider_submit_diagnostic: providerSubmitDiagnostic
+    };
+    const railMetaJson = {
+      ...(patch.rail_meta_json && typeof patch.rail_meta_json === 'object' && !Array.isArray(patch.rail_meta_json) ? patch.rail_meta_json : {}),
+      request_id: reqId || null,
+      local_provider_request_id: reqId || null,
+      provider_submit_diagnostic: providerSubmitDiagnostic
+    };
+    return {
+      ok: patch.ok === true,
+      transfer_id: transferIdText,
+      pay_bank_transfer_id: transferIdText,
+      pay_batch_id: payBatchIdText,
+      provider_key: 'REVOLUT',
+      provider_event_id: acceptanceEvidencePresent === true ? (providerTxId || providerReference || railTxId || null) : null,
+      provider_reference: acceptanceEvidencePresent === true ? (providerReference || providerTxId || railTxId || null) : null,
+      payment_reference: acceptanceEvidencePresent === true ? (providerReference || providerTxId || railTxId || null) : null,
+      provider_state: patch.provider_state || patch.normalised_state || 'UNKNOWN',
+      normalised_state: patch.normalised_state || 'UNKNOWN',
+      normalized_state: patch.normalised_state || 'UNKNOWN',
+      event_source: patch.event_source || 'LOCAL_STATE',
+      event_time_utc: eventTimeUtc,
+      amount: patch.amount ?? resolvedAmountFrom(null),
+      currency: patch.currency || resolvedCurrencyFrom(null),
+      raw_payload: rawPayload,
+      provider_submit_diagnostic: providerSubmitDiagnostic,
+      provider_external_evidence_present: externalEvidencePresent === true,
+      provider_acceptance_evidence_present: acceptanceEvidencePresent === true,
+      provider_response_present: patch.provider_response_present === true,
+      provider_response_received: patch.provider_response_received === true,
+      provider_request_sent_confirmed: patch.provider_request_sent_confirmed === true,
+      rail_tx_id: acceptanceEvidencePresent === true ? (railTxId || providerTxId || null) : null,
+      rail_state: patch.rail_state || null,
+      rail_meta_json: railMetaJson,
+      status: patch.status || patch.normalised_state || 'UNKNOWN',
+      provider_submission_status: diagnosticStatus,
+      review_reason_code: patch.review_reason_code || null,
+      manual_resolution_required: patch.manual_resolution_required === true,
+      safe_retry_available: patch.safe_retry_available === true,
+      provider_http_status: patch.provider_http_status ?? null,
+      provider_error_code: patch.provider_error_code || null,
+      provider_error_message_redacted: patch.provider_error_message_redacted || null
+    };
+  };
+
+  if (!t) {
+    return buildResult({
+      ok: false,
+      provider_call_stage: 'PROVIDER_PAYMENT_POLL_BLOCKED_PRE_CALL',
+      provider_submission_status: 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL',
+      review_reason_code: 'PROVIDER_SUBMIT_BLOCKED_PRE_CALL',
+      provider_submission_attempted: false,
+      provider_called: false,
+      provider_request_sent: false,
+      provider_request_sent_confirmed: false,
+      provider_response_received: false,
+      provider_response_present: false,
+      provider_error_code: 'REVOLUT_POLL_NO_TOKEN',
+      provider_error_message_redacted: 'Provider poll was not called because the Revolut token is missing.',
+      manual_resolution_required: false,
+      safe_retry_available: false,
+      event_source: 'LOCAL_STATE',
+      normalised_state: 'FAILED',
+      status: 'FAILED'
+    });
+  }
+
+  if (!reqId) {
+    return buildResult({
+      ok: false,
+      provider_call_stage: 'PROVIDER_PAYMENT_POLL_BLOCKED_PRE_CALL',
+      provider_submission_status: 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL',
+      review_reason_code: 'PROVIDER_SUBMIT_BLOCKED_PRE_CALL',
+      provider_submission_attempted: false,
+      provider_called: false,
+      provider_request_sent: false,
+      provider_request_sent_confirmed: false,
+      provider_response_received: false,
+      provider_response_present: false,
+      provider_error_code: 'REVOLUT_POLL_REQUEST_ID_REQUIRED',
+      provider_error_message_redacted: 'Provider poll was not called because request_id is missing.',
+      manual_resolution_required: false,
+      safe_retry_available: false,
+      event_source: 'LOCAL_STATE',
+      normalised_state: 'FAILED',
+      status: 'FAILED'
+    });
+  }
+
+  const apiBase = (env && env.REVOLUT_API_BASE && String(env.REVOLUT_API_BASE).trim())
+    ? String(env.REVOLUT_API_BASE).trim()
+    : 'https://b2b.revolut.com/api/1.0';
+
+  const url = `${apiBase}/transaction/${encodeURIComponent(reqId)}?id_type=request_id`;
+  let res;
+  let requestSentAtUtc = null;
+
+  try {
+    requestSentAtUtc = new Date().toISOString();
+    res = await fetch(url, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${t}`,
+        Accept: 'application/json'
+      }
+    });
+  } catch (error) {
+    const errorCode = safeString(error && (error.code || error.name)) || 'REVOLUT_POLL_NETWORK_ERROR';
+    return buildResult({
+      ok: false,
+      provider_call_stage: 'PROVIDER_PAYMENT_POLL_UNKNOWN',
+      provider_submission_status: 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME',
+      review_reason_code: 'PROVIDER_REQUEST_SENT_NO_RESPONSE',
+      provider_submission_attempted: true,
+      provider_called: true,
+      provider_request_sent: true,
+      provider_request_sent_confirmed: true,
+      provider_response_received: false,
+      provider_response_present: false,
+      provider_submission_unknown: true,
+      provider_error_code: errorCode,
+      provider_error_message_redacted: safeString(error && error.message) || 'Provider poll request failed before a response was received.',
+      manual_resolution_required: true,
+      safe_retry_available: false,
+      event_source: 'LOCAL_STATE',
+      event_time_utc: requestSentAtUtc || new Date().toISOString(),
+      normalised_state: 'UNKNOWN',
+      status: 'PENDING'
+    });
+  }
+
+  const responseReceivedAtUtc = new Date().toISOString();
+  let text = '';
+  try {
+    text = await res.text();
+  } catch (bodyReadError) {
+    const errorCode = 'REVOLUT_POLL_RESPONSE_READ_FAILED';
+    return buildResult({
+      ok: false,
+      provider_call_stage: 'PROVIDER_PAYMENT_POLL_RESPONSE_RECEIVED',
+      provider_submission_status: 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME',
+      review_reason_code: 'PROVIDER_RESPONSE_MALFORMED',
+      provider_submission_attempted: true,
+      provider_called: true,
+      provider_request_sent: true,
+      provider_request_sent_confirmed: true,
+      provider_response_received: true,
+      provider_response_present: true,
+      provider_submission_unknown: true,
+      provider_http_status: res ? res.status : null,
+      provider_error_code: errorCode,
+      provider_error_message_redacted: safeString(bodyReadError && bodyReadError.message) || 'Provider poll returned a response, but CloudTMS could not read the response body.',
+      manual_resolution_required: true,
+      safe_retry_available: false,
+      event_source: 'LOCAL_STATE',
+      event_time_utc: responseReceivedAtUtc,
+      normalised_state: 'UNKNOWN',
+      status: 'PENDING'
+    });
+  }
+
+  let json = null;
+  try { json = text ? JSON.parse(text) : null; } catch { json = null; }
+  const redactedBody = json !== null ? redactProviderPayload(json) : (text ? redactProviderPayload({ text }) : null);
+
+  if (!res.ok) {
+    const providerErrorCode = safeString(json && (json.code || json.error_code || json.error || json.type)) || `REVOLUT_POLL_FAILED_${res.status}`;
+    const providerErrorMessage = safeString(json && (json.message || json.error_description || json.error)) || `Revolut poll failed with HTTP ${res.status}.`;
+    const providerTxIdFromError = extractProviderTransactionId(json);
+    const providerReferenceFromError = externalProviderReferenceOrNull(json && (json.reference || json.provider_reference || json.payment_reference), providerTxIdFromError);
+    const providerExternalEvidencePresent = !!(providerTxIdFromError || providerReferenceFromError);
+    return buildResult({
+      ok: false,
+      provider_call_stage: 'PROVIDER_PAYMENT_POLL_RESPONSE_RECEIVED',
+      provider_submission_status: providerExternalEvidencePresent ? 'PROVIDER_SUBMISSION_REJECTED' : 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME',
+      review_reason_code: providerExternalEvidencePresent ? 'PROVIDER_REJECTED_PAYMENT' : 'PROVIDER_REQUEST_SENT_NO_RESPONSE',
+      provider_submission_attempted: true,
+      provider_called: true,
+      provider_request_sent: true,
+      provider_request_sent_confirmed: true,
+      provider_response_received: true,
+      provider_response_present: true,
+      provider_submission_rejected: providerExternalEvidencePresent,
+      provider_submission_unknown: providerExternalEvidencePresent !== true,
+      provider_external_evidence_present: providerExternalEvidencePresent,
+      provider_acceptance_evidence_present: false,
+      provider_http_status: res.status,
+      provider_error_code: providerErrorCode,
+      provider_error_message_redacted: providerErrorMessage,
+      provider_error_redacted: redactedBody,
+      provider_transaction_id: providerTxIdFromError || null,
+      provider_reference: providerReferenceFromError || null,
+      provider_state: safeString(json && (json.state || json.status)) || 'UNKNOWN',
+      rail_state: safeString(json && (json.state || json.status)) || null,
+      manual_resolution_required: providerExternalEvidencePresent !== true,
+      safe_retry_available: false,
+      event_source: providerExternalEvidencePresent ? 'PROVIDER_POLL' : 'LOCAL_STATE',
+      event_time_utc: responseReceivedAtUtc,
+      raw_payload: { revolut_response: redactedBody },
+      rail_meta_json: { revolut_response: redactedBody },
+      normalised_state: providerExternalEvidencePresent ? 'FAILED' : 'UNKNOWN',
+      status: providerExternalEvidencePresent ? 'FAILED' : 'PENDING'
+    });
+  }
+
+  const txId = extractProviderTransactionId(json);
+  const providerReference = externalProviderReferenceOrNull(json && (json.reference || json.provider_reference || json.payment_reference), txId);
+  const rawState = safeString(json && (json.state || json.status));
+  const state = rawState.toLowerCase();
+
+  const normalisedState = (() => {
+    if (state === 'completed' || state === 'settled' || state === 'paid') return 'COMPLETED';
+    if (state === 'declined') return 'DECLINED';
+    if (state === 'rejected') return 'REJECTED';
+    if (state === 'failed') return 'FAILED';
+    if (state === 'cancelled' || state === 'canceled') return 'CANCELLED';
+    if (state === 'returned') return 'RETURNED';
+    if (state === 'reverted' || state === 'reversed') return 'REVERTED';
+    if (state === 'processing') return 'PROCESSING';
+    if (state === 'pending' || state === 'created' || state === 'queued' || state === 'accepted') return 'PENDING';
+    return 'UNKNOWN';
   })();
 
-  const transferIdText = String(transfer_id || '').trim() || null;
-  const payBatchIdText = String(pay_batch_id || '').trim() || null;
-  const providerReference = txId || reqId;
+  const providerRejectedByPoll = ['DECLINED', 'REJECTED', 'FAILED', 'CANCELLED', 'RETURNED', 'REVERTED'].includes(normalisedState);
+  const providerExternalEvidencePresent = !!(txId || providerReference);
+  const providerAcceptanceEvidencePresent = providerExternalEvidencePresent && !providerRejectedByPoll && ['COMPLETED', 'PROCESSING', 'PENDING'].includes(normalisedState);
+  const providerSubmissionStatus = providerAcceptanceEvidencePresent ? 'PROVIDER_SUBMISSION_ACCEPTED' : providerRejectedByPoll ? 'PROVIDER_SUBMISSION_REJECTED' : providerExternalEvidencePresent ? 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID' : 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID';
+  const providerReviewReasonCode = providerAcceptanceEvidencePresent ? 'PROVIDER_ACCEPTANCE_EVIDENCE_PRESENT' : providerRejectedByPoll ? 'PROVIDER_REJECTED_PAYMENT' : 'PROVIDER_POLL_RESPONSE_WITHOUT_ACCEPTANCE_EVIDENCE';
+  const eventTimeUtc = eventTimeUtcFrom(json);
 
-  return {
+  return buildResult({
     ok: true,
-    transfer_id: transferIdText,
-    pay_bank_transfer_id: transferIdText,
-    pay_batch_id: payBatchIdText,
-    provider_key: 'REVOLUT',
-    provider_event_id: txId || reqId,
-    provider_reference: providerReference,
-    payment_reference: providerReference,
+    provider_call_stage: 'PROVIDER_PAYMENT_POLL_RESPONSE_RECEIVED',
+    provider_submission_status: providerSubmissionStatus,
+    review_reason_code: providerReviewReasonCode,
+    provider_submission_attempted: true,
+    provider_called: true,
+    provider_request_sent: true,
+    provider_request_sent_confirmed: true,
+    provider_response_received: true,
+    provider_response_present: true,
+    provider_external_evidence_present: providerExternalEvidencePresent,
+    provider_submission_accepted: providerAcceptanceEvidencePresent,
+    provider_submission_rejected: providerRejectedByPoll,
+    provider_submission_unknown: !providerAcceptanceEvidencePresent && !providerRejectedByPoll,
+    provider_acceptance_evidence_present: providerAcceptanceEvidencePresent,
+    manual_resolution_required: !providerAcceptanceEvidencePresent && normalisedState === 'UNKNOWN',
+    safe_retry_available: false,
+    provider_response_redacted: redactedBody,
+    provider_transaction_id: txId || null,
+    provider_reference: providerReference || null,
     provider_state: rawState || normalisedState,
-    normalised_state: normalisedState,
-    normalized_state: normalisedState,
+    rail_tx_id: txId || null,
+    rail_state: rawState || normalisedState,
+    response_received_at_utc: eventTimeUtc,
     event_source: 'PROVIDER_POLL',
     event_time_utc: eventTimeUtc,
-    amount: resolvedAmount,
-    currency: resolvedCurrency,
-    raw_payload: json || {},
-    rail_tx_id: txId,
-    rail_state: rawState || normalisedState,
-    rail_meta_json: json || {},
+    amount: resolvedAmountFrom(json),
+    currency: resolvedCurrencyFrom(json),
+    raw_payload: redactProviderPayload(json && typeof json === 'object' && !Array.isArray(json) ? json : {}),
+    rail_meta_json: redactProviderPayload(json && typeof json === 'object' && !Array.isArray(json) ? json : {}),
+    normalised_state: normalisedState,
     status: normalisedState
-  };
+  });
 }
-
 
 
 
