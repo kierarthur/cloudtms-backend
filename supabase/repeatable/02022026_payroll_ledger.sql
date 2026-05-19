@@ -21604,6 +21604,9 @@ DROP FUNCTION IF EXISTS public.pay_batch_get(uuid, uuid);
 
 
 
+
+
+
 create or replace function public.pay_batch_get(
   p_pay_batch_id uuid,
   p_actor_user_id uuid DEFAULT NULL::uuid,
@@ -21788,6 +21791,11 @@ declare
   v_provider_submit_summary text := NULL::text;
   v_provider_submit_action_required text := NULL::text;
   v_provider_submit_actual_context boolean := false;
+  v_payment_provider_review_required boolean := false;
+  v_provider_submit_is_diagnostic_only boolean := false;
+  v_provider_submit_backend_review_required boolean := false;
+  v_provider_submit_operation_review_required boolean := false;
+  v_provider_submit_acceptance_retry_unsafe boolean := false;
   v_provider_submit_issue_present boolean := false;
   v_provider_submit_manual_resolution_required boolean := false;
   v_provider_submit_manual_resolution_available boolean := false;
@@ -22429,6 +22437,36 @@ begin
   v_provider_submit_stale_chunk := lower(btrim(coalesce(v_provider_submit_diagnostic ->> 'stale_submit_chunk', 'false'))) IN ('true','1','yes','y','on');
   v_provider_submit_manual_resolution_required := lower(btrim(coalesce(v_provider_submit_diagnostic ->> 'manual_resolution_required', 'false'))) IN ('true','1','yes','y','on');
   v_provider_submit_safe_retry_available := lower(btrim(coalesce(v_provider_submit_diagnostic ->> 'safe_retry_available', 'false'))) IN ('true','1','yes','y','on');
+
+  v_provider_submit_backend_review_required := lower(btrim(coalesce(
+    v_provider_submit_diagnostic ->> 'payment_provider_review_required',
+    v_provider_submit_diagnostic_result ->> 'payment_provider_review_required',
+    v_provider_submit_diagnostic ->> 'provider_submit_review_required',
+    v_provider_submit_diagnostic_result ->> 'provider_submit_review_required',
+    'false'
+  ))) IN ('true','1','yes','y','on');
+
+  v_provider_submit_operation_review_required := (
+    upper(btrim(coalesce(v_active_operation_type, ''))) IN ('PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS')
+    AND upper(btrim(coalesce(v_active_operation_status, ''))) = 'REVIEW_REQUIRED'
+  );
+
+  v_provider_submit_acceptance_retry_unsafe := (
+    v_provider_submission_status = 'PROVIDER_SUBMISSION_ACCEPTED'
+    AND v_provider_submit_acceptance_evidence_present
+    AND (
+      v_provider_submit_backend_review_required
+      OR v_provider_submit_operation_review_required
+      OR lower(btrim(coalesce(
+        v_provider_submit_diagnostic ->> 'duplicate_payment_risk',
+        v_provider_submit_diagnostic_result ->> 'duplicate_payment_risk',
+        v_provider_submit_diagnostic ->> 'provider_duplicate_payment_risk',
+        v_provider_submit_diagnostic_result ->> 'provider_duplicate_payment_risk',
+        'false'
+      ))) IN ('true','1','yes','y','on')
+    )
+  );
+
   IF v_provider_submit_acceptance_evidence_present THEN
     v_has_external_submission_evidence := true;
     v_can_start_standard_execution := false;
@@ -22441,16 +22479,27 @@ begin
     AND v_provider_submit_acceptance_evidence_present = false
   );
 
-  v_provider_submit_issue_present := (
+  v_payment_provider_review_required := (
     v_provider_submit_actual_context
-    AND v_provider_submission_status IN (
-      'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK',
-      'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME',
-      'PROVIDER_SUBMISSION_MALFORMED_RESPONSE',
-      'PROVIDER_SUBMISSION_REJECTED',
-      'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL',
-      'PROVIDER_SUBMISSION_ACCEPTED'
+    AND v_provider_submission_status <> 'MANUAL_RESOLVED_NO_PAYMENT_MADE'
+    AND (
+      v_provider_submit_backend_review_required
+      OR v_provider_submission_status IN (
+        'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK',
+        'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME',
+        'PROVIDER_SUBMISSION_MALFORMED_RESPONSE',
+        'PROVIDER_SUBMISSION_REJECTED',
+        'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL'
+      )
+      OR v_provider_submit_acceptance_retry_unsafe
     )
+  );
+
+  v_provider_submit_issue_present := COALESCE(v_payment_provider_review_required, false);
+
+  v_provider_submit_is_diagnostic_only := (
+    v_provider_submit_actual_context
+    AND COALESCE(v_provider_submit_issue_present, false) = false
   );
 
   IF v_provider_submit_issue_present AND COALESCE(v_provider_submit_safe_retry_available, false) IS NOT TRUE THEN
@@ -22505,6 +22554,9 @@ begin
       'manual_resolution_required', v_provider_submit_manual_resolution_required,
       'manual_resolution_available', v_provider_submit_manual_resolution_available,
       'safe_retry_available', v_provider_submit_safe_retry_available,
+      'payment_provider_review_required', v_payment_provider_review_required,
+      'provider_submit_issue_present', v_provider_submit_issue_present,
+      'provider_submit_is_diagnostic_only', false,
       'provider_submit_diagnostic', v_provider_submit_diagnostic
     ));
 
@@ -22522,6 +22574,9 @@ begin
       'manual_resolution_required', v_provider_submit_manual_resolution_required,
       'manual_resolution_available', v_provider_submit_manual_resolution_available,
       'safe_retry_available', v_provider_submit_safe_retry_available,
+      'payment_provider_review_required', v_payment_provider_review_required,
+      'provider_submit_issue_present', v_provider_submit_issue_present,
+      'provider_submit_is_diagnostic_only', false,
       'operation_id', NULLIF(btrim(coalesce(v_provider_submit_diagnostic ->> 'operation_id', '')), ''),
       'chunk_id', NULLIF(btrim(coalesce(v_provider_submit_diagnostic ->> 'chunk_id', '')), ''),
       'transfer_id', NULLIF(btrim(coalesce(v_provider_submit_diagnostic ->> 'transfer_id', '')), ''),
@@ -22619,6 +22674,9 @@ begin
         'safe_retry_available', COALESCE(v_provider_submit_safe_retry_available, false),
         'review_reason_code', CASE WHEN v_provider_submit_actual_context THEN v_provider_submit_review_reason_code ELSE NULL::text END,
         'provider_submission_status', CASE WHEN v_provider_submit_actual_context THEN v_provider_submission_status ELSE NULL::text END,
+        'payment_provider_review_required', COALESCE(v_payment_provider_review_required, false),
+        'provider_submit_issue_present', COALESCE(v_provider_submit_issue_present, false),
+        'provider_submit_is_diagnostic_only', COALESCE(v_provider_submit_is_diagnostic_only, false),
         'payment_issues', CASE WHEN v_provider_submit_issue_present AND v_provider_submit_payment_issue IS NOT NULL THEN jsonb_build_array(v_provider_submit_payment_issue) ELSE '[]'::jsonb END
       )
       || jsonb_build_object(
@@ -22731,6 +22789,9 @@ begin
             'safe_retry_available', COALESCE(v_provider_submit_safe_retry_available, false),
             'review_reason_code', CASE WHEN v_provider_submit_actual_context THEN v_provider_submit_review_reason_code ELSE NULL::text END,
             'provider_submission_status', CASE WHEN v_provider_submit_actual_context THEN v_provider_submission_status ELSE NULL::text END,
+            'payment_provider_review_required', COALESCE(v_payment_provider_review_required, false),
+            'provider_submit_issue_present', COALESCE(v_provider_submit_issue_present, false),
+            'provider_submit_is_diagnostic_only', COALESCE(v_provider_submit_is_diagnostic_only, false),
             'payment_issues', CASE WHEN v_provider_submit_issue_present AND v_provider_submit_payment_issue IS NOT NULL THEN jsonb_build_array(v_provider_submit_payment_issue) ELSE '[]'::jsonb END
           )
         ),
@@ -23810,6 +23871,9 @@ begin
       'provider_submit_review_action_required', true,
       'manual_resolution_available', v_provider_submit_manual_resolution_available,
       'safe_retry_available', v_provider_submit_safe_retry_available,
+      'payment_provider_review_required', v_payment_provider_review_required,
+      'provider_submit_issue_present', v_provider_submit_issue_present,
+      'provider_submit_is_diagnostic_only', v_provider_submit_is_diagnostic_only,
       'requires_user_action', true
     );
   END IF;
@@ -26369,7 +26433,10 @@ begin
       'manual_resolution_available', COALESCE(v_provider_submit_manual_resolution_available, false),
       'safe_retry_available', COALESCE(v_provider_submit_safe_retry_available, false),
       'review_reason_code', CASE WHEN v_provider_submit_actual_context THEN v_provider_submit_review_reason_code ELSE NULL::text END,
-      'provider_submission_status', CASE WHEN v_provider_submit_actual_context THEN v_provider_submission_status ELSE NULL::text END
+      'provider_submission_status', CASE WHEN v_provider_submit_actual_context THEN v_provider_submission_status ELSE NULL::text END,
+      'payment_provider_review_required', COALESCE(v_payment_provider_review_required, false),
+      'provider_submit_issue_present', COALESCE(v_provider_submit_issue_present, false),
+      'provider_submit_is_diagnostic_only', COALESCE(v_provider_submit_is_diagnostic_only, false)
     )
     || jsonb_build_object(
       'bank_csv_export_json', v_batch.bank_csv_export_json,
@@ -26493,6 +26560,9 @@ begin
           'safe_retry_available', COALESCE(v_provider_submit_safe_retry_available, false),
           'review_reason_code', CASE WHEN v_provider_submit_actual_context THEN v_provider_submit_review_reason_code ELSE NULL::text END,
           'provider_submission_status', CASE WHEN v_provider_submit_actual_context THEN v_provider_submission_status ELSE NULL::text END,
+          'payment_provider_review_required', COALESCE(v_payment_provider_review_required, false),
+          'provider_submit_issue_present', COALESCE(v_provider_submit_issue_present, false),
+          'provider_submit_is_diagnostic_only', COALESCE(v_provider_submit_is_diagnostic_only, false),
           'has_cloudtms_csv_export', v_has_cloudtms_csv_export,
           'csv_export_matches_current_transfers', v_csv_export_matches_current_transfers,
           'has_external_submission_evidence', v_has_external_submission_evidence,
@@ -26571,7 +26641,9 @@ begin
           'safe_retry_available', COALESCE(v_provider_submit_safe_retry_available, false),
           'review_reason_code', CASE WHEN v_provider_submit_actual_context THEN v_provider_submit_review_reason_code ELSE NULL::text END,
           'provider_submission_status', CASE WHEN v_provider_submit_actual_context THEN v_provider_submission_status ELSE NULL::text END,
-
+          'payment_provider_review_required', COALESCE(v_payment_provider_review_required, false),
+          'provider_submit_issue_present', COALESCE(v_provider_submit_issue_present, false),
+          'provider_submit_is_diagnostic_only', COALESCE(v_provider_submit_is_diagnostic_only, false),
           -- Rail-generic scheduling/execution fields
           'rail_provider_snapshot', v_batch.rail_provider_snapshot,
           'rail_env_snapshot', v_batch.rail_env_snapshot,
@@ -26591,6 +26663,8 @@ begin
     );
 end;
 $$;
+
+
 
 
 
