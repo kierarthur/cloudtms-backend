@@ -16049,6 +16049,7 @@ DROP FUNCTION IF EXISTS public.pay_bank_transfers_apply_rail_updates(uuid, jsonb
 
 
 
+
 CREATE OR REPLACE FUNCTION public.pay_bank_transfers_apply_rail_updates(
   p_pay_batch_id uuid,
   p_updates jsonb,
@@ -16338,7 +16339,7 @@ BEGIN
         WHEN update_normalise_provider.event_source IN ('PROVIDER_RESPONSE', 'PROVIDER_POLL', 'PROVIDER_WEBHOOK')
          AND update_normalise_provider.normalised_state IN ('REJECTED', 'FAILED', 'ERROR', 'DECLINED', 'CANCELLED', 'CANCELED') THEN 'PROVIDER_SUBMISSION_REJECTED'
         WHEN update_normalise_provider.event_source IN ('PROVIDER_RESPONSE', 'PROVIDER_POLL', 'PROVIDER_WEBHOOK')
-         AND update_normalise_provider.normalised_state IN ('COMPLETED', 'COMMITTED', 'SETTLED', 'PAID', 'EXECUTED', 'ACCEPTED', 'SUBMITTED', 'SENT', 'PROCESSING', 'PENDING') THEN 'PROVIDER_SUBMISSION_ACCEPTED'
+         AND update_normalise_provider.normalised_state IN ('COMPLETED', 'COMMITTED', 'SETTLED', 'PAID', 'EXECUTED', 'ACCEPTED', 'SUBMITTED', 'SENT', 'PROCESSING', 'PENDING') THEN 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID'
         WHEN update_normalise_provider.provider_request_sent IS TRUE
          AND update_normalise_provider.provider_response_present IS NOT TRUE
          AND update_normalise_provider.provider_response_received IS NOT TRUE THEN 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME'
@@ -16366,6 +16367,50 @@ BEGIN
         OR update_normalise_provider.provider_submission_status IN ('UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE', 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID'),
       safe_retry_available = update_normalise_provider.safe_retry_available
         AND update_normalise_provider.provider_submission_status NOT IN ('PROVIDER_SUBMISSION_ACCEPTED', 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE', 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID');
+
+  UPDATE pg_temp.tmp_pay_bank_transfer_updates AS update_local_identity
+  SET provider_reference = CASE
+        WHEN NULLIF(BTRIM(COALESCE(update_local_identity.provider_reference, '')), '') IS NULL THEN NULL::text
+        WHEN NULLIF(BTRIM(COALESCE(update_local_identity.provider_reference, '')), '') = ANY(ARRAY_REMOVE(ARRAY[
+          transfer_for_local_identity.id::text,
+          NULLIF(BTRIM(COALESCE(transfer_for_local_identity.request_id, '')), ''),
+          NULLIF(BTRIM(COALESCE(transfer_for_local_identity.payment_reference, '')), ''),
+          NULLIF(BTRIM(COALESCE(v_batch_row.bulk_reference, '')), ''),
+          NULLIF(BTRIM(COALESCE(update_local_identity.request_id, '')), ''),
+          NULLIF(BTRIM(COALESCE(update_local_identity.idempotency_key, '')), ''),
+          NULLIF(BTRIM(COALESCE(update_local_identity.local_provider_request_id, '')), '')
+        ]::text[], NULL::text)) THEN NULL::text
+        ELSE update_local_identity.provider_reference
+      END,
+      provider_event_id = CASE
+        WHEN NULLIF(BTRIM(COALESCE(update_local_identity.provider_event_id, '')), '') IS NULL THEN NULL::text
+        WHEN NULLIF(BTRIM(COALESCE(update_local_identity.provider_event_id, '')), '') = ANY(ARRAY_REMOVE(ARRAY[
+          transfer_for_local_identity.id::text,
+          NULLIF(BTRIM(COALESCE(transfer_for_local_identity.request_id, '')), ''),
+          NULLIF(BTRIM(COALESCE(transfer_for_local_identity.payment_reference, '')), ''),
+          NULLIF(BTRIM(COALESCE(v_batch_row.bulk_reference, '')), ''),
+          NULLIF(BTRIM(COALESCE(update_local_identity.request_id, '')), ''),
+          NULLIF(BTRIM(COALESCE(update_local_identity.idempotency_key, '')), ''),
+          NULLIF(BTRIM(COALESCE(update_local_identity.local_provider_request_id, '')), '')
+        ]::text[], NULL::text)) THEN NULL::text
+        ELSE update_local_identity.provider_event_id
+      END,
+      rail_tx_id = CASE
+        WHEN NULLIF(BTRIM(COALESCE(update_local_identity.rail_tx_id, '')), '') IS NULL THEN NULL::text
+        WHEN NULLIF(BTRIM(COALESCE(update_local_identity.rail_tx_id, '')), '') = ANY(ARRAY_REMOVE(ARRAY[
+          transfer_for_local_identity.id::text,
+          NULLIF(BTRIM(COALESCE(transfer_for_local_identity.request_id, '')), ''),
+          NULLIF(BTRIM(COALESCE(transfer_for_local_identity.payment_reference, '')), ''),
+          NULLIF(BTRIM(COALESCE(v_batch_row.bulk_reference, '')), ''),
+          NULLIF(BTRIM(COALESCE(update_local_identity.request_id, '')), ''),
+          NULLIF(BTRIM(COALESCE(update_local_identity.idempotency_key, '')), ''),
+          NULLIF(BTRIM(COALESCE(update_local_identity.local_provider_request_id, '')), '')
+        ]::text[], NULL::text)) THEN NULL::text
+        ELSE update_local_identity.rail_tx_id
+      END
+  FROM public.pay_bank_transfers AS transfer_for_local_identity
+  WHERE transfer_for_local_identity.id = update_local_identity.transfer_id
+    AND transfer_for_local_identity.pay_batch_id = p_pay_batch_id;
 
   UPDATE pg_temp.tmp_pay_bank_transfer_updates AS update_diag
   SET provider_submit_diagnostic = jsonb_strip_nulls(
@@ -16467,11 +16512,6 @@ BEGIN
          'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID'
        )
        AND upper(BTRIM(COALESCE(update_evidence.normalised_state, update_evidence.provider_state, ''))) NOT IN ('REJECTED', 'FAILED', 'ERROR', 'DECLINED', 'CANCELLED', 'CANCELED', 'MALFORMED', 'UNKNOWN')
-       AND (
-         update_evidence.provider_submission_status = 'PROVIDER_SUBMISSION_ACCEPTED'
-         OR update_evidence.provider_acceptance_evidence_present IS TRUE
-         OR upper(BTRIM(COALESCE(update_evidence.normalised_state, update_evidence.provider_state, ''))) IN ('ACCEPTED', 'SUBMITTED', 'PROCESSING', 'SENT', 'COMPLETED', 'COMMITTED', 'SETTLED', 'PAID', 'EXECUTED')
-       )
        AND EXISTS (
          SELECT 1
          FROM (VALUES
@@ -16572,12 +16612,19 @@ BEGIN
 
   UPDATE pg_temp.tmp_pay_bank_transfer_updates AS update_diag
   SET provider_acceptance_evidence_present = update_diag.is_provider_evidence,
+      provider_submission_status = CASE
+        WHEN update_diag.is_provider_evidence IS TRUE THEN 'PROVIDER_SUBMISSION_ACCEPTED'
+        WHEN update_diag.provider_submission_status = 'PROVIDER_SUBMISSION_ACCEPTED' THEN 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID'
+        WHEN NULLIF(BTRIM(COALESCE(update_diag.provider_submission_status, '')), '') IS NOT NULL THEN update_diag.provider_submission_status
+        ELSE NULL::text
+      END,
       provider_submit_diagnostic = jsonb_strip_nulls(
         COALESCE(update_diag.provider_submit_diagnostic, '{}'::jsonb)
         || jsonb_build_object(
           'provider_acceptance_evidence_present', update_diag.is_provider_evidence,
           'provider_submission_status', CASE
             WHEN update_diag.is_provider_evidence IS TRUE THEN 'PROVIDER_SUBMISSION_ACCEPTED'
+            WHEN update_diag.provider_submission_status = 'PROVIDER_SUBMISSION_ACCEPTED' THEN 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID'
             WHEN NULLIF(BTRIM(COALESCE(update_diag.provider_submission_status, '')), '') IS NOT NULL THEN update_diag.provider_submission_status
             ELSE NULL::text
           END,
@@ -16777,6 +16824,7 @@ BEGIN
         'provider_attempt_without_external_id', update_row.is_attempted_but_unproven,
         'provider_submit_diagnostic', CASE
           WHEN COALESCE(transfer_update.rail_meta_json #>> '{provider_submit_diagnostic,provider_submission_status}', '') = 'PROVIDER_SUBMISSION_ACCEPTED'
+           AND existing_evidence.has_provider_evidence IS TRUE
            AND COALESCE(update_row.provider_submission_status, '') <> 'PROVIDER_SUBMISSION_ACCEPTED' THEN transfer_update.rail_meta_json->'provider_submit_diagnostic'
           WHEN COALESCE(transfer_update.rail_meta_json #>> '{provider_submit_diagnostic,provider_submission_status}', '') = 'PROVIDER_SUBMISSION_REJECTED'
            AND update_row.is_provider_source IS NOT TRUE
@@ -17148,9 +17196,9 @@ BEGIN
   INTO v_provider_submit_diagnostic
   FROM pg_temp.tmp_pay_bank_transfer_updates AS update_row
   ORDER BY CASE
-      WHEN update_row.provider_submission_status = 'PROVIDER_SUBMISSION_ACCEPTED' THEN 0
+      WHEN update_row.provider_submission_status = 'PROVIDER_SUBMISSION_ACCEPTED' AND update_row.is_provider_evidence IS TRUE THEN 0
       WHEN update_row.provider_submission_status = 'PROVIDER_SUBMISSION_REJECTED' THEN 1
-      WHEN update_row.provider_submission_status IN ('UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE') THEN 2
+      WHEN update_row.provider_submission_status IN ('UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE', 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID') THEN 2
       ELSE 3
     END,
     update_row.row_seq
@@ -17232,6 +17280,7 @@ BEGIN
   );
 END;
 $function$;
+
 
 
 
