@@ -17989,7 +17989,7 @@ CREATE OR REPLACE FUNCTION public.banking_alerts_active_for_user(
 )
 RETURNS jsonb
 LANGUAGE plpgsql
-STABLE
+VOLATILE
 SECURITY DEFINER
 SET search_path TO 'public'
 AS $function$
@@ -18508,6 +18508,149 @@ BEGIN
       remittance_base.sort_at_utc
     FROM remittance_base
   ),
+
+  provider_submit_review_scope AS (
+    SELECT DISTINCT
+      provider_operation.id AS operation_id,
+      provider_operation.pay_batch_id AS pay_batch_id,
+      provider_operation.status AS operation_status,
+      provider_operation.phase AS operation_phase,
+      COALESCE(provider_operation.updated_at_utc, provider_operation.created_at_utc, now()) AS sort_at_utc
+    FROM public.banking_pay_operations AS provider_operation
+    JOIN public.pay_batches AS provider_batch
+      ON provider_batch.id = provider_operation.pay_batch_id
+    WHERE provider_operation.operation_type IN ('PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS')
+      AND provider_operation.pay_batch_id IS NOT NULL
+      AND UPPER(BTRIM(COALESCE(provider_batch.status, ''))) NOT IN ('CANCELLED', 'CANCELED')
+      AND (
+        UPPER(BTRIM(COALESCE(provider_operation.status, ''))) IN ('REVIEW_REQUIRED', 'FAILED')
+        OR jsonb_typeof(provider_operation.progress_json->'provider_submit_diagnostic') = 'object'
+        OR jsonb_typeof(provider_operation.result_json->'provider_submit_diagnostic') = 'object'
+        OR jsonb_typeof(provider_operation.error_json->'provider_submit_diagnostic') = 'object'
+      )
+      AND (
+        UPPER(BTRIM(COALESCE(provider_operation.phase, ''))) IN ('SUBMIT_PROVIDER_TRANSFERS', 'APPLY_RAIL_UPDATES', 'COMPLETE')
+        OR jsonb_typeof(provider_operation.progress_json->'provider_submit_diagnostic') = 'object'
+        OR jsonb_typeof(provider_operation.result_json->'provider_submit_diagnostic') = 'object'
+        OR jsonb_typeof(provider_operation.error_json->'provider_submit_diagnostic') = 'object'
+      )
+  ),
+  provider_submit_review_base AS (
+    SELECT
+      provider_submit_review_scope.pay_batch_id,
+      provider_submit_review_scope.operation_id,
+      provider_submit_review_scope.operation_status,
+      provider_submit_review_scope.operation_phase,
+      provider_submit_review_scope.sort_at_utc,
+      provider_diagnostic.diagnostic_json AS diagnostic_result,
+      COALESCE(provider_diagnostic.diagnostic_json->'provider_submit_diagnostic', '{}'::jsonb) AS provider_submit_diagnostic,
+      UPPER(BTRIM(COALESCE(provider_diagnostic.diagnostic_json->>'provider_submission_status', provider_diagnostic.diagnostic_json #>> '{provider_submit_diagnostic,provider_submission_status}', ''))) AS provider_submission_status,
+      COALESCE(NULLIF(BTRIM(COALESCE(provider_diagnostic.diagnostic_json->>'review_reason_code', provider_diagnostic.diagnostic_json #>> '{provider_submit_diagnostic,review_reason_code}', '')), ''), 'PAYMENT_PROVIDER_SUBMIT_REVIEW') AS review_reason_code,
+      NULLIF(BTRIM(COALESCE(provider_diagnostic.diagnostic_json #>> '{provider_submit_diagnostic,chunk_id}', '')), '') AS chunk_id_text,
+      NULLIF(BTRIM(COALESCE(provider_diagnostic.diagnostic_json #>> '{provider_submit_diagnostic,transfer_id}', '')), '') AS transfer_id_text,
+      NULLIF(BTRIM(COALESCE(provider_diagnostic.diagnostic_json #>> '{provider_submit_diagnostic,transfer_scope_id}', '')), '') AS transfer_scope_id_text,
+      NULLIF(BTRIM(COALESCE(provider_diagnostic.diagnostic_json #>> '{provider_submit_diagnostic,auth_request_id}', '')), '') AS auth_request_id_text,
+      lower(BTRIM(COALESCE(provider_diagnostic.diagnostic_json->>'manual_resolution_required', provider_diagnostic.diagnostic_json #>> '{provider_submit_diagnostic,manual_resolution_required}', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on') AS manual_resolution_required,
+      lower(BTRIM(COALESCE(provider_diagnostic.diagnostic_json->>'safe_retry_available', provider_diagnostic.diagnostic_json #>> '{provider_submit_diagnostic,safe_retry_available}', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on') AS safe_retry_available,
+      lower(BTRIM(COALESCE(provider_diagnostic.diagnostic_json #>> '{provider_submit_diagnostic,provider_acceptance_evidence_present}', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on') AS provider_acceptance_evidence_present,
+      lower(BTRIM(COALESCE(provider_diagnostic.diagnostic_json #>> '{provider_submit_diagnostic,provider_response_present}', provider_diagnostic.diagnostic_json #>> '{provider_submit_diagnostic,provider_response_received}', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on') AS provider_response_present
+    FROM provider_submit_review_scope
+    CROSS JOIN LATERAL public.pay_provider_submit_diagnostic_get(
+      p_pay_batch_id := provider_submit_review_scope.pay_batch_id,
+      p_operation_id := provider_submit_review_scope.operation_id,
+      p_transfer_id := NULL::uuid,
+      p_chunk_id := NULL::uuid,
+      p_counts_only := false
+    ) AS provider_diagnostic(diagnostic_json)
+    WHERE (
+        (
+          UPPER(BTRIM(COALESCE(provider_diagnostic.diagnostic_json->>'provider_submission_status', provider_diagnostic.diagnostic_json #>> '{provider_submit_diagnostic,provider_submission_status}', ''))) IN (
+            'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK',
+            'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME',
+            'PROVIDER_SUBMISSION_MALFORMED_RESPONSE',
+            'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID',
+            'PROVIDER_SUBMISSION_REJECTED'
+          )
+          AND UPPER(BTRIM(COALESCE(provider_submit_review_scope.operation_status, ''))) IN ('REVIEW_REQUIRED', 'FAILED')
+        )
+        OR (
+          UPPER(BTRIM(COALESCE(provider_diagnostic.diagnostic_json->>'provider_submission_status', provider_diagnostic.diagnostic_json #>> '{provider_submit_diagnostic,provider_submission_status}', ''))) = 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL'
+          AND UPPER(BTRIM(COALESCE(provider_submit_review_scope.operation_status, ''))) IN ('REVIEW_REQUIRED', 'FAILED')
+        )
+        OR (
+          UPPER(BTRIM(COALESCE(provider_diagnostic.diagnostic_json->>'provider_submission_status', provider_diagnostic.diagnostic_json #>> '{provider_submit_diagnostic,provider_submission_status}', ''))) = 'PROVIDER_SUBMISSION_ACCEPTED'
+          AND UPPER(BTRIM(COALESCE(provider_submit_review_scope.operation_status, ''))) = 'REVIEW_REQUIRED'
+        )
+      )
+      AND UPPER(BTRIM(COALESCE(provider_diagnostic.diagnostic_json->>'provider_submission_status', provider_diagnostic.diagnostic_json #>> '{provider_submit_diagnostic,provider_submission_status}', ''))) <> 'MANUAL_RESOLVED_NO_PAYMENT_MADE'
+  ),
+  provider_submit_review_alerts AS (
+    SELECT
+      'PAYMENT_PROVIDER_SUBMIT_REVIEW'::text AS alert_kind,
+      'critical'::text AS severity,
+      91::integer AS severity_rank,
+      'pay_batch'::text AS entity_kind,
+      provider_submit_review_base.pay_batch_id AS entity_id,
+      provider_submit_review_base.pay_batch_id AS pay_batch_id,
+      'banking_pay_operation'::text AS payload_source_kind,
+      provider_submit_review_base.operation_id AS payload_source_id,
+      jsonb_strip_nulls(jsonb_build_object(
+        'alert_kind', 'PAYMENT_PROVIDER_SUBMIT_REVIEW',
+        'issue_kind', 'PAYMENT_PROVIDER_SUBMIT_REVIEW',
+        'pay_batch_id', provider_submit_review_base.pay_batch_id::text,
+        'operation_id', provider_submit_review_base.operation_id::text,
+        'chunk_id', provider_submit_review_base.chunk_id_text,
+        'review_reason_code', provider_submit_review_base.review_reason_code,
+        'provider_submission_status', provider_submit_review_base.provider_submission_status
+      )) AS fingerprint_payload_json,
+      CASE provider_submit_review_base.provider_submission_status
+        WHEN 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK' THEN 'Provider submission outcome unknown'
+        WHEN 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME' THEN 'Provider response missing'
+        WHEN 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE' THEN 'Provider response unusable'
+        WHEN 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID' THEN 'Provider acceptance evidence missing'
+        WHEN 'PROVIDER_SUBMISSION_REJECTED' THEN 'Provider rejected payment'
+        WHEN 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL' THEN 'Provider was not called'
+        WHEN 'PROVIDER_SUBMISSION_ACCEPTED' THEN 'Provider acceptance evidence present'
+        ELSE 'Provider submission needs review'
+      END::text AS label,
+      CASE provider_submit_review_base.provider_submission_status
+        WHEN 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK' THEN 'Provider submission outcome unknown'
+        WHEN 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME' THEN 'Provider response missing'
+        WHEN 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE' THEN 'Provider response unusable'
+        WHEN 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID' THEN 'Provider acceptance evidence missing'
+        WHEN 'PROVIDER_SUBMISSION_REJECTED' THEN 'Provider rejected payment'
+        WHEN 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL' THEN 'Provider was not called'
+        WHEN 'PROVIDER_SUBMISSION_ACCEPTED' THEN 'Provider acceptance evidence present'
+        ELSE 'Provider submission needs review'
+      END::text AS title,
+      CASE provider_submit_review_base.provider_submission_status
+        WHEN 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK' THEN 'Submit chunk became stale with no provider response, transfer event, rail transaction ID, or rail state.'
+        WHEN 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME' THEN 'A provider request may have been sent, but no usable provider response was recorded.'
+        WHEN 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE' THEN 'Provider returned an unusable response. Manual reconciliation is required before retry.'
+        WHEN 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID' THEN 'Provider response/status was recorded, but no usable external provider transaction/reference was stored.'
+        WHEN 'PROVIDER_SUBMISSION_REJECTED' THEN 'Provider rejected the payment submission.'
+        WHEN 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL' THEN 'Provider submission failed before the provider payment request was sent.'
+        WHEN 'PROVIDER_SUBMISSION_ACCEPTED' THEN 'Provider acceptance evidence exists and retry is unsafe until reconciliation is complete.'
+        ELSE 'Provider submission requires review before retry.'
+      END::text AS description,
+      COALESCE(NULLIF(BTRIM(provider_submit_review_base.provider_submit_diagnostic->>'recommended_action'), ''), 'Check Revolut/bank before retry. If no payment was made, record manual no-payment confirmation.')::text AS action_guidance,
+      provider_submit_review_base.sort_at_utc
+    FROM provider_submit_review_base
+    WHERE NOT EXISTS (
+        SELECT 1 FROM blocked_funds_alerts AS stronger_blocked
+        WHERE stronger_blocked.pay_batch_id = provider_submit_review_base.pay_batch_id
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM bank_event_alerts AS stronger_bank_event
+        WHERE stronger_bank_event.pay_batch_id = provider_submit_review_base.pay_batch_id
+          AND stronger_bank_event.alert_kind IN ('BANK_REJECTED_PAYMENT', 'BANK_RETURNED_PAYMENT', 'RAIL_SUBMISSION_UNKNOWN_OR_TIMEOUT')
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM transfer_alerts AS stronger_transfer
+        WHERE stronger_transfer.pay_batch_id = provider_submit_review_base.pay_batch_id
+          AND stronger_transfer.alert_kind IN ('BANK_REJECTED_PAYMENT', 'BANK_RETURNED_PAYMENT', 'RAIL_SUBMISSION_UNKNOWN_OR_TIMEOUT')
+      )
+  ),
   raw_current_alerts AS (
     SELECT * FROM blocked_funds_alerts
     UNION ALL
@@ -18520,6 +18663,8 @@ BEGIN
     SELECT * FROM correction_work_alerts
     UNION ALL
     SELECT * FROM remittance_alerts
+    UNION ALL
+    SELECT * FROM provider_submit_review_alerts
   ),
   current_alert_identities AS (
     SELECT
@@ -18736,6 +18881,12 @@ BEGIN
   ));
 END;
 $function$;
+
+
+
+
+
+
 
 
 CREATE OR REPLACE FUNCTION public.banking_alert_acknowledge(
@@ -19343,6 +19494,8 @@ $function$;
 
 DROP FUNCTION IF EXISTS public.banking_alert_payload_for_pay_batch(text, uuid);
 
+
+
 CREATE OR REPLACE FUNCTION public.banking_alert_payload_for_pay_batch(
   p_alert_kind text,
   p_pay_batch_id uuid,
@@ -19351,7 +19504,7 @@ CREATE OR REPLACE FUNCTION public.banking_alert_payload_for_pay_batch(
 )
 RETURNS jsonb
 LANGUAGE plpgsql
-STABLE
+VOLATILE
 SECURITY DEFINER
 SET search_path TO 'public'
 AS $function$
@@ -19378,6 +19531,14 @@ DECLARE
   v_latest_correction_request jsonb := NULL;
   v_latest_correction_work_item jsonb := NULL;
   v_latest_remittance_failure jsonb := NULL;
+  v_provider_submit_diagnostic_result jsonb := '{}'::jsonb;
+  v_provider_submit_diagnostic jsonb := '{}'::jsonb;
+  v_provider_submission_status text := NULL;
+  v_review_reason_code text := NULL;
+  v_provider_operation_id uuid := NULL::uuid;
+  v_provider_title text := NULL;
+  v_provider_description text := NULL;
+  v_provider_action_label text := NULL;
 BEGIN
   v_alert_kind := UPPER(NULLIF(BTRIM(COALESCE(p_alert_kind, '')), ''));
   v_source_kind := lower(nullif(btrim(coalesce(p_source_kind, '')), ''));
@@ -19821,6 +19982,74 @@ BEGIN
     ));
   END IF;
 
+
+  IF v_alert_kind = 'PAYMENT_PROVIDER_SUBMIT_REVIEW' THEN
+    IF v_source_kind = 'banking_pay_operation' AND p_source_id IS NOT NULL THEN
+      v_provider_operation_id := p_source_id;
+    ELSE
+      v_provider_operation_id := NULL::uuid;
+    END IF;
+
+    v_provider_submit_diagnostic_result := public.pay_provider_submit_diagnostic_get(
+      p_pay_batch_id := p_pay_batch_id,
+      p_operation_id := v_provider_operation_id,
+      p_transfer_id := NULL::uuid,
+      p_chunk_id := NULL::uuid,
+      p_counts_only := false
+    );
+    v_provider_submit_diagnostic := COALESCE(v_provider_submit_diagnostic_result->'provider_submit_diagnostic', '{}'::jsonb);
+    v_provider_submission_status := UPPER(BTRIM(COALESCE(v_provider_submit_diagnostic_result->>'provider_submission_status', v_provider_submit_diagnostic->>'provider_submission_status', '')));
+    v_review_reason_code := COALESCE(NULLIF(BTRIM(COALESCE(v_provider_submit_diagnostic_result->>'review_reason_code', v_provider_submit_diagnostic->>'review_reason_code', '')), ''), 'PAYMENT_PROVIDER_SUBMIT_REVIEW');
+
+    v_provider_title := CASE v_provider_submission_status
+      WHEN 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK' THEN 'Provider submission outcome unknown'
+      WHEN 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME' THEN 'Provider response missing'
+      WHEN 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE' THEN 'Provider response unusable'
+      WHEN 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID' THEN 'Provider acceptance evidence missing'
+      WHEN 'PROVIDER_SUBMISSION_REJECTED' THEN 'Provider rejected payment'
+      WHEN 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL' THEN 'Provider was not called'
+      WHEN 'PROVIDER_SUBMISSION_ACCEPTED' THEN 'Provider acceptance evidence present'
+      ELSE 'Provider submission needs review'
+    END;
+
+    v_provider_description := CASE v_provider_submission_status
+      WHEN 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK' THEN 'Submit chunk became stale with no provider response, transfer event, rail transaction ID, or rail state.'
+      WHEN 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME' THEN 'A provider request may have been sent, but no usable provider response was recorded.'
+      WHEN 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE' THEN 'Provider returned an unusable response. Manual reconciliation is required before retry.'
+      WHEN 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID' THEN 'Provider response/status was recorded, but no usable external provider transaction/reference was stored.'
+      WHEN 'PROVIDER_SUBMISSION_REJECTED' THEN 'Provider rejected the payment submission.'
+      WHEN 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL' THEN 'Provider submission failed before the provider payment request was sent.'
+      WHEN 'PROVIDER_SUBMISSION_ACCEPTED' THEN 'Provider acceptance evidence exists and retry is unsafe until reconciliation is complete.'
+      ELSE 'Provider submission requires review before retry.'
+    END;
+
+    v_provider_action_label := COALESCE(NULLIF(BTRIM(v_provider_submit_diagnostic->>'recommended_action'), ''), 'Check Revolut/bank before retry. If no payment was made, record manual no-payment confirmation.');
+
+    RETURN jsonb_strip_nulls(jsonb_build_object(
+      'alert_kind', 'PAYMENT_PROVIDER_SUBMIT_REVIEW',
+      'issue_kind', 'PAYMENT_PROVIDER_SUBMIT_REVIEW',
+      'title', v_provider_title,
+      'description', v_provider_description,
+      'action_label', v_provider_action_label,
+      'recommended_action', v_provider_action_label,
+      'provider_submission_status', v_provider_submission_status,
+      'review_reason_code', v_review_reason_code,
+      'manual_resolution_required', lower(BTRIM(COALESCE(v_provider_submit_diagnostic->>'manual_resolution_required', v_provider_submit_diagnostic_result->>'manual_resolution_required', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on'),
+      'safe_retry_available', lower(BTRIM(COALESCE(v_provider_submit_diagnostic->>'safe_retry_available', v_provider_submit_diagnostic_result->>'safe_retry_available', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on'),
+      'provider_acceptance_evidence_present', lower(BTRIM(COALESCE(v_provider_submit_diagnostic->>'provider_acceptance_evidence_present', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on'),
+      'provider_response_present', lower(BTRIM(COALESCE(v_provider_submit_diagnostic->>'provider_response_present', v_provider_submit_diagnostic->>'provider_response_received', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on'),
+      'pay_batch_id', v_batch.id::text,
+      'operation_id', NULLIF(BTRIM(COALESCE(v_provider_submit_diagnostic->>'operation_id', CASE WHEN v_provider_operation_id IS NULL THEN NULL ELSE v_provider_operation_id::text END, '')), ''),
+      'chunk_id', NULLIF(BTRIM(COALESCE(v_provider_submit_diagnostic->>'chunk_id', '')), ''),
+      'transfer_id', NULLIF(BTRIM(COALESCE(v_provider_submit_diagnostic->>'transfer_id', '')), ''),
+      'transfer_scope_id', NULLIF(BTRIM(COALESCE(v_provider_submit_diagnostic->>'transfer_scope_id', '')), ''),
+      'auth_request_id', NULLIF(BTRIM(COALESCE(v_provider_submit_diagnostic->>'auth_request_id', '')), ''),
+      'rail_provider', NULLIF(BTRIM(COALESCE(v_provider_submit_diagnostic->>'rail_provider', v_batch.rail_provider_snapshot, '')), ''),
+      'rail_env', NULLIF(BTRIM(COALESCE(v_provider_submit_diagnostic->>'rail_env', v_batch.rail_env_snapshot, '')), ''),
+      'provider_submit_diagnostic', v_provider_submit_diagnostic - 'provider_response_redacted' - 'provider_error_redacted' - 'raw_payload' - 'provider_raw_response' - 'raw_provider_response' - 'provider_raw_error' - 'raw_provider_error'
+    ));
+  END IF;
+
   IF v_alert_kind = 'REMITTANCE_SEND_FAILED' THEN
     SELECT jsonb_strip_nulls(jsonb_build_object(
       'mail_outbox_id', public.mail_outbox.id::text,
@@ -19881,6 +20110,8 @@ BEGIN
           )::text;
 END;
 $function$;
+
+
 
 
 
@@ -20846,7 +21077,7 @@ CREATE OR REPLACE FUNCTION public.banking_alert_signal_for_user(
 )
 RETURNS jsonb
 LANGUAGE plpgsql
-STABLE
+VOLATILE
 SECURITY DEFINER
 SET search_path TO 'public'
 AS $function$
@@ -21356,6 +21587,149 @@ BEGIN
       remittance_base.sort_at_utc
     FROM remittance_base
   ),
+
+  provider_submit_review_scope AS (
+    SELECT DISTINCT
+      provider_operation.id AS operation_id,
+      provider_operation.pay_batch_id AS pay_batch_id,
+      provider_operation.status AS operation_status,
+      provider_operation.phase AS operation_phase,
+      COALESCE(provider_operation.updated_at_utc, provider_operation.created_at_utc, now()) AS sort_at_utc
+    FROM public.banking_pay_operations AS provider_operation
+    JOIN public.pay_batches AS provider_batch
+      ON provider_batch.id = provider_operation.pay_batch_id
+    WHERE provider_operation.operation_type IN ('PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS')
+      AND provider_operation.pay_batch_id IS NOT NULL
+      AND UPPER(BTRIM(COALESCE(provider_batch.status, ''))) NOT IN ('CANCELLED', 'CANCELED')
+      AND (
+        UPPER(BTRIM(COALESCE(provider_operation.status, ''))) IN ('REVIEW_REQUIRED', 'FAILED')
+        OR jsonb_typeof(provider_operation.progress_json->'provider_submit_diagnostic') = 'object'
+        OR jsonb_typeof(provider_operation.result_json->'provider_submit_diagnostic') = 'object'
+        OR jsonb_typeof(provider_operation.error_json->'provider_submit_diagnostic') = 'object'
+      )
+      AND (
+        UPPER(BTRIM(COALESCE(provider_operation.phase, ''))) IN ('SUBMIT_PROVIDER_TRANSFERS', 'APPLY_RAIL_UPDATES', 'COMPLETE')
+        OR jsonb_typeof(provider_operation.progress_json->'provider_submit_diagnostic') = 'object'
+        OR jsonb_typeof(provider_operation.result_json->'provider_submit_diagnostic') = 'object'
+        OR jsonb_typeof(provider_operation.error_json->'provider_submit_diagnostic') = 'object'
+      )
+  ),
+  provider_submit_review_base AS (
+    SELECT
+      provider_submit_review_scope.pay_batch_id,
+      provider_submit_review_scope.operation_id,
+      provider_submit_review_scope.operation_status,
+      provider_submit_review_scope.operation_phase,
+      provider_submit_review_scope.sort_at_utc,
+      provider_diagnostic.diagnostic_json AS diagnostic_result,
+      COALESCE(provider_diagnostic.diagnostic_json->'provider_submit_diagnostic', '{}'::jsonb) AS provider_submit_diagnostic,
+      UPPER(BTRIM(COALESCE(provider_diagnostic.diagnostic_json->>'provider_submission_status', provider_diagnostic.diagnostic_json #>> '{provider_submit_diagnostic,provider_submission_status}', ''))) AS provider_submission_status,
+      COALESCE(NULLIF(BTRIM(COALESCE(provider_diagnostic.diagnostic_json->>'review_reason_code', provider_diagnostic.diagnostic_json #>> '{provider_submit_diagnostic,review_reason_code}', '')), ''), 'PAYMENT_PROVIDER_SUBMIT_REVIEW') AS review_reason_code,
+      NULLIF(BTRIM(COALESCE(provider_diagnostic.diagnostic_json #>> '{provider_submit_diagnostic,chunk_id}', '')), '') AS chunk_id_text,
+      NULLIF(BTRIM(COALESCE(provider_diagnostic.diagnostic_json #>> '{provider_submit_diagnostic,transfer_id}', '')), '') AS transfer_id_text,
+      NULLIF(BTRIM(COALESCE(provider_diagnostic.diagnostic_json #>> '{provider_submit_diagnostic,transfer_scope_id}', '')), '') AS transfer_scope_id_text,
+      NULLIF(BTRIM(COALESCE(provider_diagnostic.diagnostic_json #>> '{provider_submit_diagnostic,auth_request_id}', '')), '') AS auth_request_id_text,
+      lower(BTRIM(COALESCE(provider_diagnostic.diagnostic_json->>'manual_resolution_required', provider_diagnostic.diagnostic_json #>> '{provider_submit_diagnostic,manual_resolution_required}', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on') AS manual_resolution_required,
+      lower(BTRIM(COALESCE(provider_diagnostic.diagnostic_json->>'safe_retry_available', provider_diagnostic.diagnostic_json #>> '{provider_submit_diagnostic,safe_retry_available}', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on') AS safe_retry_available,
+      lower(BTRIM(COALESCE(provider_diagnostic.diagnostic_json #>> '{provider_submit_diagnostic,provider_acceptance_evidence_present}', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on') AS provider_acceptance_evidence_present,
+      lower(BTRIM(COALESCE(provider_diagnostic.diagnostic_json #>> '{provider_submit_diagnostic,provider_response_present}', provider_diagnostic.diagnostic_json #>> '{provider_submit_diagnostic,provider_response_received}', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on') AS provider_response_present
+    FROM provider_submit_review_scope
+    CROSS JOIN LATERAL public.pay_provider_submit_diagnostic_get(
+      p_pay_batch_id := provider_submit_review_scope.pay_batch_id,
+      p_operation_id := provider_submit_review_scope.operation_id,
+      p_transfer_id := NULL::uuid,
+      p_chunk_id := NULL::uuid,
+      p_counts_only := false
+    ) AS provider_diagnostic(diagnostic_json)
+    WHERE (
+        (
+          UPPER(BTRIM(COALESCE(provider_diagnostic.diagnostic_json->>'provider_submission_status', provider_diagnostic.diagnostic_json #>> '{provider_submit_diagnostic,provider_submission_status}', ''))) IN (
+            'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK',
+            'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME',
+            'PROVIDER_SUBMISSION_MALFORMED_RESPONSE',
+            'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID',
+            'PROVIDER_SUBMISSION_REJECTED'
+          )
+          AND UPPER(BTRIM(COALESCE(provider_submit_review_scope.operation_status, ''))) IN ('REVIEW_REQUIRED', 'FAILED')
+        )
+        OR (
+          UPPER(BTRIM(COALESCE(provider_diagnostic.diagnostic_json->>'provider_submission_status', provider_diagnostic.diagnostic_json #>> '{provider_submit_diagnostic,provider_submission_status}', ''))) = 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL'
+          AND UPPER(BTRIM(COALESCE(provider_submit_review_scope.operation_status, ''))) IN ('REVIEW_REQUIRED', 'FAILED')
+        )
+        OR (
+          UPPER(BTRIM(COALESCE(provider_diagnostic.diagnostic_json->>'provider_submission_status', provider_diagnostic.diagnostic_json #>> '{provider_submit_diagnostic,provider_submission_status}', ''))) = 'PROVIDER_SUBMISSION_ACCEPTED'
+          AND UPPER(BTRIM(COALESCE(provider_submit_review_scope.operation_status, ''))) = 'REVIEW_REQUIRED'
+        )
+      )
+      AND UPPER(BTRIM(COALESCE(provider_diagnostic.diagnostic_json->>'provider_submission_status', provider_diagnostic.diagnostic_json #>> '{provider_submit_diagnostic,provider_submission_status}', ''))) <> 'MANUAL_RESOLVED_NO_PAYMENT_MADE'
+  ),
+  provider_submit_review_alerts AS (
+    SELECT
+      'PAYMENT_PROVIDER_SUBMIT_REVIEW'::text AS alert_kind,
+      'critical'::text AS severity,
+      91::integer AS severity_rank,
+      'pay_batch'::text AS entity_kind,
+      provider_submit_review_base.pay_batch_id AS entity_id,
+      provider_submit_review_base.pay_batch_id AS pay_batch_id,
+      'banking_pay_operation'::text AS payload_source_kind,
+      provider_submit_review_base.operation_id AS payload_source_id,
+      jsonb_strip_nulls(jsonb_build_object(
+        'alert_kind', 'PAYMENT_PROVIDER_SUBMIT_REVIEW',
+        'issue_kind', 'PAYMENT_PROVIDER_SUBMIT_REVIEW',
+        'pay_batch_id', provider_submit_review_base.pay_batch_id::text,
+        'operation_id', provider_submit_review_base.operation_id::text,
+        'chunk_id', provider_submit_review_base.chunk_id_text,
+        'review_reason_code', provider_submit_review_base.review_reason_code,
+        'provider_submission_status', provider_submit_review_base.provider_submission_status
+      )) AS fingerprint_payload_json,
+      CASE provider_submit_review_base.provider_submission_status
+        WHEN 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK' THEN 'Provider submission outcome unknown'
+        WHEN 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME' THEN 'Provider response missing'
+        WHEN 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE' THEN 'Provider response unusable'
+        WHEN 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID' THEN 'Provider acceptance evidence missing'
+        WHEN 'PROVIDER_SUBMISSION_REJECTED' THEN 'Provider rejected payment'
+        WHEN 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL' THEN 'Provider was not called'
+        WHEN 'PROVIDER_SUBMISSION_ACCEPTED' THEN 'Provider acceptance evidence present'
+        ELSE 'Provider submission needs review'
+      END::text AS label,
+      CASE provider_submit_review_base.provider_submission_status
+        WHEN 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK' THEN 'Provider submission outcome unknown'
+        WHEN 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME' THEN 'Provider response missing'
+        WHEN 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE' THEN 'Provider response unusable'
+        WHEN 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID' THEN 'Provider acceptance evidence missing'
+        WHEN 'PROVIDER_SUBMISSION_REJECTED' THEN 'Provider rejected payment'
+        WHEN 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL' THEN 'Provider was not called'
+        WHEN 'PROVIDER_SUBMISSION_ACCEPTED' THEN 'Provider acceptance evidence present'
+        ELSE 'Provider submission needs review'
+      END::text AS title,
+      CASE provider_submit_review_base.provider_submission_status
+        WHEN 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK' THEN 'Submit chunk became stale with no provider response, transfer event, rail transaction ID, or rail state.'
+        WHEN 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME' THEN 'A provider request may have been sent, but no usable provider response was recorded.'
+        WHEN 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE' THEN 'Provider returned an unusable response. Manual reconciliation is required before retry.'
+        WHEN 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID' THEN 'Provider response/status was recorded, but no usable external provider transaction/reference was stored.'
+        WHEN 'PROVIDER_SUBMISSION_REJECTED' THEN 'Provider rejected the payment submission.'
+        WHEN 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL' THEN 'Provider submission failed before the provider payment request was sent.'
+        WHEN 'PROVIDER_SUBMISSION_ACCEPTED' THEN 'Provider acceptance evidence exists and retry is unsafe until reconciliation is complete.'
+        ELSE 'Provider submission requires review before retry.'
+      END::text AS description,
+      COALESCE(NULLIF(BTRIM(provider_submit_review_base.provider_submit_diagnostic->>'recommended_action'), ''), 'Check Revolut/bank before retry. If no payment was made, record manual no-payment confirmation.')::text AS action_guidance,
+      provider_submit_review_base.sort_at_utc
+    FROM provider_submit_review_base
+    WHERE NOT EXISTS (
+        SELECT 1 FROM blocked_funds_alerts AS stronger_blocked
+        WHERE stronger_blocked.pay_batch_id = provider_submit_review_base.pay_batch_id
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM bank_event_alerts AS stronger_bank_event
+        WHERE stronger_bank_event.pay_batch_id = provider_submit_review_base.pay_batch_id
+          AND stronger_bank_event.alert_kind IN ('BANK_REJECTED_PAYMENT', 'BANK_RETURNED_PAYMENT', 'RAIL_SUBMISSION_UNKNOWN_OR_TIMEOUT')
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM transfer_alerts AS stronger_transfer
+        WHERE stronger_transfer.pay_batch_id = provider_submit_review_base.pay_batch_id
+          AND stronger_transfer.alert_kind IN ('BANK_REJECTED_PAYMENT', 'BANK_RETURNED_PAYMENT', 'RAIL_SUBMISSION_UNKNOWN_OR_TIMEOUT')
+      )
+  ),
   raw_current_alerts AS (
     SELECT * FROM blocked_funds_alerts
     UNION ALL
@@ -21368,6 +21742,8 @@ BEGIN
     SELECT * FROM correction_work_alerts
     UNION ALL
     SELECT * FROM remittance_alerts
+    UNION ALL
+    SELECT * FROM provider_submit_review_alerts
   ),
   current_alert_identities AS (
     SELECT
@@ -21485,6 +21861,9 @@ BEGIN
   ));
 END;
 $function$;
+
+
+
 
 
 
