@@ -1,5 +1,8 @@
 
 
+
+
+
 CREATE OR REPLACE FUNCTION public.bulk_process_dataset_v1(p_filters jsonb DEFAULT '{}'::jsonb)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -83,97 +86,162 @@ BEGIN
     WHERE summary_row.timesheet_id IS NOT NULL
        OR summary_row.contract_week_id IS NOT NULL
   ),
-  classified_rows AS MATERIALIZED (
+  source_rows AS MATERIALIZED (
     SELECT
       lightweight_rows.*,
+      current_timesheet.is_adjustment AS current_timesheet_is_adjustment,
+      current_timesheet.parent_timesheet_id AS current_timesheet_parent_timesheet_id,
+      current_timesheet.adjustment_origin AS current_timesheet_adjustment_origin,
+      current_timesheet.correction_id AS current_timesheet_correction_id,
+      current_timesheet.correction_kind AS current_timesheet_correction_kind,
+      (
+        COALESCE(current_timesheet.is_adjustment, FALSE) = TRUE
+        AND (
+          LEFT(UPPER(COALESCE(NULLIF(BTRIM(current_timesheet.adjustment_origin::text), ''), '')), 7) = 'IMPORT_'
+          OR NULLIF(BTRIM(COALESCE(current_timesheet.correction_id::text, '')), '') IS NOT NULL
+          OR NULLIF(BTRIM(COALESCE(current_timesheet.correction_kind::text, '')), '') IS NOT NULL
+        )
+      ) AS is_import_derived_adjustment_calc,
+      (
+        (
+          COALESCE(lightweight_rows.is_adjusted, FALSE) = TRUE
+          OR COALESCE(current_timesheet.is_adjustment, FALSE) = TRUE
+          OR current_timesheet.parent_timesheet_id IS NOT NULL
+        )
+        AND (
+          UPPER(COALESCE(lightweight_rows.route_family, '')) IN ('MANUAL', 'MANUAL_NON_QR', 'QR')
+          OR UPPER(COALESCE(lightweight_rows.submission_mode, lightweight_rows.submission_mode_snapshot, '')) = 'MANUAL'
+          OR COALESCE(lightweight_rows.is_qr, FALSE) = TRUE
+          OR UPPER(COALESCE(lightweight_rows.qr_status, '')) IN ('PENDING', 'SIGNED', 'SCANNED', 'USED')
+        )
+        AND NOT (
+          COALESCE(current_timesheet.is_adjustment, FALSE) = TRUE
+          AND (
+            LEFT(UPPER(COALESCE(NULLIF(BTRIM(current_timesheet.adjustment_origin::text), ''), '')), 7) = 'IMPORT_'
+            OR NULLIF(BTRIM(COALESCE(current_timesheet.correction_id::text, '')), '') IS NOT NULL
+            OR NULLIF(BTRIM(COALESCE(current_timesheet.correction_kind::text, '')), '') IS NOT NULL
+          )
+        )
+      ) AS is_user_created_manual_qr_adjustment_calc
+    FROM lightweight_rows
+    LEFT JOIN public.timesheets AS current_timesheet
+      ON current_timesheet.timesheet_id = lightweight_rows.timesheet_id
+  ),
+  classified_rows AS MATERIALIZED (
+    SELECT
+      source_rows.*,
       CASE
-        WHEN lightweight_rows.timesheet_id IS NOT NULL THEN 'timesheet:' || lightweight_rows.timesheet_id::text
-        WHEN lightweight_rows.contract_week_id IS NOT NULL THEN 'contract_week:' || lightweight_rows.contract_week_id::text
+        WHEN source_rows.timesheet_id IS NOT NULL THEN 'timesheet:' || source_rows.timesheet_id::text
+        WHEN source_rows.contract_week_id IS NOT NULL THEN 'contract_week:' || source_rows.contract_week_id::text
         ELSE NULL::text
       END AS row_key_calc,
       CASE
-        WHEN UPPER(COALESCE(lightweight_rows.route_type, '')) IN ('WEEKLY_NHSP', 'WEEKLY_NHSP_ADJUSTMENT', 'NHSP')
-          AND NOT (COALESCE(lightweight_rows.is_adjusted, FALSE) = TRUE AND UPPER(COALESCE(lightweight_rows.submission_mode, '')) = 'MANUAL') THEN 'IMPORT_AUTHORITATIVE'
-        WHEN UPPER(COALESCE(lightweight_rows.route_type, '')) IN ('WEEKLY_HEALTHROSTER', 'HEALTHROSTER', 'HEALTHROSTER_DAILY')
-          AND COALESCE(lightweight_rows.client_no_timesheet_required, FALSE) = TRUE THEN 'IMPORT_AUTHORITATIVE'
-        WHEN UPPER(COALESCE(lightweight_rows.route_family, '')) = 'QR' OR COALESCE(lightweight_rows.is_qr, FALSE) = TRUE THEN 'QR'
-        WHEN UPPER(COALESCE(lightweight_rows.route_family, '')) = 'ELECTRONIC' OR UPPER(COALESCE(lightweight_rows.submission_mode, '')) = 'ELECTRONIC' THEN 'ELECTRONIC'
+        WHEN source_rows.is_import_derived_adjustment_calc = TRUE THEN 'IMPORT_AUTHORITATIVE'
+        WHEN UPPER(COALESCE(source_rows.route_type, '')) IN ('WEEKLY_NHSP', 'WEEKLY_NHSP_ADJUSTMENT', 'NHSP')
+          AND source_rows.is_user_created_manual_qr_adjustment_calc = FALSE THEN 'IMPORT_AUTHORITATIVE'
+        WHEN UPPER(COALESCE(source_rows.route_type, '')) IN ('WEEKLY_HEALTHROSTER', 'HEALTHROSTER', 'HEALTHROSTER_DAILY')
+          AND COALESCE(source_rows.client_no_timesheet_required, FALSE) = TRUE
+          AND source_rows.is_user_created_manual_qr_adjustment_calc = FALSE THEN 'IMPORT_AUTHORITATIVE'
+        WHEN UPPER(COALESCE(source_rows.route_family, '')) = 'QR' OR COALESCE(source_rows.is_qr, FALSE) = TRUE THEN 'QR'
+        WHEN UPPER(COALESCE(source_rows.route_family, '')) = 'ELECTRONIC' OR UPPER(COALESCE(source_rows.submission_mode, '')) = 'ELECTRONIC' THEN 'ELECTRONIC'
         ELSE 'MANUAL_NON_QR'
       END AS route_family_calc,
       CASE
-        WHEN UPPER(COALESCE(lightweight_rows.route_type, '')) IN ('WEEKLY_HEALTHROSTER', 'HEALTHROSTER', 'HEALTHROSTER_DAILY')
-          AND COALESCE(lightweight_rows.client_no_timesheet_required, FALSE) = TRUE THEN 'HEALTHROSTER_NO_TIMESHEET'
-        WHEN UPPER(COALESCE(lightweight_rows.route_type, '')) IN ('WEEKLY_HEALTHROSTER', 'HEALTHROSTER', 'HEALTHROSTER_DAILY') THEN 'HEALTHROSTER_TIMESHEET_REQUIRED'
-        WHEN UPPER(COALESCE(lightweight_rows.route_type, '')) IN ('WEEKLY_NHSP', 'WEEKLY_NHSP_ADJUSTMENT', 'NHSP')
-          AND NOT (COALESCE(lightweight_rows.is_adjusted, FALSE) = TRUE AND UPPER(COALESCE(lightweight_rows.submission_mode, '')) = 'MANUAL') THEN 'NHSP'
-        WHEN UPPER(COALESCE(lightweight_rows.route_family, '')) = 'QR' OR COALESCE(lightweight_rows.is_qr, FALSE) = TRUE THEN 'QR'
-        WHEN UPPER(COALESCE(lightweight_rows.route_family, '')) = 'ELECTRONIC' OR UPPER(COALESCE(lightweight_rows.submission_mode, '')) = 'ELECTRONIC' THEN 'ELECTRONIC'
+        WHEN source_rows.is_import_derived_adjustment_calc = TRUE
+          AND UPPER(COALESCE(source_rows.route_type, '')) IN ('WEEKLY_HEALTHROSTER', 'HEALTHROSTER', 'HEALTHROSTER_DAILY')
+          AND COALESCE(source_rows.client_no_timesheet_required, FALSE) = TRUE THEN 'HEALTHROSTER_NO_TIMESHEET'
+        WHEN source_rows.is_import_derived_adjustment_calc = TRUE
+          AND UPPER(COALESCE(source_rows.route_type, '')) IN ('WEEKLY_HEALTHROSTER', 'HEALTHROSTER', 'HEALTHROSTER_DAILY') THEN 'HEALTHROSTER_TIMESHEET_REQUIRED'
+        WHEN source_rows.is_import_derived_adjustment_calc = TRUE
+          AND UPPER(COALESCE(source_rows.route_type, '')) IN ('WEEKLY_NHSP', 'WEEKLY_NHSP_ADJUSTMENT', 'NHSP') THEN 'NHSP'
+        WHEN source_rows.is_import_derived_adjustment_calc = TRUE THEN 'IMPORT_AUTHORITATIVE'
+        WHEN UPPER(COALESCE(source_rows.route_type, '')) IN ('WEEKLY_HEALTHROSTER', 'HEALTHROSTER', 'HEALTHROSTER_DAILY')
+          AND COALESCE(source_rows.client_no_timesheet_required, FALSE) = TRUE
+          AND source_rows.is_user_created_manual_qr_adjustment_calc = FALSE THEN 'HEALTHROSTER_NO_TIMESHEET'
+        WHEN UPPER(COALESCE(source_rows.route_type, '')) IN ('WEEKLY_HEALTHROSTER', 'HEALTHROSTER', 'HEALTHROSTER_DAILY')
+          AND source_rows.is_user_created_manual_qr_adjustment_calc = FALSE THEN 'HEALTHROSTER_TIMESHEET_REQUIRED'
+        WHEN UPPER(COALESCE(source_rows.route_type, '')) IN ('WEEKLY_NHSP', 'WEEKLY_NHSP_ADJUSTMENT', 'NHSP')
+          AND source_rows.is_user_created_manual_qr_adjustment_calc = FALSE THEN 'NHSP'
+        WHEN UPPER(COALESCE(source_rows.route_family, '')) = 'QR' OR COALESCE(source_rows.is_qr, FALSE) = TRUE THEN 'QR'
+        WHEN UPPER(COALESCE(source_rows.route_family, '')) = 'ELECTRONIC' OR UPPER(COALESCE(source_rows.submission_mode, '')) = 'ELECTRONIC' THEN 'ELECTRONIC'
         ELSE 'MANUAL_NON_QR'
       END AS route_subfamily_calc,
       CASE
-        WHEN UPPER(COALESCE(lightweight_rows.route_type, '')) IN ('WEEKLY_NHSP', 'WEEKLY_NHSP_ADJUSTMENT', 'NHSP')
-          AND NOT (COALESCE(lightweight_rows.is_adjusted, FALSE) = TRUE AND UPPER(COALESCE(lightweight_rows.submission_mode, '')) = 'MANUAL') THEN 'IMPORT'
-        WHEN UPPER(COALESCE(lightweight_rows.route_type, '')) IN ('WEEKLY_HEALTHROSTER', 'HEALTHROSTER', 'HEALTHROSTER_DAILY')
-          AND COALESCE(lightweight_rows.client_no_timesheet_required, FALSE) = TRUE THEN 'IMPORT'
-        WHEN UPPER(COALESCE(lightweight_rows.underlying_channel_family, lightweight_rows.route_family, '')) = 'QR' OR COALESCE(lightweight_rows.is_qr, FALSE) = TRUE THEN 'QR'
-        WHEN UPPER(COALESCE(lightweight_rows.underlying_channel_family, lightweight_rows.route_family, '')) = 'ELECTRONIC' OR UPPER(COALESCE(lightweight_rows.submission_mode, '')) = 'ELECTRONIC' THEN 'ELECTRONIC'
+        WHEN source_rows.is_import_derived_adjustment_calc = TRUE THEN 'IMPORT'
+        WHEN UPPER(COALESCE(source_rows.route_type, '')) IN ('WEEKLY_NHSP', 'WEEKLY_NHSP_ADJUSTMENT', 'NHSP')
+          AND source_rows.is_user_created_manual_qr_adjustment_calc = FALSE THEN 'IMPORT'
+        WHEN UPPER(COALESCE(source_rows.route_type, '')) IN ('WEEKLY_HEALTHROSTER', 'HEALTHROSTER', 'HEALTHROSTER_DAILY')
+          AND COALESCE(source_rows.client_no_timesheet_required, FALSE) = TRUE
+          AND source_rows.is_user_created_manual_qr_adjustment_calc = FALSE THEN 'IMPORT'
+        WHEN UPPER(COALESCE(source_rows.underlying_channel_family, source_rows.route_family, '')) = 'QR' OR COALESCE(source_rows.is_qr, FALSE) = TRUE THEN 'QR'
+        WHEN UPPER(COALESCE(source_rows.underlying_channel_family, source_rows.route_family, '')) = 'ELECTRONIC' OR UPPER(COALESCE(source_rows.submission_mode, '')) = 'ELECTRONIC' THEN 'ELECTRONIC'
         ELSE 'MANUAL_NON_QR'
       END AS underlying_channel_family_calc,
       CASE
-        WHEN UPPER(COALESCE(lightweight_rows.sheet_scope, lightweight_rows.route_subfamily, '')) = 'DAILY' THEN 'DAILY'
+        WHEN UPPER(COALESCE(source_rows.sheet_scope, source_rows.route_subfamily, '')) = 'DAILY' THEN 'DAILY'
         ELSE 'WEEKLY'
       END AS period_type_calc,
       CASE
-        WHEN lightweight_rows.timesheet_id IS NULL
-          OR UPPER(COALESCE(lightweight_rows.processing_status, lightweight_rows.tools_stage, lightweight_rows.summary_stage, '')) IN ('UNPROCESSED', 'UNASSIGNED')
-          OR UPPER(COALESCE(lightweight_rows.summary_stage, '')) = 'UNPROCESSED' THEN 'UNPROCESSED'
+        WHEN source_rows.timesheet_id IS NULL
+          OR UPPER(COALESCE(source_rows.processing_status, source_rows.tools_stage, source_rows.summary_stage, '')) IN ('UNPROCESSED', 'UNASSIGNED')
+          OR UPPER(COALESCE(source_rows.summary_stage, '')) = 'UNPROCESSED' THEN 'UNPROCESSED'
         ELSE 'PROCESSED'
       END AS bulk_process_bucket_calc,
       (
-        COALESCE(lightweight_rows.paid_at_utc, lightweight_rows.pay_paid_at_utc) IS NOT NULL
-        OR COALESCE(lightweight_rows.invoice_is_paid, FALSE) = TRUE
-        OR COALESCE(lightweight_rows.invoice_segments_locked, 0) > 0
+        COALESCE(source_rows.paid_at_utc, source_rows.pay_paid_at_utc) IS NOT NULL
+        OR COALESCE(source_rows.invoice_is_paid, FALSE) = TRUE
+        OR COALESCE(source_rows.invoice_segments_locked, 0) > 0
       ) AS locked_calc,
-      COALESCE(lightweight_rows.is_authorised, FALSE) AS authorised_calc,
+      COALESCE(source_rows.is_authorised, FALSE) AS authorised_calc,
       (
-        UPPER(COALESCE(lightweight_rows.processing_status, '')) = 'PENDING_AUTH'
-        OR UPPER(COALESCE(lightweight_rows.processing_status, '')) = 'READY_FOR_HR'
+        UPPER(COALESCE(source_rows.processing_status, '')) = 'PENDING_AUTH'
+        OR UPPER(COALESCE(source_rows.processing_status, '')) = 'READY_FOR_HR'
       ) AS requires_authorisation_calc,
       (
-        UPPER(COALESCE(lightweight_rows.qr_status, '')) = 'PENDING'
-        AND lightweight_rows.timesheet_id IS NOT NULL
+        UPPER(COALESCE(source_rows.qr_status, '')) = 'PENDING'
+        AND source_rows.timesheet_id IS NOT NULL
       ) AS qr_unsigned_blocked_calc,
       (
-        COALESCE(lightweight_rows.validation_status, '') <> ''
-        AND UPPER(COALESCE(lightweight_rows.validation_status, '')) NOT IN ('VALIDATION_OK', 'OVERRIDDEN', 'OK', 'VALID')
+        COALESCE(source_rows.validation_status, '') <> ''
+        AND UPPER(COALESCE(source_rows.validation_status, '')) NOT IN ('VALIDATION_OK', 'OVERRIDDEN', 'OK', 'VALID')
       ) AS hr_validation_awaiting_calc,
       CASE
-        WHEN UPPER(COALESCE(lightweight_rows.route_type, '')) IN ('WEEKLY_HEALTHROSTER', 'HEALTHROSTER', 'HEALTHROSTER_DAILY')
-          AND COALESCE(lightweight_rows.client_no_timesheet_required, FALSE) = TRUE THEN 'HR'
-        WHEN UPPER(COALESCE(lightweight_rows.route_type, '')) IN ('WEEKLY_NHSP', 'WEEKLY_NHSP_ADJUSTMENT', 'NHSP')
-          AND NOT (COALESCE(lightweight_rows.is_adjusted, FALSE) = TRUE AND UPPER(COALESCE(lightweight_rows.submission_mode, '')) = 'MANUAL') THEN 'NHSP'
+        WHEN source_rows.is_import_derived_adjustment_calc = TRUE
+          AND UPPER(COALESCE(source_rows.route_type, '')) IN ('WEEKLY_HEALTHROSTER', 'HEALTHROSTER', 'HEALTHROSTER_DAILY') THEN 'HR'
+        WHEN source_rows.is_import_derived_adjustment_calc = TRUE
+          AND UPPER(COALESCE(source_rows.route_type, '')) IN ('WEEKLY_NHSP', 'WEEKLY_NHSP_ADJUSTMENT', 'NHSP') THEN 'NHSP'
+        WHEN UPPER(COALESCE(source_rows.route_type, '')) IN ('WEEKLY_HEALTHROSTER', 'HEALTHROSTER', 'HEALTHROSTER_DAILY')
+          AND COALESCE(source_rows.client_no_timesheet_required, FALSE) = TRUE
+          AND source_rows.is_user_created_manual_qr_adjustment_calc = FALSE THEN 'HR'
+        WHEN UPPER(COALESCE(source_rows.route_type, '')) IN ('WEEKLY_NHSP', 'WEEKLY_NHSP_ADJUSTMENT', 'NHSP')
+          AND source_rows.is_user_created_manual_qr_adjustment_calc = FALSE THEN 'NHSP'
         ELSE 'TIMESHEETS'
       END AS bulk_authorise_classification_calc,
       MD5(CONCAT_WS('|',
-        COALESCE(lightweight_rows.timesheet_id::text, ''),
-        COALESCE(lightweight_rows.contract_week_id::text, ''),
-        COALESCE(lightweight_rows.processing_status, ''),
-        COALESCE(lightweight_rows.summary_stage, ''),
-        COALESCE(lightweight_rows.tools_stage, ''),
-        COALESCE(lightweight_rows.authorised_at_utc::text, ''),
-        COALESCE(lightweight_rows.authorised_at_server::text, ''),
-        COALESCE(lightweight_rows.processed_at_utc::text, ''),
-        COALESCE(lightweight_rows.paid_at_utc::text, ''),
-        COALESCE(lightweight_rows.invoice_segments_locked::text, ''),
-        COALESCE(lightweight_rows.route_family, ''),
-        COALESCE(lightweight_rows.route_subfamily, ''),
-        COALESCE(lightweight_rows.validation_status, ''),
-        COALESCE(lightweight_rows.attached_evidence_count::text, ''),
-        COALESCE(lightweight_rows.primary_artifact_storage_key, '')
+        COALESCE(source_rows.timesheet_id::text, ''),
+        COALESCE(source_rows.contract_week_id::text, ''),
+        COALESCE(source_rows.processing_status, ''),
+        COALESCE(source_rows.summary_stage, ''),
+        COALESCE(source_rows.tools_stage, ''),
+        COALESCE(source_rows.authorised_at_utc::text, ''),
+        COALESCE(source_rows.authorised_at_server::text, ''),
+        COALESCE(source_rows.processed_at_utc::text, ''),
+        COALESCE(source_rows.paid_at_utc::text, ''),
+        COALESCE(source_rows.invoice_segments_locked::text, ''),
+        COALESCE(source_rows.route_family, ''),
+        COALESCE(source_rows.route_subfamily, ''),
+        COALESCE(source_rows.validation_status, ''),
+        COALESCE(source_rows.attached_evidence_count::text, ''),
+        COALESCE(source_rows.primary_artifact_storage_key, ''),
+        COALESCE(source_rows.is_import_derived_adjustment_calc::text, ''),
+        COALESCE(source_rows.is_user_created_manual_qr_adjustment_calc::text, ''),
+        COALESCE(source_rows.current_timesheet_adjustment_origin::text, ''),
+        COALESCE(source_rows.current_timesheet_correction_id::text, ''),
+        COALESCE(source_rows.current_timesheet_correction_kind::text, '')
       )) AS row_signature_calc
-    FROM lightweight_rows
-    WHERE (v_week_ending_from IS NULL OR lightweight_rows.week_ending_date >= v_week_ending_from)
-      AND (v_week_ending_to IS NULL OR lightweight_rows.week_ending_date <= v_week_ending_to)
+    FROM source_rows
+    WHERE (v_week_ending_from IS NULL OR source_rows.week_ending_date >= v_week_ending_from)
+      AND (v_week_ending_to IS NULL OR source_rows.week_ending_date <= v_week_ending_to)
   ),
   decision_rows AS MATERIALIZED (
     SELECT
@@ -269,9 +337,11 @@ BEGIN
       CASE
         WHEN UPPER(NULLIF(BTRIM(COALESCE(timesheet_evidence.kind::text, '')), '')) IN ('TIMESHEET', 'TS') THEN 'TIMESHEET'
         WHEN UPPER(NULLIF(BTRIM(COALESCE(timesheet_evidence.kind::text, '')), '')) IN ('MILEAGE', 'MILES', 'MILE') THEN 'MILEAGE'
-        WHEN UPPER(NULLIF(BTRIM(COALESCE(timesheet_evidence.kind::text, '')), '')) IN ('TRAVEL', 'EXPENSE', 'EXPENSES') THEN 'TRAVEL'
+        WHEN UPPER(NULLIF(BTRIM(COALESCE(timesheet_evidence.kind::text, '')), '')) = 'TRAVEL' THEN 'TRAVEL'
         WHEN UPPER(NULLIF(BTRIM(COALESCE(timesheet_evidence.kind::text, '')), '')) IN ('ACCOMMODATION', 'ACCOM') THEN 'ACCOMMODATION'
         WHEN UPPER(NULLIF(BTRIM(COALESCE(timesheet_evidence.kind::text, '')), '')) = 'OTHER' THEN 'OTHER'
+        WHEN UPPER(NULLIF(BTRIM(COALESCE(timesheet_evidence.kind::text, '')), '')) IN ('EXPENSE', 'EXPENSES') THEN 'EXPENSE'
+        WHEN UPPER(NULLIF(BTRIM(COALESCE(timesheet_evidence.kind::text, '')), '')) IS NOT NULL THEN UPPER(NULLIF(BTRIM(COALESCE(timesheet_evidence.kind::text, '')), ''))
         ELSE 'OTHER'
       END AS evidence_kind_norm,
       NULLIF(BTRIM(COALESCE(timesheet_evidence.display_name, '')), '') AS evidence_display_name,
@@ -293,9 +363,11 @@ BEGIN
       CASE
         WHEN UPPER(NULLIF(BTRIM(COALESCE(manual_timesheet_queue.meta_json->>'staged_kind', manual_timesheet_queue.meta_json->>'kind', '')), '')) IN ('TIMESHEET', 'TS') THEN 'TIMESHEET'
         WHEN UPPER(NULLIF(BTRIM(COALESCE(manual_timesheet_queue.meta_json->>'staged_kind', manual_timesheet_queue.meta_json->>'kind', '')), '')) IN ('MILEAGE', 'MILES', 'MILE') THEN 'MILEAGE'
-        WHEN UPPER(NULLIF(BTRIM(COALESCE(manual_timesheet_queue.meta_json->>'staged_kind', manual_timesheet_queue.meta_json->>'kind', '')), '')) IN ('TRAVEL', 'EXPENSE', 'EXPENSES') THEN 'TRAVEL'
+        WHEN UPPER(NULLIF(BTRIM(COALESCE(manual_timesheet_queue.meta_json->>'staged_kind', manual_timesheet_queue.meta_json->>'kind', '')), '')) = 'TRAVEL' THEN 'TRAVEL'
         WHEN UPPER(NULLIF(BTRIM(COALESCE(manual_timesheet_queue.meta_json->>'staged_kind', manual_timesheet_queue.meta_json->>'kind', '')), '')) IN ('ACCOMMODATION', 'ACCOM') THEN 'ACCOMMODATION'
         WHEN UPPER(NULLIF(BTRIM(COALESCE(manual_timesheet_queue.meta_json->>'staged_kind', manual_timesheet_queue.meta_json->>'kind', '')), '')) = 'OTHER' THEN 'OTHER'
+        WHEN UPPER(NULLIF(BTRIM(COALESCE(manual_timesheet_queue.meta_json->>'staged_kind', manual_timesheet_queue.meta_json->>'kind', '')), '')) IN ('EXPENSE', 'EXPENSES') THEN 'EXPENSE'
+        WHEN UPPER(NULLIF(BTRIM(COALESCE(manual_timesheet_queue.meta_json->>'staged_kind', manual_timesheet_queue.meta_json->>'kind', '')), '')) IS NOT NULL THEN UPPER(NULLIF(BTRIM(COALESCE(manual_timesheet_queue.meta_json->>'staged_kind', manual_timesheet_queue.meta_json->>'kind', '')), ''))
         ELSE 'OTHER'
       END AS evidence_kind_norm,
       NULLIF(BTRIM(COALESCE(manual_timesheet_queue.original_filename, '')), '') AS evidence_display_name,
@@ -318,16 +390,49 @@ BEGIN
         ORDER BY
           CASE evidence_kind_rows.evidence_kind_norm
             WHEN 'TIMESHEET' THEN 1
-            WHEN 'TRAVEL' THEN 2
-            WHEN 'MILEAGE' THEN 3
+            WHEN 'MILEAGE' THEN 2
+            WHEN 'TRAVEL' THEN 3
             WHEN 'ACCOMMODATION' THEN 4
             WHEN 'OTHER' THEN 5
             ELSE 6
           END,
+          evidence_kind_rows.evidence_kind_norm ASC,
           evidence_kind_rows.evidence_created_at ASC NULLS LAST,
           evidence_kind_rows.evidence_id ASC
       ) AS evidence_rank
     FROM evidence_kind_rows
+  ),
+  evidence_kind_counts AS MATERIALIZED (
+    SELECT
+      evidence_kind_ranked.row_key_calc AS row_key_calc,
+      evidence_kind_ranked.evidence_kind_norm AS evidence_kind_norm,
+      COUNT(*)::integer AS evidence_kind_count,
+      CASE evidence_kind_ranked.evidence_kind_norm
+        WHEN 'TIMESHEET' THEN 1
+        WHEN 'MILEAGE' THEN 2
+        WHEN 'TRAVEL' THEN 3
+        WHEN 'ACCOMMODATION' THEN 4
+        WHEN 'OTHER' THEN 5
+        ELSE 6
+      END AS evidence_kind_sort
+    FROM evidence_kind_ranked
+    GROUP BY evidence_kind_ranked.row_key_calc, evidence_kind_ranked.evidence_kind_norm
+  ),
+  evidence_kind_extra_badges AS MATERIALIZED (
+    SELECT
+      evidence_kind_counts.row_key_calc AS row_key_calc,
+      JSONB_AGG(
+        JSONB_BUILD_OBJECT(
+          'kind', evidence_kind_counts.evidence_kind_norm,
+          'present', evidence_kind_counts.evidence_kind_count > 0,
+          'has_evidence', evidence_kind_counts.evidence_kind_count > 0,
+          'count', evidence_kind_counts.evidence_kind_count
+        )
+        ORDER BY evidence_kind_counts.evidence_kind_sort, evidence_kind_counts.evidence_kind_norm
+      ) AS extra_evidence_badges
+    FROM evidence_kind_counts
+    WHERE evidence_kind_counts.evidence_kind_norm NOT IN ('TIMESHEET', 'MILEAGE', 'TRAVEL', 'ACCOMMODATION', 'OTHER')
+    GROUP BY evidence_kind_counts.row_key_calc
   ),
   evidence_kind_summary AS MATERIALIZED (
     SELECT
@@ -422,6 +527,33 @@ BEGIN
         decision_rows.route_subfamily_calc,
         'underlying_channel_family',
         decision_rows.underlying_channel_family_calc,
+        'is_import_authoritative',
+        decision_rows.route_family_calc = 'IMPORT_AUTHORITATIVE',
+        'is_import_derived_adjustment',
+        COALESCE(decision_rows.is_import_derived_adjustment_calc, FALSE),
+        'is_user_created_manual_qr_adjustment',
+        COALESCE(decision_rows.is_user_created_manual_qr_adjustment_calc, FALSE),
+        'adjustment_source',
+        CASE
+          WHEN decision_rows.is_import_derived_adjustment_calc = TRUE THEN 'IMPORT_DERIVED'
+          WHEN decision_rows.is_user_created_manual_qr_adjustment_calc = TRUE THEN 'USER_CREATED_MANUAL_QR'
+          ELSE NULL::text
+        END,
+        'bulk_process_excluded_reason',
+        CASE
+          WHEN decision_rows.is_import_derived_adjustment_calc = TRUE THEN 'IMPORT_AUTHORITATIVE_ADJUSTED_HOURS'
+          ELSE NULL::text
+        END,
+        'current_timesheet_is_adjustment',
+        decision_rows.current_timesheet_is_adjustment,
+        'parent_timesheet_id',
+        decision_rows.current_timesheet_parent_timesheet_id,
+        'adjustment_origin',
+        decision_rows.current_timesheet_adjustment_origin,
+        'correction_id',
+        decision_rows.current_timesheet_correction_id,
+        'correction_kind',
+        decision_rows.current_timesheet_correction_kind,
         'summary_stage',
         decision_rows.summary_stage,
         'tools_stage',
@@ -523,9 +655,9 @@ BEGIN
         'qr_email_recipient_available',
         FALSE,
         'is_adjusted',
-        decision_rows.is_adjusted,
+        (COALESCE(decision_rows.current_timesheet_is_adjustment, FALSE) OR COALESCE(decision_rows.is_adjusted, FALSE)),
         'is_adjustment',
-        decision_rows.is_adjusted,
+        (COALESCE(decision_rows.current_timesheet_is_adjustment, FALSE) OR COALESCE(decision_rows.is_adjusted, FALSE)),
         'needs_attention',
         decision_rows.needs_attention,
         'has_rate_issue',
@@ -630,15 +762,19 @@ BEGIN
           COALESCE(evidence_kind_summary.mileage_evidence_count::text, '0'),
           COALESCE(evidence_kind_summary.travel_evidence_count::text, '0'),
           COALESCE(evidence_kind_summary.accommodation_evidence_count::text, '0'),
-          COALESCE(evidence_kind_summary.other_evidence_count::text, '0')
+          COALESCE(evidence_kind_summary.other_evidence_count::text, '0'),
+          COALESCE(evidence_kind_extra_badges.extra_evidence_badges::text, '[]')
         )),
         'evidence_badges',
-        JSONB_BUILD_ARRAY(
-          JSONB_BUILD_OBJECT('kind', 'TIMESHEET', 'present', COALESCE(evidence_kind_summary.timesheet_evidence_count, 0) > 0, 'has_evidence', COALESCE(evidence_kind_summary.timesheet_evidence_count, 0) > 0, 'count', COALESCE(evidence_kind_summary.timesheet_evidence_count, 0)),
-          JSONB_BUILD_OBJECT('kind', 'MILEAGE', 'present', COALESCE(evidence_kind_summary.mileage_evidence_count, 0) > 0, 'has_evidence', COALESCE(evidence_kind_summary.mileage_evidence_count, 0) > 0, 'count', COALESCE(evidence_kind_summary.mileage_evidence_count, 0)),
-          JSONB_BUILD_OBJECT('kind', 'TRAVEL', 'present', COALESCE(evidence_kind_summary.travel_evidence_count, 0) > 0, 'has_evidence', COALESCE(evidence_kind_summary.travel_evidence_count, 0) > 0, 'count', COALESCE(evidence_kind_summary.travel_evidence_count, 0)),
-          JSONB_BUILD_OBJECT('kind', 'ACCOMMODATION', 'present', COALESCE(evidence_kind_summary.accommodation_evidence_count, 0) > 0, 'has_evidence', COALESCE(evidence_kind_summary.accommodation_evidence_count, 0) > 0, 'count', COALESCE(evidence_kind_summary.accommodation_evidence_count, 0)),
-          JSONB_BUILD_OBJECT('kind', 'OTHER', 'present', COALESCE(evidence_kind_summary.other_evidence_count, 0) > 0, 'has_evidence', COALESCE(evidence_kind_summary.other_evidence_count, 0) > 0, 'count', COALESCE(evidence_kind_summary.other_evidence_count, 0))
+        (
+          JSONB_BUILD_ARRAY(
+            JSONB_BUILD_OBJECT('kind', 'TIMESHEET', 'present', COALESCE(evidence_kind_summary.timesheet_evidence_count, 0) > 0, 'has_evidence', COALESCE(evidence_kind_summary.timesheet_evidence_count, 0) > 0, 'count', COALESCE(evidence_kind_summary.timesheet_evidence_count, 0)),
+            JSONB_BUILD_OBJECT('kind', 'MILEAGE', 'present', COALESCE(evidence_kind_summary.mileage_evidence_count, 0) > 0, 'has_evidence', COALESCE(evidence_kind_summary.mileage_evidence_count, 0) > 0, 'count', COALESCE(evidence_kind_summary.mileage_evidence_count, 0)),
+            JSONB_BUILD_OBJECT('kind', 'TRAVEL', 'present', COALESCE(evidence_kind_summary.travel_evidence_count, 0) > 0, 'has_evidence', COALESCE(evidence_kind_summary.travel_evidence_count, 0) > 0, 'count', COALESCE(evidence_kind_summary.travel_evidence_count, 0)),
+            JSONB_BUILD_OBJECT('kind', 'ACCOMMODATION', 'present', COALESCE(evidence_kind_summary.accommodation_evidence_count, 0) > 0, 'has_evidence', COALESCE(evidence_kind_summary.accommodation_evidence_count, 0) > 0, 'count', COALESCE(evidence_kind_summary.accommodation_evidence_count, 0)),
+            JSONB_BUILD_OBJECT('kind', 'OTHER', 'present', COALESCE(evidence_kind_summary.other_evidence_count, 0) > 0, 'has_evidence', COALESCE(evidence_kind_summary.other_evidence_count, 0) > 0, 'count', COALESCE(evidence_kind_summary.other_evidence_count, 0))
+          )
+          || COALESCE(evidence_kind_extra_badges.extra_evidence_badges, '[]'::jsonb)
         ),
         'artifact_hints',
         JSONB_BUILD_OBJECT(
@@ -649,12 +785,15 @@ BEGIN
           'primary_artifact_storage_key', COALESCE(evidence_kind_summary.primary_artifact_storage_key, decision_rows.primary_artifact_storage_key),
           'primary_artifact_display_name', COALESCE(evidence_kind_summary.primary_artifact_display_name, decision_rows.primary_artifact_display_name),
           'primary_artifact_preview_mode', decision_rows.primary_artifact_preview_mode,
-          'evidence_badges', JSONB_BUILD_ARRAY(
-            JSONB_BUILD_OBJECT('kind', 'TIMESHEET', 'present', COALESCE(evidence_kind_summary.timesheet_evidence_count, 0) > 0, 'has_evidence', COALESCE(evidence_kind_summary.timesheet_evidence_count, 0) > 0, 'count', COALESCE(evidence_kind_summary.timesheet_evidence_count, 0)),
-            JSONB_BUILD_OBJECT('kind', 'MILEAGE', 'present', COALESCE(evidence_kind_summary.mileage_evidence_count, 0) > 0, 'has_evidence', COALESCE(evidence_kind_summary.mileage_evidence_count, 0) > 0, 'count', COALESCE(evidence_kind_summary.mileage_evidence_count, 0)),
-            JSONB_BUILD_OBJECT('kind', 'TRAVEL', 'present', COALESCE(evidence_kind_summary.travel_evidence_count, 0) > 0, 'has_evidence', COALESCE(evidence_kind_summary.travel_evidence_count, 0) > 0, 'count', COALESCE(evidence_kind_summary.travel_evidence_count, 0)),
-            JSONB_BUILD_OBJECT('kind', 'ACCOMMODATION', 'present', COALESCE(evidence_kind_summary.accommodation_evidence_count, 0) > 0, 'has_evidence', COALESCE(evidence_kind_summary.accommodation_evidence_count, 0) > 0, 'count', COALESCE(evidence_kind_summary.accommodation_evidence_count, 0)),
-            JSONB_BUILD_OBJECT('kind', 'OTHER', 'present', COALESCE(evidence_kind_summary.other_evidence_count, 0) > 0, 'has_evidence', COALESCE(evidence_kind_summary.other_evidence_count, 0) > 0, 'count', COALESCE(evidence_kind_summary.other_evidence_count, 0))
+          'evidence_badges', (
+            JSONB_BUILD_ARRAY(
+              JSONB_BUILD_OBJECT('kind', 'TIMESHEET', 'present', COALESCE(evidence_kind_summary.timesheet_evidence_count, 0) > 0, 'has_evidence', COALESCE(evidence_kind_summary.timesheet_evidence_count, 0) > 0, 'count', COALESCE(evidence_kind_summary.timesheet_evidence_count, 0)),
+              JSONB_BUILD_OBJECT('kind', 'MILEAGE', 'present', COALESCE(evidence_kind_summary.mileage_evidence_count, 0) > 0, 'has_evidence', COALESCE(evidence_kind_summary.mileage_evidence_count, 0) > 0, 'count', COALESCE(evidence_kind_summary.mileage_evidence_count, 0)),
+              JSONB_BUILD_OBJECT('kind', 'TRAVEL', 'present', COALESCE(evidence_kind_summary.travel_evidence_count, 0) > 0, 'has_evidence', COALESCE(evidence_kind_summary.travel_evidence_count, 0) > 0, 'count', COALESCE(evidence_kind_summary.travel_evidence_count, 0)),
+              JSONB_BUILD_OBJECT('kind', 'ACCOMMODATION', 'present', COALESCE(evidence_kind_summary.accommodation_evidence_count, 0) > 0, 'has_evidence', COALESCE(evidence_kind_summary.accommodation_evidence_count, 0) > 0, 'count', COALESCE(evidence_kind_summary.accommodation_evidence_count, 0)),
+              JSONB_BUILD_OBJECT('kind', 'OTHER', 'present', COALESCE(evidence_kind_summary.other_evidence_count, 0) > 0, 'has_evidence', COALESCE(evidence_kind_summary.other_evidence_count, 0) > 0, 'count', COALESCE(evidence_kind_summary.other_evidence_count, 0))
+            )
+            || COALESCE(evidence_kind_extra_badges.extra_evidence_badges, '[]'::jsonb)
           )
         ),
         'action_flags',
@@ -699,11 +838,15 @@ BEGIN
     FROM decision_rows
     LEFT JOIN evidence_kind_summary AS evidence_kind_summary
       ON evidence_kind_summary.row_key_calc = decision_rows.row_key_calc
+    LEFT JOIN evidence_kind_extra_badges AS evidence_kind_extra_badges
+      ON evidence_kind_extra_badges.row_key_calc = decision_rows.row_key_calc
   ),
   manual_rows AS MATERIALIZED (
     SELECT payload_rows.row_json
     FROM payload_rows
     WHERE UPPER(COALESCE(payload_rows.row_json->>'route_family', '')) = 'MANUAL_NON_QR'
+      AND COALESCE((payload_rows.row_json->>'is_import_authoritative')::boolean, FALSE) = FALSE
+      AND COALESCE(payload_rows.row_json->>'adjustment_source', '') <> 'IMPORT_DERIVED'
       AND (
         (UPPER(COALESCE(payload_rows.row_json->>'period_type', payload_rows.row_json->>'sheet_scope', '')) = 'WEEKLY' AND v_show_weekly_manual = TRUE)
         OR (UPPER(COALESCE(payload_rows.row_json->>'period_type', payload_rows.row_json->>'sheet_scope', '')) = 'DAILY' AND v_show_daily_manual = TRUE)
@@ -801,8 +944,6 @@ BEGIN
   ));
 END;
 $function$;
-
-
 
 
 
