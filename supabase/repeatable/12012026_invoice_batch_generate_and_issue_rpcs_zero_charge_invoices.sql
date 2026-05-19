@@ -785,9 +785,6 @@ $$;
 
 
 
-
-
-
 create or replace function public.invoice_issue_and_queue_emails_batch(
   p_invoice_ids uuid[],
   p_actor_user_id uuid,
@@ -811,6 +808,7 @@ declare
   v_issue_json jsonb := '[]'::jsonb;
   v_not_due_json jsonb := '[]'::jsonb;
   v_email_json jsonb := '[]'::jsonb;
+  v_email_warn_json jsonb := '[]'::jsonb;
 
   v_debug boolean := false;
   v_steps jsonb := '[]'::jsonb;
@@ -1001,21 +999,20 @@ begin
     ));
   end if;
 
-  -- queue emails for successfully ISSUED invoices, excluding self-bill
-  create temporary table tmp_to_email on commit drop as
+  -- queue emails for successfully ISSUED invoices, excluding self-bill/do_not_send.
+  -- Recipient routing is derived before tmp_to_email so batch queueing matches handleInvoiceEmail(...).
+  create temporary table tmp_email_route_base on commit drop as
   select
     i.id as invoice_id,
     i.client_id,
     i.invoice_no,
     g.week_ending_date,
-
-    -- recipient: prefer snapshot primary invoice email if present, else clients.primary_invoice_email
     coalesce(
       nullif(btrim(coalesce(i.header_snapshot_json->>'client_primary_invoice_email','')), ''),
       nullif(btrim(coalesce(c.primary_invoice_email,'')), '')
-    ) as to_email,
-
-    g.is_self_bill
+    ) as primary_to_email,
+    g.is_self_bill,
+    coalesce(i.do_not_send,false) as do_not_send
   from tmp_issue r
   join public.invoices i
     on i.id = r.invoice_id
@@ -1024,9 +1021,313 @@ begin
   join public.clients c
     on c.id = i.client_id
   where r.ok = true
-    and upper(coalesce(r.status,'')) = 'ISSUED'
-    and coalesce(g.is_self_bill,false) = false
-    and coalesce(i.do_not_send,false) = false;
+    and upper(coalesce(r.status,'')) = 'ISSUED';
+
+  create temporary table tmp_latest_client_settings on commit drop as
+  select distinct on (cs.client_id)
+    cs.client_id,
+    cs.send_manual_invoices_to_different_email,
+    cs.manual_invoices_alt_email_address,
+    cs.effective_from,
+    cs.created_at
+  from public.client_settings cs
+  join (
+    select distinct rb.client_id
+    from tmp_email_route_base rb
+    where rb.client_id is not null
+  ) bc
+    on bc.client_id = cs.client_id
+  order by cs.client_id, cs.effective_from desc nulls last, cs.created_at desc nulls last;
+
+  create temporary table tmp_email_route_lines on commit drop as
+  select
+    rb.invoice_id,
+    il.timesheet_id,
+    (il.timesheet_id is not null and ts.timesheet_id is null) as missing_current_timesheet,
+    ts.contract_id as timesheet_contract_id,
+    cw.contract_id as contract_week_contract_id,
+    coalesce(ts.contract_id, cw.contract_id) as contract_id,
+    coalesce(ts.is_adjustment,false) as timesheet_is_adjustment,
+    coalesce(cw.is_adjustment,false) as contract_week_is_adjustment,
+    (
+      coalesce(ts.is_adjustment,false) = true
+      and (
+        left(upper(coalesce(ts.adjustment_origin::text,'')), 7) = 'IMPORT_'
+        or ts.correction_id is not null
+        or nullif(btrim(coalesce(ts.correction_kind::text,'')), '') is not null
+      )
+    ) as is_import_derived_adjustment,
+    (
+      upper(coalesce(ts.submission_mode::text,'')) in ('MANUAL','QR')
+      or nullif(btrim(coalesce(ts.qr_status::text,'')), '') is not null
+      or nullif(btrim(coalesce(ts.qr_token::text,'')), '') is not null
+    ) as is_manual_or_qr,
+    (
+      (coalesce(ts.is_adjustment,false) = true or coalesce(cw.is_adjustment,false) = true)
+      and (
+        upper(coalesce(ts.submission_mode::text,'')) in ('MANUAL','QR')
+        or nullif(btrim(coalesce(ts.qr_status::text,'')), '') is not null
+        or nullif(btrim(coalesce(ts.qr_token::text,'')), '') is not null
+      )
+      and not (
+        coalesce(ts.is_adjustment,false) = true
+        and (
+          left(upper(coalesce(ts.adjustment_origin::text,'')), 7) = 'IMPORT_'
+          or ts.correction_id is not null
+          or nullif(btrim(coalesce(ts.correction_kind::text,'')), '') is not null
+        )
+      )
+    ) as is_user_created_manual_qr_adjustment
+  from tmp_email_route_base rb
+  left join public.invoice_lines il
+    on il.invoice_id = rb.invoice_id
+   and il.timesheet_id is not null
+  left join public.timesheets ts
+    on ts.timesheet_id = il.timesheet_id
+   and ts.is_current = true
+  left join lateral (
+    select
+      coalesce(bool_or(coalesce(cw0.is_adjustment,false)), false) as is_adjustment,
+      (array_agg(cw0.contract_id order by cw0.contract_id::text) filter (where cw0.contract_id is not null))[1] as contract_id
+    from public.contract_weeks cw0
+    where cw0.timesheet_id = il.timesheet_id
+  ) cw
+    on true;
+
+  create temporary table tmp_email_route_flags on commit drop as
+  select
+    rb.invoice_id,
+    rb.client_id,
+    rb.invoice_no,
+    rb.week_ending_date,
+    rb.primary_to_email,
+    rb.is_self_bill,
+    rb.do_not_send,
+    coalesce(bool_or(coalesce(erl.missing_current_timesheet,false)), false) as has_missing_current_timesheet,
+    coalesce(bool_or(coalesce(erl.is_import_derived_adjustment,false)), false) as has_import_derived_adjustment,
+    coalesce(bool_or(coalesce(erl.is_user_created_manual_qr_adjustment,false)), false) as has_user_created_manual_qr_adjustment,
+    coalesce(bool_or(coalesce(erl.is_user_created_manual_qr_adjustment,false) = true and erl.contract_id is null), false) as has_missing_user_created_manual_qr_contract
+  from tmp_email_route_base rb
+  left join tmp_email_route_lines erl
+    on erl.invoice_id = rb.invoice_id
+  group by
+    rb.invoice_id,
+    rb.client_id,
+    rb.invoice_no,
+    rb.week_ending_date,
+    rb.primary_to_email,
+    rb.is_self_bill,
+    rb.do_not_send;
+
+  create temporary table tmp_email_route_contracts on commit drop as
+  select distinct
+    erl.invoice_id,
+    erl.contract_id,
+    (ct.id is null) as missing_contract,
+    coalesce(ct.overrideclientsettings,false) as overrideclientsettings,
+    coalesce(ct.send_manual_invoices_to_different_email,false) as send_manual_invoices_to_different_email,
+    nullif(btrim(coalesce(ct.manual_invoices_alt_email_address,'')), '') as manual_invoices_alt_email_address,
+    (
+      coalesce(ct.overrideclientsettings,false) = true
+      and coalesce(ct.send_manual_invoices_to_different_email,false) = true
+    ) as override_enabled
+  from tmp_email_route_lines erl
+  left join public.contracts ct
+    on ct.id = erl.contract_id
+  where erl.is_user_created_manual_qr_adjustment = true
+    and erl.contract_id is not null;
+
+  create temporary table tmp_email_route_contract_agg on commit drop as
+  select
+    erc.invoice_id,
+    coalesce(bool_or(coalesce(erc.missing_contract,false)), false) as missing_contract,
+    coalesce(bool_or(coalesce(erc.override_enabled,false)), false) as has_enabled_contract_override,
+    coalesce(bool_or(coalesce(erc.override_enabled,false) and erc.manual_invoices_alt_email_address is null), false) as has_missing_contract_alt_email,
+    count(distinct erc.manual_invoices_alt_email_address) filter (
+      where erc.override_enabled = true
+        and erc.manual_invoices_alt_email_address is not null
+    ) as contract_alt_email_count,
+    (array_agg(distinct erc.manual_invoices_alt_email_address) filter (
+      where erc.override_enabled = true
+        and erc.manual_invoices_alt_email_address is not null
+    ))[1] as contract_alt_email,
+    coalesce(
+      jsonb_agg(
+        jsonb_build_object(
+          'contract_id', erc.contract_id::text,
+          'email', erc.manual_invoices_alt_email_address
+        )
+      ) filter (
+        where erc.override_enabled = true
+          and erc.manual_invoices_alt_email_address is not null
+      ),
+      '[]'::jsonb
+    ) as contract_alt_details,
+    coalesce(
+      jsonb_agg(
+        jsonb_build_object(
+          'contract_id', erc.contract_id::text
+        )
+      ) filter (
+        where erc.override_enabled = true
+          and erc.manual_invoices_alt_email_address is null
+      ),
+      '[]'::jsonb
+    ) as missing_contract_alt_details
+  from tmp_email_route_contracts erc
+  group by erc.invoice_id;
+
+  create temporary table tmp_email_queue_warnings on commit drop as
+  select
+    erf.invoice_id,
+    'EMAIL_ROUTING_CHECK_FAILED'::text as warning_code,
+    'Current timesheet data could not be loaded for one or more invoice lines, so invoice email routing was not queued.'::text as warning_message,
+    jsonb_build_object(
+      'invoice_id', erf.invoice_id::text,
+      'warning_code', 'EMAIL_ROUTING_CHECK_FAILED',
+      'message', 'Current timesheet data could not be loaded for one or more invoice lines, so invoice email routing was not queued.'
+    ) as warning_json
+  from tmp_email_route_flags erf
+  where coalesce(erf.is_self_bill,false) = false
+    and coalesce(erf.do_not_send,false) = false
+    and erf.has_missing_current_timesheet = true
+
+  union all
+
+  select
+    erf.invoice_id,
+    'CONTRACT_ROUTING_CHECK_FAILED'::text as warning_code,
+    'Contract data could not be resolved for one or more user-created manual/QR adjustment invoice lines, so invoice email routing was not queued.'::text as warning_message,
+    jsonb_build_object(
+      'invoice_id', erf.invoice_id::text,
+      'warning_code', 'CONTRACT_ROUTING_CHECK_FAILED',
+      'message', 'Contract data could not be resolved for one or more user-created manual/QR adjustment invoice lines, so invoice email routing was not queued.'
+    ) as warning_json
+  from tmp_email_route_flags erf
+  where coalesce(erf.is_self_bill,false) = false
+    and coalesce(erf.do_not_send,false) = false
+    and erf.has_user_created_manual_qr_adjustment = true
+    and erf.has_missing_user_created_manual_qr_contract = true
+
+  union all
+
+  select
+    erf.invoice_id,
+    'CONTRACT_ROUTING_CHECK_FAILED'::text as warning_code,
+    'Contract data could not be loaded for one or more user-created manual/QR adjustment invoice lines, so invoice email routing was not queued.'::text as warning_message,
+    jsonb_build_object(
+      'invoice_id', erf.invoice_id::text,
+      'warning_code', 'CONTRACT_ROUTING_CHECK_FAILED',
+      'message', 'Contract data could not be loaded for one or more user-created manual/QR adjustment invoice lines, so invoice email routing was not queued.'
+    ) as warning_json
+  from tmp_email_route_flags erf
+  join tmp_email_route_contract_agg erca
+    on erca.invoice_id = erf.invoice_id
+  where coalesce(erf.is_self_bill,false) = false
+    and coalesce(erf.do_not_send,false) = false
+    and erf.has_user_created_manual_qr_adjustment = true
+    and erca.missing_contract = true
+
+  union all
+
+  select
+    erf.invoice_id,
+    'CONTRACT_MANUAL_EMAIL_MISSING'::text as warning_code,
+    'Contract manual invoice email is enabled but no alternate email address is configured, so invoice email routing was not queued.'::text as warning_message,
+    jsonb_build_object(
+      'invoice_id', erf.invoice_id::text,
+      'warning_code', 'CONTRACT_MANUAL_EMAIL_MISSING',
+      'message', 'Contract manual invoice email is enabled but no alternate email address is configured, so invoice email routing was not queued.',
+      'contracts', coalesce(erca.missing_contract_alt_details, '[]'::jsonb)
+    ) as warning_json
+  from tmp_email_route_flags erf
+  join tmp_email_route_contract_agg erca
+    on erca.invoice_id = erf.invoice_id
+  where coalesce(erf.is_self_bill,false) = false
+    and coalesce(erf.do_not_send,false) = false
+    and erf.has_user_created_manual_qr_adjustment = true
+    and erca.has_missing_contract_alt_email = true
+
+  union all
+
+  select
+    erf.invoice_id,
+    'CONTRACT_MANUAL_EMAIL_CONFLICT'::text as warning_code,
+    'Multiple contract manual invoice email overrides apply to this invoice and they disagree, so invoice email routing was not queued.'::text as warning_message,
+    jsonb_build_object(
+      'invoice_id', erf.invoice_id::text,
+      'warning_code', 'CONTRACT_MANUAL_EMAIL_CONFLICT',
+      'message', 'Multiple contract manual invoice email overrides apply to this invoice and they disagree, so invoice email routing was not queued.',
+      'contracts', coalesce(erca.contract_alt_details, '[]'::jsonb)
+    ) as warning_json
+  from tmp_email_route_flags erf
+  join tmp_email_route_contract_agg erca
+    on erca.invoice_id = erf.invoice_id
+  where coalesce(erf.is_self_bill,false) = false
+    and coalesce(erf.do_not_send,false) = false
+    and erf.has_user_created_manual_qr_adjustment = true
+    and coalesce(erca.contract_alt_email_count,0) > 1
+
+  union all
+
+  select
+    erf.invoice_id,
+    'CLIENT_MANUAL_EMAIL_MISSING'::text as warning_code,
+    'Client manual adjustment email is enabled but no alternate email address is configured, so invoice email routing was not queued.'::text as warning_message,
+    jsonb_build_object(
+      'invoice_id', erf.invoice_id::text,
+      'warning_code', 'CLIENT_MANUAL_EMAIL_MISSING',
+      'message', 'Client manual adjustment email is enabled but no alternate email address is configured, so invoice email routing was not queued.'
+    ) as warning_json
+  from tmp_email_route_flags erf
+  left join tmp_email_route_contract_agg erca
+    on erca.invoice_id = erf.invoice_id
+  left join tmp_latest_client_settings lcs
+    on lcs.client_id = erf.client_id
+  where coalesce(erf.is_self_bill,false) = false
+    and coalesce(erf.do_not_send,false) = false
+    and erf.has_user_created_manual_qr_adjustment = true
+    and coalesce(erca.has_enabled_contract_override,false) = false
+    and coalesce(lcs.send_manual_invoices_to_different_email,false) = true
+    and nullif(btrim(coalesce(lcs.manual_invoices_alt_email_address,'')), '') is null;
+
+  select coalesce(
+    jsonb_agg(t.warning_json order by t.invoice_id::text, t.warning_code),
+    '[]'::jsonb
+  )
+  into v_email_warn_json
+  from tmp_email_queue_warnings t;
+
+  create temporary table tmp_to_email on commit drop as
+  select
+    erf.invoice_id,
+    erf.client_id,
+    erf.invoice_no,
+    erf.week_ending_date,
+    case
+      when erf.has_user_created_manual_qr_adjustment = true
+        and coalesce(erca.contract_alt_email_count,0) = 1
+        then erca.contract_alt_email
+      when erf.has_user_created_manual_qr_adjustment = true
+        and coalesce(erca.has_enabled_contract_override,false) = false
+        and coalesce(lcs.send_manual_invoices_to_different_email,false) = true
+        and nullif(btrim(coalesce(lcs.manual_invoices_alt_email_address,'')), '') is not null
+        then nullif(btrim(coalesce(lcs.manual_invoices_alt_email_address,'')), '')
+      else erf.primary_to_email
+    end as to_email,
+    erf.is_self_bill
+  from tmp_email_route_flags erf
+  left join tmp_email_route_contract_agg erca
+    on erca.invoice_id = erf.invoice_id
+  left join tmp_latest_client_settings lcs
+    on lcs.client_id = erf.client_id
+  where coalesce(erf.is_self_bill,false) = false
+    and coalesce(erf.do_not_send,false) = false
+    and not exists (
+      select 1
+      from tmp_email_queue_warnings w
+      where w.invoice_id = erf.invoice_id
+    );
 
   -- build queued mail_outbox rows in chunks
   create temporary table tmp_mail_rows on commit drop as
@@ -1214,6 +1515,7 @@ begin
         'issue_results', v_issue_json,
         'not_due_results', v_not_due_json,
         'email_outbox', v_email_json,
+        'email_queue_warnings', v_email_warn_json,
         'max_attachments_per_email', v_max_attach,
         'pdf_invoice_ids', to_jsonb(coalesce(v_pdf_invoice_ids, array[]::uuid[])),
         'pdf_invoice_count', v_pdf_invoice_count,
@@ -1231,6 +1533,7 @@ begin
   return jsonb_build_object(
     'invoice_results', (v_issue_json || v_not_due_json),
     'email_outbox', v_email_json,
+    'email_queue_warnings', v_email_warn_json,
     'max_attachments_per_email', v_max_attach,
     'allow_early', coalesce(p_allow_early,false),
 
@@ -1268,6 +1571,9 @@ exception
     raise;
 end;
 $$;
+
+
+
 
 
 -- ============================================================
