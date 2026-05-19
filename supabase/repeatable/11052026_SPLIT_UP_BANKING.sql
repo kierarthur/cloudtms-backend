@@ -17306,6 +17306,7 @@ BEGIN
 END;
 $function$;
 
+
 CREATE OR REPLACE FUNCTION public.pay_provider_submit_chunk_stage_record(
   p_operation_id uuid,
   p_pay_batch_id uuid,
@@ -17851,8 +17852,7 @@ BEGIN
            candidate_source.source_order,
            candidate_source.diagnostic,
            CASE
-             WHEN v_provider_acceptance_evidence_count > 0
-              OR (
+             WHEN (
                 NULLIF(BTRIM(COALESCE(candidate_source.diagnostic->>'provider_transaction_id', candidate_source.diagnostic->>'provider_payment_id', candidate_source.diagnostic->>'rail_tx_id', '')), '') IS NOT NULL
                 AND NULLIF(BTRIM(COALESCE(candidate_source.diagnostic->>'provider_transaction_id', candidate_source.diagnostic->>'provider_payment_id', candidate_source.diagnostic->>'rail_tx_id', '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(candidate_source.diagnostic->>'request_id', '')), ''), '__NO_REQUEST_ID__')
                 AND NULLIF(BTRIM(COALESCE(candidate_source.diagnostic->>'provider_transaction_id', candidate_source.diagnostic->>'provider_payment_id', candidate_source.diagnostic->>'rail_tx_id', '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(candidate_source.diagnostic->>'idempotency_key', '')), ''), '__NO_IDEMPOTENCY_KEY__')
@@ -17867,13 +17867,13 @@ BEGIN
                 AND UPPER(BTRIM(COALESCE(candidate_source.diagnostic->>'provider_submission_status', ''))) NOT IN ('PROVIDER_SUBMISSION_REJECTED', 'PROVIDER_SUBMISSION_FAILED', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE', 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK', 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL', 'NO_PROVIDER_SUBMISSION_ATTEMPTED', 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID')
               ) THEN 500
              WHEN UPPER(BTRIM(COALESCE(candidate_source.diagnostic->>'provider_submission_status', ''))) = 'MANUAL_RESOLVED_NO_PAYMENT_MADE' THEN 450
-             WHEN v_provider_response_present_count > 0
-               OR v_provider_rejection_count > 0
-               OR UPPER(BTRIM(COALESCE(candidate_source.diagnostic->>'provider_submission_status', ''))) IN ('PROVIDER_SUBMISSION_REJECTED', 'PROVIDER_SUBMISSION_FAILED', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE', 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID')
+             WHEN UPPER(BTRIM(COALESCE(candidate_source.diagnostic->>'provider_submission_status', ''))) IN ('PROVIDER_SUBMISSION_REJECTED', 'PROVIDER_SUBMISSION_FAILED')
+               OR lower(BTRIM(COALESCE(candidate_source.diagnostic->>'provider_submission_rejected', candidate_source.diagnostic->>'provider_rejected', candidate_source.diagnostic->>'provider_submission_failed', ''))) IN ('true', 't', '1', 'yes', 'y', 'on')
+               OR CASE WHEN NULLIF(BTRIM(COALESCE(candidate_source.diagnostic->>'provider_http_status', '')), '') ~ '^[0-9]+$' THEN (candidate_source.diagnostic->>'provider_http_status')::integer >= 400 ELSE false END THEN 420
+             WHEN UPPER(BTRIM(COALESCE(candidate_source.diagnostic->>'provider_submission_status', ''))) IN ('PROVIDER_SUBMISSION_MALFORMED_RESPONSE', 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID')
                OR lower(BTRIM(COALESCE(candidate_source.diagnostic->>'provider_response_present', candidate_source.diagnostic->>'provider_response_received', ''))) IN ('true', 't', '1', 'yes', 'y', 'on')
-               OR NULLIF(BTRIM(COALESCE(candidate_source.diagnostic->>'provider_http_status', candidate_source.diagnostic->>'provider_error_code', '')), '') IS NOT NULL THEN 400
-             WHEN v_provider_request_sent_count > 0
-               OR UPPER(BTRIM(COALESCE(candidate_source.diagnostic->>'provider_submission_status', ''))) IN ('UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK')
+               OR NULLIF(BTRIM(COALESCE(candidate_source.diagnostic->>'provider_error_code', '')), '') IS NOT NULL THEN 400
+             WHEN UPPER(BTRIM(COALESCE(candidate_source.diagnostic->>'provider_submission_status', ''))) IN ('UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK')
                OR lower(BTRIM(COALESCE(candidate_source.diagnostic->>'provider_request_sent', ''))) IN ('true', 't', '1', 'yes', 'y', 'on') THEN 300
              WHEN UPPER(BTRIM(COALESCE(candidate_source.diagnostic->>'provider_submission_status', ''))) = 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL' THEN 200
              WHEN UPPER(BTRIM(COALESCE(candidate_source.diagnostic->>'provider_submission_status', ''))) = 'NO_PROVIDER_SUBMISSION_ATTEMPTED' THEN 100
@@ -18155,9 +18155,10 @@ BEGIN
   );
 
   v_incoming_rank := CASE
-    WHEN v_provider_acceptance_evidence_present IS TRUE THEN 500
+    WHEN v_provider_submission_accepted IS TRUE THEN 500
     WHEN v_incoming_status = 'MANUAL_RESOLVED_NO_PAYMENT_MADE' THEN 450
-    WHEN v_provider_response_present IS TRUE OR v_provider_response_received IS TRUE OR v_incoming_status IN ('PROVIDER_SUBMISSION_REJECTED', 'PROVIDER_SUBMISSION_FAILED', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE', 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID') THEN 400
+    WHEN v_provider_submission_rejected IS TRUE OR v_provider_submission_failed IS TRUE OR v_incoming_status IN ('PROVIDER_SUBMISSION_REJECTED', 'PROVIDER_SUBMISSION_FAILED') THEN 420
+    WHEN v_provider_response_present IS TRUE OR v_provider_response_received IS TRUE OR v_incoming_status IN ('PROVIDER_SUBMISSION_MALFORMED_RESPONSE', 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID') THEN 400
     WHEN v_provider_request_sent IS TRUE OR v_incoming_status IN ('UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK') THEN 300
     WHEN v_incoming_status = 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL' THEN 200
     WHEN v_incoming_status = 'NO_PROVIDER_SUBMISSION_ATTEMPTED' THEN 100
@@ -18461,5 +18462,4 @@ BEGIN
   );
 END;
 $function$;
-
 
