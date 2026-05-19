@@ -15101,57 +15101,59 @@ BEGIN
   )
   SELECT selected_transfer.transfer_id,
          (
-           NULLIF(BTRIM(COALESCE(selected_transfer.rail_tx_id, '')), '') IS NOT NULL
-           OR COALESCE(BOOL_OR(
-             upper(BTRIM(COALESCE(selected_source.provider_submission_status, ''))) = 'PROVIDER_SUBMISSION_ACCEPTED'
-             AND (
-               NULLIF(BTRIM(COALESCE(selected_source.provider_transaction_id, selected_source.rail_tx_id, '')), '') IS NOT NULL
-               OR (
-                 NULLIF(BTRIM(COALESCE(selected_source.provider_reference, '')), '') IS NOT NULL
-                 AND NULLIF(BTRIM(COALESCE(selected_source.provider_reference, '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(selected_transfer.request_id, '')), ''), '__NO_REQUEST_ID__')
-                 AND NULLIF(BTRIM(COALESCE(selected_source.provider_reference, '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(selected_source.idempotency_key, '')), ''), '__NO_IDEMPOTENCY_KEY__')
-                 AND NULLIF(BTRIM(COALESCE(selected_source.provider_reference, '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(selected_source.local_provider_request_id, '')), ''), '__NO_LOCAL_PROVIDER_REQUEST_ID__')
-                 AND NULLIF(BTRIM(COALESCE(selected_source.provider_reference, '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(selected_transfer.payment_reference, '')), ''), '__NO_PAYMENT_REFERENCE__')
-                 AND NULLIF(BTRIM(COALESCE(selected_source.provider_reference, '')), '') <> selected_transfer.transfer_id::text
-               )
-               OR upper(BTRIM(COALESCE(selected_source.provider_state, selected_source.rail_state, ''))) IN ('ACCEPTED', 'SUBMITTED', 'PROCESSING', 'SENT', 'COMPLETED', 'COMPLETE', 'APPROVED', 'EXECUTED', 'PAID')
-             )
-           ), false)
+           (
+             NULLIF(BTRIM(COALESCE(selected_transfer.rail_tx_id, '')), '') IS NOT NULL
+             AND NULLIF(BTRIM(COALESCE(selected_transfer.rail_tx_id, '')), '') <> selected_transfer.transfer_id::text
+             AND NULLIF(BTRIM(COALESCE(selected_transfer.rail_tx_id, '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(selected_transfer.request_id, '')), ''), '__NO_REQUEST_ID__')
+             AND NULLIF(BTRIM(COALESCE(selected_transfer.rail_tx_id, '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(selected_transfer.payment_reference, '')), ''), '__NO_PAYMENT_REFERENCE__')
+             AND UPPER(BTRIM(COALESCE(selected_transfer.rail_meta_json #>> '{provider_submit_diagnostic,provider_submission_status}', ''))) NOT IN ('PROVIDER_SUBMISSION_REJECTED', 'PROVIDER_SUBMISSION_FAILED', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE', 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK', 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL', 'NO_PROVIDER_SUBMISSION_ATTEMPTED', 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID')
+           )
            OR COALESCE(BOOL_OR(
              NULLIF(BTRIM(COALESCE(selected_source.provider_transaction_id, selected_source.rail_tx_id, '')), '') IS NOT NULL
              AND NULLIF(BTRIM(COALESCE(selected_source.provider_transaction_id, selected_source.rail_tx_id, '')), '') <> selected_transfer.transfer_id::text
              AND NULLIF(BTRIM(COALESCE(selected_source.provider_transaction_id, selected_source.rail_tx_id, '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(selected_transfer.request_id, '')), ''), '__NO_REQUEST_ID__')
              AND NULLIF(BTRIM(COALESCE(selected_source.provider_transaction_id, selected_source.rail_tx_id, '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(selected_source.idempotency_key, '')), ''), '__NO_IDEMPOTENCY_KEY__')
              AND NULLIF(BTRIM(COALESCE(selected_source.provider_transaction_id, selected_source.rail_tx_id, '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(selected_source.local_provider_request_id, '')), ''), '__NO_LOCAL_PROVIDER_REQUEST_ID__')
+             AND UPPER(BTRIM(COALESCE(selected_source.provider_submission_status, ''))) NOT IN ('PROVIDER_SUBMISSION_REJECTED', 'PROVIDER_SUBMISSION_FAILED', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE', 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK', 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL', 'NO_PROVIDER_SUBMISSION_ATTEMPTED', 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID')
+             AND selected_source.provider_submission_rejected IS NOT TRUE
+             AND selected_source.provider_submission_failed IS NOT TRUE
              AND NULLIF(BTRIM(COALESCE(selected_source.provider_transaction_id, selected_source.rail_tx_id, '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(selected_transfer.payment_reference, '')), ''), '__NO_PAYMENT_REFERENCE__')
+           ), false)
+           OR COALESCE(BOOL_OR(
+             NULLIF(BTRIM(COALESCE(selected_source.provider_reference, '')), '') IS NOT NULL
+             AND NULLIF(BTRIM(COALESCE(selected_source.provider_reference, '')), '') <> selected_transfer.transfer_id::text
+             AND NULLIF(BTRIM(COALESCE(selected_source.provider_reference, '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(selected_transfer.request_id, '')), ''), '__NO_REQUEST_ID__')
+             AND NULLIF(BTRIM(COALESCE(selected_source.provider_reference, '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(selected_source.idempotency_key, '')), ''), '__NO_IDEMPOTENCY_KEY__')
+             AND NULLIF(BTRIM(COALESCE(selected_source.provider_reference, '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(selected_source.local_provider_request_id, '')), ''), '__NO_LOCAL_PROVIDER_REQUEST_ID__')
+             AND UPPER(BTRIM(COALESCE(selected_source.provider_submission_status, ''))) NOT IN ('PROVIDER_SUBMISSION_REJECTED', 'PROVIDER_SUBMISSION_FAILED', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE', 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK', 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL', 'NO_PROVIDER_SUBMISSION_ATTEMPTED', 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID')
+             AND selected_source.provider_submission_rejected IS NOT TRUE
+             AND selected_source.provider_submission_failed IS NOT TRUE
+             AND NULLIF(BTRIM(COALESCE(selected_source.provider_reference, '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(selected_transfer.payment_reference, '')), ''), '__NO_PAYMENT_REFERENCE__')
            ), false)
            OR COALESCE(BOOL_OR(
                 upper(BTRIM(COALESCE(transfer_event.event_source, ''))) IN ('PROVIDER_RESPONSE', 'PROVIDER_POLL', 'PROVIDER_WEBHOOK')
                 AND upper(BTRIM(COALESCE(transfer_event.normalised_state, transfer_event.provider_state, ''))) NOT IN ('REJECTED', 'FAILED', 'ERROR', 'DECLINED', 'CANCELLED', 'CANCELED', 'MALFORMED', 'UNKNOWN')
-                AND (
-                  EXISTS (
-                    SELECT 1
-                    FROM (VALUES
-                      (transfer_event.provider_event_id),
-                      (transfer_event.provider_reference),
-                      (transfer_event.raw_payload #>> '{provider_transaction_id}'),
-                      (transfer_event.raw_payload #>> '{provider_payment_id}'),
-                      (transfer_event.raw_payload #>> '{payment_id}'),
-                      (transfer_event.raw_payload #>> '{external_payment_id}'),
-                      (transfer_event.raw_payload #>> '{revolut_payment_id}'),
-                      (transfer_event.raw_payload #>> '{rail_tx_id}'),
-                      (transfer_event.raw_payload #>> '{provider_submit_diagnostic,provider_transaction_id}'),
-                      (transfer_event.raw_payload #>> '{provider_submit_diagnostic,provider_payment_id}'),
-                      (transfer_event.raw_payload #>> '{provider_submit_diagnostic,rail_tx_id}'),
-                      (transfer_event.raw_payload #>> '{provider_submit_diagnostic,provider_reference}')
-                    ) AS provider_identifier(identifier_value)
-                    WHERE NULLIF(BTRIM(COALESCE(provider_identifier.identifier_value, '')), '') IS NOT NULL
-                      AND NULLIF(BTRIM(COALESCE(provider_identifier.identifier_value, '')), '') <> selected_transfer.transfer_id::text
-                      AND NULLIF(BTRIM(COALESCE(provider_identifier.identifier_value, '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(selected_transfer.request_id, '')), ''), '__NO_REQUEST_ID__')
-                      AND NULLIF(BTRIM(COALESCE(provider_identifier.identifier_value, '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(selected_transfer.payment_reference, '')), ''), '__NO_PAYMENT_REFERENCE__')
-                      AND NULLIF(BTRIM(COALESCE(provider_identifier.identifier_value, '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(transfer_event.idempotency_key, '')), ''), '__NO_EVENT_IDEMPOTENCY_KEY__')
-                  )
-                  OR upper(BTRIM(COALESCE(transfer_event.provider_state, transfer_event.normalised_state, ''))) IN ('ACCEPTED', 'SUBMITTED', 'PROCESSING', 'SENT', 'COMPLETED', 'COMPLETE', 'APPROVED', 'EXECUTED', 'PAID')
+                AND EXISTS (
+                  SELECT 1
+                  FROM (VALUES
+                    (transfer_event.provider_event_id),
+                    (transfer_event.provider_reference),
+                    (transfer_event.raw_payload #>> '{provider_transaction_id}'),
+                    (transfer_event.raw_payload #>> '{provider_payment_id}'),
+                    (transfer_event.raw_payload #>> '{payment_id}'),
+                    (transfer_event.raw_payload #>> '{external_payment_id}'),
+                    (transfer_event.raw_payload #>> '{revolut_payment_id}'),
+                    (transfer_event.raw_payload #>> '{rail_tx_id}'),
+                    (transfer_event.raw_payload #>> '{provider_submit_diagnostic,provider_transaction_id}'),
+                    (transfer_event.raw_payload #>> '{provider_submit_diagnostic,provider_payment_id}'),
+                    (transfer_event.raw_payload #>> '{provider_submit_diagnostic,rail_tx_id}'),
+                    (transfer_event.raw_payload #>> '{provider_submit_diagnostic,provider_reference}')
+                  ) AS provider_identifier(identifier_value)
+                  WHERE NULLIF(BTRIM(COALESCE(provider_identifier.identifier_value, '')), '') IS NOT NULL
+                    AND NULLIF(BTRIM(COALESCE(provider_identifier.identifier_value, '')), '') <> selected_transfer.transfer_id::text
+                    AND NULLIF(BTRIM(COALESCE(provider_identifier.identifier_value, '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(selected_transfer.request_id, '')), ''), '__NO_REQUEST_ID__')
+                    AND NULLIF(BTRIM(COALESCE(provider_identifier.identifier_value, '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(selected_transfer.payment_reference, '')), ''), '__NO_PAYMENT_REFERENCE__')
+                    AND NULLIF(BTRIM(COALESCE(provider_identifier.identifier_value, '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(transfer_event.idempotency_key, '')), ''), '__NO_EVENT_IDEMPOTENCY_KEY__')
                 )
               ), false)
          ),
@@ -15253,9 +15255,26 @@ BEGIN
     SELECT selected_chunk.chunk_id,
            (
              COALESCE(BOOL_OR(transfer_flag.has_provider_acceptance_evidence), false)
-             OR COALESCE(BOOL_OR(upper(BTRIM(COALESCE(selected_source.provider_submission_status, ''))) = 'PROVIDER_SUBMISSION_ACCEPTED'), false)
-             OR COALESCE(BOOL_OR(NULLIF(BTRIM(COALESCE(selected_source.provider_transaction_id, selected_source.rail_tx_id, '')), '') IS NOT NULL), false)
-             OR COALESCE(BOOL_OR(upper(BTRIM(COALESCE(selected_source.provider_state, selected_source.rail_state, ''))) IN ('ACCEPTED', 'SUBMITTED', 'PROCESSING', 'SENT', 'COMPLETED', 'COMPLETE', 'APPROVED', 'EXECUTED', 'PAID')), false)
+             OR COALESCE(BOOL_OR(
+               NULLIF(BTRIM(COALESCE(selected_source.provider_transaction_id, selected_source.rail_tx_id, '')), '') IS NOT NULL
+               AND NULLIF(BTRIM(COALESCE(selected_source.provider_transaction_id, selected_source.rail_tx_id, '')), '') <> COALESCE(selected_source.chunk_id::text, '__NO_CHUNK_ID__')
+               AND NULLIF(BTRIM(COALESCE(selected_source.provider_transaction_id, selected_source.rail_tx_id, '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(selected_source.request_id, '')), ''), '__NO_REQUEST_ID__')
+               AND NULLIF(BTRIM(COALESCE(selected_source.provider_transaction_id, selected_source.rail_tx_id, '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(selected_source.idempotency_key, '')), ''), '__NO_IDEMPOTENCY_KEY__')
+               AND NULLIF(BTRIM(COALESCE(selected_source.provider_transaction_id, selected_source.rail_tx_id, '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(selected_source.local_provider_request_id, '')), ''), '__NO_LOCAL_PROVIDER_REQUEST_ID__')
+               AND UPPER(BTRIM(COALESCE(selected_source.provider_submission_status, ''))) NOT IN ('PROVIDER_SUBMISSION_REJECTED', 'PROVIDER_SUBMISSION_FAILED', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE', 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK', 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL', 'NO_PROVIDER_SUBMISSION_ATTEMPTED', 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID')
+               AND selected_source.provider_submission_rejected IS NOT TRUE
+               AND selected_source.provider_submission_failed IS NOT TRUE
+             ), false)
+             OR COALESCE(BOOL_OR(
+               NULLIF(BTRIM(COALESCE(selected_source.provider_reference, '')), '') IS NOT NULL
+               AND NULLIF(BTRIM(COALESCE(selected_source.provider_reference, '')), '') <> COALESCE(selected_source.chunk_id::text, '__NO_CHUNK_ID__')
+               AND NULLIF(BTRIM(COALESCE(selected_source.provider_reference, '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(selected_source.request_id, '')), ''), '__NO_REQUEST_ID__')
+               AND NULLIF(BTRIM(COALESCE(selected_source.provider_reference, '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(selected_source.idempotency_key, '')), ''), '__NO_IDEMPOTENCY_KEY__')
+               AND NULLIF(BTRIM(COALESCE(selected_source.provider_reference, '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(selected_source.local_provider_request_id, '')), ''), '__NO_LOCAL_PROVIDER_REQUEST_ID__')
+               AND UPPER(BTRIM(COALESCE(selected_source.provider_submission_status, ''))) NOT IN ('PROVIDER_SUBMISSION_REJECTED', 'PROVIDER_SUBMISSION_FAILED', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE', 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK', 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL', 'NO_PROVIDER_SUBMISSION_ATTEMPTED', 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID')
+               AND selected_source.provider_submission_rejected IS NOT TRUE
+               AND selected_source.provider_submission_failed IS NOT TRUE
+             ), false)
            ) AS has_provider_acceptance_evidence,
            (
              COALESCE(BOOL_OR(transfer_flag.has_provider_response), false)
@@ -15299,9 +15318,26 @@ BEGIN
              AND (selected_chunk.lock_expires_at_utc IS NULL OR selected_chunk.lock_expires_at_utc < v_now)
              AND NOT (
                COALESCE(BOOL_OR(transfer_flag.has_provider_acceptance_evidence), false)
-               OR COALESCE(BOOL_OR(upper(BTRIM(COALESCE(selected_source.provider_submission_status, ''))) = 'PROVIDER_SUBMISSION_ACCEPTED'), false)
-               OR COALESCE(BOOL_OR(NULLIF(BTRIM(COALESCE(selected_source.provider_transaction_id, selected_source.rail_tx_id, '')), '') IS NOT NULL), false)
-               OR COALESCE(BOOL_OR(upper(BTRIM(COALESCE(selected_source.provider_state, selected_source.rail_state, ''))) IN ('ACCEPTED', 'SUBMITTED', 'PROCESSING', 'SENT', 'COMPLETED', 'COMPLETE', 'APPROVED', 'EXECUTED', 'PAID')), false)
+               OR COALESCE(BOOL_OR(
+                 NULLIF(BTRIM(COALESCE(selected_source.provider_transaction_id, selected_source.rail_tx_id, '')), '') IS NOT NULL
+                 AND NULLIF(BTRIM(COALESCE(selected_source.provider_transaction_id, selected_source.rail_tx_id, '')), '') <> COALESCE(selected_source.chunk_id::text, '__NO_CHUNK_ID__')
+                 AND NULLIF(BTRIM(COALESCE(selected_source.provider_transaction_id, selected_source.rail_tx_id, '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(selected_source.request_id, '')), ''), '__NO_REQUEST_ID__')
+                 AND NULLIF(BTRIM(COALESCE(selected_source.provider_transaction_id, selected_source.rail_tx_id, '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(selected_source.idempotency_key, '')), ''), '__NO_IDEMPOTENCY_KEY__')
+                 AND NULLIF(BTRIM(COALESCE(selected_source.provider_transaction_id, selected_source.rail_tx_id, '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(selected_source.local_provider_request_id, '')), ''), '__NO_LOCAL_PROVIDER_REQUEST_ID__')
+                 AND UPPER(BTRIM(COALESCE(selected_source.provider_submission_status, ''))) NOT IN ('PROVIDER_SUBMISSION_REJECTED', 'PROVIDER_SUBMISSION_FAILED', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE', 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK', 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL', 'NO_PROVIDER_SUBMISSION_ATTEMPTED', 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID')
+                 AND selected_source.provider_submission_rejected IS NOT TRUE
+                 AND selected_source.provider_submission_failed IS NOT TRUE
+               ), false)
+               OR COALESCE(BOOL_OR(
+                 NULLIF(BTRIM(COALESCE(selected_source.provider_reference, '')), '') IS NOT NULL
+                 AND NULLIF(BTRIM(COALESCE(selected_source.provider_reference, '')), '') <> COALESCE(selected_source.chunk_id::text, '__NO_CHUNK_ID__')
+                 AND NULLIF(BTRIM(COALESCE(selected_source.provider_reference, '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(selected_source.request_id, '')), ''), '__NO_REQUEST_ID__')
+                 AND NULLIF(BTRIM(COALESCE(selected_source.provider_reference, '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(selected_source.idempotency_key, '')), ''), '__NO_IDEMPOTENCY_KEY__')
+                 AND NULLIF(BTRIM(COALESCE(selected_source.provider_reference, '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(selected_source.local_provider_request_id, '')), ''), '__NO_LOCAL_PROVIDER_REQUEST_ID__')
+                 AND UPPER(BTRIM(COALESCE(selected_source.provider_submission_status, ''))) NOT IN ('PROVIDER_SUBMISSION_REJECTED', 'PROVIDER_SUBMISSION_FAILED', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE', 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK', 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL', 'NO_PROVIDER_SUBMISSION_ATTEMPTED', 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID')
+                 AND selected_source.provider_submission_rejected IS NOT TRUE
+                 AND selected_source.provider_submission_failed IS NOT TRUE
+               ), false)
              )
              AND NOT (
                COALESCE(BOOL_OR(transfer_flag.has_provider_response), false)
@@ -15441,7 +15477,23 @@ BEGIN
   FROM pg_temp.tmp_provider_submit_diagnostic_sources AS selected_source
   WHERE NULLIF(BTRIM(COALESCE(selected_source.provider_transaction_id, selected_source.provider_reference, selected_source.provider_state, selected_source.provider_error_code, selected_source.request_id, selected_source.idempotency_key, selected_source.provider_call_stage, '')), '') IS NOT NULL
   ORDER BY CASE
-             WHEN selected_source.provider_acceptance_evidence_present OR selected_source.provider_submission_status = 'PROVIDER_SUBMISSION_ACCEPTED' THEN 0
+             WHEN (
+               NULLIF(BTRIM(COALESCE(selected_source.provider_transaction_id, selected_source.rail_tx_id, '')), '') IS NOT NULL
+               AND NULLIF(BTRIM(COALESCE(selected_source.provider_transaction_id, selected_source.rail_tx_id, '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(selected_source.request_id, '')), ''), '__NO_REQUEST_ID__')
+               AND NULLIF(BTRIM(COALESCE(selected_source.provider_transaction_id, selected_source.rail_tx_id, '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(selected_source.idempotency_key, '')), ''), '__NO_IDEMPOTENCY_KEY__')
+               AND NULLIF(BTRIM(COALESCE(selected_source.provider_transaction_id, selected_source.rail_tx_id, '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(selected_source.local_provider_request_id, '')), ''), '__NO_LOCAL_PROVIDER_REQUEST_ID__')
+               AND UPPER(BTRIM(COALESCE(selected_source.provider_submission_status, ''))) NOT IN ('PROVIDER_SUBMISSION_REJECTED', 'PROVIDER_SUBMISSION_FAILED', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE', 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK', 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL', 'NO_PROVIDER_SUBMISSION_ATTEMPTED', 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID')
+               AND selected_source.provider_submission_rejected IS NOT TRUE
+               AND selected_source.provider_submission_failed IS NOT TRUE
+             ) OR (
+               NULLIF(BTRIM(COALESCE(selected_source.provider_reference, '')), '') IS NOT NULL
+               AND NULLIF(BTRIM(COALESCE(selected_source.provider_reference, '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(selected_source.request_id, '')), ''), '__NO_REQUEST_ID__')
+               AND NULLIF(BTRIM(COALESCE(selected_source.provider_reference, '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(selected_source.idempotency_key, '')), ''), '__NO_IDEMPOTENCY_KEY__')
+               AND NULLIF(BTRIM(COALESCE(selected_source.provider_reference, '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(selected_source.local_provider_request_id, '')), ''), '__NO_LOCAL_PROVIDER_REQUEST_ID__')
+               AND UPPER(BTRIM(COALESCE(selected_source.provider_submission_status, ''))) NOT IN ('PROVIDER_SUBMISSION_REJECTED', 'PROVIDER_SUBMISSION_FAILED', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE', 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK', 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL', 'NO_PROVIDER_SUBMISSION_ATTEMPTED', 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID')
+               AND selected_source.provider_submission_rejected IS NOT TRUE
+               AND selected_source.provider_submission_failed IS NOT TRUE
+             ) THEN 0
              WHEN selected_source.provider_response_present OR selected_source.provider_response_received THEN 1
              WHEN selected_source.provider_request_sent THEN 2
              ELSE 3
@@ -15451,6 +15503,26 @@ BEGIN
 
   IF v_primary_idempotency_key IS NULL THEN
     v_primary_idempotency_key := v_primary_request_id;
+  END IF;
+
+  IF v_primary_provider_reference IS NOT NULL
+     AND v_primary_provider_reference IN (
+       COALESCE(v_primary_request_id, '__NO_REQUEST_ID__'),
+       COALESCE(v_primary_idempotency_key, '__NO_IDEMPOTENCY_KEY__'),
+       COALESCE(v_primary_local_provider_request_id, '__NO_LOCAL_PROVIDER_REQUEST_ID__'),
+       COALESCE(v_primary_transfer_id, '__NO_TRANSFER_ID__')
+     ) THEN
+    v_primary_provider_reference := NULL::text;
+  END IF;
+
+  IF v_primary_provider_transaction_id IS NOT NULL
+     AND v_primary_provider_transaction_id IN (
+       COALESCE(v_primary_request_id, '__NO_REQUEST_ID__'),
+       COALESCE(v_primary_idempotency_key, '__NO_IDEMPOTENCY_KEY__'),
+       COALESCE(v_primary_local_provider_request_id, '__NO_LOCAL_PROVIDER_REQUEST_ID__'),
+       COALESCE(v_primary_transfer_id, '__NO_TRANSFER_ID__')
+     ) THEN
+    v_primary_provider_transaction_id := NULL::text;
   END IF;
 
   SELECT COALESCE(jsonb_agg(to_jsonb(scope_values.transfer_scope_id::text) ORDER BY scope_values.transfer_scope_id), '[]'::jsonb),
@@ -15702,6 +15774,14 @@ BEGIN
 END;
 $function$;
 
+
+
+
+
+
+
+
+
 CREATE OR REPLACE FUNCTION public.pay_provider_submit_chunk_diagnostic_finalise(
   p_operation_id uuid,
   p_pay_batch_id uuid DEFAULT NULL::uuid,
@@ -15922,9 +16002,28 @@ BEGIN
 
     SELECT COALESCE(jsonb_agg(to_jsonb(chunk_transfer.transfer_id::text) ORDER BY chunk_transfer.transfer_id), '[]'::jsonb),
            COUNT(*) FILTER (
-             WHERE NULLIF(BTRIM(COALESCE(transfer_row.rail_tx_id, '')), '') IS NOT NULL
-                OR UPPER(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_submission_status}', ''))) = 'PROVIDER_SUBMISSION_ACCEPTED'
-           )::integer,
+             WHERE (
+                  NULLIF(BTRIM(COALESCE(transfer_row.rail_tx_id, '')), '') IS NOT NULL
+                  AND NULLIF(BTRIM(COALESCE(transfer_row.rail_tx_id, '')), '') <> transfer_row.id::text
+                  AND NULLIF(BTRIM(COALESCE(transfer_row.rail_tx_id, '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(transfer_row.request_id, '')), ''), '__NO_REQUEST_ID__')
+                  AND NULLIF(BTRIM(COALESCE(transfer_row.rail_tx_id, '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(transfer_row.payment_reference, '')), ''), '__NO_PAYMENT_REFERENCE__')
+                  AND UPPER(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_submission_status}', ''))) NOT IN ('PROVIDER_SUBMISSION_REJECTED', 'PROVIDER_SUBMISSION_FAILED', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE', 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK', 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL', 'NO_PROVIDER_SUBMISSION_ATTEMPTED', 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID')
+                )
+                OR (
+                  NULLIF(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_transaction_id}', transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_payment_id}', transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,rail_tx_id}', '')), '') IS NOT NULL
+                  AND NULLIF(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_transaction_id}', transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_payment_id}', transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,rail_tx_id}', '')), '') <> transfer_row.id::text
+                  AND NULLIF(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_transaction_id}', transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_payment_id}', transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,rail_tx_id}', '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(transfer_row.request_id, '')), ''), '__NO_REQUEST_ID__')
+                  AND NULLIF(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_transaction_id}', transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_payment_id}', transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,rail_tx_id}', '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(transfer_row.payment_reference, '')), ''), '__NO_PAYMENT_REFERENCE__')
+                  AND UPPER(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_submission_status}', ''))) NOT IN ('PROVIDER_SUBMISSION_REJECTED', 'PROVIDER_SUBMISSION_FAILED', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE', 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK', 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL', 'NO_PROVIDER_SUBMISSION_ATTEMPTED', 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID')
+                )
+                OR (
+                  NULLIF(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_reference}', '')), '') IS NOT NULL
+                  AND NULLIF(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_reference}', '')), '') <> transfer_row.id::text
+                  AND NULLIF(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_reference}', '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(transfer_row.request_id, '')), ''), '__NO_REQUEST_ID__')
+                  AND NULLIF(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_reference}', '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(transfer_row.payment_reference, '')), ''), '__NO_PAYMENT_REFERENCE__')
+                  AND UPPER(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_submission_status}', ''))) NOT IN ('PROVIDER_SUBMISSION_REJECTED', 'PROVIDER_SUBMISSION_FAILED', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE', 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK', 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL', 'NO_PROVIDER_SUBMISSION_ATTEMPTED', 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID')
+                )
+          )::integer,
            COUNT(*) FILTER (
              WHERE lower(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_response_present}', transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_response_received}', ''))) IN ('true', 't', '1', 'yes', 'y', 'on')
                 OR NULLIF(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_http_status}', transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_error_code}', '')), '') IS NOT NULL
@@ -16018,6 +16117,26 @@ BEGIN
           'stale_unresolved_submit_chunk_count', GREATEST(COALESCE(v_chunk_stale_unresolved_submit_chunk_count, 0), 1),
           'stale_empty_submit_chunk_count', GREATEST(COALESCE(v_chunk_stale_unresolved_submit_chunk_count, 0), 1),
           'unfinalised_submit_chunk_count', GREATEST(COALESCE(v_chunk_unfinalised_submit_chunk_count, 0), 1)
+        )
+      );
+    END IF;
+
+    IF v_provider_submission_status = 'PROVIDER_SUBMISSION_ACCEPTED'
+       AND COALESCE(v_direct_provider_acceptance_evidence_count, 0) <= 0 THEN
+      v_provider_submission_status := 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID';
+      v_review_reason_code := 'PROVIDER_RESPONSE_PRESENT_NO_EXTERNAL_ID';
+      v_provider_submit_diagnostic := jsonb_strip_nulls(
+        v_provider_submit_diagnostic || jsonb_build_object(
+          'provider_submission_status', v_provider_submission_status,
+          'review_reason_code', v_review_reason_code,
+          'provider_submission_accepted', false,
+          'provider_acceptance_evidence_present', false,
+          'provider_submission_unknown', true,
+          'manual_resolution_required', true,
+          'safe_retry_available', false,
+          'automatic_retry_blocked', true,
+          'retry_blocked_reason', v_provider_submission_status,
+          'recommended_action', 'Provider response/status did not include usable external acceptance evidence. Manually reconcile before retry.'
         )
       );
     END IF;
@@ -16226,6 +16345,11 @@ BEGIN
   );
 END;
 $function$;
+
+
+
+
+
 
 
 CREATE OR REPLACE FUNCTION public.pay_execute_provider_submit_review_resolve(
@@ -17182,7 +17306,6 @@ BEGIN
 END;
 $function$;
 
-
 CREATE OR REPLACE FUNCTION public.pay_provider_submit_chunk_stage_record(
   p_operation_id uuid,
   p_pay_batch_id uuid,
@@ -17603,25 +17726,30 @@ BEGIN
   END IF;
 
   SELECT COUNT(DISTINCT transfer_row.id) FILTER (
-           WHERE NULLIF(BTRIM(COALESCE(transfer_row.rail_tx_id, '')), '') IS NOT NULL
-              OR NULLIF(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_transaction_id}', transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_payment_id}', transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,rail_tx_id}', '')), '') IS NOT NULL
-              OR (
-                (
-                  lower(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_acceptance_evidence_present}', ''))) IN ('true', 't', '1', 'yes', 'y', 'on')
-                  OR UPPER(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_submission_status}', ''))) = 'PROVIDER_SUBMISSION_ACCEPTED'
-                )
-                AND (
-                  (
-                    NULLIF(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_reference}', '')), '') IS NOT NULL
-                    AND NULLIF(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_reference}', '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(transfer_row.request_id, '')), ''), '__NO_REQUEST_ID__')
-                    AND NULLIF(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_reference}', '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(transfer_row.payment_reference, '')), ''), '__NO_PAYMENT_REFERENCE__')
-                  )
-                  OR UPPER(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_state}', transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,rail_state}', ''))) IN ('ACCEPTED', 'SUBMITTED', 'PROCESSING', 'SENT', 'COMPLETED', 'COMPLETE', 'APPROVED', 'EXECUTED', 'PAID')
-                )
-              )
-              OR COALESCE(event_flags.has_provider_acceptance_evidence, false) IS TRUE
-         )::integer,
-         COUNT(DISTINCT transfer_row.id) FILTER (
+          WHERE (
+               NULLIF(BTRIM(COALESCE(transfer_row.rail_tx_id, '')), '') IS NOT NULL
+               AND NULLIF(BTRIM(COALESCE(transfer_row.rail_tx_id, '')), '') <> transfer_row.id::text
+               AND NULLIF(BTRIM(COALESCE(transfer_row.rail_tx_id, '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(transfer_row.request_id, '')), ''), '__NO_REQUEST_ID__')
+               AND NULLIF(BTRIM(COALESCE(transfer_row.rail_tx_id, '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(transfer_row.payment_reference, '')), ''), '__NO_PAYMENT_REFERENCE__')
+               AND UPPER(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_submission_status}', ''))) NOT IN ('PROVIDER_SUBMISSION_REJECTED', 'PROVIDER_SUBMISSION_FAILED', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE', 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK', 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL', 'NO_PROVIDER_SUBMISSION_ATTEMPTED', 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID')
+             )
+             OR (
+               NULLIF(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_transaction_id}', transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_payment_id}', transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,rail_tx_id}', '')), '') IS NOT NULL
+               AND NULLIF(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_transaction_id}', transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_payment_id}', transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,rail_tx_id}', '')), '') <> transfer_row.id::text
+               AND NULLIF(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_transaction_id}', transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_payment_id}', transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,rail_tx_id}', '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(transfer_row.request_id, '')), ''), '__NO_REQUEST_ID__')
+               AND NULLIF(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_transaction_id}', transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_payment_id}', transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,rail_tx_id}', '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(transfer_row.payment_reference, '')), ''), '__NO_PAYMENT_REFERENCE__')
+               AND UPPER(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_submission_status}', ''))) NOT IN ('PROVIDER_SUBMISSION_REJECTED', 'PROVIDER_SUBMISSION_FAILED', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE', 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK', 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL', 'NO_PROVIDER_SUBMISSION_ATTEMPTED', 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID')
+             )
+             OR (
+               NULLIF(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_reference}', '')), '') IS NOT NULL
+               AND NULLIF(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_reference}', '')), '') <> transfer_row.id::text
+               AND NULLIF(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_reference}', '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(transfer_row.request_id, '')), ''), '__NO_REQUEST_ID__')
+               AND NULLIF(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_reference}', '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(transfer_row.payment_reference, '')), ''), '__NO_PAYMENT_REFERENCE__')
+               AND UPPER(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_submission_status}', ''))) NOT IN ('PROVIDER_SUBMISSION_REJECTED', 'PROVIDER_SUBMISSION_FAILED', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE', 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK', 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL', 'NO_PROVIDER_SUBMISSION_ATTEMPTED', 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID')
+             )
+             OR COALESCE(event_flags.has_provider_acceptance_evidence, false) IS TRUE
+        )::integer,
+        COUNT(DISTINCT transfer_row.id) FILTER (
            WHERE lower(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_response_present}', transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_response_received}', ''))) IN ('true', 't', '1', 'yes', 'y', 'on')
               OR NULLIF(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_http_status}', transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_error_code}', '')), '') IS NOT NULL
               OR COALESCE(event_flags.has_provider_response, false) IS TRUE
@@ -17658,8 +17786,13 @@ BEGIN
                  AND NULLIF(BTRIM(COALESCE(transfer_event.provider_reference, '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(transfer_row.request_id, '')), ''), '__NO_REQUEST_ID__')
                  AND NULLIF(BTRIM(COALESCE(transfer_event.provider_reference, '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(transfer_row.payment_reference, '')), ''), '__NO_PAYMENT_REFERENCE__')
                )
-               OR NULLIF(BTRIM(COALESCE(transfer_event.raw_payload #>> '{provider_submit_diagnostic,provider_transaction_id}', transfer_event.raw_payload #>> '{provider_submit_diagnostic,rail_tx_id}', transfer_event.raw_payload #>> '{provider_transaction_id}', transfer_event.raw_payload #>> '{rail_tx_id}', '')), '') IS NOT NULL
-               OR UPPER(BTRIM(COALESCE(transfer_event.provider_state, ''))) IN ('ACCEPTED', 'SUBMITTED', 'PROCESSING', 'SENT', 'COMPLETED', 'COMPLETE', 'APPROVED', 'EXECUTED', 'PAID')
+               OR (
+                 NULLIF(BTRIM(COALESCE(transfer_event.raw_payload #>> '{provider_submit_diagnostic,provider_transaction_id}', transfer_event.raw_payload #>> '{provider_submit_diagnostic,rail_tx_id}', transfer_event.raw_payload #>> '{provider_submit_diagnostic,provider_reference}', transfer_event.raw_payload #>> '{provider_transaction_id}', transfer_event.raw_payload #>> '{provider_payment_id}', transfer_event.raw_payload #>> '{payment_id}', transfer_event.raw_payload #>> '{external_payment_id}', transfer_event.raw_payload #>> '{revolut_payment_id}', transfer_event.raw_payload #>> '{provider_reference}', transfer_event.raw_payload #>> '{rail_tx_id}', '')), '') IS NOT NULL
+                 AND NULLIF(BTRIM(COALESCE(transfer_event.raw_payload #>> '{provider_submit_diagnostic,provider_transaction_id}', transfer_event.raw_payload #>> '{provider_submit_diagnostic,rail_tx_id}', transfer_event.raw_payload #>> '{provider_submit_diagnostic,provider_reference}', transfer_event.raw_payload #>> '{provider_transaction_id}', transfer_event.raw_payload #>> '{provider_payment_id}', transfer_event.raw_payload #>> '{payment_id}', transfer_event.raw_payload #>> '{external_payment_id}', transfer_event.raw_payload #>> '{revolut_payment_id}', transfer_event.raw_payload #>> '{provider_reference}', transfer_event.raw_payload #>> '{rail_tx_id}', '')), '') <> transfer_row.id::text
+                 AND NULLIF(BTRIM(COALESCE(transfer_event.raw_payload #>> '{provider_submit_diagnostic,provider_transaction_id}', transfer_event.raw_payload #>> '{provider_submit_diagnostic,rail_tx_id}', transfer_event.raw_payload #>> '{provider_submit_diagnostic,provider_reference}', transfer_event.raw_payload #>> '{provider_transaction_id}', transfer_event.raw_payload #>> '{provider_payment_id}', transfer_event.raw_payload #>> '{payment_id}', transfer_event.raw_payload #>> '{external_payment_id}', transfer_event.raw_payload #>> '{revolut_payment_id}', transfer_event.raw_payload #>> '{provider_reference}', transfer_event.raw_payload #>> '{rail_tx_id}', '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(transfer_row.request_id, '')), ''), '__NO_REQUEST_ID__')
+                 AND NULLIF(BTRIM(COALESCE(transfer_event.raw_payload #>> '{provider_submit_diagnostic,provider_transaction_id}', transfer_event.raw_payload #>> '{provider_submit_diagnostic,rail_tx_id}', transfer_event.raw_payload #>> '{provider_submit_diagnostic,provider_reference}', transfer_event.raw_payload #>> '{provider_transaction_id}', transfer_event.raw_payload #>> '{provider_payment_id}', transfer_event.raw_payload #>> '{payment_id}', transfer_event.raw_payload #>> '{external_payment_id}', transfer_event.raw_payload #>> '{revolut_payment_id}', transfer_event.raw_payload #>> '{provider_reference}', transfer_event.raw_payload #>> '{rail_tx_id}', '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(transfer_row.payment_reference, '')), ''), '__NO_PAYMENT_REFERENCE__')
+                 AND NULLIF(BTRIM(COALESCE(transfer_event.raw_payload #>> '{provider_submit_diagnostic,provider_transaction_id}', transfer_event.raw_payload #>> '{provider_submit_diagnostic,rail_tx_id}', transfer_event.raw_payload #>> '{provider_submit_diagnostic,provider_reference}', transfer_event.raw_payload #>> '{provider_transaction_id}', transfer_event.raw_payload #>> '{provider_payment_id}', transfer_event.raw_payload #>> '{payment_id}', transfer_event.raw_payload #>> '{external_payment_id}', transfer_event.raw_payload #>> '{revolut_payment_id}', transfer_event.raw_payload #>> '{provider_reference}', transfer_event.raw_payload #>> '{rail_tx_id}', '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(transfer_event.idempotency_key, '')), ''), '__NO_EVENT_IDEMPOTENCY_KEY__')
+               )
              )
              AND UPPER(BTRIM(COALESCE(transfer_event.normalised_state, transfer_event.provider_state, ''))) NOT IN ('REJECTED', 'FAILED', 'ERROR', 'DECLINED', 'CANCELLED', 'CANCELED')
            ), false) AS has_provider_acceptance_evidence,
@@ -17675,7 +17808,7 @@ BEGIN
     WHERE transfer_event.pay_bank_transfer_id = transfer_row.id
   ) AS event_flags ON true;
 
-  v_provider_acceptance_evidence_count := COALESCE(v_direct_acceptance_evidence_count, 0);
+  v_provider_acceptance_evidence_count := GREATEST(COALESCE(v_helper_acceptance_evidence_count, 0), COALESCE(v_direct_acceptance_evidence_count, 0));
   v_provider_response_present_count := GREATEST(COALESCE(v_helper_response_present_count, 0), COALESCE(v_direct_response_present_count, 0));
   v_provider_request_sent_count := GREATEST(COALESCE(v_helper_request_sent_count, 0), COALESCE(v_direct_request_sent_count, 0));
   v_provider_rejection_count := GREATEST(COALESCE(v_helper_rejected_count, 0), COALESCE(v_direct_rejection_count, 0));
@@ -17719,17 +17852,20 @@ BEGIN
            candidate_source.diagnostic,
            CASE
              WHEN v_provider_acceptance_evidence_count > 0
-               OR NULLIF(BTRIM(COALESCE(candidate_source.diagnostic->>'provider_transaction_id', candidate_source.diagnostic->>'provider_payment_id', candidate_source.diagnostic->>'rail_tx_id', '')), '') IS NOT NULL
-               OR (
-                 (
-                   lower(BTRIM(COALESCE(candidate_source.diagnostic->>'provider_acceptance_evidence_present', ''))) IN ('true', 't', '1', 'yes', 'y', 'on')
-                   OR UPPER(BTRIM(COALESCE(candidate_source.diagnostic->>'provider_submission_status', ''))) = 'PROVIDER_SUBMISSION_ACCEPTED'
-                 )
-                 AND (
-                   NULLIF(BTRIM(COALESCE(candidate_source.diagnostic->>'provider_reference', '')), '') IS NOT NULL
-                   OR UPPER(BTRIM(COALESCE(candidate_source.diagnostic->>'provider_state', candidate_source.diagnostic->>'rail_state', ''))) IN ('ACCEPTED', 'SUBMITTED', 'PROCESSING', 'SENT', 'COMPLETED', 'COMPLETE', 'APPROVED', 'EXECUTED', 'PAID')
-                 )
-               ) THEN 500
+              OR (
+                NULLIF(BTRIM(COALESCE(candidate_source.diagnostic->>'provider_transaction_id', candidate_source.diagnostic->>'provider_payment_id', candidate_source.diagnostic->>'rail_tx_id', '')), '') IS NOT NULL
+                AND NULLIF(BTRIM(COALESCE(candidate_source.diagnostic->>'provider_transaction_id', candidate_source.diagnostic->>'provider_payment_id', candidate_source.diagnostic->>'rail_tx_id', '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(candidate_source.diagnostic->>'request_id', '')), ''), '__NO_REQUEST_ID__')
+                AND NULLIF(BTRIM(COALESCE(candidate_source.diagnostic->>'provider_transaction_id', candidate_source.diagnostic->>'provider_payment_id', candidate_source.diagnostic->>'rail_tx_id', '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(candidate_source.diagnostic->>'idempotency_key', '')), ''), '__NO_IDEMPOTENCY_KEY__')
+                AND NULLIF(BTRIM(COALESCE(candidate_source.diagnostic->>'provider_transaction_id', candidate_source.diagnostic->>'provider_payment_id', candidate_source.diagnostic->>'rail_tx_id', '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(candidate_source.diagnostic->>'local_provider_request_id', '')), ''), '__NO_LOCAL_PROVIDER_REQUEST_ID__')
+                AND UPPER(BTRIM(COALESCE(candidate_source.diagnostic->>'provider_submission_status', ''))) NOT IN ('PROVIDER_SUBMISSION_REJECTED', 'PROVIDER_SUBMISSION_FAILED', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE', 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK', 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL', 'NO_PROVIDER_SUBMISSION_ATTEMPTED', 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID')
+              )
+              OR (
+                NULLIF(BTRIM(COALESCE(candidate_source.diagnostic->>'provider_reference', '')), '') IS NOT NULL
+                AND NULLIF(BTRIM(COALESCE(candidate_source.diagnostic->>'provider_reference', '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(candidate_source.diagnostic->>'request_id', '')), ''), '__NO_REQUEST_ID__')
+                AND NULLIF(BTRIM(COALESCE(candidate_source.diagnostic->>'provider_reference', '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(candidate_source.diagnostic->>'idempotency_key', '')), ''), '__NO_IDEMPOTENCY_KEY__')
+                AND NULLIF(BTRIM(COALESCE(candidate_source.diagnostic->>'provider_reference', '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(candidate_source.diagnostic->>'local_provider_request_id', '')), ''), '__NO_LOCAL_PROVIDER_REQUEST_ID__')
+                AND UPPER(BTRIM(COALESCE(candidate_source.diagnostic->>'provider_submission_status', ''))) NOT IN ('PROVIDER_SUBMISSION_REJECTED', 'PROVIDER_SUBMISSION_FAILED', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE', 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK', 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL', 'NO_PROVIDER_SUBMISSION_ATTEMPTED', 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID')
+              ) THEN 500
              WHEN UPPER(BTRIM(COALESCE(candidate_source.diagnostic->>'provider_submission_status', ''))) = 'MANUAL_RESOLVED_NO_PAYMENT_MADE' THEN 450
              WHEN v_provider_response_present_count > 0
                OR v_provider_rejection_count > 0
@@ -17831,12 +17967,46 @@ BEGIN
     v_idempotency_key := NULLIF(BTRIM(COALESCE(v_request_id, '')), '');
   END IF;
 
+  IF v_provider_reference IS NOT NULL
+     AND v_provider_reference IN (
+       COALESCE(v_primary_transfer_id, '__NO_TRANSFER_ID__'),
+       COALESCE(v_request_id, '__NO_REQUEST_ID__'),
+       COALESCE(v_idempotency_key, '__NO_IDEMPOTENCY_KEY__'),
+       COALESCE(v_local_provider_request_id, '__NO_LOCAL_PROVIDER_REQUEST_ID__'),
+       COALESCE(v_primary_payment_reference, '__NO_PAYMENT_REFERENCE__')
+     ) THEN
+    v_provider_reference := NULL::text;
+  END IF;
+
+  IF v_provider_transaction_id IS NOT NULL
+     AND v_provider_transaction_id IN (
+       COALESCE(v_primary_transfer_id, '__NO_TRANSFER_ID__'),
+       COALESCE(v_request_id, '__NO_REQUEST_ID__'),
+       COALESCE(v_idempotency_key, '__NO_IDEMPOTENCY_KEY__'),
+       COALESCE(v_local_provider_request_id, '__NO_LOCAL_PROVIDER_REQUEST_ID__'),
+       COALESCE(v_primary_payment_reference, '__NO_PAYMENT_REFERENCE__')
+     ) THEN
+    v_provider_transaction_id := NULL::text;
+  END IF;
+
+  IF v_rail_tx_id IS NOT NULL
+     AND v_rail_tx_id IN (
+       COALESCE(v_primary_transfer_id, '__NO_TRANSFER_ID__'),
+       COALESCE(v_request_id, '__NO_REQUEST_ID__'),
+       COALESCE(v_idempotency_key, '__NO_IDEMPOTENCY_KEY__'),
+       COALESCE(v_local_provider_request_id, '__NO_LOCAL_PROVIDER_REQUEST_ID__'),
+       COALESCE(v_primary_payment_reference, '__NO_PAYMENT_REFERENCE__')
+     ) THEN
+    v_rail_tx_id := NULL::text;
+  END IF;
+
   v_provider_request_sent := lower(BTRIM(COALESCE(v_input_diagnostic->>'provider_request_sent', ''))) IN ('true', 't', '1', 'yes', 'y', 'on')
-    OR v_stage_upper IN ('PROVIDER_PAYMENT_CREATE_REQUEST_SENT', 'PROVIDER_PAYMENT_CREATE_RESPONSE_RECEIVED', 'PROVIDER_PAYMENT_CREATE_ACCEPTED', 'PROVIDER_PAYMENT_CREATE_REJECTED', 'PROVIDER_PAYMENT_CREATE_UNKNOWN', 'PROVIDER_PAYMENT_CREATE_MALFORMED', 'RAIL_UPDATE_APPLY_STARTED', 'RAIL_UPDATE_APPLY_FAILED', 'CHUNK_FINALISATION_STARTED', 'CHUNK_FINALISED')
+    OR lower(BTRIM(COALESCE(v_input_diagnostic->>'provider_request_sent_confirmed', ''))) IN ('true', 't', '1', 'yes', 'y', 'on')
+    OR v_stage_upper IN ('PROVIDER_PAYMENT_CREATE_REQUEST_SENT', 'PROVIDER_PAYMENT_CREATE_RESPONSE_RECEIVED', 'PROVIDER_PAYMENT_CREATE_ACCEPTED', 'PROVIDER_PAYMENT_CREATE_REJECTED', 'PROVIDER_PAYMENT_CREATE_UNKNOWN', 'PROVIDER_PAYMENT_CREATE_MALFORMED')
     OR v_stage_upper LIKE '%REQUEST_SENT%';
 
   v_provider_response_received := lower(BTRIM(COALESCE(v_input_diagnostic->>'provider_response_received', ''))) IN ('true', 't', '1', 'yes', 'y', 'on')
-    OR v_stage_upper IN ('PROVIDER_PAYMENT_CREATE_RESPONSE_RECEIVED', 'PROVIDER_PAYMENT_CREATE_ACCEPTED', 'PROVIDER_PAYMENT_CREATE_REJECTED', 'PROVIDER_PAYMENT_CREATE_MALFORMED', 'RAIL_UPDATE_APPLY_STARTED', 'RAIL_UPDATE_APPLY_FAILED', 'CHUNK_FINALISATION_STARTED', 'CHUNK_FINALISED');
+    OR v_stage_upper IN ('PROVIDER_PAYMENT_CREATE_RESPONSE_RECEIVED', 'PROVIDER_PAYMENT_CREATE_ACCEPTED', 'PROVIDER_PAYMENT_CREATE_REJECTED', 'PROVIDER_PAYMENT_CREATE_MALFORMED');
 
   v_provider_response_present := lower(BTRIM(COALESCE(v_input_diagnostic->>'provider_response_present', ''))) IN ('true', 't', '1', 'yes', 'y', 'on')
     OR v_provider_response_received IS TRUE
@@ -17848,13 +18018,22 @@ BEGIN
     OR v_stage_upper = 'PROVIDER_PAYMENT_CREATE_ACCEPTED'
   )
   AND (
-    NULLIF(BTRIM(COALESCE(v_provider_transaction_id, v_rail_tx_id, '')), '') IS NOT NULL
+    (
+      NULLIF(BTRIM(COALESCE(v_provider_transaction_id, v_rail_tx_id, '')), '') IS NOT NULL
+      AND NULLIF(BTRIM(COALESCE(v_provider_transaction_id, v_rail_tx_id, '')), '') <> COALESCE(v_primary_transfer_id, '__NO_TRANSFER_ID__')
+      AND NULLIF(BTRIM(COALESCE(v_provider_transaction_id, v_rail_tx_id, '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(v_request_id, '')), ''), '__NO_REQUEST_ID__')
+      AND NULLIF(BTRIM(COALESCE(v_provider_transaction_id, v_rail_tx_id, '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(v_idempotency_key, '')), ''), '__NO_IDEMPOTENCY_KEY__')
+      AND NULLIF(BTRIM(COALESCE(v_provider_transaction_id, v_rail_tx_id, '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(v_local_provider_request_id, '')), ''), '__NO_LOCAL_PROVIDER_REQUEST_ID__')
+      AND NULLIF(BTRIM(COALESCE(v_provider_transaction_id, v_rail_tx_id, '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(v_primary_payment_reference, '')), ''), '__NO_PAYMENT_REFERENCE__')
+    )
     OR (
       NULLIF(BTRIM(COALESCE(v_provider_reference, '')), '') IS NOT NULL
+      AND NULLIF(BTRIM(COALESCE(v_provider_reference, '')), '') <> COALESCE(v_primary_transfer_id, '__NO_TRANSFER_ID__')
       AND NULLIF(BTRIM(COALESCE(v_provider_reference, '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(v_request_id, '')), ''), '__NO_REQUEST_ID__')
+      AND NULLIF(BTRIM(COALESCE(v_provider_reference, '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(v_idempotency_key, '')), ''), '__NO_IDEMPOTENCY_KEY__')
+      AND NULLIF(BTRIM(COALESCE(v_provider_reference, '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(v_local_provider_request_id, '')), ''), '__NO_LOCAL_PROVIDER_REQUEST_ID__')
       AND NULLIF(BTRIM(COALESCE(v_provider_reference, '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(v_primary_payment_reference, '')), ''), '__NO_PAYMENT_REFERENCE__')
     )
-    OR UPPER(BTRIM(COALESCE(v_provider_state, v_rail_state, ''))) IN ('ACCEPTED', 'SUBMITTED', 'PROCESSING', 'SENT', 'COMPLETED', 'COMPLETE', 'APPROVED', 'EXECUTED', 'PAID')
   );
 
   v_provider_submission_rejected := lower(BTRIM(COALESCE(v_input_diagnostic->>'provider_submission_rejected', v_input_diagnostic->>'provider_rejected', ''))) IN ('true', 't', '1', 'yes', 'y', 'on')
@@ -17865,6 +18044,13 @@ BEGIN
   v_provider_request_impossible := lower(BTRIM(COALESCE(v_input_diagnostic->>'provider_request_impossible', v_input_diagnostic->>'durable_provider_request_impossible', ''))) IN ('true', 't', '1', 'yes', 'y', 'on')
     OR v_incoming_status = 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL'
     OR v_stage_upper IN ('PROVIDER_PRECALL_VALIDATION_FAILED', 'PROVIDER_SUBMIT_BLOCKED_PRE_CALL', 'FUNDING_ACCOUNT_MISSING', 'FUNDING_CHECK_FAILED', 'COUNTERPARTY_MAPPING_FAILED', 'RAIL_ENV_MISMATCH', 'PROVIDER_PAYMENT_CREATE_BLOCKED_PRE_CALL');
+
+  IF v_incoming_status = 'PROVIDER_SUBMISSION_ACCEPTED' AND v_provider_submission_accepted IS NOT TRUE THEN
+    v_incoming_status := 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID';
+    v_provider_response_received := true;
+    v_provider_response_present := true;
+    v_provider_request_sent := true;
+  END IF;
 
   IF v_provider_submission_accepted IS TRUE THEN
     v_incoming_status := 'PROVIDER_SUBMISSION_ACCEPTED';
@@ -17919,9 +18105,8 @@ BEGIN
   v_provider_submission_unknown := lower(BTRIM(COALESCE(v_input_diagnostic->>'provider_submission_unknown', v_input_diagnostic->>'provider_unknown', ''))) IN ('true', 't', '1', 'yes', 'y', 'on')
     OR v_incoming_status IN ('UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE', 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID');
 
-  v_provider_acceptance_evidence_present := v_provider_acceptance_evidence_present
-    OR lower(BTRIM(COALESCE(v_input_diagnostic->>'provider_acceptance_evidence_present', ''))) IN ('true', 't', '1', 'yes', 'y', 'on')
-    OR v_provider_submission_accepted IS TRUE;
+  v_provider_acceptance_evidence_present := v_provider_submission_accepted IS TRUE
+    OR v_provider_acceptance_evidence_count > 0;
 
   v_provider_submission_failed := lower(BTRIM(COALESCE(v_input_diagnostic->>'provider_submission_failed', ''))) IN ('true', 't', '1', 'yes', 'y', 'on')
     OR v_provider_submission_rejected IS TRUE;
@@ -17970,7 +18155,7 @@ BEGIN
   );
 
   v_incoming_rank := CASE
-    WHEN v_provider_acceptance_evidence_present IS TRUE OR v_incoming_status = 'PROVIDER_SUBMISSION_ACCEPTED' THEN 500
+    WHEN v_provider_acceptance_evidence_present IS TRUE THEN 500
     WHEN v_incoming_status = 'MANUAL_RESOLVED_NO_PAYMENT_MADE' THEN 450
     WHEN v_provider_response_present IS TRUE OR v_provider_response_received IS TRUE OR v_incoming_status IN ('PROVIDER_SUBMISSION_REJECTED', 'PROVIDER_SUBMISSION_FAILED', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE', 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID') THEN 400
     WHEN v_provider_request_sent IS TRUE OR v_incoming_status IN ('UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK') THEN 300
@@ -18276,3 +18461,5 @@ BEGIN
   );
 END;
 $function$;
+
+
