@@ -2,7 +2,6 @@
 
 
 
-
 CREATE OR REPLACE FUNCTION public.bulk_process_dataset_v1(p_filters jsonb DEFAULT '{}'::jsonb)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -243,63 +242,78 @@ BEGIN
     WHERE (v_week_ending_from IS NULL OR source_rows.week_ending_date >= v_week_ending_from)
       AND (v_week_ending_to IS NULL OR source_rows.week_ending_date <= v_week_ending_to)
   ),
-  decision_rows AS MATERIALIZED (
+  eligibility_rows AS MATERIALIZED (
     SELECT
       classified_rows.*,
       (
-        (classified_rows.timesheet_id IS NOT NULL OR classified_rows.contract_week_id IS NOT NULL)
+        (
+          classified_rows.route_family_calc = 'MANUAL_NON_QR'
+          OR COALESCE(classified_rows.is_user_created_manual_qr_adjustment_calc, FALSE) = TRUE
+        )
+        AND COALESCE(classified_rows.is_import_derived_adjustment_calc, FALSE) = FALSE
+        AND classified_rows.route_family_calc NOT IN ('IMPORT_AUTHORITATIVE', 'ELECTRONIC')
         AND classified_rows.locked_calc = FALSE
         AND classified_rows.authorised_calc = FALSE
-        AND classified_rows.route_family_calc = 'MANUAL_NON_QR'
+      ) AS bulk_process_user_adjustment_eligible_calc
+    FROM classified_rows
+  ),
+  decision_rows AS MATERIALIZED (
+    SELECT
+      eligibility_rows.*,
+      (
+        (eligibility_rows.timesheet_id IS NOT NULL OR eligibility_rows.contract_week_id IS NOT NULL)
+        AND eligibility_rows.locked_calc = FALSE
+        AND eligibility_rows.authorised_calc = FALSE
+        AND eligibility_rows.bulk_process_user_adjustment_eligible_calc = TRUE
       ) AS can_save_calc,
       (
-        (classified_rows.timesheet_id IS NOT NULL OR classified_rows.contract_week_id IS NOT NULL)
-        AND classified_rows.locked_calc = FALSE
-        AND classified_rows.authorised_calc = FALSE
-        AND classified_rows.route_family_calc = 'MANUAL_NON_QR'
+        (eligibility_rows.timesheet_id IS NOT NULL OR eligibility_rows.contract_week_id IS NOT NULL)
+        AND eligibility_rows.locked_calc = FALSE
+        AND eligibility_rows.authorised_calc = FALSE
+        AND eligibility_rows.bulk_process_user_adjustment_eligible_calc = TRUE
       ) AS can_edit_timesheet_data_calc,
       (
-        (classified_rows.timesheet_id IS NOT NULL OR classified_rows.contract_week_id IS NOT NULL)
-        AND classified_rows.locked_calc = FALSE
-        AND classified_rows.authorised_calc = FALSE
-        AND classified_rows.route_family_calc = 'MANUAL_NON_QR'
-        AND classified_rows.bulk_process_bucket_calc = 'UNPROCESSED'
+        (eligibility_rows.timesheet_id IS NOT NULL OR eligibility_rows.contract_week_id IS NOT NULL)
+        AND eligibility_rows.locked_calc = FALSE
+        AND eligibility_rows.authorised_calc = FALSE
+        AND eligibility_rows.bulk_process_user_adjustment_eligible_calc = TRUE
+        AND eligibility_rows.bulk_process_bucket_calc = 'UNPROCESSED'
       ) AS can_process_calc,
       (
-        classified_rows.timesheet_id IS NOT NULL
-        AND classified_rows.locked_calc = FALSE
-        AND classified_rows.authorised_calc = FALSE
-        AND classified_rows.route_family_calc = 'MANUAL_NON_QR'
-        AND classified_rows.bulk_process_bucket_calc = 'PROCESSED'
+        eligibility_rows.timesheet_id IS NOT NULL
+        AND eligibility_rows.locked_calc = FALSE
+        AND eligibility_rows.authorised_calc = FALSE
+        AND eligibility_rows.bulk_process_user_adjustment_eligible_calc = TRUE
+        AND eligibility_rows.bulk_process_bucket_calc = 'PROCESSED'
       ) AS can_unprocess_calc,
       (
-        classified_rows.timesheet_id IS NOT NULL
-        AND classified_rows.locked_calc = FALSE
-        AND classified_rows.requires_authorisation_calc = TRUE
-        AND classified_rows.authorised_calc = FALSE
-        AND classified_rows.qr_unsigned_blocked_calc = FALSE
+        eligibility_rows.timesheet_id IS NOT NULL
+        AND eligibility_rows.locked_calc = FALSE
+        AND eligibility_rows.requires_authorisation_calc = TRUE
+        AND eligibility_rows.authorised_calc = FALSE
+        AND eligibility_rows.qr_unsigned_blocked_calc = FALSE
       ) AS can_bulk_authorise_calc,
       (
-        classified_rows.timesheet_id IS NOT NULL
-        AND classified_rows.locked_calc = FALSE
-        AND classified_rows.authorised_calc = TRUE
+        eligibility_rows.timesheet_id IS NOT NULL
+        AND eligibility_rows.locked_calc = FALSE
+        AND eligibility_rows.authorised_calc = TRUE
       ) AS can_bulk_unauthorise_calc,
       (
-        (classified_rows.timesheet_id IS NOT NULL OR (classified_rows.contract_week_id IS NOT NULL AND classified_rows.route_family_calc = 'MANUAL_NON_QR'))
-        AND classified_rows.locked_calc = FALSE
-        AND classified_rows.route_family_calc <> 'IMPORT_AUTHORITATIVE'
+        (eligibility_rows.timesheet_id IS NOT NULL OR eligibility_rows.contract_week_id IS NOT NULL)
+        AND eligibility_rows.locked_calc = FALSE
+        AND eligibility_rows.bulk_process_user_adjustment_eligible_calc = TRUE
       ) AS can_manage_evidence_calc,
       (
-        classified_rows.locked_calc = FALSE
-        AND classified_rows.authorised_calc = FALSE
-        AND COALESCE(classified_rows.is_adjusted, FALSE) = FALSE
+        eligibility_rows.locked_calc = FALSE
+        AND eligibility_rows.authorised_calc = FALSE
+        AND COALESCE(eligibility_rows.is_adjusted, FALSE) = FALSE
       ) AS can_add_additional_manual_calc,
       (
-        classified_rows.locked_calc = TRUE
-        OR classified_rows.authorised_calc = TRUE
-        OR classified_rows.route_family_calc <> 'MANUAL_NON_QR'
+        eligibility_rows.locked_calc = TRUE
+        OR eligibility_rows.authorised_calc = TRUE
+        OR eligibility_rows.bulk_process_user_adjustment_eligible_calc = FALSE
       ) AS review_only_calc
-    FROM classified_rows
+    FROM eligibility_rows
   ),
   evidence_target_rows AS MATERIALIZED (
     SELECT DISTINCT
@@ -308,7 +322,7 @@ BEGIN
       decision_rows.contract_week_id AS contract_week_id
     FROM decision_rows
     WHERE decision_rows.row_key_calc IS NOT NULL
-      AND decision_rows.route_family_calc = 'MANUAL_NON_QR'
+      AND decision_rows.bulk_process_user_adjustment_eligible_calc = TRUE
       AND (
         (UPPER(COALESCE(decision_rows.period_type_calc, decision_rows.sheet_scope, '')) = 'WEEKLY' AND v_show_weekly_manual = TRUE)
         OR (UPPER(COALESCE(decision_rows.period_type_calc, decision_rows.sheet_scope, '')) = 'DAILY' AND v_show_daily_manual = TRUE)
@@ -527,6 +541,8 @@ BEGIN
         decision_rows.route_subfamily_calc,
         'underlying_channel_family',
         decision_rows.underlying_channel_family_calc,
+        'bulk_process_user_adjustment_eligible',
+        decision_rows.bulk_process_user_adjustment_eligible_calc,
         'is_import_authoritative',
         decision_rows.route_family_calc = 'IMPORT_AUTHORITATIVE',
         'is_import_derived_adjustment',
@@ -757,6 +773,7 @@ BEGIN
         'row_signature',
         MD5(CONCAT_WS('|',
           decision_rows.row_signature_calc,
+          COALESCE(decision_rows.bulk_process_user_adjustment_eligible_calc::text, ''),
           COALESCE(evidence_kind_summary.primary_artifact_kind, ''),
           COALESCE(evidence_kind_summary.timesheet_evidence_count::text, '0'),
           COALESCE(evidence_kind_summary.mileage_evidence_count::text, '0'),
@@ -844,7 +861,7 @@ BEGIN
   manual_rows AS MATERIALIZED (
     SELECT payload_rows.row_json
     FROM payload_rows
-    WHERE UPPER(COALESCE(payload_rows.row_json->>'route_family', '')) = 'MANUAL_NON_QR'
+    WHERE COALESCE((payload_rows.row_json->>'bulk_process_user_adjustment_eligible')::boolean, FALSE) = TRUE
       AND COALESCE((payload_rows.row_json->>'is_import_authoritative')::boolean, FALSE) = FALSE
       AND COALESCE(payload_rows.row_json->>'adjustment_source', '') <> 'IMPORT_DERIVED'
       AND (
@@ -944,6 +961,12 @@ BEGIN
   ));
 END;
 $function$;
+
+
+
+
+
+
 
 
 
