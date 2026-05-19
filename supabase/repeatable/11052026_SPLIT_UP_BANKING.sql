@@ -7293,6 +7293,7 @@ DECLARE
   v_provider_submission_status text := NULL::text;
   v_review_reason_code text := NULL::text;
   v_provider_acceptance_evidence_count integer := 0;
+  v_provider_external_evidence_count integer := 0;
   v_provider_response_present_count integer := 0;
   v_provider_request_sent_count integer := 0;
   v_stale_empty_submit_chunk_count integer := 0;
@@ -7532,6 +7533,11 @@ BEGIN
   ELSE
     v_provider_acceptance_evidence_count := 0;
   END IF;
+  IF COALESCE(v_diagnostic_result #>> '{counts,provider_external_evidence_count}', '') ~ '^[0-9]+$' THEN
+    v_provider_external_evidence_count := (v_diagnostic_result #>> '{counts,provider_external_evidence_count}')::integer;
+  ELSE
+    v_provider_external_evidence_count := 0;
+  END IF;
   IF COALESCE(v_diagnostic_result #>> '{counts,provider_response_present_count}', '') ~ '^[0-9]+$' THEN
     v_provider_response_present_count := (v_diagnostic_result #>> '{counts,provider_response_present_count}')::integer;
   ELSE
@@ -7578,6 +7584,10 @@ BEGIN
       'review_reason_code', v_review_reason_code,
       'manual_resolution_required', true,
       'safe_retry_available', false,
+      'provider_request_sent', COALESCE(v_provider_request_sent_count, 0) > 0,
+      'provider_request_sent_confirmed', CASE WHEN COALESCE(v_provider_request_sent_count, 0) > 0 THEN true ELSE NULL::boolean END,
+      'provider_request_dispatched_at_utc', NULLIF(BTRIM(COALESCE(v_provider_submit_diagnostic->>'provider_request_dispatched_at_utc', v_provider_submit_diagnostic->>'request_sent_at_utc', '')), ''),
+      'provider_external_evidence_present', false,
       'provider_acceptance_evidence_present', false,
       'provider_response_present', false,
       'stale_submit_chunk', true,
@@ -7606,6 +7616,10 @@ BEGIN
       'manual_resolution_required', true,
       'safe_retry_available', false,
       'provider_acceptance_evidence_count', COALESCE(v_provider_acceptance_evidence_count, 0),
+      'provider_external_evidence_count', COALESCE(v_provider_external_evidence_count, 0),
+      'provider_external_evidence_present', COALESCE(v_provider_external_evidence_count, 0) > 0,
+      'provider_request_sent_confirmed', CASE WHEN COALESCE(v_provider_request_sent_count, 0) > 0 THEN true ELSE false END,
+      'provider_request_dispatched_at_utc', NULLIF(BTRIM(COALESCE(v_provider_submit_diagnostic->>'provider_request_dispatched_at_utc', v_provider_submit_diagnostic->>'request_sent_at_utc', '')), ''),
       'provider_response_present_count', COALESCE(v_provider_response_present_count, 0),
       'provider_request_sent_count', COALESCE(v_provider_request_sent_count, 0),
       'stale_unresolved_submit_chunk_count', COALESCE(v_stale_unresolved_submit_chunk_count, 0),
@@ -7765,9 +7779,13 @@ BEGIN
       'provider_call_stage', 'PROVIDER_SUBMIT_CHUNK_CLAIMED',
       'provider_submission_status', 'NO_PROVIDER_SUBMISSION_ATTEMPTED',
       'provider_submission_attempted', false,
+      'provider_called', false,
       'provider_request_sent', false,
+      'provider_request_sent_confirmed', false,
+      'provider_request_dispatched_at_utc', NULL::text,
       'provider_response_received', false,
       'provider_response_present', false,
+      'provider_external_evidence_present', false,
       'provider_acceptance_evidence_present', false,
       'crash_safety_status_if_lock_expires', 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK',
       'provider_request_impossible', false,
@@ -7860,6 +7878,10 @@ BEGIN
       'manual_resolution_required', false,
       'safe_retry_available', false,
       'provider_acceptance_evidence_count', COALESCE(v_provider_acceptance_evidence_count, 0),
+      'provider_external_evidence_count', COALESCE(v_provider_external_evidence_count, 0),
+      'provider_external_evidence_present', COALESCE(v_provider_external_evidence_count, 0) > 0,
+      'provider_request_sent_confirmed', CASE WHEN COALESCE(v_provider_request_sent_count, 0) > 0 THEN true ELSE false END,
+      'provider_request_dispatched_at_utc', NULLIF(BTRIM(COALESCE(v_provider_submit_diagnostic->>'provider_request_dispatched_at_utc', v_provider_submit_diagnostic->>'request_sent_at_utc', '')), ''),
       'provider_response_present_count', COALESCE(v_provider_response_present_count, 0),
       'provider_request_sent_count', COALESCE(v_provider_request_sent_count, 0),
       'stale_unresolved_submit_chunk_count', COALESCE(v_stale_unresolved_submit_chunk_count, 0),
@@ -7978,6 +8000,10 @@ BEGIN
       'manual_resolution_required', false,
       'safe_retry_available', false,
       'provider_acceptance_evidence_count', COALESCE(v_provider_acceptance_evidence_count, 0),
+      'provider_external_evidence_count', COALESCE(v_provider_external_evidence_count, 0),
+      'provider_external_evidence_present', COALESCE(v_provider_external_evidence_count, 0) > 0,
+      'provider_request_sent_confirmed', CASE WHEN COALESCE(v_provider_request_sent_count, 0) > 0 THEN true ELSE false END,
+      'provider_request_dispatched_at_utc', NULLIF(BTRIM(COALESCE(v_provider_submit_diagnostic->>'provider_request_dispatched_at_utc', v_provider_submit_diagnostic->>'request_sent_at_utc', '')), ''),
       'provider_response_present_count', COALESCE(v_provider_response_present_count, 0),
       'provider_request_sent_count', COALESCE(v_provider_request_sent_count, 0),
       'stale_unresolved_submit_chunk_count', COALESCE(v_stale_unresolved_submit_chunk_count, 0),
@@ -8005,9 +8031,13 @@ BEGIN
     'provider_call_stage', 'PROVIDER_SUBMIT_CHUNK_CLAIMED',
     'provider_submission_status', 'NO_PROVIDER_SUBMISSION_ATTEMPTED',
     'provider_submission_attempted', false,
+    'provider_called', false,
     'provider_request_sent', false,
+    'provider_request_sent_confirmed', false,
+    'provider_request_dispatched_at_utc', NULL::text,
     'provider_response_received', false,
     'provider_response_present', false,
+    'provider_external_evidence_present', false,
     'provider_acceptance_evidence_present', false,
     'crash_safety_status_if_lock_expires', 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK',
     'provider_request_impossible', false,
@@ -8131,6 +8161,10 @@ BEGIN
       'manual_resolution_required', false,
       'safe_retry_available', false,
       'provider_acceptance_evidence_count', COALESCE(v_provider_acceptance_evidence_count, 0),
+      'provider_external_evidence_count', COALESCE(v_provider_external_evidence_count, 0),
+      'provider_external_evidence_present', COALESCE(v_provider_external_evidence_count, 0) > 0,
+      'provider_request_sent_confirmed', CASE WHEN COALESCE(v_provider_request_sent_count, 0) > 0 THEN true ELSE false END,
+      'provider_request_dispatched_at_utc', NULLIF(BTRIM(COALESCE(v_provider_submit_diagnostic->>'provider_request_dispatched_at_utc', v_provider_submit_diagnostic->>'request_sent_at_utc', '')), ''),
       'provider_response_present_count', COALESCE(v_provider_response_present_count, 0),
       'provider_request_sent_count', COALESCE(v_provider_request_sent_count, 0),
       'stale_unresolved_submit_chunk_count', COALESCE(v_stale_unresolved_submit_chunk_count, 0),
@@ -8144,6 +8178,7 @@ BEGIN
   );
 END;
 $function$;
+
 
 
 CREATE OR REPLACE FUNCTION public.pay_operation_remittance_scope_seed(
@@ -17553,9 +17588,6 @@ $function$;
 
 
 
-
-
-
 CREATE OR REPLACE FUNCTION public.pay_provider_submit_chunk_stage_record(
   p_operation_id uuid,
   p_pay_batch_id uuid,
@@ -17597,6 +17629,7 @@ DECLARE
   v_primary_rail_state text := NULL::text;
   v_primary_request_id text := NULL::text;
   v_primary_payment_reference text := NULL::text;
+  v_batch_bulk_reference text := NULL::text;
 
   v_direct_acceptance_evidence_count integer := 0;
   v_direct_response_present_count integer := 0;
@@ -17638,6 +17671,8 @@ DECLARE
   v_provider_call_stage text := NULL::text;
   v_provider_submission_attempted boolean := false;
   v_provider_request_sent boolean := false;
+  v_provider_request_sent_confirmed boolean := false;
+  v_provider_request_dispatched_at_utc text := NULL::text;
   v_provider_response_received boolean := false;
   v_provider_response_present boolean := false;
   v_provider_submission_accepted boolean := false;
@@ -17645,6 +17680,7 @@ DECLARE
   v_provider_submission_failed boolean := false;
   v_provider_submission_unknown boolean := false;
   v_provider_acceptance_evidence_present boolean := false;
+  v_provider_external_evidence_present boolean := false;
   v_manual_resolution_required boolean := false;
   v_safe_retry_available boolean := false;
   v_automatic_retry_blocked boolean := false;
@@ -17775,7 +17811,8 @@ BEGIN
     )::text USING ERRCODE = 'P0001';
   END IF;
 
-  PERFORM 1
+  SELECT NULLIF(BTRIM(COALESCE(batch_row.bulk_reference, '')), '')
+  INTO v_batch_bulk_reference
   FROM public.pay_batches AS batch_row
   WHERE batch_row.id = p_pay_batch_id;
 
@@ -18174,9 +18211,11 @@ BEGIN
       'review_reason_code', 'PROVIDER_ACCEPTANCE_EVIDENCE_PRESENT',
       'provider_submission_attempted', true,
       'provider_request_sent', true,
+      'provider_request_sent_confirmed', true,
       'provider_response_received', true,
       'provider_response_present', true,
       'provider_submission_accepted', true,
+      'provider_external_evidence_present', true,
       'provider_acceptance_evidence_present', true,
       'manual_resolution_required', false,
       'safe_retry_available', false,
@@ -18219,10 +18258,17 @@ BEGIN
   IF v_provider_reference IS NOT NULL
      AND v_provider_reference IN (
        COALESCE(v_primary_transfer_id, '__NO_TRANSFER_ID__'),
+       p_operation_id::text,
+       p_chunk_id::text,
        COALESCE(v_request_id, '__NO_REQUEST_ID__'),
        COALESCE(v_idempotency_key, '__NO_IDEMPOTENCY_KEY__'),
        COALESCE(v_local_provider_request_id, '__NO_LOCAL_PROVIDER_REQUEST_ID__'),
-       COALESCE(v_primary_payment_reference, '__NO_PAYMENT_REFERENCE__')
+       COALESCE(v_primary_payment_reference, '__NO_PAYMENT_REFERENCE__'),
+       COALESCE(v_batch_bulk_reference, '__NO_BATCH_BULK_REFERENCE__'),
+       COALESCE(NULLIF(BTRIM(COALESCE(v_input_diagnostic->>'reference', '')), ''), '__NO_INPUT_REFERENCE__'),
+       COALESCE(NULLIF(BTRIM(COALESCE(v_input_diagnostic->>'referenceId', '')), ''), '__NO_INPUT_REFERENCE_ID__'),
+       COALESCE(NULLIF(BTRIM(COALESCE(v_input_diagnostic->>'local_reference', '')), ''), '__NO_INPUT_LOCAL_REFERENCE__'),
+       COALESCE(NULLIF(BTRIM(COALESCE(v_input_diagnostic->>'provider_request_reference', '')), ''), '__NO_INPUT_PROVIDER_REQUEST_REFERENCE__')
      ) THEN
     v_provider_reference := NULL::text;
   END IF;
@@ -18230,10 +18276,17 @@ BEGIN
   IF v_provider_transaction_id IS NOT NULL
      AND v_provider_transaction_id IN (
        COALESCE(v_primary_transfer_id, '__NO_TRANSFER_ID__'),
+       p_operation_id::text,
+       p_chunk_id::text,
        COALESCE(v_request_id, '__NO_REQUEST_ID__'),
        COALESCE(v_idempotency_key, '__NO_IDEMPOTENCY_KEY__'),
        COALESCE(v_local_provider_request_id, '__NO_LOCAL_PROVIDER_REQUEST_ID__'),
-       COALESCE(v_primary_payment_reference, '__NO_PAYMENT_REFERENCE__')
+       COALESCE(v_primary_payment_reference, '__NO_PAYMENT_REFERENCE__'),
+       COALESCE(v_batch_bulk_reference, '__NO_BATCH_BULK_REFERENCE__'),
+       COALESCE(NULLIF(BTRIM(COALESCE(v_input_diagnostic->>'reference', '')), ''), '__NO_INPUT_REFERENCE__'),
+       COALESCE(NULLIF(BTRIM(COALESCE(v_input_diagnostic->>'referenceId', '')), ''), '__NO_INPUT_REFERENCE_ID__'),
+       COALESCE(NULLIF(BTRIM(COALESCE(v_input_diagnostic->>'local_reference', '')), ''), '__NO_INPUT_LOCAL_REFERENCE__'),
+       COALESCE(NULLIF(BTRIM(COALESCE(v_input_diagnostic->>'provider_request_reference', '')), ''), '__NO_INPUT_PROVIDER_REQUEST_REFERENCE__')
      ) THEN
     v_provider_transaction_id := NULL::text;
   END IF;
@@ -18241,16 +18294,25 @@ BEGIN
   IF v_rail_tx_id IS NOT NULL
      AND v_rail_tx_id IN (
        COALESCE(v_primary_transfer_id, '__NO_TRANSFER_ID__'),
+       p_operation_id::text,
+       p_chunk_id::text,
        COALESCE(v_request_id, '__NO_REQUEST_ID__'),
        COALESCE(v_idempotency_key, '__NO_IDEMPOTENCY_KEY__'),
        COALESCE(v_local_provider_request_id, '__NO_LOCAL_PROVIDER_REQUEST_ID__'),
-       COALESCE(v_primary_payment_reference, '__NO_PAYMENT_REFERENCE__')
+       COALESCE(v_primary_payment_reference, '__NO_PAYMENT_REFERENCE__'),
+       COALESCE(v_batch_bulk_reference, '__NO_BATCH_BULK_REFERENCE__'),
+       COALESCE(NULLIF(BTRIM(COALESCE(v_input_diagnostic->>'reference', '')), ''), '__NO_INPUT_REFERENCE__'),
+       COALESCE(NULLIF(BTRIM(COALESCE(v_input_diagnostic->>'referenceId', '')), ''), '__NO_INPUT_REFERENCE_ID__'),
+       COALESCE(NULLIF(BTRIM(COALESCE(v_input_diagnostic->>'local_reference', '')), ''), '__NO_INPUT_LOCAL_REFERENCE__'),
+       COALESCE(NULLIF(BTRIM(COALESCE(v_input_diagnostic->>'provider_request_reference', '')), ''), '__NO_INPUT_PROVIDER_REQUEST_REFERENCE__')
      ) THEN
     v_rail_tx_id := NULL::text;
   END IF;
 
+  v_provider_request_sent_confirmed := lower(BTRIM(COALESCE(v_input_diagnostic->>'provider_request_sent_confirmed', ''))) IN ('true', 't', '1', 'yes', 'y', 'on');
+  v_provider_request_dispatched_at_utc := NULLIF(BTRIM(COALESCE(v_input_diagnostic->>'provider_request_dispatched_at_utc', v_input_diagnostic->>'request_sent_at_utc', '')), '');
   v_provider_request_sent := lower(BTRIM(COALESCE(v_input_diagnostic->>'provider_request_sent', ''))) IN ('true', 't', '1', 'yes', 'y', 'on')
-    OR lower(BTRIM(COALESCE(v_input_diagnostic->>'provider_request_sent_confirmed', ''))) IN ('true', 't', '1', 'yes', 'y', 'on')
+    OR v_provider_request_sent_confirmed IS TRUE
     OR v_stage_upper IN ('PROVIDER_PAYMENT_CREATE_REQUEST_SENT', 'PROVIDER_PAYMENT_CREATE_RESPONSE_RECEIVED', 'PROVIDER_PAYMENT_CREATE_ACCEPTED', 'PROVIDER_PAYMENT_CREATE_REJECTED', 'PROVIDER_PAYMENT_CREATE_UNKNOWN', 'PROVIDER_PAYMENT_CREATE_MALFORMED')
     OR v_stage_upper LIKE '%REQUEST_SENT%';
 
@@ -18284,6 +18346,8 @@ BEGIN
       AND NULLIF(BTRIM(COALESCE(v_provider_reference, '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(v_primary_payment_reference, '')), ''), '__NO_PAYMENT_REFERENCE__')
     )
   );
+
+  v_provider_external_evidence_present := NULLIF(BTRIM(COALESCE(v_provider_transaction_id, v_rail_tx_id, v_provider_reference, '')), '') IS NOT NULL;
 
   v_provider_submission_rejected := lower(BTRIM(COALESCE(v_input_diagnostic->>'provider_submission_rejected', v_input_diagnostic->>'provider_rejected', ''))) IN ('true', 't', '1', 'yes', 'y', 'on')
     OR v_incoming_status IN ('PROVIDER_SUBMISSION_REJECTED', 'PROVIDER_SUBMISSION_FAILED')
@@ -18354,7 +18418,7 @@ BEGIN
   v_provider_submission_unknown := lower(BTRIM(COALESCE(v_input_diagnostic->>'provider_submission_unknown', v_input_diagnostic->>'provider_unknown', ''))) IN ('true', 't', '1', 'yes', 'y', 'on')
     OR v_incoming_status IN ('UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE', 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID');
 
-  v_provider_acceptance_evidence_present := v_provider_submission_accepted IS TRUE
+  v_provider_acceptance_evidence_present := (v_provider_submission_accepted IS TRUE AND v_provider_external_evidence_present IS TRUE)
     OR v_provider_acceptance_evidence_count > 0;
 
   v_provider_submission_failed := lower(BTRIM(COALESCE(v_input_diagnostic->>'provider_submission_failed', ''))) IN ('true', 't', '1', 'yes', 'y', 'on')
@@ -18427,12 +18491,15 @@ BEGIN
       'review_reason_code', v_incoming_review_reason_code,
       'provider_submission_attempted', v_provider_submission_attempted,
       'provider_request_sent', v_provider_request_sent,
+      'provider_request_sent_confirmed', v_provider_request_sent_confirmed,
+      'provider_request_dispatched_at_utc', v_provider_request_dispatched_at_utc,
       'provider_response_received', v_provider_response_received,
       'provider_response_present', v_provider_response_present,
       'provider_submission_accepted', v_provider_submission_accepted,
       'provider_submission_rejected', v_provider_submission_rejected,
       'provider_submission_failed', v_provider_submission_failed,
       'provider_submission_unknown', v_provider_submission_unknown,
+      'provider_external_evidence_present', v_provider_external_evidence_present,
       'provider_acceptance_evidence_present', v_provider_acceptance_evidence_present,
       'manual_resolution_required', v_manual_resolution_required,
       'safe_retry_available', v_safe_retry_available,
@@ -18451,7 +18518,7 @@ BEGIN
       'transfer_ids', COALESCE(v_transfer_ids_json, '[]'::jsonb),
       'rail_provider', v_primary_rail_provider,
       'rail_env', v_primary_rail_env,
-      'rail_tx_id', v_rail_tx_id,
+      'rail_tx_id', CASE WHEN v_provider_acceptance_evidence_present IS TRUE THEN v_rail_tx_id ELSE NULL::text END,
       'rail_state', v_rail_state,
       'provider_transaction_id', v_provider_transaction_id,
       'provider_reference', v_provider_reference,
@@ -18506,6 +18573,9 @@ BEGIN
         'provider_acceptance_evidence_count', COALESCE(v_provider_acceptance_evidence_count, 0),
         'provider_response_present_count', COALESCE(v_provider_response_present_count, 0),
         'provider_request_sent_count', COALESCE(v_provider_request_sent_count, 0),
+        'provider_request_sent_confirmed', lower(BTRIM(COALESCE(v_existing_diagnostic->>'provider_request_sent_confirmed', ''))) IN ('true', 't', '1', 'yes', 'y', 'on') OR v_provider_request_sent_confirmed,
+        'provider_request_dispatched_at_utc', COALESCE(NULLIF(BTRIM(COALESCE(v_existing_diagnostic->>'provider_request_dispatched_at_utc', v_existing_diagnostic->>'request_sent_at_utc', '')), ''), v_provider_request_dispatched_at_utc),
+        'provider_external_evidence_present', lower(BTRIM(COALESCE(v_existing_diagnostic->>'provider_external_evidence_present', ''))) IN ('true', 't', '1', 'yes', 'y', 'on') OR v_provider_external_evidence_present,
         'provider_rejection_count', COALESCE(v_provider_rejection_count, 0)
       )
     );
@@ -18521,6 +18591,31 @@ BEGIN
     v_final_status := 'NO_PROVIDER_SUBMISSION_ATTEMPTED';
   END IF;
 
+  IF v_final_status = 'PROVIDER_SUBMISSION_ACCEPTED'
+     AND NOT (
+       COALESCE(v_provider_acceptance_evidence_count, 0) > 0
+       OR v_provider_external_evidence_present IS TRUE
+     ) THEN
+    v_final_status := 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID';
+    v_final_rank := GREATEST(v_final_rank, 400);
+    v_final_diagnostic := jsonb_strip_nulls(
+      v_final_diagnostic || jsonb_build_object(
+        'provider_submission_status', v_final_status,
+        'review_reason_code', 'PROVIDER_RESPONSE_PRESENT_NO_EXTERNAL_ID',
+        'provider_submission_accepted', false,
+        'provider_submission_unknown', true,
+        'provider_external_evidence_present', false,
+        'provider_acceptance_evidence_present', false,
+        'provider_response_present', true,
+        'manual_resolution_required', true,
+        'safe_retry_available', false,
+        'automatic_retry_blocked', true,
+        'retry_blocked_reason', 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID',
+        'recommended_action', 'Provider response/status was recorded, but no usable external provider transaction or reference was stored. Check Revolut/bank records before retry.'
+      )
+    );
+  END IF;
+
   IF v_chunk_lock_expired IS TRUE
      AND v_provider_acceptance_evidence_count = 0
      AND v_provider_response_present_count = 0
@@ -18533,6 +18628,8 @@ BEGIN
         'provider_submission_status', v_final_status,
         'review_reason_code', 'STALE_RUNNING_PROVIDER_SUBMIT_CHUNK',
         'provider_submission_unknown', true,
+        'provider_external_evidence_present', false,
+        'provider_acceptance_evidence_present', false,
         'stale_submit_chunk', true,
         'manual_resolution_required', true,
         'safe_retry_available', false,
@@ -18574,6 +18671,11 @@ BEGIN
       'provider_acceptance_evidence_count', COALESCE(v_provider_acceptance_evidence_count, 0),
       'provider_response_present_count', COALESCE(v_provider_response_present_count, 0),
       'provider_request_sent_count', COALESCE(v_provider_request_sent_count, 0),
+      'provider_request_sent_confirmed', lower(BTRIM(COALESCE(v_final_diagnostic->>'provider_request_sent_confirmed', ''))) IN ('true', 't', '1', 'yes', 'y', 'on') OR v_provider_request_sent_confirmed,
+      'provider_request_dispatched_at_utc', COALESCE(NULLIF(BTRIM(COALESCE(v_final_diagnostic->>'provider_request_dispatched_at_utc', v_final_diagnostic->>'request_sent_at_utc', '')), ''), v_provider_request_dispatched_at_utc),
+      'provider_external_evidence_present', COALESCE(v_provider_acceptance_evidence_count, 0) > 0 OR v_provider_external_evidence_present,
+      'provider_acceptance_evidence_present', v_final_status = 'PROVIDER_SUBMISSION_ACCEPTED' AND (COALESCE(v_provider_acceptance_evidence_count, 0) > 0 OR v_provider_external_evidence_present),
+      'rail_tx_id', CASE WHEN v_final_status = 'PROVIDER_SUBMISSION_ACCEPTED' AND (COALESCE(v_provider_acceptance_evidence_count, 0) > 0 OR v_provider_external_evidence_present) THEN COALESCE(NULLIF(BTRIM(COALESCE(v_final_diagnostic->>'rail_tx_id', '')), ''), v_rail_tx_id, v_provider_transaction_id) ELSE NULL::text END,
       'provider_rejection_count', COALESCE(v_provider_rejection_count, 0),
       'preserved_stronger_provider_evidence', v_preserved_stronger_provider_evidence
     )
@@ -18594,7 +18696,9 @@ BEGIN
     'incoming_applied', v_apply_incoming,
     'protected_by_existing_provider_evidence', v_preserved_stronger_provider_evidence,
     'provider_request_sent', lower(BTRIM(COALESCE(v_final_diagnostic->>'provider_request_sent', ''))) IN ('true', 't', '1', 'yes', 'y', 'on'),
+    'provider_request_sent_confirmed', lower(BTRIM(COALESCE(v_final_diagnostic->>'provider_request_sent_confirmed', ''))) IN ('true', 't', '1', 'yes', 'y', 'on'),
     'provider_response_present', lower(BTRIM(COALESCE(v_final_diagnostic->>'provider_response_present', v_final_diagnostic->>'provider_response_received', ''))) IN ('true', 't', '1', 'yes', 'y', 'on'),
+    'provider_external_evidence_present', lower(BTRIM(COALESCE(v_final_diagnostic->>'provider_external_evidence_present', ''))) IN ('true', 't', '1', 'yes', 'y', 'on'),
     'provider_acceptance_evidence_present', lower(BTRIM(COALESCE(v_final_diagnostic->>'provider_acceptance_evidence_present', ''))) IN ('true', 't', '1', 'yes', 'y', 'on'),
     'crash_safety_status_if_lock_expires', COALESCE(v_final_diagnostic->>'crash_safety_status_if_lock_expires', v_crash_safety_status_if_lock_expires)
   ));
@@ -18614,6 +18718,10 @@ BEGIN
       'provider_submit_diagnostic', v_final_diagnostic,
       'provider_submission_status', v_final_status,
       'review_reason_code', v_final_review_reason_code,
+      'provider_request_sent_confirmed', lower(BTRIM(COALESCE(v_final_diagnostic->>'provider_request_sent_confirmed', ''))) IN ('true', 't', '1', 'yes', 'y', 'on'),
+      'provider_request_dispatched_at_utc', NULLIF(BTRIM(COALESCE(v_final_diagnostic->>'provider_request_dispatched_at_utc', '')), ''),
+      'provider_external_evidence_present', lower(BTRIM(COALESCE(v_final_diagnostic->>'provider_external_evidence_present', ''))) IN ('true', 't', '1', 'yes', 'y', 'on'),
+      'provider_acceptance_evidence_present', lower(BTRIM(COALESCE(v_final_diagnostic->>'provider_acceptance_evidence_present', ''))) IN ('true', 't', '1', 'yes', 'y', 'on'),
       'provider_call_stage', COALESCE(v_final_diagnostic->>'provider_call_stage', v_provider_call_stage),
       'provider_submit_stage_last_recorded', v_stage,
       'provider_submit_stage_last_recorded_at_utc', v_now::text,
@@ -18637,6 +18745,10 @@ BEGIN
       'provider_submit_diagnostic', v_final_diagnostic,
       'provider_submission_status', v_final_status,
       'review_reason_code', v_final_review_reason_code,
+      'provider_request_sent_confirmed', lower(BTRIM(COALESCE(v_final_diagnostic->>'provider_request_sent_confirmed', ''))) IN ('true', 't', '1', 'yes', 'y', 'on'),
+      'provider_request_dispatched_at_utc', NULLIF(BTRIM(COALESCE(v_final_diagnostic->>'provider_request_dispatched_at_utc', '')), ''),
+      'provider_external_evidence_present', lower(BTRIM(COALESCE(v_final_diagnostic->>'provider_external_evidence_present', ''))) IN ('true', 't', '1', 'yes', 'y', 'on'),
+      'provider_acceptance_evidence_present', lower(BTRIM(COALESCE(v_final_diagnostic->>'provider_acceptance_evidence_present', ''))) IN ('true', 't', '1', 'yes', 'y', 'on'),
       'provider_call_stage', COALESCE(v_final_diagnostic->>'provider_call_stage', v_provider_call_stage),
       'provider_submit_stage_last_recorded', v_stage,
       'provider_submit_stage_last_recorded_at_utc', v_now::text,
@@ -18700,6 +18812,10 @@ BEGIN
     'review_reason_code', v_final_review_reason_code,
     'manual_resolution_required', lower(BTRIM(COALESCE(v_final_diagnostic->>'manual_resolution_required', ''))) IN ('true', 't', '1', 'yes', 'y', 'on'),
     'safe_retry_available', lower(BTRIM(COALESCE(v_final_diagnostic->>'safe_retry_available', ''))) IN ('true', 't', '1', 'yes', 'y', 'on'),
+    'provider_request_sent_confirmed', lower(BTRIM(COALESCE(v_final_diagnostic->>'provider_request_sent_confirmed', ''))) IN ('true', 't', '1', 'yes', 'y', 'on'),
+    'provider_request_dispatched_at_utc', NULLIF(BTRIM(COALESCE(v_final_diagnostic->>'provider_request_dispatched_at_utc', '')), ''),
+    'provider_external_evidence_present', lower(BTRIM(COALESCE(v_final_diagnostic->>'provider_external_evidence_present', ''))) IN ('true', 't', '1', 'yes', 'y', 'on'),
+    'provider_acceptance_evidence_present', lower(BTRIM(COALESCE(v_final_diagnostic->>'provider_acceptance_evidence_present', ''))) IN ('true', 't', '1', 'yes', 'y', 'on'),
     'provider_acceptance_evidence_count', COALESCE(v_provider_acceptance_evidence_count, 0),
     'provider_response_present_count', COALESCE(v_provider_response_present_count, 0),
     'provider_request_sent_count', COALESCE(v_provider_request_sent_count, 0),
@@ -18711,4 +18827,5 @@ BEGIN
   );
 END;
 $function$;
+
 
