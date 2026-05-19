@@ -2,6 +2,11 @@
 
 
 
+
+
+
+
+
 CREATE OR REPLACE FUNCTION public.bulk_process_dataset_v1(p_filters jsonb DEFAULT '{}'::jsonb)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -575,7 +580,9 @@ BEGIN
         'tools_stage',
         decision_rows.tools_stage,
         'processing_status',
-        decision_rows.processing_status,
+        decision_rows.processing_status
+      )
+      || JSONB_BUILD_OBJECT(
         'processing_status_display',
         decision_rows.processing_status_display
       )
@@ -961,9 +968,6 @@ BEGIN
   ));
 END;
 $function$;
-
-
-
 
 
 
