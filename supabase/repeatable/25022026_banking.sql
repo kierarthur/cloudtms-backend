@@ -1185,6 +1185,8 @@ $$;
 
 
 
+
+
 CREATE OR REPLACE FUNCTION public._pay_outstanding_components(p_timesheet_ids uuid[])
  RETURNS TABLE(timesheet_id uuid, key_type text, key_value text, truth_ex_vat numeric, baseline_ex_vat numeric, reserved_ex_vat numeric, outstanding_ex_vat numeric, truth_inc_vat numeric, baseline_inc_vat numeric, reserved_inc_vat numeric, outstanding_inc_vat numeric, reservation_overrun_detected boolean)
  LANGUAGE sql
@@ -1623,14 +1625,10 @@ component_truth as (
 ),
 component_keys as (
   select distinct
-    x.timesheet_id,
-    x.key_type,
-    x.key_value
-  from (
-    select ct.timesheet_id, ct.key_type, ct.key_value from component_truth ct
-    union all
-    select rc.timesheet_id, rc.key_type, rc.key_value from reserved_components rc
-  ) x
+    component_truth_keys.timesheet_id,
+    component_truth_keys.key_type,
+    component_truth_keys.key_value
+  from component_truth component_truth_keys
 ),
 component_joined as (
   select
@@ -1746,6 +1744,7 @@ where fr.timesheet_id is not null
   and fr.key_type is not null
   and fr.key_value is not null;
 $function$;
+
 
 
 
