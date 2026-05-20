@@ -16795,6 +16795,11 @@ BEGIN
 END;
 $function$;
 
+
+
+
+
+
 CREATE OR REPLACE FUNCTION public.pay_execute_provider_submit_review_resolve(
   p_pay_batch_id uuid,
   p_operation_id uuid,
@@ -17639,9 +17644,10 @@ BEGIN
            COALESCE(NULLIF(btrim(coalesce(transfer_row.currency, '')), ''), 'GBP'),
            'MANUAL_RESOLVED_NO_PAYMENT_MADE',
            'NO_MONEY_MOVED',
-           'NO_PAYMENT_MADE_CONFIRMED',
+           'NO_CORRECTION_REQUIRED',
            jsonb_strip_nulls(jsonb_build_object(
              'event_kind', 'PROVIDER_SUBMIT_MANUAL_NO_PAYMENT_RESOLUTION',
+             'confirmation_reason', 'NO_PAYMENT_MADE_CONFIRMED',
              'provider_submit_diagnostic', v_manual_provider_submit_diagnostic,
              'operator_confirmation', v_confirmation_redacted,
              'operation_id', p_operation_id::text,
@@ -17878,6 +17884,9 @@ BEGIN
   RETURN v_result;
 END;
 $function$;
+
+
+
 
 
 
