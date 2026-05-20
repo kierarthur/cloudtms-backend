@@ -21607,6 +21607,9 @@ DROP FUNCTION IF EXISTS public.pay_batch_get(uuid, uuid);
 
 
 
+
+
+
 create or replace function public.pay_batch_get(
   p_pay_batch_id uuid,
   p_actor_user_id uuid DEFAULT NULL::uuid,
@@ -21753,6 +21756,8 @@ declare
   v_can_retry_blocked_funds boolean := false;
   v_blocked_funds_alert_payload jsonb := '{}'::jsonb;
   v_blocked_funds_payment_issue jsonb := NULL::jsonb;
+  v_batch_stale_payment_issue jsonb := NULL::jsonb;
+  v_batch_stale_payment_execution_review jsonb := NULL::jsonb;
   v_payment_issues jsonb := '[]'::jsonb;
 
   -- Scalable batch-open controls. These allow large batches to return a compact
@@ -22593,6 +22598,66 @@ begin
   v_freshness_is_stale := upper(btrim(coalesce(to_jsonb(v_batch) ->> 'freshness_validation_status', ''))) = 'STALE';
   v_stale_reason_counts := COALESCE((to_jsonb(v_batch) -> 'freshness_result_json') -> 'stale_reason_counts', '{}'::jsonb);
 
+  IF v_batch_status_upper IN ('DRAFT','DRAFT_CREATED')
+     AND COALESCE(v_freshness_is_stale, false) = true THEN
+    v_batch_stale_payment_issue := jsonb_strip_nulls(jsonb_build_object(
+      'issue_kind', 'PAYMENT_BATCH_STALE',
+      'issue_type', 'PAYMENT_BATCH_STALE',
+      'status', 'NEEDS_REVIEW',
+      'severity', 'warning',
+      'headline', 'Draft payment is no longer valid',
+      'title', 'Draft payment is no longer valid',
+      'summary', 'Some payments in this draft are no longer valid.',
+      'message', 'Some payments in this draft are no longer valid. Delete this draft and create a new draft payment batch.',
+      'action_required', 'Delete this draft and create a new draft payment batch.',
+      'recommended_action', 'Delete this draft and create a new draft payment batch.',
+      'user_action', 'DELETE_DRAFT_AND_CREATE_NEW',
+      'delete_draft_recommended', true,
+      'create_new_draft_recommended', true,
+      'requires_user_action', true,
+      'whole_batch_issue', true,
+      'freshness_validation_status', to_jsonb(v_batch) ->> 'freshness_validation_status',
+      'freshness_checked_at_utc', to_jsonb(v_batch) ->> 'freshness_checked_at_utc',
+      'freshness_result_hash', to_jsonb(v_batch) ->> 'freshness_result_hash',
+      'freshness_scope_hash', to_jsonb(v_batch) ->> 'freshness_scope_hash',
+      'freshness_operation_id', to_jsonb(v_batch) ->> 'freshness_operation_id',
+      'stale_reason_counts', COALESCE(v_stale_reason_counts, '{}'::jsonb),
+      'freshness_result_json', COALESCE(to_jsonb(v_batch) -> 'freshness_result_json', '{}'::jsonb)
+    ));
+
+    v_batch_stale_payment_execution_review := jsonb_strip_nulls(jsonb_build_object(
+      'issue_kind', 'PAYMENT_BATCH_STALE',
+      'review_reason_code', 'BATCH_STALE',
+      'headline', 'Draft payment is no longer valid',
+      'summary', 'Some payments in this draft are no longer valid.',
+      'message', 'Some payments in this draft are no longer valid. Delete this draft and create a new draft payment batch.',
+      'recommended_action', 'Delete this draft and create a new draft payment batch.',
+      'user_action', 'DELETE_DRAFT_AND_CREATE_NEW',
+      'delete_draft_recommended', true,
+      'create_new_draft_recommended', true,
+      'manual_resolution_required', false,
+      'manual_resolution_available', false,
+      'safe_retry_available', false,
+      'payment_provider_review_required', false,
+      'provider_submit_issue_present', false,
+      'provider_submit_is_diagnostic_only', true,
+      'provider_submission_status', CASE WHEN v_provider_submit_actual_context THEN v_provider_submission_status ELSE NULL::text END,
+      'freshness_validation_status', to_jsonb(v_batch) ->> 'freshness_validation_status',
+      'freshness_checked_at_utc', to_jsonb(v_batch) ->> 'freshness_checked_at_utc',
+      'freshness_result_hash', to_jsonb(v_batch) ->> 'freshness_result_hash',
+      'freshness_scope_hash', to_jsonb(v_batch) ->> 'freshness_scope_hash',
+      'freshness_operation_id', to_jsonb(v_batch) ->> 'freshness_operation_id',
+      'stale_reason_counts', COALESCE(v_stale_reason_counts, '{}'::jsonb),
+      'freshness_result_json', COALESCE(to_jsonb(v_batch) -> 'freshness_result_json', '{}'::jsonb)
+    ));
+
+    IF v_payment_execution_review IS NULL THEN
+      v_payment_execution_review := v_batch_stale_payment_execution_review;
+    END IF;
+
+    v_payment_issues := COALESCE(v_payment_issues, '[]'::jsonb) || jsonb_build_array(v_batch_stale_payment_issue);
+  END IF;
+
   v_large_batch := (
     COALESCE(v_candidate_count, 0) > 100
     OR COALESCE(v_item_count, 0) > 250
@@ -22677,7 +22742,7 @@ begin
         'payment_provider_review_required', COALESCE(v_payment_provider_review_required, false),
         'provider_submit_issue_present', COALESCE(v_provider_submit_issue_present, false),
         'provider_submit_is_diagnostic_only', COALESCE(v_provider_submit_is_diagnostic_only, false),
-        'payment_issues', CASE WHEN v_provider_submit_issue_present AND v_provider_submit_payment_issue IS NOT NULL THEN jsonb_build_array(v_provider_submit_payment_issue) ELSE '[]'::jsonb END
+        'payment_issues', COALESCE(v_payment_issues, '[]'::jsonb) || CASE WHEN v_provider_submit_issue_present AND v_provider_submit_payment_issue IS NOT NULL THEN jsonb_build_array(v_provider_submit_payment_issue) ELSE '[]'::jsonb END
       )
       || jsonb_build_object(
         'freshness', jsonb_build_object(
@@ -22792,7 +22857,7 @@ begin
             'payment_provider_review_required', COALESCE(v_payment_provider_review_required, false),
             'provider_submit_issue_present', COALESCE(v_provider_submit_issue_present, false),
             'provider_submit_is_diagnostic_only', COALESCE(v_provider_submit_is_diagnostic_only, false),
-            'payment_issues', CASE WHEN v_provider_submit_issue_present AND v_provider_submit_payment_issue IS NOT NULL THEN jsonb_build_array(v_provider_submit_payment_issue) ELSE '[]'::jsonb END
+            'payment_issues', COALESCE(v_payment_issues, '[]'::jsonb) || CASE WHEN v_provider_submit_issue_present AND v_provider_submit_payment_issue IS NOT NULL THEN jsonb_build_array(v_provider_submit_payment_issue) ELSE '[]'::jsonb END
           )
         ),
         'candidates', NULL::jsonb,
@@ -26187,6 +26252,16 @@ begin
       'applied_reversal_item_count', COALESCE(v_applied_reversal_item_count, 0)
     )
   );
+
+  IF v_batch_stale_payment_issue IS NOT NULL THEN
+    v_payment_correction := v_payment_correction || jsonb_build_object(
+      'batch_stale_issue', v_batch_stale_payment_issue,
+      'payment_execution_review', v_batch_stale_payment_execution_review,
+      'payment_issues', v_payment_issues,
+      'batch_stale_action_required', true,
+      'requires_user_action', true
+    );
+  END IF;
 
   IF v_blocked_funds_payment_issue IS NOT NULL THEN
     v_payment_correction := v_payment_correction || jsonb_build_object(
