@@ -30685,6 +30685,7 @@ async function handleAuditEventsList(env, req) {
 // ============================================================================
 
 
+
 async function handleBankingPayProviderSubmitReviewResolution(env, req, user, payBatchId) {
   const id = String(payBatchId || '').trim();
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -30722,20 +30723,28 @@ async function handleBankingPayProviderSubmitReviewResolution(env, req, user, pa
     return withCORS(env, req, badRequest('resolution_action must be CONFIRM_NO_PAYMENT_MADE_AND_RESET_FOR_RETRY'));
   }
 
-  const checkedProviderOrBank = boolStrictTrue(body.checked_provider_or_bank ?? body.checkedProviderOrBank);
-  const confirmedNoPaymentMade = boolStrictTrue(body.confirmed_no_payment_made ?? body.confirmedNoPaymentMade);
+  const reauthToken = String(body.reauth_token || body.reauthToken || '').trim();
+  if (reauthToken) {
+    const reauthCheck = await verifyPaymentReversalReauth(env, user, reauthToken);
+    if (!reauthCheck.ok) return withCORS(env, req, reauthCheck.response || unauthorized('Invalid reauth_token'));
+  }
+
+  const confirmation = (body.confirmation && typeof body.confirmation === 'object' && !Array.isArray(body.confirmation)) ? body.confirmation : {};
+  const checkedProviderOrBank = boolStrictTrue(body.checked_provider_or_bank ?? body.checkedProviderOrBank ?? confirmation.checked_provider_or_bank ?? confirmation.checkedProviderOrBank);
+  const confirmedNoPaymentMade = boolStrictTrue(body.confirmed_no_payment_made ?? body.confirmedNoPaymentMade ?? confirmation.confirmed_no_payment_made ?? confirmation.confirmedNoPaymentMade);
   if (checkedProviderOrBank !== true) return withCORS(env, req, badRequest('checked_provider_or_bank must be true'));
   if (confirmedNoPaymentMade !== true) return withCORS(env, req, badRequest('confirmed_no_payment_made must be true'));
 
-  const providerChecked = String(body.provider_checked || body.providerChecked || '').trim().toUpperCase();
+  const providerChecked = String(body.provider_checked || body.providerChecked || confirmation.provider_checked || confirmation.providerChecked || '').trim().toUpperCase();
   if (!['REVOLUT', 'BANK', 'BOTH'].includes(providerChecked)) return withCORS(env, req, badRequest('provider_checked must be REVOLUT, BANK or BOTH'));
 
-  const checkedAtUtcRaw = String(body.checked_at_utc || body.checkedAtUtc || '').trim();
+  const checkedAtUtcRaw = String(body.checked_at_utc || body.checkedAtUtc || confirmation.checked_at_utc || confirmation.checkedAtUtc || '').trim();
   const checkedAtUtc = checkedAtUtcRaw || new Date().toISOString();
   const checkedAtDate = new Date(checkedAtUtc);
   if (Number.isNaN(checkedAtDate.getTime())) return withCORS(env, req, badRequest('checked_at_utc must be a valid timestamp'));
 
-  const notes = body.notes === null || body.notes === undefined ? null : String(body.notes).trim();
+  const notesSource = body.notes === null || body.notes === undefined ? (confirmation.notes === null || confirmation.notes === undefined ? null : confirmation.notes) : body.notes;
+  const notes = notesSource === null || notesSource === undefined ? null : String(notesSource).trim();
 
   try {
     const diagnostic = unwrapRpc(await sbRpc(env, 'pay_provider_submit_diagnostic_get', {
@@ -136955,156 +136964,7 @@ async function revolutPayment_create(env, token, { request_id, source_account_id
 }
 
 
-async function handleBankingPayProviderSubmitReviewResolution(env, req, user, payBatchId) {
-  const id = String(payBatchId || '').trim();
-  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-  const unwrapRpc = (rpcRes, key) => {
-    let payload = rpcRes;
-    try {
-      if (Array.isArray(payload) && payload.length === 1 && payload[0] && typeof payload[0] === 'object') payload = payload[0];
-      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) payload = payload[key];
-      if (Array.isArray(payload) && payload.length === 1 && payload[0] && typeof payload[0] === 'object') payload = payload[0];
-    } catch {}
-    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
-  };
-
-  const boolStrictTrue = (value) => {
-    if (value === true) return true;
-    if (typeof value === 'string') return ['true', 't', '1', 'yes', 'y', 'on'].includes(value.trim().toLowerCase());
-    return false;
-  };
-
-  const jsonResponse = (payload, status = 200) => new Response(JSON.stringify(payload), { status, headers: JSON_HEADERS });
-
-  if (!id || !uuidRe.test(id)) return withCORS(env, req, badRequest('valid pay_batch_id is required'));
-  if (!user || !user.id) return withCORS(env, req, unauthorized('Unauthorized'));
-
-  let body = null;
-  try { body = await parseJSONBody(req); } catch { body = null; }
-  if (!body || typeof body !== 'object' || Array.isArray(body)) return withCORS(env, req, badRequest('Invalid JSON'));
-
-  const operationId = String(body.operation_id || body.operationId || '').trim();
-  if (!operationId || !uuidRe.test(operationId)) return withCORS(env, req, badRequest('valid operation_id is required'));
-
-  const resolutionAction = String(body.resolution_action || body.resolutionAction || '').trim().toUpperCase();
-  if (resolutionAction !== 'CONFIRM_NO_PAYMENT_MADE_AND_RESET_FOR_RETRY') {
-    return withCORS(env, req, badRequest('resolution_action must be CONFIRM_NO_PAYMENT_MADE_AND_RESET_FOR_RETRY'));
-  }
-
-  const reauthToken = String(body.reauth_token || body.reauthToken || '').trim();
-  if (!reauthToken) return withCORS(env, req, badRequest('reauth_token is required'));
-
-  const reauthCheck = await verifyPaymentReversalReauth(env, user, reauthToken);
-  if (!reauthCheck.ok) return withCORS(env, req, reauthCheck.response || unauthorized('Invalid reauth_token'));
-
-  const confirmation = (body.confirmation && typeof body.confirmation === 'object' && !Array.isArray(body.confirmation)) ? body.confirmation : {};
-  const checkedProviderOrBank = boolStrictTrue(body.checked_provider_or_bank ?? body.checkedProviderOrBank ?? confirmation.checked_provider_or_bank ?? confirmation.checkedProviderOrBank);
-  const confirmedNoPaymentMade = boolStrictTrue(body.confirmed_no_payment_made ?? body.confirmedNoPaymentMade ?? confirmation.confirmed_no_payment_made ?? confirmation.confirmedNoPaymentMade);
-  if (checkedProviderOrBank !== true) return withCORS(env, req, badRequest('checked_provider_or_bank must be true'));
-  if (confirmedNoPaymentMade !== true) return withCORS(env, req, badRequest('confirmed_no_payment_made must be true'));
-
-  const providerChecked = String(body.provider_checked || body.providerChecked || confirmation.provider_checked || confirmation.providerChecked || '').trim().toUpperCase();
-  if (!['REVOLUT', 'BANK', 'BOTH'].includes(providerChecked)) return withCORS(env, req, badRequest('provider_checked must be REVOLUT, BANK or BOTH'));
-
-  const checkedAtUtcRaw = String(body.checked_at_utc || body.checkedAtUtc || confirmation.checked_at_utc || confirmation.checkedAtUtc || '').trim();
-  const checkedAtUtc = checkedAtUtcRaw || new Date().toISOString();
-  const checkedAtDate = new Date(checkedAtUtc);
-  if (Number.isNaN(checkedAtDate.getTime())) return withCORS(env, req, badRequest('checked_at_utc must be a valid timestamp'));
-
-  const notesSource = body.notes === null || body.notes === undefined ? (confirmation.notes === null || confirmation.notes === undefined ? null : confirmation.notes) : body.notes;
-  const notes = notesSource === null || notesSource === undefined ? null : String(notesSource).trim();
-
-  try {
-    const diagnostic = unwrapRpc(await sbRpc(env, 'pay_provider_submit_diagnostic_get', {
-      p_pay_batch_id: id,
-      p_operation_id: operationId,
-      p_transfer_id: null,
-      p_chunk_id: null,
-      p_counts_only: false
-    }), 'pay_provider_submit_diagnostic_get');
-
-    const diagnosticObject = (diagnostic.provider_submit_diagnostic && typeof diagnostic.provider_submit_diagnostic === 'object' && !Array.isArray(diagnostic.provider_submit_diagnostic))
-      ? diagnostic.provider_submit_diagnostic
-      : {};
-    const counts = (diagnostic.counts && typeof diagnostic.counts === 'object' && !Array.isArray(diagnostic.counts)) ? diagnostic.counts : {};
-    const providerAcceptanceEvidenceCount = Number(counts.provider_acceptance_evidence_count ?? diagnostic.provider_evidence_count ?? 0) || 0;
-
-    if (providerAcceptanceEvidenceCount > 0 || diagnosticObject.provider_acceptance_evidence_present === true) {
-      return withCORS(env, req, jsonResponse({
-        ok: false,
-        resolved: false,
-        reason: 'PROVIDER_ACCEPTANCE_EVIDENCE_PRESENT',
-        safe_retry_available: false,
-        manual_resolution_recorded: false,
-        provider_submit_diagnostic: diagnosticObject,
-        message: 'Provider acceptance evidence exists. Manual reconciliation is required before retry.',
-        pay_batch_id: id,
-        operation_id: operationId
-      }, 409));
-    }
-
-    const result = unwrapRpc(await sbRpc(env, 'pay_execute_provider_submit_review_resolve', {
-      p_pay_batch_id: id,
-      p_operation_id: operationId,
-      p_resolution_action: resolutionAction,
-      p_confirmation_json: {
-        checked_provider_or_bank: true,
-        confirmed_no_payment_made: true,
-        provider_checked: providerChecked,
-        checked_at_utc: checkedAtDate.toISOString(),
-        notes: notes || null
-      },
-      p_actor_user_id: user.id
-    }), 'pay_execute_provider_submit_review_resolve');
-
-    if (!result || result.ok === false || result.resolved === false) {
-      const reason = String(result?.reason || result?.code || '').trim().toUpperCase();
-      const status = reason === 'PROVIDER_ACCEPTANCE_EVIDENCE_PRESENT' ? 409 : 400;
-      return withCORS(env, req, jsonResponse({
-        ok: false,
-        resolved: false,
-        safe_retry_available: result?.safe_retry_available === true,
-        manual_resolution_recorded: result?.manual_resolution_recorded === true,
-        reason: reason || 'PROVIDER_SUBMIT_REVIEW_RESOLUTION_FAILED',
-        provider_submit_diagnostic: result?.provider_submit_diagnostic || diagnosticObject,
-        message: result?.message || 'Provider-submit review resolution failed.',
-        pay_batch_id: id,
-        operation_id: operationId
-      }, status));
-    }
-
-    let batch = null;
-    try {
-      batch = unwrapRpc(await sbRpc(env, 'pay_batch_get', {
-        p_pay_batch_id: id,
-        p_detail_mode: 'FULL',
-        p_recommended_page_size: 100,
-        p_actor_user_id: user.id
-      }), 'pay_batch_get');
-    } catch {
-      batch = null;
-    }
-
-    return withCORS(env, req, ok({
-      ok: true,
-      resolved: true,
-      safe_retry_available: result.safe_retry_available === true,
-      manual_resolution_recorded: result.manual_resolution_recorded === true,
-      provider_submit_diagnostic: result.provider_submit_diagnostic || null,
-      batch,
-      result,
-      message: result.message || 'Manual no-payment confirmation recorded. The batch can now be retried.',
-      pay_batch_id: id,
-      operation_id: operationId
-    }));
-  } catch (e) {
-    const friendly = (typeof makeBankingFriendlyErrorPayload === 'function')
-      ? makeBankingFriendlyErrorPayload(e, { action: 'BANKING_PAY_PROVIDER_SUBMIT_REVIEW_RESOLUTION', pay_batch_id: id, operation_id: operationId })
-      : { ok: false, error: String(e?.message || e || 'Provider-submit review resolution failed') };
-    return withCORS(env, req, new Response(JSON.stringify(friendly), { status: Number(friendly.http_status || friendly.status || 500) || 500, headers: JSON_HEADERS }));
-  }
-}
 
 
 
