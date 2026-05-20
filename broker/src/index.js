@@ -37475,6 +37475,7 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
 
 
 
+
 async function advanceBankingPayExecuteOperation(env, operationRow, user, options = {}) {
 const unwrapRpcPayload = (rpcRes, key) => {
 let payload = rpcRes;
@@ -38607,7 +38608,7 @@ const providerSubmitFailureCodeFromStatus = (status, reviewReason = '') => {
   if (statusUpper === 'PROVIDER_SUBMISSION_ACCEPTED' || reasonUpper === 'PROVIDER_ACCEPTANCE_EVIDENCE_PRESENT') return 'PROVIDER_SUBMISSION_ACCEPTED';
   if (statusUpper === 'PROVIDER_SUBMISSION_REJECTED' || reasonUpper === 'PROVIDER_REJECTED_PAYMENT') return 'PROVIDER_SUBMISSION_REJECTED';
   if (statusUpper === 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL' || reasonUpper === 'PROVIDER_SUBMIT_BLOCKED_PRE_CALL') return 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL';
-  return statusUpper || reasonUpper || 'PROVIDER_SUBMISSION_REVIEW_REQUIRED';
+  return statusUpper || reasonUpper || '';
 };
 const providerSubmitMessageFromCode = (code) => {
   const codeUpper = String(code || '').trim().toUpperCase();
@@ -38670,7 +38671,9 @@ const providerSubmitTerminalPayload = (source = {}, extra = {}) => {
   const diag = extractProviderSubmitDiagnostic(sourceObj);
   const status = providerSubmitStatusFrom(sourceObj) || providerSubmitStatusFrom(diag);
   const reviewReason = providerSubmitReviewCodeFrom(sourceObj) || providerSubmitReviewCodeFrom(diag);
-  const code = providerSubmitFailureCodeFromStatus(status, reviewReason);
+  const providerCode = providerSubmitFailureCodeFromStatus(status, reviewReason);
+  const fallbackCode = upperString(extraObj.code || extraObj.error_code || extraObj.errorCode || 'PROVIDER_SUBMIT_ADAPTER_FAILED');
+  const code = providerCode || fallbackCode;
   return {
     code,
     message: providerSubmitMessageFromCode(code),
@@ -39964,26 +39967,47 @@ if (currentPhase === 'COMPLETE') {
 return fail('UNKNOWN_EXECUTE_PHASE', `Unknown payment execution phase: ${currentPhase}`, { phase: currentPhase });
 
 } catch (e) {
+const topLevelErrorMessage = String(e?.message || e || 'Payment execution operation failed.');
+const topLevelErrorCode = upperString(e?.code || e?.error_code || e?.errorCode || e?.business_code || e?.businessCode || '');
 const topLevelFinalise = await finaliseProviderSubmitBeforeTerminal('PAYMENT_EXECUTE_TOP_LEVEL_CATCH', {
 phase: currentPhase,
-code: 'PAYMENT_EXECUTE_OPERATION_FAILED',
-message: String(e?.message || e || 'Payment execution operation failed.'),
-error: String(e?.message || e || '')
+code: topLevelErrorCode || 'PAYMENT_EXECUTE_OPERATION_FAILED',
+message: topLevelErrorMessage,
+error: topLevelErrorMessage,
+error_code: topLevelErrorCode || undefined,
+details: e?.details || undefined,
+hint: e?.hint || undefined
 });
 const topLevelDiagnostic = extractProviderSubmitDiagnostic(topLevelFinalise);
 const topLevelStatus = providerSubmitStatusFrom(topLevelFinalise);
 const topLevelReviewReason = providerSubmitReviewCodeFrom(topLevelFinalise);
-return fail(providerSubmitFailureCodeFromStatus(topLevelStatus, topLevelReviewReason) || 'PAYMENT_EXECUTE_OPERATION_FAILED', 'Payment execution operation failed.', {
+const topLevelProviderFailureCode = (topLevelStatus || topLevelReviewReason)
+  ? providerSubmitFailureCodeFromStatus(topLevelStatus, topLevelReviewReason)
+  : '';
+const topLevelFailureCode = topLevelProviderFailureCode || topLevelErrorCode || 'PAYMENT_EXECUTE_OPERATION_FAILED';
+return fail(topLevelFailureCode, 'Payment execution operation failed.', {
 phase: currentPhase,
-error: String(e?.message || e || ''),
-provider_submit_finalise_result: topLevelFinalise,
+code: topLevelFailureCode,
+error: topLevelErrorMessage,
+error_code: topLevelErrorCode || undefined,
+details: e?.details || undefined,
+hint: e?.hint || undefined,
+provider_submit_finalise_result: Object.keys(safeObject(topLevelFinalise)).length ? topLevelFinalise : undefined,
 provider_submit_diagnostic: Object.keys(topLevelDiagnostic).length ? topLevelDiagnostic : undefined,
 provider_submission_status: topLevelStatus || undefined,
 provider_submit_review_reason_code: topLevelReviewReason || undefined,
-review_reason_code: topLevelReviewReason || undefined
+review_reason_code: topLevelReviewReason || undefined,
+source_error: {
+  name: e?.name || undefined,
+  message: topLevelErrorMessage,
+  code: e?.code || e?.error_code || e?.errorCode || undefined,
+  details: e?.details || undefined,
+  hint: e?.hint || undefined
+}
 });
 }
 }
+
 
 async function advanceBankingPayRemittanceOperation(env, operationRow, user, options = {}) {
   const unwrapRpcPayload = (rpcRes, key) => {
