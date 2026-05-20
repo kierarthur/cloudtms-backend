@@ -16001,7 +16001,9 @@ BEGIN
     'unfinalised_submit_chunk', v_unfinalised_submit_chunk,
     'chunk_lock_expired', COALESCE(v_chunk_lock_expired, false),
     'chunk_started_at_utc', v_chunk_started_at_utc,
-    'chunk_completed_at_utc', v_chunk_completed_at_utc,
+    'chunk_completed_at_utc', v_chunk_completed_at_utc
+  )
+  || jsonb_build_object(
     'chunk_lock_expires_at_utc', v_chunk_lock_expires_at_utc,
     'manual_resolution_required', v_manual_resolution_required,
     'safe_retry_available', v_safe_retry_available,
