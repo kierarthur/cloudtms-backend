@@ -28177,618 +28177,6 @@ async function handleBankingPayBatchNotifyScheduled(env, req, user, payBatchId) 
   }
 }
 
-async function handleBankingPayBatchCancel(env, req, user, payBatchId) {
-  const id = String(payBatchId || '').trim();
-  if (!id) return withCORS(env, req, badRequest('pay_batch_id is required'));
-
-  let body = null;
-  try { body = await parseJSONBody(req); } catch { body = null; }
-  if (!body || typeof body !== 'object' || Array.isArray(body)) return withCORS(env, req, badRequest('Invalid JSON'));
-
-  const password = String(body.password || '');
-  if (!password) return withCORS(env, req, badRequest('password is required'));
-
-  const reason = String(body.reason || '').trim();
-  if (!reason) return withCORS(env, req, badRequest('reason is required'));
-
-  const trimStr = (value) => String(value == null ? '' : value).trim();
-  const isPlainObject = (value) => !!value && typeof value === 'object' && !Array.isArray(value);
-  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-  const enc = encodeURIComponent;
-
-  const parseIsoOrUkDateToIso = (raw) => {
-    const s = String(raw || '').trim();
-    if (!s) return null;
-    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-    const m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-    if (m) {
-      const dd = m[1], mm = m[2], yyyy = m[3];
-      return `${yyyy}-${mm}-${dd}`;
-    }
-    return null;
-  };
-
-  const cloneJson = (value) => {
-    try { return JSON.parse(JSON.stringify(value)); } catch { return null; }
-  };
-
-  const discardSessionRequested = (() => {
-    const raw = body.discard_session ?? body.discardSession;
-    if (typeof raw === 'boolean') return raw;
-    if (raw == null) return false;
-    const s = String(raw).trim().toLowerCase();
-    if (!s) return false;
-    if (['1', 'true', 't', 'yes', 'y', 'on'].includes(s)) return true;
-    if (['0', 'false', 'f', 'no', 'n', 'off'].includes(s)) return false;
-    return false;
-  })();
-
-  const discardSessionForced = true;
-
-  const currentSessionId = trimStr(
-    body.current_session_id ??
-    body.currentSessionId ??
-    body.session_id ??
-    body.sessionId ??
-    ''
-  );
-  if (currentSessionId && !uuidRe.test(currentSessionId)) {
-    return withCORS(env, req, badRequest('current_session_id must be a UUID when supplied'));
-  }
-
-  const currentPayDateRaw = trimStr(
-    body.current_pay_date ??
-    body.currentPayDate ??
-    body.pay_date ??
-    ''
-  );
-  const currentPayDateIso = currentPayDateRaw ? parseIsoOrUkDateToIso(currentPayDateRaw) : null;
-  if (currentPayDateRaw && !currentPayDateIso) {
-    return withCORS(env, req, badRequest('current_pay_date must be YYYY-MM-DD or DD/MM/YYYY when supplied'));
-  }
-
-  const currentCutoffRaw = trimStr(
-    body.current_week_ending_cutoff_date ??
-    body.currentWeekEndingCutoffDate ??
-    body.current_week_ending_cutoff ??
-    body.currentWeekEndingCutoff ??
-    body.week_ending_cutoff_date ??
-    body.weekEndingCutoffDate ??
-    body.week_ending_cutoff ??
-    body.weekEndingCutoff ??
-    ''
-  );
-  const currentCutoffIso = currentCutoffRaw ? parseIsoOrUkDateToIso(currentCutoffRaw) : null;
-  if (currentCutoffRaw && !currentCutoffIso) {
-    return withCORS(env, req, badRequest('current_week_ending_cutoff_date must be YYYY-MM-DD or DD/MM/YYYY when supplied'));
-  }
-
-  const currentFiltersRaw =
-    body.current_filters_json ??
-    body.currentFiltersJson ??
-    body.workbench_filters_json ??
-    body.workbenchFiltersJson ??
-    body.filters_json ??
-    body.filtersJson ??
-    null;
-
-  let currentFiltersJson = null;
-  if (currentFiltersRaw !== null && currentFiltersRaw !== undefined) {
-    if (!isPlainObject(currentFiltersRaw)) {
-      return withCORS(env, req, badRequest('current_filters_json must be an object when supplied'));
-    }
-    currentFiltersJson = cloneJson(currentFiltersRaw) || {};
-  }
-
-  const currentSessionSignature = trimStr(
-    body.current_session_signature ??
-    body.currentSessionSignature ??
-    body.session_signature ??
-    body.sessionSignature ??
-    ''
-  ) || null;
-
-  const _safeJsonParse = (s) => {
-    try { return JSON.parse(String(s || '')); } catch { return null; }
-  };
-
-  const _extractDbRaisedJson = (e) => {
-    try {
-      const ej = (e && typeof e === 'object' && e.json && typeof e.json === 'object') ? e.json : null;
-      let msg = (ej && typeof ej.message === 'string') ? ej.message : null;
-
-      if (!msg && e && typeof e === 'object' && typeof e.body === 'string' && e.body.trim()) {
-        const envObj = _safeJsonParse(e.body);
-        if (envObj && typeof envObj === 'object' && typeof envObj.message === 'string') msg = envObj.message;
-      }
-
-      if (!msg && e && typeof e === 'object' && typeof e.message === 'string' && e.message.trim()) {
-        const m = e.message;
-        const i1 = m.indexOf('{');
-        const i2 = m.lastIndexOf('}');
-        if (i1 !== -1 && i2 !== -1 && i2 > i1) {
-          const envObj = _safeJsonParse(m.slice(i1, i2 + 1));
-          if (envObj && typeof envObj === 'object') {
-            if (typeof envObj.message === 'string') msg = envObj.message;
-            if (!msg && typeof envObj.code === 'string') return envObj;
-          }
-        }
-      }
-
-      if (!msg || typeof msg !== 'string') return null;
-      const t = msg.trim();
-      if (t.startsWith('{') && t.endsWith('}')) {
-        const payload = _safeJsonParse(t);
-        return (payload && typeof payload === 'object') ? payload : null;
-      }
-
-      const j1 = t.indexOf('{');
-      const j2 = t.lastIndexOf('}');
-      if (j1 !== -1 && j2 !== -1 && j2 > j1) {
-        const payload = _safeJsonParse(t.slice(j1, j2 + 1));
-        return (payload && typeof payload === 'object') ? payload : null;
-      }
-    } catch {}
-    return null;
-  };
-
-  const _unwrapRpcPayload = (rpcRes, key) => {
-    let payload = rpcRes;
-    try {
-      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') payload = rpcRes[0];
-      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) {
-        payload = payload[key];
-      }
-    } catch {}
-    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
-  };
-
-  const _extractUuidArray = (...values) => {
-    const out = [];
-    const seen = new Set();
-
-    const pushValue = (raw) => {
-      const s = trimStr(raw);
-      if (!uuidRe.test(s) || seen.has(s)) return;
-      seen.add(s);
-      out.push(s);
-    };
-
-    const visit = (value) => {
-      if (value == null) return;
-      if (Array.isArray(value)) {
-        for (const item of value) visit(item);
-        return;
-      }
-      if (typeof value === 'object') return;
-      pushValue(value);
-    };
-
-    for (const value of values) visit(value);
-    return out;
-  };
-
-  const _analyzeCancelPayload = (payload) => {
-    const p = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
-    const code = String(p.code || '').trim().toUpperCase() || null;
-    const cancellationOutcome = String(p.cancellation_outcome || '').trim().toUpperCase() || null;
-    const executionCommitState = String(p.execution_commit_state || '').trim().toUpperCase() || null;
-    const status = String(p.status || '').trim().toUpperCase() || null;
-    const explicitOk = (typeof p.ok === 'boolean') ? p.ok : null;
-
-    const correctionOnly = (
-      code === 'CORRECTION_ONLY_REQUIRED' ||
-      code === 'USE_PAYMENT_CORRECTION_FLOW' ||
-      code === 'PAYMENT_ALREADY_COMMITTED' ||
-      cancellationOutcome === 'CORRECTION_ONLY' ||
-      cancellationOutcome === 'POST_COMMIT_CORRECTION_ONLY' ||
-      p.correction_only === true
-    );
-
-    const externalCancelConfirmationRequired = (
-      code === 'EXTERNAL_CANCEL_CONFIRMATION_REQUIRED' ||
-      cancellationOutcome === 'EXTERNAL_CANCEL_CONFIRMATION_REQUIRED' ||
-      cancellationOutcome === 'AWAITING_EXTERNAL_CANCEL_CONFIRMATION' ||
-      p.external_cancel_confirmation_required === true
-    );
-
-    const preSubmissionCancel = (cancellationOutcome === 'PRE_SUBMISSION_CANCEL');
-    const preCommitUnwind = (cancellationOutcome === 'PRE_COMMIT_UNWIND');
-
-    const cancelSucceeded = (
-      explicitOk === true ||
-      preSubmissionCancel ||
-      preCommitUnwind ||
-      status === 'CANCELLED' ||
-      !!String(p.cancelled_at_utc || '').trim()
-    ) && !correctionOnly && !externalCancelConfirmationRequired;
-
-    return {
-      code,
-      cancellation_outcome: cancellationOutcome,
-      execution_commit_state: executionCommitState,
-      status,
-      cancel_succeeded: cancelSucceeded,
-      pre_submission_cancel: preSubmissionCancel,
-      pre_commit_unwind: preCommitUnwind,
-      correction_only: correctionOnly,
-      external_cancel_confirmation_required: externalCancelConfirmationRequired
-    };
-  };
-
-  const _buildCancelFlow = (payload) => {
-    const analysis = _analyzeCancelPayload(payload);
-    return {
-      cancellation_outcome: analysis.cancellation_outcome,
-      execution_commit_state: analysis.execution_commit_state,
-      pre_submission_cancel: analysis.pre_submission_cancel,
-      pre_commit_unwind: analysis.pre_commit_unwind,
-      correction_only: analysis.correction_only,
-      external_cancel_confirmation_required: analysis.external_cancel_confirmation_required
-    };
-  };
-
-  const _cancelConflictMeta = (payload) => {
-    const p = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
-    const analysis = _analyzeCancelPayload(p);
-    const code = String(
-      p.code ||
-      p.error_code ||
-      (analysis.external_cancel_confirmation_required ? 'EXTERNAL_CANCEL_CONFIRMATION_REQUIRED' : '') ||
-      (analysis.correction_only ? 'CORRECTION_ONLY_REQUIRED' : '') ||
-      ''
-    ).trim().toUpperCase() || 'BATCH_NOT_CANCELLABLE';
-
-    if (code === 'USE_PAYMENT_CORRECTION_FLOW') {
-      return {
-        error_code: code,
-        message: 'This batch has bank/payment evidence. Open the Payment issue panel to review it safely.'
-      };
-    }
-    if (code === 'CORRECTION_ONLY_REQUIRED' || code === 'PAYMENT_ALREADY_COMMITTED') {
-      return {
-        error_code: code,
-        message: 'This batch has bank/payment evidence. Open the Payment issue panel to review it safely.'
-      };
-    }
-    if (code === 'EXTERNAL_CANCEL_CONFIRMATION_REQUIRED') {
-      return {
-        error_code: code,
-        message: 'External bank-side cancellation or confirmation is required before the system can restore this batch.'
-      };
-    }
-    if (code === 'BATCH_NOT_CANCELLABLE') {
-      return {
-        error_code: code,
-        message: 'This batch cannot be cancelled in its current state.'
-      };
-    }
-
-    return {
-      error_code: code,
-      message: String(p.message || p.error || 'Batch cancellation could not be completed.').trim() || 'Batch cancellation could not be completed.'
-    };
-  };
-
-  const _buildConflictResponse = (payload) => {
-    const p = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
-    const cancelFlow = _buildCancelFlow(p);
-    const conflictMeta = _cancelConflictMeta(p);
-    const responsePayload = {
-      ok: false,
-      pay_batch_id: id,
-      error_code: conflictMeta.error_code,
-      message: conflictMeta.message,
-      error: conflictMeta.message,
-      details: p,
-      cancel_flow: cancelFlow,
-      session_discard: {
-        requested: discardSessionRequested,
-        forced: discardSessionForced,
-        attempted: false,
-        ok: false,
-        discarded_session_id: null,
-        state_changed: false,
-        skipped_reason: 'BATCH_CANCEL_NOT_FINALIZED',
-        result: null,
-        error: null
-      }
-    };
-    return withCORS(
-      env,
-      req,
-      new Response(JSON.stringify(responsePayload), {
-        status: 409,
-        headers: JSON_HEADERS
-      })
-    );
-  };
-
-  const _buildSessionDiscardResult = (payload) => {
-    const p = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
-    const sourceSessionId = trimStr(p.source_workbench_session_id || '');
-    const discardResult = (p.source_session_discard_result && typeof p.source_session_discard_result === 'object' && !Array.isArray(p.source_session_discard_result))
-      ? p.source_session_discard_result
-      : null;
-    const attempted = (p.source_session_discard_attempted === true) || !!sourceSessionId;
-    const ok = attempted ? (p.source_session_discarded === true) : true;
-    const stateChanged = p.source_session_discard_state_changed === true;
-
-    return {
-      requested: discardSessionRequested,
-      forced: discardSessionForced,
-      attempted,
-      ok,
-      discarded_session_id: sourceSessionId || null,
-      state_changed: stateChanged,
-      skipped_reason: attempted ? null : 'NO_SOURCE_SESSION',
-      result: discardResult,
-      error: null
-    };
-  };
-
-  const _loadSessionContext = async (sessionIdValue) => {
-    const sessionIdText = trimStr(sessionIdValue);
-    if (!uuidRe.test(sessionIdText)) return null;
-
-    const { rows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/banking_pay_workbench_sessions` +
-      `?id=eq.${enc(sessionIdText)}` +
-      `&select=id,filters_json,pay_date,week_ending_cutoff,session_signature,source_snapshot_run_id,version` +
-      `&limit=1`,
-      false
-    );
-
-    const sessionRow = (rows && rows[0]) ? rows[0] : null;
-    if (!sessionRow) return null;
-
-    return {
-      session_id: sessionIdText,
-      filters_json: (sessionRow.filters_json && typeof sessionRow.filters_json === 'object' && !Array.isArray(sessionRow.filters_json))
-        ? (cloneJson(sessionRow.filters_json) || {})
-        : null,
-      pay_date: trimStr(sessionRow.pay_date || '') || null,
-      week_ending_cutoff: trimStr(sessionRow.week_ending_cutoff || '') || null,
-      session_signature: trimStr(sessionRow.session_signature || '') || null,
-      snapshot_run_id: trimStr(sessionRow.source_snapshot_run_id || '') || null,
-      session_version: sessionRow.version ?? null
-    };
-  };
-
-  try {
-    const userRow = await sbGetUserById(env, user.id);
-    if (!userRow || userRow.is_active !== true) return withCORS(env, req, unauthorized('Unauthorized'));
-
-    const okPw = await pbkdf2Verify(password, userRow.password_hash || '');
-    if (!okPw) return withCORS(env, req, unauthorized('Invalid credentials'));
-  } catch (e) {
-    return withCORS(env, req, serverError(String(e?.message || e)));
-  }
-
-  try {
-    const rpcRes = await sbRpc(env, 'pay_batch_cancel', {
-      p_pay_batch_id: id,
-      p_actor_user_id: user.id,
-      p_reason: reason
-    });
-
-    const payload = _unwrapRpcPayload(rpcRes, 'pay_batch_cancel');
-    const cancelAnalysis = _analyzeCancelPayload(payload);
-
-    if (!cancelAnalysis.cancel_succeeded) {
-      return _buildConflictResponse(payload);
-    }
-
-    const sessionDiscardResult = _buildSessionDiscardResult(payload);
-    const sourceSessionId = trimStr(sessionDiscardResult.discarded_session_id || trimStr(payload?.source_workbench_session_id || ''));
-    const snapshotRebuild = isPlainObject(payload?.snapshot_rebuild) ? payload.snapshot_rebuild : {};
-    const snapshotRefresh = isPlainObject(payload?.snapshot_refresh) ? payload.snapshot_refresh : {};
-    const dirtiedCandidates = isPlainObject(payload?.dirtied_candidates) ? payload.dirtied_candidates : {};
-    const dirtiedCandidatesCamel = isPlainObject(payload?.dirtiedCandidates) ? payload.dirtiedCandidates : {};
-
-    const dirtyCandidateIds = _extractUuidArray(
-      payload?.dirty_candidate_ids,
-      payload?.dirtied_candidate_ids,
-      payload?.touched_candidate_ids,
-      payload?.affected_candidate_ids,
-      dirtiedCandidates?.candidate_ids,
-      dirtiedCandidatesCamel?.candidateIds,
-      snapshotRebuild?.dirtied_candidates?.candidate_ids,
-      snapshotRebuild?.dirty_candidate_ids
-    );
-    const snapshotRefreshJobIds = _extractUuidArray(
-      snapshotRefresh?.job_ids,
-      snapshotRefresh?.jobIds
-    );
-    const snapshotRebuildRunIds = _extractUuidArray(
-      snapshotRebuild?.snapshot_run_ids,
-      snapshotRebuild?.snapshotRunIds,
-      snapshotRebuild?.run_ids,
-      snapshotRebuild?.runIds
-    );
-    const refreshJobIds = _extractUuidArray(
-      payload?.refresh_job_ids,
-      payload?.job_ids,
-      snapshotRefreshJobIds,
-      snapshotRebuildRunIds
-    );
-
-    const postCancelRefresh = {
-      source_session_id: sourceSessionId || null,
-      source_session_discard_result: sessionDiscardResult.result,
-      source_session_consumed: sessionDiscardResult.ok === true,
-      requires_new_session: true,
-      replacement_session_id: null,
-      replacement_session_signature: null,
-      replacement_snapshot_run_id: null,
-      replacement_session_version: null,
-      dirty_candidate_ids: dirtyCandidateIds,
-      pending_candidate_ids: dirtyCandidateIds,
-      refresh_job_ids: refreshJobIds,
-      snapshot_refresh_job_ids: snapshotRefreshJobIds,
-      snapshot_rebuild_run_ids: snapshotRebuildRunIds,
-      warnings: []
-    };
-
-    let currentSessionContext = null;
-    let sourceSessionContext = null;
-
-    if (currentSessionId) {
-      try {
-        currentSessionContext = await _loadSessionContext(currentSessionId);
-      } catch (contextError) {
-        postCancelRefresh.warnings.push({
-          code: 'CURRENT_SESSION_CONTEXT_FETCH_FAILED',
-          message: String(contextError?.message || contextError || 'Unknown current session context error')
-        });
-      }
-    }
-
-    if (sourceSessionId && sourceSessionId !== currentSessionId) {
-      try {
-        sourceSessionContext = await _loadSessionContext(sourceSessionId);
-      } catch (contextError) {
-        postCancelRefresh.warnings.push({
-          code: 'SOURCE_SESSION_CONTEXT_FETCH_FAILED',
-          message: String(contextError?.message || contextError || 'Unknown source session context error')
-        });
-      }
-    }
-
-    const replacementPayDate = currentPayDateIso ||
-      trimStr(currentSessionContext?.pay_date || '') ||
-      trimStr(sourceSessionContext?.pay_date || '') ||
-      null;
-
-    const replacementCutoff = currentCutoffIso ||
-      trimStr(currentSessionContext?.week_ending_cutoff || '') ||
-      trimStr(sourceSessionContext?.week_ending_cutoff || '') ||
-      null;
-
-    const replacementFiltersJson = currentFiltersJson !== null
-      ? currentFiltersJson
-      : (
-          (currentSessionContext && isPlainObject(currentSessionContext.filters_json)) ? currentSessionContext.filters_json
-          : ((sourceSessionContext && isPlainObject(sourceSessionContext.filters_json)) ? sourceSessionContext.filters_json : null)
-        );
-
-    const replacementSessionSignature = currentSessionSignature ||
-      trimStr(currentSessionContext?.session_signature || '') ||
-      trimStr(sourceSessionContext?.session_signature || '') ||
-      null;
-
-    const sourceSessionMustBeConsumed = sessionDiscardResult.attempted === true && !!sourceSessionId;
-
-    if (sourceSessionMustBeConsumed && sessionDiscardResult.ok !== true) {
-      postCancelRefresh.warnings.push({
-        code: 'REPLACEMENT_SESSION_OPEN_SKIPPED_SOURCE_SESSION_NOT_CONSUMED',
-        message: 'Replacement workbench session was not opened because the source session was not successfully consumed.'
-      });
-    } else if (!replacementPayDate || !replacementCutoff || !isPlainObject(replacementFiltersJson)) {
-      postCancelRefresh.warnings.push({
-        code: 'REPLACEMENT_SESSION_OPEN_SKIPPED_INSUFFICIENT_CONTEXT',
-        message: 'Replacement workbench session could not be opened because the effective workbench context was incomplete.'
-      });
-    } else {
-      try {
-        const obsoleteSessionIds = _extractUuidArray(sourceSessionId, currentSessionId);
-        const sessionOpenRpc = await sbRpc(env, 'pay_workbench_session_open', {
-          p_actor_user_id: String(user.id || '').trim(),
-          p_pay_date: replacementPayDate,
-          p_week_ending_cutoff: replacementCutoff,
-          p_filters_json: replacementFiltersJson,
-          p_session_signature: replacementSessionSignature || null,
-          p_force_new_session: true,
-          p_discard_source_session: true,
-          p_source_session_id: sourceSessionId || null,
-          p_obsolete_session_ids: obsoleteSessionIds,
-          p_mutation_context: 'CANCEL_DELETE_DRAFT_SUCCESS',
-          p_dirty_candidate_ids: dirtyCandidateIds,
-          p_refresh_job_ids: refreshJobIds
-        });
-
-        let sessionOpenPayload = sessionOpenRpc;
-        try {
-          if (Array.isArray(sessionOpenRpc) && sessionOpenRpc.length === 1 && sessionOpenRpc[0] && typeof sessionOpenRpc[0] === 'object') {
-            sessionOpenPayload = sessionOpenRpc[0];
-          }
-          if (sessionOpenPayload && typeof sessionOpenPayload === 'object' && Object.prototype.hasOwnProperty.call(sessionOpenPayload, 'pay_workbench_session_open')) {
-            sessionOpenPayload = sessionOpenPayload.pay_workbench_session_open;
-          }
-        } catch {}
-
-        const replacementSessionId = trimStr(
-          (sessionOpenPayload && typeof sessionOpenPayload === 'object' ? sessionOpenPayload.session_id : '') || ''
-        );
-
-        if (uuidRe.test(replacementSessionId)) {
-          postCancelRefresh.replacement_session_id = replacementSessionId;
-          postCancelRefresh.replacement_session_signature = trimStr(
-            (sessionOpenPayload && typeof sessionOpenPayload === 'object' ? sessionOpenPayload.session_signature : '') || ''
-          ) || null;
-          postCancelRefresh.replacement_snapshot_run_id = trimStr(
-            (sessionOpenPayload && typeof sessionOpenPayload === 'object' ? sessionOpenPayload.snapshot_run_id : '') || ''
-          ) || null;
-
-          try {
-            const replacementSessionContext = await _loadSessionContext(replacementSessionId);
-            if (replacementSessionContext) {
-              postCancelRefresh.replacement_session_version = replacementSessionContext.session_version ?? null;
-              postCancelRefresh.replacement_snapshot_run_id = trimStr(replacementSessionContext.snapshot_run_id || '') || postCancelRefresh.replacement_snapshot_run_id || null;
-              postCancelRefresh.replacement_session_signature = trimStr(replacementSessionContext.session_signature || '') || postCancelRefresh.replacement_session_signature || null;
-            }
-          } catch (replacementFetchError) {
-            postCancelRefresh.warnings.push({
-              code: 'REPLACEMENT_SESSION_FETCH_FAILED',
-              message: String(replacementFetchError?.message || replacementFetchError || 'Unknown replacement session fetch error')
-            });
-          }
-        } else {
-          postCancelRefresh.warnings.push({
-            code: 'REPLACEMENT_SESSION_OPEN_FAILED',
-            message: 'Replacement workbench session open did not return a valid session_id.'
-          });
-        }
-      } catch (sessionOpenError) {
-        postCancelRefresh.warnings.push({
-          code: 'REPLACEMENT_SESSION_OPEN_FAILED',
-          message: String(sessionOpenError?.message || sessionOpenError || 'Unknown replacement session open error')
-        });
-      }
-    }
-
-    const responsePayload = {
-      ...(payload && typeof payload === 'object' ? payload : {}),
-      cancel_flow: _buildCancelFlow(payload),
-      session_discard: sessionDiscardResult,
-      post_cancel_refresh: postCancelRefresh
-    };
-
-    return withCORS(env, req, ok(responsePayload));
-  } catch (e) {
-    const dbPayload = _extractDbRaisedJson(e);
-    if (
-      dbPayload &&
-      typeof dbPayload === 'object' &&
-      ['USE_PAYMENT_CORRECTION_FLOW', 'CORRECTION_ONLY_REQUIRED', 'PAYMENT_ALREADY_COMMITTED', 'EXTERNAL_CANCEL_CONFIRMATION_REQUIRED', 'BATCH_NOT_CANCELLABLE']
-        .includes(String(dbPayload.code || dbPayload.error_code || '').trim().toUpperCase())
-    ) {
-      return _buildConflictResponse(dbPayload);
-    }
-
-    const rawErrorText = String(e?.message || e || '').trim();
-    if (rawErrorText.toUpperCase().includes('USE_PAYMENT_CORRECTION_FLOW')) {
-      return _buildConflictResponse({
-        code: 'USE_PAYMENT_CORRECTION_FLOW',
-        message: 'This batch has bank/payment evidence. Open the Payment issue panel to review it safely.',
-        raw_error: rawErrorText
-      });
-    }
-
-    return withCORS(env, req, serverError(String(e?.message || e)));
-  }
-}
 
 
 
@@ -36199,884 +35587,6 @@ async function getBankingPayOperationConfig(env, operationType, options = {}) {
   return snapshot;
 }
 
-
-function buildBankingPayOperationPublicPayload(operationRow, options = {}) {
-  const unwrapRow = (value) => {
-    let row = value;
-    try {
-      if (Array.isArray(row) && row.length === 1 && row[0] && typeof row[0] === 'object') row = row[0];
-      if (row && typeof row === 'object' && Object.prototype.hasOwnProperty.call(row, 'banking_pay_operation_get')) row = row.banking_pay_operation_get;
-      if (row && typeof row === 'object' && Object.prototype.hasOwnProperty.call(row, 'banking_pay_operation_start')) row = row.banking_pay_operation_start;
-      if (row && typeof row === 'object' && Object.prototype.hasOwnProperty.call(row, 'banking_pay_operation_save_progress')) row = row.banking_pay_operation_save_progress;
-      if (row && typeof row === 'object' && Object.prototype.hasOwnProperty.call(row, 'banking_pay_operation_finish')) row = row.banking_pay_operation_finish;
-      if (Array.isArray(row) && row.length === 1 && row[0] && typeof row[0] === 'object') row = row[0];
-    } catch {}
-    return (row && typeof row === 'object' && !Array.isArray(row)) ? row : {};
-  };
-
-  const asPlainObject = (value) => {
-    if (value && typeof value === 'object' && !Array.isArray(value)) return value;
-    if (typeof value === 'string') {
-      const text = value.trim();
-      if (!text) return {};
-      try {
-        const parsed = JSON.parse(text);
-        return (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) ? parsed : {};
-      } catch {}
-    }
-    return {};
-  };
-
-  const row = unwrapRow(operationRow);
-  const progress = asPlainObject(row.progress_json);
-  const status = String(row.status || progress.status || '').trim().toUpperCase() || 'UNKNOWN';
-  const phase = String(row.phase || progress.phase || '').trim().toUpperCase() || 'UNKNOWN';
-  const operationType = String(row.operation_type || progress.operation_type || '').trim().toUpperCase() || 'UNKNOWN';
-  const terminalStatuses = new Set(['COMPLETE', 'FAILED', 'CANCELLED', 'REVIEW_REQUIRED']);
-  const terminal = terminalStatuses.has(status);
-
-  const phaseLabels = {
-    INITIALISE: 'Starting operation',
-    VALIDATE_SESSION: 'Checking selected payment rows',
-    SYNC_SELECTED_ROWS: 'Saving selected payment rows',
-    WAIT_FOR_PREVIEW_READY: 'Waiting for payment preview',
-    DRAIN_TSFIN: 'Preparing timesheet financials',
-    ENSURE_PAYEE_READINESS: 'Checking payee readiness',
-    SEED_CANDIDATE_SCOPE: 'Calculating candidate payrun scope',
-    SEED_ALLOCATION_ROWS: 'Calculating deductions and recoveries',
-    CREATE_BATCH_SHELLS: 'Creating draft batch',
-    SEED_DRAFT_CHUNKS: 'Preparing draft chunks',
-    INSERT_CANDIDATES: 'Adding candidates',
-    INSERT_ITEMS: 'Adding payment items',
-    APPLY_FINANCE_ADJUSTMENTS: 'Applying finance adjustments',
-    FINALISE_RESERVATIONS: 'Finalising reservations',
-    POPULATE_CANDIDATE_SUMMARIES: 'Refreshing candidate summaries',
-    CREATE_TIMESHEET_SNAPSHOTS: 'Creating timesheet snapshots',
-    BUILD_ITEM_BREAKDOWNS: 'Building payment breakdowns',
-    ASSERT_INTEGRITY: 'Checking draft integrity',
-    POST_CREATE_REFRESH: 'Refreshing payment preview',
-    VALIDATE_BATCH: 'Checking payment batch',
-    VALIDATE_AUTHORISER: 'Verifying authorisation',
-    VALIDATE_REAUTH: 'Verifying payment approval',
-    VALIDATE_FRESHNESS: 'Checking payment freshness',
-    PREPARE_TRANSFER_SCOPE: 'Preparing transfer groups',
-    SEED_TRANSFER_CHUNKS: 'Preparing transfer chunks',
-    PREPARE_TRANSFER_CHUNKS: 'Preparing bank transfers',
-    PREPARE_BATCH: 'Checking payment blockers',
-    START_AUTHORISATION: 'Starting payment authorisation',
-    WAIT_FOR_AUTHORISATION: 'Waiting for payment authorisation',
-    SCHEDULE_OR_SUBMIT: 'Preparing payment submission',
-    SUBMIT_PROVIDER_TRANSFERS: 'Submitting transfers to the bank',
-    APPLY_RAIL_UPDATES: 'Confirming bank submission state',
-    QUEUE_REMITTANCES: 'Queueing remittances',
-    VALIDATE_BATCH_REMITTANCE: 'Checking remittance batch',
-    SEED_REMITTANCE_SCOPE: 'Preparing remittance recipients',
-    QUEUE_REMITTANCE_CHUNKS: 'Queueing remittances',
-    QUEUE_PAYOUT_NOTICE_CHUNKS: 'Queueing payout notices',
-    SEED_SETTLEMENT_SCOPE: 'Preparing settlement items',
-    APPLY_SETTLEMENT_CHUNKS: 'Finalising settlement',
-    COMPLETE: 'Operation complete'
-  };
-
-  const defaultTitles = {
-    DRAFT_CREATE: 'Creating payment draft',
-    PAYMENT_EXECUTE: 'Processing payment',
-    PAYMENT_RETRY_BLOCKED_FUNDS: 'Retrying blocked payment',
-    PAYMENT_SETTLEMENT: 'Finalising payment settlement',
-    REMITTANCE_QUEUE: 'Queueing remittances',
-    PREVIEW_REFRESH: 'Refreshing payment preview'
-  };
-
-  const totalUnits = Number.isFinite(Number(row.total_units)) ? Math.max(0, Math.trunc(Number(row.total_units))) : 0;
-  const completedUnits = Number.isFinite(Number(row.completed_units)) ? Math.max(0, Math.trunc(Number(row.completed_units))) : 0;
-  const failedUnits = Number.isFinite(Number(row.failed_units)) ? Math.max(0, Math.trunc(Number(row.failed_units))) : 0;
-  const currentChunkIndex = Number.isFinite(Number(row.current_chunk_index)) ? Math.max(0, Math.trunc(Number(row.current_chunk_index))) : 0;
-  const chunkCount = Number.isFinite(Number(row.chunk_count)) ? Math.max(0, Math.trunc(Number(row.chunk_count))) : 0;
-  const percent = totalUnits > 0 ? Math.max(0, Math.min(100, Math.round((completedUnits / totalUnits) * 100))) : (terminal && status === 'COMPLETE' ? 100 : 0);
-
-  const providerSubmissionStarted = [
-    'SUBMIT_PROVIDER_TRANSFERS',
-    'APPLY_RAIL_UPDATES',
-    'QUEUE_REMITTANCES',
-    'COMPLETE'
-  ].includes(phase);
-
-  const resultObject = asPlainObject(row.result_json);
-  const resultJson = Object.keys(resultObject).length ? resultObject : null;
-  const errorObject = asPlainObject(row.error_json);
-  const errorJson = Object.keys(errorObject).length ? errorObject : null;
-
-  const providerBool = (...values) => {
-    for (const value of values) {
-      if (value === true) return true;
-      if (value === false) return false;
-      const text = String(value == null ? '' : value).trim().toLowerCase();
-      if (['true', 't', '1', 'yes', 'y', 'on'].includes(text)) return true;
-      if (['false', 'f', '0', 'no', 'n', 'off'].includes(text)) return false;
-    }
-    return undefined;
-  };
-
-  const providerText = (...values) => {
-    for (const value of values) {
-      const text = String(value == null ? '' : value).trim();
-      if (text) return text;
-    }
-    return undefined;
-  };
-
-  const providerArray = (...values) => {
-    const out = [];
-    for (const value of values) {
-      const list = Array.isArray(value) ? value : (value == null ? [] : [value]);
-      for (const item of list) {
-        const text = String(item == null ? '' : item).trim();
-        if (text && !out.includes(text)) out.push(text);
-      }
-    }
-    return out.length ? out : undefined;
-  };
-
-  const providerStrictExternalEvidencePresentForDiagnostic = (sourceValue, sanitizedValue = {}) => {
-    const localRefs = new Set();
-    const addLocal = (value) => {
-      const text = String(value == null ? '' : value).trim();
-      if (text) localRefs.add(text.toLowerCase());
-    };
-    const collectObject = (value) => (value && typeof value === 'object' && !Array.isArray(value)) ? value : {};
-    const source = collectObject(sourceValue);
-    const sanitized = collectObject(sanitizedValue);
-    const nestedObjects = [
-      source,
-      sanitized,
-      collectObject(source.rail_meta_json || source.railMetaJson),
-      collectObject(source.raw_payload || source.rawPayload),
-      collectObject(source.provider_submit_diagnostic || source.providerSubmitDiagnostic),
-      collectObject(sanitized.rail_meta_json || sanitized.railMetaJson),
-      collectObject(sanitized.raw_payload || sanitized.rawPayload),
-      collectObject(sanitized.provider_submit_diagnostic || sanitized.providerSubmitDiagnostic)
-    ];
-    const localKeys = [
-      'id', 'operation_id', 'operationId', 'chunk_id', 'chunkId', 'transfer_id', 'transferId',
-      'pay_bank_transfer_id', 'payBankTransferId', 'transfer_scope_id', 'transferScopeId',
-      'scope_id', 'scopeId', 'auth_request_id', 'authRequestId', 'pay_batch_id', 'payBatchId',
-      'batch_id', 'batchId', 'request_id', 'requestId', 'idempotency_key', 'idempotencyKey',
-      'local_provider_request_id', 'localProviderRequestId', 'provider_request_id', 'providerRequestId',
-      'reference', 'referenceId', 'local_reference', 'localReference', 'provider_request_reference', 'providerRequestReference',
-      'payment_reference', 'paymentReference', 'bulk_reference', 'bulkReference', 'correlation_id', 'correlationId'
-    ];
-    for (const obj of nestedObjects) {
-      for (const key of localKeys) addLocal(obj[key]);
-    }
-    const externalKeys = [
-      'rail_tx_id', 'railTxId', 'provider_transaction_id', 'providerTransactionId',
-      'provider_payment_id', 'providerPaymentId', 'provider_event_id', 'providerEventId',
-      'provider_reference', 'providerReference', 'provider_submission_id', 'providerSubmissionId',
-      'submission_id', 'submissionId', 'rail_submission_id', 'railSubmissionId',
-      'external_payment_id', 'externalPaymentId', 'revolut_payment_id', 'revolutPaymentId',
-      'provider_transfer_id', 'providerTransferId', 'external_transfer_id', 'externalTransferId',
-      'external_reference', 'externalReference', 'bank_reference', 'bankReference',
-      'transaction_id', 'transactionId', 'payment_id', 'paymentId'
-    ];
-    for (const obj of nestedObjects) {
-      for (const key of externalKeys) {
-        const text = String(obj[key] == null ? '' : obj[key]).trim();
-        if (!text) continue;
-        if (localRefs.has(text.toLowerCase())) continue;
-        return true;
-      }
-    }
-    return false;
-  };
-
-  const sanitizeProviderSubmitDiagnostic = (diagnostic) => {
-    const source = asPlainObject(diagnostic);
-    if (!Object.keys(source).length) return {};
-    const out = {};
-    const copyText = (outKey, ...keys) => {
-      const value = providerText(...keys.map((key) => source[key]));
-      if (value !== undefined) out[outKey] = value;
-    };
-    const copyBool = (outKey, ...keys) => {
-      const value = providerBool(...keys.map((key) => source[key]));
-      if (value !== undefined) out[outKey] = value;
-    };
-    const copyNumber = (outKey, ...keys) => {
-      for (const key of keys) {
-        const value = source[key];
-        if (Number.isFinite(Number(value))) {
-          out[outKey] = Number(value);
-          return;
-        }
-      }
-    };
-    const copyArray = (outKey, ...keys) => {
-      const value = providerArray(...keys.map((key) => source[key]));
-      if (value !== undefined) out[outKey] = value;
-    };
-
-    copyNumber('diagnostic_version', 'diagnostic_version', 'diagnosticVersion');
-    copyText('generated_at_utc', 'generated_at_utc', 'generatedAtUtc');
-    copyText('review_reason_code', 'review_reason_code', 'reviewReasonCode', 'provider_submit_review_reason_code', 'providerSubmitReviewReasonCode');
-    copyText('provider_submission_status', 'provider_submission_status', 'providerSubmissionStatus', 'outcome_code', 'outcomeCode');
-    copyText('provider_call_stage', 'provider_call_stage', 'providerCallStage');
-    copyBool('provider_submission_attempted', 'provider_submission_attempted', 'providerSubmissionAttempted', 'provider_called', 'providerCalled');
-    copyBool('provider_called', 'provider_called', 'providerCalled');
-    copyBool('provider_request_sent', 'provider_request_sent', 'providerRequestSent');
-    copyBool('provider_request_sent_confirmed', 'provider_request_sent_confirmed', 'providerRequestSentConfirmed');
-    copyText('provider_request_dispatched_at_utc', 'provider_request_dispatched_at_utc', 'providerRequestDispatchedAtUtc', 'request_sent_at_utc', 'requestSentAtUtc');
-    copyBool('provider_response_received', 'provider_response_received', 'providerResponseReceived');
-    copyBool('provider_response_present', 'provider_response_present', 'providerResponsePresent');
-    copyBool('provider_submission_accepted', 'provider_submission_accepted', 'providerSubmissionAccepted', 'provider_accepted', 'providerAccepted');
-    copyBool('provider_submission_rejected', 'provider_submission_rejected', 'providerSubmissionRejected', 'provider_rejected', 'providerRejected');
-    copyBool('provider_submission_unknown', 'provider_submission_unknown', 'providerSubmissionUnknown', 'provider_unknown', 'providerUnknown');
-    copyBool('provider_external_evidence_present', 'provider_external_evidence_present', 'providerExternalEvidencePresent');
-    copyBool('provider_acceptance_evidence_present', 'provider_acceptance_evidence_present', 'providerAcceptanceEvidencePresent');
-    copyBool('stale_submit_chunk', 'stale_submit_chunk', 'staleSubmitChunk');
-    copyBool('unfinalised_submit_chunk', 'unfinalised_submit_chunk', 'unfinalisedSubmitChunk');
-    copyBool('chunk_lock_expired', 'chunk_lock_expired', 'chunkLockExpired');
-    copyBool('manual_resolution_required', 'manual_resolution_required', 'manualResolutionRequired');
-    copyBool('safe_retry_available', 'safe_retry_available', 'safeRetryAvailable');
-    copyBool('automatic_retry_blocked', 'automatic_retry_blocked', 'automaticRetryBlocked');
-    copyText('retry_blocked_reason', 'retry_blocked_reason', 'retryBlockedReason');
-    copyText('recommended_action', 'recommended_action', 'recommendedAction');
-    copyText('pay_batch_id', 'pay_batch_id', 'payBatchId');
-    copyText('operation_id', 'operation_id', 'operationId');
-    copyText('chunk_id', 'chunk_id', 'chunkId');
-    copyArray('chunk_ids', 'chunk_ids', 'chunkIds');
-    copyText('transfer_id', 'transfer_id', 'transferId', 'pay_bank_transfer_id', 'payBankTransferId');
-    copyArray('transfer_ids', 'transfer_ids', 'transferIds', 'pay_bank_transfer_ids', 'payBankTransferIds');
-    copyText('transfer_scope_id', 'transfer_scope_id', 'transferScopeId', 'scope_id', 'scopeId');
-    copyArray('transfer_scope_ids', 'transfer_scope_ids', 'transferScopeIds', 'scope_ids', 'scopeIds');
-    copyText('auth_request_id', 'auth_request_id', 'authRequestId');
-    copyArray('auth_request_ids', 'auth_request_ids', 'authRequestIds');
-    copyText('rail_provider', 'rail_provider', 'railProvider');
-    copyText('rail_env', 'rail_env', 'railEnv');
-    copyText('rail_tx_id', 'rail_tx_id', 'railTxId');
-    copyText('rail_state', 'rail_state', 'railState');
-    copyText('provider_transaction_id', 'provider_transaction_id', 'providerTransactionId', 'provider_payment_id', 'providerPaymentId', 'transaction_id', 'transactionId', 'payment_id', 'paymentId');
-    copyText('provider_reference', 'provider_reference', 'providerReference', 'external_reference', 'externalReference', 'bank_reference', 'bankReference');
-    copyText('provider_state', 'provider_state', 'providerState');
-    copyText('request_id', 'request_id', 'requestId');
-    copyText('idempotency_key', 'idempotency_key', 'idempotencyKey');
-    copyNumber('provider_http_status', 'provider_http_status', 'providerHttpStatus');
-    copyText('provider_error_code', 'provider_error_code', 'providerErrorCode');
-    copyText('provider_error_message_redacted', 'provider_error_message_redacted', 'providerErrorMessageRedacted');
-    copyText('response_received_at_utc', 'response_received_at_utc', 'responseReceivedAtUtc');
-
-    const statusUpper = String(out.provider_submission_status || '').trim().toUpperCase();
-    const rejectedOrUnusable = [
-      'PROVIDER_SUBMISSION_REJECTED',
-      'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME',
-      'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK',
-      'PROVIDER_SUBMISSION_MALFORMED_RESPONSE',
-      'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID',
-      'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL'
-    ].includes(statusUpper);
-    const hasExternalEvidence = providerStrictExternalEvidencePresentForDiagnostic(source, out) === true;
-    out.provider_external_evidence_present = hasExternalEvidence;
-    out.provider_acceptance_evidence_present = statusUpper === 'PROVIDER_SUBMISSION_ACCEPTED' && hasExternalEvidence === true && rejectedOrUnusable !== true;
-    out.provider_submission_accepted = out.provider_acceptance_evidence_present === true;
-    if (out.provider_acceptance_evidence_present !== true) out.rail_tx_id = undefined;
-    if (hasExternalEvidence !== true) {
-      out.provider_transaction_id = undefined;
-      out.provider_reference = undefined;
-    }
-    return out;
-  };
-
-  const providerSubmitStatusMessage = (statusValue, acceptanceEvidencePresent = false) => {
-    const statusTextValue = String(statusValue || '').trim().toUpperCase();
-    if (statusTextValue === 'PROVIDER_SUBMISSION_ACCEPTED' && acceptanceEvidencePresent !== true) {
-      return 'Provider response/status was recorded, but no usable external provider transaction/reference was stored. Manual reconciliation is required before retry.';
-    }
-    const messages = {
-      PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK: 'Provider submission outcome unknown. The submit chunk became stale before any provider response, transfer event, rail transaction ID, or rail state was recorded. Check Revolut/bank records before retry.',
-      UNKNOWN_PROVIDER_SUBMISSION_OUTCOME: 'Provider request may have been sent, but no usable provider response was recorded. Check Revolut/bank records before retry.',
-      PROVIDER_SUBMISSION_MALFORMED_RESPONSE: 'Provider returned an unusable response. Manual reconciliation is required before retry.',
-      PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID: 'Provider response/status was recorded, but no usable external provider transaction/reference was stored. Manual reconciliation is required before retry.',
-      PROVIDER_SUBMISSION_REJECTED: 'Provider rejected the payment submission. Review the provider error before retry.',
-      PROVIDER_SUBMISSION_BLOCKED_PRE_CALL: 'Provider was not called. Submission failed before the provider payment request was sent.',
-      NO_PROVIDER_SUBMISSION_ATTEMPTED: 'Provider submission was not attempted.',
-      CLAIMED_NOT_PROVIDER_CALLED_YET: 'Provider submission was not attempted. CloudTMS claimed the submit chunk but had not yet called the provider.',
-      PROVIDER_SUBMISSION_ACCEPTED: 'Provider acceptance evidence exists. Do not retry unless reconciled.'
-    };
-    return messages[statusTextValue] || '';
-  };
-
-  const extractProviderSubmitDiagnosticFromOperation = (...extraSources) => {
-    const sources = [
-      options.providerSubmitDiagnostic,
-      options.provider_submit_diagnostic,
-      ...extraSources,
-      resultObject.provider_submit_diagnostic,
-      resultObject.providerSubmitDiagnostic,
-      errorObject.provider_submit_diagnostic,
-      errorObject.providerSubmitDiagnostic,
-      progress.provider_submit_diagnostic,
-      progress.providerSubmitDiagnostic,
-      asPlainObject(resultObject.cleanup_summary).provider_submit_diagnostic,
-      asPlainObject(resultObject.cleanup_summary).providerSubmitDiagnostic,
-      asPlainObject(errorObject.cleanup_summary).provider_submit_diagnostic,
-      asPlainObject(errorObject.cleanup_summary).providerSubmitDiagnostic
-    ];
-    for (const source of sources) {
-      const diagnostic = sanitizeProviderSubmitDiagnostic(source);
-      if (Object.keys(diagnostic).length) return diagnostic;
-    }
-    return {};
-  };
-
-  const providerSubmitDiagnostic = extractProviderSubmitDiagnosticFromOperation();
-  const providerSubmissionStatus = providerSubmitDiagnostic.provider_submission_status || '';
-  const providerSubmitReviewReasonCode = providerSubmitDiagnostic.review_reason_code || '';
-  const providerSubmitRecommendedAction = providerSubmitDiagnostic.recommended_action || '';
-  const providerSubmitManualResolutionRequired = providerSubmitDiagnostic.manual_resolution_required === true;
-  const providerSubmitSafeRetryAvailable = providerSubmitDiagnostic.safe_retry_available === true;
-  const providerSubmitMessage = providerSubmitStatusMessage(providerSubmissionStatus, providerSubmitDiagnostic.provider_acceptance_evidence_present === true);
-  const collectOperationalObjects = (...values) => {
-    const out = [];
-    const queue = [...values];
-    const seen = new Set();
-    const nestedKeys = [
-      'result', 'error', 'details', 'payload', 'data', 'response', 'progress',
-      'provider_submission', 'funds_check_json', 'fundsCheckJson', 'funds_check', 'fundsCheck',
-      'last_funds_check_json', 'lastFundsCheckJson', 'blocked_funds', 'blockedFunds',
-      'blocked_funds_rows', 'blockedFundsRows', 'blocked_funds_state', 'blockedFundsState',
-      'last_chunk_result', 'batch_summary', 'summary', 'friendly_error'
-    ];
-    while (queue.length) {
-      const value = queue.shift();
-      if (value == null) continue;
-      if (Array.isArray(value)) {
-        for (const item of value) queue.push(item);
-        continue;
-      }
-      if (typeof value === 'string') {
-        const text = value.trim();
-        if (!text) continue;
-        try {
-          const parsed = JSON.parse(text);
-          if (parsed && typeof parsed === 'object') queue.push(parsed);
-        } catch {}
-        continue;
-      }
-      if (typeof value !== 'object') continue;
-      if (seen.has(value)) continue;
-      seen.add(value);
-      out.push(value);
-      for (const key of nestedKeys) {
-        if (Object.prototype.hasOwnProperty.call(value, key)) queue.push(value[key]);
-      }
-    }
-    return out;
-  };
-
-  const blockedFundsSources = collectOperationalObjects(resultObject, errorObject, progress, row);
-  const safeTrimOperationalText = (value) => String(value == null ? '' : value).trim();
-  const safeUpperOperationalText = (value) => safeTrimOperationalText(value).toUpperCase();
-  const sourceHasFalseSufficientFunds = (source) => {
-    if (!source || typeof source !== 'object' || Array.isArray(source)) return false;
-    if (source.sufficient === false) return true;
-    const fundsCheckJson = asPlainObject(source.funds_check_json || source.fundsCheckJson || source.funds_check || source.fundsCheck || source.last_funds_check_json || source.lastFundsCheckJson);
-    return fundsCheckJson.sufficient === false;
-  };
-  const sourceHasBlockedFundsIdentity = (source) => {
-    if (!source || typeof source !== 'object' || Array.isArray(source)) return false;
-    if (source.blocked_funds === true || source.blockedFunds === true) return true;
-    if (Array.isArray(source.blocked_funds) && source.blocked_funds.length > 0) return true;
-    if (Array.isArray(source.blockedFunds) && source.blockedFunds.length > 0) return true;
-    const code = safeUpperOperationalText(source.code || source.error_code || source.errorCode || source.business_code || source.businessCode || source.claim_blocker_code || source.claimBlockerCode);
-    const state = safeUpperOperationalText(source.status || source.post_execution_status || source.postExecutionStatus || source.provider_submission_status || source.providerSubmissionStatus);
-    return code === 'BLOCKED_FUNDS' || state === 'BLOCKED_FUNDS';
-  };
-  const hasBlockedFundsEvidence = blockedFundsSources.some((source) => sourceHasBlockedFundsIdentity(source) || sourceHasFalseSufficientFunds(source));
-  const blockedFundsNumeric = (...keys) => {
-    for (const source of blockedFundsSources) {
-      if (!source || typeof source !== 'object' || Array.isArray(source)) continue;
-      for (const key of keys) {
-        const value = source[key];
-        if (Number.isFinite(Number(value))) return Number(value);
-      }
-    }
-    return null;
-  };
-  const blockedFundsText = (...keys) => {
-    for (const source of blockedFundsSources) {
-      if (!source || typeof source !== 'object' || Array.isArray(source)) continue;
-      for (const key of keys) {
-        const value = safeTrimOperationalText(source[key]);
-        if (value && value.length <= 160) return value;
-      }
-    }
-    return null;
-  };
-  const blockedFundsObject = (...keys) => {
-    for (const source of blockedFundsSources) {
-      if (!source || typeof source !== 'object' || Array.isArray(source)) continue;
-      for (const key of keys) {
-        const value = asPlainObject(source[key]);
-        if (Object.keys(value).length) return value;
-      }
-    }
-    return {};
-  };
-  const blockedFundsDiagnostics = hasBlockedFundsEvidence ? {
-    required_gbp: blockedFundsNumeric('required_gbp', 'requiredGbp', 'required_amount', 'requiredAmount'),
-    available_gbp: blockedFundsNumeric('available_gbp', 'availableGbp', 'available_amount', 'availableAmount'),
-    funding_account_ref: blockedFundsText('funding_account_ref', 'fundingAccountRef'),
-    rail_provider: blockedFundsText('rail_provider', 'railProvider', 'provider'),
-    rail_env: blockedFundsText('rail_env', 'railEnv', 'provider_environment', 'providerEnvironment'),
-    funds_check_json: blockedFundsObject('funds_check_json', 'fundsCheckJson', 'funds_check', 'fundsCheck', 'last_funds_check_json', 'lastFundsCheckJson')
-  } : null;
-
-  const sanitizeTerminalOperationError = (value, fallbackCode = status, fallbackMessage = statusText) => {
-    const source = asPlainObject(value);
-    const safeTrimText = (raw) => String(raw == null ? '' : raw).trim();
-    const normaliseSafeCode = (raw) => {
-      let code = safeTrimText(raw).toUpperCase();
-      if (!code) return '';
-      code = code
-        .replace(/^ERROR[:\s]+/, '')
-        .replace(/^CODE[:\s]+/, '')
-        .replace(/[^A-Z0-9_]+/g, '_')
-        .replace(/^_+|_+$/g, '');
-      if (code === 'NO_PENDING_TRANSFERS') return 'NO_AUTHORISATION_READY_TRANSFERS';
-      if (code === 'PAY_EXECUTE_OPERATION_CLEANUP_FAILED_LOCAL_ARTIFACTS') return 'PAYMENT_EXECUTE_CLEANUP_FAILED';
-      if (/^P[0-9A-Z]{4}$/.test(code) || /^[0-9]{5}$/.test(code)) return '';
-      return code;
-    };
-    const looksTechnical = (raw) => {
-      const text = safeTrimText(raw);
-      if (!text) return false;
-      const upper = text.toUpperCase();
-      if (text.includes('{') || text.includes('}')) return true;
-      if (upper.includes('SQLSTATE') || upper.includes('SQL STATE')) return true;
-      if (upper.includes('RPC ') || upper.includes(' RPC') || upper.includes('RPC_')) return true;
-      if (upper.includes('PLPGSQL') || upper.includes('POSTGRES') || upper.includes('SUPABASE') || upper.includes('POSTGREST')) return true;
-      if (upper.includes('DUPLICATE KEY') || upper.includes('UNIQUE CONSTRAINT') || upper.includes('FOREIGN KEY')) return true;
-      if (upper.includes('CONSTRAINT') || upper.includes('STACK TRACE') || upper.includes('TRACEBACK')) return true;
-      if (upper.includes('PUBLIC.') || upper.includes('PAY_BANK_TRANSFERS') || upper.includes('BANKING_PAY_OPERATION_TRANSFER_SCOPE')) return true;
-      if (upper.includes('P0001') || /\b[0-9]{5}\b/.test(upper)) return true;
-      if (upper.includes('RAW_PAYLOAD') || upper.includes('PROVIDER PAYLOAD')) return true;
-      return false;
-    };
-    const messageByCode = {
-      NO_AUTHORISATION_READY_TRANSFERS: 'The bank transfer was prepared but is not currently in a safe authorisation-ready state. Refresh the batch and try again.',
-      TRANSFER_SCOPE_RETRY_BLOCKER_DETECTED: 'A previous payment attempt left local transfer artefacts attached to this batch. Review the payment state before retrying.',
-      TRANSFER_SCOPE_GROUP_HELD_BY_ACTIVE_OR_UNSAFE_OPERATION: 'A previous payment attempt still owns local transfer artefacts for this batch. Review the payment state before retrying.',
-      EXECUTION_RETRY_BLOCKED_BY_PROVIDER_EVIDENCE: 'This payment may already have reached the banking provider. Review or reconcile the transfer before retrying.',
-      PAYMENT_EXECUTE_CLEANUP_FAILED: 'The payment failed and some local execution artefacts could not be cleaned up automatically.',
-      BLOCKED_FUNDS: 'The selected funding account does not have enough available balance to make this payment. No bank submission was attempted.',
-      BANK_TRANSFER_PROVIDER_REVIEW_REQUIRED: 'This payment may already have reached the banking provider. Review or reconcile the transfer before retrying.',
-      AUTH_REQUEST_HELD_BY_PREVIOUS_OPERATION: 'A previous authorisation request is still attached to this batch. Review or reconcile that request before retrying.',
-      NO_SAFE_LOCAL_CLEANUP_AVAILABLE: 'The payment retry needs review because CloudTMS could not confirm that local execution artefacts are safe to clean.',
-      AUTHORISED_TRANSFER_NOT_PROVIDER_SUBMIT_READY: 'The payment was authorised, but CloudTMS could not find a bank transfer that was safe to submit. Refresh the batch and retry if CloudTMS says retry is safe; otherwise review the transfer.',
-      PROVIDER_SUBMIT_NO_ELIGIBLE_TRANSFERS: 'The payment was authorised, but CloudTMS could not find a bank transfer that was safe to submit. Refresh the batch and retry if CloudTMS says retry is safe; otherwise review the transfer.',
-      PAYMENT_EXECUTE_OPERATION_START_FAILED: 'CloudTMS could not start the payment execution operation. No bank submission was attempted. Refresh the batch and try again.',
-      PAYMENT_EXECUTE_OPERATION_CONFIG_FAILED: 'CloudTMS could not start the payment execution operation. No bank submission was attempted. Refresh the batch and try again.',
-      PAYMENT_OPERATION_START_INVALID_INPUT: 'CloudTMS could not start the payment execution operation. No bank submission was attempted. Refresh the batch and try again.',
-      PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK: providerSubmitStatusMessage('PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK'),
-      UNKNOWN_PROVIDER_SUBMISSION_OUTCOME: providerSubmitStatusMessage('UNKNOWN_PROVIDER_SUBMISSION_OUTCOME'),
-      PROVIDER_SUBMISSION_MALFORMED_RESPONSE: providerSubmitStatusMessage('PROVIDER_SUBMISSION_MALFORMED_RESPONSE'),
-      PROVIDER_SUBMISSION_REJECTED: providerSubmitStatusMessage('PROVIDER_SUBMISSION_REJECTED'),
-      PROVIDER_SUBMISSION_BLOCKED_PRE_CALL: providerSubmitStatusMessage('PROVIDER_SUBMISSION_BLOCKED_PRE_CALL'),
-      NO_PROVIDER_SUBMISSION_ATTEMPTED: providerSubmitStatusMessage('NO_PROVIDER_SUBMISSION_ATTEMPTED'),
-      PROVIDER_SUBMISSION_ACCEPTED: providerSubmitStatusMessage('PROVIDER_SUBMISSION_ACCEPTED', providerSubmitDiagnostic.provider_acceptance_evidence_present === true)
-    };
-    const code = normaliseSafeCode(source.code || source.error_code || source.errorCode || fallbackCode) || normaliseSafeCode(fallbackCode) || 'BANKING_OPERATION_FAILED';
-    const sourceMessage = safeTrimText(source.message || source.user_message || source.error || fallbackMessage);
-    const message = looksTechnical(sourceMessage) ? (messageByCode[code] || 'This Banking operation needs review before it can continue.') : (sourceMessage || messageByCode[code] || 'This Banking operation needs review before it can continue.');
-    const safeError = {
-      code,
-      message,
-      phase: safeTrimText(source.phase || phase) || phase
-    };
-    for (const key of [
-      'review_required',
-      'retry_blocked',
-      'cleanup_retry_safe',
-      'safe_retry_available'
-    ]) {
-      if (typeof source[key] === 'boolean') safeError[key] = source[key];
-    }
-    if (safeTrimText(source.cleanup_status)) safeError.cleanup_status = safeTrimText(source.cleanup_status).toUpperCase();
-    const cleanupSource = asPlainObject(source.cleanup_summary);
-    const cleanupSummary = {};
-    for (const key of [
-      'scope_rows_deleted',
-      'transfer_rows_deleted',
-      'item_links_cleared',
-      'bank_references_cleared',
-      'chunks_marked_failed',
-      'chunks_marked_skipped',
-      'locks_released',
-      'provider_evidence_count',
-      'unsafe_transfer_count',
-      'unsafe_scope_count',
-      'provider_submit_ready_count',
-      'provider_submit_ready_transfer_count',
-      'authorised_without_provider_submission_count',
-      'authorised_but_not_submit_ready_count',
-      'same_operation_authorised_auth_count'
-    ]) {
-      const rawValue = Object.prototype.hasOwnProperty.call(cleanupSource, key) ? cleanupSource[key] : source[key];
-      if (Number.isFinite(Number(rawValue))) {
-        const numericValue = Math.max(0, Math.trunc(Number(rawValue)));
-        safeError[key] = numericValue;
-        cleanupSummary[key] = numericValue;
-      }
-    }
-    for (const key of [
-      'cleanup_status',
-      'cleanup_retry_safe',
-      'safe_retry_available',
-      'retry_blocked',
-      'review_required'
-    ]) {
-      if (Object.prototype.hasOwnProperty.call(cleanupSource, key)) {
-        const rawValue = cleanupSource[key];
-        if (typeof rawValue === 'boolean') cleanupSummary[key] = rawValue;
-        else if (safeTrimText(rawValue)) cleanupSummary[key] = safeTrimText(rawValue);
-      }
-    }
-    for (const safeTextKey of ['auth_request_state', 'auth_request_unsafe_reason', 'classification_source']) {
-      const rawValue = source[safeTextKey];
-      const safeValue = safeTrimText(rawValue);
-      if (safeValue && !looksTechnical(safeValue) && safeValue.length <= 160) safeError[safeTextKey] = safeTextKey === 'auth_request_state' ? safeValue.toUpperCase() : safeValue;
-    }
-    if (Object.keys(cleanupSummary).length) safeError.cleanup_summary = cleanupSummary;
-    return safeError;
-  };
-
-  let title = String(progress.title || options.title || defaultTitles[operationType] || 'Banking operation').trim();
-  let statusText = String(
-    progress.status_text
-    || progress.message
-    || options.status_text
-    || phaseLabels[phase]
-    || phase
-  ).trim();
-
-  if (hasBlockedFundsEvidence) {
-    title = 'Payment blocked — insufficient funds';
-    statusText = 'The selected funding account does not have enough available balance to make this payment.';
-  }
-
-  if (status === 'REVIEW_REQUIRED' && providerSubmitMessage) {
-    title = 'Provider submission needs review';
-    statusText = providerSubmitMessage;
-  }
-
-  const nestedResultObject = asPlainObject(resultObject.result);
-  const progressLastChunkResult = asPlainObject(progress.last_chunk_result);
-  const resultSources = [resultObject, nestedResultObject, progressLastChunkResult, progress].filter((source) => source && typeof source === 'object' && !Array.isArray(source));
-  const trimText = (value) => String(value == null ? '' : value).trim();
-  const firstText = (...values) => {
-    for (const value of values) {
-      const text = trimText(value);
-      if (text) return text;
-    }
-    return '';
-  };
-  const addUnique = (target, value) => {
-    const text = trimText(value);
-    if (!text || target.includes(text)) return;
-    target.push(text);
-  };
-  const addArrayValues = (target, value) => {
-    if (!Array.isArray(value)) return;
-    for (const item of value) addUnique(target, item);
-  };
-  const pickPayChannel = (entry) => {
-    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return '';
-    return firstText(
-      entry.pay_channel,
-      entry.payChannel,
-      entry.channel,
-      entry.batch_kind,
-      entry.batchKind,
-      entry.scope && entry.scope.pay_channel,
-      entry.scope && entry.scope.batch_kind,
-      entry.result && entry.result.pay_channel,
-      entry.result && entry.result.batch_kind,
-      entry.batch && entry.batch.pay_channel,
-      entry.batch && entry.batch.batch_kind
-    );
-  };
-  const pickPayBatchId = (entry) => {
-    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return '';
-    return firstText(
-      entry.pay_batch_id,
-      entry.payBatchId,
-      entry.primary_pay_batch_id,
-      entry.primaryBatchId,
-      entry.id,
-      entry.result && entry.result.pay_batch_id,
-      entry.result && entry.result.payBatchId,
-      entry.result && entry.result.primary_pay_batch_id,
-      entry.batch && entry.batch.pay_batch_id,
-      entry.batch && entry.batch.id
-    );
-  };
-  const addCreatedBatch = (target, seen, entry, fallbackPayChannel = null) => {
-    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return;
-    const payBatchId = pickPayBatchId(entry);
-    if (!payBatchId || seen.has(payBatchId)) return;
-    seen.add(payBatchId);
-    target.push({
-      ...entry,
-      pay_batch_id: payBatchId,
-      pay_channel: firstText(pickPayChannel(entry), fallbackPayChannel) || null
-    });
-  };
-  const normaliseCreatedBatches = (...values) => {
-    const out = [];
-    const seen = new Set();
-    for (const value of values) {
-      if (!Array.isArray(value)) continue;
-      for (const entry of value) addCreatedBatch(out, seen, entry);
-    }
-    return out;
-  };
-
-  const createdBatches = normaliseCreatedBatches(
-    resultObject.created_batches,
-    resultObject.createdBatches,
-    resultObject.batch_shells,
-    resultObject.batchShells,
-    resultObject.results,
-    nestedResultObject.created_batches,
-    nestedResultObject.createdBatches,
-    nestedResultObject.batch_shells,
-    nestedResultObject.batchShells,
-    nestedResultObject.results,
-    progress.batch_shells,
-    progress.batchShells,
-    progressLastChunkResult.created_batches,
-    progressLastChunkResult.createdBatches,
-    progressLastChunkResult.batch_shells,
-    progressLastChunkResult.batchShells,
-    progressLastChunkResult.results
-  );
-  const payBatchIds = [];
-  const createdPayBatchIds = [];
-
-  addUnique(payBatchIds, row.pay_batch_id);
-  for (const source of resultSources) {
-    addUnique(payBatchIds, source.pay_batch_id);
-    addUnique(payBatchIds, source.primary_pay_batch_id);
-    addUnique(payBatchIds, source.primaryBatchId);
-    addUnique(payBatchIds, source.paye_pay_batch_id);
-    addUnique(payBatchIds, source.umbrella_pay_batch_id);
-    addArrayValues(payBatchIds, source.pay_batch_ids);
-    addArrayValues(payBatchIds, source.created_pay_batch_ids);
-    addArrayValues(payBatchIds, source.createdBatchIds);
-
-    if (operationType === 'DRAFT_CREATE') {
-      addArrayValues(createdPayBatchIds, source.created_pay_batch_ids);
-      addArrayValues(createdPayBatchIds, source.createdBatchIds);
-      addUnique(createdPayBatchIds, source.pay_batch_id);
-      addUnique(createdPayBatchIds, source.primary_pay_batch_id);
-      addUnique(createdPayBatchIds, source.primaryBatchId);
-      addUnique(createdPayBatchIds, source.paye_pay_batch_id);
-      addUnique(createdPayBatchIds, source.umbrella_pay_batch_id);
-    }
-  }
-
-  for (const createdBatch of createdBatches) {
-    addUnique(payBatchIds, createdBatch.pay_batch_id);
-    addUnique(createdPayBatchIds, createdBatch.pay_batch_id);
-  }
-
-  const derivedPayBatchId = firstText(row.pay_batch_id, resultObject.pay_batch_id, nestedResultObject.pay_batch_id, progress.pay_batch_id, payBatchIds[0]) || null;
-  const derivedPayePayBatchId = firstText(
-    resultObject.paye_pay_batch_id,
-    nestedResultObject.paye_pay_batch_id,
-    progress.paye_pay_batch_id,
-    createdBatches.find((batch) => String(batch.pay_channel || '').trim().toUpperCase() === 'PAYE')?.pay_batch_id
-  ) || null;
-  const derivedUmbrellaPayBatchId = firstText(
-    resultObject.umbrella_pay_batch_id,
-    nestedResultObject.umbrella_pay_batch_id,
-    progress.umbrella_pay_batch_id,
-    createdBatches.find((batch) => ['UMBRELLA', 'NON_PAYE', 'NONPAYE'].includes(String(batch.pay_channel || '').trim().toUpperCase()))?.pay_batch_id
-  ) || null;
-
-  if (operationType === 'DRAFT_CREATE' && !createdBatches.length) {
-    const fabricated = [];
-    const fabricatedSeen = new Set();
-    if (derivedPayePayBatchId) addCreatedBatch(fabricated, fabricatedSeen, { pay_batch_id: derivedPayePayBatchId, pay_channel: 'PAYE' }, 'PAYE');
-    if (derivedUmbrellaPayBatchId) addCreatedBatch(fabricated, fabricatedSeen, { pay_batch_id: derivedUmbrellaPayBatchId, pay_channel: 'UMBRELLA' }, 'UMBRELLA');
-    if (derivedPayBatchId) addCreatedBatch(fabricated, fabricatedSeen, { pay_batch_id: derivedPayBatchId, pay_channel: firstText(resultObject.pay_channel, nestedResultObject.pay_channel, progress.pay_channel, resultObject.batch_kind, nestedResultObject.batch_kind, progress.batch_kind) || null });
-    for (const fabricatedBatch of fabricated) {
-      createdBatches.push(fabricatedBatch);
-      addUnique(payBatchIds, fabricatedBatch.pay_batch_id);
-      addUnique(createdPayBatchIds, fabricatedBatch.pay_batch_id);
-    }
-  }
-
-  const payload = {
-    ok: status !== 'FAILED',
-    operation_id: String(row.operation_id || row.id || ''),
-    operation_type: operationType,
-    status,
-    phase,
-    phase_label: phaseLabels[phase] || phase,
-    title,
-    status_text: statusText,
-    total_units: totalUnits,
-    completed_units: completedUnits,
-    failed_units: failedUnits,
-    current_chunk_index: currentChunkIndex,
-    chunk_count: chunkCount,
-    percent,
-    can_advance: !terminal && ['QUEUED', 'RUNNING', 'WAITING'].includes(status),
-    can_cancel: !terminal && !providerSubmissionStarted,
-    terminal,
-    waiting: status === 'WAITING',
-    pay_batch_id: derivedPayBatchId,
-    pay_batch_ids: payBatchIds,
-    created_pay_batch_ids: operationType === 'DRAFT_CREATE' ? createdPayBatchIds : [],
-    paye_pay_batch_id: derivedPayePayBatchId,
-    umbrella_pay_batch_id: derivedUmbrellaPayBatchId,
-    created_batches: operationType === 'DRAFT_CREATE' ? createdBatches : [],
-    workbench_session_id: row.workbench_session_id ? String(row.workbench_session_id) : null,
-    root_operation_id: row.root_operation_id ? String(row.root_operation_id) : null,
-    idempotency_key: row.idempotency_key ? String(row.idempotency_key) : null,
-    created_at_utc: row.created_at_utc || null,
-    started_at_utc: row.started_at_utc || null,
-    updated_at_utc: row.updated_at_utc || null,
-    completed_at_utc: row.completed_at_utc || null,
-    failed_at_utc: row.failed_at_utc || null
-  };
-
-  if (Object.keys(providerSubmitDiagnostic).length) {
-    payload.provider_submit_diagnostic = providerSubmitDiagnostic;
-    payload.provider_submission_status = providerSubmissionStatus || null;
-    payload.review_reason_code = providerSubmitReviewReasonCode || null;
-    payload.manual_resolution_required = providerSubmitManualResolutionRequired;
-    payload.safe_retry_available = providerSubmitSafeRetryAvailable;
-    payload.recommended_action = providerSubmitRecommendedAction || null;
-    payload.provider_called = providerSubmitDiagnostic.provider_called === true;
-    payload.provider_request_sent = providerSubmitDiagnostic.provider_request_sent === true;
-    payload.provider_request_sent_confirmed = providerSubmitDiagnostic.provider_request_sent_confirmed === true;
-    payload.provider_request_dispatched_at_utc = providerSubmitDiagnostic.provider_request_dispatched_at_utc || null;
-    payload.provider_response_present = providerSubmitDiagnostic.provider_response_present === true;
-    payload.provider_external_evidence_present = providerSubmitDiagnostic.provider_external_evidence_present === true;
-    payload.provider_acceptance_evidence_present = providerSubmitDiagnostic.provider_acceptance_evidence_present === true;
-  }
-
-  if (terminal && status === 'COMPLETE') {
-    payload.result = resultJson || {};
-  } else if (terminal && status === 'REVIEW_REQUIRED') {
-    payload.result = resultJson || {};
-    payload.error = sanitizeTerminalOperationError(errorJson || { code: status, message: statusText }, status, statusText);
-  } else if (terminal) {
-    payload.result = resultJson || null;
-    payload.error = sanitizeTerminalOperationError(errorJson || { code: status, message: statusText }, status, statusText);
-  } else {
-    payload.result = null;
-    payload.error = null;
-  }
-
-  if (Object.keys(providerSubmitDiagnostic).length) {
-    if (payload.error && typeof payload.error === 'object') {
-      payload.error.provider_submit_diagnostic = providerSubmitDiagnostic;
-      payload.error.provider_submission_status = providerSubmissionStatus || null;
-      payload.error.review_reason_code = providerSubmitReviewReasonCode || null;
-      payload.error.manual_resolution_required = providerSubmitManualResolutionRequired;
-      payload.error.safe_retry_available = providerSubmitSafeRetryAvailable;
-      payload.error.recommended_action = providerSubmitRecommendedAction || null;
-      payload.error.provider_request_sent_confirmed = providerSubmitDiagnostic.provider_request_sent_confirmed === true;
-      payload.error.provider_request_dispatched_at_utc = providerSubmitDiagnostic.provider_request_dispatched_at_utc || null;
-      payload.error.provider_external_evidence_present = providerSubmitDiagnostic.provider_external_evidence_present === true;
-      payload.error.provider_acceptance_evidence_present = providerSubmitDiagnostic.provider_acceptance_evidence_present === true;
-      if (status === 'REVIEW_REQUIRED' && providerSubmitMessage) payload.error.message = providerSubmitMessage;
-    }
-    if (payload.result && typeof payload.result === 'object') {
-      payload.result.provider_submit_diagnostic = payload.result.provider_submit_diagnostic || providerSubmitDiagnostic;
-      payload.result.provider_submission_status = payload.result.provider_submission_status || providerSubmissionStatus || null;
-      payload.result.review_reason_code = payload.result.review_reason_code || providerSubmitReviewReasonCode || null;
-      payload.result.manual_resolution_required = payload.result.manual_resolution_required === true || providerSubmitManualResolutionRequired;
-      payload.result.safe_retry_available = payload.result.safe_retry_available === true || providerSubmitSafeRetryAvailable;
-      payload.result.recommended_action = payload.result.recommended_action || providerSubmitRecommendedAction || null;
-      payload.result.provider_request_sent_confirmed = providerSubmitDiagnostic.provider_request_sent_confirmed === true;
-      payload.result.provider_request_dispatched_at_utc = providerSubmitDiagnostic.provider_request_dispatched_at_utc || payload.result.provider_request_dispatched_at_utc || null;
-      payload.result.provider_external_evidence_present = providerSubmitDiagnostic.provider_external_evidence_present === true;
-      payload.result.provider_acceptance_evidence_present = providerSubmitDiagnostic.provider_acceptance_evidence_present === true;
-      payload.result.provider_submission_accepted = providerSubmitDiagnostic.provider_acceptance_evidence_present === true;
-      payload.result.rail_tx_id = providerSubmitDiagnostic.provider_acceptance_evidence_present === true
-        ? (providerSubmitDiagnostic.rail_tx_id || providerSubmitDiagnostic.provider_transaction_id || payload.result.rail_tx_id || null)
-        : null;
-      payload.result.provider_transaction_id = providerSubmitDiagnostic.provider_transaction_id || null;
-      payload.result.provider_reference = providerSubmitDiagnostic.provider_reference || null;
-    }
-  }
-
-  if (hasBlockedFundsEvidence) {
-    const safeBlockedFundsError = {
-      code: 'BLOCKED_FUNDS',
-      message: 'The selected funding account does not have enough available balance to make this payment. No bank submission was attempted.',
-      phase,
-      blocked_funds: true,
-      submitted_to_bank: false,
-      provider_submission_attempted: false,
-      retry_blocked: true,
-      review_required: false,
-      safe_retry_available: false
-    };
-    if (blockedFundsDiagnostics) {
-      if (Number.isFinite(Number(blockedFundsDiagnostics.required_gbp))) safeBlockedFundsError.required_gbp = Number(blockedFundsDiagnostics.required_gbp);
-      if (Number.isFinite(Number(blockedFundsDiagnostics.available_gbp))) safeBlockedFundsError.available_gbp = Number(blockedFundsDiagnostics.available_gbp);
-      if (blockedFundsDiagnostics.funding_account_ref) safeBlockedFundsError.funding_account_ref = blockedFundsDiagnostics.funding_account_ref;
-      if (blockedFundsDiagnostics.rail_provider) safeBlockedFundsError.rail_provider = blockedFundsDiagnostics.rail_provider;
-      if (blockedFundsDiagnostics.rail_env) safeBlockedFundsError.rail_env = blockedFundsDiagnostics.rail_env;
-      if (blockedFundsDiagnostics.funds_check_json && Object.keys(blockedFundsDiagnostics.funds_check_json).length) safeBlockedFundsError.funds_check_json = blockedFundsDiagnostics.funds_check_json;
-    }
-    payload.ok = true;
-    payload.title = 'Payment blocked — insufficient funds';
-    payload.status_text = 'The selected funding account does not have enough available balance to make this payment.';
-    payload.blocked_funds = true;
-    payload.submitted_to_bank = false;
-    payload.provider_submission_attempted = false;
-    payload.retry_blocked = true;
-    payload.review_required = false;
-    payload.safe_retry_available = false;
-    payload.post_execution_status = 'BLOCKED_FUNDS';
-    payload.business_code = 'BLOCKED_FUNDS';
-    payload.error = safeBlockedFundsError;
-    payload.result = Object.assign({}, resultJson || {}, {
-      code: 'BLOCKED_FUNDS',
-      business_code: 'BLOCKED_FUNDS',
-      blocked_funds: true,
-      submitted_to_bank: false,
-      provider_submission_attempted: false,
-      retry_blocked: true,
-      review_required: false,
-      safe_retry_available: false,
-      required_gbp: safeBlockedFundsError.required_gbp ?? null,
-      available_gbp: safeBlockedFundsError.available_gbp ?? null,
-      funding_account_ref: safeBlockedFundsError.funding_account_ref ?? null,
-      rail_provider: safeBlockedFundsError.rail_provider ?? null,
-      rail_env: safeBlockedFundsError.rail_env ?? null,
-      funds_check_json: safeBlockedFundsError.funds_check_json ?? null
-    });
-  }
-
-  if (progress && typeof progress === 'object') {
-    payload.progress = {
-      freshness_validation_status: progress.freshness_validation_status || null,
-      freshness_result_hash: progress.freshness_result_hash || null,
-      freshness_scope_hash: progress.freshness_scope_hash || null,
-      freshness_is_stale: progress.freshness_is_stale === true,
-      child_operation_id: progress.child_operation_id || null,
-      last_chunk_result: progress.last_chunk_result || null
-    };
-  }
-
-  return payload;
-}
 
 
 async function startBankingPayOperation(env, input = {}, options = {}) {
@@ -133054,7 +131564,6 @@ async function cleanupStaleRailPayeeMappingsForHash(env, { entity_kind, entity_i
 }
 
 
-
 function getRailAdapter(provider) {
   // -----------------------------
   // Single source of truth registry
@@ -135268,7 +133777,7 @@ function getRailAdapter(provider) {
                     idempotency_key: requestId,
                     local_provider_request_id: requestId,
                     transfer_ids: transferIds || [],
-                    recommended_action: 'Provider create returned an unstructured error before CloudTMS could confirm dispatch. Check Revolut/bank records before retry.'
+                    recommended_action: 'Provider create returned an unstructured error before CloudTMS could confirm dispatch. Check the bank account before retry.'
                   })
                 };
               }
@@ -135498,7 +134007,7 @@ function getRailAdapter(provider) {
                   provider_submission_unknown: requestSent,
                   manual_resolution_required: requestSent,
                   safe_retry_available: false,
-                  recommended_action: requestSent ? 'Provider request may have been sent. Check Revolut/bank records before retry.' : 'Provider was not called. Resolve the local blocker and retry through payment execution.'
+                  recommended_action: requestSent ? 'Provider request may have been sent. Check the bank account before retry.' : 'Provider was not called. Resolve the local blocker and retry through payment execution.'
                 });
               } catch {
                 setProviderSubmitStage(requestSent ? 'PROVIDER_PAYMENT_CREATE_UNKNOWN' : 'CHUNK_FINALISATION_STARTED', {
@@ -135512,7 +134021,7 @@ function getRailAdapter(provider) {
                   provider_submission_unknown: requestSent,
                   manual_resolution_required: requestSent,
                   safe_retry_available: false,
-                  recommended_action: requestSent ? 'Provider request may have been sent. Check Revolut/bank records before retry.' : 'Provider was not called. Resolve the local blocker and retry through payment execution.'
+                  recommended_action: requestSent ? 'Provider request may have been sent. Check the bank account before retry.' : 'Provider was not called. Resolve the local blocker and retry through payment execution.'
                 });
               }
               out.failed_this_chunk = Math.max(out.failed_this_chunk || 0, (transfers || []).length || 1);
@@ -135981,6 +134490,7 @@ function getRailAdapter(provider) {
 
 
 
+
 async function revolutAuth_getAccessToken(env) {
   const cacheKey = '__REVOLUT_TOKEN_CACHE__';
   const nowMs = Date.now();
@@ -136322,6 +134832,1506 @@ async function revolutNameCheck_perform(env, token, { payee_name, sort_code, acc
   };
 }
 
+
+async function handleBankingPayBatchCancel(env, req, user, payBatchId) {
+  const id = String(payBatchId || '').trim();
+  if (!id) return withCORS(env, req, badRequest('pay_batch_id is required'));
+
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return withCORS(env, req, badRequest('Invalid JSON'));
+
+  const password = String(body.password || '');
+  const reauthToken = String(body.reauth_token || body.reauthToken || '').trim();
+  if (!password && !reauthToken) return withCORS(env, req, badRequest('password or reauth_token is required'));
+
+  const reason = String(body.reason || '').trim();
+  if (!reason) return withCORS(env, req, badRequest('reason is required'));
+
+  const trimStr = (value) => String(value == null ? '' : value).trim();
+  const isPlainObject = (value) => !!value && typeof value === 'object' && !Array.isArray(value);
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  const enc = encodeURIComponent;
+
+  const parseIsoOrUkDateToIso = (raw) => {
+    const s = String(raw || '').trim();
+    if (!s) return null;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+    const m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (m) {
+      const dd = m[1], mm = m[2], yyyy = m[3];
+      return `${yyyy}-${mm}-${dd}`;
+    }
+    return null;
+  };
+
+  const cloneJson = (value) => {
+    try { return JSON.parse(JSON.stringify(value)); } catch { return null; }
+  };
+
+  const discardSessionRequested = (() => {
+    const raw = body.discard_session ?? body.discardSession;
+    if (typeof raw === 'boolean') return raw;
+    if (raw == null) return false;
+    const s = String(raw).trim().toLowerCase();
+    if (!s) return false;
+    if (['1', 'true', 't', 'yes', 'y', 'on'].includes(s)) return true;
+    if (['0', 'false', 'f', 'no', 'n', 'off'].includes(s)) return false;
+    return false;
+  })();
+
+  const discardSessionForced = true;
+
+  const currentSessionId = trimStr(
+    body.current_session_id ??
+    body.currentSessionId ??
+    body.session_id ??
+    body.sessionId ??
+    ''
+  );
+  if (currentSessionId && !uuidRe.test(currentSessionId)) {
+    return withCORS(env, req, badRequest('current_session_id must be a UUID when supplied'));
+  }
+
+  const currentPayDateRaw = trimStr(
+    body.current_pay_date ??
+    body.currentPayDate ??
+    body.pay_date ??
+    ''
+  );
+  const currentPayDateIso = currentPayDateRaw ? parseIsoOrUkDateToIso(currentPayDateRaw) : null;
+  if (currentPayDateRaw && !currentPayDateIso) {
+    return withCORS(env, req, badRequest('current_pay_date must be YYYY-MM-DD or DD/MM/YYYY when supplied'));
+  }
+
+  const currentCutoffRaw = trimStr(
+    body.current_week_ending_cutoff_date ??
+    body.currentWeekEndingCutoffDate ??
+    body.current_week_ending_cutoff ??
+    body.currentWeekEndingCutoff ??
+    body.week_ending_cutoff_date ??
+    body.weekEndingCutoffDate ??
+    body.week_ending_cutoff ??
+    body.weekEndingCutoff ??
+    ''
+  );
+  const currentCutoffIso = currentCutoffRaw ? parseIsoOrUkDateToIso(currentCutoffRaw) : null;
+  if (currentCutoffRaw && !currentCutoffIso) {
+    return withCORS(env, req, badRequest('current_week_ending_cutoff_date must be YYYY-MM-DD or DD/MM/YYYY when supplied'));
+  }
+
+  const currentFiltersRaw =
+    body.current_filters_json ??
+    body.currentFiltersJson ??
+    body.workbench_filters_json ??
+    body.workbenchFiltersJson ??
+    body.filters_json ??
+    body.filtersJson ??
+    null;
+
+  let currentFiltersJson = null;
+  if (currentFiltersRaw !== null && currentFiltersRaw !== undefined) {
+    if (!isPlainObject(currentFiltersRaw)) {
+      return withCORS(env, req, badRequest('current_filters_json must be an object when supplied'));
+    }
+    currentFiltersJson = cloneJson(currentFiltersRaw) || {};
+  }
+
+  const currentSessionSignature = trimStr(
+    body.current_session_signature ??
+    body.currentSessionSignature ??
+    body.session_signature ??
+    body.sessionSignature ??
+    ''
+  ) || null;
+
+  const _safeJsonParse = (s) => {
+    try { return JSON.parse(String(s || '')); } catch { return null; }
+  };
+
+  const _extractDbRaisedJson = (e) => {
+    try {
+      const ej = (e && typeof e === 'object' && e.json && typeof e.json === 'object') ? e.json : null;
+      let msg = (ej && typeof ej.message === 'string') ? ej.message : null;
+
+      if (!msg && e && typeof e === 'object' && typeof e.body === 'string' && e.body.trim()) {
+        const envObj = _safeJsonParse(e.body);
+        if (envObj && typeof envObj === 'object' && typeof envObj.message === 'string') msg = envObj.message;
+      }
+
+      if (!msg && e && typeof e === 'object' && typeof e.message === 'string' && e.message.trim()) {
+        const m = e.message;
+        const i1 = m.indexOf('{');
+        const i2 = m.lastIndexOf('}');
+        if (i1 !== -1 && i2 !== -1 && i2 > i1) {
+          const envObj = _safeJsonParse(m.slice(i1, i2 + 1));
+          if (envObj && typeof envObj === 'object') {
+            if (typeof envObj.message === 'string') msg = envObj.message;
+            if (!msg && typeof envObj.code === 'string') return envObj;
+          }
+        }
+      }
+
+      if (!msg || typeof msg !== 'string') return null;
+      const t = msg.trim();
+      if (t.startsWith('{') && t.endsWith('}')) {
+        const payload = _safeJsonParse(t);
+        return (payload && typeof payload === 'object') ? payload : null;
+      }
+
+      const j1 = t.indexOf('{');
+      const j2 = t.lastIndexOf('}');
+      if (j1 !== -1 && j2 !== -1 && j2 > j1) {
+        const payload = _safeJsonParse(t.slice(j1, j2 + 1));
+        return (payload && typeof payload === 'object') ? payload : null;
+      }
+    } catch {}
+    return null;
+  };
+
+  const _unwrapRpcPayload = (rpcRes, key) => {
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') payload = rpcRes[0];
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) {
+        payload = payload[key];
+      }
+    } catch {}
+    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+  };
+
+  const _extractUuidArray = (...values) => {
+    const out = [];
+    const seen = new Set();
+
+    const pushValue = (raw) => {
+      const s = trimStr(raw);
+      if (!uuidRe.test(s) || seen.has(s)) return;
+      seen.add(s);
+      out.push(s);
+    };
+
+    const visit = (value) => {
+      if (value == null) return;
+      if (Array.isArray(value)) {
+        for (const item of value) visit(item);
+        return;
+      }
+      if (typeof value === 'object') return;
+      pushValue(value);
+    };
+
+    for (const value of values) visit(value);
+    return out;
+  };
+
+  const _analyzeCancelPayload = (payload) => {
+    const p = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+    const code = String(p.code || '').trim().toUpperCase() || null;
+    const cancellationOutcome = String(p.cancellation_outcome || '').trim().toUpperCase() || null;
+    const executionCommitState = String(p.execution_commit_state || '').trim().toUpperCase() || null;
+    const status = String(p.status || '').trim().toUpperCase() || null;
+    const explicitOk = (typeof p.ok === 'boolean') ? p.ok : null;
+
+    const correctionOnly = (
+      code === 'CORRECTION_ONLY_REQUIRED' ||
+      code === 'USE_PAYMENT_CORRECTION_FLOW' ||
+      code === 'PAYMENT_ALREADY_COMMITTED' ||
+      cancellationOutcome === 'CORRECTION_ONLY' ||
+      cancellationOutcome === 'POST_COMMIT_CORRECTION_ONLY' ||
+      p.correction_only === true
+    );
+
+    const externalCancelConfirmationRequired = (
+      code === 'EXTERNAL_CANCEL_CONFIRMATION_REQUIRED' ||
+      cancellationOutcome === 'EXTERNAL_CANCEL_CONFIRMATION_REQUIRED' ||
+      cancellationOutcome === 'AWAITING_EXTERNAL_CANCEL_CONFIRMATION' ||
+      p.external_cancel_confirmation_required === true
+    );
+
+    const preSubmissionCancel = (cancellationOutcome === 'PRE_SUBMISSION_CANCEL');
+    const preCommitUnwind = (cancellationOutcome === 'PRE_COMMIT_UNWIND');
+
+    const cancelSucceeded = (
+      explicitOk === true ||
+      preSubmissionCancel ||
+      preCommitUnwind ||
+      status === 'CANCELLED' ||
+      !!String(p.cancelled_at_utc || '').trim()
+    ) && !correctionOnly && !externalCancelConfirmationRequired;
+
+    return {
+      code,
+      cancellation_outcome: cancellationOutcome,
+      execution_commit_state: executionCommitState,
+      status,
+      cancel_succeeded: cancelSucceeded,
+      pre_submission_cancel: preSubmissionCancel,
+      pre_commit_unwind: preCommitUnwind,
+      correction_only: correctionOnly,
+      external_cancel_confirmation_required: externalCancelConfirmationRequired
+    };
+  };
+
+  const _buildCancelFlow = (payload) => {
+    const analysis = _analyzeCancelPayload(payload);
+    return {
+      cancellation_outcome: analysis.cancellation_outcome,
+      execution_commit_state: analysis.execution_commit_state,
+      pre_submission_cancel: analysis.pre_submission_cancel,
+      pre_commit_unwind: analysis.pre_commit_unwind,
+      correction_only: analysis.correction_only,
+      external_cancel_confirmation_required: analysis.external_cancel_confirmation_required
+    };
+  };
+
+  const _cancelConflictMeta = (payload) => {
+    const p = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+    const analysis = _analyzeCancelPayload(p);
+    const code = String(
+      p.code ||
+      p.error_code ||
+      (analysis.external_cancel_confirmation_required ? 'EXTERNAL_CANCEL_CONFIRMATION_REQUIRED' : '') ||
+      (analysis.correction_only ? 'CORRECTION_ONLY_REQUIRED' : '') ||
+      ''
+    ).trim().toUpperCase() || 'BATCH_NOT_CANCELLABLE';
+
+    if (code === 'USE_PAYMENT_CORRECTION_FLOW') {
+      return {
+        error_code: code,
+        message: 'This batch has bank/payment evidence. Open the Payment issue panel to review it safely.'
+      };
+    }
+    if (code === 'CORRECTION_ONLY_REQUIRED' || code === 'PAYMENT_ALREADY_COMMITTED') {
+      return {
+        error_code: code,
+        message: 'This batch has bank/payment evidence. Open the Payment issue panel to review it safely.'
+      };
+    }
+    if (code === 'EXTERNAL_CANCEL_CONFIRMATION_REQUIRED') {
+      return {
+        error_code: code,
+        message: 'External bank-side cancellation or confirmation is required before the system can restore this batch.'
+      };
+    }
+    if (code === 'BATCH_NOT_CANCELLABLE') {
+      return {
+        error_code: code,
+        message: 'This batch cannot be cancelled in its current state.'
+      };
+    }
+
+    return {
+      error_code: code,
+      message: String(p.message || p.error || 'Batch cancellation could not be completed.').trim() || 'Batch cancellation could not be completed.'
+    };
+  };
+
+  const _buildConflictResponse = (payload) => {
+    const p = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+    const cancelFlow = _buildCancelFlow(p);
+    const conflictMeta = _cancelConflictMeta(p);
+    const responsePayload = {
+      ok: false,
+      pay_batch_id: id,
+      error_code: conflictMeta.error_code,
+      message: conflictMeta.message,
+      error: conflictMeta.message,
+      details: p,
+      cancel_flow: cancelFlow,
+      session_discard: {
+        requested: discardSessionRequested,
+        forced: discardSessionForced,
+        attempted: false,
+        ok: false,
+        discarded_session_id: null,
+        state_changed: false,
+        skipped_reason: 'BATCH_CANCEL_NOT_FINALIZED',
+        result: null,
+        error: null
+      }
+    };
+    return withCORS(
+      env,
+      req,
+      new Response(JSON.stringify(responsePayload), {
+        status: 409,
+        headers: JSON_HEADERS
+      })
+    );
+  };
+
+  const _buildSessionDiscardResult = (payload) => {
+    const p = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+    const sourceSessionId = trimStr(p.source_workbench_session_id || '');
+    const discardResult = (p.source_session_discard_result && typeof p.source_session_discard_result === 'object' && !Array.isArray(p.source_session_discard_result))
+      ? p.source_session_discard_result
+      : null;
+    const attempted = (p.source_session_discard_attempted === true) || !!sourceSessionId;
+    const ok = attempted ? (p.source_session_discarded === true) : true;
+    const stateChanged = p.source_session_discard_state_changed === true;
+
+    return {
+      requested: discardSessionRequested,
+      forced: discardSessionForced,
+      attempted,
+      ok,
+      discarded_session_id: sourceSessionId || null,
+      state_changed: stateChanged,
+      skipped_reason: attempted ? null : 'NO_SOURCE_SESSION',
+      result: discardResult,
+      error: null
+    };
+  };
+
+  const _loadSessionContext = async (sessionIdValue) => {
+    const sessionIdText = trimStr(sessionIdValue);
+    if (!uuidRe.test(sessionIdText)) return null;
+
+    const { rows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/banking_pay_workbench_sessions` +
+      `?id=eq.${enc(sessionIdText)}` +
+      `&select=id,filters_json,pay_date,week_ending_cutoff,session_signature,source_snapshot_run_id,version` +
+      `&limit=1`,
+      false
+    );
+
+    const sessionRow = (rows && rows[0]) ? rows[0] : null;
+    if (!sessionRow) return null;
+
+    return {
+      session_id: sessionIdText,
+      filters_json: (sessionRow.filters_json && typeof sessionRow.filters_json === 'object' && !Array.isArray(sessionRow.filters_json))
+        ? (cloneJson(sessionRow.filters_json) || {})
+        : null,
+      pay_date: trimStr(sessionRow.pay_date || '') || null,
+      week_ending_cutoff: trimStr(sessionRow.week_ending_cutoff || '') || null,
+      session_signature: trimStr(sessionRow.session_signature || '') || null,
+      snapshot_run_id: trimStr(sessionRow.source_snapshot_run_id || '') || null,
+      session_version: sessionRow.version ?? null
+    };
+  };
+
+  try {
+    const userRow = await sbGetUserById(env, user.id);
+    if (!userRow || userRow.is_active !== true) return withCORS(env, req, unauthorized('Unauthorized'));
+
+    if (reauthToken) {
+      const reauthCheck = await verifyPaymentReversalReauth(env, user, reauthToken);
+      if (!reauthCheck.ok) return withCORS(env, req, reauthCheck.response || unauthorized('Invalid reauth_token'));
+    } else {
+      const okPw = await pbkdf2Verify(password, userRow.password_hash || '');
+      if (!okPw) return withCORS(env, req, unauthorized('Invalid credentials'));
+    }
+  } catch (e) {
+    return withCORS(env, req, serverError(String(e?.message || e)));
+  }
+
+  try {
+    const rpcRes = await sbRpc(env, 'pay_batch_cancel', {
+      p_pay_batch_id: id,
+      p_actor_user_id: user.id,
+      p_reason: reason
+    });
+
+    const payload = _unwrapRpcPayload(rpcRes, 'pay_batch_cancel');
+    const cancelAnalysis = _analyzeCancelPayload(payload);
+
+    if (!cancelAnalysis.cancel_succeeded) {
+      return _buildConflictResponse(payload);
+    }
+
+    const sessionDiscardResult = _buildSessionDiscardResult(payload);
+    const sourceSessionId = trimStr(sessionDiscardResult.discarded_session_id || trimStr(payload?.source_workbench_session_id || ''));
+    const snapshotRebuild = isPlainObject(payload?.snapshot_rebuild) ? payload.snapshot_rebuild : {};
+    const snapshotRefresh = isPlainObject(payload?.snapshot_refresh) ? payload.snapshot_refresh : {};
+    const dirtiedCandidates = isPlainObject(payload?.dirtied_candidates) ? payload.dirtied_candidates : {};
+    const dirtiedCandidatesCamel = isPlainObject(payload?.dirtiedCandidates) ? payload.dirtiedCandidates : {};
+
+    const dirtyCandidateIds = _extractUuidArray(
+      payload?.dirty_candidate_ids,
+      payload?.dirtied_candidate_ids,
+      payload?.touched_candidate_ids,
+      payload?.affected_candidate_ids,
+      dirtiedCandidates?.candidate_ids,
+      dirtiedCandidatesCamel?.candidateIds,
+      snapshotRebuild?.dirtied_candidates?.candidate_ids,
+      snapshotRebuild?.dirty_candidate_ids
+    );
+    const snapshotRefreshJobIds = _extractUuidArray(
+      snapshotRefresh?.job_ids,
+      snapshotRefresh?.jobIds
+    );
+    const snapshotRebuildRunIds = _extractUuidArray(
+      snapshotRebuild?.snapshot_run_ids,
+      snapshotRebuild?.snapshotRunIds,
+      snapshotRebuild?.run_ids,
+      snapshotRebuild?.runIds
+    );
+    const refreshJobIds = _extractUuidArray(
+      payload?.refresh_job_ids,
+      payload?.job_ids,
+      snapshotRefreshJobIds,
+      snapshotRebuildRunIds
+    );
+
+    const postCancelRefresh = {
+      source_session_id: sourceSessionId || null,
+      source_session_discard_result: sessionDiscardResult.result,
+      source_session_consumed: sessionDiscardResult.ok === true,
+      requires_new_session: true,
+      replacement_session_id: null,
+      replacement_session_signature: null,
+      replacement_snapshot_run_id: null,
+      replacement_session_version: null,
+      dirty_candidate_ids: dirtyCandidateIds,
+      pending_candidate_ids: dirtyCandidateIds,
+      refresh_job_ids: refreshJobIds,
+      snapshot_refresh_job_ids: snapshotRefreshJobIds,
+      snapshot_rebuild_run_ids: snapshotRebuildRunIds,
+      warnings: []
+    };
+
+    let currentSessionContext = null;
+    let sourceSessionContext = null;
+
+    if (currentSessionId) {
+      try {
+        currentSessionContext = await _loadSessionContext(currentSessionId);
+      } catch (contextError) {
+        postCancelRefresh.warnings.push({
+          code: 'CURRENT_SESSION_CONTEXT_FETCH_FAILED',
+          message: String(contextError?.message || contextError || 'Unknown current session context error')
+        });
+      }
+    }
+
+    if (sourceSessionId && sourceSessionId !== currentSessionId) {
+      try {
+        sourceSessionContext = await _loadSessionContext(sourceSessionId);
+      } catch (contextError) {
+        postCancelRefresh.warnings.push({
+          code: 'SOURCE_SESSION_CONTEXT_FETCH_FAILED',
+          message: String(contextError?.message || contextError || 'Unknown source session context error')
+        });
+      }
+    }
+
+    const replacementPayDate = currentPayDateIso ||
+      trimStr(currentSessionContext?.pay_date || '') ||
+      trimStr(sourceSessionContext?.pay_date || '') ||
+      null;
+
+    const replacementCutoff = currentCutoffIso ||
+      trimStr(currentSessionContext?.week_ending_cutoff || '') ||
+      trimStr(sourceSessionContext?.week_ending_cutoff || '') ||
+      null;
+
+    const replacementFiltersJson = currentFiltersJson !== null
+      ? currentFiltersJson
+      : (
+          (currentSessionContext && isPlainObject(currentSessionContext.filters_json)) ? currentSessionContext.filters_json
+          : ((sourceSessionContext && isPlainObject(sourceSessionContext.filters_json)) ? sourceSessionContext.filters_json : null)
+        );
+
+    const replacementSessionSignature = currentSessionSignature ||
+      trimStr(currentSessionContext?.session_signature || '') ||
+      trimStr(sourceSessionContext?.session_signature || '') ||
+      null;
+
+    const sourceSessionMustBeConsumed = sessionDiscardResult.attempted === true && !!sourceSessionId;
+
+    if (sourceSessionMustBeConsumed && sessionDiscardResult.ok !== true) {
+      postCancelRefresh.warnings.push({
+        code: 'REPLACEMENT_SESSION_OPEN_SKIPPED_SOURCE_SESSION_NOT_CONSUMED',
+        message: 'Replacement workbench session was not opened because the source session was not successfully consumed.'
+      });
+    } else if (!replacementPayDate || !replacementCutoff || !isPlainObject(replacementFiltersJson)) {
+      postCancelRefresh.warnings.push({
+        code: 'REPLACEMENT_SESSION_OPEN_SKIPPED_INSUFFICIENT_CONTEXT',
+        message: 'Replacement workbench session could not be opened because the effective workbench context was incomplete.'
+      });
+    } else {
+      try {
+        const obsoleteSessionIds = _extractUuidArray(sourceSessionId, currentSessionId);
+        const sessionOpenRpc = await sbRpc(env, 'pay_workbench_session_open', {
+          p_actor_user_id: String(user.id || '').trim(),
+          p_pay_date: replacementPayDate,
+          p_week_ending_cutoff: replacementCutoff,
+          p_filters_json: replacementFiltersJson,
+          p_session_signature: replacementSessionSignature || null,
+          p_force_new_session: true,
+          p_discard_source_session: true,
+          p_source_session_id: sourceSessionId || null,
+          p_obsolete_session_ids: obsoleteSessionIds,
+          p_mutation_context: 'CANCEL_DELETE_DRAFT_SUCCESS',
+          p_dirty_candidate_ids: dirtyCandidateIds,
+          p_refresh_job_ids: refreshJobIds
+        });
+
+        let sessionOpenPayload = sessionOpenRpc;
+        try {
+          if (Array.isArray(sessionOpenRpc) && sessionOpenRpc.length === 1 && sessionOpenRpc[0] && typeof sessionOpenRpc[0] === 'object') {
+            sessionOpenPayload = sessionOpenRpc[0];
+          }
+          if (sessionOpenPayload && typeof sessionOpenPayload === 'object' && Object.prototype.hasOwnProperty.call(sessionOpenPayload, 'pay_workbench_session_open')) {
+            sessionOpenPayload = sessionOpenPayload.pay_workbench_session_open;
+          }
+        } catch {}
+
+        const replacementSessionId = trimStr(
+          (sessionOpenPayload && typeof sessionOpenPayload === 'object' ? sessionOpenPayload.session_id : '') || ''
+        );
+
+        if (uuidRe.test(replacementSessionId)) {
+          postCancelRefresh.replacement_session_id = replacementSessionId;
+          postCancelRefresh.replacement_session_signature = trimStr(
+            (sessionOpenPayload && typeof sessionOpenPayload === 'object' ? sessionOpenPayload.session_signature : '') || ''
+          ) || null;
+          postCancelRefresh.replacement_snapshot_run_id = trimStr(
+            (sessionOpenPayload && typeof sessionOpenPayload === 'object' ? sessionOpenPayload.snapshot_run_id : '') || ''
+          ) || null;
+
+          try {
+            const replacementSessionContext = await _loadSessionContext(replacementSessionId);
+            if (replacementSessionContext) {
+              postCancelRefresh.replacement_session_version = replacementSessionContext.session_version ?? null;
+              postCancelRefresh.replacement_snapshot_run_id = trimStr(replacementSessionContext.snapshot_run_id || '') || postCancelRefresh.replacement_snapshot_run_id || null;
+              postCancelRefresh.replacement_session_signature = trimStr(replacementSessionContext.session_signature || '') || postCancelRefresh.replacement_session_signature || null;
+            }
+          } catch (replacementFetchError) {
+            postCancelRefresh.warnings.push({
+              code: 'REPLACEMENT_SESSION_FETCH_FAILED',
+              message: String(replacementFetchError?.message || replacementFetchError || 'Unknown replacement session fetch error')
+            });
+          }
+        } else {
+          postCancelRefresh.warnings.push({
+            code: 'REPLACEMENT_SESSION_OPEN_FAILED',
+            message: 'Replacement workbench session open did not return a valid session_id.'
+          });
+        }
+      } catch (sessionOpenError) {
+        postCancelRefresh.warnings.push({
+          code: 'REPLACEMENT_SESSION_OPEN_FAILED',
+          message: String(sessionOpenError?.message || sessionOpenError || 'Unknown replacement session open error')
+        });
+      }
+    }
+
+    const responsePayload = {
+      ...(payload && typeof payload === 'object' ? payload : {}),
+      cancel_flow: _buildCancelFlow(payload),
+      session_discard: sessionDiscardResult,
+      post_cancel_refresh: postCancelRefresh
+    };
+
+    return withCORS(env, req, ok(responsePayload));
+  } catch (e) {
+    const dbPayload = _extractDbRaisedJson(e);
+    if (
+      dbPayload &&
+      typeof dbPayload === 'object' &&
+      ['USE_PAYMENT_CORRECTION_FLOW', 'CORRECTION_ONLY_REQUIRED', 'PAYMENT_ALREADY_COMMITTED', 'EXTERNAL_CANCEL_CONFIRMATION_REQUIRED', 'BATCH_NOT_CANCELLABLE']
+        .includes(String(dbPayload.code || dbPayload.error_code || '').trim().toUpperCase())
+    ) {
+      return _buildConflictResponse(dbPayload);
+    }
+
+    const rawErrorText = String(e?.message || e || '').trim();
+    if (rawErrorText.toUpperCase().includes('USE_PAYMENT_CORRECTION_FLOW')) {
+      return _buildConflictResponse({
+        code: 'USE_PAYMENT_CORRECTION_FLOW',
+        message: 'This batch has bank/payment evidence. Open the Payment issue panel to review it safely.',
+        raw_error: rawErrorText
+      });
+    }
+
+    return withCORS(env, req, serverError(String(e?.message || e)));
+  }
+}
+
+
+
+
+function buildBankingPayOperationPublicPayload(operationRow, options = {}) {
+  const unwrapRow = (value) => {
+    let row = value;
+    try {
+      if (Array.isArray(row) && row.length === 1 && row[0] && typeof row[0] === 'object') row = row[0];
+      if (row && typeof row === 'object' && Object.prototype.hasOwnProperty.call(row, 'banking_pay_operation_get')) row = row.banking_pay_operation_get;
+      if (row && typeof row === 'object' && Object.prototype.hasOwnProperty.call(row, 'banking_pay_operation_start')) row = row.banking_pay_operation_start;
+      if (row && typeof row === 'object' && Object.prototype.hasOwnProperty.call(row, 'banking_pay_operation_save_progress')) row = row.banking_pay_operation_save_progress;
+      if (row && typeof row === 'object' && Object.prototype.hasOwnProperty.call(row, 'banking_pay_operation_finish')) row = row.banking_pay_operation_finish;
+      if (Array.isArray(row) && row.length === 1 && row[0] && typeof row[0] === 'object') row = row[0];
+    } catch {}
+    return (row && typeof row === 'object' && !Array.isArray(row)) ? row : {};
+  };
+
+  const asPlainObject = (value) => {
+    if (value && typeof value === 'object' && !Array.isArray(value)) return value;
+    if (typeof value === 'string') {
+      const text = value.trim();
+      if (!text) return {};
+      try {
+        const parsed = JSON.parse(text);
+        return (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) ? parsed : {};
+      } catch {}
+    }
+    return {};
+  };
+
+  const row = unwrapRow(operationRow);
+  const progress = asPlainObject(row.progress_json);
+  const status = String(row.status || progress.status || '').trim().toUpperCase() || 'UNKNOWN';
+  const phase = String(row.phase || progress.phase || '').trim().toUpperCase() || 'UNKNOWN';
+  const operationType = String(row.operation_type || progress.operation_type || '').trim().toUpperCase() || 'UNKNOWN';
+  const terminalStatuses = new Set(['COMPLETE', 'FAILED', 'CANCELLED', 'REVIEW_REQUIRED']);
+  const terminal = terminalStatuses.has(status);
+
+  const phaseLabels = {
+    INITIALISE: 'Starting operation',
+    VALIDATE_SESSION: 'Checking selected payment rows',
+    SYNC_SELECTED_ROWS: 'Saving selected payment rows',
+    WAIT_FOR_PREVIEW_READY: 'Waiting for payment preview',
+    DRAIN_TSFIN: 'Preparing timesheet financials',
+    ENSURE_PAYEE_READINESS: 'Checking payee readiness',
+    SEED_CANDIDATE_SCOPE: 'Calculating candidate payrun scope',
+    SEED_ALLOCATION_ROWS: 'Calculating deductions and recoveries',
+    CREATE_BATCH_SHELLS: 'Creating draft batch',
+    SEED_DRAFT_CHUNKS: 'Preparing draft chunks',
+    INSERT_CANDIDATES: 'Adding candidates',
+    INSERT_ITEMS: 'Adding payment items',
+    APPLY_FINANCE_ADJUSTMENTS: 'Applying finance adjustments',
+    FINALISE_RESERVATIONS: 'Finalising reservations',
+    POPULATE_CANDIDATE_SUMMARIES: 'Refreshing candidate summaries',
+    CREATE_TIMESHEET_SNAPSHOTS: 'Creating timesheet snapshots',
+    BUILD_ITEM_BREAKDOWNS: 'Building payment breakdowns',
+    ASSERT_INTEGRITY: 'Checking draft integrity',
+    POST_CREATE_REFRESH: 'Refreshing payment preview',
+    VALIDATE_BATCH: 'Checking payment batch',
+    VALIDATE_AUTHORISER: 'Verifying authorisation',
+    VALIDATE_REAUTH: 'Verifying payment approval',
+    VALIDATE_FRESHNESS: 'Checking payment freshness',
+    PREPARE_TRANSFER_SCOPE: 'Preparing transfer groups',
+    SEED_TRANSFER_CHUNKS: 'Preparing transfer chunks',
+    PREPARE_TRANSFER_CHUNKS: 'Preparing bank transfers',
+    PREPARE_BATCH: 'Checking payment blockers',
+    START_AUTHORISATION: 'Starting payment authorisation',
+    WAIT_FOR_AUTHORISATION: 'Waiting for payment authorisation',
+    SCHEDULE_OR_SUBMIT: 'Preparing payment submission',
+    SUBMIT_PROVIDER_TRANSFERS: 'Submitting transfers to the bank',
+    APPLY_RAIL_UPDATES: 'Confirming bank submission state',
+    QUEUE_REMITTANCES: 'Queueing remittances',
+    VALIDATE_BATCH_REMITTANCE: 'Checking remittance batch',
+    SEED_REMITTANCE_SCOPE: 'Preparing remittance recipients',
+    QUEUE_REMITTANCE_CHUNKS: 'Queueing remittances',
+    QUEUE_PAYOUT_NOTICE_CHUNKS: 'Queueing payout notices',
+    SEED_SETTLEMENT_SCOPE: 'Preparing settlement items',
+    APPLY_SETTLEMENT_CHUNKS: 'Finalising settlement',
+    COMPLETE: 'Operation complete'
+  };
+
+  const defaultTitles = {
+    DRAFT_CREATE: 'Creating payment draft',
+    PAYMENT_EXECUTE: 'Processing payment',
+    PAYMENT_RETRY_BLOCKED_FUNDS: 'Retrying blocked payment',
+    PAYMENT_SETTLEMENT: 'Finalising payment settlement',
+    REMITTANCE_QUEUE: 'Queueing remittances',
+    PREVIEW_REFRESH: 'Refreshing payment preview'
+  };
+
+  const totalUnits = Number.isFinite(Number(row.total_units)) ? Math.max(0, Math.trunc(Number(row.total_units))) : 0;
+  const completedUnits = Number.isFinite(Number(row.completed_units)) ? Math.max(0, Math.trunc(Number(row.completed_units))) : 0;
+  const failedUnits = Number.isFinite(Number(row.failed_units)) ? Math.max(0, Math.trunc(Number(row.failed_units))) : 0;
+  const currentChunkIndex = Number.isFinite(Number(row.current_chunk_index)) ? Math.max(0, Math.trunc(Number(row.current_chunk_index))) : 0;
+  const chunkCount = Number.isFinite(Number(row.chunk_count)) ? Math.max(0, Math.trunc(Number(row.chunk_count))) : 0;
+  const percent = totalUnits > 0 ? Math.max(0, Math.min(100, Math.round((completedUnits / totalUnits) * 100))) : (terminal && status === 'COMPLETE' ? 100 : 0);
+
+  const providerSubmissionStarted = [
+    'SUBMIT_PROVIDER_TRANSFERS',
+    'APPLY_RAIL_UPDATES',
+    'QUEUE_REMITTANCES',
+    'COMPLETE'
+  ].includes(phase);
+
+  const resultObject = asPlainObject(row.result_json);
+  const resultJson = Object.keys(resultObject).length ? resultObject : null;
+  const errorObject = asPlainObject(row.error_json);
+  const errorJson = Object.keys(errorObject).length ? errorObject : null;
+
+  const providerBool = (...values) => {
+    for (const value of values) {
+      if (value === true) return true;
+      if (value === false) return false;
+      const text = String(value == null ? '' : value).trim().toLowerCase();
+      if (['true', 't', '1', 'yes', 'y', 'on'].includes(text)) return true;
+      if (['false', 'f', '0', 'no', 'n', 'off'].includes(text)) return false;
+    }
+    return undefined;
+  };
+
+  const providerText = (...values) => {
+    for (const value of values) {
+      const text = String(value == null ? '' : value).trim();
+      if (text) return text;
+    }
+    return undefined;
+  };
+
+  const providerArray = (...values) => {
+    const out = [];
+    for (const value of values) {
+      const list = Array.isArray(value) ? value : (value == null ? [] : [value]);
+      for (const item of list) {
+        const text = String(item == null ? '' : item).trim();
+        if (text && !out.includes(text)) out.push(text);
+      }
+    }
+    return out.length ? out : undefined;
+  };
+
+  const providerStrictExternalEvidencePresentForDiagnostic = (sourceValue, sanitizedValue = {}) => {
+    const localRefs = new Set();
+    const addLocal = (value) => {
+      const text = String(value == null ? '' : value).trim();
+      if (text) localRefs.add(text.toLowerCase());
+    };
+    const collectObject = (value) => (value && typeof value === 'object' && !Array.isArray(value)) ? value : {};
+    const source = collectObject(sourceValue);
+    const sanitized = collectObject(sanitizedValue);
+    const nestedObjects = [
+      source,
+      sanitized,
+      collectObject(source.rail_meta_json || source.railMetaJson),
+      collectObject(source.raw_payload || source.rawPayload),
+      collectObject(source.provider_submit_diagnostic || source.providerSubmitDiagnostic),
+      collectObject(sanitized.rail_meta_json || sanitized.railMetaJson),
+      collectObject(sanitized.raw_payload || sanitized.rawPayload),
+      collectObject(sanitized.provider_submit_diagnostic || sanitized.providerSubmitDiagnostic)
+    ];
+    const localKeys = [
+      'id', 'operation_id', 'operationId', 'chunk_id', 'chunkId', 'transfer_id', 'transferId',
+      'pay_bank_transfer_id', 'payBankTransferId', 'transfer_scope_id', 'transferScopeId',
+      'scope_id', 'scopeId', 'auth_request_id', 'authRequestId', 'pay_batch_id', 'payBatchId',
+      'batch_id', 'batchId', 'request_id', 'requestId', 'idempotency_key', 'idempotencyKey',
+      'local_provider_request_id', 'localProviderRequestId', 'provider_request_id', 'providerRequestId',
+      'reference', 'referenceId', 'local_reference', 'localReference', 'provider_request_reference', 'providerRequestReference',
+      'payment_reference', 'paymentReference', 'bulk_reference', 'bulkReference', 'correlation_id', 'correlationId'
+    ];
+    for (const obj of nestedObjects) {
+      for (const key of localKeys) addLocal(obj[key]);
+    }
+    const externalKeys = [
+      'rail_tx_id', 'railTxId', 'provider_transaction_id', 'providerTransactionId',
+      'provider_payment_id', 'providerPaymentId', 'provider_event_id', 'providerEventId',
+      'provider_reference', 'providerReference', 'provider_submission_id', 'providerSubmissionId',
+      'submission_id', 'submissionId', 'rail_submission_id', 'railSubmissionId',
+      'external_payment_id', 'externalPaymentId', 'revolut_payment_id', 'revolutPaymentId',
+      'provider_transfer_id', 'providerTransferId', 'external_transfer_id', 'externalTransferId',
+      'external_reference', 'externalReference', 'bank_reference', 'bankReference',
+      'transaction_id', 'transactionId', 'payment_id', 'paymentId'
+    ];
+    for (const obj of nestedObjects) {
+      for (const key of externalKeys) {
+        const text = String(obj[key] == null ? '' : obj[key]).trim();
+        if (!text) continue;
+        if (localRefs.has(text.toLowerCase())) continue;
+        return true;
+      }
+    }
+    return false;
+  };
+
+  const sanitizeProviderSubmitDiagnostic = (diagnostic) => {
+    const source = asPlainObject(diagnostic);
+    if (!Object.keys(source).length) return {};
+    const out = {};
+    const copyText = (outKey, ...keys) => {
+      const value = providerText(...keys.map((key) => source[key]));
+      if (value !== undefined) out[outKey] = value;
+    };
+    const copyBool = (outKey, ...keys) => {
+      const value = providerBool(...keys.map((key) => source[key]));
+      if (value !== undefined) out[outKey] = value;
+    };
+    const copyNumber = (outKey, ...keys) => {
+      for (const key of keys) {
+        const value = source[key];
+        if (Number.isFinite(Number(value))) {
+          out[outKey] = Number(value);
+          return;
+        }
+      }
+    };
+    const copyArray = (outKey, ...keys) => {
+      const value = providerArray(...keys.map((key) => source[key]));
+      if (value !== undefined) out[outKey] = value;
+    };
+
+    copyNumber('diagnostic_version', 'diagnostic_version', 'diagnosticVersion');
+    copyText('generated_at_utc', 'generated_at_utc', 'generatedAtUtc');
+    copyText('review_reason_code', 'review_reason_code', 'reviewReasonCode', 'provider_submit_review_reason_code', 'providerSubmitReviewReasonCode');
+    copyText('provider_submission_status', 'provider_submission_status', 'providerSubmissionStatus', 'outcome_code', 'outcomeCode');
+    copyText('provider_call_stage', 'provider_call_stage', 'providerCallStage');
+    copyBool('provider_submission_attempted', 'provider_submission_attempted', 'providerSubmissionAttempted', 'provider_called', 'providerCalled');
+    copyBool('provider_called', 'provider_called', 'providerCalled');
+    copyBool('provider_request_sent', 'provider_request_sent', 'providerRequestSent');
+    copyBool('provider_request_sent_confirmed', 'provider_request_sent_confirmed', 'providerRequestSentConfirmed');
+    copyText('provider_request_dispatched_at_utc', 'provider_request_dispatched_at_utc', 'providerRequestDispatchedAtUtc', 'request_sent_at_utc', 'requestSentAtUtc');
+    copyBool('provider_response_received', 'provider_response_received', 'providerResponseReceived');
+    copyBool('provider_response_present', 'provider_response_present', 'providerResponsePresent');
+    copyBool('provider_submission_accepted', 'provider_submission_accepted', 'providerSubmissionAccepted', 'provider_accepted', 'providerAccepted');
+    copyBool('provider_submission_rejected', 'provider_submission_rejected', 'providerSubmissionRejected', 'provider_rejected', 'providerRejected');
+    copyBool('provider_submission_unknown', 'provider_submission_unknown', 'providerSubmissionUnknown', 'provider_unknown', 'providerUnknown');
+    copyBool('provider_external_evidence_present', 'provider_external_evidence_present', 'providerExternalEvidencePresent');
+    copyBool('provider_acceptance_evidence_present', 'provider_acceptance_evidence_present', 'providerAcceptanceEvidencePresent');
+    copyBool('stale_submit_chunk', 'stale_submit_chunk', 'staleSubmitChunk');
+    copyBool('unfinalised_submit_chunk', 'unfinalised_submit_chunk', 'unfinalisedSubmitChunk');
+    copyBool('chunk_lock_expired', 'chunk_lock_expired', 'chunkLockExpired');
+    copyBool('manual_resolution_required', 'manual_resolution_required', 'manualResolutionRequired');
+    copyBool('safe_retry_available', 'safe_retry_available', 'safeRetryAvailable');
+    copyBool('automatic_retry_blocked', 'automatic_retry_blocked', 'automaticRetryBlocked');
+    copyText('retry_blocked_reason', 'retry_blocked_reason', 'retryBlockedReason');
+    copyText('recommended_action', 'recommended_action', 'recommendedAction');
+    copyText('pay_batch_id', 'pay_batch_id', 'payBatchId');
+    copyText('operation_id', 'operation_id', 'operationId');
+    copyText('chunk_id', 'chunk_id', 'chunkId');
+    copyArray('chunk_ids', 'chunk_ids', 'chunkIds');
+    copyText('transfer_id', 'transfer_id', 'transferId', 'pay_bank_transfer_id', 'payBankTransferId');
+    copyArray('transfer_ids', 'transfer_ids', 'transferIds', 'pay_bank_transfer_ids', 'payBankTransferIds');
+    copyText('transfer_scope_id', 'transfer_scope_id', 'transferScopeId', 'scope_id', 'scopeId');
+    copyArray('transfer_scope_ids', 'transfer_scope_ids', 'transferScopeIds', 'scope_ids', 'scopeIds');
+    copyText('auth_request_id', 'auth_request_id', 'authRequestId');
+    copyArray('auth_request_ids', 'auth_request_ids', 'authRequestIds');
+    copyText('rail_provider', 'rail_provider', 'railProvider');
+    copyText('rail_env', 'rail_env', 'railEnv');
+    copyText('rail_tx_id', 'rail_tx_id', 'railTxId');
+    copyText('rail_state', 'rail_state', 'railState');
+    copyText('provider_transaction_id', 'provider_transaction_id', 'providerTransactionId', 'provider_payment_id', 'providerPaymentId', 'transaction_id', 'transactionId', 'payment_id', 'paymentId');
+    copyText('provider_reference', 'provider_reference', 'providerReference', 'external_reference', 'externalReference', 'bank_reference', 'bankReference');
+    copyText('provider_state', 'provider_state', 'providerState');
+    copyText('request_id', 'request_id', 'requestId');
+    copyText('idempotency_key', 'idempotency_key', 'idempotencyKey');
+    copyNumber('provider_http_status', 'provider_http_status', 'providerHttpStatus');
+    copyText('provider_error_code', 'provider_error_code', 'providerErrorCode');
+    copyText('provider_error_message_redacted', 'provider_error_message_redacted', 'providerErrorMessageRedacted');
+    copyText('response_received_at_utc', 'response_received_at_utc', 'responseReceivedAtUtc');
+
+    const statusUpper = String(out.provider_submission_status || '').trim().toUpperCase();
+    const rejectedOrUnusable = [
+      'PROVIDER_SUBMISSION_REJECTED',
+      'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME',
+      'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK',
+      'PROVIDER_SUBMISSION_MALFORMED_RESPONSE',
+      'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID',
+      'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL'
+    ].includes(statusUpper);
+    const hasExternalEvidence = providerStrictExternalEvidencePresentForDiagnostic(source, out) === true;
+    out.provider_external_evidence_present = hasExternalEvidence;
+    out.provider_acceptance_evidence_present = statusUpper === 'PROVIDER_SUBMISSION_ACCEPTED' && hasExternalEvidence === true && rejectedOrUnusable !== true;
+    out.provider_submission_accepted = out.provider_acceptance_evidence_present === true;
+    if (out.provider_acceptance_evidence_present !== true) out.rail_tx_id = undefined;
+    if (hasExternalEvidence !== true) {
+      out.provider_transaction_id = undefined;
+      out.provider_reference = undefined;
+    }
+    return out;
+  };
+
+  const providerSubmitStatusMessage = (statusValue, acceptanceEvidencePresent = false) => {
+    const statusTextValue = String(statusValue || '').trim().toUpperCase();
+    if (statusTextValue === 'PROVIDER_SUBMISSION_ACCEPTED' && acceptanceEvidencePresent !== true) {
+      return 'Provider response/status was recorded, but no usable external provider transaction/reference was stored. Manual reconciliation is required before retry.';
+    }
+    const messages = {
+      PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK: 'Provider submission outcome unknown. The submit chunk became stale before any provider response, transfer event, rail transaction ID, or rail state was recorded. Check the bank account before retry.',
+      UNKNOWN_PROVIDER_SUBMISSION_OUTCOME: 'Provider request may have been sent, but no usable provider response was recorded. Check the bank account before retry.',
+      PROVIDER_SUBMISSION_MALFORMED_RESPONSE: 'Provider returned an unusable response. Manual reconciliation is required before retry.',
+      PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID: 'Provider response/status was recorded, but no usable external provider transaction/reference was stored. Manual reconciliation is required before retry.',
+      PROVIDER_SUBMISSION_REJECTED: 'Provider rejected the payment submission. Review the provider error before retry.',
+      PROVIDER_SUBMISSION_BLOCKED_PRE_CALL: 'Provider was not called. Submission failed before the provider payment request was sent.',
+      NO_PROVIDER_SUBMISSION_ATTEMPTED: 'Provider submission was not attempted.',
+      CLAIMED_NOT_PROVIDER_CALLED_YET: 'Provider submission was not attempted. CloudTMS claimed the submit chunk but had not yet called the provider.',
+      PROVIDER_SUBMISSION_ACCEPTED: 'Provider acceptance evidence exists. Do not retry unless reconciled.'
+    };
+    return messages[statusTextValue] || '';
+  };
+
+  const extractProviderSubmitDiagnosticFromOperation = (...extraSources) => {
+    const sources = [
+      options.providerSubmitDiagnostic,
+      options.provider_submit_diagnostic,
+      ...extraSources,
+      resultObject.provider_submit_diagnostic,
+      resultObject.providerSubmitDiagnostic,
+      errorObject.provider_submit_diagnostic,
+      errorObject.providerSubmitDiagnostic,
+      progress.provider_submit_diagnostic,
+      progress.providerSubmitDiagnostic,
+      asPlainObject(resultObject.cleanup_summary).provider_submit_diagnostic,
+      asPlainObject(resultObject.cleanup_summary).providerSubmitDiagnostic,
+      asPlainObject(errorObject.cleanup_summary).provider_submit_diagnostic,
+      asPlainObject(errorObject.cleanup_summary).providerSubmitDiagnostic
+    ];
+    for (const source of sources) {
+      const diagnostic = sanitizeProviderSubmitDiagnostic(source);
+      if (Object.keys(diagnostic).length) return diagnostic;
+    }
+    return {};
+  };
+
+  const providerSubmitDiagnostic = extractProviderSubmitDiagnosticFromOperation();
+  const providerSubmissionStatus = providerSubmitDiagnostic.provider_submission_status || '';
+  const providerSubmitReviewReasonCode = providerSubmitDiagnostic.review_reason_code || '';
+  const providerSubmitRecommendedAction = providerSubmitDiagnostic.recommended_action || '';
+  const providerSubmitManualResolutionRequired = providerSubmitDiagnostic.manual_resolution_required === true;
+  const providerSubmitSafeRetryAvailable = providerSubmitDiagnostic.safe_retry_available === true;
+  const providerSubmitMessage = providerSubmitStatusMessage(providerSubmissionStatus, providerSubmitDiagnostic.provider_acceptance_evidence_present === true);
+  const collectOperationalObjects = (...values) => {
+    const out = [];
+    const queue = [...values];
+    const seen = new Set();
+    const nestedKeys = [
+      'result', 'error', 'details', 'payload', 'data', 'response', 'progress',
+      'provider_submission', 'funds_check_json', 'fundsCheckJson', 'funds_check', 'fundsCheck',
+      'last_funds_check_json', 'lastFundsCheckJson', 'blocked_funds', 'blockedFunds',
+      'blocked_funds_rows', 'blockedFundsRows', 'blocked_funds_state', 'blockedFundsState',
+      'last_chunk_result', 'batch_summary', 'summary', 'friendly_error'
+    ];
+    while (queue.length) {
+      const value = queue.shift();
+      if (value == null) continue;
+      if (Array.isArray(value)) {
+        for (const item of value) queue.push(item);
+        continue;
+      }
+      if (typeof value === 'string') {
+        const text = value.trim();
+        if (!text) continue;
+        try {
+          const parsed = JSON.parse(text);
+          if (parsed && typeof parsed === 'object') queue.push(parsed);
+        } catch {}
+        continue;
+      }
+      if (typeof value !== 'object') continue;
+      if (seen.has(value)) continue;
+      seen.add(value);
+      out.push(value);
+      for (const key of nestedKeys) {
+        if (Object.prototype.hasOwnProperty.call(value, key)) queue.push(value[key]);
+      }
+    }
+    return out;
+  };
+
+  const blockedFundsSources = collectOperationalObjects(resultObject, errorObject, progress, row);
+  const safeTrimOperationalText = (value) => String(value == null ? '' : value).trim();
+  const safeUpperOperationalText = (value) => safeTrimOperationalText(value).toUpperCase();
+  const sourceHasFalseSufficientFunds = (source) => {
+    if (!source || typeof source !== 'object' || Array.isArray(source)) return false;
+    if (source.sufficient === false) return true;
+    const fundsCheckJson = asPlainObject(source.funds_check_json || source.fundsCheckJson || source.funds_check || source.fundsCheck || source.last_funds_check_json || source.lastFundsCheckJson);
+    return fundsCheckJson.sufficient === false;
+  };
+  const sourceHasBlockedFundsIdentity = (source) => {
+    if (!source || typeof source !== 'object' || Array.isArray(source)) return false;
+    if (source.blocked_funds === true || source.blockedFunds === true) return true;
+    if (Array.isArray(source.blocked_funds) && source.blocked_funds.length > 0) return true;
+    if (Array.isArray(source.blockedFunds) && source.blockedFunds.length > 0) return true;
+    const code = safeUpperOperationalText(source.code || source.error_code || source.errorCode || source.business_code || source.businessCode || source.claim_blocker_code || source.claimBlockerCode);
+    const state = safeUpperOperationalText(source.status || source.post_execution_status || source.postExecutionStatus || source.provider_submission_status || source.providerSubmissionStatus);
+    return code === 'BLOCKED_FUNDS' || state === 'BLOCKED_FUNDS';
+  };
+  const hasBlockedFundsEvidence = blockedFundsSources.some((source) => sourceHasBlockedFundsIdentity(source) || sourceHasFalseSufficientFunds(source));
+  const blockedFundsNumeric = (...keys) => {
+    for (const source of blockedFundsSources) {
+      if (!source || typeof source !== 'object' || Array.isArray(source)) continue;
+      for (const key of keys) {
+        const value = source[key];
+        if (Number.isFinite(Number(value))) return Number(value);
+      }
+    }
+    return null;
+  };
+  const blockedFundsText = (...keys) => {
+    for (const source of blockedFundsSources) {
+      if (!source || typeof source !== 'object' || Array.isArray(source)) continue;
+      for (const key of keys) {
+        const value = safeTrimOperationalText(source[key]);
+        if (value && value.length <= 160) return value;
+      }
+    }
+    return null;
+  };
+  const blockedFundsObject = (...keys) => {
+    for (const source of blockedFundsSources) {
+      if (!source || typeof source !== 'object' || Array.isArray(source)) continue;
+      for (const key of keys) {
+        const value = asPlainObject(source[key]);
+        if (Object.keys(value).length) return value;
+      }
+    }
+    return {};
+  };
+  const blockedFundsDiagnostics = hasBlockedFundsEvidence ? {
+    required_gbp: blockedFundsNumeric('required_gbp', 'requiredGbp', 'required_amount', 'requiredAmount'),
+    available_gbp: blockedFundsNumeric('available_gbp', 'availableGbp', 'available_amount', 'availableAmount'),
+    funding_account_ref: blockedFundsText('funding_account_ref', 'fundingAccountRef'),
+    rail_provider: blockedFundsText('rail_provider', 'railProvider', 'provider'),
+    rail_env: blockedFundsText('rail_env', 'railEnv', 'provider_environment', 'providerEnvironment'),
+    funds_check_json: blockedFundsObject('funds_check_json', 'fundsCheckJson', 'funds_check', 'fundsCheck', 'last_funds_check_json', 'lastFundsCheckJson')
+  } : null;
+
+  const sanitizeTerminalOperationError = (value, fallbackCode = status, fallbackMessage = statusText) => {
+    const source = asPlainObject(value);
+    const safeTrimText = (raw) => String(raw == null ? '' : raw).trim();
+    const normaliseSafeCode = (raw) => {
+      let code = safeTrimText(raw).toUpperCase();
+      if (!code) return '';
+      code = code
+        .replace(/^ERROR[:\s]+/, '')
+        .replace(/^CODE[:\s]+/, '')
+        .replace(/[^A-Z0-9_]+/g, '_')
+        .replace(/^_+|_+$/g, '');
+      if (code === 'NO_PENDING_TRANSFERS') return 'NO_AUTHORISATION_READY_TRANSFERS';
+      if (code === 'PAY_EXECUTE_OPERATION_CLEANUP_FAILED_LOCAL_ARTIFACTS') return 'PAYMENT_EXECUTE_CLEANUP_FAILED';
+      if (/^P[0-9A-Z]{4}$/.test(code) || /^[0-9]{5}$/.test(code)) return '';
+      return code;
+    };
+    const looksTechnical = (raw) => {
+      const text = safeTrimText(raw);
+      if (!text) return false;
+      const upper = text.toUpperCase();
+      if (text.includes('{') || text.includes('}')) return true;
+      if (upper.includes('SQLSTATE') || upper.includes('SQL STATE')) return true;
+      if (upper.includes('RPC ') || upper.includes(' RPC') || upper.includes('RPC_')) return true;
+      if (upper.includes('PLPGSQL') || upper.includes('POSTGRES') || upper.includes('SUPABASE') || upper.includes('POSTGREST')) return true;
+      if (upper.includes('DUPLICATE KEY') || upper.includes('UNIQUE CONSTRAINT') || upper.includes('FOREIGN KEY')) return true;
+      if (upper.includes('CONSTRAINT') || upper.includes('STACK TRACE') || upper.includes('TRACEBACK')) return true;
+      if (upper.includes('PUBLIC.') || upper.includes('PAY_BANK_TRANSFERS') || upper.includes('BANKING_PAY_OPERATION_TRANSFER_SCOPE')) return true;
+      if (upper.includes('P0001') || /\b[0-9]{5}\b/.test(upper)) return true;
+      if (upper.includes('RAW_PAYLOAD') || upper.includes('PROVIDER PAYLOAD')) return true;
+      return false;
+    };
+    const messageByCode = {
+      NO_AUTHORISATION_READY_TRANSFERS: 'The bank transfer was prepared but is not currently in a safe authorisation-ready state. Refresh the batch and try again.',
+      TRANSFER_SCOPE_RETRY_BLOCKER_DETECTED: 'A previous payment attempt left local transfer artefacts attached to this batch. Review the payment state before retrying.',
+      TRANSFER_SCOPE_GROUP_HELD_BY_ACTIVE_OR_UNSAFE_OPERATION: 'A previous payment attempt still owns local transfer artefacts for this batch. Review the payment state before retrying.',
+      EXECUTION_RETRY_BLOCKED_BY_PROVIDER_EVIDENCE: 'This payment may already have reached the banking provider. Review or reconcile the transfer before retrying.',
+      PAYMENT_EXECUTE_CLEANUP_FAILED: 'The payment failed and some local execution artefacts could not be cleaned up automatically.',
+      BLOCKED_FUNDS: 'The selected funding account does not have enough available balance to make this payment. No bank submission was attempted.',
+      BANK_TRANSFER_PROVIDER_REVIEW_REQUIRED: 'This payment may already have reached the banking provider. Review or reconcile the transfer before retrying.',
+      AUTH_REQUEST_HELD_BY_PREVIOUS_OPERATION: 'A previous authorisation request is still attached to this batch. Review or reconcile that request before retrying.',
+      NO_SAFE_LOCAL_CLEANUP_AVAILABLE: 'The payment retry needs review because CloudTMS could not confirm that local execution artefacts are safe to clean.',
+      AUTHORISED_TRANSFER_NOT_PROVIDER_SUBMIT_READY: 'The payment was authorised, but CloudTMS could not find a bank transfer that was safe to submit. Refresh the batch and retry if CloudTMS says retry is safe; otherwise review the transfer.',
+      PROVIDER_SUBMIT_NO_ELIGIBLE_TRANSFERS: 'The payment was authorised, but CloudTMS could not find a bank transfer that was safe to submit. Refresh the batch and retry if CloudTMS says retry is safe; otherwise review the transfer.',
+      PAYMENT_EXECUTE_OPERATION_START_FAILED: 'CloudTMS could not start the payment execution operation. No bank submission was attempted. Refresh the batch and try again.',
+      PAYMENT_EXECUTE_OPERATION_CONFIG_FAILED: 'CloudTMS could not start the payment execution operation. No bank submission was attempted. Refresh the batch and try again.',
+      PAYMENT_OPERATION_START_INVALID_INPUT: 'CloudTMS could not start the payment execution operation. No bank submission was attempted. Refresh the batch and try again.',
+      PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK: providerSubmitStatusMessage('PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK'),
+      UNKNOWN_PROVIDER_SUBMISSION_OUTCOME: providerSubmitStatusMessage('UNKNOWN_PROVIDER_SUBMISSION_OUTCOME'),
+      PROVIDER_SUBMISSION_MALFORMED_RESPONSE: providerSubmitStatusMessage('PROVIDER_SUBMISSION_MALFORMED_RESPONSE'),
+      PROVIDER_SUBMISSION_REJECTED: providerSubmitStatusMessage('PROVIDER_SUBMISSION_REJECTED'),
+      PROVIDER_SUBMISSION_BLOCKED_PRE_CALL: providerSubmitStatusMessage('PROVIDER_SUBMISSION_BLOCKED_PRE_CALL'),
+      NO_PROVIDER_SUBMISSION_ATTEMPTED: providerSubmitStatusMessage('NO_PROVIDER_SUBMISSION_ATTEMPTED'),
+      PROVIDER_SUBMISSION_ACCEPTED: providerSubmitStatusMessage('PROVIDER_SUBMISSION_ACCEPTED', providerSubmitDiagnostic.provider_acceptance_evidence_present === true)
+    };
+    const code = normaliseSafeCode(source.code || source.error_code || source.errorCode || fallbackCode) || normaliseSafeCode(fallbackCode) || 'BANKING_OPERATION_FAILED';
+    const sourceMessage = safeTrimText(source.message || source.user_message || source.error || fallbackMessage);
+    const message = looksTechnical(sourceMessage) ? (messageByCode[code] || 'This Banking operation needs review before it can continue.') : (sourceMessage || messageByCode[code] || 'This Banking operation needs review before it can continue.');
+    const safeError = {
+      code,
+      message,
+      phase: safeTrimText(source.phase || phase) || phase
+    };
+    for (const key of [
+      'review_required',
+      'retry_blocked',
+      'cleanup_retry_safe',
+      'safe_retry_available'
+    ]) {
+      if (typeof source[key] === 'boolean') safeError[key] = source[key];
+    }
+    if (safeTrimText(source.cleanup_status)) safeError.cleanup_status = safeTrimText(source.cleanup_status).toUpperCase();
+    const cleanupSource = asPlainObject(source.cleanup_summary);
+    const cleanupSummary = {};
+    for (const key of [
+      'scope_rows_deleted',
+      'transfer_rows_deleted',
+      'item_links_cleared',
+      'bank_references_cleared',
+      'chunks_marked_failed',
+      'chunks_marked_skipped',
+      'locks_released',
+      'provider_evidence_count',
+      'unsafe_transfer_count',
+      'unsafe_scope_count',
+      'provider_submit_ready_count',
+      'provider_submit_ready_transfer_count',
+      'authorised_without_provider_submission_count',
+      'authorised_but_not_submit_ready_count',
+      'same_operation_authorised_auth_count'
+    ]) {
+      const rawValue = Object.prototype.hasOwnProperty.call(cleanupSource, key) ? cleanupSource[key] : source[key];
+      if (Number.isFinite(Number(rawValue))) {
+        const numericValue = Math.max(0, Math.trunc(Number(rawValue)));
+        safeError[key] = numericValue;
+        cleanupSummary[key] = numericValue;
+      }
+    }
+    for (const key of [
+      'cleanup_status',
+      'cleanup_retry_safe',
+      'safe_retry_available',
+      'retry_blocked',
+      'review_required'
+    ]) {
+      if (Object.prototype.hasOwnProperty.call(cleanupSource, key)) {
+        const rawValue = cleanupSource[key];
+        if (typeof rawValue === 'boolean') cleanupSummary[key] = rawValue;
+        else if (safeTrimText(rawValue)) cleanupSummary[key] = safeTrimText(rawValue);
+      }
+    }
+    for (const safeTextKey of ['auth_request_state', 'auth_request_unsafe_reason', 'classification_source']) {
+      const rawValue = source[safeTextKey];
+      const safeValue = safeTrimText(rawValue);
+      if (safeValue && !looksTechnical(safeValue) && safeValue.length <= 160) safeError[safeTextKey] = safeTextKey === 'auth_request_state' ? safeValue.toUpperCase() : safeValue;
+    }
+    if (Object.keys(cleanupSummary).length) safeError.cleanup_summary = cleanupSummary;
+    return safeError;
+  };
+
+  let title = String(progress.title || options.title || defaultTitles[operationType] || 'Banking operation').trim();
+  let statusText = String(
+    progress.status_text
+    || progress.message
+    || options.status_text
+    || phaseLabels[phase]
+    || phase
+  ).trim();
+
+  if (hasBlockedFundsEvidence) {
+    title = 'Payment blocked — insufficient funds';
+    statusText = 'The selected funding account does not have enough available balance to make this payment.';
+  }
+
+  if (status === 'REVIEW_REQUIRED' && providerSubmitMessage) {
+    title = 'Provider submission needs review';
+    statusText = providerSubmitMessage;
+  }
+
+  const nestedResultObject = asPlainObject(resultObject.result);
+  const progressLastChunkResult = asPlainObject(progress.last_chunk_result);
+  const resultSources = [resultObject, nestedResultObject, progressLastChunkResult, progress].filter((source) => source && typeof source === 'object' && !Array.isArray(source));
+  const trimText = (value) => String(value == null ? '' : value).trim();
+  const firstText = (...values) => {
+    for (const value of values) {
+      const text = trimText(value);
+      if (text) return text;
+    }
+    return '';
+  };
+  const addUnique = (target, value) => {
+    const text = trimText(value);
+    if (!text || target.includes(text)) return;
+    target.push(text);
+  };
+  const addArrayValues = (target, value) => {
+    if (!Array.isArray(value)) return;
+    for (const item of value) addUnique(target, item);
+  };
+  const pickPayChannel = (entry) => {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return '';
+    return firstText(
+      entry.pay_channel,
+      entry.payChannel,
+      entry.channel,
+      entry.batch_kind,
+      entry.batchKind,
+      entry.scope && entry.scope.pay_channel,
+      entry.scope && entry.scope.batch_kind,
+      entry.result && entry.result.pay_channel,
+      entry.result && entry.result.batch_kind,
+      entry.batch && entry.batch.pay_channel,
+      entry.batch && entry.batch.batch_kind
+    );
+  };
+  const pickPayBatchId = (entry) => {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return '';
+    return firstText(
+      entry.pay_batch_id,
+      entry.payBatchId,
+      entry.primary_pay_batch_id,
+      entry.primaryBatchId,
+      entry.id,
+      entry.result && entry.result.pay_batch_id,
+      entry.result && entry.result.payBatchId,
+      entry.result && entry.result.primary_pay_batch_id,
+      entry.batch && entry.batch.pay_batch_id,
+      entry.batch && entry.batch.id
+    );
+  };
+  const addCreatedBatch = (target, seen, entry, fallbackPayChannel = null) => {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return;
+    const payBatchId = pickPayBatchId(entry);
+    if (!payBatchId || seen.has(payBatchId)) return;
+    seen.add(payBatchId);
+    target.push({
+      ...entry,
+      pay_batch_id: payBatchId,
+      pay_channel: firstText(pickPayChannel(entry), fallbackPayChannel) || null
+    });
+  };
+  const normaliseCreatedBatches = (...values) => {
+    const out = [];
+    const seen = new Set();
+    for (const value of values) {
+      if (!Array.isArray(value)) continue;
+      for (const entry of value) addCreatedBatch(out, seen, entry);
+    }
+    return out;
+  };
+
+  const createdBatches = normaliseCreatedBatches(
+    resultObject.created_batches,
+    resultObject.createdBatches,
+    resultObject.batch_shells,
+    resultObject.batchShells,
+    resultObject.results,
+    nestedResultObject.created_batches,
+    nestedResultObject.createdBatches,
+    nestedResultObject.batch_shells,
+    nestedResultObject.batchShells,
+    nestedResultObject.results,
+    progress.batch_shells,
+    progress.batchShells,
+    progressLastChunkResult.created_batches,
+    progressLastChunkResult.createdBatches,
+    progressLastChunkResult.batch_shells,
+    progressLastChunkResult.batchShells,
+    progressLastChunkResult.results
+  );
+  const payBatchIds = [];
+  const createdPayBatchIds = [];
+
+  addUnique(payBatchIds, row.pay_batch_id);
+  for (const source of resultSources) {
+    addUnique(payBatchIds, source.pay_batch_id);
+    addUnique(payBatchIds, source.primary_pay_batch_id);
+    addUnique(payBatchIds, source.primaryBatchId);
+    addUnique(payBatchIds, source.paye_pay_batch_id);
+    addUnique(payBatchIds, source.umbrella_pay_batch_id);
+    addArrayValues(payBatchIds, source.pay_batch_ids);
+    addArrayValues(payBatchIds, source.created_pay_batch_ids);
+    addArrayValues(payBatchIds, source.createdBatchIds);
+
+    if (operationType === 'DRAFT_CREATE') {
+      addArrayValues(createdPayBatchIds, source.created_pay_batch_ids);
+      addArrayValues(createdPayBatchIds, source.createdBatchIds);
+      addUnique(createdPayBatchIds, source.pay_batch_id);
+      addUnique(createdPayBatchIds, source.primary_pay_batch_id);
+      addUnique(createdPayBatchIds, source.primaryBatchId);
+      addUnique(createdPayBatchIds, source.paye_pay_batch_id);
+      addUnique(createdPayBatchIds, source.umbrella_pay_batch_id);
+    }
+  }
+
+  for (const createdBatch of createdBatches) {
+    addUnique(payBatchIds, createdBatch.pay_batch_id);
+    addUnique(createdPayBatchIds, createdBatch.pay_batch_id);
+  }
+
+  const derivedPayBatchId = firstText(row.pay_batch_id, resultObject.pay_batch_id, nestedResultObject.pay_batch_id, progress.pay_batch_id, payBatchIds[0]) || null;
+  const derivedPayePayBatchId = firstText(
+    resultObject.paye_pay_batch_id,
+    nestedResultObject.paye_pay_batch_id,
+    progress.paye_pay_batch_id,
+    createdBatches.find((batch) => String(batch.pay_channel || '').trim().toUpperCase() === 'PAYE')?.pay_batch_id
+  ) || null;
+  const derivedUmbrellaPayBatchId = firstText(
+    resultObject.umbrella_pay_batch_id,
+    nestedResultObject.umbrella_pay_batch_id,
+    progress.umbrella_pay_batch_id,
+    createdBatches.find((batch) => ['UMBRELLA', 'NON_PAYE', 'NONPAYE'].includes(String(batch.pay_channel || '').trim().toUpperCase()))?.pay_batch_id
+  ) || null;
+
+  if (operationType === 'DRAFT_CREATE' && !createdBatches.length) {
+    const fabricated = [];
+    const fabricatedSeen = new Set();
+    if (derivedPayePayBatchId) addCreatedBatch(fabricated, fabricatedSeen, { pay_batch_id: derivedPayePayBatchId, pay_channel: 'PAYE' }, 'PAYE');
+    if (derivedUmbrellaPayBatchId) addCreatedBatch(fabricated, fabricatedSeen, { pay_batch_id: derivedUmbrellaPayBatchId, pay_channel: 'UMBRELLA' }, 'UMBRELLA');
+    if (derivedPayBatchId) addCreatedBatch(fabricated, fabricatedSeen, { pay_batch_id: derivedPayBatchId, pay_channel: firstText(resultObject.pay_channel, nestedResultObject.pay_channel, progress.pay_channel, resultObject.batch_kind, nestedResultObject.batch_kind, progress.batch_kind) || null });
+    for (const fabricatedBatch of fabricated) {
+      createdBatches.push(fabricatedBatch);
+      addUnique(payBatchIds, fabricatedBatch.pay_batch_id);
+      addUnique(createdPayBatchIds, fabricatedBatch.pay_batch_id);
+    }
+  }
+
+  const payload = {
+    ok: status !== 'FAILED',
+    operation_id: String(row.operation_id || row.id || ''),
+    operation_type: operationType,
+    status,
+    phase,
+    phase_label: phaseLabels[phase] || phase,
+    title,
+    status_text: statusText,
+    total_units: totalUnits,
+    completed_units: completedUnits,
+    failed_units: failedUnits,
+    current_chunk_index: currentChunkIndex,
+    chunk_count: chunkCount,
+    percent,
+    can_advance: !terminal && ['QUEUED', 'RUNNING', 'WAITING'].includes(status),
+    can_cancel: !terminal && !providerSubmissionStarted,
+    terminal,
+    waiting: status === 'WAITING',
+    pay_batch_id: derivedPayBatchId,
+    pay_batch_ids: payBatchIds,
+    created_pay_batch_ids: operationType === 'DRAFT_CREATE' ? createdPayBatchIds : [],
+    paye_pay_batch_id: derivedPayePayBatchId,
+    umbrella_pay_batch_id: derivedUmbrellaPayBatchId,
+    created_batches: operationType === 'DRAFT_CREATE' ? createdBatches : [],
+    workbench_session_id: row.workbench_session_id ? String(row.workbench_session_id) : null,
+    root_operation_id: row.root_operation_id ? String(row.root_operation_id) : null,
+    idempotency_key: row.idempotency_key ? String(row.idempotency_key) : null,
+    created_at_utc: row.created_at_utc || null,
+    started_at_utc: row.started_at_utc || null,
+    updated_at_utc: row.updated_at_utc || null,
+    completed_at_utc: row.completed_at_utc || null,
+    failed_at_utc: row.failed_at_utc || null
+  };
+
+  if (Object.keys(providerSubmitDiagnostic).length) {
+    payload.provider_submit_diagnostic = providerSubmitDiagnostic;
+    payload.provider_submission_status = providerSubmissionStatus || null;
+    payload.review_reason_code = providerSubmitReviewReasonCode || null;
+    payload.manual_resolution_required = providerSubmitManualResolutionRequired;
+    payload.safe_retry_available = providerSubmitSafeRetryAvailable;
+    payload.recommended_action = providerSubmitRecommendedAction || null;
+    payload.provider_called = providerSubmitDiagnostic.provider_called === true;
+    payload.provider_request_sent = providerSubmitDiagnostic.provider_request_sent === true;
+    payload.provider_request_sent_confirmed = providerSubmitDiagnostic.provider_request_sent_confirmed === true;
+    payload.provider_request_dispatched_at_utc = providerSubmitDiagnostic.provider_request_dispatched_at_utc || null;
+    payload.provider_response_present = providerSubmitDiagnostic.provider_response_present === true;
+    payload.provider_external_evidence_present = providerSubmitDiagnostic.provider_external_evidence_present === true;
+    payload.provider_acceptance_evidence_present = providerSubmitDiagnostic.provider_acceptance_evidence_present === true;
+  }
+
+  if (terminal && status === 'COMPLETE') {
+    payload.result = resultJson || {};
+  } else if (terminal && status === 'REVIEW_REQUIRED') {
+    payload.result = resultJson || {};
+    payload.error = sanitizeTerminalOperationError(errorJson || { code: status, message: statusText }, status, statusText);
+  } else if (terminal) {
+    payload.result = resultJson || null;
+    payload.error = sanitizeTerminalOperationError(errorJson || { code: status, message: statusText }, status, statusText);
+  } else {
+    payload.result = null;
+    payload.error = null;
+  }
+
+  if (Object.keys(providerSubmitDiagnostic).length) {
+    if (payload.error && typeof payload.error === 'object') {
+      payload.error.provider_submit_diagnostic = providerSubmitDiagnostic;
+      payload.error.provider_submission_status = providerSubmissionStatus || null;
+      payload.error.review_reason_code = providerSubmitReviewReasonCode || null;
+      payload.error.manual_resolution_required = providerSubmitManualResolutionRequired;
+      payload.error.safe_retry_available = providerSubmitSafeRetryAvailable;
+      payload.error.recommended_action = providerSubmitRecommendedAction || null;
+      payload.error.provider_request_sent_confirmed = providerSubmitDiagnostic.provider_request_sent_confirmed === true;
+      payload.error.provider_request_dispatched_at_utc = providerSubmitDiagnostic.provider_request_dispatched_at_utc || null;
+      payload.error.provider_external_evidence_present = providerSubmitDiagnostic.provider_external_evidence_present === true;
+      payload.error.provider_acceptance_evidence_present = providerSubmitDiagnostic.provider_acceptance_evidence_present === true;
+      if (status === 'REVIEW_REQUIRED' && providerSubmitMessage) payload.error.message = providerSubmitMessage;
+    }
+    if (payload.result && typeof payload.result === 'object') {
+      payload.result.provider_submit_diagnostic = payload.result.provider_submit_diagnostic || providerSubmitDiagnostic;
+      payload.result.provider_submission_status = payload.result.provider_submission_status || providerSubmissionStatus || null;
+      payload.result.review_reason_code = payload.result.review_reason_code || providerSubmitReviewReasonCode || null;
+      payload.result.manual_resolution_required = payload.result.manual_resolution_required === true || providerSubmitManualResolutionRequired;
+      payload.result.safe_retry_available = payload.result.safe_retry_available === true || providerSubmitSafeRetryAvailable;
+      payload.result.recommended_action = payload.result.recommended_action || providerSubmitRecommendedAction || null;
+      payload.result.provider_request_sent_confirmed = providerSubmitDiagnostic.provider_request_sent_confirmed === true;
+      payload.result.provider_request_dispatched_at_utc = providerSubmitDiagnostic.provider_request_dispatched_at_utc || payload.result.provider_request_dispatched_at_utc || null;
+      payload.result.provider_external_evidence_present = providerSubmitDiagnostic.provider_external_evidence_present === true;
+      payload.result.provider_acceptance_evidence_present = providerSubmitDiagnostic.provider_acceptance_evidence_present === true;
+      payload.result.provider_submission_accepted = providerSubmitDiagnostic.provider_acceptance_evidence_present === true;
+      payload.result.rail_tx_id = providerSubmitDiagnostic.provider_acceptance_evidence_present === true
+        ? (providerSubmitDiagnostic.rail_tx_id || providerSubmitDiagnostic.provider_transaction_id || payload.result.rail_tx_id || null)
+        : null;
+      payload.result.provider_transaction_id = providerSubmitDiagnostic.provider_transaction_id || null;
+      payload.result.provider_reference = providerSubmitDiagnostic.provider_reference || null;
+    }
+  }
+
+  if (hasBlockedFundsEvidence) {
+    const safeBlockedFundsError = {
+      code: 'BLOCKED_FUNDS',
+      message: 'The selected funding account does not have enough available balance to make this payment. No bank submission was attempted.',
+      phase,
+      blocked_funds: true,
+      submitted_to_bank: false,
+      provider_submission_attempted: false,
+      retry_blocked: true,
+      review_required: false,
+      safe_retry_available: false
+    };
+    if (blockedFundsDiagnostics) {
+      if (Number.isFinite(Number(blockedFundsDiagnostics.required_gbp))) safeBlockedFundsError.required_gbp = Number(blockedFundsDiagnostics.required_gbp);
+      if (Number.isFinite(Number(blockedFundsDiagnostics.available_gbp))) safeBlockedFundsError.available_gbp = Number(blockedFundsDiagnostics.available_gbp);
+      if (blockedFundsDiagnostics.funding_account_ref) safeBlockedFundsError.funding_account_ref = blockedFundsDiagnostics.funding_account_ref;
+      if (blockedFundsDiagnostics.rail_provider) safeBlockedFundsError.rail_provider = blockedFundsDiagnostics.rail_provider;
+      if (blockedFundsDiagnostics.rail_env) safeBlockedFundsError.rail_env = blockedFundsDiagnostics.rail_env;
+      if (blockedFundsDiagnostics.funds_check_json && Object.keys(blockedFundsDiagnostics.funds_check_json).length) safeBlockedFundsError.funds_check_json = blockedFundsDiagnostics.funds_check_json;
+    }
+    payload.ok = true;
+    payload.title = 'Payment blocked — insufficient funds';
+    payload.status_text = 'The selected funding account does not have enough available balance to make this payment.';
+    payload.blocked_funds = true;
+    payload.submitted_to_bank = false;
+    payload.provider_submission_attempted = false;
+    payload.retry_blocked = true;
+    payload.review_required = false;
+    payload.safe_retry_available = false;
+    payload.post_execution_status = 'BLOCKED_FUNDS';
+    payload.business_code = 'BLOCKED_FUNDS';
+    payload.error = safeBlockedFundsError;
+    payload.result = Object.assign({}, resultJson || {}, {
+      code: 'BLOCKED_FUNDS',
+      business_code: 'BLOCKED_FUNDS',
+      blocked_funds: true,
+      submitted_to_bank: false,
+      provider_submission_attempted: false,
+      retry_blocked: true,
+      review_required: false,
+      safe_retry_available: false,
+      required_gbp: safeBlockedFundsError.required_gbp ?? null,
+      available_gbp: safeBlockedFundsError.available_gbp ?? null,
+      funding_account_ref: safeBlockedFundsError.funding_account_ref ?? null,
+      rail_provider: safeBlockedFundsError.rail_provider ?? null,
+      rail_env: safeBlockedFundsError.rail_env ?? null,
+      funds_check_json: safeBlockedFundsError.funds_check_json ?? null
+    });
+  }
+
+  if (progress && typeof progress === 'object') {
+    payload.progress = {
+      freshness_validation_status: progress.freshness_validation_status || null,
+      freshness_result_hash: progress.freshness_result_hash || null,
+      freshness_scope_hash: progress.freshness_scope_hash || null,
+      freshness_is_stale: progress.freshness_is_stale === true,
+      child_operation_id: progress.child_operation_id || null,
+      last_chunk_result: progress.last_chunk_result || null
+    };
+  }
+
+  return payload;
+}
 async function revolutPayment_create(env, token, { request_id, source_account_id, counterparty_id, counterparty_account_id, amount, currency, reference, provider_timeout_ms } = {}) {
   const redactProviderPayload = (value) => {
     const sensitiveKeys = new Set([
@@ -136624,7 +136634,7 @@ async function revolutPayment_create(env, token, { request_id, source_account_id
       provider_error_message_redacted: isTimeout ? `Revolut /pay request timed out after ${providerTimeoutMs}ms without a usable response.` : (safeString(error && error.message) || 'Provider request threw before a response was received.'),
       request_sent_at_utc: requestSentAtUtc,
       response_received_at_utc: null,
-      recommended_action: 'Provider request may have been sent. Check Revolut/bank records before retry.'
+      recommended_action: 'Provider request may have been sent. Check the bank account before retry.'
     });
   } finally {
     if (timeoutHandle !== null) clearTimeout(timeoutHandle);
@@ -136800,7 +136810,7 @@ async function revolutPayment_create(env, token, { request_id, source_account_id
           },
           revolut_response: redactedBody
         },
-        recommended_action: 'Provider returned an ambiguous idempotency/conflict response without an external payment id. Check Revolut/bank records before retry.'
+        recommended_action: 'Provider returned an ambiguous idempotency/conflict response without an external payment id. Check the bank account before retry.'
       });
     }
 
@@ -136943,6 +136953,161 @@ async function revolutPayment_create(env, token, { request_id, source_account_id
     recommended_action: 'Provider acceptance evidence exists. Do not retry unless reconciled.'
   });
 }
+
+
+async function handleBankingPayProviderSubmitReviewResolution(env, req, user, payBatchId) {
+  const id = String(payBatchId || '').trim();
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+  const unwrapRpc = (rpcRes, key) => {
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(payload) && payload.length === 1 && payload[0] && typeof payload[0] === 'object') payload = payload[0];
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) payload = payload[key];
+      if (Array.isArray(payload) && payload.length === 1 && payload[0] && typeof payload[0] === 'object') payload = payload[0];
+    } catch {}
+    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+  };
+
+  const boolStrictTrue = (value) => {
+    if (value === true) return true;
+    if (typeof value === 'string') return ['true', 't', '1', 'yes', 'y', 'on'].includes(value.trim().toLowerCase());
+    return false;
+  };
+
+  const jsonResponse = (payload, status = 200) => new Response(JSON.stringify(payload), { status, headers: JSON_HEADERS });
+
+  if (!id || !uuidRe.test(id)) return withCORS(env, req, badRequest('valid pay_batch_id is required'));
+  if (!user || !user.id) return withCORS(env, req, unauthorized('Unauthorized'));
+
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return withCORS(env, req, badRequest('Invalid JSON'));
+
+  const operationId = String(body.operation_id || body.operationId || '').trim();
+  if (!operationId || !uuidRe.test(operationId)) return withCORS(env, req, badRequest('valid operation_id is required'));
+
+  const resolutionAction = String(body.resolution_action || body.resolutionAction || '').trim().toUpperCase();
+  if (resolutionAction !== 'CONFIRM_NO_PAYMENT_MADE_AND_RESET_FOR_RETRY') {
+    return withCORS(env, req, badRequest('resolution_action must be CONFIRM_NO_PAYMENT_MADE_AND_RESET_FOR_RETRY'));
+  }
+
+  const reauthToken = String(body.reauth_token || body.reauthToken || '').trim();
+  if (!reauthToken) return withCORS(env, req, badRequest('reauth_token is required'));
+
+  const reauthCheck = await verifyPaymentReversalReauth(env, user, reauthToken);
+  if (!reauthCheck.ok) return withCORS(env, req, reauthCheck.response || unauthorized('Invalid reauth_token'));
+
+  const confirmation = (body.confirmation && typeof body.confirmation === 'object' && !Array.isArray(body.confirmation)) ? body.confirmation : {};
+  const checkedProviderOrBank = boolStrictTrue(body.checked_provider_or_bank ?? body.checkedProviderOrBank ?? confirmation.checked_provider_or_bank ?? confirmation.checkedProviderOrBank);
+  const confirmedNoPaymentMade = boolStrictTrue(body.confirmed_no_payment_made ?? body.confirmedNoPaymentMade ?? confirmation.confirmed_no_payment_made ?? confirmation.confirmedNoPaymentMade);
+  if (checkedProviderOrBank !== true) return withCORS(env, req, badRequest('checked_provider_or_bank must be true'));
+  if (confirmedNoPaymentMade !== true) return withCORS(env, req, badRequest('confirmed_no_payment_made must be true'));
+
+  const providerChecked = String(body.provider_checked || body.providerChecked || confirmation.provider_checked || confirmation.providerChecked || '').trim().toUpperCase();
+  if (!['REVOLUT', 'BANK', 'BOTH'].includes(providerChecked)) return withCORS(env, req, badRequest('provider_checked must be REVOLUT, BANK or BOTH'));
+
+  const checkedAtUtcRaw = String(body.checked_at_utc || body.checkedAtUtc || confirmation.checked_at_utc || confirmation.checkedAtUtc || '').trim();
+  const checkedAtUtc = checkedAtUtcRaw || new Date().toISOString();
+  const checkedAtDate = new Date(checkedAtUtc);
+  if (Number.isNaN(checkedAtDate.getTime())) return withCORS(env, req, badRequest('checked_at_utc must be a valid timestamp'));
+
+  const notesSource = body.notes === null || body.notes === undefined ? (confirmation.notes === null || confirmation.notes === undefined ? null : confirmation.notes) : body.notes;
+  const notes = notesSource === null || notesSource === undefined ? null : String(notesSource).trim();
+
+  try {
+    const diagnostic = unwrapRpc(await sbRpc(env, 'pay_provider_submit_diagnostic_get', {
+      p_pay_batch_id: id,
+      p_operation_id: operationId,
+      p_transfer_id: null,
+      p_chunk_id: null,
+      p_counts_only: false
+    }), 'pay_provider_submit_diagnostic_get');
+
+    const diagnosticObject = (diagnostic.provider_submit_diagnostic && typeof diagnostic.provider_submit_diagnostic === 'object' && !Array.isArray(diagnostic.provider_submit_diagnostic))
+      ? diagnostic.provider_submit_diagnostic
+      : {};
+    const counts = (diagnostic.counts && typeof diagnostic.counts === 'object' && !Array.isArray(diagnostic.counts)) ? diagnostic.counts : {};
+    const providerAcceptanceEvidenceCount = Number(counts.provider_acceptance_evidence_count ?? diagnostic.provider_evidence_count ?? 0) || 0;
+
+    if (providerAcceptanceEvidenceCount > 0 || diagnosticObject.provider_acceptance_evidence_present === true) {
+      return withCORS(env, req, jsonResponse({
+        ok: false,
+        resolved: false,
+        reason: 'PROVIDER_ACCEPTANCE_EVIDENCE_PRESENT',
+        safe_retry_available: false,
+        manual_resolution_recorded: false,
+        provider_submit_diagnostic: diagnosticObject,
+        message: 'Provider acceptance evidence exists. Manual reconciliation is required before retry.',
+        pay_batch_id: id,
+        operation_id: operationId
+      }, 409));
+    }
+
+    const result = unwrapRpc(await sbRpc(env, 'pay_execute_provider_submit_review_resolve', {
+      p_pay_batch_id: id,
+      p_operation_id: operationId,
+      p_resolution_action: resolutionAction,
+      p_confirmation_json: {
+        checked_provider_or_bank: true,
+        confirmed_no_payment_made: true,
+        provider_checked: providerChecked,
+        checked_at_utc: checkedAtDate.toISOString(),
+        notes: notes || null
+      },
+      p_actor_user_id: user.id
+    }), 'pay_execute_provider_submit_review_resolve');
+
+    if (!result || result.ok === false || result.resolved === false) {
+      const reason = String(result?.reason || result?.code || '').trim().toUpperCase();
+      const status = reason === 'PROVIDER_ACCEPTANCE_EVIDENCE_PRESENT' ? 409 : 400;
+      return withCORS(env, req, jsonResponse({
+        ok: false,
+        resolved: false,
+        safe_retry_available: result?.safe_retry_available === true,
+        manual_resolution_recorded: result?.manual_resolution_recorded === true,
+        reason: reason || 'PROVIDER_SUBMIT_REVIEW_RESOLUTION_FAILED',
+        provider_submit_diagnostic: result?.provider_submit_diagnostic || diagnosticObject,
+        message: result?.message || 'Provider-submit review resolution failed.',
+        pay_batch_id: id,
+        operation_id: operationId
+      }, status));
+    }
+
+    let batch = null;
+    try {
+      batch = unwrapRpc(await sbRpc(env, 'pay_batch_get', {
+        p_pay_batch_id: id,
+        p_detail_mode: 'FULL',
+        p_recommended_page_size: 100,
+        p_actor_user_id: user.id
+      }), 'pay_batch_get');
+    } catch {
+      batch = null;
+    }
+
+    return withCORS(env, req, ok({
+      ok: true,
+      resolved: true,
+      safe_retry_available: result.safe_retry_available === true,
+      manual_resolution_recorded: result.manual_resolution_recorded === true,
+      provider_submit_diagnostic: result.provider_submit_diagnostic || null,
+      batch,
+      result,
+      message: result.message || 'Manual no-payment confirmation recorded. The batch can now be retried.',
+      pay_batch_id: id,
+      operation_id: operationId
+    }));
+  } catch (e) {
+    const friendly = (typeof makeBankingFriendlyErrorPayload === 'function')
+      ? makeBankingFriendlyErrorPayload(e, { action: 'BANKING_PAY_PROVIDER_SUBMIT_REVIEW_RESOLUTION', pay_batch_id: id, operation_id: operationId })
+      : { ok: false, error: String(e?.message || e || 'Provider-submit review resolution failed') };
+    return withCORS(env, req, new Response(JSON.stringify(friendly), { status: Number(friendly.http_status || friendly.status || 500) || 500, headers: JSON_HEADERS }));
+  }
+}
+
+
+
 
 async function revolutPayment_poll(env, token, { request_id, transfer_id = null, pay_batch_id = null, amount = null, currency = null } = {}) {
   const safeString = (value) => String(value === undefined || value === null ? '' : value).trim();
