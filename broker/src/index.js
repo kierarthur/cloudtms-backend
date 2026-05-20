@@ -37473,8 +37473,6 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
   }
 }
 
-
-
 async function advanceBankingPayExecuteOperation(env, operationRow, user, options = {}) {
 const unwrapRpcPayload = (rpcRes, key) => {
 let payload = rpcRes;
@@ -37959,6 +37957,21 @@ const providerSubmitClaimDiagnosticEventsForFailure = Array.isArray(extraObj.pro
     : (Array.isArray(providerSubmissionForFailure.provider_submit_claim_diagnostic_events)
       ? providerSubmissionForFailure.provider_submit_claim_diagnostic_events
       : (Array.isArray(providerSubmissionForFailure.providerSubmitClaimDiagnosticEvents) ? providerSubmissionForFailure.providerSubmitClaimDiagnosticEvents : [])));
+
+const transferPreparationReconciliationDiagnosticForFailure = safeObject(
+  extraObj.transfer_preparation_reconciliation_diagnostic
+  || extraObj.transferPreparationReconciliationDiagnostic
+  || extraObj.transfer_reconciliation_diagnostic
+  || extraObj.transferReconciliationDiagnostic
+);
+const transferPreparationReconciliationEventsForFailure = Array.isArray(extraObj.transfer_preparation_reconciliation_diagnostic_events)
+  ? extraObj.transfer_preparation_reconciliation_diagnostic_events
+  : (Array.isArray(extraObj.transferPreparationReconciliationDiagnosticEvents)
+    ? extraObj.transferPreparationReconciliationDiagnosticEvents
+    : []);
+const sourceErrorForFailure = safeObject(extraObj.source_error || extraObj.sourceError);
+const rawErrorForFailure = safeObject(extraObj.raw_error || extraObj.rawError);
+const transferPreparationReconciliationForFailure = safeObject(extraObj.transfer_preparation_reconciliation || extraObj.transferPreparationReconciliation || extraObj.reconciliation);
 const providerSubmitStatusForFailure = String(
   extraObj.provider_submission_status
   || extraObj.providerSubmissionStatus
@@ -38094,6 +38107,7 @@ const messageByCode = {
   AUTHORISED_TRANSFER_NOT_PROVIDER_SUBMIT_READY: 'The payment was authorised, but CloudTMS could not find a bank transfer that was safe to submit. Refresh the batch and retry if CloudTMS says retry is safe; otherwise review the transfer.',
   PROVIDER_SUBMIT_NO_ELIGIBLE_TRANSFERS: 'The payment was authorised, but no eligible bank transfer could be safely claimed for provider submission. Refresh the batch and retry if CloudTMS says retry is safe; otherwise review the transfer.',
   PAYMENT_RETRY_BLOCKED_FUNDS_CLEANUP_NOT_SAFE: 'The blocked-funds retry needs review because CloudTMS could not confirm that its local execution artefacts are safe to clean.',
+  TRANSFER_PREPARATION_RECONCILIATION_FAILED: 'Transfer preparation succeeded, but CloudTMS could not reconcile the prepared transfer groups before authorisation. The diagnostic details have been captured for review.',
   PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK: 'Provider submission outcome is unknown because the submit chunk became stale without a provider response. Check Revolut or bank records before retrying.',
   UNKNOWN_PROVIDER_SUBMISSION_OUTCOME: 'Provider submission outcome is unknown because CloudTMS sent or may have sent the provider request but did not receive a usable response. Check Revolut or bank records before retrying.',
   PROVIDER_SUBMISSION_MALFORMED_RESPONSE: 'Provider submission returned an unusable response. Check Revolut or bank records before retrying.',
@@ -38119,6 +38133,14 @@ if (providerSubmitReviewReasonForFailure) publicError.provider_submit_review_rea
 if (Object.keys(providerSubmitDiagnosticForFailure).length) publicError.provider_submit_diagnostic = providerSubmitDiagnosticForFailure;
 if (Object.keys(providerSubmitClaimDiagnosticForFailure).length) publicError.provider_submit_claim_diagnostic = providerSubmitClaimDiagnosticForFailure;
 if (providerSubmitClaimDiagnosticEventsForFailure.length) publicError.provider_submit_claim_diagnostic_events = providerSubmitClaimDiagnosticEventsForFailure;
+if (Object.keys(transferPreparationReconciliationDiagnosticForFailure).length) publicError.transfer_preparation_reconciliation_diagnostic = transferPreparationReconciliationDiagnosticForFailure;
+if (transferPreparationReconciliationEventsForFailure.length) publicError.transfer_preparation_reconciliation_diagnostic_events = transferPreparationReconciliationEventsForFailure;
+if (Object.keys(transferPreparationReconciliationForFailure).length) publicError.transfer_preparation_reconciliation = transferPreparationReconciliationForFailure;
+if (Object.keys(sourceErrorForFailure).length) publicError.source_error = sourceErrorForFailure;
+if (Object.keys(rawErrorForFailure).length) publicError.raw_error = rawErrorForFailure;
+if (extraObj.details !== undefined) publicError.details = extraObj.details;
+if (extraObj.hint !== undefined) publicError.hint = extraObj.hint;
+if (extraObj.error !== undefined) publicError.error = String(extraObj.error || '').slice(0, 2000);
 
 for (const key of [
   'blocker_count',
@@ -38484,6 +38506,112 @@ const scopedReadinessFailurePayload = (phaseText, payload = {}) => {
     non_cancellable_auth_request_count: snapshot.nonCancellableAuthRequestCount,
     all_scoped_operation_scopes_authorisation_ready: snapshot.allScopedReady
   };
+};
+
+const serialisableErrorPayload = (errorValue) => {
+  const err = errorValue || {};
+  const message = String(err?.message || err || '').trim();
+  const code = String(err?.code || err?.error_code || err?.errorCode || err?.business_code || err?.businessCode || '').trim().toUpperCase() || null;
+  return {
+    name: err?.name ? String(err.name).trim() : null,
+    message: message || null,
+    code,
+    error_code: String(err?.error_code || err?.errorCode || '').trim() || code,
+    details: err?.details !== undefined ? err.details : null,
+    hint: err?.hint !== undefined ? err.hint : null,
+    status: err?.status !== undefined ? err.status : null,
+    body: err?.body !== undefined ? err.body : null
+  };
+};
+
+const makeTransferPreparationReconciliationDiagnostic = (stage, patch = {}) => {
+  const latestProgress = safeObject(operation.progress_json || progressJson);
+  const lastChunkResult = safeObject(patch.last_chunk_result || latestProgress.last_chunk_result);
+  const transferScopeSeed = safeObject(latestProgress.transfer_scope_seed);
+  const transferChunkSeed = safeObject(latestProgress.transfer_chunk_seed);
+  const reconciliation = safeObject(patch.reconciliation);
+  const reconciliationSnapshot = patch.reconciliation_snapshot && typeof patch.reconciliation_snapshot === 'object'
+    ? patch.reconciliation_snapshot
+    : (Object.keys(reconciliation).length ? scopedReadinessSnapshot(reconciliation) : null);
+  return {
+    diagnostic_version: 1,
+    diagnostic_kind: 'TRANSFER_PREPARATION_RECONCILIATION',
+    generated_at_utc: new Date().toISOString(),
+    stage: String(stage || '').trim() || null,
+    phase: currentPhase,
+    operation_id: operationId,
+    pay_batch_id: payBatchId,
+    pay_channel_scope: payChannelScope,
+    freshness_result_hash: patch.freshness_result_hash || freshnessResultHashFromProgress || inputJson.freshness_result_hash || null,
+    freshness_scope_hash: freshnessScopeHashFromProgress || inputJson.freshness_scope_hash || transferScopeSeed.freshness_scope_hash_used || null,
+    last_chunk_id: latestProgress.last_chunk_id || null,
+    last_chunk_status: latestProgress.last_chunk_status || null,
+    last_chunk_sequence_no: latestProgress.last_chunk_sequence_no || null,
+    transfer_scope_seed: Object.keys(transferScopeSeed).length ? transferScopeSeed : null,
+    transfer_chunk_seed: Object.keys(transferChunkSeed).length ? transferChunkSeed : null,
+    last_chunk_prepared_count: numField(lastChunkResult, 'prepared_count', 'preparedCount'),
+    last_chunk_linked_transfer_count: numField(lastChunkResult, 'linked_transfer_count', 'linkedTransferCount'),
+    last_chunk_authorisation_ready_count: numField(lastChunkResult, 'authorisation_ready_count', 'authorisationReadyCount'),
+    last_chunk_requested_scope_count: numField(lastChunkResult, 'requested_scope_count', 'requestedScopeCount'),
+    last_chunk_prepared_scope_count: numField(lastChunkResult, 'prepared_scope_count', 'preparedScopeCount'),
+    last_chunk_scope_without_transfer_count: numField(lastChunkResult, 'scope_without_transfer_count', 'scopeWithoutTransferCount'),
+    last_chunk_not_authorisation_ready_count: numField(lastChunkResult, 'not_authorisation_ready_count', 'notAuthorisationReadyCount'),
+    last_chunk_unsafe_transfer_count: numField(lastChunkResult, 'unsafe_transfer_count', 'unsafeTransferCount'),
+    last_chunk_provider_evidence_blocked_count: numField(lastChunkResult, 'provider_evidence_blocked_count', 'providerEvidenceBlockedCount'),
+    last_chunk_all_requested_scopes_authorisation_ready: boolField(lastChunkResult, 'all_requested_scopes_authorisation_ready', 'allRequestedScopesAuthorisationReady'),
+    reconciliation_returned: Object.keys(reconciliation).length ? true : false,
+    reconciliation_ok: Object.keys(reconciliation).length ? reconciliation.ok === true : null,
+    reconciliation_ready: Object.keys(reconciliation).length ? reconciliation.ready === true : null,
+    reconciliation_blocker_count: numField(reconciliation, 'blocker_count', 'blockerCount'),
+    reconciliation_warning_count: numField(reconciliation, 'warning_count', 'warningCount'),
+    reconciliation_blockers: Array.isArray(reconciliation.blockers) ? reconciliation.blockers : [],
+    scoped_operation_scope_count: reconciliationSnapshot ? reconciliationSnapshot.scopedOperationScopeCount : null,
+    scoped_scope_prepared_count: reconciliationSnapshot ? reconciliationSnapshot.scopedScopePreparedCount : null,
+    scoped_scope_pending_count: reconciliationSnapshot ? reconciliationSnapshot.scopedScopePendingCount : null,
+    scoped_scope_failed_count: reconciliationSnapshot ? reconciliationSnapshot.scopedScopeFailedCount : null,
+    scoped_scope_skipped_count: reconciliationSnapshot ? reconciliationSnapshot.scopedScopeSkippedCount : null,
+    scoped_scope_without_transfer_count: reconciliationSnapshot ? reconciliationSnapshot.scopedScopeWithoutTransferCount : null,
+    authorisation_ready_transfer_count: reconciliationSnapshot ? reconciliationSnapshot.authorisationReadyTransferCount : null,
+    provider_attempt_or_evidence_transfer_count: reconciliationSnapshot ? reconciliationSnapshot.providerAttemptOrEvidenceTransferCount : null,
+    provider_or_ambiguous_evidence_transfer_count: reconciliationSnapshot ? reconciliationSnapshot.providerOrAmbiguousEvidenceTransferCount : null,
+    unsafe_transfer_count: reconciliationSnapshot ? reconciliationSnapshot.unsafeTransferCount : null,
+    non_cancellable_auth_request_count: reconciliationSnapshot ? reconciliationSnapshot.nonCancellableAuthRequestCount : null,
+    all_scoped_operation_scopes_authorisation_ready: reconciliationSnapshot ? reconciliationSnapshot.allScopedReady : null,
+    has_reconciliation_failure: reconciliationSnapshot ? reconciliationSnapshot.hasFailure === true : null,
+    source_error: patch.source_error || null,
+    ...safeObject(patch.extra)
+  };
+};
+
+const makeTransferPreparationReconciliationEvent = (event, diagnostic = {}) => ({
+  event: String(event || '').trim(),
+  at_utc: new Date().toISOString(),
+  phase: currentPhase,
+  operation_id: operationId,
+  pay_batch_id: payBatchId,
+  stage: diagnostic.stage || null,
+  last_chunk_prepared_count: diagnostic.last_chunk_prepared_count ?? null,
+  last_chunk_linked_transfer_count: diagnostic.last_chunk_linked_transfer_count ?? null,
+  last_chunk_authorisation_ready_count: diagnostic.last_chunk_authorisation_ready_count ?? null,
+  reconciliation_ok: diagnostic.reconciliation_ok ?? null,
+  reconciliation_ready: diagnostic.reconciliation_ready ?? null,
+  reconciliation_blocker_count: diagnostic.reconciliation_blocker_count ?? null,
+  scoped_operation_scope_count: diagnostic.scoped_operation_scope_count ?? null,
+  scoped_scope_prepared_count: diagnostic.scoped_scope_prepared_count ?? null,
+  authorisation_ready_transfer_count: diagnostic.authorisation_ready_transfer_count ?? null,
+  has_reconciliation_failure: diagnostic.has_reconciliation_failure ?? null,
+  source_error_code: diagnostic.source_error && diagnostic.source_error.code ? diagnostic.source_error.code : null,
+  source_error_message: diagnostic.source_error && diagnostic.source_error.message ? diagnostic.source_error.message : null
+});
+
+const emitTransferPreparationReconciliationDiagnosticLog = (diagnostic = {}, events = []) => {
+  try {
+    console.log('[BANKING_PAY][TRANSFER_PREPARATION_RECONCILIATION_DIAGNOSTIC]', JSON.stringify({ diagnostic, events }));
+  } catch {
+    try {
+      console.log('[BANKING_PAY][TRANSFER_PREPARATION_RECONCILIATION_DIAGNOSTIC]', diagnostic);
+    } catch {}
+  }
 };
 
 const upperString = (value) => String(value == null ? '' : value).trim().toUpperCase();
@@ -39181,25 +39309,89 @@ if (currentPhase === 'PREPARE_TRANSFER_CHUNKS') {
     });
   }
   const freshnessHash = freshnessResultHashFromProgress || inputJson.freshness_result_hash || null;
-  const reconciliation = unwrapRpcPayload(await sbRpc(env, 'pay_batch_prepare', {
-    p_pay_batch_id: payBatchId,
-    p_actor_user_id: actorUserId,
-    p_operation_id: operationId,
-    p_freshness_result_hash: freshnessHash
-  }), 'pay_batch_prepare');
+  const reconciliationDiagnosticEvents = [];
+  const reconciliationStartDiagnostic = makeTransferPreparationReconciliationDiagnostic('BEFORE_PAY_BATCH_PREPARE_RECONCILIATION', {
+    freshness_result_hash: freshnessHash,
+    extra: {
+      call_target: 'pay_batch_prepare',
+      p_pay_batch_id: payBatchId,
+      p_operation_id: operationId,
+      p_pay_channel_scope: payChannelScope,
+      note: 'Diagnostic captured immediately before transfer-preparation reconciliation.'
+    }
+  });
+  reconciliationDiagnosticEvents.push(makeTransferPreparationReconciliationEvent('BEFORE_PAY_BATCH_PREPARE_RECONCILIATION', reconciliationStartDiagnostic));
+  emitTransferPreparationReconciliationDiagnosticLog(reconciliationStartDiagnostic, reconciliationDiagnosticEvents);
+
+  let reconciliation;
+  try {
+    reconciliation = unwrapRpcPayload(await sbRpc(env, 'pay_batch_prepare', {
+      p_pay_batch_id: payBatchId,
+      p_actor_user_id: actorUserId,
+      p_operation_id: operationId,
+      p_freshness_result_hash: freshnessHash
+    }), 'pay_batch_prepare');
+  } catch (reconciliationError) {
+    const sourceError = serialisableErrorPayload(reconciliationError);
+    const reconciliationErrorDiagnostic = makeTransferPreparationReconciliationDiagnostic('PAY_BATCH_PREPARE_RECONCILIATION_THROW', {
+      freshness_result_hash: freshnessHash,
+      source_error: sourceError,
+      extra: {
+        call_target: 'pay_batch_prepare',
+        call_status: 'THREW',
+        p_pay_batch_id: payBatchId,
+        p_operation_id: operationId,
+        p_pay_channel_scope: payChannelScope
+      }
+    });
+    reconciliationDiagnosticEvents.push(makeTransferPreparationReconciliationEvent('PAY_BATCH_PREPARE_RECONCILIATION_THROW', reconciliationErrorDiagnostic));
+    emitTransferPreparationReconciliationDiagnosticLog(reconciliationErrorDiagnostic, reconciliationDiagnosticEvents);
+    return fail('TRANSFER_PREPARATION_RECONCILIATION_FAILED', 'Transfer preparation succeeded, but the post-chunk reconciliation call failed before authorisation could start.', {
+      phase: currentPhase,
+      freshness_result_hash: freshnessHash,
+      transfer_preparation_reconciliation_diagnostic: reconciliationErrorDiagnostic,
+      transfer_preparation_reconciliation_diagnostic_events: reconciliationDiagnosticEvents,
+      source_error: sourceError,
+      raw_error: sourceError,
+      error: sourceError.message || 'pay_batch_prepare reconciliation failed.',
+      error_code: sourceError.code || 'TRANSFER_PREPARATION_RECONCILIATION_FAILED',
+      details: sourceError.details,
+      hint: sourceError.hint
+    });
+  }
+
   const reconciliationSnapshot = scopedReadinessSnapshot(reconciliation);
+  const reconciliationReturnDiagnostic = makeTransferPreparationReconciliationDiagnostic('PAY_BATCH_PREPARE_RECONCILIATION_RETURNED', {
+    freshness_result_hash: freshnessHash,
+    reconciliation,
+    reconciliation_snapshot: reconciliationSnapshot,
+    extra: {
+      call_target: 'pay_batch_prepare',
+      call_status: 'RETURNED',
+      p_pay_batch_id: payBatchId,
+      p_operation_id: operationId,
+      p_pay_channel_scope: payChannelScope
+    }
+  });
+  reconciliationDiagnosticEvents.push(makeTransferPreparationReconciliationEvent('PAY_BATCH_PREPARE_RECONCILIATION_RETURNED', reconciliationReturnDiagnostic));
+  emitTransferPreparationReconciliationDiagnosticLog(reconciliationReturnDiagnostic, reconciliationDiagnosticEvents);
   if (reconciliation.ok === false || reconciliation.ready === false || reconciliationSnapshot.hasFailure) {
     const reconciliationCode = reconciliationSnapshot.providerOrAmbiguousEvidenceTransferCount > 0
       ? 'EXECUTION_RETRY_BLOCKED_BY_PROVIDER_EVIDENCE'
       : 'TRANSFER_SCOPE_AUTHORISATION_READY_MISMATCH';
     return fail(reconciliationCode, 'Transfer preparation reconciliation found scoped transfer groups that are not fully prepared and authorisation-ready.', {
       ...scopedReadinessFailurePayload(currentPhase, reconciliation),
-      blocker_count: numField(reconciliation, 'blocker_count', 'blockerCount')
+      blocker_count: numField(reconciliation, 'blocker_count', 'blockerCount'),
+      transfer_preparation_reconciliation: reconciliation,
+      transfer_preparation_reconciliation_diagnostic: reconciliationReturnDiagnostic,
+      transfer_preparation_reconciliation_diagnostic_events: reconciliationDiagnosticEvents
     });
   }
   return phaseProgress('RUNNING', 'PREPARE_BATCH', {
     status_text: 'All transfer chunks prepared and reconciled.',
-    transfer_preparation_reconciliation: reconciliation
+    transfer_preparation_reconciliation: reconciliation,
+    transfer_preparation_reconciliation_diagnostic: reconciliationReturnDiagnostic,
+    transfer_preparation_reconciliation_diagnostic_events: reconciliationDiagnosticEvents
   });
 }
 
@@ -40130,6 +40322,7 @@ source_error: {
 });
 }
 }
+
 
 
 async function advanceBankingPayRemittanceOperation(env, operationRow, user, options = {}) {
