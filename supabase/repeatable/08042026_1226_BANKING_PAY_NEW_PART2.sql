@@ -596,16 +596,12 @@ $function$;
 
 DROP FUNCTION IF EXISTS public.pay_batch_insert_items_from_preview(uuid, uuid);
 
-CREATE OR REPLACE FUNCTION public.pay_batch_insert_items_from_preview(
-  p_pay_batch_id uuid,
-  p_actor_user_id uuid DEFAULT NULL::uuid,
-  p_operation_id uuid DEFAULT NULL::uuid,
-  p_candidate_scope_ids jsonb DEFAULT NULL::jsonb
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
+
+CREATE OR REPLACE FUNCTION public.pay_batch_insert_items_from_preview(p_pay_batch_id uuid, p_actor_user_id uuid DEFAULT NULL::uuid, p_operation_id uuid DEFAULT NULL::uuid, p_candidate_scope_ids jsonb DEFAULT NULL::jsonb)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
 AS $function$
 DECLARE
   v_batch_id uuid := p_pay_batch_id;
@@ -620,6 +616,12 @@ DECLARE
   v_rail_provider_default text := NULL;
   v_rail_env_default text := NULL;
   v_operation_reused_count integer := 0;
+  v_reservation_skipped_item_rows integer := 0;
+  v_reservation_clipped_item_rows integer := 0;
+  v_reservation_skipped_preview_row_count integer := 0;
+  v_reservation_clipped_preview_row_count integer := 0;
+  v_scope_item_rows_after_availability integer := 0;
+  v_reservation_availability_preview_rows_json jsonb := '[]'::jsonb;
 BEGIN
   IF p_pay_batch_id IS NULL THEN
     RAISE EXCEPTION 'pay_batch_id is required';
@@ -681,6 +683,24 @@ BEGIN
   ORDER BY upper(btrim(coalesce(spr.pay_channel, '')))
   LIMIT 1;
 
+
+  CREATE TEMPORARY TABLE IF NOT EXISTS pg_temp.tmp_pay_build_reservation_availability_report (
+    pay_batch_item_id uuid null,
+    candidate_id uuid null,
+    preview_row_id text null,
+    timesheet_id uuid null,
+    item_type text null,
+    key_type text null,
+    key_value text null,
+    requested_source_amount_ex_vat numeric(12,2) null,
+    allowed_source_amount_ex_vat numeric(12,2) null,
+    requested_target_amount_ex_vat numeric(12,2) null,
+    allowed_target_amount_ex_vat numeric(12,2) null,
+    availability_action text not null,
+    message text null,
+    created_at_utc timestamptz not null default now()
+  ) ON COMMIT DROP;
+  TRUNCATE TABLE pg_temp.tmp_pay_build_reservation_availability_report;
 
 v_stage := 'STAGE_12_INSERT_PAY_BATCH_ITEMS';
 
@@ -1341,6 +1361,462 @@ v_stage := 'STAGE_12_INSERT_PAY_BATCH_ITEMS';
       AND inserted_item.item_type IN ('SEGMENT_DELTA', 'EXPENSE_DELTA', 'ADJUSTMENT_DELTA', 'MILEAGE_DELTA');
   END IF;
 
+  v_stage := 'STAGE_12B_ENFORCE_ACTIVE_RESERVATION_AVAILABILITY';
+
+  DROP TABLE IF EXISTS pg_temp.tmp_pay_build_reservation_availability_actions;
+  CREATE TEMPORARY TABLE pg_temp.tmp_pay_build_reservation_availability_actions ON COMMIT DROP AS
+  WITH scoped_items AS (
+    SELECT
+      pbi.id AS pay_batch_item_id,
+      pbc.candidate_id,
+      pbi.pay_channel,
+      spr_match.preview_row_id,
+      spr_match.preview_amount_ex_vat,
+      pbi.timesheet_id,
+      pbi.item_type,
+      pbi.amount_ex_vat AS requested_target_amount_ex_vat,
+      pbi.amount_vat AS requested_target_amount_vat,
+      pbi.amount_inc_vat AS requested_target_amount_inc_vat,
+      pbi.frozen_source_amount,
+      pbi.created_at,
+      upper(nullif(btrim(coalesce(ec.key_type, '')), '')) AS key_type,
+      nullif(btrim(coalesce(ec.key_value, '')), '') AS key_value,
+      round(abs(coalesce(ec.source_amount_ex_vat, 0)), 2)::numeric(12,2) AS requested_source_amount_ex_vat
+    FROM public.pay_batch_items AS pbi
+    JOIN public.pay_batch_candidates AS pbc
+      ON pbc.id = pbi.pay_batch_candidate_id
+    JOIN LATERAL public._pay_batch_item_economic_components(NULL::uuid, ARRAY[pbi.id]::uuid[]) AS ec
+      ON true
+    LEFT JOIN LATERAL (
+      SELECT
+        spr.preview_row_id,
+        spr.preview_amount_ex_vat
+      FROM pg_temp.tmp_pay_build_selected_preview_rows AS spr
+      WHERE spr.candidate_id = pbc.candidate_id
+        AND spr.timesheet_id = pbi.timesheet_id
+        AND upper(btrim(coalesce(spr.pay_channel, ''))) = upper(btrim(coalesce(pbi.pay_channel, '')))
+        AND upper(btrim(coalesce(spr.line_type, ''))) = 'TIMESHEET_PAYMENT'
+      ORDER BY spr.preview_row_id
+      LIMIT 1
+    ) AS spr_match ON true
+    WHERE pbc.pay_batch_id = v_batch_id
+      AND pbc.candidate_id = ANY(v_candidate_ids)
+      AND pbi.timesheet_id IS NOT NULL
+      AND coalesce(pbi.is_voided, false) = false
+      AND pbi.item_type IN ('SEGMENT_DELTA', 'EXPENSE_DELTA', 'ADJUSTMENT_DELTA', 'MILEAGE_DELTA')
+      AND pbi.reservation_id IS NULL
+  ),
+  valid_scoped_items AS (
+    SELECT *
+    FROM scoped_items
+    WHERE key_type IN ('TS_DAY','TS_TOTAL','ADDITIONAL_CODE','ADJUSTMENT_CODE','EXPENSE_CODE')
+      AND key_value IS NOT NULL
+      AND btrim(key_value) <> ''
+      AND NOT (key_type = 'TS_DAY' AND key_value !~ '^\d{4}-\d{2}-\d{2}$')
+      AND requested_source_amount_ex_vat > 0
+  ),
+  ts_ids_arr AS (
+    SELECT coalesce(array_agg(DISTINCT timesheet_id), ARRAY[]::uuid[]) AS timesheet_ids
+    FROM valid_scoped_items
+    WHERE timesheet_id IS NOT NULL
+  ),
+  outstanding_rows AS (
+    SELECT
+      oc.timesheet_id,
+      upper(nullif(btrim(coalesce(oc.key_type, '')), '')) AS key_type,
+      nullif(btrim(coalesce(oc.key_value, '')), '') AS key_value,
+      round(coalesce(oc.outstanding_ex_vat, 0), 2)::numeric(12,2) AS outstanding_ex_vat
+    FROM public._pay_outstanding_components((SELECT timesheet_ids FROM ts_ids_arr)) AS oc
+    WHERE oc.timesheet_id IS NOT NULL
+      AND oc.key_type IS NOT NULL
+      AND oc.key_value IS NOT NULL
+  ),
+  current_scope_key_totals AS (
+    SELECT
+      vsi.timesheet_id,
+      vsi.key_type,
+      vsi.key_value,
+      round(sum(coalesce(vsi.requested_source_amount_ex_vat, 0)), 2)::numeric(12,2) AS current_scope_source_amount_ex_vat
+    FROM valid_scoped_items AS vsi
+    GROUP BY vsi.timesheet_id, vsi.key_type, vsi.key_value
+  ),
+  allocation_base AS (
+    SELECT
+      vsi.*,
+      round(greatest(coalesce(orow.outstanding_ex_vat, 0) + coalesce(ckt.current_scope_source_amount_ex_vat, 0), 0), 2)::numeric(12,2) AS available_for_scope_ex_vat,
+      coalesce(
+        sum(vsi.requested_source_amount_ex_vat) OVER (
+          PARTITION BY vsi.timesheet_id, vsi.key_type, vsi.key_value
+          ORDER BY vsi.created_at NULLS LAST, vsi.pay_batch_item_id
+          ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
+        ),
+        0
+      )::numeric(12,2) AS prior_requested_source_amount_ex_vat
+    FROM valid_scoped_items AS vsi
+    LEFT JOIN current_scope_key_totals AS ckt
+      ON ckt.timesheet_id = vsi.timesheet_id
+     AND ckt.key_type = vsi.key_type
+     AND ckt.key_value = vsi.key_value
+    LEFT JOIN outstanding_rows AS orow
+      ON orow.timesheet_id = vsi.timesheet_id
+     AND orow.key_type = vsi.key_type
+     AND orow.key_value = vsi.key_value
+  ),
+  allocated AS (
+    SELECT
+      ab.*,
+      round(
+        least(
+          coalesce(ab.requested_source_amount_ex_vat, 0),
+          greatest(coalesce(ab.available_for_scope_ex_vat, 0) - coalesce(ab.prior_requested_source_amount_ex_vat, 0), 0)
+        ),
+        2
+      )::numeric(12,2) AS allowed_source_amount_ex_vat
+    FROM allocation_base AS ab
+  ),
+  actions AS (
+    SELECT
+      allocated.*,
+      CASE
+        WHEN coalesce(allocated.allowed_source_amount_ex_vat, 0) <= 0.005 THEN 'SKIP_ALREADY_RESERVED'
+        ELSE 'CLIP_TO_RESIDUAL'
+      END AS availability_action,
+      CASE
+        WHEN coalesce(allocated.allowed_source_amount_ex_vat, 0) <= 0.005 THEN 'Some payments were not added because they are already reserved in another draft batch.'
+        ELSE 'Payment component was reduced to the residual amount available after other active reservations.'
+      END AS availability_message,
+      CASE
+        WHEN coalesce(allocated.requested_source_amount_ex_vat, 0) > 0
+          THEN greatest(least(coalesce(allocated.allowed_source_amount_ex_vat, 0) / allocated.requested_source_amount_ex_vat, 1), 0)
+        ELSE 0::numeric
+      END AS availability_ratio
+    FROM allocated
+    WHERE round(coalesce(allocated.allowed_source_amount_ex_vat, 0), 2)
+            < round(coalesce(allocated.requested_source_amount_ex_vat, 0), 2) - 0.005
+  )
+  SELECT
+    actions.pay_batch_item_id,
+    actions.candidate_id,
+    actions.preview_row_id,
+    actions.timesheet_id,
+    actions.item_type,
+    actions.key_type,
+    actions.key_value,
+    actions.requested_source_amount_ex_vat,
+    round(greatest(coalesce(actions.allowed_source_amount_ex_vat, 0), 0), 2)::numeric(12,2) AS allowed_source_amount_ex_vat,
+    round(coalesce(actions.requested_target_amount_ex_vat, 0), 2)::numeric(12,2) AS requested_target_amount_ex_vat,
+    round(coalesce(actions.requested_target_amount_vat, 0), 2)::numeric(12,2) AS requested_target_amount_vat,
+    round(coalesce(actions.requested_target_amount_inc_vat, 0), 2)::numeric(12,2) AS requested_target_amount_inc_vat,
+    round(coalesce(actions.requested_target_amount_ex_vat, 0) * coalesce(actions.availability_ratio, 0), 2)::numeric(12,2) AS allowed_target_amount_ex_vat,
+    round(coalesce(actions.requested_target_amount_vat, 0) * coalesce(actions.availability_ratio, 0), 2)::numeric(12,2) AS allowed_target_amount_vat,
+    round(coalesce(actions.requested_target_amount_inc_vat, 0) * coalesce(actions.availability_ratio, 0), 2)::numeric(12,2) AS allowed_target_amount_inc_vat,
+    actions.availability_action,
+    actions.availability_message
+  FROM actions;
+
+  INSERT INTO pg_temp.tmp_pay_build_reservation_availability_report (
+    pay_batch_item_id,
+    candidate_id,
+    preview_row_id,
+    timesheet_id,
+    item_type,
+    key_type,
+    key_value,
+    requested_source_amount_ex_vat,
+    allowed_source_amount_ex_vat,
+    requested_target_amount_ex_vat,
+    allowed_target_amount_ex_vat,
+    availability_action,
+    message
+  )
+  SELECT
+    act.pay_batch_item_id,
+    act.candidate_id,
+    act.preview_row_id,
+    act.timesheet_id,
+    act.item_type,
+    act.key_type,
+    act.key_value,
+    act.requested_source_amount_ex_vat,
+    act.allowed_source_amount_ex_vat,
+    act.requested_target_amount_ex_vat,
+    act.allowed_target_amount_ex_vat,
+    act.availability_action,
+    act.availability_message
+  FROM pg_temp.tmp_pay_build_reservation_availability_actions AS act;
+
+  SELECT count(*)::integer
+  INTO v_reservation_clipped_item_rows
+  FROM pg_temp.tmp_pay_build_reservation_availability_actions AS act
+  WHERE act.availability_action = 'CLIP_TO_RESIDUAL';
+
+  UPDATE public.pay_batch_items AS pbi_update
+  SET
+    amount_ex_vat = act.allowed_target_amount_ex_vat,
+    amount_vat = act.allowed_target_amount_vat,
+    amount_inc_vat = act.allowed_target_amount_inc_vat,
+    frozen_source_amount = act.allowed_source_amount_ex_vat,
+    frozen_target_amount_ex_vat = act.allowed_target_amount_ex_vat,
+    frozen_target_amount_vat = act.allowed_target_amount_vat,
+    frozen_target_amount_inc_vat = act.allowed_target_amount_inc_vat,
+    frozen_component_snapshot_json = jsonb_strip_nulls(
+      coalesce(pbi_update.frozen_component_snapshot_json, '{}'::jsonb)
+      || jsonb_build_object(
+        'draft_reservation_availability_applied', true,
+        'draft_reservation_availability_action', act.availability_action,
+        'draft_reservation_original_source_amount_ex_vat', act.requested_source_amount_ex_vat,
+        'draft_reservation_allowed_source_amount_ex_vat', act.allowed_source_amount_ex_vat,
+        'draft_reservation_original_target_amount_ex_vat', act.requested_target_amount_ex_vat,
+        'draft_reservation_allowed_target_amount_ex_vat', act.allowed_target_amount_ex_vat,
+        'source_reservation_amount_ex_vat', act.allowed_source_amount_ex_vat,
+        'source_entitlement_amount_ex_vat', act.allowed_source_amount_ex_vat,
+        'target_pay_ex_vat', act.allowed_target_amount_ex_vat,
+        'frozen_source_amount', act.allowed_source_amount_ex_vat,
+        'frozen_target_amount_ex_vat', act.allowed_target_amount_ex_vat,
+        'frozen_target_amount_vat', act.allowed_target_amount_vat,
+        'frozen_target_amount_inc_vat', act.allowed_target_amount_inc_vat
+      )
+    ),
+    frozen_resolution_payload_json = CASE
+      WHEN jsonb_typeof(pbi_update.frozen_resolution_payload_json) = 'object'
+        THEN jsonb_strip_nulls(pbi_update.frozen_resolution_payload_json || jsonb_build_object('draft_reservation_availability_applied', true, 'draft_reservation_availability_action', act.availability_action))
+      ELSE pbi_update.frozen_resolution_payload_json
+    END,
+    frozen_resolution_result_json = CASE
+      WHEN jsonb_typeof(pbi_update.frozen_resolution_result_json) = 'object'
+        THEN jsonb_strip_nulls(
+          pbi_update.frozen_resolution_result_json
+          || jsonb_build_object(
+            'draft_reservation_availability_applied', true,
+            'draft_reservation_availability_action', act.availability_action,
+            'target_amount_ex_vat', act.allowed_target_amount_ex_vat,
+            'target_amount_vat', act.allowed_target_amount_vat,
+            'target_amount_inc_vat', act.allowed_target_amount_inc_vat
+          )
+        )
+      ELSE pbi_update.frozen_resolution_result_json
+    END,
+    updated_at = now()
+  FROM pg_temp.tmp_pay_build_reservation_availability_actions AS act
+  WHERE pbi_update.id = act.pay_batch_item_id
+    AND act.availability_action = 'CLIP_TO_RESIDUAL';
+
+  DELETE FROM public.pay_batch_item_breakdowns AS breakdown_delete
+  USING pg_temp.tmp_pay_build_reservation_availability_actions AS act
+  WHERE breakdown_delete.pay_batch_item_id = act.pay_batch_item_id
+    AND act.availability_action = 'SKIP_ALREADY_RESERVED';
+
+  DELETE FROM public.pay_batch_items AS pbi_delete
+  USING pg_temp.tmp_pay_build_reservation_availability_actions AS act
+  WHERE pbi_delete.id = act.pay_batch_item_id
+    AND act.availability_action = 'SKIP_ALREADY_RESERVED';
+
+  GET DIAGNOSTICS v_reservation_skipped_item_rows = ROW_COUNT;
+
+  DROP TABLE IF EXISTS pg_temp.tmp_pay_build_reservation_availability_preview_report;
+  CREATE TEMPORARY TABLE pg_temp.tmp_pay_build_reservation_availability_preview_report ON COMMIT DROP AS
+  WITH scoped_preview_rows AS (
+    SELECT
+      scope_row.id AS candidate_scope_id,
+      spr.preview_row_id,
+      spr.candidate_id,
+      spr.timesheet_id,
+      upper(btrim(coalesce(spr.pay_channel, ''))) AS pay_channel,
+      round(coalesce(spr.preview_amount_ex_vat, 0), 2)::numeric(12,2) AS requested_amount_ex_vat
+    FROM pg_temp.tmp_pay_build_selected_preview_rows AS spr
+    LEFT JOIN public.banking_pay_operation_candidate_scope AS scope_row
+      ON p_operation_id IS NOT NULL
+     AND scope_row.operation_id = p_operation_id
+     AND scope_row.pay_batch_id = v_batch_id
+     AND scope_row.candidate_id = spr.candidate_id
+     AND upper(btrim(coalesce(scope_row.pay_channel, ''))) = upper(btrim(coalesce(spr.pay_channel, '')))
+    WHERE spr.candidate_id = ANY(v_candidate_ids)
+  ),
+  actual_by_preview AS (
+    SELECT
+      spr.candidate_scope_id,
+      spr.preview_row_id,
+      round(coalesce(sum(pbi.amount_ex_vat), 0), 2)::numeric(12,2) AS effective_amount_ex_vat
+    FROM scoped_preview_rows AS spr
+    LEFT JOIN public.pay_batch_candidates AS pbc
+      ON pbc.pay_batch_id = v_batch_id
+     AND pbc.candidate_id = spr.candidate_id
+    LEFT JOIN public.pay_batch_items AS pbi
+      ON pbi.pay_batch_candidate_id = pbc.id
+     AND pbi.timesheet_id = spr.timesheet_id
+     AND upper(btrim(coalesce(pbi.pay_channel, ''))) = spr.pay_channel
+     AND coalesce(pbi.is_voided, false) = false
+     AND pbi.item_type IN ('SEGMENT_DELTA', 'EXPENSE_DELTA', 'ADJUSTMENT_DELTA', 'MILEAGE_DELTA')
+    GROUP BY spr.candidate_scope_id, spr.preview_row_id
+  ),
+  report_by_preview AS (
+    SELECT
+      rep.candidate_id,
+      rep.preview_row_id,
+      count(*) FILTER (WHERE rep.availability_action = 'SKIP_ALREADY_RESERVED')::integer AS unavailable_item_count,
+      count(*) FILTER (WHERE rep.availability_action = 'CLIP_TO_RESIDUAL')::integer AS clipped_item_count,
+      coalesce(jsonb_agg(
+        jsonb_build_object(
+          'pay_batch_item_id', CASE WHEN rep.pay_batch_item_id IS NULL THEN NULL ELSE rep.pay_batch_item_id::text END,
+          'timesheet_id', CASE WHEN rep.timesheet_id IS NULL THEN NULL ELSE rep.timesheet_id::text END,
+          'item_type', rep.item_type,
+          'key_type', rep.key_type,
+          'key_value', rep.key_value,
+          'requested_source_amount_ex_vat', rep.requested_source_amount_ex_vat,
+          'allowed_source_amount_ex_vat', rep.allowed_source_amount_ex_vat,
+          'requested_target_amount_ex_vat', rep.requested_target_amount_ex_vat,
+          'allowed_target_amount_ex_vat', rep.allowed_target_amount_ex_vat,
+          'availability_action', rep.availability_action,
+          'message', rep.message
+        )
+        order by rep.key_type, rep.key_value, rep.pay_batch_item_id::text
+      ), '[]'::jsonb) AS component_reports_json
+    FROM pg_temp.tmp_pay_build_reservation_availability_report AS rep
+    WHERE rep.preview_row_id IS NOT NULL
+    GROUP BY rep.candidate_id, rep.preview_row_id
+  )
+  SELECT
+    spr.candidate_scope_id,
+    spr.preview_row_id,
+    spr.candidate_id,
+    spr.timesheet_id,
+    spr.pay_channel,
+    spr.requested_amount_ex_vat,
+    coalesce(abp.effective_amount_ex_vat, 0)::numeric(12,2) AS effective_amount_ex_vat,
+    coalesce(rbp.unavailable_item_count, 0)::integer AS unavailable_item_count,
+    coalesce(rbp.clipped_item_count, 0)::integer AS clipped_item_count,
+    coalesce(rbp.component_reports_json, '[]'::jsonb) AS component_reports_json,
+    (
+      coalesce(rbp.unavailable_item_count, 0) > 0
+      AND round(coalesce(abp.effective_amount_ex_vat, 0), 2) <= 0.005
+    ) AS skipped_due_to_active_reservation,
+    (
+      (coalesce(rbp.clipped_item_count, 0) > 0 OR coalesce(rbp.unavailable_item_count, 0) > 0)
+      AND round(coalesce(abp.effective_amount_ex_vat, 0), 2) < round(coalesce(spr.requested_amount_ex_vat, 0), 2) - 0.005
+    ) AS clipped_due_to_active_reservation
+  FROM scoped_preview_rows AS spr
+  LEFT JOIN actual_by_preview AS abp
+    ON abp.candidate_scope_id IS NOT DISTINCT FROM spr.candidate_scope_id
+   AND abp.preview_row_id = spr.preview_row_id
+  LEFT JOIN report_by_preview AS rbp
+    ON rbp.candidate_id = spr.candidate_id
+   AND rbp.preview_row_id = spr.preview_row_id;
+
+  SELECT
+    count(DISTINCT preview_row_id) FILTER (WHERE skipped_due_to_active_reservation)::integer,
+    count(DISTINCT preview_row_id) FILTER (WHERE clipped_due_to_active_reservation)::integer,
+    coalesce(
+      jsonb_agg(
+        jsonb_build_object(
+          'preview_row_id', preview_row_id,
+          'candidate_id', candidate_id::text,
+          'timesheet_id', CASE WHEN timesheet_id IS NULL THEN NULL ELSE timesheet_id::text END,
+          'pay_channel', pay_channel,
+          'requested_amount_ex_vat', requested_amount_ex_vat,
+          'effective_amount_ex_vat', effective_amount_ex_vat,
+          'skipped_due_to_active_reservation', skipped_due_to_active_reservation,
+          'clipped_due_to_active_reservation', clipped_due_to_active_reservation,
+          'unavailable_item_count', unavailable_item_count,
+          'clipped_item_count', clipped_item_count,
+          'components', component_reports_json
+        )
+        order by candidate_id::text, preview_row_id
+      ) FILTER (WHERE unavailable_item_count > 0 OR clipped_item_count > 0),
+      '[]'::jsonb
+    )
+  INTO
+    v_reservation_skipped_preview_row_count,
+    v_reservation_clipped_preview_row_count,
+    v_reservation_availability_preview_rows_json
+  FROM pg_temp.tmp_pay_build_reservation_availability_preview_report;
+
+  IF p_operation_id IS NOT NULL THEN
+    WITH payload_by_scope AS (
+      SELECT
+        pr.candidate_scope_id,
+        jsonb_build_object(
+          'applied_at_utc', now(),
+          'message', CASE
+            WHEN count(*) FILTER (WHERE pr.skipped_due_to_active_reservation) = count(*)
+              THEN 'No draft was created because all selected payments are already reserved in another active draft batch.'
+            ELSE 'Some payments were not added because they are already reserved in another draft batch.'
+          END,
+          'skipped_preview_row_count', count(*) FILTER (WHERE pr.skipped_due_to_active_reservation),
+          'clipped_preview_row_count', count(*) FILTER (WHERE pr.clipped_due_to_active_reservation),
+          'skipped_item_rows', coalesce(sum(pr.unavailable_item_count), 0),
+          'clipped_item_rows', coalesce(sum(pr.clipped_item_count), 0),
+          'all_selected_rows_unavailable', bool_and(pr.skipped_due_to_active_reservation),
+          'preview_rows', coalesce(jsonb_agg(
+            jsonb_build_object(
+              'preview_row_id', pr.preview_row_id,
+              'candidate_id', pr.candidate_id::text,
+              'timesheet_id', CASE WHEN pr.timesheet_id IS NULL THEN NULL ELSE pr.timesheet_id::text END,
+              'pay_channel', pr.pay_channel,
+              'requested_amount_ex_vat', pr.requested_amount_ex_vat,
+              'effective_amount_ex_vat', pr.effective_amount_ex_vat,
+              'skipped_due_to_active_reservation', pr.skipped_due_to_active_reservation,
+              'clipped_due_to_active_reservation', pr.clipped_due_to_active_reservation,
+              'unavailable_item_count', pr.unavailable_item_count,
+              'clipped_item_count', pr.clipped_item_count,
+              'components', pr.component_reports_json
+            )
+            order by pr.preview_row_id
+          ) FILTER (WHERE pr.unavailable_item_count > 0 OR pr.clipped_item_count > 0), '[]'::jsonb)
+        ) AS reservation_availability_json
+      FROM pg_temp.tmp_pay_build_reservation_availability_preview_report AS pr
+      WHERE pr.candidate_scope_id IS NOT NULL
+      GROUP BY pr.candidate_scope_id
+      HAVING coalesce(sum(pr.unavailable_item_count + pr.clipped_item_count), 0) > 0
+    )
+    UPDATE public.banking_pay_operation_candidate_scope AS scope_update
+    SET
+      allocation_basis_json = jsonb_set(
+        coalesce(scope_update.allocation_basis_json, '{}'::jsonb),
+        '{reservation_availability}',
+        payload_by_scope.reservation_availability_json,
+        true
+      ),
+      updated_at_utc = now()
+    FROM payload_by_scope
+    WHERE scope_update.id = payload_by_scope.candidate_scope_id
+      AND scope_update.operation_id = p_operation_id
+      AND scope_update.pay_batch_id = v_batch_id;
+  END IF;
+
+  SELECT count(*)::integer
+  INTO v_scope_item_rows_after_availability
+  FROM public.pay_batch_items AS pbi_after
+  JOIN public.pay_batch_candidates AS pbc_after
+    ON pbc_after.id = pbi_after.pay_batch_candidate_id
+  WHERE pbc_after.pay_batch_id = v_batch_id
+    AND pbc_after.candidate_id = ANY(v_candidate_ids)
+    AND coalesce(pbi_after.is_voided, false) = false
+    AND pbi_after.item_type IN ('SEGMENT_DELTA', 'EXPENSE_DELTA', 'ADJUSTMENT_DELTA', 'MILEAGE_DELTA');
+
+  begin
+    perform public._imp_debug_audit(
+      p_actor_user_id,
+      'PAY_CREATE_DRAFT_BATCH:STAGE_12B_ACTIVE_RESERVATION_AVAILABILITY_ENFORCED',
+      jsonb_build_object(
+        'stage', v_stage,
+        'pay_batch_id', v_batch_id::text,
+        'scope', v_scope,
+        'inserted_item_rows_before_availability', v_rows_ins_items,
+        'eligible_item_rows_after_availability', v_scope_item_rows_after_availability,
+        'reservation_skipped_item_rows', v_reservation_skipped_item_rows,
+        'reservation_clipped_item_rows', v_reservation_clipped_item_rows,
+        'reservation_skipped_preview_row_count', v_reservation_skipped_preview_row_count,
+        'reservation_clipped_preview_row_count', v_reservation_clipped_preview_row_count,
+        'reservation_preview_rows', v_reservation_availability_preview_rows_json
+      ),
+      'pay_batches',
+      v_batch_id::text,
+      null, null, null, null, null
+    );
+  exception when others then null; end;
+
+  v_stage := 'STAGE_12_INSERT_PAY_BATCH_ITEMS';
+
   begin
     perform public._imp_debug_audit(
       p_actor_user_id,
@@ -1349,7 +1825,12 @@ v_stage := 'STAGE_12_INSERT_PAY_BATCH_ITEMS';
         'stage', v_stage,
         'pay_batch_id', v_batch_id::text,
         'scope', v_scope,
-        'inserted_item_rows', v_rows_ins_items
+        'inserted_item_rows', v_rows_ins_items,
+        'eligible_item_rows_after_availability', v_scope_item_rows_after_availability,
+        'reservation_skipped_item_rows', v_reservation_skipped_item_rows,
+        'reservation_clipped_item_rows', v_reservation_clipped_item_rows,
+        'reservation_skipped_preview_row_count', v_reservation_skipped_preview_row_count,
+        'reservation_clipped_preview_row_count', v_reservation_clipped_preview_row_count
       ),
       'pay_batches',
       v_batch_id::text,
@@ -1637,12 +2118,24 @@ v_stage := 'STAGE_12_INSERT_PAY_BATCH_ITEMS';
     'pay_batch_id', v_batch_id::text,
     'operation_id', CASE WHEN p_operation_id IS NULL THEN NULL ELSE p_operation_id::text END,
     'inserted_item_rows', v_rows_ins_items,
+    'eligible_item_rows_after_availability', coalesce(v_scope_item_rows_after_availability, 0),
     'reused_item_rows', coalesce(v_operation_reused_count, 0),
-    'skipped_item_rows', 0,
-    'failed_item_rows', 0
+    'skipped_item_rows', coalesce(v_reservation_skipped_item_rows, 0),
+    'failed_item_rows', 0,
+    'reservation_skipped_item_rows', coalesce(v_reservation_skipped_item_rows, 0),
+    'reservation_clipped_item_rows', coalesce(v_reservation_clipped_item_rows, 0),
+    'reservation_skipped_preview_row_count', coalesce(v_reservation_skipped_preview_row_count, 0),
+    'reservation_clipped_preview_row_count', coalesce(v_reservation_clipped_preview_row_count, 0),
+    'reservation_availability_preview_rows', coalesce(v_reservation_availability_preview_rows_json, '[]'::jsonb),
+    'message', CASE
+      WHEN coalesce(v_reservation_skipped_preview_row_count, 0) > 0 OR coalesce(v_reservation_clipped_preview_row_count, 0) > 0
+        THEN 'Some payments were not added because they are already reserved in another draft batch.'
+      ELSE NULL
+    END
   );
 END;
-$function$;
+$function$
+;
 
 
 
@@ -4663,19 +5156,13 @@ $function$;
 DROP FUNCTION IF EXISTS public.pay_batch_finalize_reservations_and_markers(uuid, text, uuid, date, date);
 DROP FUNCTION IF EXISTS public.pay_batch_finalize_reservations_and_markers(uuid, text, uuid, date, date, uuid, jsonb);
 
-CREATE OR REPLACE FUNCTION public.pay_batch_finalize_reservations_and_markers(
-  p_pay_batch_id uuid,
-  p_pay_channel_scope text,
-  p_actor_user_id uuid DEFAULT NULL::uuid,
-  p_pay_date date DEFAULT NULL::date,
-  p_week_start date DEFAULT NULL::date,
-  p_operation_id uuid DEFAULT NULL::uuid,
-  p_candidate_scope_ids jsonb DEFAULT NULL::jsonb
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
+
+
+CREATE OR REPLACE FUNCTION public.pay_batch_finalize_reservations_and_markers(p_pay_batch_id uuid, p_pay_channel_scope text, p_actor_user_id uuid DEFAULT NULL::uuid, p_pay_date date DEFAULT NULL::date, p_week_start date DEFAULT NULL::date, p_operation_id uuid DEFAULT NULL::uuid, p_candidate_scope_ids jsonb DEFAULT NULL::jsonb)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
 AS $function$
 DECLARE
   v_batch_id uuid := p_pay_batch_id;
@@ -4712,6 +5199,7 @@ DECLARE
   v_rows_preexisting_unlinked_reservations integer := 0;
   v_rows_mismatched_linked_reservations integer := 0;
   v_failed_count integer := 0;
+  v_nothing_payable_due_to_reservation boolean := false;
 BEGIN
   IF p_pay_batch_id IS NULL THEN
     RAISE EXCEPTION 'pay_batch_id is required';
@@ -4838,6 +5326,52 @@ v_stage := 'STAGE_13_DELETE_EMPTY_CANDIDATES';
         null, null, null, null, null
       );
     exception when others then null; end;
+
+    IF p_operation_id IS NOT NULL THEN
+      RETURN jsonb_build_object(
+        'ok', true,
+        'pay_batch_id', v_batch_id::text,
+        'operation_id', p_operation_id::text,
+        'nothing_payable_after_reservation_exclusion', EXISTS (
+          SELECT 1
+          FROM public.banking_pay_operation_candidate_scope AS scope_row
+          WHERE scope_row.operation_id = p_operation_id
+            AND scope_row.pay_batch_id = v_batch_id
+            AND (jsonb_typeof(scope_row.allocation_basis_json #> '{reservation_availability}') = 'object')
+            AND lower(coalesce(scope_row.allocation_basis_json #>> '{reservation_availability,all_selected_rows_unavailable}', 'false')) IN ('true','t','1','yes','y')
+        ),
+        'message', CASE
+          WHEN EXISTS (
+            SELECT 1
+            FROM public.banking_pay_operation_candidate_scope AS scope_row
+            WHERE scope_row.operation_id = p_operation_id
+              AND scope_row.pay_batch_id = v_batch_id
+              AND (jsonb_typeof(scope_row.allocation_basis_json #> '{reservation_availability}') = 'object')
+              AND lower(coalesce(scope_row.allocation_basis_json #>> '{reservation_availability,all_selected_rows_unavailable}', 'false')) IN ('true','t','1','yes','y')
+          )
+            THEN 'No draft was created because all selected payments are already reserved in another active draft batch.'
+          ELSE 'Nothing to pay (no payable items for scope after blockers)'
+        END,
+        'candidate_rows_before_empty_delete', v_candidate_rows_before_empty_delete,
+        'deleted_candidate_rows', v_rows_del_candidates,
+        'candidate_rows_after_empty_delete', v_candidate_rows_after_empty_delete
+      );
+    END IF;
+
+    IF to_regclass('pg_temp.tmp_pay_build_reservation_availability_report') IS NOT NULL THEN
+      EXECUTE 'SELECT EXISTS (SELECT 1 FROM pg_temp.tmp_pay_build_reservation_availability_report WHERE availability_action = ''SKIP_ALREADY_RESERVED'')'
+      INTO v_nothing_payable_due_to_reservation;
+    END IF;
+
+    IF coalesce(v_nothing_payable_due_to_reservation, false) THEN
+      raise exception '%', jsonb_build_object(
+        'error', 'PAY_DRAFT_ALL_SELECTED_PAYMENTS_ALREADY_RESERVED',
+        'message', 'No draft was created because all selected payments are already reserved in another active draft batch.',
+        'pay_batch_id', v_batch_id::text,
+        'scope', v_scope,
+        'stage', v_stage
+      )::text;
+    END IF;
 
     raise exception 'Nothing to pay (no payable items for scope % after blockers)', v_scope;
   end if;
@@ -5649,9 +6183,8 @@ v_stage := 'STAGE_16D_CREATE_FINANCE_RESERVATIONS';
     'awaiting_net_rows_updated', coalesce(v_rows_upd_candidates_paye_awaiting, 0)
   );
 END;
-$function$;
-
-
+$function$
+;
 
 
 
@@ -6728,15 +7261,12 @@ DROP FUNCTION IF EXISTS public.pay_batch_assert_integrity(uuid, uuid);
 DROP FUNCTION IF EXISTS public.pay_batch_assert_integrity(uuid, uuid, uuid);
 
 
-CREATE OR REPLACE FUNCTION public.pay_batch_assert_integrity(
-  p_pay_batch_id uuid,
-  p_actor_user_id uuid DEFAULT NULL::uuid,
-  p_operation_id uuid DEFAULT NULL::uuid
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
+
+CREATE OR REPLACE FUNCTION public.pay_batch_assert_integrity(p_pay_batch_id uuid, p_actor_user_id uuid DEFAULT NULL::uuid, p_operation_id uuid DEFAULT NULL::uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
 AS $function$
 DECLARE
   v_batch_id uuid := p_pay_batch_id;
@@ -6757,6 +7287,9 @@ DECLARE
   v_operation_mismatch_details jsonb := '{}'::jsonb;
   v_operation_affected_candidate_ids jsonb := '[]'::jsonb;
   v_operation_mismatch_count integer := 0;
+  v_operation_active_item_count integer := 0;
+  v_operation_scope_count integer := 0;
+  v_operation_reservation_unavailable_scope_count integer := 0;
 BEGIN
   IF p_pay_batch_id IS NULL THEN
     RAISE EXCEPTION 'pay_batch_id is required';
@@ -7444,6 +7977,72 @@ v_stage := 'STAGE_21_BREAKDOWN_INTEGRITY_MISSING';
 
 
   IF p_operation_id IS NOT NULL THEN
+    SELECT count(*)::integer
+    INTO v_operation_active_item_count
+    FROM public.pay_batch_items AS item_row
+    JOIN public.pay_batch_candidates AS batch_candidate
+      ON batch_candidate.id = item_row.pay_batch_candidate_id
+    WHERE batch_candidate.pay_batch_id = v_batch_id
+      AND coalesce(item_row.is_voided, false) = false;
+
+    SELECT count(*)::integer,
+           count(*) FILTER (
+             WHERE lower(coalesce(scope_row.allocation_basis_json #>> '{reservation_availability,all_selected_rows_unavailable}', 'false')) IN ('true','t','1','yes','y')
+           )::integer
+    INTO v_operation_scope_count, v_operation_reservation_unavailable_scope_count
+    FROM public.banking_pay_operation_candidate_scope AS scope_row
+    WHERE scope_row.operation_id = p_operation_id
+      AND scope_row.pay_batch_id = v_batch_id;
+
+    IF coalesce(v_operation_active_item_count, 0) = 0 THEN
+      RETURN jsonb_build_object(
+        'ok', false,
+        'pay_batch_id', v_batch_id::text,
+        'operation_id', p_operation_id::text,
+        'pass', false,
+        'error', CASE
+          WHEN coalesce(v_operation_scope_count, 0) > 0
+           AND coalesce(v_operation_reservation_unavailable_scope_count, 0) = coalesce(v_operation_scope_count, 0)
+            THEN 'PAY_DRAFT_ALL_SELECTED_PAYMENTS_ALREADY_RESERVED'
+          ELSE 'PAY_DRAFT_NO_PAYABLE_ITEMS_REMAIN'
+        END,
+        'code', CASE
+          WHEN coalesce(v_operation_scope_count, 0) > 0
+           AND coalesce(v_operation_reservation_unavailable_scope_count, 0) = coalesce(v_operation_scope_count, 0)
+            THEN 'PAY_DRAFT_ALL_SELECTED_PAYMENTS_ALREADY_RESERVED'
+          ELSE 'PAY_DRAFT_NO_PAYABLE_ITEMS_REMAIN'
+        END,
+        'message', CASE
+          WHEN coalesce(v_operation_scope_count, 0) > 0
+           AND coalesce(v_operation_reservation_unavailable_scope_count, 0) = coalesce(v_operation_scope_count, 0)
+            THEN 'No draft was created because all selected payments are already reserved in another active draft batch.'
+          ELSE 'No draft was created because no payable items remained after eligibility checks.'
+        END,
+        'friendly_error_message', CASE
+          WHEN coalesce(v_operation_scope_count, 0) > 0
+           AND coalesce(v_operation_reservation_unavailable_scope_count, 0) = coalesce(v_operation_scope_count, 0)
+            THEN 'No draft was created because all selected payments are already reserved in another active draft batch.'
+          ELSE 'No draft was created because no payable items remained after eligibility checks.'
+        END,
+        'mismatch_details', jsonb_build_array(jsonb_build_object(
+          'check_code', CASE
+            WHEN coalesce(v_operation_scope_count, 0) > 0
+             AND coalesce(v_operation_reservation_unavailable_scope_count, 0) = coalesce(v_operation_scope_count, 0)
+              THEN 'PAY_DRAFT_ALL_SELECTED_PAYMENTS_ALREADY_RESERVED'
+            ELSE 'PAY_DRAFT_NO_PAYABLE_ITEMS_REMAIN'
+          END,
+          'active_item_count', coalesce(v_operation_active_item_count, 0),
+          'operation_scope_count', coalesce(v_operation_scope_count, 0),
+          'reservation_unavailable_scope_count', coalesce(v_operation_reservation_unavailable_scope_count, 0)
+        )),
+        'affected_candidate_ids', coalesce(to_jsonb(v_candidate_ids), '[]'::jsonb),
+        'breakdown_missing_ct', coalesce(v_breakdown_missing_ct, 0),
+        'breakdown_bad_ct', coalesce(v_breakdown_bad_ct, 0),
+        'blocked_count', jsonb_array_length(coalesce(v_blocked_candidates, '[]'::jsonb)),
+        'consumed_timesheet_override_count', coalesce(v_rows_upd_timesheet_overrides_consumed, 0)
+      );
+    END IF;
+
     WITH operation_checks AS (
       SELECT 'MISSING_BATCH_CANDIDATE'::text AS check_code,
              scope_row.candidate_id,
@@ -7455,6 +8054,7 @@ v_stage := 'STAGE_21_BREAKDOWN_INTEGRITY_MISSING';
       FROM public.banking_pay_operation_candidate_scope AS scope_row
       WHERE scope_row.operation_id = p_operation_id
         AND scope_row.pay_batch_id = v_batch_id
+        AND lower(coalesce(scope_row.allocation_basis_json #>> '{reservation_availability,all_selected_rows_unavailable}', 'false')) NOT IN ('true','t','1','yes','y')
         AND NOT EXISTS (
           SELECT 1
           FROM public.pay_batch_candidates AS batch_candidate
@@ -7585,18 +8185,41 @@ v_stage := 'STAGE_21_BREAKDOWN_INTEGRITY_MISSING';
           CASE WHEN coalesce(line_element.value->>'timesheet_id', '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN (line_element.value->>'timesheet_id')::uuid ELSE NULL::uuid END AS timesheet_id,
           upper(btrim(coalesce(line_element.value->>'line_type', line_element.value->>'item_type', line_element.value->>'case_type', ''))) AS line_type,
           round(coalesce(
+            CASE WHEN coalesce(reservation_metadata.reservation_json->>'effective_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN (reservation_metadata.reservation_json->>'effective_amount_ex_vat')::numeric ELSE NULL::numeric END,
             CASE WHEN coalesce(line_element.value->>'amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN (line_element.value->>'amount_ex_vat')::numeric ELSE NULL::numeric END,
             CASE WHEN coalesce(line_element.value->>'preview_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN (line_element.value->>'preview_amount_ex_vat')::numeric ELSE NULL::numeric END,
             0::numeric
-          ), 2) AS expected_amount_ex_vat
+          ), 2) AS expected_amount_ex_vat,
+          coalesce(
+            lower(coalesce(reservation_metadata.reservation_json->>'skipped_due_to_active_reservation', 'false')) IN ('true','t','1','yes','y'),
+            false
+          ) AS skipped_due_to_active_reservation
         FROM public.banking_pay_operation_candidate_scope AS scope_row
         CROSS JOIN LATERAL jsonb_array_elements(coalesce(scope_row.selected_canonical_preview_lines_json, '[]'::jsonb)) AS line_element(value)
+        LEFT JOIN LATERAL (
+          SELECT reservation_row.value AS reservation_json
+          FROM jsonb_array_elements(
+            CASE
+              WHEN jsonb_typeof(scope_row.allocation_basis_json #> '{reservation_availability,preview_rows}') = 'array'
+                THEN scope_row.allocation_basis_json #> '{reservation_availability,preview_rows}'
+              ELSE '[]'::jsonb
+            END
+          ) AS reservation_row(value)
+          WHERE reservation_row.value->>'preview_row_id' = coalesce(
+            nullif(btrim(coalesce(line_element.value->>'preview_row_id', '')), ''),
+            nullif(btrim(coalesce(line_element.value->>'line_id', '')), ''),
+            nullif(btrim(coalesce(line_element.value->>'row_id', '')), ''),
+            nullif(btrim(coalesce(line_element.value->>'id', '')), '')
+          )
+          LIMIT 1
+        ) AS reservation_metadata ON true
         WHERE scope_row.operation_id = p_operation_id
           AND scope_row.pay_batch_id = v_batch_id
           AND jsonb_typeof(line_element.value) = 'object'
           AND coalesce(CASE WHEN lower(coalesce(line_element.value->>'draftable', 'true')) IN ('true','false') THEN (line_element.value->>'draftable')::boolean ELSE true END, true) = true
       ) AS selected_line
       WHERE selected_line.preview_row_id IS NOT NULL
+        AND coalesce(selected_line.skipped_due_to_active_reservation, false) = false
         AND NOT EXISTS (
           SELECT 1
           FROM public.pay_batch_candidates AS batch_candidate
@@ -7632,12 +8255,30 @@ v_stage := 'STAGE_21_BREAKDOWN_INTEGRITY_MISSING';
           round(coalesce((
             SELECT sum(
               round(coalesce(
+                CASE WHEN coalesce(reservation_metadata.reservation_json->>'effective_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN (reservation_metadata.reservation_json->>'effective_amount_ex_vat')::numeric ELSE NULL::numeric END,
                 CASE WHEN coalesce(selected_line_element.value->>'amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN (selected_line_element.value->>'amount_ex_vat')::numeric ELSE NULL::numeric END,
                 CASE WHEN coalesce(selected_line_element.value->>'preview_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN (selected_line_element.value->>'preview_amount_ex_vat')::numeric ELSE NULL::numeric END,
                 0::numeric
               ), 2)
             )
             FROM jsonb_array_elements(coalesce(scope_row.selected_canonical_preview_lines_json, '[]'::jsonb)) AS selected_line_element(value)
+            LEFT JOIN LATERAL (
+              SELECT reservation_row.value AS reservation_json
+              FROM jsonb_array_elements(
+                CASE
+                  WHEN jsonb_typeof(scope_row.allocation_basis_json #> '{reservation_availability,preview_rows}') = 'array'
+                    THEN scope_row.allocation_basis_json #> '{reservation_availability,preview_rows}'
+                  ELSE '[]'::jsonb
+                END
+              ) AS reservation_row(value)
+              WHERE reservation_row.value->>'preview_row_id' = coalesce(
+                nullif(btrim(coalesce(selected_line_element.value->>'preview_row_id', '')), ''),
+                nullif(btrim(coalesce(selected_line_element.value->>'line_id', '')), ''),
+                nullif(btrim(coalesce(selected_line_element.value->>'row_id', '')), ''),
+                nullif(btrim(coalesce(selected_line_element.value->>'id', '')), '')
+              )
+              LIMIT 1
+            ) AS reservation_metadata ON true
             WHERE jsonb_typeof(selected_line_element.value) = 'object'
               AND coalesce(CASE WHEN lower(coalesce(selected_line_element.value->>'draftable', 'true')) IN ('true','false') THEN (selected_line_element.value->>'draftable')::boolean ELSE true END, true) = true
           ), 0::numeric), 2) AS expected_amount_ex_vat,
@@ -7709,12 +8350,30 @@ v_stage := 'STAGE_21_BREAKDOWN_INTEGRITY_MISSING';
           SELECT
             upper(btrim(coalesce(scope_row.pay_channel, ''))) AS pay_channel,
             round(coalesce(
+              CASE WHEN coalesce(reservation_metadata.reservation_json->>'effective_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN (reservation_metadata.reservation_json->>'effective_amount_ex_vat')::numeric ELSE NULL::numeric END,
               CASE WHEN coalesce(line_element.value->>'amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN (line_element.value->>'amount_ex_vat')::numeric ELSE NULL::numeric END,
               CASE WHEN coalesce(line_element.value->>'preview_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN (line_element.value->>'preview_amount_ex_vat')::numeric ELSE NULL::numeric END,
               0::numeric
             ), 2) AS expected_amount_ex_vat
           FROM public.banking_pay_operation_candidate_scope AS scope_row
           CROSS JOIN LATERAL jsonb_array_elements(coalesce(scope_row.selected_canonical_preview_lines_json, '[]'::jsonb)) AS line_element(value)
+          LEFT JOIN LATERAL (
+            SELECT reservation_row.value AS reservation_json
+            FROM jsonb_array_elements(
+              CASE
+                WHEN jsonb_typeof(scope_row.allocation_basis_json #> '{reservation_availability,preview_rows}') = 'array'
+                  THEN scope_row.allocation_basis_json #> '{reservation_availability,preview_rows}'
+                ELSE '[]'::jsonb
+              END
+            ) AS reservation_row(value)
+            WHERE reservation_row.value->>'preview_row_id' = coalesce(
+              nullif(btrim(coalesce(line_element.value->>'preview_row_id', '')), ''),
+              nullif(btrim(coalesce(line_element.value->>'line_id', '')), ''),
+              nullif(btrim(coalesce(line_element.value->>'row_id', '')), ''),
+              nullif(btrim(coalesce(line_element.value->>'id', '')), '')
+            )
+            LIMIT 1
+          ) AS reservation_metadata ON true
           WHERE scope_row.operation_id = p_operation_id
             AND scope_row.pay_batch_id = v_batch_id
             AND jsonb_typeof(line_element.value) = 'object'
@@ -7737,6 +8396,8 @@ v_stage := 'STAGE_21_BREAKDOWN_INTEGRITY_MISSING';
         'pay_batch_id', v_batch_id::text,
         'operation_id', p_operation_id::text,
         'pass', false,
+        'error', 'DRAFT_INTEGRITY_FAILED',
+        'code', 'DRAFT_INTEGRITY_FAILED',
         'mismatch_details', coalesce(v_operation_mismatch_details, '[]'::jsonb),
         'affected_candidate_ids', coalesce(v_operation_affected_candidate_ids, '[]'::jsonb),
         'friendly_error_message', 'Operation draft integrity checks failed. The chunked draft does not exactly match the snapshotted operation scope.',
@@ -7763,6 +8424,9 @@ v_stage := 'STAGE_21_BREAKDOWN_INTEGRITY_MISSING';
   );
 END;
 $function$;
+
+
+
 
 
 
