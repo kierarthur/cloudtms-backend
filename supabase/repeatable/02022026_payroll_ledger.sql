@@ -175,6 +175,8 @@ DROP FUNCTION IF EXISTS public.pay_batch_cancel(uuid, uuid, text);
 
 
 
+
+
 create or replace function public.pay_batch_cancel(
   p_pay_batch_id uuid,
   p_actor_user_id uuid,
@@ -363,6 +365,30 @@ begin
         or nullif(btrim(coalesce(pbt.failed_reason, '')), '') is not null
         or upper(coalesce(pbt.status,'')) in ('COMPLETED','FAILED','CANCELLED','CANCELED','RETURNED','REVERSED','REVERTED')
       )
+      and not (
+        upper(coalesce(pbt.status,'')) in ('CANCELLED','CANCELED')
+        and upper(btrim(coalesce(pbt.failed_reason, ''))) = 'MANUAL_RESOLVED_NO_PAYMENT_MADE'
+        and nullif(btrim(coalesce(pbt.rail_tx_id, '')), '') is null
+        and pbt.completed_at_utc is null
+        and nullif(btrim(coalesce(pbt.rail_state, '')), '') is null
+        and upper(btrim(coalesce(pbt.rail_meta_json #>> '{provider_submit_diagnostic,provider_submission_status}', ''))) = 'MANUAL_RESOLVED_NO_PAYMENT_MADE'
+        and lower(btrim(coalesce(pbt.rail_meta_json #>> '{manual_resolution_recorded}', ''))) in ('true', 't', '1', 'yes', 'y', 'on')
+        and exists (
+          select 1
+          from public.pay_bank_transfer_events manual_no_payment_event
+          where manual_no_payment_event.pay_batch_id = p_pay_batch_id
+            and manual_no_payment_event.pay_bank_transfer_id = pbt.id
+            and upper(btrim(coalesce(manual_no_payment_event.event_source, ''))) = 'MANUAL_CONFIRM'
+            and upper(btrim(coalesce(manual_no_payment_event.provider_state, ''))) = 'MANUAL_RESOLVED_NO_PAYMENT_MADE'
+            and upper(btrim(coalesce(manual_no_payment_event.normalised_state, ''))) = 'CANCELLED'
+            and upper(btrim(coalesce(manual_no_payment_event.mapping_status, ''))) = 'MATCHED'
+            and upper(btrim(coalesce(manual_no_payment_event.mapping_method, ''))) = 'MANUAL_TRANSFER_SELECTION'
+            and upper(btrim(coalesce(manual_no_payment_event.movement_classification, ''))) = 'PRE_BANK_CANCEL'
+            and upper(btrim(coalesce(manual_no_payment_event.correction_disposition, ''))) = 'NO_CORRECTION_REQUIRED'
+            and upper(btrim(coalesce(manual_no_payment_event.raw_payload ->> 'event_kind', ''))) = 'PROVIDER_SUBMIT_MANUAL_NO_PAYMENT_RESOLUTION'
+            and upper(btrim(coalesce(manual_no_payment_event.raw_payload ->> 'confirmation_reason', ''))) = 'NO_PAYMENT_MADE_CONFIRMED'
+        )
+      )
   ) then
     raise exception '%', jsonb_build_object(
       'error', 'USE_PAYMENT_CORRECTION_FLOW',
@@ -377,6 +403,17 @@ begin
     select 1
     from public.pay_bank_transfer_events bank_event_evidence
     where bank_event_evidence.pay_batch_id = p_pay_batch_id
+      and not (
+        upper(btrim(coalesce(bank_event_evidence.event_source, ''))) = 'MANUAL_CONFIRM'
+        and upper(btrim(coalesce(bank_event_evidence.provider_state, ''))) = 'MANUAL_RESOLVED_NO_PAYMENT_MADE'
+        and upper(btrim(coalesce(bank_event_evidence.normalised_state, ''))) = 'CANCELLED'
+        and upper(btrim(coalesce(bank_event_evidence.mapping_status, ''))) = 'MATCHED'
+        and upper(btrim(coalesce(bank_event_evidence.mapping_method, ''))) = 'MANUAL_TRANSFER_SELECTION'
+        and upper(btrim(coalesce(bank_event_evidence.movement_classification, ''))) = 'PRE_BANK_CANCEL'
+        and upper(btrim(coalesce(bank_event_evidence.correction_disposition, ''))) = 'NO_CORRECTION_REQUIRED'
+        and upper(btrim(coalesce(bank_event_evidence.raw_payload ->> 'event_kind', ''))) = 'PROVIDER_SUBMIT_MANUAL_NO_PAYMENT_RESOLUTION'
+        and upper(btrim(coalesce(bank_event_evidence.raw_payload ->> 'confirmation_reason', ''))) = 'NO_PAYMENT_MADE_CONFIRMED'
+      )
   ) then
     raise exception '%', jsonb_build_object(
       'error', 'USE_PAYMENT_CORRECTION_FLOW',
@@ -1343,6 +1380,10 @@ begin
   );
 end;
 $$;
+
+
+
+
 
 
 create or replace function public.pay_set_paye_net_from_sage(
