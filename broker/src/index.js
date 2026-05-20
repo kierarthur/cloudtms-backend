@@ -38614,6 +38614,127 @@ const emitTransferPreparationReconciliationDiagnosticLog = (diagnostic = {}, eve
   }
 };
 
+const buildSingleChunkTransferPreparationProof = (stage) => {
+  const latestProgress = safeObject(operation.progress_json || progressJson);
+  const priorProof = safeObject(latestProgress.transfer_preparation_chunk_proof);
+  const lastChunkResult = safeObject(priorProof.last_chunk_result || latestProgress.last_chunk_result);
+  const transferScopeSeed = safeObject(priorProof.transfer_scope_seed || latestProgress.transfer_scope_seed);
+  const transferChunkSeed = safeObject(priorProof.transfer_chunk_seed || latestProgress.transfer_chunk_seed);
+  const requestedScopeCount = numField(lastChunkResult, 'requested_scope_count', 'requestedScopeCount');
+  const preparedCount = numField(lastChunkResult, 'prepared_count', 'preparedCount');
+  const preparedScopeCount = numField(lastChunkResult, 'prepared_scope_count', 'preparedScopeCount');
+  const linkedTransferCount = numField(lastChunkResult, 'linked_transfer_count', 'linkedTransferCount');
+  const authorisationReadyCount = numField(lastChunkResult, 'authorisation_ready_count', 'authorisationReadyCount');
+  const failedCount = numField(lastChunkResult, 'failed_count', 'failedCount');
+  const skippedCount = numField(lastChunkResult, 'skipped_count', 'skippedCount');
+  const scopeFailedCount = numField(lastChunkResult, 'scope_failed_count', 'scopeFailedCount');
+  const scopeSkippedCount = numField(lastChunkResult, 'scope_skipped_count', 'scopeSkippedCount');
+  const scopeWithoutTransferCount = numField(lastChunkResult, 'scope_without_transfer_count', 'scopeWithoutTransferCount');
+  const notAuthorisationReadyCount = numField(lastChunkResult, 'not_authorisation_ready_count', 'notAuthorisationReadyCount');
+  const unsafeTransferCount = numField(lastChunkResult, 'unsafe_transfer_count', 'unsafeTransferCount');
+  const providerEvidenceBlockedCount = numField(lastChunkResult, 'provider_evidence_blocked_count', 'providerEvidenceBlockedCount', 'conflict_provider_evidence_blocked_count', 'conflictProviderEvidenceBlockedCount');
+  const remainingCount = numField(lastChunkResult, 'remaining_count', 'remainingCount');
+  const hardBlocker = boolField(lastChunkResult, 'hard_blocker', 'hardBlocker');
+  const allRequestedScopesAuthorisationReady = boolField(lastChunkResult, 'all_requested_scopes_authorisation_ready', 'allRequestedScopesAuthorisationReady');
+  const seedGroupCount = numField(transferScopeSeed, 'group_count', 'groupCount', 'created_count', 'createdCount');
+  const chunkTotalUnits = numField(transferChunkSeed, 'total_units', 'totalUnits');
+  const chunkCount = numField(transferChunkSeed, 'chunk_count', 'chunkCount');
+  const singleChunkScopeMatches = requestedScopeCount > 0
+    && (seedGroupCount <= 0 || seedGroupCount === requestedScopeCount)
+    && (chunkTotalUnits <= 0 || chunkTotalUnits === requestedScopeCount)
+    && (chunkCount <= 0 || chunkCount === 1);
+  const proven = singleChunkScopeMatches
+    && lastChunkResult.ok !== false
+    && hardBlocker !== true
+    && preparedCount === requestedScopeCount
+    && preparedScopeCount === requestedScopeCount
+    && linkedTransferCount === requestedScopeCount
+    && authorisationReadyCount === requestedScopeCount
+    && failedCount === 0
+    && skippedCount === 0
+    && scopeFailedCount === 0
+    && scopeSkippedCount === 0
+    && scopeWithoutTransferCount === 0
+    && notAuthorisationReadyCount === 0
+    && unsafeTransferCount === 0
+    && providerEvidenceBlockedCount === 0
+    && remainingCount === 0
+    && allRequestedScopesAuthorisationReady === true;
+  const proof = {
+    proof_version: 1,
+    proof_kind: 'SINGLE_CHUNK_TRANSFER_PREPARATION_AUTHORISATION_READY',
+    generated_at_utc: new Date().toISOString(),
+    stage: String(stage || '').trim() || null,
+    operation_id: operationId,
+    pay_batch_id: payBatchId,
+    pay_channel_scope: payChannelScope,
+    single_chunk_scope_matches: singleChunkScopeMatches,
+    proven,
+    requested_scope_count: requestedScopeCount,
+    prepared_count: preparedCount,
+    prepared_scope_count: preparedScopeCount,
+    linked_transfer_count: linkedTransferCount,
+    authorisation_ready_transfer_count: authorisationReadyCount,
+    failed_count: failedCount,
+    skipped_count: skippedCount,
+    scope_failed_count: scopeFailedCount,
+    scope_skipped_count: scopeSkippedCount,
+    scope_without_transfer_count: scopeWithoutTransferCount,
+    not_authorisation_ready_count: notAuthorisationReadyCount,
+    unsafe_transfer_count: unsafeTransferCount,
+    provider_evidence_blocked_count: providerEvidenceBlockedCount,
+    remaining_count: remainingCount,
+    all_requested_scopes_authorisation_ready: allRequestedScopesAuthorisationReady,
+    transfer_scope_seed: Object.keys(transferScopeSeed).length ? transferScopeSeed : null,
+    transfer_chunk_seed: Object.keys(transferChunkSeed).length ? transferChunkSeed : null,
+    last_chunk_result: Object.keys(lastChunkResult).length ? lastChunkResult : null
+  };
+  const reconciliation = {
+    ok: proven,
+    ready: proven,
+    ready_flag: proven,
+    pay_batch_id: payBatchId,
+    operation_id: operationId,
+    blocker_count: 0,
+    warning_count: proven ? 1 : 0,
+    blockers: [],
+    warnings: proven ? [{
+      code: 'PAY_BATCH_PREPARE_RECONCILIATION_SKIPPED_SINGLE_CHUNK_PROOF',
+      message: 'Full pay_batch_prepare reconciliation was skipped because the single transfer-preparation chunk already proved every scoped group is prepared and authorisation-ready.'
+    }] : [],
+    next_required_phase: proven ? 'START_AUTHORISATION' : 'RESOLVE_BLOCKERS',
+    execution_mode: executionMode,
+    pay_channel_scope: payChannelScope,
+    scoped_operation_scope_count: requestedScopeCount,
+    scoped_scope_prepared_count: preparedScopeCount,
+    scoped_scope_pending_count: 0,
+    scoped_scope_failed_count: scopeFailedCount,
+    scoped_scope_skipped_count: scopeSkippedCount,
+    scoped_scope_without_transfer_count: scopeWithoutTransferCount,
+    authorisation_ready_transfer_count: authorisationReadyCount,
+    all_scoped_operation_scopes_authorisation_ready: proven,
+    provider_attempt_or_evidence_transfer_count: 0,
+    provider_or_ambiguous_evidence_transfer_count: 0,
+    unsafe_transfer_count: unsafeTransferCount,
+    non_cancellable_auth_request_count: 0,
+    transfer_preparation_chunk_proof: proof
+  };
+  const diagnostic = makeTransferPreparationReconciliationDiagnostic(proven ? 'SINGLE_CHUNK_TRANSFER_PREPARATION_PROOF_ACCEPTED' : 'SINGLE_CHUNK_TRANSFER_PREPARATION_PROOF_NOT_ACCEPTED', {
+    reconciliation,
+    reconciliation_snapshot: scopedReadinessSnapshot(reconciliation),
+    extra: {
+      call_target: 'pay_batch_prepare',
+      call_status: proven ? 'SKIPPED_SINGLE_CHUNK_PROOF' : 'NOT_SKIPPED_PROOF_INSUFFICIENT',
+      p_pay_batch_id: payBatchId,
+      p_operation_id: operationId,
+      p_pay_channel_scope: payChannelScope,
+      transfer_preparation_chunk_proof: proof
+    }
+  });
+  const events = [makeTransferPreparationReconciliationEvent(diagnostic.stage, diagnostic)];
+  return { proven, proof, reconciliation, diagnostic, events };
+};
+
 const upperString = (value) => String(value == null ? '' : value).trim().toUpperCase();
 const firstNonBlank = (...values) => {
   for (const value of values) {
@@ -39309,6 +39430,19 @@ if (currentPhase === 'PREPARE_TRANSFER_CHUNKS') {
     });
   }
   const freshnessHash = freshnessResultHashFromProgress || inputJson.freshness_result_hash || null;
+  const singleChunkProof = buildSingleChunkTransferPreparationProof('PREPARE_TRANSFER_CHUNKS_NO_MORE_CHUNKS');
+  if (singleChunkProof.proven === true) {
+    emitTransferPreparationReconciliationDiagnosticLog(singleChunkProof.diagnostic, singleChunkProof.events);
+    return phaseProgress('RUNNING', 'PREPARE_BATCH', {
+      status_text: 'All transfer chunks prepared and reconciled from chunk-level proof.',
+      transfer_preparation_reconciliation: singleChunkProof.reconciliation,
+      transfer_preparation_reconciliation_diagnostic: singleChunkProof.diagnostic,
+      transfer_preparation_reconciliation_diagnostic_events: singleChunkProof.events,
+      transfer_preparation_chunk_proof: singleChunkProof.proof,
+      transfer_preparation_reconciliation_skipped: true,
+      transfer_preparation_reconciliation_skip_reason: 'SINGLE_CHUNK_TRANSFER_PREPARATION_AUTHORISATION_READY'
+    });
+  }
   const reconciliationDiagnosticEvents = [];
   const reconciliationStartDiagnostic = makeTransferPreparationReconciliationDiagnostic('BEFORE_PAY_BATCH_PREPARE_RECONCILIATION', {
     freshness_result_hash: freshnessHash,
@@ -39317,6 +39451,7 @@ if (currentPhase === 'PREPARE_TRANSFER_CHUNKS') {
       p_pay_batch_id: payBatchId,
       p_operation_id: operationId,
       p_pay_channel_scope: payChannelScope,
+      proof_not_used: singleChunkProof.proof || null,
       note: 'Diagnostic captured immediately before transfer-preparation reconciliation.'
     }
   });
@@ -39341,7 +39476,8 @@ if (currentPhase === 'PREPARE_TRANSFER_CHUNKS') {
         call_status: 'THREW',
         p_pay_batch_id: payBatchId,
         p_operation_id: operationId,
-        p_pay_channel_scope: payChannelScope
+        p_pay_channel_scope: payChannelScope,
+        proof_not_used: singleChunkProof.proof || null
       }
     });
     reconciliationDiagnosticEvents.push(makeTransferPreparationReconciliationEvent('PAY_BATCH_PREPARE_RECONCILIATION_THROW', reconciliationErrorDiagnostic));
@@ -39351,6 +39487,7 @@ if (currentPhase === 'PREPARE_TRANSFER_CHUNKS') {
       freshness_result_hash: freshnessHash,
       transfer_preparation_reconciliation_diagnostic: reconciliationErrorDiagnostic,
       transfer_preparation_reconciliation_diagnostic_events: reconciliationDiagnosticEvents,
+      transfer_preparation_chunk_proof: singleChunkProof.proof || null,
       source_error: sourceError,
       raw_error: sourceError,
       error: sourceError.message || 'pay_batch_prepare reconciliation failed.',
@@ -39393,6 +39530,7 @@ if (currentPhase === 'PREPARE_TRANSFER_CHUNKS') {
     transfer_preparation_reconciliation_diagnostic: reconciliationReturnDiagnostic,
     transfer_preparation_reconciliation_diagnostic_events: reconciliationDiagnosticEvents
   });
+
 }
 
 if (currentPhase === 'PREPARE_BATCH') {
@@ -39404,6 +39542,20 @@ if (currentPhase === 'PREPARE_BATCH') {
     });
   }
   const freshnessHash = freshnessResultHashFromProgress || inputJson.freshness_result_hash || null;
+  const singleChunkProof = buildSingleChunkTransferPreparationProof('PREPARE_BATCH_FAST_AUTHORISATION_READY_CHECK');
+  if (singleChunkProof.proven === true) {
+    emitTransferPreparationReconciliationDiagnosticLog(singleChunkProof.diagnostic, singleChunkProof.events);
+    return phaseProgress('RUNNING', 'START_AUTHORISATION', {
+      status_text: 'Payment blockers checked using chunk-level transfer preparation proof.',
+      prepare: singleChunkProof.reconciliation,
+      transfer_preparation_reconciliation: singleChunkProof.reconciliation,
+      transfer_preparation_reconciliation_diagnostic: singleChunkProof.diagnostic,
+      transfer_preparation_reconciliation_diagnostic_events: singleChunkProof.events,
+      transfer_preparation_chunk_proof: singleChunkProof.proof,
+      pay_batch_prepare_skipped: true,
+      pay_batch_prepare_skip_reason: 'SINGLE_CHUNK_TRANSFER_PREPARATION_AUTHORISATION_READY'
+    });
+  }
   const prepared = unwrapRpcPayload(await sbRpc(env, 'pay_batch_prepare', {
     p_pay_batch_id: payBatchId,
     p_actor_user_id: actorUserId,
@@ -40322,8 +40474,6 @@ source_error: {
 });
 }
 }
-
-
 
 async function advanceBankingPayRemittanceOperation(env, operationRow, user, options = {}) {
   const unwrapRpcPayload = (rpcRes, key) => {
