@@ -8990,6 +8990,7 @@ $$;
 
 
 
+
 create or replace function public.pay_batch_validate_freshness_chunk(
   p_operation_id uuid,
   p_chunk_id uuid,
@@ -9224,107 +9225,233 @@ begin
       actual,
       ord
     )
-    with batch_components as (
+    with chunk_components_raw as (
       select
-        batch_component.timesheet_id,
-        upper(nullif(btrim(coalesce(batch_component.key_type, '')), '')) as key_type,
-        nullif(btrim(coalesce(batch_component.key_value, '')), '') as key_value,
-        round(sum(coalesce(batch_component.source_amount_ex_vat, 0)), 2)::numeric as batch_source_ex_vat
-      from public._pay_batch_item_economic_components(null::uuid, v_item_ids) as batch_component
-      where batch_component.item_type in ('SEGMENT_DELTA', 'EXPENSE_DELTA', 'ADJUSTMENT_DELTA', 'MILEAGE_DELTA')
-        and nullif(btrim(coalesce(batch_component.key_type, '')), '') is not null
-        and nullif(btrim(coalesce(batch_component.key_value, '')), '') is not null
-      group by batch_component.timesheet_id, upper(nullif(btrim(coalesce(batch_component.key_type, '')), '')), nullif(btrim(coalesce(batch_component.key_value, '')), '')
+        chunk_batch_component.pay_batch_item_id,
+        chunk_batch_component.timesheet_id,
+        upper(nullif(btrim(coalesce(chunk_batch_component.item_type, '')), '')) as item_type,
+        upper(nullif(btrim(coalesce(chunk_batch_component.key_type, '')), '')) as key_type,
+        nullif(btrim(coalesce(chunk_batch_component.key_value, '')), '') as key_value,
+        chunk_batch_component.source_amount_ex_vat as source_amount_ex_vat,
+        nullif(btrim(coalesce(chunk_batch_component.key_resolution_failure_reason, '')), '') as key_resolution_failure_reason
+      from public._pay_batch_item_economic_components(null::uuid, v_item_ids) as chunk_batch_component
+      join public.pay_batch_items as chunk_batch_item
+        on chunk_batch_item.id = chunk_batch_component.pay_batch_item_id
+      join public.pay_batch_candidates as chunk_batch_candidate
+        on chunk_batch_candidate.id = chunk_batch_item.pay_batch_candidate_id
+      where chunk_batch_candidate.pay_batch_id = p_pay_batch_id
+        and coalesce(chunk_batch_item.is_voided, false) = false
+        and not exists (
+          select 1
+          from public.pay_payment_correction_items as chunk_applied_correction_exclusion
+          where chunk_applied_correction_exclusion.pay_batch_item_id = chunk_batch_item.id
+            and chunk_applied_correction_exclusion.status = 'APPLIED'
+            and chunk_applied_correction_exclusion.correction_item_kind in ('PRE_BANK_CANCEL', 'NO_MONEY_UNWIND', 'SETTLED_REVERSAL')
+        )
+        and upper(nullif(btrim(coalesce(chunk_batch_component.item_type, '')), '')) in ('SEGMENT_DELTA', 'EXPENSE_DELTA', 'ADJUSTMENT_DELTA', 'MILEAGE_DELTA')
     ),
-    current_components as (
+    chunk_keys as (
+      select distinct
+        chunk_components_raw.timesheet_id,
+        chunk_components_raw.key_type,
+        chunk_components_raw.key_value
+      from chunk_components_raw
+      where chunk_components_raw.timesheet_id is not null
+        and chunk_components_raw.key_resolution_failure_reason is null
+        and chunk_components_raw.source_amount_ex_vat is not null
+        and chunk_components_raw.key_type in ('TS_DAY', 'TS_TOTAL', 'ADDITIONAL_CODE', 'ADJUSTMENT_CODE', 'EXPENSE_CODE')
+        and chunk_components_raw.key_value is not null
+        and not (chunk_components_raw.key_type = 'TS_DAY' and chunk_components_raw.key_value !~ '^\d{4}-\d{2}-\d{2}$')
+    ),
+    full_batch_components as (
+      select
+        full_batch_component.timesheet_id,
+        upper(nullif(btrim(coalesce(full_batch_component.key_type, '')), '')) as key_type,
+        nullif(btrim(coalesce(full_batch_component.key_value, '')), '') as key_value,
+        round(sum(round(coalesce(full_batch_component.source_amount_ex_vat, 0), 2)), 2)::numeric as batch_source_ex_vat
+      from public._pay_batch_item_economic_components(p_pay_batch_id, null::uuid[]) as full_batch_component
+      join public.pay_batch_items as full_batch_item
+        on full_batch_item.id = full_batch_component.pay_batch_item_id
+      join public.pay_batch_candidates as full_batch_candidate
+        on full_batch_candidate.id = full_batch_item.pay_batch_candidate_id
+      join chunk_keys
+        on chunk_keys.timesheet_id = full_batch_component.timesheet_id
+       and chunk_keys.key_type = upper(nullif(btrim(coalesce(full_batch_component.key_type, '')), ''))
+       and chunk_keys.key_value = nullif(btrim(coalesce(full_batch_component.key_value, '')), '')
+      where full_batch_candidate.pay_batch_id = p_pay_batch_id
+        and coalesce(full_batch_item.is_voided, false) = false
+        and not exists (
+          select 1
+          from public.pay_payment_correction_items as full_batch_applied_correction_exclusion
+          where full_batch_applied_correction_exclusion.pay_batch_item_id = full_batch_item.id
+            and full_batch_applied_correction_exclusion.status = 'APPLIED'
+            and full_batch_applied_correction_exclusion.correction_item_kind in ('PRE_BANK_CANCEL', 'NO_MONEY_UNWIND', 'SETTLED_REVERSAL')
+        )
+        and upper(nullif(btrim(coalesce(full_batch_component.item_type, '')), '')) in ('SEGMENT_DELTA', 'EXPENSE_DELTA', 'ADJUSTMENT_DELTA', 'MILEAGE_DELTA')
+        and full_batch_component.source_amount_ex_vat is not null
+        and upper(nullif(btrim(coalesce(full_batch_component.key_type, '')), '')) in ('TS_DAY', 'TS_TOTAL', 'ADDITIONAL_CODE', 'ADJUSTMENT_CODE', 'EXPENSE_CODE')
+        and nullif(btrim(coalesce(full_batch_component.key_value, '')), '') is not null
+        and not (
+          upper(nullif(btrim(coalesce(full_batch_component.key_type, '')), '')) = 'TS_DAY'
+          and nullif(btrim(coalesce(full_batch_component.key_value, '')), '') !~ '^\d{4}-\d{2}-\d{2}$'
+        )
+      group by
+        full_batch_component.timesheet_id,
+        upper(nullif(btrim(coalesce(full_batch_component.key_type, '')), '')),
+        nullif(btrim(coalesce(full_batch_component.key_value, '')), '')
+    ),
+    current_truth_baseline as (
       select
         current_component.timesheet_id,
         upper(nullif(btrim(coalesce(current_component.key_type, '')), '')) as key_type,
         nullif(btrim(coalesce(current_component.key_value, '')), '') as key_value,
-        round(sum(coalesce(current_component.truth_ex_vat, 0) - coalesce(current_component.baseline_ex_vat, 0)), 2)::numeric as current_available_ex_vat
+        round(sum(coalesce(current_component.truth_ex_vat, 0)), 2)::numeric as truth_ex_vat,
+        round(sum(coalesce(current_component.baseline_ex_vat, 0)), 2)::numeric as baseline_ex_vat
       from public._pay_current_timesheet_entitlement_components(v_timesheet_ids) as current_component
-      where nullif(btrim(coalesce(current_component.key_type, '')), '') is not null
+      where current_component.timesheet_id is not null
+        and upper(nullif(btrim(coalesce(current_component.key_type, '')), '')) in ('TS_DAY', 'TS_TOTAL', 'ADDITIONAL_CODE', 'ADJUSTMENT_CODE', 'EXPENSE_CODE')
         and nullif(btrim(coalesce(current_component.key_value, '')), '') is not null
-      group by current_component.timesheet_id, upper(nullif(btrim(coalesce(current_component.key_type, '')), '')), nullif(btrim(coalesce(current_component.key_value, '')), '')
+        and not (
+          upper(nullif(btrim(coalesce(current_component.key_type, '')), '')) = 'TS_DAY'
+          and nullif(btrim(coalesce(current_component.key_value, '')), '') !~ '^\d{4}-\d{2}-\d{2}$'
+        )
+      group by
+        current_component.timesheet_id,
+        upper(nullif(btrim(coalesce(current_component.key_type, '')), '')),
+        nullif(btrim(coalesce(current_component.key_value, '')), '')
     ),
-    comparison_keys as (
-      select batch_components.timesheet_id, batch_components.key_type, batch_components.key_value
-      from batch_components
-      union
-      select current_components.timesheet_id, current_components.key_type, current_components.key_value
-      from current_components
+    all_reserved_components as (
+      select
+        reserved_component.timesheet_id,
+        upper(nullif(btrim(coalesce(reserved_component.key_type, '')), '')) as key_type,
+        nullif(btrim(coalesce(reserved_component.key_value, '')), '') as key_value,
+        round(sum(coalesce(reserved_component.amount_ex_vat, 0)), 2)::numeric as all_reserved_ex_vat
+      from public._pay_reserved_components(v_timesheet_ids) as reserved_component
+      where reserved_component.timesheet_id is not null
+        and upper(nullif(btrim(coalesce(reserved_component.key_type, '')), '')) in ('TS_DAY', 'TS_TOTAL', 'ADDITIONAL_CODE', 'ADJUSTMENT_CODE', 'EXPENSE_CODE')
+        and nullif(btrim(coalesce(reserved_component.key_value, '')), '') is not null
+        and not (
+          upper(nullif(btrim(coalesce(reserved_component.key_type, '')), '')) = 'TS_DAY'
+          and nullif(btrim(coalesce(reserved_component.key_value, '')), '') !~ '^\d{4}-\d{2}-\d{2}$'
+        )
+      group by
+        reserved_component.timesheet_id,
+        upper(nullif(btrim(coalesce(reserved_component.key_type, '')), '')),
+        nullif(btrim(coalesce(reserved_component.key_value, '')), '')
+    ),
+    reservation_comparison as (
+      select
+        full_batch_components.timesheet_id,
+        full_batch_components.key_type,
+        full_batch_components.key_value,
+        round(coalesce(full_batch_components.batch_source_ex_vat, 0), 2)::numeric as expected_ex_vat,
+        round(coalesce(current_truth_baseline.truth_ex_vat, 0), 2)::numeric as truth_ex_vat,
+        round(coalesce(current_truth_baseline.baseline_ex_vat, 0), 2)::numeric as baseline_ex_vat,
+        round(coalesce(all_reserved_components.all_reserved_ex_vat, 0), 2)::numeric as all_reserved_ex_vat,
+        round(
+          case
+            when public._pay_batch_status_is_active_reservation(v_batch.status) then coalesce(full_batch_components.batch_source_ex_vat, 0)
+            else 0
+          end,
+          2
+        )::numeric as this_batch_reserved_ex_vat,
+        round(
+          greatest(
+            coalesce(all_reserved_components.all_reserved_ex_vat, 0)
+            - case
+                when public._pay_batch_status_is_active_reservation(v_batch.status) then coalesce(full_batch_components.batch_source_ex_vat, 0)
+                else 0
+              end,
+            0
+          ),
+          2
+        )::numeric as other_active_reserved_ex_vat,
+        round(
+          coalesce(current_truth_baseline.truth_ex_vat, 0)
+          - coalesce(current_truth_baseline.baseline_ex_vat, 0)
+          - (
+              coalesce(all_reserved_components.all_reserved_ex_vat, 0)
+              - case
+                  when public._pay_batch_status_is_active_reservation(v_batch.status) then coalesce(full_batch_components.batch_source_ex_vat, 0)
+                  else 0
+                end
+            ),
+          2
+        )::numeric as current_available_for_this_batch_ex_vat
+      from full_batch_components
+      left join current_truth_baseline
+        on current_truth_baseline.timesheet_id = full_batch_components.timesheet_id
+       and current_truth_baseline.key_type = full_batch_components.key_type
+       and current_truth_baseline.key_value = full_batch_components.key_value
+      left join all_reserved_components
+        on all_reserved_components.timesheet_id = full_batch_components.timesheet_id
+       and all_reserved_components.key_type = full_batch_components.key_type
+       and all_reserved_components.key_value = full_batch_components.key_value
+    ),
+    reservation_mismatches as (
+      select
+        reservation_comparison.timesheet_id,
+        reservation_comparison.key_type,
+        reservation_comparison.key_value,
+        reservation_comparison.expected_ex_vat,
+        reservation_comparison.truth_ex_vat,
+        reservation_comparison.baseline_ex_vat,
+        reservation_comparison.all_reserved_ex_vat,
+        reservation_comparison.this_batch_reserved_ex_vat,
+        reservation_comparison.other_active_reserved_ex_vat,
+        reservation_comparison.current_available_for_this_batch_ex_vat,
+        case
+          when reservation_comparison.other_active_reserved_ex_vat > 0
+            and reservation_comparison.current_available_for_this_batch_ex_vat < reservation_comparison.expected_ex_vat
+          then 'OTHER_ACTIVE_RESERVATION'
+          else 'RESERVATION_CHANGED'
+        end as stale_reason,
+        case
+          when reservation_comparison.other_active_reserved_ex_vat > 0
+            and reservation_comparison.current_available_for_this_batch_ex_vat < reservation_comparison.expected_ex_vat
+          then 30
+          else 20
+        end as stale_ord
+      from reservation_comparison
+      where abs(
+        round(coalesce(reservation_comparison.current_available_for_this_batch_ex_vat, 0), 2)
+        - round(coalesce(reservation_comparison.expected_ex_vat, 0), 2)
+      ) > 0.01
     )
     select
-      'ECONOMIC_KEY_CHANGED',
-      comparison_keys.timesheet_id,
+      reservation_mismatches.stale_reason,
+      reservation_mismatches.timesheet_id,
       null::uuid,
       null::uuid,
-      comparison_keys.key_type,
-      comparison_keys.key_value,
-      jsonb_build_object('batch_source_ex_vat', round(coalesce(batch_components.batch_source_ex_vat, 0), 2)),
-      jsonb_build_object('current_available_ex_vat', round(coalesce(current_components.current_available_ex_vat, 0), 2)),
-      20
-    from comparison_keys
-    left join batch_components
-      on batch_components.timesheet_id is not distinct from comparison_keys.timesheet_id
-     and batch_components.key_type = comparison_keys.key_type
-     and batch_components.key_value = comparison_keys.key_value
-    left join current_components
-      on current_components.timesheet_id is not distinct from comparison_keys.timesheet_id
-     and current_components.key_type = comparison_keys.key_type
-     and current_components.key_value = comparison_keys.key_value
-    where round(coalesce(batch_components.batch_source_ex_vat, 0), 2) <> round(coalesce(current_components.current_available_ex_vat, 0), 2);
+      reservation_mismatches.key_type,
+      reservation_mismatches.key_value,
+      jsonb_build_object(
+        'batch_source_ex_vat', round(coalesce(reservation_mismatches.expected_ex_vat, 0), 2),
+        'this_batch_reserved_ex_vat', round(coalesce(reservation_mismatches.this_batch_reserved_ex_vat, 0), 2)
+      ),
+      jsonb_build_object(
+        'current_available_for_this_batch_ex_vat', round(coalesce(reservation_mismatches.current_available_for_this_batch_ex_vat, 0), 2),
+        'truth_ex_vat', round(coalesce(reservation_mismatches.truth_ex_vat, 0), 2),
+        'baseline_ex_vat', round(coalesce(reservation_mismatches.baseline_ex_vat, 0), 2),
+        'all_active_reserved_ex_vat', round(coalesce(reservation_mismatches.all_reserved_ex_vat, 0), 2),
+        'other_active_reserved_ex_vat', round(coalesce(reservation_mismatches.other_active_reserved_ex_vat, 0), 2)
+      ),
+      reservation_mismatches.stale_ord
+    from reservation_mismatches;
   
     get diagnostics v_key_diff_count = row_count;
+
+    select count(*)::integer
+    into v_other_reservation_count
+    from pg_temp.tmp_validate_freshness_chunk_diffs as other_reservation_diff_rows
+    where other_reservation_diff_rows.reason = 'OTHER_ACTIVE_RESERVATION';
   
   
   else
     v_key_resolution_failure_count := 0;
     v_key_diff_count := 0;
+    v_other_reservation_count := 0;
   end if;
-
-  insert into pg_temp.tmp_validate_freshness_chunk_diffs (
-    reason,
-    timesheet_id,
-    pay_batch_item_id,
-    candidate_id,
-    key_type,
-    key_value,
-    expected,
-    actual,
-    ord
-  )
-  select
-    'OTHER_ACTIVE_RESERVATION',
-    reserved_item.timesheet_id,
-    reserved_item.id,
-    reserved_candidate.candidate_id,
-    reserved_component.key_type,
-    reserved_component.key_value,
-    jsonb_build_object('this_pay_batch_id', p_pay_batch_id::text),
-    jsonb_build_object('other_pay_batch_id', reserved_candidate.pay_batch_id::text, 'reserved_ex_vat', reserved_component.source_amount_ex_vat),
-    30
-  from public.pay_batch_items as reserved_item
-  join public.pay_batch_candidates as reserved_candidate
-    on reserved_candidate.id = reserved_item.pay_batch_candidate_id
-  join public.pay_batches as reserved_batch
-    on reserved_batch.id = reserved_candidate.pay_batch_id
-  join public._pay_batch_item_economic_components(null::uuid, array[reserved_item.id]) as reserved_component
-    on reserved_component.pay_batch_item_id = reserved_item.id
-  where reserved_item.timesheet_id = any(v_timesheet_ids)
-    and reserved_candidate.pay_batch_id <> p_pay_batch_id
-    and coalesce(reserved_item.is_voided, false) = false
-    and public._pay_batch_status_is_active_reservation(reserved_batch.status)
-    and reserved_item.item_type in ('SEGMENT_DELTA', 'EXPENSE_DELTA', 'ADJUSTMENT_DELTA', 'MILEAGE_DELTA')
-    and not exists (
-      select 1
-      from public.pay_payment_correction_items as reserved_correction_exclusion
-      where reserved_correction_exclusion.pay_batch_item_id = reserved_item.id
-        and reserved_correction_exclusion.status = 'APPLIED'
-        and reserved_correction_exclusion.correction_item_kind in ('PRE_BANK_CANCEL', 'NO_MONEY_UNWIND', 'SETTLED_REVERSAL')
-    );
-
-  get diagnostics v_other_reservation_count = row_count;
 
   insert into pg_temp.tmp_validate_freshness_chunk_diffs (
     reason,
@@ -9609,8 +9736,8 @@ begin
   if v_key_resolution_failure_count > 0 then
     v_reasons := array_append(v_reasons, 'KEY_RESOLUTION_FAILED');
   end if;
-  if v_key_diff_count > 0 then
-    v_reasons := array_append(v_reasons, 'ECONOMIC_KEY_CHANGED');
+  if greatest(coalesce(v_key_diff_count, 0) - coalesce(v_other_reservation_count, 0), 0) > 0 then
+    v_reasons := array_append(v_reasons, 'RESERVATION_CHANGED');
   end if;
   if v_other_reservation_count > 0 then
     v_reasons := array_append(v_reasons, 'OTHER_ACTIVE_RESERVATION');
@@ -9687,7 +9814,8 @@ begin
     'key_resolution_failure_count', coalesce(v_key_resolution_failure_count, 0),
     'diff_sample', coalesce(v_diff_sample, '[]'::jsonb),
     'counts', jsonb_build_object(
-      'economic_key_changed', coalesce(v_key_diff_count, 0),
+      'reservation_changed', greatest(coalesce(v_key_diff_count, 0) - coalesce(v_other_reservation_count, 0), 0),
+      'economic_key_changed', 0,
       'other_active_reservation', coalesce(v_other_reservation_count, 0),
       'finance_reservation_changed', coalesce(v_finance_reservation_diff_count, 0),
       'active_snooze_changed', coalesce(v_snooze_count, 0),
@@ -9723,7 +9851,6 @@ begin
   );
 end;
 $$;
-
 
 
 
