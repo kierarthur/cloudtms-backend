@@ -37878,7 +37878,6 @@ async function advanceBankingPaySettlementOperation(env, operationRow, user, opt
   }
 }
 
-
 async function advanceBankingPayDraftCreateOperation(env, operationRow, user, options = {}) {
   const unwrapRpcPayload = (rpcRes, key) => {
     let payload = rpcRes;
@@ -37949,8 +37948,52 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
     p_error_json: error
   });
   const fetchCandidateScopes = async (extraQuery = '') => {
-    const { rows } = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/banking_pay_operation_candidate_scope?operation_id=eq.${enc(operationId)}&select=id,candidate_id,pay_channel,pay_batch_id,chunk_sequence,status${extraQuery}`);
+    const { rows } = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/banking_pay_operation_candidate_scope?operation_id=eq.${enc(operationId)}&select=id,candidate_id,pay_channel,pay_batch_id,chunk_sequence,status,allocation_basis_json${extraQuery}`);
     return rows || [];
+  };
+  const collectReservationAvailabilityFromScopes = (scopeRows = []) => {
+    const previewRows = [];
+    let skippedPreviewRowCount = 0;
+    let clippedPreviewRowCount = 0;
+    let skippedItemRows = 0;
+    let clippedItemRows = 0;
+    const seenPreviewRows = new Set();
+
+    for (const scopeRow of Array.isArray(scopeRows) ? scopeRows : []) {
+      const allocationBasis = safeObject(scopeRow?.allocation_basis_json);
+      const reservationAvailability = safeObject(allocationBasis.reservation_availability);
+      if (!Object.keys(reservationAvailability).length) continue;
+
+      skippedPreviewRowCount += Number(reservationAvailability.skipped_preview_row_count || 0) || 0;
+      clippedPreviewRowCount += Number(reservationAvailability.clipped_preview_row_count || 0) || 0;
+      skippedItemRows += Number(reservationAvailability.skipped_item_rows || 0) || 0;
+      clippedItemRows += Number(reservationAvailability.clipped_item_rows || 0) || 0;
+
+      const rows = Array.isArray(reservationAvailability.preview_rows) ? reservationAvailability.preview_rows : [];
+      for (const row of rows) {
+        const rowObj = safeObject(row);
+        const key = [scopeRow.id, rowObj.preview_row_id || '', rowObj.timesheet_id || '', rowObj.candidate_id || ''].join('|');
+        if (seenPreviewRows.has(key)) continue;
+        seenPreviewRows.add(key);
+        previewRows.push({
+          ...rowObj,
+          candidate_scope_id: scopeRow.id || null,
+          pay_batch_id: scopeRow.pay_batch_id || null,
+          pay_channel: rowObj.pay_channel || scopeRow.pay_channel || null
+        });
+      }
+    }
+
+    const hasAvailabilityAdjustment = skippedPreviewRowCount > 0 || clippedPreviewRowCount > 0 || skippedItemRows > 0 || clippedItemRows > 0 || previewRows.length > 0;
+    return {
+      applied: hasAvailabilityAdjustment,
+      skipped_preview_row_count: skippedPreviewRowCount,
+      clipped_preview_row_count: clippedPreviewRowCount,
+      skipped_item_rows: skippedItemRows,
+      clipped_item_rows: clippedItemRows,
+      message: hasAvailabilityAdjustment ? 'Some payments were not added because they are already reserved in another draft batch.' : null,
+      preview_rows: previewRows
+    };
   };
   const fetchOperationScopedPayeesForReadiness = async () => {
     const scopedPayChannels = payChannelScope === 'PAYE' ? ['PAYE'] : (payChannelScope === 'UMBRELLA' ? ['UMBRELLA'] : null);
@@ -38286,6 +38329,46 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
     }
   };
 
+  const cancelSkippedEmptyReservedDraftBatches = async (payBatchIds = [], reason = 'Draft shell contained only already-reserved payments and was excluded from the created draft result.') => {
+    const ids = uniqueUuidArray(payBatchIds);
+    const results = [];
+
+    for (const batchId of ids) {
+      try {
+        const cancelPayload = unwrapRpcPayload(await sbRpc(env, 'pay_batch_cancel', {
+          p_pay_batch_id: batchId,
+          p_actor_user_id: actorUserId,
+          p_reason: reason
+        }), 'pay_batch_cancel');
+        const cancelStatus = String(cancelPayload.status || '').trim().toUpperCase();
+        const cancelOk = cancelPayload.ok === true || cancelStatus === 'CANCELLED' || !!String(cancelPayload.cancelled_at_utc || '').trim();
+        results.push({
+          pay_batch_id: batchId,
+          ok: cancelOk,
+          status: cancelStatus || null,
+          cancelled_at_utc: cancelPayload.cancelled_at_utc || null,
+          cancellation_outcome: cancelPayload.cancellation_outcome || null,
+          payload: cancelPayload
+        });
+      } catch (cancelError) {
+        results.push({
+          pay_batch_id: batchId,
+          ok: false,
+          error: String(cancelError?.message || cancelError || '')
+        });
+      }
+    }
+
+    return {
+      attempted: ids.length > 0,
+      ok: results.every((result) => result.ok === true),
+      requested_pay_batch_ids: ids,
+      cancelled_pay_batch_ids: results.filter((result) => result.ok === true).map((result) => result.pay_batch_id),
+      failed_pay_batch_ids: results.filter((result) => result.ok !== true).map((result) => result.pay_batch_id),
+      results
+    };
+  };
+
   try {
     if (phase === 'INITIALISE' || phase === 'VALIDATE_SESSION') {
       const validation = unwrapRpcPayload(await sbRpc(env, 'pay_workbench_prepare_draft', {
@@ -38572,24 +38655,83 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
       const scopes = await fetchCandidateScopes('&limit=50000');
       const batchIds = Array.from(new Set(scopes.map((r) => String(r.pay_batch_id || '').trim()).filter(Boolean)));
       const integrityResults = [];
+      const successfulBatchIds = [];
+      const skippedEmptyReservedBatchIds = [];
+      let skippedEmptyReservedCleanup = null;
+
       for (const batchId of batchIds) {
         const integrity = unwrapRpcPayload(await sbRpc(env, 'pay_batch_assert_integrity', {
           p_pay_batch_id: batchId,
           p_actor_user_id: actorUserId,
           p_operation_id: operationId
         }), 'pay_batch_assert_integrity');
+        const integrityCode = String(integrity.error || integrity.code || '').trim().toUpperCase();
+        const failedIntegrity = integrity.ok === false || integrity.pass === false;
         integrityResults.push({ pay_batch_id: batchId, result: integrity });
-        if (integrity.ok === false || integrity.pass === false) {
-          return finishFailedWithCleanup( null, { code: 'DRAFT_INTEGRITY_FAILED', message: 'Draft integrity check failed.', integrity_results: integrityResults });
+
+        if (!failedIntegrity) {
+          successfulBatchIds.push(batchId);
+          continue;
         }
+
+        if (integrityCode === 'PAY_DRAFT_ALL_SELECTED_PAYMENTS_ALREADY_RESERVED') {
+          skippedEmptyReservedBatchIds.push(batchId);
+          continue;
+        }
+
+        const integrityMessage = String(integrity.friendly_error_message || integrity.message || 'Draft integrity check failed.').trim() || 'Draft integrity check failed.';
+        const reservationAvailability = collectReservationAvailabilityFromScopes(scopes);
+        return finishFailedWithCleanup( null, {
+          code: integrityCode || 'DRAFT_INTEGRITY_FAILED',
+          message: integrityMessage,
+          integrity_results: integrityResults,
+          reservation_availability: reservationAvailability
+        });
       }
-      return lockProgress('RUNNING', 'POST_CREATE_REFRESH', { status_text: 'Draft integrity checked.', integrity_results: integrityResults });
+
+      if (!successfulBatchIds.length && skippedEmptyReservedBatchIds.length) {
+        const reservationAvailability = collectReservationAvailabilityFromScopes(scopes);
+        return finishFailedWithCleanup( null, {
+          code: 'PAY_DRAFT_ALL_SELECTED_PAYMENTS_ALREADY_RESERVED',
+          message: 'No draft was created because all selected payments are already reserved in another active draft batch.',
+          integrity_results: integrityResults,
+          reservation_availability: reservationAvailability,
+          skipped_empty_pay_batch_ids: skippedEmptyReservedBatchIds
+        });
+      }
+
+      if (skippedEmptyReservedBatchIds.length) {
+        skippedEmptyReservedCleanup = await cancelSkippedEmptyReservedDraftBatches(
+          skippedEmptyReservedBatchIds,
+          'Draft shell contained only payments already reserved in another active draft batch; eligible payments were created in a separate draft shell.'
+        );
+      }
+
+      return lockProgress('RUNNING', 'POST_CREATE_REFRESH', {
+        status_text: skippedEmptyReservedBatchIds.length
+          ? 'Draft integrity checked; empty already-reserved draft shells were excluded.'
+          : 'Draft integrity checked.',
+        integrity_results: integrityResults,
+        pay_batch_ids: successfulBatchIds,
+        created_pay_batch_ids: successfulBatchIds,
+        skipped_empty_pay_batch_ids: skippedEmptyReservedBatchIds,
+        cancelled_empty_pay_batch_ids: skippedEmptyReservedCleanup?.cancelled_pay_batch_ids || [],
+        empty_reserved_batch_cleanup: skippedEmptyReservedCleanup
+      });
     }
 
     if (phase === 'POST_CREATE_REFRESH') {
       const scopes = await fetchCandidateScopes('&limit=50000');
       const candidateIds = Array.from(new Set(scopes.map((r) => String(r.candidate_id || '').trim()).filter(Boolean)));
-      const batchIds = Array.from(new Set(scopes.map((r) => String(r.pay_batch_id || '').trim()).filter(Boolean)));
+      const scopedBatchIds = Array.from(new Set(scopes.map((r) => String(r.pay_batch_id || '').trim()).filter(Boolean)));
+      const skippedEmptyBatchIds = uniqueUuidArray(progressJson.skipped_empty_pay_batch_ids || []);
+      const emptyReservedBatchCleanup = safeObject(progressJson.empty_reserved_batch_cleanup);
+      const cancelledEmptyBatchIds = uniqueUuidArray(progressJson.cancelled_empty_pay_batch_ids || emptyReservedBatchCleanup.cancelled_pay_batch_ids || []);
+      const progressBatchIds = uniqueUuidArray(progressJson.created_pay_batch_ids || progressJson.pay_batch_ids || []);
+      const batchIds = progressBatchIds.length
+        ? progressBatchIds
+        : scopedBatchIds.filter((batchId) => !skippedEmptyBatchIds.includes(batchId));
+      const reservationAvailability = collectReservationAvailabilityFromScopes(scopes);
 
       let refresh = null;
       let refreshWarning = null;
@@ -38654,6 +38796,13 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
         snapshot_refresh_job_ids: snapshotRefreshJobIds,
         created_pay_batch_ids: batchIds,
         pay_batch_ids: batchIds,
+        skipped_empty_pay_batch_ids: skippedEmptyBatchIds,
+        cancelled_empty_pay_batch_ids: cancelledEmptyBatchIds,
+        empty_reserved_batch_cleanup: Object.keys(emptyReservedBatchCleanup).length ? emptyReservedBatchCleanup : null,
+        reservation_availability: reservationAvailability,
+        draft_availability: reservationAvailability,
+        skipped_preview_row_count: reservationAvailability.skipped_preview_row_count,
+        clipped_preview_row_count: reservationAvailability.clipped_preview_row_count,
         refresh: refresh || null,
         warning: refreshWarning || ((discard && discard.ok === false && discard.acceptable !== true) ? {
           code: 'SOURCE_SESSION_DISCARD_FAILED',
@@ -38668,6 +38817,13 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
         refresh: postCreateRefresh,
         pay_batch_ids: batchIds,
         created_pay_batch_ids: batchIds,
+        skipped_empty_pay_batch_ids: skippedEmptyBatchIds,
+        cancelled_empty_pay_batch_ids: cancelledEmptyBatchIds,
+        empty_reserved_batch_cleanup: Object.keys(emptyReservedBatchCleanup).length ? emptyReservedBatchCleanup : null,
+        reservation_availability: reservationAvailability,
+        draft_availability: reservationAvailability,
+        skipped_preview_row_count: reservationAvailability.skipped_preview_row_count,
+        clipped_preview_row_count: reservationAvailability.clipped_preview_row_count,
         source_session_id: workbenchSessionId,
         source_session_discarded: postCreateRefresh.source_session_discarded,
         requires_new_session: true,
@@ -38679,14 +38835,22 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
 
     if (phase === 'COMPLETE') {
       const scopes = await fetchCandidateScopes('&order=pay_channel.asc,chunk_sequence.asc,id.asc&limit=50000');
+      const reservationAvailability = collectReservationAvailabilityFromScopes(scopes);
       const batchById = new Map();
       const candidateIds = new Set();
+      const skippedEmptyBatchIds = uniqueUuidArray(progressJson.skipped_empty_pay_batch_ids || []);
+      const cancelledEmptyBatchIds = uniqueUuidArray(progressJson.cancelled_empty_pay_batch_ids || []);
+      const preferredBatchIds = uniqueUuidArray(progressJson.created_pay_batch_ids || progressJson.pay_batch_ids || []);
+      const preferredBatchIdSet = new Set(preferredBatchIds);
+      const skippedEmptyBatchIdSet = new Set(skippedEmptyBatchIds);
       for (const scope of scopes) {
         const batchId = String(scope.pay_batch_id || '').trim();
         const payChannel = String(scope.pay_channel || 'ALL').trim().toUpperCase() || 'ALL';
         const candidateId = String(scope.candidate_id || '').trim();
         if (candidateId) candidateIds.add(candidateId);
         if (!batchId) continue;
+        if (skippedEmptyBatchIdSet.has(batchId)) continue;
+        if (preferredBatchIdSet.size && !preferredBatchIdSet.has(batchId)) continue;
         if (!batchById.has(batchId)) batchById.set(batchId, { pay_batch_id: batchId, pay_channel: payChannel });
       }
       const createdBatches = Array.from(batchById.values());
@@ -38721,6 +38885,12 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
         snapshot_refresh_job_ids: snapshotRefreshJobIds,
         created_pay_batch_ids: batchIds,
         pay_batch_ids: batchIds,
+        skipped_empty_pay_batch_ids: skippedEmptyBatchIds,
+        cancelled_empty_pay_batch_ids: cancelledEmptyBatchIds,
+        reservation_availability: reservationAvailability,
+        draft_availability: reservationAvailability,
+        skipped_preview_row_count: reservationAvailability.skipped_preview_row_count,
+        clipped_preview_row_count: reservationAvailability.clipped_preview_row_count,
         replacement_session_id: null,
         refreshed_session_id: null
       };
@@ -38744,10 +38914,16 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
         refreshed_session_version: null,
         pay_batch_ids: batchIds,
         created_pay_batch_ids: batchIds,
+        skipped_empty_pay_batch_ids: skippedEmptyBatchIds,
+        cancelled_empty_pay_batch_ids: cancelledEmptyBatchIds,
         pay_batch_id: batchIds[0] || null,
         paye_pay_batch_id: payeBatch?.pay_batch_id || null,
         umbrella_pay_batch_id: umbrellaBatch?.pay_batch_id || null,
         created_batches: createdBatches,
+        reservation_availability: reservationAvailability,
+        draft_availability: reservationAvailability,
+        skipped_preview_row_count: reservationAvailability.skipped_preview_row_count,
+        clipped_preview_row_count: reservationAvailability.clipped_preview_row_count,
         candidate_count: candidateIds.size,
         dirty_candidate_ids: refreshCandidateIds,
         refresh_candidate_ids: refreshCandidateIds,
@@ -38777,6 +38953,7 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
     return finishFailedWithCleanup( null, { code: 'DRAFT_CREATE_OPERATION_FAILED', message: 'Draft create operation failed.', phase, error: String(e?.message || e || '') });
   }
 }
+
 
 async function advanceBankingPayExecuteOperation(env, operationRow, user, options = {}) {
 const unwrapRpcPayload = (rpcRes, key) => {
