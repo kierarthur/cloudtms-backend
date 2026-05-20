@@ -37474,6 +37474,7 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
 }
 
 
+
 async function advanceBankingPayExecuteOperation(env, operationRow, user, options = {}) {
 const unwrapRpcPayload = (rpcRes, key) => {
 let payload = rpcRes;
@@ -37690,6 +37691,7 @@ if (['REVIEW_REQUIRED', 'FAILED', 'COMPLETE'].includes(finishStatus) && typeof f
   const finaliseFailed = finalisePayload && (finalisePayload.finalise_failed === true || finalisePayload.provider_submit_finalise_failed === true);
   const finaliseManualResolutionRequired = boolField(finalisePayload, 'manual_resolution_required', 'manualResolutionRequired')
     || boolField(finaliseDiagnostic, 'manual_resolution_required', 'manualResolutionRequired');
+  const finaliseIsAccepted = finaliseCode === 'PROVIDER_SUBMISSION_ACCEPTED';
   const finaliseHasReviewDiagnostic = providerSubmitReviewStatuses.has(finaliseCode)
     || finaliseManualResolutionRequired === true;
   const finaliseHasFailureDiagnostic = [
@@ -37716,6 +37718,9 @@ if (['REVIEW_REQUIRED', 'FAILED', 'COMPLETE'].includes(finishStatus) && typeof f
 
   if (finishStatus === 'COMPLETE' && (finaliseFailed || finaliseHasReviewDiagnostic || finaliseHasFailureDiagnostic)) {
     terminalStatus = finaliseHasFailureDiagnostic && finaliseHasReviewDiagnostic !== true ? 'FAILED' : 'REVIEW_REQUIRED';
+  }
+  if (finishStatus !== 'COMPLETE' && finaliseIsAccepted === true) {
+    terminalStatus = 'REVIEW_REQUIRED';
   }
 
   if (Object.keys(finaliseDiagnostic).length || finaliseFailed) {
@@ -38299,7 +38304,7 @@ if (Array.isArray(cleanup.unsafe_reasons) && cleanup.unsafe_reasons.length) {
 }
 
 const terminalProviderStatus = cleanupProviderSubmitStatus || String(terminalError.provider_submission_status || '').trim().toUpperCase();
-const terminalStatus = cleanup.retry_blocked === true || cleanup.review_required === true || providerSubmitReviewStatuses.has(terminalProviderStatus)
+const terminalStatus = cleanup.retry_blocked === true || cleanup.review_required === true || providerSubmitRetryBlockedStatuses.has(terminalProviderStatus)
   ? 'REVIEW_REQUIRED'
   : 'FAILED';
 const terminalResult = terminalStatus === 'REVIEW_REQUIRED'
@@ -38586,7 +38591,10 @@ const providerSubmitReviewStatuses = new Set([
   'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK',
   'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME',
   'PROVIDER_SUBMISSION_MALFORMED_RESPONSE',
-  'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID',
+  'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID'
+]);
+const providerSubmitRetryBlockedStatuses = new Set([
+  ...providerSubmitReviewStatuses,
   'PROVIDER_SUBMISSION_ACCEPTED'
 ]);
 const providerSubmitFailureCodeFromStatus = (status, reviewReason = '') => {
@@ -39436,7 +39444,6 @@ if (currentPhase === 'SUBMIT_PROVIDER_TRANSFERS') {
   const submittedProviderSubmissionStatus = String(submittedProviderDiagnosticPayload.provider_submission_status || '').trim().toUpperCase();
   const submittedProviderReviewReason = String(submittedProviderDiagnosticPayload.review_reason_code || submittedProviderDiagnosticPayload.provider_submit_review_reason_code || '').trim().toUpperCase();
   const submittedProviderNeedsManualReview = submittedProviderDiagnosticPayload.manual_resolution_required === true
-    || submittedProviderDiagnosticPayload.claim_blocked === true
     || [
       'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK',
       'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME',
@@ -39453,15 +39460,59 @@ if (currentPhase === 'SUBMIT_PROVIDER_TRANSFERS') {
     });
   }
 
+  if (submitted && submitted.ok === false) {
+    const submittedFailureCodes = collectSubmittedErrorCodes(submitted);
+    const submittedClaimBlockerCode = String(submitted.claim_blocker_code || submitted.claimBlockerCode || '').trim().toUpperCase();
+    const submittedFailureCodeCandidate = submittedClaimBlockerCode
+      || submittedProviderSubmissionStatus
+      || submittedProviderReviewReason
+      || submittedFailureCodes[0]
+      || 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL';
+    const submittedFailureCodeMapped = submittedClaimBlockerCode
+      ? providerSubmitFailureCodeFromStatus('', submittedClaimBlockerCode)
+      : providerSubmitFailureCodeFromStatus(
+        submittedProviderSubmissionStatus,
+        submittedProviderReviewReason || submittedFailureCodeCandidate
+      );
+    const submittedFailureCode = submittedFailureCodeMapped && submittedFailureCodeMapped !== 'PROVIDER_SUBMISSION_REVIEW_REQUIRED'
+      ? submittedFailureCodeMapped
+      : submittedFailureCodeCandidate;
+    return fail(submittedFailureCode, providerSubmitMessageFromCode(submittedFailureCode), {
+      phase: currentPhase,
+      provider_submission: submitted,
+      ...submittedProviderDiagnosticPayload,
+      claim_blocker_code: submittedClaimBlockerCode || undefined,
+      claimed: Number(submitted.claimed || submitted.claimed_count || submitted.claimedCount || 0),
+      submitted_this_chunk: Number(submitted.submitted_this_chunk || submitted.submittedThisChunk || submitted.submitted_count || submitted.submittedCount || 0),
+      provider_submit_ready_count: Number(submitted.provider_submit_ready_count || submitted.providerSubmitReadyCount || submitted.provider_submit_ready_transfer_count || submitted.providerSubmitReadyTransferCount || 0),
+      authorised_without_provider_submission_count: Number(submitted.authorised_without_provider_submission_count || submitted.authorisedWithoutProviderSubmissionCount || submitted.authorised_without_provider_submission_transfer_count || submitted.authorisedWithoutProviderSubmissionTransferCount || 0),
+      authorised_but_not_submit_ready_count: Number(submitted.authorised_but_not_submit_ready_count || submitted.authorisedButNotSubmitReadyCount || submitted.authorised_but_not_submit_ready_transfer_count || submitted.authorisedButNotSubmitReadyTransferCount || 0),
+      same_operation_authorised_auth_count: Number(submitted.same_operation_authorised_auth_count || submitted.sameOperationAuthorisedAuthCount || submitted.same_operation_authorised_auth_request_count || submitted.sameOperationAuthorisedAuthRequestCount || 0),
+      provider_attempt_or_evidence_count: Number(submitted.provider_attempt_or_evidence_count || submitted.providerAttemptOrEvidenceCount || submitted.provider_attempt_or_evidence_transfer_count || submitted.providerAttemptOrEvidenceTransferCount || 0),
+      unsafe_transfer_count: Number(submitted.unsafe_transfer_count || submitted.unsafeTransferCount || 0),
+      remaining_submit_attempt_required: Number(submitted.remaining_submit_attempt_required || submitted.remainingSubmitAttemptRequired || 0),
+      attempted_but_unproven_count: Number(submitted.attempted_but_unproven_count || submitted.attemptedButUnprovenCount || 0)
+    });
+  }
+
   if (submitted && Array.isArray(submitted.errors) && submitted.errors.length) {
     const submittedErrorCodes = submitted.errors
       .map((err) => String(err?.code || err?.error_code || '').trim().toUpperCase())
       .filter(Boolean);
     const providerSubmitBlockerCode = submittedErrorCodes.find((errCode) => errCode === 'AUTHORISED_TRANSFER_NOT_PROVIDER_SUBMIT_READY' || errCode === 'PROVIDER_SUBMIT_NO_ELIGIBLE_TRANSFERS') || String(submitted.claim_blocker_code || submitted.claimBlockerCode || '').trim().toUpperCase();
-    if (providerSubmitBlockerCode === 'AUTHORISED_TRANSFER_NOT_PROVIDER_SUBMIT_READY' || providerSubmitBlockerCode === 'PROVIDER_SUBMIT_NO_ELIGIBLE_TRANSFERS') {
-      return fail(providerSubmitBlockerCode, 'The authorised bank transfer could not be safely claimed for provider submission.', {
+    if (providerSubmitBlockerCode) {
+      const effectiveProviderSubmitBlockerCode = providerSubmitFailureCodeFromStatus('', providerSubmitBlockerCode);
+      const providerSubmitBlockerFailureCode = effectiveProviderSubmitBlockerCode && effectiveProviderSubmitBlockerCode !== 'PROVIDER_SUBMISSION_REVIEW_REQUIRED'
+        ? effectiveProviderSubmitBlockerCode
+        : providerSubmitBlockerCode;
+      const providerSubmitBlockerMessage = providerSubmitBlockerFailureCode === 'AUTHORISED_TRANSFER_NOT_PROVIDER_SUBMIT_READY' || providerSubmitBlockerFailureCode === 'PROVIDER_SUBMIT_NO_ELIGIBLE_TRANSFERS'
+        ? 'The authorised bank transfer could not be safely claimed for provider submission.'
+        : providerSubmitMessageFromCode(providerSubmitBlockerFailureCode);
+      return fail(providerSubmitBlockerFailureCode, providerSubmitBlockerMessage, {
         phase: currentPhase,
         provider_submission: submitted,
+        ...submittedProviderDiagnosticPayload,
+        claim_blocker_code: providerSubmitBlockerCode,
         claimed: Number(submitted.claimed || submitted.claimed_count || submitted.claimedCount || 0),
         submitted_this_chunk: Number(submitted.submitted_this_chunk || submitted.submittedThisChunk || submitted.submitted_count || submitted.submittedCount || 0),
         provider_submit_ready_count: Number(submitted.provider_submit_ready_count || submitted.providerSubmitReadyCount || submitted.provider_submit_ready_transfer_count || submitted.providerSubmitReadyTransferCount || 0),
@@ -39475,6 +39526,8 @@ if (currentPhase === 'SUBMIT_PROVIDER_TRANSFERS') {
     }
     return fail('PROVIDER_SUBMISSION_REVIEW_REQUIRED', 'Provider submission needs review.', {
       phase: currentPhase,
+      provider_submission: submitted,
+      ...submittedProviderDiagnosticPayload,
       provider_attempt_or_evidence_transfer_count: Number(submitted.provider_attempt_or_evidence_count || submitted.providerAttemptOrEvidenceCount || 0),
       unsafe_transfer_count: Number(submitted.unsafe_transfer_count || submitted.unsafeTransferCount || 0),
       remaining_submit_attempt_required: Number(submitted.remaining_submit_attempt_required || submitted.remainingSubmitAttemptRequired || 0),
@@ -39508,11 +39561,20 @@ if (currentPhase === 'SUBMIT_PROVIDER_TRANSFERS') {
 
   if (
     standardBankSubmitMode
-    && (claimBlockerCode === 'AUTHORISED_TRANSFER_NOT_PROVIDER_SUBMIT_READY' || claimBlockerCode === 'PROVIDER_SUBMIT_NO_ELIGIBLE_TRANSFERS')
+    && claimBlockerCode
   ) {
-    return fail(claimBlockerCode, 'The authorised bank transfer could not be safely claimed for provider submission.', {
+    const effectiveClaimBlockerCode = providerSubmitFailureCodeFromStatus('', claimBlockerCode);
+    const claimBlockerFailureCode = effectiveClaimBlockerCode && effectiveClaimBlockerCode !== 'PROVIDER_SUBMISSION_REVIEW_REQUIRED'
+      ? effectiveClaimBlockerCode
+      : claimBlockerCode;
+    const claimBlockerMessage = claimBlockerFailureCode === 'AUTHORISED_TRANSFER_NOT_PROVIDER_SUBMIT_READY' || claimBlockerFailureCode === 'PROVIDER_SUBMIT_NO_ELIGIBLE_TRANSFERS'
+      ? 'The authorised bank transfer could not be safely claimed for provider submission.'
+      : providerSubmitMessageFromCode(claimBlockerFailureCode);
+    return fail(claimBlockerFailureCode, claimBlockerMessage, {
       phase: currentPhase,
       provider_submission: submitted,
+      ...submittedProviderDiagnosticPayload,
+      claim_blocker_code: claimBlockerCode,
       claimed: Number.isFinite(claimedTransferCount) ? claimedTransferCount : 0,
       submitted_this_chunk: Number.isFinite(submittedThisChunk) ? submittedThisChunk : 0,
       provider_submit_ready_count: Number.isFinite(providerSubmitReadyCount) ? providerSubmitReadyCount : 0,
@@ -39539,6 +39601,7 @@ if (currentPhase === 'SUBMIT_PROVIDER_TRANSFERS') {
     return fail(blockerCode, 'The authorised bank transfer could not be safely claimed for provider submission.', {
       phase: currentPhase,
       provider_submission: submitted,
+      ...submittedProviderDiagnosticPayload,
       claimed: Number.isFinite(claimedTransferCount) ? claimedTransferCount : 0,
       submitted_this_chunk: Number.isFinite(submittedThisChunk) ? submittedThisChunk : 0,
       provider_submit_ready_count: Number.isFinite(providerSubmitReadyCount) ? providerSubmitReadyCount : 0,
@@ -39921,9 +39984,6 @@ review_reason_code: topLevelReviewReason || undefined
 });
 }
 }
-
-
-
 
 async function advanceBankingPayRemittanceOperation(env, operationRow, user, options = {}) {
   const unwrapRpcPayload = (rpcRes, key) => {
@@ -132708,6 +132768,17 @@ function getRailAdapter(provider) {
               safe_retry_available: base.safe_retry_available === true,
               automatic_retry_blocked: base.automatic_retry_blocked === true,
               retry_blocked_reason: base.retry_blocked_reason || null,
+              claim_blocked: base.claim_blocked === true || base.claimBlocked === true,
+              claim_blocker_code: String(base.claim_blocker_code || base.claimBlockerCode || '').trim().toUpperCase() || null,
+              provider_submit_ready_count: asNumber(base.provider_submit_ready_count ?? base.providerSubmitReadyCount, null),
+              same_operation_authorised_auth_count: asNumber(base.same_operation_authorised_auth_count ?? base.sameOperationAuthorisedAuthCount, null),
+              authorised_without_provider_submission_count: asNumber(base.authorised_without_provider_submission_count ?? base.authorisedWithoutProviderSubmissionCount, null),
+              authorised_but_not_submit_ready_count: asNumber(base.authorised_but_not_submit_ready_count ?? base.authorisedButNotSubmitReadyCount, null),
+              auth_request_state: base.auth_request_state || base.authRequestState || null,
+              auth_request_unsafe_reason: base.auth_request_unsafe_reason || base.authRequestUnsafeReason || null,
+              unsafe_transfer_count: asNumber(base.unsafe_transfer_count ?? base.unsafeTransferCount, null),
+              provider_attempt_or_evidence_count: asNumber(base.provider_attempt_or_evidence_count ?? base.providerAttemptOrEvidenceCount, null),
+              classification_source: base.classification_source || base.classificationSource || null,
               recommended_action: base.recommended_action || null
             };
           };
@@ -133154,7 +133225,9 @@ function getRailAdapter(provider) {
 
           const chunkId = String(claim.chunk_id || '').trim() || null;
           const transfers = Array.isArray(claim.transfers) ? claim.transfers : [];
-          const transferIds = Array.isArray(claim.transfer_ids) ? claim.transfer_ids.map((x) => String(x || '').trim()).filter(Boolean) : transfers.map((t) => String(t.transfer_id || t.pay_bank_transfer_id || '').trim()).filter(Boolean);
+          const transferIdsFromClaim = Array.isArray(claim.transfer_ids) ? claim.transfer_ids.map((x) => String(x || '').trim()).filter(Boolean) : [];
+          const transferIdsFromRows = transfers.map((t) => String(t.transfer_id || t.pay_bank_transfer_id || t.id || '').trim()).filter(Boolean);
+          const transferIds = transferIdsFromClaim.length ? transferIdsFromClaim : transferIdsFromRows;
           currentTransferScopeIds = extractTransferScopeIdsFromRows(transfers);
           currentAuthRequestIds = extractAuthRequestIdsFromClaim(claim, transfers);
           const remainingSubmitAttemptRequiredFromClaim = Math.max(0, Math.trunc(asNumber(
@@ -133199,20 +133272,49 @@ function getRailAdapter(provider) {
           )));
           const classificationSourceFromClaim = String(claim.classification_source || claim.classificationSource || '').trim() || null;
           const claimBlockerCodeFromClaim = String(claim.claim_blocker_code || claim.claimBlockerCode || '').trim().toUpperCase() || null;
+          const claimAuthRequestState = String(claim.auth_request_state || claim.authRequestState || '').trim() || null;
+          const claimAuthRequestUnsafeReason = String(claim.auth_request_unsafe_reason || claim.authRequestUnsafeReason || '').trim() || null;
+          const rawProviderSubmissionStatusFromClaim = String(claim.provider_submission_status || claim.providerSubmissionStatus || '').trim().toUpperCase() || null;
+          const rawReviewReasonCodeFromClaim = String(claim.review_reason_code || claim.reviewReasonCode || '').trim().toUpperCase() || null;
+          const claimProviderRequestSentCount = Math.max(0, Math.trunc(asNumber(claim.provider_request_sent_count ?? claim.providerRequestSentCount ?? 0, 0)));
+          const claimProviderResponsePresentCount = Math.max(0, Math.trunc(asNumber(claim.provider_response_present_count ?? claim.providerResponsePresentCount ?? 0, 0)));
+          const claimProviderAcceptanceEvidenceCount = Math.max(0, Math.trunc(asNumber(claim.provider_acceptance_evidence_count ?? claim.providerAcceptanceEvidenceCount ?? claim.provider_evidence_count ?? claim.providerEvidenceCount ?? 0, 0)));
+          const claimProviderExternalEvidenceCount = Math.max(0, Math.trunc(asNumber(claim.provider_external_evidence_count ?? claim.providerExternalEvidenceCount ?? 0, 0)));
+          const claimProviderSubmissionUnknownCount = Math.max(0, Math.trunc(asNumber(claim.provider_submission_unknown_count ?? claim.providerSubmissionUnknownCount ?? 0, 0)));
+          const claimStaleUnresolvedSubmitChunkCount = Math.max(0, Math.trunc(asNumber(claim.stale_unresolved_submit_chunk_count ?? claim.staleUnresolvedSubmitChunkCount ?? claim.stale_empty_submit_chunk_count ?? claim.staleEmptySubmitChunkCount ?? 0, 0)));
+          const claimUnfinalisedSubmitChunkCount = Math.max(0, Math.trunc(asNumber(claim.unfinalised_submit_chunk_count ?? claim.unfinalisedSubmitChunkCount ?? 0, 0)));
           const claimProviderSubmitDiagnostic = (claim.provider_submit_diagnostic && typeof claim.provider_submit_diagnostic === 'object' && !Array.isArray(claim.provider_submit_diagnostic)) ? claim.provider_submit_diagnostic : null;
           if (claimProviderSubmitDiagnostic) {
-            providerSubmitDiagnostic = makeProviderSubmitDiagnostic({
-              ...claimProviderSubmitDiagnostic,
-              chunk_id: chunkId,
-              transfer_ids: transferIds || [],
-              transfer_scope_ids: currentTransferScopeIds,
-              auth_request_ids: currentAuthRequestIds
-            });
+            providerSubmitDiagnostic = {
+              ...makeProviderSubmitDiagnostic({
+                ...claimProviderSubmitDiagnostic,
+                chunk_id: chunkId,
+                transfer_ids: transferIds || [],
+                transfer_scope_ids: currentTransferScopeIds,
+                auth_request_ids: currentAuthRequestIds
+              }),
+              claim_blocked: claim.claim_blocked === true,
+              claim_blocker_code: claimBlockerCodeFromClaim,
+              provider_submit_ready_count: providerSubmitReadyFromClaim,
+              same_operation_authorised_auth_count: sameOperationAuthorisedAuthFromClaim,
+              authorised_without_provider_submission_count: authorisedWithoutProviderSubmissionFromClaim,
+              authorised_but_not_submit_ready_count: authorisedButNotSubmitReadyFromClaim,
+              auth_request_state: claimAuthRequestState,
+              auth_request_unsafe_reason: claimAuthRequestUnsafeReason,
+              unsafe_transfer_count: unsafeTransferFromClaim,
+              provider_attempt_or_evidence_count: providerAttemptOrEvidenceFromClaim,
+              classification_source: classificationSourceFromClaim
+            };
             out.provider_submit_diagnostic = providerSubmitDiagnostic;
-            out.provider_submission_status = providerSubmitDiagnostic.provider_submission_status || null;
-            out.review_reason_code = providerSubmitDiagnostic.review_reason_code || null;
+            out.provider_submission_status = providerSubmitDiagnostic.provider_submission_status || rawProviderSubmissionStatusFromClaim || null;
+            out.review_reason_code = providerSubmitDiagnostic.review_reason_code || rawReviewReasonCodeFromClaim || null;
             out.manual_resolution_required = providerSubmitDiagnostic.manual_resolution_required === true;
             out.safe_retry_available = providerSubmitDiagnostic.safe_retry_available === true;
+          } else {
+            if (rawProviderSubmissionStatusFromClaim) out.provider_submission_status = rawProviderSubmissionStatusFromClaim;
+            if (rawReviewReasonCodeFromClaim) out.review_reason_code = rawReviewReasonCodeFromClaim;
+            if (claim.manual_resolution_required === true || claim.manualResolutionRequired === true) out.manual_resolution_required = true;
+            if (claim.safe_retry_available === true || claim.safeRetryAvailable === true) out.safe_retry_available = true;
           }
           const standardProviderSubmitMode = !String(classificationSourceFromClaim || '').toLowerCase().includes('blocked_funds_retry');
           out.claimed = transfers.length;
@@ -133226,8 +133328,8 @@ function getRailAdapter(provider) {
           out.authorised_without_provider_submission_count = authorisedWithoutProviderSubmissionFromClaim;
           out.authorised_but_not_submit_ready_count = authorisedButNotSubmitReadyFromClaim;
           out.same_operation_authorised_auth_count = sameOperationAuthorisedAuthFromClaim;
-          out.auth_request_state = claim.auth_request_state || claim.authRequestState || null;
-          out.auth_request_unsafe_reason = claim.auth_request_unsafe_reason || claim.authRequestUnsafeReason || null;
+          out.auth_request_state = claimAuthRequestState;
+          out.auth_request_unsafe_reason = claimAuthRequestUnsafeReason;
           out.provider_attempt_or_evidence_count = providerAttemptOrEvidenceFromClaim;
           out.unsafe_transfer_count = unsafeTransferFromClaim;
           out.classification_source = classificationSourceFromClaim;
@@ -133238,51 +133340,288 @@ function getRailAdapter(provider) {
             && (out.requires_provider_poll === true || out.requires_review === true || remainingProviderEvidenceRequiredFromClaim > 0);
           out.has_more = claim.has_more_submit_attempts === true || claim.has_more === true || remainingSubmitAttemptRequiredFromClaim > 0;
 
+          const diagnosticShowsProviderRequestOrEvidence = (diagnostic) => {
+            if (!diagnostic || typeof diagnostic !== 'object' || Array.isArray(diagnostic)) return false;
+            return diagnostic.provider_request_sent === true
+              || diagnostic.provider_request_sent_confirmed === true
+              || diagnostic.provider_response_present === true
+              || diagnostic.provider_response_received === true
+              || diagnostic.provider_external_evidence_present === true
+              || diagnostic.provider_acceptance_evidence_present === true;
+          };
+          const diagnosticShowsProviderRisk = (diagnostic) => {
+            if (!diagnostic || typeof diagnostic !== 'object' || Array.isArray(diagnostic)) return false;
+            return diagnosticShowsProviderRequestOrEvidence(diagnostic)
+              || diagnostic.provider_submission_unknown === true
+              || diagnostic.stale_submit_chunk === true
+              || diagnostic.unfinalised_submit_chunk === true
+              || ['UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE', 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID'].includes(String(diagnostic.provider_submission_status || '').trim().toUpperCase())
+              || ['PROVIDER_REQUEST_SENT_NO_RESPONSE', 'STALE_RUNNING_PROVIDER_SUBMIT_CHUNK', 'PROVIDER_RESPONSE_MALFORMED', 'PROVIDER_RESPONSE_PRESENT_NO_EXTERNAL_ID'].includes(String(diagnostic.review_reason_code || '').trim().toUpperCase());
+          };
+          const claimProviderRequestOrEvidenceExists = claimProviderRequestSentCount > 0
+            || claimProviderResponsePresentCount > 0
+            || claimProviderAcceptanceEvidenceCount > 0
+            || claimProviderExternalEvidenceCount > 0
+            || diagnosticShowsProviderRequestOrEvidence(providerSubmitDiagnostic);
+          const claimProviderEvidenceOrRiskExists = claimProviderRequestOrEvidenceExists === true
+            || providerAttemptOrEvidenceFromClaim > 0
+            || attemptedButUnprovenFromClaim > 0
+            || providerAttemptWithoutExternalIdFromClaim > 0
+            || claimProviderSubmissionUnknownCount > 0
+            || claimStaleUnresolvedSubmitChunkCount > 0
+            || claimUnfinalisedSubmitChunkCount > 0
+            || claimBlockerCodeFromClaim === 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK'
+            || claimBlockerCodeFromClaim === 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME'
+            || diagnosticShowsProviderRisk(providerSubmitDiagnostic);
+          const claimSafeRetryAvailable = claimProviderEvidenceOrRiskExists !== true && unsafeTransferFromClaim <= 0;
+
           if (claim.claim_blocked === true || claim.requires_review === true && claimProviderSubmitDiagnostic || claimBlockerCodeFromClaim === 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK') {
+            const providerRequestOrEvidenceExists = claimProviderRequestOrEvidenceExists === true;
+            const providerEvidenceOrRiskExists = claimProviderEvidenceOrRiskExists === true;
+            const blockerCode = claimBlockerCodeFromClaim
+              || (authorisedWithoutProviderSubmissionFromClaim > 0 || authorisedButNotSubmitReadyFromClaim > 0
+                ? 'AUTHORISED_TRANSFER_NOT_PROVIDER_SUBMIT_READY'
+                : 'PROVIDER_SUBMIT_NO_ELIGIBLE_TRANSFERS');
+            const providerSubmissionStatus = rawProviderSubmissionStatusFromClaim
+              || (providerSubmitDiagnostic && providerSubmitDiagnostic.provider_submission_status)
+              || (providerEvidenceOrRiskExists ? 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME' : 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL');
+            const reviewReasonCode = rawReviewReasonCodeFromClaim
+              || (providerSubmitDiagnostic && providerSubmitDiagnostic.review_reason_code)
+              || blockerCode;
+            if (!providerSubmitDiagnostic) {
+              providerSubmitDiagnostic = {
+                ...makeProviderSubmitDiagnostic({
+                  ...(claimProviderSubmitDiagnostic || {}),
+                  provider_call_stage: 'PROVIDER_SUBMIT_CLAIM_BLOCKED_NO_ELIGIBLE_TRANSFER',
+                  provider_submission_status: providerSubmissionStatus,
+                  review_reason_code: reviewReasonCode,
+                  provider_submission_attempted: providerRequestOrEvidenceExists === true,
+                  provider_called: providerRequestOrEvidenceExists === true,
+                  provider_request_sent: claimProviderRequestSentCount > 0,
+                  provider_request_sent_confirmed: claimProviderRequestSentCount > 0,
+                  provider_response_received: claimProviderResponsePresentCount > 0,
+                  provider_response_present: claimProviderResponsePresentCount > 0,
+                  provider_external_evidence_present: claimProviderExternalEvidenceCount > 0,
+                  provider_acceptance_evidence_present: claimProviderAcceptanceEvidenceCount > 0,
+                  manual_resolution_required: providerEvidenceOrRiskExists === true,
+                  safe_retry_available: claimSafeRetryAvailable === true,
+                  chunk_id: chunkId,
+                  transfer_ids: transferIds || [],
+                  transfer_scope_ids: currentTransferScopeIds,
+                  auth_request_ids: currentAuthRequestIds
+                }),
+                claim_blocked: true,
+                claim_blocker_code: blockerCode,
+                provider_submit_ready_count: providerSubmitReadyFromClaim,
+                same_operation_authorised_auth_count: sameOperationAuthorisedAuthFromClaim,
+                authorised_without_provider_submission_count: authorisedWithoutProviderSubmissionFromClaim,
+                authorised_but_not_submit_ready_count: authorisedButNotSubmitReadyFromClaim,
+                auth_request_state: out.auth_request_state,
+                auth_request_unsafe_reason: out.auth_request_unsafe_reason,
+                unsafe_transfer_count: unsafeTransferFromClaim,
+                provider_attempt_or_evidence_count: providerAttemptOrEvidenceFromClaim,
+                classification_source: classificationSourceFromClaim
+              };
+            } else {
+              providerSubmitDiagnostic = {
+                ...providerSubmitDiagnostic,
+                provider_submission_status: providerSubmissionStatus,
+                review_reason_code: reviewReasonCode,
+                claim_blocked: true,
+                claim_blocker_code: blockerCode,
+                provider_submit_ready_count: providerSubmitReadyFromClaim,
+                same_operation_authorised_auth_count: sameOperationAuthorisedAuthFromClaim,
+                authorised_without_provider_submission_count: authorisedWithoutProviderSubmissionFromClaim,
+                authorised_but_not_submit_ready_count: authorisedButNotSubmitReadyFromClaim,
+                auth_request_state: out.auth_request_state,
+                auth_request_unsafe_reason: out.auth_request_unsafe_reason,
+                unsafe_transfer_count: unsafeTransferFromClaim,
+                provider_attempt_or_evidence_count: providerAttemptOrEvidenceFromClaim,
+                classification_source: classificationSourceFromClaim,
+                manual_resolution_required: providerEvidenceOrRiskExists === true,
+                safe_retry_available: claimSafeRetryAvailable === true
+              };
+            }
+            const providerSubmissionAttemptedForBlocker = (providerSubmitDiagnostic && providerSubmitDiagnostic.provider_submission_attempted === true) || providerRequestOrEvidenceExists === true;
+            const providerCalledForBlocker = (providerSubmitDiagnostic && providerSubmitDiagnostic.provider_called === true) || providerRequestOrEvidenceExists === true;
+            const providerRequestSentForBlocker = (providerSubmitDiagnostic && (providerSubmitDiagnostic.provider_request_sent === true || providerSubmitDiagnostic.provider_request_sent_confirmed === true)) || claimProviderRequestSentCount > 0;
+            const providerResponsePresentForBlocker = (providerSubmitDiagnostic && (providerSubmitDiagnostic.provider_response_present === true || providerSubmitDiagnostic.provider_response_received === true)) || claimProviderResponsePresentCount > 0;
             out.ok = false;
-            out.requires_review = true;
-            out.requires_poll_or_review = true;
-            out.claim_blocker_code = claimBlockerCodeFromClaim || 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK';
-            out.provider_submit_diagnostic = providerSubmitDiagnostic || claimProviderSubmitDiagnostic || null;
-            out.provider_submission_status = out.provider_submit_diagnostic ? out.provider_submit_diagnostic.provider_submission_status || null : null;
-            out.review_reason_code = out.provider_submit_diagnostic ? out.provider_submit_diagnostic.review_reason_code || null : null;
-            out.manual_resolution_required = out.provider_submit_diagnostic ? out.provider_submit_diagnostic.manual_resolution_required === true : true;
-            out.safe_retry_available = false;
+            out.claimed = 0;
+            out.submitted_this_chunk = 0;
+            out.failed = 0;
+            out.claim_blocked = true;
+            out.requires_review = providerEvidenceOrRiskExists === true;
+            out.requires_poll_or_review = providerEvidenceOrRiskExists === true;
+            out.claim_blocker_code = blockerCode;
+            out.provider_submit_diagnostic = providerSubmitDiagnostic;
+            out.provider_submission_status = providerSubmissionStatus;
+            out.review_reason_code = reviewReasonCode;
+            out.provider_submission_attempted = providerSubmissionAttemptedForBlocker === true;
+            out.submitted_to_bank = providerRequestSentForBlocker === true;
+            out.provider_called = providerCalledForBlocker === true;
+            out.provider_request_sent = providerRequestSentForBlocker === true;
+            out.provider_response_present = providerResponsePresentForBlocker === true;
+            out.provider_request_sent_count = claimProviderRequestSentCount;
+            out.provider_response_present_count = claimProviderResponsePresentCount;
+            out.provider_acceptance_evidence_count = claimProviderAcceptanceEvidenceCount;
+            out.provider_external_evidence_count = claimProviderExternalEvidenceCount;
+            out.provider_submission_unknown_count = claimProviderSubmissionUnknownCount;
+            out.stale_unresolved_submit_chunk_count = claimStaleUnresolvedSubmitChunkCount;
+            out.unfinalised_submit_chunk_count = claimUnfinalisedSubmitChunkCount;
+            out.manual_resolution_required = providerEvidenceOrRiskExists === true;
+            out.safe_retry_available = claimSafeRetryAvailable === true;
             out.errors.push({
-              code: out.claim_blocker_code,
-              message: 'Provider-submit claim was blocked by provider-submit diagnostic state.',
-              provider_submit_diagnostic: out.provider_submit_diagnostic
+              code: blockerCode,
+              message: providerRequestOrEvidenceExists
+                ? 'Provider-submit claim was blocked because provider submission evidence or an unresolved submit chunk exists.'
+                : 'Provider-submit claim was blocked before a provider request could be sent.',
+              provider_submission_status: providerSubmissionStatus,
+              review_reason_code: reviewReasonCode,
+              claim_blocked: true,
+              provider_submission_attempted: providerSubmissionAttemptedForBlocker === true,
+              submitted_to_bank: providerRequestSentForBlocker === true,
+              provider_called: providerCalledForBlocker === true,
+              provider_request_sent: providerRequestSentForBlocker === true,
+              provider_response_present: providerResponsePresentForBlocker === true,
+              provider_request_sent_count: claimProviderRequestSentCount,
+              provider_response_present_count: claimProviderResponsePresentCount,
+              provider_acceptance_evidence_count: claimProviderAcceptanceEvidenceCount,
+              provider_external_evidence_count: claimProviderExternalEvidenceCount,
+              provider_submission_unknown_count: claimProviderSubmissionUnknownCount,
+              stale_unresolved_submit_chunk_count: claimStaleUnresolvedSubmitChunkCount,
+              unfinalised_submit_chunk_count: claimUnfinalisedSubmitChunkCount,
+              provider_submit_ready_count: providerSubmitReadyFromClaim,
+              authorised_without_provider_submission_count: authorisedWithoutProviderSubmissionFromClaim,
+              authorised_but_not_submit_ready_count: authorisedButNotSubmitReadyFromClaim,
+              same_operation_authorised_auth_count: sameOperationAuthorisedAuthFromClaim,
+              auth_request_state: out.auth_request_state,
+              auth_request_unsafe_reason: out.auth_request_unsafe_reason,
+              classification_source: classificationSourceFromClaim,
+              provider_submit_diagnostic: providerSubmitDiagnostic
             });
             return out;
           }
 
-          if (!chunkId || transfers.length === 0) {
+          if (!chunkId || transfers.length === 0 || transferIds.length === 0) {
+            const noClaimedProviderSubmitChunk = !chunkId && transfers.length === 0 && transferIds.length === 0;
             const sameOperationAuthorisedLocalEvidenceExists = providerSubmitReadyFromClaim > 0
               || authorisedWithoutProviderSubmissionFromClaim > 0
               || authorisedButNotSubmitReadyFromClaim > 0
               || sameOperationAuthorisedAuthFromClaim > 0;
+            const providerRequestOrEvidenceExists = claimProviderRequestOrEvidenceExists === true;
+            const providerEvidenceOrRiskExists = claimProviderEvidenceOrRiskExists === true;
+            const claimIndicatesProviderSubmitBlocker = claim.claim_blocked === true
+              || claim.ok === false
+              || !!claimBlockerCodeFromClaim
+              || sameOperationAuthorisedLocalEvidenceExists === true;
             const shouldReturnProviderSubmitBlocker = standardProviderSubmitMode === true
-              && providerAttemptOrEvidenceFromClaim <= 0
-              && (claimBlockerCodeFromClaim === 'AUTHORISED_TRANSFER_NOT_PROVIDER_SUBMIT_READY'
-                || claimBlockerCodeFromClaim === 'PROVIDER_SUBMIT_NO_ELIGIBLE_TRANSFERS'
-                || sameOperationAuthorisedLocalEvidenceExists === true);
+              && (noClaimedProviderSubmitChunk === true ? claimIndicatesProviderSubmitBlocker === true : true);
+
             if (shouldReturnProviderSubmitBlocker) {
               const blockerCode = claimBlockerCodeFromClaim
                 || (authorisedWithoutProviderSubmissionFromClaim > 0 || authorisedButNotSubmitReadyFromClaim > 0
                   ? 'AUTHORISED_TRANSFER_NOT_PROVIDER_SUBMIT_READY'
-                  : 'PROVIDER_SUBMIT_NO_ELIGIBLE_TRANSFERS');
+                  : (sameOperationAuthorisedLocalEvidenceExists ? 'PROVIDER_SUBMIT_NO_ELIGIBLE_TRANSFERS' : 'PROVIDER_SUBMIT_CLAIM_PAYLOAD_INCOMPLETE'));
+              const providerSubmissionStatus = rawProviderSubmissionStatusFromClaim
+                || (providerSubmitDiagnostic && providerSubmitDiagnostic.provider_submission_status)
+                || (providerEvidenceOrRiskExists ? 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME' : 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL');
+              const reviewReasonCode = rawReviewReasonCodeFromClaim
+                || (providerSubmitDiagnostic && providerSubmitDiagnostic.review_reason_code)
+                || blockerCode;
+              providerSubmitDiagnostic = {
+                ...makeProviderSubmitDiagnostic({
+                  ...(claimProviderSubmitDiagnostic || {}),
+                  provider_call_stage: noClaimedProviderSubmitChunk ? 'PROVIDER_SUBMIT_CLAIM_BLOCKED_NO_ELIGIBLE_TRANSFER' : 'PROVIDER_SUBMIT_CLAIM_PAYLOAD_INCOMPLETE',
+                  provider_submission_status: providerSubmissionStatus,
+                  review_reason_code: reviewReasonCode,
+                  provider_submission_attempted: providerRequestOrEvidenceExists === true,
+                  provider_called: providerRequestOrEvidenceExists === true,
+                  provider_request_sent: claimProviderRequestSentCount > 0,
+                  provider_request_sent_confirmed: claimProviderRequestSentCount > 0,
+                  provider_response_received: claimProviderResponsePresentCount > 0,
+                  provider_response_present: claimProviderResponsePresentCount > 0,
+                  provider_external_evidence_present: claimProviderExternalEvidenceCount > 0,
+                  provider_acceptance_evidence_present: claimProviderAcceptanceEvidenceCount > 0,
+                  manual_resolution_required: providerEvidenceOrRiskExists === true,
+                  safe_retry_available: claimSafeRetryAvailable === true,
+                  chunk_id: chunkId,
+                  transfer_ids: transferIds || [],
+                  transfer_scope_ids: currentTransferScopeIds,
+                  auth_request_ids: currentAuthRequestIds
+                }),
+                claim_blocked: true,
+                claim_blocker_code: blockerCode,
+                provider_submit_ready_count: providerSubmitReadyFromClaim,
+                same_operation_authorised_auth_count: sameOperationAuthorisedAuthFromClaim,
+                authorised_without_provider_submission_count: authorisedWithoutProviderSubmissionFromClaim,
+                authorised_but_not_submit_ready_count: authorisedButNotSubmitReadyFromClaim,
+                auth_request_state: out.auth_request_state,
+                auth_request_unsafe_reason: out.auth_request_unsafe_reason,
+                unsafe_transfer_count: unsafeTransferFromClaim,
+                provider_attempt_or_evidence_count: providerAttemptOrEvidenceFromClaim,
+                classification_source: classificationSourceFromClaim
+              };
+              const providerSubmissionAttemptedForBlocker = (providerSubmitDiagnostic && providerSubmitDiagnostic.provider_submission_attempted === true) || providerRequestOrEvidenceExists === true;
+              const providerCalledForBlocker = (providerSubmitDiagnostic && providerSubmitDiagnostic.provider_called === true) || providerRequestOrEvidenceExists === true;
+              const providerRequestSentForBlocker = (providerSubmitDiagnostic && (providerSubmitDiagnostic.provider_request_sent === true || providerSubmitDiagnostic.provider_request_sent_confirmed === true)) || claimProviderRequestSentCount > 0;
+              const providerResponsePresentForBlocker = (providerSubmitDiagnostic && (providerSubmitDiagnostic.provider_response_present === true || providerSubmitDiagnostic.provider_response_received === true)) || claimProviderResponsePresentCount > 0;
               out.ok = false;
+              out.claimed = 0;
+              out.submitted_this_chunk = 0;
+              out.failed = 0;
+              out.has_more = false;
+              out.claim_blocked = true;
               out.claim_blocker_code = blockerCode;
+              out.provider_submit_diagnostic = providerSubmitDiagnostic;
+              out.provider_submission_status = providerSubmissionStatus;
+              out.review_reason_code = reviewReasonCode;
+              out.provider_submission_attempted = providerSubmissionAttemptedForBlocker === true;
+              out.submitted_to_bank = providerRequestSentForBlocker === true;
+              out.provider_called = providerCalledForBlocker === true;
+              out.provider_request_sent = providerRequestSentForBlocker === true;
+              out.provider_response_present = providerResponsePresentForBlocker === true;
+              out.provider_request_sent_count = claimProviderRequestSentCount;
+              out.provider_response_present_count = claimProviderResponsePresentCount;
+              out.provider_acceptance_evidence_count = claimProviderAcceptanceEvidenceCount;
+              out.provider_external_evidence_count = claimProviderExternalEvidenceCount;
+              out.provider_submission_unknown_count = claimProviderSubmissionUnknownCount;
+              out.stale_unresolved_submit_chunk_count = claimStaleUnresolvedSubmitChunkCount;
+              out.unfinalised_submit_chunk_count = claimUnfinalisedSubmitChunkCount;
+              out.manual_resolution_required = providerEvidenceOrRiskExists === true;
+              out.safe_retry_available = claimSafeRetryAvailable === true;
+              out.requires_review = providerEvidenceOrRiskExists === true;
+              out.requires_poll_or_review = providerEvidenceOrRiskExists === true;
               out.errors.push({
                 code: blockerCode,
-                message: 'The authorised bank transfer could not be safely claimed for provider submission.',
+                message: providerRequestOrEvidenceExists
+                  ? 'Provider-submit claim was blocked because provider submission evidence or an unresolved submit chunk exists.'
+                  : (noClaimedProviderSubmitChunk
+                    ? 'The authorised bank transfer could not be safely claimed for provider submission.'
+                    : 'Provider-submit claim did not return a complete chunk/transfer payload.'),
+                provider_submission_status: providerSubmissionStatus,
+                review_reason_code: reviewReasonCode,
+                claim_blocked: true,
+                provider_submission_attempted: providerSubmissionAttemptedForBlocker === true,
+                submitted_to_bank: providerRequestSentForBlocker === true,
+                provider_called: providerCalledForBlocker === true,
+                provider_request_sent: providerRequestSentForBlocker === true,
+                provider_response_present: providerResponsePresentForBlocker === true,
+                provider_request_sent_count: claimProviderRequestSentCount,
+                provider_response_present_count: claimProviderResponsePresentCount,
+                provider_acceptance_evidence_count: claimProviderAcceptanceEvidenceCount,
+                provider_external_evidence_count: claimProviderExternalEvidenceCount,
+                provider_submission_unknown_count: claimProviderSubmissionUnknownCount,
+                stale_unresolved_submit_chunk_count: claimStaleUnresolvedSubmitChunkCount,
+                unfinalised_submit_chunk_count: claimUnfinalisedSubmitChunkCount,
                 provider_submit_ready_count: providerSubmitReadyFromClaim,
                 authorised_without_provider_submission_count: authorisedWithoutProviderSubmissionFromClaim,
                 authorised_but_not_submit_ready_count: authorisedButNotSubmitReadyFromClaim,
                 same_operation_authorised_auth_count: sameOperationAuthorisedAuthFromClaim,
                 auth_request_state: out.auth_request_state,
                 auth_request_unsafe_reason: out.auth_request_unsafe_reason,
-                classification_source: classificationSourceFromClaim
+                classification_source: classificationSourceFromClaim,
+                provider_submit_diagnostic: providerSubmitDiagnostic
               });
             }
             return out;
@@ -134496,9 +134835,6 @@ function getRailAdapter(provider) {
   const mk = getRailAdapter.__RAIL_REGISTRY[p];
   return (typeof mk === 'function') ? mk() : null;
 }
-
-
-
 
 async function revolutAuth_getAccessToken(env) {
   const cacheKey = '__REVOLUT_TOKEN_CACHE__';
