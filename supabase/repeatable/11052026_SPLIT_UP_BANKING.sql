@@ -16800,6 +16800,9 @@ $function$;
 
 
 
+
+
+
 CREATE OR REPLACE FUNCTION public.pay_execute_provider_submit_review_resolve(
   p_pay_batch_id uuid,
   p_operation_id uuid,
@@ -17638,16 +17641,21 @@ BEGIN
            NULL::text,
            'MANUAL_RESOLVED_NO_PAYMENT_MADE',
            'CANCELLED',
-           'LOCAL_STATE',
+           'MANUAL_CONFIRM',
            v_now,
            transfer_row.amount,
            COALESCE(NULLIF(btrim(coalesce(transfer_row.currency, '')), ''), 'GBP'),
-           'MANUAL_RESOLVED_NO_PAYMENT_MADE',
-           'NO_MONEY_MOVED',
+           'MATCHED',
+           'PRE_BANK_CANCEL',
            'NO_CORRECTION_REQUIRED',
            jsonb_strip_nulls(jsonb_build_object(
              'event_kind', 'PROVIDER_SUBMIT_MANUAL_NO_PAYMENT_RESOLUTION',
              'confirmation_reason', 'NO_PAYMENT_MADE_CONFIRMED',
+             'manual_event_source', 'MANUAL_CONFIRM',
+             'manual_mapping_status', 'MATCHED',
+             'manual_movement_classification', 'PRE_BANK_CANCEL',
+             'manual_correction_disposition', 'NO_CORRECTION_REQUIRED',
+             'manual_mapping_method', 'MANUAL_TRANSFER_SELECTION',
              'provider_submit_diagnostic', v_manual_provider_submit_diagnostic,
              'operator_confirmation', v_confirmation_redacted,
              'operation_id', p_operation_id::text,
@@ -17655,7 +17663,7 @@ BEGIN
              'resolved_by_user_id', p_actor_user_id::text
            )),
            'MANUAL_NO_PAYMENT_RESOLUTION|' || p_operation_id::text || '|' || transfer_row.id::text,
-           'MANUAL_PROVIDER_SUBMIT_REVIEW_RESOLUTION'
+           'MANUAL_TRANSFER_SELECTION'
     FROM public.pay_bank_transfers AS transfer_row
     JOIN pg_temp.tmp_provider_submit_review_transfers AS selected_transfer
       ON selected_transfer.transfer_id = transfer_row.id
@@ -17669,7 +17677,7 @@ BEGIN
 
   WITH updated_scopes AS (
     UPDATE public.banking_pay_operation_transfer_scope AS scope_update
-    SET status = 'CANCELLED',
+    SET status = 'SKIPPED',
         updated_at_utc = v_now
     FROM pg_temp.tmp_provider_submit_review_scopes AS selected_scope
     WHERE scope_update.id = selected_scope.scope_id
@@ -17884,7 +17892,6 @@ BEGIN
   RETURN v_result;
 END;
 $function$;
-
 
 
 
