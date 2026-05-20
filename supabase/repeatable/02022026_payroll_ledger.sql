@@ -26630,7 +26630,9 @@ begin
           'banking_alert_reason', v_banking_alert_reason,
           'banking_alert_fingerprint', v_banking_alert_fingerprint,
           'banking_alert_acknowledged_for_user', v_banking_alert_acknowledged_for_user,
-          'banking_alert_requires_attention', v_banking_alert_requires_attention,
+          'banking_alert_requires_attention', v_banking_alert_requires_attention
+        )
+        || jsonb_build_object(
           'can_retry_blocked_funds', v_can_retry_blocked_funds,
           'no_submission_evidence_flags', v_no_submission_evidence_flags,
           'blocked_funds_payment_issue', v_blocked_funds_payment_issue,
