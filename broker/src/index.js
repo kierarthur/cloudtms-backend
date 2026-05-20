@@ -37475,7 +37475,6 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
 
 
 
-
 async function advanceBankingPayExecuteOperation(env, operationRow, user, options = {}) {
 const unwrapRpcPayload = (rpcRes, key) => {
 let payload = rpcRes;
@@ -37946,6 +37945,20 @@ if (businessCode === 'PAYMENT_RETRY_BLOCKED_FUNDS_CLEANUP_NOT_SAFE' || hasToken(
   businessCode = 'PAYMENT_RETRY_BLOCKED_FUNDS_CLEANUP_NOT_SAFE';
 }
 const providerSubmitDiagnosticForFailure = extractProviderSubmitDiagnostic(extraObj);
+const providerSubmissionForFailure = safeObject(extraObj.provider_submission || extraObj.providerSubmission);
+const providerSubmitClaimDiagnosticForFailure = safeObject(
+  extraObj.provider_submit_claim_diagnostic
+  || extraObj.providerSubmitClaimDiagnostic
+  || providerSubmissionForFailure.provider_submit_claim_diagnostic
+  || providerSubmissionForFailure.providerSubmitClaimDiagnostic
+);
+const providerSubmitClaimDiagnosticEventsForFailure = Array.isArray(extraObj.provider_submit_claim_diagnostic_events)
+  ? extraObj.provider_submit_claim_diagnostic_events
+  : (Array.isArray(extraObj.providerSubmitClaimDiagnosticEvents)
+    ? extraObj.providerSubmitClaimDiagnosticEvents
+    : (Array.isArray(providerSubmissionForFailure.provider_submit_claim_diagnostic_events)
+      ? providerSubmissionForFailure.provider_submit_claim_diagnostic_events
+      : (Array.isArray(providerSubmissionForFailure.providerSubmitClaimDiagnosticEvents) ? providerSubmissionForFailure.providerSubmitClaimDiagnosticEvents : [])));
 const providerSubmitStatusForFailure = String(
   extraObj.provider_submission_status
   || extraObj.providerSubmissionStatus
@@ -38104,6 +38117,8 @@ const publicError = {
 if (providerSubmitStatusForFailure) publicError.provider_submission_status = providerSubmitStatusForFailure;
 if (providerSubmitReviewReasonForFailure) publicError.provider_submit_review_reason_code = providerSubmitReviewReasonForFailure;
 if (Object.keys(providerSubmitDiagnosticForFailure).length) publicError.provider_submit_diagnostic = providerSubmitDiagnosticForFailure;
+if (Object.keys(providerSubmitClaimDiagnosticForFailure).length) publicError.provider_submit_claim_diagnostic = providerSubmitClaimDiagnosticForFailure;
+if (providerSubmitClaimDiagnosticEventsForFailure.length) publicError.provider_submit_claim_diagnostic_events = providerSubmitClaimDiagnosticEventsForFailure;
 
 for (const key of [
   'blocker_count',
@@ -38563,12 +38578,107 @@ const providerSubmitManualResolutionRequired = (source) => {
       'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID'
     ].includes(providerSubmitStatusFrom(source));
 };
+const providerSubmitClaimDiagnosticFrom = (source = {}) => {
+  const root = safeObject(source);
+  const direct = safeObject(root.provider_submit_claim_diagnostic || root.providerSubmitClaimDiagnostic);
+  const providerDiagnostic = extractProviderSubmitDiagnostic(root);
+  const transferIds = Array.isArray(root.transfer_ids)
+    ? root.transfer_ids.map((item) => String(item || '').trim()).filter(Boolean)
+    : [];
+  const chunkIds = Array.isArray(root.chunk_ids)
+    ? root.chunk_ids.map((item) => String(item || '').trim()).filter(Boolean)
+    : [];
+  const diagnostic = {
+    diagnostic_version: 1,
+    diagnostic_kind: 'PROVIDER_SUBMIT_CLAIM',
+    diagnostic_source: 'advanceBankingPayExecuteOperation.SUBMIT_PROVIDER_TRANSFERS.adapter_result',
+    generated_at_utc: new Date().toISOString(),
+    phase: 'SUBMIT_PROVIDER_TRANSFERS',
+    operation_id: operationId,
+    pay_batch_id: payBatchId,
+    adapter_ok: Object.prototype.hasOwnProperty.call(root, 'ok') ? root.ok === true : null,
+    chunk_id: String(root.chunk_id || root.chunkId || '').trim() || null,
+    chunk_ids: chunkIds,
+    claimed_count: numField(root, 'claimed_count', 'claimedCount', 'claimed', 'unit_count', 'unitCount'),
+    transfer_ids: transferIds,
+    transfer_count: transferIds.length || numField(root, 'transfer_count', 'transferCount', 'unit_count', 'unitCount'),
+    claim_blocked: root.claim_blocked === true || root.claimBlocked === true,
+    claim_blocker_code: String(root.claim_blocker_code || root.claimBlockerCode || '').trim().toUpperCase() || null,
+    provider_submission_status: String(root.provider_submission_status || root.providerSubmissionStatus || providerDiagnostic.provider_submission_status || providerDiagnostic.providerSubmissionStatus || '').trim().toUpperCase() || null,
+    review_reason_code: String(root.review_reason_code || root.reviewReasonCode || providerDiagnostic.review_reason_code || providerDiagnostic.reviewReasonCode || '').trim().toUpperCase() || null,
+    provider_submit_ready_count: numField(root, 'provider_submit_ready_count', 'providerSubmitReadyCount', 'provider_submit_ready_transfer_count', 'providerSubmitReadyTransferCount'),
+    same_operation_authorised_auth_count: numField(root, 'same_operation_authorised_auth_count', 'sameOperationAuthorisedAuthCount', 'same_operation_authorised_auth_request_count', 'sameOperationAuthorisedAuthRequestCount'),
+    authorised_without_provider_submission_count: numField(root, 'authorised_without_provider_submission_count', 'authorisedWithoutProviderSubmissionCount', 'authorised_without_provider_submission_transfer_count', 'authorisedWithoutProviderSubmissionTransferCount'),
+    authorised_but_not_submit_ready_count: numField(root, 'authorised_but_not_submit_ready_count', 'authorisedButNotSubmitReadyCount', 'authorised_but_not_submit_ready_transfer_count', 'authorisedButNotSubmitReadyTransferCount'),
+    auth_request_state: String(root.auth_request_state || root.authRequestState || '').trim() || null,
+    auth_request_unsafe_reason: String(root.auth_request_unsafe_reason || root.authRequestUnsafeReason || '').trim() || null,
+    unsafe_transfer_count: numField(root, 'unsafe_transfer_count', 'unsafeTransferCount'),
+    provider_attempt_or_evidence_count: numField(root, 'provider_attempt_or_evidence_count', 'providerAttemptOrEvidenceCount', 'provider_attempt_or_evidence_transfer_count', 'providerAttemptOrEvidenceTransferCount'),
+    provider_request_sent_count: numField(root, 'provider_request_sent_count', 'providerRequestSentCount'),
+    provider_response_present_count: numField(root, 'provider_response_present_count', 'providerResponsePresentCount'),
+    provider_acceptance_evidence_count: numField(root, 'provider_acceptance_evidence_count', 'providerAcceptanceEvidenceCount'),
+    provider_external_evidence_count: numField(root, 'provider_external_evidence_count', 'providerExternalEvidenceCount'),
+    provider_submission_unknown_count: numField(root, 'provider_submission_unknown_count', 'providerSubmissionUnknownCount'),
+    stale_unresolved_submit_chunk_count: numField(root, 'stale_unresolved_submit_chunk_count', 'staleUnresolvedSubmitChunkCount', 'stale_empty_submit_chunk_count', 'staleEmptySubmitChunkCount'),
+    unfinalised_submit_chunk_count: numField(root, 'unfinalised_submit_chunk_count', 'unfinalisedSubmitChunkCount'),
+    remaining_submit_attempt_required: numField(root, 'remaining_submit_attempt_required', 'remainingSubmitAttemptRequired', 'remaining_count', 'remainingCount'),
+    remaining_provider_evidence_required: numField(root, 'remaining_provider_evidence_required', 'remainingProviderEvidenceRequired'),
+    classification_source: String(root.classification_source || root.classificationSource || '').trim() || null,
+    has_more: root.has_more === true || root.hasMore === true || root.has_more_submit_attempts === true || root.hasMoreSubmitAttempts === true,
+    requires_review: root.requires_review === true || root.requiresReview === true,
+    requires_provider_poll: root.requires_provider_poll === true || root.requiresProviderPoll === true,
+    manual_resolution_required: root.manual_resolution_required === true || root.manualResolutionRequired === true,
+    safe_retry_available: root.safe_retry_available === true || root.safeRetryAvailable === true,
+    provider_submit_diagnostic_present: Object.keys(providerDiagnostic).length > 0
+  };
+  return Object.keys(direct).length ? { ...diagnostic, ...direct } : diagnostic;
+};
+const providerSubmitClaimDiagnosticEventsFrom = (source = {}, diagnostic = {}) => {
+  const root = safeObject(source);
+  const existingEvents = Array.isArray(root.provider_submit_claim_diagnostic_events)
+    ? root.provider_submit_claim_diagnostic_events
+    : (Array.isArray(root.providerSubmitClaimDiagnosticEvents) ? root.providerSubmitClaimDiagnosticEvents : []);
+  return [
+    ...existingEvents.filter((event) => event && typeof event === 'object' && !Array.isArray(event)),
+    {
+      event: 'ADAPTER_RETURNED_PROVIDER_SUBMIT_CLAIM_RESULT',
+      at_utc: new Date().toISOString(),
+      phase: 'SUBMIT_PROVIDER_TRANSFERS',
+      operation_id: operationId,
+      pay_batch_id: payBatchId,
+      adapter_ok: diagnostic.adapter_ok,
+      chunk_id: diagnostic.chunk_id || null,
+      claimed_count: Number.isFinite(Number(diagnostic.claimed_count)) ? Number(diagnostic.claimed_count) : 0,
+      claim_blocked: diagnostic.claim_blocked === true,
+      claim_blocker_code: diagnostic.claim_blocker_code || null,
+      provider_submit_ready_count: Number.isFinite(Number(diagnostic.provider_submit_ready_count)) ? Number(diagnostic.provider_submit_ready_count) : 0,
+      same_operation_authorised_auth_count: Number.isFinite(Number(diagnostic.same_operation_authorised_auth_count)) ? Number(diagnostic.same_operation_authorised_auth_count) : 0,
+      authorised_without_provider_submission_count: Number.isFinite(Number(diagnostic.authorised_without_provider_submission_count)) ? Number(diagnostic.authorised_without_provider_submission_count) : 0,
+      authorised_but_not_submit_ready_count: Number.isFinite(Number(diagnostic.authorised_but_not_submit_ready_count)) ? Number(diagnostic.authorised_but_not_submit_ready_count) : 0,
+      unsafe_transfer_count: Number.isFinite(Number(diagnostic.unsafe_transfer_count)) ? Number(diagnostic.unsafe_transfer_count) : 0,
+      classification_source: diagnostic.classification_source || null
+    }
+  ];
+};
+const emitProviderSubmitClaimDiagnosticLog = (diagnostic = {}, events = []) => {
+  try {
+    console.log('[BANKING_PAY][PROVIDER_SUBMIT_CLAIM_DIAGNOSTIC]', JSON.stringify({ diagnostic, events }));
+  } catch {
+    try {
+      console.log('[BANKING_PAY][PROVIDER_SUBMIT_CLAIM_DIAGNOSTIC]', diagnostic);
+    } catch {}
+  }
+};
 const providerSubmitDiagnosticFailurePayload = (source = {}) => {
   const diag = extractProviderSubmitDiagnostic(source);
+  const claimDiagnostic = providerSubmitClaimDiagnosticFrom(source);
+  const claimDiagnosticEvents = providerSubmitClaimDiagnosticEventsFrom(source, claimDiagnostic);
   const status = providerSubmitStatusFrom(source);
   const reviewReason = providerSubmitReviewCodeFrom(source);
   return {
     provider_submit_diagnostic: Object.keys(diag).length ? diag : undefined,
+    provider_submit_claim_diagnostic: Object.keys(claimDiagnostic).length ? claimDiagnostic : undefined,
+    provider_submit_claim_diagnostic_events: claimDiagnosticEvents.length ? claimDiagnosticEvents : undefined,
     provider_submission_status: status || undefined,
     provider_submit_review_reason_code: reviewReason || undefined,
     review_reason_code: reviewReason || undefined,
@@ -39367,6 +39477,19 @@ if (currentPhase === 'SUBMIT_PROVIDER_TRANSFERS') {
       adapter_error: String(adapterError?.message || adapterError || '')
     });
     return fail(providerReview.code, providerReview.message, providerReview.payload);
+  }
+  const submittedProviderClaimDiagnostic = submitted && typeof submitted === 'object' && !Array.isArray(submitted)
+    ? providerSubmitClaimDiagnosticFrom(submitted)
+    : {};
+  const submittedProviderClaimDiagnosticEvents = submitted && typeof submitted === 'object' && !Array.isArray(submitted)
+    ? providerSubmitClaimDiagnosticEventsFrom(submitted, submittedProviderClaimDiagnostic)
+    : [];
+  if (submitted && typeof submitted === 'object' && !Array.isArray(submitted)) {
+    if (Object.keys(submittedProviderClaimDiagnostic).length) submitted.provider_submit_claim_diagnostic = submittedProviderClaimDiagnostic;
+    if (submittedProviderClaimDiagnosticEvents.length) submitted.provider_submit_claim_diagnostic_events = submittedProviderClaimDiagnosticEvents;
+  }
+  if (Object.keys(submittedProviderClaimDiagnostic).length || submittedProviderClaimDiagnosticEvents.length) {
+    emitProviderSubmitClaimDiagnosticLog(submittedProviderClaimDiagnostic, submittedProviderClaimDiagnosticEvents);
   }
   if (submitted && Array.isArray(submitted.blocked_funds) && submitted.blocked_funds.length) {
     const blockedFundsRows = submitted.blocked_funds;
@@ -132997,6 +133120,8 @@ function getRailAdapter(provider) {
             funding_account_ref_candidates_checked: [],
             funding_account_ref_resolution_json: null,
             provider_submit_diagnostic: null,
+            provider_submit_claim_diagnostic: null,
+            provider_submit_claim_diagnostic_events: [],
             provider_submission_status: null,
             review_reason_code: null,
             manual_resolution_required: false,
@@ -133030,6 +133155,80 @@ function getRailAdapter(provider) {
           if (!opId) throw new Error('executeDueBatches operation mode requires operationId');
           if (!batchId) throw new Error('executeDueBatches operation mode requires payBatchId');
 
+          const providerSubmitClaimDiagnosticEvents = [];
+          const normaliseDiagnosticCount = (value) => {
+            const n = Number(value);
+            return Number.isFinite(n) ? Math.trunc(n) : null;
+          };
+          const boundedDiagnosticArray = (value, limit = 20) => (Array.isArray(value) ? value : [])
+            .map((item) => String(item === undefined || item === null ? '' : item).trim())
+            .filter(Boolean)
+            .slice(0, limit);
+          const safeDiagnosticScopeRows = (rows) => (Array.isArray(rows) ? rows : []).slice(0, 50).map((row) => {
+            const source = readObject(row);
+            return {
+              scope_id: String(source.id || source.scope_id || source.transfer_scope_id || '').trim() || null,
+              pay_bank_transfer_id: String(source.pay_bank_transfer_id || source.transfer_id || '').trim() || null,
+              pay_channel: String(source.pay_channel || '').trim() || null,
+              transfer_group_key: String(source.transfer_group_key || '').trim() || null,
+              amount: Number.isFinite(Number(source.amount)) ? Number(source.amount) : null,
+              currency: String(source.currency || '').trim() || null,
+              has_request_id: !!String(source.request_id || '').trim(),
+              has_payment_reference: !!String(source.payment_reference || '').trim(),
+              has_funding_account_ref: !!String(source.funding_account_ref || '').trim()
+            };
+          });
+          const persistProviderSubmitClaimDiagnostic = async (stage, patch = {}) => {
+            const diagnostic = {
+              diagnostic_version: 1,
+              diagnostic_kind: 'REVOLUT_PROVIDER_SUBMIT_CLAIM_TRACE',
+              generated_at_utc: new Date().toISOString(),
+              stage: String(stage || '').trim() || 'PROVIDER_SUBMIT_CLAIM_TRACE',
+              rail_provider: 'REVOLUT',
+              operation_id: opId,
+              pay_batch_id: batchId,
+              operation_mode: true,
+              ...readObject(patch)
+            };
+            out.provider_submit_claim_diagnostic = diagnostic;
+            providerSubmitClaimDiagnosticEvents.push(diagnostic);
+            out.provider_submit_claim_diagnostic_events = providerSubmitClaimDiagnosticEvents.slice(-10);
+            try {
+              console.log('[BANKING_PAY][PROVIDER_SUBMIT_CLAIM_DIAGNOSTIC]', JSON.stringify(diagnostic));
+            } catch {}
+            try {
+              const operationUrl = `${env.SUPABASE_URL}/rest/v1/banking_pay_operations?id=eq.${encodeURIComponent(opId)}&select=id,progress_json&limit=1`;
+              const operationRes = await sbFetch(env, operationUrl, false);
+              const operationRow = operationRes && Array.isArray(operationRes.rows) && operationRes.rows.length ? operationRes.rows[0] : null;
+              const existingProgress = readObject(operationRow && operationRow.progress_json);
+              const existingEvents = Array.isArray(existingProgress.provider_submit_claim_diagnostic_events)
+                ? existingProgress.provider_submit_claim_diagnostic_events
+                : [];
+              const progressPatch = {
+                ...existingProgress,
+                provider_submit_claim_diagnostic: diagnostic,
+                provider_submit_claim_diagnostic_events: [...existingEvents, diagnostic].slice(-10)
+              };
+              const patchUrl = `${env.SUPABASE_URL}/rest/v1/banking_pay_operations?id=eq.${encodeURIComponent(opId)}`;
+              await sbFetch(env, patchUrl, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+                body: JSON.stringify({ progress_json: progressPatch })
+              });
+            } catch (diagnosticPersistError) {
+              const warning = {
+                code: 'PROVIDER_SUBMIT_CLAIM_DIAGNOSTIC_PERSIST_FAILED',
+                stage: String(stage || '').trim() || 'PROVIDER_SUBMIT_CLAIM_TRACE',
+                message: String(diagnosticPersistError?.message || diagnosticPersistError || 'Provider-submit claim diagnostic persistence failed.')
+              };
+              try {
+                out.warnings.push(warning);
+                console.warn('[BANKING_PAY][PROVIDER_SUBMIT_CLAIM_DIAGNOSTIC_PERSIST_FAILED]', JSON.stringify(warning));
+              } catch {}
+            }
+            return diagnostic;
+          };
+
           const submitLimit = (() => {
             const n = Number(providerSubmitChunkSize ?? perBatchSubmitLimit ?? limit ?? 50);
             return Number.isFinite(n) ? Math.max(1, Math.min(500, Math.trunc(n))) : 50;
@@ -133045,6 +133244,8 @@ function getRailAdapter(provider) {
           let preflightToken = null;
           let preflightPayrollTesting = null;
           let fundingAccountResolution = null;
+          let preflightScopeRowsForDiagnostic = [];
+          let preflightPreparedTransfersForDiagnostic = [];
 
           try {
             const batchUrl = `${env.SUPABASE_URL}/rest/v1/pay_batches?id=eq.${encodeURIComponent(batchId)}&select=id,funding_account_ref,rail_env_snapshot,execution_intent_json&limit=1`;
@@ -133086,6 +133287,7 @@ function getRailAdapter(provider) {
             const scopeUrl = `${env.SUPABASE_URL}/rest/v1/banking_pay_operation_transfer_scope?operation_id=eq.${encodeURIComponent(opId)}&pay_batch_id=eq.${encodeURIComponent(batchId)}&status=eq.PREPARED&select=${scopeSelect}&order=created_at_utc.asc,id.asc&limit=${submitLimit}`;
             const scopeRes = await sbFetch(env, scopeUrl, false);
             const scopeRows = scopeRes && Array.isArray(scopeRes.rows) ? scopeRes.rows : [];
+            preflightScopeRowsForDiagnostic = safeDiagnosticScopeRows(scopeRows);
             const preflightTransfers = scopeRows
               .map((scopeRow) => ({
                 ...scopeRow,
@@ -133096,6 +133298,7 @@ function getRailAdapter(provider) {
                 funding_account_ref: batchFundingRef
               }))
               .filter((scopeRow) => String(scopeRow.pay_bank_transfer_id || '').trim());
+            preflightPreparedTransfersForDiagnostic = safeDiagnosticScopeRows(preflightTransfers);
 
             preflightFundingRef = batchFundingRef;
             preflightRequired = sumRequired(preflightTransfers);
@@ -133399,6 +133602,53 @@ function getRailAdapter(provider) {
             || diagnosticShowsProviderRisk(providerSubmitDiagnostic);
           const claimSafeRetryAvailable = claimProviderEvidenceOrRiskExists !== true && unsafeTransferFromClaim <= 0;
 
+          await persistProviderSubmitClaimDiagnostic('PROVIDER_SUBMIT_CLAIM_RETURNED', {
+            claim_ok: claim.ok === true,
+            claim_blocked: claim.claim_blocked === true,
+            claim_blocker_code: claimBlockerCodeFromClaim,
+            chunk_id: chunkId,
+            claimed_transfer_count: transfers.length,
+            claim_transfer_ids: boundedDiagnosticArray(transferIds),
+            transfer_scope_ids: boundedDiagnosticArray(currentTransferScopeIds),
+            auth_request_ids: boundedDiagnosticArray(currentAuthRequestIds),
+            has_provider_submit_diagnostic: !!claimProviderSubmitDiagnostic,
+            provider_submission_status: rawProviderSubmissionStatusFromClaim,
+            review_reason_code: rawReviewReasonCodeFromClaim,
+            provider_submit_ready_count: providerSubmitReadyFromClaim,
+            same_operation_authorised_auth_count: sameOperationAuthorisedAuthFromClaim,
+            authorised_without_provider_submission_count: authorisedWithoutProviderSubmissionFromClaim,
+            authorised_but_not_submit_ready_count: authorisedButNotSubmitReadyFromClaim,
+            auth_request_state: claimAuthRequestState,
+            auth_request_unsafe_reason: claimAuthRequestUnsafeReason,
+            provider_attempt_or_evidence_count: providerAttemptOrEvidenceFromClaim,
+            unsafe_transfer_count: unsafeTransferFromClaim,
+            remaining_submit_attempt_required: remainingSubmitAttemptRequiredFromClaim,
+            remaining_provider_evidence_required: remainingProviderEvidenceRequiredFromClaim,
+            attempted_but_unproven_count: attemptedButUnprovenFromClaim,
+            provider_attempt_without_external_id_count: providerAttemptWithoutExternalIdFromClaim,
+            provider_request_sent_count: claimProviderRequestSentCount,
+            provider_response_present_count: claimProviderResponsePresentCount,
+            provider_acceptance_evidence_count: claimProviderAcceptanceEvidenceCount,
+            provider_external_evidence_count: claimProviderExternalEvidenceCount,
+            provider_submission_unknown_count: claimProviderSubmissionUnknownCount,
+            stale_unresolved_submit_chunk_count: claimStaleUnresolvedSubmitChunkCount,
+            unfinalised_submit_chunk_count: claimUnfinalisedSubmitChunkCount,
+            claim_provider_request_or_evidence_exists: claimProviderRequestOrEvidenceExists,
+            claim_provider_evidence_or_risk_exists: claimProviderEvidenceOrRiskExists,
+            claim_safe_retry_available: claimSafeRetryAvailable,
+            classification_source: classificationSourceFromClaim,
+            preflight_scope_row_count: preflightScopeRowsForDiagnostic.length,
+            preflight_prepared_transfer_count: preflightPreparedTransfersForDiagnostic.length,
+            preflight_required_gbp: normaliseDiagnosticCount(preflightRequired),
+            preflight_available_gbp: Number.isFinite(Number(preflightAvailable)) ? Number(preflightAvailable) : null,
+            preflight_sufficient: preflightSufficient,
+            preflight_funding_account_ref_present: !!preflightFundingRef,
+            preflight_funding_account_ref_source: fundingAccountResolution ? fundingAccountResolution.funding_account_ref_source : null,
+            preflight_scope_rows: preflightScopeRowsForDiagnostic,
+            preflight_prepared_transfers: preflightPreparedTransfersForDiagnostic,
+            claim_payload_keys: Object.keys(readObject(claim)).sort()
+          });
+
           if (claim.claim_blocked === true || claim.requires_review === true && claimProviderSubmitDiagnostic || claimBlockerCodeFromClaim === 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK') {
             const providerRequestOrEvidenceExists = claimProviderRequestOrEvidenceExists === true;
             const providerEvidenceOrRiskExists = claimProviderEvidenceOrRiskExists === true;
@@ -133524,6 +133774,20 @@ function getRailAdapter(provider) {
               classification_source: classificationSourceFromClaim,
               provider_submit_diagnostic: providerSubmitDiagnostic
             });
+            await persistProviderSubmitClaimDiagnostic('PROVIDER_SUBMIT_CLAIM_BLOCKED_DECISION', {
+              blocker_code: blockerCode,
+              provider_submission_status: providerSubmissionStatus,
+              review_reason_code: reviewReasonCode,
+              provider_request_or_evidence_exists: providerRequestOrEvidenceExists,
+              provider_evidence_or_risk_exists: providerEvidenceOrRiskExists,
+              provider_submission_attempted: providerSubmissionAttemptedForBlocker === true,
+              provider_called: providerCalledForBlocker === true,
+              provider_request_sent: providerRequestSentForBlocker === true,
+              provider_response_present: providerResponsePresentForBlocker === true,
+              safe_retry_available: claimSafeRetryAvailable === true,
+              manual_resolution_required: providerEvidenceOrRiskExists === true,
+              provider_submit_diagnostic: providerSubmitDiagnostic
+            });
             return out;
           }
 
@@ -133647,12 +133911,58 @@ function getRailAdapter(provider) {
                 classification_source: classificationSourceFromClaim,
                 provider_submit_diagnostic: providerSubmitDiagnostic
               });
+              await persistProviderSubmitClaimDiagnostic('PROVIDER_SUBMIT_CLAIM_NO_CHUNK_BLOCKER_DECISION', {
+                no_claimed_provider_submit_chunk: noClaimedProviderSubmitChunk,
+                should_return_provider_submit_blocker: shouldReturnProviderSubmitBlocker,
+                claim_indicates_provider_submit_blocker: claimIndicatesProviderSubmitBlocker,
+                same_operation_authorised_local_evidence_exists: sameOperationAuthorisedLocalEvidenceExists,
+                blocker_code: blockerCode,
+                provider_submission_status: providerSubmissionStatus,
+                review_reason_code: reviewReasonCode,
+                provider_request_or_evidence_exists: providerRequestOrEvidenceExists,
+                provider_evidence_or_risk_exists: providerEvidenceOrRiskExists,
+                provider_submission_attempted: providerSubmissionAttemptedForBlocker === true,
+                provider_called: providerCalledForBlocker === true,
+                provider_request_sent: providerRequestSentForBlocker === true,
+                provider_response_present: providerResponsePresentForBlocker === true,
+                safe_retry_available: claimSafeRetryAvailable === true,
+                manual_resolution_required: providerEvidenceOrRiskExists === true,
+                provider_submit_diagnostic: providerSubmitDiagnostic
+              });
+            } else {
+              await persistProviderSubmitClaimDiagnostic('PROVIDER_SUBMIT_CLAIM_NO_CHUNK_NO_BLOCKER_DECISION', {
+                no_claimed_provider_submit_chunk: noClaimedProviderSubmitChunk,
+                should_return_provider_submit_blocker: shouldReturnProviderSubmitBlocker,
+                claim_indicates_provider_submit_blocker: claimIndicatesProviderSubmitBlocker,
+                same_operation_authorised_local_evidence_exists: sameOperationAuthorisedLocalEvidenceExists,
+                provider_request_or_evidence_exists: providerRequestOrEvidenceExists,
+                provider_evidence_or_risk_exists: providerEvidenceOrRiskExists,
+                provider_submit_ready_count: providerSubmitReadyFromClaim,
+                same_operation_authorised_auth_count: sameOperationAuthorisedAuthFromClaim,
+                authorised_without_provider_submission_count: authorisedWithoutProviderSubmissionFromClaim,
+                authorised_but_not_submit_ready_count: authorisedButNotSubmitReadyFromClaim,
+                unsafe_transfer_count: unsafeTransferFromClaim,
+                classification_source: classificationSourceFromClaim
+              });
             }
             return out;
           }
 
           chunkClaimed = true;
           chunkIdForFinalise = chunkId;
+          await persistProviderSubmitClaimDiagnostic('PROVIDER_SUBMIT_CLAIM_CHUNK_CLAIMED', {
+            chunk_id: chunkId,
+            claimed_transfer_count: transfers.length,
+            claim_transfer_ids: boundedDiagnosticArray(transferIds),
+            transfer_scope_ids: boundedDiagnosticArray(currentTransferScopeIds),
+            auth_request_ids: boundedDiagnosticArray(currentAuthRequestIds),
+            provider_submit_ready_count: providerSubmitReadyFromClaim,
+            same_operation_authorised_auth_count: sameOperationAuthorisedAuthFromClaim,
+            authorised_without_provider_submission_count: authorisedWithoutProviderSubmissionFromClaim,
+            authorised_but_not_submit_ready_count: authorisedButNotSubmitReadyFromClaim,
+            unsafe_transfer_count: unsafeTransferFromClaim,
+            classification_source: classificationSourceFromClaim
+          });
 
           try {
             const batchRailEnv = String(transfers[0]?.rail_env || transfers[0]?.rail_env_snapshot || 'PROD').trim().toUpperCase() || 'PROD';
