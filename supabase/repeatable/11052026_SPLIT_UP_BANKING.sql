@@ -8333,7 +8333,7 @@ BEGIN
       'has_unproven_attempts', COALESCE(v_has_unproven_attempts, false)
   );
 END;
-$function$
+$function$;
 
 
 
@@ -13241,7 +13241,7 @@ BEGIN
     final_rows.transfer_id NULLS LAST,
     final_rows.scope_id NULLS LAST;
 END;
-$function$
+$function$;
 
 
 
