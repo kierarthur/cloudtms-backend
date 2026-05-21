@@ -7849,65 +7849,124 @@ BEGIN
     );
 
     RETURN jsonb_build_object(
-      'ok', true,
-      'operation_id', p_operation_id::text,
-      'pay_batch_id', p_pay_batch_id::text,
-      'chunk_id', v_chunk_id::text,
-      'chunk_type', 'TRANSFER_SUBMIT',
-      'phase', 'SUBMIT_PROVIDER_TRANSFERS',
-      'sequence_no', v_sequence_no,
-      'lock_owner', v_lock_owner,
-      'lock_expires_at_utc', (v_now + make_interval(secs => v_lock_seconds))::text,
-      'transfer_ids', COALESCE(v_transfer_ids, '[]'::jsonb),
-      'transfers', COALESCE(v_transfer_rows, '[]'::jsonb),
-      'unit_count', COALESCE(v_transfer_count, 0),
-      'claimed_count', COALESCE(v_transfer_count, 0),
-      'unattempted_eligible_count', COALESCE(v_unattempted_eligible_count, 0),
-      'provider_submit_ready_count', COALESCE(v_provider_submit_ready_count, 0),
-      'same_operation_authorised_auth_count', COALESCE(v_same_operation_authorised_auth_count, 0),
-      'authorised_without_provider_submission_count', COALESCE(v_authorised_without_provider_submission_count, 0),
-      'authorised_but_not_submit_ready_count', COALESCE(v_authorised_but_not_submit_ready_count, 0),
-      'auth_request_state', v_auth_request_state,
-      'auth_request_unsafe_reason', v_auth_request_unsafe_reason,
-      'claim_blocker_code', v_claim_blocker_code,
-      'attempted_but_unproven_count', COALESCE(v_attempted_but_unproven_count, 0),
-      'provider_evidence_present_count', COALESCE(v_provider_evidence_present_count, 0),
-      'provider_attempt_or_evidence_count', COALESCE(v_provider_attempt_or_evidence_count, 0),
-      'unsafe_transfer_count', COALESCE(v_unsafe_transfer_count, 0),
-      'classification_source', v_classification_source,
-      'retry_mode', COALESCE(v_retry_mode, false),
-      'failed_or_retryable_count', COALESCE(v_failed_or_retryable_count, 0),
-      'terminal_count', COALESCE(v_terminal_count, 0),
-      'remaining_count', COALESCE(v_remaining_count, 0),
-      'remaining_submit_attempt_required', COALESCE(v_remaining_count, 0),
-      'remaining_unattempted_submit_required', COALESCE(v_remaining_count, 0),
-      'remaining_provider_submission_required', COALESCE(v_remaining_count, 0),
-      'remaining_provider_evidence_required', COALESCE(v_remaining_provider_evidence_required, 0),
-      'has_more', COALESCE(v_remaining_count, 0) > 0,
-      'has_more_submit_attempts', COALESCE(v_remaining_count, 0) > 0,
-      'provider_submit_diagnostic', v_provider_submit_diagnostic,
-      'provider_submission_status', v_provider_submission_status,
-      'review_reason_code', v_review_reason_code,
-      'chunk_ids', jsonb_build_array(v_chunk_id::text),
-      'manual_resolution_required', false,
-      'safe_retry_available', false,
-      'provider_acceptance_evidence_count', COALESCE(v_provider_acceptance_evidence_count, 0),
-      'provider_external_evidence_count', COALESCE(v_provider_external_evidence_count, 0),
-      'provider_external_evidence_present', COALESCE(v_provider_external_evidence_count, 0) > 0,
-      'provider_request_sent_confirmed', CASE WHEN COALESCE(v_provider_request_sent_count, 0) > 0 THEN true ELSE false END,
-      'provider_request_dispatched_at_utc', NULLIF(BTRIM(COALESCE(v_provider_submit_diagnostic->>'provider_request_dispatched_at_utc', v_provider_submit_diagnostic->>'request_sent_at_utc', '')), ''),
-      'provider_response_present_count', COALESCE(v_provider_response_present_count, 0),
-      'provider_request_sent_count', COALESCE(v_provider_request_sent_count, 0),
-      'stale_unresolved_submit_chunk_count', COALESCE(v_stale_unresolved_submit_chunk_count, 0),
-      'stale_empty_submit_chunk_count', COALESCE(v_stale_empty_submit_chunk_count, 0),
-      'unfinalised_submit_chunk_count', COALESCE(v_unfinalised_submit_chunk_count, 0),
-      'provider_submission_unknown_count', COALESCE(v_provider_submission_unknown_count, 0),
-      'provider_evidence_count', COALESCE(v_provider_evidence_present_count, 0),
-      'local_submit_chunk_claimed_count', COALESCE(v_local_submit_chunk_claimed_count, 0),
-      'operation_submit_attempt_count', COALESCE(v_operation_submit_attempt_count, 0),
-      'has_unproven_attempts', COALESCE(v_has_unproven_attempts, false),
-      'idempotent_reuse', true
-    );
+        'ok',
+        true,
+        'operation_id',
+        p_operation_id::text,
+        'pay_batch_id',
+        p_pay_batch_id::text,
+        'chunk_id',
+        v_chunk_id::text,
+        'chunk_type',
+        'TRANSFER_SUBMIT',
+        'phase',
+        'SUBMIT_PROVIDER_TRANSFERS',
+        'sequence_no',
+        v_sequence_no,
+        'lock_owner',
+        v_lock_owner,
+        'lock_expires_at_utc',
+        (v_now + make_interval(secs => v_lock_seconds))::text,
+        'transfer_ids',
+        COALESCE(v_transfer_ids, '[]'::jsonb),
+        'transfers',
+        COALESCE(v_transfer_rows, '[]'::jsonb),
+        'unit_count',
+        COALESCE(v_transfer_count, 0),
+        'claimed_count',
+        COALESCE(v_transfer_count, 0),
+        'unattempted_eligible_count',
+        COALESCE(v_unattempted_eligible_count, 0),
+        'provider_submit_ready_count',
+        COALESCE(v_provider_submit_ready_count, 0),
+        'same_operation_authorised_auth_count',
+        COALESCE(v_same_operation_authorised_auth_count, 0),
+        'authorised_without_provider_submission_count',
+        COALESCE(v_authorised_without_provider_submission_count, 0),
+        'authorised_but_not_submit_ready_count',
+        COALESCE(v_authorised_but_not_submit_ready_count, 0),
+        'auth_request_state',
+        v_auth_request_state,
+        'auth_request_unsafe_reason',
+        v_auth_request_unsafe_reason,
+        'claim_blocker_code',
+        v_claim_blocker_code,
+        'attempted_but_unproven_count',
+        COALESCE(v_attempted_but_unproven_count, 0),
+        'provider_evidence_present_count',
+        COALESCE(v_provider_evidence_present_count, 0),
+        'provider_attempt_or_evidence_count',
+        COALESCE(v_provider_attempt_or_evidence_count, 0),
+        'unsafe_transfer_count',
+        COALESCE(v_unsafe_transfer_count, 0),
+        'classification_source',
+        v_classification_source,
+        'retry_mode',
+        COALESCE(v_retry_mode, false),
+        'failed_or_retryable_count',
+        COALESCE(v_failed_or_retryable_count, 0),
+        'terminal_count',
+        COALESCE(v_terminal_count, 0),
+        'remaining_count',
+        COALESCE(v_remaining_count, 0),
+        'remaining_submit_attempt_required',
+        COALESCE(v_remaining_count, 0),
+        'remaining_unattempted_submit_required',
+        COALESCE(v_remaining_count, 0),
+        'remaining_provider_submission_required',
+        COALESCE(v_remaining_count, 0),
+        'remaining_provider_evidence_required',
+        COALESCE(v_remaining_provider_evidence_required, 0),
+        'has_more',
+        COALESCE(v_remaining_count, 0) > 0
+      ) || jsonb_build_object(
+        'has_more_submit_attempts',
+        COALESCE(v_remaining_count, 0) > 0,
+        'provider_submit_diagnostic',
+        v_provider_submit_diagnostic,
+        'provider_submission_status',
+        v_provider_submission_status,
+        'review_reason_code',
+        v_review_reason_code,
+        'chunk_ids',
+        jsonb_build_array(v_chunk_id::text),
+        'manual_resolution_required',
+        false,
+        'safe_retry_available',
+        false,
+        'provider_acceptance_evidence_count',
+        COALESCE(v_provider_acceptance_evidence_count, 0),
+        'provider_external_evidence_count',
+        COALESCE(v_provider_external_evidence_count, 0),
+        'provider_external_evidence_present',
+        COALESCE(v_provider_external_evidence_count, 0) > 0,
+        'provider_request_sent_confirmed',
+        CASE WHEN COALESCE(v_provider_request_sent_count, 0) > 0 THEN true ELSE false END,
+        'provider_request_dispatched_at_utc',
+        NULLIF(BTRIM(COALESCE(v_provider_submit_diagnostic->>'provider_request_dispatched_at_utc', v_provider_submit_diagnostic->>'request_sent_at_utc', '')), ''),
+        'provider_response_present_count',
+        COALESCE(v_provider_response_present_count, 0),
+        'provider_request_sent_count',
+        COALESCE(v_provider_request_sent_count, 0),
+        'stale_unresolved_submit_chunk_count',
+        COALESCE(v_stale_unresolved_submit_chunk_count, 0),
+        'stale_empty_submit_chunk_count',
+        COALESCE(v_stale_empty_submit_chunk_count, 0),
+        'unfinalised_submit_chunk_count',
+        COALESCE(v_unfinalised_submit_chunk_count, 0),
+        'provider_submission_unknown_count',
+        COALESCE(v_provider_submission_unknown_count, 0),
+        'provider_evidence_count',
+        COALESCE(v_provider_evidence_present_count, 0),
+        'local_submit_chunk_claimed_count',
+        COALESCE(v_local_submit_chunk_claimed_count, 0),
+        'operation_submit_attempt_count',
+        COALESCE(v_operation_submit_attempt_count, 0),
+        'has_unproven_attempts',
+        COALESCE(v_has_unproven_attempts, false),
+        'idempotent_reuse',
+        true
+      );
   END IF;
 
   WITH candidate_transfers AS (
@@ -8051,126 +8110,243 @@ BEGIN
       ));
 
       RETURN jsonb_build_object(
-        'ok', false,
-        'operation_id', p_operation_id::text,
-        'pay_batch_id', p_pay_batch_id::text,
-        'chunk_id', NULL,
-        'chunk_type', 'TRANSFER_SUBMIT',
-        'phase', 'SUBMIT_PROVIDER_TRANSFERS',
-        'claim_blocked', true,
-        'claim_blocker_code', v_claim_blocker_code,
-        'transfer_ids', '[]'::jsonb,
-        'transfers', '[]'::jsonb,
-        'unit_count', 0,
-        'claimed_count', 0,
-        'unattempted_eligible_count', COALESCE(v_unattempted_eligible_count, 0),
-        'provider_submit_ready_count', COALESCE(v_provider_submit_ready_count, 0),
-        'same_operation_authorised_auth_count', COALESCE(v_same_operation_authorised_auth_count, 0),
-        'authorised_without_provider_submission_count', COALESCE(v_authorised_without_provider_submission_count, 0),
-        'authorised_but_not_submit_ready_count', COALESCE(v_authorised_but_not_submit_ready_count, 0),
-        'auth_request_state', v_auth_request_state,
-        'auth_request_unsafe_reason', v_auth_request_unsafe_reason,
-        'attempted_but_unproven_count', COALESCE(v_attempted_but_unproven_count, 0),
-        'provider_evidence_present_count', COALESCE(v_provider_evidence_present_count, 0),
-        'provider_attempt_or_evidence_count', COALESCE(v_provider_attempt_or_evidence_count, 0),
-        'unsafe_transfer_count', COALESCE(v_unsafe_transfer_count, 0),
-        'classification_source', v_classification_source,
-        'retry_mode', COALESCE(v_retry_mode, false),
-        'failed_or_retryable_count', COALESCE(v_failed_or_retryable_count, 0),
-        'terminal_count', COALESCE(v_terminal_count, 0),
-        'remaining_count', 0,
-        'remaining_submit_attempt_required', 0,
-        'remaining_unattempted_submit_required', 0,
-        'remaining_provider_submission_required', 0,
-        'remaining_provider_evidence_required', COALESCE(v_remaining_provider_evidence_required, 0),
-        'has_more', false,
-        'has_more_submit_attempts', false,
-        'provider_submit_diagnostic', v_provider_submit_diagnostic,
-        'provider_submission_status', v_provider_submission_status,
-        'provider_submission_attempted', v_zero_claim_has_provider_attempt_or_evidence,
-        'provider_called', v_zero_claim_provider_request_or_evidence,
-        'provider_request_sent', COALESCE(v_provider_request_sent_count, 0) > 0,
-        'provider_response_present', COALESCE(v_provider_response_present_count, 0) > 0,
-        'review_reason_code', v_review_reason_code,
-        'review_required', v_zero_claim_manual_resolution_required,
-        'requires_review', v_zero_claim_manual_resolution_required,
-        'chunk_ids', '[]'::jsonb,
-        'manual_resolution_required', v_zero_claim_manual_resolution_required,
-        'safe_retry_available', v_zero_claim_safe_retry_available,
-        'provider_acceptance_evidence_count', COALESCE(v_provider_acceptance_evidence_count, 0),
-        'provider_external_evidence_count', COALESCE(v_provider_external_evidence_count, 0),
-        'provider_external_evidence_present', COALESCE(v_provider_external_evidence_count, 0) > 0,
-        'provider_request_sent_confirmed', COALESCE(v_provider_request_sent_count, 0) > 0,
-        'provider_request_dispatched_at_utc', NULLIF(BTRIM(COALESCE(v_provider_submit_diagnostic->>'provider_request_dispatched_at_utc', v_provider_submit_diagnostic->>'request_sent_at_utc', '')), ''),
-        'provider_response_present_count', COALESCE(v_provider_response_present_count, 0),
-        'provider_request_sent_count', COALESCE(v_provider_request_sent_count, 0),
-        'stale_unresolved_submit_chunk_count', COALESCE(v_stale_unresolved_submit_chunk_count, 0),
-        'stale_empty_submit_chunk_count', COALESCE(v_stale_empty_submit_chunk_count, 0),
-        'unfinalised_submit_chunk_count', COALESCE(v_unfinalised_submit_chunk_count, 0),
-        'provider_submission_unknown_count', COALESCE(v_provider_submission_unknown_count, 0),
-        'provider_evidence_count', COALESCE(v_provider_evidence_present_count, 0),
-        'local_submit_chunk_claimed_count', COALESCE(v_local_submit_chunk_claimed_count, 0),
-        'operation_submit_attempt_count', COALESCE(v_operation_submit_attempt_count, 0),
-        'has_unproven_attempts', COALESCE(v_has_unproven_attempts, false)
+        'ok',
+        false,
+        'operation_id',
+        p_operation_id::text,
+        'pay_batch_id',
+        p_pay_batch_id::text,
+        'chunk_id',
+        NULL,
+        'chunk_type',
+        'TRANSFER_SUBMIT',
+        'phase',
+        'SUBMIT_PROVIDER_TRANSFERS',
+        'claim_blocked',
+        true,
+        'claim_blocker_code',
+        v_claim_blocker_code,
+        'transfer_ids',
+        '[]'::jsonb,
+        'transfers',
+        '[]'::jsonb,
+        'unit_count',
+        0,
+        'claimed_count',
+        0,
+        'unattempted_eligible_count',
+        COALESCE(v_unattempted_eligible_count, 0),
+        'provider_submit_ready_count',
+        COALESCE(v_provider_submit_ready_count, 0),
+        'same_operation_authorised_auth_count',
+        COALESCE(v_same_operation_authorised_auth_count, 0),
+        'authorised_without_provider_submission_count',
+        COALESCE(v_authorised_without_provider_submission_count, 0),
+        'authorised_but_not_submit_ready_count',
+        COALESCE(v_authorised_but_not_submit_ready_count, 0),
+        'auth_request_state',
+        v_auth_request_state,
+        'auth_request_unsafe_reason',
+        v_auth_request_unsafe_reason,
+        'attempted_but_unproven_count',
+        COALESCE(v_attempted_but_unproven_count, 0),
+        'provider_evidence_present_count',
+        COALESCE(v_provider_evidence_present_count, 0),
+        'provider_attempt_or_evidence_count',
+        COALESCE(v_provider_attempt_or_evidence_count, 0),
+        'unsafe_transfer_count',
+        COALESCE(v_unsafe_transfer_count, 0),
+        'classification_source',
+        v_classification_source,
+        'retry_mode',
+        COALESCE(v_retry_mode, false),
+        'failed_or_retryable_count',
+        COALESCE(v_failed_or_retryable_count, 0),
+        'terminal_count',
+        COALESCE(v_terminal_count, 0),
+        'remaining_count',
+        0,
+        'remaining_submit_attempt_required',
+        0,
+        'remaining_unattempted_submit_required',
+        0,
+        'remaining_provider_submission_required',
+        0,
+        'remaining_provider_evidence_required',
+        COALESCE(v_remaining_provider_evidence_required, 0),
+        'has_more',
+        false,
+        'has_more_submit_attempts',
+        false,
+        'provider_submit_diagnostic',
+        v_provider_submit_diagnostic
+      ) || jsonb_build_object(
+        'provider_submission_status',
+        v_provider_submission_status,
+        'provider_submission_attempted',
+        v_zero_claim_has_provider_attempt_or_evidence,
+        'provider_called',
+        v_zero_claim_provider_request_or_evidence,
+        'provider_request_sent',
+        COALESCE(v_provider_request_sent_count, 0) > 0,
+        'provider_response_present',
+        COALESCE(v_provider_response_present_count, 0) > 0,
+        'review_reason_code',
+        v_review_reason_code,
+        'review_required',
+        v_zero_claim_manual_resolution_required,
+        'requires_review',
+        v_zero_claim_manual_resolution_required,
+        'chunk_ids',
+        '[]'::jsonb,
+        'manual_resolution_required',
+        v_zero_claim_manual_resolution_required,
+        'safe_retry_available',
+        v_zero_claim_safe_retry_available,
+        'provider_acceptance_evidence_count',
+        COALESCE(v_provider_acceptance_evidence_count, 0),
+        'provider_external_evidence_count',
+        COALESCE(v_provider_external_evidence_count, 0),
+        'provider_external_evidence_present',
+        COALESCE(v_provider_external_evidence_count, 0) > 0,
+        'provider_request_sent_confirmed',
+        COALESCE(v_provider_request_sent_count, 0) > 0,
+        'provider_request_dispatched_at_utc',
+        NULLIF(BTRIM(COALESCE(v_provider_submit_diagnostic->>'provider_request_dispatched_at_utc', v_provider_submit_diagnostic->>'request_sent_at_utc', '')), ''),
+        'provider_response_present_count',
+        COALESCE(v_provider_response_present_count, 0),
+        'provider_request_sent_count',
+        COALESCE(v_provider_request_sent_count, 0),
+        'stale_unresolved_submit_chunk_count',
+        COALESCE(v_stale_unresolved_submit_chunk_count, 0),
+        'stale_empty_submit_chunk_count',
+        COALESCE(v_stale_empty_submit_chunk_count, 0),
+        'unfinalised_submit_chunk_count',
+        COALESCE(v_unfinalised_submit_chunk_count, 0),
+        'provider_submission_unknown_count',
+        COALESCE(v_provider_submission_unknown_count, 0),
+        'provider_evidence_count',
+        COALESCE(v_provider_evidence_present_count, 0),
+        'local_submit_chunk_claimed_count',
+        COALESCE(v_local_submit_chunk_claimed_count, 0),
+        'operation_submit_attempt_count',
+        COALESCE(v_operation_submit_attempt_count, 0),
+        'has_unproven_attempts',
+        COALESCE(v_has_unproven_attempts, false)
       );
     END IF;
 
     RETURN jsonb_build_object(
-      'ok', true,
-      'operation_id', p_operation_id::text,
-      'pay_batch_id', p_pay_batch_id::text,
-      'chunk_id', NULL,
-      'chunk_type', 'TRANSFER_SUBMIT',
-      'phase', 'SUBMIT_PROVIDER_TRANSFERS',
-      'transfer_ids', '[]'::jsonb,
-      'transfers', '[]'::jsonb,
-      'unit_count', 0,
-      'claimed_count', 0,
-      'unattempted_eligible_count', COALESCE(v_unattempted_eligible_count, 0),
-      'provider_submit_ready_count', COALESCE(v_provider_submit_ready_count, 0),
-      'same_operation_authorised_auth_count', COALESCE(v_same_operation_authorised_auth_count, 0),
-      'authorised_without_provider_submission_count', COALESCE(v_authorised_without_provider_submission_count, 0),
-      'authorised_but_not_submit_ready_count', COALESCE(v_authorised_but_not_submit_ready_count, 0),
-      'auth_request_state', v_auth_request_state,
-      'auth_request_unsafe_reason', v_auth_request_unsafe_reason,
-      'claim_blocker_code', v_claim_blocker_code,
-      'attempted_but_unproven_count', COALESCE(v_attempted_but_unproven_count, 0),
-      'provider_evidence_present_count', COALESCE(v_provider_evidence_present_count, 0),
-      'provider_attempt_or_evidence_count', COALESCE(v_provider_attempt_or_evidence_count, 0),
-      'unsafe_transfer_count', COALESCE(v_unsafe_transfer_count, 0),
-      'classification_source', v_classification_source,
-      'retry_mode', COALESCE(v_retry_mode, false),
-      'failed_or_retryable_count', COALESCE(v_failed_or_retryable_count, 0),
-      'terminal_count', COALESCE(v_terminal_count, 0),
-      'remaining_count', 0,
-      'remaining_submit_attempt_required', 0,
-      'remaining_unattempted_submit_required', 0,
-      'remaining_provider_submission_required', 0,
-      'remaining_provider_evidence_required', COALESCE(v_remaining_provider_evidence_required, 0),
-      'has_more', false,
-      'has_more_submit_attempts', false,
-      'provider_submit_diagnostic', v_provider_submit_diagnostic,
-      'provider_submission_status', v_provider_submission_status,
-      'review_reason_code', v_review_reason_code,
-      'chunk_ids', '[]'::jsonb,
-      'manual_resolution_required', false,
-      'safe_retry_available', false,
-      'provider_acceptance_evidence_count', COALESCE(v_provider_acceptance_evidence_count, 0),
-      'provider_external_evidence_count', COALESCE(v_provider_external_evidence_count, 0),
-      'provider_external_evidence_present', COALESCE(v_provider_external_evidence_count, 0) > 0,
-      'provider_request_sent_confirmed', CASE WHEN COALESCE(v_provider_request_sent_count, 0) > 0 THEN true ELSE false END,
-      'provider_request_dispatched_at_utc', NULLIF(BTRIM(COALESCE(v_provider_submit_diagnostic->>'provider_request_dispatched_at_utc', v_provider_submit_diagnostic->>'request_sent_at_utc', '')), ''),
-      'provider_response_present_count', COALESCE(v_provider_response_present_count, 0),
-      'provider_request_sent_count', COALESCE(v_provider_request_sent_count, 0),
-      'stale_unresolved_submit_chunk_count', COALESCE(v_stale_unresolved_submit_chunk_count, 0),
-      'stale_empty_submit_chunk_count', COALESCE(v_stale_empty_submit_chunk_count, 0),
-      'unfinalised_submit_chunk_count', COALESCE(v_unfinalised_submit_chunk_count, 0),
-      'provider_submission_unknown_count', COALESCE(v_provider_submission_unknown_count, 0),
-      'provider_evidence_count', COALESCE(v_provider_evidence_present_count, 0),
-      'local_submit_chunk_claimed_count', COALESCE(v_local_submit_chunk_claimed_count, 0),
-      'operation_submit_attempt_count', COALESCE(v_operation_submit_attempt_count, 0),
-      'has_unproven_attempts', COALESCE(v_has_unproven_attempts, false)
-    );
+        'ok',
+        true,
+        'operation_id',
+        p_operation_id::text,
+        'pay_batch_id',
+        p_pay_batch_id::text,
+        'chunk_id',
+        NULL,
+        'chunk_type',
+        'TRANSFER_SUBMIT',
+        'phase',
+        'SUBMIT_PROVIDER_TRANSFERS',
+        'transfer_ids',
+        '[]'::jsonb,
+        'transfers',
+        '[]'::jsonb,
+        'unit_count',
+        0,
+        'claimed_count',
+        0,
+        'unattempted_eligible_count',
+        COALESCE(v_unattempted_eligible_count, 0),
+        'provider_submit_ready_count',
+        COALESCE(v_provider_submit_ready_count, 0),
+        'same_operation_authorised_auth_count',
+        COALESCE(v_same_operation_authorised_auth_count, 0),
+        'authorised_without_provider_submission_count',
+        COALESCE(v_authorised_without_provider_submission_count, 0),
+        'authorised_but_not_submit_ready_count',
+        COALESCE(v_authorised_but_not_submit_ready_count, 0),
+        'auth_request_state',
+        v_auth_request_state,
+        'auth_request_unsafe_reason',
+        v_auth_request_unsafe_reason,
+        'claim_blocker_code',
+        v_claim_blocker_code,
+        'attempted_but_unproven_count',
+        COALESCE(v_attempted_but_unproven_count, 0),
+        'provider_evidence_present_count',
+        COALESCE(v_provider_evidence_present_count, 0),
+        'provider_attempt_or_evidence_count',
+        COALESCE(v_provider_attempt_or_evidence_count, 0),
+        'unsafe_transfer_count',
+        COALESCE(v_unsafe_transfer_count, 0),
+        'classification_source',
+        v_classification_source,
+        'retry_mode',
+        COALESCE(v_retry_mode, false),
+        'failed_or_retryable_count',
+        COALESCE(v_failed_or_retryable_count, 0),
+        'terminal_count',
+        COALESCE(v_terminal_count, 0),
+        'remaining_count',
+        0,
+        'remaining_submit_attempt_required',
+        0,
+        'remaining_unattempted_submit_required',
+        0,
+        'remaining_provider_submission_required',
+        0,
+        'remaining_provider_evidence_required',
+        COALESCE(v_remaining_provider_evidence_required, 0),
+        'has_more',
+        false,
+        'has_more_submit_attempts',
+        false,
+        'provider_submit_diagnostic',
+        v_provider_submit_diagnostic,
+        'provider_submission_status',
+        v_provider_submission_status
+      ) || jsonb_build_object(
+        'review_reason_code',
+        v_review_reason_code,
+        'chunk_ids',
+        '[]'::jsonb,
+        'manual_resolution_required',
+        false,
+        'safe_retry_available',
+        false,
+        'provider_acceptance_evidence_count',
+        COALESCE(v_provider_acceptance_evidence_count, 0),
+        'provider_external_evidence_count',
+        COALESCE(v_provider_external_evidence_count, 0),
+        'provider_external_evidence_present',
+        COALESCE(v_provider_external_evidence_count, 0) > 0,
+        'provider_request_sent_confirmed',
+        CASE WHEN COALESCE(v_provider_request_sent_count, 0) > 0 THEN true ELSE false END,
+        'provider_request_dispatched_at_utc',
+        NULLIF(BTRIM(COALESCE(v_provider_submit_diagnostic->>'provider_request_dispatched_at_utc', v_provider_submit_diagnostic->>'request_sent_at_utc', '')), ''),
+        'provider_response_present_count',
+        COALESCE(v_provider_response_present_count, 0),
+        'provider_request_sent_count',
+        COALESCE(v_provider_request_sent_count, 0),
+        'stale_unresolved_submit_chunk_count',
+        COALESCE(v_stale_unresolved_submit_chunk_count, 0),
+        'stale_empty_submit_chunk_count',
+        COALESCE(v_stale_empty_submit_chunk_count, 0),
+        'unfinalised_submit_chunk_count',
+        COALESCE(v_unfinalised_submit_chunk_count, 0),
+        'provider_submission_unknown_count',
+        COALESCE(v_provider_submission_unknown_count, 0),
+        'provider_evidence_count',
+        COALESCE(v_provider_evidence_present_count, 0),
+        'local_submit_chunk_claimed_count',
+        COALESCE(v_local_submit_chunk_claimed_count, 0),
+        'operation_submit_attempt_count',
+        COALESCE(v_operation_submit_attempt_count, 0),
+        'has_unproven_attempts',
+        COALESCE(v_has_unproven_attempts, false)
+      );
   END IF;
 
   SELECT (COUNT(*) + 1)::integer
@@ -8274,69 +8450,124 @@ BEGIN
   );
 
   RETURN jsonb_build_object(
-    'ok', true,
-    'operation_id', p_operation_id::text,
-    'pay_batch_id', p_pay_batch_id::text,
-    'chunk_id', v_chunk_id::text,
-    'chunk_type', 'TRANSFER_SUBMIT',
-    'phase', 'SUBMIT_PROVIDER_TRANSFERS',
-    'sequence_no', v_sequence_no,
-    'lock_owner', v_lock_owner,
-    'lock_expires_at_utc', (v_now + make_interval(secs => v_lock_seconds))::text,
-    'transfer_ids', COALESCE(v_transfer_ids, '[]'::jsonb),
-    'transfers', COALESCE(v_transfer_rows, '[]'::jsonb),
-    'unit_count', COALESCE(v_transfer_count, 0),
-    'claimed_count', COALESCE(v_transfer_count, 0),
-    'unattempted_eligible_count', COALESCE(v_unattempted_eligible_count, 0),
-    'provider_submit_ready_count', COALESCE(v_provider_submit_ready_count, 0),
-    'same_operation_authorised_auth_count', COALESCE(v_same_operation_authorised_auth_count, 0),
-    'authorised_without_provider_submission_count', COALESCE(v_authorised_without_provider_submission_count, 0),
-    'authorised_but_not_submit_ready_count', COALESCE(v_authorised_but_not_submit_ready_count, 0),
-    'auth_request_state', v_auth_request_state,
-    'auth_request_unsafe_reason', v_auth_request_unsafe_reason,
-    'claim_blocker_code', v_claim_blocker_code,
-    'attempted_but_unproven_count', COALESCE(v_attempted_but_unproven_count, 0),
-    'provider_evidence_present_count', COALESCE(v_provider_evidence_present_count, 0),
-    'provider_attempt_or_evidence_count', COALESCE(v_provider_attempt_or_evidence_count, 0),
-    'unsafe_transfer_count', COALESCE(v_unsafe_transfer_count, 0),
-    'classification_source', v_classification_source,
-    'retry_mode', COALESCE(v_retry_mode, false),
-    'failed_or_retryable_count', COALESCE(v_failed_or_retryable_count, 0),
-    'terminal_count', COALESCE(v_terminal_count, 0),
-    'remaining_count', COALESCE(v_remaining_count, 0),
-    'remaining_submit_attempt_required', COALESCE(v_remaining_count, 0),
-    'remaining_unattempted_submit_required', COALESCE(v_remaining_count, 0),
-    'remaining_provider_submission_required', COALESCE(v_remaining_count, 0),
-    'remaining_provider_evidence_required', COALESCE(v_remaining_provider_evidence_required, 0),
-    'has_more', COALESCE(v_remaining_count, 0) > 0,
-    'has_more_submit_attempts', COALESCE(v_remaining_count, 0) > 0,
-    'provider_submit_diagnostic', v_provider_submit_diagnostic,
-      'provider_submission_status', v_provider_submission_status,
-      'review_reason_code', v_review_reason_code,
-      'chunk_ids', jsonb_build_array(v_chunk_id::text),
-      'manual_resolution_required', false,
-      'safe_retry_available', false,
-      'provider_acceptance_evidence_count', COALESCE(v_provider_acceptance_evidence_count, 0),
-      'provider_external_evidence_count', COALESCE(v_provider_external_evidence_count, 0),
-      'provider_external_evidence_present', COALESCE(v_provider_external_evidence_count, 0) > 0,
-      'provider_request_sent_confirmed', CASE WHEN COALESCE(v_provider_request_sent_count, 0) > 0 THEN true ELSE false END,
-      'provider_request_dispatched_at_utc', NULLIF(BTRIM(COALESCE(v_provider_submit_diagnostic->>'provider_request_dispatched_at_utc', v_provider_submit_diagnostic->>'request_sent_at_utc', '')), ''),
-      'provider_response_present_count', COALESCE(v_provider_response_present_count, 0),
-      'provider_request_sent_count', COALESCE(v_provider_request_sent_count, 0),
-      'stale_unresolved_submit_chunk_count', COALESCE(v_stale_unresolved_submit_chunk_count, 0),
-      'stale_empty_submit_chunk_count', COALESCE(v_stale_empty_submit_chunk_count, 0),
-      'unfinalised_submit_chunk_count', COALESCE(v_unfinalised_submit_chunk_count, 0),
-      'provider_submission_unknown_count', COALESCE(v_provider_submission_unknown_count, 0),
-      'provider_evidence_count', COALESCE(v_provider_evidence_present_count, 0),
-      'local_submit_chunk_claimed_count', COALESCE(v_local_submit_chunk_claimed_count, 0),
-      'operation_submit_attempt_count', COALESCE(v_operation_submit_attempt_count, 0),
-      'has_unproven_attempts', COALESCE(v_has_unproven_attempts, false)
-  );
+        'ok',
+        true,
+        'operation_id',
+        p_operation_id::text,
+        'pay_batch_id',
+        p_pay_batch_id::text,
+        'chunk_id',
+        v_chunk_id::text,
+        'chunk_type',
+        'TRANSFER_SUBMIT',
+        'phase',
+        'SUBMIT_PROVIDER_TRANSFERS',
+        'sequence_no',
+        v_sequence_no,
+        'lock_owner',
+        v_lock_owner,
+        'lock_expires_at_utc',
+        (v_now + make_interval(secs => v_lock_seconds))::text,
+        'transfer_ids',
+        COALESCE(v_transfer_ids, '[]'::jsonb),
+        'transfers',
+        COALESCE(v_transfer_rows, '[]'::jsonb),
+        'unit_count',
+        COALESCE(v_transfer_count, 0),
+        'claimed_count',
+        COALESCE(v_transfer_count, 0),
+        'unattempted_eligible_count',
+        COALESCE(v_unattempted_eligible_count, 0),
+        'provider_submit_ready_count',
+        COALESCE(v_provider_submit_ready_count, 0),
+        'same_operation_authorised_auth_count',
+        COALESCE(v_same_operation_authorised_auth_count, 0),
+        'authorised_without_provider_submission_count',
+        COALESCE(v_authorised_without_provider_submission_count, 0),
+        'authorised_but_not_submit_ready_count',
+        COALESCE(v_authorised_but_not_submit_ready_count, 0),
+        'auth_request_state',
+        v_auth_request_state,
+        'auth_request_unsafe_reason',
+        v_auth_request_unsafe_reason,
+        'claim_blocker_code',
+        v_claim_blocker_code,
+        'attempted_but_unproven_count',
+        COALESCE(v_attempted_but_unproven_count, 0),
+        'provider_evidence_present_count',
+        COALESCE(v_provider_evidence_present_count, 0),
+        'provider_attempt_or_evidence_count',
+        COALESCE(v_provider_attempt_or_evidence_count, 0),
+        'unsafe_transfer_count',
+        COALESCE(v_unsafe_transfer_count, 0),
+        'classification_source',
+        v_classification_source,
+        'retry_mode',
+        COALESCE(v_retry_mode, false),
+        'failed_or_retryable_count',
+        COALESCE(v_failed_or_retryable_count, 0),
+        'terminal_count',
+        COALESCE(v_terminal_count, 0),
+        'remaining_count',
+        COALESCE(v_remaining_count, 0),
+        'remaining_submit_attempt_required',
+        COALESCE(v_remaining_count, 0),
+        'remaining_unattempted_submit_required',
+        COALESCE(v_remaining_count, 0),
+        'remaining_provider_submission_required',
+        COALESCE(v_remaining_count, 0),
+        'remaining_provider_evidence_required',
+        COALESCE(v_remaining_provider_evidence_required, 0),
+        'has_more',
+        COALESCE(v_remaining_count, 0) > 0
+      ) || jsonb_build_object(
+        'has_more_submit_attempts',
+        COALESCE(v_remaining_count, 0) > 0,
+        'provider_submit_diagnostic',
+        v_provider_submit_diagnostic,
+        'provider_submission_status',
+        v_provider_submission_status,
+        'review_reason_code',
+        v_review_reason_code,
+        'chunk_ids',
+        jsonb_build_array(v_chunk_id::text),
+        'manual_resolution_required',
+        false,
+        'safe_retry_available',
+        false,
+        'provider_acceptance_evidence_count',
+        COALESCE(v_provider_acceptance_evidence_count, 0),
+        'provider_external_evidence_count',
+        COALESCE(v_provider_external_evidence_count, 0),
+        'provider_external_evidence_present',
+        COALESCE(v_provider_external_evidence_count, 0) > 0,
+        'provider_request_sent_confirmed',
+        CASE WHEN COALESCE(v_provider_request_sent_count, 0) > 0 THEN true ELSE false END,
+        'provider_request_dispatched_at_utc',
+        NULLIF(BTRIM(COALESCE(v_provider_submit_diagnostic->>'provider_request_dispatched_at_utc', v_provider_submit_diagnostic->>'request_sent_at_utc', '')), ''),
+        'provider_response_present_count',
+        COALESCE(v_provider_response_present_count, 0),
+        'provider_request_sent_count',
+        COALESCE(v_provider_request_sent_count, 0),
+        'stale_unresolved_submit_chunk_count',
+        COALESCE(v_stale_unresolved_submit_chunk_count, 0),
+        'stale_empty_submit_chunk_count',
+        COALESCE(v_stale_empty_submit_chunk_count, 0),
+        'unfinalised_submit_chunk_count',
+        COALESCE(v_unfinalised_submit_chunk_count, 0),
+        'provider_submission_unknown_count',
+        COALESCE(v_provider_submission_unknown_count, 0),
+        'provider_evidence_count',
+        COALESCE(v_provider_evidence_present_count, 0),
+        'local_submit_chunk_claimed_count',
+        COALESCE(v_local_submit_chunk_claimed_count, 0),
+        'operation_submit_attempt_count',
+        COALESCE(v_operation_submit_attempt_count, 0),
+        'has_unproven_attempts',
+        COALESCE(v_has_unproven_attempts, false)
+      );
 END;
 $function$;
-
-
-
 
 
 
@@ -14910,7 +15141,6 @@ BEGIN
 END;
 $function$;
 
-
 CREATE OR REPLACE FUNCTION public.pay_provider_submit_diagnostic_get(
   p_pay_batch_id uuid DEFAULT NULL::uuid,
   p_operation_id uuid DEFAULT NULL::uuid,
@@ -14969,6 +15199,9 @@ DECLARE
   v_retry_blocked_reason text := NULL::text;
   v_recommended_action text := 'No provider submission attempt has been recorded for this scope.';
   v_operation_ids jsonb := '[]'::jsonb;
+  v_current_operation_ids jsonb := '[]'::jsonb;
+  v_related_operation_ids jsonb := '[]'::jsonb;
+  v_diagnostic_operation_id text := NULL::text;
   v_chunk_ids jsonb := '[]'::jsonb;
   v_transfer_ids jsonb := '[]'::jsonb;
   v_transfer_scope_ids jsonb := '[]'::jsonb;
@@ -15877,6 +16110,34 @@ BEGIN
        v_primary_operation_id
   FROM pg_temp.tmp_provider_submit_diagnostic_operations AS selected_operation;
 
+  IF p_operation_id IS NOT NULL THEN
+    v_diagnostic_operation_id := p_operation_id::text;
+  ELSIF p_chunk_id IS NOT NULL THEN
+    SELECT selected_chunk.operation_id::text
+    INTO v_diagnostic_operation_id
+    FROM pg_temp.tmp_provider_submit_diagnostic_chunks AS selected_chunk
+    WHERE selected_chunk.chunk_id = p_chunk_id
+    LIMIT 1;
+  ELSE
+    v_diagnostic_operation_id := NULL::text;
+  END IF;
+
+  IF v_diagnostic_operation_id IS NOT NULL THEN
+    v_primary_operation_id := v_diagnostic_operation_id;
+    v_current_operation_ids := jsonb_build_array(v_diagnostic_operation_id);
+
+    SELECT COALESCE(jsonb_agg(to_jsonb(related_operation.value) ORDER BY related_operation.value), '[]'::jsonb)
+    INTO v_related_operation_ids
+    FROM (
+      SELECT DISTINCT selected_operation.operation_id::text AS value
+      FROM pg_temp.tmp_provider_submit_diagnostic_operations AS selected_operation
+      WHERE selected_operation.operation_id::text <> v_diagnostic_operation_id
+    ) AS related_operation;
+  ELSE
+    v_current_operation_ids := '[]'::jsonb;
+    v_related_operation_ids := COALESCE(v_operation_ids, '[]'::jsonb);
+  END IF;
+
   SELECT COALESCE(BOOL_OR(UPPER(BTRIM(COALESCE(selected_operation.operation_status, ''))) = 'REVIEW_REQUIRED'), false)
   INTO v_operation_review_required
   FROM pg_temp.tmp_provider_submit_diagnostic_operations AS selected_operation;
@@ -16221,7 +16482,9 @@ BEGIN
   );
 
   v_ids := jsonb_build_object(
-    'operation_ids', COALESCE(v_operation_ids, '[]'::jsonb),
+    'operation_id', v_diagnostic_operation_id,
+    'operation_ids', COALESCE(v_current_operation_ids, '[]'::jsonb),
+    'related_operation_ids', COALESCE(v_related_operation_ids, '[]'::jsonb),
     'chunk_ids', COALESCE(v_chunk_ids, '[]'::jsonb),
     'transfer_ids', COALESCE(v_transfer_ids, '[]'::jsonb),
     'transfer_scope_ids', COALESCE(v_transfer_scope_ids, '[]'::jsonb),
@@ -16267,8 +16530,9 @@ BEGIN
     'retry_blocked_reason', v_retry_blocked_reason,
     'recommended_action', v_recommended_action,
     'pay_batch_id', CASE WHEN v_effective_pay_batch_id IS NULL THEN NULL ELSE v_effective_pay_batch_id::text END,
-    'operation_id', v_primary_operation_id,
-    'operation_ids', v_operation_ids,
+    'operation_id', v_diagnostic_operation_id,
+    'operation_ids', COALESCE(v_current_operation_ids, '[]'::jsonb),
+    'related_operation_ids', COALESCE(v_related_operation_ids, '[]'::jsonb),
     'chunk_id', v_primary_chunk_id,
     'chunk_ids', v_chunk_ids,
     'transfer_id', v_primary_transfer_id,
@@ -16321,7 +16585,6 @@ BEGIN
 
 END;
 $function$;
-
 
 
 
@@ -16469,6 +16732,38 @@ BEGIN
       )
     );
   END IF;
+
+  v_provider_submit_diagnostic := jsonb_strip_nulls(
+    v_provider_submit_diagnostic
+    || jsonb_build_object(
+      'operation_id', p_operation_id::text,
+      'operation_ids', jsonb_build_array(p_operation_id::text),
+      'related_operation_ids', (
+        SELECT COALESCE(jsonb_agg(to_jsonb(related_operation.value) ORDER BY related_operation.value), '[]'::jsonb)
+        FROM (
+          SELECT DISTINCT operation_id_value.value
+          FROM (
+            SELECT operation_value.value
+            FROM jsonb_array_elements_text(
+              CASE
+                WHEN jsonb_typeof(v_provider_submit_diagnostic->'operation_ids') = 'array' THEN v_provider_submit_diagnostic->'operation_ids'
+                ELSE '[]'::jsonb
+              END
+            ) AS operation_value(value)
+            UNION
+            SELECT related_value.value
+            FROM jsonb_array_elements_text(
+              CASE
+                WHEN jsonb_typeof(v_provider_submit_diagnostic->'related_operation_ids') = 'array' THEN v_provider_submit_diagnostic->'related_operation_ids'
+                ELSE '[]'::jsonb
+              END
+            ) AS related_value(value)
+          ) AS operation_id_value
+          WHERE operation_id_value.value <> p_operation_id::text
+        ) AS related_operation
+      )
+    )
+  );
 
   v_provider_submission_status := NULLIF(BTRIM(COALESCE(v_provider_submit_diagnostic->>'provider_submission_status', v_diagnostic_result->>'provider_submission_status', '')), '');
   v_review_reason_code := NULLIF(BTRIM(COALESCE(v_provider_submit_diagnostic->>'review_reason_code', v_diagnostic_result->>'review_reason_code', '')), '');
@@ -16789,6 +17084,39 @@ BEGIN
       );
     END IF;
 
+
+  v_provider_submit_diagnostic := jsonb_strip_nulls(
+    v_provider_submit_diagnostic
+    || jsonb_build_object(
+      'operation_id', p_operation_id::text,
+      'operation_ids', jsonb_build_array(p_operation_id::text),
+      'related_operation_ids', (
+        SELECT COALESCE(jsonb_agg(to_jsonb(related_operation.value) ORDER BY related_operation.value), '[]'::jsonb)
+        FROM (
+          SELECT DISTINCT operation_id_value.value
+          FROM (
+            SELECT operation_value.value
+            FROM jsonb_array_elements_text(
+              CASE
+                WHEN jsonb_typeof(v_provider_submit_diagnostic->'operation_ids') = 'array' THEN v_provider_submit_diagnostic->'operation_ids'
+                ELSE '[]'::jsonb
+              END
+            ) AS operation_value(value)
+            UNION
+            SELECT related_value.value
+            FROM jsonb_array_elements_text(
+              CASE
+                WHEN jsonb_typeof(v_provider_submit_diagnostic->'related_operation_ids') = 'array' THEN v_provider_submit_diagnostic->'related_operation_ids'
+                ELSE '[]'::jsonb
+              END
+            ) AS related_value(value)
+          ) AS operation_id_value
+          WHERE operation_id_value.value <> p_operation_id::text
+        ) AS related_operation
+      )
+    )
+  );
+
     IF v_provider_submission_status = 'PROVIDER_SUBMISSION_ACCEPTED'
        AND COALESCE(v_chunk_completion_gate_met, false) IS TRUE
        AND COALESCE(v_chunk_mixed_provider_submit_outcome, false) IS NOT TRUE THEN
@@ -16954,6 +17282,38 @@ BEGIN
     END;
   END LOOP;
 
+  v_provider_submit_diagnostic := jsonb_strip_nulls(
+    v_provider_submit_diagnostic
+    || jsonb_build_object(
+      'operation_id', p_operation_id::text,
+      'operation_ids', jsonb_build_array(p_operation_id::text),
+      'related_operation_ids', (
+        SELECT COALESCE(jsonb_agg(to_jsonb(related_operation.value) ORDER BY related_operation.value), '[]'::jsonb)
+        FROM (
+          SELECT DISTINCT operation_id_value.value
+          FROM (
+            SELECT operation_value.value
+            FROM jsonb_array_elements_text(
+              CASE
+                WHEN jsonb_typeof(v_provider_submit_diagnostic->'operation_ids') = 'array' THEN v_provider_submit_diagnostic->'operation_ids'
+                ELSE '[]'::jsonb
+              END
+            ) AS operation_value(value)
+            UNION
+            SELECT related_value.value
+            FROM jsonb_array_elements_text(
+              CASE
+                WHEN jsonb_typeof(v_provider_submit_diagnostic->'related_operation_ids') = 'array' THEN v_provider_submit_diagnostic->'related_operation_ids'
+                ELSE '[]'::jsonb
+              END
+            ) AS related_value(value)
+          ) AS operation_id_value
+          WHERE operation_id_value.value <> p_operation_id::text
+        ) AS related_operation
+      )
+    )
+  );
+
   IF COALESCE(v_finalised_chunk_count, 0) > 0 THEN
     UPDATE public.banking_pay_operations AS operation_update
     SET progress_json = COALESCE(operation_update.progress_json, '{}'::jsonb)
@@ -17050,11 +17410,6 @@ BEGIN
   );
 END;
 $function$;
-
-
-
-
-
 
 
 
