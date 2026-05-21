@@ -18760,9 +18760,6 @@ $function$;
 
 
 
-
-
-
 CREATE OR REPLACE FUNCTION public.pay_provider_submit_chunk_stage_record(
   p_operation_id uuid,
   p_pay_batch_id uuid,
@@ -19677,7 +19674,9 @@ BEGIN
       'provider_external_evidence_present', v_provider_external_evidence_present,
       'provider_acceptance_evidence_present', v_provider_acceptance_evidence_present,
       'manual_resolution_required', v_manual_resolution_required,
-      'safe_retry_available', v_safe_retry_available,
+      'safe_retry_available', v_safe_retry_available
+    )
+    || jsonb_build_object(
       'automatic_retry_blocked', v_automatic_retry_blocked,
       'retry_blocked_reason', v_retry_blocked_reason,
       'recommended_action', v_recommended_action,
@@ -19699,7 +19698,9 @@ BEGIN
       'provider_reference', v_provider_reference,
       'provider_state', v_provider_state,
       'request_id', v_request_id,
-      'idempotency_key', v_idempotency_key,
+      'idempotency_key', v_idempotency_key
+    )
+    || jsonb_build_object(
       'local_provider_request_id', v_local_provider_request_id,
       'provider_http_status', v_provider_http_status,
       'provider_error_code', v_provider_error_code,
@@ -20002,5 +20003,8 @@ BEGIN
   );
 END;
 $function$;
+
+
+
 
 
