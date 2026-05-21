@@ -37665,7 +37665,7 @@ p_completed_units: counters.completed_units ?? null,
 p_failed_units: counters.failed_units ?? null,
 p_current_chunk_index: counters.current_chunk_index ?? null,
 p_chunk_count: counters.chunk_count ?? null,
-p_progress_json: progressJson,
+p_progress_json: decorateExecuteDiagnosticProgress(progressJson),
 p_extend_lock_seconds: null
 });
 return buildBankingPayOperationPublicPayload(saved);
@@ -37855,7 +37855,8 @@ for (const key of [
 'error', 'message', 'details', 'detail', 'hint', 'body', 'payload',
 'json', 'data', 'cause', 'result', 'response', 'rpc_response',
 'rpcResponse', 'db_error', 'dbError', 'inner_error', 'innerError',
-'source_error', 'sourceError', 'raw_error', 'rawError'
+'source_error', 'sourceError', 'raw_error', 'rawError',
+'seed_result', 'seedResult', 'transfer_scope_seed', 'transferScopeSeed'
 ]) {
 if (Object.prototype.hasOwnProperty.call(value, key)) queue.push(value[key]);
 }
@@ -38143,6 +38144,22 @@ if (extraObj.hint !== undefined) publicError.hint = extraObj.hint;
 if (extraObj.error !== undefined) publicError.error = String(extraObj.error || '').slice(0, 2000);
 
 for (const key of [
+  'seed_result',
+  'seed_result_code',
+  'transfer_scope_seed',
+  'stale_previous_operation_cleanup_diagnostic',
+  'blocked_previous_operation_ids',
+  'blocked_previous_operation_statuses',
+  'blocked_cleanup_reasons',
+  'blocked_previous_operation_types',
+  'blocked_transfer_group_keys',
+  'stale_previous_operation_ids'
+]) {
+  const value = extraObj[key];
+  if (value !== undefined) publicError[key] = value;
+}
+
+for (const key of [
   'blocker_count',
   'authorisation_ready_transfer_count',
   'provider_submit_ready_count',
@@ -38188,7 +38205,15 @@ for (const key of [
   'bank_references_cleared',
   'chunks_marked_failed',
   'chunks_marked_skipped',
-  'locks_released'
+  'locks_released',
+  'cleanup_retry_blocked_count',
+  'stale_previous_operation_scope_blocked_count',
+  'stale_previous_operation_cleanup_attempted_count',
+  'stale_previous_operation_scope_cleaned_count',
+  'stale_previous_retry_operation_scope_cleaned_count',
+  'stale_previous_operation_transfer_cleaned_count',
+  'stale_previous_operation_auth_requests_cancelled_count',
+  'stale_previous_operation_batch_execution_intent_cleared_count'
 ]) {
   const value = extraObj[key];
   if (Number.isFinite(Number(value))) publicError[key] = Number(value);
@@ -38244,14 +38269,16 @@ try {
     cleanupFailureErrorJson.provider_submit_review_reason_code = providerSubmitReviewCodeFrom(providerSubmitFinalise) || cleanupFailureErrorJson.provider_submit_review_reason_code;
     cleanupFailureErrorJson.review_reason_code = providerSubmitReviewCodeFrom(providerSubmitFinalise) || cleanupFailureErrorJson.review_reason_code;
   }
-  const cleanupRaw = await sbRpc(env, 'pay_execute_operation_cleanup_failed_local_artifacts', {
+  const cleanup = await runExecuteDiagnosticRpc('pay_execute_operation_cleanup_failed_local_artifacts', {
     p_operation_id: operationId,
     p_actor_user_id: actorUserId,
     p_failure_phase: String(phaseText || currentPhase || '').trim().toUpperCase(),
     p_failure_error_json: cleanupFailureErrorJson,
     p_dry_run: false
+  }, 'pay_execute_operation_cleanup_failed_local_artifacts', {
+    phase: String(phaseText || currentPhase || '').trim().toUpperCase(),
+    note: 'failed-payment-execution-cleanup'
   });
-  const cleanup = unwrapRpcPayload(cleanupRaw, 'pay_execute_operation_cleanup_failed_local_artifacts');
   return {
     attempted: true,
     provider_submit_finalise_result: providerSubmitFinalise,
@@ -38366,23 +38393,30 @@ return finish(terminalStatus, terminalResult, terminalError);
 const fail = async (code, message, extra = {}) => finishPaymentExecutionFailure(code, message, extra);
 
 const claimChunk = async (phase, chunkType) => {
-const rpcRes = await sbRpc(env, 'banking_pay_operation_claim_chunk', {
+return runExecuteDiagnosticRpc('banking_pay_operation_claim_chunk', {
 p_operation_id: operationId,
 p_phase: phase,
 p_chunk_type: chunkType,
 p_lock_owner: lockOwner,
 p_lock_seconds: lockSeconds
+}, 'banking_pay_operation_claim_chunk', {
+phase,
+chunk_type: chunkType,
+note: 'claim-operation-chunk'
 });
-return unwrapRpcPayload(rpcRes, 'banking_pay_operation_claim_chunk');
 };
 
-const finishChunk = async (chunkId, status, completedCount, failedCount, resultJson, errorJson = null) => sbRpc(env, 'banking_pay_operation_finish_chunk', {
+const finishChunk = async (chunkId, status, completedCount, failedCount, resultJson, errorJson = null) => runExecuteDiagnosticRpc('banking_pay_operation_finish_chunk', {
 p_chunk_id: chunkId,
 p_status: status,
 p_completed_count: completedCount,
 p_failed_count: failedCount,
 p_result_json: resultJson,
 p_error_json: errorJson
+}, null, {
+phase: currentPhase,
+chunk_id: chunkId,
+note: `finish-chunk:${String(status || '').trim().toUpperCase()}`
 });
 
 const fetchIds = async (table, query) => {
@@ -38445,6 +38479,182 @@ const paymentDate = inputJson.payment_date || inputJson.paymentDate || null;
 const actorIntent = inputJson.actor_intent || inputJson.actorIntent || null;
 const freshnessResultHashFromProgress = operation.progress_json?.freshness_result_hash || operation.result_json?.freshness?.freshness_result_hash || null;
 const freshnessScopeHashFromProgress = operation.progress_json?.freshness_scope_hash || operation.result_json?.freshness?.freshness_scope_hash || null;
+
+const executeDiagnosticEnabled = options.executeDiagnostics === false || inputJson.execute_diagnostics === false || configJson.execute_diagnostics === false ? false : true;
+const executeDiagnosticTraceId = String(progressJson.diagnostic_trace_id || `${operationId}:${Date.now()}`).trim();
+let executeDiagnosticSequence = Number.isFinite(Number(progressJson.diagnostic_sequence)) ? Math.trunc(Number(progressJson.diagnostic_sequence)) : 0;
+let executeDiagnosticHistory = Array.isArray(progressJson.diagnostic_rpc_history)
+  ? progressJson.diagnostic_rpc_history.filter((entry) => entry && typeof entry === 'object' && !Array.isArray(entry)).slice(-20)
+  : [];
+
+const executeDiagnosticNow = () => new Date().toISOString();
+const executeDiagnosticDurationMs = (startedAtMs) => Math.max(0, Date.now() - Number(startedAtMs || Date.now()));
+const executeDiagnosticText = (value, maxLength = 2000) => {
+  if (value === null || value === undefined) return null;
+  let text = '';
+  try {
+    if (typeof value === 'string') text = value;
+    else if (value instanceof Error) text = `${value.name || 'Error'}: ${value.message || ''}`;
+    else text = JSON.stringify(value, (_key, raw) => typeof raw === 'bigint' ? raw.toString() : raw);
+  } catch {
+    text = String(value);
+  }
+  text = String(text || '').trim();
+  return text ? text.slice(0, maxLength) : null;
+};
+
+const executeDiagnosticErrorPayload = (errorValue) => {
+  const err = errorValue || {};
+  return {
+    name: err?.name ? String(err.name).slice(0, 120) : null,
+    message: executeDiagnosticText(err?.message || err, 2000),
+    code: err?.code || err?.error_code || err?.errorCode || err?.business_code || err?.businessCode || null,
+    details: err?.details !== undefined ? executeDiagnosticText(err.details, 2000) : null,
+    hint: err?.hint !== undefined ? executeDiagnosticText(err.hint, 1000) : null,
+    status: err?.status !== undefined ? err.status : null
+  };
+};
+
+const emitExecuteDiagnosticLog = (eventName, payload = {}) => {
+  if (executeDiagnosticEnabled !== true) return;
+  const logPayload = {
+    event: eventName,
+    at_utc: executeDiagnosticNow(),
+    operation_id: operationId,
+    pay_batch_id: payBatchId,
+    operation_type: operationType,
+    phase: currentPhase,
+    lock_owner: lockOwner,
+    ...safeObject(payload)
+  };
+  try {
+    console.info('[BANKING_PAY][EXECUTE_DIAGNOSTIC]', JSON.stringify(logPayload));
+  } catch {
+    try {
+      console.info('[BANKING_PAY][EXECUTE_DIAGNOSTIC]', logPayload);
+    } catch {}
+  }
+};
+
+const buildExecuteDiagnosticEntry = (status, rpcName, context = {}, patch = {}) => {
+  executeDiagnosticSequence += 1;
+  return {
+    diagnostic_version: 1,
+    trace_id: executeDiagnosticTraceId,
+    sequence: executeDiagnosticSequence,
+    status: String(status || '').trim().toUpperCase(),
+    rpc_name: String(rpcName || '').trim(),
+    phase: String(context.phase || currentPhase || '').trim().toUpperCase(),
+    operation_id: operationId,
+    pay_batch_id: payBatchId,
+    operation_type: operationType,
+    lock_owner: lockOwner,
+    pay_channel_scope: payChannelScope,
+    execution_mode: executionMode,
+    chunk_id: context.chunk_id || context.chunkId || null,
+    chunk_type: context.chunk_type || context.chunkType || null,
+    chunk_phase: context.chunk_phase || context.chunkPhase || null,
+    unit_count: Number.isFinite(Number(context.unit_count ?? context.unitCount)) ? Number(context.unit_count ?? context.unitCount) : null,
+    transfer_scope_count: Number.isFinite(Number(context.transfer_scope_count ?? context.transferScopeCount)) ? Number(context.transfer_scope_count ?? context.transferScopeCount) : null,
+    started_at_utc: patch.started_at_utc || null,
+    finished_at_utc: patch.finished_at_utc || null,
+    duration_ms: Number.isFinite(Number(patch.duration_ms)) ? Number(patch.duration_ms) : null,
+    error: patch.error || null,
+    note: context.note || null
+  };
+};
+
+const decorateExecuteDiagnosticProgress = (sourceProgress = {}) => {
+  const progress = safeObject(sourceProgress);
+  const diagnosticProgress = {
+    ...progress,
+    diagnostic_trace_id: executeDiagnosticTraceId,
+    diagnostic_sequence: executeDiagnosticSequence,
+    diagnostic_rpc_history: executeDiagnosticHistory
+  };
+  if (executeDiagnosticHistory.length) {
+    const last = executeDiagnosticHistory[executeDiagnosticHistory.length - 1];
+    diagnosticProgress.diagnostic_last_rpc_event = last;
+    const lastStarted = [...executeDiagnosticHistory].reverse().find((entry) => entry && entry.status === 'BEFORE_RPC');
+    const lastCompleted = [...executeDiagnosticHistory].reverse().find((entry) => entry && entry.status === 'AFTER_RPC');
+    const lastError = [...executeDiagnosticHistory].reverse().find((entry) => entry && entry.status === 'RPC_ERROR');
+    if (lastStarted) diagnosticProgress.diagnostic_last_started_rpc = lastStarted;
+    if (lastCompleted) diagnosticProgress.diagnostic_last_completed_rpc = lastCompleted;
+    if (lastError) diagnosticProgress.diagnostic_last_error_rpc = lastError;
+  }
+  return diagnosticProgress;
+};
+
+const persistExecuteDiagnosticCheckpoint = async (entry, baseProgress = {}) => {
+  if (executeDiagnosticEnabled !== true) return;
+  if (!entry || typeof entry !== 'object') return;
+  executeDiagnosticHistory = [...executeDiagnosticHistory, entry].slice(-20);
+  emitExecuteDiagnosticLog(entry.status || 'RPC_DIAGNOSTIC', entry);
+  try {
+    await sbRpc(env, 'banking_pay_operation_save_progress', {
+      p_operation_id: operationId,
+      p_status: String(operation.status || 'RUNNING').trim().toUpperCase() || 'RUNNING',
+      p_phase: String(entry.phase || currentPhase || '').trim().toUpperCase() || currentPhase,
+      p_total_units: null,
+      p_completed_units: null,
+      p_failed_units: null,
+      p_current_chunk_index: null,
+      p_chunk_count: null,
+      p_progress_json: decorateExecuteDiagnosticProgress(baseProgress),
+      p_extend_lock_seconds: null
+    });
+  } catch (checkpointError) {
+    emitExecuteDiagnosticLog('CHECKPOINT_PERSIST_FAILED', {
+      failed_checkpoint: entry,
+      error: executeDiagnosticErrorPayload(checkpointError)
+    });
+  }
+};
+
+const runExecuteDiagnosticRpc = async (rpcName, args = {}, unwrapKey = rpcName, context = {}) => {
+  if (executeDiagnosticEnabled !== true) {
+    const rpcResult = await sbRpc(env, rpcName, args);
+    return unwrapKey ? unwrapRpcPayload(rpcResult, unwrapKey) : rpcResult;
+  }
+  const startedAtMs = Date.now();
+  const startedAtUtc = executeDiagnosticNow();
+  const beforeEntry = buildExecuteDiagnosticEntry('BEFORE_RPC', rpcName, context, {
+    started_at_utc: startedAtUtc
+  });
+  await persistExecuteDiagnosticCheckpoint(beforeEntry, {
+    ...progressJson,
+    diagnostic_current_rpc_args_preview: executeDiagnosticText(args, 1500)
+  });
+  try {
+    const rpcResult = await sbRpc(env, rpcName, args);
+    const durationMs = executeDiagnosticDurationMs(startedAtMs);
+    const afterEntry = buildExecuteDiagnosticEntry('AFTER_RPC', rpcName, context, {
+      started_at_utc: startedAtUtc,
+      finished_at_utc: executeDiagnosticNow(),
+      duration_ms: durationMs
+    });
+    await persistExecuteDiagnosticCheckpoint(afterEntry, {
+      ...progressJson,
+      diagnostic_last_rpc_result_preview: executeDiagnosticText(rpcResult, 2000)
+    });
+    return unwrapKey ? unwrapRpcPayload(rpcResult, unwrapKey) : rpcResult;
+  } catch (rpcError) {
+    const durationMs = executeDiagnosticDurationMs(startedAtMs);
+    const errorEntry = buildExecuteDiagnosticEntry('RPC_ERROR', rpcName, context, {
+      started_at_utc: startedAtUtc,
+      finished_at_utc: executeDiagnosticNow(),
+      duration_ms: durationMs,
+      error: executeDiagnosticErrorPayload(rpcError)
+    });
+    await persistExecuteDiagnosticCheckpoint(errorEntry, {
+      ...progressJson,
+      diagnostic_last_rpc_error: errorEntry.error
+    });
+    throw rpcError;
+  }
+};
+
+
 
 const scopedReadinessSnapshot = (payload = {}) => {
   const source = safeObject(payload);
@@ -38994,15 +39204,17 @@ const finaliseProviderSubmitBeforeTerminal = async (reasonCode, extra = {}) => {
   };
   if (Object.keys(suppliedDiagnostic).length) failureErrorJson.provider_submit_diagnostic = suppliedDiagnostic;
   try {
-    const finaliseRaw = await sbRpc(env, 'pay_provider_submit_chunk_diagnostic_finalise', {
+    const finaliseResult = await runExecuteDiagnosticRpc('pay_provider_submit_chunk_diagnostic_finalise', {
       p_operation_id: operationId,
       p_pay_batch_id: payBatchId,
       p_chunk_id: null,
       p_actor_user_id: actorUserId,
       p_reason_code: String(reasonCode || 'PAYMENT_EXECUTE_PROVIDER_SUBMIT_TERMINAL_GUARD').trim().toUpperCase(),
       p_failure_error_json: failureErrorJson
+    }, 'pay_provider_submit_chunk_diagnostic_finalise', {
+      phase: phaseValue,
+      note: 'provider-submit-terminal-finalise'
     });
-    const finaliseResult = unwrapRpcPayload(finaliseRaw, 'pay_provider_submit_chunk_diagnostic_finalise');
     const finaliseDiagnostic = extractProviderSubmitDiagnostic(finaliseResult);
     return {
       ...safeObject(finaliseResult),
@@ -39153,10 +39365,13 @@ const buildControlledFundingFailurePayload = (submitted) => {
 
 try {
 if (currentPhase === 'INITIALISE' || currentPhase === 'VALIDATE_BATCH') {
-const summary = unwrapRpcPayload(await sbRpc(env, 'pay_batch_execution_summary_get', {
+const summary = await runExecuteDiagnosticRpc('pay_batch_execution_summary_get', {
 p_pay_batch_id: payBatchId,
 p_actor_user_id: actorUserId
-}), 'pay_batch_execution_summary_get');
+}, 'pay_batch_execution_summary_get', {
+phase: currentPhase,
+note: 'initial-batch-summary'
+});
 if (summary && summary.ok === false) return fail('BATCH_SUMMARY_FAILED', 'Payment batch summary could not be loaded.', { summary });
 return phaseProgress('RUNNING', 'VALIDATE_AUTHORISER', {
 title: retryBlockedFunds ? 'Retrying blocked payment' : 'Processing payment',
@@ -39216,23 +39431,32 @@ if (currentPhase === 'VALIDATE_REAUTH') {
 if (currentPhase === 'VALIDATE_FRESHNESS') {
   const existingFreshnessHash = freshnessResultHashFromProgress;
   if (!existingFreshnessHash) {
-    const seed = unwrapRpcPayload(await sbRpc(env, 'pay_batch_freshness_scope_seed', {
+    const seed = await runExecuteDiagnosticRpc('pay_batch_freshness_scope_seed', {
       p_operation_id: operationId,
       p_pay_batch_id: payBatchId,
       p_actor_user_id: actorUserId,
       p_chunk_size: cfgNumber('freshness_chunk_size', 50)
-    }), 'pay_batch_freshness_scope_seed');
+    }, 'pay_batch_freshness_scope_seed', {
+      phase: currentPhase,
+      note: 'freshness-scope-seed'
+    });
 
     const chunk = await claimChunk('VALIDATE_FRESHNESS', 'FRESHNESS_VALIDATE');
     if (chunk && chunk.chunk_id) {
       try {
-        const chunkResult = unwrapRpcPayload(await sbRpc(env, 'pay_batch_validate_freshness_chunk', {
+        const chunkResult = await runExecuteDiagnosticRpc('pay_batch_validate_freshness_chunk', {
           p_operation_id: operationId,
           p_chunk_id: chunk.chunk_id,
           p_pay_batch_id: payBatchId,
           p_actor_user_id: actorUserId,
           p_diff_limit: 50
-        }), 'pay_batch_validate_freshness_chunk');
+        }, 'pay_batch_validate_freshness_chunk', {
+          phase: currentPhase,
+          chunk_id: chunk.chunk_id,
+          chunk_type: 'FRESHNESS_VALIDATE',
+          unit_count: chunk.unit_count,
+          note: 'freshness-validate-chunk'
+        });
         const isChunkStale = chunkResult.is_stale === true || chunkResult.stale === true;
         const failedCount = isChunkStale ? Number(chunkResult.stale_count || 1) : 0;
         await finishChunk(chunk.chunk_id, 'COMPLETE', Number(chunk.unit_count || chunkResult.checked_count || 1), failedCount, chunkResult, null);
@@ -39254,11 +39478,14 @@ if (currentPhase === 'VALIDATE_FRESHNESS') {
     }
   }
 
-  const freshness = unwrapRpcPayload(await sbRpc(env, 'pay_batch_freshness_result_get', {
+  const freshness = await runExecuteDiagnosticRpc('pay_batch_freshness_result_get', {
     p_operation_id: operationId,
     p_pay_batch_id: payBatchId,
     p_actor_user_id: actorUserId
-  }), 'pay_batch_freshness_result_get');
+  }, 'pay_batch_freshness_result_get', {
+    phase: currentPhase,
+    note: 'freshness-result-get'
+  });
 
   if (freshness.validation_complete !== true) {
     return phaseProgress('RUNNING', 'VALIDATE_FRESHNESS', {
@@ -39301,14 +39528,61 @@ if (currentPhase === 'VALIDATE_FRESHNESS') {
 
 if (currentPhase === 'PREPARE_TRANSFER_SCOPE') {
   const freshnessHash = freshnessResultHashFromProgress || inputJson.freshness_result_hash || null;
-  const seedResult = unwrapRpcPayload(await sbRpc(env, 'pay_execute_bank_transfer_scope_seed', {
+  const seedResult = await runExecuteDiagnosticRpc('pay_execute_bank_transfer_scope_seed', {
     p_operation_id: operationId,
     p_pay_batch_id: payBatchId,
     p_pay_channel_scope: payChannelScope,
     p_actor_user_id: actorUserId,
     p_retry_blocked_funds: retryBlockedFunds
-  }), 'pay_execute_bank_transfer_scope_seed');
-  if (seedResult.ok === false) return fail('TRANSFER_SCOPE_SEED_FAILED', 'Transfer groups could not be prepared.', { seed_result: seedResult });
+  }, 'pay_execute_bank_transfer_scope_seed', {
+    phase: currentPhase,
+    note: 'transfer-scope-seed'
+  });
+  if (seedResult.ok === false) {
+    const seedFailureCodeRaw = String(seedResult.code || seedResult.error_code || seedResult.errorCode || '').trim().toUpperCase();
+    const seedFailureCodeCleaned = seedFailureCodeRaw
+      .replace(/^ERROR[:\s]+/, '')
+      .replace(/^CODE[:\s]+/, '')
+      .replace(/[^A-Z0-9_]+/g, '_')
+      .replace(/^_+|_+$/g, '');
+    const seedFailureCode = seedFailureCodeCleaned && !/^P[0-9A-Z]{4}$/.test(seedFailureCodeCleaned) && !/^[0-9]{5}$/.test(seedFailureCodeCleaned)
+      ? seedFailureCodeCleaned
+      : 'TRANSFER_SCOPE_SEED_FAILED';
+    const seedFailureMessage = String(
+      seedResult.message
+      || seedResult.user_message
+      || seedResult.error
+      || 'Transfer groups could not be prepared.'
+    ).trim() || 'Transfer groups could not be prepared.';
+    const seedFailureExtra = {
+      phase: currentPhase,
+      seed_result: seedResult,
+      seed_result_code: seedResult.code || seedResult.error_code || seedResult.errorCode || null,
+      transfer_scope_seed: seedResult,
+      source_error: seedResult,
+      code: seedFailureCode,
+      error_code: seedFailureCode,
+      message: seedFailureMessage,
+      stale_previous_operation_cleanup_diagnostic: seedResult.stale_previous_operation_cleanup_diagnostic,
+      blocked_previous_operation_ids: seedResult.blocked_previous_operation_ids,
+      blocked_previous_operation_statuses: seedResult.blocked_previous_operation_statuses,
+      blocked_cleanup_reasons: seedResult.blocked_cleanup_reasons,
+      cleanup_retry_blocked_count: seedResult.cleanup_retry_blocked_count,
+      stale_previous_operation_scope_blocked_count: seedResult.stale_previous_operation_scope_blocked_count
+    };
+    if (seedResult.sqlstate !== undefined) seedFailureExtra.sqlstate = seedResult.sqlstate;
+    if (seedResult.sqlState !== undefined) seedFailureExtra.sqlState = seedResult.sqlState;
+    if (seedResult.blocked_previous_operation_types !== undefined) seedFailureExtra.blocked_previous_operation_types = seedResult.blocked_previous_operation_types;
+    if (seedResult.blocked_transfer_group_keys !== undefined) seedFailureExtra.blocked_transfer_group_keys = seedResult.blocked_transfer_group_keys;
+    if (seedResult.stale_previous_operation_ids !== undefined) seedFailureExtra.stale_previous_operation_ids = seedResult.stale_previous_operation_ids;
+    if (seedResult.stale_previous_operation_cleanup_attempted_count !== undefined) seedFailureExtra.stale_previous_operation_cleanup_attempted_count = seedResult.stale_previous_operation_cleanup_attempted_count;
+    if (seedResult.stale_previous_operation_scope_cleaned_count !== undefined) seedFailureExtra.stale_previous_operation_scope_cleaned_count = seedResult.stale_previous_operation_scope_cleaned_count;
+    if (seedResult.stale_previous_retry_operation_scope_cleaned_count !== undefined) seedFailureExtra.stale_previous_retry_operation_scope_cleaned_count = seedResult.stale_previous_retry_operation_scope_cleaned_count;
+    if (seedResult.stale_previous_operation_transfer_cleaned_count !== undefined) seedFailureExtra.stale_previous_operation_transfer_cleaned_count = seedResult.stale_previous_operation_transfer_cleaned_count;
+    if (seedResult.stale_previous_operation_auth_requests_cancelled_count !== undefined) seedFailureExtra.stale_previous_operation_auth_requests_cancelled_count = seedResult.stale_previous_operation_auth_requests_cancelled_count;
+    if (seedResult.stale_previous_operation_batch_execution_intent_cleared_count !== undefined) seedFailureExtra.stale_previous_operation_batch_execution_intent_cleared_count = seedResult.stale_previous_operation_batch_execution_intent_cleared_count;
+    return fail(seedFailureCode, seedFailureMessage, seedFailureExtra);
+  }
 
   const seedBlockedInvalidCount = Number(seedResult.blocked_invalid_count ?? seedResult.blockedInvalidCount ?? seedResult.invalid_blocked_count ?? 0);
   const seedGroupCount = Number(seedResult.group_count ?? seedResult.groupCount ?? 0);
@@ -39336,13 +39610,18 @@ if (currentPhase === 'PREPARE_TRANSFER_SCOPE') {
 
 if (currentPhase === 'SEED_TRANSFER_CHUNKS') {
   const ids = await fetchIds('banking_pay_operation_transfer_scope', `operation_id=eq.${enc(operationId)}&select=id&order=created_at_utc.asc,id.asc&limit=50000`);
-  const seed = unwrapRpcPayload(await sbRpc(env, 'banking_pay_operation_seed_chunks', {
+  const seed = await runExecuteDiagnosticRpc('banking_pay_operation_seed_chunks', {
     p_operation_id: operationId,
     p_phase: 'PREPARE_TRANSFER_CHUNKS',
     p_chunk_type: 'TRANSFER_GROUP',
     p_chunk_size: cfgNumber('transfer_prepare_chunk_size', 100),
     p_units_json: ids
-  }), 'banking_pay_operation_seed_chunks');
+  }, 'banking_pay_operation_seed_chunks', {
+    phase: currentPhase,
+    chunk_type: 'TRANSFER_GROUP',
+    unit_count: ids.length,
+    note: 'seed-transfer-chunks'
+  });
   return phaseProgress('RUNNING', 'PREPARE_TRANSFER_CHUNKS', {
     status_text: ids.length ? 'Transfer preparation chunks are ready.' : 'No transfer groups require preparation.',
     transfer_chunk_seed: seed
@@ -39360,12 +39639,19 @@ if (currentPhase === 'PREPARE_TRANSFER_CHUNKS') {
   if (chunk && chunk.chunk_id) {
     const transferScopeIds = toArray(chunk.payload_json?.units).map((x) => String(x || '').trim()).filter(Boolean);
     try {
-      const prepared = unwrapRpcPayload(await sbRpc(env, 'pay_execute_bank_transfer_chunk_prepare', {
+      const prepared = await runExecuteDiagnosticRpc('pay_execute_bank_transfer_chunk_prepare', {
         p_operation_id: operationId,
         p_pay_batch_id: payBatchId,
         p_transfer_scope_ids: transferScopeIds,
         p_actor_user_id: actorUserId
-      }), 'pay_execute_bank_transfer_chunk_prepare');
+      }, 'pay_execute_bank_transfer_chunk_prepare', {
+        phase: currentPhase,
+        chunk_id: chunk.chunk_id,
+        chunk_type: 'TRANSFER_GROUP',
+        unit_count: chunk.unit_count,
+        transfer_scope_count: transferScopeIds.length,
+        note: 'prepare-bank-transfer-chunk'
+      });
       const preparedOkFalse = prepared.ok === false;
       const preparedHardBlocker = prepared.hard_blocker === true || prepared.hardBlocker === true;
       const preparedFailedCount = numField(prepared, 'failed_count', 'failedCount');
@@ -39460,12 +39746,15 @@ if (currentPhase === 'PREPARE_TRANSFER_CHUNKS') {
 
   let reconciliation;
   try {
-    reconciliation = unwrapRpcPayload(await sbRpc(env, 'pay_batch_prepare', {
+    reconciliation = await runExecuteDiagnosticRpc('pay_batch_prepare', {
       p_pay_batch_id: payBatchId,
       p_actor_user_id: actorUserId,
       p_operation_id: operationId,
       p_freshness_result_hash: freshnessHash
-    }), 'pay_batch_prepare');
+    }, 'pay_batch_prepare', {
+      phase: currentPhase,
+      note: 'post-transfer-chunk-reconciliation'
+    });
   } catch (reconciliationError) {
     const sourceError = serialisableErrorPayload(reconciliationError);
     const reconciliationErrorDiagnostic = makeTransferPreparationReconciliationDiagnostic('PAY_BATCH_PREPARE_RECONCILIATION_THROW', {
@@ -39556,12 +39845,15 @@ if (currentPhase === 'PREPARE_BATCH') {
       pay_batch_prepare_skip_reason: 'SINGLE_CHUNK_TRANSFER_PREPARATION_AUTHORISATION_READY'
     });
   }
-  const prepared = unwrapRpcPayload(await sbRpc(env, 'pay_batch_prepare', {
+  const prepared = await runExecuteDiagnosticRpc('pay_batch_prepare', {
     p_pay_batch_id: payBatchId,
     p_actor_user_id: actorUserId,
     p_operation_id: operationId,
     p_freshness_result_hash: freshnessHash
-  }), 'pay_batch_prepare');
+  }, 'pay_batch_prepare', {
+    phase: currentPhase,
+    note: 'prepare-batch-blocker-check'
+  });
   if (prepared.ok === false || prepared.ready === false) return fail('PAY_BATCH_PREPARE_BLOCKED', 'Payment batch preparation found blockers.', {
     phase: currentPhase,
     prepare: prepared,
@@ -39590,7 +39882,7 @@ if (currentPhase === 'PREPARE_BATCH') {
 
 if (currentPhase === 'START_AUTHORISATION') {
   const freshnessHash = freshnessResultHashFromProgress || inputJson.freshness_result_hash || null;
-  const auth = unwrapRpcPayload(await sbRpc(env, 'pay_batch_auth_start', {
+  const auth = await runExecuteDiagnosticRpc('pay_batch_auth_start', {
     p_pay_batch_id: payBatchId,
     p_schedule_kind: scheduleKind,
     p_scheduled_at_utc: scheduledAtUtc,
@@ -39609,7 +39901,10 @@ if (currentPhase === 'START_AUTHORISATION') {
     p_operation_id: operationId,
     p_idempotency_key: `${operationId}:auth-start`,
     p_freshness_result_hash: freshnessHash
-  }), 'pay_batch_auth_start');
+  }, 'pay_batch_auth_start', {
+    phase: currentPhase,
+    note: 'auth-start'
+  });
   const authState = String(auth.state || auth.status || '').trim().toUpperCase();
   const nextRequiredPhase = String(auth.next_required_phase || auth.nextRequiredPhase || auth.next_phase || '').trim().toUpperCase();
   if (auth.requires_authorisation === true || authState === 'AWAITING' || authState === 'PENDING_AUTHORISATION' || nextRequiredPhase === 'WAIT_FOR_AUTHORISATION') {
@@ -39627,10 +39922,13 @@ if (currentPhase === 'START_AUTHORISATION') {
 }
 
 if (currentPhase === 'WAIT_FOR_AUTHORISATION') {
-  const summary = unwrapRpcPayload(await sbRpc(env, 'pay_batch_execution_summary_get', {
+  const summary = await runExecuteDiagnosticRpc('pay_batch_execution_summary_get', {
     p_pay_batch_id: payBatchId,
     p_actor_user_id: actorUserId
-  }), 'pay_batch_execution_summary_get');
+  }, 'pay_batch_execution_summary_get', {
+    phase: currentPhase,
+    note: 'wait-for-authorisation-summary'
+  });
   const state = String(summary.authorisation_state || summary.auth_state || summary.status || '').trim().toUpperCase();
   if (state.includes('AWAITING') || state.includes('PENDING')) {
     return phaseProgress('WAITING', 'WAIT_FOR_AUTHORISATION', { status_text: 'Still waiting for payment authorisation.', batch_summary: summary });
@@ -39647,7 +39945,7 @@ if (currentPhase === 'SCHEDULE_OR_SUBMIT') {
     || ['SETTLEMENT', 'PAYMENT_SETTLEMENT', 'CSV_SETTLEMENT', 'EXTERNAL_SETTLEMENT', 'MANUAL_SETTLEMENT'].includes(nextRequiredPhase);
 
   if (nextRequiresSchedule) {
-    const scheduled = unwrapRpcPayload(await sbRpc(env, 'pay_batch_schedule', {
+    const scheduled = await runExecuteDiagnosticRpc('pay_batch_schedule', {
       p_pay_batch_id: payBatchId,
       p_schedule_kind: scheduleKind,
       p_scheduled_at_utc: scheduledAtUtc,
@@ -39656,7 +39954,10 @@ if (currentPhase === 'SCHEDULE_OR_SUBMIT') {
       p_actor_user_id: actorUserId,
       p_operation_id: operationId,
       p_freshness_result_hash: freshnessHash
-    }), 'pay_batch_schedule');
+    }, 'pay_batch_schedule', {
+      phase: currentPhase,
+      note: 'schedule-payment'
+    });
 
     const initialRemittanceGate = normaliseRemittanceTimingGateResult({
       ...scheduled,
@@ -39787,10 +40088,13 @@ if (currentPhase === 'SCHEDULE_OR_SUBMIT') {
 }
 
 if (currentPhase === 'SUBMIT_PROVIDER_TRANSFERS') {
-  const summary = unwrapRpcPayload(await sbRpc(env, 'pay_batch_execution_summary_get', {
+  const summary = await runExecuteDiagnosticRpc('pay_batch_execution_summary_get', {
     p_pay_batch_id: payBatchId,
     p_actor_user_id: actorUserId
-  }), 'pay_batch_execution_summary_get');
+  }, 'pay_batch_execution_summary_get', {
+    phase: currentPhase,
+    note: 'submit-provider-summary'
+  });
   const providerRaw = String(summary.rail_provider_snapshot || summary.provider || inputJson.rail_provider_snapshot || '').trim().toUpperCase();
   const provider = providerRaw === 'REV' ? 'REVOLUT' : providerRaw;
   const adapter = typeof getRailAdapter === 'function' ? getRailAdapter(provider) : null;
@@ -39901,10 +40205,13 @@ if (currentPhase === 'SUBMIT_PROVIDER_TRANSFERS') {
     const controlledFundingFailure = buildControlledFundingFailurePayload(submitted);
     if (controlledFundingFailure.isBlocked && controlledFundingFailure.result.funds_check_json) {
       try {
-        await sbRpc(env, 'pay_batch_mark_blocked_funds', {
+        await runExecuteDiagnosticRpc('pay_batch_mark_blocked_funds', {
           p_pay_batch_id: payBatchId,
           p_actor_user_id: actorUserId,
           p_funds_check_json: controlledFundingFailure.result.funds_check_json
+        }, null, {
+          phase: currentPhase,
+          note: 'mark-blocked-funds'
         });
       } catch {}
     }
@@ -40097,7 +40404,10 @@ if (currentPhase === 'SUBMIT_PROVIDER_TRANSFERS') {
 }
 
 if (currentPhase === 'APPLY_RAIL_UPDATES') {
-  let evidence = unwrapRpcPayload(await sbRpc(env, 'pay_batch_submission_evidence', { p_pay_batch_id: payBatchId, p_counts_only: true }), 'pay_batch_submission_evidence');
+  let evidence = await runExecuteDiagnosticRpc('pay_batch_submission_evidence', { p_pay_batch_id: payBatchId, p_counts_only: true }, 'pay_batch_submission_evidence', {
+    phase: currentPhase,
+    note: 'submission-evidence-before-poll'
+  });
   let remainingSubmitAttemptRequired = Number(
     evidence.remaining_submit_attempt_required
     ?? evidence.remainingSubmitAttemptRequired
@@ -40169,10 +40479,13 @@ if (currentPhase === 'APPLY_RAIL_UPDATES') {
   }
 
   if (requiresProviderPoll || attemptedButUnprovenCount > 0 || ambiguousCount > 0) {
-    const summary = unwrapRpcPayload(await sbRpc(env, 'pay_batch_execution_summary_get', {
+    const summary = await runExecuteDiagnosticRpc('pay_batch_execution_summary_get', {
       p_pay_batch_id: payBatchId,
       p_actor_user_id: actorUserId
-    }), 'pay_batch_execution_summary_get');
+    }, 'pay_batch_execution_summary_get', {
+      phase: currentPhase,
+      note: 'apply-rail-updates-summary-before-poll'
+    });
     const providerRaw = String(summary.rail_provider_snapshot || summary.provider || inputJson.rail_provider_snapshot || '').trim().toUpperCase();
     const provider = providerRaw === 'REV' ? 'REVOLUT' : providerRaw;
     const adapter = typeof getRailAdapter === 'function' ? getRailAdapter(provider) : null;
@@ -40183,7 +40496,10 @@ if (currentPhase === 'APPLY_RAIL_UPDATES') {
         operationId,
         operation_id: operationId
       });
-      evidence = unwrapRpcPayload(await sbRpc(env, 'pay_batch_submission_evidence', { p_pay_batch_id: payBatchId, p_counts_only: true }), 'pay_batch_submission_evidence');
+      evidence = await runExecuteDiagnosticRpc('pay_batch_submission_evidence', { p_pay_batch_id: payBatchId, p_counts_only: true }, 'pay_batch_submission_evidence', {
+        phase: currentPhase,
+        note: 'submission-evidence-after-poll'
+      });
       remainingSubmitAttemptRequired = Number(
         evidence.remaining_submit_attempt_required
         ?? evidence.remainingSubmitAttemptRequired
@@ -40356,11 +40672,17 @@ if (currentPhase === 'QUEUE_REMITTANCES') {
 }
 
 if (currentPhase === 'COMPLETE') {
-  const summary = unwrapRpcPayload(await sbRpc(env, 'pay_batch_execution_summary_get', {
+  const summary = await runExecuteDiagnosticRpc('pay_batch_execution_summary_get', {
     p_pay_batch_id: payBatchId,
     p_actor_user_id: actorUserId
-  }), 'pay_batch_execution_summary_get');
-  const evidence = unwrapRpcPayload(await sbRpc(env, 'pay_batch_submission_evidence', { p_pay_batch_id: payBatchId, p_counts_only: true }), 'pay_batch_submission_evidence');
+  }, 'pay_batch_execution_summary_get', {
+    phase: currentPhase,
+    note: 'complete-summary'
+  });
+  const evidence = await runExecuteDiagnosticRpc('pay_batch_submission_evidence', { p_pay_batch_id: payBatchId, p_counts_only: true }, 'pay_batch_submission_evidence', {
+    phase: currentPhase,
+    note: 'complete-submission-evidence'
+  });
   const canMarkSubmitted = evidence.can_mark_submitted === true;
   const completeProviderStatus = providerSubmitStatusFrom(evidence);
   const completeProviderReviewReason = providerSubmitReviewCodeFrom(evidence);
@@ -40474,6 +40796,7 @@ source_error: {
 });
 }
 }
+
 
 async function advanceBankingPayRemittanceOperation(env, operationRow, user, options = {}) {
   const unwrapRpcPayload = (rpcRes, key) => {
