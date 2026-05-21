@@ -22528,13 +22528,10 @@ $function$;
 
 
 
-
-
-
 CREATE OR REPLACE FUNCTION public.rpc_changes_ping(p_last_seen jsonb DEFAULT '{}'::jsonb)
 RETURNS jsonb
 LANGUAGE plpgsql
-STABLE
+VOLATILE
 AS $function$
 DECLARE
   v_last_seen jsonb := COALESCE(p_last_seen, '{}'::jsonb);
