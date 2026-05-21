@@ -13732,6 +13732,8 @@ $function$;
 
 
 
+
+
 CREATE OR REPLACE FUNCTION public.pay_execute_operation_cleanup_failed_local_artifacts(
   p_operation_id uuid,
   p_actor_user_id uuid DEFAULT NULL::uuid,
@@ -14744,6 +14746,19 @@ BEGIN
       FROM public.banking_pay_operation_chunks AS operation_chunk
       JOIN public.banking_pay_operations AS chunk_operation
         ON chunk_operation.id = operation_chunk.operation_id
+      CROSS JOIN LATERAL (
+        SELECT COALESCE(
+          CASE
+            WHEN jsonb_typeof(operation_chunk.error_json->'provider_submit_diagnostic') = 'object' THEN operation_chunk.error_json->'provider_submit_diagnostic'
+            ELSE NULL::jsonb
+          END,
+          CASE
+            WHEN jsonb_typeof(operation_chunk.result_json->'provider_submit_diagnostic') = 'object' THEN operation_chunk.result_json->'provider_submit_diagnostic'
+            ELSE NULL::jsonb
+          END,
+          '{}'::jsonb
+        ) AS provider_submit_diagnostic
+      ) AS operation_chunk_diagnostic
       WHERE chunk_operation.pay_batch_id = v_operation_row.pay_batch_id
         AND (
           operation_chunk.phase = 'SUBMIT_PROVIDER_TRANSFERS'
@@ -14756,6 +14771,33 @@ BEGIN
           OR (operation_chunk.error_json IS NOT NULL AND operation_chunk.error_json <> '{}'::jsonb)
         )
         AND POSITION(lower(transfer_row.id::text) IN lower(COALESCE(operation_chunk.payload_json::text, '') || COALESCE(operation_chunk.result_json::text, '') || COALESCE(operation_chunk.error_json::text, ''))) > 0
+        AND NOT (
+          operation_chunk.operation_id = p_operation_id
+          AND upper(BTRIM(COALESCE(operation_chunk.status, ''))) IN ('COMPLETE', 'FAILED', 'SKIPPED')
+          AND upper(BTRIM(COALESCE(operation_chunk_diagnostic.provider_submit_diagnostic->>'provider_submission_status', ''))) = 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL'
+          AND lower(BTRIM(COALESCE(operation_chunk_diagnostic.provider_submit_diagnostic->>'provider_submission_attempted', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
+          AND lower(BTRIM(COALESCE(operation_chunk_diagnostic.provider_submit_diagnostic->>'provider_called', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
+          AND lower(BTRIM(COALESCE(operation_chunk_diagnostic.provider_submit_diagnostic->>'provider_request_sent', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
+          AND lower(BTRIM(COALESCE(operation_chunk_diagnostic.provider_submit_diagnostic->>'provider_request_sent_confirmed', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
+          AND lower(BTRIM(COALESCE(operation_chunk_diagnostic.provider_submit_diagnostic->>'provider_response_received', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
+          AND lower(BTRIM(COALESCE(operation_chunk_diagnostic.provider_submit_diagnostic->>'provider_response_present', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
+          AND lower(BTRIM(COALESCE(operation_chunk_diagnostic.provider_submit_diagnostic->>'provider_submission_accepted', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
+          AND lower(BTRIM(COALESCE(operation_chunk_diagnostic.provider_submit_diagnostic->>'provider_submission_rejected', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
+          AND lower(BTRIM(COALESCE(operation_chunk_diagnostic.provider_submit_diagnostic->>'provider_submission_unknown', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
+          AND lower(BTRIM(COALESCE(operation_chunk_diagnostic.provider_submit_diagnostic->>'provider_acceptance_evidence_present', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
+          AND lower(BTRIM(COALESCE(operation_chunk_diagnostic.provider_submit_diagnostic->>'provider_external_evidence_present', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
+          AND NULLIF(BTRIM(COALESCE(
+            operation_chunk_diagnostic.provider_submit_diagnostic->>'rail_tx_id',
+            operation_chunk_diagnostic.provider_submit_diagnostic->>'provider_transaction_id',
+            operation_chunk_diagnostic.provider_submit_diagnostic->>'provider_payment_id',
+            operation_chunk_diagnostic.provider_submit_diagnostic->>'provider_reference',
+            operation_chunk_diagnostic.provider_submit_diagnostic->>'provider_request_dispatched_at_utc',
+            operation_chunk_diagnostic.provider_submit_diagnostic->>'request_sent_at_utc',
+            operation_chunk_diagnostic.provider_submit_diagnostic->>'response_received_at_utc',
+            operation_chunk_diagnostic.provider_submit_diagnostic->>'provider_http_status',
+            ''
+          )), '') IS NULL
+        )
     )
     AND NOT EXISTS (
       SELECT 1
@@ -15091,6 +15133,19 @@ BEGIN
           FROM public.banking_pay_operation_chunks AS operation_chunk
           JOIN public.banking_pay_operations AS chunk_operation
             ON chunk_operation.id = operation_chunk.operation_id
+          CROSS JOIN LATERAL (
+            SELECT COALESCE(
+              CASE
+                WHEN jsonb_typeof(operation_chunk.error_json->'provider_submit_diagnostic') = 'object' THEN operation_chunk.error_json->'provider_submit_diagnostic'
+                ELSE NULL::jsonb
+              END,
+              CASE
+                WHEN jsonb_typeof(operation_chunk.result_json->'provider_submit_diagnostic') = 'object' THEN operation_chunk.result_json->'provider_submit_diagnostic'
+                ELSE NULL::jsonb
+              END,
+              '{}'::jsonb
+            ) AS provider_submit_diagnostic
+          ) AS operation_chunk_diagnostic
           WHERE chunk_operation.pay_batch_id = v_operation_row.pay_batch_id
             AND (
               operation_chunk.phase = 'SUBMIT_PROVIDER_TRANSFERS'
@@ -15103,6 +15158,33 @@ BEGIN
               OR (operation_chunk.error_json IS NOT NULL AND operation_chunk.error_json <> '{}'::jsonb)
             )
             AND POSITION(lower(transfer_delete.id::text) IN lower(COALESCE(operation_chunk.payload_json::text, '') || COALESCE(operation_chunk.result_json::text, '') || COALESCE(operation_chunk.error_json::text, ''))) > 0
+            AND NOT (
+              operation_chunk.operation_id = p_operation_id
+              AND upper(BTRIM(COALESCE(operation_chunk.status, ''))) IN ('COMPLETE', 'FAILED', 'SKIPPED')
+              AND upper(BTRIM(COALESCE(operation_chunk_diagnostic.provider_submit_diagnostic->>'provider_submission_status', ''))) = 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL'
+              AND lower(BTRIM(COALESCE(operation_chunk_diagnostic.provider_submit_diagnostic->>'provider_submission_attempted', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
+              AND lower(BTRIM(COALESCE(operation_chunk_diagnostic.provider_submit_diagnostic->>'provider_called', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
+              AND lower(BTRIM(COALESCE(operation_chunk_diagnostic.provider_submit_diagnostic->>'provider_request_sent', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
+              AND lower(BTRIM(COALESCE(operation_chunk_diagnostic.provider_submit_diagnostic->>'provider_request_sent_confirmed', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
+              AND lower(BTRIM(COALESCE(operation_chunk_diagnostic.provider_submit_diagnostic->>'provider_response_received', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
+              AND lower(BTRIM(COALESCE(operation_chunk_diagnostic.provider_submit_diagnostic->>'provider_response_present', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
+              AND lower(BTRIM(COALESCE(operation_chunk_diagnostic.provider_submit_diagnostic->>'provider_submission_accepted', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
+              AND lower(BTRIM(COALESCE(operation_chunk_diagnostic.provider_submit_diagnostic->>'provider_submission_rejected', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
+              AND lower(BTRIM(COALESCE(operation_chunk_diagnostic.provider_submit_diagnostic->>'provider_submission_unknown', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
+              AND lower(BTRIM(COALESCE(operation_chunk_diagnostic.provider_submit_diagnostic->>'provider_acceptance_evidence_present', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
+              AND lower(BTRIM(COALESCE(operation_chunk_diagnostic.provider_submit_diagnostic->>'provider_external_evidence_present', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
+              AND NULLIF(BTRIM(COALESCE(
+                operation_chunk_diagnostic.provider_submit_diagnostic->>'rail_tx_id',
+                operation_chunk_diagnostic.provider_submit_diagnostic->>'provider_transaction_id',
+                operation_chunk_diagnostic.provider_submit_diagnostic->>'provider_payment_id',
+                operation_chunk_diagnostic.provider_submit_diagnostic->>'provider_reference',
+                operation_chunk_diagnostic.provider_submit_diagnostic->>'provider_request_dispatched_at_utc',
+                operation_chunk_diagnostic.provider_submit_diagnostic->>'request_sent_at_utc',
+                operation_chunk_diagnostic.provider_submit_diagnostic->>'response_received_at_utc',
+                operation_chunk_diagnostic.provider_submit_diagnostic->>'provider_http_status',
+                ''
+              )), '') IS NULL
+            )
         )
         AND NOT EXISTS (
           SELECT 1
@@ -15394,6 +15476,18 @@ BEGIN
   RETURN v_result;
 END;
 $function$;
+
+
+
+
+
+
+
+
+
+
+
+
 CREATE OR REPLACE FUNCTION public.pay_provider_submit_diagnostic_get(
   p_pay_batch_id uuid DEFAULT NULL::uuid,
   p_operation_id uuid DEFAULT NULL::uuid,
