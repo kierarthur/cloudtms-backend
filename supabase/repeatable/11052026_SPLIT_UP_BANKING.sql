@@ -15394,7 +15394,6 @@ BEGIN
   RETURN v_result;
 END;
 $function$;
-
 CREATE OR REPLACE FUNCTION public.pay_provider_submit_diagnostic_get(
   p_pay_batch_id uuid DEFAULT NULL::uuid,
   p_operation_id uuid DEFAULT NULL::uuid,
@@ -16088,7 +16087,18 @@ BEGIN
          (
            COALESCE(BOOL_OR(selected_source.provider_response_received OR selected_source.provider_response_present), false)
            OR COALESCE(BOOL_OR(upper(BTRIM(COALESCE(selected_source.provider_submission_status, ''))) IN ('PROVIDER_SUBMISSION_ACCEPTED', 'PROVIDER_SUBMISSION_REJECTED', 'PROVIDER_SUBMISSION_FAILED', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE', 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID')), false)
-           OR COALESCE(BOOL_OR(NULLIF(BTRIM(COALESCE(selected_source.provider_http_status, selected_source.provider_error_code, '')), '') IS NOT NULL), false)
+           OR COALESCE(BOOL_OR(
+             NULLIF(BTRIM(COALESCE(selected_source.provider_http_status, selected_source.provider_error_code, '')), '') IS NOT NULL
+             AND NOT (
+               UPPER(BTRIM(COALESCE(selected_source.provider_submission_status, ''))) = 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL'
+               AND selected_source.provider_submission_attempted IS NOT TRUE
+               AND selected_source.provider_request_sent IS NOT TRUE
+               AND selected_source.provider_response_received IS NOT TRUE
+               AND selected_source.provider_response_present IS NOT TRUE
+               AND NULLIF(BTRIM(COALESCE(selected_source.provider_transaction_id, selected_source.rail_tx_id, selected_source.provider_reference, '')), '') IS NULL
+               AND UPPER(BTRIM(COALESCE(selected_source.provider_error_code, ''))) IN ('PROVIDER_SUBMIT_STAGE_RECORD_FAILED', 'PROVIDER_SUBMIT_BLOCKED_PRE_CALL')
+             )
+           ), false)
            OR COALESCE(BOOL_OR(upper(BTRIM(COALESCE(transfer_event.event_source, ''))) IN ('PROVIDER_RESPONSE', 'PROVIDER_POLL', 'PROVIDER_WEBHOOK')), false)
          ),
          (
@@ -16216,7 +16226,18 @@ BEGIN
              COALESCE(BOOL_OR(transfer_flag.has_provider_response), false)
              OR COALESCE(BOOL_OR(selected_source.provider_response_received OR selected_source.provider_response_present), false)
              OR COALESCE(BOOL_OR(upper(BTRIM(COALESCE(selected_source.provider_submission_status, ''))) IN ('PROVIDER_SUBMISSION_ACCEPTED', 'PROVIDER_SUBMISSION_REJECTED', 'PROVIDER_SUBMISSION_FAILED', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE', 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID')), false)
-             OR COALESCE(BOOL_OR(NULLIF(BTRIM(COALESCE(selected_source.provider_http_status, selected_source.provider_error_code, '')), '') IS NOT NULL), false)
+             OR COALESCE(BOOL_OR(
+             NULLIF(BTRIM(COALESCE(selected_source.provider_http_status, selected_source.provider_error_code, '')), '') IS NOT NULL
+             AND NOT (
+               UPPER(BTRIM(COALESCE(selected_source.provider_submission_status, ''))) = 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL'
+               AND selected_source.provider_submission_attempted IS NOT TRUE
+               AND selected_source.provider_request_sent IS NOT TRUE
+               AND selected_source.provider_response_received IS NOT TRUE
+               AND selected_source.provider_response_present IS NOT TRUE
+               AND NULLIF(BTRIM(COALESCE(selected_source.provider_transaction_id, selected_source.rail_tx_id, selected_source.provider_reference, '')), '') IS NULL
+               AND UPPER(BTRIM(COALESCE(selected_source.provider_error_code, ''))) IN ('PROVIDER_SUBMIT_STAGE_RECORD_FAILED', 'PROVIDER_SUBMIT_BLOCKED_PRE_CALL')
+             )
+           ), false)
            ) AS has_provider_response,
            (
              COALESCE(BOOL_OR(transfer_flag.has_provider_request_sent), false)
@@ -16285,7 +16306,18 @@ BEGIN
                COALESCE(BOOL_OR(transfer_flag.has_provider_response), false)
                OR COALESCE(BOOL_OR(selected_source.provider_response_received OR selected_source.provider_response_present), false)
                OR COALESCE(BOOL_OR(upper(BTRIM(COALESCE(selected_source.provider_submission_status, ''))) IN ('PROVIDER_SUBMISSION_ACCEPTED', 'PROVIDER_SUBMISSION_REJECTED', 'PROVIDER_SUBMISSION_FAILED', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE', 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID')), false)
-               OR COALESCE(BOOL_OR(NULLIF(BTRIM(COALESCE(selected_source.provider_http_status, selected_source.provider_error_code, '')), '') IS NOT NULL), false)
+               OR COALESCE(BOOL_OR(
+             NULLIF(BTRIM(COALESCE(selected_source.provider_http_status, selected_source.provider_error_code, '')), '') IS NOT NULL
+             AND NOT (
+               UPPER(BTRIM(COALESCE(selected_source.provider_submission_status, ''))) = 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL'
+               AND selected_source.provider_submission_attempted IS NOT TRUE
+               AND selected_source.provider_request_sent IS NOT TRUE
+               AND selected_source.provider_response_received IS NOT TRUE
+               AND selected_source.provider_response_present IS NOT TRUE
+               AND NULLIF(BTRIM(COALESCE(selected_source.provider_transaction_id, selected_source.rail_tx_id, selected_source.provider_reference, '')), '') IS NULL
+               AND UPPER(BTRIM(COALESCE(selected_source.provider_error_code, ''))) IN ('PROVIDER_SUBMIT_STAGE_RECORD_FAILED', 'PROVIDER_SUBMIT_BLOCKED_PRE_CALL')
+             )
+           ), false)
              )
              AND COALESCE(BOOL_OR(
                lower(BTRIM(COALESCE(selected_source.diagnostic->>'provider_request_impossible', selected_source.diagnostic->>'durable_provider_request_impossible', ''))) IN ('true', 't', '1', 'yes', 'y', 'on')
