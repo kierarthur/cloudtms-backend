@@ -132598,7 +132598,6 @@ async function cleanupStaleRailPayeeMappingsForHash(env, { entity_kind, entity_i
   return out;
 }
 
-
 function getRailAdapter(provider) {
   // -----------------------------
   // Single source of truth registry
@@ -133340,6 +133339,17 @@ function getRailAdapter(provider) {
             return text || null;
           };
           const normaliseProviderIdentity = (value) => String(value === undefined || value === null ? '' : value).trim();
+          const compactProviderRequestToken = (value) => String(value === undefined || value === null ? '' : value).trim().replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+          const makeProviderSafeRequestId = ({ operationIdText, transferIdText, batchIdText, fallbackText } = {}) => {
+            const opPart = compactProviderRequestToken(operationIdText).slice(0, 10);
+            const transferPart = compactProviderRequestToken(transferIdText).slice(0, 16);
+            const batchPart = compactProviderRequestToken(batchIdText).slice(0, 8);
+            const fallbackPart = compactProviderRequestToken(fallbackText).slice(0, 36);
+            let requestId = `ctms${opPart}${transferPart}${batchPart}`;
+            if (requestId.length < 8) requestId = `ctms${transferPart}${batchPart}${fallbackPart}`;
+            if (requestId.length < 8) requestId = `ctms${fallbackPart || 'request'}`;
+            return requestId.slice(0, 40);
+          };
           const collectLocalProviderIdentities = (...sources) => {
             const locals = new Set();
             const add = (value) => {
@@ -133849,6 +133859,7 @@ function getRailAdapter(provider) {
               provider_error_code: outcome.provider_error_code || null,
               request_id: outcome.request_id || null,
               idempotency_key: outcome.idempotency_key || outcome.request_id || null,
+              local_provider_request_id: outcome.local_provider_request_id || null,
               manual_resolution_required: outcome.manual_resolution_required === true,
               safe_retry_available: outcome.safe_retry_available === true
             };
@@ -135009,6 +135020,13 @@ function getRailAdapter(provider) {
               const transferId = String(transfer.transfer_id || transfer.pay_bank_transfer_id || '').trim();
               if (!transferId) continue;
               const requestId = String(transfer.request_id || transfer.idempotency_key || transferId).trim();
+              const localProviderRequestId = requestId;
+              const providerRequestId = makeProviderSafeRequestId({
+                operationIdText: opId,
+                transferIdText: transferId,
+                batchIdText: batchId,
+                fallbackText: requestId
+              });
               const amount = asNumber(transfer.amount, 0);
               const currency = String(transfer.currency || 'GBP').trim().toUpperCase() || 'GBP';
 
@@ -135024,13 +135042,14 @@ function getRailAdapter(provider) {
                   provider_acceptance_evidence_present: true,
                   manual_resolution_required: false,
                   safe_retry_available: false,
-                  rail_tx_id: `SIMULATED:${requestId}`,
+                  rail_tx_id: `SIMULATED:${providerRequestId}`,
                   rail_state: 'PAYROLL_TESTING',
-                  provider_transaction_id: `SIMULATED:${requestId}`,
-                  provider_reference: `SIMULATED:${requestId}`,
+                  provider_transaction_id: `SIMULATED:${providerRequestId}`,
+                  provider_reference: `SIMULATED:${providerRequestId}`,
                   provider_state: 'PAYROLL_TESTING',
-                  request_id: requestId,
-                  idempotency_key: requestId,
+                  request_id: providerRequestId,
+                  idempotency_key: providerRequestId,
+                  local_provider_request_id: localProviderRequestId,
                   transfer_ids: transferIds || []
                 });
                 recordTransferProviderOutcome(transferId, simulatedDiagnostic);
@@ -135048,8 +135067,8 @@ function getRailAdapter(provider) {
                   transfer_id: transferId,
                   pay_batch_id: batchId,
                   provider_key: 'REVOLUT',
-                  provider_event_id: `SIMULATED:${requestId}`,
-                  provider_reference: `SIMULATED:${requestId}`,
+                  provider_event_id: `SIMULATED:${providerRequestId}`,
+                  provider_reference: `SIMULATED:${providerRequestId}`,
                   provider_state: 'PAYROLL_TESTING',
                   normalised_state: 'PENDING',
                   event_source: 'PROVIDER_RESPONSE',
@@ -135057,11 +135076,11 @@ function getRailAdapter(provider) {
                   amount,
                   currency,
                   provider_submit_diagnostic: simulatedDiagnostic,
-                  raw_payload: { simulated: true, mode: 'payroll_testing', simulated_at_utc: nowIso, request_id: requestId, idempotency_key: requestId, provider_submit_diagnostic: simulatedDiagnostic },
+                  raw_payload: { simulated: true, mode: 'payroll_testing', simulated_at_utc: nowIso, request_id: providerRequestId, idempotency_key: providerRequestId, local_provider_request_id: localProviderRequestId, provider_submit_diagnostic: simulatedDiagnostic },
                   status: 'PENDING',
-                  rail_tx_id: `SIMULATED:${requestId}`,
+                  rail_tx_id: `SIMULATED:${providerRequestId}`,
                   rail_state: 'PAYROLL_TESTING',
-                  rail_meta_json: { simulated: true, mode: 'payroll_testing', simulated_at_utc: nowIso, request_id: requestId, idempotency_key: requestId, provider_submit_diagnostic: simulatedDiagnostic },
+                  rail_meta_json: { simulated: true, mode: 'payroll_testing', simulated_at_utc: nowIso, request_id: providerRequestId, idempotency_key: providerRequestId, local_provider_request_id: localProviderRequestId, provider_submit_diagnostic: simulatedDiagnostic },
                   failed_reason: null,
                   completed_at_utc: null
                 });
@@ -135104,8 +135123,9 @@ function getRailAdapter(provider) {
                   safe_retry_available: false,
                   provider_error_code: errorCode,
                   provider_error_message_redacted: errorMessage,
-                  request_id: requestId,
-                  idempotency_key: requestId,
+                  request_id: providerRequestId,
+                  idempotency_key: providerRequestId,
+                  local_provider_request_id: localProviderRequestId,
                   transfer_ids: transferIds || [],
                   recommended_action: 'Provider was not called. Resolve the local counterparty mapping blocker and retry.'
                 });
@@ -135125,11 +135145,11 @@ function getRailAdapter(provider) {
                   amount,
                   currency,
                   provider_submit_diagnostic: diagnostic,
-                  raw_payload: { event_kind: 'PROVIDER_SUBMIT_BLOCKED_PRE_CALL', kind: 'COUNTERPARTY_MAPPING_FAILED', at_utc: nowIso, error_code: errorCode, error: errorMessage, request_id: requestId, idempotency_key: requestId, local_provider_request_id: requestId, provider_submit_diagnostic: diagnostic },
+                  raw_payload: { event_kind: 'PROVIDER_SUBMIT_BLOCKED_PRE_CALL', kind: 'COUNTERPARTY_MAPPING_FAILED', at_utc: nowIso, error_code: errorCode, error: errorMessage, request_id: providerRequestId, idempotency_key: providerRequestId, local_provider_request_id: localProviderRequestId, provider_submit_diagnostic: diagnostic },
                   status: 'FAILED',
                   rail_tx_id: null,
                   rail_state: null,
-                  rail_meta_json: { provider_submit_diagnostic: diagnostic, request_id: requestId, idempotency_key: requestId, local_provider_request_id: requestId },
+                  rail_meta_json: { provider_submit_diagnostic: diagnostic, request_id: providerRequestId, idempotency_key: providerRequestId, local_provider_request_id: localProviderRequestId },
                   failed_reason: errorCode,
                   completed_at_utc: null
                 });
@@ -135146,8 +135166,9 @@ function getRailAdapter(provider) {
                 provider_acceptance_evidence_present: false,
                 manual_resolution_required: false,
                 safe_retry_available: false,
-                request_id: requestId,
-                idempotency_key: requestId
+                request_id: providerRequestId,
+                idempotency_key: providerRequestId,
+                local_provider_request_id: localProviderRequestId
               }, {
                 throw_on_failure: true,
                 failure_stage: 'PROVIDER_SUBMIT_STAGE_RECORD_FAILED',
@@ -135174,8 +135195,9 @@ function getRailAdapter(provider) {
                 provider_acceptance_evidence_present: false,
                 manual_resolution_required: false,
                 safe_retry_available: false,
-                request_id: requestId,
-                idempotency_key: requestId
+                request_id: providerRequestId,
+                idempotency_key: providerRequestId,
+                local_provider_request_id: localProviderRequestId
               }, {
                 throw_on_failure: true,
                 failure_stage: 'PROVIDER_SUBMIT_STAGE_RECORD_FAILED',
@@ -135206,9 +135228,9 @@ function getRailAdapter(provider) {
                 provider_submission_unknown: false,
                 manual_resolution_required: false,
                 safe_retry_available: false,
-                request_id: requestId,
-                idempotency_key: requestId,
-                local_provider_request_id: requestId,
+                request_id: providerRequestId,
+                idempotency_key: providerRequestId,
+                local_provider_request_id: localProviderRequestId,
                 recommended_action: null
               }, {
                 throw_on_failure: true,
@@ -135229,7 +135251,8 @@ function getRailAdapter(provider) {
               });
               try {
                 payRes = await revolutPayment_create(env, token, {
-                  request_id: requestId,
+                  request_id: providerRequestId,
+                  local_provider_request_id: localProviderRequestId,
                   source_account_id: fundingRef,
                   counterparty_id: map.payee_id,
                   counterparty_account_id: map.payee_account_id || null,
@@ -135255,9 +135278,9 @@ function getRailAdapter(provider) {
                   safe_retry_available: false,
                   provider_error_code: errorCode,
                   provider_error_message_redacted: errorMessage,
-                  request_id: requestId,
-                  idempotency_key: requestId,
-                  local_provider_request_id: requestId,
+                  request_id: providerRequestId,
+                  idempotency_key: providerRequestId,
+                  local_provider_request_id: localProviderRequestId,
                   provider_submit_diagnostic: makeProviderSubmitDiagnostic({
                     provider_call_stage: 'PROVIDER_PAYMENT_CREATE_UNSTRUCTURED_ERROR',
                     provider_submission_status: 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME',
@@ -135274,9 +135297,9 @@ function getRailAdapter(provider) {
                     safe_retry_available: false,
                     provider_error_code: errorCode,
                     provider_error_message_redacted: errorMessage,
-                    request_id: requestId,
-                    idempotency_key: requestId,
-                    local_provider_request_id: requestId,
+                    request_id: providerRequestId,
+                    idempotency_key: providerRequestId,
+                    local_provider_request_id: localProviderRequestId,
                     transfer_ids: transferIds || [],
                     recommended_action: 'Provider create returned an unstructured error before CloudTMS could confirm dispatch. Check the bank account before retry.'
                   })
@@ -135288,9 +135311,9 @@ function getRailAdapter(provider) {
                 ...(payRes.provider_submit_diagnostic || {}),
                 provider_request_sent_confirmed: payRes.provider_request_sent_confirmed === true || (payRes.provider_submit_diagnostic && payRes.provider_submit_diagnostic.provider_request_sent_confirmed === true),
                 provider_request_dispatched_at_utc: payRes.provider_request_dispatched_at_utc || (payRes.provider_submit_diagnostic && payRes.provider_submit_diagnostic.provider_request_dispatched_at_utc) || payRes.request_sent_at_utc || null,
-                request_id: payRes.request_id || requestId,
-                idempotency_key: payRes.idempotency_key || requestId,
-                local_provider_request_id: payRes.local_provider_request_id || requestId,
+                request_id: payRes.request_id || providerRequestId,
+                idempotency_key: payRes.idempotency_key || providerRequestId,
+                local_provider_request_id: localProviderRequestId || payRes.local_provider_request_id || providerRequestId,
                 transfer_ids: transferIds || []
               };
               diagnostic.provider_acceptance_evidence_present = hasStrictProviderAcceptanceEvidence(diagnostic, payRes);
@@ -135348,8 +135371,9 @@ function getRailAdapter(provider) {
                   raw_payload: {
                     source_adapter: 'REVOLUT',
                     source_action: 'PAYMENT_CREATE',
-                    request_id: requestId,
-                    idempotency_key: requestId,
+                    request_id: providerRequestId,
+                    idempotency_key: providerRequestId,
+                    local_provider_request_id: localProviderRequestId,
                     rail_tx_id: payRes.rail_tx_id || null,
                     rail_state: payRes.rail_state || null,
                     rail_meta_json: payRes.rail_meta_json || null,
@@ -135358,7 +135382,7 @@ function getRailAdapter(provider) {
                   status: 'PENDING',
                   rail_tx_id: payRes.rail_tx_id,
                   rail_state: payRes.rail_state || 'PENDING',
-                  rail_meta_json: { ...(payRes.rail_meta_json || {}), provider_submit_diagnostic: diagnostic },
+                  rail_meta_json: { ...(payRes.rail_meta_json || {}), request_id: providerRequestId, idempotency_key: providerRequestId, local_provider_request_id: localProviderRequestId, provider_submit_diagnostic: diagnostic },
                   failed_reason: null,
                   completed_at_utc: null
                 });
@@ -135387,9 +135411,9 @@ function getRailAdapter(provider) {
                   at_utc: nowIso,
                   error_code: errorCode,
                   error: errorMessage,
-                  request_id: requestId,
-                  idempotency_key: requestId,
-                  local_provider_request_id: requestId,
+                  request_id: providerRequestId,
+                  idempotency_key: providerRequestId,
+                  local_provider_request_id: localProviderRequestId,
                   provider_submit_diagnostic: diagnostic,
                   provider_error_redacted: payRes.provider_error_redacted || null,
                   provider_response_redacted: payRes.provider_response_redacted || null
@@ -135400,9 +135424,9 @@ function getRailAdapter(provider) {
                 rail_meta_json: {
                   ...(payRes.rail_meta_json || {}),
                   provider_submit_diagnostic: diagnostic,
-                  request_id: requestId,
-                  idempotency_key: requestId,
-                  local_provider_request_id: requestId
+                  request_id: providerRequestId,
+                  idempotency_key: providerRequestId,
+                  local_provider_request_id: localProviderRequestId
                 },
                 failed_reason: rejected ? errorCode : null,
                 completed_at_utc: null
@@ -135756,7 +135780,10 @@ function getRailAdapter(provider) {
           const token = await revolutAuth_getAccessToken(env);
           const updates = [];
           for (const transfer of pollableTransfers) {
-            const requestId = String(transfer.request_id || '').trim();
+            const transferRailMeta = (transfer && transfer.rail_meta_json && typeof transfer.rail_meta_json === 'object' && !Array.isArray(transfer.rail_meta_json)) ? transfer.rail_meta_json : {};
+            const transferProviderDiagnostic = (transferRailMeta.provider_submit_diagnostic && typeof transferRailMeta.provider_submit_diagnostic === 'object' && !Array.isArray(transferRailMeta.provider_submit_diagnostic)) ? transferRailMeta.provider_submit_diagnostic : {};
+            const requestId = String(transferProviderDiagnostic.request_id || transferRailMeta.provider_request_id || transferRailMeta.request_id || transfer.request_id || '').trim();
+            const localProviderRequestId = String(transferProviderDiagnostic.local_provider_request_id || transferRailMeta.local_provider_request_id || transfer.request_id || '').trim();
             const polled = await revolutPayment_poll(env, token, {
               request_id: requestId,
               transfer_id: String(transfer.id || '').trim(),
@@ -135779,7 +135806,7 @@ function getRailAdapter(provider) {
               event_time_utc: nowIso,
               amount: Number.isFinite(Number(polled?.amount)) ? Number(polled.amount) : Number(transfer.amount || 0),
               currency: String(polled?.currency || transfer.currency || 'GBP').trim().toUpperCase() || 'GBP',
-              raw_payload: { source_adapter: 'REVOLUT', source_action: 'PAYMENT_POLL', request_id: requestId, response: polled || null },
+              raw_payload: { source_adapter: 'REVOLUT', source_action: 'PAYMENT_POLL', request_id: requestId, local_provider_request_id: localProviderRequestId || null, response: polled || null },
               status: normalisedState,
               rail_tx_id: railTxId,
               rail_state: polled?.rail_state || providerState,
@@ -137830,7 +137857,8 @@ function buildBankingPayOperationPublicPayload(operationRow, options = {}) {
 
   return payload;
 }
-async function revolutPayment_create(env, token, { request_id, source_account_id, counterparty_id, counterparty_account_id, amount, currency, reference, provider_timeout_ms } = {}) {
+
+async function revolutPayment_create(env, token, { request_id, local_provider_request_id, source_account_id, counterparty_id, counterparty_account_id, amount, currency, reference, provider_timeout_ms } = {}) {
   const redactProviderPayload = (value) => {
     const sensitiveKeys = new Set([
       'access_token',
@@ -137876,8 +137904,26 @@ async function revolutPayment_create(env, token, { request_id, source_account_id
   };
 
   const safeString = (value) => String(value === undefined || value === null ? '' : value).trim();
+  const makeProviderSafeRequestId = (value) => {
+    const source = safeString(value);
+    if (!source) return '';
+    if (source.length <= 40) return source;
+    const compact = source.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+    let hash = 2166136261;
+    for (let i = 0; i < source.length; i += 1) {
+      hash ^= source.charCodeAt(i);
+      hash = Math.imul(hash, 16777619) >>> 0;
+    }
+    const hashText = hash.toString(36).padStart(7, '0').slice(0, 7);
+    const prefix = compact.slice(0, 20);
+    const suffix = compact.slice(-8);
+    const candidate = `ctms${hashText}${prefix}${suffix}`;
+    return candidate.slice(0, 40) || `ctms${hashText}`;
+  };
   const t = safeString(token);
-  const reqId = safeString(request_id);
+  const rawReqId = safeString(request_id);
+  const reqId = makeProviderSafeRequestId(rawReqId);
+  const localReqId = safeString(local_provider_request_id) || rawReqId || reqId;
   const src = safeString(source_account_id);
   const cp = safeString(counterparty_id);
   const cpa = counterparty_account_id ? safeString(counterparty_account_id) : '';
@@ -137887,7 +137933,7 @@ async function revolutPayment_create(env, token, { request_id, source_account_id
   const timeoutRaw = Number(provider_timeout_ms ?? (env && env.REVOLUT_PAY_CREATE_TIMEOUT_MS) ?? (env && env.REVOLUT_PROVIDER_TIMEOUT_MS) ?? 30000);
   const providerTimeoutMs = Number.isFinite(timeoutRaw) && timeoutRaw > 0 ? Math.max(1000, Math.min(120000, Math.trunc(timeoutRaw))) : 30000;
 
-  const localIdentitySet = new Set([reqId, ref].map((value) => safeString(value).toLowerCase()).filter(Boolean));
+  const localIdentitySet = new Set([reqId, localReqId, ref].map((value) => safeString(value).toLowerCase()).filter(Boolean));
   const isExternalProviderIdentity = (value) => {
     const text = safeString(value);
     if (!text) return false;
@@ -137971,7 +138017,7 @@ async function revolutPayment_create(env, token, { request_id, source_account_id
       rail_env: patch.rail_env || null,
       request_id: reqId || null,
       idempotency_key: reqId || null,
-      local_provider_request_id: reqId || null,
+      local_provider_request_id: localReqId || null,
       request_sent_at_utc: requestSentAtUtc,
       provider_request_dispatched_at_utc: providerRequestDispatchedAtUtc,
       response_received_at_utc: responseReceivedAtUtc,
@@ -138016,7 +138062,7 @@ async function revolutPayment_create(env, token, { request_id, source_account_id
       provider_reference: providerReference || null,
       request_id: reqId || null,
       idempotency_key: reqId || null,
-      local_provider_request_id: reqId || null,
+      local_provider_request_id: localReqId || null,
       request_sent_at_utc: requestSentAtUtc,
       provider_request_dispatched_at_utc: providerRequestDispatchedAtUtc,
       response_received_at_utc: responseReceivedAtUtc,
@@ -138220,7 +138266,8 @@ async function revolutPayment_create(env, token, { request_id, source_account_id
             rail_tx_id: providerTxIdFromError || null,
             rail_state: stateFromError,
             request_id: reqId,
-            idempotency_key: reqId
+            idempotency_key: reqId,
+            local_provider_request_id: localReqId
           },
           revolut_response: redactedBody
         },
@@ -138269,7 +138316,8 @@ async function revolutPayment_create(env, token, { request_id, source_account_id
             rail_tx_id: null,
             rail_state: stateFromError,
             request_id: reqId,
-            idempotency_key: reqId
+            idempotency_key: reqId,
+            local_provider_request_id: localReqId
           },
           revolut_response: redactedBody
         },
@@ -138304,7 +138352,8 @@ async function revolutPayment_create(env, token, { request_id, source_account_id
             provider_http_status: res.status,
             provider_error_code: providerErrorCode,
             request_id: reqId,
-            idempotency_key: reqId
+            idempotency_key: reqId,
+            local_provider_request_id: localReqId
           },
           revolut_response: redactedBody
         },
@@ -138338,7 +138387,8 @@ async function revolutPayment_create(env, token, { request_id, source_account_id
           provider_http_status: res.status,
           provider_error_code: providerErrorCode,
           request_id: reqId,
-          idempotency_key: reqId
+          idempotency_key: reqId,
+          local_provider_request_id: localReqId
         },
         revolut_response: redactedBody
       },
@@ -138379,7 +138429,8 @@ async function revolutPayment_create(env, token, { request_id, source_account_id
           review_reason_code: 'PROVIDER_RESPONSE_MALFORMED',
           provider_http_status: res.status,
           request_id: reqId,
-          idempotency_key: reqId
+          idempotency_key: reqId,
+          local_provider_request_id: localReqId
         },
         revolut_response: redactedBody
       },
@@ -138410,7 +138461,7 @@ async function revolutPayment_create(env, token, { request_id, source_account_id
       rail_provider: 'REVOLUT',
       request_id: reqId,
       idempotency_key: reqId,
-      local_provider_request_id: reqId,
+      local_provider_request_id: localReqId,
       request_sent_at_utc: requestSentAtUtc,
       provider_request_dispatched_at_utc: requestSentAtUtc,
       response_received_at_utc: responseReceivedAtUtc,
