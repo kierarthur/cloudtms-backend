@@ -6003,18 +6003,11 @@ $function$;
 
 
 DROP FUNCTION IF EXISTS public.pay_execute_bank_transfer_scope_seed(uuid, uuid, text, uuid, boolean);
-
-CREATE OR REPLACE FUNCTION public.pay_execute_bank_transfer_scope_seed(
-  p_operation_id uuid,
-  p_pay_batch_id uuid,
-  p_pay_channel_scope text,
-  p_actor_user_id uuid,
-  p_retry_blocked_funds boolean DEFAULT false
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
+CREATE OR REPLACE FUNCTION public.pay_execute_bank_transfer_scope_seed(p_operation_id uuid, p_pay_batch_id uuid, p_pay_channel_scope text, p_actor_user_id uuid, p_retry_blocked_funds boolean DEFAULT false)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
 AS $function$
 DECLARE
   v_operation_row public.banking_pay_operations%ROWTYPE;
@@ -6051,6 +6044,16 @@ DECLARE
   v_stale_previous_operation_batch_execution_intent_cleared_count integer := 0;
   v_stale_previous_operation_scope_blocked_count integer := 0;
   v_cleanup_retry_blocked_count integer := 0;
+  v_previous_scope_conflict_count integer := 0;
+  v_locked_previous_scope_conflict_count integer := 0;
+  v_previous_cleanup_busy_count integer := 0;
+  v_stale_previous_operation_cleanup_diagnostic jsonb := '[]'::jsonb;
+  v_cleanup_operation_id uuid := NULL::uuid;
+  v_cleanup_result jsonb := '{}'::jsonb;
+  v_cleanup_error_sqlstate text := NULL::text;
+  v_cleanup_error_message text := NULL::text;
+  v_cleanup_error_detail text := NULL::text;
+  v_cleanup_error_hint text := NULL::text;
   v_stale_previous_operation_ids jsonb := '[]'::jsonb;
   v_blocked_transfer_group_keys jsonb := '[]'::jsonb;
   v_blocked_previous_operation_types jsonb := '[]'::jsonb;
@@ -6911,7 +6914,7 @@ BEGIN
   FROM stale_scope;
 
 
-  CREATE TEMPORARY TABLE IF NOT EXISTS pg_temp.tmp_transfer_scope_previous_conflicts (
+  CREATE TEMPORARY TABLE IF NOT EXISTS pg_temp.tmp_transfer_scope_previous_conflict_candidates (
     transfer_scope_id uuid PRIMARY KEY,
     previous_operation_id uuid NOT NULL,
     previous_operation_status text,
@@ -6921,9 +6924,9 @@ BEGIN
     transfer_group_key text NOT NULL
   ) ON COMMIT DROP;
 
-  TRUNCATE TABLE pg_temp.tmp_transfer_scope_previous_conflicts;
+  TRUNCATE TABLE pg_temp.tmp_transfer_scope_previous_conflict_candidates;
 
-  INSERT INTO pg_temp.tmp_transfer_scope_previous_conflicts (
+  INSERT INTO pg_temp.tmp_transfer_scope_previous_conflict_candidates (
     transfer_scope_id,
     previous_operation_id,
     previous_operation_status,
@@ -6948,6 +6951,155 @@ BEGIN
   WHERE previous_scope.pay_batch_id = p_pay_batch_id
     AND previous_scope.operation_id <> p_operation_id;
 
+  SELECT COUNT(*)::integer
+  INTO v_previous_scope_conflict_count
+  FROM pg_temp.tmp_transfer_scope_previous_conflict_candidates AS previous_conflict_candidate;
+
+  CREATE TEMPORARY TABLE IF NOT EXISTS pg_temp.tmp_transfer_scope_previous_conflicts (
+    transfer_scope_id uuid PRIMARY KEY,
+    previous_operation_id uuid NOT NULL,
+    previous_operation_status text,
+    previous_operation_type text,
+    pay_bank_transfer_id uuid,
+    pay_channel text NOT NULL,
+    transfer_group_key text NOT NULL
+  ) ON COMMIT DROP;
+
+  TRUNCATE TABLE pg_temp.tmp_transfer_scope_previous_conflicts;
+
+  WITH locked_previous_scope AS (
+    SELECT previous_scope_lock.id AS transfer_scope_id
+    FROM public.banking_pay_operation_transfer_scope AS previous_scope_lock
+    JOIN pg_temp.tmp_transfer_scope_previous_conflict_candidates AS previous_conflict_candidate
+      ON previous_conflict_candidate.transfer_scope_id = previous_scope_lock.id
+    ORDER BY previous_scope_lock.created_at_utc NULLS FIRST, previous_scope_lock.id
+    FOR UPDATE OF previous_scope_lock SKIP LOCKED
+  ), locked_previous_operation AS (
+    SELECT previous_operation_lock.id AS previous_operation_id
+    FROM public.banking_pay_operations AS previous_operation_lock
+    JOIN (
+      SELECT DISTINCT previous_conflict_candidate.previous_operation_id
+      FROM pg_temp.tmp_transfer_scope_previous_conflict_candidates AS previous_conflict_candidate
+    ) AS previous_operation_candidate
+      ON previous_operation_candidate.previous_operation_id = previous_operation_lock.id
+    ORDER BY previous_operation_lock.created_at_utc NULLS FIRST, previous_operation_lock.id
+    FOR UPDATE OF previous_operation_lock SKIP LOCKED
+  ), locked_previous_transfer AS (
+    SELECT previous_transfer_lock.id AS pay_bank_transfer_id
+    FROM public.pay_bank_transfers AS previous_transfer_lock
+    JOIN (
+      SELECT DISTINCT previous_conflict_candidate.pay_bank_transfer_id
+      FROM pg_temp.tmp_transfer_scope_previous_conflict_candidates AS previous_conflict_candidate
+      WHERE previous_conflict_candidate.pay_bank_transfer_id IS NOT NULL
+    ) AS previous_transfer_candidate
+      ON previous_transfer_candidate.pay_bank_transfer_id = previous_transfer_lock.id
+    ORDER BY previous_transfer_lock.created_at_utc NULLS FIRST, previous_transfer_lock.id
+    FOR UPDATE OF previous_transfer_lock SKIP LOCKED
+  )
+  INSERT INTO pg_temp.tmp_transfer_scope_previous_conflicts (
+    transfer_scope_id,
+    previous_operation_id,
+    previous_operation_status,
+    previous_operation_type,
+    pay_bank_transfer_id,
+    pay_channel,
+    transfer_group_key
+  )
+  SELECT previous_conflict_candidate.transfer_scope_id,
+         previous_conflict_candidate.previous_operation_id,
+         previous_conflict_candidate.previous_operation_status,
+         previous_conflict_candidate.previous_operation_type,
+         previous_conflict_candidate.pay_bank_transfer_id,
+         previous_conflict_candidate.pay_channel,
+         previous_conflict_candidate.transfer_group_key
+  FROM pg_temp.tmp_transfer_scope_previous_conflict_candidates AS previous_conflict_candidate
+  JOIN locked_previous_scope AS locked_scope
+    ON locked_scope.transfer_scope_id = previous_conflict_candidate.transfer_scope_id
+  LEFT JOIN locked_previous_operation AS locked_operation
+    ON locked_operation.previous_operation_id = previous_conflict_candidate.previous_operation_id
+  LEFT JOIN locked_previous_transfer AS locked_transfer
+    ON locked_transfer.pay_bank_transfer_id = previous_conflict_candidate.pay_bank_transfer_id
+  WHERE (
+      NOT EXISTS (
+        SELECT 1
+        FROM public.banking_pay_operations AS previous_operation_exists
+        WHERE previous_operation_exists.id = previous_conflict_candidate.previous_operation_id
+      )
+      OR locked_operation.previous_operation_id IS NOT NULL
+    )
+    AND (
+      previous_conflict_candidate.pay_bank_transfer_id IS NULL
+      OR NOT EXISTS (
+        SELECT 1
+        FROM public.pay_bank_transfers AS previous_transfer_exists
+        WHERE previous_transfer_exists.id = previous_conflict_candidate.pay_bank_transfer_id
+      )
+      OR locked_transfer.pay_bank_transfer_id IS NOT NULL
+    );
+
+  SELECT COUNT(*)::integer
+  INTO v_locked_previous_scope_conflict_count
+  FROM pg_temp.tmp_transfer_scope_previous_conflicts AS previous_conflict;
+
+  v_previous_cleanup_busy_count := GREATEST(COALESCE(v_previous_scope_conflict_count, 0) - COALESCE(v_locked_previous_scope_conflict_count, 0), 0);
+
+  IF COALESCE(v_previous_cleanup_busy_count, 0) > 0 THEN
+    SELECT COALESCE(jsonb_agg(DISTINCT to_jsonb(previous_conflict_candidate.previous_operation_id::text)), '[]'::jsonb),
+           COALESCE(jsonb_agg(DISTINCT to_jsonb(previous_conflict_candidate.transfer_group_key)), '[]'::jsonb),
+           COALESCE(jsonb_agg(DISTINCT to_jsonb(previous_conflict_candidate.previous_operation_type)) FILTER (WHERE previous_conflict_candidate.previous_operation_type IS NOT NULL), '[]'::jsonb),
+           COALESCE(jsonb_agg(DISTINCT to_jsonb(previous_conflict_candidate.previous_operation_status)) FILTER (WHERE previous_conflict_candidate.previous_operation_status IS NOT NULL), '[]'::jsonb)
+    INTO v_stale_previous_operation_ids,
+         v_blocked_transfer_group_keys,
+         v_blocked_previous_operation_types,
+         v_blocked_previous_operation_statuses
+    FROM pg_temp.tmp_transfer_scope_previous_conflict_candidates AS previous_conflict_candidate
+    WHERE NOT EXISTS (
+      SELECT 1
+      FROM pg_temp.tmp_transfer_scope_previous_conflicts AS locked_previous_conflict
+      WHERE locked_previous_conflict.transfer_scope_id = previous_conflict_candidate.transfer_scope_id
+    );
+
+    v_blocked_cleanup_reasons := jsonb_build_array('STALE_PREVIOUS_OPERATION_CLEANUP_BUSY');
+    v_stale_previous_operation_scope_blocked_count := COALESCE(v_previous_cleanup_busy_count, 0);
+    v_cleanup_retry_blocked_count := COALESCE(v_previous_cleanup_busy_count, 0);
+
+    RETURN jsonb_build_object(
+      'ok', false,
+      'code', 'STALE_PREVIOUS_OPERATION_CLEANUP_BUSY',
+      'message', 'A previous local payment execution artefact is currently locked by another request. Retry the payment execution after the current request finishes.',
+      'operation_id', p_operation_id::text,
+      'pay_batch_id', p_pay_batch_id::text,
+      'pay_channel_scope', v_scope,
+      'group_count', 0,
+      'total_amount', 0,
+      'created_count', 0,
+      'reused_count', 0,
+      'blocked_invalid_count', COALESCE(v_stale_scope_skipped_count, 0),
+      'stale_scope_skipped_count', COALESCE(v_stale_scope_skipped_count, 0),
+      'stale_previous_operation_cleanup_attempted_count', COALESCE(v_stale_previous_operation_cleanup_attempted_count, 0),
+      'stale_previous_operation_scope_cleaned_count', COALESCE(v_stale_previous_operation_scope_cleaned_count, 0),
+      'stale_previous_retry_operation_scope_cleaned_count', COALESCE(v_stale_previous_retry_operation_scope_cleaned_count, 0),
+      'stale_previous_operation_transfer_cleaned_count', COALESCE(v_stale_previous_operation_transfer_cleaned_count, 0),
+      'stale_previous_operation_auth_requests_cancelled_count', COALESCE(v_stale_previous_operation_auth_requests_cancelled_count, 0),
+      'stale_previous_operation_batch_execution_intent_cleared_count', COALESCE(v_stale_previous_operation_batch_execution_intent_cleared_count, 0),
+      'stale_previous_operation_scope_blocked_count', COALESCE(v_stale_previous_operation_scope_blocked_count, 0),
+      'cleanup_retry_blocked_count', COALESCE(v_cleanup_retry_blocked_count, 0),
+      'blocked_previous_operation_ids', COALESCE(v_stale_previous_operation_ids, '[]'::jsonb),
+      'stale_previous_operation_ids', COALESCE(v_stale_previous_operation_ids, '[]'::jsonb),
+      'blocked_previous_operation_types', COALESCE(v_blocked_previous_operation_types, '[]'::jsonb),
+      'blocked_previous_operation_statuses', COALESCE(v_blocked_previous_operation_statuses, '[]'::jsonb),
+      'blocked_transfer_group_keys', COALESCE(v_blocked_transfer_group_keys, '[]'::jsonb),
+      'blocked_cleanup_reasons', COALESCE(v_blocked_cleanup_reasons, '[]'::jsonb),
+      'stale_previous_operation_cleanup_diagnostic', COALESCE(v_stale_previous_operation_cleanup_diagnostic, '[]'::jsonb),
+      'freshness_validation_status', v_freshness_status,
+      'freshness_result_hash_used', v_freshness_result_hash_used,
+      'freshness_scope_hash_used', v_freshness_scope_hash_used,
+      'cleanup_retryable', true,
+      'manual_resolution_required', false,
+      'provider_submission_status', 'NO_PROVIDER_SUBMISSION_ATTEMPTED'
+    );
+  END IF;
+
   CREATE TEMPORARY TABLE IF NOT EXISTS pg_temp.tmp_transfer_scope_previous_cleanup_results (
     previous_operation_id uuid PRIMARY KEY,
     cleanup_result jsonb NOT NULL
@@ -6955,34 +7107,82 @@ BEGIN
 
   TRUNCATE TABLE pg_temp.tmp_transfer_scope_previous_cleanup_results;
 
-  INSERT INTO pg_temp.tmp_transfer_scope_previous_cleanup_results (
-    previous_operation_id,
-    cleanup_result
-  )
-  SELECT cleanup_operation.previous_operation_id,
-         public.pay_execute_operation_cleanup_failed_local_artifacts(
-           p_operation_id => cleanup_operation.previous_operation_id,
-           p_actor_user_id => p_actor_user_id,
-           p_failure_phase => 'PREPARE_TRANSFER_SCOPE_RETRY_CONFLICT',
-           p_failure_error_json => jsonb_build_object(
-             'code', 'TRANSFER_SCOPE_RETRY_CONFLICT_CLEANUP_REQUESTED',
-             'requested_by_operation_id', p_operation_id::text,
-             'pay_batch_id', p_pay_batch_id::text
-           ),
-           p_dry_run => false
-         ) AS cleanup_result
-  FROM (
+  FOR v_cleanup_operation_id IN
     SELECT DISTINCT previous_conflict.previous_operation_id
     FROM pg_temp.tmp_transfer_scope_previous_conflicts AS previous_conflict
     WHERE previous_conflict.previous_operation_type IN ('PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS')
       AND previous_conflict.previous_operation_status IN ('FAILED', 'CANCELLED', 'CANCELED')
-  ) AS cleanup_operation;
+    ORDER BY previous_conflict.previous_operation_id
+  LOOP
+    v_cleanup_result := '{}'::jsonb;
+    v_cleanup_error_sqlstate := NULL::text;
+    v_cleanup_error_message := NULL::text;
+    v_cleanup_error_detail := NULL::text;
+    v_cleanup_error_hint := NULL::text;
+
+    BEGIN
+      v_cleanup_result := public.pay_execute_operation_cleanup_failed_local_artifacts(
+        p_operation_id => v_cleanup_operation_id,
+        p_actor_user_id => p_actor_user_id,
+        p_failure_phase => 'PREPARE_TRANSFER_SCOPE_RETRY_CONFLICT',
+        p_failure_error_json => jsonb_build_object(
+          'code', 'TRANSFER_SCOPE_RETRY_CONFLICT_CLEANUP_REQUESTED',
+          'requested_by_operation_id', p_operation_id::text,
+          'pay_batch_id', p_pay_batch_id::text
+        ),
+        p_dry_run => false
+      );
+    EXCEPTION
+      WHEN OTHERS THEN
+        GET STACKED DIAGNOSTICS
+          v_cleanup_error_sqlstate = RETURNED_SQLSTATE,
+          v_cleanup_error_message = MESSAGE_TEXT,
+          v_cleanup_error_detail = PG_EXCEPTION_DETAIL,
+          v_cleanup_error_hint = PG_EXCEPTION_HINT;
+
+        v_cleanup_result := jsonb_strip_nulls(jsonb_build_object(
+          'ok', false,
+          'cleanup_status', 'FAILED',
+          'retry_blocked', true,
+          'review_required', true,
+          'safe_to_retry', false,
+          'cleanup_retry_safe', false,
+          'safe_retry_available', false,
+          'retry_blocked_reason', 'STALE_PREVIOUS_OPERATION_CLEANUP_FAILED',
+          'blocked_cleanup_reason', 'STALE_PREVIOUS_OPERATION_CLEANUP_FAILED',
+          'error_code', v_cleanup_error_sqlstate,
+          'error_message', v_cleanup_error_message,
+          'error_detail', NULLIF(BTRIM(COALESCE(v_cleanup_error_detail, '')), ''),
+          'error_hint', NULLIF(BTRIM(COALESCE(v_cleanup_error_hint, '')), ''),
+          'operation_id', v_cleanup_operation_id::text,
+          'requested_by_operation_id', p_operation_id::text,
+          'pay_batch_id', p_pay_batch_id::text,
+          'manual_resolution_required', true,
+          'provider_submission_status', 'NO_PROVIDER_SUBMISSION_ATTEMPTED'
+        ));
+    END;
+
+    INSERT INTO pg_temp.tmp_transfer_scope_previous_cleanup_results (
+      previous_operation_id,
+      cleanup_result
+    )
+    VALUES (
+      v_cleanup_operation_id,
+      COALESCE(v_cleanup_result, '{}'::jsonb)
+    )
+    ON CONFLICT (previous_operation_id) DO UPDATE
+    SET cleanup_result = EXCLUDED.cleanup_result;
+  END LOOP;
 
   SELECT COUNT(*)::integer,
          COALESCE((COUNT(*) FILTER (
            WHERE COALESCE((cleanup_result_row.cleanup_result->>'retry_blocked')::boolean, false) IS TRUE
               OR COALESCE((cleanup_result_row.cleanup_result->>'review_required')::boolean, false) IS TRUE
-              OR COALESCE((cleanup_result_row.cleanup_result->>'safe_to_retry')::boolean, false) IS NOT TRUE
+              OR (
+                COALESCE((cleanup_result_row.cleanup_result->>'safe_to_retry')::boolean, false) IS NOT TRUE
+                AND COALESCE((cleanup_result_row.cleanup_result->>'cleanup_retry_safe')::boolean, false) IS NOT TRUE
+                AND COALESCE((cleanup_result_row.cleanup_result->>'safe_retry_available')::boolean, false) IS NOT TRUE
+              )
          )), 0)::integer
   INTO v_stale_previous_operation_cleanup_attempted_count,
        v_cleanup_retry_blocked_count
@@ -6994,6 +7194,33 @@ BEGIN
   INTO v_stale_previous_operation_transfer_cleaned_count,
        v_stale_previous_operation_auth_requests_cancelled_count,
        v_stale_previous_operation_batch_execution_intent_cleared_count
+  FROM pg_temp.tmp_transfer_scope_previous_cleanup_results AS cleanup_result_row;
+
+  SELECT COALESCE(
+           jsonb_agg(
+             jsonb_strip_nulls(jsonb_build_object(
+               'previous_operation_id', cleanup_result_row.previous_operation_id::text,
+               'ok', cleanup_result_row.cleanup_result->'ok',
+               'cleanup_status', cleanup_result_row.cleanup_result->>'cleanup_status',
+               'retry_blocked', cleanup_result_row.cleanup_result->'retry_blocked',
+               'review_required', cleanup_result_row.cleanup_result->'review_required',
+               'safe_to_retry', cleanup_result_row.cleanup_result->'safe_to_retry',
+               'cleanup_retry_safe', cleanup_result_row.cleanup_result->'cleanup_retry_safe',
+               'safe_retry_available', cleanup_result_row.cleanup_result->'safe_retry_available',
+               'retry_blocked_reason', cleanup_result_row.cleanup_result->>'retry_blocked_reason',
+               'blocked_cleanup_reason', cleanup_result_row.cleanup_result->>'blocked_cleanup_reason',
+               'error_code', cleanup_result_row.cleanup_result->>'error_code',
+               'error_message', cleanup_result_row.cleanup_result->>'error_message',
+               'scope_rows_deleted', cleanup_result_row.cleanup_result->>'scope_rows_deleted',
+               'transfer_rows_deleted', cleanup_result_row.cleanup_result->>'transfer_rows_deleted',
+               'auth_requests_cancelled', cleanup_result_row.cleanup_result->>'auth_requests_cancelled',
+               'batch_execution_intent_cleared', cleanup_result_row.cleanup_result->>'batch_execution_intent_cleared'
+             ))
+             ORDER BY cleanup_result_row.previous_operation_id::text
+           ),
+           '[]'::jsonb
+         )
+  INTO v_stale_previous_operation_cleanup_diagnostic
   FROM pg_temp.tmp_transfer_scope_previous_cleanup_results AS cleanup_result_row;
 
   SELECT COUNT(*)::integer
@@ -7047,7 +7274,11 @@ BEGIN
     FROM pg_temp.tmp_transfer_scope_previous_cleanup_results AS cleanup_result_row
     WHERE COALESCE((cleanup_result_row.cleanup_result->>'retry_blocked')::boolean, false) IS TRUE
        OR COALESCE((cleanup_result_row.cleanup_result->>'review_required')::boolean, false) IS TRUE
-       OR COALESCE((cleanup_result_row.cleanup_result->>'safe_to_retry')::boolean, false) IS NOT TRUE;
+       OR (
+         COALESCE((cleanup_result_row.cleanup_result->>'safe_to_retry')::boolean, false) IS NOT TRUE
+         AND COALESCE((cleanup_result_row.cleanup_result->>'cleanup_retry_safe')::boolean, false) IS NOT TRUE
+         AND COALESCE((cleanup_result_row.cleanup_result->>'safe_retry_available')::boolean, false) IS NOT TRUE
+       );
 
     SELECT COALESCE(jsonb_agg(DISTINCT to_jsonb(previous_conflict.transfer_group_key)), '[]'::jsonb)
     INTO v_blocked_transfer_group_keys
@@ -7059,7 +7290,11 @@ BEGIN
         AND (
           COALESCE((cleanup_result_row.cleanup_result->>'retry_blocked')::boolean, false) IS TRUE
           OR COALESCE((cleanup_result_row.cleanup_result->>'review_required')::boolean, false) IS TRUE
-          OR COALESCE((cleanup_result_row.cleanup_result->>'safe_to_retry')::boolean, false) IS NOT TRUE
+          OR (
+            COALESCE((cleanup_result_row.cleanup_result->>'safe_to_retry')::boolean, false) IS NOT TRUE
+            AND COALESCE((cleanup_result_row.cleanup_result->>'cleanup_retry_safe')::boolean, false) IS NOT TRUE
+            AND COALESCE((cleanup_result_row.cleanup_result->>'safe_retry_available')::boolean, false) IS NOT TRUE
+          )
         )
     );
 
@@ -7069,33 +7304,51 @@ BEGIN
     FROM pg_temp.tmp_transfer_scope_previous_cleanup_results AS cleanup_result_row
     WHERE COALESCE((cleanup_result_row.cleanup_result->>'retry_blocked')::boolean, false) IS TRUE
        OR COALESCE((cleanup_result_row.cleanup_result->>'review_required')::boolean, false) IS TRUE
-       OR COALESCE((cleanup_result_row.cleanup_result->>'safe_to_retry')::boolean, false) IS NOT TRUE;
+       OR (
+         COALESCE((cleanup_result_row.cleanup_result->>'safe_to_retry')::boolean, false) IS NOT TRUE
+         AND COALESCE((cleanup_result_row.cleanup_result->>'cleanup_retry_safe')::boolean, false) IS NOT TRUE
+         AND COALESCE((cleanup_result_row.cleanup_result->>'safe_retry_available')::boolean, false) IS NOT TRUE
+       );
 
     v_stale_previous_operation_scope_blocked_count := COALESCE(v_cleanup_retry_blocked_count, 0);
   END IF;
 
   IF COALESCE(v_stale_previous_operation_scope_blocked_count, 0) > 0 THEN
-    RAISE EXCEPTION '%', jsonb_build_object(
-      'error', 'PAY_EXECUTE_TRANSFER_SCOPE_SEED',
+    RETURN jsonb_build_object(
+      'ok', false,
       'code', 'TRANSFER_SCOPE_GROUP_HELD_BY_ACTIVE_OR_UNSAFE_OPERATION',
       'message', 'A previous payment execution operation still owns one or more transfer groups for this batch and cannot be cleaned safely for retry.',
       'operation_id', p_operation_id::text,
       'pay_batch_id', p_pay_batch_id::text,
-      'blocked_count', v_stale_previous_operation_scope_blocked_count,
+      'pay_channel_scope', v_scope,
+      'group_count', 0,
+      'total_amount', 0,
+      'created_count', 0,
+      'reused_count', 0,
+      'blocked_invalid_count', COALESCE(v_stale_scope_skipped_count, 0),
+      'stale_scope_skipped_count', COALESCE(v_stale_scope_skipped_count, 0),
       'stale_previous_operation_cleanup_attempted_count', COALESCE(v_stale_previous_operation_cleanup_attempted_count, 0),
       'stale_previous_operation_scope_cleaned_count', COALESCE(v_stale_previous_operation_scope_cleaned_count, 0),
       'stale_previous_retry_operation_scope_cleaned_count', COALESCE(v_stale_previous_retry_operation_scope_cleaned_count, 0),
       'stale_previous_operation_transfer_cleaned_count', COALESCE(v_stale_previous_operation_transfer_cleaned_count, 0),
       'stale_previous_operation_auth_requests_cancelled_count', COALESCE(v_stale_previous_operation_auth_requests_cancelled_count, 0),
       'stale_previous_operation_batch_execution_intent_cleared_count', COALESCE(v_stale_previous_operation_batch_execution_intent_cleared_count, 0),
+      'stale_previous_operation_scope_blocked_count', COALESCE(v_stale_previous_operation_scope_blocked_count, 0),
       'cleanup_retry_blocked_count', COALESCE(v_cleanup_retry_blocked_count, 0),
-      'blocked_previous_operation_ids', v_stale_previous_operation_ids,
-      'stale_previous_operation_ids', v_stale_previous_operation_ids,
-      'blocked_previous_operation_types', v_blocked_previous_operation_types,
-      'blocked_previous_operation_statuses', v_blocked_previous_operation_statuses,
-      'blocked_transfer_group_keys', v_blocked_transfer_group_keys,
-      'blocked_cleanup_reasons', v_blocked_cleanup_reasons
-    )::text USING ERRCODE = 'P0001';
+      'blocked_previous_operation_ids', COALESCE(v_stale_previous_operation_ids, '[]'::jsonb),
+      'stale_previous_operation_ids', COALESCE(v_stale_previous_operation_ids, '[]'::jsonb),
+      'blocked_previous_operation_types', COALESCE(v_blocked_previous_operation_types, '[]'::jsonb),
+      'blocked_previous_operation_statuses', COALESCE(v_blocked_previous_operation_statuses, '[]'::jsonb),
+      'blocked_transfer_group_keys', COALESCE(v_blocked_transfer_group_keys, '[]'::jsonb),
+      'blocked_cleanup_reasons', COALESCE(v_blocked_cleanup_reasons, '[]'::jsonb),
+      'stale_previous_operation_cleanup_diagnostic', COALESCE(v_stale_previous_operation_cleanup_diagnostic, '[]'::jsonb),
+      'freshness_validation_status', v_freshness_status,
+      'freshness_result_hash_used', v_freshness_result_hash_used,
+      'freshness_scope_hash_used', v_freshness_scope_hash_used,
+      'cleanup_retryable', false,
+      'manual_resolution_required', true,
+      'provider_submission_status', 'NO_PROVIDER_SUBMISSION_ATTEMPTED'
+    );
   END IF;
 
   WITH existing_scope AS (
@@ -7229,6 +7482,7 @@ BEGIN
     'blocked_previous_operation_statuses', COALESCE(v_blocked_previous_operation_statuses, '[]'::jsonb),
     'blocked_transfer_group_keys', COALESCE(v_blocked_transfer_group_keys, '[]'::jsonb),
     'blocked_cleanup_reasons', COALESCE(v_blocked_cleanup_reasons, '[]'::jsonb),
+    'stale_previous_operation_cleanup_diagnostic', COALESCE(v_stale_previous_operation_cleanup_diagnostic, '[]'::jsonb),
     'freshness_validation_status', v_freshness_status,
     'freshness_result_hash_used', v_freshness_result_hash_used,
     'freshness_scope_hash_used', v_freshness_scope_hash_used
