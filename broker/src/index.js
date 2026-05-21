@@ -37472,7 +37472,6 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
     return finishFailedWithCleanup( null, { code: 'DRAFT_CREATE_OPERATION_FAILED', message: 'Draft create operation failed.', phase, error: String(e?.message || e || '') });
   }
 }
-
 async function advanceBankingPayExecuteOperation(env, operationRow, user, options = {}) {
 const unwrapRpcPayload = (rpcRes, key) => {
 let payload = rpcRes;
@@ -39363,6 +39362,100 @@ const buildControlledFundingFailurePayload = (submitted) => {
   return { code, isBlocked, diagnostics, result, error };
 };
 
+const readCompletionBatchSummary = async () => {
+  const batchQuery = new URLSearchParams();
+  batchQuery.set('id', `eq.${payBatchId}`);
+  batchQuery.set('select', [
+    'id',
+    'status',
+    'pay_date',
+    'rail_provider_snapshot',
+    'rail_env_snapshot',
+    'banking_system_snapshot',
+    'external_paye_system_snapshot',
+    'bulk_ref_num',
+    'bulk_ref_date',
+    'bulk_reference',
+    'execution_commit_state',
+    'execution_commit_ref',
+    'execution_committed_at_utc',
+    'freshness_validation_status',
+    'freshness_result_hash',
+    'freshness_scope_hash',
+    'freshness_result_json'
+  ].join(','));
+  batchQuery.set('limit', '1');
+  const batchRes = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/pay_batches?${batchQuery.toString()}`, false);
+  const batchRow = batchRes && Array.isArray(batchRes.rows) && batchRes.rows.length ? safeObject(batchRes.rows[0]) : null;
+  if (!batchRow) throw new Error('PAY_BATCH_NOT_FOUND');
+
+  const transferQuery = new URLSearchParams();
+  transferQuery.set('pay_batch_id', `eq.${payBatchId}`);
+  transferQuery.set('select', [
+    'id',
+    'amount',
+    'status',
+    'rail_state',
+    'completed_at_utc',
+    'failed_reason',
+    'payee_entity_kind',
+    'payee_entity_id',
+    'payee_name',
+    'sort_code',
+    'account_number',
+    'bank_details_hash_snapshot'
+  ].join(','));
+  transferQuery.set('limit', '50000');
+  const transferRes = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/pay_bank_transfers?${transferQuery.toString()}`, false);
+  const transferRows = transferRes && Array.isArray(transferRes.rows) ? transferRes.rows.map((row) => safeObject(row)) : [];
+  const terminalTransferStates = new Set(['FAILED', 'DECLINED', 'REJECTED', 'RETURNED', 'REVERTED', 'CANCELLED', 'CANCELED', 'BLOCKED', 'SKIPPED', 'COMPLETED', 'COMMITTED', 'SETTLED', 'PAID', 'EXECUTED']);
+  const preparedTransferCount = transferRows.filter((row) => {
+    const amount = Number(row.amount || 0);
+    const statusUpper = upperString(row.status);
+    const railStateUpper = upperString(row.rail_state);
+    const failedReason = String(row.failed_reason || '').trim();
+    const hasPayeeEntity = String(row.payee_entity_kind || '').trim() && String(row.payee_entity_id || '').trim();
+    const hasBankDetails = String(row.payee_name || '').trim() && String(row.sort_code || '').trim() && String(row.account_number || '').trim();
+    const hasBankHash = String(row.bank_details_hash_snapshot || '').trim();
+    return amount > 0
+      && !terminalTransferStates.has(statusUpper)
+      && !terminalTransferStates.has(railStateUpper)
+      && !row.completed_at_utc
+      && !failedReason
+      && Boolean(hasPayeeEntity || hasBankDetails || hasBankHash);
+  }).length;
+  const pendingTransferCount = transferRows.filter((row) => upperString(row.status) === 'PENDING').length;
+  const blockedTransferCount = transferRows.filter((row) => upperString(row.status) === 'BLOCKED' || upperString(row.rail_state) === 'BLOCKED').length;
+  const freshnessResultJson = safeObject(batchRow.freshness_result_json);
+
+  return {
+    ok: true,
+    summary_source: 'narrow-rest-completion-summary',
+    pay_batch_id: String(batchRow.id || payBatchId),
+    status: batchRow.status || null,
+    pay_date: batchRow.pay_date || null,
+    rail_provider_snapshot: batchRow.rail_provider_snapshot || null,
+    rail_env_snapshot: batchRow.rail_env_snapshot || null,
+    banking_system_snapshot: batchRow.banking_system_snapshot || null,
+    external_paye_system_snapshot: batchRow.external_paye_system_snapshot || null,
+    bulk_ref_num: batchRow.bulk_ref_num ?? null,
+    bulk_ref_date: batchRow.bulk_ref_date || null,
+    bulk_reference: batchRow.bulk_reference || null,
+    execution_commit_state: batchRow.execution_commit_state || null,
+    execution_commit_ref: batchRow.execution_commit_ref || null,
+    execution_committed_at_utc: batchRow.execution_committed_at_utc || null,
+    freshness_validation_status: batchRow.freshness_validation_status || null,
+    freshness_result_hash: batchRow.freshness_result_hash || freshnessResultHashFromProgress || inputJson.freshness_result_hash || null,
+    freshness_scope_hash: batchRow.freshness_scope_hash || freshnessScopeHashFromProgress || inputJson.freshness_scope_hash || null,
+    freshness_is_stale: upperString(batchRow.freshness_validation_status) === 'STALE'
+      || String(freshnessResultJson.is_stale || '').trim().toLowerCase() === 'true',
+    transfer_count: transferRows.length,
+    prepared_transfer_count: preparedTransferCount,
+    pending_transfer_count: pendingTransferCount,
+    blocked_transfer_count: blockedTransferCount
+  };
+};
+
 try {
 if (currentPhase === 'INITIALISE' || currentPhase === 'VALIDATE_BATCH') {
 const summary = await runExecuteDiagnosticRpc('pay_batch_execution_summary_get', {
@@ -40088,17 +40181,45 @@ if (currentPhase === 'SCHEDULE_OR_SUBMIT') {
 }
 
 if (currentPhase === 'SUBMIT_PROVIDER_TRANSFERS') {
-  const summary = await runExecuteDiagnosticRpc('pay_batch_execution_summary_get', {
-    p_pay_batch_id: payBatchId,
-    p_actor_user_id: actorUserId
-  }, 'pay_batch_execution_summary_get', {
-    phase: currentPhase,
-    note: 'submit-provider-summary'
-  });
-  const providerRaw = String(summary.rail_provider_snapshot || summary.provider || inputJson.rail_provider_snapshot || '').trim().toUpperCase();
+  let providerRaw = '';
+  let providerSource = null;
+
+  try {
+    const providerQuery = new URLSearchParams();
+    providerQuery.set('id', `eq.${payBatchId}`);
+    providerQuery.set('select', 'id,rail_provider_snapshot');
+    providerQuery.set('limit', '1');
+    const providerRes = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/pay_batches?${providerQuery.toString()}`, false);
+    const providerRow = providerRes && Array.isArray(providerRes.rows) && providerRes.rows.length ? providerRes.rows[0] : null;
+    if (!providerRow) return fail('PAY_BATCH_NOT_FOUND', 'Payment batch could not be loaded for operation submission.', { phase: currentPhase, pay_batch_id: payBatchId });
+    providerRaw = String(providerRow?.rail_provider_snapshot || '').trim().toUpperCase();
+    providerSource = providerRaw ? 'pay_batches.rail_provider_snapshot' : null;
+  } catch (providerLookupError) {
+    return fail('RAIL_PROVIDER_LOOKUP_FAILED', 'Rail provider could not be loaded for operation submission.', {
+      phase: currentPhase,
+      pay_batch_id: payBatchId,
+      provider_lookup_error: String(providerLookupError?.message || providerLookupError || '')
+    });
+  }
+
+  if (!providerRaw) {
+    providerRaw = String(
+      inputJson.rail_provider_snapshot
+      || inputJson.railProviderSnapshot
+      || inputJson.rail_provider
+      || inputJson.railProvider
+      || configJson.rail_provider_snapshot
+      || configJson.railProviderSnapshot
+      || progressJson.rail_provider_snapshot
+      || progressJson.railProviderSnapshot
+      || ''
+    ).trim().toUpperCase();
+    providerSource = providerRaw ? 'operation_cached_provider_snapshot' : providerSource;
+  }
+
   const provider = providerRaw === 'REV' ? 'REVOLUT' : providerRaw;
   const adapter = typeof getRailAdapter === 'function' ? getRailAdapter(provider) : null;
-  if (!adapter || typeof adapter.executeDueBatches !== 'function') return fail('MISSING_RAIL_PROVIDER', 'Rail provider adapter is not available for operation submission.', { provider });
+  if (!adapter || typeof adapter.executeDueBatches !== 'function') return fail('MISSING_RAIL_PROVIDER', 'Rail provider adapter is not available for operation submission.', { provider, provider_source: providerSource });
   let submitted;
   try {
     submitted = await adapter.executeDueBatches(env, {
@@ -40479,14 +40600,39 @@ if (currentPhase === 'APPLY_RAIL_UPDATES') {
   }
 
   if (requiresProviderPoll || attemptedButUnprovenCount > 0 || ambiguousCount > 0) {
-    const summary = await runExecuteDiagnosticRpc('pay_batch_execution_summary_get', {
-      p_pay_batch_id: payBatchId,
-      p_actor_user_id: actorUserId
-    }, 'pay_batch_execution_summary_get', {
-      phase: currentPhase,
-      note: 'apply-rail-updates-summary-before-poll'
-    });
-    const providerRaw = String(summary.rail_provider_snapshot || summary.provider || inputJson.rail_provider_snapshot || '').trim().toUpperCase();
+    let providerRaw = '';
+
+    try {
+      const providerQuery = new URLSearchParams();
+      providerQuery.set('id', `eq.${payBatchId}`);
+      providerQuery.set('select', 'id,rail_provider_snapshot');
+      providerQuery.set('limit', '1');
+      const providerRes = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/pay_batches?${providerQuery.toString()}`, false);
+      const providerRow = providerRes && Array.isArray(providerRes.rows) && providerRes.rows.length ? providerRes.rows[0] : null;
+      if (!providerRow) return fail('PAY_BATCH_NOT_FOUND', 'Payment batch could not be loaded for provider update polling.', { phase: currentPhase, pay_batch_id: payBatchId });
+      providerRaw = String(providerRow?.rail_provider_snapshot || '').trim().toUpperCase();
+    } catch (providerLookupError) {
+      return fail('RAIL_PROVIDER_LOOKUP_FAILED', 'Rail provider could not be loaded for provider update polling.', {
+        phase: currentPhase,
+        pay_batch_id: payBatchId,
+        provider_lookup_error: String(providerLookupError?.message || providerLookupError || '')
+      });
+    }
+
+    if (!providerRaw) {
+      providerRaw = String(
+        inputJson.rail_provider_snapshot
+        || inputJson.railProviderSnapshot
+        || inputJson.rail_provider
+        || inputJson.railProvider
+        || configJson.rail_provider_snapshot
+        || configJson.railProviderSnapshot
+        || progressJson.rail_provider_snapshot
+        || progressJson.railProviderSnapshot
+        || ''
+      ).trim().toUpperCase();
+    }
+
     const provider = providerRaw === 'REV' ? 'REVOLUT' : providerRaw;
     const adapter = typeof getRailAdapter === 'function' ? getRailAdapter(provider) : null;
     if (adapter && typeof adapter.pollBatch === 'function') {
@@ -40672,34 +40818,17 @@ if (currentPhase === 'QUEUE_REMITTANCES') {
 }
 
 if (currentPhase === 'COMPLETE') {
-  const summary = await runExecuteDiagnosticRpc('pay_batch_execution_summary_get', {
-    p_pay_batch_id: payBatchId,
-    p_actor_user_id: actorUserId
-  }, 'pay_batch_execution_summary_get', {
-    phase: currentPhase,
-    note: 'complete-summary'
-  });
-  const evidence = await runExecuteDiagnosticRpc('pay_batch_submission_evidence', { p_pay_batch_id: payBatchId, p_counts_only: true }, 'pay_batch_submission_evidence', {
-    phase: currentPhase,
-    note: 'complete-submission-evidence'
-  });
-  const canMarkSubmitted = evidence.can_mark_submitted === true;
-  const completeProviderStatus = providerSubmitStatusFrom(evidence);
-  const completeProviderReviewReason = providerSubmitReviewCodeFrom(evidence);
-  const completeProviderDiagnostic = extractProviderSubmitDiagnostic(evidence);
-  const completeProviderReviewCode = providerSubmitFailureCodeFromStatus(completeProviderStatus, completeProviderReviewReason);
-  if (executionMode === 'STANDARD_BANK' && ['PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK', 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE', 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID'].includes(completeProviderReviewCode)) {
-    return fail(completeProviderReviewCode, providerSubmitMessageFromCode(completeProviderReviewCode), {
+  let summary;
+  try {
+    summary = await readCompletionBatchSummary();
+  } catch (summaryError) {
+    return fail('BATCH_COMPLETION_SUMMARY_LOOKUP_FAILED', 'Payment batch completion summary could not be loaded.', {
       phase: currentPhase,
-      submission_evidence: evidence,
-      provider_submit_diagnostic: Object.keys(completeProviderDiagnostic).length ? completeProviderDiagnostic : undefined,
-      provider_submission_status: completeProviderStatus || completeProviderReviewCode,
-      provider_submit_review_reason_code: completeProviderReviewReason || undefined,
-      review_reason_code: completeProviderReviewReason || undefined,
-      manual_resolution_required: true,
-      safe_retry_available: false
+      pay_batch_id: payBatchId,
+      summary_lookup_error: String(summaryError?.message || summaryError || '')
     });
   }
+
   const settlementOperation = safeObject(progressJson.settlement_operation);
   const remittanceOperation = safeObject(progressJson.remittance_operation);
   const childOperationId = progressJson.child_operation_id || null;
@@ -40720,6 +40849,28 @@ if (currentPhase === 'COMPLETE') {
       pending_transfer_count: summary.pending_transfer_count || 0,
       batch_summary: summary
     }, null);
+  }
+
+  const evidence = await runExecuteDiagnosticRpc('pay_batch_submission_evidence', { p_pay_batch_id: payBatchId, p_counts_only: true }, 'pay_batch_submission_evidence', {
+    phase: currentPhase,
+    note: 'complete-submission-evidence'
+  });
+  const canMarkSubmitted = evidence.can_mark_submitted === true;
+  const completeProviderStatus = providerSubmitStatusFrom(evidence);
+  const completeProviderReviewReason = providerSubmitReviewCodeFrom(evidence);
+  const completeProviderDiagnostic = extractProviderSubmitDiagnostic(evidence);
+  const completeProviderReviewCode = providerSubmitFailureCodeFromStatus(completeProviderStatus, completeProviderReviewReason);
+  if (executionMode === 'STANDARD_BANK' && ['PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK', 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE', 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID'].includes(completeProviderReviewCode)) {
+    return fail(completeProviderReviewCode, providerSubmitMessageFromCode(completeProviderReviewCode), {
+      phase: currentPhase,
+      submission_evidence: evidence,
+      provider_submit_diagnostic: Object.keys(completeProviderDiagnostic).length ? completeProviderDiagnostic : undefined,
+      provider_submission_status: completeProviderStatus || completeProviderReviewCode,
+      provider_submit_review_reason_code: completeProviderReviewReason || undefined,
+      review_reason_code: completeProviderReviewReason || undefined,
+      manual_resolution_required: true,
+      safe_retry_available: false
+    });
   }
 
   if (executionMode === 'STANDARD_BANK' && !canMarkSubmitted) {
@@ -40796,6 +40947,8 @@ source_error: {
 });
 }
 }
+
+
 
 
 async function advanceBankingPayRemittanceOperation(env, operationRow, user, options = {}) {
