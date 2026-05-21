@@ -15486,8 +15486,6 @@ $function$;
 
 
 
-
-
 CREATE OR REPLACE FUNCTION public.pay_provider_submit_diagnostic_get(
   p_pay_batch_id uuid DEFAULT NULL::uuid,
   p_operation_id uuid DEFAULT NULL::uuid,
@@ -15579,6 +15577,7 @@ DECLARE
   v_provider_submit_diagnostic jsonb := '{}'::jsonb;
   v_counts jsonb := '{}'::jsonb;
   v_ids jsonb := '{}'::jsonb;
+  v_batch_level_cleaned_local_blocked_pre_call_neutralised boolean := false;
 BEGIN
   IF p_pay_batch_id IS NULL AND p_operation_id IS NULL AND p_transfer_id IS NULL AND p_chunk_id IS NULL THEN
     RAISE EXCEPTION '%', jsonb_build_object(
@@ -16204,7 +16203,36 @@ BEGIN
          ),
          (
            COALESCE(BOOL_OR(upper(BTRIM(COALESCE(selected_source.provider_submission_status, ''))) IN ('PROVIDER_SUBMISSION_REJECTED', 'PROVIDER_SUBMISSION_FAILED')), false)
-           OR COALESCE(BOOL_OR(selected_source.provider_submission_rejected OR selected_source.provider_submission_failed), false)
+           OR COALESCE(BOOL_OR(selected_source.provider_submission_rejected
+             OR (
+               selected_source.provider_submission_failed
+               AND NOT (
+                 upper(BTRIM(COALESCE(selected_source.provider_submission_status, ''))) = 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL'
+                 AND selected_source.provider_submission_attempted IS NOT TRUE
+                 AND selected_source.provider_request_sent IS NOT TRUE
+                 AND selected_source.provider_response_received IS NOT TRUE
+                 AND selected_source.provider_response_present IS NOT TRUE
+                 AND selected_source.provider_submission_accepted IS NOT TRUE
+                 AND selected_source.provider_submission_rejected IS NOT TRUE
+                 AND selected_source.provider_submission_unknown IS NOT TRUE
+                 AND selected_source.provider_acceptance_evidence_present IS NOT TRUE
+                 AND NULLIF(BTRIM(COALESCE(
+                   selected_source.provider_transaction_id,
+                   selected_source.rail_tx_id,
+                   selected_source.provider_reference,
+                   selected_source.provider_state,
+                   selected_source.provider_http_status,
+                   ''
+                 )), '') IS NULL
+                 AND (
+                   NULLIF(BTRIM(COALESCE(selected_source.provider_error_code, '')), '') IS NULL
+                   OR upper(BTRIM(COALESCE(selected_source.provider_error_code, ''))) IN (
+                     'PROVIDER_SUBMIT_STAGE_RECORD_FAILED',
+                     'PROVIDER_SUBMIT_BLOCKED_PRE_CALL'
+                   )
+                 )
+               )
+             )), false)
            OR COALESCE(BOOL_OR(upper(BTRIM(COALESCE(transfer_event.normalised_state, transfer_event.provider_state, ''))) IN ('REJECTED', 'FAILED', 'ERROR', 'DECLINED', 'CANCELLED', 'CANCELED')), false)
            OR COALESCE(BOOL_OR(CASE WHEN NULLIF(BTRIM(COALESCE(selected_source.provider_http_status, '')), '') ~ '^[0-9]+$' THEN selected_source.provider_http_status::integer >= 400 ELSE false END), false)
          ),
@@ -16343,7 +16371,36 @@ BEGIN
            (
              COALESCE(BOOL_OR(transfer_flag.has_provider_rejection), false)
              OR COALESCE(BOOL_OR(upper(BTRIM(COALESCE(selected_source.provider_submission_status, ''))) IN ('PROVIDER_SUBMISSION_REJECTED', 'PROVIDER_SUBMISSION_FAILED')), false)
-             OR COALESCE(BOOL_OR(selected_source.provider_submission_rejected OR selected_source.provider_submission_failed), false)
+             OR COALESCE(BOOL_OR(selected_source.provider_submission_rejected
+             OR (
+               selected_source.provider_submission_failed
+               AND NOT (
+                 upper(BTRIM(COALESCE(selected_source.provider_submission_status, ''))) = 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL'
+                 AND selected_source.provider_submission_attempted IS NOT TRUE
+                 AND selected_source.provider_request_sent IS NOT TRUE
+                 AND selected_source.provider_response_received IS NOT TRUE
+                 AND selected_source.provider_response_present IS NOT TRUE
+                 AND selected_source.provider_submission_accepted IS NOT TRUE
+                 AND selected_source.provider_submission_rejected IS NOT TRUE
+                 AND selected_source.provider_submission_unknown IS NOT TRUE
+                 AND selected_source.provider_acceptance_evidence_present IS NOT TRUE
+                 AND NULLIF(BTRIM(COALESCE(
+                   selected_source.provider_transaction_id,
+                   selected_source.rail_tx_id,
+                   selected_source.provider_reference,
+                   selected_source.provider_state,
+                   selected_source.provider_http_status,
+                   ''
+                 )), '') IS NULL
+                 AND (
+                   NULLIF(BTRIM(COALESCE(selected_source.provider_error_code, '')), '') IS NULL
+                   OR upper(BTRIM(COALESCE(selected_source.provider_error_code, ''))) IN (
+                     'PROVIDER_SUBMIT_STAGE_RECORD_FAILED',
+                     'PROVIDER_SUBMIT_BLOCKED_PRE_CALL'
+                   )
+                 )
+               )
+             )), false)
              OR COALESCE(BOOL_OR(CASE WHEN NULLIF(BTRIM(COALESCE(selected_source.provider_http_status, '')), '') ~ '^[0-9]+$' THEN selected_source.provider_http_status::integer >= 400 ELSE false END), false)
            ) AS has_provider_rejection,
            (
@@ -16662,6 +16719,169 @@ BEGIN
       AND (p_operation_id IS NULL OR auth_request.execution_intent_json->>'operation_id' = p_operation_id::text)
   ) AS auth_values;
 
+  IF p_operation_id IS NULL
+     AND p_transfer_id IS NULL
+     AND p_chunk_id IS NULL
+     AND v_effective_pay_batch_id IS NOT NULL
+     AND COALESCE(v_transfer_count, 0) = 0
+     AND COALESCE(jsonb_array_length(v_transfer_ids), 0) = 0
+     AND COALESCE(jsonb_array_length(v_transfer_scope_ids), 0) = 0
+     AND COALESCE(v_active_auth_request_count, 0) = 0
+     AND COALESCE(v_provider_acceptance_evidence_count, 0) = 0
+     AND COALESCE(v_provider_response_present_count, 0) = 0
+     AND COALESCE(v_provider_request_sent_count, 0) = 0
+     AND COALESCE(v_provider_submission_unknown_count, 0) = 0
+     AND COALESCE(v_stale_unresolved_submit_chunk_count, 0) = 0
+     AND COALESCE(v_unfinalised_submit_chunk_count, 0) = 0
+     AND COALESCE(v_provider_submission_rejected_count, 0) = 0
+     AND COALESCE(v_provider_submission_malformed_response_count, 0) = 0
+     AND COALESCE(v_provider_submission_blocked_pre_call_count, 0) > 0
+     AND NOT EXISTS (
+       SELECT 1
+       FROM public.pay_bank_transfer_events AS batch_provider_event
+       WHERE batch_provider_event.pay_batch_id = v_effective_pay_batch_id
+         AND upper(BTRIM(COALESCE(batch_provider_event.event_source, ''))) IN (
+           'PROVIDER_RESPONSE',
+           'PROVIDER_POLL',
+           'PROVIDER_WEBHOOK',
+           'WEBHOOK',
+           'POLL',
+           'RAIL_PROVIDER',
+           'PROVIDER',
+           'PROVIDER_SETTLEMENT',
+           'RAIL_PROVIDER_SETTLEMENT'
+         )
+     )
+     AND NOT EXISTS (
+       SELECT 1
+       FROM pg_temp.tmp_provider_submit_diagnostic_chunks AS selected_chunk
+       LEFT JOIN pg_temp.tmp_provider_submit_diagnostic_chunk_flags AS selected_chunk_flag
+         ON selected_chunk_flag.chunk_id = selected_chunk.chunk_id
+       WHERE upper(BTRIM(COALESCE(selected_chunk.status, ''))) NOT IN ('COMPLETE', 'FAILED', 'SKIPPED', 'CANCELLED', 'CANCELED')
+          OR COALESCE(selected_chunk_flag.has_provider_blocked_pre_call, false) IS NOT TRUE
+          OR COALESCE(selected_chunk_flag.has_provider_acceptance_evidence, false) IS TRUE
+          OR COALESCE(selected_chunk_flag.has_provider_response, false) IS TRUE
+          OR COALESCE(selected_chunk_flag.has_provider_request_sent, false) IS TRUE
+          OR COALESCE(selected_chunk_flag.has_provider_rejection, false) IS TRUE
+          OR COALESCE(selected_chunk_flag.has_provider_unknown, false) IS TRUE
+          OR COALESCE(selected_chunk_flag.has_provider_malformed_response, false) IS TRUE
+          OR COALESCE(selected_chunk_flag.is_stale_unresolved, false) IS TRUE
+          OR COALESCE(selected_chunk_flag.is_stale_request_sent_no_response, false) IS TRUE
+     )
+     AND NOT EXISTS (
+       SELECT 1
+       FROM pg_temp.tmp_provider_submit_diagnostic_sources AS selected_source
+       WHERE selected_source.provider_submission_attempted IS TRUE
+          OR selected_source.provider_request_sent IS TRUE
+          OR selected_source.provider_response_received IS TRUE
+          OR selected_source.provider_response_present IS TRUE
+          OR selected_source.provider_submission_accepted IS TRUE
+          OR selected_source.provider_submission_rejected IS TRUE
+          OR (
+            selected_source.provider_submission_failed IS TRUE
+            AND NOT (
+              upper(BTRIM(COALESCE(selected_source.provider_submission_status, ''))) = 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL'
+              AND selected_source.provider_submission_attempted IS NOT TRUE
+              AND selected_source.provider_request_sent IS NOT TRUE
+              AND selected_source.provider_response_received IS NOT TRUE
+              AND selected_source.provider_response_present IS NOT TRUE
+              AND selected_source.provider_submission_accepted IS NOT TRUE
+              AND selected_source.provider_submission_rejected IS NOT TRUE
+              AND selected_source.provider_submission_unknown IS NOT TRUE
+              AND selected_source.provider_acceptance_evidence_present IS NOT TRUE
+              AND NULLIF(BTRIM(COALESCE(
+                selected_source.provider_transaction_id,
+                selected_source.rail_tx_id,
+                selected_source.provider_reference,
+                selected_source.provider_state,
+                selected_source.provider_http_status,
+                ''
+              )), '') IS NULL
+              AND (
+                NULLIF(BTRIM(COALESCE(selected_source.provider_error_code, '')), '') IS NULL
+                OR upper(BTRIM(COALESCE(selected_source.provider_error_code, ''))) IN (
+                  'PROVIDER_SUBMIT_STAGE_RECORD_FAILED',
+                  'PROVIDER_SUBMIT_BLOCKED_PRE_CALL'
+                )
+              )
+            )
+          )
+          OR selected_source.provider_submission_unknown IS TRUE
+          OR selected_source.provider_acceptance_evidence_present IS TRUE
+          OR upper(BTRIM(COALESCE(selected_source.provider_submission_status, ''))) IN (
+            'PROVIDER_SUBMISSION_ACCEPTED',
+            'PROVIDER_SUBMISSION_REJECTED',
+            'PROVIDER_SUBMISSION_FAILED',
+            'PROVIDER_SUBMISSION_MALFORMED_RESPONSE',
+            'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME',
+            'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK',
+            'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID'
+          )
+          OR NULLIF(BTRIM(COALESCE(
+            selected_source.provider_transaction_id,
+            selected_source.rail_tx_id,
+            selected_source.provider_reference,
+            selected_source.provider_state,
+            selected_source.provider_http_status,
+            ''
+          )), '') IS NOT NULL
+          OR (
+            NULLIF(BTRIM(COALESCE(selected_source.provider_error_code, '')), '') IS NOT NULL
+            AND NOT (
+              upper(BTRIM(COALESCE(selected_source.provider_submission_status, ''))) = 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL'
+              AND upper(BTRIM(COALESCE(selected_source.provider_error_code, ''))) IN (
+                'PROVIDER_SUBMIT_STAGE_RECORD_FAILED',
+                'PROVIDER_SUBMIT_BLOCKED_PRE_CALL'
+              )
+            )
+          )
+     ) THEN
+    v_batch_level_cleaned_local_blocked_pre_call_neutralised := true;
+
+    v_operation_count := 0;
+    v_chunk_count := 0;
+    v_provider_submission_blocked_pre_call_count := 0;
+    v_provider_submission_status := 'NO_PROVIDER_SUBMISSION_ATTEMPTED';
+    v_review_reason_code := 'NO_PROVIDER_SUBMIT_ATTEMPT';
+    v_provider_call_stage := 'NO_PROVIDER_SUBMIT_ATTEMPT';
+    v_provider_submission_attempted := false;
+    v_provider_request_sent := false;
+    v_provider_response_received := false;
+    v_provider_response_present := false;
+    v_provider_submission_accepted := false;
+    v_provider_submission_rejected := false;
+    v_provider_submission_failed := false;
+    v_provider_submission_unknown := false;
+    v_provider_acceptance_evidence_present := false;
+    v_stale_submit_chunk := false;
+    v_unfinalised_submit_chunk := false;
+    v_chunk_lock_expired := false;
+    v_manual_resolution_required := false;
+    v_safe_retry_available := false;
+    v_automatic_retry_blocked := false;
+    v_retry_blocked_reason := NULL::text;
+    v_recommended_action := 'No provider submission attempt has been recorded for this scope.';
+
+    v_operation_ids := '[]'::jsonb;
+    v_current_operation_ids := '[]'::jsonb;
+    v_related_operation_ids := '[]'::jsonb;
+    v_diagnostic_operation_id := NULL::text;
+    v_chunk_ids := '[]'::jsonb;
+    v_primary_operation_id := NULL::text;
+    v_primary_chunk_id := NULL::text;
+    v_primary_request_id := NULL::text;
+    v_primary_idempotency_key := NULL::text;
+    v_primary_local_provider_request_id := NULL::text;
+    v_primary_provider_http_status := NULL::text;
+    v_primary_provider_error_code := NULL::text;
+    v_primary_provider_error_message_redacted := NULL::text;
+    v_primary_provider_response_redacted := NULL::jsonb;
+    v_primary_provider_error_redacted := NULL::jsonb;
+    v_chunk_started_at_utc := NULL::text;
+    v_chunk_completed_at_utc := NULL::text;
+    v_chunk_lock_expires_at_utc := NULL::text;
+  END IF;
+
   v_provider_submit_actual_context := (
     COALESCE(v_operation_count, 0) > 0
     OR COALESCE(v_chunk_count, 0) > 0
@@ -16965,9 +17185,6 @@ BEGIN
 
 END;
 $function$;
-
-
-
 
 
 CREATE OR REPLACE FUNCTION public.pay_provider_submit_chunk_diagnostic_finalise(
