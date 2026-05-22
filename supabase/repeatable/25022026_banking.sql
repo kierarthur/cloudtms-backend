@@ -16048,6 +16048,7 @@ DROP FUNCTION IF EXISTS public.pay_bank_transfers_apply_rail_updates(uuid, jsonb
 
 
 
+
 CREATE OR REPLACE FUNCTION public.pay_bank_transfers_apply_rail_updates(
   p_pay_batch_id uuid,
   p_updates jsonb,
@@ -16330,7 +16331,8 @@ BEGIN
     WHEN update_source.event_source IN ('WEBHOOK') THEN 'PROVIDER_WEBHOOK'
     WHEN update_source.event_source IN ('POLL', 'RAIL_PROVIDER', 'PROVIDER', 'PROVIDER_SETTLEMENT', 'RAIL_PROVIDER_SETTLEMENT') THEN 'PROVIDER_POLL'
     ELSE 'LOCAL_STATE'
-  END;
+  END
+  WHERE update_source.row_seq IS NOT NULL;
 
   UPDATE pg_temp.tmp_pay_bank_transfer_updates AS update_source
   SET event_source = CASE
@@ -16345,10 +16347,12 @@ BEGIN
     WHEN update_source.provider_submission_status IN ('PROVIDER_SUBMISSION_ACCEPTED', 'PROVIDER_SUBMISSION_REJECTED', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE') THEN 'LOCAL_STATE'
     WHEN update_source.provider_submission_status IN ('UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK', 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL') THEN 'LOCAL_STATE'
     ELSE update_source.event_source
-  END;
+  END
+  WHERE update_source.row_seq IS NOT NULL;
 
   UPDATE pg_temp.tmp_pay_bank_transfer_updates AS update_source
-  SET is_provider_source = update_source.event_source IN ('PROVIDER_RESPONSE', 'PROVIDER_POLL', 'PROVIDER_WEBHOOK');
+  SET is_provider_source = update_source.event_source IN ('PROVIDER_RESPONSE', 'PROVIDER_POLL', 'PROVIDER_WEBHOOK')
+  WHERE update_source.row_seq IS NOT NULL;
 
   UPDATE pg_temp.tmp_pay_bank_transfer_updates AS update_normalise_provider
   SET provider_submission_status = CASE
@@ -16385,7 +16389,8 @@ BEGIN
       manual_resolution_required = update_normalise_provider.manual_resolution_required
         OR update_normalise_provider.provider_submission_status IN ('UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE', 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID'),
       safe_retry_available = update_normalise_provider.safe_retry_available
-        AND update_normalise_provider.provider_submission_status NOT IN ('PROVIDER_SUBMISSION_ACCEPTED', 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE', 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID');
+        AND update_normalise_provider.provider_submission_status NOT IN ('PROVIDER_SUBMISSION_ACCEPTED', 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE', 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID')
+  WHERE update_normalise_provider.row_seq IS NOT NULL;
 
   UPDATE pg_temp.tmp_pay_bank_transfer_updates AS update_local_identity
   SET provider_reference = CASE
@@ -16480,7 +16485,8 @@ BEGIN
       'provider_reference', update_diag.provider_reference,
       'provider_state', update_diag.provider_state
     )
-  );
+  )
+  WHERE update_diag.row_seq IS NOT NULL;
 
   SELECT count(*)::integer
   INTO v_input_count
@@ -16536,7 +16542,8 @@ BEGIN
       WHEN update_normalise.normalised_state IN ('SUBMITTED', 'QUEUED', 'ACCEPTED', 'SENT', 'PROCESSING', 'IN_FLIGHT', 'PENDING_SETTLEMENT', 'PENDING_CONFIRMATION', 'PENDING_SUBMISSION') THEN update_normalise.normalised_state
       WHEN update_normalise.normalised_state IN ('DECLINED', 'REJECTED', 'SUBMISSION_FAILED', 'FAILED_BEFORE_COMMIT') THEN 'FAILED'
       ELSE update_normalise.normalised_state
-    END;
+    END
+  WHERE update_normalise.row_seq IS NOT NULL;
 
   UPDATE pg_temp.tmp_pay_bank_transfer_updates AS update_evidence
   SET is_provider_evidence = COALESCE((
@@ -16658,7 +16665,8 @@ BEGIN
     FROM public.pay_bank_transfers AS transfer_for_evidence
     WHERE transfer_for_evidence.id = update_evidence.transfer_id
       AND transfer_for_evidence.pay_batch_id = p_pay_batch_id
-  ), false);
+  ), false)
+  WHERE update_evidence.row_seq IS NOT NULL;
 
   UPDATE pg_temp.tmp_pay_bank_transfer_updates AS update_external
   SET is_provider_external_evidence = COALESCE((
@@ -16758,7 +16766,8 @@ BEGIN
     FROM public.pay_bank_transfers AS transfer_for_external_evidence
     WHERE transfer_for_external_evidence.id = update_external.transfer_id
       AND transfer_for_external_evidence.pay_batch_id = p_pay_batch_id
-  ), false);
+  ), false)
+  WHERE update_external.row_seq IS NOT NULL;
 
   UPDATE pg_temp.tmp_pay_bank_transfer_updates AS update_diag
   SET provider_external_evidence_present = update_diag.is_provider_external_evidence,
@@ -16791,7 +16800,8 @@ BEGIN
           'manual_resolution_required', update_diag.manual_resolution_required,
           'safe_retry_available', update_diag.safe_retry_available
         )
-      );
+      )
+  WHERE update_diag.row_seq IS NOT NULL;
 
   UPDATE pg_temp.tmp_pay_bank_transfer_updates AS update_attempt
   SET is_attempted_but_unproven = (
@@ -16801,7 +16811,8 @@ BEGIN
       OR update_attempt.provider_response_present IS TRUE
       OR update_attempt.provider_submission_unknown IS TRUE
     )
-    AND update_attempt.is_provider_evidence IS NOT TRUE;
+    AND update_attempt.is_provider_evidence IS NOT TRUE
+  WHERE update_attempt.row_seq IS NOT NULL;
 
   UPDATE pg_temp.tmp_pay_bank_transfer_updates AS update_key
   SET idempotency_key = COALESCE(
@@ -16814,7 +16825,8 @@ BEGIN
       'event_source', update_key.event_source,
       'raw_payload', update_key.raw_payload
     ))::text)
-  );
+  )
+  WHERE update_key.row_seq IS NOT NULL;
 
   SELECT coalesce(jsonb_agg(missing_update.transfer_id::text ORDER BY missing_update.transfer_id), '[]'::jsonb)
   INTO v_missing
@@ -17458,6 +17470,10 @@ BEGIN
   );
 END;
 $function$;
+
+
+
+
 
 
 drop function if exists public.pay_batch_auth_start(uuid, text, timestamptz, text, jsonb, uuid, text);
