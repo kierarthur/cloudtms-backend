@@ -30967,6 +30967,316 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
      expected_row_signature_present: !!expectedRowSignature
    });
  
+  const parseManualUpsertJsonObject = (value) => {
+     if (value == null) return null;
+     if (typeof value === 'object' && !Array.isArray(value)) return value;
+     if (typeof value === 'string') {
+       try {
+         const parsed = JSON.parse(value);
+         return (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) ? parsed : null;
+       } catch {
+         return null;
+       }
+     }
+     return null;
+   };
+
+   const loadBulkProcessPatchRowForAlreadyProcessedReplay = async ({ contractWeekId, timesheetId }) => {
+     const cwId = String(contractWeekId || '').trim();
+     const tsId = String(timesheetId || '').trim();
+     if (!cwId && !tsId) return null;
+
+     const filters = {
+       dataset_mode: 'process',
+       projection: 'dataset_row',
+       profile: 'list'
+     };
+     if (cwId) filters.contract_week_id = cwId;
+     if (tsId) filters.timesheet_id = tsId;
+
+     try {
+       const patchRes = await sbRpc(env, 'bulk_timesheet_row_patch_v1', { p_filters: filters }, { timeoutMs: 45000 });
+       const first = Array.isArray(patchRes) ? (patchRes[0] || null) : patchRes;
+       const rowJson =
+         parseManualUpsertJsonObject(first?.row_json) ||
+         parseManualUpsertJsonObject(first?.bulk_timesheet_row_patch_v1) ||
+         parseManualUpsertJsonObject(first);
+       return (rowJson && typeof rowJson === 'object') ? rowJson : null;
+     } catch (e) {
+       wlog('already_processed_bulk_process_patch_load_failed', {
+         contract_week_id: cwId || null,
+         timesheet_id: tsId || null,
+         err: e?.message || String(e)
+       });
+       return null;
+     }
+   };
+
+   const buildAlreadyProcessedBulkProcessReplayPayload = async ({ contractWeekId, currentTimesheetId, reason }) => {
+     const cwId = String(contractWeekId || '').trim();
+     const tsId = String(currentTimesheetId || '').trim();
+     if (!cwId || !tsId) return null;
+
+     const freshRow = await loadBulkProcessPatchRowForAlreadyProcessedReplay({
+       contractWeekId: cwId,
+       timesheetId: tsId
+     });
+
+     if (!freshRow || typeof freshRow !== 'object') return null;
+
+     const rowKey = String(freshRow.row_key || `timesheet:${tsId}`).trim();
+     const previousRowKey = `contract_week:${cwId}`;
+     const rowSignature = String(
+       freshRow.backend_row_signature ||
+       freshRow.row_backend_signature ||
+       freshRow.row_signature ||
+       ''
+     ).trim() || null;
+     const bulkProcessBucket = String(freshRow.bulk_process_bucket || 'PROCESSED').trim() || 'PROCESSED';
+     const processingStatus = String(freshRow.processing_status || freshRow.tools_stage || '').trim() || null;
+     const primaryStorageKey = String(freshRow.primary_artifact_storage_key || freshRow.manual_pdf_r2_key || '').trim() || null;
+     const previewMode = String(freshRow.primary_artifact_preview_mode || 'PDF').trim() || 'PDF';
+
+     const timesheetJson = await sbGetOne(
+       env,
+       `${env.SUPABASE_URL}/rest/v1/timesheets` +
+         `?timesheet_id=eq.${enc(tsId)}` +
+         `&is_current=eq.true` +
+         `&select=*`
+     ).catch(() => null);
+
+     const tsfinJson = await sbGetOne(
+       env,
+       `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+         `?timesheet_id=eq.${enc(tsId)}` +
+         `&is_current=eq.true` +
+         `&select=*`
+     ).catch(() => null);
+
+     const cacheInvalidationHints = {
+       row_keys: [previousRowKey, rowKey].filter(Boolean),
+       contract_week_ids: [cwId],
+       timesheet_ids: [tsId],
+       storage_keys: primaryStorageKey ? [primaryStorageKey] : [],
+       datasets: ['bulk_process', 'bulk_authorise'],
+       row_signature: rowSignature,
+       backend_row_signature: rowSignature,
+       row_backend_signature: rowSignature,
+       identity_changed: true,
+       manual_changed: false,
+       evidence_changed: false,
+       storage_changed: false,
+       invalidate_context: false,
+       invalidate_row_context: false,
+       invalidate_editor_context: false,
+       invalidate_preview: false,
+       invalidate_evidence: false,
+       refresh_required: false,
+       already_processed: true,
+       idempotent_replay: true
+     };
+
+     return {
+       ok: true,
+       success: true,
+       operation: 'contract_week_manual_upsert_bulk_process',
+       already_processed: true,
+       idempotent_replay: true,
+       duplicate_replay: true,
+       replay_reason: String(reason || 'already_processed_current_timesheet').trim() || 'already_processed_current_timesheet',
+       message: 'This contract week has already been processed. The current processed row has been returned.',
+       contract_week_id: cwId,
+       timesheet_id: tsId,
+       current_timesheet_id: tsId,
+       expected_timesheet_id: tsId,
+       current_version: timesheetJson?.version ?? freshRow.current_version ?? freshRow.current_timesheet_version ?? null,
+       current_timesheet_version: timesheetJson?.version ?? freshRow.current_timesheet_version ?? freshRow.current_version ?? null,
+       was_stale: true,
+       created_now: false,
+       processing_status: processingStatus,
+       previous_bulk_process_bucket: 'UNPROCESSED',
+       bulk_process_bucket: bulkProcessBucket,
+       bucket_transition: {
+         from: 'UNPROCESSED',
+         to: bulkProcessBucket,
+         changed: true
+       },
+       row_patch: {
+         ...freshRow,
+         previous_row_key: previousRowKey,
+         row_key: rowKey,
+         new_row_key: rowKey,
+         contract_week_id: cwId,
+         timesheet_id: tsId,
+         current_timesheet_id: tsId,
+         expected_timesheet_id: tsId,
+         row_signature: rowSignature,
+         backend_row_signature: rowSignature,
+         row_backend_signature: rowSignature,
+         bulk_process_bucket: bulkProcessBucket
+       },
+       row_patches: [{
+         ...freshRow,
+         previous_row_key: previousRowKey,
+         row_key: rowKey,
+         new_row_key: rowKey,
+         contract_week_id: cwId,
+         timesheet_id: tsId,
+         current_timesheet_id: tsId,
+         expected_timesheet_id: tsId,
+         row_signature: rowSignature,
+         backend_row_signature: rowSignature,
+         row_backend_signature: rowSignature,
+         bulk_process_bucket: bulkProcessBucket
+       }],
+       data_row: {
+         ...freshRow,
+         previous_row_key: previousRowKey,
+         row_key: rowKey,
+         new_row_key: rowKey,
+         contract_week_id: cwId,
+         timesheet_id: tsId,
+         current_timesheet_id: tsId,
+         expected_timesheet_id: tsId,
+         row_signature: rowSignature,
+         backend_row_signature: rowSignature,
+         row_backend_signature: rowSignature,
+         bulk_process_bucket: bulkProcessBucket
+       },
+       row: {
+         ...freshRow,
+         previous_row_key: previousRowKey,
+         row_key: rowKey,
+         new_row_key: rowKey,
+         contract_week_id: cwId,
+         timesheet_id: tsId,
+         current_timesheet_id: tsId,
+         expected_timesheet_id: tsId,
+         row_signature: rowSignature,
+         backend_row_signature: rowSignature,
+         row_backend_signature: rowSignature,
+         bulk_process_bucket: bulkProcessBucket
+       },
+       previous_row_key: previousRowKey,
+       row_key: rowKey,
+       new_row_key: rowKey,
+       row_signature: rowSignature,
+       backend_row_signature: rowSignature,
+       row_backend_signature: rowSignature,
+       evidence_hints: {
+         has_any_evidence: freshRow.has_any_evidence === true,
+         evidence_badges: Array.isArray(freshRow.evidence_badges) ? freshRow.evidence_badges : [],
+         attached_evidence_count: Number(freshRow.attached_evidence_count || 0) || 0,
+         queue_staged_count: Number(freshRow.queue_staged_count || 0) || 0,
+         evidence_document_locked: freshRow.evidence_document_locked === true,
+         evidence_lock_reason: freshRow.evidence_lock_reason || null
+       },
+       preview_hints: {
+         primary_artifact_id: freshRow.primary_artifact_id || null,
+         primary_artifact_kind: freshRow.primary_artifact_kind || null,
+         primary_artifact_display_name: freshRow.primary_artifact_display_name || null,
+         primary_artifact_storage_key: primaryStorageKey,
+         previous_primary_artifact_storage_key: null,
+         old_storage_key: null,
+         new_storage_key: primaryStorageKey,
+         old_storage_keys: [],
+         new_storage_keys: primaryStorageKey ? [primaryStorageKey] : [],
+         primary_artifact_preview_mode: previewMode,
+         preview_storage_key: primaryStorageKey,
+         primary_left_pane_mode: freshRow.primary_left_pane_mode || null,
+         changed: false
+       },
+       artifact_hints: (freshRow.artifact_hints && typeof freshRow.artifact_hints === 'object') ? freshRow.artifact_hints : {
+         route_family: freshRow.route_family || null,
+         route_subfamily: freshRow.route_subfamily || null,
+         underlying_channel_family: freshRow.underlying_channel_family || null,
+         primary_artifact_storage_key: primaryStorageKey,
+         primary_artifact_preview_mode: previewMode,
+         has_any_evidence: freshRow.has_any_evidence === true,
+         evidence_badges: Array.isArray(freshRow.evidence_badges) ? freshRow.evidence_badges : []
+       },
+       count_deltas: {
+         unprocessed: 0,
+         processed: 0,
+         total: 0
+       },
+       cache_invalidation_hints: cacheInvalidationHints,
+       cache_invalidation: {
+         rows: [{
+           previous_row_key: previousRowKey,
+           row_key: rowKey,
+           new_row_key: rowKey,
+           contract_week_id: cwId,
+           timesheet_id: tsId,
+           new_row_signature: rowSignature
+         }],
+         artifacts: primaryStorageKey ? [{
+           contract_week_id: cwId,
+           timesheet_id: tsId,
+           previous_storage_key: null,
+           storage_key: primaryStorageKey,
+           changed: false
+         }] : [],
+         datasets: ['bulk_process', 'bulk_authorise'],
+         refresh_required: false
+       },
+       timesheet: timesheetJson || null,
+       timesheet_json: timesheetJson || null,
+       tsfin: tsfinJson || null,
+       timesheet_financials_json: tsfinJson || null,
+       response_context: 'bulk_process',
+       bulk_authorise: false,
+       bulk_process: true,
+       used_schedule: true
+     };
+   };
+
+   const buildAlreadyProcessedRefreshRequiredPayload = ({ contractWeekId, currentTimesheetId, reason }) => {
+     const cwId = String(contractWeekId || '').trim();
+     const tsId = String(currentTimesheetId || '').trim();
+     const previousRowKey = cwId ? `contract_week:${cwId}` : null;
+     const rowKey = tsId ? `timesheet:${tsId}` : null;
+     return {
+       error: 'ALREADY_PROCESSED_REFRESH_REQUIRED',
+       error_code: 'ALREADY_PROCESSED_REFRESH_REQUIRED',
+       message: 'This contract week has already been processed. Refresh the Bulk Process row before trying again.',
+       already_processed: true,
+       idempotent_replay: false,
+       replay_reason: String(reason || 'already_processed_patch_unavailable').trim() || 'already_processed_patch_unavailable',
+       contract_week_id: cwId || null,
+       current_timesheet_id: tsId || null,
+       timesheet_id: tsId || null,
+       previous_row_key: previousRowKey,
+       row_key: rowKey,
+       new_row_key: rowKey,
+       refresh_required: true,
+       cache_invalidation_hints: {
+         row_keys: [previousRowKey, rowKey].filter(Boolean),
+         contract_week_ids: cwId ? [cwId] : [],
+         timesheet_ids: tsId ? [tsId] : [],
+         storage_keys: [],
+         datasets: ['bulk_process', 'bulk_authorise'],
+         invalidate_context: true,
+         invalidate_preview: false,
+         refresh_required: true,
+         already_processed: true
+       },
+       cache_invalidation: {
+         rows: [{
+           previous_row_key: previousRowKey,
+           row_key: rowKey,
+           new_row_key: rowKey,
+           contract_week_id: cwId || null,
+           timesheet_id: tsId || null
+         }].filter((row) => row.previous_row_key || row.row_key),
+         contract_week_ids: cwId ? [cwId] : [],
+         timesheet_ids: tsId ? [tsId] : [],
+         datasets: ['bulk_process', 'bulk_authorise'],
+         refresh_required: true
+       }
+     };
+   };
+
    // ✅ Guarded write (only enforced when a current timesheet already exists for this week)
    const expectedTimesheetId = body?.expected_timesheet_id ? String(body.expected_timesheet_id) : '';
  
@@ -31059,8 +31369,47 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
        // pointer realignment is owned by the atomic RPC
      }
  
-     // Guard requires expected_timesheet_id when a timesheet exists
+     // Guard requires expected_timesheet_id when a timesheet exists.
+     // Bulk Process stale/replay submissions are treated idempotently so a duplicate
+     // contract_week:<id> request cannot re-run the staged TIMESHEET materialisation path.
      if (!expectedTimesheetId) {
+       if (bulkProcessResponseRequested) {
+         wlog('already_processed_replay_detected_missing_expected_timesheet_id', {
+           current_timesheet_id_for_week: currentTimesheetIdForWeek,
+           contract_week_id: cw?.id || weekId || null
+         });
+         const replayPayload = await buildAlreadyProcessedBulkProcessReplayPayload({
+           contractWeekId: cw.id || weekId,
+           currentTimesheetId: currentTimesheetIdForWeek,
+           reason: 'missing_expected_timesheet_id_current_timesheet_exists'
+         });
+         if (replayPayload) {
+           manualUpsertTimingTimesheetId = String(currentTimesheetIdForWeek || '').trim() || manualUpsertTimingTimesheetId;
+           wlog('already_processed_replay_returned_current_bulk_process_patch', {
+             current_timesheet_id_for_week: currentTimesheetIdForWeek,
+             contract_week_id: cw?.id || weekId || null,
+             row_key: replayPayload.row_key || null
+           });
+           return withCORS(env, req, ok(replayPayload));
+         }
+         wlog('already_processed_replay_patch_unavailable', {
+           current_timesheet_id_for_week: currentTimesheetIdForWeek,
+           contract_week_id: cw?.id || weekId || null
+         });
+         return withCORS(
+           env,
+           req,
+           new Response(
+             JSON.stringify(buildAlreadyProcessedRefreshRequiredPayload({
+               contractWeekId: cw.id || weekId,
+               currentTimesheetId: currentTimesheetIdForWeek,
+               reason: 'missing_expected_timesheet_id_patch_unavailable'
+             })),
+             { status: 409, headers: { 'Content-Type': 'application/json' } }
+           )
+         );
+       }
+
        wlog('guard_fail_missing_expected_timesheet_id', {
          current_timesheet_id_for_week: currentTimesheetIdForWeek
        });
@@ -31068,6 +31417,46 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
      }
  
      if (String(expectedTimesheetId) !== String(currentTimesheetIdForWeek)) {
+       if (bulkProcessResponseRequested) {
+         wlog('already_processed_replay_detected_timesheet_moved', {
+           expected_timesheet_id: expectedTimesheetId,
+           current_timesheet_id_for_week: currentTimesheetIdForWeek,
+           contract_week_id: cw?.id || weekId || null
+         });
+         const replayPayload = await buildAlreadyProcessedBulkProcessReplayPayload({
+           contractWeekId: cw.id || weekId,
+           currentTimesheetId: currentTimesheetIdForWeek,
+           reason: 'expected_timesheet_id_mismatch_current_timesheet_exists'
+         });
+         if (replayPayload) {
+           manualUpsertTimingTimesheetId = String(currentTimesheetIdForWeek || '').trim() || manualUpsertTimingTimesheetId;
+           wlog('already_processed_replay_returned_current_bulk_process_patch', {
+             expected_timesheet_id: expectedTimesheetId,
+             current_timesheet_id_for_week: currentTimesheetIdForWeek,
+             contract_week_id: cw?.id || weekId || null,
+             row_key: replayPayload.row_key || null
+           });
+           return withCORS(env, req, ok(replayPayload));
+         }
+         wlog('already_processed_replay_patch_unavailable', {
+           expected_timesheet_id: expectedTimesheetId,
+           current_timesheet_id_for_week: currentTimesheetIdForWeek,
+           contract_week_id: cw?.id || weekId || null
+         });
+         return withCORS(
+           env,
+           req,
+           new Response(
+             JSON.stringify(buildAlreadyProcessedRefreshRequiredPayload({
+               contractWeekId: cw.id || weekId,
+               currentTimesheetId: currentTimesheetIdForWeek,
+               reason: 'expected_timesheet_id_mismatch_patch_unavailable'
+             })),
+             { status: 409, headers: { 'Content-Type': 'application/json' } }
+           )
+         );
+       }
+
        wlog('guard_fail_timesheet_moved', {
          expected_timesheet_id: expectedTimesheetId,
          current_timesheet_id_for_week: currentTimesheetIdForWeek
@@ -31380,9 +31769,37 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
    const additionalManualAdjustmentWeek = !!(cw.is_adjustment === true || Number(cw.additional_seq || 0) > 0);
    const explicitUserScheduleEditRequested = requestHasExplicitUserScheduleEditMarker();
  
-   const buildStagedTimesheetEvidenceError = (code, message) => {
-     const err = new Error(message);
+   const sanitiseBackendDetailForClient = (value) => {
+     const text = String(value == null ? '' : value).trim();
+     if (!text) return '';
+     const lowered = text.toLowerCase();
+     if (
+       lowered.includes('pgrst') ||
+       lowered.includes('postgrest') ||
+       lowered.includes('schema cache') ||
+       lowered.includes('could not query the database') ||
+       lowered.includes('statement timeout') ||
+       lowered.includes('sqlstate') ||
+       lowered.includes('supabase') ||
+       lowered.includes('/rest/v1/')
+     ) {
+       return '';
+     }
+     return text;
+   };
+
+   const stagedTimesheetEvidenceSafeMessage = (fallback = 'Timesheet evidence could not be attached. Refresh the row and try again.') => {
+     const safe = sanitiseBackendDetailForClient(fallback);
+     return safe || 'Timesheet evidence could not be attached. Refresh the row and try again.';
+   };
+
+   const buildStagedTimesheetEvidenceError = (code, message, options = {}) => {
+     const clientMessage = stagedTimesheetEvidenceSafeMessage(options?.publicMessage || message);
+     const err = new Error(clientMessage);
      err.code = code;
+     err.publicMessage = clientMessage;
+     if (options?.internalDetail != null) err.internalDetail = String(options.internalDetail);
+     if (options?.stage != null) err.stage = String(options.stage);
      return err;
    };
  
@@ -31502,108 +31919,245 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
          primary_timesheet_rotation_deg: 0
        };
      }
- 
-     const existingTimesheetEvidenceRows = await sbFetch(
-       env,
-       `${env.SUPABASE_URL}/rest/v1/timesheet_evidence` +
-         `?timesheet_id=eq.${enc(targetTimesheetId)}` +
-         `&kind=eq.${enc('TIMESHEET')}` +
-         `&select=id,storage_key,display_name,created_at,created_by` +
-         `&order=created_at.asc,id.asc` +
-         `&limit=1`
-     ).catch(() => ({ rows: [] }));
- 
-     const existingTimesheetEvidence = Array.isArray(existingTimesheetEvidenceRows?.rows)
-       ? (existingTimesheetEvidenceRows.rows[0] || null)
-       : null;
- 
-     if (existingTimesheetEvidence?.id) {
+
+     const cleanTargetTimesheetId = String(targetTimesheetId || '').trim();
+     const cleanContractWeekId = String(contractWeekId || '').trim();
+     const cleanStorageKey = String(prepared.storage_key || '').trim().replace(/^\/+/, '');
+
+     if (!cleanTargetTimesheetId || !cleanStorageKey) {
+       throw buildStagedTimesheetEvidenceError(
+         'INVALID_TIMESHEET_EVIDENCE',
+         'Staged TIMESHEET evidence is missing a target timesheet or storage key',
+         { publicMessage: 'Staged TIMESHEET evidence is missing a target timesheet or storage key' }
+       );
+     }
+
+     const readFailureText = async (response) => {
+       try {
+         return await response.text();
+       } catch {
+         return '';
+       }
+     };
+
+     const stagedWriteError = async (response, stage, fallbackText) => {
+       const txt = response ? await readFailureText(response) : '';
+       return buildStagedTimesheetEvidenceError(
+         'STAGED_EVIDENCE_WRITE_FAILED',
+         stagedTimesheetEvidenceSafeMessage(fallbackText),
+         {
+           publicMessage: stagedTimesheetEvidenceSafeMessage(fallbackText),
+           internalDetail: txt || fallbackText || 'staged TIMESHEET evidence write failed',
+           stage
+         }
+       );
+     };
+
+     const loadQueueRowForMaterialisation = async () => {
+       try {
+         return await sbGetOne(
+           env,
+           `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue` +
+             `?id=eq.${enc(prepared.queue_item_id)}` +
+             `&select=id,status,timesheet_id,meta_json`
+         );
+       } catch (e) {
+         throw buildStagedTimesheetEvidenceError(
+           'STAGED_EVIDENCE_WRITE_FAILED',
+           'Timesheet evidence could not be attached. Refresh the row and try again.',
+           {
+             publicMessage: 'Timesheet evidence could not be attached. Refresh the row and try again.',
+             internalDetail: e?.message || String(e),
+             stage: 'load_staged_timesheet_queue_row'
+           }
+         );
+       }
+     };
+
+     const currentQueueRow = await loadQueueRowForMaterialisation();
+     const currentQueueMeta = (currentQueueRow?.meta_json && typeof currentQueueRow.meta_json === 'object')
+       ? currentQueueRow.meta_json
+       : (prepared.meta_json || {});
+     const currentQueueStatus = String(currentQueueRow?.status || '').trim().toUpperCase();
+     const currentQueueTimesheetId = String(currentQueueRow?.timesheet_id || '').trim();
+     const currentMaterialisedStorageKey = String(
+       currentQueueMeta?.materialised_storage_key ||
+       currentQueueMeta?.storage_key ||
+       currentQueueMeta?.r2_key ||
+       ''
+     ).trim().replace(/^\/+/, '');
+
+     if (
+       currentQueueStatus === 'ATTACHED' &&
+       currentQueueTimesheetId &&
+       currentQueueTimesheetId !== cleanTargetTimesheetId
+     ) {
+       throw buildStagedTimesheetEvidenceError(
+         'STAGED_EVIDENCE_ALREADY_ATTACHED_TO_DIFFERENT_TIMESHEET',
+         'This staged TIMESHEET evidence is already attached to another timesheet. Refresh the row and try again.',
+         {
+           publicMessage: 'This staged TIMESHEET evidence is already attached to another timesheet. Refresh the row and try again.',
+           internalDetail: JSON.stringify({
+             queue_item_id: prepared.queue_item_id || null,
+             existing_timesheet_id: currentQueueTimesheetId,
+             target_timesheet_id: cleanTargetTimesheetId,
+             contract_week_id: cleanContractWeekId
+           }),
+           stage: 'staged_timesheet_queue_already_attached_to_different_timesheet'
+         }
+       );
+     }
+
+     if (
+       currentQueueStatus === 'ATTACHED' &&
+       currentQueueTimesheetId === cleanTargetTimesheetId &&
+       (!currentMaterialisedStorageKey || currentMaterialisedStorageKey === cleanStorageKey)
+     ) {
+       wlog('staged_timesheet_evidence_materialisation_noop_already_attached', {
+         contract_week_id: cleanContractWeekId,
+         timesheet_id: cleanTargetTimesheetId,
+         queue_item_id: prepared.queue_item_id || null,
+         storage_key_present: !!cleanStorageKey
+       });
+       return {
+         attached_count: 0,
+         primary_timesheet_storage_key: cleanStorageKey,
+         primary_timesheet_rotation_deg: prepared.rotation_deg || 0,
+         idempotent_noop: true,
+         already_attached: true
+       };
+     }
+
+     let sameStorageEvidence = null;
+     let firstTimesheetEvidence = null;
+     try {
+       const sameStorageRows = await sbFetch(
+         env,
+         `${env.SUPABASE_URL}/rest/v1/timesheet_evidence` +
+           `?timesheet_id=eq.${enc(cleanTargetTimesheetId)}` +
+           `&kind=eq.${enc('TIMESHEET')}` +
+           `&storage_key=eq.${enc(cleanStorageKey)}` +
+           `&select=id,storage_key,display_name,created_at,created_by` +
+           `&order=created_at.asc,id.asc` +
+           `&limit=1`
+       );
+       sameStorageEvidence = Array.isArray(sameStorageRows?.rows) ? (sameStorageRows.rows[0] || null) : null;
+
+       if (!sameStorageEvidence?.id) {
+         const firstEvidenceRows = await sbFetch(
+           env,
+           `${env.SUPABASE_URL}/rest/v1/timesheet_evidence` +
+             `?timesheet_id=eq.${enc(cleanTargetTimesheetId)}` +
+             `&kind=eq.${enc('TIMESHEET')}` +
+             `&select=id,storage_key,display_name,created_at,created_by` +
+             `&order=created_at.asc,id.asc` +
+             `&limit=1`
+         );
+         firstTimesheetEvidence = Array.isArray(firstEvidenceRows?.rows) ? (firstEvidenceRows.rows[0] || null) : null;
+       }
+     } catch (e) {
+       throw buildStagedTimesheetEvidenceError(
+         'STAGED_EVIDENCE_WRITE_FAILED',
+         'Timesheet evidence could not be attached. Refresh the row and try again.',
+         {
+           publicMessage: 'Timesheet evidence could not be attached. Refresh the row and try again.',
+           internalDetail: e?.message || String(e),
+           stage: 'load_existing_timesheet_evidence'
+         }
+       );
+     }
+
+     let attachedCount = 0;
+     const evidenceRowToUpdate = sameStorageEvidence?.id ? null : firstTimesheetEvidence;
+
+     if (sameStorageEvidence?.id) {
+       wlog('staged_timesheet_evidence_materialisation_noop_existing_same_storage', {
+         contract_week_id: cleanContractWeekId,
+         timesheet_id: cleanTargetTimesheetId,
+         queue_item_id: prepared.queue_item_id || null,
+         evidence_id: sameStorageEvidence.id || null,
+         storage_key_present: true
+       });
+     } else if (evidenceRowToUpdate?.id) {
        const evidencePatch = await fetch(
-         `${env.SUPABASE_URL}/rest/v1/timesheet_evidence?id=eq.${enc(existingTimesheetEvidence.id)}`,
+         `${env.SUPABASE_URL}/rest/v1/timesheet_evidence?id=eq.${enc(evidenceRowToUpdate.id)}`,
          {
            method: 'PATCH',
            headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
            body: JSON.stringify({
              display_name: prepared.display_name,
-             storage_key: prepared.storage_key,
+             storage_key: cleanStorageKey,
              created_at: prepared.created_at,
              created_by: prepared.created_by
            })
          }
        );
- 
+
        if (!evidencePatch.ok) {
-         const txt = await evidencePatch.text().catch(() => '');
-         throw buildStagedTimesheetEvidenceError(
-           'STAGED_EVIDENCE_WRITE_FAILED',
-           `Failed to update staged TIMESHEET evidence: ${txt || 'patch failed'}`
+         throw await stagedWriteError(
+           evidencePatch,
+           'update_timesheet_evidence',
+           'Timesheet evidence could not be attached. Refresh the row and try again.'
          );
        }
+       attachedCount = 1;
      } else {
        const evidenceInsert = await fetch(`${env.SUPABASE_URL}/rest/v1/timesheet_evidence`, {
          method: 'POST',
          headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
          body: JSON.stringify([{
-           timesheet_id: targetTimesheetId,
+           timesheet_id: cleanTargetTimesheetId,
            kind: 'TIMESHEET',
            display_name: prepared.display_name,
-           storage_key: prepared.storage_key,
+           storage_key: cleanStorageKey,
            created_at: prepared.created_at,
            created_by: prepared.created_by
          }])
        });
- 
+
        if (!evidenceInsert.ok) {
-         const txt = await evidenceInsert.text().catch(() => '');
-         throw buildStagedTimesheetEvidenceError(
-           'STAGED_EVIDENCE_WRITE_FAILED',
-           `Failed to materialise staged TIMESHEET evidence: ${txt || 'insert failed'}`
+         throw await stagedWriteError(
+           evidenceInsert,
+           'insert_timesheet_evidence',
+           'Timesheet evidence could not be attached. Refresh the row and try again.'
          );
        }
+       attachedCount = 1;
      }
- 
+
      const timesheetPatch = await fetch(
-       `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(targetTimesheetId)}&is_current=eq.true`,
+       `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(cleanTargetTimesheetId)}&is_current=eq.true`,
        {
          method: 'PATCH',
          headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
          body: JSON.stringify({
-           manual_pdf_r2_key: prepared.storage_key,
+           manual_pdf_r2_key: cleanStorageKey,
            manual_pdf_rotation_degrees: prepared.rotation_deg,
            updated_at: nowIso()
          })
        }
      );
- 
+
      if (!timesheetPatch.ok) {
-       const txt = await timesheetPatch.text().catch(() => '');
-       throw buildStagedTimesheetEvidenceError(
-         'STAGED_EVIDENCE_WRITE_FAILED',
-         `Failed to update timesheet manual PDF pointer: ${txt || 'timesheet patch failed'}`
+       throw await stagedWriteError(
+         timesheetPatch,
+         'update_timesheet_manual_pdf_pointer',
+         'Timesheet evidence could not be attached. Refresh the row and try again.'
        );
      }
- 
-     const currentQueueRow = await sbGetOne(
-       env,
-       `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue?id=eq.${enc(prepared.queue_item_id)}&select=id,meta_json`
-     ).catch(() => null);
- 
-     const currentQueueMeta = (currentQueueRow?.meta_json && typeof currentQueueRow.meta_json === 'object')
-       ? currentQueueRow.meta_json
-       : prepared.meta_json;
- 
+
      const nextMeta = {
        ...currentQueueMeta,
-       contract_week_id: String(contractWeekId),
+       contract_week_id: cleanContractWeekId,
        staged_kind: 'TIMESHEET',
        materialisation_deferred_to_backend: false,
-       deferred_target_timesheet_id: String(targetTimesheetId),
+       deferred_target_timesheet_id: cleanTargetTimesheetId,
        deferred_rotation_degrees: prepared.rotation_deg,
-       materialised_to_timesheet_id: String(targetTimesheetId),
+       materialised_to_timesheet_id: cleanTargetTimesheetId,
        materialised_at_utc: nowIso(),
-       materialised_storage_key: prepared.storage_key
+       materialised_storage_key: cleanStorageKey
      };
- 
+
      const queuePatch = await fetch(
        `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue?id=eq.${enc(prepared.queue_item_id)}`,
        {
@@ -31611,29 +32165,29 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
          headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
          body: JSON.stringify({
            status: 'ATTACHED',
-           timesheet_id: targetTimesheetId,
+           timesheet_id: cleanTargetTimesheetId,
            meta_json: nextMeta
          })
        }
      );
- 
+
      if (!queuePatch.ok) {
-       const txt = await queuePatch.text().catch(() => '');
-       throw buildStagedTimesheetEvidenceError(
-         'STAGED_EVIDENCE_WRITE_FAILED',
-         `Failed to update staged queue provenance: ${txt || 'queue patch failed'}`
+       throw await stagedWriteError(
+         queuePatch,
+         'update_staged_queue_provenance',
+         'Timesheet evidence could not be attached. Refresh the row and try again.'
        );
      }
 
      invalidateStagedQueuePreflightCache();
- 
+
      return {
-       attached_count: 1,
-       primary_timesheet_storage_key: prepared.storage_key,
+       attached_count: attachedCount,
+       primary_timesheet_storage_key: cleanStorageKey,
        primary_timesheet_rotation_deg: prepared.rotation_deg
      };
    };
- 
+
    const expenseEvidenceKindCategories = {
      MILEAGE: 'mileage',
      TRAVEL: 'travel',
@@ -33402,7 +33956,7 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
        if (e?.code === 'INVALID_TIMESHEET_EVIDENCE') {
          return withCORS(env, req, badRequest(e?.message || 'Invalid staged TIMESHEET evidence'));
        }
-       return withCORS(env, req, serverError(e?.message || 'Failed to prepare staged TIMESHEET evidence'));
+       return withCORS(env, req, serverError(e?.publicMessage || stagedTimesheetEvidenceSafeMessage('Failed to prepare staged TIMESHEET evidence')));
      }
    } else if (targetTimesheetIdForWrite && suppressTimesheetEvidenceMaterialisation) {
      wlog('skipped_staged_timesheet_evidence_materialisation', {
@@ -34075,7 +34629,24 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
          if (e?.code === 'INVALID_TIMESHEET_EVIDENCE') {
            return withCORS(env, req, badRequest(e?.message || 'Invalid staged TIMESHEET evidence'));
          }
-         return withCORS(env, req, serverError(e?.message || 'Failed to materialise staged TIMESHEET evidence'));
+         if (e?.code === 'STAGED_EVIDENCE_ALREADY_ATTACHED_TO_DIFFERENT_TIMESHEET') {
+           return withCORS(
+             env,
+             req,
+             new Response(
+               JSON.stringify({
+                 error: 'STAGED_EVIDENCE_ALREADY_ATTACHED_TO_DIFFERENT_TIMESHEET',
+                 error_code: 'STAGED_EVIDENCE_ALREADY_ATTACHED_TO_DIFFERENT_TIMESHEET',
+                 message: e?.publicMessage || 'This staged TIMESHEET evidence is already attached to another timesheet. Refresh the row and try again.',
+                 contract_week_id: cw.id || weekId || null,
+                 timesheet_id: bulkCurrentTimesheetId || null,
+                 refresh_required: true
+               }),
+               { status: 409, headers: { 'Content-Type': 'application/json' } }
+             )
+           );
+         }
+         return withCORS(env, req, serverError(e?.publicMessage || stagedTimesheetEvidenceSafeMessage('Failed to materialise staged TIMESHEET evidence')));
        }
      }
  
@@ -34416,7 +34987,24 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
        if (e?.code === 'INVALID_TIMESHEET_EVIDENCE') {
          return withCORS(env, req, badRequest(e?.message || 'Invalid staged TIMESHEET evidence'));
        }
-       return withCORS(env, req, serverError(e?.message || 'Failed to materialise staged TIMESHEET evidence'));
+       if (e?.code === 'STAGED_EVIDENCE_ALREADY_ATTACHED_TO_DIFFERENT_TIMESHEET') {
+         return withCORS(
+           env,
+           req,
+           new Response(
+             JSON.stringify({
+               error: 'STAGED_EVIDENCE_ALREADY_ATTACHED_TO_DIFFERENT_TIMESHEET',
+               error_code: 'STAGED_EVIDENCE_ALREADY_ATTACHED_TO_DIFFERENT_TIMESHEET',
+               message: e?.publicMessage || 'This staged TIMESHEET evidence is already attached to another timesheet. Refresh the row and try again.',
+               contract_week_id: cw.id || weekId || null,
+               timesheet_id: ts?.timesheet_id || null,
+               refresh_required: true
+             }),
+             { status: 409, headers: { 'Content-Type': 'application/json' } }
+           )
+         );
+       }
+       return withCORS(env, req, serverError(e?.publicMessage || stagedTimesheetEvidenceSafeMessage('Failed to materialise staged TIMESHEET evidence')));
      }
    }
  
@@ -34560,7 +35148,6 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
      created_now: !!createdNow
    }));
  }
-
 
 
 
