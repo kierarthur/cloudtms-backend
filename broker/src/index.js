@@ -30839,6 +30839,7 @@ async function handleBankingPayProviderSubmitReviewResolution(env, req, user, pa
 
 
 
+
 async function handleContractWeekManualUpsert(env, req, weekId) {
    const enc = encodeURIComponent;
  
@@ -35326,8 +35327,6 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
 
 
 
-
-
 function formatCloudTmsLondonDate(value) {
   const fallback = 'Not recorded';
   if (value === null || value === undefined) return fallback;
@@ -38231,6 +38230,7 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
     return finishFailedWithCleanup( null, { code: 'DRAFT_CREATE_OPERATION_FAILED', message: 'Draft create operation failed.', phase, error: String(e?.message || e || '') });
   }
 }
+
 async function advanceBankingPayExecuteOperation(env, operationRow, user, options = {}) {
 const unwrapRpcPayload = (rpcRes, key) => {
 let payload = rpcRes;
@@ -39015,6 +39015,8 @@ cleanup_status: 'NOT_REQUIRED'
 }
 
 try {
+  const cleanupPhaseValue = String(phaseText || currentPhase || '').trim().toUpperCase();
+  const isAuthStartCleanup = cleanupPhaseValue === 'START_AUTHORISATION';
   const providerSubmitFinalise = await finaliseProviderSubmitBeforeTerminal('BEFORE_FAILED_EXECUTION_LOCAL_ARTIFACT_CLEANUP', normalisedFailure.publicError);
   const providerSubmitFinaliseDiagnostic = extractProviderSubmitDiagnostic(providerSubmitFinalise);
   const cleanupFailureErrorJson = {
@@ -39027,16 +39029,65 @@ try {
     cleanupFailureErrorJson.provider_submit_review_reason_code = providerSubmitReviewCodeFrom(providerSubmitFinalise) || cleanupFailureErrorJson.provider_submit_review_reason_code;
     cleanupFailureErrorJson.review_reason_code = providerSubmitReviewCodeFrom(providerSubmitFinalise) || cleanupFailureErrorJson.review_reason_code;
   }
+  if (isAuthStartCleanup) {
+    const authStartCleanupBeforePayload = {
+      diagnostic_version: 1,
+      diagnostic_kind: 'AUTH_START_CLEANUP_CHECKPOINT',
+      stage: 'AUTH_START_CLEANUP_BEFORE',
+      generated_at_utc: new Date().toISOString(),
+      operation_id: operationId,
+      pay_batch_id: payBatchId,
+      operation_type: operationType,
+      phase: cleanupPhaseValue,
+      cleanup_rpc_name: 'pay_execute_operation_cleanup_failed_local_artifacts',
+      failure_code: normalisedFailure.publicError?.code || null,
+      provider_submission_status: cleanupFailureErrorJson.provider_submission_status || null,
+      provider_submit_review_reason_code: cleanupFailureErrorJson.provider_submit_review_reason_code || cleanupFailureErrorJson.review_reason_code || null,
+      provider_submit_finalise_result_present: Object.keys(safeObject(providerSubmitFinalise)).length > 0
+    };
+    await persistAuthStartCheckpoint('AUTH_START_CLEANUP_BEFORE', authStartCleanupBeforePayload, {
+      auth_start_cleanup_before: authStartCleanupBeforePayload
+    });
+  }
   const cleanup = await runExecuteDiagnosticRpc('pay_execute_operation_cleanup_failed_local_artifacts', {
     p_operation_id: operationId,
     p_actor_user_id: actorUserId,
-    p_failure_phase: String(phaseText || currentPhase || '').trim().toUpperCase(),
+    p_failure_phase: cleanupPhaseValue,
     p_failure_error_json: cleanupFailureErrorJson,
     p_dry_run: false
   }, 'pay_execute_operation_cleanup_failed_local_artifacts', {
-    phase: String(phaseText || currentPhase || '').trim().toUpperCase(),
+    phase: cleanupPhaseValue,
     note: 'failed-payment-execution-cleanup'
   });
+  if (isAuthStartCleanup) {
+    const authStartCleanupAfterPayload = {
+      diagnostic_version: 1,
+      diagnostic_kind: 'AUTH_START_CLEANUP_CHECKPOINT',
+      stage: 'AUTH_START_CLEANUP_AFTER',
+      generated_at_utc: new Date().toISOString(),
+      operation_id: operationId,
+      pay_batch_id: payBatchId,
+      operation_type: operationType,
+      phase: cleanupPhaseValue,
+      cleanup_rpc_name: 'pay_execute_operation_cleanup_failed_local_artifacts',
+      cleanup_status: cleanup.retry_blocked === true || cleanup.review_required === true ? 'REVIEW_REQUIRED' : 'COMPLETE',
+      retry_blocked: cleanup.retry_blocked === true,
+      review_required: cleanup.review_required === true,
+      safe_to_retry: cleanup.safe_to_retry === true,
+      scope_rows_deleted: Number(cleanup.scope_rows_deleted || 0),
+      transfer_rows_deleted: Number(cleanup.transfer_rows_deleted || 0),
+      item_links_cleared: Number(cleanup.item_links_cleared || 0),
+      chunks_marked_failed: Number(cleanup.chunks_marked_failed || 0),
+      chunks_marked_skipped: Number(cleanup.chunks_marked_skipped || 0),
+      provider_evidence_count: Number(cleanup.provider_evidence_count || 0),
+      provider_request_sent_count: Number(cleanup.provider_request_sent_count || 0),
+      provider_response_present_count: Number(cleanup.provider_response_present_count || 0),
+      provider_submission_unknown_count: Number(cleanup.provider_submission_unknown_count || 0)
+    };
+    await persistAuthStartCheckpoint('AUTH_START_CLEANUP_AFTER', authStartCleanupAfterPayload, {
+      auth_start_cleanup_after: authStartCleanupAfterPayload
+    });
+  }
   return {
     attempted: true,
     provider_submit_finalise_result: providerSubmitFinalise,
@@ -39044,6 +39095,25 @@ try {
     ...safeObject(cleanup)
   };
 } catch (cleanupError) {
+  const cleanupPhaseValue = String(phaseText || currentPhase || '').trim().toUpperCase();
+  if (cleanupPhaseValue === 'START_AUTHORISATION') {
+    const authStartCleanupErrorPayload = {
+      diagnostic_version: 1,
+      diagnostic_kind: 'AUTH_START_CLEANUP_CHECKPOINT',
+      stage: 'AUTH_START_CLEANUP_ERROR',
+      generated_at_utc: new Date().toISOString(),
+      operation_id: operationId,
+      pay_batch_id: payBatchId,
+      operation_type: operationType,
+      phase: cleanupPhaseValue,
+      cleanup_rpc_name: 'pay_execute_operation_cleanup_failed_local_artifacts',
+      error: executeDiagnosticErrorPayload(cleanupError),
+      error_text: executeDiagnosticText(cleanupError, 2000)
+    };
+    await persistAuthStartCheckpoint('AUTH_START_CLEANUP_ERROR', authStartCleanupErrorPayload, {
+      auth_start_cleanup_error: authStartCleanupErrorPayload
+    });
+  }
   return {
     attempted: true,
     cleanup_failed: true,
@@ -39701,6 +39771,99 @@ const buildSingleChunkTransferPreparationProof = (stage) => {
   });
   const events = [makeTransferPreparationReconciliationEvent(diagnostic.stage, diagnostic)];
   return { proven, proof, reconciliation, diagnostic, events };
+};
+
+
+const buildAuthStartCheckpointPayload = (stage, proofPack = {}, extra = {}) => {
+  const proofSource = safeObject(proofPack);
+  const proof = safeObject(proofSource.proof);
+  const reconciliation = safeObject(proofSource.reconciliation);
+  const diagnostic = safeObject(proofSource.diagnostic);
+  const reconciliationSnapshot = Object.keys(reconciliation).length ? scopedReadinessSnapshot(reconciliation) : scopedReadinessSnapshot(proof);
+  const proofPresent = Object.keys(proof).length > 0;
+  return {
+    diagnostic_version: 1,
+    diagnostic_kind: 'AUTH_START_OPERATION_SCOPED_CHECKPOINT',
+    stage: String(stage || '').trim().toUpperCase() || null,
+    generated_at_utc: new Date().toISOString(),
+    operation_id: operationId,
+    pay_batch_id: payBatchId,
+    operation_type: operationType,
+    execution_mode: executionMode,
+    pay_channel_scope: payChannelScope,
+    schedule_kind: scheduleKind,
+    payment_date: paymentDate || null,
+    freshness_result_hash: freshnessResultHashFromProgress || inputJson.freshness_result_hash || null,
+    freshness_scope_hash: freshnessScopeHashFromProgress || inputJson.freshness_scope_hash || null,
+    proof_present: proofPresent,
+    proof_kind: proof.proof_kind || null,
+    proof_proven: proofSource.proven === true || proof.proven === true,
+    proof_stage: proof.stage || null,
+    proof_generated_at_utc: proof.generated_at_utc || null,
+    scoped_operation_scope_count: reconciliationSnapshot.scopedOperationScopeCount,
+    scoped_scope_prepared_count: reconciliationSnapshot.scopedScopePreparedCount,
+    scoped_scope_pending_count: reconciliationSnapshot.scopedScopePendingCount,
+    scoped_scope_failed_count: reconciliationSnapshot.scopedScopeFailedCount,
+    scoped_scope_skipped_count: reconciliationSnapshot.scopedScopeSkippedCount,
+    scoped_scope_without_transfer_count: reconciliationSnapshot.scopedScopeWithoutTransferCount,
+    authorisation_ready_transfer_count: reconciliationSnapshot.authorisationReadyTransferCount,
+    provider_attempt_or_evidence_transfer_count: reconciliationSnapshot.providerAttemptOrEvidenceTransferCount,
+    provider_or_ambiguous_evidence_transfer_count: reconciliationSnapshot.providerOrAmbiguousEvidenceTransferCount,
+    unsafe_transfer_count: reconciliationSnapshot.unsafeTransferCount,
+    non_cancellable_auth_request_count: reconciliationSnapshot.nonCancellableAuthRequestCount,
+    all_scoped_operation_scopes_authorisation_ready: reconciliationSnapshot.allScopedReady,
+    has_failure: reconciliationSnapshot.hasFailure,
+    warning_count: numField(reconciliation, 'warning_count', 'warningCount'),
+    blocker_count: numField(reconciliation, 'blocker_count', 'blockerCount'),
+    diagnostic_stage: diagnostic.stage || null,
+    diagnostic_call_status: diagnostic.call_status || null,
+    diagnostic_call_target: diagnostic.call_target || null,
+    ...safeObject(extra)
+  };
+};
+
+const persistAuthStartCheckpoint = async (status, payload = {}, extraProgress = {}) => {
+  const statusText = String(status || '').trim().toUpperCase();
+  const checkpointPayload = safeObject(payload);
+  const timestamp = executeDiagnosticNow();
+  const entry = {
+    ...buildExecuteDiagnosticEntry(statusText, 'pay_batch_auth_start', {
+      phase: 'START_AUTHORISATION',
+      note: statusText
+    }, {
+      started_at_utc: timestamp,
+      finished_at_utc: timestamp,
+      duration_ms: 0
+    }),
+    auth_start_checkpoint: checkpointPayload
+  };
+  await persistExecuteDiagnosticCheckpoint(entry, {
+    ...progressJson,
+    ...safeObject(extraProgress),
+    auth_start_checkpoint_status: statusText,
+    auth_start_checkpoint_at_utc: timestamp,
+    auth_start_checkpoint: checkpointPayload
+  });
+};
+
+const safeBuildAuthStartProof = (stage) => {
+  try {
+    const proofPack = buildSingleChunkTransferPreparationProof(stage);
+    return {
+      proofPack,
+      checkpointPayload: buildAuthStartCheckpointPayload(stage, proofPack)
+    };
+  } catch (proofError) {
+    const proofErrorPayload = serialisableErrorPayload(proofError);
+    return {
+      proofPack: null,
+      checkpointPayload: buildAuthStartCheckpointPayload(stage, {}, {
+        proof_error: proofErrorPayload,
+        proof_present: false,
+        proof_proven: false
+      })
+    };
+  }
 };
 
 const upperString = (value) => String(value == null ? '' : value).trim().toUpperCase();
@@ -40734,7 +40897,28 @@ if (currentPhase === 'PREPARE_BATCH') {
 
 if (currentPhase === 'START_AUTHORISATION') {
   const freshnessHash = freshnessResultHashFromProgress || inputJson.freshness_result_hash || null;
-  const auth = await runExecuteDiagnosticRpc('pay_batch_auth_start', {
+  const authStartProofContext = safeBuildAuthStartProof('AUTH_START_PRECHECK');
+  const authStartPrecheckBeginPayload = buildAuthStartCheckpointPayload('AUTH_START_PRECHECK_BEGIN', authStartProofContext.proofPack || {}, {
+    rpc_name: 'pay_batch_auth_start',
+    rpc_will_use_operation_scoped_fast_path: executionMode === 'STANDARD_BANK' || executionMode === 'BANK',
+    p_operation_id_present: Boolean(operationId),
+    p_freshness_result_hash_present: Boolean(freshnessHash)
+  });
+  await persistAuthStartCheckpoint('AUTH_START_PRECHECK_BEGIN', authStartPrecheckBeginPayload, {
+    auth_start_precheck_begin: authStartPrecheckBeginPayload
+  });
+
+  const authStartPrecheckResultPayload = buildAuthStartCheckpointPayload('AUTH_START_PRECHECK_RESULT', authStartProofContext.proofPack || {}, {
+    rpc_name: 'pay_batch_auth_start',
+    rpc_will_use_operation_scoped_fast_path: executionMode === 'STANDARD_BANK' || executionMode === 'BANK',
+    p_operation_id_present: Boolean(operationId),
+    p_freshness_result_hash_present: Boolean(freshnessHash)
+  });
+  await persistAuthStartCheckpoint('AUTH_START_PRECHECK_RESULT', authStartPrecheckResultPayload, {
+    auth_start_precheck_result: authStartPrecheckResultPayload
+  });
+
+  const authStartRpcArgs = {
     p_pay_batch_id: payBatchId,
     p_schedule_kind: scheduleKind,
     p_scheduled_at_utc: scheduledAtUtc,
@@ -40753,12 +40937,58 @@ if (currentPhase === 'START_AUTHORISATION') {
     p_operation_id: operationId,
     p_idempotency_key: `${operationId}:auth-start`,
     p_freshness_result_hash: freshnessHash
-  }, 'pay_batch_auth_start', {
-    phase: currentPhase,
-    note: 'auth-start'
+  };
+
+  const authStartRpcBeforePayload = buildAuthStartCheckpointPayload('AUTH_START_RPC_BEFORE', authStartProofContext.proofPack || {}, {
+    rpc_name: 'pay_batch_auth_start',
+    rpc_args_preview: executeDiagnosticText(authStartRpcArgs, 1500)
   });
+  await persistAuthStartCheckpoint('AUTH_START_RPC_BEFORE', authStartRpcBeforePayload, {
+    auth_start_rpc_before: authStartRpcBeforePayload,
+    diagnostic_current_rpc_args_preview: executeDiagnosticText(authStartRpcArgs, 1500)
+  });
+
+  let auth;
+  try {
+    auth = await runExecuteDiagnosticRpc('pay_batch_auth_start', authStartRpcArgs, 'pay_batch_auth_start', {
+      phase: currentPhase,
+      note: 'auth-start',
+      auth_start_precheck_proven: authStartPrecheckResultPayload.proof_proven === true,
+      auth_start_scoped_operation_scope_count: authStartPrecheckResultPayload.scoped_operation_scope_count,
+      auth_start_authorisation_ready_transfer_count: authStartPrecheckResultPayload.authorisation_ready_transfer_count
+    });
+  } catch (authStartError) {
+    const authStartErrorPayload = {
+      ...buildAuthStartCheckpointPayload('AUTH_START_RPC_ERROR', authStartProofContext.proofPack || {}, {
+        rpc_name: 'pay_batch_auth_start',
+        error: executeDiagnosticErrorPayload(authStartError),
+        error_text: executeDiagnosticText(authStartError, 2000)
+      })
+    };
+    await persistAuthStartCheckpoint('AUTH_START_RPC_ERROR', authStartErrorPayload, {
+      auth_start_rpc_error: authStartErrorPayload,
+      diagnostic_last_rpc_error: authStartErrorPayload.error || null
+    });
+    throw authStartError;
+  }
+
   const authState = String(auth.state || auth.status || '').trim().toUpperCase();
   const nextRequiredPhase = String(auth.next_required_phase || auth.nextRequiredPhase || auth.next_phase || '').trim().toUpperCase();
+  const authStartRpcAfterPayload = buildAuthStartCheckpointPayload('AUTH_START_RPC_AFTER', authStartProofContext.proofPack || {}, {
+    rpc_name: 'pay_batch_auth_start',
+    auth_state: authState || null,
+    next_required_phase: nextRequiredPhase || null,
+    requires_authorisation: auth.requires_authorisation === true,
+    auth_request_id: auth.auth_request_id || auth.authRequestId || null,
+    auth_start_path: auth.auth_start_path || auth.authStartPath || null,
+    used_operation_scope_proof: auth.used_operation_scope_proof === true || auth.usedOperationScopeProof === true || null,
+    pay_batch_prepare_skipped: auth.pay_batch_prepare_skipped === true || auth.payBatchPrepareSkipped === true || null
+  });
+  await persistAuthStartCheckpoint('AUTH_START_RPC_AFTER', authStartRpcAfterPayload, {
+    auth_start_rpc_after: authStartRpcAfterPayload,
+    auth_start_result_preview: executeDiagnosticText(auth, 2000)
+  });
+
   if (auth.requires_authorisation === true || authState === 'AWAITING' || authState === 'PENDING_AUTHORISATION' || nextRequiredPhase === 'WAIT_FOR_AUTHORISATION') {
     return phaseProgress('WAITING', 'WAIT_FOR_AUTHORISATION', {
       status_text: 'Waiting for payment authorisation.',
@@ -41706,7 +41936,6 @@ source_error: {
 });
 }
 }
-
 
 
 
