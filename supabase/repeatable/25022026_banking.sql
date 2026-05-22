@@ -17571,6 +17571,7 @@ DECLARE
   v_auth_start_path text := 'FULL_PREPARE_PATH';
   v_used_operation_scope_proof boolean := false;
   v_provider_submit_chunk_risk_count integer := 0;
+  v_operation_provider_submit_marker_count integer := 0;
   v_transfer_amount_mismatch_count integer := 0;
   v_transfer_currency_mismatch_count integer := 0;
   v_transfer_status_not_pending_count integer := 0;
@@ -17671,6 +17672,19 @@ BEGIN
     )::text;
   END IF;
 
+  IF NULLIF(BTRIM(COALESCE(v_batch_row.execution_commit_ref, '')), '') IS NOT NULL
+     OR v_batch_row.execution_committed_at_utc IS NOT NULL THEN
+    RAISE EXCEPTION '%', jsonb_build_object(
+      'error', 'PAY_BATCH_AUTH_START',
+      'code', 'EXECUTION_STATE_CONFLICT',
+      'message', 'This payment batch has provider submission or execution commit evidence and cannot be authorised again.',
+      'pay_batch_id', p_pay_batch_id::text,
+      'execution_commit_state', v_execution_commit_state,
+      'execution_commit_ref_present', NULLIF(BTRIM(COALESCE(v_batch_row.execution_commit_ref, '')), '') IS NOT NULL,
+      'execution_committed_at_utc_present', v_batch_row.execution_committed_at_utc IS NOT NULL
+    )::text USING ERRCODE = 'P0001';
+  END IF;
+
   SELECT settings_default.*
   INTO v_cfg_row
   FROM public.settings_defaults AS settings_default
@@ -17715,6 +17729,17 @@ BEGIN
   IF p_operation_id IS NOT NULL AND v_execution_mode IN ('STANDARD_BANK', 'BANK') THEN
     v_effective_freshness_result_hash := nullif(btrim(coalesce(p_freshness_result_hash, v_batch_row.freshness_result_hash, v_operation_row.progress_json->>'freshness_result_hash', '')), '');
     v_effective_freshness_scope_hash := nullif(btrim(coalesce(v_batch_row.freshness_scope_hash, v_operation_row.progress_json->>'freshness_scope_hash', '')), '');
+
+    IF nullif(btrim(coalesce(v_batch_row.freshness_result_hash, '')), '') IS NULL THEN
+      RAISE EXCEPTION '%', jsonb_build_object(
+        'error', 'PAY_BATCH_AUTH_START',
+        'code', 'PAY_BATCH_NOT_READY',
+        'message', 'Payment batch freshness result hash is required before operation-scoped bank authorisation can start.',
+        'pay_batch_id', p_pay_batch_id::text,
+        'operation_id', p_operation_id::text,
+        'batch_freshness_result_hash_present', false
+      )::text USING ERRCODE = 'P0001';
+    END IF;
 
     IF upper(btrim(coalesce(v_operation_row.operation_type, ''))) NOT IN ('PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS') THEN
       RAISE EXCEPTION '%', jsonb_build_object(
@@ -18164,7 +18189,56 @@ BEGIN
                  SELECT 1
                  FROM public.pay_bank_transfer_events AS transfer_event
                  WHERE transfer_event.pay_batch_id = p_pay_batch_id
-                   AND transfer_event.pay_bank_transfer_id = linked_transfer.id
+                   AND (
+                     transfer_event.pay_bank_transfer_id = linked_transfer.id
+                     OR (
+                       transfer_event.pay_bank_transfer_id IS NULL
+                       AND linked_transfer.id IS NOT NULL
+                       AND (
+                         NULLIF(BTRIM(COALESCE(transfer_event.provider_reference, '')), '') = ANY(ARRAY_REMOVE(ARRAY[
+                           linked_transfer.id::text,
+                           NULLIF(BTRIM(COALESCE(linked_transfer.rail_tx_id, '')), ''),
+                           NULLIF(BTRIM(COALESCE(linked_transfer.request_id, '')), ''),
+                           NULLIF(BTRIM(COALESCE(linked_transfer.payment_reference, '')), ''),
+                           NULLIF(BTRIM(COALESCE(linked_transfer.rail_meta_json #>> '{request_id}', '')), ''),
+                           NULLIF(BTRIM(COALESCE(linked_transfer.rail_meta_json #>> '{idempotency_key}', '')), ''),
+                           NULLIF(BTRIM(COALESCE(linked_transfer.rail_meta_json #>> '{payment_reference}', '')), '')
+                         ]::text[], NULL::text))
+                         OR NULLIF(BTRIM(COALESCE(transfer_event.provider_event_id, '')), '') = ANY(ARRAY_REMOVE(ARRAY[
+                           linked_transfer.id::text,
+                           NULLIF(BTRIM(COALESCE(linked_transfer.rail_tx_id, '')), ''),
+                           NULLIF(BTRIM(COALESCE(linked_transfer.request_id, '')), ''),
+                           NULLIF(BTRIM(COALESCE(linked_transfer.payment_reference, '')), ''),
+                           NULLIF(BTRIM(COALESCE(linked_transfer.rail_meta_json #>> '{request_id}', '')), ''),
+                           NULLIF(BTRIM(COALESCE(linked_transfer.rail_meta_json #>> '{idempotency_key}', '')), ''),
+                           NULLIF(BTRIM(COALESCE(linked_transfer.rail_meta_json #>> '{payment_reference}', '')), '')
+                         ]::text[], NULL::text))
+                         OR NULLIF(BTRIM(COALESCE(transfer_event.idempotency_key, '')), '') = ANY(ARRAY_REMOVE(ARRAY[
+                           linked_transfer.id::text,
+                           NULLIF(BTRIM(COALESCE(linked_transfer.rail_tx_id, '')), ''),
+                           NULLIF(BTRIM(COALESCE(linked_transfer.request_id, '')), ''),
+                           NULLIF(BTRIM(COALESCE(linked_transfer.payment_reference, '')), ''),
+                           NULLIF(BTRIM(COALESCE(linked_transfer.rail_meta_json #>> '{request_id}', '')), ''),
+                           NULLIF(BTRIM(COALESCE(linked_transfer.rail_meta_json #>> '{idempotency_key}', '')), ''),
+                           NULLIF(BTRIM(COALESCE(linked_transfer.rail_meta_json #>> '{payment_reference}', '')), '')
+                         ]::text[], NULL::text))
+                         OR EXISTS (
+                           SELECT 1
+                           FROM (VALUES
+                             (linked_transfer.id::text),
+                             (NULLIF(BTRIM(COALESCE(linked_transfer.rail_tx_id, '')), '')),
+                             (NULLIF(BTRIM(COALESCE(linked_transfer.request_id, '')), '')),
+                             (NULLIF(BTRIM(COALESCE(linked_transfer.payment_reference, '')), '')),
+                             (NULLIF(BTRIM(COALESCE(linked_transfer.rail_meta_json #>> '{request_id}', '')), '')),
+                             (NULLIF(BTRIM(COALESCE(linked_transfer.rail_meta_json #>> '{idempotency_key}', '')), '')),
+                             (NULLIF(BTRIM(COALESCE(linked_transfer.rail_meta_json #>> '{payment_reference}', '')), ''))
+                           ) AS transfer_event_identity(identity_value)
+                           WHERE LENGTH(NULLIF(BTRIM(COALESCE(transfer_event_identity.identity_value, '')), '')) >= 8
+                             AND POSITION(lower(NULLIF(BTRIM(COALESCE(transfer_event_identity.identity_value, '')), '')) IN lower(COALESCE(transfer_event.raw_payload::text, ''))) > 0
+                         )
+                       )
+                     )
+                   )
                  LIMIT 1
                ) AS has_transfer_event_evidence,
                (
@@ -18203,6 +18277,38 @@ BEGIN
         OR provider_submit_chunk.chunk_type = 'TRANSFER_SUBMIT'
       );
 
+    SELECT CASE
+      WHEN NULLIF(BTRIM(COALESCE(v_operation_row.progress_json->>'last_provider_submit_chunk_id', '')), '') IS NOT NULL THEN 1
+      WHEN jsonb_typeof(v_operation_row.progress_json->'provider_submit_claim_diagnostic') = 'object' THEN 1
+      WHEN jsonb_typeof(v_operation_row.progress_json->'provider_submit_diagnostic') = 'object'
+       AND (
+         lower(BTRIM(COALESCE(v_operation_row.progress_json #>> '{provider_submit_diagnostic,provider_request_sent}', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+         OR lower(BTRIM(COALESCE(v_operation_row.progress_json #>> '{provider_submit_diagnostic,provider_request_sent_confirmed}', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+         OR lower(BTRIM(COALESCE(v_operation_row.progress_json #>> '{provider_submit_diagnostic,provider_response_received}', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+         OR lower(BTRIM(COALESCE(v_operation_row.progress_json #>> '{provider_submit_diagnostic,provider_response_present}', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+         OR lower(BTRIM(COALESCE(v_operation_row.progress_json #>> '{provider_submit_diagnostic,provider_submission_attempted}', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+         OR lower(BTRIM(COALESCE(v_operation_row.progress_json #>> '{provider_submit_diagnostic,provider_acceptance_evidence_present}', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+         OR upper(BTRIM(COALESCE(v_operation_row.progress_json #>> '{provider_submit_diagnostic,provider_submission_status}', ''))) NOT IN (
+           '',
+           'NO_PROVIDER_SUBMISSION_ATTEMPTED',
+           'CLAIMED_NOT_PROVIDER_CALLED_YET',
+           'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL'
+         )
+       ) THEN 1
+      WHEN jsonb_typeof(v_operation_row.progress_json->'provider_submit_claim_diagnostic_events') = 'array'
+       AND jsonb_array_length(v_operation_row.progress_json->'provider_submit_claim_diagnostic_events') > 0 THEN 1
+      WHEN upper(BTRIM(COALESCE(v_operation_row.progress_json->>'provider_submission_status', ''))) NOT IN (
+        '',
+        'NO_PROVIDER_SUBMISSION_ATTEMPTED',
+        'CLAIMED_NOT_PROVIDER_CALLED_YET',
+        'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL'
+      ) THEN 1
+      ELSE 0
+    END::integer
+    INTO v_operation_provider_submit_marker_count;
+
+    v_provider_submit_chunk_risk_count := COALESCE(v_provider_submit_chunk_risk_count, 0) + COALESCE(v_operation_provider_submit_marker_count, 0);
+
     v_provider_attempt_or_evidence_transfer_count := COALESCE(v_provider_attempt_or_evidence_transfer_count, 0) + COALESCE(v_provider_submit_chunk_risk_count, 0);
     v_provider_or_ambiguous_evidence_transfer_count := COALESCE(v_provider_or_ambiguous_evidence_transfer_count, 0) + COALESCE(v_provider_submit_chunk_risk_count, 0);
     v_blocked_transfer_count := COALESCE(v_scoped_operation_scope_count, 0) - COALESCE(v_authorisation_ready_transfer_count, 0);
@@ -18239,6 +18345,7 @@ BEGIN
         'provider_attempt_or_evidence_transfer_count', COALESCE(v_provider_attempt_or_evidence_transfer_count, 0),
         'provider_or_ambiguous_evidence_transfer_count', COALESCE(v_provider_or_ambiguous_evidence_transfer_count, 0),
         'provider_submit_chunk_risk_count', COALESCE(v_provider_submit_chunk_risk_count, 0),
+        'operation_provider_submit_marker_count', COALESCE(v_operation_provider_submit_marker_count, 0),
         'blocked_transfer_count', COALESCE(v_blocked_transfer_count, 0),
         'transfer_status_not_pending_count', COALESCE(v_transfer_status_not_pending_count, 0),
         'transfer_identity_mismatch_count', COALESCE(v_transfer_identity_mismatch_count, 0),
@@ -18844,6 +18951,7 @@ BEGIN
     'pay_batch_prepare_skipped', v_used_operation_scope_proof,
     'used_operation_scope_proof', v_used_operation_scope_proof,
     'provider_submit_chunk_risk_count', COALESCE(v_provider_submit_chunk_risk_count, 0),
+    'operation_provider_submit_marker_count', COALESCE(v_operation_provider_submit_marker_count, 0),
     'transfer_identity_mismatch_count', COALESCE(v_transfer_identity_mismatch_count, 0),
     'transfer_amount_mismatch_count', COALESCE(v_transfer_amount_mismatch_count, 0),
     'transfer_currency_mismatch_count', COALESCE(v_transfer_currency_mismatch_count, 0),
@@ -18852,8 +18960,6 @@ BEGIN
   );
 END;
 $function$;
-
-
 
 
 
