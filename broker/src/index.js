@@ -31876,28 +31876,40 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
    const prepareContractWeekStagedTimesheetEvidence = async (contractWeekId, targetTimesheetId, options = {}) => {
      const items = await loadContractWeekStagedTimesheetQueueItems(contractWeekId, options);
      if (!items.length) return null;
- 
+
      const timesheetKindItems = items.filter(item => item.staged_kind === 'TIMESHEET');
-     if (timesheetKindItems.length > 1) {
-       throw buildStagedTimesheetEvidenceError(
-         'INVALID_TIMESHEET_EVIDENCE',
-         'Only one staged TIMESHEET file may be materialised to a weekly manual timesheet'
-       );
-     }
- 
-     const primary = timesheetKindItems[0] || null;
-     if (!primary) return null;
- 
-     const sourceKey = String(primary.r2_key || '').trim().replace(/^\/+/, '');
-     if (!sourceKey) {
+     if (!timesheetKindItems.length) return null;
+
+     const normaliseStagedTimesheetStorageKey = (item) => String(item?.r2_key || '').trim().replace(/^\/+/, '');
+     const keyedTimesheetItems = timesheetKindItems.map((item) => ({
+       item,
+       storage_key: normaliseStagedTimesheetStorageKey(item)
+     }));
+
+     const missingStorageItem = keyedTimesheetItems.find((entry) => !entry.storage_key);
+     if (missingStorageItem) {
        throw buildStagedTimesheetEvidenceError(
          'INVALID_TIMESHEET_EVIDENCE',
          'Staged TIMESHEET evidence is missing storage_key'
        );
      }
- 
+
+     const storageKeys = [...new Set(keyedTimesheetItems.map((entry) => entry.storage_key).filter(Boolean))];
+     if (storageKeys.length > 1) {
+       throw buildStagedTimesheetEvidenceError(
+         'INVALID_TIMESHEET_EVIDENCE',
+         'Multiple different staged TIMESHEET files were found for this contract week. Remove the duplicate/incorrect file and try again.'
+       );
+     }
+
+     const primaryEntry = keyedTimesheetItems[0] || null;
+     const primary = primaryEntry?.item || null;
+     if (!primary) return null;
+
+     const sourceKey = primaryEntry.storage_key;
      const rotationDeg = normaliseRotation(primary.last_rotation_deg);
- 
+     const duplicateEntries = keyedTimesheetItems.slice(1);
+
      return {
        queue_item_id: primary.id,
        display_name: primary.original_filename || null,
@@ -31906,7 +31918,19 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
        created_by: primary.uploaded_by_user_id || user?.id || null,
        rotation_deg: rotationDeg,
        meta_json: primary.meta_json,
-       source_r2_key: sourceKey
+       source_r2_key: sourceKey,
+       duplicate_queue_item_ids: duplicateEntries.map((entry) => entry.item?.id).filter(Boolean),
+       duplicate_queue_items: duplicateEntries.map((entry) => ({
+         queue_item_id: entry.item?.id || null,
+         display_name: entry.item?.original_filename || null,
+         storage_key: entry.storage_key || sourceKey,
+         created_at: entry.item?.uploaded_at_utc || nowIso(),
+         created_by: entry.item?.uploaded_by_user_id || user?.id || null,
+         rotation_deg: normaliseRotation(entry.item?.last_rotation_deg),
+         meta_json: (entry.item?.meta_json && typeof entry.item.meta_json === 'object') ? { ...entry.item.meta_json } : {},
+         source_r2_key: entry.storage_key || sourceKey
+       })).filter((entry) => entry.queue_item_id),
+       same_storage_duplicate_count: duplicateEntries.length
      };
    };
  
@@ -31931,6 +31955,16 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
          { publicMessage: 'Staged TIMESHEET evidence is missing a target timesheet or storage key' }
        );
      }
+
+     const duplicateQueueItems = Array.isArray(prepared.duplicate_queue_items)
+       ? prepared.duplicate_queue_items
+       : [];
+     const duplicateQueueItemIds = Array.isArray(prepared.duplicate_queue_item_ids)
+       ? prepared.duplicate_queue_item_ids
+       : [];
+     const preparedDuplicateRows = duplicateQueueItems.length
+       ? duplicateQueueItems
+       : duplicateQueueItemIds.map((id) => ({ queue_item_id: id, storage_key: cleanStorageKey, meta_json: {} }));
 
      const readFailureText = async (response) => {
        try {
@@ -31987,6 +32021,137 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
        ''
      ).trim().replace(/^\/+/, '');
 
+     const markDuplicateQueueRowsAttached = async () => {
+       let duplicateAttachedCount = 0;
+       const seenDuplicateQueueIds = new Set();
+
+       for (const duplicate of preparedDuplicateRows) {
+         const duplicateQueueItemId = String(duplicate?.queue_item_id || duplicate?.id || '').trim();
+         if (!duplicateQueueItemId) continue;
+         if (duplicateQueueItemId === String(prepared.queue_item_id || '').trim()) continue;
+         if (seenDuplicateQueueIds.has(duplicateQueueItemId)) continue;
+         seenDuplicateQueueIds.add(duplicateQueueItemId);
+
+         const duplicateStorageKey = String(
+           duplicate?.storage_key ||
+           duplicate?.source_r2_key ||
+           cleanStorageKey ||
+           ''
+         ).trim().replace(/^\/+/, '');
+
+         if (!duplicateStorageKey || duplicateStorageKey !== cleanStorageKey) {
+           throw buildStagedTimesheetEvidenceError(
+             'INVALID_TIMESHEET_EVIDENCE',
+             'Multiple different staged TIMESHEET files were found for this contract week. Remove the duplicate/incorrect file and try again.'
+           );
+         }
+
+         let duplicateQueueRow = null;
+         try {
+           duplicateQueueRow = await sbGetOne(
+             env,
+             `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue` +
+               `?id=eq.${enc(duplicateQueueItemId)}` +
+               `&select=id,status,timesheet_id,meta_json`
+           );
+         } catch (e) {
+           throw buildStagedTimesheetEvidenceError(
+             'STAGED_EVIDENCE_WRITE_FAILED',
+             'Timesheet evidence could not be attached. Refresh the row and try again.',
+             {
+               publicMessage: 'Timesheet evidence could not be attached. Refresh the row and try again.',
+               internalDetail: e?.message || String(e),
+               stage: 'load_duplicate_staged_timesheet_queue_row'
+             }
+           );
+         }
+
+         const duplicateQueueMeta = (duplicateQueueRow?.meta_json && typeof duplicateQueueRow.meta_json === 'object')
+           ? duplicateQueueRow.meta_json
+           : ((duplicate?.meta_json && typeof duplicate.meta_json === 'object') ? duplicate.meta_json : {});
+         const duplicateQueueStatus = String(duplicateQueueRow?.status || '').trim().toUpperCase();
+         const duplicateQueueTimesheetId = String(duplicateQueueRow?.timesheet_id || '').trim();
+
+         if (
+           duplicateQueueStatus === 'ATTACHED' &&
+           duplicateQueueTimesheetId &&
+           duplicateQueueTimesheetId !== cleanTargetTimesheetId
+         ) {
+           throw buildStagedTimesheetEvidenceError(
+             'STAGED_EVIDENCE_ALREADY_ATTACHED_TO_DIFFERENT_TIMESHEET',
+             'This staged TIMESHEET evidence is already attached to another timesheet. Refresh the row and try again.',
+             {
+               publicMessage: 'This staged TIMESHEET evidence is already attached to another timesheet. Refresh the row and try again.',
+               internalDetail: JSON.stringify({
+                 queue_item_id: duplicateQueueItemId,
+                 existing_timesheet_id: duplicateQueueTimesheetId,
+                 target_timesheet_id: cleanTargetTimesheetId,
+                 contract_week_id: cleanContractWeekId,
+                 primary_queue_item_id: prepared.queue_item_id || null
+               }),
+               stage: 'duplicate_staged_timesheet_queue_already_attached_to_different_timesheet'
+             }
+           );
+         }
+
+         const duplicateNextMeta = {
+           ...duplicateQueueMeta,
+           contract_week_id: cleanContractWeekId,
+           staged_kind: 'TIMESHEET',
+           materialisation_deferred_to_backend: false,
+           deferred_target_timesheet_id: cleanTargetTimesheetId,
+           deferred_rotation_degrees: prepared.rotation_deg,
+           materialised_to_timesheet_id: cleanTargetTimesheetId,
+           materialised_at_utc: nowIso(),
+           materialised_storage_key: cleanStorageKey,
+           duplicate_timesheet_evidence_identity: true,
+           duplicate_of_queue_item_id: prepared.queue_item_id || null,
+           materialisation_noop_reason: 'same_storage_key_duplicate'
+         };
+
+         const duplicateQueuePatch = await fetch(
+           `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue?id=eq.${enc(duplicateQueueItemId)}`,
+           {
+             method: 'PATCH',
+             headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+             body: JSON.stringify({
+               status: 'ATTACHED',
+               timesheet_id: cleanTargetTimesheetId,
+               meta_json: duplicateNextMeta
+             })
+           }
+         );
+
+         if (!duplicateQueuePatch.ok) {
+           throw await stagedWriteError(
+             duplicateQueuePatch,
+             'update_duplicate_staged_queue_provenance',
+             'Timesheet evidence could not be attached. Refresh the row and try again.'
+           );
+         }
+
+         duplicateAttachedCount += duplicateQueueStatus === 'ATTACHED' && duplicateQueueTimesheetId === cleanTargetTimesheetId ? 0 : 1;
+       }
+
+       if (duplicateAttachedCount > 0 || seenDuplicateQueueIds.size > 0) {
+         wlog('staged_timesheet_duplicate_queue_rows_marked_attached', {
+           contract_week_id: cleanContractWeekId,
+           timesheet_id: cleanTargetTimesheetId,
+           primary_queue_item_id: prepared.queue_item_id || null,
+           duplicate_queue_item_ids: Array.from(seenDuplicateQueueIds),
+           duplicate_queue_row_count: seenDuplicateQueueIds.size,
+           duplicate_queue_attached_count: duplicateAttachedCount,
+           storage_key_present: !!cleanStorageKey
+         });
+       }
+
+       return {
+         duplicate_queue_row_count: seenDuplicateQueueIds.size,
+         duplicate_queue_attached_count: duplicateAttachedCount,
+         duplicate_queue_item_ids: Array.from(seenDuplicateQueueIds)
+       };
+     };
+
      if (
        currentQueueStatus === 'ATTACHED' &&
        currentQueueTimesheetId &&
@@ -32013,10 +32178,12 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
        currentQueueTimesheetId === cleanTargetTimesheetId &&
        (!currentMaterialisedStorageKey || currentMaterialisedStorageKey === cleanStorageKey)
      ) {
+       const duplicateMaterialisation = await markDuplicateQueueRowsAttached();
        wlog('staged_timesheet_evidence_materialisation_noop_already_attached', {
          contract_week_id: cleanContractWeekId,
          timesheet_id: cleanTargetTimesheetId,
          queue_item_id: prepared.queue_item_id || null,
+         duplicate_queue_row_count: duplicateMaterialisation.duplicate_queue_row_count || 0,
          storage_key_present: !!cleanStorageKey
        });
        return {
@@ -32024,7 +32191,10 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
          primary_timesheet_storage_key: cleanStorageKey,
          primary_timesheet_rotation_deg: prepared.rotation_deg || 0,
          idempotent_noop: true,
-         already_attached: true
+         already_attached: true,
+         duplicate_queue_row_count: duplicateMaterialisation.duplicate_queue_row_count || 0,
+         duplicate_queue_attached_count: duplicateMaterialisation.duplicate_queue_attached_count || 0,
+         duplicate_queue_item_ids: duplicateMaterialisation.duplicate_queue_item_ids || []
        };
      }
 
@@ -32179,12 +32349,17 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
        );
      }
 
+     const duplicateMaterialisation = await markDuplicateQueueRowsAttached();
+
      invalidateStagedQueuePreflightCache();
 
      return {
        attached_count: attachedCount,
        primary_timesheet_storage_key: cleanStorageKey,
-       primary_timesheet_rotation_deg: prepared.rotation_deg
+       primary_timesheet_rotation_deg: prepared.rotation_deg,
+       duplicate_queue_row_count: duplicateMaterialisation.duplicate_queue_row_count || 0,
+       duplicate_queue_attached_count: duplicateMaterialisation.duplicate_queue_attached_count || 0,
+       duplicate_queue_item_ids: duplicateMaterialisation.duplicate_queue_item_ids || []
      };
    };
 
@@ -35148,9 +35323,6 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
      created_now: !!createdNow
    }));
  }
-
-
-
 
 
 
