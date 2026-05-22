@@ -34256,6 +34256,14 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
      ? 'contract_week_manual_upsert_bulk_process_atomic'
      : 'contract_week_manual_upsert_atomic';
  
+   const rpcResponseContextForManualUpsert = (
+     bulkPatchResponseRequested &&
+     bulkProcessResponseRequested &&
+     preparedStagedTimesheetEvidence
+   )
+     ? 'bulk_process_defer_patch'
+     : bulkResponseContext;
+
    const rpcArgs = bulkPatchResponseRequested
      ? {
          p_week_id: String(cw.id),
@@ -34270,7 +34278,7 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
          p_materialise_staged_evidence: shouldMaterialiseStagedEvidenceInRpc,
          p_now_utc: nowIso2,
          p_expected_row_signature: expectedRowSignature || null,
-         p_response_context: bulkResponseContext
+         p_response_context: rpcResponseContextForManualUpsert
        }
      : {
          p_week_id: String(cw.id),
@@ -35326,7 +35334,6 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
      created_now: !!createdNow
    }));
  }
-
 
 
 function formatCloudTmsLondonDate(value) {
