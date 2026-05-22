@@ -7700,6 +7700,8 @@ DROP FUNCTION IF EXISTS public.pay_bank_transfers_claim_provider_submit_chunk(uu
 
 DROP FUNCTION IF EXISTS public.pay_operation_remittance_scope_seed(uuid, uuid, text, uuid);
 
+
+
 CREATE OR REPLACE FUNCTION public.pay_bank_transfers_claim_provider_submit_chunk(
   p_operation_id uuid,
   p_pay_batch_id uuid,
@@ -7937,7 +7939,7 @@ BEGIN
           AND EXISTS (
             SELECT 1
             FROM jsonb_array_elements_text(COALESCE(submit_chunk.payload_json->'transfer_ids', '[]'::jsonb)) AS chunk_transfer_id(value)
-            WHERE chunk_transfer_id.value ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+            WHERE chunk_transfer_id.value ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
               AND chunk_transfer_id.value::uuid = exact_scope.pay_bank_transfer_id
           )
       ),
@@ -7953,7 +7955,7 @@ BEGIN
           AND EXISTS (
             SELECT 1
             FROM jsonb_array_elements_text(COALESCE(active_chunk.payload_json->'transfer_ids', '[]'::jsonb)) AS active_transfer_id(value)
-            WHERE active_transfer_id.value ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+            WHERE active_transfer_id.value ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
               AND active_transfer_id.value::uuid = exact_scope.pay_bank_transfer_id
           )
       )
@@ -8101,7 +8103,7 @@ BEGIN
     SELECT COUNT(*)::integer
     INTO v_existing_chunk_payload_transfer_count
     FROM jsonb_array_elements_text(COALESCE(v_transfer_ids, '[]'::jsonb)) AS payload_transfer_id(value)
-    WHERE payload_transfer_id.value ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$';
+    WHERE payload_transfer_id.value ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$';
   END IF;
 
   IF v_chunk_id IS NOT NULL AND COALESCE(v_existing_chunk_payload_transfer_count, 0) > 0 THEN
@@ -8109,7 +8111,7 @@ BEGIN
       SELECT transfer_id_value.value::uuid AS transfer_id,
              transfer_id_value.ordinality::integer AS transfer_order
       FROM jsonb_array_elements_text(COALESCE(v_transfer_ids, '[]'::jsonb)) WITH ORDINALITY AS transfer_id_value(value, ordinality)
-      WHERE transfer_id_value.value ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+      WHERE transfer_id_value.value ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
         AND transfer_id_value.ordinality <= v_limit
     ), claimed_transfer_rows AS (
       SELECT transfer_row.*,
@@ -8412,73 +8414,78 @@ BEGIN
   WHERE NOT EXISTS (
     SELECT 1
     FROM jsonb_array_elements_text(COALESCE(v_transfer_ids, '[]'::jsonb)) AS claimed_transfer_id(value)
-    WHERE claimed_transfer_id.value ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+    WHERE claimed_transfer_id.value ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
       AND claimed_transfer_id.value::uuid = eligible_remaining.transfer_id
   );
 
-  RETURN jsonb_build_object(
-    'ok', true,
-    'claim_ok', true,
-    'operation_id', p_operation_id::text,
-    'pay_batch_id', p_pay_batch_id::text,
-    'chunk_id', v_chunk_id::text,
-    'chunk_type', 'TRANSFER_SUBMIT',
-    'phase', 'SUBMIT_PROVIDER_TRANSFERS',
-    'sequence_no', v_sequence_no,
-    'lock_owner', v_lock_owner,
-    'lock_expires_at_utc', (v_now + make_interval(secs => v_lock_seconds))::text,
-    'transfer_ids', COALESCE(v_transfer_ids, '[]'::jsonb),
-    'transfer_scope_ids', COALESCE(v_transfer_scope_ids, '[]'::jsonb),
-    'auth_request_ids', COALESCE(v_auth_request_ids, '[]'::jsonb),
-    'transfers', COALESCE(v_transfer_rows, '[]'::jsonb),
-    'unit_count', COALESCE(v_transfer_count, 0),
-    'claimed_count', COALESCE(v_transfer_count, 0),
-    'unattempted_eligible_count', COALESCE(v_unattempted_eligible_count, 0),
-    'provider_submit_ready_count', COALESCE(v_provider_submit_ready_count, 0),
-    'same_operation_authorised_auth_count', COALESCE(v_same_operation_authorised_auth_count, 0),
-    'authorised_without_provider_submission_count', COALESCE(v_authorised_without_provider_submission_count, 0),
-    'authorised_but_not_submit_ready_count', COALESCE(v_authorised_but_not_submit_ready_count, 0),
-    'auth_request_state', v_auth_request_state,
-    'auth_request_unsafe_reason', v_auth_request_unsafe_reason,
-    'claim_blocker_code', v_claim_blocker_code,
-    'attempted_but_unproven_count', COALESCE(v_attempted_but_unproven_count, 0),
-    'provider_evidence_present_count', COALESCE(v_provider_evidence_present_count, 0),
-    'provider_attempt_or_evidence_count', COALESCE(v_provider_attempt_or_evidence_count, 0),
-    'unsafe_transfer_count', COALESCE(v_unsafe_transfer_count, 0),
-    'classification_source', v_classification_source,
-    'retry_mode', COALESCE(v_retry_mode, false),
-    'failed_or_retryable_count', COALESCE(v_failed_or_retryable_count, 0),
-    'terminal_count', COALESCE(v_terminal_count, 0),
-    'remaining_count', COALESCE(v_remaining_count, 0),
-    'remaining_submit_attempt_required', COALESCE(v_remaining_count, 0),
-    'remaining_unattempted_submit_required', COALESCE(v_remaining_count, 0),
-    'remaining_provider_submission_required', COALESCE(v_remaining_count, 0),
-    'remaining_provider_evidence_required', COALESCE(v_remaining_provider_evidence_required, 0),
-    'has_more', COALESCE(v_remaining_count, 0) > 0,
-    'has_more_submit_attempts', COALESCE(v_remaining_count, 0) > 0,
-    'provider_submit_diagnostic', v_provider_submit_diagnostic,
-    'provider_submission_status', v_provider_submission_status,
-    'review_reason_code', v_review_reason_code,
-    'manual_resolution_required', false,
-    'safe_retry_available', false,
-    'provider_acceptance_evidence_count', COALESCE(v_provider_acceptance_evidence_count, 0),
-    'provider_external_evidence_count', COALESCE(v_provider_external_evidence_count, 0),
-    'provider_external_evidence_present', COALESCE(v_provider_external_evidence_count, 0) > 0,
-    'provider_request_sent_confirmed', false,
-    'provider_request_dispatched_at_utc', NULL::text,
-    'provider_response_present_count', COALESCE(v_provider_response_present_count, 0),
-    'provider_request_sent_count', COALESCE(v_provider_request_sent_count, 0),
-    'stale_unresolved_submit_chunk_count', COALESCE(v_stale_unresolved_submit_chunk_count, 0),
-    'stale_empty_submit_chunk_count', COALESCE(v_stale_empty_submit_chunk_count, 0),
-    'unfinalised_submit_chunk_count', COALESCE(v_unfinalised_submit_chunk_count, 0),
-    'provider_submission_unknown_count', COALESCE(v_provider_submission_unknown_count, 0),
-    'provider_evidence_count', COALESCE(v_provider_evidence_present_count, 0),
-    'local_submit_chunk_claimed_count', COALESCE(v_transfer_count, 0),
-    'operation_submit_attempt_count', COALESCE(v_transfer_count, 0),
-    'has_unproven_attempts', COALESCE(v_has_unproven_attempts, false)
-  );
+  RETURN
+    jsonb_build_object(
+      'ok', true,
+      'claim_ok', true,
+      'operation_id', p_operation_id::text,
+      'pay_batch_id', p_pay_batch_id::text,
+      'chunk_id', v_chunk_id::text,
+      'chunk_type', 'TRANSFER_SUBMIT',
+      'phase', 'SUBMIT_PROVIDER_TRANSFERS',
+      'sequence_no', v_sequence_no,
+      'lock_owner', v_lock_owner,
+      'lock_expires_at_utc', (v_now + make_interval(secs => v_lock_seconds))::text,
+      'transfer_ids', COALESCE(v_transfer_ids, '[]'::jsonb),
+      'transfer_scope_ids', COALESCE(v_transfer_scope_ids, '[]'::jsonb),
+      'auth_request_ids', COALESCE(v_auth_request_ids, '[]'::jsonb),
+      'transfers', COALESCE(v_transfer_rows, '[]'::jsonb),
+      'unit_count', COALESCE(v_transfer_count, 0),
+      'claimed_count', COALESCE(v_transfer_count, 0),
+      'unattempted_eligible_count', COALESCE(v_unattempted_eligible_count, 0),
+      'provider_submit_ready_count', COALESCE(v_provider_submit_ready_count, 0),
+      'same_operation_authorised_auth_count', COALESCE(v_same_operation_authorised_auth_count, 0),
+      'authorised_without_provider_submission_count', COALESCE(v_authorised_without_provider_submission_count, 0),
+      'authorised_but_not_submit_ready_count', COALESCE(v_authorised_but_not_submit_ready_count, 0),
+      'auth_request_state', v_auth_request_state,
+      'auth_request_unsafe_reason', v_auth_request_unsafe_reason,
+      'claim_blocker_code', v_claim_blocker_code,
+      'attempted_but_unproven_count', COALESCE(v_attempted_but_unproven_count, 0),
+      'provider_evidence_present_count', COALESCE(v_provider_evidence_present_count, 0),
+      'provider_attempt_or_evidence_count', COALESCE(v_provider_attempt_or_evidence_count, 0),
+      'unsafe_transfer_count', COALESCE(v_unsafe_transfer_count, 0),
+      'classification_source', v_classification_source,
+      'retry_mode', COALESCE(v_retry_mode, false)
+    )
+    || jsonb_build_object(
+      'failed_or_retryable_count', COALESCE(v_failed_or_retryable_count, 0),
+      'terminal_count', COALESCE(v_terminal_count, 0),
+      'remaining_count', COALESCE(v_remaining_count, 0),
+      'remaining_submit_attempt_required', COALESCE(v_remaining_count, 0),
+      'remaining_unattempted_submit_required', COALESCE(v_remaining_count, 0),
+      'remaining_provider_submission_required', COALESCE(v_remaining_count, 0),
+      'remaining_provider_evidence_required', COALESCE(v_remaining_provider_evidence_required, 0),
+      'has_more', COALESCE(v_remaining_count, 0) > 0,
+      'has_more_submit_attempts', COALESCE(v_remaining_count, 0) > 0,
+      'provider_submit_diagnostic', v_provider_submit_diagnostic,
+      'provider_submission_status', v_provider_submission_status,
+      'review_reason_code', v_review_reason_code,
+      'manual_resolution_required', false,
+      'safe_retry_available', false,
+      'provider_acceptance_evidence_count', COALESCE(v_provider_acceptance_evidence_count, 0),
+      'provider_external_evidence_count', COALESCE(v_provider_external_evidence_count, 0),
+      'provider_external_evidence_present', COALESCE(v_provider_external_evidence_count, 0) > 0,
+      'provider_request_sent_confirmed', false,
+      'provider_request_dispatched_at_utc', NULL::text,
+      'provider_response_present_count', COALESCE(v_provider_response_present_count, 0),
+      'provider_request_sent_count', COALESCE(v_provider_request_sent_count, 0),
+      'stale_unresolved_submit_chunk_count', COALESCE(v_stale_unresolved_submit_chunk_count, 0),
+      'stale_empty_submit_chunk_count', COALESCE(v_stale_empty_submit_chunk_count, 0),
+      'unfinalised_submit_chunk_count', COALESCE(v_unfinalised_submit_chunk_count, 0),
+      'provider_submission_unknown_count', COALESCE(v_provider_submission_unknown_count, 0),
+      'provider_evidence_count', COALESCE(v_provider_evidence_present_count, 0),
+      'local_submit_chunk_claimed_count', COALESCE(v_transfer_count, 0),
+      'operation_submit_attempt_count', COALESCE(v_transfer_count, 0),
+      'has_unproven_attempts', COALESCE(v_has_unproven_attempts, false)
+    );
 END;
 $function$;
+
+
 
 
 CREATE OR REPLACE FUNCTION public.pay_operation_remittance_scope_seed(
