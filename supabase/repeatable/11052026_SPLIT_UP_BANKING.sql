@@ -7702,6 +7702,9 @@ DROP FUNCTION IF EXISTS public.pay_operation_remittance_scope_seed(uuid, uuid, t
 
 
 
+
+
+
 CREATE OR REPLACE FUNCTION public.pay_bank_transfers_claim_provider_submit_chunk(
   p_operation_id uuid,
   p_pay_batch_id uuid,
@@ -7934,7 +7937,37 @@ BEGIN
           AND (
             submit_chunk.status IN ('COMPLETE', 'FAILED')
             OR COALESCE(submit_chunk.error_json, '{}'::jsonb) <> '{}'::jsonb
-            OR COALESCE(submit_chunk.result_json, '{}'::jsonb) ? 'provider_submit_diagnostic'
+            OR (
+              COALESCE(submit_chunk.result_json, '{}'::jsonb) ? 'provider_submit_diagnostic'
+              AND NOT (
+                submit_chunk.status = 'RUNNING'
+                AND submit_chunk.locked_by = v_lock_owner
+                AND submit_chunk.lock_expires_at_utc IS NOT NULL
+                AND submit_chunk.lock_expires_at_utc > v_now
+                AND upper(BTRIM(COALESCE(submit_chunk.result_json #>> '{provider_submit_diagnostic,provider_submission_status}', 'NO_PROVIDER_SUBMISSION_ATTEMPTED'))) IN ('', 'NO_PROVIDER_SUBMISSION_ATTEMPTED', 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL')
+                AND lower(BTRIM(COALESCE(submit_chunk.result_json #>> '{provider_submit_diagnostic,provider_called}', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
+                AND lower(BTRIM(COALESCE(submit_chunk.result_json #>> '{provider_submit_diagnostic,provider_request_sent}', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
+                AND lower(BTRIM(COALESCE(submit_chunk.result_json #>> '{provider_submit_diagnostic,provider_request_sent_confirmed}', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
+                AND lower(BTRIM(COALESCE(submit_chunk.result_json #>> '{provider_submit_diagnostic,provider_response_present}', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
+                AND lower(BTRIM(COALESCE(submit_chunk.result_json #>> '{provider_submit_diagnostic,provider_response_received}', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
+                AND lower(BTRIM(COALESCE(submit_chunk.result_json #>> '{provider_submit_diagnostic,provider_acceptance_evidence_present}', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
+                AND lower(BTRIM(COALESCE(submit_chunk.result_json #>> '{provider_submit_diagnostic,provider_external_evidence_present}', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
+                AND lower(BTRIM(COALESCE(submit_chunk.result_json #>> '{provider_submit_diagnostic,provider_submission_rejected}', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
+                AND lower(BTRIM(COALESCE(submit_chunk.result_json #>> '{provider_submit_diagnostic,provider_submission_unknown}', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
+                AND NULLIF(BTRIM(COALESCE(
+                  submit_chunk.result_json #>> '{provider_submit_diagnostic,provider_request_dispatched_at_utc}',
+                  submit_chunk.result_json #>> '{provider_submit_diagnostic,request_sent_at_utc}',
+                  submit_chunk.result_json #>> '{provider_submit_diagnostic,response_received_at_utc}',
+                  submit_chunk.result_json #>> '{provider_submit_diagnostic,provider_http_status}',
+                  submit_chunk.result_json #>> '{provider_submit_diagnostic,provider_error_code}',
+                  submit_chunk.result_json #>> '{provider_submit_diagnostic,rail_tx_id}',
+                  submit_chunk.result_json #>> '{provider_submit_diagnostic,provider_transaction_id}',
+                  submit_chunk.result_json #>> '{provider_submit_diagnostic,provider_payment_id}',
+                  submit_chunk.result_json #>> '{provider_submit_diagnostic,provider_reference}',
+                  ''
+                )), '') IS NULL
+              )
+            )
           )
           AND EXISTS (
             SELECT 1
