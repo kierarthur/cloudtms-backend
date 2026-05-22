@@ -30839,7 +30839,6 @@ async function handleBankingPayProviderSubmitReviewResolution(env, req, user, pa
 
 
 
-
 async function handleContractWeekManualUpsert(env, req, weekId) {
    const enc = encodeURIComponent;
  
@@ -34246,8 +34245,11 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
    })();
  
    const shouldMaterialiseStagedEvidenceInRpc = !!(
-     !suppressTimesheetEvidenceMaterialisation ||
-     (willCreateNow && Array.isArray(preparedStagedExpenseEvidence) && preparedStagedExpenseEvidence.length > 0)
+     !preparedStagedTimesheetEvidence &&
+     (
+       !suppressTimesheetEvidenceMaterialisation ||
+       (willCreateNow && Array.isArray(preparedStagedExpenseEvidence) && preparedStagedExpenseEvidence.length > 0)
+     )
    );
 
    const rpcFunctionName = bulkPatchResponseRequested
