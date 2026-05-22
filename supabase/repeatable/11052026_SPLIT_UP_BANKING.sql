@@ -19812,10 +19812,10 @@ CREATE OR REPLACE FUNCTION public.pay_provider_submit_chunk_diagnostic_finalise(
   p_reason_code text DEFAULT NULL::text,
   p_failure_error_json jsonb DEFAULT '{}'::jsonb
 )
- RETURNS jsonb
- LANGUAGE plpgsql
- SECURITY DEFINER
- SET search_path TO 'public', 'pg_temp'
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public', 'pg_temp'
 AS $function$
 DECLARE
   v_now timestamptz := now();
@@ -19824,16 +19824,32 @@ DECLARE
   v_effective_actor_user_id uuid := NULL::uuid;
   v_reason_code text := NULL::text;
   v_failure_error_json jsonb := '{}'::jsonb;
-  v_diagnostic_result jsonb := '{}'::jsonb;
-  v_provider_submit_diagnostic jsonb := '{}'::jsonb;
-  v_provider_submission_status text := NULL::text;
-  v_review_reason_code text := NULL::text;
   v_target_chunk_row public.banking_pay_operation_chunks%ROWTYPE;
   v_after_chunk_row public.banking_pay_operation_chunks%ROWTYPE;
+  v_chunk_existing_diagnostic jsonb := '{}'::jsonb;
+  v_chunk_provider_submit_diagnostic jsonb := '{}'::jsonb;
+  v_chunk_diagnostic_result jsonb := '{}'::jsonb;
+  v_chunk_transfer_ids jsonb := '[]'::jsonb;
+  v_chunk_ids jsonb := '[]'::jsonb;
+  v_all_transfer_ids jsonb := '[]'::jsonb;
+  v_provider_submission_status text := NULL::text;
+  v_review_reason_code text := NULL::text;
   v_finish_status text := 'FAILED';
   v_completed_count integer := 0;
   v_failed_count integer := 0;
   v_affected_transfer_count integer := 0;
+  v_provider_request_sent_count integer := 0;
+  v_provider_response_present_count integer := 0;
+  v_provider_acceptance_evidence_count integer := 0;
+  v_provider_submission_rejected_count integer := 0;
+  v_provider_submission_unknown_count integer := 0;
+  v_provider_submission_malformed_response_count integer := 0;
+  v_unfinalised_submit_chunk_count integer := 0;
+  v_manual_resolution_required boolean := false;
+  v_safe_retry_available boolean := false;
+  v_payment_provider_review_required boolean := false;
+  v_mixed_provider_submit_outcome boolean := false;
+  v_message text := NULL::text;
   v_result_json jsonb := NULL::jsonb;
   v_error_json jsonb := NULL::jsonb;
   v_finished boolean := false;
@@ -19844,31 +19860,26 @@ DECLARE
   v_already_terminal_chunk_ids jsonb := '[]'::jsonb;
   v_before_json jsonb := '{}'::jsonb;
   v_after_json jsonb := '{}'::jsonb;
-  v_message text := NULL::text;
-  v_chunk_diagnostic_result jsonb := '{}'::jsonb;
-  v_chunk_provider_submit_diagnostic jsonb := '{}'::jsonb;
-  v_chunk_provider_submission_status text := NULL::text;
-  v_chunk_review_reason_code text := NULL::text;
-  v_chunk_provider_acceptance_evidence_count integer := 0;
-  v_chunk_provider_response_present_count integer := 0;
-  v_chunk_provider_request_sent_count integer := 0;
-  v_chunk_provider_submission_unknown_count integer := 0;
-  v_chunk_provider_submission_rejected_count integer := 0;
-  v_chunk_provider_submission_malformed_response_count integer := 0;
-  v_chunk_stale_unresolved_submit_chunk_count integer := 0;
-  v_chunk_unfinalised_submit_chunk_count integer := 0;
-  v_chunk_other_unfinalised_submit_chunk_count integer := 0;
-  v_chunk_affected_transfer_count integer := 0;
-  v_chunk_mixed_provider_submit_outcome boolean := false;
-  v_chunk_completion_gate_met boolean := false;
-  v_chunk_transfer_ids jsonb := '[]'::jsonb;
-  v_direct_provider_acceptance_evidence_count integer := 0;
-  v_direct_provider_response_present_count integer := 0;
-  v_direct_provider_request_sent_count integer := 0;
-  v_direct_stale_unresolved boolean := false;
-  v_diagnostic_before jsonb := '{}'::jsonb;
-  v_diagnostic_after jsonb := '{}'::jsonb;
+  v_overall_provider_submit_diagnostic jsonb := '{}'::jsonb;
+  v_overall_provider_submission_status text := NULL::text;
+  v_overall_review_reason_code text := NULL::text;
+  v_total_provider_request_sent_count integer := 0;
+  v_total_provider_response_present_count integer := 0;
+  v_total_provider_acceptance_evidence_count integer := 0;
+  v_total_provider_submission_rejected_count integer := 0;
+  v_total_provider_submission_unknown_count integer := 0;
+  v_total_provider_submission_malformed_response_count integer := 0;
+  v_total_unfinalised_submit_chunk_count integer := 0;
+  v_total_affected_transfer_count integer := 0;
+  v_manual_resolution_required_any boolean := false;
+  v_safe_retry_available_any boolean := false;
+  v_diagnostic_was_existing boolean := false;
+  v_diagnostic_usable boolean := false;
+  v_status_candidate text := NULL::text;
+  v_reason_candidate text := NULL::text;
 BEGIN
+  PERFORM set_config('lock_timeout', '3s', true);
+
   IF p_operation_id IS NULL THEN
     RAISE EXCEPTION '%', jsonb_build_object(
       'error', 'PAY_PROVIDER_SUBMIT_CHUNK_DIAGNOSTIC_FINALISE',
@@ -19921,499 +19932,478 @@ BEGIN
       'pay_batch_id', CASE WHEN v_effective_pay_batch_id IS NULL THEN NULL ELSE v_effective_pay_batch_id::text END,
       'finalised_chunk_count', 0,
       'finalised_chunk_ids', '[]'::jsonb,
+      'already_terminal_chunk_count', 0,
+      'already_terminal_chunk_ids', '[]'::jsonb,
+      'provider_submission_status', 'NO_PROVIDER_SUBMISSION_ATTEMPTED',
+      'review_reason_code', 'NOT_PROVIDER_SUBMIT_OPERATION',
       'reason', 'NOT_PROVIDER_SUBMIT_OPERATION',
       'operation_type', v_operation_row.operation_type
     );
   END IF;
 
-  v_diagnostic_result := public.pay_provider_submit_diagnostic_get(
-    p_pay_batch_id := v_effective_pay_batch_id,
-    p_operation_id := p_operation_id,
-    p_transfer_id := NULL::uuid,
-    p_chunk_id := p_chunk_id,
-    p_counts_only := false
-  );
+  DROP TABLE IF EXISTS pg_temp.tmp_provider_submit_finalise_chunks;
+  CREATE TEMPORARY TABLE pg_temp.tmp_provider_submit_finalise_chunks (
+    chunk_id uuid PRIMARY KEY,
+    operation_id uuid NOT NULL,
+    pay_batch_id uuid,
+    phase text,
+    chunk_type text,
+    sequence_no integer,
+    status text,
+    payload_json jsonb,
+    result_json jsonb,
+    error_json jsonb,
+    unit_count integer,
+    completed_count integer,
+    failed_count integer,
+    locked_by text,
+    lock_expires_at_utc timestamptz,
+    created_at_utc timestamptz,
+    started_at_utc timestamptz,
+    completed_at_utc timestamptz,
+    updated_at_utc timestamptz
+  ) ON COMMIT DROP;
 
-  v_provider_submit_diagnostic := COALESCE(v_diagnostic_result->'provider_submit_diagnostic', '{}'::jsonb);
+  INSERT INTO pg_temp.tmp_provider_submit_finalise_chunks (
+    chunk_id,
+    operation_id,
+    pay_batch_id,
+    phase,
+    chunk_type,
+    sequence_no,
+    status,
+    payload_json,
+    result_json,
+    error_json,
+    unit_count,
+    completed_count,
+    failed_count,
+    locked_by,
+    lock_expires_at_utc,
+    created_at_utc,
+    started_at_utc,
+    completed_at_utc,
+    updated_at_utc
+  )
+  SELECT operation_chunk.id,
+         operation_chunk.operation_id,
+         v_effective_pay_batch_id,
+         operation_chunk.phase,
+         operation_chunk.chunk_type,
+         operation_chunk.sequence_no,
+         operation_chunk.status,
+         COALESCE(operation_chunk.payload_json, '{}'::jsonb),
+         operation_chunk.result_json,
+         operation_chunk.error_json,
+         operation_chunk.unit_count,
+         operation_chunk.completed_count,
+         operation_chunk.failed_count,
+         operation_chunk.locked_by,
+         operation_chunk.lock_expires_at_utc,
+         operation_chunk.created_at_utc,
+         operation_chunk.started_at_utc,
+         operation_chunk.completed_at_utc,
+         operation_chunk.updated_at_utc
+  FROM public.banking_pay_operation_chunks AS operation_chunk
+  WHERE operation_chunk.operation_id = p_operation_id
+    AND (operation_chunk.phase = 'SUBMIT_PROVIDER_TRANSFERS' OR operation_chunk.chunk_type = 'TRANSFER_SUBMIT')
+    AND (p_chunk_id IS NULL OR operation_chunk.id = p_chunk_id)
+  ORDER BY operation_chunk.sequence_no, operation_chunk.created_at_utc NULLS FIRST, operation_chunk.id
+  FOR UPDATE;
 
-  IF jsonb_typeof(v_failure_error_json->'provider_submit_diagnostic') = 'object' THEN
-    v_provider_submit_diagnostic := jsonb_strip_nulls(
-      v_provider_submit_diagnostic
-      || (v_failure_error_json->'provider_submit_diagnostic')
-      || jsonb_build_object(
-        'diagnostic_version', 1,
-        'generated_at_utc', v_now::text,
-        'operation_id', p_operation_id::text,
-        'pay_batch_id', CASE WHEN v_effective_pay_batch_id IS NULL THEN NULL ELSE v_effective_pay_batch_id::text END
-      )
-    );
-  END IF;
-
-  v_provider_submit_diagnostic := jsonb_strip_nulls(
-    v_provider_submit_diagnostic
-    || jsonb_build_object(
+  IF p_chunk_id IS NOT NULL AND NOT EXISTS (
+    SELECT 1
+    FROM pg_temp.tmp_provider_submit_finalise_chunks AS exact_chunk_check
+    WHERE exact_chunk_check.chunk_id = p_chunk_id
+  ) THEN
+    RAISE EXCEPTION '%', jsonb_build_object(
+      'error', 'PAY_PROVIDER_SUBMIT_CHUNK_DIAGNOSTIC_FINALISE',
+      'code', 'CHUNK_NOT_FOUND_FOR_OPERATION',
+      'message', 'pay_provider_submit_chunk_diagnostic_finalise: chunk was not found for this operation/provider-submit scope',
       'operation_id', p_operation_id::text,
-      'operation_ids', jsonb_build_array(p_operation_id::text),
-      'related_operation_ids', (
-        SELECT COALESCE(jsonb_agg(to_jsonb(related_operation.value) ORDER BY related_operation.value), '[]'::jsonb)
-        FROM (
-          SELECT DISTINCT operation_id_value.value
-          FROM (
-            SELECT operation_value.value
-            FROM jsonb_array_elements_text(
-              CASE
-                WHEN jsonb_typeof(v_provider_submit_diagnostic->'operation_ids') = 'array' THEN v_provider_submit_diagnostic->'operation_ids'
-                ELSE '[]'::jsonb
-              END
-            ) AS operation_value(value)
-            UNION
-            SELECT related_value.value
-            FROM jsonb_array_elements_text(
-              CASE
-                WHEN jsonb_typeof(v_provider_submit_diagnostic->'related_operation_ids') = 'array' THEN v_provider_submit_diagnostic->'related_operation_ids'
-                ELSE '[]'::jsonb
-              END
-            ) AS related_value(value)
-          ) AS operation_id_value
-          WHERE operation_id_value.value <> p_operation_id::text
-        ) AS related_operation
-      )
-    )
-  );
-
-  v_provider_submission_status := NULLIF(BTRIM(COALESCE(v_provider_submit_diagnostic->>'provider_submission_status', v_diagnostic_result->>'provider_submission_status', '')), '');
-  v_review_reason_code := NULLIF(BTRIM(COALESCE(v_provider_submit_diagnostic->>'review_reason_code', v_diagnostic_result->>'review_reason_code', '')), '');
-
-  IF v_provider_submission_status IS NULL THEN
-    v_provider_submission_status := 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME';
+      'chunk_id', p_chunk_id::text
+    )::text USING ERRCODE = 'P0001';
   END IF;
 
-  IF v_review_reason_code IS NULL THEN
-    v_review_reason_code := CASE
-      WHEN v_provider_submission_status = 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK' THEN 'STALE_RUNNING_PROVIDER_SUBMIT_CHUNK'
-      WHEN v_provider_submission_status = 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME' THEN 'PROVIDER_REQUEST_SENT_NO_RESPONSE'
-      WHEN v_provider_submission_status = 'PROVIDER_SUBMISSION_REJECTED' THEN 'PROVIDER_REJECTED_PAYMENT'
-      WHEN v_provider_submission_status = 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE' THEN 'PROVIDER_RESPONSE_MALFORMED'
-      WHEN v_provider_submission_status = 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL' THEN 'PROVIDER_SUBMIT_BLOCKED_PRE_CALL'
-      WHEN v_provider_submission_status = 'PROVIDER_SUBMISSION_ACCEPTED' THEN 'PROVIDER_ACCEPTANCE_EVIDENCE_PRESENT'
-      ELSE 'MANUAL_BANK_CHECK_REQUIRED'
-    END;
-  END IF;
+  SELECT COALESCE(jsonb_agg(to_jsonb(selected_chunk.chunk_id::text) ORDER BY selected_chunk.sequence_no NULLS LAST, selected_chunk.created_at_utc NULLS FIRST, selected_chunk.chunk_id), '[]'::jsonb)
+  INTO v_chunk_ids
+  FROM pg_temp.tmp_provider_submit_finalise_chunks AS selected_chunk;
 
-  IF COALESCE(v_diagnostic_result #>> '{counts,transfer_count}', '') ~ '^[0-9]+$' THEN
-    v_affected_transfer_count := (v_diagnostic_result #>> '{counts,transfer_count}')::integer;
-  ELSE
-    v_affected_transfer_count := 0;
-  END IF;
+  DROP TABLE IF EXISTS pg_temp.tmp_provider_submit_finalise_transfer_ids;
+  CREATE TEMPORARY TABLE pg_temp.tmp_provider_submit_finalise_transfer_ids (
+    chunk_id uuid,
+    transfer_id uuid NOT NULL,
+    PRIMARY KEY (chunk_id, transfer_id)
+  ) ON COMMIT DROP;
+
+  INSERT INTO pg_temp.tmp_provider_submit_finalise_transfer_ids (chunk_id, transfer_id)
+  SELECT DISTINCT selected_chunk.chunk_id,
+                  transfer_text.transfer_id_text::uuid
+  FROM pg_temp.tmp_provider_submit_finalise_chunks AS selected_chunk
+  CROSS JOIN LATERAL (
+    SELECT transfer_id_element.value AS transfer_id_text
+    FROM jsonb_array_elements_text(CASE WHEN jsonb_typeof(selected_chunk.payload_json->'transfer_ids') = 'array' THEN selected_chunk.payload_json->'transfer_ids' ELSE '[]'::jsonb END) AS transfer_id_element(value)
+    UNION ALL
+    SELECT COALESCE(transfer_payload.value->>'pay_bank_transfer_id', transfer_payload.value->>'transfer_id', transfer_payload.value->>'id') AS transfer_id_text
+    FROM jsonb_array_elements(CASE WHEN jsonb_typeof(selected_chunk.payload_json->'transfers') = 'array' THEN selected_chunk.payload_json->'transfers' ELSE '[]'::jsonb END) AS transfer_payload(value)
+  ) AS transfer_text
+  WHERE NULLIF(BTRIM(COALESCE(transfer_text.transfer_id_text, '')), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+  ON CONFLICT DO NOTHING;
+
+  INSERT INTO pg_temp.tmp_provider_submit_finalise_transfer_ids (chunk_id, transfer_id)
+  SELECT DISTINCT selected_chunk.chunk_id,
+                  operation_scope.pay_bank_transfer_id
+  FROM pg_temp.tmp_provider_submit_finalise_chunks AS selected_chunk
+  JOIN public.banking_pay_operation_transfer_scope AS operation_scope
+    ON operation_scope.operation_id = selected_chunk.operation_id
+   AND (v_effective_pay_batch_id IS NULL OR operation_scope.pay_batch_id = v_effective_pay_batch_id)
+   AND operation_scope.pay_bank_transfer_id IS NOT NULL
+  WHERE NOT EXISTS (
+    SELECT 1
+    FROM pg_temp.tmp_provider_submit_finalise_transfer_ids AS existing_transfer
+    WHERE existing_transfer.chunk_id = selected_chunk.chunk_id
+  )
+  ON CONFLICT DO NOTHING;
+
+  INSERT INTO pg_temp.tmp_provider_submit_finalise_transfer_ids (chunk_id, transfer_id)
+  SELECT DISTINCT selected_chunk.chunk_id,
+                  failure_transfer_uuid.transfer_id
+  FROM pg_temp.tmp_provider_submit_finalise_chunks AS selected_chunk
+  CROSS JOIN LATERAL (
+    SELECT transfer_value.value AS transfer_id_text
+    FROM jsonb_array_elements_text(CASE WHEN jsonb_typeof(v_failure_error_json->'transfer_ids') = 'array' THEN v_failure_error_json->'transfer_ids' ELSE '[]'::jsonb END) AS transfer_value(value)
+    UNION ALL
+    SELECT transfer_value.value AS transfer_id_text
+    FROM jsonb_array_elements_text(CASE WHEN jsonb_typeof(v_failure_error_json->'transferIds') = 'array' THEN v_failure_error_json->'transferIds' ELSE '[]'::jsonb END) AS transfer_value(value)
+    UNION ALL
+    SELECT transfer_value.value AS transfer_id_text
+    FROM jsonb_array_elements_text(CASE WHEN jsonb_typeof(v_failure_error_json->'provider_submit_diagnostic'->'transfer_ids') = 'array' THEN v_failure_error_json->'provider_submit_diagnostic'->'transfer_ids' ELSE '[]'::jsonb END) AS transfer_value(value)
+    UNION ALL
+    SELECT transfer_value.value AS transfer_id_text
+    FROM jsonb_array_elements_text(CASE WHEN jsonb_typeof(v_failure_error_json->'providerSubmitDiagnostic'->'transferIds') = 'array' THEN v_failure_error_json->'providerSubmitDiagnostic'->'transferIds' ELSE '[]'::jsonb END) AS transfer_value(value)
+  ) AS failure_transfer
+  CROSS JOIN LATERAL (
+    SELECT failure_transfer.transfer_id_text::uuid AS transfer_id
+    WHERE NULLIF(BTRIM(COALESCE(failure_transfer.transfer_id_text, '')), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+  ) AS failure_transfer_uuid
+  JOIN public.pay_bank_transfers AS transfer_row
+    ON transfer_row.id = failure_transfer_uuid.transfer_id
+   AND (v_effective_pay_batch_id IS NULL OR transfer_row.pay_batch_id = v_effective_pay_batch_id)
+  WHERE EXISTS (
+    SELECT 1
+    FROM public.banking_pay_operation_transfer_scope AS operation_scope_check
+    WHERE operation_scope_check.operation_id = p_operation_id
+      AND operation_scope_check.pay_bank_transfer_id = transfer_row.id
+      AND (v_effective_pay_batch_id IS NULL OR operation_scope_check.pay_batch_id = v_effective_pay_batch_id)
+  )
+  ON CONFLICT DO NOTHING;
+
+  SELECT COALESCE(jsonb_agg(DISTINCT to_jsonb(all_transfer.transfer_id::text)), '[]'::jsonb)
+  INTO v_all_transfer_ids
+  FROM pg_temp.tmp_provider_submit_finalise_transfer_ids AS all_transfer;
+
+  SELECT COUNT(*)::integer
+  INTO v_already_terminal_chunk_count
+  FROM pg_temp.tmp_provider_submit_finalise_chunks AS selected_chunk
+  WHERE upper(BTRIM(COALESCE(selected_chunk.status, ''))) IN ('COMPLETE', 'FAILED', 'SKIPPED', 'CANCELLED', 'CANCELED');
+
+  SELECT COALESCE(jsonb_agg(to_jsonb(selected_chunk.chunk_id::text) ORDER BY selected_chunk.sequence_no NULLS LAST, selected_chunk.created_at_utc NULLS FIRST, selected_chunk.chunk_id), '[]'::jsonb)
+  INTO v_already_terminal_chunk_ids
+  FROM pg_temp.tmp_provider_submit_finalise_chunks AS selected_chunk
+  WHERE upper(BTRIM(COALESCE(selected_chunk.status, ''))) IN ('COMPLETE', 'FAILED', 'SKIPPED', 'CANCELLED', 'CANCELED');
 
   FOR v_target_chunk_row IN
     SELECT operation_chunk.*
     FROM public.banking_pay_operation_chunks AS operation_chunk
+    JOIN pg_temp.tmp_provider_submit_finalise_chunks AS selected_chunk
+      ON selected_chunk.chunk_id = operation_chunk.id
     WHERE operation_chunk.operation_id = p_operation_id
-      AND (operation_chunk.phase = 'SUBMIT_PROVIDER_TRANSFERS' OR operation_chunk.chunk_type = 'TRANSFER_SUBMIT')
-      AND (p_chunk_id IS NULL OR operation_chunk.id = p_chunk_id)
-      AND operation_chunk.status = 'RUNNING'
+      AND upper(BTRIM(COALESCE(operation_chunk.status, ''))) = 'RUNNING'
     ORDER BY operation_chunk.sequence_no, operation_chunk.created_at_utc NULLS FIRST, operation_chunk.id
-    FOR UPDATE
+    FOR UPDATE OF operation_chunk
   LOOP
     v_before_json := to_jsonb(v_target_chunk_row);
-    v_diagnostic_before := COALESCE(v_target_chunk_row.result_json->'provider_submit_diagnostic', v_target_chunk_row.error_json->'provider_submit_diagnostic', '{}'::jsonb);
-
-    v_chunk_diagnostic_result := public.pay_provider_submit_diagnostic_get(
-      p_pay_batch_id := v_effective_pay_batch_id,
-      p_operation_id := p_operation_id,
-      p_transfer_id := NULL::uuid,
-      p_chunk_id := v_target_chunk_row.id,
-      p_counts_only := false
+    v_chunk_existing_diagnostic := COALESCE(
+      CASE WHEN jsonb_typeof(v_target_chunk_row.error_json->'provider_submit_diagnostic') = 'object' THEN v_target_chunk_row.error_json->'provider_submit_diagnostic' ELSE NULL::jsonb END,
+      CASE WHEN jsonb_typeof(v_target_chunk_row.result_json->'provider_submit_diagnostic') = 'object' THEN v_target_chunk_row.result_json->'provider_submit_diagnostic' ELSE NULL::jsonb END,
+      CASE WHEN jsonb_typeof(v_target_chunk_row.payload_json->'provider_submit_diagnostic') = 'object' THEN v_target_chunk_row.payload_json->'provider_submit_diagnostic' ELSE NULL::jsonb END,
+      '{}'::jsonb
     );
 
-    v_chunk_provider_submit_diagnostic := COALESCE(v_chunk_diagnostic_result->'provider_submit_diagnostic', '{}'::jsonb);
-    v_chunk_provider_submission_status := NULLIF(BTRIM(COALESCE(v_chunk_provider_submit_diagnostic->>'provider_submission_status', v_chunk_diagnostic_result->>'provider_submission_status', '')), '');
-    v_chunk_review_reason_code := NULLIF(BTRIM(COALESCE(v_chunk_provider_submit_diagnostic->>'review_reason_code', v_chunk_diagnostic_result->>'review_reason_code', '')), '');
-
-    IF COALESCE(v_chunk_diagnostic_result #>> '{counts,provider_acceptance_evidence_count}', '') ~ '^[0-9]+$' THEN
-      v_chunk_provider_acceptance_evidence_count := (v_chunk_diagnostic_result #>> '{counts,provider_acceptance_evidence_count}')::integer;
-    ELSE
-      v_chunk_provider_acceptance_evidence_count := 0;
+    IF jsonb_typeof(v_failure_error_json->'provider_submit_diagnostic') = 'object' THEN
+      v_chunk_existing_diagnostic := jsonb_strip_nulls(v_chunk_existing_diagnostic || (v_failure_error_json->'provider_submit_diagnostic'));
     END IF;
 
-    IF COALESCE(v_chunk_diagnostic_result #>> '{counts,provider_response_present_count}', '') ~ '^[0-9]+$' THEN
-      v_chunk_provider_response_present_count := (v_chunk_diagnostic_result #>> '{counts,provider_response_present_count}')::integer;
-    ELSE
-      v_chunk_provider_response_present_count := 0;
-    END IF;
+    v_chunk_existing_diagnostic := jsonb_strip_nulls(COALESCE(v_chunk_existing_diagnostic, '{}'::jsonb))
+      || jsonb_strip_nulls(jsonb_build_object(
+        'provider_submission_status', COALESCE(v_failure_error_json->>'provider_submission_status', v_failure_error_json->>'providerSubmissionStatus'),
+        'review_reason_code', COALESCE(v_failure_error_json->>'provider_submit_review_reason_code', v_failure_error_json->>'providerSubmitReviewReasonCode', v_failure_error_json->>'review_reason_code', v_failure_error_json->>'reviewReasonCode'),
+        'provider_request_sent', COALESCE(v_failure_error_json->>'provider_request_sent', v_failure_error_json->>'providerRequestSent'),
+        'provider_request_sent_confirmed', COALESCE(v_failure_error_json->>'provider_request_sent_confirmed', v_failure_error_json->>'providerRequestSentConfirmed'),
+        'provider_called', COALESCE(v_failure_error_json->>'provider_called', v_failure_error_json->>'providerCalled'),
+        'provider_response_present', COALESCE(v_failure_error_json->>'provider_response_present', v_failure_error_json->>'providerResponsePresent'),
+        'provider_response_received', COALESCE(v_failure_error_json->>'provider_response_received', v_failure_error_json->>'providerResponseReceived'),
+        'provider_submission_accepted', COALESCE(v_failure_error_json->>'provider_submission_accepted', v_failure_error_json->>'providerSubmissionAccepted'),
+        'provider_submission_rejected', COALESCE(v_failure_error_json->>'provider_submission_rejected', v_failure_error_json->>'providerSubmissionRejected'),
+        'provider_submission_unknown', COALESCE(v_failure_error_json->>'provider_submission_unknown', v_failure_error_json->>'providerSubmissionUnknown'),
+        'provider_acceptance_evidence_present', COALESCE(v_failure_error_json->>'provider_acceptance_evidence_present', v_failure_error_json->>'providerAcceptanceEvidencePresent'),
+        'provider_acceptance_evidence_count', COALESCE(v_failure_error_json->>'provider_acceptance_evidence_count', v_failure_error_json->>'providerAcceptanceEvidenceCount'),
+        'provider_rejection_count', COALESCE(v_failure_error_json->>'provider_rejection_count', v_failure_error_json->>'providerRejectionCount'),
+        'provider_submission_rejected_count', COALESCE(v_failure_error_json->>'provider_submission_rejected_count', v_failure_error_json->>'providerSubmissionRejectedCount'),
+        'provider_unknown_count', COALESCE(v_failure_error_json->>'provider_unknown_count', v_failure_error_json->>'providerUnknownCount'),
+        'provider_submission_unknown_count', COALESCE(v_failure_error_json->>'provider_submission_unknown_count', v_failure_error_json->>'providerSubmissionUnknownCount'),
+        'provider_http_status', COALESCE(v_failure_error_json->>'provider_http_status', v_failure_error_json->>'providerHttpStatus'),
+        'provider_error_code', COALESCE(v_failure_error_json->>'provider_error_code', v_failure_error_json->>'providerErrorCode')
+      ));
 
-    IF COALESCE(v_chunk_diagnostic_result #>> '{counts,provider_request_sent_count}', '') ~ '^[0-9]+$' THEN
-      v_chunk_provider_request_sent_count := (v_chunk_diagnostic_result #>> '{counts,provider_request_sent_count}')::integer;
-    ELSE
-      v_chunk_provider_request_sent_count := 0;
-    END IF;
+    v_diagnostic_usable := (
+      COALESCE(v_chunk_existing_diagnostic, '{}'::jsonb) <> '{}'::jsonb
+      AND (
+        NULLIF(BTRIM(COALESCE(v_chunk_existing_diagnostic->>'provider_submission_status', v_chunk_existing_diagnostic->>'review_reason_code', v_chunk_existing_diagnostic->>'provider_call_stage', '')), '') IS NOT NULL
+        OR lower(BTRIM(COALESCE(v_chunk_existing_diagnostic->>'provider_request_sent', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+        OR lower(BTRIM(COALESCE(v_chunk_existing_diagnostic->>'provider_response_present', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+        OR lower(BTRIM(COALESCE(v_chunk_existing_diagnostic->>'provider_response_received', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+        OR lower(BTRIM(COALESCE(v_chunk_existing_diagnostic->>'provider_submission_accepted', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+        OR lower(BTRIM(COALESCE(v_chunk_existing_diagnostic->>'provider_submission_rejected', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+        OR lower(BTRIM(COALESCE(v_chunk_existing_diagnostic->>'provider_submission_unknown', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+        OR lower(BTRIM(COALESCE(v_chunk_existing_diagnostic->>'provider_acceptance_evidence_present', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+        OR NULLIF(BTRIM(COALESCE(v_chunk_existing_diagnostic->>'provider_http_status', v_chunk_existing_diagnostic->>'provider_error_code', v_chunk_existing_diagnostic->>'rail_tx_id', v_chunk_existing_diagnostic->>'provider_transaction_id', v_chunk_existing_diagnostic->>'provider_payment_id', v_chunk_existing_diagnostic->>'provider_reference', '')), '') IS NOT NULL
+        OR COALESCE(v_chunk_existing_diagnostic->>'provider_acceptance_evidence_count', v_chunk_existing_diagnostic->>'provider_response_present_count', v_chunk_existing_diagnostic->>'provider_request_sent_count', v_chunk_existing_diagnostic->>'provider_submission_rejected_count', v_chunk_existing_diagnostic->>'provider_submission_unknown_count', '') ~ '^[0-9]+$'
+      )
+    );
 
-    IF COALESCE(v_chunk_diagnostic_result #>> '{counts,provider_submission_unknown_count}', '') ~ '^[0-9]+$' THEN
-      v_chunk_provider_submission_unknown_count := (v_chunk_diagnostic_result #>> '{counts,provider_submission_unknown_count}')::integer;
-    ELSE
-      v_chunk_provider_submission_unknown_count := 0;
-    END IF;
+    v_diagnostic_was_existing := v_diagnostic_usable;
 
-    IF COALESCE(v_chunk_diagnostic_result #>> '{counts,provider_submission_rejected_count}', '') ~ '^[0-9]+$' THEN
-      v_chunk_provider_submission_rejected_count := (v_chunk_diagnostic_result #>> '{counts,provider_submission_rejected_count}')::integer;
+    IF v_diagnostic_usable IS TRUE THEN
+      v_chunk_diagnostic_result := '{}'::jsonb;
+      v_chunk_provider_submit_diagnostic := v_chunk_existing_diagnostic;
     ELSE
-      v_chunk_provider_submission_rejected_count := 0;
-    END IF;
-
-    IF COALESCE(v_chunk_diagnostic_result #>> '{counts,provider_submission_malformed_response_count}', '') ~ '^[0-9]+$' THEN
-      v_chunk_provider_submission_malformed_response_count := (v_chunk_diagnostic_result #>> '{counts,provider_submission_malformed_response_count}')::integer;
-    ELSE
-      v_chunk_provider_submission_malformed_response_count := 0;
-    END IF;
-
-    IF COALESCE(v_chunk_diagnostic_result #>> '{counts,stale_unresolved_submit_chunk_count}', v_chunk_diagnostic_result #>> '{counts,stale_empty_submit_chunk_count}', '') ~ '^[0-9]+$' THEN
-      v_chunk_stale_unresolved_submit_chunk_count := COALESCE(v_chunk_diagnostic_result #>> '{counts,stale_unresolved_submit_chunk_count}', v_chunk_diagnostic_result #>> '{counts,stale_empty_submit_chunk_count}')::integer;
-    ELSE
-      v_chunk_stale_unresolved_submit_chunk_count := 0;
-    END IF;
-
-    IF COALESCE(v_chunk_diagnostic_result #>> '{counts,unfinalised_submit_chunk_count}', '') ~ '^[0-9]+$' THEN
-      v_chunk_unfinalised_submit_chunk_count := (v_chunk_diagnostic_result #>> '{counts,unfinalised_submit_chunk_count}')::integer;
-    ELSE
-      v_chunk_unfinalised_submit_chunk_count := 0;
+      v_chunk_diagnostic_result := public.pay_provider_submit_diagnostic_get(
+        p_pay_batch_id := v_effective_pay_batch_id,
+        p_operation_id := p_operation_id,
+        p_transfer_id := NULL::uuid,
+        p_chunk_id := v_target_chunk_row.id,
+        p_counts_only := true
+      );
+      v_chunk_provider_submit_diagnostic := COALESCE(v_chunk_diagnostic_result->'provider_submit_diagnostic', '{}'::jsonb);
     END IF;
 
     SELECT COALESCE(jsonb_agg(to_jsonb(chunk_transfer.transfer_id::text) ORDER BY chunk_transfer.transfer_id), '[]'::jsonb),
-           COUNT(*)::integer,
-           COUNT(*) FILTER (
-             WHERE (
-                  NULLIF(BTRIM(COALESCE(transfer_row.rail_tx_id, '')), '') IS NOT NULL
-                  AND NULLIF(BTRIM(COALESCE(transfer_row.rail_tx_id, '')), '') <> transfer_row.id::text
-                  AND NULLIF(BTRIM(COALESCE(transfer_row.rail_tx_id, '')), '') <> p_operation_id::text
-                  AND NULLIF(BTRIM(COALESCE(transfer_row.rail_tx_id, '')), '') <> v_target_chunk_row.id::text
-                  AND NULLIF(BTRIM(COALESCE(transfer_row.rail_tx_id, '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(transfer_row.request_id, '')), ''), '__NO_REQUEST_ID__')
-                  AND NULLIF(BTRIM(COALESCE(transfer_row.rail_tx_id, '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(transfer_row.payment_reference, '')), ''), '__NO_PAYMENT_REFERENCE__')
-                  AND NULLIF(BTRIM(COALESCE(transfer_row.rail_tx_id, '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{local_provider_request_id}', transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,local_provider_request_id}', '')), ''), '__NO_LOCAL_PROVIDER_REQUEST_ID__')
-                  AND NULLIF(BTRIM(COALESCE(transfer_row.rail_tx_id, '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{idempotency_key}', transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,idempotency_key}', '')), ''), '__NO_IDEMPOTENCY_KEY__')
-                  AND NULLIF(BTRIM(COALESCE(transfer_row.rail_tx_id, '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{bulk_reference}', '')), ''), '__NO_BULK_REFERENCE__')
-                  AND UPPER(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_submission_status}', ''))) NOT IN ('PROVIDER_SUBMISSION_REJECTED', 'PROVIDER_SUBMISSION_FAILED', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE', 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK', 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL', 'NO_PROVIDER_SUBMISSION_ATTEMPTED', 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID')
-                )
-                OR (
-                  NULLIF(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_transaction_id}', transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_payment_id}', transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,rail_tx_id}', '')), '') IS NOT NULL
-                  AND NULLIF(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_transaction_id}', transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_payment_id}', transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,rail_tx_id}', '')), '') <> transfer_row.id::text
-                  AND NULLIF(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_transaction_id}', transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_payment_id}', transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,rail_tx_id}', '')), '') <> p_operation_id::text
-                  AND NULLIF(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_transaction_id}', transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_payment_id}', transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,rail_tx_id}', '')), '') <> v_target_chunk_row.id::text
-                  AND NULLIF(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_transaction_id}', transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_payment_id}', transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,rail_tx_id}', '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(transfer_row.request_id, '')), ''), '__NO_REQUEST_ID__')
-                  AND NULLIF(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_transaction_id}', transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_payment_id}', transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,rail_tx_id}', '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(transfer_row.payment_reference, '')), ''), '__NO_PAYMENT_REFERENCE__')
-                  AND NULLIF(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_transaction_id}', transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_payment_id}', transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,rail_tx_id}', '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{local_provider_request_id}', transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,local_provider_request_id}', '')), ''), '__NO_LOCAL_PROVIDER_REQUEST_ID__')
-                  AND NULLIF(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_transaction_id}', transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_payment_id}', transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,rail_tx_id}', '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{idempotency_key}', transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,idempotency_key}', '')), ''), '__NO_IDEMPOTENCY_KEY__')
-                  AND NULLIF(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_transaction_id}', transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_payment_id}', transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,rail_tx_id}', '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{bulk_reference}', '')), ''), '__NO_BULK_REFERENCE__')
-                  AND UPPER(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_submission_status}', ''))) NOT IN ('PROVIDER_SUBMISSION_REJECTED', 'PROVIDER_SUBMISSION_FAILED', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE', 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK', 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL', 'NO_PROVIDER_SUBMISSION_ATTEMPTED', 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID')
-                )
-                OR (
-                  NULLIF(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_reference}', '')), '') IS NOT NULL
-                  AND NULLIF(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_reference}', '')), '') <> transfer_row.id::text
-                  AND NULLIF(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_reference}', '')), '') <> p_operation_id::text
-                  AND NULLIF(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_reference}', '')), '') <> v_target_chunk_row.id::text
-                  AND NULLIF(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_reference}', '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(transfer_row.request_id, '')), ''), '__NO_REQUEST_ID__')
-                  AND NULLIF(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_reference}', '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(transfer_row.payment_reference, '')), ''), '__NO_PAYMENT_REFERENCE__')
-                  AND NULLIF(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_reference}', '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{local_provider_request_id}', transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,local_provider_request_id}', '')), ''), '__NO_LOCAL_PROVIDER_REQUEST_ID__')
-                  AND NULLIF(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_reference}', '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{idempotency_key}', transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,idempotency_key}', '')), ''), '__NO_IDEMPOTENCY_KEY__')
-                  AND NULLIF(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_reference}', '')), '') <> COALESCE(NULLIF(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{bulk_reference}', '')), ''), '__NO_BULK_REFERENCE__')
-                  AND UPPER(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_submission_status}', ''))) NOT IN ('PROVIDER_SUBMISSION_REJECTED', 'PROVIDER_SUBMISSION_FAILED', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE', 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK', 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL', 'NO_PROVIDER_SUBMISSION_ATTEMPTED', 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID')
-                )
-          )::integer,
-           COUNT(*) FILTER (
-             WHERE lower(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_response_present}', transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_response_received}', ''))) IN ('true', 't', '1', 'yes', 'y', 'on')
-                OR NULLIF(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_http_status}', transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_error_code}', '')), '') IS NOT NULL
-                OR EXISTS (
-                  SELECT 1
-                  FROM public.pay_bank_transfer_events AS transfer_event_check
-                  WHERE transfer_event_check.pay_bank_transfer_id = transfer_row.id
-                    AND UPPER(BTRIM(COALESCE(transfer_event_check.event_source, ''))) IN ('PROVIDER_RESPONSE', 'PROVIDER_POLL', 'PROVIDER_WEBHOOK')
-                )
-           )::integer,
-           COUNT(*) FILTER (
-             WHERE lower(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_request_sent}', ''))) IN ('true', 't', '1', 'yes', 'y', 'on')
-                OR NULLIF(BTRIM(COALESCE(transfer_row.rail_tx_id, '')), '') IS NOT NULL
-                OR EXISTS (
-                  SELECT 1
-                  FROM public.pay_bank_transfer_events AS transfer_event_check
-                  WHERE transfer_event_check.pay_bank_transfer_id = transfer_row.id
-                    AND UPPER(BTRIM(COALESCE(transfer_event_check.event_source, ''))) IN ('PROVIDER_RESPONSE', 'PROVIDER_POLL', 'PROVIDER_WEBHOOK')
-                )
-           )::integer
+           COUNT(*)::integer
     INTO v_chunk_transfer_ids,
-         v_chunk_affected_transfer_count,
-         v_direct_provider_acceptance_evidence_count,
-         v_direct_provider_response_present_count,
-         v_direct_provider_request_sent_count
-    FROM (
-      SELECT DISTINCT transfer_text.transfer_id_text::uuid AS transfer_id
-      FROM (
-        SELECT transfer_id_element.value AS transfer_id_text
-        FROM jsonb_array_elements_text(CASE WHEN jsonb_typeof(v_target_chunk_row.payload_json->'transfer_ids') = 'array' THEN v_target_chunk_row.payload_json->'transfer_ids' ELSE '[]'::jsonb END) AS transfer_id_element(value)
-        UNION ALL
-        SELECT COALESCE(transfer_payload.value->>'pay_bank_transfer_id', transfer_payload.value->>'transfer_id', transfer_payload.value->>'id') AS transfer_id_text
-        FROM jsonb_array_elements(CASE WHEN jsonb_typeof(v_target_chunk_row.payload_json->'transfers') = 'array' THEN v_target_chunk_row.payload_json->'transfers' ELSE '[]'::jsonb END) AS transfer_payload(value)
-      ) AS transfer_text
-      WHERE NULLIF(BTRIM(COALESCE(transfer_text.transfer_id_text, '')), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
-    ) AS chunk_transfer
-    JOIN public.pay_bank_transfers AS transfer_row
-      ON transfer_row.id = chunk_transfer.transfer_id
-     AND (v_effective_pay_batch_id IS NULL OR transfer_row.pay_batch_id = v_effective_pay_batch_id);
+         v_affected_transfer_count
+    FROM pg_temp.tmp_provider_submit_finalise_transfer_ids AS chunk_transfer
+    WHERE chunk_transfer.chunk_id = v_target_chunk_row.id;
 
-    v_direct_provider_acceptance_evidence_count := GREATEST(COALESCE(v_direct_provider_acceptance_evidence_count, 0), COALESCE(v_chunk_provider_acceptance_evidence_count, 0));
-    v_direct_provider_response_present_count := GREATEST(COALESCE(v_direct_provider_response_present_count, 0), COALESCE(v_chunk_provider_response_present_count, 0));
-    v_direct_provider_request_sent_count := GREATEST(COALESCE(v_direct_provider_request_sent_count, 0), COALESCE(v_chunk_provider_request_sent_count, 0));
+    v_affected_transfer_count := GREATEST(COALESCE(v_affected_transfer_count, 0), COALESCE(NULLIF(v_target_chunk_row.unit_count, 0), 0));
 
-    IF COALESCE(v_chunk_diagnostic_result #>> '{counts,transfer_count}', '') ~ '^[0-9]+$' THEN
-      v_chunk_affected_transfer_count := GREATEST(
-        COALESCE(v_chunk_affected_transfer_count, 0),
-        (v_chunk_diagnostic_result #>> '{counts,transfer_count}')::integer
-      );
-    END IF;
+    v_status_candidate := upper(BTRIM(COALESCE(
+      v_chunk_provider_submit_diagnostic->>'provider_submission_status',
+      v_chunk_provider_submit_diagnostic->>'outcome_code',
+      v_chunk_diagnostic_result->>'provider_submission_status',
+      ''
+    )));
+    v_reason_candidate := upper(BTRIM(COALESCE(
+      v_chunk_provider_submit_diagnostic->>'review_reason_code',
+      v_chunk_diagnostic_result->>'review_reason_code',
+      ''
+    )));
 
-    v_chunk_affected_transfer_count := GREATEST(
-      COALESCE(v_chunk_affected_transfer_count, 0),
-      COALESCE(NULLIF(v_target_chunk_row.unit_count, 0), 0)
-    );
+    v_provider_request_sent_count := CASE
+      WHEN COALESCE(v_chunk_diagnostic_result #>> '{counts,provider_request_sent_count}', '') ~ '^[0-9]+$' THEN (v_chunk_diagnostic_result #>> '{counts,provider_request_sent_count}')::integer
+      WHEN COALESCE(v_chunk_provider_submit_diagnostic->>'provider_request_sent_count', '') ~ '^[0-9]+$' THEN (v_chunk_provider_submit_diagnostic->>'provider_request_sent_count')::integer
+      WHEN lower(BTRIM(COALESCE(v_chunk_provider_submit_diagnostic->>'provider_request_sent', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+        OR lower(BTRIM(COALESCE(v_chunk_provider_submit_diagnostic->>'provider_request_sent_confirmed', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+        OR lower(BTRIM(COALESCE(v_chunk_provider_submit_diagnostic->>'provider_called', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+        OR NULLIF(BTRIM(COALESCE(v_chunk_provider_submit_diagnostic->>'provider_request_dispatched_at_utc', v_chunk_provider_submit_diagnostic->>'request_sent_at_utc', '')), '') IS NOT NULL THEN 1
+      ELSE 0
+    END;
 
-    v_chunk_other_unfinalised_submit_chunk_count := GREATEST(COALESCE(v_chunk_unfinalised_submit_chunk_count, 0) - 1, 0);
+    v_provider_response_present_count := CASE
+      WHEN COALESCE(v_chunk_diagnostic_result #>> '{counts,provider_response_present_count}', '') ~ '^[0-9]+$' THEN (v_chunk_diagnostic_result #>> '{counts,provider_response_present_count}')::integer
+      WHEN COALESCE(v_chunk_provider_submit_diagnostic->>'provider_response_present_count', '') ~ '^[0-9]+$' THEN (v_chunk_provider_submit_diagnostic->>'provider_response_present_count')::integer
+      WHEN lower(BTRIM(COALESCE(v_chunk_provider_submit_diagnostic->>'provider_response_present', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+        OR lower(BTRIM(COALESCE(v_chunk_provider_submit_diagnostic->>'provider_response_received', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+        OR NULLIF(BTRIM(COALESCE(v_chunk_provider_submit_diagnostic->>'response_received_at_utc', v_chunk_provider_submit_diagnostic->>'provider_http_status', v_chunk_provider_submit_diagnostic->>'provider_error_code', '')), '') IS NOT NULL THEN 1
+      ELSE 0
+    END;
 
-    v_chunk_mixed_provider_submit_outcome := (
-      COALESCE(v_direct_provider_acceptance_evidence_count, 0) > 0
-      AND (
-        COALESCE(v_chunk_affected_transfer_count, 0) > COALESCE(v_direct_provider_acceptance_evidence_count, 0)
-        OR COALESCE(v_chunk_provider_submission_unknown_count, 0) > 0
-        OR COALESCE(v_chunk_provider_submission_rejected_count, 0) > 0
-        OR COALESCE(v_chunk_provider_submission_malformed_response_count, 0) > 0
-        OR COALESCE(v_chunk_stale_unresolved_submit_chunk_count, 0) > 0
-        OR COALESCE(v_chunk_other_unfinalised_submit_chunk_count, 0) > 0
-      )
-    );
+    v_provider_acceptance_evidence_count := CASE
+      WHEN COALESCE(v_chunk_diagnostic_result #>> '{counts,provider_acceptance_evidence_count}', '') ~ '^[0-9]+$' THEN (v_chunk_diagnostic_result #>> '{counts,provider_acceptance_evidence_count}')::integer
+      WHEN COALESCE(v_chunk_provider_submit_diagnostic->>'provider_acceptance_evidence_count', '') ~ '^[0-9]+$' THEN (v_chunk_provider_submit_diagnostic->>'provider_acceptance_evidence_count')::integer
+      WHEN v_status_candidate IN ('PROVIDER_SUBMISSION_ACCEPTED', 'ACCEPTED', 'PROVIDER_ACCEPTED', 'PROVIDER_ACCEPTED_PAYMENT')
+        OR v_reason_candidate IN ('PROVIDER_ACCEPTANCE_EVIDENCE_PRESENT', 'PROVIDER_SUBMISSION_ACCEPTED', 'PROVIDER_ACCEPTED_PAYMENT')
+        OR lower(BTRIM(COALESCE(v_chunk_provider_submit_diagnostic->>'provider_submission_accepted', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+        OR lower(BTRIM(COALESCE(v_chunk_provider_submit_diagnostic->>'provider_acceptance_evidence_present', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+        OR NULLIF(BTRIM(COALESCE(v_chunk_provider_submit_diagnostic->>'rail_tx_id', v_chunk_provider_submit_diagnostic->>'provider_transaction_id', v_chunk_provider_submit_diagnostic->>'provider_payment_id', v_chunk_provider_submit_diagnostic->>'provider_reference', '')), '') IS NOT NULL THEN GREATEST(1, COALESCE(v_affected_transfer_count, 0))
+      ELSE 0
+    END;
 
-    v_chunk_completion_gate_met := (
-      COALESCE(v_chunk_affected_transfer_count, 0) > 0
-      AND COALESCE(v_direct_provider_acceptance_evidence_count, 0) = COALESCE(v_chunk_affected_transfer_count, 0)
-      AND COALESCE(v_chunk_provider_submission_unknown_count, 0) = 0
-      AND COALESCE(v_chunk_provider_submission_rejected_count, 0) = 0
-      AND COALESCE(v_chunk_provider_submission_malformed_response_count, 0) = 0
-      AND COALESCE(v_chunk_stale_unresolved_submit_chunk_count, 0) = 0
-      AND COALESCE(v_chunk_other_unfinalised_submit_chunk_count, 0) = 0
-    );
-
-    v_direct_stale_unresolved := UPPER(BTRIM(COALESCE(v_target_chunk_row.chunk_type, ''))) = 'TRANSFER_SUBMIT'
-      AND UPPER(BTRIM(COALESCE(v_target_chunk_row.status, ''))) = 'RUNNING'
-      AND v_target_chunk_row.completed_at_utc IS NULL
-      AND (v_target_chunk_row.lock_expires_at_utc IS NULL OR v_target_chunk_row.lock_expires_at_utc < v_now)
-      AND COALESCE(v_direct_provider_acceptance_evidence_count, 0) = 0
-      AND COALESCE(v_direct_provider_response_present_count, 0) = 0
-      AND lower(BTRIM(COALESCE(v_chunk_provider_submit_diagnostic->>'provider_request_impossible', v_chunk_provider_submit_diagnostic->>'durable_provider_request_impossible', v_provider_submit_diagnostic->>'provider_request_impossible', v_provider_submit_diagnostic->>'durable_provider_request_impossible', ''))) NOT IN ('true', 't', '1', 'yes', 'y', 'on');
-
-    IF v_chunk_provider_submit_diagnostic <> '{}'::jsonb THEN
-      v_provider_submit_diagnostic := jsonb_strip_nulls(v_provider_submit_diagnostic || v_chunk_provider_submit_diagnostic);
-      v_provider_submission_status := COALESCE(v_chunk_provider_submission_status, v_provider_submission_status);
-      v_review_reason_code := COALESCE(v_chunk_review_reason_code, v_review_reason_code);
-    END IF;
-
-    IF v_direct_stale_unresolved IS TRUE THEN
-      IF COALESCE(v_direct_provider_request_sent_count, 0) > 0
-         OR lower(BTRIM(COALESCE(v_provider_submit_diagnostic->>'provider_request_sent', ''))) IN ('true', 't', '1', 'yes', 'y', 'on') THEN
-        v_provider_submission_status := 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME';
-        v_review_reason_code := 'PROVIDER_REQUEST_SENT_NO_RESPONSE';
-      ELSE
-        v_provider_submission_status := 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK';
-        v_review_reason_code := 'STALE_RUNNING_PROVIDER_SUBMIT_CHUNK';
-      END IF;
-      v_provider_submit_diagnostic := jsonb_strip_nulls(
-        v_provider_submit_diagnostic || jsonb_build_object(
-          'diagnostic_version', 1,
-          'generated_at_utc', v_now::text,
-          'provider_submission_status', v_provider_submission_status,
-          'review_reason_code', v_review_reason_code,
-          'provider_response_present', false,
-          'provider_acceptance_evidence_present', false,
-          'payment_provider_review_required', true,
-          'provider_submission_unknown', true,
-          'stale_submit_chunk', true,
-          'unfinalised_submit_chunk', true,
-          'chunk_lock_expired', true,
-          'manual_resolution_required', true,
-          'safe_retry_available', false,
-          'automatic_retry_blocked', true,
-          'retry_blocked_reason', v_provider_submission_status,
-          'recommended_action', 'Check Revolut/bank records before retry. If no payment was made, record manual no-payment confirmation and reset for retry.',
-          'pay_batch_id', CASE WHEN v_effective_pay_batch_id IS NULL THEN NULL ELSE v_effective_pay_batch_id::text END,
-          'operation_id', p_operation_id::text,
-          'chunk_id', v_target_chunk_row.id::text,
-          'chunk_ids', jsonb_build_array(v_target_chunk_row.id::text),
-          'transfer_ids', COALESCE(v_chunk_transfer_ids, '[]'::jsonb),
-          'provider_acceptance_evidence_count', COALESCE(v_direct_provider_acceptance_evidence_count, 0),
-          'provider_response_present_count', COALESCE(v_direct_provider_response_present_count, 0),
-          'provider_request_sent_count', COALESCE(v_direct_provider_request_sent_count, 0),
-          'stale_unresolved_submit_chunk_count', GREATEST(COALESCE(v_chunk_stale_unresolved_submit_chunk_count, 0), 1),
-          'stale_empty_submit_chunk_count', GREATEST(COALESCE(v_chunk_stale_unresolved_submit_chunk_count, 0), 1),
-          'unfinalised_submit_chunk_count', GREATEST(COALESCE(v_chunk_unfinalised_submit_chunk_count, 0), 1)
+    v_provider_submission_rejected_count := CASE
+      WHEN COALESCE(v_chunk_diagnostic_result #>> '{counts,provider_submission_rejected_count}', '') ~ '^[0-9]+$' THEN (v_chunk_diagnostic_result #>> '{counts,provider_submission_rejected_count}')::integer
+      WHEN COALESCE(v_chunk_provider_submit_diagnostic->>'provider_submission_rejected_count', '') ~ '^[0-9]+$'
+        OR COALESCE(v_chunk_provider_submit_diagnostic->>'provider_rejection_count', '') ~ '^[0-9]+$' THEN GREATEST(
+          CASE WHEN COALESCE(v_chunk_provider_submit_diagnostic->>'provider_submission_rejected_count', '') ~ '^[0-9]+$' THEN (v_chunk_provider_submit_diagnostic->>'provider_submission_rejected_count')::integer ELSE 0 END,
+          CASE WHEN COALESCE(v_chunk_provider_submit_diagnostic->>'provider_rejection_count', '') ~ '^[0-9]+$' THEN (v_chunk_provider_submit_diagnostic->>'provider_rejection_count')::integer ELSE 0 END
         )
-      );
-    END IF;
+      WHEN v_status_candidate IN ('PROVIDER_SUBMISSION_REJECTED', 'PROVIDER_REJECTED_PAYMENT', 'REJECTED', 'DECLINED')
+        OR v_reason_candidate IN ('PROVIDER_REJECTED_PAYMENT', 'PROVIDER_SUBMISSION_REJECTED', 'REJECTED', 'DECLINED')
+        OR lower(BTRIM(COALESCE(v_chunk_provider_submit_diagnostic->>'provider_submission_rejected', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on') THEN GREATEST(1, COALESCE(v_affected_transfer_count, 0))
+      ELSE 0
+    END;
 
-    IF COALESCE(v_chunk_mixed_provider_submit_outcome, false) IS TRUE THEN
-      v_review_reason_code := 'MIXED_PROVIDER_SUBMIT_OUTCOME';
-      v_provider_submit_diagnostic := jsonb_strip_nulls(
-        v_provider_submit_diagnostic || jsonb_build_object(
-          'mixed_provider_submit_outcome', true,
-          'payment_provider_review_required', true,
-          'review_reason_code', v_review_reason_code,
-          'provider_acceptance_evidence_present', true,
-          'provider_acceptance_evidence_count', COALESCE(v_direct_provider_acceptance_evidence_count, 0),
-          'affected_transfer_count', COALESCE(v_chunk_affected_transfer_count, 0),
-          'provider_submission_unknown_count', COALESCE(v_chunk_provider_submission_unknown_count, 0),
-          'provider_submission_rejected_count', COALESCE(v_chunk_provider_submission_rejected_count, 0),
-          'provider_submission_malformed_response_count', COALESCE(v_chunk_provider_submission_malformed_response_count, 0),
-          'stale_empty_submit_chunk_count', COALESCE(v_chunk_stale_unresolved_submit_chunk_count, 0),
-          'unfinalised_submit_chunk_count', COALESCE(v_chunk_unfinalised_submit_chunk_count, 0),
-          'manual_resolution_required', true,
-          'safe_retry_available', false,
-          'automatic_retry_blocked', true,
-          'retry_blocked_reason', 'PROVIDER_SUBMISSION_MIXED_OUTCOME',
-          'recommended_action', 'Provider acceptance evidence exists for at least one transfer, but not all provider-submit outcomes are resolved. Reconcile accepted provider transfer(s) and unresolved/rejected/malformed transfer(s) before retry.'
+    v_provider_submission_malformed_response_count := CASE
+      WHEN COALESCE(v_chunk_diagnostic_result #>> '{counts,provider_submission_malformed_response_count}', '') ~ '^[0-9]+$' THEN (v_chunk_diagnostic_result #>> '{counts,provider_submission_malformed_response_count}')::integer
+      WHEN v_status_candidate IN ('PROVIDER_SUBMISSION_MALFORMED_RESPONSE', 'MALFORMED', 'MALFORMED_RESPONSE', 'PROVIDER_RESPONSE_MALFORMED')
+        OR v_reason_candidate IN ('PROVIDER_RESPONSE_MALFORMED', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE') THEN GREATEST(1, COALESCE(v_affected_transfer_count, 0))
+      ELSE 0
+    END;
+
+    v_unfinalised_submit_chunk_count := CASE
+      WHEN COALESCE(v_chunk_diagnostic_result #>> '{counts,unfinalised_submit_chunk_count}', '') ~ '^[0-9]+$' THEN (v_chunk_diagnostic_result #>> '{counts,unfinalised_submit_chunk_count}')::integer
+      WHEN upper(BTRIM(COALESCE(v_target_chunk_row.status, ''))) = 'RUNNING' THEN 1
+      ELSE 0
+    END;
+
+    v_provider_submission_unknown_count := CASE
+      WHEN COALESCE(v_chunk_diagnostic_result #>> '{counts,provider_submission_unknown_count}', '') ~ '^[0-9]+$' THEN (v_chunk_diagnostic_result #>> '{counts,provider_submission_unknown_count}')::integer
+      WHEN COALESCE(v_chunk_provider_submit_diagnostic->>'provider_submission_unknown_count', '') ~ '^[0-9]+$'
+        OR COALESCE(v_chunk_provider_submit_diagnostic->>'provider_unknown_count', '') ~ '^[0-9]+$' THEN GREATEST(
+          CASE WHEN COALESCE(v_chunk_provider_submit_diagnostic->>'provider_submission_unknown_count', '') ~ '^[0-9]+$' THEN (v_chunk_provider_submit_diagnostic->>'provider_submission_unknown_count')::integer ELSE 0 END,
+          CASE WHEN COALESCE(v_chunk_provider_submit_diagnostic->>'provider_unknown_count', '') ~ '^[0-9]+$' THEN (v_chunk_provider_submit_diagnostic->>'provider_unknown_count')::integer ELSE 0 END
         )
-      );
-    END IF;
+      WHEN v_status_candidate IN ('UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK', 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID')
+        OR v_reason_candidate IN ('PROVIDER_REQUEST_SENT_NO_RESPONSE', 'STALE_RUNNING_PROVIDER_SUBMIT_CHUNK', 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME')
+        OR lower(BTRIM(COALESCE(v_chunk_provider_submit_diagnostic->>'provider_submission_unknown', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+        OR (COALESCE(v_provider_request_sent_count, 0) > 0 AND COALESCE(v_provider_response_present_count, 0) = 0 AND COALESCE(v_provider_acceptance_evidence_count, 0) = 0 AND COALESCE(v_provider_submission_rejected_count, 0) = 0) THEN GREATEST(1, COALESCE(v_affected_transfer_count, 0))
+      ELSE 0
+    END;
 
-    IF v_provider_submission_status = 'PROVIDER_SUBMISSION_ACCEPTED'
-       AND COALESCE(v_direct_provider_acceptance_evidence_count, 0) <= 0 THEN
-      v_provider_submission_status := 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID';
-      v_review_reason_code := 'PROVIDER_RESPONSE_PRESENT_NO_EXTERNAL_ID';
-      v_provider_submit_diagnostic := jsonb_strip_nulls(
-        v_provider_submit_diagnostic || jsonb_build_object(
-          'provider_submission_status', v_provider_submission_status,
-          'review_reason_code', v_review_reason_code,
-          'provider_submission_accepted', false,
-          'provider_acceptance_evidence_present', false,
-          'payment_provider_review_required', true,
-          'provider_submission_unknown', true,
-          'manual_resolution_required', true,
-          'safe_retry_available', false,
-          'automatic_retry_blocked', true,
-          'retry_blocked_reason', v_provider_submission_status,
-          'recommended_action', 'Provider response/status did not include usable external acceptance evidence. Manually reconcile before retry.'
-        )
-      );
-    END IF;
-
-
-  v_provider_submit_diagnostic := jsonb_strip_nulls(
-    v_provider_submit_diagnostic
-    || jsonb_build_object(
-      'operation_id', p_operation_id::text,
-      'operation_ids', jsonb_build_array(p_operation_id::text),
-      'related_operation_ids', (
-        SELECT COALESCE(jsonb_agg(to_jsonb(related_operation.value) ORDER BY related_operation.value), '[]'::jsonb)
-        FROM (
-          SELECT DISTINCT operation_id_value.value
-          FROM (
-            SELECT operation_value.value
-            FROM jsonb_array_elements_text(
-              CASE
-                WHEN jsonb_typeof(v_provider_submit_diagnostic->'operation_ids') = 'array' THEN v_provider_submit_diagnostic->'operation_ids'
-                ELSE '[]'::jsonb
-              END
-            ) AS operation_value(value)
-            UNION
-            SELECT related_value.value
-            FROM jsonb_array_elements_text(
-              CASE
-                WHEN jsonb_typeof(v_provider_submit_diagnostic->'related_operation_ids') = 'array' THEN v_provider_submit_diagnostic->'related_operation_ids'
-                ELSE '[]'::jsonb
-              END
-            ) AS related_value(value)
-          ) AS operation_id_value
-          WHERE operation_id_value.value <> p_operation_id::text
-        ) AS related_operation
-      )
-    )
-  );
-
-    IF v_provider_submission_status = 'PROVIDER_SUBMISSION_ACCEPTED'
-       AND COALESCE(v_chunk_completion_gate_met, false) IS TRUE
-       AND COALESCE(v_chunk_mixed_provider_submit_outcome, false) IS NOT TRUE THEN
+    IF COALESCE(v_provider_acceptance_evidence_count, 0) > 0 THEN
+      v_provider_submission_status := 'PROVIDER_SUBMISSION_ACCEPTED';
       v_review_reason_code := 'PROVIDER_ACCEPTANCE_EVIDENCE_PRESENT';
-      v_provider_submit_diagnostic := jsonb_strip_nulls(
-        v_provider_submit_diagnostic || jsonb_build_object(
-          'mixed_provider_submit_outcome', false,
-          'payment_provider_review_required', false,
-          'provider_submission_status', v_provider_submission_status,
-          'review_reason_code', v_review_reason_code,
-          'provider_submission_accepted', true,
-          'provider_acceptance_evidence_present', true,
-          'provider_acceptance_evidence_count', COALESCE(v_direct_provider_acceptance_evidence_count, 0),
-          'affected_transfer_count', COALESCE(v_chunk_affected_transfer_count, 0),
-          'provider_submission_unknown_count', 0,
-          'provider_submission_rejected_count', 0,
-          'provider_submission_malformed_response_count', 0,
-          'stale_empty_submit_chunk_count', 0,
-          'unfinalised_submit_chunk_count', 0,
-          'unfinalised_submit_chunk', false,
-          'manual_resolution_required', false,
-          'safe_retry_available', false,
-          'automatic_retry_blocked', true,
-          'retry_blocked_reason', 'PROVIDER_ACCEPTANCE_EVIDENCE_PRESENT',
-          'recommended_action', 'Provider acceptance evidence exists. Do not retry unless reconciled.'
-        )
-      );
+    ELSIF COALESCE(v_provider_submission_rejected_count, 0) > 0 THEN
+      v_provider_submission_status := 'PROVIDER_SUBMISSION_REJECTED';
+      v_review_reason_code := 'PROVIDER_REJECTED_PAYMENT';
+    ELSIF COALESCE(v_provider_submission_malformed_response_count, 0) > 0 THEN
+      v_provider_submission_status := 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE';
+      v_review_reason_code := 'PROVIDER_RESPONSE_MALFORMED';
+    ELSIF v_status_candidate IN ('PROVIDER_SUBMISSION_BLOCKED_PRE_CALL', 'PROVIDER_SUBMIT_BLOCKED_PRE_CALL') OR v_reason_candidate IN ('PROVIDER_SUBMISSION_BLOCKED_PRE_CALL', 'PROVIDER_SUBMIT_BLOCKED_PRE_CALL') THEN
+      v_provider_submission_status := 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL';
+      v_review_reason_code := 'PROVIDER_SUBMIT_BLOCKED_PRE_CALL';
+    ELSIF COALESCE(v_provider_submission_unknown_count, 0) > 0 OR COALESCE(v_unfinalised_submit_chunk_count, 0) > 0 OR COALESCE(v_provider_request_sent_count, 0) > 0 OR COALESCE(v_provider_response_present_count, 0) > 0 THEN
+      v_provider_submission_status := 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME';
+      v_review_reason_code := 'PROVIDER_REQUEST_SENT_NO_RESPONSE';
+    ELSE
+      v_provider_submission_status := 'NO_PROVIDER_SUBMISSION_ATTEMPTED';
+      v_review_reason_code := 'NO_PROVIDER_SUBMIT_ATTEMPT';
     END IF;
 
+    IF COALESCE(v_provider_acceptance_evidence_count, 0) > 0
+       AND (
+         COALESCE(v_provider_submission_rejected_count, 0) > 0
+         OR COALESCE(v_provider_submission_malformed_response_count, 0) > 0
+         OR COALESCE(v_provider_submission_unknown_count, 0) > 0
+         OR COALESCE(v_unfinalised_submit_chunk_count, 0) > 1
+         OR COALESCE(v_affected_transfer_count, 0) > COALESCE(v_provider_acceptance_evidence_count, 0)
+       ) THEN
+      v_mixed_provider_submit_outcome := true;
+      v_review_reason_code := 'MIXED_PROVIDER_SUBMIT_OUTCOME';
+      v_manual_resolution_required := true;
+    ELSE
+      v_mixed_provider_submit_outcome := false;
+      v_manual_resolution_required := v_provider_submission_status IN ('UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE', 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID');
+    END IF;
+
+    v_payment_provider_review_required := v_provider_submission_status IN (
+      'PROVIDER_SUBMISSION_REJECTED',
+      'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME',
+      'PROVIDER_SUBMISSION_MALFORMED_RESPONSE',
+      'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL'
+    ) OR COALESCE(v_mixed_provider_submit_outcome, false) IS TRUE;
+    v_safe_retry_available := false;
+
+    v_chunk_provider_submit_diagnostic := jsonb_strip_nulls(
+      COALESCE(v_chunk_provider_submit_diagnostic, '{}'::jsonb)
+      || jsonb_build_object(
+        'diagnostic_version', 1,
+        'diagnostic_source', CASE WHEN v_diagnostic_was_existing THEN 'EXISTING_CHUNK_DIAGNOSTIC' ELSE 'EXACT_SCOPE_DIAGNOSTIC_GET' END,
+        'generated_at_utc', v_now::text,
+        'operation_id', p_operation_id::text,
+        'pay_batch_id', CASE WHEN v_effective_pay_batch_id IS NULL THEN NULL ELSE v_effective_pay_batch_id::text END,
+        'chunk_id', v_target_chunk_row.id::text,
+        'chunk_ids', jsonb_build_array(v_target_chunk_row.id::text),
+        'transfer_ids', COALESCE(v_chunk_transfer_ids, '[]'::jsonb),
+        'provider_submission_status', v_provider_submission_status,
+        'review_reason_code', v_review_reason_code,
+        'provider_request_sent_count', COALESCE(v_provider_request_sent_count, 0),
+        'provider_response_present_count', COALESCE(v_provider_response_present_count, 0),
+        'provider_submission_rejected_count', COALESCE(v_provider_submission_rejected_count, 0),
+        'provider_submission_unknown_count', COALESCE(v_provider_submission_unknown_count, 0),
+        'provider_submission_malformed_response_count', COALESCE(v_provider_submission_malformed_response_count, 0),
+        'provider_acceptance_evidence_count', COALESCE(v_provider_acceptance_evidence_count, 0),
+        'unfinalised_submit_chunk_count', COALESCE(v_unfinalised_submit_chunk_count, 0),
+        'manual_resolution_required', COALESCE(v_manual_resolution_required, false),
+        'safe_retry_available', COALESCE(v_safe_retry_available, false),
+        'payment_provider_review_required', COALESCE(v_payment_provider_review_required, false),
+        'mixed_provider_submit_outcome', COALESCE(v_mixed_provider_submit_outcome, false),
+        'recommended_action', CASE
+          WHEN COALESCE(v_mixed_provider_submit_outcome, false) THEN 'Provider acceptance evidence exists for part of this chunk, but one or more outcomes remain unresolved. Reconcile before retry.'
+          WHEN v_provider_submission_status = 'PROVIDER_SUBMISSION_ACCEPTED' THEN 'Provider acceptance evidence exists. Do not retry unless reconciled.'
+          WHEN v_provider_submission_status = 'PROVIDER_SUBMISSION_REJECTED' THEN 'Provider rejected the payment submission. Review the provider response before retrying.'
+          WHEN v_provider_submission_status = 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE' THEN 'Provider returned an unusable response. Check bank records before retrying.'
+          WHEN v_provider_submission_status = 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL' THEN 'Provider submission was blocked before the provider request was sent.'
+          ELSE 'Provider request may have been sent, but no usable provider response was recorded. Check bank records before retrying.'
+        END
+      )
+    );
+
     IF v_provider_submission_status = 'PROVIDER_SUBMISSION_ACCEPTED'
-       AND COALESCE(v_chunk_completion_gate_met, false) IS TRUE
-       AND COALESCE(v_chunk_mixed_provider_submit_outcome, false) IS NOT TRUE THEN
+       AND COALESCE(v_mixed_provider_submit_outcome, false) IS NOT TRUE
+       AND COALESCE(v_affected_transfer_count, 0) > 0
+       AND COALESCE(v_provider_acceptance_evidence_count, 0) >= COALESCE(v_affected_transfer_count, 0) THEN
       v_finish_status := 'COMPLETE';
-      v_completed_count := COALESCE(NULLIF(v_target_chunk_row.completed_count, 0), NULLIF(v_chunk_affected_transfer_count, 0), NULLIF(v_target_chunk_row.unit_count, 0), NULLIF(v_affected_transfer_count, 0), 0);
+      v_completed_count := COALESCE(NULLIF(v_target_chunk_row.completed_count, 0), NULLIF(v_affected_transfer_count, 0), NULLIF(v_target_chunk_row.unit_count, 0), 0);
       v_failed_count := 0;
       v_message := 'Provider acceptance evidence was found while finalising the provider-submit chunk diagnostic.';
-      v_result_json := COALESCE(v_target_chunk_row.result_json, '{}'::jsonb)
+      v_result_json := jsonb_strip_nulls(
+        COALESCE(v_target_chunk_row.result_json, '{}'::jsonb)
         || jsonb_build_object(
           'code', v_provider_submission_status,
           'message', v_message,
-          'provider_submit_diagnostic', v_provider_submit_diagnostic,
-          'diagnostic_finalised_at_utc', v_now,
+          'provider_submit_diagnostic', v_chunk_provider_submit_diagnostic,
+          'diagnostic_finalised_at_utc', v_now::text,
           'diagnostic_finalise_reason_code', v_reason_code
-        );
+        )
+      );
       v_error_json := v_target_chunk_row.error_json;
     ELSE
       v_finish_status := 'FAILED';
       v_completed_count := COALESCE(v_target_chunk_row.completed_count, 0);
-      v_failed_count := GREATEST(
-        COALESCE(v_target_chunk_row.failed_count, 0),
-        COALESCE(v_affected_transfer_count, 0),
-        COALESCE(v_target_chunk_row.unit_count, 0),
-        1
-      );
+      v_failed_count := GREATEST(COALESCE(v_target_chunk_row.failed_count, 0), COALESCE(v_affected_transfer_count, 0), COALESCE(v_target_chunk_row.unit_count, 0), 1);
       v_message := CASE
-        WHEN COALESCE(v_chunk_mixed_provider_submit_outcome, false) IS TRUE THEN 'Provider acceptance evidence exists for part of this provider-submit chunk, but one or more transfer outcomes remain unresolved/rejected/malformed. Manual reconciliation is required before retry.'
-        WHEN v_provider_submission_status = 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK' THEN 'Provider submit chunk became stale before any usable provider response was recorded.'
-        WHEN v_provider_submission_status = 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME' THEN 'Provider request may have been sent, but no usable provider response was recorded.'
-        WHEN v_provider_submission_status = 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE' THEN 'Provider returned an unusable response. Manual reconciliation is required before retry.'
+        WHEN COALESCE(v_mixed_provider_submit_outcome, false) THEN 'Provider acceptance evidence exists for part of this provider-submit chunk, but one or more outcomes remain unresolved/rejected/malformed. Manual reconciliation is required before retry.'
         WHEN v_provider_submission_status = 'PROVIDER_SUBMISSION_REJECTED' THEN 'Provider rejected the payment submission.'
+        WHEN v_provider_submission_status = 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE' THEN 'Provider returned an unusable response. Manual reconciliation is required before retry.'
         WHEN v_provider_submission_status = 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL' THEN 'Provider submission was blocked before the provider payment request was sent.'
-        ELSE 'Provider-submit chunk was finalised with a provider-submit diagnostic.'
+        ELSE 'Provider request may have been sent, but no usable provider response was recorded.'
       END;
-      v_result_json := COALESCE(v_target_chunk_row.result_json, '{}'::jsonb);
-      v_error_json := COALESCE(v_target_chunk_row.error_json, '{}'::jsonb)
+      v_result_json := v_target_chunk_row.result_json;
+      v_error_json := jsonb_strip_nulls(
+        COALESCE(v_target_chunk_row.error_json, '{}'::jsonb)
         || jsonb_build_object(
           'code', COALESCE(v_review_reason_code, v_provider_submission_status),
           'provider_submission_status', v_provider_submission_status,
           'message', v_message,
-          'provider_submit_diagnostic', v_provider_submit_diagnostic,
-          'mixed_provider_submit_outcome', COALESCE(v_chunk_mixed_provider_submit_outcome, false),
-          'payment_provider_review_required', lower(BTRIM(COALESCE(v_provider_submit_diagnostic->>'payment_provider_review_required', CASE WHEN COALESCE(v_chunk_mixed_provider_submit_outcome, false) THEN 'true' ELSE 'false' END))) IN ('true', 't', '1', 'yes', 'y', 'on'),
-          'affected_transfer_count', COALESCE(v_chunk_affected_transfer_count, 0),
-          'provider_acceptance_evidence_count', COALESCE(v_direct_provider_acceptance_evidence_count, 0),
-          'recommended_action', COALESCE(v_provider_submit_diagnostic->>'recommended_action', 'Check Revolut/bank records before retry. If no payment was made, record manual no-payment confirmation and reset for retry.'),
-          'manual_resolution_required', lower(BTRIM(COALESCE(v_provider_submit_diagnostic->>'manual_resolution_required', ''))) IN ('true', 't', '1', 'yes', 'y', 'on'),
-          'safe_retry_available', lower(BTRIM(COALESCE(v_provider_submit_diagnostic->>'safe_retry_available', ''))) IN ('true', 't', '1', 'yes', 'y', 'on'),
+          'provider_submit_diagnostic', v_chunk_provider_submit_diagnostic,
+          'payment_provider_review_required', COALESCE(v_payment_provider_review_required, true),
+          'manual_resolution_required', COALESCE(v_manual_resolution_required, false),
+          'safe_retry_available', COALESCE(v_safe_retry_available, false),
           'failure_error_json', v_failure_error_json,
-          'diagnostic_finalised_at_utc', v_now,
+          'diagnostic_finalised_at_utc', v_now::text,
           'diagnostic_finalise_reason_code', v_reason_code
-        );
+        )
+      );
     END IF;
 
     SELECT finish_result.finished,
@@ -20430,17 +20420,6 @@ BEGIN
     ) AS finish_result
     LIMIT 1;
 
-    IF COALESCE(v_finished, false) IS TRUE THEN
-      UPDATE public.banking_pay_operation_chunks AS chunk_lock_clear
-      SET locked_by = NULL::text,
-          lock_expires_at_utc = NULL::timestamptz,
-          completed_at_utc = COALESCE(chunk_lock_clear.completed_at_utc, v_now),
-          updated_at_utc = v_now
-      WHERE chunk_lock_clear.id = v_target_chunk_row.id
-        AND chunk_lock_clear.operation_id = p_operation_id
-        AND chunk_lock_clear.status IN ('COMPLETE', 'FAILED');
-    END IF;
-
     SELECT operation_chunk_after.*
     INTO v_after_chunk_row
     FROM public.banking_pay_operation_chunks AS operation_chunk_after
@@ -20451,12 +20430,24 @@ BEGIN
     IF COALESCE(v_finished, false) IS TRUE THEN
       v_finalised_chunk_count := COALESCE(v_finalised_chunk_count, 0) + 1;
       v_finalised_chunk_ids := COALESCE(v_finalised_chunk_ids, '[]'::jsonb) || jsonb_build_array(v_target_chunk_row.id::text);
-    ELSE
-      IF COALESCE(v_not_finished_reason, '') = 'ALREADY_TERMINAL' THEN
-        v_already_terminal_chunk_count := COALESCE(v_already_terminal_chunk_count, 0) + 1;
-        v_already_terminal_chunk_ids := COALESCE(v_already_terminal_chunk_ids, '[]'::jsonb) || jsonb_build_array(v_target_chunk_row.id::text);
-      END IF;
+    ELSIF COALESCE(v_not_finished_reason, '') = 'ALREADY_TERMINAL' THEN
+      v_already_terminal_chunk_count := COALESCE(v_already_terminal_chunk_count, 0) + 1;
+      v_already_terminal_chunk_ids := COALESCE(v_already_terminal_chunk_ids, '[]'::jsonb) || jsonb_build_array(v_target_chunk_row.id::text);
     END IF;
+
+    v_total_provider_request_sent_count := COALESCE(v_total_provider_request_sent_count, 0) + COALESCE(v_provider_request_sent_count, 0);
+    v_total_provider_response_present_count := COALESCE(v_total_provider_response_present_count, 0) + COALESCE(v_provider_response_present_count, 0);
+    v_total_provider_acceptance_evidence_count := COALESCE(v_total_provider_acceptance_evidence_count, 0) + COALESCE(v_provider_acceptance_evidence_count, 0);
+    v_total_provider_submission_rejected_count := COALESCE(v_total_provider_submission_rejected_count, 0) + COALESCE(v_provider_submission_rejected_count, 0);
+    v_total_provider_submission_unknown_count := COALESCE(v_total_provider_submission_unknown_count, 0) + COALESCE(v_provider_submission_unknown_count, 0);
+    v_total_provider_submission_malformed_response_count := COALESCE(v_total_provider_submission_malformed_response_count, 0) + COALESCE(v_provider_submission_malformed_response_count, 0);
+    v_total_unfinalised_submit_chunk_count := COALESCE(v_total_unfinalised_submit_chunk_count, 0) + COALESCE(v_unfinalised_submit_chunk_count, 0);
+    v_total_affected_transfer_count := COALESCE(v_total_affected_transfer_count, 0) + COALESCE(v_affected_transfer_count, 0);
+    v_manual_resolution_required_any := COALESCE(v_manual_resolution_required_any, false) OR COALESCE(v_manual_resolution_required, false);
+    v_safe_retry_available_any := COALESCE(v_safe_retry_available_any, false) OR COALESCE(v_safe_retry_available, false);
+    v_overall_provider_submit_diagnostic := jsonb_strip_nulls(v_overall_provider_submit_diagnostic || v_chunk_provider_submit_diagnostic);
+    v_overall_provider_submission_status := COALESCE(v_provider_submission_status, v_overall_provider_submission_status);
+    v_overall_review_reason_code := COALESCE(v_review_reason_code, v_overall_review_reason_code);
 
     BEGIN
       PERFORM public._audit_insert(
@@ -20468,25 +20459,11 @@ BEGIN
           'chunk', v_after_json,
           'previous_chunk_status', v_target_chunk_row.status,
           'new_chunk_status', CASE WHEN v_after_chunk_row.id IS NULL THEN NULL ELSE v_after_chunk_row.status END,
-          'previous_lock_expires_at_utc', CASE WHEN v_target_chunk_row.lock_expires_at_utc IS NULL THEN NULL ELSE v_target_chunk_row.lock_expires_at_utc::text END,
-          'provider_evidence_counts', jsonb_build_object(
-            'provider_acceptance_evidence_count', COALESCE(v_direct_provider_acceptance_evidence_count, 0),
-            'provider_response_present_count', COALESCE(v_direct_provider_response_present_count, 0),
-            'provider_request_sent_count', COALESCE(v_direct_provider_request_sent_count, 0),
-            'provider_submission_unknown_count', COALESCE(v_chunk_provider_submission_unknown_count, 0),
-            'provider_submission_rejected_count', COALESCE(v_chunk_provider_submission_rejected_count, 0),
-            'provider_submission_malformed_response_count', COALESCE(v_chunk_provider_submission_malformed_response_count, 0),
-            'affected_transfer_count', COALESCE(v_chunk_affected_transfer_count, 0),
-            'stale_unresolved_submit_chunk_count', COALESCE(v_chunk_stale_unresolved_submit_chunk_count, 0),
-            'unfinalised_submit_chunk_count', COALESCE(v_chunk_unfinalised_submit_chunk_count, 0)
-          ),
-          'diagnostic_before', v_diagnostic_before,
-          'diagnostic_after', v_provider_submit_diagnostic,
-          'affected_transfer_ids', COALESCE(v_chunk_transfer_ids, '[]'::jsonb),
-          'provider_submit_diagnostic', v_provider_submit_diagnostic,
+          'provider_submit_diagnostic', v_chunk_provider_submit_diagnostic,
           'provider_submission_status', v_provider_submission_status,
           'review_reason_code', v_review_reason_code,
           'finish_status', v_finish_status,
+          'used_existing_chunk_diagnostic', v_diagnostic_was_existing,
           'reason_code', v_reason_code
         ),
         'payment_provider_submit_chunk_diagnostic_finalised',
@@ -20498,67 +20475,56 @@ BEGIN
     END;
   END LOOP;
 
-  v_provider_submit_diagnostic := jsonb_strip_nulls(
-    v_provider_submit_diagnostic
-    || jsonb_build_object(
+  IF v_overall_provider_submit_diagnostic = '{}'::jsonb THEN
+    v_overall_provider_submit_diagnostic := jsonb_strip_nulls(jsonb_build_object(
+      'diagnostic_version', 1,
+      'diagnostic_source', 'BOUNDED_PROVIDER_SUBMIT_CHUNK_FINALISE',
+      'generated_at_utc', v_now::text,
       'operation_id', p_operation_id::text,
-      'operation_ids', jsonb_build_array(p_operation_id::text),
-      'related_operation_ids', (
-        SELECT COALESCE(jsonb_agg(to_jsonb(related_operation.value) ORDER BY related_operation.value), '[]'::jsonb)
-        FROM (
-          SELECT DISTINCT operation_id_value.value
-          FROM (
-            SELECT operation_value.value
-            FROM jsonb_array_elements_text(
-              CASE
-                WHEN jsonb_typeof(v_provider_submit_diagnostic->'operation_ids') = 'array' THEN v_provider_submit_diagnostic->'operation_ids'
-                ELSE '[]'::jsonb
-              END
-            ) AS operation_value(value)
-            UNION
-            SELECT related_value.value
-            FROM jsonb_array_elements_text(
-              CASE
-                WHEN jsonb_typeof(v_provider_submit_diagnostic->'related_operation_ids') = 'array' THEN v_provider_submit_diagnostic->'related_operation_ids'
-                ELSE '[]'::jsonb
-              END
-            ) AS related_value(value)
-          ) AS operation_id_value
-          WHERE operation_id_value.value <> p_operation_id::text
-        ) AS related_operation
-      )
-    )
-  );
+      'pay_batch_id', CASE WHEN v_effective_pay_batch_id IS NULL THEN NULL ELSE v_effective_pay_batch_id::text END,
+      'chunk_ids', COALESCE(v_chunk_ids, '[]'::jsonb),
+      'transfer_ids', COALESCE(v_all_transfer_ids, '[]'::jsonb),
+      'provider_submission_status', COALESCE(v_overall_provider_submission_status, 'NO_PROVIDER_SUBMISSION_ATTEMPTED'),
+      'review_reason_code', COALESCE(v_overall_review_reason_code, 'NO_PROVIDER_SUBMIT_ATTEMPT')
+    ));
+  END IF;
+
+  v_overall_provider_submission_status := COALESCE(v_overall_provider_submission_status, v_overall_provider_submit_diagnostic->>'provider_submission_status', 'NO_PROVIDER_SUBMISSION_ATTEMPTED');
+  v_overall_review_reason_code := COALESCE(v_overall_review_reason_code, v_overall_provider_submit_diagnostic->>'review_reason_code', 'NO_PROVIDER_SUBMIT_ATTEMPT');
 
   IF COALESCE(v_finalised_chunk_count, 0) > 0 THEN
     UPDATE public.banking_pay_operations AS operation_update
-    SET progress_json = COALESCE(operation_update.progress_json, '{}'::jsonb)
+    SET progress_json = jsonb_strip_nulls(
+          COALESCE(operation_update.progress_json, '{}'::jsonb)
           || jsonb_build_object(
-            'provider_submit_diagnostic', v_provider_submit_diagnostic,
-            'provider_submission_status', v_provider_submission_status,
-            'provider_submit_diagnostic_finalised_at_utc', v_now,
+            'provider_submit_diagnostic', v_overall_provider_submit_diagnostic,
+            'provider_submission_status', v_overall_provider_submission_status,
+            'provider_submit_diagnostic_finalised_at_utc', v_now::text,
             'provider_submit_diagnostic_finalise_reason_code', v_reason_code
-          ),
+          )
+        ),
         result_json = CASE
-          WHEN v_provider_submission_status = 'PROVIDER_SUBMISSION_ACCEPTED' THEN
+          WHEN v_overall_provider_submission_status = 'PROVIDER_SUBMISSION_ACCEPTED' THEN jsonb_strip_nulls(
             COALESCE(operation_update.result_json, '{}'::jsonb)
             || jsonb_build_object(
-              'provider_submit_diagnostic', v_provider_submit_diagnostic,
-              'provider_submission_status', v_provider_submission_status,
-              'provider_submit_diagnostic_finalised_at_utc', v_now
+              'provider_submit_diagnostic', v_overall_provider_submit_diagnostic,
+              'provider_submission_status', v_overall_provider_submission_status,
+              'provider_submit_diagnostic_finalised_at_utc', v_now::text
             )
+          )
           ELSE operation_update.result_json
         END,
         error_json = CASE
-          WHEN v_provider_submission_status <> 'PROVIDER_SUBMISSION_ACCEPTED' THEN
+          WHEN v_overall_provider_submission_status <> 'PROVIDER_SUBMISSION_ACCEPTED' THEN jsonb_strip_nulls(
             COALESCE(operation_update.error_json, '{}'::jsonb)
             || jsonb_build_object(
-              'provider_submit_diagnostic', v_provider_submit_diagnostic,
-              'provider_submission_status', v_provider_submission_status,
-              'review_reason_code', v_review_reason_code,
-              'provider_submit_diagnostic_finalised_at_utc', v_now,
+              'provider_submit_diagnostic', v_overall_provider_submit_diagnostic,
+              'provider_submission_status', v_overall_provider_submission_status,
+              'review_reason_code', v_overall_review_reason_code,
+              'provider_submit_diagnostic_finalised_at_utc', v_now::text,
               'provider_submit_diagnostic_finalise_reason_code', v_reason_code
             )
+          )
           ELSE operation_update.error_json
         END,
         updated_at_utc = v_now
@@ -20575,16 +20541,9 @@ BEGIN
           'pay_batch_id', CASE WHEN v_effective_pay_batch_id IS NULL THEN NULL ELSE v_effective_pay_batch_id::text END,
           'finalised_chunk_count', COALESCE(v_finalised_chunk_count, 0),
           'finalised_chunk_ids', COALESCE(v_finalised_chunk_ids, '[]'::jsonb),
-          'provider_submit_diagnostic', v_provider_submit_diagnostic,
-          'provider_submission_status', v_provider_submission_status,
-          'review_reason_code', v_review_reason_code,
-          'provider_evidence_counts', jsonb_build_object(
-            'provider_acceptance_evidence_count', COALESCE(v_diagnostic_result #>> '{counts,provider_acceptance_evidence_count}', '0'),
-            'provider_response_present_count', COALESCE(v_diagnostic_result #>> '{counts,provider_response_present_count}', '0'),
-            'provider_request_sent_count', COALESCE(v_diagnostic_result #>> '{counts,provider_request_sent_count}', '0'),
-            'stale_unresolved_submit_chunk_count', COALESCE(v_diagnostic_result #>> '{counts,stale_unresolved_submit_chunk_count}', v_diagnostic_result #>> '{counts,stale_empty_submit_chunk_count}', '0'),
-            'unfinalised_submit_chunk_count', COALESCE(v_diagnostic_result #>> '{counts,unfinalised_submit_chunk_count}', '0')
-          ),
+          'provider_submit_diagnostic', v_overall_provider_submit_diagnostic,
+          'provider_submission_status', v_overall_provider_submission_status,
+          'review_reason_code', v_overall_review_reason_code,
           'reason_code', v_reason_code
         ),
         'payment_provider_submit_diagnostic_finalised',
@@ -20604,20 +20563,21 @@ BEGIN
     'finalised_chunk_ids', COALESCE(v_finalised_chunk_ids, '[]'::jsonb),
     'already_terminal_chunk_count', COALESCE(v_already_terminal_chunk_count, 0),
     'already_terminal_chunk_ids', COALESCE(v_already_terminal_chunk_ids, '[]'::jsonb),
-    'provider_submit_diagnostic', v_provider_submit_diagnostic,
-    'provider_submission_status', v_provider_submission_status,
-    'review_reason_code', v_review_reason_code,
-    'provider_acceptance_evidence_count', COALESCE(v_diagnostic_result #>> '{counts,provider_acceptance_evidence_count}', '0'),
-    'provider_response_present_count', COALESCE(v_diagnostic_result #>> '{counts,provider_response_present_count}', '0'),
-    'provider_request_sent_count', COALESCE(v_diagnostic_result #>> '{counts,provider_request_sent_count}', '0'),
-    'provider_submission_unknown_count', COALESCE(v_diagnostic_result #>> '{counts,provider_submission_unknown_count}', '0'),
-    'provider_submission_rejected_count', COALESCE(v_diagnostic_result #>> '{counts,provider_submission_rejected_count}', '0'),
-    'provider_submission_malformed_response_count', COALESCE(v_diagnostic_result #>> '{counts,provider_submission_malformed_response_count}', '0'),
-    'stale_unresolved_submit_chunk_count', COALESCE(v_diagnostic_result #>> '{counts,stale_unresolved_submit_chunk_count}', v_diagnostic_result #>> '{counts,stale_empty_submit_chunk_count}', '0'),
-    'unfinalised_submit_chunk_count', COALESCE(v_diagnostic_result #>> '{counts,unfinalised_submit_chunk_count}', '0'),
-    'mixed_provider_submit_outcome', lower(BTRIM(COALESCE(v_provider_submit_diagnostic->>'mixed_provider_submit_outcome', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on'),
-    'payment_provider_review_required', lower(BTRIM(COALESCE(v_provider_submit_diagnostic->>'payment_provider_review_required', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on'),
-    'affected_transfer_count', COALESCE(NULLIF(BTRIM(COALESCE(v_provider_submit_diagnostic->>'affected_transfer_count', '')), ''), COALESCE(v_diagnostic_result #>> '{counts,transfer_count}', '0')),
+    'provider_submit_diagnostic', v_overall_provider_submit_diagnostic,
+    'provider_submission_status', v_overall_provider_submission_status,
+    'review_reason_code', v_overall_review_reason_code,
+    'provider_request_sent_count', COALESCE(v_total_provider_request_sent_count, 0),
+    'provider_response_present_count', COALESCE(v_total_provider_response_present_count, 0),
+    'provider_submission_rejected_count', COALESCE(v_total_provider_submission_rejected_count, 0),
+    'provider_submission_unknown_count', COALESCE(v_total_provider_submission_unknown_count, 0),
+    'provider_submission_malformed_response_count', COALESCE(v_total_provider_submission_malformed_response_count, 0),
+    'provider_acceptance_evidence_count', COALESCE(v_total_provider_acceptance_evidence_count, 0),
+    'unfinalised_submit_chunk_count', COALESCE(v_total_unfinalised_submit_chunk_count, 0),
+    'manual_resolution_required', COALESCE(v_manual_resolution_required_any, false),
+    'safe_retry_available', COALESCE(v_safe_retry_available_any, false),
+    'chunk_ids', COALESCE(v_chunk_ids, '[]'::jsonb),
+    'transfer_ids', COALESCE(v_all_transfer_ids, '[]'::jsonb),
+    'affected_transfer_count', COALESCE(v_total_affected_transfer_count, 0),
     'reason_code', v_reason_code,
     'message', CASE
       WHEN COALESCE(v_finalised_chunk_count, 0) > 0 THEN 'Provider-submit chunk diagnostic finalisation completed.'
@@ -20626,8 +20586,6 @@ BEGIN
   );
 END;
 $function$;
-
-
 
 
 CREATE OR REPLACE FUNCTION public.pay_execute_provider_submit_review_resolve(
