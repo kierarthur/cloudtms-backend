@@ -38240,6 +38240,7 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
   }
 }
 
+
 async function advanceBankingPayExecuteOperation(env, operationRow, user, options = {}) {
 const unwrapRpcPayload = (rpcRes, key) => {
 let payload = rpcRes;
@@ -38756,8 +38757,12 @@ const providerSubmitReviewReasonForFailure = String(
   || providerSubmitDiagnosticForFailure.reviewReasonCode
   || ''
 ).trim().toUpperCase();
+const providerSubmitFailureCodeForFailure = typeof providerSubmitFailureCodeFromStatus === 'function'
+  ? providerSubmitFailureCodeFromStatus(providerSubmitStatusForFailure, providerSubmitReviewReasonForFailure)
+  : providerSubmitStatusForFailure;
 if (
-  providerSubmitStatusForFailure === 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK'
+  providerSubmitFailureCodeForFailure === 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK'
+  || providerSubmitStatusForFailure === 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK'
   || providerSubmitReviewReasonForFailure === 'STALE_RUNNING_PROVIDER_SUBMIT_CHUNK'
   || businessCode === 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK'
   || hasToken('PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK')
@@ -38765,33 +38770,38 @@ if (
 ) {
   businessCode = 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK';
 } else if (
-  providerSubmitStatusForFailure === 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME'
+  providerSubmitFailureCodeForFailure === 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME'
+  || providerSubmitStatusForFailure === 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME'
   || businessCode === 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME'
   || hasToken('UNKNOWN_PROVIDER_SUBMISSION_OUTCOME')
   || hasToken('PROVIDER_REQUEST_SENT_NO_RESPONSE')
 ) {
   businessCode = 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME';
 } else if (
-  providerSubmitStatusForFailure === 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE'
+  providerSubmitFailureCodeForFailure === 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE'
+  || providerSubmitStatusForFailure === 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE'
   || businessCode === 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE'
   || hasToken('PROVIDER_RESPONSE_MALFORMED')
 ) {
   businessCode = 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE';
 } else if (
-  providerSubmitStatusForFailure === 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID'
+  providerSubmitFailureCodeForFailure === 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID'
+  || providerSubmitStatusForFailure === 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID'
   || businessCode === 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID'
   || hasToken('PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID')
   || hasToken('PROVIDER_RESPONSE_PRESENT_NO_EXTERNAL_ID')
 ) {
   businessCode = 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID';
 } else if (
-  providerSubmitStatusForFailure === 'PROVIDER_SUBMISSION_REJECTED'
+  providerSubmitFailureCodeForFailure === 'PROVIDER_SUBMISSION_REJECTED'
+  || providerSubmitStatusForFailure === 'PROVIDER_SUBMISSION_REJECTED'
   || businessCode === 'PROVIDER_SUBMISSION_REJECTED'
   || hasToken('PROVIDER_REJECTED_PAYMENT')
 ) {
   businessCode = 'PROVIDER_SUBMISSION_REJECTED';
 } else if (
-  providerSubmitStatusForFailure === 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL'
+  providerSubmitFailureCodeForFailure === 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL'
+  || providerSubmitStatusForFailure === 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL'
   || businessCode === 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL'
   || hasToken('PROVIDER_SUBMISSION_BLOCKED_PRE_CALL')
   || hasToken('PROVIDER_SUBMIT_BLOCKED_PRE_CALL')
@@ -38821,7 +38831,7 @@ if (providerAcceptanceEvidenceCountForFailure > 0 && ![
 ].includes(businessCode)) {
   businessCode = 'EXECUTION_RETRY_BLOCKED_BY_PROVIDER_EVIDENCE';
 }
-if (providerSubmitStatusForFailure === 'PROVIDER_SUBMISSION_ACCEPTED' && providerAcceptanceEvidenceCountForFailure > 0) {
+if ((providerSubmitFailureCodeForFailure === 'PROVIDER_SUBMISSION_ACCEPTED' || providerSubmitStatusForFailure === 'PROVIDER_SUBMISSION_ACCEPTED') && providerAcceptanceEvidenceCountForFailure > 0) {
   businessCode = 'PROVIDER_SUBMISSION_ACCEPTED';
 }
 if (providerAmbiguousRiskCountForFailure > 0 && !providerSubmitStatusForFailure && businessCode === 'PAYMENT_EXECUTE_OPERATION_FAILED') {
@@ -39023,21 +39033,121 @@ cleanup_status: 'NOT_REQUIRED'
 };
 }
 
+let cleanupPhaseValue = String(phaseText || currentPhase || '').trim().toUpperCase();
+let providerFailureCleanupForCatch = false;
+let cleanupEvidenceForCatch = {};
 try {
-  const cleanupPhaseValue = String(phaseText || currentPhase || '').trim().toUpperCase();
   const isAuthStartCleanup = cleanupPhaseValue === 'START_AUTHORISATION';
-  const providerSubmitFinalise = await finaliseProviderSubmitBeforeTerminal('BEFORE_FAILED_EXECUTION_LOCAL_ARTIFACT_CLEANUP', normalisedFailure.publicError);
-  const providerSubmitFinaliseDiagnostic = extractProviderSubmitDiagnostic(providerSubmitFinalise);
-  const cleanupFailureErrorJson = {
+  const baseFailureErrorJson = {
     ...safeObject(normalisedFailure.publicError),
-    provider_submit_finalise_result: Object.keys(safeObject(providerSubmitFinalise)).length ? providerSubmitFinalise : undefined
+    phase: cleanupPhaseValue,
+    pay_batch_id: payBatchId,
+    operation_id: operationId
   };
-  if (Object.keys(providerSubmitFinaliseDiagnostic).length) {
-    cleanupFailureErrorJson.provider_submit_diagnostic = providerSubmitFinaliseDiagnostic;
-    cleanupFailureErrorJson.provider_submission_status = providerSubmitStatusFrom(providerSubmitFinalise) || cleanupFailureErrorJson.provider_submission_status;
-    cleanupFailureErrorJson.provider_submit_review_reason_code = providerSubmitReviewCodeFrom(providerSubmitFinalise) || cleanupFailureErrorJson.provider_submit_review_reason_code;
-    cleanupFailureErrorJson.review_reason_code = providerSubmitReviewCodeFrom(providerSubmitFinalise) || cleanupFailureErrorJson.review_reason_code;
+  const heldProviderEvidence = collectProviderSubmitCleanupEvidence(
+    baseFailureErrorJson,
+    progressJson,
+    operation.progress_json,
+    safeObject(baseFailureErrorJson.provider_submission),
+    safeObject(baseFailureErrorJson.provider_submit_diagnostic),
+    safeObject(baseFailureErrorJson.provider_submit_claim_diagnostic)
+  );
+  cleanupEvidenceForCatch = heldProviderEvidence;
+
+  let cleanupFailureErrorJson = jsonLikeObject({
+    ...baseFailureErrorJson,
+    provider_submit_diagnostic: Object.keys(heldProviderEvidence.provider_submit_diagnostic || {}).length ? heldProviderEvidence.provider_submit_diagnostic : baseFailureErrorJson.provider_submit_diagnostic,
+    provider_submit_claim_diagnostic: Object.keys(heldProviderEvidence.provider_submit_claim_diagnostic || {}).length ? heldProviderEvidence.provider_submit_claim_diagnostic : baseFailureErrorJson.provider_submit_claim_diagnostic,
+    provider_submit_claim_diagnostic_events: Array.isArray(heldProviderEvidence.provider_submit_claim_diagnostic_events) && heldProviderEvidence.provider_submit_claim_diagnostic_events.length ? heldProviderEvidence.provider_submit_claim_diagnostic_events : baseFailureErrorJson.provider_submit_claim_diagnostic_events,
+    provider_submission_status: heldProviderEvidence.provider_submission_status || baseFailureErrorJson.provider_submission_status,
+    provider_submit_review_reason_code: heldProviderEvidence.provider_submit_review_reason_code || baseFailureErrorJson.provider_submit_review_reason_code,
+    review_reason_code: heldProviderEvidence.review_reason_code || baseFailureErrorJson.review_reason_code,
+    provider_request_sent: heldProviderEvidence.provider_request_sent === true || baseFailureErrorJson.provider_request_sent === true,
+    provider_response_present: heldProviderEvidence.provider_response_present === true || baseFailureErrorJson.provider_response_present === true,
+    provider_response_received: heldProviderEvidence.provider_response_received === true || baseFailureErrorJson.provider_response_received === true,
+    provider_rejection_count: heldProviderEvidence.provider_rejection_count || baseFailureErrorJson.provider_rejection_count,
+    provider_unknown_count: heldProviderEvidence.provider_unknown_count || baseFailureErrorJson.provider_unknown_count,
+    provider_acceptance_evidence_count: heldProviderEvidence.provider_acceptance_evidence_count || baseFailureErrorJson.provider_acceptance_evidence_count,
+    provider_response_present_count: heldProviderEvidence.provider_response_present_count || baseFailureErrorJson.provider_response_present_count,
+    provider_request_sent_count: heldProviderEvidence.provider_request_sent_count || baseFailureErrorJson.provider_request_sent_count,
+    unfinalised_submit_chunk_count: heldProviderEvidence.unfinalised_submit_chunk_count || baseFailureErrorJson.unfinalised_submit_chunk_count,
+    stale_unresolved_submit_chunk_count: heldProviderEvidence.stale_unresolved_submit_chunk_count || baseFailureErrorJson.stale_unresolved_submit_chunk_count,
+    transfer_ids: heldProviderEvidence.transfer_ids && heldProviderEvidence.transfer_ids.length ? heldProviderEvidence.transfer_ids : baseFailureErrorJson.transfer_ids,
+    chunk_ids: heldProviderEvidence.chunk_ids && heldProviderEvidence.chunk_ids.length ? heldProviderEvidence.chunk_ids : baseFailureErrorJson.chunk_ids,
+    auth_request_ids: heldProviderEvidence.auth_request_ids && heldProviderEvidence.auth_request_ids.length ? heldProviderEvidence.auth_request_ids : baseFailureErrorJson.auth_request_ids,
+    manual_resolution_required: heldProviderEvidence.manual_resolution_required === true || baseFailureErrorJson.manual_resolution_required === true,
+    safe_retry_available: heldProviderEvidence.safe_retry_available === true || baseFailureErrorJson.safe_retry_available === true
+  });
+
+  const cleanupProviderStatus = String(cleanupFailureErrorJson.provider_submission_status || '').trim().toUpperCase();
+  providerFailureCleanupForCatch = cleanupPhaseValue === 'SUBMIT_PROVIDER_TRANSFERS'
+    || cleanupPhaseValue === 'APPLY_RAIL_UPDATES'
+    || heldProviderEvidence.providerEvidenceDetected === true
+    || Boolean(cleanupProviderStatus && ![
+      'NO_PROVIDER_SUBMISSION_ATTEMPTED',
+      'CLAIMED_NOT_PROVIDER_CALLED_YET',
+      'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL',
+      'BLOCKED_FUNDS'
+    ].includes(cleanupProviderStatus));
+
+  const providerFinaliseContext = providerSubmitFinaliseContext(cleanupFailureErrorJson);
+
+  if (providerFailureCleanupForCatch) {
+    const providerFailureCleanupPrecheckBeginPayload = buildProviderFailureCleanupCheckpointPayload('PROVIDER_FAILURE_CLEANUP_PRECHECK_BEGIN', cleanupFailureErrorJson, {
+      cleanup_rpc_name: 'pay_execute_operation_cleanup_failed_local_artifacts',
+      failure_code: cleanupFailureErrorJson.code || null,
+      provider_finalise_candidate: providerFinaliseContext
+    });
+    await persistProviderFailureCleanupCheckpoint('PROVIDER_FAILURE_CLEANUP_PRECHECK_BEGIN', providerFailureCleanupPrecheckBeginPayload, {
+      provider_failure_cleanup_precheck_begin: providerFailureCleanupPrecheckBeginPayload
+    });
   }
+
+  let providerSubmitFinalise = {};
+  if (providerFinaliseContext.can_finalise === true) {
+    providerSubmitFinalise = await finaliseProviderSubmitBeforeTerminal('BEFORE_FAILED_EXECUTION_LOCAL_ARTIFACT_CLEANUP', {
+      ...cleanupFailureErrorJson,
+      provider_submit_finalise_context: providerFinaliseContext
+    });
+    const providerSubmitFinaliseDiagnostic = extractProviderSubmitDiagnostic(providerSubmitFinalise);
+    if (Object.keys(providerSubmitFinaliseDiagnostic).length) {
+      cleanupFailureErrorJson = jsonLikeObject({
+        ...cleanupFailureErrorJson,
+        provider_submit_finalise_result: Object.keys(safeObject(providerSubmitFinalise)).length ? providerSubmitFinalise : undefined,
+        provider_submit_diagnostic: providerSubmitFinaliseDiagnostic,
+        provider_submission_status: providerSubmitStatusFrom(providerSubmitFinalise) || cleanupFailureErrorJson.provider_submission_status,
+        provider_submit_review_reason_code: providerSubmitReviewCodeFrom(providerSubmitFinalise) || cleanupFailureErrorJson.provider_submit_review_reason_code,
+        review_reason_code: providerSubmitReviewCodeFrom(providerSubmitFinalise) || cleanupFailureErrorJson.review_reason_code
+      });
+    } else {
+      cleanupFailureErrorJson = jsonLikeObject({
+        ...cleanupFailureErrorJson,
+        provider_submit_finalise_result: Object.keys(safeObject(providerSubmitFinalise)).length ? providerSubmitFinalise : undefined
+      });
+    }
+  } else {
+    providerSubmitFinalise = jsonLikeObject({
+      ok: true,
+      provider_submit_finalise_skipped: true,
+      finalise_skipped: true,
+      finalise_skip_reason: providerFinaliseContext.skip_reason || 'BOUNDED_PROVIDER_SUBMIT_FINALISE_NOT_REQUIRED',
+      provider_submit_finalise_context: providerFinaliseContext
+    });
+  }
+
+  if (providerFailureCleanupForCatch) {
+    const providerFailureCleanupPrecheckResultPayload = buildProviderFailureCleanupCheckpointPayload('PROVIDER_FAILURE_CLEANUP_PRECHECK_RESULT', cleanupFailureErrorJson, {
+      cleanup_rpc_name: 'pay_execute_operation_cleanup_failed_local_artifacts',
+      provider_finalise_called: providerFinaliseContext.can_finalise === true,
+      provider_finalise_context: providerFinaliseContext,
+      provider_submit_finalise_result_present: Object.keys(safeObject(providerSubmitFinalise)).length > 0,
+      provider_submit_finalise_result: Object.keys(safeObject(providerSubmitFinalise)).length ? providerSubmitFinalise : undefined
+    });
+    await persistProviderFailureCleanupCheckpoint('PROVIDER_FAILURE_CLEANUP_PRECHECK_RESULT', providerFailureCleanupPrecheckResultPayload, {
+      provider_failure_cleanup_precheck_result: providerFailureCleanupPrecheckResultPayload
+    });
+  }
+
   if (isAuthStartCleanup) {
     const authStartCleanupBeforePayload = {
       diagnostic_version: 1,
@@ -39052,12 +39162,24 @@ try {
       failure_code: normalisedFailure.publicError?.code || null,
       provider_submission_status: cleanupFailureErrorJson.provider_submission_status || null,
       provider_submit_review_reason_code: cleanupFailureErrorJson.provider_submit_review_reason_code || cleanupFailureErrorJson.review_reason_code || null,
-      provider_submit_finalise_result_present: Object.keys(safeObject(providerSubmitFinalise)).length > 0
+      provider_submit_finalise_result_present: Object.keys(safeObject(providerSubmitFinalise)).length > 0,
+      provider_submit_finalise_called: providerFinaliseContext.can_finalise === true
     };
     await persistAuthStartCheckpoint('AUTH_START_CLEANUP_BEFORE', authStartCleanupBeforePayload, {
       auth_start_cleanup_before: authStartCleanupBeforePayload
     });
   }
+
+  if (providerFailureCleanupForCatch) {
+    const providerFailureCleanupRpcBeforePayload = buildProviderFailureCleanupCheckpointPayload('PROVIDER_FAILURE_CLEANUP_RPC_BEFORE', cleanupFailureErrorJson, {
+      cleanup_rpc_name: 'pay_execute_operation_cleanup_failed_local_artifacts',
+      provider_finalise_called: providerFinaliseContext.can_finalise === true
+    });
+    await persistProviderFailureCleanupCheckpoint('PROVIDER_FAILURE_CLEANUP_RPC_BEFORE', providerFailureCleanupRpcBeforePayload, {
+      provider_failure_cleanup_rpc_before: providerFailureCleanupRpcBeforePayload
+    });
+  }
+
   const cleanup = await runExecuteDiagnosticRpc('pay_execute_operation_cleanup_failed_local_artifacts', {
     p_operation_id: operationId,
     p_actor_user_id: actorUserId,
@@ -39066,8 +39188,31 @@ try {
     p_dry_run: false
   }, 'pay_execute_operation_cleanup_failed_local_artifacts', {
     phase: cleanupPhaseValue,
-    note: 'failed-payment-execution-cleanup'
+    note: providerFailureCleanupForCatch ? 'provider-failure-payment-execution-cleanup' : 'failed-payment-execution-cleanup'
   });
+
+  if (providerFailureCleanupForCatch) {
+    const providerFailureCleanupRpcAfterPayload = buildProviderFailureCleanupCheckpointPayload('PROVIDER_FAILURE_CLEANUP_RPC_AFTER', cleanupFailureErrorJson, {
+      cleanup_rpc_name: 'pay_execute_operation_cleanup_failed_local_artifacts',
+      cleanup_status: cleanup.retry_blocked === true || cleanup.review_required === true ? 'REVIEW_REQUIRED' : 'COMPLETE',
+      retry_blocked: cleanup.retry_blocked === true,
+      review_required: cleanup.review_required === true,
+      safe_to_retry: cleanup.safe_to_retry === true,
+      scope_rows_deleted: Number(cleanup.scope_rows_deleted || 0),
+      transfer_rows_deleted: Number(cleanup.transfer_rows_deleted || 0),
+      item_links_cleared: Number(cleanup.item_links_cleared || 0),
+      chunks_marked_failed: Number(cleanup.chunks_marked_failed || 0),
+      chunks_marked_skipped: Number(cleanup.chunks_marked_skipped || 0),
+      provider_evidence_count: Number(cleanup.provider_evidence_count || 0),
+      provider_request_sent_count: Number(cleanup.provider_request_sent_count || 0),
+      provider_response_present_count: Number(cleanup.provider_response_present_count || 0),
+      provider_submission_unknown_count: Number(cleanup.provider_submission_unknown_count || 0)
+    });
+    await persistProviderFailureCleanupCheckpoint('PROVIDER_FAILURE_CLEANUP_RPC_AFTER', providerFailureCleanupRpcAfterPayload, {
+      provider_failure_cleanup_rpc_after: providerFailureCleanupRpcAfterPayload
+    });
+  }
+
   if (isAuthStartCleanup) {
     const authStartCleanupAfterPayload = {
       diagnostic_version: 1,
@@ -39099,12 +39244,28 @@ try {
   }
   return {
     attempted: true,
-    provider_submit_finalise_result: providerSubmitFinalise,
+    provider_submit_finalise_result: providerFinaliseContext.can_finalise === true ? providerSubmitFinalise : undefined,
+    provider_submit_finalise_skipped: providerFinaliseContext.can_finalise !== true,
+    provider_submit_finalise_context: providerFinaliseContext,
     cleanup_status: cleanup.retry_blocked === true || cleanup.review_required === true ? 'REVIEW_REQUIRED' : 'COMPLETE',
     ...safeObject(cleanup)
   };
 } catch (cleanupError) {
-  const cleanupPhaseValue = String(phaseText || currentPhase || '').trim().toUpperCase();
+  if (providerFailureCleanupForCatch) {
+    const providerFailureCleanupRpcErrorPayload = buildProviderFailureCleanupCheckpointPayload('PROVIDER_FAILURE_CLEANUP_RPC_ERROR', {
+      ...cleanupEvidenceForCatch,
+      phase: cleanupPhaseValue,
+      pay_batch_id: payBatchId,
+      operation_id: operationId
+    }, {
+      cleanup_rpc_name: 'pay_execute_operation_cleanup_failed_local_artifacts',
+      error: executeDiagnosticErrorPayload(cleanupError),
+      error_text: executeDiagnosticText(cleanupError, 2000)
+    });
+    await persistProviderFailureCleanupCheckpoint('PROVIDER_FAILURE_CLEANUP_RPC_ERROR', providerFailureCleanupRpcErrorPayload, {
+      provider_failure_cleanup_rpc_error: providerFailureCleanupRpcErrorPayload
+    });
+  }
   if (cleanupPhaseValue === 'START_AUTHORISATION') {
     const authStartCleanupErrorPayload = {
       diagnostic_version: 1,
@@ -39855,6 +40016,84 @@ const persistAuthStartCheckpoint = async (status, payload = {}, extraProgress = 
   });
 };
 
+
+const buildProviderFailureCleanupCheckpointPayload = (stage, failurePayload = {}, extra = {}) => {
+  const failure = safeObject(failurePayload);
+  const evidence = collectProviderSubmitCleanupEvidence(failure, progressJson, operation.progress_json);
+  return jsonLikeObject({
+    diagnostic_version: 1,
+    diagnostic_kind: 'PROVIDER_FAILURE_CLEANUP_CHECKPOINT',
+    stage: String(stage || '').trim().toUpperCase() || null,
+    generated_at_utc: new Date().toISOString(),
+    operation_id: operationId,
+    pay_batch_id: payBatchId,
+    operation_type: operationType,
+    phase: String(failure.phase || currentPhase || '').trim().toUpperCase() || currentPhase,
+    cleanup_rpc_name: extra.cleanup_rpc_name || 'pay_execute_operation_cleanup_failed_local_artifacts',
+    failure_code: failure.code || failure.error_code || failure.business_code || null,
+    provider_submission_status: evidence.provider_submission_status || failure.provider_submission_status || null,
+    provider_submit_review_reason_code: evidence.provider_submit_review_reason_code || failure.provider_submit_review_reason_code || failure.review_reason_code || null,
+    review_reason_code: evidence.review_reason_code || failure.review_reason_code || null,
+    provider_request_sent: evidence.provider_request_sent === true,
+    provider_response_present: evidence.provider_response_present === true,
+    provider_response_received: evidence.provider_response_received === true,
+    provider_submission_attempted: evidence.provider_submission_attempted === true,
+    provider_rejection_count: Number(evidence.provider_rejection_count || 0),
+    provider_unknown_count: Number(evidence.provider_unknown_count || 0),
+    provider_acceptance_evidence_count: Number(evidence.provider_acceptance_evidence_count || 0),
+    provider_response_present_count: Number(evidence.provider_response_present_count || 0),
+    provider_request_sent_count: Number(evidence.provider_request_sent_count || 0),
+    unfinalised_submit_chunk_count: Number(evidence.unfinalised_submit_chunk_count || 0),
+    stale_unresolved_submit_chunk_count: Number(evidence.stale_unresolved_submit_chunk_count || 0),
+    transfer_ids: evidence.transfer_ids && evidence.transfer_ids.length ? evidence.transfer_ids : undefined,
+    chunk_ids: evidence.chunk_ids && evidence.chunk_ids.length ? evidence.chunk_ids : undefined,
+    auth_request_ids: evidence.auth_request_ids && evidence.auth_request_ids.length ? evidence.auth_request_ids : undefined,
+    provider_submit_diagnostic_present: Object.keys(evidence.provider_submit_diagnostic || {}).length > 0,
+    provider_submit_claim_diagnostic_present: Object.keys(evidence.provider_submit_claim_diagnostic || {}).length > 0,
+    provider_submit_claim_diagnostic_event_count: Array.isArray(evidence.provider_submit_claim_diagnostic_events) ? evidence.provider_submit_claim_diagnostic_events.length : 0,
+    provider_finalise_candidate: extra.provider_finalise_candidate || undefined,
+    provider_finalise_called: extra.provider_finalise_called === true,
+    provider_submit_finalise_result_present: extra.provider_submit_finalise_result_present === true,
+    cleanup_status: extra.cleanup_status || undefined,
+    retry_blocked: extra.retry_blocked,
+    review_required: extra.review_required,
+    safe_to_retry: extra.safe_to_retry,
+    scope_rows_deleted: extra.scope_rows_deleted,
+    transfer_rows_deleted: extra.transfer_rows_deleted,
+    item_links_cleared: extra.item_links_cleared,
+    chunks_marked_failed: extra.chunks_marked_failed,
+    chunks_marked_skipped: extra.chunks_marked_skipped,
+    provider_evidence_count: extra.provider_evidence_count,
+    provider_submit_finalise_result: extra.provider_submit_finalise_result,
+    error: extra.error,
+    error_text: extra.error_text
+  });
+};
+
+const persistProviderFailureCleanupCheckpoint = async (status, payload = {}, extraProgress = {}) => {
+  const statusText = String(status || '').trim().toUpperCase();
+  const checkpointPayload = safeObject(payload);
+  const timestamp = executeDiagnosticNow();
+  const entry = {
+    ...buildExecuteDiagnosticEntry(statusText, 'pay_execute_operation_cleanup_failed_local_artifacts', {
+      phase: String(checkpointPayload.phase || currentPhase || '').trim().toUpperCase() || currentPhase,
+      note: statusText
+    }, {
+      started_at_utc: timestamp,
+      finished_at_utc: timestamp,
+      duration_ms: 0
+    }),
+    provider_failure_cleanup_checkpoint: checkpointPayload
+  };
+  await persistExecuteDiagnosticCheckpoint(entry, {
+    ...progressJson,
+    ...safeObject(extraProgress),
+    provider_failure_cleanup_checkpoint_status: statusText,
+    provider_failure_cleanup_checkpoint_at_utc: timestamp,
+    provider_failure_cleanup_checkpoint: checkpointPayload
+  });
+};
+
 const safeBuildAuthStartProof = (stage) => {
   try {
     const proofPack = buildSingleChunkTransferPreparationProof(stage);
@@ -39966,6 +40205,311 @@ const providerSubmitManualResolutionRequired = (source) => {
       'PROVIDER_SUBMISSION_MALFORMED_RESPONSE',
       'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID'
     ].includes(providerSubmitStatusFrom(source));
+};
+
+const uniqueProviderSubmitIdArray = (...values) => {
+  const out = [];
+  const add = (value) => {
+    if (value === null || value === undefined) return;
+    if (Array.isArray(value)) {
+      for (const item of value) add(item);
+      return;
+    }
+    const text = String(value || '').trim();
+    if (!text) return;
+    if (!out.includes(text)) out.push(text);
+  };
+  for (const value of values) add(value);
+  return out;
+};
+
+const collectProviderSubmitCleanupEvidence = (...sources) => {
+  const queue = [];
+  const seen = new Set();
+  const seenSourceStrings = new Set();
+  const addSource = (source) => {
+    if (source == null) return;
+    if (typeof source === 'string') {
+      const text = source.trim();
+      if (!text || seenSourceStrings.has(text)) return;
+      seenSourceStrings.add(text);
+      const parsed = safeJsonParse(text);
+      if (parsed) addSource(parsed);
+      return;
+    }
+    if (Array.isArray(source)) {
+      for (const item of source) addSource(item);
+      return;
+    }
+    if (typeof source !== 'object') return;
+    if (seen.has(source)) return;
+    seen.add(source);
+    queue.push(source);
+    const nestedKeys = [
+      'provider_submission',
+      'providerSubmission',
+      'provider_submit_diagnostic',
+      'providerSubmitDiagnostic',
+      'provider_submit_claim_diagnostic',
+      'providerSubmitClaimDiagnostic',
+      'provider_submit_finalise_result',
+      'providerSubmitFinaliseResult',
+      'provider_submit_result',
+      'providerSubmitResult',
+      'rail_meta_json',
+      'railMetaJson',
+      'raw_payload',
+      'rawPayload',
+      'result_json',
+      'resultJson',
+      'error_json',
+      'errorJson',
+      'payload_json',
+      'payloadJson',
+      'progress_json',
+      'progressJson',
+      'source_error',
+      'sourceError',
+      'raw_error',
+      'rawError',
+      'adapter_error',
+      'adapterError',
+      'provider_error',
+      'providerError',
+      'provider_response',
+      'providerResponse',
+      'response',
+      'body',
+      'cause'
+    ];
+    for (const key of nestedKeys) addSource(source[key]);
+    const eventArrays = [
+      source.provider_submit_claim_diagnostic_events,
+      source.providerSubmitClaimDiagnosticEvents,
+      source.transfer_provider_outcomes,
+      source.transferProviderOutcomes,
+      source.provider_outcomes,
+      source.providerOutcomes,
+      source.errors
+    ];
+    for (const arr of eventArrays) {
+      if (!Array.isArray(arr)) continue;
+      for (const item of arr) addSource(item);
+    }
+  };
+  for (const source of sources) addSource(safeObject(source));
+
+  const transferIds = [];
+  const chunkIds = [];
+  const authRequestIds = [];
+  const addIds = (target, ...values) => {
+    for (const value of values) {
+      for (const id of uniqueProviderSubmitIdArray(value)) {
+        if (!target.includes(id)) target.push(id);
+      }
+    }
+  };
+
+  let providerRequestSent = false;
+  let providerResponsePresent = false;
+  let providerResponseReceived = false;
+  let providerSubmissionAttempted = false;
+  let manualResolutionRequired = false;
+  let safeRetryAvailable = false;
+  let providerRejectionCount = 0;
+  let providerUnknownCount = 0;
+  let providerAcceptanceEvidenceCount = 0;
+  let providerResponsePresentCount = 0;
+  let providerRequestSentCount = 0;
+  let unfinalisedSubmitChunkCount = 0;
+  let staleUnresolvedSubmitChunkCount = 0;
+  let providerSubmissionStatus = '';
+  let reviewReasonCode = '';
+  let providerSubmitDiagnostic = {};
+  let providerSubmitClaimDiagnostic = {};
+  const providerSubmitClaimDiagnosticEvents = [];
+
+  const safeStatus = (value) => String(value || '').trim().toUpperCase();
+  const firstStatus = (...values) => values.map(safeStatus).find(Boolean) || '';
+
+  for (const source of queue) {
+    const sourceStatus = firstStatus(
+      source.provider_submission_status,
+      source.providerSubmissionStatus,
+      source.provider_state,
+      source.providerState,
+      source.rail_state,
+      source.railState
+    );
+    const sourceReason = firstStatus(
+      source.provider_submit_review_reason_code,
+      source.providerSubmitReviewReasonCode,
+      source.review_reason_code,
+      source.reviewReasonCode,
+      source.claim_blocker_code,
+      source.claimBlockerCode
+    );
+    if (!providerSubmissionStatus && sourceStatus) providerSubmissionStatus = sourceStatus;
+    if (!reviewReasonCode && sourceReason) reviewReasonCode = sourceReason;
+
+    addIds(transferIds, source.transfer_ids, source.transferIds, source.transfer_id, source.transferId, source.pay_bank_transfer_id, source.payBankTransferId);
+    addIds(chunkIds, source.chunk_ids, source.chunkIds, source.chunk_id, source.chunkId, source.last_provider_submit_chunk_id, source.lastProviderSubmitChunkId);
+    addIds(authRequestIds, source.auth_request_ids, source.authRequestIds, source.auth_request_id, source.authRequestId);
+
+    providerRequestSent = providerRequestSent
+      || boolField(source, 'provider_request_sent', 'providerRequestSent', 'provider_request_sent_confirmed', 'providerRequestSentConfirmed', 'request_sent', 'requestSent');
+    providerResponsePresent = providerResponsePresent
+      || boolField(source, 'provider_response_present', 'providerResponsePresent', 'response_present', 'responsePresent');
+    providerResponseReceived = providerResponseReceived
+      || boolField(source, 'provider_response_received', 'providerResponseReceived', 'response_received', 'responseReceived');
+    providerSubmissionAttempted = providerSubmissionAttempted
+      || boolField(source, 'provider_submission_attempted', 'providerSubmissionAttempted', 'provider_called', 'providerCalled', 'provider_request_sent', 'providerRequestSent');
+    manualResolutionRequired = manualResolutionRequired
+      || boolField(source, 'manual_resolution_required', 'manualResolutionRequired', 'requires_review', 'requiresReview');
+    safeRetryAvailable = safeRetryAvailable || boolField(source, 'safe_retry_available', 'safeRetryAvailable');
+
+    providerRejectionCount = Math.max(
+      providerRejectionCount,
+      numField(source, 'provider_rejection_count', 'providerRejectionCount', 'provider_submission_rejected_count', 'providerSubmissionRejectedCount', 'rejected_count', 'rejectedCount')
+    );
+    providerUnknownCount = Math.max(
+      providerUnknownCount,
+      numField(source, 'provider_unknown_count', 'providerUnknownCount', 'provider_submission_unknown_count', 'providerSubmissionUnknownCount', 'unknown_count', 'unknownCount')
+    );
+    providerAcceptanceEvidenceCount = Math.max(
+      providerAcceptanceEvidenceCount,
+      numField(source, 'provider_acceptance_evidence_count', 'providerAcceptanceEvidenceCount')
+    );
+    providerResponsePresentCount = Math.max(
+      providerResponsePresentCount,
+      numField(source, 'provider_response_present_count', 'providerResponsePresentCount')
+    );
+    providerRequestSentCount = Math.max(
+      providerRequestSentCount,
+      numField(source, 'provider_request_sent_count', 'providerRequestSentCount')
+    );
+    unfinalisedSubmitChunkCount = Math.max(
+      unfinalisedSubmitChunkCount,
+      numField(source, 'unfinalised_submit_chunk_count', 'unfinalisedSubmitChunkCount')
+    );
+    staleUnresolvedSubmitChunkCount = Math.max(
+      staleUnresolvedSubmitChunkCount,
+      numField(source, 'stale_unresolved_submit_chunk_count', 'staleUnresolvedSubmitChunkCount', 'stale_empty_submit_chunk_count', 'staleEmptySubmitChunkCount')
+    );
+
+    const diag = extractProviderSubmitDiagnostic(source);
+    if (Object.keys(diag).length) providerSubmitDiagnostic = { ...providerSubmitDiagnostic, ...diag };
+    const claimDiag = safeObject(source.provider_submit_claim_diagnostic || source.providerSubmitClaimDiagnostic);
+    if (Object.keys(claimDiag).length) providerSubmitClaimDiagnostic = { ...providerSubmitClaimDiagnostic, ...claimDiag };
+    const events = Array.isArray(source.provider_submit_claim_diagnostic_events)
+      ? source.provider_submit_claim_diagnostic_events
+      : (Array.isArray(source.providerSubmitClaimDiagnosticEvents) ? source.providerSubmitClaimDiagnosticEvents : []);
+    for (const event of events) {
+      if (event && typeof event === 'object' && !Array.isArray(event)) providerSubmitClaimDiagnosticEvents.push(event);
+    }
+  }
+
+  const diagnosticStatus = providerSubmitStatusFrom(providerSubmitDiagnostic);
+  const diagnosticReason = providerSubmitReviewCodeFrom(providerSubmitDiagnostic);
+  if (!providerSubmissionStatus && diagnosticStatus) providerSubmissionStatus = diagnosticStatus;
+  if (!reviewReasonCode && diagnosticReason) reviewReasonCode = diagnosticReason;
+
+  const normaliseProviderSubmissionStatusAlias = (statusValue) => {
+    const statusUpper = safeStatus(statusValue);
+    if (['REJECTED', 'DECLINED', 'PROVIDER_REJECTED_PAYMENT'].includes(statusUpper)) return 'PROVIDER_SUBMISSION_REJECTED';
+    if (['ACCEPTED', 'PROVIDER_ACCEPTED'].includes(statusUpper)) return 'PROVIDER_SUBMISSION_ACCEPTED';
+    if (['MALFORMED', 'MALFORMED_RESPONSE', 'PROVIDER_RESPONSE_MALFORMED'].includes(statusUpper)) return 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE';
+    return statusUpper;
+  };
+  providerSubmissionStatus = normaliseProviderSubmissionStatusAlias(providerSubmissionStatus);
+
+  if (providerSubmissionStatus === 'PROVIDER_SUBMISSION_REJECTED') providerRejectionCount = Math.max(providerRejectionCount, 1);
+  if ([
+    'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME',
+    'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK',
+    'PROVIDER_SUBMISSION_MALFORMED_RESPONSE',
+    'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID'
+  ].includes(providerSubmissionStatus)) providerUnknownCount = Math.max(providerUnknownCount, 1);
+
+  const providerEvidenceDetected = providerRequestSent
+    || providerResponsePresent
+    || providerResponseReceived
+    || providerSubmissionAttempted
+    || providerRejectionCount > 0
+    || providerUnknownCount > 0
+    || providerAcceptanceEvidenceCount > 0
+    || providerResponsePresentCount > 0
+    || providerRequestSentCount > 0
+    || unfinalisedSubmitChunkCount > 0
+    || staleUnresolvedSubmitChunkCount > 0
+    || Boolean(providerSubmissionStatus && ![
+      'NO_PROVIDER_SUBMISSION_ATTEMPTED',
+      'CLAIMED_NOT_PROVIDER_CALLED_YET',
+      'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL',
+      'BLOCKED_FUNDS'
+    ].includes(providerSubmissionStatus));
+
+  const enrichedProviderSubmitDiagnostic = jsonLikeObject({
+    ...providerSubmitDiagnostic,
+    provider_submission_status: providerSubmissionStatus || providerSubmitDiagnostic.provider_submission_status || undefined,
+    review_reason_code: reviewReasonCode || providerSubmitDiagnostic.review_reason_code || undefined,
+    provider_request_sent: providerRequestSent || providerSubmitDiagnostic.provider_request_sent || undefined,
+    provider_response_present: providerResponsePresent || providerSubmitDiagnostic.provider_response_present || undefined,
+    provider_response_received: providerResponseReceived || providerSubmitDiagnostic.provider_response_received || undefined,
+    provider_submission_attempted: providerSubmissionAttempted || providerSubmitDiagnostic.provider_submission_attempted || undefined,
+    manual_resolution_required: manualResolutionRequired || providerSubmitDiagnostic.manual_resolution_required || undefined,
+    safe_retry_available: safeRetryAvailable || providerSubmitDiagnostic.safe_retry_available || undefined,
+    provider_rejection_count: providerRejectionCount || undefined,
+    provider_unknown_count: providerUnknownCount || undefined,
+    provider_acceptance_evidence_count: providerAcceptanceEvidenceCount || undefined,
+    provider_response_present_count: providerResponsePresentCount || undefined,
+    provider_request_sent_count: providerRequestSentCount || undefined,
+    unfinalised_submit_chunk_count: unfinalisedSubmitChunkCount || undefined,
+    stale_unresolved_submit_chunk_count: staleUnresolvedSubmitChunkCount || undefined,
+    transfer_ids: transferIds.length ? transferIds : undefined,
+    chunk_ids: chunkIds.length ? chunkIds : undefined,
+    auth_request_ids: authRequestIds.length ? authRequestIds : undefined
+  });
+
+  return {
+    providerEvidenceDetected,
+    provider_submit_diagnostic: enrichedProviderSubmitDiagnostic,
+    provider_submit_claim_diagnostic: providerSubmitClaimDiagnostic,
+    provider_submit_claim_diagnostic_events: providerSubmitClaimDiagnosticEvents,
+    provider_submission_status: providerSubmissionStatus || undefined,
+    provider_submit_review_reason_code: reviewReasonCode || undefined,
+    review_reason_code: reviewReasonCode || undefined,
+    provider_request_sent: providerRequestSent,
+    provider_response_present: providerResponsePresent,
+    provider_response_received: providerResponseReceived,
+    provider_submission_attempted: providerSubmissionAttempted,
+    provider_rejection_count: providerRejectionCount,
+    provider_unknown_count: providerUnknownCount,
+    provider_acceptance_evidence_count: providerAcceptanceEvidenceCount,
+    provider_response_present_count: providerResponsePresentCount,
+    provider_request_sent_count: providerRequestSentCount,
+    unfinalised_submit_chunk_count: unfinalisedSubmitChunkCount,
+    stale_unresolved_submit_chunk_count: staleUnresolvedSubmitChunkCount,
+    manual_resolution_required: manualResolutionRequired,
+    safe_retry_available: safeRetryAvailable,
+    transfer_ids: transferIds,
+    chunk_ids: chunkIds,
+    auth_request_ids: authRequestIds
+  };
+};
+
+const jsonLikeObject = (value = {}) => {
+  const source = safeObject(value);
+  const out = {};
+  for (const [key, raw] of Object.entries(source)) {
+    if (raw === undefined) continue;
+    if (raw === null) continue;
+    if (typeof raw === 'number' && !Number.isFinite(raw)) continue;
+    if (Array.isArray(raw) && raw.length === 0) continue;
+    if (raw && typeof raw === 'object' && !Array.isArray(raw) && Object.keys(raw).length === 0) continue;
+    out[key] = raw;
+  }
+  return out;
 };
 const providerSubmitClaimDiagnosticFrom = (source = {}) => {
   const root = safeObject(source);
@@ -40100,6 +40644,9 @@ const providerSubmitRetryBlockedStatuses = new Set([
 const providerSubmitFailureCodeFromStatus = (status, reviewReason = '') => {
   const statusUpper = String(status || '').trim().toUpperCase();
   const reasonUpper = String(reviewReason || '').trim().toUpperCase();
+  if (['REJECTED', 'DECLINED', 'PROVIDER_REJECTED_PAYMENT'].includes(statusUpper) || reasonUpper === 'PROVIDER_REJECTED_PAYMENT') return 'PROVIDER_SUBMISSION_REJECTED';
+  if (['ACCEPTED', 'PROVIDER_ACCEPTED'].includes(statusUpper) || reasonUpper === 'PROVIDER_ACCEPTANCE_EVIDENCE_PRESENT') return 'PROVIDER_SUBMISSION_ACCEPTED';
+  if (['MALFORMED', 'MALFORMED_RESPONSE', 'PROVIDER_RESPONSE_MALFORMED'].includes(statusUpper) || reasonUpper === 'PROVIDER_RESPONSE_MALFORMED') return 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE';
   if (statusUpper === 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK' || reasonUpper === 'STALE_RUNNING_PROVIDER_SUBMIT_CHUNK') return 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK';
   if (statusUpper === 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME' || reasonUpper === 'PROVIDER_REQUEST_SENT_NO_RESPONSE') return 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME';
   if (statusUpper === 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE' || reasonUpper === 'PROVIDER_RESPONSE_MALFORMED') return 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE';
@@ -40120,34 +40667,153 @@ const providerSubmitMessageFromCode = (code) => {
   if (codeUpper === 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL') return 'Provider was not called. Submission failed before the provider payment request was sent.';
   return 'Provider submission outcome needs review before retry.';
 };
+const providerSubmitFinaliseContext = (extra = {}) => {
+  const extraObj = safeObject(extra);
+  const phaseValue = String(extraObj.phase || currentPhase || '').trim().toUpperCase();
+  const evidence = collectProviderSubmitCleanupEvidence(extraObj, progressJson, operation.progress_json);
+  const suppliedContext = safeObject(extraObj.provider_submit_finalise_context || extraObj.providerSubmitFinaliseContext);
+  const chunkIds = uniqueProviderSubmitIdArray(
+    suppliedContext.chunk_id,
+    suppliedContext.chunkId,
+    suppliedContext.chunk_ids,
+    suppliedContext.chunkIds,
+    extraObj.chunk_id,
+    extraObj.chunkId,
+    extraObj.chunk_ids,
+    extraObj.chunkIds,
+    evidence.chunk_ids
+  );
+  const transferIds = uniqueProviderSubmitIdArray(
+    suppliedContext.transfer_id,
+    suppliedContext.transferId,
+    suppliedContext.transfer_ids,
+    suppliedContext.transferIds,
+    extraObj.transfer_id,
+    extraObj.transferId,
+    extraObj.transfer_ids,
+    extraObj.transferIds,
+    evidence.transfer_ids
+  );
+  const authRequestIds = uniqueProviderSubmitIdArray(
+    suppliedContext.auth_request_id,
+    suppliedContext.authRequestId,
+    suppliedContext.auth_request_ids,
+    suppliedContext.authRequestIds,
+    extraObj.auth_request_id,
+    extraObj.authRequestId,
+    extraObj.auth_request_ids,
+    extraObj.authRequestIds,
+    evidence.auth_request_ids
+  );
+  const diagnostic = evidence.provider_submit_diagnostic || {};
+  const claimDiagnostic = evidence.provider_submit_claim_diagnostic || {};
+  const status = String(evidence.provider_submission_status || '').trim().toUpperCase();
+  const chunkStatus = String(
+    suppliedContext.chunk_status
+    || suppliedContext.chunkStatus
+    || extraObj.chunk_status
+    || extraObj.chunkStatus
+    || diagnostic.chunk_status
+    || diagnostic.chunkStatus
+    || claimDiagnostic.chunk_status
+    || claimDiagnostic.chunkStatus
+    || ''
+  ).trim().toUpperCase();
+  const hasUnfinalisedIndicator = suppliedContext.unfinalised_submit_chunk === true
+    || suppliedContext.unfinalisedSubmitChunk === true
+    || boolField(extraObj, 'unfinalised_submit_chunk', 'unfinalisedSubmitChunk')
+    || boolField(diagnostic, 'unfinalised_submit_chunk', 'unfinalisedSubmitChunk')
+    || boolField(claimDiagnostic, 'unfinalised_submit_chunk', 'unfinalisedSubmitChunk')
+    || Number(evidence.unfinalised_submit_chunk_count || 0) > 0
+    || chunkStatus === 'RUNNING';
+  const hasExactChunk = chunkIds.length === 1;
+  const hasExactTransfer = transferIds.length > 0;
+  const canFinalise = ['PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS'].includes(operationType)
+    && providerSubmitTerminalFinalisePhases.has(phaseValue)
+    && hasUnfinalisedIndicator
+    && hasExactChunk
+    && hasExactTransfer;
+  let skipReason = null;
+  if (!['PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS'].includes(operationType)) skipReason = 'UNSUPPORTED_OPERATION_TYPE';
+  else if (!providerSubmitTerminalFinalisePhases.has(phaseValue)) skipReason = 'NOT_PROVIDER_SUBMIT_TERMINAL_PHASE';
+  else if (!hasUnfinalisedIndicator) skipReason = 'NO_UNFINALISED_PROVIDER_SUBMIT_CHUNK_EVIDENCE';
+  else if (!hasExactChunk) skipReason = chunkIds.length > 1 ? 'MULTIPLE_PROVIDER_SUBMIT_CHUNKS_NOT_BOUNDED' : 'PROVIDER_SUBMIT_CHUNK_ID_MISSING';
+  else if (!hasExactTransfer) skipReason = 'PROVIDER_SUBMIT_TRANSFER_IDS_MISSING';
+  return {
+    can_finalise: canFinalise,
+    skip_reason: canFinalise ? null : skipReason,
+    phase: phaseValue,
+    chunk_id: hasExactChunk ? chunkIds[0] : null,
+    chunk_ids: chunkIds,
+    transfer_ids: transferIds,
+    auth_request_ids: authRequestIds,
+    unfinalised_submit_chunk: hasUnfinalisedIndicator,
+    chunk_status: chunkStatus || null,
+    provider_submission_status: status || null,
+    provider_evidence_detected: evidence.providerEvidenceDetected === true
+  };
+};
+
 const finaliseProviderSubmitBeforeTerminal = async (reasonCode, extra = {}) => {
   const phaseValue = String(safeObject(extra).phase || currentPhase || '').trim().toUpperCase();
   if (!['PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS'].includes(operationType)) return {};
   if (!providerSubmitTerminalFinalisePhases.has(phaseValue)) return {};
   const extraObj = safeObject(extra);
   const suppliedDiagnostic = extractProviderSubmitDiagnostic(extraObj);
-  const failureErrorJson = {
+  const finaliseContext = providerSubmitFinaliseContext(extraObj);
+  if (finaliseContext.can_finalise !== true) {
+    return jsonLikeObject({
+      ok: true,
+      finalise_skipped: true,
+      provider_submit_finalise_skipped: true,
+      finalise_skip_reason: finaliseContext.skip_reason || 'BOUNDED_PROVIDER_SUBMIT_FINALISE_NOT_REQUIRED',
+      phase: phaseValue,
+      pay_batch_id: payBatchId,
+      operation_id: operationId,
+      provider_submit_finalise_context: finaliseContext,
+      provider_submit_diagnostic: Object.keys(suppliedDiagnostic).length ? suppliedDiagnostic : undefined,
+      provider_submission_status: providerSubmitStatusFrom(extraObj) || undefined,
+      review_reason_code: providerSubmitReviewCodeFrom(extraObj) || undefined
+    });
+  }
+  const heldProviderEvidence = collectProviderSubmitCleanupEvidence(extraObj, suppliedDiagnostic, progressJson, operation.progress_json);
+  const failureErrorJson = jsonLikeObject({
     ...extraObj,
     phase: phaseValue,
     pay_batch_id: payBatchId,
-    operation_id: operationId
-  };
-  if (Object.keys(suppliedDiagnostic).length) failureErrorJson.provider_submit_diagnostic = suppliedDiagnostic;
+    operation_id: operationId,
+    provider_submit_diagnostic: Object.keys(heldProviderEvidence.provider_submit_diagnostic || {}).length ? heldProviderEvidence.provider_submit_diagnostic : suppliedDiagnostic,
+    provider_submission_status: heldProviderEvidence.provider_submission_status || extraObj.provider_submission_status,
+    provider_submit_review_reason_code: heldProviderEvidence.provider_submit_review_reason_code || extraObj.provider_submit_review_reason_code,
+    review_reason_code: heldProviderEvidence.review_reason_code || extraObj.review_reason_code,
+    provider_request_sent: heldProviderEvidence.provider_request_sent,
+    provider_response_present: heldProviderEvidence.provider_response_present,
+    provider_response_received: heldProviderEvidence.provider_response_received,
+    provider_rejection_count: heldProviderEvidence.provider_rejection_count,
+    provider_unknown_count: heldProviderEvidence.provider_unknown_count,
+    transfer_ids: heldProviderEvidence.transfer_ids,
+    chunk_ids: heldProviderEvidence.chunk_ids,
+    auth_request_ids: heldProviderEvidence.auth_request_ids,
+    provider_submit_finalise_context: finaliseContext
+  });
   try {
     const finaliseResult = await runExecuteDiagnosticRpc('pay_provider_submit_chunk_diagnostic_finalise', {
       p_operation_id: operationId,
       p_pay_batch_id: payBatchId,
-      p_chunk_id: null,
+      p_chunk_id: finaliseContext.chunk_id,
       p_actor_user_id: actorUserId,
       p_reason_code: String(reasonCode || 'PAYMENT_EXECUTE_PROVIDER_SUBMIT_TERMINAL_GUARD').trim().toUpperCase(),
       p_failure_error_json: failureErrorJson
     }, 'pay_provider_submit_chunk_diagnostic_finalise', {
       phase: phaseValue,
+      chunk_id: finaliseContext.chunk_id,
+      transfer_scope_count: finaliseContext.transfer_ids.length,
       note: 'provider-submit-terminal-finalise'
     });
     const finaliseDiagnostic = extractProviderSubmitDiagnostic(finaliseResult);
     return {
       ...safeObject(finaliseResult),
+      provider_submit_finalise_context: finaliseContext,
       provider_submit_diagnostic: Object.keys(finaliseDiagnostic).length ? finaliseDiagnostic : safeObject(finaliseResult.provider_submit_diagnostic),
       provider_submission_status: providerSubmitStatusFrom(finaliseResult) || finaliseResult.provider_submission_status || null,
       review_reason_code: providerSubmitReviewCodeFrom(finaliseResult) || finaliseResult.review_reason_code || null
@@ -40162,6 +40828,7 @@ const finaliseProviderSubmitBeforeTerminal = async (reasonCode, extra = {}) => {
       phase: phaseValue,
       pay_batch_id: payBatchId,
       operation_id: operationId,
+      provider_submit_finalise_context: finaliseContext,
       provider_submit_diagnostic: suppliedDiagnostic
     };
   }
@@ -40169,9 +40836,11 @@ const finaliseProviderSubmitBeforeTerminal = async (reasonCode, extra = {}) => {
 const providerSubmitTerminalPayload = (source = {}, extra = {}) => {
   const sourceObj = safeObject(source);
   const extraObj = safeObject(extra);
-  const diag = extractProviderSubmitDiagnostic(sourceObj);
-  const status = providerSubmitStatusFrom(sourceObj) || providerSubmitStatusFrom(diag);
-  const reviewReason = providerSubmitReviewCodeFrom(sourceObj) || providerSubmitReviewCodeFrom(diag);
+  const sourceDiag = extractProviderSubmitDiagnostic(sourceObj);
+  const extraDiag = extractProviderSubmitDiagnostic(extraObj);
+  const diag = Object.keys(sourceDiag).length ? sourceDiag : extraDiag;
+  const status = providerSubmitStatusFrom(sourceObj) || providerSubmitStatusFrom(extraObj) || providerSubmitStatusFrom(diag);
+  const reviewReason = providerSubmitReviewCodeFrom(sourceObj) || providerSubmitReviewCodeFrom(extraObj) || providerSubmitReviewCodeFrom(diag);
   const providerCode = providerSubmitFailureCodeFromStatus(status, reviewReason);
   const fallbackCode = upperString(extraObj.code || extraObj.error_code || extraObj.errorCode || 'PROVIDER_SUBMIT_ADAPTER_FAILED');
   const code = providerCode || fallbackCode;
@@ -40185,8 +40854,8 @@ const providerSubmitTerminalPayload = (source = {}, extra = {}) => {
       provider_submission_status: status || undefined,
       provider_submit_review_reason_code: reviewReason || undefined,
       review_reason_code: reviewReason || undefined,
-      manual_resolution_required: providerSubmitManualResolutionRequired(sourceObj),
-      safe_retry_available: boolField(sourceObj, 'safe_retry_available', 'safeRetryAvailable')
+      manual_resolution_required: providerSubmitManualResolutionRequired(sourceObj) || providerSubmitManualResolutionRequired(extraObj),
+      safe_retry_available: boolField(sourceObj, 'safe_retry_available', 'safeRetryAvailable') || boolField(extraObj, 'safe_retry_available', 'safeRetryAvailable')
     }
   };
 };
@@ -41233,15 +41902,34 @@ if (currentPhase === 'SUBMIT_PROVIDER_TRANSFERS') {
       lockOwner
     });
   } catch (adapterError) {
+    const adapterErrorText = String(adapterError?.message || adapterError || 'Provider submit adapter failed.');
+    const adapterErrorPayload = serialisableErrorPayload(adapterError);
+    const adapterErrorObject = safeObject(adapterError);
+    const adapterErrorDiagnostic = extractProviderSubmitDiagnostic(adapterErrorObject);
+    const adapterErrorProviderStatus = providerSubmitStatusFrom(adapterErrorObject);
+    const adapterErrorReviewReason = providerSubmitReviewCodeFrom(adapterErrorObject);
     const providerSubmitFinalise = await finaliseProviderSubmitBeforeTerminal('SUBMIT_PROVIDER_TRANSFERS_ADAPTER_THROW', {
       phase: currentPhase,
       code: 'SUBMIT_PROVIDER_TRANSFERS_ADAPTER_THROW',
-      message: String(adapterError?.message || adapterError || 'Provider submit adapter failed.'),
-      error: String(adapterError?.message || adapterError || '')
+      message: adapterErrorText,
+      error: adapterErrorText,
+      source_error: adapterErrorPayload,
+      raw_error: Object.keys(adapterErrorObject).length ? adapterErrorObject : adapterErrorPayload,
+      provider_submit_diagnostic: Object.keys(adapterErrorDiagnostic).length ? adapterErrorDiagnostic : undefined,
+      provider_submission_status: adapterErrorProviderStatus || undefined,
+      provider_submit_review_reason_code: adapterErrorReviewReason || undefined,
+      review_reason_code: adapterErrorReviewReason || undefined
     });
     const providerReview = providerSubmitTerminalPayload(providerSubmitFinalise, {
+      code: adapterErrorProviderStatus || adapterErrorReviewReason || 'PROVIDER_SUBMIT_ADAPTER_FAILED',
       provider_submit_finalise_result: providerSubmitFinalise,
-      adapter_error: String(adapterError?.message || adapterError || '')
+      adapter_error: adapterErrorText,
+      source_error: adapterErrorPayload,
+      raw_error: Object.keys(adapterErrorObject).length ? adapterErrorObject : adapterErrorPayload,
+      provider_submit_diagnostic: Object.keys(adapterErrorDiagnostic).length ? adapterErrorDiagnostic : undefined,
+      provider_submission_status: adapterErrorProviderStatus || undefined,
+      provider_submit_review_reason_code: adapterErrorReviewReason || undefined,
+      review_reason_code: adapterErrorReviewReason || undefined
     });
     return fail(providerReview.code, providerReview.message, providerReview.payload);
   }
@@ -41907,18 +42595,29 @@ return fail('UNKNOWN_EXECUTE_PHASE', `Unknown payment execution phase: ${current
 } catch (e) {
 const topLevelErrorMessage = String(e?.message || e || 'Payment execution operation failed.');
 const topLevelErrorCode = upperString(e?.code || e?.error_code || e?.errorCode || e?.business_code || e?.businessCode || '');
+const topLevelErrorPayload = serialisableErrorPayload(e);
+const topLevelErrorObject = safeObject(e);
+const topLevelErrorDiagnostic = extractProviderSubmitDiagnostic(topLevelErrorObject);
+const topLevelErrorProviderStatus = providerSubmitStatusFrom(topLevelErrorObject);
+const topLevelErrorReviewReason = providerSubmitReviewCodeFrom(topLevelErrorObject);
 const topLevelFinalise = await finaliseProviderSubmitBeforeTerminal('PAYMENT_EXECUTE_TOP_LEVEL_CATCH', {
 phase: currentPhase,
-code: topLevelErrorCode || 'PAYMENT_EXECUTE_OPERATION_FAILED',
+code: topLevelErrorCode || topLevelErrorProviderStatus || topLevelErrorReviewReason || 'PAYMENT_EXECUTE_OPERATION_FAILED',
 message: topLevelErrorMessage,
 error: topLevelErrorMessage,
 error_code: topLevelErrorCode || undefined,
 details: e?.details || undefined,
-hint: e?.hint || undefined
+hint: e?.hint || undefined,
+source_error: topLevelErrorPayload,
+raw_error: Object.keys(topLevelErrorObject).length ? topLevelErrorObject : topLevelErrorPayload,
+provider_submit_diagnostic: Object.keys(topLevelErrorDiagnostic).length ? topLevelErrorDiagnostic : undefined,
+provider_submission_status: topLevelErrorProviderStatus || undefined,
+provider_submit_review_reason_code: topLevelErrorReviewReason || undefined,
+review_reason_code: topLevelErrorReviewReason || undefined
 });
-const topLevelDiagnostic = extractProviderSubmitDiagnostic(topLevelFinalise);
-const topLevelStatus = providerSubmitStatusFrom(topLevelFinalise);
-const topLevelReviewReason = providerSubmitReviewCodeFrom(topLevelFinalise);
+const topLevelDiagnostic = extractProviderSubmitDiagnostic(topLevelFinalise) || topLevelErrorDiagnostic;
+const topLevelStatus = providerSubmitStatusFrom(topLevelFinalise) || topLevelErrorProviderStatus;
+const topLevelReviewReason = providerSubmitReviewCodeFrom(topLevelFinalise) || topLevelErrorReviewReason;
 const topLevelProviderFailureCode = (topLevelStatus || topLevelReviewReason)
   ? providerSubmitFailureCodeFromStatus(topLevelStatus, topLevelReviewReason)
   : '';
@@ -41935,13 +42634,8 @@ provider_submit_diagnostic: Object.keys(topLevelDiagnostic).length ? topLevelDia
 provider_submission_status: topLevelStatus || undefined,
 provider_submit_review_reason_code: topLevelReviewReason || undefined,
 review_reason_code: topLevelReviewReason || undefined,
-source_error: {
-  name: e?.name || undefined,
-  message: topLevelErrorMessage,
-  code: e?.code || e?.error_code || e?.errorCode || undefined,
-  details: e?.details || undefined,
-  hint: e?.hint || undefined
-}
+source_error: topLevelErrorPayload,
+raw_error: Object.keys(topLevelErrorObject).length ? topLevelErrorObject : topLevelErrorPayload
 });
 }
 }
