@@ -16049,6 +16049,7 @@ DROP FUNCTION IF EXISTS public.pay_bank_transfers_apply_rail_updates(uuid, jsonb
 
 
 
+
 CREATE OR REPLACE FUNCTION public.pay_bank_transfers_apply_rail_updates(
   p_pay_batch_id uuid,
   p_updates jsonb,
@@ -16098,7 +16099,11 @@ DECLARE
   v_provider_response_present_count integer := 0;
   v_provider_request_sent_count integer := 0;
   v_provider_submission_unknown_count integer := 0;
+  v_is_scoped boolean := false;
 BEGIN
+  PERFORM set_config('lock_timeout', '3s', true);
+  v_is_scoped := (p_operation_id IS NOT NULL OR p_chunk_id IS NOT NULL OR p_transfer_ids IS NOT NULL);
+
   IF p_pay_batch_id IS NULL THEN
     RAISE EXCEPTION 'pay_bank_transfers_apply_rail_updates: pay_batch_id is required';
   END IF;
@@ -16327,7 +16332,8 @@ BEGIN
 
   UPDATE pg_temp.tmp_pay_bank_transfer_updates AS update_source
   SET event_source = CASE
-    WHEN update_source.event_source IN ('PROVIDER_RESPONSE', 'PROVIDER_POLL', 'PROVIDER_WEBHOOK', 'LOCAL_STATE') THEN update_source.event_source
+    WHEN update_source.event_source = 'PROVIDER_RESPONSE' THEN 'PROVIDER_POLL'
+    WHEN update_source.event_source IN ('PROVIDER_POLL', 'PROVIDER_WEBHOOK', 'LOCAL_STATE') THEN update_source.event_source
     WHEN update_source.event_source IN ('WEBHOOK') THEN 'PROVIDER_WEBHOOK'
     WHEN update_source.event_source IN ('POLL', 'RAIL_PROVIDER', 'PROVIDER', 'PROVIDER_SETTLEMENT', 'RAIL_PROVIDER_SETTLEMENT') THEN 'PROVIDER_POLL'
     ELSE 'LOCAL_STATE'
@@ -16343,7 +16349,7 @@ BEGIN
        OR update_source.provider_response_received IS TRUE
        OR update_source.provider_http_status IS NOT NULL
        OR NULLIF(BTRIM(COALESCE(update_source.provider_error_code, '')), '') IS NOT NULL
-     ) THEN 'PROVIDER_RESPONSE'
+     ) THEN 'PROVIDER_POLL'
     WHEN update_source.provider_submission_status IN ('PROVIDER_SUBMISSION_ACCEPTED', 'PROVIDER_SUBMISSION_REJECTED', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE') THEN 'LOCAL_STATE'
     WHEN update_source.provider_submission_status IN ('UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK', 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL') THEN 'LOCAL_STATE'
     ELSE update_source.event_source
@@ -16525,9 +16531,31 @@ BEGIN
     );
   END IF;
 
+  IF p_operation_id IS NOT NULL THEN
+    DELETE FROM pg_temp.tmp_pay_bank_transfer_updates AS update_delete
+    WHERE NOT EXISTS (
+      SELECT 1
+      FROM public.banking_pay_operation_transfer_scope AS operation_scope_filter
+      WHERE operation_scope_filter.operation_id = p_operation_id
+        AND operation_scope_filter.pay_batch_id = p_pay_batch_id
+        AND operation_scope_filter.pay_bank_transfer_id = update_delete.transfer_id
+    )
+      AND NOT EXISTS (
+        SELECT 1
+        FROM public.banking_pay_operation_chunks AS operation_chunk_filter
+        CROSS JOIN LATERAL jsonb_array_elements(COALESCE(operation_chunk_filter.payload_json->'transfer_ids', '[]'::jsonb)) AS operation_chunk_transfer_filter(value)
+        WHERE operation_chunk_filter.operation_id = p_operation_id
+          AND operation_chunk_filter.phase = 'SUBMIT_PROVIDER_TRANSFERS'
+          AND operation_chunk_filter.chunk_type = 'TRANSFER_SUBMIT'
+          AND (operation_chunk_transfer_filter.value #>> '{}') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          AND (operation_chunk_transfer_filter.value #>> '{}')::uuid = update_delete.transfer_id
+      );
+  END IF;
+
   UPDATE pg_temp.tmp_pay_bank_transfer_updates AS update_normalise
   SET
     transfer_status = CASE
+      WHEN update_normalise.provider_submission_status = 'PROVIDER_SUBMISSION_REJECTED' THEN 'FAILED'
       WHEN update_normalise.transfer_status IN ('SUCCESS', 'SUCCEEDED', 'SETTLED', 'PAID', 'EXECUTED', 'COMMITTED') THEN 'COMPLETED'
       WHEN update_normalise.transfer_status IN ('CANCELED', 'CANCELLED') THEN 'CANCELLED'
       WHEN update_normalise.transfer_status IN ('REVERSED', 'REVERTED') THEN 'RETURNED'
@@ -16536,12 +16564,23 @@ BEGIN
       ELSE update_normalise.transfer_status
     END,
     normalised_state = CASE
+      WHEN update_normalise.provider_submission_status = 'PROVIDER_SUBMISSION_REJECTED' THEN 'FAILED'
       WHEN update_normalise.normalised_state IN ('SUCCESS', 'SUCCEEDED', 'SETTLED', 'PAID', 'EXECUTED', 'COMMITTED') THEN 'COMPLETED'
       WHEN update_normalise.normalised_state IN ('CANCELED', 'CANCELLED') THEN 'FAILED'
       WHEN update_normalise.normalised_state IN ('REVERSED', 'REVERTED') THEN 'RETURNED'
       WHEN update_normalise.normalised_state IN ('SUBMITTED', 'QUEUED', 'ACCEPTED', 'SENT', 'PROCESSING', 'IN_FLIGHT', 'PENDING_SETTLEMENT', 'PENDING_CONFIRMATION', 'PENDING_SUBMISSION') THEN update_normalise.normalised_state
       WHEN update_normalise.normalised_state IN ('DECLINED', 'REJECTED', 'SUBMISSION_FAILED', 'FAILED_BEFORE_COMMIT') THEN 'FAILED'
       ELSE update_normalise.normalised_state
+    END,
+    failed_reason = CASE
+      WHEN update_normalise.provider_submission_status = 'PROVIDER_SUBMISSION_REJECTED'
+       AND NULLIF(BTRIM(COALESCE(update_normalise.failed_reason, '')), '') IS NULL THEN
+        COALESCE(
+          NULLIF(BTRIM(COALESCE(update_normalise.provider_error_message_redacted, '')), ''),
+          NULLIF(BTRIM(COALESCE(update_normalise.provider_error_code, '')), ''),
+          'PROVIDER_SUBMISSION_REJECTED'
+        )
+      ELSE update_normalise.failed_reason
     END
   WHERE update_normalise.row_seq IS NOT NULL;
 
@@ -17168,6 +17207,163 @@ BEGIN
 
   GET DIAGNOSTICS v_updated_count = ROW_COUNT;
 
+  IF v_is_scoped THEN
+    SELECT
+      COUNT(*) FILTER (WHERE scoped_row.is_provider_evidence IS TRUE)::integer,
+      COUNT(*) FILTER (
+        WHERE scoped_row.is_provider_source IS NOT TRUE
+          AND scoped_row.is_provider_evidence IS NOT TRUE
+          AND scoped_row.is_attempted_but_unproven IS NOT TRUE
+      )::integer,
+      COUNT(*) FILTER (
+        WHERE scoped_row.transfer_status = 'FAILED'
+           OR scoped_row.provider_submission_status = 'PROVIDER_SUBMISSION_REJECTED'
+      )::integer,
+      COUNT(*) FILTER (WHERE scoped_row.transfer_status = 'PENDING')::integer,
+      COUNT(*) FILTER (
+        WHERE scoped_row.provider_submission_unknown IS TRUE
+           OR scoped_row.is_attempted_but_unproven IS TRUE
+           OR scoped_row.provider_submission_status IN (
+             'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME',
+             'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK',
+             'PROVIDER_SUBMISSION_MALFORMED_RESPONSE',
+             'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID'
+           )
+      )::integer,
+      COUNT(*) FILTER (WHERE scoped_row.is_attempted_but_unproven IS TRUE)::integer,
+      COUNT(*) FILTER (WHERE scoped_row.provider_submission_status = 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID')::integer,
+      COUNT(*) FILTER (
+        WHERE scoped_row.transfer_status = 'PENDING'
+          AND scoped_row.is_provider_source IS NOT TRUE
+          AND scoped_row.is_provider_evidence IS NOT TRUE
+          AND scoped_row.provider_request_sent IS NOT TRUE
+          AND scoped_row.provider_response_present IS NOT TRUE
+          AND scoped_row.provider_response_received IS NOT TRUE
+          AND COALESCE(NULLIF(BTRIM(scoped_row.provider_submission_status), ''), 'NO_PROVIDER_SUBMISSION_ATTEMPTED') IN (
+            'NO_PROVIDER_SUBMISSION_ATTEMPTED',
+            'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL'
+          )
+      )::integer,
+      COUNT(*) FILTER (
+        WHERE scoped_row.is_attempted_but_unproven IS TRUE
+           OR scoped_row.provider_submission_unknown IS TRUE
+           OR scoped_row.provider_submission_status IN (
+             'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME',
+             'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK',
+             'PROVIDER_SUBMISSION_MALFORMED_RESPONSE',
+             'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID'
+           )
+      )::integer
+    INTO v_provider_submitted_count,
+         v_local_only_count,
+         v_failed_count,
+         v_pending_count,
+         v_ambiguous_count,
+         v_attempted_but_unproven_count,
+         v_provider_attempt_without_external_id_count,
+         v_remaining_submit_attempt_required,
+         v_remaining_provider_evidence_required
+    FROM pg_temp.tmp_pay_bank_transfer_updates AS scoped_row;
+
+    SELECT
+      COUNT(*) FILTER (WHERE scoped_row.is_provider_evidence IS TRUE)::integer,
+      COUNT(*) FILTER (WHERE scoped_row.is_provider_external_evidence IS TRUE)::integer,
+      COUNT(*) FILTER (WHERE scoped_row.provider_response_present IS TRUE OR scoped_row.provider_response_received IS TRUE OR scoped_row.is_provider_source IS TRUE)::integer,
+      COUNT(*) FILTER (WHERE scoped_row.provider_request_sent IS TRUE OR scoped_row.provider_request_sent_confirmed IS TRUE OR scoped_row.provider_response_present IS TRUE OR scoped_row.provider_response_received IS TRUE OR scoped_row.is_provider_source IS TRUE OR scoped_row.is_provider_evidence IS TRUE)::integer,
+      COUNT(*) FILTER (WHERE scoped_row.provider_submission_unknown IS TRUE OR scoped_row.is_attempted_but_unproven IS TRUE OR scoped_row.provider_submission_status IN ('UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE', 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID'))::integer,
+      COALESCE(jsonb_agg(jsonb_strip_nulls(jsonb_build_object(
+        'transfer_id', scoped_row.transfer_id::text,
+        'provider_submission_status', scoped_row.provider_submission_status,
+        'provider_request_sent', scoped_row.provider_request_sent OR scoped_row.provider_request_sent_confirmed,
+        'provider_request_sent_confirmed', scoped_row.provider_request_sent_confirmed,
+        'provider_request_dispatched_at_utc', scoped_row.provider_request_dispatched_at_utc,
+        'provider_response_received', scoped_row.provider_response_received,
+        'provider_response_present', scoped_row.provider_response_present,
+        'provider_external_evidence_present', scoped_row.is_provider_external_evidence,
+        'provider_acceptance_evidence_present', scoped_row.is_provider_evidence,
+        'rail_tx_id', CASE WHEN scoped_row.is_provider_evidence IS TRUE THEN scoped_row.rail_tx_id ELSE NULL::text END,
+        'rail_state', scoped_row.rail_state,
+        'provider_http_status', scoped_row.provider_http_status,
+        'provider_error_code', scoped_row.provider_error_code,
+        'request_id', scoped_row.request_id,
+        'idempotency_key', scoped_row.idempotency_key,
+        'manual_resolution_required', scoped_row.manual_resolution_required,
+        'safe_retry_available', scoped_row.safe_retry_available
+      )) ORDER BY scoped_row.row_seq), '[]'::jsonb)
+    INTO v_provider_acceptance_evidence_count,
+         v_provider_external_evidence_count,
+         v_provider_response_present_count,
+         v_provider_request_sent_count,
+         v_provider_submission_unknown_count,
+         v_transfer_provider_outcomes
+    FROM pg_temp.tmp_pay_bank_transfer_updates AS scoped_row;
+
+    SELECT COALESCE(scoped_row.provider_submit_diagnostic, '{}'::jsonb)
+    INTO v_provider_submit_diagnostic
+    FROM pg_temp.tmp_pay_bank_transfer_updates AS scoped_row
+    ORDER BY CASE
+        WHEN scoped_row.provider_submission_status = 'PROVIDER_SUBMISSION_ACCEPTED' AND scoped_row.is_provider_evidence IS TRUE THEN 0
+        WHEN scoped_row.provider_submission_status = 'PROVIDER_SUBMISSION_REJECTED' THEN 1
+        WHEN scoped_row.provider_submission_status IN ('UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE', 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID') THEN 2
+        ELSE 3
+      END,
+      scoped_row.row_seq
+    LIMIT 1;
+
+    v_remaining_unsubmitted_count := v_remaining_submit_attempt_required;
+    v_requires_provider_poll := COALESCE(v_ambiguous_count, 0) > 0;
+    v_requires_review := COALESCE(v_failed_count, 0) > 0
+      OR COALESCE(v_ambiguous_count, 0) > 0
+      OR COALESCE(v_provider_attempt_without_external_id_count, 0) > 0;
+    v_can_mark_submitted := false;
+    v_can_mark_committed := false;
+    v_execution_commit_state := upper(BTRIM(COALESCE(v_batch_row.execution_commit_state, 'NOT_SUBMITTED')));
+    IF v_execution_commit_state NOT IN ('NOT_SUBMITTED', 'SUBMITTED_NOT_COMMITTED', 'COMMITTED') THEN
+      v_execution_commit_state := 'NOT_SUBMITTED';
+    END IF;
+    v_execution_commit_ref := CASE WHEN v_execution_commit_state = 'NOT_SUBMITTED' THEN NULL::text ELSE v_batch_row.execution_commit_ref END;
+    v_execution_committed_at_utc := CASE WHEN v_execution_commit_state = 'COMMITTED' THEN v_batch_row.execution_committed_at_utc ELSE NULL::timestamptz END;
+
+    v_submission_evidence_json := jsonb_build_object(
+      'scoped', true,
+      'pay_batch_id', p_pay_batch_id::text,
+      'operation_id', CASE WHEN p_operation_id IS NULL THEN NULL ELSE p_operation_id::text END,
+      'chunk_id', CASE WHEN p_chunk_id IS NULL THEN NULL ELSE p_chunk_id::text END,
+      'provider_submitted_count', COALESCE(v_provider_submitted_count, 0),
+      'local_idempotency_only_count', COALESCE(v_local_only_count, 0),
+      'local_only_count', COALESCE(v_local_only_count, 0),
+      'failed_count', COALESCE(v_failed_count, 0),
+      'pending_count', COALESCE(v_pending_count, 0),
+      'ambiguous_count', COALESCE(v_ambiguous_count, 0),
+      'attempted_but_unproven_count', COALESCE(v_attempted_but_unproven_count, 0),
+      'provider_attempt_without_external_id_count', COALESCE(v_provider_attempt_without_external_id_count, 0),
+      'remaining_submit_attempt_required', COALESCE(v_remaining_submit_attempt_required, 0),
+      'remaining_provider_evidence_required', COALESCE(v_remaining_provider_evidence_required, 0),
+      'requires_provider_poll', COALESCE(v_requires_provider_poll, false),
+      'requires_review', COALESCE(v_requires_review, false),
+      'can_mark_submitted', false,
+      'can_mark_committed', false
+    );
+
+    v_summary_json := jsonb_build_object(
+      'scoped', true,
+      'summary_scope', 'SCOPED_RAIL_UPDATE',
+      'pay_batch_id', p_pay_batch_id::text,
+      'operation_id', CASE WHEN p_operation_id IS NULL THEN NULL ELSE p_operation_id::text END,
+      'chunk_id', CASE WHEN p_chunk_id IS NULL THEN NULL ELSE p_chunk_id::text END,
+      'updated_count', COALESCE(v_updated_count, 0),
+      'provider_submitted_count', COALESCE(v_provider_submitted_count, 0),
+      'failed_count', COALESCE(v_failed_count, 0),
+      'pending_count', COALESCE(v_pending_count, 0),
+      'ambiguous_count', COALESCE(v_ambiguous_count, 0),
+      'requires_review', COALESCE(v_requires_review, false),
+      'blocked_funds_state', '{}'::jsonb
+    );
+
+    UPDATE public.pay_batches AS batch_update
+    SET last_status_checked_at_utc = v_now
+    WHERE batch_update.id = p_pay_batch_id;
+  ELSE
   v_submission_evidence_json := public.pay_batch_submission_evidence(p_pay_batch_id);
   v_provider_submitted_count := coalesce((v_submission_evidence_json->>'provider_submitted_count')::integer, 0);
   v_local_only_count := coalesce((v_submission_evidence_json->>'local_only_count')::integer, coalesce((v_submission_evidence_json->>'local_idempotency_only_count')::integer, 0));
@@ -17346,53 +17542,56 @@ BEGIN
       execution_commit_ref = CASE WHEN v_execution_commit_state = 'NOT_SUBMITTED' THEN NULL ELSE v_execution_commit_ref END,
       execution_committed_at_utc = CASE WHEN v_execution_commit_state = 'COMMITTED' THEN COALESCE(v_execution_committed_at_utc, v_now) ELSE NULL::timestamptz END
   WHERE batch_update.id = p_pay_batch_id;
+  END IF;
 
-  SELECT
-    COUNT(*) FILTER (WHERE update_row.is_provider_evidence IS TRUE)::integer,
-    COUNT(*) FILTER (WHERE update_row.is_provider_external_evidence IS TRUE)::integer,
-    COUNT(*) FILTER (WHERE update_row.provider_response_present IS TRUE OR update_row.provider_response_received IS TRUE OR update_row.is_provider_source IS TRUE)::integer,
-    COUNT(*) FILTER (WHERE update_row.provider_request_sent IS TRUE OR update_row.provider_response_present IS TRUE OR update_row.provider_response_received IS TRUE OR update_row.is_provider_source IS TRUE OR update_row.is_provider_evidence IS TRUE)::integer,
-    COUNT(*) FILTER (WHERE update_row.provider_submission_unknown IS TRUE OR update_row.is_attempted_but_unproven IS TRUE OR update_row.provider_submission_status IN ('UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE', 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID'))::integer,
-    COALESCE(jsonb_agg(jsonb_strip_nulls(jsonb_build_object(
-      'transfer_id', update_row.transfer_id::text,
-      'provider_submission_status', update_row.provider_submission_status,
-      'provider_request_sent', update_row.provider_request_sent OR update_row.provider_request_sent_confirmed,
-      'provider_request_sent_confirmed', update_row.provider_request_sent_confirmed,
-      'provider_request_dispatched_at_utc', update_row.provider_request_dispatched_at_utc,
-      'provider_response_received', update_row.provider_response_received,
-      'provider_response_present', update_row.provider_response_present,
-      'provider_external_evidence_present', update_row.is_provider_external_evidence,
-      'provider_acceptance_evidence_present', update_row.is_provider_evidence,
-      'rail_tx_id', CASE WHEN update_row.is_provider_evidence IS TRUE THEN update_row.rail_tx_id ELSE NULL::text END,
-      'rail_state', update_row.rail_state,
-      'provider_http_status', update_row.provider_http_status,
-      'provider_error_code', update_row.provider_error_code,
-      'request_id', update_row.request_id,
-      'idempotency_key', update_row.idempotency_key,
-      'manual_resolution_required', update_row.manual_resolution_required,
-      'safe_retry_available', update_row.safe_retry_available
-    )) ORDER BY update_row.row_seq), '[]'::jsonb)
-  INTO v_provider_acceptance_evidence_count,
-       v_provider_external_evidence_count,
-       v_provider_response_present_count,
-       v_provider_request_sent_count,
-       v_provider_submission_unknown_count,
-       v_transfer_provider_outcomes
-  FROM pg_temp.tmp_pay_bank_transfer_updates AS update_row;
+  IF v_is_scoped IS NOT TRUE THEN
+    SELECT
+      COUNT(*) FILTER (WHERE update_row.is_provider_evidence IS TRUE)::integer,
+      COUNT(*) FILTER (WHERE update_row.is_provider_external_evidence IS TRUE)::integer,
+      COUNT(*) FILTER (WHERE update_row.provider_response_present IS TRUE OR update_row.provider_response_received IS TRUE OR update_row.is_provider_source IS TRUE)::integer,
+      COUNT(*) FILTER (WHERE update_row.provider_request_sent IS TRUE OR update_row.provider_response_present IS TRUE OR update_row.provider_response_received IS TRUE OR update_row.is_provider_source IS TRUE OR update_row.is_provider_evidence IS TRUE)::integer,
+      COUNT(*) FILTER (WHERE update_row.provider_submission_unknown IS TRUE OR update_row.is_attempted_but_unproven IS TRUE OR update_row.provider_submission_status IN ('UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE', 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID'))::integer,
+      COALESCE(jsonb_agg(jsonb_strip_nulls(jsonb_build_object(
+        'transfer_id', update_row.transfer_id::text,
+        'provider_submission_status', update_row.provider_submission_status,
+        'provider_request_sent', update_row.provider_request_sent OR update_row.provider_request_sent_confirmed,
+        'provider_request_sent_confirmed', update_row.provider_request_sent_confirmed,
+        'provider_request_dispatched_at_utc', update_row.provider_request_dispatched_at_utc,
+        'provider_response_received', update_row.provider_response_received,
+        'provider_response_present', update_row.provider_response_present,
+        'provider_external_evidence_present', update_row.is_provider_external_evidence,
+        'provider_acceptance_evidence_present', update_row.is_provider_evidence,
+        'rail_tx_id', CASE WHEN update_row.is_provider_evidence IS TRUE THEN update_row.rail_tx_id ELSE NULL::text END,
+        'rail_state', update_row.rail_state,
+        'provider_http_status', update_row.provider_http_status,
+        'provider_error_code', update_row.provider_error_code,
+        'request_id', update_row.request_id,
+        'idempotency_key', update_row.idempotency_key,
+        'manual_resolution_required', update_row.manual_resolution_required,
+        'safe_retry_available', update_row.safe_retry_available
+      )) ORDER BY update_row.row_seq), '[]'::jsonb)
+    INTO v_provider_acceptance_evidence_count,
+         v_provider_external_evidence_count,
+         v_provider_response_present_count,
+         v_provider_request_sent_count,
+         v_provider_submission_unknown_count,
+         v_transfer_provider_outcomes
+    FROM pg_temp.tmp_pay_bank_transfer_updates AS update_row;
 
-  SELECT COALESCE(update_row.provider_submit_diagnostic, '{}'::jsonb)
-  INTO v_provider_submit_diagnostic
-  FROM pg_temp.tmp_pay_bank_transfer_updates AS update_row
-  ORDER BY CASE
-      WHEN update_row.provider_submission_status = 'PROVIDER_SUBMISSION_ACCEPTED' AND update_row.is_provider_evidence IS TRUE THEN 0
-      WHEN update_row.provider_submission_status = 'PROVIDER_SUBMISSION_REJECTED' THEN 1
-      WHEN update_row.provider_submission_status IN ('UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE', 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID') THEN 2
-      ELSE 3
-    END,
-    update_row.row_seq
-  LIMIT 1;
+    SELECT COALESCE(update_row.provider_submit_diagnostic, '{}'::jsonb)
+    INTO v_provider_submit_diagnostic
+    FROM pg_temp.tmp_pay_bank_transfer_updates AS update_row
+    ORDER BY CASE
+        WHEN update_row.provider_submission_status = 'PROVIDER_SUBMISSION_ACCEPTED' AND update_row.is_provider_evidence IS TRUE THEN 0
+        WHEN update_row.provider_submission_status = 'PROVIDER_SUBMISSION_REJECTED' THEN 1
+        WHEN update_row.provider_submission_status IN ('UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE', 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID') THEN 2
+        ELSE 3
+      END,
+      update_row.row_seq
+    LIMIT 1;
 
-  v_summary_json := public.pay_batch_execution_summary_get(p_pay_batch_id, p_actor_user_id);
+    v_summary_json := public.pay_batch_execution_summary_get(p_pay_batch_id, p_actor_user_id);
+  END IF;
 
   IF p_chunk_id IS NOT NULL THEN
     UPDATE public.banking_pay_operation_chunks AS chunk_update
@@ -17470,6 +17669,8 @@ BEGIN
   );
 END;
 $function$;
+
+
 
 
 
