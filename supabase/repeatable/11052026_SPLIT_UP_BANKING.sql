@@ -1346,6 +1346,8 @@ $$;
 
 
 
+
+
 create or replace function public.banking_pay_operation_finish_chunk(
     p_chunk_id uuid,
     p_status text,
@@ -1389,6 +1391,8 @@ declare
     v_result_json jsonb;
     v_error_json jsonb;
 begin
+    perform set_config('lock_timeout', '3s', true);
+
     v_status := nullif(btrim(p_status), '');
     v_result_json := p_result_json;
     v_error_json := p_error_json;
@@ -1563,6 +1567,11 @@ begin
         v_chunk.updated_at_utc;
 end;
 $$;
+
+
+
+
+
 create or replace function public.banking_pay_operation_find_active(
     p_operation_type text default null,
     p_workbench_session_id uuid default null,
