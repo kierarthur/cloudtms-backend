@@ -38985,6 +38985,12 @@ for (const key of [
   'locks_released',
   'cleanup_retry_blocked_count',
   'stale_previous_operation_scope_blocked_count',
+  'total_payment_count',
+  'successful_payment_count',
+  'failed_or_needs_review_payment_count',
+  'rejected_payment_count',
+  'unknown_payment_count',
+  'blocked_funds_count',
   'stale_previous_operation_cleanup_attempted_count',
   'stale_previous_operation_scope_cleaned_count',
   'stale_previous_retry_operation_scope_cleaned_count',
@@ -38994,6 +39000,20 @@ for (const key of [
 ]) {
   const value = extraObj[key];
   if (Number.isFinite(Number(value))) publicError[key] = Number(value);
+}
+
+if (extraObj.payment_execution_outcome_counts && typeof extraObj.payment_execution_outcome_counts === 'object' && !Array.isArray(extraObj.payment_execution_outcome_counts)) {
+  publicError.payment_execution_outcome_counts = safeObject(extraObj.payment_execution_outcome_counts);
+}
+for (const key of [
+  'provider_request_sent',
+  'provider_response_present',
+  'provider_response_received',
+  'provider_submission_attempted',
+  'submitted_to_bank',
+  'blocked_funds'
+]) {
+  if (extraObj[key] !== undefined) publicError[key] = extraObj[key] === true;
 }
 
 return {
@@ -40156,17 +40176,24 @@ const extractFundsCheckJson = (submitted) => {
   }
   return {};
 };
+const submittedProviderEvidenceSnapshot = (submitted) => collectProviderSubmitCleanupEvidence(
+  submitted,
+  extractFundsCheckJson(submitted)
+);
 const countSubmittedProviderEvidence = (submitted) => {
-  const source = safeObject(submitted);
-  const fundsCheckJson = extractFundsCheckJson(source);
-  const roots = [source, fundsCheckJson, ...((Array.isArray(source.errors) ? source.errors : []).map((err) => safeObject(err)))];
-  let maxCount = 0;
-  for (const obj of roots) {
-    maxCount = Math.max(maxCount, strictProviderAcceptanceEvidenceCount(obj));
-  }
-  return maxCount;
+  const evidence = submittedProviderEvidenceSnapshot(submitted);
+  return Math.max(
+    evidence.provider_acceptance_evidence_count || 0,
+    evidence.provider_rejection_count || 0,
+    evidence.provider_unknown_count || 0,
+    evidence.provider_response_present_count || 0,
+    evidence.provider_request_sent_count || 0,
+    evidence.unfinalised_submit_chunk_count || 0,
+    evidence.stale_unresolved_submit_chunk_count || 0,
+    evidence.providerEvidenceDetected === true ? 1 : 0
+  );
 };
-const hasProviderEvidenceFromSubmitted = (submitted) => countSubmittedProviderEvidence(submitted) > 0;
+const hasProviderEvidenceFromSubmitted = (submitted) => submittedProviderEvidenceSnapshot(submitted).providerEvidenceDetected === true;
 const extractProviderSubmitDiagnostic = (source) => {
   const root = safeObject(source);
   const direct = safeObject(root.provider_submit_diagnostic || root.providerSubmitDiagnostic);
@@ -40203,8 +40230,9 @@ const providerSubmitManualResolutionRequired = (source) => {
       'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME',
       'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK',
       'PROVIDER_SUBMISSION_MALFORMED_RESPONSE',
-      'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID'
-    ].includes(providerSubmitStatusFrom(source));
+      'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID',
+      'PROVIDER_SUBMISSION_REJECTED'
+    ].includes(providerSubmitFailureCodeFromStatus(providerSubmitStatusFrom(source), providerSubmitReviewCodeFrom(source)));
 };
 
 const uniqueProviderSubmitIdArray = (...values) => {
@@ -40256,6 +40284,12 @@ const collectProviderSubmitCleanupEvidence = (...sources) => {
       'providerSubmitFinaliseResult',
       'provider_submit_result',
       'providerSubmitResult',
+      'provider_submission_result',
+      'providerSubmissionResult',
+      'provider_result',
+      'providerResult',
+      'apply_updates_result',
+      'applyUpdatesResult',
       'rail_meta_json',
       'railMetaJson',
       'raw_payload',
@@ -40290,6 +40324,7 @@ const collectProviderSubmitCleanupEvidence = (...sources) => {
       source.transferProviderOutcomes,
       source.provider_outcomes,
       source.providerOutcomes,
+      source.submitted,
       source.errors
     ];
     for (const arr of eventArrays) {
@@ -40297,7 +40332,7 @@ const collectProviderSubmitCleanupEvidence = (...sources) => {
       for (const item of arr) addSource(item);
     }
   };
-  for (const source of sources) addSource(safeObject(source));
+  for (const source of sources) addSource(source);
 
   const transferIds = [];
   const chunkIds = [];
@@ -40325,6 +40360,9 @@ const collectProviderSubmitCleanupEvidence = (...sources) => {
   let staleUnresolvedSubmitChunkCount = 0;
   let providerSubmissionStatus = '';
   let reviewReasonCode = '';
+  let providerErrorCode = '';
+  let providerErrorMessageRedacted = '';
+  let providerHttpStatus = '';
   let providerSubmitDiagnostic = {};
   let providerSubmitClaimDiagnostic = {};
   const providerSubmitClaimDiagnosticEvents = [];
@@ -40349,28 +40387,95 @@ const collectProviderSubmitCleanupEvidence = (...sources) => {
       source.claim_blocker_code,
       source.claimBlockerCode
     );
+    const sourceProviderScoped = Boolean(
+      Object.prototype.hasOwnProperty.call(source, 'provider_submission_status')
+      || Object.prototype.hasOwnProperty.call(source, 'providerSubmissionStatus')
+      || Object.prototype.hasOwnProperty.call(source, 'provider_submit_diagnostic')
+      || Object.prototype.hasOwnProperty.call(source, 'providerSubmitDiagnostic')
+      || Object.prototype.hasOwnProperty.call(source, 'provider_error_code')
+      || Object.prototype.hasOwnProperty.call(source, 'providerErrorCode')
+      || Object.prototype.hasOwnProperty.call(source, 'provider_error_message_redacted')
+      || Object.prototype.hasOwnProperty.call(source, 'providerErrorMessageRedacted')
+      || Object.prototype.hasOwnProperty.call(source, 'provider_error_message')
+      || Object.prototype.hasOwnProperty.call(source, 'providerErrorMessage')
+      || Object.prototype.hasOwnProperty.call(source, 'provider_http_status')
+      || Object.prototype.hasOwnProperty.call(source, 'providerHttpStatus')
+      || Object.prototype.hasOwnProperty.call(source, 'provider_request_sent')
+      || Object.prototype.hasOwnProperty.call(source, 'providerRequestSent')
+      || Object.prototype.hasOwnProperty.call(source, 'provider_response_present')
+      || Object.prototype.hasOwnProperty.call(source, 'providerResponsePresent')
+      || Object.prototype.hasOwnProperty.call(source, 'provider_response_received')
+      || Object.prototype.hasOwnProperty.call(source, 'providerResponseReceived')
+      || Object.prototype.hasOwnProperty.call(source, 'provider_submission_attempted')
+      || Object.prototype.hasOwnProperty.call(source, 'providerSubmissionAttempted')
+      || Object.prototype.hasOwnProperty.call(source, 'transfer_provider_outcomes')
+      || Object.prototype.hasOwnProperty.call(source, 'transferProviderOutcomes')
+      || Object.prototype.hasOwnProperty.call(source, 'provider_outcomes')
+      || Object.prototype.hasOwnProperty.call(source, 'providerOutcomes')
+      || Object.prototype.hasOwnProperty.call(source, 'provider_response')
+      || Object.prototype.hasOwnProperty.call(source, 'providerResponse')
+      || String(source.diagnostic_kind || source.diagnosticKind || '').trim().toUpperCase().includes('PROVIDER')
+      || sourceReason === 'PROVIDER_REJECTED_PAYMENT'
+      || sourceStatus.startsWith('PROVIDER_')
+    );
+    const sourceProviderErrorCode = firstStatus(
+      source.provider_error_code,
+      source.providerErrorCode,
+      sourceProviderScoped ? source.error_code : '',
+      sourceProviderScoped ? source.errorCode : ''
+    );
+    const sourceProviderErrorMessage = firstNonBlank(
+      source.provider_error_message_redacted,
+      source.providerErrorMessageRedacted,
+      source.provider_error_message,
+      source.providerErrorMessage,
+      source.provider_message,
+      source.providerMessage
+    );
+    const sourceProviderHttpStatus = firstNonBlank(
+      source.provider_http_status,
+      source.providerHttpStatus,
+      sourceProviderScoped ? source.http_status : '',
+      sourceProviderScoped ? source.httpStatus : ''
+    );
+    const sourceHasProviderErrorPayload = sourceProviderScoped && Boolean(sourceProviderErrorCode || sourceProviderErrorMessage || sourceProviderHttpStatus);
+    const sourceLooksRejected = ['PROVIDER_SUBMISSION_REJECTED', 'REJECTED', 'DECLINED', 'FAILED'].includes(sourceStatus)
+      || sourceReason === 'PROVIDER_REJECTED_PAYMENT'
+      || source.provider_submission_rejected === true
+      || source.providerSubmissionRejected === true
+      || safeStatus(source.rail_state) === 'REJECTED'
+      || safeStatus(source.railState) === 'REJECTED';
     if (!providerSubmissionStatus && sourceStatus) providerSubmissionStatus = sourceStatus;
     if (!reviewReasonCode && sourceReason) reviewReasonCode = sourceReason;
+    if (!providerErrorCode && sourceProviderErrorCode) providerErrorCode = sourceProviderErrorCode;
+    if (!providerErrorMessageRedacted && sourceProviderErrorMessage) providerErrorMessageRedacted = String(sourceProviderErrorMessage).trim();
+    if (!providerHttpStatus && sourceProviderHttpStatus) providerHttpStatus = String(sourceProviderHttpStatus).trim();
 
     addIds(transferIds, source.transfer_ids, source.transferIds, source.transfer_id, source.transferId, source.pay_bank_transfer_id, source.payBankTransferId);
     addIds(chunkIds, source.chunk_ids, source.chunkIds, source.chunk_id, source.chunkId, source.last_provider_submit_chunk_id, source.lastProviderSubmitChunkId);
     addIds(authRequestIds, source.auth_request_ids, source.authRequestIds, source.auth_request_id, source.authRequestId);
 
     providerRequestSent = providerRequestSent
-      || boolField(source, 'provider_request_sent', 'providerRequestSent', 'provider_request_sent_confirmed', 'providerRequestSentConfirmed', 'request_sent', 'requestSent');
+      || boolField(source, 'provider_request_sent', 'providerRequestSent', 'provider_request_sent_confirmed', 'providerRequestSentConfirmed', 'request_sent', 'requestSent')
+      || sourceHasProviderErrorPayload;
     providerResponsePresent = providerResponsePresent
-      || boolField(source, 'provider_response_present', 'providerResponsePresent', 'response_present', 'responsePresent');
+      || boolField(source, 'provider_response_present', 'providerResponsePresent', 'response_present', 'responsePresent')
+      || sourceHasProviderErrorPayload;
     providerResponseReceived = providerResponseReceived
-      || boolField(source, 'provider_response_received', 'providerResponseReceived', 'response_received', 'responseReceived');
+      || boolField(source, 'provider_response_received', 'providerResponseReceived', 'response_received', 'responseReceived')
+      || sourceHasProviderErrorPayload;
     providerSubmissionAttempted = providerSubmissionAttempted
-      || boolField(source, 'provider_submission_attempted', 'providerSubmissionAttempted', 'provider_called', 'providerCalled', 'provider_request_sent', 'providerRequestSent');
+      || boolField(source, 'provider_submission_attempted', 'providerSubmissionAttempted', 'provider_called', 'providerCalled', 'provider_request_sent', 'providerRequestSent')
+      || sourceHasProviderErrorPayload;
     manualResolutionRequired = manualResolutionRequired
-      || boolField(source, 'manual_resolution_required', 'manualResolutionRequired', 'requires_review', 'requiresReview');
+      || boolField(source, 'manual_resolution_required', 'manualResolutionRequired', 'requires_review', 'requiresReview')
+      || sourceLooksRejected;
     safeRetryAvailable = safeRetryAvailable || boolField(source, 'safe_retry_available', 'safeRetryAvailable');
 
     providerRejectionCount = Math.max(
       providerRejectionCount,
-      numField(source, 'provider_rejection_count', 'providerRejectionCount', 'provider_submission_rejected_count', 'providerSubmissionRejectedCount', 'rejected_count', 'rejectedCount')
+      numField(source, 'provider_rejection_count', 'providerRejectionCount', 'provider_submission_rejected_count', 'providerSubmissionRejectedCount', 'rejected_count', 'rejectedCount'),
+      sourceLooksRejected ? 1 : 0
     );
     providerUnknownCount = Math.max(
       providerUnknownCount,
@@ -40378,15 +40483,18 @@ const collectProviderSubmitCleanupEvidence = (...sources) => {
     );
     providerAcceptanceEvidenceCount = Math.max(
       providerAcceptanceEvidenceCount,
-      numField(source, 'provider_acceptance_evidence_count', 'providerAcceptanceEvidenceCount')
+      numField(source, 'provider_acceptance_evidence_count', 'providerAcceptanceEvidenceCount'),
+      strictProviderAcceptanceEvidenceCount(source)
     );
     providerResponsePresentCount = Math.max(
       providerResponsePresentCount,
-      numField(source, 'provider_response_present_count', 'providerResponsePresentCount')
+      numField(source, 'provider_response_present_count', 'providerResponsePresentCount'),
+      providerResponsePresent || sourceHasProviderErrorPayload ? 1 : 0
     );
     providerRequestSentCount = Math.max(
       providerRequestSentCount,
-      numField(source, 'provider_request_sent_count', 'providerRequestSentCount')
+      numField(source, 'provider_request_sent_count', 'providerRequestSentCount'),
+      providerRequestSent || sourceHasProviderErrorPayload ? 1 : 0
     );
     unfinalisedSubmitChunkCount = Math.max(
       unfinalisedSubmitChunkCount,
@@ -40422,6 +40530,7 @@ const collectProviderSubmitCleanupEvidence = (...sources) => {
     return statusUpper;
   };
   providerSubmissionStatus = normaliseProviderSubmissionStatusAlias(providerSubmissionStatus);
+  if (!providerSubmissionStatus && reviewReasonCode === 'PROVIDER_REJECTED_PAYMENT') providerSubmissionStatus = 'PROVIDER_SUBMISSION_REJECTED';
 
   if (providerSubmissionStatus === 'PROVIDER_SUBMISSION_REJECTED') providerRejectionCount = Math.max(providerRejectionCount, 1);
   if ([
@@ -40435,6 +40544,7 @@ const collectProviderSubmitCleanupEvidence = (...sources) => {
     || providerResponsePresent
     || providerResponseReceived
     || providerSubmissionAttempted
+    || Boolean(providerErrorCode || providerErrorMessageRedacted || providerHttpStatus)
     || providerRejectionCount > 0
     || providerUnknownCount > 0
     || providerAcceptanceEvidenceCount > 0
@@ -40457,6 +40567,9 @@ const collectProviderSubmitCleanupEvidence = (...sources) => {
     provider_response_present: providerResponsePresent || providerSubmitDiagnostic.provider_response_present || undefined,
     provider_response_received: providerResponseReceived || providerSubmitDiagnostic.provider_response_received || undefined,
     provider_submission_attempted: providerSubmissionAttempted || providerSubmitDiagnostic.provider_submission_attempted || undefined,
+    provider_error_code: providerErrorCode || providerSubmitDiagnostic.provider_error_code || undefined,
+    provider_error_message_redacted: providerErrorMessageRedacted || providerSubmitDiagnostic.provider_error_message_redacted || undefined,
+    provider_http_status: providerHttpStatus || providerSubmitDiagnostic.provider_http_status || undefined,
     manual_resolution_required: manualResolutionRequired || providerSubmitDiagnostic.manual_resolution_required || undefined,
     safe_retry_available: safeRetryAvailable || providerSubmitDiagnostic.safe_retry_available || undefined,
     provider_rejection_count: providerRejectionCount || undefined,
@@ -40483,6 +40596,9 @@ const collectProviderSubmitCleanupEvidence = (...sources) => {
     provider_response_present: providerResponsePresent,
     provider_response_received: providerResponseReceived,
     provider_submission_attempted: providerSubmissionAttempted,
+    provider_error_code: providerErrorCode || undefined,
+    provider_error_message_redacted: providerErrorMessageRedacted || undefined,
+    provider_http_status: providerHttpStatus || undefined,
     provider_rejection_count: providerRejectionCount,
     provider_unknown_count: providerUnknownCount,
     provider_acceptance_evidence_count: providerAcceptanceEvidenceCount,
@@ -40602,31 +40718,295 @@ const emitProviderSubmitClaimDiagnosticLog = (diagnostic = {}, events = []) => {
     } catch {}
   }
 };
+const collectProviderExecutionOutcomeCounts = (source = {}, extra = {}) => {
+  const root = safeObject(source);
+  const extraObj = safeObject(extra);
+  const evidence = collectProviderSubmitCleanupEvidence(root, extraObj);
+  const rows = [];
+  const seenRows = new Set();
+  const addRow = (value) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return;
+    const key = [
+      value.pay_bank_transfer_id,
+      value.payBankTransferId,
+      value.transfer_id,
+      value.transferId,
+      value.id,
+      value.chunk_id,
+      value.chunkId,
+      value.provider_submission_status,
+      value.providerSubmissionStatus,
+      value.review_reason_code,
+      value.reviewReasonCode,
+      value.provider_error_code,
+      value.providerErrorCode
+    ].map((item) => String(item == null ? '' : item).trim()).join('|');
+    if (key && seenRows.has(key)) return;
+    if (key) seenRows.add(key);
+    rows.push(value);
+  };
+  const addRows = (value) => {
+    if (!value) return;
+    if (Array.isArray(value)) {
+      for (const item of value) addRows(item);
+      return;
+    }
+    if (typeof value !== 'object') return;
+    addRow(value);
+    addRows(value.transfer_provider_outcomes);
+    addRows(value.transferProviderOutcomes);
+    addRows(value.provider_outcomes);
+    addRows(value.providerOutcomes);
+    addRows(value.submitted);
+    addRows(value.errors);
+    addRows(value.apply_updates_result);
+    addRows(value.applyUpdatesResult);
+    addRows(value.provider_submit_diagnostic);
+    addRows(value.providerSubmitDiagnostic);
+    addRows(value.rail_meta_json);
+    addRows(value.railMetaJson);
+    addRows(value.raw_payload);
+    addRows(value.rawPayload);
+  };
+  addRows(root);
+  addRows(extraObj);
+
+  const acceptedPaymentKeys = new Set();
+  const rejectedPaymentKeys = new Set();
+  const unknownPaymentKeys = new Set();
+  const providerRequestPaymentKeys = new Set();
+  const providerResponsePaymentKeys = new Set();
+  const transferScopedPaymentKeys = new Set();
+
+  const outcomeKeyFromRow = (row) => {
+    const transferId = String(row.pay_bank_transfer_id || row.payBankTransferId || row.transfer_id || row.transferId || '').trim();
+    if (transferId) return `transfer:${transferId}`;
+    if (evidence.transfer_ids && evidence.transfer_ids.length === 1) return `transfer:${evidence.transfer_ids[0]}`;
+    const status = providerSubmitStatusFrom(row);
+    const reason = providerSubmitReviewCodeFrom(row);
+    const providerErrorCode = String(row.provider_error_code || row.providerErrorCode || '').trim();
+    const providerErrorMessage = String(row.provider_error_message_redacted || row.providerErrorMessageRedacted || row.provider_error_message || row.providerErrorMessage || '').trim();
+    const providerHttpStatus = String(row.provider_http_status || row.providerHttpStatus || '').trim();
+    const providerKey = [status, reason, providerErrorCode, providerErrorMessage, providerHttpStatus].filter(Boolean).join('|');
+    if (providerKey) return `provider:${providerKey}`;
+    const rowId = String(row.id || row.provider_event_id || row.providerEventId || row.chunk_id || row.chunkId || '').trim();
+    if (rowId) return `row:${rowId}`;
+    return 'provider:generic';
+  };
+
+  for (const row of rows) {
+    const status = providerSubmitStatusFrom(row);
+    const reason = providerSubmitReviewCodeFrom(row);
+    const code = providerSubmitFailureCodeFromStatus(status, reason);
+    const rowProviderScoped = Boolean(
+      Object.prototype.hasOwnProperty.call(row, 'provider_submission_status')
+      || Object.prototype.hasOwnProperty.call(row, 'providerSubmissionStatus')
+      || Object.prototype.hasOwnProperty.call(row, 'provider_submit_diagnostic')
+      || Object.prototype.hasOwnProperty.call(row, 'providerSubmitDiagnostic')
+      || Object.prototype.hasOwnProperty.call(row, 'provider_error_code')
+      || Object.prototype.hasOwnProperty.call(row, 'providerErrorCode')
+      || Object.prototype.hasOwnProperty.call(row, 'provider_error_message_redacted')
+      || Object.prototype.hasOwnProperty.call(row, 'providerErrorMessageRedacted')
+      || Object.prototype.hasOwnProperty.call(row, 'provider_error_message')
+      || Object.prototype.hasOwnProperty.call(row, 'providerErrorMessage')
+      || Object.prototype.hasOwnProperty.call(row, 'provider_http_status')
+      || Object.prototype.hasOwnProperty.call(row, 'providerHttpStatus')
+      || Object.prototype.hasOwnProperty.call(row, 'provider_request_sent')
+      || Object.prototype.hasOwnProperty.call(row, 'providerRequestSent')
+      || Object.prototype.hasOwnProperty.call(row, 'provider_response_present')
+      || Object.prototype.hasOwnProperty.call(row, 'providerResponsePresent')
+      || Object.prototype.hasOwnProperty.call(row, 'provider_response_received')
+      || Object.prototype.hasOwnProperty.call(row, 'providerResponseReceived')
+      || Object.prototype.hasOwnProperty.call(row, 'provider_submission_attempted')
+      || Object.prototype.hasOwnProperty.call(row, 'providerSubmissionAttempted')
+      || Object.prototype.hasOwnProperty.call(row, 'transfer_provider_outcomes')
+      || Object.prototype.hasOwnProperty.call(row, 'transferProviderOutcomes')
+      || Object.prototype.hasOwnProperty.call(row, 'provider_outcomes')
+      || Object.prototype.hasOwnProperty.call(row, 'providerOutcomes')
+      || Object.prototype.hasOwnProperty.call(row, 'provider_response')
+      || Object.prototype.hasOwnProperty.call(row, 'providerResponse')
+      || String(row.diagnostic_kind || row.diagnosticKind || '').trim().toUpperCase().includes('PROVIDER')
+      || reason === 'PROVIDER_REJECTED_PAYMENT'
+      || status.startsWith('PROVIDER_')
+    );
+    const providerErrorCode = String(row.provider_error_code || row.providerErrorCode || (rowProviderScoped ? row.error_code || row.errorCode || '' : '')).trim();
+    const providerErrorMessage = String(row.provider_error_message_redacted || row.providerErrorMessageRedacted || row.provider_error_message || row.providerErrorMessage || '').trim();
+    const providerHttpStatus = String(row.provider_http_status || row.providerHttpStatus || (rowProviderScoped ? row.http_status || row.httpStatus || '' : '')).trim();
+    const hasProviderErrorPayload = rowProviderScoped && Boolean(providerErrorCode || providerErrorMessage || providerHttpStatus);
+    const outcomeKey = outcomeKeyFromRow(row);
+    const transferId = String(row.pay_bank_transfer_id || row.payBankTransferId || row.transfer_id || row.transferId || '').trim();
+    if (transferId) transferScopedPaymentKeys.add(`transfer:${transferId}`);
+    if (code === 'PROVIDER_SUBMISSION_ACCEPTED' || strictProviderAcceptanceEvidenceCount(row) > 0) acceptedPaymentKeys.add(outcomeKey);
+    if (code === 'PROVIDER_SUBMISSION_REJECTED' || reason === 'PROVIDER_REJECTED_PAYMENT' || hasProviderErrorPayload) rejectedPaymentKeys.add(outcomeKey);
+    if ([
+      'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK',
+      'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME',
+      'PROVIDER_SUBMISSION_MALFORMED_RESPONSE',
+      'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID'
+    ].includes(code)) unknownPaymentKeys.add(outcomeKey);
+    if (boolField(row, 'provider_request_sent', 'providerRequestSent', 'request_sent', 'requestSent') || hasProviderErrorPayload) providerRequestPaymentKeys.add(outcomeKey);
+    if (boolField(row, 'provider_response_present', 'providerResponsePresent', 'provider_response_received', 'providerResponseReceived', 'response_present', 'responsePresent', 'response_received', 'responseReceived') || hasProviderErrorPayload) providerResponsePaymentKeys.add(outcomeKey);
+  }
+
+  const acceptedRows = acceptedPaymentKeys.size;
+  const rejectedRows = rejectedPaymentKeys.size;
+  const unknownRows = unknownPaymentKeys.size;
+  const providerRequestRows = providerRequestPaymentKeys.size;
+  const providerResponseRows = providerResponsePaymentKeys.size;
+
+  const successfulPaymentCount = Math.max(
+    numField(root, 'successful_payment_count', 'successfulPaymentCount', 'successful_count', 'successfulCount', 'accepted_count', 'acceptedCount', 'submitted_success_count', 'submittedSuccessCount'),
+    numField(extraObj, 'successful_payment_count', 'successfulPaymentCount', 'successful_count', 'successfulCount', 'accepted_count', 'acceptedCount'),
+    evidence.provider_acceptance_evidence_count || 0,
+    acceptedRows
+  );
+  const rejectedPaymentCount = Math.max(
+    numField(root, 'rejected_payment_count', 'rejectedPaymentCount', 'provider_rejection_count', 'providerRejectionCount', 'provider_submission_rejected_count', 'providerSubmissionRejectedCount', 'rejected_count', 'rejectedCount'),
+    numField(extraObj, 'rejected_payment_count', 'rejectedPaymentCount', 'provider_rejection_count', 'providerRejectionCount', 'provider_submission_rejected_count', 'providerSubmissionRejectedCount', 'rejected_count', 'rejectedCount'),
+    evidence.provider_rejection_count || 0,
+    rejectedRows
+  );
+  const unknownPaymentCount = Math.max(
+    numField(root, 'unknown_payment_count', 'unknownPaymentCount', 'provider_unknown_count', 'providerUnknownCount', 'provider_submission_unknown_count', 'providerSubmissionUnknownCount', 'unknown_count', 'unknownCount'),
+    numField(extraObj, 'unknown_payment_count', 'unknownPaymentCount', 'provider_unknown_count', 'providerUnknownCount', 'provider_submission_unknown_count', 'providerSubmissionUnknownCount', 'unknown_count', 'unknownCount'),
+    evidence.provider_unknown_count || 0,
+    unknownRows
+  );
+  const failedOrNeedsReviewPaymentCount = Math.max(
+    numField(root, 'failed_or_needs_review_payment_count', 'failedOrNeedsReviewPaymentCount', 'failed_payment_count', 'failedPaymentCount', 'failed_count', 'failedCount', 'needs_review_count', 'needsReviewCount'),
+    numField(extraObj, 'failed_or_needs_review_payment_count', 'failedOrNeedsReviewPaymentCount', 'failed_payment_count', 'failedPaymentCount', 'failed_count', 'failedCount', 'needs_review_count', 'needsReviewCount'),
+    rejectedPaymentCount + unknownPaymentCount
+  );
+  let totalPaymentCount = Math.max(
+    numField(root, 'total_payment_count', 'totalPaymentCount', 'payment_count', 'paymentCount', 'transfer_count', 'transferCount', 'claimed', 'claimed_count', 'claimedCount', 'submitted_count', 'submittedCount', 'submitted_this_chunk', 'submittedThisChunk'),
+    numField(extraObj, 'total_payment_count', 'totalPaymentCount', 'payment_count', 'paymentCount', 'transfer_count', 'transferCount'),
+    evidence.transfer_ids.length,
+    transferScopedPaymentKeys.size,
+    successfulPaymentCount + failedOrNeedsReviewPaymentCount
+  );
+  if (evidence.providerEvidenceDetected === true && totalPaymentCount <= 0) totalPaymentCount = Math.max(1, successfulPaymentCount + failedOrNeedsReviewPaymentCount);
+  if (evidence.provider_submission_status === 'PROVIDER_SUBMISSION_REJECTED' && failedOrNeedsReviewPaymentCount <= 0) {
+    totalPaymentCount = Math.max(totalPaymentCount, 1);
+  }
+  const providerRequestSentCount = Math.max(
+    numField(root, 'provider_request_sent_count', 'providerRequestSentCount', 'provider_call_sent_count', 'providerCallSentCount'),
+    numField(extraObj, 'provider_request_sent_count', 'providerRequestSentCount', 'provider_call_sent_count', 'providerCallSentCount'),
+    evidence.provider_request_sent_count || 0,
+    providerRequestRows,
+    evidence.provider_request_sent === true ? 1 : 0
+  );
+  const providerResponsePresentCount = Math.max(
+    numField(root, 'provider_response_present_count', 'providerResponsePresentCount', 'provider_response_received_count', 'providerResponseReceivedCount'),
+    numField(extraObj, 'provider_response_present_count', 'providerResponsePresentCount', 'provider_response_received_count', 'providerResponseReceivedCount'),
+    evidence.provider_response_present_count || 0,
+    providerResponseRows,
+    evidence.provider_response_present === true || evidence.provider_response_received === true ? 1 : 0
+  );
+  const blockedFundsDetected = evidence.providerEvidenceDetected !== true && (
+    root.blocked_funds === true
+    || extraObj.blocked_funds === true
+    || (Array.isArray(root.blocked_funds) && root.blocked_funds.length > 0)
+    || (Array.isArray(extraObj.blocked_funds) && extraObj.blocked_funds.length > 0)
+    || String(root.code || root.business_code || extraObj.code || extraObj.business_code || '').trim().toUpperCase() === 'BLOCKED_FUNDS'
+  );
+  const blockedFundsCount = blockedFundsDetected ? Math.max(1, numField(root, 'blocked_funds_count', 'blockedFundsCount', 'blocked_transfer_count', 'blockedTransferCount'), numField(extraObj, 'blocked_funds_count', 'blockedFundsCount', 'blocked_transfer_count', 'blockedTransferCount')) : 0;
+  if (blockedFundsDetected && totalPaymentCount <= 0) totalPaymentCount = blockedFundsCount;
+
+  return jsonLikeObject({
+    total_payment_count: totalPaymentCount,
+    successful_payment_count: successfulPaymentCount,
+    failed_or_needs_review_payment_count: failedOrNeedsReviewPaymentCount,
+    rejected_payment_count: rejectedPaymentCount,
+    unknown_payment_count: unknownPaymentCount,
+    provider_request_sent_count: providerRequestSentCount,
+    provider_response_present_count: providerResponsePresentCount,
+    blocked_funds_count: blockedFundsCount,
+    blocked_funds: blockedFundsDetected,
+    provider_request_sent: evidence.provider_request_sent === true || providerRequestSentCount > 0,
+    provider_response_present: evidence.provider_response_present === true || evidence.provider_response_received === true || providerResponsePresentCount > 0,
+    provider_submission_attempted: evidence.provider_submission_attempted === true || providerRequestSentCount > 0,
+    provider_evidence_detected: evidence.providerEvidenceDetected === true,
+    provider_submission_status: evidence.provider_submission_status || undefined,
+    review_reason_code: evidence.review_reason_code || undefined
+  });
+};
 const providerSubmitDiagnosticFailurePayload = (source = {}) => {
-  const diag = extractProviderSubmitDiagnostic(source);
-  const claimDiagnostic = providerSubmitClaimDiagnosticFrom(source);
-  const claimDiagnosticEvents = providerSubmitClaimDiagnosticEventsFrom(source, claimDiagnostic);
-  const status = providerSubmitStatusFrom(source);
-  const reviewReason = providerSubmitReviewCodeFrom(source);
+  const sourceObj = safeObject(source);
+  const diag = extractProviderSubmitDiagnostic(sourceObj);
+  const claimDiagnostic = providerSubmitClaimDiagnosticFrom(sourceObj);
+  const claimDiagnosticEvents = providerSubmitClaimDiagnosticEventsFrom(sourceObj, claimDiagnostic);
+  const evidence = collectProviderSubmitCleanupEvidence(sourceObj, diag, claimDiagnostic);
+  const status = providerSubmitFailureCodeFromStatus(
+    providerSubmitStatusFrom(sourceObj) || evidence.provider_submission_status,
+    providerSubmitReviewCodeFrom(sourceObj) || evidence.review_reason_code
+  );
+  const reviewReason = providerSubmitReviewCodeFrom(sourceObj) || evidence.review_reason_code;
+  const outcomeCounts = collectProviderExecutionOutcomeCounts(sourceObj, evidence);
+  const providerEvidenceDetected = evidence.providerEvidenceDetected === true || outcomeCounts.provider_evidence_detected === true;
+  const providerRequestSent = evidence.provider_request_sent === true || outcomeCounts.provider_request_sent === true;
+  const providerResponsePresent = evidence.provider_response_present === true || evidence.provider_response_received === true || outcomeCounts.provider_response_present === true;
+  const providerSubmissionAttempted = evidence.provider_submission_attempted === true || providerRequestSent === true;
+  const providerErrorCode = firstNonBlank(
+    evidence.provider_error_code,
+    diag.provider_error_code,
+    sourceObj.provider_error_code,
+    sourceObj.providerErrorCode
+  );
+  const providerErrorMessageRedacted = firstNonBlank(
+    evidence.provider_error_message_redacted,
+    diag.provider_error_message_redacted,
+    sourceObj.provider_error_message_redacted,
+    sourceObj.providerErrorMessageRedacted,
+    sourceObj.provider_error_message,
+    sourceObj.providerErrorMessage
+  );
+  const providerHttpStatus = firstNonBlank(
+    evidence.provider_http_status,
+    diag.provider_http_status,
+    sourceObj.provider_http_status,
+    sourceObj.providerHttpStatus,
+    sourceObj.http_status,
+    sourceObj.httpStatus
+  );
   return {
-    provider_submit_diagnostic: Object.keys(diag).length ? diag : undefined,
-    provider_submit_claim_diagnostic: Object.keys(claimDiagnostic).length ? claimDiagnostic : undefined,
-    provider_submit_claim_diagnostic_events: claimDiagnosticEvents.length ? claimDiagnosticEvents : undefined,
-    provider_submission_status: status || undefined,
-    provider_submit_review_reason_code: reviewReason || undefined,
-    review_reason_code: reviewReason || undefined,
-    provider_acceptance_evidence_count: numField(source, 'provider_acceptance_evidence_count', 'providerAcceptanceEvidenceCount'),
-    provider_response_present_count: numField(source, 'provider_response_present_count', 'providerResponsePresentCount'),
-    provider_request_sent_count: numField(source, 'provider_request_sent_count', 'providerRequestSentCount', 'provider_call_sent_count', 'providerCallSentCount'),
-    provider_submission_unknown_count: numField(source, 'provider_submission_unknown_count', 'providerSubmissionUnknownCount'),
-    stale_empty_submit_chunk_count: numField(source, 'stale_empty_submit_chunk_count', 'staleEmptySubmitChunkCount'),
-    stale_unresolved_submit_chunk_count: numField(source, 'stale_unresolved_submit_chunk_count', 'staleUnresolvedSubmitChunkCount'),
-    unfinalised_submit_chunk_count: numField(source, 'unfinalised_submit_chunk_count', 'unfinalisedSubmitChunkCount'),
-    claim_blocked: source?.claim_blocked === true || source?.claimBlocked === true,
-    claim_blocker_code: String(source?.claim_blocker_code || source?.claimBlockerCode || '').trim().toUpperCase() || undefined,
-    requires_review: source?.requires_review === true || source?.requiresReview === true || providerSubmitManualResolutionRequired(source),
-    manual_resolution_required: providerSubmitManualResolutionRequired(source),
-    safe_retry_available: boolField(source, 'safe_retry_available', 'safeRetryAvailable')
+    code: status || undefined,
+    business_code: status || undefined,
+    provider_submit_diagnostic: Object.keys(evidence.provider_submit_diagnostic || {}).length ? evidence.provider_submit_diagnostic : (Object.keys(diag).length ? diag : undefined),
+    provider_submit_claim_diagnostic: Object.keys(evidence.provider_submit_claim_diagnostic || {}).length ? evidence.provider_submit_claim_diagnostic : (Object.keys(claimDiagnostic).length ? claimDiagnostic : undefined),
+    provider_submit_claim_diagnostic_events: evidence.provider_submit_claim_diagnostic_events && evidence.provider_submit_claim_diagnostic_events.length ? evidence.provider_submit_claim_diagnostic_events : (claimDiagnosticEvents.length ? claimDiagnosticEvents : undefined),
+    provider_submission_status: status || evidence.provider_submission_status || undefined,
+    provider_submit_review_reason_code: reviewReason || evidence.provider_submit_review_reason_code || undefined,
+    review_reason_code: reviewReason || evidence.review_reason_code || undefined,
+    provider_error_code: providerErrorCode || undefined,
+    provider_error_message_redacted: providerErrorMessageRedacted || undefined,
+    provider_http_status: providerHttpStatus || undefined,
+    provider_request_sent: providerRequestSent,
+    provider_response_present: providerResponsePresent,
+    provider_response_received: evidence.provider_response_received === true || providerResponsePresent,
+    provider_submission_attempted: providerSubmissionAttempted,
+    submitted_to_bank: providerSubmissionAttempted,
+    blocked_funds: providerEvidenceDetected ? false : undefined,
+    provider_acceptance_evidence_count: Math.max(numField(sourceObj, 'provider_acceptance_evidence_count', 'providerAcceptanceEvidenceCount'), evidence.provider_acceptance_evidence_count || 0),
+    provider_response_present_count: Math.max(numField(sourceObj, 'provider_response_present_count', 'providerResponsePresentCount'), evidence.provider_response_present_count || 0, providerResponsePresent ? 1 : 0),
+    provider_request_sent_count: Math.max(numField(sourceObj, 'provider_request_sent_count', 'providerRequestSentCount', 'provider_call_sent_count', 'providerCallSentCount'), evidence.provider_request_sent_count || 0, providerRequestSent ? 1 : 0),
+    provider_submission_unknown_count: Math.max(numField(sourceObj, 'provider_submission_unknown_count', 'providerSubmissionUnknownCount'), evidence.provider_unknown_count || 0),
+    provider_rejection_count: Math.max(numField(sourceObj, 'provider_rejection_count', 'providerRejectionCount', 'provider_submission_rejected_count', 'providerSubmissionRejectedCount'), evidence.provider_rejection_count || 0),
+    stale_empty_submit_chunk_count: numField(sourceObj, 'stale_empty_submit_chunk_count', 'staleEmptySubmitChunkCount'),
+    stale_unresolved_submit_chunk_count: Math.max(numField(sourceObj, 'stale_unresolved_submit_chunk_count', 'staleUnresolvedSubmitChunkCount'), evidence.stale_unresolved_submit_chunk_count || 0),
+    unfinalised_submit_chunk_count: Math.max(numField(sourceObj, 'unfinalised_submit_chunk_count', 'unfinalisedSubmitChunkCount'), evidence.unfinalised_submit_chunk_count || 0),
+    total_payment_count: outcomeCounts.total_payment_count,
+    successful_payment_count: outcomeCounts.successful_payment_count,
+    failed_or_needs_review_payment_count: outcomeCounts.failed_or_needs_review_payment_count,
+    rejected_payment_count: outcomeCounts.rejected_payment_count,
+    unknown_payment_count: outcomeCounts.unknown_payment_count,
+    blocked_funds_count: outcomeCounts.blocked_funds_count,
+    payment_execution_outcome_counts: outcomeCounts,
+    claim_blocked: sourceObj?.claim_blocked === true || sourceObj?.claimBlocked === true,
+    claim_blocker_code: String(sourceObj?.claim_blocker_code || sourceObj?.claimBlockerCode || '').trim().toUpperCase() || undefined,
+    requires_review: sourceObj?.requires_review === true || sourceObj?.requiresReview === true || providerSubmitManualResolutionRequired(sourceObj) || status === 'PROVIDER_SUBMISSION_REJECTED',
+    review_required: sourceObj?.requires_review === true || sourceObj?.requiresReview === true || providerSubmitManualResolutionRequired(sourceObj) || status === 'PROVIDER_SUBMISSION_REJECTED',
+    manual_resolution_required: providerSubmitManualResolutionRequired(sourceObj) || status === 'PROVIDER_SUBMISSION_REJECTED',
+    safe_retry_available: providerEvidenceDetected ? false : boolField(sourceObj, 'safe_retry_available', 'safeRetryAvailable')
   };
 };
 
@@ -40635,7 +41015,8 @@ const providerSubmitReviewStatuses = new Set([
   'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK',
   'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME',
   'PROVIDER_SUBMISSION_MALFORMED_RESPONSE',
-  'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID'
+  'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID',
+  'PROVIDER_SUBMISSION_REJECTED'
 ]);
 const providerSubmitRetryBlockedStatuses = new Set([
   ...providerSubmitReviewStatuses,
@@ -40863,20 +41244,31 @@ const extractFundingPreflightDiagnostics = (submitted) => {
   const source = safeObject(submitted);
   const firstError = Array.isArray(source.errors) && source.errors.length ? safeObject(source.errors[0]) : {};
   const fundsCheckJson = extractFundsCheckJson(source);
+  const providerEvidence = collectProviderSubmitCleanupEvidence(source, fundsCheckJson);
+  const providerEvidenceDetected = providerEvidence.providerEvidenceDetected === true;
   const codes = collectSubmittedErrorCodes(source);
   const sufficientValue = fundsCheckJson.sufficient;
   const fundsCheckSaysBlocked = sufficientValue === false || String(sufficientValue).trim().toLowerCase() === 'false';
-  let code = codes.find((item) => item === 'BLOCKED_FUNDS') || null;
-  if (!code && fundsCheckSaysBlocked) code = 'BLOCKED_FUNDS';
-  if (!code) code = codes.find((item) => ['FUNDS_CHECK_FAILED', 'FUNDING_ACCOUNT_REF_MISSING', 'SCHEDULED_BATCH_MISSING_FUNDING_ACCOUNT_REF'].includes(item)) || null;
+  let code = providerEvidenceDetected ? null : (codes.find((item) => item === 'BLOCKED_FUNDS') || null);
+  if (!providerEvidenceDetected && !code && fundsCheckSaysBlocked) code = 'BLOCKED_FUNDS';
+  if (!providerEvidenceDetected && !code) code = codes.find((item) => ['FUNDS_CHECK_FAILED', 'FUNDING_ACCOUNT_REF_MISSING', 'SCHEDULED_BATCH_MISSING_FUNDING_ACCOUNT_REF'].includes(item)) || null;
   const rawText = stringifyForDetection(source).toUpperCase();
-  if (!code && (rawText.includes('INSUFFICIENT') || rawText.includes('BLOCKED_FUNDS'))) code = 'BLOCKED_FUNDS';
-  if (!code && (rawText.includes('FUNDING_ACCOUNT_REF_MISSING') || rawText.includes('SCHEDULED_BATCH_MISSING_FUNDING_ACCOUNT_REF') || rawText.includes('FUNDING ACCOUNT REFERENCE IS REQUIRED'))) code = 'FUNDING_ACCOUNT_REF_MISSING';
-  if (!code && rawText.includes('FUNDS_CHECK_FAILED')) code = 'FUNDS_CHECK_FAILED';
+  if (!providerEvidenceDetected && !code && (rawText.includes('INSUFFICIENT') || rawText.includes('BLOCKED_FUNDS'))) code = 'BLOCKED_FUNDS';
+  if (!providerEvidenceDetected && !code && (rawText.includes('FUNDING_ACCOUNT_REF_MISSING') || rawText.includes('SCHEDULED_BATCH_MISSING_FUNDING_ACCOUNT_REF') || rawText.includes('FUNDING ACCOUNT REFERENCE IS REQUIRED'))) code = 'FUNDING_ACCOUNT_REF_MISSING';
+  if (!providerEvidenceDetected && !code && rawText.includes('FUNDS_CHECK_FAILED')) code = 'FUNDS_CHECK_FAILED';
   const normalisedCode = code === 'SCHEDULED_BATCH_MISSING_FUNDING_ACCOUNT_REF' ? 'FUNDING_ACCOUNT_REF_MISSING' : code;
   return {
     code: normalisedCode,
     original_code: code,
+    provider_evidence_detected: providerEvidenceDetected,
+    provider_submission_status: providerEvidence.provider_submission_status || undefined,
+    review_reason_code: providerEvidence.review_reason_code || undefined,
+    provider_request_sent: providerEvidence.provider_request_sent === true,
+    provider_response_present: providerEvidence.provider_response_present === true,
+    provider_response_received: providerEvidence.provider_response_received === true,
+    provider_submission_attempted: providerEvidence.provider_submission_attempted === true,
+    provider_error_code: providerEvidence.provider_error_code || undefined,
+    provider_error_message_redacted: providerEvidence.provider_error_message_redacted || undefined,
     message: firstNonBlank(source.message, firstError.message, firstError.error, normalisedCode === 'BLOCKED_FUNDS' ? 'The selected funding account does not have enough available balance to make this payment.' : null, 'Funding preflight failed.'),
     funds_check_json: fundsCheckJson,
     required_gbp: Number(source.required_gbp ?? source.requiredGbp ?? firstError.required_gbp ?? firstError.requiredGbp ?? fundsCheckJson.required_gbp ?? fundsCheckJson.requiredGbp),
@@ -40885,12 +41277,13 @@ const extractFundingPreflightDiagnostics = (submitted) => {
     funding_account_ref_source: firstNonBlank(source.funding_account_ref_source, firstError.funding_account_ref_source, fundsCheckJson.funding_account_ref_source),
     funding_account_ref_fallback_used: boolField(source, 'funding_account_ref_fallback_used') || boolField(firstError, 'funding_account_ref_fallback_used') || boolField(fundsCheckJson, 'funding_account_ref_fallback_used'),
     funding_account_ref_candidates_checked: Array.isArray(source.funding_account_ref_candidates_checked) ? source.funding_account_ref_candidates_checked : (Array.isArray(firstError.funding_account_ref_candidates_checked) ? firstError.funding_account_ref_candidates_checked : (Array.isArray(fundsCheckJson.funding_account_ref_candidates_checked) ? fundsCheckJson.funding_account_ref_candidates_checked : [])),
-    funding_account_ref_resolution_json: safeObject(source.funding_account_ref_resolution_json || firstError.funding_account_ref_resolution_json || fundsCheckJson.funding_account_ref_resolution_json),
-    provider_submission_attempted: boolField(source, 'provider_submission_attempted', 'submitted_to_bank') || boolField(firstError, 'provider_submission_attempted', 'submitted_to_bank')
+    funding_account_ref_resolution_json: safeObject(source.funding_account_ref_resolution_json || firstError.funding_account_ref_resolution_json || fundsCheckJson.funding_account_ref_resolution_json)
   };
 };
 const isFundingPreflightError = (submitted) => {
+  if (hasProviderEvidenceFromSubmitted(submitted)) return false;
   const diagnostics = extractFundingPreflightDiagnostics(submitted);
+  if (diagnostics.provider_evidence_detected === true) return false;
   if (['BLOCKED_FUNDS', 'FUNDS_CHECK_FAILED', 'FUNDING_ACCOUNT_REF_MISSING'].includes(diagnostics.code)) return true;
   const rawText = stringifyForDetection(submitted).toUpperCase();
   return rawText.includes('INSUFFICIENT FUNDS')
@@ -40909,6 +41302,21 @@ const buildControlledFundingFailurePayload = (submitted) => {
     : (code === 'FUNDING_ACCOUNT_REF_MISSING'
       ? 'Funding account reference is required for provider submission.'
       : 'Funds check failed before provider submission.');
+  const controlledFundingOutcomeCounts = {
+    total_payment_count: 1,
+    successful_payment_count: 0,
+    failed_or_needs_review_payment_count: 0,
+    rejected_payment_count: 0,
+    unknown_payment_count: 0,
+    provider_request_sent_count: 0,
+    provider_response_present_count: 0,
+    blocked_funds_count: isBlocked ? 1 : 0,
+    blocked_funds: isBlocked,
+    provider_request_sent: false,
+    provider_response_present: false,
+    provider_submission_attempted: false,
+    provider_evidence_detected: false
+  };
   const result = {
     ok: false,
     code,
@@ -40935,6 +41343,15 @@ const buildControlledFundingFailurePayload = (submitted) => {
     funding_account_ref_resolution_json: Object.keys(diagnostics.funding_account_ref_resolution_json).length ? diagnostics.funding_account_ref_resolution_json : null,
     funds_check_json: Object.keys(diagnostics.funds_check_json).length ? diagnostics.funds_check_json : null,
     provider_submission: submitted,
+    total_payment_count: controlledFundingOutcomeCounts.total_payment_count,
+    successful_payment_count: controlledFundingOutcomeCounts.successful_payment_count,
+    failed_or_needs_review_payment_count: controlledFundingOutcomeCounts.failed_or_needs_review_payment_count,
+    rejected_payment_count: controlledFundingOutcomeCounts.rejected_payment_count,
+    unknown_payment_count: controlledFundingOutcomeCounts.unknown_payment_count,
+    provider_request_sent_count: controlledFundingOutcomeCounts.provider_request_sent_count,
+    provider_response_present_count: controlledFundingOutcomeCounts.provider_response_present_count,
+    blocked_funds_count: controlledFundingOutcomeCounts.blocked_funds_count,
+    payment_execution_outcome_counts: controlledFundingOutcomeCounts,
     message
   };
   const error = {
@@ -40957,7 +41374,16 @@ const buildControlledFundingFailurePayload = (submitted) => {
     funding_account_ref_fallback_used: result.funding_account_ref_fallback_used,
     funding_account_ref_candidates_checked: result.funding_account_ref_candidates_checked,
     funding_account_ref_resolution_json: result.funding_account_ref_resolution_json,
-    funds_check_json: result.funds_check_json
+    funds_check_json: result.funds_check_json,
+    total_payment_count: controlledFundingOutcomeCounts.total_payment_count,
+    successful_payment_count: controlledFundingOutcomeCounts.successful_payment_count,
+    failed_or_needs_review_payment_count: controlledFundingOutcomeCounts.failed_or_needs_review_payment_count,
+    rejected_payment_count: controlledFundingOutcomeCounts.rejected_payment_count,
+    unknown_payment_count: controlledFundingOutcomeCounts.unknown_payment_count,
+    provider_request_sent_count: controlledFundingOutcomeCounts.provider_request_sent_count,
+    provider_response_present_count: controlledFundingOutcomeCounts.provider_response_present_count,
+    blocked_funds_count: controlledFundingOutcomeCounts.blocked_funds_count,
+    payment_execution_outcome_counts: controlledFundingOutcomeCounts
   };
   return { code, isBlocked, diagnostics, result, error };
 };
@@ -41946,12 +42372,29 @@ if (currentPhase === 'SUBMIT_PROVIDER_TRANSFERS') {
   if (Object.keys(submittedProviderClaimDiagnostic).length || submittedProviderClaimDiagnosticEvents.length) {
     emitProviderSubmitClaimDiagnosticLog(submittedProviderClaimDiagnostic, submittedProviderClaimDiagnosticEvents);
   }
-  if (submitted && Array.isArray(submitted.blocked_funds) && submitted.blocked_funds.length) {
+  const submittedProviderEvidence = submittedProviderEvidenceSnapshot(submitted || {});
+  if (submitted && Array.isArray(submitted.blocked_funds) && submitted.blocked_funds.length && submittedProviderEvidence.providerEvidenceDetected !== true) {
     const blockedFundsRows = submitted.blocked_funds;
     const firstBlockedFunds = safeObject(blockedFundsRows[0]);
     const fundsCheckJson = safeObject(submitted.funds_check_json || submitted.fundsCheckJson || submitted.funds_check || submitted.fundsCheck || firstBlockedFunds.funds_check_json || firstBlockedFunds.fundsCheckJson);
     const requiredGbp = Number(firstBlockedFunds.required_gbp ?? firstBlockedFunds.requiredGbp ?? fundsCheckJson.required_gbp ?? fundsCheckJson.requiredGbp ?? 0);
     const availableGbp = Number(firstBlockedFunds.available_gbp ?? firstBlockedFunds.availableGbp ?? fundsCheckJson.available_gbp ?? fundsCheckJson.availableGbp ?? 0);
+    const blockedFundsPaymentCount = Math.max(1, blockedFundsRows.length);
+    const blockedFundsOutcomeCounts = {
+      total_payment_count: blockedFundsPaymentCount,
+      successful_payment_count: 0,
+      failed_or_needs_review_payment_count: 0,
+      rejected_payment_count: 0,
+      unknown_payment_count: 0,
+      provider_request_sent_count: 0,
+      provider_response_present_count: 0,
+      blocked_funds_count: blockedFundsPaymentCount,
+      blocked_funds: true,
+      provider_request_sent: false,
+      provider_response_present: false,
+      provider_submission_attempted: false,
+      provider_evidence_detected: false
+    };
     const blockedFundsPayload = {
       ok: false,
       code: 'BLOCKED_FUNDS',
@@ -41981,6 +42424,15 @@ if (currentPhase === 'SUBMIT_PROVIDER_TRANSFERS') {
       funds_check_json: Object.keys(fundsCheckJson).length ? fundsCheckJson : null,
       blocked_funds_rows: blockedFundsRows,
       provider_submission: submitted,
+      total_payment_count: blockedFundsOutcomeCounts.total_payment_count,
+      successful_payment_count: blockedFundsOutcomeCounts.successful_payment_count,
+      failed_or_needs_review_payment_count: blockedFundsOutcomeCounts.failed_or_needs_review_payment_count,
+      rejected_payment_count: blockedFundsOutcomeCounts.rejected_payment_count,
+      unknown_payment_count: blockedFundsOutcomeCounts.unknown_payment_count,
+      provider_request_sent_count: blockedFundsOutcomeCounts.provider_request_sent_count,
+      provider_response_present_count: blockedFundsOutcomeCounts.provider_response_present_count,
+      blocked_funds_count: blockedFundsOutcomeCounts.blocked_funds_count,
+      payment_execution_outcome_counts: blockedFundsOutcomeCounts,
       message: 'The selected funding account does not have enough available balance to make this payment.'
     };
     return finish('FAILED', blockedFundsPayload, {
@@ -42005,7 +42457,16 @@ if (currentPhase === 'SUBMIT_PROVIDER_TRANSFERS') {
       funding_account_ref_resolution_json: blockedFundsPayload.funding_account_ref_resolution_json,
       rail_provider: blockedFundsPayload.rail_provider,
       rail_env: blockedFundsPayload.rail_env,
-      funds_check_json: blockedFundsPayload.funds_check_json
+      funds_check_json: blockedFundsPayload.funds_check_json,
+      total_payment_count: blockedFundsOutcomeCounts.total_payment_count,
+      successful_payment_count: blockedFundsOutcomeCounts.successful_payment_count,
+      failed_or_needs_review_payment_count: blockedFundsOutcomeCounts.failed_or_needs_review_payment_count,
+      rejected_payment_count: blockedFundsOutcomeCounts.rejected_payment_count,
+      unknown_payment_count: blockedFundsOutcomeCounts.unknown_payment_count,
+      provider_request_sent_count: blockedFundsOutcomeCounts.provider_request_sent_count,
+      provider_response_present_count: blockedFundsOutcomeCounts.provider_response_present_count,
+      blocked_funds_count: blockedFundsOutcomeCounts.blocked_funds_count,
+      payment_execution_outcome_counts: blockedFundsOutcomeCounts
     });
   }
   if (submitted && isFundingPreflightError(submitted) && !hasProviderEvidenceFromSubmitted(submitted)) {
@@ -42032,12 +42493,14 @@ if (currentPhase === 'SUBMIT_PROVIDER_TRANSFERS') {
       'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK',
       'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME',
       'PROVIDER_SUBMISSION_MALFORMED_RESPONSE',
-      'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID'
+      'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID',
+      'PROVIDER_SUBMISSION_REJECTED'
     ].includes(submittedProviderSubmissionStatus)
-    || submittedProviderReviewReason === 'STALE_RUNNING_PROVIDER_SUBMIT_CHUNK';
+    || submittedProviderReviewReason === 'STALE_RUNNING_PROVIDER_SUBMIT_CHUNK'
+    || submittedProviderReviewReason === 'PROVIDER_REJECTED_PAYMENT';
   if (submitted && submittedProviderNeedsManualReview) {
     const providerReviewCode = submittedProviderSubmissionStatus || submittedProviderReviewReason || 'PROVIDER_SUBMISSION_REVIEW_REQUIRED';
-    return fail(providerReviewCode, 'Provider submission outcome needs review before retry.', {
+    return fail(providerReviewCode, providerSubmitMessageFromCode(providerReviewCode), {
       phase: currentPhase,
       provider_submission: submitted,
       ...submittedProviderDiagnosticPayload
@@ -42235,10 +42698,12 @@ if (currentPhase === 'APPLY_RAIL_UPDATES') {
   let evidenceProviderDiagnostic = extractProviderSubmitDiagnostic(evidence);
   const evidenceProviderAcceptanceCount = numField(evidence, 'provider_acceptance_evidence_count', 'providerAcceptanceEvidenceCount');
   const evidenceProviderReviewCode = providerSubmitFailureCodeFromStatus(evidenceProviderStatus, evidenceProviderReviewReason);
-  if (['PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK', 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE', 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID'].includes(evidenceProviderReviewCode)) {
+  const evidenceProviderDiagnosticPayload = providerSubmitDiagnosticFailurePayload(evidence);
+  if (['PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK', 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE', 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID', 'PROVIDER_SUBMISSION_REJECTED'].includes(evidenceProviderReviewCode)) {
     return fail(evidenceProviderReviewCode, providerSubmitMessageFromCode(evidenceProviderReviewCode), {
       phase: currentPhase,
       submission_evidence: evidence,
+      ...evidenceProviderDiagnosticPayload,
       provider_submit_diagnostic: Object.keys(evidenceProviderDiagnostic).length ? evidenceProviderDiagnostic : undefined,
       provider_submission_status: evidenceProviderStatus || evidenceProviderReviewCode,
       provider_submit_review_reason_code: evidenceProviderReviewReason || undefined,
@@ -42249,6 +42714,7 @@ if (currentPhase === 'APPLY_RAIL_UPDATES') {
       provider_submission_unknown_count: numField(evidence, 'provider_submission_unknown_count', 'providerSubmissionUnknownCount'),
       stale_unresolved_submit_chunk_count: numField(evidence, 'stale_unresolved_submit_chunk_count', 'staleUnresolvedSubmitChunkCount', 'stale_empty_submit_chunk_count', 'staleEmptySubmitChunkCount'),
       unfinalised_submit_chunk_count: numField(evidence, 'unfinalised_submit_chunk_count', 'unfinalisedSubmitChunkCount'),
+      ...evidenceProviderDiagnosticPayload,
       manual_resolution_required: true,
       safe_retry_available: false
     });
@@ -42257,11 +42723,13 @@ if (currentPhase === 'APPLY_RAIL_UPDATES') {
     return fail('PROVIDER_SUBMISSION_ACCEPTED', providerSubmitMessageFromCode('PROVIDER_SUBMISSION_ACCEPTED'), {
       phase: currentPhase,
       submission_evidence: evidence,
+      ...evidenceProviderDiagnosticPayload,
       provider_submit_diagnostic: Object.keys(evidenceProviderDiagnostic).length ? evidenceProviderDiagnostic : undefined,
       provider_submission_status: evidenceProviderStatus || 'PROVIDER_SUBMISSION_ACCEPTED',
       provider_submit_review_reason_code: evidenceProviderReviewReason || 'PROVIDER_ACCEPTANCE_EVIDENCE_PRESENT',
       review_reason_code: evidenceProviderReviewReason || 'PROVIDER_ACCEPTANCE_EVIDENCE_PRESENT',
       provider_acceptance_evidence_count: evidenceProviderAcceptanceCount,
+      ...evidenceProviderDiagnosticPayload,
       manual_resolution_required: true,
       safe_retry_available: false
     });
@@ -42350,15 +42818,18 @@ if (currentPhase === 'APPLY_RAIL_UPDATES') {
       evidenceProviderReviewReason = providerSubmitReviewCodeFrom(evidence);
       evidenceProviderDiagnostic = extractProviderSubmitDiagnostic(evidence);
       const pollEvidenceProviderReviewCode = providerSubmitFailureCodeFromStatus(evidenceProviderStatus, evidenceProviderReviewReason);
-      if (['PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK', 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE', 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID'].includes(pollEvidenceProviderReviewCode)) {
+      const pollEvidenceProviderDiagnosticPayload = providerSubmitDiagnosticFailurePayload(evidence);
+      if (['PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK', 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE', 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID', 'PROVIDER_SUBMISSION_REJECTED'].includes(pollEvidenceProviderReviewCode)) {
         return fail(pollEvidenceProviderReviewCode, providerSubmitMessageFromCode(pollEvidenceProviderReviewCode), {
           phase: currentPhase,
           rail_poll_result: pollResult,
           submission_evidence: evidence,
+          ...pollEvidenceProviderDiagnosticPayload,
           provider_submit_diagnostic: Object.keys(evidenceProviderDiagnostic).length ? evidenceProviderDiagnostic : undefined,
           provider_submission_status: evidenceProviderStatus || pollEvidenceProviderReviewCode,
           provider_submit_review_reason_code: evidenceProviderReviewReason || undefined,
           review_reason_code: evidenceProviderReviewReason || undefined,
+          ...pollEvidenceProviderDiagnosticPayload,
           manual_resolution_required: true,
           safe_retry_available: false
         });
@@ -42546,14 +43017,17 @@ if (currentPhase === 'COMPLETE') {
   const completeProviderReviewReason = providerSubmitReviewCodeFrom(evidence);
   const completeProviderDiagnostic = extractProviderSubmitDiagnostic(evidence);
   const completeProviderReviewCode = providerSubmitFailureCodeFromStatus(completeProviderStatus, completeProviderReviewReason);
-  if (executionMode === 'STANDARD_BANK' && ['PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK', 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE', 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID'].includes(completeProviderReviewCode)) {
+  const completeProviderDiagnosticPayload = providerSubmitDiagnosticFailurePayload(evidence);
+  if (executionMode === 'STANDARD_BANK' && ['PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK', 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE', 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID', 'PROVIDER_SUBMISSION_REJECTED'].includes(completeProviderReviewCode)) {
     return fail(completeProviderReviewCode, providerSubmitMessageFromCode(completeProviderReviewCode), {
       phase: currentPhase,
       submission_evidence: evidence,
+      ...completeProviderDiagnosticPayload,
       provider_submit_diagnostic: Object.keys(completeProviderDiagnostic).length ? completeProviderDiagnostic : undefined,
       provider_submission_status: completeProviderStatus || completeProviderReviewCode,
       provider_submit_review_reason_code: completeProviderReviewReason || undefined,
       review_reason_code: completeProviderReviewReason || undefined,
+      ...completeProviderDiagnosticPayload,
       manual_resolution_required: true,
       safe_retry_available: false
     });
