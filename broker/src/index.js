@@ -30686,6 +30686,7 @@ async function handleAuditEventsList(env, req) {
 
 
 
+
 async function handleBankingPayProviderSubmitReviewResolution(env, req, user, payBatchId) {
   const id = String(payBatchId || '').trim();
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -30704,6 +30705,72 @@ async function handleBankingPayProviderSubmitReviewResolution(env, req, user, pa
     if (value === true) return true;
     if (typeof value === 'string') return ['true', 't', '1', 'yes', 'y', 'on'].includes(value.trim().toLowerCase());
     return false;
+  };
+
+  const collectUuidArray = (...sources) => {
+    const ids = [];
+    const invalid = [];
+    const seen = new Set();
+    const push = (value) => {
+      if (value === null || value === undefined || value === '') return;
+      if (Array.isArray(value)) {
+        for (const item of value) push(item);
+        return;
+      }
+      if (typeof value === 'string') {
+        const raw = value.trim();
+        if (!raw) return;
+        if (raw.startsWith('[')) {
+          try {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed)) {
+              for (const item of parsed) push(item);
+              return;
+            }
+          } catch {}
+        }
+        for (const partRaw of raw.split(',')) {
+          const part = String(partRaw || '').trim();
+          if (!part) continue;
+          if (!uuidRe.test(part)) {
+            invalid.push(part);
+            continue;
+          }
+          if (!seen.has(part)) {
+            seen.add(part);
+            ids.push(part);
+          }
+        }
+        return;
+      }
+      if (value && typeof value === 'object') {
+        push(value.id || value.pay_bank_transfer_id || value.transfer_id || value.pay_batch_item_id || value.item_id);
+        return;
+      }
+      const text = String(value || '').trim();
+      if (!text) return;
+      if (!uuidRe.test(text)) {
+        invalid.push(text);
+        return;
+      }
+      if (!seen.has(text)) {
+        seen.add(text);
+        ids.push(text);
+      }
+    };
+    for (const source of sources) push(source);
+    return { ids, invalid };
+  };
+
+  const normaliseResolutionScope = (value, selectedCount = 0) => {
+    const raw = String(value || '').trim().toUpperCase();
+    if (!raw && selectedCount === 1) return 'SINGLE_PAYMENT';
+    if (!raw && selectedCount > 1) return 'SELECTED_PAYMENTS';
+    if (!raw) return 'WHOLE_BATCH';
+    if (['SINGLE', 'SINGLE_PAYMENT', 'PAYMENT'].includes(raw)) return 'SINGLE_PAYMENT';
+    if (['SELECTED', 'SELECTED_PAYMENT', 'SELECTED_PAYMENTS', 'MULTIPLE_PAYMENTS'].includes(raw)) return 'SELECTED_PAYMENTS';
+    if (['BATCH', 'WHOLE_BATCH', 'ALL'].includes(raw)) return selectedCount > 0 ? (selectedCount === 1 ? 'SINGLE_PAYMENT' : 'SELECTED_PAYMENTS') : 'WHOLE_BATCH';
+    return null;
   };
 
   const jsonResponse = (payload, status = 200) => new Response(JSON.stringify(payload), { status, headers: JSON_HEADERS });
@@ -30746,6 +30813,45 @@ async function handleBankingPayProviderSubmitReviewResolution(env, req, user, pa
   const notesSource = body.notes === null || body.notes === undefined ? (confirmation.notes === null || confirmation.notes === undefined ? null : confirmation.notes) : body.notes;
   const notes = notesSource === null || notesSource === undefined ? null : String(notesSource).trim();
 
+  const selectedTransferCollection = collectUuidArray(
+    body.pay_bank_transfer_ids,
+    body.payBankTransferIds,
+    body.transfer_ids,
+    body.transferIds,
+    body.selected_transfer_ids,
+    body.selectedTransferIds,
+    confirmation.pay_bank_transfer_ids,
+    confirmation.payBankTransferIds,
+    confirmation.transfer_ids,
+    confirmation.transferIds,
+    confirmation.selected_transfer_ids,
+    confirmation.selectedTransferIds
+  );
+  if (selectedTransferCollection.invalid.length) return withCORS(env, req, badRequest('selected pay_bank_transfer_ids must be valid UUIDs'));
+
+  const selectedItemCollection = collectUuidArray(
+    body.pay_batch_item_ids,
+    body.payBatchItemIds,
+    body.item_ids,
+    body.itemIds,
+    body.selected_item_ids,
+    body.selectedItemIds,
+    confirmation.pay_batch_item_ids,
+    confirmation.payBatchItemIds,
+    confirmation.item_ids,
+    confirmation.itemIds,
+    confirmation.selected_item_ids,
+    confirmation.selectedItemIds
+  );
+  if (selectedItemCollection.invalid.length) return withCORS(env, req, badRequest('selected pay_batch_item_ids must be valid UUIDs'));
+
+  const rawResolutionScope = body.resolution_scope || body.resolutionScope || confirmation.resolution_scope || confirmation.resolutionScope || confirmation.scope || body.scope || '';
+  const resolutionScope = normaliseResolutionScope(rawResolutionScope, selectedTransferCollection.ids.length);
+  if (!resolutionScope) return withCORS(env, req, badRequest('resolution_scope must be SINGLE_PAYMENT, SELECTED_PAYMENTS, or WHOLE_BATCH'));
+  if (resolutionScope === 'SINGLE_PAYMENT' && selectedTransferCollection.ids.length !== 1) return withCORS(env, req, badRequest('SINGLE_PAYMENT resolution requires exactly one selected pay_bank_transfer_id'));
+  if (['SINGLE_PAYMENT', 'SELECTED_PAYMENTS'].includes(resolutionScope) && selectedTransferCollection.ids.length === 0) return withCORS(env, req, badRequest('selected transfer recovery requires pay_bank_transfer_ids'));
+  const selectedTransferScope = selectedTransferCollection.ids.length > 0 || ['SINGLE_PAYMENT', 'SELECTED_PAYMENTS'].includes(resolutionScope);
+
   try {
     const diagnostic = unwrapRpc(await sbRpc(env, 'pay_provider_submit_diagnostic_get', {
       p_pay_batch_id: id,
@@ -30761,7 +30867,7 @@ async function handleBankingPayProviderSubmitReviewResolution(env, req, user, pa
     const counts = (diagnostic.counts && typeof diagnostic.counts === 'object' && !Array.isArray(diagnostic.counts)) ? diagnostic.counts : {};
     const providerAcceptanceEvidenceCount = Number(counts.provider_acceptance_evidence_count ?? diagnostic.provider_evidence_count ?? 0) || 0;
 
-    if (providerAcceptanceEvidenceCount > 0 || diagnosticObject.provider_acceptance_evidence_present === true) {
+    if (!selectedTransferScope && (providerAcceptanceEvidenceCount > 0 || diagnosticObject.provider_acceptance_evidence_present === true)) {
       return withCORS(env, req, jsonResponse({
         ok: false,
         resolved: false,
@@ -30784,7 +30890,11 @@ async function handleBankingPayProviderSubmitReviewResolution(env, req, user, pa
         confirmed_no_payment_made: true,
         provider_checked: providerChecked,
         checked_at_utc: checkedAtDate.toISOString(),
-        notes: notes || null
+        notes: notes || null,
+        resolution_scope: resolutionScope,
+        selected_transfer_scope: selectedTransferScope,
+        pay_bank_transfer_ids: selectedTransferCollection.ids,
+        pay_batch_item_ids: selectedItemCollection.ids
       },
       p_actor_user_id: user.id
     }), 'pay_execute_provider_submit_review_resolve');
@@ -30836,8 +30946,6 @@ async function handleBankingPayProviderSubmitReviewResolution(env, req, user, pa
     return withCORS(env, req, new Response(JSON.stringify(friendly), { status: Number(friendly.http_status || friendly.status || 500) || 500, headers: JSON_HEADERS }));
   }
 }
-
-
 
 async function handleContractWeekManualUpsert(env, req, weekId) {
    const enc = encodeURIComponent;
@@ -106406,7 +106514,6 @@ async function handleGetUmbrella(env, req, umbrellaId) {
     return withCORS(env, req, serverError("Failed to fetch umbrella"));
   }
 }
-
 async function handleUpdateUmbrella(env, req, umbrellaId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized();
@@ -106431,14 +106538,28 @@ async function handleUpdateUmbrella(env, req, umbrellaId) {
   };
 
   normalizeBoolField(data, 'vat_chargeable');
+  normalizeBoolField(data, 'enabled');
   normalizeBoolField(data, 'remittance_overrides_enabled');
   normalizeBoolField(data, 'remittances_detailed_breakdown');
+
+  const umbrellaBankClearFields = ['bank_name', 'sort_code', 'account_number'];
+  for (const field of umbrellaBankClearFields) {
+    if (!Object.prototype.hasOwnProperty.call(data, field)) continue;
+    if (data[field] === null || data[field] === undefined) {
+      data[field] = null;
+      continue;
+    }
+    if (typeof data[field] === 'string') {
+      const trimmedBankValue = data[field].trim();
+      data[field] = trimmedBankValue ? trimmedBankValue : null;
+    }
+  }
 
   try {
     // 1) Load current umbrella (for change detection)
     const { rows: beforeRows } = await sbFetch(
       env,
-      `${env.SUPABASE_URL}/rest/v1/umbrellas?id=eq.${encodeURIComponent(umbrellaId)}&select=name,bank_name,sort_code,account_number,bank_details_hash,vat_chargeable`
+      `${env.SUPABASE_URL}/rest/v1/umbrellas?id=eq.${encodeURIComponent(umbrellaId)}&select=name,bank_name,sort_code,account_number,bank_details_hash,vat_chargeable,enabled`
     );
     const before = beforeRows?.[0] || {};
 
@@ -106461,9 +106582,9 @@ async function handleUpdateUmbrella(env, req, umbrellaId) {
 
     // 3) Detect pay-channel / TSFIN-impacting changes.
     // VAT chargeability must be included because umbrella payment inc-VAT is frozen from this setting.
-    const watched = ['name','bank_name','sort_code','account_number','vat_chargeable'];
+    const watched = ['name','bank_name','sort_code','account_number','vat_chargeable','enabled'];
     const changed = watched.some((k) => {
-      if (k === 'vat_chargeable') {
+      if (k === 'vat_chargeable' || k === 'enabled') {
         return normalizeBoolish(umbrella?.[k]) !== normalizeBoolish(before?.[k]);
       }
       return (umbrella?.[k] ?? null) !== (before?.[k] ?? null);
@@ -106478,8 +106599,20 @@ async function handleUpdateUmbrella(env, req, umbrellaId) {
           `&umbrella_id=eq.${encodeURIComponent(umbrellaId)}` +
           `&pay_method=eq.UMBRELLA`
       );
-      const candIds = (candidateRows || []).map(r => r.id);
+      const candIds = (candidateRows || []).map(r => r.id).filter(Boolean);
       if (candIds.length) {
+        for (const candId of candIds) {
+          try {
+            await sbRpc(env, '_change_bump', { p_entity_key: `pay_candidate:${candId}` });
+          } catch (changeErr) {
+            console.warn('[BANKING_PAY] umbrella candidate change counter bump failed (non-fatal)', {
+              umbrella_id: umbrellaId,
+              candidate_id: candId,
+              err: changeErr?.message || String(changeErr)
+            });
+          }
+        }
+
         const idsParam = candIds.map(encodeURIComponent).join(',');
         const { rows: tsfins } = await sbFetch(
           env,
@@ -106522,6 +106655,9 @@ async function handleUpdateUmbrella(env, req, umbrellaId) {
     return withCORS(env, req, serverError("Failed to update umbrella"));
   }
 }
+
+
+
 // ====================== CANDIDATES ======================
 /**
  * @openapi
@@ -108355,6 +108491,19 @@ async function handleUpdateCandidate(env, req, candidateId) {
   normalizeBoolField(data, 'remittances_detailed_breakdown');
   normalizeBoolField(data, 'remittance_receive_when_umbrella_paid');
 
+  const candidateBankClearFields = ['account_holder', 'bank_name', 'sort_code', 'account_number'];
+  for (const field of candidateBankClearFields) {
+    if (!Object.prototype.hasOwnProperty.call(data, field)) continue;
+    if (data[field] === null || data[field] === undefined) {
+      data[field] = null;
+      continue;
+    }
+    if (typeof data[field] === 'string') {
+      const trimmedBankValue = data[field].trim();
+      data[field] = trimmedBankValue ? trimmedBankValue : null;
+    }
+  }
+
   // Normalise NHSP/HR name aliases (JSONB) if provided
   let aliasesChanged = false;
   if (Object.prototype.hasOwnProperty.call(data, 'nhsp_hr_name_aliases')) {
@@ -108786,6 +108935,7 @@ return withCORS(env, req, ok({
     return withCORS(env, req, serverError("Failed to update candidate"));
   }
 }
+
 
 function normaliseRemittanceTimingGateResult(result) {
   const unwrapRpcPayload = (value) => {
@@ -141534,6 +141684,7 @@ async function csvAdapter_confirmManual() {
   throw new Error('USE_EXECUTE_MODAL_SETTLEMENT: CSV/manual settlement must be completed through the Execute modal authorisation flow.');
 }
 
+
 async function bankingCronTick(env, opts = {}) {
   const nowUtc = (() => {
     const value = opts && opts.nowUtc ? new Date(opts.nowUtc) : new Date();
@@ -141671,7 +141822,7 @@ async function bankingCronTick(env, opts = {}) {
         maxPasses: 1,
         origin: 'bankingCronTick',
         actorUserId,
-        allowedJobTypes: ['SNAPSHOT_CANDIDATE_REFRESH', 'SESSION_CANDIDATE_RECOMPUTE']
+        allowedJobTypes: ['SNAPSHOT_CANDIDATE_REFRESH', 'SESSION_CANDIDATE_RECOMPUTE', 'PAYEE_READINESS_ENSURE']
       });
       summary.workbench_jobs = workbenchDrain && typeof workbenchDrain === 'object' && !Array.isArray(workbenchDrain)
         ? workbenchDrain
@@ -141977,14 +142128,239 @@ async function executeBankingPayWorkbenchJob(env, claimedJob, opts = {}) {
   }
 
   if (jobType === 'PAYEE_READINESS_ENSURE') {
-    throw makeJobError('UNSUPPORTED_WORKBENCH_JOB_TYPE', 'PAYEE_READINESS_ENSURE was claimed, but no verified backend executor for this workbench job type exists in the uploaded backend/RPC bundle.', {
-      job_id: jobId,
-      job_type: jobType,
-      snapshot_run_id: snapshotRunId || null,
-      session_id: sessionId || null,
-      candidate_id: candidateId || null,
-      origin,
-      retry_after_seconds: 300
+    const readArrayPayload = (value) => {
+      if (Array.isArray(value)) return value;
+      if (typeof value === 'string') {
+        const raw = trimStr(value);
+        if (!raw) return [];
+        if (!raw.startsWith('[')) return null;
+        try {
+          const parsed = JSON.parse(raw);
+          return Array.isArray(parsed) ? parsed : null;
+        } catch {
+          return null;
+        }
+      }
+      return value === undefined || value === null ? [] : null;
+    };
+
+    const normaliseKind = (value) => {
+      const raw = trimStr(value).toUpperCase();
+      if (raw === 'UMBRELLA_COMPANY') return 'UMBRELLA';
+      return raw;
+    };
+
+    const normaliseRailProvider = (value) => trimStr(value || 'REVOLUT').toUpperCase() || 'REVOLUT';
+    const normaliseRailEnv = (value) => trimStr(value || 'PROD').toUpperCase() || 'PROD';
+
+    const sourcePayees = readArrayPayload(
+      Object.prototype.hasOwnProperty.call(payload, 'payees_json')
+        ? payload.payees_json
+        : (Object.prototype.hasOwnProperty.call(payload, 'payees') ? payload.payees : [])
+    );
+
+    if (!Array.isArray(sourcePayees)) {
+      throw makeJobError('PAYEE_READINESS_ENSURE_INVALID_PAYEES_JSON', 'PAYEE_READINESS_ENSURE payload_json.payees_json must be a JSON array.', {
+        job_id: jobId,
+        job_type: jobType,
+        snapshot_run_id: snapshotRunId || null,
+        session_id: sessionId || null,
+        candidate_id: candidateId || null,
+        origin,
+        retry_after_seconds: 300
+      });
+    }
+
+    const skippedPayees = [];
+    const dedupedPayees = [];
+    const seenPayeeKeys = new Set();
+
+    for (let index = 0; index < sourcePayees.length; index += 1) {
+      const payee = sourcePayees[index];
+      if (!isPlainObject(payee)) {
+        skippedPayees.push({ index, reason: 'PAYEE_NOT_OBJECT' });
+        continue;
+      }
+
+      const railProvider = normaliseRailProvider(payee.rail_provider || payee.railProvider || payload.rail_provider || payload.railProvider);
+      const railEnv = normaliseRailEnv(payee.rail_env || payee.railEnv || payload.rail_env || payload.railEnv);
+      const entityKind = normaliseKind(payee.payee_entity_kind || payee.entity_kind || payee.payee_kind || payee.kind);
+      const entityId = trimStr(payee.payee_entity_id || payee.entity_id || payee.payee_id || payee.id);
+      const bankDetailsHash = trimStr(payee.bank_details_hash || payee.bankDetailsHash);
+
+      if (!railProvider || !railEnv || !entityKind || !entityId || !bankDetailsHash) {
+        skippedPayees.push({
+          index,
+          reason: 'MISSING_EXACT_PAYEE_READINESS_KEY',
+          rail_provider: railProvider || null,
+          rail_env: railEnv || null,
+          entity_kind: entityKind || null,
+          entity_id: entityId || null,
+          bank_details_hash_present: !!bankDetailsHash
+        });
+        continue;
+      }
+
+      if (!['CANDIDATE', 'UMBRELLA'].includes(entityKind)) {
+        skippedPayees.push({
+          index,
+          reason: 'UNSUPPORTED_ENTITY_KIND',
+          rail_provider: railProvider,
+          rail_env: railEnv,
+          entity_kind: entityKind,
+          entity_id: entityId,
+          bank_details_hash_present: true
+        });
+        continue;
+      }
+
+      if (railProvider !== 'REVOLUT') {
+        skippedPayees.push({
+          index,
+          reason: 'UNSUPPORTED_RAIL_PROVIDER_FOR_READINESS_EXECUTOR',
+          rail_provider: railProvider,
+          rail_env: railEnv,
+          entity_kind: entityKind,
+          entity_id: entityId,
+          bank_details_hash_present: true
+        });
+        continue;
+      }
+
+      const key = `${railProvider}|${railEnv}|${entityKind}|${entityId}|${bankDetailsHash}`;
+      if (seenPayeeKeys.has(key)) continue;
+      seenPayeeKeys.add(key);
+
+      dedupedPayees.push(Object.assign({}, payee, {
+        rail_provider: railProvider,
+        rail_env: railEnv,
+        payee_entity_kind: entityKind,
+        entity_kind: entityKind,
+        payee_entity_id: entityId,
+        entity_id: entityId,
+        bank_details_hash: bankDetailsHash
+      }));
+    }
+
+    const resultBase = Object.assign({}, baseResult, {
+      status: 'READY',
+      payees_inspected: sourcePayees.length,
+      valid_payee_count: dedupedPayees.length,
+      skipped_payee_count: skippedPayees.length,
+      skipped_payees: skippedPayees,
+      payees_processed: 0,
+      readiness_results: [],
+      name_checks_attempted: 0,
+      name_checks_passed: 0,
+      name_checks_failed: 0,
+      payee_maps_created: 0,
+      payee_maps_reused: 0,
+      payees_still_blocked: 0,
+      errors: []
+    });
+
+    if (sourcePayees.length === 0 || dedupedPayees.length === 0) {
+      return Object.assign({}, resultBase, {
+        ok: true,
+        no_op: true,
+        status: 'READY',
+        message: sourcePayees.length === 0
+          ? 'PAYEE_READINESS_ENSURE completed with no payees in the job payload.'
+          : 'PAYEE_READINESS_ENSURE completed with no valid processable payees after exact-key validation.'
+      });
+    }
+
+    const groupedByEnv = new Map();
+    for (const payee of dedupedPayees) {
+      const railEnv = normaliseRailEnv(payee.rail_env || payee.railEnv || payload.rail_env || payload.railEnv);
+      if (!groupedByEnv.has(railEnv)) groupedByEnv.set(railEnv, []);
+      groupedByEnv.get(railEnv).push(payee);
+    }
+
+    const readinessResults = [];
+    for (const [railEnv, payeesForEnv] of groupedByEnv.entries()) {
+      const readinessResult = await revolutEnsurePayeesReadyFromPreview(env, railEnv, payeesForEnv, actorUserId || null, {
+        origin,
+        jobId,
+        job_id: jobId,
+        snapshotRunId: snapshotRunId || null,
+        snapshot_run_id: snapshotRunId || null,
+        sessionId: sessionId || null,
+        session_id: sessionId || null,
+        candidateId: candidateId || null,
+        candidate_id: candidateId || null,
+        railProvider: 'REVOLUT',
+        rail_provider: 'REVOLUT',
+        railEnv,
+        rail_env: railEnv
+      });
+      readinessResults.push(Object.assign({ rail_provider: 'REVOLUT', rail_env: railEnv }, clonePlain(readinessResult) || {}));
+    }
+
+    let nameChecksAttempted = 0;
+    let nameChecksPassed = 0;
+    let nameChecksFailed = 0;
+    let payeeMapsCreated = 0;
+    let payeeMapsReused = 0;
+    let payeesStillBlocked = 0;
+    const errors = [];
+
+    for (const readinessResult of readinessResults) {
+      const diagnostics = Array.isArray(readinessResult.diagnostics) ? readinessResult.diagnostics : [];
+      for (const diagnostic of diagnostics) {
+        const nameCheck = isPlainObject(diagnostic && diagnostic.name_check) ? diagnostic.name_check : null;
+        if (nameCheck && nameCheck.attempted === true) {
+          nameChecksAttempted += 1;
+          if (nameCheck.ok === false) nameChecksFailed += 1;
+          else if (trimStr(nameCheck.status).toUpperCase() === 'PASS') nameChecksPassed += 1;
+        }
+
+        const payeeMap = isPlainObject(diagnostic && diagnostic.payee_map) ? diagnostic.payee_map : null;
+        if (payeeMap) {
+          if (payeeMap.attempted === true && payeeMap.ok === true) payeeMapsCreated += 1;
+          if (payeeMap.reason === 'ALREADY_PRESENT') payeeMapsReused += 1;
+        }
+
+        const diagnosticErrors = Array.isArray(diagnostic && diagnostic.errors) ? diagnostic.errors : [];
+        if (diagnosticErrors.length) {
+          payeesStillBlocked += 1;
+          for (const err of diagnosticErrors) errors.push(String(err || '').trim() || 'PAYEE_READINESS_ERROR');
+        } else if (diagnostic && diagnostic.ready !== true && diagnostic.skipped !== true) {
+          payeesStillBlocked += 1;
+        }
+      }
+    }
+
+    return Object.assign({}, resultBase, {
+      ok: readinessResults.every((readinessResult) => readinessResult && readinessResult.ok !== false),
+      no_op: readinessResults.every((readinessResult) => readinessResult && readinessResult.did_work !== true),
+      status: readinessResults.some((readinessResult) => Number(readinessResult.remaining || 0) > 0) ? 'PENDING' : 'READY',
+      payees_processed: readinessResults.reduce((sum, readinessResult) => sum + (Number(readinessResult.payees_processed) || 0), 0),
+      attempted_count: readinessResults.reduce((sum, readinessResult) => sum + (Number(readinessResult.attempted_count ?? readinessResult.attempted) || 0), 0),
+      ready_count: readinessResults.reduce((sum, readinessResult) => sum + (Number(readinessResult.ready_count ?? readinessResult.ready ?? readinessResult.success_count) || 0), 0),
+      failed_count: readinessResults.reduce((sum, readinessResult) => sum + (Number(readinessResult.failed_count ?? readinessResult.failed) || 0), 0),
+      readiness_results: readinessResults,
+      name_checks_attempted: nameChecksAttempted,
+      name_checks_passed: nameChecksPassed,
+      name_checks_failed: nameChecksFailed,
+      payee_maps_created: payeeMapsCreated,
+      payee_maps_reused: payeeMapsReused,
+      payees_still_blocked: payeesStillBlocked,
+      errors: Array.from(new Set(errors)).slice(0, 50),
+      result_json: {
+        payees_inspected: sourcePayees.length,
+        valid_payee_count: dedupedPayees.length,
+        skipped_payee_count: skippedPayees.length,
+        skipped_payees: skippedPayees,
+        readiness_results: readinessResults,
+        name_checks_attempted: nameChecksAttempted,
+        name_checks_passed: nameChecksPassed,
+        name_checks_failed: nameChecksFailed,
+        payee_maps_created: payeeMapsCreated,
+        payee_maps_reused: payeeMapsReused,
+        payees_still_blocked: payeesStillBlocked,
+        errors: Array.from(new Set(errors)).slice(0, 50)
+      }
     });
   }
 
@@ -141998,6 +142374,7 @@ async function executeBankingPayWorkbenchJob(env, claimedJob, opts = {}) {
     retry_after_seconds: 300
   });
 }
+
 
 async function drainBankingPayWorkbenchJobs(env, opts = {}) {
   const trimStr = (value) => String(value == null ? '' : value).trim();
