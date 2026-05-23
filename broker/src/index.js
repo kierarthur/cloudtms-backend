@@ -21043,6 +21043,187 @@ async function revolutEnsurePayeesReadyFromPreview(env, railEnv, payees, actorUs
     return token;
   };
 
+  const readErrorMessage = (value) => {
+    if (value == null) return '';
+    if (typeof value === 'string') return trimStr(value);
+    if (value && typeof value === 'object') {
+      return trimStr(
+        value.user_safe_message ||
+        value.userSafeMessage ||
+        value.message ||
+        value.error ||
+        value.error_message ||
+        value.errorMessage ||
+        value.detail ||
+        value.hint ||
+        value.code ||
+        ''
+      );
+    }
+    return trimStr(value);
+  };
+
+  const readErrorCode = (value, fallback = '') => {
+    if (value && typeof value === 'object') {
+      return trimStr(value.code || value.error_code || value.errorCode || value.business_code || value.businessCode || fallback).toUpperCase();
+    }
+    const text = trimStr(value || fallback).toUpperCase();
+    return text;
+  };
+
+  const readHttpStatus = (value) => {
+    const candidates = [];
+    if (value && typeof value === 'object') {
+      candidates.push(value.provider_http_status, value.providerHttpStatus, value.http_status, value.httpStatus, value.status_code, value.statusCode, value.status);
+      if (value.response && typeof value.response === 'object') candidates.push(value.response.status, value.response.status_code, value.response.statusCode);
+      if (value.cause && typeof value.cause === 'object') candidates.push(value.cause.status, value.cause.http_status, value.cause.status_code);
+    }
+    const msg = readErrorMessage(value);
+    const httpMatch = msg.match(/\b(?:HTTP|status|status_code|http_status)\s*[:=]?\s*(\d{3})\b/i) || msg.match(/\b(4\d\d|5\d\d)\b/);
+    if (httpMatch) candidates.push(httpMatch[1]);
+    for (const candidate of candidates) {
+      const n = Number(candidate);
+      if (Number.isFinite(n) && n >= 100 && n <= 599) return Math.trunc(n);
+    }
+    return null;
+  };
+
+  const readRetryAfterSeconds = (value) => {
+    const candidates = [];
+    if (value && typeof value === 'object') {
+      candidates.push(value.retry_after_seconds, value.retryAfterSeconds, value.retry_after, value.retryAfter);
+      if (value.response && typeof value.response === 'object') candidates.push(value.response.retry_after_seconds, value.response.retryAfterSeconds, value.response.retry_after, value.response.retryAfter);
+    }
+    for (const candidate of candidates) {
+      const n = Number(candidate);
+      if (Number.isFinite(n) && n > 0) return Math.max(5, Math.min(86400, Math.trunc(n)));
+    }
+    return null;
+  };
+
+  const classifyReadinessError = (value, providerCallContext = 'READINESS', extra = {}) => {
+    const context = trimStr(providerCallContext || extra.provider_call_context || 'READINESS').toUpperCase() || 'READINESS';
+    const message = readErrorMessage(value) || trimStr(extra.message || extra.reason || extra.code || 'PAYEE_READINESS_ERROR');
+    const code = readErrorCode(value, extra.code || extra.reason || message || 'PAYEE_READINESS_ERROR');
+    const httpStatus = readHttpStatus(value);
+    const retryAfterSeconds = readRetryAfterSeconds(value);
+    const upperText = `${code} ${message}`.toUpperCase();
+    const providerCallAttempted = extra.provider_call_attempted === true
+      ? true
+      : (extra.provider_call_attempted === false ? false : ['NAME_CHECK', 'COUNTERPARTY_MAP'].includes(context));
+
+    const permanentMarkers = [
+      'MISSING_PAYEE_IDENTITY',
+      'MISSING_EXACT_PAYEE_READINESS_KEY',
+      'BLOCKED_BANK_DETAILS',
+      'MISSING_BANK_FIELDS',
+      'INVALID_BANK_FIELDS',
+      'NAME_CHECK_NOT_APPROVED',
+      'NAME_CHECK_FAILED_PERMANENT',
+      'NAME_CHECK_MISMATCH',
+      'NAME_CHECK_FAIL',
+      'UNSUPPORTED_ENTITY_KIND',
+      'UNSUPPORTED_RAIL_PROVIDER',
+      'UNSUPPORTED_RAIL_PROVIDER_FOR_READINESS_EXECUTOR',
+      'INVALID_SORT_CODE',
+      'INVALID_ACCOUNT_NUMBER'
+    ];
+    const productUnavailableMarkers = [
+      'REVOLUT_COP_UNAVAILABLE_404',
+      'COP_NOT_ENABLED',
+      'COP_UNAVAILABLE',
+      'NAME_CHECK_UNAVAILABLE_PRODUCT',
+      'CONFIRMATION_OF_PAYEE_UNAVAILABLE'
+    ];
+    const retryableMarkers = [
+      'TIMEOUT',
+      'TIMED OUT',
+      'NETWORK',
+      'FETCH FAILED',
+      'ECONNRESET',
+      'ECONNREFUSED',
+      'ETIMEDOUT',
+      'EAI_AGAIN',
+      'ENOTFOUND',
+      'SERVICE_UNAVAILABLE',
+      'PROVIDER_UNAVAILABLE',
+      'TEMPORARY',
+      'TRANSIENT',
+      'RATE_LIMIT',
+      'TOO MANY REQUESTS',
+      'TOKEN',
+      'AUTH',
+      'UNAUTHORIZED',
+      'FORBIDDEN',
+      'POSTGREST',
+      'PGRST',
+      'SUPABASE'
+    ];
+
+    let errorKind = 'PERMANENT_BLOCKER';
+    let retryable = false;
+    let userSafeMessage = 'Payee readiness could not be completed. Review the payee blocker and try again if required.';
+
+    if (productUnavailableMarkers.some((marker) => upperText.includes(marker)) || (httpStatus === 404 && context === 'NAME_CHECK')) {
+      errorKind = 'COP_UNAVAILABLE';
+      retryable = false;
+      userSafeMessage = 'Payee bank/name check is unavailable for this provider setup. Review provider configuration before retrying.';
+    } else if (permanentMarkers.some((marker) => upperText.includes(marker))) {
+      errorKind = 'PERMANENT_BLOCKER';
+      retryable = false;
+      userSafeMessage = 'Payee readiness is blocked by missing, invalid, or unapproved payee details.';
+    } else if (httpStatus === 408 || httpStatus === 429 || (httpStatus !== null && httpStatus >= 500) || httpStatus === 401 || httpStatus === 403 || retryableMarkers.some((marker) => upperText.includes(marker))) {
+      if (httpStatus === 429 || upperText.includes('RATE_LIMIT') || upperText.includes('TOO MANY REQUESTS')) errorKind = 'PROVIDER_RATE_LIMIT';
+      else if (httpStatus === 401 || httpStatus === 403 || upperText.includes('TOKEN') || upperText.includes('AUTH') || upperText.includes('UNAUTHORIZED') || upperText.includes('FORBIDDEN')) errorKind = 'PROVIDER_AUTH';
+      else if (context === 'NAME_CHECK_RECORD_RESULT' || context === 'READINESS_LOCK') errorKind = 'READINESS_RECORD_WRITE_FAILED';
+      else errorKind = 'PROVIDER_TRANSIENT';
+      retryable = true;
+      userSafeMessage = 'Payee readiness could not run. Retry setup or contact support.';
+    } else if (context === 'NAME_CHECK' || context === 'COUNTERPARTY_MAP') {
+      errorKind = 'PROVIDER_TRANSIENT';
+      retryable = true;
+      userSafeMessage = 'Payee readiness could not run. Retry setup or contact support.';
+    } else if (context === 'NAME_CHECK_RECORD_RESULT' || context === 'READINESS_LOCK') {
+      errorKind = 'READINESS_RECORD_WRITE_FAILED';
+      retryable = true;
+      userSafeMessage = 'Payee readiness could not be recorded. Retry setup or contact support.';
+    }
+
+    if (extra.error_kind) errorKind = trimStr(extra.error_kind).toUpperCase();
+    if (extra.retryable === true || extra.retryable === false) retryable = extra.retryable === true;
+    if (extra.user_safe_message) userSafeMessage = trimStr(extra.user_safe_message);
+
+    return {
+      error_kind: errorKind,
+      retryable,
+      provider_call_attempted: providerCallAttempted,
+      provider_call_context: context,
+      provider_http_status: httpStatus,
+      retry_after_seconds: retryAfterSeconds,
+      user_safe_message: userSafeMessage,
+      error_code: code || null,
+      error_message: message || code || 'PAYEE_READINESS_ERROR'
+    };
+  };
+
+  const recordReadinessError = (row, value, providerCallContext, extra = {}) => {
+    const diagnostic = classifyReadinessError(value, providerCallContext, extra);
+    if (!Array.isArray(row.readiness_errors)) row.readiness_errors = [];
+    row.readiness_errors.push(diagnostic);
+    row.error_kind = diagnostic.error_kind;
+    row.retryable = row.retryable === true || diagnostic.retryable === true;
+    row.provider_call_attempted = row.provider_call_attempted === true || diagnostic.provider_call_attempted === true;
+    row.provider_call_context = diagnostic.provider_call_context;
+    row.provider_http_status = diagnostic.provider_http_status;
+    row.retry_after_seconds = diagnostic.retry_after_seconds;
+    row.user_safe_message = diagnostic.user_safe_message;
+    row.ready = false;
+    const errorText = diagnostic.error_message || diagnostic.error_code || 'PAYEE_READINESS_ERROR';
+    if (!Array.isArray(row.errors)) row.errors = [];
+    row.errors.push(errorText);
+    return diagnostic;
+  };
+
   if (!list.length) {
     return {
       ok: true,
@@ -21085,13 +21266,21 @@ async function revolutEnsurePayeesReadyFromPreview(env, railEnv, payees, actorUs
       name_check: null,
       payee_map: null,
       lock: null,
-      errors: []
+      errors: [],
+      readiness_errors: [],
+      error_kind: null,
+      retryable: false,
+      provider_call_attempted: false,
+      provider_call_context: null,
+      provider_http_status: null,
+      retry_after_seconds: null,
+      user_safe_message: null
     };
 
     if (!kind || !idText || !bankHash) {
       row.skipped = false;
       row.skip_reason = 'MISSING_PAYEE_IDENTITY';
-      row.errors.push('MISSING_PAYEE_IDENTITY');
+      recordReadinessError(row, 'MISSING_PAYEE_IDENTITY', 'VALIDATION', { retryable: false, provider_call_attempted: false });
       failed += 1;
       diagnostics.push(row);
       continue;
@@ -21104,7 +21293,7 @@ async function revolutEnsurePayeesReadyFromPreview(env, railEnv, payees, actorUs
     if (blockers.includes('BLOCKED_BANK_DETAILS')) {
       row.skipped = false;
       row.skip_reason = 'BLOCKED_BANK_DETAILS';
-      row.errors.push('BLOCKED_BANK_DETAILS');
+      recordReadinessError(row, 'BLOCKED_BANK_DETAILS', 'VALIDATION', { retryable: false, provider_call_attempted: false });
       failed += 1;
       diagnostics.push(row);
       continue;
@@ -21157,6 +21346,10 @@ async function revolutEnsurePayeesReadyFromPreview(env, railEnv, payees, actorUs
       row.lock = { ok: true };
     } catch (e) {
       row.lock = { ok: false, error: String(e?.message || e || 'LOCK_FAILED') };
+      recordReadinessError(row, e, 'READINESS_LOCK', { code: 'READINESS_LOCK_FAILED', retryable: true, provider_call_attempted: false });
+      failed += 1;
+      diagnostics.push(row);
+      continue;
     }
 
     if (needsNameCheck) {
@@ -21164,6 +21357,17 @@ async function revolutEnsurePayeesReadyFromPreview(env, railEnv, payees, actorUs
         row.name_check = { attempted: false, reason: 'HAS_OVERRIDE', status: ncStatusNow };
       } else if (ncStatusNow !== 'UNVERIFIED') {
         row.name_check = { attempted: false, reason: 'ALREADY_CHECKED', status: ncStatusNow };
+        if (ncStatusNow !== 'PASS') {
+          const unavailable = ncStatusNow === 'UNAVAILABLE';
+          recordReadinessError(row, unavailable ? 'COP_NOT_ENABLED' : 'NAME_CHECK_NOT_APPROVED', 'NAME_CHECK', {
+            retryable: false,
+            provider_call_attempted: false,
+            error_kind: unavailable ? 'COP_UNAVAILABLE' : 'PERMANENT_BLOCKER',
+            user_safe_message: unavailable
+              ? 'Payee bank/name check is unavailable for this provider setup. Review provider configuration before retrying.'
+              : 'Payee readiness is blocked because the bank/name check is not approved.'
+          });
+        }
       } else if (!nameForRail || scDigits.length !== 6 || !acctDigits) {
         row.name_check = {
           attempted: false,
@@ -21174,6 +21378,7 @@ async function revolutEnsurePayeesReadyFromPreview(env, railEnv, payees, actorUs
             account_number: !acctDigits
           }
         };
+        recordReadinessError(row, 'MISSING_BANK_FIELDS', 'NAME_CHECK', { retryable: false, provider_call_attempted: false });
       } else {
         try {
           const railToken = await getToken();
@@ -21199,6 +21404,13 @@ async function revolutEnsurePayeesReadyFromPreview(env, railEnv, payees, actorUs
           ncStatusNow = String(ncRes.status || '').trim().toUpperCase() || ncStatusNow;
           row.name_check = { attempted: true, ok: true, status: ncRes.status };
           didWork = true;
+          if (ncStatusNow !== 'PASS') {
+            recordReadinessError(row, 'NAME_CHECK_NOT_APPROVED', 'NAME_CHECK', {
+              retryable: false,
+              provider_call_attempted: true,
+              user_safe_message: 'Payee readiness is blocked because the bank/name check is not approved.'
+            });
+          }
         } catch (e) {
           const msg = (e && e.message) ? String(e.message) : String(e || '');
           const is404 = msg.includes('REVOLUT_COP_UNAVAILABLE_404');
@@ -21217,15 +21429,21 @@ async function revolutEnsurePayeesReadyFromPreview(env, railEnv, payees, actorUs
                 p_actor_user_id: actor
               });
               ncStatusNow = 'UNAVAILABLE';
-              row.name_check = { attempted: true, ok: true, status: 'UNAVAILABLE' };
+              row.name_check = { attempted: true, ok: false, status: 'UNAVAILABLE', error: 'REVOLUT_COP_UNAVAILABLE_404' };
+              recordReadinessError(row, 'REVOLUT_COP_UNAVAILABLE_404', 'NAME_CHECK', {
+                retryable: false,
+                provider_call_attempted: true,
+                error_kind: 'COP_UNAVAILABLE',
+                user_safe_message: 'Payee bank/name check is unavailable for this provider setup. Review provider configuration before retrying.'
+              });
               didWork = true;
             } catch (e2) {
               row.name_check = { attempted: true, ok: false, error: String(e2?.message || e2 || 'NAME_CHECK_RECORD_FAILED') };
-              row.errors.push(String(e2?.message || e2 || 'NAME_CHECK_RECORD_FAILED'));
+              recordReadinessError(row, e2, 'NAME_CHECK_RECORD_RESULT', { code: 'NAME_CHECK_RECORD_FAILED', retryable: true, provider_call_attempted: true });
             }
           } else {
             row.name_check = { attempted: true, ok: false, error: msg || 'NAME_CHECK_FAILED' };
-            row.errors.push(msg || 'NAME_CHECK_FAILED');
+            recordReadinessError(row, e, 'NAME_CHECK', { code: 'NAME_CHECK_FAILED', provider_call_attempted: true });
           }
         }
       }
@@ -21247,6 +21465,7 @@ async function revolutEnsurePayeesReadyFromPreview(env, railEnv, payees, actorUs
           name_check_status: ncStatusNow,
           name_check_has_override: (ncHasOverrideNow === true)
         };
+        recordReadinessError(row, 'NAME_CHECK_NOT_APPROVED', 'COUNTERPARTY_MAP', { retryable: false, provider_call_attempted: false });
       } else if (!nameForRail || scDigits.length !== 6 || !acctDigits) {
         row.payee_map = {
           attempted: false,
@@ -21257,6 +21476,7 @@ async function revolutEnsurePayeesReadyFromPreview(env, railEnv, payees, actorUs
             account_number: !acctDigits
           }
         };
+        recordReadinessError(row, 'MISSING_BANK_FIELDS', 'COUNTERPARTY_MAP', { retryable: false, provider_call_attempted: false });
       } else {
         try {
           const railToken = await getToken();
@@ -21278,7 +21498,7 @@ async function revolutEnsurePayeesReadyFromPreview(env, railEnv, payees, actorUs
         } catch (e) {
           const msg = (e && e.message) ? String(e.message) : String(e || '');
           row.payee_map = { attempted: true, ok: false, error: msg || 'PAYEE_MAP_FAILED' };
-          row.errors.push(msg || 'PAYEE_MAP_FAILED');
+          recordReadinessError(row, e, 'COUNTERPARTY_MAP', { code: 'PAYEE_MAP_FAILED', provider_call_attempted: true });
         }
       }
     }
@@ -21313,9 +21533,12 @@ async function revolutEnsurePayeesReadyFromPreview(env, railEnv, payees, actorUs
     ready_count: ready,
     failed_count: failed,
     skipped_count: skipped,
+    retryable_error_count: diagnostics.reduce((sum, row) => sum + ((row && row.retryable === true) ? 1 : 0), 0),
+    provider_call_error_count: diagnostics.reduce((sum, row) => sum + (Array.isArray(row?.readiness_errors) ? row.readiness_errors.filter((err) => err && err.provider_call_attempted === true).length : 0), 0),
     diagnostics
   };
 }
+
 
 
 
@@ -142277,6 +142500,76 @@ async function executeBankingPayWorkbenchJob(env, claimedJob, opts = {}) {
       groupedByEnv.get(railEnv).push(payee);
     }
 
+    const readRetryAfterSeconds = (value) => {
+      const n = Number(value);
+      if (Number.isFinite(n) && n > 0) return Math.max(5, Math.min(86400, Math.trunc(n)));
+      return null;
+    };
+
+    const collectRetryableReadinessDiagnostics = (results) => {
+      const retryableDiagnostics = [];
+      const providerCallDiagnostics = [];
+      const readDiagArray = (diagnostic) => Array.isArray(diagnostic?.readiness_errors) ? diagnostic.readiness_errors : [];
+      for (const readinessResult of Array.isArray(results) ? results : []) {
+        const railProvider = trimStr(readinessResult?.rail_provider || 'REVOLUT').toUpperCase() || 'REVOLUT';
+        const railEnv = trimStr(readinessResult?.rail_env || readinessResult?.railEnv || 'PROD').toUpperCase() || 'PROD';
+        const diagnostics = Array.isArray(readinessResult?.diagnostics) ? readinessResult.diagnostics : [];
+        for (const diagnostic of diagnostics) {
+          const payeeEntityKind = trimStr(diagnostic?.payee_entity_kind || diagnostic?.entity_kind).toUpperCase();
+          const payeeEntityId = trimStr(diagnostic?.payee_entity_id || diagnostic?.entity_id);
+          const bankDetailsHash = trimStr(diagnostic?.bank_details_hash || diagnostic?.bankDetailsHash);
+          const payeeKey = `${railProvider}|${railEnv}|${payeeEntityKind || 'UNKNOWN'}|${payeeEntityId || 'UNKNOWN'}|${bankDetailsHash || 'UNKNOWN'}`;
+          const readinessErrors = readDiagArray(diagnostic);
+          const diagnosticRetryable = diagnostic?.retryable === true;
+          const diagnosticProviderCallError = diagnostic?.provider_call_attempted === true && (Array.isArray(diagnostic?.errors) ? diagnostic.errors.length > 0 : true);
+          if (diagnosticProviderCallError) {
+            providerCallDiagnostics.push({
+              payee_key: payeeKey,
+              payee_entity_kind: payeeEntityKind || null,
+              payee_entity_id: payeeEntityId || null,
+              bank_details_hash: bankDetailsHash || null,
+              error_kind: trimStr(diagnostic?.error_kind || 'PAYEE_READINESS_ERROR').toUpperCase(),
+              provider_call_context: trimStr(diagnostic?.provider_call_context || '').toUpperCase() || null,
+              provider_http_status: diagnostic?.provider_http_status ?? null,
+              retry_after_seconds: readRetryAfterSeconds(diagnostic?.retry_after_seconds),
+              user_safe_message: trimStr(diagnostic?.user_safe_message || '') || null
+            });
+          }
+          if (diagnosticRetryable) {
+            retryableDiagnostics.push({
+              payee_key: payeeKey,
+              payee_entity_kind: payeeEntityKind || null,
+              payee_entity_id: payeeEntityId || null,
+              bank_details_hash: bankDetailsHash || null,
+              error_kind: trimStr(diagnostic?.error_kind || 'PAYEE_READINESS_RETRYABLE_ERROR').toUpperCase(),
+              provider_call_context: trimStr(diagnostic?.provider_call_context || '').toUpperCase() || null,
+              provider_http_status: diagnostic?.provider_http_status ?? null,
+              retry_after_seconds: readRetryAfterSeconds(diagnostic?.retry_after_seconds),
+              user_safe_message: trimStr(diagnostic?.user_safe_message || '') || 'Payee readiness could not run. Retry setup or contact support.'
+            });
+          }
+          for (const readinessError of readinessErrors) {
+            const providerCallAttempted = readinessError?.provider_call_attempted === true;
+            const retryable = readinessError?.retryable === true;
+            const item = {
+              payee_key: payeeKey,
+              payee_entity_kind: payeeEntityKind || null,
+              payee_entity_id: payeeEntityId || null,
+              bank_details_hash: bankDetailsHash || null,
+              error_kind: trimStr(readinessError?.error_kind || diagnostic?.error_kind || 'PAYEE_READINESS_ERROR').toUpperCase(),
+              provider_call_context: trimStr(readinessError?.provider_call_context || diagnostic?.provider_call_context || '').toUpperCase() || null,
+              provider_http_status: readinessError?.provider_http_status ?? diagnostic?.provider_http_status ?? null,
+              retry_after_seconds: readRetryAfterSeconds(readinessError?.retry_after_seconds ?? diagnostic?.retry_after_seconds),
+              user_safe_message: trimStr(readinessError?.user_safe_message || diagnostic?.user_safe_message || '') || 'Payee readiness could not run. Retry setup or contact support.'
+            };
+            if (providerCallAttempted) providerCallDiagnostics.push(item);
+            if (retryable) retryableDiagnostics.push(item);
+          }
+        }
+      }
+      return { retryableDiagnostics, providerCallDiagnostics };
+    };
+
     const readinessResults = [];
     for (const [railEnv, payeesForEnv] of groupedByEnv.entries()) {
       const readinessResult = await revolutEnsurePayeesReadyFromPreview(env, railEnv, payeesForEnv, actorUserId || null, {
@@ -142295,6 +142588,31 @@ async function executeBankingPayWorkbenchJob(env, claimedJob, opts = {}) {
         rail_env: railEnv
       });
       readinessResults.push(Object.assign({ rail_provider: 'REVOLUT', rail_env: railEnv }, clonePlain(readinessResult) || {}));
+    }
+
+    const retryableReadiness = collectRetryableReadinessDiagnostics(readinessResults);
+    if (retryableReadiness.retryableDiagnostics.length > 0) {
+      const affectedPayeeKeys = Array.from(new Set(retryableReadiness.retryableDiagnostics.map((item) => item.payee_key).filter(Boolean)));
+      const retryAfterSeconds = retryableReadiness.retryableDiagnostics
+        .map((item) => readRetryAfterSeconds(item.retry_after_seconds))
+        .filter((value) => value !== null)
+        .sort((a, b) => a - b)[0] || 300;
+      throw makeJobError('PAYEE_READINESS_ENSURE_RETRYABLE_PROVIDER_FAILURE', 'Payee readiness could not run because the provider or readiness write path failed. The workbench job will retry.', {
+        job_id: jobId,
+        job_type: jobType,
+        snapshot_run_id: snapshotRunId || null,
+        session_id: sessionId || null,
+        candidate_id: candidateId || null,
+        origin,
+        payees_inspected: sourcePayees.length,
+        valid_payee_count: dedupedPayees.length,
+        retryable_error_count: retryableReadiness.retryableDiagnostics.length,
+        provider_call_error_count: retryableReadiness.providerCallDiagnostics.length,
+        affected_payee_keys: affectedPayeeKeys,
+        affected_payees: retryableReadiness.retryableDiagnostics.slice(0, 50),
+        user_safe_message: 'Payee readiness could not run. Retry setup or contact support.',
+        retry_after_seconds: retryAfterSeconds
+      });
     }
 
     let nameChecksAttempted = 0;
@@ -142346,6 +142664,8 @@ async function executeBankingPayWorkbenchJob(env, claimedJob, opts = {}) {
       payee_maps_created: payeeMapsCreated,
       payee_maps_reused: payeeMapsReused,
       payees_still_blocked: payeesStillBlocked,
+      retryable_error_count: 0,
+      provider_call_error_count: retryableReadiness.providerCallDiagnostics.length,
       errors: Array.from(new Set(errors)).slice(0, 50),
       result_json: {
         payees_inspected: sourcePayees.length,
@@ -142359,6 +142679,8 @@ async function executeBankingPayWorkbenchJob(env, claimedJob, opts = {}) {
         payee_maps_created: payeeMapsCreated,
         payee_maps_reused: payeeMapsReused,
         payees_still_blocked: payeesStillBlocked,
+        retryable_error_count: 0,
+        provider_call_error_count: retryableReadiness.providerCallDiagnostics.length,
         errors: Array.from(new Set(errors)).slice(0, 50)
       }
     });
