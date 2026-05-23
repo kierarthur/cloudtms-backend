@@ -15134,6 +15134,9 @@ $function$;
 
 
 
+
+
+
 CREATE OR REPLACE FUNCTION public.pay_preview_candidate_build_payee_baseline(
   p_context_json jsonb,
   p_candidate_id uuid
@@ -15824,6 +15827,7 @@ begin
           (bpm.payee_id is not null) as payee_map_present,
 
           b.is_missing_bank_details as is_missing_bank_details,
+          (p.payee_entity_kind = 'UMBRELLA' and coalesce(u_pay.enabled, false) = false) as is_umbrella_inactive,
 
           (
             v_need_name_check = true
@@ -15972,6 +15976,8 @@ begin
                   (
                     (case when pe.is_missing_bank_details then jsonb_build_array('BLOCKED_BANK_DETAILS') else '[]'::jsonb end)
                     ||
+                    (case when pe.is_umbrella_inactive then jsonb_build_array('BLOCKED_UMBRELLA_INACTIVE') else '[]'::jsonb end)
+                    ||
                     (case when pe.is_name_check_blocked then jsonb_build_array('BLOCKED_NAME_CHECK') else '[]'::jsonb end)
                     ||
                     (case when pe.is_payee_map_blocked then jsonb_build_array('BLOCKED_NO_PAYEE_MAP') else '[]'::jsonb end)
@@ -16007,6 +16013,12 @@ begin
             (case when (cp.payee_entity_id is null or cp.payee_bank_hash is null or btrim(cp.payee_bank_hash) = '') then jsonb_build_array('BLOCKED_BANK_DETAILS') else '[]'::jsonb end)
             ||
             (case
+               when (cp.payee_entity_kind = 'UMBRELLA' and coalesce(cp.umb_enabled, false) = false)
+               then jsonb_build_array('BLOCKED_UMBRELLA_INACTIVE')
+               else '[]'::jsonb
+             end)
+            ||
+            (case
                when (cp.payee_entity_id is not null and cp.payee_bank_hash is not null and v_need_name_check = true and coalesce(pe.name_check_status,'UNVERIFIED') <> 'PASS' and not coalesce(pe.name_check_has_override,false))
                then jsonb_build_array('BLOCKED_NAME_CHECK')
                else '[]'::jsonb
@@ -16023,6 +16035,12 @@ begin
             jsonb_array_length(
               (
                 (case when (cp.payee_entity_id is null or cp.payee_bank_hash is null or btrim(cp.payee_bank_hash) = '') then jsonb_build_array('BLOCKED_BANK_DETAILS') else '[]'::jsonb end)
+                ||
+                (case
+                   when (cp.payee_entity_kind = 'UMBRELLA' and coalesce(cp.umb_enabled, false) = false)
+                   then jsonb_build_array('BLOCKED_UMBRELLA_INACTIVE')
+                   else '[]'::jsonb
+                 end)
                 ||
                 (case
                    when (cp.payee_entity_id is not null and cp.payee_bank_hash is not null and v_need_name_check = true and coalesce(pe.name_check_status,'UNVERIFIED') <> 'PASS' and not coalesce(pe.name_check_has_override,false))
