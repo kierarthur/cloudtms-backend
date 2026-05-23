@@ -11706,6 +11706,9 @@ DROP FUNCTION IF EXISTS public.pay_workbench_prepare_draft(uuid, uuid, jsonb, te
 
 
 
+
+
+
 CREATE OR REPLACE FUNCTION public.pay_workbench_prepare_draft(
   p_session_id uuid,
   p_actor_user_id uuid,
@@ -12304,7 +12307,7 @@ BEGIN
                 ELSE '[]'::jsonb
               END
             ) AS blocker_element(value)
-            WHERE UPPER(BTRIM(blocker_element.value)) IN ('BLOCKED_NAME_CHECK', 'BLOCKED_NO_PAYEE_MAP', 'BLOCKED_BANK_DETAILS')
+            WHERE UPPER(BTRIM(blocker_element.value)) IN ('BLOCKED_NAME_CHECK', 'BLOCKED_NO_PAYEE_MAP', 'BLOCKED_BANK_DETAILS', 'BLOCKED_UMBRELLA_INACTIVE')
           ) THEN 1
           ELSE 0
         END,
@@ -12333,7 +12336,7 @@ BEGIN
               ELSE '[]'::jsonb
             END
           ) AS blocker_element(value)
-          WHERE UPPER(BTRIM(blocker_element.value)) IN ('BLOCKED_NAME_CHECK', 'BLOCKED_NO_PAYEE_MAP', 'BLOCKED_BANK_DETAILS')
+          WHERE UPPER(BTRIM(blocker_element.value)) IN ('BLOCKED_NAME_CHECK', 'BLOCKED_NO_PAYEE_MAP', 'BLOCKED_BANK_DETAILS', 'BLOCKED_UMBRELLA_INACTIVE')
         ) THEN 'REQUIRED_PAYEE_ROUTE_BLOCKED'
         ELSE NULL::text
       END AS failure_reason
@@ -12395,6 +12398,16 @@ BEGIN
                 END
               ) AS blocked_route(route_json)
               WHERE jsonb_typeof(blocked_route.route_json) = 'object'
+                AND NOT EXISTS (
+                  SELECT 1
+                  FROM jsonb_array_elements_text(
+                    CASE
+                      WHEN jsonb_typeof(blocked_route.route_json->'matched_blockers') = 'array' THEN COALESCE(blocked_route.route_json->'matched_blockers', '[]'::jsonb)
+                      ELSE '[]'::jsonb
+                    END
+                  ) AS inactive_blocker_element(value)
+                  WHERE UPPER(BTRIM(inactive_blocker_element.value)) = 'BLOCKED_UMBRELLA_INACTIVE'
+                )
                 AND blocked_route.route_json->>'candidate_id' = v_filter_candidate_id::text
                 AND (
                   CASE
@@ -12427,6 +12440,27 @@ BEGIN
       FROM public.banking_pay_workbench_session_candidate_state AS session_candidate
       WHERE session_candidate.session_id = p_session_id
         AND session_candidate.candidate_id = v_filter_candidate_id
+        AND EXISTS (
+          SELECT 1
+          FROM jsonb_array_elements(
+            CASE
+              WHEN jsonb_typeof(COALESCE(v_payee_blocked_route_details_json, '[]'::jsonb)) = 'array' THEN COALESCE(v_payee_blocked_route_details_json, '[]'::jsonb)
+              ELSE '[]'::jsonb
+            END
+          ) AS blocked_route(route_json)
+          WHERE jsonb_typeof(blocked_route.route_json) = 'object'
+            AND blocked_route.route_json->>'candidate_id' = v_filter_candidate_id::text
+            AND NOT EXISTS (
+              SELECT 1
+              FROM jsonb_array_elements_text(
+                CASE
+                  WHEN jsonb_typeof(blocked_route.route_json->'matched_blockers') = 'array' THEN COALESCE(blocked_route.route_json->'matched_blockers', '[]'::jsonb)
+                  ELSE '[]'::jsonb
+                END
+              ) AS inactive_blocker_element(value)
+              WHERE UPPER(BTRIM(inactive_blocker_element.value)) = 'BLOCKED_UMBRELLA_INACTIVE'
+            )
+        )
       LIMIT 1;
     END LOOP;
 
@@ -13251,6 +13285,7 @@ BEGIN
   );
 END;
 $$;
+
 
 
 
