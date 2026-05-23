@@ -16050,6 +16050,7 @@ DROP FUNCTION IF EXISTS public.pay_bank_transfers_apply_rail_updates(uuid, jsonb
 
 
 
+
 CREATE OR REPLACE FUNCTION public.pay_bank_transfers_apply_rail_updates(
   p_pay_batch_id uuid,
   p_updates jsonb,
@@ -16100,6 +16101,21 @@ DECLARE
   v_provider_request_sent_count integer := 0;
   v_provider_submission_unknown_count integer := 0;
   v_is_scoped boolean := false;
+  v_counterparty_map_recovery_json jsonb := '[]'::jsonb;
+  v_counterparty_map_invalidated_count integer := 0;
+  v_counterparty_map_recovery_count integer := 0;
+  v_counterparty_map_auto_reverse_setting boolean := false;
+  v_counterparty_map_auto_reverse_requested_count integer := 0;
+  v_counterparty_map_auto_reverse_applied_count integer := 0;
+  v_counterparty_map_manual_recoverable_count integer := 0;
+  v_counterparty_map_readiness_enqueue_json jsonb := '[]'::jsonb;
+  v_counterparty_recovery_record record;
+  v_counterparty_readiness_result jsonb := '{}'::jsonb;
+  v_counterparty_auto_request_result jsonb := '{}'::jsonb;
+  v_counterparty_auto_expand_result jsonb := '{}'::jsonb;
+  v_counterparty_auto_process_result jsonb := '{}'::jsonb;
+  v_counterparty_auto_request_id uuid := NULL::uuid;
+  v_counterparty_auto_work_applied_count integer := 0;
 BEGIN
   PERFORM set_config('lock_timeout', '3s', true);
   v_is_scoped := (p_operation_id IS NOT NULL OR p_chunk_id IS NOT NULL OR p_transfer_ids IS NOT NULL);
@@ -17207,6 +17223,489 @@ BEGIN
 
   GET DIAGNOSTICS v_updated_count = ROW_COUNT;
 
+  DROP TABLE IF EXISTS pg_temp.tmp_provider_counterparty_not_found_recovery;
+  CREATE TEMPORARY TABLE pg_temp.tmp_provider_counterparty_not_found_recovery (
+    pay_bank_transfer_id uuid PRIMARY KEY,
+    pay_batch_id uuid NOT NULL,
+    candidate_id uuid NULL,
+    umbrella_id uuid NULL,
+    payee_entity_kind text NOT NULL,
+    payee_entity_id uuid NOT NULL,
+    bank_details_hash_snapshot text NOT NULL,
+    rail_provider text NOT NULL,
+    rail_env text NOT NULL,
+    provider_payee_id text NULL,
+    provider_payee_account_id text NULL,
+    provider_error_code text NULL,
+    provider_error_message_redacted text NULL,
+    provider_http_status integer NULL,
+    provider_submit_diagnostic jsonb NOT NULL DEFAULT '{}'::jsonb,
+    source_bank_event_id uuid NULL,
+    invalidated_map_ids jsonb NOT NULL DEFAULT '[]'::jsonb,
+    invalidated_map_count integer NOT NULL DEFAULT 0,
+    readiness_enqueue_result jsonb NULL,
+    auto_reverse_setting boolean NOT NULL DEFAULT false,
+    auto_reverse_requested boolean NOT NULL DEFAULT false,
+    auto_reverse_request_id uuid NULL,
+    auto_reverse_result_json jsonb NULL,
+    auto_reverse_applied_count integer NOT NULL DEFAULT 0,
+    recovery_status text NOT NULL DEFAULT 'MANUAL_RELEASE_REQUIRED',
+    recovery_action text NOT NULL DEFAULT 'MANUAL_RELEASE_REQUIRED'
+  ) ON COMMIT DROP;
+
+  INSERT INTO pg_temp.tmp_provider_counterparty_not_found_recovery (
+    pay_bank_transfer_id,
+    pay_batch_id,
+    candidate_id,
+    umbrella_id,
+    payee_entity_kind,
+    payee_entity_id,
+    bank_details_hash_snapshot,
+    rail_provider,
+    rail_env,
+    provider_payee_id,
+    provider_payee_account_id,
+    provider_error_code,
+    provider_error_message_redacted,
+    provider_http_status,
+    provider_submit_diagnostic
+  )
+  SELECT DISTINCT ON (transfer_row.id)
+    transfer_row.id,
+    transfer_row.pay_batch_id,
+    COALESCE(transfer_row.candidate_id, readiness_candidate.candidate_id),
+    transfer_row.umbrella_id,
+    UPPER(BTRIM(COALESCE(transfer_row.payee_entity_kind, ''))) AS payee_entity_kind,
+    transfer_row.payee_entity_id,
+    NULLIF(BTRIM(COALESCE(transfer_row.bank_details_hash_snapshot, '')), '') AS bank_details_hash_snapshot,
+    UPPER(BTRIM(COALESCE(transfer_row.rail_provider, ''))) AS rail_provider,
+    UPPER(BTRIM(COALESCE(transfer_row.rail_env, ''))) AS rail_env,
+    NULLIF(BTRIM(COALESCE(
+      update_row.provider_submit_diagnostic->>'payee_id',
+      update_row.provider_submit_diagnostic->>'counterparty_id',
+      update_row.provider_submit_diagnostic->>'provider_payee_id',
+      transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,payee_id}',
+      transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,counterparty_id}',
+      transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_payee_id}',
+      ''
+    )), '') AS provider_payee_id,
+    NULLIF(BTRIM(COALESCE(
+      update_row.provider_submit_diagnostic->>'payee_account_id',
+      update_row.provider_submit_diagnostic->>'counterparty_account_id',
+      update_row.provider_submit_diagnostic->>'provider_payee_account_id',
+      transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,payee_account_id}',
+      transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,counterparty_account_id}',
+      transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_payee_account_id}',
+      ''
+    )), '') AS provider_payee_account_id,
+    NULLIF(BTRIM(COALESCE(update_row.provider_error_code, update_row.provider_submit_diagnostic->>'provider_error_code', transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_error_code}', '')), '') AS provider_error_code,
+    NULLIF(BTRIM(COALESCE(update_row.provider_error_message_redacted, update_row.provider_submit_diagnostic->>'provider_error_message_redacted', transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_error_message_redacted}', update_row.failed_reason, transfer_row.failed_reason, '')), '') AS provider_error_message_redacted,
+    update_row.provider_http_status,
+    jsonb_strip_nulls(
+      COALESCE(update_row.provider_submit_diagnostic, '{}'::jsonb)
+      || jsonb_build_object(
+        'provider_submission_status', 'PROVIDER_SUBMISSION_REJECTED',
+        'review_reason_code', 'PROVIDER_REJECTED_PAYMENT',
+        'stale_payee_map_detected', true,
+        'stale_payee_map_reason', 'COUNTERPARTY_NOT_FOUND',
+        'pay_bank_transfer_id', transfer_row.id::text,
+        'pay_batch_id', transfer_row.pay_batch_id::text,
+        'operation_id', CASE WHEN p_operation_id IS NULL THEN NULL ELSE p_operation_id::text END,
+        'chunk_id', CASE WHEN p_chunk_id IS NULL THEN NULL ELSE p_chunk_id::text END
+      )
+    ) AS provider_submit_diagnostic
+  FROM pg_temp.tmp_pay_bank_transfer_updates AS update_row
+  JOIN public.pay_bank_transfers AS transfer_row
+    ON transfer_row.id = update_row.transfer_id
+   AND transfer_row.pay_batch_id = p_pay_batch_id
+  LEFT JOIN LATERAL (
+    SELECT batch_candidate.candidate_id AS candidate_id
+    FROM public.pay_batch_items AS transfer_item
+    JOIN public.pay_batch_candidates AS batch_candidate
+      ON batch_candidate.id = transfer_item.pay_batch_candidate_id
+     AND batch_candidate.pay_batch_id = transfer_row.pay_batch_id
+    WHERE transfer_item.pay_bank_transfer_id = transfer_row.id
+      AND batch_candidate.candidate_id IS NOT NULL
+    ORDER BY batch_candidate.candidate_id
+    LIMIT 1
+  ) AS readiness_candidate
+    ON true
+  WHERE update_row.provider_submission_status = 'PROVIDER_SUBMISSION_REJECTED'
+    AND (
+      NULLIF(BTRIM(COALESCE(update_row.provider_error_code, update_row.provider_submit_diagnostic->>'provider_error_code', transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_error_code}', '')), '') = '2101'
+      OR lower(BTRIM(COALESCE(update_row.provider_error_message_redacted, update_row.provider_submit_diagnostic->>'provider_error_message_redacted', transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_error_message_redacted}', update_row.failed_reason, transfer_row.failed_reason, ''))) LIKE '%counterparty not found%'
+    )
+    AND (update_row.provider_request_sent OR update_row.provider_request_sent_confirmed OR lower(BTRIM(COALESCE(update_row.provider_submit_diagnostic->>'provider_request_sent', ''))) IN ('true', 't', '1', 'yes', 'y', 'on'))
+    AND (update_row.provider_response_present OR update_row.provider_response_received OR update_row.is_provider_source OR lower(BTRIM(COALESCE(update_row.provider_submit_diagnostic->>'provider_response_present', update_row.provider_submit_diagnostic->>'provider_response_received', ''))) IN ('true', 't', '1', 'yes', 'y', 'on'))
+    AND COALESCE(update_row.provider_acceptance_evidence_present, false) IS NOT TRUE
+    AND COALESCE(update_row.is_provider_evidence, false) IS NOT TRUE
+    AND NULLIF(BTRIM(COALESCE(update_row.rail_tx_id, transfer_row.rail_tx_id, '')), '') IS NULL
+    AND NULLIF(BTRIM(COALESCE(
+      update_row.provider_submit_diagnostic->>'provider_transaction_id',
+      update_row.provider_submit_diagnostic->>'provider_payment_id',
+      update_row.provider_submit_diagnostic->>'rail_tx_id',
+      update_row.provider_submit_diagnostic->>'provider_reference',
+      transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_transaction_id}',
+      transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_payment_id}',
+      transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,rail_tx_id}',
+      transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_reference}',
+      ''
+    )), '') IS NULL
+    AND (
+      update_row.transfer_status = 'FAILED'
+      OR UPPER(BTRIM(COALESCE(update_row.rail_state, update_row.provider_state, transfer_row.rail_state, transfer_row.status, ''))) IN ('FAILED', 'REJECTED', 'DECLINED', 'ERROR')
+      OR UPPER(BTRIM(COALESCE(transfer_row.status, ''))) IN ('FAILED', 'CANCELLED')
+    )
+    AND UPPER(BTRIM(COALESCE(transfer_row.payee_entity_kind, ''))) IN ('CANDIDATE', 'UMBRELLA')
+    AND transfer_row.payee_entity_id IS NOT NULL
+    AND NULLIF(BTRIM(COALESCE(transfer_row.bank_details_hash_snapshot, '')), '') IS NOT NULL
+    AND NULLIF(BTRIM(COALESCE(transfer_row.rail_provider, '')), '') IS NOT NULL
+    AND NULLIF(BTRIM(COALESCE(transfer_row.rail_env, '')), '') IS NOT NULL
+  ORDER BY transfer_row.id, update_row.row_seq;
+
+  UPDATE pg_temp.tmp_provider_counterparty_not_found_recovery AS recovery_update
+  SET source_bank_event_id = (
+    SELECT source_event.id
+    FROM public.pay_bank_transfer_events AS source_event
+    WHERE source_event.pay_batch_id = recovery_update.pay_batch_id
+      AND source_event.pay_bank_transfer_id = recovery_update.pay_bank_transfer_id
+      AND UPPER(BTRIM(COALESCE(source_event.mapping_status, ''))) = 'MATCHED'
+      AND UPPER(BTRIM(COALESCE(source_event.mapping_method, ''))) IN (
+        'TRANSFER_ID',
+        'PROVIDER_EVENT_ID',
+        'PROVIDER_REFERENCE',
+        'REQUEST_ID',
+        'RAIL_TX_ID',
+        'PAYMENT_REFERENCE',
+        'MANUAL_TRANSFER_SELECTION'
+      )
+      AND (
+        UPPER(BTRIM(COALESCE(
+          source_event.raw_payload #>> '{provider_submit_diagnostic,provider_submission_status}',
+          source_event.raw_payload->>'provider_submission_status',
+          ''
+        ))) = 'PROVIDER_SUBMISSION_REJECTED'
+        OR NULLIF(BTRIM(COALESCE(
+          source_event.raw_payload #>> '{provider_submit_diagnostic,provider_error_code}',
+          source_event.raw_payload->>'provider_error_code',
+          ''
+        )), '') = '2101'
+        OR LOWER(BTRIM(COALESCE(
+          source_event.raw_payload #>> '{provider_submit_diagnostic,provider_error_message_redacted}',
+          source_event.raw_payload->>'provider_error_message_redacted',
+          source_event.raw_payload->>'failed_reason',
+          ''
+        ))) LIKE '%counterparty not found%'
+        OR (
+          UPPER(BTRIM(COALESCE(source_event.event_source, ''))) IN ('PROVIDER_RESPONSE', 'PROVIDER_POLL', 'PROVIDER_WEBHOOK')
+          AND UPPER(BTRIM(COALESCE(source_event.normalised_state, source_event.provider_state, ''))) IN ('REJECTED', 'FAILED', 'ERROR', 'DECLINED')
+        )
+      )
+    ORDER BY source_event.received_at_utc DESC NULLS LAST,
+             source_event.event_time_utc DESC NULLS LAST,
+             source_event.id DESC
+    LIMIT 1
+  )
+  WHERE recovery_update.pay_bank_transfer_id IS NOT NULL;
+
+  WITH stale_map_matches AS (
+    SELECT
+      recovery_row.pay_bank_transfer_id,
+      map_row.id AS bank_payee_map_id
+    FROM pg_temp.tmp_provider_counterparty_not_found_recovery AS recovery_row
+    JOIN public.bank_payee_map AS map_row
+      ON map_row.rail_provider = recovery_row.rail_provider
+     AND map_row.rail_env = recovery_row.rail_env
+     AND map_row.entity_kind = recovery_row.payee_entity_kind
+     AND map_row.entity_id = recovery_row.payee_entity_id
+     AND map_row.bank_details_hash = recovery_row.bank_details_hash_snapshot
+     AND (recovery_row.provider_payee_id IS NULL OR map_row.payee_id = recovery_row.provider_payee_id)
+     AND (recovery_row.provider_payee_account_id IS NULL OR map_row.payee_account_id IS NOT DISTINCT FROM recovery_row.provider_payee_account_id)
+  ),
+  deleted_maps AS (
+    DELETE FROM public.bank_payee_map AS map_delete
+    USING stale_map_matches
+    WHERE map_delete.id = stale_map_matches.bank_payee_map_id
+    RETURNING stale_map_matches.pay_bank_transfer_id, map_delete.id AS bank_payee_map_id
+  )
+  UPDATE pg_temp.tmp_provider_counterparty_not_found_recovery AS recovery_update
+  SET invalidated_map_ids = COALESCE((
+        SELECT jsonb_agg(to_jsonb(deleted_maps.bank_payee_map_id::text) ORDER BY deleted_maps.bank_payee_map_id::text)
+        FROM deleted_maps
+        WHERE deleted_maps.pay_bank_transfer_id = recovery_update.pay_bank_transfer_id
+      ), '[]'::jsonb),
+      invalidated_map_count = COALESCE((
+        SELECT COUNT(*)::integer
+        FROM deleted_maps
+        WHERE deleted_maps.pay_bank_transfer_id = recovery_update.pay_bank_transfer_id
+      ), 0);
+
+  SELECT COALESCE(public.settings_defaults.payment_return_auto_reverse_timesheets, false)
+  INTO v_counterparty_map_auto_reverse_setting
+  FROM public.settings_defaults
+  ORDER BY public.settings_defaults.id
+  LIMIT 1;
+
+  IF NOT FOUND THEN
+    v_counterparty_map_auto_reverse_setting := false;
+  END IF;
+
+  FOR v_counterparty_recovery_record IN
+    SELECT recovery_row.*
+    FROM pg_temp.tmp_provider_counterparty_not_found_recovery AS recovery_row
+    ORDER BY recovery_row.pay_bank_transfer_id
+  LOOP
+    v_counterparty_readiness_result := '{}'::jsonb;
+
+    IF v_counterparty_recovery_record.candidate_id IS NOT NULL THEN
+      SELECT public.pay_workbench_enqueue_payee_readiness_ensure(
+        p_candidate_id => v_counterparty_recovery_record.candidate_id,
+        p_payees_json => jsonb_build_array(jsonb_strip_nulls(jsonb_build_object(
+          'payee_entity_kind', v_counterparty_recovery_record.payee_entity_kind,
+          'payee_entity_id', v_counterparty_recovery_record.payee_entity_id::text,
+          'entity_kind', v_counterparty_recovery_record.payee_entity_kind,
+          'entity_id', v_counterparty_recovery_record.payee_entity_id::text,
+          'bank_details_hash', v_counterparty_recovery_record.bank_details_hash_snapshot,
+          'rail_provider', v_counterparty_recovery_record.rail_provider,
+          'rail_env', v_counterparty_recovery_record.rail_env,
+          'pay_bank_transfer_id', v_counterparty_recovery_record.pay_bank_transfer_id::text
+        ))),
+        p_snapshot_run_id => NULL::uuid,
+        p_session_id => NULL::uuid,
+        p_reason => 'PROVIDER_COUNTERPARTY_NOT_FOUND_STALE_PAYEE_MAP',
+        p_actor_user_id => p_actor_user_id,
+        p_payload_json => jsonb_strip_nulls(jsonb_build_object(
+          'pay_batch_id', p_pay_batch_id::text,
+          'operation_id', CASE WHEN p_operation_id IS NULL THEN NULL ELSE p_operation_id::text END,
+          'chunk_id', CASE WHEN p_chunk_id IS NULL THEN NULL ELSE p_chunk_id::text END,
+          'pay_bank_transfer_id', v_counterparty_recovery_record.pay_bank_transfer_id::text,
+          'provider_error_code', v_counterparty_recovery_record.provider_error_code,
+          'provider_error_message_redacted', v_counterparty_recovery_record.provider_error_message_redacted,
+          'stale_payee_map_invalidated', (v_counterparty_recovery_record.invalidated_map_count > 0),
+          'stale_payee_map_invalidated_map_ids', v_counterparty_recovery_record.invalidated_map_ids
+        ))
+      )
+      INTO v_counterparty_readiness_result;
+    END IF;
+
+    UPDATE pg_temp.tmp_provider_counterparty_not_found_recovery AS recovery_update
+    SET readiness_enqueue_result = v_counterparty_readiness_result,
+        auto_reverse_setting = COALESCE(v_counterparty_map_auto_reverse_setting, false)
+    WHERE recovery_update.pay_bank_transfer_id = v_counterparty_recovery_record.pay_bank_transfer_id;
+
+    IF COALESCE(v_counterparty_map_auto_reverse_setting, false) THEN
+      v_counterparty_auto_request_result := '{}'::jsonb;
+      v_counterparty_auto_expand_result := '{}'::jsonb;
+      v_counterparty_auto_process_result := '{}'::jsonb;
+      v_counterparty_auto_request_id := NULL::uuid;
+      v_counterparty_auto_work_applied_count := 0;
+
+      IF v_counterparty_recovery_record.source_bank_event_id IS NULL THEN
+        UPDATE pg_temp.tmp_provider_counterparty_not_found_recovery AS recovery_update
+        SET auto_reverse_requested = false,
+            auto_reverse_request_id = NULL::uuid,
+            auto_reverse_result_json = jsonb_build_object(
+              'ok', false,
+              'code', 'AUTO_RELEASE_SOURCE_EVENT_MISSING',
+              'message', 'Automatic release was not attempted because no strongly matched provider rejection event was available for the selected transfer.'
+            ),
+            auto_reverse_applied_count = 0,
+            recovery_status = 'AUTO_RELEASE_FAILED_MANUAL_RELEASE_REQUIRED',
+            recovery_action = 'MANUAL_RELEASE_REQUIRED'
+        WHERE recovery_update.pay_bank_transfer_id = v_counterparty_recovery_record.pay_bank_transfer_id;
+      ELSE
+      BEGIN
+        v_counterparty_auto_request_result := public.pay_payment_correction_request_start(
+          p_pay_batch_id => p_pay_batch_id,
+          p_selection_json => jsonb_build_object(
+            'scope_type', 'TRANSFER',
+            'pay_bank_transfer_ids', jsonb_build_array(v_counterparty_recovery_record.pay_bank_transfer_id::text),
+            'source_context', 'PROVIDER_COUNTERPARTY_NOT_FOUND',
+            'requested_action', 'UNWIND_FAILED_PAYMENT'
+          ),
+          p_reason => 'Automatic provider counterparty-not-found no-money unwind',
+          p_actor_user_id => NULL::uuid,
+          p_source_bank_event_id => v_counterparty_recovery_record.source_bank_event_id,
+          p_auto_requested => true,
+          p_accepted_resolution_json => jsonb_strip_nulls(jsonb_build_object(
+            'provider_submit_diagnostic', v_counterparty_recovery_record.provider_submit_diagnostic,
+            'provider_submission_status', 'PROVIDER_SUBMISSION_REJECTED',
+            'provider_error_code', v_counterparty_recovery_record.provider_error_code,
+            'provider_error_message_redacted', v_counterparty_recovery_record.provider_error_message_redacted,
+            'pay_bank_transfer_id', v_counterparty_recovery_record.pay_bank_transfer_id::text,
+            'source_bank_event_id', CASE WHEN v_counterparty_recovery_record.source_bank_event_id IS NULL THEN NULL ELSE v_counterparty_recovery_record.source_bank_event_id::text END,
+            'auto_reversal_reason', 'PROVIDER_COUNTERPARTY_NOT_FOUND'
+          ))
+        );
+
+        IF NULLIF(BTRIM(COALESCE(v_counterparty_auto_request_result->>'correction_request_id', '')), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
+          v_counterparty_auto_request_id := (v_counterparty_auto_request_result->>'correction_request_id')::uuid;
+          v_counterparty_auto_expand_result := public.pay_payment_correction_expand_work(v_counterparty_auto_request_id, NULL::uuid);
+          v_counterparty_auto_process_result := public.pay_payment_correction_process_chunk(v_counterparty_auto_request_id, 50, 'provider-counterparty-not-found');
+
+          SELECT COUNT(*)::integer
+          INTO v_counterparty_auto_work_applied_count
+          FROM public.pay_payment_correction_work_items AS correction_work_item
+          WHERE correction_work_item.correction_request_id = v_counterparty_auto_request_id
+            AND correction_work_item.pay_bank_transfer_id = v_counterparty_recovery_record.pay_bank_transfer_id
+            AND correction_work_item.status = 'APPLIED';
+        END IF;
+
+        UPDATE pg_temp.tmp_provider_counterparty_not_found_recovery AS recovery_update
+        SET auto_reverse_requested = true,
+            auto_reverse_request_id = v_counterparty_auto_request_id,
+            auto_reverse_result_json = jsonb_strip_nulls(jsonb_build_object(
+              'request_start_result', v_counterparty_auto_request_result,
+              'expand_result', v_counterparty_auto_expand_result,
+              'process_result', v_counterparty_auto_process_result,
+              'source_bank_event_id', CASE WHEN v_counterparty_recovery_record.source_bank_event_id IS NULL THEN NULL ELSE v_counterparty_recovery_record.source_bank_event_id::text END,
+              'applied_work_item_count', v_counterparty_auto_work_applied_count
+            )),
+            auto_reverse_applied_count = COALESCE(v_counterparty_auto_work_applied_count, 0),
+            recovery_status = CASE WHEN COALESCE(v_counterparty_auto_work_applied_count, 0) > 0 THEN 'AUTO_RELEASED_FOR_NEXT_RUN' ELSE 'AUTO_RELEASE_REQUESTED' END,
+            recovery_action = CASE WHEN COALESCE(v_counterparty_auto_work_applied_count, 0) > 0 THEN 'READY_FOR_NEXT_RUN_AFTER_PAYEE_READINESS' ELSE 'AUTO_RELEASE_IN_PROGRESS' END
+        WHERE recovery_update.pay_bank_transfer_id = v_counterparty_recovery_record.pay_bank_transfer_id;
+      EXCEPTION
+        WHEN OTHERS THEN
+          UPDATE pg_temp.tmp_provider_counterparty_not_found_recovery AS recovery_update
+          SET auto_reverse_requested = true,
+              auto_reverse_request_id = v_counterparty_auto_request_id,
+              auto_reverse_result_json = jsonb_strip_nulls(jsonb_build_object(
+                'request_start_result', v_counterparty_auto_request_result,
+                'expand_result', v_counterparty_auto_expand_result,
+                'process_result', v_counterparty_auto_process_result,
+                'source_bank_event_id', CASE WHEN v_counterparty_recovery_record.source_bank_event_id IS NULL THEN NULL ELSE v_counterparty_recovery_record.source_bank_event_id::text END,
+                'error', SQLERRM
+              )),
+              recovery_status = 'AUTO_RELEASE_FAILED_MANUAL_RELEASE_REQUIRED',
+              recovery_action = 'MANUAL_RELEASE_REQUIRED'
+          WHERE recovery_update.pay_bank_transfer_id = v_counterparty_recovery_record.pay_bank_transfer_id;
+      END;
+      END IF;
+    END IF;
+  END LOOP;
+
+  UPDATE public.pay_bank_transfers AS transfer_update
+  SET rail_meta_json = jsonb_strip_nulls(
+        COALESCE(transfer_update.rail_meta_json, '{}'::jsonb)
+        || jsonb_build_object(
+          'stale_payee_map_recovery', jsonb_strip_nulls(jsonb_build_object(
+            'stale_payee_map_detected', true,
+            'stale_payee_map_reason', 'COUNTERPARTY_NOT_FOUND',
+            'stale_payee_map_invalidation_attempted', true,
+            'stale_payee_map_invalidated', (recovery_row.invalidated_map_count > 0),
+            'stale_payee_map_invalidated_map_ids', recovery_row.invalidated_map_ids,
+            'stale_payee_map_invalidated_count', recovery_row.invalidated_map_count,
+            'payee_route', jsonb_strip_nulls(jsonb_build_object(
+              'rail_provider', recovery_row.rail_provider,
+              'rail_env', recovery_row.rail_env,
+              'payee_entity_kind', recovery_row.payee_entity_kind,
+              'payee_entity_id', recovery_row.payee_entity_id::text,
+              'bank_details_hash_snapshot', recovery_row.bank_details_hash_snapshot,
+              'provider_payee_id', recovery_row.provider_payee_id,
+              'provider_payee_account_id', recovery_row.provider_payee_account_id
+            )),
+            'readiness_enqueue_result', recovery_row.readiness_enqueue_result,
+            'source_bank_event_id', CASE WHEN recovery_row.source_bank_event_id IS NULL THEN NULL ELSE recovery_row.source_bank_event_id::text END,
+            'auto_reverse_setting', recovery_row.auto_reverse_setting,
+            'auto_reverse_requested', recovery_row.auto_reverse_requested,
+            'auto_reverse_request_id', CASE WHEN recovery_row.auto_reverse_request_id IS NULL THEN NULL ELSE recovery_row.auto_reverse_request_id::text END,
+            'auto_reverse_result', recovery_row.auto_reverse_result_json,
+            'auto_reverse_applied_count', recovery_row.auto_reverse_applied_count,
+            'recovery_status', recovery_row.recovery_status,
+            'recovery_action', recovery_row.recovery_action,
+            'manual_recoverable', (recovery_row.recovery_action = 'MANUAL_RELEASE_REQUIRED'),
+            'provider_error_code', recovery_row.provider_error_code,
+            'provider_error_message_redacted', recovery_row.provider_error_message_redacted,
+            'provider_http_status', recovery_row.provider_http_status,
+            'operation_id', CASE WHEN p_operation_id IS NULL THEN NULL ELSE p_operation_id::text END,
+            'chunk_id', CASE WHEN p_chunk_id IS NULL THEN NULL ELSE p_chunk_id::text END,
+            'updated_at_utc', v_now::text
+          )),
+          'provider_submit_diagnostic', jsonb_strip_nulls(
+            COALESCE(transfer_update.rail_meta_json->'provider_submit_diagnostic', recovery_row.provider_submit_diagnostic, '{}'::jsonb)
+            || recovery_row.provider_submit_diagnostic
+            || jsonb_build_object(
+              'stale_payee_map_detected', true,
+              'stale_payee_map_reason', 'COUNTERPARTY_NOT_FOUND',
+              'stale_payee_map_invalidated', (recovery_row.invalidated_map_count > 0),
+              'stale_payee_map_invalidated_map_ids', recovery_row.invalidated_map_ids,
+              'readiness_enqueue_result', recovery_row.readiness_enqueue_result,
+              'source_bank_event_id', CASE WHEN recovery_row.source_bank_event_id IS NULL THEN NULL ELSE recovery_row.source_bank_event_id::text END,
+              'auto_reverse_setting', recovery_row.auto_reverse_setting,
+              'auto_reverse_requested', recovery_row.auto_reverse_requested,
+              'auto_reverse_request_id', CASE WHEN recovery_row.auto_reverse_request_id IS NULL THEN NULL ELSE recovery_row.auto_reverse_request_id::text END,
+              'auto_reverse_applied_count', recovery_row.auto_reverse_applied_count,
+              'recovery_status', recovery_row.recovery_status,
+              'recovery_action', recovery_row.recovery_action,
+              'manual_recoverable', (recovery_row.recovery_action = 'MANUAL_RELEASE_REQUIRED')
+            )
+          )
+        )
+      )
+  FROM pg_temp.tmp_provider_counterparty_not_found_recovery AS recovery_row
+  WHERE transfer_update.id = recovery_row.pay_bank_transfer_id
+    AND transfer_update.pay_batch_id = p_pay_batch_id;
+
+  SELECT
+    COUNT(*)::integer,
+    COALESCE(SUM(recovery_row.invalidated_map_count), 0)::integer,
+    (COUNT(*) FILTER (WHERE recovery_row.auto_reverse_requested IS TRUE))::integer,
+    COALESCE(SUM(recovery_row.auto_reverse_applied_count), 0)::integer,
+    (COUNT(*) FILTER (WHERE recovery_row.recovery_action = 'MANUAL_RELEASE_REQUIRED'))::integer,
+    COALESCE(jsonb_agg(
+      jsonb_strip_nulls(jsonb_build_object(
+        'pay_bank_transfer_id', recovery_row.pay_bank_transfer_id::text,
+        'pay_batch_id', recovery_row.pay_batch_id::text,
+        'candidate_id', CASE WHEN recovery_row.candidate_id IS NULL THEN NULL ELSE recovery_row.candidate_id::text END,
+        'umbrella_id', CASE WHEN recovery_row.umbrella_id IS NULL THEN NULL ELSE recovery_row.umbrella_id::text END,
+        'payee_entity_kind', recovery_row.payee_entity_kind,
+        'payee_entity_id', recovery_row.payee_entity_id::text,
+        'bank_details_hash_snapshot', recovery_row.bank_details_hash_snapshot,
+        'rail_provider', recovery_row.rail_provider,
+        'rail_env', recovery_row.rail_env,
+        'provider_payee_id', recovery_row.provider_payee_id,
+        'provider_payee_account_id', recovery_row.provider_payee_account_id,
+        'provider_error_code', recovery_row.provider_error_code,
+        'provider_error_message_redacted', recovery_row.provider_error_message_redacted,
+        'provider_http_status', recovery_row.provider_http_status,
+        'stale_payee_map_detected', true,
+        'stale_payee_map_invalidation_attempted', true,
+        'invalidated_map_ids', recovery_row.invalidated_map_ids,
+        'invalidated_map_count', recovery_row.invalidated_map_count,
+        'readiness_enqueue_result', recovery_row.readiness_enqueue_result,
+        'source_bank_event_id', CASE WHEN recovery_row.source_bank_event_id IS NULL THEN NULL ELSE recovery_row.source_bank_event_id::text END,
+        'auto_reverse_setting', recovery_row.auto_reverse_setting,
+        'auto_reverse_requested', recovery_row.auto_reverse_requested,
+        'auto_reverse_request_id', CASE WHEN recovery_row.auto_reverse_request_id IS NULL THEN NULL ELSE recovery_row.auto_reverse_request_id::text END,
+        'auto_reverse_result', recovery_row.auto_reverse_result_json,
+        'auto_reverse_applied_count', recovery_row.auto_reverse_applied_count,
+        'recovery_status', recovery_row.recovery_status,
+        'recovery_action', recovery_row.recovery_action,
+        'manual_recoverable', (recovery_row.recovery_action = 'MANUAL_RELEASE_REQUIRED')
+      ))
+      ORDER BY recovery_row.pay_bank_transfer_id::text
+    ), '[]'::jsonb)
+  INTO
+    v_counterparty_map_recovery_count,
+    v_counterparty_map_invalidated_count,
+    v_counterparty_map_auto_reverse_requested_count,
+    v_counterparty_map_auto_reverse_applied_count,
+    v_counterparty_map_manual_recoverable_count,
+    v_counterparty_map_recovery_json
+  FROM pg_temp.tmp_provider_counterparty_not_found_recovery AS recovery_row;
+
+  SELECT COALESCE(jsonb_agg(
+    jsonb_strip_nulls(jsonb_build_object(
+      'pay_bank_transfer_id', recovery_row.pay_bank_transfer_id::text,
+      'readiness_enqueue_result', recovery_row.readiness_enqueue_result
+    ))
+    ORDER BY recovery_row.pay_bank_transfer_id::text
+  ), '[]'::jsonb)
+  INTO v_counterparty_map_readiness_enqueue_json
+  FROM pg_temp.tmp_provider_counterparty_not_found_recovery AS recovery_row;
+
+
   IF v_is_scoped THEN
     SELECT
       COUNT(*) FILTER (WHERE scoped_row.is_provider_evidence IS TRUE)::integer,
@@ -17357,6 +17856,13 @@ BEGIN
       'pending_count', COALESCE(v_pending_count, 0),
       'ambiguous_count', COALESCE(v_ambiguous_count, 0),
       'requires_review', COALESCE(v_requires_review, false),
+      'counterparty_not_found_recovery_count', COALESCE(v_counterparty_map_recovery_count, 0),
+      'counterparty_not_found_invalidated_map_count', COALESCE(v_counterparty_map_invalidated_count, 0),
+      'counterparty_not_found_auto_reverse_requested_count', COALESCE(v_counterparty_map_auto_reverse_requested_count, 0),
+      'counterparty_not_found_auto_reverse_applied_count', COALESCE(v_counterparty_map_auto_reverse_applied_count, 0),
+      'counterparty_not_found_manual_recoverable_count', COALESCE(v_counterparty_map_manual_recoverable_count, 0),
+      'counterparty_not_found_recoveries', COALESCE(v_counterparty_map_recovery_json, '[]'::jsonb),
+      'counterparty_not_found_readiness_enqueue', COALESCE(v_counterparty_map_readiness_enqueue_json, '[]'::jsonb),
       'blocked_funds_state', '{}'::jsonb
     );
 
@@ -17616,7 +18122,14 @@ BEGIN
           'provider_acceptance_evidence_count', COALESCE(v_provider_acceptance_evidence_count, 0),
           'provider_external_evidence_count', COALESCE(v_provider_external_evidence_count, 0),
           'provider_response_present_count', COALESCE(v_provider_response_present_count, 0),
-          'provider_submission_unknown_count', COALESCE(v_provider_submission_unknown_count, 0)
+          'provider_submission_unknown_count', COALESCE(v_provider_submission_unknown_count, 0),
+          'counterparty_not_found_recovery_count', COALESCE(v_counterparty_map_recovery_count, 0),
+          'counterparty_not_found_invalidated_map_count', COALESCE(v_counterparty_map_invalidated_count, 0),
+          'counterparty_not_found_auto_reverse_requested_count', COALESCE(v_counterparty_map_auto_reverse_requested_count, 0),
+          'counterparty_not_found_auto_reverse_applied_count', COALESCE(v_counterparty_map_auto_reverse_applied_count, 0),
+          'counterparty_not_found_manual_recoverable_count', COALESCE(v_counterparty_map_manual_recoverable_count, 0),
+          'counterparty_not_found_recoveries', COALESCE(v_counterparty_map_recovery_json, '[]'::jsonb),
+          'counterparty_not_found_readiness_enqueue', COALESCE(v_counterparty_map_readiness_enqueue_json, '[]'::jsonb)
         )),
         updated_at_utc = v_now
     WHERE chunk_update.id = p_chunk_id
@@ -17653,6 +18166,13 @@ BEGIN
     'provider_response_present_count', COALESCE(v_provider_response_present_count, 0),
     'provider_request_sent_count', COALESCE(v_provider_request_sent_count, 0),
     'provider_submission_unknown_count', COALESCE(v_provider_submission_unknown_count, 0),
+    'counterparty_not_found_recovery_count', COALESCE(v_counterparty_map_recovery_count, 0),
+    'counterparty_not_found_invalidated_map_count', COALESCE(v_counterparty_map_invalidated_count, 0),
+    'counterparty_not_found_auto_reverse_requested_count', COALESCE(v_counterparty_map_auto_reverse_requested_count, 0),
+    'counterparty_not_found_auto_reverse_applied_count', COALESCE(v_counterparty_map_auto_reverse_applied_count, 0),
+    'counterparty_not_found_manual_recoverable_count', COALESCE(v_counterparty_map_manual_recoverable_count, 0),
+    'counterparty_not_found_recoveries', COALESCE(v_counterparty_map_recovery_json, '[]'::jsonb),
+    'counterparty_not_found_readiness_enqueue', COALESCE(v_counterparty_map_readiness_enqueue_json, '[]'::jsonb),
     'blocked_funds_state', COALESCE(v_summary_json->'blocked_funds_state', '{}'::jsonb),
     'batch_execution_state', jsonb_build_object(
       'execution_commit_state', v_execution_commit_state,
@@ -17669,7 +18189,6 @@ BEGIN
   );
 END;
 $function$;
-
 
 
 
