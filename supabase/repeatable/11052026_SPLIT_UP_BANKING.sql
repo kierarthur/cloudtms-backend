@@ -20851,7 +20851,6 @@ END;
 $function$;
 
 
-
 CREATE OR REPLACE FUNCTION public.pay_execute_provider_submit_review_resolve(
   p_pay_batch_id uuid,
   p_operation_id uuid,
@@ -20908,6 +20907,14 @@ DECLARE
   v_before_json jsonb := '{}'::jsonb;
   v_after_json jsonb := '{}'::jsonb;
   v_result jsonb := '{}'::jsonb;
+  v_resolution_scope text := 'WHOLE_BATCH';
+  v_requested_transfer_ids jsonb := '[]'::jsonb;
+  v_requested_transfer_count integer := 0;
+  v_selected_transfer_scope boolean := false;
+  v_missing_requested_transfer_ids jsonb := '[]'::jsonb;
+  v_unsafe_selected_transfer_ids jsonb := '[]'::jsonb;
+  v_unsafe_selected_transfer_count integer := 0;
+  v_effective_provider_acceptance_evidence_count integer := 0;
 BEGIN
   IF p_pay_batch_id IS NULL THEN
     RAISE EXCEPTION '%', jsonb_build_object(
@@ -20957,6 +20964,57 @@ BEGIN
   v_provider_checked := upper(btrim(coalesce(v_confirmation_json->>'provider_checked', '')));
   v_checked_at_text := NULLIF(btrim(coalesce(v_confirmation_json->>'checked_at_utc', '')), '');
   v_notes := NULLIF(btrim(coalesce(v_confirmation_json->>'notes', '')), '');
+  v_resolution_scope := upper(btrim(coalesce(v_confirmation_json->>'resolution_scope', v_confirmation_json->>'scope', 'WHOLE_BATCH')));
+
+  IF v_resolution_scope IN ('SINGLE', 'SINGLE_PAYMENT', 'PAYMENT') THEN
+    v_resolution_scope := 'SINGLE_PAYMENT';
+  ELSIF v_resolution_scope IN ('SELECTED', 'SELECTED_PAYMENT', 'SELECTED_PAYMENTS', 'MULTIPLE_PAYMENTS') THEN
+    v_resolution_scope := 'SELECTED_PAYMENTS';
+  ELSIF v_resolution_scope IN ('BATCH', 'WHOLE_BATCH', 'ALL') THEN
+    v_resolution_scope := 'WHOLE_BATCH';
+  ELSE
+    RAISE EXCEPTION '%', jsonb_build_object(
+      'error', 'PAY_EXECUTE_PROVIDER_SUBMIT_REVIEW_RESOLVE',
+      'code', 'RESOLUTION_SCOPE_INVALID',
+      'message', 'resolution_scope must be SINGLE_PAYMENT, SELECTED_PAYMENTS, or WHOLE_BATCH',
+      'resolution_scope', COALESCE(v_confirmation_json->>'resolution_scope', v_confirmation_json->>'scope', '')
+    )::text USING ERRCODE = 'P0001';
+  END IF;
+
+  SELECT COALESCE(jsonb_agg(to_jsonb(requested_transfer.transfer_id_text) ORDER BY requested_transfer.transfer_id_text), '[]'::jsonb),
+         COUNT(*)::integer
+  INTO v_requested_transfer_ids, v_requested_transfer_count
+  FROM (
+    SELECT DISTINCT btrim(requested_transfer_text.value) AS transfer_id_text
+    FROM jsonb_array_elements_text(
+      CASE
+        WHEN jsonb_typeof(COALESCE(v_confirmation_json->'pay_bank_transfer_ids', v_confirmation_json->'transfer_ids', v_confirmation_json->'selected_transfer_ids', '[]'::jsonb)) = 'array'
+          THEN COALESCE(v_confirmation_json->'pay_bank_transfer_ids', v_confirmation_json->'transfer_ids', v_confirmation_json->'selected_transfer_ids', '[]'::jsonb)
+        ELSE '[]'::jsonb
+      END
+    ) AS requested_transfer_text(value)
+    WHERE btrim(requested_transfer_text.value) ~* v_uuid_regex
+  ) AS requested_transfer;
+
+  v_selected_transfer_scope := COALESCE(v_requested_transfer_count, 0) > 0 OR v_resolution_scope IN ('SINGLE_PAYMENT', 'SELECTED_PAYMENTS');
+
+  IF v_selected_transfer_scope AND COALESCE(v_requested_transfer_count, 0) = 0 THEN
+    RAISE EXCEPTION '%', jsonb_build_object(
+      'error', 'PAY_EXECUTE_PROVIDER_SUBMIT_REVIEW_RESOLVE',
+      'code', 'SELECTED_TRANSFER_IDS_REQUIRED',
+      'message', 'Selected payment recovery requires pay_bank_transfer_ids in p_confirmation_json.',
+      'resolution_scope', v_resolution_scope
+    )::text USING ERRCODE = 'P0001';
+  END IF;
+
+  IF v_resolution_scope = 'SINGLE_PAYMENT' AND COALESCE(v_requested_transfer_count, 0) <> 1 THEN
+    RAISE EXCEPTION '%', jsonb_build_object(
+      'error', 'PAY_EXECUTE_PROVIDER_SUBMIT_REVIEW_RESOLVE',
+      'code', 'SINGLE_PAYMENT_REQUIRES_ONE_TRANSFER',
+      'message', 'SINGLE_PAYMENT recovery requires exactly one pay_bank_transfer_id.',
+      'selected_transfer_count', COALESCE(v_requested_transfer_count, 0)
+    )::text USING ERRCODE = 'P0001';
+  END IF;
 
   IF v_checked_provider_or_bank IS NOT TRUE THEN
     RAISE EXCEPTION '%', jsonb_build_object(
@@ -21006,6 +21064,8 @@ BEGIN
     'checked_at_utc', v_checked_at_utc::text,
     'notes_present', v_notes IS NOT NULL,
     'notes_length', CASE WHEN v_notes IS NULL THEN NULL ELSE char_length(v_notes) END,
+    'resolution_scope', v_resolution_scope,
+    'selected_transfer_ids', v_requested_transfer_ids,
     'recorded_at_utc', v_now::text,
     'recorded_by_user_id', p_actor_user_id::text
   ));
@@ -21118,8 +21178,20 @@ BEGIN
     v_provider_acceptance_evidence_count := 0;
   END IF;
 
-  IF v_manual_resolution_required IS NOT TRUE
-     OR v_provider_submission_status NOT IN ('UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK', 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE', 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID') THEN
+  IF v_selected_transfer_scope IS NOT TRUE
+     AND (
+       (
+         v_manual_resolution_required IS NOT TRUE
+         AND v_provider_submission_status <> 'PROVIDER_SUBMISSION_REJECTED'
+       )
+       OR v_provider_submission_status NOT IN (
+         'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME',
+         'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK',
+         'PROVIDER_SUBMISSION_MALFORMED_RESPONSE',
+         'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID',
+         'PROVIDER_SUBMISSION_REJECTED'
+       )
+     ) THEN
     RETURN jsonb_build_object(
       'ok', false,
       'resolved', false,
@@ -21216,6 +21288,36 @@ BEGIN
   WHERE transfer_id_text.value ~* v_uuid_regex
   ON CONFLICT DO NOTHING;
 
+  IF v_selected_transfer_scope THEN
+    SELECT COALESCE(jsonb_agg(to_jsonb(requested_transfer.transfer_id_text) ORDER BY requested_transfer.transfer_id_text), '[]'::jsonb)
+    INTO v_missing_requested_transfer_ids
+    FROM jsonb_array_elements_text(v_requested_transfer_ids) AS requested_transfer(transfer_id_text)
+    WHERE NOT EXISTS (
+      SELECT 1
+      FROM pg_temp.tmp_provider_submit_review_transfers AS selected_transfer
+      WHERE selected_transfer.transfer_id = requested_transfer.transfer_id_text::uuid
+    );
+
+    IF jsonb_array_length(COALESCE(v_missing_requested_transfer_ids, '[]'::jsonb)) > 0 THEN
+      RAISE EXCEPTION '%', jsonb_build_object(
+        'error', 'PAY_EXECUTE_PROVIDER_SUBMIT_REVIEW_RESOLVE',
+        'code', 'SELECTED_TRANSFERS_NOT_IN_OPERATION_SCOPE',
+        'message', 'Selected transfer ids are not part of the provider-submit review operation scope.',
+        'pay_batch_id', p_pay_batch_id::text,
+        'operation_id', p_operation_id::text,
+        'selected_transfer_ids', v_requested_transfer_ids,
+        'missing_transfer_ids', v_missing_requested_transfer_ids
+      )::text USING ERRCODE = 'P0001';
+    END IF;
+
+    DELETE FROM pg_temp.tmp_provider_submit_review_transfers AS selected_transfer
+    WHERE NOT EXISTS (
+      SELECT 1
+      FROM jsonb_array_elements_text(v_requested_transfer_ids) AS requested_transfer(transfer_id_text)
+      WHERE requested_transfer.transfer_id_text::uuid = selected_transfer.transfer_id
+    );
+  END IF;
+
   INSERT INTO pg_temp.tmp_provider_submit_review_scopes (scope_id)
   SELECT transfer_scope.id
   FROM public.banking_pay_operation_transfer_scope AS transfer_scope
@@ -21233,6 +21335,19 @@ BEGIN
   ) AS scope_id_text(value)
   WHERE scope_id_text.value ~* v_uuid_regex
   ON CONFLICT DO NOTHING;
+
+  IF v_selected_transfer_scope THEN
+    DELETE FROM pg_temp.tmp_provider_submit_review_scopes AS selected_scope
+    WHERE NOT EXISTS (
+      SELECT 1
+      FROM public.banking_pay_operation_transfer_scope AS transfer_scope
+      JOIN pg_temp.tmp_provider_submit_review_transfers AS selected_transfer
+        ON selected_transfer.transfer_id = transfer_scope.pay_bank_transfer_id
+      WHERE transfer_scope.id = selected_scope.scope_id
+        AND transfer_scope.operation_id = p_operation_id
+        AND transfer_scope.pay_batch_id = p_pay_batch_id
+    );
+  END IF;
 
   INSERT INTO pg_temp.tmp_provider_submit_review_auth_requests (auth_request_id)
   SELECT auth_request.id
@@ -21252,6 +21367,16 @@ BEGIN
   ) AS auth_id_text(value)
   WHERE auth_id_text.value ~* v_uuid_regex
   ON CONFLICT DO NOTHING;
+
+  IF v_selected_transfer_scope THEN
+    DELETE FROM pg_temp.tmp_provider_submit_review_auth_requests;
+    DELETE FROM pg_temp.tmp_provider_submit_review_chunks;
+  END IF;
+
+  SELECT COALESCE(jsonb_agg(to_jsonb(selected_transfer.transfer_id::text) ORDER BY selected_transfer.transfer_id::text), '[]'::jsonb),
+         COUNT(*)::integer
+  INTO v_requested_transfer_ids, v_requested_transfer_count
+  FROM pg_temp.tmp_provider_submit_review_transfers AS selected_transfer;
 
   SELECT COUNT(*)::integer
   INTO v_direct_provider_acceptance_evidence_count
@@ -21366,7 +21491,12 @@ BEGIN
       )
     );
 
-  IF COALESCE(v_provider_acceptance_evidence_count, 0) > 0 OR COALESCE(v_direct_provider_acceptance_evidence_count, 0) > 0 THEN
+  v_effective_provider_acceptance_evidence_count := CASE
+    WHEN v_selected_transfer_scope THEN COALESCE(v_direct_provider_acceptance_evidence_count, 0)
+    ELSE GREATEST(COALESCE(v_provider_acceptance_evidence_count, 0), COALESCE(v_direct_provider_acceptance_evidence_count, 0))
+  END;
+
+  IF COALESCE(v_effective_provider_acceptance_evidence_count, 0) > 0 THEN
     RETURN jsonb_build_object(
       'ok', false,
       'resolved', false,
@@ -21377,7 +21507,45 @@ BEGIN
       'pay_batch_id', p_pay_batch_id::text,
       'operation_id', p_operation_id::text,
       'provider_submit_diagnostic', v_provider_submit_diagnostic_before,
-      'provider_acceptance_evidence_count', GREATEST(COALESCE(v_provider_acceptance_evidence_count, 0), COALESCE(v_direct_provider_acceptance_evidence_count, 0))
+      'provider_acceptance_evidence_count', COALESCE(v_effective_provider_acceptance_evidence_count, 0)
+    );
+  END IF;
+
+  SELECT COALESCE(jsonb_agg(to_jsonb(unsafe_transfer.transfer_id::text) ORDER BY unsafe_transfer.transfer_id::text), '[]'::jsonb),
+         COUNT(*)::integer
+  INTO v_unsafe_selected_transfer_ids, v_unsafe_selected_transfer_count
+  FROM (
+    SELECT transfer_row.id AS transfer_id
+    FROM public.pay_bank_transfers AS transfer_row
+    JOIN pg_temp.tmp_provider_submit_review_transfers AS selected_transfer
+      ON selected_transfer.transfer_id = transfer_row.id
+    WHERE transfer_row.pay_batch_id = p_pay_batch_id
+      AND NOT (
+        UPPER(BTRIM(COALESCE(transfer_row.status, ''))) IN ('FAILED', 'CANCELLED', 'RETURNED')
+        OR UPPER(BTRIM(COALESCE(transfer_row.rail_state, ''))) IN ('FAILED', 'REJECTED', 'DECLINED', 'ERROR', 'CANCELLED', 'CANCELED', 'RETURNED', 'REVERTED', 'UNKNOWN')
+        OR UPPER(BTRIM(COALESCE(transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_submission_status}', ''))) IN (
+          'PROVIDER_SUBMISSION_REJECTED',
+          'PROVIDER_SUBMISSION_FAILED',
+          'PROVIDER_SUBMISSION_MALFORMED_RESPONSE',
+          'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME',
+          'PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK',
+          'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID'
+        )
+      )
+  ) AS unsafe_transfer;
+
+  IF COALESCE(v_unsafe_selected_transfer_count, 0) > 0 THEN
+    RETURN jsonb_build_object(
+      'ok', false,
+      'resolved', false,
+      'reason', 'SELECTED_TRANSFERS_NOT_NO_PAYMENT_ELIGIBLE',
+      'safe_retry_available', false,
+      'manual_resolution_recorded', false,
+      'message', 'One or more selected transfers are not failed, rejected, returned, or provider-review eligible.',
+      'pay_batch_id', p_pay_batch_id::text,
+      'operation_id', p_operation_id::text,
+      'selected_transfer_ids', v_requested_transfer_ids,
+      'unsafe_transfer_ids', v_unsafe_selected_transfer_ids
     );
   END IF;
 
@@ -21412,38 +21580,49 @@ BEGIN
     'operator_confirmation', v_confirmation_redacted
   );
 
-  v_finalise_result := public.pay_provider_submit_chunk_diagnostic_finalise(
-    p_operation_id := p_operation_id,
-    p_pay_batch_id := p_pay_batch_id,
-    p_chunk_id := NULL::uuid,
-    p_actor_user_id := p_actor_user_id,
-    p_reason_code := 'MANUAL_NO_PAYMENT_RESOLUTION_FINALISE_PROVIDER_SUBMIT_CHUNKS',
-    p_failure_error_json := jsonb_build_object(
-      'provider_submit_diagnostic', v_provider_submit_diagnostic_before,
-      'manual_resolution_action', v_resolution_action,
-      'operator_confirmation', v_confirmation_redacted
-    )
-  );
-
-  v_diagnostic_after_finalise_result := public.pay_provider_submit_diagnostic_get(
-    p_pay_batch_id := p_pay_batch_id,
-    p_operation_id := p_operation_id,
-    p_transfer_id := NULL::uuid,
-    p_chunk_id := NULL::uuid,
-    p_counts_only := false
-  );
-
-  v_provider_submit_diagnostic_after_finalise := COALESCE(v_diagnostic_after_finalise_result->'provider_submit_diagnostic', v_provider_submit_diagnostic_before, '{}'::jsonb);
-
-  IF COALESCE(v_diagnostic_after_finalise_result #>> '{counts,provider_acceptance_evidence_count}', '') ~ '^[0-9]+$' THEN
-    v_after_provider_acceptance_evidence_count := (v_diagnostic_after_finalise_result #>> '{counts,provider_acceptance_evidence_count}')::integer;
-  ELSIF COALESCE(v_diagnostic_after_finalise_result->>'provider_evidence_count', '') ~ '^[0-9]+$' THEN
-    v_after_provider_acceptance_evidence_count := (v_diagnostic_after_finalise_result->>'provider_evidence_count')::integer;
-  ELSE
+  IF v_selected_transfer_scope THEN
+    v_finalise_result := jsonb_build_object(
+      'ok', true,
+      'skipped_for_selected_transfer_scope', true,
+      'message', 'Selected-transfer recovery does not finalise whole provider-submit chunks.'
+    );
+    v_diagnostic_after_finalise_result := v_diagnostic_before_result;
+    v_provider_submit_diagnostic_after_finalise := COALESCE(v_provider_submit_diagnostic_before, '{}'::jsonb);
     v_after_provider_acceptance_evidence_count := 0;
+  ELSE
+    v_finalise_result := public.pay_provider_submit_chunk_diagnostic_finalise(
+      p_operation_id := p_operation_id,
+      p_pay_batch_id := p_pay_batch_id,
+      p_chunk_id := NULL::uuid,
+      p_actor_user_id := p_actor_user_id,
+      p_reason_code := 'MANUAL_NO_PAYMENT_RESOLUTION_FINALISE_PROVIDER_SUBMIT_CHUNKS',
+      p_failure_error_json := jsonb_build_object(
+        'provider_submit_diagnostic', v_provider_submit_diagnostic_before,
+        'manual_resolution_action', v_resolution_action,
+        'operator_confirmation', v_confirmation_redacted
+      )
+    );
+
+    v_diagnostic_after_finalise_result := public.pay_provider_submit_diagnostic_get(
+      p_pay_batch_id := p_pay_batch_id,
+      p_operation_id := p_operation_id,
+      p_transfer_id := NULL::uuid,
+      p_chunk_id := NULL::uuid,
+      p_counts_only := false
+    );
+
+    v_provider_submit_diagnostic_after_finalise := COALESCE(v_diagnostic_after_finalise_result->'provider_submit_diagnostic', v_provider_submit_diagnostic_before, '{}'::jsonb);
+
+    IF COALESCE(v_diagnostic_after_finalise_result #>> '{counts,provider_acceptance_evidence_count}', '') ~ '^[0-9]+$' THEN
+      v_after_provider_acceptance_evidence_count := (v_diagnostic_after_finalise_result #>> '{counts,provider_acceptance_evidence_count}')::integer;
+    ELSIF COALESCE(v_diagnostic_after_finalise_result->>'provider_evidence_count', '') ~ '^[0-9]+$' THEN
+      v_after_provider_acceptance_evidence_count := (v_diagnostic_after_finalise_result->>'provider_evidence_count')::integer;
+    ELSE
+      v_after_provider_acceptance_evidence_count := 0;
+    END IF;
   END IF;
 
-  IF COALESCE(v_after_provider_acceptance_evidence_count, 0) > 0 THEN
+  IF v_selected_transfer_scope IS NOT TRUE AND COALESCE(v_after_provider_acceptance_evidence_count, 0) > 0 THEN
     RETURN jsonb_build_object(
       'ok', false,
       'resolved', false,
@@ -21492,6 +21671,9 @@ BEGIN
       'resolved_at_utc', v_now::text,
       'resolved_by_user_id', p_actor_user_id::text,
       'operator_confirmation', v_confirmation_redacted,
+      'resolution_scope', v_resolution_scope,
+      'selected_transfer_scope', v_selected_transfer_scope,
+      'selected_transfer_count', COALESCE(v_requested_transfer_count, 0),
       'pay_batch_id', p_pay_batch_id::text,
       'operation_id', p_operation_id::text,
       'chunk_ids', v_chunk_ids,
@@ -21911,6 +22093,21 @@ BEGIN
     'provider_submit_diagnostic', v_manual_provider_submit_diagnostic,
     'provider_submission_status', 'MANUAL_RESOLVED_NO_PAYMENT_MADE',
     'review_reason_code', 'MANUAL_NO_PAYMENT_CONFIRMATION_RECORDED',
+    'resolution_scope', v_resolution_scope,
+    'selected_transfer_scope', v_selected_transfer_scope,
+    'selected_transfer_count', COALESCE(v_requested_transfer_count, 0),
+    'resolved_transfer_count', jsonb_array_length(COALESCE(v_resolved_transfer_ids, '[]'::jsonb)),
+    'skipped_transfer_count', GREATEST(
+      COALESCE(v_requested_transfer_count, 0)
+      - jsonb_array_length(COALESCE(v_resolved_transfer_ids, '[]'::jsonb))
+      - COALESCE(v_unsafe_selected_transfer_count, 0),
+      0
+    ),
+    'unsafe_transfer_count', COALESCE(v_unsafe_selected_transfer_count, 0),
+    'rejected_unsafe_transfer_count', COALESCE(v_unsafe_selected_transfer_count, 0),
+    'affected_item_count', jsonb_array_length(COALESCE(v_cleared_pay_batch_item_ids, '[]'::jsonb)),
+    'batch_remains_open', true,
+    'batch_cancelled_or_released', false,
     'resolved_chunk_ids', COALESCE(v_resolved_chunk_ids, '[]'::jsonb),
     'resolved_transfer_ids', COALESCE(v_resolved_transfer_ids, '[]'::jsonb),
     'resolved_transfer_scope_ids', COALESCE(v_resolved_transfer_scope_ids, '[]'::jsonb),
@@ -21941,6 +22138,10 @@ BEGIN
   RETURN v_result;
 END;
 $function$;
+
+
+
+
 
 
 
