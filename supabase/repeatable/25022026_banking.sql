@@ -17438,7 +17438,8 @@ BEGIN
         SELECT COUNT(*)::integer
         FROM deleted_maps
         WHERE deleted_maps.pay_bank_transfer_id = recovery_update.pay_bank_transfer_id
-      ), 0);
+      ), 0)
+  WHERE recovery_update.pay_bank_transfer_id IS NOT NULL;
 
   SELECT COALESCE(public.settings_defaults.payment_return_auto_reverse_timesheets, false)
   INTO v_counterparty_map_auto_reverse_setting
@@ -18189,6 +18190,7 @@ BEGIN
   );
 END;
 $function$;
+
 
 
 
