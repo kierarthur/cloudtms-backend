@@ -9022,14 +9022,11 @@ $function$;
 
 
 
-CREATE OR REPLACE FUNCTION public.pay_preview_candidate_build_case_component_rows(
-  p_context_json jsonb,
-  p_candidate_id uuid
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
+CREATE OR REPLACE FUNCTION public.pay_preview_candidate_build_case_component_rows(p_context_json jsonb, p_candidate_id uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
 AS $function$
 declare
   v_context_matches boolean := false;
@@ -10190,7 +10187,17 @@ begin
         from ts_itemised d
         cross join lateral (
           values
-            ('EXPENSES', round(coalesce(d.delta_expenses_pay_ex_vat, 0), 2)),
+            (
+              'EXPENSES',
+              case
+                when round(coalesce(d.delta_travel_pay_ex_vat, 0), 2) <> 0
+                  or round(coalesce(d.delta_accommodation_pay_ex_vat, 0), 2) <> 0
+                  or round(coalesce(d.delta_other_pay_ex_vat, 0), 2) <> 0
+                  or round(coalesce(d.delta_mileage_pay_ex_vat, 0), 2) <> 0
+                then 0::numeric
+                else round(coalesce(d.delta_expenses_pay_ex_vat, 0), 2)
+              end
+            ),
             ('TRAVEL', round(coalesce(d.delta_travel_pay_ex_vat, 0), 2)),
             ('ACCOMMODATION', round(coalesce(d.delta_accommodation_pay_ex_vat, 0), 2)),
             ('OTHER', round(coalesce(d.delta_other_pay_ex_vat, 0), 2)),
@@ -10814,14 +10821,24 @@ begin
           round(sum(coalesce(tcr.preview_component_amount_ex_vat, tcr.component_amount_ex_vat, 0)),2) as payment_amount_ex_vat,
           round(
             case
-              when max(tcr.cand_pay_method) = 'UMBRELLA' then (public._pay_umbrella_vat_calc(round(sum(coalesce(tcr.preview_component_amount_ex_vat, tcr.component_amount_ex_vat, 0)),2), v_vat_rate_pct, bool_or(tcr.umb_vat_chargeable))->>'inc')::numeric
+              when max(tcr.cand_pay_method) = 'UMBRELLA' then
+                (public._pay_umbrella_vat_calc(
+                  round(sum(coalesce(tcr.preview_component_amount_ex_vat, tcr.component_amount_ex_vat, 0)), 2),
+                  v_vat_rate_pct,
+                  bool_or(tcr.umb_vat_chargeable)
+                )->>'inc')::numeric
               else round(sum(coalesce(tcr.preview_component_amount_ex_vat, tcr.component_amount_ex_vat, 0)),2)
             end,
             2
           ) as payment_amount_inc_vat,
           round(
             case
-              when max(tcr.cand_pay_method) = 'UMBRELLA' then (public._pay_umbrella_vat_calc(round(sum(coalesce(tcr.preview_component_amount_ex_vat, tcr.component_amount_ex_vat, 0)),2), v_vat_rate_pct, bool_or(tcr.umb_vat_chargeable))->>'inc')::numeric
+              when max(tcr.cand_pay_method) = 'UMBRELLA' then
+                (public._pay_umbrella_vat_calc(
+                  round(sum(coalesce(tcr.preview_component_amount_ex_vat, tcr.component_amount_ex_vat, 0)), 2),
+                  v_vat_rate_pct,
+                  bool_or(tcr.umb_vat_chargeable)
+                )->>'inc')::numeric
               else round(sum(coalesce(tcr.preview_component_amount_ex_vat, tcr.component_amount_ex_vat, 0)),2)
             end,
             2
@@ -10989,6 +11006,7 @@ begin
   );
 end;
 $function$;
+
 
 
 
