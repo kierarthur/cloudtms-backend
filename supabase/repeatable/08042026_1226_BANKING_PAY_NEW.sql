@@ -7194,14 +7194,12 @@ $function$;
 
 
 
-CREATE OR REPLACE FUNCTION public.pay_preview_candidate_build_canonical_lines(
-  p_context_json jsonb,
-  p_candidate_id uuid
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
+
+CREATE OR REPLACE FUNCTION public.pay_preview_candidate_build_canonical_lines(p_context_json jsonb, p_candidate_id uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
 AS $function$
 declare
   v_context_matches boolean := false;
@@ -7944,7 +7942,12 @@ begin
           ) as case_resolution_section_amount_ex_vat,
           round(
             case
-              when ctps.source_pay_method = 'UMBRELLA' then (public._pay_umbrella_vat_calc(round(coalesce(ctps.ready_segment_amount_ex_vat, 0) + coalesce(ctps.non_segment_amount_ex_vat, 0), 2), v_vat_rate_pct, ctps.umb_vat_chargeable)->>'inc')::numeric
+              when ctps.source_pay_method = 'UMBRELLA' then
+                (public._pay_umbrella_vat_calc(
+                  round(coalesce(ctps.ready_segment_amount_ex_vat, 0) + coalesce(ctps.non_segment_amount_ex_vat, 0), 2),
+                  v_vat_rate_pct,
+                  ctps.umb_vat_chargeable
+                )->>'inc')::numeric
               else round(coalesce(ctps.ready_segment_amount_ex_vat, 0) + coalesce(ctps.non_segment_amount_ex_vat, 0), 2)
             end,
             2
@@ -9014,6 +9017,9 @@ begin
   );
 end;
 $function$;
+
+
+
 
 
 CREATE OR REPLACE FUNCTION public.pay_preview_candidate_build_case_component_rows(
@@ -10986,14 +10992,12 @@ $function$;
 
 
 
-CREATE OR REPLACE FUNCTION public.pay_preview_candidate_build_entitlement_rows(
-  p_context_json jsonb,
-  p_candidate_id uuid
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
+
+CREATE OR REPLACE FUNCTION public.pay_preview_candidate_build_entitlement_rows(p_context_json jsonb, p_candidate_id uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
 AS $function$
 declare
   v_context_matches boolean := false;
@@ -12665,8 +12669,29 @@ begin
           ), '[]'::jsonb) as additional_unit_deltas_json,
 
           -- EXPENSES/TRAVEL/etc (outstanding = current - baseline - reserved)
+          -- EXPENSES is an aggregate fallback only. If any specific expense bucket
+          -- exists in current, baseline, or reserved state, the specific buckets are
+          -- the canonical payable components and the aggregate must not also pay out.
           round(
             case
+              when (
+                coalesce(b.current_travel_pay_ex_vat,0) <> 0
+                or coalesce(b.current_accommodation_pay_ex_vat,0) <> 0
+                or coalesce(b.current_other_pay_ex_vat,0) <> 0
+                or coalesce(b.current_mileage_pay_ex_vat,0) <> 0
+                or coalesce(nullif(b.base_json #>> '{expenses,travel_pay_ex_vat}','')::numeric,0) <> 0
+                or coalesce(nullif(b.base_json #>> '{expenses,accommodation_pay_ex_vat}','')::numeric,0) <> 0
+                or coalesce(nullif(b.base_json #>> '{expenses,other_pay_ex_vat}','')::numeric,0) <> 0
+                or coalesce(nullif(b.base_json #>> '{expenses,mileage_pay_ex_vat}','')::numeric,0) <> 0
+                or exists (
+                  select 1
+                  from reserved_by_source_ref r_specific_expense
+                  where r_specific_expense.timesheet_id = b.timesheet_id
+                    and r_specific_expense.source_ref in ('travel','accommodation','other','mileage')
+                    and coalesce(r_specific_expense.reserved_amount_ex_vat,0) <> 0
+                )
+              )
+              then 0
               when (
                 coalesce(b.has_active_overpayment_case,false) = true
                 and round(
@@ -12698,7 +12723,30 @@ begin
             end,
             2
           ) as delta_expenses_pay_ex_vat,
-          round(coalesce(b.current_expenses_charge_ex_vat,0) - coalesce(nullif(b.base_json #>> '{expenses,expenses_charge_ex_vat}','')::numeric,0),2) as delta_expenses_charge_ex_vat,
+          round(
+            case
+              when (
+                coalesce(b.current_travel_pay_ex_vat,0) <> 0
+                or coalesce(b.current_accommodation_pay_ex_vat,0) <> 0
+                or coalesce(b.current_other_pay_ex_vat,0) <> 0
+                or coalesce(b.current_mileage_pay_ex_vat,0) <> 0
+                or coalesce(nullif(b.base_json #>> '{expenses,travel_pay_ex_vat}','')::numeric,0) <> 0
+                or coalesce(nullif(b.base_json #>> '{expenses,accommodation_pay_ex_vat}','')::numeric,0) <> 0
+                or coalesce(nullif(b.base_json #>> '{expenses,other_pay_ex_vat}','')::numeric,0) <> 0
+                or coalesce(nullif(b.base_json #>> '{expenses,mileage_pay_ex_vat}','')::numeric,0) <> 0
+                or exists (
+                  select 1
+                  from reserved_by_source_ref r_specific_expense
+                  where r_specific_expense.timesheet_id = b.timesheet_id
+                    and r_specific_expense.source_ref in ('travel','accommodation','other','mileage')
+                    and coalesce(r_specific_expense.reserved_amount_ex_vat,0) <> 0
+                )
+              )
+              then 0
+              else coalesce(b.current_expenses_charge_ex_vat,0) - coalesce(nullif(b.base_json #>> '{expenses,expenses_charge_ex_vat}','')::numeric,0)
+            end,
+            2
+          ) as delta_expenses_charge_ex_vat,
 
           round(
             case
@@ -12992,6 +13040,24 @@ begin
                 end
               + case
                   when (
+                    coalesce(b.current_travel_pay_ex_vat,0) <> 0
+                    or coalesce(b.current_accommodation_pay_ex_vat,0) <> 0
+                    or coalesce(b.current_other_pay_ex_vat,0) <> 0
+                    or coalesce(b.current_mileage_pay_ex_vat,0) <> 0
+                    or coalesce(nullif(b.base_json #>> '{expenses,travel_pay_ex_vat}','')::numeric,0) <> 0
+                    or coalesce(nullif(b.base_json #>> '{expenses,accommodation_pay_ex_vat}','')::numeric,0) <> 0
+                    or coalesce(nullif(b.base_json #>> '{expenses,other_pay_ex_vat}','')::numeric,0) <> 0
+                    or coalesce(nullif(b.base_json #>> '{expenses,mileage_pay_ex_vat}','')::numeric,0) <> 0
+                    or exists (
+                      select 1
+                      from reserved_by_source_ref r_specific_expense
+                      where r_specific_expense.timesheet_id = b.timesheet_id
+                        and r_specific_expense.source_ref in ('travel','accommodation','other','mileage')
+                        and coalesce(r_specific_expense.reserved_amount_ex_vat,0) <> 0
+                    )
+                  )
+                  then 0
+                  when (
                     coalesce(b.has_active_overpayment_case,false) = true
                     and round(
                       coalesce(b.current_expenses_pay_ex_vat,0)
@@ -13110,29 +13176,45 @@ begin
         select
           d2.*,
           d2.total_ex as payment_amount_ex_vat,
-          case
-            when d2.ts_pay_method = 'UMBRELLA' then (public._pay_umbrella_vat_calc(d2.total_ex, v_vat_rate_pct, d2.umb_vat_chargeable)->>'inc')::numeric
-            else d2.total_ex
-          end as payment_amount_inc_vat,
-          case
-            when d2.ts_pay_method = 'UMBRELLA' then (public._pay_umbrella_vat_calc(d2.total_ex, v_vat_rate_pct, d2.umb_vat_chargeable)->>'inc')::numeric
-            else d2.total_ex
-          end as payment_amount
+          round(
+            case
+              when d2.ts_pay_method = 'UMBRELLA' then
+                (public._pay_umbrella_vat_calc(d2.total_ex, v_vat_rate_pct, d2.umb_vat_chargeable)->>'inc')::numeric
+              else d2.total_ex
+            end,
+            2
+          ) as payment_amount_inc_vat,
+          round(
+            case
+              when d2.ts_pay_method = 'UMBRELLA' then
+                (public._pay_umbrella_vat_calc(d2.total_ex, v_vat_rate_pct, d2.umb_vat_chargeable)->>'inc')::numeric
+              else d2.total_ex
+            end,
+            2
+          ) as payment_amount
         from (
           select
-            d1.*,
-            round(
-              coalesce((select sum(coalesce(nullif(x->>'delta_pay_ex_vat','')::numeric,0)) from jsonb_array_elements(d1.segment_deltas_json) x),0)
-              + coalesce(d1.delta_additional_pay_ex_vat,0)
-              + coalesce(d1.delta_expenses_pay_ex_vat,0)
-              + coalesce(d1.delta_travel_pay_ex_vat,0)
-              + coalesce(d1.delta_accommodation_pay_ex_vat,0)
-              + coalesce(d1.delta_other_pay_ex_vat,0)
-              + coalesce(d1.delta_mileage_pay_ex_vat,0)
-              + coalesce((select sum(coalesce(nullif(x->>'delta_pay_ex_vat','')::numeric,0)) from jsonb_array_elements(d1.adjustment_deltas_json) x),0),
-              2
-            ) as total_ex
-          from ts_deltas d1
+            d_calc.*,
+            round(coalesce(d_calc.taxable_total_ex,0) + coalesce(d_calc.reimbursement_total_ex,0), 2) as total_ex
+          from (
+            select
+              d1.*,
+              round(
+                coalesce((select sum(coalesce(nullif(x->>'delta_pay_ex_vat','')::numeric,0)) from jsonb_array_elements(d1.segment_deltas_json) x),0)
+                + coalesce(d1.delta_additional_pay_ex_vat,0)
+                + coalesce((select sum(coalesce(nullif(x->>'delta_pay_ex_vat','')::numeric,0)) from jsonb_array_elements(d1.adjustment_deltas_json) x),0),
+                2
+              ) as taxable_total_ex,
+              round(
+                coalesce(d1.delta_expenses_pay_ex_vat,0)
+                + coalesce(d1.delta_travel_pay_ex_vat,0)
+                + coalesce(d1.delta_accommodation_pay_ex_vat,0)
+                + coalesce(d1.delta_other_pay_ex_vat,0)
+                + coalesce(d1.delta_mileage_pay_ex_vat,0),
+                2
+              ) as reimbursement_total_ex
+            from ts_deltas d1
+          ) d_calc
         ) d2
   
   ;
@@ -13147,6 +13229,9 @@ begin
   );
 end;
 $function$;
+
+
+
 
 
 
@@ -17529,19 +17614,11 @@ $function$;
 
 
 
-
-
-
-
-
-CREATE OR REPLACE FUNCTION public.pay_preview_candidate_collect_scope(
-  p_context_json jsonb,
-  p_candidate_id uuid
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
+CREATE OR REPLACE FUNCTION public.pay_preview_candidate_collect_scope(p_context_json jsonb, p_candidate_id uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
 AS $function$
 declare
   v_context_matches boolean := false;
@@ -18541,20 +18618,12 @@ begin
           case when e.charge_bh is null then null else round(e.charge_bh,6) end as charge_bh,
           coalesce(e.additional_units_json, '{}'::jsonb) as current_additional_units_json,
 
-          case
-            when e.invoice_breakdown_json is not null
-             and jsonb_typeof(e.invoice_breakdown_json)='object'
-             and upper(coalesce(e.invoice_breakdown_json->>'mode',''))='SEGMENTS'
-            then round(coalesce(nullif(e.invoice_breakdown_json #>> '{additional,pay_ex_vat}','')::numeric,0),2)
-            else round(coalesce(e.additional_pay_ex_vat,0),2)
-          end as current_additional_pay_ex_vat,
-          case
-            when e.invoice_breakdown_json is not null
-             and jsonb_typeof(e.invoice_breakdown_json)='object'
-             and upper(coalesce(e.invoice_breakdown_json->>'mode',''))='SEGMENTS'
-            then round(coalesce(nullif(e.invoice_breakdown_json #>> '{additional,charge_ex_vat}','')::numeric,0),2)
-            else round(coalesce(e.additional_charge_ex_vat,0),2)
-          end as current_additional_charge_ex_vat,
+          -- Canonical additional truth is the TSFIN top-level additional bucket plus
+          -- additional_units_json. SEGMENTS invoice_breakdown_json.additional is not a
+          -- Banking Pay entitlement source: in expense-only manual rows it can be a
+          -- catch-all presentation artefact for non-segment totals.
+          round(coalesce(e.additional_pay_ex_vat,0),2) as current_additional_pay_ex_vat,
+          round(coalesce(e.additional_charge_ex_vat,0),2) as current_additional_charge_ex_vat,
           round(coalesce(e.expenses_pay_ex_vat,0),2) as current_expenses_pay_ex_vat,
           round(coalesce(e.expenses_charge_ex_vat,0),2) as current_expenses_charge_ex_vat,
           round(coalesce(e.travel_pay_ex_vat,0),2) as current_travel_pay_ex_vat,
@@ -19199,6 +19268,8 @@ begin
   );
 end;
 $function$;
+
+
 
 
 
