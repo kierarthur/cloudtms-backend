@@ -33427,6 +33427,7 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
      (cw.totals_json && typeof cw.totals_json === 'object') ? cw.totals_json : {};
  
    const hasExpensesDraftKey = !!(body && Object.prototype.hasOwnProperty.call(body, 'expenses_draft'));
+   const hasProcessedTimesheetForWeek = !!currentTimesheetIdForWeek;
  
    let expensesDraft = null;
    if (hasExpensesDraftKey) {
@@ -33456,7 +33457,7 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
      } catch (e) {
        return withCORS(env, req, badRequest(e?.message || 'Invalid expenses_draft'));
      }
-   } else {
+   } else if (!hasProcessedTimesheetForWeek) {
      try {
        expensesDraft = normaliseExpenseDraft(
          parseMaybeJsonObj(existingWeekTotalsForDraft.expenses_draft) || {}
@@ -33464,9 +33465,14 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
      } catch (e) {
        return withCORS(env, req, badRequest(e?.message || 'Invalid stored expenses_draft'));
      }
+   } else {
+     // Once a real timesheet exists, contract_weeks.totals_json.expenses_draft is only
+     // a draft seed/history field. Do not let a stale draft override current TSFIN.
+     expensesDraft = normaliseExpenseDraft({});
    }
  
    wlog('expenses_draft_loaded', {
+     source: hasExpensesDraftKey ? 'request' : (hasProcessedTimesheetForWeek ? 'current_tsfin' : 'contract_week_draft'),
      has_expense_claims: hasPositiveExpenseDraftClaims(expensesDraft),
      mileage_units: Number(expensesDraft.mileage_units || 0),
      travel_pay: Number(expensesDraft.travel_pay || 0),
@@ -34221,8 +34227,10 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
  
    const expenseHydrationNeeded =
      hasExpensesDraftKey ||
-     hasPositiveExpenseDraftClaims(expensesDraft) ||
-     !!String(expensesDraft?.note || '').trim();
+     (!hasProcessedTimesheetForWeek && (
+       hasPositiveExpenseDraftClaims(expensesDraft) ||
+       !!String(expensesDraft?.note || '').trim()
+     ));
  
    const finalTravelPay = expenseHydrationNeeded
      ? round2(Number(expensesDraft?.travel_pay || 0))
@@ -34310,12 +34318,23 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
      expense_hydration_needed: expenseHydrationNeeded
    });
  
+   const currentExpenseDraftForWeekTotals = normaliseExpenseDraft({
+     mileage_units: finalMileageUnits,
+     travel_pay: finalTravelPay,
+     travel_charge: finalTravelChg,
+     accommodation_pay: finalAccommodationPay,
+     accommodation_charge: finalAccommodationChg,
+     other_pay: finalOtherPay,
+     other_charge: finalOtherChg,
+     note: finalExpensesDescription || ''
+   });
+
    const existingWeekTotals = (cw.totals_json && typeof cw.totals_json === 'object') ? cw.totals_json : {};
    const mergedWeekTotals = { ...existingWeekTotals, hours };
- 
+
    if (hasUnitsWeekKey) mergedWeekTotals.additional_units_week = unitsWeek || {};
    if (hasUnitsPerDayKey) mergedWeekTotals.additional_units_per_day = unitsPerDay || {};
-   mergedWeekTotals.expenses_draft = expensesDraft;
+   mergedWeekTotals.expenses_draft = currentExpenseDraftForWeekTotals;
  
    const snap = {
      timesheet_id: targetTimesheetIdForWrite,
@@ -34392,16 +34411,9 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
        segments,
        additional: {
          units: additional_units_json,
-         pay_ex_vat: round2(additional_pay_ex_vat + finalExpensesPay + finalMileagePay),
-         charge_ex_vat: round2(additional_charge_ex_vat + finalExpensesChg + finalMileageChg),
-         margin_ex_vat: round2(
-           (additional_charge_ex_vat + finalExpensesChg + finalMileageChg) -
-           (
-             (erniApplies ? round2(additional_pay_ex_vat * erniMult) : additional_pay_ex_vat) +
-             finalExpensesPay +
-             finalMileagePay
-           )
-         )
+         pay_ex_vat: additional_pay_ex_vat,
+         charge_ex_vat: additional_charge_ex_vat,
+         margin_ex_vat: additional_margin_ex_vat
        },
        totals: {
          total_pay_ex_vat: total_pay,
