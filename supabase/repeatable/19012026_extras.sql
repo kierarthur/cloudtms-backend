@@ -7646,35 +7646,12 @@ DROP FUNCTION IF EXISTS public.contract_week_manual_upsert_bulk_process_atomic(u
 DROP FUNCTION IF EXISTS public.contract_week_manual_upsert_atomic(uuid, uuid, jsonb, jsonb, jsonb, jsonb, jsonb, uuid, boolean, timestamp with time zone);
 
 
-CREATE OR REPLACE FUNCTION public.contract_week_manual_upsert_atomic(
-  p_week_id uuid,
-  p_expected_timesheet_id uuid DEFAULT NULL,
-  p_timesheet_create_json jsonb DEFAULT NULL,
-  p_timesheet_patch_json jsonb DEFAULT '{}'::jsonb,
-  p_contract_week_patch_json jsonb DEFAULT '{}'::jsonb,
-  p_tsfin_snapshot_json jsonb DEFAULT NULL,
-  p_rotation_json jsonb DEFAULT NULL,
-  p_actor_user_id uuid DEFAULT NULL,
-  p_materialise_staged_evidence boolean DEFAULT true,
-  p_now_utc timestamptz DEFAULT now(),
-  p_expected_row_signature text DEFAULT NULL
-)
-RETURNS TABLE(
-  contract_week_id uuid,
-  contract_id uuid,
-  timesheet_id uuid,
-  current_timesheet_id uuid,
-  current_timesheet_version integer,
-  was_stale boolean,
-  created_now boolean,
-  processing_status public.ts_fin_processing_status_enum,
-  contract_week_json jsonb,
-  timesheet_json jsonb,
-  timesheet_financials_json jsonb
-)
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO public
+
+CREATE OR REPLACE FUNCTION public.contract_week_manual_upsert_atomic(p_week_id uuid, p_expected_timesheet_id uuid DEFAULT NULL::uuid, p_timesheet_create_json jsonb DEFAULT NULL::jsonb, p_timesheet_patch_json jsonb DEFAULT '{}'::jsonb, p_contract_week_patch_json jsonb DEFAULT '{}'::jsonb, p_tsfin_snapshot_json jsonb DEFAULT NULL::jsonb, p_rotation_json jsonb DEFAULT NULL::jsonb, p_actor_user_id uuid DEFAULT NULL::uuid, p_materialise_staged_evidence boolean DEFAULT true, p_now_utc timestamp with time zone DEFAULT now(), p_expected_row_signature text DEFAULT NULL::text)
+ RETURNS TABLE(contract_week_id uuid, contract_id uuid, timesheet_id uuid, current_timesheet_id uuid, current_timesheet_version integer, was_stale boolean, created_now boolean, processing_status ts_fin_processing_status_enum, contract_week_json jsonb, timesheet_json jsonb, timesheet_financials_json jsonb)
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
 AS $function$
 DECLARE
   v_now timestamptz := COALESCE(p_now_utc, now());
@@ -7767,7 +7744,20 @@ DECLARE
   v_expenses_pay_ex_vat numeric := 0;
   v_expenses_charge_ex_vat numeric := 0;
   v_expenses_margin_ex_vat numeric := 0;
+  v_mileage_pay_ex_vat numeric := 0;
+  v_mileage_charge_ex_vat numeric := 0;
+  v_additional_pay_ex_vat numeric := 0;
+  v_additional_charge_ex_vat numeric := 0;
+  v_additional_margin_ex_vat numeric := 0;
+  v_nonsegment_pay_ex_vat numeric := 0;
+  v_nonsegment_charge_ex_vat numeric := 0;
+  v_nonsegment_margin_ex_vat numeric := 0;
+  v_total_pay_ex_vat numeric := 0;
+  v_total_charge_ex_vat numeric := 0;
+  v_total_margin_ex_vat numeric := 0;
   v_effective_invoice_breakdown_json jsonb := '{}'::jsonb;
+  v_additional_units_json jsonb := '{}'::jsonb;
+  v_has_additional_unit_rows boolean := FALSE;
   v_existing_planned_schedule_json jsonb := NULL;
   v_existing_totals_json jsonb := NULL;
   v_existing_contract_week_hours_zero boolean := TRUE;
@@ -7957,9 +7947,11 @@ BEGIN
     v_patch_json := COALESCE(v_patch_json, '{}'::jsonb) || jsonb_build_object('actual_schedule_json', '[]'::jsonb);
 
     IF v_tsfin_snapshot_json IS NOT NULL THEN
+      -- Empty additional/manual adjustment weeks have no standard hours, but their
+      -- expense, mileage, and genuine additional-unit amounts remain separate TSFIN
+      -- buckets. Do not copy expense totals into additional_pay_ex_vat.
       v_expenses_pay_ex_vat :=
-        COALESCE(CASE WHEN NULLIF(BTRIM(COALESCE(v_tsfin_snapshot_json->>'mileage_pay_ex_vat', '')), '') ~ v_numeric_re THEN (v_tsfin_snapshot_json->>'mileage_pay_ex_vat')::numeric ELSE NULL END, 0::numeric)
-        + COALESCE(CASE WHEN NULLIF(BTRIM(COALESCE(v_tsfin_snapshot_json->>'travel_pay_ex_vat', '')), '') ~ v_numeric_re THEN (v_tsfin_snapshot_json->>'travel_pay_ex_vat')::numeric ELSE NULL END, 0::numeric)
+        COALESCE(CASE WHEN NULLIF(BTRIM(COALESCE(v_tsfin_snapshot_json->>'travel_pay_ex_vat', '')), '') ~ v_numeric_re THEN (v_tsfin_snapshot_json->>'travel_pay_ex_vat')::numeric ELSE NULL END, 0::numeric)
         + COALESCE(CASE WHEN NULLIF(BTRIM(COALESCE(v_tsfin_snapshot_json->>'accommodation_pay_ex_vat', '')), '') ~ v_numeric_re THEN (v_tsfin_snapshot_json->>'accommodation_pay_ex_vat')::numeric ELSE NULL END, 0::numeric)
         + COALESCE(CASE WHEN NULLIF(BTRIM(COALESCE(v_tsfin_snapshot_json->>'other_pay_ex_vat', '')), '') ~ v_numeric_re THEN (v_tsfin_snapshot_json->>'other_pay_ex_vat')::numeric ELSE NULL END, 0::numeric);
 
@@ -7969,17 +7961,12 @@ BEGIN
             WHEN NULLIF(BTRIM(COALESCE(v_tsfin_snapshot_json->>'expenses_pay_ex_vat', '')), '') ~ v_numeric_re THEN (v_tsfin_snapshot_json->>'expenses_pay_ex_vat')::numeric
             ELSE NULL
           END,
-          CASE
-            WHEN NULLIF(BTRIM(COALESCE(v_tsfin_snapshot_json->>'additional_pay_ex_vat', '')), '') ~ v_numeric_re THEN (v_tsfin_snapshot_json->>'additional_pay_ex_vat')::numeric
-            ELSE NULL
-          END,
           0::numeric
         );
       END IF;
 
       v_expenses_charge_ex_vat :=
-        COALESCE(CASE WHEN NULLIF(BTRIM(COALESCE(v_tsfin_snapshot_json->>'mileage_charge_ex_vat', '')), '') ~ v_numeric_re THEN (v_tsfin_snapshot_json->>'mileage_charge_ex_vat')::numeric ELSE NULL END, 0::numeric)
-        + COALESCE(CASE WHEN NULLIF(BTRIM(COALESCE(v_tsfin_snapshot_json->>'travel_charge_ex_vat', '')), '') ~ v_numeric_re THEN (v_tsfin_snapshot_json->>'travel_charge_ex_vat')::numeric ELSE NULL END, 0::numeric)
+        COALESCE(CASE WHEN NULLIF(BTRIM(COALESCE(v_tsfin_snapshot_json->>'travel_charge_ex_vat', '')), '') ~ v_numeric_re THEN (v_tsfin_snapshot_json->>'travel_charge_ex_vat')::numeric ELSE NULL END, 0::numeric)
         + COALESCE(CASE WHEN NULLIF(BTRIM(COALESCE(v_tsfin_snapshot_json->>'accommodation_charge_ex_vat', '')), '') ~ v_numeric_re THEN (v_tsfin_snapshot_json->>'accommodation_charge_ex_vat')::numeric ELSE NULL END, 0::numeric)
         + COALESCE(CASE WHEN NULLIF(BTRIM(COALESCE(v_tsfin_snapshot_json->>'other_charge_ex_vat', '')), '') ~ v_numeric_re THEN (v_tsfin_snapshot_json->>'other_charge_ex_vat')::numeric ELSE NULL END, 0::numeric);
 
@@ -7989,15 +7976,164 @@ BEGIN
             WHEN NULLIF(BTRIM(COALESCE(v_tsfin_snapshot_json->>'expenses_charge_ex_vat', '')), '') ~ v_numeric_re THEN (v_tsfin_snapshot_json->>'expenses_charge_ex_vat')::numeric
             ELSE NULL
           END,
+          0::numeric
+        );
+      END IF;
+
+      v_mileage_pay_ex_vat := COALESCE(
+        CASE
+          WHEN NULLIF(BTRIM(COALESCE(v_tsfin_snapshot_json->>'mileage_pay_ex_vat', '')), '') ~ v_numeric_re THEN (v_tsfin_snapshot_json->>'mileage_pay_ex_vat')::numeric
+          ELSE NULL
+        END,
+        0::numeric
+      );
+
+      v_mileage_charge_ex_vat := COALESCE(
+        CASE
+          WHEN NULLIF(BTRIM(COALESCE(v_tsfin_snapshot_json->>'mileage_charge_ex_vat', '')), '') ~ v_numeric_re THEN (v_tsfin_snapshot_json->>'mileage_charge_ex_vat')::numeric
+          ELSE NULL
+        END,
+        0::numeric
+      );
+
+      v_additional_units_json := CASE
+        WHEN jsonb_typeof(v_tsfin_snapshot_json->'additional_units_json') = 'object' THEN v_tsfin_snapshot_json->'additional_units_json'
+        ELSE '{}'::jsonb
+      END;
+
+      WITH RECURSIVE additional_unit_walk(value_json, key_text) AS (
+        SELECT root_json, root_key
+        FROM (
+          VALUES
+            (v_additional_units_json, NULL::text),
+            (v_patch_json->'additional_units_week', NULL::text),
+            (v_patch_json->'additional_units_per_day', NULL::text),
+            (v_create_json->'additional_units_week', NULL::text),
+            (v_create_json->'additional_units_per_day', NULL::text),
+            (v_effective_totals_json->'additional_units_week', NULL::text),
+            (v_effective_totals_json->'additional_units_per_day', NULL::text)
+        ) AS additional_unit_roots(root_json, root_key)
+        WHERE root_json IS NOT NULL
+          AND jsonb_typeof(root_json) IN ('object', 'array', 'number', 'string')
+
+        UNION ALL
+
+        SELECT child_json.value_json, child_json.key_text
+        FROM additional_unit_walk AS additional_unit_parent
+        CROSS JOIN LATERAL (
+          SELECT object_child.value AS value_json,
+                 object_child.key::text AS key_text
+          FROM jsonb_each(
+            CASE
+              WHEN jsonb_typeof(additional_unit_parent.value_json) = 'object' THEN additional_unit_parent.value_json
+              ELSE '{}'::jsonb
+            END
+          ) AS object_child(key, value)
+
+          UNION ALL
+
+          SELECT array_child.value AS value_json,
+                 additional_unit_parent.key_text AS key_text
+          FROM jsonb_array_elements(
+            CASE
+              WHEN jsonb_typeof(additional_unit_parent.value_json) = 'array' THEN additional_unit_parent.value_json
+              ELSE '[]'::jsonb
+            END
+          ) AS array_child(value)
+        ) AS child_json
+      )
+      SELECT EXISTS (
+        SELECT 1
+        FROM additional_unit_walk AS additional_unit_value
+        WHERE (
+          (
+            jsonb_typeof(additional_unit_value.value_json) = 'number'
+          AND NULLIF(BTRIM(additional_unit_value.value_json #>> '{}'), '') ~ v_numeric_re
+          AND (additional_unit_value.value_json #>> '{}')::numeric <> 0::numeric
+        )
+        OR (
+          jsonb_typeof(additional_unit_value.value_json) = 'string'
+          AND NULLIF(BTRIM(additional_unit_value.value_json #>> '{}'), '') ~ v_numeric_re
+          AND (additional_unit_value.value_json #>> '{}')::numeric <> 0::numeric
+          )
+        )
+        AND LOWER(COALESCE(NULLIF(BTRIM(additional_unit_value.key_text), ''), '')) NOT IN (
+          'pay_ex_vat',
+          'charge_ex_vat',
+          'margin_ex_vat',
+          'pay_rate',
+          'charge_rate',
+          'rate',
+          'amount',
+          'pay',
+          'charge',
+          'margin',
+          'price',
+          'cost',
+          'total',
+          'total_pay',
+          'total_charge',
+          'total_margin',
+          'total_pay_ex_vat',
+          'total_charge_ex_vat',
+          'total_margin_ex_vat',
+          'vat',
+          'vat_rate',
+          'inc_vat',
+          'code',
+          'label',
+          'name',
+          'id',
+          'sort_order',
+          'order',
+          'seq',
+          'sequence',
+          'version',
+          'day_index',
+          'additional_seq',
+          'week',
+          'date'
+        )
+      )
+      INTO v_has_additional_unit_rows;
+
+      IF COALESCE(v_has_additional_unit_rows, FALSE) THEN
+        v_additional_pay_ex_vat := COALESCE(
+          CASE
+            WHEN NULLIF(BTRIM(COALESCE(v_tsfin_snapshot_json->>'additional_pay_ex_vat', '')), '') ~ v_numeric_re THEN (v_tsfin_snapshot_json->>'additional_pay_ex_vat')::numeric
+            ELSE NULL
+          END,
+          0::numeric
+        );
+
+        v_additional_charge_ex_vat := COALESCE(
           CASE
             WHEN NULLIF(BTRIM(COALESCE(v_tsfin_snapshot_json->>'additional_charge_ex_vat', '')), '') ~ v_numeric_re THEN (v_tsfin_snapshot_json->>'additional_charge_ex_vat')::numeric
             ELSE NULL
           END,
           0::numeric
         );
+
+        v_additional_margin_ex_vat := COALESCE(
+          CASE
+            WHEN NULLIF(BTRIM(COALESCE(v_tsfin_snapshot_json->>'additional_margin_ex_vat', '')), '') ~ v_numeric_re THEN (v_tsfin_snapshot_json->>'additional_margin_ex_vat')::numeric
+            ELSE NULL
+          END,
+          v_additional_charge_ex_vat - v_additional_pay_ex_vat
+        );
+      ELSE
+        v_additional_pay_ex_vat := 0::numeric;
+        v_additional_charge_ex_vat := 0::numeric;
+        v_additional_margin_ex_vat := 0::numeric;
       END IF;
 
       v_expenses_margin_ex_vat := v_expenses_charge_ex_vat - v_expenses_pay_ex_vat;
+      v_nonsegment_pay_ex_vat := v_additional_pay_ex_vat + v_expenses_pay_ex_vat + v_mileage_pay_ex_vat;
+      v_nonsegment_charge_ex_vat := v_additional_charge_ex_vat + v_expenses_charge_ex_vat + v_mileage_charge_ex_vat;
+      v_nonsegment_margin_ex_vat := v_nonsegment_charge_ex_vat - v_nonsegment_pay_ex_vat;
+      v_total_pay_ex_vat := v_nonsegment_pay_ex_vat;
+      v_total_charge_ex_vat := v_nonsegment_charge_ex_vat;
+      v_total_margin_ex_vat := v_total_charge_ex_vat - v_total_pay_ex_vat;
 
       v_effective_invoice_breakdown_json := COALESCE(
         CASE
@@ -8009,15 +8145,16 @@ BEGIN
         'mode', 'SEGMENTS',
         'segments', '[]'::jsonb,
         'additional', jsonb_build_object(
-          'pay_ex_vat', v_expenses_pay_ex_vat,
-          'charge_ex_vat', v_expenses_charge_ex_vat,
-          'margin_ex_vat', v_expenses_margin_ex_vat
+          'units', v_additional_units_json,
+          'pay_ex_vat', v_additional_pay_ex_vat,
+          'charge_ex_vat', v_additional_charge_ex_vat,
+          'margin_ex_vat', v_additional_margin_ex_vat
         ),
         'totals', jsonb_build_object(
           'total_hours', 0,
-          'total_pay_ex_vat', v_expenses_pay_ex_vat,
-          'total_charge_ex_vat', v_expenses_charge_ex_vat,
-          'margin_ex_vat', v_expenses_margin_ex_vat
+          'total_pay_ex_vat', v_total_pay_ex_vat,
+          'total_charge_ex_vat', v_total_charge_ex_vat,
+          'margin_ex_vat', v_total_margin_ex_vat
         )
       );
 
@@ -8040,12 +8177,12 @@ BEGIN
         'total_hours', 0,
         'expenses_pay_ex_vat', v_expenses_pay_ex_vat,
         'expenses_charge_ex_vat', v_expenses_charge_ex_vat,
-        'additional_pay_ex_vat', v_expenses_pay_ex_vat,
-        'additional_charge_ex_vat', v_expenses_charge_ex_vat,
-        'additional_margin_ex_vat', v_expenses_margin_ex_vat,
-        'total_pay_ex_vat', v_expenses_pay_ex_vat,
-        'total_charge_ex_vat', v_expenses_charge_ex_vat,
-        'margin_ex_vat', v_expenses_margin_ex_vat,
+        'additional_pay_ex_vat', v_additional_pay_ex_vat,
+        'additional_charge_ex_vat', v_additional_charge_ex_vat,
+        'additional_margin_ex_vat', v_additional_margin_ex_vat,
+        'total_pay_ex_vat', v_total_pay_ex_vat,
+        'total_charge_ex_vat', v_total_charge_ex_vat,
+        'margin_ex_vat', v_total_margin_ex_vat,
         'actual_schedule_json', '[]'::jsonb,
         'actual_minutes_by_day_json', '{}'::jsonb,
         'invoice_breakdown_json', v_effective_invoice_breakdown_json
@@ -9051,10 +9188,7 @@ BEGIN
 
   RETURN NEXT;
 END;
-$function$;
-
-
-
+$function$
 
 
 
