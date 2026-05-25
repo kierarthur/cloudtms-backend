@@ -102867,7 +102867,7 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
     `${env.SUPABASE_URL}/rest/v1/timesheets` +
       `?timesheet_id=eq.${enc(currentTimesheetId)}` +
       `&is_current=eq.true` +
-      `&select=timesheet_id,is_current,contract_id,authorised_at_server,revoked_at,sheet_scope,submission_mode,line_type,is_adjustment,adjustment_origin,parent_timesheet_id,qr_status`
+      `&select=timesheet_id,is_current,contract_id,authorised_at_server,revoked_at,sheet_scope,submission_mode,line_type,is_adjustment,adjustment_origin,parent_timesheet_id,qr_status,additional_units_week,additional_units_per_day`
   );
   if (!currentTs) return notFound('Timesheet not found');
 
@@ -102907,7 +102907,7 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
     env,
     `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
       `?timesheet_id=eq.${enc(currentTimesheetId)}` +
-      `&select=additional_seq,submission_mode_snapshot,is_adjustment` +
+      `&select=id,totals_json,additional_seq,submission_mode_snapshot,is_adjustment` +
       `&limit=1`
   ).catch(() => null);
 
@@ -103015,6 +103015,116 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
       if (typeof v === 'object') return JSON.stringify(v);
     } catch {}
     return String(v);
+  };
+  const extractExpenseDraftNote = (v) => {
+    if (v === undefined || v === null) return '';
+    if (typeof v === 'object') {
+      const obj = v || {};
+      return String(obj.note ?? obj.notes ?? obj.description ?? '').trim();
+    }
+    const s = String(v || '').trim();
+    if (!s) return '';
+    if ((s.startsWith('{') && s.endsWith('}')) || (s.startsWith('[') && s.endsWith(']'))) {
+      try {
+        const parsed = JSON.parse(s);
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          return String(parsed.note ?? parsed.notes ?? parsed.description ?? '').trim();
+        }
+      } catch {}
+    }
+    return s;
+  };
+
+  const additionalUnitNonCountNumericKeys = new Set([
+    'pay_ex_vat',
+    'charge_ex_vat',
+    'margin_ex_vat',
+    'pay_rate',
+    'charge_rate',
+    'rate',
+    'amount',
+    'pay',
+    'charge',
+    'margin',
+    'price',
+    'cost',
+    'total',
+    'total_pay',
+    'total_charge',
+    'total_margin',
+    'total_pay_ex_vat',
+    'total_charge_ex_vat',
+    'total_margin_ex_vat',
+    'vat',
+    'vat_rate',
+    'inc_vat',
+    'code',
+    'label',
+    'name',
+    'id',
+    'sort_order',
+    'order',
+    'seq',
+    'sequence',
+    'version',
+    'day_index',
+    'additional_seq',
+    'week',
+    'date'
+  ]);
+
+  const additionalUnitHasNonZeroNumericSignal = (value, key = '') => {
+    if (value === null || value === undefined || value === '') return false;
+
+    if (typeof value === 'number' || typeof value === 'string') {
+      const keyNorm = String(key == null ? '' : key).trim().toLowerCase();
+      if (additionalUnitNonCountNumericKeys.has(keyNorm)) return false;
+      const n = Number(value);
+      return Number.isFinite(n) && n !== 0;
+    }
+
+    if (Array.isArray(value)) {
+      return value.some((entry) => additionalUnitHasNonZeroNumericSignal(entry, key));
+    }
+
+    if (typeof value === 'object') {
+      return Object.entries(value).some(([childKey, entry]) => additionalUnitHasNonZeroNumericSignal(entry, childKey));
+    }
+
+    return false;
+  };
+
+  const summariseAdditionalUnits = (unitsRaw) => {
+    const unitsObj = (unitsRaw && typeof unitsRaw === 'object' && !Array.isArray(unitsRaw)) ? unitsRaw : {};
+    let hasUnitRows = false;
+    let hasAmountFields = false;
+    let pay = 0;
+    let charge = 0;
+
+    for (const [unitKey, unit] of Object.entries(unitsObj)) {
+      if (unit === null || unit === undefined || unit === '') continue;
+
+      const hasUnitSignal = additionalUnitHasNonZeroNumericSignal(unit, unitKey);
+      if (hasUnitSignal) hasUnitRows = true;
+
+      if (!hasUnitSignal || !unit || typeof unit !== 'object' || Array.isArray(unit)) continue;
+
+      if (Object.prototype.hasOwnProperty.call(unit, 'pay_ex_vat')) {
+        hasAmountFields = true;
+        pay += num0(unit.pay_ex_vat);
+      }
+      if (Object.prototype.hasOwnProperty.call(unit, 'charge_ex_vat')) {
+        hasAmountFields = true;
+        charge += num0(unit.charge_ex_vat);
+      }
+    }
+
+    return {
+      hasUnitRows,
+      hasAmountFields,
+      pay: round2(pay),
+      charge: round2(charge)
+    };
   };
 
   const KIND_ALIASES = {
@@ -103233,16 +103343,44 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
   const beforeExpChg = round2(num0(before.expenses_charge_ex_vat));
   const beforeMilPay = round2(num0(before.mileage_pay_ex_vat));
   const beforeMilChg = round2(num0(before.mileage_charge_ex_vat));
-  const addPay = round2(num0(before.additional_pay_ex_vat));
-  const addChg = round2(num0(before.additional_charge_ex_vat));
+  const beforeAddPay = round2(num0(before.additional_pay_ex_vat));
+  const beforeAddChg = round2(num0(before.additional_charge_ex_vat));
+  const beforeAddMargin = round2(num0(before.additional_margin_ex_vat));
+  const tsfinAdditionalSummary = summariseAdditionalUnits(before.additional_units_json);
+  const hasTimesheetAdditionalUnitSignal =
+    additionalUnitHasNonZeroNumericSignal(currentTs?.additional_units_week) ||
+    additionalUnitHasNonZeroNumericSignal(currentTs?.additional_units_per_day);
+  const cwTotals = (cw?.totals_json && typeof cw.totals_json === 'object' && !Array.isArray(cw.totals_json))
+    ? cw.totals_json
+    : {};
+  const hasContractWeekAdditionalUnitSignal =
+    additionalUnitHasNonZeroNumericSignal(cwTotals.additional_units_week) ||
+    additionalUnitHasNonZeroNumericSignal(cwTotals.additional_units_per_day);
+  const additionalSummary = {
+    hasUnitRows: tsfinAdditionalSummary.hasUnitRows || hasTimesheetAdditionalUnitSignal || hasContractWeekAdditionalUnitSignal,
+    hasAmountFields: tsfinAdditionalSummary.hasAmountFields,
+    pay: tsfinAdditionalSummary.pay,
+    charge: tsfinAdditionalSummary.charge
+  };
+  const addPay = additionalSummary.hasUnitRows
+    ? (additionalSummary.hasAmountFields ? additionalSummary.pay : beforeAddPay)
+    : 0;
+  const addChg = additionalSummary.hasUnitRows
+    ? (additionalSummary.hasAmountFields ? additionalSummary.charge : beforeAddChg)
+    : 0;
+  const addMargin = round2(addChg - addPay);
+
+  if (addPay !== beforeAddPay) upd.additional_pay_ex_vat = addPay;
+  if (addChg !== beforeAddChg) upd.additional_charge_ex_vat = addChg;
+  if (addMargin !== beforeAddMargin) upd.additional_margin_ex_vat = addMargin;
 
   const afterExpPay = round2(num0(upd.expenses_pay_ex_vat !== undefined ? upd.expenses_pay_ex_vat : before.expenses_pay_ex_vat));
   const afterExpChg = round2(num0(upd.expenses_charge_ex_vat !== undefined ? upd.expenses_charge_ex_vat : before.expenses_charge_ex_vat));
   const afterMilPay = round2(num0(upd.mileage_pay_ex_vat !== undefined ? upd.mileage_pay_ex_vat : before.mileage_pay_ex_vat));
   const afterMilChg = round2(num0(upd.mileage_charge_ex_vat !== undefined ? upd.mileage_charge_ex_vat : before.mileage_charge_ex_vat));
 
-  let corePay = round2(num0(before.total_pay_ex_vat) - addPay - beforeExpPay - beforeMilPay);
-  let coreChg = round2(num0(before.total_charge_ex_vat) - addChg - beforeExpChg - beforeMilChg);
+  let corePay = round2(num0(before.total_pay_ex_vat) - beforeAddPay - beforeExpPay - beforeMilPay);
+  let coreChg = round2(num0(before.total_charge_ex_vat) - beforeAddChg - beforeExpChg - beforeMilChg);
 
   const ib = (before.invoice_breakdown_json && typeof before.invoice_breakdown_json === 'object') ? before.invoice_breakdown_json : {};
   const mode = String(ib?.mode || '').toUpperCase();
@@ -103307,16 +103445,16 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
     const out = { ...ib0 };
 
     const priorAdd = (ib0.additional && typeof ib0.additional === 'object') ? ib0.additional : {};
-    const units = (priorAdd.units && typeof priorAdd.units === 'object')
-      ? priorAdd.units
-      : (before.additional_units_json && typeof before.additional_units_json === 'object' ? before.additional_units_json : {});
+    const units = (before.additional_units_json && typeof before.additional_units_json === 'object' && !Array.isArray(before.additional_units_json))
+      ? before.additional_units_json
+      : ((priorAdd.units && typeof priorAdd.units === 'object' && !Array.isArray(priorAdd.units)) ? priorAdd.units : {});
 
     out.additional = {
       ...priorAdd,
       units,
-      pay_ex_vat: nonsegPay,
-      charge_ex_vat: nonsegChg,
-      margin_ex_vat: nonsegMargin
+      pay_ex_vat: addPay,
+      charge_ex_vat: addChg,
+      margin_ex_vat: addMargin
     };
 
     const priorTot = (ib0.totals && typeof ib0.totals === 'object') ? ib0.totals : {};
@@ -103357,6 +103495,38 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
 
   const json = await res.json().catch(() => []);
   const after = Array.isArray(json) ? json[0] : json;
+  if ((patch.expenses || patch.mileage) && cw?.id && after) {
+    const existingTotals = (cw.totals_json && typeof cw.totals_json === 'object' && !Array.isArray(cw.totals_json))
+      ? cw.totals_json
+      : {};
+    const nextExpensesDraft = {
+      mileage_units: round2(num0(after.mileage_units)),
+      travel_pay: round2(num0(after.travel_pay_ex_vat)),
+      travel_charge: round2(num0(after.travel_charge_ex_vat)),
+      accommodation_pay: round2(num0(after.accommodation_pay_ex_vat)),
+      accommodation_charge: round2(num0(after.accommodation_charge_ex_vat)),
+      other_pay: round2(num0(after.other_pay_ex_vat)),
+      other_charge: round2(num0(after.other_charge_ex_vat)),
+      note: extractExpenseDraftNote(after.expenses_description)
+    };
+
+    const cwSyncRes = await fetch(
+      `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(cw.id)}`,
+      {
+        method: 'PATCH',
+        headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+        body: JSON.stringify({
+          totals_json: { ...existingTotals, expenses_draft: nextExpensesDraft },
+          updated_at: nowISO
+        })
+      }
+    );
+
+    if (!cwSyncRes.ok) {
+      const t = await cwSyncRes.text().catch(() => '');
+      return serverError(`Contract week expense draft sync failed: ${t}`);
+    }
+  }
 
   await insertAuditEvent(env, req, {
     object_type: 'timesheets_financials',
@@ -103417,6 +103587,15 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
     was_stale: !!resolved.was_stale
   });
 }
+
+
+// ============================================================
+// UPDATED: handleTimesheetEvidenceAdd / handleTimesheetEvidenceUpdateKind
+// - Normalizes kind to canonical set where applicable:
+//     MILEAGE, TRAVEL, ACCOMMODATION, OTHER, TIMESHEET
+// - Maps legacy UI "Expenses" -> TRAVEL
+// - Keeps other/system kinds as UPPER(TRIM(...))
+// ============================================================
 
 
 // ============================================================
