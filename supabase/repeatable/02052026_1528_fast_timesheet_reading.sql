@@ -13732,6 +13732,10 @@ END;
 $function$;
 
 
+
+
+
+
 CREATE OR REPLACE FUNCTION public.bulk_timesheet_row_patch_v1(
   p_filters jsonb DEFAULT '{}'::jsonb
 )
@@ -13989,6 +13993,17 @@ BEGIN
       financial_row.actual_schedule_json AS tsfin_actual_schedule_json,
       financial_row.invoice_breakdown_json AS tsfin_invoice_breakdown_json,
       financial_row.total_hours AS tsfin_total_hours,
+      financial_row.expenses_pay_ex_vat AS tsfin_expenses_pay_ex_vat,
+      financial_row.expenses_charge_ex_vat AS tsfin_expenses_charge_ex_vat,
+      financial_row.mileage_units AS tsfin_mileage_units,
+      financial_row.mileage_pay_ex_vat AS tsfin_mileage_pay_ex_vat,
+      financial_row.mileage_charge_ex_vat AS tsfin_mileage_charge_ex_vat,
+      financial_row.travel_pay_ex_vat AS tsfin_travel_pay_ex_vat,
+      financial_row.travel_charge_ex_vat AS tsfin_travel_charge_ex_vat,
+      financial_row.accommodation_pay_ex_vat AS tsfin_accommodation_pay_ex_vat,
+      financial_row.accommodation_charge_ex_vat AS tsfin_accommodation_charge_ex_vat,
+      financial_row.other_pay_ex_vat AS tsfin_other_pay_ex_vat,
+      financial_row.other_charge_ex_vat AS tsfin_other_charge_ex_vat,
       financial_row.authorised_at_utc AS tsfin_authorised_at_utc,
       financial_row.processed_at_utc AS tsfin_processed_at_utc,
       COALESCE(evidence_summary.attached_evidence_count, 0)::integer AS evidence_attached_count,
@@ -14418,6 +14433,17 @@ BEGIN
         COALESCE(final_rows.total_pay_ex_vat::text, ''),
         COALESCE(final_rows.total_charge_ex_vat::text, ''),
         COALESCE(final_rows.margin_ex_vat::text, ''),
+        COALESCE(final_rows.tsfin_expenses_pay_ex_vat::text, ''),
+        COALESCE(final_rows.tsfin_expenses_charge_ex_vat::text, ''),
+        COALESCE(final_rows.tsfin_mileage_units::text, ''),
+        COALESCE(final_rows.tsfin_mileage_pay_ex_vat::text, ''),
+        COALESCE(final_rows.tsfin_mileage_charge_ex_vat::text, ''),
+        COALESCE(final_rows.tsfin_travel_pay_ex_vat::text, ''),
+        COALESCE(final_rows.tsfin_travel_charge_ex_vat::text, ''),
+        COALESCE(final_rows.tsfin_accommodation_pay_ex_vat::text, ''),
+        COALESCE(final_rows.tsfin_accommodation_charge_ex_vat::text, ''),
+        COALESCE(final_rows.tsfin_other_pay_ex_vat::text, ''),
+        COALESCE(final_rows.tsfin_other_charge_ex_vat::text, ''),
         COALESCE(final_rows.issue_codes::text, '')
       )) AS row_signature_calc
     FROM final_rows
@@ -14761,6 +14787,17 @@ BEGIN
         'total_pay_ex_vat', COALESCE(payload_rows.total_pay_ex_vat, 0::numeric),
         'total_charge_ex_vat', COALESCE(payload_rows.total_charge_ex_vat, 0::numeric),
         'margin_ex_vat', COALESCE(payload_rows.margin_ex_vat, 0::numeric),
+        'expenses_pay_ex_vat', payload_rows.tsfin_expenses_pay_ex_vat,
+        'expenses_charge_ex_vat', payload_rows.tsfin_expenses_charge_ex_vat,
+        'mileage_units', payload_rows.tsfin_mileage_units,
+        'mileage_pay_ex_vat', payload_rows.tsfin_mileage_pay_ex_vat,
+        'mileage_charge_ex_vat', payload_rows.tsfin_mileage_charge_ex_vat,
+        'travel_pay_ex_vat', payload_rows.tsfin_travel_pay_ex_vat,
+        'travel_charge_ex_vat', payload_rows.tsfin_travel_charge_ex_vat,
+        'accommodation_pay_ex_vat', payload_rows.tsfin_accommodation_pay_ex_vat,
+        'accommodation_charge_ex_vat', payload_rows.tsfin_accommodation_charge_ex_vat,
+        'other_pay_ex_vat', payload_rows.tsfin_other_pay_ex_vat,
+        'other_charge_ex_vat', payload_rows.tsfin_other_charge_ex_vat,
         'net_delta_ex_vat', COALESCE(payload_rows.net_delta_ex_vat, COALESCE(payload_rows.total_charge_ex_vat, 0::numeric) - COALESCE(payload_rows.total_pay_ex_vat, 0::numeric)),
         'invoice_is_paid', COALESCE(payload_rows.invoice_is_paid, FALSE),
         'invoice_segments_total', COALESCE(payload_rows.invoice_segments_total, 0),
@@ -15035,6 +15072,8 @@ BEGIN
     payload_rows.row_key_calc ASC;
 END;
 $function$;
+
+
 
 
 
