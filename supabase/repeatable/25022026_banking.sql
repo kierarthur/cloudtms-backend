@@ -16049,20 +16049,11 @@ DROP FUNCTION IF EXISTS public.pay_bank_transfers_apply_rail_updates(uuid, jsonb
 
 
 
-
-
-CREATE OR REPLACE FUNCTION public.pay_bank_transfers_apply_rail_updates(
-  p_pay_batch_id uuid,
-  p_updates jsonb,
-  p_actor_user_id uuid DEFAULT NULL::uuid,
-  p_operation_id uuid DEFAULT NULL::uuid,
-  p_transfer_ids jsonb DEFAULT NULL::jsonb,
-  p_chunk_id uuid DEFAULT NULL::uuid
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
+CREATE OR REPLACE FUNCTION public.pay_bank_transfers_apply_rail_updates(p_pay_batch_id uuid, p_updates jsonb, p_actor_user_id uuid DEFAULT NULL::uuid, p_operation_id uuid DEFAULT NULL::uuid, p_transfer_ids jsonb DEFAULT NULL::jsonb, p_chunk_id uuid DEFAULT NULL::uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
 AS $function$
 DECLARE
   v_now timestamptz := now();
@@ -16116,6 +16107,16 @@ DECLARE
   v_counterparty_auto_process_result jsonb := '{}'::jsonb;
   v_counterparty_auto_request_id uuid := NULL::uuid;
   v_counterparty_auto_work_applied_count integer := 0;
+  v_batch_status_before text := NULL::text;
+  v_batch_status_after text := NULL::text;
+  v_execution_commit_state_before text := NULL::text;
+  v_provider_boundary_crossed boolean := false;
+  v_submitted_state_finalisation_attempted boolean := false;
+  v_submitted_state_finalised boolean := false;
+  v_local_finalisation_error text := NULL::text;
+  v_execution_commit_ref_candidate text := NULL::text;
+  v_provider_transfer_total numeric := NULL::numeric;
+  v_has_completed_provider_evidence boolean := false;
 BEGIN
   PERFORM set_config('lock_timeout', '3s', true);
   v_is_scoped := (p_operation_id IS NOT NULL OR p_chunk_id IS NOT NULL OR p_transfer_ids IS NOT NULL);
@@ -16147,6 +16148,10 @@ BEGIN
   IF NOT FOUND THEN
     RAISE EXCEPTION 'pay_bank_transfers_apply_rail_updates: pay_batch % not found', p_pay_batch_id;
   END IF;
+
+  v_batch_status_before := upper(BTRIM(COALESCE(v_batch_row.status, '')));
+  v_batch_status_after := v_batch_status_before;
+  v_execution_commit_state_before := upper(BTRIM(COALESCE(v_batch_row.execution_commit_state, 'NOT_SUBMITTED')));
 
   IF p_operation_id IS NOT NULL THEN
     SELECT operation_row.*
@@ -17815,14 +17820,92 @@ BEGIN
     v_requires_review := COALESCE(v_failed_count, 0) > 0
       OR COALESCE(v_ambiguous_count, 0) > 0
       OR COALESCE(v_provider_attempt_without_external_id_count, 0) > 0;
-    v_can_mark_submitted := false;
-    v_can_mark_committed := false;
-    v_execution_commit_state := upper(BTRIM(COALESCE(v_batch_row.execution_commit_state, 'NOT_SUBMITTED')));
-    IF v_execution_commit_state NOT IN ('NOT_SUBMITTED', 'SUBMITTED_NOT_COMMITTED', 'COMMITTED') THEN
-      v_execution_commit_state := 'NOT_SUBMITTED';
+
+    SELECT COALESCE(
+             NULLIF(BTRIM(COALESCE(scoped_row.rail_tx_id, '')), ''),
+             NULLIF(BTRIM(COALESCE(scoped_row.provider_reference, '')), ''),
+             NULLIF(BTRIM(COALESCE(scoped_row.provider_event_id, '')), ''),
+             NULLIF(BTRIM(COALESCE(scoped_row.provider_submit_diagnostic->>'provider_transaction_id', '')), ''),
+             NULLIF(BTRIM(COALESCE(scoped_row.provider_submit_diagnostic->>'provider_payment_id', '')), ''),
+             NULLIF(BTRIM(COALESCE(scoped_row.provider_submit_diagnostic->>'rail_tx_id', '')), ''),
+             NULLIF(BTRIM(COALESCE(scoped_row.provider_submit_diagnostic->>'provider_reference', '')), '')
+           )
+    INTO v_execution_commit_ref_candidate
+    FROM pg_temp.tmp_pay_bank_transfer_updates AS scoped_row
+    WHERE scoped_row.is_provider_evidence IS TRUE
+    ORDER BY CASE
+        WHEN NULLIF(BTRIM(COALESCE(scoped_row.rail_tx_id, '')), '') IS NOT NULL THEN 0
+        WHEN NULLIF(BTRIM(COALESCE(scoped_row.provider_submit_diagnostic->>'provider_transaction_id', '')), '') IS NOT NULL THEN 1
+        WHEN NULLIF(BTRIM(COALESCE(scoped_row.provider_submit_diagnostic->>'provider_payment_id', '')), '') IS NOT NULL THEN 2
+        WHEN NULLIF(BTRIM(COALESCE(scoped_row.provider_reference, '')), '') IS NOT NULL THEN 3
+        WHEN NULLIF(BTRIM(COALESCE(scoped_row.provider_event_id, '')), '') IS NOT NULL THEN 4
+        ELSE 5
+      END,
+      scoped_row.row_seq
+    LIMIT 1;
+
+    SELECT COALESCE(SUM(COALESCE(transfer_row.amount, 0)), 0)
+    INTO v_provider_transfer_total
+    FROM pg_temp.tmp_pay_bank_transfer_updates AS scoped_row
+    JOIN public.pay_bank_transfers AS transfer_row
+      ON transfer_row.id = scoped_row.transfer_id
+     AND transfer_row.pay_batch_id = p_pay_batch_id
+    WHERE scoped_row.is_provider_evidence IS TRUE;
+
+    SELECT EXISTS (
+      SELECT 1
+      FROM pg_temp.tmp_pay_bank_transfer_updates AS scoped_row
+      WHERE scoped_row.is_provider_evidence IS TRUE
+        AND (
+          scoped_row.transfer_status IN ('COMPLETED', 'COMMITTED', 'SETTLED', 'PAID', 'EXECUTED')
+          OR scoped_row.normalised_state IN ('COMPLETED', 'COMMITTED', 'SETTLED', 'PAID', 'EXECUTED')
+          OR scoped_row.completed_at_utc IS NOT NULL
+        )
+    )
+    INTO v_has_completed_provider_evidence;
+
+    v_provider_boundary_crossed := (
+      COALESCE(v_provider_acceptance_evidence_count, 0) > 0
+      AND COALESCE(v_provider_external_evidence_count, 0) > 0
+      AND COALESCE(v_remaining_submit_attempt_required, 0) = 0
+      AND COALESCE(v_failed_count, 0) = 0
+      AND COALESCE(v_ambiguous_count, 0) = 0
+      AND COALESCE(v_provider_attempt_without_external_id_count, 0) = 0
+      AND NULLIF(BTRIM(COALESCE(v_execution_commit_ref_candidate, '')), '') IS NOT NULL
+    );
+
+    v_can_mark_committed := COALESCE(v_provider_boundary_crossed, false) IS TRUE
+      AND COALESCE(v_has_completed_provider_evidence, false) IS TRUE
+      AND COALESCE(v_requires_review, false) IS NOT TRUE;
+
+    v_can_mark_submitted := COALESCE(v_provider_boundary_crossed, false) IS TRUE
+      AND COALESCE(v_can_mark_committed, false) IS NOT TRUE
+      AND COALESCE(v_requires_review, false) IS NOT TRUE;
+
+    v_submitted_state_finalisation_attempted := COALESCE(v_provider_boundary_crossed, false) IS TRUE
+      AND upper(BTRIM(COALESCE(v_batch_row.status, ''))) NOT IN ('SETTLED', 'CANCELLED', 'FAILED', 'BLOCKED_FUNDS')
+      AND upper(BTRIM(COALESCE(v_batch_row.execution_commit_state, 'NOT_SUBMITTED'))) <> 'COMMITTED';
+
+    IF v_can_mark_committed THEN
+      v_execution_commit_state := 'COMMITTED';
+    ELSIF v_can_mark_submitted THEN
+      v_execution_commit_state := 'SUBMITTED_NOT_COMMITTED';
+    ELSE
+      v_execution_commit_state := upper(BTRIM(COALESCE(v_batch_row.execution_commit_state, 'NOT_SUBMITTED')));
+      IF v_execution_commit_state NOT IN ('NOT_SUBMITTED', 'SUBMITTED_NOT_COMMITTED', 'COMMITTED') THEN
+        v_execution_commit_state := 'NOT_SUBMITTED';
+      END IF;
     END IF;
-    v_execution_commit_ref := CASE WHEN v_execution_commit_state = 'NOT_SUBMITTED' THEN NULL::text ELSE v_batch_row.execution_commit_ref END;
-    v_execution_committed_at_utc := CASE WHEN v_execution_commit_state = 'COMMITTED' THEN v_batch_row.execution_committed_at_utc ELSE NULL::timestamptz END;
+
+    v_execution_commit_ref := CASE
+      WHEN v_execution_commit_state IN ('SUBMITTED_NOT_COMMITTED', 'COMMITTED') THEN COALESCE(NULLIF(BTRIM(COALESCE(v_batch_row.execution_commit_ref, '')), ''), v_execution_commit_ref_candidate)
+      ELSE NULL::text
+    END;
+
+    v_execution_committed_at_utc := CASE
+      WHEN v_execution_commit_state = 'COMMITTED' THEN COALESCE(v_batch_row.execution_committed_at_utc, v_now)
+      ELSE NULL::timestamptz
+    END;
 
     v_submission_evidence_json := jsonb_build_object(
       'scoped', true,
@@ -17841,8 +17924,14 @@ BEGIN
       'remaining_provider_evidence_required', COALESCE(v_remaining_provider_evidence_required, 0),
       'requires_provider_poll', COALESCE(v_requires_provider_poll, false),
       'requires_review', COALESCE(v_requires_review, false),
-      'can_mark_submitted', false,
-      'can_mark_committed', false
+      'provider_boundary_crossed', COALESCE(v_provider_boundary_crossed, false),
+      'provider_acceptance_evidence_count', COALESCE(v_provider_acceptance_evidence_count, 0),
+      'provider_external_evidence_count', COALESCE(v_provider_external_evidence_count, 0),
+      'execution_commit_ref_candidate', v_execution_commit_ref_candidate,
+      'provider_transfer_total', v_provider_transfer_total,
+      'can_mark_submitted', COALESCE(v_can_mark_submitted, false),
+      'can_mark_committed', COALESCE(v_can_mark_committed, false),
+      'submitted_state_finalisation_attempted', COALESCE(v_submitted_state_finalisation_attempted, false)
     );
 
     v_summary_json := jsonb_build_object(
@@ -17857,6 +17946,12 @@ BEGIN
       'pending_count', COALESCE(v_pending_count, 0),
       'ambiguous_count', COALESCE(v_ambiguous_count, 0),
       'requires_review', COALESCE(v_requires_review, false),
+      'provider_boundary_crossed', COALESCE(v_provider_boundary_crossed, false),
+      'can_mark_submitted', COALESCE(v_can_mark_submitted, false),
+      'can_mark_committed', COALESCE(v_can_mark_committed, false),
+      'execution_commit_ref_candidate', v_execution_commit_ref_candidate,
+      'provider_transfer_total', v_provider_transfer_total,
+      'submitted_state_finalisation_attempted', COALESCE(v_submitted_state_finalisation_attempted, false),
       'counterparty_not_found_recovery_count', COALESCE(v_counterparty_map_recovery_count, 0),
       'counterparty_not_found_invalidated_map_count', COALESCE(v_counterparty_map_invalidated_count, 0),
       'counterparty_not_found_auto_reverse_requested_count', COALESCE(v_counterparty_map_auto_reverse_requested_count, 0),
@@ -17868,8 +17963,60 @@ BEGIN
     );
 
     UPDATE public.pay_batches AS batch_update
-    SET last_status_checked_at_utc = v_now
-    WHERE batch_update.id = p_pay_batch_id;
+    SET status = CASE
+          WHEN upper(BTRIM(COALESCE(batch_update.status, ''))) IN ('SETTLED', 'CANCELLED', 'FAILED', 'BLOCKED_FUNDS') THEN batch_update.status
+          WHEN COALESCE(v_can_mark_submitted, false) IS TRUE OR COALESCE(v_can_mark_committed, false) IS TRUE THEN 'WAITING_BANK_CONFIRM'
+          ELSE batch_update.status
+        END,
+        execution_commit_state = CASE
+          WHEN upper(BTRIM(COALESCE(batch_update.execution_commit_state, 'NOT_SUBMITTED'))) = 'COMMITTED' THEN batch_update.execution_commit_state
+          WHEN upper(BTRIM(COALESCE(batch_update.status, ''))) IN ('SETTLED', 'CANCELLED', 'FAILED', 'BLOCKED_FUNDS') THEN batch_update.execution_commit_state
+          WHEN COALESCE(v_can_mark_committed, false) IS TRUE THEN 'COMMITTED'
+          WHEN COALESCE(v_can_mark_submitted, false) IS TRUE THEN 'SUBMITTED_NOT_COMMITTED'
+          ELSE batch_update.execution_commit_state
+        END,
+        execution_commit_ref = CASE
+          WHEN upper(BTRIM(COALESCE(batch_update.status, ''))) IN ('SETTLED', 'CANCELLED', 'FAILED', 'BLOCKED_FUNDS') THEN batch_update.execution_commit_ref
+          WHEN COALESCE(v_can_mark_submitted, false) IS TRUE OR COALESCE(v_can_mark_committed, false) IS TRUE THEN COALESCE(NULLIF(BTRIM(COALESCE(batch_update.execution_commit_ref, '')), ''), v_execution_commit_ref_candidate)
+          ELSE batch_update.execution_commit_ref
+        END,
+        execution_committed_at_utc = CASE
+          WHEN upper(BTRIM(COALESCE(batch_update.execution_commit_state, 'NOT_SUBMITTED'))) = 'COMMITTED' THEN batch_update.execution_committed_at_utc
+          WHEN upper(BTRIM(COALESCE(batch_update.status, ''))) IN ('SETTLED', 'CANCELLED', 'FAILED', 'BLOCKED_FUNDS') THEN batch_update.execution_committed_at_utc
+          WHEN COALESCE(v_can_mark_committed, false) IS TRUE THEN COALESCE(batch_update.execution_committed_at_utc, v_execution_committed_at_utc, v_now)
+          WHEN COALESCE(v_can_mark_submitted, false) IS TRUE THEN NULL::timestamptz
+          ELSE batch_update.execution_committed_at_utc
+        END,
+        total_bank_out = CASE
+          WHEN (COALESCE(v_can_mark_submitted, false) IS TRUE OR COALESCE(v_can_mark_committed, false) IS TRUE)
+           AND batch_update.total_bank_out IS NULL THEN COALESCE(v_provider_transfer_total, batch_update.total_bank_out)
+          ELSE batch_update.total_bank_out
+        END,
+        executing_started_at_utc = CASE
+          WHEN COALESCE(v_can_mark_submitted, false) IS TRUE OR COALESCE(v_can_mark_committed, false) IS TRUE THEN COALESCE(batch_update.executing_started_at_utc, v_now)
+          ELSE batch_update.executing_started_at_utc
+        END,
+        last_status_checked_at_utc = v_now
+    WHERE batch_update.id = p_pay_batch_id
+    RETURNING upper(BTRIM(COALESCE(batch_update.status, ''))),
+              upper(BTRIM(COALESCE(batch_update.execution_commit_state, 'NOT_SUBMITTED'))),
+              batch_update.execution_commit_ref,
+              batch_update.execution_committed_at_utc
+    INTO v_batch_status_after,
+         v_execution_commit_state,
+         v_execution_commit_ref,
+         v_execution_committed_at_utc;
+
+    v_submitted_state_finalised := COALESCE(v_provider_boundary_crossed, false) IS TRUE
+      AND v_execution_commit_state IN ('SUBMITTED_NOT_COMMITTED', 'COMMITTED');
+
+    IF COALESCE(v_provider_boundary_crossed, false) IS TRUE
+      AND COALESCE(v_submitted_state_finalised, false) IS NOT TRUE
+      AND upper(BTRIM(COALESCE(v_batch_status_after, ''))) NOT IN ('SETTLED', 'CANCELLED', 'FAILED', 'BLOCKED_FUNDS') THEN
+      v_local_finalisation_error := 'PROVIDER_ACCEPTED_LOCAL_BATCH_FINALISATION_NOT_APPLIED';
+    ELSE
+      v_local_finalisation_error := NULL::text;
+    END IF;
   ELSE
   v_submission_evidence_json := public.pay_batch_submission_evidence(p_pay_batch_id);
   v_provider_submitted_count := coalesce((v_submission_evidence_json->>'provider_submitted_count')::integer, 0);
@@ -18048,7 +18195,15 @@ BEGIN
       execution_commit_state = v_execution_commit_state,
       execution_commit_ref = CASE WHEN v_execution_commit_state = 'NOT_SUBMITTED' THEN NULL ELSE v_execution_commit_ref END,
       execution_committed_at_utc = CASE WHEN v_execution_commit_state = 'COMMITTED' THEN COALESCE(v_execution_committed_at_utc, v_now) ELSE NULL::timestamptz END
-  WHERE batch_update.id = p_pay_batch_id;
+  WHERE batch_update.id = p_pay_batch_id
+  RETURNING upper(BTRIM(COALESCE(batch_update.status, ''))),
+            upper(BTRIM(COALESCE(batch_update.execution_commit_state, 'NOT_SUBMITTED'))),
+            batch_update.execution_commit_ref,
+            batch_update.execution_committed_at_utc
+  INTO v_batch_status_after,
+       v_execution_commit_state,
+       v_execution_commit_ref,
+       v_execution_committed_at_utc;
   END IF;
 
   IF v_is_scoped IS NOT TRUE THEN
@@ -18124,6 +18279,22 @@ BEGIN
           'provider_external_evidence_count', COALESCE(v_provider_external_evidence_count, 0),
           'provider_response_present_count', COALESCE(v_provider_response_present_count, 0),
           'provider_submission_unknown_count', COALESCE(v_provider_submission_unknown_count, 0),
+          'batch_execution_state', jsonb_build_object(
+            'submitted_state_finalisation_attempted', COALESCE(v_submitted_state_finalisation_attempted, false),
+            'submitted_state_finalised', COALESCE(v_submitted_state_finalised, false),
+            'batch_status_before', v_batch_status_before,
+            'batch_status_after', v_batch_status_after,
+            'execution_commit_state_before', v_execution_commit_state_before,
+            'execution_commit_state_after', v_execution_commit_state,
+            'execution_commit_ref_selected', CASE WHEN v_execution_commit_state = 'NOT_SUBMITTED' THEN NULL ELSE v_execution_commit_ref END,
+            'execution_committed_at_utc', CASE WHEN v_execution_commit_state = 'COMMITTED' THEN COALESCE(v_execution_committed_at_utc, v_now)::text ELSE NULL END,
+            'provider_boundary_crossed', COALESCE(v_provider_boundary_crossed, false),
+            'provider_acceptance_evidence_count', COALESCE(v_provider_acceptance_evidence_count, 0),
+            'provider_external_evidence_count', COALESCE(v_provider_external_evidence_count, 0),
+            'remaining_submit_attempt_required', COALESCE(v_remaining_submit_attempt_required, 0),
+            'requires_review', COALESCE(v_requires_review, false),
+            'local_finalisation_error', v_local_finalisation_error
+          ),
           'counterparty_not_found_recovery_count', COALESCE(v_counterparty_map_recovery_count, 0),
           'counterparty_not_found_invalidated_map_count', COALESCE(v_counterparty_map_invalidated_count, 0),
           'counterparty_not_found_auto_reverse_requested_count', COALESCE(v_counterparty_map_auto_reverse_requested_count, 0),
@@ -18167,6 +18338,16 @@ BEGIN
     'provider_response_present_count', COALESCE(v_provider_response_present_count, 0),
     'provider_request_sent_count', COALESCE(v_provider_request_sent_count, 0),
     'provider_submission_unknown_count', COALESCE(v_provider_submission_unknown_count, 0),
+    'provider_boundary_crossed', COALESCE(v_provider_boundary_crossed, false),
+    'submitted_state_finalisation_attempted', COALESCE(v_submitted_state_finalisation_attempted, false),
+    'submitted_state_finalised', COALESCE(v_submitted_state_finalised, false),
+    'batch_status_before', v_batch_status_before,
+    'batch_status_after', v_batch_status_after,
+    'execution_commit_state_before', v_execution_commit_state_before,
+    'execution_commit_state_after', v_execution_commit_state,
+    'execution_commit_ref_selected', CASE WHEN v_execution_commit_state = 'NOT_SUBMITTED' THEN NULL ELSE v_execution_commit_ref END,
+    'provider_transfer_total', v_provider_transfer_total,
+    'local_finalisation_error', v_local_finalisation_error,
     'counterparty_not_found_recovery_count', COALESCE(v_counterparty_map_recovery_count, 0),
     'counterparty_not_found_invalidated_map_count', COALESCE(v_counterparty_map_invalidated_count, 0),
     'counterparty_not_found_auto_reverse_requested_count', COALESCE(v_counterparty_map_auto_reverse_requested_count, 0),
@@ -18176,6 +18357,19 @@ BEGIN
     'counterparty_not_found_readiness_enqueue', COALESCE(v_counterparty_map_readiness_enqueue_json, '[]'::jsonb),
     'blocked_funds_state', COALESCE(v_summary_json->'blocked_funds_state', '{}'::jsonb),
     'batch_execution_state', jsonb_build_object(
+      'submitted_state_finalisation_attempted', COALESCE(v_submitted_state_finalisation_attempted, false),
+      'submitted_state_finalised', COALESCE(v_submitted_state_finalised, false),
+      'batch_status_before', v_batch_status_before,
+      'batch_status_after', v_batch_status_after,
+      'execution_commit_state_before', v_execution_commit_state_before,
+      'execution_commit_state_after', v_execution_commit_state,
+      'execution_commit_ref_selected', CASE WHEN v_execution_commit_state = 'NOT_SUBMITTED' THEN NULL ELSE v_execution_commit_ref END,
+      'provider_boundary_crossed', COALESCE(v_provider_boundary_crossed, false),
+      'provider_acceptance_evidence_count', COALESCE(v_provider_acceptance_evidence_count, 0),
+      'provider_external_evidence_count', COALESCE(v_provider_external_evidence_count, 0),
+      'remaining_submit_attempt_required', COALESCE(v_remaining_submit_attempt_required, 0),
+      'requires_review', COALESCE(v_requires_review, false),
+      'local_finalisation_error', v_local_finalisation_error,
       'execution_commit_state', v_execution_commit_state,
       'execution_commit_ref', CASE WHEN v_execution_commit_state = 'NOT_SUBMITTED' THEN NULL ELSE v_execution_commit_ref END,
       'execution_committed_at_utc', CASE WHEN v_execution_commit_state = 'COMMITTED' THEN COALESCE(v_execution_committed_at_utc, v_now)::text ELSE NULL END,
@@ -18190,9 +18384,6 @@ BEGIN
   );
 END;
 $function$;
-
-
-
 
 
 
