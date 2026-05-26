@@ -76640,8 +76640,6 @@ $function$;
 
 DROP FUNCTION IF EXISTS public.pay_batch_submission_evidence(uuid);
 
-
-
 CREATE OR REPLACE FUNCTION public.pay_batch_submission_evidence(
   p_pay_batch_id uuid,
   p_counts_only boolean,
@@ -77441,7 +77439,10 @@ BEGIN
     'provider_boundary_crossed', COALESCE(v_provider_boundary_crossed, false),
     'provider_acceptance_evidence_present', COALESCE(v_provider_acceptance_evidence_present, false),
     'provider_external_evidence_count', COALESCE(v_provider_external_evidence_count, 0),
-    'local_finalisation_required', COALESCE(v_local_finalisation_required, false),
+    'local_finalisation_required', COALESCE(v_local_finalisation_required, false)
+  )
+  ||
+  jsonb_build_object(
     'raw_batch_status', v_raw_batch_status,
     'raw_execution_commit_state', v_raw_execution_commit_state,
     'safe_to_retry_provider', COALESCE(v_safe_to_retry_provider, false),
@@ -78202,47 +78203,6 @@ BEGIN
   );
 END;
 $function$;
-
-CREATE OR REPLACE FUNCTION public.pay_batch_submission_evidence(
-  p_pay_batch_id uuid,
-  p_counts_only boolean,
-  p_operation_id uuid
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
-AS $function$
-BEGIN
-  RETURN public.pay_batch_submission_evidence(
-    p_pay_batch_id := p_pay_batch_id,
-    p_counts_only := p_counts_only,
-    p_operation_id := p_operation_id,
-    p_chunk_id := NULL::uuid
-  );
-END;
-$function$;
-
-CREATE OR REPLACE FUNCTION public.pay_batch_submission_evidence(
-  p_pay_batch_id uuid,
-  p_counts_only boolean DEFAULT false
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
-AS $function$
-BEGIN
-  RETURN public.pay_batch_submission_evidence(
-    p_pay_batch_id := p_pay_batch_id,
-    p_counts_only := p_counts_only,
-    p_operation_id := NULL::uuid,
-    p_chunk_id := NULL::uuid
-  );
-END;
-$function$;
-
-
 
 
 
