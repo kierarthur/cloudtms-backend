@@ -5318,16 +5318,11 @@ DROP FUNCTION IF EXISTS public.pay_execute_bank_transfer_chunk_prepare(uuid, uui
 
 
 DROP FUNCTION IF EXISTS public.pay_execute_bank_transfer_chunk_prepare(uuid, uuid, jsonb, uuid);
-CREATE OR REPLACE FUNCTION public.pay_execute_bank_transfer_chunk_prepare(
-  p_operation_id uuid,
-  p_pay_batch_id uuid,
-  p_transfer_scope_ids jsonb,
-  p_actor_user_id uuid
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public', 'pg_temp'
+CREATE OR REPLACE FUNCTION public.pay_execute_bank_transfer_chunk_prepare(p_operation_id uuid, p_pay_batch_id uuid, p_transfer_scope_ids jsonb, p_actor_user_id uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
 AS $function$
 DECLARE
   v_now timestamptz := now();
@@ -5353,6 +5348,19 @@ DECLARE
   v_final_scope_failed_count integer := 0;
   v_final_scope_skipped_count integer := 0;
   v_final_scope_without_transfer_count integer := 0;
+  v_scope_linked_transfer_count integer := 0;
+  v_requested_item_count integer := 0;
+  v_item_linked_count integer := 0;
+  v_item_already_linked_count integer := 0;
+  v_item_link_failed_count integer := 0;
+  v_item_missing_count integer := 0;
+  v_item_voided_count integer := 0;
+  v_item_invalid_uuid_count integer := 0;
+  v_item_conflict_count integer := 0;
+  v_item_wrong_batch_count integer := 0;
+  v_empty_item_list_count integer := 0;
+  v_all_requested_items_linked boolean := false;
+  v_item_problem_samples jsonb := '[]'::jsonb;
   v_all_requested_scopes_authorisation_ready boolean := false;
   v_hard_blocker boolean := false;
   v_result_code text := NULL::text;
@@ -5877,28 +5885,6 @@ BEGIN
     RETURNING transfer_scope_update.id,
               transfer_scope_update.pay_bank_transfer_id,
               upserted_transfers.was_inserted
-  ), item_links AS (
-    UPDATE public.pay_batch_items AS batch_item_update
-    SET pay_bank_transfer_id = linked_scope.pay_bank_transfer_id,
-        bank_reference = COALESCE(batch_item_update.bank_reference, bank_transfer.payment_reference),
-        updated_at = v_now
-    FROM linked_scope
-    JOIN public.banking_pay_operation_transfer_scope AS transfer_scope
-      ON transfer_scope.id = linked_scope.id
-    JOIN public.pay_bank_transfers AS bank_transfer
-      ON bank_transfer.id = linked_scope.pay_bank_transfer_id
-    WHERE batch_item_update.id IN (
-        SELECT item_id.value::uuid
-        FROM jsonb_array_elements_text(COALESCE(transfer_scope.pay_batch_item_ids_json, '[]'::jsonb)) AS item_id(value)
-        WHERE item_id.value ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
-      )
-      AND EXISTS (
-        SELECT 1
-        FROM public.pay_batch_candidates AS batch_candidate
-        WHERE batch_candidate.id = batch_item_update.pay_batch_candidate_id
-          AND batch_candidate.pay_batch_id = p_pay_batch_id
-      )
-    RETURNING batch_item_update.id
   )
   SELECT count(*) FILTER (WHERE linked_scope.was_inserted)::integer,
          count(*) FILTER (WHERE linked_scope.was_inserted IS NOT TRUE)::integer
@@ -5921,6 +5907,220 @@ BEGIN
   FROM failed_requested_scope;
 
   v_reused_count := COALESCE(v_existing_prepared_reused_count, 0) + COALESCE(v_reused_count, 0);
+
+  DROP TABLE IF EXISTS pg_temp.tmp_prepare_requested_item_eval;
+  CREATE TEMPORARY TABLE pg_temp.tmp_prepare_requested_item_eval (
+    eval_id bigserial PRIMARY KEY,
+    transfer_scope_id uuid NOT NULL,
+    pay_batch_id uuid NOT NULL,
+    pay_channel text NULL,
+    transfer_group_key text NULL,
+    scope_status text NOT NULL,
+    pay_bank_transfer_id uuid NULL,
+    item_id_text text NULL,
+    item_id uuid NULL,
+    item_id_valid_uuid boolean NOT NULL DEFAULT false,
+    item_exists boolean NOT NULL DEFAULT false,
+    item_wrong_batch boolean NOT NULL DEFAULT false,
+    item_voided boolean NOT NULL DEFAULT false,
+    item_already_linked_same boolean NOT NULL DEFAULT false,
+    item_conflict boolean NOT NULL DEFAULT false,
+    item_can_link boolean NOT NULL DEFAULT false,
+    item_linked boolean NOT NULL DEFAULT false,
+    item_failure_reason text NULL
+  ) ON COMMIT DROP;
+
+  SELECT COUNT(*) FILTER (
+           WHERE jsonb_array_length(
+             CASE
+               WHEN jsonb_typeof(COALESCE(scope_for_empty_items.pay_batch_item_ids_json, '[]'::jsonb)) = 'array'
+                 THEN COALESCE(scope_for_empty_items.pay_batch_item_ids_json, '[]'::jsonb)
+               ELSE '[]'::jsonb
+             END
+           ) = 0
+         )::integer
+  INTO v_empty_item_list_count
+  FROM public.banking_pay_operation_transfer_scope AS scope_for_empty_items
+  JOIN pg_temp.tmp_transfer_scope_request AS requested_scope
+    ON requested_scope.transfer_scope_id = scope_for_empty_items.id
+  WHERE scope_for_empty_items.operation_id = p_operation_id
+    AND scope_for_empty_items.pay_batch_id = p_pay_batch_id;
+
+  INSERT INTO pg_temp.tmp_prepare_requested_item_eval (
+    transfer_scope_id,
+    pay_batch_id,
+    pay_channel,
+    transfer_group_key,
+    scope_status,
+    pay_bank_transfer_id,
+    item_id_text,
+    item_id,
+    item_id_valid_uuid
+  )
+  SELECT requested_operation_scope.id,
+         requested_operation_scope.pay_batch_id,
+         requested_operation_scope.pay_channel,
+         requested_operation_scope.transfer_group_key,
+         upper(BTRIM(COALESCE(requested_operation_scope.status, ''))),
+         requested_operation_scope.pay_bank_transfer_id,
+         NULLIF(BTRIM(COALESCE(requested_item.value, '')), ''),
+         CASE
+           WHEN NULLIF(BTRIM(COALESCE(requested_item.value, '')), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+             THEN NULLIF(BTRIM(COALESCE(requested_item.value, '')), '')::uuid
+           ELSE NULL::uuid
+         END,
+         COALESCE((NULLIF(BTRIM(COALESCE(requested_item.value, '')), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'), false)
+  FROM public.banking_pay_operation_transfer_scope AS requested_operation_scope
+  JOIN pg_temp.tmp_transfer_scope_request AS requested_scope
+    ON requested_scope.transfer_scope_id = requested_operation_scope.id
+  CROSS JOIN LATERAL jsonb_array_elements_text(
+    CASE
+      WHEN jsonb_typeof(COALESCE(requested_operation_scope.pay_batch_item_ids_json, '[]'::jsonb)) = 'array'
+        THEN COALESCE(requested_operation_scope.pay_batch_item_ids_json, '[]'::jsonb)
+      ELSE '[]'::jsonb
+    END
+  ) AS requested_item(value)
+  WHERE requested_operation_scope.operation_id = p_operation_id
+    AND requested_operation_scope.pay_batch_id = p_pay_batch_id;
+
+  WITH item_state AS (
+    SELECT item_eval.eval_id,
+           batch_item.id AS pay_batch_item_id,
+           batch_candidate.id AS pay_batch_candidate_id,
+           batch_candidate.pay_batch_id AS candidate_pay_batch_id,
+           COALESCE(batch_item.is_voided, false) AS is_voided,
+           batch_item.pay_bank_transfer_id AS existing_pay_bank_transfer_id
+    FROM pg_temp.tmp_prepare_requested_item_eval AS item_eval
+    LEFT JOIN public.pay_batch_items AS batch_item
+      ON batch_item.id = item_eval.item_id
+    LEFT JOIN public.pay_batch_candidates AS batch_candidate
+      ON batch_candidate.id = batch_item.pay_batch_candidate_id
+  )
+  UPDATE pg_temp.tmp_prepare_requested_item_eval AS item_eval_update
+  SET item_exists = item_state.pay_batch_item_id IS NOT NULL,
+      item_wrong_batch = item_state.pay_batch_item_id IS NOT NULL
+        AND (item_state.pay_batch_candidate_id IS NULL OR item_state.candidate_pay_batch_id <> p_pay_batch_id),
+      item_voided = item_state.pay_batch_item_id IS NOT NULL
+        AND item_state.pay_batch_candidate_id IS NOT NULL
+        AND item_state.candidate_pay_batch_id = p_pay_batch_id
+        AND item_state.is_voided IS TRUE,
+      item_already_linked_same = item_state.pay_batch_item_id IS NOT NULL
+        AND item_state.pay_batch_candidate_id IS NOT NULL
+        AND item_state.candidate_pay_batch_id = p_pay_batch_id
+        AND item_state.existing_pay_bank_transfer_id IS NOT NULL
+        AND item_state.existing_pay_bank_transfer_id = item_eval_update.pay_bank_transfer_id,
+      item_conflict = item_state.pay_batch_item_id IS NOT NULL
+        AND item_state.pay_batch_candidate_id IS NOT NULL
+        AND item_state.candidate_pay_batch_id = p_pay_batch_id
+        AND item_state.existing_pay_bank_transfer_id IS NOT NULL
+        AND (
+          item_eval_update.pay_bank_transfer_id IS NULL
+          OR item_state.existing_pay_bank_transfer_id <> item_eval_update.pay_bank_transfer_id
+        ),
+      item_can_link = item_eval_update.item_id_valid_uuid IS TRUE
+        AND item_state.pay_batch_item_id IS NOT NULL
+        AND item_state.pay_batch_candidate_id IS NOT NULL
+        AND item_state.candidate_pay_batch_id = p_pay_batch_id
+        AND item_state.is_voided IS NOT TRUE
+        AND item_eval_update.scope_status = 'PREPARED'
+        AND item_eval_update.pay_bank_transfer_id IS NOT NULL
+        AND (
+          item_state.existing_pay_bank_transfer_id IS NULL
+          OR item_state.existing_pay_bank_transfer_id = item_eval_update.pay_bank_transfer_id
+        ),
+      item_failure_reason = CASE
+        WHEN item_eval_update.item_id_valid_uuid IS NOT TRUE THEN 'ITEM_ID_INVALID_UUID'
+        WHEN item_state.pay_batch_item_id IS NULL THEN 'ITEM_NOT_FOUND'
+        WHEN item_state.pay_batch_candidate_id IS NULL OR item_state.candidate_pay_batch_id <> p_pay_batch_id THEN 'ITEM_WRONG_BATCH'
+        WHEN item_state.is_voided IS TRUE THEN 'ITEM_VOIDED'
+        WHEN item_state.existing_pay_bank_transfer_id IS NOT NULL
+         AND (item_eval_update.pay_bank_transfer_id IS NULL OR item_state.existing_pay_bank_transfer_id <> item_eval_update.pay_bank_transfer_id) THEN 'ITEM_LINKED_TO_DIFFERENT_TRANSFER'
+        WHEN item_eval_update.scope_status <> 'PREPARED' THEN 'ITEM_SCOPE_NOT_PREPARED'
+        WHEN item_eval_update.pay_bank_transfer_id IS NULL THEN 'ITEM_SCOPE_WITHOUT_TRANSFER'
+        ELSE NULL::text
+      END
+  FROM item_state
+  WHERE item_state.eval_id = item_eval_update.eval_id;
+
+  WITH linkable_items AS (
+    SELECT item_eval.eval_id,
+           item_eval.item_id,
+           item_eval.pay_bank_transfer_id,
+           bank_transfer.payment_reference
+    FROM pg_temp.tmp_prepare_requested_item_eval AS item_eval
+    JOIN public.pay_bank_transfers AS bank_transfer
+      ON bank_transfer.id = item_eval.pay_bank_transfer_id
+     AND bank_transfer.pay_batch_id = item_eval.pay_batch_id
+     AND bank_transfer.pay_channel = item_eval.pay_channel
+     AND bank_transfer.transfer_group_key = item_eval.transfer_group_key
+    WHERE item_eval.item_can_link IS TRUE
+      AND item_eval.item_already_linked_same IS NOT TRUE
+  ), updated_item_links AS (
+    UPDATE public.pay_batch_items AS batch_item_update
+    SET pay_bank_transfer_id = linkable_items.pay_bank_transfer_id,
+        bank_reference = COALESCE(batch_item_update.bank_reference, linkable_items.payment_reference),
+        updated_at = v_now
+    FROM linkable_items
+    WHERE batch_item_update.id = linkable_items.item_id
+      AND batch_item_update.pay_bank_transfer_id IS NULL
+    RETURNING linkable_items.eval_id,
+              batch_item_update.id
+  )
+  UPDATE pg_temp.tmp_prepare_requested_item_eval AS item_eval_update
+  SET item_linked = true,
+      item_failure_reason = NULL::text
+  FROM updated_item_links
+  WHERE updated_item_links.eval_id = item_eval_update.eval_id;
+
+  SELECT COUNT(*)::integer,
+         COUNT(*) FILTER (WHERE item_eval.item_linked IS TRUE)::integer,
+         COUNT(*) FILTER (WHERE item_eval.item_already_linked_same IS TRUE)::integer,
+         COUNT(*) FILTER (WHERE item_eval.item_id_valid_uuid IS NOT TRUE)::integer,
+         COUNT(*) FILTER (WHERE item_eval.item_id_valid_uuid IS TRUE AND item_eval.item_exists IS NOT TRUE)::integer,
+         COUNT(*) FILTER (WHERE item_eval.item_id_valid_uuid IS TRUE AND item_eval.item_exists IS TRUE AND item_eval.item_wrong_batch IS TRUE)::integer,
+         COUNT(*) FILTER (WHERE item_eval.item_id_valid_uuid IS TRUE AND item_eval.item_exists IS TRUE AND item_eval.item_wrong_batch IS NOT TRUE AND item_eval.item_voided IS TRUE)::integer,
+         COUNT(*) FILTER (WHERE item_eval.item_id_valid_uuid IS TRUE AND item_eval.item_exists IS TRUE AND item_eval.item_wrong_batch IS NOT TRUE AND item_eval.item_voided IS NOT TRUE AND item_eval.item_conflict IS TRUE)::integer
+  INTO v_requested_item_count,
+       v_item_linked_count,
+       v_item_already_linked_count,
+       v_item_invalid_uuid_count,
+       v_item_missing_count,
+       v_item_wrong_batch_count,
+       v_item_voided_count,
+       v_item_conflict_count
+  FROM pg_temp.tmp_prepare_requested_item_eval AS item_eval;
+
+  v_item_link_failed_count := GREATEST(
+    COALESCE(v_requested_item_count, 0) - COALESCE(v_item_linked_count, 0) - COALESCE(v_item_already_linked_count, 0),
+    0
+  );
+
+  v_all_requested_items_linked := (
+    COALESCE(v_requested_item_count, 0) > 0
+    AND COALESCE(v_empty_item_list_count, 0) = 0
+    AND COALESCE(v_requested_item_count, 0) = COALESCE(v_item_linked_count, 0) + COALESCE(v_item_already_linked_count, 0)
+    AND COALESCE(v_item_link_failed_count, 0) = 0
+    AND COALESCE(v_item_conflict_count, 0) = 0
+    AND COALESCE(v_item_missing_count, 0) = 0
+    AND COALESCE(v_item_voided_count, 0) = 0
+    AND COALESCE(v_item_invalid_uuid_count, 0) = 0
+    AND COALESCE(v_item_wrong_batch_count, 0) = 0
+  );
+
+  SELECT COALESCE(jsonb_agg(jsonb_strip_nulls(jsonb_build_object(
+           'transfer_scope_id', item_eval.transfer_scope_id::text,
+           'pay_bank_transfer_id', CASE WHEN item_eval.pay_bank_transfer_id IS NULL THEN NULL ELSE item_eval.pay_bank_transfer_id::text END,
+           'pay_channel', item_eval.pay_channel,
+           'transfer_group_key', item_eval.transfer_group_key,
+           'scope_status', item_eval.scope_status,
+           'item_id_text', item_eval.item_id_text,
+           'item_id', CASE WHEN item_eval.item_id IS NULL THEN NULL ELSE item_eval.item_id::text END,
+           'reason', item_eval.item_failure_reason
+         )) ORDER BY item_eval.transfer_scope_id::text, item_eval.item_id_text), '[]'::jsonb)
+  INTO v_item_problem_samples
+  FROM pg_temp.tmp_prepare_requested_item_eval AS item_eval
+  WHERE item_eval.item_linked IS NOT TRUE
+    AND item_eval.item_already_linked_same IS NOT TRUE;
 
   DROP TABLE IF EXISTS pg_temp.tmp_prepare_final_scope_eval;
   CREATE TEMPORARY TABLE pg_temp.tmp_prepare_final_scope_eval AS
@@ -6136,11 +6336,13 @@ BEGIN
   SELECT count(*) FILTER (WHERE upper(btrim(coalesce(final_scope.status, ''))) = 'PREPARED')::integer,
          count(*) FILTER (WHERE upper(btrim(coalesce(final_scope.status, ''))) = 'FAILED')::integer,
          count(*) FILTER (WHERE upper(btrim(coalesce(final_scope.status, ''))) = 'SKIPPED')::integer,
-         count(*) FILTER (WHERE final_scope.pay_bank_transfer_id IS NULL)::integer
+         count(*) FILTER (WHERE final_scope.pay_bank_transfer_id IS NULL)::integer,
+         count(*) FILTER (WHERE upper(btrim(coalesce(final_scope.status, ''))) = 'PREPARED' AND final_scope.pay_bank_transfer_id IS NOT NULL)::integer
   INTO v_final_scope_prepared_count,
        v_final_scope_failed_count,
        v_final_scope_skipped_count,
-       v_final_scope_without_transfer_count
+       v_final_scope_without_transfer_count,
+       v_scope_linked_transfer_count
   FROM public.banking_pay_operation_transfer_scope AS final_scope
   JOIN pg_temp.tmp_transfer_scope_request AS requested_scope
     ON requested_scope.transfer_scope_id = final_scope.id
@@ -6150,6 +6352,10 @@ BEGIN
   v_all_requested_scopes_authorisation_ready := (
     COALESCE(v_requested_count, 0) > 0
     AND COALESCE(v_authorisation_ready_count, 0) = COALESCE(v_requested_count, 0)
+    AND COALESCE(v_final_scope_prepared_count, 0) = COALESCE(v_requested_count, 0)
+    AND COALESCE(v_scope_linked_transfer_count, 0) = COALESCE(v_requested_count, 0)
+    AND COALESCE(v_empty_item_list_count, 0) = 0
+    AND COALESCE(v_all_requested_items_linked, false) IS TRUE
     AND COALESCE(v_not_authorisation_ready_count, 0) = 0
     AND COALESCE(v_provider_evidence_blocked_count, 0) = 0
     AND COALESCE(v_unsafe_transfer_count, 0) = 0
@@ -6164,6 +6370,13 @@ BEGIN
 
   v_result_code := CASE
     WHEN COALESCE(v_all_requested_scopes_authorisation_ready, false) IS TRUE THEN NULL::text
+    WHEN COALESCE(v_item_conflict_count, 0) > 0 THEN 'ITEM_LINKED_TO_DIFFERENT_TRANSFER'
+    WHEN COALESCE(v_item_invalid_uuid_count, 0) > 0 THEN 'TRANSFER_PREPARATION_ITEM_INVALID_UUID'
+    WHEN COALESCE(v_item_missing_count, 0) > 0 THEN 'TRANSFER_PREPARATION_ITEM_MISSING'
+    WHEN COALESCE(v_item_wrong_batch_count, 0) > 0 THEN 'TRANSFER_PREPARATION_ITEM_WRONG_BATCH'
+    WHEN COALESCE(v_item_voided_count, 0) > 0 THEN 'TRANSFER_PREPARATION_ITEM_VOIDED'
+    WHEN COALESCE(v_requested_item_count, 0) = 0 OR COALESCE(v_empty_item_list_count, 0) > 0 THEN 'TRANSFER_PREPARATION_SCOPE_WITHOUT_ITEMS'
+    WHEN COALESCE(v_item_link_failed_count, 0) > 0 THEN 'TRANSFER_PREPARATION_ITEM_LINK_FAILED'
     WHEN COALESCE(v_provider_evidence_blocked_count, 0) > 0 THEN 'TRANSFER_PREPARATION_BLOCKED_BY_PROVIDER_EVIDENCE'
     WHEN COALESCE(v_unsafe_transfer_count, 0) > 0 THEN 'TRANSFER_PREPARATION_UNSAFE_TRANSFER'
     WHEN COALESCE(v_final_scope_without_transfer_count, 0) > 0 THEN 'TRANSFER_PREPARATION_SCOPE_WITHOUT_TRANSFER'
@@ -6185,6 +6398,19 @@ BEGIN
     'scope_failed_count', COALESCE(v_final_scope_failed_count, 0),
     'scope_skipped_count', COALESCE(v_final_scope_skipped_count, 0),
     'scope_without_transfer_count', COALESCE(v_final_scope_without_transfer_count, 0),
+    'scope_linked_transfer_count', COALESCE(v_scope_linked_transfer_count, 0),
+    'requested_item_count', COALESCE(v_requested_item_count, 0),
+    'item_linked_count', COALESCE(v_item_linked_count, 0),
+    'item_already_linked_count', COALESCE(v_item_already_linked_count, 0),
+    'item_link_failed_count', COALESCE(v_item_link_failed_count, 0),
+    'item_missing_count', COALESCE(v_item_missing_count, 0),
+    'item_voided_count', COALESCE(v_item_voided_count, 0),
+    'item_invalid_uuid_count', COALESCE(v_item_invalid_uuid_count, 0),
+    'item_conflict_count', COALESCE(v_item_conflict_count, 0),
+    'item_wrong_batch_count', COALESCE(v_item_wrong_batch_count, 0),
+    'empty_item_list_count', COALESCE(v_empty_item_list_count, 0),
+    'all_requested_items_linked', COALESCE(v_all_requested_items_linked, false),
+    'item_problem_samples', COALESCE(v_item_problem_samples, '[]'::jsonb),
     'all_requested_scopes_authorisation_ready', COALESCE(v_all_requested_scopes_authorisation_ready, false),
     'prepared_count', COALESCE(v_authorisation_ready_count, 0),
     'linked_transfer_count', COALESCE(v_prepared_count, 0) + COALESCE(v_reused_count, 0),
@@ -6202,7 +6428,6 @@ BEGIN
   );
 END;
 $function$;
-
 
 
 DROP FUNCTION IF EXISTS public.pay_execute_bank_transfer_scope_seed(uuid, uuid, text, uuid, boolean);
