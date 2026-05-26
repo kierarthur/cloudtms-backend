@@ -4913,8 +4913,6 @@ $function$;
 DROP FUNCTION IF EXISTS public.pay_batch_execution_summary_get(uuid, uuid);
 
 
-
-
 CREATE OR REPLACE FUNCTION public.pay_batch_execution_summary_get(
   p_pay_batch_id uuid,
   p_actor_user_id uuid DEFAULT NULL::uuid
@@ -4992,6 +4990,25 @@ DECLARE
   v_provider_manual_resolution_required boolean := false;
   v_provider_safe_retry_available boolean := false;
   v_provider_recommended_action text := NULL::text;
+  v_provider_boundary_crossed boolean := false;
+  v_provider_acceptance_evidence_present boolean := false;
+  v_provider_external_evidence_count integer := 0;
+  v_raw_batch_status text := NULL::text;
+  v_raw_execution_commit_state text := NULL::text;
+  v_effective_batch_status text := NULL::text;
+  v_effective_execution_commit_state text := NULL::text;
+  v_local_finalisation_required boolean := false;
+  v_safe_to_execute boolean := false;
+  v_safe_to_retry_provider boolean := false;
+  v_recommended_action_code text := NULL::text;
+  v_recommended_action_text text := NULL::text;
+  v_active_item_count integer := 0;
+  v_items_with_transfer_link_count integer := 0;
+  v_items_missing_transfer_link_count integer := 0;
+  v_scope_diagnostic_operation_id uuid := NULL::uuid;
+  v_operation_scope_item_count integer := 0;
+  v_operation_scope_items_linked_count integer := 0;
+  v_operation_scope_items_missing_transfer_link_count integer := 0;
 BEGIN
   IF p_pay_batch_id IS NULL THEN
     RAISE EXCEPTION 'pay_batch_id is required';
@@ -5015,6 +5032,11 @@ BEGIN
   IF NOT FOUND THEN
     RAISE EXCEPTION 'pay_batches row % not found', p_pay_batch_id;
   END IF;
+
+  v_raw_batch_status := upper(BTRIM(COALESCE(v_batch_row.status, '')));
+  v_raw_execution_commit_state := upper(BTRIM(COALESCE(v_batch_row.execution_commit_state, 'NOT_SUBMITTED')));
+  v_effective_batch_status := v_raw_batch_status;
+  v_effective_execution_commit_state := v_raw_execution_commit_state;
 
   v_freshness_result_json := coalesce(v_batch_row.freshness_result_json, '{}'::jsonb);
   v_freshness_is_stale := upper(coalesce(v_batch_row.freshness_validation_status, '')) = 'STALE'
@@ -5042,7 +5064,12 @@ BEGIN
   -- Use counts-only submission evidence for execution summary so progress checks
   -- remain lightweight for large batches with many transfer events. The returned
   -- payload intentionally avoids evidence samples/detail arrays.
-  v_submission_evidence_json := public.pay_batch_submission_evidence(p_pay_batch_id, true);
+  v_submission_evidence_json := public.pay_batch_submission_evidence(
+    p_pay_batch_id := p_pay_batch_id,
+    p_counts_only := true,
+    p_operation_id := NULL::uuid,
+    p_chunk_id := NULL::uuid
+  );
   v_transfer_count := coalesce(nullif(v_submission_evidence_json->>'transfer_count', '')::integer, 0);
   v_provider_submitted_transfer_count := coalesce(nullif(v_submission_evidence_json->>'provider_submitted_count', '')::integer, 0);
   v_local_only_transfer_count := coalesce(nullif(v_submission_evidence_json->>'local_only_count', '')::integer, coalesce(nullif(v_submission_evidence_json->>'local_idempotency_only_count', '')::integer, 0));
@@ -5085,6 +5112,25 @@ BEGIN
   v_provider_manual_resolution_required := lower(BTRIM(COALESCE(v_submission_evidence_json->>'manual_resolution_required', v_provider_submit_diagnostic->>'manual_resolution_required', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on');
   v_provider_safe_retry_available := lower(BTRIM(COALESCE(v_submission_evidence_json->>'safe_retry_available', v_provider_submit_diagnostic->>'safe_retry_available', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on');
   v_provider_recommended_action := NULLIF(BTRIM(COALESCE(v_submission_evidence_json->>'recommended_action', v_provider_submit_diagnostic->>'recommended_action', '')), '');
+  v_provider_external_evidence_count := COALESCE(NULLIF(v_submission_evidence_json->>'provider_external_evidence_count', '')::integer, COALESCE(v_provider_acceptance_evidence_count, 0));
+  v_provider_acceptance_evidence_present := lower(BTRIM(COALESCE(v_submission_evidence_json->>'provider_acceptance_evidence_present', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+    OR COALESCE(v_provider_acceptance_evidence_count, 0) > 0
+    OR upper(BTRIM(COALESCE(v_provider_submission_status, ''))) = 'PROVIDER_SUBMISSION_ACCEPTED';
+  v_provider_boundary_crossed := lower(BTRIM(COALESCE(v_submission_evidence_json->>'provider_boundary_crossed', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+    OR (
+      COALESCE(v_provider_acceptance_evidence_present, false) IS TRUE
+      AND COALESCE(v_provider_external_evidence_count, 0) > 0
+      AND COALESCE(v_failed_transfer_count, 0) = 0
+      AND COALESCE(v_ambiguous_transfer_count, 0) = 0
+    );
+  v_local_finalisation_required := lower(BTRIM(COALESCE(v_submission_evidence_json->>'local_finalisation_required', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+    OR (
+      COALESCE(v_provider_acceptance_evidence_present, false) IS TRUE
+      AND (
+        COALESCE(v_raw_batch_status, '') = 'DRAFT'
+        OR COALESCE(v_raw_execution_commit_state, 'NOT_SUBMITTED') = 'NOT_SUBMITTED'
+      )
+    );
 
   SELECT count(*)::integer
   INTO v_canonical_pending_status_transfer_count
@@ -5183,6 +5229,161 @@ BEGIN
     );
   END IF;
 
+  SELECT count(*) FILTER (
+           WHERE COALESCE(batch_item.is_voided, false) = false
+             AND COALESCE(batch_item.item_type, '') <> 'DEBT_CREATED'
+             AND COALESCE(batch_item.amount_inc_vat, batch_item.amount_ex_vat, 0) <> 0
+         )::integer,
+         count(*) FILTER (
+           WHERE COALESCE(batch_item.is_voided, false) = false
+             AND COALESCE(batch_item.item_type, '') <> 'DEBT_CREATED'
+             AND COALESCE(batch_item.amount_inc_vat, batch_item.amount_ex_vat, 0) <> 0
+             AND batch_item.pay_bank_transfer_id IS NOT NULL
+         )::integer,
+         count(*) FILTER (
+           WHERE COALESCE(batch_item.is_voided, false) = false
+             AND COALESCE(batch_item.item_type, '') <> 'DEBT_CREATED'
+             AND COALESCE(batch_item.amount_inc_vat, batch_item.amount_ex_vat, 0) <> 0
+             AND batch_item.pay_bank_transfer_id IS NULL
+         )::integer
+  INTO v_active_item_count,
+       v_items_with_transfer_link_count,
+       v_items_missing_transfer_link_count
+  FROM public.pay_batch_items AS batch_item
+  JOIN public.pay_batch_candidates AS batch_candidate
+    ON batch_candidate.id = batch_item.pay_batch_candidate_id
+  WHERE batch_candidate.pay_batch_id = p_pay_batch_id;
+
+  v_scope_diagnostic_operation_id := v_active_operation_id;
+
+  IF v_scope_diagnostic_operation_id IS NULL THEN
+    SELECT recent_operation.id
+    INTO v_scope_diagnostic_operation_id
+    FROM public.banking_pay_operations AS recent_operation
+    WHERE recent_operation.pay_batch_id = p_pay_batch_id
+      AND recent_operation.operation_type IN ('PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS')
+    ORDER BY recent_operation.updated_at_utc DESC NULLS LAST,
+             recent_operation.created_at_utc DESC NULLS LAST,
+             recent_operation.id DESC
+    LIMIT 1;
+  END IF;
+
+  IF v_scope_diagnostic_operation_id IS NOT NULL THEN
+    WITH operation_scope_items AS (
+      SELECT operation_scope.id AS transfer_scope_id,
+             operation_scope.pay_bank_transfer_id,
+             CASE
+               WHEN NULLIF(BTRIM(COALESCE(scope_item.value, '')), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+                 THEN NULLIF(BTRIM(COALESCE(scope_item.value, '')), '')::uuid
+               ELSE NULL::uuid
+             END AS pay_batch_item_id
+      FROM public.banking_pay_operation_transfer_scope AS operation_scope
+      CROSS JOIN LATERAL jsonb_array_elements_text(
+        CASE
+          WHEN jsonb_typeof(COALESCE(operation_scope.pay_batch_item_ids_json, '[]'::jsonb)) = 'array'
+            THEN COALESCE(operation_scope.pay_batch_item_ids_json, '[]'::jsonb)
+          ELSE '[]'::jsonb
+        END
+      ) AS scope_item(value)
+      WHERE operation_scope.operation_id = v_scope_diagnostic_operation_id
+        AND operation_scope.pay_batch_id = p_pay_batch_id
+    )
+    SELECT count(DISTINCT operation_scope_items.pay_batch_item_id) FILTER (WHERE operation_scope_items.pay_batch_item_id IS NOT NULL)::integer,
+           count(DISTINCT operation_scope_items.pay_batch_item_id) FILTER (
+             WHERE operation_scope_items.pay_batch_item_id IS NOT NULL
+               AND batch_item.id IS NOT NULL
+               AND batch_candidate.pay_batch_id = p_pay_batch_id
+               AND operation_scope_items.pay_bank_transfer_id IS NOT NULL
+               AND batch_item.pay_bank_transfer_id = operation_scope_items.pay_bank_transfer_id
+           )::integer,
+           count(DISTINCT operation_scope_items.pay_batch_item_id) FILTER (
+             WHERE operation_scope_items.pay_batch_item_id IS NOT NULL
+               AND (
+                 batch_item.id IS NULL
+                 OR batch_candidate.pay_batch_id IS DISTINCT FROM p_pay_batch_id
+                 OR operation_scope_items.pay_bank_transfer_id IS NULL
+                 OR batch_item.pay_bank_transfer_id IS NULL
+                 OR batch_item.pay_bank_transfer_id <> operation_scope_items.pay_bank_transfer_id
+               )
+           )::integer
+    INTO v_operation_scope_item_count,
+         v_operation_scope_items_linked_count,
+         v_operation_scope_items_missing_transfer_link_count
+    FROM operation_scope_items
+    LEFT JOIN public.pay_batch_items AS batch_item
+      ON batch_item.id = operation_scope_items.pay_batch_item_id
+    LEFT JOIN public.pay_batch_candidates AS batch_candidate
+      ON batch_candidate.id = batch_item.pay_batch_candidate_id;
+  ELSE
+    v_operation_scope_item_count := 0;
+    v_operation_scope_items_linked_count := 0;
+    v_operation_scope_items_missing_transfer_link_count := 0;
+  END IF;
+
+  IF COALESCE(v_provider_acceptance_evidence_present, false) IS TRUE
+    AND (
+      COALESCE(v_items_missing_transfer_link_count, 0) > 0
+      OR COALESCE(v_operation_scope_items_missing_transfer_link_count, 0) > 0
+    ) THEN
+    v_local_finalisation_required := true;
+  END IF;
+
+  IF COALESCE(v_local_finalisation_required, false) IS TRUE THEN
+    v_effective_batch_status := 'LOCAL_FINALISATION_REQUIRED';
+    v_effective_execution_commit_state := 'LOCAL_FINALISATION_REQUIRED';
+  ELSIF COALESCE(v_provider_boundary_crossed, false) IS TRUE THEN
+    v_effective_batch_status := CASE
+      WHEN COALESCE(v_raw_batch_status, '') IN ('SETTLED', 'CANCELLED', 'CANCELED', 'FAILED', 'BLOCKED_FUNDS') THEN v_raw_batch_status
+      ELSE 'WAITING_BANK_CONFIRM'
+    END;
+    v_effective_execution_commit_state := CASE
+      WHEN COALESCE(v_raw_execution_commit_state, 'NOT_SUBMITTED') = 'COMMITTED' THEN 'COMMITTED'
+      ELSE 'SUBMITTED_NOT_COMMITTED'
+    END;
+  ELSE
+    v_effective_batch_status := v_raw_batch_status;
+    v_effective_execution_commit_state := v_raw_execution_commit_state;
+  END IF;
+
+  v_safe_to_retry_provider := COALESCE(v_provider_acceptance_evidence_present, false) IS NOT TRUE
+    AND COALESCE(v_provider_boundary_crossed, false) IS NOT TRUE
+    AND COALESCE(v_local_finalisation_required, false) IS NOT TRUE
+    AND COALESCE(v_provider_manual_resolution_required, false) IS NOT TRUE
+    AND COALESCE(v_ambiguous_transfer_count, 0) = 0
+    AND COALESCE(v_attempted_but_unproven_transfer_count, 0) = 0
+    AND COALESCE(v_provider_attempt_without_external_id_count, 0) = 0
+    AND COALESCE(v_failed_transfer_count, 0) = 0;
+
+  v_safe_to_execute := COALESCE(v_provider_acceptance_evidence_present, false) IS NOT TRUE
+    AND COALESCE(v_provider_boundary_crossed, false) IS NOT TRUE
+    AND COALESCE(v_local_finalisation_required, false) IS NOT TRUE
+    AND COALESCE(v_provider_manual_resolution_required, false) IS NOT TRUE
+    AND COALESCE(v_ambiguous_transfer_count, 0) = 0
+    AND COALESCE(v_attempted_but_unproven_transfer_count, 0) = 0
+    AND COALESCE(v_provider_attempt_without_external_id_count, 0) = 0
+    AND COALESCE(v_raw_execution_commit_state, 'NOT_SUBMITTED') NOT IN ('SUBMITTED_NOT_COMMITTED', 'COMMITTED')
+    AND COALESCE(v_raw_batch_status, '') NOT IN ('WAITING_BANK_CONFIRM', 'SETTLED', 'CANCELLED', 'CANCELED', 'FAILED', 'BLOCKED_FUNDS');
+
+  v_recommended_action_code := CASE
+    WHEN COALESCE(v_local_finalisation_required, false) IS TRUE THEN 'PROVIDER_EVIDENCE_RECONCILIATION_REQUIRED'
+    WHEN COALESCE(v_provider_manual_resolution_required, false) IS TRUE OR COALESCE(v_ambiguous_transfer_count, 0) > 0 OR COALESCE(v_attempted_but_unproven_transfer_count, 0) > 0 THEN 'PROVIDER_OUTCOME_REVIEW_REQUIRED'
+    WHEN COALESCE(v_failed_transfer_count, 0) > 0 THEN 'PROVIDER_REJECTION_OR_PAYMENT_FAILURE_REVIEW_REQUIRED'
+    WHEN COALESCE(v_provider_boundary_crossed, false) IS TRUE THEN 'PENDING_BANK_CONFIRMATION'
+    WHEN COALESCE(v_raw_execution_commit_state, 'NOT_SUBMITTED') IN ('SUBMITTED_NOT_COMMITTED', 'COMMITTED') THEN 'ALREADY_SUBMITTED'
+    WHEN COALESCE(v_safe_to_execute, false) IS TRUE THEN 'EXECUTE_AVAILABLE'
+    ELSE COALESCE(NULLIF(v_provider_recommended_action, ''), 'NO_ACTION_REQUIRED')
+  END;
+
+  v_recommended_action_text := CASE v_recommended_action_code
+    WHEN 'PROVIDER_EVIDENCE_RECONCILIATION_REQUIRED' THEN 'Provider acceptance evidence exists but local batch finalisation is incomplete. Do not execute again; reconcile/finalise the existing provider-submitted payment.'
+    WHEN 'PROVIDER_OUTCOME_REVIEW_REQUIRED' THEN 'Provider submission evidence is ambiguous or requires review. Do not retry provider submission until reconciled.'
+    WHEN 'PROVIDER_REJECTION_OR_PAYMENT_FAILURE_REVIEW_REQUIRED' THEN 'Provider rejection or failed transfer evidence exists. Resolve through the payment issue path.'
+    WHEN 'PENDING_BANK_CONFIRMATION' THEN 'Provider acceptance evidence exists. Treat the batch as pending bank confirmation, not executable draft.'
+    WHEN 'ALREADY_SUBMITTED' THEN 'Batch execution state is already submitted or committed. Do not execute again.'
+    WHEN 'EXECUTE_AVAILABLE' THEN 'No provider submission evidence is present and the batch is not already submitted by execution state.'
+    ELSE COALESCE(v_provider_recommended_action, 'No action required.')
+  END;
+
   RETURN (
   jsonb_build_object(
     'ok', true,
@@ -5197,6 +5398,16 @@ BEGIN
     'rail_provider_snapshot', v_batch_row.rail_provider_snapshot,
     'rail_env_snapshot', v_batch_row.rail_env_snapshot,
     'execution_commit_state', v_batch_row.execution_commit_state,
+    'effective_batch_status', v_effective_batch_status,
+    'effective_execution_commit_state', v_effective_execution_commit_state,
+    'provider_boundary_crossed', COALESCE(v_provider_boundary_crossed, false),
+    'provider_acceptance_evidence_present', COALESCE(v_provider_acceptance_evidence_present, false),
+    'provider_external_evidence_count', COALESCE(v_provider_external_evidence_count, 0),
+    'local_finalisation_required', COALESCE(v_local_finalisation_required, false),
+    'safe_to_execute', COALESCE(v_safe_to_execute, false),
+    'safe_to_retry_provider', COALESCE(v_safe_to_retry_provider, false),
+    'recommended_action_code', v_recommended_action_code,
+    'recommended_action_text', v_recommended_action_text,
     'execution_mode', coalesce(nullif(btrim(coalesce(v_batch_row.execution_intent_json->>'execution_mode', '')), ''), nullif(btrim(coalesce(v_batch_row.execution_intent_json->>'mode', '')), ''), case when upper(coalesce(v_batch_row.rail_provider_snapshot, '')) = 'CSV' then 'CSV' else 'BANK' end),
     'freshness_validation_status', v_batch_row.freshness_validation_status,
     'freshness_checked_at_utc', v_batch_row.freshness_checked_at_utc,
@@ -5218,6 +5429,13 @@ BEGIN
     'candidate_count', coalesce(v_candidate_count, 0),
     'item_count', coalesce(v_item_count, 0),
     'active_payment_count', coalesce(v_active_payment_count, 0),
+    'active_item_count', COALESCE(v_active_item_count, 0),
+    'items_with_transfer_link_count', COALESCE(v_items_with_transfer_link_count, 0),
+    'items_missing_transfer_link_count', COALESCE(v_items_missing_transfer_link_count, 0),
+    'scope_diagnostic_operation_id', CASE WHEN v_scope_diagnostic_operation_id IS NULL THEN NULL ELSE v_scope_diagnostic_operation_id::text END,
+    'operation_scope_item_count', COALESCE(v_operation_scope_item_count, 0),
+    'operation_scope_items_linked_count', COALESCE(v_operation_scope_items_linked_count, 0),
+    'operation_scope_items_missing_transfer_link_count', COALESCE(v_operation_scope_items_missing_transfer_link_count, 0),
     'total_amount', coalesce(v_total_amount, 0),
     'transfer_count', coalesce(v_transfer_count, 0),
     'prepared_transfer_count', coalesce(v_prepared_transfer_count, 0),
@@ -5286,6 +5504,10 @@ BEGIN
     'unfinalised_submit_chunk_count', COALESCE(v_unfinalised_submit_chunk_count, 0),
     'manual_resolution_required', COALESCE(v_provider_manual_resolution_required, false),
     'safe_retry_available', COALESCE(v_provider_safe_retry_available, false),
+    'safe_to_execute', COALESCE(v_safe_to_execute, false),
+    'safe_to_retry_provider', COALESCE(v_safe_to_retry_provider, false),
+    'recommended_action_code', v_recommended_action_code,
+    'recommended_action_text', v_recommended_action_text,
     'recommended_action', v_provider_recommended_action,
     'blocked_funds_state', jsonb_build_object(
       'is_blocked_funds', upper(coalesce(v_batch_row.status, '')) = 'BLOCKED_FUNDS',
@@ -5309,8 +5531,6 @@ BEGIN
   );
 END;
 $function$;
-
-
 
 
 
