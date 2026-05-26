@@ -3436,6 +3436,7 @@ $function$;
 
 
 
+
 CREATE OR REPLACE FUNCTION public.bulk_process_row_context_v1(p_filters jsonb DEFAULT '{}'::jsonb)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -4207,6 +4208,23 @@ BEGIN
         tsfin_row.processed_at_utc AS tsfin_processed_at_utc,
         tsfin_row.authorised_at_utc AS tsfin_authorised_at_utc,
         tsfin_row.external_source_rows_json AS tsfin_external_source_rows_json,
+        tsfin_row.total_pay_ex_vat AS tsfin_total_pay_ex_vat,
+        tsfin_row.total_charge_ex_vat AS tsfin_total_charge_ex_vat,
+        tsfin_row.margin_ex_vat AS tsfin_margin_ex_vat,
+        tsfin_row.expenses_pay_ex_vat AS tsfin_expenses_pay_ex_vat,
+        tsfin_row.expenses_charge_ex_vat AS tsfin_expenses_charge_ex_vat,
+        tsfin_row.mileage_units AS tsfin_mileage_units,
+        tsfin_row.mileage_pay_ex_vat AS tsfin_mileage_pay_ex_vat,
+        tsfin_row.mileage_charge_ex_vat AS tsfin_mileage_charge_ex_vat,
+        tsfin_row.travel_pay_ex_vat AS tsfin_travel_pay_ex_vat,
+        tsfin_row.travel_charge_ex_vat AS tsfin_travel_charge_ex_vat,
+        tsfin_row.accommodation_pay_ex_vat AS tsfin_accommodation_pay_ex_vat,
+        tsfin_row.accommodation_charge_ex_vat AS tsfin_accommodation_charge_ex_vat,
+        tsfin_row.other_pay_ex_vat AS tsfin_other_pay_ex_vat,
+        tsfin_row.other_charge_ex_vat AS tsfin_other_charge_ex_vat,
+        tsfin_row.additional_pay_ex_vat AS tsfin_additional_pay_ex_vat,
+        tsfin_row.additional_charge_ex_vat AS tsfin_additional_charge_ex_vat,
+        tsfin_row.additional_margin_ex_vat AS tsfin_additional_margin_ex_vat,
         validation_payload.validations_json AS validations_json,
         validation_payload.latest_validation_json AS latest_validation_json
       FROM input_ids
@@ -4500,6 +4518,23 @@ BEGIN
               'stale_reason', flags.tsfin_stale_reason,
               'processing_status', flags.tsfin_processing_status,
               'total_hours', flags.total_hours,
+              'total_pay_ex_vat', flags.tsfin_total_pay_ex_vat,
+              'total_charge_ex_vat', flags.tsfin_total_charge_ex_vat,
+              'margin_ex_vat', flags.tsfin_margin_ex_vat,
+              'expenses_pay_ex_vat', flags.tsfin_expenses_pay_ex_vat,
+              'expenses_charge_ex_vat', flags.tsfin_expenses_charge_ex_vat,
+              'mileage_units', flags.tsfin_mileage_units,
+              'mileage_pay_ex_vat', flags.tsfin_mileage_pay_ex_vat,
+              'mileage_charge_ex_vat', flags.tsfin_mileage_charge_ex_vat,
+              'travel_pay_ex_vat', flags.tsfin_travel_pay_ex_vat,
+              'travel_charge_ex_vat', flags.tsfin_travel_charge_ex_vat,
+              'accommodation_pay_ex_vat', flags.tsfin_accommodation_pay_ex_vat,
+              'accommodation_charge_ex_vat', flags.tsfin_accommodation_charge_ex_vat,
+              'other_pay_ex_vat', flags.tsfin_other_pay_ex_vat,
+              'other_charge_ex_vat', flags.tsfin_other_charge_ex_vat,
+              'additional_pay_ex_vat', flags.tsfin_additional_pay_ex_vat,
+              'additional_charge_ex_vat', flags.tsfin_additional_charge_ex_vat,
+              'additional_margin_ex_vat', flags.tsfin_additional_margin_ex_vat,
               'locked_by_invoice_id', flags.tsfin_locked_by_invoice_id,
               'locked_at_utc', flags.tsfin_locked_at_utc,
               'paid_at_utc', flags.tsfin_paid_at_utc,
@@ -4629,6 +4664,23 @@ BEGIN
             'basis', flags.tsfin_basis,
             'processing_status', flags.tsfin_processing_status,
             'total_hours', flags.total_hours,
+            'total_pay_ex_vat', flags.tsfin_total_pay_ex_vat,
+            'total_charge_ex_vat', flags.tsfin_total_charge_ex_vat,
+            'margin_ex_vat', flags.tsfin_margin_ex_vat,
+            'expenses_pay_ex_vat', flags.tsfin_expenses_pay_ex_vat,
+            'expenses_charge_ex_vat', flags.tsfin_expenses_charge_ex_vat,
+            'mileage_units', flags.tsfin_mileage_units,
+            'mileage_pay_ex_vat', flags.tsfin_mileage_pay_ex_vat,
+            'mileage_charge_ex_vat', flags.tsfin_mileage_charge_ex_vat,
+            'travel_pay_ex_vat', flags.tsfin_travel_pay_ex_vat,
+            'travel_charge_ex_vat', flags.tsfin_travel_charge_ex_vat,
+            'accommodation_pay_ex_vat', flags.tsfin_accommodation_pay_ex_vat,
+            'accommodation_charge_ex_vat', flags.tsfin_accommodation_charge_ex_vat,
+            'other_pay_ex_vat', flags.tsfin_other_pay_ex_vat,
+            'other_charge_ex_vat', flags.tsfin_other_charge_ex_vat,
+            'additional_pay_ex_vat', flags.tsfin_additional_pay_ex_vat,
+            'additional_charge_ex_vat', flags.tsfin_additional_charge_ex_vat,
+            'additional_margin_ex_vat', flags.tsfin_additional_margin_ex_vat,
             'actual_schedule_json', COALESCE(flags.tsfin_actual_schedule_json, flags.timesheet_actual_schedule_json, '[]'::jsonb),
             'actual_minutes_by_day_json', COALESCE(flags.tsfin_actual_minutes_by_day_json, '{}'::jsonb),
             'additional_units_json', COALESCE(flags.tsfin_additional_units_json, '{}'::jsonb),
@@ -7170,9 +7222,6 @@ BEGIN
   ));
 END;
 $function$;
-
-
-
 
 
 
