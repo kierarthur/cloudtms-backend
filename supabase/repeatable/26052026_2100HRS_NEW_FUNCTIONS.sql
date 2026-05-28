@@ -173472,17 +173472,12 @@ BEGIN
 END;
 $function$;
 
-CREATE OR REPLACE FUNCTION public._pay_manual_adjustment_carry_forward_freshness_check(
-  p_pay_batch_id uuid DEFAULT NULL::uuid,
-  p_candidate_ids uuid[] DEFAULT NULL::uuid[],
-  p_pay_batch_item_ids uuid[] DEFAULT NULL::uuid[],
-  p_resolved_scope_json jsonb DEFAULT NULL::jsonb,
-  p_actor_user_id uuid DEFAULT NULL::uuid
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
+
+CREATE OR REPLACE FUNCTION public._pay_manual_adjustment_carry_forward_freshness_check(p_pay_batch_id uuid DEFAULT NULL::uuid, p_candidate_ids uuid[] DEFAULT NULL::uuid[], p_pay_batch_item_ids uuid[] DEFAULT NULL::uuid[], p_resolved_scope_json jsonb DEFAULT NULL::jsonb, p_actor_user_id uuid DEFAULT NULL::uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
 AS $function$
 DECLARE
   v_uuid_regex text := '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$';
@@ -173606,54 +173601,54 @@ BEGIN
          AND carry_forward_rows.candidate_id = ANY(COALESCE(v_candidate_ids, ARRAY[]::uuid[]))
          AND carry_forward_rows.status IN ('PENDING_CARRY_FORWARD', 'RESERVED_IN_DRAFT', 'CONSUMED_IN_BATCH', 'CANCELLED', 'SUPERSEDED', 'NEEDS_REVIEW')
        )
-  ), target_item_rows AS (
+  ), target_carry_forward_item_rows AS (
     SELECT
       relevant_carry_forwards.id AS carry_forward_id,
-      target_item_rows.pay_batch_item_id AS target_pay_batch_item_id,
-      target_item_rows.pay_batch_id AS target_pay_batch_id,
-      target_item_rows.candidate_id AS target_candidate_id,
-      target_item_rows.amount_ex_vat AS target_amount_ex_vat,
-      target_item_rows.amount_vat AS target_amount_vat,
-      target_item_rows.amount_inc_vat AS target_amount_inc_vat,
-      target_item_rows.is_voided AS target_is_voided,
-      target_item_rows.source_ref AS target_source_ref,
-      target_item_rows.operation_source_key AS target_operation_source_key
+      target_batch_item_rows.pay_batch_item_id AS target_pay_batch_item_id,
+      target_batch_item_rows.pay_batch_id AS target_pay_batch_id,
+      target_batch_item_rows.candidate_id AS target_candidate_id,
+      target_batch_item_rows.amount_ex_vat AS target_amount_ex_vat,
+      target_batch_item_rows.amount_vat AS target_amount_vat,
+      target_batch_item_rows.amount_inc_vat AS target_amount_inc_vat,
+      target_batch_item_rows.is_voided AS target_is_voided,
+      target_batch_item_rows.source_ref AS target_source_ref,
+      target_batch_item_rows.operation_source_key AS target_operation_source_key
     FROM relevant_carry_forwards
-    LEFT JOIN target_items AS target_item_rows
-      ON target_item_rows.pay_batch_item_id = relevant_carry_forwards.target_pay_batch_item_id
-      OR lower(COALESCE(target_item_rows.operation_source_key, '')) = 'carry_forward:' || relevant_carry_forwards.id::text
-      OR lower(COALESCE(target_item_rows.source_ref, '')) = 'carry_forward:' || relevant_carry_forwards.id::text
-  ), source_item_rows AS (
+    LEFT JOIN target_items AS target_batch_item_rows
+      ON target_batch_item_rows.pay_batch_item_id = relevant_carry_forwards.target_pay_batch_item_id
+      OR lower(COALESCE(target_batch_item_rows.operation_source_key, '')) = 'carry_forward:' || relevant_carry_forwards.id::text
+      OR lower(COALESCE(target_batch_item_rows.source_ref, '')) = 'carry_forward:' || relevant_carry_forwards.id::text
+  ), source_carry_forward_item_rows AS (
     SELECT
       relevant_carry_forwards.id AS carry_forward_id,
-      source_item_rows.id AS source_pay_batch_item_id,
-      source_item_rows.amount_ex_vat AS source_amount_ex_vat,
-      source_item_rows.amount_vat AS source_amount_vat,
-      source_item_rows.amount_inc_vat AS source_amount_inc_vat,
-      source_item_rows.pay_bank_transfer_id AS source_pay_bank_transfer_id,
+      source_batch_item_rows.id AS source_pay_batch_item_id,
+      source_batch_item_rows.amount_ex_vat AS source_amount_ex_vat,
+      source_batch_item_rows.amount_vat AS source_amount_vat,
+      source_batch_item_rows.amount_inc_vat AS source_amount_inc_vat,
+      source_batch_item_rows.pay_bank_transfer_id AS source_pay_bank_transfer_id,
       source_candidate_rows.settlement_status AS source_settlement_status,
       source_candidate_rows.settled_at_utc AS source_settled_at_utc,
       source_transfer_rows.status AS source_transfer_status,
       source_transfer_rows.rail_state AS source_transfer_rail_state,
       COALESCE(source_transfer_rows.rail_meta_json, '{}'::jsonb) AS source_transfer_meta_json
     FROM relevant_carry_forwards
-    LEFT JOIN public.pay_batch_items AS source_item_rows
-      ON source_item_rows.id = relevant_carry_forwards.source_pay_batch_item_id
+    LEFT JOIN public.pay_batch_items AS source_batch_item_rows
+      ON source_batch_item_rows.id = relevant_carry_forwards.source_pay_batch_item_id
     LEFT JOIN public.pay_batch_candidates AS source_candidate_rows
-      ON source_candidate_rows.id = source_item_rows.pay_batch_candidate_id
+      ON source_candidate_rows.id = source_batch_item_rows.pay_batch_candidate_id
     LEFT JOIN public.pay_bank_transfers AS source_transfer_rows
-      ON source_transfer_rows.id = source_item_rows.pay_bank_transfer_id
+      ON source_transfer_rows.id = source_batch_item_rows.pay_bank_transfer_id
   ), source_classified_rows AS (
     SELECT
-      source_item_rows.*,
+      source_carry_forward_item_rows.*,
       COALESCE(source_classification_rows.is_final_money_moved, false) AS source_is_final_money_moved
-    FROM source_item_rows
+    FROM source_carry_forward_item_rows
     LEFT JOIN LATERAL public._pay_rail_state_money_movement_classify(
-      source_item_rows.source_transfer_status,
-      source_item_rows.source_transfer_rail_state,
-      source_item_rows.source_transfer_meta_json,
-      source_item_rows.source_transfer_meta_json
-    ) AS source_classification_rows ON source_item_rows.source_pay_bank_transfer_id IS NOT NULL
+      source_carry_forward_item_rows.source_transfer_status,
+      source_carry_forward_item_rows.source_transfer_rail_state,
+      source_carry_forward_item_rows.source_transfer_meta_json,
+      source_carry_forward_item_rows.source_transfer_meta_json
+    ) AS source_classification_rows ON source_carry_forward_item_rows.source_pay_bank_transfer_id IS NOT NULL
   ), checked_carry_forwards AS (
     SELECT
       relevant_carry_forwards.id AS carry_forward_id,
@@ -173667,12 +173662,12 @@ BEGIN
       relevant_carry_forwards.source_pay_batch_item_id,
       relevant_carry_forwards.target_pay_batch_id,
       relevant_carry_forwards.target_pay_batch_item_id,
-      target_item_rows.target_pay_batch_item_id AS actual_target_pay_batch_item_id,
-      target_item_rows.target_pay_batch_id AS actual_target_pay_batch_id,
-      target_item_rows.target_amount_ex_vat,
-      target_item_rows.target_amount_vat,
-      target_item_rows.target_amount_inc_vat,
-      target_item_rows.target_is_voided,
+      target_carry_forward_item_rows.target_pay_batch_item_id AS actual_target_pay_batch_item_id,
+      target_carry_forward_item_rows.target_pay_batch_id AS actual_target_pay_batch_id,
+      target_carry_forward_item_rows.target_amount_ex_vat,
+      target_carry_forward_item_rows.target_amount_vat,
+      target_carry_forward_item_rows.target_amount_inc_vat,
+      target_carry_forward_item_rows.target_is_voided,
       source_classified_rows.source_pay_batch_item_id AS actual_source_pay_batch_item_id,
       source_classified_rows.source_amount_ex_vat,
       source_classified_rows.source_amount_vat,
@@ -173693,13 +173688,12 @@ BEGIN
           )
       ) AS is_represented_in_target_batch
     FROM relevant_carry_forwards
-    LEFT JOIN target_item_rows
-      ON target_item_rows.carry_forward_id = relevant_carry_forwards.id
+    LEFT JOIN target_carry_forward_item_rows
+      ON target_carry_forward_item_rows.carry_forward_id = relevant_carry_forwards.id
     LEFT JOIN source_classified_rows
       ON source_classified_rows.carry_forward_id = relevant_carry_forwards.id
   ), blocker_rows AS (
     SELECT
-      checked_carry_forwards.carry_forward_id,
       CASE
         WHEN checked_carry_forwards.carry_forward_status IN ('CANCELLED', 'SUPERSEDED', 'NEEDS_REVIEW') THEN 'MANUAL_ADJUSTMENT_CARRY_FORWARD_CHANGED'
         WHEN checked_carry_forwards.carry_forward_status = 'CONSUMED_IN_BATCH'
@@ -173735,7 +173729,17 @@ BEGIN
           AND checked_carry_forwards.is_represented_in_target_batch = false THEN 'PENDING_CARRY_FORWARD_NOT_INCLUDED_IN_TARGET_BATCH'
         ELSE NULL::text
       END AS blocker_code,
-      checked_carry_forwards.*
+      checked_carry_forwards.carry_forward_id,
+      checked_carry_forwards.carry_forward_status,
+      checked_carry_forwards.candidate_id,
+      checked_carry_forwards.pay_channel,
+      checked_carry_forwards.source_pay_batch_id,
+      checked_carry_forwards.source_pay_batch_item_id,
+      checked_carry_forwards.target_pay_batch_id,
+      checked_carry_forwards.target_pay_batch_item_id,
+      checked_carry_forwards.actual_target_pay_batch_item_id,
+      checked_carry_forwards.carry_forward_amount_inc_vat,
+      checked_carry_forwards.target_amount_inc_vat
     FROM checked_carry_forwards
   )
   SELECT
@@ -173777,6 +173781,10 @@ BEGIN
   );
 END;
 $function$;
+
+
+
+
 
 CREATE OR REPLACE FUNCTION public._pay_batch_provider_submit_preflight_recheck(
   p_pay_batch_id uuid,
