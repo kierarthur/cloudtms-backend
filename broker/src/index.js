@@ -17316,6 +17316,7 @@ function buildRemittanceEmailPayload(job, context = {}) {
   };
 }
 
+
 async function handleBankingPayBatchRetryBlockedFunds(env, req, user, payBatchId) {
 
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -17413,6 +17414,124 @@ async function handleBankingPayBatchRetryBlockedFunds(env, req, user, payBatchId
       released: Number(source.carry_forward_released_count ?? progress.carry_forward_released_count ?? totals.carry_forward_released_count ?? totals.carry_forward_released ?? 0) || 0
     };
   };
+  const firstNonBlank = (...values) => {
+    for (const value of values) {
+      const text = trimText(value);
+      if (text) return text;
+    }
+    return '';
+  };
+  const boolValue = (...values) => {
+    for (const value of values) {
+      if (value === true) return true;
+      if (value === false) return false;
+      const text = trimText(value).toLowerCase();
+      if (['true', 't', '1', 'yes', 'y', 'on'].includes(text)) return true;
+      if (['false', 'f', '0', 'no', 'n', 'off'].includes(text)) return false;
+    }
+    return false;
+  };
+  const numberValue = (...values) => {
+    for (const value of values) {
+      const n = Number(value);
+      if (Number.isFinite(n)) return Math.max(0, Math.trunc(n));
+    }
+    return 0;
+  };
+  const arrayValue = (...values) => {
+    for (const value of values) {
+      if (Array.isArray(value)) return value;
+    }
+    return [];
+  };
+  const objectValue = (...values) => {
+    for (const value of values) {
+      const obj = safeObject(value);
+      if (Object.keys(obj).length) return obj;
+    }
+    return {};
+  };
+  const retryScopeSignatureFrom = (...values) => {
+    for (const value of values) {
+      const source = safeObject(value);
+      const text = firstNonBlank(
+        source.retry_scope_signature,
+        source.retryScopeSignature,
+        source.retry_signature,
+        source.retrySignature,
+        source.scope_signature,
+        source.scopeSignature
+      );
+      if (text) return text;
+    }
+    return '';
+  };
+  const retryFieldsFromPlan = (plan) => {
+    const source = safeObject(plan);
+    return {
+      retry_eligible_count: numberValue(source.retry_eligible_count, source.retryEligibleCount),
+      retry_ineligible_count: numberValue(source.retry_ineligible_count, source.retryIneligibleCount),
+      retry_in_progress: boolValue(source.retry_in_progress, source.retryInProgress),
+      retry_already_in_progress: boolValue(source.retry_already_in_progress, source.retryAlreadyInProgress),
+      retry_operation_id: firstNonBlank(source.retry_operation_id, source.retryOperationId),
+      retry_operation_status: firstNonBlank(source.retry_operation_status, source.retryOperationStatus),
+      retry_eligible_scope_json: objectValue(source.retry_eligible_scope_json, source.retryEligibleScopeJson, source.retry_eligible_scope, source.retryEligibleScope),
+      retry_ineligible_summary_json: arrayValue(source.retry_ineligible_summary_json, source.retryIneligibleSummaryJson, source.retry_ineligible_summary, source.retryIneligibleSummary),
+      retry_scope_signature: retryScopeSignatureFrom(source)
+    };
+  };
+  const buildRetryResponsePayload = async (basePayload, plan, operationPayload, flags = {}) => {
+    const retry = retryFieldsFromPlan(plan);
+    const signal = await readLiveSignal(id, actorUserId, body, 'OVERVIEW');
+    const alertSummary = await readGroupedAlertSummary(actorUserId);
+    const operationObj = safeObject(operationPayload);
+    return {
+      ...safeObject(basePayload),
+      ...operationObj,
+      ok: safeObject(basePayload).ok !== false && operationObj.ok !== false,
+      pay_batch_id: id,
+      recommended_action: 'RETRY_PROVIDER_LATER',
+      requested_action: 'RETRY_PROVIDER_LATER',
+      visible_label: 'Retry unsent payments',
+      status_label: 'Retrying unsent payments',
+      retry_eligible_count: retry.retry_eligible_count,
+      retry_ineligible_count: retry.retry_ineligible_count,
+      retry_in_progress: flags.retry_in_progress === true || retry.retry_in_progress === true || operationObj.retry_in_progress === true,
+      retry_already_in_progress: flags.retry_already_in_progress === true || retry.retry_already_in_progress === true || operationObj.retry_already_in_progress === true,
+      retry_operation_id: firstNonBlank(operationObj.operation_id, operationObj.id, retry.retry_operation_id) || null,
+      retry_operation_status: firstNonBlank(operationObj.status, retry.retry_operation_status) || null,
+      retry_eligible_scope_json: retry.retry_eligible_scope_json,
+      retry_ineligible_summary_json: retry.retry_ineligible_summary_json,
+      retry_scope_signature: retry.retry_scope_signature || null,
+      grouped_alert_summary: alertSummary,
+      live_signal: signal,
+      live_signal_version: signal?.version ?? null,
+      payment_status_version: signal?.payment_status_version ?? null,
+      correction_progress_version: signal?.correction_progress_version ?? null,
+      alert_version: signal?.alert_version ?? null,
+      overview_version: signal?.overview_version ?? null
+    };
+  };
+  const findExistingRetryOperation = async (retryScopeSignature) => {
+    if (!retryScopeSignature) return null;
+    try {
+      const query = new URLSearchParams();
+      query.set('pay_batch_id', `eq.${id}`);
+      query.set('operation_type', 'eq.PAYMENT_RETRY_BLOCKED_FUNDS');
+      query.set('status', 'in.(QUEUED,RUNNING,WAITING)');
+      query.set('select', 'id,pay_batch_id,operation_type,status,phase,input_json,progress_json,result_json,error_json,total_units,completed_units,failed_units,current_chunk_index,chunk_count,workbench_session_id,root_operation_id,idempotency_key,created_at_utc,started_at_utc,updated_at_utc,completed_at_utc,failed_at_utc');
+      query.set('order', 'created_at_utc.desc');
+      query.set('limit', '20');
+      const { rows } = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/banking_pay_operations?${query.toString()}`, false);
+      for (const row of Array.isArray(rows) ? rows : []) {
+        const input = safeObject(row.input_json);
+        const progress = safeObject(row.progress_json);
+        const signature = retryScopeSignatureFrom(input, progress, row.result_json, row.error_json);
+        if (signature && signature === retryScopeSignature) return row;
+      }
+    } catch {}
+    return null;
+  };
   const requirePaymentPermission = async (actorUserId) => {
     if (!uuidRe.test(actorUserId)) return { ok: false, response: unauthorized('Unauthorized') };
     try {
@@ -17445,12 +17564,76 @@ async function handleBankingPayBatchRetryBlockedFunds(env, req, user, payBatchId
   const reauthCheck = await verifyPaymentScheduleReauth(env, user, reauthToken);
   if (!reauthCheck.ok) return withCORS(env, req, reauthCheck.response || badRequest('Please verify your identity before continuing.'));
   try {
-    const selectionJson = normaliseSelection(body, 'RETRY_PROVIDER_LATER', 'handleBankingPayBatchRetryBlockedFunds');
+    const rawSelectionJson = normaliseSelection(body, 'RETRY_PROVIDER_LATER', 'handleBankingPayBatchRetryBlockedFunds');
+    if (selectionHasSpecificRows(rawSelectionJson)) {
+      const signal = await readLiveSignal(id, actorUserId, body, 'OVERVIEW');
+      return withCORS(env, req, jsonResponse(409, {
+        ok: false,
+        pay_batch_id: id,
+        error_code: 'RETRY_UNSENT_PAYMENTS_OVERVIEW_ONLY',
+        message: 'Use Overview to retry unsent payments.',
+        requested_action: 'RETRY_PROVIDER_LATER',
+        recommended_action: 'RETRY_PROVIDER_LATER',
+        visible_label: 'Retry unsent payments',
+        status_label: 'Retrying unsent payments',
+        live_signal: signal
+      }));
+    }
+    const selectionJson = {
+      ...rawSelectionJson,
+      scope_type: 'BATCH',
+      requested_action: 'RETRY_PROVIDER_LATER',
+      source_context: 'handleBankingPayBatchRetryBlockedFunds.overview_retry'
+    };
     const plan = unwrapRpc(await sbRpc(env, 'pay_payment_correction_plan', { p_pay_batch_id: id, p_selection_json: selectionJson, p_actor_user_id: actorUserId }), 'pay_payment_correction_plan');
     const action = upperText(plan.recommended_action || plan.action || selectionJson.requested_action || '');
+    const retry = retryFieldsFromPlan(plan);
+    if (action !== 'RETRY_PROVIDER_LATER') {
+      const signal = await readLiveSignal(id, actorUserId, body, 'OVERVIEW');
+      return withCORS(env, req, jsonResponse(409, {
+        ok: false,
+        pay_batch_id: id,
+        error_code: 'RETRY_PROVIDER_LATER_NOT_ALLOWED',
+        message: 'Retry unsent payments is only available when the backend confirms unsent payments can be retried.',
+        visible_label: 'Retry unsent payments',
+        status_label: 'Retrying unsent payments',
+        retry_eligible_count: retry.retry_eligible_count,
+        retry_ineligible_count: retry.retry_ineligible_count,
+        retry_in_progress: retry.retry_in_progress,
+        retry_already_in_progress: retry.retry_already_in_progress,
+        retry_operation_id: retry.retry_operation_id || null,
+        retry_operation_status: retry.retry_operation_status || null,
+        retry_eligible_scope_json: retry.retry_eligible_scope_json,
+        retry_ineligible_summary_json: retry.retry_ineligible_summary_json,
+        retry_scope_signature: retry.retry_scope_signature || null,
+        plan,
+        live_signal: signal
+      }));
+    }
+    if (retry.retry_eligible_count <= 0) {
+      const signal = await readLiveSignal(id, actorUserId, body, 'OVERVIEW');
+      return withCORS(env, req, jsonResponse(409, {
+        ok: false,
+        pay_batch_id: id,
+        error_code: 'NO_UNSENT_PAYMENTS_TO_RETRY',
+        message: 'No unsent payments are currently available to retry.',
+        visible_label: 'Retry unsent payments',
+        status_label: 'No unsent payments available to retry',
+        retry_eligible_count: 0,
+        retry_ineligible_count: retry.retry_ineligible_count,
+        retry_in_progress: retry.retry_in_progress,
+        retry_already_in_progress: retry.retry_already_in_progress,
+        retry_operation_id: retry.retry_operation_id || null,
+        retry_operation_status: retry.retry_operation_status || null,
+        retry_eligible_scope_json: retry.retry_eligible_scope_json,
+        retry_ineligible_summary_json: retry.retry_ineligible_summary_json,
+        retry_scope_signature: retry.retry_scope_signature || null,
+        plan,
+        live_signal: signal
+      }));
+    }
     const evidenceText = upperText(JSON.stringify({ provider_evidence: plan.provider_evidence || plan.provider_evidence_json, webhook_evidence: plan.webhook_evidence || plan.provider_webhook_evidence_json, lifecycle: plan.payment_lifecycle_state || plan.lifecycle, blockers: plan.blockers || plan.hard_blockers }));
-    const unsafe = action !== 'RETRY_PROVIDER_LATER'
-      || evidenceText.includes('PROVIDER_SUBMITTED_PENDING')
+    const unsafe = evidenceText.includes('PROVIDER_SUBMITTED_PENDING')
       || evidenceText.includes('PROVIDER_OUTCOME_UNKNOWN')
       || evidenceText.includes('PROVIDER_FAILED_NO_MONEY')
       || evidenceText.includes('PROVIDER_CANCELLED_NO_MONEY')
@@ -17460,15 +17643,50 @@ async function handleBankingPayBatchRetryBlockedFunds(env, req, user, payBatchId
       || evidenceText.includes('PROVIDER_RESPONSE_PRESENT');
     if (unsafe) {
       const signal = await readLiveSignal(id, actorUserId, body, 'OVERVIEW');
-      return withCORS(env, req, jsonResponse(409, { ok: false, pay_batch_id: id, error_code: 'RETRY_PROVIDER_LATER_NOT_ALLOWED', message: 'Retry is only available when the provider request was definitely not sent.', plan, live_signal: signal }));
+      return withCORS(env, req, jsonResponse(409, { ok: false, pay_batch_id: id, error_code: 'RETRY_UNSENT_PAYMENTS_NOT_SAFE', message: 'Retry unsent payments is only available when the provider request was definitely not sent.', plan, live_signal: signal }));
     }
     const summary = unwrapRpc(await sbRpc(env, 'pay_batch_execution_summary_get', { p_pay_batch_id: id, p_actor_user_id: actorUserId }), 'pay_batch_execution_summary_get');
     const fundingAccountRef = trimText(body.funding_account_ref || body.fundingAccountRef || summary.funding_account_ref || summary.blocked_funds_account_ref || '');
     if (!fundingAccountRef) return withCORS(env, req, badRequest('funding_account_ref is required'));
+    if (!retry.retry_scope_signature) {
+      const signal = await readLiveSignal(id, actorUserId, body, 'OVERVIEW');
+      return withCORS(env, req, jsonResponse(409, {
+        ok: false,
+        pay_batch_id: id,
+        error_code: 'RETRY_SCOPE_SIGNATURE_REQUIRED',
+        message: 'Retry unsent payments could not be started because the retry scope signature is missing. Refresh the batch and try again.',
+        visible_label: 'Retry unsent payments',
+        status_label: 'No unsent payments available to retry',
+        retry_eligible_count: retry.retry_eligible_count,
+        retry_ineligible_count: retry.retry_ineligible_count,
+        retry_in_progress: retry.retry_in_progress,
+        retry_already_in_progress: retry.retry_already_in_progress,
+        retry_operation_id: retry.retry_operation_id || null,
+        retry_operation_status: retry.retry_operation_status || null,
+        retry_eligible_scope_json: retry.retry_eligible_scope_json,
+        retry_ineligible_summary_json: retry.retry_ineligible_summary_json,
+        retry_scope_signature: null,
+        plan,
+        live_signal: signal
+      }));
+    }
+    const retryScopeSignature = retry.retry_scope_signature;
+    const existingOperation = await findExistingRetryOperation(retryScopeSignature);
+    if (existingOperation) {
+      const existingPayload = typeof buildBankingPayOperationPublicPayload === 'function'
+        ? buildBankingPayOperationPublicPayload(existingOperation)
+        : existingOperation;
+      const responsePayload = await buildRetryResponsePayload({
+        retry_in_progress: true,
+        retry_already_in_progress: true,
+        message: 'Retry already in progress'
+      }, plan, existingPayload, { retry_in_progress: true, retry_already_in_progress: true });
+      return withCORS(env, req, ok(responsePayload));
+    }
     const operation = await startBankingPayOperation(env, {
       operation_type: 'PAYMENT_RETRY_BLOCKED_FUNDS',
       actor_user_id: actorUserId,
-      idempotency_key: trimText(body.idempotency_key || body.idempotencyKey || `payment-retry-provider-later:batch:${id}:${actorUserId}:${fundingAccountRef}`),
+      idempotency_key: `payment-retry-unsent:batch:${id}:scope:${retryScopeSignature}`,
       pay_batch_id: id,
       input_json: {
         source: 'handleBankingPayBatchRetryBlockedFunds',
@@ -17480,21 +17698,25 @@ async function handleBankingPayBatchRetryBlockedFunds(env, req, user, payBatchId
         suppress_remittances: true,
         suppress_remittances_confirmed: true,
         retry_blocked_funds: true,
+        retry_unsent_payments: true,
         retry_provider_later: true,
+        retry_scope_signature: retryScopeSignature,
+        retry_eligible_scope_json: retry.retry_eligible_scope_json,
+        retry_ineligible_summary_json: retry.retry_ineligible_summary_json,
+        retry_eligible_count: retry.retry_eligible_count,
+        retry_ineligible_count: retry.retry_ineligible_count,
         requires_reauth: true,
         reauth_verified: true,
         rail_provider_snapshot: summary.rail_provider_snapshot || summary.provider || null,
         rail_env_snapshot: summary.rail_env_snapshot || summary.provider_environment || null
       }
     });
-    const signal = await readLiveSignal(id, actorUserId, body, 'OVERVIEW');
-    const alertSummary = await readGroupedAlertSummary(actorUserId);
-    return withCORS(env, req, ok({ ...operation, ok: true, pay_batch_id: id, retry_provider_later: true, grouped_alert_summary: alertSummary, live_signal: signal, live_signal_version: signal?.version ?? null, payment_status_version: signal?.payment_status_version ?? null, correction_progress_version: signal?.correction_progress_version ?? null, overview_version: signal?.overview_version ?? null }));
+    const responsePayload = await buildRetryResponsePayload({ retry_in_progress: true }, plan, operation, { retry_in_progress: true });
+    return withCORS(env, req, ok(responsePayload));
   } catch (e) {
     return rpcErrorResponse(e, 'RETRY_PROVIDER_LATER_FAILED', 'Provider retry could not be started.');
   }
 }
-
 
 
 
