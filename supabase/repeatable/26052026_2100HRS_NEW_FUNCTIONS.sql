@@ -1,4 +1,4 @@
-begin;
+
 
 -- =========================================================
 -- Helpers (private)
@@ -1402,7 +1402,7 @@ $$;
 
 
 
-commit;
+
 
 
 
@@ -3160,7 +3160,7 @@ end;
 $$;
 
 
-begin;
+
 
 -- =========================================================
 -- pay_snooze_upsert
@@ -4592,11 +4592,11 @@ END;
 $$;
 
 
-commit;
 
 
 
-begin;
+
+
 
 -- =========================================================
 -- A4.1 pay_preview(p_pay_date date, p_actor_user_id uuid)
@@ -4628,7 +4628,7 @@ begin;
 --  - Does not filter out missing refs at timesheet level
 -- =========================================================
 
-begin;
+
 CREATE OR REPLACE FUNCTION public.pay_preview(
   p_pay_date date,
   p_week_ending_cutoff date,
@@ -20527,7 +20527,7 @@ begin
 end;
 $$;
 
-commit;
+
 
 
 
