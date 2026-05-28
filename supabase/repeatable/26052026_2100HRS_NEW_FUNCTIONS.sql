@@ -74568,7 +74568,7 @@ BEGIN
   IF p_limit IS NULL THEN
     v_limit := 100;
   ELSIF p_limit = 0 THEN
-    v_limit := NULL::integer;
+    v_limit := 100;
   ELSE
     v_limit := LEAST(GREATEST(p_limit, 1), 500);
   END IF;
@@ -74628,7 +74628,7 @@ BEGIN
           AND COALESCE(blocked_funds_item_exists.is_voided, false) = false
       )
   ),
-  blocked_funds_alerts AS (
+  blocked_funds_alerts AS MATERIALIZED (
     SELECT
       'PROVIDER_OUTAGE_RETRY_LATER'::text AS alert_kind,
       'critical'::text AS severity,
@@ -74677,7 +74677,7 @@ BEGIN
       blocked_funds_base.last_funds_check_at_utc AS sort_at_utc
     FROM blocked_funds_base
   ),
-  bank_event_base AS (
+  bank_event_base AS MATERIALIZED (
     SELECT
       CASE
         WHEN (
@@ -74743,7 +74743,7 @@ BEGIN
           AND UPPER(BTRIM(COALESCE(resolved_event_corrections.status, ''))) IN ('APPLIED','RESOLVED')
       )
   ),
-  bank_event_alerts AS (
+  bank_event_alerts AS MATERIALIZED (
     SELECT
       bank_event_base.alert_kind,
       'critical'::text AS severity,
@@ -74819,7 +74819,7 @@ BEGIN
     FROM bank_event_base
     WHERE bank_event_base.alert_kind IS NOT NULL
   ),
-  transfer_base AS (
+  transfer_base AS MATERIALIZED (
     SELECT
       CASE
         WHEN UPPER(BTRIM(COALESCE(public.pay_bank_transfers.status, ''))) IN ('RETURNED','REVERTED')
@@ -74867,7 +74867,7 @@ BEGIN
           AND UPPER(BTRIM(COALESCE(transfer_resolved_requests.status, ''))) IN ('APPLIED','RESOLVED')
       )
   ),
-  transfer_alerts AS (
+  transfer_alerts AS MATERIALIZED (
     SELECT
       transfer_base.alert_kind,
       'critical'::text AS severity,
@@ -74915,7 +74915,7 @@ BEGIN
     FROM transfer_base
     WHERE transfer_base.alert_kind IS NOT NULL
   ),
-  correction_request_base AS (
+  correction_request_base AS MATERIALIZED (
     SELECT
       CASE
         WHEN UPPER(BTRIM(COALESCE(public.pay_payment_correction_requests.status, ''))) IN ('FAILED','FAILED_RETRYABLE','FAILED_FINAL') THEN 'PAYMENT_CORRECTION_FAILED'
@@ -74938,7 +74938,7 @@ BEGIN
     WHERE UPPER(BTRIM(COALESCE(correction_request_batches.status, ''))) NOT IN ('CANCELLED','CANCELED')
       AND UPPER(BTRIM(COALESCE(public.pay_payment_correction_requests.status, ''))) IN ('FAILED','FAILED_RETRYABLE','FAILED_FINAL','BLOCKED','APPLIED_WITH_BLOCKERS','REQUESTED','AWAITING_AUTHORISATION','AWAITING_AUTHORIZATION','PENDING_APPROVAL')
   ),
-  correction_request_alerts AS (
+  correction_request_alerts AS MATERIALIZED (
     SELECT
       correction_request_base.alert_kind,
       'critical'::text AS severity,
@@ -74984,7 +74984,7 @@ BEGIN
     FROM correction_request_base
     WHERE correction_request_base.alert_kind IS NOT NULL
   ),
-  correction_work_base AS (
+  correction_work_base AS MATERIALIZED (
     SELECT
       CASE
         WHEN UPPER(BTRIM(COALESCE(public.pay_payment_correction_work_items.status, ''))) IN ('FAILED','FAILED_RETRYABLE','FAILED_FINAL') THEN 'PAYMENT_CORRECTION_FAILED'
@@ -75005,7 +75005,7 @@ BEGIN
     WHERE UPPER(BTRIM(COALESCE(correction_work_batches.status, ''))) NOT IN ('CANCELLED','CANCELED')
       AND UPPER(BTRIM(COALESCE(public.pay_payment_correction_work_items.status, ''))) IN ('FAILED','FAILED_RETRYABLE','FAILED_FINAL','BLOCKED','APPLIED_WITH_BLOCKERS')
   ),
-  correction_work_alerts AS (
+  correction_work_alerts AS MATERIALIZED (
     SELECT
       correction_work_base.alert_kind,
       'critical'::text AS severity,
@@ -75044,7 +75044,7 @@ BEGIN
     FROM correction_work_base
     WHERE correction_work_base.alert_kind IS NOT NULL
   ),
-  remittance_base AS (
+  remittance_base AS MATERIALIZED (
     SELECT
       public.mail_outbox.context_id AS pay_batch_id,
       public.mail_outbox.id AS source_id,
@@ -75071,7 +75071,7 @@ BEGIN
           AND COALESCE(remittance_success_outbox.sent_at, remittance_success_outbox.created_at_utc) >= COALESCE(public.mail_outbox.failed_at, public.mail_outbox.created_at_utc)
       )
   ),
-  remittance_alerts AS (
+  remittance_alerts AS MATERIALIZED (
     SELECT
       'REMITTANCE_SEND_FAILED'::text AS alert_kind,
       'critical'::text AS severity,
@@ -75097,7 +75097,7 @@ BEGIN
     FROM remittance_base
   ),
 
-  provider_submit_review_scope AS (
+  provider_submit_review_scope AS MATERIALIZED (
     SELECT DISTINCT
       provider_operation.id AS operation_id,
       provider_operation.pay_batch_id AS pay_batch_id,
@@ -75123,7 +75123,7 @@ BEGIN
         OR jsonb_typeof(provider_operation.error_json->'provider_submit_diagnostic') = 'object'
       )
   ),
-  provider_submit_review_base AS (
+  provider_submit_review_base AS MATERIALIZED (
     SELECT
       provider_submit_review_scope.pay_batch_id,
       provider_submit_review_scope.operation_id,
@@ -75172,7 +75172,7 @@ BEGIN
       )
       AND UPPER(BTRIM(COALESCE(provider_diagnostic.diagnostic_json->>'provider_submission_status', provider_diagnostic.diagnostic_json #>> '{provider_submit_diagnostic,provider_submission_status}', ''))) <> 'MANUAL_RESOLVED_NO_PAYMENT_MADE'
   ),
-  provider_submit_review_alerts AS (
+  provider_submit_review_alerts AS MATERIALIZED (
     SELECT
       'PAYMENT_PROVIDER_SUBMIT_REVIEW'::text AS alert_kind,
       'critical'::text AS severity,
@@ -75240,31 +75240,158 @@ BEGIN
       )
   ),
 
-  grouped_banking_pay_diagnostic_scope AS (
+  grouped_banking_pay_diagnostic_pay_batch_scope AS MATERIALIZED (
+    SELECT DISTINCT candidate_scope.pay_batch_id
+    FROM (
+      SELECT scoped_specific_batch.id AS pay_batch_id
+      FROM public.pay_batches AS scoped_specific_batch
+      WHERE p_entity_id IS NOT NULL
+        AND (v_entity_kind IS NULL OR v_entity_kind IN ('pay_batch', 'pay_batches'))
+        AND scoped_specific_batch.id = p_entity_id
+
+      UNION
+
+      SELECT blocked_candidate_batch.id AS pay_batch_id
+      FROM public.pay_batches AS blocked_candidate_batch
+      WHERE p_entity_id IS NULL
+        AND (v_entity_kind IS NULL OR v_entity_kind IN ('pay_batch', 'pay_batches'))
+        AND UPPER(BTRIM(COALESCE(blocked_candidate_batch.status, ''))) = 'BLOCKED_FUNDS'
+        AND UPPER(BTRIM(COALESCE(blocked_candidate_batch.execution_commit_state, 'NOT_SUBMITTED'))) = 'NOT_SUBMITTED'
+        AND blocked_candidate_batch.cancelled_at_utc IS NULL
+
+      UNION
+
+      SELECT event_candidate.pay_batch_id
+      FROM public.pay_bank_transfer_events AS event_candidate
+      JOIN public.pay_batches AS event_candidate_batch
+        ON event_candidate_batch.id = event_candidate.pay_batch_id
+      WHERE p_entity_id IS NULL
+        AND (v_entity_kind IS NULL OR v_entity_kind IN ('pay_batch', 'pay_batches'))
+        AND event_candidate.pay_batch_id IS NOT NULL
+        AND UPPER(BTRIM(COALESCE(event_candidate_batch.status, ''))) NOT IN ('CANCELLED','CANCELED')
+        AND (
+          UPPER(BTRIM(COALESCE(event_candidate.normalised_state, ''))) IN ('FAILED','DECLINED','REJECTED','CANCELLED','CANCELED','SUBMISSION_FAILED','RETURNED','REVERTED','UNKNOWN','TIMEOUT','TIMED_OUT','PENDING_REVIEW')
+          OR UPPER(BTRIM(COALESCE(event_candidate.normalised_state, ''))) LIKE 'CREATE_ERROR%'
+          OR UPPER(BTRIM(COALESCE(event_candidate.provider_state, ''))) IN ('FAILED','DECLINED','REJECTED','CANCELLED','CANCELED','SUBMISSION_FAILED','RETURNED','REVERTED','UNKNOWN','TIMEOUT','TIMED_OUT','PENDING_REVIEW')
+          OR UPPER(BTRIM(COALESCE(event_candidate.provider_state, ''))) LIKE 'CREATE_ERROR%'
+          OR UPPER(BTRIM(COALESCE(event_candidate.mapping_status, ''))) IN ('AMBIGUOUS','UNMATCHED','NO_MATCH','MULTIPLE_MATCHES')
+          OR UPPER(BTRIM(COALESCE(event_candidate.correction_disposition, ''))) IN ('AMBIGUOUS','ACTION_REQUIRED','BLOCKED','FAILED')
+          OR NULLIF(BTRIM(COALESCE(event_candidate.provider_failure_reason_group, '')), '') IS NOT NULL
+        )
+
+      UNION
+
+      SELECT transfer_candidate.pay_batch_id
+      FROM public.pay_bank_transfers AS transfer_candidate
+      JOIN public.pay_batches AS transfer_candidate_batch
+        ON transfer_candidate_batch.id = transfer_candidate.pay_batch_id
+      WHERE p_entity_id IS NULL
+        AND (v_entity_kind IS NULL OR v_entity_kind IN ('pay_batch', 'pay_batches'))
+        AND transfer_candidate.pay_batch_id IS NOT NULL
+        AND UPPER(BTRIM(COALESCE(transfer_candidate_batch.status, ''))) NOT IN ('CANCELLED','CANCELED')
+        AND (
+          UPPER(BTRIM(COALESCE(transfer_candidate.status, ''))) IN ('FAILED','DECLINED','REJECTED','CANCELLED','CANCELED','SUBMISSION_FAILED','FAILED_BEFORE_COMMIT','RETURNED','REVERTED','UNKNOWN','TIMEOUT','TIMED_OUT','PENDING_REVIEW')
+          OR UPPER(BTRIM(COALESCE(transfer_candidate.status, ''))) LIKE 'CREATE_ERROR%'
+          OR UPPER(BTRIM(COALESCE(transfer_candidate.rail_state, ''))) IN ('FAILED','DECLINED','REJECTED','CANCELLED','CANCELED','SUBMISSION_FAILED','FAILED_BEFORE_COMMIT','RETURNED','REVERTED','UNKNOWN','TIMEOUT','TIMED_OUT','PENDING_REVIEW')
+          OR UPPER(BTRIM(COALESCE(transfer_candidate.rail_state, ''))) LIKE 'CREATE_ERROR%'
+          OR NULLIF(BTRIM(COALESCE(transfer_candidate.failed_reason, '')), '') IS NOT NULL
+        )
+
+      UNION
+
+      SELECT correction_request_candidate.pay_batch_id
+      FROM public.pay_payment_correction_requests AS correction_request_candidate
+      JOIN public.pay_batches AS correction_request_candidate_batch
+        ON correction_request_candidate_batch.id = correction_request_candidate.pay_batch_id
+      WHERE p_entity_id IS NULL
+        AND (v_entity_kind IS NULL OR v_entity_kind IN ('pay_batch', 'pay_batches'))
+        AND correction_request_candidate.pay_batch_id IS NOT NULL
+        AND UPPER(BTRIM(COALESCE(correction_request_candidate_batch.status, ''))) NOT IN ('CANCELLED','CANCELED')
+        AND UPPER(BTRIM(COALESCE(correction_request_candidate.status, ''))) NOT IN ('APPLIED','RESOLVED','COMPLETE','COMPLETED','CANCELLED','CANCELED')
+
+      UNION
+
+      SELECT correction_work_candidate.pay_batch_id
+      FROM public.pay_payment_correction_work_items AS correction_work_candidate
+      JOIN public.pay_batches AS correction_work_candidate_batch
+        ON correction_work_candidate_batch.id = correction_work_candidate.pay_batch_id
+      WHERE p_entity_id IS NULL
+        AND (v_entity_kind IS NULL OR v_entity_kind IN ('pay_batch', 'pay_batches'))
+        AND correction_work_candidate.pay_batch_id IS NOT NULL
+        AND UPPER(BTRIM(COALESCE(correction_work_candidate_batch.status, ''))) NOT IN ('CANCELLED','CANCELED')
+        AND UPPER(BTRIM(COALESCE(correction_work_candidate.status, ''))) IN ('PENDING','PROCESSING','BLOCKED','FAILED','FAILED_RETRYABLE','FAILED_FINAL','APPLIED_WITH_BLOCKERS')
+
+      UNION
+
+      SELECT operation_candidate.pay_batch_id
+      FROM public.banking_pay_operations AS operation_candidate
+      JOIN public.pay_batches AS operation_candidate_batch
+        ON operation_candidate_batch.id = operation_candidate.pay_batch_id
+      WHERE p_entity_id IS NULL
+        AND (v_entity_kind IS NULL OR v_entity_kind IN ('pay_batch', 'pay_batches'))
+        AND operation_candidate.pay_batch_id IS NOT NULL
+        AND UPPER(BTRIM(COALESCE(operation_candidate_batch.status, ''))) NOT IN ('CANCELLED','CANCELED')
+        AND (
+          UPPER(BTRIM(COALESCE(operation_candidate.operation_type, ''))) = 'PAYMENT_RETRY_BLOCKED_FUNDS'
+          OR UPPER(BTRIM(COALESCE(operation_candidate.status, ''))) IN ('REVIEW_REQUIRED','FAILED')
+          OR jsonb_typeof(operation_candidate.progress_json->'provider_submit_diagnostic') = 'object'
+          OR jsonb_typeof(operation_candidate.result_json->'provider_submit_diagnostic') = 'object'
+          OR jsonb_typeof(operation_candidate.error_json->'provider_submit_diagnostic') = 'object'
+        )
+
+      UNION
+
+      SELECT remittance_candidate.context_id AS pay_batch_id
+      FROM public.mail_outbox AS remittance_candidate
+      JOIN public.pay_batches AS remittance_candidate_batch
+        ON remittance_candidate_batch.id = remittance_candidate.context_id
+      WHERE p_entity_id IS NULL
+        AND (v_entity_kind IS NULL OR v_entity_kind IN ('pay_batch', 'pay_batches'))
+        AND remittance_candidate.context_id IS NOT NULL
+        AND UPPER(BTRIM(COALESCE(remittance_candidate_batch.status, ''))) NOT IN ('CANCELLED','CANCELED')
+        AND UPPER(BTRIM(COALESCE(remittance_candidate.type, ''))) = 'REMITTANCE'
+        AND LOWER(BTRIM(COALESCE(remittance_candidate.context_kind, ''))) = 'pay_batches'
+        AND UPPER(BTRIM(COALESCE(remittance_candidate.status::text, ''))) = 'FAILED'
+
+      UNION
+
+      SELECT carry_forward_candidate.source_pay_batch_id AS pay_batch_id
+      FROM public.pay_manual_adjustment_carry_forwards AS carry_forward_candidate
+      JOIN public.pay_batches AS carry_forward_candidate_batch
+        ON carry_forward_candidate_batch.id = carry_forward_candidate.source_pay_batch_id
+      WHERE p_entity_id IS NULL
+        AND (v_entity_kind IS NULL OR v_entity_kind IN ('pay_batch', 'pay_batches'))
+        AND carry_forward_candidate.source_pay_batch_id IS NOT NULL
+        AND UPPER(BTRIM(COALESCE(carry_forward_candidate_batch.status, ''))) NOT IN ('CANCELLED','CANCELED')
+        AND UPPER(BTRIM(COALESCE(carry_forward_candidate.status, ''))) = 'PENDING_CARRY_FORWARD'
+    ) AS candidate_scope
+    WHERE candidate_scope.pay_batch_id IS NOT NULL
+  ),
+  grouped_banking_pay_diagnostic_scope AS MATERIALIZED (
     SELECT
-      public.pay_batches.id AS pay_batch_id,
-      public.pay_batches.status AS batch_status,
-      public.pay_batches.rail_provider_snapshot,
-      public.pay_batches.rail_env_snapshot,
+      scoped_pay_batches.id AS pay_batch_id,
+      scoped_pay_batches.status AS batch_status,
+      scoped_pay_batches.rail_provider_snapshot,
+      scoped_pay_batches.rail_env_snapshot,
       GREATEST(
-        COALESCE(public.pay_batches.last_status_checked_at_utc, '-infinity'::timestamptz),
-        COALESCE(public.pay_batches.last_funds_check_at_utc, '-infinity'::timestamptz),
-        COALESCE(public.pay_batches.execution_committed_at_utc, '-infinity'::timestamptz),
-        COALESCE(public.pay_batches.created_at_utc, '-infinity'::timestamptz)
+        COALESCE(scoped_pay_batches.last_status_checked_at_utc, '-infinity'::timestamptz),
+        COALESCE(scoped_pay_batches.last_funds_check_at_utc, '-infinity'::timestamptz),
+        COALESCE(scoped_pay_batches.execution_committed_at_utc, '-infinity'::timestamptz),
+        COALESCE(scoped_pay_batches.created_at_utc, '-infinity'::timestamptz)
       ) AS sort_at_utc,
       COALESCE(
         public.pay_payment_cancelability_diagnostic(
-          public.pay_batches.id,
+          scoped_pay_batches.id,
           jsonb_build_object('scope_type', 'BATCH'),
           p_actor_user_id
         ),
         '{}'::jsonb
       ) AS diagnostic_json
-    FROM public.pay_batches
-    WHERE (v_entity_kind IS NULL OR v_entity_kind IN ('pay_batch', 'pay_batches'))
-      AND (p_entity_id IS NULL OR public.pay_batches.id = p_entity_id)
+    FROM grouped_banking_pay_diagnostic_pay_batch_scope AS diagnostic_scope
+    JOIN public.pay_batches AS scoped_pay_batches
+      ON scoped_pay_batches.id = diagnostic_scope.pay_batch_id
   ),
-  grouped_banking_pay_correction_scope AS (
+  grouped_banking_pay_correction_scope AS MATERIALIZED (
     SELECT
       public.pay_payment_correction_requests.pay_batch_id,
       public.pay_payment_correction_requests.id AS correction_request_id,
@@ -75293,7 +75420,7 @@ BEGIN
       public.pay_payment_correction_requests.updated_at_utc,
       public.pay_payment_correction_requests.created_at_utc
   ),
-  grouped_banking_pay_carry_forward_scope AS (
+  grouped_banking_pay_carry_forward_scope AS MATERIALIZED (
     SELECT
       public.pay_manual_adjustment_carry_forwards.source_pay_batch_id AS pay_batch_id,
       COUNT(*)::integer AS carry_forward_count,
@@ -75305,7 +75432,7 @@ BEGIN
       AND UPPER(BTRIM(COALESCE(public.pay_manual_adjustment_carry_forwards.status, ''))) = 'PENDING_CARRY_FORWARD'
     GROUP BY public.pay_manual_adjustment_carry_forwards.source_pay_batch_id
   ),
-  grouped_banking_pay_alert_seeds AS (
+  grouped_banking_pay_alert_seeds AS MATERIALIZED (
     SELECT
       'PROVIDER_OUTAGE_RETRY_LATER'::text AS alert_kind,
       92::integer AS severity_rank,
@@ -75450,7 +75577,7 @@ BEGIN
     FROM grouped_banking_pay_carry_forward_scope
     WHERE COALESCE(grouped_banking_pay_carry_forward_scope.carry_forward_count, 0) > 0
   ),
-  grouped_banking_pay_alerts AS (
+  grouped_banking_pay_alerts AS MATERIALIZED (
     SELECT
       grouped_banking_pay_alert_seeds.alert_kind,
       grouped_banking_pay_alert_seeds.severity,
@@ -75460,23 +75587,247 @@ BEGIN
       grouped_banking_pay_alert_seeds.pay_batch_id,
       grouped_banking_pay_alert_seeds.payload_source_kind,
       grouped_banking_pay_alert_seeds.payload_source_id,
-      grouped_payload.payload_json AS fingerprint_payload_json,
-      COALESCE(NULLIF(BTRIM(grouped_payload.payload_json->>'user_label'), ''), INITCAP(REPLACE(LOWER(grouped_banking_pay_alert_seeds.alert_kind), '_', ' ')))::text AS label,
-      COALESCE(NULLIF(BTRIM(grouped_payload.payload_json->>'user_label'), ''), INITCAP(REPLACE(LOWER(grouped_banking_pay_alert_seeds.alert_kind), '_', ' ')))::text AS title,
-      COALESCE(NULLIF(BTRIM(grouped_payload.payload_json->>'user_description'), ''), 'Open Banking Pay for details.')::text AS description,
-      COALESCE(NULLIF(BTRIM(grouped_payload.payload_json->>'required_user_action'), ''), 'Open Banking Pay.')::text AS action_guidance,
+      jsonb_strip_nulls(
+        jsonb_build_object(
+          'payload_is_grouped', true,
+          'alert_kind', grouped_banking_pay_alert_seeds.alert_kind,
+          'issue_kind', grouped_banking_pay_alert_seeds.alert_kind,
+          'legacy_alert_kind', grouped_banking_pay_alert_seeds.alert_kind,
+          'pay_batch_id', grouped_banking_pay_alert_seeds.pay_batch_id::text,
+          'link_target', 'banking_pay_batch',
+          'link_tab', CASE
+            WHEN grouped_banking_pay_alert_seeds.alert_kind = 'PROVIDER_OUTAGE_RETRY_LATER' THEN 'overview'
+            WHEN grouped_banking_pay_alert_seeds.alert_kind = 'WHOLE_BATCH_CANCELLATION_PROGRESS' THEN 'overview'
+            ELSE 'current_payment_status'
+          END,
+          'alert_severity', grouped_banking_pay_alert_seeds.severity,
+          'severity', grouped_banking_pay_alert_seeds.severity
+        )
+        || jsonb_build_object(
+          'stable_issue_key', CONCAT_WS(
+            ':',
+            grouped_banking_pay_alert_seeds.pay_batch_id::text,
+            grouped_banking_pay_alert_seeds.alert_kind,
+            CASE
+              WHEN grouped_banking_pay_alert_seeds.alert_kind IN (
+                'PROVIDER_OUTAGE_RETRY_LATER',
+                'PROVIDER_OUTCOME_UNKNOWN_CHECK_PROVIDER',
+                'TERMINAL_NO_MONEY_REWIND_AVAILABLE',
+                'PAID_SETTLED_RECOVERY_REQUIRED',
+                'CANCELLATION_RACED_WITH_PROVIDER_SUBMIT',
+                'MANUAL_ADJUSTMENT_AMBIGUOUS_BLOCKERS',
+                'MANUAL_ADJUSTMENTS_CARRIED_FORWARD'
+              ) THEN 'GROUPED'
+              ELSE COALESCE(NULLIF(BTRIM(grouped_banking_pay_alert_seeds.payload_source_kind), ''), 'BATCH')
+            END,
+            CASE
+              WHEN grouped_banking_pay_alert_seeds.alert_kind IN (
+                'PROVIDER_OUTAGE_RETRY_LATER',
+                'PROVIDER_OUTCOME_UNKNOWN_CHECK_PROVIDER',
+                'TERMINAL_NO_MONEY_REWIND_AVAILABLE',
+                'PAID_SETTLED_RECOVERY_REQUIRED',
+                'CANCELLATION_RACED_WITH_PROVIDER_SUBMIT',
+                'MANUAL_ADJUSTMENT_AMBIGUOUS_BLOCKERS',
+                'MANUAL_ADJUSTMENTS_CARRIED_FORWARD'
+              ) THEN 'ACTIVE'
+              ELSE COALESCE(grouped_banking_pay_alert_seeds.payload_source_id::text, 'NO_SOURCE')
+            END
+          ),
+          'dedupe_key', CONCAT_WS(
+            ':',
+            grouped_banking_pay_alert_seeds.pay_batch_id::text,
+            grouped_banking_pay_alert_seeds.alert_kind,
+            CASE
+              WHEN grouped_banking_pay_alert_seeds.alert_kind IN (
+                'PROVIDER_OUTAGE_RETRY_LATER',
+                'PROVIDER_OUTCOME_UNKNOWN_CHECK_PROVIDER',
+                'TERMINAL_NO_MONEY_REWIND_AVAILABLE',
+                'PAID_SETTLED_RECOVERY_REQUIRED',
+                'CANCELLATION_RACED_WITH_PROVIDER_SUBMIT',
+                'MANUAL_ADJUSTMENT_AMBIGUOUS_BLOCKERS',
+                'MANUAL_ADJUSTMENTS_CARRIED_FORWARD'
+              ) THEN 'GROUPED'
+              ELSE COALESCE(grouped_banking_pay_alert_seeds.payload_source_id::text, 'NO_SOURCE')
+            END
+          ),
+          'payload_source_kind', NULLIF(BTRIM(COALESCE(grouped_banking_pay_alert_seeds.payload_source_kind, '')), ''),
+          'payload_source_id', CASE WHEN grouped_banking_pay_alert_seeds.payload_source_id IS NULL THEN NULL::text ELSE grouped_banking_pay_alert_seeds.payload_source_id::text END
+        )
+        || jsonb_build_object(
+          'user_label', CASE
+            WHEN grouped_banking_pay_alert_seeds.alert_kind = 'PROVIDER_OUTAGE_RETRY_LATER'
+              AND UPPER(BTRIM(COALESCE(grouped_banking_pay_alert_seeds.severity, ''))) = 'PROGRESS'
+              THEN 'Retrying unsent payments'
+            WHEN grouped_banking_pay_alert_seeds.alert_kind = 'PROVIDER_OUTAGE_RETRY_LATER'
+              THEN 'Bank unavailable — unsent payments can be retried'
+            WHEN grouped_banking_pay_alert_seeds.alert_kind = 'PROVIDER_OUTCOME_UNKNOWN_CHECK_PROVIDER'
+              THEN 'Provider outcome unknown — check provider'
+            WHEN grouped_banking_pay_alert_seeds.alert_kind = 'TERMINAL_NO_MONEY_REWIND_AVAILABLE'
+              THEN 'Failed payments — Rewind financials available'
+            WHEN grouped_banking_pay_alert_seeds.alert_kind = 'AUTO_UNWIND_PROGRESS'
+              THEN 'Rewinding failed payments'
+            WHEN grouped_banking_pay_alert_seeds.alert_kind = 'WHOLE_BATCH_CANCELLATION_PROGRESS'
+              THEN 'Cancelling scheduled batch'
+            WHEN grouped_banking_pay_alert_seeds.alert_kind = 'MANUAL_ADJUSTMENTS_CARRIED_FORWARD'
+              THEN 'Manual adjustments carried forward'
+            WHEN grouped_banking_pay_alert_seeds.alert_kind = 'MANUAL_ADJUSTMENT_AMBIGUOUS_BLOCKERS'
+              THEN 'Manual adjustment blockers — review required'
+            WHEN grouped_banking_pay_alert_seeds.alert_kind = 'PAID_SETTLED_RECOVERY_REQUIRED'
+              THEN 'Paid — recovery required'
+            WHEN grouped_banking_pay_alert_seeds.alert_kind = 'CANCELLATION_RACED_WITH_PROVIDER_SUBMIT'
+              THEN 'Cancellation conflict — provider submission already started'
+            ELSE INITCAP(REPLACE(LOWER(grouped_banking_pay_alert_seeds.alert_kind), '_', ' '))
+          END,
+          'user_description', CASE
+            WHEN grouped_banking_pay_alert_seeds.alert_kind = 'PROVIDER_OUTAGE_RETRY_LATER'
+              AND UPPER(BTRIM(COALESCE(grouped_banking_pay_alert_seeds.severity, ''))) = 'PROGRESS'
+              THEN 'Retrying unsent payments is in progress. You can continue using CloudTMS while this runs.'
+            WHEN grouped_banking_pay_alert_seeds.alert_kind = 'PROVIDER_OUTAGE_RETRY_LATER'
+              THEN 'The bank/provider was unavailable before the payment request was sent. Retry unsent payments from Banking Pay Overview.'
+            WHEN grouped_banking_pay_alert_seeds.alert_kind = 'PROVIDER_OUTCOME_UNKNOWN_CHECK_PROVIDER'
+              THEN 'A provider request may have been sent, but the outcome is not confirmed. Open Current Payment Status and check the provider outcome.'
+            WHEN grouped_banking_pay_alert_seeds.alert_kind = 'TERMINAL_NO_MONEY_REWIND_AVAILABLE'
+              THEN 'The provider/bank outcome indicates no money moved. Open Current Payment Status and rewind financials where safe.'
+            WHEN grouped_banking_pay_alert_seeds.alert_kind = 'AUTO_UNWIND_PROGRESS'
+              THEN 'Automatic no-money unwind is running and this alert updates grouped progress.'
+            WHEN grouped_banking_pay_alert_seeds.alert_kind = 'WHOLE_BATCH_CANCELLATION_PROGRESS'
+              THEN 'Scheduled local cancellation is running in chunks and this alert updates grouped progress.'
+            WHEN grouped_banking_pay_alert_seeds.alert_kind = 'MANUAL_ADJUSTMENTS_CARRIED_FORWARD'
+              THEN 'Safe source-less manual adjustments were carried forward and will be included in the next pay run.'
+            WHEN grouped_banking_pay_alert_seeds.alert_kind = 'MANUAL_ADJUSTMENT_AMBIGUOUS_BLOCKERS'
+              THEN 'One or more manual adjustments cannot be safely carried forward automatically.'
+            WHEN grouped_banking_pay_alert_seeds.alert_kind = 'PAID_SETTLED_RECOVERY_REQUIRED'
+              THEN 'Money appears to have moved. Amend the timesheet and recover the overpayment in the next pay run rather than unwinding the payment.'
+            WHEN grouped_banking_pay_alert_seeds.alert_kind = 'CANCELLATION_RACED_WITH_PROVIDER_SUBMIT'
+              THEN 'Cancellation could not proceed because provider submission had already started.'
+            ELSE 'Open Banking Pay for details.'
+          END,
+          'required_user_action', CASE
+            WHEN grouped_banking_pay_alert_seeds.alert_kind = 'PROVIDER_OUTAGE_RETRY_LATER'
+              AND UPPER(BTRIM(COALESCE(grouped_banking_pay_alert_seeds.severity, ''))) = 'PROGRESS'
+              THEN 'Monitor retry progress from Banking Pay Overview.'
+            WHEN grouped_banking_pay_alert_seeds.alert_kind = 'PROVIDER_OUTAGE_RETRY_LATER'
+              THEN 'Retry unsent payments from Banking Pay Overview.'
+            WHEN grouped_banking_pay_alert_seeds.alert_kind = 'PROVIDER_OUTCOME_UNKNOWN_CHECK_PROVIDER'
+              THEN 'Open Current Payment Status and check the provider outcome.'
+            WHEN grouped_banking_pay_alert_seeds.alert_kind = 'TERMINAL_NO_MONEY_REWIND_AVAILABLE'
+              THEN 'Open Current Payment Status and rewind financials where no money moved.'
+            WHEN grouped_banking_pay_alert_seeds.alert_kind = 'AUTO_UNWIND_PROGRESS'
+              THEN 'Monitor rewind progress.'
+            WHEN grouped_banking_pay_alert_seeds.alert_kind = 'WHOLE_BATCH_CANCELLATION_PROGRESS'
+              THEN 'Monitor cancellation progress in Banking Pay Overview.'
+            WHEN grouped_banking_pay_alert_seeds.alert_kind = 'MANUAL_ADJUSTMENTS_CARRIED_FORWARD'
+              THEN 'Review carried-forward manual adjustments in the next pay run.'
+            WHEN grouped_banking_pay_alert_seeds.alert_kind = 'MANUAL_ADJUSTMENT_AMBIGUOUS_BLOCKERS'
+              THEN 'Open Current Payment Status and review ambiguous manual adjustment blockers.'
+            WHEN grouped_banking_pay_alert_seeds.alert_kind = 'PAID_SETTLED_RECOVERY_REQUIRED'
+              THEN 'Open Current Payment Status and recover overpayment in next pay run.'
+            WHEN grouped_banking_pay_alert_seeds.alert_kind = 'CANCELLATION_RACED_WITH_PROVIDER_SUBMIT'
+              THEN 'Open Current Payment Status and check provider submission before continuing.'
+            ELSE 'Open Banking Pay.'
+          END
+        )
+      ) AS fingerprint_payload_json,
+      CASE
+        WHEN grouped_banking_pay_alert_seeds.alert_kind = 'PROVIDER_OUTAGE_RETRY_LATER'
+          AND UPPER(BTRIM(COALESCE(grouped_banking_pay_alert_seeds.severity, ''))) = 'PROGRESS'
+          THEN 'Retrying unsent payments'
+        WHEN grouped_banking_pay_alert_seeds.alert_kind = 'PROVIDER_OUTAGE_RETRY_LATER'
+          THEN 'Bank unavailable — unsent payments can be retried'
+        WHEN grouped_banking_pay_alert_seeds.alert_kind = 'PROVIDER_OUTCOME_UNKNOWN_CHECK_PROVIDER'
+          THEN 'Provider outcome unknown — check provider'
+        WHEN grouped_banking_pay_alert_seeds.alert_kind = 'TERMINAL_NO_MONEY_REWIND_AVAILABLE'
+          THEN 'Failed payments — Rewind financials available'
+        WHEN grouped_banking_pay_alert_seeds.alert_kind = 'AUTO_UNWIND_PROGRESS'
+          THEN 'Rewinding failed payments'
+        WHEN grouped_banking_pay_alert_seeds.alert_kind = 'WHOLE_BATCH_CANCELLATION_PROGRESS'
+          THEN 'Cancelling scheduled batch'
+        WHEN grouped_banking_pay_alert_seeds.alert_kind = 'MANUAL_ADJUSTMENTS_CARRIED_FORWARD'
+          THEN 'Manual adjustments carried forward'
+        WHEN grouped_banking_pay_alert_seeds.alert_kind = 'MANUAL_ADJUSTMENT_AMBIGUOUS_BLOCKERS'
+          THEN 'Manual adjustment blockers — review required'
+        WHEN grouped_banking_pay_alert_seeds.alert_kind = 'PAID_SETTLED_RECOVERY_REQUIRED'
+          THEN 'Paid — recovery required'
+        WHEN grouped_banking_pay_alert_seeds.alert_kind = 'CANCELLATION_RACED_WITH_PROVIDER_SUBMIT'
+          THEN 'Cancellation conflict — provider submission already started'
+        ELSE INITCAP(REPLACE(LOWER(grouped_banking_pay_alert_seeds.alert_kind), '_', ' '))
+      END::text AS label,
+      CASE
+        WHEN grouped_banking_pay_alert_seeds.alert_kind = 'PROVIDER_OUTAGE_RETRY_LATER'
+          AND UPPER(BTRIM(COALESCE(grouped_banking_pay_alert_seeds.severity, ''))) = 'PROGRESS'
+          THEN 'Retrying unsent payments'
+        WHEN grouped_banking_pay_alert_seeds.alert_kind = 'PROVIDER_OUTAGE_RETRY_LATER'
+          THEN 'Bank unavailable — unsent payments can be retried'
+        WHEN grouped_banking_pay_alert_seeds.alert_kind = 'PROVIDER_OUTCOME_UNKNOWN_CHECK_PROVIDER'
+          THEN 'Provider outcome unknown — check provider'
+        WHEN grouped_banking_pay_alert_seeds.alert_kind = 'TERMINAL_NO_MONEY_REWIND_AVAILABLE'
+          THEN 'Failed payments — Rewind financials available'
+        WHEN grouped_banking_pay_alert_seeds.alert_kind = 'AUTO_UNWIND_PROGRESS'
+          THEN 'Rewinding failed payments'
+        WHEN grouped_banking_pay_alert_seeds.alert_kind = 'WHOLE_BATCH_CANCELLATION_PROGRESS'
+          THEN 'Cancelling scheduled batch'
+        WHEN grouped_banking_pay_alert_seeds.alert_kind = 'MANUAL_ADJUSTMENTS_CARRIED_FORWARD'
+          THEN 'Manual adjustments carried forward'
+        WHEN grouped_banking_pay_alert_seeds.alert_kind = 'MANUAL_ADJUSTMENT_AMBIGUOUS_BLOCKERS'
+          THEN 'Manual adjustment blockers — review required'
+        WHEN grouped_banking_pay_alert_seeds.alert_kind = 'PAID_SETTLED_RECOVERY_REQUIRED'
+          THEN 'Paid — recovery required'
+        WHEN grouped_banking_pay_alert_seeds.alert_kind = 'CANCELLATION_RACED_WITH_PROVIDER_SUBMIT'
+          THEN 'Cancellation conflict — provider submission already started'
+        ELSE INITCAP(REPLACE(LOWER(grouped_banking_pay_alert_seeds.alert_kind), '_', ' '))
+      END::text AS title,
+      CASE
+        WHEN grouped_banking_pay_alert_seeds.alert_kind = 'PROVIDER_OUTAGE_RETRY_LATER'
+          AND UPPER(BTRIM(COALESCE(grouped_banking_pay_alert_seeds.severity, ''))) = 'PROGRESS'
+          THEN 'Retrying unsent payments is in progress. You can continue using CloudTMS while this runs.'
+        WHEN grouped_banking_pay_alert_seeds.alert_kind = 'PROVIDER_OUTAGE_RETRY_LATER'
+          THEN 'The bank/provider was unavailable before the payment request was sent. Retry unsent payments from Banking Pay Overview.'
+        WHEN grouped_banking_pay_alert_seeds.alert_kind = 'PROVIDER_OUTCOME_UNKNOWN_CHECK_PROVIDER'
+          THEN 'A provider request may have been sent, but the outcome is not confirmed. Open Current Payment Status and check the provider outcome.'
+        WHEN grouped_banking_pay_alert_seeds.alert_kind = 'TERMINAL_NO_MONEY_REWIND_AVAILABLE'
+          THEN 'The provider/bank outcome indicates no money moved. Open Current Payment Status and rewind financials where safe.'
+        WHEN grouped_banking_pay_alert_seeds.alert_kind = 'AUTO_UNWIND_PROGRESS'
+          THEN 'Automatic no-money unwind is running and this alert updates grouped progress.'
+        WHEN grouped_banking_pay_alert_seeds.alert_kind = 'WHOLE_BATCH_CANCELLATION_PROGRESS'
+          THEN 'Scheduled local cancellation is running in chunks and this alert updates grouped progress.'
+        WHEN grouped_banking_pay_alert_seeds.alert_kind = 'MANUAL_ADJUSTMENTS_CARRIED_FORWARD'
+          THEN 'Safe source-less manual adjustments were carried forward and will be included in the next pay run.'
+        WHEN grouped_banking_pay_alert_seeds.alert_kind = 'MANUAL_ADJUSTMENT_AMBIGUOUS_BLOCKERS'
+          THEN 'One or more manual adjustments cannot be safely carried forward automatically.'
+        WHEN grouped_banking_pay_alert_seeds.alert_kind = 'PAID_SETTLED_RECOVERY_REQUIRED'
+          THEN 'Money appears to have moved. Amend the timesheet and recover the overpayment in the next pay run rather than unwinding the payment.'
+        WHEN grouped_banking_pay_alert_seeds.alert_kind = 'CANCELLATION_RACED_WITH_PROVIDER_SUBMIT'
+          THEN 'Cancellation could not proceed because provider submission had already started.'
+        ELSE 'Open Banking Pay for details.'
+      END::text AS description,
+      CASE
+        WHEN grouped_banking_pay_alert_seeds.alert_kind = 'PROVIDER_OUTAGE_RETRY_LATER'
+          AND UPPER(BTRIM(COALESCE(grouped_banking_pay_alert_seeds.severity, ''))) = 'PROGRESS'
+          THEN 'Monitor retry progress from Banking Pay Overview.'
+        WHEN grouped_banking_pay_alert_seeds.alert_kind = 'PROVIDER_OUTAGE_RETRY_LATER'
+          THEN 'Retry unsent payments from Banking Pay Overview.'
+        WHEN grouped_banking_pay_alert_seeds.alert_kind = 'PROVIDER_OUTCOME_UNKNOWN_CHECK_PROVIDER'
+          THEN 'Open Current Payment Status and check the provider outcome.'
+        WHEN grouped_banking_pay_alert_seeds.alert_kind = 'TERMINAL_NO_MONEY_REWIND_AVAILABLE'
+          THEN 'Open Current Payment Status and rewind financials where no money moved.'
+        WHEN grouped_banking_pay_alert_seeds.alert_kind = 'AUTO_UNWIND_PROGRESS'
+          THEN 'Monitor rewind progress.'
+        WHEN grouped_banking_pay_alert_seeds.alert_kind = 'WHOLE_BATCH_CANCELLATION_PROGRESS'
+          THEN 'Monitor cancellation progress in Banking Pay Overview.'
+        WHEN grouped_banking_pay_alert_seeds.alert_kind = 'MANUAL_ADJUSTMENTS_CARRIED_FORWARD'
+          THEN 'Review carried-forward manual adjustments in the next pay run.'
+        WHEN grouped_banking_pay_alert_seeds.alert_kind = 'MANUAL_ADJUSTMENT_AMBIGUOUS_BLOCKERS'
+          THEN 'Open Current Payment Status and review ambiguous manual adjustment blockers.'
+        WHEN grouped_banking_pay_alert_seeds.alert_kind = 'PAID_SETTLED_RECOVERY_REQUIRED'
+          THEN 'Open Current Payment Status and recover overpayment in next pay run.'
+        WHEN grouped_banking_pay_alert_seeds.alert_kind = 'CANCELLATION_RACED_WITH_PROVIDER_SUBMIT'
+          THEN 'Open Current Payment Status and check provider submission before continuing.'
+        ELSE 'Open Banking Pay.'
+      END::text AS action_guidance,
       grouped_banking_pay_alert_seeds.sort_at_utc
     FROM grouped_banking_pay_alert_seeds
-    CROSS JOIN LATERAL (
-      SELECT public.banking_alert_payload_for_pay_batch(
-        grouped_banking_pay_alert_seeds.alert_kind,
-        grouped_banking_pay_alert_seeds.pay_batch_id,
-        grouped_banking_pay_alert_seeds.payload_source_kind,
-        grouped_banking_pay_alert_seeds.payload_source_id
-      ) AS payload_json
-    ) AS grouped_payload
   ),
-  raw_current_alerts AS (
+  raw_current_alerts AS MATERIALIZED (
     SELECT * FROM blocked_funds_alerts
     UNION ALL
     SELECT bank_event_alerts.*
@@ -75601,7 +75952,7 @@ BEGIN
     UNION ALL
     SELECT * FROM grouped_banking_pay_alerts
   ),
-  normalised_current_alerts AS (
+  normalised_current_alerts AS MATERIALIZED (
     SELECT
       mapped_alerts.mapped_alert_kind AS alert_kind,
       raw_current_alerts.severity,
@@ -75684,7 +76035,7 @@ BEGIN
       END AS mapped_alert_kind
     ) AS mapped_alerts
   ),
-  current_alert_identities AS (
+  current_alert_identities AS MATERIALIZED (
     SELECT
       normalised_current_alerts.alert_kind,
       normalised_current_alerts.severity,
@@ -75710,7 +76061,7 @@ BEGIN
     WHERE normalised_current_alerts.alert_kind IS NOT NULL
       AND normalised_current_alerts.entity_id IS NOT NULL
   ),
-  filtered_current_alert_identities AS (
+  filtered_current_alert_identities AS MATERIALIZED (
     SELECT current_alert_identities.*
     FROM current_alert_identities
     WHERE (v_entity_kind IS NULL OR current_alert_identities.entity_kind = v_entity_kind)
@@ -75734,7 +76085,7 @@ BEGIN
         )
       )
   ),
-  deduped_alerts AS (
+  deduped_alerts AS MATERIALIZED (
     SELECT DISTINCT ON (filtered_current_alert_identities.alert_fingerprint)
       filtered_current_alert_identities.alert_kind,
       filtered_current_alert_identities.severity,
@@ -75757,7 +76108,7 @@ BEGIN
              filtered_current_alert_identities.severity_rank DESC,
              filtered_current_alert_identities.sort_at_utc DESC NULLS LAST
   ),
-  alert_rows AS (
+  alert_rows AS MATERIALIZED (
     SELECT
       deduped_alerts.alert_kind,
       deduped_alerts.severity,
@@ -75792,14 +76143,14 @@ BEGIN
     WHERE COALESCE(p_include_acknowledged, false) = true
        OR alert_acknowledgements.id IS NULL
   ),
-  counted_alerts AS (
+  counted_alerts AS MATERIALIZED (
     SELECT
       alert_rows.*,
       (COUNT(*) OVER ())::integer AS filtered_count,
       (COUNT(*) FILTER (WHERE alert_rows.acknowledged_for_current_user = false) OVER ())::integer AS unacknowledged_count
     FROM alert_rows
   ),
-  limited_alerts AS (
+  limited_alerts AS MATERIALIZED (
     SELECT counted_alerts.*
     FROM counted_alerts
     ORDER BY counted_alerts.severity_rank DESC,
@@ -75807,7 +76158,7 @@ BEGIN
              counted_alerts.alert_fingerprint ASC
     LIMIT v_limit
   ),
-  detailed_alerts AS (
+  detailed_alerts AS MATERIALIZED (
     SELECT
       limited_alerts.alert_kind,
       limited_alerts.severity,
@@ -75826,18 +76177,29 @@ BEGIN
       limited_alerts.acknowledged_at_utc,
       limited_alerts.filtered_count,
       limited_alerts.unacknowledged_count,
-      (
+      jsonb_strip_nulls(
         COALESCE(limited_alerts.fingerprint_payload_json, '{}'::jsonb)
-        || public.banking_alert_payload_for_pay_batch(
-          limited_alerts.alert_kind,
-          limited_alerts.pay_batch_id,
-          limited_alerts.payload_source_kind,
-          limited_alerts.payload_source_id
+        || jsonb_build_object(
+          'alert_kind', limited_alerts.alert_kind,
+          'issue_kind', limited_alerts.alert_kind,
+          'pay_batch_id', limited_alerts.pay_batch_id::text,
+          'entity_kind', limited_alerts.entity_kind,
+          'entity_id', limited_alerts.entity_id::text,
+          'alert_fingerprint', limited_alerts.alert_fingerprint,
+          'user_label', limited_alerts.label,
+          'user_description', limited_alerts.description,
+          'required_user_action', limited_alerts.action_guidance,
+          'link_target', 'banking_pay_batch',
+          'link_tab', CASE
+            WHEN limited_alerts.alert_kind = 'PROVIDER_OUTAGE_RETRY_LATER' THEN 'overview'
+            WHEN limited_alerts.alert_kind = 'WHOLE_BATCH_CANCELLATION_PROGRESS' THEN 'overview'
+            ELSE 'current_payment_status'
+          END
         )
       ) AS payload_json
     FROM limited_alerts
   ),
-  signal_aggregate AS (
+  signal_aggregate AS MATERIALIZED (
     SELECT
       (COUNT(*) FILTER (WHERE alert_rows.acknowledged_for_current_user = false))::integer AS unacknowledged_count,
       (ARRAY_AGG(alert_rows.severity ORDER BY alert_rows.severity_rank DESC, alert_rows.sort_at_utc DESC NULLS LAST, alert_rows.alert_fingerprint ASC) FILTER (WHERE alert_rows.acknowledged_for_current_user = false))[1] AS highest_severity,
@@ -75860,7 +76222,7 @@ BEGIN
       ) FILTER (WHERE alert_rows.acknowledged_for_current_user = false), '')) AS summary_signature
     FROM alert_rows
   ),
-  aggregate_result AS (
+  aggregate_result AS MATERIALIZED (
     SELECT
       COALESCE(JSONB_AGG(
         jsonb_build_object(
@@ -75930,7 +76292,6 @@ BEGIN
   ));
 END;
 $function$;
-
 
 
 
