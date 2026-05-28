@@ -24321,6 +24321,139 @@ const strictProviderAcceptanceEvidenceCount = (value) => {
   );
   return Math.max(numeric, strictExternalProviderIdentifierPresent(source) ? 1 : 0);
 };
+const retryNumber = (...values) => {
+  for (const value of values) {
+    const n = Number(value);
+    if (Number.isFinite(n)) return Math.max(0, Math.trunc(n));
+  }
+  return 0;
+};
+
+const retryArray = (...values) => {
+  for (const value of values) {
+    if (Array.isArray(value)) return value;
+  }
+  return [];
+};
+
+const retryObject = (...values) => {
+  for (const value of values) {
+    const source = safeObject(value);
+    if (Object.keys(source).length) return source;
+  }
+  return {};
+};
+
+const retryScopeSignatureFrom = (...values) => {
+  for (const value of values) {
+    const source = safeObject(value);
+    const text = String(
+      source.retry_scope_signature
+      || source.retryScopeSignature
+      || source.retry_signature
+      || source.retrySignature
+      || source.scope_signature
+      || source.scopeSignature
+      || ''
+    ).trim();
+    if (text) return text;
+  }
+  return null;
+};
+
+const extractRetryProgressFields = (...sources) => {
+  if (retryBlockedFunds !== true) return {};
+  const queue = [...sources];
+  const seen = new Set();
+  const merged = {
+    retry_eligible_count: 0,
+    retry_ineligible_count: 0,
+    retry_submitted_count: 0,
+    retry_skipped_count: 0,
+    retry_still_available_count: 0,
+    retry_provider_unavailable_again: false,
+    retry_ineligible_summary_json: [],
+    retry_eligible_scope_json: {},
+    retry_skipped_reasons_json: [],
+    retry_scope_signature: null,
+    retry_operation_id: operationId || null,
+    retry_operation_status: null,
+    retry_status_label: 'Retrying unsent payments',
+    retry_button_label: 'Retry unsent payments',
+    retry_button_disabled_reason: 'Retry in progress',
+    retry_visible_label: 'Retry unsent payments',
+    retry_running_label: 'Retrying unsent payments'
+  };
+  const mergeOne = (source) => {
+    const obj = safeObject(source);
+    if (!Object.keys(obj).length) return;
+    merged.retry_eligible_count = Math.max(merged.retry_eligible_count, retryNumber(obj.retry_eligible_count, obj.retryEligibleCount, obj.eligible_count, obj.eligibleCount));
+    merged.retry_ineligible_count = Math.max(merged.retry_ineligible_count, retryNumber(obj.retry_ineligible_count, obj.retryIneligibleCount, obj.ineligible_count, obj.ineligibleCount));
+    merged.retry_submitted_count = Math.max(merged.retry_submitted_count, retryNumber(obj.retry_submitted_count, obj.retrySubmittedCount, obj.submitted_this_chunk, obj.submittedThisChunk, obj.submitted_count, obj.submittedCount));
+    merged.retry_skipped_count = Math.max(merged.retry_skipped_count, retryNumber(obj.retry_skipped_count, obj.retrySkippedCount, obj.skipped_count, obj.skippedCount));
+    merged.retry_still_available_count = Math.max(merged.retry_still_available_count, retryNumber(obj.retry_still_available_count, obj.retryStillAvailableCount));
+    merged.retry_provider_unavailable_again = merged.retry_provider_unavailable_again || boolField(obj, 'retry_provider_unavailable_again', 'retryProviderUnavailableAgain', 'provider_unavailable_again', 'providerUnavailableAgain');
+    const ineligibleSummary = retryArray(obj.retry_ineligible_summary_json, obj.retryIneligibleSummaryJson, obj.retry_ineligible_summary, obj.retryIneligibleSummary);
+    if (ineligibleSummary.length && !merged.retry_ineligible_summary_json.length) merged.retry_ineligible_summary_json = ineligibleSummary;
+    const eligibleScope = retryObject(obj.retry_eligible_scope_json, obj.retryEligibleScopeJson, obj.retry_eligible_scope, obj.retryEligibleScope);
+    if (Object.keys(eligibleScope).length && !Object.keys(merged.retry_eligible_scope_json).length) merged.retry_eligible_scope_json = eligibleScope;
+    const skippedReasons = retryArray(obj.retry_skipped_reasons_json, obj.retrySkippedReasonsJson, obj.skipped_reasons, obj.skippedReasons);
+    if (skippedReasons.length && !merged.retry_skipped_reasons_json.length) merged.retry_skipped_reasons_json = skippedReasons;
+    const signature = retryScopeSignatureFrom(obj);
+    if (signature && !merged.retry_scope_signature) merged.retry_scope_signature = signature;
+    const operationStatus = String(obj.retry_operation_status || obj.retryOperationStatus || obj.status || '').trim();
+    if (operationStatus && !merged.retry_operation_status) merged.retry_operation_status = operationStatus;
+  };
+  while (queue.length) {
+    const value = queue.shift();
+    if (!value || typeof value !== 'object') continue;
+    if (seen.has(value)) continue;
+    seen.add(value);
+    if (Array.isArray(value)) {
+      for (const item of value.slice(0, 100)) queue.push(item);
+      continue;
+    }
+    mergeOne(value);
+    for (const key of [
+      'retry',
+      'retry_summary',
+      'retrySummary',
+      'transfer_scope_seed',
+      'transferScopeSeed',
+      'seed_result',
+      'seedResult',
+      'provider_submission',
+      'providerSubmission',
+      'apply_updates_result',
+      'applyUpdatesResult',
+      'submission_evidence',
+      'submissionEvidence',
+      'provider_submit_diagnostic',
+      'providerSubmitDiagnostic',
+      'provider_submit_claim_diagnostic',
+      'providerSubmitClaimDiagnostic'
+    ]) {
+      if (value[key] && typeof value[key] === 'object') queue.push(value[key]);
+    }
+  }
+  if (merged.retry_submitted_count > 0 && merged.retry_eligible_count <= 0) merged.retry_eligible_count = merged.retry_submitted_count + merged.retry_skipped_count;
+  if (merged.retry_skipped_count > 0 && merged.retry_ineligible_count <= 0) merged.retry_ineligible_count = merged.retry_skipped_count;
+  if (merged.retry_still_available_count <= 0) merged.retry_still_available_count = Math.max(0, merged.retry_eligible_count - merged.retry_submitted_count - merged.retry_skipped_count);
+  return jsonLikeObject(merged);
+};
+
+const decorateRetryProgress = (progress = {}) => {
+  const source = safeObject(progress);
+  if (retryBlockedFunds !== true) return source;
+  return jsonLikeObject({
+    ...source,
+    operation_user_label: source.operation_user_label || 'Retry unsent payments',
+    title: (String(source.title || '').trim().toLowerCase() && String(source.title || '').trim().toLowerCase() !== ('retrying ' + 'blocked payment')) ? source.title : 'Retrying unsent payments',
+    status_text: source.status_text || 'Retrying unsent payments',
+    ...extractRetryProgressFields(source, progressJson, operation.progress_json, operation.result_json, operation.error_json)
+  });
+};
+
 const lockSeconds = numberFrom(configJson.lock_seconds, 60);
 const phaseProgress = async (status, phase, progressJson = {}, counters = {}) => {
 const saved = await sbRpc(env, 'banking_pay_operation_save_progress', {
@@ -24332,7 +24465,7 @@ p_completed_units: counters.completed_units ?? null,
 p_failed_units: counters.failed_units ?? null,
 p_current_chunk_index: counters.current_chunk_index ?? null,
 p_chunk_count: counters.chunk_count ?? null,
-p_progress_json: decorateExecuteDiagnosticProgress(progressJson),
+p_progress_json: decorateExecuteDiagnosticProgress(decorateRetryProgress(progressJson)),
 p_extend_lock_seconds: null
 });
 return buildBankingPayOperationPublicPayload(saved);
@@ -24428,6 +24561,10 @@ if (['REVIEW_REQUIRED', 'FAILED', 'COMPLETE'].includes(finishStatus) && typeof f
       }
     }
   }
+}
+if (retryBlockedFunds === true) {
+  finalResultJson = decorateRetryProgress(finalResultJson);
+  finalErrorJson = decorateRetryProgress(finalErrorJson);
 }
 const finished = await sbRpc(env, 'banking_pay_operation_finish', {
 p_operation_id: operationId,
@@ -24783,7 +24920,7 @@ const messageByCode = {
   NO_SAFE_LOCAL_CLEANUP_AVAILABLE: 'The payment retry needs review because CloudTMS could not confirm that local execution artefacts are safe to clean.',
   AUTHORISED_TRANSFER_NOT_PROVIDER_SUBMIT_READY: 'The payment was authorised, but CloudTMS could not find a bank transfer that was safe to submit. Refresh the batch and retry if CloudTMS says retry is safe; otherwise review the transfer.',
   PROVIDER_SUBMIT_NO_ELIGIBLE_TRANSFERS: 'The payment was authorised, but no eligible bank transfer could be safely claimed for provider submission. Refresh the batch and retry if CloudTMS says retry is safe; otherwise review the transfer.',
-  PAYMENT_RETRY_BLOCKED_FUNDS_CLEANUP_NOT_SAFE: 'The blocked-funds retry needs review because CloudTMS could not confirm that its local execution artefacts are safe to clean.',
+  PAYMENT_RETRY_BLOCKED_FUNDS_CLEANUP_NOT_SAFE: 'Retry unsent payments needs review because CloudTMS could not confirm that its local execution artefacts are safe to clean.',
   TRANSFER_PREPARATION_RECONCILIATION_FAILED: 'Transfer preparation succeeded, but CloudTMS could not reconcile the prepared transfer groups before authorisation. The diagnostic details have been captured for review.',
   PROVIDER_SUBMISSION_UNKNOWN_STALE_CHUNK: 'Provider submission outcome is unknown because the submit chunk became stale without a provider response. Check Revolut or bank records before retrying.',
   UNKNOWN_PROVIDER_SUBMISSION_OUTCOME: 'Provider submission outcome is unknown because CloudTMS sent or may have sent the provider request but did not receive a usable response. Check Revolut or bank records before retrying.',
@@ -28215,6 +28352,48 @@ const providerSubmitPreflightRecheck = async (scopeJson = {}, note = 'provider-s
   return { ok: true, preflight, blockers: [] };
 };
 
+
+const retryUnsentPaymentEligibilityRecheck = async (note = 'retry-unsent-payment-eligibility-recheck') => {
+  if (retryBlockedFunds !== true) {
+    return { ok: true, skipped: true, skip_reason: 'NOT_RETRY_UNSENT_OPERATION' };
+  }
+  const plan = await runExecuteDiagnosticRpc('pay_payment_correction_plan', {
+    p_pay_batch_id: payBatchId,
+    p_selection_json: {
+      scope_type: 'BATCH',
+      source_context: 'advanceBankingPayExecuteOperation',
+      requested_action: 'RETRY_PROVIDER_LATER',
+      operation_id: operationId,
+      retry_scope_signature: extractRetryProgressFields(progressJson, operation.progress_json, operation.result_json).retry_scope_signature || null
+    },
+    p_actor_user_id: actorUserId
+  }, 'pay_payment_correction_plan', {
+    phase: currentPhase,
+    note
+  });
+  const retryFields = extractRetryProgressFields(plan, progressJson, operation.progress_json, operation.result_json);
+  const eligibleCount = retryNumber(plan.retry_eligible_count, plan.retryEligibleCount, retryFields.retry_eligible_count);
+  const ineligibleCount = retryNumber(plan.retry_ineligible_count, plan.retryIneligibleCount, retryFields.retry_ineligible_count);
+  const ineligibleSummary = retryArray(plan.retry_ineligible_summary_json, plan.retryIneligibleSummaryJson, retryFields.retry_ineligible_summary_json);
+  const scopeSignature = retryScopeSignatureFrom(plan, retryFields, progressJson, operation.progress_json, operation.result_json);
+  const requestedAction = upperString(plan.recommended_action || plan.requested_action || plan.action || '');
+  const retryInProgress = boolField(plan, 'retry_in_progress', 'retryInProgress', 'retry_already_in_progress', 'retryAlreadyInProgress');
+  return {
+    ok: plan.ok !== false,
+    plan,
+    retry_eligible_count: eligibleCount,
+    retry_ineligible_count: ineligibleCount,
+    retry_ineligible_summary_json: ineligibleSummary,
+    retry_eligible_scope_json: retryObject(plan.retry_eligible_scope_json, plan.retryEligibleScopeJson, retryFields.retry_eligible_scope_json),
+    retry_scope_signature: scopeSignature,
+    retry_in_progress: retryInProgress,
+    retry_operation_id: plan.retry_operation_id || plan.retryOperationId || operationId || null,
+    retry_operation_status: plan.retry_operation_status || plan.retryOperationStatus || operation.status || null,
+    recommended_action: requestedAction || null,
+    safe_to_submit_retry: eligibleCount > 0 && (requestedAction === '' || requestedAction === 'RETRY_PROVIDER_LATER')
+  };
+};
+
 const collectCanonicalProviderEventPayloads = (source, context = {}) => {
   const contextObj = safeObject(context);
   const queue = [{ value: source, path: 'root' }];
@@ -28392,6 +28571,81 @@ const collectCanonicalProviderEventPayloads = (source, context = {}) => {
   return events;
 };
 
+const ingestSignalRecommendationFrom = (payload) => {
+  const source = safeObject(payload);
+  const direct = safeObject(source.signal_recommendation_json);
+  if (Object.keys(direct).length) return direct;
+  const liveSignal = safeObject(source.live_signal);
+  const nested = safeObject(liveSignal.signal_recommendation_json);
+  return Object.keys(nested).length ? nested : {};
+};
+
+const touchCanonicalProviderEventSignals = async (rows, context = {}) => {
+  const byBatch = new Map();
+  const addSet = (set, value) => {
+    const text = String(value == null ? '' : value).trim();
+    if (text) set.add(text);
+  };
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const result = safeObject(row.result);
+    const recommendation = ingestSignalRecommendationFrom(result);
+    const batchId = String(recommendation.pay_batch_id || result.pay_batch_id || payBatchId || '').trim();
+    if (!batchId) continue;
+    const key = batchId.toLowerCase();
+    if (!byBatch.has(key)) {
+      byBatch.set(key, {
+        pay_batch_id: batchId,
+        touch_payment_status: false,
+        touch_correction_progress: false,
+        touch_alerts: false,
+        touch_overview: false,
+        changed_transfer_ids: new Set(),
+        changed_candidate_ids: new Set(),
+        changed_pay_batch_item_ids: new Set(),
+        provider_event_keys: new Set()
+      });
+    }
+    const item = byBatch.get(key);
+    item.touch_payment_status = item.touch_payment_status || boolField(recommendation, 'touch_payment_status', 'touchPaymentStatus');
+    item.touch_correction_progress = item.touch_correction_progress || boolField(recommendation, 'touch_correction_progress', 'touchCorrectionProgress');
+    item.touch_alerts = item.touch_alerts || boolField(recommendation, 'touch_alerts', 'touchAlerts');
+    item.touch_overview = item.touch_overview || boolField(recommendation, 'touch_overview', 'touchOverview');
+    for (const value of Array.isArray(recommendation.changed_transfer_ids) ? recommendation.changed_transfer_ids : []) addSet(item.changed_transfer_ids, value);
+    for (const value of Array.isArray(recommendation.changed_candidate_ids) ? recommendation.changed_candidate_ids : []) addSet(item.changed_candidate_ids, value);
+    for (const value of Array.isArray(recommendation.changed_pay_batch_item_ids) ? recommendation.changed_pay_batch_item_ids : []) addSet(item.changed_pay_batch_item_ids, value);
+    addSet(item.provider_event_keys, row.provider_event_key || result.provider_event_key);
+  }
+  const out = [];
+  for (const item of byBatch.values()) {
+    if (!(item.touch_payment_status || item.touch_correction_progress || item.touch_alerts || item.touch_overview)) continue;
+    try {
+      const touched = await runExecuteDiagnosticRpc('banking_pay_batch_signal_touch', {
+        p_pay_batch_id: item.pay_batch_id,
+        p_change_reason: context.change_reason || 'PROVIDER_EXECUTE_EVENTS_INGESTED',
+        p_change_source: context.change_source || 'advanceBankingPayExecuteOperation',
+        p_change_scope_json: {
+          changed_transfer_ids: Array.from(item.changed_transfer_ids),
+          changed_candidate_ids: Array.from(item.changed_candidate_ids),
+          changed_pay_batch_item_ids: Array.from(item.changed_pay_batch_item_ids),
+          provider_event_keys: Array.from(item.provider_event_keys),
+          operation_id: operationId
+        },
+        p_touch_payment_status: item.touch_payment_status,
+        p_touch_correction_progress: item.touch_correction_progress,
+        p_touch_alerts: item.touch_alerts,
+        p_touch_overview: item.touch_overview
+      }, 'banking_pay_batch_signal_touch', {
+        phase: currentPhase,
+        note: 'coalesced-canonical-provider-event-signal-touch'
+      });
+      out.push({ ok: touched.ok !== false, pay_batch_id: item.pay_batch_id, result: touched });
+    } catch (signalError) {
+      out.push({ ok: false, pay_batch_id: item.pay_batch_id, error: serialisableErrorPayload(signalError) });
+    }
+  }
+  return out;
+};
+
 const ingestCanonicalProviderEventsFromAdapterResult = async (adapterResult, context = {}) => {
   const eventPayloads = collectCanonicalProviderEventPayloads(adapterResult, context);
   const result = {
@@ -28401,21 +28655,36 @@ const ingestCanonicalProviderEventsFromAdapterResult = async (adapterResult, con
     ingested_count: 0,
     duplicate_count: 0,
     failed_count: 0,
+    signal_touch_results: [],
+    signals_touched: 0,
     results: []
   };
   if (!eventPayloads.length) return result;
+
+  const sourceBatchEventGroupKey = [
+    'ADVANCE_BANKING_PAY_EXECUTE_OPERATION',
+    operationId,
+    context.provider || context.provider_key || 'PROVIDER',
+    context.rail_env || context.railEnv || 'NO_RAIL_ENV'
+  ].join('|');
 
   for (const eventPayload of eventPayloads) {
     try {
       const ingestResult = await runExecuteDiagnosticRpc('pay_bank_event_ingest', {
         p_event_json: eventPayload,
-        p_actor_user_id: actorUserId
+        p_actor_user_id: actorUserId,
+        p_ingest_options_json: {
+          touch_signal: false,
+          signal_mode: 'DEFERRED',
+          source_delivery_id: operationId,
+          source_batch_event_group_key: sourceBatchEventGroupKey
+        }
       }, 'pay_bank_event_ingest', {
         phase: currentPhase,
         note: 'canonical-provider-event-ingest-from-execute-operation'
       });
       const statusText = stringifyForDetection(ingestResult).toUpperCase();
-      const duplicateEvent = statusText.includes('DUPLICATE') || ingestResult.duplicate === true || ingestResult.is_duplicate === true;
+      const duplicateEvent = statusText.includes('DUPLICATE') || ingestResult.duplicate === true || ingestResult.is_duplicate === true || ingestResult.duplicate_event === true;
       if (duplicateEvent) result.duplicate_count += 1;
       else if (ingestResult && ingestResult.ok !== false) result.ingested_count += 1;
       result.results.push({
@@ -28443,6 +28712,11 @@ const ingestCanonicalProviderEventsFromAdapterResult = async (adapterResult, con
     }
   }
 
+  result.signal_touch_results = await touchCanonicalProviderEventSignals(result.results, {
+    change_reason: retryBlockedFunds ? 'RETRY_UNSENT_PROVIDER_EVENTS_INGESTED' : 'PROVIDER_EXECUTE_EVENTS_INGESTED',
+    change_source: 'advanceBankingPayExecuteOperation'
+  });
+  result.signals_touched = result.signal_touch_results.filter((row) => row && row.ok === true).length;
   return result;
 };
 
@@ -28553,7 +28827,7 @@ const submissionEvidenceLifecycleReviewFrom = (evidence = {}, context = {}) => {
   if (providerOutageRetryLaterCount > 0) {
     return {
       code: 'PROVIDER_OUTAGE_RETRY_LATER',
-      message: 'Provider was unavailable before a confirmed bank submission. Retry later on the same batch/operation.',
+      message: 'Provider was unavailable before a confirmed bank submission. Retry unsent payments from Banking Pay Overview.',
       evidence_context: contextObj.context || null,
       provider_outage_retry_later_count: providerOutageRetryLaterCount
     };
@@ -28581,7 +28855,7 @@ note: 'initial-batch-summary'
 });
 if (summary && summary.ok === false) return fail('BATCH_SUMMARY_FAILED', 'Payment batch summary could not be loaded.', { summary });
 return phaseProgress('RUNNING', 'VALIDATE_AUTHORISER', {
-title: retryBlockedFunds ? 'Retrying blocked payment' : 'Processing payment',
+title: retryBlockedFunds ? 'Retrying unsent payments' : 'Processing payment',
 status_text: 'Payment batch checked.',
 batch_summary: summary
 }, {
@@ -28809,7 +29083,7 @@ if (currentPhase === 'PREPARE_TRANSFER_SCOPE') {
   }
 
   return phaseProgress('RUNNING', 'SEED_TRANSFER_CHUNKS', {
-    status_text: 'Transfer groups prepared.',
+    status_text: retryBlockedFunds ? 'Retry unsent payment scopes prepared.' : 'Transfer groups prepared.',
     transfer_scope_seed: seedResult,
     freshness_result_hash: freshnessHash
   });
@@ -29452,9 +29726,12 @@ if (currentPhase === 'SUBMIT_PROVIDER_TRANSFERS') {
   const providerSubmitPreflight = await providerSubmitPreflightRecheck({
     scope_type: 'BATCH',
     source_context: 'advanceBankingPayExecuteOperation.SUBMIT_PROVIDER_TRANSFERS',
-    requested_action: 'PROVIDER_SUBMIT',
-    operation_id: operationId
-  }, 'before-provider-api-call');
+    requested_action: retryBlockedFunds ? 'RETRY_PROVIDER_LATER' : 'PROVIDER_SUBMIT',
+    operation_id: operationId,
+    retry_unsent_payments: retryBlockedFunds === true,
+    retry_scope_signature: retryBlockedFunds ? (extractRetryProgressFields(progressJson, operation.progress_json, operation.result_json).retry_scope_signature || null) : null,
+    retry_eligible_scope_json: retryBlockedFunds ? (extractRetryProgressFields(progressJson, operation.progress_json, operation.result_json).retry_eligible_scope_json || {}) : undefined
+  }, retryBlockedFunds ? 'before-retry-unsent-provider-api-call' : 'before-provider-api-call');
   if (providerSubmitPreflight.ok !== true) {
     return finishProviderSubmitLifecycleReview(providerSubmitPreflight.code, providerSubmitPreflight.message, {
       phase: currentPhase,
@@ -29464,6 +29741,64 @@ if (currentPhase === 'SUBMIT_PROVIDER_TRANSFERS') {
       review_reason_code: providerSubmitPreflight.code,
       manual_resolution_required: true,
       safe_retry_available: false
+    });
+  }
+
+  if (retryBlockedFunds === true) {
+    const retryRecheck = await retryUnsentPaymentEligibilityRecheck('before-retry-unsent-provider-submit');
+    if (retryRecheck.ok === false) {
+      return finishProviderSubmitLifecycleReview('PROVIDER_OUTAGE_RETRY_LATER', 'Retry unsent payments could not be safely rechecked before provider submission.', {
+        phase: currentPhase,
+        retry_recheck: retryRecheck,
+        provider_submission_status: 'PROVIDER_OUTAGE_RETRY_LATER',
+        review_reason_code: 'RETRY_UNSENT_RECHECK_FAILED',
+        manual_resolution_required: true,
+        safe_retry_available: false
+      });
+    }
+    if (retryRecheck.safe_to_submit_retry !== true) {
+      return finishProviderSubmitLifecycleReview('UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'Retry unsent payments is no longer safe because the payment status changed before provider submission.', {
+        phase: currentPhase,
+        retry_recheck: retryRecheck,
+        retry_eligible_count: retryRecheck.retry_eligible_count,
+        retry_ineligible_count: retryRecheck.retry_ineligible_count,
+        retry_ineligible_summary_json: retryRecheck.retry_ineligible_summary_json,
+        retry_eligible_scope_json: retryRecheck.retry_eligible_scope_json,
+        retry_scope_signature: retryRecheck.retry_scope_signature,
+        provider_submission_status: retryRecheck.recommended_action || 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME',
+        review_reason_code: 'RETRY_UNSENT_RECHECK_NOT_SAFE',
+        manual_resolution_required: true,
+        safe_retry_available: false
+      });
+    }
+    if (retryRecheck.retry_eligible_count <= 0) {
+      return finish('COMPLETE', {
+        ok: true,
+        pay_batch_id: payBatchId,
+        operation_id: operationId,
+        operation_user_label: 'Retry unsent payments',
+        status_text: 'No unsent payments available to retry.',
+        retry_eligible_count: 0,
+        retry_ineligible_count: retryRecheck.retry_ineligible_count,
+        retry_submitted_count: 0,
+        retry_skipped_count: retryRecheck.retry_ineligible_count,
+        retry_ineligible_summary_json: retryRecheck.retry_ineligible_summary_json,
+        retry_eligible_scope_json: retryRecheck.retry_eligible_scope_json,
+        retry_scope_signature: retryRecheck.retry_scope_signature,
+        retry_still_available_count: 0,
+        retry_provider_unavailable_again: false,
+        retry_recheck: retryRecheck.plan,
+        message: 'No unsent payments are currently eligible for retry.'
+      }, null);
+    }
+    await phaseProgress('RUNNING', currentPhase, {
+      status_text: 'Retrying unsent payments eligibility rechecked.',
+      retry_recheck: retryRecheck,
+      retry_eligible_count: retryRecheck.retry_eligible_count,
+      retry_ineligible_count: retryRecheck.retry_ineligible_count,
+      retry_eligible_scope_json: retryRecheck.retry_eligible_scope_json,
+      retry_ineligible_summary_json: retryRecheck.retry_ineligible_summary_json,
+      retry_scope_signature: retryRecheck.retry_scope_signature
     });
   }
 
@@ -30451,7 +30786,6 @@ raw_error: Object.keys(topLevelErrorObject).length ? topLevelErrorObject : topLe
 });
 }
 }
-
 
 async function handleBankingPayCancelNotSentAndRecalculate(env, req, user, payBatchId) {
   const id = String(payBatchId || '').trim();
@@ -37651,7 +37985,7 @@ async function handleBankingProviderWebhookReplayFailedEvents(env, req, user, pr
   if (!adapter || typeof adapter !== 'object') {
     return jsonResponse({ ok: false, error_code: 'UNKNOWN_RAIL_PROVIDER', provider_key: providerKey || null }, 400);
   }
-  if (typeof adapter.fetchFailedWebhookEvents !== 'function') {
+  if (typeof adapter.fetchFailedWebhookEvents !== 'function' || typeof adapter.normaliseWebhookEvents !== 'function') {
     return jsonResponse({ ok: false, error_code: 'RAIL_PROVIDER_FAILED_WEBHOOK_REPLAY_UNSUPPORTED', provider_key: providerKey || null }, 400);
   }
 
@@ -37661,10 +37995,15 @@ async function handleBankingProviderWebhookReplayFailedEvents(env, req, user, pr
     `&select=id,provider_key,rail_env,webhook_public_id,provider_webhook_id,webhook_url,event_types,signing_secret_ref,old_secret_expires_at_utc,status,last_verified_at_utc,last_event_at_utc,last_error_at_utc,last_error,last_failed_event_sync_at_utc,meta_json` +
     `&limit=1`;
   const configRes = await sbFetch(env, url, false);
-  const webhookConfig = configRes && Array.isArray(configRes.rows) && configRes.rows.length ? configRes.rows[0] : null;
-  if (!webhookConfig) {
+  const webhookConfigRaw = configRes && Array.isArray(configRes.rows) && configRes.rows.length ? configRes.rows[0] : null;
+  if (!webhookConfigRaw) {
     return jsonResponse({ ok: false, error_code: 'WEBHOOK_CONFIG_NOT_FOUND', provider_key: providerKey || null, webhook_public_id: publicId || null }, 404);
   }
+  const webhookMeta = safeObject(webhookConfigRaw.meta_json);
+  const webhookConfig = {
+    ...webhookConfigRaw,
+    old_signing_secret_ref: String(webhookConfigRaw.old_signing_secret_ref || webhookMeta.old_signing_secret_ref || webhookMeta.oldSigningSecretRef || '').trim() || null
+  };
 
   const configStatus = String(webhookConfig.status || '').trim().toUpperCase();
   if (!['ACTIVE', 'ROTATING_SECRET'].includes(configStatus)) {
@@ -37686,31 +38025,30 @@ async function handleBankingProviderWebhookReplayFailedEvents(env, req, user, pr
       webhook_config: webhookConfig,
       webhook_id: webhookConfig.provider_webhook_id || body.webhook_id || body.provider_webhook_id || null,
       provider_webhook_id: webhookConfig.provider_webhook_id || body.provider_webhook_id || body.webhook_id || null,
-      actor_user_id: String(user.id)
+      actor_user_id: String(user.id),
+      provider_event_transport: 'FAILED_WEBHOOK_REPLAY',
+      event_source: 'FAILED_WEBHOOK_REPLAY'
     });
 
     const replayedRows = safeArray(replayResult && replayResult.replayed);
-    const rowText = (row) => {
-      try { return JSON.stringify(row || {}).toUpperCase(); } catch { return ''; }
-    };
-    const fetchedCount = Number(replayResult && (replayResult.fetched_count ?? replayResult.fetched)) || (Number(replayResult && replayResult.replayed_count) || 0) + (Number(replayResult && replayResult.failed_count) || 0) || replayedRows.length;
+    const fetchedCount = Number(replayResult && (replayResult.fetched ?? replayResult.fetched_count)) || replayedRows.length;
+    const normalisedCount = Number(replayResult && (replayResult.normalised ?? replayResult.normalised_count)) || replayedRows.filter((row) => row && row.normalised !== false).length;
+    const ingestedCount = Number(replayResult && (replayResult.ingested ?? replayResult.ingested_count)) || replayedRows.filter((row) => row && row.ok === true && row.status !== 'DUPLICATE' && row.status !== 'IGNORED').length;
+    const duplicateCount = Number(replayResult && (replayResult.duplicates ?? replayResult.duplicate_count)) || replayedRows.filter((row) => String(row && row.status || '').toUpperCase().includes('DUPLICATE')).length;
+    const ignoredCount = Number(replayResult && (replayResult.ignored ?? replayResult.ignored_count)) || replayedRows.filter((row) => String(row && row.status || '').toUpperCase().includes('IGNORED')).length;
+    const unmatchedCount = Number(replayResult && (replayResult.unmatched ?? replayResult.unmatched_count)) || replayedRows.filter((row) => JSON.stringify(row || {}).toUpperCase().includes('UNMATCHED')).length;
+    const autoUnwindStartedCount = Number(replayResult && (replayResult.auto_unwind_started ?? replayResult.auto_unwind_started_count)) || replayedRows.filter((row) => JSON.stringify(row || {}).toUpperCase().includes('AUTO') && JSON.stringify(row || {}).toUpperCase().includes('UNWIND') && !JSON.stringify(row || {}).toUpperCase().includes('REUSED')).length;
+    const autoUnwindReusedCount = Number(replayResult && (replayResult.auto_unwind_reused ?? replayResult.auto_unwind_reused_count)) || replayedRows.filter((row) => JSON.stringify(row || {}).toUpperCase().includes('AUTO') && JSON.stringify(row || {}).toUpperCase().includes('UNWIND') && JSON.stringify(row || {}).toUpperCase().includes('REUSED')).length;
+    const failedRetryableCount = Number(replayResult && (replayResult.failed_retryable ?? replayResult.failed_retryable_count)) || replayedRows.filter((row) => String(row && (row.status || row.error_code) || '').toUpperCase().includes('FAILED_RETRYABLE')).length;
+    const failedFinalCount = Number(replayResult && (replayResult.failed_final ?? replayResult.failed_final_count)) || replayedRows.filter((row) => String(row && (row.status || row.error_code) || '').toUpperCase().includes('FAILED_FINAL')).length;
+    const signalsTouched = Number(replayResult && (replayResult.signals_touched ?? replayResult.signals_touched_count)) || 0;
     const errorRows = replayedRows.filter((row) => row && row.ok === false);
-    const errorCount = Number(replayResult && replayResult.failed_count) || errorRows.length;
-    const duplicateCount = replayedRows.filter((row) => rowText(row).includes('DUPLICATE')).length;
-    const ignoredCount = replayedRows.filter((row) => rowText(row).includes('IGNORED')).length;
-    const unmatchedCount = replayedRows.filter((row) => rowText(row).includes('UNMATCHED')).length;
-    const ingestedCount = replayedRows.filter((row) => row && row.ok === true && !rowText(row).includes('DUPLICATE') && !rowText(row).includes('IGNORED')).length;
-    const matchedCount = Math.max(0, ingestedCount - unmatchedCount);
-    const autoUnwindStartedCount = replayedRows.filter((row) => rowText(row).includes('AUTO') && rowText(row).includes('UNWIND') && !rowText(row).includes('REUSED')).length;
-    const autoUnwindReusedCount = replayedRows.filter((row) => rowText(row).includes('AUTO') && rowText(row).includes('UNWIND') && rowText(row).includes('REUSED')).length;
-    const replayErrors = errorRows.map((row) => {
-      const source = safeObject(row);
-      return {
-        error: source.error || source.message || source.reason || 'FAILED_WEBHOOK_REPLAY_ROW_FAILED',
-        provider_event_key: source.provider_event_key || null,
-        receipt_id: source.receipt_id || source.receiptId || null
-      };
-    });
+    const errorCount = Number(replayResult && (replayResult.failed_count ?? replayResult.error_count)) || errorRows.length;
+    const replayErrors = errorRows.map((row) => ({
+      error: row.error || row.message || row.reason || 'FAILED_WEBHOOK_REPLAY_ROW_FAILED',
+      provider_event_key: row.provider_event_key || null,
+      receipt_id: row.receipt_id || row.receiptId || null
+    }));
 
     try {
       const patchUrl = `${env.SUPABASE_URL}/rest/v1/bank_provider_webhook_configs?id=eq.${enc(String(webhookConfig.id))}`;
@@ -37732,22 +38070,28 @@ async function handleBankingProviderWebhookReplayFailedEvents(env, req, user, pr
       webhook_config_id: webhookConfig.id || null,
       provider_webhook_id: webhookConfig.provider_webhook_id || null,
       fetched: fetchedCount,
+      normalised: normalisedCount,
+      ingested: ingestedCount,
       duplicates: duplicateCount,
       ignored: ignoredCount,
-      matched: matchedCount,
       unmatched: unmatchedCount,
-      ingested: ingestedCount,
       auto_unwind_started: autoUnwindStartedCount,
       auto_unwind_reused: autoUnwindReusedCount,
+      failed_retryable: failedRetryableCount,
+      failed_final: failedFinalCount,
+      signals_touched: signalsTouched,
       errors: replayErrors,
       fetched_count: fetchedCount,
+      normalised_count: normalisedCount,
       ingested_count: ingestedCount,
       duplicate_count: duplicateCount,
       ignored_count: ignoredCount,
-      matched_count: matchedCount,
       unmatched_count: unmatchedCount,
       auto_unwind_started_count: autoUnwindStartedCount,
       auto_unwind_reused_count: autoUnwindReusedCount,
+      failed_retryable_count: failedRetryableCount,
+      failed_final_count: failedFinalCount,
+      signals_touched_count: signalsTouched,
       error_count: errorCount,
       replay_result: replayResult
     }, errorCount > 0 ? 202 : 200);
@@ -37760,7 +38104,6 @@ async function handleBankingProviderWebhookReplayFailedEvents(env, req, user, pr
     }, 500);
   }
 }
-
 
 async function handleBankingPayBatchWatchSignal(env, req, user, payBatchId) {
   const id = String(payBatchId || '').trim();
@@ -38056,6 +38399,7 @@ async function handleBankingAlertPreferencesUpdate(env, req, user) {
 
 
 
+
 async function handleBankingProviderWebhook(env, req, provider, webhookPublicId) {
   const nowIso = new Date().toISOString();
   const providerKeyRaw = String(provider || '').trim().toUpperCase();
@@ -38127,13 +38471,40 @@ async function handleBankingProviderWebhook(env, req, provider, webhookPublicId)
     const res = await sbFetch(env, url, false);
     const row = res && Array.isArray(res.rows) && res.rows.length ? res.rows[0] : null;
     if (!row) return null;
+    const meta = safeObject(row.meta_json);
+    return {
+      ...safeObject(row),
+      old_signing_secret_ref: String(row.old_signing_secret_ref || meta.old_signing_secret_ref || meta.oldSigningSecretRef || '').trim() || null
+    };
+  };
 
-    /*
-      Webhook signing secret material is intentionally not hydrated from DB
-      fields here. The adapter must resolve the configured Worker secret
-      reference from the Worker environment.
-    */
-    return safeObject(row);
+  const findExistingReceipt = async (railEnv, providerEventKey) => {
+    if (!providerEventKey) return null;
+    const url = `${env.SUPABASE_URL}/rest/v1/bank_provider_webhook_receipts` +
+      `?provider_key=eq.${enc(providerKey)}` +
+      `&rail_env=eq.${enc(railEnv)}` +
+      `&provider_event_key=eq.${enc(providerEventKey)}` +
+      `&select=id,status,attempt_count,ingest_results_json,processed_at_utc,provider_event_key,raw_payload_hash` +
+      `&limit=1`;
+    const res = await sbFetch(env, url, false);
+    return res && Array.isArray(res.rows) && res.rows.length ? res.rows[0] : null;
+  };
+
+  const patchReceipt = async (receiptId, patch) => {
+    if (!receiptId) return null;
+    const url = `${env.SUPABASE_URL}/rest/v1/bank_provider_webhook_receipts?id=eq.${enc(String(receiptId))}`;
+    const res = await sbFetch(env, url, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Prefer: 'return=representation' },
+      body: JSON.stringify({ ...safeObject(patch), updated_at_utc: new Date().toISOString() })
+    });
+    return res && Array.isArray(res.rows) && res.rows.length ? res.rows[0] : null;
+  };
+
+  const bumpDuplicateAttempt = async (receipt) => {
+    if (!receipt || !receipt.id) return null;
+    const nextAttempt = Math.max(1, Number(receipt.attempt_count || 1) + 1);
+    return patchReceipt(receipt.id, { attempt_count: nextAttempt });
   };
 
   const insertReceipt = async (receipt) => {
@@ -38183,35 +38554,6 @@ async function handleBankingProviderWebhook(env, req, provider, webhookPublicId)
     }
   };
 
-  const findExistingReceipt = async (railEnv, providerEventKey) => {
-    if (!providerEventKey) return null;
-    const url = `${env.SUPABASE_URL}/rest/v1/bank_provider_webhook_receipts` +
-      `?provider_key=eq.${enc(providerKey)}` +
-      `&rail_env=eq.${enc(railEnv)}` +
-      `&provider_event_key=eq.${enc(providerEventKey)}` +
-      `&select=id,status,attempt_count,ingest_results_json,processed_at_utc,provider_event_key` +
-      `&limit=1`;
-    const res = await sbFetch(env, url, false);
-    return res && Array.isArray(res.rows) && res.rows.length ? res.rows[0] : null;
-  };
-
-  const patchReceipt = async (receiptId, patch) => {
-    if (!receiptId) return null;
-    const url = `${env.SUPABASE_URL}/rest/v1/bank_provider_webhook_receipts?id=eq.${enc(String(receiptId))}`;
-    const res = await sbFetch(env, url, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json', Prefer: 'return=representation' },
-      body: JSON.stringify({ ...patch, updated_at_utc: new Date().toISOString() })
-    });
-    return res && Array.isArray(res.rows) && res.rows.length ? res.rows[0] : null;
-  };
-
-  const bumpDuplicateAttempt = async (receipt) => {
-    if (!receipt || !receipt.id) return null;
-    const nextAttempt = Math.max(1, Number(receipt.attempt_count || 1) + 1);
-    return patchReceipt(receipt.id, { attempt_count: nextAttempt });
-  };
-
   const patchWebhookConfig = async (configId, patch) => {
     if (!configId) return null;
     try {
@@ -38219,11 +38561,116 @@ async function handleBankingProviderWebhook(env, req, provider, webhookPublicId)
       await sbFetch(env, url, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', Prefer: 'return=minimal' },
-        body: JSON.stringify({ ...patch, updated_at_utc: new Date().toISOString() })
+        body: JSON.stringify({ ...safeObject(patch), updated_at_utc: new Date().toISOString() })
       });
     } catch {}
     return null;
   };
+
+
+  const asBool = (value) => {
+    if (value === true) return true;
+    const s = String(value === undefined || value === null ? '' : value).trim().toLowerCase();
+    return ['true', 't', '1', 'yes', 'y', 'on'].includes(s);
+  };
+
+  const toArray = (value) => Array.isArray(value) ? value : [];
+  const addUnique = (set, value) => {
+    const text = String(value === undefined || value === null ? '' : value).trim();
+    if (text) set.add(text);
+  };
+
+  const readSignalRecommendation = (payload) => {
+    const source = safeObject(payload);
+    const direct = safeObject(source.signal_recommendation_json);
+    if (Object.keys(direct).length) return direct;
+    const live = safeObject(source.live_signal);
+    const nested = safeObject(live.signal_recommendation_json);
+    return Object.keys(nested).length ? nested : {};
+  };
+
+  const coalesceSignalRecommendations = (rows) => {
+    const byBatch = new Map();
+    for (const row of toArray(rows)) {
+      const result = safeObject(row && row.result ? row.result : row);
+      const rec = readSignalRecommendation(result);
+      const batchId = String(rec.pay_batch_id || result.pay_batch_id || '').trim();
+      if (!batchId) continue;
+      const key = batchId.toLowerCase();
+      if (!byBatch.has(key)) {
+        byBatch.set(key, {
+          pay_batch_id: batchId,
+          touch_payment_status: false,
+          touch_correction_progress: false,
+          touch_alerts: false,
+          touch_overview: false,
+          change_reason: 'PROVIDER_EVENT_INGEST',
+          change_source: 'provider_webhook',
+          transfer_ids: new Set(),
+          candidate_ids: new Set(),
+          pay_batch_item_ids: new Set(),
+          provider_event_keys: new Set(),
+          source_delivery_ids: new Set(),
+          source_batch_event_group_keys: new Set(),
+          provider_failure_reason_groups: new Set()
+        });
+      }
+      const item = byBatch.get(key);
+      item.touch_payment_status = item.touch_payment_status || asBool(rec.touch_payment_status);
+      item.touch_correction_progress = item.touch_correction_progress || asBool(rec.touch_correction_progress);
+      item.touch_alerts = item.touch_alerts || asBool(rec.touch_alerts);
+      item.touch_overview = item.touch_overview || asBool(rec.touch_overview);
+      item.change_reason = String(rec.change_reason || item.change_reason || 'PROVIDER_EVENT_INGEST').trim() || 'PROVIDER_EVENT_INGEST';
+      item.change_source = String(rec.change_source || item.change_source || 'provider_webhook').trim() || 'provider_webhook';
+      for (const v of toArray(rec.changed_transfer_ids)) addUnique(item.transfer_ids, v);
+      for (const v of toArray(rec.changed_candidate_ids)) addUnique(item.candidate_ids, v);
+      for (const v of toArray(rec.changed_pay_batch_item_ids)) addUnique(item.pay_batch_item_ids, v);
+      addUnique(item.provider_event_keys, result.provider_event_key || row.provider_event_key || rec.provider_event_key);
+      addUnique(item.source_delivery_ids, rec.source_delivery_id);
+      addUnique(item.source_batch_event_group_keys, rec.source_batch_event_group_key);
+      addUnique(item.provider_failure_reason_groups, rec.provider_failure_reason_group);
+    }
+    return Array.from(byBatch.values()).filter((item) =>
+      item.touch_payment_status || item.touch_correction_progress || item.touch_alerts || item.touch_overview
+    );
+  };
+
+  const touchSignalRecommendations = async (recommendationRows, defaults = {}) => {
+    const signals = [];
+    const batches = coalesceSignalRecommendations(recommendationRows);
+    for (const item of batches) {
+      const changeScope = {
+        changed_transfer_ids: Array.from(item.transfer_ids),
+        changed_candidate_ids: Array.from(item.candidate_ids),
+        changed_pay_batch_item_ids: Array.from(item.pay_batch_item_ids),
+        provider_event_keys: Array.from(item.provider_event_keys),
+        source_delivery_ids: Array.from(item.source_delivery_ids),
+        source_batch_event_group_keys: Array.from(item.source_batch_event_group_keys),
+        provider_failure_reason_groups: Array.from(item.provider_failure_reason_groups)
+      };
+      try {
+        const touched = unwrapRpcPayload(await sbRpc(env, 'banking_pay_batch_signal_touch', {
+          p_pay_batch_id: item.pay_batch_id,
+          p_change_reason: defaults.change_reason || item.change_reason || 'PROVIDER_EVENT_INGEST',
+          p_change_source: defaults.change_source || item.change_source || 'provider_webhook',
+          p_change_scope_json: changeScope,
+          p_touch_payment_status: item.touch_payment_status,
+          p_touch_correction_progress: item.touch_correction_progress,
+          p_touch_alerts: item.touch_alerts,
+          p_touch_overview: item.touch_overview
+        }), 'banking_pay_batch_signal_touch');
+        signals.push({ ok: touched.ok !== false, pay_batch_id: item.pay_batch_id, result: touched });
+      } catch (e) {
+        signals.push({
+          ok: false,
+          pay_batch_id: item.pay_batch_id,
+          error: String(e && e.message || e || 'banking_pay_batch_signal_touch failed')
+        });
+      }
+    }
+    return signals;
+  };
+
 
   if (req.method !== 'POST') {
     return jsonResponse({ ok: false, error_code: 'METHOD_NOT_ALLOWED', message: 'Provider webhooks must use POST.' }, 405);
@@ -38251,6 +38698,7 @@ async function handleBankingProviderWebhook(env, req, provider, webhookPublicId)
   const rawBodyText = await req.text();
   const rawPayloadHash = await sha256Hex(rawBodyText);
   const redactedHeaders = redactHeaders(req.headers);
+  const deliveryReceiptKey = `${providerKey}|${railEnv}|WEBHOOK_DELIVERY|${rawPayloadHash}`;
 
   const verification = await adapter.verifyWebhookSignature(env, {
     raw_body: rawBodyText,
@@ -38270,6 +38718,7 @@ async function handleBankingProviderWebhook(env, req, provider, webhookPublicId)
         rail_env: railEnv,
         webhook_config_id: webhookConfig.id || null,
         provider_webhook_id: webhookConfig.provider_webhook_id || null,
+        provider_event_type: 'SIGNATURE_INVALID',
         provider_event_key: invalidEventKey,
         signature_valid: false,
         signature_version: verification && verification.signature_version || null,
@@ -38277,12 +38726,14 @@ async function handleBankingProviderWebhook(env, req, provider, webhookPublicId)
         request_timestamp: verification && verification.request_timestamp || readHeader(req.headers, 'Revolut-Request-Timestamp') || null,
         raw_payload_hash: rawPayloadHash,
         raw_headers_redacted: redactedHeaders,
+        normalised_events_json: [],
+        ingest_results_json: [],
         status: 'SIGNATURE_INVALID',
-        error_code: verification && verification.reason || 'WEBHOOK_SIGNATURE_INVALID',
+        error_code: verification && (verification.failure_reason || verification.reason) || 'WEBHOOK_SIGNATURE_INVALID',
         error_message: 'Provider webhook signature validation failed.'
       });
     }
-    await patchWebhookConfig(webhookConfig.id, { last_error_at_utc: nowIso, last_error: verification && verification.reason || 'WEBHOOK_SIGNATURE_INVALID' });
+    await patchWebhookConfig(webhookConfig.id, { last_error_at_utc: nowIso, last_error: verification && (verification.failure_reason || verification.reason) || 'WEBHOOK_SIGNATURE_INVALID' });
     return jsonResponse({ ok: false, error_code: 'WEBHOOK_SIGNATURE_INVALID', provider_key: providerKey, signature_valid: false }, 401);
   }
 
@@ -38299,6 +38750,7 @@ async function handleBankingProviderWebhook(env, req, provider, webhookPublicId)
         rail_env: railEnv,
         webhook_config_id: webhookConfig.id || null,
         provider_webhook_id: webhookConfig.provider_webhook_id || null,
+        provider_event_type: 'INVALID_JSON',
         provider_event_key: invalidJsonEventKey,
         signature_valid: true,
         signature_version: verification.signature_version || null,
@@ -38306,6 +38758,8 @@ async function handleBankingProviderWebhook(env, req, provider, webhookPublicId)
         request_timestamp: verification.request_timestamp || null,
         raw_payload_hash: rawPayloadHash,
         raw_headers_redacted: redactedHeaders,
+        normalised_events_json: [],
+        ingest_results_json: [],
         status: 'FAILED_FINAL',
         error_code: 'WEBHOOK_JSON_INVALID',
         error_message: String(e && e.message || e || 'Webhook JSON parsing failed.')
@@ -38313,6 +38767,24 @@ async function handleBankingProviderWebhook(env, req, provider, webhookPublicId)
     }
     await patchWebhookConfig(webhookConfig.id, { last_error_at_utc: nowIso, last_error: 'WEBHOOK_JSON_INVALID' });
     return jsonResponse({ ok: false, error_code: 'WEBHOOK_JSON_INVALID' }, 400);
+  }
+
+  const existingDelivery = await findExistingReceipt(railEnv, deliveryReceiptKey);
+  if (existingDelivery && existingDelivery.id) {
+    const duplicateStatus = String(existingDelivery.status || '').trim().toUpperCase();
+    await bumpDuplicateAttempt(existingDelivery);
+    return jsonResponse({
+      ok: true,
+      duplicate: true,
+      duplicate_scope: 'DELIVERY',
+      provider_key: providerKey,
+      rail_env: railEnv,
+      provider_event_key: deliveryReceiptKey,
+      receipt_id: existingDelivery.id,
+      status: existingDelivery.status || null,
+      duplicate_status: duplicateStatus || null,
+      message: 'Duplicate provider webhook delivery found; no duplicate ingestion work was started.'
+    }, duplicateStatus === 'FAILED_RETRYABLE' ? 202 : 200);
   }
 
   let normalised;
@@ -38329,13 +38801,13 @@ async function handleBankingProviderWebhook(env, req, provider, webhookPublicId)
       signature_valid: verification.signature_valid === true
     });
   } catch (normaliseError) {
-    const normaliseFailedEventKey = `${providerKey}|${railEnv}|NORMALISE_FAILED|${rawPayloadHash}`;
     const normaliseFailedReceipt = await insertReceipt({
       provider_key: providerKey,
       rail_env: railEnv,
       webhook_config_id: webhookConfig.id || null,
       provider_webhook_id: webhookConfig.provider_webhook_id || null,
-      provider_event_key: normaliseFailedEventKey,
+      provider_event_type: 'NORMALISE_FAILED',
+      provider_event_key: `${providerKey}|${railEnv}|NORMALISE_FAILED|${rawPayloadHash}`,
       signature_valid: true,
       signature_version: verification.signature_version || null,
       signature_header: verification.signature_header || null,
@@ -38349,23 +38821,13 @@ async function handleBankingProviderWebhook(env, req, provider, webhookPublicId)
       error_code: 'WEBHOOK_NORMALISE_FAILED',
       error_message: String(normaliseError && normaliseError.message || normaliseError || 'Webhook normalisation failed.')
     });
-
-    if (normaliseFailedReceipt && normaliseFailedReceipt.__duplicate_receipt_insert === true && normaliseFailedReceipt.id) {
-      await bumpDuplicateAttempt(normaliseFailedReceipt);
-    }
-
-    await patchWebhookConfig(webhookConfig.id, {
-      last_event_at_utc: nowIso,
-      last_error_at_utc: nowIso,
-      last_error: 'WEBHOOK_NORMALISE_FAILED'
-    });
-
+    if (normaliseFailedReceipt && normaliseFailedReceipt.__duplicate_receipt_insert === true && normaliseFailedReceipt.id) await bumpDuplicateAttempt(normaliseFailedReceipt);
+    await patchWebhookConfig(webhookConfig.id, { last_event_at_utc: nowIso, last_error_at_utc: nowIso, last_error: 'WEBHOOK_NORMALISE_FAILED' });
     return jsonResponse({
       ok: false,
       provider_key: providerKey,
       rail_env: railEnv,
       receipt_id: normaliseFailedReceipt && normaliseFailedReceipt.id ? normaliseFailedReceipt.id : null,
-      provider_event_key: normaliseFailedEventKey,
       status: 'FAILED_RETRYABLE',
       error_code: 'WEBHOOK_NORMALISE_FAILED',
       message: 'Webhook signature was valid, but the provider payload could not be normalised. No event ingestion work was started.'
@@ -38376,32 +38838,26 @@ async function handleBankingProviderWebhook(env, req, provider, webhookPublicId)
   const ingestableEvents = normalisedEvents.filter((event) => event && typeof event === 'object' && event.ignored !== true);
   const ignoredEvents = normalisedEvents.filter((event) => event && typeof event === 'object' && event.ignored === true);
   const firstEvent = ingestableEvents[0] || ignoredEvents[0] || {};
-  const providerEventKey = String(firstEvent.provider_event_key || firstEvent.idempotency_key || `${providerKey}|${railEnv}|${rawPayloadHash}`).trim();
-  const duplicateReceipt = await findExistingReceipt(railEnv, providerEventKey);
-  if (duplicateReceipt && duplicateReceipt.id) {
-    const duplicateStatus = String(duplicateReceipt.status || '').trim().toUpperCase();
-    await bumpDuplicateAttempt(duplicateReceipt);
-    return jsonResponse({
-      ok: true,
-      duplicate: true,
-      provider_key: providerKey,
-      rail_env: railEnv,
-      provider_event_key: providerEventKey,
-      receipt_id: duplicateReceipt.id,
-      status: duplicateReceipt.status || null,
-      duplicate_status: duplicateStatus || null,
-      message: 'Duplicate provider webhook receipt found; no duplicate ingestion work was started.'
-    }, duplicateStatus === 'FAILED_RETRYABLE' ? 202 : 200);
-  }
+
+  const receiptPlaceholders = normalisedEvents.map((event) => {
+    const safeEvent = safeObject(event);
+    return {
+      provider_event_key: safeEvent.provider_event_key || safeEvent.idempotency_key || null,
+      provider_event_type: safeEvent.provider_event_type || null,
+      provider_transaction_id: safeEvent.provider_transaction_id || null,
+      provider_request_id: safeEvent.provider_request_id || null,
+      status: safeEvent.ignored === true ? 'IGNORED' : 'PENDING'
+    };
+  });
 
   const receiptRow = await insertReceipt({
     provider_key: providerKey,
     rail_env: railEnv,
     webhook_config_id: webhookConfig.id || null,
     provider_webhook_id: webhookConfig.provider_webhook_id || null,
-    provider_event_type: firstEvent.provider_event_type || null,
-    provider_event_id: firstEvent.provider_event_id || null,
-    provider_event_key: providerEventKey,
+    provider_event_type: 'WEBHOOK_DELIVERY',
+    provider_event_id: rawPayloadHash,
+    provider_event_key: deliveryReceiptKey,
     provider_transaction_id: firstEvent.provider_transaction_id || null,
     provider_request_id: firstEvent.provider_request_id || null,
     signature_valid: true,
@@ -38413,7 +38869,7 @@ async function handleBankingProviderWebhook(env, req, provider, webhookPublicId)
     raw_payload_hash: rawPayloadHash,
     raw_headers_redacted: redactedHeaders,
     normalised_events_json: normalisedEvents,
-    ingest_results_json: [],
+    ingest_results_json: receiptPlaceholders,
     status: ingestableEvents.length ? 'NORMALISED' : 'IGNORED_EVENT_TYPE'
   });
 
@@ -38423,13 +38879,14 @@ async function handleBankingProviderWebhook(env, req, provider, webhookPublicId)
     return jsonResponse({
       ok: true,
       duplicate: true,
+      duplicate_scope: 'DELIVERY',
       provider_key: providerKey,
       rail_env: railEnv,
-      provider_event_key: providerEventKey,
+      provider_event_key: deliveryReceiptKey,
       receipt_id: receiptRow.id,
       status: receiptRow.status || null,
       duplicate_status: duplicateStatus || null,
-      message: 'Duplicate provider webhook receipt found during insert; no duplicate ingestion work was started.'
+      message: 'Duplicate provider webhook delivery found during insert; no duplicate ingestion work was started.'
     }, duplicateStatus === 'FAILED_RETRYABLE' ? 202 : 200);
   }
 
@@ -38439,6 +38896,7 @@ async function handleBankingProviderWebhook(env, req, provider, webhookPublicId)
     await patchReceipt(receiptId, {
       status: 'IGNORED_EVENT_TYPE',
       normalised_events_json: normalisedEvents.map((event) => ({ ...event, provider_webhook_receipt_id: receiptId })),
+      ingest_results_json: receiptPlaceholders,
       processed_at_utc: new Date().toISOString()
     });
     await patchWebhookConfig(webhookConfig.id, { last_event_at_utc: nowIso });
@@ -38456,7 +38914,7 @@ async function handleBankingProviderWebhook(env, req, provider, webhookPublicId)
   let ingestFailed = false;
   for (const eventJson of ingestableEvents) {
     const eventPayload = {
-      ...eventJson,
+      ...safeObject(eventJson),
       provider_webhook_receipt_id: receiptId || eventJson.provider_webhook_receipt_id || null,
       provider_webhook_id: eventJson.provider_webhook_id || webhookConfig.provider_webhook_id || null,
       provider_event_transport: eventJson.provider_event_transport || 'PROVIDER_WEBHOOK',
@@ -38469,21 +38927,75 @@ async function handleBankingProviderWebhook(env, req, provider, webhookPublicId)
     try {
       const ingestPayload = unwrapRpcPayload(await sbRpc(env, 'pay_bank_event_ingest', {
         p_event_json: eventPayload,
-        p_actor_user_id: null
+        p_actor_user_id: null,
+        p_ingest_options_json: {
+          touch_signal: false,
+          signal_mode: 'DEFERRED',
+          source_delivery_id: receiptId,
+          source_batch_event_group_key: deliveryReceiptKey
+        }
       }), 'pay_bank_event_ingest');
-      ingestResults.push({ ok: ingestPayload.ok !== false, provider_event_key: eventPayload.provider_event_key || null, result: ingestPayload });
+      const liveSignal = safeObject(ingestPayload.live_signal);
+      const duplicateEvent = ingestPayload.duplicate_event === true || liveSignal.duplicate_event === true || liveSignal.changed === false && String(liveSignal.reason || '').toUpperCase().includes('ALREADY');
+      const statusText = JSON.stringify(ingestPayload || {}).toUpperCase();
+      ingestResults.push({
+        ok: ingestPayload.ok !== false,
+        provider_event_key: eventPayload.provider_event_key || null,
+        provider_event_type: eventPayload.provider_event_type || null,
+        provider_transaction_id: eventPayload.provider_transaction_id || null,
+        provider_request_id: eventPayload.provider_request_id || null,
+        pay_batch_id: ingestPayload.pay_batch_id || null,
+        pay_bank_transfer_id: ingestPayload.pay_bank_transfer_id || eventPayload.pay_bank_transfer_id || null,
+        status: duplicateEvent ? 'DUPLICATE' : (statusText.includes('UNMATCHED') ? 'UNMATCHED_REVIEW_REQUIRED' : 'INGESTED'),
+        action_taken: ingestPayload.correction_disposition || ingestPayload.classification || null,
+        auto_unwind_started: statusText.includes('AUTO') && statusText.includes('UNWIND') && !statusText.includes('REUSED'),
+        auto_unwind_reused: statusText.includes('AUTO') && statusText.includes('UNWIND') && statusText.includes('REUSED'),
+        ignored_reason: null,
+        unmatched_reason: statusText.includes('UNMATCHED') ? 'UNMATCHED_OR_REVIEW_REQUIRED' : null,
+        result: ingestPayload
+      });
       if (ingestPayload.ok === false) ingestFailed = true;
     } catch (e) {
       ingestFailed = true;
-      ingestResults.push({ ok: false, provider_event_key: eventPayload.provider_event_key || null, error: String(e && e.message || e || 'pay_bank_event_ingest failed') });
+      ingestResults.push({
+        ok: false,
+        provider_event_key: eventPayload.provider_event_key || null,
+        provider_event_type: eventPayload.provider_event_type || null,
+        provider_transaction_id: eventPayload.provider_transaction_id || null,
+        provider_request_id: eventPayload.provider_request_id || null,
+        status: 'FAILED_RETRYABLE',
+        action_taken: null,
+        auto_unwind_started: false,
+        auto_unwind_reused: false,
+        ignored_reason: null,
+        unmatched_reason: null,
+        error: String(e && e.message || e || 'pay_bank_event_ingest failed')
+      });
     }
   }
 
-  const hasUnmatched = ingestResults.some((row) => {
-    const result = safeObject(row && row.result);
-    const statusText = JSON.stringify(result).toUpperCase();
-    return statusText.includes('UNMATCHED') || statusText.includes('REVIEW_REQUIRED');
+  for (const ignored of ignoredEvents) {
+    ingestResults.push({
+      ok: true,
+      provider_event_key: ignored.provider_event_key || ignored.idempotency_key || null,
+      provider_event_type: ignored.provider_event_type || null,
+      provider_transaction_id: ignored.provider_transaction_id || null,
+      provider_request_id: ignored.provider_request_id || null,
+      status: 'IGNORED',
+      action_taken: null,
+      auto_unwind_started: false,
+      auto_unwind_reused: false,
+      ignored_reason: ignored.ignored_reason || 'IGNORED_EVENT_TYPE',
+      unmatched_reason: null
+    });
+  }
+
+  const signalTouchResults = await touchSignalRecommendations(ingestResults, {
+    change_reason: 'PROVIDER_WEBHOOK_EVENTS_INGESTED',
+    change_source: 'provider_webhook'
   });
+
+  const hasUnmatched = ingestResults.some((row) => String(row && row.status || '').toUpperCase().includes('UNMATCHED'));
   const finalStatus = ingestFailed ? 'FAILED_RETRYABLE' : (hasUnmatched ? 'UNMATCHED_REVIEW_REQUIRED' : 'INGESTED');
 
   await patchReceipt(receiptId, {
@@ -38504,15 +39016,15 @@ async function handleBankingProviderWebhook(env, req, provider, webhookPublicId)
     provider_key: providerKey,
     rail_env: railEnv,
     receipt_id: receiptId,
-    provider_event_key: providerEventKey,
+    provider_event_key: deliveryReceiptKey,
     status: finalStatus,
     event_count: ingestableEvents.length,
     ignored_count: ignoredEvents.length,
-    ingest_results: ingestResults
+    ingest_results: ingestResults,
+    signal_touch_results: signalTouchResults,
+    signals_touched: signalTouchResults.filter((row) => row && row.ok === true).length
   }, ingestFailed ? 202 : 200);
 }
-
-
 async function handleBankingPayProviderSubmitReviewResolution(env, req, user, payBatchId) {
   const id = String(payBatchId || '').trim();
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -60593,11 +61105,33 @@ async function handleBankingPayCorrectionStart(env, req, user, payBatchId) {
       result = await callPoll();
     } else if (action === 'RETRY_PROVIDER_LATER') {
       route = 'RETRY_PROVIDER_LATER';
+      const sourceContext = upperText(body.source_context || body.sourceContext || selectionJson.source_context || selectionJson.sourceContext || '');
+      const sourceTab = upperText(body.source_tab || body.sourceTab || selectionJson.source_tab || selectionJson.sourceTab || '');
+      const sourceSection = upperText(body.source_section || body.sourceSection || selectionJson.source_section || selectionJson.sourceSection || '');
+      const overviewRetry = body.overview_retry === true
+        || body.retry_from_overview === true
+        || body.batch_retry === true
+        || sourceContext.includes('OVERVIEW')
+        || sourceContext.includes('BATCH_RETRY')
+        || sourceTab === 'OVERVIEW'
+        || sourceSection === 'OVERVIEW';
+      if (overviewRetry !== true || selectionHasSpecificRows(selectionJson)) {
+        return withCORS(env, req, jsonResponse(409, {
+          ok: false,
+          pay_batch_id: id,
+          error_code: 'RETRY_UNSENT_PAYMENTS_OVERVIEW_ONLY',
+          message: 'Use Overview to retry unsent payments.',
+          requested_action: 'RETRY_PROVIDER_LATER',
+          recommended_action: 'RETRY_PROVIDER_LATER',
+          plan
+        }));
+      }
       const retryBody = {
         ...body,
-        selection_json: { ...selectionJson, requested_action: 'RETRY_PROVIDER_LATER', source_context: selectionJson.source_context || 'handleBankingPayCorrectionStart.retry_provider_later' },
+        selection_json: { scope_type: 'BATCH', requested_action: 'RETRY_PROVIDER_LATER', source_context: 'handleBankingPayCorrectionStart.overview_retry' },
         requested_action: 'RETRY_PROVIDER_LATER',
-        source_context: 'handleBankingPayCorrectionStart.retry_provider_later',
+        source_context: 'handleBankingPayCorrectionStart.overview_retry',
+        overview_retry: true,
         reason
       };
       const retryHeaders = new Headers(req.headers);
@@ -138342,7 +138876,7 @@ function getRailAdapter(provider) {
           };
         },
 
-      async verifyWebhookSignature(env, args = {}) {
+  async verifyWebhookSignature(env, args = {}) {
           const getHeader = (headers, name) => {
             if (!headers || !name) return '';
             try {
@@ -138389,6 +138923,7 @@ function getRailAdapter(provider) {
           const rawBodyText = await toText(args.raw_body ?? args.rawBody ?? '');
           const headers = args.headers || {};
           const webhookConfig = (args.webhook_config && typeof args.webhook_config === 'object' && !Array.isArray(args.webhook_config)) ? args.webhook_config : {};
+          const webhookMeta = (webhookConfig.meta_json && typeof webhookConfig.meta_json === 'object' && !Array.isArray(webhookConfig.meta_json)) ? webhookConfig.meta_json : {};
           const railEnv = normalizeEnv(args.rail_env ?? webhookConfig.rail_env, getRevolutWorkerEnv(env));
           const timestampHeader = getHeader(headers, 'Revolut-Request-Timestamp');
           const signatureHeader = getHeader(headers, 'Revolut-Signature');
@@ -138396,31 +138931,64 @@ function getRailAdapter(provider) {
           const toleranceSeconds = Number.isFinite(toleranceSecondsRaw) ? Math.max(0, Math.min(3600, toleranceSecondsRaw)) : 300;
 
           if (!timestampHeader) {
-            return { ok: true, provider_key: 'REVOLUT', rail_env: railEnv, signature_valid: false, reason: 'REVOLUT_WEBHOOK_TIMESTAMP_MISSING' };
+            return {
+              ok: true,
+              provider_key: 'REVOLUT',
+              rail_env: railEnv,
+              signature_valid: false,
+              timestamp_valid: false,
+              failure_reason: 'REVOLUT_WEBHOOK_TIMESTAMP_MISSING',
+              reason: 'REVOLUT_WEBHOOK_TIMESTAMP_MISSING',
+              checked_signature_count: 0
+            };
           }
           if (!signatureHeader) {
-            return { ok: true, provider_key: 'REVOLUT', rail_env: railEnv, signature_valid: false, reason: 'REVOLUT_WEBHOOK_SIGNATURE_MISSING', request_timestamp: timestampHeader };
+            return {
+              ok: true,
+              provider_key: 'REVOLUT',
+              rail_env: railEnv,
+              signature_valid: false,
+              timestamp_valid: true,
+              failure_reason: 'REVOLUT_WEBHOOK_SIGNATURE_MISSING',
+              reason: 'REVOLUT_WEBHOOK_SIGNATURE_MISSING',
+              request_timestamp: timestampHeader,
+              checked_signature_count: 0
+            };
           }
 
           const timestampMs = /^\d+$/.test(String(timestampHeader).trim())
             ? Number(String(timestampHeader).trim())
             : Date.parse(String(timestampHeader).trim());
           if (!Number.isFinite(timestampMs)) {
-            return { ok: true, provider_key: 'REVOLUT', rail_env: railEnv, signature_valid: false, reason: 'REVOLUT_WEBHOOK_TIMESTAMP_INVALID', request_timestamp: timestampHeader };
-          }
-
-          const nowMs = Number.isFinite(Number(args.now_ms)) ? Number(args.now_ms) : Date.now();
-          const ageSeconds = Math.abs(nowMs - timestampMs) / 1000;
-          if (toleranceSeconds > 0 && ageSeconds > toleranceSeconds) {
             return {
               ok: true,
               provider_key: 'REVOLUT',
               rail_env: railEnv,
               signature_valid: false,
+              timestamp_valid: false,
+              failure_reason: 'REVOLUT_WEBHOOK_TIMESTAMP_INVALID',
+              reason: 'REVOLUT_WEBHOOK_TIMESTAMP_INVALID',
+              request_timestamp: timestampHeader,
+              checked_signature_count: 0
+            };
+          }
+
+          const nowMs = Number.isFinite(Number(args.now_ms)) ? Number(args.now_ms) : Date.now();
+          const ageSeconds = Math.abs(nowMs - timestampMs) / 1000;
+          const timestampValid = !(toleranceSeconds > 0 && ageSeconds > toleranceSeconds);
+          if (!timestampValid) {
+            return {
+              ok: true,
+              provider_key: 'REVOLUT',
+              rail_env: railEnv,
+              signature_valid: false,
+              timestamp_valid: false,
+              failure_reason: 'REVOLUT_WEBHOOK_TIMESTAMP_OUTSIDE_TOLERANCE',
               reason: 'REVOLUT_WEBHOOK_TIMESTAMP_OUTSIDE_TOLERANCE',
               request_timestamp: timestampHeader,
               timestamp_age_seconds: ageSeconds,
-              timestamp_tolerance_seconds: toleranceSeconds
+              timestamp_tolerance_seconds: toleranceSeconds,
+              checked_signature_count: 0
             };
           }
 
@@ -138435,10 +139003,10 @@ function getRailAdapter(provider) {
           }).filter((sig) => sig.value);
 
           const secrets = [];
-          const addSecret = (secret, slot, active = true) => {
+          const addSecret = (secret, kind, active = true) => {
             const text = secret === undefined || secret === null ? '' : String(secret).trim();
             if (!text || active !== true) return;
-            if (!secrets.some((s) => s.value === text)) secrets.push({ value: text, slot });
+            if (!secrets.some((s) => s.value === text)) secrets.push({ value: text, matched_secret_kind: kind });
           };
 
           const activeSecretRef = String(
@@ -138450,7 +139018,7 @@ function getRailAdapter(provider) {
           ).trim();
 
           if (activeSecretRef && env && Object.prototype.hasOwnProperty.call(env, activeSecretRef)) {
-            addSecret(env[activeSecretRef], 'ACTIVE_ENV_SECRET');
+            addSecret(env[activeSecretRef], 'CURRENT');
           }
 
           const oldSecretExpiresAt = webhookConfig.old_secret_expires_at_utc ? Date.parse(String(webhookConfig.old_secret_expires_at_utc)) : null;
@@ -138459,49 +139027,67 @@ function getRailAdapter(provider) {
             webhookConfig.old_signing_secret_ref
             || webhookConfig.oldSigningSecretRef
             || webhookConfig.old_secret_ref
+            || webhookMeta.old_signing_secret_ref
+            || webhookMeta.oldSigningSecretRef
+            || webhookMeta.old_secret_ref
             || ''
           ).trim();
 
           if (oldSecretActive && oldSecretRef && env && Object.prototype.hasOwnProperty.call(env, oldSecretRef)) {
-            addSecret(env[oldSecretRef], 'OLD_ENV_SECRET', true);
+            addSecret(env[oldSecretRef], 'OLD', true);
           }
 
           if (!secrets.length && activeSecretRef === 'REVOLUT_WEBHOOK_SIGNING_SECRET' && env && env.REVOLUT_WEBHOOK_SIGNING_SECRET) {
-            addSecret(env.REVOLUT_WEBHOOK_SIGNING_SECRET, 'ACTIVE_ENV_SECRET');
+            addSecret(env.REVOLUT_WEBHOOK_SIGNING_SECRET, 'CURRENT');
           }
 
           if (!secrets.length) {
-            return { ok: true, provider_key: 'REVOLUT', rail_env: railEnv, signature_valid: false, reason: 'REVOLUT_WEBHOOK_SIGNING_SECRET_MISSING', request_timestamp: timestampHeader };
+            return {
+              ok: true,
+              provider_key: 'REVOLUT',
+              rail_env: railEnv,
+              signature_valid: false,
+              timestamp_valid: true,
+              failure_reason: 'REVOLUT_WEBHOOK_SIGNING_SECRET_MISSING',
+              reason: 'REVOLUT_WEBHOOK_SIGNING_SECRET_MISSING',
+              request_timestamp: timestampHeader,
+              checked_signature_count: parsedSignatures.length
+            };
           }
 
           const versionsToCheck = parsedSignatures.length ? parsedSignatures : [{ version: 'v1', value: '' }];
           const matches = [];
+          let checkedSignatureCount = 0;
           for (const secret of secrets) {
             for (const signature of versionsToCheck) {
+              checkedSignatureCount += 1;
               const version = signature.version || 'v1';
               const payloadToSign = `${version}.${timestampHeader}.${rawBodyText}`;
               const key = await crypto.subtle.importKey('raw', toUtf8(secret.value), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
               const digest = await crypto.subtle.sign('HMAC', key, toUtf8(payloadToSign));
               const expected = `${version}=${toHex(digest)}`;
               if (timingSafeEqual(expected, `${version}=${signature.value}`) || timingSafeEqual(toHex(digest), signature.value)) {
-                matches.push({ version, secret_slot: secret.slot });
+                matches.push({ version, matched_secret_kind: secret.matched_secret_kind });
               }
             }
           }
 
+          const matched = matches[0] || null;
           return {
             ok: true,
             provider_key: 'REVOLUT',
             rail_env: railEnv,
-            signature_valid: matches.length > 0,
-            reason: matches.length > 0 ? null : 'REVOLUT_WEBHOOK_SIGNATURE_INVALID',
-            signature_version: matches.length > 0 ? matches[0].version : (parsedSignatures[0] ? parsedSignatures[0].version : 'v1'),
+            signature_valid: !!matched,
+            timestamp_valid: true,
+            signature_version: matched ? matched.version : (parsedSignatures[0] ? parsedSignatures[0].version : 'v1'),
+            matched_secret_kind: matched ? matched.matched_secret_kind : null,
+            failure_reason: matched ? null : 'REVOLUT_WEBHOOK_SIGNATURE_INVALID',
+            reason: matched ? null : 'REVOLUT_WEBHOOK_SIGNATURE_INVALID',
             signature_header: signatureHeader,
             timestamp_header: timestampHeader,
             request_timestamp: timestampHeader,
             timestamp_age_seconds: ageSeconds,
-            matched_secret_slot: matches.length > 0 ? matches[0].secret_slot : null,
-            active_secret_count: secrets.length,
+            checked_signature_count: checkedSignatureCount,
             signature_count: parsedSignatures.length
           };
         },
@@ -138580,7 +139166,7 @@ function getRailAdapter(provider) {
           };
         },
 
-    async normaliseWebhookEvents(env, args = {}) {
+  async normaliseWebhookEvents(env, args = {}) {
           const railEnv = normalizeEnv(args.rail_env, getRevolutWorkerEnv(env));
           const providerWebhookReceiptId = args.provider_webhook_receipt_id || args.webhook_receipt_id || null;
           const providerWebhookId = args.provider_webhook_id || (args.webhook_config && args.webhook_config.provider_webhook_id) || null;
@@ -138595,6 +139181,17 @@ function getRailAdapter(provider) {
               ? rawPayload.events
               : [rawPayload];
 
+          const readObject = (value) => (value && typeof value === 'object' && !Array.isArray(value)) ? value : {};
+          const readText = (value) => String(value === undefined || value === null ? '' : value).trim();
+          const readUpper = (value) => readText(value).toUpperCase();
+          const firstNumeric = (...values) => {
+            for (const value of values) {
+              const n = Number(value);
+              if (Number.isFinite(n)) return n;
+            }
+            return undefined;
+          };
+
           const events = [];
           for (const rawEvent of asArray) {
             let eventPayload = rawEvent;
@@ -138603,17 +139200,30 @@ function getRailAdapter(provider) {
             }
             if (!eventPayload || typeof eventPayload !== 'object' || Array.isArray(eventPayload)) continue;
 
-            const eventType = String(eventPayload.event || eventPayload.type || eventPayload.event_type || '').trim();
-            const data = (eventPayload.data && typeof eventPayload.data === 'object' && !Array.isArray(eventPayload.data)) ? eventPayload.data : {};
-            const providerTransactionId = String(data.id || eventPayload.transaction_id || eventPayload.provider_transaction_id || '').trim() || null;
-            const providerRequestId = String(data.request_id || eventPayload.request_id || '').trim() || null;
-            const oldState = String(data.old_state || eventPayload.old_state || '').trim();
-            const newStateRaw = String(data.new_state || data.state || eventPayload.new_state || eventPayload.state || '').trim();
+            const eventType = readText(eventPayload.event || eventPayload.type || eventPayload.event_type);
+            const data = readObject(eventPayload.data);
+            const providerTransactionId = readText(data.id || eventPayload.transaction_id || eventPayload.provider_transaction_id) || null;
+            const providerRequestId = readText(data.request_id || eventPayload.request_id) || null;
+            const oldState = readText(data.old_state || eventPayload.old_state);
+            const stateForCreated = readText(data.state || eventPayload.state);
+            const stateForChanged = readText(data.new_state || eventPayload.new_state || data.state || eventPayload.state);
+            const newStateRaw = eventType === 'TransactionStateChanged' ? stateForChanged : stateForCreated;
             const providerState = newStateRaw || null;
-            const stateUpper = String(providerState || '').trim().toUpperCase();
-            const timestamp = String(eventPayload.timestamp || eventPayload.created_at || eventPayload.created_at_utc || args.event_time_utc || new Date().toISOString()).trim();
-            const providerReasonCode = String(data.reason_code || data.failure_reason || data.decline_reason || data.error_code || data.error || eventPayload.reason_code || eventPayload.error_code || '').trim() || null;
-            const providerReasonText = String(data.reason || data.reason_text || data.failure_reason_text || data.decline_reason_text || data.message || eventPayload.message || '').trim() || null;
+            const stateUpper = readUpper(providerState);
+            const timestamp = readText(
+              eventPayload.timestamp
+              || data.updated_at
+              || data.completed_at
+              || data.created_at
+              || eventPayload.created_at
+              || eventPayload.created_at_utc
+              || args.event_time_utc
+              || new Date().toISOString()
+            );
+            const reference = readText(data.reference || eventPayload.reference || eventPayload.payment_reference) || null;
+            const legs = Array.isArray(data.legs) ? data.legs : undefined;
+            const providerReasonCode = readText(data.reason_code || data.failure_reason || data.decline_reason || data.error_code || data.error || eventPayload.reason_code || eventPayload.error_code) || null;
+            const providerReasonText = readText(data.reason || data.reason_text || data.failure_reason_text || data.decline_reason_text || data.message || eventPayload.message) || null;
 
             if (eventType === 'PayoutLinkCreated' || eventType === 'PayoutLinkStateChanged') {
               events.push({
@@ -138662,13 +139272,20 @@ function getRailAdapter(provider) {
               || eventPayload.provider_event_key
               || eventPayload.event_key
               || (
-                providerTransactionId
-                  ? `REVOLUT|${railEnv}|${eventType}|${providerTransactionId}|${oldState || 'NO_OLD_STATE'}|${newStateRaw || 'NO_NEW_STATE'}|${timestamp || 'NO_TIMESTAMP'}`
+                providerTransactionId && eventType === 'TransactionStateChanged'
+                  ? `REVOLUT|${railEnv}|TransactionStateChanged|${providerTransactionId}|${oldState || 'NO_OLD_STATE'}|${newStateRaw || 'NO_NEW_STATE'}|${timestamp || 'NO_TIMESTAMP'}`
                   : ''
               )
-              || (providerTransactionId && normalisedState ? `REVOLUT|${railEnv}|${eventType}|${providerTransactionId}|${normalisedState}|${args.raw_payload_hash || 'NO_HASH'}` : '')
-              || `REVOLUT|${railEnv}|${args.raw_payload_hash || timestamp || JSON.stringify(eventPayload).slice(0, 128)}`
+              || (
+                providerTransactionId && eventType === 'TransactionCreated'
+                  ? `REVOLUT|${railEnv}|TransactionCreated|${providerTransactionId}|${stateForCreated || 'NO_STATE'}|${timestamp || 'NO_TIMESTAMP'}`
+                  : ''
+              )
+              || `REVOLUT|${railEnv}|${eventType || 'UNKNOWN_EVENT'}|${args.raw_payload_hash || timestamp || JSON.stringify(eventPayload).slice(0, 128)}`
             ).trim();
+
+            const amount = firstNumeric(data.amount, eventPayload.amount, legs && legs[0] && legs[0].amount);
+            const currency = readText(data.currency || eventPayload.currency || (legs && legs[0] && legs[0].currency)).toUpperCase() || undefined;
 
             events.push({
               provider_key: 'REVOLUT',
@@ -138681,7 +139298,7 @@ function getRailAdapter(provider) {
               provider_webhook_id: providerWebhookId,
               provider_event_id: providerTransactionId,
               provider_transaction_id: providerTransactionId,
-              provider_reference: providerTransactionId,
+              provider_reference: reference || providerTransactionId,
               provider_request_id: providerRequestId,
               request_id: providerRequestId,
               provider_state: providerState,
@@ -138695,8 +139312,8 @@ function getRailAdapter(provider) {
               event_time_utc: timestamp,
               idempotency_key: providerEventKey,
               provider_event_key: providerEventKey,
-              amount: data.amount ? Number(data.amount) : undefined,
-              currency: data.currency ? String(data.currency).trim().toUpperCase() : undefined,
+              amount,
+              currency,
               raw_payload: eventPayload,
               mapping_hints_json: {
                 provider_key: 'REVOLUT',
@@ -138707,8 +139324,17 @@ function getRailAdapter(provider) {
                 provider_event_key: providerEventKey,
                 provider_transaction_id: providerTransactionId,
                 provider_request_id: providerRequestId,
+                reference,
+                amount,
+                currency,
+                legs,
                 old_state: oldState || null,
                 new_state: newStateRaw || null,
+                state: stateForCreated || null,
+                reason_code: providerReasonCode,
+                created_at: data.created_at || null,
+                completed_at: data.completed_at || null,
+                updated_at: data.updated_at || null,
                 revolut_reverted_requires_review: ['REVERTED', 'REVERSED', 'RETURNED'].includes(stateUpper),
                 source_transport: sourceTransport
               }
@@ -138726,7 +139352,7 @@ function getRailAdapter(provider) {
         },
 
 
-        async fetchFailedWebhookEvents(env, args = {}) {
+     async fetchFailedWebhookEvents(env, args = {}) {
           const railEnv = normalizeEnv(args.rail_env, getRevolutWorkerEnv(env));
           const webhookConfig = (args.webhook_config && typeof args.webhook_config === 'object' && !Array.isArray(args.webhook_config)) ? args.webhook_config : {};
           const webhookId = String(args.webhook_id || args.provider_webhook_id || webhookConfig.provider_webhook_id || '').trim();
@@ -138738,11 +139364,159 @@ function getRailAdapter(provider) {
           const maxPages = Number.isFinite(maxPagesRaw) ? Math.max(1, Math.min(25, Math.trunc(maxPagesRaw))) : 1;
           const apiBase = (env && env.REVOLUT_API_BASE !== undefined && env.REVOLUT_API_BASE !== null) ? String(env.REVOLUT_API_BASE).replace(/\/$/, '') : 'https://b2b.revolut.com/api/1.0';
           const token = await revolutAuth_getAccessToken(env);
+          const enc = encodeURIComponent;
           const toUtf8 = (value) => new TextEncoder().encode(String(value));
           const toHex = (buffer) => Array.from(new Uint8Array(buffer)).map((b) => b.toString(16).padStart(2, '0')).join('');
           const sha256Hex = async (value) => toHex(await crypto.subtle.digest('SHA-256', toUtf8(value)));
+          const safeObject = (value) => (value && typeof value === 'object' && !Array.isArray(value)) ? value : {};
+          const safeArray = (value) => Array.isArray(value) ? value : [];
+          const unwrapRpcPayload = (rpcRes, key) => {
+            let payload = rpcRes;
+            try {
+              if (Array.isArray(payload) && payload.length === 1 && payload[0] && typeof payload[0] === 'object') payload = payload[0];
+              if (payload && typeof payload === 'object' && key && Object.prototype.hasOwnProperty.call(payload, key)) payload = payload[key];
+              if (Array.isArray(payload) && payload.length === 1 && payload[0] && typeof payload[0] === 'object') payload = payload[0];
+            } catch {}
+            return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+          };
+          const asBool = (value) => {
+            if (value === true) return true;
+            const s = String(value === undefined || value === null ? '' : value).trim().toLowerCase();
+            return ['true', 't', '1', 'yes', 'y', 'on'].includes(s);
+          };
+          const addUnique = (set, value) => {
+            const text = String(value === undefined || value === null ? '' : value).trim();
+            if (text) set.add(text);
+          };
+          const readSignalRecommendation = (payload) => {
+            const source = safeObject(payload);
+            const direct = safeObject(source.signal_recommendation_json);
+            if (Object.keys(direct).length) return direct;
+            const live = safeObject(source.live_signal);
+            const nested = safeObject(live.signal_recommendation_json);
+            return Object.keys(nested).length ? nested : {};
+          };
+          const coalesceSignalRecommendations = (rows) => {
+            const byBatch = new Map();
+            for (const row of safeArray(rows)) {
+              const result = safeObject(row && row.result ? row.result : (row && row.ingest_result ? row.ingest_result : row));
+              const rec = readSignalRecommendation(result);
+              const batchId = String(rec.pay_batch_id || result.pay_batch_id || '').trim();
+              if (!batchId) continue;
+              const key = batchId.toLowerCase();
+              if (!byBatch.has(key)) {
+                byBatch.set(key, {
+                  pay_batch_id: batchId,
+                  touch_payment_status: false,
+                  touch_correction_progress: false,
+                  touch_alerts: false,
+                  touch_overview: false,
+                  transfer_ids: new Set(),
+                  candidate_ids: new Set(),
+                  item_ids: new Set(),
+                  provider_event_keys: new Set(),
+                  source_delivery_ids: new Set()
+                });
+              }
+              const item = byBatch.get(key);
+              item.touch_payment_status = item.touch_payment_status || asBool(rec.touch_payment_status);
+              item.touch_correction_progress = item.touch_correction_progress || asBool(rec.touch_correction_progress);
+              item.touch_alerts = item.touch_alerts || asBool(rec.touch_alerts);
+              item.touch_overview = item.touch_overview || asBool(rec.touch_overview);
+              for (const v of safeArray(rec.changed_transfer_ids)) addUnique(item.transfer_ids, v);
+              for (const v of safeArray(rec.changed_candidate_ids)) addUnique(item.candidate_ids, v);
+              for (const v of safeArray(rec.changed_pay_batch_item_ids)) addUnique(item.item_ids, v);
+              addUnique(item.provider_event_keys, result.provider_event_key || row.provider_event_key);
+              addUnique(item.source_delivery_ids, rec.source_delivery_id || row.receipt_id);
+            }
+            return Array.from(byBatch.values()).filter((item) => item.touch_payment_status || item.touch_correction_progress || item.touch_alerts || item.touch_overview);
+          };
+          const touchSignalRecommendations = async (rows) => {
+            const out = [];
+            for (const item of coalesceSignalRecommendations(rows)) {
+              try {
+                const result = unwrapRpcPayload(await sbRpc(env, 'banking_pay_batch_signal_touch', {
+                  p_pay_batch_id: item.pay_batch_id,
+                  p_change_reason: 'FAILED_WEBHOOK_REPLAY_EVENTS_INGESTED',
+                  p_change_source: 'revolut.fetchFailedWebhookEvents',
+                  p_change_scope_json: {
+                    changed_transfer_ids: Array.from(item.transfer_ids),
+                    changed_candidate_ids: Array.from(item.candidate_ids),
+                    changed_pay_batch_item_ids: Array.from(item.item_ids),
+                    provider_event_keys: Array.from(item.provider_event_keys),
+                    source_delivery_ids: Array.from(item.source_delivery_ids)
+                  },
+                  p_touch_payment_status: item.touch_payment_status,
+                  p_touch_correction_progress: item.touch_correction_progress,
+                  p_touch_alerts: item.touch_alerts,
+                  p_touch_overview: item.touch_overview
+                }), 'banking_pay_batch_signal_touch');
+                out.push({ ok: result.ok !== false, pay_batch_id: item.pay_batch_id, result });
+              } catch (e) {
+                out.push({ ok: false, pay_batch_id: item.pay_batch_id, error: String(e && e.message || e || 'banking_pay_batch_signal_touch failed') });
+              }
+            }
+            return out;
+          };
+          const patchReceipt = async (receiptId, patch) => {
+            if (!receiptId) return null;
+            const patchUrl = `${env.SUPABASE_URL}/rest/v1/bank_provider_webhook_receipts?id=eq.${enc(String(receiptId))}`;
+            try {
+              const res = await sbFetch(env, patchUrl, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json', Prefer: 'return=representation' },
+                body: JSON.stringify({ ...safeObject(patch), updated_at_utc: new Date().toISOString() })
+              });
+              return res && Array.isArray(res.rows) && res.rows.length ? res.rows[0] : null;
+            } catch {
+              return null;
+            }
+          };
+          const createOrReuseReceipt = async ({ rawPayloadHash, rawPayloadJson, events, failedEvent }) => {
+            const firstEvent = events[0] || {};
+            const providerEventKey = `REVOLUT|${railEnv}|FAILED_WEBHOOK_REPLAY|${rawPayloadHash}`;
+            const receiptBody = [{
+              provider_key: 'REVOLUT',
+              rail_env: railEnv,
+              webhook_config_id: webhookConfig.id || null,
+              provider_webhook_id: webhookId,
+              provider_event_type: 'FAILED_WEBHOOK_REPLAY',
+              provider_event_id: rawPayloadHash,
+              provider_event_key: providerEventKey,
+              provider_transaction_id: firstEvent.provider_transaction_id || null,
+              provider_request_id: firstEvent.provider_request_id || null,
+              signature_valid: true,
+              signature_version: 'FAILED_WEBHOOK_REPLAY',
+              signature_header: null,
+              request_timestamp: failedEvent && failedEvent.last_sent_date ? String(failedEvent.last_sent_date) : null,
+              event_time_utc: firstEvent.event_time_utc || null,
+              raw_payload_json: rawPayloadJson,
+              raw_payload_hash: rawPayloadHash,
+              raw_headers_redacted: {},
+              normalised_events_json: events,
+              ingest_results_json: events.map((event) => ({
+                provider_event_key: event.provider_event_key || null,
+                provider_event_type: event.provider_event_type || null,
+                provider_transaction_id: event.provider_transaction_id || null,
+                provider_request_id: event.provider_request_id || null,
+                status: event.ignored === true ? 'IGNORED' : 'PENDING'
+              })),
+              status: events.length ? 'NORMALISED' : 'IGNORED_EVENT_TYPE'
+            }];
+            const receiptUrl = `${env.SUPABASE_URL}/rest/v1/bank_provider_webhook_receipts?on_conflict=provider_key,rail_env,provider_event_key`;
+            const receiptRes = await sbFetch(env, receiptUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=representation' },
+              body: JSON.stringify(receiptBody)
+            });
+            return receiptRes && Array.isArray(receiptRes.rows) && receiptRes.rows.length ? receiptRes.rows[0] : null;
+          };
+
           const replayed = [];
           let createdBefore = args.created_before || args.createdBefore || null;
+          let fetched = 0;
+          let normalisedCount = 0;
+          let ignoredCount = 0;
 
           for (let pageIndex = 0; pageIndex < maxPages; pageIndex += 1) {
             const url = new URL(`${apiBase}/webhooks/${encodeURIComponent(webhookId)}/failed-events`);
@@ -138761,6 +139535,7 @@ function getRailAdapter(provider) {
             try { payload = text ? JSON.parse(text) : {}; } catch { payload = { raw: text }; }
             const rows = Array.isArray(payload) ? payload : (Array.isArray(payload.data) ? payload.data : (Array.isArray(payload.items) ? payload.items : (Array.isArray(payload.events) ? payload.events : [])));
             if (!rows.length) break;
+            fetched += rows.length;
 
             for (const failedEvent of rows) {
               const eventPayload = (failedEvent && typeof failedEvent === 'object' && !Array.isArray(failedEvent))
@@ -138780,55 +139555,83 @@ function getRailAdapter(provider) {
                 provider_event_transport: 'FAILED_WEBHOOK_REPLAY',
                 event_source: 'FAILED_WEBHOOK_REPLAY'
               });
-              const events = Array.isArray(normalised.events) ? normalised.events.filter((event) => event && !event.ignored) : [];
+              const allEvents = Array.isArray(normalised.events) ? normalised.events : [];
+              const events = allEvents.filter((event) => event && !event.ignored);
+              ignoredCount += allEvents.filter((event) => event && event.ignored).length;
+              normalisedCount += events.length;
               let receiptId = null;
-              if (events.length) {
-                const firstEvent = events[0];
-                try {
-                  const receiptBody = [{
-                    provider_key: 'REVOLUT',
-                    rail_env: railEnv,
-                    webhook_config_id: webhookConfig.id || null,
-                    provider_webhook_id: webhookId,
-                    provider_event_type: firstEvent.provider_event_type || null,
-                    provider_event_id: firstEvent.provider_event_id || null,
-                    provider_event_key: firstEvent.provider_event_key || `REVOLUT|${railEnv}|${rawPayloadHash}`,
-                    provider_transaction_id: firstEvent.provider_transaction_id || null,
-                    provider_request_id: firstEvent.provider_request_id || null,
-                    signature_valid: true,
-                    signature_version: 'FAILED_WEBHOOK_REPLAY',
-                    signature_header: null,
-                    request_timestamp: failedEvent && failedEvent.last_sent_date ? String(failedEvent.last_sent_date) : null,
-                    event_time_utc: firstEvent.event_time_utc || null,
-                    raw_payload_json: parsedEventPayload,
-                    raw_payload_hash: rawPayloadHash,
-                    raw_headers_redacted: {},
-                    normalised_events_json: events,
-                    ingest_results_json: [],
-                    status: 'NORMALISED'
-                  }];
-                  const receiptUrl = `${env.SUPABASE_URL}/rest/v1/bank_provider_webhook_receipts?on_conflict=provider_key,rail_env,provider_event_key`;
-                  const receiptRes = await sbFetch(env, receiptUrl, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=representation' },
-                    body: JSON.stringify(receiptBody)
-                  });
-                  const receiptRow = receiptRes && Array.isArray(receiptRes.rows) && receiptRes.rows.length ? receiptRes.rows[0] : null;
-                  receiptId = receiptRow && receiptRow.id ? String(receiptRow.id) : null;
-                } catch (receiptError) {
-                  replayed.push({ ok: false, stage: 'REPLAY_RECEIPT_INSERT_FAILED', error: String(receiptError?.message || receiptError), raw_payload_hash: rawPayloadHash });
-                  continue;
-                }
+              try {
+                const receiptRow = await createOrReuseReceipt({ rawPayloadHash, rawPayloadJson: parsedEventPayload, events: allEvents, failedEvent });
+                receiptId = receiptRow && receiptRow.id ? String(receiptRow.id) : null;
+              } catch (receiptError) {
+                replayed.push({ ok: false, status: 'FAILED_RETRYABLE', stage: 'REPLAY_RECEIPT_UPSERT_FAILED', error: String(receiptError && receiptError.message || receiptError), raw_payload_hash: rawPayloadHash });
+                continue;
+              }
+
+              const receiptResults = [];
+              if (!events.length) {
+                await patchReceipt(receiptId, {
+                  status: 'IGNORED_EVENT_TYPE',
+                  normalised_events_json: allEvents.map((event) => ({ ...event, provider_webhook_receipt_id: receiptId })),
+                  ingest_results_json: allEvents.map((event) => ({
+                    provider_event_key: event.provider_event_key || null,
+                    provider_event_type: event.provider_event_type || null,
+                    status: 'IGNORED',
+                    ignored_reason: event.ignored_reason || 'IGNORED_EVENT_TYPE'
+                  })),
+                  processed_at_utc: new Date().toISOString()
+                });
+                continue;
               }
 
               for (const eventJson of events) {
-                const ingestPayload = { ...eventJson, provider_webhook_receipt_id: receiptId || eventJson.provider_webhook_receipt_id || null };
-                const ingestResult = await sbRpc(env, 'pay_bank_event_ingest', {
-                  p_event_json: ingestPayload,
-                  p_actor_user_id: actorUserId
-                });
-                replayed.push({ ok: true, provider_event_key: ingestPayload.provider_event_key || null, receipt_id: receiptId, ingest_result: ingestResult });
+                const ingestPayload = {
+                  ...eventJson,
+                  provider_webhook_receipt_id: receiptId || eventJson.provider_webhook_receipt_id || null,
+                  provider_webhook_id: eventJson.provider_webhook_id || webhookId || null,
+                  provider_event_transport: 'FAILED_WEBHOOK_REPLAY',
+                  event_source: 'FAILED_WEBHOOK_REPLAY'
+                };
+                try {
+                  const ingestResult = unwrapRpcPayload(await sbRpc(env, 'pay_bank_event_ingest', {
+                    p_event_json: ingestPayload,
+                    p_actor_user_id: actorUserId,
+                    p_ingest_options_json: {
+                      touch_signal: false,
+                      signal_mode: 'DEFERRED',
+                      source_delivery_id: receiptId,
+                      source_batch_event_group_key: `REVOLUT|${railEnv}|FAILED_WEBHOOK_REPLAY|${rawPayloadHash}`
+                    }
+                  }), 'pay_bank_event_ingest');
+                  const liveSignal = safeObject(ingestResult.live_signal);
+                  const duplicateEvent = ingestResult.duplicate_event === true || liveSignal.duplicate_event === true || liveSignal.changed === false && String(liveSignal.reason || '').toUpperCase().includes('ALREADY');
+                  const textResult = JSON.stringify(ingestResult || {}).toUpperCase();
+                  const row = {
+                    ok: ingestResult.ok !== false,
+                    status: duplicateEvent ? 'DUPLICATE' : (textResult.includes('UNMATCHED') ? 'UNMATCHED_REVIEW_REQUIRED' : 'INGESTED'),
+                    provider_event_key: ingestPayload.provider_event_key || null,
+                    receipt_id: receiptId,
+                    result: ingestResult
+                  };
+                  receiptResults.push(row);
+                  replayed.push(row);
+                } catch (e) {
+                  const row = { ok: false, status: 'FAILED_RETRYABLE', provider_event_key: ingestPayload.provider_event_key || null, receipt_id: receiptId, error: String(e && e.message || e || 'pay_bank_event_ingest failed') };
+                  receiptResults.push(row);
+                  replayed.push(row);
+                }
               }
+
+              const receiptFailed = receiptResults.some((row) => row.ok === false);
+              const receiptUnmatched = receiptResults.some((row) => String(row.status || '').toUpperCase().includes('UNMATCHED'));
+              await patchReceipt(receiptId, {
+                normalised_events_json: allEvents.map((event) => ({ ...event, provider_webhook_receipt_id: receiptId })),
+                ingest_results_json: receiptResults,
+                status: receiptFailed ? 'FAILED_RETRYABLE' : (receiptUnmatched ? 'UNMATCHED_REVIEW_REQUIRED' : 'INGESTED'),
+                error_code: receiptFailed ? 'FAILED_WEBHOOK_REPLAY_INGEST_FAILED' : null,
+                error_message: receiptFailed ? 'At least one replayed webhook event failed to ingest.' : null,
+                processed_at_utc: new Date().toISOString()
+              });
             }
 
             const lastRow = rows[rows.length - 1];
@@ -138836,13 +139639,53 @@ function getRailAdapter(provider) {
             if (!createdBefore || rows.length < pageSize) break;
           }
 
+          const signalTouchResults = await touchSignalRecommendations(replayed);
+          const rowText = (row) => {
+            try { return JSON.stringify(row || {}).toUpperCase(); } catch { return ''; }
+          };
+          const duplicateCount = replayed.filter((row) => String(row && row.status || '').toUpperCase().includes('DUPLICATE')).length;
+          const unmatchedCount = replayed.filter((row) => rowText(row).includes('UNMATCHED')).length;
+          const failedRetryable = replayed.filter((row) => String(row && row.status || '').toUpperCase().includes('FAILED_RETRYABLE')).length;
+          const failedFinal = replayed.filter((row) => String(row && row.status || '').toUpperCase().includes('FAILED_FINAL')).length;
+          const ingested = replayed.filter((row) => row && row.ok === true && !String(row.status || '').toUpperCase().includes('DUPLICATE') && !String(row.status || '').toUpperCase().includes('IGNORED')).length;
+          const autoUnwindStarted = replayed.filter((row) => rowText(row).includes('AUTO') && rowText(row).includes('UNWIND') && !rowText(row).includes('REUSED')).length;
+          const autoUnwindReused = replayed.filter((row) => rowText(row).includes('AUTO') && rowText(row).includes('UNWIND') && rowText(row).includes('REUSED')).length;
+
+          try {
+            const patchUrl = `${env.SUPABASE_URL}/rest/v1/bank_provider_webhook_configs?id=eq.${encodeURIComponent(String(webhookConfig.id))}`;
+            await sbFetch(env, patchUrl, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+              body: JSON.stringify({
+                last_failed_event_sync_at_utc: new Date().toISOString(),
+                last_error: failedRetryable > 0 || failedFinal > 0 ? 'FAILED_WEBHOOK_REPLAY_PARTIAL_ERRORS' : null,
+                updated_at_utc: new Date().toISOString()
+              })
+            });
+          } catch {}
+
           return {
-            ok: true,
+            ok: failedRetryable === 0 && failedFinal === 0,
             provider_key: 'REVOLUT',
             rail_env: railEnv,
             provider_webhook_id: webhookId,
-            replayed_count: replayed.filter((row) => row && row.ok === true).length,
-            failed_count: replayed.filter((row) => row && row.ok === false).length,
+            fetched,
+            normalised: normalisedCount,
+            ingested,
+            duplicates: duplicateCount,
+            ignored: ignoredCount,
+            unmatched: unmatchedCount,
+            auto_unwind_started: autoUnwindStarted,
+            auto_unwind_reused: autoUnwindReused,
+            failed_retryable: failedRetryable,
+            failed_final: failedFinal,
+            signals_touched: signalTouchResults.filter((row) => row && row.ok === true).length,
+            signal_touch_results: signalTouchResults,
+            replayed_count: ingested,
+            failed_count: failedRetryable + failedFinal,
+            duplicate_count: duplicateCount,
+            ignored_count: ignoredCount,
+            unmatched_count: unmatchedCount,
             replayed
           };
         },
@@ -141794,7 +142637,7 @@ function getRailAdapter(provider) {
           return csvAdapter_export(env, batchId, sc, actorUserId);
         },
 
-     async pollBatch(env, batchId, actorUserId, options = {}) {
+    async pollBatch(env, batchId, actorUserId, options = {}) {
           if (!batchId) throw new Error('pollBatch: batchId required');
           if (!actorUserId) throw new Error('pollBatch: actorUserId required');
 
@@ -142097,11 +142940,90 @@ function getRailAdapter(provider) {
             };
           }
 
+          const readSignalRecommendation = (payload) => {
+            const source = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+            const direct = (source.signal_recommendation_json && typeof source.signal_recommendation_json === 'object' && !Array.isArray(source.signal_recommendation_json)) ? source.signal_recommendation_json : {};
+            if (Object.keys(direct).length) return direct;
+            const live = (source.live_signal && typeof source.live_signal === 'object' && !Array.isArray(source.live_signal)) ? source.live_signal : {};
+            const nested = (live.signal_recommendation_json && typeof live.signal_recommendation_json === 'object' && !Array.isArray(live.signal_recommendation_json)) ? live.signal_recommendation_json : {};
+            return Object.keys(nested).length ? nested : {};
+          };
+          const coalesceSignalRecommendations = (rows) => {
+            const byBatch = new Map();
+            const addUnique = (set, value) => {
+              const text = String(value === undefined || value === null ? '' : value).trim();
+              if (text) set.add(text);
+            };
+            const toArray = (value) => Array.isArray(value) ? value : [];
+            for (const row of Array.isArray(rows) ? rows : []) {
+              const result = (row && row.result && typeof row.result === 'object' && !Array.isArray(row.result)) ? row.result : {};
+              const rec = readSignalRecommendation(result);
+              const batchId = String(rec.pay_batch_id || result.pay_batch_id || batchId || '').trim();
+              if (!batchId) continue;
+              const key = batchId.toLowerCase();
+              if (!byBatch.has(key)) {
+                byBatch.set(key, {
+                  pay_batch_id: batchId,
+                  touch_payment_status: false,
+                  touch_correction_progress: false,
+                  touch_alerts: false,
+                  touch_overview: false,
+                  transfer_ids: new Set(),
+                  candidate_ids: new Set(),
+                  item_ids: new Set(),
+                  provider_event_keys: new Set()
+                });
+              }
+              const item = byBatch.get(key);
+              item.touch_payment_status = item.touch_payment_status || asBool(rec.touch_payment_status);
+              item.touch_correction_progress = item.touch_correction_progress || asBool(rec.touch_correction_progress);
+              item.touch_alerts = item.touch_alerts || asBool(rec.touch_alerts);
+              item.touch_overview = item.touch_overview || asBool(rec.touch_overview);
+              for (const v of toArray(rec.changed_transfer_ids)) addUnique(item.transfer_ids, v);
+              for (const v of toArray(rec.changed_candidate_ids)) addUnique(item.candidate_ids, v);
+              for (const v of toArray(rec.changed_pay_batch_item_ids)) addUnique(item.item_ids, v);
+              addUnique(item.provider_event_keys, result.provider_event_key || row.provider_event_key);
+            }
+            return Array.from(byBatch.values()).filter((item) => item.touch_payment_status || item.touch_correction_progress || item.touch_alerts || item.touch_overview);
+          };
+          const touchSignalRecommendations = async (rows) => {
+            const touched = [];
+            for (const item of coalesceSignalRecommendations(rows)) {
+              try {
+                const result = unwrapRpcPayload(await sbRpc(env, 'banking_pay_batch_signal_touch', {
+                  p_pay_batch_id: item.pay_batch_id,
+                  p_change_reason: 'PROVIDER_POLL_EVENTS_INGESTED',
+                  p_change_source: 'revolut.pollBatch',
+                  p_change_scope_json: {
+                    changed_transfer_ids: Array.from(item.transfer_ids),
+                    changed_candidate_ids: Array.from(item.candidate_ids),
+                    changed_pay_batch_item_ids: Array.from(item.item_ids),
+                    provider_event_keys: Array.from(item.provider_event_keys)
+                  },
+                  p_touch_payment_status: item.touch_payment_status,
+                  p_touch_correction_progress: item.touch_correction_progress,
+                  p_touch_alerts: item.touch_alerts,
+                  p_touch_overview: item.touch_overview
+                }), 'banking_pay_batch_signal_touch');
+                touched.push({ ok: result.ok !== false, pay_batch_id: item.pay_batch_id, result });
+              } catch (e) {
+                touched.push({ ok: false, pay_batch_id: item.pay_batch_id, error: String(e && e.message || e || 'banking_pay_batch_signal_touch failed') });
+              }
+            }
+            return touched;
+          };
+
           const ingestResults = [];
           for (const eventJson of updates) {
             const ingestResult = unwrapRpcPayload(await sbRpc(env, 'pay_bank_event_ingest', {
               p_event_json: eventJson,
-              p_actor_user_id: String(actorUserId)
+              p_actor_user_id: String(actorUserId),
+              p_ingest_options_json: {
+                touch_signal: false,
+                signal_mode: 'DEFERRED',
+                source_delivery_id: null,
+                source_batch_event_group_key: `REVOLUT|${expectedEnv}|PROVIDER_POLL|${String(batchId)}|${nowIso}`
+              }
             }), 'pay_bank_event_ingest');
             ingestResults.push({
               pay_bank_transfer_id: eventJson.pay_bank_transfer_id || eventJson.transfer_id || null,
@@ -142112,9 +143034,13 @@ function getRailAdapter(provider) {
             });
           }
 
+          const signalTouchResults = await touchSignalRecommendations(ingestResults);
+
           const applyUpdates = {
             ok: ingestResults.every((row) => !row.result || row.result.ok !== false),
             event_ingest_results: ingestResults,
+            signal_touch_results: signalTouchResults,
+            signals_touched: signalTouchResults.filter((row) => row && row.ok === true).length,
             updates_applied: ingestResults.length,
             requires_review: ingestResults.some((row) => row.result && (row.result.requires_review === true || row.result.manual_resolution_required === true)),
             requires_provider_poll: ingestResults.some((row) => row.result && row.result.requires_provider_poll === true),
@@ -142139,6 +143065,8 @@ function getRailAdapter(provider) {
             polled: pollableTransfers.length,
             updates_applied: updates.length,
             apply_updates_result: applyUpdates,
+            signal_touch_results: signalTouchResults,
+            signals_touched: signalTouchResults.filter((row) => row && row.ok === true).length,
             submission_evidence: evidenceAfter,
             remaining_pollable_count: remainingPollableCount,
             remaining_provider_evidence_required: remainingProviderEvidenceRequired,
@@ -142916,6 +143844,7 @@ async function handleBankingPayBatchCancel(env, req, user, payBatchId) {
   }
 }
 
+
 function buildBankingPayOperationPublicPayload(operationRow, options = {}) {
   const unwrapRow = (value) => {
     let row = value;
@@ -142950,6 +143879,38 @@ function buildBankingPayOperationPublicPayload(operationRow, options = {}) {
   const operationType = String(row.operation_type || progress.operation_type || '').trim().toUpperCase() || 'UNKNOWN';
   const terminalStatuses = new Set(['COMPLETE', 'FAILED', 'CANCELLED', 'REVIEW_REQUIRED']);
   const terminal = terminalStatuses.has(status);
+
+  const retryOperation = operationType === 'PAYMENT_RETRY_BLOCKED_FUNDS';
+  const retryNumber = (...values) => {
+    for (const value of values) {
+      const n = Number(value);
+      if (Number.isFinite(n)) return Math.max(0, Math.trunc(n));
+    }
+    return 0;
+  };
+  const retryBool = (...values) => {
+    for (const value of values) {
+      if (value === true) return true;
+      if (value === false) return false;
+      const text = String(value == null ? '' : value).trim().toLowerCase();
+      if (['true', 't', '1', 'yes', 'y', 'on'].includes(text)) return true;
+      if (['false', 'f', '0', 'no', 'n', 'off'].includes(text)) return false;
+    }
+    return false;
+  };
+  const retryArray = (...values) => {
+    for (const value of values) {
+      if (Array.isArray(value)) return value;
+    }
+    return [];
+  };
+  const retryObject = (...values) => {
+    for (const value of values) {
+      const obj = asPlainObject(value);
+      if (Object.keys(obj).length) return obj;
+    }
+    return {};
+  };
 
   const phaseLabels = {
     INITIALISE: 'Starting operation',
@@ -142997,7 +143958,7 @@ function buildBankingPayOperationPublicPayload(operationRow, options = {}) {
   const defaultTitles = {
     DRAFT_CREATE: 'Creating payment draft',
     PAYMENT_EXECUTE: 'Processing payment',
-    PAYMENT_RETRY_BLOCKED_FUNDS: 'Retrying blocked payment',
+    PAYMENT_RETRY_BLOCKED_FUNDS: 'Retrying unsent payments',
     PAYMENT_SETTLEMENT: 'Finalising payment settlement',
     REMITTANCE_QUEUE: 'Queueing remittances',
     PREVIEW_REFRESH: 'Refreshing payment preview'
@@ -143021,6 +143982,16 @@ function buildBankingPayOperationPublicPayload(operationRow, options = {}) {
   const resultJson = Object.keys(resultObject).length ? resultObject : null;
   const errorObject = asPlainObject(row.error_json);
   const errorJson = Object.keys(errorObject).length ? errorObject : null;
+
+  const retrySources = [progress, resultObject, errorObject, asPlainObject(progress.retry), asPlainObject(resultObject.retry), asPlainObject(errorObject.retry), asPlainObject(progress.retry_summary), asPlainObject(resultObject.retry_summary), asPlainObject(errorObject.retry_summary)];
+  const retryField = (snakeKey, camelKey, fallback = undefined) => {
+    for (const source of retrySources) {
+      if (!source || typeof source !== 'object' || Array.isArray(source)) continue;
+      if (Object.prototype.hasOwnProperty.call(source, snakeKey)) return source[snakeKey];
+      if (camelKey && Object.prototype.hasOwnProperty.call(source, camelKey)) return source[camelKey];
+    }
+    return fallback;
+  };
 
   const providerBool = (...values) => {
     for (const value of values) {
@@ -144184,8 +145155,45 @@ function buildBankingPayOperationPublicPayload(operationRow, options = {}) {
     };
   }
 
+  if (retryOperation) {
+    const retryEligibleCount = retryNumber(retryField('retry_eligible_count', 'retryEligibleCount'));
+    const retrySubmittedCount = retryNumber(retryField('retry_submitted_count', 'retrySubmittedCount'), retryField('submitted_this_chunk', 'submittedThisChunk'));
+    const retrySkippedCount = retryNumber(retryField('retry_skipped_count', 'retrySkippedCount'));
+    const retryIneligibleCount = retryNumber(retryField('retry_ineligible_count', 'retryIneligibleCount'), retrySkippedCount);
+    const retryStillAvailableCount = retryNumber(retryField('retry_still_available_count', 'retryStillAvailableCount'), Math.max(0, retryEligibleCount - retrySubmittedCount - retrySkippedCount));
+    const retryProviderUnavailableAgain = retryBool(retryField('retry_provider_unavailable_again', 'retryProviderUnavailableAgain'), retryField('provider_unavailable_again', 'providerUnavailableAgain'));
+    payload.operation_kind_label = 'Retry unsent payments';
+    payload.label = status === 'COMPLETE' ? 'Retry complete' : 'Retrying unsent payments';
+    payload.title = status === 'COMPLETE' ? 'Retry complete' : 'Retrying unsent payments';
+    if (!payload.status_text || String(payload.status_text).toLowerCase().includes('blocked payment') || String(payload.status_text).toLowerCase().includes('retry later')) {
+      payload.status_text = status === 'COMPLETE' ? 'Retry complete' : 'Retrying unsent payments';
+    }
+    payload.retry_in_progress = !terminal;
+    payload.retry_complete = status === 'COMPLETE';
+    payload.retry_eligible_count = retryEligibleCount;
+    payload.retry_submitted_count = retrySubmittedCount;
+    payload.retry_skipped_count = retrySkippedCount;
+    payload.retry_ineligible_count = retryIneligibleCount;
+    payload.retry_still_available_count = retryStillAvailableCount;
+    payload.retry_provider_unavailable_again = retryProviderUnavailableAgain;
+    payload.retry_eligible_scope_json = retryObject(retryField('retry_eligible_scope_json', 'retryEligibleScopeJson'));
+    payload.retry_ineligible_summary_json = retryArray(retryField('retry_ineligible_summary_json', 'retryIneligibleSummaryJson'));
+    payload.retry_button_label = 'Retry unsent payments';
+    payload.retry_status_label = payload.retry_in_progress ? 'Retrying unsent payments' : (payload.retry_complete ? 'Retry complete' : 'No unsent payments available to retry');
+    payload.retry_button_disabled_reason = payload.retry_in_progress ? 'Retry in progress' : null;
+    if (payload.error && typeof payload.error === 'object') {
+      const errorMessage = String(payload.error.message || '');
+      payload.error.message = errorMessage
+        .replace(/Retrying blocked payment/gi, 'Retrying unsent payments')
+        .replace(/retry later/gi, 'retry unsent payments')
+        .replace(/blocked funds/gi, 'funding issue');
+    }
+  }
+
   return payload;
 }
+
+
 
 async function revolutPayment_create(env, token, { request_id, local_provider_request_id, source_account_id, counterparty_id, counterparty_account_id, amount, currency, reference, provider_timeout_ms } = {}) {
   const redactProviderPayload = (value) => {
