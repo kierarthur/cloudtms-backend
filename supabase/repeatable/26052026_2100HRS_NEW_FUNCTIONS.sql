@@ -39072,7 +39072,6 @@ $function$;
 
 
 
-
 CREATE OR REPLACE FUNCTION public.pay_preview_candidate_build_canonical_lines(p_context_json jsonb, p_candidate_id uuid)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -40886,7 +40885,9 @@ begin
               'line_type', 'MANUAL_ADJUSTMENT_CARRY_FORWARD',
               'case_key', ('carry_forward:' || cf_lines.manual_adjustment_carry_forward_id::text),
               'case_type', 'MANUAL_ADJUSTMENT_CARRY_FORWARD',
-              'case_is_blocked', false,
+              'case_is_blocked', false
+            )
+            || jsonb_build_object(
               'case_resolution_summary', '{}'::jsonb,
               'case_components', '[]'::jsonb,
               'item_type_label', 'Manual adjustment carry-forward',
@@ -40898,7 +40899,9 @@ begin
               'description', cf_lines.display_description,
               'adjustment_comment', cf_lines.display_description,
               'original_description', cf_lines.original_description,
-              'reason', cf_lines.reason,
+              'reason', cf_lines.reason
+            )
+            || jsonb_build_object(
               'source_pay_batch_id', CASE WHEN cf_lines.source_pay_batch_id IS NULL THEN NULL ELSE cf_lines.source_pay_batch_id::text END,
               'source_pay_batch_item_id', CASE WHEN cf_lines.source_pay_batch_item_id IS NULL THEN NULL ELSE cf_lines.source_pay_batch_item_id::text END,
               'source_pay_bank_transfer_id', CASE WHEN cf_lines.source_pay_bank_transfer_id IS NULL THEN NULL ELSE cf_lines.source_pay_bank_transfer_id::text END,
@@ -40910,7 +40913,9 @@ begin
               'client_id', CASE WHEN cf_lines.client_id IS NULL THEN NULL ELSE cf_lines.client_id::text END,
               'timesheet_id', CASE WHEN cf_lines.timesheet_id IS NULL THEN NULL ELSE cf_lines.timesheet_id::text END,
               'pay_channel', cf_lines.pay_channel,
-              'candidate_pay_method', cf_lines.pay_channel,
+              'candidate_pay_method', cf_lines.pay_channel
+            )
+            || jsonb_build_object(
               'paye_treatment', cf_lines.paye_treatment,
               'tax_treatment_json', cf_lines.tax_treatment_json,
               'taxability', cf_lines.tax_treatment_json->>'taxability',
@@ -40922,7 +40927,9 @@ begin
               'amount_display', cf_lines.amount_inc_vat,
               'payment_amount_ex_vat', cf_lines.amount_ex_vat,
               'payment_amount_vat', cf_lines.amount_vat,
-              'payment_amount_inc_vat', cf_lines.amount_inc_vat,
+              'payment_amount_inc_vat', cf_lines.amount_inc_vat
+            )
+            || jsonb_build_object(
               'payment_amount', cf_lines.amount_inc_vat,
               'source_snapshot_json', cf_lines.source_snapshot_json,
               'manual_adjustment_carry_forward_status', cf_lines.status,
@@ -40934,7 +40941,9 @@ begin
               'is_ready_for_draft', true,
               'is_excluded_from_allocation', false,
               'presentation_section', 'READY_TO_PAY',
-              'presentation_role', 'PARENT',
+              'presentation_role', 'PARENT'
+            )
+            || jsonb_build_object(
               'presentation_line_id', cf_lines.preview_row_id,
               'presentation_parent_line_id', cf_lines.preview_row_id,
               'presentation_reason', 'READY_TO_PAY',
