@@ -76294,8 +76294,6 @@ END;
 $function$;
 
 
-
-
 CREATE OR REPLACE FUNCTION public.banking_alert_acknowledge(
   p_alert_fingerprint text,
   p_alert_kind text,
