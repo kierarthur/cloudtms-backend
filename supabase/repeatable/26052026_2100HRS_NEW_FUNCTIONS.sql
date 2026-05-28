@@ -20656,6 +20656,9 @@ DROP FUNCTION IF EXISTS public.pay_batch_get(uuid, uuid);
 
 
 
+
+
+
 create or replace function public.pay_batch_get(
   p_pay_batch_id uuid,
   p_actor_user_id uuid DEFAULT NULL::uuid,
@@ -20771,7 +20774,7 @@ declare
   v_active_effective_amount_inc_vat numeric := 0;
   v_payment_issue_candidate_count integer := 0;
 
-  -- Banking red-alert / blocked-funds modal support
+  -- Banking alert / legacy funds-check compatibility support
   v_alert_actor_user_id uuid := '00000000-0000-0000-0000-000000000000'::uuid;
   v_alert_registry jsonb := jsonb_build_object('alerts', '[]'::jsonb, 'unacknowledged_count', 0, 'highest_severity', NULL::text, 'highest_label', NULL::text);
   v_banking_alerts jsonb := '[]'::jsonb;
@@ -20871,6 +20874,20 @@ declare
   v_retry_after_utc text := NULL::text;
   v_retry_reason text := NULL::text;
   v_next_retry_description text := NULL::text;
+  v_retry_plan_json jsonb := '{}'::jsonb;
+  v_retry_eligible_count integer := 0;
+  v_retry_ineligible_count integer := 0;
+  v_retry_in_progress boolean := false;
+  v_retry_already_in_progress boolean := false;
+  v_retry_operation_id uuid := NULL::uuid;
+  v_retry_operation_status text := NULL::text;
+  v_retry_eligible_scope_json jsonb := '{}'::jsonb;
+  v_retry_ineligible_summary_json jsonb := '[]'::jsonb;
+  v_retry_scope_signature text := NULL::text;
+  v_retry_status_label text := NULL::text;
+  v_retry_button_label text := 'Retry unsent payments';
+  v_retry_button_disabled_reason text := NULL::text;
+  v_retry_button_visible boolean := false;
   v_partial_cancel_count integer := 0;
   v_cancelled_before_bank_submission_count integer := 0;
   v_financials_rewound_count integer := 0;
@@ -21073,7 +21090,7 @@ begin
   -- Use counts-only evidence for the summary/bootstrap path so large batch open
   -- does not build evidence samples or event-detail arrays. Full mode refreshes
   -- v_submission_evidence later with p_counts_only = false before detailed
-  -- blocked-funds/evidence payload construction.
+  -- legacy funds-check/evidence payload construction.
   WITH classified_rows AS (
     SELECT
       classification_row.pay_bank_transfer_id,
@@ -21496,7 +21513,7 @@ begin
     WHEN 'LOCAL_PREPARED_NOT_SENT' THEN 'Prepared locally — not sent to bank'
     WHEN 'SCHEDULED_LOCAL_NOT_SENT' THEN 'Scheduled locally — not sent to bank'
     WHEN 'PROVIDER_SUBMITTED_PENDING' THEN 'Sent to bank — pending outcome'
-    WHEN 'PROVIDER_OUTAGE_RETRY_LATER' THEN 'Bank unavailable — retry later'
+    WHEN 'PROVIDER_OUTAGE_RETRY_LATER' THEN 'Bank unavailable — unsent payments can be retried'
     WHEN 'PROVIDER_OUTCOME_UNKNOWN' THEN 'Provider outcome unknown — check bank'
     WHEN 'PROVIDER_CANCELLED_NO_MONEY' THEN 'Provider cancelled — no money moved'
     WHEN 'PROVIDER_FAILED_NO_MONEY' THEN 'Provider failed — no money moved'
@@ -21515,7 +21532,7 @@ begin
   v_retry_state := CASE
     WHEN lower(btrim(COALESCE(v_batch_cancelability_diagnostic->>'requires_retry_later', 'false'))) IN ('true','1','yes','y','on')
       OR upper(btrim(COALESCE(v_batch_recommended_action, ''))) = 'RETRY_PROVIDER_LATER'
-      THEN 'RETRY_LATER'
+      THEN 'RETRY_UNSENT_AVAILABLE'
     ELSE NULL::text
   END;
   v_retry_after_utc := COALESCE(
@@ -21529,7 +21546,7 @@ begin
     NULLIF(btrim(COALESCE(v_provider_submit_diagnostic->>'retry_reason', '')), '')
   );
   v_next_retry_description := CASE
-    WHEN v_retry_state = 'RETRY_LATER' THEN COALESCE(v_retry_reason, 'Retry when the provider/bank is available again.')
+    WHEN v_retry_state IN ('RETRY_UNSENT_AVAILABLE','RETRY_UNSENT_IN_PROGRESS') THEN COALESCE(v_retry_reason, 'Payments were not sent to the bank/provider and can be retried.')
     ELSE NULL::text
   END;
 
@@ -21678,9 +21695,135 @@ begin
   );
 
   v_next_retry_description := CASE
-    WHEN v_retry_state = 'RETRY_LATER' THEN COALESCE(v_retry_reason, 'Retry when the provider/bank is available again.')
+    WHEN v_retry_state IN ('RETRY_UNSENT_AVAILABLE','RETRY_UNSENT_IN_PROGRESS') THEN COALESCE(v_retry_reason, 'Payments were not sent to the bank/provider and can be retried.')
     ELSE NULL::text
   END;
+
+  IF upper(btrim(COALESCE(v_active_operation_type, ''))) = 'PAYMENT_RETRY_BLOCKED_FUNDS'
+     AND upper(btrim(COALESCE(v_active_operation_status, ''))) NOT IN ('COMPLETED','COMPLETE','SUCCEEDED','SUCCESS','FAILED','FAILED_FINAL','CANCELLED','CANCELED') THEN
+    v_retry_in_progress := true;
+    v_retry_already_in_progress := true;
+    v_retry_operation_id := v_active_operation_id;
+    v_retry_operation_status := v_active_operation_status;
+    v_retry_state := 'RETRY_UNSENT_IN_PROGRESS';
+  END IF;
+
+  IF upper(btrim(COALESCE(v_batch_recommended_action, ''))) = 'RETRY_PROVIDER_LATER'
+     OR COALESCE(v_retry_in_progress, false) THEN
+    BEGIN
+      v_retry_plan_json := public.pay_payment_correction_plan(
+        p_pay_batch_id,
+        jsonb_build_object(
+          'scope_type', 'BATCH',
+          'source_context', 'PAY_BATCH_GET_OVERVIEW',
+          'requested_action', 'RETRY_PROVIDER_LATER'
+        ),
+        p_actor_user_id
+      );
+    EXCEPTION WHEN OTHERS THEN
+      v_retry_plan_json := jsonb_build_object(
+        'ok', false,
+        'retry_eligible_count', 0,
+        'retry_ineligible_count', 0,
+        'retry_eligible_scope_json', '{}'::jsonb,
+        'retry_ineligible_summary_json', jsonb_build_array(jsonb_build_object(
+          'code', 'RETRY_UNSENT_PLAN_UNAVAILABLE',
+          'message', SQLERRM,
+          'sqlstate', SQLSTATE
+        )),
+        'retry_in_progress', COALESCE(v_retry_in_progress, false),
+        'retry_already_in_progress', COALESCE(v_retry_already_in_progress, false),
+        'retry_operation_id', CASE WHEN v_retry_operation_id IS NULL THEN NULL ELSE v_retry_operation_id::text END,
+        'retry_operation_status', v_retry_operation_status,
+        'retry_button_visible', false,
+        'retry_button_disabled_reason', 'Retry status could not be checked'
+      );
+    END;
+
+    v_retry_eligible_count := CASE
+      WHEN COALESCE(v_retry_plan_json->>'retry_eligible_count', '') ~ '^\d+$' THEN (v_retry_plan_json->>'retry_eligible_count')::integer
+      ELSE 0
+    END;
+    v_retry_ineligible_count := CASE
+      WHEN COALESCE(v_retry_plan_json->>'retry_ineligible_count', '') ~ '^\d+$' THEN (v_retry_plan_json->>'retry_ineligible_count')::integer
+      ELSE 0
+    END;
+    v_retry_eligible_scope_json := COALESCE(v_retry_plan_json->'retry_eligible_scope_json', '{}'::jsonb);
+    v_retry_ineligible_summary_json := COALESCE(v_retry_plan_json->'retry_ineligible_summary_json', '[]'::jsonb);
+    v_retry_scope_signature := NULLIF(btrim(COALESCE(v_retry_plan_json->>'retry_scope_signature', '')), '');
+
+    IF NULLIF(btrim(COALESCE(v_retry_plan_json->>'retry_operation_id', '')), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
+      v_retry_operation_id := (v_retry_plan_json->>'retry_operation_id')::uuid;
+    END IF;
+    v_retry_operation_status := COALESCE(NULLIF(btrim(COALESCE(v_retry_plan_json->>'retry_operation_status', '')), ''), v_retry_operation_status);
+    v_retry_in_progress := COALESCE(NULLIF(v_retry_plan_json->>'retry_in_progress', '')::boolean, v_retry_in_progress, false);
+    v_retry_already_in_progress := COALESCE(NULLIF(v_retry_plan_json->>'retry_already_in_progress', '')::boolean, v_retry_in_progress, false);
+  END IF;
+
+  IF v_retry_operation_id IS NULL THEN
+    SELECT retry_operation_rows.id,
+           retry_operation_rows.status
+    INTO v_retry_operation_id,
+         v_retry_operation_status
+    FROM public.banking_pay_operations AS retry_operation_rows
+    WHERE retry_operation_rows.pay_batch_id = p_pay_batch_id
+      AND upper(btrim(COALESCE(retry_operation_rows.operation_type, ''))) = 'PAYMENT_RETRY_BLOCKED_FUNDS'
+    ORDER BY COALESCE(retry_operation_rows.updated_at_utc, retry_operation_rows.created_at_utc) DESC NULLS LAST,
+             retry_operation_rows.created_at_utc DESC NULLS LAST,
+             retry_operation_rows.id DESC
+    LIMIT 1;
+  END IF;
+
+  IF COALESCE(v_retry_in_progress, false) THEN
+    v_retry_state := 'RETRY_UNSENT_IN_PROGRESS';
+    v_retry_status_label := 'Retrying unsent payments';
+    v_retry_button_disabled_reason := 'Retry in progress';
+    v_retry_button_visible := false;
+  ELSIF COALESCE(v_retry_eligible_count, 0) > 0 THEN
+    v_retry_state := 'RETRY_UNSENT_AVAILABLE';
+    v_retry_status_label := 'Bank unavailable — unsent payments can be retried';
+    v_retry_button_disabled_reason := NULL::text;
+    v_retry_button_visible := true;
+  ELSIF upper(btrim(COALESCE(v_retry_operation_status, ''))) IN ('COMPLETED','COMPLETE','SUCCEEDED','SUCCESS') THEN
+    v_retry_state := 'RETRY_UNSENT_COMPLETE';
+    v_retry_status_label := 'Retry complete';
+    v_retry_button_disabled_reason := NULL::text;
+    v_retry_button_visible := false;
+  ELSIF upper(btrim(COALESCE(v_batch_recommended_action, ''))) = 'RETRY_PROVIDER_LATER' THEN
+    v_retry_state := 'NO_UNSENT_RETRY_AVAILABLE';
+    v_retry_status_label := 'No unsent payments available to retry';
+    v_retry_button_disabled_reason := 'No unsent payments available to retry';
+    v_retry_button_visible := false;
+  ELSE
+    v_retry_state := NULL::text;
+    v_retry_status_label := NULL::text;
+    v_retry_button_disabled_reason := NULL::text;
+    v_retry_button_visible := false;
+  END IF;
+
+  v_next_retry_description := CASE
+    WHEN v_retry_state = 'RETRY_UNSENT_AVAILABLE' THEN 'Payments were not sent to the bank/provider and can be retried.'
+    WHEN v_retry_state = 'RETRY_UNSENT_IN_PROGRESS' THEN 'CloudTMS is retrying payments confirmed as not sent. You can continue using CloudTMS while this runs.'
+    WHEN v_retry_state = 'NO_UNSENT_RETRY_AVAILABLE' THEN 'No unsent payments are currently available to retry.'
+    WHEN v_retry_state = 'RETRY_UNSENT_COMPLETE' THEN 'Retry complete.'
+    ELSE NULL::text
+  END;
+
+  v_batch_support_details_json := COALESCE(v_batch_support_details_json, '{}'::jsonb) || jsonb_build_object(
+    'retry_eligible_count', COALESCE(v_retry_eligible_count, 0),
+    'retry_ineligible_count', COALESCE(v_retry_ineligible_count, 0),
+    'retry_in_progress', COALESCE(v_retry_in_progress, false),
+    'retry_already_in_progress', COALESCE(v_retry_already_in_progress, false),
+    'retry_operation_id', CASE WHEN v_retry_operation_id IS NULL THEN NULL ELSE v_retry_operation_id::text END,
+    'retry_operation_status', v_retry_operation_status,
+    'retry_eligible_scope_json', COALESCE(v_retry_eligible_scope_json, '{}'::jsonb),
+    'retry_ineligible_summary_json', COALESCE(v_retry_ineligible_summary_json, '[]'::jsonb),
+    'retry_scope_signature', v_retry_scope_signature,
+    'retry_status_label', v_retry_status_label,
+    'retry_button_label', v_retry_button_label,
+    'retry_button_visible', COALESCE(v_retry_button_visible, false),
+    'retry_button_disabled_reason', v_retry_button_disabled_reason
+  );
 
   v_provider_submission_status := upper(btrim(coalesce(
     v_provider_submit_diagnostic ->> 'provider_submission_status',
@@ -22023,6 +22166,18 @@ begin
         'retry_after_utc', v_retry_after_utc,
         'retry_reason', v_retry_reason,
         'next_retry_description', v_next_retry_description,
+        'retry_eligible_count', COALESCE(v_retry_eligible_count, 0),
+        'retry_ineligible_count', COALESCE(v_retry_ineligible_count, 0),
+        'retry_in_progress', COALESCE(v_retry_in_progress, false),
+        'retry_already_in_progress', COALESCE(v_retry_already_in_progress, false),
+        'retry_operation_id', CASE WHEN v_retry_operation_id IS NULL THEN NULL ELSE v_retry_operation_id::text END,
+        'retry_operation_status', v_retry_operation_status,
+        'retry_eligible_scope_json', COALESCE(v_retry_eligible_scope_json, '{}'::jsonb),
+        'retry_ineligible_summary_json', COALESCE(v_retry_ineligible_summary_json, '[]'::jsonb),
+        'retry_status_label', v_retry_status_label,
+        'retry_button_label', v_retry_button_label,
+        'retry_button_visible', COALESCE(v_retry_button_visible, false),
+        'retry_button_disabled_reason', v_retry_button_disabled_reason,
         'partial_cancel_count', COALESCE(v_partial_cancel_count, 0),
         'cancelled_before_bank_submission_count', COALESCE(v_cancelled_before_bank_submission_count, 0),
         'financials_rewound_count', COALESCE(v_financials_rewound_count, 0),
@@ -22037,6 +22192,18 @@ begin
         'correction_progress_version', COALESCE(v_batch_correction_progress_version, 0),
         'alert_version', COALESCE(v_batch_alert_version, 0),
         'overview_version', COALESCE(v_batch_overview_version, 0),
+        'retry_eligible_count', COALESCE(v_retry_eligible_count, 0),
+        'retry_ineligible_count', COALESCE(v_retry_ineligible_count, 0),
+        'retry_in_progress', COALESCE(v_retry_in_progress, false),
+        'retry_already_in_progress', COALESCE(v_retry_already_in_progress, false),
+        'retry_operation_id', CASE WHEN v_retry_operation_id IS NULL THEN NULL ELSE v_retry_operation_id::text END,
+        'retry_operation_status', v_retry_operation_status,
+        'retry_eligible_scope_json', COALESCE(v_retry_eligible_scope_json, '{}'::jsonb),
+        'retry_ineligible_summary_json', COALESCE(v_retry_ineligible_summary_json, '[]'::jsonb),
+        'retry_status_label', v_retry_status_label,
+        'retry_button_label', v_retry_button_label,
+        'retry_button_visible', COALESCE(v_retry_button_visible, false),
+        'retry_button_disabled_reason', v_retry_button_disabled_reason,
         'last_status_hash', v_batch_last_status_hash,
         'last_alert_hash', v_batch_last_alert_hash,
         'provider_webhook_evidence_json', COALESCE(v_provider_webhook_evidence_json, '{}'::jsonb)
@@ -22298,9 +22465,9 @@ begin
       AND COALESCE(candidate_effective.active_effective_item_count, 0) = 0
     ) AS current_effective_zero,
     CASE
-      WHEN COALESCE(candidate_effective.applied_reversal_item_count, 0) > 0 THEN 'Bank returned payment'
-      WHEN COALESCE(candidate_effective.applied_unwind_item_count, 0) > 0 THEN 'Bank rejected payment'
-      WHEN COALESCE(candidate_effective.applied_precancel_item_count, 0) > 0 THEN 'Payment removed from batch'
+      WHEN COALESCE(candidate_effective.applied_reversal_item_count, 0) > 0 THEN 'Overpayment recovery applied'
+      WHEN COALESCE(candidate_effective.applied_unwind_item_count, 0) > 0 THEN 'Financials rewound'
+      WHEN COALESCE(candidate_effective.applied_precancel_item_count, 0) > 0 THEN 'Cancelled before bank submission'
       ELSE NULL::text
     END AS payment_issue_label,
     COALESCE((
@@ -22494,7 +22661,7 @@ begin
           WHEN 'LOCAL_PREPARED_NOT_SENT' THEN 'Prepared locally — not sent to bank'
           WHEN 'SCHEDULED_LOCAL_NOT_SENT' THEN 'Scheduled locally — not sent to bank'
           WHEN 'PROVIDER_SUBMITTED_PENDING' THEN 'Sent to bank — pending outcome'
-          WHEN 'PROVIDER_OUTAGE_RETRY_LATER' THEN 'Bank unavailable — retry later'
+          WHEN 'PROVIDER_OUTAGE_RETRY_LATER' THEN 'Bank unavailable — retry available'
           WHEN 'PROVIDER_OUTCOME_UNKNOWN' THEN 'Provider outcome unknown — check bank'
           WHEN 'PROVIDER_CANCELLED_NO_MONEY' THEN 'Provider cancelled — no money moved'
           WHEN 'PROVIDER_FAILED_NO_MONEY' THEN 'Provider failed — no money moved'
@@ -22506,6 +22673,22 @@ begin
         END,
           'recommended_action',
           candidate_payment_diagnostic.diagnostic_json->>'recommended_action',
+          'row_action',
+          CASE
+            WHEN candidate_payment_diagnostic.diagnostic_json->>'recommended_action' = 'RETRY_PROVIDER_LATER' THEN 'OPEN_RETRY_SUMMARY'
+            ELSE candidate_payment_diagnostic.diagnostic_json->>'recommended_action'
+          END,
+          'row_action_label',
+          CASE
+            WHEN candidate_payment_diagnostic.diagnostic_json->>'recommended_action' = 'RETRY_PROVIDER_LATER' THEN 'Open retry summary'
+            WHEN candidate_payment_diagnostic.diagnostic_json->>'recommended_action' = 'AMEND_AND_RECOVER_OVERPAYMENT' THEN 'Recover overpayment in next pay run'
+            WHEN candidate_payment_diagnostic.diagnostic_json->>'recommended_action' = 'NO_MONEY_UNWIND_AND_RECALCULATE' THEN 'Rewind financials'
+            WHEN candidate_payment_diagnostic.diagnostic_json->>'recommended_action' = 'CHECK_PROVIDER_STATUS' THEN 'Check provider status'
+            WHEN candidate_payment_diagnostic.diagnostic_json->>'recommended_action' = 'PRE_PROVIDER_CANCEL_AND_RECALCULATE' THEN 'Cancel this payment and recalculate'
+            ELSE 'View details'
+          END,
+          'retry_row_context',
+          CASE WHEN candidate_payment_diagnostic.diagnostic_json->>'recommended_action' = 'RETRY_PROVIDER_LATER' THEN 'OVERVIEW_ONLY' ELSE NULL::text END,
           'row_cancel_available',
           lower(btrim(COALESCE(candidate_payment_diagnostic.diagnostic_json->>'row_cancel_available', 'false'))) IN ('true','1','yes','y','on'),
           'can_no_money_unwind',
@@ -22697,7 +22880,7 @@ begin
           WHEN 'LOCAL_PREPARED_NOT_SENT' THEN 'Prepared locally — not sent to bank'
           WHEN 'SCHEDULED_LOCAL_NOT_SENT' THEN 'Scheduled locally — not sent to bank'
           WHEN 'PROVIDER_SUBMITTED_PENDING' THEN 'Sent to bank — pending outcome'
-          WHEN 'PROVIDER_OUTAGE_RETRY_LATER' THEN 'Bank unavailable — retry later'
+          WHEN 'PROVIDER_OUTAGE_RETRY_LATER' THEN 'Bank unavailable — retry available'
           WHEN 'PROVIDER_OUTCOME_UNKNOWN' THEN 'Provider outcome unknown — check bank'
           WHEN 'PROVIDER_CANCELLED_NO_MONEY' THEN 'Provider cancelled — no money moved'
           WHEN 'PROVIDER_FAILED_NO_MONEY' THEN 'Provider failed — no money moved'
@@ -22708,6 +22891,19 @@ begin
           ELSE initcap(replace(lower(COALESCE(transfer_payment_diagnostic.diagnostic_json->>'payment_lifecycle_state', v_batch_payment_lifecycle_state, 'unknown')), '_', ' '))
         END,
         'recommended_action', transfer_payment_diagnostic.diagnostic_json->>'recommended_action',
+        'row_action', CASE
+          WHEN transfer_payment_diagnostic.diagnostic_json->>'recommended_action' = 'RETRY_PROVIDER_LATER' THEN 'OPEN_RETRY_SUMMARY'
+          ELSE transfer_payment_diagnostic.diagnostic_json->>'recommended_action'
+        END,
+        'row_action_label', CASE
+          WHEN transfer_payment_diagnostic.diagnostic_json->>'recommended_action' = 'RETRY_PROVIDER_LATER' THEN 'Open retry summary'
+          WHEN transfer_payment_diagnostic.diagnostic_json->>'recommended_action' = 'AMEND_AND_RECOVER_OVERPAYMENT' THEN 'Recover overpayment in next pay run'
+          WHEN transfer_payment_diagnostic.diagnostic_json->>'recommended_action' = 'NO_MONEY_UNWIND_AND_RECALCULATE' THEN 'Rewind financials'
+          WHEN transfer_payment_diagnostic.diagnostic_json->>'recommended_action' = 'CHECK_PROVIDER_STATUS' THEN 'Check provider status'
+          WHEN transfer_payment_diagnostic.diagnostic_json->>'recommended_action' = 'PRE_PROVIDER_CANCEL_AND_RECALCULATE' THEN 'Cancel this payment and recalculate'
+          ELSE 'View details'
+        END,
+        'retry_row_context', CASE WHEN transfer_payment_diagnostic.diagnostic_json->>'recommended_action' = 'RETRY_PROVIDER_LATER' THEN 'OVERVIEW_ONLY' ELSE NULL::text END,
         'row_cancel_available', lower(btrim(COALESCE(transfer_payment_diagnostic.diagnostic_json->>'row_cancel_available', 'false'))) IN ('true','1','yes','y','on'),
         'can_no_money_unwind', lower(btrim(COALESCE(transfer_payment_diagnostic.diagnostic_json->>'can_no_money_unwind', 'false'))) IN ('true','1','yes','y','on'),
         'can_recover_overpayment', lower(btrim(COALESCE(transfer_payment_diagnostic.diagnostic_json->>'can_recover_overpayment', 'false'))) IN ('true','1','yes','y','on'),
@@ -23317,7 +23513,7 @@ begin
     END IF;
 
     v_blocked_funds_reason := concat(
-      'Blocked funds',
+      'Bank unavailable',
       CASE WHEN v_blocked_funds_required_gbp IS NULL THEN '' ELSE ' — required ' || v_blocked_funds_required_gbp_display END,
       CASE WHEN v_blocked_funds_available_gbp IS NULL THEN '' ELSE ', available ' || v_blocked_funds_available_gbp_display END
     );
@@ -23326,7 +23522,7 @@ begin
        OR COALESCE(v_banking_alert_kind, '') = 'BLOCKED_FUNDS' THEN
       v_banking_alert_kind := 'BLOCKED_FUNDS';
       v_banking_alert_severity := 'critical';
-      v_banking_alert_label := 'Bank rejected payment';
+      v_banking_alert_label := 'Bank unavailable — unsent payments can be retried';
       v_banking_alert_reason := v_blocked_funds_reason;
     END IF;
 
@@ -23341,10 +23537,10 @@ begin
         'entity_id', p_pay_batch_id::text,
         'pay_batch_id', p_pay_batch_id::text,
         'alert_fingerprint', v_banking_alert_fingerprint,
-        'label', 'Bank rejected payment',
-        'title', 'Bank rejected payment — blocked funds',
+        'label', 'Bank unavailable — unsent payments can be retried',
+        'title', 'Bank unavailable — unsent payments can be retried',
         'description', v_blocked_funds_reason,
-        'action_guidance', 'Fund the account and retry, or cancel/release the batch.',
+        'action_guidance', 'Retry unsent payments from Overview if eligible, or cancel scheduled batch and recalculate.',
         'acknowledged_for_current_user', v_banking_alert_acknowledged_for_user,
         'requires_attention_for_current_user', v_banking_alert_requires_attention,
         'payload_json', v_blocked_funds_alert_payload
@@ -23356,10 +23552,10 @@ begin
             WHEN COALESCE(alert_item.alert_json ->> 'alert_kind', '') = 'BLOCKED_FUNDS' THEN
               alert_item.alert_json
               || jsonb_build_object(
-                'label', 'Bank rejected payment',
-                'title', 'Bank rejected payment — blocked funds',
+                'label', 'Bank unavailable — unsent payments can be retried',
+                'title', 'Bank unavailable — unsent payments can be retried',
                 'description', v_blocked_funds_reason,
-                'action_guidance', 'Fund the account and retry, or cancel/release the batch.',
+                'action_guidance', 'Retry unsent payments from Overview if eligible, or cancel scheduled batch and recalculate.',
                 'payload_json', COALESCE(alert_item.alert_json -> 'payload_json', '{}'::jsonb) || v_blocked_funds_alert_payload
               )
             ELSE alert_item.alert_json
@@ -23375,14 +23571,26 @@ begin
     v_blocked_funds_payment_issue := jsonb_build_object(
       'issue_kind', 'BLOCKED_FUNDS',
       'severity', 'critical',
-      'bank_status_label', 'Bank rejected payment',
+      'bank_status_label', 'Bank unavailable — unsent payments can be retried',
       'what_happened', v_blocked_funds_reason,
       'what_happened_label', v_blocked_funds_reason,
-      'action_label', 'Retry payment / Cancel payment',
+      'action_label', 'Retry unsent payments',
       'status_label', 'Urgent action needed',
       'requires_user_action', true,
       'whole_batch_issue', true,
       'can_retry_blocked_funds', v_can_retry_blocked_funds,
+      'retry_eligible_count', COALESCE(v_retry_eligible_count, 0),
+      'retry_ineligible_count', COALESCE(v_retry_ineligible_count, 0),
+      'retry_in_progress', COALESCE(v_retry_in_progress, false),
+      'retry_already_in_progress', COALESCE(v_retry_already_in_progress, false),
+      'retry_operation_id', CASE WHEN v_retry_operation_id IS NULL THEN NULL ELSE v_retry_operation_id::text END,
+      'retry_operation_status', v_retry_operation_status,
+      'retry_eligible_scope_json', COALESCE(v_retry_eligible_scope_json, '{}'::jsonb),
+      'retry_ineligible_summary_json', COALESCE(v_retry_ineligible_summary_json, '[]'::jsonb),
+      'retry_status_label', v_retry_status_label,
+      'retry_button_label', v_retry_button_label,
+      'retry_button_visible', COALESCE(v_retry_button_visible, false),
+      'retry_button_disabled_reason', v_retry_button_disabled_reason,
       'required_gbp', v_blocked_funds_required_gbp,
       'available_gbp', v_blocked_funds_available_gbp,
       'required_gbp_display', v_blocked_funds_required_gbp_display,
@@ -24602,6 +24810,9 @@ begin
         'payment_lifecycle_state', candidate_payload.value->'payment_lifecycle_state',
         'payment_lifecycle_label', candidate_payload.value->'payment_lifecycle_label',
         'recommended_action', candidate_payload.value->'recommended_action',
+        'row_action', candidate_payload.value->'row_action',
+        'row_action_label', candidate_payload.value->'row_action_label',
+        'retry_row_context', candidate_payload.value->'retry_row_context',
         'row_cancel_available', candidate_payload.value->'row_cancel_available',
         'can_no_money_unwind', candidate_payload.value->'can_no_money_unwind',
         'can_recover_overpayment', candidate_payload.value->'can_recover_overpayment',
@@ -24651,6 +24862,9 @@ begin
         'payment_lifecycle_state', candidate_payload.value->'payment_lifecycle_state',
         'payment_lifecycle_label', candidate_payload.value->'payment_lifecycle_label',
         'recommended_action', candidate_payload.value->'recommended_action',
+        'row_action', candidate_payload.value->'row_action',
+        'row_action_label', candidate_payload.value->'row_action_label',
+        'retry_row_context', candidate_payload.value->'retry_row_context',
         'row_cancel_available', candidate_payload.value->'row_cancel_available',
         'can_no_money_unwind', candidate_payload.value->'can_no_money_unwind',
         'can_recover_overpayment', candidate_payload.value->'can_recover_overpayment',
@@ -25857,6 +26071,18 @@ begin
       'payment_issues', v_payment_issues,
       'blocked_funds_action_required', true,
       'can_retry_blocked_funds', v_can_retry_blocked_funds,
+      'retry_eligible_count', COALESCE(v_retry_eligible_count, 0),
+      'retry_ineligible_count', COALESCE(v_retry_ineligible_count, 0),
+      'retry_in_progress', COALESCE(v_retry_in_progress, false),
+      'retry_already_in_progress', COALESCE(v_retry_already_in_progress, false),
+      'retry_operation_id', CASE WHEN v_retry_operation_id IS NULL THEN NULL ELSE v_retry_operation_id::text END,
+      'retry_operation_status', v_retry_operation_status,
+      'retry_eligible_scope_json', COALESCE(v_retry_eligible_scope_json, '{}'::jsonb),
+      'retry_ineligible_summary_json', COALESCE(v_retry_ineligible_summary_json, '[]'::jsonb),
+      'retry_status_label', v_retry_status_label,
+      'retry_button_label', v_retry_button_label,
+      'retry_button_visible', COALESCE(v_retry_button_visible, false),
+      'retry_button_disabled_reason', v_retry_button_disabled_reason,
       'requires_user_action', true
     );
   END IF;
@@ -25937,7 +26163,7 @@ begin
     v_movement_classification := v_movement_classification || jsonb_build_object(
       'blocked_funds_issue', v_blocked_funds_payment_issue,
       'blocked_funds_action_required', true,
-      'bank_status_label', 'Bank rejected payment',
+      'bank_status_label', 'Bank unavailable — unsent payments can be retried',
       'issue_kind', 'BLOCKED_FUNDS',
       'can_retry_blocked_funds', v_can_retry_blocked_funds
     );
@@ -25971,6 +26197,18 @@ begin
     'can_recover_overpayment', lower(btrim(COALESCE(v_batch_cancelability_diagnostic->>'can_recover_overpayment', 'false'))) IN ('true','1','yes','y','on'),
     'can_review_bank_evidence', COALESCE(v_batch_requires_bank_check, false),
     'can_retry_blocked_funds', v_can_retry_blocked_funds,
+    'retry_eligible_count', COALESCE(v_retry_eligible_count, 0),
+    'retry_ineligible_count', COALESCE(v_retry_ineligible_count, 0),
+    'retry_in_progress', COALESCE(v_retry_in_progress, false),
+    'retry_already_in_progress', COALESCE(v_retry_already_in_progress, false),
+    'retry_operation_id', CASE WHEN v_retry_operation_id IS NULL THEN NULL ELSE v_retry_operation_id::text END,
+    'retry_operation_status', v_retry_operation_status,
+    'retry_eligible_scope_json', COALESCE(v_retry_eligible_scope_json, '{}'::jsonb),
+    'retry_ineligible_summary_json', COALESCE(v_retry_ineligible_summary_json, '[]'::jsonb),
+    'retry_status_label', v_retry_status_label,
+    'retry_button_label', v_retry_button_label,
+    'retry_button_visible', COALESCE(v_retry_button_visible, false),
+    'retry_button_disabled_reason', v_retry_button_disabled_reason,
     'payment_lifecycle_state', v_batch_payment_lifecycle_state,
     'payment_lifecycle_label', v_batch_payment_lifecycle_label,
     'recommended_action', v_batch_recommended_action,
@@ -26230,6 +26468,18 @@ begin
       'banking_alert_acknowledged_for_user', v_banking_alert_acknowledged_for_user,
       'banking_alert_requires_attention', v_banking_alert_requires_attention,
       'can_retry_blocked_funds', v_can_retry_blocked_funds,
+      'retry_eligible_count', COALESCE(v_retry_eligible_count, 0),
+      'retry_ineligible_count', COALESCE(v_retry_ineligible_count, 0),
+      'retry_in_progress', COALESCE(v_retry_in_progress, false),
+      'retry_already_in_progress', COALESCE(v_retry_already_in_progress, false),
+      'retry_operation_id', CASE WHEN v_retry_operation_id IS NULL THEN NULL ELSE v_retry_operation_id::text END,
+      'retry_operation_status', v_retry_operation_status,
+      'retry_eligible_scope_json', COALESCE(v_retry_eligible_scope_json, '{}'::jsonb),
+      'retry_ineligible_summary_json', COALESCE(v_retry_ineligible_summary_json, '[]'::jsonb),
+      'retry_status_label', v_retry_status_label,
+      'retry_button_label', v_retry_button_label,
+      'retry_button_visible', COALESCE(v_retry_button_visible, false),
+      'retry_button_disabled_reason', v_retry_button_disabled_reason,
       'no_submission_evidence_flags', v_no_submission_evidence_flags,
       'blocked_funds_payment_issue', v_blocked_funds_payment_issue,
       'payment_issues', v_payment_issues,
@@ -74103,6 +74353,8 @@ DECLARE
   v_pay_batch_id text := NULL::text;
   v_issue_key text := NULL::text;
   v_provider_key text := NULL::text;
+  v_rail_env text := NULL::text;
+  v_retry_operation_id text := NULL::text;
   v_outage_window text := NULL::text;
   v_correction_request_id text := NULL::text;
   v_cancellation_operation_id text := NULL::text;
@@ -74162,6 +74414,18 @@ BEGIN
     'UNKNOWN_PROVIDER'
   );
 
+  v_rail_env := COALESCE(
+    NULLIF(BTRIM(v_payload->>'rail_env'), ''),
+    NULLIF(BTRIM(v_payload->>'provider_env'), ''),
+    NULLIF(BTRIM(v_payload->>'environment'), ''),
+    'UNKNOWN_ENV'
+  );
+
+  v_retry_operation_id := COALESCE(
+    NULLIF(BTRIM(v_payload->>'retry_operation_id'), ''),
+    NULLIF(BTRIM(v_payload->>'retry_operation_key'), '')
+  );
+
   v_outage_window := COALESCE(
     NULLIF(BTRIM(v_payload->>'outage_window'), ''),
     NULLIF(BTRIM(v_payload->>'retry_window'), ''),
@@ -74207,7 +74471,8 @@ BEGIN
       COALESCE(v_pay_batch_id, p_entity_id::text),
       v_alert_kind,
       v_provider_key,
-      COALESCE(v_outage_window, v_issue_window, 'NO_WINDOW')
+      v_rail_env,
+      COALESCE(v_retry_operation_id, v_outage_window, v_issue_window, 'NO_WINDOW')
     )
     WHEN v_alert_kind = 'PROVIDER_OUTCOME_UNKNOWN_CHECK_PROVIDER' THEN CONCAT_WS(
       ':',
@@ -74365,7 +74630,7 @@ BEGIN
   ),
   blocked_funds_alerts AS (
     SELECT
-      'BLOCKED_FUNDS'::text AS alert_kind,
+      'PROVIDER_OUTAGE_RETRY_LATER'::text AS alert_kind,
       'critical'::text AS severity,
       100::integer AS severity_rank,
       'pay_batch'::text AS entity_kind,
@@ -74376,7 +74641,7 @@ BEGIN
       jsonb_strip_nulls(jsonb_build_object(
         'fingerprint_source_kind', 'pay_batch',
         'fingerprint_source_id', blocked_funds_base.pay_batch_id::text,
-        'issue_kind', 'BLOCKED_FUNDS',
+        'issue_kind', 'PROVIDER_OUTAGE_RETRY_LATER',
         'pay_batch_id', blocked_funds_base.pay_batch_id::text,
         'batch_status', UPPER(BTRIM(COALESCE(blocked_funds_base.batch_status, ''))),
         'execution_commit_state', UPPER(BTRIM(COALESCE(blocked_funds_base.execution_commit_state, 'NOT_SUBMITTED'))),
@@ -74401,14 +74666,14 @@ BEGIN
         'rail_provider', blocked_funds_base.resolved_rail_provider,
         'rail_env', blocked_funds_base.resolved_rail_env
       )) AS fingerprint_payload_json,
-      'Bank rejected payment'::text AS label,
-      'Bank unavailable — retry later'::text AS title,
+      'Bank unavailable — unsent payments can be retried'::text AS label,
+      'Bank unavailable — unsent payments can be retried'::text AS title,
       ('Bank unavailable — required '
         || COALESCE(NULLIF(BTRIM(blocked_funds_base.required_gbp_text), ''), '—')
         || ', available '
         || COALESCE(NULLIF(BTRIM(blocked_funds_base.available_gbp_text), ''), '—')
-        || '. No payment was submitted.')::text AS description,
-      'Open Banking Pay Overview and retry later.'::text AS action_guidance,
+        || '. Payments were not sent to the bank/provider and can be retried from Overview.')::text AS description,
+      'Open Banking Pay Overview and retry unsent payments.'::text AS action_guidance,
       blocked_funds_base.last_funds_check_at_utc AS sort_at_utc
     FROM blocked_funds_base
   ),
@@ -74518,8 +74783,8 @@ BEGIN
       )) AS fingerprint_payload_json,
       CASE bank_event_base.alert_kind
         WHEN 'WEBHOOK_UNMATCHED_REVIEW_REQUIRED' THEN 'Unmatched bank webhook'
-        WHEN 'BANK_RETURNED_PAYMENT' THEN 'Bank returned payment'
-        WHEN 'BANK_REJECTED_PAYMENT' THEN 'Bank rejected payment'
+        WHEN 'BANK_RETURNED_PAYMENT' THEN 'Provider outcome unknown — check provider'
+        WHEN 'BANK_REJECTED_PAYMENT' THEN 'Failed payments — Rewind financials available'
         WHEN 'AMBIGUOUS_PAYMENT_REVIEW_REQUIRED' THEN 'Payment needs review'
         WHEN 'PAYMENT_CORRECTION_FAILED' THEN 'Payment correction failed'
         WHEN 'PAYMENT_CORRECTION_BLOCKED' THEN 'Payment correction blocked'
@@ -74527,8 +74792,8 @@ BEGIN
       END::text AS label,
       CASE bank_event_base.alert_kind
         WHEN 'WEBHOOK_UNMATCHED_REVIEW_REQUIRED' THEN 'Unmatched provider webhook needs review'
-        WHEN 'BANK_RETURNED_PAYMENT' THEN 'Bank returned payment'
-        WHEN 'BANK_REJECTED_PAYMENT' THEN 'Bank rejected payment'
+        WHEN 'BANK_RETURNED_PAYMENT' THEN 'Provider outcome unknown — check provider'
+        WHEN 'BANK_REJECTED_PAYMENT' THEN 'Failed payments — Rewind financials available'
         WHEN 'AMBIGUOUS_PAYMENT_REVIEW_REQUIRED' THEN 'Payment event needs review'
         WHEN 'PAYMENT_CORRECTION_FAILED' THEN 'Payment correction failed'
         WHEN 'PAYMENT_CORRECTION_BLOCKED' THEN 'Payment correction blocked'
@@ -74536,8 +74801,8 @@ BEGIN
       END::text AS title,
       CASE bank_event_base.alert_kind
         WHEN 'WEBHOOK_UNMATCHED_REVIEW_REQUIRED' THEN 'A verified provider webhook could not be matched safely and needs review.'
-        WHEN 'BANK_RETURNED_PAYMENT' THEN 'The bank returned a payment. The candidate or umbrella is no longer paid for that transfer.'
-        WHEN 'BANK_REJECTED_PAYMENT' THEN 'The bank rejected a payment submission or transfer.'
+        WHEN 'BANK_RETURNED_PAYMENT' THEN 'Provider returned/reverted status requires checking before any financial correction.'
+        WHEN 'BANK_REJECTED_PAYMENT' THEN 'The provider/bank outcome indicates no money moved. Open Current Payment Status and rewind financials where safe.'
         WHEN 'AMBIGUOUS_PAYMENT_REVIEW_REQUIRED' THEN 'A bank payment event could not be matched safely and needs review.'
         WHEN 'PAYMENT_CORRECTION_FAILED' THEN 'CloudTMS could not complete a payment correction automatically.'
         WHEN 'PAYMENT_CORRECTION_BLOCKED' THEN 'A payment correction is blocked and needs review.'
@@ -74546,7 +74811,7 @@ BEGIN
       CASE bank_event_base.alert_kind
         WHEN 'WEBHOOK_UNMATCHED_REVIEW_REQUIRED' THEN 'Review the unmatched provider webhook.'
         WHEN 'BANK_RETURNED_PAYMENT' THEN 'Open Current Payment Status and review the payment status.'
-        WHEN 'BANK_REJECTED_PAYMENT' THEN 'Open Current Payment Status and review the failed payment.'
+        WHEN 'BANK_REJECTED_PAYMENT' THEN 'Open Current Payment Status and rewind financials where no money moved.'
         WHEN 'AMBIGUOUS_PAYMENT_REVIEW_REQUIRED' THEN 'Review and resolve the ambiguous bank event.'
         ELSE 'Open Current Payment Status.'
       END::text AS action_guidance,
@@ -74628,17 +74893,17 @@ BEGIN
         'created_at_utc', CASE WHEN transfer_base.created_at_utc IS NULL THEN NULL::text ELSE TO_CHAR(transfer_base.created_at_utc AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') END
       )) AS fingerprint_payload_json,
       CASE transfer_base.alert_kind
-        WHEN 'BANK_RETURNED_PAYMENT' THEN 'Bank returned payment'
-        WHEN 'BANK_REJECTED_PAYMENT' THEN 'Bank rejected payment'
+        WHEN 'BANK_RETURNED_PAYMENT' THEN 'Provider outcome unknown — check provider'
+        WHEN 'BANK_REJECTED_PAYMENT' THEN 'Failed payments — Rewind financials available'
         ELSE 'Rail submission needs review'
       END::text AS label,
       CASE transfer_base.alert_kind
-        WHEN 'BANK_RETURNED_PAYMENT' THEN 'Bank returned payment'
-        WHEN 'BANK_REJECTED_PAYMENT' THEN 'Bank rejected payment'
+        WHEN 'BANK_RETURNED_PAYMENT' THEN 'Provider outcome unknown — check provider'
+        WHEN 'BANK_REJECTED_PAYMENT' THEN 'Failed payments — Rewind financials available'
         ELSE 'Rail submission needs review'
       END::text AS title,
       CASE transfer_base.alert_kind
-        WHEN 'BANK_RETURNED_PAYMENT' THEN 'The bank returned a payment. The candidate or umbrella is no longer paid for that transfer.'
+        WHEN 'BANK_RETURNED_PAYMENT' THEN 'Provider returned/reverted status requires checking before any financial correction.'
         WHEN 'BANK_REJECTED_PAYMENT' THEN 'The bank rejected a payment transfer.'
         ELSE 'CloudTMS could not confirm the final bank submission state.'
       END::text AS description,
@@ -74931,7 +75196,7 @@ BEGIN
         WHEN 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME' THEN 'Provider response missing'
         WHEN 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE' THEN 'Provider response unusable'
         WHEN 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID' THEN 'Provider acceptance evidence missing'
-        WHEN 'PROVIDER_SUBMISSION_REJECTED' THEN 'Provider rejected payment'
+        WHEN 'PROVIDER_SUBMISSION_REJECTED' THEN 'Provider submission failed'
         WHEN 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL' THEN 'Provider was not called'
         WHEN 'PROVIDER_SUBMISSION_ACCEPTED' THEN 'Provider acceptance evidence present'
         ELSE 'Provider submission needs review'
@@ -74941,7 +75206,7 @@ BEGIN
         WHEN 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME' THEN 'Provider response missing'
         WHEN 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE' THEN 'Provider response unusable'
         WHEN 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID' THEN 'Provider acceptance evidence missing'
-        WHEN 'PROVIDER_SUBMISSION_REJECTED' THEN 'Provider rejected payment'
+        WHEN 'PROVIDER_SUBMISSION_REJECTED' THEN 'Provider submission failed'
         WHEN 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL' THEN 'Provider was not called'
         WHEN 'PROVIDER_SUBMISSION_ACCEPTED' THEN 'Provider acceptance evidence present'
         ELSE 'Provider submission needs review'
@@ -75053,6 +75318,24 @@ BEGIN
     WHERE COALESCE(NULLIF(BTRIM(grouped_banking_pay_diagnostic_scope.diagnostic_json->>'payment_lifecycle_state'), ''), '') = 'PROVIDER_OUTAGE_RETRY_LATER'
        OR COALESCE(NULLIF(BTRIM(grouped_banking_pay_diagnostic_scope.diagnostic_json->>'recommended_action'), ''), '') = 'RETRY_PROVIDER_LATER'
        OR LOWER(BTRIM(COALESCE(grouped_banking_pay_diagnostic_scope.diagnostic_json->>'requires_retry_later', 'false'))) IN ('true','t','1','yes','y','on')
+
+    UNION ALL
+    SELECT
+      'PROVIDER_OUTAGE_RETRY_LATER'::text AS alert_kind,
+      92::integer AS severity_rank,
+      'PROGRESS'::text AS severity,
+      retry_operation.pay_batch_id,
+      'banking_pay_operation'::text AS payload_source_kind,
+      retry_operation.id AS payload_source_id,
+      COALESCE(retry_operation.updated_at_utc, retry_operation.created_at_utc, now()) AS sort_at_utc
+    FROM public.banking_pay_operations AS retry_operation
+    WHERE UPPER(BTRIM(COALESCE(retry_operation.operation_type, ''))) = 'PAYMENT_RETRY_BLOCKED_FUNDS'
+      AND UPPER(BTRIM(COALESCE(retry_operation.status, ''))) NOT IN ('COMPLETE','COMPLETED','SUCCEEDED','SUCCESS','FAILED','FAILED_FINAL','CANCELLED','CANCELED')
+      AND EXISTS (
+        SELECT 1
+        FROM grouped_banking_pay_diagnostic_scope
+        WHERE grouped_banking_pay_diagnostic_scope.pay_batch_id = retry_operation.pay_batch_id
+      )
 
     UNION ALL
     SELECT
@@ -75333,7 +75616,7 @@ BEGIN
         'alert_kind', mapped_alerts.mapped_alert_kind
       ) AS fingerprint_payload_json,
       CASE mapped_alerts.mapped_alert_kind
-        WHEN 'PROVIDER_OUTAGE_RETRY_LATER' THEN 'Bank unavailable — retry later'
+        WHEN 'PROVIDER_OUTAGE_RETRY_LATER' THEN 'Bank unavailable — unsent payments can be retried'
         WHEN 'PROVIDER_OUTCOME_UNKNOWN_CHECK_PROVIDER' THEN 'Provider outcome unknown — check provider'
         WHEN 'TERMINAL_NO_MONEY_REWIND_AVAILABLE' THEN 'Failed payments — Rewind financials available'
         WHEN 'AUTO_UNWIND_PROGRESS' THEN 'Rewinding failed payments'
@@ -75346,7 +75629,7 @@ BEGIN
         ELSE raw_current_alerts.label
       END AS label,
       CASE mapped_alerts.mapped_alert_kind
-        WHEN 'PROVIDER_OUTAGE_RETRY_LATER' THEN 'Bank unavailable — retry later'
+        WHEN 'PROVIDER_OUTAGE_RETRY_LATER' THEN 'Bank unavailable — unsent payments can be retried'
         WHEN 'PROVIDER_OUTCOME_UNKNOWN_CHECK_PROVIDER' THEN 'Provider outcome unknown — check provider'
         WHEN 'TERMINAL_NO_MONEY_REWIND_AVAILABLE' THEN 'Failed payments — Rewind financials available'
         WHEN 'AUTO_UNWIND_PROGRESS' THEN 'Rewinding failed payments'
@@ -75359,27 +75642,27 @@ BEGIN
         ELSE raw_current_alerts.title
       END AS title,
       CASE mapped_alerts.mapped_alert_kind
-        WHEN 'PROVIDER_OUTAGE_RETRY_LATER' THEN 'The bank/provider was unavailable before the payment request was sent. Retry later from Banking Pay Overview.'
+        WHEN 'PROVIDER_OUTAGE_RETRY_LATER' THEN 'The bank/provider was unavailable before the payment request was sent. Retry unsent payments from Banking Pay Overview.'
         WHEN 'PROVIDER_OUTCOME_UNKNOWN_CHECK_PROVIDER' THEN 'A provider request may have been sent, but the outcome is not confirmed. Open Current Payment Status and check the provider outcome.'
         WHEN 'TERMINAL_NO_MONEY_REWIND_AVAILABLE' THEN 'The provider/bank outcome indicates no money moved. Open Current Payment Status and rewind financials where safe.'
         WHEN 'AUTO_UNWIND_PROGRESS' THEN 'Automatic no-money unwind is running and this alert updates grouped progress.'
         WHEN 'WHOLE_BATCH_CANCELLATION_PROGRESS' THEN 'Scheduled local cancellation is running in chunks and this alert updates grouped progress.'
         WHEN 'MANUAL_ADJUSTMENTS_CARRIED_FORWARD' THEN 'Safe source-less manual adjustments were carried forward and will be included in the next pay run.'
         WHEN 'MANUAL_ADJUSTMENT_AMBIGUOUS_BLOCKERS' THEN 'One or more manual adjustments cannot be safely carried forward automatically.'
-        WHEN 'PAID_SETTLED_RECOVERY_REQUIRED' THEN 'Money appears to have moved. Use recovery/overpayment handling rather than unwind.'
+        WHEN 'PAID_SETTLED_RECOVERY_REQUIRED' THEN 'Money appears to have moved. Amend the timesheet and recover the overpayment in the next pay run rather than unwinding the payment.'
         WHEN 'CANCELLATION_RACED_WITH_PROVIDER_SUBMIT' THEN 'Cancellation could not proceed because provider submission had already started.'
         WHEN 'WEBHOOK_UNMATCHED_REVIEW_REQUIRED' THEN 'A verified provider webhook was received but could not be matched safely to a payment.'
         ELSE raw_current_alerts.description
       END AS description,
       CASE mapped_alerts.mapped_alert_kind
-        WHEN 'PROVIDER_OUTAGE_RETRY_LATER' THEN 'Open Banking Pay Overview and retry later.'
+        WHEN 'PROVIDER_OUTAGE_RETRY_LATER' THEN 'Open Banking Pay Overview and retry unsent payments.'
         WHEN 'PROVIDER_OUTCOME_UNKNOWN_CHECK_PROVIDER' THEN 'Open Current Payment Status and check the provider outcome.'
         WHEN 'TERMINAL_NO_MONEY_REWIND_AVAILABLE' THEN 'Open Current Payment Status and rewind financials where no money moved.'
         WHEN 'AUTO_UNWIND_PROGRESS' THEN 'Monitor rewind progress.'
         WHEN 'WHOLE_BATCH_CANCELLATION_PROGRESS' THEN 'Monitor cancellation progress in Banking Pay Overview.'
         WHEN 'MANUAL_ADJUSTMENTS_CARRIED_FORWARD' THEN 'Review carried-forward manual adjustments in the next pay run.'
         WHEN 'MANUAL_ADJUSTMENT_AMBIGUOUS_BLOCKERS' THEN 'Open Current Payment Status and review ambiguous manual adjustment blockers.'
-        WHEN 'PAID_SETTLED_RECOVERY_REQUIRED' THEN 'Open Current Payment Status and recover overpayment.'
+        WHEN 'PAID_SETTLED_RECOVERY_REQUIRED' THEN 'Open Current Payment Status and recover overpayment in next pay run.'
         WHEN 'CANCELLATION_RACED_WITH_PROVIDER_SUBMIT' THEN 'Open Current Payment Status and check provider submission before continuing.'
         WHEN 'WEBHOOK_UNMATCHED_REVIEW_REQUIRED' THEN 'Open Current Payment Status and review the unmatched provider webhook.'
         ELSE replace(COALESCE(raw_current_alerts.action_guidance, 'Open Banking Pay.'), 'Payment Issues', 'Current Payment Status')
@@ -75647,7 +75930,6 @@ BEGIN
   ));
 END;
 $function$;
-
 
 
 
@@ -76258,7 +76540,6 @@ $function$;
 
 DROP FUNCTION IF EXISTS public.banking_alert_payload_for_pay_batch(text, uuid);
 
-
 CREATE OR REPLACE FUNCTION public.banking_alert_payload_for_pay_batch(
   p_alert_kind text,
   p_pay_batch_id uuid,
@@ -76491,7 +76772,43 @@ BEGIN
     'CANCELLATION_RACED_WITH_PROVIDER_SUBMIT',
     'WEBHOOK_UNMATCHED_REVIEW_REQUIRED'
   ) THEN
-    WITH item_counts AS (
+    WITH retry_plan_scope AS (
+      SELECT COALESCE(public.pay_payment_correction_plan(
+        p_pay_batch_id,
+        jsonb_build_object(
+          'scope_type', 'BATCH',
+          'source_context', 'BANKING_ALERT_PAYLOAD',
+          'requested_action', 'RETRY_PROVIDER_LATER'
+        ),
+        NULL::uuid
+      ), '{}'::jsonb) AS retry_plan_json
+    ),
+    retry_operation_scope AS (
+      SELECT
+        retry_operation.id AS retry_operation_id,
+        retry_operation.status AS retry_operation_status
+      FROM public.banking_pay_operations AS retry_operation
+      WHERE retry_operation.pay_batch_id = p_pay_batch_id
+        AND UPPER(BTRIM(COALESCE(retry_operation.operation_type, ''))) = 'PAYMENT_RETRY_BLOCKED_FUNDS'
+        AND UPPER(BTRIM(COALESCE(retry_operation.status, ''))) NOT IN ('COMPLETE','COMPLETED','SUCCEEDED','SUCCESS','FAILED','FAILED_FINAL','CANCELLED','CANCELED')
+      ORDER BY COALESCE(retry_operation.updated_at_utc, retry_operation.created_at_utc) DESC NULLS LAST,
+               retry_operation.created_at_utc DESC NULLS LAST,
+               retry_operation.id DESC
+      LIMIT 1
+    ),
+    retry_plan_counts AS (
+      SELECT
+        CASE
+          WHEN COALESCE(retry_plan_scope.retry_plan_json->>'retry_eligible_count', '') ~ '^\d+$' THEN (retry_plan_scope.retry_plan_json->>'retry_eligible_count')::integer
+          ELSE 0
+        END AS retry_eligible_count,
+        CASE
+          WHEN COALESCE(retry_plan_scope.retry_plan_json->>'retry_ineligible_count', '') ~ '^\d+$' THEN (retry_plan_scope.retry_plan_json->>'retry_ineligible_count')::integer
+          ELSE 0
+        END AS retry_ineligible_count
+      FROM retry_plan_scope
+    ),
+    item_counts AS (
       SELECT
         COUNT(DISTINCT pbi.id)::integer AS affected_payment_count,
         COUNT(DISTINCT pbc.candidate_id)::integer AS affected_candidate_count,
@@ -76540,7 +76857,7 @@ BEGIN
     )
     SELECT jsonb_strip_nulls(jsonb_build_object(
       'stable_issue_key', CASE
-        WHEN v_alert_kind = 'PROVIDER_OUTAGE_RETRY_LATER' THEN p_pay_batch_id::text || ':' || v_alert_kind || ':' || COALESCE(v_rail_provider, 'UNKNOWN') || ':' || COALESCE(v_rail_env, 'UNKNOWN') || ':' || COALESCE(v_last_status_checked_at_utc_text, v_last_funds_check_at_utc_text, v_execution_committed_at_utc_text, 'NO_WINDOW')
+        WHEN v_alert_kind = 'PROVIDER_OUTAGE_RETRY_LATER' THEN p_pay_batch_id::text || ':' || v_alert_kind || ':' || COALESCE(v_rail_provider, 'UNKNOWN') || ':' || COALESCE(v_rail_env, 'UNKNOWN') || ':' || COALESCE((SELECT retry_operation_id::text FROM retry_operation_scope), v_last_status_checked_at_utc_text, v_last_funds_check_at_utc_text, v_execution_committed_at_utc_text, 'NO_WINDOW')
         WHEN v_alert_kind = 'PROVIDER_OUTCOME_UNKNOWN_CHECK_PROVIDER' THEN p_pay_batch_id::text || ':' || v_alert_kind || ':' || COALESCE(v_rail_provider, 'UNKNOWN') || ':' || COALESCE(v_rail_env, 'UNKNOWN') || ':' || COALESCE(v_last_status_checked_at_utc_text, v_execution_committed_at_utc_text, 'NO_WINDOW')
         WHEN v_alert_kind = 'WEBHOOK_UNMATCHED_REVIEW_REQUIRED' THEN COALESCE(p_pay_batch_id::text, 'NO_BATCH') || ':' || v_alert_kind || ':' || COALESCE(v_rail_provider, 'UNKNOWN') || ':' || COALESCE(v_rail_env, 'UNKNOWN') || ':' || COALESCE(v_provider_event_key, 'NO_PROVIDER_EVENT_KEY')
         WHEN v_alert_kind = 'TERMINAL_NO_MONEY_REWIND_AVAILABLE' THEN p_pay_batch_id::text || ':' || v_alert_kind || ':' || COALESCE((SELECT correction_request_id::text FROM correction_scope), v_provider_failure_reason_group, v_provider_event_key, 'NO_TERMINAL_FAILURE_KEY')
@@ -76551,7 +76868,7 @@ BEGIN
         ELSE p_pay_batch_id::text || ':' || v_alert_kind
       END,
       'dedupe_key', CASE
-        WHEN v_alert_kind = 'PROVIDER_OUTAGE_RETRY_LATER' THEN p_pay_batch_id::text || ':' || v_alert_kind || ':' || COALESCE(v_rail_provider, 'UNKNOWN') || ':' || COALESCE(v_rail_env, 'UNKNOWN') || ':' || COALESCE(v_last_status_checked_at_utc_text, v_last_funds_check_at_utc_text, v_execution_committed_at_utc_text, 'NO_WINDOW')
+        WHEN v_alert_kind = 'PROVIDER_OUTAGE_RETRY_LATER' THEN p_pay_batch_id::text || ':' || v_alert_kind || ':' || COALESCE(v_rail_provider, 'UNKNOWN') || ':' || COALESCE(v_rail_env, 'UNKNOWN') || ':' || COALESCE((SELECT retry_operation_id::text FROM retry_operation_scope), v_last_status_checked_at_utc_text, v_last_funds_check_at_utc_text, v_execution_committed_at_utc_text, 'NO_WINDOW')
         WHEN v_alert_kind = 'PROVIDER_OUTCOME_UNKNOWN_CHECK_PROVIDER' THEN p_pay_batch_id::text || ':' || v_alert_kind || ':' || COALESCE(v_rail_provider, 'UNKNOWN') || ':' || COALESCE(v_rail_env, 'UNKNOWN') || ':' || COALESCE(v_last_status_checked_at_utc_text, v_execution_committed_at_utc_text, 'NO_WINDOW')
         WHEN v_alert_kind = 'WEBHOOK_UNMATCHED_REVIEW_REQUIRED' THEN COALESCE(p_pay_batch_id::text, 'NO_BATCH') || ':' || v_alert_kind || ':' || COALESCE(v_rail_provider, 'UNKNOWN') || ':' || COALESCE(v_rail_env, 'UNKNOWN') || ':' || COALESCE(v_provider_event_key, 'NO_PROVIDER_EVENT_KEY')
         WHEN v_alert_kind = 'TERMINAL_NO_MONEY_REWIND_AVAILABLE' THEN p_pay_batch_id::text || ':' || v_alert_kind || ':' || COALESCE((SELECT correction_request_id::text FROM correction_scope), v_provider_failure_reason_group, v_provider_event_key, 'NO_TERMINAL_FAILURE_KEY')
@@ -76577,6 +76894,10 @@ BEGIN
       'rail', v_rail_provider,
       'rail_env', v_rail_env,
       'outage_window', CASE WHEN v_alert_kind = 'PROVIDER_OUTAGE_RETRY_LATER' THEN COALESCE(v_last_status_checked_at_utc_text, v_last_funds_check_at_utc_text, v_execution_committed_at_utc_text) ELSE NULL END,
+      'retry_operation_id', CASE WHEN (SELECT retry_operation_id FROM retry_operation_scope) IS NULL THEN NULL ELSE (SELECT retry_operation_id::text FROM retry_operation_scope) END,
+      'retry_operation_status', (SELECT retry_operation_status FROM retry_operation_scope),
+      'retry_eligible_count', COALESCE((SELECT retry_eligible_count FROM retry_plan_counts), 0),
+      'retry_ineligible_count', COALESCE((SELECT retry_ineligible_count FROM retry_plan_counts), 0),
       'correction_request_id', CASE WHEN (SELECT correction_request_id FROM correction_scope) IS NULL THEN NULL ELSE (SELECT correction_request_id::text FROM correction_scope) END,
       'cancellation_operation_id', CASE WHEN v_alert_kind = 'WHOLE_BATCH_CANCELLATION_PROGRESS' THEN CASE WHEN (SELECT correction_request_id FROM correction_scope) IS NULL THEN NULL ELSE (SELECT correction_request_id::text FROM correction_scope) END ELSE NULL END,
       'pay_bank_transfer_id', CASE WHEN (SELECT pay_bank_transfer_id FROM single_transfer_scope) IS NULL THEN NULL ELSE (SELECT pay_bank_transfer_id::text FROM single_transfer_scope) END,
@@ -76589,14 +76910,14 @@ BEGIN
       'amount_affected', COALESCE((SELECT amount_affected FROM item_counts), 0),
       'current_status', UPPER(BTRIM(COALESCE(v_batch.status, ''))),
       'required_user_action', CASE v_alert_kind
-        WHEN 'PROVIDER_OUTAGE_RETRY_LATER' THEN 'Retry later from Banking Pay Overview.'
+        WHEN 'PROVIDER_OUTAGE_RETRY_LATER' THEN 'Retry unsent payments from Banking Pay Overview.'
         WHEN 'PROVIDER_OUTCOME_UNKNOWN_CHECK_PROVIDER' THEN 'Open Current Payment Status and check the provider outcome.'
         WHEN 'TERMINAL_NO_MONEY_REWIND_AVAILABLE' THEN 'Open Current Payment Status and rewind financials where no money moved.'
         WHEN 'AUTO_UNWIND_PROGRESS' THEN 'Monitor rewind progress.'
         WHEN 'WHOLE_BATCH_CANCELLATION_PROGRESS' THEN 'Monitor cancellation progress in Banking Pay Overview.'
         WHEN 'MANUAL_ADJUSTMENTS_CARRIED_FORWARD' THEN 'Review carried-forward manual adjustments in the next pay run.'
         WHEN 'MANUAL_ADJUSTMENT_AMBIGUOUS_BLOCKERS' THEN 'Open Current Payment Status and review ambiguous manual adjustment blockers.'
-        WHEN 'PAID_SETTLED_RECOVERY_REQUIRED' THEN 'Open Current Payment Status and recover overpayment.'
+        WHEN 'PAID_SETTLED_RECOVERY_REQUIRED' THEN 'Open Current Payment Status and recover overpayment in next pay run.'
         WHEN 'CANCELLATION_RACED_WITH_PROVIDER_SUBMIT' THEN 'Open Current Payment Status and check provider submission before continuing.'
         WHEN 'WEBHOOK_UNMATCHED_REVIEW_REQUIRED' THEN 'Review the unmatched provider webhook and link it to the correct payment if safe.'
         ELSE 'Open Banking Pay.'
@@ -76612,7 +76933,7 @@ BEGIN
         ELSE 'current_payment_status'
       END,
       'user_label', CASE v_alert_kind
-        WHEN 'PROVIDER_OUTAGE_RETRY_LATER' THEN 'Bank unavailable — ' || COALESCE((SELECT affected_payment_count FROM item_counts), 0)::text || ' payments will retry later'
+        WHEN 'PROVIDER_OUTAGE_RETRY_LATER' THEN CASE WHEN (SELECT retry_operation_id FROM retry_operation_scope) IS NOT NULL THEN 'Retrying unsent payments — ' || COALESCE(NULLIF((SELECT retry_eligible_count FROM retry_plan_counts), 0), COALESCE((SELECT affected_payment_count FROM item_counts), 0))::text || ' payments in progress' ELSE 'Bank unavailable — ' || COALESCE(NULLIF((SELECT retry_eligible_count FROM retry_plan_counts), 0), COALESCE((SELECT affected_payment_count FROM item_counts), 0))::text || ' unsent payments can be retried' END
         WHEN 'PROVIDER_OUTCOME_UNKNOWN_CHECK_PROVIDER' THEN 'Provider outcome unknown — ' || COALESCE((SELECT affected_payment_count FROM item_counts), 0)::text || ' payments need checking'
         WHEN 'TERMINAL_NO_MONEY_REWIND_AVAILABLE' THEN 'Failed payments — Rewind financials available for ' || COALESCE((SELECT affected_payment_count FROM item_counts), 0)::text || ' payments'
         WHEN 'AUTO_UNWIND_PROGRESS' THEN 'Rewinding failed payments — ' || COALESCE((SELECT progress_completed FROM correction_scope), 0)::text || ' of ' || COALESCE(NULLIF((SELECT progress_total FROM correction_scope), 0), COALESCE((SELECT affected_payment_count FROM item_counts), 0))::text || ' complete'
@@ -76625,14 +76946,14 @@ BEGIN
         ELSE initcap(replace(lower(v_alert_kind), '_', ' '))
       END,
       'user_description', CASE v_alert_kind
-        WHEN 'PROVIDER_OUTAGE_RETRY_LATER' THEN 'The bank/provider was unavailable before the payment request was sent. The grouped batch issue should retry later.'
+        WHEN 'PROVIDER_OUTAGE_RETRY_LATER' THEN CASE WHEN (SELECT retry_operation_id FROM retry_operation_scope) IS NOT NULL THEN 'CloudTMS is retrying payments confirmed as not sent. You can continue using CloudTMS while this runs.' ELSE 'The bank/provider was unavailable before the payment request was sent. Retry unsent payments from Banking Pay Overview.' END
         WHEN 'PROVIDER_OUTCOME_UNKNOWN_CHECK_PROVIDER' THEN 'A provider request may have been sent, but the outcome is not confirmed. Check provider state before retrying or unwinding.'
         WHEN 'TERMINAL_NO_MONEY_REWIND_AVAILABLE' THEN 'The provider/bank outcome indicates no money moved. Financials can be rewound from Current Payment Status.'
         WHEN 'AUTO_UNWIND_PROGRESS' THEN 'Automatic no-money unwind is running and this alert updates progress instead of creating per-payment alerts.'
         WHEN 'WHOLE_BATCH_CANCELLATION_PROGRESS' THEN 'Scheduled local cancellation is running in chunks and this alert updates progress.'
         WHEN 'MANUAL_ADJUSTMENTS_CARRIED_FORWARD' THEN 'Safe source-less manual adjustments were carried forward and will be included in the next pay run.'
         WHEN 'MANUAL_ADJUSTMENT_AMBIGUOUS_BLOCKERS' THEN 'One or more manual adjustments cannot be safely carried forward automatically.'
-        WHEN 'PAID_SETTLED_RECOVERY_REQUIRED' THEN 'Money appears to have moved. Use recovery/overpayment handling rather than unwind.'
+        WHEN 'PAID_SETTLED_RECOVERY_REQUIRED' THEN 'Money appears to have moved. Amend the timesheet and recover the overpayment in the next pay run rather than unwinding the payment.'
         WHEN 'CANCELLATION_RACED_WITH_PROVIDER_SUBMIT' THEN 'Cancellation could not proceed because provider submission had already started.'
         WHEN 'WEBHOOK_UNMATCHED_REVIEW_REQUIRED' THEN 'A verified provider webhook was received but could not be matched safely to a payment.'
         ELSE 'Open Banking Pay for details.'
@@ -76993,7 +77314,7 @@ BEGIN
       WHEN 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME' THEN 'Provider response missing'
       WHEN 'PROVIDER_SUBMISSION_MALFORMED_RESPONSE' THEN 'Provider response unusable'
       WHEN 'PROVIDER_SUBMISSION_ATTEMPTED_NO_EXTERNAL_ID' THEN 'Provider acceptance evidence missing'
-      WHEN 'PROVIDER_SUBMISSION_REJECTED' THEN 'Provider rejected payment'
+      WHEN 'PROVIDER_SUBMISSION_REJECTED' THEN 'Provider outcome needs review'
       WHEN 'PROVIDER_SUBMISSION_BLOCKED_PRE_CALL' THEN 'Provider was not called'
       WHEN 'PROVIDER_SUBMISSION_ACCEPTED' THEN 'Provider acceptance evidence present'
       ELSE 'Provider submission needs review'
@@ -77097,7 +77418,6 @@ BEGIN
           )::text;
 END;
 $function$;
-
 
 
 
@@ -84136,7 +84456,19 @@ DECLARE
   v_alert_version bigint := 0;
   v_overview_version bigint := 0;
   v_last_status_hash text := NULL::text;
-  v_last_alert_hash text := NULL::text;
+  v_retry_plan_json jsonb := '{}'::jsonb;
+  v_retry_eligible_count integer := 0;
+  v_retry_ineligible_count integer := 0;
+  v_retry_in_progress boolean := false;
+  v_retry_already_in_progress boolean := false;
+  v_retry_operation_id uuid := NULL::uuid;
+  v_retry_operation_status text := NULL::text;
+  v_retry_eligible_scope_json jsonb := '{}'::jsonb;
+  v_retry_ineligible_summary_json jsonb := '[]'::jsonb;
+  v_retry_summary_label text := NULL::text;
+  v_retry_summary_description text := NULL::text;
+  v_retry_button_label text := 'Retry unsent payments';
+  v_retry_button_disabled_reason text := NULL::text;
 BEGIN
   IF p_pay_batch_id IS NULL THEN
     RAISE EXCEPTION 'pay_batch_id is required';
@@ -84542,14 +84874,90 @@ BEGIN
     WHEN 'SCHEDULED_LOCAL_NOT_SENT' THEN 'Scheduled — not sent to bank yet'
     WHEN 'PARTIALLY_CANCELLED_BEFORE_BANK_SUBMISSION' THEN 'Partially cancelled before bank submission'
     WHEN 'CANCELLED_BEFORE_BANK_SUBMISSION' THEN 'Cancelled before bank submission'
-    WHEN 'PROVIDER_OUTAGE_RETRY_LATER' THEN 'Bank unavailable — retry later'
+    WHEN 'PROVIDER_OUTAGE_RETRY_LATER' THEN 'Bank unavailable — unsent payments can be retried'
     WHEN 'PROVIDER_OUTCOME_UNKNOWN' THEN 'Provider outcome unknown — check provider'
     WHEN 'PROVIDER_CANCELLED_NO_MONEY' THEN 'Failed — not paid'
     WHEN 'PROVIDER_FAILED_NO_MONEY' THEN 'Failed — not paid'
     WHEN 'FINANCIALS_REWOUND' THEN 'Financials rewound'
-    WHEN 'PAID_OR_SETTLED' THEN CASE WHEN v_payment_recommended_action = 'AMEND_AND_RECOVER_OVERPAYMENT' THEN 'Recover overpayment' ELSE 'Paid' END
+    WHEN 'PAID_OR_SETTLED' THEN CASE WHEN v_payment_recommended_action = 'AMEND_AND_RECOVER_OVERPAYMENT' THEN 'Recover overpayment in next pay run' ELSE 'Paid' END
     ELSE INITCAP(REPLACE(LOWER(COALESCE(v_payment_lifecycle_state, 'unknown')), '_', ' '))
   END;
+
+  IF COALESCE(v_payment_recommended_action, '') = 'RETRY_PROVIDER_LATER'
+     OR COALESCE(v_payment_lifecycle_state, '') = 'PROVIDER_OUTAGE_RETRY_LATER'
+     OR UPPER(BTRIM(COALESCE(v_active_operation_type, ''))) = 'PAYMENT_RETRY_BLOCKED_FUNDS' THEN
+    BEGIN
+      v_retry_plan_json := COALESCE(public.pay_payment_correction_plan(
+        p_pay_batch_id,
+        jsonb_build_object(
+          'scope_type', 'BATCH',
+          'source_context', 'PAY_BATCH_EXECUTION_SUMMARY',
+          'requested_action', 'RETRY_PROVIDER_LATER'
+        ),
+        p_actor_user_id
+      ), '{}'::jsonb);
+    EXCEPTION WHEN OTHERS THEN
+      v_retry_plan_json := jsonb_build_object(
+        'ok', false,
+        'retry_eligible_count', 0,
+        'retry_ineligible_count', 0,
+        'retry_eligible_scope_json', '{}'::jsonb,
+        'retry_ineligible_summary_json', jsonb_build_array(jsonb_build_object(
+          'code', 'RETRY_UNSENT_PLAN_UNAVAILABLE'
+        )),
+        'retry_in_progress', false,
+        'retry_already_in_progress', false,
+        'retry_button_disabled_reason', 'Retry status could not be checked'
+      );
+    END;
+
+    v_retry_eligible_count := CASE
+      WHEN COALESCE(v_retry_plan_json->>'retry_eligible_count', '') ~ '^\d+$' THEN (v_retry_plan_json->>'retry_eligible_count')::integer
+      ELSE 0
+    END;
+    v_retry_ineligible_count := CASE
+      WHEN COALESCE(v_retry_plan_json->>'retry_ineligible_count', '') ~ '^\d+$' THEN (v_retry_plan_json->>'retry_ineligible_count')::integer
+      ELSE 0
+    END;
+    v_retry_eligible_scope_json := COALESCE(v_retry_plan_json->'retry_eligible_scope_json', '{}'::jsonb);
+    v_retry_ineligible_summary_json := COALESCE(v_retry_plan_json->'retry_ineligible_summary_json', '[]'::jsonb);
+
+    IF NULLIF(BTRIM(COALESCE(v_retry_plan_json->>'retry_operation_id', '')), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
+      v_retry_operation_id := (v_retry_plan_json->>'retry_operation_id')::uuid;
+    END IF;
+
+    v_retry_operation_status := NULLIF(BTRIM(COALESCE(v_retry_plan_json->>'retry_operation_status', '')), '');
+    v_retry_in_progress := COALESCE(NULLIF(v_retry_plan_json->>'retry_in_progress', '')::boolean, false);
+    v_retry_already_in_progress := COALESCE(NULLIF(v_retry_plan_json->>'retry_already_in_progress', '')::boolean, v_retry_in_progress, false);
+    v_retry_button_disabled_reason := NULLIF(BTRIM(COALESCE(v_retry_plan_json->>'retry_button_disabled_reason', '')), '');
+  END IF;
+
+  IF UPPER(BTRIM(COALESCE(v_active_operation_type, ''))) = 'PAYMENT_RETRY_BLOCKED_FUNDS'
+     AND UPPER(BTRIM(COALESCE(v_active_operation_status, ''))) NOT IN ('COMPLETE','COMPLETED','SUCCEEDED','SUCCESS','FAILED','FAILED_FINAL','CANCELLED','CANCELED') THEN
+    v_retry_in_progress := true;
+    v_retry_already_in_progress := true;
+    v_retry_operation_id := COALESCE(v_retry_operation_id, v_active_operation_id);
+    v_retry_operation_status := COALESCE(v_retry_operation_status, v_active_operation_status);
+  END IF;
+
+  IF COALESCE(v_retry_in_progress, false) THEN
+    v_retry_summary_label := 'Retrying unsent payments';
+    v_retry_summary_description := 'CloudTMS is retrying payments confirmed as not sent. You can continue using CloudTMS while this runs.';
+    v_retry_button_disabled_reason := 'Retry in progress';
+  ELSIF COALESCE(v_retry_eligible_count, 0) > 0 THEN
+    v_retry_summary_label := 'Bank unavailable — unsent payments can be retried';
+    v_retry_summary_description := COALESCE(v_retry_eligible_count, 0)::text || ' payments were not sent to the bank/provider and can be retried.';
+    v_retry_button_disabled_reason := NULL::text;
+  ELSIF UPPER(BTRIM(COALESCE(v_retry_operation_status, ''))) IN ('COMPLETE','COMPLETED','SUCCEEDED','SUCCESS') THEN
+    v_retry_summary_label := 'Retry complete';
+    v_retry_summary_description := 'Retry complete.';
+    v_retry_button_disabled_reason := NULL::text;
+  ELSIF COALESCE(v_payment_recommended_action, '') = 'RETRY_PROVIDER_LATER'
+     OR COALESCE(v_payment_lifecycle_state, '') = 'PROVIDER_OUTAGE_RETRY_LATER' THEN
+    v_retry_summary_label := 'No unsent payments available to retry';
+    v_retry_summary_description := 'No unsent payments are currently available to retry.';
+    v_retry_button_disabled_reason := 'No unsent payments available to retry';
+  END IF;
 
   SELECT
     COALESCE(batch_signal.version, 0),
@@ -84913,13 +85321,35 @@ BEGIN
     'last_alert_hash',
     v_last_alert_hash,
     'alert_candidate_is_success_only',
-    v_payment_lifecycle_state = 'PAID_OR_SETTLED' AND COALESCE(v_payment_recommended_action, '') <> 'AMEND_AND_RECOVER_OVERPAYMENT'
+    v_payment_lifecycle_state = 'PAID_OR_SETTLED' AND COALESCE(v_payment_recommended_action, '') <> 'AMEND_AND_RECOVER_OVERPAYMENT',
+    'retry_eligible_count',
+    COALESCE(v_retry_eligible_count, 0),
+    'retry_ineligible_count',
+    COALESCE(v_retry_ineligible_count, 0),
+    'retry_in_progress',
+    COALESCE(v_retry_in_progress, false),
+    'retry_already_in_progress',
+    COALESCE(v_retry_already_in_progress, false),
+    'retry_operation_id',
+    CASE WHEN v_retry_operation_id IS NULL THEN NULL ELSE v_retry_operation_id::text END,
+    'retry_operation_status',
+    v_retry_operation_status,
+    'retry_eligible_scope_json',
+    COALESCE(v_retry_eligible_scope_json, '{}'::jsonb),
+    'retry_ineligible_summary_json',
+    COALESCE(v_retry_ineligible_summary_json, '[]'::jsonb),
+    'retry_summary_label',
+    v_retry_summary_label,
+    'retry_summary_description',
+    v_retry_summary_description,
+    'retry_button_label',
+    v_retry_button_label,
+    'retry_button_disabled_reason',
+    v_retry_button_disabled_reason
   )
   );
 END;
 $function$;
-
-
 
 
 
@@ -85878,6 +86308,13 @@ DECLARE
   v_freshness_status text := NULL::text;
   v_freshness_result_hash_used text := NULL::text;
   v_freshness_scope_hash_used text := NULL::text;
+  v_retry_eligible_count integer := 0;
+  v_retry_ineligible_count integer := 0;
+  v_retry_scope_signature text := NULL::text;
+  v_retry_eligible_scope_json jsonb := '{}'::jsonb;
+  v_retry_ineligible_summary_json jsonb := '[]'::jsonb;
+  v_retry_skipped_count integer := 0;
+  v_retry_skipped_reasons_json jsonb := '[]'::jsonb;
 BEGIN
   IF p_operation_id IS NULL THEN
     RAISE EXCEPTION 'operation_id is required';
@@ -86608,6 +87045,184 @@ BEGIN
        AND count(*) FILTER (WHERE round(greatest(coalesce(item_group.amount, 0), 0), 2) > 0) > 0;
   END IF;
 
+  CREATE TEMPORARY TABLE IF NOT EXISTS pg_temp.tmp_retry_unsent_ineligible_groups (
+    pay_channel text NOT NULL,
+    transfer_group_key text NOT NULL,
+    reason_code text NOT NULL,
+    reason_detail jsonb NOT NULL,
+    PRIMARY KEY (pay_channel, transfer_group_key)
+  ) ON COMMIT DROP;
+  TRUNCATE TABLE pg_temp.tmp_retry_unsent_ineligible_groups;
+
+  IF COALESCE(p_retry_blocked_funds, false) IS TRUE THEN
+    INSERT INTO pg_temp.tmp_retry_unsent_ineligible_groups (
+      pay_channel,
+      transfer_group_key,
+      reason_code,
+      reason_detail
+    )
+    SELECT
+      transfer_group.pay_channel,
+      transfer_group.transfer_group_key,
+      CASE
+        WHEN transfer_group.status <> 'PENDING' THEN 'PAYMENT_SCOPE_NOT_RETRYABLE_INVALID_OR_BLOCKED'
+        WHEN EXISTS (
+          SELECT 1
+          FROM public.pay_bank_transfers AS existing_transfer
+          WHERE existing_transfer.pay_batch_id = p_pay_batch_id
+            AND existing_transfer.pay_channel = transfer_group.pay_channel
+            AND existing_transfer.transfer_group_key = transfer_group.transfer_group_key
+            AND (
+              existing_transfer.completed_at_utc IS NOT NULL
+              OR NULLIF(BTRIM(COALESCE(existing_transfer.rail_tx_id, '')), '') IS NOT NULL
+              OR upper(BTRIM(COALESCE(existing_transfer.status, ''))) IN ('COMPLETED', 'PAID', 'SETTLED', 'CANCELLED', 'CANCELED', 'DECLINED', 'REJECTED')
+              OR EXISTS (
+                SELECT 1
+                FROM public.pay_bank_transfer_events AS provider_event
+                WHERE provider_event.pay_bank_transfer_id = existing_transfer.id
+                  AND upper(BTRIM(COALESCE(provider_event.provider_event_transport, provider_event.event_source, ''))) IN ('PROVIDER_RESPONSE', 'PROVIDER_WEBHOOK', 'PROVIDER_POLL', 'FAILED_WEBHOOK_REPLAY', 'MANUAL_CONFIRM')
+                  AND upper(BTRIM(COALESCE(provider_event.mapping_status, ''))) = 'MATCHED'
+              )
+            )
+        ) THEN 'PROVIDER_REQUEST_OR_OUTCOME_ALREADY_PRESENT'
+        WHEN EXISTS (
+          SELECT 1
+          FROM public.pay_payment_correction_requests AS open_correction
+          WHERE open_correction.pay_batch_id = p_pay_batch_id
+            AND upper(BTRIM(COALESCE(open_correction.status, ''))) NOT IN ('CANCELLED', 'CANCELED', 'COMPLETED', 'COMPLETE', 'APPLIED', 'FAILED_FINAL')
+            AND upper(BTRIM(COALESCE(open_correction.correction_kind, ''))) IN ('PRE_BANK_CANCEL', 'NO_MONEY_UNWIND', 'MANUAL_EVIDENCE_NO_MONEY')
+        ) THEN 'CORRECTION_ALREADY_RUNNING_FOR_BATCH'
+        ELSE 'RETRY_UNSENT_SCOPE_NOT_CONFIRMED'
+      END AS reason_code,
+      jsonb_build_object(
+        'pay_channel', transfer_group.pay_channel,
+        'transfer_group_key', transfer_group.transfer_group_key,
+        'status', transfer_group.status,
+        'amount', transfer_group.amount,
+        'candidate_ids', COALESCE(transfer_group.candidate_ids_json, '[]'::jsonb),
+        'pay_batch_item_ids', COALESCE(transfer_group.pay_batch_item_ids_json, '[]'::jsonb)
+      ) AS reason_detail
+    FROM pg_temp.tmp_operation_transfer_groups AS transfer_group
+    WHERE transfer_group.status <> 'PENDING'
+       OR EXISTS (
+          SELECT 1
+          FROM public.pay_bank_transfers AS existing_transfer
+          WHERE existing_transfer.pay_batch_id = p_pay_batch_id
+            AND existing_transfer.pay_channel = transfer_group.pay_channel
+            AND existing_transfer.transfer_group_key = transfer_group.transfer_group_key
+            AND (
+              existing_transfer.completed_at_utc IS NOT NULL
+              OR NULLIF(BTRIM(COALESCE(existing_transfer.rail_tx_id, '')), '') IS NOT NULL
+              OR upper(BTRIM(COALESCE(existing_transfer.status, ''))) IN ('COMPLETED', 'PAID', 'SETTLED', 'CANCELLED', 'CANCELED', 'DECLINED', 'REJECTED')
+              OR EXISTS (
+                SELECT 1
+                FROM public.pay_bank_transfer_events AS provider_event
+                WHERE provider_event.pay_bank_transfer_id = existing_transfer.id
+                  AND upper(BTRIM(COALESCE(provider_event.provider_event_transport, provider_event.event_source, ''))) IN ('PROVIDER_RESPONSE', 'PROVIDER_WEBHOOK', 'PROVIDER_POLL', 'FAILED_WEBHOOK_REPLAY', 'MANUAL_CONFIRM')
+                  AND upper(BTRIM(COALESCE(provider_event.mapping_status, ''))) = 'MATCHED'
+              )
+            )
+       )
+       OR EXISTS (
+          SELECT 1
+          FROM public.pay_payment_correction_requests AS open_correction
+          WHERE open_correction.pay_batch_id = p_pay_batch_id
+            AND upper(BTRIM(COALESCE(open_correction.status, ''))) NOT IN ('CANCELLED', 'CANCELED', 'COMPLETED', 'COMPLETE', 'APPLIED', 'FAILED_FINAL')
+            AND upper(BTRIM(COALESCE(open_correction.correction_kind, ''))) IN ('PRE_BANK_CANCEL', 'NO_MONEY_UNWIND', 'MANUAL_EVIDENCE_NO_MONEY')
+       )
+    ON CONFLICT (pay_channel, transfer_group_key) DO UPDATE
+    SET reason_code = EXCLUDED.reason_code,
+        reason_detail = EXCLUDED.reason_detail;
+
+    DELETE FROM pg_temp.tmp_operation_transfer_item_groups AS item_group
+    USING pg_temp.tmp_retry_unsent_ineligible_groups AS ineligible_group
+    WHERE item_group.pay_channel = ineligible_group.pay_channel
+      AND item_group.transfer_group_key = ineligible_group.transfer_group_key;
+
+    DELETE FROM pg_temp.tmp_operation_transfer_groups AS transfer_group
+    USING pg_temp.tmp_retry_unsent_ineligible_groups AS ineligible_group
+    WHERE transfer_group.pay_channel = ineligible_group.pay_channel
+      AND transfer_group.transfer_group_key = ineligible_group.transfer_group_key;
+
+    SELECT COUNT(*)::integer,
+           COALESCE(jsonb_agg(jsonb_build_object(
+             'pay_channel', ineligible_group.pay_channel,
+             'transfer_group_key', ineligible_group.transfer_group_key,
+             'reason_code', ineligible_group.reason_code,
+             'reason_detail', ineligible_group.reason_detail
+           ) ORDER BY ineligible_group.pay_channel, ineligible_group.transfer_group_key), '[]'::jsonb)
+    INTO v_retry_ineligible_count,
+         v_retry_ineligible_summary_json
+    FROM pg_temp.tmp_retry_unsent_ineligible_groups AS ineligible_group;
+
+    SELECT COUNT(*)::integer,
+           COALESCE(jsonb_agg(DISTINCT to_jsonb(ineligible_group.reason_code) ORDER BY to_jsonb(ineligible_group.reason_code)), '[]'::jsonb)
+    INTO v_retry_skipped_count,
+         v_retry_skipped_reasons_json
+    FROM pg_temp.tmp_retry_unsent_ineligible_groups AS ineligible_group;
+
+    SELECT COUNT(*)::integer,
+           md5(jsonb_build_object(
+             'operation_id', p_operation_id::text,
+             'pay_batch_id', p_pay_batch_id::text,
+             'pay_channel_scope', v_scope,
+             'retry_unsent_transfer_groups', COALESCE(jsonb_agg(jsonb_build_object(
+               'pay_channel', transfer_group.pay_channel,
+               'transfer_group_key', transfer_group.transfer_group_key,
+               'amount', transfer_group.amount,
+               'candidate_ids', transfer_group.candidate_ids_json,
+               'pay_batch_item_ids', transfer_group.pay_batch_item_ids_json
+             ) ORDER BY transfer_group.pay_channel, transfer_group.transfer_group_key), '[]'::jsonb)
+           )::text),
+           jsonb_build_object(
+             'scope_type', 'RETRY_UNSENT_PAYMENTS',
+             'pay_batch_id', p_pay_batch_id::text,
+             'operation_id', p_operation_id::text,
+             'pay_channel_scope', v_scope,
+             'transfer_groups', COALESCE(jsonb_agg(jsonb_build_object(
+               'pay_channel', transfer_group.pay_channel,
+               'transfer_group_key', transfer_group.transfer_group_key,
+               'amount', transfer_group.amount,
+               'currency', transfer_group.currency,
+               'candidate_ids', transfer_group.candidate_ids_json,
+               'pay_batch_item_ids', transfer_group.pay_batch_item_ids_json
+             ) ORDER BY transfer_group.pay_channel, transfer_group.transfer_group_key), '[]'::jsonb)
+           )
+    INTO v_retry_eligible_count,
+         v_retry_scope_signature,
+         v_retry_eligible_scope_json
+    FROM pg_temp.tmp_operation_transfer_groups AS transfer_group;
+
+    UPDATE public.banking_pay_operations AS retry_operation_update
+    SET input_json = COALESCE(retry_operation_update.input_json, '{}'::jsonb) || jsonb_build_object(
+          'retry_unsent_payments', true,
+          'retry_scope_signature', v_retry_scope_signature,
+          'retry_eligible_count', COALESCE(v_retry_eligible_count, 0),
+          'retry_ineligible_count', COALESCE(v_retry_ineligible_count, 0)
+        ),
+        progress_json = COALESCE(retry_operation_update.progress_json, '{}'::jsonb) || jsonb_build_object(
+          'retry_unsent_payments', true,
+          'retry_scope_signature', v_retry_scope_signature,
+          'retry_eligible_count', COALESCE(v_retry_eligible_count, 0),
+          'retry_ineligible_count', COALESCE(v_retry_ineligible_count, 0),
+          'retry_ineligible_summary_json', COALESCE(v_retry_ineligible_summary_json, '[]'::jsonb),
+          'retry_skipped_count', COALESCE(v_retry_skipped_count, 0),
+          'retry_skipped_reasons_json', COALESCE(v_retry_skipped_reasons_json, '[]'::jsonb),
+          'visible_label', 'Retry unsent payments',
+          'status_label', 'Retrying unsent payments'
+        ),
+        updated_at_utc = v_now
+    WHERE retry_operation_update.id = p_operation_id;
+  ELSE
+    v_retry_eligible_count := 0;
+    v_retry_ineligible_count := 0;
+    v_retry_scope_signature := NULL::text;
+    v_retry_eligible_scope_json := '{}'::jsonb;
+    v_retry_ineligible_summary_json := '[]'::jsonb;
+    v_retry_skipped_count := 0;
+    v_retry_skipped_reasons_json := '[]'::jsonb;
+  END IF;
+
   WITH incoming_scope AS (
     SELECT
       transfer_group.pay_channel,
@@ -86883,6 +87498,15 @@ BEGIN
       'pay_batch_id', p_pay_batch_id::text,
       'pay_channel_scope', v_scope,
       'group_count', 0,
+      'retry_eligible_count', COALESCE(v_retry_eligible_count, 0),
+      'retry_ineligible_count', COALESCE(v_retry_ineligible_count, 0),
+      'retry_eligible_scope_json', COALESCE(v_retry_eligible_scope_json, '{}'::jsonb),
+      'retry_ineligible_summary_json', COALESCE(v_retry_ineligible_summary_json, '[]'::jsonb),
+      'retry_scope_signature', v_retry_scope_signature,
+      'retry_skipped_count', COALESCE(v_retry_skipped_count, 0),
+      'retry_skipped_reasons_json', COALESCE(v_retry_skipped_reasons_json, '[]'::jsonb),
+      'visible_label', CASE WHEN COALESCE(p_retry_blocked_funds, false) THEN 'Retry unsent payments' ELSE NULL::text END,
+      'status_label', CASE WHEN COALESCE(p_retry_blocked_funds, false) THEN 'Retrying unsent payments' ELSE NULL::text END,
       'total_amount', 0,
       'created_count', 0,
       'reused_count', 0,
@@ -87134,6 +87758,15 @@ BEGIN
       'pay_batch_id', p_pay_batch_id::text,
       'pay_channel_scope', v_scope,
       'group_count', 0,
+      'retry_eligible_count', COALESCE(v_retry_eligible_count, 0),
+      'retry_ineligible_count', COALESCE(v_retry_ineligible_count, 0),
+      'retry_eligible_scope_json', COALESCE(v_retry_eligible_scope_json, '{}'::jsonb),
+      'retry_ineligible_summary_json', COALESCE(v_retry_ineligible_summary_json, '[]'::jsonb),
+      'retry_scope_signature', v_retry_scope_signature,
+      'retry_skipped_count', COALESCE(v_retry_skipped_count, 0),
+      'retry_skipped_reasons_json', COALESCE(v_retry_skipped_reasons_json, '[]'::jsonb),
+      'visible_label', CASE WHEN COALESCE(p_retry_blocked_funds, false) THEN 'Retry unsent payments' ELSE NULL::text END,
+      'status_label', CASE WHEN COALESCE(p_retry_blocked_funds, false) THEN 'Retrying unsent payments' ELSE NULL::text END,
       'total_amount', 0,
       'created_count', 0,
       'reused_count', 0,
@@ -87275,6 +87908,15 @@ BEGIN
     'pay_batch_id', p_pay_batch_id::text,
     'pay_channel_scope', v_scope,
     'group_count', COALESCE(v_group_count, 0),
+    'retry_eligible_count', CASE WHEN COALESCE(p_retry_blocked_funds, false) THEN COALESCE(v_retry_eligible_count, 0) ELSE 0 END,
+    'retry_ineligible_count', CASE WHEN COALESCE(p_retry_blocked_funds, false) THEN COALESCE(v_retry_ineligible_count, 0) ELSE 0 END,
+    'retry_eligible_scope_json', CASE WHEN COALESCE(p_retry_blocked_funds, false) THEN COALESCE(v_retry_eligible_scope_json, '{}'::jsonb) ELSE '{}'::jsonb END,
+    'retry_ineligible_summary_json', CASE WHEN COALESCE(p_retry_blocked_funds, false) THEN COALESCE(v_retry_ineligible_summary_json, '[]'::jsonb) ELSE '[]'::jsonb END,
+    'retry_scope_signature', CASE WHEN COALESCE(p_retry_blocked_funds, false) THEN v_retry_scope_signature ELSE NULL::text END,
+    'retry_skipped_count', CASE WHEN COALESCE(p_retry_blocked_funds, false) THEN COALESCE(v_retry_skipped_count, 0) ELSE 0 END,
+    'retry_skipped_reasons_json', CASE WHEN COALESCE(p_retry_blocked_funds, false) THEN COALESCE(v_retry_skipped_reasons_json, '[]'::jsonb) ELSE '[]'::jsonb END,
+    'visible_label', CASE WHEN COALESCE(p_retry_blocked_funds, false) THEN 'Retry unsent payments' ELSE NULL::text END,
+    'status_label', CASE WHEN COALESCE(p_retry_blocked_funds, false) THEN 'Retrying unsent payments' ELSE NULL::text END,
     'total_amount', COALESCE(v_total_amount, 0),
     'created_count', COALESCE(v_created_count, 0),
     'reused_count', COALESCE(v_reused_count, 0),
@@ -92066,6 +92708,7 @@ begin
     'items',
     'item_breakdowns',
     'transfers',
+    'current_payment_status',
     'finance_case_groups',
     'remittances',
     'communications',
@@ -92082,6 +92725,7 @@ begin
                 'items',
                 'item_breakdowns',
                 'transfers',
+                'current_payment_status',
                 'finance_case_groups',
                 'remittances',
                 'communications',
@@ -92247,12 +92891,12 @@ begin
             WHEN 'LOCAL_PREPARED_NOT_SENT' THEN 'Scheduled — not sent to bank yet'
             WHEN 'SCHEDULED_LOCAL_NOT_SENT' THEN 'Scheduled — not sent to bank yet'
             WHEN 'PROVIDER_SUBMITTED_PENDING' THEN 'Sent to bank — pending outcome'
-            WHEN 'PROVIDER_OUTAGE_RETRY_LATER' THEN 'Bank unavailable — retry later'
+            WHEN 'PROVIDER_OUTAGE_RETRY_LATER' THEN 'Bank unavailable — retry available'
             WHEN 'PROVIDER_OUTCOME_UNKNOWN' THEN 'Provider outcome unknown — check provider'
             WHEN 'PROVIDER_CANCELLED_NO_MONEY' THEN 'Failed — not paid'
             WHEN 'PROVIDER_FAILED_NO_MONEY' THEN 'Failed — not paid'
             WHEN 'PAID_OR_SETTLED' THEN CASE
-              WHEN candidate_payment_diagnostic.diagnostic_json->>'recommended_action' = 'AMEND_AND_RECOVER_OVERPAYMENT' THEN 'Recover overpayment'
+              WHEN candidate_payment_diagnostic.diagnostic_json->>'recommended_action' = 'AMEND_AND_RECOVER_OVERPAYMENT' THEN 'Recover overpayment in next pay run'
               ELSE 'Paid'
             END
             WHEN 'CANCELLED_BEFORE_BANK_SUBMISSION' THEN 'Cancelled before bank submission'
@@ -92261,6 +92905,32 @@ begin
             ELSE COALESCE(NULLIF(candidate_payment_diagnostic.diagnostic_json->>'payment_lifecycle_label', ''), initcap(replace(lower(COALESCE(candidate_payment_diagnostic.diagnostic_json->>'payment_lifecycle_state', 'unknown')), '_', ' ')))
           END,
           'recommended_action', candidate_payment_diagnostic.diagnostic_json->>'recommended_action',
+          'row_action', CASE
+            WHEN candidate_payment_diagnostic.diagnostic_json->>'recommended_action' = 'RETRY_PROVIDER_LATER' THEN 'OPEN_RETRY_SUMMARY'
+            ELSE candidate_payment_diagnostic.diagnostic_json->>'recommended_action'
+          END,
+          'row_action_label', CASE
+            WHEN candidate_payment_diagnostic.diagnostic_json->>'recommended_action' = 'RETRY_PROVIDER_LATER' THEN 'Open retry summary'
+            WHEN candidate_payment_diagnostic.diagnostic_json->>'recommended_action' = 'AMEND_AND_RECOVER_OVERPAYMENT' THEN 'Recover overpayment in next pay run'
+            WHEN candidate_payment_diagnostic.diagnostic_json->>'recommended_action' = 'NO_MONEY_UNWIND_AND_RECALCULATE' THEN 'Rewind financials'
+            WHEN candidate_payment_diagnostic.diagnostic_json->>'recommended_action' = 'CHECK_PROVIDER_STATUS' THEN 'Check provider status'
+            WHEN candidate_payment_diagnostic.diagnostic_json->>'recommended_action' = 'PRE_PROVIDER_CANCEL_AND_RECALCULATE' THEN 'Cancel this payment and recalculate'
+            ELSE 'View details'
+          END,
+          'selectable', CASE
+            WHEN candidate_payment_diagnostic.diagnostic_json->>'recommended_action' IN (
+              'PRE_PROVIDER_CANCEL_AND_RECALCULATE',
+              'NO_MONEY_UNWIND_AND_RECALCULATE',
+              'CHECK_PROVIDER_STATUS',
+              'AMEND_AND_RECOVER_OVERPAYMENT'
+            ) THEN true
+            ELSE false
+          END,
+          'selection_disabled_reason', CASE
+            WHEN candidate_payment_diagnostic.diagnostic_json->>'recommended_action' = 'RETRY_PROVIDER_LATER' THEN 'Use Overview to retry unsent payments.'
+            WHEN NULLIF(BTRIM(COALESCE(candidate_payment_diagnostic.diagnostic_json->>'recommended_action', '')), '') IS NULL THEN 'No row action available.'
+            ELSE NULL::text
+          END,
           'row_cancel_available', lower(btrim(COALESCE(candidate_payment_diagnostic.diagnostic_json->>'row_cancel_available', 'false'))) IN ('true','1','yes','y','on'),
           'can_no_money_unwind', lower(btrim(COALESCE(candidate_payment_diagnostic.diagnostic_json->>'can_no_money_unwind', 'false'))) IN ('true','1','yes','y','on'),
           'can_recover_overpayment', lower(btrim(COALESCE(candidate_payment_diagnostic.diagnostic_json->>'can_recover_overpayment', 'false'))) IN ('true','1','yes','y','on'),
@@ -92366,18 +93036,19 @@ begin
           'frozen_component_key_value', page_rows.frozen_component_key_value,
           'operation_source_key', page_rows.operation_source_key,
           'created_at', page_rows.created_at,
-          'updated_at', page_rows.updated_at,
+          'updated_at', page_rows.updated_at
+        ) || jsonb_build_object(
           'payment_lifecycle_state', item_payment_diagnostic.diagnostic_json->>'payment_lifecycle_state',
           'payment_lifecycle_label', CASE COALESCE(item_payment_diagnostic.diagnostic_json->>'payment_lifecycle_state', '')
             WHEN 'LOCAL_PREPARED_NOT_SENT' THEN 'Scheduled — not sent to bank yet'
             WHEN 'SCHEDULED_LOCAL_NOT_SENT' THEN 'Scheduled — not sent to bank yet'
             WHEN 'PROVIDER_SUBMITTED_PENDING' THEN 'Sent to bank — pending outcome'
-            WHEN 'PROVIDER_OUTAGE_RETRY_LATER' THEN 'Bank unavailable — retry later'
+            WHEN 'PROVIDER_OUTAGE_RETRY_LATER' THEN 'Bank unavailable — retry available'
             WHEN 'PROVIDER_OUTCOME_UNKNOWN' THEN 'Provider outcome unknown — check provider'
             WHEN 'PROVIDER_CANCELLED_NO_MONEY' THEN 'Failed — not paid'
             WHEN 'PROVIDER_FAILED_NO_MONEY' THEN 'Failed — not paid'
             WHEN 'PAID_OR_SETTLED' THEN CASE
-              WHEN item_payment_diagnostic.diagnostic_json->>'recommended_action' = 'AMEND_AND_RECOVER_OVERPAYMENT' THEN 'Recover overpayment'
+              WHEN item_payment_diagnostic.diagnostic_json->>'recommended_action' = 'AMEND_AND_RECOVER_OVERPAYMENT' THEN 'Recover overpayment in next pay run'
               ELSE 'Paid'
             END
             WHEN 'CANCELLED_BEFORE_BANK_SUBMISSION' THEN 'Cancelled before bank submission'
@@ -92386,6 +93057,32 @@ begin
             ELSE COALESCE(NULLIF(item_payment_diagnostic.diagnostic_json->>'payment_lifecycle_label', ''), initcap(replace(lower(COALESCE(item_payment_diagnostic.diagnostic_json->>'payment_lifecycle_state', 'unknown')), '_', ' ')))
           END,
           'recommended_action', item_payment_diagnostic.diagnostic_json->>'recommended_action',
+          'row_action', CASE
+            WHEN item_payment_diagnostic.diagnostic_json->>'recommended_action' = 'RETRY_PROVIDER_LATER' THEN 'OPEN_RETRY_SUMMARY'
+            ELSE item_payment_diagnostic.diagnostic_json->>'recommended_action'
+          END,
+          'row_action_label', CASE
+            WHEN item_payment_diagnostic.diagnostic_json->>'recommended_action' = 'RETRY_PROVIDER_LATER' THEN 'Open retry summary'
+            WHEN item_payment_diagnostic.diagnostic_json->>'recommended_action' = 'AMEND_AND_RECOVER_OVERPAYMENT' THEN 'Recover overpayment in next pay run'
+            WHEN item_payment_diagnostic.diagnostic_json->>'recommended_action' = 'NO_MONEY_UNWIND_AND_RECALCULATE' THEN 'Rewind financials'
+            WHEN item_payment_diagnostic.diagnostic_json->>'recommended_action' = 'CHECK_PROVIDER_STATUS' THEN 'Check provider status'
+            WHEN item_payment_diagnostic.diagnostic_json->>'recommended_action' = 'PRE_PROVIDER_CANCEL_AND_RECALCULATE' THEN 'Cancel this payment and recalculate'
+            ELSE 'View details'
+          END,
+          'selectable', CASE
+            WHEN item_payment_diagnostic.diagnostic_json->>'recommended_action' IN (
+              'PRE_PROVIDER_CANCEL_AND_RECALCULATE',
+              'NO_MONEY_UNWIND_AND_RECALCULATE',
+              'CHECK_PROVIDER_STATUS',
+              'AMEND_AND_RECOVER_OVERPAYMENT'
+            ) THEN true
+            ELSE false
+          END,
+          'selection_disabled_reason', CASE
+            WHEN item_payment_diagnostic.diagnostic_json->>'recommended_action' = 'RETRY_PROVIDER_LATER' THEN 'Use Overview to retry unsent payments.'
+            WHEN NULLIF(BTRIM(COALESCE(item_payment_diagnostic.diagnostic_json->>'recommended_action', '')), '') IS NULL THEN 'No row action available.'
+            ELSE NULL::text
+          END,
           'row_cancel_available', lower(btrim(COALESCE(item_payment_diagnostic.diagnostic_json->>'row_cancel_available', 'false'))) IN ('true','1','yes','y','on'),
           'can_no_money_unwind', lower(btrim(COALESCE(item_payment_diagnostic.diagnostic_json->>'can_no_money_unwind', 'false'))) IN ('true','1','yes','y','on'),
           'can_recover_overpayment', lower(btrim(COALESCE(item_payment_diagnostic.diagnostic_json->>'can_recover_overpayment', 'false'))) IN ('true','1','yes','y','on'),
@@ -92486,12 +93183,12 @@ begin
             WHEN 'LOCAL_PREPARED_NOT_SENT' THEN 'Scheduled — not sent to bank yet'
             WHEN 'SCHEDULED_LOCAL_NOT_SENT' THEN 'Scheduled — not sent to bank yet'
             WHEN 'PROVIDER_SUBMITTED_PENDING' THEN 'Sent to bank — pending outcome'
-            WHEN 'PROVIDER_OUTAGE_RETRY_LATER' THEN 'Bank unavailable — retry later'
+            WHEN 'PROVIDER_OUTAGE_RETRY_LATER' THEN 'Bank unavailable — retry available'
             WHEN 'PROVIDER_OUTCOME_UNKNOWN' THEN 'Provider outcome unknown — check provider'
             WHEN 'PROVIDER_CANCELLED_NO_MONEY' THEN 'Failed — not paid'
             WHEN 'PROVIDER_FAILED_NO_MONEY' THEN 'Failed — not paid'
             WHEN 'PAID_OR_SETTLED' THEN CASE
-              WHEN breakdown_payment_diagnostic.diagnostic_json->>'recommended_action' = 'AMEND_AND_RECOVER_OVERPAYMENT' THEN 'Recover overpayment'
+              WHEN breakdown_payment_diagnostic.diagnostic_json->>'recommended_action' = 'AMEND_AND_RECOVER_OVERPAYMENT' THEN 'Recover overpayment in next pay run'
               ELSE 'Paid'
             END
             WHEN 'CANCELLED_BEFORE_BANK_SUBMISSION' THEN 'Cancelled before bank submission'
@@ -92500,6 +93197,32 @@ begin
             ELSE COALESCE(NULLIF(breakdown_payment_diagnostic.diagnostic_json->>'payment_lifecycle_label', ''), initcap(replace(lower(COALESCE(breakdown_payment_diagnostic.diagnostic_json->>'payment_lifecycle_state', 'unknown')), '_', ' ')))
           END,
           'recommended_action', breakdown_payment_diagnostic.diagnostic_json->>'recommended_action',
+          'row_action', CASE
+            WHEN breakdown_payment_diagnostic.diagnostic_json->>'recommended_action' = 'RETRY_PROVIDER_LATER' THEN 'OPEN_RETRY_SUMMARY'
+            ELSE breakdown_payment_diagnostic.diagnostic_json->>'recommended_action'
+          END,
+          'row_action_label', CASE
+            WHEN breakdown_payment_diagnostic.diagnostic_json->>'recommended_action' = 'RETRY_PROVIDER_LATER' THEN 'Open retry summary'
+            WHEN breakdown_payment_diagnostic.diagnostic_json->>'recommended_action' = 'AMEND_AND_RECOVER_OVERPAYMENT' THEN 'Recover overpayment in next pay run'
+            WHEN breakdown_payment_diagnostic.diagnostic_json->>'recommended_action' = 'NO_MONEY_UNWIND_AND_RECALCULATE' THEN 'Rewind financials'
+            WHEN breakdown_payment_diagnostic.diagnostic_json->>'recommended_action' = 'CHECK_PROVIDER_STATUS' THEN 'Check provider status'
+            WHEN breakdown_payment_diagnostic.diagnostic_json->>'recommended_action' = 'PRE_PROVIDER_CANCEL_AND_RECALCULATE' THEN 'Cancel this payment and recalculate'
+            ELSE 'View details'
+          END,
+          'selectable', CASE
+            WHEN breakdown_payment_diagnostic.diagnostic_json->>'recommended_action' IN (
+              'PRE_PROVIDER_CANCEL_AND_RECALCULATE',
+              'NO_MONEY_UNWIND_AND_RECALCULATE',
+              'CHECK_PROVIDER_STATUS',
+              'AMEND_AND_RECOVER_OVERPAYMENT'
+            ) THEN true
+            ELSE false
+          END,
+          'selection_disabled_reason', CASE
+            WHEN breakdown_payment_diagnostic.diagnostic_json->>'recommended_action' = 'RETRY_PROVIDER_LATER' THEN 'Use Overview to retry unsent payments.'
+            WHEN NULLIF(BTRIM(COALESCE(breakdown_payment_diagnostic.diagnostic_json->>'recommended_action', '')), '') IS NULL THEN 'No row action available.'
+            ELSE NULL::text
+          END,
           'row_cancel_available', lower(btrim(COALESCE(breakdown_payment_diagnostic.diagnostic_json->>'row_cancel_available', 'false'))) IN ('true','1','yes','y','on'),
           'can_no_money_unwind', lower(btrim(COALESCE(breakdown_payment_diagnostic.diagnostic_json->>'can_no_money_unwind', 'false'))) IN ('true','1','yes','y','on'),
           'can_recover_overpayment', lower(btrim(COALESCE(breakdown_payment_diagnostic.diagnostic_json->>'can_recover_overpayment', 'false'))) IN ('true','1','yes','y','on'),
@@ -92543,7 +93266,7 @@ begin
       ) as diagnostic_json
     ) as breakdown_payment_diagnostic on true;
 
-  elsif v_section = 'transfers' then
+  elsif v_section in ('transfers', 'current_payment_status') then
     v_known_total_count := null;
 
     with page_rows as (
@@ -92705,12 +93428,12 @@ begin
             WHEN 'LOCAL_PREPARED_NOT_SENT' THEN 'Scheduled — not sent to bank yet'
             WHEN 'SCHEDULED_LOCAL_NOT_SENT' THEN 'Scheduled — not sent to bank yet'
             WHEN 'PROVIDER_SUBMITTED_PENDING' THEN 'Sent to bank — pending outcome'
-            WHEN 'PROVIDER_OUTAGE_RETRY_LATER' THEN 'Bank unavailable — retry later'
+            WHEN 'PROVIDER_OUTAGE_RETRY_LATER' THEN 'Bank unavailable — retry available'
             WHEN 'PROVIDER_OUTCOME_UNKNOWN' THEN 'Provider outcome unknown — check provider'
             WHEN 'PROVIDER_CANCELLED_NO_MONEY' THEN 'Failed — not paid'
             WHEN 'PROVIDER_FAILED_NO_MONEY' THEN 'Failed — not paid'
             WHEN 'PAID_OR_SETTLED' THEN CASE
-              WHEN transfer_payment_diagnostic.diagnostic_json->>'recommended_action' = 'AMEND_AND_RECOVER_OVERPAYMENT' THEN 'Recover overpayment'
+              WHEN transfer_payment_diagnostic.diagnostic_json->>'recommended_action' = 'AMEND_AND_RECOVER_OVERPAYMENT' THEN 'Recover overpayment in next pay run'
               ELSE 'Paid'
             END
             WHEN 'CANCELLED_BEFORE_BANK_SUBMISSION' THEN 'Cancelled before bank submission'
@@ -92719,6 +93442,32 @@ begin
             ELSE COALESCE(NULLIF(transfer_payment_diagnostic.diagnostic_json->>'payment_lifecycle_label', ''), initcap(replace(lower(COALESCE(transfer_payment_diagnostic.diagnostic_json->>'payment_lifecycle_state', 'unknown')), '_', ' ')))
           END,
           'recommended_action', transfer_payment_diagnostic.diagnostic_json->>'recommended_action',
+          'row_action', CASE
+            WHEN transfer_payment_diagnostic.diagnostic_json->>'recommended_action' = 'RETRY_PROVIDER_LATER' THEN 'OPEN_RETRY_SUMMARY'
+            ELSE transfer_payment_diagnostic.diagnostic_json->>'recommended_action'
+          END,
+          'row_action_label', CASE
+            WHEN transfer_payment_diagnostic.diagnostic_json->>'recommended_action' = 'RETRY_PROVIDER_LATER' THEN 'Open retry summary'
+            WHEN transfer_payment_diagnostic.diagnostic_json->>'recommended_action' = 'AMEND_AND_RECOVER_OVERPAYMENT' THEN 'Recover overpayment in next pay run'
+            WHEN transfer_payment_diagnostic.diagnostic_json->>'recommended_action' = 'NO_MONEY_UNWIND_AND_RECALCULATE' THEN 'Rewind financials'
+            WHEN transfer_payment_diagnostic.diagnostic_json->>'recommended_action' = 'CHECK_PROVIDER_STATUS' THEN 'Check provider status'
+            WHEN transfer_payment_diagnostic.diagnostic_json->>'recommended_action' = 'PRE_PROVIDER_CANCEL_AND_RECALCULATE' THEN 'Cancel this payment and recalculate'
+            ELSE 'View details'
+          END,
+          'selectable', CASE
+            WHEN transfer_payment_diagnostic.diagnostic_json->>'recommended_action' IN (
+              'PRE_PROVIDER_CANCEL_AND_RECALCULATE',
+              'NO_MONEY_UNWIND_AND_RECALCULATE',
+              'CHECK_PROVIDER_STATUS',
+              'AMEND_AND_RECOVER_OVERPAYMENT'
+            ) THEN true
+            ELSE false
+          END,
+          'selection_disabled_reason', CASE
+            WHEN transfer_payment_diagnostic.diagnostic_json->>'recommended_action' = 'RETRY_PROVIDER_LATER' THEN 'Use Overview to retry unsent payments.'
+            WHEN NULLIF(BTRIM(COALESCE(transfer_payment_diagnostic.diagnostic_json->>'recommended_action', '')), '') IS NULL THEN 'No row action available.'
+            ELSE NULL::text
+          END,
           'row_cancel_available', lower(btrim(COALESCE(transfer_payment_diagnostic.diagnostic_json->>'row_cancel_available', 'false'))) IN ('true','1','yes','y','on'),
           'can_no_money_unwind', lower(btrim(COALESCE(transfer_payment_diagnostic.diagnostic_json->>'can_no_money_unwind', 'false'))) IN ('true','1','yes','y','on'),
           'can_recover_overpayment', lower(btrim(COALESCE(transfer_payment_diagnostic.diagnostic_json->>'can_recover_overpayment', 'false'))) IN ('true','1','yes','y','on'),
@@ -93017,8 +93766,6 @@ begin
   );
 end;
 $$;
-
-
 
 
 
@@ -149149,7 +149896,6 @@ EXCEPTION
 END;
 $function$;
 
-
 CREATE OR REPLACE FUNCTION public.pay_payment_correction_plan(
   p_pay_batch_id uuid,
   p_selection_json jsonb,
@@ -149230,6 +149976,22 @@ DECLARE
   v_selected_mail_scope_json jsonb := '{}'::jsonb;
   v_mail_legacy_review_count integer := 0;
   v_mail_legacy_queued_review_count integer := 0;
+
+  v_retry_eligible_count integer := 0;
+  v_retry_ineligible_count integer := 0;
+  v_retry_eligible_scope_json jsonb := '{}'::jsonb;
+  v_retry_ineligible_summary_json jsonb := '[]'::jsonb;
+  v_retry_in_progress boolean := false;
+  v_retry_already_in_progress boolean := false;
+  v_retry_operation_id uuid := NULL::uuid;
+  v_retry_operation_status text := NULL::text;
+  v_retry_button_visible boolean := false;
+  v_retry_button_disabled_reason text := NULL::text;
+  v_retry_scope_signature text := NULL::text;
+  v_retry_status_label text := NULL::text;
+  v_retry_button_label text := NULL::text;
+  v_retry_running_label text := NULL::text;
+  v_recovery_action_label text := NULL::text;
 BEGIN
   v_subject_id := COALESCE(p_pay_batch_id::text, 'NO_BATCH_ID');
   v_scope_type := upper(nullif(btrim(COALESCE(p_selection_json->>'scope_type', '')), ''));
@@ -150700,6 +151462,92 @@ BEGIN
     AND NOT v_suggested_resolution_required
   );
 
+  v_retry_scope_signature := md5(jsonb_build_object(
+    'pay_batch_id', p_pay_batch_id::text,
+    'selection_hash', COALESCE(v_selected_selection_hash, 'NO_SELECTED_ITEMS'),
+    'classification', v_classification,
+    'recommended_action', v_recommended_action,
+    'pay_channel_scope', COALESCE(p_selection_json->>'pay_channel_scope', p_selection_json->>'pay_channel', 'ALL'),
+    'retry_contract', 'RETRY_UNSENT_PAYMENTS'
+  )::text);
+
+  v_retry_status_label := 'Bank unavailable — unsent payments can be retried';
+  v_retry_button_label := 'Retry unsent payments';
+  v_retry_running_label := 'Retrying unsent payments';
+  v_recovery_action_label := 'Recover overpayment in next pay run';
+
+  IF v_recommended_action = 'RETRY_PROVIDER_LATER'
+     AND v_classification = 'PROVIDER_OUTAGE_RETRY_LATER'
+     AND jsonb_array_length(v_hard_blockers) = 0
+     AND v_selected_item_count > 0 THEN
+    v_retry_eligible_count := CASE
+      WHEN COALESCE(v_selected_transfer_count, 0) > 0 THEN v_selected_transfer_count
+      WHEN COALESCE(v_selected_candidate_count, 0) > 0 THEN v_selected_candidate_count
+      ELSE v_selected_item_count
+    END;
+    v_retry_ineligible_count := 0;
+    v_retry_eligible_scope_json := jsonb_build_object(
+      'scope_type', COALESCE(NULLIF(btrim(COALESCE(p_selection_json->>'scope_type', '')), ''), 'BATCH'),
+      'pay_batch_id', p_pay_batch_id::text,
+      'retry_scope_signature', v_retry_scope_signature,
+      'pay_batch_item_ids', COALESCE(v_selected_mail_scope_json->'pay_batch_item_ids', '[]'::jsonb),
+      'pay_batch_candidate_ids', COALESCE(v_selected_mail_scope_json->'pay_batch_candidate_ids', '[]'::jsonb),
+      'candidate_ids', COALESCE(v_selected_mail_scope_json->'candidate_ids', '[]'::jsonb),
+      'pay_bank_transfer_ids', COALESCE(v_selected_mail_scope_json->'pay_bank_transfer_ids', '[]'::jsonb),
+      'transfer_group_keys', COALESCE(v_selected_mail_scope_json->'transfer_group_keys', '[]'::jsonb),
+      'reason', 'Backend-confirmed provider request was not sent; eligible for Retry unsent payments.'
+    );
+  ELSE
+    v_retry_eligible_count := 0;
+    v_retry_ineligible_count := CASE
+      WHEN v_recommended_action = 'RETRY_PROVIDER_LATER' THEN GREATEST(COALESCE(v_selected_transfer_count, 0), COALESCE(v_selected_candidate_count, 0), COALESCE(v_selected_item_count, 0))
+      ELSE 0
+    END;
+    v_retry_eligible_scope_json := jsonb_build_object(
+      'scope_type', COALESCE(NULLIF(btrim(COALESCE(p_selection_json->>'scope_type', '')), ''), 'BATCH'),
+      'pay_batch_id', p_pay_batch_id::text,
+      'retry_scope_signature', v_retry_scope_signature,
+      'eligible', false
+    );
+    IF v_recommended_action = 'RETRY_PROVIDER_LATER' THEN
+      v_retry_ineligible_summary_json := jsonb_build_array(jsonb_build_object(
+        'code', 'RETRY_UNSENT_PAYMENTS_NOT_CURRENTLY_ELIGIBLE',
+        'message', 'No selected payment scope is currently confirmed as unsent and retry-safe.',
+        'classification', v_classification,
+        'recommended_action', v_recommended_action
+      ));
+    END IF;
+  END IF;
+
+  SELECT operation_rows.id,
+         operation_rows.status
+  INTO v_retry_operation_id,
+       v_retry_operation_status
+  FROM public.banking_pay_operations AS operation_rows
+  WHERE operation_rows.pay_batch_id = p_pay_batch_id
+    AND upper(btrim(COALESCE(operation_rows.operation_type, ''))) = 'PAYMENT_RETRY_BLOCKED_FUNDS'
+    AND upper(btrim(COALESCE(operation_rows.status, ''))) NOT IN ('COMPLETED', 'COMPLETE', 'SUCCEEDED', 'SUCCESS', 'FAILED', 'FAILED_FINAL', 'CANCELLED', 'CANCELED')
+    AND (
+      COALESCE(operation_rows.input_json->>'retry_scope_signature', '') = v_retry_scope_signature
+      OR COALESCE(operation_rows.progress_json->>'retry_scope_signature', '') = v_retry_scope_signature
+      OR COALESCE(operation_rows.result_json->>'retry_scope_signature', '') = v_retry_scope_signature
+      OR COALESCE(v_retry_eligible_count, 0) > 0
+    )
+  ORDER BY operation_rows.created_at_utc DESC NULLS LAST, operation_rows.id DESC
+  LIMIT 1;
+
+  v_retry_in_progress := v_retry_operation_id IS NOT NULL;
+  v_retry_already_in_progress := v_retry_in_progress;
+  v_retry_button_visible := COALESCE(v_retry_eligible_count, 0) > 0 AND COALESCE(v_retry_in_progress, false) IS NOT TRUE;
+
+  IF COALESCE(v_retry_in_progress, false) THEN
+    v_retry_button_disabled_reason := 'Retry already in progress';
+  ELSIF COALESCE(v_retry_eligible_count, 0) <= 0 AND v_recommended_action = 'RETRY_PROVIDER_LATER' THEN
+    v_retry_button_disabled_reason := 'No unsent payments available to retry';
+  ELSE
+    v_retry_button_disabled_reason := NULL::text;
+  END IF;
+
   PERFORM public._imp_debug_audit(
     p_actor_user_id,
     'PAYMENT_CORRECTION_PLAN_RESULT',
@@ -150716,7 +151564,10 @@ BEGIN
       'suggested_resolution_required', v_suggested_resolution_required,
       'umbrella_change_count', v_umbrella_change_count,
       'work_item_count', v_work_item_count,
-      'large_correction', COALESCE(v_work_item_count, 0) > v_large_correction_threshold
+      'large_correction', COALESCE(v_work_item_count, 0) > v_large_correction_threshold,
+      'retry_eligible_count', v_retry_eligible_count,
+      'retry_in_progress', v_retry_in_progress,
+      'retry_operation_id', CASE WHEN v_retry_operation_id IS NULL THEN NULL ELSE v_retry_operation_id::text END
     ),
     'pay_payment_correction',
     v_subject_id,
@@ -150735,6 +151586,22 @@ BEGIN
     'next_step', CASE WHEN v_recommended_action = 'VIEW_RECALCULATE_NEXT_STEP' THEN 'AMEND_TIMESHEET_AND_RECALCULATE' ELSE NULL::text END,
     'next_step_label', CASE WHEN v_recommended_action = 'VIEW_RECALCULATE_NEXT_STEP' THEN 'Amend timesheets and recalculate' ELSE NULL::text END,
     'display_only_action', v_recommended_action = 'VIEW_RECALCULATE_NEXT_STEP',
+    'action_label', CASE WHEN v_recommended_action = 'AMEND_AND_RECOVER_OVERPAYMENT' THEN v_recovery_action_label WHEN v_recommended_action = 'RETRY_PROVIDER_LATER' THEN v_retry_button_label ELSE NULL::text END,
+    'status_label', CASE WHEN v_recommended_action = 'RETRY_PROVIDER_LATER' THEN v_retry_status_label ELSE NULL::text END,
+    'button_label', CASE WHEN v_recommended_action = 'RETRY_PROVIDER_LATER' THEN v_retry_button_label ELSE NULL::text END,
+    'running_label', CASE WHEN v_recommended_action = 'RETRY_PROVIDER_LATER' THEN v_retry_running_label ELSE NULL::text END,
+    'recovery_action_label', CASE WHEN v_recommended_action = 'AMEND_AND_RECOVER_OVERPAYMENT' THEN v_recovery_action_label ELSE NULL::text END,
+    'retry_eligible_count', COALESCE(v_retry_eligible_count, 0),
+    'retry_ineligible_count', COALESCE(v_retry_ineligible_count, 0),
+    'retry_eligible_scope_json', COALESCE(v_retry_eligible_scope_json, '{}'::jsonb),
+    'retry_ineligible_summary_json', COALESCE(v_retry_ineligible_summary_json, '[]'::jsonb),
+    'retry_in_progress', COALESCE(v_retry_in_progress, false),
+    'retry_already_in_progress', COALESCE(v_retry_already_in_progress, false),
+    'retry_operation_id', CASE WHEN v_retry_operation_id IS NULL THEN NULL ELSE v_retry_operation_id::text END,
+    'retry_operation_status', v_retry_operation_status,
+    'retry_button_visible', COALESCE(v_retry_button_visible, false),
+    'retry_button_disabled_reason', v_retry_button_disabled_reason,
+    'retry_scope_signature', v_retry_scope_signature,
     'payment_lifecycle_state', v_classification,
     'provider_failure_reason_code', COALESCE(NULLIF(btrim(v_classification_result->>'provider_failure_reason_code'), ''), NULLIF(btrim(v_classification_result#>>'{provider_evidence,provider_failure_reason_code}'), '')),
     'provider_failure_reason_group', COALESCE(NULLIF(btrim(v_classification_result->>'provider_failure_reason_group'), ''), NULLIF(btrim(v_classification_result#>>'{provider_evidence,provider_failure_reason_group}'), '')),
@@ -150804,7 +151671,10 @@ BEGIN
       'candidate_ids', COALESCE(v_selected_mail_scope_json->'candidate_ids', '[]'::jsonb),
       'finance_case_ids', COALESCE(v_selected_mail_scope_json->'finance_case_ids', '[]'::jsonb),
       'finance_component_ids', COALESCE(v_selected_mail_scope_json->'finance_component_ids', '[]'::jsonb),
-      'reservation_ids', COALESCE(v_selected_mail_scope_json->'reservation_ids', '[]'::jsonb)
+      'reservation_ids', COALESCE(v_selected_mail_scope_json->'reservation_ids', '[]'::jsonb),
+      'retry_scope_signature', v_retry_scope_signature,
+      'retry_eligible_count', COALESCE(v_retry_eligible_count, 0),
+      'retry_in_progress', COALESCE(v_retry_in_progress, false)
     ),
     'batch', jsonb_build_object(
       'status', v_batch_status,
@@ -150839,7 +151709,6 @@ EXCEPTION
     RAISE;
 END;
 $function$;
-
 
 
 
@@ -156028,11 +156897,12 @@ ORDER BY
   active_component_totals.key_value;
 $function$;
 
-
+DROP FUNCTION IF EXISTS public.pay_bank_event_ingest(jsonb, uuid);
 
 CREATE OR REPLACE FUNCTION public.pay_bank_event_ingest(
   p_event_json jsonb,
-  p_actor_user_id uuid DEFAULT NULL::uuid
+  p_actor_user_id uuid DEFAULT NULL::uuid,
+  p_ingest_options_json jsonb DEFAULT '{}'::jsonb
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -156044,6 +156914,13 @@ DECLARE
   v_event_json jsonb := COALESCE(p_event_json, '{}'::jsonb);
   v_uuid_regex text := '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$';
   v_now timestamptz := now();
+  v_ingest_options_json jsonb := COALESCE(p_ingest_options_json, '{}'::jsonb);
+  v_touch_signal boolean := true;
+  v_signal_mode text := 'IMMEDIATE';
+  v_should_touch_signal boolean := true;
+  v_source_delivery_id text := NULL::text;
+  v_source_batch_event_group_key text := NULL::text;
+  v_signal_recommendation_json jsonb := '{}'::jsonb;
 
   v_pay_batch_id uuid := NULL::uuid;
   v_supplied_pay_batch_id uuid := NULL::uuid;
@@ -156157,6 +157034,7 @@ BEGIN
     'PAYMENT_BANK_EVENT_INGEST_START',
     jsonb_build_object(
       'actor_user_id', p_actor_user_id,
+      'ingest_options', COALESCE(p_ingest_options_json, '{}'::jsonb),
       'event_keys', CASE
         WHEN p_event_json IS NULL OR jsonb_typeof(p_event_json) <> 'object' THEN '[]'::jsonb
         ELSE COALESCE((
@@ -156178,6 +157056,30 @@ BEGIN
       USING ERRCODE = 'P0001',
             DETAIL = jsonb_build_object('code', 'BANK_EVENT_JSON_MUST_BE_OBJECT')::text;
   END IF;
+
+  IF p_ingest_options_json IS NULL THEN
+    v_ingest_options_json := '{}'::jsonb;
+  ELSIF COALESCE(jsonb_typeof(p_ingest_options_json), 'null') <> 'object' THEN
+    RAISE EXCEPTION 'BANK_EVENT_INGEST_OPTIONS_MUST_BE_OBJECT'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object('code', 'BANK_EVENT_INGEST_OPTIONS_MUST_BE_OBJECT')::text;
+  ELSE
+    v_ingest_options_json := p_ingest_options_json;
+  END IF;
+
+  IF v_ingest_options_json ? 'touch_signal' THEN
+    v_touch_signal := lower(btrim(COALESCE(v_ingest_options_json->>'touch_signal', 'true'))) IN ('true', 't', '1', 'yes', 'y', 'on');
+  ELSE
+    v_touch_signal := true;
+  END IF;
+
+  v_signal_mode := upper(nullif(btrim(COALESCE(v_ingest_options_json->>'signal_mode', 'IMMEDIATE')), ''));
+  IF v_signal_mode IS NULL OR v_signal_mode NOT IN ('IMMEDIATE', 'DEFERRED') THEN
+    v_signal_mode := 'IMMEDIATE';
+  END IF;
+  v_should_touch_signal := COALESCE(v_touch_signal, true) AND v_signal_mode <> 'DEFERRED';
+  v_source_delivery_id := nullif(btrim(COALESCE(v_ingest_options_json->>'source_delivery_id', '')), '');
+  v_source_batch_event_group_key := nullif(btrim(COALESCE(v_ingest_options_json->>'source_batch_event_group_key', '')), '');
 
   v_pay_batch_id_text := nullif(btrim(COALESCE(
     v_event_json->>'pay_batch_id',
@@ -156899,11 +157801,31 @@ BEGIN
       NULL::text
     );
 
+    v_signal_recommendation_json := jsonb_build_object(
+      'pay_batch_id', CASE WHEN v_pay_batch_id IS NULL THEN NULL ELSE v_pay_batch_id::text END,
+      'touch_payment_status', false,
+      'touch_correction_progress', false,
+      'touch_alerts', false,
+      'touch_overview', false,
+      'change_reason', 'BANK_EVENT_DUPLICATE_NO_SIGNAL',
+      'change_source', 'pay_bank_event_ingest',
+      'changed_transfer_ids', '[]'::jsonb,
+      'changed_candidate_ids', '[]'::jsonb,
+      'changed_pay_batch_item_ids', '[]'::jsonb,
+      'alert_candidate_kind', NULL::text,
+      'alert_candidate_is_success_only', false,
+      'provider_failure_reason_code', v_provider_failure_reason_code,
+      'provider_failure_reason_group', v_provider_failure_reason_group,
+      'source_delivery_id', v_source_delivery_id,
+      'source_batch_event_group_key', v_source_batch_event_group_key
+    );
+
     v_live_signal_result := jsonb_build_object(
       'ok', true,
       'changed', false,
       'duplicate_event', true,
-      'reason', 'Bank event already recorded; live signal was not touched.'
+      'reason', 'Bank event already recorded; live signal was not touched.',
+      'signal_recommendation_json', v_signal_recommendation_json
     );
 
     RETURN jsonb_build_object(
@@ -156915,7 +157837,9 @@ BEGIN
       'classification', COALESCE(v_classification, 'UNKNOWN'),
       'correction_disposition', COALESCE(v_correction_disposition, 'ALREADY_RECORDED'),
       'correction_request_id', NULL::uuid,
-      'admin_notice_group_id', NULL::uuid
+      'admin_notice_group_id', NULL::uuid,
+      'live_signal', v_live_signal_result,
+      'signal_recommendation_json', v_signal_recommendation_json
     );
   END IF;
 
@@ -157075,23 +157999,52 @@ BEGIN
       NULL::text
     );
 
-    v_live_signal_result := public.banking_pay_batch_signal_touch(
-      v_pay_batch_id,
-      'BANK_EVENT_COMPLETED',
-      'pay_bank_event_ingest',
-      jsonb_build_object(
+    v_signal_recommendation_json := jsonb_build_object(
+      'pay_batch_id', v_pay_batch_id::text,
+      'touch_payment_status', true,
+      'touch_correction_progress', false,
+      'touch_alerts', false,
+      'touch_overview', true,
+      'change_reason', 'BANK_EVENT_COMPLETED',
+      'change_source', 'pay_bank_event_ingest',
+      'changed_transfer_ids', CASE WHEN v_pay_bank_transfer_id IS NULL THEN '[]'::jsonb ELSE jsonb_build_array(v_pay_bank_transfer_id::text) END,
+      'changed_candidate_ids', CASE WHEN v_candidate_id IS NULL THEN '[]'::jsonb ELSE jsonb_build_array(v_candidate_id::text) END,
+      'changed_pay_batch_item_ids', '[]'::jsonb,
+      'alert_candidate_kind', NULL::text,
+      'alert_candidate_is_success_only', true,
+      'provider_failure_reason_code', v_provider_failure_reason_code,
+      'provider_failure_reason_group', v_provider_failure_reason_group,
+      'source_delivery_id', v_source_delivery_id,
+      'source_batch_event_group_key', v_source_batch_event_group_key,
+      'change_scope_json', jsonb_build_object(
         'bank_event_id', v_event_id::text,
         'pay_bank_transfer_id', CASE WHEN v_pay_bank_transfer_id IS NULL THEN NULL ELSE v_pay_bank_transfer_id::text END,
         'normalised_state', v_normalised_state,
         'provider_event_transport', v_provider_event_transport,
         'provider_transaction_id', v_provider_transaction_id,
         'provider_request_id', v_provider_request_id
-      ),
-      true,
-      false,
-      false,
-      true
+      )
     );
+
+    IF v_should_touch_signal THEN
+      v_live_signal_result := public.banking_pay_batch_signal_touch(
+        v_pay_batch_id,
+        'BANK_EVENT_COMPLETED',
+        'pay_bank_event_ingest',
+        v_signal_recommendation_json->'change_scope_json',
+        true,
+        false,
+        false,
+        true
+      );
+    ELSE
+      v_live_signal_result := jsonb_build_object(
+        'ok', true,
+        'changed', false,
+        'deferred', true,
+        'signal_recommendation_json', v_signal_recommendation_json
+      );
+    END IF;
 
     RETURN jsonb_build_object(
       'ok', true,
@@ -157104,6 +158057,7 @@ BEGIN
       'correction_request_id', NULL::uuid,
       'admin_notice_group_id', NULL::uuid,
       'live_signal', v_live_signal_result,
+      'signal_recommendation_json', v_signal_recommendation_json,
       'selection_json', NULL::jsonb,
       'classification_result', v_classification_result,
       'auto_apply', jsonb_build_object(
@@ -157175,21 +158129,50 @@ BEGIN
         NULL::text
       );
 
-      v_live_signal_result := public.banking_pay_batch_signal_touch(
-        v_pay_batch_id,
-        'BANK_EVENT_PENDING_OR_NON_TERMINAL',
-        'pay_bank_event_ingest',
-        jsonb_build_object(
+      v_signal_recommendation_json := jsonb_build_object(
+        'pay_batch_id', v_pay_batch_id::text,
+        'touch_payment_status', true,
+        'touch_correction_progress', false,
+        'touch_alerts', false,
+        'touch_overview', true,
+        'change_reason', 'BANK_EVENT_PENDING_OR_NON_TERMINAL',
+        'change_source', 'pay_bank_event_ingest',
+        'changed_transfer_ids', CASE WHEN v_pay_bank_transfer_id IS NULL THEN '[]'::jsonb ELSE jsonb_build_array(v_pay_bank_transfer_id::text) END,
+        'changed_candidate_ids', CASE WHEN v_candidate_id IS NULL THEN '[]'::jsonb ELSE jsonb_build_array(v_candidate_id::text) END,
+        'changed_pay_batch_item_ids', '[]'::jsonb,
+        'alert_candidate_kind', NULL::text,
+        'alert_candidate_is_success_only', false,
+        'provider_failure_reason_code', v_provider_failure_reason_code,
+        'provider_failure_reason_group', v_provider_failure_reason_group,
+        'source_delivery_id', v_source_delivery_id,
+        'source_batch_event_group_key', v_source_batch_event_group_key,
+        'change_scope_json', jsonb_build_object(
           'bank_event_id', v_event_id::text,
           'pay_bank_transfer_id', CASE WHEN v_pay_bank_transfer_id IS NULL THEN NULL ELSE v_pay_bank_transfer_id::text END,
           'normalised_state', v_normalised_state,
           'provider_event_transport', v_provider_event_transport
-        ),
-        true,
-        false,
-        false,
-        true
+        )
       );
+
+      IF v_should_touch_signal THEN
+        v_live_signal_result := public.banking_pay_batch_signal_touch(
+          v_pay_batch_id,
+          'BANK_EVENT_PENDING_OR_NON_TERMINAL',
+          'pay_bank_event_ingest',
+          v_signal_recommendation_json->'change_scope_json',
+          true,
+          false,
+          false,
+          true
+        );
+      ELSE
+        v_live_signal_result := jsonb_build_object(
+          'ok', true,
+          'changed', false,
+          'deferred', true,
+          'signal_recommendation_json', v_signal_recommendation_json
+        );
+      END IF;
 
       RETURN jsonb_build_object(
         'ok', true,
@@ -157202,6 +158185,7 @@ BEGIN
         'correction_request_id', NULL::uuid,
         'admin_notice_group_id', NULL::uuid,
         'live_signal', v_live_signal_result,
+        'signal_recommendation_json', v_signal_recommendation_json,
         'message', 'Provider state recorded; no correction action required yet.',
         'selection_json', NULL::jsonb,
         'classification_result', v_classification_result,
@@ -157552,29 +158536,71 @@ BEGIN
     NULL::text
   );
 
-  v_live_signal_result := public.banking_pay_batch_signal_touch(
-    v_pay_batch_id,
-    'BANK_EVENT_INGEST_RESULT',
-    'pay_bank_event_ingest',
-    jsonb_build_object(
-      'bank_event_id', v_event_id::text,
-      'pay_bank_transfer_id', CASE WHEN v_pay_bank_transfer_id IS NULL THEN NULL ELSE v_pay_bank_transfer_id::text END,
-      'normalised_state', v_normalised_state,
-      'correction_disposition', v_correction_disposition,
-      'provider_event_transport', v_provider_event_transport,
-      'provider_failure_reason_group', v_provider_failure_reason_group
-    ),
-    true,
-    v_correction_disposition IN ('AUTO_PROCESSING', 'AUTO_APPLIED'),
-    (
+  v_signal_recommendation_json := jsonb_build_object(
+    'pay_batch_id', v_pay_batch_id::text,
+    'touch_payment_status', true,
+    'touch_correction_progress', v_correction_disposition IN ('AUTO_PROCESSING', 'AUTO_APPLIED'),
+    'touch_alerts', (
       v_event_is_final_paid IS NOT TRUE
       AND (
         v_correction_disposition IN ('ACTION_REQUIRED', 'AMBIGUOUS', 'BLOCKED', 'FAILED', 'AUTO_PROCESSING')
         OR v_event_required_action IN ('CHECK_PROVIDER_STATUS', 'NO_MONEY_UNWIND_AND_RECALCULATE')
       )
     ),
-    true
+    'touch_overview', true,
+    'change_reason', 'BANK_EVENT_INGEST_RESULT',
+    'change_source', 'pay_bank_event_ingest',
+    'changed_transfer_ids', CASE WHEN v_pay_bank_transfer_id IS NULL THEN '[]'::jsonb ELSE jsonb_build_array(v_pay_bank_transfer_id::text) END,
+    'changed_candidate_ids', CASE WHEN v_candidate_id IS NULL THEN '[]'::jsonb ELSE jsonb_build_array(v_candidate_id::text) END,
+    'changed_pay_batch_item_ids', '[]'::jsonb,
+    'alert_candidate_kind', CASE
+      WHEN COALESCE(v_existing_transfer_is_final_paid, false) AND v_event_is_terminal_no_money THEN 'PAID_SETTLED_RECOVERY_REQUIRED'
+      WHEN v_event_is_final_paid THEN NULL::text
+      WHEN v_event_required_action = 'AMEND_AND_RECOVER_OVERPAYMENT' THEN 'PAID_SETTLED_RECOVERY_REQUIRED'
+      WHEN v_event_required_action = 'CHECK_PROVIDER_STATUS' THEN 'PROVIDER_OUTCOME_UNKNOWN_CHECK_PROVIDER'
+      WHEN v_event_required_action = 'NO_MONEY_UNWIND_AND_RECALCULATE' THEN CASE WHEN COALESCE(v_auto_setting, false) THEN 'AUTO_UNWIND_PROGRESS' ELSE 'TERMINAL_NO_MONEY_REWIND_AVAILABLE' END
+      ELSE NULL::text
+    END,
+    'alert_candidate_is_success_only', COALESCE(v_event_is_final_paid, false) AND v_event_required_action IS DISTINCT FROM 'AMEND_AND_RECOVER_OVERPAYMENT',
+    'provider_failure_reason_code', v_provider_failure_reason_code,
+    'provider_failure_reason_group', v_provider_failure_reason_group,
+    'source_delivery_id', v_source_delivery_id,
+    'source_batch_event_group_key', v_source_batch_event_group_key,
+    'change_scope_json', jsonb_build_object(
+      'bank_event_id', v_event_id::text,
+      'pay_bank_transfer_id', CASE WHEN v_pay_bank_transfer_id IS NULL THEN NULL ELSE v_pay_bank_transfer_id::text END,
+      'normalised_state', v_normalised_state,
+      'correction_disposition', v_correction_disposition,
+      'provider_event_transport', v_provider_event_transport,
+      'provider_failure_reason_group', v_provider_failure_reason_group
+    )
   );
+
+  IF v_should_touch_signal THEN
+    v_live_signal_result := public.banking_pay_batch_signal_touch(
+      v_pay_batch_id,
+      'BANK_EVENT_INGEST_RESULT',
+      'pay_bank_event_ingest',
+      v_signal_recommendation_json->'change_scope_json',
+      true,
+      v_correction_disposition IN ('AUTO_PROCESSING', 'AUTO_APPLIED'),
+      (
+        v_event_is_final_paid IS NOT TRUE
+        AND (
+          v_correction_disposition IN ('ACTION_REQUIRED', 'AMBIGUOUS', 'BLOCKED', 'FAILED', 'AUTO_PROCESSING')
+          OR v_event_required_action IN ('CHECK_PROVIDER_STATUS', 'NO_MONEY_UNWIND_AND_RECALCULATE')
+        )
+      ),
+      true
+    );
+  ELSE
+    v_live_signal_result := jsonb_build_object(
+      'ok', true,
+      'changed', false,
+      'deferred', true,
+      'signal_recommendation_json', v_signal_recommendation_json
+    );
+  END IF;
 
   RETURN jsonb_build_object(
     'ok', true,
@@ -157590,6 +158616,7 @@ BEGIN
     'provider_failure_reason_group', v_provider_failure_reason_group,
     'provider_failure_reason_label', v_provider_failure_reason_label,
     'live_signal', v_live_signal_result,
+    'signal_recommendation_json', v_signal_recommendation_json,
     'selection_json', v_selection_json,
     'classification_result', v_classification_result,
     'auto_apply', jsonb_build_object(
