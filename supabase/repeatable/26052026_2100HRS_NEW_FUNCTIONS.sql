@@ -84462,6 +84462,7 @@ DECLARE
   v_alert_version bigint := 0;
   v_overview_version bigint := 0;
   v_last_status_hash text := NULL::text;
+  v_last_alert_hash text := NULL::text;
   v_retry_plan_json jsonb := '{}'::jsonb;
   v_retry_eligible_count integer := 0;
   v_retry_ineligible_count integer := 0;
