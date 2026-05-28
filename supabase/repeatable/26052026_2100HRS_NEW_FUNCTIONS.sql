@@ -76855,119 +76855,125 @@ BEGIN
         AND pbt.id = p_source_id
       LIMIT 1
     )
-    SELECT jsonb_strip_nulls(jsonb_build_object(
-      'stable_issue_key', CASE
-        WHEN v_alert_kind = 'PROVIDER_OUTAGE_RETRY_LATER' THEN p_pay_batch_id::text || ':' || v_alert_kind || ':' || COALESCE(v_rail_provider, 'UNKNOWN') || ':' || COALESCE(v_rail_env, 'UNKNOWN') || ':' || COALESCE((SELECT retry_operation_id::text FROM retry_operation_scope), v_last_status_checked_at_utc_text, v_last_funds_check_at_utc_text, v_execution_committed_at_utc_text, 'NO_WINDOW')
-        WHEN v_alert_kind = 'PROVIDER_OUTCOME_UNKNOWN_CHECK_PROVIDER' THEN p_pay_batch_id::text || ':' || v_alert_kind || ':' || COALESCE(v_rail_provider, 'UNKNOWN') || ':' || COALESCE(v_rail_env, 'UNKNOWN') || ':' || COALESCE(v_last_status_checked_at_utc_text, v_execution_committed_at_utc_text, 'NO_WINDOW')
-        WHEN v_alert_kind = 'WEBHOOK_UNMATCHED_REVIEW_REQUIRED' THEN COALESCE(p_pay_batch_id::text, 'NO_BATCH') || ':' || v_alert_kind || ':' || COALESCE(v_rail_provider, 'UNKNOWN') || ':' || COALESCE(v_rail_env, 'UNKNOWN') || ':' || COALESCE(v_provider_event_key, 'NO_PROVIDER_EVENT_KEY')
-        WHEN v_alert_kind = 'TERMINAL_NO_MONEY_REWIND_AVAILABLE' THEN p_pay_batch_id::text || ':' || v_alert_kind || ':' || COALESCE((SELECT correction_request_id::text FROM correction_scope), v_provider_failure_reason_group, v_provider_event_key, 'NO_TERMINAL_FAILURE_KEY')
-        WHEN v_alert_kind = 'AUTO_UNWIND_PROGRESS' THEN p_pay_batch_id::text || ':' || v_alert_kind || ':' || COALESCE((SELECT correction_request_id::text FROM correction_scope), 'NO_CORRECTION_REQUEST')
-        WHEN v_alert_kind = 'WHOLE_BATCH_CANCELLATION_PROGRESS' THEN p_pay_batch_id::text || ':' || v_alert_kind || ':' || COALESCE((SELECT correction_request_id::text FROM correction_scope), 'NO_CORRECTION_REQUEST')
-        WHEN v_alert_kind = 'MANUAL_ADJUSTMENT_AMBIGUOUS_BLOCKERS' THEN p_pay_batch_id::text || ':' || v_alert_kind || ':' || COALESCE((SELECT carry_forward_id::text FROM carry_forward_scope), (SELECT source_pay_batch_item_id::text FROM carry_forward_scope), 'NO_BLOCKER_KEY')
-        WHEN v_alert_kind IN ('PAID_SETTLED_RECOVERY_REQUIRED','CANCELLATION_RACED_WITH_PROVIDER_SUBMIT') THEN p_pay_batch_id::text || ':' || v_alert_kind || ':' || COALESCE((SELECT pay_bank_transfer_id::text FROM single_transfer_scope), (SELECT correction_request_id::text FROM correction_scope), v_provider_event_key, 'NO_SCOPE_KEY')
-        ELSE p_pay_batch_id::text || ':' || v_alert_kind
-      END,
-      'dedupe_key', CASE
-        WHEN v_alert_kind = 'PROVIDER_OUTAGE_RETRY_LATER' THEN p_pay_batch_id::text || ':' || v_alert_kind || ':' || COALESCE(v_rail_provider, 'UNKNOWN') || ':' || COALESCE(v_rail_env, 'UNKNOWN') || ':' || COALESCE((SELECT retry_operation_id::text FROM retry_operation_scope), v_last_status_checked_at_utc_text, v_last_funds_check_at_utc_text, v_execution_committed_at_utc_text, 'NO_WINDOW')
-        WHEN v_alert_kind = 'PROVIDER_OUTCOME_UNKNOWN_CHECK_PROVIDER' THEN p_pay_batch_id::text || ':' || v_alert_kind || ':' || COALESCE(v_rail_provider, 'UNKNOWN') || ':' || COALESCE(v_rail_env, 'UNKNOWN') || ':' || COALESCE(v_last_status_checked_at_utc_text, v_execution_committed_at_utc_text, 'NO_WINDOW')
-        WHEN v_alert_kind = 'WEBHOOK_UNMATCHED_REVIEW_REQUIRED' THEN COALESCE(p_pay_batch_id::text, 'NO_BATCH') || ':' || v_alert_kind || ':' || COALESCE(v_rail_provider, 'UNKNOWN') || ':' || COALESCE(v_rail_env, 'UNKNOWN') || ':' || COALESCE(v_provider_event_key, 'NO_PROVIDER_EVENT_KEY')
-        WHEN v_alert_kind = 'TERMINAL_NO_MONEY_REWIND_AVAILABLE' THEN p_pay_batch_id::text || ':' || v_alert_kind || ':' || COALESCE((SELECT correction_request_id::text FROM correction_scope), v_provider_failure_reason_group, v_provider_event_key, 'NO_TERMINAL_FAILURE_KEY')
-        WHEN (SELECT correction_request_id FROM correction_scope) IS NOT NULL THEN p_pay_batch_id::text || ':' || v_alert_kind || ':' || (SELECT correction_request_id::text FROM correction_scope)
-        WHEN (SELECT pay_bank_transfer_id FROM single_transfer_scope) IS NOT NULL THEN p_pay_batch_id::text || ':' || v_alert_kind || ':' || (SELECT pay_bank_transfer_id::text FROM single_transfer_scope)
-        WHEN (SELECT carry_forward_id FROM carry_forward_scope) IS NOT NULL AND v_alert_kind = 'MANUAL_ADJUSTMENT_AMBIGUOUS_BLOCKERS' THEN p_pay_batch_id::text || ':' || v_alert_kind || ':' || (SELECT carry_forward_id::text FROM carry_forward_scope)
-        ELSE p_pay_batch_id::text || ':' || v_alert_kind
-      END,
-      'alert_kind', v_alert_kind,
-      'issue_kind', v_alert_kind,
-      'alert_severity', CASE
-        WHEN v_alert_kind IN ('AUTO_UNWIND_PROGRESS','WHOLE_BATCH_CANCELLATION_PROGRESS') THEN 'PROGRESS'
-        WHEN v_alert_kind = 'MANUAL_ADJUSTMENTS_CARRIED_FORWARD' THEN 'INFO'
-        ELSE 'ACTION_REQUIRED'
-      END,
-      'provider_failure_reason_code', v_provider_failure_reason_code,
-      'provider_failure_reason_group', CASE WHEN v_alert_kind = 'WEBHOOK_UNMATCHED_REVIEW_REQUIRED' THEN COALESCE(v_provider_failure_reason_group, 'WEBHOOK_UNMATCHED') ELSE v_provider_failure_reason_group END,
-      'provider_failure_reason_label', CASE WHEN v_alert_kind = 'WEBHOOK_UNMATCHED_REVIEW_REQUIRED' THEN COALESCE(v_provider_failure_reason_label, 'Webhook unmatched') ELSE v_provider_failure_reason_label END,
-      'provider_event_key', v_provider_event_key,
-      'provider_webhook_receipt_id', CASE WHEN v_webhook_receipt_id IS NULL THEN NULL ELSE v_webhook_receipt_id::text END,
-      'pay_batch_id', p_pay_batch_id::text,
-      'provider', v_rail_provider,
-      'rail', v_rail_provider,
-      'rail_env', v_rail_env,
-      'outage_window', CASE WHEN v_alert_kind = 'PROVIDER_OUTAGE_RETRY_LATER' THEN COALESCE(v_last_status_checked_at_utc_text, v_last_funds_check_at_utc_text, v_execution_committed_at_utc_text) ELSE NULL END,
-      'retry_operation_id', CASE WHEN (SELECT retry_operation_id FROM retry_operation_scope) IS NULL THEN NULL ELSE (SELECT retry_operation_id::text FROM retry_operation_scope) END,
-      'retry_operation_status', (SELECT retry_operation_status FROM retry_operation_scope),
-      'retry_eligible_count', COALESCE((SELECT retry_eligible_count FROM retry_plan_counts), 0),
-      'retry_ineligible_count', COALESCE((SELECT retry_ineligible_count FROM retry_plan_counts), 0),
-      'correction_request_id', CASE WHEN (SELECT correction_request_id FROM correction_scope) IS NULL THEN NULL ELSE (SELECT correction_request_id::text FROM correction_scope) END,
-      'cancellation_operation_id', CASE WHEN v_alert_kind = 'WHOLE_BATCH_CANCELLATION_PROGRESS' THEN CASE WHEN (SELECT correction_request_id FROM correction_scope) IS NULL THEN NULL ELSE (SELECT correction_request_id::text FROM correction_scope) END ELSE NULL END,
-      'pay_bank_transfer_id', CASE WHEN (SELECT pay_bank_transfer_id FROM single_transfer_scope) IS NULL THEN NULL ELSE (SELECT pay_bank_transfer_id::text FROM single_transfer_scope) END,
-      'carry_forward_id', CASE WHEN (SELECT carry_forward_id FROM carry_forward_scope) IS NULL THEN NULL ELSE (SELECT carry_forward_id::text FROM carry_forward_scope) END,
-      'source_pay_batch_item_id', CASE WHEN (SELECT source_pay_batch_item_id FROM carry_forward_scope) IS NULL THEN NULL ELSE (SELECT source_pay_batch_item_id::text FROM carry_forward_scope) END,
-      'affected_payment_count', COALESCE((SELECT affected_payment_count FROM item_counts), 0),
-      'affected_candidate_count', COALESCE((SELECT affected_candidate_count FROM item_counts), 0),
-      'affected_transfer_count', COALESCE((SELECT affected_transfer_count FROM item_counts), 0),
-      'affected_timesheet_count', COALESCE((SELECT affected_timesheet_count FROM item_counts), 0),
-      'amount_affected', COALESCE((SELECT amount_affected FROM item_counts), 0),
-      'current_status', UPPER(BTRIM(COALESCE(v_batch.status, ''))),
-      'required_user_action', CASE v_alert_kind
-        WHEN 'PROVIDER_OUTAGE_RETRY_LATER' THEN 'Retry unsent payments from Banking Pay Overview.'
-        WHEN 'PROVIDER_OUTCOME_UNKNOWN_CHECK_PROVIDER' THEN 'Open Current Payment Status and check the provider outcome.'
-        WHEN 'TERMINAL_NO_MONEY_REWIND_AVAILABLE' THEN 'Open Current Payment Status and rewind financials where no money moved.'
-        WHEN 'AUTO_UNWIND_PROGRESS' THEN 'Monitor rewind progress.'
-        WHEN 'WHOLE_BATCH_CANCELLATION_PROGRESS' THEN 'Monitor cancellation progress in Banking Pay Overview.'
-        WHEN 'MANUAL_ADJUSTMENTS_CARRIED_FORWARD' THEN 'Review carried-forward manual adjustments in the next pay run.'
-        WHEN 'MANUAL_ADJUSTMENT_AMBIGUOUS_BLOCKERS' THEN 'Open Current Payment Status and review ambiguous manual adjustment blockers.'
-        WHEN 'PAID_SETTLED_RECOVERY_REQUIRED' THEN 'Open Current Payment Status and recover overpayment in next pay run.'
-        WHEN 'CANCELLATION_RACED_WITH_PROVIDER_SUBMIT' THEN 'Open Current Payment Status and check provider submission before continuing.'
-        WHEN 'WEBHOOK_UNMATCHED_REVIEW_REQUIRED' THEN 'Review the unmatched provider webhook and link it to the correct payment if safe.'
-        ELSE 'Open Banking Pay.'
-      END,
-      'auto_unwind_running', v_alert_kind = 'AUTO_UNWIND_PROGRESS' AND COALESCE((SELECT correction_running FROM correction_scope), false),
-      'manual_rewind_required', v_alert_kind = 'TERMINAL_NO_MONEY_REWIND_AVAILABLE',
-      'progress_completed', COALESCE((SELECT progress_completed FROM correction_scope), 0),
-      'progress_total', COALESCE((SELECT progress_total FROM correction_scope), 0),
-      'link_target', 'banking_pay_batch',
-      'link_tab', CASE
-        WHEN v_alert_kind IN ('PROVIDER_OUTAGE_RETRY_LATER','AUTO_UNWIND_PROGRESS','WHOLE_BATCH_CANCELLATION_PROGRESS') THEN 'overview'
-        WHEN v_alert_kind = 'WEBHOOK_UNMATCHED_REVIEW_REQUIRED' THEN 'current_payment_status'
-        ELSE 'current_payment_status'
-      END,
-      'user_label', CASE v_alert_kind
-        WHEN 'PROVIDER_OUTAGE_RETRY_LATER' THEN CASE WHEN (SELECT retry_operation_id FROM retry_operation_scope) IS NOT NULL THEN 'Retrying unsent payments — ' || COALESCE(NULLIF((SELECT retry_eligible_count FROM retry_plan_counts), 0), COALESCE((SELECT affected_payment_count FROM item_counts), 0))::text || ' payments in progress' ELSE 'Bank unavailable — ' || COALESCE(NULLIF((SELECT retry_eligible_count FROM retry_plan_counts), 0), COALESCE((SELECT affected_payment_count FROM item_counts), 0))::text || ' unsent payments can be retried' END
-        WHEN 'PROVIDER_OUTCOME_UNKNOWN_CHECK_PROVIDER' THEN 'Provider outcome unknown — ' || COALESCE((SELECT affected_payment_count FROM item_counts), 0)::text || ' payments need checking'
-        WHEN 'TERMINAL_NO_MONEY_REWIND_AVAILABLE' THEN 'Failed payments — Rewind financials available for ' || COALESCE((SELECT affected_payment_count FROM item_counts), 0)::text || ' payments'
-        WHEN 'AUTO_UNWIND_PROGRESS' THEN 'Rewinding failed payments — ' || COALESCE((SELECT progress_completed FROM correction_scope), 0)::text || ' of ' || COALESCE(NULLIF((SELECT progress_total FROM correction_scope), 0), COALESCE((SELECT affected_payment_count FROM item_counts), 0))::text || ' complete'
-        WHEN 'WHOLE_BATCH_CANCELLATION_PROGRESS' THEN 'Cancelling scheduled batch — ' || COALESCE((SELECT progress_completed FROM correction_scope), 0)::text || ' of ' || COALESCE(NULLIF((SELECT progress_total FROM correction_scope), 0), COALESCE((SELECT affected_payment_count FROM item_counts), 0))::text || ' payment scopes complete'
-        WHEN 'MANUAL_ADJUSTMENTS_CARRIED_FORWARD' THEN 'Manual adjustments carried forward — ' || COALESCE((SELECT carry_forward_count FROM carry_forward_scope), 0)::text || ' adjustments will appear in the next pay run'
-        WHEN 'MANUAL_ADJUSTMENT_AMBIGUOUS_BLOCKERS' THEN 'Manual adjustment blockers — review required'
-        WHEN 'PAID_SETTLED_RECOVERY_REQUIRED' THEN 'Paid — recovery required'
-        WHEN 'CANCELLATION_RACED_WITH_PROVIDER_SUBMIT' THEN 'Cancellation conflict — provider submission already started'
-        WHEN 'WEBHOOK_UNMATCHED_REVIEW_REQUIRED' THEN 'Unmatched bank webhook — review required'
-        ELSE initcap(replace(lower(v_alert_kind), '_', ' '))
-      END,
-      'user_description', CASE v_alert_kind
-        WHEN 'PROVIDER_OUTAGE_RETRY_LATER' THEN CASE WHEN (SELECT retry_operation_id FROM retry_operation_scope) IS NOT NULL THEN 'CloudTMS is retrying payments confirmed as not sent. You can continue using CloudTMS while this runs.' ELSE 'The bank/provider was unavailable before the payment request was sent. Retry unsent payments from Banking Pay Overview.' END
-        WHEN 'PROVIDER_OUTCOME_UNKNOWN_CHECK_PROVIDER' THEN 'A provider request may have been sent, but the outcome is not confirmed. Check provider state before retrying or unwinding.'
-        WHEN 'TERMINAL_NO_MONEY_REWIND_AVAILABLE' THEN 'The provider/bank outcome indicates no money moved. Financials can be rewound from Current Payment Status.'
-        WHEN 'AUTO_UNWIND_PROGRESS' THEN 'Automatic no-money unwind is running and this alert updates progress instead of creating per-payment alerts.'
-        WHEN 'WHOLE_BATCH_CANCELLATION_PROGRESS' THEN 'Scheduled local cancellation is running in chunks and this alert updates progress.'
-        WHEN 'MANUAL_ADJUSTMENTS_CARRIED_FORWARD' THEN 'Safe source-less manual adjustments were carried forward and will be included in the next pay run.'
-        WHEN 'MANUAL_ADJUSTMENT_AMBIGUOUS_BLOCKERS' THEN 'One or more manual adjustments cannot be safely carried forward automatically.'
-        WHEN 'PAID_SETTLED_RECOVERY_REQUIRED' THEN 'Money appears to have moved. Amend the timesheet and recover the overpayment in the next pay run rather than unwinding the payment.'
-        WHEN 'CANCELLATION_RACED_WITH_PROVIDER_SUBMIT' THEN 'Cancellation could not proceed because provider submission had already started.'
-        WHEN 'WEBHOOK_UNMATCHED_REVIEW_REQUIRED' THEN 'A verified provider webhook was received but could not be matched safely to a payment.'
-        ELSE 'Open Banking Pay for details.'
-      END,
-      'manual_adjustments_carried_forward_count', COALESCE((SELECT carry_forward_count FROM carry_forward_scope), 0),
-      'carry_forward_count', COALESCE((SELECT carry_forward_count FROM carry_forward_scope), 0),
-      'remittance_already_sent', EXISTS (
-        SELECT 1
-        FROM public.pay_batch_candidates AS remittance_candidate
-        WHERE remittance_candidate.pay_batch_id = p_pay_batch_id
-          AND remittance_candidate.remittance_sent_at_utc IS NOT NULL
-      ),
-      'payload_is_grouped', true
-    ))
+    SELECT jsonb_strip_nulls(
+      jsonb_build_object(
+        'stable_issue_key', CASE
+          WHEN v_alert_kind = 'PROVIDER_OUTAGE_RETRY_LATER' THEN p_pay_batch_id::text || ':' || v_alert_kind || ':' || COALESCE(v_rail_provider, 'UNKNOWN') || ':' || COALESCE(v_rail_env, 'UNKNOWN') || ':' || COALESCE(v_last_status_checked_at_utc_text, v_last_funds_check_at_utc_text, v_execution_committed_at_utc_text, (SELECT ros.retry_operation_id::text FROM retry_operation_scope AS ros), 'NO_WINDOW')
+          WHEN v_alert_kind = 'PROVIDER_OUTCOME_UNKNOWN_CHECK_PROVIDER' THEN p_pay_batch_id::text || ':' || v_alert_kind || ':' || COALESCE(v_rail_provider, 'UNKNOWN') || ':' || COALESCE(v_rail_env, 'UNKNOWN') || ':' || COALESCE(v_last_status_checked_at_utc_text, v_execution_committed_at_utc_text, 'NO_WINDOW')
+          WHEN v_alert_kind = 'WEBHOOK_UNMATCHED_REVIEW_REQUIRED' THEN COALESCE(p_pay_batch_id::text, 'NO_BATCH') || ':' || v_alert_kind || ':' || COALESCE(v_rail_provider, 'UNKNOWN') || ':' || COALESCE(v_rail_env, 'UNKNOWN') || ':' || COALESCE(v_provider_event_key, 'NO_PROVIDER_EVENT_KEY')
+          WHEN v_alert_kind = 'TERMINAL_NO_MONEY_REWIND_AVAILABLE' THEN p_pay_batch_id::text || ':' || v_alert_kind || ':' || COALESCE((SELECT cs.correction_request_id::text FROM correction_scope AS cs), v_provider_failure_reason_group, v_provider_event_key, 'NO_TERMINAL_FAILURE_KEY')
+          WHEN v_alert_kind = 'AUTO_UNWIND_PROGRESS' THEN p_pay_batch_id::text || ':' || v_alert_kind || ':' || COALESCE((SELECT cs.correction_request_id::text FROM correction_scope AS cs), 'NO_CORRECTION_REQUEST')
+          WHEN v_alert_kind = 'WHOLE_BATCH_CANCELLATION_PROGRESS' THEN p_pay_batch_id::text || ':' || v_alert_kind || ':' || COALESCE((SELECT cs.correction_request_id::text FROM correction_scope AS cs), 'NO_CORRECTION_REQUEST')
+          WHEN v_alert_kind = 'MANUAL_ADJUSTMENT_AMBIGUOUS_BLOCKERS' THEN p_pay_batch_id::text || ':' || v_alert_kind || ':' || COALESCE((SELECT cfs.carry_forward_id::text FROM carry_forward_scope AS cfs), (SELECT cfs.source_pay_batch_item_id::text FROM carry_forward_scope AS cfs), 'NO_BLOCKER_KEY')
+          WHEN v_alert_kind IN ('PAID_SETTLED_RECOVERY_REQUIRED','CANCELLATION_RACED_WITH_PROVIDER_SUBMIT') THEN p_pay_batch_id::text || ':' || v_alert_kind || ':' || COALESCE((SELECT sts.pay_bank_transfer_id::text FROM single_transfer_scope AS sts), (SELECT cs.correction_request_id::text FROM correction_scope AS cs), v_provider_event_key, 'NO_SCOPE_KEY')
+          ELSE p_pay_batch_id::text || ':' || v_alert_kind
+        END,
+        'dedupe_key', CASE
+          WHEN v_alert_kind = 'PROVIDER_OUTAGE_RETRY_LATER' THEN p_pay_batch_id::text || ':' || v_alert_kind || ':' || COALESCE(v_rail_provider, 'UNKNOWN') || ':' || COALESCE(v_rail_env, 'UNKNOWN') || ':' || COALESCE(v_last_status_checked_at_utc_text, v_last_funds_check_at_utc_text, v_execution_committed_at_utc_text, (SELECT ros.retry_operation_id::text FROM retry_operation_scope AS ros), 'NO_WINDOW')
+          WHEN v_alert_kind = 'PROVIDER_OUTCOME_UNKNOWN_CHECK_PROVIDER' THEN p_pay_batch_id::text || ':' || v_alert_kind || ':' || COALESCE(v_rail_provider, 'UNKNOWN') || ':' || COALESCE(v_rail_env, 'UNKNOWN') || ':' || COALESCE(v_last_status_checked_at_utc_text, v_execution_committed_at_utc_text, 'NO_WINDOW')
+          WHEN v_alert_kind = 'WEBHOOK_UNMATCHED_REVIEW_REQUIRED' THEN COALESCE(p_pay_batch_id::text, 'NO_BATCH') || ':' || v_alert_kind || ':' || COALESCE(v_rail_provider, 'UNKNOWN') || ':' || COALESCE(v_rail_env, 'UNKNOWN') || ':' || COALESCE(v_provider_event_key, 'NO_PROVIDER_EVENT_KEY')
+          WHEN v_alert_kind = 'TERMINAL_NO_MONEY_REWIND_AVAILABLE' THEN p_pay_batch_id::text || ':' || v_alert_kind || ':' || COALESCE((SELECT cs.correction_request_id::text FROM correction_scope AS cs), v_provider_failure_reason_group, v_provider_event_key, 'NO_TERMINAL_FAILURE_KEY')
+          WHEN (SELECT cs.correction_request_id FROM correction_scope AS cs) IS NOT NULL THEN p_pay_batch_id::text || ':' || v_alert_kind || ':' || (SELECT cs.correction_request_id::text FROM correction_scope AS cs)
+          WHEN (SELECT sts.pay_bank_transfer_id FROM single_transfer_scope AS sts) IS NOT NULL THEN p_pay_batch_id::text || ':' || v_alert_kind || ':' || (SELECT sts.pay_bank_transfer_id::text FROM single_transfer_scope AS sts)
+          WHEN (SELECT cfs.carry_forward_id FROM carry_forward_scope AS cfs) IS NOT NULL AND v_alert_kind = 'MANUAL_ADJUSTMENT_AMBIGUOUS_BLOCKERS' THEN p_pay_batch_id::text || ':' || v_alert_kind || ':' || (SELECT cfs.carry_forward_id::text FROM carry_forward_scope AS cfs)
+          ELSE p_pay_batch_id::text || ':' || v_alert_kind
+        END,
+        'alert_kind', v_alert_kind,
+        'issue_kind', v_alert_kind,
+        'alert_severity', CASE
+          WHEN v_alert_kind IN ('AUTO_UNWIND_PROGRESS','WHOLE_BATCH_CANCELLATION_PROGRESS') THEN 'PROGRESS'
+          WHEN v_alert_kind = 'MANUAL_ADJUSTMENTS_CARRIED_FORWARD' THEN 'INFO'
+          ELSE 'ACTION_REQUIRED'
+        END,
+        'provider_failure_reason_code', v_provider_failure_reason_code,
+        'provider_failure_reason_group', CASE WHEN v_alert_kind = 'WEBHOOK_UNMATCHED_REVIEW_REQUIRED' THEN COALESCE(v_provider_failure_reason_group, 'WEBHOOK_UNMATCHED') ELSE v_provider_failure_reason_group END,
+        'provider_failure_reason_label', CASE WHEN v_alert_kind = 'WEBHOOK_UNMATCHED_REVIEW_REQUIRED' THEN COALESCE(v_provider_failure_reason_label, 'Webhook unmatched') ELSE v_provider_failure_reason_label END,
+        'provider_event_key', v_provider_event_key,
+        'provider_webhook_receipt_id', CASE WHEN v_webhook_receipt_id IS NULL THEN NULL ELSE v_webhook_receipt_id::text END,
+        'pay_batch_id', p_pay_batch_id::text,
+        'provider', v_rail_provider,
+        'rail', v_rail_provider,
+        'rail_env', v_rail_env,
+        'outage_window', CASE WHEN v_alert_kind = 'PROVIDER_OUTAGE_RETRY_LATER' THEN COALESCE(v_last_status_checked_at_utc_text, v_last_funds_check_at_utc_text, v_execution_committed_at_utc_text) ELSE NULL END
+      )
+      || jsonb_build_object(
+        'retry_operation_id', CASE WHEN (SELECT ros.retry_operation_id FROM retry_operation_scope AS ros) IS NULL THEN NULL ELSE (SELECT ros.retry_operation_id::text FROM retry_operation_scope AS ros) END,
+        'retry_operation_status', (SELECT ros.retry_operation_status FROM retry_operation_scope AS ros),
+        'retry_eligible_count', COALESCE((SELECT rpc.retry_eligible_count FROM retry_plan_counts AS rpc), 0),
+        'retry_ineligible_count', COALESCE((SELECT rpc.retry_ineligible_count FROM retry_plan_counts AS rpc), 0),
+        'correction_request_id', CASE WHEN (SELECT cs.correction_request_id FROM correction_scope AS cs) IS NULL THEN NULL ELSE (SELECT cs.correction_request_id::text FROM correction_scope AS cs) END,
+        'cancellation_operation_id', CASE WHEN v_alert_kind = 'WHOLE_BATCH_CANCELLATION_PROGRESS' THEN CASE WHEN (SELECT cs.correction_request_id FROM correction_scope AS cs) IS NULL THEN NULL ELSE (SELECT cs.correction_request_id::text FROM correction_scope AS cs) END ELSE NULL END,
+        'pay_bank_transfer_id', CASE WHEN (SELECT sts.pay_bank_transfer_id FROM single_transfer_scope AS sts) IS NULL THEN NULL ELSE (SELECT sts.pay_bank_transfer_id::text FROM single_transfer_scope AS sts) END,
+        'carry_forward_id', CASE WHEN (SELECT cfs.carry_forward_id FROM carry_forward_scope AS cfs) IS NULL THEN NULL ELSE (SELECT cfs.carry_forward_id::text FROM carry_forward_scope AS cfs) END,
+        'source_pay_batch_item_id', CASE WHEN (SELECT cfs.source_pay_batch_item_id FROM carry_forward_scope AS cfs) IS NULL THEN NULL ELSE (SELECT cfs.source_pay_batch_item_id::text FROM carry_forward_scope AS cfs) END,
+        'affected_payment_count', COALESCE((SELECT ic.affected_payment_count FROM item_counts AS ic), 0),
+        'affected_candidate_count', COALESCE((SELECT ic.affected_candidate_count FROM item_counts AS ic), 0),
+        'affected_transfer_count', COALESCE((SELECT ic.affected_transfer_count FROM item_counts AS ic), 0),
+        'affected_timesheet_count', COALESCE((SELECT ic.affected_timesheet_count FROM item_counts AS ic), 0),
+        'amount_affected', COALESCE((SELECT ic.amount_affected FROM item_counts AS ic), 0),
+        'current_status', UPPER(BTRIM(COALESCE(v_batch.status, ''))),
+        'required_user_action', CASE v_alert_kind
+          WHEN 'PROVIDER_OUTAGE_RETRY_LATER' THEN 'Retry unsent payments from Banking Pay Overview.'
+          WHEN 'PROVIDER_OUTCOME_UNKNOWN_CHECK_PROVIDER' THEN 'Open Current Payment Status and check the provider outcome.'
+          WHEN 'TERMINAL_NO_MONEY_REWIND_AVAILABLE' THEN 'Open Current Payment Status and rewind financials where no money moved.'
+          WHEN 'AUTO_UNWIND_PROGRESS' THEN 'Monitor rewind progress.'
+          WHEN 'WHOLE_BATCH_CANCELLATION_PROGRESS' THEN 'Monitor cancellation progress in Banking Pay Overview.'
+          WHEN 'MANUAL_ADJUSTMENTS_CARRIED_FORWARD' THEN 'Review carried-forward manual adjustments in the next pay run.'
+          WHEN 'MANUAL_ADJUSTMENT_AMBIGUOUS_BLOCKERS' THEN 'Open Current Payment Status and review ambiguous manual adjustment blockers.'
+          WHEN 'PAID_SETTLED_RECOVERY_REQUIRED' THEN 'Open Current Payment Status and recover overpayment in next pay run.'
+          WHEN 'CANCELLATION_RACED_WITH_PROVIDER_SUBMIT' THEN 'Open Current Payment Status and check provider submission before continuing.'
+          WHEN 'WEBHOOK_UNMATCHED_REVIEW_REQUIRED' THEN 'Review the unmatched provider webhook and link it to the correct payment if safe.'
+          ELSE 'Open Banking Pay.'
+        END,
+        'auto_unwind_running', v_alert_kind = 'AUTO_UNWIND_PROGRESS' AND COALESCE((SELECT cs.correction_running FROM correction_scope AS cs), false),
+        'manual_rewind_required', v_alert_kind = 'TERMINAL_NO_MONEY_REWIND_AVAILABLE',
+        'progress_completed', COALESCE((SELECT cs.progress_completed FROM correction_scope AS cs), 0),
+        'progress_total', COALESCE((SELECT cs.progress_total FROM correction_scope AS cs), 0)
+      )
+      || jsonb_build_object(
+        'link_target', 'banking_pay_batch',
+        'link_tab', CASE
+          WHEN v_alert_kind IN ('PROVIDER_OUTAGE_RETRY_LATER','AUTO_UNWIND_PROGRESS','WHOLE_BATCH_CANCELLATION_PROGRESS') THEN 'overview'
+          WHEN v_alert_kind = 'WEBHOOK_UNMATCHED_REVIEW_REQUIRED' THEN 'current_payment_status'
+          ELSE 'current_payment_status'
+        END,
+        'user_label', CASE v_alert_kind
+          WHEN 'PROVIDER_OUTAGE_RETRY_LATER' THEN CASE WHEN (SELECT ros.retry_operation_id FROM retry_operation_scope AS ros) IS NOT NULL THEN 'Retrying unsent payments — ' || COALESCE(NULLIF((SELECT rpc.retry_eligible_count FROM retry_plan_counts AS rpc), 0), COALESCE((SELECT ic.affected_payment_count FROM item_counts AS ic), 0))::text || ' payments in progress' ELSE 'Bank unavailable — ' || COALESCE(NULLIF((SELECT rpc.retry_eligible_count FROM retry_plan_counts AS rpc), 0), COALESCE((SELECT ic.affected_payment_count FROM item_counts AS ic), 0))::text || ' unsent payments can be retried' END
+          WHEN 'PROVIDER_OUTCOME_UNKNOWN_CHECK_PROVIDER' THEN 'Provider outcome unknown — ' || COALESCE((SELECT ic.affected_payment_count FROM item_counts AS ic), 0)::text || ' payments need checking'
+          WHEN 'TERMINAL_NO_MONEY_REWIND_AVAILABLE' THEN 'Failed payments — Rewind financials available for ' || COALESCE((SELECT ic.affected_payment_count FROM item_counts AS ic), 0)::text || ' payments'
+          WHEN 'AUTO_UNWIND_PROGRESS' THEN 'Rewinding failed payments — ' || COALESCE((SELECT cs.progress_completed FROM correction_scope AS cs), 0)::text || ' of ' || COALESCE(NULLIF((SELECT cs.progress_total FROM correction_scope AS cs), 0), COALESCE((SELECT ic.affected_payment_count FROM item_counts AS ic), 0))::text || ' complete'
+          WHEN 'WHOLE_BATCH_CANCELLATION_PROGRESS' THEN 'Cancelling scheduled batch — ' || COALESCE((SELECT cs.progress_completed FROM correction_scope AS cs), 0)::text || ' of ' || COALESCE(NULLIF((SELECT cs.progress_total FROM correction_scope AS cs), 0), COALESCE((SELECT ic.affected_payment_count FROM item_counts AS ic), 0))::text || ' payment scopes complete'
+          WHEN 'MANUAL_ADJUSTMENTS_CARRIED_FORWARD' THEN 'Manual adjustments carried forward — ' || COALESCE((SELECT cfs.carry_forward_count FROM carry_forward_scope AS cfs), 0)::text || ' adjustments will appear in the next pay run'
+          WHEN 'MANUAL_ADJUSTMENT_AMBIGUOUS_BLOCKERS' THEN 'Manual adjustment blockers — review required'
+          WHEN 'PAID_SETTLED_RECOVERY_REQUIRED' THEN 'Paid — recovery required'
+          WHEN 'CANCELLATION_RACED_WITH_PROVIDER_SUBMIT' THEN 'Cancellation conflict — provider submission already started'
+          WHEN 'WEBHOOK_UNMATCHED_REVIEW_REQUIRED' THEN 'Unmatched bank webhook — review required'
+          ELSE initcap(replace(lower(v_alert_kind), '_', ' '))
+        END,
+        'user_description', CASE v_alert_kind
+          WHEN 'PROVIDER_OUTAGE_RETRY_LATER' THEN CASE WHEN (SELECT ros.retry_operation_id FROM retry_operation_scope AS ros) IS NOT NULL THEN 'CloudTMS is retrying payments confirmed as not sent. You can continue using CloudTMS while this runs.' ELSE 'The bank/provider was unavailable before the payment request was sent. Retry unsent payments from Banking Pay Overview.' END
+          WHEN 'PROVIDER_OUTCOME_UNKNOWN_CHECK_PROVIDER' THEN 'A provider request may have been sent, but the outcome is not confirmed. Check provider state before retrying or unwinding.'
+          WHEN 'TERMINAL_NO_MONEY_REWIND_AVAILABLE' THEN 'The provider/bank outcome indicates no money moved. Financials can be rewound from Current Payment Status.'
+          WHEN 'AUTO_UNWIND_PROGRESS' THEN 'Automatic no-money unwind is running and this alert updates progress instead of creating per-payment alerts.'
+          WHEN 'WHOLE_BATCH_CANCELLATION_PROGRESS' THEN 'Scheduled local cancellation is running in chunks and this alert updates progress.'
+          WHEN 'MANUAL_ADJUSTMENTS_CARRIED_FORWARD' THEN 'Safe source-less manual adjustments were carried forward and will be included in the next pay run.'
+          WHEN 'MANUAL_ADJUSTMENT_AMBIGUOUS_BLOCKERS' THEN 'One or more manual adjustments cannot be safely carried forward automatically.'
+          WHEN 'PAID_SETTLED_RECOVERY_REQUIRED' THEN 'Money appears to have moved. Amend the timesheet and recover the overpayment in the next pay run rather than unwinding the payment.'
+          WHEN 'CANCELLATION_RACED_WITH_PROVIDER_SUBMIT' THEN 'Cancellation could not proceed because provider submission had already started.'
+          WHEN 'WEBHOOK_UNMATCHED_REVIEW_REQUIRED' THEN 'A verified provider webhook was received but could not be matched safely to a payment.'
+          ELSE 'Open Banking Pay for details.'
+        END,
+        'manual_adjustments_carried_forward_count', COALESCE((SELECT cfs.carry_forward_count FROM carry_forward_scope AS cfs), 0),
+        'carry_forward_count', COALESCE((SELECT cfs.carry_forward_count FROM carry_forward_scope AS cfs), 0),
+        'remittance_already_sent', EXISTS (
+          SELECT 1
+          FROM public.pay_batch_candidates AS remittance_candidate
+          WHERE remittance_candidate.pay_batch_id = p_pay_batch_id
+            AND remittance_candidate.remittance_sent_at_utc IS NOT NULL
+        ),
+        'payload_is_grouped', true
+      )
+    )
     INTO v_grouped_alert_payload;
 
     RETURN v_grouped_alert_payload;
