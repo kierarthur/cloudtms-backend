@@ -20657,8 +20657,6 @@ DROP FUNCTION IF EXISTS public.pay_batch_get(uuid, uuid);
 
 
 
-
-
 create or replace function public.pay_batch_get(
   p_pay_batch_id uuid,
   p_actor_user_id uuid DEFAULT NULL::uuid,
@@ -22174,7 +22172,9 @@ begin
         'retry_operation_status', v_retry_operation_status,
         'retry_eligible_scope_json', COALESCE(v_retry_eligible_scope_json, '{}'::jsonb),
         'retry_ineligible_summary_json', COALESCE(v_retry_ineligible_summary_json, '[]'::jsonb),
-        'retry_status_label', v_retry_status_label,
+        'retry_status_label', v_retry_status_label
+      )
+      || jsonb_build_object(
         'retry_button_label', v_retry_button_label,
         'retry_button_visible', COALESCE(v_retry_button_visible, false),
         'retry_button_disabled_reason', v_retry_button_disabled_reason,
@@ -23501,7 +23501,65 @@ begin
   );
 
   IF v_batch_status_upper = 'BLOCKED_FUNDS' THEN
-    v_blocked_funds_alert_payload := public.banking_alert_payload_for_pay_batch('BLOCKED_FUNDS', p_pay_batch_id);
+    v_blocked_funds_alert_payload := jsonb_strip_nulls(
+      jsonb_build_object(
+        'payload_is_summary', true,
+        'summary_source', 'pay_batch_get',
+        'alert_kind', 'BLOCKED_FUNDS',
+        'issue_kind', 'BLOCKED_FUNDS',
+        'compatibility_kind', 'BLOCKED_FUNDS',
+        'entity_kind', 'pay_batch',
+        'entity_id', p_pay_batch_id::text,
+        'pay_batch_id', p_pay_batch_id::text,
+        'link_target', 'banking_pay_batch',
+        'link_tab', 'overview',
+        'rail_provider_snapshot', v_batch.rail_provider_snapshot,
+        'rail_env_snapshot', v_batch.rail_env_snapshot,
+        'provider', v_blocked_funds_provider,
+        'rail_provider', v_blocked_funds_provider,
+        'rail_env', v_blocked_funds_env
+      )
+      || jsonb_build_object(
+        'funding_account_ref', v_blocked_funds_account_ref,
+        'required_gbp', v_blocked_funds_required_gbp,
+        'available_gbp', v_blocked_funds_available_gbp,
+        'required_gbp_display', v_blocked_funds_required_gbp_display,
+        'available_gbp_display', v_blocked_funds_available_gbp_display,
+        'sufficient', v_blocked_funds_sufficient,
+        'total_bank_out', COALESCE(v_batch.total_bank_out, COALESCE(v_total_amount, 0)),
+        'active_effective_item_count', COALESCE(v_active_effective_item_count, 0),
+        'active_effective_amount_ex_vat', COALESCE(v_active_effective_amount_ex_vat, 0),
+        'active_effective_amount_inc_vat', COALESCE(v_active_effective_amount_inc_vat, 0)
+      )
+      || jsonb_build_object(
+        'can_retry_blocked_funds', COALESCE(v_can_retry_blocked_funds, false),
+        'retry_state', v_retry_state,
+        'retry_eligible_count', COALESCE(v_retry_eligible_count, 0),
+        'retry_ineligible_count', COALESCE(v_retry_ineligible_count, 0),
+        'retry_in_progress', COALESCE(v_retry_in_progress, false),
+        'retry_already_in_progress', COALESCE(v_retry_already_in_progress, false),
+        'retry_operation_id', CASE WHEN v_retry_operation_id IS NULL THEN NULL ELSE v_retry_operation_id::text END,
+        'retry_operation_status', v_retry_operation_status,
+        'retry_status_label', v_retry_status_label,
+        'retry_button_label', v_retry_button_label,
+        'retry_button_visible', COALESCE(v_retry_button_visible, false),
+        'retry_button_disabled_reason', v_retry_button_disabled_reason
+      )
+      || jsonb_build_object(
+        'execution_commit_state', v_execution_commit_state,
+        'has_external_submission_evidence', COALESCE(v_has_external_submission_evidence, false),
+        'no_submission_evidence', COALESCE((v_submission_evidence ->> 'no_submission_evidence')::boolean, false),
+        'no_bank_transfer_events', COALESCE(v_no_bank_transfer_events, false),
+        'no_rail_tx_id', COALESCE(v_no_rail_tx_id, false),
+        'no_provider_submission_reference', COALESCE(v_no_provider_submission_reference, false),
+        'no_submitted_or_completed_transfer_state', COALESCE(v_no_submitted_or_completed_transfer_state, false),
+        'no_provider_attempt_request_or_idempotency_reference', COALESCE(v_no_provider_attempt_request_or_idempotency_reference, false),
+        'no_possible_provider_attempt_evidence', COALESCE(v_no_possible_provider_attempt_evidence, false),
+        'no_external_submission_evidence', COALESCE(v_no_external_submission_evidence, false),
+        'current_payment_status_authority', true,
+        'payload_contains_affected_rows', false
+      )
+    );
 
     IF NULLIF(BTRIM(COALESCE(v_banking_alert_fingerprint, '')), '') IS NULL THEN
       v_banking_alert_fingerprint := public.banking_alert_fingerprint(
@@ -26671,6 +26729,11 @@ $$;
 
 
 
+
+
+
+
+
 DROP FUNCTION IF EXISTS public.pay_batches_list(integer, integer, text);
 
 
@@ -26807,6 +26870,13 @@ begin
           'manual_adjustments_carried_forward_count', COALESCE(pb.manual_adjustments_carried_forward_count, 0),
           'partial_cancel_count', COALESCE(pb.partial_cancel_count, 0),
           'retry_later_count', COALESCE(pb.retry_later_count, 0),
+          'retry_eligible_count', COALESCE(pb.retry_eligible_count, 0),
+          'retry_ineligible_count', COALESCE(pb.retry_ineligible_count, 0),
+          'retry_in_progress', COALESCE(pb.retry_in_progress, false),
+          'retry_operation_id', CASE WHEN pb.retry_operation_id IS NULL THEN NULL ELSE pb.retry_operation_id::text END,
+          'retry_operation_status', pb.retry_operation_status,
+          'retry_button_label', pb.retry_button_label,
+          'retry_button_disabled_reason', pb.retry_button_disabled_reason,
           'provider_unknown_count', COALESCE(pb.provider_unknown_count, 0),
           'terminal_no_money_count', COALESCE(pb.terminal_no_money_count, 0),
           'paid_recovery_required_count', COALESCE(pb.paid_recovery_required_count, 0),
@@ -26997,12 +27067,12 @@ begin
         WHEN 'SCHEDULED_LOCAL_NOT_SENT' THEN 'Scheduled — not sent to bank yet'
         WHEN 'PARTIALLY_CANCELLED_BEFORE_BANK_SUBMISSION' THEN 'Partially cancelled before bank submission'
         WHEN 'CANCELLED_BEFORE_BANK_SUBMISSION' THEN 'Cancelled before bank submission'
-        WHEN 'PROVIDER_OUTAGE_RETRY_LATER' THEN 'Bank unavailable — retry later'
+        WHEN 'PROVIDER_OUTAGE_RETRY_LATER' THEN 'Bank unavailable — unsent payments can be retried'
         WHEN 'PROVIDER_OUTCOME_UNKNOWN' THEN 'Provider outcome unknown — check provider'
         WHEN 'PROVIDER_CANCELLED_NO_MONEY' THEN 'Failed — not paid'
         WHEN 'PROVIDER_FAILED_NO_MONEY' THEN 'Failed — not paid'
         WHEN 'FINANCIALS_REWOUND' THEN 'Financials rewound'
-        WHEN 'PAID_OR_SETTLED' THEN CASE WHEN diag.diagnostic_json->>'recommended_action' = 'AMEND_AND_RECOVER_OVERPAYMENT' THEN 'Recover overpayment' ELSE 'Paid' END
+        WHEN 'PAID_OR_SETTLED' THEN CASE WHEN diag.diagnostic_json->>'recommended_action' = 'AMEND_AND_RECOVER_OVERPAYMENT' THEN 'Recover overpayment in next pay run' ELSE 'Paid' END
         ELSE initcap(replace(lower(COALESCE(NULLIF(btrim(diag.diagnostic_json->>'payment_lifecycle_state'), ''), 'unknown')), '_', ' '))
       END AS payment_lifecycle_label,
       diag.diagnostic_json->>'recommended_action' AS recommended_action,
@@ -27010,6 +27080,13 @@ begin
       COALESCE(lifecycle_counts.manual_adjustments_carried_forward_count, 0) AS manual_adjustments_carried_forward_count,
       COALESCE(lifecycle_counts.partial_cancel_count, 0) AS partial_cancel_count,
       COALESCE(lifecycle_counts.retry_later_count, 0) AS retry_later_count,
+      CASE WHEN COALESCE(lifecycle_counts.retry_later_count, 0) > 0 THEN COALESCE(lifecycle_counts.retry_later_count, 0) ELSE 0 END AS retry_eligible_count,
+      0::integer AS retry_ineligible_count,
+      COALESCE(active_retry.retry_in_progress, false) AS retry_in_progress,
+      active_retry.retry_operation_id AS retry_operation_id,
+      active_retry.retry_operation_status AS retry_operation_status,
+      CASE WHEN COALESCE(lifecycle_counts.retry_later_count, 0) > 0 THEN 'Retry unsent payments' ELSE NULL::text END AS retry_button_label,
+      CASE WHEN COALESCE(active_retry.retry_in_progress, false) THEN 'Retry in progress' ELSE NULL::text END AS retry_button_disabled_reason,
       COALESCE(lifecycle_counts.provider_unknown_count, 0) AS provider_unknown_count,
       COALESCE(lifecycle_counts.terminal_no_money_count, 0) AS terminal_no_money_count,
       COALESCE(lifecycle_counts.paid_recovery_required_count, 0) AS paid_recovery_required_count,
@@ -27191,6 +27268,18 @@ begin
        and pci_pre.correction_item_kind = 'PRE_BANK_CANCEL'
       where lifecycle_batch.id = pb0.id
     ) lifecycle_counts on true
+    left join lateral (
+      SELECT
+        true AS retry_in_progress,
+        retry_operation_rows.id AS retry_operation_id,
+        retry_operation_rows.status AS retry_operation_status
+      FROM public.banking_pay_operations AS retry_operation_rows
+      WHERE retry_operation_rows.pay_batch_id = pb0.id
+        AND retry_operation_rows.operation_type = 'PAYMENT_RETRY_BLOCKED_FUNDS'
+        AND retry_operation_rows.status IN ('QUEUED', 'RUNNING', 'PROCESSING', 'CLAIMED', 'IN_PROGRESS')
+      ORDER BY retry_operation_rows.created_at_utc DESC NULLS LAST, retry_operation_rows.id DESC
+      LIMIT 1
+    ) active_retry on true
     left join public.banking_pay_batch_change_signals AS batch_signal
       ON batch_signal.pay_batch_id = pb0.id
     left join lateral (
@@ -27498,6 +27587,7 @@ begin
   );
 end;
 $function$;
+
 
 
 
@@ -157274,6 +157364,11 @@ $function$;
 
 DROP FUNCTION IF EXISTS public.pay_bank_event_ingest(jsonb, uuid);
 
+
+
+
+DROP FUNCTION IF EXISTS public.pay_bank_event_ingest(jsonb, uuid);
+
 CREATE OR REPLACE FUNCTION public.pay_bank_event_ingest(
   p_event_json jsonb,
   p_actor_user_id uuid DEFAULT NULL::uuid,
@@ -157340,6 +157435,9 @@ DECLARE
   v_receipt_rail_env text := NULL::text;
   v_receipt_provider_event_key text := NULL::text;
   v_receipt_signature_valid boolean := NULL::boolean;
+  v_receipt_normalised_events_json jsonb := '[]'::jsonb;
+  v_receipt_ingest_results_json jsonb := '[]'::jsonb;
+  v_provider_event_key_in_receipt boolean := false;
   v_webhook_gate_ok boolean := false;
   v_replay_gate_ok boolean := false;
   v_mapping_hints_json jsonb := '{}'::jsonb;
@@ -157637,42 +157735,110 @@ BEGIN
     ELSE 'LOCAL_STATE'
   END;
 
+  v_event_source := CASE
+    WHEN v_provider_event_transport = 'PROVIDER_WEBHOOK' THEN 'PROVIDER_WEBHOOK'
+    WHEN v_provider_event_transport = 'FAILED_WEBHOOK_REPLAY' THEN 'PROVIDER_WEBHOOK'
+    WHEN v_provider_event_transport = 'PROVIDER_RESPONSE' THEN 'PROVIDER_POLL'
+    WHEN v_provider_event_transport = 'PROVIDER_POLL' THEN 'PROVIDER_POLL'
+    WHEN COALESCE(v_event_source, '') = 'MANUAL_EVIDENCE' THEN 'MANUAL_EVIDENCE'
+    WHEN v_provider_event_transport = 'MANUAL_CONFIRM' THEN 'MANUAL_CONFIRM'
+    ELSE 'SYSTEM'
+  END;
 
   IF v_provider_webhook_receipt_id IS NOT NULL THEN
     SELECT receipt_row.status,
            receipt_row.provider_key,
            receipt_row.rail_env,
            receipt_row.provider_event_key,
-           receipt_row.signature_valid
+           receipt_row.signature_valid,
+           COALESCE(receipt_row.normalised_events_json, '[]'::jsonb),
+           COALESCE(receipt_row.ingest_results_json, '[]'::jsonb)
     INTO v_receipt_status,
          v_receipt_provider_key,
          v_receipt_rail_env,
          v_receipt_provider_event_key,
-         v_receipt_signature_valid
+         v_receipt_signature_valid,
+         v_receipt_normalised_events_json,
+         v_receipt_ingest_results_json
     FROM public.bank_provider_webhook_receipts AS receipt_row
     WHERE receipt_row.id = v_provider_webhook_receipt_id;
   END IF;
 
+  IF v_provider_event_transport IN ('PROVIDER_WEBHOOK', 'FAILED_WEBHOOK_REPLAY')
+     AND v_provider_signature_valid IS NULL
+     AND v_receipt_signature_valid IS TRUE THEN
+    v_provider_signature_valid := true;
+  END IF;
+
+  IF NULLIF(btrim(COALESCE(v_provider_event_key, '')), '') IS NOT NULL THEN
+    SELECT EXISTS (
+      WITH RECURSIVE receipt_json_walk(json_value) AS (
+        SELECT jsonb_build_array(
+          to_jsonb(v_receipt_provider_event_key),
+          COALESCE(v_receipt_normalised_events_json, '[]'::jsonb),
+          COALESCE(v_receipt_ingest_results_json, '[]'::jsonb)
+        )
+        UNION ALL
+        SELECT receipt_json_child.child_value
+        FROM receipt_json_walk AS receipt_json_parent
+        CROSS JOIN LATERAL (
+          SELECT array_child.value AS child_value
+          FROM jsonb_array_elements(
+            CASE
+              WHEN jsonb_typeof(receipt_json_parent.json_value) = 'array' THEN receipt_json_parent.json_value
+              ELSE '[]'::jsonb
+            END
+          ) AS array_child(value)
+          UNION ALL
+          SELECT object_child.value AS child_value
+          FROM jsonb_each(
+            CASE
+              WHEN jsonb_typeof(receipt_json_parent.json_value) = 'object' THEN receipt_json_parent.json_value
+              ELSE '{}'::jsonb
+            END
+          ) AS object_child(key_name, value)
+          UNION ALL
+          SELECT to_jsonb(object_child_key.key_name) AS child_value
+          FROM jsonb_each(
+            CASE
+              WHEN jsonb_typeof(receipt_json_parent.json_value) = 'object' THEN receipt_json_parent.json_value
+              ELSE '{}'::jsonb
+            END
+          ) AS object_child_key(key_name, value)
+        ) AS receipt_json_child
+      )
+      SELECT 1
+      FROM receipt_json_walk AS receipt_json_match
+      WHERE (
+        jsonb_typeof(receipt_json_match.json_value) = 'string'
+        AND trim(both '"' from receipt_json_match.json_value::text) = v_provider_event_key
+      )
+    )
+    INTO v_provider_event_key_in_receipt;
+  ELSE
+    v_provider_event_key_in_receipt := false;
+  END IF;
+
   v_webhook_gate_ok := (
     v_provider_event_transport = 'PROVIDER_WEBHOOK'
-    AND COALESCE(v_provider_signature_valid, false) IS TRUE
+    AND v_provider_signature_valid IS DISTINCT FROM false
     AND v_provider_webhook_receipt_id IS NOT NULL
     AND v_receipt_status IS NOT NULL
-    AND upper(COALESCE(v_receipt_status, '')) IN ('VERIFIED', 'NORMALISED', 'NORMALIZED', 'INGESTED', 'UNMATCHED_REVIEW_REQUIRED')
+    AND upper(COALESCE(v_receipt_status, '')) IN ('VERIFIED', 'NORMALISED', 'NORMALIZED', 'INGESTED', 'FAILED_RETRYABLE', 'UNMATCHED_REVIEW_REQUIRED')
     AND v_receipt_signature_valid IS TRUE
     AND v_receipt_provider_key IS NOT DISTINCT FROM v_provider_key
     AND v_receipt_rail_env IS NOT DISTINCT FROM v_rail_env
     AND NULLIF(btrim(COALESCE(v_provider_event_key, '')), '') IS NOT NULL
-    AND v_receipt_provider_event_key IS NOT NULL
-    AND v_receipt_provider_event_key = v_provider_event_key
+    AND COALESCE(v_provider_event_key_in_receipt, false) IS TRUE
   );
 
   IF v_provider_event_transport = 'PROVIDER_WEBHOOK' AND COALESCE(v_webhook_gate_ok, false) IS NOT TRUE THEN
-    IF v_provider_webhook_receipt_id IS NOT NULL THEN
+    IF v_provider_webhook_receipt_id IS NOT NULL
+       AND (v_provider_signature_valid IS FALSE OR COALESCE(v_receipt_signature_valid, false) IS NOT TRUE) THEN
       UPDATE public.bank_provider_webhook_receipts AS receipt_to_update
       SET status = CASE WHEN upper(COALESCE(receipt_to_update.status, '')) = 'SIGNATURE_INVALID' THEN receipt_to_update.status ELSE 'SIGNATURE_INVALID' END,
           error_code = COALESCE(receipt_to_update.error_code, 'WEBHOOK_SIGNATURE_OR_RECEIPT_INVALID'),
-          error_message = COALESCE(receipt_to_update.error_message, 'Webhook event was rejected by SQL provider evidence gate.'),
+          error_message = COALESCE(receipt_to_update.error_message, 'Webhook event was rejected because the webhook signature or receipt signature was invalid.'),
           updated_at_utc = v_now
       WHERE receipt_to_update.id = v_provider_webhook_receipt_id;
     END IF;
@@ -157680,12 +157846,20 @@ BEGIN
     RETURN jsonb_build_object(
       'ok', false,
       'ignored', true,
-      'code', 'WEBHOOK_SIGNATURE_OR_RECEIPT_INVALID',
+      'code', CASE
+        WHEN v_provider_signature_valid IS FALSE OR COALESCE(v_receipt_signature_valid, false) IS NOT TRUE THEN 'WEBHOOK_SIGNATURE_OR_RECEIPT_INVALID'
+        ELSE 'WEBHOOK_RECEIPT_EVENT_MEMBERSHIP_INVALID'
+      END,
       'provider_event_transport', v_provider_event_transport,
       'provider_webhook_receipt_id', CASE WHEN v_provider_webhook_receipt_id IS NULL THEN NULL ELSE v_provider_webhook_receipt_id::text END,
-      'provider_signature_valid', COALESCE(v_provider_signature_valid, false),
+      'provider_event_key', v_provider_event_key,
+      'provider_signature_valid', COALESCE(v_provider_signature_valid, v_receipt_signature_valid, false),
       'receipt_status', v_receipt_status,
-      'message', 'Webhook event was not ingested as provider evidence because signature/receipt validation failed.'
+      'receipt_signature_valid', COALESCE(v_receipt_signature_valid, false),
+      'message', CASE
+        WHEN v_provider_signature_valid IS FALSE OR COALESCE(v_receipt_signature_valid, false) IS NOT TRUE THEN 'Webhook event was not ingested as provider evidence because signature/receipt validation failed.'
+        ELSE 'Webhook event was not ingested as provider evidence because the event key was not present in the signed webhook receipt.'
+      END
     );
   END IF;
 
@@ -157693,12 +157867,12 @@ BEGIN
     v_provider_event_transport = 'FAILED_WEBHOOK_REPLAY'
     AND v_provider_webhook_receipt_id IS NOT NULL
     AND v_receipt_status IS NOT NULL
-    AND upper(COALESCE(v_receipt_status, '')) NOT IN ('SIGNATURE_INVALID', 'FAILED_FINAL')
+    AND upper(COALESCE(v_receipt_status, '')) IN ('VERIFIED', 'NORMALISED', 'NORMALIZED', 'INGESTED', 'FAILED_RETRYABLE', 'UNMATCHED_REVIEW_REQUIRED')
+    AND v_receipt_signature_valid IS TRUE
     AND v_receipt_provider_key IS NOT DISTINCT FROM v_provider_key
     AND v_receipt_rail_env IS NOT DISTINCT FROM v_rail_env
     AND NULLIF(btrim(COALESCE(v_provider_event_key, '')), '') IS NOT NULL
-    AND v_receipt_provider_event_key IS NOT NULL
-    AND v_receipt_provider_event_key = v_provider_event_key
+    AND COALESCE(v_provider_event_key_in_receipt, false) IS TRUE
   );
 
   IF v_provider_event_transport = 'FAILED_WEBHOOK_REPLAY' AND COALESCE(v_replay_gate_ok, false) IS NOT TRUE THEN
@@ -158721,8 +158895,8 @@ BEGIN
           'provider_transaction_id', v_provider_transaction_id,
           'provider_request_id', v_provider_request_id,
           'terminal_no_money_evidence', true,
-          'signature_valid', COALESCE(v_provider_signature_valid, false),
-          'provider_signature_valid', COALESCE(v_provider_signature_valid, false),
+          'signature_valid', COALESCE(v_provider_signature_valid, v_receipt_signature_valid, false),
+          'provider_signature_valid', COALESCE(v_provider_signature_valid, v_receipt_signature_valid, false),
           'provider_checked', true,
           'no_payment_made', true,
           'terminal_no_money_confirmed', true,
@@ -159052,7 +159226,6 @@ EXCEPTION
     RAISE;
 END;
 $function$;
-
 
 
 
@@ -168334,6 +168507,8 @@ BEGIN
 END;
 $function$;
 
+
+
 CREATE OR REPLACE FUNCTION public.banking_alert_preferences_get(p_user_id uuid)
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -168344,6 +168519,57 @@ AS $function$
 DECLARE
   v_preferences public.banking_alert_user_preferences%ROWTYPE;
   v_defaults_applied boolean := false;
+  v_enabled boolean := true;
+  v_alert_kind_allowlist jsonb := NULL::jsonb;
+  v_alert_kind_blocklist jsonb := '[]'::jsonb;
+  v_failure_reason_allowlist jsonb := NULL::jsonb;
+  v_failure_reason_blocklist jsonb := '[]'::jsonb;
+  v_include_action_required boolean := true;
+  v_include_progress_alerts boolean := true;
+  v_include_informational_alerts boolean := false;
+  v_include_success_alerts boolean := false;
+  v_severity_min text := 'ACTION_REQUIRED';
+  v_muted_provider_keys jsonb := '[]'::jsonb;
+  v_muted_pay_batch_ids jsonb := '[]'::jsonb;
+  v_snoozed_until_utc_text text := NULL::text;
+  v_mode text := 'ALL_ACTION_REQUIRED';
+  v_failure_reason_groups jsonb := '[]'::jsonb;
+  v_informational_alert_kinds jsonb := '[]'::jsonb;
+  v_allowed_alert_kinds jsonb := to_jsonb(ARRAY[
+    'PROVIDER_OUTAGE_RETRY_LATER',
+    'PROVIDER_OUTCOME_UNKNOWN_CHECK_PROVIDER',
+    'TERMINAL_NO_MONEY_REWIND_AVAILABLE',
+    'AUTO_UNWIND_PROGRESS',
+    'WHOLE_BATCH_CANCELLATION_PROGRESS',
+    'MANUAL_ADJUSTMENTS_CARRIED_FORWARD',
+    'MANUAL_ADJUSTMENT_AMBIGUOUS_BLOCKERS',
+    'PAID_SETTLED_RECOVERY_REQUIRED',
+    'CANCELLATION_RACED_WITH_PROVIDER_SUBMIT',
+    'WEBHOOK_UNMATCHED_REVIEW_REQUIRED'
+  ]::text[]);
+  v_allowed_failure_reason_groups jsonb := to_jsonb(ARRAY[
+    'INSUFFICIENT_FUNDS',
+    'UNKNOWN_RECIPIENT',
+    'INVALID_ACCOUNT',
+    'ACCOUNT_CLOSED',
+    'BANK_REJECTED',
+    'PROVIDER_OUTAGE',
+    'PROVIDER_UNKNOWN',
+    'COMPLIANCE_REVIEW',
+    'DUPLICATE_RISK',
+    'PAID_RECOVERY_REQUIRED',
+    'MANUAL_ADJUSTMENT_BLOCKER',
+    'WEBHOOK_UNMATCHED',
+    'PROVIDER_FAILED_UNSPECIFIED'
+  ]::text[]);
+  v_progress_alert_kinds jsonb := to_jsonb(ARRAY[
+    'AUTO_UNWIND_PROGRESS',
+    'WHOLE_BATCH_CANCELLATION_PROGRESS'
+  ]::text[]);
+  v_default_informational_alert_kinds jsonb := to_jsonb(ARRAY[
+    'MANUAL_ADJUSTMENTS_CARRIED_FORWARD'
+  ]::text[]);
+  v_effective_options_json jsonb := '{}'::jsonb;
 BEGIN
   IF p_user_id IS NULL THEN
     RAISE EXCEPTION 'BANKING_ALERT_PREFERENCES_GET_USER_REQUIRED'
@@ -168356,49 +168582,79 @@ BEGIN
   FROM public.banking_alert_user_preferences AS preference_row
   WHERE preference_row.user_id = p_user_id;
 
-  IF NOT FOUND THEN
+  IF FOUND THEN
+    v_enabled := COALESCE(v_preferences.enabled, true);
+    v_alert_kind_allowlist := CASE WHEN jsonb_typeof(v_preferences.alert_kind_allowlist) = 'array' THEN v_preferences.alert_kind_allowlist ELSE NULL::jsonb END;
+    v_alert_kind_blocklist := COALESCE(v_preferences.alert_kind_blocklist, '[]'::jsonb);
+    v_failure_reason_allowlist := CASE WHEN jsonb_typeof(v_preferences.failure_reason_allowlist) = 'array' THEN v_preferences.failure_reason_allowlist ELSE NULL::jsonb END;
+    v_failure_reason_blocklist := COALESCE(v_preferences.failure_reason_blocklist, '[]'::jsonb);
+    v_include_action_required := COALESCE(v_preferences.include_action_required, true);
+    v_include_progress_alerts := COALESCE(v_preferences.include_progress_alerts, true);
+    v_include_informational_alerts := COALESCE(v_preferences.include_informational_alerts, false);
+    v_include_success_alerts := false;
+    v_severity_min := COALESCE(NULLIF(BTRIM(v_preferences.severity_min), ''), 'ACTION_REQUIRED');
+    v_muted_provider_keys := COALESCE(v_preferences.muted_provider_keys, '[]'::jsonb);
+    v_muted_pay_batch_ids := COALESCE(v_preferences.muted_pay_batch_ids, '[]'::jsonb);
+    v_snoozed_until_utc_text := CASE WHEN v_preferences.snoozed_until_utc IS NULL THEN NULL ELSE v_preferences.snoozed_until_utc::text END;
+  ELSE
     v_defaults_applied := true;
-
-    RETURN jsonb_build_object(
-      'ok', true,
-      'user_id', p_user_id::text,
-      'enabled', true,
-      'alert_kind_allowlist', NULL::jsonb,
-      'alert_kind_blocklist', '[]'::jsonb,
-      'failure_reason_allowlist', NULL::jsonb,
-      'failure_reason_blocklist', '[]'::jsonb,
-      'include_action_required', true,
-      'include_progress_alerts', true,
-      'include_informational_alerts', false,
-      'include_success_alerts', false,
-      'severity_min', 'ACTION_REQUIRED',
-      'muted_provider_keys', '[]'::jsonb,
-      'muted_pay_batch_ids', '[]'::jsonb,
-      'snoozed_until_utc', NULL::text,
-      'effective_defaults_applied', v_defaults_applied
-    );
   END IF;
+
+  v_failure_reason_groups := CASE
+    WHEN jsonb_typeof(v_failure_reason_allowlist) = 'array' THEN v_failure_reason_allowlist
+    ELSE '[]'::jsonb
+  END;
+
+  v_mode := CASE
+    WHEN COALESCE(v_enabled, true) IS NOT TRUE THEN 'NO_BANKING_PAY_ALERTS'
+    WHEN jsonb_typeof(v_failure_reason_allowlist) = 'array' AND jsonb_array_length(v_failure_reason_allowlist) > 0 THEN 'SELECTED_FAILURE_REASONS'
+    ELSE 'ALL_ACTION_REQUIRED'
+  END;
+
+  v_informational_alert_kinds := '[]'::jsonb;
+  IF COALESCE(v_include_progress_alerts, true) THEN
+    v_informational_alert_kinds := v_informational_alert_kinds || v_progress_alert_kinds;
+  END IF;
+  IF COALESCE(v_include_informational_alerts, false) THEN
+    v_informational_alert_kinds := v_informational_alert_kinds || v_default_informational_alert_kinds;
+  END IF;
+
+  v_effective_options_json := jsonb_build_object(
+    'modes', to_jsonb(ARRAY['ALL_ACTION_REQUIRED','SELECTED_FAILURE_REASONS','NO_BANKING_PAY_ALERTS']::text[]),
+    'alert_kinds', v_allowed_alert_kinds,
+    'failure_reason_groups', v_allowed_failure_reason_groups,
+    'progress_alert_kinds', v_progress_alert_kinds,
+    'informational_alert_kinds', v_default_informational_alert_kinds,
+    'success_alerts_available', false,
+    'default_mode', 'ALL_ACTION_REQUIRED'
+  );
 
   RETURN jsonb_build_object(
     'ok', true,
     'user_id', p_user_id::text,
-    'enabled', COALESCE(v_preferences.enabled, true),
-    'alert_kind_allowlist', v_preferences.alert_kind_allowlist,
-    'alert_kind_blocklist', COALESCE(v_preferences.alert_kind_blocklist, '[]'::jsonb),
-    'failure_reason_allowlist', v_preferences.failure_reason_allowlist,
-    'failure_reason_blocklist', COALESCE(v_preferences.failure_reason_blocklist, '[]'::jsonb),
-    'include_action_required', COALESCE(v_preferences.include_action_required, true),
-    'include_progress_alerts', COALESCE(v_preferences.include_progress_alerts, true),
-    'include_informational_alerts', COALESCE(v_preferences.include_informational_alerts, false),
+    'enabled', v_enabled,
+    'mode', v_mode,
+    'alert_kind_allowlist', v_alert_kind_allowlist,
+    'alert_kind_blocklist', v_alert_kind_blocklist,
+    'failure_reason_allowlist', v_failure_reason_allowlist,
+    'failure_reason_blocklist', v_failure_reason_blocklist,
+    'failure_reason_groups', v_failure_reason_groups,
+    'include_action_required', v_include_action_required,
+    'include_progress_alerts', v_include_progress_alerts,
+    'include_informational_alerts', v_include_informational_alerts,
     'include_success_alerts', false,
-    'severity_min', COALESCE(NULLIF(BTRIM(v_preferences.severity_min), ''), 'ACTION_REQUIRED'),
-    'muted_provider_keys', COALESCE(v_preferences.muted_provider_keys, '[]'::jsonb),
-    'muted_pay_batch_ids', COALESCE(v_preferences.muted_pay_batch_ids, '[]'::jsonb),
-    'snoozed_until_utc', CASE WHEN v_preferences.snoozed_until_utc IS NULL THEN NULL ELSE v_preferences.snoozed_until_utc::text END,
-    'effective_defaults_applied', v_defaults_applied
+    'informational_alert_kinds', v_informational_alert_kinds,
+    'severity_min', v_severity_min,
+    'muted_provider_keys', v_muted_provider_keys,
+    'muted_pay_batch_ids', v_muted_pay_batch_ids,
+    'snoozed_until_utc', v_snoozed_until_utc_text,
+    'effective_defaults_applied', v_defaults_applied,
+    'effective_options_json', v_effective_options_json
   );
 END;
 $function$;
+
+
 
 CREATE OR REPLACE FUNCTION public.banking_alert_preferences_update(p_user_id uuid, p_preferences_json jsonb)
 RETURNS jsonb
@@ -168422,6 +168678,8 @@ DECLARE
   v_muted_provider_keys jsonb := '[]'::jsonb;
   v_muted_pay_batch_ids jsonb := '[]'::jsonb;
   v_snoozed_until_utc timestamptz := NULL::timestamptz;
+  v_mode text := NULL::text;
+  v_informational_alert_kinds jsonb := '[]'::jsonb;
   v_allowed_alert_kinds text[] := ARRAY[
     'PROVIDER_OUTAGE_RETRY_LATER',
     'PROVIDER_OUTCOME_UNKNOWN_CHECK_PROVIDER',
@@ -168488,6 +168746,99 @@ BEGIN
       v_snoozed_until_utc := NULL::timestamptz;
     END;
   END IF;
+
+  IF v_payload ? 'mode' THEN
+    IF COALESCE(jsonb_typeof(v_payload -> 'mode'), 'null') <> 'string' THEN
+      RAISE EXCEPTION 'BANKING_ALERT_PREFERENCES_MODE_MUST_BE_STRING'
+        USING ERRCODE = 'P0001',
+              DETAIL = jsonb_build_object('code', 'BANKING_ALERT_PREFERENCES_MODE_MUST_BE_STRING')::text;
+    END IF;
+
+    v_mode := UPPER(NULLIF(BTRIM(COALESCE(v_payload ->> 'mode', '')), ''));
+    IF v_mode = 'NONE' THEN
+      v_mode := 'NO_BANKING_PAY_ALERTS';
+    END IF;
+
+    IF v_mode NOT IN ('NO_BANKING_PAY_ALERTS', 'ALL_ACTION_REQUIRED', 'SELECTED_FAILURE_REASONS') THEN
+      RAISE EXCEPTION 'BANKING_ALERT_PREFERENCES_INVALID_MODE'
+        USING ERRCODE = 'P0001',
+              DETAIL = jsonb_build_object('code', 'BANKING_ALERT_PREFERENCES_INVALID_MODE', 'mode', COALESCE(v_payload ->> 'mode', NULL))::text;
+    END IF;
+
+    IF v_mode = 'NO_BANKING_PAY_ALERTS' THEN
+      v_enabled := false;
+    ELSIF v_mode = 'ALL_ACTION_REQUIRED' THEN
+      v_enabled := true;
+      v_include_action_required := true;
+      IF NOT (v_payload ? 'failure_reason_allowlist') AND NOT (v_payload ? 'failure_reason_groups') THEN
+        v_failure_reason_allowlist := NULL::jsonb;
+      END IF;
+    ELSIF v_mode = 'SELECTED_FAILURE_REASONS' THEN
+      v_enabled := true;
+      v_include_action_required := true;
+      IF NOT (v_payload ? 'failure_reason_allowlist') AND NOT (v_payload ? 'failure_reason_groups') THEN
+        v_failure_reason_allowlist := '[]'::jsonb;
+      END IF;
+    END IF;
+  END IF;
+
+  IF v_payload ? 'failure_reason_groups' THEN
+    IF COALESCE(jsonb_typeof(v_payload -> 'failure_reason_groups'), 'null') <> 'array' THEN
+      RAISE EXCEPTION 'BANKING_ALERT_PREFERENCES_REASON_GROUPS_MUST_BE_ARRAY'
+        USING ERRCODE = 'P0001',
+              DETAIL = jsonb_build_object('code', 'BANKING_ALERT_PREFERENCES_REASON_GROUPS_MUST_BE_ARRAY')::text;
+    END IF;
+
+    SELECT COALESCE(jsonb_agg(to_jsonb(normalised_reason.failure_reason_group) ORDER BY normalised_reason.failure_reason_group), '[]'::jsonb)
+    INTO v_failure_reason_allowlist
+    FROM (
+      SELECT DISTINCT CASE UPPER(BTRIM(reason_value.value))
+        WHEN 'PROVIDER_OUTCOME_UNKNOWN' THEN 'PROVIDER_UNKNOWN'
+        WHEN 'UNSPECIFIED_PROVIDER_FAILURE' THEN 'PROVIDER_FAILED_UNSPECIFIED'
+        ELSE UPPER(BTRIM(reason_value.value))
+      END AS failure_reason_group
+      FROM jsonb_array_elements_text(v_payload -> 'failure_reason_groups') AS reason_value(value)
+      WHERE NULLIF(BTRIM(reason_value.value), '') IS NOT NULL
+    ) AS normalised_reason;
+  END IF;
+
+  IF v_payload ? 'informational_alert_kinds' THEN
+    IF COALESCE(jsonb_typeof(v_payload -> 'informational_alert_kinds'), 'null') <> 'array' THEN
+      RAISE EXCEPTION 'BANKING_ALERT_PREFERENCES_INFORMATIONAL_KINDS_MUST_BE_ARRAY'
+        USING ERRCODE = 'P0001',
+              DETAIL = jsonb_build_object('code', 'BANKING_ALERT_PREFERENCES_INFORMATIONAL_KINDS_MUST_BE_ARRAY')::text;
+    END IF;
+
+    SELECT COALESCE(jsonb_agg(to_jsonb(UPPER(BTRIM(informational_kind.value))) ORDER BY UPPER(BTRIM(informational_kind.value))), '[]'::jsonb)
+    INTO v_informational_alert_kinds
+    FROM jsonb_array_elements_text(v_payload -> 'informational_alert_kinds') AS informational_kind(value)
+    WHERE NULLIF(BTRIM(informational_kind.value), '') IS NOT NULL;
+
+    v_include_informational_alerts := EXISTS (
+      SELECT 1
+      FROM jsonb_array_elements_text(v_informational_alert_kinds) AS informational_kind(value)
+      WHERE informational_kind.value IN ('MANUAL_ADJUSTMENTS_CARRIED_FORWARD')
+    );
+
+    IF EXISTS (
+      SELECT 1
+      FROM jsonb_array_elements_text(v_informational_alert_kinds) AS progress_kind(value)
+      WHERE progress_kind.value IN ('AUTO_UNWIND_PROGRESS', 'WHOLE_BATCH_CANCELLATION_PROGRESS')
+    ) THEN
+      v_include_progress_alerts := true;
+    END IF;
+  END IF;
+
+  FOR v_value_text IN
+    SELECT informational_kind_entry.value
+    FROM jsonb_array_elements_text(COALESCE(v_informational_alert_kinds, '[]'::jsonb)) AS informational_kind_entry(value)
+  LOOP
+    IF NOT (v_value_text = ANY(v_allowed_alert_kinds)) THEN
+      RAISE EXCEPTION 'BANKING_ALERT_PREFERENCES_INVALID_INFORMATIONAL_ALERT_KIND'
+        USING ERRCODE = 'P0001',
+              DETAIL = jsonb_build_object('code', 'BANKING_ALERT_PREFERENCES_INVALID_INFORMATIONAL_ALERT_KIND', 'alert_kind', v_value_text)::text;
+    END IF;
+  END LOOP;
 
   IF v_payload ? 'enabled' THEN
     IF COALESCE(jsonb_typeof(v_payload -> 'enabled'), 'null') <> 'boolean' THEN
@@ -168608,7 +168959,11 @@ BEGIN
       SELECT COALESCE(jsonb_agg(to_jsonb(normalised_reason.failure_reason_group) ORDER BY normalised_reason.failure_reason_group), '[]'::jsonb)
       INTO v_failure_reason_allowlist
       FROM (
-        SELECT DISTINCT UPPER(BTRIM(reason_value.value)) AS failure_reason_group
+        SELECT DISTINCT CASE UPPER(BTRIM(reason_value.value))
+        WHEN 'PROVIDER_OUTCOME_UNKNOWN' THEN 'PROVIDER_UNKNOWN'
+        WHEN 'UNSPECIFIED_PROVIDER_FAILURE' THEN 'PROVIDER_FAILED_UNSPECIFIED'
+        ELSE UPPER(BTRIM(reason_value.value))
+      END AS failure_reason_group
         FROM jsonb_array_elements_text(v_payload -> 'failure_reason_allowlist') AS reason_value(value)
         WHERE NULLIF(BTRIM(reason_value.value), '') IS NOT NULL
       ) AS normalised_reason;
@@ -168628,7 +168983,11 @@ BEGIN
     SELECT COALESCE(jsonb_agg(to_jsonb(normalised_reason.failure_reason_group) ORDER BY normalised_reason.failure_reason_group), '[]'::jsonb)
     INTO v_failure_reason_blocklist
     FROM (
-      SELECT DISTINCT UPPER(BTRIM(reason_value.value)) AS failure_reason_group
+      SELECT DISTINCT CASE UPPER(BTRIM(reason_value.value))
+        WHEN 'PROVIDER_OUTCOME_UNKNOWN' THEN 'PROVIDER_UNKNOWN'
+        WHEN 'UNSPECIFIED_PROVIDER_FAILURE' THEN 'PROVIDER_FAILED_UNSPECIFIED'
+        ELSE UPPER(BTRIM(reason_value.value))
+      END AS failure_reason_group
       FROM jsonb_array_elements_text(v_payload -> 'failure_reason_blocklist') AS reason_value(value)
       WHERE NULLIF(BTRIM(reason_value.value), '') IS NOT NULL
     ) AS normalised_reason;
@@ -168721,6 +169080,24 @@ BEGIN
     END IF;
   END IF;
 
+  IF v_mode = 'NO_BANKING_PAY_ALERTS' THEN
+    v_enabled := false;
+  ELSIF v_mode = 'ALL_ACTION_REQUIRED' THEN
+    v_enabled := true;
+    v_include_action_required := true;
+    IF NOT (v_payload ? 'failure_reason_allowlist') AND NOT (v_payload ? 'failure_reason_groups') THEN
+      v_failure_reason_allowlist := NULL::jsonb;
+    END IF;
+  ELSIF v_mode = 'SELECTED_FAILURE_REASONS' THEN
+    v_enabled := true;
+    v_include_action_required := true;
+    IF NOT (v_payload ? 'failure_reason_allowlist') AND NOT (v_payload ? 'failure_reason_groups') THEN
+      v_failure_reason_allowlist := COALESCE(v_failure_reason_allowlist, '[]'::jsonb);
+    END IF;
+  END IF;
+
+  v_include_success_alerts := false;
+
   INSERT INTO public.banking_alert_user_preferences AS preference_target (
     user_id,
     enabled,
@@ -168785,6 +169162,9 @@ BEGIN
   );
 END;
 $function$;
+
+
+
 
 
 CREATE OR REPLACE FUNCTION public._banking_alert_user_filter_allows(p_user_id uuid, p_alert_payload jsonb)
@@ -169053,8 +169433,6 @@ BEGIN
   RETURN true;
 END;
 $function$;
-
-
 
 
 
@@ -169413,16 +169791,19 @@ BEGIN
     count(*) FILTER (WHERE classified_events.is_terminal_no_money)::integer,
     count(*) FILTER (WHERE classified_events.is_pending_non_final)::integer,
     count(*) FILTER (
-      WHERE upper(COALESCE(classified_events.normalised_state, '')) IN ('UNKNOWN', 'OUTCOME_UNKNOWN', 'PROVIDER_UNKNOWN')
-         OR upper(COALESCE(classified_events.mapping_status, '')) IN ('UNMATCHED', 'AMBIGUOUS', 'REVIEW_REQUIRED')
-         OR classified_events.provider_failure_reason_group IN ('WEBHOOK_UNMATCHED', 'PROVIDER_UNKNOWN')
+      WHERE (
+        upper(COALESCE(classified_events.normalised_state, '')) IN ('UNKNOWN', 'OUTCOME_UNKNOWN', 'PROVIDER_UNKNOWN')
+        OR upper(COALESCE(classified_events.mapping_status, '')) IN ('UNMATCHED', 'AMBIGUOUS', 'REVIEW_REQUIRED')
+        OR upper(COALESCE(classified_events.provider_failure_reason_group, '')) IN ('WEBHOOK_UNMATCHED', 'PROVIDER_UNKNOWN')
+      )
+      AND upper(COALESCE(classified_events.provider_failure_reason_group, '')) <> 'PROVIDER_OUTAGE'
     )::integer,
     count(*) FILTER (
       WHERE classified_events.provider_event_transport = 'PROVIDER_WEBHOOK'
-        AND classified_events.provider_signature_valid IS TRUE
+        AND classified_events.provider_signature_valid IS DISTINCT FROM false
         AND classified_events.provider_webhook_receipt_id IS NOT NULL
         AND classified_events.receipt_signature_valid IS TRUE
-        AND upper(COALESCE(classified_events.receipt_status, '')) NOT IN ('SIGNATURE_INVALID', 'FAILED_FINAL', 'FAILED_RETRYABLE')
+        AND upper(COALESCE(classified_events.receipt_status, '')) IN ('VERIFIED', 'NORMALISED', 'NORMALIZED', 'INGESTED', 'FAILED_RETRYABLE', 'UNMATCHED_REVIEW_REQUIRED')
         AND classified_events.receipt_provider_key IS NOT DISTINCT FROM v_batch.rail_provider_snapshot
         AND classified_events.receipt_rail_env IS NOT DISTINCT FROM COALESCE(v_batch.rail_env_snapshot, 'PROD')
         AND NULLIF(btrim(COALESCE(classified_events.receipt_provider_event_key, '')), '') IS NOT NULL
@@ -169430,10 +169811,10 @@ BEGIN
     count(*) FILTER (
       WHERE classified_events.provider_event_transport = 'PROVIDER_WEBHOOK'
         AND (
-          classified_events.provider_signature_valid IS DISTINCT FROM true
+          classified_events.provider_signature_valid IS FALSE
           OR classified_events.provider_webhook_receipt_id IS NULL
           OR classified_events.receipt_signature_valid IS DISTINCT FROM true
-          OR upper(COALESCE(classified_events.receipt_status, '')) IN ('SIGNATURE_INVALID', 'FAILED_FINAL', 'FAILED_RETRYABLE')
+          OR upper(COALESCE(classified_events.receipt_status, '')) IN ('SIGNATURE_INVALID', 'FAILED_FINAL')
           OR classified_events.receipt_provider_key IS DISTINCT FROM v_batch.rail_provider_snapshot
           OR classified_events.receipt_rail_env IS DISTINCT FROM COALESCE(v_batch.rail_env_snapshot, 'PROD')
           OR NULLIF(btrim(COALESCE(classified_events.receipt_provider_event_key, '')), '') IS NULL
@@ -169448,7 +169829,10 @@ BEGIN
         AND NULLIF(btrim(COALESCE(classified_events.receipt_provider_event_key, '')), '') IS NOT NULL
     )::integer,
     count(*) FILTER (WHERE classified_events.provider_event_transport = 'PROVIDER_POLL')::integer,
-    count(*) FILTER (WHERE classified_events.provider_failure_reason_group = 'PROVIDER_OUTAGE')::integer
+    count(*) FILTER (
+      WHERE upper(COALESCE(classified_events.provider_failure_reason_group, '')) = 'PROVIDER_OUTAGE'
+        AND upper(COALESCE(classified_events.mapping_status, '')) = 'MATCHED'
+    )::integer
   INTO v_event_count,
        v_event_final_count,
        v_event_terminal_no_money_count,
@@ -169550,7 +169934,11 @@ BEGIN
   v_final_evidence_count := v_transfer_final_count + v_event_final_count;
   v_terminal_no_money_count := v_transfer_terminal_no_money_count + v_event_terminal_no_money_count;
   v_pending_provider_count := v_transfer_pending_count + v_event_pending_count + CASE WHEN v_provider_submitted OR v_provider_request_sent THEN 1 ELSE 0 END;
-  v_unknown_provider_count := v_event_unknown_count + CASE WHEN v_provider_evidence_class = 'PROVIDER_OUTCOME_UNKNOWN' OR v_provider_blocker_code = 'PAYMENT_OUTCOME_UNKNOWN_CHECK_PROVIDER' THEN 1 ELSE 0 END;
+  v_unknown_provider_count := v_event_unknown_count + CASE
+    WHEN v_provider_outage_count > 0 OR v_provider_blocker_code = 'PROVIDER_OUTAGE_RETRY_LATER' THEN 0
+    WHEN v_provider_evidence_class = 'PROVIDER_OUTCOME_UNKNOWN' OR v_provider_blocker_code = 'PAYMENT_OUTCOME_UNKNOWN_CHECK_PROVIDER' THEN 1
+    ELSE 0
+  END;
 
   v_has_paid_or_settled := v_final_evidence_count > 0 OR upper(COALESCE(v_provider_cash_state, '')) = 'FINAL_PAID';
   v_has_provider_unknown := v_unknown_provider_count > 0;
@@ -169589,7 +169977,7 @@ BEGIN
 
   IF v_has_paid_or_settled THEN
     v_lifecycle_state := 'PAID_OR_SETTLED';
-    v_lifecycle_label := 'Paid — recover overpayment if timesheet changed';
+    v_lifecycle_label := 'Recover overpayment in next pay run';
     v_recommended_action := 'AMEND_AND_RECOVER_OVERPAYMENT';
   ELSIF v_has_provider_unknown THEN
     v_lifecycle_state := 'PROVIDER_OUTCOME_UNKNOWN';
@@ -169599,9 +169987,13 @@ BEGIN
     v_lifecycle_state := 'PROVIDER_SUBMITTED_PENDING';
     v_lifecycle_label := 'Provider pending';
     v_recommended_action := 'CHECK_PROVIDER_STATUS';
-  ELSIF v_has_provider_outage THEN
+  ELSIF v_has_provider_outage
+        AND COALESCE(v_provider_request_sent, false) IS NOT TRUE
+        AND COALESCE(v_provider_submitted, false) IS NOT TRUE
+        AND COALESCE(v_provider_external_id_present, false) IS NOT TRUE
+        AND COALESCE(jsonb_array_length(v_blockers), 0) = 0 THEN
     v_lifecycle_state := 'PROVIDER_OUTAGE_RETRY_LATER';
-    v_lifecycle_label := 'Bank unavailable — retry later';
+    v_lifecycle_label := 'Bank unavailable — unsent payments can be retried';
     v_recommended_action := 'RETRY_PROVIDER_LATER';
   ELSIF v_no_money_applied_count > 0 THEN
     v_lifecycle_state := 'FINANCIALS_REWOUND';
@@ -169651,7 +170043,11 @@ BEGIN
   v_requires_retry_later := v_lifecycle_state = 'PROVIDER_OUTAGE_RETRY_LATER';
   v_whole_batch_cancel_available := v_can_pre_provider_cancel AND v_scope_type = 'BATCH';
   v_row_cancel_available := v_can_pre_provider_cancel AND v_scope_type <> 'BATCH';
-  v_retry_same_batch_safe := v_lifecycle_state = 'PROVIDER_OUTAGE_RETRY_LATER' AND v_provider_request_sent IS NOT TRUE;
+  v_retry_same_batch_safe := v_lifecycle_state = 'PROVIDER_OUTAGE_RETRY_LATER'
+                             AND v_provider_request_sent IS NOT TRUE
+                             AND v_provider_submitted IS NOT TRUE
+                             AND v_provider_external_id_present IS NOT TRUE
+                             AND COALESCE(jsonb_array_length(v_blockers), 0) = 0;
 
   v_provider_evidence_summary_json := jsonb_build_object(
     'evidence_class', v_provider_evidence_class,
@@ -169776,7 +170172,14 @@ BEGIN
     'requires_retry_later', v_requires_retry_later,
     'whole_batch_cancel_available', v_whole_batch_cancel_available,
     'row_cancel_available', v_row_cancel_available,
-    'retry_same_batch_safe', v_retry_same_batch_safe
+    'retry_same_batch_safe', v_retry_same_batch_safe,
+    'retry_status_label', CASE WHEN v_lifecycle_state = 'PROVIDER_OUTAGE_RETRY_LATER' THEN 'Bank unavailable — unsent payments can be retried' ELSE NULL::text END,
+    'retry_row_label', CASE WHEN v_lifecycle_state = 'PROVIDER_OUTAGE_RETRY_LATER' THEN 'Bank unavailable — retry available' ELSE NULL::text END,
+    'retry_button_label', CASE WHEN v_lifecycle_state = 'PROVIDER_OUTAGE_RETRY_LATER' THEN 'Retry unsent payments' ELSE NULL::text END,
+    'retry_running_label', CASE WHEN v_lifecycle_state = 'PROVIDER_OUTAGE_RETRY_LATER' THEN 'Retrying unsent payments' ELSE NULL::text END,
+    'retry_disabled_button_label', CASE WHEN v_lifecycle_state = 'PROVIDER_OUTAGE_RETRY_LATER' THEN 'Retry in progress' ELSE NULL::text END,
+    'retry_row_action_label', CASE WHEN v_lifecycle_state = 'PROVIDER_OUTAGE_RETRY_LATER' THEN 'Open retry summary' ELSE NULL::text END,
+    'paid_recovery_label', CASE WHEN v_lifecycle_state = 'PAID_OR_SETTLED' THEN 'Recover overpayment in next pay run' ELSE NULL::text END
   );
 
   v_result := v_result || jsonb_build_object(
@@ -169816,7 +170219,6 @@ BEGIN
   RETURN v_result;
 END;
 $function$;
-
 
 
 
