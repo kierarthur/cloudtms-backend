@@ -6603,7 +6603,6 @@ async function handleContractsCreate(env, req) {
 // handleContractsList — enriched with candidate/client names and relationship-aware free-text filtering
 // (joins based on FK: contracts.candidate_id → candidates.id, contracts.client_id → clients.id)  :contentReference[oaicite:0]{index=0}
 
-
 function makeBankingFriendlyErrorPayload(input, options = {}) {
   const isPlainObject = (value) => Boolean(value && typeof value === 'object' && !Array.isArray(value));
 
@@ -7437,7 +7436,7 @@ function makeBankingFriendlyErrorPayload(input, options = {}) {
       http_status: 409,
       severity: 'critical',
       title: 'Payment retry needs review',
-      message: 'The blocked-funds retry needs review because CloudTMS could not confirm that its local execution artefacts are safe to clean.',
+      message: 'Retry unsent payments needs review because CloudTMS could not confirm that its local execution artefacts are safe to clean.',
       user_action: 'REVIEW_PAYMENT_ISSUES',
       confirm_label: 'OK',
       show_modal: true
@@ -7455,8 +7454,8 @@ function makeBankingFriendlyErrorPayload(input, options = {}) {
       ok: true,
       http_status: 200,
       severity: 'critical',
-      title: 'Bank rejected payment — blocked funds',
-      message: 'The bank rejected the payment because the funding account does not have enough money. No payment was submitted. Fund the account and retry, or cancel/release the batch.',
+      title: 'Bank unavailable — unsent payments can be retried',
+      message: 'The payment was not submitted to the bank/provider. Fund the account if needed, then use Retry unsent payments from Overview.',
       user_action: 'REVIEW_PAYMENT_ISSUES',
       confirm_label: 'OK',
       blocked_funds: true,
@@ -7552,7 +7551,7 @@ function makeBankingFriendlyErrorPayload(input, options = {}) {
       http_status: 409,
       severity: 'warning',
       title: 'Payment retry did not complete',
-      message: 'CloudTMS could not safely complete this blocked-funds retry. No payment was submitted. Refresh Banking, review the batch status, then try again.',
+      message: 'Retry unsent payments needs review. No payment was submitted. Refresh Banking and review the batch status before trying again.',
       user_action: 'REVIEW_PAYMENT_ISSUES',
       confirm_label: 'OK',
       show_modal: true
@@ -7562,7 +7561,7 @@ function makeBankingFriendlyErrorPayload(input, options = {}) {
       http_status: 409,
       severity: 'warning',
       title: 'Payment retry did not complete',
-      message: 'CloudTMS could not safely complete this blocked-funds retry. No payment was submitted. Refresh Banking, review the batch status, then try again.',
+      message: 'Retry unsent payments needs review. No payment was submitted. Refresh Banking and review the batch status before trying again.',
       user_action: 'REVIEW_PAYMENT_ISSUES',
       confirm_label: 'OK',
       show_modal: true
@@ -7572,7 +7571,7 @@ function makeBankingFriendlyErrorPayload(input, options = {}) {
       http_status: 409,
       severity: 'warning',
       title: 'Payment retry did not complete',
-      message: 'CloudTMS could not safely complete this blocked-funds retry. No payment was submitted. Refresh Banking, review the batch status, then try again.',
+      message: 'Retry unsent payments needs review. No payment was submitted. Refresh Banking and review the batch status before trying again.',
       user_action: 'REVIEW_PAYMENT_ISSUES',
       confirm_label: 'OK',
       show_modal: true
@@ -7582,7 +7581,7 @@ function makeBankingFriendlyErrorPayload(input, options = {}) {
       http_status: 409,
       severity: 'warning',
       title: 'Payment retry did not complete',
-      message: 'CloudTMS could not safely complete this blocked-funds retry. No payment was submitted. Refresh Banking, review the batch status, then try again.',
+      message: 'Retry unsent payments needs review. No payment was submitted. Refresh Banking and review the batch status before trying again.',
       user_action: 'REVIEW_PAYMENT_ISSUES',
       confirm_label: 'OK',
       show_modal: true
@@ -7592,7 +7591,7 @@ function makeBankingFriendlyErrorPayload(input, options = {}) {
       http_status: 409,
       severity: 'warning',
       title: 'Payment retry did not complete',
-      message: 'CloudTMS could not safely complete this blocked-funds retry. No payment was submitted. Refresh Banking, review the batch status, then try again.',
+      message: 'Retry unsent payments needs review. No payment was submitted. Refresh Banking and review the batch status before trying again.',
       user_action: 'REVIEW_PAYMENT_ISSUES',
       confirm_label: 'OK',
       show_modal: true
@@ -7602,7 +7601,7 @@ function makeBankingFriendlyErrorPayload(input, options = {}) {
       http_status: 409,
       severity: 'warning',
       title: 'Payment retry did not complete',
-      message: 'CloudTMS could not safely complete this blocked-funds retry. No payment was submitted. Refresh Banking, review the batch status, then try again.',
+      message: 'Retry unsent payments needs review. No payment was submitted. Refresh Banking and review the batch status before trying again.',
       user_action: 'REVIEW_PAYMENT_ISSUES',
       confirm_label: 'OK',
       show_modal: true
@@ -7612,7 +7611,7 @@ function makeBankingFriendlyErrorPayload(input, options = {}) {
       http_status: 409,
       severity: 'warning',
       title: 'Payment retry did not complete',
-      message: 'CloudTMS could not safely complete this blocked-funds retry. No payment was submitted. Refresh Banking, review the batch status, then try again.',
+      message: 'Retry unsent payments needs review. No payment was submitted. Refresh Banking and review the batch status before trying again.',
       user_action: 'REVIEW_PAYMENT_ISSUES',
       confirm_label: 'OK',
       show_modal: true
@@ -7622,7 +7621,7 @@ function makeBankingFriendlyErrorPayload(input, options = {}) {
       http_status: 409,
       severity: 'warning',
       title: 'Payment retry did not complete',
-      message: 'CloudTMS could not safely complete this blocked-funds retry. No payment was submitted. Refresh Banking, review the batch status, then try again.',
+      message: 'Retry unsent payments needs review. No payment was submitted. Refresh Banking and review the batch status before trying again.',
       user_action: 'REVIEW_PAYMENT_ISSUES',
       confirm_label: 'OK',
       show_modal: true
@@ -7632,7 +7631,7 @@ function makeBankingFriendlyErrorPayload(input, options = {}) {
       http_status: 409,
       severity: 'warning',
       title: 'Payment retry did not complete',
-      message: 'CloudTMS could not safely complete this blocked-funds retry. No payment was submitted. Refresh Banking, review the batch status, then try again.',
+      message: 'Retry unsent payments needs review. No payment was submitted. Refresh Banking and review the batch status before trying again.',
       user_action: 'REVIEW_PAYMENT_ISSUES',
       confirm_label: 'OK',
       show_modal: true
@@ -7642,7 +7641,7 @@ function makeBankingFriendlyErrorPayload(input, options = {}) {
       http_status: 409,
       severity: 'warning',
       title: 'Payment retry did not complete',
-      message: 'CloudTMS could not safely complete this blocked-funds retry. No payment was submitted. Refresh Banking, review the batch status, then try again.',
+      message: 'Retry unsent payments needs review. No payment was submitted. Refresh Banking and review the batch status before trying again.',
       user_action: 'REVIEW_PAYMENT_ISSUES',
       confirm_label: 'OK',
       show_modal: true
@@ -7652,7 +7651,7 @@ function makeBankingFriendlyErrorPayload(input, options = {}) {
       http_status: 409,
       severity: 'warning',
       title: 'Payment retry did not complete',
-      message: 'CloudTMS could not safely complete this blocked-funds retry. No payment was submitted. Refresh Banking, review the batch status, then try again.',
+      message: 'Retry unsent payments needs review. No payment was submitted. Refresh Banking and review the batch status before trying again.',
       user_action: 'REVIEW_PAYMENT_ISSUES',
       confirm_label: 'OK',
       show_modal: true
@@ -7662,7 +7661,7 @@ function makeBankingFriendlyErrorPayload(input, options = {}) {
       http_status: 409,
       severity: 'warning',
       title: 'Payment retry did not complete',
-      message: 'CloudTMS could not safely complete this blocked-funds retry. No payment was submitted. Refresh Banking, review the batch status, then try again.',
+      message: 'Retry unsent payments needs review. No payment was submitted. Refresh Banking and review the batch status before trying again.',
       user_action: 'REVIEW_PAYMENT_ISSUES',
       confirm_label: 'OK',
       show_modal: true
@@ -8003,7 +8002,7 @@ function makeBankingFriendlyErrorPayload(input, options = {}) {
       http_status: 400,
       severity: 'warning',
       title: 'Banking setup needs attention',
-      message: 'CloudTMS could not retry this payment because the configured banking rail does not support retrying this batch. Review Banking settings, then retry or cancel/release the batch.',
+      message: 'CloudTMS could not retry this payment because the configured banking rail does not support retrying this batch. Review Banking settings, then use an available banking action.',
       user_action: 'REVIEW_BANKING_SETTINGS',
       confirm_label: 'OK'
     },
@@ -8114,7 +8113,7 @@ function makeBankingFriendlyErrorPayload(input, options = {}) {
     if (action === 'RETRY_BLOCKED_FUNDS') {
       Object.assign(template, {
         title: 'Payment batch has changed',
-        message: 'This blocked-funds batch is no longer up to date. No payment was submitted. Refresh Banking, review the latest payment differences, then create or authorise a new payment batch.',
+        message: 'This payment batch is no longer up to date. No payment was submitted. Refresh Banking, review the latest payment differences, then try again.',
         user_action: 'REFRESH_BATCH'
       });
     } else if (action === 'CREATE_DRAFT') {
@@ -8158,7 +8157,7 @@ function makeBankingFriendlyErrorPayload(input, options = {}) {
     if (errorCode === 'RAIL_RETRY_EXECUTION_NOT_SUPPORTED') {
       Object.assign(template, {
         title: 'Banking setup needs attention',
-        message: 'CloudTMS could not retry this payment because the configured banking rail does not support retrying this batch. Review Banking settings, then retry or cancel/release the batch.',
+        message: 'CloudTMS could not retry this payment because the configured banking rail does not support retrying this batch. Review Banking settings, then use an available banking action.',
         user_action: 'REVIEW_BANKING_SETTINGS'
       });
     } else {
@@ -8556,6 +8555,7 @@ function makeBankingFriendlyErrorPayload(input, options = {}) {
 
   return payload;
 }
+
 
 
 async function handleContractsList(env, req) {
@@ -38436,6 +38436,8 @@ async function handleBankingAlertPreferencesGet(env, req, user) {
   }
 }
 
+
+
 async function handleBankingAlertPreferencesUpdate(env, req, user) {
   if (!user || !user.id) return withCORS(env, req, unauthorized('Unauthorized'));
 
@@ -38496,6 +38498,107 @@ async function handleBankingAlertPreferencesUpdate(env, req, user) {
   ]);
   const allowedSeverities = new Set(['INFO', 'PROGRESS', 'ACTION_REQUIRED', 'CRITICAL']);
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+  const normalisePreferenceMode = (value) => {
+    const mode = String(value === undefined || value === null ? '' : value).trim().toUpperCase();
+    if (!mode) return '';
+    if (mode === 'NONE' || mode === 'OFF' || mode === 'DISABLED') return 'NO_BANKING_PAY_ALERTS';
+    return mode;
+  };
+
+  const normaliseFailureReasonGroup = (value) => {
+    const group = String(value === undefined || value === null ? '' : value).trim().toUpperCase();
+    if (!group) return '';
+    if (group === 'PROVIDER_OUTCOME_UNKNOWN') return 'PROVIDER_UNKNOWN';
+    if (group === 'UNSPECIFIED_PROVIDER_FAILURE') return 'PROVIDER_FAILED_UNSPECIFIED';
+    return group;
+  };
+
+  const normaliseStringArray = (value, fieldName, normaliser, allowedSet, label) => {
+    if (value === null || value === undefined) return { ok: true, value: value === null ? null : undefined };
+    if (!Array.isArray(value)) return { ok: false, error: `${fieldName} must be an array or null` };
+    const out = [];
+    for (const item of value) {
+      const text = normaliser(item);
+      if (!text || !allowedSet.has(text)) return { ok: false, error: `${fieldName} contains invalid ${label}` };
+      if (!out.includes(text)) out.push(text);
+    }
+    return { ok: true, value: out };
+  };
+
+  const requestedMode = normalisePreferenceMode(
+    preferencesPayload.mode
+    ?? preferencesPayload.preference_mode
+    ?? preferencesPayload.preferenceMode
+    ?? preferencesPayload.alert_mode
+    ?? preferencesPayload.alertMode
+  );
+  if (requestedMode && !['NO_BANKING_PAY_ALERTS', 'ALL_ACTION_REQUIRED', 'SELECTED_FAILURE_REASONS'].includes(requestedMode)) {
+    return withCORS(env, req, badRequest('mode must be NO_BANKING_PAY_ALERTS, ALL_ACTION_REQUIRED, or SELECTED_FAILURE_REASONS'));
+  }
+
+  if (Object.prototype.hasOwnProperty.call(preferencesPayload, 'failure_reason_groups')) {
+    const normalised = normaliseStringArray(preferencesPayload.failure_reason_groups, 'failure_reason_groups', normaliseFailureReasonGroup, allowedFailureReasonGroups, 'failure reason group');
+    if (!normalised.ok) return withCORS(env, req, badRequest(normalised.error));
+    preferencesPayload.failure_reason_allowlist = normalised.value || [];
+  } else if (Object.prototype.hasOwnProperty.call(preferencesPayload, 'failureReasonGroups')) {
+    const normalised = normaliseStringArray(preferencesPayload.failureReasonGroups, 'failureReasonGroups', normaliseFailureReasonGroup, allowedFailureReasonGroups, 'failure reason group');
+    if (!normalised.ok) return withCORS(env, req, badRequest(normalised.error));
+    preferencesPayload.failure_reason_allowlist = normalised.value || [];
+  }
+
+  for (const fieldName of ['failure_reason_allowlist', 'failure_reason_blocklist']) {
+    if (Object.prototype.hasOwnProperty.call(preferencesPayload, fieldName)) {
+      const normalised = normaliseStringArray(preferencesPayload[fieldName], fieldName, normaliseFailureReasonGroup, allowedFailureReasonGroups, 'failure reason group');
+      if (!normalised.ok) return withCORS(env, req, badRequest(normalised.error));
+      preferencesPayload[fieldName] = normalised.value;
+    }
+  }
+
+  if (Object.prototype.hasOwnProperty.call(preferencesPayload, 'informational_alert_kinds') || Object.prototype.hasOwnProperty.call(preferencesPayload, 'informationalAlertKinds')) {
+    const rawInformationalKinds = Object.prototype.hasOwnProperty.call(preferencesPayload, 'informational_alert_kinds')
+      ? preferencesPayload.informational_alert_kinds
+      : preferencesPayload.informationalAlertKinds;
+    const normalised = normaliseStringArray(
+      rawInformationalKinds,
+      Object.prototype.hasOwnProperty.call(preferencesPayload, 'informational_alert_kinds') ? 'informational_alert_kinds' : 'informationalAlertKinds',
+      (value) => String(value === undefined || value === null ? '' : value).trim().toUpperCase(),
+      allowedAlertKinds,
+      'alert kind'
+    );
+    if (!normalised.ok) return withCORS(env, req, badRequest(normalised.error));
+    const kinds = normalised.value || [];
+    preferencesPayload.include_progress_alerts = kinds.includes('AUTO_UNWIND_PROGRESS') || kinds.includes('WHOLE_BATCH_CANCELLATION_PROGRESS');
+    preferencesPayload.include_informational_alerts = kinds.includes('MANUAL_ADJUSTMENTS_CARRIED_FORWARD');
+  }
+
+  if (requestedMode === 'NO_BANKING_PAY_ALERTS') {
+    preferencesPayload.enabled = false;
+  } else if (requestedMode === 'ALL_ACTION_REQUIRED') {
+    preferencesPayload.enabled = true;
+    preferencesPayload.include_action_required = true;
+    if (!Object.prototype.hasOwnProperty.call(preferencesPayload, 'failure_reason_groups')
+      && !Object.prototype.hasOwnProperty.call(preferencesPayload, 'failureReasonGroups')
+      && !Object.prototype.hasOwnProperty.call(preferencesPayload, 'failure_reason_allowlist')) {
+      preferencesPayload.failure_reason_allowlist = null;
+    }
+  } else if (requestedMode === 'SELECTED_FAILURE_REASONS') {
+    preferencesPayload.enabled = true;
+    preferencesPayload.include_action_required = true;
+    const selectedReasons = Array.isArray(preferencesPayload.failure_reason_allowlist) ? preferencesPayload.failure_reason_allowlist : [];
+    if (!selectedReasons.length) return withCORS(env, req, badRequest('SELECTED_FAILURE_REASONS requires at least one failure reason group'));
+  }
+
+  preferencesPayload.include_success_alerts = false;
+  delete preferencesPayload.mode;
+  delete preferencesPayload.preference_mode;
+  delete preferencesPayload.preferenceMode;
+  delete preferencesPayload.alert_mode;
+  delete preferencesPayload.alertMode;
+  delete preferencesPayload.failure_reason_groups;
+  delete preferencesPayload.failureReasonGroups;
+  delete preferencesPayload.informational_alert_kinds;
+  delete preferencesPayload.informationalAlertKinds;
 
   const ensureBooleanIfPresent = (fieldName) => {
     if (!Object.prototype.hasOwnProperty.call(preferencesPayload, fieldName)) return null;
@@ -38622,6 +38725,7 @@ async function handleBankingAlertPreferencesUpdate(env, req, user) {
 
 
 
+
 async function handleBankingProviderWebhook(env, req, provider, webhookPublicId) {
   const nowIso = new Date().toISOString();
   const providerKeyRaw = String(provider || '').trim().toUpperCase();
@@ -38706,7 +38810,7 @@ async function handleBankingProviderWebhook(env, req, provider, webhookPublicId)
       `?provider_key=eq.${enc(providerKey)}` +
       `&rail_env=eq.${enc(railEnv)}` +
       `&provider_event_key=eq.${enc(providerEventKey)}` +
-      `&select=id,status,attempt_count,ingest_results_json,processed_at_utc,provider_event_key,raw_payload_hash` +
+      `&select=id,status,attempt_count,normalised_events_json,ingest_results_json,processed_at_utc,provider_event_key,raw_payload_hash,error_code,error_message` +
       `&limit=1`;
     const res = await sbFetch(env, url, false);
     return res && Array.isArray(res.rows) && res.rows.length ? res.rows[0] : null;
@@ -38727,6 +38831,74 @@ async function handleBankingProviderWebhook(env, req, provider, webhookPublicId)
     if (!receipt || !receipt.id) return null;
     const nextAttempt = Math.max(1, Number(receipt.attempt_count || 1) + 1);
     return patchReceipt(receipt.id, { attempt_count: nextAttempt });
+  };
+
+  const finalReceiptStatuses = new Set(['INGESTED', 'IGNORED_EVENT_TYPE', 'UNMATCHED_REVIEW_REQUIRED', 'FAILED_FINAL']);
+  const retryableReceiptStatuses = new Set(['RECEIVED', 'VERIFIED', 'NORMALISED', 'NORMALIZED', 'FAILED_RETRYABLE', 'PROCESSING']);
+  const finalEventResultStatuses = new Set(['INGESTED', 'DUPLICATE', 'IGNORED', 'UNMATCHED_REVIEW_REQUIRED', 'FAILED_FINAL']);
+
+  const eventKeyOf = (event) => {
+    const source = safeObject(event);
+    return String(source.provider_event_key || source.idempotency_key || source.event_key || '').trim();
+  };
+
+  const receiptResultKeyOf = (result) => {
+    const source = safeObject(result);
+    return String(source.provider_event_key || source.idempotency_key || source.event_key || '').trim();
+  };
+
+  const receiptResultStatusOf = (result) => String(safeObject(result).status || '').trim().toUpperCase();
+
+  const receiptEventIsIngestable = (event) => {
+    const source = safeObject(event);
+    return source.ignored !== true;
+  };
+
+  const receiptResultsByEventKey = (receipt) => {
+    const resultMap = new Map();
+    const receiptResults = safeArray(receipt && receipt.ingest_results_json);
+    for (const result of receiptResults) {
+      const key = receiptResultKeyOf(result);
+      if (!key) continue;
+      resultMap.set(key, safeObject(result));
+    }
+    return resultMap;
+  };
+
+  const isFinalEventResult = (result) => {
+    const status = receiptResultStatusOf(result);
+    return !!status && finalEventResultStatuses.has(status);
+  };
+
+  const isReceiptFullyProcessed = (receipt) => {
+    if (!receipt || !receipt.id) return false;
+    const status = String(receipt.status || '').trim().toUpperCase();
+    if (!finalReceiptStatuses.has(status)) return false;
+    if (retryableReceiptStatuses.has(status)) return false;
+    const normalisedEvents = safeArray(receipt.normalised_events_json);
+    const resultMap = receiptResultsByEventKey(receipt);
+    const ingestableEvents = normalisedEvents.filter(receiptEventIsIngestable);
+    if (ingestableEvents.length) {
+      for (const event of ingestableEvents) {
+        const eventKey = eventKeyOf(event);
+        if (!eventKey) return false;
+        const result = resultMap.get(eventKey);
+        if (!isFinalEventResult(result)) return false;
+      }
+      return true;
+    }
+    const results = safeArray(receipt.ingest_results_json);
+    if (results.length) return results.every(isFinalEventResult);
+    return !!receipt.processed_at_utc;
+  };
+
+  const existingFinalResultByEventKey = (receipt) => {
+    const resultMap = receiptResultsByEventKey(receipt);
+    const finalMap = new Map();
+    for (const [key, result] of resultMap.entries()) {
+      if (isFinalEventResult(result)) finalMap.set(key, result);
+    }
+    return finalMap;
   };
 
   const insertReceipt = async (receipt) => {
@@ -38814,7 +38986,10 @@ async function handleBankingProviderWebhook(env, req, provider, webhookPublicId)
   const coalesceSignalRecommendations = (rows) => {
     const byBatch = new Map();
     for (const row of toArray(rows)) {
-      const result = safeObject(row && row.result ? row.result : row);
+      const rowObject = safeObject(row);
+      if (rowObject.skipped_existing_final_result === true) continue;
+      const result = safeObject(rowObject && rowObject.result ? rowObject.result : rowObject);
+      if (result.skipped_existing_final_result === true) continue;
       const rec = readSignalRecommendation(result);
       const batchId = String(rec.pay_batch_id || result.pay_batch_id || '').trim();
       if (!batchId) continue;
@@ -38992,21 +39167,25 @@ async function handleBankingProviderWebhook(env, req, provider, webhookPublicId)
   }
 
   const existingDelivery = await findExistingReceipt(railEnv, deliveryReceiptKey);
+  let existingDeliveryForReprocess = null;
   if (existingDelivery && existingDelivery.id) {
     const duplicateStatus = String(existingDelivery.status || '').trim().toUpperCase();
     await bumpDuplicateAttempt(existingDelivery);
-    return jsonResponse({
-      ok: true,
-      duplicate: true,
-      duplicate_scope: 'DELIVERY',
-      provider_key: providerKey,
-      rail_env: railEnv,
-      provider_event_key: deliveryReceiptKey,
-      receipt_id: existingDelivery.id,
-      status: existingDelivery.status || null,
-      duplicate_status: duplicateStatus || null,
-      message: 'Duplicate provider webhook delivery found; no duplicate ingestion work was started.'
-    }, duplicateStatus === 'FAILED_RETRYABLE' ? 202 : 200);
+    if (isReceiptFullyProcessed(existingDelivery)) {
+      return jsonResponse({
+        ok: true,
+        duplicate: true,
+        duplicate_scope: 'DELIVERY',
+        provider_key: providerKey,
+        rail_env: railEnv,
+        provider_event_key: deliveryReceiptKey,
+        receipt_id: existingDelivery.id,
+        status: existingDelivery.status || null,
+        duplicate_status: duplicateStatus || null,
+        message: 'Duplicate provider webhook delivery found and all ingestable events are already final; no duplicate ingestion work was started.'
+      }, 200);
+    }
+    existingDeliveryForReprocess = existingDelivery;
   }
 
   let normalised;
@@ -39072,47 +39251,77 @@ async function handleBankingProviderWebhook(env, req, provider, webhookPublicId)
     };
   });
 
-  const receiptRow = await insertReceipt({
-    provider_key: providerKey,
-    rail_env: railEnv,
-    webhook_config_id: webhookConfig.id || null,
-    provider_webhook_id: webhookConfig.provider_webhook_id || null,
-    provider_event_type: 'WEBHOOK_DELIVERY',
-    provider_event_id: rawPayloadHash,
-    provider_event_key: deliveryReceiptKey,
-    provider_transaction_id: firstEvent.provider_transaction_id || null,
-    provider_request_id: firstEvent.provider_request_id || null,
-    signature_valid: true,
-    signature_version: verification.signature_version || null,
-    signature_header: verification.signature_header || null,
-    request_timestamp: verification.request_timestamp || null,
-    event_time_utc: firstEvent.event_time_utc || null,
-    raw_payload_json: payload,
-    raw_payload_hash: rawPayloadHash,
-    raw_headers_redacted: redactedHeaders,
-    normalised_events_json: normalisedEvents,
-    ingest_results_json: receiptPlaceholders,
-    status: ingestableEvents.length ? 'NORMALISED' : 'IGNORED_EVENT_TYPE'
-  });
+  let receiptRow = existingDeliveryForReprocess || null;
+  if (receiptRow && receiptRow.id) {
+    receiptRow = await patchReceipt(receiptRow.id, {
+      provider_event_type: 'WEBHOOK_DELIVERY',
+      provider_event_id: rawPayloadHash,
+      provider_transaction_id: firstEvent.provider_transaction_id || null,
+      provider_request_id: firstEvent.provider_request_id || null,
+      signature_valid: true,
+      signature_version: verification.signature_version || null,
+      signature_header: verification.signature_header || null,
+      request_timestamp: verification.request_timestamp || null,
+      event_time_utc: firstEvent.event_time_utc || null,
+      raw_payload_json: payload,
+      raw_payload_hash: rawPayloadHash,
+      raw_headers_redacted: redactedHeaders,
+      normalised_events_json: normalisedEvents,
+      ingest_results_json: receiptPlaceholders.map((placeholder) => {
+        const existingResult = existingFinalResultByEventKey(existingDeliveryForReprocess).get(String(placeholder.provider_event_key || '').trim());
+        return existingResult || placeholder;
+      }),
+      status: ingestableEvents.length ? 'NORMALISED' : 'IGNORED_EVENT_TYPE',
+      error_code: null,
+      error_message: null,
+      processed_at_utc: null
+    }) || receiptRow;
+  } else {
+    receiptRow = await insertReceipt({
+      provider_key: providerKey,
+      rail_env: railEnv,
+      webhook_config_id: webhookConfig.id || null,
+      provider_webhook_id: webhookConfig.provider_webhook_id || null,
+      provider_event_type: 'WEBHOOK_DELIVERY',
+      provider_event_id: rawPayloadHash,
+      provider_event_key: deliveryReceiptKey,
+      provider_transaction_id: firstEvent.provider_transaction_id || null,
+      provider_request_id: firstEvent.provider_request_id || null,
+      signature_valid: true,
+      signature_version: verification.signature_version || null,
+      signature_header: verification.signature_header || null,
+      request_timestamp: verification.request_timestamp || null,
+      event_time_utc: firstEvent.event_time_utc || null,
+      raw_payload_json: payload,
+      raw_payload_hash: rawPayloadHash,
+      raw_headers_redacted: redactedHeaders,
+      normalised_events_json: normalisedEvents,
+      ingest_results_json: receiptPlaceholders,
+      status: ingestableEvents.length ? 'NORMALISED' : 'IGNORED_EVENT_TYPE'
+    });
+  }
 
   if (receiptRow && receiptRow.__duplicate_receipt_insert === true && receiptRow.id) {
     const duplicateStatus = String(receiptRow.status || '').trim().toUpperCase();
     await bumpDuplicateAttempt(receiptRow);
-    return jsonResponse({
-      ok: true,
-      duplicate: true,
-      duplicate_scope: 'DELIVERY',
-      provider_key: providerKey,
-      rail_env: railEnv,
-      provider_event_key: deliveryReceiptKey,
-      receipt_id: receiptRow.id,
-      status: receiptRow.status || null,
-      duplicate_status: duplicateStatus || null,
-      message: 'Duplicate provider webhook delivery found during insert; no duplicate ingestion work was started.'
-    }, duplicateStatus === 'FAILED_RETRYABLE' ? 202 : 200);
+    if (isReceiptFullyProcessed(receiptRow)) {
+      return jsonResponse({
+        ok: true,
+        duplicate: true,
+        duplicate_scope: 'DELIVERY',
+        provider_key: providerKey,
+        rail_env: railEnv,
+        provider_event_key: deliveryReceiptKey,
+        receipt_id: receiptRow.id,
+        status: receiptRow.status || null,
+        duplicate_status: duplicateStatus || null,
+        message: 'Duplicate provider webhook delivery found during insert and all ingestable events are already final; no duplicate ingestion work was started.'
+      }, 200);
+    }
   }
 
   const receiptId = receiptRow && receiptRow.id ? String(receiptRow.id) : null;
+  const finalExistingResults = existingFinalResultByEventKey(existingDeliveryForReprocess || receiptRow || {});
 
   if (!ingestableEvents.length) {
     await patchReceipt(receiptId, {
@@ -39146,6 +39355,22 @@ async function handleBankingProviderWebhook(env, req, provider, webhookPublicId)
       rail_env: eventJson.rail_env || railEnv,
       mapping_hints_json: safeObject(eventJson.mapping_hints_json)
     };
+    const currentEventKey = eventKeyOf(eventPayload);
+    const priorFinalResult = currentEventKey ? finalExistingResults.get(currentEventKey) : null;
+    if (priorFinalResult && isFinalEventResult(priorFinalResult)) {
+      ingestResults.push({
+        ...priorFinalResult,
+        ok: priorFinalResult.ok !== false,
+        provider_event_key: priorFinalResult.provider_event_key || currentEventKey,
+        provider_event_type: priorFinalResult.provider_event_type || eventPayload.provider_event_type || null,
+        provider_transaction_id: priorFinalResult.provider_transaction_id || eventPayload.provider_transaction_id || null,
+        provider_request_id: priorFinalResult.provider_request_id || eventPayload.provider_request_id || null,
+        status: receiptResultStatusOf(priorFinalResult) || 'DUPLICATE',
+        skipped_existing_final_result: true,
+        result: safeObject(priorFinalResult.result)
+      });
+      continue;
+    }
     try {
       const ingestPayload = unwrapRpcPayload(await sbRpc(env, 'pay_bank_event_ingest', {
         p_event_json: eventPayload,
@@ -39247,6 +39472,10 @@ async function handleBankingProviderWebhook(env, req, provider, webhookPublicId)
     signals_touched: signalTouchResults.filter((row) => row && row.ok === true).length
   }, ingestFailed ? 202 : 200);
 }
+
+
+
+
 async function handleBankingPayProviderSubmitReviewResolution(env, req, user, payBatchId) {
   const id = String(payBatchId || '').trim();
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -102449,8 +102678,6 @@ const normalizePayExportCsvFormatJson = (raw) => {
 
   return out;
 };
-
-
 async function handleGetSettings(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized('Unauthorized');
@@ -102580,27 +102807,68 @@ async function handleGetSettings(env, req) {
     try {
       const webhookRes = await sbFetch(
         env,
-        `${env.SUPABASE_URL}/rest/v1/bank_provider_webhook_configs?select=id,provider_key,rail_env,webhook_public_id,provider_webhook_id,event_types,status,last_verified_at_utc,last_event_at_utc,last_error_at_utc,last_error,last_failed_event_sync_at_utc,updated_at_utc&order=provider_key.asc,rail_env.asc,webhook_public_id.asc&limit=100`,
+        `${env.SUPABASE_URL}/rest/v1/bank_provider_webhook_configs?select=id,provider_key,rail_env,webhook_public_id,provider_webhook_id,event_types,status,last_verified_at_utc,last_event_at_utc,last_error_at_utc,last_error,last_failed_event_sync_at_utc,old_secret_expires_at_utc,signing_secret_ref,signing_secret_encrypted,old_signing_secret_encrypted,meta_json,updated_at_utc&order=provider_key.asc,rail_env.asc,webhook_public_id.asc&limit=100`,
         false
       );
-      banking_webhook_status_summary = Array.isArray(webhookRes.rows)
-        ? webhookRes.rows.map((row) => ({
-            id: row.id || null,
-            provider_key: row.provider_key || null,
-            rail_env: row.rail_env || null,
-            webhook_public_id: row.webhook_public_id || null,
-            provider_webhook_id_set: !!String(row.provider_webhook_id || '').trim(),
-            event_types: Array.isArray(row.event_types) ? row.event_types : [],
-            status: row.status || null,
-            active: row.status === 'ACTIVE' || row.status === 'ROTATING_SECRET',
-            last_verified_at_utc: row.last_verified_at_utc || null,
-            last_event_at_utc: row.last_event_at_utc || null,
-            last_error_at_utc: row.last_error_at_utc || null,
-            last_error: row.last_error || null,
-            last_failed_event_sync_at_utc: row.last_failed_event_sync_at_utc || null,
-            updated_at_utc: row.updated_at_utc || null
-          }))
-        : [];
+      const webhookRows = Array.isArray(webhookRes.rows) ? webhookRes.rows : [];
+      const unmatchedByConfigId = new Map();
+      const unmatchedByProviderEnv = new Map();
+      try {
+        const receiptRes = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/bank_provider_webhook_receipts?select=webhook_config_id,provider_key,rail_env,status,signature_valid&status=eq.UNMATCHED_REVIEW_REQUIRED&signature_valid=eq.true&limit=10000`,
+          false
+        );
+        const receiptRows = Array.isArray(receiptRes.rows) ? receiptRes.rows : [];
+        for (const receiptRow of receiptRows) {
+          const configId = receiptRow.webhook_config_id ? String(receiptRow.webhook_config_id) : '';
+          const providerEnvKey = `${String(receiptRow.provider_key || '').trim().toUpperCase()}|${String(receiptRow.rail_env || '').trim().toUpperCase()}`;
+          if (configId) unmatchedByConfigId.set(configId, (unmatchedByConfigId.get(configId) || 0) + 1);
+          if (providerEnvKey !== '|') unmatchedByProviderEnv.set(providerEnvKey, (unmatchedByProviderEnv.get(providerEnvKey) || 0) + 1);
+        }
+      } catch {}
+
+      const nowMs = Date.now();
+      banking_webhook_status_summary = webhookRows.map((row) => {
+        const meta = (row.meta_json && typeof row.meta_json === 'object' && !Array.isArray(row.meta_json)) ? row.meta_json : {};
+        const secretConfigured = !!String(row.signing_secret_ref || '').trim() || !!String(row.signing_secret_encrypted || '').trim();
+        const oldSecretExpiresMs = row.old_secret_expires_at_utc ? Date.parse(String(row.old_secret_expires_at_utc)) : NaN;
+        const oldSecretConfigured = !!String(row.old_signing_secret_encrypted || '').trim()
+          || !!String(meta.old_signing_secret_ref || meta.oldSigningSecretRef || meta.old_secret_ref || '').trim();
+        const oldSecretOverlapActive = oldSecretConfigured && Number.isFinite(oldSecretExpiresMs) && oldSecretExpiresMs > nowMs;
+        const providerEnvKey = `${String(row.provider_key || '').trim().toUpperCase()}|${String(row.rail_env || '').trim().toUpperCase()}`;
+        const unmatchedVerifiedWebhookCount = (row.id && unmatchedByConfigId.get(String(row.id))) || unmatchedByProviderEnv.get(providerEnvKey) || 0;
+        const lastError = row.last_error || null;
+        const failedReplaySyncState = row.last_failed_event_sync_at_utc
+          ? (lastError && String(lastError).toUpperCase().includes('FAILED_WEBHOOK_REPLAY') ? 'ERROR' : 'SYNCED')
+          : 'NEVER_SYNCED';
+        return {
+          id: row.id || null,
+          provider: row.provider_key || null,
+          provider_key: row.provider_key || null,
+          rail_environment: row.rail_env || null,
+          rail_env: row.rail_env || null,
+          webhook_public_id: row.webhook_public_id || null,
+          provider_webhook_id_set: !!String(row.provider_webhook_id || '').trim(),
+          configured_event_types: Array.isArray(row.event_types) ? row.event_types : [],
+          event_types: Array.isArray(row.event_types) ? row.event_types : [],
+          status: row.status || null,
+          active: row.status === 'ACTIVE' || row.status === 'ROTATING_SECRET',
+          last_verified_at_utc: row.last_verified_at_utc || null,
+          last_event_at_utc: row.last_event_at_utc || null,
+          last_error_at_utc: row.last_error_at_utc || null,
+          last_error: lastError,
+          failed_replay_sync_state: failedReplaySyncState,
+          last_failed_event_sync_at_utc: row.last_failed_event_sync_at_utc || null,
+          unmatched_verified_webhook_count: unmatchedVerifiedWebhookCount,
+          secret_configured: secretConfigured,
+          signing_secret_configured: secretConfigured,
+          old_secret_configured: oldSecretConfigured,
+          old_secret_overlap_active: oldSecretOverlapActive,
+          old_secret_expires_at_utc: oldSecretConfigured ? (row.old_secret_expires_at_utc || null) : null,
+          updated_at_utc: row.updated_at_utc || null
+        };
+      });
     } catch {
       banking_webhook_status_summary = [];
     }
@@ -102659,6 +102927,9 @@ async function handleGetSettings(env, req) {
     return withCORS(env, req, serverError("Failed to fetch settings_defaults"));
   }
 }
+
+
+
 
 async function handleUpdateSettings(env, req) {
   const user = await requireUser(env, req, ['admin']);
@@ -139039,7 +139310,6 @@ async function cleanupStaleRailPayeeMappingsForHash(env, { entity_kind, entity_i
   return out;
 }
 
-
 function getRailAdapter(provider) {
   // -----------------------------
   // Single source of truth registry
@@ -142283,11 +142553,18 @@ function getRailAdapter(provider) {
               provider_response_present: false,
               provider_acceptance_evidence_present: false,
               manual_resolution_required: false,
-              safe_retry_available: false,
+              safe_retry_available: true,
               provider_error_code: 'BLOCKED_FUNDS',
-              recommended_action: 'Provider was not called because funding was insufficient.'
+              recommended_action: 'Provider was not called because funding was insufficient. Retry unsent payments from Overview when funding is available.'
             });
-            await finishProviderSubmitChunkOnce('FAILED', out, { code: 'BLOCKED_FUNDS', message: 'Bank rejected payment — blocked funds.', provider_submission_attempted: false, submitted_to_bank: false });
+            await finishProviderSubmitChunkOnce('FAILED', out, {
+              code: 'BLOCKED_FUNDS',
+              message: 'Bank unavailable — unsent payments can be retried.',
+              provider_submission_attempted: false,
+              submitted_to_bank: false,
+              safe_retry_available: true,
+              recommended_action: 'Retry unsent payments'
+            });
             return out;
           }
 
@@ -143180,12 +143457,12 @@ function getRailAdapter(provider) {
             for (const row of Array.isArray(rows) ? rows : []) {
               const result = (row && row.result && typeof row.result === 'object' && !Array.isArray(row.result)) ? row.result : {};
               const rec = readSignalRecommendation(result);
-              const batchId = String(rec.pay_batch_id || result.pay_batch_id || batchId || '').trim();
-              if (!batchId) continue;
-              const key = batchId.toLowerCase();
+              const recommendationBatchId = String(rec.pay_batch_id || result.pay_batch_id || batchId || '').trim();
+              if (!recommendationBatchId) continue;
+              const key = recommendationBatchId.toLowerCase();
               if (!byBatch.has(key)) {
                 byBatch.set(key, {
-                  pay_batch_id: batchId,
+                  pay_batch_id: recommendationBatchId,
                   touch_payment_status: false,
                   touch_correction_progress: false,
                   touch_alerts: false,
@@ -143510,6 +143787,9 @@ function getRailAdapter(provider) {
   const mk = getRailAdapter.__RAIL_REGISTRY[p];
   return (typeof mk === 'function') ? mk() : null;
 }
+
+
+
 
 
 
@@ -144065,7 +144345,6 @@ async function handleBankingPayBatchCancel(env, req, user, payBatchId) {
     return rpcErrorResponse(e, 'PAYMENT_CANCEL_NOT_SENT_RECALCULATE_FAILED', 'Unable to cancel selected payments.');
   }
 }
-
 
 function buildBankingPayOperationPublicPayload(operationRow, options = {}) {
   const unwrapRow = (value) => {
@@ -144946,8 +145225,8 @@ function buildBankingPayOperationPublicPayload(operationRow, options = {}) {
   ).trim();
 
   if (hasBlockedFundsEvidence) {
-    title = 'Payment blocked — insufficient funds';
-    statusText = 'The selected funding account does not have enough available balance to make this payment.';
+    title = 'Bank unavailable — unsent payments can be retried';
+    statusText = 'The payment was not submitted to the bank/provider. Use Retry unsent payments from Overview when funding is available.';
   }
 
   if (status === 'REVIEW_REQUIRED' && providerSubmitMessage) {
@@ -145319,7 +145598,7 @@ function buildBankingPayOperationPublicPayload(operationRow, options = {}) {
   if (hasBlockedFundsEvidence) {
     const safeBlockedFundsError = {
       code: 'BLOCKED_FUNDS',
-      message: 'The selected funding account does not have enough available balance to make this payment. No bank submission was attempted.',
+      message: 'The payment was not submitted to the bank/provider. Use Retry unsent payments from Overview when funding is available.',
       phase,
       blocked_funds: true,
       submitted_to_bank: false,
@@ -145337,8 +145616,8 @@ function buildBankingPayOperationPublicPayload(operationRow, options = {}) {
       if (blockedFundsDiagnostics.funds_check_json && Object.keys(blockedFundsDiagnostics.funds_check_json).length) safeBlockedFundsError.funds_check_json = blockedFundsDiagnostics.funds_check_json;
     }
     payload.ok = true;
-    payload.title = 'Payment blocked — insufficient funds';
-    payload.status_text = 'The selected funding account does not have enough available balance to make this payment.';
+    payload.title = 'Bank unavailable — unsent payments can be retried';
+    payload.status_text = 'The payment was not submitted to the bank/provider. Use Retry unsent payments from Overview when funding is available.';
     payload.blocked_funds = true;
     payload.submitted_to_bank = false;
     payload.provider_submission_attempted = false;
@@ -145384,12 +145663,83 @@ function buildBankingPayOperationPublicPayload(operationRow, options = {}) {
     const retryIneligibleCount = retryNumber(retryField('retry_ineligible_count', 'retryIneligibleCount'), retrySkippedCount);
     const retryStillAvailableCount = retryNumber(retryField('retry_still_available_count', 'retryStillAvailableCount'), Math.max(0, retryEligibleCount - retrySubmittedCount - retrySkippedCount));
     const retryProviderUnavailableAgain = retryBool(retryField('retry_provider_unavailable_again', 'retryProviderUnavailableAgain'), retryField('provider_unavailable_again', 'providerUnavailableAgain'));
+    const retryNeedsReview = status === 'FAILED' || status === 'REVIEW_REQUIRED' || payload.review_required === true;
+    const retryPublicCode = retryNeedsReview
+      ? 'RETRY_UNSENT_PAYMENTS_NEEDS_REVIEW'
+      : (retryProviderUnavailableAgain ? 'RETRY_UNSENT_PAYMENTS_PROVIDER_UNAVAILABLE' : (status === 'COMPLETE' ? 'RETRY_UNSENT_PAYMENTS_COMPLETE' : 'RETRY_UNSENT_PAYMENTS_IN_PROGRESS'));
+    const retryDisplayLabel = status === 'COMPLETE'
+      ? 'Retry complete'
+      : (retryNeedsReview ? 'Retry unsent payments needs review' : 'Retrying unsent payments');
+    const retryStatusText = retryProviderUnavailableAgain
+      ? 'Bank unavailable — unsent payments can still be retried'
+      : retryDisplayLabel;
+
+    const rewriteRetryText = (value) => {
+      let text = String(value === undefined || value === null ? '' : value);
+      if (!text) return text;
+      text = text.replace(/Retrying\s+blocked\s+payment/gi, 'Retrying unsent payments');
+      text = text.replace(/blocked[-_\s]*funds[-_\s]*retry/gi, 'Retry unsent payments');
+      text = text.replace(/BLOCKED_FUNDS_RETRY/gi, 'RETRY_UNSENT_PAYMENTS');
+      text = text.replace(/retry\s+later/gi, 'retry unsent payments');
+      text = text.replace(/BLOCKED_FUNDS/gi, 'UNSENT_PAYMENTS');
+      text = text.replace(/blocked[-_\s]*funds/gi, 'unsent payments');
+      text = text.replace(/funding\s+issue/gi, 'unsent payment issue');
+      return text;
+    };
+
+    const isRetryBlockedFundsCode = (value) => {
+      const text = String(value === undefined || value === null ? '' : value).trim().toUpperCase();
+      return text === 'BLOCKED_FUNDS' || text.startsWith('BLOCKED_FUNDS_RETRY');
+    };
+
+    const scrubRetryPublicValue = (value, depth = 0) => {
+      if (depth > 5) return value;
+      if (typeof value === 'string') return isRetryBlockedFundsCode(value) ? retryPublicCode : rewriteRetryText(value);
+      if (!value || typeof value !== 'object') return value;
+      if (Array.isArray(value)) return value.map((item) => scrubRetryPublicValue(item, depth + 1));
+      const out = {};
+      for (const [rawKey, rawValue] of Object.entries(value)) {
+        const key = String(rawKey || '');
+        const keyLower = key.toLowerCase();
+        if (
+          keyLower === 'blocked_funds'
+          || keyLower === 'blockedfunds'
+          || keyLower === 'blocked_funds_count'
+          || keyLower === 'blockedfundscount'
+          || keyLower === 'blocked_transfer_count'
+          || keyLower === 'blockedtransfercount'
+        ) continue;
+        if (
+          (
+            keyLower === 'code'
+            || keyLower === 'error_code'
+            || keyLower === 'errorcode'
+            || keyLower === 'business_code'
+            || keyLower === 'businesscode'
+            || keyLower === 'status'
+            || keyLower === 'post_execution_status'
+            || keyLower === 'postexecutionstatus'
+            || keyLower === 'claim_blocker_code'
+            || keyLower === 'claimblockercode'
+            || keyLower === 'review_reason_code'
+            || keyLower === 'reviewreasoncode'
+            || keyLower === 'provider_error_code'
+            || keyLower === 'providererrorcode'
+          )
+          && isRetryBlockedFundsCode(rawValue)
+        ) {
+          out[key] = retryPublicCode;
+          continue;
+        }
+        out[key] = scrubRetryPublicValue(rawValue, depth + 1);
+      }
+      return out;
+    };
+
     payload.operation_kind_label = 'Retry unsent payments';
-    payload.label = status === 'COMPLETE' ? 'Retry complete' : 'Retrying unsent payments';
-    payload.title = status === 'COMPLETE' ? 'Retry complete' : 'Retrying unsent payments';
-    if (!payload.status_text || String(payload.status_text).toLowerCase().includes('blocked payment') || String(payload.status_text).toLowerCase().includes('retry later')) {
-      payload.status_text = status === 'COMPLETE' ? 'Retry complete' : 'Retrying unsent payments';
-    }
+    payload.label = retryDisplayLabel;
+    payload.title = retryDisplayLabel;
+    payload.status_text = retryStatusText;
     payload.retry_in_progress = !terminal;
     payload.retry_complete = status === 'COMPLETE';
     payload.retry_eligible_count = retryEligibleCount;
@@ -145398,18 +145748,79 @@ function buildBankingPayOperationPublicPayload(operationRow, options = {}) {
     payload.retry_ineligible_count = retryIneligibleCount;
     payload.retry_still_available_count = retryStillAvailableCount;
     payload.retry_provider_unavailable_again = retryProviderUnavailableAgain;
-    payload.retry_eligible_scope_json = retryObject(retryField('retry_eligible_scope_json', 'retryEligibleScopeJson'));
-    payload.retry_ineligible_summary_json = retryArray(retryField('retry_ineligible_summary_json', 'retryIneligibleSummaryJson'));
+    payload.retry_eligible_scope_json = scrubRetryPublicValue(retryObject(retryField('retry_eligible_scope_json', 'retryEligibleScopeJson')));
+    payload.retry_ineligible_summary_json = scrubRetryPublicValue(retryArray(retryField('retry_ineligible_summary_json', 'retryIneligibleSummaryJson')));
     payload.retry_button_label = 'Retry unsent payments';
-    payload.retry_status_label = payload.retry_in_progress ? 'Retrying unsent payments' : (payload.retry_complete ? 'Retry complete' : 'No unsent payments available to retry');
+    payload.retry_status_label = payload.retry_in_progress
+      ? 'Retrying unsent payments'
+      : (payload.retry_complete ? 'Retry complete' : (retryProviderUnavailableAgain ? 'Bank unavailable — unsent payments can still be retried' : (retryNeedsReview ? 'Retry unsent payments needs review' : 'No unsent payments available to retry')));
     payload.retry_button_disabled_reason = payload.retry_in_progress ? 'Retry in progress' : null;
-    if (payload.error && typeof payload.error === 'object') {
-      const errorMessage = String(payload.error.message || '');
-      payload.error.message = errorMessage
-        .replace(/Retrying blocked payment/gi, 'Retrying unsent payments')
-        .replace(/retry later/gi, 'retry unsent payments')
-        .replace(/blocked funds/gi, 'funding issue');
+    payload.unsent_payment_retry = true;
+    payload.business_code = retryPublicCode;
+    payload.post_execution_status = retryPublicCode;
+    delete payload.blocked_funds;
+    delete payload.blockedFunds;
+    delete payload.blocked_funds_count;
+    delete payload.blockedFundsCount;
+    if (payload.payment_execution_outcome_counts && typeof payload.payment_execution_outcome_counts === 'object') {
+      delete payload.payment_execution_outcome_counts.blocked_funds_count;
+      delete payload.payment_execution_outcome_counts.blockedFundsCount;
     }
+
+    if (payload.error && typeof payload.error === 'object') {
+      payload.error = scrubRetryPublicValue(payload.error);
+      payload.error.code = retryPublicCode;
+      payload.error.business_code = retryPublicCode;
+      payload.error.message = retryStatusText;
+      payload.error.user_message = retryStatusText;
+      payload.error.title = retryDisplayLabel;
+      payload.error.retry_blocked = retryNeedsReview === true;
+      payload.error.review_required = retryNeedsReview === true;
+      payload.error.safe_retry_available = retryProviderUnavailableAgain === true || retryStillAvailableCount > 0;
+    }
+
+    if (payload.result && typeof payload.result === 'object') {
+      payload.result = scrubRetryPublicValue(payload.result);
+      payload.result.code = retryPublicCode;
+      payload.result.business_code = retryPublicCode;
+      payload.result.status = retryPublicCode;
+      payload.result.post_execution_status = retryPublicCode;
+      payload.result.unsent_payment_retry = true;
+      payload.result.retry_eligible_count = retryEligibleCount;
+      payload.result.retry_submitted_count = retrySubmittedCount;
+      payload.result.retry_skipped_count = retrySkippedCount;
+      payload.result.retry_ineligible_count = retryIneligibleCount;
+      payload.result.retry_provider_unavailable_again = retryProviderUnavailableAgain;
+    }
+
+    if (payload.provider_submit_diagnostic && typeof payload.provider_submit_diagnostic === 'object') {
+      payload.provider_submit_diagnostic = scrubRetryPublicValue(payload.provider_submit_diagnostic);
+    }
+    if (payload.payment_execution_outcome_counts && typeof payload.payment_execution_outcome_counts === 'object') {
+      payload.payment_execution_outcome_counts = scrubRetryPublicValue(payload.payment_execution_outcome_counts);
+    }
+    if (payload.progress && typeof payload.progress === 'object') {
+      payload.progress = scrubRetryPublicValue(payload.progress);
+    }
+    for (const key of Object.keys(payload)) {
+      const keyLower = String(key || '').toLowerCase();
+      if (keyLower === 'blocked_funds' || keyLower === 'blockedfunds' || keyLower === 'blocked_funds_count' || keyLower === 'blockedfundscount' || keyLower === 'blocked_transfer_count' || keyLower === 'blockedtransfercount') {
+        delete payload[key];
+        continue;
+      }
+      payload[key] = scrubRetryPublicValue(payload[key]);
+    }
+    payload.operation_kind_label = 'Retry unsent payments';
+    payload.label = retryDisplayLabel;
+    payload.title = retryDisplayLabel;
+    payload.status_text = retryStatusText;
+    payload.retry_button_label = 'Retry unsent payments';
+    payload.retry_status_label = payload.retry_in_progress
+      ? 'Retrying unsent payments'
+      : (payload.retry_complete ? 'Retry complete' : (retryProviderUnavailableAgain ? 'Bank unavailable — unsent payments can still be retried' : (retryNeedsReview ? 'Retry unsent payments needs review' : 'No unsent payments available to retry')));
+    payload.retry_button_disabled_reason = payload.retry_in_progress ? 'Retry in progress' : null;
+    payload.business_code = retryPublicCode;
+    payload.post_execution_status = retryPublicCode;
   }
 
   return payload;
