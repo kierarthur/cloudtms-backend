@@ -24361,7 +24361,6 @@ async function handleBankingIdLedgerList(env, req, user) {
 }
 
 
-
 async function advanceBankingPayExecuteOperation(env, operationRow, user, options = {}) {
 const unwrapRpcPayload = (rpcRes, key) => {
 let payload = rpcRes;
@@ -26156,23 +26155,26 @@ const buildSingleChunkTransferPreparationProof = (stage) => {
     && (seedGroupCount <= 0 || seedGroupCount === requestedScopeCount)
     && (chunkTotalUnits <= 0 || chunkTotalUnits === requestedScopeCount)
     && (chunkCount <= 0 || chunkCount === 1);
+  const itemLinkageContractSatisfied = hasRequestedItemFields !== true
+    || (
+      requestedItemCount > 0
+      && requestedItemCount === itemLinkedCount + itemAlreadyLinkedCount
+      && itemLinkFailedCount === 0
+      && itemConflictCount === 0
+      && itemMissingCount === 0
+      && itemVoidedCount === 0
+      && itemInvalidUuidCount === 0
+      && itemWrongBatchCount === 0
+      && emptyItemListCount === 0
+      && allRequestedItemsLinked === true
+    );
   const proven = singleChunkScopeMatches
     && lastChunkResult.ok !== false
     && hardBlocker !== true
     && preparedCount === requestedScopeCount
     && preparedScopeCount === requestedScopeCount
     && scopeLinkedTransferCount === requestedScopeCount
-    && hasRequestedItemFields === true
-    && requestedItemCount > 0
-    && requestedItemCount === itemLinkedCount + itemAlreadyLinkedCount
-    && itemLinkFailedCount === 0
-    && itemConflictCount === 0
-    && itemMissingCount === 0
-    && itemVoidedCount === 0
-    && itemInvalidUuidCount === 0
-    && itemWrongBatchCount === 0
-    && emptyItemListCount === 0
-    && allRequestedItemsLinked === true
+    && itemLinkageContractSatisfied === true
     && authorisationReadyCount === requestedScopeCount
     && failedCount === 0
     && skippedCount === 0
@@ -26209,7 +26211,10 @@ const buildSingleChunkTransferPreparationProof = (stage) => {
     item_conflict_count: itemConflictCount,
     item_wrong_batch_count: itemWrongBatchCount,
     empty_item_list_count: emptyItemListCount,
-    all_requested_items_linked: allRequestedItemsLinked,
+    all_requested_items_linked: hasRequestedItemFields === true ? allRequestedItemsLinked : null,
+    item_linkage_contract_returned: hasRequestedItemFields === true,
+    item_linkage_validation_skipped: hasRequestedItemFields !== true,
+    item_linkage_contract_satisfied: itemLinkageContractSatisfied,
     authorisation_ready_transfer_count: authorisationReadyCount,
     failed_count: failedCount,
     skipped_count: skippedCount,
@@ -26253,7 +26258,10 @@ const buildSingleChunkTransferPreparationProof = (stage) => {
     item_voided_count: itemVoidedCount,
     item_invalid_uuid_count: itemInvalidUuidCount,
     item_wrong_batch_count: itemWrongBatchCount,
-    all_requested_items_linked: allRequestedItemsLinked,
+    all_requested_items_linked: hasRequestedItemFields === true ? allRequestedItemsLinked : null,
+    item_linkage_contract_returned: hasRequestedItemFields === true,
+    item_linkage_validation_skipped: hasRequestedItemFields !== true,
+    item_linkage_contract_satisfied: itemLinkageContractSatisfied,
     scoped_scope_failed_count: scopeFailedCount,
     scoped_scope_skipped_count: scopeSkippedCount,
     scoped_scope_without_transfer_count: scopeWithoutTransferCount,
@@ -29383,21 +29391,26 @@ if (currentPhase === 'PREPARE_TRANSFER_CHUNKS') {
       const hasAllRequestedScopesAuthorisationReadyField = Object.prototype.hasOwnProperty.call(safeObject(prepared), 'all_requested_scopes_authorisation_ready')
         || Object.prototype.hasOwnProperty.call(safeObject(prepared), 'allRequestedScopesAuthorisationReady');
       const explicitAllRequestedScopesNotReady = hasAllRequestedScopesAuthorisationReadyField && allRequestedScopesAuthorisationReady !== true;
-      const preparedItemLinkageIncomplete = hasPreparedItemLinkageFields !== true
-        || requestedScopeCount <= 0
+      const preparedScopeLinkageIncomplete = requestedScopeCount <= 0
         || preparedScopeCount !== requestedScopeCount
         || scopeLinkedTransferCount !== requestedScopeCount
-        || scopeWithoutTransferCount > 0
-        || requestedItemCount <= 0
-        || requestedItemCount !== itemLinkedCount + itemAlreadyLinkedCount
-        || itemLinkFailedCount > 0
-        || itemConflictCount > 0
-        || itemMissingCount > 0
-        || itemVoidedCount > 0
-        || itemInvalidUuidCount > 0
-        || itemWrongBatchCount > 0
-        || emptyItemListCount > 0
-        || allRequestedItemsLinked !== true;
+        || scopeWithoutTransferCount > 0;
+      const preparedItemLinkageIncomplete = preparedScopeLinkageIncomplete
+        || (
+          hasPreparedItemLinkageFields === true
+          && (
+            requestedItemCount <= 0
+            || requestedItemCount !== itemLinkedCount + itemAlreadyLinkedCount
+            || itemLinkFailedCount > 0
+            || itemConflictCount > 0
+            || itemMissingCount > 0
+            || itemVoidedCount > 0
+            || itemInvalidUuidCount > 0
+            || itemWrongBatchCount > 0
+            || emptyItemListCount > 0
+            || allRequestedItemsLinked !== true
+          )
+        );
       const preparedFailedOrSkippedCount = Math.max(0, preparedFailedCount) + Math.max(0, preparedSkippedCount);
       const chunkHasUnsafeOrNotReadyGroups = preparedOkFalse
         || preparedHardBlocker
@@ -31008,7 +31021,6 @@ raw_error: Object.keys(topLevelErrorObject).length ? topLevelErrorObject : topLe
 });
 }
 }
-
 async function handleBankingPayCancelNotSentAndRecalculate(env, req, user, payBatchId) {
   const id = String(payBatchId || '').trim();
   if (!id) return withCORS(env, req, badRequest('pay_batch_id is required'));
