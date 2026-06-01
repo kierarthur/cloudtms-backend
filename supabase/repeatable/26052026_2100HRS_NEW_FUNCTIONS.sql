@@ -1,5 +1,389 @@
 
 
+CREATE OR REPLACE FUNCTION public._pay_policy_x_resolve_pre_draft_economic_key(
+  p_timesheet_id uuid DEFAULT NULL::uuid,
+  p_live_source_json jsonb DEFAULT '{}'::jsonb,
+  p_item_type text DEFAULT NULL::text,
+  p_key_type_hint text DEFAULT NULL::text,
+  p_key_value_hint text DEFAULT NULL::text,
+  p_work_date date DEFAULT NULL::date
+)
+RETURNS TABLE(
+  timesheet_id uuid,
+  key_type text,
+  key_value text,
+  key_resolution_source text,
+  key_resolution_failure_reason text
+)
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_source_json jsonb := CASE
+    WHEN jsonb_typeof(COALESCE(p_live_source_json, '{}'::jsonb)) = 'object' THEN COALESCE(p_live_source_json, '{}'::jsonb)
+    ELSE '{}'::jsonb
+  END;
+  v_timesheet_id uuid := p_timesheet_id;
+  v_timesheet_id_text text;
+  v_item_type text := UPPER(NULLIF(BTRIM(COALESCE(p_item_type, '')), ''));
+  v_direct_key_type text;
+  v_direct_key_value text;
+  v_resolved_key_type text := NULL::text;
+  v_resolved_key_value text := NULL::text;
+  v_resolved_source text := NULL::text;
+  v_failure_reason text := NULL::text;
+  v_assert_ok boolean := false;
+  v_assert_key_type text := NULL::text;
+  v_assert_key_value text := NULL::text;
+  v_assert_failure_reason text := NULL::text;
+  v_work_date_text text := NULL::text;
+  v_segment_id_text text := NULL::text;
+  v_segment_key_text text := NULL::text;
+  v_segment_stable_key_text text := NULL::text;
+  v_ref_num_text text := NULL::text;
+  v_adjustment_id_text text := NULL::text;
+  v_additional_code_text text := NULL::text;
+  v_expense_code_text text := NULL::text;
+  v_segments_json jsonb := '[]'::jsonb;
+  v_live_schedule_json jsonb := '{}'::jsonb;
+  v_segment_match_found boolean := false;
+  v_segment_match_date_text text := NULL::text;
+  v_timesheet_start_date_text text := NULL::text;
+BEGIN
+  v_timesheet_id_text := NULLIF(BTRIM(COALESCE(v_source_json->>'timesheet_id', '')), '');
+  IF v_timesheet_id IS NULL
+     AND v_timesheet_id_text ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
+    v_timesheet_id := v_timesheet_id_text::uuid;
+  END IF;
+
+  IF v_item_type IS NULL THEN
+    v_item_type := UPPER(NULLIF(BTRIM(COALESCE(
+      v_source_json->>'item_type',
+      v_source_json->>'line_type',
+      v_source_json->>'component_type',
+      v_source_json#>>'{source_basis_json,item_type}',
+      ''
+    )), ''));
+  END IF;
+
+  v_direct_key_type := UPPER(NULLIF(BTRIM(COALESCE(
+    p_key_type_hint,
+    v_source_json->>'component_key_type',
+    v_source_json->>'key_type',
+    v_source_json#>>'{source_basis_json,component_key_type}',
+    v_source_json#>>'{source_basis_json,key_type}',
+    ''
+  )), ''));
+
+  v_direct_key_value := NULLIF(BTRIM(COALESCE(
+    p_key_value_hint,
+    v_source_json->>'component_key_value',
+    v_source_json->>'key_value',
+    v_source_json#>>'{source_basis_json,component_key_value}',
+    v_source_json#>>'{source_basis_json,key_value}',
+    ''
+  )), '');
+
+  IF v_direct_key_type IS NOT NULL OR v_direct_key_value IS NOT NULL THEN
+    SELECT
+      key_check.ok,
+      key_check.key_type,
+      key_check.key_value,
+      key_check.failure_reason
+    INTO
+      v_assert_ok,
+      v_assert_key_type,
+      v_assert_key_value,
+      v_assert_failure_reason
+    FROM public._pay_policy_x_assert_economic_key(
+      p_timesheet_id => v_timesheet_id,
+      p_key_type => v_direct_key_type,
+      p_key_value => v_direct_key_value,
+      p_context => 'PRE_DRAFT_RESOLVE_DIRECT_KEY',
+      p_authority_scope => 'PRE_DRAFT',
+      p_resolution_source => 'PRE_DRAFT_LIVE_DIRECT_KEY',
+      p_required => true,
+      p_source_json => v_source_json
+    ) AS key_check;
+
+    IF COALESCE(v_assert_ok, false) THEN
+      v_resolved_key_type := v_assert_key_type;
+      v_resolved_key_value := v_assert_key_value;
+      v_resolved_source := 'PRE_DRAFT_LIVE_DIRECT_KEY';
+    ELSE
+      v_failure_reason := v_assert_failure_reason;
+    END IF;
+  END IF;
+
+  IF v_resolved_key_type IS NULL THEN
+    v_work_date_text := COALESCE(
+      CASE WHEN p_work_date IS NULL THEN NULL::text ELSE p_work_date::text END,
+      NULLIF(BTRIM(COALESCE(v_source_json->>'work_date', '')), ''),
+      NULLIF(BTRIM(COALESCE(v_source_json->>'date', '')), ''),
+      NULLIF(BTRIM(COALESCE(v_source_json#>>'{source_basis_json,work_date}', '')), ''),
+      NULLIF(BTRIM(COALESCE(v_source_json#>>'{source_basis_json,date}', '')), ''),
+      NULLIF(BTRIM(COALESCE(v_source_json#>>'{segment,work_date}', '')), ''),
+      NULLIF(BTRIM(COALESCE(v_source_json#>>'{segment,date}', '')), ''),
+      NULLIF(BTRIM(COALESCE(v_source_json#>>'{segment_json,work_date}', '')), ''),
+      NULLIF(BTRIM(COALESCE(v_source_json#>>'{segment_json,date}', '')), '')
+    );
+
+    v_segment_id_text := NULLIF(BTRIM(COALESCE(
+      v_source_json->>'segment_id',
+      v_source_json#>>'{source_basis_json,segment_id}',
+      v_source_json#>>'{segment,segment_id}',
+      v_source_json#>>'{segment_json,segment_id}',
+      ''
+    )), '');
+
+    v_segment_key_text := NULLIF(BTRIM(COALESCE(
+      v_source_json->>'segment_key',
+      v_source_json#>>'{source_basis_json,segment_key}',
+      v_source_json#>>'{segment,segment_key}',
+      v_source_json#>>'{segment_json,segment_key}',
+      ''
+    )), '');
+
+    v_segment_stable_key_text := NULLIF(BTRIM(COALESCE(
+      v_source_json->>'segment_stable_key',
+      v_source_json#>>'{source_basis_json,segment_stable_key}',
+      v_source_json#>>'{segment,segment_stable_key}',
+      v_source_json#>>'{segment_json,segment_stable_key}',
+      ''
+    )), '');
+
+    v_ref_num_text := NULLIF(BTRIM(COALESCE(
+      v_source_json->>'ref_num',
+      v_source_json#>>'{source_basis_json,ref_num}',
+      v_source_json#>>'{segment,ref_num}',
+      v_source_json#>>'{segment_json,ref_num}',
+      ''
+    )), '');
+
+    v_adjustment_id_text := NULLIF(BTRIM(COALESCE(
+      v_source_json->>'adjustment_id',
+      v_source_json->>'adjustment_code',
+      v_source_json#>>'{source_basis_json,adjustment_id}',
+      v_source_json#>>'{source_basis_json,adjustment_code}',
+      ''
+    )), '');
+
+    v_additional_code_text := NULLIF(BTRIM(COALESCE(
+      v_source_json->>'additional_code',
+      v_source_json#>>'{source_basis_json,additional_code}',
+      ''
+    )), '');
+
+    v_expense_code_text := NULLIF(BTRIM(COALESCE(
+      v_source_json->>'expense_code',
+      v_source_json->>'mileage_code',
+      v_source_json#>>'{source_basis_json,expense_code}',
+      v_source_json#>>'{source_basis_json,mileage_code}',
+      ''
+    )), '');
+
+    IF v_item_type IN ('SEGMENT_DELTA', 'SEGMENT', 'TIMESHEET_SEGMENT', 'HOURS') THEN
+      IF v_work_date_text IS NOT NULL AND v_work_date_text ~ '^\d{4}-\d{2}-\d{2}$' THEN
+        v_resolved_key_type := 'TS_DAY';
+        v_resolved_key_value := v_work_date_text;
+        v_resolved_source := 'PRE_DRAFT_LIVE_WORK_DATE';
+      END IF;
+
+      IF v_resolved_key_type IS NULL THEN
+        IF jsonb_typeof(v_source_json->'segments') = 'array' THEN
+          v_segments_json := v_source_json->'segments';
+        ELSIF jsonb_typeof(v_source_json#>'{actual_schedule_json,segments}') = 'array' THEN
+          v_segments_json := v_source_json#>'{actual_schedule_json,segments}';
+        ELSIF jsonb_typeof(v_source_json#>'{schedule_json,segments}') = 'array' THEN
+          v_segments_json := v_source_json#>'{schedule_json,segments}';
+        ELSE
+          v_segments_json := '[]'::jsonb;
+        END IF;
+
+        IF jsonb_array_length(v_segments_json) > 0 THEN
+          SELECT
+            NULLIF(BTRIM(COALESCE(segment_choice.segment_json->>'date', segment_choice.segment_json->>'work_date', '')), ''),
+            true
+          INTO
+            v_segment_match_date_text,
+            v_segment_match_found
+          FROM jsonb_array_elements(v_segments_json) AS segment_choice(segment_json)
+          WHERE segment_choice.segment_json IS NOT NULL
+            AND jsonb_typeof(segment_choice.segment_json) = 'object'
+            AND (
+              (v_work_date_text IS NOT NULL AND NULLIF(BTRIM(COALESCE(segment_choice.segment_json->>'date', segment_choice.segment_json->>'work_date', '')), '') = v_work_date_text)
+              OR (v_ref_num_text IS NOT NULL AND NULLIF(BTRIM(COALESCE(segment_choice.segment_json->>'ref_num', '')), '') = v_ref_num_text)
+              OR (v_segment_id_text IS NOT NULL AND NULLIF(BTRIM(COALESCE(segment_choice.segment_json->>'segment_id', '')), '') = v_segment_id_text)
+              OR (v_segment_key_text IS NOT NULL AND NULLIF(BTRIM(COALESCE(segment_choice.segment_json->>'segment_key', segment_choice.segment_json->>'segment_id', '')), '') = v_segment_key_text)
+              OR (v_segment_stable_key_text IS NOT NULL AND NULLIF(BTRIM(COALESCE(segment_choice.segment_json->>'segment_stable_key', segment_choice.segment_json->>'segment_id', segment_choice.segment_json->>'segment_key', '')), '') = v_segment_stable_key_text)
+            )
+          ORDER BY
+            CASE
+              WHEN v_work_date_text IS NOT NULL AND NULLIF(BTRIM(COALESCE(segment_choice.segment_json->>'date', segment_choice.segment_json->>'work_date', '')), '') = v_work_date_text THEN 0
+              WHEN v_ref_num_text IS NOT NULL AND NULLIF(BTRIM(COALESCE(segment_choice.segment_json->>'ref_num', '')), '') = v_ref_num_text THEN 1
+              WHEN v_segment_id_text IS NOT NULL AND NULLIF(BTRIM(COALESCE(segment_choice.segment_json->>'segment_id', '')), '') = v_segment_id_text THEN 2
+              WHEN v_segment_key_text IS NOT NULL AND NULLIF(BTRIM(COALESCE(segment_choice.segment_json->>'segment_key', segment_choice.segment_json->>'segment_id', '')), '') = v_segment_key_text THEN 3
+              WHEN v_segment_stable_key_text IS NOT NULL AND NULLIF(BTRIM(COALESCE(segment_choice.segment_json->>'segment_stable_key', segment_choice.segment_json->>'segment_id', segment_choice.segment_json->>'segment_key', '')), '') = v_segment_stable_key_text THEN 4
+              ELSE 9
+            END
+          LIMIT 1;
+
+          IF COALESCE(v_segment_match_found, false)
+             AND v_segment_match_date_text IS NOT NULL
+             AND v_segment_match_date_text ~ '^\d{4}-\d{2}-\d{2}$' THEN
+            v_resolved_key_type := 'TS_DAY';
+            v_resolved_key_value := v_segment_match_date_text;
+            v_resolved_source := 'PRE_DRAFT_LIVE_SEGMENT_DATE';
+          ELSIF COALESCE(v_segment_match_found, false) THEN
+            v_resolved_key_type := 'TS_TOTAL';
+            v_resolved_key_value := 'TOTAL';
+            v_resolved_source := 'PRE_DRAFT_LIVE_SEGMENT_TOTAL_FALLBACK';
+          END IF;
+        END IF;
+      END IF;
+
+      IF v_resolved_key_type IS NULL AND v_timesheet_id IS NOT NULL THEN
+        SELECT COALESCE(latest_finance.actual_schedule_json, timesheet_row.actual_schedule_json, '{}'::jsonb)
+        INTO v_live_schedule_json
+        FROM public.timesheets AS timesheet_row
+        LEFT JOIN LATERAL (
+          SELECT finance_row.actual_schedule_json
+          FROM public.timesheets_financials AS finance_row
+          WHERE finance_row.timesheet_id = timesheet_row.timesheet_id
+            AND finance_row.is_current = true
+          ORDER BY finance_row.computed_at_utc DESC, finance_row.id DESC
+          LIMIT 1
+        ) AS latest_finance ON true
+        WHERE timesheet_row.timesheet_id = v_timesheet_id
+        LIMIT 1;
+
+        IF jsonb_typeof(v_live_schedule_json->'segments') = 'array' THEN
+          v_segments_json := v_live_schedule_json->'segments';
+        ELSE
+          v_segments_json := '[]'::jsonb;
+        END IF;
+
+        IF jsonb_array_length(v_segments_json) > 0 THEN
+          v_segment_match_found := false;
+          v_segment_match_date_text := NULL::text;
+
+          SELECT
+            NULLIF(BTRIM(COALESCE(segment_choice.segment_json->>'date', segment_choice.segment_json->>'work_date', '')), ''),
+            true
+          INTO
+            v_segment_match_date_text,
+            v_segment_match_found
+          FROM jsonb_array_elements(v_segments_json) AS segment_choice(segment_json)
+          WHERE segment_choice.segment_json IS NOT NULL
+            AND jsonb_typeof(segment_choice.segment_json) = 'object'
+            AND (
+              (v_ref_num_text IS NOT NULL AND NULLIF(BTRIM(COALESCE(segment_choice.segment_json->>'ref_num', '')), '') = v_ref_num_text)
+              OR (v_segment_id_text IS NOT NULL AND NULLIF(BTRIM(COALESCE(segment_choice.segment_json->>'segment_id', '')), '') = v_segment_id_text)
+              OR (v_segment_key_text IS NOT NULL AND NULLIF(BTRIM(COALESCE(segment_choice.segment_json->>'segment_key', segment_choice.segment_json->>'segment_id', '')), '') = v_segment_key_text)
+              OR (v_segment_stable_key_text IS NOT NULL AND NULLIF(BTRIM(COALESCE(segment_choice.segment_json->>'segment_stable_key', segment_choice.segment_json->>'segment_id', segment_choice.segment_json->>'segment_key', '')), '') = v_segment_stable_key_text)
+            )
+          ORDER BY
+            CASE
+              WHEN v_ref_num_text IS NOT NULL AND NULLIF(BTRIM(COALESCE(segment_choice.segment_json->>'ref_num', '')), '') = v_ref_num_text THEN 1
+              WHEN v_segment_id_text IS NOT NULL AND NULLIF(BTRIM(COALESCE(segment_choice.segment_json->>'segment_id', '')), '') = v_segment_id_text THEN 2
+              WHEN v_segment_key_text IS NOT NULL AND NULLIF(BTRIM(COALESCE(segment_choice.segment_json->>'segment_key', segment_choice.segment_json->>'segment_id', '')), '') = v_segment_key_text THEN 3
+              WHEN v_segment_stable_key_text IS NOT NULL AND NULLIF(BTRIM(COALESCE(segment_choice.segment_json->>'segment_stable_key', segment_choice.segment_json->>'segment_id', segment_choice.segment_json->>'segment_key', '')), '') = v_segment_stable_key_text THEN 4
+              ELSE 9
+            END
+          LIMIT 1;
+
+          IF COALESCE(v_segment_match_found, false)
+             AND v_segment_match_date_text IS NOT NULL
+             AND v_segment_match_date_text ~ '^\d{4}-\d{2}-\d{2}$' THEN
+            v_resolved_key_type := 'TS_DAY';
+            v_resolved_key_value := v_segment_match_date_text;
+            v_resolved_source := 'PRE_DRAFT_LIVE_TIMESHEET_SEGMENT_DATE';
+          ELSIF COALESCE(v_segment_match_found, false) THEN
+            v_resolved_key_type := 'TS_TOTAL';
+            v_resolved_key_value := 'TOTAL';
+            v_resolved_source := 'PRE_DRAFT_LIVE_TIMESHEET_SEGMENT_TOTAL_FALLBACK';
+          END IF;
+        END IF;
+      END IF;
+
+      IF v_resolved_key_type IS NULL AND v_timesheet_id IS NOT NULL THEN
+        SELECT COALESCE(timesheet_row.worked_start_iso::date::text, timesheet_row.scheduled_start_iso::date::text)
+        INTO v_timesheet_start_date_text
+        FROM public.timesheets AS timesheet_row
+        WHERE timesheet_row.timesheet_id = v_timesheet_id
+        LIMIT 1;
+
+        IF v_timesheet_start_date_text IS NOT NULL THEN
+          v_resolved_key_type := 'TS_DAY';
+          v_resolved_key_value := v_timesheet_start_date_text;
+          v_resolved_source := 'PRE_DRAFT_LIVE_TIMESHEET_START_DATE';
+        END IF;
+      END IF;
+
+      IF v_resolved_key_type IS NULL THEN
+        v_resolved_key_type := 'TS_TOTAL';
+        v_resolved_key_value := 'TOTAL';
+        v_resolved_source := 'PRE_DRAFT_LIVE_TOTAL_FALLBACK';
+      END IF;
+
+    ELSIF v_item_type = 'ADJUSTMENT_DELTA' AND v_adjustment_id_text IS NOT NULL THEN
+      v_resolved_key_type := 'ADJUSTMENT_CODE';
+      v_resolved_key_value := v_adjustment_id_text;
+      v_resolved_source := 'PRE_DRAFT_LIVE_ADJUSTMENT_KEY';
+
+    ELSIF v_item_type = 'EXPENSE_DELTA' AND v_additional_code_text IS NOT NULL THEN
+      v_resolved_key_type := 'ADDITIONAL_CODE';
+      v_resolved_key_value := UPPER(v_additional_code_text);
+      v_resolved_source := 'PRE_DRAFT_LIVE_ADDITIONAL_CODE';
+
+    ELSIF v_item_type IN ('EXPENSE_DELTA', 'MILEAGE_DELTA') AND v_expense_code_text IS NOT NULL THEN
+      v_resolved_key_type := 'EXPENSE_CODE';
+      v_resolved_key_value := UPPER(v_expense_code_text);
+      v_resolved_source := 'PRE_DRAFT_LIVE_EXPENSE_CODE';
+    END IF;
+  END IF;
+
+  SELECT
+    key_check.ok,
+    key_check.key_type,
+    key_check.key_value,
+    key_check.failure_reason
+  INTO
+    v_assert_ok,
+    v_assert_key_type,
+    v_assert_key_value,
+    v_assert_failure_reason
+  FROM public._pay_policy_x_assert_economic_key(
+    p_timesheet_id => v_timesheet_id,
+    p_key_type => v_resolved_key_type,
+    p_key_value => v_resolved_key_value,
+    p_context => 'PRE_DRAFT_RESOLVE_FINAL',
+    p_authority_scope => 'PRE_DRAFT',
+    p_resolution_source => COALESCE(v_resolved_source, 'PRE_DRAFT_KEY_RESOLUTION_FAILED'),
+    p_required => true,
+    p_source_json => v_source_json
+  ) AS key_check;
+
+  IF COALESCE(v_assert_ok, false) THEN
+    timesheet_id := v_timesheet_id;
+    key_type := v_assert_key_type;
+    key_value := v_assert_key_value;
+    key_resolution_source := v_resolved_source;
+    key_resolution_failure_reason := NULL::text;
+  ELSE
+    timesheet_id := v_timesheet_id;
+    key_type := NULL::text;
+    key_value := NULL::text;
+    key_resolution_source := 'KEY_RESOLUTION_FAILED';
+    key_resolution_failure_reason := COALESCE(v_failure_reason, v_assert_failure_reason, 'PRE_DRAFT_KEY_RESOLUTION_FAILED');
+  END IF;
+
+  RETURN NEXT;
+END;
+$function$;
+
 -- =========================================================
 -- Helpers (private)
 -- ==========================================================
@@ -152249,390 +152633,6 @@ BEGIN
 END;
 $function$;
 
-
-CREATE OR REPLACE FUNCTION public._pay_policy_x_resolve_pre_draft_economic_key(
-  p_timesheet_id uuid DEFAULT NULL::uuid,
-  p_live_source_json jsonb DEFAULT '{}'::jsonb,
-  p_item_type text DEFAULT NULL::text,
-  p_key_type_hint text DEFAULT NULL::text,
-  p_key_value_hint text DEFAULT NULL::text,
-  p_work_date date DEFAULT NULL::date
-)
-RETURNS TABLE(
-  timesheet_id uuid,
-  key_type text,
-  key_value text,
-  key_resolution_source text,
-  key_resolution_failure_reason text
-)
-LANGUAGE plpgsql
-STABLE
-SECURITY DEFINER
-SET search_path TO 'public'
-AS $function$
-DECLARE
-  v_source_json jsonb := CASE
-    WHEN jsonb_typeof(COALESCE(p_live_source_json, '{}'::jsonb)) = 'object' THEN COALESCE(p_live_source_json, '{}'::jsonb)
-    ELSE '{}'::jsonb
-  END;
-  v_timesheet_id uuid := p_timesheet_id;
-  v_timesheet_id_text text;
-  v_item_type text := UPPER(NULLIF(BTRIM(COALESCE(p_item_type, '')), ''));
-  v_direct_key_type text;
-  v_direct_key_value text;
-  v_resolved_key_type text := NULL::text;
-  v_resolved_key_value text := NULL::text;
-  v_resolved_source text := NULL::text;
-  v_failure_reason text := NULL::text;
-  v_assert_ok boolean := false;
-  v_assert_key_type text := NULL::text;
-  v_assert_key_value text := NULL::text;
-  v_assert_failure_reason text := NULL::text;
-  v_work_date_text text := NULL::text;
-  v_segment_id_text text := NULL::text;
-  v_segment_key_text text := NULL::text;
-  v_segment_stable_key_text text := NULL::text;
-  v_ref_num_text text := NULL::text;
-  v_adjustment_id_text text := NULL::text;
-  v_additional_code_text text := NULL::text;
-  v_expense_code_text text := NULL::text;
-  v_segments_json jsonb := '[]'::jsonb;
-  v_live_schedule_json jsonb := '{}'::jsonb;
-  v_segment_match_found boolean := false;
-  v_segment_match_date_text text := NULL::text;
-  v_timesheet_start_date_text text := NULL::text;
-BEGIN
-  v_timesheet_id_text := NULLIF(BTRIM(COALESCE(v_source_json->>'timesheet_id', '')), '');
-  IF v_timesheet_id IS NULL
-     AND v_timesheet_id_text ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
-    v_timesheet_id := v_timesheet_id_text::uuid;
-  END IF;
-
-  IF v_item_type IS NULL THEN
-    v_item_type := UPPER(NULLIF(BTRIM(COALESCE(
-      v_source_json->>'item_type',
-      v_source_json->>'line_type',
-      v_source_json->>'component_type',
-      v_source_json#>>'{source_basis_json,item_type}',
-      ''
-    )), ''));
-  END IF;
-
-  v_direct_key_type := UPPER(NULLIF(BTRIM(COALESCE(
-    p_key_type_hint,
-    v_source_json->>'component_key_type',
-    v_source_json->>'key_type',
-    v_source_json#>>'{source_basis_json,component_key_type}',
-    v_source_json#>>'{source_basis_json,key_type}',
-    ''
-  )), ''));
-
-  v_direct_key_value := NULLIF(BTRIM(COALESCE(
-    p_key_value_hint,
-    v_source_json->>'component_key_value',
-    v_source_json->>'key_value',
-    v_source_json#>>'{source_basis_json,component_key_value}',
-    v_source_json#>>'{source_basis_json,key_value}',
-    ''
-  )), '');
-
-  IF v_direct_key_type IS NOT NULL OR v_direct_key_value IS NOT NULL THEN
-    SELECT
-      key_check.ok,
-      key_check.key_type,
-      key_check.key_value,
-      key_check.failure_reason
-    INTO
-      v_assert_ok,
-      v_assert_key_type,
-      v_assert_key_value,
-      v_assert_failure_reason
-    FROM public._pay_policy_x_assert_economic_key(
-      p_timesheet_id => v_timesheet_id,
-      p_key_type => v_direct_key_type,
-      p_key_value => v_direct_key_value,
-      p_context => 'PRE_DRAFT_RESOLVE_DIRECT_KEY',
-      p_authority_scope => 'PRE_DRAFT',
-      p_resolution_source => 'PRE_DRAFT_LIVE_DIRECT_KEY',
-      p_required => true,
-      p_source_json => v_source_json
-    ) AS key_check;
-
-    IF COALESCE(v_assert_ok, false) THEN
-      v_resolved_key_type := v_assert_key_type;
-      v_resolved_key_value := v_assert_key_value;
-      v_resolved_source := 'PRE_DRAFT_LIVE_DIRECT_KEY';
-    ELSE
-      v_failure_reason := v_assert_failure_reason;
-    END IF;
-  END IF;
-
-  IF v_resolved_key_type IS NULL THEN
-    v_work_date_text := COALESCE(
-      CASE WHEN p_work_date IS NULL THEN NULL::text ELSE p_work_date::text END,
-      NULLIF(BTRIM(COALESCE(v_source_json->>'work_date', '')), ''),
-      NULLIF(BTRIM(COALESCE(v_source_json->>'date', '')), ''),
-      NULLIF(BTRIM(COALESCE(v_source_json#>>'{source_basis_json,work_date}', '')), ''),
-      NULLIF(BTRIM(COALESCE(v_source_json#>>'{source_basis_json,date}', '')), ''),
-      NULLIF(BTRIM(COALESCE(v_source_json#>>'{segment,work_date}', '')), ''),
-      NULLIF(BTRIM(COALESCE(v_source_json#>>'{segment,date}', '')), ''),
-      NULLIF(BTRIM(COALESCE(v_source_json#>>'{segment_json,work_date}', '')), ''),
-      NULLIF(BTRIM(COALESCE(v_source_json#>>'{segment_json,date}', '')), '')
-    );
-
-    v_segment_id_text := NULLIF(BTRIM(COALESCE(
-      v_source_json->>'segment_id',
-      v_source_json#>>'{source_basis_json,segment_id}',
-      v_source_json#>>'{segment,segment_id}',
-      v_source_json#>>'{segment_json,segment_id}',
-      ''
-    )), '');
-
-    v_segment_key_text := NULLIF(BTRIM(COALESCE(
-      v_source_json->>'segment_key',
-      v_source_json#>>'{source_basis_json,segment_key}',
-      v_source_json#>>'{segment,segment_key}',
-      v_source_json#>>'{segment_json,segment_key}',
-      ''
-    )), '');
-
-    v_segment_stable_key_text := NULLIF(BTRIM(COALESCE(
-      v_source_json->>'segment_stable_key',
-      v_source_json#>>'{source_basis_json,segment_stable_key}',
-      v_source_json#>>'{segment,segment_stable_key}',
-      v_source_json#>>'{segment_json,segment_stable_key}',
-      ''
-    )), '');
-
-    v_ref_num_text := NULLIF(BTRIM(COALESCE(
-      v_source_json->>'ref_num',
-      v_source_json#>>'{source_basis_json,ref_num}',
-      v_source_json#>>'{segment,ref_num}',
-      v_source_json#>>'{segment_json,ref_num}',
-      ''
-    )), '');
-
-    v_adjustment_id_text := NULLIF(BTRIM(COALESCE(
-      v_source_json->>'adjustment_id',
-      v_source_json->>'adjustment_code',
-      v_source_json#>>'{source_basis_json,adjustment_id}',
-      v_source_json#>>'{source_basis_json,adjustment_code}',
-      ''
-    )), '');
-
-    v_additional_code_text := NULLIF(BTRIM(COALESCE(
-      v_source_json->>'additional_code',
-      v_source_json#>>'{source_basis_json,additional_code}',
-      ''
-    )), '');
-
-    v_expense_code_text := NULLIF(BTRIM(COALESCE(
-      v_source_json->>'expense_code',
-      v_source_json->>'mileage_code',
-      v_source_json#>>'{source_basis_json,expense_code}',
-      v_source_json#>>'{source_basis_json,mileage_code}',
-      ''
-    )), '');
-
-    IF v_item_type IN ('SEGMENT_DELTA', 'SEGMENT', 'TIMESHEET_SEGMENT', 'HOURS') THEN
-      IF v_work_date_text IS NOT NULL AND v_work_date_text ~ '^\d{4}-\d{2}-\d{2}$' THEN
-        v_resolved_key_type := 'TS_DAY';
-        v_resolved_key_value := v_work_date_text;
-        v_resolved_source := 'PRE_DRAFT_LIVE_WORK_DATE';
-      END IF;
-
-      IF v_resolved_key_type IS NULL THEN
-        IF jsonb_typeof(v_source_json->'segments') = 'array' THEN
-          v_segments_json := v_source_json->'segments';
-        ELSIF jsonb_typeof(v_source_json#>'{actual_schedule_json,segments}') = 'array' THEN
-          v_segments_json := v_source_json#>'{actual_schedule_json,segments}';
-        ELSIF jsonb_typeof(v_source_json#>'{schedule_json,segments}') = 'array' THEN
-          v_segments_json := v_source_json#>'{schedule_json,segments}';
-        ELSE
-          v_segments_json := '[]'::jsonb;
-        END IF;
-
-        IF jsonb_array_length(v_segments_json) > 0 THEN
-          SELECT
-            NULLIF(BTRIM(COALESCE(segment_choice.segment_json->>'date', segment_choice.segment_json->>'work_date', '')), ''),
-            true
-          INTO
-            v_segment_match_date_text,
-            v_segment_match_found
-          FROM jsonb_array_elements(v_segments_json) AS segment_choice(segment_json)
-          WHERE segment_choice.segment_json IS NOT NULL
-            AND jsonb_typeof(segment_choice.segment_json) = 'object'
-            AND (
-              (v_work_date_text IS NOT NULL AND NULLIF(BTRIM(COALESCE(segment_choice.segment_json->>'date', segment_choice.segment_json->>'work_date', '')), '') = v_work_date_text)
-              OR (v_ref_num_text IS NOT NULL AND NULLIF(BTRIM(COALESCE(segment_choice.segment_json->>'ref_num', '')), '') = v_ref_num_text)
-              OR (v_segment_id_text IS NOT NULL AND NULLIF(BTRIM(COALESCE(segment_choice.segment_json->>'segment_id', '')), '') = v_segment_id_text)
-              OR (v_segment_key_text IS NOT NULL AND NULLIF(BTRIM(COALESCE(segment_choice.segment_json->>'segment_key', segment_choice.segment_json->>'segment_id', '')), '') = v_segment_key_text)
-              OR (v_segment_stable_key_text IS NOT NULL AND NULLIF(BTRIM(COALESCE(segment_choice.segment_json->>'segment_stable_key', segment_choice.segment_json->>'segment_id', segment_choice.segment_json->>'segment_key', '')), '') = v_segment_stable_key_text)
-            )
-          ORDER BY
-            CASE
-              WHEN v_work_date_text IS NOT NULL AND NULLIF(BTRIM(COALESCE(segment_choice.segment_json->>'date', segment_choice.segment_json->>'work_date', '')), '') = v_work_date_text THEN 0
-              WHEN v_ref_num_text IS NOT NULL AND NULLIF(BTRIM(COALESCE(segment_choice.segment_json->>'ref_num', '')), '') = v_ref_num_text THEN 1
-              WHEN v_segment_id_text IS NOT NULL AND NULLIF(BTRIM(COALESCE(segment_choice.segment_json->>'segment_id', '')), '') = v_segment_id_text THEN 2
-              WHEN v_segment_key_text IS NOT NULL AND NULLIF(BTRIM(COALESCE(segment_choice.segment_json->>'segment_key', segment_choice.segment_json->>'segment_id', '')), '') = v_segment_key_text THEN 3
-              WHEN v_segment_stable_key_text IS NOT NULL AND NULLIF(BTRIM(COALESCE(segment_choice.segment_json->>'segment_stable_key', segment_choice.segment_json->>'segment_id', segment_choice.segment_json->>'segment_key', '')), '') = v_segment_stable_key_text THEN 4
-              ELSE 9
-            END
-          LIMIT 1;
-
-          IF COALESCE(v_segment_match_found, false)
-             AND v_segment_match_date_text IS NOT NULL
-             AND v_segment_match_date_text ~ '^\d{4}-\d{2}-\d{2}$' THEN
-            v_resolved_key_type := 'TS_DAY';
-            v_resolved_key_value := v_segment_match_date_text;
-            v_resolved_source := 'PRE_DRAFT_LIVE_SEGMENT_DATE';
-          ELSIF COALESCE(v_segment_match_found, false) THEN
-            v_resolved_key_type := 'TS_TOTAL';
-            v_resolved_key_value := 'TOTAL';
-            v_resolved_source := 'PRE_DRAFT_LIVE_SEGMENT_TOTAL_FALLBACK';
-          END IF;
-        END IF;
-      END IF;
-
-      IF v_resolved_key_type IS NULL AND v_timesheet_id IS NOT NULL THEN
-        SELECT COALESCE(latest_finance.actual_schedule_json, timesheet_row.actual_schedule_json, '{}'::jsonb)
-        INTO v_live_schedule_json
-        FROM public.timesheets AS timesheet_row
-        LEFT JOIN LATERAL (
-          SELECT finance_row.actual_schedule_json
-          FROM public.timesheets_financials AS finance_row
-          WHERE finance_row.timesheet_id = timesheet_row.timesheet_id
-            AND finance_row.is_current = true
-          ORDER BY finance_row.computed_at_utc DESC, finance_row.id DESC
-          LIMIT 1
-        ) AS latest_finance ON true
-        WHERE timesheet_row.timesheet_id = v_timesheet_id
-        LIMIT 1;
-
-        IF jsonb_typeof(v_live_schedule_json->'segments') = 'array' THEN
-          v_segments_json := v_live_schedule_json->'segments';
-        ELSE
-          v_segments_json := '[]'::jsonb;
-        END IF;
-
-        IF jsonb_array_length(v_segments_json) > 0 THEN
-          v_segment_match_found := false;
-          v_segment_match_date_text := NULL::text;
-
-          SELECT
-            NULLIF(BTRIM(COALESCE(segment_choice.segment_json->>'date', segment_choice.segment_json->>'work_date', '')), ''),
-            true
-          INTO
-            v_segment_match_date_text,
-            v_segment_match_found
-          FROM jsonb_array_elements(v_segments_json) AS segment_choice(segment_json)
-          WHERE segment_choice.segment_json IS NOT NULL
-            AND jsonb_typeof(segment_choice.segment_json) = 'object'
-            AND (
-              (v_ref_num_text IS NOT NULL AND NULLIF(BTRIM(COALESCE(segment_choice.segment_json->>'ref_num', '')), '') = v_ref_num_text)
-              OR (v_segment_id_text IS NOT NULL AND NULLIF(BTRIM(COALESCE(segment_choice.segment_json->>'segment_id', '')), '') = v_segment_id_text)
-              OR (v_segment_key_text IS NOT NULL AND NULLIF(BTRIM(COALESCE(segment_choice.segment_json->>'segment_key', segment_choice.segment_json->>'segment_id', '')), '') = v_segment_key_text)
-              OR (v_segment_stable_key_text IS NOT NULL AND NULLIF(BTRIM(COALESCE(segment_choice.segment_json->>'segment_stable_key', segment_choice.segment_json->>'segment_id', segment_choice.segment_json->>'segment_key', '')), '') = v_segment_stable_key_text)
-            )
-          ORDER BY
-            CASE
-              WHEN v_ref_num_text IS NOT NULL AND NULLIF(BTRIM(COALESCE(segment_choice.segment_json->>'ref_num', '')), '') = v_ref_num_text THEN 1
-              WHEN v_segment_id_text IS NOT NULL AND NULLIF(BTRIM(COALESCE(segment_choice.segment_json->>'segment_id', '')), '') = v_segment_id_text THEN 2
-              WHEN v_segment_key_text IS NOT NULL AND NULLIF(BTRIM(COALESCE(segment_choice.segment_json->>'segment_key', segment_choice.segment_json->>'segment_id', '')), '') = v_segment_key_text THEN 3
-              WHEN v_segment_stable_key_text IS NOT NULL AND NULLIF(BTRIM(COALESCE(segment_choice.segment_json->>'segment_stable_key', segment_choice.segment_json->>'segment_id', segment_choice.segment_json->>'segment_key', '')), '') = v_segment_stable_key_text THEN 4
-              ELSE 9
-            END
-          LIMIT 1;
-
-          IF COALESCE(v_segment_match_found, false)
-             AND v_segment_match_date_text IS NOT NULL
-             AND v_segment_match_date_text ~ '^\d{4}-\d{2}-\d{2}$' THEN
-            v_resolved_key_type := 'TS_DAY';
-            v_resolved_key_value := v_segment_match_date_text;
-            v_resolved_source := 'PRE_DRAFT_LIVE_TIMESHEET_SEGMENT_DATE';
-          ELSIF COALESCE(v_segment_match_found, false) THEN
-            v_resolved_key_type := 'TS_TOTAL';
-            v_resolved_key_value := 'TOTAL';
-            v_resolved_source := 'PRE_DRAFT_LIVE_TIMESHEET_SEGMENT_TOTAL_FALLBACK';
-          END IF;
-        END IF;
-      END IF;
-
-      IF v_resolved_key_type IS NULL AND v_timesheet_id IS NOT NULL THEN
-        SELECT COALESCE(timesheet_row.worked_start_iso::date::text, timesheet_row.scheduled_start_iso::date::text)
-        INTO v_timesheet_start_date_text
-        FROM public.timesheets AS timesheet_row
-        WHERE timesheet_row.timesheet_id = v_timesheet_id
-        LIMIT 1;
-
-        IF v_timesheet_start_date_text IS NOT NULL THEN
-          v_resolved_key_type := 'TS_DAY';
-          v_resolved_key_value := v_timesheet_start_date_text;
-          v_resolved_source := 'PRE_DRAFT_LIVE_TIMESHEET_START_DATE';
-        END IF;
-      END IF;
-
-      IF v_resolved_key_type IS NULL THEN
-        v_resolved_key_type := 'TS_TOTAL';
-        v_resolved_key_value := 'TOTAL';
-        v_resolved_source := 'PRE_DRAFT_LIVE_TOTAL_FALLBACK';
-      END IF;
-
-    ELSIF v_item_type = 'ADJUSTMENT_DELTA' AND v_adjustment_id_text IS NOT NULL THEN
-      v_resolved_key_type := 'ADJUSTMENT_CODE';
-      v_resolved_key_value := v_adjustment_id_text;
-      v_resolved_source := 'PRE_DRAFT_LIVE_ADJUSTMENT_KEY';
-
-    ELSIF v_item_type = 'EXPENSE_DELTA' AND v_additional_code_text IS NOT NULL THEN
-      v_resolved_key_type := 'ADDITIONAL_CODE';
-      v_resolved_key_value := UPPER(v_additional_code_text);
-      v_resolved_source := 'PRE_DRAFT_LIVE_ADDITIONAL_CODE';
-
-    ELSIF v_item_type IN ('EXPENSE_DELTA', 'MILEAGE_DELTA') AND v_expense_code_text IS NOT NULL THEN
-      v_resolved_key_type := 'EXPENSE_CODE';
-      v_resolved_key_value := UPPER(v_expense_code_text);
-      v_resolved_source := 'PRE_DRAFT_LIVE_EXPENSE_CODE';
-    END IF;
-  END IF;
-
-  SELECT
-    key_check.ok,
-    key_check.key_type,
-    key_check.key_value,
-    key_check.failure_reason
-  INTO
-    v_assert_ok,
-    v_assert_key_type,
-    v_assert_key_value,
-    v_assert_failure_reason
-  FROM public._pay_policy_x_assert_economic_key(
-    p_timesheet_id => v_timesheet_id,
-    p_key_type => v_resolved_key_type,
-    p_key_value => v_resolved_key_value,
-    p_context => 'PRE_DRAFT_RESOLVE_FINAL',
-    p_authority_scope => 'PRE_DRAFT',
-    p_resolution_source => COALESCE(v_resolved_source, 'PRE_DRAFT_KEY_RESOLUTION_FAILED'),
-    p_required => true,
-    p_source_json => v_source_json
-  ) AS key_check;
-
-  IF COALESCE(v_assert_ok, false) THEN
-    timesheet_id := v_timesheet_id;
-    key_type := v_assert_key_type;
-    key_value := v_assert_key_value;
-    key_resolution_source := v_resolved_source;
-    key_resolution_failure_reason := NULL::text;
-  ELSE
-    timesheet_id := v_timesheet_id;
-    key_type := NULL::text;
-    key_value := NULL::text;
-    key_resolution_source := 'KEY_RESOLUTION_FAILED';
-    key_resolution_failure_reason := COALESCE(v_failure_reason, v_assert_failure_reason, 'PRE_DRAFT_KEY_RESOLUTION_FAILED');
-  END IF;
-
-  RETURN NEXT;
-END;
-$function$;
 
 
 
