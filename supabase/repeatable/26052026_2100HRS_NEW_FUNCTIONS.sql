@@ -26388,6 +26388,7 @@ end;
 $function$;
 
 
+
 CREATE OR REPLACE FUNCTION public.pay_preview_assemble_payload(
   p_context_json jsonb,
   p_candidate_rollups_json jsonb
@@ -26441,6 +26442,7 @@ DECLARE
   v_snoozed_items jsonb := '[]'::jsonb;
   v_baseline_component_rows jsonb := '[]'::jsonb;
   v_hidden_recovery_template_lines jsonb := '[]'::jsonb;
+  v_hidden_recovery_template_line_count integer := 0;
   v_timesheet_snapshots_json jsonb := '[]'::jsonb;
   v_summary jsonb := '{}'::jsonb;
 BEGIN
@@ -26752,7 +26754,6 @@ BEGIN
   );
 END;
 $function$;
-
 
 
 
