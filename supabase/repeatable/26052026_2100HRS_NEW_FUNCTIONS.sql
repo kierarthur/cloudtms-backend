@@ -42429,7 +42429,7 @@ BEGIN
     'timesheet_snapshots_json', '[]'::jsonb
   );
 END;
-$function$
+$function$;
 
 
 DROP FUNCTION IF EXISTS public.pay_batch_insert_candidates_from_preview(uuid, uuid);
