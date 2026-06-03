@@ -21754,8 +21754,6 @@ END;
 $function$;
 
 
-
-
 CREATE OR REPLACE FUNCTION public.pay_workbench_snapshot_refresh_candidate(
   p_snapshot_run_id uuid,
   p_candidate_id uuid,
@@ -21775,7 +21773,6 @@ DECLARE
   v_line_limit integer := 100;
   v_line_result jsonb := '{}'::jsonb;
   v_still_pending boolean := true;
-  v_allow_tiny_full_compat boolean := false;
   v_source_change_seq bigint := 0;
 BEGIN
   PERFORM public.banking_pay_hot_path_budget_apply('WORKBENCH_CHUNK');
@@ -21821,11 +21818,6 @@ BEGIN
     v_line_limit := 100;
   END IF;
 
-  v_allow_tiny_full_compat := LOWER(BTRIM(COALESCE(
-    v_payload_json->>'allow_tiny_full_compat',
-    v_payload_json->>'allow_full_candidate_snapshot_refresh',
-    'false'
-  ))) IN ('true','1','yes','y','on');
 
   SELECT COALESCE(change_counter.seq, 0)
   INTO v_source_change_seq
@@ -21884,51 +21876,22 @@ BEGIN
     );
   END IF;
 
-  IF v_allow_tiny_full_compat IS NOT TRUE THEN
-    RETURN jsonb_build_object(
-      'ok', true,
-      'snapshot_run_id', p_snapshot_run_id::text,
-      'candidate_id', p_candidate_id::text,
-      'bounded_line_work', false,
-      'still_pending', true,
-      'candidate_still_pending', true,
-      'deferred', true,
-      'reason', 'SESSION_REQUIRED_FOR_ROW_BACKED_LINE_WORK',
-      'source_change_seq', COALESCE(v_source_change_seq, 0),
-      'no_op', true
-    );
-  END IF;
-
-  v_line_result := public.pay_preview_candidate_build_timesheet_snapshots(
-    p_context_json => public.pay_preview_build_context(
-      p_pay_date => v_snapshot_run_row.pay_date,
-      p_week_ending_cutoff => v_snapshot_run_row.week_ending_cutoff,
-      p_actor_user_id => NULL::uuid,
-      p_candidate_id => p_candidate_id,
-      p_client_id => NULL::uuid,
-      p_preview_decisions_json => v_payload_json || jsonb_build_object('preview_context_mode', 'FULL_COMPAT')
-    ),
-    p_candidate_id => p_candidate_id,
-    p_cursor_json => NULL::jsonb,
-    p_limit => v_line_limit,
-    p_mode => 'FULL_COMPAT'
-  );
-
   RETURN jsonb_build_object(
     'ok', true,
     'snapshot_run_id', p_snapshot_run_id::text,
     'candidate_id', p_candidate_id::text,
+    'session_id', NULL::text,
     'bounded_line_work', false,
-    'tiny_full_compat', true,
-    'still_pending', COALESCE(NULLIF(BTRIM(COALESCE(v_line_result->>'has_more', '')), '')::boolean, false),
-    'candidate_still_pending', COALESCE(NULLIF(BTRIM(COALESCE(v_line_result->>'has_more', '')), '')::boolean, false),
-    'line_result', COALESCE(v_line_result, '{}'::jsonb),
+    'still_pending', true,
+    'candidate_still_pending', true,
+    'deferred', true,
+    'reason', 'SESSION_REQUIRED_FOR_ROW_BACKED_LINE_WORK',
+    'reason_code', 'SESSION_REQUIRED_FOR_ROW_BACKED_LINE_WORK',
     'source_change_seq', COALESCE(v_source_change_seq, 0),
-    'no_op', false
+    'no_op', true
   );
 END;
 $function$;
-
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_enqueue_payee_readiness_ensure(
   p_candidate_id uuid,
@@ -41880,7 +41843,7 @@ CREATE OR REPLACE FUNCTION public.pay_preview_candidate_build_timesheet_snapshot
   p_candidate_id uuid,
   p_cursor_json jsonb DEFAULT NULL::jsonb,
   p_limit integer DEFAULT 100,
-  p_mode text DEFAULT 'FULL_COMPAT'::text
+  p_mode text DEFAULT 'PAGE'::text
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -41896,12 +41859,13 @@ DECLARE
   v_client_id uuid := NULL::uuid;
   v_eligibility_from_date date := NULL::date;
   v_eligibility_to_date date := NULL::date;
-  v_snapshot_mode text := UPPER(NULLIF(BTRIM(COALESCE(p_mode, v_context_json->>'timesheet_snapshot_mode', 'PAGE')), ''));
   v_requested_snapshot_mode text := UPPER(NULLIF(BTRIM(COALESCE(p_mode, v_context_json->>'timesheet_snapshot_mode', 'PAGE')), ''));
+  v_snapshot_mode text := 'PAGE';
   v_limit integer := LEAST(GREATEST(COALESCE(p_limit, 100), 1), 100);
   v_cursor_timesheet_id uuid := NULL::uuid;
   v_cursor_timesheet_text text := NULL::text;
   v_cursor_week_ending_date date := NULL::date;
+  v_cursor_row_ordinal integer := 0;
   v_workbench_session_id uuid := NULL::uuid;
   v_snapshot_count_known boolean := false;
   v_snapshot_count integer := 0;
@@ -41922,13 +41886,15 @@ BEGIN
     RAISE EXCEPTION 'candidate_id is required';
   END IF;
 
-  IF v_snapshot_mode NOT IN ('PAGE', 'FULL_COMPAT') THEN
-    v_snapshot_mode := 'PAGE';
-  END IF;
-
   IF v_requested_snapshot_mode NOT IN ('PAGE', 'FULL_COMPAT') THEN
     v_requested_snapshot_mode := 'PAGE';
   END IF;
+
+  IF v_requested_snapshot_mode = 'FULL_COMPAT' THEN
+    v_full_compat_downgraded_to_page := true;
+  END IF;
+
+  v_snapshot_mode := 'PAGE';
 
   IF NULLIF(BTRIM(COALESCE(v_context_json->>'pay_date', '')), '') IS NOT NULL THEN
     v_pay_date := NULLIF(BTRIM(COALESCE(v_context_json->>'pay_date', '')), '')::date;
@@ -41983,49 +41949,9 @@ BEGIN
     EXCEPTION WHEN OTHERS THEN
       v_cursor_week_ending_date := NULL::date;
     END;
-  END IF;
 
-  IF v_snapshot_mode = 'FULL_COMPAT' THEN
-    SELECT COUNT(*)::integer
-    INTO v_snapshot_count
-    FROM public.timesheets_financials AS current_financials
-    JOIN public.timesheets AS timesheet_row
-      ON timesheet_row.timesheet_id = current_financials.timesheet_id
-    JOIN public.candidates AS candidate_row
-      ON candidate_row.id = current_financials.candidate_id
-    WHERE current_financials.is_current = true
-      AND current_financials.candidate_id = v_candidate_id
-      AND (v_client_id IS NULL OR current_financials.client_id = v_client_id)
-      AND COALESCE(current_financials.pay_on_hold, false) = false
-      AND COALESCE(current_financials.has_rate_issue, false) = false
-      AND COALESCE(current_financials.has_pay_channel_issue, false) = false
-      AND UPPER(COALESCE(current_financials.processing_status::text, '')) NOT IN ('UNASSIGNED', 'CLIENT_UNRESOLVED', 'RATE_MISSING', 'PAY_CHANNEL_MISSING')
-      AND UPPER(COALESCE(candidate_row.pay_method, '')) IN ('PAYE', 'UMBRELLA')
-      AND timesheet_row.authorised_at_server IS NOT NULL
-      AND timesheet_row.revoked_at IS NULL
-      AND COALESCE(
-        CASE
-          WHEN UPPER(COALESCE(timesheet_row.sheet_scope::text, '')) = 'DAILY'
-           AND timesheet_row.worked_start_iso IS NOT NULL
-            THEN (timesheet_row.worked_start_iso AT TIME ZONE 'Europe/London')::date
-          ELSE NULL::date
-        END,
-        timesheet_row.week_ending_date::date
-      ) >= v_eligibility_from_date
-      AND COALESCE(
-        CASE
-          WHEN UPPER(COALESCE(timesheet_row.sheet_scope::text, '')) = 'DAILY'
-           AND timesheet_row.worked_start_iso IS NOT NULL
-            THEN (timesheet_row.worked_start_iso AT TIME ZONE 'Europe/London')::date
-          ELSE NULL::date
-        END,
-        timesheet_row.week_ending_date::date
-      ) <= LEAST(v_eligibility_to_date, v_week_ending_cutoff);
-
-    v_snapshot_count_known := true;
-    IF COALESCE(v_snapshot_count, 0) > v_limit THEN
-      v_snapshot_mode := 'PAGE';
-      v_full_compat_downgraded_to_page := true;
+    IF NULLIF(BTRIM(COALESCE(p_cursor_json->>'last_row_ordinal', '')), '') ~ '^[0-9]{1,9}$' THEN
+      v_cursor_row_ordinal := GREATEST((NULLIF(BTRIM(COALESCE(p_cursor_json->>'last_row_ordinal', '')), ''))::integer, 0);
     END IF;
   END IF;
 
@@ -42126,21 +42052,24 @@ BEGIN
   cursor_filtered AS (
     SELECT eligible_timesheets.*
     FROM eligible_timesheets
-    WHERE v_snapshot_mode = 'FULL_COMPAT'
-       OR v_cursor_timesheet_id IS NULL
+    WHERE v_cursor_timesheet_id IS NULL
        OR eligible_timesheets.week_ending_date > COALESCE(v_cursor_week_ending_date, DATE '0001-01-01')
        OR (
          eligible_timesheets.week_ending_date = COALESCE(v_cursor_week_ending_date, eligible_timesheets.week_ending_date)
          AND eligible_timesheets.timesheet_id::text > COALESCE(v_cursor_timesheet_text, '')
        )
   ),
-  page_rows AS (
-    SELECT cursor_filtered.*,
-           ROW_NUMBER() OVER (ORDER BY cursor_filtered.week_ending_date, cursor_filtered.timesheet_id::text) AS page_ordinal,
-           ROW_NUMBER() OVER (ORDER BY cursor_filtered.week_ending_date, cursor_filtered.timesheet_id::text) AS line_ordinal
+  limited_page_rows AS (
+    SELECT cursor_filtered.*
     FROM cursor_filtered
     ORDER BY cursor_filtered.week_ending_date, cursor_filtered.timesheet_id::text
-    LIMIT CASE WHEN v_snapshot_mode = 'PAGE' THEN v_limit + 1 ELSE 2147483647 END
+    LIMIT v_limit + 1
+  ),
+  page_rows AS (
+    SELECT limited_page_rows.*,
+           ROW_NUMBER() OVER (ORDER BY limited_page_rows.week_ending_date, limited_page_rows.timesheet_id::text) AS page_ordinal,
+           v_cursor_row_ordinal + ROW_NUMBER() OVER (ORDER BY limited_page_rows.week_ending_date, limited_page_rows.timesheet_id::text) AS line_ordinal
+    FROM limited_page_rows
   ),
   page_rows_with_json AS (
     SELECT
@@ -42406,22 +42335,31 @@ BEGIN
     'mode_requested', v_requested_snapshot_mode,
     'mode', v_snapshot_mode,
     'full_compat_downgraded_to_page', v_full_compat_downgraded_to_page,
+    'full_compat_downgrade_reason', CASE WHEN v_full_compat_downgraded_to_page THEN 'PAGE_FIRST_REQUIRED_FOR_BANKING_PAY' ELSE NULL::text END,
     'limit', v_limit,
-    'timesheet_snapshot_count', CASE WHEN v_snapshot_count_known THEN v_snapshot_count ELSE NULL::integer END,
-    'count_unknown', NOT v_snapshot_count_known,
+    'timesheet_snapshot_count', NULL::integer,
+    'count_unknown', true,
     'page_count', COALESCE(v_page_count, 0),
     'has_more', COALESCE(v_has_more, false),
     'next_cursor', v_next_cursor,
+    'progress_state', CASE WHEN COALESCE(v_has_more, false) THEN 'PAGE_READY_HAS_MORE' ELSE 'PAGE_READY' END,
+    'progress_json', jsonb_build_object(
+      'phase', 'TIMESHEET_SNAPSHOT_PAGE',
+      'page_count', COALESCE(v_page_count, 0),
+      'has_more', COALESCE(v_has_more, false),
+      'count_unknown', true,
+      'next_cursor', v_next_cursor,
+      'updated_at_utc', v_now::text
+    ),
     'workbench_session_id', CASE WHEN v_workbench_session_id IS NULL THEN NULL::text ELSE v_workbench_session_id::text END,
     'line_work_scope_found', COALESCE(v_workbench_scope_exists, false),
     'line_work_seeded_count', COALESCE(v_line_work_seeded_count, 0),
     'line_work_error_count', COALESCE(v_line_work_error_count, 0),
-    'snapshot_page_json', CASE WHEN v_snapshot_mode = 'FULL_COMPAT' THEN COALESCE(v_page_payload, '[]'::jsonb) ELSE '[]'::jsonb END
+    'snapshot_page_json', '[]'::jsonb,
+    'timesheet_snapshots_json', '[]'::jsonb
   );
 END;
 $function$;
-
-
 
 
 DROP FUNCTION IF EXISTS public.pay_batch_insert_candidates_from_preview(uuid, uuid);
@@ -59014,12 +58952,33 @@ DECLARE
   v_cached_highest_label text := NULL::text;
   v_watched_batch_ids jsonb := '[]'::jsonb;
   v_watched_batch_signals jsonb := '[]'::jsonb;
+  v_explicit_entity_keys jsonb := '[]'::jsonb;
+  v_ping_context text := NULL::text;
+  v_has_watched_batch_ids boolean := false;
+  v_is_banking_pay_mode boolean := false;
+  v_allow_generic_global_scan boolean := false;
+  v_app_counter_mode text := 'SKIPPED';
   v_result jsonb := '{}'::jsonb;
 BEGIN
   PERFORM public.banking_pay_hot_path_budget_apply('CHANGES_PING');
 
   IF COALESCE(jsonb_typeof(v_last_seen), 'null') <> 'object' THEN
     v_last_seen := '{}'::jsonb;
+  END IF;
+
+  v_ping_context := UPPER(NULLIF(BTRIM(COALESCE(
+    v_last_seen ->> '__changes_ping_context',
+    v_last_seen ->> '__route_context',
+    v_last_seen ->> 'route_context',
+    v_last_seen ->> '__context',
+    v_last_seen ->> 'context',
+    v_last_seen ->> '__mode',
+    v_last_seen ->> 'mode',
+    ''
+  )), ''));
+
+  IF v_ping_context IS NULL THEN
+    v_ping_context := 'UNSPECIFIED';
   END IF;
 
   BEGIN
@@ -59044,31 +59003,154 @@ BEGIN
     v_watched_batch_ids := '[]'::jsonb;
   END IF;
 
-  FOR v_counter_record IN
-    SELECT change_counter.entity_key, change_counter.seq
-    FROM public.app_change_counters AS change_counter
-    ORDER BY change_counter.entity_key
-  LOOP
-    v_cur := COALESCE(v_counter_record.seq, 0);
-    v_prev := 0;
+  IF COALESCE(jsonb_typeof(v_watched_batch_ids), 'null') = 'array' THEN
+    v_has_watched_batch_ids := jsonb_array_length(v_watched_batch_ids) > 0;
+  ELSE
+    v_has_watched_batch_ids := false;
+  END IF;
 
-    BEGIN
-      v_prev := COALESCE((v_last_seen ->> v_counter_record.entity_key)::bigint, 0);
-    EXCEPTION WHEN OTHERS THEN
+  IF jsonb_typeof(v_last_seen -> '__watched_entity_keys') = 'array' THEN
+    v_explicit_entity_keys := v_last_seen -> '__watched_entity_keys';
+  ELSIF jsonb_typeof(v_last_seen -> 'watched_entity_keys') = 'array' THEN
+    v_explicit_entity_keys := v_last_seen -> 'watched_entity_keys';
+  ELSIF jsonb_typeof(v_last_seen -> '__entity_keys') = 'array' THEN
+    v_explicit_entity_keys := v_last_seen -> '__entity_keys';
+  ELSIF jsonb_typeof(v_last_seen -> 'entity_keys') = 'array' THEN
+    v_explicit_entity_keys := v_last_seen -> 'entity_keys';
+  ELSE
+    v_explicit_entity_keys := '[]'::jsonb;
+  END IF;
+
+  v_is_banking_pay_mode :=
+       v_actor_user_id IS NOT NULL
+    OR v_has_watched_batch_ids
+    OR v_ping_context IN (
+      'BANKING',
+      'BANKING_PAY',
+      'BANKING_PAY_LIST',
+      'BANKING_PAY_MODAL',
+      'BANKING_PAY_PREVIEW',
+      'BANKING_PAY_WATCH',
+      'BANKING_PAY_BATCH_WATCH',
+      'BANKING_PAY_CHANGES_PING',
+      'PAY_BATCH_WATCH',
+      'PAY_BATCH_MODAL',
+      'PAY_BATCH_LIST'
+    );
+
+  v_allow_generic_global_scan :=
+       v_is_banking_pay_mode IS NOT TRUE
+   AND v_ping_context IN ('GENERIC_APP_COUNTERS', 'APP_CHANGE_COUNTERS', 'GLOBAL_APP_CHANGES', 'NON_BANKING_APP_CHANGES')
+   AND LOWER(BTRIM(COALESCE(
+      v_last_seen ->> '__allow_global_app_change_counter_scan',
+      v_last_seen ->> 'allow_global_app_change_counter_scan',
+      'false'
+   ))) IN ('true', '1', 'yes', 'y', 'on');
+
+
+  IF COALESCE(jsonb_typeof(v_explicit_entity_keys), 'null') = 'array'
+     AND jsonb_array_length(v_explicit_entity_keys) > 0 THEN
+    v_app_counter_mode := 'EXPLICIT_CAPPED_KEYS';
+
+    FOR v_counter_record IN
+      WITH raw_entity_keys AS (
+        SELECT entity_key_entry.value,
+               entity_key_entry.ordinality
+        FROM jsonb_array_elements(COALESCE(v_explicit_entity_keys, '[]'::jsonb)) WITH ORDINALITY AS entity_key_entry(value, ordinality)
+        LIMIT 25
+      ),
+      parsed_entity_keys AS (
+        SELECT
+          CASE
+            WHEN jsonb_typeof(raw_entity_keys.value) = 'string'
+              THEN NULLIF(BTRIM(TRIM(BOTH '"' FROM raw_entity_keys.value::text)), '')
+            WHEN jsonb_typeof(raw_entity_keys.value) = 'object'
+              THEN NULLIF(BTRIM(COALESCE(raw_entity_keys.value->>'entity_key', raw_entity_keys.value->>'key', raw_entity_keys.value->>'name', '')), '')
+            ELSE NULL::text
+          END AS entity_key,
+          CASE
+            WHEN jsonb_typeof(raw_entity_keys.value) = 'object'
+             AND COALESCE(raw_entity_keys.value->>'known_seq', raw_entity_keys.value->>'seq', raw_entity_keys.value->>'last_seen_seq', '') ~ '^[0-9]+$'
+              THEN COALESCE(raw_entity_keys.value->>'known_seq', raw_entity_keys.value->>'seq', raw_entity_keys.value->>'last_seen_seq')::bigint
+            ELSE NULL::bigint
+          END AS known_seq,
+          raw_entity_keys.ordinality
+        FROM raw_entity_keys
+      ),
+      requested_entity_keys AS (
+        SELECT DISTINCT ON (parsed_entity_keys.entity_key)
+          parsed_entity_keys.entity_key,
+          parsed_entity_keys.known_seq,
+          parsed_entity_keys.ordinality
+        FROM parsed_entity_keys
+        WHERE parsed_entity_keys.entity_key IS NOT NULL
+          AND LENGTH(parsed_entity_keys.entity_key) <= 200
+        ORDER BY parsed_entity_keys.entity_key, parsed_entity_keys.ordinality
+      )
+      SELECT requested_entity_keys.entity_key,
+             requested_entity_keys.known_seq,
+             COALESCE(change_counter.seq, 0) AS seq
+      FROM requested_entity_keys
+      LEFT JOIN public.app_change_counters AS change_counter
+        ON change_counter.entity_key = requested_entity_keys.entity_key
+      ORDER BY requested_entity_keys.ordinality
+    LOOP
+      v_cur := COALESCE(v_counter_record.seq, 0);
+
+      IF v_counter_record.known_seq IS NOT NULL THEN
+        v_prev := COALESCE(v_counter_record.known_seq, 0);
+      ELSE
+        BEGIN
+          v_prev := COALESCE((v_last_seen ->> v_counter_record.entity_key)::bigint, 0);
+        EXCEPTION WHEN OTHERS THEN
+          v_prev := 0;
+        END;
+      END IF;
+
+      v_seqs := v_seqs || jsonb_build_object(v_counter_record.entity_key, v_cur);
+
+      IF v_cur > v_prev THEN
+        v_changed := array_append(v_changed, v_counter_record.entity_key);
+      END IF;
+    END LOOP;
+  ELSIF v_allow_generic_global_scan THEN
+    v_app_counter_mode := 'EXPLICIT_NON_BANKING_GLOBAL_SCAN';
+
+    FOR v_counter_record IN
+      SELECT change_counter.entity_key, change_counter.seq
+      FROM public.app_change_counters AS change_counter
+      ORDER BY change_counter.entity_key
+    LOOP
+      v_cur := COALESCE(v_counter_record.seq, 0);
       v_prev := 0;
+
+      BEGIN
+        v_prev := COALESCE((v_last_seen ->> v_counter_record.entity_key)::bigint, 0);
+      EXCEPTION WHEN OTHERS THEN
+        v_prev := 0;
+      END;
+
+      v_seqs := v_seqs || jsonb_build_object(v_counter_record.entity_key, v_cur);
+
+      IF v_cur > v_prev THEN
+        v_changed := array_append(v_changed, v_counter_record.entity_key);
+      END IF;
+    END LOOP;
+  ELSE
+    v_app_counter_mode := CASE
+      WHEN v_is_banking_pay_mode THEN 'SKIPPED_FOR_BANKING_PAY'
+      ELSE 'SKIPPED_NO_EXPLICIT_KEYS'
     END;
-
-    v_seqs := v_seqs || jsonb_build_object(v_counter_record.entity_key, v_cur);
-
-    IF v_cur > v_prev THEN
-      v_changed := array_append(v_changed, v_counter_record.entity_key);
-    END IF;
-  END LOOP;
+  END IF;
 
   v_result := jsonb_build_object(
     'server_utc', now(),
     'seqs', v_seqs,
-    'changed', to_jsonb(v_changed)
+    'changed', to_jsonb(v_changed),
+    'changes_ping_context', v_ping_context,
+    'banking_pay_mode', COALESCE(v_is_banking_pay_mode, false),
+    'app_change_counter_mode', v_app_counter_mode,
+    'app_change_counter_cap', CASE WHEN v_app_counter_mode = 'EXPLICIT_CAPPED_KEYS' THEN 25 ELSE NULL::integer END
   );
 
   IF v_actor_user_id IS NOT NULL THEN
@@ -59136,12 +59218,13 @@ BEGIN
       FROM raw_watched_batches
     ),
     requested_watched_batches AS (
-      SELECT DISTINCT
+      SELECT DISTINCT ON (parsed_watched_batches.pay_batch_id)
         parsed_watched_batches.pay_batch_id,
-        parsed_watched_batches.known_version
+        parsed_watched_batches.known_version,
+        parsed_watched_batches.ordinality
       FROM parsed_watched_batches
       WHERE parsed_watched_batches.pay_batch_id IS NOT NULL
-      ORDER BY parsed_watched_batches.pay_batch_id
+      ORDER BY parsed_watched_batches.pay_batch_id, parsed_watched_batches.ordinality
       LIMIT 25
     )
     SELECT COALESCE(jsonb_agg(jsonb_build_object(
@@ -59155,7 +59238,7 @@ BEGIN
       'last_status_hash', batch_signal.last_status_hash,
       'last_alert_hash', batch_signal.last_alert_hash,
       'changed_since_version', requested_watched_batches.known_version IS NOT NULL AND COALESCE(batch_signal.version, 0) > requested_watched_batches.known_version
-    ) ORDER BY requested_watched_batches.pay_batch_id::text), '[]'::jsonb)
+    ) ORDER BY requested_watched_batches.ordinality), '[]'::jsonb)
     INTO v_watched_batch_signals
     FROM requested_watched_batches
     LEFT JOIN public.banking_pay_batch_change_signals AS batch_signal
@@ -59171,9 +59254,6 @@ BEGIN
   RETURN v_result;
 END;
 $function$;
-
-
-
 
 
 create or replace function public.banking_pay_operation_config_get(
