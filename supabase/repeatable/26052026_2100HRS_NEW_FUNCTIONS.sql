@@ -63628,6 +63628,13 @@ DECLARE
   v_has_more boolean := false;
   v_next_cursor jsonb := NULL::jsonb;
   v_cached_scope_count integer := 0;
+  v_existing_scope_count integer := 0;
+  v_unseeded_transfer_scope_count integer := 0;
+  v_next_transfer_scope_id uuid := NULL::uuid;
+  v_review_scope_count integer := 0;
+  v_operation_phase text := NULL::text;
+  v_transfer_scope_group_seed_complete boolean := false;
+  v_membership_seed_required boolean := false;
   v_next_required_phase text := 'TRANSFER_SCOPE_ITEM_MEMBERSHIP_SEED_PAGE';
 BEGIN
   PERFORM set_config('lock_timeout', '3s', true);
@@ -63701,6 +63708,184 @@ BEGIN
   IF upper(btrim(coalesce(v_batch_row.status, ''))) = 'BLOCKED_FUNDS' AND coalesce(p_retry_blocked_funds, false) IS NOT TRUE THEN
     RAISE EXCEPTION 'PAY_EXECUTE_TRANSFER_SCOPE_SEED_BLOCKED_FUNDS_RETRY_REQUIRED'
       USING ERRCODE = 'P0001', DETAIL = jsonb_build_object('code', 'PAY_EXECUTE_TRANSFER_SCOPE_SEED_BLOCKED_FUNDS_RETRY_REQUIRED', 'pay_batch_id', p_pay_batch_id::text)::text;
+  END IF;
+
+  v_operation_phase := upper(btrim(coalesce(v_operation_row.phase, '')));
+  v_transfer_scope_group_seed_complete :=
+    v_operation_phase IN (
+      'SEED_TRANSFER_SCOPE_ITEMS',
+      'TRANSFER_SCOPE_ITEM_MEMBERSHIP_SEED_PAGE',
+      'SEED_TRANSFER_ROLLUP_CHUNKS',
+      'ROLLUP_TRANSFER_SCOPE_ITEMS',
+      'TRANSFER_SCOPE_ROLLUP_PAGE',
+      'PREPARE_TRANSFER_CHUNKS',
+      'TRANSFER_CHUNK_PREPARE_PAGE',
+      'PREPARE_BATCH_PROOF',
+      'PREPARE_BATCH',
+      'START_AUTHORISATION_PROOF',
+      'START_AUTHORISATION',
+      'SUBMIT_PROVIDER_TRANSFERS',
+      'SEND_PROVIDER_CHUNK',
+      'REQUEST_PROVIDER_SEND',
+      'FINALISE_PROVIDER_CHUNK',
+      'APPLY_RAIL_UPDATES',
+      'QUEUE_REMITTANCES',
+      'COMPLETE'
+    )
+    OR upper(btrim(coalesce(v_operation_row.progress_json->>'transfer_scope_group_seed_complete', ''))) = 'TRUE'
+    OR (
+      v_operation_row.progress_json ? 'has_more_transfer_groups'
+      AND upper(btrim(coalesce(v_operation_row.progress_json->>'has_more_transfer_groups', 'false'))) <> 'TRUE'
+      AND v_operation_row.progress_json ? 'last_transfer_scope_seed_at_utc'
+    );
+
+  IF coalesce(v_transfer_scope_group_seed_complete, false) THEN
+    SELECT count(*)::integer
+    INTO v_existing_scope_count
+    FROM public.banking_pay_operation_transfer_scope AS existing_scope
+    WHERE existing_scope.operation_id = p_operation_id
+      AND existing_scope.pay_batch_id = p_pay_batch_id;
+
+    SELECT count(*)::integer
+    INTO v_unseeded_transfer_scope_count
+    FROM public.banking_pay_operation_transfer_scope AS unseeded_scope
+    WHERE unseeded_scope.operation_id = p_operation_id
+      AND unseeded_scope.pay_batch_id = p_pay_batch_id
+      AND upper(btrim(coalesce(v_operation_row.progress_json #>> ARRAY['transfer_scope_item_seed_proofs', unseeded_scope.id::text, 'seed_complete'], 'false'))) <> 'TRUE'
+      AND upper(btrim(coalesce(unseeded_scope.provider_submit_state, 'NOT_READY'))) NOT IN (
+        'CLAIMED',
+        'REQUEST_PREPARING',
+        'REQUEST_SENDING',
+        'REQUEST_SENT_LOCAL',
+        'PROVIDER_ACCEPTED',
+        'PROVIDER_REJECTED',
+        'PROVIDER_UNKNOWN',
+        'CHUNK_FINALISED'
+      );
+
+    SELECT next_scope.id
+    INTO v_next_transfer_scope_id
+    FROM public.banking_pay_operation_transfer_scope AS next_scope
+    WHERE next_scope.operation_id = p_operation_id
+      AND next_scope.pay_batch_id = p_pay_batch_id
+      AND upper(btrim(coalesce(v_operation_row.progress_json #>> ARRAY['transfer_scope_item_seed_proofs', next_scope.id::text, 'seed_complete'], 'false'))) <> 'TRUE'
+      AND upper(btrim(coalesce(next_scope.provider_submit_state, 'NOT_READY'))) NOT IN (
+        'CLAIMED',
+        'REQUEST_PREPARING',
+        'REQUEST_SENDING',
+        'REQUEST_SENT_LOCAL',
+        'PROVIDER_ACCEPTED',
+        'PROVIDER_REJECTED',
+        'PROVIDER_UNKNOWN',
+        'CHUNK_FINALISED'
+      )
+    ORDER BY next_scope.created_at_utc NULLS FIRST, next_scope.id
+    LIMIT 1;
+
+    SELECT count(*)::integer
+    INTO v_review_scope_count
+    FROM public.banking_pay_operation_transfer_scope AS review_scope
+    WHERE review_scope.operation_id = p_operation_id
+      AND review_scope.pay_batch_id = p_pay_batch_id
+      AND (
+        coalesce(review_scope.provider_review_required, false) IS TRUE
+        OR upper(btrim(coalesce(review_scope.provider_submit_state, ''))) = 'REVIEW_REQUIRED'
+      );
+
+    IF coalesce(v_existing_scope_count, 0) <= 0 THEN
+      UPDATE public.banking_pay_operations AS operation_update
+      SET pay_batch_id = p_pay_batch_id,
+          phase = 'REVIEW_REQUIRED',
+          progress_json = jsonb_strip_nulls(
+            coalesce(operation_update.progress_json, '{}'::jsonb)
+            || jsonb_build_object(
+              'last_transfer_scope_seed_at_utc', v_now::text,
+              'last_transfer_scope_seed_phase', 'TRANSFER_GROUP_SEED_PAGE',
+              'transfer_scope_group_seed_complete', true,
+              'transfer_scope_count', 0,
+              'unseeded_transfer_scope_count', 0,
+              'membership_seed_required', false,
+              'no_transfer_scope', true,
+              'next_required_phase', 'REVIEW_REQUIRED'
+            )
+          ),
+          updated_at_utc = v_now
+      WHERE operation_update.id = p_operation_id;
+
+      RETURN jsonb_build_object(
+        'ok', false,
+        'code', 'NO_ELIGIBLE_TRANSFER_SCOPE',
+        'message', 'No eligible payable transfer scope was available for this operation.',
+        'operation_id', p_operation_id::text,
+        'pay_batch_id', p_pay_batch_id::text,
+        'pay_channel_scope', v_scope,
+        'bounded', true,
+        'limit', v_limit,
+        'phase_completed', 'TRANSFER_GROUP_SEED_PAGE',
+        'source_item_page_count', 0,
+        'group_seeded_count', 0,
+        'membership_seeded_count', 0,
+        'transfer_scope_count', 0,
+        'unseeded_transfer_scope_count', 0,
+        'review_scope_count', coalesce(v_review_scope_count, 0),
+        'membership_seed_required', false,
+        'no_transfer_scope', true,
+        'has_more_transfer_groups', false,
+        'has_more_membership_seed', false,
+        'next_transfer_scope_id', NULL::text,
+        'next_cursor', NULL::jsonb,
+        'next_required_phase', 'REVIEW_REQUIRED',
+        'server_utc', v_now::text
+      );
+    END IF;
+
+    v_membership_seed_required := coalesce(v_unseeded_transfer_scope_count, 0) > 0;
+    v_next_required_phase := CASE WHEN coalesce(v_membership_seed_required, false) THEN 'SEED_TRANSFER_SCOPE_ITEMS' ELSE 'SEED_TRANSFER_ROLLUP_CHUNKS' END;
+
+    UPDATE public.banking_pay_operations AS operation_update
+    SET pay_batch_id = p_pay_batch_id,
+        phase = v_next_required_phase,
+        runner_state = CASE WHEN upper(btrim(coalesce(operation_update.status, ''))) = 'REVIEW_REQUIRED' THEN operation_update.runner_state ELSE 'RUNNABLE' END,
+        run_after_utc = CASE WHEN upper(btrim(coalesce(operation_update.status, ''))) = 'REVIEW_REQUIRED' THEN operation_update.run_after_utc ELSE v_now END,
+        progress_json = jsonb_strip_nulls(
+          coalesce(operation_update.progress_json, '{}'::jsonb)
+          || jsonb_build_object(
+            'last_transfer_scope_seed_at_utc', v_now::text,
+            'last_transfer_scope_seed_phase', 'TRANSFER_GROUP_SEED_PAGE',
+            'transfer_scope_group_seed_complete', true,
+            'transfer_scope_count', coalesce(v_existing_scope_count, 0),
+            'unseeded_transfer_scope_count', coalesce(v_unseeded_transfer_scope_count, 0),
+            'membership_seed_required', coalesce(v_membership_seed_required, false),
+            'next_transfer_scope_id', CASE WHEN v_next_transfer_scope_id IS NULL THEN NULL ELSE v_next_transfer_scope_id::text END,
+            'next_required_phase', v_next_required_phase
+          )
+        ),
+        updated_at_utc = v_now
+    WHERE operation_update.id = p_operation_id;
+
+    RETURN jsonb_build_object(
+      'ok', true,
+      'operation_id', p_operation_id::text,
+      'pay_batch_id', p_pay_batch_id::text,
+      'pay_channel_scope', v_scope,
+      'bounded', true,
+      'limit', v_limit,
+      'phase_completed', 'TRANSFER_GROUP_SEED_PAGE',
+      'source_item_page_count', 0,
+      'group_seeded_count', 0,
+      'membership_seeded_count', 0,
+      'transfer_scope_count', coalesce(v_existing_scope_count, 0),
+      'unseeded_transfer_scope_count', coalesce(v_unseeded_transfer_scope_count, 0),
+      'review_scope_count', coalesce(v_review_scope_count, 0),
+      'membership_seed_required', coalesce(v_membership_seed_required, false),
+      'no_transfer_scope', false,
+      'has_more_transfer_groups', false,
+      'has_more_membership_seed', coalesce(v_membership_seed_required, false),
+      'next_transfer_scope_id', CASE WHEN v_next_transfer_scope_id IS NULL THEN NULL ELSE v_next_transfer_scope_id::text END,
+      'next_cursor', NULL::jsonb,
+      'next_required_phase', v_next_required_phase,
+      'server_utc', v_now::text
+    );
   END IF;
 
   IF nullif(btrim(coalesce(v_operation_row.progress_json #>> '{transfer_scope_seed_cursor,last_pay_batch_item_id}', '')), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
@@ -63882,22 +64067,140 @@ BEGIN
     v_next_cursor := NULL::jsonb;
   END IF;
 
-  v_cached_scope_count := coalesce(v_cached_scope_count, 0) + coalesce(v_group_seeded_count, 0);
-  v_next_required_phase := CASE WHEN coalesce(v_has_more, false) THEN 'TRANSFER_GROUP_SEED_PAGE' ELSE 'TRANSFER_SCOPE_ITEM_MEMBERSHIP_SEED_PAGE' END;
+  SELECT count(*)::integer
+  INTO v_existing_scope_count
+  FROM public.banking_pay_operation_transfer_scope AS existing_scope
+  WHERE existing_scope.operation_id = p_operation_id
+    AND existing_scope.pay_batch_id = p_pay_batch_id;
+
+  SELECT count(*)::integer
+  INTO v_unseeded_transfer_scope_count
+  FROM public.banking_pay_operation_transfer_scope AS unseeded_scope
+  WHERE unseeded_scope.operation_id = p_operation_id
+    AND unseeded_scope.pay_batch_id = p_pay_batch_id
+    AND upper(btrim(coalesce(v_operation_row.progress_json #>> ARRAY['transfer_scope_item_seed_proofs', unseeded_scope.id::text, 'seed_complete'], 'false'))) <> 'TRUE'
+    AND upper(btrim(coalesce(unseeded_scope.provider_submit_state, 'NOT_READY'))) NOT IN (
+      'CLAIMED',
+      'REQUEST_PREPARING',
+      'REQUEST_SENDING',
+      'REQUEST_SENT_LOCAL',
+      'PROVIDER_ACCEPTED',
+      'PROVIDER_REJECTED',
+      'PROVIDER_UNKNOWN',
+      'CHUNK_FINALISED'
+    );
+
+  SELECT next_scope.id
+  INTO v_next_transfer_scope_id
+  FROM public.banking_pay_operation_transfer_scope AS next_scope
+  WHERE next_scope.operation_id = p_operation_id
+    AND next_scope.pay_batch_id = p_pay_batch_id
+    AND upper(btrim(coalesce(v_operation_row.progress_json #>> ARRAY['transfer_scope_item_seed_proofs', next_scope.id::text, 'seed_complete'], 'false'))) <> 'TRUE'
+    AND upper(btrim(coalesce(next_scope.provider_submit_state, 'NOT_READY'))) NOT IN (
+      'CLAIMED',
+      'REQUEST_PREPARING',
+      'REQUEST_SENDING',
+      'REQUEST_SENT_LOCAL',
+      'PROVIDER_ACCEPTED',
+      'PROVIDER_REJECTED',
+      'PROVIDER_UNKNOWN',
+      'CHUNK_FINALISED'
+    )
+  ORDER BY next_scope.created_at_utc NULLS FIRST, next_scope.id
+  LIMIT 1;
+
+  SELECT count(*)::integer
+  INTO v_review_scope_count
+  FROM public.banking_pay_operation_transfer_scope AS review_scope
+  WHERE review_scope.operation_id = p_operation_id
+    AND review_scope.pay_batch_id = p_pay_batch_id
+    AND (
+      coalesce(review_scope.provider_review_required, false) IS TRUE
+      OR upper(btrim(coalesce(review_scope.provider_submit_state, ''))) = 'REVIEW_REQUIRED'
+    );
+
+  v_cached_scope_count := coalesce(v_existing_scope_count, 0);
+
+  IF coalesce(v_page_count, 0) = 0 AND coalesce(v_cached_scope_count, 0) <= 0 THEN
+    UPDATE public.banking_pay_operations AS operation_update
+    SET pay_batch_id = p_pay_batch_id,
+        phase = 'REVIEW_REQUIRED',
+        progress_json = jsonb_strip_nulls(
+          coalesce(operation_update.progress_json, '{}'::jsonb)
+          || jsonb_build_object(
+            'last_transfer_scope_seed_at_utc', v_now::text,
+            'last_transfer_scope_seed_phase', 'TRANSFER_GROUP_SEED_PAGE',
+            'transfer_scope_group_seed_complete', true,
+            'transfer_scope_count', 0,
+            'unseeded_transfer_scope_count', 0,
+            'membership_seed_required', false,
+            'no_transfer_scope', true,
+            'has_more_transfer_groups', false,
+            'transfer_scope_seed_cursor', NULL::jsonb,
+            'next_required_phase', 'REVIEW_REQUIRED'
+          )
+        ),
+        updated_at_utc = v_now
+    WHERE operation_update.id = p_operation_id;
+
+    RETURN jsonb_build_object(
+      'ok', false,
+      'code', 'NO_ELIGIBLE_TRANSFER_SCOPE',
+      'message', 'No eligible payable transfer scope was available for this operation.',
+      'operation_id', p_operation_id::text,
+      'pay_batch_id', p_pay_batch_id::text,
+      'pay_channel_scope', v_scope,
+      'bounded', true,
+      'limit', v_limit,
+      'phase_completed', 'TRANSFER_GROUP_SEED_PAGE',
+      'source_item_page_count', 0,
+      'group_seeded_count', 0,
+      'membership_seeded_count', 0,
+      'transfer_scope_count', 0,
+      'unseeded_transfer_scope_count', 0,
+      'review_scope_count', coalesce(v_review_scope_count, 0),
+      'membership_seed_required', false,
+      'no_transfer_scope', true,
+      'has_more_transfer_groups', false,
+      'has_more_membership_seed', false,
+      'next_transfer_scope_id', NULL::text,
+      'next_cursor', NULL::jsonb,
+      'next_required_phase', 'REVIEW_REQUIRED',
+      'server_utc', v_now::text
+    );
+  END IF;
+
+  v_membership_seed_required := coalesce(v_has_more, false) IS NOT TRUE AND coalesce(v_unseeded_transfer_scope_count, 0) > 0;
+  v_next_required_phase := CASE
+    WHEN coalesce(v_has_more, false) THEN 'TRANSFER_GROUP_SEED_PAGE'
+    WHEN coalesce(v_membership_seed_required, false) THEN 'SEED_TRANSFER_SCOPE_ITEMS'
+    ELSE 'SEED_TRANSFER_ROLLUP_CHUNKS'
+  END;
 
   UPDATE public.banking_pay_operations AS operation_update
   SET pay_batch_id = p_pay_batch_id,
-      phase = CASE WHEN coalesce(v_has_more, false) THEN 'SEED_TRANSFER_SCOPE' ELSE 'SEED_TRANSFER_SCOPE_ITEMS' END,
+      phase = CASE
+        WHEN coalesce(v_has_more, false) THEN 'SEED_TRANSFER_SCOPE'
+        WHEN coalesce(v_membership_seed_required, false) THEN 'SEED_TRANSFER_SCOPE_ITEMS'
+        ELSE 'SEED_TRANSFER_ROLLUP_CHUNKS'
+      END,
       runner_state = CASE WHEN upper(btrim(coalesce(operation_update.status, ''))) = 'REVIEW_REQUIRED' THEN operation_update.runner_state ELSE 'RUNNABLE' END,
       run_after_utc = CASE WHEN upper(btrim(coalesce(operation_update.status, ''))) = 'REVIEW_REQUIRED' THEN operation_update.run_after_utc ELSE v_now END,
-      progress_json = jsonb_strip_nulls(coalesce(operation_update.progress_json, '{}'::jsonb) || jsonb_build_object(
-        'last_transfer_scope_seed_at_utc', v_now::text,
-        'last_transfer_scope_seed_phase', 'TRANSFER_GROUP_SEED_PAGE',
-        'transfer_scope_count', coalesce(v_cached_scope_count, 0),
-        'has_more_transfer_groups', coalesce(v_has_more, false),
-        'transfer_scope_seed_cursor', CASE WHEN coalesce(v_has_more, false) THEN v_next_cursor ELSE NULL::jsonb END,
-        'next_required_phase', v_next_required_phase
-      )),
+      progress_json = jsonb_strip_nulls(
+        coalesce(operation_update.progress_json, '{}'::jsonb)
+        || jsonb_build_object(
+          'last_transfer_scope_seed_at_utc', v_now::text,
+          'last_transfer_scope_seed_phase', 'TRANSFER_GROUP_SEED_PAGE',
+          'transfer_scope_group_seed_complete', coalesce(v_has_more, false) IS NOT TRUE,
+          'transfer_scope_count', coalesce(v_cached_scope_count, 0),
+          'unseeded_transfer_scope_count', CASE WHEN coalesce(v_has_more, false) THEN NULL::integer ELSE coalesce(v_unseeded_transfer_scope_count, 0) END,
+          'membership_seed_required', coalesce(v_membership_seed_required, false),
+          'next_transfer_scope_id', CASE WHEN coalesce(v_membership_seed_required, false) AND v_next_transfer_scope_id IS NOT NULL THEN v_next_transfer_scope_id::text ELSE NULL::text END,
+          'has_more_transfer_groups', coalesce(v_has_more, false),
+          'transfer_scope_seed_cursor', CASE WHEN coalesce(v_has_more, false) THEN v_next_cursor ELSE NULL::jsonb END,
+          'next_required_phase', v_next_required_phase
+        )
+      ),
       updated_at_utc = v_now
   WHERE operation_update.id = p_operation_id;
 
@@ -63913,15 +64216,19 @@ BEGIN
     'group_seeded_count', coalesce(v_group_seeded_count, 0),
     'membership_seeded_count', 0,
     'transfer_scope_count', coalesce(v_cached_scope_count, 0),
+    'unseeded_transfer_scope_count', CASE WHEN coalesce(v_has_more, false) THEN NULL::integer ELSE coalesce(v_unseeded_transfer_scope_count, 0) END,
+    'review_scope_count', coalesce(v_review_scope_count, 0),
+    'membership_seed_required', coalesce(v_membership_seed_required, false),
+    'no_transfer_scope', false,
     'has_more_transfer_groups', coalesce(v_has_more, false),
-    'has_more_membership_seed', false,
+    'has_more_membership_seed', coalesce(v_membership_seed_required, false),
+    'next_transfer_scope_id', CASE WHEN coalesce(v_membership_seed_required, false) AND v_next_transfer_scope_id IS NOT NULL THEN v_next_transfer_scope_id::text ELSE NULL::text END,
     'next_cursor', CASE WHEN coalesce(v_has_more, false) THEN v_next_cursor ELSE NULL::jsonb END,
     'next_required_phase', v_next_required_phase,
     'server_utc', v_now::text
   );
 END;
 $function$;
-
 
 
 
