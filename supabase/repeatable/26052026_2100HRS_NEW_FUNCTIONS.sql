@@ -23536,7 +23536,6 @@ $function$;
 
 
 
-
 CREATE OR REPLACE FUNCTION public.pay_preview_build_context(
   p_pay_date date,
   p_week_ending_cutoff date,
@@ -23582,6 +23581,10 @@ DECLARE
   v_refresh_scope_kind text := NULL::text;
   v_targeted_timesheet_ids jsonb := '[]'::jsonb;
   v_linked_timesheet_ids jsonb := '[]'::jsonb;
+  v_targeted_timesheet_ids_raw jsonb := '[]'::jsonb;
+  v_linked_timesheet_ids_raw jsonb := '[]'::jsonb;
+  v_targeted_timesheet_input_count integer := 0;
+  v_linked_timesheet_input_count integer := 0;
   v_context_mode text := 'SUMMARY';
   v_effective_candidate_id uuid := p_candidate_id;
   v_effective_client_id uuid := p_client_id;
@@ -23722,17 +23725,47 @@ BEGIN
     v_refresh_scope_kind := NULL::text;
   END IF;
 
+  v_targeted_timesheet_ids_raw := CASE
+    WHEN jsonb_typeof(v_preview_decisions_root->'targeted_timesheet_ids') = 'array' THEN v_preview_decisions_root->'targeted_timesheet_ids'
+    WHEN jsonb_typeof(v_preview_decisions_root->'targetedTimesheetIds') = 'array' THEN v_preview_decisions_root->'targetedTimesheetIds'
+    WHEN jsonb_typeof(v_preview_decisions_root->'targeted_timesheet_ids') = 'string' THEN jsonb_build_array(v_preview_decisions_root->>'targeted_timesheet_ids')
+    WHEN jsonb_typeof(v_preview_decisions_root->'targetedTimesheetIds') = 'string' THEN jsonb_build_array(v_preview_decisions_root->>'targetedTimesheetIds')
+    ELSE '[]'::jsonb
+  END;
+
+  v_linked_timesheet_ids_raw := CASE
+    WHEN jsonb_typeof(v_preview_decisions_root->'linked_timesheet_ids') = 'array' THEN v_preview_decisions_root->'linked_timesheet_ids'
+    WHEN jsonb_typeof(v_preview_decisions_root->'linkedTimesheetIds') = 'array' THEN v_preview_decisions_root->'linkedTimesheetIds'
+    WHEN jsonb_typeof(v_preview_decisions_root->'linked_timesheet_ids') = 'string' THEN jsonb_build_array(v_preview_decisions_root->>'linked_timesheet_ids')
+    WHEN jsonb_typeof(v_preview_decisions_root->'linkedTimesheetIds') = 'string' THEN jsonb_build_array(v_preview_decisions_root->>'linkedTimesheetIds')
+    ELSE '[]'::jsonb
+  END;
+
+  v_targeted_timesheet_input_count := jsonb_array_length(COALESCE(v_targeted_timesheet_ids_raw, '[]'::jsonb));
+  v_linked_timesheet_input_count := jsonb_array_length(COALESCE(v_linked_timesheet_ids_raw, '[]'::jsonb));
+
+  IF COALESCE(v_targeted_timesheet_input_count, 0) > 100
+     OR COALESCE(v_linked_timesheet_input_count, 0) > 100
+     OR (COALESCE(v_targeted_timesheet_input_count, 0) + COALESCE(v_linked_timesheet_input_count, 0)) > 100 THEN
+    RAISE EXCEPTION 'PAY_PREVIEW_BUILD_CONTEXT_TIMESHEET_SCOPE_TOO_LARGE'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object(
+              'code', 'PAY_PREVIEW_BUILD_CONTEXT_TIMESHEET_SCOPE_TOO_LARGE',
+              'context_mode', v_context_mode,
+              'targeted_timesheet_count', COALESCE(v_targeted_timesheet_input_count, 0),
+              'linked_timesheet_count', COALESCE(v_linked_timesheet_input_count, 0),
+              'combined_timesheet_count', COALESCE(v_targeted_timesheet_input_count, 0) + COALESCE(v_linked_timesheet_input_count, 0),
+              'max_timesheet_scope_ids', 100,
+              'row_backed_scope_required', true,
+              'message', 'Caller-supplied timesheet scope arrays are capped at 100 for preview context. Use the row-backed workbench session scope instead.'
+            )::text;
+  END IF;
+
   SELECT COALESCE(jsonb_agg(targeted_scope_ids.targeted_timesheet_id ORDER BY targeted_scope_ids.targeted_timesheet_id), '[]'::jsonb)
   INTO v_targeted_timesheet_ids
   FROM (
     SELECT DISTINCT NULLIF(BTRIM(targeted_scope_array.value), '') AS targeted_timesheet_id
-    FROM jsonb_array_elements_text(
-      CASE
-        WHEN jsonb_typeof(v_preview_decisions_root->'targeted_timesheet_ids') = 'array' THEN v_preview_decisions_root->'targeted_timesheet_ids'
-        WHEN jsonb_typeof(v_preview_decisions_root->'targeted_timesheet_ids') = 'string' THEN jsonb_build_array(v_preview_decisions_root->>'targeted_timesheet_ids')
-        ELSE '[]'::jsonb
-      END
-    ) AS targeted_scope_array(value)
+    FROM jsonb_array_elements_text(COALESCE(v_targeted_timesheet_ids_raw, '[]'::jsonb)) AS targeted_scope_array(value)
     WHERE NULLIF(BTRIM(targeted_scope_array.value), '') IS NOT NULL
   ) AS targeted_scope_ids;
 
@@ -23740,13 +23773,7 @@ BEGIN
   INTO v_linked_timesheet_ids
   FROM (
     SELECT DISTINCT NULLIF(BTRIM(linked_scope_array.value), '') AS linked_timesheet_id
-    FROM jsonb_array_elements_text(
-      CASE
-        WHEN jsonb_typeof(v_preview_decisions_root->'linked_timesheet_ids') = 'array' THEN v_preview_decisions_root->'linked_timesheet_ids'
-        WHEN jsonb_typeof(v_preview_decisions_root->'linked_timesheet_ids') = 'string' THEN jsonb_build_array(v_preview_decisions_root->>'linked_timesheet_ids')
-        ELSE '[]'::jsonb
-      END
-    ) AS linked_scope_array(value)
+    FROM jsonb_array_elements_text(COALESCE(v_linked_timesheet_ids_raw, '[]'::jsonb)) AS linked_scope_array(value)
     WHERE NULLIF(BTRIM(linked_scope_array.value), '') IS NOT NULL
   ) AS linked_scope_ids;
 
@@ -39895,6 +39922,7 @@ DROP FUNCTION IF EXISTS public.pay_workbench_session_open(uuid, date, date, json
 DROP FUNCTION IF EXISTS public.pay_workbench_session_open(uuid, date, date, jsonb, text);
 
 
+
 CREATE OR REPLACE FUNCTION public.pay_workbench_session_open(
   p_actor_user_id uuid,
   p_pay_date date,
@@ -40175,6 +40203,12 @@ BEGIN
     DELETE FROM public.banking_pay_workbench_session_scope AS scope_row
     WHERE scope_row.session_id = v_session_id;
 
+    DELETE FROM public.banking_pay_workbench_preview_rows AS preview_row
+    WHERE preview_row.session_id = v_session_id;
+
+    DELETE FROM public.banking_pay_workbench_candidate_line_work AS line_work
+    WHERE line_work.session_id = v_session_id;
+
     v_action := 'WORKBENCH_SESSION_RESUMED';
   END IF;
 
@@ -40266,8 +40300,6 @@ BEGIN
   );
 END;
 $function$;
-
-
 
 
 
@@ -40440,6 +40472,7 @@ BEGIN
   FROM public.banking_pay_workbench_session_candidate_state AS candidate_state
   WHERE candidate_state.session_id = p_session_id
     AND candidate_state.candidate_id = p_candidate_id
+    AND candidate_state.session_version = v_session_row.version
   ORDER BY candidate_state.updated_at_utc DESC, candidate_state.id DESC
   LIMIT 1;
 
@@ -40483,6 +40516,8 @@ BEGIN
   FROM public.banking_pay_workbench_preview_rows AS preview_row
   WHERE preview_row.session_id = p_session_id
     AND preview_row.candidate_id = p_candidate_id
+    AND preview_row.session_version = v_session_row.version
+    AND UPPER(BTRIM(COALESCE(preview_row.status, ''))) = 'READY'
     AND (
       v_last_section IS NULL
       OR lower(COALESCE(NULLIF(BTRIM(preview_row.section), ''), 'canonical_preview_lines')) > v_last_section
@@ -40570,7 +40605,6 @@ BEGIN
   );
 END;
 $function$;
-
 
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_session_clear_case_resolution(
@@ -41210,7 +41244,6 @@ END;
 $function$;
 
 
-
 CREATE OR REPLACE FUNCTION public.pay_workbench_session_set_selected_rows(
   p_session_id uuid,
   p_selected_preview_row_ids jsonb,
@@ -41230,7 +41263,9 @@ DECLARE
   v_selected_ids jsonb := '[]'::jsonb;
   v_deselected_ids jsonb := '[]'::jsonb;
   v_missing_ids jsonb := '[]'::jsonb;
+  v_stale_selection_ids jsonb := '[]'::jsonb;
   v_non_draftable_ids jsonb := '[]'::jsonb;
+  v_current_selected_count integer := 0;
   v_selected_delta integer := 0;
   v_deselected_delta integer := 0;
   v_updated_count integer := 0;
@@ -41316,6 +41351,36 @@ BEGIN
   GROUP BY BTRIM(deselect_id.value);
 
   SELECT COALESCE(jsonb_agg(to_jsonb(selection_ids.supplied_id) ORDER BY selection_ids.action, selection_ids.first_ordinality), '[]'::jsonb)
+  INTO v_stale_selection_ids
+  FROM pg_temp._tmp_pay_wb_selection_ids AS selection_ids
+  WHERE EXISTS (
+    SELECT 1
+    FROM public.banking_pay_workbench_preview_rows AS any_preview_row
+    WHERE any_preview_row.session_id = p_session_id
+      AND (any_preview_row.id::text = selection_ids.supplied_id OR any_preview_row.row_key = selection_ids.supplied_id)
+  )
+    AND NOT EXISTS (
+      SELECT 1
+      FROM public.banking_pay_workbench_preview_rows AS current_preview_row
+      WHERE current_preview_row.session_id = p_session_id
+        AND current_preview_row.session_version = v_session_row.version
+        AND UPPER(BTRIM(COALESCE(current_preview_row.status, ''))) = 'READY'
+        AND (current_preview_row.id::text = selection_ids.supplied_id OR current_preview_row.row_key = selection_ids.supplied_id)
+    );
+
+  IF jsonb_array_length(COALESCE(v_stale_selection_ids, '[]'::jsonb)) > 0 THEN
+    RAISE EXCEPTION 'WORKBENCH_STALE_SELECTION'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object(
+              'code', 'WORKBENCH_STALE_SELECTION',
+              'session_id', p_session_id::text,
+              'session_version', v_session_row.version,
+              'rejected_preview_row_ids', COALESCE(v_stale_selection_ids, '[]'::jsonb),
+              'message', 'Selected preview rows are not part of the current ready workbench session version. Refresh the preview page and try again.'
+            )::text;
+  END IF;
+
+  SELECT COALESCE(jsonb_agg(to_jsonb(selection_ids.supplied_id) ORDER BY selection_ids.action, selection_ids.first_ordinality), '[]'::jsonb)
   INTO v_missing_ids
   FROM pg_temp._tmp_pay_wb_selection_ids AS selection_ids
   WHERE NOT EXISTS (
@@ -41337,6 +41402,8 @@ BEGIN
     FROM pg_temp._tmp_pay_wb_selection_ids AS selection_ids
     JOIN public.banking_pay_workbench_preview_rows AS preview_row
       ON preview_row.session_id = p_session_id
+     AND preview_row.session_version = v_session_row.version
+     AND UPPER(BTRIM(COALESCE(preview_row.status, ''))) = 'READY'
      AND (preview_row.id::text = selection_ids.supplied_id OR preview_row.row_key = selection_ids.supplied_id)
     WHERE selection_ids.action = 'SELECT'
       AND (
@@ -41359,6 +41426,8 @@ BEGIN
     FROM pg_temp._tmp_pay_wb_selection_ids AS selection_ids
     JOIN public.banking_pay_workbench_preview_rows AS preview_row
       ON preview_row.session_id = p_session_id
+     AND preview_row.session_version = v_session_row.version
+     AND UPPER(BTRIM(COALESCE(preview_row.status, ''))) = 'READY'
      AND (preview_row.id::text = selection_ids.supplied_id OR preview_row.row_key = selection_ids.supplied_id)
   ), updated_rows AS (
     UPDATE public.banking_pay_workbench_preview_rows AS preview_row
@@ -41386,8 +41455,16 @@ BEGIN
     COALESCE((SELECT COUNT(*)::integer FROM updated_rows), 0)
   INTO v_selected_ids, v_deselected_ids, v_selected_delta, v_deselected_delta, v_updated_count;
 
+  SELECT COUNT(*)::integer
+  INTO v_current_selected_count
+  FROM public.banking_pay_workbench_preview_rows AS selected_count_row
+  WHERE selected_count_row.session_id = p_session_id
+    AND selected_count_row.session_version = v_session_row.version
+    AND UPPER(BTRIM(COALESCE(selected_count_row.status, ''))) = 'READY'
+    AND COALESCE(selected_count_row.selected, false) = true;
+
   UPDATE public.banking_pay_workbench_sessions AS session_row
-  SET selected_row_count = GREATEST(COALESCE(session_row.selected_row_count, 0) + COALESCE(v_selected_delta, 0) - COALESCE(v_deselected_delta, 0), 0),
+  SET selected_row_count = COALESCE(v_current_selected_count, 0),
       server_selected_preview_row_ids = '[]'::jsonb,
       server_selected_preview_row_ids_provided = false,
       progress_json = COALESCE(session_row.progress_json, '{}'::jsonb)
@@ -41440,7 +41517,6 @@ BEGIN
   );
 END;
 $function$;
-
 
 
 
@@ -50864,6 +50940,9 @@ DECLARE
   v_phase text := 'REFRESHING_CANDIDATES';
   v_status_text text := 'Preparing payment preview.';
   v_next_recommended_action text := 'WAIT_FOR_WORKER';
+  v_current_preview_row_count integer := 0;
+  v_current_selected_row_count integer := 0;
+  v_current_section_counts_json jsonb := '{}'::jsonb;
 BEGIN
   IF p_session_id IS NULL THEN
     RAISE EXCEPTION 'session_id is required';
@@ -50937,6 +51016,27 @@ BEGIN
     ELSE 0
   END;
 
+  SELECT COUNT(*)::integer,
+         COUNT(*) FILTER (WHERE COALESCE(current_preview_row.selected, false) = true)::integer
+  INTO v_current_preview_row_count,
+       v_current_selected_row_count
+  FROM public.banking_pay_workbench_preview_rows AS current_preview_row
+  WHERE current_preview_row.session_id = p_session_id
+    AND current_preview_row.session_version = v_session_row.version
+    AND UPPER(BTRIM(COALESCE(current_preview_row.status, ''))) = 'READY';
+
+  SELECT COALESCE(jsonb_object_agg(section_counts.section_key, to_jsonb(section_counts.section_count) ORDER BY section_counts.section_key), '{}'::jsonb)
+  INTO v_current_section_counts_json
+  FROM (
+    SELECT lower(COALESCE(NULLIF(BTRIM(current_preview_row.section), ''), 'canonical_preview_lines')) AS section_key,
+           COUNT(*)::integer AS section_count
+    FROM public.banking_pay_workbench_preview_rows AS current_preview_row
+    WHERE current_preview_row.session_id = p_session_id
+      AND current_preview_row.session_version = v_session_row.version
+      AND UPPER(BTRIM(COALESCE(current_preview_row.status, ''))) = 'READY'
+    GROUP BY lower(COALESCE(NULLIF(BTRIM(current_preview_row.section), ''), 'canonical_preview_lines'))
+  ) AS section_counts;
+
   v_ready_flag := (
     COALESCE(v_session_row.scope_pending_count, 0) = 0
     AND COALESCE(v_session_row.scope_failed_count, 0) = 0
@@ -50951,7 +51051,7 @@ BEGIN
   v_phase := CASE
     WHEN v_ready_flag THEN 'READY'
     WHEN COALESCE(v_session_row.scope_failed_count, 0) > 0 OR COALESCE(v_session_row.line_units_failed, 0) > 0 THEN 'FAILED'
-    WHEN COALESCE(v_session_row.preview_row_count, 0) > 0 THEN 'PARTIAL_READY'
+    WHEN COALESCE(v_current_preview_row_count, 0) > 0 THEN 'PARTIAL_READY'
     WHEN COALESCE(v_session_row.line_units_ready, 0) > 0 THEN 'MATERIALISING_PREVIEW_ROWS'
     WHEN COALESCE(v_session_row.line_units_pending, 0) > 0 THEN 'PROCESSING_LINE_WORK'
     ELSE 'REFRESHING_CANDIDATES'
@@ -50960,7 +51060,7 @@ BEGIN
   v_status_text := CASE
     WHEN v_ready_flag THEN 'Payment preview is ready.'
     WHEN COALESCE(v_session_row.scope_failed_count, 0) > 0 OR COALESCE(v_session_row.line_units_failed, 0) > 0 THEN 'Payment preview could not be prepared for every candidate.'
-    WHEN COALESCE(v_session_row.preview_row_count, 0) > 0 THEN 'Payment preview is still preparing; available rows can be paged.'
+    WHEN COALESCE(v_current_preview_row_count, 0) > 0 THEN 'Payment preview is still preparing; available rows can be paged.'
     ELSE 'Preparing payment preview candidates.'
   END;
 
@@ -51003,9 +51103,9 @@ BEGIN
     'line_units_pending', COALESCE(v_session_row.line_units_pending, 0),
     'line_units_ready', COALESCE(v_session_row.line_units_ready, 0),
     'line_units_error', COALESCE(v_session_row.line_units_failed, 0),
-    'preview_row_count', COALESCE(v_session_row.preview_row_count, 0),
-    'selected_row_count', COALESCE(v_session_row.selected_row_count, 0),
-    'section_counts', COALESCE(v_session_row.section_counts_json, '{}'::jsonb),
+    'preview_row_count', COALESCE(v_current_preview_row_count, 0),
+    'selected_row_count', COALESCE(v_current_selected_row_count, 0),
+    'section_counts', COALESCE(v_current_section_counts_json, '{}'::jsonb),
     'running_jobs', COALESCE(v_running_jobs, 0),
     'queued_jobs', COALESCE(v_queued_jobs, 0),
     'progress', COALESCE(v_session_row.progress_json, '{}'::jsonb),
@@ -51245,7 +51345,6 @@ DROP FUNCTION IF EXISTS public.pay_workbench_prepare_draft(uuid, uuid, jsonb, te
 DROP FUNCTION IF EXISTS public.pay_workbench_prepare_draft(uuid, uuid, jsonb, text, text, boolean, boolean, uuid, timestamptz, uuid, boolean, boolean);
 
 
-
 CREATE OR REPLACE FUNCTION public.pay_workbench_prepare_draft(
   p_session_id uuid,
   p_actor_user_id uuid,
@@ -51285,6 +51384,9 @@ DECLARE
   v_paye_block_reason_code text := NULL::text;
   v_paye_block_message text := NULL::text;
   v_selected_sample jsonb := '[]'::jsonb;
+  v_stale_selection_ids jsonb := '[]'::jsonb;
+  v_missing_selection_ids jsonb := '[]'::jsonb;
+  v_current_unready_selected_exists boolean := false;
 BEGIN
   PERFORM public.banking_pay_hot_path_budget_apply('WORKBENCH_PROGRESS');
 
@@ -51405,14 +51507,100 @@ BEGIN
       updated_at_utc = v_now
   WHERE operation_update.id = p_operation_id;
 
+  DROP TABLE IF EXISTS pg_temp.tmp_pay_workbench_prepare_draft_supplied_ids;
+  CREATE TEMPORARY TABLE pg_temp.tmp_pay_workbench_prepare_draft_supplied_ids ON COMMIT DROP AS
+  SELECT DISTINCT BTRIM(supplied_id.value) AS supplied_id
+  FROM jsonb_array_elements_text(COALESCE(p_selected_preview_row_ids, '[]'::jsonb)) AS supplied_id(value)
+  WHERE p_selected_preview_row_ids IS NOT NULL
+    AND BTRIM(supplied_id.value) <> '';
+
+  IF p_selected_preview_row_ids IS NOT NULL THEN
+    SELECT COALESCE(jsonb_agg(to_jsonb(supplied_ids.supplied_id) ORDER BY supplied_ids.supplied_id), '[]'::jsonb)
+    INTO v_stale_selection_ids
+    FROM pg_temp.tmp_pay_workbench_prepare_draft_supplied_ids AS supplied_ids
+    WHERE EXISTS (
+      SELECT 1
+      FROM public.banking_pay_workbench_preview_rows AS any_preview_row
+      WHERE any_preview_row.session_id = p_session_id
+        AND (
+          any_preview_row.id::text = supplied_ids.supplied_id
+          OR any_preview_row.row_key = supplied_ids.supplied_id
+          OR any_preview_row.row_json->>'preview_row_id' = supplied_ids.supplied_id
+          OR any_preview_row.row_json->>'row_id' = supplied_ids.supplied_id
+          OR any_preview_row.row_json->>'line_id' = supplied_ids.supplied_id
+        )
+    )
+      AND NOT EXISTS (
+        SELECT 1
+        FROM public.banking_pay_workbench_preview_rows AS current_preview_row
+        WHERE current_preview_row.session_id = p_session_id
+          AND current_preview_row.session_version = v_session_row.version
+          AND UPPER(BTRIM(COALESCE(current_preview_row.status, ''))) = 'READY'
+          AND (
+            current_preview_row.id::text = supplied_ids.supplied_id
+            OR current_preview_row.row_key = supplied_ids.supplied_id
+            OR current_preview_row.row_json->>'preview_row_id' = supplied_ids.supplied_id
+            OR current_preview_row.row_json->>'row_id' = supplied_ids.supplied_id
+            OR current_preview_row.row_json->>'line_id' = supplied_ids.supplied_id
+          )
+      );
+
+    SELECT COALESCE(jsonb_agg(to_jsonb(supplied_ids.supplied_id) ORDER BY supplied_ids.supplied_id), '[]'::jsonb)
+    INTO v_missing_selection_ids
+    FROM pg_temp.tmp_pay_workbench_prepare_draft_supplied_ids AS supplied_ids
+    WHERE NOT EXISTS (
+      SELECT 1
+      FROM public.banking_pay_workbench_preview_rows AS any_preview_row
+      WHERE any_preview_row.session_id = p_session_id
+        AND (
+          any_preview_row.id::text = supplied_ids.supplied_id
+          OR any_preview_row.row_key = supplied_ids.supplied_id
+          OR any_preview_row.row_json->>'preview_row_id' = supplied_ids.supplied_id
+          OR any_preview_row.row_json->>'row_id' = supplied_ids.supplied_id
+          OR any_preview_row.row_json->>'line_id' = supplied_ids.supplied_id
+        )
+    );
+
+    IF jsonb_array_length(COALESCE(v_stale_selection_ids, '[]'::jsonb)) > 0
+       OR jsonb_array_length(COALESCE(v_missing_selection_ids, '[]'::jsonb)) > 0 THEN
+      RAISE EXCEPTION 'WORKBENCH_STALE_SELECTION'
+        USING ERRCODE = 'P0001',
+              DETAIL = jsonb_build_object(
+                'code', 'WORKBENCH_STALE_SELECTION',
+                'session_id', p_session_id::text,
+                'session_version', v_session_row.version,
+                'rejected_preview_row_ids', COALESCE(v_stale_selection_ids, '[]'::jsonb) || COALESCE(v_missing_selection_ids, '[]'::jsonb),
+                'stale_preview_row_ids', COALESCE(v_stale_selection_ids, '[]'::jsonb),
+                'missing_preview_row_ids', COALESCE(v_missing_selection_ids, '[]'::jsonb),
+                'message', 'Selected preview rows are not part of the current ready workbench session version. Refresh the preview page and try again.'
+              )::text;
+    END IF;
+  END IF;
+
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.banking_pay_workbench_preview_rows AS blocked_selected_row
+    WHERE blocked_selected_row.session_id = p_session_id
+      AND blocked_selected_row.session_version = v_session_row.version
+      AND COALESCE(blocked_selected_row.selected, false) = true
+      AND (v_scope_filter = 'ALL' OR UPPER(BTRIM(COALESCE(blocked_selected_row.row_json->>'pay_channel', blocked_selected_row.row_json->>'current_pay_method', blocked_selected_row.row_json->>'candidate_pay_method', ''))) = v_scope_filter)
+      AND (
+        p_selected_preview_row_ids IS NULL
+        OR EXISTS (
+          SELECT 1
+          FROM pg_temp.tmp_pay_workbench_prepare_draft_supplied_ids AS supplied_id
+          WHERE supplied_id.supplied_id IN (blocked_selected_row.id::text, blocked_selected_row.row_key, blocked_selected_row.row_json->>'preview_row_id', blocked_selected_row.row_json->>'row_id', blocked_selected_row.row_json->>'line_id')
+        )
+      )
+      AND (
+        UPPER(BTRIM(COALESCE(blocked_selected_row.status, ''))) <> 'READY'
+        OR UPPER(BTRIM(COALESCE(blocked_selected_row.selection_state, ''))) IN ('NOT_SELECTABLE', 'EXCLUDED')
+      )
+  )
+  INTO v_current_unready_selected_exists;
+
   DROP TABLE IF EXISTS pg_temp.tmp_pay_workbench_prepare_draft_selected_sample;
   CREATE TEMPORARY TABLE pg_temp.tmp_pay_workbench_prepare_draft_selected_sample ON COMMIT DROP AS
-  WITH supplied_ids AS (
-    SELECT DISTINCT BTRIM(supplied_id.value) AS supplied_id
-    FROM jsonb_array_elements_text(COALESCE(p_selected_preview_row_ids, '[]'::jsonb)) AS supplied_id(value)
-    WHERE p_selected_preview_row_ids IS NOT NULL
-      AND BTRIM(supplied_id.value) <> ''
-  )
   SELECT
     preview_row.id,
     preview_row.row_key,
@@ -51428,13 +51616,15 @@ BEGIN
     preview_row.row_json
   FROM public.banking_pay_workbench_preview_rows AS preview_row
   WHERE preview_row.session_id = p_session_id
+    AND preview_row.session_version = v_session_row.version
+    AND UPPER(BTRIM(COALESCE(preview_row.status, ''))) = 'READY'
     AND COALESCE(preview_row.selected, false) = true
     AND (v_scope_filter = 'ALL' OR UPPER(BTRIM(COALESCE(preview_row.row_json->>'pay_channel', preview_row.row_json->>'current_pay_method', preview_row.row_json->>'candidate_pay_method', ''))) = v_scope_filter)
     AND (
       p_selected_preview_row_ids IS NULL
       OR EXISTS (
         SELECT 1
-        FROM supplied_ids AS supplied_id
+        FROM pg_temp.tmp_pay_workbench_prepare_draft_supplied_ids AS supplied_id
         WHERE supplied_id.supplied_id IN (preview_row.id::text, preview_row.row_key, preview_row.row_json->>'preview_row_id', preview_row.row_json->>'row_id', preview_row.row_json->>'line_id')
       )
     )
@@ -51464,6 +51654,8 @@ BEGIN
          )
   INTO v_sample_row_count, v_sample_candidate_count, v_sample_paye_count, v_sample_umbrella_count, v_ready_selected_exists, v_unready_selected_exists
   FROM pg_temp.tmp_pay_workbench_prepare_draft_selected_sample AS selected_sample;
+
+  v_unready_selected_exists := COALESCE(v_unready_selected_exists, false) OR COALESCE(v_current_unready_selected_exists, false);
 
   IF COALESCE(v_sample_row_count, 0) = 0 THEN
     RAISE EXCEPTION 'No selected preview rows are available for session % and scope %', p_session_id, v_scope_filter;
@@ -51573,8 +51765,6 @@ BEGIN
   );
 END;
 $function$;
-
-
 
 
 
@@ -62801,7 +62991,13 @@ BEGIN
     v_last_id := (v_cursor_json->>'last_id')::uuid;
   END IF;
 
-  v_known_count := COALESCE(NULLIF(BTRIM(COALESCE(v_session_row.section_counts_json->>v_section, '')), '')::integer, 0);
+  SELECT COUNT(*)::integer
+  INTO v_known_count
+  FROM public.banking_pay_workbench_preview_rows AS preview_count_row
+  WHERE preview_count_row.session_id = p_session_id
+    AND preview_count_row.session_version = v_session_row.version
+    AND lower(COALESCE(NULLIF(BTRIM(preview_count_row.section), ''), 'canonical_preview_lines')) = v_section
+    AND UPPER(BTRIM(COALESCE(preview_count_row.status, ''))) = 'READY';
 
   DROP TABLE IF EXISTS pg_temp._tmp_pay_wb_preview_page;
   CREATE TEMP TABLE _tmp_pay_wb_preview_page ON COMMIT DROP AS
@@ -62820,7 +63016,9 @@ BEGIN
          ROW_NUMBER() OVER (ORDER BY preview_row.row_ordinal, preview_row.id) AS page_ordinal
   FROM public.banking_pay_workbench_preview_rows AS preview_row
   WHERE preview_row.session_id = p_session_id
+    AND preview_row.session_version = v_session_row.version
     AND lower(COALESCE(NULLIF(BTRIM(preview_row.section), ''), 'canonical_preview_lines')) = v_section
+    AND UPPER(BTRIM(COALESCE(preview_row.status, ''))) = 'READY'
     AND (
       v_last_row_ordinal IS NULL
       OR preview_row.row_ordinal > v_last_row_ordinal
@@ -142701,6 +142899,10 @@ BEGIN
   END;
   v_page_count := COALESCE(jsonb_array_length(v_page_candidate_ids), 0);
   v_next_cursor := COALESCE(v_page_context_json->'next_cursor_json', v_page_context_json->'next_cursor', NULL::jsonb);
+  v_next_cursor := CASE
+    WHEN jsonb_typeof(v_next_cursor) = 'object' THEN v_next_cursor
+    ELSE NULL::jsonb
+  END;
   v_has_more := COALESCE(NULLIF(BTRIM(COALESCE(v_page_context_json->>'has_more', '')), '')::boolean, false);
   v_scope_seed_complete := NOT COALESCE(v_has_more, false);
   v_base_scope_ordinal := COALESCE(v_session_row.scope_seeded_count, 0);
@@ -142790,7 +142992,10 @@ BEGIN
   v_scope_failed_count := COALESCE(v_session_row.scope_failed_count, 0);
 
   UPDATE public.banking_pay_workbench_sessions AS session_update
-  SET scope_next_cursor_json = COALESCE(v_next_cursor, '{}'::jsonb),
+  SET scope_next_cursor_json = CASE
+        WHEN jsonb_typeof(v_next_cursor) = 'object' THEN v_next_cursor
+        ELSE '{}'::jsonb
+      END,
       scope_seed_complete = v_scope_seed_complete,
       scope_total_count = GREATEST(COALESCE(session_update.scope_total_count, 0), v_scope_seeded_count),
       scope_seeded_count = v_scope_seeded_count,
@@ -143482,6 +143687,21 @@ BEGIN
   INTO v_materialised_count
   FROM marked_line_work;
 
+  UPDATE public.banking_pay_workbench_preview_rows AS superseded_preview_row
+  SET status = 'SUPERSEDED',
+      selected = false,
+      selection_state = 'SUPERSEDED',
+      updated_at_utc = v_now
+  WHERE superseded_preview_row.session_id = p_session_id
+    AND (superseded_preview_row.session_version IS DISTINCT FROM COALESCE(v_session_row.version, 1))
+    AND UPPER(BTRIM(COALESCE(superseded_preview_row.status, ''))) <> 'SUPERSEDED'
+    AND EXISTS (
+      SELECT 1
+      FROM pg_temp._tmp_pay_wb_preview_materialise AS materialise_rows
+      WHERE materialise_rows.page_ordinal <= v_limit
+        AND materialise_rows.candidate_id = superseded_preview_row.candidate_id
+    );
+
   IF v_raw_count > v_limit THEN
     SELECT
       materialise_rows.scope_ordinal,
@@ -143538,6 +143758,30 @@ BEGIN
   JOIN public.banking_pay_workbench_session_scope AS scope_row
     ON scope_row.session_id = p_session_id
    AND scope_row.candidate_id = candidate_new_status.candidate_id;
+
+  UPDATE public.banking_pay_workbench_preview_rows AS obsolete_current_preview_row
+  SET status = 'SUPERSEDED',
+      selected = false,
+      selection_state = 'SUPERSEDED',
+      updated_at_utc = v_now
+  WHERE obsolete_current_preview_row.session_id = p_session_id
+    AND obsolete_current_preview_row.session_version = COALESCE(v_session_row.version, 1)
+    AND UPPER(BTRIM(COALESCE(obsolete_current_preview_row.status, ''))) = 'READY'
+    AND EXISTS (
+      SELECT 1
+      FROM pg_temp._tmp_pay_wb_materialise_scope_delta AS scope_delta
+      WHERE scope_delta.candidate_id = obsolete_current_preview_row.candidate_id
+        AND scope_delta.new_status = 'MATERIALISED'
+    )
+    AND NOT EXISTS (
+      SELECT 1
+      FROM public.banking_pay_workbench_candidate_line_work AS line_work
+      WHERE line_work.session_id = p_session_id
+        AND line_work.candidate_id = obsolete_current_preview_row.candidate_id
+        AND line_work.line_key = obsolete_current_preview_row.row_key
+        AND COALESCE(NULLIF(BTRIM(line_work.result_row_json->>'section'), ''), 'canonical_preview_lines') = obsolete_current_preview_row.section
+        AND UPPER(BTRIM(COALESCE(line_work.status, ''))) IN ('READY', 'MATERIALISED')
+    );
 
   UPDATE public.banking_pay_workbench_session_scope AS scope_row
   SET status = scope_delta.new_status,
@@ -143631,7 +143875,6 @@ BEGIN
   );
 END;
 $function$;
-
 
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_mark_finance_case_dirty()
@@ -143814,8 +144057,6 @@ END;
 $function$;
 
 
-
-
 CREATE OR REPLACE FUNCTION public.pay_workbench_prepare_draft_allocation_rows_seed(
   p_operation_id uuid,
   p_candidate_scope_ids jsonb DEFAULT NULL::jsonb
@@ -143945,10 +144186,11 @@ BEGIN
     JOIN public.banking_pay_workbench_preview_rows AS preview_row
       ON preview_row.session_id = selected_scope.workbench_session_id
      AND preview_row.candidate_id = selected_scope.candidate_id
+     AND preview_row.session_version = selected_scope.source_session_version
      AND UPPER(BTRIM(COALESCE(preview_row.row_json->>'pay_channel', preview_row.row_json->>'current_pay_method', preview_row.row_json->>'candidate_pay_method', ''))) = selected_scope.pay_channel
     WHERE COALESCE(preview_row.selected, false) = true
       AND UPPER(BTRIM(COALESCE(preview_row.selection_state, ''))) NOT IN ('NOT_SELECTABLE', 'EXCLUDED')
-      AND UPPER(BTRIM(COALESCE(preview_row.status, ''))) NOT IN ('DIRTY', 'ERROR', 'FAILED')
+      AND UPPER(BTRIM(COALESCE(preview_row.status, ''))) = 'READY'
       AND UPPER(NULLIF(BTRIM(COALESCE(preview_row.key_type, preview_row.row_json#>>'{economic_key,key_type}', preview_row.row_json->>'component_key_type', '')), '')) IN ('TS_DAY','TS_TOTAL','ADDITIONAL_CODE','ADJUSTMENT_CODE','EXPENSE_CODE','MANUAL_CARRY_FORWARD')
       AND NULLIF(BTRIM(COALESCE(preview_row.key_value, preview_row.row_json#>>'{economic_key,key_value}', preview_row.row_json->>'component_key_value', '')), '') IS NOT NULL
       AND NOT (UPPER(NULLIF(BTRIM(COALESCE(preview_row.key_type, preview_row.row_json#>>'{economic_key,key_type}', preview_row.row_json->>'component_key_type', '')), '')) = 'TS_DAY' AND NULLIF(BTRIM(COALESCE(preview_row.key_value, preview_row.row_json#>>'{economic_key,key_value}', preview_row.row_json->>'component_key_value', '')), '') !~ '^\d{4}-\d{2}-\d{2}$')
@@ -144056,10 +144298,11 @@ BEGIN
           FROM public.banking_pay_workbench_preview_rows AS preview_row
           WHERE preview_row.session_id = scope_update.workbench_session_id
             AND preview_row.candidate_id = scope_update.candidate_id
+            AND preview_row.session_version = scope_update.source_session_version
             AND UPPER(BTRIM(COALESCE(preview_row.row_json->>'pay_channel', preview_row.row_json->>'current_pay_method', preview_row.row_json->>'candidate_pay_method', ''))) = scope_update.pay_channel
             AND COALESCE(preview_row.selected, false) = true
             AND UPPER(BTRIM(COALESCE(preview_row.selection_state, ''))) NOT IN ('NOT_SELECTABLE', 'EXCLUDED')
-            AND UPPER(BTRIM(COALESCE(preview_row.status, ''))) NOT IN ('DIRTY', 'ERROR', 'FAILED')
+            AND UPPER(BTRIM(COALESCE(preview_row.status, ''))) = 'READY'
             AND NOT EXISTS (
               SELECT 1
               FROM public.banking_pay_operation_candidate_allocation_rows AS existing_row
@@ -144089,9 +144332,6 @@ BEGIN
     0::integer;
 END;
 $function$;
-
-
-
 
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_prepare_draft_scope_seed(
@@ -144124,6 +144364,8 @@ DECLARE
   v_timesheet_count integer := 0;
   v_finance_case_count integer := 0;
   v_pay_channel_count integer := 0;
+  v_stale_selection_ids jsonb := '[]'::jsonb;
+  v_missing_selection_ids jsonb := '[]'::jsonb;
 BEGIN
   PERFORM public.banking_pay_hot_path_budget_apply('WORKBENCH_CHUNK');
 
@@ -144209,14 +144451,80 @@ BEGIN
       updated_at_utc = v_now
   WHERE operation_update.id = p_operation_id;
 
+  DROP TABLE IF EXISTS pg_temp.tmp_pay_workbench_draft_scope_supplied_ids;
+  CREATE TEMPORARY TABLE pg_temp.tmp_pay_workbench_draft_scope_supplied_ids ON COMMIT DROP AS
+  SELECT DISTINCT BTRIM(supplied_id.value) AS supplied_id
+  FROM jsonb_array_elements_text(COALESCE(p_selected_preview_row_ids, '[]'::jsonb)) AS supplied_id(value)
+  WHERE p_selected_preview_row_ids IS NOT NULL
+    AND BTRIM(supplied_id.value) <> '';
+
+  IF p_selected_preview_row_ids IS NOT NULL THEN
+    SELECT COALESCE(jsonb_agg(to_jsonb(supplied_ids.supplied_id) ORDER BY supplied_ids.supplied_id), '[]'::jsonb)
+    INTO v_stale_selection_ids
+    FROM pg_temp.tmp_pay_workbench_draft_scope_supplied_ids AS supplied_ids
+    WHERE EXISTS (
+      SELECT 1
+      FROM public.banking_pay_workbench_preview_rows AS any_preview_row
+      WHERE any_preview_row.session_id = p_workbench_session_id
+        AND (
+          any_preview_row.id::text = supplied_ids.supplied_id
+          OR any_preview_row.row_key = supplied_ids.supplied_id
+          OR any_preview_row.row_json->>'preview_row_id' = supplied_ids.supplied_id
+          OR any_preview_row.row_json->>'row_id' = supplied_ids.supplied_id
+          OR any_preview_row.row_json->>'line_id' = supplied_ids.supplied_id
+        )
+    )
+      AND NOT EXISTS (
+        SELECT 1
+        FROM public.banking_pay_workbench_preview_rows AS current_preview_row
+        WHERE current_preview_row.session_id = p_workbench_session_id
+          AND current_preview_row.session_version = v_session.version
+          AND UPPER(BTRIM(COALESCE(current_preview_row.status, ''))) = 'READY'
+          AND (
+            current_preview_row.id::text = supplied_ids.supplied_id
+            OR current_preview_row.row_key = supplied_ids.supplied_id
+            OR current_preview_row.row_json->>'preview_row_id' = supplied_ids.supplied_id
+            OR current_preview_row.row_json->>'row_id' = supplied_ids.supplied_id
+            OR current_preview_row.row_json->>'line_id' = supplied_ids.supplied_id
+          )
+      );
+
+    SELECT COALESCE(jsonb_agg(to_jsonb(supplied_ids.supplied_id) ORDER BY supplied_ids.supplied_id), '[]'::jsonb)
+    INTO v_missing_selection_ids
+    FROM pg_temp.tmp_pay_workbench_draft_scope_supplied_ids AS supplied_ids
+    WHERE NOT EXISTS (
+      SELECT 1
+      FROM public.banking_pay_workbench_preview_rows AS any_preview_row
+      WHERE any_preview_row.session_id = p_workbench_session_id
+        AND (
+          any_preview_row.id::text = supplied_ids.supplied_id
+          OR any_preview_row.row_key = supplied_ids.supplied_id
+          OR any_preview_row.row_json->>'preview_row_id' = supplied_ids.supplied_id
+          OR any_preview_row.row_json->>'row_id' = supplied_ids.supplied_id
+          OR any_preview_row.row_json->>'line_id' = supplied_ids.supplied_id
+        )
+    );
+
+    IF jsonb_array_length(COALESCE(v_stale_selection_ids, '[]'::jsonb)) > 0
+       OR jsonb_array_length(COALESCE(v_missing_selection_ids, '[]'::jsonb)) > 0 THEN
+      RAISE EXCEPTION 'WORKBENCH_STALE_SELECTION'
+        USING ERRCODE = 'P0001',
+              DETAIL = jsonb_build_object(
+                'code', 'WORKBENCH_STALE_SELECTION',
+                'session_id', p_workbench_session_id::text,
+                'session_version', v_session.version,
+                'operation_id', p_operation_id::text,
+                'rejected_preview_row_ids', COALESCE(v_stale_selection_ids, '[]'::jsonb) || COALESCE(v_missing_selection_ids, '[]'::jsonb),
+                'stale_preview_row_ids', COALESCE(v_stale_selection_ids, '[]'::jsonb),
+                'missing_preview_row_ids', COALESCE(v_missing_selection_ids, '[]'::jsonb),
+                'message', 'Selected preview rows are not part of the current ready workbench session version. Refresh the preview page and try again.'
+              )::text;
+    END IF;
+  END IF;
+
   DROP TABLE IF EXISTS pg_temp.tmp_pay_workbench_draft_scope_selected_page;
   CREATE TEMPORARY TABLE pg_temp.tmp_pay_workbench_draft_scope_selected_page ON COMMIT DROP AS
-  WITH supplied_ids AS (
-    SELECT DISTINCT BTRIM(supplied_id.value) AS supplied_id
-    FROM jsonb_array_elements_text(COALESCE(p_selected_preview_row_ids, '[]'::jsonb)) AS supplied_id(value)
-    WHERE p_selected_preview_row_ids IS NOT NULL
-      AND BTRIM(supplied_id.value) <> ''
-  ), eligible_rows AS (
+  WITH eligible_rows AS (
     SELECT
       preview_row.id AS preview_row_id,
       preview_row.row_key,
@@ -144233,9 +144541,10 @@ BEGIN
       CASE WHEN COALESCE(preview_row.row_json->>'amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN ROUND((preview_row.row_json->>'amount_ex_vat')::numeric, 2) ELSE 0::numeric END AS amount_ex_vat
     FROM public.banking_pay_workbench_preview_rows AS preview_row
     WHERE preview_row.session_id = p_workbench_session_id
+      AND preview_row.session_version = v_session.version
       AND COALESCE(preview_row.selected, false) = true
       AND UPPER(BTRIM(COALESCE(preview_row.selection_state, ''))) NOT IN ('NOT_SELECTABLE', 'EXCLUDED')
-      AND UPPER(BTRIM(COALESCE(preview_row.status, ''))) NOT IN ('DIRTY', 'ERROR', 'FAILED')
+      AND UPPER(BTRIM(COALESCE(preview_row.status, ''))) = 'READY'
       AND UPPER(NULLIF(BTRIM(COALESCE(preview_row.key_type, preview_row.row_json#>>'{economic_key,key_type}', preview_row.row_json->>'component_key_type', '')), '')) IN ('TS_DAY','TS_TOTAL','ADDITIONAL_CODE','ADJUSTMENT_CODE','EXPENSE_CODE','MANUAL_CARRY_FORWARD')
       AND NULLIF(BTRIM(COALESCE(preview_row.key_value, preview_row.row_json#>>'{economic_key,key_value}', preview_row.row_json->>'component_key_value', '')), '') IS NOT NULL
       AND NOT (UPPER(NULLIF(BTRIM(COALESCE(preview_row.key_type, preview_row.row_json#>>'{economic_key,key_type}', preview_row.row_json->>'component_key_type', '')), '')) = 'TS_DAY' AND NULLIF(BTRIM(COALESCE(preview_row.key_value, preview_row.row_json#>>'{economic_key,key_value}', preview_row.row_json->>'component_key_value', '')), '') !~ '^\d{4}-\d{2}-\d{2}$')
@@ -144244,7 +144553,7 @@ BEGIN
         p_selected_preview_row_ids IS NULL
         OR EXISTS (
           SELECT 1
-          FROM supplied_ids AS supplied_id
+          FROM pg_temp.tmp_pay_workbench_draft_scope_supplied_ids AS supplied_id
           WHERE supplied_id.supplied_id IN (preview_row.id::text, preview_row.row_key, preview_row.row_json->>'preview_row_id', preview_row.row_json->>'row_id', preview_row.row_json->>'line_id')
         )
       )
@@ -144323,10 +144632,14 @@ BEGIN
   GROUP BY selected_page.candidate_id, selected_page.pay_channel
   ON CONFLICT (operation_id, candidate_id, pay_channel)
   DO UPDATE
-  SET pay_batch_id = COALESCE(public.banking_pay_operation_candidate_scope.pay_batch_id, EXCLUDED.pay_batch_id),
+  SET workbench_session_id = EXCLUDED.workbench_session_id,
+      source_snapshot_run_id = EXCLUDED.source_snapshot_run_id,
+      source_session_version = EXCLUDED.source_session_version,
+      pay_batch_id = COALESCE(public.banking_pay_operation_candidate_scope.pay_batch_id, EXCLUDED.pay_batch_id),
       candidate_totals_json = public.banking_pay_operation_candidate_scope.candidate_totals_json || EXCLUDED.candidate_totals_json,
       allocation_basis_json = public.banking_pay_operation_candidate_scope.allocation_basis_json || EXCLUDED.allocation_basis_json,
       scope_hash = EXCLUDED.scope_hash,
+      chunk_sequence = EXCLUDED.chunk_sequence,
       status = CASE WHEN public.banking_pay_operation_candidate_scope.status IN ('PENDING', 'SCOPED') THEN 'SCOPED' ELSE public.banking_pay_operation_candidate_scope.status END,
       updated_at_utc = v_now;
 
@@ -144359,6 +144672,7 @@ BEGIN
     COALESCE(v_pay_channel_count, 0);
 END;
 $function$;
+
 
 
 
