@@ -12833,7 +12833,7 @@ async function handleBankingPayWorkbenchSessionGetPreviewPage(env, req, user, se
   return execute();
 }
 
-async function handleBankingPayWorkbenchSessionOpen(env, req, user) {
+async function handleBankingPayWorkbenchSessionOpen(env, req, user, ctx = null) {
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   const isPlainObject = (value) => !!value && typeof value === 'object' && !Array.isArray(value);
   const trimStr = (value) => String(value == null ? '' : value).trim();
@@ -13094,6 +13094,35 @@ async function handleBankingPayWorkbenchSessionOpen(env, req, user) {
         throw err;
       }
 
+      const shouldWakeWorkbenchDrain = progressPayload.ready !== true;
+      let backgroundDrainNudge = {
+        ok: true,
+        scheduled: false,
+        skipped: true,
+        code: shouldWakeWorkbenchDrain ? 'BANKING_PAY_WORKBENCH_NUDGE_HELPER_UNAVAILABLE' : 'BANKING_PAY_WORKBENCH_ALREADY_READY'
+      };
+      if (shouldWakeWorkbenchDrain && typeof nudgeBankingPayWorkbenchDrain === 'function') {
+        try {
+          backgroundDrainNudge = nudgeBankingPayWorkbenchDrain(env, ctx, {
+            origin: 'WORKBENCH_SESSION_OPEN_NUDGE',
+            sessionId,
+            actorUserId,
+            claimLimit: 2,
+            maxPasses: 1,
+            maxJobs: 2,
+            maxRows: 200,
+            maxRuntimeMs: 6000
+          });
+        } catch (nudgeError) {
+          backgroundDrainNudge = {
+            ok: false,
+            scheduled: false,
+            code: 'BANKING_PAY_WORKBENCH_OPEN_NUDGE_FAILED',
+            message: String(nudgeError?.message || nudgeError || 'Workbench drain nudge failed')
+          };
+        }
+      }
+
       return withCORS(env, req, ok({
         ok: true,
         session_id: sessionId,
@@ -13106,6 +13135,9 @@ async function handleBankingPayWorkbenchSessionOpen(env, req, user) {
         preview_ready: progressPayload.ready === true,
         inline_drain_attempted: false,
         inline_drain_allowed: false,
+        background_drain_nudge: backgroundDrainNudge,
+        background_drain_nudge_scheduled: backgroundDrainNudge && (backgroundDrainNudge.scheduled === true || backgroundDrainNudge.already_running === true),
+        background_drain_wait_until_used: backgroundDrainNudge && backgroundDrainNudge.wait_until_used === true,
         seed_limit: 100,
         diagnostic_trace_id: diagnosticTraceId
       }));
@@ -13144,6 +13176,240 @@ async function handleBankingPayWorkbenchSessionOpen(env, req, user) {
   return execute();
 }
 
+
+async function bankingPayWorkbenchCronTick(env, options = {}) {
+  const trimStr = (value) => String(value == null ? '' : value).trim();
+  const isPlainObject = (value) => !!value && typeof value === 'object' && !Array.isArray(value);
+  const clampInt = (value, fallback, min, max) => {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return fallback;
+    const i = Math.trunc(n);
+    if (i < min) return min;
+    if (i > max) return max;
+    return i;
+  };
+  const readOption = (camelName, snakeName, envName, fallback, min, max) => {
+    const fromOptions = isPlainObject(options) && Object.prototype.hasOwnProperty.call(options, camelName)
+      ? options[camelName]
+      : (isPlainObject(options) && snakeName && Object.prototype.hasOwnProperty.call(options, snakeName) ? options[snakeName] : undefined);
+    const fromEnv = env && envName ? env[envName] : undefined;
+    return clampInt(fromOptions !== undefined ? fromOptions : fromEnv, fallback, min, max);
+  };
+  const enabledRaw = isPlainObject(options) && Object.prototype.hasOwnProperty.call(options, 'enabled')
+    ? options.enabled
+    : (env && Object.prototype.hasOwnProperty.call(env, 'BANKING_PAY_WORKBENCH_CRON_ENABLED') ? env.BANKING_PAY_WORKBENCH_CRON_ENABLED : true);
+  const enabled = !(enabledRaw === false || String(enabledRaw).trim().toLowerCase() === 'false' || String(enabledRaw).trim() === '0');
+  const origin = trimStr(isPlainObject(options) ? options.origin : '') || 'BANKING_PAY_WORKBENCH_CRON';
+  const startedAtUtc = new Date().toISOString();
+
+  if (!enabled) {
+    return {
+      ok: true,
+      skipped: true,
+      code: 'BANKING_PAY_WORKBENCH_CRON_DISABLED',
+      origin,
+      started_at_utc: startedAtUtc,
+      completed_at_utc: new Date().toISOString()
+    };
+  }
+
+  if (typeof drainBankingPayWorkbenchJobs !== 'function') {
+    return {
+      ok: false,
+      skipped: true,
+      code: 'DRAIN_BANKING_PAY_WORKBENCH_JOBS_UNAVAILABLE',
+      origin,
+      started_at_utc: startedAtUtc,
+      completed_at_utc: new Date().toISOString(),
+      message: 'drainBankingPayWorkbenchJobs is not available in this backend runtime.'
+    };
+  }
+
+  const claimLimit = readOption('claimLimit', 'claim_limit', 'BANKING_PAY_WORKBENCH_CRON_CLAIM_LIMIT', 3, 1, 10);
+  const maxPasses = readOption('maxPasses', 'max_passes', 'BANKING_PAY_WORKBENCH_CRON_MAX_PASSES', 1, 1, 2);
+  const maxJobs = readOption('maxJobs', 'max_jobs', 'BANKING_PAY_WORKBENCH_CRON_MAX_JOBS', Math.max(3, claimLimit), 1, 20);
+  const maxRows = readOption('maxRows', 'max_rows', 'BANKING_PAY_WORKBENCH_CRON_MAX_ROWS', 300, 1, 2000);
+  const maxRuntimeMs = readOption('maxRuntimeMs', 'max_runtime_ms', 'BANKING_PAY_WORKBENCH_CRON_MAX_RUNTIME_MS', 8000, 1000, 30000);
+  const allowedJobTypes = isPlainObject(options) && Object.prototype.hasOwnProperty.call(options, 'allowedJobTypes')
+    ? options.allowedJobTypes
+    : undefined;
+
+  try {
+    const drainResult = await drainBankingPayWorkbenchJobs(env, {
+      origin,
+      claimLimit,
+      maxPasses,
+      maxJobs,
+      maxRows,
+      maxRuntimeMs,
+      allowedJobTypes
+    });
+
+    return {
+      ok: drainResult && typeof drainResult === 'object' ? drainResult.ok !== false : true,
+      worker: 'bankingPayWorkbenchCronTick',
+      origin,
+      started_at_utc: startedAtUtc,
+      completed_at_utc: new Date().toISOString(),
+      claim_limit: claimLimit,
+      max_passes: maxPasses,
+      max_jobs: maxJobs,
+      max_rows: maxRows,
+      max_runtime_ms: maxRuntimeMs,
+      drain_result: drainResult && typeof drainResult === 'object' ? drainResult : { ok: true }
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      worker: 'bankingPayWorkbenchCronTick',
+      origin,
+      started_at_utc: startedAtUtc,
+      completed_at_utc: new Date().toISOString(),
+      claim_limit: claimLimit,
+      max_passes: maxPasses,
+      max_jobs: maxJobs,
+      max_rows: maxRows,
+      max_runtime_ms: maxRuntimeMs,
+      error_code: error && (error.code || error.error_code || error.name) ? String(error.code || error.error_code || error.name) : 'BANKING_PAY_WORKBENCH_CRON_FAILED',
+      message: error && error.message ? String(error.message) : String(error || 'Banking Pay workbench cron failed')
+    };
+  }
+}
+function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
+  const trimStr = (value) => String(value == null ? '' : value).trim();
+  const isPlainObject = (value) => !!value && typeof value === 'object' && !Array.isArray(value);
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  const clampInt = (value, fallback, min, max) => {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return fallback;
+    const i = Math.trunc(n);
+    if (i < min) return min;
+    if (i > max) return max;
+    return i;
+  };
+  const source = isPlainObject(options) ? options : {};
+  const enabledRaw = Object.prototype.hasOwnProperty.call(source, 'enabled')
+    ? source.enabled
+    : (env && Object.prototype.hasOwnProperty.call(env, 'BANKING_PAY_WORKBENCH_NUDGE_ENABLED') ? env.BANKING_PAY_WORKBENCH_NUDGE_ENABLED : true);
+  const enabled = !(enabledRaw === false || String(enabledRaw).trim().toLowerCase() === 'false' || String(enabledRaw).trim() === '0');
+  const requestedSessionId = trimStr(source.sessionId || source.session_id || '');
+  const requestedCandidateId = trimStr(source.candidateId || source.candidate_id || '');
+  const origin = trimStr(source.origin) || 'BANKING_PAY_WORKBENCH_NUDGE';
+  const singleFlightKey = [
+    origin,
+    uuidRe.test(requestedSessionId) ? requestedSessionId : 'GLOBAL',
+    uuidRe.test(requestedCandidateId) ? requestedCandidateId : 'ALL'
+  ].join(':');
+
+  if (!enabled) {
+    return {
+      ok: true,
+      scheduled: false,
+      skipped: true,
+      code: 'BANKING_PAY_WORKBENCH_NUDGE_DISABLED',
+      origin,
+      requested_session_id: uuidRe.test(requestedSessionId) ? requestedSessionId : null,
+      requested_candidate_id: uuidRe.test(requestedCandidateId) ? requestedCandidateId : null
+    };
+  }
+
+  if (typeof bankingPayWorkbenchCronTick !== 'function') {
+    return {
+      ok: false,
+      scheduled: false,
+      skipped: true,
+      code: 'BANKING_PAY_WORKBENCH_CRON_TICK_UNAVAILABLE',
+      origin,
+      requested_session_id: uuidRe.test(requestedSessionId) ? requestedSessionId : null,
+      requested_candidate_id: uuidRe.test(requestedCandidateId) ? requestedCandidateId : null
+    };
+  }
+
+  const root = globalThis || {};
+  if (!root.__bankingPayWorkbenchDrainNudges || typeof root.__bankingPayWorkbenchDrainNudges.get !== 'function') {
+    try {
+      root.__bankingPayWorkbenchDrainNudges = new Map();
+    } catch {
+      root.__bankingPayWorkbenchDrainNudges = null;
+    }
+  }
+  const map = root.__bankingPayWorkbenchDrainNudges;
+  if (map && map.has(singleFlightKey)) {
+    return {
+      ok: true,
+      scheduled: false,
+      already_running: true,
+      code: 'BANKING_PAY_WORKBENCH_NUDGE_ALREADY_RUNNING',
+      origin,
+      single_flight_key: singleFlightKey,
+      requested_session_id: uuidRe.test(requestedSessionId) ? requestedSessionId : null,
+      requested_candidate_id: uuidRe.test(requestedCandidateId) ? requestedCandidateId : null
+    };
+  }
+
+  const claimLimit = clampInt(source.claimLimit ?? source.claim_limit ?? (env && env.BANKING_PAY_WORKBENCH_NUDGE_CLAIM_LIMIT), 2, 1, 5);
+  const maxPasses = clampInt(source.maxPasses ?? source.max_passes ?? (env && env.BANKING_PAY_WORKBENCH_NUDGE_MAX_PASSES), 1, 1, 1);
+  const maxJobs = clampInt(source.maxJobs ?? source.max_jobs ?? (env && env.BANKING_PAY_WORKBENCH_NUDGE_MAX_JOBS), 2, 1, 10);
+  const maxRows = clampInt(source.maxRows ?? source.max_rows ?? (env && env.BANKING_PAY_WORKBENCH_NUDGE_MAX_ROWS), 200, 1, 1000);
+  const maxRuntimeMs = clampInt(source.maxRuntimeMs ?? source.max_runtime_ms ?? (env && env.BANKING_PAY_WORKBENCH_NUDGE_MAX_RUNTIME_MS), 6000, 1000, 15000);
+
+  const promise = (async () => {
+    try {
+      return await bankingPayWorkbenchCronTick(env, {
+        origin,
+        claimLimit,
+        maxPasses,
+        maxJobs,
+        maxRows,
+        maxRuntimeMs
+      });
+    } catch (error) {
+      try {
+        console.warn('[nudgeBankingPayWorkbenchDrain] Workbench drain nudge failed:', error && error.message ? error.message : error);
+      } catch {}
+      return {
+        ok: false,
+        code: 'BANKING_PAY_WORKBENCH_NUDGE_FAILED',
+        origin,
+        message: error && error.message ? String(error.message) : String(error || 'Workbench drain nudge failed')
+      };
+    } finally {
+      try {
+        if (map && map.get(singleFlightKey) === promise) map.delete(singleFlightKey);
+      } catch {}
+    }
+  })();
+
+  try {
+    if (map) map.set(singleFlightKey, promise);
+  } catch {}
+
+  const hasWaitUntil = !!(ctx && typeof ctx.waitUntil === 'function');
+  if (hasWaitUntil) {
+    try {
+      ctx.waitUntil(promise);
+    } catch {
+      promise.catch(() => {});
+    }
+  } else {
+    promise.catch(() => {});
+  }
+
+  return {
+    ok: true,
+    scheduled: true,
+    wait_until_used: hasWaitUntil,
+    origin,
+    single_flight_key: singleFlightKey,
+    requested_session_id: uuidRe.test(requestedSessionId) ? requestedSessionId : null,
+    requested_candidate_id: uuidRe.test(requestedCandidateId) ? requestedCandidateId : null,
+    claim_limit: claimLimit,
+    max_passes: maxPasses,
+    max_jobs: maxJobs,
+    max_rows: maxRows,
+    max_runtime_ms: maxRuntimeMs
+  };
+}
 
 
 async function handleBankingPayWorkbenchSessionGet(env, req, user, sessionId) {
@@ -139169,9 +139435,6 @@ async function executeBankingPayWorkbenchJob(env, claimedJob, opts = {}) {
   throw makeJobError('UNSUPPORTED_WORKBENCH_JOB_TYPE', `Unsupported Banking Pay workbench job type: ${jobType}`, Object.assign({}, baseResult, { retry_after_seconds: 300 }));
 }
 
-
-
-
 async function drainBankingPayWorkbenchJobs(env, opts = {}) {
   const trimStr = (value) => String(value == null ? '' : value).trim();
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -139260,7 +139523,7 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
   const allowedJobTypes = normalizeAllowedJobTypes(opts && opts.allowedJobTypes);
   const startedMs = Date.now();
 
-  const summary = { ok: true, origin, actor_user_id: uuidRe.test(actorUserId) ? actorUserId : null, session_id: uuidRe.test(sessionFilterId) ? sessionFilterId : null, candidate_id: uuidRe.test(candidateFilterId) ? candidateFilterId : null, claim_limit: claimLimit, max_passes: maxPasses, max_jobs: maxJobs, max_rows: maxRows, max_runtime_ms: maxRuntimeMs, started_at_utc: normalizeNowUtc(opts && opts.nowUtc), completed_at_utc: null, claimed_count: 0, processed_count: 0, row_work_count: 0, succeeded_count: 0, failed_count: 0, skipped_count: 0, recovered_stale_count: 0, dead_stale_count: 0, pass_count: 0, jobs: [], errors: [] };
+  const summary = { ok: true, origin, actor_user_id: uuidRe.test(actorUserId) ? actorUserId : null, session_id: uuidRe.test(sessionFilterId) ? sessionFilterId : null, candidate_id: uuidRe.test(candidateFilterId) ? candidateFilterId : null, claim_limit: claimLimit, max_passes: maxPasses, max_jobs: maxJobs, max_rows: maxRows, max_runtime_ms: maxRuntimeMs, started_at_utc: normalizeNowUtc(opts && opts.nowUtc), completed_at_utc: null, claimed_count: 0, processed_count: 0, row_work_count: 0, succeeded_count: 0, failed_count: 0, skipped_count: 0, out_of_scope_claimed_count: 0, recovered_stale_count: 0, dead_stale_count: 0, pass_count: 0, jobs: [], errors: [] };
 
   const buildErrorJson = (code, error, job, extra = {}) => {
     const payload = isPlainObject(job && job.payload_json) ? job.payload_json : {};
@@ -139315,7 +139578,7 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
     const sessionId = trimStr(job && (job.session_id || payload.session_id));
     const candidateId = trimStr(job && (job.candidate_id || payload.candidate_id));
     const cursor = extractCursor(payload);
-    const requestedLimit = numberInRange(payload.limit || payload.chunk_size || payload.chunkSize || 100, 100, 1, 100);
+    const requestedLimit = numberInRange(payload.limit || payload.line_limit || payload.lineLimit || payload.chunk_size || payload.chunkSize || 100, 100, 1, 100);
     const remainingRows = Math.max(1, maxRows - summary.row_work_count);
     const limit = Math.max(1, Math.min(requestedLimit, remainingRows));
     if (!uuidRe.test(sessionId)) {
@@ -139332,7 +139595,7 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
         err.code = 'WORKBENCH_JOB_CANDIDATE_ID_REQUIRED';
         throw err;
       }
-      return unwrapRpc(await sbRpc(env, 'pay_workbench_candidate_line_work_seed', { p_session_id: sessionId, p_candidate_id: candidateId, p_cursor: cursor, p_limit: limit, p_actor_user_id: uuidRe.test(actorUserId) ? actorUserId : null }, { routeClass: 'PREVIEW_CHUNK', purpose: 'LINE_WORK_SEED_CHUNK', timeoutMs: 20000, bankingPay: true }), 'pay_workbench_candidate_line_work_seed');
+      return unwrapRpc(await sbRpc(env, 'pay_workbench_candidate_line_work_seed', { p_session_id: sessionId, p_candidate_id: candidateId, p_cursor_json: cursor, p_limit: limit }, { routeClass: 'PREVIEW_CHUNK', purpose: 'LINE_WORK_SEED_CHUNK', timeoutMs: 20000, bankingPay: true }), 'pay_workbench_candidate_line_work_seed');
     }
     if (jobType === 'WORKBENCH_CANDIDATE_LINE_WORK_PROCESS' || jobType === 'CANDIDATE_LINE_WORK_PROCESS' || jobType === 'LINE_WORK_PROCESS') {
       return unwrapRpc(await sbRpc(env, 'pay_workbench_candidate_line_work_process_chunk', { p_session_id: sessionId, p_candidate_id: uuidRe.test(candidateId) ? candidateId : null, p_limit: limit, p_cursor_json: cursor }, { routeClass: 'PREVIEW_CHUNK', purpose: 'LINE_WORK_PROCESS_CHUNK', timeoutMs: 20000, bankingPay: true }), 'pay_workbench_candidate_line_work_process_chunk');
@@ -139377,9 +139640,7 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
         continue;
       }
       if (!jobMatchesRequestedScope(job)) {
-        summary.skipped_count += 1;
-        summary.jobs.push({ ...jobSummaryBase, status: 'SKIPPED', result_summary: null, error_code: 'OUT_OF_REQUESTED_SCOPE' });
-        continue;
+        summary.out_of_scope_claimed_count += 1;
       }
       if (!allowedJobTypes.has(jobType)) {
         const typeError = new Error(`Claimed workbench job type is not allowed by this drain: ${jobType}`);
@@ -145083,7 +145344,7 @@ function matchPath(pathname, pattern) {
 }
 // BACKEND — FULL ROUTER ( default) — unchanged routes map but now benefits from updated CORS/sbFetch
 export default {
-  async fetch(req, env) {
+  async fetch(req, env, ctx) {
     const pre = preflightIfNeeded(env, req);
     if (pre) return pre;
 
@@ -145496,7 +145757,7 @@ if (req.method === 'POST' && p === '/api/banking/pay/auth-token/action') {
 // after `user` has been resolved, alongside the other /api/banking/pay/* routes.
 
 if (req.method === 'POST' && p === '/api/banking/pay/workbench/session/open') {
-  return handleBankingPayWorkbenchSessionOpen(env, req, user);
+  return handleBankingPayWorkbenchSessionOpen(env, req, user, ctx);
 }
 
 {
@@ -147091,7 +147352,6 @@ if (req.method === 'POST' && p === '/api/users') {
   },
   /// Cron handler for TSFIN queue processing + Auto-invoice + Email outbox drain
 // Cron handler for TSFIN queue processing + Auto-invoice + TS PDF + INVOICE PDF + Email outbox drain
-
 async scheduled(event, env, ctx) {
   const maxBatches      = parseInt(env.TSFIN_MAX_BATCHES || '10', 10);
   const batchSize       = parseInt(env.TSFIN_BATCH_SIZE  || '50', 10);
@@ -147241,6 +147501,23 @@ async scheduled(event, env, ctx) {
       await bankingCronTick(env);
     } catch (e) {
       console.warn('[scheduled] Banking cron tick failed:', e?.message || e);
+    }
+
+
+    try {
+      if (typeof bankingPayWorkbenchCronTick === 'function') {
+        const workbenchCronRes = await bankingPayWorkbenchCronTick(env, {
+          origin: 'SCHEDULED_BANKING_PAY_WORKBENCH_CRON',
+          cron: cronExpr || null
+        });
+        if (workbenchCronRes && typeof workbenchCronRes === 'object' && workbenchCronRes.ok === false) {
+          console.warn('[scheduled] Banking Pay workbench cron tick reported failure:', workbenchCronRes);
+        }
+      } else {
+        console.warn('[scheduled] bankingPayWorkbenchCronTick is not available; Banking Pay workbench preview queue was not drained.');
+      }
+    } catch (e) {
+      console.warn('[scheduled] Banking Pay workbench cron tick failed:', e?.message || e);
     }
 
     if (isInvpdfMinuteCron) {
@@ -147431,5 +147708,6 @@ async scheduled(event, env, ctx) {
     }
   })());
 }
+
 
 };
