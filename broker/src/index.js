@@ -12833,7 +12833,6 @@ async function handleBankingPayWorkbenchSessionGetPreviewPage(env, req, user, se
   return execute();
 }
 
-
 async function handleBankingPayWorkbenchSessionOpen(env, req, user) {
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   const isPlainObject = (value) => !!value && typeof value === 'object' && !Array.isArray(value);
@@ -12869,6 +12868,125 @@ async function handleBankingPayWorkbenchSessionOpen(env, req, user) {
     if (Array.isArray(out.candidate_samples)) out.candidate_samples = out.candidate_samples.slice(0, 25);
     return out;
   };
+  const diagnosticTraceId = (() => {
+    try {
+      if (globalThis.crypto && typeof globalThis.crypto.randomUUID === 'function') return globalThis.crypto.randomUUID();
+    } catch {}
+    return `bpwso_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+  })();
+  let lastDiagnosticStage = 'INITIALISE';
+  let lastDiagnosticRpc = null;
+  const shortHash = (value) => {
+    const text = String(value == null ? '' : value);
+    let hash = 2166136261;
+    for (let i = 0; i < text.length; i += 1) {
+      hash ^= text.charCodeAt(i);
+      hash = Math.imul(hash, 16777619);
+    }
+    return (hash >>> 0).toString(16).padStart(8, '0');
+  };
+  const diagnosticSafeValue = (value, depth = 0, seen = new WeakSet()) => {
+    if (value == null) return value;
+    if (depth > 6) return '[MaxDepth]';
+    if (typeof value === 'string') {
+      if (value.length > 1200) return `${value.slice(0, 1200)}...[truncated:${value.length}]`;
+      return value;
+    }
+    if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') return value;
+    if (value instanceof Error) {
+      const errOut = {
+        name: value.name || null,
+        message: value.message || null,
+        stack: value.stack || null,
+        code: value.code || value.error_code || null,
+        status: value.status || value.status_code || value.http_status || null,
+        details: value.details || null,
+        hint: value.hint || null,
+        cause: diagnosticSafeValue(value.cause, depth + 1, seen),
+        json: diagnosticSafeValue(value.json, depth + 1, seen),
+        payload: diagnosticSafeValue(value.payload, depth + 1, seen),
+        body: diagnosticSafeValue(value.body, depth + 1, seen),
+        backendPayload: diagnosticSafeValue(value.backendPayload, depth + 1, seen),
+        supabase: diagnosticSafeValue(value.supabase, depth + 1, seen),
+        rpc: value.__banking_workbench_open_rpc || value.rpc || value.rpc_name || null,
+        stage: value.__banking_workbench_open_stage || null,
+        trace_id: value.__banking_workbench_open_trace_id || null
+      };
+      return Object.fromEntries(Object.entries(errOut).filter(([, v]) => v !== undefined && v !== null && v !== ''));
+    }
+    if (Array.isArray(value)) return value.slice(0, 50).map((item) => diagnosticSafeValue(item, depth + 1, seen));
+    if (!isPlainObject(value)) {
+      try { return String(value); } catch { return '[Unserialisable]'; }
+    }
+    if (seen.has(value)) return '[Circular]';
+    seen.add(value);
+    const out = {};
+    for (const [key, raw] of Object.entries(value)) {
+      const keyText = String(key || '');
+      if (/authorization|cookie|password|secret|token|otp|totp|verification|reauth|golden/i.test(keyText)) {
+        out[keyText] = '[REDACTED]';
+      } else if (keyText === 'p_session_signature' || keyText === 'session_signature' || keyText === 'sessionSignature') {
+        const text = trimStr(raw);
+        out[keyText] = text ? { length: text.length, hash: shortHash(text) } : '';
+      } else {
+        out[keyText] = diagnosticSafeValue(raw, depth + 1, seen);
+      }
+    }
+    return out;
+  };
+  const logWorkbenchSessionOpenDiagnostic = (level, stage, message, extra = {}) => {
+    const payload = {
+      trace_id: diagnosticTraceId,
+      stage: stage || lastDiagnosticStage || 'UNKNOWN',
+      rpc: lastDiagnosticRpc || null,
+      message: trimStr(message || ''),
+      route: 'handleBankingPayWorkbenchSessionOpen',
+      pay_date: typeof payDate !== 'undefined' ? payDate : null,
+      week_ending_cutoff: typeof weekEndingCutoff !== 'undefined' ? weekEndingCutoff : null,
+      actor_user_id: typeof actorUserId !== 'undefined' ? actorUserId : null,
+      session_signature_hash: typeof sessionSignature !== 'undefined' ? shortHash(sessionSignature) : null,
+      session_signature_length: typeof sessionSignature !== 'undefined' ? sessionSignature.length : null,
+      force_new_session: typeof forceNewSession !== 'undefined' ? forceNewSession === true : null,
+      discard_source_session: typeof discardSourceSession !== 'undefined' ? discardSourceSession === true : null,
+      source_session_id_present: typeof sourceSessionId !== 'undefined' ? !!sourceSessionId : null,
+      extra: diagnosticSafeValue(extra)
+    };
+    try {
+      const line = JSON.stringify(payload);
+      if (level === 'error' && console && typeof console.error === 'function') console.error('[BANKING_PAY_WORKBENCH_SESSION_OPEN_DIAGNOSTIC]', line);
+      else if (console && typeof console.warn === 'function') console.warn('[BANKING_PAY_WORKBENCH_SESSION_OPEN_DIAGNOSTIC]', line);
+      else if (console && typeof console.log === 'function') console.log('[BANKING_PAY_WORKBENCH_SESSION_OPEN_DIAGNOSTIC]', line);
+    } catch (logError) {
+      try { console.error('[BANKING_PAY_WORKBENCH_SESSION_OPEN_DIAGNOSTIC_LOG_FAILED]', String(logError?.message || logError)); } catch {}
+    }
+  };
+  const attachDiagnosticToError = (error, stage, rpcName, extra = {}) => {
+    const err = error instanceof Error ? error : new Error(String(error == null ? 'Unknown error' : error));
+    try {
+      err.__banking_workbench_open_trace_id = diagnosticTraceId;
+      err.__banking_workbench_open_stage = stage || lastDiagnosticStage || 'UNKNOWN';
+      err.__banking_workbench_open_rpc = rpcName || lastDiagnosticRpc || null;
+      err.__banking_workbench_open_extra = diagnosticSafeValue(extra);
+    } catch {}
+    return err;
+  };
+  const rpcArgsSummary = (args) => {
+    const src = isPlainObject(args) ? args : {};
+    const out = {};
+    for (const [key, value] of Object.entries(src)) {
+      if (key === 'p_filters_json') {
+        out[key] = { keys: isPlainObject(value) ? Object.keys(value).sort() : [], hash: shortHash(stableStringify(value || {})) };
+      } else if (key === 'p_session_signature') {
+        const text = trimStr(value);
+        out[key] = text ? { length: text.length, hash: shortHash(text) } : '';
+      } else if (Array.isArray(value)) {
+        out[key] = { count: value.length, sample: value.slice(0, 5).map((entry) => trimStr(entry)).filter(Boolean) };
+      } else {
+        out[key] = diagnosticSafeValue(value);
+      }
+    }
+    return out;
+  };
   const normaliseProgress = (payload, fallback = {}) => {
     const src = stripLegacyArrays(payload);
     const total = Number(src.total_count ?? src.total_candidates ?? src.candidate_count ?? src.total ?? 0);
@@ -12881,7 +12999,12 @@ async function handleBankingPayWorkbenchSessionOpen(env, req, user) {
   const buildFriendlyFailure = (status, errorInput, options = {}, extra = null) => {
     const input = errorInput instanceof Error ? { message: errorInput.message, error: errorInput.message, original_error: errorInput } : (isPlainObject(errorInput) ? errorInput : { message: String(errorInput || 'Request failed') });
     const friendlyPayload = (typeof makeBankingFriendlyErrorPayload === 'function') ? makeBankingFriendlyErrorPayload(input, { action: 'WORKBENCH_SESSION_OPEN', ...options }) : input;
-    return withCORS(env, req, new Response(JSON.stringify({ ...(isPlainObject(friendlyPayload) ? friendlyPayload : {}), ...(isPlainObject(extra) ? extra : {}), ok: false }), { status, headers: JSON_HEADERS }));
+    return withCORS(env, req, new Response(JSON.stringify({
+      ...(isPlainObject(friendlyPayload) ? friendlyPayload : {}),
+      diagnostic_trace_id: diagnosticTraceId,
+      ...(isPlainObject(extra) ? extra : {}),
+      ok: false
+    }), { status, headers: JSON_HEADERS }));
   };
 
   let body = null;
@@ -12891,7 +13014,7 @@ async function handleBankingPayWorkbenchSessionOpen(env, req, user) {
   if (!uuidRe.test(actorUserId)) return withCORS(env, req, unauthorized('Unauthorized'));
   const payDate = parseIsoOrUkDateToIso(body.pay_date || body.payDate || body.payment_date || body.paymentDate || '');
   if (!payDate) return buildFriendlyFailure(400, { code: 'WORKBENCH_MODAL_ACTION_INVALID_PAY_DATE', message: 'Select a valid pay date, then try again.' });
-  const weekEndingCutoff = parseIsoOrUkDateToIso(body.week_ending_cutoff || body.weekEndingCutoff || '') || '9999-12-31';
+  const weekEndingCutoff = parseIsoOrUkDateToIso(body.week_ending_cutoff || body.weekEndingCutoff || body.week_ending_cutoff_date || body.weekEndingCutoffDate || '') || '9999-12-31';
   const filtersJson = cloneJson((isPlainObject(body.filters_json) ? body.filters_json : null) || (isPlainObject(body.filters) ? body.filters : null) || {}) || {};
   const sessionSignature = trimStr(body.session_signature || body.sessionSignature || '') || stableStringify({ kind: 'BANKING_PAY_WORKBENCH', pay_date: payDate, week_ending_cutoff: weekEndingCutoff, filters_json: filtersJson });
   const forceNewSession = body.force_new_session === true || body.forceNewSession === true;
@@ -12915,10 +13038,61 @@ async function handleBankingPayWorkbenchSessionOpen(env, req, user) {
         p_dirty_candidate_ids: Array.isArray(body.dirty_candidate_ids) ? body.dirty_candidate_ids.slice(0, 25) : [],
         p_refresh_job_ids: Array.isArray(body.refresh_job_ids) ? body.refresh_job_ids.slice(0, 25) : []
       };
-      const openPayload = stripLegacyArrays(unwrapRpc(await sbRpc(env, 'pay_workbench_session_open', openRpcArgs, { routeClass: 'PREVIEW_OPEN', purpose: 'WORKBENCH_SESSION_OPEN', timeoutMs: 10000, bankingPay: true }), 'pay_workbench_session_open'));
+      let openPayload = {};
+      lastDiagnosticStage = 'PAY_WORKBENCH_SESSION_OPEN_RPC';
+      lastDiagnosticRpc = 'pay_workbench_session_open';
+      try {
+        const openRpcRaw = await sbRpc(env, 'pay_workbench_session_open', openRpcArgs, { routeClass: 'PREVIEW_OPEN', purpose: 'WORKBENCH_SESSION_OPEN', timeoutMs: 10000, bankingPay: true });
+        openPayload = stripLegacyArrays(unwrapRpc(openRpcRaw, 'pay_workbench_session_open'));
+      } catch (rpcError) {
+        const err = attachDiagnosticToError(rpcError, 'PAY_WORKBENCH_SESSION_OPEN_RPC', 'pay_workbench_session_open', {
+          rpc_args: rpcArgsSummary(openRpcArgs)
+        });
+        logWorkbenchSessionOpenDiagnostic('error', 'PAY_WORKBENCH_SESSION_OPEN_RPC', 'pay_workbench_session_open failed before a valid workbench session was returned.', {
+          rpc_name: 'pay_workbench_session_open',
+          rpc_args: rpcArgsSummary(openRpcArgs),
+          error: err
+        });
+        throw err;
+      }
+
       const sessionId = trimStr(openPayload.session_id || '');
-      if (!uuidRe.test(sessionId)) throw new Error('pay_workbench_session_open did not return a valid session_id');
-      const progressPayload = normaliseProgress(unwrapRpc(await sbRpc(env, 'pay_workbench_session_get_progress', { p_session_id: sessionId }, { routeClass: 'PREVIEW_PROGRESS', purpose: 'WORKBENCH_SESSION_OPEN_PROGRESS', timeoutMs: 8000, bankingPay: true }), 'pay_workbench_session_get_progress'), { session_id: sessionId });
+      if (!uuidRe.test(sessionId)) {
+        const err = attachDiagnosticToError(new Error('pay_workbench_session_open did not return a valid session_id'), 'PAY_WORKBENCH_SESSION_OPEN_RETURN_VALIDATE', 'pay_workbench_session_open', {
+          open_payload: openPayload,
+          rpc_args: rpcArgsSummary(openRpcArgs)
+        });
+        logWorkbenchSessionOpenDiagnostic('error', 'PAY_WORKBENCH_SESSION_OPEN_RETURN_VALIDATE', 'pay_workbench_session_open returned an invalid or missing session_id.', {
+          rpc_name: 'pay_workbench_session_open',
+          rpc_args: rpcArgsSummary(openRpcArgs),
+          open_payload: openPayload,
+          error: err
+        });
+        throw err;
+      }
+
+      let progressPayload = {};
+      const progressRpcArgs = { p_session_id: sessionId };
+      lastDiagnosticStage = 'PAY_WORKBENCH_SESSION_GET_PROGRESS_RPC';
+      lastDiagnosticRpc = 'pay_workbench_session_get_progress';
+      try {
+        const progressRpcRaw = await sbRpc(env, 'pay_workbench_session_get_progress', progressRpcArgs, { routeClass: 'PREVIEW_PROGRESS', purpose: 'WORKBENCH_SESSION_OPEN_PROGRESS', timeoutMs: 8000, bankingPay: true });
+        progressPayload = normaliseProgress(unwrapRpc(progressRpcRaw, 'pay_workbench_session_get_progress'), { session_id: sessionId });
+      } catch (rpcError) {
+        const err = attachDiagnosticToError(rpcError, 'PAY_WORKBENCH_SESSION_GET_PROGRESS_RPC', 'pay_workbench_session_get_progress', {
+          session_id: sessionId,
+          rpc_args: rpcArgsSummary(progressRpcArgs),
+          open_payload: openPayload
+        });
+        logWorkbenchSessionOpenDiagnostic('error', 'PAY_WORKBENCH_SESSION_GET_PROGRESS_RPC', 'pay_workbench_session_get_progress failed after the workbench session was opened.', {
+          rpc_name: 'pay_workbench_session_get_progress',
+          session_id: sessionId,
+          rpc_args: rpcArgsSummary(progressRpcArgs),
+          open_payload: openPayload,
+          error: err
+        });
+        throw err;
+      }
 
       return withCORS(env, req, ok({
         ok: true,
@@ -12932,10 +13106,35 @@ async function handleBankingPayWorkbenchSessionOpen(env, req, user) {
         preview_ready: progressPayload.ready === true,
         inline_drain_attempted: false,
         inline_drain_allowed: false,
-        seed_limit: 100
+        seed_limit: 100,
+        diagnostic_trace_id: diagnosticTraceId
       }));
     } catch (e) {
-      return buildFriendlyFailure(500, { code: 'BANKING_PAY_WORKBENCH_SESSION_OPEN_FAILED', message: String(e?.message || e || 'CloudTMS could not open the Banking Pay workbench session.'), details: { reason: String(e?.message || e || '') }, rpc_error: e, original_error: e });
+      const diagnosticStage = e?.__banking_workbench_open_stage || lastDiagnosticStage || 'WORKBENCH_SESSION_OPEN_UNKNOWN';
+      const diagnosticRpc = e?.__banking_workbench_open_rpc || lastDiagnosticRpc || null;
+      if (!e?.__banking_workbench_open_logged_final) {
+        try { if (e && typeof e === 'object') e.__banking_workbench_open_logged_final = true; } catch {}
+        logWorkbenchSessionOpenDiagnostic('error', diagnosticStage, 'Banking Pay workbench session open failed and is being returned as a friendly error.', {
+          rpc_name: diagnosticRpc,
+          error: e
+        });
+      }
+      return buildFriendlyFailure(500, {
+        code: 'BANKING_PAY_WORKBENCH_SESSION_OPEN_FAILED',
+        message: String(e?.message || e || 'CloudTMS could not open the Banking Pay workbench session.'),
+        details: {
+          reason: String(e?.message || e || ''),
+          diagnostic_trace_id: diagnosticTraceId,
+          diagnostic_stage: diagnosticStage,
+          diagnostic_rpc: diagnosticRpc
+        },
+        rpc_error: e,
+        original_error: e
+      }, {}, {
+        diagnostic_trace_id: diagnosticTraceId,
+        diagnostic_stage: diagnosticStage,
+        diagnostic_rpc: diagnosticRpc
+      });
     }
   };
 
