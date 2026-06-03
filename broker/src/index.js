@@ -38540,7 +38540,7 @@ async function handleBankingPayBatchGetSectionPage(env, req, user, payBatchId) {
         p_known_overview_version: knownVersions.known_overview_version ?? knownVersions.knownOverviewVersion ?? null,
         p_current_tab: 'OVERVIEW',
         p_current_section_json: safeObject(knownVersions.current_section_json || knownVersions.currentSectionJson || {})
-      }, { routeClass: 'OPERATION_PROGRESS', purpose: 'WATCH_SIGNAL', timeoutMs: 5000, bankingPay: true }), 'banking_pay_batch_watch_signal');
+      }, { routeClass: 'WATCH_SIGNAL', purpose: 'WATCH_SIGNAL', timeoutMs: 5000, bankingPay: true }), 'banking_pay_batch_watch_signal');
       return Object.keys(signal).length ? signal : null;
     } catch { return null; }
   };
@@ -38626,7 +38626,22 @@ async function handleBankingPayBatchGetSectionPage(env, req, user, payBatchId) {
 
   const url = new URL(req.url);
   if (typeof withBankingPaySingleFlight === 'function') {
-    return withBankingPaySingleFlight({ actorUserId, routeClass: 'OVERVIEW_SECTION', purpose: 'OVERVIEW', payBatchId: id, section: body.section || url.searchParams.get('section') || 'overview_items', cursor: body.cursor_json || body.cursor || url.searchParams.get('cursor') || null }, execute);
+    const singleFlightSection = trimText(body.section || url.searchParams.get('section') || 'overview_items').toLowerCase();
+    const singleFlightPurposeRaw = upperText(body.purpose || body.purpose_text || body.purposeText || url.searchParams.get('purpose') || url.searchParams.get('p_purpose') || 'OVERVIEW');
+    const singleFlightPurpose = singleFlightPurposeRaw === 'OVERVIEW' || singleFlightSection === 'overview_items' ? 'OVERVIEW' : singleFlightPurposeRaw;
+    const singleFlightRouteClass = singleFlightPurpose === 'OVERVIEW' ? 'OVERVIEW_SECTION' : 'EXPLICIT_DIAGNOSTIC';
+    const singleFlightLimitRaw = Number(body.limit ?? url.searchParams.get('limit') ?? 100);
+    const singleFlightLimit = Number.isFinite(singleFlightLimitRaw) ? Math.max(1, Math.min(singleFlightPurpose === 'OVERVIEW' ? 100 : 250, Math.trunc(singleFlightLimitRaw))) : 100;
+    const singleFlightCursor = body.cursor_json || body.cursorJson || body.cursor || url.searchParams.get('cursor') || null;
+    return withBankingPaySingleFlight({
+      actorUserId,
+      routeClass: singleFlightRouteClass,
+      purpose: singleFlightPurpose,
+      payBatchId: id,
+      section: singleFlightSection,
+      cursor: singleFlightCursor,
+      limit: singleFlightLimit
+    }, execute);
   }
   return execute();
 }
