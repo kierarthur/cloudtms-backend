@@ -41914,17 +41914,11 @@ DROP FUNCTION IF EXISTS public.pay_preview_candidate_build_timesheet_snapshots(j
 DROP FUNCTION IF EXISTS public.pay_preview_candidate_build_timesheet_snapshots(jsonb, uuid);
 
 
-CREATE OR REPLACE FUNCTION public.pay_preview_candidate_build_timesheet_snapshots(
-  p_context_json jsonb,
-  p_candidate_id uuid,
-  p_cursor_json jsonb DEFAULT NULL::jsonb,
-  p_limit integer DEFAULT 100,
-  p_mode text DEFAULT 'PAGE'::text
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
+CREATE OR REPLACE FUNCTION public.pay_preview_candidate_build_timesheet_snapshots(p_context_json jsonb, p_candidate_id uuid, p_cursor_json jsonb DEFAULT NULL::jsonb, p_limit integer DEFAULT 100, p_mode text DEFAULT 'PAGE'::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
 AS $function$
 DECLARE
   v_now timestamptz := now();
@@ -42343,7 +42337,7 @@ BEGIN
           v_now,
           v_now
         FROM selected_rows
-        ON CONFLICT (session_id, candidate_id, timesheet_id, line_key)
+        ON CONFLICT (session_id, candidate_id, (COALESCE(timesheet_id, '00000000-0000-0000-0000-000000000000'::uuid)), line_key)
         DO UPDATE
         SET line_ordinal = EXCLUDED.line_ordinal,
             work_payload_json = EXCLUDED.work_payload_json,
@@ -42435,7 +42429,7 @@ BEGIN
     'timesheet_snapshots_json', '[]'::jsonb
   );
 END;
-$function$;
+$function$
 
 
 DROP FUNCTION IF EXISTS public.pay_batch_insert_candidates_from_preview(uuid, uuid);
@@ -50943,6 +50937,10 @@ DECLARE
   v_current_preview_row_count integer := 0;
   v_current_selected_row_count integer := 0;
   v_current_section_counts_json jsonb := '{}'::jsonb;
+  v_pending_job_ids_json jsonb := '[]'::jsonb;
+  v_recent_jobs_json jsonb := '[]'::jsonb;
+  v_pending_candidate_jobs_json jsonb := '[]'::jsonb;
+  v_candidate_status_rows_json jsonb := '[]'::jsonb;
 BEGIN
   IF p_session_id IS NULL THEN
     RAISE EXCEPTION 'session_id is required';
@@ -51005,16 +51003,128 @@ BEGIN
     0
   );
 
-  v_running_jobs := CASE
-    WHEN NULLIF(BTRIM(COALESCE(v_session_row.progress_json->>'running_jobs', '')), '') ~ '^[0-9]+$'
-      THEN NULLIF(BTRIM(COALESCE(v_session_row.progress_json->>'running_jobs', '')), '')::integer
-    ELSE 0
-  END;
-  v_queued_jobs := CASE
-    WHEN NULLIF(BTRIM(COALESCE(v_session_row.progress_json->>'queued_jobs', '')), '') ~ '^[0-9]+$'
-      THEN NULLIF(BTRIM(COALESCE(v_session_row.progress_json->>'queued_jobs', '')), '')::integer
-    ELSE 0
-  END;
+  SELECT
+    COUNT(*) FILTER (
+      WHERE UPPER(BTRIM(COALESCE(workbench_job.status, ''))) IN ('RUNNING', 'PROCESSING', 'IN_PROGRESS', 'CLAIMED')
+        AND workbench_job.completed_at_utc IS NULL
+        AND workbench_job.failed_at_utc IS NULL
+    )::integer,
+    COUNT(*) FILTER (
+      WHERE UPPER(BTRIM(COALESCE(workbench_job.status, ''))) IN ('QUEUED', 'PENDING', 'RETRY', 'WAITING_RETRY', 'SCHEDULED', 'RUNNABLE')
+        AND workbench_job.completed_at_utc IS NULL
+        AND workbench_job.failed_at_utc IS NULL
+    )::integer
+  INTO v_running_jobs,
+       v_queued_jobs
+  FROM public.banking_pay_workbench_jobs AS workbench_job
+  WHERE workbench_job.session_id = p_session_id;
+
+  SELECT COALESCE(jsonb_agg(active_job.job_id ORDER BY active_job.priority DESC NULLS LAST, active_job.run_at_utc ASC NULLS FIRST, active_job.created_at_utc ASC NULLS FIRST), '[]'::jsonb)
+  INTO v_pending_job_ids_json
+  FROM (
+    SELECT
+      workbench_job.id::text AS job_id,
+      workbench_job.priority,
+      workbench_job.run_at_utc,
+      workbench_job.created_at_utc
+    FROM public.banking_pay_workbench_jobs AS workbench_job
+    WHERE workbench_job.session_id = p_session_id
+      AND workbench_job.completed_at_utc IS NULL
+      AND workbench_job.failed_at_utc IS NULL
+      AND UPPER(BTRIM(COALESCE(workbench_job.status, ''))) IN ('QUEUED', 'PENDING', 'RETRY', 'WAITING_RETRY', 'SCHEDULED', 'RUNNABLE', 'RUNNING', 'PROCESSING', 'IN_PROGRESS', 'CLAIMED')
+    ORDER BY workbench_job.priority DESC NULLS LAST,
+             workbench_job.run_at_utc ASC NULLS FIRST,
+             workbench_job.created_at_utc ASC NULLS FIRST,
+             workbench_job.id ASC
+    LIMIT 25
+  ) AS active_job;
+
+  SELECT COALESCE(jsonb_agg(
+    jsonb_build_object(
+      'job_id', recent_job.id::text,
+      'job_type', recent_job.job_type,
+      'status', recent_job.status,
+      'candidate_id', CASE WHEN recent_job.candidate_id IS NULL THEN NULL ELSE recent_job.candidate_id::text END,
+      'attempt_count', COALESCE(recent_job.attempt_count, 0),
+      'max_attempts', COALESCE(recent_job.max_attempts, 0),
+      'run_at_utc', recent_job.run_at_utc,
+      'started_at_utc', recent_job.started_at_utc,
+      'completed_at_utc', recent_job.completed_at_utc,
+      'failed_at_utc', recent_job.failed_at_utc,
+      'last_error_json', COALESCE(recent_job.last_error_json, '{}'::jsonb),
+      'updated_at_utc', recent_job.updated_at_utc
+    )
+    ORDER BY recent_job.updated_at_utc DESC NULLS LAST, recent_job.created_at_utc DESC NULLS LAST, recent_job.id DESC
+  ), '[]'::jsonb)
+  INTO v_recent_jobs_json
+  FROM (
+    SELECT workbench_job.*
+    FROM public.banking_pay_workbench_jobs AS workbench_job
+    WHERE workbench_job.session_id = p_session_id
+    ORDER BY workbench_job.updated_at_utc DESC NULLS LAST,
+             workbench_job.created_at_utc DESC NULLS LAST,
+             workbench_job.id DESC
+    LIMIT 25
+  ) AS recent_job;
+
+  SELECT COALESCE(jsonb_agg(
+    jsonb_build_object(
+      'candidate_id', pending_job.candidate_id::text,
+      'pending_job_id', pending_job.id::text,
+      'latest_job_id', pending_job.id::text,
+      'latest_job_type', pending_job.job_type,
+      'latest_job_status', pending_job.status,
+      'job_status', pending_job.status,
+      'latest_job_attempt_count', COALESCE(pending_job.attempt_count, 0),
+      'latest_job_max_attempts', COALESCE(pending_job.max_attempts, 0),
+      'latest_job_last_error_json', COALESCE(pending_job.last_error_json, '{}'::jsonb)
+    )
+    ORDER BY pending_job.priority DESC NULLS LAST, pending_job.run_at_utc ASC NULLS FIRST, pending_job.created_at_utc ASC NULLS FIRST, pending_job.id ASC
+  ), '[]'::jsonb)
+  INTO v_pending_candidate_jobs_json
+  FROM (
+    SELECT workbench_job.*
+    FROM public.banking_pay_workbench_jobs AS workbench_job
+    WHERE workbench_job.session_id = p_session_id
+      AND workbench_job.candidate_id IS NOT NULL
+      AND workbench_job.completed_at_utc IS NULL
+      AND workbench_job.failed_at_utc IS NULL
+      AND UPPER(BTRIM(COALESCE(workbench_job.status, ''))) IN ('QUEUED', 'PENDING', 'RETRY', 'WAITING_RETRY', 'SCHEDULED', 'RUNNABLE', 'RUNNING', 'PROCESSING', 'IN_PROGRESS', 'CLAIMED')
+    ORDER BY workbench_job.priority DESC NULLS LAST,
+             workbench_job.run_at_utc ASC NULLS FIRST,
+             workbench_job.created_at_utc ASC NULLS FIRST,
+             workbench_job.id ASC
+    LIMIT 25
+  ) AS pending_job;
+
+  SELECT COALESCE(jsonb_agg(
+    jsonb_build_object(
+      'candidate_id', session_scope.candidate_id::text,
+      'status', session_scope.status,
+      'candidate_status', session_scope.status,
+      'pending_job_id', CASE WHEN session_scope.pending_job_id IS NULL THEN NULL ELSE session_scope.pending_job_id::text END,
+      'latest_job_id', CASE WHEN workbench_job.id IS NULL THEN NULL ELSE workbench_job.id::text END,
+      'latest_job_type', workbench_job.job_type,
+      'latest_job_status', workbench_job.status,
+      'job_status', workbench_job.status,
+      'latest_job_attempt_count', COALESCE(workbench_job.attempt_count, 0),
+      'latest_job_max_attempts', COALESCE(workbench_job.max_attempts, 0),
+      'latest_job_last_error_json', COALESCE(workbench_job.last_error_json, '{}'::jsonb),
+      'error_json', session_scope.error_json
+    )
+    ORDER BY session_scope.scope_ordinal ASC NULLS LAST, session_scope.candidate_id ASC
+  ), '[]'::jsonb)
+  INTO v_candidate_status_rows_json
+  FROM (
+    SELECT scope_row.*
+    FROM public.banking_pay_workbench_session_scope AS scope_row
+    WHERE scope_row.session_id = p_session_id
+    ORDER BY scope_row.scope_ordinal ASC NULLS LAST,
+             scope_row.candidate_id ASC
+    LIMIT 25
+  ) AS session_scope
+  LEFT JOIN public.banking_pay_workbench_jobs AS workbench_job
+    ON workbench_job.id = session_scope.pending_job_id;
 
   SELECT COUNT(*)::integer,
          COUNT(*) FILTER (WHERE COALESCE(current_preview_row.selected, false) = true)::integer
@@ -51097,7 +51207,9 @@ BEGIN
     'ready_count', COALESCE(v_session_row.scope_ready_count, 0),
     'completed_count', COALESCE(v_session_row.scope_ready_count, 0),
     'pending_count', COALESCE(v_session_row.scope_pending_count, 0),
-    'failed_count', COALESCE(v_session_row.scope_failed_count, 0),
+    'failed_count', COALESCE(v_session_row.scope_failed_count, 0)
+  )
+  || jsonb_build_object(
     'line_units_total', COALESCE(v_session_row.line_units_total, 0),
     'line_units_complete', COALESCE(v_line_units_complete, 0),
     'line_units_pending', COALESCE(v_session_row.line_units_pending, 0),
@@ -51108,12 +51220,22 @@ BEGIN
     'section_counts', COALESCE(v_current_section_counts_json, '{}'::jsonb),
     'running_jobs', COALESCE(v_running_jobs, 0),
     'queued_jobs', COALESCE(v_queued_jobs, 0),
-    'progress', COALESCE(v_session_row.progress_json, '{}'::jsonb),
+    'pending_job_ids', COALESCE(v_pending_job_ids_json, '[]'::jsonb),
+    'recent_jobs', COALESCE(v_recent_jobs_json, '[]'::jsonb),
+    'pending_candidate_jobs', COALESCE(v_pending_candidate_jobs_json, '[]'::jsonb),
+    'candidate_status_rows', COALESCE(v_candidate_status_rows_json, '[]'::jsonb),
+    'candidate_statuses', COALESCE(v_candidate_status_rows_json, '[]'::jsonb)
+  )
+  || jsonb_build_object(
+    'progress', COALESCE(v_session_row.progress_json, '{}'::jsonb) || jsonb_build_object(
+      'running_jobs', COALESCE(v_running_jobs, 0),
+      'queued_jobs', COALESCE(v_queued_jobs, 0)
+    ),
     'samples', jsonb_build_object(
       'scope', COALESCE(v_session_row.candidate_sample_rows_json, '[]'::jsonb),
-      'pending_candidates', '[]'::jsonb,
+      'pending_candidates', COALESCE(v_candidate_status_rows_json, '[]'::jsonb),
       'failed_candidates', '[]'::jsonb,
-      'recent_jobs', '[]'::jsonb
+      'recent_jobs', COALESCE(v_recent_jobs_json, '[]'::jsonb)
     )
   );
 END;
