@@ -24771,7 +24771,7 @@ async function claimAndAdvanceOneBankingPayOperation(env, opts = {}) {
   };
 
   if (!env) throw new Error('claimAndAdvanceOneBankingPayOperation: env is required');
-  if (typeof advanceBankingPayExecuteOperation !== 'function') throw new Error('claimAndAdvanceOneBankingPayOperation: advanceBankingPayExecuteOperation is required');
+  if (typeof advanceBankingPayOperation !== 'function') throw new Error('claimAndAdvanceOneBankingPayOperation: advanceBankingPayOperation is required');
 
   const actorUserId = firstText(opts.actorUserId, opts.actor_user_id, opts.actorId, opts.actor_id, env && env.PAY_ACTOR_USER_ID, env && env.INVOICE_ACTOR_USER_ID, env && env.TSFIN_ACTOR_USER_ID);
   if (!actorUserId) throw new Error('BANKING_PAY_OPERATION_WORKER_ACTOR_USER_ID_MISSING');
@@ -24807,41 +24807,6 @@ async function claimAndAdvanceOneBankingPayOperation(env, opts = {}) {
 
   const claimedOperationId = firstText(claim.operation_id, claim.id, operationId);
   const operationType = upperText(claim.operation_type || claim.operationType);
-  if (!['PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS'].includes(operationType)) {
-    let releasePayload = {};
-    try {
-      releasePayload = unwrapRpcPayload(await sbRpc(env, 'banking_pay_operation_release_lease', {
-        p_operation_id: claimedOperationId,
-        p_lease_owner: lockOwner,
-        p_release_state: 'MORE_WORK',
-        p_run_after_delay_seconds: 60,
-        p_progress_patch_json: {
-          source,
-          skipped_by_banking_pay_worker: true,
-          operation_type: operationType,
-          last_message: 'Operation type is not handled by the Banking Pay execution worker.'
-        },
-        p_resume_reason: 'OPERATION_TYPE_NOT_HANDLED_BY_BANKING_PAY_WORKER',
-        p_actor_user_id: actorUserId
-      }, {
-        routeClass: 'OPERATION_PROGRESS_SAVE',
-        purpose: 'BANKING_PAY_OPERATION_RELEASE_SKIPPED',
-        timeoutMs: 10000
-      }), 'banking_pay_operation_release_lease');
-    } catch (releaseError) {
-      releasePayload = { ok: false, error: compactError(releaseError) };
-    }
-    return {
-      ok: true,
-      claimed: true,
-      advanced: false,
-      skipped: true,
-      reason: 'OPERATION_TYPE_NOT_EXECUTION_RUNNER',
-      operation_id: claimedOperationId,
-      release: releasePayload,
-      operation: publicPayload(claim)
-    };
-  }
 
   let advancedPayload = null;
   let releasePayload = null;
@@ -24850,11 +24815,13 @@ async function claimAndAdvanceOneBankingPayOperation(env, opts = {}) {
   let advanceError = null;
 
   try {
-    advancedPayload = await advanceBankingPayExecuteOperation(env, claim, { id: actorUserId }, {
+    advancedPayload = await advanceBankingPayOperation(env, claim, { id: actorUserId }, {
       req: opts.req || null,
       lockOwner,
       backendRunner: true,
       source,
+      operationType,
+      operation_type: operationType,
       maxPhaseUnits: 1,
       max_phase_units: 1,
       maxChunksPerCall: 1,
@@ -24873,6 +24840,7 @@ async function claimAndAdvanceOneBankingPayOperation(env, opts = {}) {
   const progressPatch = compactProgressPatch(publicAdvanced, {
     source,
     lock_owner: lockOwner,
+    operation_type: operationType,
     last_worker_advanced_at_utc: new Date().toISOString(),
     bounded_phase_unit: true,
     release_state: releaseState
