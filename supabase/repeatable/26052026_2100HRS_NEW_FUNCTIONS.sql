@@ -22606,9 +22606,15 @@ $function$;
 
 
 
+DROP FUNCTION IF EXISTS public.pay_workbench_claim_due_jobs(integer, timestamptz);
+DROP FUNCTION IF EXISTS public.pay_workbench_claim_due_jobs(integer, timestamptz, uuid, uuid, jsonb);
+
 CREATE OR REPLACE FUNCTION public.pay_workbench_claim_due_jobs(
   p_limit integer DEFAULT 25,
-  p_now_utc timestamptz DEFAULT NULL::timestamptz
+  p_now_utc timestamptz DEFAULT NULL::timestamptz,
+  p_session_id uuid DEFAULT NULL::uuid,
+  p_candidate_id uuid DEFAULT NULL::uuid,
+  p_allowed_job_types text[] DEFAULT NULL::text[]
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -22646,7 +22652,41 @@ DECLARE
   v_stale_completed_equivalent_id uuid := NULL::uuid;
   v_stale_obsolete boolean := false;
   v_stale_obsolete_reason text := NULL;
+  v_allowed_job_types text[] := NULL::text[];
 BEGIN
+  IF p_allowed_job_types IS NOT NULL THEN
+    SELECT ARRAY(
+      SELECT DISTINCT normalised_allowed.job_type
+      FROM (
+        SELECT
+          CASE
+            WHEN normalised_raw.raw_value_text IN ('WORKBENCH_SESSION_SCOPE_SEED', 'SESSION_SCOPE_SEED', 'WORKBENCH_SCOPE_SEED', 'WORKBENCH_SCOPE_SEED_PAGE', 'SCOPE_SEED_PAGE')
+              THEN 'WORKBENCH_SESSION_SCOPE_SEED'
+            WHEN normalised_raw.raw_value_text IN ('WORKBENCH_CANDIDATE_LINE_WORK_SEED', 'WORKBENCH_CANDIDATE_LINE_WORK_SEED_PAGE', 'CANDIDATE_LINE_WORK_SEED', 'CANDIDATE_LINE_WORK_SEED_PAGE', 'LINE_WORK_SEED_PAGE', 'SNAPSHOT_CANDIDATE_REFRESH', 'CANDIDATE_REFRESH')
+              THEN 'WORKBENCH_CANDIDATE_LINE_WORK_SEED'
+            WHEN normalised_raw.raw_value_text IN ('WORKBENCH_CANDIDATE_LINE_WORK_PROCESS', 'WORKBENCH_CANDIDATE_LINE_WORK_PROCESS_CHUNK', 'CANDIDATE_LINE_WORK_PROCESS', 'CANDIDATE_LINE_WORK_PROCESS_CHUNK', 'LINE_WORK_PROCESS', 'LINE_WORK_PROCESS_CHUNK')
+              THEN 'WORKBENCH_CANDIDATE_LINE_WORK_PROCESS'
+            WHEN normalised_raw.raw_value_text IN ('WORKBENCH_PREVIEW_ROWS_MATERIALISE', 'WORKBENCH_PREVIEW_ROWS_MATERIALIZE', 'WORKBENCH_PREVIEW_ROWS_MATERIALISE_CHUNK', 'WORKBENCH_PREVIEW_ROWS_MATERIALIZE_CHUNK', 'PREVIEW_ROWS_MATERIALISE', 'PREVIEW_ROWS_MATERIALIZE', 'PREVIEW_ROWS_MATERIALISE_CHUNK', 'PREVIEW_ROWS_MATERIALIZE_CHUNK', 'PREVIEW_ROW_MATERIALISE_CHUNK', 'PREVIEW_ROW_MATERIALIZE_CHUNK')
+              THEN 'WORKBENCH_PREVIEW_ROWS_MATERIALISE'
+            ELSE normalised_raw.raw_value_text
+          END AS job_type
+        FROM unnest(p_allowed_job_types) AS allowed_job_type(raw_value)
+        CROSS JOIN LATERAL (
+          SELECT UPPER(BTRIM(COALESCE(allowed_job_type.raw_value, ''))) AS raw_value_text
+        ) AS normalised_raw
+        WHERE normalised_raw.raw_value_text <> ''
+      ) AS normalised_allowed
+      WHERE normalised_allowed.job_type <> ''
+      ORDER BY normalised_allowed.job_type
+    )
+    INTO v_allowed_job_types;
+
+    IF COALESCE(array_length(v_allowed_job_types, 1), 0) = 0 THEN
+      v_allowed_job_types := ARRAY[]::text[];
+    END IF;
+  ELSE
+    v_allowed_job_types := NULL::text[];
+  END IF;
   FOR v_stale_row IN
     WITH stale_candidates AS (
       SELECT
@@ -22676,7 +22716,57 @@ BEGIN
         ) AS last_activity_utc
       FROM public.banking_pay_workbench_jobs AS stale_job
       WHERE stale_job.status = 'RUNNING'
-        AND stale_job.job_type IN ('SNAPSHOT_CANDIDATE_REFRESH', 'SESSION_CANDIDATE_RECOMPUTE', 'PAYEE_READINESS_ENSURE')
+        AND UPPER(BTRIM(COALESCE(stale_job.job_type, ''))) IN (
+          'SNAPSHOT_CANDIDATE_REFRESH',
+          'CANDIDATE_REFRESH',
+          'SESSION_CANDIDATE_RECOMPUTE',
+          'PAYEE_READINESS_ENSURE',
+          'WORKBENCH_SESSION_SCOPE_SEED',
+          'SESSION_SCOPE_SEED',
+          'WORKBENCH_SCOPE_SEED',
+          'WORKBENCH_SCOPE_SEED_PAGE',
+          'SCOPE_SEED_PAGE',
+          'WORKBENCH_CANDIDATE_LINE_WORK_SEED',
+          'CANDIDATE_LINE_WORK_SEED',
+          'WORKBENCH_CANDIDATE_LINE_WORK_SEED_PAGE',
+          'CANDIDATE_LINE_WORK_SEED_PAGE',
+          'LINE_WORK_SEED_PAGE',
+          'WORKBENCH_CANDIDATE_LINE_WORK_PROCESS',
+          'CANDIDATE_LINE_WORK_PROCESS',
+          'WORKBENCH_CANDIDATE_LINE_WORK_PROCESS_CHUNK',
+          'CANDIDATE_LINE_WORK_PROCESS_CHUNK',
+          'LINE_WORK_PROCESS',
+          'LINE_WORK_PROCESS_CHUNK',
+          'WORKBENCH_PREVIEW_ROWS_MATERIALISE',
+          'WORKBENCH_PREVIEW_ROWS_MATERIALIZE',
+          'WORKBENCH_PREVIEW_ROWS_MATERIALISE_CHUNK',
+          'WORKBENCH_PREVIEW_ROWS_MATERIALIZE_CHUNK',
+          'PREVIEW_ROWS_MATERIALISE',
+          'PREVIEW_ROWS_MATERIALIZE',
+          'PREVIEW_ROWS_MATERIALISE_CHUNK',
+          'PREVIEW_ROWS_MATERIALIZE_CHUNK',
+          'PREVIEW_ROW_MATERIALISE_CHUNK',
+          'PREVIEW_ROW_MATERIALIZE_CHUNK'
+        )
+        AND (p_session_id IS NULL OR stale_job.session_id = p_session_id)
+        AND (p_candidate_id IS NULL OR stale_job.candidate_id = p_candidate_id)
+        AND (
+          v_allowed_job_types IS NULL
+          OR UPPER(BTRIM(COALESCE(stale_job.job_type, ''))) = ANY(v_allowed_job_types)
+          OR (
+            CASE
+              WHEN UPPER(BTRIM(COALESCE(stale_job.job_type, ''))) IN ('WORKBENCH_SESSION_SCOPE_SEED', 'SESSION_SCOPE_SEED', 'WORKBENCH_SCOPE_SEED', 'WORKBENCH_SCOPE_SEED_PAGE', 'SCOPE_SEED_PAGE')
+                THEN 'WORKBENCH_SESSION_SCOPE_SEED'
+              WHEN UPPER(BTRIM(COALESCE(stale_job.job_type, ''))) IN ('WORKBENCH_CANDIDATE_LINE_WORK_SEED', 'WORKBENCH_CANDIDATE_LINE_WORK_SEED_PAGE', 'CANDIDATE_LINE_WORK_SEED', 'CANDIDATE_LINE_WORK_SEED_PAGE', 'LINE_WORK_SEED_PAGE', 'SNAPSHOT_CANDIDATE_REFRESH', 'CANDIDATE_REFRESH')
+                THEN 'WORKBENCH_CANDIDATE_LINE_WORK_SEED'
+              WHEN UPPER(BTRIM(COALESCE(stale_job.job_type, ''))) IN ('WORKBENCH_CANDIDATE_LINE_WORK_PROCESS', 'WORKBENCH_CANDIDATE_LINE_WORK_PROCESS_CHUNK', 'CANDIDATE_LINE_WORK_PROCESS', 'CANDIDATE_LINE_WORK_PROCESS_CHUNK', 'LINE_WORK_PROCESS', 'LINE_WORK_PROCESS_CHUNK')
+                THEN 'WORKBENCH_CANDIDATE_LINE_WORK_PROCESS'
+              WHEN UPPER(BTRIM(COALESCE(stale_job.job_type, ''))) IN ('WORKBENCH_PREVIEW_ROWS_MATERIALISE', 'WORKBENCH_PREVIEW_ROWS_MATERIALIZE', 'WORKBENCH_PREVIEW_ROWS_MATERIALISE_CHUNK', 'WORKBENCH_PREVIEW_ROWS_MATERIALIZE_CHUNK', 'PREVIEW_ROWS_MATERIALISE', 'PREVIEW_ROWS_MATERIALIZE', 'PREVIEW_ROWS_MATERIALISE_CHUNK', 'PREVIEW_ROWS_MATERIALIZE_CHUNK', 'PREVIEW_ROW_MATERIALISE_CHUNK', 'PREVIEW_ROW_MATERIALIZE_CHUNK')
+                THEN 'WORKBENCH_PREVIEW_ROWS_MATERIALISE'
+              ELSE UPPER(BTRIM(COALESCE(stale_job.job_type, '')))
+            END
+          ) = ANY(v_allowed_job_types)
+        )
         AND stale_job.completed_at_utc IS NULL
         AND stale_job.failed_at_utc IS NULL
         AND COALESCE(
@@ -22750,7 +22840,7 @@ BEGIN
     v_stale_obsolete := false;
     v_stale_obsolete_reason := NULL;
 
-    IF v_stale_row.job_type = 'SNAPSHOT_CANDIDATE_REFRESH' THEN
+    IF UPPER(BTRIM(COALESCE(v_stale_row.job_type, ''))) = 'SNAPSHOT_CANDIDATE_REFRESH' THEN
       IF v_stale_row.snapshot_run_id IS NULL OR v_stale_row.candidate_id IS NULL THEN
         v_stale_obsolete := true;
         v_stale_obsolete_reason := 'INVALID_SNAPSHOT_CONTEXT';
@@ -22808,7 +22898,7 @@ BEGIN
           v_stale_obsolete_reason := 'SNAPSHOT_ALREADY_CURRENT';
         END IF;
       END IF;
-    ELSIF v_stale_row.job_type = 'SESSION_CANDIDATE_RECOMPUTE' THEN
+    ELSIF UPPER(BTRIM(COALESCE(v_stale_row.job_type, ''))) = 'SESSION_CANDIDATE_RECOMPUTE' THEN
       IF v_stale_row.session_id IS NULL OR v_stale_row.candidate_id IS NULL THEN
         v_stale_obsolete := true;
         v_stale_obsolete_reason := 'INVALID_SESSION_CONTEXT';
@@ -22898,7 +22988,7 @@ BEGIN
           END IF;
         END IF;
       END IF;
-    ELSIF v_stale_row.job_type = 'PAYEE_READINESS_ENSURE' THEN
+    ELSIF UPPER(BTRIM(COALESCE(v_stale_row.job_type, ''))) = 'PAYEE_READINESS_ENSURE' THEN
       IF v_stale_row.candidate_id IS NULL THEN
         v_stale_obsolete := true;
         v_stale_obsolete_reason := 'INVALID_READINESS_CONTEXT';
@@ -22962,6 +23052,38 @@ BEGIN
           END IF;
         END IF;
       END IF;
+    ELSIF (
+      CASE
+        WHEN UPPER(BTRIM(COALESCE(v_stale_row.job_type, ''))) IN ('WORKBENCH_SESSION_SCOPE_SEED', 'SESSION_SCOPE_SEED', 'WORKBENCH_SCOPE_SEED', 'WORKBENCH_SCOPE_SEED_PAGE', 'SCOPE_SEED_PAGE')
+          THEN 'WORKBENCH_SESSION_SCOPE_SEED'
+        WHEN UPPER(BTRIM(COALESCE(v_stale_row.job_type, ''))) IN ('WORKBENCH_CANDIDATE_LINE_WORK_SEED', 'WORKBENCH_CANDIDATE_LINE_WORK_SEED_PAGE', 'CANDIDATE_LINE_WORK_SEED', 'CANDIDATE_LINE_WORK_SEED_PAGE', 'LINE_WORK_SEED_PAGE', 'SNAPSHOT_CANDIDATE_REFRESH', 'CANDIDATE_REFRESH')
+          THEN 'WORKBENCH_CANDIDATE_LINE_WORK_SEED'
+        WHEN UPPER(BTRIM(COALESCE(v_stale_row.job_type, ''))) IN ('WORKBENCH_CANDIDATE_LINE_WORK_PROCESS', 'WORKBENCH_CANDIDATE_LINE_WORK_PROCESS_CHUNK', 'CANDIDATE_LINE_WORK_PROCESS', 'CANDIDATE_LINE_WORK_PROCESS_CHUNK', 'LINE_WORK_PROCESS', 'LINE_WORK_PROCESS_CHUNK')
+          THEN 'WORKBENCH_CANDIDATE_LINE_WORK_PROCESS'
+        WHEN UPPER(BTRIM(COALESCE(v_stale_row.job_type, ''))) IN ('WORKBENCH_PREVIEW_ROWS_MATERIALISE', 'WORKBENCH_PREVIEW_ROWS_MATERIALIZE', 'WORKBENCH_PREVIEW_ROWS_MATERIALISE_CHUNK', 'WORKBENCH_PREVIEW_ROWS_MATERIALIZE_CHUNK', 'PREVIEW_ROWS_MATERIALISE', 'PREVIEW_ROWS_MATERIALIZE', 'PREVIEW_ROWS_MATERIALISE_CHUNK', 'PREVIEW_ROWS_MATERIALIZE_CHUNK', 'PREVIEW_ROW_MATERIALISE_CHUNK', 'PREVIEW_ROW_MATERIALIZE_CHUNK')
+          THEN 'WORKBENCH_PREVIEW_ROWS_MATERIALISE'
+        ELSE UPPER(BTRIM(COALESCE(v_stale_row.job_type, '')))
+      END
+    ) IN ('WORKBENCH_SESSION_SCOPE_SEED', 'WORKBENCH_CANDIDATE_LINE_WORK_SEED', 'WORKBENCH_CANDIDATE_LINE_WORK_PROCESS', 'WORKBENCH_PREVIEW_ROWS_MATERIALISE') THEN
+      IF v_stale_row.session_id IS NULL THEN
+        v_stale_obsolete := true;
+        v_stale_obsolete_reason := 'INVALID_WORKBENCH_SESSION_CONTEXT';
+      ELSE
+        SELECT COALESCE(workbench_session.status, NULL), COALESCE(workbench_session.version, 0)
+        INTO v_stale_session_status, v_stale_session_version
+        FROM public.banking_pay_workbench_sessions AS workbench_session
+        WHERE workbench_session.id = v_stale_row.session_id
+        LIMIT 1;
+
+        IF v_stale_session_status IS NULL OR UPPER(COALESCE(v_stale_session_status, '')) <> 'OPEN' THEN
+          v_stale_obsolete := true;
+          v_stale_obsolete_reason := 'SESSION_NOT_OPEN';
+        ELSIF v_stale_job_session_version > 0 AND v_stale_session_version > v_stale_job_session_version THEN
+          v_stale_obsolete := true;
+          v_stale_obsolete_reason := 'SUPERSEDED_BY_NEWER_SESSION_VERSION';
+        END IF;
+      END IF;
+
     END IF;
 
     v_stale_before_json := jsonb_build_object(
@@ -23255,6 +23377,25 @@ BEGIN
       FROM public.banking_pay_workbench_jobs AS claim_job
       WHERE claim_job.status = 'QUEUED'
         AND claim_job.run_at_utc <= v_cutoff
+        AND (p_session_id IS NULL OR claim_job.session_id = p_session_id)
+        AND (p_candidate_id IS NULL OR claim_job.candidate_id = p_candidate_id)
+        AND (
+          v_allowed_job_types IS NULL
+          OR UPPER(BTRIM(COALESCE(claim_job.job_type, ''))) = ANY(v_allowed_job_types)
+          OR (
+            CASE
+              WHEN UPPER(BTRIM(COALESCE(claim_job.job_type, ''))) IN ('WORKBENCH_SESSION_SCOPE_SEED', 'SESSION_SCOPE_SEED', 'WORKBENCH_SCOPE_SEED', 'WORKBENCH_SCOPE_SEED_PAGE', 'SCOPE_SEED_PAGE')
+                THEN 'WORKBENCH_SESSION_SCOPE_SEED'
+              WHEN UPPER(BTRIM(COALESCE(claim_job.job_type, ''))) IN ('WORKBENCH_CANDIDATE_LINE_WORK_SEED', 'WORKBENCH_CANDIDATE_LINE_WORK_SEED_PAGE', 'CANDIDATE_LINE_WORK_SEED', 'CANDIDATE_LINE_WORK_SEED_PAGE', 'LINE_WORK_SEED_PAGE', 'SNAPSHOT_CANDIDATE_REFRESH', 'CANDIDATE_REFRESH')
+                THEN 'WORKBENCH_CANDIDATE_LINE_WORK_SEED'
+              WHEN UPPER(BTRIM(COALESCE(claim_job.job_type, ''))) IN ('WORKBENCH_CANDIDATE_LINE_WORK_PROCESS', 'WORKBENCH_CANDIDATE_LINE_WORK_PROCESS_CHUNK', 'CANDIDATE_LINE_WORK_PROCESS', 'CANDIDATE_LINE_WORK_PROCESS_CHUNK', 'LINE_WORK_PROCESS', 'LINE_WORK_PROCESS_CHUNK')
+                THEN 'WORKBENCH_CANDIDATE_LINE_WORK_PROCESS'
+              WHEN UPPER(BTRIM(COALESCE(claim_job.job_type, ''))) IN ('WORKBENCH_PREVIEW_ROWS_MATERIALISE', 'WORKBENCH_PREVIEW_ROWS_MATERIALIZE', 'WORKBENCH_PREVIEW_ROWS_MATERIALISE_CHUNK', 'WORKBENCH_PREVIEW_ROWS_MATERIALIZE_CHUNK', 'PREVIEW_ROWS_MATERIALISE', 'PREVIEW_ROWS_MATERIALIZE', 'PREVIEW_ROWS_MATERIALISE_CHUNK', 'PREVIEW_ROWS_MATERIALIZE_CHUNK', 'PREVIEW_ROW_MATERIALISE_CHUNK', 'PREVIEW_ROW_MATERIALIZE_CHUNK')
+                THEN 'WORKBENCH_PREVIEW_ROWS_MATERIALISE'
+              ELSE UPPER(BTRIM(COALESCE(claim_job.job_type, '')))
+            END
+          ) = ANY(v_allowed_job_types)
+        )
       ORDER BY claim_job.priority ASC, claim_job.run_at_utc ASC, claim_job.created_at_utc ASC, claim_job.id ASC
       FOR UPDATE SKIP LOCKED
       LIMIT v_limit
@@ -23346,6 +23487,9 @@ BEGIN
     'stale_cutoff_utc', v_stale_cutoff,
     'stale_running_seconds', v_stale_running_seconds,
     'limit', v_limit,
+    'filtered_session_id', CASE WHEN p_session_id IS NULL THEN NULL ELSE p_session_id::text END,
+    'filtered_candidate_id', CASE WHEN p_candidate_id IS NULL THEN NULL ELSE p_candidate_id::text END,
+    'allowed_job_types', CASE WHEN v_allowed_job_types IS NULL THEN NULL ELSE to_jsonb(v_allowed_job_types) END,
     'recovered_stale_count', v_recovered_stale_count,
     'dead_stale_count', v_dead_stale_count,
     'claimed_count', v_claimed_count,
@@ -23355,6 +23499,8 @@ BEGIN
   );
 END;
 $function$;
+
+
 
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_complete_job(
@@ -42217,6 +42363,7 @@ DECLARE
   v_selected_delta integer := 0;
   v_deselected_delta integer := 0;
   v_updated_count integer := 0;
+  v_rejected_non_draftable_count integer := 0;
   v_audit_after_json jsonb := '{}'::jsonb;
 BEGIN
   IF p_session_id IS NULL THEN
@@ -42312,8 +42459,11 @@ BEGIN
       FROM public.banking_pay_workbench_preview_rows AS current_preview_row
       WHERE current_preview_row.session_id = p_session_id
         AND current_preview_row.session_version = v_session_row.version
-        AND UPPER(BTRIM(COALESCE(current_preview_row.status, ''))) = 'READY'
         AND (current_preview_row.id::text = selection_ids.supplied_id OR current_preview_row.row_key = selection_ids.supplied_id)
+        AND (
+          selection_ids.action = 'DESELECT'
+          OR UPPER(BTRIM(COALESCE(current_preview_row.status, ''))) = 'READY'
+        )
     );
 
   IF jsonb_array_length(COALESCE(v_stale_selection_ids, '[]'::jsonb)) > 0 THEN
@@ -42324,7 +42474,7 @@ BEGIN
               'session_id', p_session_id::text,
               'session_version', v_session_row.version,
               'rejected_preview_row_ids', COALESCE(v_stale_selection_ids, '[]'::jsonb),
-              'message', 'Selected preview rows are not part of the current ready workbench session version. Refresh the preview page and try again.'
+              'message', 'Selected preview rows are not part of the current workbench session version. Refresh the preview page and try again.'
             )::text;
   END IF;
 
@@ -42342,8 +42492,9 @@ BEGIN
     RAISE EXCEPTION 'selected preview row ids are not present in current session scope: %', v_missing_ids::text;
   END IF;
 
-  SELECT COALESCE(jsonb_agg(to_jsonb(matched_rows.preview_row_id) ORDER BY matched_rows.first_ordinality), '[]'::jsonb)
-  INTO v_non_draftable_ids
+  SELECT COALESCE(jsonb_agg(to_jsonb(matched_rows.preview_row_id) ORDER BY matched_rows.first_ordinality), '[]'::jsonb),
+         COUNT(*)::integer
+  INTO v_non_draftable_ids, v_rejected_non_draftable_count
   FROM (
     SELECT preview_row.id::text AS preview_row_id,
            selection_ids.first_ordinality
@@ -42353,11 +42504,48 @@ BEGIN
      AND preview_row.session_version = v_session_row.version
      AND UPPER(BTRIM(COALESCE(preview_row.status, ''))) = 'READY'
      AND (preview_row.id::text = selection_ids.supplied_id OR preview_row.row_key = selection_ids.supplied_id)
+    CROSS JOIN LATERAL (
+      SELECT public.pay_workbench_preview_line_contract_ok(
+        p_line_json => COALESCE(preview_row.row_json, '{}'::jsonb)
+          || jsonb_build_object(
+            'line_key', preview_row.row_key,
+            'row_key', preview_row.row_key,
+            'section', preview_row.section,
+            'target_section', preview_row.section,
+            'key_type', preview_row.key_type,
+            'key_value', preview_row.key_value
+          ),
+        p_economic_key_json => jsonb_build_object(
+          'key_type', preview_row.key_type,
+          'key_value', preview_row.key_value
+        ),
+        p_target_section => preview_row.section
+      ) AS contract_json
+    ) AS contract_check
     WHERE selection_ids.action = 'SELECT'
       AND (
-        LOWER(BTRIM(COALESCE(preview_row.row_json->>'draftable', preview_row.row_json->>'is_ready_for_draft', 'true'))) IN ('false', '0', 'no', 'n', 'off')
-        OR UPPER(BTRIM(COALESCE(preview_row.row_json->>'presentation_section', ''))) IN ('BLOCKED', 'BLOCKED_FOR_PAY', 'CASES_RESOLUTIONS', 'DO_NOT_PAY', 'SNOOZED')
-        OR LOWER(BTRIM(COALESCE(preview_row.row_json->>'is_excluded_from_allocation', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+        LOWER(BTRIM(COALESCE(contract_check.contract_json->>'ok', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
+        OR LOWER(BTRIM(COALESCE(contract_check.contract_json->>'materialisable', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
+        OR LOWER(BTRIM(COALESCE(contract_check.contract_json->>'selection_allowed', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
+        OR COALESCE(contract_check.contract_json->>'target_section', '') <> 'canonical_preview_lines'
+        OR UPPER(BTRIM(COALESCE(contract_check.contract_json->>'presentation_section', ''))) <> 'READY_TO_PAY'
+        OR LOWER(BTRIM(COALESCE(contract_check.contract_json->>'draftable', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
+        OR LOWER(BTRIM(COALESCE(contract_check.contract_json->>'is_ready_for_draft', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
+        OR COALESCE(contract_check.contract_json->>'key_type', '') = ''
+        OR COALESCE(contract_check.contract_json->>'key_value', '') = ''
+        OR (
+          UPPER(BTRIM(COALESCE(contract_check.contract_json->>'key_type', ''))) = 'TS_DAY'
+          AND COALESCE(contract_check.contract_json->>'key_value', '') !~ '^\d{4}-\d{2}-\d{2}$'
+        )
+        OR UPPER(BTRIM(COALESCE(contract_check.contract_json->>'source_kind', ''))) IN (
+          'TIMESHEET_SNAPSHOT',
+          'TIMESHEET_SNAPSHOT_EVIDENCE',
+          'RAW_TIMESHEET_SNAPSHOT',
+          'INTERNAL_ONLY',
+          'NO_DELTA',
+          'EXCLUDED'
+        )
+        OR preview_row.row_key LIKE 'timesheet_snapshot:%'
       )
   ) AS matched_rows;
 
@@ -42366,21 +42554,63 @@ BEGIN
            selection_ids.action,
            selection_ids.first_ordinality,
            COALESCE(preview_row.selected, false) AS was_selected,
-           NOT (
-             LOWER(BTRIM(COALESCE(preview_row.row_json->>'draftable', preview_row.row_json->>'is_ready_for_draft', 'true'))) IN ('false', '0', 'no', 'n', 'off')
-             OR UPPER(BTRIM(COALESCE(preview_row.row_json->>'presentation_section', ''))) IN ('BLOCKED', 'BLOCKED_FOR_PAY', 'CASES_RESOLUTIONS', 'DO_NOT_PAY', 'SNOOZED')
-             OR LOWER(BTRIM(COALESCE(preview_row.row_json->>'is_excluded_from_allocation', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
-           ) AS is_selectable
+           CASE
+             WHEN selection_ids.action = 'DESELECT' THEN false
+             ELSE LOWER(BTRIM(COALESCE(contract_check.contract_json->>'ok', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+               AND LOWER(BTRIM(COALESCE(contract_check.contract_json->>'materialisable', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+               AND LOWER(BTRIM(COALESCE(contract_check.contract_json->>'selection_allowed', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+               AND COALESCE(contract_check.contract_json->>'target_section', '') = 'canonical_preview_lines'
+               AND UPPER(BTRIM(COALESCE(contract_check.contract_json->>'presentation_section', ''))) = 'READY_TO_PAY'
+               AND LOWER(BTRIM(COALESCE(contract_check.contract_json->>'draftable', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+               AND LOWER(BTRIM(COALESCE(contract_check.contract_json->>'is_ready_for_draft', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+               AND COALESCE(contract_check.contract_json->>'key_type', '') <> ''
+               AND COALESCE(contract_check.contract_json->>'key_value', '') <> ''
+               AND (
+                 UPPER(BTRIM(COALESCE(contract_check.contract_json->>'key_type', ''))) <> 'TS_DAY'
+                 OR COALESCE(contract_check.contract_json->>'key_value', '') ~ '^\d{4}-\d{2}-\d{2}$'
+               )
+               AND UPPER(BTRIM(COALESCE(contract_check.contract_json->>'source_kind', ''))) NOT IN (
+                 'TIMESHEET_SNAPSHOT',
+                 'TIMESHEET_SNAPSHOT_EVIDENCE',
+                 'RAW_TIMESHEET_SNAPSHOT',
+                 'INTERNAL_ONLY',
+                 'NO_DELTA',
+                 'EXCLUDED'
+               )
+               AND preview_row.row_key NOT LIKE 'timesheet_snapshot:%'
+           END AS is_selectable
     FROM pg_temp._tmp_pay_wb_selection_ids AS selection_ids
     JOIN public.banking_pay_workbench_preview_rows AS preview_row
       ON preview_row.session_id = p_session_id
      AND preview_row.session_version = v_session_row.version
-     AND UPPER(BTRIM(COALESCE(preview_row.status, ''))) = 'READY'
      AND (preview_row.id::text = selection_ids.supplied_id OR preview_row.row_key = selection_ids.supplied_id)
+     AND (
+       selection_ids.action = 'DESELECT'
+       OR UPPER(BTRIM(COALESCE(preview_row.status, ''))) = 'READY'
+     )
+    CROSS JOIN LATERAL (
+      SELECT public.pay_workbench_preview_line_contract_ok(
+        p_line_json => COALESCE(preview_row.row_json, '{}'::jsonb)
+          || jsonb_build_object(
+            'line_key', preview_row.row_key,
+            'row_key', preview_row.row_key,
+            'section', preview_row.section,
+            'target_section', preview_row.section,
+            'key_type', preview_row.key_type,
+            'key_value', preview_row.key_value
+          ),
+        p_economic_key_json => jsonb_build_object(
+          'key_type', preview_row.key_type,
+          'key_value', preview_row.key_value
+        ),
+        p_target_section => preview_row.section
+      ) AS contract_json
+    ) AS contract_check
   ), updated_rows AS (
     UPDATE public.banking_pay_workbench_preview_rows AS preview_row
     SET selected = CASE
           WHEN matched_rows.action = 'SELECT' AND matched_rows.is_selectable THEN true
+          WHEN matched_rows.action = 'SELECT' AND matched_rows.is_selectable IS NOT TRUE THEN false
           WHEN matched_rows.action = 'DESELECT' THEN false
           ELSE preview_row.selected
         END,
@@ -42406,10 +42636,33 @@ BEGIN
   SELECT COUNT(*)::integer
   INTO v_current_selected_count
   FROM public.banking_pay_workbench_preview_rows AS selected_count_row
+  CROSS JOIN LATERAL (
+    SELECT public.pay_workbench_preview_line_contract_ok(
+      p_line_json => COALESCE(selected_count_row.row_json, '{}'::jsonb)
+        || jsonb_build_object(
+          'line_key', selected_count_row.row_key,
+          'row_key', selected_count_row.row_key,
+          'section', selected_count_row.section,
+          'target_section', selected_count_row.section,
+          'key_type', selected_count_row.key_type,
+          'key_value', selected_count_row.key_value
+        ),
+      p_economic_key_json => jsonb_build_object(
+        'key_type', selected_count_row.key_type,
+        'key_value', selected_count_row.key_value
+      ),
+      p_target_section => selected_count_row.section
+    ) AS contract_json
+  ) AS selected_contract
   WHERE selected_count_row.session_id = p_session_id
     AND selected_count_row.session_version = v_session_row.version
     AND UPPER(BTRIM(COALESCE(selected_count_row.status, ''))) = 'READY'
-    AND COALESCE(selected_count_row.selected, false) = true;
+    AND COALESCE(selected_count_row.selected, false) = true
+    AND UPPER(BTRIM(COALESCE(selected_count_row.selection_state, ''))) = 'SELECTED'
+    AND LOWER(BTRIM(COALESCE(selected_contract.contract_json->>'ok', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+    AND LOWER(BTRIM(COALESCE(selected_contract.contract_json->>'selection_allowed', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+    AND COALESCE(selected_contract.contract_json->>'target_section', '') = 'canonical_preview_lines'
+    AND UPPER(BTRIM(COALESCE(selected_contract.contract_json->>'presentation_section', ''))) = 'READY_TO_PAY';
 
   UPDATE public.banking_pay_workbench_sessions AS session_row
   SET selected_row_count = COALESCE(v_current_selected_count, 0),
@@ -42419,7 +42672,8 @@ BEGIN
         || jsonb_build_object(
           'last_selection_update_at_utc', v_now::text,
           'last_selection_selected_delta', COALESCE(v_selected_delta, 0),
-          'last_selection_deselected_delta', COALESCE(v_deselected_delta, 0)
+          'last_selection_deselected_delta', COALESCE(v_deselected_delta, 0),
+          'last_selection_rejected_non_draftable_count', COALESCE(v_rejected_non_draftable_count, 0)
         ),
       progress_counter_version = COALESCE(session_row.progress_counter_version, 0) + 1,
       progress_updated_at_utc = v_now,
@@ -42430,7 +42684,8 @@ BEGIN
     'id', p_session_id::text,
     'selected_preview_row_ids', COALESCE(v_selected_ids, '[]'::jsonb),
     'deselected_preview_row_ids', COALESCE(v_deselected_ids, '[]'::jsonb),
-    'dropped_non_draftable_preview_row_ids', COALESCE(v_non_draftable_ids, '[]'::jsonb),
+    'rejected_non_draftable_preview_row_ids', COALESCE(v_non_draftable_ids, '[]'::jsonb),
+    'rejected_non_draftable_preview_row_count', COALESCE(v_rejected_non_draftable_count, 0),
     'updated_preview_row_count', COALESCE(v_updated_count, 0),
     'selected_delta', COALESCE(v_selected_delta, 0),
     'deselected_delta', COALESCE(v_deselected_delta, 0),
@@ -42461,10 +42716,14 @@ BEGIN
     'deselected_delta', COALESCE(v_deselected_delta, 0),
     'updated_preview_row_count', COALESCE(v_updated_count, 0),
     'dropped_non_draftable_preview_row_ids', COALESCE(v_non_draftable_ids, '[]'::jsonb),
-    'selection_mode', 'ROW_PATCH_CAPPED'
+    'rejected_non_draftable_preview_row_ids', COALESCE(v_non_draftable_ids, '[]'::jsonb),
+    'rejected_non_draftable_preview_row_count', COALESCE(v_rejected_non_draftable_count, 0),
+    'selected_row_count', COALESCE(v_current_selected_count, 0),
+    'selection_mode', 'ROW_PATCH_CAPPED_CONTRACT_GUARDED'
   );
 END;
 $function$;
+
 
 
 
