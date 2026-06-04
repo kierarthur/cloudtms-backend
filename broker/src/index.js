@@ -140796,11 +140796,12 @@ async function bankingCronTick(env, opts = {}) {
   return summary;
 }
 
+
 async function executeBankingPayWorkbenchJob(env, claimedJob, opts = {}) {
   const trimStr = (value) => String(value == null ? '' : value).trim();
   const upperTrim = (value) => trimStr(value).toUpperCase();
   const isPlainObject = (value) => !!value && typeof value === 'object' && !Array.isArray(value);
-  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{12}$/i;
 
   const unwrapRpc = (rpcRes, key) => {
     let payload = rpcRes;
@@ -140825,6 +140826,15 @@ async function executeBankingPayWorkbenchJob(env, claimedJob, opts = {}) {
     const n = Number(value);
     const chosen = Number.isFinite(n) ? Math.trunc(n) : fallback;
     return Math.max(min, Math.min(max, chosen));
+  };
+
+  const boolish = (value, fallback = false) => {
+    if (value === true || value === false) return value;
+    const s = upperTrim(value);
+    if (!s) return fallback;
+    if (['TRUE', 'T', '1', 'YES', 'Y', 'ON'].includes(s)) return true;
+    if (['FALSE', 'F', '0', 'NO', 'N', 'OFF'].includes(s)) return false;
+    return fallback;
   };
 
   const makeJobError = (code, message, extra = {}) => {
@@ -140868,6 +140878,23 @@ async function executeBankingPayWorkbenchJob(env, claimedJob, opts = {}) {
     return out;
   };
 
+  const canonicalWorkbenchJobType = (value, context = {}) => {
+    const s = upperTrim(value);
+    if (!s) return '';
+    if (['WORKBENCH_SESSION_SCOPE_SEED', 'SESSION_SCOPE_SEED', 'WORKBENCH_SCOPE_SEED', 'WORKBENCH_SCOPE_SEED_PAGE', 'SCOPE_SEED_PAGE'].includes(s)) return 'WORKBENCH_SESSION_SCOPE_SEED';
+    if (['WORKBENCH_CANDIDATE_LINE_WORK_SEED', 'CANDIDATE_LINE_WORK_SEED', 'CANDIDATE_LINE_WORK_SEED_PAGE', 'LINE_WORK_SEED_PAGE'].includes(s)) return 'WORKBENCH_CANDIDATE_LINE_WORK_SEED';
+    if (['WORKBENCH_CANDIDATE_LINE_WORK_PROCESS', 'CANDIDATE_LINE_WORK_PROCESS', 'CANDIDATE_LINE_WORK_PROCESS_CHUNK', 'LINE_WORK_PROCESS', 'LINE_WORK_PROCESS_CHUNK'].includes(s)) return 'WORKBENCH_CANDIDATE_LINE_WORK_PROCESS';
+    if (['WORKBENCH_PREVIEW_ROWS_MATERIALISE', 'WORKBENCH_PREVIEW_ROWS_MATERIALIZE', 'PREVIEW_ROWS_MATERIALISE', 'PREVIEW_ROWS_MATERIALIZE', 'PREVIEW_ROWS_MATERIALISE_CHUNK', 'PREVIEW_ROWS_MATERIALIZE_CHUNK', 'PREVIEW_ROW_MATERIALISE_CHUNK', 'PREVIEW_ROW_MATERIALIZE_CHUNK'].includes(s)) return 'WORKBENCH_PREVIEW_ROWS_MATERIALISE';
+    if (['SNAPSHOT_CANDIDATE_REFRESH', 'CANDIDATE_REFRESH'].includes(s)) {
+      const contextPayload = isPlainObject(context.payload) ? context.payload : {};
+      const contextSessionId = trimStr(context.sessionId || contextPayload.session_id || contextPayload.source_session_id);
+      const lineWorkOnly = boolish(contextPayload.line_work_only, false) || boolish(contextPayload.line_work_required, false) || upperTrim(contextPayload.line_work_action) === 'SEED';
+      if (uuidRe.test(contextSessionId) && lineWorkOnly) return 'WORKBENCH_CANDIDATE_LINE_WORK_SEED';
+      return s;
+    }
+    return s;
+  };
+
   const rpc = async (name, args, key) => unwrapRpc(await sbRpc(env, name, args || {}, {
     routeClass: 'PREVIEW_CHUNK',
     purpose: 'WORKBENCH_JOB',
@@ -140876,20 +140903,28 @@ async function executeBankingPayWorkbenchJob(env, claimedJob, opts = {}) {
 
   const payload = isPlainObject(claimedJob && claimedJob.payload_json) ? claimedJob.payload_json : {};
   const jobId = trimStr(claimedJob && (claimedJob.job_id || claimedJob.id || payload.job_id));
-  const jobType = upperTrim(claimedJob && (claimedJob.job_type || payload.job_type));
+  const rawJobType = upperTrim(claimedJob && (claimedJob.job_type || payload.job_type));
   const snapshotRunId = trimStr(claimedJob && (claimedJob.snapshot_run_id || payload.snapshot_run_id));
-  const sessionId = trimStr(claimedJob && (claimedJob.session_id || payload.session_id));
+  const sessionId = trimStr(claimedJob && (claimedJob.session_id || payload.session_id || payload.source_session_id));
   const candidateId = trimStr(claimedJob && (claimedJob.candidate_id || payload.candidate_id));
   const actorUserId = trimStr(opts.actorUserId || opts.actor_user_id || payload.actor_user_id || payload.actorUserId);
   const origin = trimStr(opts.origin || payload.origin) || 'WORKBENCH_JOB_EXECUTOR';
-  const limit = clampInt(payload.limit ?? payload.p_limit ?? payload.chunk_size ?? opts.limit, 100, 1, 100);
-  const cursorJson = isPlainObject(payload.cursor_json) ? payload.cursor_json : (isPlainObject(payload.cursor) ? payload.cursor : null);
+  const jobType = canonicalWorkbenchJobType(rawJobType, { payload, sessionId });
+  const limit = clampInt(payload.limit ?? payload.p_limit ?? payload.line_limit ?? payload.chunk_size ?? opts.limit, 100, 1, 100);
+  const cursorJson = isPlainObject(payload.cursor_json)
+    ? payload.cursor_json
+    : (isPlainObject(payload.cursor)
+      ? payload.cursor
+      : (isPlainObject(payload.next_cursor_json)
+        ? payload.next_cursor_json
+        : (isPlainObject(payload.next_cursor) ? payload.next_cursor : null)));
   const executedAtUtc = new Date().toISOString();
 
   const baseResult = {
     ok: true,
     job_id: uuidRe.test(jobId) ? jobId : null,
-    job_type: jobType || null,
+    job_type: rawJobType || null,
+    canonical_job_type: jobType || null,
     snapshot_run_id: uuidRe.test(snapshotRunId) ? snapshotRunId : null,
     session_id: uuidRe.test(sessionId) ? sessionId : null,
     payload_session_id: uuidRe.test(sessionId) ? sessionId : null,
@@ -140901,11 +140936,25 @@ async function executeBankingPayWorkbenchJob(env, claimedJob, opts = {}) {
     executed_at_utc: executedAtUtc
   };
 
+  const buildWorkbenchChunkRpcArgs = (canonicalType) => {
+    const args = {
+      p_session_id: sessionId,
+      p_cursor_json: cursorJson,
+      p_limit: limit
+    };
+    if (canonicalType === 'WORKBENCH_CANDIDATE_LINE_WORK_SEED') {
+      args.p_candidate_id = candidateId;
+    } else if (canonicalType === 'WORKBENCH_CANDIDATE_LINE_WORK_PROCESS' || canonicalType === 'WORKBENCH_PREVIEW_ROWS_MATERIALISE') {
+      args.p_candidate_id = uuidRe.test(candidateId) ? candidateId : null;
+    }
+    return args;
+  };
+
   if (!uuidRe.test(jobId)) {
     throw makeJobError('WORKBENCH_JOB_INVALID_JOB_ID', 'Workbench job could not be executed because the claimed job id is missing or invalid.', Object.assign({}, baseResult, { retry_after_seconds: 60 }));
   }
 
-  if (!jobType) {
+  if (!rawJobType) {
     throw makeJobError('WORKBENCH_JOB_TYPE_MISSING', 'Workbench job could not be executed because job_type is missing.', Object.assign({}, baseResult, { retry_after_seconds: 60 }));
   }
 
@@ -140926,7 +140975,7 @@ async function executeBankingPayWorkbenchJob(env, claimedJob, opts = {}) {
     });
   };
 
-  if (jobType === 'SNAPSHOT_CANDIDATE_REFRESH') {
+  if (jobType === 'SNAPSHOT_CANDIDATE_REFRESH' || jobType === 'CANDIDATE_REFRESH') {
     if (!uuidRe.test(snapshotRunId) || !uuidRe.test(candidateId)) {
       throw makeJobError('SNAPSHOT_CANDIDATE_REFRESH_INVALID_CONTEXT', 'Snapshot candidate refresh job is missing a valid snapshot_run_id or candidate_id.', Object.assign({}, baseResult, { retry_after_seconds: 60 }));
     }
@@ -140956,58 +141005,35 @@ async function executeBankingPayWorkbenchJob(env, claimedJob, opts = {}) {
     });
   }
 
-  if (['SESSION_SCOPE_SEED', 'WORKBENCH_SCOPE_SEED', 'WORKBENCH_SCOPE_SEED_PAGE', 'SCOPE_SEED_PAGE'].includes(jobType)) {
+  if (jobType === 'WORKBENCH_SESSION_SCOPE_SEED') {
     if (!uuidRe.test(sessionId)) {
       throw makeJobError('WORKBENCH_SCOPE_SEED_INVALID_CONTEXT', 'Scope seed job is missing a valid session_id.', Object.assign({}, baseResult, { retry_after_seconds: 60 }));
     }
-    const result = await rpc('pay_workbench_session_seed_scope_chunk', {
-      p_session_id: sessionId,
-      p_cursor_json: cursorJson,
-      p_limit: limit,
-      p_actor_user_id: uuidRe.test(actorUserId) ? actorUserId : null
-    });
+    const result = await rpc('pay_workbench_session_seed_scope_chunk', buildWorkbenchChunkRpcArgs(jobType));
     return finish('pay_workbench_session_seed_scope_chunk', result);
   }
 
-  if (['CANDIDATE_LINE_WORK_SEED', 'CANDIDATE_LINE_WORK_SEED_PAGE', 'LINE_WORK_SEED_PAGE'].includes(jobType)) {
+  if (jobType === 'WORKBENCH_CANDIDATE_LINE_WORK_SEED') {
     if (!uuidRe.test(sessionId) || !uuidRe.test(candidateId)) {
       throw makeJobError('CANDIDATE_LINE_WORK_SEED_INVALID_CONTEXT', 'Candidate line-work seed job is missing a valid session_id or candidate_id.', Object.assign({}, baseResult, { retry_after_seconds: 60 }));
     }
-    const result = await rpc('pay_workbench_candidate_line_work_seed', {
-      p_session_id: sessionId,
-      p_candidate_id: candidateId,
-      p_cursor_json: cursorJson,
-      p_limit: limit,
-      p_actor_user_id: uuidRe.test(actorUserId) ? actorUserId : null
-    });
+    const result = await rpc('pay_workbench_candidate_line_work_seed', buildWorkbenchChunkRpcArgs(jobType));
     return finish('pay_workbench_candidate_line_work_seed', result);
   }
 
-  if (['CANDIDATE_LINE_WORK_PROCESS', 'CANDIDATE_LINE_WORK_PROCESS_CHUNK', 'LINE_WORK_PROCESS_CHUNK'].includes(jobType)) {
+  if (jobType === 'WORKBENCH_CANDIDATE_LINE_WORK_PROCESS') {
     if (!uuidRe.test(sessionId)) {
       throw makeJobError('CANDIDATE_LINE_WORK_PROCESS_INVALID_CONTEXT', 'Candidate line-work process job is missing a valid session_id.', Object.assign({}, baseResult, { retry_after_seconds: 60 }));
     }
-    const result = await rpc('pay_workbench_candidate_line_work_process_chunk', {
-      p_session_id: sessionId,
-      p_candidate_id: uuidRe.test(candidateId) ? candidateId : null,
-      p_cursor_json: cursorJson,
-      p_limit: limit,
-      p_actor_user_id: uuidRe.test(actorUserId) ? actorUserId : null
-    });
+    const result = await rpc('pay_workbench_candidate_line_work_process_chunk', buildWorkbenchChunkRpcArgs(jobType));
     return finish('pay_workbench_candidate_line_work_process_chunk', result);
   }
 
-  if (['PREVIEW_ROWS_MATERIALISE', 'PREVIEW_ROWS_MATERIALISE_CHUNK', 'PREVIEW_ROW_MATERIALISE_CHUNK'].includes(jobType)) {
+  if (jobType === 'WORKBENCH_PREVIEW_ROWS_MATERIALISE') {
     if (!uuidRe.test(sessionId)) {
       throw makeJobError('PREVIEW_ROW_MATERIALISE_INVALID_CONTEXT', 'Preview-row materialise job is missing a valid session_id.', Object.assign({}, baseResult, { retry_after_seconds: 60 }));
     }
-    const result = await rpc('pay_workbench_preview_rows_materialise_chunk', {
-      p_session_id: sessionId,
-      p_candidate_id: uuidRe.test(candidateId) ? candidateId : null,
-      p_cursor_json: cursorJson,
-      p_limit: limit,
-      p_actor_user_id: uuidRe.test(actorUserId) ? actorUserId : null
-    });
+    const result = await rpc('pay_workbench_preview_rows_materialise_chunk', buildWorkbenchChunkRpcArgs(jobType));
     return finish('pay_workbench_preview_rows_materialise_chunk', result);
   }
 
@@ -141067,8 +141093,9 @@ async function executeBankingPayWorkbenchJob(env, claimedJob, opts = {}) {
     });
   }
 
-  throw makeJobError('UNSUPPORTED_WORKBENCH_JOB_TYPE', `Unsupported Banking Pay workbench job type: ${jobType}`, Object.assign({}, baseResult, { retry_after_seconds: 300 }));
+  throw makeJobError('UNSUPPORTED_WORKBENCH_JOB_TYPE', `Unsupported Banking Pay workbench job type: ${rawJobType}${jobType && jobType !== rawJobType ? ` (${jobType})` : ''}`, Object.assign({}, baseResult, { retry_after_seconds: 300 }));
 }
+
 
 
 async function drainBankingPayWorkbenchJobs(env, opts = {}) {
