@@ -11923,6 +11923,8 @@ DROP FUNCTION IF EXISTS public.pay_batch_get(uuid, uuid);
 
 
 
+
+
 create or replace function public.pay_batch_get(
   p_pay_batch_id uuid,
   p_actor_user_id uuid DEFAULT NULL::uuid,
@@ -12203,6 +12205,41 @@ declare
   v_display_summary_updated_at_utc timestamptz := NULL::timestamptz;
   v_bootstrap_detail_mode_applied text := 'FULL';
   v_actor_is_active boolean := true;
+
+  -- Bootstrap display-summary validation. These values are derived from durable
+  -- batch artefacts using cheap counts before the BOOTSTRAP_ONLY early return,
+  -- so a stale pay_batch_display_summary row cannot make a populated batch look
+  -- empty. They are display/open metadata only and do not alter Policy X
+  -- post-draft economic authority, frozen artefacts, settlement, remittance, or
+  -- export calculations.
+  v_durable_candidate_count integer := 0;
+  v_durable_item_count integer := 0;
+  v_durable_item_breakdown_count integer := 0;
+  v_durable_timesheet_snapshot_count integer := 0;
+  v_durable_transfer_count integer := 0;
+  v_durable_total_payable numeric := 0;
+  v_durable_total_bank_out numeric := 0;
+  v_durable_sent_confirmed_count integer := 0;
+  v_durable_sent_confirmed_amount numeric := 0;
+  v_durable_pending_submitted_count integer := 0;
+  v_durable_pending_submitted_amount numeric := 0;
+  v_durable_failed_returned_count integer := 0;
+  v_durable_failed_returned_amount numeric := 0;
+  v_durable_check_required_count integer := 0;
+  v_durable_check_required_amount numeric := 0;
+  v_durable_not_sent_count integer := 0;
+  v_durable_not_sent_amount numeric := 0;
+  v_durable_counts jsonb := '{}'::jsonb;
+  v_payment_status_buckets jsonb := '{}'::jsonb;
+  v_display_summary_stale_before_refresh boolean := false;
+  v_display_summary_repaired boolean := false;
+  v_display_summary_stale boolean := false;
+  v_summary_refresh_failed boolean := false;
+  v_summary_refresh_error text := NULL::text;
+  v_empty_shell boolean := false;
+  v_empty_shell_kind text := NULL::text;
+  v_empty_shell_message text := NULL::text;
+  v_batch_signal_last_changed_at_utc timestamptz := NULL::timestamptz;
 begin
   v_detail_mode := upper(btrim(coalesce(p_detail_mode, 'AUTO')));
   IF v_detail_mode NOT IN ('AUTO','FULL','BOOTSTRAP_ONLY') THEN
@@ -12365,7 +12402,8 @@ begin
     COALESCE(batch_signal.alert_version, 0),
     COALESCE(batch_signal.overview_version, 0),
     batch_signal.last_status_hash,
-    batch_signal.last_alert_hash
+    batch_signal.last_alert_hash,
+    batch_signal.last_changed_at_utc
   INTO
     v_batch_signal_version,
     v_batch_payment_status_version,
@@ -12373,7 +12411,8 @@ begin
     v_batch_alert_version,
     v_batch_overview_version,
     v_batch_last_status_hash,
-    v_batch_last_alert_hash
+    v_batch_last_alert_hash,
+    v_batch_signal_last_changed_at_utc
   FROM public.banking_pay_batch_change_signals AS batch_signal
   WHERE batch_signal.pay_batch_id = p_pay_batch_id;
 
@@ -12385,7 +12424,316 @@ begin
     v_batch_overview_version := 0;
     v_batch_last_status_hash := NULL::text;
     v_batch_last_alert_hash := NULL::text;
+    v_batch_signal_last_changed_at_utc := NULL::timestamptz;
   END IF;
+
+  SELECT
+    COALESCE(durable_candidate_summary.candidate_count, 0)::integer,
+    COALESCE(durable_item_summary.item_count, 0)::integer,
+    COALESCE(durable_breakdown_summary.item_breakdown_count, 0)::integer,
+    COALESCE(durable_snapshot_summary.timesheet_snapshot_count, 0)::integer,
+    COALESCE(durable_transfer_summary.transfer_count, 0)::integer,
+    ROUND(COALESCE(durable_item_summary.total_payable, 0), 2)::numeric,
+    ROUND(COALESCE(durable_transfer_summary.transfer_amount_total, 0), 2)::numeric,
+    COALESCE(durable_transfer_summary.sent_confirmed_count, 0)::integer,
+    ROUND(COALESCE(durable_transfer_summary.sent_confirmed_amount, 0), 2)::numeric,
+    COALESCE(durable_transfer_summary.pending_submitted_count, 0)::integer,
+    ROUND(COALESCE(durable_transfer_summary.pending_submitted_amount, 0), 2)::numeric,
+    COALESCE(durable_transfer_summary.failed_returned_count, 0)::integer,
+    ROUND(COALESCE(durable_transfer_summary.failed_returned_amount, 0), 2)::numeric,
+    COALESCE(durable_transfer_summary.check_required_count, 0)::integer,
+    ROUND(COALESCE(durable_transfer_summary.check_required_amount, 0), 2)::numeric,
+    COALESCE(durable_transfer_summary.not_sent_count, 0)::integer,
+    ROUND(COALESCE(durable_transfer_summary.not_sent_amount, 0), 2)::numeric
+  INTO
+    v_durable_candidate_count,
+    v_durable_item_count,
+    v_durable_item_breakdown_count,
+    v_durable_timesheet_snapshot_count,
+    v_durable_transfer_count,
+    v_durable_total_payable,
+    v_durable_total_bank_out,
+    v_durable_sent_confirmed_count,
+    v_durable_sent_confirmed_amount,
+    v_durable_pending_submitted_count,
+    v_durable_pending_submitted_amount,
+    v_durable_failed_returned_count,
+    v_durable_failed_returned_amount,
+    v_durable_check_required_count,
+    v_durable_check_required_amount,
+    v_durable_not_sent_count,
+    v_durable_not_sent_amount
+  FROM (
+    SELECT COUNT(*)::integer AS candidate_count
+    FROM public.pay_batch_candidates AS durable_candidate_row
+    WHERE durable_candidate_row.pay_batch_id = p_pay_batch_id
+  ) AS durable_candidate_summary
+  CROSS JOIN (
+    SELECT
+      COUNT(*) FILTER (WHERE COALESCE(durable_item_row.is_voided, false) = false)::integer AS item_count,
+      ROUND(
+        COALESCE(
+          SUM(
+            COALESCE(
+              durable_item_row.frozen_target_amount_inc_vat,
+              durable_item_row.amount_inc_vat,
+              durable_item_row.frozen_target_amount_ex_vat,
+              durable_item_row.amount_ex_vat,
+              0
+            )
+          ) FILTER (WHERE COALESCE(durable_item_row.is_voided, false) = false),
+          0
+        ),
+        2
+      )::numeric AS total_payable
+    FROM public.pay_batch_candidates AS durable_candidate_for_item
+    JOIN public.pay_batch_items AS durable_item_row
+      ON durable_item_row.pay_batch_candidate_id = durable_candidate_for_item.id
+    WHERE durable_candidate_for_item.pay_batch_id = p_pay_batch_id
+  ) AS durable_item_summary
+  CROSS JOIN (
+    SELECT COUNT(*)::integer AS item_breakdown_count
+    FROM public.pay_batch_item_breakdowns AS durable_breakdown_row
+    JOIN public.pay_batch_items AS durable_breakdown_item_row
+      ON durable_breakdown_item_row.id = durable_breakdown_row.pay_batch_item_id
+    JOIN public.pay_batch_candidates AS durable_breakdown_candidate_row
+      ON durable_breakdown_candidate_row.id = durable_breakdown_item_row.pay_batch_candidate_id
+    WHERE durable_breakdown_candidate_row.pay_batch_id = p_pay_batch_id
+  ) AS durable_breakdown_summary
+  CROSS JOIN (
+    SELECT COUNT(*)::integer AS timesheet_snapshot_count
+    FROM public.pay_batch_timesheet_snapshots AS durable_snapshot_row
+    WHERE durable_snapshot_row.pay_batch_id = p_pay_batch_id
+  ) AS durable_snapshot_summary
+  CROSS JOIN (
+    SELECT
+      COUNT(*)::integer AS transfer_count,
+      ROUND(COALESCE(SUM(COALESCE(classified_transfer_rows.transfer_amount, 0)), 0), 2)::numeric AS transfer_amount_total,
+      COUNT(*) FILTER (WHERE classified_transfer_rows.transfer_bucket = 'SENT_CONFIRMED')::integer AS sent_confirmed_count,
+      ROUND(COALESCE(SUM(classified_transfer_rows.transfer_amount) FILTER (WHERE classified_transfer_rows.transfer_bucket = 'SENT_CONFIRMED'), 0), 2)::numeric AS sent_confirmed_amount,
+      COUNT(*) FILTER (WHERE classified_transfer_rows.transfer_bucket = 'PENDING_SUBMITTED')::integer AS pending_submitted_count,
+      ROUND(COALESCE(SUM(classified_transfer_rows.transfer_amount) FILTER (WHERE classified_transfer_rows.transfer_bucket = 'PENDING_SUBMITTED'), 0), 2)::numeric AS pending_submitted_amount,
+      COUNT(*) FILTER (WHERE classified_transfer_rows.transfer_bucket = 'FAILED_RETURNED')::integer AS failed_returned_count,
+      ROUND(COALESCE(SUM(classified_transfer_rows.transfer_amount) FILTER (WHERE classified_transfer_rows.transfer_bucket = 'FAILED_RETURNED'), 0), 2)::numeric AS failed_returned_amount,
+      COUNT(*) FILTER (WHERE classified_transfer_rows.transfer_bucket = 'CHECK_REQUIRED')::integer AS check_required_count,
+      ROUND(COALESCE(SUM(classified_transfer_rows.transfer_amount) FILTER (WHERE classified_transfer_rows.transfer_bucket = 'CHECK_REQUIRED'), 0), 2)::numeric AS check_required_amount,
+      COUNT(*) FILTER (WHERE classified_transfer_rows.transfer_bucket = 'NOT_SENT')::integer AS not_sent_count,
+      ROUND(COALESCE(SUM(classified_transfer_rows.transfer_amount) FILTER (WHERE classified_transfer_rows.transfer_bucket = 'NOT_SENT'), 0), 2)::numeric AS not_sent_amount
+    FROM (
+      SELECT
+        durable_transfer_row.id AS pay_bank_transfer_id,
+        COALESCE(durable_transfer_row.amount, 0)::numeric AS transfer_amount,
+        CASE
+          WHEN UPPER(BTRIM(COALESCE(durable_transfer_row.status, ''))) IN (
+            'PAID', 'COMPLETED', 'COMPLETE', 'SETTLED', 'BANK_CONFIRMED', 'CONFIRMED', 'COMMITTED', 'SUCCESS', 'SUCCEEDED'
+          )
+          OR UPPER(BTRIM(COALESCE(durable_transfer_row.rail_state, ''))) IN (
+            'PAID', 'COMPLETED', 'COMPLETE', 'SETTLED', 'BANK_CONFIRMED', 'CONFIRMED', 'COMMITTED', 'SUCCESS', 'SUCCEEDED'
+          )
+          OR (
+            durable_transfer_row.completed_at_utc IS NOT NULL
+            AND UPPER(BTRIM(COALESCE(durable_transfer_row.status, ''))) NOT IN (
+              'FAILED', 'REJECTED', 'DECLINED', 'RETURNED', 'CANCELLED', 'CANCELED', 'VOIDED', 'SUBMISSION_FAILED', 'FAILED_BEFORE_COMMIT'
+            )
+            AND UPPER(BTRIM(COALESCE(durable_transfer_row.rail_state, ''))) NOT IN (
+              'FAILED', 'REJECTED', 'DECLINED', 'RETURNED', 'CANCELLED', 'CANCELED', 'VOIDED', 'SUBMISSION_FAILED', 'FAILED_BEFORE_COMMIT'
+            )
+          ) THEN 'SENT_CONFIRMED'
+          WHEN UPPER(BTRIM(COALESCE(durable_transfer_row.status, ''))) IN (
+            'FAILED', 'REJECTED', 'DECLINED', 'RETURNED', 'CANCELLED', 'CANCELED', 'VOIDED', 'SUBMISSION_FAILED', 'FAILED_BEFORE_COMMIT'
+          )
+          OR UPPER(BTRIM(COALESCE(durable_transfer_row.rail_state, ''))) IN (
+            'FAILED', 'REJECTED', 'DECLINED', 'RETURNED', 'CANCELLED', 'CANCELED', 'VOIDED', 'SUBMISSION_FAILED', 'FAILED_BEFORE_COMMIT'
+          ) THEN 'FAILED_RETURNED'
+          WHEN UPPER(BTRIM(COALESCE(durable_transfer_row.status, ''))) IN (
+            'UNKNOWN', 'UNCERTAIN', 'REVIEW_REQUIRED', 'AMBIGUOUS', 'TIMEOUT', 'TIMED_OUT'
+          )
+          OR UPPER(BTRIM(COALESCE(durable_transfer_row.rail_state, ''))) IN (
+            'UNKNOWN', 'UNCERTAIN', 'REVIEW_REQUIRED', 'AMBIGUOUS', 'TIMEOUT', 'TIMED_OUT'
+          ) THEN 'CHECK_REQUIRED'
+          WHEN NULLIF(BTRIM(COALESCE(durable_transfer_row.rail_tx_id, '')), '') IS NOT NULL
+            OR UPPER(BTRIM(COALESCE(durable_transfer_row.status, ''))) IN (
+              'PENDING', 'PROCESSING', 'SUBMITTED', 'ACCEPTED', 'IN_FLIGHT', 'PENDING_SETTLEMENT', 'PENDING_CONFIRMATION', 'WAITING_BANK_CONFIRM', 'SUBMITTED_NOT_COMMITTED'
+            )
+            OR UPPER(BTRIM(COALESCE(durable_transfer_row.rail_state, ''))) IN (
+              'PENDING', 'PROCESSING', 'SUBMITTED', 'ACCEPTED', 'IN_FLIGHT', 'PENDING_SETTLEMENT', 'PENDING_CONFIRMATION', 'WAITING_BANK_CONFIRM', 'SUBMITTED_NOT_COMMITTED'
+            )
+            OR POSITION('PROVIDER_SUBMISSION_ACCEPTED' IN UPPER(COALESCE(durable_transfer_row.rail_meta_json::text, ''))) > 0
+          THEN 'PENDING_SUBMITTED'
+          WHEN NULLIF(BTRIM(COALESCE(durable_transfer_row.request_id, '')), '') IS NOT NULL
+            OR UPPER(BTRIM(COALESCE(durable_transfer_row.status, ''))) IN (
+              'LOCAL', 'READY', 'DRAFT', 'CREATED', 'PREPARED', 'AUTHORISED', 'AUTHORIZED', 'NOT_SUBMITTED', 'PENDING_AUTH'
+            )
+          THEN 'NOT_SENT'
+          ELSE 'CHECK_REQUIRED'
+        END AS transfer_bucket
+      FROM public.pay_bank_transfers AS durable_transfer_row
+      WHERE durable_transfer_row.pay_batch_id = p_pay_batch_id
+    ) AS classified_transfer_rows
+  ) AS durable_transfer_summary;
+
+  v_durable_counts :=
+    jsonb_build_object(
+      'candidate_count', COALESCE(v_durable_candidate_count, 0),
+      'item_count', COALESCE(v_durable_item_count, 0),
+      'item_breakdown_count', COALESCE(v_durable_item_breakdown_count, 0),
+      'timesheet_snapshot_count', COALESCE(v_durable_timesheet_snapshot_count, 0),
+      'transfer_count', COALESCE(v_durable_transfer_count, 0),
+      'total_payable', COALESCE(v_durable_total_payable, 0)
+    )
+    || jsonb_build_object(
+      'total_bank_out', COALESCE(v_durable_total_bank_out, 0),
+      'source', 'durable_batch_artefact_counts',
+      'validated_at_utc', now()::text
+    );
+
+  v_payment_status_buckets :=
+    jsonb_build_object(
+      'sent_confirmed_count', COALESCE(v_durable_sent_confirmed_count, 0),
+      'sent_confirmed_amount', COALESCE(v_durable_sent_confirmed_amount, 0),
+      'pending_submitted_count', COALESCE(v_durable_pending_submitted_count, 0),
+      'pending_submitted_amount', COALESCE(v_durable_pending_submitted_amount, 0),
+      'failed_returned_count', COALESCE(v_durable_failed_returned_count, 0),
+      'failed_returned_amount', COALESCE(v_durable_failed_returned_amount, 0)
+    )
+    || jsonb_build_object(
+      'check_required_count', COALESCE(v_durable_check_required_count, 0),
+      'check_required_amount', COALESCE(v_durable_check_required_amount, 0),
+      'not_sent_count', COALESCE(v_durable_not_sent_count, 0),
+      'not_sent_amount', COALESCE(v_durable_not_sent_amount, 0),
+      'classification_source', 'pay_bank_transfers_durable_status'
+    );
+
+  v_display_summary_stale_before_refresh := (
+    v_display_summary_found IS NOT TRUE
+    OR LOWER(BTRIM(COALESCE(v_display_stale_summary_json ->> 'summary_refresh_required', ''))) IN ('true', 't', '1', 'yes', 'y', 'on')
+    OR (COALESCE(v_display_candidate_count, 0) = 0 AND COALESCE(v_durable_candidate_count, 0) > 0)
+    OR (COALESCE(v_display_item_count, 0) = 0 AND COALESCE(v_durable_item_count, 0) > 0)
+    OR (COALESCE(v_display_transfer_count, 0) = 0 AND COALESCE(v_durable_transfer_count, 0) > 0)
+    OR (COALESCE(v_display_total_bank_out, 0) <> 0 AND COALESCE(v_display_transfer_count, 0) = 0)
+    OR (v_batch_signal_last_changed_at_utc IS NOT NULL AND (v_display_summary_updated_at_utc IS NULL OR v_display_summary_updated_at_utc < v_batch_signal_last_changed_at_utc))
+  );
+
+  v_display_summary_stale := v_display_summary_stale_before_refresh;
+
+  IF v_display_summary_stale_before_refresh IS TRUE THEN
+    BEGIN
+      PERFORM public.pay_batch_display_summary_refresh(p_pay_batch_id);
+
+      SELECT
+        refreshed_display_summary.batch_status,
+        refreshed_display_summary.batch_kind,
+        COALESCE(refreshed_display_summary.candidate_count, 0),
+        COALESCE(refreshed_display_summary.item_count, 0),
+        COALESCE(refreshed_display_summary.transfer_count, 0),
+        COALESCE(refreshed_display_summary.total_payable, 0),
+        COALESCE(refreshed_display_summary.total_bank_out, 0),
+        refreshed_display_summary.execution_commit_state,
+        refreshed_display_summary.rail_provider_label,
+        refreshed_display_summary.rail_env_label,
+        COALESCE(refreshed_display_summary.issue_summary_counts, '{}'::jsonb),
+        refreshed_display_summary.latest_operation_id,
+        refreshed_display_summary.latest_operation_status,
+        refreshed_display_summary.latest_operation_phase,
+        refreshed_display_summary.display_label,
+        COALESCE(refreshed_display_summary.stale_summary_json, '{}'::jsonb),
+        refreshed_display_summary.freshness_validation_status,
+        refreshed_display_summary.freshness_checked_at_utc,
+        refreshed_display_summary.freshness_result_hash,
+        COALESCE(refreshed_display_summary.summary_version, 0),
+        refreshed_display_summary.updated_at_utc
+      INTO
+        v_display_batch_status,
+        v_display_batch_kind,
+        v_display_candidate_count,
+        v_display_item_count,
+        v_display_transfer_count,
+        v_display_total_payable,
+        v_display_total_bank_out,
+        v_display_execution_commit_state,
+        v_display_rail_provider_label,
+        v_display_rail_env_label,
+        v_display_issue_summary_counts,
+        v_display_latest_operation_id,
+        v_display_latest_operation_status,
+        v_display_latest_operation_phase,
+        v_display_label,
+        v_display_stale_summary_json,
+        v_display_freshness_validation_status,
+        v_display_freshness_checked_at_utc,
+        v_display_freshness_result_hash,
+        v_display_summary_version,
+        v_display_summary_updated_at_utc
+      FROM public.pay_batch_display_summary AS refreshed_display_summary
+      WHERE refreshed_display_summary.pay_batch_id = p_pay_batch_id;
+
+      v_display_summary_found := FOUND;
+      v_display_summary_stale := (
+        v_display_summary_found IS NOT TRUE
+        OR LOWER(BTRIM(COALESCE(v_display_stale_summary_json ->> 'summary_refresh_required', ''))) IN ('true', 't', '1', 'yes', 'y', 'on')
+        OR (COALESCE(v_display_candidate_count, 0) = 0 AND COALESCE(v_durable_candidate_count, 0) > 0)
+        OR (COALESCE(v_display_item_count, 0) = 0 AND COALESCE(v_durable_item_count, 0) > 0)
+        OR (COALESCE(v_display_transfer_count, 0) = 0 AND COALESCE(v_durable_transfer_count, 0) > 0)
+        OR (COALESCE(v_display_total_bank_out, 0) <> 0 AND COALESCE(v_display_transfer_count, 0) = 0)
+      );
+      v_display_summary_repaired := (v_display_summary_found IS TRUE AND v_display_summary_stale IS NOT TRUE);
+    EXCEPTION WHEN OTHERS THEN
+      v_summary_refresh_failed := true;
+      v_summary_refresh_error := SQLERRM;
+      v_display_summary_stale := true;
+    END;
+  END IF;
+
+  IF v_display_summary_stale IS TRUE THEN
+    v_display_candidate_count := COALESCE(v_durable_candidate_count, 0);
+    v_display_item_count := COALESCE(v_durable_item_count, 0);
+    v_display_transfer_count := COALESCE(v_durable_transfer_count, 0);
+    v_display_total_payable := COALESCE(v_durable_total_payable, 0);
+    v_display_total_bank_out := COALESCE(v_durable_total_bank_out, v_batch.total_bank_out, 0);
+  END IF;
+
+  v_item_breakdown_count := COALESCE(v_durable_item_breakdown_count, 0);
+  v_empty_shell := (
+    COALESCE(v_durable_candidate_count, 0) = 0
+    AND COALESCE(v_durable_item_count, 0) = 0
+    AND COALESCE(v_durable_item_breakdown_count, 0) = 0
+    AND COALESCE(v_durable_timesheet_snapshot_count, 0) = 0
+    AND COALESCE(v_durable_transfer_count, 0) = 0
+  );
+
+  IF v_empty_shell IS TRUE THEN
+    v_empty_shell_kind := 'DRAFT_NO_DURABLE_CONTENT';
+    v_empty_shell_message := 'This draft payment batch contains no candidates, no payable items and no bank transfers.';
+  END IF;
+
+  v_display_stale_summary_json :=
+    COALESCE(v_display_stale_summary_json, '{}'::jsonb)
+    || jsonb_build_object(
+      'summary_refresh_required', COALESCE(v_display_summary_stale, false),
+      'display_summary_stale_before_refresh', COALESCE(v_display_summary_stale_before_refresh, false),
+      'display_summary_repaired', COALESCE(v_display_summary_repaired, false),
+      'summary_refresh_failed', COALESCE(v_summary_refresh_failed, false),
+      'summary_source', CASE WHEN v_display_summary_stale IS TRUE THEN 'durable_validation_fallback' ELSE 'display_summary_validated' END
+    )
+    || jsonb_build_object(
+      'durable_counts', COALESCE(v_durable_counts, '{}'::jsonb),
+      'payment_status_buckets', COALESCE(v_payment_status_buckets, '{}'::jsonb),
+      'empty_shell', COALESCE(v_empty_shell, false),
+      'empty_shell_kind', v_empty_shell_kind,
+      'validated_at_utc', now()::text
+    );
+
+  v_display_issue_summary_counts :=
+    COALESCE(v_display_issue_summary_counts, '{}'::jsonb)
+    || COALESCE(v_durable_counts, '{}'::jsonb)
+    || COALESCE(v_payment_status_buckets, '{}'::jsonb)
+    || jsonb_build_object(
+      'display_summary_stale', COALESCE(v_display_summary_stale, false),
+      'display_summary_stale_before_refresh', COALESCE(v_display_summary_stale_before_refresh, false),
+      'display_summary_repaired', COALESCE(v_display_summary_repaired, false),
+      'summary_refresh_failed', COALESCE(v_summary_refresh_failed, false),
+      'empty_shell', COALESCE(v_empty_shell, false)
+    );
 
   v_candidate_count := COALESCE(v_display_candidate_count, 0);
   v_item_count := COALESCE(v_display_item_count, 0);
@@ -12407,22 +12755,19 @@ begin
   );
 
   v_large_batch := (
-    v_display_summary_found IS NOT TRUE
-    OR COALESCE(v_display_candidate_count, 0) > 100
-    OR COALESCE(v_display_item_count, 0) > 250
-    OR COALESCE(v_display_transfer_count, 0) > 100
+    COALESCE(v_display_candidate_count, v_durable_candidate_count, 0) > 100
+    OR COALESCE(v_display_item_count, v_durable_item_count, 0) > 250
+    OR COALESCE(v_display_transfer_count, v_durable_transfer_count, 0) > 100
   );
 
   SELECT COALESCE(jsonb_agg(large_reason.reason ORDER BY large_reason.reason), '[]'::jsonb)
   INTO v_large_batch_reasons
   FROM (
-    SELECT 'display_summary_missing'::text AS reason WHERE v_display_summary_found IS NOT TRUE
+    SELECT 'candidate_count'::text AS reason WHERE COALESCE(v_display_candidate_count, v_durable_candidate_count, 0) > 100
     UNION ALL
-    SELECT 'candidate_count'::text AS reason WHERE COALESCE(v_display_candidate_count, 0) > 100
+    SELECT 'item_count'::text AS reason WHERE COALESCE(v_display_item_count, v_durable_item_count, 0) > 250
     UNION ALL
-    SELECT 'item_count'::text AS reason WHERE COALESCE(v_display_item_count, 0) > 250
-    UNION ALL
-    SELECT 'transfer_count'::text AS reason WHERE COALESCE(v_display_transfer_count, 0) > 100
+    SELECT 'transfer_count'::text AS reason WHERE COALESCE(v_display_transfer_count, v_durable_transfer_count, 0) > 100
   ) AS large_reason;
 
   v_bootstrap_only := (
@@ -12459,7 +12804,8 @@ begin
       || jsonb_build_object(
         'candidate_count', COALESCE(v_display_candidate_count, 0),
         'item_count', COALESCE(v_display_item_count, 0),
-        'item_breakdown_count', NULL::integer,
+        'item_breakdown_count', COALESCE(v_item_breakdown_count, 0),
+        'timesheet_snapshot_count', COALESCE(v_durable_timesheet_snapshot_count, 0),
         'transfer_count', COALESCE(v_display_transfer_count, 0),
         'total_amount', COALESCE(v_total_amount, 0),
         'total_bank_out', COALESCE(v_display_total_bank_out, v_batch.total_bank_out, 0),
@@ -12469,6 +12815,15 @@ begin
         'summary_updated_at_utc', CASE WHEN v_display_summary_updated_at_utc IS NULL THEN NULL::text ELSE v_display_summary_updated_at_utc::text END,
         'issue_summary_counts', COALESCE(v_display_issue_summary_counts, '{}'::jsonb),
         'stale_summary_json', COALESCE(v_display_stale_summary_json, '{}'::jsonb),
+        'durable_counts', COALESCE(v_durable_counts, '{}'::jsonb),
+        'payment_status_buckets', COALESCE(v_payment_status_buckets, '{}'::jsonb),
+        'display_summary_stale_before_refresh', COALESCE(v_display_summary_stale_before_refresh, false),
+        'display_summary_repaired', COALESCE(v_display_summary_repaired, false),
+        'display_summary_stale', COALESCE(v_display_summary_stale, false),
+        'summary_refresh_failed', COALESCE(v_summary_refresh_failed, false),
+        'empty_shell', COALESCE(v_empty_shell, false),
+        'empty_shell_kind', v_empty_shell_kind,
+        'empty_shell_message', v_empty_shell_message,
         'provider_environment_summary', v_provider_environment_summary,
         'latest_operation_id', CASE WHEN v_display_latest_operation_id IS NULL THEN NULL::text ELSE v_display_latest_operation_id::text END,
         'latest_operation_status', v_display_latest_operation_status,
@@ -12482,6 +12837,20 @@ begin
             'phase', v_display_latest_operation_phase
           ))
         END
+      )
+      || jsonb_build_object(
+        'sent_confirmed_count', COALESCE(v_durable_sent_confirmed_count, 0),
+        'sent_confirmed_amount', COALESCE(v_durable_sent_confirmed_amount, 0),
+        'pending_submitted_count', COALESCE(v_durable_pending_submitted_count, 0),
+        'pending_submitted_amount', COALESCE(v_durable_pending_submitted_amount, 0),
+        'failed_returned_count', COALESCE(v_durable_failed_returned_count, 0),
+        'failed_returned_amount', COALESCE(v_durable_failed_returned_amount, 0)
+      )
+      || jsonb_build_object(
+        'check_required_count', COALESCE(v_durable_check_required_count, 0),
+        'check_required_amount', COALESCE(v_durable_check_required_amount, 0),
+        'not_sent_count', COALESCE(v_durable_not_sent_count, 0),
+        'not_sent_amount', COALESCE(v_durable_not_sent_amount, 0)
       )
       || jsonb_build_object(
         'live_signal_version', COALESCE(v_batch_signal_version, 0),
@@ -12513,8 +12882,16 @@ begin
           'created_by_user_id', CASE WHEN v_batch.created_by_user_id IS NULL THEN NULL ELSE v_batch.created_by_user_id::text END,
           'candidate_count', COALESCE(v_display_candidate_count, 0),
           'item_count', COALESCE(v_display_item_count, 0),
+          'item_breakdown_count', COALESCE(v_item_breakdown_count, 0),
+          'timesheet_snapshot_count', COALESCE(v_durable_timesheet_snapshot_count, 0),
           'transfer_count', COALESCE(v_display_transfer_count, 0),
+          'total_payable', COALESCE(v_display_total_payable, 0),
           'total_bank_out', COALESCE(v_display_total_bank_out, v_batch.total_bank_out, 0),
+          'durable_counts', COALESCE(v_durable_counts, '{}'::jsonb),
+          'payment_status_buckets', COALESCE(v_payment_status_buckets, '{}'::jsonb),
+          'empty_shell', COALESCE(v_empty_shell, false),
+          'empty_shell_kind', v_empty_shell_kind,
+          'empty_shell_message', v_empty_shell_message,
           'summary_version', COALESCE(v_display_summary_version, 0),
           'live_signal_version', COALESCE(v_batch_signal_version, 0),
           'payment_status_version', COALESCE(v_batch_payment_status_version, 0),
@@ -18331,6 +18708,7 @@ begin
     );
 end;
 $$;
+
 
 
 
@@ -67861,7 +68239,6 @@ $function$;
 
 DROP FUNCTION IF EXISTS public.pay_batch_get_section_page(uuid, text, jsonb, integer, uuid, jsonb, jsonb);
 
-
 CREATE OR REPLACE FUNCTION public.pay_batch_get_section_page(
   p_pay_batch_id uuid,
   p_section text,
@@ -68407,7 +68784,68 @@ BEGIN
               'provider_webhook_evidence_json', COALESCE(transfer_diagnostic.diagnostic_json->'provider_webhook_evidence_json', '{}'::jsonb),
               'terminal_no_money_evidence_json', COALESCE(transfer_diagnostic.diagnostic_json->'terminal_no_money_evidence_json', '{}'::jsonb),
               'pending_provider_evidence_json', COALESCE(transfer_diagnostic.diagnostic_json->'pending_provider_evidence_json', '{}'::jsonb),
-              'status_update_signature', NULLIF(BTRIM(COALESCE(transfer_diagnostic.diagnostic_json->>'status_update_signature', '')), '')
+              'status_update_signature', NULLIF(BTRIM(COALESCE(transfer_diagnostic.diagnostic_json->>'status_update_signature', '')), ''),
+              'provider_submission_status', NULLIF(BTRIM(COALESCE(
+                transfer_diagnostic.diagnostic_json->>'provider_submission_status',
+                page_rows.rail_meta_json #>> '{provider_submit_diagnostic,provider_submission_status}',
+                page_rows.rail_meta_json #>> '{providerSubmitDiagnostic,providerSubmissionStatus}',
+                page_rows.rail_meta_json->>'provider_submission_status',
+                ''
+              )), ''),
+              'money_movement_cash_state', NULLIF(BTRIM(COALESCE(
+                transfer_diagnostic.diagnostic_json #>> '{money_movement_classification,cash_state}',
+                transfer_diagnostic.diagnostic_json->>'cash_state',
+                page_rows.rail_meta_json #>> '{money_movement_classification,cash_state}',
+                ''
+              )), ''),
+              'is_final_money_moved', (
+                LOWER(BTRIM(COALESCE(transfer_diagnostic.diagnostic_json->>'is_final_money_moved', transfer_diagnostic.diagnostic_json->>'final_money_moved', 'false'))) IN ('true','1','yes','y','on')
+                OR UPPER(BTRIM(COALESCE(page_rows.status, ''))) IN ('COMPLETED','SETTLED','PAID','COMMITTED','EXECUTED')
+                OR UPPER(BTRIM(COALESCE(page_rows.rail_state, ''))) IN ('COMPLETED','SETTLED','PAID','COMMITTED','EXECUTED','BANK_CONFIRMED','MANUAL_CONFIRM')
+              ),
+              'safe_retry_available', LOWER(BTRIM(COALESCE(transfer_diagnostic.diagnostic_json->>'safe_retry_available', page_rows.rail_meta_json #>> '{provider_submit_diagnostic,safe_retry_available}', 'false'))) IN ('true','1','yes','y','on'),
+              'payment_status_bucket', CASE
+                WHEN (
+                  LOWER(BTRIM(COALESCE(transfer_diagnostic.diagnostic_json->>'is_final_money_moved', transfer_diagnostic.diagnostic_json->>'final_money_moved', 'false'))) IN ('true','1','yes','y','on')
+                  OR UPPER(BTRIM(COALESCE(page_rows.status, ''))) IN ('COMPLETED','SETTLED','PAID','COMMITTED','EXECUTED')
+                  OR UPPER(BTRIM(COALESCE(page_rows.rail_state, ''))) IN ('COMPLETED','SETTLED','PAID','COMMITTED','EXECUTED','BANK_CONFIRMED','MANUAL_CONFIRM')
+                ) THEN 'SENT_CONFIRMED'
+                WHEN UPPER(BTRIM(COALESCE(page_rows.status, ''))) IN ('FAILED','REJECTED','DECLINED','RETURNED','CANCELLED','CANCELED','SUBMISSION_FAILED','FAILED_BEFORE_COMMIT')
+                  OR UPPER(BTRIM(COALESCE(page_rows.rail_state, ''))) IN ('FAILED','REJECTED','DECLINED','RETURNED','CANCELLED','CANCELED')
+                  OR jsonb_typeof(COALESCE(transfer_diagnostic.diagnostic_json->'terminal_no_money_evidence_json', '{}'::jsonb)) = 'object' AND COALESCE(transfer_diagnostic.diagnostic_json->'terminal_no_money_evidence_json', '{}'::jsonb) <> '{}'::jsonb
+                  THEN 'FAILED_RETURNED'
+                WHEN UPPER(BTRIM(COALESCE(transfer_diagnostic.diagnostic_json->>'payment_lifecycle_state', ''))) IN ('PROVIDER_OUTCOME_UNKNOWN','CHECK_REQUIRED','UNKNOWN')
+                  OR UPPER(BTRIM(COALESCE(transfer_diagnostic.diagnostic_json->>'recommended_action', ''))) = 'CHECK_PROVIDER_STATUS'
+                  OR UPPER(BTRIM(COALESCE(page_rows.status, ''))) IN ('UNKNOWN','UNCERTAIN','REVIEW_REQUIRED')
+                  OR UPPER(BTRIM(COALESCE(page_rows.rail_state, ''))) IN ('UNKNOWN','UNCERTAIN','REVIEW_REQUIRED')
+                  THEN 'CHECK_REQUIRED'
+                WHEN UPPER(BTRIM(COALESCE(page_rows.status, ''))) IN ('PENDING','SUBMITTED','PROCESSING','IN_FLIGHT','WAITING_BANK_CONFIRM')
+                  OR UPPER(BTRIM(COALESCE(page_rows.rail_state, ''))) IN ('PENDING','SUBMITTED','PROCESSING','IN_FLIGHT','ACCEPTED','PENDING_SETTLEMENT','PENDING_CONFIRMATION')
+                  OR NULLIF(BTRIM(COALESCE(page_rows.rail_tx_id, '')), '') IS NOT NULL
+                  OR UPPER(BTRIM(COALESCE(page_rows.rail_meta_json #>> '{provider_submit_diagnostic,provider_submission_status}', page_rows.rail_meta_json->>'provider_submission_status', ''))) IN ('PROVIDER_SUBMISSION_ACCEPTED','ACCEPTED','SUBMITTED','PROVIDER_SUBMITTED')
+                  THEN 'PENDING_SUBMITTED'
+                ELSE 'NOT_SENT'
+              END,
+              'payment_status_label', CASE
+                WHEN (
+                  LOWER(BTRIM(COALESCE(transfer_diagnostic.diagnostic_json->>'is_final_money_moved', transfer_diagnostic.diagnostic_json->>'final_money_moved', 'false'))) IN ('true','1','yes','y','on')
+                  OR UPPER(BTRIM(COALESCE(page_rows.status, ''))) IN ('COMPLETED','SETTLED','PAID','COMMITTED','EXECUTED')
+                  OR UPPER(BTRIM(COALESCE(page_rows.rail_state, ''))) IN ('COMPLETED','SETTLED','PAID','COMMITTED','EXECUTED','BANK_CONFIRMED','MANUAL_CONFIRM')
+                ) THEN 'Sent / confirmed paid'
+                WHEN UPPER(BTRIM(COALESCE(page_rows.status, ''))) IN ('FAILED','REJECTED','DECLINED','RETURNED','CANCELLED','CANCELED','SUBMISSION_FAILED','FAILED_BEFORE_COMMIT')
+                  OR UPPER(BTRIM(COALESCE(page_rows.rail_state, ''))) IN ('FAILED','REJECTED','DECLINED','RETURNED','CANCELLED','CANCELED')
+                  THEN 'Failed / returned'
+                WHEN UPPER(BTRIM(COALESCE(transfer_diagnostic.diagnostic_json->>'payment_lifecycle_state', ''))) IN ('PROVIDER_OUTCOME_UNKNOWN','CHECK_REQUIRED','UNKNOWN')
+                  OR UPPER(BTRIM(COALESCE(transfer_diagnostic.diagnostic_json->>'recommended_action', ''))) = 'CHECK_PROVIDER_STATUS'
+                  OR UPPER(BTRIM(COALESCE(page_rows.status, ''))) IN ('UNKNOWN','UNCERTAIN','REVIEW_REQUIRED')
+                  OR UPPER(BTRIM(COALESCE(page_rows.rail_state, ''))) IN ('UNKNOWN','UNCERTAIN','REVIEW_REQUIRED')
+                  THEN 'Check required'
+                WHEN UPPER(BTRIM(COALESCE(page_rows.status, ''))) IN ('PENDING','SUBMITTED','PROCESSING','IN_FLIGHT','WAITING_BANK_CONFIRM')
+                  OR UPPER(BTRIM(COALESCE(page_rows.rail_state, ''))) IN ('PENDING','SUBMITTED','PROCESSING','IN_FLIGHT','ACCEPTED','PENDING_SETTLEMENT','PENDING_CONFIRMATION')
+                  OR NULLIF(BTRIM(COALESCE(page_rows.rail_tx_id, '')), '') IS NOT NULL
+                  THEN 'Submitted / pending bank confirmation'
+                ELSE 'Not sent'
+              END
             )
             ELSE '{}'::jsonb
           END
@@ -68682,7 +69120,6 @@ BEGIN
   );
 END;
 $function$;
-
 
 
 
@@ -134785,8 +135222,6 @@ BEGIN
 END;
 $function$;
 
-
-
 CREATE OR REPLACE FUNCTION public.banking_pay_batch_watch_signal(
   p_pay_batch_id uuid,
   p_actor_user_id uuid,
@@ -134823,6 +135258,8 @@ DECLARE
   v_recommended_refresh text := 'NONE';
   v_display_summary_version bigint := 0;
   v_display_summary_updated_at_utc timestamptz := NULL::timestamptz;
+  v_display_stale_summary_json jsonb := '{}'::jsonb;
+  v_display_summary_refresh_required boolean := false;
   v_latest_operation_id uuid := NULL::uuid;
   v_latest_operation_status text := NULL::text;
   v_latest_operation_phase text := NULL::text;
@@ -134932,12 +135369,14 @@ BEGIN
   SELECT
     COALESCE(display_summary.summary_version, 0),
     display_summary.updated_at_utc,
+    COALESCE(display_summary.stale_summary_json, '{}'::jsonb),
     display_summary.latest_operation_id,
     display_summary.latest_operation_status,
     display_summary.latest_operation_phase
   INTO
     v_display_summary_version,
     v_display_summary_updated_at_utc,
+    v_display_stale_summary_json,
     v_latest_operation_id,
     v_latest_operation_status,
     v_latest_operation_phase
@@ -134947,6 +135386,7 @@ BEGIN
   IF NOT FOUND THEN
     v_display_summary_version := 0;
     v_display_summary_updated_at_utc := NULL::timestamptz;
+    v_display_stale_summary_json := '{}'::jsonb;
     v_latest_operation_id := NULL::uuid;
     v_latest_operation_status := NULL::text;
     v_latest_operation_phase := NULL::text;
@@ -134974,6 +135414,9 @@ BEGIN
     v_cached_highest_severity := NULL::text;
     v_cached_highest_label := NULL::text;
   END IF;
+
+
+  v_display_summary_refresh_required := LOWER(BTRIM(COALESCE(v_display_stale_summary_json->>'summary_refresh_required', 'false'))) IN ('true','1','yes','y','on');
 
   IF v_signal_found THEN
     v_version := COALESCE(v_signal_row.version, 0);
@@ -135113,6 +135556,12 @@ BEGIN
   v_overview_changed := p_known_overview_version IS NULL OR p_known_overview_version IS DISTINCT FROM v_overview_version;
   v_changed := p_known_version IS NULL OR p_known_version IS DISTINCT FROM v_version OR v_payment_status_changed OR v_correction_progress_changed OR v_alert_changed OR v_overview_changed;
 
+  IF v_display_summary_refresh_required THEN
+    v_changed := true;
+    v_overview_changed := true;
+    v_payment_status_changed := true;
+  END IF;
+
   IF v_payment_status_changed THEN
     v_changed_areas := array_append(v_changed_areas, 'payment_status');
   END IF;
@@ -135150,6 +135599,8 @@ BEGIN
     'version', v_version,
     'display_summary_version', COALESCE(v_display_summary_version, 0),
     'display_summary_updated_at_utc', CASE WHEN v_display_summary_updated_at_utc IS NULL THEN NULL::text ELSE v_display_summary_updated_at_utc::text END,
+    'display_summary_refresh_required', COALESCE(v_display_summary_refresh_required, false),
+    'display_stale_summary_json', COALESCE(v_display_stale_summary_json, '{}'::jsonb),
     'latest_operation_id', CASE WHEN v_latest_operation_id IS NULL THEN NULL::text ELSE v_latest_operation_id::text END,
     'latest_operation_status', v_latest_operation_status,
     'latest_operation_phase', v_latest_operation_phase,
@@ -135187,7 +135638,6 @@ BEGIN
   );
 END;
 $function$;
-
 
 
 CREATE OR REPLACE FUNCTION public.banking_alert_preferences_get(p_user_id uuid)
@@ -142534,7 +142984,16 @@ BEGIN
     COALESCE(item_summary.item_count, 0) AS item_count,
     COALESCE(transfer_summary.transfer_count, 0) AS transfer_count,
     ROUND(COALESCE(item_summary.total_payable, 0), 2)::numeric(14,2) AS total_payable,
-    ROUND(COALESCE(pay_batch_row.total_bank_out, transfer_summary.transfer_amount_total, 0), 2)::numeric(14,2) AS total_bank_out,
+    ROUND(
+      COALESCE(
+        CASE
+          WHEN COALESCE(transfer_summary.transfer_count, 0) > 0 THEN transfer_summary.transfer_amount_total
+          ELSE pay_batch_row.total_bank_out
+        END,
+        0
+      ),
+      2
+    )::numeric(14,2) AS total_bank_out,
     pay_batch_row.execution_commit_state AS execution_commit_state,
     pay_batch_row.rail_provider_snapshot AS rail_provider_label,
     pay_batch_row.rail_env_snapshot AS rail_env_label,
@@ -142547,8 +143006,22 @@ BEGIN
         'voided_item_count', COALESCE(item_summary.voided_item_count, 0),
         'mismatch_item_count', COALESCE(item_summary.mismatch_item_count, 0),
         'transfer_count', COALESCE(transfer_summary.transfer_count, 0),
+        'transfer_amount_total', ROUND(COALESCE(transfer_summary.transfer_amount_total, 0), 2),
         'failed_transfer_count', COALESCE(transfer_summary.failed_transfer_count, 0),
         'uncertain_transfer_count', COALESCE(transfer_summary.uncertain_transfer_count, 0),
+        'sent_confirmed_count', COALESCE(transfer_summary.sent_confirmed_count, 0),
+        'sent_confirmed_amount', ROUND(COALESCE(transfer_summary.sent_confirmed_amount, 0), 2),
+        'pending_submitted_count', COALESCE(transfer_summary.pending_submitted_count, 0),
+        'pending_submitted_amount', ROUND(COALESCE(transfer_summary.pending_submitted_amount, 0), 2),
+        'failed_returned_count', COALESCE(transfer_summary.failed_returned_count, 0),
+        'failed_returned_amount', ROUND(COALESCE(transfer_summary.failed_returned_amount, 0), 2),
+        'check_required_count', COALESCE(transfer_summary.check_required_count, 0),
+        'check_required_amount', ROUND(COALESCE(transfer_summary.check_required_amount, 0), 2),
+        'not_sent_count', COALESCE(transfer_summary.not_sent_count, 0),
+        'not_sent_amount', ROUND(COALESCE(transfer_summary.not_sent_amount, 0), 2),
+        'summary_source', 'durable_refresh',
+        'summary_refresh_required', false,
+        'refreshed_at_utc', now()::text,
         'latest_operation_status', latest_operation.status
       )
     ) AS issue_summary_counts,
@@ -142622,30 +143095,48 @@ BEGIN
   LEFT JOIN LATERAL (
     SELECT
       COUNT(*)::integer AS transfer_count,
-      ROUND(COALESCE(SUM(transfer_row.amount), 0), 2)::numeric AS transfer_amount_total,
-      COUNT(*) FILTER (
-        WHERE UPPER(BTRIM(COALESCE(transfer_row.status, ''))) IN (
-          'FAILED',
-          'REJECTED',
-          'DECLINED',
-          'RETURNED',
-          'CANCELLED',
-          'CANCELED',
-          'SUBMISSION_FAILED',
-          'FAILED_BEFORE_COMMIT'
-        )
-      )::integer AS failed_transfer_count,
-      COUNT(*) FILTER (
-        WHERE UPPER(BTRIM(COALESCE(transfer_row.status, ''))) IN (
-          'UNKNOWN',
-          'PENDING',
-          'LOCAL',
-          'UNCERTAIN',
-          'REVIEW_REQUIRED'
-        )
-      )::integer AS uncertain_transfer_count
-    FROM public.pay_bank_transfers AS transfer_row
-    WHERE transfer_row.pay_batch_id = pay_batch_row.id
+      ROUND(COALESCE(SUM(transfer_class.amount), 0), 2)::numeric AS transfer_amount_total,
+      COUNT(*) FILTER (WHERE transfer_class.bucket = 'FAILED_RETURNED')::integer AS failed_transfer_count,
+      COUNT(*) FILTER (WHERE transfer_class.bucket IN ('PENDING_SUBMITTED','CHECK_REQUIRED'))::integer AS uncertain_transfer_count,
+      COUNT(*) FILTER (WHERE transfer_class.bucket = 'SENT_CONFIRMED')::integer AS sent_confirmed_count,
+      ROUND(COALESCE(SUM(transfer_class.amount) FILTER (WHERE transfer_class.bucket = 'SENT_CONFIRMED'), 0), 2)::numeric AS sent_confirmed_amount,
+      COUNT(*) FILTER (WHERE transfer_class.bucket = 'PENDING_SUBMITTED')::integer AS pending_submitted_count,
+      ROUND(COALESCE(SUM(transfer_class.amount) FILTER (WHERE transfer_class.bucket = 'PENDING_SUBMITTED'), 0), 2)::numeric AS pending_submitted_amount,
+      COUNT(*) FILTER (WHERE transfer_class.bucket = 'FAILED_RETURNED')::integer AS failed_returned_count,
+      ROUND(COALESCE(SUM(transfer_class.amount) FILTER (WHERE transfer_class.bucket = 'FAILED_RETURNED'), 0), 2)::numeric AS failed_returned_amount,
+      COUNT(*) FILTER (WHERE transfer_class.bucket = 'CHECK_REQUIRED')::integer AS check_required_count,
+      ROUND(COALESCE(SUM(transfer_class.amount) FILTER (WHERE transfer_class.bucket = 'CHECK_REQUIRED'), 0), 2)::numeric AS check_required_amount,
+      COUNT(*) FILTER (WHERE transfer_class.bucket = 'NOT_SENT')::integer AS not_sent_count,
+      ROUND(COALESCE(SUM(transfer_class.amount) FILTER (WHERE transfer_class.bucket = 'NOT_SENT'), 0), 2)::numeric AS not_sent_amount
+    FROM (
+      SELECT
+        transfer_row.amount,
+        CASE
+          WHEN UPPER(BTRIM(COALESCE(transfer_row.status, ''))) IN ('COMPLETED','SETTLED','PAID','COMMITTED','EXECUTED')
+            OR UPPER(BTRIM(COALESCE(transfer_row.rail_state, ''))) IN ('COMPLETED','SETTLED','PAID','COMMITTED','EXECUTED','BANK_CONFIRMED','MANUAL_CONFIRM')
+            OR transfer_row.completed_at_utc IS NOT NULL
+            THEN 'SENT_CONFIRMED'
+          WHEN UPPER(BTRIM(COALESCE(transfer_row.status, ''))) IN ('FAILED','REJECTED','DECLINED','RETURNED','CANCELLED','CANCELED','SUBMISSION_FAILED','FAILED_BEFORE_COMMIT')
+            OR UPPER(BTRIM(COALESCE(transfer_row.rail_state, ''))) IN ('FAILED','REJECTED','DECLINED','RETURNED','CANCELLED','CANCELED')
+            THEN 'FAILED_RETURNED'
+          WHEN UPPER(BTRIM(COALESCE(transfer_row.status, ''))) IN ('UNKNOWN','UNCERTAIN','REVIEW_REQUIRED')
+            OR UPPER(BTRIM(COALESCE(transfer_row.rail_state, ''))) IN ('UNKNOWN','UNCERTAIN','REVIEW_REQUIRED')
+            THEN 'CHECK_REQUIRED'
+          WHEN UPPER(BTRIM(COALESCE(transfer_row.status, ''))) IN ('PENDING','SUBMITTED','PROCESSING','IN_FLIGHT','WAITING_BANK_CONFIRM')
+            OR UPPER(BTRIM(COALESCE(transfer_row.rail_state, ''))) IN ('PENDING','SUBMITTED','PROCESSING','IN_FLIGHT','ACCEPTED','PENDING_SETTLEMENT','PENDING_CONFIRMATION')
+            OR NULLIF(BTRIM(COALESCE(transfer_row.rail_tx_id, '')), '') IS NOT NULL
+            OR UPPER(BTRIM(COALESCE(
+              transfer_row.rail_meta_json #>> '{provider_submit_diagnostic,provider_submission_status}',
+              transfer_row.rail_meta_json #>> '{providerSubmitDiagnostic,providerSubmissionStatus}',
+              transfer_row.rail_meta_json->>'provider_submission_status',
+              ''
+            ))) IN ('PROVIDER_SUBMISSION_ACCEPTED','ACCEPTED','SUBMITTED','PROVIDER_SUBMITTED')
+            THEN 'PENDING_SUBMITTED'
+          ELSE 'NOT_SENT'
+        END AS bucket
+      FROM public.pay_bank_transfers AS transfer_row
+      WHERE transfer_row.pay_batch_id = pay_batch_row.id
+    ) AS transfer_class
   ) AS transfer_summary ON true
   LEFT JOIN LATERAL (
     SELECT
@@ -142692,9 +143183,66 @@ BEGIN
               'pay_batch_id', p_pay_batch_id::text
             )::text;
   END IF;
+
+  INSERT INTO public.banking_pay_batch_change_signals (
+    pay_batch_id,
+    version,
+    payment_status_version,
+    correction_progress_version,
+    alert_version,
+    overview_version,
+    last_changed_at_utc,
+    last_payment_status_changed_at_utc,
+    last_correction_progress_changed_at_utc,
+    last_alert_changed_at_utc,
+    last_change_reason,
+    last_change_source,
+    last_change_scope_json,
+    last_changed_transfer_ids,
+    last_changed_candidate_ids,
+    last_changed_pay_batch_item_ids,
+    updated_at_utc
+  )
+  VALUES (
+    p_pay_batch_id,
+    1,
+    1,
+    0,
+    0,
+    1,
+    now(),
+    now(),
+    NULL::timestamptz,
+    NULL::timestamptz,
+    'DISPLAY_SUMMARY_REFRESH',
+    'pay_batch_display_summary_refresh',
+    jsonb_build_object(
+      'summary_source', 'durable_refresh',
+      'summary_refresh_required', false,
+      'changed_areas', jsonb_build_array('overview', 'payment_status')
+    ),
+    '[]'::jsonb,
+    '[]'::jsonb,
+    '[]'::jsonb,
+    now()
+  )
+  ON CONFLICT (pay_batch_id) DO UPDATE
+  SET
+    version = COALESCE(banking_pay_batch_change_signals.version, 0) + 1,
+    payment_status_version = COALESCE(banking_pay_batch_change_signals.payment_status_version, 0) + 1,
+    overview_version = COALESCE(banking_pay_batch_change_signals.overview_version, 0) + 1,
+    last_changed_at_utc = now(),
+    last_payment_status_changed_at_utc = now(),
+    last_change_reason = 'DISPLAY_SUMMARY_REFRESH',
+    last_change_source = 'pay_batch_display_summary_refresh',
+    last_change_scope_json = COALESCE(banking_pay_batch_change_signals.last_change_scope_json, '{}'::jsonb) || jsonb_build_object(
+      'summary_source', 'durable_refresh',
+      'summary_refresh_required', false,
+      'changed_areas', jsonb_build_array('overview', 'payment_status')
+    ),
+    updated_at_utc = now();
 END;
 $function$;
-
 
 
 
