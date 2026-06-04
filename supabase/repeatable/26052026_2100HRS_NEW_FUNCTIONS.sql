@@ -123796,6 +123796,8 @@ DROP FUNCTION IF EXISTS public.pay_bank_event_ingest(jsonb, uuid);
 
 DROP FUNCTION IF EXISTS public.pay_bank_event_ingest(jsonb, uuid);
 
+
+
 CREATE OR REPLACE FUNCTION public.pay_bank_event_ingest(
   p_event_json jsonb,
   p_actor_user_id uuid DEFAULT NULL::uuid,
@@ -123876,6 +123878,13 @@ DECLARE
   v_mapping_candidate_count integer := 0;
   v_has_strong_transfer_mapping boolean := false;
   v_existing_transfer_is_final_paid boolean := false;
+  v_pre_insert_pay_batch_id uuid := NULL::uuid;
+  v_pre_insert_pay_bank_transfer_id uuid := NULL::uuid;
+  v_pre_insert_candidate_id uuid := NULL::uuid;
+  v_pre_insert_umbrella_id uuid := NULL::uuid;
+  v_pre_insert_mapping_status text := NULL::text;
+  v_pre_insert_mapping_method text := NULL::text;
+  v_duplicate_event_should_continue boolean := false;
 
   v_transfer public.pay_bank_transfers%rowtype;
   v_batch public.pay_batches%rowtype;
@@ -124362,6 +124371,8 @@ BEGIN
       OR transfer_match.rail_meta_json #>> '{provider_transaction_id}' = v_provider_transaction_id
       OR transfer_match.rail_meta_json #>> '{transaction_id}' = v_provider_transaction_id
       OR transfer_match.rail_meta_json #>> '{provider_payment_id}' = v_provider_transaction_id
+      OR transfer_match.rail_meta_json #>> '{provider_submit_diagnostic,provider_transaction_id}' = v_provider_transaction_id
+      OR transfer_match.rail_meta_json #>> '{id}' = v_provider_transaction_id
     )
       AND (v_pay_batch_id IS NULL OR transfer_match.pay_batch_id = v_pay_batch_id);
 
@@ -124374,6 +124385,8 @@ BEGIN
         OR transfer_match.rail_meta_json #>> '{provider_transaction_id}' = v_provider_transaction_id
         OR transfer_match.rail_meta_json #>> '{transaction_id}' = v_provider_transaction_id
         OR transfer_match.rail_meta_json #>> '{provider_payment_id}' = v_provider_transaction_id
+        OR transfer_match.rail_meta_json #>> '{provider_submit_diagnostic,provider_transaction_id}' = v_provider_transaction_id
+        OR transfer_match.rail_meta_json #>> '{id}' = v_provider_transaction_id
       )
         AND (v_pay_batch_id IS NULL OR transfer_match.pay_batch_id = v_pay_batch_id)
       ORDER BY transfer_match.created_at_utc DESC, transfer_match.id DESC
@@ -124393,14 +124406,22 @@ BEGIN
     SELECT count(*)::integer
     INTO v_mapping_candidate_count
     FROM public.pay_bank_transfers AS transfer_match
-    WHERE transfer_match.request_id = v_provider_request_id
+    WHERE (
+        transfer_match.request_id = v_provider_request_id
+        OR transfer_match.rail_meta_json #>> '{provider_submit_diagnostic,request_id}' = v_provider_request_id
+        OR transfer_match.rail_meta_json #>> '{provider_submit_diagnostic,local_provider_request_id}' = v_provider_request_id
+      )
       AND (v_pay_batch_id IS NULL OR transfer_match.pay_batch_id = v_pay_batch_id);
 
     IF v_mapping_candidate_count = 1 THEN
       SELECT transfer_match.*
       INTO v_transfer
       FROM public.pay_bank_transfers AS transfer_match
-      WHERE transfer_match.request_id = v_provider_request_id
+      WHERE (
+          transfer_match.request_id = v_provider_request_id
+          OR transfer_match.rail_meta_json #>> '{provider_submit_diagnostic,request_id}' = v_provider_request_id
+          OR transfer_match.rail_meta_json #>> '{provider_submit_diagnostic,local_provider_request_id}' = v_provider_request_id
+        )
         AND (v_pay_batch_id IS NULL OR transfer_match.pay_batch_id = v_pay_batch_id)
       ORDER BY transfer_match.created_at_utc DESC, transfer_match.id DESC
       LIMIT 1;
@@ -124497,6 +124518,102 @@ BEGIN
         END
       );
       v_mapping_method := 'PROVIDER_EVENT_ID';
+    ELSIF v_mapping_candidate_count > 1 THEN
+      v_mapping_method := 'AMBIGUOUS';
+    END IF;
+  END IF;
+
+  IF v_pay_bank_transfer_id IS NULL
+     AND (
+       v_provider_transaction_id IS NOT NULL
+       OR v_provider_request_id IS NOT NULL
+       OR v_provider_reference IS NOT NULL
+     ) THEN
+    SELECT count(DISTINCT event_match.pay_bank_transfer_id)::integer
+    INTO v_mapping_candidate_count
+    FROM public.pay_bank_transfer_events AS event_match
+    JOIN public.pay_bank_transfers AS transfer_match
+      ON transfer_match.id = event_match.pay_bank_transfer_id
+    WHERE event_match.pay_bank_transfer_id IS NOT NULL
+      AND upper(COALESCE(event_match.mapping_status, '')) = 'MATCHED'
+      AND upper(COALESCE(event_match.mapping_method, '')) IN (
+        'TRANSFER_ID',
+        'PROVIDER_EVENT_ID',
+        'PROVIDER_TRANSACTION_ID',
+        'REQUEST_ID',
+        'PROVIDER_REFERENCE',
+        'RAIL_TX_ID',
+        'MATCHED_PROVIDER_EVENT',
+        'MANUAL_TRANSFER_SELECTION'
+      )
+      AND (
+        event_match.provider_transaction_id = v_provider_transaction_id
+        OR event_match.provider_request_id = v_provider_request_id
+        OR event_match.provider_reference = v_provider_transaction_id
+        OR event_match.provider_reference = v_provider_request_id
+        OR event_match.provider_transaction_id = v_provider_reference
+        OR event_match.provider_request_id = v_provider_reference
+      )
+      AND (
+        v_pay_batch_id IS NULL
+        OR event_match.pay_batch_id = v_pay_batch_id
+        OR transfer_match.pay_batch_id = v_pay_batch_id
+      );
+
+    IF v_mapping_candidate_count = 1 THEN
+      SELECT transfer_match.*
+      INTO v_transfer
+      FROM public.pay_bank_transfer_events AS event_match
+      JOIN public.pay_bank_transfers AS transfer_match
+        ON transfer_match.id = event_match.pay_bank_transfer_id
+      WHERE event_match.pay_bank_transfer_id IS NOT NULL
+        AND upper(COALESCE(event_match.mapping_status, '')) = 'MATCHED'
+        AND upper(COALESCE(event_match.mapping_method, '')) IN (
+          'TRANSFER_ID',
+          'PROVIDER_EVENT_ID',
+          'PROVIDER_TRANSACTION_ID',
+          'REQUEST_ID',
+          'PROVIDER_REFERENCE',
+          'RAIL_TX_ID',
+          'MATCHED_PROVIDER_EVENT',
+          'MANUAL_TRANSFER_SELECTION'
+        )
+        AND (
+          event_match.provider_transaction_id = v_provider_transaction_id
+          OR event_match.provider_request_id = v_provider_request_id
+          OR event_match.provider_reference = v_provider_transaction_id
+          OR event_match.provider_reference = v_provider_request_id
+          OR event_match.provider_transaction_id = v_provider_reference
+          OR event_match.provider_request_id = v_provider_reference
+        )
+        AND (
+          v_pay_batch_id IS NULL
+          OR event_match.pay_batch_id = v_pay_batch_id
+          OR transfer_match.pay_batch_id = v_pay_batch_id
+        )
+      ORDER BY event_match.received_at_utc DESC NULLS LAST,
+               event_match.event_time_utc DESC NULLS LAST,
+               event_match.created_at_utc DESC NULLS LAST,
+               event_match.id DESC
+      LIMIT 1;
+
+      IF v_transfer.id IS NOT NULL THEN
+        v_pay_bank_transfer_id := v_transfer.id;
+        v_pay_batch_id := COALESCE(v_pay_batch_id, v_transfer.pay_batch_id);
+        v_candidate_id := COALESCE(v_candidate_id, v_transfer.candidate_id);
+        v_umbrella_id := COALESCE(
+          v_umbrella_id,
+          v_transfer.umbrella_id,
+          CASE
+            WHEN upper(COALESCE(v_transfer.payee_entity_kind, '')) IN ('UMBRELLA', 'UMBRELLA_COMPANY') THEN v_transfer.payee_entity_id
+            ELSE NULL::uuid
+          END
+        );
+        v_mapping_method := 'MATCHED_PROVIDER_EVENT';
+      ELSE
+        v_mapping_candidate_count := 0;
+        v_mapping_method := 'UNMATCHED';
+      END IF;
     ELSIF v_mapping_candidate_count > 1 THEN
       v_mapping_method := 'AMBIGUOUS';
     END IF;
@@ -124629,9 +124746,17 @@ BEGIN
       'REQUEST_ID',
       'PROVIDER_REFERENCE',
       'RAIL_TX_ID',
+      'MATCHED_PROVIDER_EVENT',
       'MANUAL_TRANSFER_SELECTION'
     )
   );
+
+  v_pre_insert_pay_batch_id := v_pay_batch_id;
+  v_pre_insert_pay_bank_transfer_id := v_pay_bank_transfer_id;
+  v_pre_insert_candidate_id := v_candidate_id;
+  v_pre_insert_umbrella_id := v_umbrella_id;
+  v_pre_insert_mapping_status := v_mapping_status;
+  v_pre_insert_mapping_method := v_mapping_method;
 
   v_idempotency_key := nullif(btrim(COALESCE(v_event_json->>'idempotency_key', v_provider_event_key, '')), '');
 
@@ -124758,6 +124883,71 @@ BEGIN
              public.pay_bank_transfer_events.id DESC
     LIMIT 1;
 
+    v_duplicate_event_should_continue := false;
+
+    IF v_event_id IS NOT NULL
+       AND v_pre_insert_mapping_status = 'MATCHED'
+       AND v_pre_insert_pay_batch_id IS NOT NULL
+       AND v_pre_insert_pay_bank_transfer_id IS NOT NULL
+       AND v_pre_insert_mapping_method IN (
+         'TRANSFER_ID',
+         'PROVIDER_EVENT_ID',
+         'PROVIDER_TRANSACTION_ID',
+         'REQUEST_ID',
+         'PROVIDER_REFERENCE',
+         'RAIL_TX_ID',
+         'MATCHED_PROVIDER_EVENT',
+         'MANUAL_TRANSFER_SELECTION'
+       )
+       AND (
+         v_mapping_status IS DISTINCT FROM 'MATCHED'
+         OR v_pay_bank_transfer_id IS NULL
+         OR v_mapping_method NOT IN (
+           'TRANSFER_ID',
+           'PROVIDER_EVENT_ID',
+           'PROVIDER_TRANSACTION_ID',
+           'REQUEST_ID',
+           'PROVIDER_REFERENCE',
+           'RAIL_TX_ID',
+           'MATCHED_PROVIDER_EVENT',
+           'MANUAL_TRANSFER_SELECTION'
+         )
+       ) THEN
+      UPDATE public.pay_bank_transfer_events AS existing_event_to_upgrade
+      SET
+        pay_batch_id = v_pre_insert_pay_batch_id,
+        pay_bank_transfer_id = v_pre_insert_pay_bank_transfer_id,
+        candidate_id = COALESCE(existing_event_to_upgrade.candidate_id, v_pre_insert_candidate_id),
+        umbrella_id = COALESCE(existing_event_to_upgrade.umbrella_id, v_pre_insert_umbrella_id),
+        mapping_status = 'MATCHED',
+        mapping_method = v_pre_insert_mapping_method,
+        correction_disposition = NULL::text
+      WHERE existing_event_to_upgrade.id = v_event_id
+      RETURNING
+        existing_event_to_upgrade.mapping_status,
+        existing_event_to_upgrade.mapping_method,
+        existing_event_to_upgrade.movement_classification,
+        existing_event_to_upgrade.correction_disposition,
+        existing_event_to_upgrade.pay_bank_transfer_id,
+        existing_event_to_upgrade.pay_batch_id,
+        existing_event_to_upgrade.candidate_id,
+        existing_event_to_upgrade.umbrella_id
+      INTO
+        v_mapping_status,
+        v_mapping_method,
+        v_classification,
+        v_correction_disposition,
+        v_pay_bank_transfer_id,
+        v_pay_batch_id,
+        v_candidate_id,
+        v_umbrella_id;
+
+      v_duplicate_event_should_continue := true;
+      v_inserted_event := false;
+      v_has_strong_transfer_mapping := true;
+    END IF;
+
+    IF COALESCE(v_duplicate_event_should_continue, false) IS NOT TRUE THEN
     PERFORM public._imp_debug_audit(
       p_actor_user_id,
       'PAYMENT_BANK_EVENT_INGEST_IDEMPOTENT_EXISTING',
@@ -124817,6 +125007,7 @@ BEGIN
       'live_signal', v_live_signal_result,
       'signal_recommendation_json', v_signal_recommendation_json
     );
+    END IF;
   END IF;
 
   IF v_pay_bank_transfer_id IS NOT NULL THEN
@@ -124852,7 +125043,7 @@ BEGIN
         status = 'COMPLETED',
         completed_at_utc = COALESCE(transfer_to_update.completed_at_utc, v_event_time_utc, v_now),
         rail_state = COALESCE(v_provider_state, transfer_to_update.rail_state),
-        rail_tx_id = COALESCE(NULLIF(v_provider_reference, ''), transfer_to_update.rail_tx_id),
+        rail_tx_id = COALESCE(NULLIF(v_provider_transaction_id, ''), NULLIF(v_provider_reference, ''), transfer_to_update.rail_tx_id),
         rail_meta_json = COALESCE(transfer_to_update.rail_meta_json, '{}'::jsonb) || jsonb_build_object(
           'latest_bank_event_id', v_event_id,
           'latest_bank_event_state', v_normalised_state,
@@ -124894,7 +125085,7 @@ BEGIN
           ELSE transfer_to_update.status
         END,
         rail_state = COALESCE(v_provider_state, transfer_to_update.rail_state),
-        rail_tx_id = COALESCE(NULLIF(v_provider_reference, ''), transfer_to_update.rail_tx_id),
+        rail_tx_id = COALESCE(NULLIF(v_provider_transaction_id, ''), NULLIF(v_provider_reference, ''), transfer_to_update.rail_tx_id),
         rail_meta_json = COALESCE(transfer_to_update.rail_meta_json, '{}'::jsonb) || jsonb_build_object(
           'latest_bank_event_id', v_event_id,
           'latest_bank_event_state', v_normalised_state,
@@ -125058,6 +125249,7 @@ BEGIN
          'REQUEST_ID',
          'PROVIDER_REFERENCE',
          'RAIL_TX_ID',
+         'MATCHED_PROVIDER_EVENT',
          'MANUAL_TRANSFER_SELECTION'
        )
        AND v_provider_state_upper NOT IN ('TIMEOUT', 'TIMED_OUT', 'TIMEDOUT', 'API_TIMEOUT') THEN
@@ -125225,6 +125417,7 @@ BEGIN
        'REQUEST_ID',
        'PROVIDER_REFERENCE',
        'RAIL_TX_ID',
+       'MATCHED_PROVIDER_EVENT',
        'MANUAL_TRANSFER_SELECTION'
      ) THEN
     v_classification_result := public._pay_payment_movement_classify(
@@ -125305,6 +125498,7 @@ BEGIN
        'REQUEST_ID',
        'PROVIDER_REFERENCE',
        'RAIL_TX_ID',
+       'MATCHED_PROVIDER_EVENT',
        'MANUAL_TRANSFER_SELECTION'
      )
      AND v_event_is_terminal_no_money
@@ -125653,6 +125847,7 @@ EXCEPTION
     RAISE;
 END;
 $function$;
+
 
 
 
