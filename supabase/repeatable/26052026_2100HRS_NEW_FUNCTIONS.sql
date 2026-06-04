@@ -43652,9 +43652,11 @@ BEGIN
           'NO_DELTA',
           'EXCLUDED'
         )
-     OR UPPER(BTRIM(COALESCE(allocation_row.allocation_basis_json#>>'{line,presentation_section}', allocation_row.allocation_basis_json#>>'{line,readiness_state}', allocation_row.allocation_basis_json->>'presentation_section', allocation_row.allocation_basis_json->>'readiness_state', ''))) <> 'READY_TO_PAY'
+     OR UPPER(BTRIM(COALESCE(allocation_row.allocation_basis_json#>>'{line,presentation_section}', allocation_row.allocation_basis_json->>'presentation_section', ''))) <> 'READY_TO_PAY'
      OR LOWER(BTRIM(COALESCE(allocation_row.allocation_basis_json#>>'{line,draftable}', allocation_row.allocation_basis_json->>'draftable', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
      OR LOWER(BTRIM(COALESCE(allocation_row.allocation_basis_json#>>'{line,is_ready_for_draft}', allocation_row.allocation_basis_json->>'is_ready_for_draft', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
+     OR UPPER(BTRIM(COALESCE(allocation_row.allocation_basis_json#>>'{economic_key,key_type}', allocation_row.allocation_basis_json->>'key_type', ''))) NOT IN ('TS_DAY','TS_TOTAL','ADDITIONAL_CODE','ADJUSTMENT_CODE','EXPENSE_CODE','MANUAL_CARRY_FORWARD')
+     OR NULLIF(BTRIM(COALESCE(allocation_row.allocation_basis_json#>>'{economic_key,key_value}', allocation_row.allocation_basis_json->>'key_value', '')), '') IS NULL
      OR ROUND(COALESCE(allocation_row.allocated_amount, 0), 2) = 0
   LIMIT 1;
 
@@ -52483,6 +52485,7 @@ DROP FUNCTION IF EXISTS public.pay_workbench_prepare_draft(uuid, uuid, jsonb, te
 DROP FUNCTION IF EXISTS public.pay_workbench_prepare_draft(uuid, uuid, jsonb, text, text, boolean, boolean, uuid, timestamptz);
 DROP FUNCTION IF EXISTS public.pay_workbench_prepare_draft(uuid, uuid, jsonb, text, text, boolean, boolean, uuid, timestamptz, uuid, boolean, boolean);
 
+
 CREATE OR REPLACE FUNCTION public.pay_workbench_prepare_draft(
   p_session_id uuid,
   p_actor_user_id uuid,
@@ -52734,7 +52737,7 @@ BEGIN
       )
       AND (
         UPPER(BTRIM(COALESCE(blocked_selected_row.status, ''))) <> 'READY'
-        OR UPPER(BTRIM(COALESCE(blocked_selected_row.selection_state, ''))) IN ('NOT_SELECTABLE', 'EXCLUDED')
+        OR UPPER(BTRIM(COALESCE(blocked_selected_row.selection_state, ''))) <> 'SELECTED'
       )
   )
   INTO v_current_unready_selected_exists;
@@ -52799,6 +52802,8 @@ BEGIN
            FROM pg_temp.tmp_pay_workbench_prepare_draft_selected_sample AS malformed_sample
            WHERE LOWER(BTRIM(COALESCE(malformed_sample.preview_contract_json->>'ok', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
               OR LOWER(BTRIM(COALESCE(malformed_sample.preview_contract_json->>'selection_allowed', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
+              OR UPPER(BTRIM(COALESCE(malformed_sample.selection_state, ''))) <> 'SELECTED'
+              OR UPPER(BTRIM(COALESCE(malformed_sample.row_json->>'presentation_section', ''))) <> 'READY_TO_PAY'
          )
   INTO v_malformed_selected_exists;
 
@@ -52815,6 +52820,8 @@ BEGIN
       FROM pg_temp.tmp_pay_workbench_prepare_draft_selected_sample AS malformed_sample
       WHERE LOWER(BTRIM(COALESCE(malformed_sample.preview_contract_json->>'ok', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
          OR LOWER(BTRIM(COALESCE(malformed_sample.preview_contract_json->>'selection_allowed', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
+         OR UPPER(BTRIM(COALESCE(malformed_sample.selection_state, ''))) <> 'SELECTED'
+         OR UPPER(BTRIM(COALESCE(malformed_sample.row_json->>'presentation_section', ''))) <> 'READY_TO_PAY'
       ORDER BY malformed_sample.row_ordinal, malformed_sample.id
       LIMIT 25
     ) AS malformed_rows;
@@ -52844,14 +52851,16 @@ BEGIN
              AND UPPER(BTRIM(COALESCE(ready_sample.status, ''))) = 'READY'
              AND LOWER(BTRIM(COALESCE(ready_sample.preview_contract_json->>'ok', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
              AND LOWER(BTRIM(COALESCE(ready_sample.preview_contract_json->>'selection_allowed', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+             AND UPPER(BTRIM(COALESCE(ready_sample.row_json->>'presentation_section', ''))) = 'READY_TO_PAY'
          ),
          EXISTS (
            SELECT 1
            FROM pg_temp.tmp_pay_workbench_prepare_draft_selected_sample AS blocked_sample
            WHERE UPPER(BTRIM(COALESCE(blocked_sample.status, ''))) IN ('DIRTY', 'ERROR', 'FAILED')
-              OR UPPER(BTRIM(COALESCE(blocked_sample.selection_state, ''))) IN ('NOT_SELECTABLE', 'EXCLUDED')
+              OR UPPER(BTRIM(COALESCE(blocked_sample.selection_state, ''))) <> 'SELECTED'
               OR LOWER(BTRIM(COALESCE(blocked_sample.preview_contract_json->>'ok', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
               OR LOWER(BTRIM(COALESCE(blocked_sample.preview_contract_json->>'selection_allowed', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
+              OR UPPER(BTRIM(COALESCE(blocked_sample.row_json->>'presentation_section', ''))) <> 'READY_TO_PAY'
          )
   INTO v_sample_row_count, v_sample_candidate_count, v_sample_paye_count, v_sample_umbrella_count, v_ready_selected_exists, v_unready_selected_exists
   FROM pg_temp.tmp_pay_workbench_prepare_draft_selected_sample AS selected_sample;
@@ -52966,6 +52975,8 @@ BEGIN
   );
 END;
 $function$;
+
+
 
 
 
