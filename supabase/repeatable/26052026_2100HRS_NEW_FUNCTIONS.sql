@@ -53091,6 +53091,7 @@ DROP FUNCTION IF EXISTS public.pay_workbench_prepare_draft(uuid, uuid, jsonb, te
 DROP FUNCTION IF EXISTS public.pay_workbench_prepare_draft(uuid, uuid, jsonb, text, text, boolean, boolean, uuid, timestamptz, uuid, boolean, boolean);
 
 
+
 CREATE OR REPLACE FUNCTION public.pay_workbench_prepare_draft(
   p_session_id uuid,
   p_actor_user_id uuid,
@@ -53135,6 +53136,12 @@ DECLARE
   v_current_unready_selected_exists boolean := false;
   v_malformed_selected_exists boolean := false;
   v_malformed_selected_sample jsonb := '[]'::jsonb;
+  v_direct_current_selection_match_count integer := 0;
+  v_current_ready_selected_row_count integer := 0;
+  v_selection_resolved_to_current boolean := false;
+  v_resolved_current_selection_ids jsonb := '[]'::jsonb;
+  v_resolved_selection_match_count integer := 0;
+  v_resolved_selection_distinct_count integer := 0;
 BEGIN
   PERFORM public.banking_pay_hot_path_budget_apply('WORKBENCH_PROGRESS');
 
@@ -53261,6 +53268,152 @@ BEGIN
   FROM jsonb_array_elements_text(COALESCE(p_selected_preview_row_ids, '[]'::jsonb)) AS supplied_id(value)
   WHERE p_selected_preview_row_ids IS NOT NULL
     AND BTRIM(supplied_id.value) <> '';
+
+  IF p_selected_preview_row_ids IS NOT NULL AND COALESCE(v_input_count, 0) > 0 THEN
+    DROP TABLE IF EXISTS pg_temp.tmp_pay_workbench_prepare_draft_resolved_ids;
+    CREATE TEMPORARY TABLE pg_temp.tmp_pay_workbench_prepare_draft_resolved_ids ON COMMIT DROP AS
+    WITH supplied_ids AS (
+      SELECT supplied_id.supplied_id
+      FROM pg_temp.tmp_pay_workbench_prepare_draft_supplied_ids AS supplied_id
+    ),
+    direct_current_matches AS (
+      SELECT DISTINCT
+        supplied_ids.supplied_id,
+        current_preview_row.id::text AS resolved_id
+      FROM supplied_ids
+      JOIN public.banking_pay_workbench_preview_rows AS current_preview_row
+        ON current_preview_row.session_id = p_session_id
+       AND current_preview_row.session_version = v_session_row.version
+       AND UPPER(BTRIM(COALESCE(current_preview_row.status, ''))) = 'READY'
+       AND COALESCE(current_preview_row.selected, false) = true
+       AND UPPER(BTRIM(COALESCE(current_preview_row.selection_state, ''))) = 'SELECTED'
+       AND UPPER(BTRIM(COALESCE(current_preview_row.row_json->>'presentation_section', ''))) = 'READY_TO_PAY'
+       AND LOWER(BTRIM(COALESCE(current_preview_row.row_json->>'draftable', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+       AND LOWER(BTRIM(COALESCE(current_preview_row.row_json->>'is_ready_for_draft', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+       AND (v_scope_filter = 'ALL' OR UPPER(BTRIM(COALESCE(current_preview_row.row_json->>'pay_channel', current_preview_row.row_json->>'current_pay_method', current_preview_row.row_json->>'candidate_pay_method', ''))) = v_scope_filter)
+       AND (
+         current_preview_row.id::text = supplied_ids.supplied_id
+         OR current_preview_row.row_key = supplied_ids.supplied_id
+         OR current_preview_row.row_json->>'preview_row_id' = supplied_ids.supplied_id
+         OR current_preview_row.row_json->>'row_id' = supplied_ids.supplied_id
+         OR current_preview_row.row_json->>'line_id' = supplied_ids.supplied_id
+       )
+    ),
+    historical_candidates AS (
+      SELECT
+        supplied_ids.supplied_id,
+        historical_preview_row.id AS historical_preview_id,
+        historical_preview_row.session_version,
+        historical_preview_row.row_ordinal,
+        historical_preview_row.candidate_id,
+        historical_preview_row.timesheet_id,
+        historical_preview_row.row_key,
+        historical_preview_row.section,
+        NULLIF(BTRIM(COALESCE(historical_preview_row.key_type, historical_preview_row.row_json#>>'{economic_key,key_type}', historical_preview_row.row_json->>'component_key_type', '')), '') AS key_type,
+        NULLIF(BTRIM(COALESCE(historical_preview_row.key_value, historical_preview_row.row_json#>>'{economic_key,key_value}', historical_preview_row.row_json->>'component_key_value', '')), '') AS key_value,
+        UPPER(BTRIM(COALESCE(historical_preview_row.row_json->>'pay_channel', historical_preview_row.row_json->>'current_pay_method', historical_preview_row.row_json->>'candidate_pay_method', ''))) AS pay_channel,
+        ROW_NUMBER() OVER (
+          PARTITION BY supplied_ids.supplied_id
+          ORDER BY historical_preview_row.session_version DESC, historical_preview_row.updated_at_utc DESC NULLS LAST, historical_preview_row.created_at_utc DESC NULLS LAST, historical_preview_row.id DESC
+        ) AS match_rank
+      FROM supplied_ids
+      JOIN public.banking_pay_workbench_preview_rows AS historical_preview_row
+        ON historical_preview_row.session_id = p_session_id
+       AND (
+         historical_preview_row.id::text = supplied_ids.supplied_id
+         OR historical_preview_row.row_key = supplied_ids.supplied_id
+         OR historical_preview_row.row_json->>'preview_row_id' = supplied_ids.supplied_id
+         OR historical_preview_row.row_json->>'row_id' = supplied_ids.supplied_id
+         OR historical_preview_row.row_json->>'line_id' = supplied_ids.supplied_id
+       )
+    ),
+    historical_best AS (
+      SELECT
+        historical_candidates.supplied_id,
+        historical_candidates.candidate_id,
+        historical_candidates.timesheet_id,
+        historical_candidates.row_key,
+        historical_candidates.section,
+        historical_candidates.key_type,
+        historical_candidates.key_value,
+        historical_candidates.pay_channel
+      FROM historical_candidates
+      WHERE historical_candidates.match_rank = 1
+    ),
+    economic_key_current_matches AS (
+      SELECT DISTINCT
+        historical_best.supplied_id,
+        current_preview_row.id::text AS resolved_id
+      FROM historical_best
+      JOIN public.banking_pay_workbench_preview_rows AS current_preview_row
+        ON current_preview_row.session_id = p_session_id
+       AND current_preview_row.session_version = v_session_row.version
+       AND UPPER(BTRIM(COALESCE(current_preview_row.status, ''))) = 'READY'
+       AND COALESCE(current_preview_row.selected, false) = true
+       AND UPPER(BTRIM(COALESCE(current_preview_row.selection_state, ''))) = 'SELECTED'
+       AND UPPER(BTRIM(COALESCE(current_preview_row.row_json->>'presentation_section', ''))) = 'READY_TO_PAY'
+       AND LOWER(BTRIM(COALESCE(current_preview_row.row_json->>'draftable', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+       AND LOWER(BTRIM(COALESCE(current_preview_row.row_json->>'is_ready_for_draft', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+       AND current_preview_row.candidate_id IS NOT DISTINCT FROM historical_best.candidate_id
+       AND current_preview_row.timesheet_id IS NOT DISTINCT FROM historical_best.timesheet_id
+       AND COALESCE(NULLIF(BTRIM(current_preview_row.section), ''), 'canonical_preview_lines') = COALESCE(NULLIF(BTRIM(historical_best.section), ''), 'canonical_preview_lines')
+       AND NULLIF(BTRIM(COALESCE(current_preview_row.key_type, current_preview_row.row_json#>>'{economic_key,key_type}', current_preview_row.row_json->>'component_key_type', '')), '') IS NOT DISTINCT FROM historical_best.key_type
+       AND NULLIF(BTRIM(COALESCE(current_preview_row.key_value, current_preview_row.row_json#>>'{economic_key,key_value}', current_preview_row.row_json->>'component_key_value', '')), '') IS NOT DISTINCT FROM historical_best.key_value
+       AND NULLIF(BTRIM(current_preview_row.row_key), '') IS NOT DISTINCT FROM NULLIF(BTRIM(historical_best.row_key), '')
+       AND (v_scope_filter = 'ALL' OR UPPER(BTRIM(COALESCE(current_preview_row.row_json->>'pay_channel', current_preview_row.row_json->>'current_pay_method', current_preview_row.row_json->>'candidate_pay_method', ''))) = v_scope_filter)
+       AND (
+         historical_best.pay_channel IS NULL
+         OR historical_best.pay_channel = ''
+         OR UPPER(BTRIM(COALESCE(current_preview_row.row_json->>'pay_channel', current_preview_row.row_json->>'current_pay_method', current_preview_row.row_json->>'candidate_pay_method', ''))) = historical_best.pay_channel
+       )
+    )
+    SELECT
+      supplied_ids.supplied_id,
+      COALESCE(direct_current_matches.resolved_id, economic_key_current_matches.resolved_id) AS resolved_id
+    FROM supplied_ids
+    LEFT JOIN direct_current_matches
+      ON direct_current_matches.supplied_id = supplied_ids.supplied_id
+    LEFT JOIN economic_key_current_matches
+      ON economic_key_current_matches.supplied_id = supplied_ids.supplied_id;
+
+    SELECT COUNT(*)::integer,
+           COUNT(DISTINCT resolved_selection.resolved_id)::integer,
+           COALESCE(jsonb_agg(to_jsonb(resolved_selection.resolved_id) ORDER BY resolved_selection.resolved_id), '[]'::jsonb)
+    INTO v_resolved_selection_match_count, v_resolved_selection_distinct_count, v_resolved_current_selection_ids
+    FROM pg_temp.tmp_pay_workbench_prepare_draft_resolved_ids AS resolved_selection
+    WHERE NULLIF(BTRIM(COALESCE(resolved_selection.resolved_id, '')), '') IS NOT NULL;
+
+    IF COALESCE(v_resolved_selection_match_count, 0) = COALESCE(v_input_count, 0)
+       AND COALESCE(v_resolved_selection_distinct_count, 0) = COALESCE(v_input_count, 0) THEN
+      SELECT EXISTS (
+        SELECT 1
+        FROM pg_temp.tmp_pay_workbench_prepare_draft_resolved_ids AS resolved_selection
+        WHERE resolved_selection.resolved_id IS DISTINCT FROM resolved_selection.supplied_id
+      )
+      INTO v_selection_resolved_to_current;
+
+      TRUNCATE TABLE pg_temp.tmp_pay_workbench_prepare_draft_supplied_ids;
+
+      INSERT INTO pg_temp.tmp_pay_workbench_prepare_draft_supplied_ids (supplied_id)
+      SELECT resolved_selection.resolved_id
+      FROM pg_temp.tmp_pay_workbench_prepare_draft_resolved_ids AS resolved_selection
+      WHERE NULLIF(BTRIM(COALESCE(resolved_selection.resolved_id, '')), '') IS NOT NULL
+      ORDER BY resolved_selection.resolved_id;
+    ELSE
+      SELECT COUNT(*)::integer
+      INTO v_current_ready_selected_row_count
+      FROM public.banking_pay_workbench_preview_rows AS current_preview_row
+      WHERE current_preview_row.session_id = p_session_id
+        AND current_preview_row.session_version = v_session_row.version
+        AND UPPER(BTRIM(COALESCE(current_preview_row.status, ''))) = 'READY'
+        AND COALESCE(current_preview_row.selected, false) = true
+        AND UPPER(BTRIM(COALESCE(current_preview_row.selection_state, ''))) = 'SELECTED'
+        AND UPPER(BTRIM(COALESCE(current_preview_row.row_json->>'presentation_section', ''))) = 'READY_TO_PAY'
+        AND LOWER(BTRIM(COALESCE(current_preview_row.row_json->>'draftable', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+        AND LOWER(BTRIM(COALESCE(current_preview_row.row_json->>'is_ready_for_draft', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+        AND (v_scope_filter = 'ALL' OR UPPER(BTRIM(COALESCE(current_preview_row.row_json->>'pay_channel', current_preview_row.row_json->>'current_pay_method', current_preview_row.row_json->>'candidate_pay_method', ''))) = v_scope_filter);
+    END IF;
+  END IF;
 
   IF p_selected_preview_row_ids IS NOT NULL THEN
     SELECT COALESCE(jsonb_agg(to_jsonb(supplied_ids.supplied_id) ORDER BY supplied_ids.supplied_id), '[]'::jsonb)
@@ -53539,7 +53692,9 @@ BEGIN
           'draft_prepare_validated_at_utc', v_now::text,
           'draft_prepare_scope', v_scope_filter,
           'draft_prepare_sample_row_count', COALESCE(v_sample_row_count, 0),
-          'draft_prepare_sample_candidate_count', COALESCE(v_sample_candidate_count, 0)
+          'draft_prepare_sample_candidate_count', COALESCE(v_sample_candidate_count, 0),
+          'draft_prepare_input_selection_count', COALESCE(v_input_count, 0),
+          'draft_prepare_selection_resolved_to_current', COALESCE(v_selection_resolved_to_current, false)
         )
       ),
       updated_at_utc = v_now
@@ -53561,6 +53716,9 @@ BEGIN
     'paye_selected_row_sample_count', COALESCE(v_sample_paye_count, 0),
     'umbrella_selected_row_sample_count', COALESCE(v_sample_umbrella_count, 0),
     'selected_row_sample', COALESCE(v_selected_sample, '[]'::jsonb),
+    'input_selected_preview_row_count', COALESCE(v_input_count, 0),
+    'selection_resolved_to_current', COALESCE(v_selection_resolved_to_current, false),
+    'resolved_current_selected_preview_row_ids', COALESCE(v_resolved_current_selection_ids, '[]'::jsonb),
     'same_week_paye_override', jsonb_build_object(
       'guardrails', COALESCE(v_paye_guardrails, '{}'::jsonb),
       'create_blocked', v_paye_create_blocked,
