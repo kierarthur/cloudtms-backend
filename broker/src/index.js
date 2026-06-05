@@ -41335,6 +41335,7 @@ async function advanceBankingPaySettlementOperation(env, operationRow, user, opt
   }
 }
 
+
 async function advanceBankingPayDraftCreateOperation(env, operationRow, user, options = {}) {
   const unwrapRpcPayload = (rpcRes, key) => {
     let payload = rpcRes;
@@ -41791,6 +41792,271 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
       return [];
     }
   };
+  const fetchPayBatchCleanupSafety = async (payBatchId) => {
+    const batchId = String(payBatchId || '').trim();
+    if (!isUuid(batchId)) {
+      return {
+        ok: false,
+        pay_batch_id: batchId || null,
+        batch_row_present: false,
+        candidate_row_present: true,
+        item_row_present: true,
+        transfer_row_present: true,
+        candidate_row_count_cap_exceeded: false,
+        safe_empty_shell: false,
+        reason: 'INVALID_PAY_BATCH_ID'
+      };
+    }
+
+    let batchRow = null;
+    let candidateRows = [];
+    let candidateRowPresent = true;
+    let itemRowPresent = true;
+    let transferRowPresent = true;
+    let candidateRowCountCapExceeded = false;
+
+    try {
+      const { rows: batchRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/pay_batches?id=eq.${enc(batchId)}&select=id,status,execution_commit_state,source_workbench_session_id,source_snapshot_run_id,source_session_version,created_by_user_id,created_at_utc&limit=1`,
+        false
+      );
+      batchRow = Array.isArray(batchRows) && batchRows.length > 0 ? batchRows[0] : null;
+    } catch {
+      batchRow = null;
+    }
+
+    if (!batchRow) {
+      return {
+        ok: false,
+        pay_batch_id: batchId,
+        batch_row_present: false,
+        candidate_row_present: true,
+        item_row_present: true,
+        transfer_row_present: true,
+        candidate_row_count_cap_exceeded: false,
+        safe_empty_shell: false,
+        reason: 'PAY_BATCH_ROW_NOT_FOUND'
+      };
+    }
+
+    try {
+      const { rows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/pay_batch_candidates?pay_batch_id=eq.${enc(batchId)}&select=id&limit=1001`,
+        false
+      );
+      candidateRows = Array.isArray(rows) ? rows : [];
+      candidateRowPresent = candidateRows.length > 0;
+      candidateRowCountCapExceeded = candidateRows.length > 1000;
+    } catch {
+      candidateRows = [];
+      candidateRowPresent = true;
+      candidateRowCountCapExceeded = true;
+    }
+
+    if (candidateRowCountCapExceeded) {
+      itemRowPresent = true;
+    } else if (candidateRows.length <= 0) {
+      itemRowPresent = false;
+    } else {
+      const candidateIds = uniqueUuidArray(candidateRows.map((candidateRow) => candidateRow && candidateRow.id));
+      if (candidateIds.length <= 0) {
+        itemRowPresent = true;
+      } else {
+        try {
+          const { rows: itemRows } = await sbFetch(
+            env,
+            `${env.SUPABASE_URL}/rest/v1/pay_batch_items?pay_batch_candidate_id=in.(${candidateIds.map(enc).join(',')})&select=id&limit=1`,
+            false
+          );
+          itemRowPresent = Array.isArray(itemRows) && itemRows.length > 0;
+        } catch {
+          itemRowPresent = true;
+        }
+      }
+    }
+
+    try {
+      const { rows: transferRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/pay_bank_transfers?pay_batch_id=eq.${enc(batchId)}&select=id&limit=1`,
+        false
+      );
+      transferRowPresent = Array.isArray(transferRows) && transferRows.length > 0;
+    } catch {
+      transferRowPresent = true;
+    }
+
+    const status = String(batchRow.status || '').trim().toUpperCase();
+    const executionCommitState = String(batchRow.execution_commit_state || '').trim().toUpperCase();
+    const sourceWorkbenchSessionId = String(batchRow.source_workbench_session_id || '').trim();
+    const expectedSnapshotRunId = String(inputJson.source_snapshot_run_id || inputJson.sourceSnapshotRunId || '').trim();
+    const sourceSnapshotRunId = String(batchRow.source_snapshot_run_id || '').trim();
+    const sourceSessionMatches = !!workbenchSessionId && sourceWorkbenchSessionId === workbenchSessionId;
+    const snapshotMatches = !expectedSnapshotRunId || !sourceSnapshotRunId || sourceSnapshotRunId === expectedSnapshotRunId;
+    const safeEmptyShell = status === 'DRAFT'
+      && (!executionCommitState || executionCommitState === 'NOT_SUBMITTED')
+      && sourceSessionMatches
+      && snapshotMatches
+      && candidateRowCountCapExceeded !== true
+      && itemRowPresent !== true
+      && transferRowPresent !== true;
+
+    return {
+      ok: true,
+      pay_batch_id: batchId,
+      batch_row_present: true,
+      batch_status: status || null,
+      execution_commit_state: executionCommitState || null,
+      source_workbench_session_id: sourceWorkbenchSessionId || null,
+      source_snapshot_run_id: sourceSnapshotRunId || null,
+      expected_workbench_session_id: workbenchSessionId || null,
+      expected_source_snapshot_run_id: expectedSnapshotRunId || null,
+      source_session_matches: sourceSessionMatches,
+      source_snapshot_matches: snapshotMatches,
+      candidate_row_present: candidateRowPresent,
+      candidate_row_count_checked: candidateRows.length,
+      candidate_row_count_cap_exceeded: candidateRowCountCapExceeded,
+      item_row_present: itemRowPresent,
+      transfer_row_present: transferRowPresent,
+      safe_empty_shell: safeEmptyShell,
+      reason: safeEmptyShell ? null : 'DIRECT_CANCEL_SAFETY_CHECK_FAILED'
+    };
+  };
+
+  const touchDraftCreateBatchFailureSignal = async (payBatchId, reason, signalScope = {}) => {
+    const batchId = String(payBatchId || '').trim();
+    if (!isUuid(batchId)) {
+      return {
+        ok: false,
+        skipped: true,
+        reason: 'INVALID_PAY_BATCH_ID',
+        pay_batch_id: batchId || null
+      };
+    }
+
+    const scope = Object.assign({
+      operation_id: operationId,
+      operation_type: 'DRAFT_CREATE',
+      workbench_session_id: workbenchSessionId,
+      failure_phase: phase,
+      draft_create_failure: true,
+      failed_empty_shell_possible: true
+    }, safeObject(signalScope));
+
+    let signal = null;
+    let signalError = null;
+    let summaryRefreshed = false;
+    let summaryError = null;
+
+    try {
+      signal = unwrapRpcPayload(await sbRpc(env, 'banking_pay_batch_signal_touch', {
+        p_pay_batch_id: batchId,
+        p_change_reason: String(reason || 'DRAFT_CREATE_FAILED').slice(0, 120),
+        p_change_source: 'advanceBankingPayDraftCreateOperation',
+        p_change_scope_json: scope,
+        p_touch_payment_status: true,
+        p_touch_correction_progress: false,
+        p_touch_alerts: true,
+        p_touch_overview: true
+      }), 'banking_pay_batch_signal_touch');
+    } catch (error) {
+      signalError = String(error?.message || error || '');
+    }
+
+    try {
+      await sbRpc(env, 'pay_batch_display_summary_refresh', {
+        p_pay_batch_id: batchId
+      });
+      summaryRefreshed = true;
+    } catch (error) {
+      summaryError = String(error?.message || error || '');
+    }
+
+    return {
+      ok: !signalError && summaryRefreshed,
+      pay_batch_id: batchId,
+      signal,
+      signal_error: signalError,
+      summary_refreshed: summaryRefreshed,
+      summary_error: summaryError
+    };
+  };
+
+  const cancelEmptyDraftBatchShellDirectly = async (payBatchId, cancelReason, cleanupContext = {}) => {
+    const batchId = String(payBatchId || '').trim();
+    const reason = String(cancelReason || 'Draft creation failed before any payable draft items were created.').slice(0, 500);
+    const context = safeObject(cleanupContext);
+
+    if (!isUuid(batchId)) {
+      return {
+        ok: false,
+        skipped: true,
+        reason: 'INVALID_PAY_BATCH_ID',
+        pay_batch_id: batchId || null
+      };
+    }
+
+    const safety = await fetchPayBatchCleanupSafety(batchId);
+    if (safety.safe_empty_shell !== true) {
+      return {
+        ok: false,
+        skipped: true,
+        reason: 'NOT_EMPTY_DRAFT_SHELL',
+        pay_batch_id: batchId,
+        safety
+      };
+    }
+
+    const cancelledAtUtc = new Date().toISOString();
+    const patchPayload = {
+      status: 'CANCELLED',
+      cancelled_at_utc: cancelledAtUtc,
+      cancelled_by_user_id: actorUserId,
+      cancel_reason: reason,
+      execution_commit_state: 'NOT_SUBMITTED',
+      schedule_kind: null,
+      scheduled_at_utc: null,
+      scheduled_by_user_id: null,
+      funding_account_ref: null,
+      funds_warning_hours_json: null
+    };
+
+    const { rows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/pay_batches?id=eq.${enc(batchId)}&status=eq.DRAFT&execution_commit_state=eq.NOT_SUBMITTED&source_workbench_session_id=eq.${enc(workbenchSessionId)}`,
+      {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Prefer: 'return=representation'
+        },
+        body: JSON.stringify(patchPayload)
+      }
+    );
+
+    const updatedRow = Array.isArray(rows) && rows.length ? rows[0] : null;
+    const updateOk = String(updatedRow?.status || '').trim().toUpperCase() === 'CANCELLED';
+
+    const signal = await touchDraftCreateBatchFailureSignal(batchId, 'DRAFT_CREATE_FAILED_EMPTY_SHELL_CANCELLED', Object.assign({}, context, {
+      cleanup_reason: reason,
+      cleanup_mode: 'DIRECT_EMPTY_DRAFT_SHELL_CANCEL',
+      cancelled_at_utc: cancelledAtUtc,
+      update_ok: updateOk
+    }));
+
+    return {
+      ok: updateOk,
+      pay_batch_id: batchId,
+      status: updatedRow?.status || null,
+      cancelled_at_utc: updatedRow?.cancelled_at_utc || cancelledAtUtc,
+      cancel_reason: updatedRow?.cancel_reason || reason,
+      cleanup_mode: 'DIRECT_EMPTY_DRAFT_SHELL_CANCEL',
+      safety,
+      signal
+    };
+  };
   async function discoverCreatedDraftBatchIds() {
     const extraValues = Array.prototype.slice.call(arguments);
     const ids = new Set();
@@ -41834,21 +42100,61 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
       }
 
       if (status === 'CANCELLED') {
-        results.push({ pay_batch_id: batchId, ok: true, skipped: true, already_cancelled: true, status, execution_commit_state: executionCommitState || null });
+        const signal = await touchDraftCreateBatchFailureSignal(batchId, 'DRAFT_CREATE_FAILED_BATCH_ALREADY_CANCELLED', {
+          failure_phase: failurePhase,
+          failure_code: failureCode,
+          status_before: status,
+          execution_commit_state_before: executionCommitState || null
+        });
+        results.push({ pay_batch_id: batchId, ok: true, skipped: true, already_cancelled: true, status, execution_commit_state: executionCommitState || null, signal });
         continue;
       }
 
       if (status !== 'DRAFT') {
-        results.push({ pay_batch_id: batchId, ok: false, skipped: true, reason: 'PAY_BATCH_NOT_DRAFT', status, execution_commit_state: executionCommitState || null });
+        const signal = await touchDraftCreateBatchFailureSignal(batchId, 'DRAFT_CREATE_FAILED_BATCH_NOT_DRAFT', {
+          failure_phase: failurePhase,
+          failure_code: failureCode,
+          status_before: status,
+          execution_commit_state_before: executionCommitState || null
+        });
+        results.push({ pay_batch_id: batchId, ok: false, skipped: true, reason: 'PAY_BATCH_NOT_DRAFT', status, execution_commit_state: executionCommitState || null, signal });
         continue;
       }
 
       if (executionCommitState && executionCommitState !== 'NOT_SUBMITTED') {
-        results.push({ pay_batch_id: batchId, ok: false, skipped: true, reason: 'PAY_BATCH_ALREADY_SUBMITTED_OR_COMMITTED', status, execution_commit_state: executionCommitState });
+        const signal = await touchDraftCreateBatchFailureSignal(batchId, 'DRAFT_CREATE_FAILED_BATCH_ALREADY_SUBMITTED_OR_COMMITTED', {
+          failure_phase: failurePhase,
+          failure_code: failureCode,
+          status_before: status,
+          execution_commit_state_before: executionCommitState
+        });
+        results.push({ pay_batch_id: batchId, ok: false, skipped: true, reason: 'PAY_BATCH_ALREADY_SUBMITTED_OR_COMMITTED', status, execution_commit_state: executionCommitState, signal });
         continue;
       }
 
       const cancelReason = `Draft creation failed during ${failurePhase}: ${failureCode}`.slice(0, 500);
+      const directCancel = await cancelEmptyDraftBatchShellDirectly(batchId, cancelReason, {
+        failure_phase: failurePhase,
+        failure_code: failureCode,
+        status_before: status,
+        execution_commit_state_before: executionCommitState || null
+      });
+
+      if (directCancel.ok === true) {
+        results.push({
+          pay_batch_id: batchId,
+          ok: true,
+          status_before: status,
+          execution_commit_state_before: executionCommitState || null,
+          cancel_reason: cancelReason,
+          cancel_status: 'CANCELLED',
+          cancelled_at_utc: directCancel.cancelled_at_utc || null,
+          cleanup_mode: directCancel.cleanup_mode || 'DIRECT_EMPTY_DRAFT_SHELL_CANCEL',
+          direct_empty_shell_cancel: directCancel
+        });
+        continue;
+      }
+
       try {
         const cancelPayload = unwrapRpcPayload(await sbRpc(env, 'pay_batch_cancel', {
           p_pay_batch_id: batchId,
@@ -41857,6 +42163,14 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
         }), 'pay_batch_cancel');
         const cancelStatus = String(cancelPayload.status || '').trim().toUpperCase();
         const cancelOk = cancelPayload.ok === true || cancelStatus === 'CANCELLED' || !!String(cancelPayload.cancelled_at_utc || '').trim();
+        const signal = await touchDraftCreateBatchFailureSignal(batchId, cancelOk ? 'DRAFT_CREATE_FAILED_BATCH_CANCELLED' : 'DRAFT_CREATE_FAILED_BATCH_CANCEL_RETURNED_NOT_OK', {
+          failure_phase: failurePhase,
+          failure_code: failureCode,
+          status_before: status,
+          execution_commit_state_before: executionCommitState || null,
+          cancel_status: cancelStatus || null,
+          cancel_ok: cancelOk
+        });
         results.push({
           pay_batch_id: batchId,
           ok: cancelOk,
@@ -41866,16 +42180,28 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
           cancel_status: cancelStatus || null,
           cancellation_outcome: cancelPayload.cancellation_outcome || null,
           cancelled_at_utc: cancelPayload.cancelled_at_utc || null,
-          payload: cancelPayload
+          payload: cancelPayload,
+          direct_empty_shell_cancel: directCancel,
+          signal
         });
       } catch (cancelError) {
+        const signal = await touchDraftCreateBatchFailureSignal(batchId, 'DRAFT_CREATE_FAILED_BATCH_CLEANUP_FAILED', {
+          failure_phase: failurePhase,
+          failure_code: failureCode,
+          status_before: status,
+          execution_commit_state_before: executionCommitState || null,
+          cleanup_error: String(cancelError?.message || cancelError || ''),
+          direct_empty_shell_cancel: directCancel
+        });
         results.push({
           pay_batch_id: batchId,
           ok: false,
           status_before: status,
           execution_commit_state_before: executionCommitState || null,
           cancel_reason: cancelReason,
-          error: String(cancelError?.message || cancelError || '')
+          direct_empty_shell_cancel: directCancel,
+          error: String(cancelError?.message || cancelError || ''),
+          signal
         });
       }
     }
@@ -41900,14 +42226,42 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
       results
     };
   };
+
   const finishFailedWithCleanup = async (resultJson = null, errorJson = null, cleanupOptions = {}) => {
     const baseError = safeObject(errorJson);
     const cleanup = await cancelCreatedDraftBatchesForFailure(baseError, cleanupOptions);
-    return finish('FAILED', resultJson, Object.assign({}, baseError, {
+    const cleanupStatus = cleanup.ok === true ? (cleanup.attempted ? 'COMPLETE' : 'NOT_REQUIRED') : 'FAILED';
+    const finishedOperation = await finish('FAILED', resultJson, Object.assign({}, baseError, {
       cleanup_required: cleanup.attempted === true,
-      cleanup_status: cleanup.ok === true ? (cleanup.attempted ? 'COMPLETE' : 'NOT_REQUIRED') : 'FAILED',
+      cleanup_status: cleanupStatus,
       created_batch_cleanup: cleanup
     }));
+
+    const affectedBatchIds = uniqueDraftUuidArray([].concat(
+      Array.isArray(cleanup.discovered_pay_batch_ids) ? cleanup.discovered_pay_batch_ids : [],
+      Array.isArray(cleanup.cancelled_pay_batch_ids) ? cleanup.cancelled_pay_batch_ids : [],
+      Array.isArray(cleanup.already_cancelled_pay_batch_ids) ? cleanup.already_cancelled_pay_batch_ids : [],
+      Array.isArray(cleanup.failed_pay_batch_ids) ? cleanup.failed_pay_batch_ids : [],
+      Array.isArray(cleanup.results) ? cleanup.results.map((cleanupResult) => cleanupResult && cleanupResult.pay_batch_id) : []
+    ));
+
+    for (const batchId of affectedBatchIds) {
+      try {
+        await touchDraftCreateBatchFailureSignal(batchId, cleanup.ok === true ? 'DRAFT_CREATE_OPERATION_FAILED_FINALISED' : 'DRAFT_CREATE_OPERATION_FAILED_CLEANUP_INCOMPLETE', {
+          failure_phase: cleanup.failure_phase || cleanupOptions.phase || baseError.phase || phase,
+          failure_code: cleanup.failure_code || baseError.code || baseError.error_code || 'DRAFT_CREATE_OPERATION_FAILED',
+          operation_status: 'FAILED',
+          operation_finished: true,
+          cleanup_attempted: cleanup.attempted === true,
+          cleanup_status: cleanupStatus,
+          cleanup_ok: cleanup.ok === true,
+          cleanup_cancelled_batch: Array.isArray(cleanup.cancelled_pay_batch_ids) && cleanup.cancelled_pay_batch_ids.includes(batchId),
+          cleanup_failed_batch: Array.isArray(cleanup.failed_pay_batch_ids) && cleanup.failed_pay_batch_ids.includes(batchId)
+        });
+      } catch {}
+    }
+
+    return finishedOperation;
   };
 
   const isAcceptableWorkbenchDiscardFailure = (value) => {
@@ -41971,6 +42325,24 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
     const results = [];
 
     for (const batchId of ids) {
+      const directCancel = await cancelEmptyDraftBatchShellDirectly(batchId, reason, {
+        failure_phase: 'ASSERT_INTEGRITY',
+        failure_code: 'PAY_DRAFT_ALL_SELECTED_PAYMENTS_ALREADY_RESERVED',
+        cleanup_reason: 'SKIPPED_EMPTY_RESERVED_DRAFT'
+      });
+
+      if (directCancel.ok === true) {
+        results.push({
+          pay_batch_id: batchId,
+          ok: true,
+          status: directCancel.status || 'CANCELLED',
+          cancelled_at_utc: directCancel.cancelled_at_utc || null,
+          cancellation_outcome: 'DIRECT_EMPTY_DRAFT_SHELL_CANCEL',
+          direct_empty_shell_cancel: directCancel
+        });
+        continue;
+      }
+
       try {
         const cancelPayload = unwrapRpcPayload(await sbRpc(env, 'pay_batch_cancel', {
           p_pay_batch_id: batchId,
@@ -41979,19 +42351,35 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
         }), 'pay_batch_cancel');
         const cancelStatus = String(cancelPayload.status || '').trim().toUpperCase();
         const cancelOk = cancelPayload.ok === true || cancelStatus === 'CANCELLED' || !!String(cancelPayload.cancelled_at_utc || '').trim();
+        const signal = await touchDraftCreateBatchFailureSignal(batchId, cancelOk ? 'DRAFT_CREATE_SKIPPED_EMPTY_RESERVED_CANCELLED' : 'DRAFT_CREATE_SKIPPED_EMPTY_RESERVED_CANCEL_RETURNED_NOT_OK', {
+          failure_phase: 'ASSERT_INTEGRITY',
+          failure_code: 'PAY_DRAFT_ALL_SELECTED_PAYMENTS_ALREADY_RESERVED',
+          cancel_status: cancelStatus || null,
+          cancel_ok: cancelOk
+        });
         results.push({
           pay_batch_id: batchId,
           ok: cancelOk,
           status: cancelStatus || null,
           cancelled_at_utc: cancelPayload.cancelled_at_utc || null,
           cancellation_outcome: cancelPayload.cancellation_outcome || null,
-          payload: cancelPayload
+          payload: cancelPayload,
+          direct_empty_shell_cancel: directCancel,
+          signal
         });
       } catch (cancelError) {
+        const signal = await touchDraftCreateBatchFailureSignal(batchId, 'DRAFT_CREATE_SKIPPED_EMPTY_RESERVED_CLEANUP_FAILED', {
+          failure_phase: 'ASSERT_INTEGRITY',
+          failure_code: 'PAY_DRAFT_ALL_SELECTED_PAYMENTS_ALREADY_RESERVED',
+          cleanup_error: String(cancelError?.message || cancelError || ''),
+          direct_empty_shell_cancel: directCancel
+        });
         results.push({
           pay_batch_id: batchId,
           ok: false,
-          error: String(cancelError?.message || cancelError || '')
+          direct_empty_shell_cancel: directCancel,
+          error: String(cancelError?.message || cancelError || ''),
+          signal
         });
       }
     }
@@ -42666,7 +43054,6 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
     return finishFailedWithCleanup( null, { code: 'DRAFT_CREATE_OPERATION_FAILED', message: 'Draft create operation failed.', phase, error: String(e?.message || e || '') });
   }
 }
-
 
 
 
