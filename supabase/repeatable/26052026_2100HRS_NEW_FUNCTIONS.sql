@@ -61053,9 +61053,15 @@ DECLARE
     v_mode text := upper(BTRIM(COALESCE(p_mode, 'PROGRESS_LIGHT')));
     v_operation public.banking_pay_operations%ROWTYPE;
     v_progress jsonb := '{}'::jsonb;
+    v_result jsonb := '{}'::jsonb;
     v_error_summary jsonb := NULL::jsonb;
     v_heartbeat_age_seconds integer := NULL::integer;
     v_terminal boolean := false;
+    v_backend_runner_owned boolean := false;
+    v_frontend_completion_required boolean := false;
+    v_batch_ids jsonb := '[]'::jsonb;
+    v_primary_pay_batch_id text := NULL::text;
+    v_result_summary jsonb := NULL::jsonb;
 BEGIN
     PERFORM public.banking_pay_hot_path_budget_apply('PROGRESS');
 
@@ -61087,7 +61093,8 @@ BEGIN
     END IF;
 
     v_progress := COALESCE(v_operation.progress_json, '{}'::jsonb);
-    v_terminal := upper(BTRIM(COALESCE(v_operation.status, ''))) IN ('COMPLETE', 'FAILED', 'CANCELLED', 'CANCELED');
+    v_result := COALESCE(v_operation.result_json, '{}'::jsonb);
+    v_terminal := upper(BTRIM(COALESCE(v_operation.status, ''))) IN ('COMPLETE', 'COMPLETED', 'FAILED', 'CANCELLED', 'CANCELED');
     v_heartbeat_age_seconds := CASE WHEN v_operation.heartbeat_at_utc IS NULL THEN NULL ELSE GREATEST(0, EXTRACT(EPOCH FROM (v_now - v_operation.heartbeat_at_utc))::integer) END;
 
     v_error_summary := CASE
@@ -61101,68 +61108,155 @@ BEGIN
       ELSE jsonb_build_object('message', LEFT(v_operation.error_json::text, 1000))
     END;
 
-    RETURN jsonb_strip_nulls(jsonb_build_object(
-      'ok', true,
-      'mode', 'PROGRESS_LIGHT',
-      'operation_id', v_operation.id::text,
-      'id', v_operation.id::text,
-      'pay_batch_id', CASE WHEN v_operation.pay_batch_id IS NULL THEN NULL ELSE v_operation.pay_batch_id::text END,
+    v_backend_runner_owned := upper(BTRIM(COALESCE(
+      v_operation.input_json->>'backend_runner_owned',
+      v_operation.input_json->>'backendRunnerOwned',
+      v_operation.config_json->>'backend_runner_owned',
+      v_operation.config_json->>'backendRunnerOwned',
+      v_progress->>'backend_runner_owned',
+      v_progress->>'backendRunnerOwned',
+      'false'
+    ))) IN ('TRUE', 'T', '1', 'YES', 'Y', 'ON');
+
+    v_frontend_completion_required := upper(BTRIM(COALESCE(
+      v_operation.input_json->>'frontend_completion_required',
+      v_operation.input_json->>'frontendCompletionRequired',
+      v_operation.config_json->>'frontend_completion_required',
+      v_operation.config_json->>'frontendCompletionRequired',
+      v_progress->>'frontend_completion_required',
+      v_progress->>'frontendCompletionRequired',
+      'false'
+    ))) IN ('TRUE', 'T', '1', 'YES', 'Y', 'ON');
+
+    SELECT COALESCE(jsonb_agg(batch_id_dedup.batch_id_text ORDER BY batch_id_dedup.batch_id_text), '[]'::jsonb)
+    INTO v_batch_ids
+    FROM (
+      SELECT DISTINCT NULLIF(BTRIM(batch_id_source.batch_id_text), '') AS batch_id_text
+      FROM (
+        SELECT CASE WHEN v_operation.pay_batch_id IS NULL THEN NULL::text ELSE v_operation.pay_batch_id::text END AS batch_id_text
+        UNION ALL SELECT v_progress->>'pay_batch_id'
+        UNION ALL SELECT v_progress->>'payBatchId'
+        UNION ALL SELECT v_progress->>'primary_pay_batch_id'
+        UNION ALL SELECT v_progress->>'primaryPayBatchId'
+        UNION ALL SELECT v_result->>'pay_batch_id'
+        UNION ALL SELECT v_result->>'payBatchId'
+        UNION ALL SELECT v_result->>'primary_pay_batch_id'
+        UNION ALL SELECT v_result->>'primaryPayBatchId'
+        UNION ALL SELECT jsonb_array_elements_text(CASE WHEN jsonb_typeof(v_progress->'pay_batch_ids') = 'array' THEN v_progress->'pay_batch_ids' ELSE '[]'::jsonb END)
+        UNION ALL SELECT jsonb_array_elements_text(CASE WHEN jsonb_typeof(v_progress->'payBatchIds') = 'array' THEN v_progress->'payBatchIds' ELSE '[]'::jsonb END)
+        UNION ALL SELECT jsonb_array_elements_text(CASE WHEN jsonb_typeof(v_progress->'created_pay_batch_ids') = 'array' THEN v_progress->'created_pay_batch_ids' ELSE '[]'::jsonb END)
+        UNION ALL SELECT jsonb_array_elements_text(CASE WHEN jsonb_typeof(v_progress->'createdPayBatchIds') = 'array' THEN v_progress->'createdPayBatchIds' ELSE '[]'::jsonb END)
+        UNION ALL SELECT jsonb_array_elements_text(CASE WHEN jsonb_typeof(v_result->'pay_batch_ids') = 'array' THEN v_result->'pay_batch_ids' ELSE '[]'::jsonb END)
+        UNION ALL SELECT jsonb_array_elements_text(CASE WHEN jsonb_typeof(v_result->'payBatchIds') = 'array' THEN v_result->'payBatchIds' ELSE '[]'::jsonb END)
+        UNION ALL SELECT jsonb_array_elements_text(CASE WHEN jsonb_typeof(v_result->'created_pay_batch_ids') = 'array' THEN v_result->'created_pay_batch_ids' ELSE '[]'::jsonb END)
+        UNION ALL SELECT jsonb_array_elements_text(CASE WHEN jsonb_typeof(v_result->'createdPayBatchIds') = 'array' THEN v_result->'createdPayBatchIds' ELSE '[]'::jsonb END)
+      ) AS batch_id_source
+    ) AS batch_id_dedup
+    WHERE batch_id_dedup.batch_id_text IS NOT NULL;
+
+    v_primary_pay_batch_id := COALESCE(
+      CASE WHEN v_operation.pay_batch_id IS NULL THEN NULL::text ELSE v_operation.pay_batch_id::text END,
+      NULLIF(BTRIM(v_progress->>'primary_pay_batch_id'), ''),
+      NULLIF(BTRIM(v_progress->>'primaryPayBatchId'), ''),
+      NULLIF(BTRIM(v_progress->>'pay_batch_id'), ''),
+      NULLIF(BTRIM(v_progress->>'payBatchId'), ''),
+      NULLIF(BTRIM(v_result->>'primary_pay_batch_id'), ''),
+      NULLIF(BTRIM(v_result->>'primaryPayBatchId'), ''),
+      NULLIF(BTRIM(v_result->>'pay_batch_id'), ''),
+      NULLIF(BTRIM(v_result->>'payBatchId'), '')
+    );
+
+    v_result_summary := jsonb_strip_nulls(jsonb_build_object(
       'operation_type', v_operation.operation_type,
-      'status', v_operation.status,
-      'phase', v_operation.phase,
-      'runner_state', v_operation.runner_state,
-      'run_after_utc', CASE WHEN v_operation.run_after_utc IS NULL THEN NULL ELSE v_operation.run_after_utc::text END,
-      'lease_owner', v_operation.lease_owner,
-      'lease_expires_at_utc', CASE WHEN v_operation.lease_expires_at_utc IS NULL THEN NULL ELSE v_operation.lease_expires_at_utc::text END,
-      'heartbeat_at_utc', CASE WHEN v_operation.heartbeat_at_utc IS NULL THEN NULL ELSE v_operation.heartbeat_at_utc::text END,
-      'heartbeat_age_seconds', v_heartbeat_age_seconds,
-      'last_advanced_at_utc', CASE WHEN v_operation.last_advanced_at_utc IS NULL THEN NULL ELSE v_operation.last_advanced_at_utc::text END,
-      'attempt_count', COALESCE(v_operation.attempt_count, 0),
-      'max_attempts', v_operation.max_attempts,
-      'requires_user_action', COALESCE(v_operation.requires_user_action, false),
-      'resume_reason', v_operation.resume_reason,
-      'terminal', v_terminal,
-      'server_running', (v_operation.lease_owner IS NOT NULL AND v_operation.lease_expires_at_utc IS NOT NULL AND v_operation.lease_expires_at_utc > v_now),
-      'waiting', upper(BTRIM(COALESCE(v_operation.status, ''))) IN ('WAITING_AUTHORISATION', 'WAITING_PROVIDER', 'WAITING_RETRY'),
-      'review_required', upper(BTRIM(COALESCE(v_operation.status, ''))) = 'REVIEW_REQUIRED' OR COALESCE(v_operation.requires_user_action, false),
-      'counters', jsonb_build_object(
-        'total_units', COALESCE(v_operation.total_units, 0),
-        'completed_units', COALESCE(v_operation.completed_units, 0),
-        'failed_units', COALESCE(v_operation.failed_units, 0),
-        'current_chunk_index', COALESCE(v_operation.current_chunk_index, 0),
-        'chunk_count', COALESCE(v_operation.chunk_count, 0)
-      ),
-      'stale_summary', jsonb_strip_nulls(jsonb_build_object(
-        'freshness_status', v_progress->>'freshness_status',
-        'freshness_result_hash', v_progress->>'freshness_result_hash',
-        'freshness_scope_hash', v_progress->>'freshness_scope_hash',
-        'freshness_stale_units', v_progress->>'freshness_stale_units',
-        'freshness_pending_units', v_progress->>'freshness_pending_units'
-      )),
-      'proof_hashes', jsonb_strip_nulls(jsonb_build_object(
-        'freshness_result_hash', v_progress->>'freshness_result_hash',
-        'freshness_scope_hash', v_progress->>'freshness_scope_hash',
-        'prepared_transfer_proof_hash', COALESCE(v_progress->>'prepared_transfer_proof_hash', v_progress#>>'{prepare,prepared_transfer_proof_hash}'),
-        'prepared_scope_hash', v_progress->>'prepared_scope_hash',
-        'provider_scope_hash', v_progress->>'provider_scope_hash'
-      )),
-      'provider_counters', jsonb_strip_nulls(jsonb_build_object(
-        'submitted', COALESCE(v_progress->>'provider_submitted_count', v_progress->>'submitted_count'),
-        'accepted', COALESCE(v_progress->>'provider_accepted_count', v_progress->>'accepted_count'),
-        'failed', COALESCE(v_progress->>'provider_failed_count', v_progress->>'failed_count'),
-        'unknown', COALESCE(v_progress->>'provider_unknown_count', v_progress->>'unknown_count'),
-        'review_required', COALESCE(v_progress->>'provider_review_required_count', v_progress->>'review_required_count'),
-        'remaining_ready', COALESCE(v_progress->>'provider_remaining_ready_count', v_progress->>'remaining_ready_count'),
-        'last_provider_message', COALESCE(v_progress->>'last_provider_message', v_progress#>>'{provider,last_message}')
-      )),
-      'last_message', COALESCE(v_progress->>'last_message', v_progress->>'status_text'),
-      'small_error_summary', v_error_summary,
-      'created_at_utc', CASE WHEN v_operation.created_at_utc IS NULL THEN NULL ELSE v_operation.created_at_utc::text END,
-      'started_at_utc', CASE WHEN v_operation.started_at_utc IS NULL THEN NULL ELSE v_operation.started_at_utc::text END,
-      'updated_at_utc', CASE WHEN v_operation.updated_at_utc IS NULL THEN NULL ELSE v_operation.updated_at_utc::text END,
-      'completed_at_utc', CASE WHEN v_operation.completed_at_utc IS NULL THEN NULL ELSE v_operation.completed_at_utc::text END,
-      'failed_at_utc', CASE WHEN v_operation.failed_at_utc IS NULL THEN NULL ELSE v_operation.failed_at_utc::text END
+      'workbench_session_id', CASE WHEN v_operation.workbench_session_id IS NULL THEN NULL ELSE v_operation.workbench_session_id::text END,
+      'pay_batch_id', v_primary_pay_batch_id,
+      'primary_pay_batch_id', v_primary_pay_batch_id,
+      'pay_batch_ids', v_batch_ids,
+      'created_pay_batch_ids', v_batch_ids,
+      'created_batch_count', CASE WHEN COALESCE(v_result->>'created_batch_count', '') ~ '^[0-9]+$' THEN (v_result->>'created_batch_count')::integer ELSE jsonb_array_length(v_batch_ids) END,
+      'source_session_discarded', COALESCE(v_result->>'source_session_discarded', v_progress->>'source_session_discarded'),
+      'last_message', COALESCE(v_result->>'last_message', v_progress->>'last_message', v_progress->>'status_text')
     ));
+
+    RETURN jsonb_strip_nulls(
+      jsonb_build_object(
+        'ok', true,
+        'mode', 'PROGRESS_LIGHT',
+        'operation_id', v_operation.id::text,
+        'id', v_operation.id::text,
+        'pay_batch_id', COALESCE(CASE WHEN v_operation.pay_batch_id IS NULL THEN NULL ELSE v_operation.pay_batch_id::text END, v_primary_pay_batch_id),
+        'primary_pay_batch_id', v_primary_pay_batch_id,
+        'pay_batch_ids', v_batch_ids,
+        'created_pay_batch_ids', v_batch_ids,
+        'operation_type', v_operation.operation_type,
+        'workbench_session_id', CASE WHEN v_operation.workbench_session_id IS NULL THEN NULL ELSE v_operation.workbench_session_id::text END,
+        'root_operation_id', CASE WHEN v_operation.root_operation_id IS NULL THEN NULL ELSE v_operation.root_operation_id::text END,
+        'idempotency_key', v_operation.idempotency_key,
+        'backend_runner_owned', v_backend_runner_owned,
+        'frontend_completion_required', v_frontend_completion_required,
+        'status', v_operation.status,
+        'phase', v_operation.phase,
+        'runner_state', v_operation.runner_state,
+        'run_after_utc', CASE WHEN v_operation.run_after_utc IS NULL THEN NULL ELSE v_operation.run_after_utc::text END,
+        'lease_owner', v_operation.lease_owner,
+        'lease_expires_at_utc', CASE WHEN v_operation.lease_expires_at_utc IS NULL THEN NULL ELSE v_operation.lease_expires_at_utc::text END,
+        'heartbeat_at_utc', CASE WHEN v_operation.heartbeat_at_utc IS NULL THEN NULL ELSE v_operation.heartbeat_at_utc::text END,
+        'heartbeat_age_seconds', v_heartbeat_age_seconds,
+        'last_advanced_at_utc', CASE WHEN v_operation.last_advanced_at_utc IS NULL THEN NULL ELSE v_operation.last_advanced_at_utc::text END
+      )
+      || jsonb_build_object(
+        'attempt_count', COALESCE(v_operation.attempt_count, 0),
+        'max_attempts', v_operation.max_attempts,
+        'requires_user_action', COALESCE(v_operation.requires_user_action, false),
+        'resume_reason', v_operation.resume_reason,
+        'terminal', v_terminal,
+        'server_running', (v_operation.lease_owner IS NOT NULL AND v_operation.lease_expires_at_utc IS NOT NULL AND v_operation.lease_expires_at_utc > v_now),
+        'waiting', upper(BTRIM(COALESCE(v_operation.status, ''))) IN ('WAITING_AUTHORISATION', 'WAITING_PROVIDER', 'WAITING_RETRY'),
+        'review_required', upper(BTRIM(COALESCE(v_operation.status, ''))) = 'REVIEW_REQUIRED' OR COALESCE(v_operation.requires_user_action, false),
+        'counters', jsonb_build_object(
+          'total_units', COALESCE(v_operation.total_units, 0),
+          'completed_units', COALESCE(v_operation.completed_units, 0),
+          'failed_units', COALESCE(v_operation.failed_units, 0),
+          'current_chunk_index', COALESCE(v_operation.current_chunk_index, 0),
+          'chunk_count', COALESCE(v_operation.chunk_count, 0)
+        ),
+        'result_summary', CASE WHEN upper(BTRIM(COALESCE(v_operation.operation_type, ''))) = 'DRAFT_CREATE' THEN v_result_summary ELSE NULL::jsonb END,
+        'small_error_summary', v_error_summary
+      )
+      || jsonb_build_object(
+        'stale_summary', jsonb_strip_nulls(jsonb_build_object(
+          'freshness_status', v_progress->>'freshness_status',
+          'freshness_result_hash', v_progress->>'freshness_result_hash',
+          'freshness_scope_hash', v_progress->>'freshness_scope_hash',
+          'freshness_stale_units', v_progress->>'freshness_stale_units',
+          'freshness_pending_units', v_progress->>'freshness_pending_units'
+        )),
+        'proof_hashes', jsonb_strip_nulls(jsonb_build_object(
+          'freshness_result_hash', v_progress->>'freshness_result_hash',
+          'freshness_scope_hash', v_progress->>'freshness_scope_hash',
+          'prepared_transfer_proof_hash', COALESCE(v_progress->>'prepared_transfer_proof_hash', v_progress#>>'{prepare,prepared_transfer_proof_hash}'),
+          'prepared_scope_hash', v_progress->>'prepared_scope_hash',
+          'provider_scope_hash', v_progress->>'provider_scope_hash'
+        )),
+        'provider_counters', jsonb_strip_nulls(jsonb_build_object(
+          'submitted', COALESCE(v_progress->>'provider_submitted_count', v_progress->>'submitted_count'),
+          'accepted', COALESCE(v_progress->>'provider_accepted_count', v_progress->>'accepted_count'),
+          'failed', COALESCE(v_progress->>'provider_failed_count', v_progress->>'failed_count'),
+          'unknown', COALESCE(v_progress->>'provider_unknown_count', v_progress->>'unknown_count'),
+          'review_required', COALESCE(v_progress->>'provider_review_required_count', v_progress->>'review_required_count'),
+          'remaining_ready', COALESCE(v_progress->>'provider_remaining_ready_count', v_progress->>'remaining_ready_count'),
+          'last_provider_message', COALESCE(v_progress->>'last_provider_message', v_progress#>>'{provider,last_message}')
+        )),
+        'last_message', COALESCE(v_progress->>'last_message', v_progress->>'status_text')
+      )
+      || jsonb_build_object(
+        'created_at_utc', CASE WHEN v_operation.created_at_utc IS NULL THEN NULL ELSE v_operation.created_at_utc::text END,
+        'started_at_utc', CASE WHEN v_operation.started_at_utc IS NULL THEN NULL ELSE v_operation.started_at_utc::text END,
+        'updated_at_utc', CASE WHEN v_operation.updated_at_utc IS NULL THEN NULL ELSE v_operation.updated_at_utc::text END,
+        'completed_at_utc', CASE WHEN v_operation.completed_at_utc IS NULL THEN NULL ELSE v_operation.completed_at_utc::text END,
+        'failed_at_utc', CASE WHEN v_operation.failed_at_utc IS NULL THEN NULL ELSE v_operation.failed_at_utc::text END
+      )
+    );
 END;
 $function$;
 
@@ -61175,11 +61269,15 @@ $function$;
 
 DROP FUNCTION IF EXISTS public.banking_pay_operation_claim_next(uuid, uuid, text, integer);
 
+DROP FUNCTION IF EXISTS public.banking_pay_operation_claim_next(uuid, uuid, text, integer);
+
 CREATE OR REPLACE FUNCTION public.banking_pay_operation_claim_next(
     p_operation_id uuid DEFAULT NULL::uuid,
     p_actor_user_id uuid DEFAULT NULL::uuid,
     p_lock_owner text DEFAULT NULL::text,
-    p_lock_seconds integer DEFAULT 60
+    p_lock_seconds integer DEFAULT 60,
+    p_allow_backend_runner_owned boolean DEFAULT false,
+    p_operation_types text[] DEFAULT NULL::text[]
 )
 RETURNS TABLE (
     claimed boolean,
@@ -61223,14 +61321,53 @@ DECLARE
     v_lock_owner text := COALESCE(NULLIF(BTRIM(COALESCE(p_lock_owner, '')), ''), 'banking-runner:' || pg_backend_pid()::text);
     v_lock_seconds integer := LEAST(GREATEST(COALESCE(p_lock_seconds, 60), 10), 3600);
     v_not_claimed_reason text := NULL::text;
+    v_allow_backend_runner_owned boolean := COALESCE(p_allow_backend_runner_owned, false);
+    v_operation_types text[] := ARRAY[]::text[];
+    v_visible_operation_type text := NULL::text;
+    v_visible_backend_runner_claimable boolean := false;
+    v_visible_actor_authorised boolean := false;
 BEGIN
     PERFORM set_config('lock_timeout', '3s', true);
+
+    SELECT COALESCE(array_agg(DISTINCT supplied_operation_type.normalized_operation_type) FILTER (WHERE supplied_operation_type.normalized_operation_type IS NOT NULL), ARRAY[]::text[])
+    INTO v_operation_types
+    FROM (
+      SELECT NULLIF(upper(BTRIM(COALESCE(operation_type_value, ''))), '') AS normalized_operation_type
+      FROM unnest(COALESCE(p_operation_types, ARRAY[]::text[])) AS supplied(operation_type_value)
+    ) AS supplied_operation_type;
+
+    IF COALESCE(array_length(v_operation_types, 1), 0) = 0 AND v_allow_backend_runner_owned IS TRUE THEN
+      v_operation_types := ARRAY['DRAFT_CREATE', 'PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS']::text[];
+    END IF;
 
     WITH claimable AS (
       SELECT operation_row.id
       FROM public.banking_pay_operations AS operation_row
       WHERE (p_operation_id IS NULL OR operation_row.id = p_operation_id)
-        AND (p_actor_user_id IS NULL OR operation_row.actor_user_id IS NULL OR operation_row.actor_user_id = p_actor_user_id)
+        AND (
+          COALESCE(array_length(v_operation_types, 1), 0) = 0
+          OR upper(BTRIM(COALESCE(operation_row.operation_type, ''))) = ANY(v_operation_types)
+        )
+        AND (
+          p_actor_user_id IS NULL
+          OR operation_row.actor_user_id IS NULL
+          OR operation_row.actor_user_id = p_actor_user_id
+          OR (
+            v_allow_backend_runner_owned IS TRUE
+            AND upper(BTRIM(COALESCE(operation_row.operation_type, ''))) = ANY(v_operation_types)
+            AND (
+              upper(BTRIM(COALESCE(operation_row.input_json->>'backend_runner_owned', operation_row.input_json->>'backendRunnerOwned', operation_row.config_json->>'backend_runner_owned', operation_row.config_json->>'backendRunnerOwned', 'false'))) IN ('TRUE', 'T', '1', 'YES', 'Y', 'ON')
+              OR (
+                operation_row.config_json ? 'frontend_completion_required'
+                AND upper(BTRIM(COALESCE(operation_row.config_json->>'frontend_completion_required', ''))) IN ('FALSE', 'F', '0', 'NO', 'N', 'OFF')
+              )
+              OR (
+                operation_row.config_json ? 'frontendCompletionRequired'
+                AND upper(BTRIM(COALESCE(operation_row.config_json->>'frontendCompletionRequired', ''))) IN ('FALSE', 'F', '0', 'NO', 'N', 'OFF')
+              )
+            )
+          )
+        )
         AND upper(BTRIM(COALESCE(operation_row.status, ''))) IN ('RUNNING', 'CONTINUING', 'WAITING_RETRY')
         AND COALESCE(operation_row.requires_user_action, false) = false
         AND COALESCE(operation_row.run_after_utc, v_now) <= v_now
@@ -61259,7 +61396,9 @@ BEGIN
           'last_claimed_at_utc', v_now::text,
           'last_claim_lease_owner', v_lock_owner,
           'runner_state', 'RUNNING',
-          'attempt_count', COALESCE(operation_update.attempt_count, 0) + 1
+          'attempt_count', COALESCE(operation_update.attempt_count, 0) + 1,
+          'backend_runner_claim', v_allow_backend_runner_owned,
+          'runner_actor_user_id', CASE WHEN p_actor_user_id IS NULL THEN NULL ELSE p_actor_user_id::text END
         )),
         updated_at_utc = v_now
     FROM claimable
@@ -61315,11 +61454,64 @@ BEGIN
       SELECT visible_operation.*
       INTO v_visible
       FROM public.banking_pay_operations AS visible_operation
-      WHERE visible_operation.id = p_operation_id
-        AND (p_actor_user_id IS NULL OR visible_operation.actor_user_id IS NULL OR visible_operation.actor_user_id = p_actor_user_id);
+      WHERE visible_operation.id = p_operation_id;
 
       IF FOUND THEN
+        v_visible_operation_type := upper(BTRIM(COALESCE(v_visible.operation_type, '')));
+        v_visible_backend_runner_claimable := v_allow_backend_runner_owned IS TRUE
+          AND (
+            COALESCE(array_length(v_operation_types, 1), 0) = 0
+            OR v_visible_operation_type = ANY(v_operation_types)
+          )
+          AND (
+            upper(BTRIM(COALESCE(v_visible.input_json->>'backend_runner_owned', v_visible.input_json->>'backendRunnerOwned', v_visible.config_json->>'backend_runner_owned', v_visible.config_json->>'backendRunnerOwned', 'false'))) IN ('TRUE', 'T', '1', 'YES', 'Y', 'ON')
+            OR (
+              v_visible.config_json ? 'frontend_completion_required'
+              AND upper(BTRIM(COALESCE(v_visible.config_json->>'frontend_completion_required', ''))) IN ('FALSE', 'F', '0', 'NO', 'N', 'OFF')
+            )
+            OR (
+              v_visible.config_json ? 'frontendCompletionRequired'
+              AND upper(BTRIM(COALESCE(v_visible.config_json->>'frontendCompletionRequired', ''))) IN ('FALSE', 'F', '0', 'NO', 'N', 'OFF')
+            )
+          );
+        v_visible_actor_authorised := p_actor_user_id IS NULL OR v_visible.actor_user_id IS NULL OR v_visible.actor_user_id = p_actor_user_id OR v_visible_backend_runner_claimable IS TRUE;
+
+        IF v_visible_actor_authorised IS NOT TRUE THEN
+          RETURN QUERY
+          SELECT
+            false,
+            'ACTOR_MISMATCH'::text,
+            p_operation_id,
+            NULL::text,
+            NULL::text,
+            NULL::text,
+            NULL::uuid,
+            NULL::uuid,
+            NULL::uuid,
+            NULL::uuid,
+            NULL::text,
+            NULL::jsonb,
+            NULL::jsonb,
+            NULL::jsonb,
+            NULL::jsonb,
+            NULL::jsonb,
+            NULL::integer,
+            NULL::integer,
+            NULL::integer,
+            NULL::integer,
+            NULL::integer,
+            NULL::text,
+            NULL::timestamptz,
+            NULL::timestamptz,
+            NULL::timestamptz,
+            NULL::timestamptz,
+            NULL::timestamptz,
+            NULL::timestamptz;
+          RETURN;
+        END IF;
+
         v_not_claimed_reason := CASE
+          WHEN COALESCE(array_length(v_operation_types, 1), 0) > 0 AND v_visible_operation_type <> ALL(v_operation_types) THEN 'OPERATION_TYPE_NOT_IN_SCOPE'
           WHEN upper(BTRIM(COALESCE(v_visible.status, ''))) IN ('WAITING_AUTHORISATION', 'WAITING_PROVIDER', 'REVIEW_REQUIRED', 'COMPLETE', 'FAILED', 'CANCELLED', 'CANCELED') THEN 'NOT_RUNNABLE_STATUS'
           WHEN COALESCE(v_visible.requires_user_action, false) THEN 'REQUIRES_USER_ACTION'
           WHEN COALESCE(v_visible.run_after_utc, v_now) > v_now THEN 'RUN_AFTER_NOT_DUE'
@@ -61351,7 +61543,8 @@ BEGIN
             'requires_user_action', COALESCE(v_visible.requires_user_action, false),
             'resume_reason', v_visible.resume_reason,
             'attempt_count', COALESCE(v_visible.attempt_count, 0),
-            'max_attempts', v_visible.max_attempts
+            'max_attempts', v_visible.max_attempts,
+            'backend_runner_claimable', v_visible_backend_runner_claimable
           )),
           v_visible.result_json,
           v_visible.error_json,
@@ -61664,6 +61857,10 @@ DECLARE
     v_max_attempts integer := 10;
     v_lock_seconds integer := 60;
     v_chunk_config jsonb := '{}'::jsonb;
+    v_run_after_utc timestamptz := NULL::timestamptz;
+    v_server_runnable boolean := false;
+    v_backend_runner_owned boolean := false;
+    v_frontend_completion_required boolean := false;
 BEGIN
     PERFORM set_config('lock_timeout', '3s', true);
 
@@ -61702,6 +61899,28 @@ BEGIN
     v_allow_restart := lower(BTRIM(COALESCE(v_input_json->>'explicit_restart', v_input_json->>'allow_restart', v_config_json->>'explicit_restart', v_config_json->>'allow_restart', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on');
     v_max_attempts := LEAST(GREATEST(COALESCE(NULLIF(BTRIM(COALESCE(v_config_json->>'max_attempts', '')), '')::integer, 10), 1), 100);
     v_lock_seconds := LEAST(GREATEST(COALESCE(NULLIF(BTRIM(COALESCE(v_config_json->>'lock_seconds', '')), '')::integer, 60), 10), 3600);
+    v_server_runnable := v_operation_type IN ('DRAFT_CREATE', 'PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS');
+    v_backend_runner_owned := v_server_runnable OR lower(BTRIM(COALESCE(v_input_json->>'backend_runner_owned', v_input_json->>'backendRunnerOwned', v_config_json->>'backend_runner_owned', v_config_json->>'backendRunnerOwned', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on');
+    v_frontend_completion_required := CASE
+        WHEN v_operation_type = 'DRAFT_CREATE' THEN false
+        ELSE lower(BTRIM(COALESCE(v_input_json->>'frontend_completion_required', v_input_json->>'frontendCompletionRequired', v_config_json->>'frontend_completion_required', v_config_json->>'frontendCompletionRequired', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+    END;
+
+    IF NULLIF(BTRIM(COALESCE(v_config_json->>'run_after_utc', v_config_json->>'runAfterUtc', '')), '') IS NOT NULL THEN
+        BEGIN
+            v_run_after_utc := COALESCE(v_config_json->>'run_after_utc', v_config_json->>'runAfterUtc')::timestamptz;
+        EXCEPTION WHEN OTHERS THEN
+            v_run_after_utc := NULL::timestamptz;
+        END;
+    END IF;
+
+    IF v_server_runnable IS TRUE AND (v_run_after_utc IS NULL OR v_run_after_utc <= v_now) THEN
+        v_run_after_utc := v_now;
+    END IF;
+
+    IF v_server_runnable IS TRUE THEN
+        v_runner_state := 'RUNNABLE';
+    END IF;
 
     IF v_operation_type IN ('PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS') THEN
         v_initial_status := 'RUNNING';
@@ -61737,7 +61956,12 @@ BEGIN
       - 'pay_batch_item_ids_json'
       - 'transfer_group_json'
       - 'full_preview_json'
-      - 'canonical_preview_lines_json') || jsonb_build_object('chunks', v_chunk_config));
+      - 'canonical_preview_lines_json') || jsonb_build_object(
+        'chunks', v_chunk_config,
+        'backend_runner_owned', CASE WHEN v_operation_type = 'DRAFT_CREATE' THEN true ELSE NULL::boolean END,
+        'frontend_completion_required', CASE WHEN v_operation_type = 'DRAFT_CREATE' THEN false ELSE NULL::boolean END,
+        'run_after_utc', CASE WHEN v_operation_type = 'DRAFT_CREATE' AND v_run_after_utc IS NOT NULL THEN v_run_after_utc::text ELSE NULL::text END
+      ));
 
     PERFORM pg_advisory_xact_lock(pg_catalog.hashtextextended('banking_pay_operation_start:' || v_operation_type || ':' || v_idempotency_key, 0));
 
@@ -61884,12 +62108,19 @@ BEGIN
         v_compact_input_json,
         v_compact_config_json,
         jsonb_strip_nulls(jsonb_build_object(
-            'server_runnable', v_operation_type IN ('PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS'),
+            'server_runnable', v_server_runnable,
+            'backend_runner_owned', v_backend_runner_owned,
+            'frontend_completion_required', v_frontend_completion_required,
             'progress_version', 1,
-            'status_text', CASE WHEN v_operation_type IN ('PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS') THEN 'Payment execution operation created for backend runner.' ELSE 'Operation created.' END,
+            'status_text', CASE
+                WHEN v_operation_type = 'DRAFT_CREATE' THEN 'Draft creation operation created for backend runner.'
+                WHEN v_operation_type IN ('PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS') THEN 'Payment execution operation created for backend runner.'
+                ELSE 'Operation created.'
+            END,
             'bounded_chunk_config', v_chunk_config,
             'started_by_operation_start', true,
-            'created_at_utc', v_now::text
+            'created_at_utc', v_now::text,
+            'run_after_utc', CASE WHEN v_run_after_utc IS NULL THEN NULL ELSE v_run_after_utc::text END
         )),
         NULL::jsonb,
         NULL::jsonb,
@@ -61900,7 +62131,7 @@ BEGIN
         0,
         NULL::text,
         NULL::timestamptz,
-        CASE WHEN v_operation_type IN ('PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS') THEN v_now ELSE NULL::timestamptz END,
+        v_run_after_utc,
         NULL::text,
         NULL::timestamptz,
         v_now,
@@ -61944,7 +62175,6 @@ BEGIN
         false;
 END;
 $function$;
-
 
 
 
@@ -151432,3 +151662,237 @@ BEGIN
   );
 END;
 $function$;
+
+CREATE OR REPLACE FUNCTION public.banking_pay_operation_find_active_draft_create(
+    p_actor_user_id uuid,
+    p_workbench_session_id uuid,
+    p_include_recent_terminal boolean DEFAULT true,
+    p_recent_terminal_minutes integer DEFAULT 60
+)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+DECLARE
+    v_now timestamptz := now();
+    v_recent_terminal_minutes integer := LEAST(GREATEST(COALESCE(p_recent_terminal_minutes, 60), 0), 10080);
+    v_recent_terminal_after timestamptz := NULL::timestamptz;
+    v_operation public.banking_pay_operations%ROWTYPE;
+    v_progress jsonb := '{}'::jsonb;
+    v_result jsonb := '{}'::jsonb;
+    v_error jsonb := '{}'::jsonb;
+    v_public_payload jsonb := '{}'::jsonb;
+    v_terminal boolean := false;
+    v_heartbeat_age_seconds integer := NULL::integer;
+    v_batch_ids jsonb := '[]'::jsonb;
+    v_primary_pay_batch_id text := NULL::text;
+    v_backend_runner_owned boolean := false;
+    v_frontend_completion_required boolean := false;
+    v_session_id_text text := NULL::text;
+BEGIN
+    PERFORM public.banking_pay_hot_path_budget_apply('PROGRESS');
+
+    IF p_actor_user_id IS NULL THEN
+        RETURN jsonb_build_object(
+            'ok', false,
+            'code', 'ACTOR_USER_ID_REQUIRED',
+            'message', 'actor_user_id is required'
+        );
+    END IF;
+
+    IF p_workbench_session_id IS NULL THEN
+        RETURN jsonb_build_object(
+            'ok', false,
+            'code', 'WORKBENCH_SESSION_ID_REQUIRED',
+            'message', 'workbench_session_id is required'
+        );
+    END IF;
+
+    v_session_id_text := p_workbench_session_id::text;
+
+    IF COALESCE(p_include_recent_terminal, true) IS TRUE AND v_recent_terminal_minutes > 0 THEN
+        v_recent_terminal_after := v_now - make_interval(mins => v_recent_terminal_minutes);
+    END IF;
+
+    SELECT operation_row.*
+    INTO v_operation
+    FROM public.banking_pay_operations AS operation_row
+    WHERE upper(BTRIM(COALESCE(operation_row.operation_type, ''))) = 'DRAFT_CREATE'
+      AND operation_row.actor_user_id = p_actor_user_id
+      AND (
+          operation_row.workbench_session_id = p_workbench_session_id
+          OR COALESCE(operation_row.input_json->>'workbench_session_id', '') = v_session_id_text
+          OR COALESCE(operation_row.input_json->>'workbenchSessionId', '') = v_session_id_text
+          OR COALESCE(operation_row.input_json->>'session_id', '') = v_session_id_text
+          OR COALESCE(operation_row.input_json->>'source_session_id', '') = v_session_id_text
+          OR COALESCE(operation_row.input_json->>'source_workbench_session_id', '') = v_session_id_text
+          OR COALESCE(operation_row.progress_json->>'workbench_session_id', '') = v_session_id_text
+          OR COALESCE(operation_row.progress_json->>'workbenchSessionId', '') = v_session_id_text
+          OR COALESCE(operation_row.progress_json->>'session_id', '') = v_session_id_text
+          OR COALESCE(operation_row.progress_json->>'source_session_id', '') = v_session_id_text
+          OR COALESCE(operation_row.progress_json->>'source_workbench_session_id', '') = v_session_id_text
+          OR COALESCE(operation_row.result_json->>'workbench_session_id', '') = v_session_id_text
+          OR COALESCE(operation_row.result_json->>'workbenchSessionId', '') = v_session_id_text
+          OR COALESCE(operation_row.result_json->>'session_id', '') = v_session_id_text
+          OR COALESCE(operation_row.result_json->>'source_session_id', '') = v_session_id_text
+          OR COALESCE(operation_row.result_json->>'source_workbench_session_id', '') = v_session_id_text
+      )
+      AND (
+          upper(BTRIM(COALESCE(operation_row.status, ''))) NOT IN ('COMPLETE', 'COMPLETED', 'FAILED', 'CANCELLED', 'CANCELED', 'ERROR')
+          OR (
+              v_recent_terminal_after IS NOT NULL
+              AND COALESCE(operation_row.completed_at_utc, operation_row.failed_at_utc, operation_row.updated_at_utc, operation_row.created_at_utc) >= v_recent_terminal_after
+          )
+      )
+    ORDER BY
+      CASE
+        WHEN upper(BTRIM(COALESCE(operation_row.status, ''))) IN ('COMPLETE', 'COMPLETED', 'FAILED', 'CANCELLED', 'CANCELED', 'ERROR') THEN 1
+        ELSE 0
+      END ASC,
+      CASE upper(BTRIM(COALESCE(operation_row.status, '')))
+        WHEN 'RUNNING' THEN 0
+        WHEN 'CONTINUING' THEN 1
+        WHEN 'WAITING_RETRY' THEN 2
+        WHEN 'WAITING_AUTHORISATION' THEN 3
+        WHEN 'WAITING_PROVIDER' THEN 4
+        WHEN 'REVIEW_REQUIRED' THEN 5
+        WHEN 'QUEUED' THEN 6
+        ELSE 8
+      END ASC,
+      operation_row.updated_at_utc DESC NULLS LAST,
+      operation_row.created_at_utc DESC NULLS LAST,
+      operation_row.id DESC
+    LIMIT 1;
+
+    IF NOT FOUND THEN
+        RETURN jsonb_build_object(
+            'ok', true,
+            'found', false,
+            'operation', NULL::jsonb,
+            'operation_id', NULL::text,
+            'workbench_session_id', v_session_id_text,
+            'operation_type', 'DRAFT_CREATE'
+        );
+    END IF;
+
+    v_progress := COALESCE(v_operation.progress_json, '{}'::jsonb);
+    v_result := COALESCE(v_operation.result_json, '{}'::jsonb);
+    v_error := COALESCE(v_operation.error_json, '{}'::jsonb);
+    v_terminal := upper(BTRIM(COALESCE(v_operation.status, ''))) IN ('COMPLETE', 'COMPLETED', 'FAILED', 'CANCELLED', 'CANCELED', 'ERROR');
+    v_heartbeat_age_seconds := CASE
+        WHEN v_operation.heartbeat_at_utc IS NULL THEN NULL::integer
+        ELSE GREATEST(0, EXTRACT(EPOCH FROM (v_now - v_operation.heartbeat_at_utc))::integer)
+    END;
+
+    v_backend_runner_owned := upper(BTRIM(COALESCE(
+        v_operation.input_json->>'backend_runner_owned',
+        v_operation.input_json->>'backendRunnerOwned',
+        v_operation.config_json->>'backend_runner_owned',
+        v_operation.config_json->>'backendRunnerOwned',
+        v_progress->>'backend_runner_owned',
+        v_progress->>'backendRunnerOwned',
+        'false'
+    ))) IN ('TRUE', 'T', '1', 'YES', 'Y', 'ON');
+
+    v_frontend_completion_required := upper(BTRIM(COALESCE(
+        v_operation.input_json->>'frontend_completion_required',
+        v_operation.input_json->>'frontendCompletionRequired',
+        v_operation.config_json->>'frontend_completion_required',
+        v_operation.config_json->>'frontendCompletionRequired',
+        v_progress->>'frontend_completion_required',
+        v_progress->>'frontendCompletionRequired',
+        'false'
+    ))) IN ('TRUE', 'T', '1', 'YES', 'Y', 'ON');
+
+    SELECT COALESCE(jsonb_agg(batch_id_dedup.batch_id_text ORDER BY batch_id_dedup.batch_id_text), '[]'::jsonb)
+    INTO v_batch_ids
+    FROM (
+        SELECT DISTINCT NULLIF(BTRIM(batch_id_source.batch_id_text), '') AS batch_id_text
+        FROM (
+            SELECT CASE WHEN v_operation.pay_batch_id IS NULL THEN NULL::text ELSE v_operation.pay_batch_id::text END AS batch_id_text
+            UNION ALL SELECT v_progress->>'pay_batch_id'
+            UNION ALL SELECT v_progress->>'payBatchId'
+            UNION ALL SELECT v_progress->>'primary_pay_batch_id'
+            UNION ALL SELECT v_progress->>'primaryPayBatchId'
+            UNION ALL SELECT v_result->>'pay_batch_id'
+            UNION ALL SELECT v_result->>'payBatchId'
+            UNION ALL SELECT v_result->>'primary_pay_batch_id'
+            UNION ALL SELECT v_result->>'primaryPayBatchId'
+            UNION ALL SELECT jsonb_array_elements_text(CASE WHEN jsonb_typeof(v_progress->'pay_batch_ids') = 'array' THEN v_progress->'pay_batch_ids' ELSE '[]'::jsonb END)
+            UNION ALL SELECT jsonb_array_elements_text(CASE WHEN jsonb_typeof(v_progress->'payBatchIds') = 'array' THEN v_progress->'payBatchIds' ELSE '[]'::jsonb END)
+            UNION ALL SELECT jsonb_array_elements_text(CASE WHEN jsonb_typeof(v_progress->'created_pay_batch_ids') = 'array' THEN v_progress->'created_pay_batch_ids' ELSE '[]'::jsonb END)
+            UNION ALL SELECT jsonb_array_elements_text(CASE WHEN jsonb_typeof(v_progress->'createdPayBatchIds') = 'array' THEN v_progress->'createdPayBatchIds' ELSE '[]'::jsonb END)
+            UNION ALL SELECT jsonb_array_elements_text(CASE WHEN jsonb_typeof(v_result->'pay_batch_ids') = 'array' THEN v_result->'pay_batch_ids' ELSE '[]'::jsonb END)
+            UNION ALL SELECT jsonb_array_elements_text(CASE WHEN jsonb_typeof(v_result->'payBatchIds') = 'array' THEN v_result->'payBatchIds' ELSE '[]'::jsonb END)
+            UNION ALL SELECT jsonb_array_elements_text(CASE WHEN jsonb_typeof(v_result->'created_pay_batch_ids') = 'array' THEN v_result->'created_pay_batch_ids' ELSE '[]'::jsonb END)
+            UNION ALL SELECT jsonb_array_elements_text(CASE WHEN jsonb_typeof(v_result->'createdPayBatchIds') = 'array' THEN v_result->'createdPayBatchIds' ELSE '[]'::jsonb END)
+        ) AS batch_id_source
+    ) AS batch_id_dedup
+    WHERE batch_id_dedup.batch_id_text IS NOT NULL;
+
+    v_primary_pay_batch_id := COALESCE(
+        CASE WHEN v_operation.pay_batch_id IS NULL THEN NULL::text ELSE v_operation.pay_batch_id::text END,
+        NULLIF(BTRIM(v_progress->>'primary_pay_batch_id'), ''),
+        NULLIF(BTRIM(v_progress->>'primaryPayBatchId'), ''),
+        NULLIF(BTRIM(v_progress->>'pay_batch_id'), ''),
+        NULLIF(BTRIM(v_progress->>'payBatchId'), ''),
+        NULLIF(BTRIM(v_result->>'primary_pay_batch_id'), ''),
+        NULLIF(BTRIM(v_result->>'primaryPayBatchId'), ''),
+        NULLIF(BTRIM(v_result->>'pay_batch_id'), ''),
+        NULLIF(BTRIM(v_result->>'payBatchId'), '')
+    );
+
+    v_public_payload := COALESCE(public.banking_pay_operation_get(v_operation.id, p_actor_user_id, 'PROGRESS_LIGHT'), '{}'::jsonb);
+
+    RETURN jsonb_strip_nulls(
+        v_public_payload
+        || jsonb_build_object(
+            'ok', true,
+            'found', true,
+            'active_draft_create_operation', true,
+            'operation_id', v_operation.id::text,
+            'id', v_operation.id::text,
+            'operation_type', v_operation.operation_type,
+            'status', v_operation.status,
+            'phase', v_operation.phase,
+            'runner_state', v_operation.runner_state,
+            'actor_user_id', v_operation.actor_user_id::text,
+            'workbench_session_id', COALESCE(CASE WHEN v_operation.workbench_session_id IS NULL THEN NULL::text ELSE v_operation.workbench_session_id::text END, v_session_id_text),
+            'pay_batch_id', v_primary_pay_batch_id,
+            'primary_pay_batch_id', v_primary_pay_batch_id,
+            'root_operation_id', CASE WHEN v_operation.root_operation_id IS NULL THEN NULL ELSE v_operation.root_operation_id::text END,
+            'idempotency_key', v_operation.idempotency_key,
+            'backend_runner_owned', v_backend_runner_owned,
+            'frontend_completion_required', v_frontend_completion_required,
+            'terminal', v_terminal,
+            'server_running', (v_operation.lease_owner IS NOT NULL AND v_operation.lease_expires_at_utc IS NOT NULL AND v_operation.lease_expires_at_utc > v_now),
+            'heartbeat_age_seconds', v_heartbeat_age_seconds,
+            'pay_batch_ids', v_batch_ids,
+            'created_pay_batch_ids', v_batch_ids
+        )
+        || jsonb_build_object(
+            'result_summary', jsonb_strip_nulls(jsonb_build_object(
+                'pay_batch_id', v_primary_pay_batch_id,
+                'primary_pay_batch_id', v_primary_pay_batch_id,
+                'pay_batch_ids', v_batch_ids,
+                'created_pay_batch_ids', v_batch_ids,
+                'created_batch_count', CASE WHEN COALESCE(v_result->>'created_batch_count', '') ~ '^[0-9]+$' THEN (v_result->>'created_batch_count')::integer ELSE jsonb_array_length(v_batch_ids) END,
+                'workbench_session_id', COALESCE(CASE WHEN v_operation.workbench_session_id IS NULL THEN NULL::text ELSE v_operation.workbench_session_id::text END, v_session_id_text),
+                'source_session_discarded', v_result->>'source_session_discarded',
+                'last_message', COALESCE(v_result->>'last_message', v_progress->>'last_message')
+            )),
+            'small_error_summary', CASE
+                WHEN v_operation.error_json IS NULL THEN NULL::jsonb
+                WHEN jsonb_typeof(v_error) = 'object' THEN jsonb_strip_nulls(jsonb_build_object(
+                    'code', COALESCE(NULLIF(BTRIM(v_error->>'code'), ''), NULLIF(BTRIM(v_error->>'error_code'), '')),
+                    'message', LEFT(COALESCE(NULLIF(BTRIM(v_error->>'message'), ''), NULLIF(BTRIM(v_error->>'error'), ''), v_error::text), 1000)
+                ))
+                ELSE jsonb_build_object('message', LEFT(v_error::text, 1000))
+            END
+        )
+    );
+END;
+$function$;
+
+
