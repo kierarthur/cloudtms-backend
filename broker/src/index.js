@@ -22092,8 +22092,6 @@ async function handleBankingPayDraftCreateOperationLookup(env, req, user, sessio
 }
 
 
-
-
 async function handleBankingPayCreateDraft(env, req, user) {
   const trimStr = (value) => String(value == null ? '' : value).trim();
   const upperTrim = (value) => trimStr(value).toUpperCase();
@@ -22192,6 +22190,73 @@ async function handleBankingPayCreateDraft(env, req, user) {
     }
     return fallback;
   };
+  const booleanFrom = (value) => value === true || ['true', 't', '1', 'yes', 'y', 'on'].includes(trimStr(value).toLowerCase());
+  const numericOrNull = (value) => {
+    const text = trimStr(value);
+    if (!/^-?[0-9]+(\.[0-9]+)?$/.test(text)) return null;
+    const numberValue = Number(text);
+    return Number.isFinite(numberValue) ? Math.round(numberValue * 100) / 100 : null;
+  };
+  const buildCreateDraftSelectedPreviewRowContract = (previewRowLike, index = 0) => {
+    const previewRow = isPlainObject(previewRowLike) ? previewRowLike : {};
+    const rowJson = isPlainObject(previewRow.row_json) ? previewRow.row_json : {};
+    const economicKey = isPlainObject(rowJson.economic_key) ? rowJson.economic_key : {};
+    const previewRowId = trimStr(previewRow.id || previewRow.row_id || rowJson.preview_row_pk || rowJson.row_id || '');
+    const presentationPreviewRowId = trimStr(rowJson.preview_row_id || rowJson.row_id || rowJson.line_id || previewRow.row_key || '');
+    const rowKey = trimStr(previewRow.row_key || rowJson.row_key || rowJson.line_key || '');
+    const lineId = trimStr(rowJson.line_id || rowJson.lineId || '');
+    const section = trimStr(previewRow.section || rowJson.section || 'canonical_preview_lines') || 'canonical_preview_lines';
+    const candidateId = trimStr(previewRow.candidate_id || rowJson.candidate_id || '');
+    const timesheetId = trimStr(previewRow.timesheet_id || economicKey.timesheet_id || rowJson.timesheet_id || '');
+    const keyType = upperTrim(previewRow.key_type || economicKey.key_type || rowJson.key_type || rowJson.component_key_type || '');
+    const keyValue = trimStr(previewRow.key_value || economicKey.key_value || rowJson.key_value || rowJson.component_key_value || '');
+    const payChannel = upperTrim(rowJson.pay_channel || rowJson.current_pay_method || rowJson.candidate_pay_method || '');
+    const amountExVat = numericOrNull(previewRow.amount_ex_vat ?? rowJson.amount_ex_vat ?? rowJson.preview_amount_ex_vat ?? rowJson.amount_display);
+    return {
+      contract_version: 1,
+      contract_index: Number.isFinite(Number(index)) ? Math.max(0, Math.trunc(Number(index))) : 0,
+      source: 'banking_pay_workbench_preview_rows',
+      preview_row_id: previewRowId || null,
+      materialised_preview_row_id: previewRowId || null,
+      presentation_preview_row_id: presentationPreviewRowId || null,
+      row_id: previewRowId || null,
+      line_id: lineId || null,
+      row_key: rowKey || null,
+      section,
+      candidate_id: candidateId || null,
+      timesheet_id: timesheetId || null,
+      key_type: keyType || null,
+      key_value: keyValue || null,
+      pay_channel: payChannel || null,
+      amount_ex_vat: amountExVat,
+      presentation_section: upperTrim(rowJson.presentation_section || ''),
+      selection_state: upperTrim(previewRow.selection_state || rowJson.selection_state || ''),
+      status: upperTrim(previewRow.status || rowJson.status || ''),
+      selected: previewRow.selected === true || rowJson.selected === true,
+      draftable: booleanFrom(rowJson.draftable),
+      is_ready_for_draft: booleanFrom(rowJson.is_ready_for_draft),
+      economic_key: {
+        timesheet_id: timesheetId || null,
+        key_type: keyType || null,
+        key_value: keyValue || null
+      },
+      economic_keyspace: 'timesheet_id,key_type,key_value',
+      policy_x_authority_scope: 'PRE_DRAFT_LIVE_TRUTH'
+    };
+  };
+  const buildCreateDraftEconomicKeyContract = (contractLike) => {
+    const contract = isPlainObject(contractLike) ? contractLike : {};
+    return {
+      candidate_id: trimStr(contract.candidate_id || '') || null,
+      timesheet_id: trimStr(contract.timesheet_id || contract.economic_key?.timesheet_id || '') || null,
+      key_type: upperTrim(contract.key_type || contract.economic_key?.key_type || '') || null,
+      key_value: trimStr(contract.key_value || contract.economic_key?.key_value || '') || null,
+      row_key: trimStr(contract.row_key || '') || null,
+      pay_channel: upperTrim(contract.pay_channel || '') || null,
+      section: trimStr(contract.section || 'canonical_preview_lines') || 'canonical_preview_lines',
+      economic_keyspace: 'timesheet_id,key_type,key_value'
+    };
+  };
   const fetchCurrentSessionSelectionForCreateDraft = async (sessionIdValue, scopeValue = 'ALL') => {
     const id = trimStr(sessionIdValue);
     const scope = upperTrim(scopeValue || 'ALL') || 'ALL';
@@ -22250,6 +22315,9 @@ async function handleBankingPayCreateDraft(env, req, user) {
       selectedIds.push(rowId);
     }
 
+    const selectedPreviewRowContracts = selectedRows.map((selectedRow, index) => buildCreateDraftSelectedPreviewRowContract(selectedRow, index));
+    const selectedEconomicKeys = selectedPreviewRowContracts.map((contract) => buildCreateDraftEconomicKeyContract(contract));
+
     return {
       ok: selectedIds.length > 0,
       error_code: selectedIds.length > 0 ? null : 'BANKING_CREATE_DRAFT_NO_SELECTED_ROWS_CURRENT_VERSION',
@@ -22261,7 +22329,11 @@ async function handleBankingPayCreateDraft(env, req, user) {
       selected_row_count: selectedIds.length,
       server_selected_preview_row_ids_provided: sessionRow.server_selected_preview_row_ids_provided === true,
       session_selected_row_count: Number.isFinite(Number(sessionRow.selected_row_count)) ? Math.max(0, Math.trunc(Number(sessionRow.selected_row_count))) : null,
-      sample_rows: selectedRows.slice(0, 25)
+      sample_rows: selectedRows.slice(0, 25),
+      selected_preview_row_contracts: selectedPreviewRowContracts,
+      draft_selected_preview_row_contracts: selectedPreviewRowContracts,
+      selected_economic_keys: selectedEconomicKeys,
+      draft_selected_economic_keys: selectedEconomicKeys
     };
   };
   const isActiveDraftCreateStatus = (value) => ['RUNNING', 'CONTINUING', 'WAITING_RETRY'].includes(upperTrim(value));
@@ -22405,6 +22477,12 @@ async function handleBankingPayCreateDraft(env, req, user) {
   sessionVersion = currentSelection.session_version ?? sessionVersion;
   sourceSnapshotRunId = currentSelection.source_snapshot_run_id || sourceSnapshotRunId;
   sessionSignature = currentSelection.session_signature || sessionSignature;
+  const selectedPreviewRowContracts = Array.isArray(currentSelection.selected_preview_row_contracts)
+    ? currentSelection.selected_preview_row_contracts.filter((contract) => isPlainObject(contract)).map((contract) => cloneJson(contract) || contract)
+    : [];
+  const selectedEconomicKeys = Array.isArray(currentSelection.selected_economic_keys)
+    ? currentSelection.selected_economic_keys.filter((contract) => isPlainObject(contract)).map((contract) => cloneJson(contract) || contract)
+    : selectedPreviewRowContracts.map((contract) => buildCreateDraftEconomicKeyContract(contract));
 
   try {
     const activeLookup = unwrapRpc(await sbRpc(env, 'banking_pay_operation_find_active_draft_create', {
@@ -22427,7 +22505,7 @@ async function handleBankingPayCreateDraft(env, req, user) {
     }
   } catch {}
 
-  const selectedHashInput = selectedPreviewRowIds.length > 0 ? selectedPreviewRowIds : { row_backed_selection: true, session_id: sessionId, selected_count: selectedCount, session_version: sessionVersion };
+  const selectedHashInput = selectedEconomicKeys.length > 0 ? selectedEconomicKeys : (selectedPreviewRowIds.length > 0 ? selectedPreviewRowIds : { row_backed_selection: true, session_id: sessionId, selected_count: selectedCount, session_version: sessionVersion });
   const selectedPreviewRowHash = await sha256Hex(stableStringify(selectedHashInput));
   const idempotencyHash = await sha256Hex(stableStringify({
     actor_user_id: actorUserId,
@@ -22455,6 +22533,10 @@ async function handleBankingPayCreateDraft(env, req, user) {
     selected_preview_row_count: selectedCount,
     selected_preview_row_ids: selectedPreviewRowIds.slice(0, 100),
     draft_selected_preview_row_ids: selectedPreviewRowIds.slice(0, 100),
+    selected_preview_row_contracts: selectedPreviewRowContracts,
+    draft_selected_preview_row_contracts: selectedPreviewRowContracts,
+    selected_economic_keys: selectedEconomicKeys,
+    draft_selected_economic_keys: selectedEconomicKeys,
     submitted_preview_row_ids_before_current_selection_refresh: previousSelectedIds,
     current_selection_refreshed_before_operation_start: true,
     selected_preview_row_mode: selectedPreviewRowMode,
@@ -22501,6 +22583,7 @@ async function handleBankingPayCreateDraft(env, req, user) {
     });
   }
 }
+
 
 
 async function handleTimesheetAdvancePayment(env, req, timesheetId) {
