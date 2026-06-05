@@ -22094,8 +22094,6 @@ async function handleBankingPayDraftCreateOperationLookup(env, req, user, sessio
 
 
 
-
-
 async function handleBankingPayCreateDraft(env, req, user) {
   const trimStr = (value) => String(value == null ? '' : value).trim();
   const upperTrim = (value) => trimStr(value).toUpperCase();
@@ -22194,6 +22192,78 @@ async function handleBankingPayCreateDraft(env, req, user) {
     }
     return fallback;
   };
+  const fetchCurrentSessionSelectionForCreateDraft = async (sessionIdValue, scopeValue = 'ALL') => {
+    const id = trimStr(sessionIdValue);
+    const scope = upperTrim(scopeValue || 'ALL') || 'ALL';
+    if (!uuidRe.test(id)) {
+      return { ok: false, error_code: 'BANKING_PAY_CREATE_DRAFT_SESSION_REQUIRED', selected_preview_row_ids: [] };
+    }
+
+    let sessionRow = null;
+    try {
+      const { rows: sessionRows } = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/banking_pay_workbench_sessions?id=eq.${encodeURIComponent(id)}&select=id,version,source_snapshot_run_id,session_signature,server_selected_preview_row_ids,server_selected_preview_row_ids_provided,selected_row_count,status,pay_date,week_ending_cutoff&limit=1`, false);
+      sessionRow = Array.isArray(sessionRows) && sessionRows.length > 0 ? sessionRows[0] : null;
+    } catch (error) {
+      return { ok: false, error_code: 'BANKING_PAY_CREATE_DRAFT_SESSION_READ_FAILED', selected_preview_row_ids: [], error: String(error && error.message ? error.message : error) };
+    }
+
+    if (!sessionRow) {
+      return { ok: false, error_code: 'WORKBENCH_SESSION_NOT_FOUND', selected_preview_row_ids: [] };
+    }
+
+    const sessionStatus = upperTrim(sessionRow.status || '');
+    if (sessionStatus !== 'OPEN') {
+      return { ok: false, error_code: 'WORKBENCH_SESSION_INVALID', selected_preview_row_ids: [], session_status: sessionStatus || null };
+    }
+
+    const sessionVersionValue = sessionRow.version;
+    const sessionVersionNumber = Number(sessionVersionValue);
+    if (!Number.isFinite(sessionVersionNumber)) {
+      return { ok: false, error_code: 'WORKBENCH_SESSION_VERSION_MISSING', selected_preview_row_ids: [] };
+    }
+
+    let previewRows = [];
+    try {
+      const { rows } = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/banking_pay_workbench_preview_rows?session_id=eq.${encodeURIComponent(id)}&session_version=eq.${encodeURIComponent(String(sessionVersionValue))}&section=eq.canonical_preview_lines&selected=eq.true&status=eq.READY&select=id,row_key,timesheet_id,key_type,key_value,candidate_id,section,status,selection_state,selected,row_json,row_ordinal&order=row_ordinal.asc,id.asc&limit=101`, false);
+      previewRows = Array.isArray(rows) ? rows : [];
+    } catch (error) {
+      return { ok: false, error_code: 'BANKING_PAY_CURRENT_SELECTION_READ_FAILED', selected_preview_row_ids: [], session_version: sessionVersionValue, error: String(error && error.message ? error.message : error) };
+    }
+
+    const selectedRows = previewRows.filter((previewRow) => {
+      if (!previewRow || typeof previewRow !== 'object') return false;
+      if (upperTrim(previewRow.selection_state || '') !== 'SELECTED') return false;
+      if (scope === 'PAYE' || scope === 'UMBRELLA') {
+        const rowJson = isPlainObject(previewRow.row_json) ? previewRow.row_json : {};
+        const rowPayChannel = upperTrim(rowJson.pay_channel || rowJson.current_pay_method || rowJson.candidate_pay_method || '');
+        if (rowPayChannel && rowPayChannel !== scope) return false;
+      }
+      return true;
+    });
+
+    const selectedIds = [];
+    const seenIds = new Set();
+    for (const selectedRow of selectedRows) {
+      const rowId = trimStr(selectedRow.id || '');
+      if (!uuidRe.test(rowId) || seenIds.has(rowId)) continue;
+      seenIds.add(rowId);
+      selectedIds.push(rowId);
+    }
+
+    return {
+      ok: selectedIds.length > 0,
+      error_code: selectedIds.length > 0 ? null : 'BANKING_CREATE_DRAFT_NO_SELECTED_ROWS_CURRENT_VERSION',
+      session_id: id,
+      session_version: sessionVersionValue,
+      source_snapshot_run_id: trimStr(sessionRow.source_snapshot_run_id || '') || null,
+      session_signature: trimStr(sessionRow.session_signature || '') || null,
+      selected_preview_row_ids: selectedIds,
+      selected_row_count: selectedIds.length,
+      server_selected_preview_row_ids_provided: sessionRow.server_selected_preview_row_ids_provided === true,
+      session_selected_row_count: Number.isFinite(Number(sessionRow.selected_row_count)) ? Math.max(0, Math.trunc(Number(sessionRow.selected_row_count))) : null,
+      sample_rows: selectedRows.slice(0, 25)
+    };
+  };
   const isActiveDraftCreateStatus = (value) => ['RUNNING', 'CONTINUING', 'WAITING_RETRY'].includes(upperTrim(value));
   const isTerminalDraftCreateStatus = (value) => ['COMPLETE', 'COMPLETED', 'FAILED', 'ERROR', 'CANCELLED', 'CANCELED', 'REVIEW_REQUIRED'].includes(upperTrim(value));
   const classifyExistingDraftCreateOperation = (operationLike) => {
@@ -22265,7 +22335,7 @@ async function handleBankingPayCreateDraft(env, req, user) {
   const rawSelectedPreviewRowIds = Array.isArray(body.selected_preview_row_ids)
     ? body.selected_preview_row_ids
     : (Array.isArray(body.selectedPreviewRowIds) ? body.selectedPreviewRowIds : (Array.isArray(previewDecisions.selected_preview_row_ids) ? previewDecisions.selected_preview_row_ids : []));
-  const selectedPreviewRowIds = [];
+  let selectedPreviewRowIds = [];
   const selectedPreviewRowIdSeen = new Set();
   for (const value of rawSelectedPreviewRowIds) {
     const text = trimStr(value);
@@ -22310,10 +22380,31 @@ async function handleBankingPayCreateDraft(env, req, user) {
   }
 
   const progress = await readCachedProgress(sessionId);
-  const selectedCount = numberFrom(progress, ['selected_rows_total', 'selected_row_count', 'selected_count'], selectedPreviewRowIds.length);
+  let selectedCount = numberFrom(progress, ['selected_rows_total', 'selected_row_count', 'selected_count'], selectedPreviewRowIds.length);
   if (selectedCount <= 0) {
     return fail(409, 'BANKING_CREATE_DRAFT_NO_SELECTED_ROWS', 'Select at least one payment row before creating the batch.', { session_id: sessionId, selected_rows_total: selectedCount });
   }
+
+  let sessionVersion = progress.session_version ?? body.session_version ?? body.sessionVersion ?? null;
+  let sourceSnapshotRunId = trimStr(progress.snapshot_run_id || body.source_snapshot_run_id || body.sourceSnapshotRunId) || null;
+  let sessionSignature = trimStr(body.session_signature || body.sessionSignature || progress.session_signature || progress.filter_hash || '') || null;
+
+  const currentSelection = await fetchCurrentSessionSelectionForCreateDraft(sessionId, payChannelScope);
+  if (!currentSelection || currentSelection.ok !== true || !Array.isArray(currentSelection.selected_preview_row_ids) || currentSelection.selected_preview_row_ids.length <= 0) {
+    return fail(409, currentSelection?.error_code || 'WORKBENCH_STALE_SELECTION', 'Selected preview rows are not part of the current ready workbench session version. Refresh the preview page and try again.', {
+      session_id: sessionId,
+      supplied_selected_preview_row_ids: selectedPreviewRowIds.slice(0, 100),
+      progress_selected_count: selectedCount,
+      current_selection: currentSelection || null
+    });
+  }
+
+  const previousSelectedIds = selectedPreviewRowIds.slice(0, 100);
+  selectedPreviewRowIds = currentSelection.selected_preview_row_ids.slice(0, 100);
+  selectedCount = selectedPreviewRowIds.length;
+  sessionVersion = currentSelection.session_version ?? sessionVersion;
+  sourceSnapshotRunId = currentSelection.source_snapshot_run_id || sourceSnapshotRunId;
+  sessionSignature = currentSelection.session_signature || sessionSignature;
 
   try {
     const activeLookup = unwrapRpc(await sbRpc(env, 'banking_pay_operation_find_active_draft_create', {
@@ -22336,9 +22427,6 @@ async function handleBankingPayCreateDraft(env, req, user) {
     }
   } catch {}
 
-  const sessionVersion = progress.session_version ?? body.session_version ?? body.sessionVersion ?? null;
-  const sourceSnapshotRunId = trimStr(progress.snapshot_run_id || body.source_snapshot_run_id || body.sourceSnapshotRunId) || null;
-  const sessionSignature = trimStr(body.session_signature || body.sessionSignature || progress.session_signature || progress.filter_hash || '') || null;
   const selectedHashInput = selectedPreviewRowIds.length > 0 ? selectedPreviewRowIds : { row_backed_selection: true, session_id: sessionId, selected_count: selectedCount, session_version: sessionVersion };
   const selectedPreviewRowHash = await sha256Hex(stableStringify(selectedHashInput));
   const idempotencyHash = await sha256Hex(stableStringify({
@@ -22367,6 +22455,8 @@ async function handleBankingPayCreateDraft(env, req, user) {
     selected_preview_row_count: selectedCount,
     selected_preview_row_ids: selectedPreviewRowIds.slice(0, 100),
     draft_selected_preview_row_ids: selectedPreviewRowIds.slice(0, 100),
+    submitted_preview_row_ids_before_current_selection_refresh: previousSelectedIds,
+    current_selection_refreshed_before_operation_start: true,
     selected_preview_row_mode: selectedPreviewRowMode,
     selection_session_version: sessionVersion,
     selected_preview_row_hash: selectedPreviewRowHash,
@@ -22411,8 +22501,6 @@ async function handleBankingPayCreateDraft(env, req, user) {
     });
   }
 }
-
-
 
 
 async function handleTimesheetAdvancePayment(env, req, timesheetId) {
