@@ -43597,6 +43597,7 @@ $function$;
 DROP FUNCTION IF EXISTS public.pay_batch_insert_candidates_from_preview(uuid, uuid);
 
 
+
 CREATE OR REPLACE FUNCTION public.pay_batch_insert_candidates_from_preview(
   p_pay_batch_id uuid,
   p_actor_user_id uuid DEFAULT NULL::uuid,
@@ -43777,7 +43778,10 @@ BEGIN
   SELECT COUNT(*)::integer INTO v_inserted_count FROM inserted_candidates;
 
   UPDATE public.banking_pay_operation_candidate_scope AS scope_update
-  SET status = CASE WHEN UPPER(BTRIM(COALESCE(scope_update.status, ''))) IN ('SCOPED', 'ALLOCATED') THEN 'CANDIDATE_INSERTED' ELSE scope_update.status END,
+  SET status = CASE
+        WHEN UPPER(BTRIM(COALESCE(scope_update.status, ''))) IN ('PENDING', 'SCOPED', 'ALLOCATED') THEN 'ALLOCATED'
+        ELSE scope_update.status
+      END,
       updated_at_utc = v_now
   WHERE scope_update.operation_id = p_operation_id
     AND EXISTS (
@@ -43856,8 +43860,6 @@ BEGIN
   );
 END;
 $function$;
-
-
 
 
 DROP FUNCTION IF EXISTS public.pay_batch_insert_items_from_preview(uuid, uuid);
@@ -44053,7 +44055,7 @@ BEGIN
        AND COALESCE(v_linked_allocation_row_count, 0) = COALESCE(v_expected_allocation_row_count, 0) THEN
       UPDATE public.banking_pay_operation_candidate_scope AS scope_update
       SET pay_batch_id = p_pay_batch_id,
-          status = 'ITEMS_INSERTED',
+          status = 'DRAFTED',
           updated_at_utc = v_now
       WHERE scope_update.operation_id = p_operation_id
         AND scope_update.id IN (
@@ -44357,7 +44359,7 @@ BEGIN
           FROM public.banking_pay_operation_candidate_allocation_rows AS allocation_remaining
           WHERE allocation_remaining.candidate_scope_id = scope_update.id
             AND UPPER(BTRIM(COALESCE(allocation_remaining.status, ''))) IN ('PENDING', 'ITEM_PENDING')
-        ) THEN 'ITEMS_INSERTED'
+        ) THEN 'DRAFTED'
         ELSE scope_update.status
       END,
       updated_at_utc = v_now
@@ -137358,7 +137360,6 @@ END;
 $function$;
 
 
-
 CREATE OR REPLACE FUNCTION public.banking_pay_batch_signal_touch(
   p_pay_batch_id uuid,
   p_change_reason text,
@@ -137662,7 +137663,15 @@ BEGIN
   RETURNING *
   INTO v_signal_row;
 
-  PERFORM public.pay_batch_display_summary_touch(p_pay_batch_id);
+  BEGIN
+    PERFORM public.pay_batch_display_summary_refresh(p_pay_batch_id);
+    SELECT refreshed_signal.*
+    INTO v_signal_row
+    FROM public.banking_pay_batch_change_signals AS refreshed_signal
+    WHERE refreshed_signal.pay_batch_id = p_pay_batch_id;
+  EXCEPTION WHEN OTHERS THEN
+    PERFORM public.pay_batch_display_summary_touch(p_pay_batch_id);
+  END;
 
   RETURN jsonb_build_object(
     'ok', true,
@@ -137691,6 +137700,10 @@ BEGIN
   );
 END;
 $function$;
+
+
+
+
 
 CREATE OR REPLACE FUNCTION public.banking_pay_batch_watch_signal(
   p_pay_batch_id uuid,
@@ -145492,12 +145505,53 @@ BEGIN
         'summary_refresh_required', false,
         'refreshed_at_utc', now()::text,
         'latest_operation_status', latest_operation.status,
+        'latest_operation_type', latest_operation.operation_type,
         'batch_status_raw', pay_batch_row.status,
-        'batch_status_label', public._pay_batch_status_display_label(
-          pay_batch_row.status,
-          COALESCE(transfer_summary.pending_bank_outcome_count, 0),
-          COALESCE(transfer_summary.unknown_bank_outcome_count, 0)
+        'batch_status_label', CASE
+          WHEN (
+          UPPER(BTRIM(COALESCE(pay_batch_row.status, ''))) = 'DRAFT'
+          AND pay_batch_row.source_workbench_session_id IS NOT NULL
+          AND COALESCE(candidate_summary.candidate_count, 0) = 0
+          AND COALESCE(item_summary.item_count, 0) = 0
+          AND UPPER(BTRIM(COALESCE(latest_operation.operation_type, ''))) = 'DRAFT_CREATE'
+          AND UPPER(BTRIM(COALESCE(latest_operation.status, ''))) IN ('FAILED', 'ERROR')
+        ) THEN 'Draft creation failed'
+          ELSE public._pay_batch_status_display_label(
+            pay_batch_row.status,
+            COALESCE(transfer_summary.pending_bank_outcome_count, 0),
+            COALESCE(transfer_summary.unknown_bank_outcome_count, 0)
+          )
+        END,
+        'draft_creation_failed_empty_shell', (
+          UPPER(BTRIM(COALESCE(pay_batch_row.status, ''))) = 'DRAFT'
+          AND pay_batch_row.source_workbench_session_id IS NOT NULL
+          AND COALESCE(candidate_summary.candidate_count, 0) = 0
+          AND COALESCE(item_summary.item_count, 0) = 0
+          AND UPPER(BTRIM(COALESCE(latest_operation.operation_type, ''))) = 'DRAFT_CREATE'
+          AND UPPER(BTRIM(COALESCE(latest_operation.status, ''))) IN ('FAILED', 'ERROR')
         ),
+        'draft_creation_failed_operation_id', CASE
+          WHEN (
+          UPPER(BTRIM(COALESCE(pay_batch_row.status, ''))) = 'DRAFT'
+          AND pay_batch_row.source_workbench_session_id IS NOT NULL
+          AND COALESCE(candidate_summary.candidate_count, 0) = 0
+          AND COALESCE(item_summary.item_count, 0) = 0
+          AND UPPER(BTRIM(COALESCE(latest_operation.operation_type, ''))) = 'DRAFT_CREATE'
+          AND UPPER(BTRIM(COALESCE(latest_operation.status, ''))) IN ('FAILED', 'ERROR')
+        ) THEN latest_operation.id::text
+          ELSE NULL::text
+        END,
+        'draft_creation_failed_operation_phase', CASE
+          WHEN (
+          UPPER(BTRIM(COALESCE(pay_batch_row.status, ''))) = 'DRAFT'
+          AND pay_batch_row.source_workbench_session_id IS NOT NULL
+          AND COALESCE(candidate_summary.candidate_count, 0) = 0
+          AND COALESCE(item_summary.item_count, 0) = 0
+          AND UPPER(BTRIM(COALESCE(latest_operation.operation_type, ''))) = 'DRAFT_CREATE'
+          AND UPPER(BTRIM(COALESCE(latest_operation.status, ''))) IN ('FAILED', 'ERROR')
+        ) THEN latest_operation.phase
+          ELSE NULL::text
+        END,
         'batch_terminal_with_failed_payments', UPPER(BTRIM(COALESCE(pay_batch_row.status, ''))) = 'FAILED',
         'pending_bank_outcome_count', COALESCE(transfer_summary.pending_bank_outcome_count, 0),
         'unknown_bank_outcome_count', COALESCE(transfer_summary.unknown_bank_outcome_count, 0),
@@ -145529,11 +145583,21 @@ BEGIN
         CONCAT_WS(
           ' · ',
           NULLIF(BTRIM(COALESCE(pay_batch_row.batch_kind_fixed, '')), ''),
-          NULLIF(BTRIM(COALESCE(public._pay_batch_status_display_label(
-            pay_batch_row.status,
-            COALESCE(transfer_summary.pending_bank_outcome_count, 0),
-            COALESCE(transfer_summary.unknown_bank_outcome_count, 0)
-          ), '')), ''),
+          NULLIF(BTRIM(COALESCE(CASE
+            WHEN (
+          UPPER(BTRIM(COALESCE(pay_batch_row.status, ''))) = 'DRAFT'
+          AND pay_batch_row.source_workbench_session_id IS NOT NULL
+          AND COALESCE(candidate_summary.candidate_count, 0) = 0
+          AND COALESCE(item_summary.item_count, 0) = 0
+          AND UPPER(BTRIM(COALESCE(latest_operation.operation_type, ''))) = 'DRAFT_CREATE'
+          AND UPPER(BTRIM(COALESCE(latest_operation.status, ''))) IN ('FAILED', 'ERROR')
+        ) THEN 'Draft creation failed'
+            ELSE public._pay_batch_status_display_label(
+              pay_batch_row.status,
+              COALESCE(transfer_summary.pending_bank_outcome_count, 0),
+              COALESCE(transfer_summary.unknown_bank_outcome_count, 0)
+            )
+          END, '')), ''),
           CASE WHEN pay_batch_row.pay_date IS NULL THEN NULL::text ELSE pay_batch_row.pay_date::text END
         )
       ),
@@ -145645,10 +145709,17 @@ BEGIN
   LEFT JOIN LATERAL (
     SELECT
       operation_row.id,
+      operation_row.operation_type,
       operation_row.status,
       operation_row.phase
     FROM public.banking_pay_operations AS operation_row
     WHERE operation_row.pay_batch_id = pay_batch_row.id
+       OR EXISTS (
+         SELECT 1
+         FROM public.banking_pay_operation_candidate_scope AS operation_scope
+         WHERE operation_scope.operation_id = operation_row.id
+           AND operation_scope.pay_batch_id = pay_batch_row.id
+       )
     ORDER BY operation_row.updated_at_utc DESC NULLS LAST,
              operation_row.created_at_utc DESC NULLS LAST,
              operation_row.id DESC
@@ -145747,6 +145818,7 @@ BEGIN
     updated_at_utc = now();
 END;
 $function$;
+
 
 
 
