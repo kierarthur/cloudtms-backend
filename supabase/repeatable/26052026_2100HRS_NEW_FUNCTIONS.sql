@@ -153465,7 +153465,6 @@ BEGIN
 END;
 $function$;
 
-
 CREATE OR REPLACE FUNCTION public.pay_batch_abort_failed_draft_create_partial(p_operation_id uuid, p_pay_batch_id uuid, p_actor_user_id uuid DEFAULT NULL::uuid, p_reason text DEFAULT NULL::text, p_failure_json jsonb DEFAULT '{}'::jsonb)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -153491,6 +153490,7 @@ DECLARE
   v_batch_snapshot_run_id_text text := NULL::text;
   v_expected_session_version_text text := NULL::text;
   v_batch_session_version_text text := NULL::text;
+  v_session_version_direct_link_exception_used boolean := false;
   v_operation_direct_batch_link boolean := false;
   v_candidate_scope_link_count integer := 0;
   v_allocation_link_count integer := 0;
@@ -153731,20 +153731,10 @@ BEGIN
   )), '');
   v_batch_session_version_text := CASE WHEN v_batch_row.source_session_version IS NULL THEN NULL ELSE v_batch_row.source_session_version::text END;
 
-  IF v_expected_session_version_text IS NOT NULL
-     AND v_batch_session_version_text IS DISTINCT FROM v_expected_session_version_text THEN
-    RAISE EXCEPTION 'PAY_BATCH_ABORT_FAILED_DRAFT_CREATE_PARTIAL_SESSION_VERSION_MISMATCH'
-      USING ERRCODE = 'P0001',
-            DETAIL = jsonb_build_object(
-              'code', 'PAY_BATCH_ABORT_FAILED_DRAFT_CREATE_PARTIAL_SESSION_VERSION_MISMATCH',
-              'operation_id', p_operation_id::text,
-              'pay_batch_id', p_pay_batch_id::text,
-              'expected_source_session_version', v_expected_session_version_text,
-              'batch_source_session_version', v_batch_session_version_text
-            )::text;
-  END IF;
-
-  v_operation_direct_batch_link := v_operation_row.pay_batch_id = p_pay_batch_id;
+  v_operation_direct_batch_link := (
+    v_operation_row.pay_batch_id IS NOT NULL
+    AND v_operation_row.pay_batch_id = p_pay_batch_id
+  );
 
   SELECT COUNT(*)::integer
   INTO v_candidate_scope_link_count
@@ -153766,6 +153756,35 @@ BEGIN
   WHERE candidate_row.pay_batch_id = p_pay_batch_id
     AND item_row.operation_source_key IS NOT NULL
     AND item_row.operation_source_key LIKE p_operation_id::text || ':%';
+
+  v_session_version_direct_link_exception_used := (
+    v_expected_session_version_text IS NOT NULL
+    AND v_batch_session_version_text IS DISTINCT FROM v_expected_session_version_text
+    AND (
+      COALESCE(v_operation_direct_batch_link, false) IS TRUE
+      OR COALESCE(v_candidate_scope_link_count, 0) > 0
+      OR COALESCE(v_allocation_link_count, 0) > 0
+      OR COALESCE(v_item_link_count, 0) > 0
+    )
+  );
+
+  IF v_expected_session_version_text IS NOT NULL
+     AND v_batch_session_version_text IS DISTINCT FROM v_expected_session_version_text
+     AND COALESCE(v_session_version_direct_link_exception_used, false) IS NOT TRUE THEN
+    RAISE EXCEPTION 'PAY_BATCH_ABORT_FAILED_DRAFT_CREATE_PARTIAL_SESSION_VERSION_MISMATCH'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object(
+              'code', 'PAY_BATCH_ABORT_FAILED_DRAFT_CREATE_PARTIAL_SESSION_VERSION_MISMATCH',
+              'operation_id', p_operation_id::text,
+              'pay_batch_id', p_pay_batch_id::text,
+              'expected_source_session_version', v_expected_session_version_text,
+              'batch_source_session_version', v_batch_session_version_text,
+              'operation_direct_batch_link', COALESCE(v_operation_direct_batch_link, false),
+              'candidate_scope_link_count', COALESCE(v_candidate_scope_link_count, 0),
+              'allocation_link_count', COALESCE(v_allocation_link_count, 0),
+              'item_link_count', COALESCE(v_item_link_count, 0)
+            )::text;
+  END IF;
 
   SELECT latest_operation.id
   INTO v_latest_draft_create_operation_id
@@ -154213,6 +154232,12 @@ BEGIN
       'source_workbench_session_id', v_operation_row.workbench_session_id::text,
       'source_snapshot_run_id', v_batch_snapshot_run_id_text,
       'source_session_version', v_batch_session_version_text,
+      'expected_source_session_version', v_expected_session_version_text,
+      'session_version_direct_link_exception_used', COALESCE(v_session_version_direct_link_exception_used, false),
+      'operation_direct_batch_link', COALESCE(v_operation_direct_batch_link, false),
+      'candidate_scope_link_count', COALESCE(v_candidate_scope_link_count, 0),
+      'allocation_link_count', COALESCE(v_allocation_link_count, 0),
+      'item_link_count', COALESCE(v_item_link_count, 0),
       'allocation_status_failed_allowed', v_allocation_failed_status_allowed,
       'reservation_status_released_allowed', v_reservation_released_status_allowed,
       'cleaned_at_utc', v_now::text,
