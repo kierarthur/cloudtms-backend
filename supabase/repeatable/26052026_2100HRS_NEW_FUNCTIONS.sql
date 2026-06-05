@@ -76922,30 +76922,6 @@ $$;
 
 
 
-CREATE OR REPLACE FUNCTION public._pay_reserved_components(p_timesheet_ids uuid[])
-RETURNS TABLE (
-  timesheet_id uuid,
-  key_type text,
-  key_value text,
-  amount_ex_vat numeric,
-  amount_inc_vat numeric
-)
-LANGUAGE sql
-STABLE
-SECURITY DEFINER
-SET search_path TO 'public'
-AS $$
-SELECT
-  reserved_component_rows.timesheet_id,
-  reserved_component_rows.key_type,
-  reserved_component_rows.key_value,
-  reserved_component_rows.amount_ex_vat,
-  reserved_component_rows.amount_inc_vat
-FROM public._pay_reserved_components(p_timesheet_ids, NULL::uuid) AS reserved_component_rows;
-$$;
-
-
-
 
 CREATE OR REPLACE FUNCTION public._pay_reserved_components(p_timesheet_ids uuid[], p_exclude_pay_batch_id uuid)
 RETURNS TABLE (
@@ -77180,42 +77156,38 @@ FROM reserved_components AS reserved_component_rows;
 $$;
 
 
-CREATE OR REPLACE FUNCTION public._pay_outstanding_components(p_timesheet_ids uuid[])
-RETURNS TABLE(
+
+-- =========================================================
+-- NEW - public._pay_reserved_components - wrapper uuid array.txt
+-- =========================================================
+
+CREATE OR REPLACE FUNCTION public._pay_reserved_components(p_timesheet_ids uuid[])
+RETURNS TABLE (
   timesheet_id uuid,
   key_type text,
   key_value text,
-  truth_ex_vat numeric,
-  baseline_ex_vat numeric,
-  reserved_ex_vat numeric,
-  outstanding_ex_vat numeric,
-  truth_inc_vat numeric,
-  baseline_inc_vat numeric,
-  reserved_inc_vat numeric,
-  outstanding_inc_vat numeric,
-  reservation_overrun_detected boolean
+  amount_ex_vat numeric,
+  amount_inc_vat numeric
 )
 LANGUAGE sql
 STABLE
 SECURITY DEFINER
 SET search_path TO 'public'
-AS $function$
+AS $$
 SELECT
-  outstanding_component_rows.timesheet_id,
-  outstanding_component_rows.key_type,
-  outstanding_component_rows.key_value,
-  outstanding_component_rows.truth_ex_vat,
-  outstanding_component_rows.baseline_ex_vat,
-  outstanding_component_rows.reserved_ex_vat,
-  outstanding_component_rows.outstanding_ex_vat,
-  outstanding_component_rows.truth_inc_vat,
-  outstanding_component_rows.baseline_inc_vat,
-  outstanding_component_rows.reserved_inc_vat,
-  outstanding_component_rows.outstanding_inc_vat,
-  outstanding_component_rows.reservation_overrun_detected
-FROM public._pay_outstanding_components(p_timesheet_ids, NULL::uuid) AS outstanding_component_rows;
-$function$;
+  reserved_component_rows.timesheet_id,
+  reserved_component_rows.key_type,
+  reserved_component_rows.key_value,
+  reserved_component_rows.amount_ex_vat,
+  reserved_component_rows.amount_inc_vat
+FROM public._pay_reserved_components(p_timesheet_ids, NULL::uuid) AS reserved_component_rows;
+$$;
 
+
+
+-- =========================================================
+-- NEW - public._pay_outstanding_components - overload exclude pay batch.txt
+-- =========================================================
 
 CREATE OR REPLACE FUNCTION public._pay_outstanding_components(p_timesheet_ids uuid[], p_exclude_pay_batch_id uuid)
  RETURNS TABLE(timesheet_id uuid, key_type text, key_value text, truth_ex_vat numeric, baseline_ex_vat numeric, reserved_ex_vat numeric, outstanding_ex_vat numeric, truth_inc_vat numeric, baseline_inc_vat numeric, reserved_inc_vat numeric, outstanding_inc_vat numeric, reservation_overrun_detected boolean)
@@ -77854,6 +77826,56 @@ where fr.timesheet_id is not null
   and fr.key_type is not null
   and fr.key_value is not null;
 $function$;
+
+
+
+-- =========================================================
+-- NEW - public._pay_outstanding_components - wrapper uuid array.txt
+-- =========================================================
+
+CREATE OR REPLACE FUNCTION public._pay_outstanding_components(p_timesheet_ids uuid[])
+RETURNS TABLE(
+  timesheet_id uuid,
+  key_type text,
+  key_value text,
+  truth_ex_vat numeric,
+  baseline_ex_vat numeric,
+  reserved_ex_vat numeric,
+  outstanding_ex_vat numeric,
+  truth_inc_vat numeric,
+  baseline_inc_vat numeric,
+  reserved_inc_vat numeric,
+  outstanding_inc_vat numeric,
+  reservation_overrun_detected boolean
+)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $function$
+SELECT
+  outstanding_component_rows.timesheet_id,
+  outstanding_component_rows.key_type,
+  outstanding_component_rows.key_value,
+  outstanding_component_rows.truth_ex_vat,
+  outstanding_component_rows.baseline_ex_vat,
+  outstanding_component_rows.reserved_ex_vat,
+  outstanding_component_rows.outstanding_ex_vat,
+  outstanding_component_rows.truth_inc_vat,
+  outstanding_component_rows.baseline_inc_vat,
+  outstanding_component_rows.reserved_inc_vat,
+  outstanding_component_rows.outstanding_inc_vat,
+  outstanding_component_rows.reservation_overrun_detected
+FROM public._pay_outstanding_components(p_timesheet_ids, NULL::uuid) AS outstanding_component_rows;
+$function$;
+
+
+
+
+
+
+
+
 
 
 
