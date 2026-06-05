@@ -24768,7 +24768,6 @@ async function withBankingPayOperationLease(env, operationRow, options = {}, adv
   };
 }
 
-
 async function advanceBankingPayRunnableOperations(env, opts = {}) {
   const trimText = (value) => String(value == null ? '' : value).trim();
   const clampInteger = (value, fallback, min, max) => {
@@ -24810,6 +24809,10 @@ async function advanceBankingPayRunnableOperations(env, opts = {}) {
     ? opts.operationTypes.map((value) => firstText(value).toUpperCase()).filter(Boolean)
     : (Array.isArray(opts.operation_types) ? opts.operation_types.map((value) => firstText(value).toUpperCase()).filter(Boolean) : []);
   const backendRunnerOperationTypes = operationTypes.length ? Array.from(new Set(operationTypes)) : ['DRAFT_CREATE', 'PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS'];
+  const draftCreateMaxPhaseUnits = clampInteger(opts.draftCreateMaxPhaseUnits != null ? opts.draftCreateMaxPhaseUnits : (opts.draft_create_max_phase_units != null ? opts.draft_create_max_phase_units : 20), 20, 1, 50);
+  const draftCreateMaxChunksPerLease = clampInteger(opts.draftCreateMaxChunksPerLease != null ? opts.draftCreateMaxChunksPerLease : (opts.draft_create_max_chunks_per_lease != null ? opts.draft_create_max_chunks_per_lease : opts.draftCreateMaxChunksPerCall != null ? opts.draftCreateMaxChunksPerCall : opts.draft_create_max_chunks_per_call != null ? opts.draft_create_max_chunks_per_call : 10), 10, 1, 50);
+  const safeDraftCreateRequestBudgetMs = Math.max(1000, Math.min(25000, (lockSeconds * 1000) - 5000, maxRuntimeMs - 500));
+  const draftCreateRequestBudgetMs = clampInteger(opts.draftCreateRequestBudgetMs != null ? opts.draftCreateRequestBudgetMs : (opts.draft_create_request_budget_ms != null ? opts.draft_create_request_budget_ms : safeDraftCreateRequestBudgetMs), safeDraftCreateRequestBudgetMs, 1000, Math.max(1000, safeDraftCreateRequestBudgetMs));
 
   const summary = {
     ok: true,
@@ -24822,6 +24825,9 @@ async function advanceBankingPayRunnableOperations(env, opts = {}) {
     max_operations_per_tick: maxOperations,
     max_advance_calls_per_tick: maxAdvanceCalls,
     max_runtime_ms: maxRuntimeMs,
+    draft_create_max_phase_units: draftCreateMaxPhaseUnits,
+    draft_create_max_chunks_per_lease: draftCreateMaxChunksPerLease,
+    draft_create_request_budget_ms: draftCreateRequestBudgetMs,
     attempted_count: 0,
     claimed_count: 0,
     advanced_count: 0,
@@ -24846,7 +24852,16 @@ async function advanceBankingPayRunnableOperations(env, opts = {}) {
         lockSeconds,
         source,
         req: opts.req || null,
-        requestBudget: opts.requestBudget || opts.request_budget || null,
+        requestBudget: opts.requestBudget || opts.request_budget || draftCreateRequestBudgetMs,
+        request_budget: opts.requestBudget || opts.request_budget || draftCreateRequestBudgetMs,
+        draftCreateMaxPhaseUnits,
+        draft_create_max_phase_units: draftCreateMaxPhaseUnits,
+        draftCreateMaxChunksPerLease,
+        draft_create_max_chunks_per_lease: draftCreateMaxChunksPerLease,
+        draftCreateMaxChunksPerCall: draftCreateMaxChunksPerLease,
+        draft_create_max_chunks_per_call: draftCreateMaxChunksPerLease,
+        draftCreateRequestBudgetMs,
+        draft_create_request_budget_ms: draftCreateRequestBudgetMs,
         runAfterDelaySeconds: opts.runAfterDelaySeconds,
         run_after_delay_seconds: opts.run_after_delay_seconds,
         allowBackendRunnerOwned: opts.allowBackendRunnerOwned !== false,
@@ -24884,7 +24899,6 @@ async function advanceBankingPayRunnableOperations(env, opts = {}) {
   summary.elapsed_ms = Date.now() - startedAt;
   return summary;
 }
-
 
 async function handleBankingPayOperationResume(env, req, user, operationId) {
   const id = String(operationId || '').trim();
@@ -25083,14 +25097,6 @@ async function bankingPayOperationsCronTick(env, opts = {}) {
 }
 
 
-
-
-
-
-
-
-
-
 async function claimAndAdvanceOneBankingPayOperation(env, opts = {}) {
   const trimText = (value) => String(value == null ? '' : value).trim();
   const upperText = (value) => trimText(value).toUpperCase();
@@ -25241,19 +25247,35 @@ async function claimAndAdvanceOneBankingPayOperation(env, opts = {}) {
           continue;
         }
         try {
-          const cancelPayload = unwrapRpcPayload(await sbRpc(env, 'pay_batch_cancel', {
+          const abortPayload = unwrapRpcPayload(await sbRpc(env, 'pay_batch_abort_failed_draft_create_partial', {
+            p_operation_id: exhaustedOperationId,
             p_pay_batch_id: payBatchId,
             p_actor_user_id: businessActorUserId,
-            p_reason: `Draft creation failed before claim: ${terminalReason}`.slice(0, 500)
+            p_reason: `Draft creation failed before claim: ${terminalReason}`.slice(0, 500),
+            p_failure_json: {
+              code: terminalReason,
+              phase: upperText(claimObject.phase || claimObject.operation_phase || 'UNKNOWN') || 'UNKNOWN',
+              not_claimed_reason: claimObject.not_claimed_reason || reason || 'MAX_ATTEMPTS_REACHED',
+              called_from_failure_finalisation: true,
+              cleanup_source: 'claimAndAdvanceOneBankingPayOperation.terminaliseUnclaimableDraftCreateOperation'
+            }
           }, {
             routeClass: 'OPERATION_WORKER_ADVANCE',
-            purpose: 'DRAFT_CREATE_UNCLAIMABLE_CLEANUP',
-            timeoutMs: 10000
-          }), 'pay_batch_cancel');
-          const cancelStatus = upperText(cancelPayload.status);
-          cleanupResults.push({ pay_batch_id: payBatchId, ok: cancelPayload.ok === true || cancelStatus === 'CANCELLED' || !!trimText(cancelPayload.cancelled_at_utc), status: cancelStatus || null, payload: cancelPayload });
-        } catch (cancelError) {
-          cleanupResults.push({ pay_batch_id: payBatchId, ok: false, error: String(cancelError && cancelError.message || cancelError || '') });
+            purpose: 'DRAFT_CREATE_UNCLAIMABLE_PARTIAL_ABORT',
+            timeoutMs: 15000
+          }), 'pay_batch_abort_failed_draft_create_partial');
+          const abortStatus = upperText(abortPayload.status_after || abortPayload.status || abortPayload.batch_status);
+          cleanupResults.push({
+            pay_batch_id: payBatchId,
+            ok: abortPayload.ok === true || abortStatus === 'CANCELLED',
+            status: abortStatus || null,
+            cleanup_mode: abortPayload.cleanup_mode || 'FAILED_DRAFT_CREATE_PARTIAL_ABORT',
+            draft_creation_failed_partial: abortPayload.draft_creation_failed_partial === true,
+            batch_action_blocked: abortPayload.batch_action_blocked !== false,
+            payload: abortPayload
+          });
+        } catch (abortError) {
+          cleanupResults.push({ pay_batch_id: payBatchId, ok: false, error: String(abortError && abortError.message || abortError || '') });
         }
       }
     }
@@ -25385,12 +25407,12 @@ async function claimAndAdvanceOneBankingPayOperation(env, opts = {}) {
     const phase = upperText(source.phase || source.operation_phase);
     const operationTypeForRelease = upperText(source.operation_type || source.operationType);
     const runnerState = upperText(source.runner_state || source.runnerState);
-    if (status === 'COMPLETE' || status === 'COMPLETED') return 'COMPLETE';
-    if (status === 'FAILED' || status === 'ERROR' || status === 'CANCELLED' || status === 'CANCELED') return 'FAILED';
+    if (['COMPLETE', 'COMPLETED', 'SUCCESS', 'SUCCEEDED', 'DONE'].includes(status)) return 'COMPLETE';
+    if (['FAILED', 'ERROR', 'CANCELLED', 'CANCELED'].includes(status)) return 'FAILED';
     if (phase === 'COMPLETE') {
       return operationTypeForRelease === 'DRAFT_CREATE' ? 'MORE_WORK' : 'COMPLETE';
     }
-    if (status === 'REVIEW_REQUIRED' || runnerState === 'WAITING_USER_REVIEW' || source.review_required === true || source.requires_user_action === true && runnerState === 'WAITING_USER_REVIEW') return 'REVIEW_REQUIRED';
+    if (['REVIEW_REQUIRED', 'NEEDS_REVIEW', 'REVIEW'].includes(status) || runnerState === 'WAITING_USER_REVIEW' || source.review_required === true || source.requires_user_action === true && runnerState === 'WAITING_USER_REVIEW') return 'REVIEW_REQUIRED';
     if (status === 'WAITING_AUTHORISATION' || status === 'WAITING_AUTHORIZATION' || source.waiting_authorisation === true || runnerState === 'WAITING_USER') return 'WAITING_AUTHORISATION';
     if (status === 'WAITING_PROVIDER' || source.waiting_provider === true || runnerState === 'WAITING_PROVIDER') return 'WAITING_PROVIDER';
     return 'MORE_WORK';
@@ -25474,6 +25496,16 @@ async function claimAndAdvanceOneBankingPayOperation(env, opts = {}) {
     backendRunner: true,
     businessActorUserId: opts.businessActorUserId || opts.business_actor_user_id || null
   });
+  const safeDraftBudgetMs = Math.max(1000, Math.min(25000, (lockSeconds * 1000) - 5000));
+  const draftCreateMaxPhaseUnits = operationType === 'DRAFT_CREATE'
+    ? clampInteger(opts.draftCreateMaxPhaseUnits != null ? opts.draftCreateMaxPhaseUnits : (opts.draft_create_max_phase_units != null ? opts.draft_create_max_phase_units : 20), 20, 1, 50)
+    : 1;
+  const draftCreateMaxChunksPerCall = operationType === 'DRAFT_CREATE'
+    ? clampInteger(opts.draftCreateMaxChunksPerCall != null ? opts.draftCreateMaxChunksPerCall : (opts.draft_create_max_chunks_per_call != null ? opts.draft_create_max_chunks_per_call : opts.draftCreateMaxChunksPerLease != null ? opts.draftCreateMaxChunksPerLease : opts.draft_create_max_chunks_per_lease != null ? opts.draft_create_max_chunks_per_lease : 10), 10, 1, 50)
+    : 1;
+  const draftCreateRequestBudgetMs = operationType === 'DRAFT_CREATE'
+    ? clampInteger(opts.draftCreateRequestBudgetMs != null ? opts.draftCreateRequestBudgetMs : (opts.draft_create_request_budget_ms != null ? opts.draft_create_request_budget_ms : safeDraftBudgetMs), safeDraftBudgetMs, 1000, Math.max(1000, safeDraftBudgetMs))
+    : (opts.requestBudget || opts.request_budget || null);
 
   let advancedPayload = null;
   let releasePayload = null;
@@ -25501,13 +25533,18 @@ async function claimAndAdvanceOneBankingPayOperation(env, opts = {}) {
       source,
       operationType,
       operation_type: operationType,
-      maxPhaseUnits: 1,
-      max_phase_units: 1,
-      maxChunksPerCall: 1,
-      max_chunks_per_call: 1,
+      maxPhaseUnits: draftCreateMaxPhaseUnits,
+      max_phase_units: draftCreateMaxPhaseUnits,
+      maxChunksPerCall: draftCreateMaxChunksPerCall,
+      max_chunks_per_call: draftCreateMaxChunksPerCall,
       progressMode: 'LIGHT',
       progress_mode: 'LIGHT',
-      requestBudget: opts.requestBudget || opts.request_budget || null
+      requestBudget: draftCreateRequestBudgetMs,
+      request_budget: draftCreateRequestBudgetMs,
+      requestBudgetMs: draftCreateRequestBudgetMs,
+      request_budget_ms: draftCreateRequestBudgetMs,
+      backendOwned: operationType === 'DRAFT_CREATE' ? true : undefined,
+      backend_owned: operationType === 'DRAFT_CREATE' ? true : undefined
     });
     releaseState = determineReleaseState(advancedPayload, null, { operationType });
   } catch (error) {
@@ -25516,7 +25553,7 @@ async function claimAndAdvanceOneBankingPayOperation(env, opts = {}) {
   }
 
   const publicAdvanced = publicPayload(advancedPayload || claim);
-  const terminalAfterAdvance = !advanceError && (publicAdvanced.terminal === true || ['COMPLETE', 'COMPLETED', 'FAILED', 'ERROR', 'CANCELLED', 'CANCELED'].includes(upperText(publicAdvanced.status || advancedPayload?.status)));
+  const terminalAfterAdvance = !advanceError && (publicAdvanced.terminal === true || ['COMPLETE', 'COMPLETED', 'SUCCESS', 'SUCCEEDED', 'DONE', 'FAILED', 'ERROR', 'CANCELLED', 'CANCELED', 'REVIEW_REQUIRED', 'NEEDS_REVIEW', 'REVIEW'].includes(upperText(publicAdvanced.status || advancedPayload?.status)));
   const advancedLeaseOwner = firstText(publicAdvanced.lease_owner, publicAdvanced.lock_owner, publicAdvanced.locked_by, advancedPayload && (advancedPayload.lease_owner || advancedPayload.lock_owner || advancedPayload.locked_by));
   const terminalStillLeasedToThisWorker = terminalAfterAdvance && advancedLeaseOwner === lockOwner && publicAdvanced.leased !== false;
   const progressPatch = compactProgressPatch(publicAdvanced, {
@@ -25525,6 +25562,11 @@ async function claimAndAdvanceOneBankingPayOperation(env, opts = {}) {
     operation_type: operationType,
     last_worker_advanced_at_utc: new Date().toISOString(),
     bounded_phase_unit: true,
+    draft_create_bounded_advance: operationType === 'DRAFT_CREATE',
+    advanced_steps: Number.isFinite(Number(publicAdvanced.advanced_steps)) ? Math.max(0, Math.trunc(Number(publicAdvanced.advanced_steps))) : null,
+    max_phase_units: operationType === 'DRAFT_CREATE' ? draftCreateMaxPhaseUnits : 1,
+    max_chunks_per_call: operationType === 'DRAFT_CREATE' ? draftCreateMaxChunksPerCall : 1,
+    request_budget_ms: operationType === 'DRAFT_CREATE' ? draftCreateRequestBudgetMs : null,
     release_state: releaseState,
     backend_runner_owned: operationBackendRunnerOwned,
     runner_actor_user_id: actorContext.runnerActorUserId || null,
@@ -25630,10 +25672,6 @@ async function claimAndAdvanceOneBankingPayOperation(env, opts = {}) {
     error: advanceErrorPayload
   };
 }
-
-
-
-
 
 
 
@@ -40336,7 +40374,6 @@ async function startBankingPayOperation(env, input = {}, options = {}) {
 }
 
 
-
 async function handleBankingPayOperationGet(env, req, user, operationId) {
   const id = String(operationId || '').trim();
   if (!id) return withCORS(env, req, badRequest('operation_id is required'));
@@ -40363,8 +40400,21 @@ async function handleBankingPayOperationGet(env, req, user, operationId) {
       timeoutMs: 8000
     });
     const row = unwrapRpcPayload(rpcRes, 'banking_pay_operation_get');
+    if (row.ok === false) {
+      const code = String(row.code || row.error_code || '').trim().toUpperCase();
+      if (code === 'OPERATION_NOT_FOUND' || code === 'BANKING_PAY_OPERATION_NOT_FOUND') {
+        return withCORS(env, req, notFound('Operation not found'));
+      }
+      return withCORS(env, req, badRequest(row.message || row.error || row.code || 'Operation could not be loaded'));
+    }
     if (!row.operation_id && !row.id) return withCORS(env, req, notFound('Operation not found'));
-    const payload = buildBankingPayOperationPublicPayload(row, { mode: 'PROGRESS_LIGHT' });
+    const payload = buildBankingPayOperationPublicPayload(row, { mode: 'PROGRESS_LIGHT', observer_only: true, no_auto_advance: true });
+    if (payload.ok === false) {
+      const code = String(payload.code || payload.error_code || '').trim().toUpperCase();
+      if (code === 'OPERATION_NOT_FOUND' || code === 'BANKING_PAY_OPERATION_NOT_FOUND') {
+        return withCORS(env, req, notFound('Operation not found'));
+      }
+    }
     if (!payload.operation_id) return withCORS(env, req, notFound('Operation not found'));
     return withCORS(env, req, ok(payload));
   } catch (e) {
@@ -40374,7 +40424,6 @@ async function handleBankingPayOperationGet(env, req, user, operationId) {
     return withCORS(env, req, new Response(JSON.stringify(friendly), { status: Number(friendly.http_status || friendly.status || 500) || 500, headers: JSON_HEADERS }));
   }
 }
-
 
 async function handleBankingPayOperationAdvance(env, req, user, operationId) {
   const id = String(operationId || '').trim();
@@ -41507,6 +41556,7 @@ async function advanceBankingPaySettlementOperation(env, operationRow, user, opt
 }
 
 
+
 async function advanceBankingPayDraftCreateOperation(env, operationRow, user, options = {}) {
   const unwrapRpcPayload = (rpcRes, key) => {
     let payload = rpcRes;
@@ -41542,6 +41592,153 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
     if (Number.isFinite(n) && n > 0) return Math.trunc(n);
     return fallback;
   };
+  const isDraftCreateTerminalStatus = (value) => ['COMPLETE', 'COMPLETED', 'SUCCESS', 'SUCCEEDED', 'DONE', 'FAILED', 'ERROR', 'CANCELLED', 'CANCELED', 'REVIEW_REQUIRED', 'NEEDS_REVIEW', 'REVIEW'].includes(String(value || '').trim().toUpperCase());
+  const isDraftCreateFailedOrReviewStatus = (value) => ['FAILED', 'ERROR', 'REVIEW_REQUIRED', 'NEEDS_REVIEW', 'REVIEW'].includes(String(value || '').trim().toUpperCase());
+  const draftCreateMaxPhaseUnits = Math.max(1, Math.min(50, numberFrom(options.maxPhaseUnits ?? options.max_phase_units, 20)));
+  const draftCreateMaxChunksPerCall = Math.max(1, Math.min(50, numberFrom(options.maxChunksPerCall ?? options.max_chunks_per_call ?? options.maxChunksPerLease ?? options.max_chunks_per_lease, 10)));
+  const draftCreateRequestBudgetMs = Math.max(1000, Math.min(25000, numberFrom(options.requestBudgetMs ?? options.request_budget_ms ?? options.requestBudget ?? options.request_budget, 20000)));
+  const draftCreateSingleStepMode = options.__draftCreateSingleStep === true || options.singleStep === true || options.single_step === true;
+  const draftCreateChunkPhaseSet = new Set(['SEED_ALLOCATION_ROWS', 'INSERT_CANDIDATES', 'INSERT_ITEMS', 'APPLY_FINANCE_ADJUSTMENTS', 'FINALISE_RESERVATIONS', 'POPULATE_CANDIDATE_SUMMARIES', 'CREATE_TIMESHEET_SNAPSHOTS', 'BUILD_ITEM_BREAKDOWNS']);
+  const fetchLatestDraftCreateOperationRow = async () => {
+    try {
+      const { rows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/banking_pay_operations?id=eq.${enc(operationId)}&select=*&limit=1`,
+        false
+      );
+      return Array.isArray(rows) && rows.length > 0 && rows[0] && typeof rows[0] === 'object' ? rows[0] : null;
+    } catch {
+      return null;
+    }
+  };
+
+  if (!draftCreateSingleStepMode && draftCreateMaxPhaseUnits > 1) {
+    const loopStartedAtMs = Date.now();
+    let currentOperationRow = operation;
+    let lastStepPayload = null;
+    let draftCreateChunkSteps = 0;
+    const advancedStepSummaries = [];
+
+    for (let stepIndex = 0; stepIndex < draftCreateMaxPhaseUnits; stepIndex += 1) {
+      const elapsedMs = Date.now() - loopStartedAtMs;
+      const remainingBudgetMs = draftCreateRequestBudgetMs - elapsedMs;
+      if (remainingBudgetMs <= 750) {
+        return Object.assign({}, lastStepPayload || buildBankingPayOperationPublicPayload(currentOperationRow), {
+          advanced_steps: advancedStepSummaries.length,
+          draft_create_bounded_advance: true,
+          budget_exhausted: true,
+          stop_reason: 'REQUEST_BUDGET_EXHAUSTED',
+          step_summaries: advancedStepSummaries
+        });
+      }
+
+      const beforePhase = String(currentOperationRow.phase || 'VALIDATE_SESSION').trim().toUpperCase() || 'VALIDATE_SESSION';
+      const beforeStatus = String(currentOperationRow.status || 'RUNNING').trim().toUpperCase() || 'RUNNING';
+      const beforeUpdatedAt = String(currentOperationRow.updated_at_utc || currentOperationRow.updatedAtUtc || '').trim();
+      lastStepPayload = await advanceBankingPayDraftCreateOperation(env, currentOperationRow, user, Object.assign({}, options, {
+        __draftCreateSingleStep: true,
+        singleStep: true,
+        single_step: true,
+        maxPhaseUnits: 1,
+        max_phase_units: 1,
+        maxChunksPerCall: 1,
+        max_chunks_per_call: 1,
+        requestBudgetMs: Math.max(750, Math.min(remainingBudgetMs, draftCreateRequestBudgetMs)),
+        request_budget_ms: Math.max(750, Math.min(remainingBudgetMs, draftCreateRequestBudgetMs))
+      }));
+
+      const publicStepPayload = safeObject(lastStepPayload);
+      const stepStatus = String(publicStepPayload.status || '').trim().toUpperCase();
+      const stepPhase = String(publicStepPayload.phase || '').trim().toUpperCase();
+      advancedStepSummaries.push({
+        step: stepIndex + 1,
+        started_phase: beforePhase,
+        ended_phase: stepPhase || beforePhase,
+        status: stepStatus || beforeStatus
+      });
+
+      if (isDraftCreateFailedOrReviewStatus(stepStatus) || isDraftCreateTerminalStatus(stepStatus)) {
+        return Object.assign({}, publicStepPayload, {
+          advanced_steps: advancedStepSummaries.length,
+          draft_create_bounded_advance: true,
+          budget_exhausted: false,
+          stop_reason: isDraftCreateFailedOrReviewStatus(stepStatus) ? 'TERMINAL_FAILURE_OR_REVIEW' : 'TERMINAL',
+          step_summaries: advancedStepSummaries
+        });
+      }
+
+      const latestOperationRow = await fetchLatestDraftCreateOperationRow();
+      if (!latestOperationRow) {
+        return Object.assign({}, publicStepPayload, {
+          advanced_steps: advancedStepSummaries.length,
+          draft_create_bounded_advance: true,
+          budget_exhausted: false,
+          stop_reason: 'LATEST_OPERATION_ROW_NOT_FOUND',
+          step_summaries: advancedStepSummaries
+        });
+      }
+
+      const latestStatus = String(latestOperationRow.status || '').trim().toUpperCase();
+      const latestPhase = String(latestOperationRow.phase || '').trim().toUpperCase();
+      const latestRunAfterMs = Date.parse(String(latestOperationRow.run_after_utc || '').trim());
+      const latestUpdatedAt = String(latestOperationRow.updated_at_utc || '').trim();
+
+      if (isDraftCreateFailedOrReviewStatus(latestStatus) || isDraftCreateTerminalStatus(latestStatus)) {
+        return Object.assign({}, buildBankingPayOperationPublicPayload(latestOperationRow), {
+          advanced_steps: advancedStepSummaries.length,
+          draft_create_bounded_advance: true,
+          budget_exhausted: false,
+          stop_reason: isDraftCreateFailedOrReviewStatus(latestStatus) ? 'TERMINAL_FAILURE_OR_REVIEW' : 'TERMINAL',
+          step_summaries: advancedStepSummaries
+        });
+      }
+
+      if (latestStatus === 'WAITING_RETRY' && Number.isFinite(latestRunAfterMs) && latestRunAfterMs > Date.now()) {
+        return Object.assign({}, buildBankingPayOperationPublicPayload(latestOperationRow), {
+          advanced_steps: advancedStepSummaries.length,
+          draft_create_bounded_advance: true,
+          budget_exhausted: false,
+          stop_reason: 'WAITING_RETRY_RUN_AFTER_FUTURE',
+          step_summaries: advancedStepSummaries
+        });
+      }
+
+      if (draftCreateChunkPhaseSet.has(beforePhase) && latestPhase === beforePhase) {
+        draftCreateChunkSteps += 1;
+        if (draftCreateChunkSteps >= draftCreateMaxChunksPerCall) {
+          return Object.assign({}, buildBankingPayOperationPublicPayload(latestOperationRow), {
+            advanced_steps: advancedStepSummaries.length,
+            chunk_steps: draftCreateChunkSteps,
+            draft_create_bounded_advance: true,
+            budget_exhausted: false,
+            stop_reason: 'MAX_CHUNKS_PER_CALL_REACHED',
+            step_summaries: advancedStepSummaries
+          });
+        }
+      }
+
+      if (latestPhase === beforePhase && latestStatus === beforeStatus && latestUpdatedAt && beforeUpdatedAt && latestUpdatedAt === beforeUpdatedAt) {
+        return Object.assign({}, buildBankingPayOperationPublicPayload(latestOperationRow), {
+          advanced_steps: advancedStepSummaries.length,
+          draft_create_bounded_advance: true,
+          budget_exhausted: false,
+          stop_reason: 'NO_PROGRESS_MADE',
+          step_summaries: advancedStepSummaries
+        });
+      }
+
+      currentOperationRow = latestOperationRow;
+    }
+
+    return Object.assign({}, lastStepPayload || buildBankingPayOperationPublicPayload(currentOperationRow), {
+      advanced_steps: advancedStepSummaries.length,
+      chunk_steps: draftCreateChunkSteps,
+      draft_create_bounded_advance: true,
+      budget_exhausted: false,
+      stop_reason: 'MAX_PHASE_UNITS_REACHED',
+      step_summaries: advancedStepSummaries
+    });
+  }
   const selectedPreviewRowIds = Array.isArray(inputJson.selected_preview_row_ids)
     ? inputJson.selected_preview_row_ids
     : (Array.isArray(inputJson.selectedPreviewRowIds)
@@ -41975,6 +42172,7 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
         transfer_row_present: true,
         candidate_row_count_cap_exceeded: false,
         safe_empty_shell: false,
+        safe_failed_partial: false,
         reason: 'INVALID_PAY_BATCH_ID'
       };
     }
@@ -42007,6 +42205,7 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
         transfer_row_present: true,
         candidate_row_count_cap_exceeded: false,
         safe_empty_shell: false,
+        safe_failed_partial: false,
         reason: 'PAY_BATCH_ROW_NOT_FOUND'
       };
     }
@@ -42073,6 +42272,12 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
       && candidateRowCountCapExceeded !== true
       && itemRowPresent !== true
       && transferRowPresent !== true;
+    const safeFailedPartial = status === 'DRAFT'
+      && (!executionCommitState || executionCommitState === 'NOT_SUBMITTED')
+      && sourceSessionMatches
+      && snapshotMatches
+      && candidateRowCountCapExceeded !== true
+      && transferRowPresent !== true;
 
     return {
       ok: true,
@@ -42092,7 +42297,8 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
       item_row_present: itemRowPresent,
       transfer_row_present: transferRowPresent,
       safe_empty_shell: safeEmptyShell,
-      reason: safeEmptyShell ? null : 'DIRECT_CANCEL_SAFETY_CHECK_FAILED'
+      safe_failed_partial: safeFailedPartial,
+      reason: safeEmptyShell ? null : (safeFailedPartial ? null : 'DIRECT_CANCEL_SAFETY_CHECK_FAILED')
     };
   };
 
@@ -42196,7 +42402,7 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
 
     const { rows } = await sbFetch(
       env,
-      `${env.SUPABASE_URL}/rest/v1/pay_batches?id=eq.${enc(batchId)}&status=eq.DRAFT&execution_commit_state=eq.NOT_SUBMITTED&source_workbench_session_id=eq.${enc(workbenchSessionId)}`,
+      `${env.SUPABASE_URL}/rest/v1/pay_batches?id=eq.${enc(batchId)}&status=eq.DRAFT&or=(execution_commit_state.is.null,execution_commit_state.eq.NOT_SUBMITTED)&source_workbench_session_id=eq.${enc(workbenchSessionId)}`,
       {
         method: 'PATCH',
         headers: {
@@ -42327,41 +42533,53 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
       }
 
       try {
-        const cancelPayload = unwrapRpcPayload(await sbRpc(env, 'pay_batch_cancel', {
+        const abortPayload = unwrapRpcPayload(await sbRpc(env, 'pay_batch_abort_failed_draft_create_partial', {
+          p_operation_id: operationId,
           p_pay_batch_id: batchId,
           p_actor_user_id: actorUserId,
-          p_reason: cancelReason
-        }), 'pay_batch_cancel');
-        const cancelStatus = String(cancelPayload.status || '').trim().toUpperCase();
-        const cancelOk = cancelPayload.ok === true || cancelStatus === 'CANCELLED' || !!String(cancelPayload.cancelled_at_utc || '').trim();
-        const signal = await touchDraftCreateBatchFailureSignal(batchId, cancelOk ? 'DRAFT_CREATE_FAILED_BATCH_CANCELLED' : 'DRAFT_CREATE_FAILED_BATCH_CANCEL_RETURNED_NOT_OK', {
+          p_reason: cancelReason,
+          p_failure_json: Object.assign({}, failurePayload, {
+            code: failureCode,
+            phase: failurePhase,
+            called_from_failure_finalisation: true,
+            cleanup_source: 'advanceBankingPayDraftCreateOperation.cancelCreatedDraftBatchesForFailure'
+          })
+        }), 'pay_batch_abort_failed_draft_create_partial');
+        const abortStatus = String(abortPayload.status_after || abortPayload.status || abortPayload.batch_status || '').trim().toUpperCase();
+        const abortOk = abortPayload.ok === true || abortStatus === 'CANCELLED';
+        const signal = await touchDraftCreateBatchFailureSignal(batchId, abortOk ? 'DRAFT_CREATE_FAILED_PARTIAL_ABORTED' : 'DRAFT_CREATE_FAILED_PARTIAL_ABORT_RETURNED_NOT_OK', {
           failure_phase: failurePhase,
           failure_code: failureCode,
           status_before: status,
           execution_commit_state_before: executionCommitState || null,
-          cancel_status: cancelStatus || null,
-          cancel_ok: cancelOk
+          abort_status: abortStatus || null,
+          abort_ok: abortOk,
+          draft_creation_failed_partial: abortPayload.draft_creation_failed_partial === true,
+          batch_action_blocked: abortPayload.batch_action_blocked !== false
         });
         results.push({
           pay_batch_id: batchId,
-          ok: cancelOk,
+          ok: abortOk,
           status_before: status,
           execution_commit_state_before: executionCommitState || null,
           cancel_reason: cancelReason,
-          cancel_status: cancelStatus || null,
-          cancellation_outcome: cancelPayload.cancellation_outcome || null,
-          cancelled_at_utc: cancelPayload.cancelled_at_utc || null,
-          payload: cancelPayload,
+          cancel_status: abortStatus || null,
+          cancelled_at_utc: abortPayload.cleaned_at_utc || abortPayload.cancelled_at_utc || null,
+          cleanup_mode: abortPayload.cleanup_mode || 'FAILED_DRAFT_CREATE_PARTIAL_ABORT',
+          draft_creation_failed_partial: abortPayload.draft_creation_failed_partial === true,
+          batch_action_blocked: abortPayload.batch_action_blocked !== false,
+          failed_partial_cleanup_status: abortOk ? 'ABORTED' : 'FAILED',
+          payload: abortPayload,
           direct_empty_shell_cancel: directCancel,
           signal
         });
-      } catch (cancelError) {
+      } catch (abortError) {
         const signal = await touchDraftCreateBatchFailureSignal(batchId, 'DRAFT_CREATE_FAILED_BATCH_CLEANUP_FAILED', {
           failure_phase: failurePhase,
           failure_code: failureCode,
           status_before: status,
           execution_commit_state_before: executionCommitState || null,
-          cleanup_error: String(cancelError?.message || cancelError || ''),
+          cleanup_error: String(abortError?.message || abortError || ''),
           direct_empty_shell_cancel: directCancel
         });
         results.push({
@@ -42371,7 +42589,8 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
           execution_commit_state_before: executionCommitState || null,
           cancel_reason: cancelReason,
           direct_empty_shell_cancel: directCancel,
-          error: String(cancelError?.message || cancelError || ''),
+          failed_partial_cleanup_status: 'FAILED',
+          error: String(abortError?.message || abortError || ''),
           signal
         });
       }
@@ -42402,10 +42621,17 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
     const baseError = safeObject(errorJson);
     const cleanup = await cancelCreatedDraftBatchesForFailure(baseError, cleanupOptions);
     const cleanupStatus = cleanup.ok === true ? (cleanup.attempted ? 'COMPLETE' : 'NOT_REQUIRED') : 'FAILED';
+    const cleanupResults = Array.isArray(cleanup.results) ? cleanup.results : [];
+    const failedPartialAborted = cleanupResults.some((cleanupResult) => cleanupResult && cleanupResult.failed_partial_cleanup_status === 'ABORTED' || cleanupResult && cleanupResult.cleanup_mode === 'FAILED_DRAFT_CREATE_PARTIAL_ABORT');
     const finishedOperation = await finish('FAILED', resultJson, Object.assign({}, baseError, {
       cleanup_required: cleanup.attempted === true,
       cleanup_status: cleanupStatus,
-      created_batch_cleanup: cleanup
+      created_batch_cleanup: cleanup,
+      draft_creation_failed_partial: failedPartialAborted,
+      failed_partial_cleanup_status: failedPartialAborted ? 'ABORTED' : cleanupStatus,
+      batch_action_blocked: cleanup.attempted === true,
+      normal_draft_actions_blocked: cleanup.attempted === true,
+      created_pay_batch_ids: Array.isArray(cleanup.discovered_pay_batch_ids) ? cleanup.discovered_pay_batch_ids : []
     }));
 
     const affectedBatchIds = uniqueDraftUuidArray([].concat(
@@ -42514,45 +42740,79 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
         continue;
       }
 
-      try {
-        const cancelPayload = unwrapRpcPayload(await sbRpc(env, 'pay_batch_cancel', {
-          p_pay_batch_id: batchId,
-          p_actor_user_id: actorUserId,
-          p_reason: reason
-        }), 'pay_batch_cancel');
-        const cancelStatus = String(cancelPayload.status || '').trim().toUpperCase();
-        const cancelOk = cancelPayload.ok === true || cancelStatus === 'CANCELLED' || !!String(cancelPayload.cancelled_at_utc || '').trim();
-        const signal = await touchDraftCreateBatchFailureSignal(batchId, cancelOk ? 'DRAFT_CREATE_SKIPPED_EMPTY_RESERVED_CANCELLED' : 'DRAFT_CREATE_SKIPPED_EMPTY_RESERVED_CANCEL_RETURNED_NOT_OK', {
-          failure_phase: 'ASSERT_INTEGRITY',
-          failure_code: 'PAY_DRAFT_ALL_SELECTED_PAYMENTS_ALREADY_RESERVED',
-          cancel_status: cancelStatus || null,
-          cancel_ok: cancelOk
-        });
-        results.push({
-          pay_batch_id: batchId,
-          ok: cancelOk,
-          status: cancelStatus || null,
-          cancelled_at_utc: cancelPayload.cancelled_at_utc || null,
-          cancellation_outcome: cancelPayload.cancellation_outcome || null,
-          payload: cancelPayload,
-          direct_empty_shell_cancel: directCancel,
-          signal
-        });
-      } catch (cancelError) {
-        const signal = await touchDraftCreateBatchFailureSignal(batchId, 'DRAFT_CREATE_SKIPPED_EMPTY_RESERVED_CLEANUP_FAILED', {
-          failure_phase: 'ASSERT_INTEGRITY',
-          failure_code: 'PAY_DRAFT_ALL_SELECTED_PAYMENTS_ALREADY_RESERVED',
-          cleanup_error: String(cancelError?.message || cancelError || ''),
-          direct_empty_shell_cancel: directCancel
-        });
-        results.push({
-          pay_batch_id: batchId,
-          ok: false,
-          direct_empty_shell_cancel: directCancel,
-          error: String(cancelError?.message || cancelError || ''),
-          signal
-        });
+      if (directCancel?.safety?.safe_failed_partial === true) {
+        try {
+          const abortPayload = unwrapRpcPayload(await sbRpc(env, 'pay_batch_abort_failed_draft_create_partial', {
+            p_operation_id: operationId,
+            p_pay_batch_id: batchId,
+            p_actor_user_id: actorUserId,
+            p_reason: reason,
+            p_failure_json: {
+              code: 'PAY_DRAFT_ALL_SELECTED_PAYMENTS_ALREADY_RESERVED',
+              phase: 'ASSERT_INTEGRITY',
+              called_from_failure_finalisation: true,
+              cleanup_source: 'advanceBankingPayDraftCreateOperation.cancelSkippedEmptyReservedDraftBatches',
+              cleanup_reason: 'SKIPPED_EMPTY_RESERVED_DRAFT',
+              direct_empty_shell_cancel: directCancel
+            }
+          }), 'pay_batch_abort_failed_draft_create_partial');
+          const abortStatus = String(abortPayload.status_after || abortPayload.status || abortPayload.batch_status || '').trim().toUpperCase();
+          const abortOk = abortPayload.ok === true || abortStatus === 'CANCELLED';
+          const signal = await touchDraftCreateBatchFailureSignal(batchId, abortOk ? 'DRAFT_CREATE_SKIPPED_RESERVED_PARTIAL_ABORTED' : 'DRAFT_CREATE_SKIPPED_RESERVED_PARTIAL_ABORT_RETURNED_NOT_OK', {
+            failure_phase: 'ASSERT_INTEGRITY',
+            failure_code: 'PAY_DRAFT_ALL_SELECTED_PAYMENTS_ALREADY_RESERVED',
+            abort_status: abortStatus || null,
+            abort_ok: abortOk,
+            draft_creation_failed_partial: abortPayload.draft_creation_failed_partial === true,
+            batch_action_blocked: abortPayload.batch_action_blocked !== false,
+            direct_empty_shell_cancel: directCancel
+          });
+          results.push({
+            pay_batch_id: batchId,
+            ok: abortOk,
+            status: abortStatus || null,
+            cancelled_at_utc: abortPayload.cleaned_at_utc || abortPayload.cancelled_at_utc || null,
+            cancellation_outcome: abortPayload.cleanup_mode || 'FAILED_DRAFT_CREATE_PARTIAL_ABORT',
+            cleanup_mode: abortPayload.cleanup_mode || 'FAILED_DRAFT_CREATE_PARTIAL_ABORT',
+            draft_creation_failed_partial: abortPayload.draft_creation_failed_partial === true,
+            batch_action_blocked: abortPayload.batch_action_blocked !== false,
+            failed_partial_cleanup_status: abortOk ? 'ABORTED' : 'FAILED',
+            payload: abortPayload,
+            direct_empty_shell_cancel: directCancel,
+            signal
+          });
+        } catch (abortError) {
+          const signal = await touchDraftCreateBatchFailureSignal(batchId, 'DRAFT_CREATE_SKIPPED_RESERVED_PARTIAL_ABORT_FAILED', {
+            failure_phase: 'ASSERT_INTEGRITY',
+            failure_code: 'PAY_DRAFT_ALL_SELECTED_PAYMENTS_ALREADY_RESERVED',
+            cleanup_error: String(abortError?.message || abortError || ''),
+            direct_empty_shell_cancel: directCancel
+          });
+          results.push({
+            pay_batch_id: batchId,
+            ok: false,
+            direct_empty_shell_cancel: directCancel,
+            failed_partial_cleanup_status: 'FAILED',
+            error: String(abortError?.message || abortError || ''),
+            signal
+          });
+        }
+        continue;
       }
+
+      const signal = await touchDraftCreateBatchFailureSignal(batchId, 'DRAFT_CREATE_SKIPPED_EMPTY_RESERVED_CLEANUP_FAILED', {
+        failure_phase: 'ASSERT_INTEGRITY',
+        failure_code: 'PAY_DRAFT_ALL_SELECTED_PAYMENTS_ALREADY_RESERVED',
+        cleanup_error: directCancel?.reason || directCancel?.safety?.reason || 'DIRECT_EMPTY_SHELL_CANCEL_FAILED_AND_FAILED_PARTIAL_UNSAFE',
+        direct_empty_shell_cancel: directCancel
+      });
+      results.push({
+        pay_batch_id: batchId,
+        ok: false,
+        direct_empty_shell_cancel: directCancel,
+        error: directCancel?.reason || directCancel?.safety?.reason || 'DIRECT_EMPTY_SHELL_CANCEL_FAILED_AND_FAILED_PARTIAL_UNSAFE',
+        signal
+      });
     }
 
     return {
@@ -43225,7 +43485,6 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
     return finishFailedWithCleanup( null, { code: 'DRAFT_CREATE_OPERATION_FAILED', message: 'Draft create operation failed.', phase, error: String(e?.message || e || '') });
   }
 }
-
 
 
 async function advanceBankingPayRemittanceOperation(env, operationRow, user, options = {}) {
@@ -140490,9 +140749,6 @@ async function handleBankingPayBatchCancel(env, req, user, payBatchId) {
 
 
 
-
-
-
 function buildBankingPayOperationPublicPayload(operationRow, options = {}) {
   const unwrapRow = (value) => {
     let row = value;
@@ -140589,7 +140845,7 @@ function buildBankingPayOperationPublicPayload(operationRow, options = {}) {
     }
     return [];
   };
-  const extractBankingPayOperationBatchIds = (sourceRow, sourceProgress, sourceResult) => {
+  const extractBankingPayOperationBatchIds = (sourceRow, sourceProgress, sourceResult, sourceError = {}) => {
     const out = [];
     const seen = new Set();
     const push = (value) => {
@@ -140610,7 +140866,11 @@ function buildBankingPayOperationPublicPayload(operationRow, options = {}) {
       sourceResult.pay_batch_id,
       sourceResult.payBatchId,
       sourceResult.primary_pay_batch_id,
-      sourceResult.primaryPayBatchId
+      sourceResult.primaryPayBatchId,
+      sourceError.pay_batch_id,
+      sourceError.payBatchId,
+      sourceError.primary_pay_batch_id,
+      sourceError.primaryPayBatchId
     ]) push(value);
     for (const arrayValue of [
       sourceRow.pay_batch_ids,
@@ -140624,17 +140884,25 @@ function buildBankingPayOperationPublicPayload(operationRow, options = {}) {
       sourceResult.pay_batch_ids,
       sourceResult.payBatchIds,
       sourceResult.created_pay_batch_ids,
-      sourceResult.createdPayBatchIds
+      sourceResult.createdPayBatchIds,
+      sourceError.pay_batch_ids,
+      sourceError.payBatchIds,
+      sourceError.created_pay_batch_ids,
+      sourceError.createdPayBatchIds,
+      asPlainObject(sourceError.created_batch_cleanup).discovered_pay_batch_ids,
+      asPlainObject(sourceError.createdBatchCleanup).discoveredPayBatchIds
     ]) {
       for (const item of extractStringArray(arrayValue)) push(item);
     }
     return out;
   };
   const operationType = upperText(firstText(row.operation_type, row.operationType, progress.operation_type, progress.operationType, resultObject.operation_type, resultObject.operationType)) || null;
-  const payBatchIds = extractBankingPayOperationBatchIds(row, progress, resultObject);
-  const primaryPayBatchId = firstText(row.primary_pay_batch_id, row.primaryPayBatchId, row.pay_batch_id, row.payBatchId, progress.primary_pay_batch_id, progress.primaryPayBatchId, progress.pay_batch_id, progress.payBatchId, resultObject.primary_pay_batch_id, resultObject.primaryPayBatchId, resultObject.pay_batch_id, resultObject.payBatchId, payBatchIds[0]) || null;
-  const backendRunnerOwned = boolValue(firstValue(row.backend_runner_owned, row.backendRunnerOwned, progress.backend_runner_owned, progress.backendRunnerOwned, resultObject.backend_runner_owned, resultObject.backendRunnerOwned, optionsObject.backend_runner_owned, optionsObject.backendRunnerOwned), operationType === 'DRAFT_CREATE');
-  const frontendCompletionRequired = boolValue(firstValue(row.frontend_completion_required, row.frontendCompletionRequired, progress.frontend_completion_required, progress.frontendCompletionRequired, resultObject.frontend_completion_required, resultObject.frontendCompletionRequired, optionsObject.frontend_completion_required, optionsObject.frontendCompletionRequired), false);
+  const payBatchIds = extractBankingPayOperationBatchIds(row, progress, resultObject, errorObject);
+  const primaryPayBatchId = firstText(row.primary_pay_batch_id, row.primaryPayBatchId, row.pay_batch_id, row.payBatchId, progress.primary_pay_batch_id, progress.primaryPayBatchId, progress.pay_batch_id, progress.payBatchId, resultObject.primary_pay_batch_id, resultObject.primaryPayBatchId, resultObject.pay_batch_id, resultObject.payBatchId, errorObject.primary_pay_batch_id, errorObject.primaryPayBatchId, errorObject.pay_batch_id, errorObject.payBatchId, payBatchIds[0]) || null;
+  const backendRunnerOwnedRaw = boolValue(firstValue(row.backend_runner_owned, row.backendRunnerOwned, progress.backend_runner_owned, progress.backendRunnerOwned, resultObject.backend_runner_owned, resultObject.backendRunnerOwned, optionsObject.backend_runner_owned, optionsObject.backendRunnerOwned), false);
+  const backendRunnerOwned = operationType === 'DRAFT_CREATE' ? true : backendRunnerOwnedRaw;
+  const frontendCompletionRequiredRaw = boolValue(firstValue(row.frontend_completion_required, row.frontendCompletionRequired, progress.frontend_completion_required, progress.frontendCompletionRequired, resultObject.frontend_completion_required, resultObject.frontendCompletionRequired, optionsObject.frontend_completion_required, optionsObject.frontendCompletionRequired), false);
+  const frontendCompletionRequired = operationType === 'DRAFT_CREATE' ? false : frontendCompletionRequiredRaw;
   const extractDraftCreateResultSummary = () => {
     const supplied = Object.assign({}, asPlainObject(row.result_summary), asPlainObject(row.resultSummary), asPlainObject(progress.result_summary), asPlainObject(progress.resultSummary), asPlainObject(resultObject.result_summary), asPlainObject(resultObject.resultSummary));
     if (operationType !== 'DRAFT_CREATE' && !Object.keys(supplied).length && !payBatchIds.length) return null;
@@ -140654,24 +140922,28 @@ function buildBankingPayOperationPublicPayload(operationRow, options = {}) {
 
   const status = upperText(firstText(row.status, progress.status, resultObject.status, errorObject.status)) || 'UNKNOWN';
   const phase = upperText(firstText(row.phase, progress.phase, resultObject.phase, errorObject.phase)) || 'UNKNOWN';
-  const operationStatusLabel = operationType === 'DRAFT_CREATE' && status === 'FAILED'
+  const terminalStatusSet = new Set(['COMPLETE', 'COMPLETED', 'SUCCESS', 'SUCCEEDED', 'DONE', 'FAILED', 'ERROR', 'CANCELLED', 'CANCELED', 'REVIEW_REQUIRED', 'NEEDS_REVIEW', 'REVIEW']);
+  const successStatusSet = new Set(['COMPLETE', 'COMPLETED', 'SUCCESS', 'SUCCEEDED', 'DONE']);
+  const failedStatusSet = new Set(['FAILED', 'ERROR']);
+  const reviewStatusSet = new Set(['REVIEW_REQUIRED', 'NEEDS_REVIEW', 'REVIEW']);
+  const operationFailedIsProcessFailure = failedStatusSet.has(status);
+  const operationStatusLabel = operationType === 'DRAFT_CREATE' && operationFailedIsProcessFailure
     ? 'Draft creation failed'
-    : operationType === 'DRAFT_CREATE' && (status === 'COMPLETE' || status === 'COMPLETED')
+    : operationType === 'DRAFT_CREATE' && successStatusSet.has(status)
       ? 'Draft created'
-      : status === 'FAILED'
+      : operationFailedIsProcessFailure
     ? 'Operation failed'
-    : (status === 'COMPLETE' || status === 'COMPLETED')
+    : successStatusSet.has(status)
       ? 'Operation complete'
       : status === 'WAITING_PROVIDER'
         ? 'Waiting for bank confirmation'
         : status === 'WAITING_AUTHORISATION'
           ? 'Waiting for payment authorisation'
-          : status === 'REVIEW_REQUIRED'
+          : reviewStatusSet.has(status)
             ? 'Review required'
             : status === 'CANCELLED' || status === 'CANCELED'
               ? 'Operation cancelled'
               : 'Operation running';
-  const operationFailedIsProcessFailure = status === 'FAILED';
   const batchStatusRaw = upperText(firstText(
     row.batch_status_raw,
     row.batchStatusRaw,
@@ -140764,10 +141036,10 @@ function buildBankingPayOperationPublicPayload(operationRow, options = {}) {
     status === 'REVIEW_REQUIRED' ? 'WAITING_USER_REVIEW' :
     status === 'WAITING_AUTHORISATION' ? 'WAITING_USER' :
     status === 'WAITING_PROVIDER' ? 'WAITING_PROVIDER' :
-    ['COMPLETE', 'COMPLETED', 'FAILED', 'CANCELLED', 'CANCELED'].includes(status) ? status : 'RUNNABLE'
+    terminalStatusSet.has(status) ? status : 'RUNNABLE'
   );
-  const terminal = ['COMPLETE', 'COMPLETED', 'FAILED', 'CANCELLED', 'CANCELED'].includes(status);
-  const reviewRequired = status === 'REVIEW_REQUIRED' || runnerState === 'WAITING_USER_REVIEW' || boolValue(row.provider_review_required, false) || boolValue(progress.provider_review_required, false) || boolValue(progress.review_required, false);
+  const terminal = terminalStatusSet.has(status);
+  const reviewRequired = reviewStatusSet.has(status) || runnerState === 'WAITING_USER_REVIEW' || boolValue(row.provider_review_required, false) || boolValue(progress.provider_review_required, false) || boolValue(progress.review_required, false);
   const waitingAuthorisation = status === 'WAITING_AUTHORISATION' || runnerState === 'WAITING_USER';
   const waitingProvider = status === 'WAITING_PROVIDER' || runnerState === 'WAITING_PROVIDER';
   const requiresUserAction = boolValue(firstValue(row.requires_user_action, row.requiresUserAction, progress.requires_user_action, progress.requiresUserAction), false) || reviewRequired || waitingAuthorisation;
@@ -140777,7 +141049,7 @@ function buildBankingPayOperationPublicPayload(operationRow, options = {}) {
   const failedUnits = Math.max(0, finiteInteger(firstValue(row.failed_units, row.failedUnits, progress.failed_units, progress.failedUnits), 0));
   const currentChunkIndex = Math.max(0, finiteInteger(firstValue(row.current_chunk_index, row.currentChunkIndex, progress.current_chunk_index, progress.currentChunkIndex), 0));
   const chunkCount = Math.max(0, finiteInteger(firstValue(row.chunk_count, row.chunkCount, progress.chunk_count, progress.chunkCount), 0));
-  const percent = totalUnits > 0 ? Math.max(0, Math.min(100, Math.round((completedUnits / totalUnits) * 100))) : (status === 'COMPLETE' || status === 'COMPLETED' ? 100 : 0);
+  const percent = totalUnits > 0 ? Math.max(0, Math.min(100, Math.round((completedUnits / totalUnits) * 100))) : (successStatusSet.has(status) ? 100 : 0);
 
   const nowMs = Date.now();
   const leaseOwner = firstText(row.lease_owner, row.locked_by, progress.lease_owner, progress.locked_by);
@@ -140791,7 +141063,8 @@ function buildBankingPayOperationPublicPayload(operationRow, options = {}) {
   const leased = !!leaseOwner && leaseExpiryMs !== null && leaseExpiryMs > nowMs;
   const serverRunning = leased || runnerState === 'RUNNING' || runnerState === 'LEASED' || runnerState === 'ADVANCING';
   const runAfterDue = runAfterMs === null || runAfterMs <= nowMs;
-  const canNudge = !terminal && !reviewRequired && !waitingAuthorisation && !waitingProvider && !leased && runAfterDue && requiresUserAction !== true;
+  const canNudgeRaw = !terminal && !reviewRequired && !waitingAuthorisation && !waitingProvider && !leased && runAfterDue && requiresUserAction !== true;
+  const canNudge = operationType === 'DRAFT_CREATE' ? false : canNudgeRaw;
 
   const largeKeyPattern = /(candidate|candidates|transfer_ids|transferids|transfer_rows|transfers|item_ids|itemids|items|chunks|chunk_rows|provider_events|events|rows|payload_json|raw_payload|request_payload|response_payload|canonical_preview_lines_json|timesheet_snapshots_json|scope_candidate_ids|pending_candidate_ids)/i;
   const compactValue = (value, depth) => {
@@ -140837,6 +141110,72 @@ function buildBankingPayOperationPublicPayload(operationRow, options = {}) {
     const small = smallErrorFromObject(item);
     if (small) smallErrors.push(small);
   }
+
+  const primarySmallError = smallErrors.length ? smallErrors[0] : null;
+  const errorCode = firstText(
+    primarySmallError && primarySmallError.code,
+    errorObject.error_code,
+    errorObject.errorCode,
+    errorObject.code,
+    progress.error_code,
+    progress.errorCode,
+    progress.code,
+    resultObject.error_code,
+    resultObject.errorCode,
+    resultObject.code
+  ) || null;
+  const errorMessage = firstText(
+    primarySmallError && primarySmallError.message,
+    errorObject.user_message,
+    errorObject.message,
+    errorObject.error,
+    progress.error_message,
+    progress.errorMessage,
+    progress.message,
+    resultObject.error_message,
+    resultObject.errorMessage,
+    resultObject.message
+  ) || null;
+  const phaseIndex = Math.max(0, finiteInteger(firstValue(row.phase_index, row.phaseIndex, progress.phase_index, progress.phaseIndex, resultObject.phase_index, resultObject.phaseIndex), 0));
+  const phaseTotal = Math.max(0, finiteInteger(firstValue(row.phase_total, row.phaseTotal, progress.phase_total, progress.phaseTotal, resultObject.phase_total, resultObject.phaseTotal), 0));
+  const draftCreationFailedPartial = boolValue(firstValue(
+    row.draft_creation_failed_partial,
+    row.draftCreationFailedPartial,
+    progress.draft_creation_failed_partial,
+    progress.draftCreationFailedPartial,
+    resultObject.draft_creation_failed_partial,
+    resultObject.draftCreationFailedPartial,
+    errorObject.draft_creation_failed_partial,
+    errorObject.draftCreationFailedPartial
+  ), false);
+  const batchActionBlocked = boolValue(firstValue(
+    row.batch_action_blocked,
+    row.batchActionBlocked,
+    row.normal_draft_actions_blocked,
+    row.normalDraftActionsBlocked,
+    progress.batch_action_blocked,
+    progress.batchActionBlocked,
+    progress.normal_draft_actions_blocked,
+    progress.normalDraftActionsBlocked,
+    resultObject.batch_action_blocked,
+    resultObject.batchActionBlocked,
+    resultObject.normal_draft_actions_blocked,
+    resultObject.normalDraftActionsBlocked,
+    errorObject.batch_action_blocked,
+    errorObject.batchActionBlocked,
+    errorObject.normal_draft_actions_blocked,
+    errorObject.normalDraftActionsBlocked
+  ), false);
+  const failedPartialCleanupStatus = firstText(
+    row.failed_partial_cleanup_status,
+    row.failedPartialCleanupStatus,
+    progress.failed_partial_cleanup_status,
+    progress.failedPartialCleanupStatus,
+    resultObject.failed_partial_cleanup_status,
+    resultObject.failedPartialCleanupStatus,
+    errorObject.failed_partial_cleanup_status,
+    errorObject.failedPartialCleanupStatus
+  ) || null;
 
   const providerSources = [
     progress.provider_summary,
@@ -140951,10 +141290,10 @@ function buildBankingPayOperationPublicPayload(operationRow, options = {}) {
       ? 'Waiting for payment authorisation.'
       : waitingProvider
         ? 'Waiting for provider confirmation.'
-        : terminal && status === 'FAILED'
-          ? firstText(errorObject.message, progress.last_message, 'Payment operation failed.')
+        : terminal && operationFailedIsProcessFailure
+          ? firstText(errorMessage, progress.last_message, operationType === 'DRAFT_CREATE' ? 'Draft creation failed.' : 'Payment operation failed.')
           : terminal
-            ? (status === 'COMPLETE' || status === 'COMPLETED' ? (operationType === 'DRAFT_CREATE' ? 'Draft created.' : settlementProgressLabel) : (operationType === 'DRAFT_CREATE' ? 'Draft creation stopped.' : 'Payment operation stopped.'))
+            ? (successStatusSet.has(status) ? (operationType === 'DRAFT_CREATE' ? 'Draft created.' : settlementProgressLabel) : (operationType === 'DRAFT_CREATE' ? 'Draft creation stopped.' : 'Payment operation stopped.'))
             : firstText(lastMessage, phaseLabels[phase], operationType === 'DRAFT_CREATE' ? 'Draft creation is running.' : 'Payment operation is running.');
 
   return {
@@ -141001,6 +141340,23 @@ function buildBankingPayOperationPublicPayload(operationRow, options = {}) {
     review_required: reviewRequired,
     requires_user_action: requiresUserAction,
     terminal,
+    failed: operationFailedIsProcessFailure,
+    error_code: errorCode,
+    errorCode,
+    error_message: errorMessage,
+    errorMessage,
+    phase_index: phaseIndex || null,
+    phaseIndex: phaseIndex || null,
+    phase_total: phaseTotal || null,
+    phaseTotal: phaseTotal || null,
+    draft_creation_failed_partial: draftCreationFailedPartial,
+    draftCreationFailedPartial,
+    batch_action_blocked: batchActionBlocked,
+    batchActionBlocked,
+    normal_draft_actions_blocked: batchActionBlocked,
+    normalDraftActionsBlocked: batchActionBlocked,
+    failed_partial_cleanup_status: failedPartialCleanupStatus,
+    failedPartialCleanupStatus,
     can_advance: canNudge,
     can_nudge: canNudge,
     run_after_utc: runAfterUtc,
@@ -141032,7 +141388,7 @@ function buildBankingPayOperationPublicPayload(operationRow, options = {}) {
     stale_summary: staleSummary,
     proof_hashes: proofHashes,
     small_errors: smallErrors.slice(0, 10),
-    error: smallErrors.length ? smallErrors[0] : null,
+    error: primarySmallError,
     last_message: lastMessage || null,
     status_text: statusText,
     progress: progressSummary,
@@ -141044,7 +141400,6 @@ function buildBankingPayOperationPublicPayload(operationRow, options = {}) {
     failed_at_utc: firstText(row.failed_at_utc, row.failedAtUtc) || null
   };
 }
-
 
 
 async function revolutPayment_create(env, token, { request_id, local_provider_request_id, source_account_id, counterparty_id, counterparty_account_id, amount, currency, reference, provider_timeout_ms } = {}) {
