@@ -53092,6 +53092,8 @@ DROP FUNCTION IF EXISTS public.pay_workbench_prepare_draft(uuid, uuid, jsonb, te
 
 
 
+
+
 CREATE OR REPLACE FUNCTION public.pay_workbench_prepare_draft(
   p_session_id uuid,
   p_actor_user_id uuid,
@@ -53366,15 +53368,90 @@ BEGIN
          OR historical_best.pay_channel = ''
          OR UPPER(BTRIM(COALESCE(current_preview_row.row_json->>'pay_channel', current_preview_row.row_json->>'current_pay_method', current_preview_row.row_json->>'candidate_pay_method', ''))) = historical_best.pay_channel
        )
+    ),
+    operation_contracts AS (
+      SELECT
+        contract_entry.ordinality::integer AS contract_index,
+        NULLIF(BTRIM(COALESCE(
+          contract_entry.value->>'preview_row_id',
+          contract_entry.value->>'materialised_preview_row_id',
+          contract_entry.value->>'row_id',
+          contract_entry.value->>'id',
+          contract_entry.value->>'selected_preview_row_id'
+        )), '') AS supplied_id,
+        NULLIF(BTRIM(COALESCE(contract_entry.value->>'presentation_preview_row_id', contract_entry.value->>'line_id', '')), '') AS presentation_preview_row_id,
+        NULLIF(BTRIM(COALESCE(contract_entry.value->>'row_key', '')), '') AS row_key,
+        COALESCE(NULLIF(BTRIM(contract_entry.value->>'section'), ''), 'canonical_preview_lines') AS section,
+        CASE
+          WHEN NULLIF(BTRIM(COALESCE(contract_entry.value->>'candidate_id', '')), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+            THEN NULLIF(BTRIM(COALESCE(contract_entry.value->>'candidate_id', '')), '')::uuid
+          ELSE NULL::uuid
+        END AS candidate_id,
+        CASE
+          WHEN NULLIF(BTRIM(COALESCE(contract_entry.value->>'timesheet_id', contract_entry.value#>>'{economic_key,timesheet_id}', '')), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+            THEN NULLIF(BTRIM(COALESCE(contract_entry.value->>'timesheet_id', contract_entry.value#>>'{economic_key,timesheet_id}', '')), '')::uuid
+          ELSE NULL::uuid
+        END AS timesheet_id,
+        NULLIF(BTRIM(COALESCE(contract_entry.value->>'key_type', contract_entry.value#>>'{economic_key,key_type}', '')), '') AS key_type,
+        NULLIF(BTRIM(COALESCE(contract_entry.value->>'key_value', contract_entry.value#>>'{economic_key,key_value}', '')), '') AS key_value,
+        UPPER(NULLIF(BTRIM(COALESCE(contract_entry.value->>'pay_channel', '')), '')) AS pay_channel
+      FROM jsonb_array_elements(
+        CASE
+          WHEN jsonb_typeof(COALESCE(v_operation_row.input_json->'draft_selected_preview_row_contracts', '[]'::jsonb)) = 'array'
+            THEN COALESCE(v_operation_row.input_json->'draft_selected_preview_row_contracts', '[]'::jsonb)
+          ELSE '[]'::jsonb
+        END
+      ) WITH ORDINALITY AS contract_entry(value, ordinality)
+      WHERE jsonb_typeof(contract_entry.value) = 'object'
+    ),
+    operation_contract_current_matches AS (
+      SELECT DISTINCT
+        supplied_ids.supplied_id,
+        current_preview_row.id::text AS resolved_id
+      FROM supplied_ids
+      JOIN operation_contracts AS operation_contract
+        ON (
+          operation_contract.supplied_id = supplied_ids.supplied_id
+          OR operation_contract.presentation_preview_row_id = supplied_ids.supplied_id
+          OR operation_contract.row_key = supplied_ids.supplied_id
+        )
+      JOIN public.banking_pay_workbench_preview_rows AS current_preview_row
+        ON current_preview_row.session_id = p_session_id
+       AND current_preview_row.session_version = v_session_row.version
+       AND UPPER(BTRIM(COALESCE(current_preview_row.status, ''))) = 'READY'
+       AND COALESCE(current_preview_row.selected, false) = true
+       AND UPPER(BTRIM(COALESCE(current_preview_row.selection_state, ''))) = 'SELECTED'
+       AND UPPER(BTRIM(COALESCE(current_preview_row.row_json->>'presentation_section', ''))) = 'READY_TO_PAY'
+       AND LOWER(BTRIM(COALESCE(current_preview_row.row_json->>'draftable', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+       AND LOWER(BTRIM(COALESCE(current_preview_row.row_json->>'is_ready_for_draft', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+       AND operation_contract.candidate_id IS NOT NULL
+       AND operation_contract.timesheet_id IS NOT NULL
+       AND operation_contract.row_key IS NOT NULL
+       AND operation_contract.key_type IS NOT NULL
+       AND operation_contract.key_value IS NOT NULL
+       AND current_preview_row.candidate_id IS NOT DISTINCT FROM operation_contract.candidate_id
+       AND current_preview_row.timesheet_id IS NOT DISTINCT FROM operation_contract.timesheet_id
+       AND COALESCE(NULLIF(BTRIM(current_preview_row.section), ''), 'canonical_preview_lines') = COALESCE(NULLIF(BTRIM(operation_contract.section), ''), 'canonical_preview_lines')
+       AND NULLIF(BTRIM(COALESCE(current_preview_row.key_type, current_preview_row.row_json#>>'{economic_key,key_type}', current_preview_row.row_json->>'component_key_type', '')), '') IS NOT DISTINCT FROM operation_contract.key_type
+       AND NULLIF(BTRIM(COALESCE(current_preview_row.key_value, current_preview_row.row_json#>>'{economic_key,key_value}', current_preview_row.row_json->>'component_key_value', '')), '') IS NOT DISTINCT FROM operation_contract.key_value
+       AND NULLIF(BTRIM(current_preview_row.row_key), '') IS NOT DISTINCT FROM NULLIF(BTRIM(operation_contract.row_key), '')
+       AND (v_scope_filter = 'ALL' OR UPPER(BTRIM(COALESCE(current_preview_row.row_json->>'pay_channel', current_preview_row.row_json->>'current_pay_method', current_preview_row.row_json->>'candidate_pay_method', ''))) = v_scope_filter)
+       AND (
+         operation_contract.pay_channel IS NULL
+         OR operation_contract.pay_channel = ''
+         OR UPPER(BTRIM(COALESCE(current_preview_row.row_json->>'pay_channel', current_preview_row.row_json->>'current_pay_method', current_preview_row.row_json->>'candidate_pay_method', ''))) = operation_contract.pay_channel
+       )
     )
     SELECT
       supplied_ids.supplied_id,
-      COALESCE(direct_current_matches.resolved_id, economic_key_current_matches.resolved_id) AS resolved_id
+      COALESCE(direct_current_matches.resolved_id, economic_key_current_matches.resolved_id, operation_contract_current_matches.resolved_id) AS resolved_id
     FROM supplied_ids
     LEFT JOIN direct_current_matches
       ON direct_current_matches.supplied_id = supplied_ids.supplied_id
     LEFT JOIN economic_key_current_matches
-      ON economic_key_current_matches.supplied_id = supplied_ids.supplied_id;
+      ON economic_key_current_matches.supplied_id = supplied_ids.supplied_id
+    LEFT JOIN operation_contract_current_matches
+      ON operation_contract_current_matches.supplied_id = supplied_ids.supplied_id;
 
     SELECT COUNT(*)::integer,
            COUNT(DISTINCT resolved_selection.resolved_id)::integer,
@@ -148407,6 +148484,10 @@ DECLARE
   v_stale_selection_ids jsonb := '[]'::jsonb;
   v_missing_selection_ids jsonb := '[]'::jsonb;
   v_malformed_selected_preview_rows jsonb := '[]'::jsonb;
+  v_selection_resolved_to_current boolean := false;
+  v_resolved_current_selection_ids jsonb := '[]'::jsonb;
+  v_resolved_selection_match_count integer := 0;
+  v_resolved_selection_distinct_count integer := 0;
 BEGIN
   PERFORM public.banking_pay_hot_path_budget_apply('WORKBENCH_CHUNK');
 
@@ -148498,6 +148579,144 @@ BEGIN
   FROM jsonb_array_elements_text(COALESCE(p_selected_preview_row_ids, '[]'::jsonb)) AS supplied_id(value)
   WHERE p_selected_preview_row_ids IS NOT NULL
     AND BTRIM(supplied_id.value) <> '';
+
+  IF p_selected_preview_row_ids IS NOT NULL AND COALESCE(v_selected_input_count, 0) > 0 THEN
+    DROP TABLE IF EXISTS pg_temp.tmp_pay_workbench_draft_scope_resolved_ids;
+    CREATE TEMPORARY TABLE pg_temp.tmp_pay_workbench_draft_scope_resolved_ids ON COMMIT DROP AS
+    WITH supplied_ids AS (
+      SELECT supplied_id.supplied_id
+      FROM pg_temp.tmp_pay_workbench_draft_scope_supplied_ids AS supplied_id
+    ),
+    direct_current_matches AS (
+      SELECT DISTINCT
+        supplied_ids.supplied_id,
+        current_preview_row.id::text AS resolved_id
+      FROM supplied_ids
+      JOIN public.banking_pay_workbench_preview_rows AS current_preview_row
+        ON current_preview_row.session_id = p_workbench_session_id
+       AND current_preview_row.session_version = v_session.version
+       AND UPPER(BTRIM(COALESCE(current_preview_row.status, ''))) = 'READY'
+       AND COALESCE(current_preview_row.selected, false) = true
+       AND UPPER(BTRIM(COALESCE(current_preview_row.selection_state, ''))) = 'SELECTED'
+       AND UPPER(BTRIM(COALESCE(current_preview_row.row_json->>'presentation_section', ''))) = 'READY_TO_PAY'
+       AND LOWER(BTRIM(COALESCE(current_preview_row.row_json->>'draftable', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+       AND LOWER(BTRIM(COALESCE(current_preview_row.row_json->>'is_ready_for_draft', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+       AND (v_scope_filter = 'ALL' OR UPPER(BTRIM(COALESCE(current_preview_row.row_json->>'pay_channel', current_preview_row.row_json->>'current_pay_method', current_preview_row.row_json->>'candidate_pay_method', ''))) = v_scope_filter)
+       AND (
+         current_preview_row.id::text = supplied_ids.supplied_id
+         OR current_preview_row.row_key = supplied_ids.supplied_id
+         OR current_preview_row.row_json->>'preview_row_id' = supplied_ids.supplied_id
+         OR current_preview_row.row_json->>'row_id' = supplied_ids.supplied_id
+         OR current_preview_row.row_json->>'line_id' = supplied_ids.supplied_id
+       )
+    ),
+    operation_contracts AS (
+      SELECT
+        contract_entry.ordinality::integer AS contract_index,
+        NULLIF(BTRIM(COALESCE(
+          contract_entry.value->>'preview_row_id',
+          contract_entry.value->>'materialised_preview_row_id',
+          contract_entry.value->>'row_id',
+          contract_entry.value->>'id',
+          contract_entry.value->>'selected_preview_row_id'
+        )), '') AS supplied_id,
+        NULLIF(BTRIM(COALESCE(contract_entry.value->>'presentation_preview_row_id', contract_entry.value->>'line_id', '')), '') AS presentation_preview_row_id,
+        NULLIF(BTRIM(COALESCE(contract_entry.value->>'row_key', '')), '') AS row_key,
+        COALESCE(NULLIF(BTRIM(contract_entry.value->>'section'), ''), 'canonical_preview_lines') AS section,
+        CASE
+          WHEN NULLIF(BTRIM(COALESCE(contract_entry.value->>'candidate_id', '')), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+            THEN NULLIF(BTRIM(COALESCE(contract_entry.value->>'candidate_id', '')), '')::uuid
+          ELSE NULL::uuid
+        END AS candidate_id,
+        CASE
+          WHEN NULLIF(BTRIM(COALESCE(contract_entry.value->>'timesheet_id', contract_entry.value#>>'{economic_key,timesheet_id}', '')), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+            THEN NULLIF(BTRIM(COALESCE(contract_entry.value->>'timesheet_id', contract_entry.value#>>'{economic_key,timesheet_id}', '')), '')::uuid
+          ELSE NULL::uuid
+        END AS timesheet_id,
+        NULLIF(BTRIM(COALESCE(contract_entry.value->>'key_type', contract_entry.value#>>'{economic_key,key_type}', '')), '') AS key_type,
+        NULLIF(BTRIM(COALESCE(contract_entry.value->>'key_value', contract_entry.value#>>'{economic_key,key_value}', '')), '') AS key_value,
+        UPPER(NULLIF(BTRIM(COALESCE(contract_entry.value->>'pay_channel', '')), '')) AS pay_channel
+      FROM jsonb_array_elements(
+        CASE
+          WHEN jsonb_typeof(COALESCE(v_operation.input_json->'draft_selected_preview_row_contracts', '[]'::jsonb)) = 'array'
+            THEN COALESCE(v_operation.input_json->'draft_selected_preview_row_contracts', '[]'::jsonb)
+          ELSE '[]'::jsonb
+        END
+      ) WITH ORDINALITY AS contract_entry(value, ordinality)
+      WHERE jsonb_typeof(contract_entry.value) = 'object'
+    ),
+    operation_contract_current_matches AS (
+      SELECT DISTINCT
+        supplied_ids.supplied_id,
+        current_preview_row.id::text AS resolved_id
+      FROM supplied_ids
+      JOIN operation_contracts AS operation_contract
+        ON (
+          operation_contract.supplied_id = supplied_ids.supplied_id
+          OR operation_contract.presentation_preview_row_id = supplied_ids.supplied_id
+          OR operation_contract.row_key = supplied_ids.supplied_id
+        )
+      JOIN public.banking_pay_workbench_preview_rows AS current_preview_row
+        ON current_preview_row.session_id = p_workbench_session_id
+       AND current_preview_row.session_version = v_session.version
+       AND UPPER(BTRIM(COALESCE(current_preview_row.status, ''))) = 'READY'
+       AND COALESCE(current_preview_row.selected, false) = true
+       AND UPPER(BTRIM(COALESCE(current_preview_row.selection_state, ''))) = 'SELECTED'
+       AND UPPER(BTRIM(COALESCE(current_preview_row.row_json->>'presentation_section', ''))) = 'READY_TO_PAY'
+       AND LOWER(BTRIM(COALESCE(current_preview_row.row_json->>'draftable', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+       AND LOWER(BTRIM(COALESCE(current_preview_row.row_json->>'is_ready_for_draft', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+       AND operation_contract.candidate_id IS NOT NULL
+       AND operation_contract.timesheet_id IS NOT NULL
+       AND operation_contract.row_key IS NOT NULL
+       AND operation_contract.key_type IS NOT NULL
+       AND operation_contract.key_value IS NOT NULL
+       AND current_preview_row.candidate_id IS NOT DISTINCT FROM operation_contract.candidate_id
+       AND current_preview_row.timesheet_id IS NOT DISTINCT FROM operation_contract.timesheet_id
+       AND COALESCE(NULLIF(BTRIM(current_preview_row.section), ''), 'canonical_preview_lines') = COALESCE(NULLIF(BTRIM(operation_contract.section), ''), 'canonical_preview_lines')
+       AND NULLIF(BTRIM(COALESCE(current_preview_row.key_type, current_preview_row.row_json#>>'{economic_key,key_type}', current_preview_row.row_json->>'component_key_type', '')), '') IS NOT DISTINCT FROM operation_contract.key_type
+       AND NULLIF(BTRIM(COALESCE(current_preview_row.key_value, current_preview_row.row_json#>>'{economic_key,key_value}', current_preview_row.row_json->>'component_key_value', '')), '') IS NOT DISTINCT FROM operation_contract.key_value
+       AND NULLIF(BTRIM(current_preview_row.row_key), '') IS NOT DISTINCT FROM NULLIF(BTRIM(operation_contract.row_key), '')
+       AND (v_scope_filter = 'ALL' OR UPPER(BTRIM(COALESCE(current_preview_row.row_json->>'pay_channel', current_preview_row.row_json->>'current_pay_method', current_preview_row.row_json->>'candidate_pay_method', ''))) = v_scope_filter)
+       AND (
+         operation_contract.pay_channel IS NULL
+         OR operation_contract.pay_channel = ''
+         OR UPPER(BTRIM(COALESCE(current_preview_row.row_json->>'pay_channel', current_preview_row.row_json->>'current_pay_method', current_preview_row.row_json->>'candidate_pay_method', ''))) = operation_contract.pay_channel
+       )
+    )
+    SELECT
+      supplied_ids.supplied_id,
+      COALESCE(direct_current_matches.resolved_id, operation_contract_current_matches.resolved_id) AS resolved_id
+    FROM supplied_ids
+    LEFT JOIN direct_current_matches
+      ON direct_current_matches.supplied_id = supplied_ids.supplied_id
+    LEFT JOIN operation_contract_current_matches
+      ON operation_contract_current_matches.supplied_id = supplied_ids.supplied_id;
+
+    SELECT COUNT(*)::integer,
+           COUNT(DISTINCT resolved_selection.resolved_id)::integer,
+           COALESCE(jsonb_agg(to_jsonb(resolved_selection.resolved_id) ORDER BY resolved_selection.resolved_id), '[]'::jsonb)
+    INTO v_resolved_selection_match_count, v_resolved_selection_distinct_count, v_resolved_current_selection_ids
+    FROM pg_temp.tmp_pay_workbench_draft_scope_resolved_ids AS resolved_selection
+    WHERE NULLIF(BTRIM(COALESCE(resolved_selection.resolved_id, '')), '') IS NOT NULL;
+
+    IF COALESCE(v_resolved_selection_match_count, 0) = COALESCE(v_selected_input_count, 0)
+       AND COALESCE(v_resolved_selection_distinct_count, 0) = COALESCE(v_selected_input_count, 0) THEN
+      SELECT EXISTS (
+        SELECT 1
+        FROM pg_temp.tmp_pay_workbench_draft_scope_resolved_ids AS resolved_selection
+        WHERE resolved_selection.resolved_id IS DISTINCT FROM resolved_selection.supplied_id
+      )
+      INTO v_selection_resolved_to_current;
+
+      TRUNCATE TABLE pg_temp.tmp_pay_workbench_draft_scope_supplied_ids;
+
+      INSERT INTO pg_temp.tmp_pay_workbench_draft_scope_supplied_ids (supplied_id)
+      SELECT resolved_selection.resolved_id
+      FROM pg_temp.tmp_pay_workbench_draft_scope_resolved_ids AS resolved_selection
+      WHERE NULLIF(BTRIM(COALESCE(resolved_selection.resolved_id, '')), '') IS NOT NULL
+      ORDER BY resolved_selection.resolved_id;
+    END IF;
+  END IF;
 
   IF p_selected_preview_row_ids IS NOT NULL THEN
     SELECT COALESCE(jsonb_agg(to_jsonb(supplied_ids.supplied_id) ORDER BY supplied_ids.supplied_id), '[]'::jsonb)
@@ -148898,7 +149117,9 @@ BEGIN
         || jsonb_build_object(
           'draft_scope_last_seeded_at_utc', v_now::text,
           'draft_scope_last_selected_row_count', COALESCE(v_selected_count, 0),
-          'draft_scope_last_candidate_scope_count', COALESCE(v_candidate_scope_count, 0)
+          'draft_scope_last_candidate_scope_count', COALESCE(v_candidate_scope_count, 0),
+          'draft_scope_selection_resolved_to_current', COALESCE(v_selection_resolved_to_current, false),
+          'draft_scope_resolved_current_selected_preview_row_ids', COALESCE(v_resolved_current_selection_ids, '[]'::jsonb)
         )
       ),
       updated_at_utc = v_now
@@ -148913,7 +149134,6 @@ BEGIN
     COALESCE(v_pay_channel_count, 0);
 END;
 $function$;
-
 
 
 
