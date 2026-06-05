@@ -21958,6 +21958,131 @@ async function handleTimesheetCreateManualDaily(env, req) {
 
 
 
+async function handleBankingPayDraftCreateOperationLookup(env, req, user, sessionId) {
+  const id = String(sessionId || '').trim();
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  if (!id) return withCORS(env, req, badRequest('session_id is required'));
+  if (!uuidRe.test(id)) return withCORS(env, req, badRequest('invalid_session_id'));
+  if (!user || !uuidRe.test(String(user.id || '').trim())) return withCORS(env, req, unauthorized('Unauthorized'));
+
+  const trimStr = (value) => String(value == null ? '' : value).trim();
+  const readBool = (value, fallback = false) => {
+    if (value === true) return true;
+    if (value === false) return false;
+    if (value === null || value === undefined) return fallback;
+    const text = trimStr(value).toLowerCase();
+    if (['true', 't', '1', 'yes', 'y', 'on'].includes(text)) return true;
+    if (['false', 'f', '0', 'no', 'n', 'off'].includes(text)) return false;
+    return fallback;
+  };
+  const readBoundedInteger = (value, fallback, minimum, maximum) => {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return fallback;
+    return Math.min(maximum, Math.max(minimum, Math.trunc(n)));
+  };
+  const isPlainObject = (value) => !!value && typeof value === 'object' && !Array.isArray(value);
+  const unwrapRpcPayload = (rpcRes, key) => {
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(payload) && payload.length === 1 && isPlainObject(payload[0])) payload = payload[0];
+      if (payload && typeof payload === 'object' && key && Object.prototype.hasOwnProperty.call(payload, key)) payload = payload[key];
+      if (Array.isArray(payload) && payload.length === 1 && isPlainObject(payload[0])) payload = payload[0];
+    } catch {}
+    return isPlainObject(payload) ? payload : {};
+  };
+
+  let includeRecentTerminal = true;
+  let recentTerminalMinutes = 60;
+  try {
+    const requestUrl = new URL(req.url);
+    includeRecentTerminal = readBool(
+      requestUrl.searchParams.get('include_recent_terminal') ?? requestUrl.searchParams.get('includeRecentTerminal'),
+      true
+    );
+    recentTerminalMinutes = readBoundedInteger(
+      requestUrl.searchParams.get('recent_terminal_minutes') ?? requestUrl.searchParams.get('recentTerminalMinutes'),
+      60,
+      0,
+      10080
+    );
+  } catch {}
+
+  try {
+    const rpcRes = await sbRpc(env, 'banking_pay_operation_find_active_draft_create', {
+      p_actor_user_id: String(user.id).trim(),
+      p_workbench_session_id: id,
+      p_include_recent_terminal: includeRecentTerminal,
+      p_recent_terminal_minutes: recentTerminalMinutes
+    }, {
+      routeClass: 'OPERATION_GET',
+      purpose: 'BANKING_PAY_DRAFT_CREATE_OPERATION_LOOKUP',
+      timeoutMs: 8000
+    });
+
+    const row = unwrapRpcPayload(rpcRes, 'banking_pay_operation_find_active_draft_create');
+    if (row.ok === false) {
+      const status = row.code === 'ACTOR_USER_ID_REQUIRED' ? 401 : 400;
+      return withCORS(env, req, new Response(JSON.stringify(row), { status, headers: JSON_HEADERS }));
+    }
+
+    const sourceOperation = isPlainObject(row.operation) ? row.operation : row;
+    const hasOperation = !!trimStr(sourceOperation.operation_id || sourceOperation.id || '');
+    const operationPayload = hasOperation
+      ? buildBankingPayOperationPublicPayload(sourceOperation, { mode: 'PROGRESS_LIGHT' })
+      : null;
+
+    if (!operationPayload || !trimStr(operationPayload.operation_id || operationPayload.id || '')) {
+      return withCORS(env, req, ok({
+        ok: true,
+        found: false,
+        operation: null,
+        operation_id: null,
+        active_draft_create_operation: null,
+        active_draft_create_operation_id: null,
+        workbench_session_id: id,
+        include_recent_terminal: includeRecentTerminal,
+        recent_terminal_minutes: recentTerminalMinutes
+      }));
+    }
+
+    operationPayload.ok = operationPayload.ok !== false;
+    operationPayload.found = true;
+    operationPayload.active_draft_create_operation = true;
+    operationPayload.operation_type = trimStr(operationPayload.operation_type || operationPayload.operationType || 'DRAFT_CREATE').toUpperCase() || 'DRAFT_CREATE';
+    operationPayload.workbench_session_id = trimStr(operationPayload.workbench_session_id || operationPayload.workbenchSessionId || id) || id;
+    operationPayload.workbenchSessionId = operationPayload.workbench_session_id;
+    operationPayload.backend_runner_owned = readBool(sourceOperation.backend_runner_owned ?? sourceOperation.backendRunnerOwned ?? operationPayload.backend_runner_owned ?? operationPayload.backendRunnerOwned, true);
+    operationPayload.backendRunnerOwned = operationPayload.backend_runner_owned;
+    operationPayload.frontend_completion_required = readBool(sourceOperation.frontend_completion_required ?? sourceOperation.frontendCompletionRequired ?? operationPayload.frontend_completion_required ?? operationPayload.frontendCompletionRequired, false);
+    operationPayload.frontendCompletionRequired = operationPayload.frontend_completion_required;
+    if (Array.isArray(sourceOperation.pay_batch_ids)) operationPayload.pay_batch_ids = sourceOperation.pay_batch_ids;
+    if (Array.isArray(sourceOperation.created_pay_batch_ids)) operationPayload.created_pay_batch_ids = sourceOperation.created_pay_batch_ids;
+    if (Array.isArray(sourceOperation.createdPayBatchIds)) operationPayload.createdPayBatchIds = sourceOperation.createdPayBatchIds;
+    operationPayload.primary_pay_batch_id = trimStr(sourceOperation.primary_pay_batch_id || sourceOperation.primaryPayBatchId || operationPayload.primary_pay_batch_id || operationPayload.primaryPayBatchId || operationPayload.pay_batch_id || operationPayload.payBatchId) || null;
+    operationPayload.primaryPayBatchId = operationPayload.primary_pay_batch_id;
+    if (!trimStr(operationPayload.pay_batch_id || operationPayload.payBatchId || '') && operationPayload.primary_pay_batch_id) operationPayload.pay_batch_id = operationPayload.primary_pay_batch_id;
+    if (!trimStr(operationPayload.payBatchId || '') && trimStr(operationPayload.pay_batch_id || '')) operationPayload.payBatchId = operationPayload.pay_batch_id;
+    if (isPlainObject(sourceOperation.result_summary)) operationPayload.result_summary = sourceOperation.result_summary;
+
+    return withCORS(env, req, ok({
+      ok: true,
+      found: true,
+      operation: operationPayload,
+      operation_id: operationPayload.operation_id || operationPayload.id || null,
+      active_draft_create_operation: operationPayload,
+      active_draft_create_operation_id: operationPayload.operation_id || operationPayload.id || null,
+      workbench_session_id: id,
+      include_recent_terminal: includeRecentTerminal,
+      recent_terminal_minutes: recentTerminalMinutes
+    }));
+  } catch (e) {
+    const friendly = (typeof makeBankingFriendlyErrorPayload === 'function')
+      ? makeBankingFriendlyErrorPayload(e, { action: 'BANKING_PAY_DRAFT_CREATE_OPERATION_LOOKUP', workbench_session_id: id })
+      : { ok: false, error: String(e && e.message || e || 'Draft creation operation status could not be loaded') };
+    return withCORS(env, req, new Response(JSON.stringify(friendly), { status: Number(friendly.http_status || friendly.status || 500) || 500, headers: JSON_HEADERS }));
+  }
+}
+
 
 async function handleBankingPayCreateDraft(env, req, user) {
   const trimStr = (value) => String(value == null ? '' : value).trim();
@@ -22088,9 +22213,20 @@ async function handleBankingPayCreateDraft(env, req, user) {
   }
 
   const previewDecisions = isPlainObject(body.preview_decisions_json) ? cloneJson(body.preview_decisions_json) : {};
-  const selectedPreviewRowIds = Array.isArray(body.selected_preview_row_ids)
+  const rawSelectedPreviewRowIds = Array.isArray(body.selected_preview_row_ids)
     ? body.selected_preview_row_ids
     : (Array.isArray(body.selectedPreviewRowIds) ? body.selectedPreviewRowIds : (Array.isArray(previewDecisions.selected_preview_row_ids) ? previewDecisions.selected_preview_row_ids : []));
+  const selectedPreviewRowIds = [];
+  const selectedPreviewRowIdSeen = new Set();
+  for (const value of rawSelectedPreviewRowIds) {
+    const text = trimStr(value);
+    if (!text || selectedPreviewRowIdSeen.has(text)) continue;
+    selectedPreviewRowIdSeen.add(text);
+    selectedPreviewRowIds.push(text);
+  }
+  const selectedPreviewRowModeRaw = upperTrim(body.selected_preview_row_mode || body.selectedPreviewRowMode || previewDecisions.selected_preview_row_mode || previewDecisions.selectedPreviewRowMode || 'ROW_IDS') || 'ROW_IDS';
+  const selectedPreviewRowMode = ['ROW_IDS', 'IMPLICIT_ALL', 'EXPLICIT_IDS', 'ROW_PATCH_CAPPED_CONTRACT_GUARDED'].includes(selectedPreviewRowModeRaw) ? selectedPreviewRowModeRaw : 'ROW_IDS';
+  const weekEndingCutoffDate = parseDate(body.week_ending_cutoff_date || body.weekEndingCutoffDate || body.week_ending_cutoff || body.weekEndingCutoff) || '9999-12-31';
 
   if (selectedPreviewRowIds.length > 100) {
     return fail(413, 'BANKING_CREATE_DRAFT_SELECTED_ROWS_TOO_MANY_FOR_REQUEST', 'Too many selected rows were sent with the create request. Apply selection in the workbench first, then create the draft from the row-backed selection.', {
@@ -22145,30 +22281,45 @@ async function handleBankingPayCreateDraft(env, req, user) {
     session_signature: sessionSignature
   }));
 
+  const buildDraftCreateOperationInputFromSessionSelection = () => ({
+    source: 'handleBankingPayCreateDraft',
+    row_backed_preview_required: true,
+    frozen_economic_keys_required: true,
+    backend_runner_owned: true,
+    frontend_completion_required: false,
+    workbench_session_id: sessionId,
+    session_id: sessionId,
+    pay_date: payDate,
+    week_ending_cutoff_date: weekEndingCutoffDate,
+    week_ending_cutoff: weekEndingCutoffDate,
+    pay_channel_scope: payChannelScope,
+    selected_rows_total: selectedCount,
+    selected_preview_row_count: selectedCount,
+    selected_preview_row_ids: selectedPreviewRowIds.slice(0, 100),
+    draft_selected_preview_row_ids: selectedPreviewRowIds.slice(0, 100),
+    selected_preview_row_mode: selectedPreviewRowMode,
+    selection_session_version: sessionVersion,
+    selected_preview_row_hash: selectedPreviewRowHash,
+    source_session_version: sessionVersion,
+    source_session_signature: sessionSignature,
+    source_snapshot_run_id: sourceSnapshotRunId,
+    policy_x_authority: 'PRE_DRAFT_ROW_BACKED_PREVIEW_TO_POST_DRAFT_FROZEN_ARTEFACTS',
+    economic_keyspace: 'timesheet_id,key_type,key_value',
+    draft_source: 'banking_pay_workbench_preview_rows',
+    final_result_shape: 'handleBankingPayCreateDraft'
+  });
+
   try {
     const operationPayload = await startBankingPayOperation(env, {
       operation_type: 'DRAFT_CREATE',
       actor_user_id: actorUserId,
       idempotency_key: `draft-create:session:${sessionId}:hash:${idempotencyHash}`,
       workbench_session_id: sessionId,
-      input_json: {
-        source: 'handleBankingPayCreateDraft',
-        row_backed_preview_required: true,
-        workbench_session_id: sessionId,
-        pay_date: payDate,
-        week_ending_cutoff: '9999-12-31',
-        pay_channel_scope: payChannelScope,
-        selected_rows_total: selectedCount,
-        selected_preview_row_hash: selectedPreviewRowHash,
-        source_session_version: sessionVersion,
-        source_session_signature: sessionSignature,
-        source_snapshot_run_id: sourceSnapshotRunId,
-        policy_x_authority: 'PRE_DRAFT_ROW_BACKED_PREVIEW_TO_POST_DRAFT_FROZEN_ARTEFACTS',
-        economic_keyspace: 'timesheet_id,key_type,key_value',
-        draft_source: 'banking_pay_workbench_preview_rows',
-        final_result_shape: 'handleBankingPayCreateDraft'
-      },
+      input_json: buildDraftCreateOperationInputFromSessionSelection(),
       config_json: {
+        backend_runner_owned: true,
+        frontend_completion_required: false,
+        run_after_utc: new Date().toISOString(),
         chunk_size: 100,
         scope_seed_limit: 100,
         allocation_seed_limit: 100,
@@ -22187,6 +22338,12 @@ async function handleBankingPayCreateDraft(env, req, user) {
       workbench_session_id: sessionId,
       pay_date: payDate,
       selected_rows_total: selectedCount,
+      selected_preview_row_count: selectedCount,
+      selected_preview_row_ids: selectedPreviewRowIds.slice(0, 100),
+      selected_preview_row_mode: selectedPreviewRowMode,
+      week_ending_cutoff_date: weekEndingCutoffDate,
+      backend_runner_owned: true,
+      frontend_completion_required: false,
       preview_payload_requested: false,
       row_backed_preview_required: true,
       frozen_economic_keys_required: true,
@@ -22205,6 +22362,9 @@ async function handleBankingPayCreateDraft(env, req, user) {
     });
   }
 }
+
+
+
 
 async function handleTimesheetAdvancePayment(env, req, timesheetId) {
   const user = await requireUser(env, req, ['admin']);
@@ -24388,6 +24548,7 @@ async function withBankingPayOperationLease(env, operationRow, options = {}, adv
   };
 }
 
+
 async function advanceBankingPayRunnableOperations(env, opts = {}) {
   const trimText = (value) => String(value == null ? '' : value).trim();
   const clampInteger = (value, fallback, min, max) => {
@@ -24425,12 +24586,19 @@ async function advanceBankingPayRunnableOperations(env, opts = {}) {
   const maxRuntimeMs = clampInteger(opts.maxRuntimeMs != null ? opts.maxRuntimeMs : opts.max_runtime_ms, 25000, 1000, 280000);
   const lockSeconds = clampInteger(opts.lockSeconds != null ? opts.lockSeconds : (opts.lock_seconds != null ? opts.lock_seconds : opts.leaseSeconds), 60, 10, 300);
   const source = firstText(opts.source, 'advanceBankingPayRunnableOperations');
+  const operationTypes = Array.isArray(opts.operationTypes)
+    ? opts.operationTypes.map((value) => firstText(value).toUpperCase()).filter(Boolean)
+    : (Array.isArray(opts.operation_types) ? opts.operation_types.map((value) => firstText(value).toUpperCase()).filter(Boolean) : []);
+  const backendRunnerOperationTypes = operationTypes.length ? Array.from(new Set(operationTypes)) : ['DRAFT_CREATE', 'PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS'];
 
   const summary = {
     ok: true,
     source,
     now_utc: nowUtc.toISOString(),
     browser_session_required: false,
+    backend_runner_owned_scope: true,
+    operation_scope: 'BANKING_PAY_BACKEND_RUNNER_OWNED',
+    operation_types: backendRunnerOperationTypes.slice(),
     max_operations_per_tick: maxOperations,
     max_advance_calls_per_tick: maxAdvanceCalls,
     max_runtime_ms: maxRuntimeMs,
@@ -24460,7 +24628,11 @@ async function advanceBankingPayRunnableOperations(env, opts = {}) {
         req: opts.req || null,
         requestBudget: opts.requestBudget || opts.request_budget || null,
         runAfterDelaySeconds: opts.runAfterDelaySeconds,
-        run_after_delay_seconds: opts.run_after_delay_seconds
+        run_after_delay_seconds: opts.run_after_delay_seconds,
+        allowBackendRunnerOwned: opts.allowBackendRunnerOwned !== false,
+        allow_backend_runner_owned: opts.allow_backend_runner_owned !== false,
+        operationTypes: backendRunnerOperationTypes.slice(),
+        operation_types: backendRunnerOperationTypes.slice()
       });
     } catch (error) {
       const compact = compactError(error);
@@ -24608,20 +24780,6 @@ async function handleBankingPayOperationResume(env, req, user, operationId) {
   }
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 async function bankingPayOperationsCronTick(env, opts = {}) {
   const trimText = (value) => String(value == null ? '' : value).trim();
   const firstText = function () {
@@ -24659,12 +24817,18 @@ async function bankingPayOperationsCronTick(env, opts = {}) {
   );
   if (!actorUserId) throw new Error('BANKING_PAY_OPERATIONS_CRON_ACTOR_USER_ID_MISSING');
 
+  const backendRunnerOperationTypes = Array.isArray(opts.operationTypes)
+    ? opts.operationTypes.map((value) => firstText(value).toUpperCase()).filter(Boolean)
+    : (Array.isArray(opts.operation_types) ? opts.operation_types.map((value) => firstText(value).toUpperCase()).filter(Boolean) : ['DRAFT_CREATE', 'PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS']);
+
   const summary = {
     ok: true,
     source: 'bankingPayOperationsCronTick',
     now_utc: nowUtc.toISOString(),
     browser_session_required: false,
-    operation_scope: 'BANKING_PAY_EXECUTION_ONLY',
+    backend_runner_owned_scope: true,
+    operation_scope: 'BANKING_PAY_BACKEND_RUNNER_OWNED',
+    operation_types: Array.from(new Set(backendRunnerOperationTypes.length ? backendRunnerOperationTypes : ['DRAFT_CREATE', 'PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS'])),
     result: null,
     errors: []
   };
@@ -24677,7 +24841,11 @@ async function bankingPayOperationsCronTick(env, opts = {}) {
       maxOperationsPerTick: clampInteger(opts.maxOperationsPerTick != null ? opts.maxOperationsPerTick : (opts.max_operations_per_tick != null ? opts.max_operations_per_tick : (opts.operationLimit != null ? opts.operationLimit : opts.operation_limit)), 10, 1, 25),
       maxAdvanceCallsPerTick: clampInteger(opts.maxAdvanceCallsPerTick != null ? opts.maxAdvanceCallsPerTick : (opts.max_advance_calls_per_tick != null ? opts.max_advance_calls_per_tick : (opts.advanceLimit != null ? opts.advanceLimit : opts.advance_limit)), 10, 1, 50),
       maxRuntimeMs: clampInteger(opts.maxRuntimeMs != null ? opts.maxRuntimeMs : opts.max_runtime_ms, 25000, 1000, 280000),
-      lockSeconds: clampInteger(opts.lockSeconds != null ? opts.lockSeconds : (opts.lock_seconds != null ? opts.lock_seconds : (opts.leaseSeconds != null ? opts.leaseSeconds : opts.lease_seconds)), 60, 10, 300)
+      lockSeconds: clampInteger(opts.lockSeconds != null ? opts.lockSeconds : (opts.lock_seconds != null ? opts.lock_seconds : (opts.leaseSeconds != null ? opts.leaseSeconds : opts.lease_seconds)), 60, 10, 300),
+      allowBackendRunnerOwned: true,
+      allow_backend_runner_owned: true,
+      operationTypes: summary.operation_types.slice(),
+      operation_types: summary.operation_types.slice()
     }));
     summary.ok = summary.result && summary.result.ok !== false;
   } catch (error) {
@@ -24694,6 +24862,21 @@ async function bankingPayOperationsCronTick(env, opts = {}) {
   return summary;
 }
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 async function claimAndAdvanceOneBankingPayOperation(env, opts = {}) {
   const trimText = (value) => String(value == null ? '' : value).trim();
   const upperText = (value) => trimText(value).toUpperCase();
@@ -24709,6 +24892,21 @@ async function claimAndAdvanceOneBankingPayOperation(env, opts = {}) {
       if (text) return text;
     }
     return '';
+  };
+  const readBool = (value, fallback = false) => {
+    if (value === true) return true;
+    if (value === false) return false;
+    if (value === null || value === undefined || value === '') return fallback;
+    const text = trimText(value).toLowerCase();
+    if (['true', 't', '1', 'yes', 'y', 'on'].includes(text)) return true;
+    if (['false', 'f', '0', 'no', 'n', 'off'].includes(text)) return false;
+    return fallback;
+  };
+  const parseTimeMs = (value) => {
+    const text = trimText(value);
+    if (!text) return null;
+    const ms = Date.parse(text);
+    return Number.isFinite(ms) ? ms : null;
   };
   const unwrapRpcPayload = (rpcRes, key) => {
     let payload = rpcRes;
@@ -24730,6 +24928,22 @@ async function claimAndAdvanceOneBankingPayOperation(env, opts = {}) {
     message: String(error && error.message ? error.message : (error || 'Banking Pay operation advance failed.')).slice(0, 1000),
     name: error && error.name ? String(error.name).slice(0, 120) : null
   });
+  const buildBankingPayOperationActorContext = (claimRow, runnerActorUserId, sourceOptions = {}) => {
+    const claimObject = asPlainObject(claimRow);
+    const inputObject = asPlainObject(claimObject.input_json || claimObject.inputJson || claimObject.input);
+    const operationActorUserId = firstText(claimObject.actor_user_id, claimObject.actorUserId, inputObject.actor_user_id, inputObject.actorUserId);
+    const businessActorUserId = firstText(
+      claimObject.operation_type || claimObject.operationType,
+    ).toUpperCase() === 'DRAFT_CREATE'
+      ? firstText(operationActorUserId, sourceOptions.businessActorUserId, sourceOptions.business_actor_user_id, runnerActorUserId)
+      : firstText(sourceOptions.businessActorUserId, sourceOptions.business_actor_user_id, runnerActorUserId);
+    return {
+      businessActorUserId,
+      runnerActorUserId,
+      backendRunner: sourceOptions.backendRunner !== false,
+      operationActorUserId: operationActorUserId || null
+    };
+  };
   const compactProgressPatch = (payload, extra) => {
     const source = asPlainObject(payload);
     const progress = asPlainObject(source.progress);
@@ -24737,7 +24951,8 @@ async function claimAndAdvanceOneBankingPayOperation(env, opts = {}) {
     const copyKeys = [
       'status', 'phase', 'runner_state', 'next_required_phase', 'last_message', 'resume_reason',
       'requires_user_action', 'review_required', 'waiting_authorisation', 'waiting_provider',
-      'provider_submission_status', 'review_reason_code', 'provider_submit_state', 'run_after_utc'
+      'provider_submission_status', 'review_reason_code', 'provider_submit_state', 'run_after_utc',
+      'run_after_delay_seconds', 'runAfterDelaySeconds'
     ];
     for (const key of copyKeys) {
       if (source[key] !== undefined && source[key] !== null && source[key] !== '') out[key] = source[key];
@@ -24761,9 +24976,13 @@ async function claimAndAdvanceOneBankingPayOperation(env, opts = {}) {
     const source = asPlainObject(payload);
     const status = upperText(source.status || source.operation_status);
     const phase = upperText(source.phase || source.operation_phase);
+    const operationTypeForRelease = upperText(source.operation_type || source.operationType);
     const runnerState = upperText(source.runner_state || source.runnerState);
-    if (status === 'COMPLETE' || status === 'COMPLETED' || phase === 'COMPLETE') return 'COMPLETE';
+    if (status === 'COMPLETE' || status === 'COMPLETED') return 'COMPLETE';
     if (status === 'FAILED' || status === 'CANCELLED' || status === 'CANCELED') return 'FAILED';
+    if (phase === 'COMPLETE') {
+      return operationTypeForRelease === 'DRAFT_CREATE' ? 'MORE_WORK' : 'COMPLETE';
+    }
     if (status === 'REVIEW_REQUIRED' || runnerState === 'WAITING_USER_REVIEW' || source.review_required === true || source.requires_user_action === true && runnerState === 'WAITING_USER_REVIEW') return 'REVIEW_REQUIRED';
     if (status === 'WAITING_AUTHORISATION' || status === 'WAITING_AUTHORIZATION' || source.waiting_authorisation === true || runnerState === 'WAITING_USER') return 'WAITING_AUTHORISATION';
     if (status === 'WAITING_PROVIDER' || source.waiting_provider === true || runnerState === 'WAITING_PROVIDER') return 'WAITING_PROVIDER';
@@ -24780,12 +24999,20 @@ async function claimAndAdvanceOneBankingPayOperation(env, opts = {}) {
   const lockSeconds = clampInteger(opts.lockSeconds != null ? opts.lockSeconds : opts.lock_seconds, 60, 10, 300);
   const lockOwner = firstText(opts.lockOwner, opts.lock_owner) || `banking-pay-worker:${Date.now()}:${Math.random().toString(36).slice(2)}`;
   const source = firstText(opts.source, 'claimAndAdvanceOneBankingPayOperation');
+  const allowBackendRunnerOwned = opts.allowBackendRunnerOwned === true || opts.allow_backend_runner_owned === true;
+  const suppliedOperationTypes = Array.isArray(opts.operationTypes)
+    ? opts.operationTypes
+    : (Array.isArray(opts.operation_types) ? opts.operation_types : []);
+  const operationTypes = suppliedOperationTypes.map((value) => firstText(value).toUpperCase()).filter(Boolean);
+  const backendRunnerOperationTypes = operationTypes.length ? Array.from(new Set(operationTypes)) : (allowBackendRunnerOwned ? ['DRAFT_CREATE', 'PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS'] : []);
 
   const claimArgs = {
     p_operation_id: operationId || null,
     p_actor_user_id: actorUserId,
     p_lock_owner: lockOwner,
-    p_lock_seconds: lockSeconds
+    p_lock_seconds: lockSeconds,
+    p_allow_backend_runner_owned: allowBackendRunnerOwned,
+    p_operation_types: backendRunnerOperationTypes.length ? backendRunnerOperationTypes : null
   };
 
   const claim = unwrapRpcPayload(await sbRpc(env, 'banking_pay_operation_claim_next', claimArgs, {
@@ -24807,6 +25034,22 @@ async function claimAndAdvanceOneBankingPayOperation(env, opts = {}) {
 
   const claimedOperationId = firstText(claim.operation_id, claim.id, operationId);
   const operationType = upperText(claim.operation_type || claim.operationType);
+  const claimInputJson = asPlainObject(claim.input_json || claim.inputJson || claim.input);
+  const claimConfigJson = asPlainObject(claim.config_json || claim.configJson || claim.config);
+  const claimProgressJson = asPlainObject(claim.progress_json || claim.progressJson || claim.progress);
+  const claimConfigHasFrontendCompletionRequired = Object.prototype.hasOwnProperty.call(claimConfigJson, 'frontend_completion_required') || Object.prototype.hasOwnProperty.call(claimConfigJson, 'frontendCompletionRequired');
+  const operationBackendRunnerOwned = operationType === 'DRAFT_CREATE' || allowBackendRunnerOwned === true ||
+    readBool(claimInputJson.backend_runner_owned, false) ||
+    readBool(claimInputJson.backendRunnerOwned, false) ||
+    readBool(claimConfigJson.backend_runner_owned, false) ||
+    readBool(claimConfigJson.backendRunnerOwned, false) ||
+    readBool(claimProgressJson.backend_runner_owned, false) ||
+    readBool(claimProgressJson.backendRunnerOwned, false) ||
+    (claimConfigHasFrontendCompletionRequired && readBool(claimConfigJson.frontend_completion_required ?? claimConfigJson.frontendCompletionRequired, true) === false);
+  const actorContext = buildBankingPayOperationActorContext(claim, actorUserId, {
+    backendRunner: true,
+    businessActorUserId: opts.businessActorUserId || opts.business_actor_user_id || null
+  });
 
   let advancedPayload = null;
   let releasePayload = null;
@@ -24815,10 +25058,22 @@ async function claimAndAdvanceOneBankingPayOperation(env, opts = {}) {
   let advanceError = null;
 
   try {
-    advancedPayload = await advanceBankingPayOperation(env, claim, { id: actorUserId }, {
+    advancedPayload = await advanceBankingPayOperation(env, claim, {
+      id: actorContext.businessActorUserId,
+      business_actor_user_id: actorContext.businessActorUserId,
+      runner_actor_user_id: actorContext.runnerActorUserId,
+      operation_actor_user_id: actorContext.operationActorUserId,
+      backend_runner: actorContext.backendRunner
+    }, {
       req: opts.req || null,
       lockOwner,
       backendRunner: true,
+      runnerActorUserId: actorContext.runnerActorUserId,
+      runner_actor_user_id: actorContext.runnerActorUserId,
+      operationActorUserId: actorContext.operationActorUserId,
+      operation_actor_user_id: actorContext.operationActorUserId,
+      businessActorUserId: actorContext.businessActorUserId,
+      business_actor_user_id: actorContext.businessActorUserId,
       source,
       operationType,
       operation_type: operationType,
@@ -24837,15 +25092,37 @@ async function claimAndAdvanceOneBankingPayOperation(env, opts = {}) {
   }
 
   const publicAdvanced = publicPayload(advancedPayload || claim);
+  const terminalAfterAdvance = !advanceError && (publicAdvanced.terminal === true || ['COMPLETE', 'COMPLETED', 'FAILED', 'CANCELLED', 'CANCELED'].includes(upperText(publicAdvanced.status || advancedPayload?.status)));
+  const advancedLeaseOwner = firstText(publicAdvanced.lease_owner, publicAdvanced.lock_owner, publicAdvanced.locked_by, advancedPayload && (advancedPayload.lease_owner || advancedPayload.lock_owner || advancedPayload.locked_by));
+  const terminalStillLeasedToThisWorker = terminalAfterAdvance && advancedLeaseOwner === lockOwner && publicAdvanced.leased !== false;
   const progressPatch = compactProgressPatch(publicAdvanced, {
     source,
     lock_owner: lockOwner,
     operation_type: operationType,
     last_worker_advanced_at_utc: new Date().toISOString(),
     bounded_phase_unit: true,
-    release_state: releaseState
+    release_state: releaseState,
+    backend_runner_owned: operationBackendRunnerOwned,
+    runner_actor_user_id: actorContext.runnerActorUserId || null,
+    operation_actor_user_id: actorContext.operationActorUserId || null,
+    business_actor_user_id: actorContext.businessActorUserId || null
   });
   if (advanceError) progressPatch.error = compactError(advanceError);
+
+  if (terminalAfterAdvance && !terminalStillLeasedToThisWorker) {
+    return {
+      ok: true,
+      claimed: true,
+      advanced: true,
+      operation_id: claimedOperationId,
+      lock_owner: lockOwner,
+      release_state: releaseState,
+      operation: publicAdvanced,
+      save_progress: { saved: false, skipped: true, reason: 'OPERATION_ALREADY_TERMINAL_AFTER_ADVANCE' },
+      release: { ok: true, skipped: true, reason: 'OPERATION_ALREADY_TERMINAL_AFTER_ADVANCE' },
+      error: null
+    };
+  }
 
   try {
     savePayload = unwrapRpcPayload(await sbRpc(env, 'banking_pay_operation_save_progress', {
@@ -24868,7 +25145,22 @@ async function claimAndAdvanceOneBankingPayOperation(env, opts = {}) {
     savePayload = { saved: false, error: compactError(saveError) };
   }
 
-  const delaySeconds = releaseState === 'MORE_WORK' ? clampInteger(opts.runAfterDelaySeconds != null ? opts.runAfterDelaySeconds : opts.run_after_delay_seconds, 0, 0, 60) : (releaseState === 'WAITING_PROVIDER' ? 60 : 0);
+  const progressDelaySeconds = Number(progressPatch.run_after_delay_seconds ?? progressPatch.runAfterDelaySeconds);
+  const progressRunAfterMs = parseTimeMs(progressPatch.run_after_utc || progressPatch.runAfterUtc);
+  const progressRunAfterDelaySeconds = progressRunAfterMs === null ? null : Math.max(0, Math.ceil((progressRunAfterMs - Date.now()) / 1000));
+  const optionDelaySeconds = Number(opts.runAfterDelaySeconds != null ? opts.runAfterDelaySeconds : opts.run_after_delay_seconds);
+  const delaySeconds = releaseState === 'MORE_WORK'
+    ? clampInteger(
+      Number.isFinite(progressDelaySeconds)
+        ? progressDelaySeconds
+        : (Number.isFinite(progressRunAfterDelaySeconds) && progressRunAfterDelaySeconds > 0
+          ? progressRunAfterDelaySeconds
+          : (Number.isFinite(optionDelaySeconds) ? optionDelaySeconds : 0)),
+      0,
+      0,
+      60
+    )
+    : (releaseState === 'WAITING_PROVIDER' ? 60 : 0);
   try {
     releasePayload = unwrapRpcPayload(await sbRpc(env, 'banking_pay_operation_release_lease', {
       p_operation_id: claimedOperationId,
@@ -24879,7 +25171,7 @@ async function claimAndAdvanceOneBankingPayOperation(env, opts = {}) {
       p_result_patch_json: releaseState === 'COMPLETE' ? { worker_completed_at_utc: new Date().toISOString() } : null,
       p_error_json: advanceError ? compactError(advanceError) : null,
       p_resume_reason: progressPatch.resume_reason || progressPatch.next_required_phase || releaseState,
-      p_actor_user_id: actorUserId
+      p_actor_user_id: actorContext.businessActorUserId || actorUserId
     }, {
       routeClass: 'OPERATION_PROGRESS_SAVE',
       purpose: 'BANKING_PAY_OPERATION_RELEASE_LEASE',
@@ -24904,6 +25196,7 @@ async function claimAndAdvanceOneBankingPayOperation(env, opts = {}) {
     error: advanceError ? compactError(advanceError) : null
   };
 }
+
 
 
 async function handleBankingPayCancelNotSentAndRecalculate(env, req, user, payBatchId) {
@@ -40776,9 +41069,6 @@ async function advanceBankingPaySettlementOperation(env, operationRow, user, opt
 }
 
 
-
-
-
 async function advanceBankingPayDraftCreateOperation(env, operationRow, user, options = {}) {
   const unwrapRpcPayload = (rpcRes, key) => {
     let payload = rpcRes;
@@ -40794,11 +41084,13 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
   const enc = encodeURIComponent;
   const operation = safeObject(operationRow);
   const operationId = String(operation.operation_id || operation.id || '').trim();
-  const workbenchSessionId = String(operation.workbench_session_id || operation.input_json?.workbench_session_id || operation.input_json?.session_id || '').trim();
-  const actorUserId = String(user?.id || operation.actor_user_id || operation.input_json?.actor_user_id || '').trim();
   const inputJson = safeObject(operation.input_json);
   const configJson = safeObject(operation.config_json);
   const progressJson = safeObject(operation.progress_json);
+  const workbenchSessionId = String(operation.workbench_session_id || inputJson.workbench_session_id || inputJson.session_id || '').trim();
+  const runnerActorUserId = String(options.runnerActorUserId || options.runner_actor_user_id || user?.runner_actor_user_id || user?.runnerActorUserId || '').trim();
+  const operationActorUserId = String(operation.actor_user_id || operation.actorUserId || inputJson.actor_user_id || inputJson.actorUserId || '').trim();
+  const actorUserId = String(operationActorUserId || user?.id || user?.business_actor_user_id || user?.businessActorUserId || '').trim();
   const lockOwner = String(options.lockOwner || `draft:${operationId}`).trim();
   const lockSeconds = Number.isFinite(Number(configJson.lock_seconds)) ? Math.max(5, Math.min(3600, Math.trunc(Number(configJson.lock_seconds)))) : 60;
   const phase = String(operation.phase || 'VALIDATE_SESSION').trim().toUpperCase() || 'VALIDATE_SESSION';
@@ -40812,10 +41104,102 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
     if (Number.isFinite(n) && n > 0) return Math.trunc(n);
     return fallback;
   };
-  const selectedPreviewRowIds = Array.isArray(inputJson.selected_preview_row_ids) ? inputJson.selected_preview_row_ids : (Array.isArray(inputJson.selectedPreviewRowIds) ? inputJson.selectedPreviewRowIds : null);
+  const selectedPreviewRowIds = Array.isArray(inputJson.selected_preview_row_ids)
+    ? inputJson.selected_preview_row_ids
+    : (Array.isArray(inputJson.selectedPreviewRowIds)
+      ? inputJson.selectedPreviewRowIds
+      : (Array.isArray(inputJson.draft_selected_preview_row_ids)
+        ? inputJson.draft_selected_preview_row_ids
+        : (Array.isArray(inputJson.draftSelectedPreviewRowIds) ? inputJson.draftSelectedPreviewRowIds : null)));
+  const selectedPreviewRowCount = Array.isArray(selectedPreviewRowIds)
+    ? selectedPreviewRowIds.length
+    : Math.max(0, Number.isFinite(Number(inputJson.selected_preview_row_count || inputJson.selectedPreviewRowCount || inputJson.selected_rows_total)) ? Math.trunc(Number(inputJson.selected_preview_row_count || inputJson.selectedPreviewRowCount || inputJson.selected_rows_total)) : 0);
   const payChannelScope = String(inputJson.pay_channel_scope || inputJson.payChannelScope || 'ALL').trim().toUpperCase() || 'ALL';
   const sameWeekPayeOverrideJson = safeObject(inputJson.same_week_paye_override_json || inputJson.sameWeekPayeOverrideJson);
-  const lockProgress = async (status, nextPhase, progressJson = {}, counters = {}) => buildBankingPayOperationPublicPayload(await sbRpc(env, 'banking_pay_operation_save_progress', {
+  const draftCreatePhaseOrder = [
+    'VALIDATE_SESSION',
+    'SYNC_SELECTED_ROWS',
+    'WAIT_FOR_PREVIEW_READY',
+    'SEED_CANDIDATE_SCOPE',
+    'DRAIN_TSFIN',
+    'ENSURE_PAYEE_READINESS',
+    'SEED_ALLOCATION_ROWS',
+    'CREATE_BATCH_SHELLS',
+    'SEED_DRAFT_CHUNKS',
+    'INSERT_CANDIDATES',
+    'INSERT_ITEMS',
+    'APPLY_FINANCE_ADJUSTMENTS',
+    'FINALISE_RESERVATIONS',
+    'POPULATE_CANDIDATE_SUMMARIES',
+    'CREATE_TIMESHEET_SNAPSHOTS',
+    'BUILD_ITEM_BREAKDOWNS',
+    'ASSERT_INTEGRITY',
+    'POST_CREATE_REFRESH',
+    'COMPLETE'
+  ];
+  const phaseIndexFor = (phaseName) => {
+    const idx = draftCreatePhaseOrder.indexOf(String(phaseName || '').trim().toUpperCase());
+    return idx >= 0 ? idx + 1 : null;
+  };
+  const uniqueDraftUuidArray = (values) => uniqueUuidArray(Array.isArray(values) ? values : []);
+  const batchIdsFromProgressPatch = (patch = {}) => {
+    const source = safeObject(patch);
+    return uniqueDraftUuidArray(source.created_pay_batch_ids || source.createdPayBatchIds || source.pay_batch_ids || source.payBatchIds || []);
+  };
+  const buildDraftCreateProgressSummary = (status, nextPhase, progressPatch = {}) => {
+    const patch = safeObject(progressPatch);
+    const batchIds = batchIdsFromProgressPatch(patch);
+    const lastMessage = String(patch.last_message || patch.status_text || patch.message || '').trim() || null;
+    const summary = {
+      ...patch,
+      operation_type: 'DRAFT_CREATE',
+      operation_id: operationId,
+      workbench_session_id: workbenchSessionId,
+      session_id: workbenchSessionId,
+      source_session_id: workbenchSessionId,
+      selected_preview_row_count: selectedPreviewRowCount,
+      selected_rows_total: selectedPreviewRowCount,
+      phase: nextPhase,
+      phase_index: phaseIndexFor(nextPhase),
+      phase_total: draftCreatePhaseOrder.length,
+      status,
+      backend_runner_owned: true,
+      frontend_completion_required: false,
+      business_actor_user_id: actorUserId,
+      operation_actor_user_id: operationActorUserId || actorUserId,
+      runner_actor_user_id: runnerActorUserId || null,
+      last_message: lastMessage,
+      status_text: lastMessage || patch.status_text || null
+    };
+    if (batchIds.length) {
+      summary.pay_batch_ids = batchIds;
+      summary.created_pay_batch_ids = batchIds;
+      if (batchIds.length === 1) summary.pay_batch_id = batchIds[0];
+    }
+    return summary;
+  };
+  const buildDraftCreateTerminalResult = (resultJson = {}) => {
+    const result = safeObject(resultJson);
+    const batchIds = uniqueDraftUuidArray(result.created_pay_batch_ids || result.pay_batch_ids || result.createdPayBatchIds || result.payBatchIds || []);
+    const primaryPayBatchId = String(result.primary_pay_batch_id || result.primaryPayBatchId || result.pay_batch_id || result.payBatchId || batchIds[0] || '').trim() || null;
+    return {
+      ...result,
+      ok: result.ok !== false,
+      operation_type: 'DRAFT_CREATE',
+      operation_id: operationId,
+      workbench_session_id: workbenchSessionId,
+      session_id: workbenchSessionId,
+      source_session_id: workbenchSessionId,
+      pay_batch_ids: batchIds,
+      created_pay_batch_ids: batchIds,
+      primary_pay_batch_id: primaryPayBatchId,
+      pay_batch_id: primaryPayBatchId,
+      created_batch_count: Number.isFinite(Number(result.created_batch_count)) ? Math.max(0, Math.trunc(Number(result.created_batch_count))) : batchIds.length,
+      backend_runner_owned: true,
+      frontend_completion_required: false
+    };
+  };
+  const lockProgress = async (status, nextPhase, progressPatch = {}, counters = {}) => buildBankingPayOperationPublicPayload(await sbRpc(env, 'banking_pay_operation_save_progress', {
     p_operation_id: operationId,
     p_status: status,
     p_phase: nextPhase,
@@ -40824,13 +41208,20 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
     p_failed_units: counters.failed_units ?? null,
     p_current_chunk_index: counters.current_chunk_index ?? null,
     p_chunk_count: counters.chunk_count ?? null,
-    p_progress_json: progressJson,
+    p_progress_json: buildDraftCreateProgressSummary(status, nextPhase, progressPatch),
     p_extend_lock_seconds: null
   }));
+  const lockProgressForRetryableWait = async (nextPhase, progressPatch = {}, waitSeconds = 10, counters = {}) => lockProgress('WAITING_RETRY', nextPhase, {
+    ...safeObject(progressPatch),
+    runner_state: 'RUNNABLE',
+    run_after_delay_seconds: Math.max(1, Math.min(60, Math.trunc(Number(waitSeconds) || 10))),
+    run_after_utc: new Date(Date.now() + Math.max(1, Math.min(60, Math.trunc(Number(waitSeconds) || 10))) * 1000).toISOString(),
+    resume_reason: 'WAITING_FOR_PREVIEW_READY'
+  }, counters);
   const finish = async (status, resultJson = null, errorJson = null) => buildBankingPayOperationPublicPayload(await sbRpc(env, 'banking_pay_operation_finish', {
     p_operation_id: operationId,
     p_status: status,
-    p_result_json: resultJson,
+    p_result_json: status === 'COMPLETE' ? buildDraftCreateTerminalResult(resultJson || {}) : resultJson,
     p_error_json: errorJson
   }));
   const claim = async () => unwrapRpcPayload(await sbRpc(env, 'banking_pay_operation_claim_chunk', {
@@ -41297,7 +41688,7 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
     if (phase === 'WAIT_FOR_PREVIEW_READY') {
       const progress = unwrapRpcPayload(await sbRpc(env, 'pay_workbench_session_get_progress', { p_session_id: workbenchSessionId }), 'pay_workbench_session_get_progress');
       const ready = progress.ready === true || progress.ready_flag === true || String(progress.status || '').toUpperCase() === 'READY';
-      if (!ready) return lockProgress('WAITING', 'WAIT_FOR_PREVIEW_READY', { status_text: 'Waiting for payment preview to become ready.', session_progress: progress });
+      if (!ready) return lockProgressForRetryableWait('WAIT_FOR_PREVIEW_READY', { status_text: 'Waiting for payment preview to become ready.', session_progress: progress }, 10);
       return lockProgress('RUNNING', 'SEED_CANDIDATE_SCOPE', { status_text: 'Payment preview is ready.', session_progress: progress });
     }
 
@@ -41817,7 +42208,12 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
         created_pay_batch_ids: batchIds,
         skipped_empty_pay_batch_ids: skippedEmptyBatchIds,
         cancelled_empty_pay_batch_ids: cancelledEmptyBatchIds,
+        operation_type: 'DRAFT_CREATE',
+        primary_pay_batch_id: batchIds[0] || null,
         pay_batch_id: batchIds[0] || null,
+        created_batch_count: batchIds.length,
+        backend_runner_owned: true,
+        frontend_completion_required: false,
         paye_pay_batch_id: payeBatch?.pay_batch_id || null,
         umbrella_pay_batch_id: umbrellaBatch?.pay_batch_id || null,
         created_batches: createdBatches,
@@ -41854,6 +42250,8 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
     return finishFailedWithCleanup( null, { code: 'DRAFT_CREATE_OPERATION_FAILED', message: 'Draft create operation failed.', phase, error: String(e?.message || e || '') });
   }
 }
+
+
 
 
 async function advanceBankingPayRemittanceOperation(env, operationRow, user, options = {}) {
@@ -139120,6 +139518,7 @@ async function handleBankingPayBatchCancel(env, req, user, payBatchId) {
 
 
 
+
 function buildBankingPayOperationPublicPayload(operationRow, options = {}) {
   const unwrapRow = (value) => {
     let row = value;
@@ -139131,7 +139530,8 @@ function buildBankingPayOperationPublicPayload(operationRow, options = {}) {
         'banking_pay_operation_save_progress',
         'banking_pay_operation_finish',
         'banking_pay_operation_claim_next',
-        'banking_pay_operation_release_lease'
+        'banking_pay_operation_release_lease',
+        'banking_pay_operation_find_active_draft_create'
       ];
       for (const key of wrapperKeys) {
         if (row && typeof row === 'object' && !Array.isArray(row) && Object.prototype.hasOwnProperty.call(row, key)) {
@@ -139201,10 +139601,90 @@ function buildBankingPayOperationPublicPayload(operationRow, options = {}) {
   const resultObject = asPlainObject(row.result_json || row.resultJson || row.result);
   const errorObject = asPlainObject(row.error_json || row.errorJson || row.error);
   const optionsObject = asPlainObject(options);
+  const extractStringArray = (value) => {
+    if (Array.isArray(value)) return value.map((item) => trimText(item)).filter(Boolean);
+    if (typeof value === 'string') {
+      const text = trimText(value);
+      if (!text) return [];
+      try {
+        const parsed = JSON.parse(text);
+        return Array.isArray(parsed) ? parsed.map((item) => trimText(item)).filter(Boolean) : [text];
+      } catch {
+        return [text];
+      }
+    }
+    return [];
+  };
+  const extractBankingPayOperationBatchIds = (sourceRow, sourceProgress, sourceResult) => {
+    const out = [];
+    const seen = new Set();
+    const push = (value) => {
+      const text = trimText(value);
+      if (!text || seen.has(text)) return;
+      seen.add(text);
+      out.push(text);
+    };
+    for (const value of [
+      sourceRow.pay_batch_id,
+      sourceRow.payBatchId,
+      sourceRow.primary_pay_batch_id,
+      sourceRow.primaryPayBatchId,
+      sourceProgress.pay_batch_id,
+      sourceProgress.payBatchId,
+      sourceProgress.primary_pay_batch_id,
+      sourceProgress.primaryPayBatchId,
+      sourceResult.pay_batch_id,
+      sourceResult.payBatchId,
+      sourceResult.primary_pay_batch_id,
+      sourceResult.primaryPayBatchId
+    ]) push(value);
+    for (const arrayValue of [
+      sourceRow.pay_batch_ids,
+      sourceRow.payBatchIds,
+      sourceRow.created_pay_batch_ids,
+      sourceRow.createdPayBatchIds,
+      sourceProgress.pay_batch_ids,
+      sourceProgress.payBatchIds,
+      sourceProgress.created_pay_batch_ids,
+      sourceProgress.createdPayBatchIds,
+      sourceResult.pay_batch_ids,
+      sourceResult.payBatchIds,
+      sourceResult.created_pay_batch_ids,
+      sourceResult.createdPayBatchIds
+    ]) {
+      for (const item of extractStringArray(arrayValue)) push(item);
+    }
+    return out;
+  };
+  const operationType = upperText(firstText(row.operation_type, row.operationType, progress.operation_type, progress.operationType, resultObject.operation_type, resultObject.operationType)) || null;
+  const payBatchIds = extractBankingPayOperationBatchIds(row, progress, resultObject);
+  const primaryPayBatchId = firstText(row.primary_pay_batch_id, row.primaryPayBatchId, row.pay_batch_id, row.payBatchId, progress.primary_pay_batch_id, progress.primaryPayBatchId, progress.pay_batch_id, progress.payBatchId, resultObject.primary_pay_batch_id, resultObject.primaryPayBatchId, resultObject.pay_batch_id, resultObject.payBatchId, payBatchIds[0]) || null;
+  const backendRunnerOwned = boolValue(firstValue(row.backend_runner_owned, row.backendRunnerOwned, progress.backend_runner_owned, progress.backendRunnerOwned, resultObject.backend_runner_owned, resultObject.backendRunnerOwned, optionsObject.backend_runner_owned, optionsObject.backendRunnerOwned), operationType === 'DRAFT_CREATE');
+  const frontendCompletionRequired = boolValue(firstValue(row.frontend_completion_required, row.frontendCompletionRequired, progress.frontend_completion_required, progress.frontendCompletionRequired, resultObject.frontend_completion_required, resultObject.frontendCompletionRequired, optionsObject.frontend_completion_required, optionsObject.frontendCompletionRequired), false);
+  const extractDraftCreateResultSummary = () => {
+    const supplied = Object.assign({}, asPlainObject(row.result_summary), asPlainObject(row.resultSummary), asPlainObject(progress.result_summary), asPlainObject(progress.resultSummary), asPlainObject(resultObject.result_summary), asPlainObject(resultObject.resultSummary));
+    if (operationType !== 'DRAFT_CREATE' && !Object.keys(supplied).length && !payBatchIds.length) return null;
+    return {
+      ...supplied,
+      operation_type: operationType,
+      workbench_session_id: firstText(row.workbench_session_id, row.workbenchSessionId, progress.workbench_session_id, progress.workbenchSessionId, resultObject.workbench_session_id, resultObject.workbenchSessionId) || null,
+      pay_batch_id: primaryPayBatchId,
+      primary_pay_batch_id: primaryPayBatchId,
+      pay_batch_ids: payBatchIds.slice(),
+      created_pay_batch_ids: payBatchIds.slice(),
+      created_batch_count: Math.max(0, finiteInteger(firstValue(supplied.created_batch_count, supplied.createdBatchCount, resultObject.created_batch_count, resultObject.createdBatchCount), payBatchIds.length)),
+      source_session_discarded: boolValue(firstValue(supplied.source_session_discarded, supplied.sourceSessionDiscarded, resultObject.source_session_discarded, resultObject.sourceSessionDiscarded, progress.source_session_discarded, progress.sourceSessionDiscarded), false)
+    };
+  };
+  const draftCreateResultSummary = extractDraftCreateResultSummary();
 
   const status = upperText(firstText(row.status, progress.status, resultObject.status, errorObject.status)) || 'UNKNOWN';
   const phase = upperText(firstText(row.phase, progress.phase, resultObject.phase, errorObject.phase)) || 'UNKNOWN';
-  const operationStatusLabel = status === 'FAILED'
+  const operationStatusLabel = operationType === 'DRAFT_CREATE' && status === 'FAILED'
+    ? 'Draft creation failed'
+    : operationType === 'DRAFT_CREATE' && (status === 'COMPLETE' || status === 'COMPLETED')
+      ? 'Draft created'
+      : status === 'FAILED'
     ? 'Operation failed'
     : (status === 'COMPLETE' || status === 'COMPLETED')
       ? 'Operation complete'
@@ -139470,7 +139950,25 @@ function buildBankingPayOperationPublicPayload(operationRow, options = {}) {
     SUBMIT_PROVIDER_TRANSFERS: 'Submitting transfers to the bank',
     APPLY_RAIL_UPDATES: 'Confirming bank submission state',
     FINALISE_PROVIDER_CHUNK: 'Finalising bank submission',
-    COMPLETE: 'Operation complete'
+    COMPLETE: operationType === 'DRAFT_CREATE' ? 'Draft creation complete' : 'Operation complete',
+    VALIDATE_SESSION: 'Checking draft session',
+    SYNC_SELECTED_ROWS: 'Checking selected payment rows',
+    WAIT_FOR_PREVIEW_READY: 'Waiting for payment preview',
+    SEED_CANDIDATE_SCOPE: 'Preparing draft scope',
+    DRAIN_TSFIN: 'Checking timesheet financials',
+    ENSURE_PAYEE_READINESS: 'Checking payee readiness',
+    SEED_ALLOCATION_ROWS: 'Preparing deductions and recoveries',
+    CREATE_BATCH_SHELLS: 'Creating draft batch shell',
+    SEED_DRAFT_CHUNKS: 'Preparing draft creation chunks',
+    INSERT_CANDIDATES: 'Adding draft candidates',
+    INSERT_ITEMS: 'Adding draft items',
+    APPLY_FINANCE_ADJUSTMENTS: 'Applying finance adjustments',
+    FINALISE_RESERVATIONS: 'Finalising reservations',
+    POPULATE_CANDIDATE_SUMMARIES: 'Building candidate summaries',
+    CREATE_TIMESHEET_SNAPSHOTS: 'Freezing timesheet snapshots',
+    BUILD_ITEM_BREAKDOWNS: 'Building item breakdowns',
+    ASSERT_INTEGRITY: 'Checking draft integrity',
+    POST_CREATE_REFRESH: 'Refreshing preview after draft creation'
   };
   const lastMessage = firstText(progress.last_message, progress.message, resultObject.last_message, resultObject.message, errorObject.message);
   const statusText = reviewRequired
@@ -139482,18 +139980,31 @@ function buildBankingPayOperationPublicPayload(operationRow, options = {}) {
         : terminal && status === 'FAILED'
           ? firstText(errorObject.message, progress.last_message, 'Payment operation failed.')
           : terminal
-            ? (status === 'COMPLETE' || status === 'COMPLETED' ? settlementProgressLabel : 'Payment operation stopped.')
-            : firstText(lastMessage, phaseLabels[phase], 'Payment operation is running.');
+            ? (status === 'COMPLETE' || status === 'COMPLETED' ? (operationType === 'DRAFT_CREATE' ? 'Draft created.' : settlementProgressLabel) : (operationType === 'DRAFT_CREATE' ? 'Draft creation stopped.' : 'Payment operation stopped.'))
+            : firstText(lastMessage, phaseLabels[phase], operationType === 'DRAFT_CREATE' ? 'Draft creation is running.' : 'Payment operation is running.');
 
   return {
     ok: row.ok !== false,
     operation_id: firstText(row.operation_id, row.id, progress.operation_id) || null,
     id: firstText(row.operation_id, row.id, progress.operation_id) || null,
-    operation_type: upperText(firstText(row.operation_type, row.operationType, progress.operation_type)) || null,
-    pay_batch_id: firstText(row.pay_batch_id, row.payBatchId, progress.pay_batch_id) || null,
-    workbench_session_id: firstText(row.workbench_session_id, row.workbenchSessionId, progress.workbench_session_id) || null,
-    root_operation_id: firstText(row.root_operation_id, row.rootOperationId, progress.root_operation_id) || null,
-    idempotency_key: firstText(row.idempotency_key, progress.idempotency_key) || null,
+    operation_type: operationType,
+    pay_batch_id: primaryPayBatchId,
+    payBatchId: primaryPayBatchId,
+    primary_pay_batch_id: primaryPayBatchId,
+    primaryPayBatchId: primaryPayBatchId,
+    pay_batch_ids: payBatchIds.slice(),
+    payBatchIds: payBatchIds.slice(),
+    created_pay_batch_ids: payBatchIds.slice(),
+    createdPayBatchIds: payBatchIds.slice(),
+    workbench_session_id: firstText(row.workbench_session_id, row.workbenchSessionId, progress.workbench_session_id, progress.workbenchSessionId, resultObject.workbench_session_id, resultObject.workbenchSessionId) || null,
+    workbenchSessionId: firstText(row.workbench_session_id, row.workbenchSessionId, progress.workbench_session_id, progress.workbenchSessionId, resultObject.workbench_session_id, resultObject.workbenchSessionId) || null,
+    root_operation_id: firstText(row.root_operation_id, row.rootOperationId, progress.root_operation_id, progress.rootOperationId) || null,
+    idempotency_key: firstText(row.idempotency_key, row.idempotencyKey, progress.idempotency_key, progress.idempotencyKey) || null,
+    backend_runner_owned: backendRunnerOwned,
+    backendRunnerOwned,
+    frontend_completion_required: frontendCompletionRequired,
+    frontendCompletionRequired,
+    result_summary: draftCreateResultSummary,
     status,
     phase,
     operation_status_label: operationStatusLabel,
@@ -139559,6 +140070,7 @@ function buildBankingPayOperationPublicPayload(operationRow, options = {}) {
     failed_at_utc: firstText(row.failed_at_utc, row.failedAtUtc) || null
   };
 }
+
 
 
 async function revolutPayment_create(env, token, { request_id, local_provider_request_id, source_account_id, counterparty_id, counterparty_account_id, amount, currency, reference, provider_timeout_ms } = {}) {
@@ -140685,6 +141197,7 @@ async function csvAdapter_confirmManual() {
 
 
 
+
 async function bankingCronTick(env, opts = {}) {
   const trimText = (value) => String(value == null ? '' : value).trim();
   const firstText = function () {
@@ -140713,10 +141226,17 @@ async function bankingCronTick(env, opts = {}) {
   if (!actorUserId) throw new Error('BANKING_CRON_ACTOR_USER_ID_MISSING');
   if (typeof advanceBankingPayRunnableOperations !== 'function') throw new Error('bankingCronTick: advanceBankingPayRunnableOperations is required');
 
+  const backendRunnerOperationTypes = Array.isArray(opts && opts.operationTypes)
+    ? opts.operationTypes.map((value) => firstText(value).toUpperCase()).filter(Boolean)
+    : (Array.isArray(opts && opts.operation_types) ? opts.operation_types.map((value) => firstText(value).toUpperCase()).filter(Boolean) : ['DRAFT_CREATE', 'PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS']);
+
   const summary = {
     ok: true,
     now_utc: nowUtc.toISOString(),
     browser_session_required: false,
+    backend_runner_owned_scope: true,
+    operation_scope: 'BANKING_PAY_BACKEND_RUNNER_OWNED',
+    operation_types: Array.from(new Set(backendRunnerOperationTypes.length ? backendRunnerOperationTypes : ['DRAFT_CREATE', 'PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS'])),
     operation_limit: clampInteger(opts && (opts.operationLimit != null ? opts.operationLimit : (opts.activeOperationLimit != null ? opts.activeOperationLimit : opts.claimLimit)), 10, 1, 25),
     advanced_count: 0,
     claimed_count: 0,
@@ -140737,6 +141257,10 @@ async function bankingCronTick(env, opts = {}) {
       maxAdvanceCallsPerTick: clampInteger(opts && (opts.maxAdvanceCallsPerTick != null ? opts.maxAdvanceCallsPerTick : opts.advanceLimit), summary.operation_limit, 1, 50),
       maxRuntimeMs: clampInteger(opts && (opts.maxRuntimeMs != null ? opts.maxRuntimeMs : opts.max_runtime_ms), 25000, 1000, 280000),
       lockSeconds: clampInteger(opts && (opts.lockSeconds != null ? opts.lockSeconds : opts.leaseSeconds), 60, 10, 300),
+      allowBackendRunnerOwned: true,
+      allow_backend_runner_owned: true,
+      operationTypes: summary.operation_types.slice(),
+      operation_types: summary.operation_types.slice(),
       req: opts.req || null,
       requestBudget: opts.requestBudget || opts.request_budget || null
     });
@@ -140763,6 +141287,9 @@ async function bankingCronTick(env, opts = {}) {
 
   return summary;
 }
+
+
+
 
 
 async function executeBankingPayWorkbenchJob(env, claimedJob, opts = {}) {
@@ -148124,6 +148651,13 @@ if (req.method === 'POST' && p === '/api/banking/pay/workbench/session/open') {
   const m = matchPath(p, '/api/banking/pay/workbench/session/:id/candidate/:candidateId');
   if (m && req.method === 'GET') {
     return handleBankingPayWorkbenchSessionGetCandidate(env, req, user, m.id, m.candidateId);
+  }
+}
+
+{
+  const m = matchPath(p, '/api/banking/pay/workbench/session/:id/draft-create-operation');
+  if (m && req.method === 'GET') {
+    return handleBankingPayDraftCreateOperationLookup(env, req, user, m.id);
   }
 }
 
