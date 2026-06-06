@@ -19583,19 +19583,6 @@ function escapeHtml(s) {
     .replace(/'/g, '&#39;');
 }
 
-/**
- * Minimal HTML escape for safe <pre> usage.
- * (mail_outbox ultimately renders HTML; keep it safe.)
- */
-function escapeHtml(s) {
-  return String(s || '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
-
 
 async function handleBankingPayTaxableManualDebtResolution(env, req, user, financeCaseId) {
   const financeCaseIdText = String(financeCaseId || '').trim();
