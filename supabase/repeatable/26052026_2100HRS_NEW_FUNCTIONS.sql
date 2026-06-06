@@ -24587,7 +24587,6 @@ END;
 $function$;
 
 
-
 CREATE OR REPLACE FUNCTION public.pay_preview_build_context(
   p_pay_date date,
   p_week_ending_cutoff date,
@@ -24635,6 +24634,9 @@ DECLARE
   v_linked_timesheet_ids jsonb := '[]'::jsonb;
   v_targeted_timesheet_ids_raw jsonb := '[]'::jsonb;
   v_linked_timesheet_ids_raw jsonb := '[]'::jsonb;
+  v_targeted_timesheet_ids_requested jsonb := '[]'::jsonb;
+  v_linked_timesheet_ids_requested jsonb := '[]'::jsonb;
+  v_timesheet_rotation_scope_json jsonb := '[]'::jsonb;
   v_targeted_timesheet_input_count integer := 0;
   v_linked_timesheet_input_count integer := 0;
   v_context_mode text := 'SUMMARY';
@@ -24828,6 +24830,98 @@ BEGIN
     FROM jsonb_array_elements_text(COALESCE(v_linked_timesheet_ids_raw, '[]'::jsonb)) AS linked_scope_array(value)
     WHERE NULLIF(BTRIM(linked_scope_array.value), '') IS NOT NULL
   ) AS linked_scope_ids;
+
+
+  v_targeted_timesheet_ids_requested := COALESCE(v_targeted_timesheet_ids, '[]'::jsonb);
+  v_linked_timesheet_ids_requested := COALESCE(v_linked_timesheet_ids, '[]'::jsonb);
+
+  WITH requested_scope_values AS (
+    SELECT
+      'TARGETED'::text AS scope_kind,
+      requested_targeted_values.timesheet_id_text AS timesheet_id_text
+    FROM jsonb_array_elements_text(COALESCE(v_targeted_timesheet_ids_requested, '[]'::jsonb)) AS requested_targeted_values(timesheet_id_text)
+
+    UNION ALL
+
+    SELECT
+      'LINKED'::text AS scope_kind,
+      requested_linked_values.timesheet_id_text AS timesheet_id_text
+    FROM jsonb_array_elements_text(COALESCE(v_linked_timesheet_ids_requested, '[]'::jsonb)) AS requested_linked_values(timesheet_id_text)
+  ),
+  requested_scope_ids AS (
+    SELECT DISTINCT
+      requested_scope_values.scope_kind,
+      NULLIF(BTRIM(COALESCE(requested_scope_values.timesheet_id_text, '')), '')::uuid AS requested_timesheet_id
+    FROM requested_scope_values
+    WHERE NULLIF(BTRIM(COALESCE(requested_scope_values.timesheet_id_text, '')), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+  ),
+  rotation_scope_rows AS (
+    SELECT
+      requested_scope_ids.scope_kind,
+      requested_scope_ids.requested_timesheet_id,
+      rotation_scope.requested_timesheet_id AS scope_requested_timesheet_id,
+      rotation_scope.booking_id,
+      rotation_scope.canonical_timesheet_id,
+      rotation_scope.family_timesheet_id,
+      rotation_scope.family_is_current,
+      rotation_scope.family_version,
+      rotation_scope.requested_is_canonical
+    FROM requested_scope_ids
+    JOIN public._pay_timesheet_rotation_scope(
+      (
+        SELECT COALESCE(
+          array_agg(DISTINCT requested_scope_ids_for_array.requested_timesheet_id ORDER BY requested_scope_ids_for_array.requested_timesheet_id),
+          ARRAY[]::uuid[]
+        )
+        FROM requested_scope_ids AS requested_scope_ids_for_array
+      )
+    ) AS rotation_scope
+      ON rotation_scope.requested_timesheet_id = requested_scope_ids.requested_timesheet_id
+  ),
+  resolved_requested_scope AS (
+    SELECT DISTINCT ON (rotation_scope_rows.scope_kind, rotation_scope_rows.requested_timesheet_id)
+      rotation_scope_rows.scope_kind,
+      rotation_scope_rows.requested_timesheet_id,
+      COALESCE(rotation_scope_rows.canonical_timesheet_id, rotation_scope_rows.requested_timesheet_id) AS canonical_timesheet_id,
+      rotation_scope_rows.booking_id,
+      COALESCE(rotation_scope_rows.requested_is_canonical, false) AS requested_is_canonical
+    FROM rotation_scope_rows
+    ORDER BY
+      rotation_scope_rows.scope_kind,
+      rotation_scope_rows.requested_timesheet_id,
+      rotation_scope_rows.family_is_current DESC NULLS LAST,
+      rotation_scope_rows.family_version DESC NULLS LAST,
+      rotation_scope_rows.family_timesheet_id
+  )
+  SELECT
+    COALESCE(
+      jsonb_agg(DISTINCT resolved_requested_scope.canonical_timesheet_id::text ORDER BY resolved_requested_scope.canonical_timesheet_id::text)
+        FILTER (WHERE resolved_requested_scope.scope_kind = 'TARGETED'),
+      '[]'::jsonb
+    ),
+    COALESCE(
+      jsonb_agg(DISTINCT resolved_requested_scope.canonical_timesheet_id::text ORDER BY resolved_requested_scope.canonical_timesheet_id::text)
+        FILTER (WHERE resolved_requested_scope.scope_kind = 'LINKED'),
+      '[]'::jsonb
+    ),
+    COALESCE(
+      jsonb_agg(
+        jsonb_build_object(
+          'scope_kind', resolved_requested_scope.scope_kind,
+          'requested_timesheet_id', resolved_requested_scope.requested_timesheet_id::text,
+          'canonical_timesheet_id', resolved_requested_scope.canonical_timesheet_id::text,
+          'booking_id', resolved_requested_scope.booking_id,
+          'requested_is_canonical', resolved_requested_scope.requested_is_canonical
+        )
+        ORDER BY resolved_requested_scope.scope_kind, resolved_requested_scope.requested_timesheet_id
+      ),
+      '[]'::jsonb
+    )
+  INTO
+    v_targeted_timesheet_ids,
+    v_linked_timesheet_ids,
+    v_timesheet_rotation_scope_json
+  FROM resolved_requested_scope;
 
   v_paye_guardrails := public.pay_paye_guardrails(
     p_pay_date => p_pay_date,
@@ -25087,9 +25181,15 @@ BEGIN
     'refresh_scope_kind', v_refresh_scope_kind,
     'targeted_timesheet_ids', COALESCE(v_targeted_timesheet_ids, '[]'::jsonb),
     'linked_timesheet_ids', COALESCE(v_linked_timesheet_ids, '[]'::jsonb)
+  )
+  || jsonb_build_object(
+    'targeted_timesheet_ids_requested', COALESCE(v_targeted_timesheet_ids_requested, '[]'::jsonb),
+    'linked_timesheet_ids_requested', COALESCE(v_linked_timesheet_ids_requested, '[]'::jsonb),
+    'timesheet_rotation_scope', COALESCE(v_timesheet_rotation_scope_json, '[]'::jsonb)
   );
 END;
 $function$;
+
 
 
 CREATE OR REPLACE FUNCTION public.pay_preview_build_candidate_rollup(
@@ -39381,6 +39481,8 @@ declare
   v_effective_refresh_scope_kind text := 'CANDIDATE_FULL_LIVE';
   v_targeted_timesheet_ids_json jsonb := '[]'::jsonb;
   v_linked_timesheet_ids_json jsonb := '[]'::jsonb;
+  v_targeted_timesheet_ids_requested_json jsonb := '[]'::jsonb;
+  v_linked_timesheet_ids_requested_json jsonb := '[]'::jsonb;
   v_pay_channel_scope text := 'ALL';
   v_candidate_pay_method text := NULL::text;
   v_target_pay_batch_id_raw text := NULL::text;
@@ -39523,6 +39625,19 @@ begin
     WHERE NULLIF(BTRIM(linked_scope_values.linked_timesheet_id_raw), '') IS NOT NULL
   ) AS linked_scope_ids;
 
+
+  v_targeted_timesheet_ids_requested_json := CASE
+    WHEN jsonb_typeof(v_context_json->'targeted_timesheet_ids_requested') = 'array' THEN v_context_json->'targeted_timesheet_ids_requested'
+    WHEN jsonb_typeof(v_context_json #> '{preview_decisions_json,targeted_timesheet_ids_requested}') = 'array' THEN v_context_json #> '{preview_decisions_json,targeted_timesheet_ids_requested}'
+    ELSE COALESCE(v_targeted_timesheet_ids_json, '[]'::jsonb)
+  END;
+
+  v_linked_timesheet_ids_requested_json := CASE
+    WHEN jsonb_typeof(v_context_json->'linked_timesheet_ids_requested') = 'array' THEN v_context_json->'linked_timesheet_ids_requested'
+    WHEN jsonb_typeof(v_context_json #> '{preview_decisions_json,linked_timesheet_ids_requested}') = 'array' THEN v_context_json #> '{preview_decisions_json,linked_timesheet_ids_requested}'
+    ELSE COALESCE(v_linked_timesheet_ids_json, '[]'::jsonb)
+  END;
+
   IF v_refresh_scope_kind = 'TARGETED_TIMESHEETS'
      AND jsonb_array_length(v_targeted_timesheet_ids_json) = 0
      AND jsonb_array_length(v_linked_timesheet_ids_json) = 0 THEN
@@ -39551,7 +39666,7 @@ begin
     raise exception 'rail defaults missing from p_context_json';
   end if;
 
-  drop table if exists pg_temp.pay_preview_candidate_context, pg_temp.targeted_refresh_timesheet_ids, pg_temp.linked_refresh_timesheet_ids, pg_temp.targeted_refresh_all_timesheet_ids, pg_temp.active_snoozes, pg_temp.active_timesheet_payment_snoozes, pg_temp.active_segment_snoozes, pg_temp.active_timesheet_payment_overrides, pg_temp.force_include, pg_temp.reserved_batch_items, pg_temp.reserved_by_source_ref, pg_temp.reserved_total_by_timesheet, pg_temp.reserved_segment_key_map, pg_temp.reserved_segment_sums, pg_temp.reserved_preview_segment_ords, pg_temp.reserved_additional_by_code, pg_temp.eligible_tsfin, pg_temp.debted_overpayment_cases, pg_temp.umb_map, pg_temp.adj, pg_temp.ts_current, pg_temp.targeted_baseline_only_ts_current, pg_temp.active_settled_artifact_components, pg_temp.active_settled_artifact_baseline_by_timesheet, pg_temp.ts_baseline, pg_temp.finance_case_baseline_scope, pg_temp.manual_adjustment_carry_forward_scope, pg_temp.segment_status, pg_temp.blocked_items_all, pg_temp.blocked_items, pg_temp.blocked_items_snoozed, pg_temp.do_not_pay_all, pg_temp.do_not_pay_items, pg_temp.do_not_pay_items_snoozed, pg_temp.ts_deltas, pg_temp.ts_itemised, pg_temp.worked_time_current_segment_rows, pg_temp.worked_time_baseline_segment_rows, pg_temp.worked_time_current_ranked, pg_temp.worked_time_baseline_ranked, pg_temp.worked_time_bucket_ids, pg_temp.worked_time_bucket_agg, pg_temp.worked_time_bucket_calc, pg_temp.worked_time_bucket_alloc, pg_temp.worked_time_bucket_effective, pg_temp.worked_time_bucket_component_rows, pg_temp.worked_time_key_totals, pg_temp.worked_time_bucket_component_sums, pg_temp.worked_time_amount_fallback_rows, pg_temp.timesheet_component_rows, pg_temp.timesheet_component_match_rows, pg_temp.transient_timesheet_component_rows, pg_temp.transient_timesheet_component_review_rows, pg_temp.timesheet_case_actionable_basis, pg_temp.timesheet_live_scope, pg_temp.timesheet_linked_scope_counts, pg_temp.transient_timesheet_component_review_rows_effective, pg_temp.timesheet_case_rollup, pg_temp.finance_candidate_seed, pg_temp.candidate_base, pg_temp.timesheet_candidate_rollup, pg_temp.candidate_rollup, pg_temp.blocked_counts, pg_temp.do_not_pay_counts, pg_temp.loan_due, pg_temp.overpayment_balances, pg_temp.loan_due_this_week, pg_temp.loan_repaid_wtd, pg_temp.paid_wtd_before, pg_temp.cand_enriched, pg_temp.payee_baseline_rows, pg_temp.payees_src, pg_temp.payees, pg_temp.payees_enriched, pg_temp.payees_json, pg_temp.cand_payee0, pg_temp.cand_payee, pg_temp.timesheet_case_rollup_effective, pg_temp.finance_case_repaid_wtd, pg_temp.finance_case_recovery_rows_base, pg_temp.manual_debt_recovery_rows, pg_temp.manual_debt_recovery_allocations, pg_temp.manual_debt_recovery_totals, pg_temp.overpayment_recovery_rows, pg_temp.overpayment_recovery_allocations, pg_temp.overpayment_recovery_totals, pg_temp.payment_advance_recovery_rows, pg_temp.payment_advance_recovery_allocations, pg_temp.finance_case_protected_allocations, pg_temp.finance_case_payee_readiness, pg_temp.finance_case_component_rows, pg_temp.finance_case_component_review_rows, pg_temp.finance_case_component_review_rows_effective, pg_temp.finance_case_due_source_amounts, pg_temp.finance_case_component_due_source_base, pg_temp.finance_case_component_due_source_shares, pg_temp.finance_case_component_due_source_allocations, pg_temp.finance_case_component_due_preview_base, pg_temp.finance_case_component_due_preview_allocations, pg_temp.finance_case_taxable_manual_debt_resolution, pg_temp.finance_case_resolution_rollup, pg_temp.canonical_timesheet_lines, pg_temp.timesheet_active_segment_snooze_meta, pg_temp.canonical_timesheet_segment_rows, pg_temp.canonical_timesheet_segment_rollup, pg_temp.canonical_timesheet_presentation_seed, pg_temp.canonical_timesheet_presentation_state, pg_temp.canonical_timesheet_presentation_rows, pg_temp.finance_case_lines, pg_temp.timesheet_canonical_preview_lines, pg_temp.canonical_preview_lines, pg_temp.candidate_preview_line_rollup, pg_temp.candidate_preview_timesheet_rollup, pg_temp.summary_json, pg_temp.timesheet_case_states_flat, pg_temp.finance_case_states_flat, pg_temp.candidate_case_states_flat, pg_temp.candidate_case_states, pg_temp.case_resolution_states_json, pg_temp.finance_candidate_totals, pg_temp.candidate_finance_itemisation, pg_temp.paye_summary_breakdown_json, pg_temp.timesheet_baseline_component_rows, pg_temp.finance_baseline_component_rows, pg_temp.baseline_component_rows_json;
+  drop table if exists pg_temp.pay_preview_candidate_context, pg_temp.targeted_refresh_requested_timesheet_ids, pg_temp.linked_refresh_requested_timesheet_ids, pg_temp.targeted_refresh_rotation_scope, pg_temp.targeted_refresh_scope_projection, pg_temp.targeted_refresh_timesheet_ids, pg_temp.linked_refresh_timesheet_ids, pg_temp.targeted_refresh_family_timesheet_ids, pg_temp.linked_refresh_family_timesheet_ids, pg_temp.targeted_refresh_all_family_timesheet_ids, pg_temp.targeted_refresh_all_family_projection, pg_temp.targeted_refresh_all_baseline_projection, pg_temp.targeted_refresh_all_timesheet_ids, pg_temp.active_snoozes, pg_temp.active_timesheet_payment_snoozes, pg_temp.active_segment_snoozes, pg_temp.active_timesheet_payment_overrides, pg_temp.force_include, pg_temp.reserved_batch_items, pg_temp.reserved_by_source_ref, pg_temp.reserved_total_by_timesheet, pg_temp.reserved_segment_key_map, pg_temp.reserved_segment_sums, pg_temp.reserved_preview_segment_ords, pg_temp.reserved_additional_by_code, pg_temp.eligible_tsfin, pg_temp.debted_overpayment_cases, pg_temp.umb_map, pg_temp.adj, pg_temp.ts_current, pg_temp.targeted_baseline_only_ts_current, pg_temp.active_settled_artifact_components, pg_temp.active_settled_artifact_baseline_by_timesheet, pg_temp.ts_baseline, pg_temp.finance_case_baseline_scope, pg_temp.manual_adjustment_carry_forward_scope, pg_temp.segment_status, pg_temp.blocked_items_all, pg_temp.blocked_items, pg_temp.blocked_items_snoozed, pg_temp.do_not_pay_all, pg_temp.do_not_pay_items, pg_temp.do_not_pay_items_snoozed, pg_temp.ts_deltas, pg_temp.ts_itemised, pg_temp.worked_time_current_segment_rows, pg_temp.worked_time_baseline_segment_rows, pg_temp.worked_time_current_ranked, pg_temp.worked_time_baseline_ranked, pg_temp.worked_time_bucket_ids, pg_temp.worked_time_bucket_agg, pg_temp.worked_time_bucket_calc, pg_temp.worked_time_bucket_alloc, pg_temp.worked_time_bucket_effective, pg_temp.worked_time_bucket_component_rows, pg_temp.worked_time_key_totals, pg_temp.worked_time_bucket_component_sums, pg_temp.worked_time_amount_fallback_rows, pg_temp.timesheet_component_rows, pg_temp.timesheet_component_match_rows, pg_temp.transient_timesheet_component_rows, pg_temp.transient_timesheet_component_review_rows, pg_temp.timesheet_case_actionable_basis, pg_temp.timesheet_live_scope, pg_temp.timesheet_linked_scope_counts, pg_temp.transient_timesheet_component_review_rows_effective, pg_temp.timesheet_case_rollup, pg_temp.finance_candidate_seed, pg_temp.candidate_base, pg_temp.timesheet_candidate_rollup, pg_temp.candidate_rollup, pg_temp.blocked_counts, pg_temp.do_not_pay_counts, pg_temp.loan_due, pg_temp.overpayment_balances, pg_temp.loan_due_this_week, pg_temp.loan_repaid_wtd, pg_temp.paid_wtd_before, pg_temp.cand_enriched, pg_temp.payee_baseline_rows, pg_temp.payees_src, pg_temp.payees, pg_temp.payees_enriched, pg_temp.payees_json, pg_temp.cand_payee0, pg_temp.cand_payee, pg_temp.timesheet_case_rollup_effective, pg_temp.finance_case_repaid_wtd, pg_temp.finance_case_recovery_rows_base, pg_temp.manual_debt_recovery_rows, pg_temp.manual_debt_recovery_allocations, pg_temp.manual_debt_recovery_totals, pg_temp.overpayment_recovery_rows, pg_temp.overpayment_recovery_allocations, pg_temp.overpayment_recovery_totals, pg_temp.payment_advance_recovery_rows, pg_temp.payment_advance_recovery_allocations, pg_temp.finance_case_protected_allocations, pg_temp.finance_case_payee_readiness, pg_temp.finance_case_component_rows, pg_temp.finance_case_component_review_rows, pg_temp.finance_case_component_review_rows_effective, pg_temp.finance_case_due_source_amounts, pg_temp.finance_case_component_due_source_base, pg_temp.finance_case_component_due_source_shares, pg_temp.finance_case_component_due_source_allocations, pg_temp.finance_case_component_due_preview_base, pg_temp.finance_case_component_due_preview_allocations, pg_temp.finance_case_taxable_manual_debt_resolution, pg_temp.finance_case_resolution_rollup, pg_temp.canonical_timesheet_lines, pg_temp.timesheet_active_segment_snooze_meta, pg_temp.canonical_timesheet_segment_rows, pg_temp.canonical_timesheet_segment_rollup, pg_temp.canonical_timesheet_presentation_seed, pg_temp.canonical_timesheet_presentation_state, pg_temp.canonical_timesheet_presentation_rows, pg_temp.finance_case_lines, pg_temp.timesheet_canonical_preview_lines, pg_temp.canonical_preview_lines, pg_temp.candidate_preview_line_rollup, pg_temp.candidate_preview_timesheet_rollup, pg_temp.summary_json, pg_temp.timesheet_case_states_flat, pg_temp.finance_case_states_flat, pg_temp.candidate_case_states_flat, pg_temp.candidate_case_states, pg_temp.case_resolution_states_json, pg_temp.finance_candidate_totals, pg_temp.candidate_finance_itemisation, pg_temp.paye_summary_breakdown_json, pg_temp.timesheet_baseline_component_rows, pg_temp.finance_baseline_component_rows, pg_temp.baseline_component_rows_json;
 
   create temporary table pay_preview_candidate_context on commit drop as
     select
@@ -39585,18 +39700,156 @@ begin
       v_linked_timesheet_ids_json as linked_timesheet_ids_json
   ;
 
-  create temporary table targeted_refresh_timesheet_ids on commit drop as
+  create temporary table targeted_refresh_requested_timesheet_ids on commit drop as
     select distinct
       nullif(btrim(targeted_scope_array.value), '')::uuid as timesheet_id
-    from jsonb_array_elements_text(v_targeted_timesheet_ids_json) as targeted_scope_array(value)
-    where nullif(btrim(targeted_scope_array.value), '') is not null
+    from jsonb_array_elements_text(coalesce(v_targeted_timesheet_ids_requested_json, '[]'::jsonb)) as targeted_scope_array(value)
+    where nullif(btrim(targeted_scope_array.value), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+  ;
+
+  create temporary table linked_refresh_requested_timesheet_ids on commit drop as
+    select distinct
+      nullif(btrim(linked_scope_array.value), '')::uuid as timesheet_id
+    from jsonb_array_elements_text(coalesce(v_linked_timesheet_ids_requested_json, '[]'::jsonb)) as linked_scope_array(value)
+    where nullif(btrim(linked_scope_array.value), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+  ;
+
+  create temporary table targeted_refresh_rotation_scope on commit drop as
+    select
+      requested_scope.source_scope_kind,
+      requested_scope.requested_timesheet_id as source_requested_timesheet_id,
+      rotation_scope_rows.requested_timesheet_id,
+      rotation_scope_rows.booking_id,
+      rotation_scope_rows.canonical_timesheet_id,
+      rotation_scope_rows.family_timesheet_id,
+      rotation_scope_rows.family_is_current,
+      rotation_scope_rows.family_version,
+      rotation_scope_rows.requested_is_canonical
+    from (
+      select 'TARGETED'::text as source_scope_kind, targeted_requested.timesheet_id as requested_timesheet_id
+      from targeted_refresh_requested_timesheet_ids as targeted_requested
+      union
+      select 'LINKED'::text as source_scope_kind, linked_requested.timesheet_id as requested_timesheet_id
+      from linked_refresh_requested_timesheet_ids as linked_requested
+      union
+      select 'TARGETED'::text as source_scope_kind, nullif(btrim(targeted_context_values.value), '')::uuid as requested_timesheet_id
+      from jsonb_array_elements_text(coalesce(v_targeted_timesheet_ids_json, '[]'::jsonb)) as targeted_context_values(value)
+      where nullif(btrim(targeted_context_values.value), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+      union
+      select 'LINKED'::text as source_scope_kind, nullif(btrim(linked_context_values.value), '')::uuid as requested_timesheet_id
+      from jsonb_array_elements_text(coalesce(v_linked_timesheet_ids_json, '[]'::jsonb)) as linked_context_values(value)
+      where nullif(btrim(linked_context_values.value), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+    ) as requested_scope
+    join public._pay_timesheet_rotation_scope(
+      (
+        select coalesce(
+          array_agg(distinct all_requested_scope.requested_timesheet_id order by all_requested_scope.requested_timesheet_id),
+          array[]::uuid[]
+        )
+        from (
+          select targeted_requested.timesheet_id as requested_timesheet_id
+          from targeted_refresh_requested_timesheet_ids as targeted_requested
+          union
+          select linked_requested.timesheet_id as requested_timesheet_id
+          from linked_refresh_requested_timesheet_ids as linked_requested
+          union
+          select nullif(btrim(targeted_context_values.value), '')::uuid as requested_timesheet_id
+          from jsonb_array_elements_text(coalesce(v_targeted_timesheet_ids_json, '[]'::jsonb)) as targeted_context_values(value)
+          where nullif(btrim(targeted_context_values.value), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          union
+          select nullif(btrim(linked_context_values.value), '')::uuid as requested_timesheet_id
+          from jsonb_array_elements_text(coalesce(v_linked_timesheet_ids_json, '[]'::jsonb)) as linked_context_values(value)
+          where nullif(btrim(linked_context_values.value), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+        ) as all_requested_scope
+        where all_requested_scope.requested_timesheet_id is not null
+      )
+    ) as rotation_scope_rows
+      on rotation_scope_rows.requested_timesheet_id = requested_scope.requested_timesheet_id
+  ;
+
+  create temporary table targeted_refresh_scope_projection on commit drop as
+    select distinct
+      targeted_refresh_rotation_scope.source_scope_kind,
+      targeted_refresh_rotation_scope.source_requested_timesheet_id,
+      coalesce(targeted_refresh_rotation_scope.canonical_timesheet_id, targeted_refresh_rotation_scope.source_requested_timesheet_id) as canonical_timesheet_id,
+      targeted_refresh_rotation_scope.family_timesheet_id,
+      targeted_refresh_rotation_scope.family_is_current,
+      targeted_refresh_rotation_scope.family_version,
+      targeted_refresh_rotation_scope.booking_id,
+      coalesce(targeted_refresh_rotation_scope.requested_is_canonical, false) as requested_is_canonical
+    from targeted_refresh_rotation_scope
+    where targeted_refresh_rotation_scope.source_requested_timesheet_id is not null
+      and targeted_refresh_rotation_scope.family_timesheet_id is not null
+  ;
+
+  create temporary table targeted_refresh_timesheet_ids on commit drop as
+    select distinct
+      targeted_refresh_scope_projection.canonical_timesheet_id as timesheet_id
+    from targeted_refresh_scope_projection
+    where targeted_refresh_scope_projection.source_scope_kind = 'TARGETED'
+      and targeted_refresh_scope_projection.canonical_timesheet_id is not null
   ;
 
   create temporary table linked_refresh_timesheet_ids on commit drop as
     select distinct
-      nullif(btrim(linked_scope_array.value), '')::uuid as timesheet_id
-    from jsonb_array_elements_text(v_linked_timesheet_ids_json) as linked_scope_array(value)
-    where nullif(btrim(linked_scope_array.value), '') is not null
+      targeted_refresh_scope_projection.canonical_timesheet_id as timesheet_id
+    from targeted_refresh_scope_projection
+    where targeted_refresh_scope_projection.source_scope_kind = 'LINKED'
+      and targeted_refresh_scope_projection.canonical_timesheet_id is not null
+  ;
+
+  create temporary table targeted_refresh_family_timesheet_ids on commit drop as
+    select distinct
+      targeted_refresh_scope_projection.family_timesheet_id
+    from targeted_refresh_scope_projection
+    where targeted_refresh_scope_projection.source_scope_kind = 'TARGETED'
+      and targeted_refresh_scope_projection.family_timesheet_id is not null
+  ;
+
+  create temporary table linked_refresh_family_timesheet_ids on commit drop as
+    select distinct
+      targeted_refresh_scope_projection.family_timesheet_id
+    from targeted_refresh_scope_projection
+    where targeted_refresh_scope_projection.source_scope_kind = 'LINKED'
+      and targeted_refresh_scope_projection.family_timesheet_id is not null
+  ;
+
+  create temporary table targeted_refresh_all_family_timesheet_ids on commit drop as
+    select distinct targeted_refresh_family_timesheet_ids.family_timesheet_id
+    from targeted_refresh_family_timesheet_ids
+    union
+    select distinct linked_refresh_family_timesheet_ids.family_timesheet_id
+    from linked_refresh_family_timesheet_ids
+  ;
+
+  create temporary table targeted_refresh_all_family_projection on commit drop as
+    select distinct
+      targeted_refresh_scope_projection.canonical_timesheet_id,
+      targeted_refresh_scope_projection.family_timesheet_id,
+      targeted_refresh_scope_projection.family_is_current,
+      targeted_refresh_scope_projection.family_version,
+      targeted_refresh_scope_projection.booking_id
+    from targeted_refresh_scope_projection
+    where targeted_refresh_scope_projection.canonical_timesheet_id is not null
+      and targeted_refresh_scope_projection.family_timesheet_id is not null
+  ;
+
+  create temporary table targeted_refresh_all_baseline_projection on commit drop as
+    select distinct on (targeted_refresh_all_family_projection.canonical_timesheet_id)
+      targeted_refresh_all_family_projection.canonical_timesheet_id,
+      targeted_refresh_all_family_projection.family_timesheet_id,
+      targeted_refresh_all_family_projection.family_is_current,
+      targeted_refresh_all_family_projection.family_version,
+      targeted_refresh_all_family_projection.booking_id
+    from targeted_refresh_all_family_projection
+    join public.timesheet_pay_state as baseline_projection_state
+      on baseline_projection_state.timesheet_id = targeted_refresh_all_family_projection.family_timesheet_id
+    order by
+      targeted_refresh_all_family_projection.canonical_timesheet_id,
+      (targeted_refresh_all_family_projection.family_timesheet_id = targeted_refresh_all_family_projection.canonical_timesheet_id) desc,
+      targeted_refresh_all_family_projection.family_is_current desc nulls last,
+      targeted_refresh_all_family_projection.family_version desc nulls last,
+      targeted_refresh_all_family_projection.family_timesheet_id
   ;
 
   create temporary table targeted_refresh_all_timesheet_ids on commit drop as
@@ -39633,6 +39886,7 @@ begin
             v_effective_refresh_scope_kind <> 'TARGETED_TIMESHEETS'
             or s.timesheet_id in (select trti.timesheet_id from targeted_refresh_timesheet_ids trti)
             or s.timesheet_id in (select lrti.timesheet_id from linked_refresh_timesheet_ids lrti)
+            or s.timesheet_id in (select trf.family_timesheet_id from targeted_refresh_all_family_timesheet_ids trf)
             or (
               s.booking_id is not null
               and exists (
@@ -39686,12 +39940,14 @@ begin
 
   create temporary table active_timesheet_payment_overrides on commit drop as
         select
-          tpo.timesheet_id,
+          coalesce(tpo_family_projection.canonical_timesheet_id, tpo.timesheet_id) as timesheet_id,
           tpo.candidate_id,
           tpo.id as override_id,
           tpo.reason as override_reason,
           tpo.created_at_utc
         from public.timesheet_payment_overrides tpo
+        left join targeted_refresh_all_family_projection as tpo_family_projection
+          on tpo_family_projection.family_timesheet_id = tpo.timesheet_id
         where tpo.cleared_at_utc is null
           and tpo.consumed_at_utc is null
           and tpo.consumed_by_pay_batch_id is null
@@ -39701,14 +39957,17 @@ begin
             v_effective_refresh_scope_kind <> 'TARGETED_TIMESHEETS'
             or tpo.timesheet_id in (select trti.timesheet_id from targeted_refresh_timesheet_ids trti)
             or tpo.timesheet_id in (select lrti.timesheet_id from linked_refresh_timesheet_ids lrti)
+            or tpo.timesheet_id in (select trf.family_timesheet_id from targeted_refresh_all_family_timesheet_ids trf)
           )
   
   ;
 
   create temporary table force_include on commit drop as
         select distinct
-          tpo.timesheet_id
+          coalesce(tpo_family_projection.canonical_timesheet_id, tpo.timesheet_id) as timesheet_id
         from public.timesheet_payment_overrides tpo
+        left join targeted_refresh_all_family_projection as tpo_family_projection
+          on tpo_family_projection.family_timesheet_id = tpo.timesheet_id
         where tpo.cleared_at_utc is null
           and tpo.consumed_at_utc is null
           and tpo.consumed_by_pay_batch_id is null
@@ -39719,6 +39978,7 @@ begin
             v_effective_refresh_scope_kind <> 'TARGETED_TIMESHEETS'
             or tpo.timesheet_id in (select trti.timesheet_id from targeted_refresh_timesheet_ids trti)
             or tpo.timesheet_id in (select lrti.timesheet_id from linked_refresh_timesheet_ids lrti)
+            or tpo.timesheet_id in (select trf.family_timesheet_id from targeted_refresh_all_family_timesheet_ids trf)
           )
   
   ;
@@ -39727,116 +39987,203 @@ begin
         -- Items are considered "reserved" if they belong to an ACTIVE (non-cancelled, non-settled) batch.
         -- Policy X/source-target rule: entitlement reservations must subtract the positive ORIGINAL SOURCE
         -- entitlement amount, not the resolved target payout amount. Finance bookkeeping item types are excluded.
+        -- Rotation rule: discover candidate/scoped reservation items by family id, project them to the canonical
+        -- current timesheet id for pre-draft preview, and resolve artifact keys in one set-based helper call.
+        with reserved_batch_item_candidates as (
+          select distinct
+            reserved_pay_batch_item.id as pay_batch_item_id,
+            reserved_pay_batch_candidate.pay_batch_id as pay_batch_id,
+            reserved_pay_batch_item.timesheet_id as source_timesheet_id,
+            reserved_pay_batch_item.segment_key as segment_key,
+            reserved_pay_batch_item.source_ref as source_ref,
+            reserved_pay_batch_item.item_type as item_type,
+            round(public._pay_batch_item_source_reservation_amount_ex_vat(reserved_pay_batch_item.id), 2) as amount_ex_vat
+          from public.pay_batch_items as reserved_pay_batch_item
+          join public.pay_batch_candidates as reserved_pay_batch_candidate
+            on reserved_pay_batch_candidate.id = reserved_pay_batch_item.pay_batch_candidate_id
+          join public.pay_batches as reserved_pay_batch
+            on reserved_pay_batch.id = reserved_pay_batch_candidate.pay_batch_id
+          left join public.pay_bank_transfers as reserved_pay_bank_transfer
+            on reserved_pay_bank_transfer.id = reserved_pay_batch_item.pay_bank_transfer_id
+          where reserved_pay_batch_item.timesheet_id is not null
+            and reserved_pay_batch_candidate.candidate_id = v_candidate_id
+            and (
+              v_effective_refresh_scope_kind <> 'TARGETED_TIMESHEETS'
+              or reserved_pay_batch_item.timesheet_id in (
+                select targeted_family_scope.family_timesheet_id
+                from targeted_refresh_all_family_timesheet_ids as targeted_family_scope
+              )
+            )
+            and upper(coalesce(reserved_pay_batch_item.pay_channel,'')) in ('PAYE','UMBRELLA')
+            and reserved_pay_batch_item.item_type in ('SEGMENT_DELTA','EXPENSE_DELTA','ADJUSTMENT_DELTA','MILEAGE_DELTA')
+            and public._pay_batch_item_source_reservation_amount_ex_vat(reserved_pay_batch_item.id) is not null
+            and coalesce(reserved_pay_batch_item.is_voided, false) = false
+            and not exists (
+              select 1
+              from public.pay_payment_correction_items as applied_corrections
+              where applied_corrections.pay_batch_item_id = reserved_pay_batch_item.id
+                and applied_corrections.status = 'APPLIED'
+                and applied_corrections.correction_item_kind in ('PRE_BANK_CANCEL','NO_MONEY_UNWIND','SETTLED_REVERSAL')
+            )
+            and not (
+              upper(btrim(coalesce(reserved_pay_batch_candidate.settlement_status, ''))) = 'SETTLED'
+              or reserved_pay_batch_candidate.settled_at_utc is not null
+              or upper(btrim(coalesce(reserved_pay_bank_transfer.status, ''))) = 'COMPLETED'
+              or reserved_pay_bank_transfer.completed_at_utc is not null
+            )
+            and (
+              public._pay_batch_status_is_active_reservation(reserved_pay_batch.status)
+              or exists (
+                select 1
+                from public.pay_payment_correction_requests as open_correction_requests
+                join lateral public._pay_payment_correction_selected_items(
+                  open_correction_requests.pay_batch_id,
+                  case
+                    when jsonb_typeof(open_correction_requests.plan_json->'selected_pay_batch_item_ids') = 'array' then
+                      coalesce(open_correction_requests.selection_json, '{}'::jsonb)
+                      || jsonb_build_object(
+                        'pay_batch_item_ids', open_correction_requests.plan_json->'selected_pay_batch_item_ids',
+                        'expected_pay_batch_item_ids', open_correction_requests.plan_json->'selected_pay_batch_item_ids'
+                      )
+                    when jsonb_typeof(open_correction_requests.plan_json#>'{selection,selected_pay_batch_item_ids}') = 'array' then
+                      coalesce(open_correction_requests.selection_json, '{}'::jsonb)
+                      || jsonb_build_object(
+                        'pay_batch_item_ids', open_correction_requests.plan_json#>'{selection,selected_pay_batch_item_ids}',
+                        'expected_pay_batch_item_ids', open_correction_requests.plan_json#>'{selection,selected_pay_batch_item_ids}'
+                      )
+                    when jsonb_typeof(open_correction_requests.plan_json#>'{selection,pay_batch_item_ids}') = 'array' then
+                      coalesce(open_correction_requests.selection_json, '{}'::jsonb)
+                      || jsonb_build_object(
+                        'pay_batch_item_ids', open_correction_requests.plan_json#>'{selection,pay_batch_item_ids}',
+                        'expected_pay_batch_item_ids', open_correction_requests.plan_json#>'{selection,pay_batch_item_ids}'
+                      )
+                    else
+                      coalesce(open_correction_requests.selection_json, '{}'::jsonb)
+                  end,
+                  false
+                ) as open_correction_selected_items
+                  on open_correction_selected_items.pay_batch_id = open_correction_requests.pay_batch_id
+                where open_correction_requests.pay_batch_id = reserved_pay_batch_candidate.pay_batch_id
+                  and open_correction_requests.status in ('REQUESTED','AWAITING_AUTHORISATION','AUTHORISED','EXPANDED','PROCESSING','BLOCKED')
+                  and open_correction_requests.correction_kind in ('PRE_BANK_CANCEL','NO_MONEY_UNWIND','MANUAL_EVIDENCE_NO_MONEY')
+                  and open_correction_selected_items.pay_batch_item_id = reserved_pay_batch_item.id
+              )
+              or exists (
+                select 1
+                from public.pay_bank_transfer_events as unresolved_terminal_failure_events
+                where unresolved_terminal_failure_events.pay_batch_id = reserved_pay_batch_candidate.pay_batch_id
+                  and unresolved_terminal_failure_events.pay_bank_transfer_id = reserved_pay_batch_item.pay_bank_transfer_id
+                  and unresolved_terminal_failure_events.mapping_status = 'MATCHED'
+                  and unresolved_terminal_failure_events.normalised_state in ('FAILED','DECLINED','REJECTED','CANCELLED')
+                  and not exists (
+                    select 1
+                    from public.pay_payment_correction_items as applied_failure_corrections
+                    where applied_failure_corrections.pay_batch_item_id = reserved_pay_batch_item.id
+                      and applied_failure_corrections.status = 'APPLIED'
+                      and applied_failure_corrections.correction_item_kind in ('NO_MONEY_UNWIND','PRE_BANK_CANCEL','SETTLED_REVERSAL')
+                  )
+              )
+            )
+        ),
+        reserved_batch_item_rotation_scope as (
+          select
+            rotation_scope_rows.requested_timesheet_id,
+            rotation_scope_rows.canonical_timesheet_id,
+            rotation_scope_rows.family_timesheet_id,
+            rotation_scope_rows.family_is_current,
+            rotation_scope_rows.family_version
+          from public._pay_timesheet_rotation_scope(
+            (
+              select coalesce(
+                array_agg(distinct reserved_batch_item_candidates.source_timesheet_id order by reserved_batch_item_candidates.source_timesheet_id),
+                array[]::uuid[]
+              )
+              from reserved_batch_item_candidates
+              where reserved_batch_item_candidates.source_timesheet_id is not null
+            )
+          ) as rotation_scope_rows
+        ),
+        reserved_batch_item_projection as (
+          select distinct on (reserved_batch_item_rotation_scope.requested_timesheet_id)
+            reserved_batch_item_rotation_scope.requested_timesheet_id as requested_timesheet_id,
+            coalesce(
+              reserved_batch_item_rotation_scope.canonical_timesheet_id,
+              reserved_batch_item_rotation_scope.requested_timesheet_id
+            ) as projected_timesheet_id
+          from reserved_batch_item_rotation_scope
+          where reserved_batch_item_rotation_scope.requested_timesheet_id is not null
+          order by
+            reserved_batch_item_rotation_scope.requested_timesheet_id,
+            reserved_batch_item_rotation_scope.family_is_current desc nulls last,
+            reserved_batch_item_rotation_scope.family_version desc nulls last,
+            reserved_batch_item_rotation_scope.family_timesheet_id
+        ),
+        reserved_batch_item_projected as (
+          select
+            reserved_batch_item_candidates.pay_batch_item_id,
+            reserved_batch_item_candidates.pay_batch_id,
+            coalesce(
+              reserved_batch_item_projection.projected_timesheet_id,
+              reserved_batch_item_candidates.source_timesheet_id
+            ) as projected_timesheet_id,
+            reserved_batch_item_candidates.segment_key,
+            reserved_batch_item_candidates.source_ref,
+            reserved_batch_item_candidates.item_type,
+            reserved_batch_item_candidates.amount_ex_vat
+          from reserved_batch_item_candidates
+          left join reserved_batch_item_projection
+            on reserved_batch_item_projection.requested_timesheet_id = reserved_batch_item_candidates.source_timesheet_id
+        ),
+        reserved_batch_item_id_array as (
+          select
+            case
+              when count(*) = 0 then array['00000000-0000-0000-0000-000000000000'::uuid]
+              else array_agg(reserved_batch_item_projected.pay_batch_item_id order by reserved_batch_item_projected.pay_batch_item_id)
+            end as pay_batch_item_ids
+          from reserved_batch_item_projected
+        ),
+        reserved_batch_item_components as (
+          select distinct
+            economic_component_rows.pay_batch_item_id,
+            economic_component_rows.key_type,
+            economic_component_rows.key_value,
+            economic_component_rows.key_resolution_source,
+            economic_component_rows.key_resolution_failure_reason
+          from reserved_batch_item_id_array
+          join lateral public._pay_batch_item_economic_components(
+            p_pay_batch_id => null::uuid,
+            p_pay_batch_item_ids => reserved_batch_item_id_array.pay_batch_item_ids
+          ) as economic_component_rows
+            on true
+        )
         select
-          pbi.id as pay_batch_item_id,
-          pbc_r.pay_batch_id as pay_batch_id,
-          pbi.timesheet_id as timesheet_id,
-          pbi.segment_key as segment_key,
+          reserved_batch_item_projected.pay_batch_item_id as pay_batch_item_id,
+          reserved_batch_item_projected.pay_batch_id as pay_batch_id,
+          reserved_batch_item_projected.projected_timesheet_id as timesheet_id,
+          reserved_batch_item_projected.segment_key as segment_key,
           -- Normalise segment_id (some legacy items store it in source_ref 'seg:<id>')
           nullif(
             btrim(coalesce(
               case
-                when nullif(btrim(coalesce(pbi.segment_key,'')), '') is not null then pbi.segment_key
-                when nullif(btrim(coalesce(pbi.source_ref,'')), '') like 'seg:%' then split_part(pbi.source_ref, ':', 2)
+                when nullif(btrim(coalesce(reserved_batch_item_projected.segment_key,'')), '') is not null then reserved_batch_item_projected.segment_key
+                when nullif(btrim(coalesce(reserved_batch_item_projected.source_ref,'')), '') like 'seg:%' then split_part(reserved_batch_item_projected.source_ref, ':', 2)
                 else null
               end,
               ''
             )),
             ''
           ) as segment_id_norm,
-          pbi.source_ref as source_ref,
-          pbi.item_type as item_type,
-          ecomp.key_type as component_key_type,
-          ecomp.key_value as component_key_value,
-          ecomp.key_resolution_source as key_resolution_source,
-          ecomp.key_resolution_failure_reason as key_resolution_failure_reason,
-          round(public._pay_batch_item_source_reservation_amount_ex_vat(pbi.id), 2) as amount_ex_vat
-        from public.pay_batch_items pbi
-        join public.pay_batch_candidates pbc_r
-          on pbc_r.id = pbi.pay_batch_candidate_id
-        join public.pay_batches pb_r
-          on pb_r.id = pbc_r.pay_batch_id
-        left join lateral public._pay_batch_item_economic_components(null::uuid, array[pbi.id]::uuid[]) as ecomp
-          on ecomp.pay_batch_item_id = pbi.id
-        where pbi.timesheet_id is not null
-          and upper(coalesce(pbi.pay_channel,'')) in ('PAYE','UMBRELLA')
-          and pbi.item_type in ('SEGMENT_DELTA','EXPENSE_DELTA','ADJUSTMENT_DELTA','MILEAGE_DELTA')
-          and public._pay_batch_item_source_reservation_amount_ex_vat(pbi.id) is not null
-          and coalesce(pbi.is_voided, false) = false
-          and not exists (
-            select 1
-            from public.pay_payment_correction_items applied_corrections
-            where applied_corrections.pay_batch_item_id = pbi.id
-              and applied_corrections.status = 'APPLIED'
-              and applied_corrections.correction_item_kind in ('PRE_BANK_CANCEL','NO_MONEY_UNWIND','SETTLED_REVERSAL')
-          )
-          and not (
-            upper(btrim(coalesce(pbc_r.settlement_status, ''))) = 'SETTLED'
-            or pbc_r.settled_at_utc is not null
-            or exists (
-              select 1
-              from public.pay_bank_transfers completed_transfer_check
-              where completed_transfer_check.id = pbi.pay_bank_transfer_id
-                and (
-                  upper(btrim(coalesce(completed_transfer_check.status, ''))) = 'COMPLETED'
-                  or completed_transfer_check.completed_at_utc is not null
-                )
-            )
-          )
-          and (
-            public._pay_batch_status_is_active_reservation(pb_r.status)
-            or exists (
-              select 1
-              from public.pay_payment_correction_requests open_correction_requests
-              join lateral public._pay_payment_correction_selected_items(
-                open_correction_requests.pay_batch_id,
-                case
-                  when jsonb_typeof(open_correction_requests.plan_json->'selected_pay_batch_item_ids') = 'array' then
-                    coalesce(open_correction_requests.selection_json, '{}'::jsonb)
-                    || jsonb_build_object(
-                      'pay_batch_item_ids', open_correction_requests.plan_json->'selected_pay_batch_item_ids',
-                      'expected_pay_batch_item_ids', open_correction_requests.plan_json->'selected_pay_batch_item_ids'
-                    )
-                  when jsonb_typeof(open_correction_requests.plan_json#>'{selection,selected_pay_batch_item_ids}') = 'array' then
-                    coalesce(open_correction_requests.selection_json, '{}'::jsonb)
-                    || jsonb_build_object(
-                      'pay_batch_item_ids', open_correction_requests.plan_json#>'{selection,selected_pay_batch_item_ids}',
-                      'expected_pay_batch_item_ids', open_correction_requests.plan_json#>'{selection,selected_pay_batch_item_ids}'
-                    )
-                  when jsonb_typeof(open_correction_requests.plan_json#>'{selection,pay_batch_item_ids}') = 'array' then
-                    coalesce(open_correction_requests.selection_json, '{}'::jsonb)
-                    || jsonb_build_object(
-                      'pay_batch_item_ids', open_correction_requests.plan_json#>'{selection,pay_batch_item_ids}',
-                      'expected_pay_batch_item_ids', open_correction_requests.plan_json#>'{selection,pay_batch_item_ids}'
-                    )
-                  else
-                    coalesce(open_correction_requests.selection_json, '{}'::jsonb)
-                end,
-                false
-              ) open_correction_selected_items
-                on open_correction_selected_items.pay_batch_id = open_correction_requests.pay_batch_id
-              where open_correction_requests.pay_batch_id = pbc_r.pay_batch_id
-                and open_correction_requests.status in ('REQUESTED','AWAITING_AUTHORISATION','AUTHORISED','EXPANDED','PROCESSING','BLOCKED')
-                and open_correction_requests.correction_kind in ('PRE_BANK_CANCEL','NO_MONEY_UNWIND','MANUAL_EVIDENCE_NO_MONEY')
-                and open_correction_selected_items.pay_batch_item_id = pbi.id
-            )
-            or exists (
-              select 1
-              from public.pay_bank_transfer_events unresolved_terminal_failure_events
-              where unresolved_terminal_failure_events.pay_batch_id = pbc_r.pay_batch_id
-                and unresolved_terminal_failure_events.pay_bank_transfer_id = pbi.pay_bank_transfer_id
-                and unresolved_terminal_failure_events.mapping_status = 'MATCHED'
-                and unresolved_terminal_failure_events.normalised_state in ('FAILED','DECLINED','REJECTED','CANCELLED')
-                and not exists (
-                  select 1
-                  from public.pay_payment_correction_items applied_failure_corrections
-                  where applied_failure_corrections.pay_batch_item_id = pbi.id
-                    and applied_failure_corrections.status = 'APPLIED'
-                    and applied_failure_corrections.correction_item_kind in ('NO_MONEY_UNWIND','PRE_BANK_CANCEL','SETTLED_REVERSAL')
-                )
-            )
-          )
-  
+          reserved_batch_item_projected.source_ref as source_ref,
+          reserved_batch_item_projected.item_type as item_type,
+          reserved_batch_item_components.key_type as component_key_type,
+          reserved_batch_item_components.key_value as component_key_value,
+          reserved_batch_item_components.key_resolution_source as key_resolution_source,
+          reserved_batch_item_components.key_resolution_failure_reason as key_resolution_failure_reason,
+          reserved_batch_item_projected.amount_ex_vat as amount_ex_vat
+        from reserved_batch_item_projected
+        left join reserved_batch_item_components
+          on reserved_batch_item_components.pay_batch_item_id = reserved_batch_item_projected.pay_batch_item_id
+
   ;
 
   create temporary table reserved_by_source_ref on commit drop as
@@ -40121,9 +40468,11 @@ begin
   create temporary table debted_overpayment_cases on commit drop as
         select
           pa.candidate_id,
-          pa.linked_timesheet_id as timesheet_id,
+          coalesce(pay_advance_family_projection.canonical_timesheet_id, pa.linked_timesheet_id) as timesheet_id,
           pa.baseline_signature
         from public.pay_advances pa
+        left join targeted_refresh_all_family_projection as pay_advance_family_projection
+          on pay_advance_family_projection.family_timesheet_id = pa.linked_timesheet_id
         where pa.advance_kind = 'OVERPAYMENT'::public.pay_advance_kind_enum
           and pa.status in ('ACTIVE'::public.pay_advance_status_enum, 'PAID_OFF'::public.pay_advance_status_enum)
           and pa.candidate_id = v_candidate_id
@@ -40132,10 +40481,11 @@ begin
             v_effective_refresh_scope_kind <> 'TARGETED_TIMESHEETS'
             or pa.linked_timesheet_id in (select trti.timesheet_id from targeted_refresh_timesheet_ids trti)
             or pa.linked_timesheet_id in (select lrti.timesheet_id from linked_refresh_timesheet_ids lrti)
+            or pa.linked_timesheet_id in (select trf.family_timesheet_id from targeted_refresh_all_family_timesheet_ids trf)
           )
         group by
           pa.candidate_id,
-          pa.linked_timesheet_id,
+          coalesce(pay_advance_family_projection.canonical_timesheet_id, pa.linked_timesheet_id),
           pa.baseline_signature
   
   ;
@@ -40462,7 +40812,7 @@ begin
   create temporary table targeted_baseline_only_ts_current on commit drop as
         select
           coalesce(tf_any.candidate_id, v_candidate_id) as candidate_id,
-          tri.timesheet_id,
+          tri.canonical_timesheet_id as timesheet_id,
           tf_any.id as tsfin_id,
           tf_any.client_id as client_id,
           ts.booking_id as ts_booking_id,
@@ -40486,7 +40836,7 @@ begin
             when upper(coalesce(ts.sheet_scope::text,'')) = 'DAILY'
             then jsonb_build_array(
               jsonb_build_object(
-                'segment_id', ('ts:' || tri.timesheet_id::text),
+                'segment_id', ('ts:' || tri.canonical_timesheet_id::text),
                 'pay_amount', 0,
                 'charge_amount', 0,
                 'units', 0,
@@ -40507,8 +40857,8 @@ begin
                     nullif(btrim(coalesce(daily_sched.effective_daily_schedule_json->>'date_ymd','')), '')
                   )
                 end,
-                'segment_key', ('ts:' || tri.timesheet_id::text),
-                'segment_stable_key', ('timesheet:' || coalesce(ts.booking_id, tri.timesheet_id::text)),
+                'segment_key', ('ts:' || tri.canonical_timesheet_id::text),
+                'segment_stable_key', ('timesheet:' || coalesce(ts.booking_id, tri.canonical_timesheet_id::text)),
                 'start_utc', case
                   when daily_sched.effective_worked_start_iso is not null then daily_sched.effective_worked_start_iso::text
                   else null
@@ -40598,7 +40948,7 @@ begin
             )
             else jsonb_build_array(
               jsonb_build_object(
-                'segment_id', ('ts:' || tri.timesheet_id::text),
+                'segment_id', ('ts:' || tri.canonical_timesheet_id::text),
                 'pay_amount', 0,
                 'charge_amount', 0,
                 'units', 0,
@@ -40611,8 +40961,8 @@ begin
                 'exclude_from_pay', false,
                 'ref_num', nullif(btrim(coalesce(ts.reference_number,'')), ''),
                 'date', null,
-                'segment_key', ('ts:' || tri.timesheet_id::text),
-                'segment_stable_key', ('timesheet:' || coalesce(ts.booking_id, tri.timesheet_id::text)),
+                'segment_key', ('ts:' || tri.canonical_timesheet_id::text),
+                'segment_stable_key', ('timesheet:' || coalesce(ts.booking_id, tri.canonical_timesheet_id::text)),
                 'start_utc', null,
                 'end_utc', null,
                 'start', null,
@@ -40665,20 +41015,20 @@ begin
             md5(coalesce(tps.last_settled_snapshot_json::text, '{}'))
           ) as baseline_signature,
           (doc.timesheet_id is not null) as has_active_overpayment_case
-        from targeted_refresh_all_timesheet_ids tri
+        from targeted_refresh_all_baseline_projection tri
         join public.timesheet_pay_state tps
-          on tps.timesheet_id = tri.timesheet_id
+          on tps.timesheet_id = tri.family_timesheet_id
         left join lateral (
           select tf.*
           from public.timesheets_financials tf
-          where tf.timesheet_id = tri.timesheet_id
+          where tf.timesheet_id = tri.canonical_timesheet_id
           order by tf.is_current desc, tf.computed_at_utc desc nulls last, tf.id desc
           limit 1
         ) tf_any on true
         join public.candidates cand
           on cand.id = coalesce(tf_any.candidate_id, v_candidate_id)
         left join public.timesheets ts
-          on ts.timesheet_id = tri.timesheet_id
+          on ts.timesheet_id = tri.canonical_timesheet_id
         left join lateral (
           select
             coalesce(tf_any.worked_start_iso, ts.worked_start_iso) as effective_worked_start_iso,
@@ -40716,7 +41066,7 @@ begin
           on um.umbrella_id = cand.umbrella_id
         left join debted_overpayment_cases doc
           on doc.candidate_id = coalesce(tf_any.candidate_id, v_candidate_id)
-         and doc.timesheet_id = tri.timesheet_id
+         and doc.timesheet_id = tri.canonical_timesheet_id
          and coalesce(doc.baseline_signature, '') = coalesce(tps.last_settled_signature, md5(coalesce(tps.last_settled_snapshot_json::text, '{}')))
         where v_effective_refresh_scope_kind = 'TARGETED_TIMESHEETS'
           and (
@@ -40728,7 +41078,7 @@ begin
           and not exists (
             select 1
             from ts_current cur
-            where cur.timesheet_id = tri.timesheet_id
+            where cur.timesheet_id = tri.canonical_timesheet_id
           )
   ;
 
@@ -41050,6 +41400,7 @@ begin
             or vfcr.linked_timesheet_id is null
             or vfcr.linked_timesheet_id in (select trti.timesheet_id from targeted_refresh_timesheet_ids trti)
             or vfcr.linked_timesheet_id in (select lrti.timesheet_id from linked_refresh_timesheet_ids lrti)
+            or vfcr.linked_timesheet_id in (select trf.family_timesheet_id from targeted_refresh_all_family_timesheet_ids trf)
           )
   
   ;
@@ -41145,7 +41496,6 @@ begin
   );
 end;
 $function$;
-
 
 
 
@@ -44171,20 +44521,207 @@ BEGIN
 
   DROP TABLE IF EXISTS pg_temp.tmp_pay_batch_item_allocation_page;
   CREATE TEMPORARY TABLE pg_temp.tmp_pay_batch_item_allocation_page ON COMMIT DROP AS
-  SELECT allocation_row.*
-  FROM public.banking_pay_operation_candidate_allocation_rows AS allocation_row
-  WHERE allocation_row.operation_id = p_operation_id
-    AND allocation_row.candidate_scope_id IN (
-      SELECT (supplied_scope.scope_value #>> '{}')::uuid
-      FROM jsonb_array_elements(v_scope_ids) AS supplied_scope(scope_value)
-    )
-    AND UPPER(BTRIM(COALESCE(allocation_row.status, ''))) IN ('PENDING', 'ITEM_PENDING')
-  ORDER BY allocation_row.candidate_scope_id, allocation_row.sort_order, allocation_row.id
-  LIMIT 100;
+  WITH allocation_page_raw AS (
+    SELECT
+      allocation_row.id,
+      allocation_row.operation_id,
+      allocation_row.candidate_scope_id,
+      allocation_row.pay_batch_id,
+      allocation_row.candidate_id,
+      allocation_row.pay_channel,
+      allocation_row.finance_case_id,
+      allocation_row.finance_component_id,
+      allocation_row.allocation_type,
+      allocation_row.source_ref,
+      allocation_row.operation_source_key,
+      allocation_row.allocated_amount,
+      allocation_row.allocation_basis_json,
+      allocation_row.sort_order,
+      allocation_row.status
+    FROM public.banking_pay_operation_candidate_allocation_rows AS allocation_row
+    WHERE allocation_row.operation_id = p_operation_id
+      AND allocation_row.candidate_scope_id IN (
+        SELECT (supplied_scope.scope_value #>> '{}')::uuid
+        FROM jsonb_array_elements(v_scope_ids) AS supplied_scope(scope_value)
+      )
+      AND UPPER(BTRIM(COALESCE(allocation_row.status, ''))) IN ('PENDING', 'ITEM_PENDING')
+    ORDER BY allocation_row.candidate_scope_id, allocation_row.sort_order, allocation_row.id
+    LIMIT 100
+  ), allocation_page_keys AS (
+    SELECT
+      allocation_page_raw.*,
+      CASE
+        WHEN NULLIF(BTRIM(COALESCE(allocation_page_raw.allocation_basis_json#>>'{economic_key,timesheet_id}', allocation_page_raw.allocation_basis_json->>'timesheet_id', '')), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          THEN NULLIF(BTRIM(COALESCE(allocation_page_raw.allocation_basis_json#>>'{economic_key,timesheet_id}', allocation_page_raw.allocation_basis_json->>'timesheet_id', '')), '')::uuid
+        ELSE NULL::uuid
+      END AS economic_key_timesheet_id,
+      CASE
+        WHEN NULLIF(BTRIM(COALESCE(allocation_page_raw.allocation_basis_json#>>'{line,timesheet_id}', allocation_page_raw.allocation_basis_json#>>'{line,real_business_timesheet_id}', '')), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          THEN NULLIF(BTRIM(COALESCE(allocation_page_raw.allocation_basis_json#>>'{line,timesheet_id}', allocation_page_raw.allocation_basis_json#>>'{line,real_business_timesheet_id}', '')), '')::uuid
+        ELSE NULL::uuid
+      END AS line_timesheet_id,
+      UPPER(NULLIF(BTRIM(COALESCE(allocation_page_raw.allocation_basis_json#>>'{economic_key,key_type}', allocation_page_raw.allocation_basis_json->>'key_type', '')), '')) AS allocation_key_type,
+      NULLIF(BTRIM(COALESCE(allocation_page_raw.allocation_basis_json#>>'{economic_key,key_value}', allocation_page_raw.allocation_basis_json->>'key_value', '')), '') AS allocation_key_value
+    FROM allocation_page_raw
+  ), allocation_timesheet_refs AS (
+    SELECT allocation_page_keys.economic_key_timesheet_id AS timesheet_id
+    FROM allocation_page_keys
+    WHERE allocation_page_keys.economic_key_timesheet_id IS NOT NULL
+    UNION
+    SELECT allocation_page_keys.line_timesheet_id AS timesheet_id
+    FROM allocation_page_keys
+    WHERE allocation_page_keys.line_timesheet_id IS NOT NULL
+  ), allocation_timesheet_id_array AS (
+    SELECT COALESCE(
+      array_agg(DISTINCT allocation_timesheet_refs.timesheet_id ORDER BY allocation_timesheet_refs.timesheet_id),
+      array[]::uuid[]
+    ) AS timesheet_ids
+    FROM allocation_timesheet_refs
+  ), allocation_rotation_scope AS (
+    SELECT DISTINCT ON (rotation_scope.requested_timesheet_id)
+      rotation_scope.requested_timesheet_id,
+      COALESCE(rotation_scope.canonical_timesheet_id, rotation_scope.requested_timesheet_id) AS canonical_timesheet_id,
+      (rotation_scope.family_timesheet_id IS NOT NULL AND rotation_scope.family_is_current IS NOT NULL) AS rotation_scope_resolved,
+      COALESCE(rotation_scope.requested_is_canonical, false) AS requested_is_canonical
+    FROM allocation_timesheet_id_array
+    JOIN public._pay_timesheet_rotation_scope(allocation_timesheet_id_array.timesheet_ids) AS rotation_scope
+      ON true
+    ORDER BY
+      rotation_scope.requested_timesheet_id,
+      rotation_scope.family_is_current DESC NULLS LAST,
+      rotation_scope.family_version DESC NULLS LAST,
+      rotation_scope.family_timesheet_id
+  ), scope_canonical_line_matches AS (
+    SELECT DISTINCT
+      allocation_page_keys.id AS allocation_row_id,
+      COALESCE(economic_key_rotation.canonical_timesheet_id, line_rotation.canonical_timesheet_id) AS canonical_timesheet_id
+    FROM allocation_page_keys
+    JOIN public.banking_pay_operation_candidate_scope AS scope_row
+      ON scope_row.id = allocation_page_keys.candidate_scope_id
+     AND scope_row.operation_id = allocation_page_keys.operation_id
+    LEFT JOIN allocation_rotation_scope AS economic_key_rotation
+      ON economic_key_rotation.requested_timesheet_id = allocation_page_keys.economic_key_timesheet_id
+    LEFT JOIN allocation_rotation_scope AS line_rotation
+      ON line_rotation.requested_timesheet_id = allocation_page_keys.line_timesheet_id
+    CROSS JOIN LATERAL jsonb_array_elements(
+      CASE
+        WHEN jsonb_typeof(scope_row.selected_canonical_preview_lines_json) = 'array'
+          AND jsonb_array_length(scope_row.selected_canonical_preview_lines_json) > 0
+          THEN scope_row.selected_canonical_preview_lines_json
+        WHEN jsonb_typeof(scope_row.effective_canonical_preview_lines_json) = 'array'
+          AND jsonb_array_length(scope_row.effective_canonical_preview_lines_json) > 0
+          THEN scope_row.effective_canonical_preview_lines_json
+        ELSE '[]'::jsonb
+      END
+    ) AS scope_line(line_json)
+    WHERE COALESCE(economic_key_rotation.canonical_timesheet_id, line_rotation.canonical_timesheet_id) IS NOT NULL
+      AND NULLIF(BTRIM(COALESCE(scope_line.line_json#>>'{economic_key,timesheet_id}', scope_line.line_json->>'timesheet_id', '')), '') = COALESCE(economic_key_rotation.canonical_timesheet_id, line_rotation.canonical_timesheet_id)::text
+      AND UPPER(NULLIF(BTRIM(COALESCE(scope_line.line_json#>>'{economic_key,key_type}', scope_line.line_json->>'key_type', scope_line.line_json->>'component_key_type', '')), '')) IS NOT DISTINCT FROM allocation_page_keys.allocation_key_type
+      AND NULLIF(BTRIM(COALESCE(scope_line.line_json#>>'{economic_key,key_value}', scope_line.line_json->>'key_value', scope_line.line_json->>'component_key_value', '')), '') IS NOT DISTINCT FROM allocation_page_keys.allocation_key_value
+      AND NULLIF(BTRIM(COALESCE(scope_line.line_json->>'row_key', scope_line.line_json->>'source_ref', '')), '') IS NOT DISTINCT FROM NULLIF(BTRIM(COALESCE(allocation_page_keys.allocation_basis_json->>'row_key', allocation_page_keys.allocation_basis_json#>>'{line,row_key}', allocation_page_keys.source_ref, '')), '')
+  )
+  SELECT
+    allocation_page_keys.id,
+    allocation_page_keys.operation_id,
+    allocation_page_keys.candidate_scope_id,
+    allocation_page_keys.pay_batch_id,
+    allocation_page_keys.candidate_id,
+    allocation_page_keys.pay_channel,
+    allocation_page_keys.finance_case_id,
+    allocation_page_keys.finance_component_id,
+    allocation_page_keys.allocation_type,
+    allocation_page_keys.source_ref,
+    allocation_page_keys.operation_source_key,
+    allocation_page_keys.allocated_amount,
+    jsonb_strip_nulls(
+      allocation_page_keys.allocation_basis_json
+      || CASE
+        WHEN COALESCE(economic_key_rotation.canonical_timesheet_id, line_rotation.canonical_timesheet_id) IS NULL THEN '{}'::jsonb
+        ELSE jsonb_build_object(
+          'timesheet_id', COALESCE(economic_key_rotation.canonical_timesheet_id, line_rotation.canonical_timesheet_id)::text,
+          'economic_key', COALESCE(allocation_page_keys.allocation_basis_json->'economic_key', '{}'::jsonb)
+            || jsonb_build_object(
+              'timesheet_id', COALESCE(economic_key_rotation.canonical_timesheet_id, line_rotation.canonical_timesheet_id)::text,
+              'key_type', allocation_page_keys.allocation_key_type,
+              'key_value', allocation_page_keys.allocation_key_value
+            ),
+          'line', COALESCE(allocation_page_keys.allocation_basis_json->'line', '{}'::jsonb)
+            || jsonb_build_object(
+              'timesheet_id', COALESCE(economic_key_rotation.canonical_timesheet_id, line_rotation.canonical_timesheet_id)::text,
+              'real_business_timesheet_id', COALESCE(economic_key_rotation.canonical_timesheet_id, line_rotation.canonical_timesheet_id)::text,
+              'economic_key', COALESCE(allocation_page_keys.allocation_basis_json#>'{line,economic_key}', '{}'::jsonb)
+                || jsonb_build_object(
+                  'timesheet_id', COALESCE(economic_key_rotation.canonical_timesheet_id, line_rotation.canonical_timesheet_id)::text,
+                  'key_type', allocation_page_keys.allocation_key_type,
+                  'key_value', allocation_page_keys.allocation_key_value
+                )
+            )
+        )
+      END
+      || CASE
+        WHEN allocation_page_keys.economic_key_timesheet_id IS NOT NULL
+         AND allocation_page_keys.economic_key_timesheet_id IS DISTINCT FROM COALESCE(economic_key_rotation.canonical_timesheet_id, line_rotation.canonical_timesheet_id) THEN jsonb_build_object(
+          'rotation_requested_timesheet_id', allocation_page_keys.economic_key_timesheet_id::text
+        )
+        ELSE '{}'::jsonb
+      END
+    ) AS allocation_basis_json,
+    allocation_page_keys.sort_order,
+    allocation_page_keys.status,
+    allocation_page_keys.economic_key_timesheet_id,
+    allocation_page_keys.line_timesheet_id,
+    COALESCE(economic_key_rotation.canonical_timesheet_id, line_rotation.canonical_timesheet_id) AS canonical_timesheet_id,
+    allocation_page_keys.allocation_key_type,
+    allocation_page_keys.allocation_key_value,
+    CASE
+      WHEN allocation_page_keys.economic_key_timesheet_id IS NULL AND allocation_page_keys.line_timesheet_id IS NULL THEN true
+      WHEN allocation_page_keys.economic_key_timesheet_id IS NOT NULL AND COALESCE(economic_key_rotation.rotation_scope_resolved, false) = false THEN false
+      WHEN allocation_page_keys.line_timesheet_id IS NOT NULL AND COALESCE(line_rotation.rotation_scope_resolved, false) = false THEN false
+      WHEN economic_key_rotation.canonical_timesheet_id IS NOT NULL
+       AND line_rotation.canonical_timesheet_id IS NOT NULL
+       AND economic_key_rotation.canonical_timesheet_id IS DISTINCT FROM line_rotation.canonical_timesheet_id THEN false
+      WHEN COALESCE(economic_key_rotation.requested_is_canonical, line_rotation.requested_is_canonical, true) = false
+       AND scope_canonical_line_matches.allocation_row_id IS NULL THEN false
+      ELSE true
+    END AS rotation_validation_ok,
+    CASE
+      WHEN allocation_page_keys.economic_key_timesheet_id IS NULL AND allocation_page_keys.line_timesheet_id IS NULL THEN NULL::text
+      WHEN allocation_page_keys.economic_key_timesheet_id IS NOT NULL AND COALESCE(economic_key_rotation.rotation_scope_resolved, false) = false THEN 'ALLOCATION_ECONOMIC_KEY_TIMESHEET_ROTATION_SCOPE_UNRESOLVED'
+      WHEN allocation_page_keys.line_timesheet_id IS NOT NULL AND COALESCE(line_rotation.rotation_scope_resolved, false) = false THEN 'ALLOCATION_LINE_TIMESHEET_ROTATION_SCOPE_UNRESOLVED'
+      WHEN economic_key_rotation.canonical_timesheet_id IS NOT NULL
+       AND line_rotation.canonical_timesheet_id IS NOT NULL
+       AND economic_key_rotation.canonical_timesheet_id IS DISTINCT FROM line_rotation.canonical_timesheet_id THEN 'ALLOCATION_LINE_AND_ECONOMIC_KEY_CANONICAL_TIMESHEET_MISMATCH'
+      WHEN COALESCE(economic_key_rotation.requested_is_canonical, line_rotation.requested_is_canonical, true) = false
+       AND scope_canonical_line_matches.allocation_row_id IS NULL THEN 'ALLOCATION_TIMESHEET_ROTATED_WITHOUT_VALIDATED_CANONICAL_SCOPE_ROW'
+      ELSE NULL::text
+    END AS rotation_validation_failure_reason
+  FROM allocation_page_keys
+  LEFT JOIN allocation_rotation_scope AS economic_key_rotation
+    ON economic_key_rotation.requested_timesheet_id = allocation_page_keys.economic_key_timesheet_id
+  LEFT JOIN allocation_rotation_scope AS line_rotation
+    ON line_rotation.requested_timesheet_id = allocation_page_keys.line_timesheet_id
+  LEFT JOIN scope_canonical_line_matches
+    ON scope_canonical_line_matches.allocation_row_id = allocation_page_keys.id;
 
   SELECT COUNT(*)::integer
   INTO v_page_allocation_row_count
   FROM pg_temp.tmp_pay_batch_item_allocation_page AS allocation_page;
+
+  PERFORM 1
+  FROM pg_temp.tmp_pay_batch_item_allocation_page AS allocation_page
+  WHERE allocation_page.rotation_validation_ok IS NOT TRUE
+  LIMIT 1;
+
+  IF FOUND THEN
+    RAISE EXCEPTION 'DRAFT_ITEM_ROTATED_ALLOCATION_STALE'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object(
+              'code', 'DRAFT_ITEM_ROTATED_ALLOCATION_STALE',
+              'pay_batch_id', p_pay_batch_id::text,
+              'operation_id', p_operation_id::text,
+              'message', 'One or more allocation rows no longer resolve to a validated current canonical timesheet. Refresh draft scope before creating batch items.'
+            )::text;
+  END IF;
 
   IF COALESCE(v_page_allocation_row_count, 0) <= 0 THEN
     IF COALESCE(v_expected_allocation_row_count, 0) > 0
@@ -44282,6 +44819,22 @@ BEGIN
               'message', 'Allocation rows from the preview are not valid draftable Ready to Pay rows.'
             )::text;
   END IF;
+
+  DROP TABLE IF EXISTS pg_temp.tmp_pay_batch_item_allocation_outstanding_components;
+  CREATE TEMPORARY TABLE pg_temp.tmp_pay_batch_item_allocation_outstanding_components ON COMMIT DROP AS
+  SELECT
+    outstanding_components.timesheet_id,
+    outstanding_components.key_type,
+    outstanding_components.key_value,
+    outstanding_components.outstanding_ex_vat
+  FROM public._pay_outstanding_components(
+    ARRAY(
+      SELECT DISTINCT allocation_page.canonical_timesheet_id
+      FROM pg_temp.tmp_pay_batch_item_allocation_page AS allocation_page
+      WHERE allocation_page.canonical_timesheet_id IS NOT NULL
+    ),
+    p_pay_batch_id
+  ) AS outstanding_components;
 
   PERFORM 1
   FROM pg_temp.tmp_pay_batch_item_allocation_page AS allocation_row
@@ -44417,14 +44970,10 @@ BEGIN
       ) AS component_element(value)
     ) AS component_counts
   ) AS component_probe
-  LEFT JOIN LATERAL (
-    SELECT outstanding_components.outstanding_ex_vat
-    FROM public._pay_outstanding_components(ARRAY[allocation_key.timesheet_id], p_pay_batch_id) AS outstanding_components
-    WHERE outstanding_components.timesheet_id = allocation_key.timesheet_id
-      AND outstanding_components.key_type = allocation_key.key_type
-      AND outstanding_components.key_value = allocation_key.key_value
-    LIMIT 1
-  ) AS outstanding_component ON allocation_key.timesheet_id IS NOT NULL
+  LEFT JOIN pg_temp.tmp_pay_batch_item_allocation_outstanding_components AS outstanding_component
+    ON outstanding_component.timesheet_id = allocation_key.timesheet_id
+   AND outstanding_component.key_type = allocation_key.key_type
+   AND outstanding_component.key_value = allocation_key.key_value
   WHERE component_probe.single_fixed_reimbursement_key_type IS NOT NULL
     AND allocation_key.key_type = component_probe.single_fixed_reimbursement_key_type
     AND allocation_key.key_value = component_probe.single_fixed_reimbursement_key_value
@@ -44691,6 +45240,7 @@ BEGIN
   );
 END;
 $function$;
+
 
 
 DROP FUNCTION IF EXISTS public.pay_batch_apply_finance_adjustments(uuid, text, uuid, numeric, date);
@@ -57277,6 +57827,9 @@ AS $function$
 $function$;
 
 
+
+
+
 CREATE OR REPLACE FUNCTION public._pay_current_timesheet_entitlement_components(p_timesheet_ids uuid[])
  RETURNS TABLE(timesheet_id uuid, key_type text, key_value text, truth_ex_vat numeric, baseline_ex_vat numeric, truth_inc_vat numeric, baseline_inc_vat numeric)
  LANGUAGE sql
@@ -57287,16 +57840,89 @@ with
 inp as (
   select coalesce(
     (
-      select array_agg(distinct t_input.x)
+      select array_agg(distinct t_input.x order by t_input.x)
       from unnest(coalesce(p_timesheet_ids, array[]::uuid[])) as t_input(x)
       where t_input.x is not null
     ),
     array[]::uuid[]
   ) as ts_ids
 ),
+rotation_scope_rows as (
+  select
+    scope_rows.requested_timesheet_id,
+    scope_rows.booking_id,
+    scope_rows.canonical_timesheet_id,
+    scope_rows.family_timesheet_id,
+    scope_rows.family_is_current,
+    scope_rows.family_version,
+    scope_rows.requested_is_canonical
+  from inp as input_scope
+  join public._pay_timesheet_rotation_scope(input_scope.ts_ids) as scope_rows
+    on true
+),
+rotation_scope_keyed as (
+  select
+    rotation_scope_rows.requested_timesheet_id,
+    rotation_scope_rows.booking_id,
+    rotation_scope_rows.canonical_timesheet_id,
+    rotation_scope_rows.family_timesheet_id,
+    rotation_scope_rows.family_is_current,
+    rotation_scope_rows.family_version,
+    rotation_scope_rows.requested_is_canonical,
+    coalesce(rotation_scope_rows.booking_id, rotation_scope_rows.requested_timesheet_id::text) as scope_family_key
+  from rotation_scope_rows
+  where rotation_scope_rows.requested_timesheet_id is not null
+),
+projection_targets as (
+  select
+    rotation_scope_keyed.scope_family_key,
+    coalesce(
+      (
+        array_agg(distinct rotation_scope_keyed.canonical_timesheet_id order by rotation_scope_keyed.canonical_timesheet_id)
+        filter (
+          where coalesce(rotation_scope_keyed.requested_is_canonical, false) = true
+            and rotation_scope_keyed.canonical_timesheet_id is not null
+        )
+      )[1],
+      (
+        array_agg(distinct rotation_scope_keyed.requested_timesheet_id order by rotation_scope_keyed.requested_timesheet_id)
+        filter (where rotation_scope_keyed.requested_timesheet_id is not null)
+      )[1],
+      (
+        array_agg(distinct rotation_scope_keyed.canonical_timesheet_id order by rotation_scope_keyed.canonical_timesheet_id)
+        filter (where rotation_scope_keyed.canonical_timesheet_id is not null)
+      )[1]
+    ) as projected_timesheet_id,
+    (
+      array_agg(distinct rotation_scope_keyed.canonical_timesheet_id order by rotation_scope_keyed.canonical_timesheet_id)
+      filter (where rotation_scope_keyed.canonical_timesheet_id is not null)
+    )[1] as canonical_timesheet_id
+  from rotation_scope_keyed
+  group by rotation_scope_keyed.scope_family_key
+),
+family_to_projection as (
+  select distinct
+    rotation_scope_keyed.family_timesheet_id,
+    projection_targets.projected_timesheet_id,
+    projection_targets.canonical_timesheet_id
+  from rotation_scope_keyed
+  join projection_targets
+    on projection_targets.scope_family_key = rotation_scope_keyed.scope_family_key
+  where rotation_scope_keyed.family_timesheet_id is not null
+    and projection_targets.projected_timesheet_id is not null
+),
+canonical_projection as (
+  select distinct
+    family_to_projection.canonical_timesheet_id,
+    family_to_projection.projected_timesheet_id
+  from family_to_projection
+  where family_to_projection.canonical_timesheet_id is not null
+    and family_to_projection.projected_timesheet_id is not null
+),
 tf as (
   select
-    tfin.timesheet_id,
+    canonical_projection.projected_timesheet_id as timesheet_id,
+    canonical_projection.canonical_timesheet_id as canonical_timesheet_id,
     tfin.total_pay_ex_vat,
     tfin.invoice_breakdown_json,
     tfin.additional_units_json,
@@ -57305,32 +57931,33 @@ tf as (
     tfin.accommodation_pay_ex_vat,
     tfin.other_pay_ex_vat,
     tfin.mileage_pay_ex_vat,
-    ts.booking_id,
-    upper(coalesce(ts.sheet_scope::text,'')) as sheet_scope,
-    ts.reference_number,
-    ts.worked_start_iso as ts_worked_start_iso,
-    ts.worked_end_iso as ts_worked_end_iso,
-    ts.break_start_iso as ts_break_start_iso,
-    ts.break_end_iso as ts_break_end_iso,
-    ts.break_minutes as ts_break_minutes,
-    ts.actual_schedule_json as ts_actual_schedule_json,
+    timesheet_rows.booking_id,
+    upper(coalesce(timesheet_rows.sheet_scope::text,'')) as sheet_scope,
+    timesheet_rows.reference_number,
+    timesheet_rows.worked_start_iso as ts_worked_start_iso,
+    timesheet_rows.worked_end_iso as ts_worked_end_iso,
+    timesheet_rows.break_start_iso as ts_break_start_iso,
+    timesheet_rows.break_end_iso as ts_break_end_iso,
+    timesheet_rows.break_minutes as ts_break_minutes,
+    timesheet_rows.actual_schedule_json as ts_actual_schedule_json,
     tfin.worked_start_iso as tf_worked_start_iso,
     tfin.worked_end_iso as tf_worked_end_iso,
     tfin.break_start_iso as tf_break_start_iso,
     tfin.break_end_iso as tf_break_end_iso,
     tfin.break_minutes as tf_break_minutes,
     tfin.actual_schedule_json as tf_actual_schedule_json
-  from inp i
-  left join public.timesheets_financials tfin
+  from canonical_projection
+  join public.timesheets_financials as tfin
     on tfin.is_current = true
-   and tfin.timesheet_id = any(i.ts_ids)
-  left join public.timesheets ts
-    on ts.timesheet_id = tfin.timesheet_id
-   and ts.is_current = true
+   and tfin.timesheet_id = canonical_projection.canonical_timesheet_id
+  join public.timesheets as timesheet_rows
+    on timesheet_rows.timesheet_id = canonical_projection.canonical_timesheet_id
+   and timesheet_rows.is_current = true
 ),
 truth_enriched as (
   select
     tf0.timesheet_id,
+    tf0.canonical_timesheet_id,
     tf0.total_pay_ex_vat,
     tf0.invoice_breakdown_json,
     tf0.additional_units_json,
@@ -57371,6 +57998,7 @@ truth_enriched as (
 truth_segments as (
   select
     te.timesheet_id,
+    te.canonical_timesheet_id,
     case
       when te.invoice_breakdown_json is not null
        and jsonb_typeof(te.invoice_breakdown_json) = 'object'
@@ -57499,9 +58127,9 @@ truth_segments as (
 ),
 truth_snapshot_like as (
   select
-    ts.timesheet_id,
+    truth_segment_rows.timesheet_id,
     jsonb_build_object(
-      'segments', ts.segments_json,
+      'segments', truth_segment_rows.segments_json,
       'additional_units_json', coalesce(tf1.additional_units_json,'{}'::jsonb),
       'additional_pay_ex_vat', 0,
       'expenses', jsonb_build_object(
@@ -57514,30 +58142,72 @@ truth_snapshot_like as (
       'adjustments', coalesce((
         select jsonb_agg(
           jsonb_build_object(
-            'id', a.id::text,
-            'delta_pay_ex_vat', round(coalesce(a.delta_pay_ex_vat,0),2)
+            'id', adjustment_rows.id::text,
+            'delta_pay_ex_vat', round(coalesce(adjustment_rows.delta_pay_ex_vat,0),2)
           )
-          order by a.created_at nulls last, a.id
+          order by adjustment_rows.created_at nulls last, adjustment_rows.id
         )
-        from public.ts_pay_adjustments a
-        where a.as_advance = false
-          and a.timesheet_id = ts.timesheet_id
+        from public.ts_pay_adjustments as adjustment_rows
+        where adjustment_rows.as_advance = false
+          and adjustment_rows.timesheet_id = truth_segment_rows.canonical_timesheet_id
       ), '[]'::jsonb)
     ) as snap_json
-  from truth_segments ts
-  join tf tf1
-    on tf1.timesheet_id = ts.timesheet_id
+  from truth_segments as truth_segment_rows
+  join tf as tf1
+    on tf1.timesheet_id = truth_segment_rows.timesheet_id
+),
+truth_components_raw as (
+  select
+    truth_snapshot_rows.timesheet_id,
+    upper(nullif(btrim(coalesce(timesheet_component_rows.key_type, '')), '')) as raw_key_type,
+    nullif(btrim(coalesce(timesheet_component_rows.key_value, '')), '') as raw_key_value,
+    timesheet_component_rows.amount_ex_vat,
+    timesheet_component_rows.amount_inc_vat,
+    case
+      when upper(nullif(btrim(coalesce(timesheet_component_rows.key_type, '')), '')) in ('TS_DAY','TS_TOTAL')
+        then 'SEGMENT_DELTA'
+      when upper(nullif(btrim(coalesce(timesheet_component_rows.key_type, '')), '')) = 'ADJUSTMENT_CODE'
+        then 'ADJUSTMENT_DELTA'
+      when upper(nullif(btrim(coalesce(timesheet_component_rows.key_type, '')), '')) = 'EXPENSE_CODE'
+       and upper(nullif(btrim(coalesce(timesheet_component_rows.key_value, '')), '')) = 'MILEAGE'
+        then 'MILEAGE_DELTA'
+      when upper(nullif(btrim(coalesce(timesheet_component_rows.key_type, '')), '')) in ('ADDITIONAL_CODE','EXPENSE_CODE')
+        then 'EXPENSE_DELTA'
+      else null::text
+    end as resolver_item_type
+  from truth_snapshot_like as truth_snapshot_rows
+  join lateral public._pay_timesheet_components(truth_snapshot_rows.snap_json) as timesheet_component_rows
+    on true
 ),
 truth_components as (
   select
-    tsl.timesheet_id,
-    tc.key_type,
-    tc.key_value,
-    tc.amount_ex_vat,
-    tc.amount_inc_vat
-  from truth_snapshot_like tsl
-  join lateral public._pay_timesheet_components(tsl.snap_json) as tc
+    truth_component_rows.timesheet_id,
+    resolved_truth_keys.key_type,
+    resolved_truth_keys.key_value,
+    truth_component_rows.amount_ex_vat,
+    truth_component_rows.amount_inc_vat
+  from truth_components_raw as truth_component_rows
+  join lateral public._pay_policy_x_resolve_pre_draft_economic_key(
+    p_timesheet_id => truth_component_rows.timesheet_id,
+    p_live_source_json => jsonb_build_object(
+      'timesheet_id', truth_component_rows.timesheet_id::text,
+      'item_type', truth_component_rows.resolver_item_type,
+      'component_key_type', truth_component_rows.raw_key_type,
+      'component_key_value', truth_component_rows.raw_key_value,
+      'work_date', case when truth_component_rows.raw_key_type = 'TS_DAY' then truth_component_rows.raw_key_value else null::text end
+    ),
+    p_item_type => truth_component_rows.resolver_item_type,
+    p_key_type_hint => truth_component_rows.raw_key_type,
+    p_key_value_hint => truth_component_rows.raw_key_value,
+    p_work_date => case
+      when truth_component_rows.raw_key_type = 'TS_DAY'
+       and truth_component_rows.raw_key_value ~ '^\d{4}-\d{2}-\d{2}$'
+        then truth_component_rows.raw_key_value::date
+      else null::date
+    end
+  ) as resolved_truth_keys
     on true
+  where resolved_truth_keys.key_resolution_failure_reason is null
 ),
 active_settled_components as (
   select
@@ -57550,28 +58220,71 @@ active_settled_components as (
 ),
 legacy_baseline_timesheets as (
   select distinct
-    tps.timesheet_id
-  from inp i
-  join public.timesheet_pay_state tps
-    on tps.timesheet_id = any(i.ts_ids)
+    timesheet_pay_state_rows.timesheet_id as source_timesheet_id,
+    family_to_projection.projected_timesheet_id as projected_timesheet_id
+  from family_to_projection
+  join public.timesheet_pay_state as timesheet_pay_state_rows
+    on timesheet_pay_state_rows.timesheet_id = family_to_projection.family_timesheet_id
   where not exists (
     select 1
-    from active_settled_components active_check
-    where active_check.timesheet_id = tps.timesheet_id
+    from active_settled_components as active_check
+    where active_check.timesheet_id = family_to_projection.projected_timesheet_id
   )
+),
+legacy_baseline_components_raw as (
+  select
+    legacy_baseline_timesheet_rows.projected_timesheet_id as timesheet_id,
+    upper(nullif(btrim(coalesce(baseline_component_rows.key_type, '')), '')) as raw_key_type,
+    nullif(btrim(coalesce(baseline_component_rows.key_value, '')), '') as raw_key_value,
+    baseline_component_rows.amount_ex_vat,
+    baseline_component_rows.amount_inc_vat,
+    case
+      when upper(nullif(btrim(coalesce(baseline_component_rows.key_type, '')), '')) in ('TS_DAY','TS_TOTAL')
+        then 'SEGMENT_DELTA'
+      when upper(nullif(btrim(coalesce(baseline_component_rows.key_type, '')), '')) = 'ADJUSTMENT_CODE'
+        then 'ADJUSTMENT_DELTA'
+      when upper(nullif(btrim(coalesce(baseline_component_rows.key_type, '')), '')) = 'EXPENSE_CODE'
+       and upper(nullif(btrim(coalesce(baseline_component_rows.key_value, '')), '')) = 'MILEAGE'
+        then 'MILEAGE_DELTA'
+      when upper(nullif(btrim(coalesce(baseline_component_rows.key_type, '')), '')) in ('ADDITIONAL_CODE','EXPENSE_CODE')
+        then 'EXPENSE_DELTA'
+      else null::text
+    end as resolver_item_type
+  from legacy_baseline_timesheets as legacy_baseline_timesheet_rows
+  join public.timesheet_pay_state as timesheet_pay_state_rows
+    on timesheet_pay_state_rows.timesheet_id = legacy_baseline_timesheet_rows.source_timesheet_id
+  join lateral public._pay_timesheet_components(coalesce(timesheet_pay_state_rows.last_settled_snapshot_json,'{}'::jsonb)) as baseline_component_rows
+    on true
 ),
 legacy_baseline_components as (
   select
-    tps.timesheet_id,
-    bc.key_type,
-    bc.key_value,
-    bc.amount_ex_vat,
-    bc.amount_inc_vat
-  from legacy_baseline_timesheets lbt
-  join public.timesheet_pay_state tps
-    on tps.timesheet_id = lbt.timesheet_id
-  join lateral public._pay_timesheet_components(coalesce(tps.last_settled_snapshot_json,'{}'::jsonb)) as bc
+    legacy_baseline_rows.timesheet_id,
+    resolved_baseline_keys.key_type,
+    resolved_baseline_keys.key_value,
+    legacy_baseline_rows.amount_ex_vat,
+    legacy_baseline_rows.amount_inc_vat
+  from legacy_baseline_components_raw as legacy_baseline_rows
+  join lateral public._pay_policy_x_resolve_pre_draft_economic_key(
+    p_timesheet_id => legacy_baseline_rows.timesheet_id,
+    p_live_source_json => jsonb_build_object(
+      'timesheet_id', legacy_baseline_rows.timesheet_id::text,
+      'item_type', legacy_baseline_rows.resolver_item_type,
+      'component_key_type', legacy_baseline_rows.raw_key_type,
+      'component_key_value', legacy_baseline_rows.raw_key_value,
+      'work_date', case when legacy_baseline_rows.raw_key_type = 'TS_DAY' then legacy_baseline_rows.raw_key_value else null::text end
+    ),
+    p_item_type => legacy_baseline_rows.resolver_item_type,
+    p_key_type_hint => legacy_baseline_rows.raw_key_type,
+    p_key_value_hint => legacy_baseline_rows.raw_key_value,
+    p_work_date => case
+      when legacy_baseline_rows.raw_key_type = 'TS_DAY'
+       and legacy_baseline_rows.raw_key_value ~ '^\d{4}-\d{2}-\d{2}$'
+        then legacy_baseline_rows.raw_key_value::date
+      else null::date
+    end
+  ) as resolved_baseline_keys
     on true
+  where resolved_baseline_keys.key_resolution_failure_reason is null
 ),
 baseline_components as (
   select
@@ -57590,7 +58303,6 @@ baseline_components as (
     legacy_baseline_components.amount_inc_vat
   from legacy_baseline_components
 ),
-
 truth_grouped as (
   select
     truth_components.timesheet_id,
@@ -77525,8 +78237,6 @@ $$;
 
 
 
-
-
 CREATE OR REPLACE FUNCTION public._pay_reserved_components(p_timesheet_ids uuid[], p_exclude_pay_batch_id uuid)
 RETURNS TABLE (
   timesheet_id uuid,
@@ -77544,19 +78254,79 @@ WITH
 inp AS (
   SELECT COALESCE(
     (
-      SELECT array_agg(DISTINCT input_values.timesheet_id_value)
+      SELECT array_agg(DISTINCT input_values.timesheet_id_value ORDER BY input_values.timesheet_id_value)
       FROM unnest(COALESCE(p_timesheet_ids, ARRAY[]::uuid[])) AS input_values(timesheet_id_value)
       WHERE input_values.timesheet_id_value IS NOT NULL
     ),
     ARRAY[]::uuid[]
   ) AS ts_ids
 ),
-active_batch_item_ids AS (
+rotation_scope_rows AS (
   SELECT
-    pay_batch_item_row.id AS pay_batch_item_id
+    scope_rows.requested_timesheet_id,
+    scope_rows.booking_id,
+    scope_rows.canonical_timesheet_id,
+    scope_rows.family_timesheet_id,
+    scope_rows.family_is_current,
+    scope_rows.family_version,
+    scope_rows.requested_is_canonical
   FROM inp AS input_scope
+  JOIN public._pay_timesheet_rotation_scope(input_scope.ts_ids) AS scope_rows
+    ON true
+),
+rotation_scope_keyed AS (
+  SELECT
+    rotation_scope_rows.requested_timesheet_id,
+    rotation_scope_rows.booking_id,
+    rotation_scope_rows.canonical_timesheet_id,
+    rotation_scope_rows.family_timesheet_id,
+    rotation_scope_rows.family_is_current,
+    rotation_scope_rows.family_version,
+    rotation_scope_rows.requested_is_canonical,
+    COALESCE(rotation_scope_rows.booking_id, rotation_scope_rows.requested_timesheet_id::text) AS scope_family_key
+  FROM rotation_scope_rows
+  WHERE rotation_scope_rows.requested_timesheet_id IS NOT NULL
+),
+projection_targets AS (
+  SELECT
+    rotation_scope_keyed.scope_family_key,
+    COALESCE(
+      (
+        ARRAY_AGG(DISTINCT rotation_scope_keyed.canonical_timesheet_id ORDER BY rotation_scope_keyed.canonical_timesheet_id)
+        FILTER (
+          WHERE COALESCE(rotation_scope_keyed.requested_is_canonical, false) = true
+            AND rotation_scope_keyed.canonical_timesheet_id IS NOT NULL
+        )
+      )[1],
+      (
+        ARRAY_AGG(DISTINCT rotation_scope_keyed.requested_timesheet_id ORDER BY rotation_scope_keyed.requested_timesheet_id)
+        FILTER (WHERE rotation_scope_keyed.requested_timesheet_id IS NOT NULL)
+      )[1],
+      (
+        ARRAY_AGG(DISTINCT rotation_scope_keyed.canonical_timesheet_id ORDER BY rotation_scope_keyed.canonical_timesheet_id)
+        FILTER (WHERE rotation_scope_keyed.canonical_timesheet_id IS NOT NULL)
+      )[1]
+    ) AS projected_timesheet_id
+  FROM rotation_scope_keyed
+  GROUP BY rotation_scope_keyed.scope_family_key
+),
+family_to_projection AS (
+  SELECT DISTINCT
+    rotation_scope_keyed.family_timesheet_id,
+    projection_targets.projected_timesheet_id
+  FROM rotation_scope_keyed
+  JOIN projection_targets
+    ON projection_targets.scope_family_key = rotation_scope_keyed.scope_family_key
+  WHERE rotation_scope_keyed.family_timesheet_id IS NOT NULL
+    AND projection_targets.projected_timesheet_id IS NOT NULL
+),
+active_batch_item_ids AS (
+  SELECT DISTINCT
+    pay_batch_item_row.id AS pay_batch_item_id,
+    family_to_projection.projected_timesheet_id AS projected_timesheet_id
+  FROM family_to_projection
   JOIN public.pay_batch_items AS pay_batch_item_row
-    ON pay_batch_item_row.timesheet_id = ANY(input_scope.ts_ids)
+    ON pay_batch_item_row.timesheet_id = family_to_projection.family_timesheet_id
   JOIN public.pay_batch_candidates AS pay_batch_candidate_row
     ON pay_batch_candidate_row.id = pay_batch_item_row.pay_batch_candidate_id
   JOIN public.pay_batches AS pay_batch_row
@@ -77639,19 +78409,19 @@ open_correction_exact_item_ids AS (
 ),
 open_correction_hold_item_ids AS (
   SELECT DISTINCT
-    open_correction_exact_item_ids.pay_batch_item_id AS pay_batch_item_id
-  FROM inp AS input_scope
-  JOIN open_correction_exact_item_ids
-    ON true
+    open_correction_exact_item_ids.pay_batch_item_id AS pay_batch_item_id,
+    family_to_projection.projected_timesheet_id AS projected_timesheet_id
+  FROM open_correction_exact_item_ids
   JOIN public.pay_batch_items AS selected_pay_batch_item_row
     ON selected_pay_batch_item_row.id = open_correction_exact_item_ids.pay_batch_item_id
+  JOIN family_to_projection
+    ON family_to_projection.family_timesheet_id = selected_pay_batch_item_row.timesheet_id
   JOIN public.pay_batch_candidates AS selected_pay_batch_candidate_row
     ON selected_pay_batch_candidate_row.id = selected_pay_batch_item_row.pay_batch_candidate_id
    AND selected_pay_batch_candidate_row.pay_batch_id = open_correction_exact_item_ids.pay_batch_id
   LEFT JOIN public.pay_bank_transfers AS selected_pay_bank_transfer_row
     ON selected_pay_bank_transfer_row.id = selected_pay_batch_item_row.pay_bank_transfer_id
-  WHERE selected_pay_batch_item_row.timesheet_id = ANY(input_scope.ts_ids)
-    AND selected_pay_batch_item_row.timesheet_id IS NOT NULL
+  WHERE selected_pay_batch_item_row.timesheet_id IS NOT NULL
     AND COALESCE(selected_pay_batch_item_row.is_voided, false) = false
     AND upper(coalesce(selected_pay_batch_item_row.pay_channel, '')) IN ('PAYE','UMBRELLA')
     AND (p_exclude_pay_batch_id IS NULL OR selected_pay_batch_candidate_row.pay_batch_id <> p_exclude_pay_batch_id)
@@ -77672,10 +78442,11 @@ open_correction_hold_item_ids AS (
 ),
 unresolved_terminal_failure_hold_item_ids AS (
   SELECT DISTINCT
-    terminal_failure_item_row.id AS pay_batch_item_id
-  FROM inp AS input_scope
+    terminal_failure_item_row.id AS pay_batch_item_id,
+    family_to_projection.projected_timesheet_id AS projected_timesheet_id
+  FROM family_to_projection
   JOIN public.pay_batch_items AS terminal_failure_item_row
-    ON terminal_failure_item_row.timesheet_id = ANY(input_scope.ts_ids)
+    ON terminal_failure_item_row.timesheet_id = family_to_projection.family_timesheet_id
   JOIN public.pay_batch_candidates AS terminal_failure_candidate_row
     ON terminal_failure_candidate_row.id = terminal_failure_item_row.pay_batch_candidate_id
   JOIN public.pay_bank_transfer_events AS terminal_failure_event_row
@@ -77705,31 +78476,65 @@ unresolved_terminal_failure_hold_item_ids AS (
     )
 ),
 active_item_ids AS (
-  SELECT active_batch_item_ids.pay_batch_item_id
+  SELECT active_batch_item_ids.pay_batch_item_id, active_batch_item_ids.projected_timesheet_id
   FROM active_batch_item_ids
   UNION
-  SELECT open_correction_hold_item_ids.pay_batch_item_id
+  SELECT open_correction_hold_item_ids.pay_batch_item_id, open_correction_hold_item_ids.projected_timesheet_id
   FROM open_correction_hold_item_ids
   UNION
-  SELECT unresolved_terminal_failure_hold_item_ids.pay_batch_item_id
+  SELECT unresolved_terminal_failure_hold_item_ids.pay_batch_item_id, unresolved_terminal_failure_hold_item_ids.projected_timesheet_id
   FROM unresolved_terminal_failure_hold_item_ids
 ),
-reserved_keyed AS (
+active_item_id_array AS (
   SELECT
-    economic_component_rows.timesheet_id,
+    CASE
+      WHEN COUNT(*) = 0 THEN ARRAY['00000000-0000-0000-0000-000000000000'::uuid]
+      ELSE ARRAY_AGG(active_item_ids.pay_batch_item_id ORDER BY active_item_ids.pay_batch_item_id)
+    END AS pay_batch_item_ids
+  FROM active_item_ids
+),
+reserved_keyed_raw AS (
+  SELECT
+    active_item_rows.pay_batch_item_id,
+    active_item_rows.projected_timesheet_id AS timesheet_id,
     UPPER(NULLIF(BTRIM(COALESCE(economic_component_rows.key_type, '')), '')) AS key_type,
     NULLIF(BTRIM(COALESCE(economic_component_rows.key_value, '')), '') AS key_value,
     ROUND(COALESCE(economic_component_rows.source_amount_ex_vat, 0), 2) AS amount_ex_vat,
     ROUND(COALESCE(economic_component_rows.source_amount_inc_vat, 0), 2) AS amount_inc_vat
-  FROM active_item_ids AS active_item_rows
+  FROM active_item_id_array
   JOIN LATERAL public._pay_batch_item_economic_components(
-    p_pay_batch_item_ids => ARRAY[active_item_rows.pay_batch_item_id]::uuid[]
+    p_pay_batch_id => NULL::uuid,
+    p_pay_batch_item_ids => active_item_id_array.pay_batch_item_ids
   ) AS economic_component_rows
     ON true
-  WHERE UPPER(BTRIM(COALESCE(economic_component_rows.item_type, ''))) IN ('SEGMENT_DELTA','EXPENSE_DELTA','ADJUSTMENT_DELTA','MILEAGE_DELTA')
+  JOIN active_item_ids AS active_item_rows
+    ON active_item_rows.pay_batch_item_id = economic_component_rows.pay_batch_item_id
+  WHERE active_item_rows.projected_timesheet_id IS NOT NULL
+    AND UPPER(BTRIM(COALESCE(economic_component_rows.item_type, ''))) IN ('SEGMENT_DELTA','EXPENSE_DELTA','ADJUSTMENT_DELTA','MILEAGE_DELTA')
     AND economic_component_rows.key_resolution_failure_reason IS NULL
     AND economic_component_rows.source_amount_ex_vat IS NOT NULL
-    AND economic_component_rows.key_type IN ('TS_DAY','TS_TOTAL','ADDITIONAL_CODE','ADJUSTMENT_CODE','EXPENSE_CODE')
+    AND UPPER(BTRIM(COALESCE(economic_component_rows.key_type, ''))) IN ('TS_DAY','TS_TOTAL','ADDITIONAL_CODE','ADJUSTMENT_CODE','EXPENSE_CODE')
+),
+reserved_keyed AS (
+  SELECT
+    reserved_keyed_raw.pay_batch_item_id,
+    reserved_keyed_raw.timesheet_id,
+    reserved_keyed_raw.key_type,
+    reserved_keyed_raw.key_value,
+    ROUND(SUM(COALESCE(reserved_keyed_raw.amount_ex_vat, 0)), 2) AS amount_ex_vat,
+    ROUND(SUM(COALESCE(reserved_keyed_raw.amount_inc_vat, 0)), 2) AS amount_inc_vat
+  FROM reserved_keyed_raw
+  WHERE reserved_keyed_raw.timesheet_id IS NOT NULL
+    AND reserved_keyed_raw.key_type IS NOT NULL
+    AND BTRIM(reserved_keyed_raw.key_type) <> ''
+    AND reserved_keyed_raw.key_value IS NOT NULL
+    AND BTRIM(reserved_keyed_raw.key_value) <> ''
+    AND NOT (reserved_keyed_raw.key_type = 'TS_DAY' AND reserved_keyed_raw.key_value !~ '^\d{4}-\d{2}-\d{2}$')
+  GROUP BY
+    reserved_keyed_raw.pay_batch_item_id,
+    reserved_keyed_raw.timesheet_id,
+    reserved_keyed_raw.key_type,
+    reserved_keyed_raw.key_value
 ),
 reserved_components AS (
   SELECT
@@ -77739,12 +78544,6 @@ reserved_components AS (
     ROUND(SUM(COALESCE(reserved_keyed_rows.amount_ex_vat, 0)), 2) AS amount_ex_vat,
     ROUND(SUM(COALESCE(reserved_keyed_rows.amount_inc_vat, 0)), 2) AS amount_inc_vat
   FROM reserved_keyed AS reserved_keyed_rows
-  WHERE reserved_keyed_rows.timesheet_id IS NOT NULL
-    AND reserved_keyed_rows.key_type IS NOT NULL
-    AND BTRIM(reserved_keyed_rows.key_type) <> ''
-    AND reserved_keyed_rows.key_value IS NOT NULL
-    AND BTRIM(reserved_keyed_rows.key_value) <> ''
-    AND NOT (reserved_keyed_rows.key_type = 'TS_DAY' AND reserved_keyed_rows.key_value !~ '^\d{4}-\d{2}-\d{2}$')
   GROUP BY
     reserved_keyed_rows.timesheet_id,
     reserved_keyed_rows.key_type,
@@ -77756,9 +78555,15 @@ SELECT
   reserved_component_rows.key_value,
   reserved_component_rows.amount_ex_vat,
   reserved_component_rows.amount_inc_vat
-FROM reserved_components AS reserved_component_rows;
+FROM reserved_components AS reserved_component_rows
+WHERE reserved_component_rows.timesheet_id IS NOT NULL
+  AND reserved_component_rows.key_type IS NOT NULL
+  AND reserved_component_rows.key_value IS NOT NULL
+  AND (
+    ROUND(COALESCE(reserved_component_rows.amount_ex_vat, 0), 2) <> 0
+    OR ROUND(COALESCE(reserved_component_rows.amount_inc_vat, 0), 2) <> 0
+  );
 $$;
-
 
 
 -- =========================================================
@@ -77792,7 +78597,6 @@ $$;
 -- =========================================================
 -- NEW - public._pay_outstanding_components - overload exclude pay batch.txt
 -- =========================================================
-
 CREATE OR REPLACE FUNCTION public._pay_outstanding_components(p_timesheet_ids uuid[], p_exclude_pay_batch_id uuid)
  RETURNS TABLE(timesheet_id uuid, key_type text, key_value text, truth_ex_vat numeric, baseline_ex_vat numeric, reserved_ex_vat numeric, outstanding_ex_vat numeric, truth_inc_vat numeric, baseline_inc_vat numeric, reserved_inc_vat numeric, outstanding_inc_vat numeric, reservation_overrun_detected boolean)
  LANGUAGE sql
@@ -77803,388 +78607,83 @@ with
 inp as (
   select coalesce(
     (
-      select array_agg(distinct t_input.x)
+      select array_agg(distinct t_input.x order by t_input.x)
       from unnest(coalesce(p_timesheet_ids, array[]::uuid[])) as t_input(x)
       where t_input.x is not null
     ),
     array[]::uuid[]
   ) as ts_ids
 ),
-tf as (
+rotation_scope_rows as (
   select
-    tfin.timesheet_id,
-    tfin.total_pay_ex_vat,
-    tfin.invoice_breakdown_json,
-    tfin.additional_units_json,
-    tfin.expenses_pay_ex_vat,
-    tfin.travel_pay_ex_vat,
-    tfin.accommodation_pay_ex_vat,
-    tfin.other_pay_ex_vat,
-    tfin.mileage_pay_ex_vat,
-    ts.booking_id,
-    upper(coalesce(ts.sheet_scope::text,'')) as sheet_scope,
-    ts.reference_number,
-    ts.worked_start_iso as ts_worked_start_iso,
-    ts.worked_end_iso as ts_worked_end_iso,
-    ts.break_start_iso as ts_break_start_iso,
-    ts.break_end_iso as ts_break_end_iso,
-    ts.break_minutes as ts_break_minutes,
-    ts.actual_schedule_json as ts_actual_schedule_json,
-    tfin.worked_start_iso as tf_worked_start_iso,
-    tfin.worked_end_iso as tf_worked_end_iso,
-    tfin.break_start_iso as tf_break_start_iso,
-    tfin.break_end_iso as tf_break_end_iso,
-    tfin.break_minutes as tf_break_minutes,
-    tfin.actual_schedule_json as tf_actual_schedule_json
-  from inp i
-  left join public.timesheets_financials tfin
-    on tfin.is_current = true
-   and tfin.timesheet_id = any(i.ts_ids)
-  left join public.timesheets ts
-    on ts.timesheet_id = tfin.timesheet_id
-   and ts.is_current = true
-),
-truth_enriched as (
-  select
-    tf0.timesheet_id,
-    tf0.total_pay_ex_vat,
-    tf0.invoice_breakdown_json,
-    tf0.additional_units_json,
-    tf0.expenses_pay_ex_vat,
-    tf0.travel_pay_ex_vat,
-    tf0.accommodation_pay_ex_vat,
-    tf0.other_pay_ex_vat,
-    tf0.mileage_pay_ex_vat,
-    tf0.booking_id,
-    tf0.sheet_scope,
-    tf0.reference_number,
-    coalesce(tf0.tf_worked_start_iso, tf0.ts_worked_start_iso) as effective_worked_start_iso,
-    coalesce(tf0.tf_worked_end_iso, tf0.ts_worked_end_iso) as effective_worked_end_iso,
-    coalesce(tf0.tf_break_start_iso, tf0.ts_break_start_iso) as effective_break_start_iso,
-    coalesce(tf0.tf_break_end_iso, tf0.ts_break_end_iso) as effective_break_end_iso,
-    coalesce(tf0.tf_break_minutes, tf0.ts_break_minutes) as effective_break_minutes,
-    case
-      when jsonb_typeof(tf0.tf_actual_schedule_json) = 'object' then tf0.tf_actual_schedule_json
-      when jsonb_typeof(tf0.tf_actual_schedule_json) = 'array' then (
-        select tf_sched_item.value
-        from jsonb_array_elements(tf0.tf_actual_schedule_json) as tf_sched_item(value)
-        where tf_sched_item.value is not null
-          and jsonb_typeof(tf_sched_item.value) = 'object'
-        limit 1
-      )
-      when jsonb_typeof(tf0.ts_actual_schedule_json) = 'object' then tf0.ts_actual_schedule_json
-      when jsonb_typeof(tf0.ts_actual_schedule_json) = 'array' then (
-        select ts_sched_item.value
-        from jsonb_array_elements(tf0.ts_actual_schedule_json) as ts_sched_item(value)
-        where ts_sched_item.value is not null
-          and jsonb_typeof(ts_sched_item.value) = 'object'
-        limit 1
-      )
-      else null::jsonb
-    end as effective_daily_schedule_json
-  from tf tf0
-),
-truth_segments as (
-  select
-    te.timesheet_id,
-    case
-      when te.invoice_breakdown_json is not null
-       and jsonb_typeof(te.invoice_breakdown_json) = 'object'
-       and upper(coalesce(te.invoice_breakdown_json->>'mode','')) = 'SEGMENTS'
-       and jsonb_typeof(te.invoice_breakdown_json->'segments') = 'array'
-      then (
-        select coalesce(
-          jsonb_agg(seg.value),
-          '[]'::jsonb
-        )
-        from jsonb_array_elements(te.invoice_breakdown_json->'segments') as seg(value)
-        where seg.value is not null
-          and jsonb_typeof(seg.value) = 'object'
-      )
-      when te.sheet_scope = 'DAILY'
-      then jsonb_build_array(
-        jsonb_build_object(
-          'segment_id', ('ts:' || te.timesheet_id::text),
-          'pay_amount', round(coalesce(te.total_pay_ex_vat,0),2),
-          'exclude_from_pay', false,
-          'date', case
-            when te.effective_worked_start_iso is not null then ((te.effective_worked_start_iso at time zone 'Europe/London')::date)::text
-            else coalesce(
-              nullif(btrim(coalesce(te.effective_daily_schedule_json->>'date','')), ''),
-              nullif(btrim(coalesce(te.effective_daily_schedule_json->>'work_date','')), ''),
-              nullif(btrim(coalesce(te.effective_daily_schedule_json->>'ymd','')), ''),
-              nullif(btrim(coalesce(te.effective_daily_schedule_json->>'date_ymd','')), '')
-            )
-          end,
-          'segment_key', ('ts:' || te.timesheet_id::text),
-          'segment_stable_key', ('timesheet:' || coalesce(te.booking_id, te.timesheet_id::text)),
-          'ref_num', nullif(btrim(coalesce(te.reference_number,'')), ''),
-          'start_utc', case
-            when te.effective_worked_start_iso is not null then te.effective_worked_start_iso::text
-            else null
-          end,
-          'end_utc', case
-            when te.effective_worked_end_iso is not null then te.effective_worked_end_iso::text
-            else null
-          end,
-          'start', case
-            when te.effective_worked_start_iso is not null then to_char((te.effective_worked_start_iso at time zone 'Europe/London'), 'HH24:MI')
-            else coalesce(
-              nullif(btrim(coalesce(te.effective_daily_schedule_json->>'start','')), ''),
-              nullif(btrim(coalesce(te.effective_daily_schedule_json->>'worked_start','')), '')
-            )
-          end,
-          'end', case
-            when te.effective_worked_end_iso is not null then to_char((te.effective_worked_end_iso at time zone 'Europe/London'), 'HH24:MI')
-            else coalesce(
-              nullif(btrim(coalesce(te.effective_daily_schedule_json->>'end','')), ''),
-              nullif(btrim(coalesce(te.effective_daily_schedule_json->>'worked_end','')), '')
-            )
-          end,
-          'break_start', case
-            when te.effective_break_start_iso is not null then to_char((te.effective_break_start_iso at time zone 'Europe/London'), 'HH24:MI')
-            else nullif(btrim(coalesce(te.effective_daily_schedule_json->>'break_start','')), '')
-          end,
-          'break_end', case
-            when te.effective_break_end_iso is not null then to_char((te.effective_break_end_iso at time zone 'Europe/London'), 'HH24:MI')
-            else nullif(btrim(coalesce(te.effective_daily_schedule_json->>'break_end','')), '')
-          end,
-          'break_mins', coalesce(
-            te.effective_break_minutes::numeric,
-            nullif(btrim(coalesce(te.effective_daily_schedule_json->>'break_minutes','')), '')::numeric,
-            nullif(btrim(coalesce(te.effective_daily_schedule_json->>'break_mins','')), '')::numeric,
-            nullif(btrim(coalesce(te.effective_daily_schedule_json->>'breakMinutes','')), '')::numeric,
-            nullif(btrim(coalesce(te.effective_daily_schedule_json->>'breakMin','')), '')::numeric,
-            case
-              when te.effective_break_start_iso is not null and te.effective_break_end_iso is not null
-                then greatest(
-                  0::numeric,
-                  round((extract(epoch from (te.effective_break_end_iso - te.effective_break_start_iso)) / 60.0)::numeric, 0)
-                )
-              else null::numeric
-            end
-          ),
-          'breaks', case
-            when jsonb_typeof(te.effective_daily_schedule_json->'breaks') = 'array' then te.effective_daily_schedule_json->'breaks'
-            when te.effective_break_start_iso is not null and te.effective_break_end_iso is not null
-              then jsonb_build_array(
-                jsonb_build_object(
-                  'start', to_char((te.effective_break_start_iso at time zone 'Europe/London'), 'HH24:MI'),
-                  'end', to_char((te.effective_break_end_iso at time zone 'Europe/London'), 'HH24:MI'),
-                  'break_mins', coalesce(
-                    te.effective_break_minutes::numeric,
-                    case
-                      when te.effective_break_start_iso is not null and te.effective_break_end_iso is not null
-                        then greatest(
-                          0::numeric,
-                          round((extract(epoch from (te.effective_break_end_iso - te.effective_break_start_iso)) / 60.0)::numeric, 0)
-                        )
-                      else null::numeric
-                    end
-                  )
-                )
-              )
-            when nullif(btrim(coalesce(te.effective_daily_schedule_json->>'break_start','')), '') is not null
-             and nullif(btrim(coalesce(te.effective_daily_schedule_json->>'break_end','')), '') is not null
-              then jsonb_build_array(
-                jsonb_build_object(
-                  'start', nullif(btrim(coalesce(te.effective_daily_schedule_json->>'break_start','')), ''),
-                  'end', nullif(btrim(coalesce(te.effective_daily_schedule_json->>'break_end','')), ''),
-                  'break_mins', coalesce(
-                    te.effective_break_minutes::numeric,
-                    nullif(btrim(coalesce(te.effective_daily_schedule_json->>'break_minutes','')), '')::numeric,
-                    nullif(btrim(coalesce(te.effective_daily_schedule_json->>'break_mins','')), '')::numeric,
-                    nullif(btrim(coalesce(te.effective_daily_schedule_json->>'breakMinutes','')), '')::numeric,
-                    nullif(btrim(coalesce(te.effective_daily_schedule_json->>'breakMin','')), '')::numeric
-                  )
-                )
-              )
-            else '[]'::jsonb
-          end
-        )
-      )
-      else jsonb_build_array(
-        jsonb_build_object(
-          'segment_id', ('ts:' || te.timesheet_id::text),
-          'pay_amount', round(coalesce(te.total_pay_ex_vat,0),2),
-          'exclude_from_pay', false
-        )
-      )
-    end as segments_json
-  from truth_enriched te
-),
-truth_snapshot_like as (
-  select
-    ts.timesheet_id,
-    jsonb_build_object(
-      'segments', ts.segments_json,
-      'additional_units_json', coalesce(tf1.additional_units_json,'{}'::jsonb),
-      'additional_pay_ex_vat', 0,
-      'expenses', jsonb_build_object(
-        'expenses_pay_ex_vat', round(coalesce(tf1.expenses_pay_ex_vat,0),2),
-        'travel_pay_ex_vat', round(coalesce(tf1.travel_pay_ex_vat,0),2),
-        'accommodation_pay_ex_vat', round(coalesce(tf1.accommodation_pay_ex_vat,0),2),
-        'other_pay_ex_vat', round(coalesce(tf1.other_pay_ex_vat,0),2),
-        'mileage_pay_ex_vat', round(coalesce(tf1.mileage_pay_ex_vat,0),2)
-      ),
-      'adjustments', coalesce((
-        select jsonb_agg(
-          jsonb_build_object(
-            'id', a.id::text,
-            'delta_pay_ex_vat', round(coalesce(a.delta_pay_ex_vat,0),2)
-          )
-          order by a.created_at nulls last, a.id
-        )
-        from public.ts_pay_adjustments a
-        where a.as_advance = false
-          and a.timesheet_id = ts.timesheet_id
-      ), '[]'::jsonb)
-    ) as snap_json
-  from truth_segments ts
-  join tf tf1
-    on tf1.timesheet_id = ts.timesheet_id
-),
-truth_components_raw as (
-  select
-    truth_snapshot_rows.timesheet_id,
-    UPPER(NULLIF(BTRIM(COALESCE(timesheet_component_rows.key_type, '')), '')) as raw_key_type,
-    NULLIF(BTRIM(COALESCE(timesheet_component_rows.key_value, '')), '') as raw_key_value,
-    timesheet_component_rows.amount_ex_vat,
-    timesheet_component_rows.amount_inc_vat,
-    CASE
-      WHEN UPPER(NULLIF(BTRIM(COALESCE(timesheet_component_rows.key_type, '')), '')) IN ('TS_DAY','TS_TOTAL')
-        THEN 'SEGMENT_DELTA'
-      WHEN UPPER(NULLIF(BTRIM(COALESCE(timesheet_component_rows.key_type, '')), '')) = 'ADJUSTMENT_CODE'
-        THEN 'ADJUSTMENT_DELTA'
-      WHEN UPPER(NULLIF(BTRIM(COALESCE(timesheet_component_rows.key_type, '')), '')) IN ('ADDITIONAL_CODE','EXPENSE_CODE')
-        THEN 'EXPENSE_DELTA'
-      ELSE NULL::text
-    END as resolver_item_type
-  from truth_snapshot_like as truth_snapshot_rows
-  join lateral public._pay_timesheet_components(truth_snapshot_rows.snap_json) as timesheet_component_rows
+    scope_rows.requested_timesheet_id,
+    scope_rows.booking_id,
+    scope_rows.canonical_timesheet_id,
+    scope_rows.family_timesheet_id,
+    scope_rows.family_is_current,
+    scope_rows.family_version,
+    scope_rows.requested_is_canonical
+  from inp as input_scope
+  join public._pay_timesheet_rotation_scope(input_scope.ts_ids) as scope_rows
     on true
 ),
-truth_components as (
+rotation_scope_keyed as (
   select
-    truth_component_rows.timesheet_id,
-    resolved_truth_keys.key_type,
-    resolved_truth_keys.key_value,
-    truth_component_rows.amount_ex_vat,
-    truth_component_rows.amount_inc_vat
-  from truth_components_raw as truth_component_rows
-  join lateral public._pay_policy_x_resolve_pre_draft_economic_key(
-    p_timesheet_id => truth_component_rows.timesheet_id,
-    p_live_source_json => jsonb_build_object(
-      'timesheet_id', truth_component_rows.timesheet_id::text,
-      'item_type', truth_component_rows.resolver_item_type,
-      'component_key_type', truth_component_rows.raw_key_type,
-      'component_key_value', truth_component_rows.raw_key_value,
-      'work_date', CASE WHEN truth_component_rows.raw_key_type = 'TS_DAY' THEN truth_component_rows.raw_key_value ELSE NULL::text END
-    ),
-    p_item_type => truth_component_rows.resolver_item_type,
-    p_key_type_hint => truth_component_rows.raw_key_type,
-    p_key_value_hint => truth_component_rows.raw_key_value,
-    p_work_date => CASE
-      WHEN truth_component_rows.raw_key_type = 'TS_DAY'
-       AND truth_component_rows.raw_key_value ~ '^\d{4}-\d{2}-\d{2}$'
-        THEN truth_component_rows.raw_key_value::date
-      ELSE NULL::date
-    END
-  ) as resolved_truth_keys
-    on true
-  where resolved_truth_keys.key_resolution_failure_reason is null
+    rotation_scope_rows.requested_timesheet_id,
+    rotation_scope_rows.booking_id,
+    rotation_scope_rows.canonical_timesheet_id,
+    rotation_scope_rows.family_timesheet_id,
+    rotation_scope_rows.family_is_current,
+    rotation_scope_rows.family_version,
+    rotation_scope_rows.requested_is_canonical,
+    coalesce(rotation_scope_rows.booking_id, rotation_scope_rows.requested_timesheet_id::text) as scope_family_key
+  from rotation_scope_rows
+  where rotation_scope_rows.requested_timesheet_id is not null
 ),
-active_settled_components as (
+projection_targets as (
   select
-    active_rows.timesheet_id,
-    active_rows.key_type,
-    active_rows.key_value,
-    active_rows.amount_ex_vat,
-    active_rows.amount_inc_vat
-  from public._pay_active_settled_components((select inp.ts_ids from inp)) as active_rows
+    rotation_scope_keyed.scope_family_key,
+    coalesce(
+      (
+        array_agg(distinct rotation_scope_keyed.canonical_timesheet_id order by rotation_scope_keyed.canonical_timesheet_id)
+        filter (
+          where coalesce(rotation_scope_keyed.requested_is_canonical, false) = true
+            and rotation_scope_keyed.canonical_timesheet_id is not null
+        )
+      )[1],
+      (
+        array_agg(distinct rotation_scope_keyed.requested_timesheet_id order by rotation_scope_keyed.requested_timesheet_id)
+        filter (where rotation_scope_keyed.requested_timesheet_id is not null)
+      )[1],
+      (
+        array_agg(distinct rotation_scope_keyed.canonical_timesheet_id order by rotation_scope_keyed.canonical_timesheet_id)
+        filter (where rotation_scope_keyed.canonical_timesheet_id is not null)
+      )[1]
+    ) as projected_timesheet_id
+  from rotation_scope_keyed
+  group by rotation_scope_keyed.scope_family_key
 ),
-legacy_baseline_timesheets as (
+family_to_projection as (
   select distinct
-    tps.timesheet_id
-  from inp i
-  join public.timesheet_pay_state tps
-    on tps.timesheet_id = any(i.ts_ids)
-  where not exists (
-    select 1
-    from active_settled_components active_check
-    where active_check.timesheet_id = tps.timesheet_id
-  )
+    rotation_scope_keyed.family_timesheet_id,
+    projection_targets.projected_timesheet_id
+  from rotation_scope_keyed
+  join projection_targets
+    on projection_targets.scope_family_key = rotation_scope_keyed.scope_family_key
+  where rotation_scope_keyed.family_timesheet_id is not null
+    and projection_targets.projected_timesheet_id is not null
 ),
-legacy_baseline_components_raw as (
+timesheet_entitlement_components as (
   select
-    timesheet_pay_state_rows.timesheet_id,
-    UPPER(NULLIF(BTRIM(COALESCE(baseline_component_rows.key_type, '')), '')) as raw_key_type,
-    NULLIF(BTRIM(COALESCE(baseline_component_rows.key_value, '')), '') as raw_key_value,
-    baseline_component_rows.amount_ex_vat,
-    baseline_component_rows.amount_inc_vat,
-    CASE
-      WHEN UPPER(NULLIF(BTRIM(COALESCE(baseline_component_rows.key_type, '')), '')) IN ('TS_DAY','TS_TOTAL')
-        THEN 'SEGMENT_DELTA'
-      WHEN UPPER(NULLIF(BTRIM(COALESCE(baseline_component_rows.key_type, '')), '')) = 'ADJUSTMENT_CODE'
-        THEN 'ADJUSTMENT_DELTA'
-      WHEN UPPER(NULLIF(BTRIM(COALESCE(baseline_component_rows.key_type, '')), '')) IN ('ADDITIONAL_CODE','EXPENSE_CODE')
-        THEN 'EXPENSE_DELTA'
-      ELSE NULL::text
-    END as resolver_item_type
-  from legacy_baseline_timesheets as legacy_baseline_timesheet_rows
-  join public.timesheet_pay_state as timesheet_pay_state_rows
-    on timesheet_pay_state_rows.timesheet_id = legacy_baseline_timesheet_rows.timesheet_id
-  join lateral public._pay_timesheet_components(coalesce(timesheet_pay_state_rows.last_settled_snapshot_json,'{}'::jsonb)) as baseline_component_rows
-    on true
+    entitlement_rows.timesheet_id,
+    entitlement_rows.key_type,
+    entitlement_rows.key_value,
+    entitlement_rows.truth_ex_vat,
+    entitlement_rows.baseline_ex_vat,
+    entitlement_rows.truth_inc_vat,
+    entitlement_rows.baseline_inc_vat
+  from public._pay_current_timesheet_entitlement_components((select input_scope.ts_ids from inp as input_scope)) as entitlement_rows
 ),
-legacy_baseline_components as (
-  select
-    legacy_baseline_rows.timesheet_id,
-    resolved_baseline_keys.key_type,
-    resolved_baseline_keys.key_value,
-    legacy_baseline_rows.amount_ex_vat,
-    legacy_baseline_rows.amount_inc_vat
-  from legacy_baseline_components_raw as legacy_baseline_rows
-  join lateral public._pay_policy_x_resolve_pre_draft_economic_key(
-    p_timesheet_id => legacy_baseline_rows.timesheet_id,
-    p_live_source_json => jsonb_build_object(
-      'timesheet_id', legacy_baseline_rows.timesheet_id::text,
-      'item_type', legacy_baseline_rows.resolver_item_type,
-      'component_key_type', legacy_baseline_rows.raw_key_type,
-      'component_key_value', legacy_baseline_rows.raw_key_value,
-      'work_date', CASE WHEN legacy_baseline_rows.raw_key_type = 'TS_DAY' THEN legacy_baseline_rows.raw_key_value ELSE NULL::text END
-    ),
-    p_item_type => legacy_baseline_rows.resolver_item_type,
-    p_key_type_hint => legacy_baseline_rows.raw_key_type,
-    p_key_value_hint => legacy_baseline_rows.raw_key_value,
-    p_work_date => CASE
-      WHEN legacy_baseline_rows.raw_key_type = 'TS_DAY'
-       AND legacy_baseline_rows.raw_key_value ~ '^\d{4}-\d{2}-\d{2}$'
-        THEN legacy_baseline_rows.raw_key_value::date
-      ELSE NULL::date
-    END
-  ) as resolved_baseline_keys
-    on true
-  where resolved_baseline_keys.key_resolution_failure_reason is null
-),
-baseline_components as (
-  select
-    active_settled_components.timesheet_id,
-    active_settled_components.key_type,
-    active_settled_components.key_value,
-    active_settled_components.amount_ex_vat,
-    active_settled_components.amount_inc_vat
-  from active_settled_components
-  union all
-  select
-    legacy_baseline_components.timesheet_id,
-    legacy_baseline_components.key_type,
-    legacy_baseline_components.key_value,
-    legacy_baseline_components.amount_ex_vat,
-    legacy_baseline_components.amount_inc_vat
-  from legacy_baseline_components
-),
-
 reserved_components as (
   select
     reserved_component_rows.timesheet_id,
@@ -78199,32 +78698,33 @@ reserved_components as (
 ),
 component_truth_raw as (
   select
-    finance_component_rows.linked_timesheet_id as timesheet_id,
-    UPPER(NULLIF(BTRIM(COALESCE(finance_component_rows.component_key_type,'')), '')) as raw_key_type,
-    NULLIF(BTRIM(COALESCE(finance_component_rows.component_key_value,'')), '') as raw_key_value,
-    CASE
-      WHEN jsonb_typeof(COALESCE(finance_component_rows.source_basis_json, '{}'::jsonb)) = 'object'
-        THEN COALESCE(finance_component_rows.source_basis_json, '{}'::jsonb)
-      ELSE '{}'::jsonb
-    END as source_basis_json,
-    ROUND(
-      CASE
-        WHEN pay_advance_rows.case_type = 'OVERPAYMENT'::public.pay_finance_case_type_enum
-          THEN COALESCE(finance_component_rows.remaining_source_amount,0) * -1
-        WHEN pay_advance_rows.case_type = 'UNDERPAYMENT'::public.pay_finance_case_type_enum
-          THEN COALESCE(finance_component_rows.remaining_source_amount,0)
-        ELSE 0
-      END,
+    family_to_projection.projected_timesheet_id as timesheet_id,
+    upper(nullif(btrim(coalesce(finance_component_rows.component_key_type,'')), '')) as raw_key_type,
+    nullif(btrim(coalesce(finance_component_rows.component_key_value,'')), '') as raw_key_value,
+    case
+      when jsonb_typeof(coalesce(finance_component_rows.source_basis_json, '{}'::jsonb)) = 'object'
+        then coalesce(finance_component_rows.source_basis_json, '{}'::jsonb)
+      else '{}'::jsonb
+    end as source_basis_json,
+    round(
+      case
+        when pay_advance_rows.case_type = 'OVERPAYMENT'::public.pay_finance_case_type_enum
+          then coalesce(finance_component_rows.remaining_source_amount,0) * -1
+        when pay_advance_rows.case_type = 'UNDERPAYMENT'::public.pay_finance_case_type_enum
+          then coalesce(finance_component_rows.remaining_source_amount,0)
+        else 0
+      end,
       2
     ) as signed_amount
-  from inp as input_scope
+  from family_to_projection
   join public.pay_finance_case_components as finance_component_rows
-    on finance_component_rows.linked_timesheet_id = any(input_scope.ts_ids)
+    on finance_component_rows.linked_timesheet_id = family_to_projection.family_timesheet_id
   join public.pay_advances as pay_advance_rows
     on pay_advance_rows.id = finance_component_rows.finance_case_id
   where finance_component_rows.linked_timesheet_id is not null
+    and family_to_projection.projected_timesheet_id is not null
     and finance_component_rows.closed_at_utc is null
-    and COALESCE(finance_component_rows.remaining_source_amount,0) > 0
+    and coalesce(finance_component_rows.remaining_source_amount,0) > 0
     and pay_advance_rows.case_type in (
       'OVERPAYMENT'::public.pay_finance_case_type_enum,
       'UNDERPAYMENT'::public.pay_finance_case_type_enum
@@ -78237,27 +78737,30 @@ component_truth_prepared as (
     component_truth_raw_rows.raw_key_value,
     component_truth_raw_rows.source_basis_json,
     component_truth_raw_rows.signed_amount,
-    COALESCE(
-      UPPER(NULLIF(BTRIM(COALESCE(component_truth_raw_rows.source_basis_json->>'item_type', '')), '')),
-      CASE
-        WHEN component_truth_raw_rows.raw_key_type IN ('TS_DAY','TS_TOTAL','CASE_TOTAL')
-          THEN 'SEGMENT_DELTA'
-        WHEN NULLIF(BTRIM(COALESCE(component_truth_raw_rows.source_basis_json->>'work_date','')), '') ~ '^\d{4}-\d{2}-\d{2}$'
-          THEN 'SEGMENT_DELTA'
-        WHEN component_truth_raw_rows.raw_key_type = 'ADJUSTMENT_CODE'
-          THEN 'ADJUSTMENT_DELTA'
-        WHEN NULLIF(BTRIM(COALESCE(component_truth_raw_rows.source_basis_json->>'adjustment_id','')), '') IS NOT NULL
-          THEN 'ADJUSTMENT_DELTA'
-        WHEN component_truth_raw_rows.raw_key_type IN ('ADDITIONAL_CODE','EXPENSE_CODE')
-          THEN 'EXPENSE_DELTA'
-        WHEN NULLIF(BTRIM(COALESCE(component_truth_raw_rows.source_basis_json->>'additional_code','')), '') IS NOT NULL
-          THEN 'EXPENSE_DELTA'
-        WHEN NULLIF(BTRIM(COALESCE(component_truth_raw_rows.source_basis_json->>'expense_code','')), '') IS NOT NULL
-          THEN 'EXPENSE_DELTA'
-        ELSE NULL::text
-      END
+    coalesce(
+      upper(nullif(btrim(coalesce(component_truth_raw_rows.source_basis_json->>'item_type', '')), '')),
+      case
+        when component_truth_raw_rows.raw_key_type in ('TS_DAY','TS_TOTAL','CASE_TOTAL')
+          then 'SEGMENT_DELTA'
+        when nullif(btrim(coalesce(component_truth_raw_rows.source_basis_json->>'work_date','')), '') ~ '^\d{4}-\d{2}-\d{2}$'
+          then 'SEGMENT_DELTA'
+        when component_truth_raw_rows.raw_key_type = 'ADJUSTMENT_CODE'
+          then 'ADJUSTMENT_DELTA'
+        when nullif(btrim(coalesce(component_truth_raw_rows.source_basis_json->>'adjustment_id','')), '') is not null
+          then 'ADJUSTMENT_DELTA'
+        when component_truth_raw_rows.raw_key_type = 'EXPENSE_CODE'
+         and upper(coalesce(component_truth_raw_rows.raw_key_value, '')) = 'MILEAGE'
+          then 'MILEAGE_DELTA'
+        when component_truth_raw_rows.raw_key_type in ('ADDITIONAL_CODE','EXPENSE_CODE')
+          then 'EXPENSE_DELTA'
+        when nullif(btrim(coalesce(component_truth_raw_rows.source_basis_json->>'additional_code','')), '') is not null
+          then 'EXPENSE_DELTA'
+        when nullif(btrim(coalesce(component_truth_raw_rows.source_basis_json->>'expense_code','')), '') is not null
+          then 'EXPENSE_DELTA'
+        else null::text
+      end
     ) as resolver_item_type,
-    NULLIF(BTRIM(COALESCE(component_truth_raw_rows.source_basis_json->>'work_date','')), '') as source_work_date_text
+    nullif(btrim(coalesce(component_truth_raw_rows.source_basis_json->>'work_date','')), '') as source_work_date_text
   from component_truth_raw as component_truth_raw_rows
 ),
 component_truth_keyed as (
@@ -78280,157 +78783,158 @@ component_truth_keyed as (
     p_item_type => component_truth_prepared_rows.resolver_item_type,
     p_key_type_hint => component_truth_prepared_rows.raw_key_type,
     p_key_value_hint => component_truth_prepared_rows.raw_key_value,
-    p_work_date => CASE
-      WHEN component_truth_prepared_rows.source_work_date_text ~ '^\d{4}-\d{2}-\d{2}$'
-        THEN component_truth_prepared_rows.source_work_date_text::date
-      WHEN component_truth_prepared_rows.raw_key_type = 'TS_DAY'
-       AND component_truth_prepared_rows.raw_key_value ~ '^\d{4}-\d{2}-\d{2}$'
-        THEN component_truth_prepared_rows.raw_key_value::date
-      ELSE NULL::date
-    END
+    p_work_date => case
+      when component_truth_prepared_rows.source_work_date_text ~ '^\d{4}-\d{2}-\d{2}$'
+        then component_truth_prepared_rows.source_work_date_text::date
+      when component_truth_prepared_rows.raw_key_type = 'TS_DAY'
+       and component_truth_prepared_rows.raw_key_value ~ '^\d{4}-\d{2}-\d{2}$'
+        then component_truth_prepared_rows.raw_key_value::date
+      else null::date
+    end
   ) as resolved_component_keys
     on true
   where resolved_component_keys.key_resolution_failure_reason is null
 ),
 component_truth as (
   select
-    ctk.timesheet_id,
-    ctk.key_type,
-    ctk.key_value,
-    round(sum(ctk.signed_amount), 2) as truth_ex_vat,
-    round(sum(ctk.signed_amount), 2) as truth_inc_vat
-  from component_truth_keyed ctk
-  where ctk.key_type is not null
-    and btrim(ctk.key_type) <> ''
-    and ctk.key_value is not null
-    and btrim(ctk.key_value) <> ''
+    component_truth_keyed_rows.timesheet_id,
+    component_truth_keyed_rows.key_type,
+    component_truth_keyed_rows.key_value,
+    round(sum(component_truth_keyed_rows.signed_amount), 2) as truth_ex_vat,
+    round(sum(component_truth_keyed_rows.signed_amount), 2) as truth_inc_vat
+  from component_truth_keyed as component_truth_keyed_rows
+  where component_truth_keyed_rows.key_type is not null
+    and btrim(component_truth_keyed_rows.key_type) <> ''
+    and component_truth_keyed_rows.key_value is not null
+    and btrim(component_truth_keyed_rows.key_value) <> ''
   group by
-    ctk.timesheet_id,
-    ctk.key_type,
-    ctk.key_value
+    component_truth_keyed_rows.timesheet_id,
+    component_truth_keyed_rows.key_type,
+    component_truth_keyed_rows.key_value
 ),
 component_keys as (
   select distinct
     component_truth_keys.timesheet_id,
     component_truth_keys.key_type,
     component_truth_keys.key_value
-  from component_truth component_truth_keys
+  from component_truth as component_truth_keys
 ),
 component_joined as (
   select
-    ck.timesheet_id,
-    ck.key_type,
-    ck.key_value,
-    coalesce(ct.truth_ex_vat,0) as truth_ex_vat,
+    component_keys.timesheet_id,
+    component_keys.key_type,
+    component_keys.key_value,
+    coalesce(component_truth.truth_ex_vat,0) as truth_ex_vat,
     0::numeric as baseline_ex_vat,
-    coalesce(rc.amount_ex_vat,0) as reserved_ex_vat,
-    coalesce(ct.truth_inc_vat,0) as truth_inc_vat,
+    coalesce(reserved_components.amount_ex_vat,0) as reserved_ex_vat,
+    coalesce(component_truth.truth_inc_vat,0) as truth_inc_vat,
     0::numeric as baseline_inc_vat,
-    coalesce(rc.amount_inc_vat,0) as reserved_inc_vat
-  from component_keys ck
-  left join component_truth ct
-    on ct.timesheet_id = ck.timesheet_id
-   and ct.key_type = ck.key_type
-   and ct.key_value = ck.key_value
-  left join reserved_components rc
-    on rc.timesheet_id = ck.timesheet_id
-   and rc.key_type = ck.key_type
-   and rc.key_value = ck.key_value
+    coalesce(reserved_components.amount_inc_vat,0) as reserved_inc_vat
+  from component_keys
+  left join component_truth
+    on component_truth.timesheet_id = component_keys.timesheet_id
+   and component_truth.key_type = component_keys.key_type
+   and component_truth.key_value = component_keys.key_value
+  left join reserved_components
+    on reserved_components.timesheet_id = component_keys.timesheet_id
+   and reserved_components.key_type = component_keys.key_type
+   and reserved_components.key_value = component_keys.key_value
 ),
 all_legacy_keys as (
   select distinct
-    x.timesheet_id,
-    x.key_type,
-    x.key_value
+    legacy_key_rows.timesheet_id,
+    legacy_key_rows.key_type,
+    legacy_key_rows.key_value
   from (
-    select tc.timesheet_id, tc.key_type, tc.key_value from truth_components tc
+    select
+      timesheet_entitlement_components.timesheet_id,
+      timesheet_entitlement_components.key_type,
+      timesheet_entitlement_components.key_value
+    from timesheet_entitlement_components
     union all
-    select bc.timesheet_id, bc.key_type, bc.key_value from baseline_components bc
-    union all
-    select rc.timesheet_id, rc.key_type, rc.key_value from reserved_components rc
-  ) x
+    select
+      reserved_components.timesheet_id,
+      reserved_components.key_type,
+      reserved_components.key_value
+    from reserved_components
+  ) as legacy_key_rows
 ),
 legacy_joined as (
   select
-    ak.timesheet_id,
-    ak.key_type,
-    ak.key_value,
-    coalesce(tc.amount_ex_vat,0) as truth_ex_vat,
-    coalesce(bc.amount_ex_vat,0) as baseline_ex_vat,
-    coalesce(rc.amount_ex_vat,0) as reserved_ex_vat,
-    coalesce(tc.amount_inc_vat,0) as truth_inc_vat,
-    coalesce(bc.amount_inc_vat,0) as baseline_inc_vat,
-    coalesce(rc.amount_inc_vat,0) as reserved_inc_vat
-  from all_legacy_keys ak
-  left join truth_components tc
-    on tc.timesheet_id = ak.timesheet_id
-   and tc.key_type = ak.key_type
-   and tc.key_value = ak.key_value
-  left join baseline_components bc
-    on bc.timesheet_id = ak.timesheet_id
-   and bc.key_type = ak.key_type
-   and bc.key_value = ak.key_value
-  left join reserved_components rc
-    on rc.timesheet_id = ak.timesheet_id
-   and rc.key_type = ak.key_type
-   and rc.key_value = ak.key_value
+    all_legacy_keys.timesheet_id,
+    all_legacy_keys.key_type,
+    all_legacy_keys.key_value,
+    coalesce(timesheet_entitlement_components.truth_ex_vat,0) as truth_ex_vat,
+    coalesce(timesheet_entitlement_components.baseline_ex_vat,0) as baseline_ex_vat,
+    coalesce(reserved_components.amount_ex_vat,0) as reserved_ex_vat,
+    coalesce(timesheet_entitlement_components.truth_inc_vat,0) as truth_inc_vat,
+    coalesce(timesheet_entitlement_components.baseline_inc_vat,0) as baseline_inc_vat,
+    coalesce(reserved_components.amount_inc_vat,0) as reserved_inc_vat
+  from all_legacy_keys
+  left join timesheet_entitlement_components
+    on timesheet_entitlement_components.timesheet_id = all_legacy_keys.timesheet_id
+   and timesheet_entitlement_components.key_type = all_legacy_keys.key_type
+   and timesheet_entitlement_components.key_value = all_legacy_keys.key_value
+  left join reserved_components
+    on reserved_components.timesheet_id = all_legacy_keys.timesheet_id
+   and reserved_components.key_type = all_legacy_keys.key_type
+   and reserved_components.key_value = all_legacy_keys.key_value
 ),
 final_rows as (
   select
-    cj.timesheet_id,
-    cj.key_type,
-    cj.key_value,
-    cj.truth_ex_vat,
-    cj.baseline_ex_vat,
-    cj.reserved_ex_vat,
-    cj.truth_inc_vat,
-    cj.baseline_inc_vat,
-    cj.reserved_inc_vat
-  from component_joined cj
+    component_joined.timesheet_id,
+    component_joined.key_type,
+    component_joined.key_value,
+    component_joined.truth_ex_vat,
+    component_joined.baseline_ex_vat,
+    component_joined.reserved_ex_vat,
+    component_joined.truth_inc_vat,
+    component_joined.baseline_inc_vat,
+    component_joined.reserved_inc_vat
+  from component_joined
 
   union all
 
   select
-    lj.timesheet_id,
-    lj.key_type,
-    lj.key_value,
-    lj.truth_ex_vat,
-    lj.baseline_ex_vat,
-    lj.reserved_ex_vat,
-    lj.truth_inc_vat,
-    lj.baseline_inc_vat,
-    lj.reserved_inc_vat
-  from legacy_joined lj
+    legacy_joined.timesheet_id,
+    legacy_joined.key_type,
+    legacy_joined.key_value,
+    legacy_joined.truth_ex_vat,
+    legacy_joined.baseline_ex_vat,
+    legacy_joined.reserved_ex_vat,
+    legacy_joined.truth_inc_vat,
+    legacy_joined.baseline_inc_vat,
+    legacy_joined.reserved_inc_vat
+  from legacy_joined
   where not exists (
     select 1
-    from component_truth ct
-    where ct.timesheet_id = lj.timesheet_id
-      and ct.key_type = lj.key_type
-      and ct.key_value = lj.key_value
+    from component_truth
+    where component_truth.timesheet_id = legacy_joined.timesheet_id
+      and component_truth.key_type = legacy_joined.key_type
+      and component_truth.key_value = legacy_joined.key_value
   )
 )
 select
-  fr.timesheet_id,
-  fr.key_type,
-  fr.key_value,
-  round(fr.truth_ex_vat,2) as truth_ex_vat,
-  round(fr.baseline_ex_vat,2) as baseline_ex_vat,
-  round(fr.reserved_ex_vat,2) as reserved_ex_vat,
-  round(fr.truth_ex_vat - fr.baseline_ex_vat - fr.reserved_ex_vat,2) as outstanding_ex_vat,
-  round(fr.truth_inc_vat,2) as truth_inc_vat,
-  round(fr.baseline_inc_vat,2) as baseline_inc_vat,
-  round(fr.reserved_inc_vat,2) as reserved_inc_vat,
-  round(fr.truth_inc_vat - fr.baseline_inc_vat - fr.reserved_inc_vat,2) as outstanding_inc_vat,
+  final_rows.timesheet_id,
+  final_rows.key_type,
+  final_rows.key_value,
+  round(final_rows.truth_ex_vat,2) as truth_ex_vat,
+  round(final_rows.baseline_ex_vat,2) as baseline_ex_vat,
+  round(final_rows.reserved_ex_vat,2) as reserved_ex_vat,
+  round(final_rows.truth_ex_vat - final_rows.baseline_ex_vat - final_rows.reserved_ex_vat,2) as outstanding_ex_vat,
+  round(final_rows.truth_inc_vat,2) as truth_inc_vat,
+  round(final_rows.baseline_inc_vat,2) as baseline_inc_vat,
+  round(final_rows.reserved_inc_vat,2) as reserved_inc_vat,
+  round(final_rows.truth_inc_vat - final_rows.baseline_inc_vat - final_rows.reserved_inc_vat,2) as outstanding_inc_vat,
   (
-    round(abs(fr.reserved_ex_vat),2) >
-    round(abs(greatest(fr.truth_ex_vat - fr.baseline_ex_vat, 0)),2)
+    round(abs(final_rows.reserved_ex_vat),2) >
+    round(abs(greatest(final_rows.truth_ex_vat - final_rows.baseline_ex_vat, 0)),2)
   ) as reservation_overrun_detected
-from final_rows fr
-where fr.timesheet_id is not null
-  and fr.key_type is not null
-  and fr.key_value is not null;
+from final_rows
+where final_rows.timesheet_id is not null
+  and final_rows.key_type is not null
+  and final_rows.key_value is not null;
 $function$;
-
 
 
 -- =========================================================
@@ -126824,8 +127328,6 @@ $function$;
 
 
 
-
-
 CREATE OR REPLACE FUNCTION public._pay_active_settled_components(
   p_timesheet_ids uuid[]
 )
@@ -126847,12 +127349,78 @@ WITH input_timesheets AS (
   FROM unnest(COALESCE(p_timesheet_ids, ARRAY[]::uuid[])) AS input_timesheet_values(timesheet_id_value)
   WHERE input_timesheet_values.timesheet_id_value IS NOT NULL
 ),
+rotation_scope_rows AS (
+  SELECT
+    scope_rows.requested_timesheet_id,
+    scope_rows.booking_id,
+    scope_rows.canonical_timesheet_id,
+    scope_rows.family_timesheet_id,
+    scope_rows.family_is_current,
+    scope_rows.family_version,
+    scope_rows.requested_is_canonical
+  FROM public._pay_timesheet_rotation_scope(
+    (
+      SELECT COALESCE(
+        ARRAY_AGG(input_timesheets.timesheet_id ORDER BY input_timesheets.timesheet_id),
+        ARRAY[]::uuid[]
+      )
+      FROM input_timesheets
+    )
+  ) AS scope_rows
+),
+rotation_scope_keyed AS (
+  SELECT
+    rotation_scope_rows.requested_timesheet_id,
+    rotation_scope_rows.booking_id,
+    rotation_scope_rows.canonical_timesheet_id,
+    rotation_scope_rows.family_timesheet_id,
+    rotation_scope_rows.family_is_current,
+    rotation_scope_rows.family_version,
+    rotation_scope_rows.requested_is_canonical,
+    COALESCE(rotation_scope_rows.booking_id, rotation_scope_rows.requested_timesheet_id::text) AS scope_family_key
+  FROM rotation_scope_rows
+  WHERE rotation_scope_rows.requested_timesheet_id IS NOT NULL
+),
+projection_targets AS (
+  SELECT
+    rotation_scope_keyed.scope_family_key,
+    COALESCE(
+      (
+        ARRAY_AGG(DISTINCT rotation_scope_keyed.canonical_timesheet_id ORDER BY rotation_scope_keyed.canonical_timesheet_id)
+        FILTER (
+          WHERE COALESCE(rotation_scope_keyed.requested_is_canonical, false) = true
+            AND rotation_scope_keyed.canonical_timesheet_id IS NOT NULL
+        )
+      )[1],
+      (
+        ARRAY_AGG(DISTINCT rotation_scope_keyed.requested_timesheet_id ORDER BY rotation_scope_keyed.requested_timesheet_id)
+        FILTER (WHERE rotation_scope_keyed.requested_timesheet_id IS NOT NULL)
+      )[1],
+      (
+        ARRAY_AGG(DISTINCT rotation_scope_keyed.canonical_timesheet_id ORDER BY rotation_scope_keyed.canonical_timesheet_id)
+        FILTER (WHERE rotation_scope_keyed.canonical_timesheet_id IS NOT NULL)
+      )[1]
+    ) AS projected_timesheet_id
+  FROM rotation_scope_keyed
+  GROUP BY rotation_scope_keyed.scope_family_key
+),
+family_to_projection AS (
+  SELECT DISTINCT
+    rotation_scope_keyed.family_timesheet_id,
+    projection_targets.projected_timesheet_id
+  FROM rotation_scope_keyed
+  JOIN projection_targets
+    ON projection_targets.scope_family_key = rotation_scope_keyed.scope_family_key
+  WHERE rotation_scope_keyed.family_timesheet_id IS NOT NULL
+    AND projection_targets.projected_timesheet_id IS NOT NULL
+),
 active_item_ids AS (
   SELECT DISTINCT
-    public.pay_batch_items.id AS pay_batch_item_id
-  FROM input_timesheets
+    public.pay_batch_items.id AS pay_batch_item_id,
+    family_to_projection.projected_timesheet_id AS projected_timesheet_id
+  FROM family_to_projection
   JOIN public.pay_batch_items
-    ON public.pay_batch_items.timesheet_id = input_timesheets.timesheet_id
+    ON public.pay_batch_items.timesheet_id = family_to_projection.family_timesheet_id
   JOIN public.pay_batch_candidates
     ON public.pay_batch_candidates.id = public.pay_batch_items.pay_batch_candidate_id
   LEFT JOIN public.pay_bank_transfers
@@ -126888,20 +127456,32 @@ active_item_ids AS (
         )
     )
 ),
+active_item_id_array AS (
+  SELECT
+    CASE
+      WHEN COUNT(*) = 0 THEN ARRAY['00000000-0000-0000-0000-000000000000'::uuid]
+      ELSE ARRAY_AGG(active_item_ids.pay_batch_item_id ORDER BY active_item_ids.pay_batch_item_id)
+    END AS pay_batch_item_ids
+  FROM active_item_ids
+),
 active_components AS (
   SELECT
-    economic_components.timesheet_id AS component_timesheet_id,
+    active_item_ids.pay_batch_item_id,
+    active_item_ids.projected_timesheet_id AS component_timesheet_id,
     economic_components.key_type AS component_key_type,
     economic_components.key_value AS component_key_value,
     economic_components.source_amount_ex_vat AS component_amount_ex_vat,
     economic_components.source_amount_inc_vat AS component_amount_inc_vat
-  FROM active_item_ids
+  FROM active_item_id_array
   JOIN LATERAL public._pay_batch_item_economic_components(
-    NULL::uuid,
-    ARRAY[active_item_ids.pay_batch_item_id]::uuid[]
+    p_pay_batch_id => NULL::uuid,
+    p_pay_batch_item_ids => active_item_id_array.pay_batch_item_ids
   ) AS economic_components
-    ON economic_components.pay_batch_item_id = active_item_ids.pay_batch_item_id
-  WHERE economic_components.timesheet_id IS NOT NULL
+    ON true
+  JOIN active_item_ids
+    ON active_item_ids.pay_batch_item_id = economic_components.pay_batch_item_id
+  WHERE active_item_ids.projected_timesheet_id IS NOT NULL
+    AND economic_components.timesheet_id IS NOT NULL
     AND economic_components.key_type IS NOT NULL
     AND BTRIM(COALESCE(economic_components.key_type, '')) <> ''
     AND economic_components.key_value IS NOT NULL
@@ -126925,8 +127505,9 @@ active_components AS (
       AND economic_components.key_value !~ '^\d{4}-\d{2}-\d{2}$'
     )
 ),
-active_component_totals AS (
+active_components_by_item_key AS (
   SELECT
+    active_components.pay_batch_item_id,
     active_components.component_timesheet_id AS timesheet_id,
     UPPER(BTRIM(active_components.component_key_type)) AS key_type,
     active_components.component_key_value AS key_value,
@@ -126934,9 +127515,23 @@ active_component_totals AS (
     ROUND(COALESCE(SUM(COALESCE(active_components.component_amount_inc_vat, 0)), 0), 2)::numeric AS amount_inc_vat
   FROM active_components
   GROUP BY
+    active_components.pay_batch_item_id,
     active_components.component_timesheet_id,
     UPPER(BTRIM(active_components.component_key_type)),
     active_components.component_key_value
+),
+active_component_totals AS (
+  SELECT
+    active_components_by_item_key.timesheet_id,
+    active_components_by_item_key.key_type,
+    active_components_by_item_key.key_value,
+    ROUND(COALESCE(SUM(COALESCE(active_components_by_item_key.amount_ex_vat, 0)), 0), 2)::numeric AS amount_ex_vat,
+    ROUND(COALESCE(SUM(COALESCE(active_components_by_item_key.amount_inc_vat, 0)), 0), 2)::numeric AS amount_inc_vat
+  FROM active_components_by_item_key
+  GROUP BY
+    active_components_by_item_key.timesheet_id,
+    active_components_by_item_key.key_type,
+    active_components_by_item_key.key_value
 )
 SELECT
   active_component_totals.timesheet_id,
@@ -126957,6 +127552,7 @@ ORDER BY
   active_component_totals.key_type,
   active_component_totals.key_value;
 $function$;
+
 
 DROP FUNCTION IF EXISTS public.pay_bank_event_ingest(jsonb, uuid);
 
@@ -147979,14 +148575,35 @@ BEGIN
     SELECT process_rows.*
     FROM pg_temp._tmp_pay_wb_line_process AS process_rows
     WHERE process_rows.page_ordinal <= v_limit
-  ), prepared_rows AS (
+  ), prepared_source_rows AS (
     SELECT
       selected_rows.id,
       selected_rows.candidate_id,
-      selected_rows.timesheet_id,
+      selected_rows.timesheet_id AS line_work_timesheet_id,
+      CASE
+        WHEN NULLIF(BTRIM(COALESCE(selected_rows.work_payload_json#>>'{economic_key,timesheet_id}', '')), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          THEN NULLIF(BTRIM(COALESCE(selected_rows.work_payload_json#>>'{economic_key,timesheet_id}', '')), '')::uuid
+        ELSE NULL::uuid
+      END AS economic_key_timesheet_id,
+      CASE
+        WHEN NULLIF(BTRIM(COALESCE(
+          selected_rows.work_payload_json#>>'{line_json,economic_key,timesheet_id}',
+          selected_rows.work_payload_json#>>'{line_json,real_business_timesheet_id}',
+          selected_rows.work_payload_json#>>'{line_json,timesheet_id}',
+          ''
+        )), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          THEN NULLIF(BTRIM(COALESCE(
+            selected_rows.work_payload_json#>>'{line_json,economic_key,timesheet_id}',
+            selected_rows.work_payload_json#>>'{line_json,real_business_timesheet_id}',
+            selected_rows.work_payload_json#>>'{line_json,timesheet_id}',
+            ''
+          )), '')::uuid
+        ELSE NULL::uuid
+      END AS line_json_timesheet_id,
       selected_rows.line_key,
       selected_rows.line_ordinal,
       selected_rows.scope_ordinal,
+      selected_rows.work_payload_json,
       COALESCE(selected_rows.work_payload_json->'line_json', '{}'::jsonb) AS safe_line_json,
       CASE
         WHEN jsonb_typeof(selected_rows.work_payload_json->'economic_key') = 'object'
@@ -148014,6 +148631,149 @@ BEGIN
         ELSE false
       END AS is_internal_snapshot_row
     FROM selected_rows
+  ), source_timesheet_refs AS (
+    SELECT prepared_source_rows.id, 'LINE_WORK'::text AS source_label, prepared_source_rows.line_work_timesheet_id AS source_timesheet_id
+    FROM prepared_source_rows
+    WHERE prepared_source_rows.line_work_timesheet_id IS NOT NULL
+    UNION ALL
+    SELECT prepared_source_rows.id, 'ECONOMIC_KEY'::text AS source_label, prepared_source_rows.economic_key_timesheet_id AS source_timesheet_id
+    FROM prepared_source_rows
+    WHERE prepared_source_rows.economic_key_timesheet_id IS NOT NULL
+    UNION ALL
+    SELECT prepared_source_rows.id, 'LINE_JSON'::text AS source_label, prepared_source_rows.line_json_timesheet_id AS source_timesheet_id
+    FROM prepared_source_rows
+    WHERE prepared_source_rows.line_json_timesheet_id IS NOT NULL
+  ), source_timesheet_id_array AS (
+    SELECT COALESCE(
+      array_agg(DISTINCT source_timesheet_refs.source_timesheet_id ORDER BY source_timesheet_refs.source_timesheet_id),
+      array[]::uuid[]
+    ) AS timesheet_ids
+    FROM source_timesheet_refs
+  ), rotation_scope_rows AS (
+    SELECT
+      rotation_scope.requested_timesheet_id,
+      rotation_scope.canonical_timesheet_id,
+      rotation_scope.family_timesheet_id,
+      rotation_scope.family_is_current,
+      rotation_scope.family_version,
+      rotation_scope.requested_is_canonical
+    FROM source_timesheet_id_array
+    JOIN public._pay_timesheet_rotation_scope(source_timesheet_id_array.timesheet_ids) AS rotation_scope
+      ON true
+  ), rotation_scope_by_requested AS (
+    SELECT DISTINCT ON (rotation_scope_rows.requested_timesheet_id)
+      rotation_scope_rows.requested_timesheet_id,
+      COALESCE(rotation_scope_rows.canonical_timesheet_id, rotation_scope_rows.requested_timesheet_id) AS canonical_timesheet_id,
+      (rotation_scope_rows.family_timesheet_id IS NOT NULL AND rotation_scope_rows.family_is_current IS NOT NULL) AS rotation_scope_resolved,
+      COALESCE(rotation_scope_rows.requested_is_canonical, false) AS requested_is_canonical
+    FROM rotation_scope_rows
+    WHERE rotation_scope_rows.requested_timesheet_id IS NOT NULL
+    ORDER BY
+      rotation_scope_rows.requested_timesheet_id,
+      rotation_scope_rows.family_is_current DESC NULLS LAST,
+      rotation_scope_rows.family_version DESC NULLS LAST,
+      rotation_scope_rows.family_timesheet_id
+  ), prepared_rows AS (
+    SELECT
+      prepared_source_rows.id,
+      prepared_source_rows.candidate_id,
+      COALESCE(line_work_rotation.canonical_timesheet_id, economic_key_rotation.canonical_timesheet_id, line_json_rotation.canonical_timesheet_id) AS timesheet_id,
+      prepared_source_rows.line_work_timesheet_id,
+      prepared_source_rows.economic_key_timesheet_id,
+      prepared_source_rows.line_json_timesheet_id,
+      line_work_rotation.canonical_timesheet_id AS line_work_canonical_timesheet_id,
+      economic_key_rotation.canonical_timesheet_id AS economic_key_canonical_timesheet_id,
+      line_json_rotation.canonical_timesheet_id AS line_json_canonical_timesheet_id,
+      prepared_source_rows.line_key,
+      prepared_source_rows.line_ordinal,
+      prepared_source_rows.scope_ordinal,
+      jsonb_strip_nulls(
+        COALESCE(prepared_source_rows.economic_key_json, '{}'::jsonb)
+        || jsonb_build_object(
+          'timesheet_id', CASE
+            WHEN COALESCE(line_work_rotation.canonical_timesheet_id, economic_key_rotation.canonical_timesheet_id, line_json_rotation.canonical_timesheet_id) IS NULL THEN NULL
+            ELSE COALESCE(line_work_rotation.canonical_timesheet_id, economic_key_rotation.canonical_timesheet_id, line_json_rotation.canonical_timesheet_id)::text
+          END
+        )
+      ) AS economic_key_json,
+      jsonb_strip_nulls(
+        CASE
+          WHEN COALESCE(line_work_rotation.canonical_timesheet_id, economic_key_rotation.canonical_timesheet_id, line_json_rotation.canonical_timesheet_id) IS NULL THEN prepared_source_rows.safe_line_json
+          ELSE prepared_source_rows.safe_line_json
+            || jsonb_build_object(
+              'timesheet_id', COALESCE(line_work_rotation.canonical_timesheet_id, economic_key_rotation.canonical_timesheet_id, line_json_rotation.canonical_timesheet_id)::text,
+              'real_business_timesheet_id', COALESCE(line_work_rotation.canonical_timesheet_id, economic_key_rotation.canonical_timesheet_id, line_json_rotation.canonical_timesheet_id)::text
+            )
+            || jsonb_build_object(
+              'economic_key', COALESCE(prepared_source_rows.safe_line_json->'economic_key', '{}'::jsonb)
+                || jsonb_build_object('timesheet_id', COALESCE(line_work_rotation.canonical_timesheet_id, economic_key_rotation.canonical_timesheet_id, line_json_rotation.canonical_timesheet_id)::text)
+            )
+            || CASE
+              WHEN prepared_source_rows.line_work_timesheet_id IS DISTINCT FROM COALESCE(line_work_rotation.canonical_timesheet_id, economic_key_rotation.canonical_timesheet_id, line_json_rotation.canonical_timesheet_id)
+                OR prepared_source_rows.economic_key_timesheet_id IS DISTINCT FROM COALESCE(line_work_rotation.canonical_timesheet_id, economic_key_rotation.canonical_timesheet_id, line_json_rotation.canonical_timesheet_id)
+                OR prepared_source_rows.line_json_timesheet_id IS DISTINCT FROM COALESCE(line_work_rotation.canonical_timesheet_id, economic_key_rotation.canonical_timesheet_id, line_json_rotation.canonical_timesheet_id)
+              THEN jsonb_build_object(
+                'rotation_requested_timesheet_ids', jsonb_strip_nulls(jsonb_build_object(
+                  'line_work_timesheet_id', CASE WHEN prepared_source_rows.line_work_timesheet_id IS NULL THEN NULL ELSE prepared_source_rows.line_work_timesheet_id::text END,
+                  'economic_key_timesheet_id', CASE WHEN prepared_source_rows.economic_key_timesheet_id IS NULL THEN NULL ELSE prepared_source_rows.economic_key_timesheet_id::text END,
+                  'line_json_timesheet_id', CASE WHEN prepared_source_rows.line_json_timesheet_id IS NULL THEN NULL ELSE prepared_source_rows.line_json_timesheet_id::text END
+                ))
+              )
+              ELSE '{}'::jsonb
+            END
+        END
+      ) AS safe_line_json,
+      prepared_source_rows.target_section_hint,
+      prepared_source_rows.source_kind,
+      prepared_source_rows.source_function,
+      prepared_source_rows.is_internal_snapshot_row,
+      CASE
+        WHEN prepared_source_rows.is_internal_snapshot_row THEN false
+        WHEN prepared_source_rows.line_work_timesheet_id IS NULL
+         AND prepared_source_rows.economic_key_timesheet_id IS NULL
+         AND prepared_source_rows.line_json_timesheet_id IS NULL THEN false
+        WHEN COALESCE(line_work_rotation.canonical_timesheet_id, economic_key_rotation.canonical_timesheet_id, line_json_rotation.canonical_timesheet_id) IS NULL THEN true
+        WHEN prepared_source_rows.line_work_timesheet_id IS NOT NULL AND COALESCE(line_work_rotation.rotation_scope_resolved, false) = false THEN true
+        WHEN prepared_source_rows.economic_key_timesheet_id IS NOT NULL AND COALESCE(economic_key_rotation.rotation_scope_resolved, false) = false THEN true
+        WHEN prepared_source_rows.line_json_timesheet_id IS NOT NULL AND COALESCE(line_json_rotation.rotation_scope_resolved, false) = false THEN true
+        WHEN line_work_rotation.canonical_timesheet_id IS NOT NULL
+         AND economic_key_rotation.canonical_timesheet_id IS NOT NULL
+         AND line_work_rotation.canonical_timesheet_id IS DISTINCT FROM economic_key_rotation.canonical_timesheet_id THEN true
+        WHEN line_work_rotation.canonical_timesheet_id IS NOT NULL
+         AND line_json_rotation.canonical_timesheet_id IS NOT NULL
+         AND line_work_rotation.canonical_timesheet_id IS DISTINCT FROM line_json_rotation.canonical_timesheet_id THEN true
+        WHEN economic_key_rotation.canonical_timesheet_id IS NOT NULL
+         AND line_json_rotation.canonical_timesheet_id IS NOT NULL
+         AND economic_key_rotation.canonical_timesheet_id IS DISTINCT FROM line_json_rotation.canonical_timesheet_id THEN true
+        ELSE false
+      END AS rotation_validation_failed,
+      CASE
+        WHEN prepared_source_rows.is_internal_snapshot_row THEN NULL::text
+        WHEN prepared_source_rows.line_work_timesheet_id IS NULL
+         AND prepared_source_rows.economic_key_timesheet_id IS NULL
+         AND prepared_source_rows.line_json_timesheet_id IS NULL THEN NULL::text
+        WHEN COALESCE(line_work_rotation.canonical_timesheet_id, economic_key_rotation.canonical_timesheet_id, line_json_rotation.canonical_timesheet_id) IS NULL THEN 'ROTATION_CANONICAL_TIMESHEET_NOT_RESOLVED'
+        WHEN prepared_source_rows.line_work_timesheet_id IS NOT NULL AND COALESCE(line_work_rotation.rotation_scope_resolved, false) = false THEN 'LINE_WORK_TIMESHEET_ROTATION_SCOPE_UNRESOLVED'
+        WHEN prepared_source_rows.economic_key_timesheet_id IS NOT NULL AND COALESCE(economic_key_rotation.rotation_scope_resolved, false) = false THEN 'ECONOMIC_KEY_TIMESHEET_ROTATION_SCOPE_UNRESOLVED'
+        WHEN prepared_source_rows.line_json_timesheet_id IS NOT NULL AND COALESCE(line_json_rotation.rotation_scope_resolved, false) = false THEN 'LINE_JSON_TIMESHEET_ROTATION_SCOPE_UNRESOLVED'
+        WHEN line_work_rotation.canonical_timesheet_id IS NOT NULL
+         AND economic_key_rotation.canonical_timesheet_id IS NOT NULL
+         AND line_work_rotation.canonical_timesheet_id IS DISTINCT FROM economic_key_rotation.canonical_timesheet_id THEN 'LINE_WORK_AND_ECONOMIC_KEY_CANONICAL_TIMESHEET_MISMATCH'
+        WHEN line_work_rotation.canonical_timesheet_id IS NOT NULL
+         AND line_json_rotation.canonical_timesheet_id IS NOT NULL
+         AND line_work_rotation.canonical_timesheet_id IS DISTINCT FROM line_json_rotation.canonical_timesheet_id THEN 'LINE_WORK_AND_RESULT_ROW_CANONICAL_TIMESHEET_MISMATCH'
+        WHEN economic_key_rotation.canonical_timesheet_id IS NOT NULL
+         AND line_json_rotation.canonical_timesheet_id IS NOT NULL
+         AND economic_key_rotation.canonical_timesheet_id IS DISTINCT FROM line_json_rotation.canonical_timesheet_id THEN 'ECONOMIC_KEY_AND_RESULT_ROW_CANONICAL_TIMESHEET_MISMATCH'
+        ELSE NULL::text
+      END AS rotation_failure_reason
+    FROM prepared_source_rows
+    LEFT JOIN rotation_scope_by_requested AS line_work_rotation
+      ON line_work_rotation.requested_timesheet_id = prepared_source_rows.line_work_timesheet_id
+    LEFT JOIN rotation_scope_by_requested AS economic_key_rotation
+      ON economic_key_rotation.requested_timesheet_id = prepared_source_rows.economic_key_timesheet_id
+    LEFT JOIN rotation_scope_by_requested AS line_json_rotation
+      ON line_json_rotation.requested_timesheet_id = prepared_source_rows.line_json_timesheet_id
   ), contracted_rows AS (
     SELECT
       prepared_rows.*,
@@ -148025,6 +148785,14 @@ BEGIN
           'selection_allowed', false,
           'reasons', jsonb_build_array('INTERNAL_TIMESHEET_SNAPSHOT_ROW_SKIPPED'),
           'status', 'SKIPPED'
+        )
+        WHEN prepared_rows.rotation_validation_failed THEN jsonb_build_object(
+          'ok', false,
+          'materialisable', true,
+          'target_section', COALESCE(prepared_rows.target_section_hint, 'canonical_preview_lines'),
+          'selection_allowed', false,
+          'reasons', jsonb_build_array(prepared_rows.rotation_failure_reason),
+          'status', 'ERROR'
         )
         WHEN jsonb_typeof(prepared_rows.safe_line_json) = 'object' THEN public.pay_workbench_preview_line_contract_ok(
           p_line_json => prepared_rows.safe_line_json,
@@ -148046,6 +148814,7 @@ BEGIN
       contracted_rows.*,
       COALESCE(NULLIF(BTRIM(contracted_rows.contract_json->>'target_section'), ''), 'internal_only') AS target_section,
       CASE
+        WHEN contracted_rows.rotation_validation_failed THEN 'ERROR'
         WHEN LOWER(BTRIM(COALESCE(contracted_rows.contract_json->>'ok', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on') THEN 'READY'
         WHEN LOWER(BTRIM(COALESCE(contracted_rows.contract_json->>'materialisable', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on') THEN 'ERROR'
         ELSE 'SKIPPED'
@@ -148054,6 +148823,10 @@ BEGIN
   ), updated_rows AS (
     UPDATE public.banking_pay_workbench_candidate_line_work AS line_work
     SET status = update_source.next_status,
+        timesheet_id = CASE
+          WHEN update_source.rotation_validation_failed THEN line_work.timesheet_id
+          ELSE COALESCE(update_source.timesheet_id, line_work.timesheet_id)
+        END,
         result_row_json = CASE
           WHEN update_source.next_status = 'READY' THEN jsonb_strip_nulls(
             update_source.safe_line_json
@@ -148095,8 +148868,11 @@ BEGIN
         END,
         error_json = CASE
           WHEN update_source.next_status = 'ERROR' THEN jsonb_build_object(
-            'code', 'PREVIEW_LINE_CONTRACT_FAILED',
-            'message', 'Candidate line work did not satisfy the Banking Pay preview-row contract.',
+            'code', CASE WHEN update_source.rotation_validation_failed THEN 'WORKBENCH_ROTATED_TIMESHEET_MISMATCH' ELSE 'PREVIEW_LINE_CONTRACT_FAILED' END,
+            'message', CASE
+              WHEN update_source.rotation_validation_failed THEN 'Candidate line work timesheet identities did not resolve to the same current canonical timesheet.'
+              ELSE 'Candidate line work did not satisfy the Banking Pay preview-row contract.'
+            END,
             'line_key', update_source.line_key,
             'line_ordinal', update_source.line_ordinal,
             'scope_ordinal', update_source.scope_ordinal,
@@ -148254,6 +149030,8 @@ BEGIN
 END;
 $function$;
 
+
+
 CREATE OR REPLACE FUNCTION public.pay_workbench_preview_rows_materialise_chunk(p_session_id uuid, p_candidate_id uuid DEFAULT NULL::uuid, p_cursor_json jsonb DEFAULT NULL::jsonb, p_limit integer DEFAULT 100)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -148273,6 +149051,7 @@ DECLARE
   v_new_preview_row_count integer := 0;
   v_new_selected_row_count integer := 0;
   v_suppressed_preview_row_count integer := 0;
+  v_materialise_error_count integer := 0;
   v_next_cursor jsonb := NULL::jsonb;
   v_last_returned_scope_ordinal bigint := NULL::bigint;
   v_last_returned_line_ordinal bigint := NULL::bigint;
@@ -148410,84 +149189,171 @@ BEGIN
       )
     ORDER BY COALESCE(scope_row.scope_ordinal, 0), line_work.line_ordinal, line_work.id
     LIMIT (v_limit + 1)
-  ), selected_rows AS (
+  ), ready_source_rows AS (
     SELECT
       ready_rows.*,
-      public.pay_workbench_preview_section_from_line_json(ready_rows.result_row_json) AS target_section,
+      ready_rows.timesheet_id AS line_work_timesheet_id,
       CASE
-        WHEN COALESCE(ready_rows.scope_ordinal, 0) > 0 THEN (ready_rows.scope_ordinal * 1000000) + ready_rows.line_ordinal
-        ELSE ready_rows.line_ordinal
-      END AS stable_row_ordinal,
-      (
-        component_probe.single_fixed_reimbursement_key_type IS NOT NULL
-        AND (
-          UPPER(NULLIF(BTRIM(COALESCE(ready_rows.result_row_json#>>'{economic_key,key_type}', ready_rows.result_row_json->>'key_type', '')), '')) IS DISTINCT FROM component_probe.single_fixed_reimbursement_key_type
-          OR NULLIF(BTRIM(COALESCE(ready_rows.result_row_json#>>'{economic_key,key_value}', ready_rows.result_row_json->>'key_value', '')), '') IS DISTINCT FROM component_probe.single_fixed_reimbursement_key_value
-        )
-      ) AS fixed_reimbursement_key_mismatch,
-      (
-        component_probe.single_fixed_reimbursement_key_type IS NOT NULL
-        AND component_probe.selected_amount_ex_vat IS NOT NULL
-        AND ROUND(ABS(COALESCE(component_probe.selected_amount_ex_vat, 0)), 2) > 0
-        AND (
-          outstanding_component.outstanding_ex_vat IS NULL
-          OR ROUND(COALESCE(outstanding_component.outstanding_ex_vat, 0), 2) <= 0
-        )
-      ) AS fixed_reimbursement_not_outstanding,
-      (
-        component_probe.single_fixed_reimbursement_key_type IS NOT NULL
-        AND component_probe.selected_amount_ex_vat IS NOT NULL
-        AND ROUND(ABS(COALESCE(component_probe.selected_amount_ex_vat, 0)), 2) > 0
-        AND outstanding_component.outstanding_ex_vat IS NOT NULL
-        AND ROUND(COALESCE(outstanding_component.outstanding_ex_vat, 0), 2) = 0
-        AND UPPER(NULLIF(BTRIM(COALESCE(ready_rows.result_row_json#>>'{economic_key,key_type}', ready_rows.result_row_json->>'key_type', '')), '')) = component_probe.single_fixed_reimbursement_key_type
-        AND NULLIF(BTRIM(COALESCE(ready_rows.result_row_json#>>'{economic_key,key_value}', ready_rows.result_row_json->>'key_value', '')), '') = component_probe.single_fixed_reimbursement_key_value
-      ) AS suppress_zero_outstanding_fixed_reimbursement,
-      (
-        component_probe.single_fixed_reimbursement_key_type IS NOT NULL
-        AND component_probe.selected_amount_ex_vat IS NOT NULL
-        AND outstanding_component.outstanding_ex_vat IS NOT NULL
-        AND ROUND(COALESCE(outstanding_component.outstanding_ex_vat, 0), 2) > 0
-        AND ROUND(ABS(COALESCE(component_probe.selected_amount_ex_vat, 0)), 2) > ROUND(ABS(COALESCE(outstanding_component.outstanding_ex_vat, 0)), 2)
-        AND UPPER(NULLIF(BTRIM(COALESCE(ready_rows.result_row_json#>>'{economic_key,key_type}', ready_rows.result_row_json->>'key_type', '')), '')) = component_probe.single_fixed_reimbursement_key_type
-        AND NULLIF(BTRIM(COALESCE(ready_rows.result_row_json#>>'{economic_key,key_value}', ready_rows.result_row_json->>'key_value', '')), '') = component_probe.single_fixed_reimbursement_key_value
-      ) AS clamp_fixed_reimbursement_to_outstanding,
-      component_probe.selected_amount_ex_vat AS fixed_reimbursement_original_amount_ex_vat,
-      ROUND(COALESCE(outstanding_component.outstanding_ex_vat, 0), 2) AS fixed_reimbursement_outstanding_ex_vat,
-      component_probe.single_fixed_reimbursement_key_type,
-      component_probe.single_fixed_reimbursement_key_value,
+        WHEN NULLIF(BTRIM(COALESCE(ready_rows.result_row_json#>>'{economic_key,timesheet_id}', '')), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          THEN NULLIF(BTRIM(COALESCE(ready_rows.result_row_json#>>'{economic_key,timesheet_id}', '')), '')::uuid
+        ELSE NULL::uuid
+      END AS economic_key_timesheet_id,
       CASE
-        WHEN public.pay_workbench_preview_section_from_line_json(ready_rows.result_row_json) = 'canonical_preview_lines'
-         AND LOWER(BTRIM(COALESCE(ready_rows.result_row_json->>'draftable', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
-         AND LOWER(BTRIM(COALESCE(ready_rows.result_row_json->>'is_ready_for_draft', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
-         AND LOWER(BTRIM(COALESCE(ready_rows.result_row_json->>'is_excluded_from_allocation', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
-         AND LOWER(BTRIM(COALESCE(ready_rows.result_row_json#>>'{preview_contract,selection_allowed}', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
-         AND NULLIF(BTRIM(COALESCE(ready_rows.result_row_json#>>'{economic_key,key_type}', '')), '') IS NOT NULL
-         AND NULLIF(BTRIM(COALESCE(ready_rows.result_row_json#>>'{economic_key,key_value}', '')), '') IS NOT NULL
-         AND NOT (
-           component_probe.single_fixed_reimbursement_key_type IS NOT NULL
-           AND (
-             UPPER(NULLIF(BTRIM(COALESCE(ready_rows.result_row_json#>>'{economic_key,key_type}', ready_rows.result_row_json->>'key_type', '')), '')) IS DISTINCT FROM component_probe.single_fixed_reimbursement_key_type
-             OR NULLIF(BTRIM(COALESCE(ready_rows.result_row_json#>>'{economic_key,key_value}', ready_rows.result_row_json->>'key_value', '')), '') IS DISTINCT FROM component_probe.single_fixed_reimbursement_key_value
-           )
-         )
-         AND NOT (
-           component_probe.single_fixed_reimbursement_key_type IS NOT NULL
-           AND component_probe.selected_amount_ex_vat IS NOT NULL
-           AND ROUND(ABS(COALESCE(component_probe.selected_amount_ex_vat, 0)), 2) > 0
-           AND (
-             outstanding_component.outstanding_ex_vat IS NULL
-             OR ROUND(COALESCE(outstanding_component.outstanding_ex_vat, 0), 2) <= 0
-           )
-         )
-        THEN true
-        ELSE false
-      END AS target_selected
+        WHEN NULLIF(BTRIM(COALESCE(ready_rows.result_row_json->>'timesheet_id', ready_rows.result_row_json->>'real_business_timesheet_id', '')), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          THEN NULLIF(BTRIM(COALESCE(ready_rows.result_row_json->>'timesheet_id', ready_rows.result_row_json->>'real_business_timesheet_id', '')), '')::uuid
+        ELSE NULL::uuid
+      END AS result_row_timesheet_id
     FROM ready_rows
+  ), ready_timesheet_refs AS (
+    SELECT ready_source_rows.id, 'LINE_WORK'::text AS source_label, ready_source_rows.line_work_timesheet_id AS source_timesheet_id
+    FROM ready_source_rows
+    WHERE ready_source_rows.line_work_timesheet_id IS NOT NULL
+    UNION ALL
+    SELECT ready_source_rows.id, 'ECONOMIC_KEY'::text AS source_label, ready_source_rows.economic_key_timesheet_id AS source_timesheet_id
+    FROM ready_source_rows
+    WHERE ready_source_rows.economic_key_timesheet_id IS NOT NULL
+    UNION ALL
+    SELECT ready_source_rows.id, 'RESULT_ROW'::text AS source_label, ready_source_rows.result_row_timesheet_id AS source_timesheet_id
+    FROM ready_source_rows
+    WHERE ready_source_rows.result_row_timesheet_id IS NOT NULL
+  ), ready_timesheet_id_array AS (
+    SELECT COALESCE(
+      array_agg(DISTINCT ready_timesheet_refs.source_timesheet_id ORDER BY ready_timesheet_refs.source_timesheet_id),
+      array[]::uuid[]
+    ) AS timesheet_ids
+    FROM ready_timesheet_refs
+  ), rotation_scope_rows AS (
+    SELECT
+      rotation_scope.requested_timesheet_id,
+      rotation_scope.canonical_timesheet_id,
+      rotation_scope.family_timesheet_id,
+      rotation_scope.family_is_current,
+      rotation_scope.family_version,
+      rotation_scope.requested_is_canonical
+    FROM ready_timesheet_id_array
+    JOIN public._pay_timesheet_rotation_scope(ready_timesheet_id_array.timesheet_ids) AS rotation_scope
+      ON true
+  ), rotation_scope_by_requested AS (
+    SELECT DISTINCT ON (rotation_scope_rows.requested_timesheet_id)
+      rotation_scope_rows.requested_timesheet_id,
+      COALESCE(rotation_scope_rows.canonical_timesheet_id, rotation_scope_rows.requested_timesheet_id) AS canonical_timesheet_id,
+      (rotation_scope_rows.family_timesheet_id IS NOT NULL AND rotation_scope_rows.family_is_current IS NOT NULL) AS rotation_scope_resolved
+    FROM rotation_scope_rows
+    WHERE rotation_scope_rows.requested_timesheet_id IS NOT NULL
+    ORDER BY
+      rotation_scope_rows.requested_timesheet_id,
+      rotation_scope_rows.family_is_current DESC NULLS LAST,
+      rotation_scope_rows.family_version DESC NULLS LAST,
+      rotation_scope_rows.family_timesheet_id
+  ), canonical_ready_rows AS (
+    SELECT
+      ready_source_rows.id,
+      ready_source_rows.session_id,
+      ready_source_rows.candidate_id,
+      COALESCE(line_work_rotation.canonical_timesheet_id, economic_key_rotation.canonical_timesheet_id, result_row_rotation.canonical_timesheet_id) AS timesheet_id,
+      ready_source_rows.line_work_timesheet_id,
+      ready_source_rows.economic_key_timesheet_id,
+      ready_source_rows.result_row_timesheet_id,
+      ready_source_rows.line_key,
+      ready_source_rows.line_ordinal,
+      CASE
+        WHEN COALESCE(ready_source_rows.scope_ordinal, 0) > 0 THEN (ready_source_rows.scope_ordinal * 1000000) + ready_source_rows.line_ordinal
+        ELSE ready_source_rows.line_ordinal
+      END AS stable_row_ordinal,
+      jsonb_strip_nulls(
+        CASE
+          WHEN COALESCE(line_work_rotation.canonical_timesheet_id, economic_key_rotation.canonical_timesheet_id, result_row_rotation.canonical_timesheet_id) IS NULL THEN ready_source_rows.result_row_json
+          ELSE ready_source_rows.result_row_json
+            || jsonb_build_object(
+              'timesheet_id', COALESCE(line_work_rotation.canonical_timesheet_id, economic_key_rotation.canonical_timesheet_id, result_row_rotation.canonical_timesheet_id)::text,
+              'real_business_timesheet_id', COALESCE(line_work_rotation.canonical_timesheet_id, economic_key_rotation.canonical_timesheet_id, result_row_rotation.canonical_timesheet_id)::text,
+              'economic_key', COALESCE(ready_source_rows.result_row_json->'economic_key', '{}'::jsonb)
+                || jsonb_build_object('timesheet_id', COALESCE(line_work_rotation.canonical_timesheet_id, economic_key_rotation.canonical_timesheet_id, result_row_rotation.canonical_timesheet_id)::text)
+            )
+            || CASE
+              WHEN ready_source_rows.line_work_timesheet_id IS DISTINCT FROM COALESCE(line_work_rotation.canonical_timesheet_id, economic_key_rotation.canonical_timesheet_id, result_row_rotation.canonical_timesheet_id)
+                OR ready_source_rows.economic_key_timesheet_id IS DISTINCT FROM COALESCE(line_work_rotation.canonical_timesheet_id, economic_key_rotation.canonical_timesheet_id, result_row_rotation.canonical_timesheet_id)
+                OR ready_source_rows.result_row_timesheet_id IS DISTINCT FROM COALESCE(line_work_rotation.canonical_timesheet_id, economic_key_rotation.canonical_timesheet_id, result_row_rotation.canonical_timesheet_id)
+              THEN jsonb_build_object(
+                'rotation_requested_timesheet_ids', jsonb_strip_nulls(jsonb_build_object(
+                  'line_work_timesheet_id', CASE WHEN ready_source_rows.line_work_timesheet_id IS NULL THEN NULL ELSE ready_source_rows.line_work_timesheet_id::text END,
+                  'economic_key_timesheet_id', CASE WHEN ready_source_rows.economic_key_timesheet_id IS NULL THEN NULL ELSE ready_source_rows.economic_key_timesheet_id::text END,
+                  'result_row_timesheet_id', CASE WHEN ready_source_rows.result_row_timesheet_id IS NULL THEN NULL ELSE ready_source_rows.result_row_timesheet_id::text END
+                ))
+              )
+              ELSE '{}'::jsonb
+            END
+        END
+      ) AS result_row_json,
+      ready_source_rows.scope_ordinal,
+      ready_source_rows.page_ordinal,
+      public.pay_workbench_preview_section_from_line_json(
+        CASE
+          WHEN COALESCE(line_work_rotation.canonical_timesheet_id, economic_key_rotation.canonical_timesheet_id, result_row_rotation.canonical_timesheet_id) IS NULL THEN ready_source_rows.result_row_json
+          ELSE ready_source_rows.result_row_json
+            || jsonb_build_object(
+              'timesheet_id', COALESCE(line_work_rotation.canonical_timesheet_id, economic_key_rotation.canonical_timesheet_id, result_row_rotation.canonical_timesheet_id)::text,
+              'economic_key', COALESCE(ready_source_rows.result_row_json->'economic_key', '{}'::jsonb)
+                || jsonb_build_object('timesheet_id', COALESCE(line_work_rotation.canonical_timesheet_id, economic_key_rotation.canonical_timesheet_id, result_row_rotation.canonical_timesheet_id)::text)
+            )
+        END
+      ) AS target_section,
+      CASE
+        WHEN ready_source_rows.line_work_timesheet_id IS NULL
+         AND ready_source_rows.economic_key_timesheet_id IS NULL
+         AND ready_source_rows.result_row_timesheet_id IS NULL THEN false
+        WHEN COALESCE(line_work_rotation.canonical_timesheet_id, economic_key_rotation.canonical_timesheet_id, result_row_rotation.canonical_timesheet_id) IS NULL THEN true
+        WHEN ready_source_rows.line_work_timesheet_id IS NOT NULL AND COALESCE(line_work_rotation.rotation_scope_resolved, false) = false THEN true
+        WHEN ready_source_rows.economic_key_timesheet_id IS NOT NULL AND COALESCE(economic_key_rotation.rotation_scope_resolved, false) = false THEN true
+        WHEN ready_source_rows.result_row_timesheet_id IS NOT NULL AND COALESCE(result_row_rotation.rotation_scope_resolved, false) = false THEN true
+        WHEN line_work_rotation.canonical_timesheet_id IS NOT NULL
+         AND economic_key_rotation.canonical_timesheet_id IS NOT NULL
+         AND line_work_rotation.canonical_timesheet_id IS DISTINCT FROM economic_key_rotation.canonical_timesheet_id THEN true
+        WHEN line_work_rotation.canonical_timesheet_id IS NOT NULL
+         AND result_row_rotation.canonical_timesheet_id IS NOT NULL
+         AND line_work_rotation.canonical_timesheet_id IS DISTINCT FROM result_row_rotation.canonical_timesheet_id THEN true
+        WHEN economic_key_rotation.canonical_timesheet_id IS NOT NULL
+         AND result_row_rotation.canonical_timesheet_id IS NOT NULL
+         AND economic_key_rotation.canonical_timesheet_id IS DISTINCT FROM result_row_rotation.canonical_timesheet_id THEN true
+        ELSE false
+      END AS rotation_validation_failed,
+      CASE
+        WHEN ready_source_rows.line_work_timesheet_id IS NULL
+         AND ready_source_rows.economic_key_timesheet_id IS NULL
+         AND ready_source_rows.result_row_timesheet_id IS NULL THEN NULL::text
+        WHEN COALESCE(line_work_rotation.canonical_timesheet_id, economic_key_rotation.canonical_timesheet_id, result_row_rotation.canonical_timesheet_id) IS NULL THEN 'ROTATION_CANONICAL_TIMESHEET_NOT_RESOLVED'
+        WHEN ready_source_rows.line_work_timesheet_id IS NOT NULL AND COALESCE(line_work_rotation.rotation_scope_resolved, false) = false THEN 'LINE_WORK_TIMESHEET_ROTATION_SCOPE_UNRESOLVED'
+        WHEN ready_source_rows.economic_key_timesheet_id IS NOT NULL AND COALESCE(economic_key_rotation.rotation_scope_resolved, false) = false THEN 'ECONOMIC_KEY_TIMESHEET_ROTATION_SCOPE_UNRESOLVED'
+        WHEN ready_source_rows.result_row_timesheet_id IS NOT NULL AND COALESCE(result_row_rotation.rotation_scope_resolved, false) = false THEN 'RESULT_ROW_TIMESHEET_ROTATION_SCOPE_UNRESOLVED'
+        WHEN line_work_rotation.canonical_timesheet_id IS NOT NULL
+         AND economic_key_rotation.canonical_timesheet_id IS NOT NULL
+         AND line_work_rotation.canonical_timesheet_id IS DISTINCT FROM economic_key_rotation.canonical_timesheet_id THEN 'LINE_WORK_AND_ECONOMIC_KEY_CANONICAL_TIMESHEET_MISMATCH'
+        WHEN line_work_rotation.canonical_timesheet_id IS NOT NULL
+         AND result_row_rotation.canonical_timesheet_id IS NOT NULL
+         AND line_work_rotation.canonical_timesheet_id IS DISTINCT FROM result_row_rotation.canonical_timesheet_id THEN 'LINE_WORK_AND_RESULT_ROW_CANONICAL_TIMESHEET_MISMATCH'
+        WHEN economic_key_rotation.canonical_timesheet_id IS NOT NULL
+         AND result_row_rotation.canonical_timesheet_id IS NOT NULL
+         AND economic_key_rotation.canonical_timesheet_id IS DISTINCT FROM result_row_rotation.canonical_timesheet_id THEN 'ECONOMIC_KEY_AND_RESULT_ROW_CANONICAL_TIMESHEET_MISMATCH'
+        ELSE NULL::text
+      END AS rotation_failure_reason
+    FROM ready_source_rows
+    LEFT JOIN rotation_scope_by_requested AS line_work_rotation
+      ON line_work_rotation.requested_timesheet_id = ready_source_rows.line_work_timesheet_id
+    LEFT JOIN rotation_scope_by_requested AS economic_key_rotation
+      ON economic_key_rotation.requested_timesheet_id = ready_source_rows.economic_key_timesheet_id
+    LEFT JOIN rotation_scope_by_requested AS result_row_rotation
+      ON result_row_rotation.requested_timesheet_id = ready_source_rows.result_row_timesheet_id
+  ), component_probe_rows AS (
+    SELECT
+      canonical_ready_rows.*,
+      component_probe.selected_amount_ex_vat AS fixed_reimbursement_original_amount_ex_vat,
+      component_probe.single_fixed_reimbursement_key_type,
+      component_probe.single_fixed_reimbursement_key_value
+    FROM canonical_ready_rows
     CROSS JOIN LATERAL (
       SELECT
-        CASE WHEN NULLIF(BTRIM(COALESCE(ready_rows.result_row_json->>'amount_ex_vat', ready_rows.result_row_json->>'preview_amount_ex_vat', '')), '') ~ '^-?[0-9]+(\.[0-9]+)?$'
-          THEN ROUND(NULLIF(BTRIM(COALESCE(ready_rows.result_row_json->>'amount_ex_vat', ready_rows.result_row_json->>'preview_amount_ex_vat', '')), '')::numeric, 2)
+        CASE WHEN NULLIF(BTRIM(COALESCE(canonical_ready_rows.result_row_json->>'amount_ex_vat', canonical_ready_rows.result_row_json->>'preview_amount_ex_vat', '')), '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+          THEN ROUND(NULLIF(BTRIM(COALESCE(canonical_ready_rows.result_row_json->>'amount_ex_vat', canonical_ready_rows.result_row_json->>'preview_amount_ex_vat', '')), '')::numeric, 2)
           ELSE NULL::numeric
         END AS selected_amount_ex_vat,
         CASE
@@ -148529,20 +149395,102 @@ BEGIN
           ) AS fixed_reimbursement_key_value
         FROM jsonb_array_elements(
           CASE
-            WHEN jsonb_typeof(ready_rows.result_row_json->'case_components') = 'array' THEN ready_rows.result_row_json->'case_components'
+            WHEN jsonb_typeof(canonical_ready_rows.result_row_json->'case_components') = 'array' THEN canonical_ready_rows.result_row_json->'case_components'
             ELSE '[]'::jsonb
           END
         ) AS component_element(value)
       ) AS component_counts
     ) AS component_probe
-    LEFT JOIN LATERAL (
-      SELECT outstanding_components.outstanding_ex_vat
-      FROM public._pay_outstanding_components(ARRAY[ready_rows.timesheet_id], NULL::uuid) AS outstanding_components
-      WHERE outstanding_components.timesheet_id = ready_rows.timesheet_id
-        AND outstanding_components.key_type = component_probe.single_fixed_reimbursement_key_type
-        AND outstanding_components.key_value = component_probe.single_fixed_reimbursement_key_value
-      LIMIT 1
-    ) AS outstanding_component ON ready_rows.timesheet_id IS NOT NULL
+  ), outstanding_timesheet_ids AS (
+    SELECT COALESCE(
+      array_agg(DISTINCT component_probe_rows.timesheet_id ORDER BY component_probe_rows.timesheet_id),
+      array[]::uuid[]
+    ) AS timesheet_ids
+    FROM component_probe_rows
+    WHERE component_probe_rows.page_ordinal <= v_limit
+      AND component_probe_rows.rotation_validation_failed IS NOT TRUE
+      AND component_probe_rows.timesheet_id IS NOT NULL
+      AND component_probe_rows.single_fixed_reimbursement_key_type IS NOT NULL
+  ), outstanding_component_rows AS (
+    SELECT
+      outstanding_components.timesheet_id,
+      outstanding_components.key_type,
+      outstanding_components.key_value,
+      outstanding_components.outstanding_ex_vat
+    FROM outstanding_timesheet_ids
+    JOIN public._pay_outstanding_components(outstanding_timesheet_ids.timesheet_ids, NULL::uuid) AS outstanding_components
+      ON true
+  ), selected_rows AS (
+    SELECT
+      component_probe_rows.*,
+      (
+        component_probe_rows.single_fixed_reimbursement_key_type IS NOT NULL
+        AND (
+          UPPER(NULLIF(BTRIM(COALESCE(component_probe_rows.result_row_json#>>'{economic_key,key_type}', component_probe_rows.result_row_json->>'key_type', '')), '')) IS DISTINCT FROM component_probe_rows.single_fixed_reimbursement_key_type
+          OR NULLIF(BTRIM(COALESCE(component_probe_rows.result_row_json#>>'{economic_key,key_value}', component_probe_rows.result_row_json->>'key_value', '')), '') IS DISTINCT FROM component_probe_rows.single_fixed_reimbursement_key_value
+        )
+      ) AS fixed_reimbursement_key_mismatch,
+      (
+        component_probe_rows.single_fixed_reimbursement_key_type IS NOT NULL
+        AND component_probe_rows.fixed_reimbursement_original_amount_ex_vat IS NOT NULL
+        AND ROUND(ABS(COALESCE(component_probe_rows.fixed_reimbursement_original_amount_ex_vat, 0)), 2) > 0
+        AND (
+          outstanding_component_rows.outstanding_ex_vat IS NULL
+          OR ROUND(COALESCE(outstanding_component_rows.outstanding_ex_vat, 0), 2) <= 0
+        )
+      ) AS fixed_reimbursement_not_outstanding,
+      (
+        component_probe_rows.single_fixed_reimbursement_key_type IS NOT NULL
+        AND component_probe_rows.fixed_reimbursement_original_amount_ex_vat IS NOT NULL
+        AND ROUND(ABS(COALESCE(component_probe_rows.fixed_reimbursement_original_amount_ex_vat, 0)), 2) > 0
+        AND outstanding_component_rows.outstanding_ex_vat IS NOT NULL
+        AND ROUND(COALESCE(outstanding_component_rows.outstanding_ex_vat, 0), 2) = 0
+        AND UPPER(NULLIF(BTRIM(COALESCE(component_probe_rows.result_row_json#>>'{economic_key,key_type}', component_probe_rows.result_row_json->>'key_type', '')), '')) = component_probe_rows.single_fixed_reimbursement_key_type
+        AND NULLIF(BTRIM(COALESCE(component_probe_rows.result_row_json#>>'{economic_key,key_value}', component_probe_rows.result_row_json->>'key_value', '')), '') = component_probe_rows.single_fixed_reimbursement_key_value
+      ) AS suppress_zero_outstanding_fixed_reimbursement,
+      (
+        component_probe_rows.single_fixed_reimbursement_key_type IS NOT NULL
+        AND component_probe_rows.fixed_reimbursement_original_amount_ex_vat IS NOT NULL
+        AND outstanding_component_rows.outstanding_ex_vat IS NOT NULL
+        AND ROUND(COALESCE(outstanding_component_rows.outstanding_ex_vat, 0), 2) > 0
+        AND ROUND(ABS(COALESCE(component_probe_rows.fixed_reimbursement_original_amount_ex_vat, 0)), 2) > ROUND(ABS(COALESCE(outstanding_component_rows.outstanding_ex_vat, 0)), 2)
+        AND UPPER(NULLIF(BTRIM(COALESCE(component_probe_rows.result_row_json#>>'{economic_key,key_type}', component_probe_rows.result_row_json->>'key_type', '')), '')) = component_probe_rows.single_fixed_reimbursement_key_type
+        AND NULLIF(BTRIM(COALESCE(component_probe_rows.result_row_json#>>'{economic_key,key_value}', component_probe_rows.result_row_json->>'key_value', '')), '') = component_probe_rows.single_fixed_reimbursement_key_value
+      ) AS clamp_fixed_reimbursement_to_outstanding,
+      ROUND(COALESCE(outstanding_component_rows.outstanding_ex_vat, 0), 2) AS fixed_reimbursement_outstanding_ex_vat,
+      CASE
+        WHEN component_probe_rows.rotation_validation_failed IS NOT TRUE
+         AND component_probe_rows.target_section = 'canonical_preview_lines'
+         AND LOWER(BTRIM(COALESCE(component_probe_rows.result_row_json->>'draftable', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+         AND LOWER(BTRIM(COALESCE(component_probe_rows.result_row_json->>'is_ready_for_draft', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+         AND LOWER(BTRIM(COALESCE(component_probe_rows.result_row_json->>'is_excluded_from_allocation', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
+         AND LOWER(BTRIM(COALESCE(component_probe_rows.result_row_json#>>'{preview_contract,selection_allowed}', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+         AND NULLIF(BTRIM(COALESCE(component_probe_rows.result_row_json#>>'{economic_key,key_type}', '')), '') IS NOT NULL
+         AND NULLIF(BTRIM(COALESCE(component_probe_rows.result_row_json#>>'{economic_key,key_value}', '')), '') IS NOT NULL
+         AND NOT (
+           component_probe_rows.single_fixed_reimbursement_key_type IS NOT NULL
+           AND (
+             UPPER(NULLIF(BTRIM(COALESCE(component_probe_rows.result_row_json#>>'{economic_key,key_type}', component_probe_rows.result_row_json->>'key_type', '')), '')) IS DISTINCT FROM component_probe_rows.single_fixed_reimbursement_key_type
+             OR NULLIF(BTRIM(COALESCE(component_probe_rows.result_row_json#>>'{economic_key,key_value}', component_probe_rows.result_row_json->>'key_value', '')), '') IS DISTINCT FROM component_probe_rows.single_fixed_reimbursement_key_value
+           )
+         )
+         AND NOT (
+           component_probe_rows.single_fixed_reimbursement_key_type IS NOT NULL
+           AND component_probe_rows.fixed_reimbursement_original_amount_ex_vat IS NOT NULL
+           AND ROUND(ABS(COALESCE(component_probe_rows.fixed_reimbursement_original_amount_ex_vat, 0)), 2) > 0
+           AND (
+             outstanding_component_rows.outstanding_ex_vat IS NULL
+             OR ROUND(COALESCE(outstanding_component_rows.outstanding_ex_vat, 0), 2) <= 0
+           )
+         )
+        THEN true
+        ELSE false
+      END AS target_selected
+    FROM component_probe_rows
+    LEFT JOIN outstanding_component_rows
+      ON outstanding_component_rows.timesheet_id = component_probe_rows.timesheet_id
+     AND outstanding_component_rows.key_type = component_probe_rows.single_fixed_reimbursement_key_type
+     AND outstanding_component_rows.key_value = component_probe_rows.single_fixed_reimbursement_key_value
   )
   SELECT selected_rows.*,
          CASE
@@ -148567,6 +149515,7 @@ BEGIN
   FROM pg_temp._tmp_pay_wb_preview_materialise AS materialise_rows
   WHERE materialise_rows.page_ordinal <= v_limit
     AND materialise_rows.existing_preview_row_id IS NULL
+    AND materialise_rows.rotation_validation_failed IS NOT TRUE
     AND materialise_rows.suppress_zero_outstanding_fixed_reimbursement IS NOT TRUE;
 
   SELECT COUNT(*)::integer
@@ -148575,6 +149524,12 @@ BEGIN
   WHERE materialise_rows.page_ordinal <= v_limit
     AND materialise_rows.suppress_zero_outstanding_fixed_reimbursement IS TRUE;
 
+  SELECT COUNT(*)::integer
+  INTO v_materialise_error_count
+  FROM pg_temp._tmp_pay_wb_preview_materialise AS materialise_rows
+  WHERE materialise_rows.page_ordinal <= v_limit
+    AND materialise_rows.rotation_validation_failed IS TRUE;
+
   SELECT COALESCE(jsonb_object_agg(section_delta.target_section, section_delta.section_count ORDER BY section_delta.target_section), '{}'::jsonb)
   INTO v_section_delta_json
   FROM (
@@ -148582,6 +149537,7 @@ BEGIN
     FROM pg_temp._tmp_pay_wb_preview_materialise AS materialise_rows
     WHERE materialise_rows.page_ordinal <= v_limit
       AND materialise_rows.existing_preview_row_id IS NULL
+      AND materialise_rows.rotation_validation_failed IS NOT TRUE
       AND materialise_rows.suppress_zero_outstanding_fixed_reimbursement IS NOT TRUE
     GROUP BY materialise_rows.target_section
   ) AS section_delta;
@@ -148593,7 +149549,8 @@ BEGIN
   ), visible_rows AS (
     SELECT selected_rows.*
     FROM selected_rows
-    WHERE selected_rows.suppress_zero_outstanding_fixed_reimbursement IS NOT TRUE
+    WHERE selected_rows.rotation_validation_failed IS NOT TRUE
+      AND selected_rows.suppress_zero_outstanding_fixed_reimbursement IS NOT TRUE
   ), suppressed_existing_preview AS (
     UPDATE public.banking_pay_workbench_preview_rows AS preview_row
     SET status = 'SUPERSEDED',
@@ -148813,8 +149770,18 @@ BEGIN
     RETURNING public.banking_pay_workbench_preview_rows.id
   ), marked_line_work AS (
     UPDATE public.banking_pay_workbench_candidate_line_work AS line_work
-    SET status = 'MATERIALISED',
+    SET status = CASE WHEN selected_rows.rotation_validation_failed IS TRUE THEN 'ERROR' ELSE 'MATERIALISED' END,
         result_row_json = CASE
+          WHEN selected_rows.rotation_validation_failed IS TRUE THEN
+            COALESCE(line_work.result_row_json, '{}'::jsonb)
+            || jsonb_build_object(
+              'draftable', false,
+              'is_ready_for_draft', false,
+              'selection_allowed', false,
+              'row_processing_status', 'ERROR',
+              'rotation_validation_failed', true,
+              'rotation_failure_reason', selected_rows.rotation_failure_reason
+            )
           WHEN selected_rows.suppress_zero_outstanding_fixed_reimbursement IS TRUE THEN
             COALESCE(line_work.result_row_json, '{}'::jsonb)
             || jsonb_build_object(
@@ -148956,6 +149923,17 @@ BEGIN
             END
           ELSE line_work.result_row_json
         END,
+        error_json = CASE
+          WHEN selected_rows.rotation_validation_failed IS TRUE THEN jsonb_build_object(
+            'code', 'WORKBENCH_MATERIALISE_ROTATED_TIMESHEET_MISMATCH',
+            'message', 'Ready line work timesheet identities did not resolve to one current canonical timesheet at preview materialisation.',
+            'line_key', selected_rows.line_key,
+            'line_ordinal', selected_rows.line_ordinal,
+            'scope_ordinal', selected_rows.scope_ordinal,
+            'reason', selected_rows.rotation_failure_reason
+          )
+          ELSE line_work.error_json
+        END,
         updated_at_utc = v_now
     FROM selected_rows
     WHERE line_work.id = selected_rows.id
@@ -149084,6 +150062,7 @@ BEGIN
 
   UPDATE public.banking_pay_workbench_sessions AS session_row
   SET line_units_ready = GREATEST(COALESCE(session_row.line_units_ready, 0) - COALESCE(v_materialised_count, 0), 0),
+      line_units_failed = GREATEST(COALESCE(session_row.line_units_failed, 0) + COALESCE(v_materialise_error_count, 0), 0),
       preview_row_count = GREATEST(COALESCE(session_row.preview_row_count, 0) + COALESCE(v_new_preview_row_count, 0), 0),
       selected_row_count = GREATEST(COALESCE(session_row.selected_row_count, 0) + COALESCE(v_new_selected_row_count, 0), 0),
       scope_ready_count = GREATEST(COALESCE(session_row.scope_ready_count, 0)
@@ -149128,6 +150107,7 @@ BEGIN
           'last_preview_materialise_count', COALESCE(v_materialised_count, 0),
           'last_preview_materialise_selected_count', COALESCE(v_new_selected_row_count, 0),
           'last_preview_materialise_suppressed_count', COALESCE(v_suppressed_preview_row_count, 0),
+          'last_preview_materialise_error_count', COALESCE(v_materialise_error_count, 0),
           'last_preview_materialise_has_more', v_next_cursor IS NOT NULL
         ),
       progress_counter_version = COALESCE(session_row.progress_counter_version, 0) + 1,
@@ -149146,7 +150126,8 @@ BEGIN
     'materialised_count', COALESCE(v_materialised_count, 0),
     'new_preview_row_count', COALESCE(v_new_preview_row_count, 0),
     'new_selected_row_count', COALESCE(v_new_selected_row_count, 0),
-    'suppressed_preview_row_count', COALESCE(v_suppressed_preview_row_count, 0)
+    'suppressed_preview_row_count', COALESCE(v_suppressed_preview_row_count, 0),
+    'materialisation_error_count', COALESCE(v_materialise_error_count, 0)
   )
   || jsonb_build_object(
     'next_cursor', v_next_cursor,
@@ -149158,7 +150139,6 @@ BEGIN
   );
 END;
 $function$;
-
 
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_mark_finance_case_dirty()
@@ -149341,6 +150321,7 @@ END;
 $function$;
 
 
+
 CREATE OR REPLACE FUNCTION public.pay_workbench_prepare_draft_allocation_rows_seed(p_operation_id uuid, p_candidate_scope_ids jsonb DEFAULT NULL::jsonb)
  RETURNS TABLE(candidate_scopes_processed integer, allocation_rows_inserted integer, allocation_rows_reused integer, failures integer)
  LANGUAGE plpgsql
@@ -149464,7 +150445,7 @@ BEGIN
         ELSE '[]'::jsonb
       END
     ) WITH ORDINALITY AS line_values(value, ordinality)
-  ), normalised_scope_lines AS (
+  ), normalised_scope_lines_raw AS (
     SELECT
       scope_selected_lines.operation_id,
       scope_selected_lines.candidate_scope_id,
@@ -149480,13 +150461,18 @@ BEGIN
       CASE WHEN COALESCE(scope_selected_lines.line_json->>'row_ordinal', '') ~ '^[0-9]+$' THEN (scope_selected_lines.line_json->>'row_ordinal')::bigint ELSE scope_selected_lines.line_ordinal END AS row_ordinal,
       scope_selected_lines.line_json AS row_json,
       CASE
-        WHEN NULLIF(BTRIM(COALESCE(scope_selected_lines.line_json->>'timesheet_id', scope_selected_lines.line_json#>>'{economic_key,timesheet_id}', '')), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
-          THEN NULLIF(BTRIM(COALESCE(scope_selected_lines.line_json->>'timesheet_id', scope_selected_lines.line_json#>>'{economic_key,timesheet_id}', '')), '')::uuid
+        WHEN NULLIF(BTRIM(COALESCE(scope_selected_lines.line_json#>>'{economic_key,timesheet_id}', '')), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          THEN NULLIF(BTRIM(COALESCE(scope_selected_lines.line_json#>>'{economic_key,timesheet_id}', '')), '')::uuid
         ELSE NULL::uuid
-      END AS timesheet_id,
+      END AS economic_key_timesheet_id,
+      CASE
+        WHEN NULLIF(BTRIM(COALESCE(scope_selected_lines.line_json->>'timesheet_id', scope_selected_lines.line_json->>'real_business_timesheet_id', '')), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          THEN NULLIF(BTRIM(COALESCE(scope_selected_lines.line_json->>'timesheet_id', scope_selected_lines.line_json->>'real_business_timesheet_id', '')), '')::uuid
+        ELSE NULL::uuid
+      END AS top_level_timesheet_id,
       COALESCE(NULLIF(BTRIM(scope_selected_lines.line_json->>'section'), ''), 'canonical_preview_lines') AS section,
-      UPPER(NULLIF(BTRIM(COALESCE(scope_selected_lines.line_json->>'key_type', scope_selected_lines.line_json#>>'{economic_key,key_type}', scope_selected_lines.line_json->>'component_key_type', '')), '')) AS key_type,
-      NULLIF(BTRIM(COALESCE(scope_selected_lines.line_json->>'key_value', scope_selected_lines.line_json#>>'{economic_key,key_value}', scope_selected_lines.line_json->>'component_key_value', '')), '') AS key_value,
+      UPPER(NULLIF(BTRIM(COALESCE(scope_selected_lines.line_json#>>'{economic_key,key_type}', scope_selected_lines.line_json->>'key_type', scope_selected_lines.line_json->>'component_key_type', '')), '')) AS key_type,
+      NULLIF(BTRIM(COALESCE(scope_selected_lines.line_json#>>'{economic_key,key_value}', scope_selected_lines.line_json->>'key_value', scope_selected_lines.line_json->>'component_key_value', '')), '') AS key_value,
       UPPER(NULLIF(BTRIM(COALESCE(scope_selected_lines.line_json->>'selection_state', 'SELECTED')), '')) AS selection_state,
       UPPER(NULLIF(BTRIM(COALESCE(scope_selected_lines.line_json->>'status', 'READY')), '')) AS line_status,
       CASE WHEN NULLIF(BTRIM(COALESCE(scope_selected_lines.line_json->>'finance_case_id', '')), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN NULLIF(BTRIM(COALESCE(scope_selected_lines.line_json->>'finance_case_id', '')), '')::uuid ELSE NULL::uuid END AS finance_case_id,
@@ -149552,6 +150538,97 @@ BEGIN
         ) AS component_element(value)
       ) AS component_counts
     ) AS component_probe
+  ), allocation_timesheet_refs AS (
+    SELECT normalised_scope_lines_raw.economic_key_timesheet_id AS timesheet_id
+    FROM normalised_scope_lines_raw
+    WHERE normalised_scope_lines_raw.economic_key_timesheet_id IS NOT NULL
+    UNION
+    SELECT normalised_scope_lines_raw.top_level_timesheet_id AS timesheet_id
+    FROM normalised_scope_lines_raw
+    WHERE normalised_scope_lines_raw.top_level_timesheet_id IS NOT NULL
+  ), allocation_timesheet_id_array AS (
+    SELECT COALESCE(
+      array_agg(DISTINCT allocation_timesheet_refs.timesheet_id ORDER BY allocation_timesheet_refs.timesheet_id),
+      array[]::uuid[]
+    ) AS timesheet_ids
+    FROM allocation_timesheet_refs
+  ), allocation_rotation_scope AS (
+    SELECT DISTINCT ON (rotation_scope.requested_timesheet_id)
+      rotation_scope.requested_timesheet_id,
+      COALESCE(rotation_scope.canonical_timesheet_id, rotation_scope.requested_timesheet_id) AS canonical_timesheet_id,
+      (rotation_scope.family_timesheet_id IS NOT NULL AND rotation_scope.family_is_current IS NOT NULL) AS rotation_scope_resolved
+    FROM allocation_timesheet_id_array
+    JOIN public._pay_timesheet_rotation_scope(allocation_timesheet_id_array.timesheet_ids) AS rotation_scope
+      ON true
+    ORDER BY
+      rotation_scope.requested_timesheet_id,
+      rotation_scope.family_is_current DESC NULLS LAST,
+      rotation_scope.family_version DESC NULLS LAST,
+      rotation_scope.family_timesheet_id
+  ), normalised_scope_lines AS (
+    SELECT
+      normalised_scope_lines_raw.operation_id,
+      normalised_scope_lines_raw.candidate_scope_id,
+      normalised_scope_lines_raw.pay_batch_id,
+      normalised_scope_lines_raw.candidate_id,
+      normalised_scope_lines_raw.pay_channel,
+      normalised_scope_lines_raw.preview_row_id,
+      normalised_scope_lines_raw.row_key,
+      normalised_scope_lines_raw.row_ordinal,
+      jsonb_strip_nulls(
+        normalised_scope_lines_raw.row_json
+        || CASE
+          WHEN COALESCE(economic_key_rotation.canonical_timesheet_id, top_level_rotation.canonical_timesheet_id) IS NULL THEN '{}'::jsonb
+          ELSE jsonb_build_object(
+            'timesheet_id', COALESCE(economic_key_rotation.canonical_timesheet_id, top_level_rotation.canonical_timesheet_id)::text,
+            'real_business_timesheet_id', COALESCE(economic_key_rotation.canonical_timesheet_id, top_level_rotation.canonical_timesheet_id)::text,
+            'economic_key', COALESCE(normalised_scope_lines_raw.row_json->'economic_key', '{}'::jsonb)
+              || jsonb_build_object('timesheet_id', COALESCE(economic_key_rotation.canonical_timesheet_id, top_level_rotation.canonical_timesheet_id)::text)
+          )
+        END
+        || CASE
+          WHEN normalised_scope_lines_raw.top_level_timesheet_id IS NOT NULL
+           AND normalised_scope_lines_raw.top_level_timesheet_id IS DISTINCT FROM COALESCE(economic_key_rotation.canonical_timesheet_id, top_level_rotation.canonical_timesheet_id)
+          THEN jsonb_build_object('rotation_requested_timesheet_id', normalised_scope_lines_raw.top_level_timesheet_id::text)
+          ELSE '{}'::jsonb
+        END
+      ) AS row_json,
+      COALESCE(economic_key_rotation.canonical_timesheet_id, top_level_rotation.canonical_timesheet_id, normalised_scope_lines_raw.economic_key_timesheet_id, normalised_scope_lines_raw.top_level_timesheet_id) AS timesheet_id,
+      normalised_scope_lines_raw.section,
+      normalised_scope_lines_raw.key_type,
+      normalised_scope_lines_raw.key_value,
+      normalised_scope_lines_raw.selection_state,
+      normalised_scope_lines_raw.line_status,
+      normalised_scope_lines_raw.finance_case_id,
+      normalised_scope_lines_raw.finance_component_id,
+      normalised_scope_lines_raw.allocation_type,
+      normalised_scope_lines_raw.single_fixed_reimbursement_key_type,
+      normalised_scope_lines_raw.single_fixed_reimbursement_key_value,
+      normalised_scope_lines_raw.source_ref,
+      normalised_scope_lines_raw.allocated_amount,
+      CASE
+        WHEN normalised_scope_lines_raw.economic_key_timesheet_id IS NULL AND normalised_scope_lines_raw.top_level_timesheet_id IS NULL THEN false
+        WHEN normalised_scope_lines_raw.economic_key_timesheet_id IS NOT NULL AND COALESCE(economic_key_rotation.rotation_scope_resolved, false) = false THEN true
+        WHEN normalised_scope_lines_raw.top_level_timesheet_id IS NOT NULL AND COALESCE(top_level_rotation.rotation_scope_resolved, false) = false THEN true
+        WHEN economic_key_rotation.canonical_timesheet_id IS NOT NULL
+         AND top_level_rotation.canonical_timesheet_id IS NOT NULL
+         AND economic_key_rotation.canonical_timesheet_id IS DISTINCT FROM top_level_rotation.canonical_timesheet_id THEN true
+        ELSE false
+      END AS rotation_validation_failed,
+      CASE
+        WHEN normalised_scope_lines_raw.economic_key_timesheet_id IS NULL AND normalised_scope_lines_raw.top_level_timesheet_id IS NULL THEN NULL::text
+        WHEN normalised_scope_lines_raw.economic_key_timesheet_id IS NOT NULL AND COALESCE(economic_key_rotation.rotation_scope_resolved, false) = false THEN 'ALLOCATION_ECONOMIC_KEY_TIMESHEET_ROTATION_SCOPE_UNRESOLVED'
+        WHEN normalised_scope_lines_raw.top_level_timesheet_id IS NOT NULL AND COALESCE(top_level_rotation.rotation_scope_resolved, false) = false THEN 'ALLOCATION_LINE_TIMESHEET_ROTATION_SCOPE_UNRESOLVED'
+        WHEN economic_key_rotation.canonical_timesheet_id IS NOT NULL
+         AND top_level_rotation.canonical_timesheet_id IS NOT NULL
+         AND economic_key_rotation.canonical_timesheet_id IS DISTINCT FROM top_level_rotation.canonical_timesheet_id THEN 'ALLOCATION_LINE_AND_ECONOMIC_KEY_CANONICAL_TIMESHEET_MISMATCH'
+        ELSE NULL::text
+      END AS rotation_failure_reason
+    FROM normalised_scope_lines_raw
+    LEFT JOIN allocation_rotation_scope AS economic_key_rotation
+      ON economic_key_rotation.requested_timesheet_id = normalised_scope_lines_raw.economic_key_timesheet_id
+    LEFT JOIN allocation_rotation_scope AS top_level_rotation
+      ON top_level_rotation.requested_timesheet_id = normalised_scope_lines_raw.top_level_timesheet_id
   )
   SELECT
     normalised_scope_lines.*,
@@ -149585,6 +150662,7 @@ BEGIN
            'candidate_id', invalid_rows.candidate_id::text,
            'candidate_scope_id', invalid_rows.candidate_scope_id::text,
            'reasons', COALESCE(invalid_rows.preview_contract_json->'reasons', '[]'::jsonb)
+             || CASE WHEN invalid_rows.rotation_validation_failed IS TRUE THEN jsonb_build_array(invalid_rows.rotation_failure_reason) ELSE '[]'::jsonb END
              || CASE
                WHEN invalid_rows.single_fixed_reimbursement_key_type IS NOT NULL
                 AND (
@@ -149598,7 +150676,8 @@ BEGIN
   FROM (
     SELECT candidate_row.*
     FROM pg_temp.tmp_pay_workbench_allocation_preview_candidates AS candidate_row
-    WHERE LOWER(BTRIM(COALESCE(candidate_row.preview_contract_json->>'ok', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
+    WHERE candidate_row.rotation_validation_failed IS TRUE
+       OR LOWER(BTRIM(COALESCE(candidate_row.preview_contract_json->>'ok', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
        OR LOWER(BTRIM(COALESCE(candidate_row.preview_contract_json->>'selection_allowed', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
        OR candidate_row.preview_row_id IS NULL
        OR lower(COALESCE(candidate_row.section, '')) <> 'canonical_preview_lines'
@@ -149637,7 +150716,8 @@ BEGIN
   WITH selected_preview_rows AS (
     SELECT candidate_row.*
     FROM pg_temp.tmp_pay_workbench_allocation_preview_candidates AS candidate_row
-    WHERE LOWER(BTRIM(COALESCE(candidate_row.preview_contract_json->>'ok', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+    WHERE candidate_row.rotation_validation_failed IS NOT TRUE
+      AND LOWER(BTRIM(COALESCE(candidate_row.preview_contract_json->>'ok', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
       AND LOWER(BTRIM(COALESCE(candidate_row.preview_contract_json->>'selection_allowed', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
       AND candidate_row.preview_row_id IS NOT NULL
       AND lower(COALESCE(candidate_row.section, '')) = 'canonical_preview_lines'
@@ -149811,7 +150891,6 @@ BEGIN
     0::integer;
 END;
 $function$;
-
 
 
 
@@ -149993,12 +151072,12 @@ BEGIN
           ELSE NULL::uuid
         END AS candidate_id,
         CASE
-          WHEN NULLIF(BTRIM(COALESCE(contract_entry.value->>'timesheet_id', contract_entry.value#>>'{economic_key,timesheet_id}', '')), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
-            THEN NULLIF(BTRIM(COALESCE(contract_entry.value->>'timesheet_id', contract_entry.value#>>'{economic_key,timesheet_id}', '')), '')::uuid
+          WHEN NULLIF(BTRIM(COALESCE(contract_entry.value#>>'{economic_key,timesheet_id}', contract_entry.value->>'timesheet_id', '')), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+            THEN NULLIF(BTRIM(COALESCE(contract_entry.value#>>'{economic_key,timesheet_id}', contract_entry.value->>'timesheet_id', '')), '')::uuid
           ELSE NULL::uuid
         END AS timesheet_id,
-        NULLIF(BTRIM(COALESCE(contract_entry.value->>'key_type', contract_entry.value#>>'{economic_key,key_type}', '')), '') AS key_type,
-        NULLIF(BTRIM(COALESCE(contract_entry.value->>'key_value', contract_entry.value#>>'{economic_key,key_value}', '')), '') AS key_value,
+        NULLIF(BTRIM(COALESCE(contract_entry.value#>>'{economic_key,key_type}', contract_entry.value->>'key_type', '')), '') AS key_type,
+        NULLIF(BTRIM(COALESCE(contract_entry.value#>>'{economic_key,key_value}', contract_entry.value->>'key_value', '')), '') AS key_value,
         UPPER(NULLIF(BTRIM(COALESCE(contract_entry.value->>'pay_channel', '')), '')) AS pay_channel
       FROM jsonb_array_elements(
         CASE
@@ -150008,6 +151087,27 @@ BEGIN
         END
       ) WITH ORDINALITY AS contract_entry(value, ordinality)
       WHERE jsonb_typeof(contract_entry.value) = 'object'
+    ),
+    operation_contract_timesheet_ids AS (
+      SELECT COALESCE(
+        array_agg(DISTINCT operation_contracts.timesheet_id ORDER BY operation_contracts.timesheet_id),
+        array[]::uuid[]
+      ) AS timesheet_ids
+      FROM operation_contracts
+      WHERE operation_contracts.timesheet_id IS NOT NULL
+    ),
+    operation_contract_rotation AS (
+      SELECT DISTINCT ON (rotation_scope.requested_timesheet_id)
+        rotation_scope.requested_timesheet_id,
+        COALESCE(rotation_scope.canonical_timesheet_id, rotation_scope.requested_timesheet_id) AS canonical_timesheet_id
+      FROM operation_contract_timesheet_ids
+      JOIN public._pay_timesheet_rotation_scope(operation_contract_timesheet_ids.timesheet_ids) AS rotation_scope
+        ON true
+      ORDER BY
+        rotation_scope.requested_timesheet_id,
+        rotation_scope.family_is_current DESC NULLS LAST,
+        rotation_scope.family_version DESC NULLS LAST,
+        rotation_scope.family_timesheet_id
     ),
     operation_contract_current_matches AS (
       SELECT DISTINCT
@@ -150020,6 +151120,8 @@ BEGIN
           OR operation_contract.presentation_preview_row_id = supplied_ids.supplied_id
           OR operation_contract.row_key = supplied_ids.supplied_id
         )
+      LEFT JOIN operation_contract_rotation
+        ON operation_contract_rotation.requested_timesheet_id = operation_contract.timesheet_id
       JOIN public.banking_pay_workbench_preview_rows AS current_preview_row
         ON current_preview_row.session_id = p_workbench_session_id
        AND current_preview_row.session_version = v_session.version
@@ -150035,7 +151137,7 @@ BEGIN
        AND operation_contract.key_type IS NOT NULL
        AND operation_contract.key_value IS NOT NULL
        AND current_preview_row.candidate_id IS NOT DISTINCT FROM operation_contract.candidate_id
-       AND current_preview_row.timesheet_id IS NOT DISTINCT FROM operation_contract.timesheet_id
+       AND current_preview_row.timesheet_id IS NOT DISTINCT FROM COALESCE(operation_contract_rotation.canonical_timesheet_id, operation_contract.timesheet_id)
        AND COALESCE(NULLIF(BTRIM(current_preview_row.section), ''), 'canonical_preview_lines') = COALESCE(NULLIF(BTRIM(operation_contract.section), ''), 'canonical_preview_lines')
        AND NULLIF(BTRIM(COALESCE(current_preview_row.key_type, current_preview_row.row_json#>>'{economic_key,key_type}', current_preview_row.row_json->>'component_key_type', '')), '') IS NOT DISTINCT FROM operation_contract.key_type
        AND NULLIF(BTRIM(COALESCE(current_preview_row.key_value, current_preview_row.row_json#>>'{economic_key,key_value}', current_preview_row.row_json->>'component_key_value', '')), '') IS NOT DISTINCT FROM operation_contract.key_value
@@ -150046,15 +151148,89 @@ BEGIN
          OR operation_contract.pay_channel = ''
          OR UPPER(BTRIM(COALESCE(current_preview_row.row_json->>'pay_channel', current_preview_row.row_json->>'current_pay_method', current_preview_row.row_json->>'candidate_pay_method', ''))) = operation_contract.pay_channel
        )
+    ),
+    historical_preview_inputs AS (
+      SELECT DISTINCT
+        supplied_ids.supplied_id,
+        any_preview_row.candidate_id,
+        COALESCE(NULLIF(BTRIM(any_preview_row.section), ''), 'canonical_preview_lines') AS section,
+        any_preview_row.row_key,
+        any_preview_row.timesheet_id,
+        NULLIF(BTRIM(COALESCE(any_preview_row.key_type, any_preview_row.row_json#>>'{economic_key,key_type}', any_preview_row.row_json->>'component_key_type', '')), '') AS key_type,
+        NULLIF(BTRIM(COALESCE(any_preview_row.key_value, any_preview_row.row_json#>>'{economic_key,key_value}', any_preview_row.row_json->>'component_key_value', '')), '') AS key_value,
+        UPPER(NULLIF(BTRIM(COALESCE(any_preview_row.row_json->>'pay_channel', any_preview_row.row_json->>'current_pay_method', any_preview_row.row_json->>'candidate_pay_method', '')), '')) AS pay_channel
+      FROM supplied_ids
+      JOIN public.banking_pay_workbench_preview_rows AS any_preview_row
+        ON any_preview_row.session_id = p_workbench_session_id
+       AND (
+         any_preview_row.id::text = supplied_ids.supplied_id
+         OR any_preview_row.row_key = supplied_ids.supplied_id
+         OR any_preview_row.row_json->>'preview_row_id' = supplied_ids.supplied_id
+         OR any_preview_row.row_json->>'row_id' = supplied_ids.supplied_id
+         OR any_preview_row.row_json->>'line_id' = supplied_ids.supplied_id
+       )
+      WHERE any_preview_row.timesheet_id IS NOT NULL
+        AND any_preview_row.row_key IS NOT NULL
+    ),
+    historical_timesheet_ids AS (
+      SELECT COALESCE(
+        array_agg(DISTINCT historical_preview_inputs.timesheet_id ORDER BY historical_preview_inputs.timesheet_id),
+        array[]::uuid[]
+      ) AS timesheet_ids
+      FROM historical_preview_inputs
+    ),
+    historical_rotation AS (
+      SELECT DISTINCT ON (rotation_scope.requested_timesheet_id)
+        rotation_scope.requested_timesheet_id,
+        COALESCE(rotation_scope.canonical_timesheet_id, rotation_scope.requested_timesheet_id) AS canonical_timesheet_id
+      FROM historical_timesheet_ids
+      JOIN public._pay_timesheet_rotation_scope(historical_timesheet_ids.timesheet_ids) AS rotation_scope
+        ON true
+      ORDER BY
+        rotation_scope.requested_timesheet_id,
+        rotation_scope.family_is_current DESC NULLS LAST,
+        rotation_scope.family_version DESC NULLS LAST,
+        rotation_scope.family_timesheet_id
+    ),
+    historical_preview_current_matches AS (
+      SELECT DISTINCT
+        historical_preview_inputs.supplied_id,
+        current_preview_row.id::text AS resolved_id
+      FROM historical_preview_inputs
+      JOIN historical_rotation
+        ON historical_rotation.requested_timesheet_id = historical_preview_inputs.timesheet_id
+      JOIN public.banking_pay_workbench_preview_rows AS current_preview_row
+        ON current_preview_row.session_id = p_workbench_session_id
+       AND current_preview_row.session_version = v_session.version
+       AND UPPER(BTRIM(COALESCE(current_preview_row.status, ''))) = 'READY'
+       AND COALESCE(current_preview_row.selected, false) = true
+       AND UPPER(BTRIM(COALESCE(current_preview_row.selection_state, ''))) = 'SELECTED'
+       AND UPPER(BTRIM(COALESCE(current_preview_row.row_json->>'presentation_section', ''))) = 'READY_TO_PAY'
+       AND LOWER(BTRIM(COALESCE(current_preview_row.row_json->>'draftable', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+       AND LOWER(BTRIM(COALESCE(current_preview_row.row_json->>'is_ready_for_draft', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+       AND current_preview_row.candidate_id IS NOT DISTINCT FROM historical_preview_inputs.candidate_id
+       AND current_preview_row.timesheet_id IS NOT DISTINCT FROM historical_rotation.canonical_timesheet_id
+       AND COALESCE(NULLIF(BTRIM(current_preview_row.section), ''), 'canonical_preview_lines') = historical_preview_inputs.section
+       AND NULLIF(BTRIM(current_preview_row.row_key), '') IS NOT DISTINCT FROM NULLIF(BTRIM(historical_preview_inputs.row_key), '')
+       AND NULLIF(BTRIM(COALESCE(current_preview_row.key_type, current_preview_row.row_json#>>'{economic_key,key_type}', current_preview_row.row_json->>'component_key_type', '')), '') IS NOT DISTINCT FROM historical_preview_inputs.key_type
+       AND NULLIF(BTRIM(COALESCE(current_preview_row.key_value, current_preview_row.row_json#>>'{economic_key,key_value}', current_preview_row.row_json->>'component_key_value', '')), '') IS NOT DISTINCT FROM historical_preview_inputs.key_value
+       AND (v_scope_filter = 'ALL' OR UPPER(BTRIM(COALESCE(current_preview_row.row_json->>'pay_channel', current_preview_row.row_json->>'current_pay_method', current_preview_row.row_json->>'candidate_pay_method', ''))) = v_scope_filter)
+       AND (
+         historical_preview_inputs.pay_channel IS NULL
+         OR historical_preview_inputs.pay_channel = ''
+         OR UPPER(BTRIM(COALESCE(current_preview_row.row_json->>'pay_channel', current_preview_row.row_json->>'current_pay_method', current_preview_row.row_json->>'candidate_pay_method', ''))) = historical_preview_inputs.pay_channel
+       )
     )
     SELECT
       supplied_ids.supplied_id,
-      COALESCE(direct_current_matches.resolved_id, operation_contract_current_matches.resolved_id) AS resolved_id
+      COALESCE(direct_current_matches.resolved_id, operation_contract_current_matches.resolved_id, historical_preview_current_matches.resolved_id) AS resolved_id
     FROM supplied_ids
     LEFT JOIN direct_current_matches
       ON direct_current_matches.supplied_id = supplied_ids.supplied_id
     LEFT JOIN operation_contract_current_matches
-      ON operation_contract_current_matches.supplied_id = supplied_ids.supplied_id;
+      ON operation_contract_current_matches.supplied_id = supplied_ids.supplied_id
+    LEFT JOIN historical_preview_current_matches
+      ON historical_preview_current_matches.supplied_id = supplied_ids.supplied_id;
 
     SELECT COUNT(*)::integer,
            COUNT(DISTINCT resolved_selection.resolved_id)::integer,
@@ -150148,7 +151324,7 @@ BEGIN
 
   DROP TABLE IF EXISTS pg_temp.tmp_pay_workbench_draft_scope_selected_candidates;
   CREATE TEMPORARY TABLE pg_temp.tmp_pay_workbench_draft_scope_selected_candidates ON COMMIT DROP AS
-  WITH selected_base AS (
+  WITH selected_base_raw AS (
     SELECT
       preview_row.id AS preview_row_id,
       preview_row.row_key,
@@ -150191,6 +151367,77 @@ BEGIN
       )
     ORDER BY preview_row.row_ordinal, preview_row.id
     LIMIT 100
+  ), selected_timesheet_ids AS (
+    SELECT COALESCE(
+      array_agg(DISTINCT selected_base_raw.timesheet_id ORDER BY selected_base_raw.timesheet_id),
+      array[]::uuid[]
+    ) AS timesheet_ids
+    FROM selected_base_raw
+    WHERE selected_base_raw.timesheet_id IS NOT NULL
+  ), selected_rotation_scope AS (
+    SELECT DISTINCT ON (rotation_scope.requested_timesheet_id)
+      rotation_scope.requested_timesheet_id,
+      COALESCE(rotation_scope.canonical_timesheet_id, rotation_scope.requested_timesheet_id) AS canonical_timesheet_id,
+      (rotation_scope.family_timesheet_id IS NOT NULL AND rotation_scope.family_is_current IS NOT NULL) AS rotation_scope_resolved,
+      COALESCE(rotation_scope.requested_is_canonical, false) AS requested_is_canonical
+    FROM selected_timesheet_ids
+    JOIN public._pay_timesheet_rotation_scope(selected_timesheet_ids.timesheet_ids) AS rotation_scope
+      ON true
+    ORDER BY
+      rotation_scope.requested_timesheet_id,
+      rotation_scope.family_is_current DESC NULLS LAST,
+      rotation_scope.family_version DESC NULLS LAST,
+      rotation_scope.family_timesheet_id
+  ), selected_base AS (
+    SELECT
+      selected_base_raw.preview_row_id,
+      selected_base_raw.row_key,
+      selected_base_raw.session_id,
+      selected_base_raw.candidate_id,
+      selected_base_raw.section,
+      selected_base_raw.selection_state,
+      selected_base_raw.row_ordinal,
+      jsonb_strip_nulls(
+        CASE
+          WHEN selected_base_raw.timesheet_id IS NULL OR selected_rotation_scope.canonical_timesheet_id IS NULL THEN selected_base_raw.row_json
+          ELSE selected_base_raw.row_json
+            || jsonb_build_object(
+              'timesheet_id', selected_rotation_scope.canonical_timesheet_id::text,
+              'real_business_timesheet_id', selected_rotation_scope.canonical_timesheet_id::text,
+              'economic_key', COALESCE(selected_base_raw.row_json->'economic_key', '{}'::jsonb)
+                || jsonb_build_object('timesheet_id', selected_rotation_scope.canonical_timesheet_id::text)
+            )
+            || CASE
+              WHEN selected_base_raw.timesheet_id IS DISTINCT FROM selected_rotation_scope.canonical_timesheet_id THEN jsonb_build_object(
+                'rotation_requested_timesheet_id', selected_base_raw.timesheet_id::text
+              )
+              ELSE '{}'::jsonb
+            END
+        END
+      ) AS row_json,
+      COALESCE(selected_rotation_scope.canonical_timesheet_id, selected_base_raw.timesheet_id) AS timesheet_id,
+      selected_base_raw.key_type,
+      selected_base_raw.key_value,
+      selected_base_raw.pay_channel,
+      selected_base_raw.finance_case_id,
+      selected_base_raw.amount_ex_vat,
+      CASE
+        WHEN selected_base_raw.timesheet_id IS NULL THEN false
+        WHEN COALESCE(selected_rotation_scope.rotation_scope_resolved, false) = false THEN true
+        WHEN selected_rotation_scope.canonical_timesheet_id IS NULL THEN true
+        WHEN COALESCE(selected_rotation_scope.requested_is_canonical, false) = false THEN true
+        ELSE false
+      END AS rotation_validation_failed,
+      CASE
+        WHEN selected_base_raw.timesheet_id IS NULL THEN NULL::text
+        WHEN COALESCE(selected_rotation_scope.rotation_scope_resolved, false) = false THEN 'SELECTED_PREVIEW_TIMESHEET_ROTATION_SCOPE_UNRESOLVED'
+        WHEN selected_rotation_scope.canonical_timesheet_id IS NULL THEN 'SELECTED_PREVIEW_CANONICAL_TIMESHEET_NOT_RESOLVED'
+        WHEN COALESCE(selected_rotation_scope.requested_is_canonical, false) = false THEN 'SELECTED_PREVIEW_TIMESHEET_NOT_CANONICAL_REFRESH_REQUIRED'
+        ELSE NULL::text
+      END AS rotation_failure_reason
+    FROM selected_base_raw
+    LEFT JOIN selected_rotation_scope
+      ON selected_rotation_scope.requested_timesheet_id = selected_base_raw.timesheet_id
   )
   SELECT
     selected_base.*,
@@ -150222,12 +151469,14 @@ BEGIN
            'row_key', invalid_rows.row_key,
            'candidate_id', invalid_rows.candidate_id::text,
            'reasons', COALESCE(invalid_rows.preview_contract_json->'reasons', '[]'::jsonb)
+             || CASE WHEN invalid_rows.rotation_validation_failed IS TRUE THEN jsonb_build_array(invalid_rows.rotation_failure_reason) ELSE '[]'::jsonb END
          ) ORDER BY invalid_rows.row_ordinal, invalid_rows.preview_row_id), '[]'::jsonb)
   INTO v_malformed_selected_preview_rows
   FROM (
     SELECT selected_candidate.*
     FROM pg_temp.tmp_pay_workbench_draft_scope_selected_candidates AS selected_candidate
-    WHERE LOWER(BTRIM(COALESCE(selected_candidate.preview_contract_json->>'ok', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
+    WHERE selected_candidate.rotation_validation_failed IS TRUE
+       OR LOWER(BTRIM(COALESCE(selected_candidate.preview_contract_json->>'ok', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
        OR LOWER(BTRIM(COALESCE(selected_candidate.preview_contract_json->>'selection_allowed', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
        OR UPPER(BTRIM(COALESCE(selected_candidate.section, ''))) <> 'CANONICAL_PREVIEW_LINES'
        OR UPPER(BTRIM(COALESCE(selected_candidate.selection_state, ''))) <> 'SELECTED'
@@ -150256,7 +151505,8 @@ BEGIN
   CREATE TEMPORARY TABLE pg_temp.tmp_pay_workbench_draft_scope_selected_page ON COMMIT DROP AS
   SELECT selected_candidate.*
   FROM pg_temp.tmp_pay_workbench_draft_scope_selected_candidates AS selected_candidate
-  WHERE LOWER(BTRIM(COALESCE(selected_candidate.preview_contract_json->>'ok', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+  WHERE selected_candidate.rotation_validation_failed IS NOT TRUE
+    AND LOWER(BTRIM(COALESCE(selected_candidate.preview_contract_json->>'ok', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
     AND LOWER(BTRIM(COALESCE(selected_candidate.preview_contract_json->>'selection_allowed', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
     AND lower(COALESCE(selected_candidate.section, '')) = 'canonical_preview_lines'
     AND UPPER(BTRIM(COALESCE(selected_candidate.selection_state, ''))) = 'SELECTED'
@@ -153448,7 +154698,6 @@ END;
 $function$;
 
 
-
 CREATE OR REPLACE FUNCTION public.pay_workbench_seed_candidate_preview_line_source(p_session_id uuid, p_candidate_id uuid, p_context_json jsonb DEFAULT '{}'::jsonb, p_cursor_json jsonb DEFAULT NULL::jsonb, p_limit integer DEFAULT 100)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -153596,7 +154845,7 @@ BEGIN
 
   DROP TABLE IF EXISTS pg_temp._tmp_pay_wb_preview_line_seed_source;
   CREATE TEMPORARY TABLE pg_temp._tmp_pay_wb_preview_line_seed_source ON COMMIT DROP AS
-  WITH base_rows AS (
+  WITH base_rows_raw AS (
     SELECT
       ROW_NUMBER() OVER (
         ORDER BY
@@ -153612,13 +154861,73 @@ BEGIN
       public.pay_workbench_preview_section_from_line_json(canonical_rows.line_json) AS target_section,
       UPPER(NULLIF(BTRIM(COALESCE(canonical_rows.line_json->>'line_type', canonical_rows.line_json->>'case_type', '')), '')) AS line_type,
       CASE
-        WHEN NULLIF(BTRIM(COALESCE(canonical_rows.line_json->>'timesheet_id', canonical_rows.line_json->>'real_business_timesheet_id', '')), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
-          THEN NULLIF(BTRIM(COALESCE(canonical_rows.line_json->>'timesheet_id', canonical_rows.line_json->>'real_business_timesheet_id', '')), '')::uuid
+        WHEN NULLIF(BTRIM(COALESCE(canonical_rows.line_json->>'real_business_timesheet_id', canonical_rows.line_json#>>'{economic_key,timesheet_id}', canonical_rows.line_json->>'timesheet_id', '')), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          THEN NULLIF(BTRIM(COALESCE(canonical_rows.line_json->>'real_business_timesheet_id', canonical_rows.line_json#>>'{economic_key,timesheet_id}', canonical_rows.line_json->>'timesheet_id', '')), '')::uuid
         ELSE NULL::uuid
-      END AS timesheet_id,
+      END AS requested_timesheet_id,
       NULLIF(BTRIM(COALESCE(canonical_rows.line_json->>'preview_row_id', canonical_rows.line_json->>'line_id', canonical_rows.line_json->>'case_key', md5(canonical_rows.line_json::text))), '') AS parent_line_key
     FROM pg_temp.canonical_preview_lines AS canonical_rows
     WHERE canonical_rows.candidate_id = p_candidate_id
+  ), base_requested_timesheets AS (
+    SELECT DISTINCT
+      base_rows_raw.requested_timesheet_id
+    FROM base_rows_raw
+    WHERE base_rows_raw.requested_timesheet_id IS NOT NULL
+  ), base_rotation_scope AS (
+    SELECT
+      rotation_scope_rows.requested_timesheet_id,
+      rotation_scope_rows.canonical_timesheet_id,
+      rotation_scope_rows.family_is_current,
+      rotation_scope_rows.family_version,
+      rotation_scope_rows.family_timesheet_id
+    FROM public._pay_timesheet_rotation_scope(
+      (
+        SELECT COALESCE(
+          array_agg(base_requested_timesheets.requested_timesheet_id ORDER BY base_requested_timesheets.requested_timesheet_id),
+          ARRAY[]::uuid[]
+        )
+        FROM base_requested_timesheets
+      )
+    ) AS rotation_scope_rows
+  ), base_requested_canonical AS (
+    SELECT DISTINCT ON (base_rotation_scope.requested_timesheet_id)
+      base_rotation_scope.requested_timesheet_id,
+      COALESCE(base_rotation_scope.canonical_timesheet_id, base_rotation_scope.requested_timesheet_id) AS canonical_timesheet_id
+    FROM base_rotation_scope
+    WHERE base_rotation_scope.requested_timesheet_id IS NOT NULL
+    ORDER BY
+      base_rotation_scope.requested_timesheet_id,
+      base_rotation_scope.family_is_current DESC NULLS LAST,
+      base_rotation_scope.family_version DESC NULLS LAST,
+      base_rotation_scope.family_timesheet_id
+  ), base_rows AS (
+    SELECT
+      base_rows_raw.base_ordinal,
+      base_rows_raw.candidate_id,
+      jsonb_strip_nulls(
+        base_rows_raw.line_json
+        || jsonb_build_object(
+          'timesheet_id', CASE WHEN COALESCE(base_requested_canonical.canonical_timesheet_id, base_rows_raw.requested_timesheet_id) IS NULL THEN NULL ELSE COALESCE(base_requested_canonical.canonical_timesheet_id, base_rows_raw.requested_timesheet_id)::text END,
+          'real_business_timesheet_id', CASE WHEN COALESCE(base_requested_canonical.canonical_timesheet_id, base_rows_raw.requested_timesheet_id) IS NULL THEN NULL ELSE COALESCE(base_requested_canonical.canonical_timesheet_id, base_rows_raw.requested_timesheet_id)::text END
+        )
+        || CASE
+          WHEN base_rows_raw.requested_timesheet_id IS NOT NULL
+           AND COALESCE(base_requested_canonical.canonical_timesheet_id, base_rows_raw.requested_timesheet_id) IS DISTINCT FROM base_rows_raw.requested_timesheet_id
+          THEN jsonb_build_object('rotation_requested_timesheet_id', base_rows_raw.requested_timesheet_id::text)
+          ELSE '{}'::jsonb
+        END
+      ) AS line_json,
+      base_rows_raw.pay_channel,
+      base_rows_raw.paye_treatment,
+      base_rows_raw.amount_ex_vat,
+      base_rows_raw.is_excluded_from_allocation,
+      base_rows_raw.target_section,
+      base_rows_raw.line_type,
+      COALESCE(base_requested_canonical.canonical_timesheet_id, base_rows_raw.requested_timesheet_id) AS timesheet_id,
+      base_rows_raw.parent_line_key
+    FROM base_rows_raw
+    LEFT JOIN base_requested_canonical
+      ON base_requested_canonical.requested_timesheet_id = base_rows_raw.requested_timesheet_id
   ), timesheet_segment_rows AS (
     SELECT
       base_rows.base_ordinal,
@@ -153968,11 +155277,7 @@ BEGIN
         AND jsonb_typeof(component_element.value) = 'object'
     ) AS component_rows
     CROSS JOIN LATERAL (
-      SELECT CASE
-        WHEN NULLIF(BTRIM(COALESCE(component_rows.component_json#>>'{source_basis_json,timesheet_id}', '')), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
-          THEN NULLIF(BTRIM(COALESCE(component_rows.component_json#>>'{source_basis_json,timesheet_id}', '')), '')::uuid
-        ELSE base_rows.timesheet_id
-      END AS timesheet_id
+      SELECT base_rows.timesheet_id AS timesheet_id
     ) AS component_timesheet
     WHERE base_rows.target_section = 'canonical_preview_lines'
       AND (
@@ -154247,8 +155552,6 @@ END;
 $function$;
 
 
-
-
 CREATE OR REPLACE FUNCTION public.pay_workbench_preview_line_economic_key(p_line_json jsonb DEFAULT '{}'::jsonb, p_timesheet_id uuid DEFAULT NULL::uuid, p_item_type text DEFAULT NULL::text, p_segment_json jsonb DEFAULT NULL::jsonb, p_key_type_hint text DEFAULT NULL::text, p_key_value_hint text DEFAULT NULL::text)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -154401,14 +155704,17 @@ BEGIN
     END IF;
   END IF;
 
-  v_timesheet_id_text := NULLIF(BTRIM(COALESCE(
-    v_line_json->>'timesheet_id',
-    v_line_json->>'real_business_timesheet_id',
-    v_line_json#>>'{economic_key,timesheet_id}',
-    v_line_json#>>'{source_basis_json,timesheet_id}',
-    v_line_json#>>'{frozen_source_basis_json,timesheet_id}',
-    ''
-  )), '');
+  v_timesheet_id_text := CASE
+    WHEN v_timesheet_id IS NOT NULL THEN NULL::text
+    ELSE NULLIF(BTRIM(COALESCE(
+      v_line_json#>>'{economic_key,timesheet_id}',
+      v_line_json->>'real_business_timesheet_id',
+      v_line_json->>'timesheet_id',
+      v_line_json#>>'{source_basis_json,timesheet_id}',
+      v_line_json#>>'{frozen_source_basis_json,timesheet_id}',
+      ''
+    )), '')
+  END;
 
   IF v_timesheet_id IS NULL
      AND v_timesheet_id_text ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
@@ -155782,3 +157088,124 @@ $function$;
 
 
 
+CREATE OR REPLACE FUNCTION public._pay_timesheet_rotation_scope(p_timesheet_ids uuid[])
+ RETURNS TABLE(requested_timesheet_id uuid, booking_id text, canonical_timesheet_id uuid, family_timesheet_id uuid, family_is_current boolean, family_version integer, requested_is_canonical boolean)
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+WITH input_timesheets AS (
+  SELECT DISTINCT
+    input_timesheet_values.timesheet_id_value AS requested_timesheet_id
+  FROM unnest(COALESCE(p_timesheet_ids, ARRAY[]::uuid[])) AS input_timesheet_values(timesheet_id_value)
+  WHERE input_timesheet_values.timesheet_id_value IS NOT NULL
+),
+requested_timesheets AS (
+  SELECT
+    input_timesheets.requested_timesheet_id AS requested_timesheet_id,
+    public.timesheets.timesheet_id AS matched_timesheet_id,
+    public.timesheets.booking_id AS matched_booking_id
+  FROM input_timesheets
+  LEFT JOIN public.timesheets
+    ON public.timesheets.timesheet_id = input_timesheets.requested_timesheet_id
+),
+requested_bookings AS (
+  SELECT DISTINCT
+    requested_timesheets.matched_booking_id AS booking_id
+  FROM requested_timesheets
+  WHERE requested_timesheets.matched_timesheet_id IS NOT NULL
+    AND requested_timesheets.matched_booking_id IS NOT NULL
+    AND BTRIM(requested_timesheets.matched_booking_id) <> ''
+),
+canonical_timesheets AS (
+  SELECT DISTINCT ON (current_timesheets.booking_id)
+    current_timesheets.booking_id AS booking_id,
+    current_timesheets.timesheet_id AS canonical_timesheet_id
+  FROM public.timesheets AS current_timesheets
+  JOIN requested_bookings
+    ON requested_bookings.booking_id = current_timesheets.booking_id
+  WHERE current_timesheets.is_current = true
+  ORDER BY
+    current_timesheets.booking_id,
+    current_timesheets.version DESC,
+    current_timesheets.updated_at DESC,
+    current_timesheets.created_at DESC,
+    current_timesheets.timesheet_id
+),
+family_timesheets AS (
+  SELECT DISTINCT
+    family_rows.booking_id AS booking_id,
+    family_rows.timesheet_id AS family_timesheet_id,
+    family_rows.is_current AS family_is_current,
+    family_rows.version AS family_version
+  FROM public.timesheets AS family_rows
+  JOIN requested_bookings
+    ON requested_bookings.booking_id = family_rows.booking_id
+),
+resolved_scope_rows AS (
+  SELECT
+    requested_timesheets.requested_timesheet_id AS requested_timesheet_id,
+    requested_timesheets.matched_booking_id AS booking_id,
+    canonical_timesheets.canonical_timesheet_id AS canonical_timesheet_id,
+    family_timesheets.family_timesheet_id AS family_timesheet_id,
+    family_timesheets.family_is_current AS family_is_current,
+    family_timesheets.family_version AS family_version,
+    COALESCE(requested_timesheets.requested_timesheet_id = canonical_timesheets.canonical_timesheet_id, false) AS requested_is_canonical
+  FROM requested_timesheets
+  JOIN family_timesheets
+    ON family_timesheets.booking_id = requested_timesheets.matched_booking_id
+  LEFT JOIN canonical_timesheets
+    ON canonical_timesheets.booking_id = requested_timesheets.matched_booking_id
+  WHERE requested_timesheets.matched_timesheet_id IS NOT NULL
+),
+defensive_unresolved_rows AS (
+  SELECT
+    requested_timesheets.requested_timesheet_id AS requested_timesheet_id,
+    NULL::text AS booking_id,
+    requested_timesheets.requested_timesheet_id AS canonical_timesheet_id,
+    requested_timesheets.requested_timesheet_id AS family_timesheet_id,
+    NULL::boolean AS family_is_current,
+    NULL::integer AS family_version,
+    false AS requested_is_canonical
+  FROM requested_timesheets
+  WHERE requested_timesheets.matched_timesheet_id IS NULL
+),
+rotation_scope_output AS (
+  SELECT
+    resolved_scope_rows.requested_timesheet_id AS requested_timesheet_id,
+    resolved_scope_rows.booking_id AS booking_id,
+    resolved_scope_rows.canonical_timesheet_id AS canonical_timesheet_id,
+    resolved_scope_rows.family_timesheet_id AS family_timesheet_id,
+    resolved_scope_rows.family_is_current AS family_is_current,
+    resolved_scope_rows.family_version AS family_version,
+    resolved_scope_rows.requested_is_canonical AS requested_is_canonical
+  FROM resolved_scope_rows
+
+  UNION ALL
+
+  SELECT
+    defensive_unresolved_rows.requested_timesheet_id AS requested_timesheet_id,
+    defensive_unresolved_rows.booking_id AS booking_id,
+    defensive_unresolved_rows.canonical_timesheet_id AS canonical_timesheet_id,
+    defensive_unresolved_rows.family_timesheet_id AS family_timesheet_id,
+    defensive_unresolved_rows.family_is_current AS family_is_current,
+    defensive_unresolved_rows.family_version AS family_version,
+    defensive_unresolved_rows.requested_is_canonical AS requested_is_canonical
+  FROM defensive_unresolved_rows
+)
+SELECT
+  rotation_scope_output.requested_timesheet_id,
+  rotation_scope_output.booking_id,
+  rotation_scope_output.canonical_timesheet_id,
+  rotation_scope_output.family_timesheet_id,
+  rotation_scope_output.family_is_current,
+  rotation_scope_output.family_version,
+  rotation_scope_output.requested_is_canonical
+FROM rotation_scope_output
+ORDER BY
+  rotation_scope_output.requested_timesheet_id,
+  rotation_scope_output.booking_id NULLS LAST,
+  rotation_scope_output.family_is_current DESC NULLS LAST,
+  rotation_scope_output.family_version DESC NULLS LAST,
+  rotation_scope_output.family_timesheet_id;
+$function$;
