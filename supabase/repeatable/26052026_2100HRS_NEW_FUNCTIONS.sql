@@ -44006,16 +44006,11 @@ $function$;
 DROP FUNCTION IF EXISTS public.pay_batch_insert_items_from_preview(uuid, uuid);
 
 
-CREATE OR REPLACE FUNCTION public.pay_batch_insert_items_from_preview(
-  p_pay_batch_id uuid,
-  p_actor_user_id uuid DEFAULT NULL::uuid,
-  p_operation_id uuid DEFAULT NULL::uuid,
-  p_candidate_scope_ids jsonb DEFAULT NULL::jsonb
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
+CREATE OR REPLACE FUNCTION public.pay_batch_insert_items_from_preview(p_pay_batch_id uuid, p_actor_user_id uuid DEFAULT NULL::uuid, p_operation_id uuid DEFAULT NULL::uuid, p_candidate_scope_ids jsonb DEFAULT NULL::jsonb)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
 AS $function$
 DECLARE
   v_now timestamptz := now();
@@ -44285,6 +44280,165 @@ BEGIN
               'operation_id', p_operation_id::text,
               'pay_batch_id', p_pay_batch_id::text,
               'message', 'Allocation rows from the preview are not valid draftable Ready to Pay rows.'
+            )::text;
+  END IF;
+
+  PERFORM 1
+  FROM pg_temp.tmp_pay_batch_item_allocation_page AS allocation_row
+  CROSS JOIN LATERAL (
+    SELECT
+      CASE WHEN NULLIF(BTRIM(COALESCE(allocation_row.allocation_basis_json#>>'{economic_key,timesheet_id}', allocation_row.allocation_basis_json->>'timesheet_id', allocation_row.allocation_basis_json#>>'{line,timesheet_id}', '')), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+        THEN NULLIF(BTRIM(COALESCE(allocation_row.allocation_basis_json#>>'{economic_key,timesheet_id}', allocation_row.allocation_basis_json->>'timesheet_id', allocation_row.allocation_basis_json#>>'{line,timesheet_id}', '')), '')::uuid
+        ELSE NULL::uuid
+      END AS timesheet_id,
+      UPPER(NULLIF(BTRIM(COALESCE(allocation_row.allocation_basis_json#>>'{economic_key,key_type}', allocation_row.allocation_basis_json->>'key_type', '')), '')) AS key_type,
+      NULLIF(BTRIM(COALESCE(allocation_row.allocation_basis_json#>>'{economic_key,key_value}', allocation_row.allocation_basis_json->>'key_value', '')), '') AS key_value
+  ) AS allocation_key
+  CROSS JOIN LATERAL (
+    SELECT
+      CASE
+        WHEN component_counts.object_component_count = 1
+         AND component_counts.fixed_reimbursement_component_count = 1 THEN component_counts.fixed_reimbursement_key_type
+        ELSE NULL::text
+      END AS single_fixed_reimbursement_key_type,
+      CASE
+        WHEN component_counts.object_component_count = 1
+         AND component_counts.fixed_reimbursement_component_count = 1 THEN component_counts.fixed_reimbursement_key_value
+        ELSE NULL::text
+      END AS single_fixed_reimbursement_key_value
+    FROM (
+      SELECT
+        (COUNT(*) FILTER (
+          WHERE component_element.value IS NOT NULL
+            AND jsonb_typeof(component_element.value) = 'object'
+        ))::integer AS object_component_count,
+        (COUNT(*) FILTER (
+          WHERE component_element.value IS NOT NULL
+            AND jsonb_typeof(component_element.value) = 'object'
+            AND UPPER(NULLIF(BTRIM(COALESCE(component_element.value->>'classification', '')), '')) = 'REIMBURSEMENT_GROSS_FIXED'
+            AND UPPER(NULLIF(BTRIM(COALESCE(component_element.value->>'component_key_type', '')), '')) IN ('EXPENSE_CODE', 'ADDITIONAL_CODE')
+            AND NULLIF(BTRIM(COALESCE(component_element.value->>'component_key_value', '')), '') IS NOT NULL
+        ))::integer AS fixed_reimbursement_component_count,
+        MAX(UPPER(NULLIF(BTRIM(COALESCE(component_element.value->>'component_key_type', '')), ''))) FILTER (
+          WHERE component_element.value IS NOT NULL
+            AND jsonb_typeof(component_element.value) = 'object'
+            AND UPPER(NULLIF(BTRIM(COALESCE(component_element.value->>'classification', '')), '')) = 'REIMBURSEMENT_GROSS_FIXED'
+            AND UPPER(NULLIF(BTRIM(COALESCE(component_element.value->>'component_key_type', '')), '')) IN ('EXPENSE_CODE', 'ADDITIONAL_CODE')
+            AND NULLIF(BTRIM(COALESCE(component_element.value->>'component_key_value', '')), '') IS NOT NULL
+        ) AS fixed_reimbursement_key_type,
+        MAX(NULLIF(BTRIM(COALESCE(component_element.value->>'component_key_value', '')), '')) FILTER (
+          WHERE component_element.value IS NOT NULL
+            AND jsonb_typeof(component_element.value) = 'object'
+            AND UPPER(NULLIF(BTRIM(COALESCE(component_element.value->>'classification', '')), '')) = 'REIMBURSEMENT_GROSS_FIXED'
+            AND UPPER(NULLIF(BTRIM(COALESCE(component_element.value->>'component_key_type', '')), '')) IN ('EXPENSE_CODE', 'ADDITIONAL_CODE')
+            AND NULLIF(BTRIM(COALESCE(component_element.value->>'component_key_value', '')), '') IS NOT NULL
+        ) AS fixed_reimbursement_key_value
+      FROM jsonb_array_elements(
+        CASE
+          WHEN jsonb_typeof(allocation_row.allocation_basis_json#>'{line,case_components}') = 'array' THEN allocation_row.allocation_basis_json#>'{line,case_components}'
+          ELSE '[]'::jsonb
+        END
+      ) AS component_element(value)
+    ) AS component_counts
+  ) AS component_probe
+  WHERE component_probe.single_fixed_reimbursement_key_type IS NOT NULL
+    AND (
+      allocation_key.key_type IS DISTINCT FROM component_probe.single_fixed_reimbursement_key_type
+      OR allocation_key.key_value IS DISTINCT FROM component_probe.single_fixed_reimbursement_key_value
+    )
+  LIMIT 1;
+
+  IF FOUND THEN
+    RAISE EXCEPTION 'PREVIEW_ALLOCATION_REIMBURSEMENT_KEY_MISMATCH'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object(
+              'code', 'PREVIEW_ALLOCATION_REIMBURSEMENT_KEY_MISMATCH',
+              'operation_id', p_operation_id::text,
+              'pay_batch_id', p_pay_batch_id::text,
+              'message', 'A fixed reimbursement preview allocation did not use its EXPENSE_CODE/ADDITIONAL_CODE economic key.'
+            )::text;
+  END IF;
+
+  PERFORM 1
+  FROM pg_temp.tmp_pay_batch_item_allocation_page AS allocation_row
+  CROSS JOIN LATERAL (
+    SELECT
+      CASE WHEN NULLIF(BTRIM(COALESCE(allocation_row.allocation_basis_json#>>'{economic_key,timesheet_id}', allocation_row.allocation_basis_json->>'timesheet_id', allocation_row.allocation_basis_json#>>'{line,timesheet_id}', '')), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+        THEN NULLIF(BTRIM(COALESCE(allocation_row.allocation_basis_json#>>'{economic_key,timesheet_id}', allocation_row.allocation_basis_json->>'timesheet_id', allocation_row.allocation_basis_json#>>'{line,timesheet_id}', '')), '')::uuid
+        ELSE NULL::uuid
+      END AS timesheet_id,
+      UPPER(NULLIF(BTRIM(COALESCE(allocation_row.allocation_basis_json#>>'{economic_key,key_type}', allocation_row.allocation_basis_json->>'key_type', '')), '')) AS key_type,
+      NULLIF(BTRIM(COALESCE(allocation_row.allocation_basis_json#>>'{economic_key,key_value}', allocation_row.allocation_basis_json->>'key_value', '')), '') AS key_value
+  ) AS allocation_key
+  CROSS JOIN LATERAL (
+    SELECT
+      CASE
+        WHEN component_counts.object_component_count = 1
+         AND component_counts.fixed_reimbursement_component_count = 1 THEN component_counts.fixed_reimbursement_key_type
+        ELSE NULL::text
+      END AS single_fixed_reimbursement_key_type,
+      CASE
+        WHEN component_counts.object_component_count = 1
+         AND component_counts.fixed_reimbursement_component_count = 1 THEN component_counts.fixed_reimbursement_key_value
+        ELSE NULL::text
+      END AS single_fixed_reimbursement_key_value
+    FROM (
+      SELECT
+        (COUNT(*) FILTER (
+          WHERE component_element.value IS NOT NULL
+            AND jsonb_typeof(component_element.value) = 'object'
+        ))::integer AS object_component_count,
+        (COUNT(*) FILTER (
+          WHERE component_element.value IS NOT NULL
+            AND jsonb_typeof(component_element.value) = 'object'
+            AND UPPER(NULLIF(BTRIM(COALESCE(component_element.value->>'classification', '')), '')) = 'REIMBURSEMENT_GROSS_FIXED'
+            AND UPPER(NULLIF(BTRIM(COALESCE(component_element.value->>'component_key_type', '')), '')) IN ('EXPENSE_CODE', 'ADDITIONAL_CODE')
+            AND NULLIF(BTRIM(COALESCE(component_element.value->>'component_key_value', '')), '') IS NOT NULL
+        ))::integer AS fixed_reimbursement_component_count,
+        MAX(UPPER(NULLIF(BTRIM(COALESCE(component_element.value->>'component_key_type', '')), ''))) FILTER (
+          WHERE component_element.value IS NOT NULL
+            AND jsonb_typeof(component_element.value) = 'object'
+            AND UPPER(NULLIF(BTRIM(COALESCE(component_element.value->>'classification', '')), '')) = 'REIMBURSEMENT_GROSS_FIXED'
+            AND UPPER(NULLIF(BTRIM(COALESCE(component_element.value->>'component_key_type', '')), '')) IN ('EXPENSE_CODE', 'ADDITIONAL_CODE')
+            AND NULLIF(BTRIM(COALESCE(component_element.value->>'component_key_value', '')), '') IS NOT NULL
+        ) AS fixed_reimbursement_key_type,
+        MAX(NULLIF(BTRIM(COALESCE(component_element.value->>'component_key_value', '')), '')) FILTER (
+          WHERE component_element.value IS NOT NULL
+            AND jsonb_typeof(component_element.value) = 'object'
+            AND UPPER(NULLIF(BTRIM(COALESCE(component_element.value->>'classification', '')), '')) = 'REIMBURSEMENT_GROSS_FIXED'
+            AND UPPER(NULLIF(BTRIM(COALESCE(component_element.value->>'component_key_type', '')), '')) IN ('EXPENSE_CODE', 'ADDITIONAL_CODE')
+            AND NULLIF(BTRIM(COALESCE(component_element.value->>'component_key_value', '')), '') IS NOT NULL
+        ) AS fixed_reimbursement_key_value
+      FROM jsonb_array_elements(
+        CASE
+          WHEN jsonb_typeof(allocation_row.allocation_basis_json#>'{line,case_components}') = 'array' THEN allocation_row.allocation_basis_json#>'{line,case_components}'
+          ELSE '[]'::jsonb
+        END
+      ) AS component_element(value)
+    ) AS component_counts
+  ) AS component_probe
+  LEFT JOIN LATERAL (
+    SELECT outstanding_components.outstanding_ex_vat
+    FROM public._pay_outstanding_components(ARRAY[allocation_key.timesheet_id], p_pay_batch_id) AS outstanding_components
+    WHERE outstanding_components.timesheet_id = allocation_key.timesheet_id
+      AND outstanding_components.key_type = allocation_key.key_type
+      AND outstanding_components.key_value = allocation_key.key_value
+    LIMIT 1
+  ) AS outstanding_component ON allocation_key.timesheet_id IS NOT NULL
+  WHERE component_probe.single_fixed_reimbursement_key_type IS NOT NULL
+    AND allocation_key.key_type = component_probe.single_fixed_reimbursement_key_type
+    AND allocation_key.key_value = component_probe.single_fixed_reimbursement_key_value
+    AND ROUND(ABS(COALESCE(allocation_row.allocated_amount, 0)), 2) > ROUND(ABS(COALESCE(outstanding_component.outstanding_ex_vat, 0)), 2)
+  LIMIT 1;
+
+  IF FOUND THEN
+    RAISE EXCEPTION 'PREVIEW_ALLOCATION_REIMBURSEMENT_OUTSTANDING_NOT_AVAILABLE'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object(
+              'code', 'PREVIEW_ALLOCATION_REIMBURSEMENT_OUTSTANDING_NOT_AVAILABLE',
+              'operation_id', p_operation_id::text,
+              'pay_batch_id', p_pay_batch_id::text,
+              'message', 'A selected fixed reimbursement preview allocation no longer has enough outstanding entitlement to draft.'
             )::text;
   END IF;
 
@@ -148100,17 +148254,11 @@ BEGIN
 END;
 $function$;
 
-
-CREATE OR REPLACE FUNCTION public.pay_workbench_preview_rows_materialise_chunk(
-  p_session_id uuid,
-  p_candidate_id uuid DEFAULT NULL::uuid,
-  p_cursor_json jsonb DEFAULT NULL::jsonb,
-  p_limit integer DEFAULT 100
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
+CREATE OR REPLACE FUNCTION public.pay_workbench_preview_rows_materialise_chunk(p_session_id uuid, p_candidate_id uuid DEFAULT NULL::uuid, p_cursor_json jsonb DEFAULT NULL::jsonb, p_limit integer DEFAULT 100)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
 AS $function$
 DECLARE
   v_now timestamptz := now();
@@ -148269,6 +148417,20 @@ BEGIN
         WHEN COALESCE(ready_rows.scope_ordinal, 0) > 0 THEN (ready_rows.scope_ordinal * 1000000) + ready_rows.line_ordinal
         ELSE ready_rows.line_ordinal
       END AS stable_row_ordinal,
+      (
+        component_probe.single_fixed_reimbursement_key_type IS NOT NULL
+        AND (
+          UPPER(NULLIF(BTRIM(COALESCE(ready_rows.result_row_json#>>'{economic_key,key_type}', ready_rows.result_row_json->>'key_type', '')), '')) IS DISTINCT FROM component_probe.single_fixed_reimbursement_key_type
+          OR NULLIF(BTRIM(COALESCE(ready_rows.result_row_json#>>'{economic_key,key_value}', ready_rows.result_row_json->>'key_value', '')), '') IS DISTINCT FROM component_probe.single_fixed_reimbursement_key_value
+        )
+      ) AS fixed_reimbursement_key_mismatch,
+      (
+        component_probe.single_fixed_reimbursement_key_type IS NOT NULL
+        AND component_probe.selected_amount_ex_vat IS NOT NULL
+        AND ROUND(ABS(COALESCE(component_probe.selected_amount_ex_vat, 0)), 2) > ROUND(ABS(COALESCE(outstanding_component.outstanding_ex_vat, 0)), 2)
+      ) AS fixed_reimbursement_not_outstanding,
+      component_probe.single_fixed_reimbursement_key_type,
+      component_probe.single_fixed_reimbursement_key_value,
       CASE
         WHEN public.pay_workbench_preview_section_from_line_json(ready_rows.result_row_json) = 'canonical_preview_lines'
          AND LOWER(BTRIM(COALESCE(ready_rows.result_row_json->>'draftable', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
@@ -148277,10 +148439,81 @@ BEGIN
          AND LOWER(BTRIM(COALESCE(ready_rows.result_row_json#>>'{preview_contract,selection_allowed}', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
          AND NULLIF(BTRIM(COALESCE(ready_rows.result_row_json#>>'{economic_key,key_type}', '')), '') IS NOT NULL
          AND NULLIF(BTRIM(COALESCE(ready_rows.result_row_json#>>'{economic_key,key_value}', '')), '') IS NOT NULL
+         AND NOT (
+           component_probe.single_fixed_reimbursement_key_type IS NOT NULL
+           AND (
+             UPPER(NULLIF(BTRIM(COALESCE(ready_rows.result_row_json#>>'{economic_key,key_type}', ready_rows.result_row_json->>'key_type', '')), '')) IS DISTINCT FROM component_probe.single_fixed_reimbursement_key_type
+             OR NULLIF(BTRIM(COALESCE(ready_rows.result_row_json#>>'{economic_key,key_value}', ready_rows.result_row_json->>'key_value', '')), '') IS DISTINCT FROM component_probe.single_fixed_reimbursement_key_value
+           )
+         )
+         AND NOT (
+           component_probe.single_fixed_reimbursement_key_type IS NOT NULL
+           AND component_probe.selected_amount_ex_vat IS NOT NULL
+           AND ROUND(ABS(COALESCE(component_probe.selected_amount_ex_vat, 0)), 2) > ROUND(ABS(COALESCE(outstanding_component.outstanding_ex_vat, 0)), 2)
+         )
         THEN true
         ELSE false
       END AS target_selected
     FROM ready_rows
+    CROSS JOIN LATERAL (
+      SELECT
+        CASE WHEN NULLIF(BTRIM(COALESCE(ready_rows.result_row_json->>'amount_ex_vat', ready_rows.result_row_json->>'preview_amount_ex_vat', '')), '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+          THEN ROUND(NULLIF(BTRIM(COALESCE(ready_rows.result_row_json->>'amount_ex_vat', ready_rows.result_row_json->>'preview_amount_ex_vat', '')), '')::numeric, 2)
+          ELSE NULL::numeric
+        END AS selected_amount_ex_vat,
+        CASE
+          WHEN component_counts.object_component_count = 1
+           AND component_counts.fixed_reimbursement_component_count = 1 THEN component_counts.fixed_reimbursement_key_type
+          ELSE NULL::text
+        END AS single_fixed_reimbursement_key_type,
+        CASE
+          WHEN component_counts.object_component_count = 1
+           AND component_counts.fixed_reimbursement_component_count = 1 THEN component_counts.fixed_reimbursement_key_value
+          ELSE NULL::text
+        END AS single_fixed_reimbursement_key_value
+      FROM (
+        SELECT
+          (COUNT(*) FILTER (
+            WHERE component_element.value IS NOT NULL
+              AND jsonb_typeof(component_element.value) = 'object'
+          ))::integer AS object_component_count,
+          (COUNT(*) FILTER (
+            WHERE component_element.value IS NOT NULL
+              AND jsonb_typeof(component_element.value) = 'object'
+              AND UPPER(NULLIF(BTRIM(COALESCE(component_element.value->>'classification', '')), '')) = 'REIMBURSEMENT_GROSS_FIXED'
+              AND UPPER(NULLIF(BTRIM(COALESCE(component_element.value->>'component_key_type', '')), '')) IN ('EXPENSE_CODE', 'ADDITIONAL_CODE')
+              AND NULLIF(BTRIM(COALESCE(component_element.value->>'component_key_value', '')), '') IS NOT NULL
+          ))::integer AS fixed_reimbursement_component_count,
+          MAX(UPPER(NULLIF(BTRIM(COALESCE(component_element.value->>'component_key_type', '')), ''))) FILTER (
+            WHERE component_element.value IS NOT NULL
+              AND jsonb_typeof(component_element.value) = 'object'
+              AND UPPER(NULLIF(BTRIM(COALESCE(component_element.value->>'classification', '')), '')) = 'REIMBURSEMENT_GROSS_FIXED'
+              AND UPPER(NULLIF(BTRIM(COALESCE(component_element.value->>'component_key_type', '')), '')) IN ('EXPENSE_CODE', 'ADDITIONAL_CODE')
+              AND NULLIF(BTRIM(COALESCE(component_element.value->>'component_key_value', '')), '') IS NOT NULL
+          ) AS fixed_reimbursement_key_type,
+          MAX(NULLIF(BTRIM(COALESCE(component_element.value->>'component_key_value', '')), '')) FILTER (
+            WHERE component_element.value IS NOT NULL
+              AND jsonb_typeof(component_element.value) = 'object'
+              AND UPPER(NULLIF(BTRIM(COALESCE(component_element.value->>'classification', '')), '')) = 'REIMBURSEMENT_GROSS_FIXED'
+              AND UPPER(NULLIF(BTRIM(COALESCE(component_element.value->>'component_key_type', '')), '')) IN ('EXPENSE_CODE', 'ADDITIONAL_CODE')
+              AND NULLIF(BTRIM(COALESCE(component_element.value->>'component_key_value', '')), '') IS NOT NULL
+          ) AS fixed_reimbursement_key_value
+        FROM jsonb_array_elements(
+          CASE
+            WHEN jsonb_typeof(ready_rows.result_row_json->'case_components') = 'array' THEN ready_rows.result_row_json->'case_components'
+            ELSE '[]'::jsonb
+          END
+        ) AS component_element(value)
+      ) AS component_counts
+    ) AS component_probe
+    LEFT JOIN LATERAL (
+      SELECT outstanding_components.outstanding_ex_vat
+      FROM public._pay_outstanding_components(ARRAY[ready_rows.timesheet_id], NULL::uuid) AS outstanding_components
+      WHERE outstanding_components.timesheet_id = ready_rows.timesheet_id
+        AND outstanding_components.key_type = component_probe.single_fixed_reimbursement_key_type
+        AND outstanding_components.key_value = component_probe.single_fixed_reimbursement_key_value
+      LIMIT 1
+    ) AS outstanding_component ON ready_rows.timesheet_id IS NOT NULL
   )
   SELECT selected_rows.*,
          CASE
@@ -148345,6 +148578,23 @@ BEGIN
       selected_rows.line_key,
       selected_rows.stable_row_ordinal,
       selected_rows.result_row_json
+        || CASE
+          WHEN selected_rows.fixed_reimbursement_key_mismatch THEN jsonb_build_object(
+            'draftable', false,
+            'is_ready_for_draft', false,
+            'selection_allowed', false,
+            'pay_outstanding_blocked', true,
+            'outstanding_block_reason', 'REIMBURSEMENT_KEY_MISMATCH'
+          )
+          WHEN selected_rows.fixed_reimbursement_not_outstanding THEN jsonb_build_object(
+            'draftable', false,
+            'is_ready_for_draft', false,
+            'selection_allowed', false,
+            'pay_outstanding_blocked', true,
+            'outstanding_block_reason', 'REIMBURSEMENT_OUTSTANDING_NOT_AVAILABLE'
+          )
+          ELSE '{}'::jsonb
+        END
         || jsonb_build_object(
           'materialised_at_utc', v_now::text,
           'materialised_from_line_work_id', selected_rows.id::text,
@@ -148581,6 +148831,7 @@ END;
 $function$;
 
 
+
 CREATE OR REPLACE FUNCTION public.pay_workbench_mark_finance_case_dirty()
  RETURNS trigger
  LANGUAGE plpgsql
@@ -148761,19 +149012,11 @@ END;
 $function$;
 
 
-CREATE OR REPLACE FUNCTION public.pay_workbench_prepare_draft_allocation_rows_seed(
-  p_operation_id uuid,
-  p_candidate_scope_ids jsonb DEFAULT NULL::jsonb
-)
-RETURNS TABLE(
-  candidate_scopes_processed integer,
-  allocation_rows_inserted integer,
-  allocation_rows_reused integer,
-  failures integer
-)
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public', 'pg_temp'
+CREATE OR REPLACE FUNCTION public.pay_workbench_prepare_draft_allocation_rows_seed(p_operation_id uuid, p_candidate_scope_ids jsonb DEFAULT NULL::jsonb)
+ RETURNS TABLE(candidate_scopes_processed integer, allocation_rows_inserted integer, allocation_rows_reused integer, failures integer)
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
 AS $function$
 DECLARE
   v_now timestamptz := now();
@@ -148920,6 +149163,8 @@ BEGIN
       CASE WHEN NULLIF(BTRIM(COALESCE(scope_selected_lines.line_json->>'finance_case_id', '')), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN NULLIF(BTRIM(COALESCE(scope_selected_lines.line_json->>'finance_case_id', '')), '')::uuid ELSE NULL::uuid END AS finance_case_id,
       CASE WHEN NULLIF(BTRIM(COALESCE(scope_selected_lines.line_json->>'finance_component_id', '')), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN NULLIF(BTRIM(COALESCE(scope_selected_lines.line_json->>'finance_component_id', '')), '')::uuid ELSE NULL::uuid END AS finance_component_id,
       UPPER(COALESCE(NULLIF(BTRIM(COALESCE(scope_selected_lines.line_json->>'line_type', '')), ''), NULLIF(BTRIM(COALESCE(scope_selected_lines.line_json->>'case_type', '')), ''), 'PREVIEW_ROW')) AS allocation_type,
+      component_probe.single_fixed_reimbursement_key_type,
+      component_probe.single_fixed_reimbursement_key_value,
       NULLIF(BTRIM(COALESCE(scope_selected_lines.line_json->>'source_ref', scope_selected_lines.line_json->>'row_key', '')), '') AS source_ref,
       CASE
         WHEN COALESCE(scope_selected_lines.line_json->>'amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$'
@@ -148931,6 +149176,53 @@ BEGIN
         ELSE NULL::numeric
       END AS allocated_amount
     FROM scope_selected_lines
+    CROSS JOIN LATERAL (
+      SELECT
+        CASE
+          WHEN component_counts.object_component_count = 1
+           AND component_counts.fixed_reimbursement_component_count = 1 THEN component_counts.fixed_reimbursement_key_type
+          ELSE NULL::text
+        END AS single_fixed_reimbursement_key_type,
+        CASE
+          WHEN component_counts.object_component_count = 1
+           AND component_counts.fixed_reimbursement_component_count = 1 THEN component_counts.fixed_reimbursement_key_value
+          ELSE NULL::text
+        END AS single_fixed_reimbursement_key_value
+      FROM (
+        SELECT
+          (COUNT(*) FILTER (
+            WHERE component_element.value IS NOT NULL
+              AND jsonb_typeof(component_element.value) = 'object'
+          ))::integer AS object_component_count,
+          (COUNT(*) FILTER (
+            WHERE component_element.value IS NOT NULL
+              AND jsonb_typeof(component_element.value) = 'object'
+              AND UPPER(NULLIF(BTRIM(COALESCE(component_element.value->>'classification', '')), '')) = 'REIMBURSEMENT_GROSS_FIXED'
+              AND UPPER(NULLIF(BTRIM(COALESCE(component_element.value->>'component_key_type', '')), '')) IN ('EXPENSE_CODE', 'ADDITIONAL_CODE')
+              AND NULLIF(BTRIM(COALESCE(component_element.value->>'component_key_value', '')), '') IS NOT NULL
+          ))::integer AS fixed_reimbursement_component_count,
+          MAX(UPPER(NULLIF(BTRIM(COALESCE(component_element.value->>'component_key_type', '')), ''))) FILTER (
+            WHERE component_element.value IS NOT NULL
+              AND jsonb_typeof(component_element.value) = 'object'
+              AND UPPER(NULLIF(BTRIM(COALESCE(component_element.value->>'classification', '')), '')) = 'REIMBURSEMENT_GROSS_FIXED'
+              AND UPPER(NULLIF(BTRIM(COALESCE(component_element.value->>'component_key_type', '')), '')) IN ('EXPENSE_CODE', 'ADDITIONAL_CODE')
+              AND NULLIF(BTRIM(COALESCE(component_element.value->>'component_key_value', '')), '') IS NOT NULL
+          ) AS fixed_reimbursement_key_type,
+          MAX(NULLIF(BTRIM(COALESCE(component_element.value->>'component_key_value', '')), '')) FILTER (
+            WHERE component_element.value IS NOT NULL
+              AND jsonb_typeof(component_element.value) = 'object'
+              AND UPPER(NULLIF(BTRIM(COALESCE(component_element.value->>'classification', '')), '')) = 'REIMBURSEMENT_GROSS_FIXED'
+              AND UPPER(NULLIF(BTRIM(COALESCE(component_element.value->>'component_key_type', '')), '')) IN ('EXPENSE_CODE', 'ADDITIONAL_CODE')
+              AND NULLIF(BTRIM(COALESCE(component_element.value->>'component_key_value', '')), '') IS NOT NULL
+          ) AS fixed_reimbursement_key_value
+        FROM jsonb_array_elements(
+          CASE
+            WHEN jsonb_typeof(scope_selected_lines.line_json->'case_components') = 'array' THEN scope_selected_lines.line_json->'case_components'
+            ELSE '[]'::jsonb
+          END
+        ) AS component_element(value)
+      ) AS component_counts
+    ) AS component_probe
   )
   SELECT
     normalised_scope_lines.*,
@@ -148964,6 +149256,14 @@ BEGIN
            'candidate_id', invalid_rows.candidate_id::text,
            'candidate_scope_id', invalid_rows.candidate_scope_id::text,
            'reasons', COALESCE(invalid_rows.preview_contract_json->'reasons', '[]'::jsonb)
+             || CASE
+               WHEN invalid_rows.single_fixed_reimbursement_key_type IS NOT NULL
+                AND (
+                  invalid_rows.key_type IS DISTINCT FROM invalid_rows.single_fixed_reimbursement_key_type
+                  OR invalid_rows.key_value IS DISTINCT FROM invalid_rows.single_fixed_reimbursement_key_value
+                ) THEN jsonb_build_array('POLICY_X_REIMBURSEMENT_KEY_MISMATCH')
+               ELSE '[]'::jsonb
+             END
          ) ORDER BY invalid_rows.row_ordinal, invalid_rows.preview_row_id), '[]'::jsonb)
   INTO v_malformed_allocation_preview_rows
   FROM (
@@ -148978,6 +149278,13 @@ BEGIN
        OR candidate_row.pay_channel NOT IN ('PAYE', 'UMBRELLA')
        OR candidate_row.key_type NOT IN ('TS_DAY','TS_TOTAL','ADDITIONAL_CODE','ADJUSTMENT_CODE','EXPENSE_CODE','MANUAL_CARRY_FORWARD')
        OR candidate_row.key_value IS NULL
+       OR (
+         candidate_row.single_fixed_reimbursement_key_type IS NOT NULL
+         AND (
+           candidate_row.key_type IS DISTINCT FROM candidate_row.single_fixed_reimbursement_key_type
+           OR candidate_row.key_value IS DISTINCT FROM candidate_row.single_fixed_reimbursement_key_value
+         )
+       )
        OR (candidate_row.key_type = 'TS_DAY' AND candidate_row.key_value !~ '^\d{4}-\d{2}-\d{2}$')
        OR candidate_row.allocated_amount IS NULL
        OR ROUND(COALESCE(candidate_row.allocated_amount, 0), 2) = 0
@@ -149010,6 +149317,13 @@ BEGIN
       AND candidate_row.pay_channel IN ('PAYE', 'UMBRELLA')
       AND candidate_row.key_type IN ('TS_DAY','TS_TOTAL','ADDITIONAL_CODE','ADJUSTMENT_CODE','EXPENSE_CODE','MANUAL_CARRY_FORWARD')
       AND candidate_row.key_value IS NOT NULL
+      AND NOT (
+        candidate_row.single_fixed_reimbursement_key_type IS NOT NULL
+        AND (
+          candidate_row.key_type IS DISTINCT FROM candidate_row.single_fixed_reimbursement_key_type
+          OR candidate_row.key_value IS DISTINCT FROM candidate_row.single_fixed_reimbursement_key_value
+        )
+      )
       AND NOT (candidate_row.key_type = 'TS_DAY' AND candidate_row.key_value !~ '^\d{4}-\d{2}-\d{2}$')
       AND candidate_row.allocated_amount IS NOT NULL
       AND ROUND(COALESCE(candidate_row.allocated_amount, 0), 2) <> 0
@@ -149168,6 +149482,8 @@ BEGIN
     0::integer;
 END;
 $function$;
+
+
 
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_prepare_draft_scope_seed(
@@ -152804,18 +153120,11 @@ $function$;
 
 
 
-
-CREATE OR REPLACE FUNCTION public.pay_workbench_seed_candidate_preview_line_source(
-  p_session_id uuid,
-  p_candidate_id uuid,
-  p_context_json jsonb DEFAULT '{}'::jsonb,
-  p_cursor_json jsonb DEFAULT NULL::jsonb,
-  p_limit integer DEFAULT 100
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public', 'pg_temp'
+CREATE OR REPLACE FUNCTION public.pay_workbench_seed_candidate_preview_line_source(p_session_id uuid, p_candidate_id uuid, p_context_json jsonb DEFAULT '{}'::jsonb, p_cursor_json jsonb DEFAULT NULL::jsonb, p_limit integer DEFAULT 100)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
 AS $function$
 DECLARE
   v_now timestamptz := now();
@@ -152995,7 +153304,18 @@ BEGIN
       NULL::text AS key_value_hint,
       segment_rows.segment_json,
       jsonb_strip_nulls(
-        base_rows.line_json
+        (
+          base_rows.line_json
+          - 'case_components'
+          - 'component_key_type'
+          - 'component_key_value'
+          - 'frozen_component_key_type'
+          - 'frozen_component_key_value'
+          - 'frozen_component_classification'
+          - 'frozen_component_snapshot_json'
+          - 'source_basis_json'
+          - 'frozen_source_basis_json'
+        )
         || jsonb_build_object(
           'source_kind', 'VALID_PREVIEW_LINE',
           'preview_row_id', base_rows.parent_line_key || ':segment:' || segment_rows.segment_ord::text,
@@ -153026,6 +153346,9 @@ BEGIN
           'date', NULLIF(BTRIM(COALESCE(segment_rows.segment_json->>'date', segment_rows.segment_json->>'work_date', '')), ''),
           'source_basis_json', segment_rows.segment_json
         )
+        || jsonb_build_object(
+          'case_components', segment_case_components.non_fixed_case_components_json
+        )
       ) AS seed_line_json
     FROM base_rows
     CROSS JOIN LATERAL (
@@ -153043,6 +153366,25 @@ BEGIN
       WHERE segment_element.value IS NOT NULL
         AND jsonb_typeof(segment_element.value) = 'object'
     ) AS segment_rows
+    CROSS JOIN LATERAL (
+      SELECT COALESCE(
+        jsonb_agg(component_element.value ORDER BY component_element.ordinality),
+        '[]'::jsonb
+      ) AS non_fixed_case_components_json
+      FROM jsonb_array_elements(
+        CASE
+          WHEN jsonb_typeof(base_rows.line_json->'case_components') = 'array' THEN base_rows.line_json->'case_components'
+          ELSE '[]'::jsonb
+        END
+      ) WITH ORDINALITY AS component_element(value, ordinality)
+      WHERE NOT (
+        component_element.value IS NOT NULL
+        AND jsonb_typeof(component_element.value) = 'object'
+        AND UPPER(NULLIF(BTRIM(COALESCE(component_element.value->>'classification', '')), '')) = 'REIMBURSEMENT_GROSS_FIXED'
+        AND UPPER(NULLIF(BTRIM(COALESCE(component_element.value->>'component_key_type', '')), '')) IN ('EXPENSE_CODE', 'ADDITIONAL_CODE')
+        AND NULLIF(BTRIM(COALESCE(component_element.value->>'component_key_value', '')), '') IS NOT NULL
+      )
+    ) AS segment_case_components
     WHERE base_rows.target_section = 'canonical_preview_lines'
       AND base_rows.line_type = 'TIMESHEET_PAYMENT'
       AND LOWER(BTRIM(COALESCE(base_rows.line_json->>'draftable', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
@@ -153061,7 +153403,18 @@ BEGIN
       'TOTAL'::text AS key_value_hint,
       '{}'::jsonb AS segment_json,
       jsonb_strip_nulls(
-        base_rows.line_json
+        (
+          base_rows.line_json
+          - 'case_components'
+          - 'component_key_type'
+          - 'component_key_value'
+          - 'frozen_component_key_type'
+          - 'frozen_component_key_value'
+          - 'frozen_component_classification'
+          - 'frozen_component_snapshot_json'
+          - 'source_basis_json'
+          - 'frozen_source_basis_json'
+        )
         || jsonb_build_object(
           'source_kind', 'VALID_PREVIEW_LINE',
           'preview_row_id', base_rows.parent_line_key || ':non_segment:total',
@@ -153085,6 +153438,9 @@ BEGIN
           'section_non_segment_amount_ex_vat', non_segment_amounts.non_segment_amount_ex_vat,
           'source_basis_json', jsonb_build_object('component_key_type', 'TS_TOTAL', 'component_key_value', 'TOTAL')
         )
+        || jsonb_build_object(
+          'case_components', non_segment_case_components.non_fixed_case_components_json
+        )
       ) AS seed_line_json
     FROM base_rows
     CROSS JOIN LATERAL (
@@ -153095,8 +153451,64 @@ BEGIN
                  AND COALESCE(base_rows.line_json->>'amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$'
                THEN (base_rows.line_json->>'amount_ex_vat')::numeric ELSE NULL::numeric END,
           0::numeric
-        ), 2) AS non_segment_amount_ex_vat
+        ), 2) AS gross_non_segment_amount_ex_vat
+    ) AS gross_non_segment_amounts
+    CROSS JOIN LATERAL (
+      SELECT
+        ROUND(COALESCE(SUM(
+          CASE
+            WHEN COALESCE(base_rows.line_json->>'amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+             AND (base_rows.line_json->>'amount_ex_vat')::numeric < 0
+            THEN -ABS(ROUND(COALESCE(
+              CASE WHEN COALESCE(component_element.value->>'preview_due_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN (component_element.value->>'preview_due_amount_ex_vat')::numeric ELSE NULL::numeric END,
+              CASE WHEN COALESCE(component_element.value->>'allocated_source_due_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN (component_element.value->>'allocated_source_due_amount_ex_vat')::numeric ELSE NULL::numeric END,
+              CASE WHEN COALESCE(component_element.value->>'target_pay_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN (component_element.value->>'target_pay_ex_vat')::numeric ELSE NULL::numeric END,
+              CASE WHEN COALESCE(component_element.value->>'remaining_source_amount', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN (component_element.value->>'remaining_source_amount')::numeric ELSE NULL::numeric END,
+              0::numeric
+            ), 2))
+            ELSE ABS(ROUND(COALESCE(
+              CASE WHEN COALESCE(component_element.value->>'preview_due_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN (component_element.value->>'preview_due_amount_ex_vat')::numeric ELSE NULL::numeric END,
+              CASE WHEN COALESCE(component_element.value->>'allocated_source_due_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN (component_element.value->>'allocated_source_due_amount_ex_vat')::numeric ELSE NULL::numeric END,
+              CASE WHEN COALESCE(component_element.value->>'target_pay_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN (component_element.value->>'target_pay_ex_vat')::numeric ELSE NULL::numeric END,
+              CASE WHEN COALESCE(component_element.value->>'remaining_source_amount', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN (component_element.value->>'remaining_source_amount')::numeric ELSE NULL::numeric END,
+              0::numeric
+            ), 2))
+          END
+        ), 0::numeric), 2) AS explicit_reimbursement_amount_ex_vat
+      FROM jsonb_array_elements(COALESCE(base_rows.line_json->'case_components', '[]'::jsonb)) AS component_element(value)
+      WHERE base_rows.line_type = 'TIMESHEET_PAYMENT'
+        AND component_element.value IS NOT NULL
+        AND jsonb_typeof(component_element.value) = 'object'
+        AND UPPER(NULLIF(BTRIM(COALESCE(component_element.value->>'classification', '')), '')) = 'REIMBURSEMENT_GROSS_FIXED'
+        AND UPPER(NULLIF(BTRIM(COALESCE(component_element.value->>'component_key_type', '')), '')) IN ('EXPENSE_CODE', 'ADDITIONAL_CODE')
+        AND NULLIF(BTRIM(COALESCE(component_element.value->>'component_key_value', '')), '') IS NOT NULL
+    ) AS explicit_component_amounts
+    CROSS JOIN LATERAL (
+      SELECT ROUND(
+        COALESCE(gross_non_segment_amounts.gross_non_segment_amount_ex_vat, 0)
+        - COALESCE(explicit_component_amounts.explicit_reimbursement_amount_ex_vat, 0),
+        2
+      ) AS non_segment_amount_ex_vat
     ) AS non_segment_amounts
+    CROSS JOIN LATERAL (
+      SELECT COALESCE(
+        jsonb_agg(component_element.value ORDER BY component_element.ordinality),
+        '[]'::jsonb
+      ) AS non_fixed_case_components_json
+      FROM jsonb_array_elements(
+        CASE
+          WHEN jsonb_typeof(base_rows.line_json->'case_components') = 'array' THEN base_rows.line_json->'case_components'
+          ELSE '[]'::jsonb
+        END
+      ) WITH ORDINALITY AS component_element(value, ordinality)
+      WHERE NOT (
+        component_element.value IS NOT NULL
+        AND jsonb_typeof(component_element.value) = 'object'
+        AND UPPER(NULLIF(BTRIM(COALESCE(component_element.value->>'classification', '')), '')) = 'REIMBURSEMENT_GROSS_FIXED'
+        AND UPPER(NULLIF(BTRIM(COALESCE(component_element.value->>'component_key_type', '')), '')) IN ('EXPENSE_CODE', 'ADDITIONAL_CODE')
+        AND NULLIF(BTRIM(COALESCE(component_element.value->>'component_key_value', '')), '') IS NOT NULL
+      )
+    ) AS non_segment_case_components
     WHERE base_rows.target_section = 'canonical_preview_lines'
       AND base_rows.line_type = 'TIMESHEET_PAYMENT'
       AND LOWER(BTRIM(COALESCE(base_rows.line_json->>'draftable', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
@@ -153110,12 +153522,30 @@ BEGIN
       base_rows.parent_line_key,
       ('component:' || COALESCE(NULLIF(BTRIM(component_rows.component_json->>'finance_component_id'), ''), component_rows.component_ord::text)) AS split_suffix,
       component_rows.component_ord::bigint AS split_ordinal,
-      base_rows.line_type AS item_type,
+      CASE
+        WHEN UPPER(NULLIF(BTRIM(COALESCE(component_rows.component_json->>'component_key_type', '')), '')) IN ('TS_DAY', 'TS_TOTAL') THEN 'SEGMENT_DELTA'
+        WHEN UPPER(NULLIF(BTRIM(COALESCE(component_rows.component_json->>'component_key_type', '')), '')) = 'ADJUSTMENT_CODE' THEN 'ADJUSTMENT_DELTA'
+        WHEN UPPER(NULLIF(BTRIM(COALESCE(component_rows.component_json->>'component_key_type', '')), '')) = 'EXPENSE_CODE'
+         AND UPPER(NULLIF(BTRIM(COALESCE(component_rows.component_json->>'component_key_value', '')), '')) = 'MILEAGE' THEN 'MILEAGE_DELTA'
+        WHEN UPPER(NULLIF(BTRIM(COALESCE(component_rows.component_json->>'component_key_type', '')), '')) IN ('EXPENSE_CODE', 'ADDITIONAL_CODE') THEN 'EXPENSE_DELTA'
+        ELSE base_rows.line_type
+      END AS item_type,
       UPPER(NULLIF(BTRIM(COALESCE(component_rows.component_json->>'component_key_type', '')), '')) AS key_type_hint,
       NULLIF(BTRIM(COALESCE(component_rows.component_json->>'component_key_value', '')), '') AS key_value_hint,
       '{}'::jsonb AS segment_json,
       jsonb_strip_nulls(
-        base_rows.line_json
+        (
+          base_rows.line_json
+          - 'case_components'
+          - 'component_key_type'
+          - 'component_key_value'
+          - 'frozen_component_key_type'
+          - 'frozen_component_key_value'
+          - 'frozen_component_classification'
+          - 'frozen_component_snapshot_json'
+          - 'source_basis_json'
+          - 'frozen_source_basis_json'
+        )
         || jsonb_build_object(
           'source_kind', 'VALID_PREVIEW_LINE',
           'preview_row_id', base_rows.parent_line_key || ':component:' || COALESCE(NULLIF(BTRIM(component_rows.component_json->>'finance_component_id'), ''), component_rows.component_ord::text),
@@ -153129,6 +153559,9 @@ BEGIN
           'finance_component_id', NULLIF(BTRIM(COALESCE(component_rows.component_json->>'finance_component_id', '')), ''),
           'component_key_type', UPPER(NULLIF(BTRIM(COALESCE(component_rows.component_json->>'component_key_type', '')), '')),
           'component_key_value', NULLIF(BTRIM(COALESCE(component_rows.component_json->>'component_key_value', '')), '')
+        )
+        || jsonb_build_object(
+          'case_components', jsonb_build_array(component_rows.component_json)
         )
         || jsonb_build_object(
           'amount_ex_vat', component_rows.signed_component_amount_ex_vat,
@@ -153213,7 +153646,15 @@ BEGIN
       END AS timesheet_id
     ) AS component_timesheet
     WHERE base_rows.target_section = 'canonical_preview_lines'
-      AND base_rows.line_type <> 'TIMESHEET_PAYMENT'
+      AND (
+        base_rows.line_type <> 'TIMESHEET_PAYMENT'
+        OR (
+          base_rows.line_type = 'TIMESHEET_PAYMENT'
+          AND UPPER(NULLIF(BTRIM(COALESCE(component_rows.component_json->>'classification', '')), '')) = 'REIMBURSEMENT_GROSS_FIXED'
+          AND UPPER(NULLIF(BTRIM(COALESCE(component_rows.component_json->>'component_key_type', '')), '')) IN ('EXPENSE_CODE', 'ADDITIONAL_CODE')
+          AND NULLIF(BTRIM(COALESCE(component_rows.component_json->>'component_key_value', '')), '') IS NOT NULL
+        )
+      )
       AND LOWER(BTRIM(COALESCE(base_rows.line_json->>'draftable', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
       AND jsonb_array_length(COALESCE(base_rows.line_json->'case_components', '[]'::jsonb)) > 0
       AND ROUND(COALESCE(component_rows.signed_component_amount_ex_vat, 0), 2) <> 0
@@ -153477,19 +153918,13 @@ END;
 $function$;
 
 
-CREATE OR REPLACE FUNCTION public.pay_workbench_preview_line_economic_key(
-  p_line_json jsonb DEFAULT '{}'::jsonb,
-  p_timesheet_id uuid DEFAULT NULL::uuid,
-  p_item_type text DEFAULT NULL::text,
-  p_segment_json jsonb DEFAULT NULL::jsonb,
-  p_key_type_hint text DEFAULT NULL::text,
-  p_key_value_hint text DEFAULT NULL::text
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-STABLE
-SECURITY DEFINER
-SET search_path TO 'public'
+
+
+CREATE OR REPLACE FUNCTION public.pay_workbench_preview_line_economic_key(p_line_json jsonb DEFAULT '{}'::jsonb, p_timesheet_id uuid DEFAULT NULL::uuid, p_item_type text DEFAULT NULL::text, p_segment_json jsonb DEFAULT NULL::jsonb, p_key_type_hint text DEFAULT NULL::text, p_key_value_hint text DEFAULT NULL::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
 AS $function$
 DECLARE
   v_line_json jsonb := CASE
@@ -153551,7 +153986,92 @@ DECLARE
   v_resolved_key_value text := NULL::text;
   v_resolved_source text := NULL::text;
   v_failure_reason text := NULL::text;
+  v_case_component_count integer := 0;
+  v_single_case_component_json jsonb := '{}'::jsonb;
+  v_single_component_key_type text := NULL::text;
+  v_single_component_key_value text := NULL::text;
+  v_single_component_classification text := NULL::text;
+  v_line_amount_ex_vat numeric := NULL::numeric;
+  v_single_component_amount_ex_vat numeric := NULL::numeric;
+  v_has_segment_identity boolean := false;
 BEGIN
+  v_has_segment_identity := NULLIF(BTRIM(COALESCE(
+    v_segment_json->>'segment_id',
+    v_segment_json->>'segment_key',
+    v_segment_json->>'segment_stable_key',
+    v_segment_json->>'ref_num',
+    v_segment_json->>'work_date',
+    v_segment_json->>'date',
+    v_line_json->>'segment_id',
+    v_line_json->>'segment_key',
+    v_line_json->>'segment_stable_key',
+    v_line_json->>'ref_num',
+    v_line_json#>>'{source_basis_json,segment_id}',
+    v_line_json#>>'{source_basis_json,segment_key}',
+    v_line_json#>>'{source_basis_json,segment_stable_key}',
+    ''
+  )), '') IS NOT NULL;
+
+  IF COALESCE(v_line_json->>'amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN
+    v_line_amount_ex_vat := ROUND((v_line_json->>'amount_ex_vat')::numeric, 2);
+  ELSIF COALESCE(v_line_json->>'preview_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN
+    v_line_amount_ex_vat := ROUND((v_line_json->>'preview_amount_ex_vat')::numeric, 2);
+  ELSIF COALESCE(v_line_json->>'section_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN
+    v_line_amount_ex_vat := ROUND((v_line_json->>'section_amount_ex_vat')::numeric, 2);
+  END IF;
+
+  IF jsonb_typeof(COALESCE(v_line_json->'case_components', '[]'::jsonb)) = 'array' THEN
+    SELECT
+      COUNT(*)::integer,
+      COALESCE((ARRAY_AGG(case_component.value ORDER BY case_component.ordinality))[1], '{}'::jsonb)
+    INTO v_case_component_count, v_single_case_component_json
+    FROM jsonb_array_elements(COALESCE(v_line_json->'case_components', '[]'::jsonb)) WITH ORDINALITY AS case_component(value, ordinality)
+    WHERE case_component.value IS NOT NULL
+      AND jsonb_typeof(case_component.value) = 'object';
+  END IF;
+
+  IF COALESCE(v_case_component_count, 0) = 1 THEN
+    v_single_component_key_type := UPPER(NULLIF(BTRIM(COALESCE(v_single_case_component_json->>'component_key_type', '')), ''));
+    v_single_component_key_value := NULLIF(BTRIM(COALESCE(v_single_case_component_json->>'component_key_value', '')), '');
+    v_single_component_classification := UPPER(NULLIF(BTRIM(COALESCE(v_single_case_component_json->>'classification', '')), ''));
+
+    IF COALESCE(v_single_case_component_json->>'preview_due_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN
+      v_single_component_amount_ex_vat := ROUND((v_single_case_component_json->>'preview_due_amount_ex_vat')::numeric, 2);
+    ELSIF COALESCE(v_single_case_component_json->>'allocated_source_due_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN
+      v_single_component_amount_ex_vat := ROUND((v_single_case_component_json->>'allocated_source_due_amount_ex_vat')::numeric, 2);
+    ELSIF COALESCE(v_single_case_component_json->>'target_pay_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN
+      v_single_component_amount_ex_vat := ROUND((v_single_case_component_json->>'target_pay_ex_vat')::numeric, 2);
+    ELSIF COALESCE(v_single_case_component_json->>'remaining_source_amount', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN
+      v_single_component_amount_ex_vat := ROUND((v_single_case_component_json->>'remaining_source_amount')::numeric, 2);
+    END IF;
+
+    IF v_single_component_classification = 'REIMBURSEMENT_GROSS_FIXED'
+       AND v_single_component_key_type IN ('EXPENSE_CODE', 'ADDITIONAL_CODE')
+       AND v_single_component_key_value IS NOT NULL
+       AND (
+         v_key_type_hint IN ('EXPENSE_CODE', 'ADDITIONAL_CODE')
+         OR (
+           COALESCE(v_has_segment_identity, false) IS FALSE
+           AND v_line_amount_ex_vat IS NOT NULL
+           AND v_single_component_amount_ex_vat IS NOT NULL
+           AND ROUND(ABS(v_line_amount_ex_vat), 2) = ROUND(ABS(v_single_component_amount_ex_vat), 2)
+         )
+         OR (
+           COALESCE(v_has_segment_identity, false) IS FALSE
+           AND v_key_type_hint IS NULL
+           AND COALESCE(v_item_type, '') NOT IN ('SEGMENT_DELTA')
+         )
+       ) THEN
+      v_key_type_hint := v_single_component_key_type;
+      v_key_value_hint := v_single_component_key_value;
+      v_item_type := CASE
+        WHEN v_single_component_key_type = 'EXPENSE_CODE'
+         AND UPPER(COALESCE(v_single_component_key_value, '')) = 'MILEAGE' THEN 'MILEAGE_DELTA'
+        ELSE 'EXPENSE_DELTA'
+      END;
+    END IF;
+  END IF;
+
   v_timesheet_id_text := NULLIF(BTRIM(COALESCE(
     v_line_json->>'timesheet_id',
     v_line_json->>'real_business_timesheet_id',
@@ -153670,6 +154190,8 @@ BEGIN
   );
 END;
 $function$;
+
+
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_preview_line_contract_ok(
   p_line_json jsonb DEFAULT '{}'::jsonb,
