@@ -1,5 +1,128 @@
 
 
+CREATE OR REPLACE FUNCTION public._pay_timesheet_rotation_scope(p_timesheet_ids uuid[])
+ RETURNS TABLE(requested_timesheet_id uuid, booking_id text, canonical_timesheet_id uuid, family_timesheet_id uuid, family_is_current boolean, family_version integer, requested_is_canonical boolean)
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+WITH input_timesheets AS (
+  SELECT DISTINCT
+    input_timesheet_values.timesheet_id_value AS requested_timesheet_id
+  FROM unnest(COALESCE(p_timesheet_ids, ARRAY[]::uuid[])) AS input_timesheet_values(timesheet_id_value)
+  WHERE input_timesheet_values.timesheet_id_value IS NOT NULL
+),
+requested_timesheets AS (
+  SELECT
+    input_timesheets.requested_timesheet_id AS requested_timesheet_id,
+    public.timesheets.timesheet_id AS matched_timesheet_id,
+    public.timesheets.booking_id AS matched_booking_id
+  FROM input_timesheets
+  LEFT JOIN public.timesheets
+    ON public.timesheets.timesheet_id = input_timesheets.requested_timesheet_id
+),
+requested_bookings AS (
+  SELECT DISTINCT
+    requested_timesheets.matched_booking_id AS booking_id
+  FROM requested_timesheets
+  WHERE requested_timesheets.matched_timesheet_id IS NOT NULL
+    AND requested_timesheets.matched_booking_id IS NOT NULL
+    AND BTRIM(requested_timesheets.matched_booking_id) <> ''
+),
+canonical_timesheets AS (
+  SELECT DISTINCT ON (current_timesheets.booking_id)
+    current_timesheets.booking_id AS booking_id,
+    current_timesheets.timesheet_id AS canonical_timesheet_id
+  FROM public.timesheets AS current_timesheets
+  JOIN requested_bookings
+    ON requested_bookings.booking_id = current_timesheets.booking_id
+  WHERE current_timesheets.is_current = true
+  ORDER BY
+    current_timesheets.booking_id,
+    current_timesheets.version DESC,
+    current_timesheets.updated_at DESC,
+    current_timesheets.created_at DESC,
+    current_timesheets.timesheet_id
+),
+family_timesheets AS (
+  SELECT DISTINCT
+    family_rows.booking_id AS booking_id,
+    family_rows.timesheet_id AS family_timesheet_id,
+    family_rows.is_current AS family_is_current,
+    family_rows.version AS family_version
+  FROM public.timesheets AS family_rows
+  JOIN requested_bookings
+    ON requested_bookings.booking_id = family_rows.booking_id
+),
+resolved_scope_rows AS (
+  SELECT
+    requested_timesheets.requested_timesheet_id AS requested_timesheet_id,
+    requested_timesheets.matched_booking_id AS booking_id,
+    canonical_timesheets.canonical_timesheet_id AS canonical_timesheet_id,
+    family_timesheets.family_timesheet_id AS family_timesheet_id,
+    family_timesheets.family_is_current AS family_is_current,
+    family_timesheets.family_version AS family_version,
+    COALESCE(requested_timesheets.requested_timesheet_id = canonical_timesheets.canonical_timesheet_id, false) AS requested_is_canonical
+  FROM requested_timesheets
+  JOIN family_timesheets
+    ON family_timesheets.booking_id = requested_timesheets.matched_booking_id
+  LEFT JOIN canonical_timesheets
+    ON canonical_timesheets.booking_id = requested_timesheets.matched_booking_id
+  WHERE requested_timesheets.matched_timesheet_id IS NOT NULL
+),
+defensive_unresolved_rows AS (
+  SELECT
+    requested_timesheets.requested_timesheet_id AS requested_timesheet_id,
+    NULL::text AS booking_id,
+    requested_timesheets.requested_timesheet_id AS canonical_timesheet_id,
+    requested_timesheets.requested_timesheet_id AS family_timesheet_id,
+    NULL::boolean AS family_is_current,
+    NULL::integer AS family_version,
+    false AS requested_is_canonical
+  FROM requested_timesheets
+  WHERE requested_timesheets.matched_timesheet_id IS NULL
+),
+rotation_scope_output AS (
+  SELECT
+    resolved_scope_rows.requested_timesheet_id AS requested_timesheet_id,
+    resolved_scope_rows.booking_id AS booking_id,
+    resolved_scope_rows.canonical_timesheet_id AS canonical_timesheet_id,
+    resolved_scope_rows.family_timesheet_id AS family_timesheet_id,
+    resolved_scope_rows.family_is_current AS family_is_current,
+    resolved_scope_rows.family_version AS family_version,
+    resolved_scope_rows.requested_is_canonical AS requested_is_canonical
+  FROM resolved_scope_rows
+
+  UNION ALL
+
+  SELECT
+    defensive_unresolved_rows.requested_timesheet_id AS requested_timesheet_id,
+    defensive_unresolved_rows.booking_id AS booking_id,
+    defensive_unresolved_rows.canonical_timesheet_id AS canonical_timesheet_id,
+    defensive_unresolved_rows.family_timesheet_id AS family_timesheet_id,
+    defensive_unresolved_rows.family_is_current AS family_is_current,
+    defensive_unresolved_rows.family_version AS family_version,
+    defensive_unresolved_rows.requested_is_canonical AS requested_is_canonical
+  FROM defensive_unresolved_rows
+)
+SELECT
+  rotation_scope_output.requested_timesheet_id,
+  rotation_scope_output.booking_id,
+  rotation_scope_output.canonical_timesheet_id,
+  rotation_scope_output.family_timesheet_id,
+  rotation_scope_output.family_is_current,
+  rotation_scope_output.family_version,
+  rotation_scope_output.requested_is_canonical
+FROM rotation_scope_output
+ORDER BY
+  rotation_scope_output.requested_timesheet_id,
+  rotation_scope_output.booking_id NULLS LAST,
+  rotation_scope_output.family_is_current DESC NULLS LAST,
+  rotation_scope_output.family_version DESC NULLS LAST,
+  rotation_scope_output.family_timesheet_id;
+$function$;
+
+
 CREATE OR REPLACE FUNCTION public._pay_policy_x_resolve_pre_draft_economic_key(
   p_timesheet_id uuid DEFAULT NULL::uuid,
   p_live_source_json jsonb DEFAULT '{}'::jsonb,
@@ -157086,126 +157209,3 @@ BEGIN
 END;
 $function$;
 
-
-
-CREATE OR REPLACE FUNCTION public._pay_timesheet_rotation_scope(p_timesheet_ids uuid[])
- RETURNS TABLE(requested_timesheet_id uuid, booking_id text, canonical_timesheet_id uuid, family_timesheet_id uuid, family_is_current boolean, family_version integer, requested_is_canonical boolean)
- LANGUAGE sql
- STABLE SECURITY DEFINER
- SET search_path TO 'public'
-AS $function$
-WITH input_timesheets AS (
-  SELECT DISTINCT
-    input_timesheet_values.timesheet_id_value AS requested_timesheet_id
-  FROM unnest(COALESCE(p_timesheet_ids, ARRAY[]::uuid[])) AS input_timesheet_values(timesheet_id_value)
-  WHERE input_timesheet_values.timesheet_id_value IS NOT NULL
-),
-requested_timesheets AS (
-  SELECT
-    input_timesheets.requested_timesheet_id AS requested_timesheet_id,
-    public.timesheets.timesheet_id AS matched_timesheet_id,
-    public.timesheets.booking_id AS matched_booking_id
-  FROM input_timesheets
-  LEFT JOIN public.timesheets
-    ON public.timesheets.timesheet_id = input_timesheets.requested_timesheet_id
-),
-requested_bookings AS (
-  SELECT DISTINCT
-    requested_timesheets.matched_booking_id AS booking_id
-  FROM requested_timesheets
-  WHERE requested_timesheets.matched_timesheet_id IS NOT NULL
-    AND requested_timesheets.matched_booking_id IS NOT NULL
-    AND BTRIM(requested_timesheets.matched_booking_id) <> ''
-),
-canonical_timesheets AS (
-  SELECT DISTINCT ON (current_timesheets.booking_id)
-    current_timesheets.booking_id AS booking_id,
-    current_timesheets.timesheet_id AS canonical_timesheet_id
-  FROM public.timesheets AS current_timesheets
-  JOIN requested_bookings
-    ON requested_bookings.booking_id = current_timesheets.booking_id
-  WHERE current_timesheets.is_current = true
-  ORDER BY
-    current_timesheets.booking_id,
-    current_timesheets.version DESC,
-    current_timesheets.updated_at DESC,
-    current_timesheets.created_at DESC,
-    current_timesheets.timesheet_id
-),
-family_timesheets AS (
-  SELECT DISTINCT
-    family_rows.booking_id AS booking_id,
-    family_rows.timesheet_id AS family_timesheet_id,
-    family_rows.is_current AS family_is_current,
-    family_rows.version AS family_version
-  FROM public.timesheets AS family_rows
-  JOIN requested_bookings
-    ON requested_bookings.booking_id = family_rows.booking_id
-),
-resolved_scope_rows AS (
-  SELECT
-    requested_timesheets.requested_timesheet_id AS requested_timesheet_id,
-    requested_timesheets.matched_booking_id AS booking_id,
-    canonical_timesheets.canonical_timesheet_id AS canonical_timesheet_id,
-    family_timesheets.family_timesheet_id AS family_timesheet_id,
-    family_timesheets.family_is_current AS family_is_current,
-    family_timesheets.family_version AS family_version,
-    COALESCE(requested_timesheets.requested_timesheet_id = canonical_timesheets.canonical_timesheet_id, false) AS requested_is_canonical
-  FROM requested_timesheets
-  JOIN family_timesheets
-    ON family_timesheets.booking_id = requested_timesheets.matched_booking_id
-  LEFT JOIN canonical_timesheets
-    ON canonical_timesheets.booking_id = requested_timesheets.matched_booking_id
-  WHERE requested_timesheets.matched_timesheet_id IS NOT NULL
-),
-defensive_unresolved_rows AS (
-  SELECT
-    requested_timesheets.requested_timesheet_id AS requested_timesheet_id,
-    NULL::text AS booking_id,
-    requested_timesheets.requested_timesheet_id AS canonical_timesheet_id,
-    requested_timesheets.requested_timesheet_id AS family_timesheet_id,
-    NULL::boolean AS family_is_current,
-    NULL::integer AS family_version,
-    false AS requested_is_canonical
-  FROM requested_timesheets
-  WHERE requested_timesheets.matched_timesheet_id IS NULL
-),
-rotation_scope_output AS (
-  SELECT
-    resolved_scope_rows.requested_timesheet_id AS requested_timesheet_id,
-    resolved_scope_rows.booking_id AS booking_id,
-    resolved_scope_rows.canonical_timesheet_id AS canonical_timesheet_id,
-    resolved_scope_rows.family_timesheet_id AS family_timesheet_id,
-    resolved_scope_rows.family_is_current AS family_is_current,
-    resolved_scope_rows.family_version AS family_version,
-    resolved_scope_rows.requested_is_canonical AS requested_is_canonical
-  FROM resolved_scope_rows
-
-  UNION ALL
-
-  SELECT
-    defensive_unresolved_rows.requested_timesheet_id AS requested_timesheet_id,
-    defensive_unresolved_rows.booking_id AS booking_id,
-    defensive_unresolved_rows.canonical_timesheet_id AS canonical_timesheet_id,
-    defensive_unresolved_rows.family_timesheet_id AS family_timesheet_id,
-    defensive_unresolved_rows.family_is_current AS family_is_current,
-    defensive_unresolved_rows.family_version AS family_version,
-    defensive_unresolved_rows.requested_is_canonical AS requested_is_canonical
-  FROM defensive_unresolved_rows
-)
-SELECT
-  rotation_scope_output.requested_timesheet_id,
-  rotation_scope_output.booking_id,
-  rotation_scope_output.canonical_timesheet_id,
-  rotation_scope_output.family_timesheet_id,
-  rotation_scope_output.family_is_current,
-  rotation_scope_output.family_version,
-  rotation_scope_output.requested_is_canonical
-FROM rotation_scope_output
-ORDER BY
-  rotation_scope_output.requested_timesheet_id,
-  rotation_scope_output.booking_id NULLS LAST,
-  rotation_scope_output.family_is_current DESC NULLS LAST,
-  rotation_scope_output.family_version DESC NULLS LAST,
-  rotation_scope_output.family_timesheet_id;
-$function$;
