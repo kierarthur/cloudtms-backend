@@ -23567,6 +23567,11 @@ async function handleBankingPayBatchGet(env, req, user, payBatchId) {
       !validActiveOperation &&
       !executeBlocked &&
       (explicitStandardExecutionAllow || !explicitStandardExecutionDeny);
+    const cleanDraftBankCsvFileAllowed = ['DRAFT', 'DRAFT_CREATED', 'READY'].includes(status) &&
+      executionCommitState === 'NOT_SUBMITTED' &&
+      hasActivePayables &&
+      !validActiveOperation &&
+      !executeBlocked;
 
     const decorateAmountsAndFlags = (target) => {
       if (!target || typeof target !== 'object') return;
@@ -23576,6 +23581,7 @@ async function handleBankingPayBatchGet(env, req, user, payBatchId) {
       const directAllowed = cleanDraftExecutable || keepTrueWhenSafe(target.can_execute, target.canExecute, target.execute_allowed, target.executeAllowed);
       const csvSettlementAllowed = keepTrueWhenSafe(target.can_start_csv_settlement, target.canStartCsvSettlement);
       const externalSettlementAllowed = keepTrueWhenSafe(target.can_start_external_settlement, target.canStartExternalSettlement);
+      const bankCsvFileAllowed = cleanDraftBankCsvFileAllowed || keepTrueWhenSafe(target.can_create_bank_csv_file, target.canCreateBankCsvFile);
       const anyExecuteAllowed = standardAllowed || nativeAllowed || directAllowed || csvSettlementAllowed || externalSettlementAllowed;
       target.active_payment_item_count = activeItemCount ?? 0;
       target.activePaymentItemCount = activeItemCount ?? 0;
@@ -23597,6 +23603,8 @@ async function handleBankingPayBatchGet(env, req, user, payBatchId) {
       target.canStartCsvSettlement = csvSettlementAllowed;
       target.can_start_external_settlement = externalSettlementAllowed;
       target.canStartExternalSettlement = externalSettlementAllowed;
+      target.can_create_bank_csv_file = bankCsvFileAllowed;
+      target.canCreateBankCsvFile = bankCsvFileAllowed;
       target.execute_disabled = !anyExecuteAllowed;
       target.executeDisabled = !anyExecuteAllowed;
       if (anyExecuteAllowed) {
