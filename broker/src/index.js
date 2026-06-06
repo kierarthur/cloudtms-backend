@@ -18868,6 +18868,9 @@ async function buildPayBatchDetailPdfFromRows(exportObj) {
   return pdfBytes;
 }
 
+
+
+
 async function handleBankingPayBatchExportDetailPdf(env, req, user, payBatchId) {
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -19078,9 +19081,44 @@ async function handleBankingPayBatchExportDetailPdf(env, req, user, payBatchId) 
     return parts.join('    ');
   };
 
+  const friendlyExecutionStateLabel = (value) => {
+    const upper = safeStr(value).trim().toUpperCase();
+    if (!upper) return '';
+    const mapped = {
+      NOT_SUBMITTED: 'Not yet submitted',
+      NO_PROVIDER_SUBMISSION_ATTEMPTED: 'Not yet submitted',
+      SUBMITTED_NOT_COMMITTED: 'Submitted — awaiting bank confirmation',
+      COMMITTED: 'Committed',
+      CANCELLED: 'Cancelled',
+      CANCELED: 'Cancelled',
+      FAILED_BEFORE_COMMIT: 'Failed before commit',
+      SUBMISSION_FAILED: 'Submission failed',
+      RETURNED: 'Returned',
+      VOIDED: 'Voided',
+      REVERTED: 'Reverted',
+      CHECK_REQUIRED: 'Check required',
+      REVIEW_REQUIRED: 'Review required'
+    };
+    return mapped[upper] || upper.replace(/_/g, ' ').replace(/\s+/g, ' ').trim();
+  };
+  let batchIsDraftNotSubmitted = false;
+  const friendlyPaymentStatusLabel = (row) => {
+    const rawStatus = safeStr(row?.payment_status_raw || '').trim();
+    const label = safeStr(row?.payment_status_label || '').trim();
+    const provider = safeStr(row?.provider || '').trim();
+    const tx = safeStr(row?.rail_tx_id || row?.rail_transaction_id || '').trim();
+    const submittedAt = safeStr(row?.payment_submitted_at_utc || row?.submitted_at_utc || row?.provider_submitted_at_utc || '').trim();
+    if (batchIsDraftNotSubmitted && !provider && !tx && !submittedAt) return 'Not yet submitted';
+    const upper = safeStr(rawStatus || label).trim().toUpperCase();
+    if (upper === 'NOT_SUBMITTED' || upper === 'NO_PROVIDER_SUBMISSION_ATTEMPTED') return 'Not yet submitted';
+    if (upper === 'SUBMITTED_NOT_COMMITTED' || upper === 'PENDING' || upper === 'WAITING_BANK_CONFIRM') return 'Submitted — awaiting bank confirmation';
+    if (upper === 'COMMITTED' || upper === 'PAID' || upper === 'SENT' || upper === 'CONFIRMED_PAID') return 'Paid';
+    if (upper === 'CHECK_REQUIRED' && batchIsDraftNotSubmitted) return 'Not yet submitted';
+    return label || friendlyExecutionStateLabel(rawStatus);
+  };
   const paymentStatusDetailLine = (row) => {
     const parts = [];
-    const statusLabel = safeStr(row?.payment_status_label || '').trim();
+    const statusLabel = friendlyPaymentStatusLabel(row);
     const rawStatus = safeStr(row?.payment_status_raw || '').trim();
     const railState = safeStr(row?.rail_state || '').trim();
     const provider = safeStr(row?.provider || '').trim();
@@ -19088,7 +19126,7 @@ async function handleBankingPayBatchExportDetailPdf(env, req, user, payBatchId) 
     const tx = safeStr(row?.rail_tx_id || row?.rail_transaction_id || '').trim();
     const terminalAt = safeStr(row?.payment_terminal_at_utc || row?.payment_completed_at_utc || row?.payment_failed_at_utc || row?.payment_returned_at_utc || '').trim();
     if (statusLabel) parts.push(`Payment: ${statusLabel}`);
-    if (rawStatus || railState) parts.push(`State: ${[rawStatus, railState].filter(Boolean).join(' / ')}`);
+    if (!batchIsDraftNotSubmitted && (rawStatus || railState)) parts.push(`State: ${[friendlyExecutionStateLabel(rawStatus) || rawStatus, friendlyExecutionStateLabel(railState) || railState].filter(Boolean).join(' / ')}`);
     if (provider || rail) parts.push(`Provider/Rail: ${[provider, rail].filter(Boolean).join(' / ')}`);
     if (tx) parts.push(`Rail transaction ID: ${tx}`);
     if (terminalAt) parts.push(`Terminal at: ${terminalAt}`);
@@ -19110,7 +19148,7 @@ async function handleBankingPayBatchExportDetailPdf(env, req, user, payBatchId) 
     if (n != null) return n;
     const m = asNum(row?.amount_inc_vat);
     if (m != null) return m;
-    return lineEx(row);
+    return lineEx(row) + lineVat(row);
   };
   const lineVat = (row) => {
     const n = asNum(row?.amount_vat);
@@ -19212,7 +19250,15 @@ async function handleBankingPayBatchExportDetailPdf(env, req, user, payBatchId) 
       const payeNet = asNum(candidateRows.find((row) => asNum(row?.paye_net_amount) != null)?.paye_net_amount);
       if (payeNet != null) return round2(payeNet);
     }
-    return candidateTotals.hasVat ? candidateTotals.netInc : candidateTotals.netEx;
+    return candidateTotals.netEx;
+  };
+  const candidateNetInclTotal = (candidateRows, candidateTotals) => {
+    const channels = [...new Set(candidateRows.map((row) => safeStr(row?.pay_channel).trim().toUpperCase()).filter(Boolean))];
+    if (channels.length === 1 && channels[0] === 'PAYE') {
+      const payeNet = asNum(candidateRows.find((row) => asNum(row?.paye_net_amount) != null)?.paye_net_amount);
+      if (payeNet != null) return round2(payeNet);
+    }
+    return candidateTotals.netInc;
   };
 
   try {
@@ -19233,7 +19279,9 @@ async function handleBankingPayBatchExportDetailPdf(env, req, user, payBatchId) 
       : {};
     const batchStatusRaw = safeStr(batch?.batch_status_raw || batch?.status || '').trim();
     const batchStatusLabel = safeStr(batch?.batch_status_label || (batchStatusRaw.toUpperCase() === 'FAILED' ? 'Completed with failed payments' : batchStatusRaw)).trim();
-    const executionCommitState = safeStr(batch?.execution_commit_state || '').trim();
+    const executionCommitStateRaw = safeStr(batch?.execution_commit_state || '').trim();
+    const executionCommitState = friendlyExecutionStateLabel(executionCommitStateRaw || 'NOT_SUBMITTED') || 'Not yet submitted';
+    batchIsDraftNotSubmitted = ['DRAFT', 'DRAFT_CREATED', 'READY'].includes(safeStr(batchStatusRaw || batch?.status || '').trim().toUpperCase()) && safeStr(executionCommitStateRaw || 'NOT_SUBMITTED').trim().toUpperCase() === 'NOT_SUBMITTED';
     const executionCommitRef = safeStr(batch?.execution_commit_ref || '').trim();
     const paymentRunCompletedAtUtc = safeStr(batch?.completed_at_utc || batch?.finalised_at_utc || '').trim();
     const pendingBankOutcomeCount = safeStr(batch?.pending_bank_outcome_count ?? '').trim();
@@ -19337,41 +19385,27 @@ async function handleBankingPayBatchExportDetailPdf(env, req, user, payBatchId) 
       drawHeader();
     };
 
-    const makeCols = (showVat) => {
-      if (showVat) {
-        return {
-          date: { x: M, w: 18 },
-          client: { x: M + 20, w: 32 },
-          desc: { x: M + 54, w: 48 },
-          units: { x: M + 104, w: 20 },
-          rate: { x: M + 126, w: 16 },
-          ex: { x: M + 144, w: 16 },
-          vat: { x: M + 162, w: 12 },
-          inc: { x: M + 176, w: 20 }
-        };
-      }
-      return {
-        date: { x: M, w: 20 },
-        client: { x: M + 22, w: 36 },
-        desc: { x: M + 60, w: 58 },
-        units: { x: M + 120, w: 24 },
-        rate: { x: M + 146, w: 18 },
-        ex: { x: M + 166, w: 24 }
-      };
-    };
+    const makeCols = () => ({
+      date: { x: M, w: 18 },
+      client: { x: M + 20, w: 32 },
+      desc: { x: M + 54, w: 48 },
+      units: { x: M + 104, w: 20 },
+      rate: { x: M + 126, w: 16 },
+      ex: { x: M + 144, w: 16 },
+      vat: { x: M + 162, w: 12 },
+      inc: { x: M + 176, w: 20 }
+    });
 
-    const drawTableHeader = (showVat) => {
-      const cols = makeCols(showVat);
+    const drawTableHeader = () => {
+      const cols = makeCols();
       drawText(state.page, fontBold, 'Date', cols.date.x, state.yTop, tiny);
       drawText(state.page, fontBold, 'Client', cols.client.x, state.yTop, tiny);
       drawText(state.page, fontBold, 'Description', cols.desc.x, state.yTop, tiny);
       drawText(state.page, fontBold, 'Hours / Units', cols.units.x, state.yTop, tiny);
       drawText(state.page, fontBold, 'Rate', cols.rate.x, state.yTop, tiny);
       drawText(state.page, fontBold, 'Gross ex VAT', cols.ex.x, state.yTop, tiny);
-      if (showVat) {
-        drawText(state.page, fontBold, 'VAT', cols.vat.x, state.yTop, tiny);
-        drawText(state.page, fontBold, 'Gross inc VAT', cols.inc.x, state.yTop, tiny);
-      }
+      drawText(state.page, fontBold, 'VAT', cols.vat.x, state.yTop, tiny);
+      drawText(state.page, fontBold, 'Gross incl VAT', cols.inc.x, state.yTop, tiny);
       state.yTop += 4.5;
       drawLine(state.page, M, state.yTop, PAGE_W_MM - M);
       state.yTop += 2.0;
@@ -19409,7 +19443,7 @@ async function handleBankingPayBatchExportDetailPdf(env, req, user, payBatchId) 
       const candidateTitle = candidateDisplayName(candidateRows[0] || {});
       const candidateTotals = computeGroupTotals(candidateRows);
       const candidateNet = candidateNetTotal(candidateRows, candidateTotals);
-      const candidateHasVat = candidateTotals.hasVat;
+      const candidateNetIncl = candidateNetInclTotal(candidateRows, candidateTotals);
 
       ensureSpace(14);
       drawText(state.page, fontBold, candidateTitle || '(unknown candidate)', M, state.yTop, small);
@@ -19428,7 +19462,7 @@ async function handleBankingPayBatchExportDetailPdf(env, req, user, payBatchId) 
         const destinationRows = destinationGroups[destinationIdx];
         const destinationFirst = destinationRows[0] || {};
         const destinationTotals = computeGroupTotals(destinationRows);
-        const destinationHasVat = destinationTotals.hasVat;
+        const destinationHasVat = true;
         const beneficiary = safeStr(destinationFirst?.beneficiary_name || '').trim() || candidateTitle;
         const sortCode = safeStr(destinationFirst?.sort_code || '').trim();
         const accountNumber = safeStr(destinationFirst?.account_number || '').trim();
@@ -19452,9 +19486,9 @@ async function handleBankingPayBatchExportDetailPdf(env, req, user, payBatchId) 
           state.yTop += 0.8;
         }
 
-        drawTableHeader(destinationHasVat);
+        drawTableHeader();
 
-        const cols = makeCols(destinationHasVat);
+        const cols = makeCols();
         for (const row of destinationRows) {
           const label = lineLabel(row);
           const note = meaningfulNote(row);
@@ -19467,10 +19501,8 @@ async function handleBankingPayBatchExportDetailPdf(env, req, user, payBatchId) 
           drawText(state.page, font, fitText(font, unitsDisplay(row), tiny, cols.units.w), cols.units.x, state.yTop, tiny);
           drawText(state.page, font, fitText(font, rateDisplay(row), tiny, cols.rate.w), cols.rate.x, state.yTop, tiny);
           drawText(state.page, fontBold, fitText(fontBold, formatMoney(lineEx(row)), tiny, cols.ex.w), cols.ex.x, state.yTop, tiny);
-          if (destinationHasVat) {
-            drawText(state.page, font, fitText(font, formatMoney(lineVat(row)), tiny, cols.vat.w), cols.vat.x, state.yTop, tiny);
-            drawText(state.page, fontBold, fitText(fontBold, formatMoney(lineInc(row)), tiny, cols.inc.w), cols.inc.x, state.yTop, tiny);
-          }
+          drawText(state.page, font, fitText(font, formatMoney(lineVat(row)), tiny, cols.vat.w), cols.vat.x, state.yTop, tiny);
+          drawText(state.page, fontBold, fitText(fontBold, formatMoney(lineInc(row)), tiny, cols.inc.w), cols.inc.x, state.yTop, tiny);
           state.yTop += 4.0;
           if (sourceTargetDetail) {
             drawText(state.page, font, fitText(font, sourceTargetDetail, tiny, PAGE_W_MM - (M * 2) - 6), M + 6, state.yTop, tiny);
@@ -19487,36 +19519,34 @@ async function handleBankingPayBatchExportDetailPdf(env, req, user, payBatchId) 
         }
 
         if (showDestinationTotals) {
-          ensureSpace(destinationHasVat ? 18 : 14);
+          ensureSpace(18);
           drawLine(state.page, M + 2, state.yTop, PAGE_W_MM - M);
           state.yTop += 2.4;
           drawTotalLine('Destination gross pay ex VAT', destinationTotals.grossEx, state.yTop, true);
           state.yTop += 3.8;
-          if (destinationHasVat) {
-            drawTotalLine('Destination gross pay inc VAT', destinationTotals.grossInc, state.yTop, true);
-            state.yTop += 3.8;
-          }
-          drawTotalLine('Destination deductions total', destinationHasVat ? destinationTotals.deductionsInc : destinationTotals.deductionsEx, state.yTop, false);
+          drawTotalLine('Destination gross pay incl VAT', destinationTotals.grossInc, state.yTop, true);
           state.yTop += 3.8;
-          drawTotalLine('Destination net total', destinationHasVat ? destinationTotals.netInc : destinationTotals.netEx, state.yTop, true);
+          drawTotalLine('Destination deductions total', destinationTotals.deductionsInc, state.yTop, false);
+          state.yTop += 3.8;
+          drawTotalLine('Destination net total', destinationTotals.netInc, state.yTop, true);
           state.yTop += 5.0;
         } else {
           state.yTop += 3.5;
         }
       }
 
-      ensureSpace(candidateHasVat ? 20 : 16);
+      ensureSpace(24);
       drawLine(state.page, M, state.yTop, PAGE_W_MM - M);
       state.yTop += 2.8;
       drawTotalLine('Candidate gross pay ex VAT', candidateTotals.grossEx, state.yTop, true);
       state.yTop += 3.8;
-      if (candidateHasVat) {
-        drawTotalLine('Candidate gross pay inc VAT', candidateTotals.grossInc, state.yTop, true);
-        state.yTop += 3.8;
-      }
-      drawTotalLine('Candidate deductions total', candidateHasVat ? candidateTotals.deductionsInc : candidateTotals.deductionsEx, state.yTop, false);
+      drawTotalLine('Candidate gross pay incl VAT', candidateTotals.grossInc, state.yTop, true);
+      state.yTop += 3.8;
+      drawTotalLine('Candidate deductions total', candidateTotals.deductionsInc, state.yTop, false);
       state.yTop += 3.8;
       drawTotalLine('Candidate net pay total', candidateNet, state.yTop, true);
+      state.yTop += 3.8;
+      drawTotalLine('Candidate net pay incl VAT', candidateNetIncl, state.yTop, true);
       state.yTop += 6.0;
     }
 
@@ -19539,6 +19569,19 @@ async function handleBankingPayBatchExportDetailPdf(env, req, user, payBatchId) 
   }
 }
 
+
+/**
+ * Minimal HTML escape for safe <pre> usage.
+ * (mail_outbox ultimately renders HTML; keep it safe.)
+ */
+function escapeHtml(s) {
+  return String(s || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
 
 /**
  * Minimal HTML escape for safe <pre> usage.
@@ -23289,6 +23332,8 @@ async function tsfinBestEffortMakeReadyForDraft(env, timesheetIds, opts = {}) {
 }
 
 
+
+
 async function handleBankingPayBatchGet(env, req, user, payBatchId) {
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   const trimText = (value) => String(value == null ? '' : value).trim();
@@ -23313,6 +23358,276 @@ async function handleBankingPayBatchGet(env, req, user, payBatchId) {
   if (!id || !uuidRe.test(id)) return withCORS(env, req, badRequest('invalid_pay_batch_id'));
   const actorUserId = trimText(user && user.id);
 
+  const firstFiniteNumber = (...values) => {
+    for (const value of values) {
+      if (value === null || value === undefined || value === '') continue;
+      const n = Number(value);
+      if (Number.isFinite(n)) return n;
+    }
+    return null;
+  };
+  const firstFiniteNonNegativeInteger = (...values) => {
+    const n = firstFiniteNumber(...values);
+    return n == null ? null : Math.max(0, Math.trunc(n));
+  };
+  const optionalBool = (value) => {
+    if (value === true) return true;
+    if (value === false) return false;
+    if (value === null || value === undefined) return null;
+    const text = upperText(value);
+    if (!text) return null;
+    if (['TRUE', 'T', 'YES', 'Y', '1', 'ON'].includes(text)) return true;
+    if (['FALSE', 'F', 'NO', 'N', '0', 'OFF'].includes(text)) return false;
+    return null;
+  };
+  const readFirstBool = (...values) => {
+    for (const value of values) {
+      const b = optionalBool(value);
+      if (b !== null) return b;
+    }
+    return false;
+  };
+  const terminalOperationStates = new Set(['COMPLETE', 'COMPLETED', 'SUCCESS', 'SUCCEEDED', 'DONE', 'FAILED', 'ERROR', 'ERRORED', 'REVIEW_REQUIRED', 'CANCELLED', 'CANCELED']);
+  const paymentOperationTypes = new Set([
+    'PAYMENT_EXECUTE',
+    'PAYMENT_EXECUTION',
+    'PAYMENT_RETRY_BLOCKED_FUNDS',
+    'PAYMENT_RETRY_UNSENT_PAYMENTS',
+    'PAYMENT_RETRY_UNSENT',
+    'PAYMENT_SETTLEMENT',
+    'PAYMENT_PROVIDER_SUBMIT',
+    'PAYMENT_SUBMISSION'
+  ]);
+  const normaliseActivePaymentOperation = (operation, forcedType = '') => {
+    const op = safeObject(operation);
+    if (!Object.keys(op).length) return null;
+    const type = upperText(
+      forcedType ||
+      op.operation_type ||
+      op.operationType ||
+      op.kind ||
+      op.operation_kind ||
+      op.operationKind ||
+      ''
+    );
+    if (!type || !paymentOperationTypes.has(type) || type === 'DRAFT_CREATE') return null;
+    const stateSignals = [
+      op.status,
+      op.operation_status,
+      op.operationStatus,
+      op.phase,
+      op.runner_state,
+      op.runnerState,
+      op.state,
+      op.lifecycle_state,
+      op.lifecycleState
+    ].map(upperText).filter(Boolean);
+    if (stateSignals.some((signal) => terminalOperationStates.has(signal))) return null;
+    const opId = trimText(op.operation_id || op.operationId || op.id || '');
+    if (!opId && stateSignals.length === 0) return null;
+    return { ...op, operation_type: type };
+  };
+  const chooseValidActivePaymentOperation = (...containers) => {
+    for (const source of containers) {
+      const obj = safeObject(source);
+      if (!Object.keys(obj).length) continue;
+      const specific = normaliseActivePaymentOperation(obj.payment_execute_operation || obj.paymentExecuteOperation, 'PAYMENT_EXECUTE') ||
+        normaliseActivePaymentOperation(obj.active_payment_execute_operation || obj.activePaymentExecuteOperation, 'PAYMENT_EXECUTE');
+      if (specific) return specific;
+      const generic = normaliseActivePaymentOperation(obj.active_operation || obj.activeOperation);
+      if (generic) return generic;
+    }
+    return null;
+  };
+  const scrubActiveOperationFields = (target) => {
+    if (!target || typeof target !== 'object') return;
+    for (const key of [
+      'active_operation', 'activeOperation', 'active_operation_id', 'activeOperationId',
+      'active_operation_type', 'activeOperationType',
+      'payment_execute_operation', 'paymentExecuteOperation',
+      'active_payment_execute_operation', 'activePaymentExecuteOperation'
+    ]) {
+      try { delete target[key]; } catch {}
+    }
+  };
+  const decoratePayloadForChildModal = (payload) => {
+    const out = safeObject(payload);
+    const batch = safeObject(out.batch);
+    const validActiveOperation = chooseValidActivePaymentOperation(out, batch);
+    scrubActiveOperationFields(out);
+    scrubActiveOperationFields(batch);
+    if (validActiveOperation) {
+      out.active_operation = validActiveOperation;
+      out.activeOperation = validActiveOperation;
+      if (upperText(validActiveOperation.operation_type || validActiveOperation.operationType) === 'PAYMENT_EXECUTE') {
+        out.payment_execute_operation = validActiveOperation;
+        out.paymentExecuteOperation = validActiveOperation;
+        out.active_payment_execute_operation = validActiveOperation;
+        out.activePaymentExecuteOperation = validActiveOperation;
+      }
+      if (Object.keys(batch).length) {
+        batch.active_operation = validActiveOperation;
+        batch.activeOperation = validActiveOperation;
+        if (upperText(validActiveOperation.operation_type || validActiveOperation.operationType) === 'PAYMENT_EXECUTE') {
+          batch.payment_execute_operation = validActiveOperation;
+          batch.paymentExecuteOperation = validActiveOperation;
+          batch.active_payment_execute_operation = validActiveOperation;
+          batch.activePaymentExecuteOperation = validActiveOperation;
+        }
+      }
+    }
+
+    const status = upperText(out.status || batch.status || out.batch_status_raw || batch.batch_status_raw || '');
+    const executionCommitState = upperText(out.execution_commit_state || batch.execution_commit_state || 'NOT_SUBMITTED') || 'NOT_SUBMITTED';
+    const activeItemCount = firstFiniteNonNegativeInteger(
+      out.active_payment_item_count,
+      out.activePaymentItemCount,
+      batch.active_payment_item_count,
+      batch.activePaymentItemCount,
+      out.active_count,
+      out.activeCount,
+      batch.active_count,
+      batch.activeCount,
+      out.active_item_count,
+      out.activeItemCount,
+      batch.active_item_count,
+      batch.activeItemCount,
+      out.item_count,
+      batch.item_count,
+      out.durable_counts && out.durable_counts.item_count,
+      out.durableCounts && out.durableCounts.item_count
+    );
+    const activeAmountVat = firstFiniteNumber(out.active_payment_amount_vat, out.activePaymentAmountVat, batch.active_payment_amount_vat, batch.activePaymentAmountVat, out.active_amount_vat, batch.active_amount_vat) ?? 0;
+    const activeAmountEx = firstFiniteNumber(
+      out.active_payment_amount_ex_vat,
+      out.activePaymentAmountExVat,
+      batch.active_payment_amount_ex_vat,
+      batch.activePaymentAmountExVat,
+      out.active_amount_ex_vat,
+      out.activeAmountExVat,
+      batch.active_amount_ex_vat,
+      batch.activeAmountExVat,
+      out.active_amount,
+      out.activeAmount,
+      batch.active_amount,
+      batch.activeAmount,
+      out.total_payable,
+      out.totalPayable,
+      batch.total_payable,
+      batch.totalPayable
+    ) ?? 0;
+    const explicitInc = firstFiniteNumber(
+      out.active_payment_amount_inc_vat,
+      out.activePaymentAmountIncVat,
+      batch.active_payment_amount_inc_vat,
+      batch.activePaymentAmountIncVat,
+      out.active_amount_inc_vat,
+      out.activeAmountIncVat,
+      batch.active_amount_inc_vat,
+      batch.activeAmountIncVat
+    );
+    const activeAmountInc = explicitInc != null ? explicitInc : activeAmountEx + activeAmountVat;
+    const hasActivePayables = (activeItemCount == null ? activeAmountInc > 0 : activeItemCount > 0) && activeAmountInc > 0;
+    const executeBlocked = readFirstBool(
+      out.execute_disabled,
+      out.executeDisabled,
+      batch.execute_disabled,
+      batch.executeDisabled,
+      out.execution_blocked,
+      out.executionBlocked,
+      batch.execution_blocked,
+      batch.executionBlocked,
+      out.provider_blocked,
+      out.providerBlocked,
+      batch.provider_blocked,
+      batch.providerBlocked,
+      out.security_blocked,
+      out.securityBlocked,
+      batch.security_blocked,
+      batch.securityBlocked,
+      out.freshness_blocked,
+      out.freshnessBlocked,
+      batch.freshness_blocked,
+      batch.freshnessBlocked,
+      out.funds_blocked,
+      out.fundsBlocked,
+      batch.funds_blocked,
+      batch.fundsBlocked
+    );
+    const standardExecutionFlagStates = [
+      out.can_start_standard_execution,
+      out.canStartStandardExecution,
+      batch.can_start_standard_execution,
+      batch.canStartStandardExecution,
+      out.native_execution_available,
+      out.nativeExecutionAvailable,
+      batch.native_execution_available,
+      batch.nativeExecutionAvailable,
+      out.can_execute,
+      out.canExecute,
+      out.execute_allowed,
+      out.executeAllowed,
+      batch.can_execute,
+      batch.canExecute,
+      batch.execute_allowed,
+      batch.executeAllowed
+    ].map(optionalBool).filter((value) => value !== null);
+    const explicitStandardExecutionAllow = standardExecutionFlagStates.includes(true);
+    const explicitStandardExecutionDeny = standardExecutionFlagStates.length > 0 && !explicitStandardExecutionAllow;
+    const cleanDraftExecutable = ['DRAFT', 'DRAFT_CREATED', 'READY'].includes(status) &&
+      executionCommitState === 'NOT_SUBMITTED' &&
+      hasActivePayables &&
+      !validActiveOperation &&
+      !executeBlocked &&
+      (explicitStandardExecutionAllow || !explicitStandardExecutionDeny);
+
+    const decorateAmountsAndFlags = (target) => {
+      if (!target || typeof target !== 'object') return;
+      const keepTrueWhenSafe = (...values) => values.map(optionalBool).some((value) => value === true) && !validActiveOperation && !executeBlocked;
+      const standardAllowed = cleanDraftExecutable || keepTrueWhenSafe(target.can_start_standard_execution, target.canStartStandardExecution);
+      const nativeAllowed = cleanDraftExecutable || keepTrueWhenSafe(target.native_execution_available, target.nativeExecutionAvailable);
+      const directAllowed = cleanDraftExecutable || keepTrueWhenSafe(target.can_execute, target.canExecute, target.execute_allowed, target.executeAllowed);
+      const csvSettlementAllowed = keepTrueWhenSafe(target.can_start_csv_settlement, target.canStartCsvSettlement);
+      const externalSettlementAllowed = keepTrueWhenSafe(target.can_start_external_settlement, target.canStartExternalSettlement);
+      const anyExecuteAllowed = standardAllowed || nativeAllowed || directAllowed || csvSettlementAllowed || externalSettlementAllowed;
+      target.active_payment_item_count = activeItemCount ?? 0;
+      target.activePaymentItemCount = activeItemCount ?? 0;
+      target.active_payment_amount_ex_vat = activeAmountEx;
+      target.activePaymentAmountExVat = activeAmountEx;
+      target.active_payment_amount_vat = activeAmountVat;
+      target.activePaymentAmountVat = activeAmountVat;
+      target.active_payment_amount_inc_vat = activeAmountInc;
+      target.activePaymentAmountIncVat = activeAmountInc;
+      target.can_execute = directAllowed || standardAllowed || nativeAllowed;
+      target.canExecute = target.can_execute;
+      target.execute_allowed = anyExecuteAllowed;
+      target.executeAllowed = anyExecuteAllowed;
+      target.can_start_standard_execution = standardAllowed;
+      target.canStartStandardExecution = standardAllowed;
+      target.native_execution_available = nativeAllowed;
+      target.nativeExecutionAvailable = nativeAllowed;
+      target.can_start_csv_settlement = csvSettlementAllowed;
+      target.canStartCsvSettlement = csvSettlementAllowed;
+      target.can_start_external_settlement = externalSettlementAllowed;
+      target.canStartExternalSettlement = externalSettlementAllowed;
+      target.execute_disabled = !anyExecuteAllowed;
+      target.executeDisabled = !anyExecuteAllowed;
+      if (anyExecuteAllowed) {
+        target.execute_disabled_reason = '';
+        target.executeDisabledReason = '';
+      } else if (!trimText(target.execute_disabled_reason || target.executeDisabledReason || '')) {
+        target.execute_disabled_reason = validActiveOperation ? 'A payment operation is already in progress.' : (executeBlocked ? 'Payment execution is currently blocked.' : 'Payment execution is not available for this batch state.');
+        target.executeDisabledReason = target.execute_disabled_reason;
+      }
+    };
+    decorateAmountsAndFlags(out);
+    if (Object.keys(batch).length) {
+      decorateAmountsAndFlags(batch);
+      out.batch = batch;
+    }
+    return out;
+  };
+
   const execute = async () => {
     try {
       const url = new URL(req.url);
@@ -23327,12 +23642,12 @@ async function handleBankingPayBatchGet(env, req, user, payBatchId) {
         p_detail_mode: detailMode,
         p_recommended_page_size: recommendedPageSize
       };
-      const payload = unwrapRpc(await sbRpc(env, 'pay_batch_get', args, {
+      const payload = decoratePayloadForChildModal(unwrapRpc(await sbRpc(env, 'pay_batch_get', args, {
         routeClass: detailMode === 'FULL' ? 'EXPLICIT_DIAGNOSTIC' : 'BATCH_BOOTSTRAP',
         purpose: detailMode === 'FULL' ? 'DIAGNOSTIC' : 'CHILD_MODAL_OPEN',
         timeoutMs: detailMode === 'FULL' ? 60000 : 8000,
         bankingPay: true
-      }), 'pay_batch_get');
+      }), 'pay_batch_get'));
 
       return withCORS(env, req, ok({
         ...payload,
@@ -23376,8 +23691,6 @@ async function handleBankingPayBatchGet(env, req, user, payBatchId) {
   }
   return execute();
 }
-
-
 
 
 
@@ -31400,6 +31713,7 @@ async function handleBankingPayBatchExportCsv(env, req, user, payBatchId) {
   }
 }
 
+
 async function handleBankingPayBatchExportDetailCsv(env, req, user, payBatchId) {
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -31609,7 +31923,7 @@ async function handleBankingPayBatchExportDetailCsv(env, req, user, payBatchId) 
     if (n != null) return n;
     const m = asNum(row?.amount_inc_vat);
     if (m != null) return m;
-    return lineEx(row);
+    return lineEx(row) + lineVat(row);
   };
   const lineVat = (row) => {
     const n = asNum(row?.amount_vat);
@@ -31699,7 +32013,50 @@ async function handleBankingPayBatchExportDetailCsv(env, req, user, payBatchId) 
       const payeNet = asNum(candidateRows.find((row) => asNum(row?.paye_net_amount) != null)?.paye_net_amount);
       if (payeNet != null) return round2(payeNet);
     }
-    return candidateTotals.hasVat ? candidateTotals.netInc : candidateTotals.netEx;
+    return candidateTotals.netEx;
+  };
+  const candidateNetInclTotal = (candidateRows, candidateTotals) => {
+    const channels = [...new Set(candidateRows.map((row) => safeStr(row?.pay_channel).trim().toUpperCase()).filter(Boolean))];
+    if (channels.length === 1 && channels[0] === 'PAYE') {
+      const payeNet = asNum(candidateRows.find((row) => asNum(row?.paye_net_amount) != null)?.paye_net_amount);
+      if (payeNet != null) return round2(payeNet);
+    }
+    return candidateTotals.netInc;
+  };
+  const friendlyExecutionStateLabel = (value) => {
+    const upper = safeStr(value).trim().toUpperCase();
+    if (!upper) return '';
+    const mapped = {
+      NOT_SUBMITTED: 'Not yet submitted',
+      NO_PROVIDER_SUBMISSION_ATTEMPTED: 'Not yet submitted',
+      SUBMITTED_NOT_COMMITTED: 'Submitted — awaiting bank confirmation',
+      COMMITTED: 'Committed',
+      CANCELLED: 'Cancelled',
+      CANCELED: 'Cancelled',
+      FAILED_BEFORE_COMMIT: 'Failed before commit',
+      SUBMISSION_FAILED: 'Submission failed',
+      RETURNED: 'Returned',
+      VOIDED: 'Voided',
+      REVERTED: 'Reverted',
+      CHECK_REQUIRED: 'Check required',
+      REVIEW_REQUIRED: 'Review required'
+    };
+    return mapped[upper] || upper.replace(/_/g, ' ').replace(/\s+/g, ' ').trim();
+  };
+  let batchIsDraftNotSubmitted = false;
+  const friendlyPaymentStatusLabel = (row) => {
+    const rawStatus = safeStr(row?.payment_status_raw || '').trim();
+    const label = safeStr(row?.payment_status_label || '').trim();
+    const provider = safeStr(row?.provider || '').trim();
+    const tx = safeStr(row?.rail_tx_id || row?.rail_transaction_id || '').trim();
+    const submittedAt = safeStr(row?.payment_submitted_at_utc || row?.submitted_at_utc || row?.provider_submitted_at_utc || '').trim();
+    if (batchIsDraftNotSubmitted && !provider && !tx && !submittedAt) return 'Not yet submitted';
+    const upper = safeStr(rawStatus || label).trim().toUpperCase();
+    if (upper === 'NOT_SUBMITTED' || upper === 'NO_PROVIDER_SUBMISSION_ATTEMPTED') return 'Not yet submitted';
+    if (upper === 'SUBMITTED_NOT_COMMITTED' || upper === 'PENDING' || upper === 'WAITING_BANK_CONFIRM') return 'Submitted — awaiting bank confirmation';
+    if (upper === 'COMMITTED' || upper === 'PAID' || upper === 'SENT' || upper === 'CONFIRMED_PAID') return 'Paid';
+    if (upper === 'CHECK_REQUIRED' && batchIsDraftNotSubmitted) return 'Not yet submitted';
+    return label || friendlyExecutionStateLabel(rawStatus);
   };
 
   try {
@@ -31720,13 +32077,15 @@ async function handleBankingPayBatchExportDetailCsv(env, req, user, payBatchId) 
       : {};
     const exportIsStale = Boolean(freshness?.is_stale);
     const exportStaleReasons = staleReasonsDisplay(freshness);
-    const batchHasVat = rows.some((row) => hasVatValue(row));
+    const batchHasVat = true;
 
     const batchId = (batch && batch.id != null) ? String(batch.id) : id;
     const batchStatus = (batch && batch.status != null) ? String(batch.status) : '';
     const batchStatusRaw = safeStr(batch?.batch_status_raw || batchStatus).trim();
     const batchStatusLabel = safeStr(batch?.batch_status_label || (batchStatusRaw.toUpperCase() === 'FAILED' ? 'Completed with failed payments' : batchStatusRaw)).trim();
-    const executionCommitState = safeStr(batch?.execution_commit_state || '').trim();
+    const executionCommitStateRaw = safeStr(batch?.execution_commit_state || '').trim();
+    const executionCommitState = friendlyExecutionStateLabel(executionCommitStateRaw || 'NOT_SUBMITTED') || 'Not yet submitted';
+    batchIsDraftNotSubmitted = ['DRAFT', 'DRAFT_CREATED', 'READY'].includes(safeStr(batchStatusRaw || batchStatus || '').trim().toUpperCase()) && safeStr(executionCommitStateRaw || 'NOT_SUBMITTED').trim().toUpperCase() === 'NOT_SUBMITTED';
     const executionCommitRef = safeStr(batch?.execution_commit_ref || '').trim();
     const executionCommittedAtUtc = safeStr(batch?.execution_committed_at_utc || '').trim();
     const paymentRunCompletedAtUtc = safeStr(batch?.completed_at_utc || batch?.finalised_at_utc || '').trim();
@@ -31746,6 +32105,7 @@ async function handleBankingPayBatchExportDetailCsv(env, req, user, payBatchId) 
     for (const candidateRows of candidateGroups) {
       const candidateTotals = computeTotals(candidateRows);
       const candidateNet = candidateNetTotal(candidateRows, candidateTotals);
+      const candidateNetIncl = candidateNetInclTotal(candidateRows, candidateTotals);
       const destinationMap = new Map();
       for (const row of candidateRows) {
         const destinationKey = safeStr(row?.destination_group_key || `${safeStr(row?.beneficiary_name)}|${safeStr(row?.sort_code)}|${safeStr(row?.account_number)}|${routeDisplay(row)}` || '__destination__');
@@ -31797,8 +32157,8 @@ async function handleBankingPayBatchExportDetailCsv(env, req, user, payBatchId) 
             export_is_stale: exportIsStale ? 'YES' : 'NO',
             export_stale_reasons: normalizeText(exportStaleReasons),
             gross_pay_ex_vat: normalizeText(formatNum(lineEx(row))),
-            payment_status_raw: normalizeText(safeStr(row?.payment_status_raw || '').trim()),
-            payment_status_label: normalizeText(safeStr(row?.payment_status_label || '').trim()),
+            payment_status_raw: normalizeText(batchIsDraftNotSubmitted ? 'NOT_SUBMITTED' : safeStr(row?.payment_status_raw || '').trim()),
+            payment_status_label: normalizeText(friendlyPaymentStatusLabel(row)),
             rail_state: normalizeText(safeStr(row?.rail_state || '').trim()),
             provider: normalizeText(safeStr(row?.provider || '').trim()),
             rail: normalizeText(safeStr(row?.rail || '').trim()),
@@ -31808,17 +32168,18 @@ async function handleBankingPayBatchExportDetailCsv(env, req, user, payBatchId) 
             payment_returned_at_utc: normalizeText(safeStr(row?.payment_returned_at_utc || '').trim()),
             payment_terminal_at_utc: normalizeText(safeStr(row?.payment_terminal_at_utc || '').trim()),
             action_review_status: normalizeText(safeStr(row?.action_review_status || '').trim()),
-            vat_amount: batchHasVat ? normalizeText(formatNum(lineVat(row))) : undefined,
-            gross_pay_inc_vat: batchHasVat ? normalizeText(formatNum(lineInc(row))) : undefined,
+            vat_amount: normalizeText(formatNum(lineVat(row))),
+            gross_pay_inc_vat: normalizeText(formatNum(lineInc(row))),
             note: normalizeText(meaningfulNote(row)),
             destination_gross_pay_ex_vat: showDestinationTotals ? normalizeText(formatNum(destinationTotals.grossEx)) : undefined,
-            destination_gross_pay_inc_vat: (batchHasVat && showDestinationTotals) ? normalizeText(formatNum(destinationTotals.grossInc)) : undefined,
-            destination_deductions_total: showDestinationTotals ? normalizeText(formatNum(batchHasVat ? destinationTotals.deductionsInc : destinationTotals.deductionsEx)) : undefined,
-            destination_net_total: showDestinationTotals ? normalizeText(formatNum(batchHasVat ? destinationTotals.netInc : destinationTotals.netEx)) : undefined,
+            destination_gross_pay_inc_vat: showDestinationTotals ? normalizeText(formatNum(destinationTotals.grossInc)) : undefined,
+            destination_deductions_total: showDestinationTotals ? normalizeText(formatNum(destinationTotals.deductionsInc)) : undefined,
+            destination_net_total: showDestinationTotals ? normalizeText(formatNum(destinationTotals.netInc)) : undefined,
             candidate_gross_pay_ex_vat: normalizeText(formatNum(candidateTotals.grossEx)),
-            candidate_gross_pay_inc_vat: batchHasVat ? normalizeText(formatNum(candidateTotals.grossInc)) : undefined,
-            candidate_deductions_total: normalizeText(formatNum(batchHasVat ? candidateTotals.deductionsInc : candidateTotals.deductionsEx)),
-            candidate_net_pay_total: normalizeText(formatNum(candidateNet))
+            candidate_gross_pay_inc_vat: normalizeText(formatNum(candidateTotals.grossInc)),
+            candidate_deductions_total: normalizeText(formatNum(candidateTotals.deductionsInc)),
+            candidate_net_pay_total: normalizeText(formatNum(candidateNet)),
+            candidate_net_pay_incl_vat: normalizeText(formatNum(candidateNetIncl))
           });
         }
       }
@@ -31877,28 +32238,30 @@ async function handleBankingPayBatchExportDetailCsv(env, req, user, payBatchId) 
     cols.push('payment_terminal_at_utc');
     cols.push('action_review_status');
 
-    if (batchHasVat) {
-      cols.push('vat_amount');
-      cols.push('gross_pay_inc_vat');
-    }
+    cols.push('vat_amount');
+    cols.push('gross_pay_inc_vat');
 
     cols.push('note');
     cols.push('destination_gross_pay_ex_vat');
-    if (batchHasVat) cols.push('destination_gross_pay_inc_vat');
+    cols.push('destination_gross_pay_inc_vat');
     cols.push('destination_deductions_total');
     cols.push('destination_net_total');
     cols.push('candidate_gross_pay_ex_vat');
-    if (batchHasVat) cols.push('candidate_gross_pay_inc_vat');
+    cols.push('candidate_gross_pay_inc_vat');
     cols.push('candidate_deductions_total');
     cols.push('candidate_net_pay_total');
+    cols.push('candidate_net_pay_incl_vat');
 
     const headerLabels = {
       batch_status_raw: 'Batch Status Raw',
       batch_status_label: 'Batch Status',
-      execution_commit_state: 'Execution Commit State',
+      execution_commit_state: 'Execution',
       execution_commit_ref: 'Execution Commit Ref',
       execution_committed_at_utc: 'Execution Committed At UTC',
       payment_run_completed_at_utc: 'Payment Run Completed At UTC',
+      gross_pay_ex_vat: 'Gross ex VAT',
+      vat_amount: 'VAT',
+      gross_pay_inc_vat: 'Gross incl VAT',
       payment_status_raw: 'Payment Status Raw',
       payment_status_label: 'Payment Status',
       rail_state: 'Rail State',
@@ -31909,7 +32272,12 @@ async function handleBankingPayBatchExportDetailCsv(env, req, user, payBatchId) 
       payment_failed_at_utc: 'Payment Failed At UTC',
       payment_returned_at_utc: 'Payment Returned At UTC',
       payment_terminal_at_utc: 'Payment Terminal At UTC',
-      action_review_status: 'Action / Review Status'
+      action_review_status: 'Action / Review Status',
+      destination_gross_pay_ex_vat: 'Destination Gross ex VAT',
+      destination_gross_pay_inc_vat: 'Destination Gross incl VAT',
+      candidate_gross_pay_ex_vat: 'Candidate Gross ex VAT',
+      candidate_gross_pay_inc_vat: 'Candidate Gross incl VAT',
+      candidate_net_pay_incl_vat: 'Candidate Net Pay incl VAT'
     };
 
     const lines = [];
@@ -31936,6 +32304,8 @@ async function handleBankingPayBatchExportDetailCsv(env, req, user, payBatchId) 
     return buildDetailCsvFailureResponse(500, e, 'EXPORT_DETAIL_CSV_FAILED', 'CloudTMS could not export the payment details. Refresh the batch and try again.', { stage: 'export_detail_csv' });
   }
 }
+
+
 
 async function handleBankingPayBatchPoll(env, req, user, payBatchId) {
 
