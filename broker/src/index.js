@@ -142617,9 +142617,453 @@ async function bankingCronTick(env, opts = {}) {
   return summary;
 }
 
+async function drainBankingPayWorkbenchJobs(env, opts = {}) {
+  const trimStr = (value) => String(value == null ? '' : value).trim();
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  const isPlainObject = (value) => value && typeof value === 'object' && !Array.isArray(value);
+  const unwrapRpc = (rpcRes, key) => {
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(payload) && payload.length === 1 && payload[0] && typeof payload[0] === 'object') payload = payload[0];
+      if (payload && typeof payload === 'object' && key && Object.prototype.hasOwnProperty.call(payload, key)) payload = payload[key];
+      if (Array.isArray(payload) && payload.length === 1 && payload[0] && typeof payload[0] === 'object') payload = payload[0];
+    } catch {}
+    return isPlainObject(payload) ? payload : {};
+  };
+  const normalizeJobArray = (value) => {
+    if (Array.isArray(value)) return value;
+    if (value && typeof value === 'object' && Array.isArray(value.rows)) return value.rows;
+    return [];
+  };
+  const boundedJobTypes = new Set([
+    'WORKBENCH_SESSION_SCOPE_SEED',
+    'SESSION_SCOPE_SEED',
+    'WORKBENCH_SCOPE_SEED',
+    'WORKBENCH_CANDIDATE_LINE_WORK_SEED',
+    'CANDIDATE_LINE_WORK_SEED',
+    'SNAPSHOT_CANDIDATE_REFRESH',
+    'CANDIDATE_REFRESH',
+    'WORKBENCH_CANDIDATE_LINE_WORK_PROCESS',
+    'CANDIDATE_LINE_WORK_PROCESS',
+    'LINE_WORK_PROCESS',
+    'WORKBENCH_PREVIEW_ROWS_MATERIALISE',
+    'WORKBENCH_PREVIEW_ROWS_MATERIALIZE',
+    'PREVIEW_ROWS_MATERIALISE',
+    'PREVIEW_ROWS_MATERIALIZE'
+  ]);
+  const canonicalWorkbenchJobType = (value) => {
+    const s = trimStr(value).toUpperCase();
+    if (s === 'WORKBENCH_SESSION_SCOPE_SEED' || s === 'SESSION_SCOPE_SEED' || s === 'WORKBENCH_SCOPE_SEED') return 'WORKBENCH_SESSION_SCOPE_SEED';
+    if (s === 'WORKBENCH_CANDIDATE_LINE_WORK_SEED' || s === 'CANDIDATE_LINE_WORK_SEED' || s === 'SNAPSHOT_CANDIDATE_REFRESH' || s === 'CANDIDATE_REFRESH') return 'WORKBENCH_CANDIDATE_LINE_WORK_SEED';
+    if (s === 'WORKBENCH_CANDIDATE_LINE_WORK_PROCESS' || s === 'CANDIDATE_LINE_WORK_PROCESS' || s === 'LINE_WORK_PROCESS') return 'WORKBENCH_CANDIDATE_LINE_WORK_PROCESS';
+    if (s === 'WORKBENCH_PREVIEW_ROWS_MATERIALISE' || s === 'WORKBENCH_PREVIEW_ROWS_MATERIALIZE' || s === 'PREVIEW_ROWS_MATERIALISE' || s === 'PREVIEW_ROWS_MATERIALIZE') return 'WORKBENCH_PREVIEW_ROWS_MATERIALISE';
+    return s;
+  };
+  const normalizeAllowedJobTypes = (value) => {
+    if (value === undefined || value === null || value === '') return new Set(boundedJobTypes);
+    const rawItems = Array.isArray(value) ? value : String(value).split(',');
+    const normalized = rawItems.map((item) => trimStr(item).toUpperCase()).filter(Boolean);
+    const allowed = [];
+    for (const item of normalized) {
+      if (boundedJobTypes.has(item)) allowed.push(item);
+      const canonical = canonicalWorkbenchJobType(item);
+      if (boundedJobTypes.has(canonical)) allowed.push(canonical);
+    }
+    return new Set(allowed);
+  };
+  const numberInRange = (value, fallback, min, max) => {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return fallback;
+    return Math.max(min, Math.min(max, Math.trunc(n)));
+  };
+  const normalizeNowUtc = (value) => {
+    const raw = trimStr(value);
+    if (raw) {
+      const parsed = new Date(raw);
+      if (!Number.isNaN(parsed.getTime())) return parsed.toISOString();
+    }
+    return new Date().toISOString();
+  };
+  const clonePlain = (value) => {
+    try { return JSON.parse(JSON.stringify(value)); } catch { return null; }
+  };
+  const errMessage = (error) => {
+    if (!error) return 'Unknown workbench job error';
+    if (typeof error === 'string') return error;
+    if (error instanceof Error) return error.message || error.name || 'Workbench job error';
+    try { return JSON.stringify(error); } catch { return String(error); }
+  };
+  const errCode = (error, fallback = 'WORKBENCH_JOB_EXECUTION_FAILED') => {
+    const code = trimStr(error && (error.code || error.error_code || error.name)).toUpperCase();
+    return code || fallback;
+  };
+  const retryDelaySeconds = (error, job) => {
+    const explicit = Number(error && (error.retry_after_seconds || error.retryAfterSeconds));
+    if (Number.isFinite(explicit) && explicit >= 0) return Math.min(3600, Math.trunc(explicit));
+    const attemptCount = numberInRange(job && job.attempt_count, 1, 1, 100);
+    const code = errCode(error, '').toUpperCase();
+    if (code.includes('LOCK') || code.includes('TIMEOUT') || code.includes('BUSY')) return Math.min(300, 10 * attemptCount);
+    return Math.min(900, 30 * attemptCount);
+  };
 
+  const sourceOptions = isPlainObject(opts) ? opts : {};
+  const budgetProfile = trimStr(sourceOptions.budgetProfile || sourceOptions.budget_profile || sourceOptions.profile || '').toUpperCase() || null;
+  const claimLimitMax = numberInRange(sourceOptions.claimLimitMax ?? sourceOptions.claim_limit_max, 100, 1, 100);
+  const maxJobsMax = numberInRange(sourceOptions.maxJobsMax ?? sourceOptions.max_jobs_max, 150, 1, 150);
+  const maxRowsMax = numberInRange(sourceOptions.maxRowsMax ?? sourceOptions.max_rows_max, 5000, 1, 5000);
+  const maxRuntimeMsMax = numberInRange(sourceOptions.maxRuntimeMsMax ?? sourceOptions.max_runtime_ms_max, 30000, 1000, 30000);
+  const claimLimit = numberInRange(sourceOptions.claimLimit ?? sourceOptions.claim_limit, 5, 1, claimLimitMax);
+  const maxPasses = numberInRange(sourceOptions.maxPasses ?? sourceOptions.max_passes, 1, 1, 2);
+  const maxJobs = numberInRange(sourceOptions.maxJobs ?? sourceOptions.max_jobs, Math.min(maxJobsMax, claimLimit * maxPasses), 1, maxJobsMax);
+  const maxRows = numberInRange(sourceOptions.maxRows ?? sourceOptions.max_rows, 500, 1, maxRowsMax);
+  const maxRuntimeMs = numberInRange(sourceOptions.maxRuntimeMs ?? sourceOptions.max_runtime_ms, 10000, 1000, maxRuntimeMsMax);
+  const origin = trimStr(sourceOptions.origin) || 'WORKBENCH_JOB_DRAIN';
+  const actorUserId = trimStr(sourceOptions.actorUserId || sourceOptions.actor_user_id);
+  const sessionFilterId = trimStr(sourceOptions.sessionId || sourceOptions.session_id);
+  const candidateFilterId = trimStr(sourceOptions.candidateId || sourceOptions.candidate_id);
+  const allowedJobTypes = normalizeAllowedJobTypes(sourceOptions.allowedJobTypes ?? sourceOptions.allowed_job_types);
+  const allowedJobTypesForClaim = Array.from(allowedJobTypes)
+    .map((jobType) => canonicalWorkbenchJobType(jobType))
+    .filter((jobType, index, arr) => jobType && boundedJobTypes.has(jobType) && arr.indexOf(jobType) === index)
+    .sort();
+  const startedMs = Date.now();
 
+  const summary = {
+    ok: true,
+    origin,
+    actor_user_id: uuidRe.test(actorUserId) ? actorUserId : null,
+    session_id: uuidRe.test(sessionFilterId) ? sessionFilterId : null,
+    candidate_id: uuidRe.test(candidateFilterId) ? candidateFilterId : null,
+    claim_limit: claimLimit,
+    max_passes: maxPasses,
+    max_jobs: maxJobs,
+    max_rows: maxRows,
+    max_runtime_ms: maxRuntimeMs,
+    claim_limit_max: claimLimitMax,
+    max_jobs_max: maxJobsMax,
+    max_rows_max: maxRowsMax,
+    max_runtime_ms_max: maxRuntimeMsMax,
+    budget_profile: budgetProfile,
+    started_at_utc: normalizeNowUtc(sourceOptions.nowUtc || sourceOptions.now_utc),
+    completed_at_utc: null,
+    claimed_count: 0,
+    processed_count: 0,
+    row_work_count: 0,
+    succeeded_count: 0,
+    failed_count: 0,
+    skipped_count: 0,
+    fail_mark_fallback_count: 0,
+    out_of_scope_claimed_count: 0,
+    recovered_stale_count: 0,
+    dead_stale_count: 0,
+    continuation_enqueued_count: 0,
+    continuation_reused_count: 0,
+    continuation_jobs: [],
+    last_next_recommended_action: null,
+    budget_exhausted: false,
+    budget_exhausted_reason: null,
+    pass_count: 0,
+    jobs: [],
+    errors: []
+  };
 
+  const markBudgetIfExhausted = () => {
+    if (summary.budget_exhausted) return true;
+    if (summary.processed_count >= maxJobs) {
+      summary.budget_exhausted = true;
+      summary.budget_exhausted_reason = 'MAX_JOBS';
+      return true;
+    }
+    if (summary.row_work_count >= maxRows) {
+      summary.budget_exhausted = true;
+      summary.budget_exhausted_reason = 'MAX_ROWS';
+      return true;
+    }
+    if (Date.now() - startedMs >= maxRuntimeMs) {
+      summary.budget_exhausted = true;
+      summary.budget_exhausted_reason = 'MAX_RUNTIME_MS';
+      return true;
+    }
+    return false;
+  };
+  const hasDrainBudgetRemaining = () => !markBudgetIfExhausted();
+
+  const buildErrorJson = (code, error, job, extra = {}) => {
+    const payload = isPlainObject(job && job.payload_json) ? job.payload_json : {};
+    const jobId = trimStr(job && (job.job_id || job.id || payload.job_id));
+    const jobType = trimStr(job && (job.job_type || payload.job_type)).toUpperCase();
+    const sessionId = trimStr(job && (job.session_id || payload.session_id));
+    const candidateId = trimStr(job && (job.candidate_id || payload.candidate_id));
+    return { code, message: errMessage(error), job_id: uuidRe.test(jobId) ? jobId : null, job_type: jobType || null, session_id: uuidRe.test(sessionId) ? sessionId : null, candidate_id: uuidRe.test(candidateId) ? candidateId : null, origin, ...extra };
+  };
+  const markClaimedJobFailedFallback = async (job, errorJson) => {
+    const payload = isPlainObject(job && job.payload_json) ? job.payload_json : {};
+    const jobId = trimStr(job && (job.job_id || job.id || payload.job_id));
+    if (!uuidRe.test(jobId)) return { ok: false, code: 'INVALID_CLAIMED_JOB_ID' };
+    const nowIso = new Date().toISOString();
+    await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/banking_pay_workbench_jobs?id=eq.${encodeURIComponent(jobId)}&completed_at_utc=is.null`, {
+      method: 'PATCH',
+      headers: { Prefer: 'return=minimal', 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        status: 'FAILED',
+        updated_at_utc: nowIso,
+        completed_at_utc: null,
+        failed_at_utc: nowIso,
+        last_error_json: isPlainObject(errorJson) ? errorJson : { code: 'WORKBENCH_JOB_FAIL_MARK_FALLBACK', message: 'Fallback failure marker used for workbench job.' }
+      })
+    });
+    summary.fail_mark_fallback_count += 1;
+    return { ok: true, status: 'FAILED' };
+  };
+  const summarizeJobResult = (result) => {
+    const obj = isPlainObject(result) ? result : {};
+    return {
+      ok: obj.ok !== false,
+      seeded_count: Number.isFinite(Number(obj.seeded_count)) ? Math.max(0, Math.trunc(Number(obj.seeded_count))) : null,
+      new_scope_count: Number.isFinite(Number(obj.new_scope_count)) ? Math.max(0, Math.trunc(Number(obj.new_scope_count))) : null,
+      enqueued_count: Number.isFinite(Number(obj.enqueued_count)) ? Math.max(0, Math.trunc(Number(obj.enqueued_count))) : null,
+      processed_count: Number.isFinite(Number(obj.processed_count)) ? Math.max(0, Math.trunc(Number(obj.processed_count))) : null,
+      ready_count_delta: Number.isFinite(Number(obj.ready_count_delta)) ? Math.max(0, Math.trunc(Number(obj.ready_count_delta))) : null,
+      materialised_count: Number.isFinite(Number(obj.materialised_count ?? obj.materialized_count)) ? Math.max(0, Math.trunc(Number(obj.materialised_count ?? obj.materialized_count))) : null,
+      error_count: Number.isFinite(Number(obj.error_count)) ? Math.max(0, Math.trunc(Number(obj.error_count))) : null,
+      has_more: obj.has_more === true,
+      next_cursor_present: !!(isPlainObject(obj.next_cursor) || isPlainObject(obj.next_cursor_json) || isPlainObject(obj.nextCursorJson) || isPlainObject(obj.nextCursor)),
+      pending: obj.pending === true || obj.candidate_still_pending === true,
+      ready: obj.ready === true,
+      section_delta_counts: isPlainObject(obj.section_delta_counts) ? clonePlain(obj.section_delta_counts) : null,
+      new_preview_row_count: Number.isFinite(Number(obj.new_preview_row_count)) ? Math.max(0, Math.trunc(Number(obj.new_preview_row_count))) : null,
+      new_selected_row_count: Number.isFinite(Number(obj.new_selected_row_count)) ? Math.max(0, Math.trunc(Number(obj.new_selected_row_count))) : null,
+      status: obj.status || obj.phase || null
+    };
+  };
+  const estimateRowWorkCount = (result) => {
+    const obj = isPlainObject(result) ? result : {};
+    const orderedCandidates = [
+      obj.materialised_count,
+      obj.materialized_count,
+      obj.processed_count,
+      obj.seeded_count,
+      obj.new_scope_count,
+      obj.returned_count,
+      obj.row_count,
+      obj.rows_count,
+      obj.completed_count,
+      obj.error_count
+    ];
+    for (const value of orderedCandidates) {
+      const n = Number(value);
+      if (Number.isFinite(n) && n > 0) return Math.max(1, Math.trunc(n));
+    }
+    return 1;
+  };
+  const normaliseCompletionPayload = (completionRpcResult) => {
+    const obj = unwrapRpc(completionRpcResult, 'pay_workbench_complete_job');
+    const continuationJobsRaw = Array.isArray(obj.continuation_jobs) ? obj.continuation_jobs : [];
+    const continuationJobs = continuationJobsRaw.filter((item) => isPlainObject(item)).map((item) => clonePlain(item) || item);
+    const continuationCountRaw = Number(obj.continuation_count ?? continuationJobs.length);
+    const continuationReusedRaw = Number(obj.continuation_reused_count ?? continuationJobs.filter((item) => item && item.reused === true).length);
+    return {
+      ...obj,
+      continuation_jobs: continuationJobs,
+      continuation_count: Number.isFinite(continuationCountRaw) ? Math.max(0, Math.trunc(continuationCountRaw)) : continuationJobs.length,
+      continuation_reused_count: Number.isFinite(continuationReusedRaw) ? Math.max(0, Math.trunc(continuationReusedRaw)) : 0,
+      continuation_enqueued: obj.continuation_enqueued === true || continuationJobs.length > 0,
+      next_recommended_action: trimStr(obj.next_recommended_action || ''),
+      result_json: isPlainObject(obj.result_json) ? obj.result_json : {}
+    };
+  };
+  const jobMatchesRequestedScope = (job) => {
+    const payload = isPlainObject(job && job.payload_json) ? job.payload_json : {};
+    const jobSessionId = trimStr(job && (job.session_id || payload.session_id));
+    const jobCandidateId = trimStr(job && (job.candidate_id || payload.candidate_id));
+    if (summary.session_id && jobSessionId !== summary.session_id) return false;
+    if (summary.candidate_id && jobCandidateId !== summary.candidate_id) return false;
+    return true;
+  };
+  const extractCursor = (payload) => {
+    if (!isPlainObject(payload)) return null;
+    const cursor = payload.cursor_json || payload.cursorJson || payload.cursor || payload.next_cursor || payload.nextCursor || null;
+    return isPlainObject(cursor) ? cursor : null;
+  };
+  const executeBoundedWorkbenchJob = async (job) => {
+    const payload = isPlainObject(job && job.payload_json) ? job.payload_json : {};
+    const rawJobType = trimStr(job && (job.job_type || payload.job_type)).toUpperCase();
+    const jobType = canonicalWorkbenchJobType(rawJobType);
+    const sessionId = trimStr(job && (job.session_id || payload.session_id));
+    const candidateId = trimStr(job && (job.candidate_id || payload.candidate_id));
+    const cursor = extractCursor(payload);
+    const requestedLimit = numberInRange(payload.limit || payload.line_limit || payload.lineLimit || payload.chunk_size || payload.chunkSize || 100, 100, 1, 100);
+    const remainingRows = Math.max(1, maxRows - summary.row_work_count);
+    const limit = Math.max(1, Math.min(requestedLimit, remainingRows, 100));
+    const enrichAndThrow = (message, code, extra = {}) => {
+      const err = new Error(message);
+      err.code = code;
+      err.details = { job_type: rawJobType || null, canonical_job_type: jobType || null, session_id: uuidRe.test(sessionId) ? sessionId : null, candidate_id: uuidRe.test(candidateId) ? candidateId : null, has_cursor: !!cursor, limit, ...extra };
+      throw err;
+    };
+    if (!uuidRe.test(sessionId)) {
+      enrichAndThrow('Workbench job is missing a valid session_id.', 'WORKBENCH_JOB_SESSION_ID_REQUIRED');
+    }
+    if ((rawJobType === 'SNAPSHOT_CANDIDATE_REFRESH' || rawJobType === 'CANDIDATE_REFRESH') && !(payload.line_work_only === true || payload.line_work_required === true || trimStr(payload.line_work_action).toUpperCase() === 'SEED')) {
+      enrichAndThrow('Legacy candidate refresh jobs must explicitly opt into line-work-only bounded execution.', 'WORKBENCH_LEGACY_REFRESH_NOT_LINE_WORK_ONLY');
+    }
+    if (jobType === 'WORKBENCH_SESSION_SCOPE_SEED') {
+      return unwrapRpc(await sbRpc(env, 'pay_workbench_session_seed_scope_chunk', { p_session_id: sessionId, p_cursor_json: cursor, p_limit: limit }, { routeClass: 'PREVIEW_CHUNK', purpose: 'SCOPE_SEED_CHUNK', timeoutMs: 20000, bankingPay: true }), 'pay_workbench_session_seed_scope_chunk');
+    }
+    if (jobType === 'WORKBENCH_CANDIDATE_LINE_WORK_SEED') {
+      if (!uuidRe.test(candidateId)) {
+        enrichAndThrow('Candidate line-work seed job is missing a valid candidate_id.', 'WORKBENCH_JOB_CANDIDATE_ID_REQUIRED');
+      }
+      return unwrapRpc(await sbRpc(env, 'pay_workbench_candidate_line_work_seed', { p_session_id: sessionId, p_candidate_id: candidateId, p_cursor_json: cursor, p_limit: limit }, { routeClass: 'PREVIEW_CHUNK', purpose: 'LINE_WORK_SEED_CHUNK', timeoutMs: 20000, bankingPay: true }), 'pay_workbench_candidate_line_work_seed');
+    }
+    if (jobType === 'WORKBENCH_CANDIDATE_LINE_WORK_PROCESS') {
+      return unwrapRpc(await sbRpc(env, 'pay_workbench_candidate_line_work_process_chunk', { p_session_id: sessionId, p_candidate_id: uuidRe.test(candidateId) ? candidateId : null, p_limit: limit, p_cursor_json: cursor }, { routeClass: 'PREVIEW_CHUNK', purpose: 'LINE_WORK_PROCESS_CHUNK', timeoutMs: 20000, bankingPay: true }), 'pay_workbench_candidate_line_work_process_chunk');
+    }
+    if (jobType === 'WORKBENCH_PREVIEW_ROWS_MATERIALISE') {
+      return unwrapRpc(await sbRpc(env, 'pay_workbench_preview_rows_materialise_chunk', { p_session_id: sessionId, p_candidate_id: uuidRe.test(candidateId) ? candidateId : null, p_limit: limit, p_cursor_json: cursor }, { routeClass: 'PREVIEW_CHUNK', purpose: 'PREVIEW_ROWS_MATERIALISE_CHUNK', timeoutMs: 20000, bankingPay: true }), 'pay_workbench_preview_rows_materialise_chunk');
+    }
+    enrichAndThrow(`Unsupported bounded workbench job type: ${rawJobType || '(blank)'}`, 'UNSUPPORTED_WORKBENCH_JOB_TYPE');
+  };
+
+  for (let passIndex = 0; passIndex < maxPasses; passIndex += 1) {
+    if (!hasDrainBudgetRemaining()) break;
+    summary.pass_count = passIndex + 1;
+    let claimPayload = {};
+    try {
+      const claimArgs = {
+        p_limit: Math.min(claimLimit, maxJobs - summary.processed_count),
+        p_now_utc: passIndex === 0 ? summary.started_at_utc : new Date().toISOString(),
+        p_session_id: summary.session_id || null,
+        p_candidate_id: summary.candidate_id || null,
+        p_allowed_job_types: allowedJobTypesForClaim
+      };
+      claimPayload = unwrapRpc(await sbRpc(env, 'pay_workbench_claim_due_jobs', claimArgs, { routeClass: 'PREVIEW_CHUNK', purpose: 'WORKBENCH_JOB_CLAIM', timeoutMs: 10000, bankingPay: true }), 'pay_workbench_claim_due_jobs');
+    } catch (error) {
+      summary.ok = false;
+      summary.errors.push({ code: 'WORKBENCH_DUE_JOB_CLAIM_FAILED', message: errMessage(error), pass_index: passIndex, origin, session_id: summary.session_id || null, candidate_id: summary.candidate_id || null });
+      break;
+    }
+    const claimedJobs = normalizeJobArray(claimPayload.claimed).slice(0, Math.min(claimLimit, maxJobs - summary.processed_count));
+    summary.recovered_stale_count += numberInRange(claimPayload.recovered_stale_count, 0, 0, 1000000);
+    summary.dead_stale_count += numberInRange(claimPayload.dead_stale_count, 0, 0, 1000000);
+    summary.claimed_count += claimedJobs.length;
+    if (claimedJobs.length === 0) break;
+
+    for (const job of claimedJobs) {
+      if (!hasDrainBudgetRemaining()) break;
+      const payload = isPlainObject(job && job.payload_json) ? job.payload_json : {};
+      const jobId = trimStr(job && (job.job_id || job.id || payload.job_id));
+      const jobType = trimStr(job && (job.job_type || payload.job_type)).toUpperCase();
+      const canonicalJobType = canonicalWorkbenchJobType(jobType);
+      const sessionId = trimStr(job && (job.session_id || payload.session_id));
+      const candidateId = trimStr(job && (job.candidate_id || payload.candidate_id));
+      const jobSummaryBase = { job_id: uuidRe.test(jobId) ? jobId : null, job_type: jobType || null, canonical_job_type: canonicalJobType || null, session_id: uuidRe.test(sessionId) ? sessionId : null, candidate_id: uuidRe.test(candidateId) ? candidateId : null, requested_scope_match: jobMatchesRequestedScope(job) };
+
+      if (!uuidRe.test(jobId)) {
+        summary.skipped_count += 1;
+        summary.jobs.push({ ...jobSummaryBase, status: 'SKIPPED', row_work_estimate: 0, result_summary: null, continuation_summary: null, error_code: 'INVALID_CLAIMED_JOB_ID' });
+        continue;
+      }
+      if (!jobMatchesRequestedScope(job)) {
+        summary.out_of_scope_claimed_count += 1;
+        summary.skipped_count += 1;
+        summary.failed_count += 1;
+        const scopeError = new Error('Claimed workbench job is outside the requested drain scope.');
+        scopeError.code = 'WORKBENCH_JOB_OUT_OF_REQUESTED_SCOPE';
+        const errorJson = buildErrorJson(scopeError.code, scopeError, job, { requested_session_id: summary.session_id || null, requested_candidate_id: summary.candidate_id || null });
+        let finalStatus = 'FAIL_MARK_FAILED';
+        try {
+          const failPayload = unwrapRpc(await sbRpc(env, 'pay_workbench_fail_job', { p_job_id: jobId, p_error_json: errorJson, p_retry_after_seconds: retryDelaySeconds(scopeError, job) }, { routeClass: 'PREVIEW_CHUNK', purpose: 'WORKBENCH_JOB_OUT_OF_SCOPE_FAIL', timeoutMs: 10000, bankingPay: true }), 'pay_workbench_fail_job');
+          finalStatus = trimStr(failPayload.status || '').toUpperCase() || 'FAILED';
+        } catch (failError) {
+          try {
+            await markClaimedJobFailedFallback(job, { ...errorJson, fail_mark_error: errMessage(failError), fallback_code: 'WORKBENCH_JOB_OUT_OF_SCOPE_FAIL_FALLBACK' });
+            finalStatus = 'FAILED';
+          } catch (fallbackError) {
+            summary.errors.push({ code: 'WORKBENCH_JOB_OUT_OF_SCOPE_FAIL_MARK_FAILED', job_id: jobId, job_type: jobType || null, message: errMessage(failError), fallback_message: errMessage(fallbackError) });
+          }
+        }
+        summary.jobs.push({ ...jobSummaryBase, status: finalStatus, row_work_estimate: 0, result_summary: null, continuation_summary: null, error_code: scopeError.code });
+        continue;
+      }
+      if (!allowedJobTypes.has(jobType) && !allowedJobTypes.has(canonicalJobType)) {
+        const typeError = new Error(`Claimed workbench job type is not allowed by this drain: ${jobType}`);
+        typeError.code = 'WORKBENCH_JOB_TYPE_NOT_ALLOWED_BY_BOUNDED_DRAIN';
+        const errorJson = buildErrorJson(typeError.code, typeError, job, { allowed_job_types: Array.from(allowedJobTypes), bounded_job_types: Array.from(boundedJobTypes) });
+        let finalStatus = 'FAIL_MARK_FAILED';
+        try {
+          const failPayload = unwrapRpc(await sbRpc(env, 'pay_workbench_fail_job', { p_job_id: jobId, p_error_json: errorJson, p_retry_after_seconds: retryDelaySeconds(typeError, job) }, { routeClass: 'PREVIEW_CHUNK', purpose: 'WORKBENCH_JOB_FAIL', timeoutMs: 10000, bankingPay: true }), 'pay_workbench_fail_job');
+          finalStatus = trimStr(failPayload.status || '').toUpperCase() || 'FAILED';
+        } catch (failError) {
+          try {
+            await markClaimedJobFailedFallback(job, { ...errorJson, fail_mark_error: errMessage(failError), fallback_code: 'WORKBENCH_JOB_TYPE_FAIL_FALLBACK' });
+            finalStatus = 'FAILED';
+          } catch (fallbackError) {
+            summary.errors.push({ code: 'WORKBENCH_JOB_TYPE_FAIL_MARK_FAILED', job_id: jobId, job_type: jobType || null, message: errMessage(failError), fallback_message: errMessage(fallbackError) });
+          }
+        }
+        summary.failed_count += 1;
+        summary.skipped_count += 1;
+        summary.jobs.push({ ...jobSummaryBase, status: finalStatus, row_work_estimate: 0, result_summary: null, continuation_summary: null, error_code: typeError.code });
+        continue;
+      }
+
+      try {
+        const resultForStorage = await executeBoundedWorkbenchJob(job);
+        const rowWorkEstimate = estimateRowWorkCount(resultForStorage);
+        summary.row_work_count += rowWorkEstimate;
+        const completionPayload = normaliseCompletionPayload(await sbRpc(env, 'pay_workbench_complete_job', { p_job_id: jobId, p_result_json: isPlainObject(resultForStorage) ? resultForStorage : {} }, { routeClass: 'PREVIEW_CHUNK', purpose: 'WORKBENCH_JOB_COMPLETE', timeoutMs: 10000, bankingPay: true }));
+        if (completionPayload.continuation_enqueued) {
+          summary.continuation_enqueued_count += completionPayload.continuation_count;
+          summary.continuation_reused_count += completionPayload.continuation_reused_count;
+          summary.continuation_jobs.push(...completionPayload.continuation_jobs);
+        }
+        if (completionPayload.next_recommended_action) summary.last_next_recommended_action = completionPayload.next_recommended_action;
+        summary.processed_count += 1;
+        summary.succeeded_count += 1;
+        summary.jobs.push({
+          ...jobSummaryBase,
+          status: 'SUCCEEDED',
+          row_work_estimate: rowWorkEstimate,
+          result_summary: summarizeJobResult(resultForStorage),
+          continuation_summary: {
+            continuation_enqueued: completionPayload.continuation_enqueued,
+            continuation_count: completionPayload.continuation_count,
+            continuation_reused_count: completionPayload.continuation_reused_count,
+            continuation_jobs: completionPayload.continuation_jobs,
+            next_recommended_action: completionPayload.next_recommended_action || null
+          },
+          error_code: null
+        });
+      } catch (error) {
+        const code = errCode(error);
+        const retryAfterSeconds = retryDelaySeconds(error, job);
+        const errorJson = buildErrorJson(code, error, job, { details: clonePlain(error && error.details), retry_after_seconds: retryAfterSeconds });
+        let finalStatus = 'FAIL_MARK_FAILED';
+        try {
+          const failPayload = unwrapRpc(await sbRpc(env, 'pay_workbench_fail_job', { p_job_id: jobId, p_error_json: errorJson, p_retry_after_seconds: retryAfterSeconds }, { routeClass: 'PREVIEW_CHUNK', purpose: 'WORKBENCH_JOB_FAIL', timeoutMs: 10000, bankingPay: true }), 'pay_workbench_fail_job');
+          finalStatus = trimStr(failPayload.status || '').toUpperCase() || 'FAILED';
+        } catch (failError) {
+          try {
+            await markClaimedJobFailedFallback(job, { ...errorJson, fail_mark_error: errMessage(failError), fallback_code: 'WORKBENCH_JOB_FAIL_FALLBACK' });
+            finalStatus = 'FAILED';
+          } catch (fallbackError) {
+            summary.errors.push({ code: 'WORKBENCH_JOB_FAIL_MARK_FAILED', job_id: jobId, job_type: jobType || null, message: errMessage(failError), fallback_message: errMessage(fallbackError) });
+          }
+        }
+        summary.ok = false;
+        summary.processed_count += 1;
+        summary.failed_count += 1;
+        summary.jobs.push({ ...jobSummaryBase, status: finalStatus, row_work_estimate: 1, result_summary: null, continuation_summary: null, error_code: code });
+      }
+    }
+  }
+
+  markBudgetIfExhausted();
+  summary.completed_at_utc = new Date().toISOString();
+  if (summary.failed_count > 0 || summary.errors.length > 0) summary.ok = false;
+  return summary;
+}
 
 async function executeBankingPayWorkbenchJob(env, claimedJob, opts = {}) {
   const trimStr = (value) => String(value == null ? '' : value).trim();
@@ -142922,404 +143366,6 @@ async function executeBankingPayWorkbenchJob(env, claimedJob, opts = {}) {
 
 
 
-async function drainBankingPayWorkbenchJobs(env, opts = {}) {
-  const trimStr = (value) => String(value == null ? '' : value).trim();
-  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-  const isPlainObject = (value) => value && typeof value === 'object' && !Array.isArray(value);
-  const unwrapRpc = (rpcRes, key) => {
-    let payload = rpcRes;
-    try {
-      if (Array.isArray(payload) && payload.length === 1 && payload[0] && typeof payload[0] === 'object') payload = payload[0];
-      if (payload && typeof payload === 'object' && key && Object.prototype.hasOwnProperty.call(payload, key)) payload = payload[key];
-      if (Array.isArray(payload) && payload.length === 1 && payload[0] && typeof payload[0] === 'object') payload = payload[0];
-    } catch {}
-    return isPlainObject(payload) ? payload : {};
-  };
-  const normalizeJobArray = (value) => {
-    if (Array.isArray(value)) return value;
-    if (value && typeof value === 'object' && Array.isArray(value.rows)) return value.rows;
-    return [];
-  };
-  const boundedJobTypes = new Set([
-    'WORKBENCH_SESSION_SCOPE_SEED',
-    'SESSION_SCOPE_SEED',
-    'WORKBENCH_SCOPE_SEED',
-    'WORKBENCH_CANDIDATE_LINE_WORK_SEED',
-    'CANDIDATE_LINE_WORK_SEED',
-    'SNAPSHOT_CANDIDATE_REFRESH',
-    'CANDIDATE_REFRESH',
-    'WORKBENCH_CANDIDATE_LINE_WORK_PROCESS',
-    'CANDIDATE_LINE_WORK_PROCESS',
-    'LINE_WORK_PROCESS',
-    'WORKBENCH_PREVIEW_ROWS_MATERIALISE',
-    'WORKBENCH_PREVIEW_ROWS_MATERIALIZE',
-    'PREVIEW_ROWS_MATERIALISE',
-    'PREVIEW_ROWS_MATERIALIZE'
-  ]);
-  const canonicalWorkbenchJobType = (value) => {
-    const s = trimStr(value).toUpperCase();
-    if (s === 'WORKBENCH_SESSION_SCOPE_SEED' || s === 'SESSION_SCOPE_SEED' || s === 'WORKBENCH_SCOPE_SEED') return 'WORKBENCH_SESSION_SCOPE_SEED';
-    if (s === 'WORKBENCH_CANDIDATE_LINE_WORK_SEED' || s === 'CANDIDATE_LINE_WORK_SEED' || s === 'SNAPSHOT_CANDIDATE_REFRESH' || s === 'CANDIDATE_REFRESH') return 'WORKBENCH_CANDIDATE_LINE_WORK_SEED';
-    if (s === 'WORKBENCH_CANDIDATE_LINE_WORK_PROCESS' || s === 'CANDIDATE_LINE_WORK_PROCESS' || s === 'LINE_WORK_PROCESS') return 'WORKBENCH_CANDIDATE_LINE_WORK_PROCESS';
-    if (s === 'WORKBENCH_PREVIEW_ROWS_MATERIALISE' || s === 'WORKBENCH_PREVIEW_ROWS_MATERIALIZE' || s === 'PREVIEW_ROWS_MATERIALISE' || s === 'PREVIEW_ROWS_MATERIALIZE') return 'WORKBENCH_PREVIEW_ROWS_MATERIALISE';
-    return s;
-  };
-  const normalizeAllowedJobTypes = (value) => {
-    if (value === undefined || value === null || value === '') return new Set(boundedJobTypes);
-    const rawItems = Array.isArray(value) ? value : String(value).split(',');
-    const normalized = rawItems.map((item) => trimStr(item).toUpperCase()).filter(Boolean);
-    const allowed = [];
-    for (const item of normalized) {
-      if (boundedJobTypes.has(item)) allowed.push(item);
-      const canonical = canonicalWorkbenchJobType(item);
-      if (boundedJobTypes.has(canonical)) allowed.push(canonical);
-    }
-    return new Set(allowed);
-  };
-  const numberInRange = (value, fallback, min, max) => {
-    const n = Number(value);
-    if (!Number.isFinite(n)) return fallback;
-    return Math.max(min, Math.min(max, Math.trunc(n)));
-  };
-  const normalizeNowUtc = (value) => {
-    const raw = trimStr(value);
-    if (raw) {
-      const parsed = new Date(raw);
-      if (!Number.isNaN(parsed.getTime())) return parsed.toISOString();
-    }
-    return new Date().toISOString();
-  };
-  const clonePlain = (value) => {
-    try { return JSON.parse(JSON.stringify(value)); } catch { return null; }
-  };
-  const errMessage = (error) => {
-    if (!error) return 'Unknown workbench job error';
-    if (typeof error === 'string') return error;
-    if (error instanceof Error) return error.message || error.name || 'Workbench job error';
-    try { return JSON.stringify(error); } catch { return String(error); }
-  };
-  const errCode = (error, fallback = 'WORKBENCH_JOB_EXECUTION_FAILED') => {
-    const code = trimStr(error && (error.code || error.error_code || error.name)).toUpperCase();
-    return code || fallback;
-  };
-  const retryDelaySeconds = (error, job) => {
-    const explicit = Number(error && (error.retry_after_seconds || error.retryAfterSeconds));
-    if (Number.isFinite(explicit) && explicit >= 0) return Math.min(3600, Math.trunc(explicit));
-    const attemptCount = numberInRange(job && job.attempt_count, 1, 1, 100);
-    const code = errCode(error, '').toUpperCase();
-    if (code.includes('LOCK') || code.includes('TIMEOUT') || code.includes('BUSY')) return Math.min(300, 10 * attemptCount);
-    return Math.min(900, 30 * attemptCount);
-  };
-
-  const sourceOptions = isPlainObject(opts) ? opts : {};
-  const budgetProfile = trimStr(sourceOptions.budgetProfile || sourceOptions.budget_profile || sourceOptions.profile || '').toUpperCase() || null;
-  const claimLimitMax = numberInRange(sourceOptions.claimLimitMax ?? sourceOptions.claim_limit_max, 100, 1, 100);
-  const maxJobsMax = numberInRange(sourceOptions.maxJobsMax ?? sourceOptions.max_jobs_max, 150, 1, 150);
-  const maxRowsMax = numberInRange(sourceOptions.maxRowsMax ?? sourceOptions.max_rows_max, 5000, 1, 5000);
-  const maxRuntimeMsMax = numberInRange(sourceOptions.maxRuntimeMsMax ?? sourceOptions.max_runtime_ms_max, 30000, 1000, 30000);
-  const claimLimit = numberInRange(sourceOptions.claimLimit ?? sourceOptions.claim_limit, 5, 1, claimLimitMax);
-  const maxPasses = numberInRange(sourceOptions.maxPasses ?? sourceOptions.max_passes, 1, 1, 2);
-  const maxJobs = numberInRange(sourceOptions.maxJobs ?? sourceOptions.max_jobs, Math.min(maxJobsMax, claimLimit * maxPasses), 1, maxJobsMax);
-  const maxRows = numberInRange(sourceOptions.maxRows ?? sourceOptions.max_rows, 500, 1, maxRowsMax);
-  const maxRuntimeMs = numberInRange(sourceOptions.maxRuntimeMs ?? sourceOptions.max_runtime_ms, 10000, 1000, maxRuntimeMsMax);
-  const origin = trimStr(sourceOptions.origin) || 'WORKBENCH_JOB_DRAIN';
-  const actorUserId = trimStr(sourceOptions.actorUserId || sourceOptions.actor_user_id);
-  const sessionFilterId = trimStr(sourceOptions.sessionId || sourceOptions.session_id);
-  const candidateFilterId = trimStr(sourceOptions.candidateId || sourceOptions.candidate_id);
-  const allowedJobTypes = normalizeAllowedJobTypes(sourceOptions.allowedJobTypes ?? sourceOptions.allowed_job_types);
-  const allowedJobTypesForClaim = Array.from(allowedJobTypes)
-    .map((jobType) => canonicalWorkbenchJobType(jobType))
-    .filter((jobType, index, arr) => jobType && boundedJobTypes.has(jobType) && arr.indexOf(jobType) === index)
-    .sort();
-  const startedMs = Date.now();
-
-  const summary = {
-    ok: true,
-    origin,
-    actor_user_id: uuidRe.test(actorUserId) ? actorUserId : null,
-    session_id: uuidRe.test(sessionFilterId) ? sessionFilterId : null,
-    candidate_id: uuidRe.test(candidateFilterId) ? candidateFilterId : null,
-    claim_limit: claimLimit,
-    max_passes: maxPasses,
-    max_jobs: maxJobs,
-    max_rows: maxRows,
-    max_runtime_ms: maxRuntimeMs,
-    claim_limit_max: claimLimitMax,
-    max_jobs_max: maxJobsMax,
-    max_rows_max: maxRowsMax,
-    max_runtime_ms_max: maxRuntimeMsMax,
-    budget_profile: budgetProfile,
-    started_at_utc: normalizeNowUtc(sourceOptions.nowUtc || sourceOptions.now_utc),
-    completed_at_utc: null,
-    claimed_count: 0,
-    processed_count: 0,
-    row_work_count: 0,
-    succeeded_count: 0,
-    failed_count: 0,
-    skipped_count: 0,
-    out_of_scope_claimed_count: 0,
-    recovered_stale_count: 0,
-    dead_stale_count: 0,
-    continuation_enqueued_count: 0,
-    continuation_reused_count: 0,
-    continuation_jobs: [],
-    last_next_recommended_action: null,
-    budget_exhausted: false,
-    budget_exhausted_reason: null,
-    pass_count: 0,
-    jobs: [],
-    errors: []
-  };
-
-  const markBudgetIfExhausted = () => {
-    if (summary.budget_exhausted) return true;
-    if (summary.processed_count >= maxJobs) {
-      summary.budget_exhausted = true;
-      summary.budget_exhausted_reason = 'MAX_JOBS';
-      return true;
-    }
-    if (summary.row_work_count >= maxRows) {
-      summary.budget_exhausted = true;
-      summary.budget_exhausted_reason = 'MAX_ROWS';
-      return true;
-    }
-    if (Date.now() - startedMs >= maxRuntimeMs) {
-      summary.budget_exhausted = true;
-      summary.budget_exhausted_reason = 'MAX_RUNTIME_MS';
-      return true;
-    }
-    return false;
-  };
-  const hasDrainBudgetRemaining = () => !markBudgetIfExhausted();
-
-  const buildErrorJson = (code, error, job, extra = {}) => {
-    const payload = isPlainObject(job && job.payload_json) ? job.payload_json : {};
-    const jobId = trimStr(job && (job.job_id || job.id || payload.job_id));
-    const jobType = trimStr(job && (job.job_type || payload.job_type)).toUpperCase();
-    const sessionId = trimStr(job && (job.session_id || payload.session_id));
-    const candidateId = trimStr(job && (job.candidate_id || payload.candidate_id));
-    return { code, message: errMessage(error), job_id: uuidRe.test(jobId) ? jobId : null, job_type: jobType || null, session_id: uuidRe.test(sessionId) ? sessionId : null, candidate_id: uuidRe.test(candidateId) ? candidateId : null, origin, ...extra };
-  };
-  const summarizeJobResult = (result) => {
-    const obj = isPlainObject(result) ? result : {};
-    return {
-      ok: obj.ok !== false,
-      seeded_count: Number.isFinite(Number(obj.seeded_count)) ? Math.max(0, Math.trunc(Number(obj.seeded_count))) : null,
-      new_scope_count: Number.isFinite(Number(obj.new_scope_count)) ? Math.max(0, Math.trunc(Number(obj.new_scope_count))) : null,
-      enqueued_count: Number.isFinite(Number(obj.enqueued_count)) ? Math.max(0, Math.trunc(Number(obj.enqueued_count))) : null,
-      processed_count: Number.isFinite(Number(obj.processed_count)) ? Math.max(0, Math.trunc(Number(obj.processed_count))) : null,
-      ready_count_delta: Number.isFinite(Number(obj.ready_count_delta)) ? Math.max(0, Math.trunc(Number(obj.ready_count_delta))) : null,
-      materialised_count: Number.isFinite(Number(obj.materialised_count ?? obj.materialized_count)) ? Math.max(0, Math.trunc(Number(obj.materialised_count ?? obj.materialized_count))) : null,
-      error_count: Number.isFinite(Number(obj.error_count)) ? Math.max(0, Math.trunc(Number(obj.error_count))) : null,
-      has_more: obj.has_more === true,
-      next_cursor_present: !!(isPlainObject(obj.next_cursor) || isPlainObject(obj.next_cursor_json) || isPlainObject(obj.nextCursorJson) || isPlainObject(obj.nextCursor)),
-      pending: obj.pending === true || obj.candidate_still_pending === true,
-      ready: obj.ready === true,
-      section_delta_counts: isPlainObject(obj.section_delta_counts) ? clonePlain(obj.section_delta_counts) : null,
-      new_preview_row_count: Number.isFinite(Number(obj.new_preview_row_count)) ? Math.max(0, Math.trunc(Number(obj.new_preview_row_count))) : null,
-      new_selected_row_count: Number.isFinite(Number(obj.new_selected_row_count)) ? Math.max(0, Math.trunc(Number(obj.new_selected_row_count))) : null,
-      status: obj.status || obj.phase || null
-    };
-  };
-  const estimateRowWorkCount = (result) => {
-    const obj = isPlainObject(result) ? result : {};
-    const orderedCandidates = [
-      obj.materialised_count,
-      obj.materialized_count,
-      obj.processed_count,
-      obj.seeded_count,
-      obj.new_scope_count,
-      obj.returned_count,
-      obj.row_count,
-      obj.rows_count,
-      obj.completed_count,
-      obj.error_count
-    ];
-    for (const value of orderedCandidates) {
-      const n = Number(value);
-      if (Number.isFinite(n) && n > 0) return Math.max(1, Math.trunc(n));
-    }
-    return 1;
-  };
-  const normaliseCompletionPayload = (completionRpcResult) => {
-    const obj = unwrapRpc(completionRpcResult, 'pay_workbench_complete_job');
-    const continuationJobsRaw = Array.isArray(obj.continuation_jobs) ? obj.continuation_jobs : [];
-    const continuationJobs = continuationJobsRaw.filter((item) => isPlainObject(item)).map((item) => clonePlain(item) || item);
-    const continuationCountRaw = Number(obj.continuation_count ?? continuationJobs.length);
-    const continuationReusedRaw = Number(obj.continuation_reused_count ?? continuationJobs.filter((item) => item && item.reused === true).length);
-    return {
-      ...obj,
-      continuation_jobs: continuationJobs,
-      continuation_count: Number.isFinite(continuationCountRaw) ? Math.max(0, Math.trunc(continuationCountRaw)) : continuationJobs.length,
-      continuation_reused_count: Number.isFinite(continuationReusedRaw) ? Math.max(0, Math.trunc(continuationReusedRaw)) : 0,
-      continuation_enqueued: obj.continuation_enqueued === true || continuationJobs.length > 0,
-      next_recommended_action: trimStr(obj.next_recommended_action || ''),
-      result_json: isPlainObject(obj.result_json) ? obj.result_json : {}
-    };
-  };
-  const jobMatchesRequestedScope = (job) => {
-    const payload = isPlainObject(job && job.payload_json) ? job.payload_json : {};
-    const jobSessionId = trimStr(job && (job.session_id || payload.session_id));
-    const jobCandidateId = trimStr(job && (job.candidate_id || payload.candidate_id));
-    if (summary.session_id && jobSessionId !== summary.session_id) return false;
-    if (summary.candidate_id && jobCandidateId !== summary.candidate_id) return false;
-    return true;
-  };
-  const extractCursor = (payload) => {
-    if (!isPlainObject(payload)) return null;
-    const cursor = payload.cursor_json || payload.cursorJson || payload.cursor || payload.next_cursor || payload.nextCursor || null;
-    return isPlainObject(cursor) ? cursor : null;
-  };
-  const executeBoundedWorkbenchJob = async (job) => {
-    const payload = isPlainObject(job && job.payload_json) ? job.payload_json : {};
-    const rawJobType = trimStr(job && (job.job_type || payload.job_type)).toUpperCase();
-    const jobType = canonicalWorkbenchJobType(rawJobType);
-    const sessionId = trimStr(job && (job.session_id || payload.session_id));
-    const candidateId = trimStr(job && (job.candidate_id || payload.candidate_id));
-    const cursor = extractCursor(payload);
-    const requestedLimit = numberInRange(payload.limit || payload.line_limit || payload.lineLimit || payload.chunk_size || payload.chunkSize || 100, 100, 1, 100);
-    const remainingRows = Math.max(1, maxRows - summary.row_work_count);
-    const limit = Math.max(1, Math.min(requestedLimit, remainingRows, 100));
-    const enrichAndThrow = (message, code, extra = {}) => {
-      const err = new Error(message);
-      err.code = code;
-      err.details = { job_type: rawJobType || null, canonical_job_type: jobType || null, session_id: uuidRe.test(sessionId) ? sessionId : null, candidate_id: uuidRe.test(candidateId) ? candidateId : null, has_cursor: !!cursor, limit, ...extra };
-      throw err;
-    };
-    if (!uuidRe.test(sessionId)) {
-      enrichAndThrow('Workbench job is missing a valid session_id.', 'WORKBENCH_JOB_SESSION_ID_REQUIRED');
-    }
-    if ((rawJobType === 'SNAPSHOT_CANDIDATE_REFRESH' || rawJobType === 'CANDIDATE_REFRESH') && !(payload.line_work_only === true || payload.line_work_required === true || trimStr(payload.line_work_action).toUpperCase() === 'SEED')) {
-      enrichAndThrow('Legacy candidate refresh jobs must explicitly opt into line-work-only bounded execution.', 'WORKBENCH_LEGACY_REFRESH_NOT_LINE_WORK_ONLY');
-    }
-    if (jobType === 'WORKBENCH_SESSION_SCOPE_SEED') {
-      return unwrapRpc(await sbRpc(env, 'pay_workbench_session_seed_scope_chunk', { p_session_id: sessionId, p_cursor_json: cursor, p_limit: limit }, { routeClass: 'PREVIEW_CHUNK', purpose: 'SCOPE_SEED_CHUNK', timeoutMs: 20000, bankingPay: true }), 'pay_workbench_session_seed_scope_chunk');
-    }
-    if (jobType === 'WORKBENCH_CANDIDATE_LINE_WORK_SEED') {
-      if (!uuidRe.test(candidateId)) {
-        enrichAndThrow('Candidate line-work seed job is missing a valid candidate_id.', 'WORKBENCH_JOB_CANDIDATE_ID_REQUIRED');
-      }
-      return unwrapRpc(await sbRpc(env, 'pay_workbench_candidate_line_work_seed', { p_session_id: sessionId, p_candidate_id: candidateId, p_cursor_json: cursor, p_limit: limit }, { routeClass: 'PREVIEW_CHUNK', purpose: 'LINE_WORK_SEED_CHUNK', timeoutMs: 20000, bankingPay: true }), 'pay_workbench_candidate_line_work_seed');
-    }
-    if (jobType === 'WORKBENCH_CANDIDATE_LINE_WORK_PROCESS') {
-      return unwrapRpc(await sbRpc(env, 'pay_workbench_candidate_line_work_process_chunk', { p_session_id: sessionId, p_candidate_id: uuidRe.test(candidateId) ? candidateId : null, p_limit: limit, p_cursor_json: cursor }, { routeClass: 'PREVIEW_CHUNK', purpose: 'LINE_WORK_PROCESS_CHUNK', timeoutMs: 20000, bankingPay: true }), 'pay_workbench_candidate_line_work_process_chunk');
-    }
-    if (jobType === 'WORKBENCH_PREVIEW_ROWS_MATERIALISE') {
-      return unwrapRpc(await sbRpc(env, 'pay_workbench_preview_rows_materialise_chunk', { p_session_id: sessionId, p_candidate_id: uuidRe.test(candidateId) ? candidateId : null, p_limit: limit, p_cursor_json: cursor }, { routeClass: 'PREVIEW_CHUNK', purpose: 'PREVIEW_ROWS_MATERIALISE_CHUNK', timeoutMs: 20000, bankingPay: true }), 'pay_workbench_preview_rows_materialise_chunk');
-    }
-    enrichAndThrow(`Unsupported bounded workbench job type: ${rawJobType || '(blank)'}`, 'UNSUPPORTED_WORKBENCH_JOB_TYPE');
-  };
-
-  for (let passIndex = 0; passIndex < maxPasses; passIndex += 1) {
-    if (!hasDrainBudgetRemaining()) break;
-    summary.pass_count = passIndex + 1;
-    let claimPayload = {};
-    try {
-      const claimArgs = {
-        p_limit: Math.min(claimLimit, maxJobs - summary.processed_count),
-        p_now_utc: passIndex === 0 ? summary.started_at_utc : new Date().toISOString(),
-        p_session_id: summary.session_id || null,
-        p_candidate_id: summary.candidate_id || null,
-        p_allowed_job_types: allowedJobTypesForClaim
-      };
-      claimPayload = unwrapRpc(await sbRpc(env, 'pay_workbench_claim_due_jobs', claimArgs, { routeClass: 'PREVIEW_CHUNK', purpose: 'WORKBENCH_JOB_CLAIM', timeoutMs: 10000, bankingPay: true }), 'pay_workbench_claim_due_jobs');
-    } catch (error) {
-      summary.ok = false;
-      summary.errors.push({ code: 'WORKBENCH_DUE_JOB_CLAIM_FAILED', message: errMessage(error), pass_index: passIndex, origin, session_id: summary.session_id || null, candidate_id: summary.candidate_id || null });
-      break;
-    }
-    const claimedJobs = normalizeJobArray(claimPayload.claimed).slice(0, Math.min(claimLimit, maxJobs - summary.processed_count));
-    summary.recovered_stale_count += numberInRange(claimPayload.recovered_stale_count, 0, 0, 1000000);
-    summary.dead_stale_count += numberInRange(claimPayload.dead_stale_count, 0, 0, 1000000);
-    summary.claimed_count += claimedJobs.length;
-    if (claimedJobs.length === 0) break;
-
-    for (const job of claimedJobs) {
-      if (!hasDrainBudgetRemaining()) break;
-      const payload = isPlainObject(job && job.payload_json) ? job.payload_json : {};
-      const jobId = trimStr(job && (job.job_id || job.id || payload.job_id));
-      const jobType = trimStr(job && (job.job_type || payload.job_type)).toUpperCase();
-      const canonicalJobType = canonicalWorkbenchJobType(jobType);
-      const sessionId = trimStr(job && (job.session_id || payload.session_id));
-      const candidateId = trimStr(job && (job.candidate_id || payload.candidate_id));
-      const jobSummaryBase = { job_id: uuidRe.test(jobId) ? jobId : null, job_type: jobType || null, canonical_job_type: canonicalJobType || null, session_id: uuidRe.test(sessionId) ? sessionId : null, candidate_id: uuidRe.test(candidateId) ? candidateId : null, requested_scope_match: jobMatchesRequestedScope(job) };
-
-      if (!uuidRe.test(jobId)) {
-        summary.skipped_count += 1;
-        summary.jobs.push({ ...jobSummaryBase, status: 'SKIPPED', row_work_estimate: 0, result_summary: null, continuation_summary: null, error_code: 'INVALID_CLAIMED_JOB_ID' });
-        continue;
-      }
-      if (!jobMatchesRequestedScope(job)) {
-        summary.out_of_scope_claimed_count += 1;
-        summary.skipped_count += 1;
-        summary.jobs.push({ ...jobSummaryBase, status: 'SKIPPED_OUT_OF_SCOPE', row_work_estimate: 0, result_summary: null, continuation_summary: null, error_code: 'WORKBENCH_JOB_OUT_OF_REQUESTED_SCOPE' });
-        continue;
-      }
-      if (!allowedJobTypes.has(jobType) && !allowedJobTypes.has(canonicalJobType)) {
-        const typeError = new Error(`Claimed workbench job type is not allowed by this drain: ${jobType}`);
-        typeError.code = 'WORKBENCH_JOB_TYPE_NOT_ALLOWED_BY_BOUNDED_DRAIN';
-        try {
-          await sbRpc(env, 'pay_workbench_fail_job', { p_job_id: jobId, p_error_json: buildErrorJson(typeError.code, typeError, job, { allowed_job_types: Array.from(allowedJobTypes), bounded_job_types: Array.from(boundedJobTypes) }), p_retry_after_seconds: retryDelaySeconds(typeError, job) }, { routeClass: 'PREVIEW_CHUNK', purpose: 'WORKBENCH_JOB_FAIL', timeoutMs: 10000, bankingPay: true });
-        } catch (failError) {
-          summary.errors.push({ code: 'WORKBENCH_JOB_TYPE_FAIL_MARK_FAILED', job_id: jobId, job_type: jobType || null, message: errMessage(failError) });
-        }
-        summary.failed_count += 1;
-        summary.skipped_count += 1;
-        summary.jobs.push({ ...jobSummaryBase, status: 'FAILED', row_work_estimate: 0, result_summary: null, continuation_summary: null, error_code: typeError.code });
-        continue;
-      }
-
-      try {
-        const resultForStorage = await executeBoundedWorkbenchJob(job);
-        const rowWorkEstimate = estimateRowWorkCount(resultForStorage);
-        summary.row_work_count += rowWorkEstimate;
-        const completionPayload = normaliseCompletionPayload(await sbRpc(env, 'pay_workbench_complete_job', { p_job_id: jobId, p_result_json: isPlainObject(resultForStorage) ? resultForStorage : {} }, { routeClass: 'PREVIEW_CHUNK', purpose: 'WORKBENCH_JOB_COMPLETE', timeoutMs: 10000, bankingPay: true }));
-        if (completionPayload.continuation_enqueued) {
-          summary.continuation_enqueued_count += completionPayload.continuation_count;
-          summary.continuation_reused_count += completionPayload.continuation_reused_count;
-          summary.continuation_jobs.push(...completionPayload.continuation_jobs);
-        }
-        if (completionPayload.next_recommended_action) summary.last_next_recommended_action = completionPayload.next_recommended_action;
-        summary.processed_count += 1;
-        summary.succeeded_count += 1;
-        summary.jobs.push({
-          ...jobSummaryBase,
-          status: 'SUCCEEDED',
-          row_work_estimate: rowWorkEstimate,
-          result_summary: summarizeJobResult(resultForStorage),
-          continuation_summary: {
-            continuation_enqueued: completionPayload.continuation_enqueued,
-            continuation_count: completionPayload.continuation_count,
-            continuation_reused_count: completionPayload.continuation_reused_count,
-            continuation_jobs: completionPayload.continuation_jobs,
-            next_recommended_action: completionPayload.next_recommended_action || null
-          },
-          error_code: null
-        });
-      } catch (error) {
-        const code = errCode(error);
-        const retryAfterSeconds = retryDelaySeconds(error, job);
-        const errorJson = buildErrorJson(code, error, job, { details: clonePlain(error && error.details), retry_after_seconds: retryAfterSeconds });
-        let failMarkSucceeded = false;
-        try {
-          await sbRpc(env, 'pay_workbench_fail_job', { p_job_id: jobId, p_error_json: errorJson, p_retry_after_seconds: retryAfterSeconds }, { routeClass: 'PREVIEW_CHUNK', purpose: 'WORKBENCH_JOB_FAIL', timeoutMs: 10000, bankingPay: true });
-          failMarkSucceeded = true;
-        } catch (failError) {
-          summary.errors.push({ code: 'WORKBENCH_JOB_FAIL_MARK_FAILED', job_id: jobId, job_type: jobType || null, message: errMessage(failError) });
-        }
-        summary.ok = false;
-        summary.processed_count += 1;
-        summary.failed_count += 1;
-        summary.jobs.push({ ...jobSummaryBase, status: failMarkSucceeded ? 'FAILED' : 'FAIL_MARK_FAILED', row_work_estimate: 1, result_summary: null, continuation_summary: null, error_code: code });
-      }
-    }
-  }
-
-  markBudgetIfExhausted();
-  summary.completed_at_utc = new Date().toISOString();
-  if (summary.failed_count > 0 || summary.errors.length > 0) summary.ok = false;
-  return summary;
-}
 
 
 async function nudgeBankingPaySettlementFromTerminalBankOutcome(env, input = {}, options = {}) {
