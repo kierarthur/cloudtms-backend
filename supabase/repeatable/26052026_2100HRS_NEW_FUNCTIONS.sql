@@ -39561,6 +39561,7 @@ $function$;
 
 DROP FUNCTION IF EXISTS public.pay_preview_candidate_collect_scope(jsonb, uuid);
 
+
 CREATE OR REPLACE FUNCTION public.pay_preview_candidate_collect_scope(
   p_context_json jsonb,
   p_candidate_id uuid DEFAULT NULL::uuid,
@@ -39789,7 +39790,7 @@ begin
     raise exception 'rail defaults missing from p_context_json';
   end if;
 
-  drop table if exists pg_temp.pay_preview_candidate_context, pg_temp.targeted_refresh_requested_timesheet_ids, pg_temp.linked_refresh_requested_timesheet_ids, pg_temp.targeted_refresh_rotation_scope, pg_temp.targeted_refresh_scope_projection, pg_temp.targeted_refresh_timesheet_ids, pg_temp.linked_refresh_timesheet_ids, pg_temp.targeted_refresh_family_timesheet_ids, pg_temp.linked_refresh_family_timesheet_ids, pg_temp.targeted_refresh_all_family_timesheet_ids, pg_temp.targeted_refresh_all_family_projection, pg_temp.targeted_refresh_all_baseline_projection, pg_temp.targeted_refresh_all_timesheet_ids, pg_temp.active_snoozes, pg_temp.active_timesheet_payment_snoozes, pg_temp.active_segment_snoozes, pg_temp.active_timesheet_payment_overrides, pg_temp.force_include, pg_temp.reserved_batch_items, pg_temp.reserved_by_source_ref, pg_temp.reserved_total_by_timesheet, pg_temp.reserved_segment_key_map, pg_temp.reserved_segment_sums, pg_temp.reserved_preview_segment_ords, pg_temp.reserved_additional_by_code, pg_temp.eligible_tsfin, pg_temp.debted_overpayment_cases, pg_temp.umb_map, pg_temp.adj, pg_temp.ts_current, pg_temp.targeted_baseline_only_ts_current, pg_temp.active_settled_artifact_components, pg_temp.active_settled_artifact_baseline_by_timesheet, pg_temp.ts_baseline, pg_temp.finance_case_baseline_scope, pg_temp.manual_adjustment_carry_forward_scope, pg_temp.segment_status, pg_temp.blocked_items_all, pg_temp.blocked_items, pg_temp.blocked_items_snoozed, pg_temp.do_not_pay_all, pg_temp.do_not_pay_items, pg_temp.do_not_pay_items_snoozed, pg_temp.ts_deltas, pg_temp.ts_itemised, pg_temp.worked_time_current_segment_rows, pg_temp.worked_time_baseline_segment_rows, pg_temp.worked_time_current_ranked, pg_temp.worked_time_baseline_ranked, pg_temp.worked_time_bucket_ids, pg_temp.worked_time_bucket_agg, pg_temp.worked_time_bucket_calc, pg_temp.worked_time_bucket_alloc, pg_temp.worked_time_bucket_effective, pg_temp.worked_time_bucket_component_rows, pg_temp.worked_time_key_totals, pg_temp.worked_time_bucket_component_sums, pg_temp.worked_time_amount_fallback_rows, pg_temp.timesheet_component_rows, pg_temp.timesheet_component_match_rows, pg_temp.transient_timesheet_component_rows, pg_temp.transient_timesheet_component_review_rows, pg_temp.timesheet_case_actionable_basis, pg_temp.timesheet_live_scope, pg_temp.timesheet_linked_scope_counts, pg_temp.transient_timesheet_component_review_rows_effective, pg_temp.timesheet_case_rollup, pg_temp.finance_candidate_seed, pg_temp.candidate_base, pg_temp.timesheet_candidate_rollup, pg_temp.candidate_rollup, pg_temp.blocked_counts, pg_temp.do_not_pay_counts, pg_temp.loan_due, pg_temp.overpayment_balances, pg_temp.loan_due_this_week, pg_temp.loan_repaid_wtd, pg_temp.paid_wtd_before, pg_temp.cand_enriched, pg_temp.payee_baseline_rows, pg_temp.payees_src, pg_temp.payees, pg_temp.payees_enriched, pg_temp.payees_json, pg_temp.cand_payee0, pg_temp.cand_payee, pg_temp.timesheet_case_rollup_effective, pg_temp.finance_case_repaid_wtd, pg_temp.finance_case_recovery_rows_base, pg_temp.manual_debt_recovery_rows, pg_temp.manual_debt_recovery_allocations, pg_temp.manual_debt_recovery_totals, pg_temp.overpayment_recovery_rows, pg_temp.overpayment_recovery_allocations, pg_temp.overpayment_recovery_totals, pg_temp.payment_advance_recovery_rows, pg_temp.payment_advance_recovery_allocations, pg_temp.finance_case_protected_allocations, pg_temp.finance_case_payee_readiness, pg_temp.finance_case_component_rows, pg_temp.finance_case_component_review_rows, pg_temp.finance_case_component_review_rows_effective, pg_temp.finance_case_due_source_amounts, pg_temp.finance_case_component_due_source_base, pg_temp.finance_case_component_due_source_shares, pg_temp.finance_case_component_due_source_allocations, pg_temp.finance_case_component_due_preview_base, pg_temp.finance_case_component_due_preview_allocations, pg_temp.finance_case_taxable_manual_debt_resolution, pg_temp.finance_case_resolution_rollup, pg_temp.canonical_timesheet_lines, pg_temp.timesheet_active_segment_snooze_meta, pg_temp.canonical_timesheet_segment_rows, pg_temp.canonical_timesheet_segment_rollup, pg_temp.canonical_timesheet_presentation_seed, pg_temp.canonical_timesheet_presentation_state, pg_temp.canonical_timesheet_presentation_rows, pg_temp.finance_case_lines, pg_temp.timesheet_canonical_preview_lines, pg_temp.canonical_preview_lines, pg_temp.candidate_preview_line_rollup, pg_temp.candidate_preview_timesheet_rollup, pg_temp.summary_json, pg_temp.timesheet_case_states_flat, pg_temp.finance_case_states_flat, pg_temp.candidate_case_states_flat, pg_temp.candidate_case_states, pg_temp.case_resolution_states_json, pg_temp.finance_candidate_totals, pg_temp.candidate_finance_itemisation, pg_temp.paye_summary_breakdown_json, pg_temp.timesheet_baseline_component_rows, pg_temp.finance_baseline_component_rows, pg_temp.baseline_component_rows_json;
+  drop table if exists pg_temp.pay_preview_candidate_context, pg_temp.targeted_refresh_requested_timesheet_ids, pg_temp.linked_refresh_requested_timesheet_ids, pg_temp.targeted_refresh_rotation_scope, pg_temp.targeted_refresh_scope_projection, pg_temp.targeted_refresh_timesheet_ids, pg_temp.linked_refresh_timesheet_ids, pg_temp.targeted_refresh_family_timesheet_ids, pg_temp.linked_refresh_family_timesheet_ids, pg_temp.targeted_refresh_all_family_timesheet_ids, pg_temp.targeted_refresh_all_family_projection, pg_temp.targeted_refresh_all_baseline_projection, pg_temp.targeted_refresh_all_timesheet_ids, pg_temp.active_snoozes, pg_temp.active_timesheet_payment_snoozes, pg_temp.active_segment_snoozes, pg_temp.active_timesheet_payment_overrides, pg_temp.force_include, pg_temp.reserved_batch_items, pg_temp.reserved_by_source_ref, pg_temp.reserved_total_by_timesheet, pg_temp.reserved_segment_key_map, pg_temp.reserved_segment_sums, pg_temp.reserved_preview_segment_ords, pg_temp.reserved_additional_by_code, pg_temp.eligible_tsfin, pg_temp.debted_overpayment_cases, pg_temp.umb_map, pg_temp.adjustment_family_projection, pg_temp.adj, pg_temp.ts_current, pg_temp.targeted_baseline_only_ts_current, pg_temp.active_settled_artifact_components, pg_temp.active_settled_artifact_baseline_by_timesheet, pg_temp.ts_baseline, pg_temp.finance_case_baseline_scope, pg_temp.manual_adjustment_carry_forward_scope, pg_temp.segment_status, pg_temp.blocked_items_all, pg_temp.blocked_items, pg_temp.blocked_items_snoozed, pg_temp.do_not_pay_all, pg_temp.do_not_pay_items, pg_temp.do_not_pay_items_snoozed, pg_temp.ts_deltas, pg_temp.ts_itemised, pg_temp.worked_time_current_segment_rows, pg_temp.worked_time_baseline_segment_rows, pg_temp.worked_time_current_ranked, pg_temp.worked_time_baseline_ranked, pg_temp.worked_time_bucket_ids, pg_temp.worked_time_bucket_agg, pg_temp.worked_time_bucket_calc, pg_temp.worked_time_bucket_alloc, pg_temp.worked_time_bucket_effective, pg_temp.worked_time_bucket_component_rows, pg_temp.worked_time_key_totals, pg_temp.worked_time_bucket_component_sums, pg_temp.worked_time_amount_fallback_rows, pg_temp.timesheet_component_rows, pg_temp.timesheet_component_match_rows, pg_temp.transient_timesheet_component_rows, pg_temp.transient_timesheet_component_review_rows, pg_temp.timesheet_case_actionable_basis, pg_temp.timesheet_live_scope, pg_temp.timesheet_linked_scope_counts, pg_temp.transient_timesheet_component_review_rows_effective, pg_temp.timesheet_case_rollup, pg_temp.finance_candidate_seed, pg_temp.candidate_base, pg_temp.timesheet_candidate_rollup, pg_temp.candidate_rollup, pg_temp.blocked_counts, pg_temp.do_not_pay_counts, pg_temp.loan_due, pg_temp.overpayment_balances, pg_temp.loan_due_this_week, pg_temp.loan_repaid_wtd, pg_temp.paid_wtd_before, pg_temp.cand_enriched, pg_temp.payee_baseline_rows, pg_temp.payees_src, pg_temp.payees, pg_temp.payees_enriched, pg_temp.payees_json, pg_temp.cand_payee0, pg_temp.cand_payee, pg_temp.timesheet_case_rollup_effective, pg_temp.finance_case_repaid_wtd, pg_temp.finance_case_recovery_rows_base, pg_temp.manual_debt_recovery_rows, pg_temp.manual_debt_recovery_allocations, pg_temp.manual_debt_recovery_totals, pg_temp.overpayment_recovery_rows, pg_temp.overpayment_recovery_allocations, pg_temp.overpayment_recovery_totals, pg_temp.payment_advance_recovery_rows, pg_temp.payment_advance_recovery_allocations, pg_temp.finance_case_protected_allocations, pg_temp.finance_case_payee_readiness, pg_temp.finance_case_component_rows, pg_temp.finance_case_component_review_rows, pg_temp.finance_case_component_review_rows_effective, pg_temp.finance_case_due_source_amounts, pg_temp.finance_case_component_due_source_base, pg_temp.finance_case_component_due_source_shares, pg_temp.finance_case_component_due_source_allocations, pg_temp.finance_case_component_due_preview_base, pg_temp.finance_case_component_due_preview_allocations, pg_temp.finance_case_taxable_manual_debt_resolution, pg_temp.finance_case_resolution_rollup, pg_temp.canonical_timesheet_lines, pg_temp.timesheet_active_segment_snooze_meta, pg_temp.canonical_timesheet_segment_rows, pg_temp.canonical_timesheet_segment_rollup, pg_temp.canonical_timesheet_presentation_seed, pg_temp.canonical_timesheet_presentation_state, pg_temp.canonical_timesheet_presentation_rows, pg_temp.finance_case_lines, pg_temp.timesheet_canonical_preview_lines, pg_temp.canonical_preview_lines, pg_temp.candidate_preview_line_rollup, pg_temp.candidate_preview_timesheet_rollup, pg_temp.summary_json, pg_temp.timesheet_case_states_flat, pg_temp.finance_case_states_flat, pg_temp.candidate_case_states_flat, pg_temp.candidate_case_states, pg_temp.case_resolution_states_json, pg_temp.finance_candidate_totals, pg_temp.candidate_finance_itemisation, pg_temp.paye_summary_breakdown_json, pg_temp.timesheet_baseline_component_rows, pg_temp.finance_baseline_component_rows, pg_temp.baseline_component_rows_json;
 
   create temporary table pay_preview_candidate_context on commit drop as
     select
@@ -40624,21 +40625,88 @@ begin
   
   ;
 
+  create temporary table adjustment_family_projection on commit drop as
+        with eligible_current_timesheet_ids as (
+          select distinct
+            eligible_tsfin.timesheet_id as timesheet_id
+          from eligible_tsfin
+          where eligible_tsfin.timesheet_id is not null
+        ),
+        full_live_rotation_scope as (
+          select
+            full_live_scope.requested_timesheet_id,
+            full_live_scope.canonical_timesheet_id,
+            full_live_scope.family_timesheet_id,
+            full_live_scope.family_is_current,
+            full_live_scope.family_version,
+            full_live_scope.booking_id
+          from public._pay_timesheet_rotation_scope(
+            case
+              when v_effective_refresh_scope_kind = 'CANDIDATE_FULL_LIVE' then (
+                select coalesce(
+                  array_agg(distinct eligible_current_timesheet_ids.timesheet_id order by eligible_current_timesheet_ids.timesheet_id),
+                  array[]::uuid[]
+                )
+                from eligible_current_timesheet_ids
+              )
+              else array[]::uuid[]
+            end
+          ) as full_live_scope
+        )
+        select distinct
+          adjustment_projection_rows.canonical_timesheet_id,
+          adjustment_projection_rows.family_timesheet_id
+        from (
+          select
+            eligible_tsfin.timesheet_id as canonical_timesheet_id,
+            targeted_refresh_all_family_projection.family_timesheet_id as family_timesheet_id
+          from eligible_tsfin
+          join targeted_refresh_all_family_projection
+            on targeted_refresh_all_family_projection.canonical_timesheet_id = eligible_tsfin.timesheet_id
+          where v_effective_refresh_scope_kind = 'TARGETED_TIMESHEETS'
+            and eligible_tsfin.timesheet_id is not null
+            and targeted_refresh_all_family_projection.family_timesheet_id is not null
+
+          union all
+
+          select
+            coalesce(full_live_rotation_scope.canonical_timesheet_id, full_live_rotation_scope.requested_timesheet_id) as canonical_timesheet_id,
+            full_live_rotation_scope.family_timesheet_id as family_timesheet_id
+          from full_live_rotation_scope
+          join eligible_current_timesheet_ids
+            on eligible_current_timesheet_ids.timesheet_id = full_live_rotation_scope.requested_timesheet_id
+          where v_effective_refresh_scope_kind = 'CANDIDATE_FULL_LIVE'
+            and coalesce(full_live_rotation_scope.canonical_timesheet_id, full_live_rotation_scope.requested_timesheet_id) is not null
+            and full_live_rotation_scope.family_timesheet_id is not null
+        ) as adjustment_projection_rows
+        where adjustment_projection_rows.canonical_timesheet_id is not null
+          and adjustment_projection_rows.family_timesheet_id is not null
+  
+  ;
+
   create temporary table adj on commit drop as
-        select
-          a.id as adj_id,
-          a.timesheet_id,
-          a.candidate_id,
-          round(coalesce(a.delta_pay_ex_vat,0),2) as delta_pay_ex_vat
-        from public.ts_pay_adjustments a
-        where a.as_advance = false
-          and a.timesheet_id is not null
-          and a.candidate_id = v_candidate_id
-          and (
-            v_effective_refresh_scope_kind <> 'TARGETED_TIMESHEETS'
-            or a.timesheet_id in (select trti.timesheet_id from targeted_refresh_timesheet_ids trti)
-            or a.timesheet_id in (select lrti.timesheet_id from linked_refresh_timesheet_ids lrti)
-          )
+        select distinct on (
+          adjustment_family_projection.canonical_timesheet_id,
+          adjustment_rows.id
+        )
+          adjustment_rows.id as adj_id,
+          adjustment_family_projection.canonical_timesheet_id as timesheet_id,
+          adjustment_rows.timesheet_id as source_timesheet_id,
+          adjustment_rows.candidate_id,
+          adjustment_rows.created_at as adjustment_created_at,
+          round(coalesce(adjustment_rows.delta_pay_ex_vat,0),2) as delta_pay_ex_vat
+        from adjustment_family_projection
+        join public.ts_pay_adjustments as adjustment_rows
+          on adjustment_rows.timesheet_id = adjustment_family_projection.family_timesheet_id
+        where adjustment_rows.as_advance = false
+          and adjustment_rows.timesheet_id is not null
+          and adjustment_rows.id is not null
+          and adjustment_rows.candidate_id = v_candidate_id
+        order by
+          adjustment_family_projection.canonical_timesheet_id,
+          adjustment_rows.id,
+          adjustment_rows.created_at nulls last,
+          adjustment_rows.timesheet_id
   
   ;
 
@@ -40912,6 +40980,7 @@ begin
                   'id', a.adj_id::text,
                   'delta_pay_ex_vat', a.delta_pay_ex_vat
                 )
+                order by a.adjustment_created_at nulls last, a.adj_id
               )
               from adj a
               where a.timesheet_id = e.timesheet_id
@@ -41619,7 +41688,6 @@ begin
   );
 end;
 $function$;
-
 
 
 
@@ -44498,6 +44566,8 @@ DECLARE
   v_scope_expects_item_count integer := 0;
   v_candidate_scope_ids jsonb := '[]'::jsonb;
   v_repaired_existing_item_link_count integer := 0;
+  v_pay_date date := NULL::date;
+  v_vat_rate_pct numeric := NULL::numeric;
 BEGIN
   PERFORM public.banking_pay_hot_path_budget_apply('WORKBENCH_CHUNK');
 
@@ -44549,6 +44619,28 @@ BEGIN
     )
   ) THEN
     RAISE EXCEPTION 'one or more candidate scope ids do not belong to operation %', p_operation_id;
+  END IF;
+
+  SELECT batch_row.pay_date
+  INTO v_pay_date
+  FROM public.pay_batches AS batch_row
+  WHERE batch_row.id = p_pay_batch_id
+  LIMIT 1;
+
+  IF v_pay_date IS NULL THEN
+    RAISE EXCEPTION 'pay_batch % not found or missing pay_date', p_pay_batch_id;
+  END IF;
+
+  SELECT finance_window.vat_rate_pct
+  INTO v_vat_rate_pct
+  FROM public.settings_finance_windows AS finance_window
+  WHERE v_pay_date >= finance_window.date_from
+    AND v_pay_date <= COALESCE(finance_window.date_to, 'infinity'::date)
+  ORDER BY finance_window.date_from DESC, finance_window.id DESC
+  LIMIT 1;
+
+  IF v_vat_rate_pct IS NULL THEN
+    RAISE EXCEPTION 'VAT rate not found for pay_batch % pay_date %', p_pay_batch_id, v_pay_date;
   END IF;
 
   WITH existing_linked_items AS (
@@ -45144,7 +45236,7 @@ BEGIN
       UPPER(NULLIF(BTRIM(COALESCE(allocation_row.allocation_basis_json#>>'{economic_key,key_type}', allocation_row.allocation_basis_json->>'key_type', '')), '')) AS key_type,
       NULLIF(BTRIM(COALESCE(allocation_row.allocation_basis_json#>>'{economic_key,key_value}', allocation_row.allocation_basis_json->>'key_value', '')), '') AS key_value
     FROM pg_temp.tmp_pay_batch_item_allocation_page AS allocation_row
-  ), normalised_rows AS (
+  ), normalised_source_rows AS (
     SELECT
       prepared_rows.*,
       CASE
@@ -45157,8 +45249,6 @@ BEGIN
       END AS item_type,
       CASE WHEN prepared_rows.key_type IN ('TS_DAY', 'TS_TOTAL') THEN NULLIF(BTRIM(COALESCE(prepared_rows.line_json#>>'{source_basis_json,segment_key}', prepared_rows.line_json#>>'{source_basis,segment_key}', prepared_rows.line_json->>'segment_key', '')), '') ELSE NULL::text END AS segment_key,
       ROUND(COALESCE(prepared_rows.allocated_amount, 0), 2)::numeric(12,2) AS amount_ex_vat,
-      ROUND(COALESCE(CASE WHEN COALESCE(prepared_rows.line_json->>'amount_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN (prepared_rows.line_json->>'amount_vat')::numeric ELSE 0::numeric END, 0), 2)::numeric(12,2) AS amount_vat,
-      ROUND(COALESCE(CASE WHEN COALESCE(prepared_rows.line_json->>'amount_inc_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN (prepared_rows.line_json->>'amount_inc_vat')::numeric ELSE NULL::numeric END, prepared_rows.allocated_amount, 0), 2)::numeric(12,2) AS amount_inc_vat,
       CASE
         WHEN UPPER(COALESCE(prepared_rows.line_json->>'classification', prepared_rows.line_json->>'frozen_component_classification', '')) = 'REIMBURSEMENT_GROSS_FIXED' THEN 'REIMBURSEMENT_GROSS_FIXED'::public.pay_finance_component_classification_enum
         WHEN UPPER(COALESCE(prepared_rows.line_json->>'classification', prepared_rows.line_json->>'frozen_component_classification', '')) = 'NET_PAY_FIXED_RECOVERY' THEN 'NET_PAY_FIXED_RECOVERY'::public.pay_finance_component_classification_enum
@@ -45176,6 +45266,44 @@ BEGIN
         ABS(COALESCE(prepared_rows.allocated_amount, 0))
       ), 2)::numeric(12,2) AS frozen_source_amount
     FROM prepared_rows
+  ), normalised_rows AS (
+    SELECT
+      normalised_source_rows.*,
+      payee_resolution.resolved_umbrella_id,
+      COALESCE(umbrella_row.vat_chargeable, false) AS umbrella_vat_chargeable,
+      ROUND(COALESCE((vat_calculation.vat_json->>'vat')::numeric, 0), 2)::numeric(12,2) AS amount_vat,
+      ROUND(COALESCE((vat_calculation.vat_json->>'inc')::numeric, normalised_source_rows.amount_ex_vat, 0), 2)::numeric(12,2) AS amount_inc_vat
+    FROM normalised_source_rows
+    JOIN public.candidates AS candidate_row
+      ON candidate_row.id = normalised_source_rows.candidate_id
+    LEFT JOIN public.banking_pay_operation_candidate_scope AS scope_row
+      ON scope_row.id = normalised_source_rows.candidate_scope_id
+     AND scope_row.operation_id = p_operation_id
+    CROSS JOIN LATERAL (
+      SELECT
+        CASE
+          WHEN UPPER(BTRIM(COALESCE(normalised_source_rows.pay_channel, ''))) = 'UMBRELLA' THEN
+            COALESCE(
+              CASE
+                WHEN NULLIF(BTRIM(COALESCE(scope_row.effective_non_paye_payee_json->>'umbrella_id', '')), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+                  THEN NULLIF(BTRIM(COALESCE(scope_row.effective_non_paye_payee_json->>'umbrella_id', '')), '')::uuid
+                ELSE NULL::uuid
+              END,
+              candidate_row.umbrella_id
+            )
+          ELSE NULL::uuid
+        END AS resolved_umbrella_id
+    ) AS payee_resolution
+    LEFT JOIN public.umbrellas AS umbrella_row
+      ON umbrella_row.id = payee_resolution.resolved_umbrella_id
+    CROSS JOIN LATERAL (
+      SELECT public._pay_umbrella_vat_calc(
+        normalised_source_rows.amount_ex_vat,
+        v_vat_rate_pct,
+        UPPER(BTRIM(COALESCE(normalised_source_rows.pay_channel, ''))) = 'UMBRELLA'
+          AND COALESCE(umbrella_row.vat_chargeable, false)
+      ) AS vat_json
+    ) AS vat_calculation
   ), inserted_items AS (
     INSERT INTO public.pay_batch_items(
       pay_batch_candidate_id,
@@ -45219,7 +45347,7 @@ BEGIN
       normalised_rows.amount_vat,
       normalised_rows.amount_inc_vat,
       normalised_rows.pay_channel,
-      CASE WHEN normalised_rows.pay_channel = 'UMBRELLA' THEN candidate_row.umbrella_id ELSE NULL::uuid END,
+      normalised_rows.resolved_umbrella_id,
       false,
       normalised_rows.finance_case_id,
       normalised_rows.finance_component_id,
@@ -45242,8 +45370,6 @@ BEGIN
     JOIN public.pay_batch_candidates AS pay_batch_candidate
       ON pay_batch_candidate.pay_batch_id = p_pay_batch_id
      AND pay_batch_candidate.candidate_id = normalised_rows.candidate_id
-    JOIN public.candidates AS candidate_row
-      ON candidate_row.id = normalised_rows.candidate_id
     ON CONFLICT (pay_batch_candidate_id, operation_source_key) WHERE operation_source_key IS NOT NULL DO NOTHING
     RETURNING public.pay_batch_items.id, public.pay_batch_items.operation_source_key
   )
@@ -57951,8 +58077,6 @@ $function$;
 
 
 
-
-
 CREATE OR REPLACE FUNCTION public._pay_current_timesheet_entitlement_components(p_timesheet_ids uuid[])
  RETURNS TABLE(timesheet_id uuid, key_type text, key_value text, truth_ex_vat numeric, baseline_ex_vat numeric, truth_inc_vat numeric, baseline_inc_vat numeric)
  LANGUAGE sql
@@ -58248,6 +58372,28 @@ truth_segments as (
     end as segments_json
   from truth_enriched te
 ),
+adjustment_truth_rows as (
+  select distinct on (
+    family_to_projection.projected_timesheet_id,
+    adjustment_rows.id
+  )
+    family_to_projection.projected_timesheet_id as timesheet_id,
+    adjustment_rows.id as adjustment_id,
+    adjustment_rows.created_at as adjustment_created_at,
+    round(coalesce(adjustment_rows.delta_pay_ex_vat, 0), 2) as delta_pay_ex_vat
+  from family_to_projection
+  join public.ts_pay_adjustments as adjustment_rows
+    on adjustment_rows.timesheet_id = family_to_projection.family_timesheet_id
+  where adjustment_rows.as_advance = false
+    and adjustment_rows.timesheet_id is not null
+    and adjustment_rows.id is not null
+    and family_to_projection.projected_timesheet_id is not null
+  order by
+    family_to_projection.projected_timesheet_id,
+    adjustment_rows.id,
+    adjustment_rows.created_at nulls last,
+    family_to_projection.family_timesheet_id
+),
 truth_snapshot_like as (
   select
     truth_segment_rows.timesheet_id,
@@ -58265,14 +58411,13 @@ truth_snapshot_like as (
       'adjustments', coalesce((
         select jsonb_agg(
           jsonb_build_object(
-            'id', adjustment_rows.id::text,
-            'delta_pay_ex_vat', round(coalesce(adjustment_rows.delta_pay_ex_vat,0),2)
+            'id', adjustment_truth_rows.adjustment_id::text,
+            'delta_pay_ex_vat', adjustment_truth_rows.delta_pay_ex_vat
           )
-          order by adjustment_rows.created_at nulls last, adjustment_rows.id
+          order by adjustment_truth_rows.adjustment_created_at nulls last, adjustment_truth_rows.adjustment_id
         )
-        from public.ts_pay_adjustments as adjustment_rows
-        where adjustment_rows.as_advance = false
-          and adjustment_rows.timesheet_id = truth_segment_rows.canonical_timesheet_id
+        from adjustment_truth_rows
+        where adjustment_truth_rows.timesheet_id = truth_segment_rows.timesheet_id
       ), '[]'::jsonb)
     ) as snap_json
   from truth_segments as truth_segment_rows
@@ -58508,7 +58653,6 @@ order by
   all_keys.key_type,
   all_keys.key_value;
 $function$;
-
 
 
 
@@ -99435,15 +99579,12 @@ end;
 $function$;
 
 
-create or replace function public.pay_batch_export_csv_rows(
-  p_pay_batch_id uuid,
-  p_actor_user_id uuid
-)
-returns jsonb
-language plpgsql
-security definer
-set search_path = public
-as $$
+CREATE OR REPLACE FUNCTION public.pay_batch_export_csv_rows(p_pay_batch_id uuid, p_actor_user_id uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
 declare
   v_now_utc timestamptz := now();
 
@@ -100271,26 +100412,38 @@ begin
         || jsonb_build_object(
           'pay_bank_transfer_id', CASE WHEN b.pay_bank_transfer_id IS NULL THEN NULL ELSE b.pay_bank_transfer_id::text END,
           'payment_status_raw', b.payment_status_raw,
-          'payment_status_label', public._pay_bank_transfer_status_display_label(
-            b.payment_status_raw,
-            b.payment_rail_state,
-            CASE
-              WHEN (
-            UPPER(BTRIM(COALESCE(b.payment_status_raw, ''))) IN ('COMPLETED','COMPLETE','SETTLED','PAID','COMMITTED','EXECUTED','SUCCESS','SUCCEEDED')
-            OR UPPER(BTRIM(COALESCE(b.payment_rail_state, ''))) IN ('COMPLETED','COMPLETE','SETTLED','PAID','COMMITTED','EXECUTED','SUCCESS','SUCCEEDED','BANK_CONFIRMED','MANUAL_CONFIRM')
-            OR (
-              b.payment_completed_at_utc IS NOT NULL
-              AND UPPER(BTRIM(COALESCE(b.payment_status_raw, ''))) NOT IN ('FAILED','REJECTED','DECLINED','RETURNED','REVERTED','CANCELLED','CANCELED','VOIDED','SUBMISSION_FAILED','FAILED_BEFORE_COMMIT')
-              AND UPPER(BTRIM(COALESCE(b.payment_rail_state, ''))) NOT IN ('FAILED','REJECTED','DECLINED','RETURNED','REVERTED','CANCELLED','CANCELED','VOIDED','SUBMISSION_FAILED','FAILED_BEFORE_COMMIT')
+          'payment_status_label', CASE
+            WHEN v_pre_execution_export
+             AND UPPER(BTRIM(COALESCE(v_batch_status_raw, ''))) IN ('DRAFT', 'DRAFT_CREATED')
+             AND b.pay_bank_transfer_id IS NULL
+             AND NULLIF(BTRIM(COALESCE(b.payment_status_raw, '')), '') IS NULL
+             AND NULLIF(BTRIM(COALESCE(b.payment_rail_state, '')), '') IS NULL
+             AND NULLIF(BTRIM(COALESCE(b.payment_rail_tx_id, '')), '') IS NULL
+             AND NULLIF(BTRIM(COALESCE(b.payment_request_id, '')), '') IS NULL
+             AND NULLIF(BTRIM(COALESCE(b.payment_provider_transaction_id, '')), '') IS NULL
+             AND NULLIF(BTRIM(COALESCE(b.payment_provider_request_id, '')), '') IS NULL
+              THEN 'Not yet submitted'
+            ELSE public._pay_bank_transfer_status_display_label(
+              b.payment_status_raw,
+              b.payment_rail_state,
+              CASE
+                WHEN (
+              UPPER(BTRIM(COALESCE(b.payment_status_raw, ''))) IN ('COMPLETED','COMPLETE','SETTLED','PAID','COMMITTED','EXECUTED','SUCCESS','SUCCEEDED')
+              OR UPPER(BTRIM(COALESCE(b.payment_rail_state, ''))) IN ('COMPLETED','COMPLETE','SETTLED','PAID','COMMITTED','EXECUTED','SUCCESS','SUCCEEDED','BANK_CONFIRMED','MANUAL_CONFIRM')
+              OR (
+                b.payment_completed_at_utc IS NOT NULL
+                AND UPPER(BTRIM(COALESCE(b.payment_status_raw, ''))) NOT IN ('FAILED','REJECTED','DECLINED','RETURNED','REVERTED','CANCELLED','CANCELED','VOIDED','SUBMISSION_FAILED','FAILED_BEFORE_COMMIT')
+                AND UPPER(BTRIM(COALESCE(b.payment_rail_state, ''))) NOT IN ('FAILED','REJECTED','DECLINED','RETURNED','REVERTED','CANCELLED','CANCELED','VOIDED','SUBMISSION_FAILED','FAILED_BEFORE_COMMIT')
+              )
+            ) THEN 'FINAL_PAID'
+                WHEN (
+              UPPER(BTRIM(COALESCE(b.payment_status_raw, ''))) IN ('FAILED','REJECTED','DECLINED','RETURNED','REVERTED','CANCELLED','CANCELED','VOIDED','SUBMISSION_FAILED','FAILED_BEFORE_COMMIT')
+              OR UPPER(BTRIM(COALESCE(b.payment_rail_state, ''))) IN ('FAILED','REJECTED','DECLINED','RETURNED','REVERTED','CANCELLED','CANCELED','VOIDED','SUBMISSION_FAILED','FAILED_BEFORE_COMMIT')
+            ) THEN 'TERMINAL_NO_MONEY'
+                ELSE NULL::text
+              END
             )
-          ) THEN 'FINAL_PAID'
-              WHEN (
-            UPPER(BTRIM(COALESCE(b.payment_status_raw, ''))) IN ('FAILED','REJECTED','DECLINED','RETURNED','REVERTED','CANCELLED','CANCELED','VOIDED','SUBMISSION_FAILED','FAILED_BEFORE_COMMIT')
-            OR UPPER(BTRIM(COALESCE(b.payment_rail_state, ''))) IN ('FAILED','REJECTED','DECLINED','RETURNED','REVERTED','CANCELLED','CANCELED','VOIDED','SUBMISSION_FAILED','FAILED_BEFORE_COMMIT')
-          ) THEN 'TERMINAL_NO_MONEY'
-              ELSE NULL::text
-            END
-          ),
+          END,
           'rail_state', b.payment_rail_state,
           'payment_terminal_success', (
             UPPER(BTRIM(COALESCE(b.payment_status_raw, ''))) IN ('COMPLETED','COMPLETE','SETTLED','PAID','COMMITTED','EXECUTED','SUCCESS','SUCCEEDED')
@@ -100450,7 +100603,9 @@ begin
     'rows', v_rows
   );
 end;
-$$;
+$function$;
+
+
 
 
 
