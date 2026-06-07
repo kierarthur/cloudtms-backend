@@ -24006,7 +24006,6 @@ async function handleBankingIdLedgerList(env, req, user) {
 }
 
 
-
 async function advanceBankingPayExecuteOperation(env, operationRow, user, options = {}) {
   const trimStr = (value) => String(value == null ? '' : value).trim();
   const upper = (value) => trimStr(value).toUpperCase();
@@ -24080,7 +24079,107 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
   const inputJson = isPlainObject(operation.input_json) ? operation.input_json : (isPlainObject(operation.inputJson) ? operation.inputJson : {});
   const configJson = isPlainObject(operation.config_json) ? operation.config_json : (isPlainObject(operation.configJson) ? operation.configJson : {});
   const progressJson = isPlainObject(operation.progress_json) ? operation.progress_json : (isPlainObject(operation.progressJson) ? operation.progressJson : {});
-  const currentPhase = upper(operation.phase || progressJson.phase || progressJson.next_required_phase || 'VALIDATE_FRESHNESS') || 'VALIDATE_FRESHNESS';
+  const normalisePhase = (value) => upper(value);
+  const phaseRank = (phase) => {
+    const normalised = normalisePhase(phase);
+    const ranks = {
+      INITIALISE: 0,
+      VALIDATE_FRESHNESS: 1,
+      FRESHNESS_SCOPE_SEED: 1,
+      SEED_FRESHNESS_SCOPE: 1,
+      FRESHNESS_VALIDATE: 2,
+      VALIDATE_FRESHNESS_CHUNK: 2,
+      FRESHNESS_RESULT: 3,
+      TRANSFER_SCOPE_SEED: 4,
+      SEED_TRANSFER_SCOPE: 4,
+      TRANSFER_GROUP_SEED_PAGE: 4,
+      PREPARE_TRANSFER_SCOPE: 4,
+      SEED_TRANSFER_SCOPE_ITEMS: 5,
+      TRANSFER_SCOPE_ITEM_MEMBERSHIP_SEED_PAGE: 5,
+      SEED_TRANSFER_ROLLUP_CHUNKS: 6,
+      ROLLUP_TRANSFER_SCOPE_ITEMS: 7,
+      TRANSFER_SCOPE_ROLLUP_PAGE: 7,
+      SEED_TRANSFER_SUBMIT_CHUNKS: 8,
+      PREPARE_TRANSFER_CHUNKS: 9,
+      TRANSFER_CHUNK_PREPARE_PAGE: 9,
+      PREPARE_BATCH_PROOF: 10,
+      PREPARE_BATCH: 10,
+      START_AUTHORISATION_PROOF: 11,
+      START_AUTHORISATION: 11,
+      SCHEDULE_PAYMENT: 12,
+      SUBMIT_PROVIDER_TRANSFERS: 13,
+      SEND_PROVIDER_CHUNK: 14,
+      REQUEST_PROVIDER_SEND: 14,
+      FINALISE_PROVIDER_CHUNK: 15,
+      APPLY_RAIL_UPDATES: 16,
+      QUEUE_REMITTANCES: 17,
+      WAITING_AUTHORISATION: 18,
+      COMPLETE: 19
+    };
+    return Object.prototype.hasOwnProperty.call(ranks, normalised) ? ranks[normalised] : -1;
+  };
+  const resolveCurrentPhase = (operationPhase, sourceProgressJson) => {
+    const progress = isPlainObject(sourceProgressJson) ? sourceProgressJson : {};
+    const durablePhase = normalisePhase(operationPhase);
+    const progressPhase = normalisePhase(progress.phase);
+    const nextRequiredPhase = normalisePhase(progress.next_required_phase || progress.nextRequiredPhase);
+    const lastBoundedAdvancePhase = normalisePhase(progress.last_bounded_advance_phase || progress.lastBoundedAdvancePhase);
+    const durableRank = phaseRank(durablePhase);
+    const progressRank = phaseRank(progressPhase);
+    const nextRequiredRank = phaseRank(nextRequiredPhase);
+
+    if (durablePhase && durableRank < 0) {
+      return {
+        phase: durablePhase,
+        durablePhase,
+        progressPhase,
+        nextRequiredPhase,
+        lastBoundedAdvancePhase,
+        source: 'operation.phase_unknown',
+        driftRecovered: false
+      };
+    }
+
+    let phase = 'VALIDATE_FRESHNESS';
+    let source = 'fallback';
+    let driftRecovered = false;
+
+    if (durableRank >= 0) {
+      phase = durablePhase;
+      source = 'operation.phase';
+    } else if (progressRank >= 0) {
+      phase = progressPhase;
+      source = 'progress_json.phase';
+    } else if (nextRequiredRank >= 0) {
+      phase = nextRequiredPhase;
+      source = 'progress_json.next_required_phase';
+    }
+
+    if (durableRank >= 0 && progressRank >= 0 && progressRank > durableRank && lastBoundedAdvancePhase === durablePhase) {
+      phase = progressPhase;
+      source = 'progress_json.phase_forward_drift_recovery';
+      driftRecovered = true;
+    }
+
+    const resolvedRank = phaseRank(phase);
+    if (durableRank >= 0 && nextRequiredRank >= 0 && nextRequiredRank > resolvedRank && (lastBoundedAdvancePhase === durablePhase || nextRequiredPhase === progressPhase)) {
+      phase = nextRequiredPhase;
+      source = 'progress_json.next_required_phase_forward_drift_recovery';
+      driftRecovered = true;
+    }
+
+    return {
+      phase: phase || 'VALIDATE_FRESHNESS',
+      durablePhase,
+      progressPhase,
+      nextRequiredPhase,
+      lastBoundedAdvancePhase,
+      source,
+      driftRecovered
+    };
+  };
+  const phaseResolution = resolveCurrentPhase(operation.phase, progressJson);
+  const currentPhase = phaseResolution.phase;
   const lockOwner = trimStr(options.lockOwner || options.leaseOwner || operation.lease_owner || operation.locked_by || operation.lock_owner);
   const payChannelScope = upper(inputJson.pay_channel_scope || inputJson.payChannelScope || 'ALL') || 'ALL';
   const scheduleKind = upper(inputJson.schedule_kind || inputJson.scheduleKind || (inputJson.scheduled_at_utc ? 'SCHEDULED' : 'IMMEDIATE')) || 'IMMEDIATE';
@@ -24115,7 +24214,12 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
         phase: nextPhase,
         last_bounded_advance_phase: currentPhase,
         last_bounded_advance_at_utc: new Date().toISOString(),
-        last_message: progress.last_message || progress.status_text || null
+        last_message: progress.last_message || progress.status_text || null,
+        phase_resolution_source: phaseResolution.source,
+        phase_drift_recovered: phaseResolution.driftRecovered === true,
+        durable_phase_before_advance: phaseResolution.durablePhase || null,
+        progress_phase_before_advance: phaseResolution.progressPhase || null,
+        resolved_current_phase: currentPhase
       }),
       p_result_patch_json: isPlainObject(resultPatch) ? resultPatch : null,
       p_error_json: isPlainObject(errorPatch) ? errorPatch : null,
@@ -24302,10 +24406,25 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
     if (currentPhase === 'FRESHNESS_RESULT') {
       const freshness = await rpc('pay_batch_freshness_result_get', {
         p_operation_id: operationId,
-        p_pay_batch_id: payBatchId
+        p_pay_batch_id: payBatchId,
+        p_actor_user_id: actorUserId || null
       }, 'pay_batch_freshness_result_get');
+      const freshnessStatus = upper(freshness.status);
+      const freshnessReason = upper(freshness.reason || freshness.code || '');
+      const pendingFreshnessCount = numberValue(freshness.pending_count ?? freshness.pending_units, 0);
       if (freshness.ok === false) return reviewRequired(currentPhase, freshness.code || 'FRESHNESS_RESULT_FAILED', freshness.message || 'Freshness proof summary could not be read.', { freshness_result: freshness });
-      if (freshness.is_stale === true || freshness.stale === true || numberValue(freshness.stale_count, 0) > 0 || ['STALE', 'FAILED', 'ERROR'].includes(upper(freshness.status))) {
+      if (freshnessReason === 'NO_FRESHNESS_CHUNKS' || (freshness.validation_complete === false && numberValue(freshness.total_units ?? freshness.checked_count, 0) <= 0)) {
+        return reviewRequired(currentPhase, freshness.code || freshness.reason || 'FRESHNESS_RESULT_INCOMPLETE', freshness.message || 'Freshness proof summary was incomplete and cannot gate payment execution.', { freshness_result: freshness });
+      }
+      if (freshness.validation_complete === false || freshnessStatus === 'PENDING' || pendingFreshnessCount > 0) {
+        return moreWork('FRESHNESS_VALIDATE', {
+          status_text: 'Freshness proof is not complete; validation will continue before transfer preparation.',
+          freshness_result: freshness,
+          freshness_pending_count: pendingFreshnessCount,
+          next_required_phase: 'FRESHNESS_VALIDATE'
+        });
+      }
+      if (freshness.is_stale === true || freshness.stale === true || numberValue(freshness.stale_count, 0) > 0 || ['STALE', 'FAILED', 'ERROR'].includes(freshnessStatus)) {
         return reviewRequired(currentPhase, 'BATCH_STALE', 'Payment batch freshness validation did not pass.', { freshness_result: freshness });
       }
       return moreWork('TRANSFER_SCOPE_SEED', {
@@ -31196,10 +31315,6 @@ async function handleBankingPayCorrectionStatus(env, req, user, correctionReques
   }
 }
 
-
-
-
-
 async function handleBankingPayBatchExportCsv(env, req, user, payBatchId) {
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -31549,6 +31664,212 @@ async function handleBankingPayBatchExportCsv(env, req, user, payBatchId) {
     return firstFinite === null ? 0 : firstFinite;
   };
 
+  const isPlainExportObject = (value) => !!(value && typeof value === 'object' && !Array.isArray(value));
+
+  const firstFiniteExportNumber = (...values) => {
+    for (const value of values) {
+      if (value === null || value === undefined || value === '') continue;
+      const n = Number(value);
+      if (Number.isFinite(n)) return n;
+    }
+    return null;
+  };
+
+  const collectFiniteExportNumbers = (...values) => {
+    const out = [];
+    for (const value of values) {
+      if (value === null || value === undefined || value === '') continue;
+      const n = Number(value);
+      if (Number.isFinite(n)) out.push(n);
+    }
+    return out;
+  };
+
+  const loadRestRowsForCsvExport = async (pathWithQuery, { pageSize = 1000, maxPages = 250 } = {}) => {
+    const out = [];
+    const safePageSize = Number.isFinite(Number(pageSize)) ? Math.max(1, Math.min(1000, Math.trunc(Number(pageSize)))) : 1000;
+    const safeMaxPages = Number.isFinite(Number(maxPages)) ? Math.max(1, Math.min(1000, Math.trunc(Number(maxPages)))) : 250;
+    const joiner = String(pathWithQuery || '').includes('?') ? '&' : '?';
+    for (let pageIndex = 0; pageIndex < safeMaxPages; pageIndex += 1) {
+      const offset = pageIndex * safePageSize;
+      const { rows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}${pathWithQuery}${joiner}limit=${encodeURIComponent(String(safePageSize))}&offset=${encodeURIComponent(String(offset))}`
+      );
+      const pageRows = Array.isArray(rows) ? rows : [];
+      out.push(...pageRows);
+      if (pageRows.length < safePageSize) break;
+    }
+    return out;
+  };
+
+  const loadFrozenPayableItemEvidence = async () => {
+    const baseEvidence = {
+      known: false,
+      pay_batch_id: id,
+      candidate_count: null,
+      non_void_item_count: null,
+      item_count: null,
+      total_payable: null,
+      hasPayableContent: false,
+      source: 'pay_batch_items'
+    };
+
+    const candidateRows = await loadRestRowsForCsvExport(
+      `/rest/v1/pay_batch_candidates?pay_batch_id=eq.${encodeURIComponent(id)}&select=id`,
+      { pageSize: 1000, maxPages: 500 }
+    );
+    const candidateIds = Array.from(new Set(
+      candidateRows
+        .map((row) => String(row && row.id != null ? row.id : '').trim())
+        .filter(Boolean)
+    ));
+
+    if (!candidateIds.length) {
+      return {
+        ...baseEvidence,
+        known: true,
+        candidate_count: 0,
+        non_void_item_count: 0,
+        item_count: 0,
+        total_payable: 0,
+        hasPayableContent: false
+      };
+    }
+
+    let nonVoidItemCount = 0;
+    let payableItemCount = 0;
+    let payableTotal = 0;
+    const chunkSize = 50;
+
+    for (let index = 0; index < candidateIds.length; index += chunkSize) {
+      const chunk = candidateIds.slice(index, index + chunkSize);
+      const inList = chunk.map((candidateId) => encodeURIComponent(candidateId)).join(',');
+      const itemRows = await loadRestRowsForCsvExport(
+        `/rest/v1/pay_batch_items?pay_batch_candidate_id=in.(${inList})&select=pay_batch_candidate_id,is_voided,frozen_target_amount_inc_vat,amount_inc_vat,frozen_target_amount_ex_vat,amount_ex_vat`,
+        { pageSize: 1000, maxPages: 500 }
+      );
+
+      for (const item of itemRows) {
+        if (!item || typeof item !== 'object') continue;
+        const voidedText = String(item.is_voided == null ? '' : item.is_voided).trim().toLowerCase();
+        if (item.is_voided === true || voidedText === 'true' || voidedText === 't' || voidedText === '1' || voidedText === 'yes') continue;
+        nonVoidItemCount += 1;
+        const amount = firstFiniteExportNumber(
+          item.frozen_target_amount_inc_vat,
+          item.amount_inc_vat,
+          item.frozen_target_amount_ex_vat,
+          item.amount_ex_vat,
+          0
+        );
+        if (Number.isFinite(amount) && amount > 0) {
+          payableItemCount += 1;
+          payableTotal += amount;
+        }
+      }
+    }
+
+    const roundedTotal = Number.isFinite(payableTotal) ? Number(payableTotal.toFixed(2)) : 0;
+    return {
+      ...baseEvidence,
+      known: true,
+      candidate_count: candidateIds.length,
+      non_void_item_count: nonVoidItemCount,
+      item_count: payableItemCount,
+      total_payable: roundedTotal,
+      hasPayableContent: payableItemCount > 0 || roundedTotal > 0
+    };
+  };
+
+  const derivePayableDraftContentEvidence = (summary = {}, frozenItemEvidence = null) => {
+    const summaryObj = isPlainExportObject(summary) ? summary : {};
+    const displaySummary = isPlainExportObject(summaryObj.display_summary) ? summaryObj.display_summary : {};
+    const payBatchDisplaySummary = isPlainExportObject(summaryObj.pay_batch_display_summary) ? summaryObj.pay_batch_display_summary : {};
+    const frozenEvidence = isPlainExportObject(frozenItemEvidence) ? frozenItemEvidence : {};
+
+    const durableCountValues = collectFiniteExportNumbers(
+      summaryObj.item_count,
+      summaryObj.pay_batch_item_count,
+      summaryObj.non_void_item_count,
+      displaySummary.item_count,
+      displaySummary.pay_batch_item_count,
+      displaySummary.non_void_item_count,
+      payBatchDisplaySummary.item_count,
+      payBatchDisplaySummary.pay_batch_item_count,
+      payBatchDisplaySummary.non_void_item_count
+    );
+    const durableAmountValues = collectFiniteExportNumbers(
+      summaryObj.total_payable,
+      summaryObj.totalPayable,
+      summaryObj.total_amount,
+      summaryObj.totalAmount,
+      summaryObj.total_amount_inc_vat,
+      summaryObj.totalAmountIncVat,
+      displaySummary.total_payable,
+      displaySummary.totalPayable,
+      displaySummary.total_amount,
+      displaySummary.totalAmount,
+      displaySummary.total_amount_inc_vat,
+      displaySummary.totalAmountIncVat,
+      payBatchDisplaySummary.total_payable,
+      payBatchDisplaySummary.totalPayable,
+      payBatchDisplaySummary.total_amount,
+      payBatchDisplaySummary.totalAmount,
+      payBatchDisplaySummary.total_amount_inc_vat,
+      payBatchDisplaySummary.totalAmountIncVat
+    );
+    const activeCountValues = collectFiniteExportNumbers(
+      summaryObj.active_payment_count,
+      summaryObj.active_pay_item_count,
+      summaryObj.active_item_count,
+      summaryObj.payable_item_count,
+      displaySummary.active_payment_count,
+      displaySummary.active_pay_item_count,
+      displaySummary.active_item_count,
+      displaySummary.payable_item_count
+    );
+    const activeAmountValues = collectFiniteExportNumbers(
+      summaryObj.active_amount_inc_vat,
+      summaryObj.active_payment_amount_inc_vat,
+      displaySummary.active_amount_inc_vat,
+      displaySummary.active_payment_amount_inc_vat
+    );
+
+    const durableItemCount = numberFromSummary(...durableCountValues);
+    const durableTotalPayable = numberFromSummary(...durableAmountValues);
+    const activeItemCount = numberFromSummary(...activeCountValues);
+    const activeTotalPayable = numberFromSummary(...activeAmountValues);
+    const frozenKnown = frozenEvidence.known === true;
+    const frozenItemCount = firstFiniteExportNumber(frozenEvidence.item_count, frozenEvidence.payable_item_count);
+    const frozenTotalPayable = firstFiniteExportNumber(frozenEvidence.total_payable, frozenEvidence.totalPayable);
+    const frozenHasPayableContent = frozenEvidence.hasPayableContent === true || (Number.isFinite(frozenItemCount) && frozenItemCount > 0) || (Number.isFinite(frozenTotalPayable) && frozenTotalPayable > 0);
+    const hasDurablePayableContent = durableCountValues.some((value) => value > 0) || durableAmountValues.some((value) => value > 0);
+    const hasActivePositiveEvidence = activeCountValues.some((value) => value > 0) || activeAmountValues.some((value) => value > 0);
+    const durableEvidenceKnown = durableCountValues.length > 0 || durableAmountValues.length > 0;
+    const durableEvidenceAllZero = durableEvidenceKnown && durableCountValues.concat(durableAmountValues).every((value) => value <= 0);
+    const frozenEvidenceAllZero = frozenKnown && (!Number.isFinite(frozenItemCount) || frozenItemCount <= 0) && (!Number.isFinite(frozenTotalPayable) || frozenTotalPayable <= 0) && frozenHasPayableContent !== true;
+    const hasPayableContent = hasDurablePayableContent || hasActivePositiveEvidence || frozenHasPayableContent;
+    const known = durableEvidenceKnown || frozenKnown || hasActivePositiveEvidence;
+    const knownEmpty = !hasPayableContent && frozenKnown && frozenEvidenceAllZero && (!durableEvidenceKnown || durableEvidenceAllZero);
+
+    return {
+      known,
+      known_empty: knownEmpty,
+      knownEmpty,
+      has_payable_content: hasPayableContent,
+      hasPayableContent,
+      summary_item_count: durableItemCount,
+      summary_total_payable: durableTotalPayable,
+      active_item_count: activeItemCount,
+      active_total_payable: activeTotalPayable,
+      frozen_item_count: Number.isFinite(frozenItemCount) ? frozenItemCount : null,
+      frozen_total_payable: Number.isFinite(frozenTotalPayable) ? frozenTotalPayable : null,
+      frozen_known: frozenKnown,
+      frozen_query_error: frozenEvidence.error || null,
+      source: 'summary_display_and_frozen_pay_batch_items'
+    };
+  };
+
   const normalizeProvider = (rawProvider) => {
     const raw = String(rawProvider || '').trim().toUpperCase();
     if (!raw) return { provider: null, valid: false, reason: 'RAIL_PROVIDER_REQUIRED' };
@@ -31644,7 +31965,7 @@ async function handleBankingPayBatchExportCsv(env, req, user, payBatchId) {
     };
   };
 
-  const buildCsvExportPrepareOperation = async (reason, summary = {}) => {
+  const buildCsvExportPrepareOperation = async (reason, summary = {}, payableContentEvidence = null) => {
     const idempotencyBasis = {
       action: 'BANK_CSV_EXPORT_PREPARE',
       pay_batch_id: id,
@@ -31665,19 +31986,23 @@ async function handleBankingPayBatchExportCsv(env, req, user, payBatchId) {
     } catch {}
     if (!idempotencyHash) idempotencyHash = `${Date.now()}:${Math.random().toString(16).slice(2)}`;
 
+    const evidenceForOperation = isPlainExportObject(payableContentEvidence) ? payableContentEvidence : null;
+    const inputJson = {
+      source: 'handleBankingPayBatchExportCsv',
+      execution_mode: 'BANK_CSV_EXPORT_PREPARE',
+      prepare_bank_csv_export_only: true,
+      pay_channel_scope: payChannelScope,
+      requested_scope: requestedPayChannelScope,
+      reason: String(reason || 'PREPARE_REQUIRED')
+    };
+    if (evidenceForOperation) inputJson.bank_csv_payable_content_evidence = evidenceForOperation;
+
     const operationPayload = await startBankingPayOperation(env, {
       operation_type: 'PAYMENT_EXECUTE',
       actor_user_id: user.id,
       idempotency_key: `bank-csv-export-prepare:batch:${id}:scope:${payChannelScope}:hash:${idempotencyHash}`,
       pay_batch_id: id,
-      input_json: {
-        source: 'handleBankingPayBatchExportCsv',
-        execution_mode: 'BANK_CSV_EXPORT_PREPARE',
-        prepare_bank_csv_export_only: true,
-        pay_channel_scope: payChannelScope,
-        requested_scope: requestedPayChannelScope,
-        reason: String(reason || 'PREPARE_REQUIRED')
-      }
+      input_json: inputJson
     });
 
     return {
@@ -31688,7 +32013,8 @@ async function handleBankingPayBatchExportCsv(env, req, user, payBatchId) {
       pay_batch_id: id,
       requested_scope: requestedPayChannelScope,
       scope: payChannelScope,
-      reason: String(reason || 'PREPARE_REQUIRED')
+      reason: String(reason || 'PREPARE_REQUIRED'),
+      bank_csv_payable_content_evidence: evidenceForOperation
     };
   };
 
@@ -31704,24 +32030,31 @@ async function handleBankingPayBatchExportCsv(env, req, user, payBatchId) {
       return buildExportCsvFailureResponse(404, summary || 'PAY_BATCH_NOT_FOUND', 'PAY_BATCH_NOT_FOUND', 'CloudTMS could not create the bank CSV for this batch. Refresh the batch and try again.');
     }
 
-    const displaySummary = (summary.display_summary && typeof summary.display_summary === 'object' && !Array.isArray(summary.display_summary)) ? summary.display_summary : {};
-    const activePaymentCount = numberFromSummary(
-      summary.active_payment_count,
-      summary.active_pay_item_count,
-      summary.active_item_count,
-      summary.payable_item_count,
-      displaySummary.active_payment_count,
-      displaySummary.active_pay_item_count,
-      displaySummary.active_item_count,
-      displaySummary.payable_item_count
-    );
+    let frozenPayableItemEvidence = {
+      known: false,
+      pay_batch_id: id,
+      item_count: null,
+      total_payable: null,
+      hasPayableContent: false,
+      source: 'pay_batch_items'
+    };
+    try {
+      frozenPayableItemEvidence = await loadFrozenPayableItemEvidence();
+    } catch (evidenceError) {
+      frozenPayableItemEvidence = {
+        ...frozenPayableItemEvidence,
+        error: stringifyFailureValue(evidenceError) || 'FROZEN_PAYABLE_ITEM_EVIDENCE_UNAVAILABLE'
+      };
+    }
+
+    const payableContentEvidence = derivePayableDraftContentEvidence(summary, frozenPayableItemEvidence);
     const batchStatus = String(summary.batch_status || summary.status || '').trim().toUpperCase();
     const executionCommitState = String(summary.execution_commit_state || '').trim().toUpperCase();
     const freshnessStatus = String(summary.freshness_validation_status || '').trim().toUpperCase();
     const isCancelledBatch = batchStatus === 'CANCELLED' || batchStatus === 'CANCELED';
     const isPostExecutionOrHistoricalExport = isCancelledBatch || ['SUBMITTED_NOT_COMMITTED', 'COMMITTED'].includes(executionCommitState);
 
-    if (activePaymentCount <= 0 && !isPostExecutionOrHistoricalExport) {
+    if (payableContentEvidence.knownEmpty === true && !isPostExecutionOrHistoricalExport) {
       return withCORS(env, req, noActivePaymentsResponse());
     }
 
@@ -31731,7 +32064,7 @@ async function handleBankingPayBatchExportCsv(env, req, user, payBatchId) {
     }
 
     if (!['PASSED', 'NOT_REQUIRED'].includes(freshnessStatus) && !isPostExecutionOrHistoricalExport) {
-      const operationPayload = await buildCsvExportPrepareOperation('FRESHNESS_REQUIRED', summary);
+      const operationPayload = await buildCsvExportPrepareOperation('FRESHNESS_REQUIRED', summary, payableContentEvidence);
       return withCORS(env, req, jsonResponse(202, operationPayload));
     }
 
@@ -31740,7 +32073,7 @@ async function handleBankingPayBatchExportCsv(env, req, user, payBatchId) {
       csvText = await exportFrozenCsv();
     } catch (firstExportError) {
       if (isMissingTransferRowsError(firstExportError) && !isPostExecutionOrHistoricalExport) {
-        const operationPayload = await buildCsvExportPrepareOperation('TRANSFER_ROWS_REQUIRED_AFTER_EXPORT_CHECK', summary);
+        const operationPayload = await buildCsvExportPrepareOperation('TRANSFER_ROWS_REQUIRED_AFTER_EXPORT_CHECK', summary, payableContentEvidence);
         return withCORS(env, req, jsonResponse(202, operationPayload));
       }
       const norm = normalizeRpcError(firstExportError, 'PAY_EXPORT_BANK_CSV_FAILED');
@@ -31804,6 +32137,8 @@ async function handleBankingPayBatchExportCsv(env, req, user, payBatchId) {
     return withCORS(env, req, jsonResponse(norm.status, norm.body));
   }
 }
+
+
 
 
 async function handleBankingPayBatchExportDetailCsv(env, req, user, payBatchId) {
