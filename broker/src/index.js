@@ -24517,15 +24517,22 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
       }
 
       const itemSeedHasMore = itemSeed.has_more === true;
+      const itemSeedComplete = itemSeed.seed_complete === true && itemSeedHasMore !== true;
       const itemSeedCursorMap = transferScopeItemSeedCursorPatch(transferScopeId, itemSeedHasMore ? (itemSeed.next_cursor || itemSeed.next_cursor_json || null) : null);
-      return moreWork('SEED_TRANSFER_SCOPE_ITEMS', {
-        status_text: itemSeedHasMore ? 'Seeded one transfer-scope item membership page.' : 'Completed one transfer-scope item membership seed.',
+      if (!itemSeedHasMore && itemSeed.seed_complete !== true) {
+        return reviewRequired(currentPhase, 'TRANSFER_SCOPE_ITEM_SEED_INCOMPLETE', 'Transfer-scope item membership seed did not return a continuation cursor or a completion proof.', { transfer_scope_item_seed: itemSeed, transfer_scope_id: transferScopeId });
+      }
+      return moreWork(itemSeedComplete ? 'ROLLUP_TRANSFER_SCOPE_ITEMS' : 'SEED_TRANSFER_SCOPE_ITEMS', {
+        status_text: itemSeedHasMore ? 'Seeded one transfer-scope item membership page.' : 'Completed one transfer-scope item membership seed; transfer-scope rollup is next.',
         transfer_scope_item_seed: itemSeed,
         current_transfer_scope_item_seed_scope_id: itemSeedHasMore ? transferScopeId : null,
         transfer_scope_item_seed_scope_id: itemSeedHasMore ? transferScopeId : null,
         last_completed_transfer_scope_item_seed_scope_id: itemSeedHasMore ? null : transferScopeId,
         transfer_scope_item_seed_cursors: itemSeedCursorMap,
-        next_required_phase: itemSeedHasMore ? 'TRANSFER_SCOPE_ITEM_MEMBERSHIP_SEED_PAGE' : 'SEED_TRANSFER_SCOPE_ITEMS'
+        membership_seed_required: itemSeedHasMore,
+        unseeded_transfer_scope_count: itemSeedHasMore ? 1 : 0,
+        transfer_scope_group_seed_complete: itemSeedComplete ? true : progressJson.transfer_scope_group_seed_complete,
+        next_required_phase: itemSeedHasMore ? 'TRANSFER_SCOPE_ITEM_MEMBERSHIP_SEED_PAGE' : 'TRANSFER_SCOPE_ROLLUP_PAGE'
       });
     }
 
