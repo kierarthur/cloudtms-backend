@@ -120280,6 +120280,7 @@ DECLARE
   v_blockers jsonb := '[]'::jsonb;
   v_manual_result jsonb := '{}'::jsonb;
   v_safe_to_auto_apply boolean := false;
+  v_diagnostic_context text := NULL::text;
 BEGIN
   IF p_pay_batch_id IS NULL THEN
     RAISE EXCEPTION 'PAY_BATCH_ID_REQUIRED'
@@ -120291,7 +120292,32 @@ BEGIN
       USING ERRCODE = 'P0001', DETAIL = jsonb_build_object('code', 'PAYMENT_CORRECTION_SELECTION_JSON_MUST_BE_OBJECT', 'pay_batch_id', p_pay_batch_id)::text;
   END IF;
 
-  v_diagnostic_json := public.pay_payment_cancelability_diagnostic(p_pay_batch_id, v_selection_json, NULL::uuid);
+  v_diagnostic_context := CASE
+    WHEN UPPER(BTRIM(COALESCE(v_selection_json->>'diagnostic_context', v_selection_json->>'diagnosticContext', ''))) IN (
+      'CURRENT_PAYMENT_STATUS',
+      'CURRENT_PAYMENT_STATUS_TAB',
+      'PAYMENT_STATUS_TAB',
+      'PAYMENT_ISSUES_TAB',
+      'PAYMENT_ISSUE_REVIEW',
+      'CANCELLATION_ACTION',
+      'CANCEL_PAYMENT_ACTION',
+      'CANCEL_WHOLE_BATCH_ACTION',
+      'CORRECTION_REVIEW',
+      'CORRECTION_ACTION',
+      'PAYMENT_CORRECTION_PLAN',
+      'USER_TRIGGERED_DIAGNOSTIC',
+      'EXPLICIT_DIAGNOSTIC'
+    ) THEN UPPER(BTRIM(COALESCE(v_selection_json->>'diagnostic_context', v_selection_json->>'diagnosticContext', '')))
+    WHEN UPPER(BTRIM(COALESCE(v_selection_json->>'scope_type', v_selection_json->>'scopeType', ''))) IN ('BATCH', 'WHOLE_BATCH', 'ALL', 'PAY_BATCH') THEN 'CANCEL_WHOLE_BATCH_ACTION'
+    ELSE 'CANCEL_PAYMENT_ACTION'
+  END;
+
+  v_diagnostic_json := public.pay_payment_cancelability_diagnostic(
+    p_pay_batch_id,
+    v_selection_json,
+    NULL::uuid,
+    v_diagnostic_context
+  );
   v_lifecycle := NULLIF(btrim(COALESCE(v_diagnostic_json->>'payment_lifecycle_state', '')), '');
   v_recommended_action := NULLIF(btrim(COALESCE(v_diagnostic_json->>'recommended_action', '')), '');
   v_manual_result := jsonb_build_object(
@@ -120358,6 +120384,7 @@ BEGIN
   RETURN jsonb_build_object(
     'ok', true,
     'pay_batch_id', p_pay_batch_id::text,
+    'diagnostic_context', v_diagnostic_context,
     'classification', v_classification,
     'payment_lifecycle_state', v_lifecycle,
     'recommended_action', v_recommended_action,
@@ -142643,6 +142670,7 @@ BEGIN
 END;
 $function$;
 
+
 CREATE OR REPLACE FUNCTION public.pay_payment_cancel_not_sent_and_recalculate(p_pay_batch_id uuid, p_selection_json jsonb DEFAULT '{}'::jsonb, p_actor_user_id uuid DEFAULT NULL::uuid, p_reason text DEFAULT NULL::text, p_idempotency_key text DEFAULT NULL::text, p_confirmation_json jsonb DEFAULT '{}'::jsonb)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -142684,6 +142712,19 @@ DECLARE
   v_actor_valid boolean := false;
   v_is_complete boolean := false;
   v_grouped_alert_updates jsonb := '[]'::jsonb;
+  v_process_total integer := 0;
+  v_process_applied integer := 0;
+  v_process_skipped integer := 0;
+  v_process_blocked integer := 0;
+  v_process_failed_retryable integer := 0;
+  v_process_failed_final integer := 0;
+  v_process_pending integer := 0;
+  v_process_processing integer := 0;
+  v_process_cancelled integer := 0;
+  v_process_parent_status text := NULL::text;
+  v_process_failed boolean := false;
+  v_process_error_code text := NULL::text;
+  v_process_error_message text := NULL::text;
 BEGIN
   IF p_pay_batch_id IS NULL THEN
     RAISE EXCEPTION 'PAY_PAYMENT_CANCEL_NOT_SENT_BATCH_REQUIRED'
@@ -143127,6 +143168,46 @@ BEGIN
   v_grouped_alert_updates := COALESCE(v_process_result -> 'grouped_alert_updates', '[]'::jsonb);
   v_is_complete := COALESCE((v_process_result ->> 'complete')::boolean, false);
 
+  v_process_total := COALESCE(NULLIF(v_process_result #>> '{totals,total}', '')::integer, NULLIF(v_process_result ->> 'progress_total', '')::integer, 0);
+  v_process_applied := COALESCE(NULLIF(v_process_result #>> '{totals,applied}', '')::integer, NULLIF(v_process_result ->> 'applied', '')::integer, 0);
+  v_process_skipped := COALESCE(NULLIF(v_process_result #>> '{totals,skipped}', '')::integer, NULLIF(v_process_result ->> 'skipped', '')::integer, 0);
+  v_process_blocked := COALESCE(NULLIF(v_process_result #>> '{totals,blocked}', '')::integer, NULLIF(v_process_result ->> 'blocked', '')::integer, 0);
+  v_process_failed_retryable := COALESCE(NULLIF(v_process_result #>> '{totals,failed_retryable}', '')::integer, NULLIF(v_process_result ->> 'failed_retryable', '')::integer, 0);
+  v_process_failed_final := COALESCE(NULLIF(v_process_result #>> '{totals,failed_final}', '')::integer, NULLIF(v_process_result ->> 'failed_final', '')::integer, 0);
+  v_process_pending := COALESCE(NULLIF(v_process_result #>> '{totals,pending}', '')::integer, NULLIF(v_process_result ->> 'pending', '')::integer, 0);
+  v_process_processing := COALESCE(NULLIF(v_process_result #>> '{totals,processing}', '')::integer, NULLIF(v_process_result ->> 'processing', '')::integer, 0);
+  v_process_cancelled := COALESCE(NULLIF(v_process_result #>> '{totals,cancelled}', '')::integer, NULLIF(v_process_result ->> 'cancelled', '')::integer, 0);
+  v_process_parent_status := UPPER(NULLIF(BTRIM(COALESCE(v_process_result ->> 'parent_status', '')), ''));
+
+  v_process_failed := (
+    COALESCE((v_process_result ->> 'ok')::boolean, true) IS NOT TRUE
+    OR COALESCE(v_process_failed_final, 0) > 0
+    OR COALESCE(v_process_failed_retryable, 0) > 0
+    OR COALESCE(v_process_blocked, 0) > 0
+    OR v_process_parent_status IN ('FAILED', 'BLOCKED', 'APPLIED_WITH_BLOCKERS')
+    OR (
+      COALESCE(v_process_total, 0) > 0
+      AND COALESCE(v_is_complete, false) = true
+      AND COALESCE(v_process_applied, 0) + COALESCE(v_process_skipped, 0) + COALESCE(v_process_cancelled, 0) <= 0
+    )
+  );
+
+  v_process_error_code := CASE
+    WHEN COALESCE(v_process_failed_final, 0) > 0 OR v_process_parent_status = 'FAILED' THEN 'PAY_PAYMENT_CANCEL_NOT_SENT_PROCESS_FAILED'
+    WHEN COALESCE(v_process_failed_retryable, 0) > 0 THEN 'PAY_PAYMENT_CANCEL_NOT_SENT_PROCESS_RETRYABLE'
+    WHEN COALESCE(v_process_blocked, 0) > 0 OR v_process_parent_status IN ('BLOCKED', 'APPLIED_WITH_BLOCKERS') THEN 'PAY_PAYMENT_CANCEL_NOT_SENT_PROCESS_BLOCKED'
+    WHEN COALESCE(v_process_failed, false) THEN 'PAY_PAYMENT_CANCEL_NOT_SENT_NOT_APPLIED'
+    ELSE NULL::text
+  END;
+
+  v_process_error_message := CASE
+    WHEN COALESCE(v_process_failed_final, 0) > 0 OR v_process_parent_status = 'FAILED' THEN 'Cancel Draft Batch could not be completed because the cancellation work item failed.'
+    WHEN COALESCE(v_process_failed_retryable, 0) > 0 THEN 'Cancel Draft Batch could not be completed because the cancellation work item needs to be retried.'
+    WHEN COALESCE(v_process_blocked, 0) > 0 OR v_process_parent_status IN ('BLOCKED', 'APPLIED_WITH_BLOCKERS') THEN 'Cancel Draft Batch could not be completed because the cancellation work item was blocked.'
+    WHEN COALESCE(v_process_failed, false) THEN 'Cancel Draft Batch could not be completed because no cancellation work item was applied.'
+    ELSE NULL::text
+  END;
+
   v_signal_result := public.banking_pay_batch_signal_touch(
     p_pay_batch_id,
     'PAYMENT_CANCEL_NOT_SENT_AND_RECALCULATE',
@@ -143142,6 +143223,49 @@ BEGIN
     COALESCE(jsonb_array_length(v_grouped_alert_updates), 0) > 0,
     true
   );
+
+  IF COALESCE(v_process_failed, false) THEN
+    RETURN jsonb_build_object(
+      'ok', false,
+      'error_code', v_process_error_code,
+      'code', v_process_error_code,
+      'message', v_process_error_message,
+      'user_message', v_process_error_message,
+      'pay_batch_id', p_pay_batch_id::text,
+      'correction_request_id', v_request.id::text,
+      'payment_lifecycle_state', v_lifecycle_state,
+      'recommended_action', v_recommended_action,
+      'next_step', NULL::text,
+      'progress_completed', COALESCE(v_process_applied, 0) + COALESCE(v_process_skipped, 0) + COALESCE(v_process_cancelled, 0),
+      'progress_total', COALESCE(v_process_total, 0),
+      'is_complete', v_is_complete,
+      'voided_transfer_count', COALESCE((v_process_result ->> 'updated_transfer_count')::integer, 0),
+      'voided_item_count', COALESCE(v_process_applied, 0),
+      'released_reservation_count', COALESCE((v_process_result ->> 'released_reservations')::integer, 0),
+      'restored_finance_component_count', COALESCE((v_process_result ->> 'restored_finance_components')::integer, 0),
+      'carry_forward_created_count', COALESCE((v_process_result ->> 'carry_forward_created')::integer, 0),
+      'carry_forward_existing_count', COALESCE((v_process_result ->> 'carry_forward_existing')::integer, 0),
+      'carry_forward_released_count', COALESCE((v_process_result ->> 'carry_forward_released')::integer, 0),
+      'freshness_dirty_result', COALESCE(v_process_result -> 'freshness_dirty_result', '{}'::jsonb),
+      'diagnostic_json', v_diagnostic_json,
+      'expand_result', v_expand_result,
+      'process_result', v_process_result,
+      'live_signal', v_signal_result,
+      'grouped_alert_summary_impact', v_grouped_alert_updates,
+      'failure_summary', jsonb_build_object(
+        'parent_status', v_process_parent_status,
+        'total', COALESCE(v_process_total, 0),
+        'applied', COALESCE(v_process_applied, 0),
+        'skipped', COALESCE(v_process_skipped, 0),
+        'blocked', COALESCE(v_process_blocked, 0),
+        'failed_retryable', COALESCE(v_process_failed_retryable, 0),
+        'failed_final', COALESCE(v_process_failed_final, 0),
+        'pending', COALESCE(v_process_pending, 0),
+        'processing', COALESCE(v_process_processing, 0),
+        'cancelled', COALESCE(v_process_cancelled, 0)
+      )
+    );
+  END IF;
 
   RETURN jsonb_build_object(
     'ok', true,
