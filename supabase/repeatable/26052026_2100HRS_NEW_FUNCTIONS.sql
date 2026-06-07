@@ -44679,6 +44679,7 @@ $function$;
 
 DROP FUNCTION IF EXISTS public.pay_batch_insert_items_from_preview(uuid, uuid);
 
+
 CREATE OR REPLACE FUNCTION public.pay_batch_insert_items_from_preview(p_pay_batch_id uuid, p_actor_user_id uuid DEFAULT NULL::uuid, p_operation_id uuid DEFAULT NULL::uuid, p_candidate_scope_ids jsonb DEFAULT NULL::jsonb)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -45417,6 +45418,8 @@ BEGIN
     RAISE EXCEPTION 'Selected preview rows did not resolve TS_DAY economic keys to YYYY-MM-DD date buckets';
   END IF;
 
+  DROP TABLE IF EXISTS pg_temp.tmp_pay_batch_item_normalised_rows;
+  CREATE TEMPORARY TABLE tmp_pay_batch_item_normalised_rows ON COMMIT DROP AS
   WITH prepared_rows AS (
     SELECT
       allocation_row.id AS allocation_row_id,
@@ -45473,6 +45476,29 @@ BEGIN
       normalised_source_rows.*,
       payee_resolution.resolved_umbrella_id,
       COALESCE(umbrella_row.vat_chargeable, false) AS umbrella_vat_chargeable,
+      payout_route.routing_kind,
+      payout_route.payee_entity_kind,
+      payout_route.payee_entity_id,
+      payout_route.beneficiary_name,
+      payout_route.destination_label,
+      payout_route.sort_code,
+      payout_route.account_number,
+      payout_route.bank_details_hash,
+      payout_route.week_ending_bucket,
+      payout_route.payout_instruction_error_code,
+      jsonb_strip_nulls(jsonb_build_object(
+        'routing_kind', payout_route.routing_kind,
+        'payee_entity_kind', payout_route.payee_entity_kind,
+        'payee_entity_id', CASE WHEN payout_route.payee_entity_id IS NULL THEN NULL ELSE payout_route.payee_entity_id::text END,
+        'umbrella_id', CASE WHEN payout_route.payee_entity_kind = 'UMBRELLA' AND payee_resolution.resolved_umbrella_id IS NOT NULL THEN payee_resolution.resolved_umbrella_id::text ELSE NULL END,
+        'beneficiary_name', payout_route.beneficiary_name,
+        'payee_name', payout_route.beneficiary_name,
+        'sort_code', payout_route.sort_code,
+        'account_number', payout_route.account_number,
+        'bank_details_hash', payout_route.bank_details_hash,
+        'destination_label', payout_route.destination_label,
+        'week_ending_bucket', CASE WHEN payout_route.week_ending_bucket IS NULL THEN NULL ELSE payout_route.week_ending_bucket::text END
+      )) AS payout_instruction_snapshot_json,
       ROUND(COALESCE((vat_calculation.vat_json->>'vat')::numeric, 0), 2)::numeric(12,2) AS amount_vat,
       ROUND(COALESCE((vat_calculation.vat_json->>'inc')::numeric, normalised_source_rows.amount_ex_vat, 0), 2)::numeric(12,2) AS amount_inc_vat
     FROM normalised_source_rows
@@ -45499,14 +45525,136 @@ BEGIN
     LEFT JOIN public.umbrellas AS umbrella_row
       ON umbrella_row.id = payee_resolution.resolved_umbrella_id
     CROSS JOIN LATERAL (
+      SELECT
+        UPPER(BTRIM(COALESCE(normalised_source_rows.pay_channel, ''))) AS channel_upper,
+        NULLIF(BTRIM(COALESCE(umbrella_row.name, '')), '') AS umbrella_name,
+        NULLIF(BTRIM(COALESCE(umbrella_row.sort_code, '')), '') AS umbrella_sort_code,
+        NULLIF(BTRIM(COALESCE(umbrella_row.account_number, '')), '') AS umbrella_account_number,
+        NULLIF(BTRIM(COALESCE(umbrella_row.bank_details_hash, '')), '') AS umbrella_bank_details_hash,
+        COALESCE(
+          NULLIF(BTRIM(candidate_row.account_holder), ''),
+          NULLIF(BTRIM(candidate_row.display_name), ''),
+          NULLIF(BTRIM(CONCAT_WS(' ', NULLIF(BTRIM(candidate_row.first_name), ''), NULLIF(BTRIM(candidate_row.last_name), ''))), '')
+        ) AS candidate_payee_name,
+        NULLIF(BTRIM(COALESCE(candidate_row.sort_code, '')), '') AS candidate_sort_code,
+        NULLIF(BTRIM(COALESCE(candidate_row.account_number, '')), '') AS candidate_account_number,
+        NULLIF(BTRIM(COALESCE(candidate_row.bank_details_hash, '')), '') AS candidate_bank_details_hash,
+        CASE
+          WHEN NULLIF(BTRIM(COALESCE(
+            normalised_source_rows.line_json->>'week_ending_bucket',
+            normalised_source_rows.line_json->>'week_ending_date',
+            normalised_source_rows.line_json#>>'{timesheet,week_ending_date}',
+            normalised_source_rows.allocation_basis_json->>'week_ending_bucket',
+            normalised_source_rows.allocation_basis_json->>'week_ending_date',
+            normalised_source_rows.allocation_basis_json#>>'{timesheet,week_ending_date}',
+            ''
+          )), '') ~ '^\d{4}-\d{2}-\d{2}$'
+            THEN NULLIF(BTRIM(COALESCE(
+              normalised_source_rows.line_json->>'week_ending_bucket',
+              normalised_source_rows.line_json->>'week_ending_date',
+              normalised_source_rows.line_json#>>'{timesheet,week_ending_date}',
+              normalised_source_rows.allocation_basis_json->>'week_ending_bucket',
+              normalised_source_rows.allocation_basis_json->>'week_ending_date',
+              normalised_source_rows.allocation_basis_json#>>'{timesheet,week_ending_date}',
+              ''
+            )), '')::date
+          ELSE NULL::date
+        END AS resolved_week_ending_bucket
+    ) AS payout_source
+    CROSS JOIN LATERAL (
+      SELECT
+        CASE WHEN payout_source.channel_upper = 'UMBRELLA' THEN 'UMBRELLA_COMPANY' ELSE 'NORMAL_PAY_ROUTE' END AS routing_kind,
+        CASE WHEN payout_source.channel_upper = 'UMBRELLA' THEN 'UMBRELLA' ELSE 'CANDIDATE' END AS payee_entity_kind,
+        CASE WHEN payout_source.channel_upper = 'UMBRELLA' THEN payee_resolution.resolved_umbrella_id ELSE candidate_row.id END AS payee_entity_id,
+        CASE WHEN payout_source.channel_upper = 'UMBRELLA' THEN payout_source.umbrella_name ELSE payout_source.candidate_payee_name END AS beneficiary_name,
+        CASE WHEN payout_source.channel_upper = 'UMBRELLA' THEN payout_source.umbrella_name ELSE payout_source.candidate_payee_name END AS destination_label,
+        CASE WHEN payout_source.channel_upper = 'UMBRELLA' THEN payout_source.umbrella_sort_code ELSE payout_source.candidate_sort_code END AS sort_code,
+        CASE WHEN payout_source.channel_upper = 'UMBRELLA' THEN payout_source.umbrella_account_number ELSE payout_source.candidate_account_number END AS account_number,
+        CASE WHEN payout_source.channel_upper = 'UMBRELLA' THEN payout_source.umbrella_bank_details_hash ELSE payout_source.candidate_bank_details_hash END AS bank_details_hash,
+        payout_source.resolved_week_ending_bucket AS week_ending_bucket,
+        CASE
+          WHEN payout_source.channel_upper = 'UMBRELLA' AND payee_resolution.resolved_umbrella_id IS NULL THEN 'PAYOUT_INSTRUCTION_UMBRELLA_REQUIRED'
+          WHEN payout_source.channel_upper = 'UMBRELLA' AND umbrella_row.id IS NULL THEN 'PAYOUT_INSTRUCTION_UMBRELLA_NOT_FOUND'
+          WHEN payout_source.channel_upper = 'UMBRELLA' AND COALESCE(umbrella_row.enabled, false) IS NOT TRUE THEN 'PAYOUT_INSTRUCTION_UMBRELLA_DISABLED'
+          WHEN payout_source.channel_upper = 'UMBRELLA' AND (
+            payout_source.umbrella_name IS NULL
+            OR length(regexp_replace(COALESCE(payout_source.umbrella_sort_code, ''), '[^0-9]', '', 'g')) <> 6
+            OR NULLIF(regexp_replace(COALESCE(payout_source.umbrella_account_number, ''), '[^0-9]', '', 'g'), '') IS NULL
+            OR payout_source.umbrella_bank_details_hash IS NULL
+          ) THEN 'PAYOUT_INSTRUCTION_UMBRELLA_BANK_DETAILS_MISSING'
+          WHEN payout_source.channel_upper = 'PAYE' AND (
+            payout_source.candidate_payee_name IS NULL
+            OR length(regexp_replace(COALESCE(payout_source.candidate_sort_code, ''), '[^0-9]', '', 'g')) <> 6
+            OR NULLIF(regexp_replace(COALESCE(payout_source.candidate_account_number, ''), '[^0-9]', '', 'g'), '') IS NULL
+            OR payout_source.candidate_bank_details_hash IS NULL
+          ) THEN 'PAYOUT_INSTRUCTION_PAYE_BANK_DETAILS_MISSING'
+          WHEN payout_source.channel_upper NOT IN ('PAYE', 'UMBRELLA') THEN 'PAYOUT_INSTRUCTION_PAY_CHANNEL_UNSUPPORTED'
+          ELSE NULL::text
+        END AS payout_instruction_error_code
+    ) AS payout_route
+    CROSS JOIN LATERAL (
       SELECT public._pay_umbrella_vat_calc(
         normalised_source_rows.amount_ex_vat,
         v_vat_rate_pct,
-        UPPER(BTRIM(COALESCE(normalised_source_rows.pay_channel, ''))) = 'UMBRELLA'
+        payout_source.channel_upper = 'UMBRELLA'
           AND COALESCE(umbrella_row.vat_chargeable, false)
       ) AS vat_json
     ) AS vat_calculation
-  ), inserted_items AS (
+  )
+  SELECT normalised_rows.*
+  FROM normalised_rows;
+
+  IF EXISTS (
+    SELECT 1
+    FROM pg_temp.tmp_pay_batch_item_normalised_rows AS validation_rows
+    WHERE validation_rows.payout_instruction_error_code IS NOT NULL
+  ) THEN
+    RAISE EXCEPTION 'PAYOUT_INSTRUCTION_FREEZE_FAILED'
+      USING ERRCODE = 'P0001',
+            DETAIL = (
+              SELECT jsonb_build_object(
+                'code', 'PAYOUT_INSTRUCTION_FREEZE_FAILED',
+                'message', COALESCE(
+                  MIN(failure_rows.failure_message) FILTER (WHERE failure_rows.failure_message IS NOT NULL),
+                  'Draft payout instructions could not be frozen from the resolved payee bank details.'
+                ),
+                'pay_batch_id', p_pay_batch_id::text,
+                'operation_id', p_operation_id::text,
+                'first_failure_code', MIN(failure_rows.payout_instruction_error_code) FILTER (WHERE failure_rows.payout_instruction_error_code IS NOT NULL),
+                'first_failure_message', MIN(failure_rows.failure_message) FILTER (WHERE failure_rows.failure_message IS NOT NULL),
+                'failures', COALESCE(jsonb_agg(jsonb_build_object(
+                  'allocation_row_id', failure_rows.allocation_row_id::text,
+                  'candidate_id', failure_rows.candidate_id::text,
+                  'pay_channel', failure_rows.pay_channel,
+                  'umbrella_id', CASE WHEN failure_rows.resolved_umbrella_id IS NULL THEN NULL ELSE failure_rows.resolved_umbrella_id::text END,
+                  'code', failure_rows.payout_instruction_error_code,
+                  'message', failure_rows.failure_message
+                ) ORDER BY failure_rows.allocation_row_id), '[]'::jsonb)
+              )::text
+              FROM (
+                SELECT validation_rows.allocation_row_id,
+                       validation_rows.candidate_id,
+                       validation_rows.pay_channel,
+                       validation_rows.resolved_umbrella_id,
+                       validation_rows.payout_instruction_error_code,
+                       CASE validation_rows.payout_instruction_error_code
+                         WHEN 'PAYOUT_INSTRUCTION_UMBRELLA_REQUIRED' THEN 'Umbrella payment cannot be drafted because the candidate has no resolved umbrella payee.'
+                         WHEN 'PAYOUT_INSTRUCTION_UMBRELLA_NOT_FOUND' THEN 'Umbrella payment cannot be drafted because the resolved umbrella payee was not found.'
+                         WHEN 'PAYOUT_INSTRUCTION_UMBRELLA_DISABLED' THEN 'Umbrella payment cannot be drafted because the resolved umbrella is disabled.'
+                         WHEN 'PAYOUT_INSTRUCTION_UMBRELLA_BANK_DETAILS_MISSING' THEN 'Umbrella payment cannot be drafted because the enabled umbrella is missing mandatory bank details.'
+                         WHEN 'PAYOUT_INSTRUCTION_PAYE_BANK_DETAILS_MISSING' THEN 'PAYE payment cannot be drafted because the candidate is missing mandatory bank details.'
+                         WHEN 'PAYOUT_INSTRUCTION_PAY_CHANNEL_UNSUPPORTED' THEN 'Payment cannot be drafted because the pay channel is unsupported for bank payout freezing.'
+                         ELSE 'Draft payout instructions could not be frozen from the resolved payee bank details.'
+                       END AS failure_message
+                FROM pg_temp.tmp_pay_batch_item_normalised_rows AS validation_rows
+                WHERE validation_rows.payout_instruction_error_code IS NOT NULL
+                ORDER BY validation_rows.allocation_row_id
+                LIMIT 25
+              ) AS failure_rows
+            );
+  END IF;
+
+  WITH inserted_items AS (
     INSERT INTO public.pay_batch_items(
       pay_batch_candidate_id,
       item_type,
@@ -45536,6 +45684,7 @@ BEGIN
       frozen_target_amount_ex_vat,
       frozen_target_amount_vat,
       frozen_target_amount_inc_vat,
+      payout_instruction_snapshot_json,
       operation_source_key
     )
     SELECT
@@ -45567,8 +45716,9 @@ BEGIN
       normalised_rows.amount_ex_vat,
       normalised_rows.amount_vat,
       normalised_rows.amount_inc_vat,
+      normalised_rows.payout_instruction_snapshot_json,
       normalised_rows.operation_source_key
-    FROM normalised_rows
+    FROM pg_temp.tmp_pay_batch_item_normalised_rows AS normalised_rows
     JOIN public.pay_batch_candidates AS pay_batch_candidate
       ON pay_batch_candidate.pay_batch_id = p_pay_batch_id
      AND pay_batch_candidate.candidate_id = normalised_rows.candidate_id
@@ -45593,6 +45743,16 @@ BEGIN
      AND pay_batch_item.operation_source_key = allocation_row.operation_source_key
      AND COALESCE(pay_batch_item.is_voided, false) = false
      AND UPPER(BTRIM(COALESCE(allocation_row.allocation_type, ''))) <> 'OVERPAYMENT_RECOVERY'
+  ), repaired_item_snapshots AS (
+    UPDATE public.pay_batch_items AS item_update
+    SET payout_instruction_snapshot_json = normalised_rows.payout_instruction_snapshot_json,
+        updated_at = v_now
+    FROM matched_items
+    JOIN pg_temp.tmp_pay_batch_item_normalised_rows AS normalised_rows
+      ON normalised_rows.allocation_row_id = matched_items.allocation_row_id
+    WHERE item_update.id = matched_items.pay_batch_item_id
+      AND item_update.payout_instruction_snapshot_json IS NULL
+    RETURNING item_update.id
   ), updated_allocations AS (
     UPDATE public.banking_pay_operation_candidate_allocation_rows AS allocation_update
     SET status = 'ITEM_CREATED',
@@ -45693,6 +45853,8 @@ BEGIN
   );
 END;
 $function$;
+
+
 
 
 DROP FUNCTION IF EXISTS public.pay_batch_apply_finance_adjustments(uuid, text, uuid, numeric, date);
@@ -68613,17 +68775,11 @@ $function$;
 
 DROP FUNCTION IF EXISTS public.pay_execute_bank_transfer_scope_seed(uuid, uuid, text, uuid, boolean);
 
-CREATE OR REPLACE FUNCTION public.pay_execute_bank_transfer_scope_seed(
-  p_operation_id uuid,
-  p_pay_batch_id uuid,
-  p_pay_channel_scope text,
-  p_actor_user_id uuid,
-  p_retry_blocked_funds boolean DEFAULT false
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public', 'pg_temp'
+CREATE OR REPLACE FUNCTION public.pay_execute_bank_transfer_scope_seed(p_operation_id uuid, p_pay_batch_id uuid, p_pay_channel_scope text, p_actor_user_id uuid, p_retry_blocked_funds boolean DEFAULT false)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
 AS $function$
 DECLARE
   v_now timestamptz := now();
@@ -68918,7 +69074,7 @@ BEGIN
       COALESCE(batch_item.amount_inc_vat, batch_item.amount_ex_vat, 0)::numeric AS item_amount,
       batch_candidate.net_bank_amount,
       batch_item.payout_instruction_snapshot_json,
-      upper(coalesce(batch_item.payout_instruction_snapshot_json->>'payee_entity_kind', CASE WHEN batch_item.pay_channel = 'UMBRELLA' THEN 'UMBRELLA' ELSE 'CANDIDATE' END)) AS payee_entity_kind,
+      upper(nullif(btrim(coalesce(batch_item.payout_instruction_snapshot_json->>'payee_entity_kind', '')), '')) AS payee_entity_kind,
       CASE
         WHEN nullif(btrim(coalesce(batch_item.payout_instruction_snapshot_json->>'payee_entity_id', '')), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
           THEN (batch_item.payout_instruction_snapshot_json->>'payee_entity_id')::uuid
@@ -68987,7 +69143,8 @@ BEGIN
              OR source_page.bank_details_hash_snapshot IS NULL
              OR length(regexp_replace(coalesce(source_page.sort_code, ''), '[^0-9]', '', 'g')) <> 6
              OR nullif(regexp_replace(coalesce(source_page.account_number, ''), '[^0-9]', '', 'g'), '') IS NULL
-             OR nullif(btrim(coalesce(source_page.account_type, '')), '') IS NULL
+             OR (source_page.pay_channel = 'UMBRELLA' AND (source_page.payee_entity_kind IS NULL OR source_page.payee_entity_kind <> 'UMBRELLA' OR source_page.payee_entity_id IS NULL OR source_page.umbrella_id IS NULL OR source_page.payee_entity_id IS DISTINCT FROM source_page.umbrella_id))
+             OR (source_page.pay_channel = 'PAYE' AND (source_page.payee_entity_kind IS NULL OR source_page.payee_entity_kind <> 'CANDIDATE' OR source_page.payee_entity_id IS NULL OR source_page.payee_entity_id IS DISTINCT FROM source_page.candidate_id))
              OR (source_page.pay_channel = 'PAYE' AND round(coalesce(source_page.net_bank_amount, 0), 2) <= 0)
            THEN 'FAILED'
            ELSE 'PENDING'
@@ -82879,17 +83036,11 @@ DROP FUNCTION IF EXISTS public.pay_batch_prepare(uuid, uuid);
 DROP FUNCTION IF EXISTS public.pay_batch_prepare(uuid, uuid, uuid, text);
 
 
-
-CREATE OR REPLACE FUNCTION public.pay_batch_prepare(
-  p_pay_batch_id uuid,
-  p_actor_user_id uuid,
-  p_operation_id uuid DEFAULT NULL::uuid,
-  p_freshness_result_hash text DEFAULT NULL::text
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
+CREATE OR REPLACE FUNCTION public.pay_batch_prepare(p_pay_batch_id uuid, p_actor_user_id uuid, p_operation_id uuid DEFAULT NULL::uuid, p_freshness_result_hash text DEFAULT NULL::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
 AS $function$
 DECLARE
   v_now timestamptz := now();
@@ -83789,7 +83940,8 @@ BEGIN
     p_pay_batch_id => p_pay_batch_id,
     p_pay_channel_scope => v_pay_channel_scope,
     p_operation_id => p_operation_id,
-    p_include_unscoped_transfers => CASE WHEN p_operation_id IS NULL THEN true ELSE false END
+    p_include_unscoped_transfers => CASE WHEN p_operation_id IS NULL THEN true ELSE false END,
+    p_action_context => 'PREPARE_ACTION'
   ) AS classified_transfer
   WHERE (
     p_operation_id IS NULL
@@ -84205,7 +84357,6 @@ BEGIN
   );
 END;
 $function$;
-
 
 
 
@@ -84726,21 +84877,16 @@ $function$;
 
 
 
-
-
-create or replace function public.pay_export_bank_csv(
-  p_pay_batch_id uuid,
-  p_scope text default 'ALL'
-)
-returns text
-language plpgsql
-security definer
-set search_path = public
-as $$
+CREATE OR REPLACE FUNCTION public.pay_export_bank_csv(p_pay_batch_id uuid, p_scope text DEFAULT 'ALL'::text)
+ RETURNS text
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
 declare
   v_scope text := upper(btrim(coalesce(p_scope, 'ALL')));
 
-  v_default_cols jsonb := '["payment_reference","payee_name","sort_code","account_number","account_type","amount"]'::jsonb;
+  v_default_cols jsonb := '["payment_reference","payee_name","sort_code","account_number","amount"]'::jsonb;
   v_cols_json jsonb;
   v_cols text[];
   v_col text;
@@ -85007,7 +85153,7 @@ begin
   from jsonb_array_elements_text(v_cols_json) with ordinality as t(col, ord);
 
   if array_length(v_cols, 1) is null or array_length(v_cols, 1) = 0 then
-    v_cols := array['payment_reference','payee_name','sort_code','account_number','account_type','amount']::text[];
+    v_cols := array['payment_reference','payee_name','sort_code','account_number','amount']::text[];
   end if;
 
   -- Validate column keys: must be from allowed set.
@@ -85049,7 +85195,6 @@ begin
       or (array_position(v_cols,'payee_name') is not null and pbt.payee_name is null)
       or (array_position(v_cols,'sort_code') is not null and pbt.sort_code is null)
       or (array_position(v_cols,'account_number') is not null and pbt.account_number is null)
-      or (array_position(v_cols,'account_type') is not null and pbt.account_type is null)
       or (array_position(v_cols,'amount') is not null and pbt.amount is null)
       or (array_position(v_cols,'currency') is not null and pbt.currency is null)
       or (array_position(v_cols,'pay_channel') is not null and pbt.pay_channel is null)
@@ -85277,7 +85422,7 @@ begin
 
   return v_csv;
 end;
-$$;
+$function$;
 
 
 
@@ -95923,30 +96068,11 @@ DROP FUNCTION IF EXISTS public.pay_batch_auth_start(uuid, text, timestamptz, tex
 
 
 
-CREATE OR REPLACE FUNCTION public.pay_batch_auth_start(
-  p_pay_batch_id uuid,
-  p_schedule_kind text,
-  p_scheduled_at_utc timestamptz,
-  p_funding_account_ref text,
-  p_warning_hours_json jsonb,
-  p_actor_user_id uuid,
-  p_actor_intent text DEFAULT NULL::text,
-  p_execution_mode text DEFAULT 'STANDARD_BANK'::text,
-  p_payment_date date DEFAULT NULL::date,
-  p_pay_channel_scope text DEFAULT 'ALL'::text,
-  p_suppress_remittances boolean DEFAULT false,
-  p_suppress_remittances_confirmed boolean DEFAULT false,
-  p_csv_uploaded_confirmed boolean DEFAULT false,
-  p_csv_bank_confirm_ref text DEFAULT NULL::text,
-  p_external_settlement_comment text DEFAULT NULL::text,
-  p_operation_id uuid DEFAULT NULL::uuid,
-  p_idempotency_key text DEFAULT NULL::text,
-  p_freshness_result_hash text DEFAULT NULL::text
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
+CREATE OR REPLACE FUNCTION public.pay_batch_auth_start(p_pay_batch_id uuid, p_schedule_kind text, p_scheduled_at_utc timestamp with time zone, p_funding_account_ref text, p_warning_hours_json jsonb, p_actor_user_id uuid, p_actor_intent text DEFAULT NULL::text, p_execution_mode text DEFAULT 'STANDARD_BANK'::text, p_payment_date date DEFAULT NULL::date, p_pay_channel_scope text DEFAULT 'ALL'::text, p_suppress_remittances boolean DEFAULT false, p_suppress_remittances_confirmed boolean DEFAULT false, p_csv_uploaded_confirmed boolean DEFAULT false, p_csv_bank_confirm_ref text DEFAULT NULL::text, p_external_settlement_comment text DEFAULT NULL::text, p_operation_id uuid DEFAULT NULL::uuid, p_idempotency_key text DEFAULT NULL::text, p_freshness_result_hash text DEFAULT NULL::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
 AS $function$
 DECLARE
   v_now timestamptz := now();
@@ -96671,7 +96797,8 @@ BEGIN
         p_pay_batch_id => p_pay_batch_id,
         p_pay_channel_scope => v_pay_channel_scope,
         p_operation_id => p_operation_id,
-        p_include_unscoped_transfers => CASE WHEN p_operation_id IS NULL THEN true ELSE false END
+        p_include_unscoped_transfers => CASE WHEN p_operation_id IS NULL THEN true ELSE false END,
+        p_action_context => 'AUTHORISATION_ACTION'
       ) AS classified_transfer;
 
       IF p_operation_id IS NOT NULL THEN
@@ -97245,8 +97372,6 @@ BEGIN
   );
 END;
 $function$;
-
-
 
 
 create or replace function public.pay_batch_auth_apply_action(
