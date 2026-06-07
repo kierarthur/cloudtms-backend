@@ -154137,10 +154137,10 @@ END;
 $function$;
 
 
-
 CREATE OR REPLACE FUNCTION public.pay_batch_freshness_result_get(
   p_operation_id uuid,
-  p_pay_batch_id uuid DEFAULT NULL::uuid
+  p_pay_batch_id uuid,
+  p_actor_user_id uuid DEFAULT NULL::uuid
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -154150,166 +154150,782 @@ AS $function$
 DECLARE
   v_now timestamptz := now();
   v_operation public.banking_pay_operations%ROWTYPE;
+  v_batch public.pay_batches%ROWTYPE;
   v_pay_batch_id uuid := p_pay_batch_id;
-  v_summary jsonb := '{}'::jsonb;
-  v_status text := 'PENDING';
-  v_total_units integer := 0;
-  v_fresh_units integer := 0;
-  v_stale_units integer := 0;
-  v_pending_units integer := 0;
-  v_error_units integer := 0;
-  v_stale_reasons jsonb := '[]'::jsonb;
-  v_diff_samples jsonb := '[]'::jsonb;
-  v_result_hash text := NULL::text;
-  v_scope_hash text := NULL::text;
-  v_is_stale boolean := false;
-  v_result_json jsonb := '{}'::jsonb;
-BEGIN
-  PERFORM public.banking_pay_hot_path_budget_apply('PROGRESS');
+  v_actor_is_valid boolean := true;
+  v_progress_summary jsonb := '{}'::jsonb;
 
+  v_total_unit_count integer := 0;
+  v_fresh_unit_count integer := 0;
+  v_stale_unit_count integer := 0;
+  v_pending_unit_count integer := 0;
+  v_error_unit_count integer := 0;
+  v_completed_unit_count integer := 0;
+  v_unit_result_hashes jsonb := '[]'::jsonb;
+
+  v_total_chunk_count integer := 0;
+  v_pending_chunk_count integer := 0;
+  v_running_chunk_count integer := 0;
+  v_failed_chunk_count integer := 0;
+  v_complete_chunk_count integer := 0;
+  v_chunk_result_hashes jsonb := '[]'::jsonb;
+
+  v_validation_complete boolean := false;
+  v_is_stale boolean := false;
+  v_checked_count integer := 0;
+  v_stale_count integer := 0;
+  v_failed_count integer := 0;
+  v_key_resolution_failure_count integer := 0;
+  v_stale_reasons jsonb := '[]'::jsonb;
+  v_stale_reason_counts jsonb := '{}'::jsonb;
+  v_diff_sample jsonb := '[]'::jsonb;
+  v_failed_sample jsonb := '[]'::jsonb;
+  v_checked_at_utc timestamptz := NULL::timestamptz;
+  v_scope_hash text := NULL::text;
+  v_result_hash text := NULL::text;
+  v_status text := 'PENDING';
+  v_result jsonb := '{}'::jsonb;
+  v_hash_basis jsonb := '{}'::jsonb;
+BEGIN
   IF p_operation_id IS NULL THEN
-    RAISE EXCEPTION 'pay_batch_freshness_result_get: p_operation_id is required';
+    RAISE EXCEPTION 'PAY_BATCH_FRESHNESS_RESULT_GET_OPERATION_ID_REQUIRED'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object('code', 'PAY_BATCH_FRESHNESS_RESULT_GET_OPERATION_ID_REQUIRED')::text;
   END IF;
 
   SELECT operation_row.*
   INTO v_operation
   FROM public.banking_pay_operations AS operation_row
-  WHERE operation_row.id = p_operation_id;
+  WHERE operation_row.id = p_operation_id
+  FOR UPDATE;
 
   IF NOT FOUND THEN
-    RAISE EXCEPTION 'pay_batch_freshness_result_get operation not found: %', p_operation_id;
+    RAISE EXCEPTION 'PAY_BATCH_FRESHNESS_RESULT_GET_OPERATION_NOT_FOUND'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object(
+              'code', 'PAY_BATCH_FRESHNESS_RESULT_GET_OPERATION_NOT_FOUND',
+              'operation_id', p_operation_id::text
+            )::text;
   END IF;
 
   v_pay_batch_id := COALESCE(v_pay_batch_id, v_operation.pay_batch_id);
 
-  v_summary := CASE
+  IF v_pay_batch_id IS NULL THEN
+    RAISE EXCEPTION 'PAY_BATCH_FRESHNESS_RESULT_GET_PAY_BATCH_ID_REQUIRED'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object(
+              'code', 'PAY_BATCH_FRESHNESS_RESULT_GET_PAY_BATCH_ID_REQUIRED',
+              'operation_id', p_operation_id::text
+            )::text;
+  END IF;
+
+  IF v_operation.pay_batch_id IS NOT NULL AND v_operation.pay_batch_id <> v_pay_batch_id THEN
+    RAISE EXCEPTION 'PAY_BATCH_FRESHNESS_RESULT_GET_OPERATION_BATCH_MISMATCH'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object(
+              'code', 'PAY_BATCH_FRESHNESS_RESULT_GET_OPERATION_BATCH_MISMATCH',
+              'operation_id', p_operation_id::text,
+              'operation_pay_batch_id', v_operation.pay_batch_id::text,
+              'pay_batch_id', v_pay_batch_id::text
+            )::text;
+  END IF;
+
+  SELECT pay_batch_row.*
+  INTO v_batch
+  FROM public.pay_batches AS pay_batch_row
+  WHERE pay_batch_row.id = v_pay_batch_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'PAY_BATCH_FRESHNESS_RESULT_GET_BATCH_NOT_FOUND'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object(
+              'code', 'PAY_BATCH_FRESHNESS_RESULT_GET_BATCH_NOT_FOUND',
+              'pay_batch_id', v_pay_batch_id::text
+            )::text;
+  END IF;
+
+  IF p_actor_user_id IS NOT NULL THEN
+    SELECT EXISTS (
+      SELECT 1
+      FROM public.tms_users AS actor_user
+      WHERE actor_user.id = p_actor_user_id
+        AND COALESCE(actor_user.is_active, false) = true
+    )
+    INTO v_actor_is_valid;
+
+    IF COALESCE(v_actor_is_valid, false) IS NOT TRUE THEN
+      RAISE EXCEPTION 'PAY_BATCH_FRESHNESS_RESULT_GET_ACTOR_NOT_ALLOWED'
+        USING ERRCODE = 'P0001',
+              DETAIL = jsonb_build_object(
+                'code', 'PAY_BATCH_FRESHNESS_RESULT_GET_ACTOR_NOT_ALLOWED',
+                'actor_user_id', p_actor_user_id::text
+              )::text;
+    END IF;
+  END IF;
+
+  v_progress_summary := CASE
     WHEN jsonb_typeof(COALESCE(v_operation.progress_json, '{}'::jsonb)->'freshness_summary') = 'object'
       THEN COALESCE(v_operation.progress_json->'freshness_summary', '{}'::jsonb)
     ELSE '{}'::jsonb
   END;
 
-  v_total_units := COALESCE(
-    CASE WHEN COALESCE(v_summary->>'total_units', '') ~ '^[0-9]+$' THEN (v_summary->>'total_units')::integer ELSE NULL::integer END,
-    CASE WHEN COALESCE(v_operation.progress_json->>'freshness_total_units', '') ~ '^[0-9]+$' THEN (v_operation.progress_json->>'freshness_total_units')::integer ELSE NULL::integer END,
-    0
-  );
-  v_fresh_units := COALESCE(CASE WHEN COALESCE(v_summary->>'fresh_units', '') ~ '^[0-9]+$' THEN (v_summary->>'fresh_units')::integer ELSE NULL::integer END, 0);
-  v_stale_units := COALESCE(
-    CASE WHEN COALESCE(v_summary->>'stale_units', '') ~ '^[0-9]+$' THEN (v_summary->>'stale_units')::integer ELSE NULL::integer END,
-    CASE WHEN COALESCE(v_operation.progress_json->>'freshness_stale_units', '') ~ '^[0-9]+$' THEN (v_operation.progress_json->>'freshness_stale_units')::integer ELSE NULL::integer END,
-    0
-  );
-  v_pending_units := COALESCE(
-    CASE WHEN COALESCE(v_summary->>'pending_units', '') ~ '^[0-9]+$' THEN (v_summary->>'pending_units')::integer ELSE NULL::integer END,
-    CASE WHEN COALESCE(v_operation.progress_json->>'freshness_pending_units', '') ~ '^[0-9]+$' THEN (v_operation.progress_json->>'freshness_pending_units')::integer ELSE NULL::integer END,
-    0
-  );
-  v_error_units := COALESCE(
-    CASE WHEN COALESCE(v_summary->>'error_units', '') ~ '^[0-9]+$' THEN (v_summary->>'error_units')::integer ELSE NULL::integer END,
-    CASE WHEN COALESCE(v_operation.progress_json->>'freshness_error_units', '') ~ '^[0-9]+$' THEN (v_operation.progress_json->>'freshness_error_units')::integer ELSE NULL::integer END,
-    0
-  );
+  SELECT
+    COUNT(*)::integer,
+    COUNT(*) FILTER (WHERE UPPER(BTRIM(COALESCE(scope_unit.status, ''))) = 'FRESH')::integer,
+    COUNT(*) FILTER (WHERE UPPER(BTRIM(COALESCE(scope_unit.status, ''))) = 'STALE')::integer,
+    COUNT(*) FILTER (WHERE UPPER(BTRIM(COALESCE(scope_unit.status, ''))) = 'ERROR')::integer,
+    COUNT(*) FILTER (WHERE UPPER(BTRIM(COALESCE(scope_unit.status, ''))) NOT IN ('FRESH', 'STALE', 'ERROR'))::integer
+  INTO
+    v_total_unit_count,
+    v_fresh_unit_count,
+    v_stale_unit_count,
+    v_error_unit_count,
+    v_pending_unit_count
+  FROM public.banking_pay_operation_scope_units AS scope_unit
+  WHERE scope_unit.operation_id = p_operation_id
+    AND scope_unit.phase = 'FRESHNESS'
+    AND scope_unit.unit_type = 'PAY_BATCH_ITEM'
+    AND (scope_unit.pay_batch_id = v_pay_batch_id OR scope_unit.pay_batch_id IS NULL);
 
-  v_scope_hash := COALESCE(
-    NULLIF(BTRIM(COALESCE(v_summary->>'scope_hash', '')), ''),
-    NULLIF(BTRIM(COALESCE(v_operation.progress_json->>'freshness_scope_hash', '')), '')
-  );
-  v_result_hash := COALESCE(
-    NULLIF(BTRIM(COALESCE(v_summary->>'result_hash', '')), ''),
-    NULLIF(BTRIM(COALESCE(v_operation.progress_json->>'freshness_result_hash', '')), '')
-  );
-  v_status := UPPER(BTRIM(COALESCE(
-    NULLIF(BTRIM(COALESCE(v_summary->>'status', '')), ''),
-    NULLIF(BTRIM(COALESCE(v_operation.progress_json->>'freshness_status', '')), ''),
-    CASE
-      WHEN COALESCE(v_pending_units, 0) > 0 THEN 'PENDING'
-      WHEN COALESCE(v_error_units, 0) > 0 THEN 'ERROR'
-      WHEN COALESCE(v_stale_units, 0) > 0 THEN 'STALE'
-      WHEN COALESCE(v_total_units, 0) > 0 THEN 'PASSED'
-      ELSE 'PENDING'
-    END
-  )));
+  IF COALESCE(v_total_unit_count, 0) > 0 THEN
+    v_completed_unit_count := COALESCE(v_fresh_unit_count, 0) + COALESCE(v_stale_unit_count, 0) + COALESCE(v_error_unit_count, 0);
+    v_validation_complete := COALESCE(v_pending_unit_count, 0) = 0;
+    v_checked_count := v_completed_unit_count;
+    v_stale_count := COALESCE(v_stale_unit_count, 0);
+    v_failed_count := COALESCE(v_error_unit_count, 0);
 
-  IF v_status NOT IN ('PENDING', 'ERROR', 'STALE', 'PASSED') THEN
-    v_status := 'PENDING';
-  END IF;
+    IF COALESCE(v_pending_unit_count, 0) > 0 THEN
+      v_status := 'PENDING';
+    ELSIF COALESCE(v_error_unit_count, 0) > 0 THEN
+      v_status := 'ERROR';
+    ELSIF COALESCE(v_stale_unit_count, 0) > 0 THEN
+      v_status := 'STALE';
+    ELSE
+      v_status := 'PASSED';
+    END IF;
 
-  v_stale_reasons := CASE
-    WHEN jsonb_typeof(v_summary->'stale_reasons') = 'array' THEN COALESCE(v_summary->'stale_reasons', '[]'::jsonb)
-    ELSE '[]'::jsonb
-  END;
-  v_diff_samples := CASE
-    WHEN jsonb_typeof(v_summary->'diff_samples') = 'array' THEN COALESCE(v_summary->'diff_samples', '[]'::jsonb)
-    WHEN jsonb_typeof(v_summary->'diff') = 'array' THEN COALESCE(v_summary->'diff', '[]'::jsonb)
-    ELSE '[]'::jsonb
-  END;
+    v_is_stale := v_status IN ('STALE', 'ERROR');
 
-  v_is_stale := v_status IN ('STALE', 'ERROR') OR COALESCE(v_stale_units, 0) > 0 OR COALESCE(v_error_units, 0) > 0;
+    v_scope_hash := COALESCE(
+      NULLIF(BTRIM(COALESCE(v_progress_summary->>'scope_hash', '')), ''),
+      NULLIF(BTRIM(COALESCE(v_operation.progress_json->>'freshness_scope_hash', '')), ''),
+      NULLIF(BTRIM(COALESCE(v_batch.freshness_scope_hash, '')), '')
+    );
 
-  v_result_json := jsonb_build_object(
-    'ok', true,
-    'operation_id', p_operation_id::text,
-    'pay_batch_id', CASE WHEN v_pay_batch_id IS NULL THEN NULL ELSE v_pay_batch_id::text END,
-    'phase', 'FRESHNESS',
-    'status', v_status,
-    'is_stale', v_is_stale,
-    'total_units', COALESCE(v_total_units, 0),
-    'fresh_units', COALESCE(v_fresh_units, 0),
-    'stale_units', COALESCE(v_stale_units, 0),
-    'pending_units', COALESCE(v_pending_units, 0),
-    'error_units', COALESCE(v_error_units, 0),
-    'stale_reasons', COALESCE(v_stale_reasons, '[]'::jsonb),
-    'diff', COALESCE(v_diff_samples, '[]'::jsonb),
-    'diff_samples', COALESCE(v_diff_samples, '[]'::jsonb),
-    'scope_hash', v_scope_hash,
-    'result_hash', v_result_hash,
-    'checked_at_utc', CASE WHEN v_status <> 'PENDING' THEN v_now::text ELSE NULL END,
-    'progress_source', 'banking_pay_operations.progress_json.freshness_summary'
-  );
+    IF v_scope_hash IS NULL THEN
+      WITH scope_key_rows AS (
+        SELECT
+          scope_unit.unit_ordinal,
+          scope_unit.unit_key
+        FROM public.banking_pay_operation_scope_units AS scope_unit
+        WHERE scope_unit.operation_id = p_operation_id
+          AND scope_unit.phase = 'FRESHNESS'
+          AND scope_unit.unit_type = 'PAY_BATCH_ITEM'
+          AND (scope_unit.pay_batch_id = v_pay_batch_id OR scope_unit.pay_batch_id IS NULL)
+        ORDER BY scope_unit.unit_ordinal, scope_unit.unit_key
+      )
+      SELECT md5(COALESCE(jsonb_agg(scope_key_rows.unit_key ORDER BY scope_key_rows.unit_ordinal, scope_key_rows.unit_key), '[]'::jsonb)::text)
+      INTO v_scope_hash
+      FROM scope_key_rows;
+    END IF;
 
-  UPDATE public.banking_pay_operations AS operation_row
-  SET progress_json = jsonb_strip_nulls(
-        COALESCE(operation_row.progress_json, '{}'::jsonb)
-        || jsonb_build_object(
-          'freshness_summary', COALESCE(v_summary, '{}'::jsonb) || jsonb_build_object(
-            'status', v_status,
-            'total_units', COALESCE(v_total_units, 0),
-            'fresh_units', COALESCE(v_fresh_units, 0),
-            'stale_units', COALESCE(v_stale_units, 0),
-            'pending_units', COALESCE(v_pending_units, 0),
-            'error_units', COALESCE(v_error_units, 0),
-            'scope_hash', v_scope_hash,
-            'result_hash', v_result_hash,
-            'stale_reasons', COALESCE(v_stale_reasons, '[]'::jsonb),
-            'diff_samples', COALESCE(v_diff_samples, '[]'::jsonb)
-          ),
-          'freshness_status', v_status,
-          'freshness_total_units', COALESCE(v_total_units, 0),
-          'freshness_stale_units', COALESCE(v_stale_units, 0),
-          'freshness_pending_units', COALESCE(v_pending_units, 0),
-          'freshness_result_hash', v_result_hash,
-          'freshness_scope_hash', v_scope_hash
+    WITH reason_values AS (
+      SELECT DISTINCT NULLIF(BTRIM(reason_source.reason_value), '') AS reason_value
+      FROM (
+        SELECT reason_text.reason_value
+        FROM public.banking_pay_operation_scope_units AS scope_unit
+        CROSS JOIN LATERAL jsonb_array_elements_text(
+          CASE
+            WHEN jsonb_typeof(scope_unit.unit_payload_json #> '{validation_result,stale_reasons}') = 'array'
+              THEN scope_unit.unit_payload_json #> '{validation_result,stale_reasons}'
+            ELSE '[]'::jsonb
+          END
+        ) AS reason_text(reason_value)
+        WHERE scope_unit.operation_id = p_operation_id
+          AND scope_unit.phase = 'FRESHNESS'
+          AND scope_unit.unit_type = 'PAY_BATCH_ITEM'
+          AND (scope_unit.pay_batch_id = v_pay_batch_id OR scope_unit.pay_batch_id IS NULL)
+
+        UNION ALL
+
+        SELECT scope_unit.error_json->>'code' AS reason_value
+        FROM public.banking_pay_operation_scope_units AS scope_unit
+        WHERE scope_unit.operation_id = p_operation_id
+          AND scope_unit.phase = 'FRESHNESS'
+          AND scope_unit.unit_type = 'PAY_BATCH_ITEM'
+          AND (scope_unit.pay_batch_id = v_pay_batch_id OR scope_unit.pay_batch_id IS NULL)
+          AND scope_unit.error_json IS NOT NULL
+
+        UNION ALL
+
+        SELECT scope_unit.error_json->>'reason' AS reason_value
+        FROM public.banking_pay_operation_scope_units AS scope_unit
+        WHERE scope_unit.operation_id = p_operation_id
+          AND scope_unit.phase = 'FRESHNESS'
+          AND scope_unit.unit_type = 'PAY_BATCH_ITEM'
+          AND (scope_unit.pay_batch_id = v_pay_batch_id OR scope_unit.pay_batch_id IS NULL)
+          AND scope_unit.error_json IS NOT NULL
+      ) AS reason_source
+      WHERE NULLIF(BTRIM(reason_source.reason_value), '') IS NOT NULL
+    )
+    SELECT COALESCE(jsonb_agg(reason_values.reason_value ORDER BY reason_values.reason_value), '[]'::jsonb)
+    INTO v_stale_reasons
+    FROM reason_values;
+
+    WITH reason_values AS (
+      SELECT NULLIF(BTRIM(reason_source.reason_value), '') AS reason_value
+      FROM (
+        SELECT reason_text.reason_value
+        FROM public.banking_pay_operation_scope_units AS scope_unit
+        CROSS JOIN LATERAL jsonb_array_elements_text(
+          CASE
+            WHEN jsonb_typeof(scope_unit.unit_payload_json #> '{validation_result,stale_reasons}') = 'array'
+              THEN scope_unit.unit_payload_json #> '{validation_result,stale_reasons}'
+            ELSE '[]'::jsonb
+          END
+        ) AS reason_text(reason_value)
+        WHERE scope_unit.operation_id = p_operation_id
+          AND scope_unit.phase = 'FRESHNESS'
+          AND scope_unit.unit_type = 'PAY_BATCH_ITEM'
+          AND (scope_unit.pay_batch_id = v_pay_batch_id OR scope_unit.pay_batch_id IS NULL)
+
+        UNION ALL
+
+        SELECT scope_unit.error_json->>'code' AS reason_value
+        FROM public.banking_pay_operation_scope_units AS scope_unit
+        WHERE scope_unit.operation_id = p_operation_id
+          AND scope_unit.phase = 'FRESHNESS'
+          AND scope_unit.unit_type = 'PAY_BATCH_ITEM'
+          AND (scope_unit.pay_batch_id = v_pay_batch_id OR scope_unit.pay_batch_id IS NULL)
+          AND scope_unit.error_json IS NOT NULL
+
+        UNION ALL
+
+        SELECT scope_unit.error_json->>'reason' AS reason_value
+        FROM public.banking_pay_operation_scope_units AS scope_unit
+        WHERE scope_unit.operation_id = p_operation_id
+          AND scope_unit.phase = 'FRESHNESS'
+          AND scope_unit.unit_type = 'PAY_BATCH_ITEM'
+          AND (scope_unit.pay_batch_id = v_pay_batch_id OR scope_unit.pay_batch_id IS NULL)
+          AND scope_unit.error_json IS NOT NULL
+      ) AS reason_source
+      WHERE NULLIF(BTRIM(reason_source.reason_value), '') IS NOT NULL
+    ),
+    reason_counts AS (
+      SELECT
+        reason_values.reason_value AS reason_key,
+        COUNT(*)::integer AS reason_count
+      FROM reason_values
+      GROUP BY reason_values.reason_value
+    )
+    SELECT COALESCE(jsonb_object_agg(reason_counts.reason_key, reason_counts.reason_count ORDER BY reason_counts.reason_key), '{}'::jsonb)
+    INTO v_stale_reason_counts
+    FROM reason_counts;
+
+    WITH key_failure_units AS (
+      SELECT DISTINCT scope_unit.id
+      FROM public.banking_pay_operation_scope_units AS scope_unit
+      LEFT JOIN LATERAL jsonb_array_elements_text(
+        CASE
+          WHEN jsonb_typeof(scope_unit.unit_payload_json #> '{validation_result,stale_reasons}') = 'array'
+            THEN scope_unit.unit_payload_json #> '{validation_result,stale_reasons}'
+          ELSE '[]'::jsonb
+        END
+      ) AS reason_text(reason_value) ON true
+      WHERE scope_unit.operation_id = p_operation_id
+        AND scope_unit.phase = 'FRESHNESS'
+        AND scope_unit.unit_type = 'PAY_BATCH_ITEM'
+        AND (scope_unit.pay_batch_id = v_pay_batch_id OR scope_unit.pay_batch_id IS NULL)
+        AND (
+          UPPER(BTRIM(COALESCE(reason_text.reason_value, ''))) IN ('POST_DRAFT_KEY_RESOLUTION_FAILED', 'KEY_RESOLUTION_FAILED')
+          OR UPPER(BTRIM(COALESCE(reason_text.reason_value, ''))) LIKE '%KEY_RESOLUTION%'
+          OR UPPER(BTRIM(COALESCE(scope_unit.error_json->>'code', ''))) IN ('POST_DRAFT_KEY_RESOLUTION_FAILED', 'KEY_RESOLUTION_FAILED')
+          OR UPPER(BTRIM(COALESCE(scope_unit.error_json->>'code', ''))) LIKE '%KEY_RESOLUTION%'
+          OR UPPER(BTRIM(COALESCE(scope_unit.error_json->>'reason', ''))) LIKE '%KEY_RESOLUTION%'
+          OR UPPER(BTRIM(COALESCE(scope_unit.error_json->>'message', ''))) LIKE '%KEY_RESOLUTION%'
         )
-      ),
-      result_json = CASE WHEN v_status <> 'PENDING' THEN jsonb_set(COALESCE(operation_row.result_json, '{}'::jsonb), '{freshness}', v_result_json, true) ELSE operation_row.result_json END,
-      updated_at_utc = v_now
-  WHERE operation_row.id = p_operation_id;
+    )
+    SELECT COUNT(*)::integer
+    INTO v_key_resolution_failure_count
+    FROM key_failure_units;
 
-  IF v_pay_batch_id IS NOT NULL THEN
-    UPDATE public.pay_batches AS batch_row
+    WITH diff_items AS (
+      SELECT
+        scope_unit.unit_ordinal,
+        scope_unit.unit_key,
+        diff_item.diff_value
+      FROM public.banking_pay_operation_scope_units AS scope_unit
+      CROSS JOIN LATERAL jsonb_array_elements(
+        CASE
+          WHEN jsonb_typeof(scope_unit.unit_payload_json #> '{validation_result,diff}') = 'array'
+            THEN scope_unit.unit_payload_json #> '{validation_result,diff}'
+          WHEN jsonb_typeof(scope_unit.unit_payload_json #> '{validation_result,diff_sample}') = 'array'
+            THEN scope_unit.unit_payload_json #> '{validation_result,diff_sample}'
+          ELSE '[]'::jsonb
+        END
+      ) AS diff_item(diff_value)
+      WHERE scope_unit.operation_id = p_operation_id
+        AND scope_unit.phase = 'FRESHNESS'
+        AND scope_unit.unit_type = 'PAY_BATCH_ITEM'
+        AND (scope_unit.pay_batch_id = v_pay_batch_id OR scope_unit.pay_batch_id IS NULL)
+      ORDER BY scope_unit.unit_ordinal, scope_unit.unit_key, diff_item.diff_value::text
+      LIMIT 50
+    )
+    SELECT COALESCE(jsonb_agg(diff_items.diff_value ORDER BY diff_items.unit_ordinal, diff_items.unit_key, diff_items.diff_value::text), '[]'::jsonb)
+    INTO v_diff_sample
+    FROM diff_items;
+
+    WITH failed_rows AS (
+      SELECT
+        scope_unit.unit_ordinal,
+        scope_unit.unit_key,
+        jsonb_build_object(
+          'unit_id', scope_unit.id::text,
+          'unit_key', scope_unit.unit_key,
+          'status', UPPER(BTRIM(COALESCE(scope_unit.status, ''))),
+          'error', COALESCE(scope_unit.error_json, '{}'::jsonb)
+        ) AS failed_json
+      FROM public.banking_pay_operation_scope_units AS scope_unit
+      WHERE scope_unit.operation_id = p_operation_id
+        AND scope_unit.phase = 'FRESHNESS'
+        AND scope_unit.unit_type = 'PAY_BATCH_ITEM'
+        AND (scope_unit.pay_batch_id = v_pay_batch_id OR scope_unit.pay_batch_id IS NULL)
+        AND UPPER(BTRIM(COALESCE(scope_unit.status, ''))) = 'ERROR'
+      ORDER BY scope_unit.unit_ordinal, scope_unit.unit_key
+      LIMIT 20
+    )
+    SELECT COALESCE(jsonb_agg(failed_rows.failed_json ORDER BY failed_rows.unit_ordinal, failed_rows.unit_key), '[]'::jsonb)
+    INTO v_failed_sample
+    FROM failed_rows;
+
+    WITH unit_hash_rows AS (
+      SELECT
+        scope_unit.unit_ordinal,
+        scope_unit.unit_key,
+        COALESCE(
+          NULLIF(BTRIM(COALESCE(scope_unit.result_hash, '')), ''),
+          md5((jsonb_build_object(
+            'unit_key', scope_unit.unit_key,
+            'status', UPPER(BTRIM(COALESCE(scope_unit.status, ''))),
+            'error_json', COALESCE(scope_unit.error_json, '{}'::jsonb),
+            'validation_result', COALESCE(scope_unit.unit_payload_json->'validation_result', '{}'::jsonb)
+          ))::text)
+        ) AS unit_result_hash
+      FROM public.banking_pay_operation_scope_units AS scope_unit
+      WHERE scope_unit.operation_id = p_operation_id
+        AND scope_unit.phase = 'FRESHNESS'
+        AND scope_unit.unit_type = 'PAY_BATCH_ITEM'
+        AND (scope_unit.pay_batch_id = v_pay_batch_id OR scope_unit.pay_batch_id IS NULL)
+      ORDER BY scope_unit.unit_ordinal, scope_unit.unit_key
+    )
+    SELECT COALESCE(jsonb_agg(unit_hash_rows.unit_result_hash ORDER BY unit_hash_rows.unit_ordinal, unit_hash_rows.unit_key), '[]'::jsonb)
+    INTO v_unit_result_hashes
+    FROM unit_hash_rows;
+
+    IF COALESCE(v_failed_count, 0) > 0 AND NOT (COALESCE(v_stale_reasons, '[]'::jsonb) ? 'UNIT_ERROR') THEN
+      v_stale_reasons := COALESCE(v_stale_reasons, '[]'::jsonb) || jsonb_build_array('UNIT_ERROR');
+      v_stale_reason_counts := COALESCE(v_stale_reason_counts, '{}'::jsonb) || jsonb_build_object('UNIT_ERROR', COALESCE(v_failed_count, 0));
+    END IF;
+
+    IF COALESCE(v_key_resolution_failure_count, 0) > 0 AND NOT (COALESCE(v_stale_reasons, '[]'::jsonb) ? 'KEY_RESOLUTION_FAILED') THEN
+      v_stale_reasons := COALESCE(v_stale_reasons, '[]'::jsonb) || jsonb_build_array('KEY_RESOLUTION_FAILED');
+      v_stale_reason_counts := COALESCE(v_stale_reason_counts, '{}'::jsonb) || jsonb_build_object('KEY_RESOLUTION_FAILED', COALESCE(v_key_resolution_failure_count, 0));
+    END IF;
+
+    v_hash_basis := jsonb_build_object(
+      'source', 'banking_pay_operation_scope_units',
+      'validation_complete', v_validation_complete,
+      'is_stale', v_is_stale,
+      'status', v_status,
+      'stale_reasons', COALESCE(v_stale_reasons, '[]'::jsonb),
+      'stale_reason_counts', COALESCE(v_stale_reason_counts, '{}'::jsonb),
+      'checked_count', COALESCE(v_checked_count, 0),
+      'stale_count', COALESCE(v_stale_count, 0),
+      'failed_count', COALESCE(v_failed_count, 0)
+    ) || jsonb_build_object(
+      'key_resolution_failure_count', COALESCE(v_key_resolution_failure_count, 0),
+      'diff_sample', COALESCE(v_diff_sample, '[]'::jsonb),
+      'failed_sample', COALESCE(v_failed_sample, '[]'::jsonb),
+      'freshness_scope_hash', v_scope_hash,
+      'total_units', COALESCE(v_total_unit_count, 0),
+      'fresh_units', COALESCE(v_fresh_unit_count, 0),
+      'stale_units', COALESCE(v_stale_unit_count, 0),
+      'pending_units', COALESCE(v_pending_unit_count, 0),
+      'error_units', COALESCE(v_error_unit_count, 0),
+      'unit_result_hashes', COALESCE(v_unit_result_hashes, '[]'::jsonb)
+    );
+
+    IF v_status <> 'PENDING' THEN
+      v_result_hash := md5(v_hash_basis::text);
+      v_checked_at_utc := v_now;
+
+      IF v_batch.freshness_operation_id = p_operation_id
+         AND NULLIF(BTRIM(COALESCE(v_batch.freshness_result_hash, '')), '') = v_result_hash
+         AND v_batch.freshness_checked_at_utc IS NOT NULL THEN
+        v_checked_at_utc := v_batch.freshness_checked_at_utc;
+      END IF;
+    END IF;
+
+    v_result := jsonb_build_object(
+      'ok', true,
+      'phase', 'FRESHNESS',
+      'validation_complete', v_validation_complete,
+      'is_stale', v_is_stale,
+      'status', v_status,
+      'checked_count', COALESCE(v_checked_count, 0),
+      'stale_count', COALESCE(v_stale_count, 0),
+      'failed_count', COALESCE(v_failed_count, 0),
+      'key_resolution_failure_count', COALESCE(v_key_resolution_failure_count, 0),
+      'stale_reasons', COALESCE(v_stale_reasons, '[]'::jsonb)
+    ) || jsonb_build_object(
+      'stale_reason_counts', COALESCE(v_stale_reason_counts, '{}'::jsonb),
+      'diff_sample', COALESCE(v_diff_sample, '[]'::jsonb),
+      'diff', COALESCE(v_diff_sample, '[]'::jsonb),
+      'diff_samples', COALESCE(v_diff_sample, '[]'::jsonb),
+      'failed_sample', COALESCE(v_failed_sample, '[]'::jsonb),
+      'freshness_checked_at_utc', CASE WHEN v_checked_at_utc IS NULL THEN NULL ELSE to_jsonb(v_checked_at_utc) END,
+      'checked_at_utc', CASE WHEN v_checked_at_utc IS NULL THEN NULL ELSE v_checked_at_utc::text END,
+      'freshness_result_hash', v_result_hash,
+      'result_hash', v_result_hash,
+      'freshness_scope_hash', v_scope_hash
+    ) || jsonb_build_object(
+      'scope_hash', v_scope_hash,
+      'total_units', COALESCE(v_total_unit_count, 0),
+      'fresh_units', COALESCE(v_fresh_unit_count, 0),
+      'stale_units', COALESCE(v_stale_unit_count, 0),
+      'pending_units', COALESCE(v_pending_unit_count, 0),
+      'error_units', COALESCE(v_error_unit_count, 0),
+      'fresh_count', COALESCE(v_fresh_unit_count, 0),
+      'pending_count', COALESCE(v_pending_unit_count, 0),
+      'error_count', COALESCE(v_error_unit_count, 0)
+    ) || jsonb_build_object(
+      'operation_id', p_operation_id::text,
+      'pay_batch_id', v_pay_batch_id::text,
+      'progress_source', 'banking_pay_operation_scope_units'
+    );
+
+    UPDATE public.pay_batches AS pay_batch_update
     SET freshness_operation_id = p_operation_id,
         freshness_validation_status = v_status,
-        freshness_checked_at_utc = CASE WHEN v_status <> 'PENDING' THEN v_now ELSE batch_row.freshness_checked_at_utc END,
-        freshness_result_hash = CASE WHEN v_status <> 'PENDING' THEN v_result_hash ELSE batch_row.freshness_result_hash END,
-        freshness_scope_hash = COALESCE(v_scope_hash, batch_row.freshness_scope_hash),
-        freshness_result_json = v_result_json
-    WHERE batch_row.id = v_pay_batch_id;
+        freshness_checked_at_utc = CASE WHEN v_status <> 'PENDING' THEN v_checked_at_utc ELSE pay_batch_update.freshness_checked_at_utc END,
+        freshness_result_hash = CASE WHEN v_status <> 'PENDING' THEN v_result_hash ELSE pay_batch_update.freshness_result_hash END,
+        freshness_scope_hash = COALESCE(v_scope_hash, pay_batch_update.freshness_scope_hash),
+        freshness_result_json = v_result
+    WHERE pay_batch_update.id = v_pay_batch_id;
+
+    UPDATE public.banking_pay_operations AS operation_update
+    SET progress_json = jsonb_strip_nulls(
+          COALESCE(operation_update.progress_json, '{}'::jsonb)
+          || jsonb_build_object(
+            'freshness_summary', v_result,
+            'freshness_validation_status', v_status,
+            'freshness_status', v_status,
+            'freshness_result_hash', v_result_hash,
+            'freshness_scope_hash', v_scope_hash,
+            'freshness_checked_at_utc', CASE WHEN v_checked_at_utc IS NULL THEN NULL ELSE v_checked_at_utc::text END,
+            'freshness_is_stale', v_is_stale
+          )
+          || jsonb_build_object(
+            'freshness_total_units', COALESCE(v_total_unit_count, 0),
+            'freshness_pending_units', COALESCE(v_pending_unit_count, 0),
+            'freshness_stale_units', COALESCE(v_stale_unit_count, 0),
+            'freshness_error_units', COALESCE(v_error_unit_count, 0)
+          )
+        ),
+        result_json = CASE
+          WHEN v_status <> 'PENDING' THEN jsonb_set(COALESCE(operation_update.result_json, '{}'::jsonb), '{freshness}', v_result, true)
+          ELSE operation_update.result_json
+        END,
+        updated_at_utc = v_now
+    WHERE operation_update.id = p_operation_id;
+
+    RETURN v_result;
   END IF;
 
-  RETURN v_result_json;
+  SELECT
+    COUNT(*)::integer,
+    COUNT(*) FILTER (WHERE chunk_row.status = 'PENDING')::integer,
+    COUNT(*) FILTER (WHERE chunk_row.status = 'RUNNING')::integer,
+    COUNT(*) FILTER (WHERE chunk_row.status = 'FAILED')::integer,
+    COUNT(*) FILTER (WHERE chunk_row.status = 'COMPLETE')::integer
+  INTO
+    v_total_chunk_count,
+    v_pending_chunk_count,
+    v_running_chunk_count,
+    v_failed_chunk_count,
+    v_complete_chunk_count
+  FROM public.banking_pay_operation_chunks AS chunk_row
+  WHERE chunk_row.operation_id = p_operation_id
+    AND chunk_row.phase IN ('VALIDATE_FRESHNESS', 'FRESHNESS_VALIDATE')
+    AND chunk_row.chunk_type = 'FRESHNESS_VALIDATE';
+
+  IF COALESCE(v_total_chunk_count, 0) = 0 THEN
+    v_result := jsonb_build_object(
+      'validation_complete', false,
+      'is_stale', false,
+      'status', 'PENDING',
+      'reason', 'NO_FRESHNESS_CHUNKS',
+      'operation_id', p_operation_id::text,
+      'pay_batch_id', v_pay_batch_id::text
+    );
+
+    RETURN v_result;
+  END IF;
+
+  v_validation_complete := COALESCE(v_pending_chunk_count, 0) = 0
+    AND COALESCE(v_running_chunk_count, 0) = 0;
+
+  v_scope_hash := COALESCE(
+    NULLIF(BTRIM(COALESCE(v_progress_summary->>'scope_hash', '')), ''),
+    NULLIF(BTRIM(COALESCE(v_operation.progress_json->>'freshness_scope_hash', '')), ''),
+    NULLIF(BTRIM(COALESCE(v_batch.freshness_scope_hash, '')), '')
+  );
+
+  IF v_validation_complete IS NOT TRUE THEN
+    v_result := jsonb_build_object(
+      'validation_complete', false,
+      'is_stale', false,
+      'status', 'PENDING',
+      'pending_count', COALESCE(v_pending_chunk_count, 0),
+      'running_count', COALESCE(v_running_chunk_count, 0),
+      'complete_count', COALESCE(v_complete_chunk_count, 0),
+      'failed_count', COALESCE(v_failed_chunk_count, 0),
+      'checked_count', 0,
+      'stale_count', 0,
+      'key_resolution_failure_count', 0,
+      'diff_sample', '[]'::jsonb,
+      'freshness_checked_at_utc', NULL,
+      'freshness_result_hash', NULL,
+      'freshness_scope_hash', v_scope_hash,
+      'operation_id', p_operation_id::text,
+      'pay_batch_id', v_pay_batch_id::text
+    );
+
+    RETURN v_result;
+  END IF;
+
+  WITH chunk_results AS (
+    SELECT
+      chunk_row.id,
+      chunk_row.status,
+      COALESCE(chunk_row.result_json, '{}'::jsonb) AS result_json,
+      COALESCE(chunk_row.error_json, '{}'::jsonb) AS error_json
+    FROM public.banking_pay_operation_chunks AS chunk_row
+    WHERE chunk_row.operation_id = p_operation_id
+      AND chunk_row.phase IN ('VALIDATE_FRESHNESS', 'FRESHNESS_VALIDATE')
+      AND chunk_row.chunk_type = 'FRESHNESS_VALIDATE'
+  ),
+  counts AS (
+    SELECT
+      SUM(COALESCE((chunk_results.result_json->>'checked_count')::integer, 0))::integer AS checked_count,
+      SUM(COALESCE((chunk_results.result_json->>'stale_count')::integer, 0))::integer AS stale_count,
+      SUM(COALESCE((chunk_results.result_json->>'key_resolution_failure_count')::integer, 0))::integer AS key_resolution_failure_count,
+      COUNT(*) FILTER (WHERE chunk_results.status = 'FAILED')::integer AS failed_count,
+      BOOL_OR(COALESCE((chunk_results.result_json->>'is_stale')::boolean, false)) AS any_stale,
+      BOOL_OR(chunk_results.status = 'FAILED') AS any_failed
+    FROM chunk_results
+  )
+  SELECT
+    COALESCE(counts.checked_count, 0),
+    COALESCE(counts.stale_count, 0),
+    COALESCE(counts.key_resolution_failure_count, 0),
+    COALESCE(counts.failed_count, 0),
+    COALESCE(counts.any_stale, false) OR COALESCE(counts.any_failed, false) OR COALESCE(counts.key_resolution_failure_count, 0) > 0
+  INTO
+    v_checked_count,
+    v_stale_count,
+    v_key_resolution_failure_count,
+    v_failed_count,
+    v_is_stale
+  FROM counts;
+
+  WITH reason_values AS (
+    SELECT DISTINCT reason_text.reason_value
+    FROM public.banking_pay_operation_chunks AS chunk_row
+    CROSS JOIN LATERAL jsonb_array_elements_text(COALESCE(chunk_row.result_json->'stale_reasons', '[]'::jsonb)) AS reason_text(reason_value)
+    WHERE chunk_row.operation_id = p_operation_id
+      AND chunk_row.phase IN ('VALIDATE_FRESHNESS', 'FRESHNESS_VALIDATE')
+      AND chunk_row.chunk_type = 'FRESHNESS_VALIDATE'
+      AND chunk_row.result_json IS NOT NULL
+  )
+  SELECT COALESCE(jsonb_agg(reason_values.reason_value ORDER BY reason_values.reason_value), '[]'::jsonb)
+  INTO v_stale_reasons
+  FROM reason_values;
+
+  WITH reason_pairs AS (
+    SELECT
+      reason_entry.key AS reason_key,
+      SUM(COALESCE(reason_entry.value::text::integer, 0))::integer AS reason_count
+    FROM public.banking_pay_operation_chunks AS chunk_row
+    CROSS JOIN LATERAL jsonb_each(COALESCE(chunk_row.result_json->'stale_reason_counts', '{}'::jsonb)) AS reason_entry(key, value)
+    WHERE chunk_row.operation_id = p_operation_id
+      AND chunk_row.phase IN ('VALIDATE_FRESHNESS', 'FRESHNESS_VALIDATE')
+      AND chunk_row.chunk_type = 'FRESHNESS_VALIDATE'
+      AND chunk_row.result_json IS NOT NULL
+    GROUP BY reason_entry.key
+  )
+  SELECT COALESCE(jsonb_object_agg(reason_pairs.reason_key, reason_pairs.reason_count ORDER BY reason_pairs.reason_key), '{}'::jsonb)
+  INTO v_stale_reason_counts
+  FROM reason_pairs;
+
+  WITH diff_items AS (
+    SELECT
+      chunk_row.sequence_no,
+      diff_item.diff_value
+    FROM public.banking_pay_operation_chunks AS chunk_row
+    CROSS JOIN LATERAL jsonb_array_elements(COALESCE(chunk_row.result_json->'diff_sample', '[]'::jsonb)) AS diff_item(diff_value)
+    WHERE chunk_row.operation_id = p_operation_id
+      AND chunk_row.phase IN ('VALIDATE_FRESHNESS', 'FRESHNESS_VALIDATE')
+      AND chunk_row.chunk_type = 'FRESHNESS_VALIDATE'
+      AND chunk_row.result_json IS NOT NULL
+    ORDER BY chunk_row.sequence_no, diff_item.diff_value::text
+    LIMIT 50
+  )
+  SELECT COALESCE(jsonb_agg(diff_items.diff_value ORDER BY diff_items.sequence_no, diff_items.diff_value::text), '[]'::jsonb)
+  INTO v_diff_sample
+  FROM diff_items;
+
+  WITH chunk_hash_rows AS (
+    SELECT
+      chunk_row.sequence_no,
+      NULLIF(BTRIM(COALESCE(chunk_row.result_json->>'chunk_result_hash', '')), '') AS chunk_result_hash
+    FROM public.banking_pay_operation_chunks AS chunk_row
+    WHERE chunk_row.operation_id = p_operation_id
+      AND chunk_row.phase IN ('VALIDATE_FRESHNESS', 'FRESHNESS_VALIDATE')
+      AND chunk_row.chunk_type = 'FRESHNESS_VALIDATE'
+      AND NULLIF(BTRIM(COALESCE(chunk_row.result_json->>'chunk_result_hash', '')), '') IS NOT NULL
+    ORDER BY chunk_row.sequence_no
+  )
+  SELECT COALESCE(jsonb_agg(chunk_hash_rows.chunk_result_hash ORDER BY chunk_hash_rows.sequence_no), '[]'::jsonb)
+  INTO v_chunk_result_hashes
+  FROM chunk_hash_rows;
+
+  WITH failed_rows AS (
+    SELECT
+      chunk_row.sequence_no,
+      jsonb_build_object(
+        'chunk_id', chunk_row.id::text,
+        'sequence_no', chunk_row.sequence_no,
+        'error', COALESCE(chunk_row.error_json, '{}'::jsonb)
+      ) AS failed_json
+    FROM public.banking_pay_operation_chunks AS chunk_row
+    WHERE chunk_row.operation_id = p_operation_id
+      AND chunk_row.phase IN ('VALIDATE_FRESHNESS', 'FRESHNESS_VALIDATE')
+      AND chunk_row.chunk_type = 'FRESHNESS_VALIDATE'
+      AND chunk_row.status = 'FAILED'
+    ORDER BY chunk_row.sequence_no
+    LIMIT 20
+  )
+  SELECT COALESCE(jsonb_agg(failed_rows.failed_json ORDER BY failed_rows.sequence_no), '[]'::jsonb)
+  INTO v_failed_sample
+  FROM failed_rows;
+
+  IF COALESCE(v_failed_count, 0) > 0 AND NOT (COALESCE(v_stale_reasons, '[]'::jsonb) ? 'CHUNK_FAILED') THEN
+    v_stale_reasons := COALESCE(v_stale_reasons, '[]'::jsonb) || jsonb_build_array('CHUNK_FAILED');
+    v_stale_reason_counts := COALESCE(v_stale_reason_counts, '{}'::jsonb) || jsonb_build_object('CHUNK_FAILED', COALESCE(v_failed_count, 0));
+  END IF;
+
+  IF COALESCE(v_key_resolution_failure_count, 0) > 0 AND NOT (COALESCE(v_stale_reasons, '[]'::jsonb) ? 'KEY_RESOLUTION_FAILED') THEN
+    v_stale_reasons := COALESCE(v_stale_reasons, '[]'::jsonb) || jsonb_build_array('KEY_RESOLUTION_FAILED');
+    v_stale_reason_counts := COALESCE(v_stale_reason_counts, '{}'::jsonb) || jsonb_build_object('KEY_RESOLUTION_FAILED', COALESCE(v_key_resolution_failure_count, 0));
+  END IF;
+
+  IF COALESCE(v_failed_count, 0) > 0 THEN
+    v_status := 'FAILED';
+  ELSIF v_is_stale THEN
+    v_status := 'STALE';
+  ELSE
+    v_status := 'PASSED';
+  END IF;
+
+  v_hash_basis := jsonb_build_object(
+    'source', 'banking_pay_operation_chunks',
+    'validation_complete', true,
+    'is_stale', v_is_stale,
+    'status', v_status,
+    'stale_reasons', COALESCE(v_stale_reasons, '[]'::jsonb),
+    'stale_reason_counts', COALESCE(v_stale_reason_counts, '{}'::jsonb),
+    'checked_count', COALESCE(v_checked_count, 0),
+    'stale_count', COALESCE(v_stale_count, 0),
+    'failed_count', COALESCE(v_failed_count, 0)
+  ) || jsonb_build_object(
+    'key_resolution_failure_count', COALESCE(v_key_resolution_failure_count, 0),
+    'diff_sample', COALESCE(v_diff_sample, '[]'::jsonb),
+    'failed_sample', COALESCE(v_failed_sample, '[]'::jsonb),
+    'freshness_scope_hash', v_scope_hash,
+    'chunk_count', COALESCE(v_total_chunk_count, 0),
+    'complete_chunk_count', COALESCE(v_complete_chunk_count, 0),
+    'chunk_result_hashes', COALESCE(v_chunk_result_hashes, '[]'::jsonb)
+  );
+
+  v_result_hash := md5(v_hash_basis::text);
+  v_checked_at_utc := v_now;
+
+  IF v_batch.freshness_operation_id = p_operation_id
+     AND NULLIF(BTRIM(COALESCE(v_batch.freshness_result_hash, '')), '') = v_result_hash
+     AND v_batch.freshness_checked_at_utc IS NOT NULL THEN
+    v_checked_at_utc := v_batch.freshness_checked_at_utc;
+  END IF;
+
+  v_result := v_hash_basis || jsonb_build_object(
+    'ok', true,
+    'phase', 'FRESHNESS',
+    'freshness_checked_at_utc', to_jsonb(v_checked_at_utc),
+    'checked_at_utc', v_checked_at_utc::text,
+    'freshness_result_hash', v_result_hash,
+    'result_hash', v_result_hash,
+    'freshness_scope_hash', v_scope_hash,
+    'scope_hash', v_scope_hash,
+    'operation_id', p_operation_id::text,
+    'pay_batch_id', v_pay_batch_id::text,
+    'progress_source', 'banking_pay_operation_chunks'
+  );
+
+  UPDATE public.pay_batches AS pay_batch_update
+  SET freshness_operation_id = p_operation_id,
+      freshness_validation_status = v_status,
+      freshness_checked_at_utc = v_checked_at_utc,
+      freshness_result_hash = v_result_hash,
+      freshness_scope_hash = v_scope_hash,
+      freshness_result_json = v_result
+  WHERE pay_batch_update.id = v_pay_batch_id;
+
+  UPDATE public.banking_pay_operations AS operation_update
+  SET progress_json = COALESCE(operation_update.progress_json, '{}'::jsonb)
+        || jsonb_build_object(
+          'freshness_summary', v_result,
+          'freshness_validation_status', v_status,
+          'freshness_status', v_status,
+          'freshness_result_hash', v_result_hash,
+          'freshness_scope_hash', v_scope_hash,
+          'freshness_checked_at_utc', to_jsonb(v_checked_at_utc),
+          'freshness_is_stale', v_is_stale
+        ),
+      result_json = jsonb_set(COALESCE(operation_update.result_json, '{}'::jsonb), '{freshness}', v_result, true),
+      updated_at_utc = v_now
+  WHERE operation_update.id = p_operation_id;
+
+  RETURN v_result;
 END;
 $function$;
-
+CREATE OR REPLACE FUNCTION public.pay_batch_freshness_result_get(
+  p_operation_id uuid,
+  p_pay_batch_id uuid DEFAULT NULL::uuid
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $function$
+BEGIN
+  RETURN public.pay_batch_freshness_result_get(
+    p_operation_id,
+    p_pay_batch_id,
+    NULL::uuid
+  );
+END;
+$function$;
 
 
 CREATE OR REPLACE FUNCTION public.banking_pay_operation_release_lease(
@@ -154344,6 +154960,10 @@ DECLARE
   v_retry_failure boolean := false;
   v_next_attempt_count integer := NULL::integer;
   v_attempt_limit_reached boolean := false;
+  v_progress_patch_json jsonb := '{}'::jsonb;
+  v_previous_phase text := NULL::text;
+  v_requested_phase text := NULL::text;
+  v_phase_for_update text := NULL::text;
 BEGIN
   IF p_operation_id IS NULL THEN
     RAISE EXCEPTION 'BANKING_PAY_OPERATION_RELEASE_OPERATION_ID_REQUIRED'
@@ -154354,6 +154974,8 @@ BEGIN
     RAISE EXCEPTION 'BANKING_PAY_OPERATION_RELEASE_LEASE_OWNER_REQUIRED'
       USING ERRCODE = 'P0001', DETAIL = jsonb_build_object('code', 'BANKING_PAY_OPERATION_RELEASE_LEASE_OWNER_REQUIRED', 'operation_id', p_operation_id::text)::text;
   END IF;
+
+  v_progress_patch_json := COALESCE(p_progress_patch_json, '{}'::jsonb);
 
   IF p_progress_patch_json IS NOT NULL AND jsonb_typeof(p_progress_patch_json) <> 'object' THEN
     RAISE EXCEPTION 'BANKING_PAY_OPERATION_RELEASE_PROGRESS_PATCH_MUST_BE_OBJECT'
@@ -154377,6 +154999,15 @@ BEGIN
   END IF;
 
   v_operation_type := upper(BTRIM(COALESCE(v_operation_row.operation_type, '')));
+  v_previous_phase := NULLIF(UPPER(BTRIM(COALESCE(v_operation_row.phase, ''))), '');
+  v_requested_phase := UPPER(BTRIM(COALESCE(
+    NULLIF(BTRIM(COALESCE(v_progress_patch_json->>'phase', '')), ''),
+    NULLIF(BTRIM(COALESCE(v_progress_patch_json->>'next_phase', '')), ''),
+    NULLIF(BTRIM(COALESCE(v_progress_patch_json->>'next_required_phase', '')), ''),
+    NULLIF(BTRIM(COALESCE(v_progress_patch_json->>'operation_phase', '')), ''),
+    ''
+  )));
+  v_requested_phase := NULLIF(v_requested_phase, '');
 
   IF NULLIF(BTRIM(COALESCE(v_operation_row.lease_owner, '')), '') IS NULL
      OR v_operation_row.lease_owner <> p_lease_owner THEN
@@ -154451,8 +155082,19 @@ BEGIN
       USING ERRCODE = 'P0001', DETAIL = jsonb_build_object('code', 'BANKING_PAY_OPERATION_RELEASE_STATE_INVALID', 'operation_id', p_operation_id::text, 'release_state', p_release_state)::text;
   END IF;
 
+  IF v_requested_phase IS NOT NULL THEN
+    v_phase_for_update := v_requested_phase;
+  ELSIF v_next_status = 'COMPLETE' THEN
+    v_phase_for_update := 'COMPLETE';
+  ELSIF v_next_status = 'WAITING_AUTHORISATION' THEN
+    v_phase_for_update := 'WAITING_AUTHORISATION';
+  ELSE
+    v_phase_for_update := NULL::text;
+  END IF;
+
   UPDATE public.banking_pay_operations AS operation_update
   SET status = v_next_status,
+      phase = COALESCE(v_phase_for_update, operation_update.phase),
       runner_state = v_next_runner_state,
       run_after_utc = v_next_run_after_utc,
       requires_user_action = v_next_requires_user_action,
@@ -154466,7 +155108,7 @@ BEGIN
       last_advanced_at_utc = v_now,
       progress_json = jsonb_strip_nulls(
         COALESCE(operation_update.progress_json, '{}'::jsonb)
-        || COALESCE(p_progress_patch_json, '{}'::jsonb)
+        || v_progress_patch_json
         || jsonb_build_object(
           'last_release', jsonb_build_object(
             'released_at_utc', v_now::text,
@@ -154476,6 +155118,10 @@ BEGIN
             'run_after_utc', CASE WHEN v_next_run_after_utc IS NULL THEN NULL ELSE v_next_run_after_utc::text END,
             'requires_user_action', v_next_requires_user_action,
             'resume_reason', v_next_resume_reason,
+            'previous_phase', v_previous_phase,
+            'requested_phase', v_requested_phase,
+            'next_phase', COALESCE(v_phase_for_update, operation_update.phase),
+            'phase_persisted', v_phase_for_update IS NOT NULL,
             'retry_failure', v_retry_failure,
             'attempt_count', CASE WHEN v_retry_failure IS TRUE THEN v_next_attempt_count ELSE operation_update.attempt_count END,
             'max_attempts', operation_update.max_attempts,
@@ -154515,6 +155161,9 @@ BEGIN
     'released_lease_owner', p_lease_owner,
     'status', v_next_status,
     'runner_state', v_next_runner_state,
+    'phase', COALESCE(v_phase_for_update, v_operation_row.phase),
+    'previous_phase', v_previous_phase,
+    'phase_persisted', v_phase_for_update IS NOT NULL,
     'run_after_utc', CASE WHEN v_next_run_after_utc IS NULL THEN NULL ELSE v_next_run_after_utc::text END,
     'requires_user_action', v_next_requires_user_action,
     'resume_reason', v_next_resume_reason,
