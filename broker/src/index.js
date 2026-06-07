@@ -24006,6 +24006,7 @@ async function handleBankingIdLedgerList(env, req, user) {
 }
 
 
+
 async function advanceBankingPayExecuteOperation(env, operationRow, user, options = {}) {
   const trimStr = (value) => String(value == null ? '' : value).trim();
   const upper = (value) => trimStr(value).toUpperCase();
@@ -24272,14 +24273,12 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
   }, 'banking_pay_operation_claim_chunk');
 
   const finishChunk = async (chunkId, status, completedCount, failedCount, resultJson, errorJson) => rpc('banking_pay_operation_finish_chunk', {
-    p_operation_id: operationId,
     p_chunk_id: chunkId,
     p_status: status,
     p_completed_count: completedCount,
     p_failed_count: failedCount,
     p_result_json: isPlainObject(resultJson) ? resultJson : {},
-    p_error_json: isPlainObject(errorJson) ? errorJson : null,
-    p_actor_user_id: actorUserId
+    p_error_json: isPlainObject(errorJson) ? errorJson : null
   }, 'banking_pay_operation_finish_chunk');
 
   const seedChunks = async (phase, chunkType, chunkSize) => rpc('banking_pay_operation_seed_chunks', {
@@ -24900,7 +24899,6 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
     });
   }
 }
-
 
 
 async function withBankingPayOperationLease(env, operationRow, options = {}, advanceOnce = null) {
