@@ -155819,7 +155819,14 @@ BEGIN
       AND existing_scope_item.transfer_scope_id = p_transfer_scope_id
     ORDER BY existing_scope_item.item_ordinal DESC, existing_scope_item.pay_batch_item_id DESC
     LIMIT 1;
+
+    IF NOT FOUND THEN
+      v_last_pay_batch_item_id := NULL::uuid;
+      v_last_item_ordinal := 0;
+    END IF;
   END IF;
+
+  v_last_item_ordinal := COALESCE(v_last_item_ordinal, 0);
 
   DROP TABLE IF EXISTS pg_temp.tmp_transfer_scope_item_seed_page;
   CREATE TEMPORARY TABLE pg_temp.tmp_transfer_scope_item_seed_page ON COMMIT DROP AS
@@ -155857,13 +155864,13 @@ BEGIN
     ORDER BY batch_item.id
     LIMIT (v_limit + 1)
   )
-  SELECT (v_last_item_ordinal + candidate_item_page.page_row_no)::bigint AS item_ordinal,
+  SELECT (COALESCE(v_last_item_ordinal, 0) + candidate_item_page.page_row_no)::bigint AS item_ordinal,
          candidate_item_page.pay_batch_item_id,
          candidate_item_page.pay_batch_candidate_id,
          candidate_item_page.candidate_id,
          round(
            CASE
-             WHEN v_scope_row.pay_channel = 'PAYE' THEN CASE WHEN (v_last_item_ordinal + candidate_item_page.page_row_no) = 1 THEN coalesce(nullif(v_scope_row.amount, 0), candidate_item_page.net_bank_amount, 0) ELSE 0 END
+             WHEN v_scope_row.pay_channel = 'PAYE' THEN CASE WHEN (COALESCE(v_last_item_ordinal, 0) + candidate_item_page.page_row_no) = 1 THEN coalesce(nullif(v_scope_row.amount, 0), candidate_item_page.net_bank_amount, 0) ELSE 0 END
              ELSE coalesce(candidate_item_page.source_item_amount, 0)
            END,
            2
@@ -156030,7 +156037,6 @@ BEGIN
   );
 END;
 $function$;
-
 
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_enqueue_stage_continuation(p_session_id uuid, p_candidate_id uuid DEFAULT NULL::uuid, p_job_type text DEFAULT NULL::text, p_cursor_json jsonb DEFAULT NULL::jsonb, p_source_job_id uuid DEFAULT NULL::uuid, p_result_json jsonb DEFAULT '{}'::jsonb, p_actor_user_id uuid DEFAULT NULL::uuid, p_reason text DEFAULT NULL::text, p_priority integer DEFAULT NULL::integer, p_limit integer DEFAULT NULL::integer)
