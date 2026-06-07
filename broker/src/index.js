@@ -24006,6 +24006,7 @@ async function handleBankingIdLedgerList(env, req, user) {
 }
 
 
+
 async function advanceBankingPayExecuteOperation(env, operationRow, user, options = {}) {
   const trimStr = (value) => String(value == null ? '' : value).trim();
   const upper = (value) => trimStr(value).toUpperCase();
@@ -24084,6 +24085,7 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
   const payChannelScope = upper(inputJson.pay_channel_scope || inputJson.payChannelScope || 'ALL') || 'ALL';
   const scheduleKind = upper(inputJson.schedule_kind || inputJson.scheduleKind || (inputJson.scheduled_at_utc ? 'SCHEDULED' : 'IMMEDIATE')) || 'IMMEDIATE';
   const retryBlockedFunds = operationType === 'PAYMENT_RETRY_BLOCKED_FUNDS' || inputJson.retry_blocked_funds === true || options.retryBlockedFunds === true;
+  const bankCsvExportPrepareOnly = inputJson.prepare_bank_csv_export_only === true || upper(inputJson.execution_mode || '') === 'BANK_CSV_EXPORT_PREPARE';
 
   if (!uuidRe.test(operationId)) throw new Error('advanceBankingPayExecuteOperation: operation_id is required');
   if (!uuidRe.test(payBatchId)) throw new Error('advanceBankingPayExecuteOperation: pay_batch_id is required');
@@ -24249,6 +24251,14 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
   };
 
   try {
+    if (bankCsvExportPrepareOnly && ['PREPARE_BATCH_PROOF', 'PREPARE_BATCH', 'START_AUTHORISATION_PROOF', 'START_AUTHORISATION', 'SCHEDULE_PAYMENT', 'SUBMIT_PROVIDER_TRANSFERS', 'SEND_PROVIDER_CHUNK', 'REQUEST_PROVIDER_SEND'].includes(currentPhase)) {
+      return complete({
+        status_text: 'Bank CSV transfer rows are prepared; provider submission is not run for CSV export preparation.',
+        bank_csv_export_prepare_only: true,
+        provider_submission_suppressed: true
+      });
+    }
+
     if (['INITIALISE', 'VALIDATE_FRESHNESS', 'FRESHNESS_SCOPE_SEED', 'SEED_FRESHNESS_SCOPE'].includes(currentPhase)) {
       const seed = await rpc('pay_batch_freshness_scope_seed', {
         p_operation_id: operationId,
@@ -24469,6 +24479,13 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
     }
 
     if (currentPhase === 'SEED_TRANSFER_SUBMIT_CHUNKS') {
+      if (bankCsvExportPrepareOnly) {
+        return moreWork('PREPARE_TRANSFER_CHUNKS', {
+          status_text: 'Bank CSV export preparation skips provider-submit chunk seeding and will only prepare local transfer rows.',
+          bank_csv_export_prepare_only: true,
+          provider_submit_chunk_seed_skipped: true
+        });
+      }
       const seededChunks = await seedChunks('SUBMIT_PROVIDER_TRANSFERS', 'TRANSFER_SUBMIT', limitFromConfig('provider_submit_limit', 25, 1, 25));
       return moreWork('PREPARE_TRANSFER_CHUNKS', { status_text: 'Seeded provider-transfer submit chunks.', chunk_seed: seededChunks });
     }
@@ -24483,6 +24500,14 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
       if (prepared.ok === false) return reviewRequired(currentPhase, prepared.code || 'TRANSFER_CHUNK_PREPARE_FAILED', prepared.message || 'Transfer chunk prepare failed.', { transfer_chunk_prepare: prepared });
       if (prepared.has_more === true || numberValue(prepared.remaining_count, 0) > 0) {
         return moreWork('PREPARE_TRANSFER_CHUNKS', { status_text: 'Prepared one transfer chunk page.', transfer_chunk_prepare: prepared });
+      }
+      if (bankCsvExportPrepareOnly) {
+        return complete({
+          status_text: 'Bank CSV transfer rows prepared. CSV export can now read pending local transfer rows.',
+          transfer_chunk_prepare: prepared,
+          bank_csv_export_prepare_only: true,
+          provider_submission_suppressed: true
+        });
       }
       return moreWork('PREPARE_BATCH_PROOF', { status_text: 'Transfer chunks prepared.', transfer_chunk_prepare: prepared });
     }
@@ -24749,8 +24774,6 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
     });
   }
 }
-
-
 
 
 
@@ -31177,7 +31200,6 @@ async function handleBankingPayCorrectionStatus(env, req, user, correctionReques
 
 
 
-
 async function handleBankingPayBatchExportCsv(env, req, user, payBatchId) {
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -31219,6 +31241,8 @@ async function handleBankingPayBatchExportCsv(env, req, user, payBatchId) {
     if (compact === 'PAY_BATCH_VALIDATE_FRESHNESS_FAILED') return 'BATCH_STALE';
     if (compact === 'MISSING_RAIL_PROVIDER') return 'RAIL_PROVIDER_REQUIRED';
     if (compact === 'PAY_BATCH_EXPORT_CSV_FAILED') return 'PAY_EXPORT_BANK_CSV_FAILED';
+    if (['NO_EXPORTABLE_TRANSFER', 'NO_EXPORTABLE_TRANSFER_ROW', 'NO_EXPORTABLE_TRANSFER_ROWS'].includes(compact)) return 'NO_EXPORTABLE_TRANSFERS';
+    if (['NO_PENDING_BANK_TRANSFER', 'NO_PENDING_BANK_TRANSFERS', 'NO_PENDING_BANK_TRANSFER_ROW', 'NO_PENDING_BANK_TRANSFER_ROWS'].includes(compact)) return 'NO_PENDING_TRANSFER_ROWS';
     return compact;
   };
 
@@ -31236,6 +31260,10 @@ async function handleBankingPayBatchExportCsv(env, req, user, payBatchId) {
       'PAY_EXECUTE_BANK_FAILED',
       'NO_PENDING_TRANSFERS',
       'NO_PENDING_TRANSFER_ROWS',
+      'NO_PENDING_BANK_TRANSFERS',
+      'NO_PENDING_BANK_TRANSFER_ROWS',
+      'NO_EXPORTABLE_TRANSFERS',
+      'NO_EXPORTABLE_TRANSFER_ROWS',
       'NO_ACTIVE_PAYMENTS_IN_BATCH',
       'CURRENT_TRANSFER_HASH_REQUIRED'
     ];
@@ -31329,7 +31357,7 @@ async function handleBankingPayBatchExportCsv(env, req, user, payBatchId) {
         message: 'CloudTMS could not create this bank CSV because the banking setup is incomplete or unavailable. Review Banking settings and try again.'
       };
     }
-    if (normalizedCode === 'NO_ACTIVE_PAYMENTS_IN_BATCH' || normalizedCode === 'NO_PENDING_TRANSFERS' || normalizedCode === 'NO_PENDING_TRANSFER_ROWS') {
+    if (normalizedCode === 'NO_ACTIVE_PAYMENTS_IN_BATCH' || normalizedCode === 'NO_PENDING_TRANSFERS' || normalizedCode === 'NO_PENDING_TRANSFER_ROWS' || normalizedCode === 'NO_EXPORTABLE_TRANSFERS') {
       return {
         title: 'Bank CSV could not be created',
         message: 'This batch has no active payments ready to export. Delete the draft or create a new batch.'
@@ -31382,7 +31410,7 @@ async function handleBankingPayBatchExportCsv(env, req, user, payBatchId) {
 
   const statusForExportCsvFailureCode = (code, fallbackStatus = 400) => {
     const normalizedCode = String(code || '').trim().toUpperCase();
-    if (normalizedCode === 'BATCH_STALE' || normalizedCode === 'NO_PENDING_TRANSFERS' || normalizedCode === 'NO_PENDING_TRANSFER_ROWS' || normalizedCode === 'NO_ACTIVE_PAYMENTS_IN_BATCH' || normalizedCode === 'CURRENT_TRANSFER_HASH_REQUIRED') return 409;
+    if (normalizedCode === 'BATCH_STALE' || normalizedCode === 'NO_PENDING_TRANSFERS' || normalizedCode === 'NO_PENDING_TRANSFER_ROWS' || normalizedCode === 'NO_EXPORTABLE_TRANSFERS' || normalizedCode === 'NO_ACTIVE_PAYMENTS_IN_BATCH' || normalizedCode === 'CURRENT_TRANSFER_HASH_REQUIRED') return 409;
     if (normalizedCode === 'PAY_BATCH_NOT_FOUND') return 404;
     return Number.isFinite(Number(fallbackStatus)) ? Math.trunc(Number(fallbackStatus)) : 400;
   };
@@ -31427,22 +31455,74 @@ async function handleBankingPayBatchExportCsv(env, req, user, payBatchId) {
   };
 
   const isMissingTransferRowsError = (e) => {
-    const raw = (() => {
+    const candidates = [];
+    const seen = new Set();
+    const addCandidate = (value) => {
+      if (value === null || value === undefined) return;
+      let text = '';
       try {
-        const jm = (e && e.json && typeof e.json === 'object' && typeof e.json.message === 'string') ? e.json.message : '';
-        return String(jm || e?.message || e || '');
+        if (value instanceof Error) text = value.message || value.name || '';
+        else if (typeof value === 'string') text = value;
+        else if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') text = String(value);
+        else return;
       } catch {
-        return String(e || '');
+        return;
       }
-    })().toUpperCase();
+      text = String(text || '').trim();
+      if (!text || seen.has(text)) return;
+      seen.add(text);
+      candidates.push(text);
+    };
+    const visit = (value, depth = 0) => {
+      if (value === null || value === undefined || depth > 5) return;
+      if (value instanceof Error) {
+        addCandidate(value.name);
+        addCandidate(value.message);
+        visit(value.code, depth + 1);
+        visit(value.error_code, depth + 1);
+        visit(value.errorCode, depth + 1);
+        visit(value.details, depth + 1);
+        visit(value.detail, depth + 1);
+        visit(value.hint, depth + 1);
+        visit(value.json, depth + 1);
+        visit(value.body, depth + 1);
+        visit(value.cause, depth + 1);
+        return;
+      }
+      if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') {
+        addCandidate(value);
+        const parsed = parseJsonObjectCandidate(value);
+        if (parsed) visit(parsed, depth + 1);
+        return;
+      }
+      if (Array.isArray(value)) {
+        for (const item of value.slice(0, 25)) visit(item, depth + 1);
+        return;
+      }
+      if (typeof value !== 'object') return;
+      for (const key of ['error_code', 'errorCode', 'code', 'error', 'message', 'details', 'detail', 'reason', 'hint', 'body', 'json', 'payload', 'data', 'cause', 'response', 'result', 'technical_message', 'technicalMessage']) {
+        if (Object.prototype.hasOwnProperty.call(value, key)) visit(value[key], depth + 1);
+      }
+    };
 
-    return raw.includes('NO_PENDING_TRANSFERS')
+    visit(e);
+    const raw = candidates.join(' | ').toUpperCase();
+    const normalizedCodes = candidates.map((candidate) => normalizeExportCsvFailureCode(candidate)).filter(Boolean);
+
+    return normalizedCodes.includes('NO_PENDING_TRANSFER_ROWS')
+      || normalizedCodes.includes('NO_EXPORTABLE_TRANSFERS')
+      || raw.includes('NO_PENDING_TRANSFERS')
       || raw.includes('NO_PENDING_TRANSFER_ROWS')
       || raw.includes('NO_PENDING_BANK_TRANSFERS')
+      || raw.includes('NO_PENDING_BANK_TRANSFER_ROWS')
       || raw.includes('NO PENDING TRANSFERS')
       || raw.includes('NO PENDING BANK TRANSFERS')
-      || raw.includes('NO TRANSFER ROWS')
-      || raw.includes('PENDING TRANSFERS EXIST');
+      || raw.includes('NO EXPORTABLE TRANSFERS')
+      || raw.includes('NO EXPORTABLE TRANSFER')
+      || raw.includes('NO_EXPORTABLE_TRANSFERS')
+      || raw.includes('NO_EXPORTABLE_TRANSFER_ROWS')
+      || raw.includes('NO_EXPORTABLE_TRANSFER')
+      || raw.includes('NO TRANSFER ROWS');
   };
 
   const jsonResponse = (status, payload) => {
@@ -31456,6 +31536,18 @@ async function handleBankingPayBatchExportCsv(env, req, user, payBatchId) {
     'NO_ACTIVE_PAYMENTS_IN_BATCH',
     'This batch has no active payments ready to export. Delete the draft or create a new batch.'
   ));
+
+  const numberFromSummary = (...values) => {
+    let firstFinite = null;
+    for (const value of values) {
+      if (value === null || value === undefined || value === '') continue;
+      const n = Number(value);
+      if (!Number.isFinite(n)) continue;
+      if (firstFinite === null) firstFinite = n;
+      if (n > 0) return n;
+    }
+    return firstFinite === null ? 0 : firstFinite;
+  };
 
   const normalizeProvider = (rawProvider) => {
     const raw = String(rawProvider || '').trim().toUpperCase();
@@ -31476,7 +31568,7 @@ async function handleBankingPayBatchExportCsv(env, req, user, payBatchId) {
   };
 
   const loadCsvExportSettingsSummary = async () => {
-    const DEFAULT_COLUMNS = ['payment_reference', 'payee_name', 'sort_code', 'account_number', 'account_type', 'amount'];
+    const DEFAULT_COLUMNS = ['payment_reference', 'payee_name', 'sort_code', 'account_number', 'amount'];
     const parseJsonish = (value) => {
       if (value === null || value === undefined) return null;
       if (typeof value === 'string') {
@@ -31612,29 +31704,34 @@ async function handleBankingPayBatchExportCsv(env, req, user, payBatchId) {
       return buildExportCsvFailureResponse(404, summary || 'PAY_BATCH_NOT_FOUND', 'PAY_BATCH_NOT_FOUND', 'CloudTMS could not create the bank CSV for this batch. Refresh the batch and try again.');
     }
 
-    const activePaymentCount = Number(summary.active_payment_count ?? 0);
-    if (Number.isFinite(activePaymentCount) && activePaymentCount <= 0) {
-      return withCORS(env, req, noActivePaymentsResponse());
-    }
-
-    const providerMeta = normalizeProvider(summary.rail_provider_snapshot || summary.provider || null);
-    if (!providerMeta.valid) return buildExportCsvFailureResponse(400, providerMeta.reason || 'UNKNOWN_RAIL_PROVIDER', providerMeta.reason || 'UNKNOWN_RAIL_PROVIDER', 'CloudTMS could not create this bank CSV because the banking setup is incomplete or unavailable. Review Banking settings and try again.', { provider: providerMeta.provider || null });
-
+    const displaySummary = (summary.display_summary && typeof summary.display_summary === 'object' && !Array.isArray(summary.display_summary)) ? summary.display_summary : {};
+    const activePaymentCount = numberFromSummary(
+      summary.active_payment_count,
+      summary.active_pay_item_count,
+      summary.active_item_count,
+      summary.payable_item_count,
+      displaySummary.active_payment_count,
+      displaySummary.active_pay_item_count,
+      displaySummary.active_item_count,
+      displaySummary.payable_item_count
+    );
     const batchStatus = String(summary.batch_status || summary.status || '').trim().toUpperCase();
     const executionCommitState = String(summary.execution_commit_state || '').trim().toUpperCase();
     const freshnessStatus = String(summary.freshness_validation_status || '').trim().toUpperCase();
-    const transferCount = Number(summary.transfer_count ?? 0);
-    const preparedTransferCount = Number(summary.prepared_transfer_count ?? 0);
     const isCancelledBatch = batchStatus === 'CANCELLED' || batchStatus === 'CANCELED';
     const isPostExecutionOrHistoricalExport = isCancelledBatch || ['SUBMITTED_NOT_COMMITTED', 'COMMITTED'].includes(executionCommitState);
 
-    if (!['PASSED', 'NOT_REQUIRED'].includes(freshnessStatus) && !isPostExecutionOrHistoricalExport) {
-      const operationPayload = await buildCsvExportPrepareOperation('FRESHNESS_REQUIRED', summary);
-      return withCORS(env, req, jsonResponse(202, operationPayload));
+    if (activePaymentCount <= 0 && !isPostExecutionOrHistoricalExport) {
+      return withCORS(env, req, noActivePaymentsResponse());
     }
 
-    if ((!Number.isFinite(transferCount) || transferCount <= 0 || !Number.isFinite(preparedTransferCount) || preparedTransferCount <= 0) && !isPostExecutionOrHistoricalExport) {
-      const operationPayload = await buildCsvExportPrepareOperation('TRANSFER_ROWS_REQUIRED', summary);
+    if (!isPostExecutionOrHistoricalExport) {
+      const providerMeta = normalizeProvider(summary.rail_provider_snapshot || summary.provider || null);
+      if (!providerMeta.valid) return buildExportCsvFailureResponse(400, providerMeta.reason || 'UNKNOWN_RAIL_PROVIDER', providerMeta.reason || 'UNKNOWN_RAIL_PROVIDER', 'CloudTMS could not create this bank CSV because the banking setup is incomplete or unavailable. Review Banking settings and try again.', { provider: providerMeta.provider || null });
+    }
+
+    if (!['PASSED', 'NOT_REQUIRED'].includes(freshnessStatus) && !isPostExecutionOrHistoricalExport) {
+      const operationPayload = await buildCsvExportPrepareOperation('FRESHNESS_REQUIRED', summary);
       return withCORS(env, req, jsonResponse(202, operationPayload));
     }
 
