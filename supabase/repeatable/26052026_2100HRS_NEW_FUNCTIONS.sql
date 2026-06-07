@@ -142643,20 +142643,11 @@ BEGIN
 END;
 $function$;
 
-
-
-CREATE OR REPLACE FUNCTION public.pay_payment_cancel_not_sent_and_recalculate(
-  p_pay_batch_id uuid,
-  p_selection_json jsonb DEFAULT '{}'::jsonb,
-  p_actor_user_id uuid DEFAULT NULL::uuid,
-  p_reason text DEFAULT NULL::text,
-  p_idempotency_key text DEFAULT NULL::text,
-  p_confirmation_json jsonb DEFAULT '{}'::jsonb
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
+CREATE OR REPLACE FUNCTION public.pay_payment_cancel_not_sent_and_recalculate(p_pay_batch_id uuid, p_selection_json jsonb DEFAULT '{}'::jsonb, p_actor_user_id uuid DEFAULT NULL::uuid, p_reason text DEFAULT NULL::text, p_idempotency_key text DEFAULT NULL::text, p_confirmation_json jsonb DEFAULT '{}'::jsonb)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
 AS $function$
 DECLARE
   v_uuid_regex text := '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$';
@@ -142683,6 +142674,13 @@ DECLARE
   v_signal_result jsonb := '{}'::jsonb;
   v_idempotency_key text := NULL::text;
   v_scope_type text := NULL::text;
+  v_ui_mode text := NULL::text;
+  v_batch_status text := NULL::text;
+  v_execution_commit_state text := NULL::text;
+  v_execution_commit_ref text := NULL::text;
+  v_execution_committed_at_utc timestamptz := NULL::timestamptz;
+  v_active_unsafe_operation_count integer := 0;
+  v_active_unsafe_operation_ids jsonb := '[]'::jsonb;
   v_actor_valid boolean := false;
   v_is_complete boolean := false;
   v_grouped_alert_updates jsonb := '[]'::jsonb;
@@ -142724,8 +142722,192 @@ BEGIN
   v_selection_json := COALESCE(p_selection_json, '{}'::jsonb);
   v_confirmation_json := COALESCE(p_confirmation_json, '{}'::jsonb);
   v_reason := NULLIF(BTRIM(COALESCE(p_reason, '')), '');
+  v_scope_type := COALESCE(NULLIF(BTRIM(UPPER(COALESCE(v_selection_json ->> 'scope_type', v_selection_json ->> 'scopeType', ''))), ''), 'BATCH');
+  v_ui_mode := UPPER(REPLACE(NULLIF(BTRIM(COALESCE(v_confirmation_json ->> 'ui_mode', v_selection_json ->> 'ui_mode', '')), ''), '-', '_'));
 
-  v_diagnostic_json := public.pay_payment_cancelability_diagnostic(p_pay_batch_id, v_selection_json, p_actor_user_id);
+  SELECT batch_rows.status,
+         batch_rows.execution_commit_state,
+         batch_rows.execution_commit_ref,
+         batch_rows.execution_committed_at_utc
+  INTO v_batch_status,
+       v_execution_commit_state,
+       v_execution_commit_ref,
+       v_execution_committed_at_utc
+  FROM public.pay_batches AS batch_rows
+  WHERE batch_rows.id = p_pay_batch_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'PAY_PAYMENT_CANCEL_NOT_SENT_BATCH_NOT_FOUND'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object('code', 'PAY_PAYMENT_CANCEL_NOT_SENT_BATCH_NOT_FOUND', 'pay_batch_id', p_pay_batch_id::text)::text;
+  END IF;
+
+  IF UPPER(COALESCE(v_execution_commit_state, '')) <> 'NOT_SUBMITTED'
+     OR NULLIF(BTRIM(COALESCE(v_execution_commit_ref, '')), '') IS NOT NULL
+     OR v_execution_committed_at_utc IS NOT NULL THEN
+    RAISE EXCEPTION 'PAY_PAYMENT_CANCEL_NOT_SENT_COMMIT_BOUNDARY_CROSSED'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object(
+              'code', 'PAY_PAYMENT_CANCEL_NOT_SENT_COMMIT_BOUNDARY_CROSSED',
+              'pay_batch_id', p_pay_batch_id::text,
+              'status', v_batch_status,
+              'execution_commit_state', v_execution_commit_state,
+              'has_execution_commit_ref', NULLIF(BTRIM(COALESCE(v_execution_commit_ref, '')), '') IS NOT NULL,
+              'has_execution_committed_at_utc', v_execution_committed_at_utc IS NOT NULL
+            )::text;
+  END IF;
+
+  IF v_ui_mode = 'DRAFT_DELETE' AND UPPER(COALESCE(v_batch_status, '')) NOT IN ('DRAFT', 'DRAFT_CREATED') THEN
+    RAISE EXCEPTION 'PAY_PAYMENT_CANCEL_NOT_SENT_DRAFT_DELETE_NOT_AVAILABLE'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object(
+              'code', 'PAY_PAYMENT_CANCEL_NOT_SENT_DRAFT_DELETE_NOT_AVAILABLE',
+              'pay_batch_id', p_pay_batch_id::text,
+              'status', v_batch_status,
+              'execution_commit_state', v_execution_commit_state
+            )::text;
+  END IF;
+
+  IF v_ui_mode = 'DRAFT_DELETE' AND v_scope_type NOT IN ('BATCH', 'WHOLE_BATCH', 'ALL', 'PAY_BATCH') THEN
+    RAISE EXCEPTION 'PAY_PAYMENT_CANCEL_NOT_SENT_DRAFT_DELETE_REQUIRES_BATCH_SCOPE'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object(
+              'code', 'PAY_PAYMENT_CANCEL_NOT_SENT_DRAFT_DELETE_REQUIRES_BATCH_SCOPE',
+              'pay_batch_id', p_pay_batch_id::text,
+              'scope_type', v_scope_type
+            )::text;
+  END IF;
+
+  IF v_ui_mode = 'DRAFT_DELETE' THEN
+    SELECT count(*)::integer,
+           COALESCE(jsonb_agg(active_operation_rows.id::text ORDER BY active_operation_rows.created_at_utc, active_operation_rows.id), '[]'::jsonb)
+    INTO v_active_unsafe_operation_count,
+         v_active_unsafe_operation_ids
+    FROM public.banking_pay_operations AS active_operation_rows
+    WHERE active_operation_rows.pay_batch_id = p_pay_batch_id
+      AND UPPER(COALESCE(active_operation_rows.operation_type::text, '')) IN (
+        'DRAFT_CREATE',
+        'PAYMENT_DRAFT_CREATE',
+        'PAY_BATCH_DRAFT_CREATE',
+        'CREATE_DRAFT',
+        'PAYMENT_EXECUTE',
+        'PAY_EXECUTE',
+        'PROVIDER_SUBMIT',
+        'PAYMENT_PROVIDER_SUBMIT',
+        'PAYMENT_SUBMISSION',
+        'RAIL_SUBMIT',
+        'BANK_SUBMISSION',
+        'PAYMENT_AUTHORISE',
+        'PAYMENT_AUTHORIZE',
+        'PAYMENT_AUTH_START',
+        'PAYMENT_RETRY_BLOCKED_FUNDS',
+        'PAYMENT_RETRY_UNSENT_PAYMENTS',
+        'PAYMENT_RETRY_UNSENT',
+        'PAYMENT_SETTLEMENT'
+      )
+      AND UPPER(COALESCE(active_operation_rows.status::text, '')) NOT IN (
+        'COMPLETE',
+        'COMPLETED',
+        'SUCCESS',
+        'SUCCEEDED',
+        'DONE',
+        'FAILED',
+        'ERROR',
+        'ERRORED',
+        'REVIEW_REQUIRED',
+        'CANCELLED',
+        'CANCELED',
+        'ABORTED'
+      )
+      AND (
+        UPPER(COALESCE(active_operation_rows.status::text, '')) IN (
+          'QUEUED',
+          'RUNNABLE',
+          'RUNNING',
+          'CONTINUING',
+          'WAITING_RETRY',
+          'LEASED',
+          'ADVANCING',
+          'PENDING',
+          'STARTED',
+          'INITIALISING',
+          'INITIALIZING',
+          'PROCESSING',
+          'CLAIMED',
+          'IN_PROGRESS',
+          'WAITING_PROVIDER',
+          'WAITING_FOR_PROVIDER',
+          'PROVIDER_WAIT',
+          'PROVIDER_WAITING',
+          'WAITING_PROVIDER_CONFIRMATION',
+          'WAITING_AUTHORISATION',
+          'WAITING_AUTHORIZATION',
+          'AWAITING_AUTHORISATION',
+          'AWAITING_AUTHORIZATION',
+          'AUTHORISATION_REQUIRED',
+          'AUTHORIZATION_REQUIRED',
+          'WAITING_BANK_CONFIRM',
+          'SUBMITTED_NOT_COMMITTED'
+        )
+        OR UPPER(COALESCE(active_operation_rows.runner_state::text, '')) IN (
+          'RUNNABLE',
+          'RUNNING',
+          'CONTINUING',
+          'WAITING_RETRY',
+          'LEASED',
+          'ADVANCING',
+          'PENDING',
+          'STARTED',
+          'INITIALISING',
+          'INITIALIZING',
+          'PROCESSING',
+          'CLAIMED',
+          'IN_PROGRESS',
+          'WAITING_PROVIDER',
+          'WAITING_FOR_PROVIDER',
+          'PROVIDER_WAIT',
+          'PROVIDER_WAITING',
+          'WAITING_PROVIDER_CONFIRMATION',
+          'WAITING_AUTHORISATION',
+          'WAITING_AUTHORIZATION',
+          'AWAITING_AUTHORISATION',
+          'AWAITING_AUTHORIZATION',
+          'AUTHORISATION_REQUIRED',
+          'AUTHORIZATION_REQUIRED',
+          'WAITING_BANK_CONFIRM'
+        )
+        OR (
+          NULLIF(BTRIM(COALESCE(active_operation_rows.lease_owner, '')), '') IS NOT NULL
+          AND COALESCE(active_operation_rows.lease_expires_at_utc, now()) > now()
+        )
+        OR (
+          NULLIF(BTRIM(COALESCE(active_operation_rows.locked_by, '')), '') IS NOT NULL
+          AND COALESCE(active_operation_rows.lock_expires_at_utc, now()) > now()
+        )
+      );
+
+    IF COALESCE(v_active_unsafe_operation_count, 0) > 0 THEN
+      RAISE EXCEPTION 'PAY_PAYMENT_CANCEL_NOT_SENT_DRAFT_DELETE_OPERATION_IN_PROGRESS'
+        USING ERRCODE = 'P0001',
+              DETAIL = jsonb_build_object(
+                'code', 'PAY_PAYMENT_CANCEL_NOT_SENT_DRAFT_DELETE_OPERATION_IN_PROGRESS',
+                'pay_batch_id', p_pay_batch_id::text,
+                'active_operation_count', COALESCE(v_active_unsafe_operation_count, 0),
+                'active_operation_ids', COALESCE(v_active_unsafe_operation_ids, '[]'::jsonb)
+              )::text;
+    END IF;
+  END IF;
+
+  v_diagnostic_json := public.pay_payment_cancelability_diagnostic(
+    p_pay_batch_id,
+    v_selection_json,
+    p_actor_user_id,
+    CASE
+      WHEN v_scope_type IN ('BATCH', 'WHOLE_BATCH', 'ALL', 'PAY_BATCH') THEN 'CANCEL_WHOLE_BATCH_ACTION'
+      ELSE 'CANCEL_PAYMENT_ACTION'
+    END
+  );
   v_lifecycle_state := v_diagnostic_json ->> 'payment_lifecycle_state';
   v_recommended_action := v_diagnostic_json ->> 'recommended_action';
   v_blockers := COALESCE(v_diagnostic_json -> 'blockers', '[]'::jsonb);
@@ -142987,6 +143169,10 @@ BEGIN
   );
 END;
 $function$;
+
+
+
+
 
 
 CREATE OR REPLACE FUNCTION public.pay_payment_confirm_no_money_and_unwind(
