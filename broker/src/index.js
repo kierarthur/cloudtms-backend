@@ -26005,13 +26005,12 @@ async function claimAndAdvanceOneBankingPayOperation(env, opts = {}) {
 }
 
 
-
 async function handleBankingPayCancelNotSentAndRecalculate(env, req, user, payBatchId) {
   const id = String(payBatchId || '').trim();
   if (!id) return withCORS(env, req, badRequest('pay_batch_id is required'));
   if (!user || !user.id) return withCORS(env, req, unauthorized('Unauthorized'));
 
-  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{12}$/i;
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   if (!uuidRe.test(id)) return withCORS(env, req, badRequest('invalid_pay_batch_id'));
 
   const enc = encodeURIComponent;
@@ -26339,6 +26338,7 @@ async function handleBankingPayCancelNotSentAndRecalculate(env, req, user, payBa
     return rpcErrorResponse(e, 'PAYMENT_CANCEL_NOT_SENT_RECALCULATE_FAILED', 'Unable to cancel selected payments.');
   }
 }
+
 
 
 async function handleBankingPayConfirmNoMoneyAndUnwind(env, req, user, payBatchId) {
