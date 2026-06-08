@@ -62942,6 +62942,16 @@ DECLARE
   v_transfer_count integer := 0;
   v_terminal_no_money_count integer := 0;
   v_final_money_moved_count integer := 0;
+  v_materialised_transfer_count integer := 0;
+  v_materialised_final_money_moved_count integer := 0;
+  v_materialised_terminal_no_money_count integer := 0;
+  v_materialised_pending_non_final_count integer := 0;
+  v_materialised_unknown_or_review_count integer := 0;
+  v_materialised_last_provider_state text := NULL::text;
+  v_materialised_last_provider_at_utc text := NULL::text;
+  v_transfer_classification_summary_json jsonb := '{}'::jsonb;
+  v_transfer_classification_called boolean := false;
+  v_should_classify_transfers boolean := false;
 BEGIN
   PERFORM set_config('lock_timeout', '3s', true);
   PERFORM public.banking_pay_hot_path_budget_apply('DISPLAY');
@@ -63062,6 +63072,157 @@ BEGIN
        v_terminal_no_money_count,
        v_final_money_moved_count;
 
+  v_should_classify_transfers := (
+    v_operation_id IS NOT NULL
+    AND upper(btrim(coalesce(v_operation_row.operation_type, ''))) IN ('PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS')
+    AND (
+      upper(btrim(coalesce(v_operation_row.phase, ''))) IN (
+        'SUBMIT_PROVIDER_TRANSFERS',
+        'SEND_PROVIDER_CHUNK',
+        'APPLY_RAIL_UPDATES',
+        'PAYMENT_SETTLEMENT',
+        'SETTLEMENT_SCOPE_SEED',
+        'SEED_SETTLEMENT_SCOPE',
+        'SETTLE_RAIL',
+        'QUEUE_REMITTANCES',
+        'REMITTANCE_SCOPE_SEED',
+        'BUILD_REMITTANCE',
+        'COMMIT_REMITTANCE',
+        'COMPLETE',
+        'FAILED',
+        'REVIEW_REQUIRED'
+      )
+      OR upper(btrim(coalesce(v_progress_json->>'phase', ''))) IN (
+        'SUBMIT_PROVIDER_TRANSFERS',
+        'SEND_PROVIDER_CHUNK',
+        'APPLY_RAIL_UPDATES',
+        'PAYMENT_SETTLEMENT',
+        'SETTLEMENT_SCOPE_SEED',
+        'SEED_SETTLEMENT_SCOPE',
+        'SETTLE_RAIL',
+        'QUEUE_REMITTANCES',
+        'REMITTANCE_SCOPE_SEED',
+        'BUILD_REMITTANCE',
+        'COMMIT_REMITTANCE',
+        'COMPLETE',
+        'FAILED',
+        'REVIEW_REQUIRED'
+      )
+      OR upper(btrim(coalesce(v_operation_row.status, ''))) IN (
+        'WAITING_PROVIDER',
+        'COMPLETE',
+        'FAILED',
+        'REVIEW_REQUIRED'
+      )
+      OR upper(btrim(coalesce(v_operation_row.runner_state, ''))) IN (
+        'WAITING_PROVIDER',
+        'WAITING_USER_REVIEW'
+      )
+      OR p_chunk_id IS NOT NULL
+    )
+  );
+
+  IF v_should_classify_transfers IS TRUE THEN
+    WITH classified_transfer_rows AS (
+    SELECT
+      transfer_row.id AS pay_bank_transfer_id,
+      transfer_row.pay_batch_id,
+      transfer_row.status AS transfer_status,
+      transfer_row.rail_state,
+      transfer_row.rail_tx_id,
+      transfer_row.completed_at_utc,
+      transfer_row.failed_reason,
+      transfer_row.amount,
+      transfer_row.currency,
+      transfer_row.created_at_utc,
+      classifier_row.cash_state,
+      classifier_row.normalised_transfer_status,
+      classifier_row.is_final_money_moved,
+      classifier_row.is_terminal_no_money,
+      classifier_row.is_pending_non_final,
+      classifier_row.reason
+    FROM public.pay_bank_transfers AS transfer_row
+    CROSS JOIN LATERAL public._pay_rail_state_money_movement_classify(
+      p_transfer_status => transfer_row.status,
+      p_rail_state => transfer_row.rail_state,
+      p_event_payload_json => COALESCE(transfer_row.rail_meta_json, '{}'::jsonb) || jsonb_strip_nulls(jsonb_build_object(
+        'normalised_state', transfer_row.status,
+        'provider_state', transfer_row.rail_state,
+        'provider_transaction_id', transfer_row.rail_tx_id,
+        'failed_reason', transfer_row.failed_reason,
+        'completed_at_utc', CASE WHEN transfer_row.completed_at_utc IS NULL THEN NULL ELSE transfer_row.completed_at_utc::text END
+      )),
+      p_provider_meta_json => COALESCE(transfer_row.rail_meta_json -> 'provider_submit_diagnostic', '{}'::jsonb) || COALESCE(transfer_row.rail_meta_json, '{}'::jsonb) || jsonb_strip_nulls(jsonb_build_object(
+        'provider_transaction_id', transfer_row.rail_tx_id,
+        'rail_tx_id', transfer_row.rail_tx_id,
+        'provider_external_evidence_present', NULLIF(BTRIM(COALESCE(transfer_row.rail_tx_id, '')), '') IS NOT NULL,
+        'provider_acceptance_evidence_present', NULLIF(BTRIM(COALESCE(transfer_row.rail_tx_id, '')), '') IS NOT NULL,
+        'completed_at_utc', CASE WHEN transfer_row.completed_at_utc IS NULL THEN NULL ELSE transfer_row.completed_at_utc::text END
+      ))
+    ) AS classifier_row
+    WHERE transfer_row.pay_batch_id = p_pay_batch_id
+  ), transfer_classification_totals AS (
+    SELECT
+      COUNT(*)::integer AS transfer_count,
+      COUNT(*) FILTER (WHERE COALESCE(classified_transfer_rows.is_final_money_moved, false) IS TRUE)::integer AS final_money_moved_count,
+      COUNT(*) FILTER (WHERE COALESCE(classified_transfer_rows.is_terminal_no_money, false) IS TRUE)::integer AS terminal_no_money_count,
+      COUNT(*) FILTER (WHERE COALESCE(classified_transfer_rows.is_pending_non_final, false) IS TRUE)::integer AS pending_non_final_count,
+      COUNT(*) FILTER (
+        WHERE COALESCE(classified_transfer_rows.is_final_money_moved, false) IS NOT TRUE
+          AND COALESCE(classified_transfer_rows.is_terminal_no_money, false) IS NOT TRUE
+          AND COALESCE(classified_transfer_rows.is_pending_non_final, false) IS NOT TRUE
+      )::integer AS unknown_or_review_count,
+      (array_agg(NULLIF(BTRIM(COALESCE(classified_transfer_rows.rail_state, classified_transfer_rows.normalised_transfer_status, classified_transfer_rows.transfer_status, '')), '') ORDER BY COALESCE(classified_transfer_rows.completed_at_utc, classified_transfer_rows.created_at_utc) DESC NULLS LAST, classified_transfer_rows.pay_bank_transfer_id DESC))[1] AS last_provider_state,
+      (array_agg((COALESCE(classified_transfer_rows.completed_at_utc, classified_transfer_rows.created_at_utc))::text ORDER BY COALESCE(classified_transfer_rows.completed_at_utc, classified_transfer_rows.created_at_utc) DESC NULLS LAST, classified_transfer_rows.pay_bank_transfer_id DESC))[1] AS last_provider_at_utc
+    FROM classified_transfer_rows AS classified_transfer_rows
+  )
+  SELECT
+    COALESCE(transfer_classification_totals.transfer_count, 0),
+    COALESCE(transfer_classification_totals.final_money_moved_count, 0),
+    COALESCE(transfer_classification_totals.terminal_no_money_count, 0),
+    COALESCE(transfer_classification_totals.pending_non_final_count, 0),
+    COALESCE(transfer_classification_totals.unknown_or_review_count, 0),
+    transfer_classification_totals.last_provider_state,
+    transfer_classification_totals.last_provider_at_utc,
+    jsonb_strip_nulls(jsonb_build_object(
+      'source', 'pay_bank_transfers',
+      'bounded_scope', 'pay_batch_id',
+      'pay_batch_id', p_pay_batch_id::text,
+      'operation_id', CASE WHEN v_operation_id IS NULL THEN NULL ELSE v_operation_id::text END,
+      'transfer_count', COALESCE(transfer_classification_totals.transfer_count, 0),
+      'final_money_moved_count', COALESCE(transfer_classification_totals.final_money_moved_count, 0),
+      'terminal_no_money_count', COALESCE(transfer_classification_totals.terminal_no_money_count, 0),
+      'pending_non_final_count', COALESCE(transfer_classification_totals.pending_non_final_count, 0),
+      'unknown_or_review_count', COALESCE(transfer_classification_totals.unknown_or_review_count, 0),
+      'classification_called', COALESCE(transfer_classification_totals.transfer_count, 0) > 0,
+      'last_provider_state', transfer_classification_totals.last_provider_state,
+      'last_provider_at_utc', transfer_classification_totals.last_provider_at_utc
+    ))
+  INTO v_materialised_transfer_count,
+       v_materialised_final_money_moved_count,
+       v_materialised_terminal_no_money_count,
+       v_materialised_pending_non_final_count,
+       v_materialised_unknown_or_review_count,
+       v_materialised_last_provider_state,
+       v_materialised_last_provider_at_utc,
+       v_transfer_classification_summary_json
+  FROM transfer_classification_totals AS transfer_classification_totals;
+  END IF;
+
+  v_transfer_classification_called := COALESCE(v_materialised_transfer_count, 0) > 0;
+
+  IF v_transfer_classification_called IS TRUE THEN
+    v_transfer_count := v_materialised_transfer_count;
+    v_submitted_count := GREATEST(COALESCE(v_submitted_count, 0), COALESCE(v_materialised_transfer_count, 0));
+    v_request_sent_count := GREATEST(COALESCE(v_request_sent_count, 0), COALESCE(v_materialised_transfer_count, 0));
+    v_final_money_moved_count := v_materialised_final_money_moved_count;
+    v_terminal_no_money_count := v_materialised_terminal_no_money_count;
+    v_unknown_count := GREATEST(COALESCE(v_unknown_count, 0), COALESCE(v_materialised_unknown_or_review_count, 0));
+    v_review_required_count := GREATEST(COALESCE(v_review_required_count, 0), COALESCE(v_materialised_unknown_or_review_count, 0));
+    v_last_provider_state := COALESCE(NULLIF(BTRIM(COALESCE(v_materialised_last_provider_state, '')), ''), v_last_provider_state);
+    v_last_provider_at_utc := COALESCE(NULLIF(BTRIM(COALESCE(v_materialised_last_provider_at_utc, '')), ''), v_last_provider_at_utc);
+  END IF;
+
   RETURN jsonb_build_object(
     'ok', true,
     'mode', v_mode,
@@ -63088,13 +63249,18 @@ BEGIN
     'request_sent_count', coalesce(v_request_sent_count, 0),
     'terminal_no_money_count', coalesce(v_terminal_no_money_count, 0),
     'final_money_moved_count', coalesce(v_final_money_moved_count, 0),
+    'pending_non_final_count', coalesce(v_materialised_pending_non_final_count, 0),
+    'unknown_or_review_count', coalesce(v_materialised_unknown_or_review_count, 0),
+    'materialised_transfer_count', coalesce(v_materialised_transfer_count, 0),
+    'transfer_classification_scope_enabled', v_should_classify_transfers,
+    'transfer_classification_summary_json', coalesce(v_transfer_classification_summary_json, '{}'::jsonb),
     'chunk_count', coalesce(v_chunk_count, 0),
     'running_chunk_count', coalesce(v_running_chunk_count, 0),
     'pending_chunk_count', coalesce(v_pending_chunk_count, 0),
     'completed_chunk_count', coalesce(v_completed_chunk_count, 0),
     'failed_chunk_count', coalesce(v_failed_chunk_count, 0),
     'provider_submit_diagnostic_called', false,
-    'classification_called', false,
+    'classification_called', v_transfer_classification_called,
     'provider_event_grouping_called', false
   );
 END;
