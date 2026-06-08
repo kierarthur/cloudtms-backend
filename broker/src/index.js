@@ -25165,8 +25165,71 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
     }
 
     if (currentPhase === 'APPLY_RAIL_UPDATES') {
+      const readSubmissionEvidence = async () => {
+        const evidence = await rpc('pay_batch_submission_evidence', {
+          p_pay_batch_id: payBatchId,
+          p_counts_only: true,
+          p_operation_id: operationId,
+          p_chunk_id: null,
+          p_mode: 'OPERATION_LIGHT'
+        }, 'pay_batch_submission_evidence');
+        const finalMoneyMovedCount = numberValue(evidence.final_money_moved_count, 0);
+        const terminalNoMoneyCount = numberValue(evidence.terminal_no_money_count, 0);
+        const pendingNonFinalCount = numberValue(evidence.pending_non_final_count, 0);
+        const unknownOrReviewCount = numberValue(evidence.unknown_or_review_count, 0);
+        const materialisedTransferCount = numberValue(evidence.materialised_transfer_count ?? evidence.transfer_count, 0);
+        return {
+          evidence,
+          finalMoneyMovedCount,
+          terminalNoMoneyCount,
+          pendingNonFinalCount,
+          unknownOrReviewCount,
+          materialisedTransferCount,
+          hasConclusiveTerminalOutcomes: materialisedTransferCount > 0
+            && pendingNonFinalCount <= 0
+            && unknownOrReviewCount <= 0
+            && (finalMoneyMovedCount > 0 || terminalNoMoneyCount > 0),
+          hasReviewOutcome: materialisedTransferCount > 0
+            && pendingNonFinalCount <= 0
+            && unknownOrReviewCount > 0
+        };
+      };
+
+      const continueFromSubmissionEvidence = (submissionEvidence, updateSource) => moreWork('QUEUE_REMITTANCES', {
+        status_text: 'Provider transfer outcomes are already materialised; continuing payment finalisation.',
+        rail_update_source: updateSource || null,
+        submission_evidence: submissionEvidence.evidence,
+        final_money_moved_count: submissionEvidence.finalMoneyMovedCount,
+        terminal_no_money_count: submissionEvidence.terminalNoMoneyCount,
+        pending_non_final_count: submissionEvidence.pendingNonFinalCount,
+        unknown_or_review_count: submissionEvidence.unknownOrReviewCount,
+        materialised_transfer_count: submissionEvidence.materialisedTransferCount,
+        next_required_phase: 'QUEUE_REMITTANCES'
+      });
+
+      const reviewFromSubmissionEvidence = (submissionEvidence, updateSource) => reviewRequired(
+        currentPhase,
+        'PROVIDER_OUTCOME_REVIEW_REQUIRED',
+        'Provider outcome evidence requires review before payment finalisation can continue.',
+        {
+          rail_update_source: updateSource || null,
+          submission_evidence: submissionEvidence.evidence,
+          final_money_moved_count: submissionEvidence.finalMoneyMovedCount,
+          terminal_no_money_count: submissionEvidence.terminalNoMoneyCount,
+          pending_non_final_count: submissionEvidence.pendingNonFinalCount,
+          unknown_or_review_count: submissionEvidence.unknownOrReviewCount,
+          materialised_transfer_count: submissionEvidence.materialisedTransferCount
+        }
+      );
+
       if (typeof collectRailUpdatesForBankingPayOperation !== 'function') {
-        return waitingProvider('APPLY_RAIL_UPDATES', { status_text: 'Waiting for provider rail updates. No backend rail-update collector is registered for this environment.' }, 60);
+        const submissionEvidence = await readSubmissionEvidence();
+        if (submissionEvidence.hasConclusiveTerminalOutcomes) return continueFromSubmissionEvidence(submissionEvidence, { collector_available: false });
+        if (submissionEvidence.hasReviewOutcome) return reviewFromSubmissionEvidence(submissionEvidence, { collector_available: false });
+        return waitingProvider('APPLY_RAIL_UPDATES', {
+          status_text: 'Waiting for provider rail updates. No backend rail-update collector is registered for this environment.',
+          submission_evidence: submissionEvidence.evidence
+        }, 60);
       }
       const updateBatch = await collectRailUpdatesForBankingPayOperation(env, {
         operation_id: operationId,
@@ -25175,7 +25238,16 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
         limit: limitFromConfig('rail_update_limit', 100, 1, 100)
       });
       const updates = Array.isArray(updateBatch && updateBatch.updates) ? updateBatch.updates.slice(0, limitFromConfig('rail_update_limit', 100, 1, 100)) : [];
-      if (updates.length <= 0) return waitingProvider('APPLY_RAIL_UPDATES', { status_text: 'No provider rail updates are currently available.', rail_update_source: updateBatch || null }, 60);
+      if (updates.length <= 0) {
+        const submissionEvidence = await readSubmissionEvidence();
+        if (submissionEvidence.hasConclusiveTerminalOutcomes) return continueFromSubmissionEvidence(submissionEvidence, updateBatch || null);
+        if (submissionEvidence.hasReviewOutcome) return reviewFromSubmissionEvidence(submissionEvidence, updateBatch || null);
+        return waitingProvider('APPLY_RAIL_UPDATES', {
+          status_text: 'No provider rail updates are currently available.',
+          rail_update_source: updateBatch || null,
+          submission_evidence: submissionEvidence.evidence
+        }, 60);
+      }
       const applied = await rpc('pay_bank_transfers_apply_rail_updates', {
         p_pay_batch_id: payBatchId,
         p_updates: updates,
@@ -25226,6 +25298,7 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
     });
   }
 }
+
 
 
 
