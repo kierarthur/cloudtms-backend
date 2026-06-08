@@ -138445,6 +138445,59 @@ function getRailAdapter(provider) {
             const text = String(value === undefined || value === null ? '' : value).trim();
             return text || null;
           };
+          const resolveTransferPayeeIdentity = (transfer) => {
+            const row = readObject(transfer);
+            const explicitKind = String(row.payee_entity_kind || row.payeeEntityKind || '').trim().toUpperCase();
+            const explicitEntityId = String(row.payee_entity_id || row.payeeEntityId || '').trim();
+            const umbrellaId = String(row.umbrella_id || row.umbrellaId || '').trim();
+            const candidateId = String(row.candidate_id || row.candidateId || '').trim();
+
+            if ((explicitKind === 'CANDIDATE' || explicitKind === 'UMBRELLA') && explicitEntityId) {
+              return {
+                entity_kind: explicitKind,
+                entity_id: explicitEntityId,
+                source: 'PAYLOAD_EXPLICIT',
+                explicit_entity_kind_present: true,
+                explicit_entity_id_present: true,
+                umbrella_id_present: !!umbrellaId,
+                candidate_id_present: !!candidateId
+              };
+            }
+
+            if ((!explicitKind || explicitKind === 'UMBRELLA') && umbrellaId) {
+              return {
+                entity_kind: 'UMBRELLA',
+                entity_id: umbrellaId,
+                source: explicitKind ? 'PAYLOAD_UMBRELLA_ID_FALLBACK_FOR_KIND' : 'PAYLOAD_UMBRELLA_ID_FALLBACK',
+                explicit_entity_kind_present: !!explicitKind,
+                explicit_entity_id_present: !!explicitEntityId,
+                umbrella_id_present: true,
+                candidate_id_present: !!candidateId
+              };
+            }
+
+            if ((!explicitKind || explicitKind === 'CANDIDATE') && candidateId) {
+              return {
+                entity_kind: 'CANDIDATE',
+                entity_id: candidateId,
+                source: explicitKind ? 'PAYLOAD_CANDIDATE_ID_FALLBACK_FOR_KIND' : 'PAYLOAD_CANDIDATE_ID_FALLBACK',
+                explicit_entity_kind_present: !!explicitKind,
+                explicit_entity_id_present: !!explicitEntityId,
+                umbrella_id_present: !!umbrellaId,
+                candidate_id_present: true
+              };
+            }
+
+            return {
+              entity_kind: explicitKind || null,
+              entity_id: explicitEntityId || null,
+              source: 'PAYLOAD_IDENTITY_MISSING',
+              explicit_entity_kind_present: !!explicitKind,
+              explicit_entity_id_present: !!explicitEntityId,
+              umbrella_id_present: !!umbrellaId,
+              candidate_id_present: !!candidateId
+            };
+          };
           const normaliseProviderIdentity = (value) => String(value === undefined || value === null ? '' : value).trim();
           const compactProviderRequestToken = (value) => String(value === undefined || value === null ? '' : value).trim().replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
           const makeProviderSafeRequestId = ({ operationIdText, transferIdText, batchIdText, fallbackText } = {}) => {
@@ -140257,16 +140310,18 @@ function getRailAdapter(provider) {
 
               let map = null;
               try {
+                const payeeIdentity = resolveTransferPayeeIdentity(transfer);
                 await persistProviderSubmitStage('PROVIDER_PRECALL_VALIDATION_STARTED', {
                   provider_submission_status: providerSubmitDiagnostic?.provider_submission_status || 'NO_PROVIDER_SUBMISSION_ATTEMPTED',
                   provider_submission_attempted: false,
-                  provider_request_sent: false
+                  provider_request_sent: false,
+                  payee_identity_resolution: payeeIdentity
                 });
                 map = await revolutCounterparty_ensureMapped(env, token, {
                   rail_env: expectedEnv,
                   actor_user_id: actor,
-                  entity_kind: String(transfer.payee_entity_kind || '').trim().toUpperCase(),
-                  entity_id: String(transfer.payee_entity_id || '').trim(),
+                  entity_kind: payeeIdentity.entity_kind || '',
+                  entity_id: payeeIdentity.entity_id || '',
                   bank_details_hash: String(transfer.bank_details_hash_snapshot || '').trim(),
                   bank_fields: {
                     payee_name: String(transfer.payee_name || '').trim(),
