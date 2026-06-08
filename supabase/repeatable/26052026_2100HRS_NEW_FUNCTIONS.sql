@@ -88439,7 +88439,19 @@ begin
     when settle_status_normalise.status = 'REVERSED' then 'REVERTED'
     when settle_status_normalise.status in ('SUBMISSION_FAILED','FAILED_BEFORE_COMMIT') then 'FAILED'
     else settle_status_normalise.status
-  end;
+  end
+  where settle_status_normalise.status in (
+    'CANCELED',
+    'SUCCESS',
+    'SUCCEEDED',
+    'SETTLED',
+    'PAID',
+    'EXECUTED',
+    'COMMITTED',
+    'REVERSED',
+    'SUBMISSION_FAILED',
+    'FAILED_BEFORE_COMMIT'
+  );
 
   DROP TABLE IF EXISTS pg_temp._tmp_settle_in_classification;
   CREATE TEMP TABLE _tmp_settle_in_classification ON COMMIT DROP AS
@@ -90601,6 +90613,7 @@ begin
   );
 end;
 $$;
+
 
 
 
