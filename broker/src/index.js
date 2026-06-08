@@ -24185,12 +24185,35 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
 
   const operation = isPlainObject(operationRow) ? operationRow : {};
   const operationId = trimStr(operation.operation_id || operation.id);
-  const payBatchId = trimStr(operation.pay_batch_id || operation.payBatchId || (isPlainObject(operation.input_json) ? operation.input_json.pay_batch_id : null));
-  const actorUserId = trimStr(user && user.id || operation.actor_user_id || operation.actorUserId || (isPlainObject(operation.input_json) ? operation.input_json.actor_user_id : null));
-  const operationType = upper(operation.operation_type || operation.operationType);
   const inputJson = isPlainObject(operation.input_json) ? operation.input_json : (isPlainObject(operation.inputJson) ? operation.inputJson : {});
   const configJson = isPlainObject(operation.config_json) ? operation.config_json : (isPlainObject(operation.configJson) ? operation.configJson : {});
   const progressJson = isPlainObject(operation.progress_json) ? operation.progress_json : (isPlainObject(operation.progressJson) ? operation.progressJson : {});
+  const payBatchId = trimStr(operation.pay_batch_id || operation.payBatchId || inputJson.pay_batch_id || inputJson.payBatchId);
+  const operationActorUserId = trimStr(
+    operation.actor_user_id
+    || operation.actorUserId
+    || inputJson.actor_user_id
+    || inputJson.actorUserId
+    || configJson.actor_user_id
+    || configJson.actorUserId
+    || progressJson.operation_actor_user_id
+    || progressJson.operationActorUserId
+    || (user && user.id)
+  );
+  const runnerActorUserId = trimStr(
+    options.runner_actor_user_id
+    || options.runnerActorUserId
+    || (user && user.id)
+    || progressJson.runner_actor_user_id
+    || progressJson.runnerActorUserId
+    || progressJson.last_claim_runner_actor_user_id
+    || progressJson.lastClaimRunnerActorUserId
+    || operation.runner_actor_user_id
+    || operation.runnerActorUserId
+    || operationActorUserId
+  );
+  const actorUserId = operationActorUserId;
+  const operationType = upper(operation.operation_type || operation.operationType);
   const normalisePhase = (value) => upper(value);
   const phaseRank = (phase) => {
     const normalised = normalisePhase(phase);
@@ -24331,7 +24354,11 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
         phase_drift_recovered: phaseResolution.driftRecovered === true,
         durable_phase_before_advance: phaseResolution.durablePhase || null,
         progress_phase_before_advance: phaseResolution.progressPhase || null,
-        resolved_current_phase: currentPhase
+        resolved_current_phase: currentPhase,
+        operation_actor_user_id: actorUserId,
+        runner_actor_user_id: uuidRe.test(runnerActorUserId) ? runnerActorUserId : null,
+        actor_identity_mode: 'OPERATION_OWNER_FOR_BUSINESS_RPCS',
+        runner_actor_differs_from_operation_actor: uuidRe.test(runnerActorUserId) && runnerActorUserId !== actorUserId
       }),
       p_result_patch_json: isPlainObject(resultPatch) ? resultPatch : null,
       p_error_json: isPlainObject(errorPatch) ? errorPatch : null,
@@ -25010,7 +25037,6 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
     });
   }
 }
-
 
 async function withBankingPayOperationLease(env, operationRow, options = {}, advanceOnce = null) {
   if (typeof options === 'function') {
