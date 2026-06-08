@@ -45806,7 +45806,6 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
   }
 }
 
-
 async function advanceBankingPayRemittanceOperation(env, operationRow, user, options = {}) {
   const unwrapRpcPayload = (rpcRes, key) => {
     let payload = rpcRes;
@@ -45870,15 +45869,52 @@ async function advanceBankingPayRemittanceOperation(env, operationRow, user, opt
   });
   const fetchScopeIds = async (kind) => {
     const wantedKind = String(kind || '').trim().toUpperCase();
-    const { rows } = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/banking_pay_operation_remittance_scope?operation_id=eq.${enc(operationId)}&select=id,remittance_type&order=created_at_utc.asc,id.asc&limit=50000`);
+    const { rows } = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/banking_pay_operation_remittance_scope?operation_id=eq.${enc(operationId)}&select=id,remittance_type,status&order=created_at_utc.asc,id.asc&limit=50000`);
     return (rows || [])
       .filter((r) => {
         const remittanceType = String(r?.remittance_type || '').trim().toUpperCase();
+        const remittanceStatus = String(r?.status || '').trim().toUpperCase();
         const isPayoutNotice = remittanceType.includes('PAYOUT') || remittanceType.includes('NOTICE');
-        return wantedKind === 'PAYOUT_NOTICE' ? isPayoutNotice : !isPayoutNotice;
+        const statusIsQueueable = remittanceStatus === 'PENDING' || remittanceStatus === 'FAILED';
+        return statusIsQueueable && (wantedKind === 'PAYOUT_NOTICE' ? isPayoutNotice : !isPayoutNotice);
       })
       .map((r) => String(r.id || '').trim())
       .filter(Boolean);
+  };
+
+  const isUuidText = (value) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(value || '').trim());
+
+  const extractRemittanceScopeIdsFromChunk = (chunk) => {
+    const payload = safeObject(chunk?.payload_json);
+    const ids = [];
+    const seen = new Set();
+    const pushId = (value) => {
+      const text = String(value || '').trim();
+      if (!isUuidText(text) || seen.has(text)) return;
+      seen.add(text);
+      ids.push(text);
+    };
+    const pushArray = (value) => {
+      if (!Array.isArray(value)) {
+        pushId(value);
+        return;
+      }
+      for (const entry of value) {
+        if (entry && typeof entry === 'object' && !Array.isArray(entry)) {
+          pushId(entry.remittance_scope_id || entry.remittanceScopeId || entry.scope_unit_id || entry.scopeUnitId || entry.id);
+        } else {
+          pushId(entry);
+        }
+      }
+    };
+
+    pushId(payload.remittance_scope_id || payload.remittanceScopeId || payload.scope_unit_id || payload.scopeUnitId || payload.id);
+    pushArray(payload.remittance_scope_ids);
+    pushArray(payload.remittanceScopeIds);
+    pushArray(payload.scope_unit_ids);
+    pushArray(payload.scopeUnitIds);
+    pushArray(payload.units);
+    return ids;
   };
 
   const readBool = (value, fallback = false) => {
@@ -45894,8 +45930,8 @@ async function advanceBankingPayRemittanceOperation(env, operationRow, user, opt
 
   const extractQueueCounts = (queueResult = {}) => {
     const result = safeObject(queueResult);
-    const numberFrom = (...keys) => {
-      for (const key of keys) {
+    const numberFrom = function numberFromKeys() {
+      for (const key of Array.from(arguments)) {
         const value = result[key];
         if (Number.isFinite(Number(value))) return Math.max(0, Math.trunc(Number(value)));
       }
@@ -46138,7 +46174,21 @@ async function advanceBankingPayRemittanceOperation(env, operationRow, user, opt
       if (guard.finish === true) return finish(guard.status, guard.result, guard.error);
       const chunk = await claim('QUEUE_REMITTANCE_CHUNKS', 'REMITTANCE');
       if (chunk && chunk.chunk_id) {
-        const ids = Array.isArray(chunk.payload_json?.units) ? chunk.payload_json.units.map((x) => String(x || '').trim()).filter(Boolean) : [];
+        const ids = extractRemittanceScopeIdsFromChunk(chunk);
+        const failedUnitCount = Math.max(1, ids.length || Number(chunk.unit_count || 0) || 1);
+        if (ids.length <= 0) {
+          const missingScopeError = {
+            code: 'REMITTANCE_CHUNK_SCOPE_IDS_MISSING',
+            message: 'Remittance chunk is missing remittance scope ids.',
+            operation_id: operationId,
+            pay_batch_id: payBatchId,
+            chunk_id: String(chunk.chunk_id || ''),
+            phase,
+            chunk_payload_json: safeObject(chunk.payload_json)
+          };
+          await finishChunk(chunk.chunk_id, 'FAILED', 0, failedUnitCount, safeObject(chunk.payload_json), missingScopeError);
+          return finish('FAILED', null, missingScopeError);
+        }
         try {
           const queued = unwrapRpcPayload(await sbRpc(env, 'pay_remittance_queue_commit_stage', {
             p_pay_batch_id: payBatchId,
@@ -46161,7 +46211,12 @@ async function advanceBankingPayRemittanceOperation(env, operationRow, user, opt
             should_keep_advancing: true,
             status_text: 'Queued one remittance chunk.',
             last_chunk_result: queued,
-            ...queuedCounts
+            queued_count: queuedCounts.queued_count,
+            reused_count: queuedCounts.reused_count,
+            skipped_count: queuedCounts.skipped_count,
+            failed_count: queuedCounts.failed_count,
+            remaining_count: queuedCounts.remaining_count,
+            outbox_ids: queuedCounts.outbox_ids
           }, { current_chunk_index: chunk.sequence_no || null });
         } catch (e) {
           await finishChunk(chunk.chunk_id, 'FAILED', 0, ids.length || 1, null, { code: 'REMITTANCE_QUEUE_CHUNK_FAILED', message: String(e?.message || e || '') });
@@ -46176,7 +46231,21 @@ async function advanceBankingPayRemittanceOperation(env, operationRow, user, opt
       if (guard.finish === true) return finish(guard.status, guard.result, guard.error);
       const chunk = await claim('QUEUE_PAYOUT_NOTICE_CHUNKS', 'PAYOUT_NOTICE');
       if (chunk && chunk.chunk_id) {
-        const ids = Array.isArray(chunk.payload_json?.units) ? chunk.payload_json.units.map((x) => String(x || '').trim()).filter(Boolean) : [];
+        const ids = extractRemittanceScopeIdsFromChunk(chunk);
+        const failedUnitCount = Math.max(1, ids.length || Number(chunk.unit_count || 0) || 1);
+        if (ids.length <= 0) {
+          const missingScopeError = {
+            code: 'PAYOUT_NOTICE_CHUNK_SCOPE_IDS_MISSING',
+            message: 'Payout notice chunk is missing remittance scope ids.',
+            operation_id: operationId,
+            pay_batch_id: payBatchId,
+            chunk_id: String(chunk.chunk_id || ''),
+            phase,
+            chunk_payload_json: safeObject(chunk.payload_json)
+          };
+          await finishChunk(chunk.chunk_id, 'FAILED', 0, failedUnitCount, safeObject(chunk.payload_json), missingScopeError);
+          return finish('FAILED', null, missingScopeError);
+        }
         try {
           const queued = unwrapRpcPayload(await sbRpc(env, 'pay_finance_payout_notice_queue_commit_stage', {
             p_pay_batch_id: payBatchId,
@@ -46198,7 +46267,12 @@ async function advanceBankingPayRemittanceOperation(env, operationRow, user, opt
             should_keep_advancing: true,
             status_text: 'Queued one payout notice chunk.',
             last_chunk_result: queued,
-            ...queuedCounts
+            queued_count: queuedCounts.queued_count,
+            reused_count: queuedCounts.reused_count,
+            skipped_count: queuedCounts.skipped_count,
+            failed_count: queuedCounts.failed_count,
+            remaining_count: queuedCounts.remaining_count,
+            outbox_ids: queuedCounts.outbox_ids
           }, { current_chunk_index: chunk.sequence_no || null });
         } catch (e) {
           await finishChunk(chunk.chunk_id, 'FAILED', 0, ids.length || 1, null, { code: 'PAYOUT_NOTICE_QUEUE_CHUNK_FAILED', message: String(e?.message || e || '') });
