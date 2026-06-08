@@ -64371,6 +64371,7 @@ DROP FUNCTION IF EXISTS public.banking_pay_operation_claim_next(uuid, uuid, text
 
 DROP FUNCTION IF EXISTS public.banking_pay_operation_claim_next(uuid, uuid, text, integer);
 
+
 CREATE OR REPLACE FUNCTION public.banking_pay_operation_claim_next(
     p_operation_id uuid DEFAULT NULL::uuid,
     p_actor_user_id uuid DEFAULT NULL::uuid,
@@ -64468,7 +64469,27 @@ BEGIN
             )
           )
         )
-        AND upper(BTRIM(COALESCE(operation_row.status, ''))) IN ('RUNNING', 'CONTINUING', 'WAITING_RETRY')
+        AND (
+          (
+            upper(BTRIM(COALESCE(operation_row.status, ''))) = 'RUNNING'
+            AND upper(BTRIM(COALESCE(operation_row.runner_state, ''))) IN ('RUNNABLE', 'RUNNING', 'IDLE')
+          )
+          OR (
+            upper(BTRIM(COALESCE(operation_row.status, ''))) = 'WAITING'
+            AND upper(BTRIM(COALESCE(operation_row.runner_state, ''))) = 'RUNNABLE'
+          )
+          OR (
+            upper(BTRIM(COALESCE(operation_row.status, ''))) = 'WAITING_PROVIDER'
+            AND v_allow_backend_runner_owned IS TRUE
+            AND upper(BTRIM(COALESCE(operation_row.operation_type, ''))) = 'PAYMENT_EXECUTE'
+            AND upper(BTRIM(COALESCE(operation_row.runner_state, ''))) IN ('WAITING_PROVIDER', 'RUNNABLE')
+            AND (
+              upper(BTRIM(COALESCE(operation_row.phase, ''))) IN ('APPLY_RAIL_UPDATES', 'WAITING_PROVIDER', 'WAIT_PROVIDER', 'PROVIDER_WAIT', 'PROVIDER_WAITING', 'WAITING_PROVIDER_CONFIRMATION', 'POLL_PROVIDER', 'PROVIDER_POLL', 'APPLY_PROVIDER_UPDATES', 'CHECK_PROVIDER_OUTCOME')
+              OR upper(BTRIM(COALESCE(operation_row.progress_json->>'phase', operation_row.progress_json->>'operation_phase', operation_row.progress_json->>'operationPhase', operation_row.progress_json->>'next_phase', operation_row.progress_json->>'nextPhase', ''))) IN ('APPLY_RAIL_UPDATES', 'WAITING_PROVIDER', 'WAIT_PROVIDER', 'PROVIDER_WAIT', 'PROVIDER_WAITING', 'WAITING_PROVIDER_CONFIRMATION', 'POLL_PROVIDER', 'PROVIDER_POLL', 'APPLY_PROVIDER_UPDATES', 'CHECK_PROVIDER_OUTCOME')
+              OR upper(BTRIM(COALESCE(operation_row.resume_reason, operation_row.progress_json->>'resume_reason', operation_row.progress_json->>'resumeReason', ''))) IN ('AWAITING_PROVIDER_OUTCOME', 'WAITING_PROVIDER', 'WAIT_PROVIDER', 'PROVIDER_WAIT')
+            )
+          )
+        )
         AND COALESCE(operation_row.requires_user_action, false) = false
         AND COALESCE(operation_row.run_after_utc, v_now) <= v_now
         AND (
@@ -64482,7 +64503,7 @@ BEGIN
       FOR UPDATE SKIP LOCKED
     )
     UPDATE public.banking_pay_operations AS operation_update
-    SET status = CASE WHEN upper(BTRIM(COALESCE(operation_update.status, ''))) = 'WAITING_RETRY' THEN 'RUNNING' ELSE operation_update.status END,
+    SET status = CASE WHEN upper(BTRIM(COALESCE(operation_update.status, ''))) IN ('WAITING', 'WAITING_PROVIDER') THEN 'RUNNING' ELSE operation_update.status END,
         runner_state = 'RUNNING',
         lease_owner = v_lock_owner,
         lease_expires_at_utc = v_now + make_interval(secs => v_lock_seconds),
@@ -64619,11 +64640,27 @@ BEGIN
 
         v_not_claimed_reason := CASE
           WHEN COALESCE(array_length(v_operation_types, 1), 0) > 0 AND v_visible_operation_type <> ALL(v_operation_types) THEN 'OPERATION_TYPE_NOT_IN_SCOPE'
-          WHEN upper(BTRIM(COALESCE(v_visible.status, ''))) IN ('WAITING_AUTHORISATION', 'WAITING_PROVIDER', 'REVIEW_REQUIRED', 'COMPLETE', 'FAILED', 'CANCELLED', 'CANCELED') THEN 'NOT_RUNNABLE_STATUS'
+          WHEN upper(BTRIM(COALESCE(v_visible.status, ''))) IN ('WAITING_AUTHORISATION', 'REVIEW_REQUIRED', 'COMPLETE', 'FAILED', 'CANCELLED', 'CANCELED') THEN 'NOT_RUNNABLE_STATUS'
           WHEN COALESCE(v_visible.requires_user_action, false) THEN 'REQUIRES_USER_ACTION'
           WHEN COALESCE(v_visible.run_after_utc, v_now) > v_now THEN 'RUN_AFTER_NOT_DUE'
           WHEN v_visible.lease_owner IS NOT NULL AND v_visible.lease_expires_at_utc IS NOT NULL AND v_visible.lease_expires_at_utc > v_now THEN 'LEASE_ACTIVE'
           WHEN COALESCE(v_visible.attempt_count, 0) >= COALESCE(v_visible.max_attempts, 10) THEN 'MAX_ATTEMPTS_REACHED'
+          WHEN upper(BTRIM(COALESCE(v_visible.status, ''))) = 'RUNNING'
+           AND upper(BTRIM(COALESCE(v_visible.runner_state, ''))) NOT IN ('RUNNABLE', 'RUNNING', 'IDLE') THEN 'RUNNING_NOT_RUNNABLE'
+          WHEN upper(BTRIM(COALESCE(v_visible.status, ''))) = 'WAITING'
+           AND upper(BTRIM(COALESCE(v_visible.runner_state, ''))) <> 'RUNNABLE' THEN 'WAITING_NOT_RUNNABLE'
+          WHEN upper(BTRIM(COALESCE(v_visible.status, ''))) = 'WAITING_PROVIDER'
+           AND v_allow_backend_runner_owned IS NOT TRUE THEN 'WAITING_PROVIDER_BACKEND_RUNNER_REQUIRED'
+          WHEN upper(BTRIM(COALESCE(v_visible.status, ''))) = 'WAITING_PROVIDER'
+           AND upper(BTRIM(COALESCE(v_visible.operation_type, ''))) <> 'PAYMENT_EXECUTE' THEN 'WAITING_PROVIDER_OPERATION_TYPE_NOT_CLAIMABLE'
+          WHEN upper(BTRIM(COALESCE(v_visible.status, ''))) = 'WAITING_PROVIDER'
+           AND upper(BTRIM(COALESCE(v_visible.runner_state, ''))) NOT IN ('WAITING_PROVIDER', 'RUNNABLE') THEN 'WAITING_PROVIDER_NOT_RUNNABLE'
+          WHEN upper(BTRIM(COALESCE(v_visible.status, ''))) = 'WAITING_PROVIDER'
+           AND NOT (
+             upper(BTRIM(COALESCE(v_visible.phase, ''))) IN ('APPLY_RAIL_UPDATES', 'WAITING_PROVIDER', 'WAIT_PROVIDER', 'PROVIDER_WAIT', 'PROVIDER_WAITING', 'WAITING_PROVIDER_CONFIRMATION', 'POLL_PROVIDER', 'PROVIDER_POLL', 'APPLY_PROVIDER_UPDATES', 'CHECK_PROVIDER_OUTCOME')
+             OR upper(BTRIM(COALESCE(v_visible.progress_json->>'phase', v_visible.progress_json->>'operation_phase', v_visible.progress_json->>'operationPhase', v_visible.progress_json->>'next_phase', v_visible.progress_json->>'nextPhase', ''))) IN ('APPLY_RAIL_UPDATES', 'WAITING_PROVIDER', 'WAIT_PROVIDER', 'PROVIDER_WAIT', 'PROVIDER_WAITING', 'WAITING_PROVIDER_CONFIRMATION', 'POLL_PROVIDER', 'PROVIDER_POLL', 'APPLY_PROVIDER_UPDATES', 'CHECK_PROVIDER_OUTCOME')
+             OR upper(BTRIM(COALESCE(v_visible.resume_reason, v_visible.progress_json->>'resume_reason', v_visible.progress_json->>'resumeReason', ''))) IN ('AWAITING_PROVIDER_OUTCOME', 'WAITING_PROVIDER', 'WAIT_PROVIDER', 'PROVIDER_WAIT')
+           ) THEN 'WAITING_PROVIDER_NOT_RECHECK_PHASE'
           ELSE 'NOT_RUNNABLE'
         END;
 
@@ -64703,8 +64740,6 @@ BEGIN
       NULL::timestamptz;
 END;
 $function$;
-
-
 
 
 
@@ -70178,6 +70213,11 @@ DECLARE
   v_suppress_remittances boolean := false;
   v_scheduled_execution_eligible boolean := false;
   v_deferred_by_timing boolean := false;
+  v_pending_provider_skipped_count integer := 0;
+  v_no_transfer_skipped_count integer := 0;
+  v_terminal_no_money_skipped_count integer := 0;
+  v_confirmed_scope_row_count integer := 0;
+  v_scheduled_scope_row_count integer := 0;
 BEGIN
   IF p_operation_id IS NULL THEN
     RAISE EXCEPTION 'operation_id is required';
@@ -70293,6 +70333,11 @@ BEGIN
       'scope_rows_reused', 0,
       'recipient_count', 0,
       'stale_scope_skipped_count', 0,
+      'scheduled_scope_rows', 0,
+      'confirmed_scope_rows', 0,
+      'pending_provider_skipped_count', 0,
+      'no_transfer_skipped_count', 0,
+      'terminal_no_money_skipped_count', 0,
       'scheduled_execution_eligible', false,
       'trigger_status', 'REMITTANCE_SCOPE_DEFERRED_BY_CONFIGURED_TIMING'
     );
@@ -70320,6 +70365,11 @@ BEGIN
       'scope_rows_reused', 0,
       'recipient_count', 0,
       'stale_scope_skipped_count', 0,
+      'scheduled_scope_rows', 0,
+      'confirmed_scope_rows', 0,
+      'pending_provider_skipped_count', 0,
+      'no_transfer_skipped_count', 0,
+      'terminal_no_money_skipped_count', 0,
       'scheduled_execution_eligible', false,
       'trigger_status', 'REMITTANCE_SCOPE_SUPPRESSED'
     );
@@ -70350,6 +70400,84 @@ BEGIN
       OR v_execution_intent_json->>'operation_id' = v_operation_row.root_operation_id::text
     );
 
+  WITH scoped_item_rows AS (
+    SELECT
+      batch_candidate.id AS pay_batch_candidate_id,
+      batch_item.id AS pay_batch_item_id,
+      batch_item.pay_bank_transfer_id,
+      upper(BTRIM(COALESCE(batch_candidate.settlement_status, ''))) AS settlement_status,
+      transfer_row.id AS transfer_id,
+      upper(BTRIM(COALESCE(transfer_row.status, ''))) AS transfer_status,
+      upper(BTRIM(COALESCE(transfer_row.rail_state, ''))) AS transfer_rail_state,
+      transfer_row.completed_at_utc,
+      COALESCE(transfer_classifier.is_final_money_moved, false) AS is_final_money_moved,
+      COALESCE(transfer_classifier.is_terminal_no_money, false) AS is_terminal_no_money,
+      COALESCE(transfer_classifier.is_pending_non_final, false) AS is_pending_non_final
+    FROM public.pay_batch_candidates AS batch_candidate
+    JOIN public.pay_batch_items AS batch_item
+      ON batch_item.pay_batch_candidate_id = batch_candidate.id
+    LEFT JOIN public.pay_bank_transfers AS transfer_row
+      ON transfer_row.id = batch_item.pay_bank_transfer_id
+     AND transfer_row.pay_batch_id = p_pay_batch_id
+    LEFT JOIN LATERAL public._pay_rail_state_money_movement_classify(
+      transfer_row.status,
+      transfer_row.rail_state,
+      COALESCE(transfer_row.rail_meta_json, '{}'::jsonb),
+      COALESCE(transfer_row.rail_meta_json, '{}'::jsonb)
+    ) AS transfer_classifier ON transfer_row.id IS NOT NULL
+    WHERE batch_candidate.pay_batch_id = p_pay_batch_id
+      AND COALESCE(batch_item.is_voided, false) = false
+      AND COALESCE(batch_item.item_type, '') <> 'DEBT_CREATED'
+      AND (
+        v_scope = 'ALL'
+        OR (v_scope IN ('CANDIDATE', 'PAYE') AND upper(BTRIM(COALESCE(batch_item.pay_channel, ''))) = 'PAYE')
+        OR (v_scope = 'UMBRELLA' AND upper(BTRIM(COALESCE(batch_item.pay_channel, ''))) = 'UMBRELLA')
+      )
+  ), scoped_item_flags AS (
+    SELECT
+      scoped_item_rows.*,
+      (
+        scoped_item_rows.settlement_status IN ('SETTLED', 'PAID', 'CONFIRMED')
+        OR scoped_item_rows.is_final_money_moved
+        OR scoped_item_rows.transfer_status IN ('COMPLETED', 'COMPLETE', 'SETTLED', 'PAID', 'EXECUTED', 'COMMITTED', 'SUCCESS', 'SUCCESSFUL', 'SUCCEEDED')
+        OR scoped_item_rows.transfer_rail_state IN ('COMPLETED', 'COMPLETE', 'SETTLED', 'PAID', 'EXECUTED', 'COMMITTED', 'SUCCESS', 'SUCCESSFUL', 'SUCCEEDED')
+        OR scoped_item_rows.completed_at_utc IS NOT NULL
+        OR EXISTS (
+          SELECT 1
+          FROM public.banking_pay_operation_settlement_scope AS settlement_scope_row
+          WHERE settlement_scope_row.pay_batch_id = p_pay_batch_id
+            AND settlement_scope_row.pay_batch_candidate_id = scoped_item_rows.pay_batch_candidate_id
+            AND settlement_scope_row.status = 'SETTLED'
+            AND (
+              (
+                scoped_item_rows.pay_bank_transfer_id IS NOT NULL
+                AND settlement_scope_row.payload_json #>> '{payment_scope_json,pay_bank_transfer_id}' = scoped_item_rows.pay_bank_transfer_id::text
+              )
+              OR COALESCE(settlement_scope_row.payload_json->'pay_batch_item_ids', '[]'::jsonb) ? scoped_item_rows.pay_batch_item_id::text
+            )
+        )
+      ) AS confirmed_or_final,
+      (
+        scoped_item_rows.is_pending_non_final
+        OR scoped_item_rows.transfer_status IN ('PENDING', 'SUBMITTED', 'QUEUED', 'ACCEPTED', 'SENT', 'PROCESSING', 'IN_FLIGHT', 'PENDING_SETTLEMENT', 'PENDING_CONFIRMATION', 'PENDING_SUBMISSION', 'WAITING', 'WAITING_BANK_CONFIRM')
+        OR scoped_item_rows.transfer_rail_state IN ('PENDING', 'SUBMITTED', 'QUEUED', 'ACCEPTED', 'SENT', 'PROCESSING', 'IN_FLIGHT', 'PENDING_SETTLEMENT', 'PENDING_CONFIRMATION', 'PENDING_SUBMISSION', 'WAITING', 'WAITING_BANK_CONFIRM')
+      ) AS pending_provider,
+      (
+        scoped_item_rows.is_terminal_no_money
+        OR scoped_item_rows.transfer_status IN ('FAILED', 'FAILURE', 'DECLINED', 'REJECTED', 'CANCELLED', 'CANCELED', 'RETURNED', 'REVERTED', 'REVERSED', 'SUBMISSION_FAILED', 'FAILED_BEFORE_COMMIT')
+        OR scoped_item_rows.transfer_rail_state IN ('FAILED', 'FAILURE', 'DECLINED', 'REJECTED', 'CANCELLED', 'CANCELED', 'RETURNED', 'REVERTED', 'REVERSED', 'SUBMISSION_FAILED', 'FAILED_BEFORE_COMMIT')
+      ) AS terminal_no_money
+    FROM scoped_item_rows
+  )
+  SELECT
+    CASE WHEN v_scheduled_execution_eligible THEN 0 ELSE COUNT(*) FILTER (WHERE scoped_item_flags.pay_bank_transfer_id IS NOT NULL AND scoped_item_flags.pending_provider IS TRUE AND scoped_item_flags.confirmed_or_final IS NOT TRUE)::integer END,
+    CASE WHEN v_scheduled_execution_eligible THEN 0 ELSE COUNT(*) FILTER (WHERE scoped_item_flags.pay_bank_transfer_id IS NULL AND scoped_item_flags.confirmed_or_final IS NOT TRUE)::integer END,
+    CASE WHEN v_scheduled_execution_eligible THEN 0 ELSE COUNT(*) FILTER (WHERE scoped_item_flags.pay_bank_transfer_id IS NOT NULL AND scoped_item_flags.terminal_no_money IS TRUE AND scoped_item_flags.confirmed_or_final IS NOT TRUE)::integer END
+  INTO v_pending_provider_skipped_count,
+       v_no_transfer_skipped_count,
+       v_terminal_no_money_skipped_count
+  FROM scoped_item_flags;
+
   WITH eligible_item_rows AS (
     SELECT
       batch_candidate.id AS pay_batch_candidate_id,
@@ -70369,20 +70497,37 @@ BEGIN
       ON batch_item.pay_batch_candidate_id = batch_candidate.id
     LEFT JOIN public.pay_bank_transfers AS transfer_row
       ON transfer_row.id = batch_item.pay_bank_transfer_id
+     AND transfer_row.pay_batch_id = p_pay_batch_id
+    LEFT JOIN LATERAL public._pay_rail_state_money_movement_classify(
+      transfer_row.status,
+      transfer_row.rail_state,
+      COALESCE(transfer_row.rail_meta_json, '{}'::jsonb),
+      COALESCE(transfer_row.rail_meta_json, '{}'::jsonb)
+    ) AS transfer_classifier ON transfer_row.id IS NOT NULL
     WHERE batch_candidate.pay_batch_id = p_pay_batch_id
       AND COALESCE(batch_item.is_voided, false) = false
       AND COALESCE(batch_item.item_type, '') <> 'DEBT_CREATED'
       AND (
         v_scheduled_execution_eligible
-        OR upper(COALESCE(batch_candidate.settlement_status, '')) IN ('SETTLED', 'PAID', 'CONFIRMED')
-        OR upper(COALESCE(transfer_row.status, '')) IN ('SUBMITTED', 'COMPLETED', 'COMMITTED', 'SETTLED', 'PAID', 'EXECUTED')
-        OR upper(COALESCE(transfer_row.rail_state, '')) IN ('SUBMITTED', 'QUEUED', 'ACCEPTED', 'SENT', 'PROCESSING', 'IN_FLIGHT', 'PENDING_SETTLEMENT', 'PENDING_CONFIRMATION', 'PENDING_SUBMISSION', 'COMPLETED', 'COMMITTED', 'SETTLED', 'PAID', 'EXECUTED')
-        OR NULLIF(BTRIM(COALESCE(transfer_row.rail_tx_id, '')), '') IS NOT NULL
-        OR NULLIF(BTRIM(COALESCE(transfer_row.rail_meta_json->>'provider_submission_id', '')), '') IS NOT NULL
-        OR NULLIF(BTRIM(COALESCE(transfer_row.rail_meta_json->>'submission_id', '')), '') IS NOT NULL
-        OR NULLIF(BTRIM(COALESCE(transfer_row.rail_meta_json->>'provider_transfer_id', '')), '') IS NOT NULL
-        OR NULLIF(BTRIM(COALESCE(transfer_row.rail_meta_json->>'transfer_id', '')), '') IS NOT NULL
-        OR NULLIF(BTRIM(COALESCE(transfer_row.rail_meta_json->>'provider_payment_id', '')), '') IS NOT NULL
+        OR upper(BTRIM(COALESCE(batch_candidate.settlement_status, ''))) IN ('SETTLED', 'PAID', 'CONFIRMED')
+        OR COALESCE(transfer_classifier.is_final_money_moved, false)
+        OR upper(BTRIM(COALESCE(transfer_row.status, ''))) IN ('COMPLETED', 'COMPLETE', 'SETTLED', 'PAID', 'EXECUTED', 'COMMITTED', 'SUCCESS', 'SUCCESSFUL', 'SUCCEEDED')
+        OR upper(BTRIM(COALESCE(transfer_row.rail_state, ''))) IN ('COMPLETED', 'COMPLETE', 'SETTLED', 'PAID', 'EXECUTED', 'COMMITTED', 'SUCCESS', 'SUCCESSFUL', 'SUCCEEDED')
+        OR transfer_row.completed_at_utc IS NOT NULL
+        OR EXISTS (
+          SELECT 1
+          FROM public.banking_pay_operation_settlement_scope AS settlement_scope_row
+          WHERE settlement_scope_row.pay_batch_id = p_pay_batch_id
+            AND settlement_scope_row.pay_batch_candidate_id = batch_candidate.id
+            AND settlement_scope_row.status = 'SETTLED'
+            AND (
+              (
+                batch_item.pay_bank_transfer_id IS NOT NULL
+                AND settlement_scope_row.payload_json #>> '{payment_scope_json,pay_bank_transfer_id}' = batch_item.pay_bank_transfer_id::text
+              )
+              OR COALESCE(settlement_scope_row.payload_json->'pay_batch_item_ids', '[]'::jsonb) ? batch_item.id::text
+            )
+        )
       )
       AND (
         v_scope = 'ALL'
@@ -70568,6 +70713,9 @@ BEGIN
        v_stale_scope_skipped_count
   FROM upserted_scope;
 
+  v_scheduled_scope_row_count := CASE WHEN v_scheduled_execution_eligible THEN COALESCE(v_created_count, 0) + COALESCE(v_reused_count, 0) ELSE 0 END;
+  v_confirmed_scope_row_count := CASE WHEN v_scheduled_execution_eligible THEN 0 ELSE COALESCE(v_created_count, 0) + COALESCE(v_reused_count, 0) END;
+
   UPDATE public.banking_pay_operations AS operation_update
   SET pay_batch_id = p_pay_batch_id,
       updated_at_utc = v_now
@@ -70585,15 +70733,25 @@ BEGIN
     'scheduled_execution_eligible', v_scheduled_execution_eligible,
     'deferred', false,
     'suppressed', false,
-    'trigger_status', CASE WHEN v_scheduled_execution_eligible THEN 'SCHEDULED_ON_EXECUTION_SCOPE_SEEDED' ELSE 'STANDARD_REMITTANCE_SCOPE_SEEDED' END,
+    'trigger_status', CASE
+      WHEN v_scheduled_execution_eligible THEN 'SCHEDULED_ON_EXECUTION_SCOPE_SEEDED'
+      WHEN COALESCE(v_created_count, 0) + COALESCE(v_reused_count, 0) = 0 AND COALESCE(v_pending_provider_skipped_count, 0) > 0 THEN 'STANDARD_REMITTANCE_SCOPE_DEFERRED_PENDING_PROVIDER'
+      WHEN COALESCE(v_created_count, 0) + COALESCE(v_reused_count, 0) = 0 AND COALESCE(v_no_transfer_skipped_count, 0) > 0 THEN 'STANDARD_REMITTANCE_SCOPE_DEFERRED_NO_TRANSFER'
+      WHEN COALESCE(v_created_count, 0) + COALESCE(v_reused_count, 0) = 0 AND COALESCE(v_terminal_no_money_skipped_count, 0) > 0 THEN 'STANDARD_REMITTANCE_SCOPE_SKIPPED_TERMINAL_NO_MONEY'
+      ELSE 'STANDARD_REMITTANCE_SCOPE_SEEDED'
+    END,
     'scope_rows_created', COALESCE(v_created_count, 0),
     'scope_rows_reused', COALESCE(v_reused_count, 0),
     'recipient_count', COALESCE(v_recipient_count, 0),
-    'stale_scope_skipped_count', COALESCE(v_stale_scope_skipped_count, 0)
+    'stale_scope_skipped_count', COALESCE(v_stale_scope_skipped_count, 0),
+    'scheduled_scope_rows', COALESCE(v_scheduled_scope_row_count, 0),
+    'confirmed_scope_rows', COALESCE(v_confirmed_scope_row_count, 0),
+    'pending_provider_skipped_count', COALESCE(v_pending_provider_skipped_count, 0),
+    'no_transfer_skipped_count', COALESCE(v_no_transfer_skipped_count, 0),
+    'terminal_no_money_skipped_count', COALESCE(v_terminal_no_money_skipped_count, 0)
   );
 END;
 $function$;
-
 
 
 
@@ -86978,6 +87136,9 @@ declare
   v_payout_cases_marked_paid_ct int := 0;
   v_component_settled_count int := 0;
   v_component_settled_amount numeric := 0;
+  v_component_unresolved_count int := 0;
+  v_component_unresolved_amount numeric := 0;
+  v_component_unresolved_json jsonb := '[]'::jsonb;
   v_component_reconciliation_bad jsonb := '[]'::jsonb;
   v_component_reconciliation_bad_ct int := 0;
   v_component_reconciliation_checked_ct int := 0;
@@ -88949,109 +89110,201 @@ begin
 
   truncate table _tmp_component_settle;
 
-  with settled_source as (
-    select
-      coalesce(
-        par.finance_component_id,
-        pbi.finance_component_id,
-        fb.finance_component_id
-      ) as finance_component_id,
-      coalesce(
-        par.finance_case_id,
-        pbi.finance_case_id,
-        fb.finance_case_id
-      ) as finance_case_id,
-      round(
-        sum(
-          coalesce(
-            par.reserved_source_amount,
-            pbi.frozen_source_amount,
-            abs(coalesce(pbi.amount_ex_vat, pbi.amount_inc_vat, par.reserved_amount, 0))
-          )
-        ),
-        2
-      ) as settled_source_amount
-    from public.pay_advance_reservations par
-    join public.pay_batch_items pbi
-      on pbi.id = par.pay_batch_item_id
-    join public.pay_batch_candidates pbc
-      on pbc.id = pbi.pay_batch_candidate_id
-     and pbc.pay_batch_id = p_pay_batch_id
-    left join lateral (
-      select
-        pfc_fb.id as finance_component_id,
-        pfc_fb.finance_case_id as finance_case_id
-      from public.pay_finance_case_components pfc_fb
-      where pfc_fb.finance_case_id = coalesce(par.finance_case_id, pbi.finance_case_id)
-        and pfc_fb.component_key_type = coalesce(
-          nullif(
-            btrim(
-              coalesce(
-                par.frozen_component_key_type,
-                pbi.frozen_component_key_type,
-                par.frozen_component_snapshot_json->>'component_key_type',
-                pbi.frozen_component_snapshot_json->>'component_key_type',
-                ''
-              )
-            ),
-            ''
-          ),
-          '§NO_COMPONENT_KEY§'
-        )
-        and pfc_fb.component_key_value = coalesce(
-          nullif(
-            btrim(
-              coalesce(
-                par.frozen_component_key_value,
-                pbi.frozen_component_key_value,
-                par.frozen_component_snapshot_json->>'component_key_value',
-                pbi.frozen_component_snapshot_json->>'component_key_value',
-                ''
-              )
-            ),
-            ''
-          ),
-          '§NO_COMPONENT_VALUE§'
-        )
-      order by
-        pfc_fb.closed_at_utc nulls first,
-        pfc_fb.updated_at_utc desc,
-        pfc_fb.created_at_utc desc,
-        pfc_fb.id desc
-      limit 1
-    ) fb on coalesce(par.finance_component_id, pbi.finance_component_id) is null
-    where par.pay_batch_id = p_pay_batch_id
-      and upper(coalesce(par.status,'')) = 'SETTLED'
-      and par.settled_at_utc = v_now
-      and pbc.candidate_id in (select t.candidate_id from _tmp_newly_settled_candidates t)
-    group by
-      coalesce(
-        par.finance_component_id,
-        pbi.finance_component_id,
-        fb.finance_component_id
-      ),
-      coalesce(
-        par.finance_case_id,
-        pbi.finance_case_id,
-        fb.finance_case_id
-      )
-    having coalesce(
-      coalesce(
-        par.finance_component_id,
-        pbi.finance_component_id,
-        fb.finance_component_id
-      ),
-      '00000000-0000-0000-0000-000000000000'::uuid
-    ) <> '00000000-0000-0000-0000-000000000000'::uuid
+  create temp table if not exists _tmp_component_settle_source (
+    finance_component_id uuid null,
+    finance_case_id uuid null,
+    pay_batch_item_id uuid not null,
+    reservation_id uuid null,
+    frozen_component_key_type text null,
+    frozen_component_key_value text null,
+    settled_source_amount numeric not null
+  ) on commit drop;
+
+  truncate table _tmp_component_settle_source;
+
+  create temp table if not exists _tmp_component_settle_unresolved (
+    pay_batch_id uuid not null,
+    pay_batch_item_id uuid not null,
+    reservation_id uuid null,
+    finance_case_id uuid null,
+    frozen_component_key_type text null,
+    frozen_component_key_value text null,
+    affected_source_amount numeric not null,
+    reason_code text not null
+  ) on commit drop;
+
+  truncate table _tmp_component_settle_unresolved;
+
+  insert into _tmp_component_settle_source(
+    finance_component_id,
+    finance_case_id,
+    pay_batch_item_id,
+    reservation_id,
+    frozen_component_key_type,
+    frozen_component_key_value,
+    settled_source_amount
   )
+  select
+    coalesce(
+      par.finance_component_id,
+      pbi.finance_component_id
+    ) as finance_component_id,
+    coalesce(
+      par.finance_case_id,
+      pbi.finance_case_id
+    ) as finance_case_id,
+    pbi.id as pay_batch_item_id,
+    par.id as reservation_id,
+    nullif(
+      btrim(
+        coalesce(
+          par.frozen_component_key_type,
+          pbi.frozen_component_key_type,
+          par.frozen_component_snapshot_json->>'component_key_type',
+          pbi.frozen_component_snapshot_json->>'component_key_type',
+          ''
+        )
+      ),
+      ''
+    ) as frozen_component_key_type,
+    nullif(
+      btrim(
+        coalesce(
+          par.frozen_component_key_value,
+          pbi.frozen_component_key_value,
+          par.frozen_component_snapshot_json->>'component_key_value',
+          pbi.frozen_component_snapshot_json->>'component_key_value',
+          ''
+        )
+      ),
+      ''
+    ) as frozen_component_key_value,
+    round(
+      sum(
+        coalesce(
+          par.reserved_source_amount,
+          pbi.frozen_source_amount,
+          abs(coalesce(pbi.amount_ex_vat, pbi.amount_inc_vat, par.reserved_amount, 0))
+        )
+      ),
+      2
+    ) as settled_source_amount
+  from public.pay_advance_reservations par
+  join public.pay_batch_items pbi
+    on pbi.id = par.pay_batch_item_id
+  join public.pay_batch_candidates pbc
+    on pbc.id = pbi.pay_batch_candidate_id
+   and pbc.pay_batch_id = p_pay_batch_id
+  where par.pay_batch_id = p_pay_batch_id
+    and upper(coalesce(par.status,'')) = 'SETTLED'
+    and par.settled_at_utc = v_now
+    and pbc.candidate_id in (select t.candidate_id from _tmp_newly_settled_candidates t)
+  group by
+    coalesce(
+      par.finance_component_id,
+      pbi.finance_component_id
+    ),
+    coalesce(
+      par.finance_case_id,
+      pbi.finance_case_id
+    ),
+    pbi.id,
+    par.id,
+    nullif(
+      btrim(
+        coalesce(
+          par.frozen_component_key_type,
+          pbi.frozen_component_key_type,
+          par.frozen_component_snapshot_json->>'component_key_type',
+          pbi.frozen_component_snapshot_json->>'component_key_type',
+          ''
+        )
+      ),
+      ''
+    ),
+    nullif(
+      btrim(
+        coalesce(
+          par.frozen_component_key_value,
+          pbi.frozen_component_key_value,
+          par.frozen_component_snapshot_json->>'component_key_value',
+          pbi.frozen_component_snapshot_json->>'component_key_value',
+          ''
+        )
+      ),
+      ''
+    )
+  having round(
+    sum(
+      coalesce(
+        par.reserved_source_amount,
+        pbi.frozen_source_amount,
+        abs(coalesce(pbi.amount_ex_vat, pbi.amount_inc_vat, par.reserved_amount, 0))
+      )
+    ),
+    2
+  ) > 0;
+
   insert into _tmp_component_settle(finance_component_id, finance_case_id, settled_source_amount)
   select
-    ss.finance_component_id,
-    ss.finance_case_id,
-    ss.settled_source_amount
-  from settled_source ss
-  where ss.finance_component_id is not null
-    and ss.settled_source_amount > 0;
+    component_source.finance_component_id,
+    component_source.finance_case_id,
+    round(sum(component_source.settled_source_amount), 2) as settled_source_amount
+  from _tmp_component_settle_source as component_source
+  where component_source.finance_component_id is not null
+    and component_source.settled_source_amount > 0
+  group by component_source.finance_component_id,
+           component_source.finance_case_id
+  having round(sum(component_source.settled_source_amount), 2) > 0;
+
+  insert into _tmp_component_settle_unresolved(
+    pay_batch_id,
+    pay_batch_item_id,
+    reservation_id,
+    finance_case_id,
+    frozen_component_key_type,
+    frozen_component_key_value,
+    affected_source_amount,
+    reason_code
+  )
+  select
+    p_pay_batch_id,
+    component_source.pay_batch_item_id,
+    component_source.reservation_id,
+    component_source.finance_case_id,
+    component_source.frozen_component_key_type,
+    component_source.frozen_component_key_value,
+    component_source.settled_source_amount,
+    'SETTLEMENT_COMPONENT_ID_MISSING_FROM_FROZEN_ARTIFACT'
+  from _tmp_component_settle_source as component_source
+  where component_source.finance_component_id is null
+    and component_source.settled_source_amount > 0;
+
+  select
+    count(*)::int,
+    round(coalesce(sum(component_unresolved.affected_source_amount), 0), 2),
+    coalesce(
+      jsonb_agg(
+        jsonb_build_object(
+          'reason_code', component_unresolved.reason_code,
+          'pay_batch_id', component_unresolved.pay_batch_id::text,
+          'pay_batch_item_id', component_unresolved.pay_batch_item_id::text,
+          'reservation_id', case when component_unresolved.reservation_id is null then null else component_unresolved.reservation_id::text end,
+          'finance_case_id', case when component_unresolved.finance_case_id is null then null else component_unresolved.finance_case_id::text end,
+          'frozen_component_key_type', component_unresolved.frozen_component_key_type,
+          'frozen_component_key_value', component_unresolved.frozen_component_key_value,
+          'affected_source_amount', component_unresolved.affected_source_amount
+        )
+        order by component_unresolved.pay_batch_item_id::text,
+                 component_unresolved.reservation_id::text
+      ),
+      '[]'::jsonb
+    )
+  into
+    v_component_unresolved_count,
+    v_component_unresolved_amount,
+    v_component_unresolved_json
+  from _tmp_component_settle_unresolved as component_unresolved;
 
   create temp table if not exists _tmp_component_settle_apply (
     finance_component_id uuid not null primary key,
@@ -89533,6 +89786,11 @@ begin
       round(rcc.case_outstanding_amount - rcc.open_component_remaining_source_amount, 2) as mismatch_amount
     from reconciled_component_cases rcc
     where abs(round(rcc.case_outstanding_amount - rcc.open_component_remaining_source_amount, 2)) > 0.01
+      and not exists (
+        select 1
+        from _tmp_component_settle_unresolved component_unresolved
+        where component_unresolved.finance_case_id = rcc.finance_case_id
+      )
   )
   select
     (select count(*)::int from reconciled_component_cases),
@@ -89564,7 +89822,10 @@ begin
         'pay_batch_id', p_pay_batch_id::text,
         'checked_count', coalesce(v_component_reconciliation_checked_ct, 0),
         'mismatch_count', coalesce(v_component_reconciliation_bad_ct, 0),
-        'mismatches', v_component_reconciliation_bad
+        'mismatches', v_component_reconciliation_bad,
+        'component_id_missing_from_frozen_artifact_count', coalesce(v_component_unresolved_count, 0),
+        'component_id_missing_from_frozen_artifact_amount', coalesce(v_component_unresolved_amount, 0),
+        'component_id_missing_from_frozen_artifact', coalesce(v_component_unresolved_json, '[]'::jsonb)
       ),
       'pay_batches',
       p_pay_batch_id::text,
@@ -90236,6 +90497,9 @@ begin
         'payout_cases_marked_paid', v_payout_cases_marked_paid_ct,
         'component_settlements_applied', v_component_settled_count,
         'component_settlement_amount', v_component_settled_amount,
+        'component_id_missing_from_frozen_artifact_count', coalesce(v_component_unresolved_count, 0),
+        'component_id_missing_from_frozen_artifact_amount', coalesce(v_component_unresolved_amount, 0),
+        'component_id_missing_from_frozen_artifact', coalesce(v_component_unresolved_json, '[]'::jsonb),
         'component_reconciliation_checked_count', coalesce(v_component_reconciliation_checked_ct, 0),
         'component_reconciliation_mismatch_count', coalesce(v_component_reconciliation_bad_ct, 0),
         'component_reconciliation_mismatches', v_component_reconciliation_bad,
@@ -90270,6 +90534,7 @@ begin
       'newly_settled_candidates', COALESCE(v_newly_settled_candidates, '[]'::jsonb),
       'completed_transfer_count', COALESCE(v_completed_transfer_count, 0),
       'consumed_carry_forward_count', COALESCE(v_consumed_carry_forward_count, 0),
+      'component_id_missing_from_frozen_artifact_count', COALESCE(v_component_unresolved_count, 0),
       'bank_event_ingest_count', COALESCE(v_bank_event_ingest_count, 0)
     )),
     p_touch_payment_status := true,
@@ -90312,6 +90577,9 @@ begin
       'payout_cases_marked_paid', v_payout_cases_marked_paid_ct,
       'component_settlements_applied', v_component_settled_count,
       'component_settlement_amount', v_component_settled_amount,
+      'component_id_missing_from_frozen_artifact_count', coalesce(v_component_unresolved_count, 0),
+      'component_id_missing_from_frozen_artifact_amount', coalesce(v_component_unresolved_amount, 0),
+      'component_id_missing_from_frozen_artifact', coalesce(v_component_unresolved_json, '[]'::jsonb),
       'component_reconciliation_checked_count', coalesce(v_component_reconciliation_checked_ct, 0),
       'component_reconciliation_mismatch_count', coalesce(v_component_reconciliation_bad_ct, 0)
     ),
@@ -90333,8 +90601,6 @@ begin
   );
 end;
 $$;
-
-
 
 
 
@@ -155473,7 +155739,6 @@ BEGIN
 END;
 $function$;
 
-
 CREATE OR REPLACE FUNCTION public.banking_pay_operation_release_lease(
   p_operation_id uuid,
   p_lease_owner text,
@@ -155585,7 +155850,7 @@ BEGIN
       v_next_resume_reason := COALESCE(NULLIF(BTRIM(COALESCE(p_resume_reason, '')), ''), CASE WHEN v_operation_type = 'DRAFT_CREATE' THEN 'DRAFT_CREATE_ATTEMPT_LIMIT_EXHAUSTED' ELSE 'OPERATION_ATTEMPT_LIMIT_EXHAUSTED' END);
       v_failed_at_utc := v_now;
     ELSE
-      v_next_status := 'WAITING_RETRY';
+      v_next_status := 'WAITING';
       v_next_runner_state := 'RUNNABLE';
       v_next_run_after_utc := v_now + make_interval(secs => GREATEST(v_delay_seconds, 1));
       v_next_requires_user_action := false;
