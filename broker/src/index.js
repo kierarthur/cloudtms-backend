@@ -136482,6 +136482,7 @@ async function cleanupStaleRailPayeeMappingsForHash(env, { entity_kind, entity_i
 
 
 
+
 function getRailAdapter(provider) {
   // -----------------------------
   // Single source of truth registry
@@ -138073,7 +138074,90 @@ function getRailAdapter(provider) {
           });
         },
 
-     async executeDueBatches(env, { nowUtc, limit, claimedRows, actorUserId, perBatchSubmitLimit, operationMode, operation_id, operationId, pay_batch_id, payBatchId, providerSubmitChunkSize, lockOwner, lock_seconds, fundingAccountRef, funding_account_ref } = {}) {
+        async submitClaimedProviderChunk(env, args = {}) {
+          const source = (args && typeof args === 'object' && !Array.isArray(args)) ? args : {};
+          const claimSource = (source.claim && typeof source.claim === 'object' && !Array.isArray(source.claim))
+            ? source.claim
+            : ((source.provider_submit_claim && typeof source.provider_submit_claim === 'object' && !Array.isArray(source.provider_submit_claim))
+              ? source.provider_submit_claim
+              : ((source.providerSubmitClaim && typeof source.providerSubmitClaim === 'object' && !Array.isArray(source.providerSubmitClaim))
+                ? source.providerSubmitClaim
+                : {}));
+          const operationIdText = String(source.operation_id || source.operationId || claimSource.operation_id || claimSource.operationId || '').trim();
+          const payBatchIdText = String(source.pay_batch_id || source.payBatchId || claimSource.pay_batch_id || claimSource.payBatchId || '').trim();
+          const chunkIdText = String(source.chunk_id || source.chunkId || claimSource.chunk_id || claimSource.chunkId || '').trim();
+          const transfers = Array.isArray(source.transfers) ? source.transfers : (Array.isArray(claimSource.transfers) ? claimSource.transfers : []);
+          const transferIds = Array.isArray(source.transfer_ids)
+            ? source.transfer_ids
+            : (Array.isArray(source.transferIds) ? source.transferIds : (Array.isArray(claimSource.transfer_ids) ? claimSource.transfer_ids : (Array.isArray(claimSource.transferIds) ? claimSource.transferIds : [])));
+          const transferScopeIds = Array.isArray(source.transfer_scope_ids)
+            ? source.transfer_scope_ids
+            : (Array.isArray(source.transferScopeIds) ? source.transferScopeIds : (Array.isArray(claimSource.transfer_scope_ids) ? claimSource.transfer_scope_ids : (Array.isArray(claimSource.transferScopeIds) ? claimSource.transferScopeIds : [])));
+          const actorUserIdText = String(source.actor_user_id || source.actorUserId || claimSource.actor_user_id || claimSource.actorUserId || '').trim();
+          const lockOwnerText = String(source.lock_owner || source.lockOwner || claimSource.lock_owner || claimSource.lockOwner || '').trim();
+
+          if (!operationIdText) throw new Error('submitClaimedProviderChunk: operation_id is required');
+          if (!payBatchIdText) throw new Error('submitClaimedProviderChunk: pay_batch_id is required');
+          if (!chunkIdText) throw new Error('submitClaimedProviderChunk: chunk_id is required');
+          if (!transfers.length && !transferIds.length) throw new Error('submitClaimedProviderChunk: claimed transfers or transfer_ids are required');
+
+          const normaliseTextList = (values) => {
+            const out = [];
+            const seen = new Set();
+            for (const value of Array.isArray(values) ? values : []) {
+              const text = String(value === undefined || value === null ? '' : value).trim();
+              if (!text) continue;
+              const key = text.toLowerCase();
+              if (seen.has(key)) continue;
+              seen.add(key);
+              out.push(text);
+            }
+            return out;
+          };
+          const derivedTransferIds = normaliseTextList(transfers.map((transfer) => {
+            if (!transfer || typeof transfer !== 'object') return null;
+            return transfer.transfer_id || transfer.pay_bank_transfer_id || transfer.id || null;
+          }));
+          const effectiveTransferIds = normaliseTextList(transferIds).length ? normaliseTextList(transferIds) : derivedTransferIds;
+          const effectiveTransferScopeIds = normaliseTextList(transferScopeIds).length
+            ? normaliseTextList(transferScopeIds)
+            : normaliseTextList(transfers.map((transfer) => {
+              if (!transfer || typeof transfer !== 'object') return null;
+              return transfer.transfer_scope_id || transfer.operation_transfer_scope_id || transfer.banking_pay_operation_transfer_scope_id || transfer.scope_id || transfer.scope_row_id || null;
+            }));
+
+          const claimedProviderChunkPayload = {
+            ...claimSource,
+            ok: claimSource.ok !== false,
+            operation_id: operationIdText,
+            pay_batch_id: payBatchIdText,
+            chunk_id: chunkIdText,
+            transfers,
+            transfer_ids: effectiveTransferIds,
+            transfer_scope_ids: effectiveTransferScopeIds,
+            claimed_count: Number.isFinite(Number(claimSource.claimed_count)) ? Math.max(0, Math.trunc(Number(claimSource.claimed_count))) : Math.max(transfers.length, effectiveTransferIds.length),
+            claim_supplied_by_worker: true,
+            bounded_claim_already_held: true
+          };
+
+          return this.executeDueBatches(env, {
+            nowUtc: source.nowUtc || source.now_utc || null,
+            limit: source.limit,
+            actorUserId: actorUserIdText || undefined,
+            perBatchSubmitLimit: source.perBatchSubmitLimit || source.per_batch_submit_limit,
+            operationMode: true,
+            operation_id: operationIdText,
+            pay_batch_id: payBatchIdText,
+            providerSubmitChunkSize: source.providerSubmitChunkSize || source.provider_submit_chunk_size || (transfers.length || effectiveTransferIds.length || undefined),
+            lockOwner: lockOwnerText || undefined,
+            lock_seconds: source.lock_seconds || source.lockSeconds,
+            fundingAccountRef: source.fundingAccountRef,
+            funding_account_ref: source.funding_account_ref,
+            providerSubmitClaim: claimedProviderChunkPayload
+          });
+        },
+
+     async executeDueBatches(env, { nowUtc, limit, claimedRows, actorUserId, perBatchSubmitLimit, operationMode, operation_id, operationId, pay_batch_id, payBatchId, providerSubmitChunkSize, lockOwner, lock_seconds, fundingAccountRef, funding_account_ref, providerSubmitClaim, provider_submit_claim, claimedProviderChunk, claimed_provider_chunk, claim: suppliedClaim, chunk_id: suppliedChunkId, chunkId: suppliedChunkIdCamel, transfers: suppliedTransfers, transfer_ids: suppliedTransferIds, transferIds: suppliedTransferIdsCamel, transfer_scope_ids: suppliedTransferScopeIds, transferScopeIds: suppliedTransferScopeIdsCamel } = {}) {
           const nowIso = nowUtc ? String(nowUtc) : new Date().toISOString();
           const apiBase = (env && env.REVOLUT_API_BASE !== undefined && env.REVOLUT_API_BASE !== null) ? String(env.REVOLUT_API_BASE) : '';
           const workerEnv = getRevolutWorkerEnv(env);
@@ -138595,9 +138679,27 @@ function getRailAdapter(provider) {
             return providerSubmitDiagnostic;
           };
 
+          const mapProviderSubmitStageForDb = (stage) => {
+            const rawStage = String(stage || '').trim();
+            const normalisedStage = rawStage.toUpperCase();
+            if (['CLAIMED', 'REQUEST_PREPARING', 'REQUEST_SENDING', 'REQUEST_SENT_LOCAL', 'PROVIDER_ACCEPTED', 'PROVIDER_REJECTED', 'PROVIDER_UNKNOWN', 'REVIEW_REQUIRED', 'CHUNK_FINALISED'].includes(normalisedStage)) return normalisedStage;
+            if (normalisedStage === 'PROVIDER_SUBMIT_CHUNK_CLAIMED') return 'CLAIMED';
+            if (normalisedStage.includes('CHUNK_FINALISED')) return 'CHUNK_FINALISED';
+            if (normalisedStage.includes('ACCEPTED') || normalisedStage.includes('PROVIDER_PAYMENT_CREATE_ACCEPTED')) return 'PROVIDER_ACCEPTED';
+            if (normalisedStage.includes('REJECTED') || normalisedStage.includes('DECLINED')) return 'PROVIDER_REJECTED';
+            if (normalisedStage.includes('UNKNOWN') || normalisedStage.includes('MALFORMED') || normalisedStage.includes('NO_EXTERNAL_ID') || normalisedStage.includes('UNSTRUCTURED')) return 'PROVIDER_UNKNOWN';
+            if (normalisedStage.includes('REVIEW') || normalisedStage.includes('BLOCKED') || normalisedStage.includes('FAILED') || normalisedStage.includes('MISSING') || normalisedStage.includes('MISMATCH') || normalisedStage.includes('COUNTERPARTY')) return 'REVIEW_REQUIRED';
+            if (normalisedStage.includes('REQUEST_SENDING') || normalisedStage.includes('HANDOFF')) return 'REQUEST_SENDING';
+            if (normalisedStage.includes('REQUEST_SENT') || normalisedStage.includes('RESPONSE_RECEIVED') || normalisedStage.includes('RAIL_UPDATE_APPLY')) return 'REQUEST_SENT_LOCAL';
+            if (normalisedStage.includes('PRECALL') || normalisedStage.includes('CREATE_STARTED') || normalisedStage.includes('PREPAR')) return 'REQUEST_PREPARING';
+            if (normalisedStage.includes('FINALISATION_STARTED')) return 'REQUEST_SENT_LOCAL';
+            return 'REQUEST_PREPARING';
+          };
+
           const persistProviderSubmitStage = async (stage, patch = {}, options = {}) => {
             const opts = readObject(options);
             const diagnostic = setProviderSubmitStage(stage, patch);
+            const dbStage = mapProviderSubmitStageForDb(stage);
             if (!chunkIdForFinalise) return diagnostic;
             try {
               await sbRpc(env, 'pay_provider_submit_chunk_stage_record', {
@@ -138605,8 +138707,12 @@ function getRailAdapter(provider) {
                 p_pay_batch_id: batchId,
                 p_chunk_id: chunkIdForFinalise,
                 p_transfer_ids: Array.isArray(transferIds) ? transferIds : [],
-                p_stage: String(stage || '').trim(),
-                p_provider_submit_diagnostic: diagnostic,
+                p_stage: dbStage,
+                p_provider_submit_diagnostic: {
+                  ...diagnostic,
+                  provider_db_stage: dbStage,
+                  provider_call_stage: diagnostic && diagnostic.provider_call_stage ? diagnostic.provider_call_stage : String(stage || '').trim()
+                },
                 p_actor_user_id: actor
               });
             } catch (stageError) {
@@ -139076,7 +139182,39 @@ function getRailAdapter(provider) {
             return out;
           }
 
-          const claim = unwrapRpcPayload(await sbRpc(env, 'pay_bank_transfers_claim_provider_submit_chunk', {
+          const suppliedProviderSubmitClaim = (() => {
+            const supplied = readObject(providerSubmitClaim || provider_submit_claim || claimedProviderChunk || claimed_provider_chunk || suppliedClaim);
+            const suppliedTransfers = Array.isArray(supplied.transfers) ? supplied.transfers : [];
+            const directTransfers = Array.isArray(suppliedTransfers) && suppliedTransfers.length
+              ? suppliedTransfers
+              : (Array.isArray(suppliedTransfers) ? suppliedTransfers : []);
+            const directTransferIds = uniqueTextIds(Array.isArray(supplied.transfer_ids) ? supplied.transfer_ids : (Array.isArray(supplied.transferIds) ? supplied.transferIds : []));
+            const directTransferScopeIds = uniqueTextIds(Array.isArray(supplied.transfer_scope_ids) ? supplied.transfer_scope_ids : (Array.isArray(supplied.transferScopeIds) ? supplied.transferScopeIds : []));
+            const directChunkId = String(supplied.chunk_id || supplied.chunkId || suppliedChunkId || suppliedChunkIdCamel || '').trim();
+            const rowTransferIds = uniqueTextIds(directTransfers.map((transfer) => {
+              if (!transfer || typeof transfer !== 'object') return null;
+              return transfer.transfer_id || transfer.pay_bank_transfer_id || transfer.id || null;
+            }));
+            const effectiveTransferIds = directTransferIds.length ? directTransferIds : rowTransferIds;
+            const effectiveTransferScopeIds = directTransferScopeIds.length ? directTransferScopeIds : uniqueTextIds(directTransfers.map((transfer) => {
+              if (!transfer || typeof transfer !== 'object') return null;
+              return transfer.transfer_scope_id || transfer.operation_transfer_scope_id || transfer.banking_pay_operation_transfer_scope_id || transfer.scope_id || transfer.scope_row_id || null;
+            }));
+            if (!directChunkId && !directTransfers.length && !effectiveTransferIds.length) return null;
+            return {
+              ...supplied,
+              ok: supplied.ok !== false,
+              chunk_id: directChunkId || null,
+              transfers: directTransfers,
+              transfer_ids: effectiveTransferIds,
+              transfer_scope_ids: effectiveTransferScopeIds,
+              claimed_count: Number.isFinite(Number(supplied.claimed_count)) ? Math.max(0, Math.trunc(Number(supplied.claimed_count))) : Math.max(directTransfers.length, effectiveTransferIds.length),
+              claim_supplied_by_worker: true,
+              bounded_claim_already_held: true
+            };
+          })();
+
+          const claim = suppliedProviderSubmitClaim || unwrapRpcPayload(await sbRpc(env, 'pay_bank_transfers_claim_provider_submit_chunk', {
             p_operation_id: opId,
             p_pay_batch_id: batchId,
             p_limit: submitLimit,
@@ -141127,8 +141265,6 @@ function getRailAdapter(provider) {
   const mk = getRailAdapter.__RAIL_REGISTRY[p];
   return (typeof mk === 'function') ? mk() : null;
 }
-
-
 
 
 
