@@ -65663,7 +65663,7 @@ BEGIN
           USING ERRCODE = 'P0001', DETAIL = jsonb_build_object('code', 'BANKING_PAY_OPERATION_FINISH_CHUNK_ID_REQUIRED')::text;
     END IF;
 
-    IF v_status IS NULL OR v_status NOT IN ('COMPLETE', 'FAILED', 'SKIPPED') THEN
+    IF v_status IS NULL OR v_status NOT IN ('PENDING', 'COMPLETE', 'FAILED', 'SKIPPED') THEN
         RAISE EXCEPTION 'BANKING_PAY_OPERATION_FINISH_CHUNK_STATUS_INVALID'
           USING ERRCODE = 'P0001', DETAIL = jsonb_build_object('code', 'BANKING_PAY_OPERATION_FINISH_CHUNK_STATUS_INVALID', 'chunk_id', p_chunk_id::text, 'status', p_status)::text;
     END IF;
@@ -65694,7 +65694,10 @@ BEGIN
         RETURN;
     END IF;
 
-    IF v_status = 'COMPLETE' THEN
+    IF v_status = 'PENDING' THEN
+        v_completed_count := COALESCE(p_completed_count, v_chunk.completed_count, 0);
+        v_failed_count := COALESCE(p_failed_count, v_chunk.failed_count, 0);
+    ELSIF v_status = 'COMPLETE' THEN
         v_completed_count := COALESCE(p_completed_count, v_chunk.unit_count, 1);
         v_failed_count := COALESCE(p_failed_count, 0);
     ELSIF v_status = 'FAILED' THEN
@@ -65721,43 +65724,65 @@ BEGIN
         error_json = v_error_json,
         locked_by = NULL::text,
         lock_expires_at_utc = NULL::timestamptz,
-        completed_at_utc = COALESCE(chunk_update.completed_at_utc, v_now),
+        completed_at_utc = CASE WHEN v_status = 'PENDING' THEN NULL::timestamptz ELSE COALESCE(chunk_update.completed_at_utc, v_now) END,
         updated_at_utc = v_now
     WHERE chunk_update.id = v_chunk.id
     RETURNING chunk_update.* INTO v_chunk;
 
-    UPDATE public.banking_pay_operations AS operation_update
-    SET phase = v_chunk.phase,
-        status = CASE WHEN upper(BTRIM(COALESCE(operation_update.status, ''))) IN ('RUNNING', 'CONTINUING', 'WAITING_RETRY') THEN 'RUNNING' ELSE operation_update.status END,
-        runner_state = CASE WHEN upper(BTRIM(COALESCE(operation_update.status, ''))) IN ('RUNNING', 'CONTINUING', 'WAITING_RETRY') THEN 'RUNNABLE' ELSE operation_update.runner_state END,
-        run_after_utc = CASE WHEN upper(BTRIM(COALESCE(operation_update.status, ''))) IN ('RUNNING', 'CONTINUING', 'WAITING_RETRY') THEN v_now ELSE operation_update.run_after_utc END,
-        heartbeat_at_utc = v_now,
-        last_advanced_at_utc = v_now,
-        current_chunk_index = COALESCE(operation_update.current_chunk_index, 0) + 1,
-        completed_units = COALESCE(operation_update.completed_units, 0) + v_completed_count,
-        failed_units = COALESCE(operation_update.failed_units, 0) + v_failed_count,
-        progress_json = jsonb_strip_nulls(COALESCE(operation_update.progress_json, '{}'::jsonb) || jsonb_build_object(
-          'last_finished_chunk_id', v_chunk.id::text,
-          'last_finished_chunk_phase', v_chunk.phase,
-          'last_finished_chunk_type', v_chunk.chunk_type,
-          'last_finished_chunk_status', v_chunk.status,
-          'last_finished_chunk_sequence_no', v_chunk.sequence_no,
-          'last_finished_chunk_completed_count', v_completed_count,
-          'last_finished_chunk_failed_count', v_failed_count,
-          'last_finished_chunk_result_hash', v_result_hash,
-          'last_finished_chunk_error_summary', v_error_summary,
-          'last_advanced_at_utc', v_now::text
-        )),
-        updated_at_utc = v_now
-    WHERE operation_update.id = v_chunk.operation_id
-      AND upper(BTRIM(COALESCE(operation_update.status, ''))) NOT IN ('COMPLETE', 'FAILED', 'CANCELLED', 'CANCELED', 'REVIEW_REQUIRED');
+    IF v_status = 'PENDING' THEN
+        UPDATE public.banking_pay_operations AS operation_update
+        SET phase = v_chunk.phase,
+            status = CASE WHEN upper(BTRIM(COALESCE(operation_update.status, ''))) IN ('QUEUED', 'RUNNING', 'CONTINUING', 'WAITING_RETRY') THEN 'RUNNING' ELSE operation_update.status END,
+            runner_state = CASE WHEN upper(BTRIM(COALESCE(operation_update.status, ''))) IN ('QUEUED', 'RUNNING', 'CONTINUING', 'WAITING_RETRY') THEN 'RUNNABLE' ELSE operation_update.runner_state END,
+            run_after_utc = CASE WHEN upper(BTRIM(COALESCE(operation_update.status, ''))) IN ('QUEUED', 'RUNNING', 'CONTINUING', 'WAITING_RETRY') THEN v_now ELSE operation_update.run_after_utc END,
+            heartbeat_at_utc = v_now,
+            last_advanced_at_utc = v_now,
+            progress_json = jsonb_strip_nulls(COALESCE(operation_update.progress_json, '{}'::jsonb) || jsonb_build_object(
+              'last_requeued_chunk_id', v_chunk.id::text,
+              'last_requeued_chunk_phase', v_chunk.phase,
+              'last_requeued_chunk_type', v_chunk.chunk_type,
+              'last_requeued_chunk_status', v_chunk.status,
+              'last_requeued_chunk_sequence_no', v_chunk.sequence_no,
+              'last_requeued_chunk_completed_count', v_completed_count,
+              'last_requeued_chunk_failed_count', v_failed_count,
+              'last_requeued_chunk_result_hash', v_result_hash,
+              'last_requeued_chunk_error_summary', v_error_summary,
+              'last_advanced_at_utc', v_now::text
+            )),
+            updated_at_utc = v_now
+        WHERE operation_update.id = v_chunk.operation_id
+          AND upper(BTRIM(COALESCE(operation_update.status, ''))) NOT IN ('COMPLETE', 'FAILED', 'CANCELLED', 'CANCELED', 'REVIEW_REQUIRED');
+    ELSE
+        UPDATE public.banking_pay_operations AS operation_update
+        SET phase = v_chunk.phase,
+            status = CASE WHEN upper(BTRIM(COALESCE(operation_update.status, ''))) IN ('RUNNING', 'CONTINUING', 'WAITING_RETRY') THEN 'RUNNING' ELSE operation_update.status END,
+            runner_state = CASE WHEN upper(BTRIM(COALESCE(operation_update.status, ''))) IN ('RUNNING', 'CONTINUING', 'WAITING_RETRY') THEN 'RUNNABLE' ELSE operation_update.runner_state END,
+            run_after_utc = CASE WHEN upper(BTRIM(COALESCE(operation_update.status, ''))) IN ('RUNNING', 'CONTINUING', 'WAITING_RETRY') THEN v_now ELSE operation_update.run_after_utc END,
+            heartbeat_at_utc = v_now,
+            last_advanced_at_utc = v_now,
+            current_chunk_index = COALESCE(operation_update.current_chunk_index, 0) + 1,
+            completed_units = COALESCE(operation_update.completed_units, 0) + v_completed_count,
+            failed_units = COALESCE(operation_update.failed_units, 0) + v_failed_count,
+            progress_json = jsonb_strip_nulls(COALESCE(operation_update.progress_json, '{}'::jsonb) || jsonb_build_object(
+              'last_finished_chunk_id', v_chunk.id::text,
+              'last_finished_chunk_phase', v_chunk.phase,
+              'last_finished_chunk_type', v_chunk.chunk_type,
+              'last_finished_chunk_status', v_chunk.status,
+              'last_finished_chunk_sequence_no', v_chunk.sequence_no,
+              'last_finished_chunk_completed_count', v_completed_count,
+              'last_finished_chunk_failed_count', v_failed_count,
+              'last_finished_chunk_result_hash', v_result_hash,
+              'last_finished_chunk_error_summary', v_error_summary,
+              'last_advanced_at_utc', v_now::text
+            )),
+            updated_at_utc = v_now
+        WHERE operation_update.id = v_chunk.operation_id
+          AND upper(BTRIM(COALESCE(operation_update.status, ''))) NOT IN ('COMPLETE', 'FAILED', 'CANCELLED', 'CANCELED', 'REVIEW_REQUIRED');
+    END IF;
 
     RETURN QUERY SELECT true, NULL::text, v_chunk.id, v_chunk.operation_id, v_chunk.phase, v_chunk.chunk_type, v_chunk.sequence_no, v_chunk.status, v_chunk.payload_json, v_chunk.result_json, v_chunk.error_json, v_chunk.unit_count, v_chunk.completed_count, v_chunk.failed_count, v_chunk.locked_by, v_chunk.lock_expires_at_utc, v_chunk.created_at_utc, v_chunk.started_at_utc, v_chunk.completed_at_utc, v_chunk.updated_at_utc;
 END;
 $function$;
-
-
-
 
 DROP FUNCTION IF EXISTS public.banking_pay_operation_find_active(text, uuid, uuid, uuid);
 
@@ -68414,7 +68439,6 @@ DROP FUNCTION IF EXISTS public.pay_execute_bank_transfer_chunk_prepare(uuid, uui
 DROP FUNCTION IF EXISTS public.pay_execute_bank_transfer_chunk_prepare(uuid, uuid, jsonb, uuid);
 
 
-
 CREATE OR REPLACE FUNCTION public.pay_execute_bank_transfer_chunk_prepare(
   p_operation_id uuid,
   p_pay_batch_id uuid,
@@ -68716,7 +68740,14 @@ BEGIN
            'PENDING',
            preparable_scope.payment_reference,
            preparable_scope.payee_name,
-           regexp_replace(coalesce(preparable_scope.sort_code, ''), '[^0-9]', '', 'g'),
+           CASE
+             WHEN regexp_replace(coalesce(preparable_scope.sort_code, ''), '[^0-9]', '', 'g') ~ '^[0-9]{6}$' THEN regexp_replace(
+               regexp_replace(coalesce(preparable_scope.sort_code, ''), '[^0-9]', '', 'g'),
+               '^([0-9]{2})([0-9]{2})([0-9]{2})$',
+               '\1-\2-\3'
+             )
+             ELSE NULL::text
+           END,
            regexp_replace(coalesce(preparable_scope.account_number, ''), '[^0-9]', '', 'g'),
            preparable_scope.account_type,
            v_now,
@@ -68844,7 +68875,6 @@ BEGIN
   );
 END;
 $function$;
-
 
 
 
@@ -95710,6 +95740,7 @@ BEGIN
     request_id text NULL,
     idempotency_key text NULL,
     event_source text NOT NULL,
+    provider_event_transport text NULL,
     event_time_utc timestamptz NOT NULL,
     amount numeric NULL,
     currency text NULL,
@@ -95734,6 +95765,7 @@ BEGIN
     request_id,
     idempotency_key,
     event_source,
+    provider_event_transport,
     event_time_utc,
     amount,
     currency,
@@ -95750,7 +95782,13 @@ BEGIN
              THEN nullif(btrim(coalesce(update_element.value->>'transfer_id', update_element.value->>'pay_bank_transfer_id', '')), '')::uuid
            ELSE NULL::uuid
          END,
-         upper(btrim(coalesce(nullif(update_element.value->>'status', ''), nullif(update_element.value->>'normalised_state', ''), nullif(update_element.value->>'normalized_state', ''), 'UNKNOWN'))),
+         CASE
+           WHEN upper(btrim(coalesce(nullif(update_element.value->>'status', ''), nullif(update_element.value->>'normalised_state', ''), nullif(update_element.value->>'normalized_state', ''), 'UNKNOWN'))) IN ('COMPLETED', 'SETTLED', 'PAID', 'SUCCESS', 'SUCCEEDED', 'ACCEPTED') THEN 'COMPLETED'
+           WHEN upper(btrim(coalesce(nullif(update_element.value->>'status', ''), nullif(update_element.value->>'normalised_state', ''), nullif(update_element.value->>'normalized_state', ''), 'UNKNOWN'))) IN ('CANCELLED', 'CANCELED') THEN 'CANCELLED'
+           WHEN upper(btrim(coalesce(nullif(update_element.value->>'status', ''), nullif(update_element.value->>'normalised_state', ''), nullif(update_element.value->>'normalized_state', ''), 'UNKNOWN'))) IN ('SUBMITTED', 'PENDING', 'PROCESSING', 'FAILED', 'DECLINED', 'REJECTED', 'RETURNED', 'REVERTED', 'UNKNOWN') THEN upper(btrim(coalesce(nullif(update_element.value->>'status', ''), nullif(update_element.value->>'normalised_state', ''), nullif(update_element.value->>'normalized_state', ''), 'UNKNOWN')))
+           WHEN upper(btrim(coalesce(nullif(update_element.value->>'status', ''), nullif(update_element.value->>'normalised_state', ''), nullif(update_element.value->>'normalized_state', ''), 'UNKNOWN'))) = 'TIMEOUT' THEN 'UNKNOWN'
+           ELSE 'UNKNOWN'
+         END,
          nullif(btrim(coalesce(update_element.value->>'rail_state', update_element.value->>'normalised_state', update_element.value->>'normalized_state', update_element.value->>'status', '')), ''),
          nullif(btrim(coalesce(update_element.value->>'rail_tx_id', update_element.value->>'provider_transaction_id', update_element.value->>'provider_payment_id', '')), ''),
          nullif(btrim(coalesce(update_element.value->>'provider_state', update_element.value->>'rail_state', update_element.value->>'status', '')), ''),
@@ -95759,7 +95797,23 @@ BEGIN
          nullif(btrim(coalesce(update_element.value->>'provider_transaction_id', update_element.value->>'provider_payment_id', update_element.value->>'rail_tx_id', '')), ''),
          nullif(btrim(coalesce(update_element.value->>'request_id', update_element.value->'provider_submit_diagnostic'->>'request_id', '')), ''),
          nullif(btrim(coalesce(update_element.value->>'idempotency_key', update_element.value->>'provider_event_key', update_element.value->>'provider_event_id', update_element.value->>'request_id', '')), ''),
-         upper(btrim(coalesce(nullif(update_element.value->>'event_source', ''), nullif(update_element.value->>'provider_event_transport', ''), 'PROVIDER_POLL'))),
+         CASE
+           WHEN upper(btrim(coalesce(nullif(update_element.value->>'event_source', ''), ''))) IN ('PROVIDER_WEBHOOK', 'PROVIDER_POLL', 'PROVIDER_RESPONSE', 'LOCAL_STATE', 'MANUAL_CONFIRM', 'MANUAL_EVIDENCE', 'SYSTEM') THEN upper(btrim(coalesce(nullif(update_element.value->>'event_source', ''), '')))
+           WHEN upper(btrim(coalesce(nullif(update_element.value->>'event_source', ''), ''))) = 'FAILED_WEBHOOK_REPLAY' THEN 'PROVIDER_WEBHOOK'
+           WHEN upper(btrim(coalesce(nullif(update_element.value->>'provider_event_transport', ''), ''))) = 'PROVIDER_WEBHOOK' THEN 'PROVIDER_WEBHOOK'
+           WHEN upper(btrim(coalesce(nullif(update_element.value->>'provider_event_transport', ''), ''))) = 'FAILED_WEBHOOK_REPLAY' THEN 'PROVIDER_WEBHOOK'
+           WHEN upper(btrim(coalesce(nullif(update_element.value->>'provider_event_transport', ''), ''))) = 'PROVIDER_RESPONSE' THEN 'PROVIDER_RESPONSE'
+           WHEN upper(btrim(coalesce(nullif(update_element.value->>'provider_event_transport', ''), ''))) = 'LOCAL_STATE' THEN 'LOCAL_STATE'
+           WHEN upper(btrim(coalesce(nullif(update_element.value->>'provider_event_transport', ''), ''))) = 'MANUAL_CONFIRM' THEN 'MANUAL_CONFIRM'
+           WHEN upper(btrim(coalesce(nullif(update_element.value->>'provider_event_transport', ''), ''))) = 'PROVIDER_POLL' THEN 'PROVIDER_POLL'
+           ELSE 'PROVIDER_POLL'
+         END,
+         CASE
+           WHEN upper(btrim(coalesce(nullif(update_element.value->>'provider_event_transport', ''), ''))) IN ('PROVIDER_RESPONSE', 'PROVIDER_POLL', 'PROVIDER_WEBHOOK', 'FAILED_WEBHOOK_REPLAY', 'MANUAL_CONFIRM', 'LOCAL_STATE') THEN upper(btrim(coalesce(nullif(update_element.value->>'provider_event_transport', ''), '')))
+           WHEN upper(btrim(coalesce(nullif(update_element.value->>'event_source', ''), ''))) IN ('PROVIDER_RESPONSE', 'PROVIDER_POLL', 'PROVIDER_WEBHOOK', 'LOCAL_STATE', 'MANUAL_CONFIRM') THEN upper(btrim(coalesce(nullif(update_element.value->>'event_source', ''), '')))
+           WHEN upper(btrim(coalesce(nullif(update_element.value->>'event_source', ''), ''))) = 'FAILED_WEBHOOK_REPLAY' THEN 'FAILED_WEBHOOK_REPLAY'
+           ELSE NULL::text
+         END,
          coalesce(nullif(btrim(coalesce(update_element.value->>'event_time_utc', '')), '')::timestamptz, v_now),
          CASE WHEN nullif(btrim(coalesce(update_element.value->>'amount', '')), '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN nullif(btrim(coalesce(update_element.value->>'amount', '')), '')::numeric ELSE NULL::numeric END,
          upper(btrim(coalesce(nullif(update_element.value->>'currency', ''), 'GBP'))),
@@ -95939,14 +95993,24 @@ BEGIN
            matched_row.provider_transaction_id,
            matched_row.request_id,
            coalesce(matched_row.idempotency_key, matched_row.provider_event_id, matched_row.request_id, 'rail-update:' || md5(matched_row.raw_payload::text || ':' || matched_row.row_seq::text)),
-           matched_row.event_source,
+           matched_row.provider_event_transport,
            NULL::text,
            NULL::text,
            coalesce(v_batch_row.rail_env_snapshot, 'PROD'),
-           matched_row.provider_error_code,
            CASE
-             WHEN matched_row.outcome = 'FAILED' THEN coalesce(nullif(btrim(matched_row.provider_error_code), ''), 'PROVIDER_REJECTED')
-             WHEN matched_row.outcome = 'UNKNOWN' THEN 'UNKNOWN'
+             WHEN matched_row.outcome IN ('FAILED', 'UNKNOWN') THEN COALESCE(
+               failure_reason.failure_json->>'failure_reason_code',
+               failure_reason.failure_json->>'provider_failure_reason_code',
+               CASE WHEN matched_row.outcome = 'UNKNOWN' THEN 'PROVIDER_UNKNOWN' ELSE 'PROVIDER_FAILED_UNSPECIFIED' END
+             )
+             ELSE NULL::text
+           END,
+           CASE
+             WHEN matched_row.outcome IN ('FAILED', 'UNKNOWN') THEN COALESCE(
+               failure_reason.failure_json->>'failure_reason_group',
+               failure_reason.failure_json->>'provider_failure_reason_group',
+               CASE WHEN matched_row.outcome = 'UNKNOWN' THEN 'PROVIDER_UNKNOWN' ELSE 'PROVIDER_FAILED_UNSPECIFIED' END
+             )
              ELSE NULL::text
            END,
            '{}'::jsonb
@@ -95954,6 +96018,18 @@ BEGIN
     JOIN public.pay_bank_transfers AS transfer_row
       ON transfer_row.id = matched_row.pay_bank_transfer_id
      AND transfer_row.pay_batch_id = p_pay_batch_id
+    CROSS JOIN LATERAL (
+      SELECT CASE
+        WHEN matched_row.outcome IN ('FAILED', 'UNKNOWN') THEN public._banking_provider_failure_reason_normalise(
+          v_batch_row.rail_provider_snapshot,
+          coalesce(matched_row.provider_state, matched_row.rail_state, matched_row.status),
+          matched_row.provider_error_code,
+          matched_row.provider_error_message_redacted,
+          matched_row.raw_payload
+        )
+        ELSE '{}'::jsonb
+      END AS failure_json
+    ) AS failure_reason
     WHERE NOT EXISTS (
       SELECT 1
       FROM public.pay_bank_transfer_events AS existing_event
@@ -96248,6 +96324,13 @@ BEGIN
   IF v_execution_mode NOT IN ('STANDARD_BANK', 'BANK', 'CSV', 'CSV_SETTLEMENT', 'EXTERNAL', 'EXTERNAL_SETTLEMENT', 'MANUAL_SETTLEMENT') THEN
     RAISE EXCEPTION 'pay_batch_auth_start: invalid execution_mode';
   END IF;
+
+  v_execution_mode := CASE
+    WHEN v_execution_mode IN ('STANDARD_BANK', 'BANK') THEN 'STANDARD_BANK'
+    WHEN v_execution_mode IN ('CSV', 'CSV_SETTLEMENT') THEN 'CSV_SETTLEMENT'
+    WHEN v_execution_mode IN ('EXTERNAL', 'EXTERNAL_SETTLEMENT', 'MANUAL_SETTLEMENT') THEN 'EXTERNAL_SETTLEMENT'
+    ELSE v_execution_mode
+  END;
 
   v_requested_idempotency_key := nullif(btrim(coalesce(p_idempotency_key, '')), '');
 
@@ -96712,6 +96795,13 @@ BEGIN
     IF v_execution_mode NOT IN ('STANDARD_BANK', 'BANK', 'CSV', 'CSV_SETTLEMENT', 'EXTERNAL', 'EXTERNAL_SETTLEMENT', 'MANUAL_SETTLEMENT') THEN
       v_execution_mode := upper(btrim(coalesce(p_execution_mode, 'STANDARD_BANK')));
     END IF;
+
+    v_execution_mode := CASE
+      WHEN v_execution_mode IN ('STANDARD_BANK', 'BANK') THEN 'STANDARD_BANK'
+      WHEN v_execution_mode IN ('CSV', 'CSV_SETTLEMENT') THEN 'CSV_SETTLEMENT'
+      WHEN v_execution_mode IN ('EXTERNAL', 'EXTERNAL_SETTLEMENT', 'MANUAL_SETTLEMENT') THEN 'EXTERNAL_SETTLEMENT'
+      ELSE v_execution_mode
+    END;
     v_kind := upper(btrim(coalesce(v_execution_intent_json->>'schedule_kind', v_kind)));
     IF v_kind NOT IN ('IMMEDIATE', 'SCHEDULED') THEN
       v_kind := upper(btrim(coalesce(p_schedule_kind, '')));
@@ -97228,6 +97318,13 @@ BEGIN
     IF v_execution_mode NOT IN ('STANDARD_BANK', 'BANK', 'CSV', 'CSV_SETTLEMENT', 'EXTERNAL', 'EXTERNAL_SETTLEMENT', 'MANUAL_SETTLEMENT') THEN
       v_execution_mode := upper(btrim(coalesce(p_execution_mode, 'STANDARD_BANK')));
     END IF;
+
+    v_execution_mode := CASE
+      WHEN v_execution_mode IN ('STANDARD_BANK', 'BANK') THEN 'STANDARD_BANK'
+      WHEN v_execution_mode IN ('CSV', 'CSV_SETTLEMENT') THEN 'CSV_SETTLEMENT'
+      WHEN v_execution_mode IN ('EXTERNAL', 'EXTERNAL_SETTLEMENT', 'MANUAL_SETTLEMENT') THEN 'EXTERNAL_SETTLEMENT'
+      ELSE v_execution_mode
+    END;
 
     v_kind := upper(btrim(coalesce(v_execution_intent_json->>'schedule_kind', v_kind)));
 
