@@ -66135,7 +66135,6 @@ END;
 $function$;
 
 
-
 CREATE OR REPLACE FUNCTION public.banking_pay_operation_seed_chunks(
   p_operation_id uuid,
   p_phase text,
@@ -66166,6 +66165,7 @@ DECLARE
   v_chunk_count integer := 0;
   v_existing_chunk_count integer := 0;
   v_new_chunk_count integer := 0;
+  v_repaired_chunk_count integer := 0;
   v_mismatch_count integer := 0;
   v_legacy_mode boolean := false;
 BEGIN
@@ -66222,7 +66222,10 @@ BEGIN
   v_operation_type := upper(btrim(coalesce(v_operation_row.operation_type, '')));
   v_legacy_mode := p_units_json IS NOT NULL
     AND jsonb_array_length(v_units_json) > 0
-    AND NOT (v_operation_type = 'DRAFT_CREATE' AND v_chunk_type = 'CANDIDATE_SCOPE');
+    AND NOT (
+      (v_operation_type = 'DRAFT_CREATE' AND v_chunk_type = 'CANDIDATE_SCOPE')
+      OR (v_operation_type = 'REMITTANCE_QUEUE' AND v_chunk_type IN ('REMITTANCE', 'PAYOUT_NOTICE'))
+    );
 
   IF v_legacy_mode AND jsonb_array_length(v_units_json) > 25 THEN
     RAISE EXCEPTION 'BANKING_PAY_OPERATION_SEED_CHUNKS_LEGACY_UNITS_TOO_LARGE'
@@ -66240,6 +66243,7 @@ BEGIN
     unit_ordinal bigint NOT NULL,
     candidate_scope_id uuid NULL,
     transfer_scope_id uuid NULL,
+    remittance_scope_id uuid NULL,
     scope_unit_id uuid NULL,
     pay_bank_transfer_id uuid NULL,
     unit_key text NULL,
@@ -66298,6 +66302,120 @@ BEGIN
       ON candidate_scope_row.operation_id = p_operation_id
      AND candidate_scope_row.id = BTRIM(supplied_scope.candidate_scope_id_text)::uuid
     ORDER BY supplied_scope.ordinality;
+  ELSIF v_operation_type = 'REMITTANCE_QUEUE' AND v_chunk_type IN ('REMITTANCE', 'PAYOUT_NOTICE') THEN
+    IF p_units_json IS NOT NULL AND jsonb_array_length(v_units_json) > 0 THEN
+      IF EXISTS (
+        SELECT 1
+        FROM jsonb_array_elements_text(v_units_json) AS supplied_remittance_scope(remittance_scope_id_text)
+        WHERE BTRIM(supplied_remittance_scope.remittance_scope_id_text) !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+      ) THEN
+        RAISE EXCEPTION 'REMITTANCE_CHUNK_UNITS_MUST_BE_UUIDS'
+          USING ERRCODE = 'P0001', DETAIL = jsonb_build_object('code', 'REMITTANCE_CHUNK_UNITS_MUST_BE_UUIDS', 'operation_id', p_operation_id::text, 'phase', v_phase, 'chunk_type', v_chunk_type)::text;
+      END IF;
+
+      IF EXISTS (
+        SELECT 1
+        FROM jsonb_array_elements_text(v_units_json) AS supplied_remittance_scope(remittance_scope_id_text)
+        WHERE NOT EXISTS (
+          SELECT 1
+          FROM public.banking_pay_operation_remittance_scope AS remittance_scope_row
+          WHERE remittance_scope_row.operation_id = p_operation_id
+            AND remittance_scope_row.id = BTRIM(supplied_remittance_scope.remittance_scope_id_text)::uuid
+            AND upper(btrim(coalesce(remittance_scope_row.status, ''))) IN ('PENDING', 'FAILED')
+            AND (
+              (
+                v_chunk_type = 'PAYOUT_NOTICE'
+                AND (
+                  upper(btrim(coalesce(remittance_scope_row.remittance_type, ''))) LIKE '%PAYOUT%'
+                  OR upper(btrim(coalesce(remittance_scope_row.remittance_type, ''))) LIKE '%NOTICE%'
+                )
+              )
+              OR (
+                v_chunk_type = 'REMITTANCE'
+                AND upper(btrim(coalesce(remittance_scope_row.remittance_type, ''))) NOT LIKE '%PAYOUT%'
+                AND upper(btrim(coalesce(remittance_scope_row.remittance_type, ''))) NOT LIKE '%NOTICE%'
+              )
+            )
+        )
+      ) THEN
+        RAISE EXCEPTION 'REMITTANCE_CHUNK_SCOPE_ID_MISMATCH'
+          USING ERRCODE = 'P0001', DETAIL = jsonb_build_object('code', 'REMITTANCE_CHUNK_SCOPE_ID_MISMATCH', 'operation_id', p_operation_id::text, 'phase', v_phase, 'chunk_type', v_chunk_type)::text;
+      END IF;
+
+      INSERT INTO pg_temp.tmp_operation_seed_units (unit_ordinal, remittance_scope_id, unit_key, unit_payload_json)
+      SELECT supplied_remittance_scope.ordinality::bigint,
+             remittance_scope_row.id,
+             remittance_scope_row.deterministic_outbox_key,
+             jsonb_strip_nulls(jsonb_build_object(
+               'remittance_scope_id', remittance_scope_row.id::text,
+               'pay_batch_id', remittance_scope_row.pay_batch_id::text,
+               'pay_batch_candidate_id', CASE WHEN remittance_scope_row.pay_batch_candidate_id IS NULL THEN NULL ELSE remittance_scope_row.pay_batch_candidate_id::text END,
+               'candidate_id', CASE WHEN remittance_scope_row.candidate_id IS NULL THEN NULL ELSE remittance_scope_row.candidate_id::text END,
+               'recipient_kind', remittance_scope_row.recipient_kind,
+               'recipient_id', CASE WHEN remittance_scope_row.recipient_id IS NULL THEN NULL ELSE remittance_scope_row.recipient_id::text END,
+               'remittance_type', remittance_scope_row.remittance_type,
+               'status', remittance_scope_row.status,
+               'deterministic_outbox_key', remittance_scope_row.deterministic_outbox_key,
+               'outbox_id', CASE WHEN remittance_scope_row.outbox_id IS NULL THEN NULL ELSE remittance_scope_row.outbox_id::text END
+             ))
+      FROM jsonb_array_elements_text(v_units_json) WITH ORDINALITY AS supplied_remittance_scope(remittance_scope_id_text, ordinality)
+      JOIN public.banking_pay_operation_remittance_scope AS remittance_scope_row
+        ON remittance_scope_row.operation_id = p_operation_id
+       AND remittance_scope_row.id = BTRIM(supplied_remittance_scope.remittance_scope_id_text)::uuid
+      WHERE upper(btrim(coalesce(remittance_scope_row.status, ''))) IN ('PENDING', 'FAILED')
+        AND (
+          (
+            v_chunk_type = 'PAYOUT_NOTICE'
+            AND (
+              upper(btrim(coalesce(remittance_scope_row.remittance_type, ''))) LIKE '%PAYOUT%'
+              OR upper(btrim(coalesce(remittance_scope_row.remittance_type, ''))) LIKE '%NOTICE%'
+            )
+          )
+          OR (
+            v_chunk_type = 'REMITTANCE'
+            AND upper(btrim(coalesce(remittance_scope_row.remittance_type, ''))) NOT LIKE '%PAYOUT%'
+            AND upper(btrim(coalesce(remittance_scope_row.remittance_type, ''))) NOT LIKE '%NOTICE%'
+          )
+        )
+      ORDER BY supplied_remittance_scope.ordinality;
+    ELSE
+      INSERT INTO pg_temp.tmp_operation_seed_units (unit_ordinal, remittance_scope_id, unit_key, unit_payload_json)
+      SELECT row_number() OVER (ORDER BY remittance_scope_row.created_at_utc NULLS FIRST, remittance_scope_row.id)::bigint AS unit_ordinal,
+             remittance_scope_row.id,
+             remittance_scope_row.deterministic_outbox_key,
+             jsonb_strip_nulls(jsonb_build_object(
+               'remittance_scope_id', remittance_scope_row.id::text,
+               'pay_batch_id', remittance_scope_row.pay_batch_id::text,
+               'pay_batch_candidate_id', CASE WHEN remittance_scope_row.pay_batch_candidate_id IS NULL THEN NULL ELSE remittance_scope_row.pay_batch_candidate_id::text END,
+               'candidate_id', CASE WHEN remittance_scope_row.candidate_id IS NULL THEN NULL ELSE remittance_scope_row.candidate_id::text END,
+               'recipient_kind', remittance_scope_row.recipient_kind,
+               'recipient_id', CASE WHEN remittance_scope_row.recipient_id IS NULL THEN NULL ELSE remittance_scope_row.recipient_id::text END,
+               'remittance_type', remittance_scope_row.remittance_type,
+               'status', remittance_scope_row.status,
+               'deterministic_outbox_key', remittance_scope_row.deterministic_outbox_key,
+               'outbox_id', CASE WHEN remittance_scope_row.outbox_id IS NULL THEN NULL ELSE remittance_scope_row.outbox_id::text END
+             ))
+      FROM public.banking_pay_operation_remittance_scope AS remittance_scope_row
+      WHERE remittance_scope_row.operation_id = p_operation_id
+        AND upper(btrim(coalesce(remittance_scope_row.status, ''))) IN ('PENDING', 'FAILED')
+        AND (
+          (
+            v_chunk_type = 'PAYOUT_NOTICE'
+            AND (
+              upper(btrim(coalesce(remittance_scope_row.remittance_type, ''))) LIKE '%PAYOUT%'
+              OR upper(btrim(coalesce(remittance_scope_row.remittance_type, ''))) LIKE '%NOTICE%'
+            )
+          )
+          OR (
+            v_chunk_type = 'REMITTANCE'
+            AND upper(btrim(coalesce(remittance_scope_row.remittance_type, ''))) NOT LIKE '%PAYOUT%'
+            AND upper(btrim(coalesce(remittance_scope_row.remittance_type, ''))) NOT LIKE '%NOTICE%'
+          )
+        )
+      ORDER BY remittance_scope_row.created_at_utc NULLS FIRST, remittance_scope_row.id
+      LIMIT 100;
+    END IF;
+
   ELSIF v_legacy_mode THEN
     INSERT INTO pg_temp.tmp_operation_seed_units (unit_ordinal, unit_payload_json)
     SELECT unit_values.ordinality::bigint,
@@ -66387,6 +66505,7 @@ BEGIN
              'legacy_tiny_compat', v_legacy_mode,
              'source_table', CASE
                WHEN v_operation_type = 'DRAFT_CREATE' AND v_chunk_type = 'CANDIDATE_SCOPE' THEN 'banking_pay_operation_candidate_scope'
+               WHEN v_operation_type = 'REMITTANCE_QUEUE' AND v_chunk_type IN ('REMITTANCE', 'PAYOUT_NOTICE') THEN 'banking_pay_operation_remittance_scope'
                WHEN v_chunk_type = 'FRESHNESS_VALIDATE' THEN 'banking_pay_operation_scope_units'
                WHEN v_chunk_type IN ('TRANSFER_GROUP', 'TRANSFER_SCOPE_ITEM_SEED', 'TRANSFER_SCOPE_ROLLUP', 'TRANSFER_SUBMIT') THEN 'banking_pay_operation_transfer_scope'
                ELSE 'diagnostic_legacy_units'
@@ -66394,12 +66513,101 @@ BEGIN
              'unit_count', count(*)::integer,
              'unit_ordinal_min', min(seed_unit.unit_ordinal),
              'unit_ordinal_max', max(seed_unit.unit_ordinal),
-             'units', coalesce(jsonb_agg(to_jsonb(seed_unit.candidate_scope_id::text) ORDER BY seed_unit.unit_ordinal) FILTER (WHERE seed_unit.candidate_scope_id IS NOT NULL), '[]'::jsonb),
-             'candidate_scope_ids', coalesce(jsonb_agg(to_jsonb(seed_unit.candidate_scope_id::text) ORDER BY seed_unit.unit_ordinal) FILTER (WHERE seed_unit.candidate_scope_id IS NOT NULL), '[]'::jsonb),
+             'units', CASE
+               WHEN v_operation_type = 'DRAFT_CREATE' AND v_chunk_type = 'CANDIDATE_SCOPE' THEN coalesce(jsonb_agg(to_jsonb(seed_unit.candidate_scope_id::text) ORDER BY seed_unit.unit_ordinal) FILTER (WHERE seed_unit.candidate_scope_id IS NOT NULL), '[]'::jsonb)
+               WHEN v_operation_type = 'REMITTANCE_QUEUE' AND v_chunk_type IN ('REMITTANCE', 'PAYOUT_NOTICE') THEN coalesce(jsonb_agg(to_jsonb(seed_unit.remittance_scope_id::text) ORDER BY seed_unit.unit_ordinal) FILTER (WHERE seed_unit.remittance_scope_id IS NOT NULL), '[]'::jsonb)
+               ELSE '[]'::jsonb
+             END,
+             'candidate_scope_ids', CASE
+               WHEN v_operation_type = 'DRAFT_CREATE' AND v_chunk_type = 'CANDIDATE_SCOPE' THEN coalesce(jsonb_agg(to_jsonb(seed_unit.candidate_scope_id::text) ORDER BY seed_unit.unit_ordinal) FILTER (WHERE seed_unit.candidate_scope_id IS NOT NULL), '[]'::jsonb)
+               ELSE '[]'::jsonb
+             END,
              'pay_batch_ids', coalesce(jsonb_agg(DISTINCT to_jsonb((seed_unit.unit_payload_json->>'pay_batch_id'))) FILTER (WHERE NULLIF(seed_unit.unit_payload_json->>'pay_batch_id', '') IS NOT NULL), '[]'::jsonb),
              'transfer_scope_ids', coalesce(jsonb_agg(to_jsonb(seed_unit.transfer_scope_id::text) ORDER BY seed_unit.unit_ordinal) FILTER (WHERE seed_unit.transfer_scope_id IS NOT NULL), '[]'::jsonb),
+             'remittance_scope_ids', CASE
+               WHEN v_operation_type = 'REMITTANCE_QUEUE' AND v_chunk_type IN ('REMITTANCE', 'PAYOUT_NOTICE') THEN coalesce(jsonb_agg(to_jsonb(seed_unit.remittance_scope_id::text) ORDER BY seed_unit.unit_ordinal) FILTER (WHERE seed_unit.remittance_scope_id IS NOT NULL), '[]'::jsonb)
+               ELSE '[]'::jsonb
+             END,
              'scope_unit_ids', CASE
                WHEN v_operation_type = 'DRAFT_CREATE' AND v_chunk_type = 'CANDIDATE_SCOPE' THEN coalesce(jsonb_agg(to_jsonb(seed_unit.candidate_scope_id::text) ORDER BY seed_unit.unit_ordinal) FILTER (WHERE seed_unit.candidate_scope_id IS NOT NULL), '[]'::jsonb)
+               WHEN v_operation_type = 'REMITTANCE_QUEUE' AND v_chunk_type IN ('REMITTANCE', 'PAYOUT_NOTICE') THEN coalesce(jsonb_agg(to_jsonb(seed_unit.remittance_scope_id::text) ORDER BY seed_unit.unit_ordinal) FILTER (WHERE seed_unit.remittance_scope_id IS NOT NULL), '[]'::jsonb)
+               ELSE coalesce(jsonb_agg(to_jsonb(seed_unit.scope_unit_id::text) ORDER BY seed_unit.unit_ordinal) FILTER (WHERE seed_unit.scope_unit_id IS NOT NULL), '[]'::jsonb)
+             END,
+             'unit_keys_sample', coalesce(jsonb_agg(to_jsonb(seed_unit.unit_key) ORDER BY seed_unit.unit_ordinal) FILTER (WHERE seed_unit.unit_key IS NOT NULL), '[]'::jsonb)
+           )) AS payload_json,
+           count(*)::integer AS unit_count
+    FROM pg_temp.tmp_operation_seed_units AS seed_unit
+    GROUP BY (((seed_unit.unit_ordinal - 1) / v_chunk_size) + 1)::integer
+  ), repaired_chunks AS (
+    UPDATE public.banking_pay_operation_chunks AS chunk_update
+    SET status = 'PENDING',
+        payload_json = expected_chunks.payload_json,
+        result_json = NULL::jsonb,
+        error_json = NULL::jsonb,
+        unit_count = expected_chunks.unit_count,
+        completed_count = 0,
+        failed_count = 0,
+        locked_by = NULL,
+        lock_expires_at_utc = NULL,
+        started_at_utc = NULL,
+        completed_at_utc = NULL,
+        updated_at_utc = v_now
+    FROM expected_chunks
+    WHERE chunk_update.operation_id = p_operation_id
+      AND chunk_update.phase = v_phase
+      AND chunk_update.chunk_type = v_chunk_type
+      AND chunk_update.sequence_no = expected_chunks.sequence_no
+      AND v_operation_type = 'REMITTANCE_QUEUE'
+      AND v_chunk_type IN ('REMITTANCE', 'PAYOUT_NOTICE')
+      AND chunk_update.status IN ('PENDING', 'FAILED')
+      AND (
+        chunk_update.unit_count <> expected_chunks.unit_count
+        OR chunk_update.payload_json IS DISTINCT FROM expected_chunks.payload_json
+      )
+      AND (
+        chunk_update.payload_json->>'source_table' = 'diagnostic_legacy_units'
+        OR lower(coalesce(chunk_update.payload_json->>'row_backed', 'false')) <> 'true'
+        OR lower(coalesce(chunk_update.payload_json->>'legacy_tiny_compat', 'false')) = 'true'
+      )
+    RETURNING 1
+  )
+  SELECT count(*)::integer
+  INTO v_repaired_chunk_count
+  FROM repaired_chunks;
+
+  WITH expected_chunks AS (
+    SELECT (((seed_unit.unit_ordinal - 1) / v_chunk_size) + 1)::integer AS sequence_no,
+           jsonb_strip_nulls(jsonb_build_object(
+             'row_backed', NOT v_legacy_mode,
+             'legacy_tiny_compat', v_legacy_mode,
+             'source_table', CASE
+               WHEN v_operation_type = 'DRAFT_CREATE' AND v_chunk_type = 'CANDIDATE_SCOPE' THEN 'banking_pay_operation_candidate_scope'
+               WHEN v_operation_type = 'REMITTANCE_QUEUE' AND v_chunk_type IN ('REMITTANCE', 'PAYOUT_NOTICE') THEN 'banking_pay_operation_remittance_scope'
+               WHEN v_chunk_type = 'FRESHNESS_VALIDATE' THEN 'banking_pay_operation_scope_units'
+               WHEN v_chunk_type IN ('TRANSFER_GROUP', 'TRANSFER_SCOPE_ITEM_SEED', 'TRANSFER_SCOPE_ROLLUP', 'TRANSFER_SUBMIT') THEN 'banking_pay_operation_transfer_scope'
+               ELSE 'diagnostic_legacy_units'
+             END,
+             'unit_count', count(*)::integer,
+             'unit_ordinal_min', min(seed_unit.unit_ordinal),
+             'unit_ordinal_max', max(seed_unit.unit_ordinal),
+             'units', CASE
+               WHEN v_operation_type = 'DRAFT_CREATE' AND v_chunk_type = 'CANDIDATE_SCOPE' THEN coalesce(jsonb_agg(to_jsonb(seed_unit.candidate_scope_id::text) ORDER BY seed_unit.unit_ordinal) FILTER (WHERE seed_unit.candidate_scope_id IS NOT NULL), '[]'::jsonb)
+               WHEN v_operation_type = 'REMITTANCE_QUEUE' AND v_chunk_type IN ('REMITTANCE', 'PAYOUT_NOTICE') THEN coalesce(jsonb_agg(to_jsonb(seed_unit.remittance_scope_id::text) ORDER BY seed_unit.unit_ordinal) FILTER (WHERE seed_unit.remittance_scope_id IS NOT NULL), '[]'::jsonb)
+               ELSE '[]'::jsonb
+             END,
+             'candidate_scope_ids', CASE
+               WHEN v_operation_type = 'DRAFT_CREATE' AND v_chunk_type = 'CANDIDATE_SCOPE' THEN coalesce(jsonb_agg(to_jsonb(seed_unit.candidate_scope_id::text) ORDER BY seed_unit.unit_ordinal) FILTER (WHERE seed_unit.candidate_scope_id IS NOT NULL), '[]'::jsonb)
+               ELSE '[]'::jsonb
+             END,
+             'pay_batch_ids', coalesce(jsonb_agg(DISTINCT to_jsonb((seed_unit.unit_payload_json->>'pay_batch_id'))) FILTER (WHERE NULLIF(seed_unit.unit_payload_json->>'pay_batch_id', '') IS NOT NULL), '[]'::jsonb),
+             'transfer_scope_ids', coalesce(jsonb_agg(to_jsonb(seed_unit.transfer_scope_id::text) ORDER BY seed_unit.unit_ordinal) FILTER (WHERE seed_unit.transfer_scope_id IS NOT NULL), '[]'::jsonb),
+             'remittance_scope_ids', CASE
+               WHEN v_operation_type = 'REMITTANCE_QUEUE' AND v_chunk_type IN ('REMITTANCE', 'PAYOUT_NOTICE') THEN coalesce(jsonb_agg(to_jsonb(seed_unit.remittance_scope_id::text) ORDER BY seed_unit.unit_ordinal) FILTER (WHERE seed_unit.remittance_scope_id IS NOT NULL), '[]'::jsonb)
+               ELSE '[]'::jsonb
+             END,
+             'scope_unit_ids', CASE
+               WHEN v_operation_type = 'DRAFT_CREATE' AND v_chunk_type = 'CANDIDATE_SCOPE' THEN coalesce(jsonb_agg(to_jsonb(seed_unit.candidate_scope_id::text) ORDER BY seed_unit.unit_ordinal) FILTER (WHERE seed_unit.candidate_scope_id IS NOT NULL), '[]'::jsonb)
+               WHEN v_operation_type = 'REMITTANCE_QUEUE' AND v_chunk_type IN ('REMITTANCE', 'PAYOUT_NOTICE') THEN coalesce(jsonb_agg(to_jsonb(seed_unit.remittance_scope_id::text) ORDER BY seed_unit.unit_ordinal) FILTER (WHERE seed_unit.remittance_scope_id IS NOT NULL), '[]'::jsonb)
                ELSE coalesce(jsonb_agg(to_jsonb(seed_unit.scope_unit_id::text) ORDER BY seed_unit.unit_ordinal) FILTER (WHERE seed_unit.scope_unit_id IS NOT NULL), '[]'::jsonb)
              END,
              'unit_keys_sample', coalesce(jsonb_agg(to_jsonb(seed_unit.unit_key) ORDER BY seed_unit.unit_ordinal) FILTER (WHERE seed_unit.unit_key IS NOT NULL), '[]'::jsonb)
@@ -66431,6 +66639,7 @@ BEGIN
              'legacy_tiny_compat', v_legacy_mode,
              'source_table', CASE
                WHEN v_operation_type = 'DRAFT_CREATE' AND v_chunk_type = 'CANDIDATE_SCOPE' THEN 'banking_pay_operation_candidate_scope'
+               WHEN v_operation_type = 'REMITTANCE_QUEUE' AND v_chunk_type IN ('REMITTANCE', 'PAYOUT_NOTICE') THEN 'banking_pay_operation_remittance_scope'
                WHEN v_chunk_type = 'FRESHNESS_VALIDATE' THEN 'banking_pay_operation_scope_units'
                WHEN v_chunk_type IN ('TRANSFER_GROUP', 'TRANSFER_SCOPE_ITEM_SEED', 'TRANSFER_SCOPE_ROLLUP', 'TRANSFER_SUBMIT') THEN 'banking_pay_operation_transfer_scope'
                ELSE 'diagnostic_legacy_units'
@@ -66438,12 +66647,24 @@ BEGIN
              'unit_count', count(*)::integer,
              'unit_ordinal_min', min(seed_unit.unit_ordinal),
              'unit_ordinal_max', max(seed_unit.unit_ordinal),
-             'units', coalesce(jsonb_agg(to_jsonb(seed_unit.candidate_scope_id::text) ORDER BY seed_unit.unit_ordinal) FILTER (WHERE seed_unit.candidate_scope_id IS NOT NULL), '[]'::jsonb),
-             'candidate_scope_ids', coalesce(jsonb_agg(to_jsonb(seed_unit.candidate_scope_id::text) ORDER BY seed_unit.unit_ordinal) FILTER (WHERE seed_unit.candidate_scope_id IS NOT NULL), '[]'::jsonb),
+             'units', CASE
+               WHEN v_operation_type = 'DRAFT_CREATE' AND v_chunk_type = 'CANDIDATE_SCOPE' THEN coalesce(jsonb_agg(to_jsonb(seed_unit.candidate_scope_id::text) ORDER BY seed_unit.unit_ordinal) FILTER (WHERE seed_unit.candidate_scope_id IS NOT NULL), '[]'::jsonb)
+               WHEN v_operation_type = 'REMITTANCE_QUEUE' AND v_chunk_type IN ('REMITTANCE', 'PAYOUT_NOTICE') THEN coalesce(jsonb_agg(to_jsonb(seed_unit.remittance_scope_id::text) ORDER BY seed_unit.unit_ordinal) FILTER (WHERE seed_unit.remittance_scope_id IS NOT NULL), '[]'::jsonb)
+               ELSE '[]'::jsonb
+             END,
+             'candidate_scope_ids', CASE
+               WHEN v_operation_type = 'DRAFT_CREATE' AND v_chunk_type = 'CANDIDATE_SCOPE' THEN coalesce(jsonb_agg(to_jsonb(seed_unit.candidate_scope_id::text) ORDER BY seed_unit.unit_ordinal) FILTER (WHERE seed_unit.candidate_scope_id IS NOT NULL), '[]'::jsonb)
+               ELSE '[]'::jsonb
+             END,
              'pay_batch_ids', coalesce(jsonb_agg(DISTINCT to_jsonb((seed_unit.unit_payload_json->>'pay_batch_id'))) FILTER (WHERE NULLIF(seed_unit.unit_payload_json->>'pay_batch_id', '') IS NOT NULL), '[]'::jsonb),
              'transfer_scope_ids', coalesce(jsonb_agg(to_jsonb(seed_unit.transfer_scope_id::text) ORDER BY seed_unit.unit_ordinal) FILTER (WHERE seed_unit.transfer_scope_id IS NOT NULL), '[]'::jsonb),
+             'remittance_scope_ids', CASE
+               WHEN v_operation_type = 'REMITTANCE_QUEUE' AND v_chunk_type IN ('REMITTANCE', 'PAYOUT_NOTICE') THEN coalesce(jsonb_agg(to_jsonb(seed_unit.remittance_scope_id::text) ORDER BY seed_unit.unit_ordinal) FILTER (WHERE seed_unit.remittance_scope_id IS NOT NULL), '[]'::jsonb)
+               ELSE '[]'::jsonb
+             END,
              'scope_unit_ids', CASE
                WHEN v_operation_type = 'DRAFT_CREATE' AND v_chunk_type = 'CANDIDATE_SCOPE' THEN coalesce(jsonb_agg(to_jsonb(seed_unit.candidate_scope_id::text) ORDER BY seed_unit.unit_ordinal) FILTER (WHERE seed_unit.candidate_scope_id IS NOT NULL), '[]'::jsonb)
+               WHEN v_operation_type = 'REMITTANCE_QUEUE' AND v_chunk_type IN ('REMITTANCE', 'PAYOUT_NOTICE') THEN coalesce(jsonb_agg(to_jsonb(seed_unit.remittance_scope_id::text) ORDER BY seed_unit.unit_ordinal) FILTER (WHERE seed_unit.remittance_scope_id IS NOT NULL), '[]'::jsonb)
                ELSE coalesce(jsonb_agg(to_jsonb(seed_unit.scope_unit_id::text) ORDER BY seed_unit.unit_ordinal) FILTER (WHERE seed_unit.scope_unit_id IS NOT NULL), '[]'::jsonb)
              END,
              'unit_keys_sample', coalesce(jsonb_agg(to_jsonb(seed_unit.unit_key) ORDER BY seed_unit.unit_ordinal) FILTER (WHERE seed_unit.unit_key IS NOT NULL), '[]'::jsonb)
@@ -66502,7 +66723,15 @@ BEGIN
           'total_units', v_total_units,
           'chunk_count', v_chunk_count,
           'new_chunk_count', COALESCE(v_new_chunk_count, 0),
-          'row_backed', NOT v_legacy_mode
+          'repaired_chunk_count', COALESCE(v_repaired_chunk_count, 0),
+          'row_backed', NOT v_legacy_mode,
+          'source_table', CASE
+            WHEN v_operation_type = 'DRAFT_CREATE' AND v_chunk_type = 'CANDIDATE_SCOPE' THEN 'banking_pay_operation_candidate_scope'
+            WHEN v_operation_type = 'REMITTANCE_QUEUE' AND v_chunk_type IN ('REMITTANCE', 'PAYOUT_NOTICE') THEN 'banking_pay_operation_remittance_scope'
+            WHEN v_chunk_type = 'FRESHNESS_VALIDATE' THEN 'banking_pay_operation_scope_units'
+            WHEN v_chunk_type IN ('TRANSFER_GROUP', 'TRANSFER_SCOPE_ITEM_SEED', 'TRANSFER_SCOPE_ROLLUP', 'TRANSFER_SUBMIT') THEN 'banking_pay_operation_transfer_scope'
+            ELSE 'diagnostic_legacy_units'
+          END
         )
       )),
       updated_at_utc = v_now
@@ -66511,6 +66740,7 @@ BEGIN
   RETURN QUERY SELECT v_total_units, v_chunk_count, v_existing_chunk_count, coalesce(v_new_chunk_count, 0);
 END;
 $function$;
+
 
 
 
