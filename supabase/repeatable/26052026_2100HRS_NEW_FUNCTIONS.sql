@@ -64437,7 +64437,7 @@ BEGIN
     ) AS supplied_operation_type;
 
     IF COALESCE(array_length(v_operation_types, 1), 0) = 0 AND v_allow_backend_runner_owned IS TRUE THEN
-      v_operation_types := ARRAY['DRAFT_CREATE', 'PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS']::text[];
+      v_operation_types := ARRAY['DRAFT_CREATE', 'PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS', 'PAYMENT_SETTLEMENT', 'REMITTANCE_QUEUE']::text[];
     END IF;
 
     WITH claimable AS (
@@ -64456,7 +64456,7 @@ BEGIN
             v_allow_backend_runner_owned IS TRUE
             AND upper(BTRIM(COALESCE(operation_row.operation_type, ''))) = ANY(v_operation_types)
             AND (
-              upper(BTRIM(COALESCE(operation_row.input_json->>'backend_runner_owned', operation_row.input_json->>'backendRunnerOwned', operation_row.config_json->>'backend_runner_owned', operation_row.config_json->>'backendRunnerOwned', 'false'))) IN ('TRUE', 'T', '1', 'YES', 'Y', 'ON')
+              upper(BTRIM(COALESCE(operation_row.input_json->>'backend_runner_owned', operation_row.input_json->>'backendRunnerOwned', operation_row.config_json->>'backend_runner_owned', operation_row.config_json->>'backendRunnerOwned', operation_row.progress_json->>'backend_runner_owned', operation_row.progress_json->>'backendRunnerOwned', operation_row.progress_json->>'server_runnable', operation_row.progress_json->>'serverRunnable', 'false'))) IN ('TRUE', 'T', '1', 'YES', 'Y', 'ON')
               OR (
                 operation_row.config_json ? 'frontend_completion_required'
                 AND upper(BTRIM(COALESCE(operation_row.config_json->>'frontend_completion_required', ''))) IN ('FALSE', 'F', '0', 'NO', 'N', 'OFF')
@@ -64571,7 +64571,7 @@ BEGIN
             OR v_visible_operation_type = ANY(v_operation_types)
           )
           AND (
-            upper(BTRIM(COALESCE(v_visible.input_json->>'backend_runner_owned', v_visible.input_json->>'backendRunnerOwned', v_visible.config_json->>'backend_runner_owned', v_visible.config_json->>'backendRunnerOwned', 'false'))) IN ('TRUE', 'T', '1', 'YES', 'Y', 'ON')
+            upper(BTRIM(COALESCE(v_visible.input_json->>'backend_runner_owned', v_visible.input_json->>'backendRunnerOwned', v_visible.config_json->>'backend_runner_owned', v_visible.config_json->>'backendRunnerOwned', v_visible.progress_json->>'backend_runner_owned', v_visible.progress_json->>'backendRunnerOwned', v_visible.progress_json->>'server_runnable', v_visible.progress_json->>'serverRunnable', 'false'))) IN ('TRUE', 'T', '1', 'YES', 'Y', 'ON')
             OR (
               v_visible.config_json ? 'frontend_completion_required'
               AND upper(BTRIM(COALESCE(v_visible.config_json->>'frontend_completion_required', ''))) IN ('FALSE', 'F', '0', 'NO', 'N', 'OFF')
@@ -64703,6 +64703,7 @@ BEGIN
       NULL::timestamptz;
 END;
 $function$;
+
 
 
 
@@ -64976,10 +64977,10 @@ BEGIN
     v_allow_restart := lower(BTRIM(COALESCE(v_input_json->>'explicit_restart', v_input_json->>'allow_restart', v_config_json->>'explicit_restart', v_config_json->>'allow_restart', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on');
     v_max_attempts := LEAST(GREATEST(COALESCE(NULLIF(BTRIM(COALESCE(v_config_json->>'max_attempts', '')), '')::integer, 10), 1), 100);
     v_lock_seconds := LEAST(GREATEST(COALESCE(NULLIF(BTRIM(COALESCE(v_config_json->>'lock_seconds', '')), '')::integer, 60), 10), 3600);
-    v_server_runnable := v_operation_type IN ('DRAFT_CREATE', 'PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS');
+    v_server_runnable := v_operation_type IN ('DRAFT_CREATE', 'PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS', 'PAYMENT_SETTLEMENT', 'REMITTANCE_QUEUE');
     v_backend_runner_owned := v_server_runnable OR lower(BTRIM(COALESCE(v_input_json->>'backend_runner_owned', v_input_json->>'backendRunnerOwned', v_config_json->>'backend_runner_owned', v_config_json->>'backendRunnerOwned', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on');
     v_frontend_completion_required := CASE
-        WHEN v_operation_type = 'DRAFT_CREATE' THEN false
+        WHEN v_operation_type IN ('DRAFT_CREATE', 'PAYMENT_SETTLEMENT', 'REMITTANCE_QUEUE') THEN false
         ELSE lower(BTRIM(COALESCE(v_input_json->>'frontend_completion_required', v_input_json->>'frontendCompletionRequired', v_config_json->>'frontend_completion_required', v_config_json->>'frontendCompletionRequired', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
     END;
     v_draft_stale_minutes := LEAST(GREATEST(COALESCE(NULLIF(BTRIM(COALESCE(v_config_json->>'draft_create_stale_minutes', v_config_json->>'draftCreateStaleMinutes', '')), '')::integer, 120), 5), 1440);
@@ -65036,9 +65037,11 @@ BEGIN
       - 'full_preview_json'
       - 'canonical_preview_lines_json') || jsonb_build_object(
         'chunks', v_chunk_config,
-        'backend_runner_owned', CASE WHEN v_operation_type = 'DRAFT_CREATE' THEN true ELSE NULL::boolean END,
-        'frontend_completion_required', CASE WHEN v_operation_type = 'DRAFT_CREATE' THEN false ELSE NULL::boolean END,
-        'run_after_utc', CASE WHEN v_operation_type = 'DRAFT_CREATE' AND v_run_after_utc IS NOT NULL THEN v_run_after_utc::text ELSE NULL::text END
+        'server_runnable', CASE WHEN v_server_runnable THEN v_server_runnable ELSE NULL::boolean END,
+        'backend_runner_owned', CASE WHEN v_server_runnable THEN v_backend_runner_owned ELSE NULL::boolean END,
+        'frontend_completion_required', CASE WHEN v_server_runnable THEN v_frontend_completion_required ELSE NULL::boolean END,
+        'operation_created_for_backend_runner', CASE WHEN v_server_runnable THEN v_backend_runner_owned ELSE NULL::boolean END,
+        'run_after_utc', CASE WHEN v_server_runnable AND v_run_after_utc IS NOT NULL THEN v_run_after_utc::text ELSE NULL::text END
       ));
 
     PERFORM pg_advisory_xact_lock(pg_catalog.hashtextextended('banking_pay_operation_start:' || v_operation_type || ':' || v_idempotency_key, 0));
@@ -65186,6 +65189,33 @@ BEGIN
                 RETURN;
             END IF;
         ELSE
+            IF v_operation_type IN ('PAYMENT_SETTLEMENT', 'REMITTANCE_QUEUE')
+               AND upper(BTRIM(COALESCE(v_operation.status, ''))) NOT IN ('COMPLETE', 'COMPLETED', 'FAILED', 'CANCELLED', 'CANCELED', 'ERROR', 'REVIEW_REQUIRED') THEN
+                UPDATE public.banking_pay_operations AS child_operation_update
+                SET config_json = jsonb_strip_nulls(COALESCE(child_operation_update.config_json, '{}'::jsonb) || jsonb_build_object(
+                        'server_runnable', true,
+                        'backend_runner_owned', true,
+                        'frontend_completion_required', false,
+                        'operation_created_for_backend_runner', true,
+                        'run_after_utc', COALESCE(child_operation_update.run_after_utc, v_now)::text
+                    )),
+                    progress_json = jsonb_strip_nulls(COALESCE(child_operation_update.progress_json, '{}'::jsonb) || jsonb_build_object(
+                        'server_runnable', true,
+                        'backend_runner_owned', true,
+                        'frontend_completion_required', false,
+                        'operation_created_for_backend_runner', true,
+                        'operation_reused_for_backend_runner', true,
+                        'runner_flags_repaired_at_utc', v_now::text,
+                        'run_after_utc', COALESCE(child_operation_update.run_after_utc, v_now)::text
+                    )),
+                    runner_state = 'RUNNABLE',
+                    requires_user_action = false,
+                    run_after_utc = COALESCE(child_operation_update.run_after_utc, v_now),
+                    updated_at_utc = v_now
+                WHERE child_operation_update.id = v_operation.id
+                RETURNING child_operation_update.* INTO v_operation;
+            END IF;
+
             RETURN QUERY
             SELECT
                 v_operation.id,
@@ -65445,9 +65475,12 @@ BEGIN
             'status_text', CASE
                 WHEN v_operation_type = 'DRAFT_CREATE' THEN 'Draft creation operation created for backend runner.'
                 WHEN v_operation_type IN ('PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS') THEN 'Payment execution operation created for backend runner.'
+                WHEN v_operation_type = 'PAYMENT_SETTLEMENT' THEN 'Payment settlement operation created for backend runner.'
+                WHEN v_operation_type = 'REMITTANCE_QUEUE' THEN 'Remittance queue operation created for backend runner.'
                 ELSE 'Operation created.'
             END,
             'bounded_chunk_config', v_chunk_config,
+            'operation_created_for_backend_runner', v_backend_runner_owned,
             'started_by_operation_start', true,
             'active_operation_guard', CASE WHEN v_operation_type = 'DRAFT_CREATE' THEN 'DRAFT_CREATE_WORKBENCH_SESSION' ELSE NULL::text END,
             'created_at_utc', v_now::text,
@@ -65506,6 +65539,8 @@ BEGIN
         false;
 END;
 $function$;
+
+
 
 
 DROP FUNCTION IF EXISTS public.banking_pay_operation_finish(uuid, text, jsonb, jsonb);
@@ -68629,6 +68664,9 @@ DECLARE
   v_failed_count integer := 0;
   v_remaining_exists boolean := false;
   v_authorisation_ready_count integer := 0;
+  v_item_transfer_linked_count integer := 0;
+  v_item_transfer_reused_count integer := 0;
+  v_item_transfer_conflict_count integer := 0;
 BEGIN
   PERFORM set_config('lock_timeout', '3s', true);
   PERFORM public.banking_pay_hot_path_budget_apply('WORKER_CHUNK');
@@ -68763,6 +68801,9 @@ BEGIN
       'prepared_count', 0,
       'reused_count', 0,
       'failed_count', 0,
+      'item_transfer_linked_count', 0,
+      'item_transfer_reused_count', 0,
+      'item_transfer_conflict_count', 0,
       'remaining_count', 0,
       'has_more', false,
       'next_required_phase', 'PROVIDER_SUBMIT_CLAIM'
@@ -68987,6 +69028,82 @@ BEGIN
        v_reused_count
   FROM linked_scope;
 
+  DROP TABLE IF EXISTS pg_temp.tmp_prepare_item_transfer_link;
+  CREATE TEMPORARY TABLE pg_temp.tmp_prepare_item_transfer_link ON COMMIT DROP AS
+  SELECT DISTINCT
+         scope_row.id AS transfer_scope_id,
+         scope_row.pay_bank_transfer_id AS pay_bank_transfer_id,
+         scope_item_row.pay_batch_item_id AS pay_batch_item_id,
+         batch_item.pay_bank_transfer_id AS existing_pay_bank_transfer_id
+  FROM public.banking_pay_operation_transfer_scope AS scope_row
+  JOIN pg_temp.tmp_prepare_scope_eval AS eval_row
+    ON eval_row.transfer_scope_id = scope_row.id
+   AND eval_row.blocker_code IS NULL
+  JOIN public.banking_pay_operation_transfer_scope_items AS scope_item_row
+    ON scope_item_row.operation_id = p_operation_id
+   AND scope_item_row.pay_batch_id = p_pay_batch_id
+   AND scope_item_row.transfer_scope_id = scope_row.id
+  JOIN public.pay_batch_items AS batch_item
+    ON batch_item.id = scope_item_row.pay_batch_item_id
+  JOIN public.pay_batch_candidates AS batch_candidate
+    ON batch_candidate.id = batch_item.pay_batch_candidate_id
+   AND batch_candidate.pay_batch_id = p_pay_batch_id
+  WHERE scope_row.operation_id = p_operation_id
+    AND scope_row.pay_batch_id = p_pay_batch_id
+    AND scope_row.pay_bank_transfer_id IS NOT NULL
+    AND COALESCE(batch_item.is_voided, false) = false;
+
+  SELECT COUNT(*) FILTER (
+           WHERE link_row.existing_pay_bank_transfer_id IS NOT NULL
+             AND link_row.existing_pay_bank_transfer_id <> link_row.pay_bank_transfer_id
+         )::integer,
+         COUNT(*) FILTER (
+           WHERE link_row.existing_pay_bank_transfer_id = link_row.pay_bank_transfer_id
+         )::integer
+  INTO v_item_transfer_conflict_count,
+       v_item_transfer_reused_count
+  FROM pg_temp.tmp_prepare_item_transfer_link AS link_row;
+
+  WITH linked_batch_items AS (
+    UPDATE public.pay_batch_items AS batch_item_update
+    SET pay_bank_transfer_id = link_row.pay_bank_transfer_id,
+        updated_at = v_now
+    FROM pg_temp.tmp_prepare_item_transfer_link AS link_row
+    WHERE batch_item_update.id = link_row.pay_batch_item_id
+      AND batch_item_update.pay_bank_transfer_id IS NULL
+      AND link_row.pay_bank_transfer_id IS NOT NULL
+      AND NOT EXISTS (
+        SELECT 1
+        FROM pg_temp.tmp_prepare_item_transfer_link AS conflict_row
+        WHERE conflict_row.pay_batch_item_id = link_row.pay_batch_item_id
+          AND conflict_row.existing_pay_bank_transfer_id IS NOT NULL
+          AND conflict_row.existing_pay_bank_transfer_id <> conflict_row.pay_bank_transfer_id
+      )
+    RETURNING batch_item_update.id
+  )
+  SELECT COUNT(*)::integer
+  INTO v_item_transfer_linked_count
+  FROM linked_batch_items;
+
+  IF COALESCE(v_item_transfer_conflict_count, 0) > 0 THEN
+    UPDATE public.banking_pay_operation_transfer_scope AS scope_conflict_update
+    SET status = 'FAILED',
+        provider_submit_ready = false,
+        provider_submit_state = 'REVIEW_REQUIRED',
+        provider_review_required = true,
+        provider_unsafe_reason = 'PAY_BATCH_ITEM_TRANSFER_LINK_CONFLICT',
+        updated_at_utc = v_now
+    FROM (
+      SELECT DISTINCT conflict_link.transfer_scope_id
+      FROM pg_temp.tmp_prepare_item_transfer_link AS conflict_link
+      WHERE conflict_link.existing_pay_bank_transfer_id IS NOT NULL
+        AND conflict_link.existing_pay_bank_transfer_id <> conflict_link.pay_bank_transfer_id
+    ) AS conflict_scope
+    WHERE scope_conflict_update.id = conflict_scope.transfer_scope_id
+      AND scope_conflict_update.operation_id = p_operation_id
+      AND scope_conflict_update.pay_batch_id = p_pay_batch_id;
+  END IF;
+
   SELECT EXISTS (
     SELECT 1
     FROM public.banking_pay_operation_transfer_scope AS scope_row
@@ -69013,19 +69130,38 @@ BEGIN
     AND scope_row.pay_bank_transfer_id IS NOT NULL;
 
   UPDATE public.banking_pay_operations AS operation_update
-  SET phase = CASE WHEN v_remaining_exists THEN 'PREPARE_TRANSFER_CHUNKS' ELSE 'CLAIM_PROVIDER_SUBMIT' END,
+  SET status = CASE WHEN COALESCE(v_item_transfer_conflict_count, 0) > 0 THEN 'REVIEW_REQUIRED' ELSE operation_update.status END,
+      phase = CASE WHEN COALESCE(v_item_transfer_conflict_count, 0) > 0 THEN 'REVIEW_REQUIRED' WHEN v_remaining_exists THEN 'PREPARE_TRANSFER_CHUNKS' ELSE 'CLAIM_PROVIDER_SUBMIT' END,
+      runner_state = CASE WHEN COALESCE(v_item_transfer_conflict_count, 0) > 0 THEN 'WAITING_USER_REVIEW' ELSE operation_update.runner_state END,
+      requires_user_action = CASE WHEN COALESCE(v_item_transfer_conflict_count, 0) > 0 THEN true ELSE operation_update.requires_user_action END,
       progress_json = jsonb_strip_nulls(coalesce(operation_update.progress_json, '{}'::jsonb) || jsonb_build_object(
         'last_transfer_chunk_prepare_at_utc', v_now::text,
         'last_transfer_chunk_prepare_scope_count', coalesce(v_requested_count, 0),
         'last_transfer_chunk_prepare_ready_count', coalesce(v_authorisation_ready_count, 0),
-        'next_required_phase', CASE WHEN v_remaining_exists THEN 'TRANSFER_CHUNK_PREPARE_PAGE' ELSE 'PROVIDER_SUBMIT_CLAIM' END
+        'item_transfer_linked_count', COALESCE(v_item_transfer_linked_count, 0),
+        'item_transfer_reused_count', COALESCE(v_item_transfer_reused_count, 0),
+        'item_transfer_conflict_count', COALESCE(v_item_transfer_conflict_count, 0),
+        'review_required', CASE WHEN COALESCE(v_item_transfer_conflict_count, 0) > 0 THEN true ELSE NULL::boolean END,
+        'review_reason_code', CASE WHEN COALESCE(v_item_transfer_conflict_count, 0) > 0 THEN 'PAY_BATCH_ITEM_TRANSFER_LINK_CONFLICT' ELSE NULL::text END,
+        'next_required_phase', CASE WHEN COALESCE(v_item_transfer_conflict_count, 0) > 0 THEN 'REVIEW_REQUIRED' WHEN v_remaining_exists THEN 'TRANSFER_CHUNK_PREPARE_PAGE' ELSE 'PROVIDER_SUBMIT_CLAIM' END
       )),
+      error_json = CASE
+        WHEN COALESCE(v_item_transfer_conflict_count, 0) > 0 THEN jsonb_strip_nulls(coalesce(operation_update.error_json, '{}'::jsonb) || jsonb_build_object(
+          'code', 'PAY_BATCH_ITEM_TRANSFER_LINK_CONFLICT',
+          'message', 'One or more frozen pay batch items are already linked to a different bank transfer. Provider submission has been blocked for the affected transfer scope.',
+          'operation_id', p_operation_id::text,
+          'pay_batch_id', p_pay_batch_id::text,
+          'conflict_count', COALESCE(v_item_transfer_conflict_count, 0),
+          'detected_at_utc', v_now::text
+        ))
+        ELSE operation_update.error_json
+      END,
       updated_at_utc = v_now
   WHERE operation_update.id = p_operation_id;
 
   RETURN jsonb_build_object(
-    'ok', coalesce(v_failed_count, 0) = 0,
-    'hard_blocker', coalesce(v_failed_count, 0) > 0,
+    'ok', coalesce(v_failed_count, 0) = 0 AND COALESCE(v_item_transfer_conflict_count, 0) = 0,
+    'hard_blocker', coalesce(v_failed_count, 0) > 0 OR COALESCE(v_item_transfer_conflict_count, 0) > 0,
     'operation_id', p_operation_id::text,
     'pay_batch_id', p_pay_batch_id::text,
     'chunk_id', CASE WHEN v_chunk_id IS NULL THEN NULL ELSE v_chunk_id::text END,
@@ -69034,6 +69170,9 @@ BEGIN
     'reused_count', coalesce(v_reused_count, 0),
     'authorisation_ready_count', coalesce(v_authorisation_ready_count, 0),
     'failed_count', coalesce(v_failed_count, 0),
+    'item_transfer_linked_count', COALESCE(v_item_transfer_linked_count, 0),
+    'item_transfer_reused_count', COALESCE(v_item_transfer_reused_count, 0),
+    'item_transfer_conflict_count', COALESCE(v_item_transfer_conflict_count, 0),
     'remaining_count', CASE WHEN v_remaining_exists THEN 1 ELSE 0 END,
     'has_more', v_remaining_exists,
     'next_required_phase', CASE WHEN v_remaining_exists THEN 'TRANSFER_CHUNK_PREPARE_PAGE' ELSE 'PROVIDER_SUBMIT_CLAIM' END,
@@ -69041,7 +69180,6 @@ BEGIN
   );
 END;
 $function$;
-
 
 
 
@@ -132308,6 +132446,7 @@ DECLARE
   v_operation_input_json jsonb := '{}'::jsonb;
   v_operation_config_json jsonb := '{}'::jsonb;
   v_operation_config_snapshot_status text := 'created_or_reused';
+  v_operation_runner_repair_count integer := 0;
   v_batch_candidate_count integer := 0;
   v_large_batch_threshold integer := 100;
 BEGIN
@@ -132517,7 +132656,10 @@ BEGIN
       'message_kind', v_operation_kind,
       'is_loans_batch', v_is_loans_batch,
       'root_operation_id', CASE WHEN p_root_operation_id IS NULL THEN NULL ELSE p_root_operation_id::text END,
-      'source_rpc', 'pay_remittance_maybe_queue_for_trigger'
+      'source_rpc', 'pay_remittance_maybe_queue_for_trigger',
+      'backend_runner_owned', true,
+      'server_runnable', true,
+      'frontend_completion_required', false
     );
 
     WITH operation_config_plan AS (
@@ -132547,8 +132689,13 @@ BEGIN
     )
     SELECT jsonb_build_object(
       'source', 'pay_remittance_maybe_queue_for_trigger',
+      'source_rpc', 'pay_remittance_maybe_queue_for_trigger',
       'version', 1,
       'operation_type', 'REMITTANCE_QUEUE',
+      'server_runnable', true,
+      'backend_runner_owned', true,
+      'frontend_completion_required', false,
+      'operation_created_for_backend_runner', true,
       'snapshotted_at_utc', now()::text,
       'lock_seconds', COALESCE(max(operation_config_rows.lock_seconds), 60),
       'max_advance_ms', COALESCE(max(operation_config_rows.max_advance_ms), 15000),
@@ -132572,7 +132719,13 @@ BEGIN
 
     v_operation_config_json := COALESCE(v_operation_config_json, '{}'::jsonb) || jsonb_build_object(
       'remittance_chunk_size', COALESCE(NULLIF(v_operation_config_json #>> '{chunks,queue_remittance_chunks,chunk_size}', '')::integer, 100),
-      'payout_notice_chunk_size', COALESCE(NULLIF(v_operation_config_json #>> '{chunks,queue_payout_notice_chunks,chunk_size}', '')::integer, 100)
+      'payout_notice_chunk_size', COALESCE(NULLIF(v_operation_config_json #>> '{chunks,queue_payout_notice_chunks,chunk_size}', '')::integer, 100),
+      'server_runnable', true,
+      'backend_runner_owned', true,
+      'frontend_completion_required', false,
+      'operation_created_for_backend_runner', true,
+      'source_rpc', 'pay_remittance_maybe_queue_for_trigger',
+      'run_after_utc', now()::text
     );
 
     SELECT operation_start_row.*
@@ -132588,7 +132741,45 @@ BEGIN
       p_config_json => v_operation_config_json
     ) AS operation_start_row;
 
+
+    UPDATE public.banking_pay_operations AS remittance_operation_update
+    SET config_json = jsonb_strip_nulls(COALESCE(remittance_operation_update.config_json, '{}'::jsonb) || v_operation_config_json || jsonb_build_object(
+          'server_runnable', true,
+          'backend_runner_owned', true,
+          'frontend_completion_required', false,
+          'operation_created_for_backend_runner', true,
+          'source_rpc', 'pay_remittance_maybe_queue_for_trigger',
+          'run_after_utc', COALESCE(remittance_operation_update.run_after_utc, now())::text
+        )),
+        progress_json = jsonb_strip_nulls(COALESCE(remittance_operation_update.progress_json, '{}'::jsonb) || jsonb_build_object(
+          'server_runnable', true,
+          'backend_runner_owned', true,
+          'frontend_completion_required', false,
+          'operation_created_for_backend_runner', true,
+          'operation_reused_for_backend_runner', COALESCE(v_operation_start.is_existing, false),
+          'runner_flags_repaired_at_utc', now()::text,
+          'source_rpc', 'pay_remittance_maybe_queue_for_trigger',
+          'run_after_utc', COALESCE(remittance_operation_update.run_after_utc, now())::text
+        )),
+        runner_state = 'RUNNABLE',
+        requires_user_action = false,
+        run_after_utc = COALESCE(remittance_operation_update.run_after_utc, now()),
+        updated_at_utc = now()
+    WHERE remittance_operation_update.id = v_operation_start.operation_id
+      AND upper(btrim(coalesce(remittance_operation_update.status, ''))) NOT IN ('COMPLETE', 'COMPLETED', 'FAILED', 'CANCELLED', 'CANCELED', 'ERROR', 'REVIEW_REQUIRED')
+      AND (
+        upper(btrim(coalesce(remittance_operation_update.runner_state, ''))) <> 'RUNNABLE'
+        OR remittance_operation_update.run_after_utc IS NULL
+        OR lower(btrim(coalesce(remittance_operation_update.config_json->>'backend_runner_owned', remittance_operation_update.config_json->>'backendRunnerOwned', remittance_operation_update.progress_json->>'backend_runner_owned', remittance_operation_update.progress_json->>'backendRunnerOwned', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
+        OR lower(btrim(coalesce(remittance_operation_update.config_json->>'frontend_completion_required', remittance_operation_update.config_json->>'frontendCompletionRequired', remittance_operation_update.progress_json->>'frontend_completion_required', remittance_operation_update.progress_json->>'frontendCompletionRequired', 'true'))) NOT IN ('false', 'f', '0', 'no', 'n', 'off')
+        OR lower(btrim(coalesce(remittance_operation_update.config_json->>'server_runnable', remittance_operation_update.config_json->>'serverRunnable', remittance_operation_update.progress_json->>'server_runnable', remittance_operation_update.progress_json->>'serverRunnable', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
+      );
+
+    GET DIAGNOSTICS v_operation_runner_repair_count = ROW_COUNT;
+
     v_operation_config_snapshot_status := CASE
+      WHEN COALESCE(v_operation_runner_repair_count, 0) > 0 AND COALESCE(v_operation_start.is_existing, false) THEN 'reused_repaired'
+      WHEN COALESCE(v_operation_runner_repair_count, 0) > 0 THEN 'created_repaired'
       WHEN v_operation_start.config_json IS NULL OR v_operation_start.config_json = '{}'::jsonb THEN 'repaired'
       WHEN v_operation_start.is_existing THEN 'reused'
       ELSE 'created'
@@ -132622,6 +132813,10 @@ BEGIN
         'operation_status', v_operation_start.status,
         'operation_phase', v_operation_start.phase,
         'operation_config_snapshot_status', v_operation_config_snapshot_status,
+        'operation_runner_repair_count', COALESCE(v_operation_runner_repair_count, 0),
+        'server_runnable', true,
+        'backend_runner_owned', true,
+        'frontend_completion_required', false,
         'operation_idempotency_key', v_operation_idempotency_key,
         'already_exists', COALESCE(v_operation_start.is_existing, false),
         'operation_created', COALESCE(v_operation_start.is_existing, false) = false,
@@ -132645,7 +132840,11 @@ BEGIN
       'dispatch_required', true,
       'advance_inline_allowed', true,
       'requires_remittance_operation', true,
-      'trigger_status', CASE WHEN COALESCE(v_operation_start.is_existing, false) THEN 'REMITTANCE_QUEUE_OPERATION_REUSED' ELSE 'REMITTANCE_QUEUE_OPERATION_STARTED' END,
+      'server_runnable', true,
+      'backend_runner_owned', true,
+      'frontend_completion_required', false,
+      'runner_flags_repaired', COALESCE(v_operation_runner_repair_count, 0) > 0,
+      'trigger_status', CASE WHEN COALESCE(v_operation_runner_repair_count, 0) > 0 AND COALESCE(v_operation_start.is_existing, false) THEN 'REMITTANCE_QUEUE_OPERATION_REUSED_REPAIRED' WHEN COALESCE(v_operation_start.is_existing, false) THEN 'REMITTANCE_QUEUE_OPERATION_REUSED' ELSE 'REMITTANCE_QUEUE_OPERATION_STARTED' END,
       'operation_mode', true,
       'operation_idempotency_key', v_operation_idempotency_key,
       'already_exists', COALESCE(v_operation_start.is_existing, false),
@@ -132665,6 +132864,8 @@ BEGIN
       'operation_status', v_operation_start.status,
       'operation_phase', v_operation_start.phase,
       'operation_config_snapshot_status', v_operation_config_snapshot_status,
+      'operation_runner_repair_count', COALESCE(v_operation_runner_repair_count, 0),
+      'run_after_utc', now()::text,
       'root_operation_id', CASE WHEN p_root_operation_id IS NULL THEN NULL ELSE p_root_operation_id::text END,
       'queue_result', jsonb_build_object(
         'ok', true,
@@ -132685,10 +132886,14 @@ BEGIN
         'operation_config_snapshot_status', v_operation_config_snapshot_status,
         'pay_batch_id', p_pay_batch_id::text,
         'message_kind', v_operation_kind,
-        'trigger_status', CASE WHEN COALESCE(v_operation_start.is_existing, false) THEN 'REMITTANCE_QUEUE_OPERATION_REUSED' ELSE 'REMITTANCE_QUEUE_OPERATION_STARTED' END,
+        'trigger_status', CASE WHEN COALESCE(v_operation_runner_repair_count, 0) > 0 AND COALESCE(v_operation_start.is_existing, false) THEN 'REMITTANCE_QUEUE_OPERATION_REUSED_REPAIRED' WHEN COALESCE(v_operation_start.is_existing, false) THEN 'REMITTANCE_QUEUE_OPERATION_REUSED' ELSE 'REMITTANCE_QUEUE_OPERATION_STARTED' END,
         'dispatch_required', true,
         'advance_inline_allowed', true,
         'requires_remittance_operation', true,
+        'server_runnable', true,
+        'backend_runner_owned', true,
+        'frontend_completion_required', false,
+        'runner_flags_repaired', COALESCE(v_operation_runner_repair_count, 0) > 0,
         'operation_queued', true,
         'job_count', 0,
         'jobs', '[]'::jsonb
@@ -159842,3 +160047,344 @@ BEGIN
 END;
 $function$;
 
+CREATE OR REPLACE FUNCTION public.pay_operation_settlement_scope_seed(p_operation_id uuid, p_pay_batch_id uuid, p_scope text DEFAULT 'ALL'::text, p_actor_user_id uuid DEFAULT NULL::uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_now timestamptz := now();
+  v_operation_row public.banking_pay_operations%ROWTYPE;
+  v_batch_row public.pay_batches%ROWTYPE;
+  v_scope text := upper(BTRIM(COALESCE(p_scope, 'ALL')));
+  v_created_count integer := 0;
+  v_reused_count integer := 0;
+  v_settlement_unit_count integer := 0;
+  v_stale_scope_skipped_count integer := 0;
+  v_transfer_scope_operation_id uuid := NULL::uuid;
+  v_item_transfer_linked_count integer := 0;
+  v_item_transfer_reused_count integer := 0;
+  v_item_transfer_conflict_count integer := 0;
+BEGIN
+  IF p_operation_id IS NULL THEN
+    RAISE EXCEPTION 'operation_id is required';
+  END IF;
+
+  IF p_pay_batch_id IS NULL THEN
+    RAISE EXCEPTION 'pay_batch_id is required';
+  END IF;
+
+  IF p_actor_user_id IS NULL THEN
+    RAISE EXCEPTION 'actor_user_id is required';
+  END IF;
+
+  IF v_scope NOT IN ('ALL', 'PAYE', 'UMBRELLA', 'LOANS') THEN
+    RAISE EXCEPTION 'p_scope must be ALL, PAYE, UMBRELLA, or LOANS';
+  END IF;
+
+  PERFORM 1
+  FROM public.tms_users AS actor_user
+  WHERE actor_user.id = p_actor_user_id;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'tms_users row % not found', p_actor_user_id;
+  END IF;
+
+  SELECT operation_row.*
+  INTO v_operation_row
+  FROM public.banking_pay_operations AS operation_row
+  WHERE operation_row.id = p_operation_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'banking_pay_operations row % not found', p_operation_id;
+  END IF;
+
+  v_transfer_scope_operation_id := COALESCE(v_operation_row.root_operation_id, p_operation_id);
+
+  IF v_operation_row.operation_type NOT IN ('PAYMENT_SETTLEMENT', 'PAYMENT_EXECUTE') THEN
+    RAISE EXCEPTION 'operation % is not a settlement-capable operation', p_operation_id;
+  END IF;
+
+  IF v_operation_row.pay_batch_id IS NOT NULL AND v_operation_row.pay_batch_id <> p_pay_batch_id THEN
+    RAISE EXCEPTION 'operation % is for pay batch %, not %', p_operation_id, v_operation_row.pay_batch_id, p_pay_batch_id;
+  END IF;
+
+  IF v_operation_row.actor_user_id IS NOT NULL AND v_operation_row.actor_user_id <> p_actor_user_id THEN
+    RAISE EXCEPTION 'operation % belongs to a different actor', p_operation_id;
+  END IF;
+
+  SELECT batch_row.*
+  INTO v_batch_row
+  FROM public.pay_batches AS batch_row
+  WHERE batch_row.id = p_pay_batch_id;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'pay_batches row % not found', p_pay_batch_id;
+  END IF;
+
+  DROP TABLE IF EXISTS pg_temp.tmp_settlement_item_transfer_repair;
+  CREATE TEMPORARY TABLE pg_temp.tmp_settlement_item_transfer_repair ON COMMIT DROP AS
+  SELECT DISTINCT
+         transfer_scope_row.id AS transfer_scope_id,
+         transfer_scope_row.pay_bank_transfer_id AS pay_bank_transfer_id,
+         transfer_scope_item_row.pay_batch_item_id AS pay_batch_item_id,
+         batch_item.pay_bank_transfer_id AS existing_pay_bank_transfer_id
+  FROM public.banking_pay_operation_transfer_scope AS transfer_scope_row
+  JOIN public.banking_pay_operation_transfer_scope_items AS transfer_scope_item_row
+    ON transfer_scope_item_row.operation_id = transfer_scope_row.operation_id
+   AND transfer_scope_item_row.pay_batch_id = transfer_scope_row.pay_batch_id
+   AND transfer_scope_item_row.transfer_scope_id = transfer_scope_row.id
+  JOIN public.pay_batch_items AS batch_item
+    ON batch_item.id = transfer_scope_item_row.pay_batch_item_id
+  JOIN public.pay_batch_candidates AS batch_candidate
+    ON batch_candidate.id = batch_item.pay_batch_candidate_id
+   AND batch_candidate.pay_batch_id = p_pay_batch_id
+  WHERE transfer_scope_row.operation_id = v_transfer_scope_operation_id
+    AND transfer_scope_row.pay_batch_id = p_pay_batch_id
+    AND transfer_scope_item_row.pay_batch_id = p_pay_batch_id
+    AND transfer_scope_row.pay_bank_transfer_id IS NOT NULL
+    AND COALESCE(batch_item.is_voided, false) = false
+    AND (
+      v_scope = 'ALL'
+      OR (v_scope = 'LOANS' AND batch_item.item_type = 'LOAN_PAYOUT')
+      OR upper(BTRIM(COALESCE(batch_item.pay_channel, ''))) = v_scope
+    );
+
+  SELECT COUNT(*) FILTER (
+           WHERE repair_row.existing_pay_bank_transfer_id IS NOT NULL
+             AND repair_row.existing_pay_bank_transfer_id <> repair_row.pay_bank_transfer_id
+         )::integer,
+         COUNT(*) FILTER (
+           WHERE repair_row.existing_pay_bank_transfer_id = repair_row.pay_bank_transfer_id
+         )::integer
+  INTO v_item_transfer_conflict_count,
+       v_item_transfer_reused_count
+  FROM pg_temp.tmp_settlement_item_transfer_repair AS repair_row;
+
+  WITH repaired_batch_items AS (
+    UPDATE public.pay_batch_items AS batch_item_update
+    SET pay_bank_transfer_id = repair_row.pay_bank_transfer_id,
+        updated_at = v_now
+    FROM pg_temp.tmp_settlement_item_transfer_repair AS repair_row
+    WHERE batch_item_update.id = repair_row.pay_batch_item_id
+      AND batch_item_update.pay_bank_transfer_id IS NULL
+      AND repair_row.pay_bank_transfer_id IS NOT NULL
+      AND NOT EXISTS (
+        SELECT 1
+        FROM pg_temp.tmp_settlement_item_transfer_repair AS conflict_row
+        WHERE conflict_row.pay_batch_item_id = repair_row.pay_batch_item_id
+          AND conflict_row.existing_pay_bank_transfer_id IS NOT NULL
+          AND conflict_row.existing_pay_bank_transfer_id <> conflict_row.pay_bank_transfer_id
+      )
+    RETURNING batch_item_update.id
+  )
+  SELECT COUNT(*)::integer
+  INTO v_item_transfer_linked_count
+  FROM repaired_batch_items;
+
+  IF COALESCE(v_item_transfer_conflict_count, 0) > 0 THEN
+    UPDATE public.banking_pay_operation_transfer_scope AS transfer_scope_conflict_update
+    SET status = 'FAILED',
+        provider_submit_ready = false,
+        provider_submit_state = 'REVIEW_REQUIRED',
+        provider_review_required = true,
+        provider_unsafe_reason = 'SETTLEMENT_ITEM_TRANSFER_LINK_CONFLICT',
+        updated_at_utc = v_now
+    FROM (
+      SELECT DISTINCT conflict_repair.transfer_scope_id
+      FROM pg_temp.tmp_settlement_item_transfer_repair AS conflict_repair
+      WHERE conflict_repair.existing_pay_bank_transfer_id IS NOT NULL
+        AND conflict_repair.existing_pay_bank_transfer_id <> conflict_repair.pay_bank_transfer_id
+    ) AS conflict_scope
+    WHERE transfer_scope_conflict_update.id = conflict_scope.transfer_scope_id
+      AND transfer_scope_conflict_update.operation_id = v_transfer_scope_operation_id
+      AND transfer_scope_conflict_update.pay_batch_id = p_pay_batch_id;
+
+    UPDATE public.banking_pay_operations AS operation_conflict_update
+    SET status = 'REVIEW_REQUIRED',
+        phase = 'REVIEW_REQUIRED',
+        runner_state = 'WAITING_USER_REVIEW',
+        requires_user_action = true,
+        progress_json = jsonb_strip_nulls(coalesce(operation_conflict_update.progress_json, '{}'::jsonb) || jsonb_build_object(
+          'review_required', true,
+          'review_reason_code', 'SETTLEMENT_ITEM_TRANSFER_LINK_CONFLICT',
+          'item_transfer_linked_count', COALESCE(v_item_transfer_linked_count, 0),
+          'item_transfer_reused_count', COALESCE(v_item_transfer_reused_count, 0),
+          'item_transfer_conflict_count', COALESCE(v_item_transfer_conflict_count, 0),
+          'detected_at_utc', v_now::text
+        )),
+        error_json = jsonb_strip_nulls(coalesce(operation_conflict_update.error_json, '{}'::jsonb) || jsonb_build_object(
+          'code', 'SETTLEMENT_ITEM_TRANSFER_LINK_CONFLICT',
+          'message', 'One or more frozen pay batch items are linked to a different bank transfer. Settlement scope seeding has been blocked.',
+          'operation_id', p_operation_id::text,
+          'transfer_scope_operation_id', CASE WHEN v_transfer_scope_operation_id IS NULL THEN NULL ELSE v_transfer_scope_operation_id::text END,
+          'pay_batch_id', p_pay_batch_id::text,
+          'conflict_count', COALESCE(v_item_transfer_conflict_count, 0),
+          'detected_at_utc', v_now::text
+        )),
+        updated_at_utc = v_now
+    WHERE operation_conflict_update.id = p_operation_id;
+
+    RETURN jsonb_build_object(
+      'ok', false,
+      'hard_blocker', true,
+      'code', 'SETTLEMENT_ITEM_TRANSFER_LINK_CONFLICT',
+      'operation_id', p_operation_id::text,
+      'transfer_scope_operation_id', CASE WHEN v_transfer_scope_operation_id IS NULL THEN NULL ELSE v_transfer_scope_operation_id::text END,
+      'pay_batch_id', p_pay_batch_id::text,
+      'scope', v_scope,
+      'item_transfer_linked_count', COALESCE(v_item_transfer_linked_count, 0),
+      'item_transfer_reused_count', COALESCE(v_item_transfer_reused_count, 0),
+      'item_transfer_conflict_count', COALESCE(v_item_transfer_conflict_count, 0),
+      'message', 'Settlement scope seeding blocked because a batch item is already linked to a different bank transfer.'
+    );
+  END IF;
+
+  WITH item_scope AS (
+    SELECT
+      batch_candidate.id AS pay_batch_candidate_id,
+      batch_candidate.candidate_id,
+      upper(BTRIM(COALESCE(batch_item.pay_channel, ''))) AS pay_channel,
+      batch_item.pay_bank_transfer_id,
+      transfer_row.transfer_group_key,
+      CASE
+        WHEN batch_item.pay_bank_transfer_id IS NOT NULL THEN 'transfer:' || batch_item.pay_bank_transfer_id::text
+        ELSE 'batch_candidate:' || batch_candidate.id::text || ':channel:' || upper(BTRIM(COALESCE(batch_item.pay_channel, '')))
+      END AS settlement_scope_key,
+      COALESCE(jsonb_agg(to_jsonb(batch_item.id::text) ORDER BY batch_item.id::text), '[]'::jsonb) AS pay_batch_item_ids_json,
+      COUNT(batch_item.id)::integer AS item_count,
+      ROUND(COALESCE(SUM(COALESCE(batch_item.amount_inc_vat, batch_item.amount_ex_vat, 0)), 0), 2) AS total_amount
+    FROM public.pay_batch_candidates AS batch_candidate
+    JOIN public.pay_batch_items AS batch_item
+      ON batch_item.pay_batch_candidate_id = batch_candidate.id
+    LEFT JOIN public.pay_bank_transfers AS transfer_row
+      ON transfer_row.id = batch_item.pay_bank_transfer_id
+    WHERE batch_candidate.pay_batch_id = p_pay_batch_id
+      AND COALESCE(batch_item.is_voided, false) = false
+      AND COALESCE(batch_item.item_type, '') <> 'DEBT_CREATED'
+      AND (
+        upper(COALESCE(batch_candidate.settlement_status, '')) NOT IN ('SETTLED', 'PAID', 'CONFIRMED')
+        OR batch_candidate.settlement_status IS NULL
+      )
+      AND (
+        v_scope = 'ALL'
+        OR (v_scope = 'LOANS' AND batch_item.item_type = 'LOAN_PAYOUT')
+        OR upper(BTRIM(COALESCE(batch_item.pay_channel, ''))) = v_scope
+      )
+    GROUP BY batch_candidate.id,
+             batch_candidate.candidate_id,
+             upper(BTRIM(COALESCE(batch_item.pay_channel, ''))),
+             batch_item.pay_bank_transfer_id,
+             transfer_row.transfer_group_key,
+             CASE
+               WHEN batch_item.pay_bank_transfer_id IS NOT NULL THEN 'transfer:' || batch_item.pay_bank_transfer_id::text
+               ELSE 'batch_candidate:' || batch_candidate.id::text || ':channel:' || upper(BTRIM(COALESCE(batch_item.pay_channel, '')))
+             END
+    HAVING ROUND(COALESCE(SUM(COALESCE(batch_item.amount_inc_vat, batch_item.amount_ex_vat, 0)), 0), 2) <> 0
+  ), scope_rows AS (
+    SELECT
+      item_scope.pay_batch_candidate_id,
+      item_scope.candidate_id,
+      item_scope.pay_channel,
+      'settlement:batch:' || p_pay_batch_id::text || ':batch_candidate:' || item_scope.pay_batch_candidate_id::text || ':channel:' || item_scope.pay_channel || ':scope:' || item_scope.settlement_scope_key AS settlement_key,
+      jsonb_build_object(
+        'pay_batch_id', p_pay_batch_id::text,
+        'pay_batch_candidate_id', item_scope.pay_batch_candidate_id::text,
+        'candidate_id', item_scope.candidate_id::text,
+        'pay_channel', item_scope.pay_channel,
+        'payment_scope_json', jsonb_strip_nulls(jsonb_build_object(
+          'scope_key', item_scope.settlement_scope_key,
+          'pay_bank_transfer_id', CASE WHEN item_scope.pay_bank_transfer_id IS NULL THEN NULL ELSE item_scope.pay_bank_transfer_id::text END,
+          'transfer_group_key', item_scope.transfer_group_key
+        )),
+        'pay_batch_item_ids', item_scope.pay_batch_item_ids_json,
+        'item_count', item_scope.item_count,
+        'total_amount', item_scope.total_amount,
+        'scope', v_scope
+      ) AS payload_json
+    FROM item_scope
+  ), stale_scope AS (
+    UPDATE public.banking_pay_operation_settlement_scope AS scope_update
+    SET status = 'SKIPPED',
+        updated_at_utc = v_now
+    WHERE scope_update.operation_id = p_operation_id
+      AND scope_update.pay_batch_id = p_pay_batch_id
+      AND scope_update.status IN ('PENDING', 'FAILED')
+      AND NOT EXISTS (
+        SELECT 1
+        FROM scope_rows
+        WHERE scope_rows.settlement_key = scope_update.settlement_key
+      )
+    RETURNING scope_update.id
+  ), upserted_scope AS (
+    INSERT INTO public.banking_pay_operation_settlement_scope (
+      operation_id,
+      pay_batch_id,
+      pay_batch_candidate_id,
+      candidate_id,
+      pay_channel,
+      settlement_key,
+      payload_json,
+      status,
+      settlement_event_id,
+      created_at_utc,
+      updated_at_utc
+    )
+    SELECT
+      p_operation_id,
+      p_pay_batch_id,
+      scope_rows.pay_batch_candidate_id,
+      scope_rows.candidate_id,
+      scope_rows.pay_channel,
+      scope_rows.settlement_key,
+      scope_rows.payload_json,
+      'PENDING',
+      NULL::uuid,
+      v_now,
+      v_now
+    FROM scope_rows
+    ON CONFLICT (operation_id, settlement_key)
+    DO UPDATE
+    SET pay_batch_candidate_id = CASE WHEN public.banking_pay_operation_settlement_scope.status = 'SETTLED' THEN public.banking_pay_operation_settlement_scope.pay_batch_candidate_id ELSE EXCLUDED.pay_batch_candidate_id END,
+        candidate_id = CASE WHEN public.banking_pay_operation_settlement_scope.status = 'SETTLED' THEN public.banking_pay_operation_settlement_scope.candidate_id ELSE EXCLUDED.candidate_id END,
+        pay_channel = CASE WHEN public.banking_pay_operation_settlement_scope.status = 'SETTLED' THEN public.banking_pay_operation_settlement_scope.pay_channel ELSE EXCLUDED.pay_channel END,
+        payload_json = CASE WHEN public.banking_pay_operation_settlement_scope.status = 'SETTLED' THEN public.banking_pay_operation_settlement_scope.payload_json ELSE EXCLUDED.payload_json END,
+        status = CASE WHEN public.banking_pay_operation_settlement_scope.status = 'SETTLED' THEN public.banking_pay_operation_settlement_scope.status ELSE EXCLUDED.status END,
+        updated_at_utc = v_now
+    RETURNING public.banking_pay_operation_settlement_scope.id,
+              (xmax = 0) AS was_inserted
+  )
+  SELECT COUNT(*) FILTER (WHERE upserted_scope.was_inserted)::integer,
+         COUNT(*) FILTER (WHERE upserted_scope.was_inserted IS NOT TRUE)::integer,
+         COUNT(*)::integer,
+         COALESCE((SELECT COUNT(*)::integer FROM stale_scope), 0)
+  INTO v_created_count,
+       v_reused_count,
+       v_settlement_unit_count,
+       v_stale_scope_skipped_count
+  FROM upserted_scope;
+
+  UPDATE public.banking_pay_operations AS operation_update
+  SET pay_batch_id = p_pay_batch_id,
+      updated_at_utc = v_now
+  WHERE operation_update.id = p_operation_id
+    AND operation_update.pay_batch_id IS NULL;
+
+  RETURN jsonb_build_object(
+    'ok', true,
+    'operation_id', p_operation_id::text,
+    'pay_batch_id', p_pay_batch_id::text,
+    'scope', v_scope,
+    'scope_rows_created', COALESCE(v_created_count, 0),
+    'scope_rows_reused', COALESCE(v_reused_count, 0),
+    'settlement_unit_count', COALESCE(v_settlement_unit_count, 0),
+    'stale_scope_skipped_count', COALESCE(v_stale_scope_skipped_count, 0),
+    'transfer_scope_operation_id', CASE WHEN v_transfer_scope_operation_id IS NULL THEN NULL ELSE v_transfer_scope_operation_id::text END,
+    'item_transfer_linked_count', COALESCE(v_item_transfer_linked_count, 0),
+    'item_transfer_reused_count', COALESCE(v_item_transfer_reused_count, 0),
+    'item_transfer_conflict_count', COALESCE(v_item_transfer_conflict_count, 0)
+  );
+END;
+$function$;
