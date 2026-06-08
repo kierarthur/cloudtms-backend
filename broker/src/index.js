@@ -24117,7 +24117,6 @@ async function handleBankingIdLedgerList(env, req, user) {
 }
 
 
-
 async function advanceBankingPayExecuteOperation(env, operationRow, user, options = {}) {
   const trimStr = (value) => String(value == null ? '' : value).trim();
   const upper = (value) => trimStr(value).toUpperCase();
@@ -24491,6 +24490,171 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
     return null;
   };
 
+
+  const roundMoney = (value, fallback = 0) => {
+    const n = Number(value);
+    const chosen = Number.isFinite(n) ? n : Number(fallback);
+    const safe = Number.isFinite(chosen) ? chosen : 0;
+    return Math.round(safe * 100) / 100;
+  };
+
+  const firstNonBlank = (...values) => {
+    for (const value of values) {
+      const text = trimStr(value);
+      if (text) return text;
+    }
+    return null;
+  };
+
+  const readRollupProofRows = () => {
+    const proofs = isPlainObject(progressJson.transfer_scope_rollup_proofs) ? progressJson.transfer_scope_rollup_proofs : {};
+    return Object.values(proofs).filter((value) => isPlainObject(value));
+  };
+
+  const sumProofRows = (rows, ...keys) => {
+    let total = 0;
+    for (const row of Array.isArray(rows) ? rows : []) {
+      for (const key of keys) {
+        if (!Object.prototype.hasOwnProperty.call(row, key)) continue;
+        const n = Number(row[key]);
+        if (Number.isFinite(n)) {
+          total += n;
+          break;
+        }
+      }
+    }
+    return Math.round(total * 100) / 100;
+  };
+
+  const buildPreparedTransferProof = (preparedResult) => {
+    const prepared = isPlainObject(preparedResult) ? preparedResult : {};
+    const rollupProofRows = readRollupProofRows();
+    const rollup = isPlainObject(progressJson.transfer_scope_rollup) ? progressJson.transfer_scope_rollup : {};
+    const lastRollup = isPlainObject(progressJson.last_transfer_scope_rollup) ? progressJson.last_transfer_scope_rollup : {};
+    const rollupProofCount = rollupProofRows.length || (uuidRe.test(trimStr(rollup.transfer_scope_id || lastRollup.transfer_scope_id)) ? 1 : 0);
+    const scopedOperationScopeCount = numberValue(
+      prepared.scoped_operation_scope_count
+      ?? prepared.transfer_scope_count
+      ?? prepared.requested_scope_count
+      ?? prepared.scope_count
+      ?? prepared.prepared_scope_count
+      ?? prepared.prepared_count,
+      rollupProofCount
+    );
+    const preparedScopeCount = numberValue(
+      prepared.scoped_scope_prepared_count
+      ?? prepared.prepared_transfer_scope_count
+      ?? prepared.prepared_scope_count
+      ?? prepared.prepared_count
+      ?? prepared.authorisation_ready_count
+      ?? prepared.authorisation_ready_transfer_count,
+      scopedOperationScopeCount
+    );
+    const authorisationReadyTransferCount = numberValue(
+      prepared.authorisation_ready_transfer_count
+      ?? prepared.authorisation_ready_count
+      ?? prepared.provider_ready_count
+      ?? prepared.ready_count,
+      preparedScopeCount
+    );
+    const pendingCount = numberValue(
+      prepared.scoped_scope_pending_count
+      ?? prepared.pending_count
+      ?? prepared.remaining_count,
+      Math.max(0, scopedOperationScopeCount - preparedScopeCount)
+    );
+    const failedCount = numberValue(prepared.scoped_scope_failed_count ?? prepared.failed_count, 0);
+    const skippedCount = numberValue(prepared.scoped_scope_skipped_count ?? prepared.skipped_count, 0);
+    const withoutTransferCount = numberValue(prepared.scoped_scope_without_transfer_count ?? prepared.without_transfer_count ?? prepared.scope_without_transfer_count, 0);
+    const unsafeTransferCount = numberValue(prepared.unsafe_transfer_count ?? prepared.review_required_count ?? prepared.unsafe_scope_count, 0);
+    const providerNotReadyCount = numberValue(
+      prepared.scope_provider_not_ready_count
+      ?? prepared.provider_not_ready_count,
+      Math.max(0, scopedOperationScopeCount - authorisationReadyTransferCount)
+    );
+    const preparedHashMissingCount = numberValue(prepared.scope_prepared_hash_missing_count ?? prepared.prepared_hash_missing_count, 0);
+    const preparedAmountMismatchCount = numberValue(prepared.scope_prepared_amount_mismatch_count ?? prepared.prepared_amount_mismatch_count, 0);
+    const scopeItemRollupPendingCount = numberValue(prepared.scope_item_rollup_pending_count ?? prepared.item_rollup_pending_count, 0);
+    const payoutInstructionMissingCount = numberValue(prepared.payout_instruction_missing_count ?? prepared.frozen_payout_instruction_missing_count, 0);
+    const rollupAmountTotal = roundMoney(
+      sumProofRows(rollupProofRows, 'prepared_amount_total', 'scope_amount', 'scope_amount_total', 'amount')
+      || rollup.prepared_amount_total
+      || rollup.scope_amount
+      || lastRollup.prepared_amount_total
+      || lastRollup.scope_amount,
+      0
+    );
+    const scopeAmountTotal = roundMoney(prepared.scope_amount_total ?? prepared.amount_total ?? prepared.prepared_amount_total, rollupAmountTotal);
+    const transferAmountTotal = roundMoney(prepared.transfer_amount_total ?? prepared.bank_transfer_amount_total ?? prepared.prepared_amount_total, scopeAmountTotal);
+    const scopeItemAmountTotal = roundMoney(prepared.scope_item_amount_total ?? prepared.item_amount_total ?? prepared.prepared_amount_total, scopeAmountTotal);
+    const batchItemAmountTotal = roundMoney(prepared.batch_item_amount_total ?? prepared.item_total_amount ?? prepared.prepared_amount_total, scopeAmountTotal);
+    const firstRollupProof = rollupProofRows.find((row) => firstNonBlank(row.prepared_result_hash, row.prepared_scope_hash, row.prepared_transfer_proof_hash, row.transfer_scope_hash)) || {};
+    const proofHash = firstNonBlank(
+      prepared.prepared_transfer_proof_hash,
+      prepared.prepared_transfer_scope_hash,
+      prepared.transfer_prepare_proof_hash,
+      prepared.transfer_scope_hash,
+      prepared.prepared_result_hash,
+      prepared.result_hash,
+      rollup.prepared_transfer_proof_hash,
+      rollup.prepared_result_hash,
+      rollup.transfer_scope_hash,
+      lastRollup.prepared_transfer_proof_hash,
+      lastRollup.prepared_result_hash,
+      lastRollup.transfer_scope_hash,
+      firstRollupProof.prepared_transfer_proof_hash,
+      firstRollupProof.prepared_scope_hash,
+      firstRollupProof.prepared_result_hash,
+      firstRollupProof.transfer_scope_hash
+    );
+    const effectivePreparedHashMissingCount = proofHash ? 0 : Math.max(1, preparedHashMissingCount, scopedOperationScopeCount);
+
+    return {
+      proof_version: 1,
+      proof_source: 'pay_execute_bank_transfer_chunk_prepare',
+      checked_at_utc: new Date().toISOString(),
+      operation_id: operationId,
+      pay_batch_id: payBatchId,
+      pay_channel_scope: payChannelScope,
+      scoped_operation_scope_count: scopedOperationScopeCount,
+      transfer_scope_count: scopedOperationScopeCount,
+      scoped_scope_prepared_count: preparedScopeCount,
+      prepared_transfer_scope_count: preparedScopeCount,
+      prepared_count: preparedScopeCount,
+      pending_count: pendingCount,
+      scoped_scope_pending_count: pendingCount,
+      failed_count: failedCount,
+      scoped_scope_failed_count: failedCount,
+      skipped_count: skippedCount,
+      scoped_scope_skipped_count: skippedCount,
+      without_transfer_count: withoutTransferCount,
+      scoped_scope_without_transfer_count: withoutTransferCount,
+      authorisation_ready_transfer_count: authorisationReadyTransferCount,
+      provider_ready_count: authorisationReadyTransferCount,
+      unsafe_transfer_count: unsafeTransferCount,
+      review_required_count: unsafeTransferCount,
+      scope_provider_not_ready_count: providerNotReadyCount,
+      provider_not_ready_count: providerNotReadyCount,
+      scope_prepared_hash_missing_count: effectivePreparedHashMissingCount,
+      prepared_hash_missing_count: effectivePreparedHashMissingCount,
+      scope_prepared_amount_mismatch_count: preparedAmountMismatchCount,
+      prepared_amount_mismatch_count: preparedAmountMismatchCount,
+      scope_item_rollup_pending_count: scopeItemRollupPendingCount,
+      item_rollup_pending_count: scopeItemRollupPendingCount,
+      payout_instruction_missing_count: payoutInstructionMissingCount,
+      scope_amount_total: scopeAmountTotal,
+      transfer_amount_total: transferAmountTotal,
+      scope_item_amount_total: scopeItemAmountTotal,
+      batch_item_amount_total: batchItemAmountTotal,
+      prepared_transfer_proof_hash: proofHash,
+      prepared_transfer_scope_hash: proofHash,
+      transfer_prepare_proof_hash: proofHash,
+      transfer_scope_hash: proofHash,
+      prepared_result_hash: proofHash,
+      transfer_chunk_prepare: prepared
+    };
+  };
+
   try {
     if (bankCsvExportPrepareOnly && ['PREPARE_BATCH_PROOF', 'PREPARE_BATCH', 'START_AUTHORISATION_PROOF', 'START_AUTHORISATION', 'SCHEDULE_PAYMENT', 'SUBMIT_PROVIDER_TRANSFERS', 'SEND_PROVIDER_CHUNK', 'REQUEST_PROVIDER_SEND'].includes(currentPhase)) {
       return complete({
@@ -24764,15 +24928,29 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
       if (prepared.has_more === true || numberValue(prepared.remaining_count, 0) > 0) {
         return moreWork('PREPARE_TRANSFER_CHUNKS', { status_text: 'Prepared one transfer chunk page.', transfer_chunk_prepare: prepared });
       }
+      const preparedTransferProof = buildPreparedTransferProof(prepared);
       if (bankCsvExportPrepareOnly) {
         return complete({
           status_text: 'Bank CSV transfer rows prepared. CSV export can now read pending local transfer rows.',
           transfer_chunk_prepare: prepared,
+          prepared_transfer_proof: preparedTransferProof,
+          transfer_prepare_proof: preparedTransferProof,
+          transfer_scope_proof: preparedTransferProof,
           bank_csv_export_prepare_only: true,
           provider_submission_suppressed: true
         });
       }
-      return moreWork('PREPARE_BATCH_PROOF', { status_text: 'Transfer chunks prepared.', transfer_chunk_prepare: prepared });
+      return moreWork('PREPARE_BATCH_PROOF', {
+        status_text: 'Transfer chunks prepared.',
+        transfer_chunk_prepare: prepared,
+        prepared_transfer_proof: preparedTransferProof,
+        transfer_prepare_proof: preparedTransferProof,
+        transfer_scope_proof: preparedTransferProof,
+        prepared_transfer_proof_hash: preparedTransferProof.prepared_transfer_proof_hash || null,
+        scoped_operation_scope_count: preparedTransferProof.scoped_operation_scope_count,
+        scoped_scope_prepared_count: preparedTransferProof.scoped_scope_prepared_count,
+        authorisation_ready_transfer_count: preparedTransferProof.authorisation_ready_transfer_count
+      });
     }
 
     if (['PREPARE_BATCH_PROOF', 'PREPARE_BATCH'].includes(currentPhase)) {
@@ -24782,7 +24960,18 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
         p_operation_id: operationId,
         p_freshness_result_hash: progressJson.freshness_result_hash || inputJson.freshness_result_hash || null
       }, 'pay_batch_prepare');
+      const prepareBlockerCount = numberValue(prepared.blocker_count ?? prepared.blockerCount, 0);
+      const prepareReady = prepared.ready === true || prepared.ready_flag === true || prepared.readyFlag === true;
+      const prepareNextRequiredPhase = upper(prepared.next_required_phase || prepared.nextRequiredPhase || '');
       if (prepared.ok === false || prepared.hard_blocker === true) return reviewRequired(currentPhase, prepared.code || 'PAY_BATCH_PREPARE_FAILED', prepared.message || 'Payment batch prepare failed.', { pay_batch_prepare: prepared });
+      if (prepareReady !== true || prepareBlockerCount > 0 || prepareNextRequiredPhase === 'RESOLVE_BLOCKERS') {
+        return reviewRequired(
+          currentPhase,
+          prepared.code || 'PAY_BATCH_PREPARE_NOT_READY',
+          prepared.message || 'Payment batch prepare did not produce an authorisation-ready operation proof.',
+          { pay_batch_prepare: prepared }
+        );
+      }
       return moreWork('START_AUTHORISATION_PROOF', { status_text: 'Batch proof-mode prepare completed.', pay_batch_prepare: prepared });
     }
 
@@ -25037,6 +25226,10 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
     });
   }
 }
+
+
+
+
 
 async function withBankingPayOperationLease(env, operationRow, options = {}, advanceOnce = null) {
   if (typeof options === 'function') {
