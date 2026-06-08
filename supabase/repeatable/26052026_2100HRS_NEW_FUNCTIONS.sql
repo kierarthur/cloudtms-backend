@@ -69512,8 +69512,6 @@ DROP FUNCTION IF EXISTS public.pay_bank_transfers_claim_provider_submit_chunk(uu
 
 DROP FUNCTION IF EXISTS public.pay_operation_remittance_scope_seed(uuid, uuid, text, uuid);
 
-
-
 CREATE OR REPLACE FUNCTION public.pay_bank_transfers_claim_provider_submit_chunk(
   p_operation_id uuid,
   p_pay_batch_id uuid,
@@ -69717,6 +69715,8 @@ BEGIN
            'transfer_scope_id', claimed_scope.transfer_scope_id::text,
            'pay_bank_transfer_id', transfer_row.id::text,
            'pay_batch_id', transfer_row.pay_batch_id::text,
+           'payee_entity_kind', transfer_row.payee_entity_kind,
+           'payee_entity_id', CASE WHEN transfer_row.payee_entity_id IS NULL THEN NULL ELSE transfer_row.payee_entity_id::text END,
            'candidate_id', CASE WHEN transfer_row.candidate_id IS NULL THEN NULL ELSE transfer_row.candidate_id::text END,
            'umbrella_id', CASE WHEN transfer_row.umbrella_id IS NULL THEN NULL ELSE transfer_row.umbrella_id::text END,
            'pay_channel', transfer_row.pay_channel,
@@ -69841,6 +69841,7 @@ BEGIN
   );
 END;
 $function$;
+
 
 
 CREATE OR REPLACE FUNCTION public.pay_operation_remittance_scope_seed(
