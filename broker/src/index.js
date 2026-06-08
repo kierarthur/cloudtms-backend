@@ -23319,8 +23319,6 @@ async function tsfinBestEffortMakeReadyForDraft(env, timesheetIds, opts = {}) {
 }
 
 
-
-
 async function handleBankingPayBatchGet(env, req, user, payBatchId) {
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   const trimText = (value) => String(value == null ? '' : value).trim();
@@ -23374,30 +23372,27 @@ async function handleBankingPayBatchGet(env, req, user, payBatchId) {
     }
     return false;
   };
-  const terminalOperationStates = new Set(['COMPLETE', 'COMPLETED', 'SUCCESS', 'SUCCEEDED', 'DONE', 'FAILED', 'ERROR', 'ERRORED', 'REVIEW_REQUIRED', 'CANCELLED', 'CANCELED']);
-  const paymentOperationTypes = new Set([
-    'PAYMENT_EXECUTE',
-    'PAYMENT_EXECUTION',
-    'PAYMENT_RETRY_BLOCKED_FUNDS',
-    'PAYMENT_RETRY_UNSENT_PAYMENTS',
-    'PAYMENT_RETRY_UNSENT',
-    'PAYMENT_SETTLEMENT',
-    'PAYMENT_PROVIDER_SUBMIT',
-    'PAYMENT_SUBMISSION'
+  const paymentExecutionOperationTypes = new Set(['PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS']);
+  const activePaymentOperationStates = new Set([
+    'QUEUED', 'RUNNING', 'WAITING', 'RUNNABLE', 'CONTINUING', 'WAITING_RETRY',
+    'WAITING_AUTHORISATION', 'WAITING_AUTHORIZATION', 'AWAITING_AUTHORISATION', 'AWAITING_AUTHORIZATION',
+    'WAITING_PROVIDER', 'WAITING_FOR_PROVIDER', 'AWAITING_PROVIDER',
+    'WAITING_USER', 'WAITING_USER_REVIEW', 'REVIEW_REQUIRED'
   ]);
+  const terminalOperationStates = new Set(['COMPLETE', 'COMPLETED', 'SUCCESS', 'SUCCEEDED', 'DONE', 'FAILED', 'ERROR', 'ERRORED', 'CANCELLED', 'CANCELED', 'ABORTED']);
   const normaliseActivePaymentOperation = (operation, forcedType = '') => {
     const op = safeObject(operation);
     if (!Object.keys(op).length) return null;
     const type = upperText(
-      forcedType ||
       op.operation_type ||
       op.operationType ||
       op.kind ||
       op.operation_kind ||
       op.operationKind ||
+      forcedType ||
       ''
     );
-    if (!type || !paymentOperationTypes.has(type) || type === 'DRAFT_CREATE') return null;
+    if (!type || !paymentExecutionOperationTypes.has(type)) return null;
     const stateSignals = [
       op.status,
       op.operation_status,
@@ -23410,16 +23405,35 @@ async function handleBankingPayBatchGet(env, req, user, payBatchId) {
       op.lifecycleState
     ].map(upperText).filter(Boolean);
     if (stateSignals.some((signal) => terminalOperationStates.has(signal))) return null;
+    const hasActiveState = stateSignals.some((signal) => activePaymentOperationStates.has(signal));
     const opId = trimText(op.operation_id || op.operationId || op.id || '');
-    if (!opId && stateSignals.length === 0) return null;
-    return { ...op, operation_type: type };
+    if (!opId || !hasActiveState) return null;
+    return { ...op, operation_type: type, operationType: type };
+  };
+  const normaliseActivePaymentOperationFromScalars = (obj) => {
+    const specificPaymentOperationId = trimText(obj.active_payment_operation_id || obj.activePaymentOperationId || obj.payment_execute_operation_id || obj.paymentExecuteOperationId || '');
+    const genericOperationId = trimText(obj.active_operation_id || obj.activeOperationId || '');
+    const specificPaymentOperationType = obj.active_payment_operation_type || obj.activePaymentOperationType || obj.payment_execute_operation_type || obj.paymentExecuteOperationType || '';
+    const genericOperationType = obj.active_operation_type || obj.activeOperationType || '';
+    return normaliseActivePaymentOperation({
+      operation_id: specificPaymentOperationId || genericOperationId || '',
+      operation_type: specificPaymentOperationType || genericOperationType || (specificPaymentOperationId ? 'PAYMENT_EXECUTE' : ''),
+      status: obj.active_payment_operation_status || obj.activePaymentOperationStatus || obj.payment_execute_operation_status || obj.paymentExecuteOperationStatus || obj.active_operation_status || obj.activeOperationStatus || '',
+      phase: obj.active_payment_operation_phase || obj.activePaymentOperationPhase || obj.payment_execute_operation_phase || obj.paymentExecuteOperationPhase || obj.active_operation_phase || obj.activeOperationPhase || '',
+      runner_state: obj.active_payment_operation_runner_state || obj.activePaymentOperationRunnerState || obj.payment_execute_operation_runner_state || obj.paymentExecuteOperationRunnerState || obj.active_operation_runner_state || obj.activeOperationRunnerState || '',
+      requires_user_action: obj.active_payment_operation_requires_user_action ?? obj.activePaymentOperationRequiresUserAction ?? null,
+      resume_reason: obj.active_payment_operation_resume_reason || obj.activePaymentOperationResumeReason || null,
+      pay_batch_id: obj.pay_batch_id || obj.payBatchId || id
+    });
   };
   const chooseValidActivePaymentOperation = (...containers) => {
     for (const source of containers) {
       const obj = safeObject(source);
       if (!Object.keys(obj).length) continue;
-      const specific = normaliseActivePaymentOperation(obj.payment_execute_operation || obj.paymentExecuteOperation, 'PAYMENT_EXECUTE') ||
-        normaliseActivePaymentOperation(obj.active_payment_execute_operation || obj.activePaymentExecuteOperation, 'PAYMENT_EXECUTE');
+      const specific = normaliseActivePaymentOperation(obj.active_payment_operation || obj.activePaymentOperation) ||
+        normaliseActivePaymentOperation(obj.payment_execute_operation || obj.paymentExecuteOperation) ||
+        normaliseActivePaymentOperation(obj.active_payment_execute_operation || obj.activePaymentExecuteOperation) ||
+        normaliseActivePaymentOperationFromScalars(obj);
       if (specific) return specific;
       const generic = normaliseActivePaymentOperation(obj.active_operation || obj.activeOperation);
       if (generic) return generic;
@@ -23430,12 +23444,117 @@ async function handleBankingPayBatchGet(env, req, user, payBatchId) {
     if (!target || typeof target !== 'object') return;
     for (const key of [
       'active_operation', 'activeOperation', 'active_operation_id', 'activeOperationId',
-      'active_operation_type', 'activeOperationType',
-      'payment_execute_operation', 'paymentExecuteOperation',
+      'active_operation_type', 'activeOperationType', 'active_operation_status', 'activeOperationStatus', 'active_operation_phase', 'activeOperationPhase',
+      'active_payment_operation', 'activePaymentOperation', 'active_payment_operation_id', 'activePaymentOperationId',
+      'active_payment_operation_type', 'activePaymentOperationType', 'active_payment_operation_status', 'activePaymentOperationStatus',
+      'active_payment_operation_phase', 'activePaymentOperationPhase', 'active_payment_operation_runner_state', 'activePaymentOperationRunnerState',
+      'payment_execute_operation', 'paymentExecuteOperation', 'payment_execute_operation_id', 'paymentExecuteOperationId',
+      'payment_execute_operation_type', 'paymentExecuteOperationType', 'payment_execute_operation_status', 'paymentExecuteOperationStatus',
+      'payment_execute_operation_phase', 'paymentExecuteOperationPhase', 'payment_execute_operation_runner_state', 'paymentExecuteOperationRunnerState',
       'active_payment_execute_operation', 'activePaymentExecuteOperation'
     ]) {
       try { delete target[key]; } catch {}
     }
+  };
+  const attachActivePaymentOperation = (target, operation) => {
+    if (!target || typeof target !== 'object') return;
+    const op = normaliseActivePaymentOperation(operation);
+    if (!op) return;
+    const operationId = trimText(op.operation_id || op.operationId || op.id || '');
+    const operationType = upperText(op.operation_type || op.operationType || 'PAYMENT_EXECUTE') || 'PAYMENT_EXECUTE';
+    const statusText = upperText(op.status || op.operation_status || op.operationStatus || '');
+    const phaseText = upperText(op.phase || '');
+    const runnerState = upperText(op.runner_state || op.runnerState || '');
+    const normalised = { ...op, operation_id: operationId || op.operation_id || op.id, operationId: operationId || op.operationId || op.id, operation_type: operationType, operationType: operationType, pay_batch_id: op.pay_batch_id || op.payBatchId || id, payBatchId: op.payBatchId || op.pay_batch_id || id };
+    target.active_operation = normalised;
+    target.activeOperation = normalised;
+    target.active_payment_operation = normalised;
+    target.activePaymentOperation = normalised;
+    target.payment_execute_operation = normalised;
+    target.paymentExecuteOperation = normalised;
+    target.active_payment_execute_operation = normalised;
+    target.activePaymentExecuteOperation = normalised;
+    target.active_operation_id = operationId || null;
+    target.activeOperationId = operationId || null;
+    target.active_operation_type = operationType;
+    target.activeOperationType = operationType;
+    target.active_operation_status = statusText || null;
+    target.activeOperationStatus = statusText || null;
+    target.active_operation_phase = phaseText || null;
+    target.activeOperationPhase = phaseText || null;
+    target.active_payment_operation_id = operationId || null;
+    target.activePaymentOperationId = operationId || null;
+    target.active_payment_operation_type = operationType;
+    target.activePaymentOperationType = operationType;
+    target.active_payment_operation_status = statusText || null;
+    target.activePaymentOperationStatus = statusText || null;
+    target.active_payment_operation_phase = phaseText || null;
+    target.activePaymentOperationPhase = phaseText || null;
+    target.active_payment_operation_runner_state = runnerState || null;
+    target.activePaymentOperationRunnerState = runnerState || null;
+    target.payment_execute_operation_id = operationId || null;
+    target.paymentExecuteOperationId = operationId || null;
+    target.payment_execute_operation_type = operationType;
+    target.paymentExecuteOperationType = operationType;
+    target.payment_execute_operation_status = statusText || null;
+    target.paymentExecuteOperationStatus = statusText || null;
+    target.payment_execute_operation_phase = phaseText || null;
+    target.paymentExecuteOperationPhase = phaseText || null;
+    target.payment_execute_operation_runner_state = runnerState || null;
+    target.paymentExecuteOperationRunnerState = runnerState || null;
+  };
+  const lookupActivePaymentExecutionOperation = async () => {
+    const candidates = [];
+    for (const operationType of paymentExecutionOperationTypes) {
+      try {
+        const found = unwrapRpc(await sbRpc(env, 'banking_pay_operation_find_active', {
+          p_operation_type: operationType,
+          p_workbench_session_id: null,
+          p_pay_batch_id: id,
+          p_actor_user_id: null
+        }, {
+          routeClass: 'BATCH_BOOTSTRAP',
+          purpose: 'ACTIVE_PAYMENT_EXECUTION_LOOKUP',
+          timeoutMs: 5000,
+          bankingPay: true
+        }), 'banking_pay_operation_find_active');
+        const rows = Array.isArray(found) ? found : (found ? [found] : []);
+        for (const row of rows) {
+          let payload = row;
+          try {
+            if (typeof buildBankingPayOperationPublicPayload === 'function') {
+              payload = buildBankingPayOperationPublicPayload(row, { mode: 'PROGRESS_LIGHT' });
+            }
+          } catch {}
+          const normalised = normaliseActivePaymentOperation({ ...(safeObject(row)), ...(safeObject(payload)), operation_type: row.operation_type || payload.operation_type || operationType });
+          if (normalised) candidates.push(normalised);
+        }
+      } catch {}
+    }
+    if (!candidates.length) return null;
+    candidates.sort((a, b) => {
+      const priority = (op) => {
+        const status = upperText(op.status || op.operation_status || op.operationStatus || op.runner_state || op.runnerState || '');
+        if (status === 'RUNNING') return 0;
+        if (status === 'RUNNABLE') return 1;
+        if (status === 'QUEUED') return 2;
+        if (status === 'CONTINUING') return 3;
+        if (status === 'WAITING_RETRY') return 4;
+        if (status.includes('AUTHORIS')) return 5;
+        if (status.includes('AUTHORIZ')) return 5;
+        if (status.includes('PROVIDER')) return 6;
+        if (status.includes('USER')) return 7;
+        if (status === 'REVIEW_REQUIRED') return 8;
+        return 9;
+      };
+      const pa = priority(a);
+      const pb = priority(b);
+      if (pa !== pb) return pa - pb;
+      const ta = Date.parse(a.updated_at_utc || a.updatedAtUtc || a.updated_at || a.updatedAt || 0) || 0;
+      const tb = Date.parse(b.updated_at_utc || b.updatedAtUtc || b.updated_at || b.updatedAt || 0) || 0;
+      return tb - ta;
+    });
+    return candidates[0];
   };
   const decoratePayloadForChildModal = (payload) => {
     const out = safeObject(payload);
@@ -23444,24 +23563,8 @@ async function handleBankingPayBatchGet(env, req, user, payBatchId) {
     scrubActiveOperationFields(out);
     scrubActiveOperationFields(batch);
     if (validActiveOperation) {
-      out.active_operation = validActiveOperation;
-      out.activeOperation = validActiveOperation;
-      if (upperText(validActiveOperation.operation_type || validActiveOperation.operationType) === 'PAYMENT_EXECUTE') {
-        out.payment_execute_operation = validActiveOperation;
-        out.paymentExecuteOperation = validActiveOperation;
-        out.active_payment_execute_operation = validActiveOperation;
-        out.activePaymentExecuteOperation = validActiveOperation;
-      }
-      if (Object.keys(batch).length) {
-        batch.active_operation = validActiveOperation;
-        batch.activeOperation = validActiveOperation;
-        if (upperText(validActiveOperation.operation_type || validActiveOperation.operationType) === 'PAYMENT_EXECUTE') {
-          batch.payment_execute_operation = validActiveOperation;
-          batch.paymentExecuteOperation = validActiveOperation;
-          batch.active_payment_execute_operation = validActiveOperation;
-          batch.activePaymentExecuteOperation = validActiveOperation;
-        }
-      }
+      attachActivePaymentOperation(out, validActiveOperation);
+      if (Object.keys(batch).length) attachActivePaymentOperation(batch, validActiveOperation);
     }
 
     const status = upperText(out.status || batch.status || out.batch_status_raw || batch.batch_status_raw || '');
@@ -23637,12 +23740,18 @@ async function handleBankingPayBatchGet(env, req, user, payBatchId) {
         p_detail_mode: detailMode,
         p_recommended_page_size: recommendedPageSize
       };
-      const payload = decoratePayloadForChildModal(unwrapRpc(await sbRpc(env, 'pay_batch_get', args, {
+      const rawPayload = safeObject(unwrapRpc(await sbRpc(env, 'pay_batch_get', args, {
         routeClass: detailMode === 'FULL' ? 'EXPLICIT_DIAGNOSTIC' : 'BATCH_BOOTSTRAP',
         purpose: detailMode === 'FULL' ? 'DIAGNOSTIC' : 'CHILD_MODAL_OPEN',
         timeoutMs: detailMode === 'FULL' ? 60000 : 8000,
         bankingPay: true
       }), 'pay_batch_get'));
+      const activePaymentOperation = await lookupActivePaymentExecutionOperation();
+      if (activePaymentOperation) {
+        attachActivePaymentOperation(rawPayload, activePaymentOperation);
+        if (rawPayload.batch && typeof rawPayload.batch === 'object' && !Array.isArray(rawPayload.batch)) attachActivePaymentOperation(rawPayload.batch, activePaymentOperation);
+      }
+      const payload = decoratePayloadForChildModal(rawPayload);
 
       return withCORS(env, req, ok({
         ...payload,
@@ -23686,6 +23795,8 @@ async function handleBankingPayBatchGet(env, req, user, payBatchId) {
   }
   return execute();
 }
+
+
 
 
 
@@ -26765,10 +26876,6 @@ async function handleBankingPayConfirmNoMoneyAndUnwind(env, req, user, payBatchI
 }
 
 
-
-
-
-
 async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
   const trimStr = (value) => String(value == null ? '' : value).trim();
   const upperTrim = (value) => trimStr(value).toUpperCase();
@@ -26906,10 +27013,25 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
       }
     }, { publicPayloadOptions: { mode: 'PROGRESS_LIGHT' } });
 
+    const operationReused = operationPayload.operation_reused === true ||
+      operationPayload.active_operation_reused === true ||
+      operationPayload.existing_active_operation === true ||
+      operationPayload.active_execution_already_exists === true ||
+      operationPayload.duplicate_start_prevented === true ||
+      operationPayload.is_existing === true ||
+      operationPayload.operation_created === false;
+    const operationCreated = !operationReused && operationPayload.operation_created !== false;
+
     return response(200, Object.assign({}, operationPayload, {
       ok: true,
-      operation_created: operationPayload.operation_created !== false,
-      execute_payment_operation_started: true,
+      operation_created: operationCreated,
+      operation_reused: operationReused,
+      active_operation_reused: operationReused,
+      existing_active_operation: operationReused,
+      active_execution_already_exists: operationReused,
+      duplicate_start_prevented: operationReused,
+      execute_payment_operation_started: operationCreated,
+      execute_payment_operation_available: true,
       backend_owned_execution: true,
       provider_submission_attempted: false,
       submitted_to_bank: false,
@@ -26939,6 +27061,10 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
     return response(Number(friendly && (friendly.http_status || friendly.status)) || 400, Object.assign({}, friendlyInput, isPlainObject(friendly) ? friendly : {}));
   }
 }
+
+
+
+
 
 async function verifyPaymentScheduleReauth(env, user, reauthToken) {
   const token = String(reauthToken || '').trim();
@@ -40980,8 +41106,6 @@ async function getBankingPayOperationConfig(env, operationType, options = {}) {
 
 
 
-
-
 async function startBankingPayOperation(env, input = {}, options = {}) {
   const trimStr = (value) => String(value == null ? '' : value).trim();
   const upperTrim = (value) => trimStr(value).toUpperCase();
@@ -41158,15 +41282,27 @@ async function startBankingPayOperation(env, input = {}, options = {}) {
     throw makeOperationStartError('PAYMENT_OPERATION_START_FAILED', 'CloudTMS could not start the Banking Pay operation. Refresh and try again.', { operation_type: operationType, pay_batch_id: payBatchId, internal_diagnostic: 'banking_pay_operation_start did not return operation_id' });
   }
 
+  const rowOperationType = upperTrim(row.operation_type || row.operationType || operationType) || operationType;
+  const operationReused = row.is_existing === true || row.operation_created === false;
+  const isPaymentExecutionOperation = rowOperationType === 'PAYMENT_EXECUTE' || rowOperationType === 'PAYMENT_RETRY_BLOCKED_FUNDS' || operationType === 'PAYMENT_EXECUTE' || operationType === 'PAYMENT_RETRY_BLOCKED_FUNDS';
+  const activeExecutionReused = isPaymentExecutionOperation && operationReused;
+
   return Object.assign({}, publicPayload(row), {
     ok: row.ok !== false,
     operation_id: operationId,
-    operation_type: operationType,
+    operation_type: rowOperationType,
+    operationType: rowOperationType,
     pay_batch_id: payBatchId,
     workbench_session_id: workbenchSessionId,
     durable_operation: true,
     backend_runner_owned: true,
-    operation_created: row.operation_created !== false,
+    operation_created: operationReused ? false : (row.operation_created !== false),
+    operation_reused: operationReused,
+    active_operation_reused: activeExecutionReused,
+    existing_active_operation: activeExecutionReused,
+    active_execution_already_exists: activeExecutionReused,
+    duplicate_start_prevented: activeExecutionReused,
+    is_existing: row.is_existing === true,
     runner_state: row.runner_state || 'RUNNABLE',
     run_after_utc: row.run_after_utc || nowIso,
     submitted_to_bank: false,
@@ -41174,6 +41310,7 @@ async function startBankingPayOperation(env, input = {}, options = {}) {
     progress_light: isPlainObject(row.progress_light) ? row.progress_light : (isPlainObject(row.progress_json) ? row.progress_json : {})
   });
 }
+
 
 
 async function handleBankingPayOperationGet(env, req, user, operationId) {
