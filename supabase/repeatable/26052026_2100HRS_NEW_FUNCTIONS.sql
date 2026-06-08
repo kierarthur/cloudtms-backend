@@ -18953,20 +18953,11 @@ DROP FUNCTION IF EXISTS public.pay_batches_list(integer, integer, text);
 
 DROP FUNCTION IF EXISTS public.pay_batches_list(integer, integer, text, uuid);
 
-CREATE OR REPLACE FUNCTION public.pay_batches_list(
-  p_limit integer DEFAULT 50,
-  p_offset integer DEFAULT 0,
-  p_status text DEFAULT NULL::text,
-  p_actor_user_id uuid DEFAULT NULL::uuid,
-  p_display_mode text DEFAULT 'LIGHT'::text,
-  p_include_diagnostics boolean DEFAULT false,
-  p_include_alerts boolean DEFAULT false,
-  p_include_correction_summary boolean DEFAULT false
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
+CREATE OR REPLACE FUNCTION public.pay_batches_list(p_limit integer DEFAULT 50, p_offset integer DEFAULT 0, p_status text DEFAULT NULL::text, p_actor_user_id uuid DEFAULT NULL::uuid, p_display_mode text DEFAULT 'LIGHT'::text, p_include_diagnostics boolean DEFAULT false, p_include_alerts boolean DEFAULT false, p_include_correction_summary boolean DEFAULT false)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
 AS $function$
 DECLARE
   v_limit integer := GREATEST(1, LEAST(COALESCE(p_limit, 50), 50));
@@ -19100,6 +19091,31 @@ BEGIN
       display_summary.latest_operation_id,
       display_summary.latest_operation_status,
       display_summary.latest_operation_phase,
+      active_execution_operation.id AS active_payment_operation_id,
+      active_execution_operation.operation_type AS active_payment_operation_type,
+      active_execution_operation.status AS active_payment_operation_status,
+      active_execution_operation.phase AS active_payment_operation_phase,
+      active_execution_operation.runner_state AS active_payment_operation_runner_state,
+      active_execution_operation.requires_user_action AS active_payment_operation_requires_user_action,
+      active_execution_operation.resume_reason AS active_payment_operation_resume_reason,
+      active_execution_operation.updated_at_utc AS active_payment_operation_updated_at_utc,
+      CASE
+        WHEN active_execution_operation.id IS NULL THEN NULL::jsonb
+        ELSE jsonb_strip_nulls(jsonb_build_object(
+          'operation_id', active_execution_operation.id::text,
+          'id', active_execution_operation.id::text,
+          'operation_type', active_execution_operation.operation_type,
+          'status', active_execution_operation.status,
+          'phase', active_execution_operation.phase,
+          'runner_state', active_execution_operation.runner_state,
+          'requires_user_action', active_execution_operation.requires_user_action,
+          'resume_reason', active_execution_operation.resume_reason,
+          'pay_batch_id', active_execution_operation.pay_batch_id::text,
+          'workbench_session_id', CASE WHEN active_execution_operation.workbench_session_id IS NULL THEN NULL::text ELSE active_execution_operation.workbench_session_id::text END,
+          'progress_json', active_execution_operation.progress_json,
+          'updated_at_utc', active_execution_operation.updated_at_utc
+        ))
+      END AS active_payment_operation,
       display_summary.display_label,
       display_summary.stale_summary_json,
       display_summary.freshness_validation_status AS display_freshness_validation_status,
@@ -19120,6 +19136,37 @@ BEGIN
       ON display_summary.pay_batch_id = pay_batch_row.id
     LEFT JOIN public.banking_pay_batch_change_signals AS batch_signal
       ON batch_signal.pay_batch_id = pay_batch_row.id
+    LEFT JOIN LATERAL (
+      SELECT active_operation.*
+      FROM public.banking_pay_operations AS active_operation
+      WHERE active_operation.pay_batch_id = pay_batch_row.id
+        AND upper(BTRIM(COALESCE(active_operation.operation_type, ''))) IN ('PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS')
+        AND upper(BTRIM(COALESCE(active_operation.status, ''))) IN ('QUEUED', 'RUNNING', 'WAITING', 'RUNNABLE', 'CONTINUING', 'WAITING_RETRY', 'WAITING_AUTHORISATION', 'WAITING_AUTHORIZATION', 'AWAITING_AUTHORISATION', 'AWAITING_AUTHORIZATION', 'WAITING_PROVIDER', 'WAITING_FOR_PROVIDER', 'AWAITING_PROVIDER', 'WAITING_USER', 'WAITING_USER_REVIEW', 'REVIEW_REQUIRED')
+      ORDER BY
+        CASE upper(BTRIM(COALESCE(active_operation.status, '')))
+          WHEN 'RUNNING' THEN 0
+          WHEN 'WAITING' THEN 1
+          WHEN 'RUNNABLE' THEN 2
+          WHEN 'QUEUED' THEN 3
+          WHEN 'CONTINUING' THEN 4
+          WHEN 'WAITING_RETRY' THEN 5
+          WHEN 'WAITING_AUTHORISATION' THEN 6
+          WHEN 'WAITING_AUTHORIZATION' THEN 6
+          WHEN 'AWAITING_AUTHORISATION' THEN 6
+          WHEN 'AWAITING_AUTHORIZATION' THEN 6
+          WHEN 'WAITING_PROVIDER' THEN 7
+          WHEN 'WAITING_FOR_PROVIDER' THEN 7
+          WHEN 'AWAITING_PROVIDER' THEN 7
+          WHEN 'WAITING_USER' THEN 8
+          WHEN 'WAITING_USER_REVIEW' THEN 8
+          WHEN 'REVIEW_REQUIRED' THEN 9
+          ELSE 10
+        END,
+        active_operation.updated_at_utc DESC NULLS LAST,
+        active_operation.created_at_utc DESC NULLS LAST,
+        active_operation.id DESC
+      LIMIT 1
+    ) AS active_execution_operation ON true
     WHERE v_status IS NULL
        OR UPPER(COALESCE(pay_batch_row.status, '')) = v_status
     ORDER BY pay_batch_row.created_at_utc DESC, pay_batch_row.id DESC
@@ -19166,6 +19213,22 @@ BEGIN
           'latest_operation_id', CASE WHEN page_source.latest_operation_id IS NULL THEN NULL::text ELSE page_source.latest_operation_id::text END,
           'latest_operation_status', page_source.latest_operation_status,
           'latest_operation_phase', page_source.latest_operation_phase,
+          'active_payment_operation_id', CASE WHEN page_source.active_payment_operation_id IS NULL THEN NULL::text ELSE page_source.active_payment_operation_id::text END,
+          'active_payment_operation_type', page_source.active_payment_operation_type,
+          'active_payment_operation_status', page_source.active_payment_operation_status,
+          'active_payment_operation_phase', page_source.active_payment_operation_phase,
+          'active_payment_operation_runner_state', page_source.active_payment_operation_runner_state,
+          'active_payment_operation_requires_user_action', page_source.active_payment_operation_requires_user_action,
+          'active_payment_operation_resume_reason', page_source.active_payment_operation_resume_reason,
+          'active_payment_operation_updated_at_utc', page_source.active_payment_operation_updated_at_utc,
+          'active_payment_operation', page_source.active_payment_operation,
+          'active_payment_execute_operation', page_source.active_payment_operation,
+          'payment_execute_operation', page_source.active_payment_operation,
+          'active_operation_id', CASE WHEN page_source.active_payment_operation_id IS NULL THEN NULL::text ELSE page_source.active_payment_operation_id::text END,
+          'active_operation_type', page_source.active_payment_operation_type,
+          'active_operation_status', page_source.active_payment_operation_status,
+          'active_operation_phase', page_source.active_payment_operation_phase,
+          'active_operation', page_source.active_payment_operation,
           'issue_summary_counts', CASE WHEN v_include_correction_summary THEN COALESCE(page_source.issue_summary_counts, '{}'::jsonb) ELSE '{}'::jsonb END,
           'stale_summary_json', COALESCE(page_source.stale_summary_json, '{}'::jsonb),
           'freshness_validation_status', COALESCE(page_source.display_freshness_validation_status, page_source.freshness_validation_status),
@@ -19249,6 +19312,7 @@ BEGIN
   );
 END;
 $function$;
+
 
 
 
@@ -64675,49 +64739,11 @@ $function$;
 
 DROP FUNCTION IF EXISTS public.banking_pay_operation_start(text, uuid, text, uuid, uuid, uuid, jsonb, jsonb);
 
-CREATE OR REPLACE FUNCTION public.banking_pay_operation_start(
-    p_operation_type text,
-    p_actor_user_id uuid,
-    p_idempotency_key text,
-    p_workbench_session_id uuid DEFAULT NULL::uuid,
-    p_pay_batch_id uuid DEFAULT NULL::uuid,
-    p_root_operation_id uuid DEFAULT NULL::uuid,
-    p_input_json jsonb DEFAULT '{}'::jsonb,
-    p_config_json jsonb DEFAULT '{}'::jsonb
-)
-RETURNS TABLE (
-    operation_id uuid,
-    operation_type text,
-    status text,
-    phase text,
-    actor_user_id uuid,
-    workbench_session_id uuid,
-    pay_batch_id uuid,
-    root_operation_id uuid,
-    idempotency_key text,
-    input_json jsonb,
-    config_json jsonb,
-    progress_json jsonb,
-    result_json jsonb,
-    error_json jsonb,
-    total_units integer,
-    completed_units integer,
-    failed_units integer,
-    current_chunk_index integer,
-    chunk_count integer,
-    locked_by text,
-    lock_expires_at_utc timestamptz,
-    created_at_utc timestamptz,
-    started_at_utc timestamptz,
-    updated_at_utc timestamptz,
-    completed_at_utc timestamptz,
-    failed_at_utc timestamptz,
-    is_existing boolean
-)
-LANGUAGE plpgsql
-SECURITY DEFINER
-VOLATILE
-SET search_path TO 'public', 'pg_temp'
+CREATE OR REPLACE FUNCTION public.banking_pay_operation_start(p_operation_type text, p_actor_user_id uuid, p_idempotency_key text, p_workbench_session_id uuid DEFAULT NULL::uuid, p_pay_batch_id uuid DEFAULT NULL::uuid, p_root_operation_id uuid DEFAULT NULL::uuid, p_input_json jsonb DEFAULT '{}'::jsonb, p_config_json jsonb DEFAULT '{}'::jsonb)
+ RETURNS TABLE(operation_id uuid, operation_type text, status text, phase text, actor_user_id uuid, workbench_session_id uuid, pay_batch_id uuid, root_operation_id uuid, idempotency_key text, input_json jsonb, config_json jsonb, progress_json jsonb, result_json jsonb, error_json jsonb, total_units integer, completed_units integer, failed_units integer, current_chunk_index integer, chunk_count integer, locked_by text, lock_expires_at_utc timestamp with time zone, created_at_utc timestamp with time zone, started_at_utc timestamp with time zone, updated_at_utc timestamp with time zone, completed_at_utc timestamp with time zone, failed_at_utc timestamp with time zone, is_existing boolean)
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
 AS $function$
 DECLARE
     v_now timestamptz := now();
@@ -64851,6 +64877,10 @@ BEGIN
 
     PERFORM pg_advisory_xact_lock(pg_catalog.hashtextextended('banking_pay_operation_start:' || v_operation_type || ':' || v_idempotency_key, 0));
 
+    IF v_operation_type IN ('PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS') AND p_pay_batch_id IS NOT NULL THEN
+        PERFORM pg_advisory_xact_lock(pg_catalog.hashtextextended('banking_pay_operation_start:PAYMENT_EXECUTION_BATCH:' || p_pay_batch_id::text, 0));
+    END IF;
+
     IF v_operation_type = 'DRAFT_CREATE' AND p_workbench_session_id IS NOT NULL THEN
         PERFORM pg_advisory_xact_lock(pg_catalog.hashtextextended('banking_pay_operation_start:DRAFT_CREATE_WORKBENCH_SESSION:' || p_workbench_session_id::text, 0));
     END IF;
@@ -64954,38 +64984,72 @@ BEGIN
         RETURN;
 
             END IF;
-        ELSE
-        RETURN QUERY
-        SELECT
-            v_operation.id,
-            v_operation.operation_type,
-            v_operation.status,
-            v_operation.phase,
-            v_operation.actor_user_id,
-            v_operation.workbench_session_id,
-            v_operation.pay_batch_id,
-            v_operation.root_operation_id,
-            v_operation.idempotency_key,
-            v_operation.input_json,
-            v_operation.config_json,
-            v_operation.progress_json,
-            v_operation.result_json,
-            v_operation.error_json,
-            v_operation.total_units,
-            v_operation.completed_units,
-            v_operation.failed_units,
-            v_operation.current_chunk_index,
-            v_operation.chunk_count,
-            COALESCE(v_operation.lease_owner, v_operation.locked_by),
-            COALESCE(v_operation.lease_expires_at_utc, v_operation.lock_expires_at_utc),
-            v_operation.created_at_utc,
-            v_operation.started_at_utc,
-            v_operation.updated_at_utc,
-            v_operation.completed_at_utc,
-            v_operation.failed_at_utc,
-            true;
-        RETURN;
+        ELSIF v_operation_type IN ('PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS') THEN
+            v_existing_status := upper(BTRIM(COALESCE(v_operation.status, '')));
 
+            IF v_existing_status IN ('QUEUED', 'RUNNING', 'WAITING', 'RUNNABLE', 'CONTINUING', 'WAITING_RETRY', 'WAITING_AUTHORISATION', 'WAITING_AUTHORIZATION', 'AWAITING_AUTHORISATION', 'AWAITING_AUTHORIZATION', 'WAITING_PROVIDER', 'WAITING_FOR_PROVIDER', 'AWAITING_PROVIDER', 'WAITING_USER', 'WAITING_USER_REVIEW', 'REVIEW_REQUIRED') THEN
+                RETURN QUERY
+                SELECT
+                    v_operation.id,
+                    v_operation.operation_type,
+                    v_operation.status,
+                    v_operation.phase,
+                    v_operation.actor_user_id,
+                    v_operation.workbench_session_id,
+                    v_operation.pay_batch_id,
+                    v_operation.root_operation_id,
+                    v_operation.idempotency_key,
+                    v_operation.input_json,
+                    v_operation.config_json,
+                    v_operation.progress_json,
+                    v_operation.result_json,
+                    v_operation.error_json,
+                    v_operation.total_units,
+                    v_operation.completed_units,
+                    v_operation.failed_units,
+                    v_operation.current_chunk_index,
+                    v_operation.chunk_count,
+                    COALESCE(v_operation.lease_owner, v_operation.locked_by),
+                    COALESCE(v_operation.lease_expires_at_utc, v_operation.lock_expires_at_utc),
+                    v_operation.created_at_utc,
+                    v_operation.started_at_utc,
+                    v_operation.updated_at_utc,
+                    v_operation.completed_at_utc,
+                    v_operation.failed_at_utc,
+                    true;
+                RETURN;
+            END IF;
+        ELSE
+            RETURN QUERY
+            SELECT
+                v_operation.id,
+                v_operation.operation_type,
+                v_operation.status,
+                v_operation.phase,
+                v_operation.actor_user_id,
+                v_operation.workbench_session_id,
+                v_operation.pay_batch_id,
+                v_operation.root_operation_id,
+                v_operation.idempotency_key,
+                v_operation.input_json,
+                v_operation.config_json,
+                v_operation.progress_json,
+                v_operation.result_json,
+                v_operation.error_json,
+                v_operation.total_units,
+                v_operation.completed_units,
+                v_operation.failed_units,
+                v_operation.current_chunk_index,
+                v_operation.chunk_count,
+                COALESCE(v_operation.lease_owner, v_operation.locked_by),
+                COALESCE(v_operation.lease_expires_at_utc, v_operation.lock_expires_at_utc),
+                v_operation.created_at_utc,
+                v_operation.started_at_utc,
+                v_operation.updated_at_utc,
+                v_operation.completed_at_utc,
+                v_operation.failed_at_utc,
+                true;
+            RETURN;
         END IF;
     END IF;
 
@@ -64994,13 +65058,35 @@ BEGIN
         INTO v_existing_by_batch
         FROM public.banking_pay_operations AS active_operation
         WHERE active_operation.pay_batch_id = p_pay_batch_id
-          AND upper(BTRIM(COALESCE(active_operation.operation_type, ''))) = v_operation_type
-          AND upper(BTRIM(COALESCE(active_operation.status, ''))) IN ('RUNNING', 'CONTINUING', 'WAITING_RETRY', 'WAITING_AUTHORISATION', 'WAITING_PROVIDER', 'REVIEW_REQUIRED')
-        ORDER BY active_operation.updated_at_utc DESC NULLS LAST, active_operation.created_at_utc DESC NULLS LAST, active_operation.id DESC
+          AND upper(BTRIM(COALESCE(active_operation.operation_type, ''))) IN ('PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS')
+          AND upper(BTRIM(COALESCE(active_operation.status, ''))) IN ('QUEUED', 'RUNNING', 'WAITING', 'RUNNABLE', 'CONTINUING', 'WAITING_RETRY', 'WAITING_AUTHORISATION', 'WAITING_AUTHORIZATION', 'AWAITING_AUTHORISATION', 'AWAITING_AUTHORIZATION', 'WAITING_PROVIDER', 'WAITING_FOR_PROVIDER', 'AWAITING_PROVIDER', 'WAITING_USER', 'WAITING_USER_REVIEW', 'REVIEW_REQUIRED')
+        ORDER BY
+          CASE upper(BTRIM(COALESCE(active_operation.status, '')))
+            WHEN 'RUNNING' THEN 0
+            WHEN 'WAITING' THEN 1
+            WHEN 'RUNNABLE' THEN 2
+            WHEN 'QUEUED' THEN 3
+            WHEN 'CONTINUING' THEN 4
+            WHEN 'WAITING_RETRY' THEN 5
+            WHEN 'WAITING_AUTHORISATION' THEN 6
+            WHEN 'WAITING_AUTHORIZATION' THEN 6
+            WHEN 'AWAITING_AUTHORISATION' THEN 6
+            WHEN 'AWAITING_AUTHORIZATION' THEN 6
+            WHEN 'WAITING_PROVIDER' THEN 7
+            WHEN 'WAITING_FOR_PROVIDER' THEN 7
+            WHEN 'AWAITING_PROVIDER' THEN 7
+            WHEN 'WAITING_USER' THEN 8
+            WHEN 'WAITING_USER_REVIEW' THEN 8
+            WHEN 'REVIEW_REQUIRED' THEN 9
+            ELSE 10
+          END,
+          active_operation.updated_at_utc DESC NULLS LAST,
+          active_operation.created_at_utc DESC NULLS LAST,
+          active_operation.id DESC
         LIMIT 1
         FOR UPDATE;
 
-        IF FOUND AND v_allow_restart IS NOT TRUE THEN
+        IF FOUND THEN
             v_operation := v_existing_by_batch;
             RETURN QUERY
             SELECT
@@ -65254,7 +65340,6 @@ BEGIN
         false;
 END;
 $function$;
-
 
 
 DROP FUNCTION IF EXISTS public.banking_pay_operation_finish(uuid, text, jsonb, jsonb);
@@ -65676,38 +65761,11 @@ $function$;
 
 DROP FUNCTION IF EXISTS public.banking_pay_operation_find_active(text, uuid, uuid, uuid);
 
-CREATE OR REPLACE FUNCTION public.banking_pay_operation_find_active(
-    p_operation_type text DEFAULT NULL::text,
-    p_workbench_session_id uuid DEFAULT NULL::uuid,
-    p_pay_batch_id uuid DEFAULT NULL::uuid,
-    p_actor_user_id uuid DEFAULT NULL::uuid
-)
-RETURNS TABLE (
-    operation_id uuid,
-    operation_type text,
-    status text,
-    phase text,
-    actor_user_id uuid,
-    workbench_session_id uuid,
-    pay_batch_id uuid,
-    root_operation_id uuid,
-    idempotency_key text,
-    progress_json jsonb,
-    total_units integer,
-    completed_units integer,
-    failed_units integer,
-    current_chunk_index integer,
-    chunk_count integer,
-    locked_by text,
-    lock_expires_at_utc timestamptz,
-    created_at_utc timestamptz,
-    started_at_utc timestamptz,
-    updated_at_utc timestamptz
-)
-LANGUAGE plpgsql
-SECURITY DEFINER
-STABLE
-SET search_path TO 'public', 'pg_temp'
+CREATE OR REPLACE FUNCTION public.banking_pay_operation_find_active(p_operation_type text DEFAULT NULL::text, p_workbench_session_id uuid DEFAULT NULL::uuid, p_pay_batch_id uuid DEFAULT NULL::uuid, p_actor_user_id uuid DEFAULT NULL::uuid)
+ RETURNS TABLE(operation_id uuid, operation_type text, status text, phase text, actor_user_id uuid, workbench_session_id uuid, pay_batch_id uuid, root_operation_id uuid, idempotency_key text, progress_json jsonb, total_units integer, completed_units integer, failed_units integer, current_chunk_index integer, chunk_count integer, locked_by text, lock_expires_at_utc timestamp with time zone, created_at_utc timestamp with time zone, started_at_utc timestamp with time zone, updated_at_utc timestamp with time zone)
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
 AS $function$
 DECLARE
     v_operation_type text := upper(NULLIF(BTRIM(COALESCE(p_operation_type, '')), ''));
@@ -65763,11 +65821,21 @@ BEGIN
         operation_row.updated_at_utc
     FROM public.banking_pay_operations AS operation_row
     WHERE upper(BTRIM(COALESCE(operation_row.status, ''))) IN (
+            'QUEUED',
             'RUNNING',
+            'WAITING',
+            'RUNNABLE',
             'CONTINUING',
             'WAITING_RETRY',
             'WAITING_AUTHORISATION',
+            'WAITING_AUTHORIZATION',
+            'AWAITING_AUTHORISATION',
+            'AWAITING_AUTHORIZATION',
             'WAITING_PROVIDER',
+            'WAITING_FOR_PROVIDER',
+            'AWAITING_PROVIDER',
+            'WAITING_USER',
+            'WAITING_USER_REVIEW',
             'REVIEW_REQUIRED'
           )
       AND (v_operation_type IS NULL OR upper(BTRIM(COALESCE(operation_row.operation_type, ''))) = v_operation_type)
@@ -65781,12 +65849,22 @@ BEGIN
     ORDER BY
       CASE upper(BTRIM(COALESCE(operation_row.status, '')))
         WHEN 'RUNNING' THEN 0
-        WHEN 'CONTINUING' THEN 1
-        WHEN 'WAITING_RETRY' THEN 2
-        WHEN 'WAITING_AUTHORISATION' THEN 3
-        WHEN 'WAITING_PROVIDER' THEN 4
-        WHEN 'REVIEW_REQUIRED' THEN 5
-        ELSE 9
+        WHEN 'WAITING' THEN 1
+        WHEN 'RUNNABLE' THEN 2
+        WHEN 'QUEUED' THEN 3
+        WHEN 'CONTINUING' THEN 4
+        WHEN 'WAITING_RETRY' THEN 5
+        WHEN 'WAITING_AUTHORISATION' THEN 6
+        WHEN 'WAITING_AUTHORIZATION' THEN 6
+        WHEN 'AWAITING_AUTHORISATION' THEN 6
+        WHEN 'AWAITING_AUTHORIZATION' THEN 6
+        WHEN 'WAITING_PROVIDER' THEN 7
+        WHEN 'WAITING_FOR_PROVIDER' THEN 7
+        WHEN 'AWAITING_PROVIDER' THEN 7
+        WHEN 'WAITING_USER' THEN 8
+        WHEN 'WAITING_USER_REVIEW' THEN 8
+        WHEN 'REVIEW_REQUIRED' THEN 9
+        ELSE 10
       END,
       operation_row.updated_at_utc DESC NULLS LAST,
       operation_row.created_at_utc DESC NULLS LAST,
@@ -65794,7 +65872,6 @@ BEGIN
     LIMIT 1;
 END;
 $function$;
-
 
 
 
