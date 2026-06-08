@@ -43073,6 +43073,198 @@ async function advanceBankingPaySettlementOperation(env, operationRow, user, opt
     p_error_json: error
   });
 
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const textOrNull = (value) => {
+    const text = String(value == null ? '' : value).trim();
+    return text || null;
+  };
+  const uniqueTexts = (values = []) => {
+    const out = [];
+    const seen = new Set();
+    for (const value of Array.isArray(values) ? values : []) {
+      const text = textOrNull(value);
+      if (!text || seen.has(text)) continue;
+      seen.add(text);
+      out.push(text);
+    }
+    return out;
+  };
+  const isUuidText = (value) => uuidRe.test(String(value || '').trim());
+
+  const fetchPendingSettlementScopeRows = async () => {
+    const query = new URLSearchParams();
+    query.set('operation_id', `eq.${operationId}`);
+    query.set('pay_batch_id', `eq.${payBatchId}`);
+    query.set('status', 'eq.PENDING');
+    query.set('select', 'id,operation_id,pay_batch_id,pay_batch_candidate_id,candidate_id,pay_channel,settlement_key,payload_json,status,created_at_utc,updated_at_utc');
+    query.set('order', 'created_at_utc.asc,id.asc');
+    query.set('limit', '50000');
+    const res = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/banking_pay_operation_settlement_scope?${query.toString()}`, false);
+    return res && Array.isArray(res.rows) ? res.rows.map((row) => safeObject(row)).filter((row) => isUuidText(row.id)) : [];
+  };
+
+  const settlementScopeUnitFromRow = (row, unitOrdinal) => {
+    const payload = safeObject(row.payload_json);
+    return {
+      unit_ordinal: unitOrdinal,
+      settlement_scope_id: String(row.id),
+      pay_batch_id: String(row.pay_batch_id || payBatchId),
+      pay_batch_candidate_id: textOrNull(row.pay_batch_candidate_id),
+      candidate_id: textOrNull(row.candidate_id),
+      pay_channel: textOrNull(row.pay_channel),
+      settlement_key: textOrNull(row.settlement_key),
+      payment_scope_json: safeObject(payload.payment_scope_json),
+      total_amount: payload.total_amount == null ? null : String(payload.total_amount)
+    };
+  };
+
+  const buildSettlementChunkPayloads = (settlementScopeRows = []) => {
+    const units = settlementScopeRows.map((row, index) => settlementScopeUnitFromRow(row, index + 1));
+    const chunks = [];
+    for (let startIndex = 0; startIndex < units.length; startIndex += settlementChunkSize) {
+      const chunkUnits = units.slice(startIndex, startIndex + settlementChunkSize);
+      const sequenceNo = Math.floor(startIndex / settlementChunkSize) + 1;
+      const settlementScopeIds = uniqueTexts(chunkUnits.map((unit) => unit.settlement_scope_id)).filter(isUuidText);
+      chunks.push({
+        sequence_no: sequenceNo,
+        unit_count: chunkUnits.length,
+        payload_json: {
+          row_backed: true,
+          legacy_tiny_compat: false,
+          source_table: 'banking_pay_operation_settlement_scope',
+          unit_count: chunkUnits.length,
+          unit_ordinal_min: chunkUnits.length ? chunkUnits[0].unit_ordinal : null,
+          unit_ordinal_max: chunkUnits.length ? chunkUnits[chunkUnits.length - 1].unit_ordinal : null,
+          units: chunkUnits,
+          settlement_scope_ids: settlementScopeIds,
+          scope_unit_ids: settlementScopeIds,
+          pay_batch_ids: uniqueTexts(chunkUnits.map((unit) => unit.pay_batch_id)).filter(isUuidText),
+          unit_keys_sample: uniqueTexts(chunkUnits.map((unit) => unit.settlement_key))
+        }
+      });
+    }
+    return chunks;
+  };
+
+  const readExistingSettlementChunks = async () => {
+    const query = new URLSearchParams();
+    query.set('operation_id', `eq.${operationId}`);
+    query.set('phase', 'eq.APPLY_SETTLEMENT_CHUNKS');
+    query.set('chunk_type', 'eq.SETTLEMENT');
+    query.set('select', 'id,operation_id,phase,chunk_type,sequence_no,status,payload_json,result_json,error_json,unit_count,completed_count,failed_count,locked_by,lock_expires_at_utc,created_at_utc,started_at_utc,completed_at_utc,updated_at_utc');
+    query.set('order', 'sequence_no.asc,id.asc');
+    query.set('limit', '50000');
+    const res = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/banking_pay_operation_chunks?${query.toString()}`, false);
+    return res && Array.isArray(res.rows) ? res.rows.map((row) => safeObject(row)) : [];
+  };
+
+  const seedSettlementChunksFromScopeRows = async (settlementScopeRows = []) => {
+    const expectedChunks = buildSettlementChunkPayloads(settlementScopeRows);
+    const existingChunks = await readExistingSettlementChunks();
+    const existingBySequence = new Map();
+    for (const chunkRow of existingChunks) {
+      const sequence = Number(chunkRow.sequence_no);
+      if (!Number.isFinite(sequence) || existingBySequence.has(sequence)) continue;
+      existingBySequence.set(sequence, chunkRow);
+    }
+
+    let existingChunkCount = 0;
+    let newChunkCount = 0;
+    let repairedChunkCount = 0;
+    const insertedChunks = [];
+    const repairedChunks = [];
+
+    for (const expectedChunk of expectedChunks) {
+      const existingChunk = existingBySequence.get(expectedChunk.sequence_no);
+      if (existingChunk) {
+        const existingPayload = safeObject(existingChunk.payload_json);
+        const existingUnitCount = Number(existingChunk.unit_count ?? 0) || 0;
+        const existingCompletedCount = Number(existingChunk.completed_count ?? 0) || 0;
+        const existingFailedCount = Number(existingChunk.failed_count ?? 0) || 0;
+        const existingStatus = String(existingChunk.status || '').trim().toUpperCase();
+        const payloadMatches = jsonStable(existingPayload) === jsonStable(expectedChunk.payload_json);
+        const countMatches = existingUnitCount === expectedChunk.unit_count;
+        if (payloadMatches && countMatches) {
+          existingChunkCount += 1;
+          continue;
+        }
+        if (existingStatus === 'PENDING' && existingCompletedCount === 0 && existingFailedCount === 0) {
+          const patchQuery = new URLSearchParams();
+          patchQuery.set('id', `eq.${existingChunk.id}`);
+          const patchRes = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/banking_pay_operation_chunks?${patchQuery.toString()}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json', Prefer: 'return=representation' },
+            body: JSON.stringify({
+              payload_json: expectedChunk.payload_json,
+              unit_count: expectedChunk.unit_count,
+              result_json: null,
+              error_json: null,
+              locked_by: null,
+              lock_expires_at_utc: null,
+              updated_at_utc: new Date().toISOString()
+            })
+          });
+          repairedChunkCount += 1;
+          existingChunkCount += 1;
+          repairedChunks.push(...(Array.isArray(patchRes.rows) ? patchRes.rows.map((row) => safeObject(row)) : []));
+          continue;
+        }
+        throw new Error(`SETTLEMENT_CHUNK_SCOPE_MISMATCH_NON_REPAIRABLE:${existingChunk.id || expectedChunk.sequence_no}`);
+      }
+
+      const insertBody = {
+        operation_id: operationId,
+        phase: 'APPLY_SETTLEMENT_CHUNKS',
+        chunk_type: 'SETTLEMENT',
+        sequence_no: expectedChunk.sequence_no,
+        status: 'PENDING',
+        payload_json: expectedChunk.payload_json,
+        result_json: null,
+        error_json: null,
+        unit_count: expectedChunk.unit_count,
+        completed_count: 0,
+        failed_count: 0
+      };
+      const insertRes = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/banking_pay_operation_chunks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Prefer: 'return=representation' },
+        body: JSON.stringify(insertBody)
+      });
+      newChunkCount += 1;
+      insertedChunks.push(...(Array.isArray(insertRes.rows) ? insertRes.rows.map((row) => safeObject(row)) : []));
+    }
+
+    return {
+      ok: true,
+      row_backed: true,
+      source_table: 'banking_pay_operation_settlement_scope',
+      total_units: settlementScopeRows.length,
+      chunk_count: expectedChunks.length,
+      existing_chunk_count: existingChunkCount,
+      new_chunk_count: newChunkCount,
+      repaired_chunk_count: repairedChunkCount,
+      settlement_scope_count: settlementScopeRows.length,
+      settlement_scope_ids: settlementScopeRows.map((row) => String(row.id)).filter(isUuidText),
+      inserted_chunk_ids: insertedChunks.map((row) => String(row.id || '').trim()).filter(isUuidText),
+      repaired_chunk_ids: repairedChunks.map((row) => String(row.id || '').trim()).filter(isUuidText)
+    };
+  };
+
+  const extractSettlementScopeIdsFromChunkPayload = (payloadJson) => {
+    const payload = safeObject(payloadJson);
+    const ids = [];
+    for (const value of Array.isArray(payload.settlement_scope_ids) ? payload.settlement_scope_ids : []) ids.push(value);
+    for (const value of Array.isArray(payload.scope_unit_ids) ? payload.scope_unit_ids : []) ids.push(value);
+    for (const value of Array.isArray(payload.units) ? payload.units : []) {
+      if (typeof value === 'string') {
+        ids.push(value);
+      } else if (value && typeof value === 'object' && !Array.isArray(value)) {
+        ids.push(value.settlement_scope_id || value.scope_unit_id || value.id);
+      }
+    }
+    return uniqueTexts(ids).filter(isUuidText);
+  };
+
   const readSettlementVerification = async () => {
     const batchQuery = new URLSearchParams();
     batchQuery.set('id', `eq.${payBatchId}`);
@@ -43228,7 +43420,8 @@ async function advanceBankingPaySettlementOperation(env, operationRow, user, opt
     if (!childId) return { ok: false, terminal: true, status: 'FAILED', error: { code: 'CHILD_OPERATION_ID_REQUIRED', message: 'Child operation id is required.' } };
     const childRow = unwrapRpcPayload(await sbRpc(env, 'banking_pay_operation_get', {
       p_operation_id: childId,
-      p_actor_user_id: actorUserId
+      p_actor_user_id: actorUserId,
+      p_mode: 'PROGRESS_LIGHT'
     }), 'banking_pay_operation_get');
     const childStatus = String(childRow.status || '').trim().toUpperCase();
     if (['COMPLETE', 'FAILED', 'CANCELLED', 'CANCELED', 'REVIEW_REQUIRED'].includes(childStatus)) {
@@ -43240,7 +43433,9 @@ async function advanceBankingPaySettlementOperation(env, operationRow, user, opt
       p_operation_id: childId,
       p_actor_user_id: actorUserId,
       p_lock_owner: `${childLockPrefix}:${childId}`,
-      p_lock_seconds: childLockSeconds
+      p_lock_seconds: childLockSeconds,
+      p_allow_backend_runner_owned: true,
+      p_operation_types: null
     }), 'banking_pay_operation_claim_next');
     if (childClaim.claimed === false) {
       return {
@@ -43324,26 +43519,45 @@ async function advanceBankingPaySettlementOperation(env, operationRow, user, opt
         p_scope: inputJson.scope || 'ALL',
         p_actor_user_id: actorUserId
       }), 'pay_operation_settlement_scope_seed');
-      const { rows } = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/banking_pay_operation_settlement_scope?operation_id=eq.${enc(operationId)}&select=id&order=created_at_utc.asc,id.asc&limit=50000`);
-      const ids = (rows || []).map((r) => String(r.id || '').trim()).filter(Boolean);
-      const chunkSeed = unwrapRpcPayload(await sbRpc(env, 'banking_pay_operation_seed_chunks', {
-        p_operation_id: operationId,
-        p_phase: 'APPLY_SETTLEMENT_CHUNKS',
-        p_chunk_type: 'SETTLEMENT',
-        p_chunk_size: settlementChunkSize,
-        p_units_json: ids
-      }), 'banking_pay_operation_seed_chunks');
+      const settlementScopeRows = await fetchPendingSettlementScopeRows();
+      if (settlementScopeRows.length <= 0) {
+        return finish('FAILED', null, {
+          code: 'SETTLEMENT_SCOPE_ROWS_MISSING',
+          message: 'Settlement scope seeding completed but no pending settlement scope rows were available to chunk.',
+          phase,
+          settlement_scope_seed: seed
+        });
+      }
+      const chunkSeed = await seedSettlementChunksFromScopeRows(settlementScopeRows);
       return save('RUNNING', 'APPLY_SETTLEMENT_CHUNKS', {
         status_text: 'Settlement chunks are ready.',
         settlement_scope_seed: seed,
         settlement_chunk_seed: chunkSeed
-      }, { total_units: ids.length, completed_units: 0, failed_units: 0, current_chunk_index: 0, chunk_count: chunkSeed.chunk_count || 0 });
+      }, { total_units: settlementScopeRows.length, completed_units: 0, failed_units: 0, current_chunk_index: 0, chunk_count: chunkSeed.chunk_count || 0 });
     }
 
     if (phase === 'APPLY_SETTLEMENT_CHUNKS') {
+      const pendingSettlementScopeRows = await fetchPendingSettlementScopeRows();
+      let settlementChunkSeedRepair = null;
+      if (pendingSettlementScopeRows.length > 0) {
+        settlementChunkSeedRepair = await seedSettlementChunksFromScopeRows(pendingSettlementScopeRows);
+      }
       const chunk = await claim('APPLY_SETTLEMENT_CHUNKS', 'SETTLEMENT');
       if (chunk && chunk.chunk_id) {
-        const ids = Array.isArray(chunk.payload_json?.units) ? chunk.payload_json.units.map((x) => String(x || '').trim()).filter(Boolean) : [];
+        const ids = extractSettlementScopeIdsFromChunkPayload(chunk.payload_json);
+        if (ids.length <= 0) {
+          const errorJson = {
+            code: 'SETTLEMENT_CHUNK_SCOPE_IDS_MISSING',
+            message: 'Settlement chunk payload does not contain settlement scope ids.',
+            chunk_id: chunk.chunk_id,
+            phase: 'APPLY_SETTLEMENT_CHUNKS',
+            chunk_type: 'SETTLEMENT',
+            payload_json: safeObject(chunk.payload_json),
+            settlement_chunk_seed_repair: settlementChunkSeedRepair
+          };
+          await finishChunk(chunk.chunk_id, 'FAILED', 0, 1, null, errorJson);
+          return finish('FAILED', null, errorJson);
+        }
         try {
           const settled = usesRailSettlement
             ? unwrapRpcPayload(await sbRpc(env, 'pay_settle_rail', {
@@ -43368,7 +43582,11 @@ async function advanceBankingPaySettlementOperation(env, operationRow, user, opt
                 p_settlement_scope_ids: ids
               }), 'pay_settle_manual_confirm');
           await finishChunk(chunk.chunk_id, 'COMPLETE', ids.length, Number(settled.failed || settled.failed_count || 0), settled, null);
-          return save('RUNNING', 'APPLY_SETTLEMENT_CHUNKS', { status_text: 'Applied one settlement chunk.', last_chunk_result: settled }, { current_chunk_index: chunk.sequence_no || null });
+          return save('RUNNING', 'APPLY_SETTLEMENT_CHUNKS', {
+            status_text: 'Applied one settlement chunk.',
+            last_chunk_result: settled,
+            settlement_chunk_seed_repair: settlementChunkSeedRepair
+          }, { current_chunk_index: chunk.sequence_no || null });
         } catch (e) {
           await finishChunk(chunk.chunk_id, 'FAILED', 0, ids.length || 1, null, { code: 'SETTLEMENT_CHUNK_FAILED', message: String(e?.message || e || '') });
           return finish('FAILED', null, { code: 'SETTLEMENT_CHUNK_FAILED', message: 'Settlement chunk failed.', error: String(e?.message || e || '') });
