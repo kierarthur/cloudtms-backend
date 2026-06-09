@@ -16364,7 +16364,6 @@ async function sendPayBatchRemittancesInternal(env, opts = {}) {
   };
 }
 
-
 function buildRemittanceEmailPayload(job, context = {}) {
   const sourceJob = (typeof normaliseRemittanceJobForRendering === 'function')
     ? normaliseRemittanceJobForRendering((job && typeof job === 'object') ? job : {})
@@ -16495,8 +16494,8 @@ function buildRemittanceEmailPayload(job, context = {}) {
       MANUAL_CREDIT_ADJUSTMENT: 'Manual credit adjustment',
       ADJUSTMENT_DELTA: 'Manual adjustment',
       MANUAL_ADJUSTMENT: 'Manual adjustment',
-      EXPENSE_DELTA: 'Expense',
-      EXPENSE: 'Expense',
+      EXPENSE_DELTA: 'Approved expense',
+      EXPENSE: 'Approved expense',
       MILEAGE_DELTA: 'Mileage',
       MILEAGE: 'Mileage',
       SEGMENT_DELTA: 'Timesheet pay'
@@ -16519,9 +16518,59 @@ function buildRemittanceEmailPayload(job, context = {}) {
     if (/MANUAL\s+ADJUST/.test(compact)) return 'Manual adjustment';
     return '';
   };
+  const friendlyExpenseLineLabel = (line) => {
+    const l = line && typeof line === 'object' ? line : {};
+    const firstExpenseText = firstNonBlank(
+      l.expense_category,
+      l.expenseCategory,
+      l.expense_category_name,
+      l.expenseCategoryName,
+      l.category,
+      l.category_name,
+      l.categoryName,
+      l.expense_name,
+      l.expenseName,
+      l.item_label,
+      l.itemLabel,
+      l.friendly_label,
+      l.friendlyLabel,
+      l.description,
+      l.line_label,
+      l.lineLabel,
+      l.label,
+      l.name
+    );
+    const safeDirect = String(firstExpenseText || '').trim();
+    if (safeDirect && !/^(expense|expenses?|expense_delta|mileage_delta)$/i.test(safeDirect)) return safeDirect;
+    let evidence = '';
+    try {
+      evidence = JSON.stringify({
+        expense_category: l.expense_category,
+        expenseCategory: l.expenseCategory,
+        category: l.category,
+        description: l.description,
+        line_label: l.line_label,
+        label: l.label,
+        unit: l.unit,
+        unit_name: l.unit_name,
+        item_type: l.item_type,
+        line_kind: l.line_kind,
+        frozen_source_basis_json: l.frozen_source_basis_json,
+        frozen_component_snapshot_json: l.frozen_component_snapshot_json,
+        meta_json: l.meta_json
+      }).toLowerCase();
+    } catch { evidence = ''; }
+    if (/\bmileage\b|\bmiles?\b|\bppm\b|pence\s*per\s*mile/.test(evidence)) return 'Mileage';
+    if (/\baccommodation\b|\bhotel\b|\blodging\b/.test(evidence)) return 'Accommodation';
+    if (/\btravel\b|\btaxi\b|\btrain\b|\bflight\b|\bparking\b|\bfuel\b|\bsubsistence\b/.test(evidence)) return 'Travel';
+    return 'Approved expense';
+  };
+
   const preferredLineLabel = (line) => {
     const l = line && typeof line === 'object' ? line : {};
-    const typeLabel = professionalLineTypeLabel(l.item_type || l.itemType || l.internal_item_type || l.internalItemType || l.line_kind || l.lineKind || l.kind);
+    const typeKey = String(l.item_type || l.itemType || l.internal_item_type || l.internalItemType || l.line_kind || l.lineKind || l.kind || '').trim().toUpperCase().replace(/[^A-Z0-9]+/g, '_');
+    if (typeKey === 'EXPENSE_DELTA' || typeKey === 'EXPENSE' || typeKey === 'MILEAGE_DELTA' || typeKey === 'MILEAGE') return friendlyExpenseLineLabel(l);
+    const typeLabel = professionalLineTypeLabel(typeKey);
     if (typeLabel) return typeLabel;
 
     const candidates = [
@@ -16753,9 +16802,12 @@ function buildRemittanceEmailPayload(job, context = {}) {
     deductions: moneyNum(summary.deductions_recoveries_inc_vat ?? summary.deductions_inc_vat ?? computedSummary.deductions),
     final_payable: moneyNum(summary.final_payable ?? summary.net_inc_vat ?? summary.total_amount ?? computedSummary.final_payable)
   };
+  const detailedBreakdown = sourceJob.detailed_breakdown === true || ctx.detailedBreakdown === true;
+  const headerMessage = firstNonBlank(ctx.headerMessage, sourceJob.header_message, sourceJob.headerMessage, 'Please find below a remittance advice for authorised timesheets:');
+  const footerMessage = firstNonBlank(ctx.footerMessage, sourceJob.footer_message, sourceJob.footerMessage, 'Many thanks Arthur Rai Medical Services');
   const textLines = [];
-  if (ctx.headerMessage) {
-    textLines.push(String(ctx.headerMessage));
+  if (headerMessage) {
+    textLines.push(String(headerMessage));
     textLines.push('');
   }
   if (ctx.effectiveTestMode === true) {
@@ -16798,7 +16850,7 @@ function buildRemittanceEmailPayload(job, context = {}) {
   });
   textTable(textLines, 'Candidate summary', ['Candidate', 'Works No.', 'Timesheets', 'Gross excl VAT', 'VAT', 'Gross incl VAT', 'Deductions', 'Final payable'], candidateSummaryRows);
   let html = `<div style="font-family:Arial,Helvetica,sans-serif;color:#111827;font-size:14px;line-height:1.45;">`;
-  if (ctx.headerMessage) html += `<p style="margin:0 0 14px;">${h(ctx.headerMessage)}</p>`;
+  if (headerMessage) html += `<p style="margin:0 0 14px;">${h(headerMessage)}</p>`;
   if (ctx.effectiveTestMode === true) {
     html += `<div style="border:1px solid #f59e0b;background:#fffbeb;color:#92400e;padding:10px 12px;border-radius:8px;margin:0 0 14px;"><strong>PAYROLL TEST MODE</strong>${ctx.testRecipient ? `<br>Test recipient: ${h(ctx.testRecipient)}` : ''}${ctx.intendedRecipient ? `<br>Intended recipient: ${h(ctx.intendedRecipient)}` : ''}</div>`;
   }
@@ -16848,7 +16900,7 @@ function buildRemittanceEmailPayload(job, context = {}) {
         referenceNumber: timesheet?.reference_number != null ? String(timesheet.reference_number) : '',
         timesheetType: timesheet?.timesheet_type != null ? String(timesheet.timesheet_type) : 'Standard',
         renderMode: timesheet?.timesheet_render_mode != null ? String(timesheet.timesheet_render_mode) : 'AGGREGATE',
-        detailed: sourceJob.detailed_breakdown === true || ctx.detailedBreakdown === true,
+        detailed: detailedBreakdown,
         timesheetId: timesheet?.timesheet_id ?? timesheet?.timesheetId ?? timesheet?.id ?? '',
         candidateId: candidate.candidate_id || '',
         unit_rows: timesheet?.unit_rows || timesheet?.unitRows,
@@ -16857,7 +16909,16 @@ function buildRemittanceEmailPayload(job, context = {}) {
         other_rows: timesheet?.other_rows || timesheet?.otherRows,
         totals: timesheet?.totals,
         schedule_rows: timesheet?.schedule_rows,
-        schedule_changes: timesheet?.schedule_changes
+        schedule_changes: timesheet?.schedule_changes,
+        amended_hours_note: timesheet?.amended_hours_note ?? timesheet?.amendedHoursNote,
+        amendment_note: timesheet?.amendment_note ?? timesheet?.amendmentNote,
+        delta_note: timesheet?.delta_note ?? timesheet?.deltaNote,
+        schedule_note: timesheet?.schedule_note ?? timesheet?.scheduleNote,
+        base_snapshot_json: timesheet?.base_snapshot_json ?? timesheet?.baseSnapshotJson,
+        target_snapshot_json: timesheet?.target_snapshot_json ?? timesheet?.targetSnapshotJson,
+        frozen_source_basis_json: timesheet?.frozen_source_basis_json ?? timesheet?.frozenSourceBasisJson,
+        frozen_component_snapshot_json: timesheet?.frozen_component_snapshot_json ?? timesheet?.frozenComponentSnapshotJson,
+        resolved_components: timesheet?.resolved_components ?? timesheet?.resolvedComponents
       });
       if (section.body_text) textLines.push(section.body_text);
       if (section.body_html) html += section.body_html;
@@ -16877,6 +16938,12 @@ function buildRemittanceEmailPayload(job, context = {}) {
       candidate.otherNonTimesheetLines
     ));
     if (nonTimesheetLines.length) {
+      const hasRecoveryLine = nonTimesheetLines.some((line) => {
+        const typeKey = String(line?.item_type || line?.itemType || line?.internal_item_type || line?.internalItemType || line?.line_kind || line?.lineKind || line?.kind || '').trim().toUpperCase().replace(/[^A-Z0-9]+/g, '_');
+        const label = preferredLineLabel(line).toLowerCase();
+        return /debt|recovery|recover|repayment|overpayment|loan/.test(`${typeKey} ${label}`);
+      });
+      const nonTimesheetTitle = hasRecoveryLine ? 'Deductions / recoveries' : 'Items';
       const deductionRows = nonTimesheetLines.map((line) => [
         preferredLineLabel(line),
         fmtMoney(line.amount_ex_vat ?? line.total_ex_vat ?? line.amount ?? line.total),
@@ -16884,8 +16951,8 @@ function buildRemittanceEmailPayload(job, context = {}) {
         fmtMoney(line.amount_inc_vat ?? line.total_inc_vat ?? line.amount ?? line.total),
         professionalRoutingLabel(line, isUmbrellaJob ? 'umbrella company' : '') || (isUmbrellaJob ? 'umbrella company' : '')
       ]);
-      textTable(textLines, 'Deductions / recoveries', ['Item', 'Excl VAT', 'VAT', 'Incl VAT', 'Routing'], deductionRows);
-      html += tableHtml(['Item', 'Excl VAT', 'VAT', 'Incl VAT', 'Routing'], deductionRows, { title: 'Deductions / recoveries', alignRight: [1, 2, 3] });
+      textTable(textLines, nonTimesheetTitle, ['Item', 'Excl VAT', 'VAT', 'Incl VAT', 'Routing'], deductionRows);
+      html += tableHtml(['Item', 'Excl VAT', 'VAT', 'Incl VAT', 'Routing'], deductionRows, { title: nonTimesheetTitle, alignRight: [1, 2, 3] });
     }
     const candidateTotalRows = [
       ['Gross Pay (excl VAT)', fmtMoney(ft.gross_ex_vat)],
@@ -16908,12 +16975,10 @@ function buildRemittanceEmailPayload(job, context = {}) {
   ]];
   textTable(textLines, 'Grand remittance total', ['Candidates', 'Timesheets', 'Gross excl VAT', 'VAT', 'Gross incl VAT', 'Deductions', 'Final payable'], grandRows);
   html += tableHtml(['Candidates', 'Timesheets', 'Gross excl VAT', 'VAT', 'Gross incl VAT', 'Deductions', 'Final payable'], grandRows, { title: 'Grand remittance total', alignRight: [0, 1, 2, 3, 4, 5, 6] });
-  textLines.push('This remittance was generated from frozen pay batch artifacts in CloudTMS.');
-  html += `<p style="margin:18px 0 0;font-size:12px;color:#6b7280;">This remittance was generated from frozen pay batch artifacts in CloudTMS.</p>`;
-  if (ctx.footerMessage) {
+  if (footerMessage) {
     textLines.push('');
-    textLines.push(String(ctx.footerMessage));
-    html += `<p style="margin:14px 0 0;">${h(ctx.footerMessage)}</p>`;
+    textLines.push(String(footerMessage));
+    html += `<p style="margin:14px 0 0;">${h(footerMessage)}</p>`;
   }
   html += '</div>';
   return {
@@ -16945,6 +17010,8 @@ function buildRemittanceEmailPayload(job, context = {}) {
     }
   };
 }
+
+
 
 
 async function handleBankingPayBatchRetryBlockedFunds(env, req, user, payBatchId) {
@@ -17349,7 +17416,6 @@ async function handleBankingPayBatchRetryBlockedFunds(env, req, user, payBatchId
 }
 
 
-
 function normaliseRemittanceJobForRendering(job) {
   const cloneValue = (value) => {
     if (value === null || value === undefined) return value;
@@ -17707,6 +17773,26 @@ function normaliseRemittanceJobForRendering(job) {
     'otherNonTimesheetLines'
   ];
 
+  const frozenTimesheetArrayKeys = [
+    'schedule_rows',
+    'scheduleRows',
+    'schedule_changes',
+    'scheduleChanges',
+    'resolved_components',
+    'resolvedComponents'
+  ];
+
+  const frozenTimesheetObjectKeys = [
+    'base_snapshot_json',
+    'baseSnapshotJson',
+    'target_snapshot_json',
+    'targetSnapshotJson',
+    'frozen_source_basis_json',
+    'frozenSourceBasisJson',
+    'frozen_component_snapshot_json',
+    'frozenComponentSnapshotJson'
+  ];
+
   const timesheetArrayKeys = [
     'timesheets',
     'timesheet_sections',
@@ -17727,6 +17813,25 @@ function normaliseRemittanceJobForRendering(job) {
     rows,
     (line, index) => buildNonTimesheetLineKey(line, index, context)
   );
+
+  const normaliseFrozenTimesheetArray = (rows, keyName, context) => dedupeArray(
+    Array.isArray(rows) ? rows : [],
+    (row, index) => {
+      if (!row || typeof row !== 'object' || Array.isArray(row)) return `${keyName}|index:${index}`;
+      const date = firstNonBlank(row.date, row.work_date, row.workDate, row.shift_date, row.shiftDate, row.ts_day, row.key_value);
+      const start = firstNonBlank(row.start_utc, row.startUtc, row.start_iso, row.startIso, row.start, row.start_time, row.startTime, row.before && (row.before.start_utc || row.before.start_iso || row.before.start), row.after && (row.after.start_utc || row.after.start_iso || row.after.start));
+      const end = firstNonBlank(row.end_utc, row.endUtc, row.end_iso, row.endIso, row.end, row.end_time, row.endTime, row.before && (row.before.end_utc || row.before.end_iso || row.before.end), row.after && (row.after.end_utc || row.after.end_iso || row.after.end));
+      const kind = upperScalar(row.kind || row.type || row.change_type || row.changeType || keyName);
+      return [keyName, date || 'no_date', start || 'no_start', end || 'no_end', kind || 'row', index].join('|');
+    }
+  );
+
+  const preserveFrozenTimesheetObjects = (existing, duplicate) => {
+    if (!existing || typeof existing !== 'object' || Array.isArray(existing) || !duplicate || typeof duplicate !== 'object' || Array.isArray(duplicate)) return;
+    for (const key of frozenTimesheetObjectKeys) {
+      if ((existing[key] == null || existing[key] === '') && duplicate[key] != null && duplicate[key] !== '') existing[key] = duplicate[key];
+    }
+  };
 
   const normaliseTimesheet = (timesheet, index, context = {}) => {
     if (!timesheet || typeof timesheet !== 'object' || Array.isArray(timesheet)) return timesheet;
@@ -17755,6 +17860,12 @@ function normaliseRemittanceJobForRendering(job) {
       }
     }
 
+    for (const key of frozenTimesheetArrayKeys) {
+      if (Array.isArray(timesheet[key])) {
+        timesheet[key] = normaliseFrozenTimesheetArray(timesheet[key], key, childContext);
+      }
+    }
+
     return timesheet;
   };
 
@@ -17775,6 +17886,14 @@ function normaliseRemittanceJobForRendering(job) {
         timesheetId: getTimesheetId(existing, context.timesheetId) || getTimesheetId(duplicate, context.timesheetId),
         candidateId: getCandidateId(existing, context.candidateId) || getCandidateId(duplicate, context.candidateId)
       }, normaliseNonTimesheetLinesArray);
+
+      mergeKnownArrays(existing, duplicate, frozenTimesheetArrayKeys, {
+        ...context,
+        timesheetId: getTimesheetId(existing, context.timesheetId) || getTimesheetId(duplicate, context.timesheetId),
+        candidateId: getCandidateId(existing, context.candidateId) || getCandidateId(duplicate, context.candidateId)
+      }, normaliseFrozenTimesheetArray);
+
+      preserveFrozenTimesheetObjects(existing, duplicate);
 
       setRenderKey(existing, key);
     }
@@ -17864,6 +17983,8 @@ function normaliseRemittanceJobForRendering(job) {
 
   return output;
 }
+
+
 
 async function handleBankingAlertAcknowledge(env, req, user) {
 
@@ -18238,6 +18359,9 @@ function renderTimesheetSection(ctx) {
     return '';
   };
 
+  const safeObject = (value) => (value && typeof value === 'object' && !Array.isArray(value)) ? value : {};
+  const toArray = (value) => Array.isArray(value) ? value : [];
+
   const moneyKey = (value) => {
     const n = Number(String(value == null ? '' : value).replace(/,/g, ''));
     return Number.isFinite(n) ? (Math.round(n * 100) / 100).toFixed(2) : String(value == null ? '' : value).trim();
@@ -18268,37 +18392,29 @@ function renderTimesheetSection(ctx) {
     }).format(d);
   };
 
-  const fmtDateTime = (value) => {
+  const fmtTime = (value) => {
     const s = String(value || '').trim();
     if (!s) return '';
-    if (typeof formatCloudTmsLondonDateTime === 'function') {
-      const formatted = formatCloudTmsLondonDateTime(s);
-      return formatted && formatted !== 'Not recorded' ? formatted : s;
-    }
-    const d = new Date(s);
-    if (!Number.isFinite(d.getTime())) return s;
-    const date = new Intl.DateTimeFormat('en-GB', {
-      timeZone: 'Europe/London',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    }).format(d);
-    const time = new Intl.DateTimeFormat('en-GB', {
-      timeZone: 'Europe/London',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false,
-      hourCycle: 'h23'
-    }).format(d);
-    return `${date} at ${time} hrs (UK time)`;
-  };
 
-  const fmtTime = (isoStr) => {
-    const s = String(isoStr || '').trim();
-    if (!s) return '';
+    const simpleTime = s.match(/^([01]?\d|2[0-3])[:.]?([0-5]\d)(?::[0-5]\d)?(?:\s*(?:hrs?|hours?))?$/i);
+    if (simpleTime) return `${simpleTime[1].padStart(2, '0')}:${simpleTime[2]}`;
+
+    const verboseTime = s.match(/\b([01]?\d|2[0-3])[:.]([0-5]\d)(?::[0-5]\d)?\b/);
+    if (!/^\d{4}-\d{2}-\d{2}/.test(s) && verboseTime) return `${verboseTime[1].padStart(2, '0')}:${verboseTime[2]}`;
+
     const d = new Date(s);
-    if (!Number.isFinite(d.getTime())) return s;
-    return fmtDateTime(s);
+    if (Number.isFinite(d.getTime())) {
+      return new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Europe/London',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+        hourCycle: 'h23'
+      }).format(d);
+    }
+
+    if (verboseTime) return `${verboseTime[1].padStart(2, '0')}:${verboseTime[2]}`;
+    return s;
   };
 
   const fmtBreak = (seg) => {
@@ -18306,13 +18422,13 @@ function renderTimesheetSection(ctx) {
     const breaks = seg.breaks;
     if (Array.isArray(breaks) && breaks.length > 0) {
       const b0 = breaks[0];
-      const bs = (b0 && (b0.start_utc || b0.start_iso || b0.start)) ? String(b0.start_utc || b0.start_iso || b0.start) : '';
-      const be = (b0 && (b0.end_utc || b0.end_iso || b0.end)) ? String(b0.end_utc || b0.end_iso || b0.end) : '';
+      const bs = (b0 && (b0.start_utc || b0.start_iso || b0.start || b0.start_time || b0.startTime)) ? String(b0.start_utc || b0.start_iso || b0.start || b0.start_time || b0.startTime) : '';
+      const be = (b0 && (b0.end_utc || b0.end_iso || b0.end || b0.end_time || b0.endTime)) ? String(b0.end_utc || b0.end_iso || b0.end || b0.end_time || b0.endTime) : '';
       const t1 = fmtTime(bs);
       const t2 = fmtTime(be);
       if (t1 && t2) return `${t1}–${t2}`;
     }
-    const bm = asNum(seg.break_mins ?? seg.break_minutes);
+    const bm = asNum(seg.break_mins ?? seg.break_minutes ?? seg.breakMins ?? seg.breakMinutes);
     if (bm == null) return '';
     return `${bm}m`;
   };
@@ -18338,11 +18454,11 @@ function renderTimesheetSection(ctx) {
     const breakdownId = firstNonBlank(row?.pay_batch_item_breakdown_id, row?.payBatchItemBreakdownId, row?.breakdown_id, row?.breakdownId, row?.line_id, row?.lineId);
     if (breakdownId) return `breakdown:${breakdownId}`;
 
-    const stable = firstNonBlank(row?.render_dedupe_key, row?.renderDedupeKey, row?.render_key, row?.renderKey, row?.stable_key, row?.stableKey, row?.source_key, row?.sourceKey);
+    const stable = firstNonBlank(row?.render_dedupe_key, row?.renderDedupeKey, row?.render_key, row?.renderKey, row?.stable_key, row?.stableKey, row?.source_key, row?.sourceKey, row?.stable_line_key, row?.stableLineKey);
     if (stable) return `stable:${stable}`;
 
     const timesheetId = firstNonBlank(context.timesheetId, context.timesheet_id, row?.timesheet_id, row?.timesheetId);
-    const lineKind = String(row?.line_kind || row?.lineKind || row?.kind || sectionName || '').trim().toUpperCase();
+    const lineKind = String(row?.line_kind || row?.lineKind || row?.kind || row?.line_kind_raw || row?.lineKindRaw || sectionName || '').trim().toUpperCase();
     const bucketCode = String(row?.bucket_code || row?.bucketCode || row?.bucket || row?.code || '').trim().toUpperCase();
     const unitName = String(row?.unit_name || row?.unitName || row?.unit || row?.label || row?.name || '').trim().toUpperCase();
     const rate = moneyKey(row?.rate ?? row?.unit_rate ?? row?.unitRate);
@@ -18382,10 +18498,124 @@ function renderTimesheetSection(ctx) {
     return out;
   };
 
+  const labelKey = (value) => String(value == null ? '' : value).trim().toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+  const isInternalLabel = (value) => {
+    const key = labelKey(value);
+    return [
+      'EXPENSE_DELTA', 'SEGMENT_DELTA', 'ADJUSTMENT_DELTA', 'MILEAGE_DELTA',
+      'TS_DAY', 'TS_TOTAL', 'EXPENSE_CODE', 'ADDITIONAL_CODE', 'ADJUSTMENT_CODE'
+    ].includes(key);
+  };
+  const bucketLabel = (value) => {
+    const key = labelKey(value);
+    const map = {
+      DAY: 'Day', DAYS: 'Day', TS_DAY: 'Day',
+      NIGHT: 'Night', NIGHTS: 'Night',
+      SAT: 'Sat', SATURDAY: 'Sat',
+      SUN: 'Sun', SUNDAY: 'Sun',
+      BH: 'BH', BANK_HOLIDAY: 'BH', BANKHOLIDAY: 'BH', PUBLIC_HOLIDAY: 'BH'
+    };
+    return map[key] || '';
+  };
+  const normaliseHumanLabel = (value) => {
+    const raw = String(value == null ? '' : value).trim();
+    if (!raw || isInternalLabel(raw)) return '';
+    const bucket = bucketLabel(raw);
+    if (bucket) return bucket;
+    if (/^[A-Z0-9_]+$/.test(raw) && raw.includes('_')) {
+      return raw.toLowerCase().replace(/_/g, ' ').replace(/\b\w/g, (m) => m.toUpperCase());
+    }
+    return raw;
+  };
+  const stringifyEvidence = (value, depth = 0) => {
+    if (value == null || depth > 5) return '';
+    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return String(value);
+    if (Array.isArray(value)) return value.slice(0, 50).map((item) => stringifyEvidence(item, depth + 1)).filter(Boolean).join(' ');
+    if (typeof value !== 'object') return '';
+    return Object.entries(value).slice(0, 80).map(([key, child]) => `${key} ${stringifyEvidence(child, depth + 1)}`).filter(Boolean).join(' ');
+  };
+  const expenseLabel = (row) => {
+    const source = safeObject(row);
+    const direct = firstNonBlank(
+      source.expense_category,
+      source.expenseCategory,
+      source.expense_category_name,
+      source.expenseCategoryName,
+      source.category,
+      source.category_name,
+      source.categoryName,
+      source.expense_name,
+      source.expenseName,
+      source.source_label,
+      source.sourceLabel,
+      source.item_label,
+      source.itemLabel,
+      source.friendly_label,
+      source.friendlyLabel,
+      source.description,
+      source.unit,
+      source.unit_name,
+      source.unitName,
+      source.label,
+      source.name,
+      source.bucket_code,
+      source.bucketCode
+    );
+    const directLabel = normaliseHumanLabel(direct);
+    if (directLabel && !/^expense$/i.test(directLabel)) return directLabel;
+
+    const evidence = stringifyEvidence([
+      source.expense_category,
+      source.expenseCategory,
+      source.category,
+      source.description,
+      source.unit,
+      source.unit_name,
+      source.label,
+      source.name,
+      source.line_kind,
+      source.line_kind_raw,
+      source.item_type,
+      source.itemType,
+      source.frozen_source_basis_json,
+      source.frozenSourceBasisJson,
+      source.frozen_component_snapshot_json,
+      source.frozenComponentSnapshotJson,
+      source.meta_json,
+      source.metaJson
+    ]).toLowerCase();
+
+    if (/\bmileage\b|\bmiles?\b|\bppm\b|\bpence\s*per\s*mile\b/.test(evidence)) return 'Mileage';
+    if (/\baccommodation\b|\bhotel\b|\blodging\b/.test(evidence)) return 'Accommodation';
+    if (/\btravel\b|\btaxi\b|\btrain\b|\bflight\b|\bparking\b|\bfuel\b|\bsubsistence\b/.test(evidence)) return 'Travel';
+    return 'Approved expense';
+  };
+  const friendlyUnitLabel = (row, sectionName) => {
+    const source = safeObject(row);
+    const lineKind = labelKey(source.line_kind || source.lineKind || source.line_kind_raw || source.lineKindRaw || source.kind || sectionName);
+    const itemType = labelKey(source.item_type || source.itemType || source.internal_item_type || source.internalItemType || source.type);
+
+    if (sectionName === 'expenses_rows' || lineKind === 'EXPENSE' || lineKind === 'MILEAGE' || itemType === 'EXPENSE_DELTA' || itemType === 'MILEAGE_DELTA') {
+      return expenseLabel(source);
+    }
+
+    const direct = firstNonBlank(source.friendly_label, source.friendlyLabel, source.unit, source.unit_name, source.unitName, source.label, source.name, source.bucket_code, source.bucketCode);
+    const bucket = bucketLabel(direct || source.bucket_code || source.bucketCode);
+    if (bucket) return bucket;
+
+    const human = normaliseHumanLabel(direct);
+    if (human) return human;
+
+    if (itemType === 'SEGMENT_DELTA') return bucketLabel(source.bucket_code || source.bucketCode) || 'Timesheet pay';
+    if (itemType === 'ADJUSTMENT_DELTA') return normaliseHumanLabel(source.description || source.adjustment_comment || source.adjustmentComment || source.line_label || source.lineLabel) || 'Manual adjustment';
+
+    return sectionName === 'expenses_rows' ? 'Approved expense' : 'Unit';
+  };
+
   const normalizeUnitRows = (rows, sectionName) => {
     const out = [];
     for (const row of dedupeUnitRows(rows, sectionName)) {
-      const unit = String(row?.unit ?? row?.unit_name ?? row?.unitName ?? row?.label ?? row?.name ?? row?.bucket_code ?? '').trim();
+      const unit = friendlyUnitLabel(row, sectionName);
       const qty = asNum(row?.quantity ?? row?.qty ?? row?.units);
       const rate = asNum(row?.rate ?? row?.unit_rate ?? row?.unitRate);
       const totalEx = asNum(row?.total_ex_vat ?? row?.amount_ex_vat ?? row?.totalExVat ?? row?.amountExVat ?? row?.total ?? row?.amount);
@@ -18393,7 +18623,7 @@ function renderTimesheetSection(ctx) {
       const totalInc = asNum(row?.total_inc_vat ?? row?.amount_inc_vat ?? row?.totalIncVat ?? row?.amountIncVat ?? ((totalEx != null || vat != null) ? Number(totalEx || 0) + Number(vat || 0) : null));
       if ((qty == null || Math.abs(qty) < 1e-9) && (totalEx == null || Math.abs(totalEx) < 1e-9) && (totalInc == null || Math.abs(totalInc) < 1e-9)) continue;
       out.push({
-        unit: unit || 'Unit',
+        unit: unit || (sectionName === 'expenses_rows' ? 'Approved expense' : 'Unit'),
         quantity: qty == null ? '' : String(qty),
         rate: rate == null ? '' : fmtMoney(rate),
         total_ex_vat: fmtMoney(totalEx),
@@ -18402,6 +18632,97 @@ function renderTimesheetSection(ctx) {
       });
     }
     return out;
+  };
+
+  const normaliseScheduleRow = (seg) => {
+    const source = safeObject(seg);
+    if (!Object.keys(source).length) return null;
+    const date = firstNonBlank(source.date, source.work_date, source.workDate, source.shift_date, source.shiftDate, source.day, source.ts_day, source.key_value, context.workDate, context.work_date);
+    const start = firstNonBlank(source.start_utc, source.startUtc, source.start_iso, source.startIso, source.start_at_utc, source.startAtUtc, source.start, source.start_time, source.startTime);
+    const end = firstNonBlank(source.end_utc, source.endUtc, source.end_iso, source.endIso, source.end_at_utc, source.endAtUtc, source.end, source.end_time, source.endTime);
+    const breakMins = source.break_mins ?? source.breakMins ?? source.break_minutes ?? source.breakMinutes;
+    const breaks = Array.isArray(source.breaks) ? source.breaks : (Array.isArray(source.break_windows) ? source.break_windows : source.breakWindows);
+    if (!date && !start && !end) return null;
+    return {
+      ...source,
+      date,
+      start_utc: start,
+      end_utc: end,
+      break_mins: breakMins,
+      breaks: Array.isArray(breaks) ? breaks : source.breaks
+    };
+  };
+
+  const collectFrozenScheduleRows = () => {
+    const rows = [];
+    const push = (candidate) => {
+      const row = normaliseScheduleRow(candidate);
+      if (row) rows.push(row);
+    };
+    const scan = (value, depth = 0, keyHint = '') => {
+      if (value == null || depth > 6) return;
+      if (Array.isArray(value)) {
+        const hint = String(keyHint || '').toLowerCase();
+        for (const item of value) {
+          if (item && typeof item === 'object' && !Array.isArray(item)) {
+            if (/schedule|segment|shift|row/.test(hint)) push(item);
+            scan(item, depth + 1, keyHint);
+          } else {
+            scan(item, depth + 1, keyHint);
+          }
+        }
+        return;
+      }
+      if (typeof value !== 'object') return;
+      const obj = value;
+      push(obj);
+      for (const [key, child] of Object.entries(obj)) {
+        if (['segments', 'schedule_rows', 'scheduleRows', 'shift_rows', 'shiftRows', 'rows', 'resolved_components', 'resolvedComponents', 'frozen_source_basis_json', 'frozenSourceBasisJson', 'frozen_component_snapshot_json', 'frozenComponentSnapshotJson', 'target_snapshot_json', 'targetSnapshotJson'].includes(key)) {
+          scan(child, depth + 1, key);
+        }
+      }
+    };
+
+    scan(context.schedule_rows, 0, 'schedule_rows');
+    scan(context.target_snapshot_json || context.targetSnapshotJson, 0, 'target_snapshot_json');
+    scan(context.frozen_source_basis_json || context.frozenSourceBasisJson, 0, 'frozen_source_basis_json');
+    scan(context.frozen_component_snapshot_json || context.frozenComponentSnapshotJson, 0, 'frozen_component_snapshot_json');
+    scan(context.resolved_components || context.resolvedComponents, 0, 'resolved_components');
+
+    const seen = new Set();
+    return rows.filter((row) => {
+      const key = [row.date || '', row.start_utc || row.start || '', row.end_utc || row.end || '', row.break_mins ?? ''].join('|');
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  };
+
+  const existingScheduleChanges = () => toArray(context.schedule_changes || context.scheduleChanges).filter((change) => change && typeof change === 'object');
+  const explicitAmendmentNote = firstNonBlank(context.amended_hours_note, context.amendedHoursNote, context.amendment_note, context.amendmentNote, context.delta_note, context.deltaNote, context.schedule_note, context.scheduleNote);
+  const hasFrozenAmendedEvidence = () => {
+    if (existingScheduleChanges().length > 0) return true;
+    if (explicitAmendmentNote) return true;
+    const sources = [
+      context.base_snapshot_json,
+      context.baseSnapshotJson,
+      context.target_snapshot_json,
+      context.targetSnapshotJson,
+      context.frozen_source_basis_json,
+      context.frozenSourceBasisJson,
+      context.frozen_component_snapshot_json,
+      context.frozenComponentSnapshotJson,
+      context.resolved_components,
+      context.resolvedComponents
+    ];
+    const evidence = stringifyEvidence(sources).toLowerCase();
+    return /amend(?:ed|ment)?|adjustment|changed[_\s-]?hours?|additional[_\s-]?hours?|partial[_\s-]?payment|partial[_\s-]?additional|previously[_\s-]?paid|prior[_\s-]?paid|baseline|schedule[_\s-]?changes?/.test(evidence);
+  };
+  const amendedScheduleNote = () => {
+    if (!hasFrozenAmendedEvidence()) return '';
+    const note = normaliseHumanLabel(explicitAmendmentNote);
+    if (note) return note;
+    return 'Amended shift — the schedule shows the amended shift; this remittance pays the additional payable time only.';
   };
 
   const candidateDisplay = String(context.candidateDisplay || '').trim();
@@ -18443,46 +18764,58 @@ function renderTimesheetSection(ctx) {
   html += tableHtml(['Field', 'Value'], metaRows);
 
   if (detailed && renderMode === 'SEGMENT') {
-    if (timesheetType.toLowerCase() === 'adjustment') {
-      const changes = Array.isArray(context.schedule_changes) ? context.schedule_changes : [];
+    const changes = existingScheduleChanges();
+    const note = amendedScheduleNote();
+    if (changes.length) {
       const rows = [];
       for (const change of changes) {
-        const dateLbl = fmtDateShort(change?.date);
+        const dateLbl = fmtDateShort(change?.date || change?.work_date || change?.workDate);
         const before = (change && typeof change.before === 'object' && change.before) ? change.before : null;
         const after = (change && typeof change.after === 'object' && change.after) ? change.after : null;
-        rows.push([dateLbl, 'Before', before ? fmtTime(before.start_utc || before.start_iso || before.start) : '', before ? fmtTime(before.end_utc || before.end_iso || before.end) : '', before ? fmtBreak(before) : '']);
-        rows.push([dateLbl, 'After', after ? fmtTime(after.start_utc || after.start_iso || after.start) : '', after ? fmtTime(after.end_utc || after.end_iso || after.end) : '', after ? fmtBreak(after) : '']);
+        rows.push([dateLbl, 'Before', before ? fmtTime(before.start_utc || before.start_iso || before.start || before.start_time || before.startTime) : '', before ? fmtTime(before.end_utc || before.end_iso || before.end || before.end_time || before.endTime) : '', before ? fmtBreak(before) : '']);
+        rows.push([dateLbl, 'After', after ? fmtTime(after.start_utc || after.start_iso || after.start || after.start_time || after.startTime) : '', after ? fmtTime(after.end_utc || after.end_iso || after.end || after.end_time || after.endTime) : '', after ? fmtBreak(after) : '']);
       }
       if (rows.length) {
-        textTable('Schedule changes', ['Date', 'Type', 'Start', 'End', 'Break'], rows);
-        html += tableHtml(['Date', 'Type', 'Start', 'End', 'Break'], rows, { title: 'Schedule changes' });
+        textTable('Schedule', ['Date', 'Type', 'Start', 'End', 'Break'], rows);
+        if (note) {
+          textLines.push(`Note: ${note}`);
+          textLines.push('');
+          html += `<p style="margin:8px 0 8px;padding:8px 10px;border:1px solid #fde68a;background:#fffbeb;border-radius:6px;color:#92400e;"><strong>Note:</strong> ${h(note)}</p>`;
+        }
+        html += tableHtml(['Date', 'Type', 'Start', 'End', 'Break'], rows, { title: 'Schedule' });
       }
     } else {
-      const sched = Array.isArray(context.schedule_rows) ? context.schedule_rows : [];
+      const sched = collectFrozenScheduleRows();
       const rows = sched.map((seg) => [fmtDateShort(seg?.date), fmtTime(seg?.start_utc || seg?.start_iso || seg?.start), fmtTime(seg?.end_utc || seg?.end_iso || seg?.end), fmtBreak(seg)]);
       if (rows.length) {
         textTable('Schedule', ['Date', 'Start', 'End', 'Break'], rows);
+        if (note) {
+          textLines.push(`Note: ${note}`);
+          textLines.push('');
+          html += `<p style="margin:8px 0 8px;padding:8px 10px;border:1px solid #fde68a;background:#fffbeb;border-radius:6px;color:#92400e;"><strong>Note:</strong> ${h(note)}</p>`;
+        }
         html += tableHtml(['Date', 'Start', 'End', 'Break'], rows, { title: 'Schedule' });
       }
     }
   }
 
   const sections = [
-    ['Units / rates', normalizeUnitRows(context.unit_rows, 'unit_rows')],
-    ['Additional Units', normalizeUnitRows(context.additional_units_rows, 'additional_units_rows')],
-    ['Expenses', normalizeUnitRows(context.expenses_rows, 'expenses_rows')],
-    ['Other', normalizeUnitRows(context.other_rows, 'other_rows')]
+    ['Units / rates', normalizeUnitRows(context.unit_rows, 'unit_rows'), 'Unit'],
+    ['Additional Units', normalizeUnitRows(context.additional_units_rows, 'additional_units_rows'), 'Unit'],
+    ['Expenses', normalizeUnitRows(context.expenses_rows, 'expenses_rows'), 'Item'],
+    ['Other', normalizeUnitRows(context.other_rows, 'other_rows'), 'Item']
   ];
 
-  for (const [title, rows] of sections) {
+  for (const [title, rows, labelHeader] of sections) {
     if (!rows.length && title !== 'Units / rates') continue;
     const tableRows = rows.map((row) => [row.unit, row.quantity, row.rate, row.total_ex_vat, row.vat, row.total_inc_vat]);
+    const headers = [labelHeader, 'Quantity', 'Rate', 'Total excl VAT', 'VAT', 'Total incl VAT'];
     if (tableRows.length) {
-      textTable(title, ['Unit', 'Quantity', 'Rate', 'Total excl VAT', 'VAT', 'Total incl VAT'], tableRows);
-      html += tableHtml(['Unit', 'Quantity', 'Rate', 'Total excl VAT', 'VAT', 'Total incl VAT'], tableRows, { title, alignRight: [1, 2, 3, 4, 5] });
+      textTable(title, headers, tableRows);
+      html += tableHtml(headers, tableRows, { title, alignRight: [1, 2, 3, 4, 5] });
     } else if (title === 'Units / rates') {
-      textTable(title, ['Unit', 'Quantity', 'Rate', 'Total excl VAT', 'VAT', 'Total incl VAT'], []);
-      html += tableHtml(['Unit', 'Quantity', 'Rate', 'Total excl VAT', 'VAT', 'Total incl VAT'], [], { title, alignRight: [1, 2, 3, 4, 5] });
+      textTable(title, headers, []);
+      html += tableHtml(headers, [], { title, alignRight: [1, 2, 3, 4, 5] });
     }
   }
 
@@ -24116,6 +24449,9 @@ async function handleBankingIdLedgerList(env, req, user) {
   }
 }
 
+
+
+
 async function advanceBankingPayExecuteOperation(env, operationRow, user, options = {}) {
   const trimStr = (value) => String(value == null ? '' : value).trim();
   const upper = (value) => trimStr(value).toUpperCase();
@@ -24225,6 +24561,53 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
       compact[key] = value;
     }
     return compact;
+  };
+
+  const resolveAuthRequestIdForScheduledNotice = (...sources) => {
+    const keys = ['auth_request_id', 'authRequestId', 'pay_batch_auth_request_id', 'payBatchAuthRequestId', 'payment_auth_request_id', 'paymentAuthRequestId'];
+    const scan = (value, depth = 0) => {
+      if (value == null || depth > 4) return '';
+      if (typeof value === 'string') return '';
+      if (Array.isArray(value)) {
+        for (const item of value) {
+          const found = scan(item, depth + 1);
+          if (found) return found;
+        }
+        return '';
+      }
+      if (!isPlainObject(value)) return '';
+      for (const key of keys) {
+        const raw = trimStr(value[key]);
+        if (raw) return raw;
+      }
+      for (const nestedKey of ['pay_batch_auth_start', 'payBatchAuthStart', 'auth', 'authorisation', 'authorization', 'execution_intent_json', 'executionIntentJson']) {
+        const found = scan(value[nestedKey], depth + 1);
+        if (found) return found;
+      }
+      return '';
+    };
+    for (const source of sources) {
+      const found = scan(source);
+      if (found) return found;
+    }
+    return '';
+  };
+
+  const queueScheduledPaymentNoticeBestEffort = async (...sources) => {
+    if (typeof sendPayBatchScheduledNoticeAllAuthorisers !== 'function') {
+      return { ok: false, skipped: true, code: 'PAYMENT_SCHEDULED_NOTICE_FUNCTION_UNAVAILABLE' };
+    }
+    const authRequestId = resolveAuthRequestIdForScheduledNotice(...sources) || null;
+    try {
+      return await sendPayBatchScheduledNoticeAllAuthorisers(env, payBatchId, authRequestId, actorUserId);
+    } catch (e) {
+      return {
+        ok: false,
+        code: 'PAYMENT_SCHEDULED_NOTICE_QUEUE_FAILED',
+        error: String(e && e.message ? e.message : e || 'PAYMENT_SCHEDULED_NOTICE_QUEUE_FAILED'),
+        auth_request_id: authRequestId
+      };
+    }
   };
 
   const publicPayload = (row) => {
@@ -26068,8 +26451,20 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
       if (auth.requires_user_action === true || upper(auth.status || auth.state || '') === 'WAITING_AUTHORISATION') {
         return waitingAuthorisation({ status_text: 'Human authorisation is required before provider submission.', pay_batch_auth_start: auth });
       }
-      if (scheduleKind === 'SCHEDULED') return moreWork('SCHEDULE_PAYMENT', { status_text: 'Authorisation complete; scheduling is required.', pay_batch_auth_start: auth });
-      return moreWork('SUBMIT_PROVIDER_TRANSFERS', { status_text: 'Authorisation complete; ready to claim one provider chunk.', pay_batch_auth_start: auth });
+      const scheduledNoticeAuthRequestId = resolveAuthRequestIdForScheduledNotice(auth, inputJson, progressJson) || null;
+      if (scheduleKind === 'SCHEDULED') {
+        return moreWork('SCHEDULE_PAYMENT', {
+          status_text: 'Authorisation complete; scheduling is required.',
+          pay_batch_auth_start: auth,
+          pay_batch_scheduled_notice_auth_request_id: scheduledNoticeAuthRequestId
+        });
+      }
+      const scheduledNotice = await queueScheduledPaymentNoticeBestEffort(auth, inputJson, progressJson);
+      return moreWork('SUBMIT_PROVIDER_TRANSFERS', {
+        status_text: 'Authorisation complete; ready to claim one provider chunk.',
+        pay_batch_auth_start: auth,
+        pay_batch_scheduled_notice: scheduledNotice
+      });
     }
 
     if (currentPhase === 'SCHEDULE_PAYMENT') {
@@ -26084,7 +26479,8 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
         p_freshness_result_hash: progressJson.freshness_result_hash || inputJson.freshness_result_hash || null
       }, 'pay_batch_schedule');
       if (scheduled.ok === false) return reviewRequired(currentPhase, scheduled.code || 'PAY_BATCH_SCHEDULE_FAILED', scheduled.message || 'Payment schedule failed.', { pay_batch_schedule: scheduled });
-      return complete({ status_text: 'Payment scheduled.', pay_batch_schedule: scheduled });
+      const scheduledNotice = await queueScheduledPaymentNoticeBestEffort(scheduled, progressJson.pay_batch_auth_start, progressJson, inputJson);
+      return complete({ status_text: 'Payment scheduled.', pay_batch_schedule: scheduled, pay_batch_scheduled_notice: scheduledNotice });
     }
 
     if (currentPhase === 'SUBMIT_PROVIDER_TRANSFERS') {
@@ -26829,8 +27225,6 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
     });
   }
 }
-
-
 
 
 async function withBankingPayOperationLease(env, operationRow, options = {}, advanceOnce = null) {
@@ -32857,11 +33251,15 @@ async function handleBankingPayBatchAuthAction(env, req, user, payBatchId) {
 
 async function sendPayBatchScheduledNoticeAllAuthorisers(env, payBatchId, authRequestId, actorUserId) {
   const enc = encodeURIComponent;
+  const trimText = (value) => String(value == null ? '' : value).trim();
+  const safeObject = (value) => (value && typeof value === 'object' && !Array.isArray(value)) ? value : {};
+  const h = (value) => escapeHtml(String(value == null ? '' : value));
 
-  const id = String(payBatchId || '').trim();
+  const id = trimText(payBatchId);
   if (!id) throw new Error('payBatchId required');
 
-  const authId = (authRequestId == null) ? null : String(authRequestId).trim() || null;
+  const authId = (authRequestId == null) ? null : trimText(authRequestId) || null;
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
   const unwrapRpc = (rpcRes, key) => {
     let payload = rpcRes;
@@ -32873,6 +33271,54 @@ async function sendPayBatchScheduledNoticeAllAuthorisers(env, payBatchId, authRe
     return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
   };
 
+  const fmtDate = (value) => {
+    const raw = trimText(value);
+    if (!raw) return '';
+    if (typeof formatCloudTmsLondonDate === 'function') {
+      const formatted = formatCloudTmsLondonDate(raw);
+      return formatted && formatted !== 'Not recorded' ? formatted : raw;
+    }
+    const d = new Date(raw.includes('T') ? raw : `${raw}T00:00:00.000Z`);
+    if (!Number.isFinite(d.getTime())) return raw;
+    return new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London', day: 'numeric', month: 'long', year: 'numeric' }).format(d);
+  };
+
+  const fmtUk = (iso) => {
+    try {
+      const d = new Date(trimText(iso));
+      if (!Number.isFinite(d.getTime())) return '';
+      return new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Europe/London',
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+        hourCycle: 'h23'
+      }).format(d);
+    } catch { return ''; }
+  };
+
+  const fmtMoney = (value) => {
+    if (value == null || trimText(value) === '') return 'Amount unavailable';
+    if (typeof formatCloudTmsGbp === 'function') {
+      const formatted = formatCloudTmsGbp(value);
+      if (formatted) return formatted;
+    }
+    const n = Number(value);
+    if (!Number.isFinite(n)) return 'Amount unavailable';
+    return new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
+  };
+
+  const tableHtml = (headers, rows, options = {}) => {
+    const title = options.title ? `<h2 style="font-size:16px;margin:18px 0 8px;color:#111827;">${h(options.title)}</h2>` : '';
+    const alignRight = new Set(options.alignRight || []);
+    const thead = `<thead><tr>${headers.map((header, index) => `<th style="border:1px solid #d1d5db;background:#f3f4f6;padding:8px 9px;text-align:${alignRight.has(index) ? 'right' : 'left'};font-size:12px;color:#374151;">${h(header)}</th>`).join('')}</tr></thead>`;
+    const tbody = `<tbody>${rows.map((row) => `<tr>${headers.map((_, index) => `<td style="border:1px solid #e5e7eb;padding:8px 9px;text-align:${alignRight.has(index) ? 'right' : 'left'};font-size:12px;color:#111827;vertical-align:top;">${h(row[index] ?? '')}</td>`).join('')}</tr>`).join('')}</tbody>`;
+    return `${title}<table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse;width:100%;margin:0 0 12px 0;">${thead}${tbody}</table>`;
+  };
+
   const summary = unwrapRpc(await sbRpc(env, 'pay_batch_execution_summary_get', {
     p_pay_batch_id: id,
     p_actor_user_id: actorUserId || null
@@ -32882,7 +33328,7 @@ async function sendPayBatchScheduledNoticeAllAuthorisers(env, payBatchId, authRe
     env,
     `${env.SUPABASE_URL}/rest/v1/pay_batches` +
     `?id=eq.${enc(id)}` +
-    `&select=id,pay_date,schedule_kind,scheduled_at_utc,rail_provider_snapshot,rail_env_snapshot,execution_commit_state` +
+    `&select=id,pay_date,schedule_kind,scheduled_at_utc,rail_provider_snapshot,rail_env_snapshot,execution_commit_state,status` +
     `&limit=1`,
     false
   );
@@ -32913,9 +33359,10 @@ async function sendPayBatchScheduledNoticeAllAuthorisers(env, payBatchId, authRe
     authObj = Array.isArray(authRows) && authRows[0] && typeof authRows[0] === 'object' ? authRows[0] : null;
   }
 
-  const payDate = (batchObj && batchObj.pay_date) ? String(batchObj.pay_date) : '';
-  const scheduleKind = (batchObj && batchObj.schedule_kind) ? String(batchObj.schedule_kind) : '';
-  const scheduledAtUtc = (batchObj && batchObj.scheduled_at_utc) ? String(batchObj.scheduled_at_utc) : '';
+  const payDate = trimText(batchObj.pay_date);
+  const scheduleKind = trimText(batchObj.schedule_kind || summary.schedule_kind || 'IMMEDIATE').toUpperCase() || 'IMMEDIATE';
+  const releaseUtc = trimText(batchObj.scheduled_at_utc || authObj?.finalised_at_utc || authObj?.created_at_utc || '');
+  const scheduledAtUk = releaseUtc ? fmtUk(releaseUtc) : '';
 
   let totalAmount = null;
   try {
@@ -32928,29 +33375,13 @@ async function sendPayBatchScheduledNoticeAllAuthorisers(env, payBatchId, authRe
     if (Number.isFinite(n) && Number(exportSummary.row_count || 0) > 0) totalAmount = Math.round(n * 100) / 100;
   } catch {}
   if (totalAmount === null) {
-    const n = Number(summary.total_amount);
+    const n = Number(summary.total_amount ?? summary.final_payable ?? summary.total_bank_out);
     if (Number.isFinite(n)) totalAmount = Math.round(n * 100) / 100;
   }
 
-  const fmtUk = (iso) => {
-    try {
-      const d = new Date(String(iso || '').trim());
-      if (isNaN(d.getTime())) return '';
-      const parts = new Intl.DateTimeFormat('en-GB', {
-        timeZone: 'Europe/London',
-        year: 'numeric', month: '2-digit', day: '2-digit',
-        hour: '2-digit', minute: '2-digit', second: '2-digit',
-        hour12: false
-      }).formatToParts(d).reduce((acc, p) => ((acc[p.type] = p.value), acc), {});
-      return `${parts.day}/${parts.month}/${parts.year} ${parts.hour}:${parts.minute}:${parts.second}hrs`;
-    } catch { return ''; }
-  };
-
-  const scheduledAtUk = scheduledAtUtc ? fmtUk(scheduledAtUtc) : '';
-
   const actorIds = [];
   const pushActorId = (value) => {
-    const s = String(value || '').trim();
+    const s = trimText(value);
     if (s && !actorIds.includes(s)) actorIds.push(s);
   };
   pushActorId(authObj && authObj.requested_by_user_id);
@@ -32967,27 +33398,28 @@ async function sendPayBatchScheduledNoticeAllAuthorisers(env, payBatchId, authRe
       false
     );
     for (const actorRow of actorRows || []) {
-      const actorId = String(actorRow && actorRow.id ? actorRow.id : '').trim();
+      const actorId = trimText(actorRow && actorRow.id);
       if (!actorId) continue;
-      displayById[actorId] = String(actorRow.display_name || actorRow.email || actorId);
+      displayById[actorId] = trimText(actorRow.display_name || actorRow.email || actorId);
     }
   }
 
-  const linesAuth = [];
+  const authRowsForEmail = [];
   if (authObj && authObj.requested_by_user_id) {
     const who = displayById[String(authObj.requested_by_user_id)] || String(authObj.requested_by_user_id);
     const at = authObj.created_at_utc ? fmtUk(authObj.created_at_utc) : '';
-    linesAuth.push(`- ${who} (requested)${at ? ` at ${at}` : ''}`);
+    authRowsForEmail.push([who, 'REQUESTED', at]);
   }
   if (authObj && authObj.finalised_by_user_id) {
     const who = displayById[String(authObj.finalised_by_user_id)] || String(authObj.finalised_by_user_id);
     const at = authObj.finalised_at_utc ? fmtUk(authObj.finalised_at_utc) : '';
-    linesAuth.push(`- ${who} (${String(authObj.state || 'authorised')})${at ? ` at ${at}` : ''}`);
+    authRowsForEmail.push([who, trimText(authObj.state || 'AUTHORISED').toUpperCase(), at]);
   }
   if (authObj && authObj.golden_key_used === true && authObj.golden_key_user_id && String(authObj.golden_key_user_id) !== String(authObj.finalised_by_user_id || '')) {
     const who = displayById[String(authObj.golden_key_user_id)] || String(authObj.golden_key_user_id);
-    linesAuth.push(`- ${who} (golden key)`);
+    authRowsForEmail.push([who, 'GOLDEN KEY', '']);
   }
+  if (!authRowsForEmail.length) authRowsForEmail.push(['Not recorded', 'AUTHORISE', '']);
 
   const { rows: authUsers } = await sbFetch(
     env,
@@ -32998,11 +33430,18 @@ async function sendPayBatchScheduledNoticeAllAuthorisers(env, payBatchId, authRe
     false
   );
 
-  const toEmails = (authUsers || [])
-    .map(r => (r && r.email) ? String(r.email).trim() : '')
-    .filter(Boolean);
+  const toEmails = [];
+  const seenEmail = new Set();
+  for (const row of authUsers || []) {
+    const email = trimText(row && row.email);
+    if (!email) continue;
+    const key = email.toLowerCase();
+    if (seenEmail.has(key)) continue;
+    seenEmail.add(key);
+    toEmails.push(email);
+  }
 
-  const reference = `pay_batch_scheduled:${id}:${authId || ''}`;
+  const reference = `pay_batch_scheduled:${id}:${authObj?.id || authId || ''}`;
 
   const { rows: existingRows } = await sbFetch(
     env,
@@ -33015,37 +33454,49 @@ async function sendPayBatchScheduledNoticeAllAuthorisers(env, payBatchId, authRe
   );
 
   const existingTo = new Set((existingRows || [])
-    .map(r => (r && r.to) ? String(r.to).trim() : '')
+    .map(r => trimText(r && r.to).toLowerCase())
     .filter(Boolean)
   );
 
-  const subject = `Payment scheduled – Pay batch ${String(id).slice(0, 8)}${payDate ? ` – ${payDate}` : ''}`;
-  const totalAmountLine = totalAmount === null ? 'Total amount: amount unavailable' : `Total amount: £${totalAmount.toFixed(2)}`;
+  const statusLabel = trimText(batchObj.execution_commit_state || batchObj.status || summary.status || (scheduleKind === 'SCHEDULED' ? 'Scheduled' : 'Authorised'));
+  const scopeLabel = trimText(summary.pay_channel_scope || summary.scope || summary.batch_scope || 'ALL').toUpperCase() || 'ALL';
+  const subject = `Payment scheduled in CloudTMS – Pay batch ${String(id).slice(0, 8)}${payDate ? ` – ${fmtDate(payDate)}` : ''}`;
+
+  const batchRowsForEmail = [
+    ['Pay batch', id],
+    ...(payDate ? [['Pay date', fmtDate(payDate)]] : []),
+    ['Schedule', scheduleKind],
+    ...(scheduledAtUk ? [['Release time', scheduledAtUk]] : []),
+    ['Total amount', fmtMoney(totalAmount)],
+    ['Scope', scopeLabel],
+    ['Status', statusLabel || (scheduleKind === 'SCHEDULED' ? 'Scheduled' : 'Authorised')]
+  ];
 
   const textLines = [
-    `A payment has been scheduled in CloudTMS.`,
-    ``,
-    `Pay batch: ${id}`,
-    ...(payDate ? [`Pay date: ${payDate}`] : []),
-    `Schedule: ${scheduleKind || ''}${scheduledAtUk ? ` (release: ${scheduledAtUk})` : ''}`,
-    ``,
-    totalAmountLine,
-    ``,
-    `Authorised by:`,
-    ...(linesAuth.length ? linesAuth : ['- (none recorded)']),
-    ``,
-    `This email is for audit visibility for all payment authorisers.`
+    'Payment scheduled in CloudTMS',
+    '',
+    ...batchRowsForEmail.map(([field, value]) => `${field}: ${value}`),
+    '',
+    'Authorisation',
+    ...authRowsForEmail.map(([who, action, at]) => `- ${who} (${action})${at ? ` at ${at}` : ''}`),
+    '',
+    'This email is for audit visibility for payment authorisers.'
   ];
 
   const body_text = textLines.join('\n');
-  const body_html = `<pre>${textLines.map(l => String(l)).join('\n')}</pre>`;
+  let body_html = `<div style="font-family:Arial,Helvetica,sans-serif;color:#111827;font-size:14px;line-height:1.45;">`;
+  body_html += `<h1 style="font-size:22px;margin:0 0 10px;color:#111827;">Payment scheduled in CloudTMS</h1>`;
+  body_html += tableHtml(['Field', 'Value'], batchRowsForEmail, { title: 'Batch summary' });
+  body_html += tableHtml(['Authorised by', 'Action', 'Time'], authRowsForEmail, { title: 'Authorisation' });
+  body_html += `<p style="margin:14px 0 0;">This email is for audit visibility for payment authorisers.</p>`;
+  body_html += `</div>`;
 
   let queued = 0;
   let skipped_exists = 0;
   let errors = 0;
 
   for (const toEmail of toEmails) {
-    if (existingTo.has(toEmail)) {
+    if (existingTo.has(toEmail.toLowerCase())) {
       skipped_exists += 1;
       continue;
     }
@@ -33071,7 +33522,7 @@ async function sendPayBatchScheduledNoticeAllAuthorisers(env, payBatchId, authRe
           recipient_kind: null,
           recipient_id: null,
           context_kind: 'pay_batches',
-          context_id: (/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id) ? id : null),
+          context_id: (uuidRe.test(id) ? id : null),
           mailshot_run_id: null,
           document_template_id: null,
           created_by: actorUserId || null
@@ -33088,7 +33539,7 @@ async function sendPayBatchScheduledNoticeAllAuthorisers(env, payBatchId, authRe
   return {
     ok: true,
     pay_batch_id: id,
-    auth_request_id: authId,
+    auth_request_id: authObj?.id || authId,
     reference,
     amount_available: totalAmount !== null,
     total_amount: totalAmount,
@@ -33098,6 +33549,7 @@ async function sendPayBatchScheduledNoticeAllAuthorisers(env, payBatchId, authRe
     errors
   };
 }
+
 
 
 
@@ -44410,7 +44862,6 @@ async function handleBankingPayBatchGetSectionPage(env, req, user, payBatchId) {
 }
 
 
-
 async function advanceBankingPaySettlementOperation(env, operationRow, user, options = {}) {
   const unwrapRpcPayload = (rpcRes, key) => {
     let payload = rpcRes;
@@ -44539,6 +44990,159 @@ async function advanceBankingPaySettlementOperation(env, operationRow, user, opt
     query.set('limit', '50000');
     const res = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/banking_pay_operation_settlement_scope?${query.toString()}`, false);
     return res && Array.isArray(res.rows) ? res.rows.map((row) => safeObject(row)).filter((row) => isUuidText(row.id)) : [];
+  };
+
+  const fetchAllSettlementScopeRows = async () => {
+    const query = new URLSearchParams();
+    query.set('operation_id', `eq.${operationId}`);
+    query.set('pay_batch_id', `eq.${payBatchId}`);
+    query.set('select', 'id,operation_id,pay_batch_id,pay_batch_candidate_id,candidate_id,pay_channel,settlement_key,payload_json,status,created_at_utc,updated_at_utc');
+    query.set('order', 'created_at_utc.asc,id.asc');
+    query.set('limit', '50000');
+    const res = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/banking_pay_operation_settlement_scope?${query.toString()}`, false);
+    return res && Array.isArray(res.rows) ? res.rows.map((row) => safeObject(row)).filter((row) => isUuidText(row.id)) : [];
+  };
+
+  const extractTransferIdsFromSettlementScopeRows = (settlementScopeRows = []) => uniqueTexts((Array.isArray(settlementScopeRows) ? settlementScopeRows : []).map((row) => {
+    const payload = safeObject(row?.payload_json);
+    return payload?.payment_scope_json?.pay_bank_transfer_id;
+  })).filter(isUuidText);
+
+  const fetchSettlementScopeTransferRows = async (transferIds = []) => {
+    const ids = uniqueTexts(transferIds).filter(isUuidText);
+    if (ids.length <= 0) return [];
+    const idSet = new Set(ids);
+    const query = new URLSearchParams();
+    query.set('pay_batch_id', `eq.${payBatchId}`);
+    query.set('select', 'id,pay_batch_id,status,rail_state,completed_at_utc,rail_tx_id,amount,failed_reason');
+    query.set('limit', '50000');
+    const res = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/pay_bank_transfers?${query.toString()}`, false);
+    return res && Array.isArray(res.rows)
+      ? res.rows.map((row) => safeObject(row)).filter((row) => isUuidText(row.id) && idSet.has(String(row.id || '').trim()))
+      : [];
+  };
+
+  const buildDurableSettlementScopeReadiness = async (previousChunkResult = {}) => {
+    const settlementScopeRows = await fetchAllSettlementScopeRows();
+    const settlementScopeIds = settlementScopeRows.map((row) => String(row.id || '').trim()).filter(isUuidText);
+    const transferIds = extractTransferIdsFromSettlementScopeRows(settlementScopeRows);
+    const transferRows = await fetchSettlementScopeTransferRows(transferIds);
+    const transferById = new Map(transferRows.map((row) => [String(row.id || '').trim(), row]));
+    const successTerminalStates = new Set(['COMPLETED', 'COMPLETE', 'SETTLED', 'PAID', 'EXECUTED', 'COMMITTED', 'SUCCESS', 'SUCCESSFUL', 'SUCCEEDED']);
+    const failedTerminalStates = new Set(['FAILED', 'FAILURE', 'DECLINED', 'REJECTED', 'CANCELLED', 'CANCELED', 'RETURNED', 'REVERTED', 'REVERSED']);
+    const pendingStates = new Set(['', 'PENDING', 'SUBMITTED', 'QUEUED', 'ACCEPTED', 'SENT', 'PROCESSING', 'IN_FLIGHT', 'WAITING', 'WAITING_BANK_CONFIRM', 'UNKNOWN', 'NOT_SUBMITTED']);
+    const statusOf = (value) => String(value == null ? '' : value).trim().toUpperCase();
+    const isSuccessTransfer = (row) => {
+      const transfer = safeObject(row);
+      return successTerminalStates.has(statusOf(transfer.status)) || successTerminalStates.has(statusOf(transfer.rail_state)) || Boolean(transfer.completed_at_utc);
+    };
+    const isFailedTransfer = (row) => {
+      const transfer = safeObject(row);
+      return failedTerminalStates.has(statusOf(transfer.status)) || failedTerminalStates.has(statusOf(transfer.rail_state));
+    };
+    const settledScopeRows = [];
+    const failedScopeRows = [];
+    const skippedScopeRows = [];
+    const pendingScopeRows = [];
+    const unknownScopeRows = [];
+    const successfulTransferIds = [];
+    const failedTransferIds = [];
+    const pendingTransferIds = [];
+
+    for (const scopeRow of settlementScopeRows) {
+      const scopeStatus = statusOf(scopeRow.status);
+      const payload = safeObject(scopeRow.payload_json);
+      const transferId = String(payload?.payment_scope_json?.pay_bank_transfer_id || '').trim();
+      const transferRow = transferById.get(transferId) || null;
+      if (transferRow && isSuccessTransfer(transferRow)) successfulTransferIds.push(transferId);
+      if (transferRow && !isSuccessTransfer(transferRow) && isFailedTransfer(transferRow)) failedTransferIds.push(transferId);
+      if (transferRow && !isSuccessTransfer(transferRow) && !isFailedTransfer(transferRow)) pendingTransferIds.push(transferId);
+
+      if (scopeStatus === 'SETTLED') {
+        settledScopeRows.push(scopeRow);
+      } else if (scopeStatus === 'FAILED') {
+        failedScopeRows.push(scopeRow);
+      } else if (scopeStatus === 'SKIPPED') {
+        skippedScopeRows.push(scopeRow);
+      } else if (pendingStates.has(scopeStatus)) {
+        pendingScopeRows.push(scopeRow);
+      } else {
+        unknownScopeRows.push(scopeRow);
+      }
+    }
+
+    const totalScopeCount = settlementScopeRows.length;
+    const successfulScopeCount = settledScopeRows.length;
+    const terminalFailedScopeCount = failedScopeRows.length;
+    const skippedScopeCount = skippedScopeRows.length;
+    const pendingScopeCount = pendingScopeRows.length;
+    const unknownScopeCount = unknownScopeRows.length;
+    const processorFailedScopeCount = 0;
+    const allScopesTerminal = totalScopeCount > 0
+      && pendingScopeCount === 0
+      && unknownScopeCount === 0
+      && processorFailedScopeCount === 0
+      && successfulScopeCount + terminalFailedScopeCount + skippedScopeCount === totalScopeCount
+      && successfulScopeCount + terminalFailedScopeCount > 0;
+    const allScopesSuccessful = allScopesTerminal === true && terminalFailedScopeCount === 0;
+    const completedWithFailedPayments = allScopesTerminal === true && terminalFailedScopeCount > 0;
+    const priorReadiness = settlementReadinessFromChunkResult(previousChunkResult);
+    const finalisationPayload = {
+      pay_batch_id: payBatchId,
+      operation_id: operationId,
+      settlement_scope_ids: settlementScopeIds,
+      successful_scope_count: successfulScopeCount,
+      terminal_failed_scope_count: terminalFailedScopeCount,
+      pending_scope_count: pendingScopeCount,
+      unknown_scope_count: unknownScopeCount,
+      processor_failed_scope_count: processorFailedScopeCount,
+      completed_transfer_count: uniqueTexts(successfulTransferIds).length
+    };
+    const finalisationPayloadHash = allScopesTerminal ? simpleHash(finalisationPayload) : null;
+
+    return {
+      ok: true,
+      operation_mode: true,
+      durable_settlement_scope_readiness: true,
+      source: 'banking_pay_operation_settlement_scope',
+      operation_id: operationId,
+      pay_batch_id: payBatchId,
+      settlement_scope_ids: settlementScopeIds,
+      settlement_scope_count: totalScopeCount,
+      total_scope_count: totalScopeCount,
+      settled_this_chunk: 0,
+      reused_this_chunk: successfulScopeCount,
+      failed_this_chunk: 0,
+      pending_this_chunk: pendingScopeCount,
+      remaining: pendingScopeCount + unknownScopeCount,
+      failed_scope_count: terminalFailedScopeCount,
+      scope_settlement_complete: allScopesTerminal && terminalFailedScopeCount === 0,
+      successful_scope_count: successfulScopeCount,
+      terminal_failed_scope_count: terminalFailedScopeCount,
+      skipped_scope_count: skippedScopeCount,
+      pending_scope_count: pendingScopeCount,
+      unknown_scope_count: unknownScopeCount,
+      processor_failed_scope_count: processorFailedScopeCount,
+      all_scopes_terminal: allScopesTerminal,
+      all_scopes_successful: allScopesSuccessful,
+      completed_with_failed_payments: completedWithFailedPayments,
+      batch_status_label: completedWithFailedPayments ? 'Completed with failed payments' : (allScopesSuccessful ? 'Completed' : 'Waiting for bank confirmation'),
+      completed_transfer_count: uniqueTexts(successfulTransferIds).length,
+      terminal_failed_transfer_count: uniqueTexts(failedTransferIds).length,
+      pending_transfer_count: uniqueTexts(pendingTransferIds).length,
+      has_more: pendingScopeCount + unknownScopeCount > 0,
+      remittance_ready: allScopesTerminal === true && successfulScopeCount > 0,
+      requires_full_batch_finalisation: allScopesTerminal,
+      full_batch_finalisation_safe: allScopesTerminal,
+      finalisation_idempotency_key: allScopesTerminal ? `rail-finalise:batch:${payBatchId}:operation:${operationId}:hash:${finalisationPayloadHash}` : null,
+      finalisation_payload_hash: finalisationPayloadHash,
+      remittance_queued: false,
+      previous_last_chunk_result_hash: simpleHash(previousChunkResult),
+      previous_last_chunk_readiness: priorReadiness,
+      message: allScopesTerminal
+        ? 'Durable settlement scopes are terminal. Full batch settlement finalisation can proceed.'
+        : 'Durable settlement scopes are not yet terminal.'
+    };
   };
 
   const settlementScopeUnitFromRow = (row, unitOrdinal) => {
@@ -45031,29 +45635,52 @@ async function advanceBankingPaySettlementOperation(env, operationRow, user, opt
         }
       }
       const lastChunkResult = safeObject(progressJson.last_chunk_result);
-      if (shouldRunFullSettlementFinalisation(lastChunkResult)) {
-        const finalisationIdentity = finalisationIdentityFrom(lastChunkResult);
+      let effectiveLastChunkResult = lastChunkResult;
+      let durableSettlementReadiness = null;
+
+      if (usesRailSettlement === true) {
+        durableSettlementReadiness = await buildDurableSettlementScopeReadiness(lastChunkResult);
+        const previousReadiness = settlementReadinessFromChunkResult(lastChunkResult);
+        const durableReadinessShouldReplaceStaleChunkResult = durableSettlementReadiness.total_scope_count > 0
+          && (
+            durableSettlementReadiness.all_scopes_terminal === true
+            || previousReadiness.all_scopes_terminal !== true
+            || previousReadiness.pending_or_unknown_scope_count > 0
+            || Object.keys(lastChunkResult).length === 0
+          );
+        if (durableReadinessShouldReplaceStaleChunkResult) {
+          effectiveLastChunkResult = {
+            ...durableSettlementReadiness,
+            stale_chunk_result_recomputed_from_durable_scope: true
+          };
+        }
+      }
+
+      if (shouldRunFullSettlementFinalisation(effectiveLastChunkResult)) {
+        const finalisationIdentity = finalisationIdentityFrom(effectiveLastChunkResult);
         return save('RUNNING', 'FINALISE_BATCH_SETTLEMENT', {
           status_text: 'All operation-mode settlement scopes are terminal. Finalising the full batch settlement once before remittance queueing.',
-          last_chunk_result: lastChunkResult,
+          last_chunk_result: effectiveLastChunkResult,
+          durable_settlement_scope_readiness: durableSettlementReadiness,
           batch_settlement_finalisation: {
             required: true,
             completed: false,
             finalisation_idempotency_key: finalisationIdentity.key,
             finalisation_payload_hash: finalisationIdentity.payloadHash,
-            source_chunk_result: lastChunkResult
+            source_chunk_result: effectiveLastChunkResult
           }
         });
       }
 
       if (usesRailSettlement === true) {
-        const readiness = settlementReadinessFromChunkResult(lastChunkResult);
+        const readiness = settlementReadinessFromChunkResult(effectiveLastChunkResult);
         if (readiness.processor_failed_scope_count > 0) {
           return finish('FAILED', null, {
             code: 'SETTLEMENT_SCOPE_PROCESSOR_FAILURE',
             message: 'One or more settlement scopes failed for a processor/data reason and require investigation.',
             phase,
-            last_chunk_result: lastChunkResult,
+            last_chunk_result: effectiveLastChunkResult,
+            durable_settlement_scope_readiness: durableSettlementReadiness,
             readiness
           });
         }
@@ -45061,14 +45688,19 @@ async function advanceBankingPaySettlementOperation(env, operationRow, user, opt
           return save('WAITING_PROVIDER', 'APPLY_SETTLEMENT_CHUNKS', {
             status_text: 'Waiting for remaining bank/provider outcomes before finalising the payment run.',
             waiting_provider: true,
-            last_chunk_result: lastChunkResult,
+            last_chunk_result: effectiveLastChunkResult,
+            durable_settlement_scope_readiness: durableSettlementReadiness,
             readiness,
             resume_reason: 'WAITING_FOR_TERMINAL_BANK_OUTCOMES'
           });
         }
       }
 
-      return save('RUNNING', 'APPLY_RAIL_UPDATES', { status_text: 'All settlement chunks applied.', last_chunk_result: lastChunkResult });
+      return save('RUNNING', 'APPLY_RAIL_UPDATES', {
+        status_text: 'All settlement chunks applied.',
+        last_chunk_result: effectiveLastChunkResult,
+        durable_settlement_scope_readiness: durableSettlementReadiness
+      });
     }
 
     if (phase === 'FINALISE_BATCH_SETTLEMENT') {
@@ -95745,6 +96377,127 @@ function validateEmailPayload(p) {
 // ---------- Build PA payload (single email) in Apps Script structure ----------
 
 async function buildEmailPayloadFromOutboxRow(env, outboxRow) {
+  const trimText = (value) => String(value == null ? '' : value).trim();
+  const upperText = (value) => trimText(value).toUpperCase();
+  const safeObject = (value) => (value && typeof value === 'object' && !Array.isArray(value)) ? value : {};
+  const parseObjectMaybe = (value) => {
+    if (value && typeof value === 'object' && !Array.isArray(value)) return value;
+    if (typeof value !== 'string') return {};
+    const raw = value.trim();
+    if (!raw) return {};
+    try {
+      const parsed = JSON.parse(raw);
+      return safeObject(parsed);
+    } catch { return {}; }
+  };
+  const firstNonBlank = (...values) => {
+    for (const value of values) {
+      const text = trimText(value);
+      if (text) return text;
+    }
+    return '';
+  };
+  const hasArray = (value) => Array.isArray(value) && value.length > 0;
+  const mergePreservingRichArrays = (baseValue, extraValue) => {
+    const out = { ...safeObject(baseValue) };
+    const extra = safeObject(extraValue);
+    for (const [key, value] of Object.entries(extra)) {
+      if (value == null) continue;
+      if (Array.isArray(value)) {
+        if (!hasArray(out[key])) out[key] = value;
+        continue;
+      }
+      if (value && typeof value === 'object') {
+        out[key] = mergePreservingRichArrays(out[key], value);
+        continue;
+      }
+      if (out[key] == null || trimText(out[key]) === '') out[key] = value;
+    }
+    return out;
+  };
+  const buildRemittanceJobFromOutbox = (row) => {
+    const scope = parseObjectMaybe(row.payment_scope_json ?? row.paymentScopeJson);
+    const payload = parseObjectMaybe(row.payload_json ?? row.payloadJson);
+    const meta = parseObjectMaybe(row.metadata_json ?? row.metadataJson ?? row.metadata);
+    let job = mergePreservingRichArrays({}, scope);
+    const nested = [
+      scope.remittance_job,
+      scope.remittanceJob,
+      scope.render_job,
+      scope.renderJob,
+      scope.job,
+      scope.payload_json,
+      scope.payloadJson,
+      scope.payment_scope_json,
+      scope.paymentScopeJson,
+      payload.remittance_job,
+      payload.remittanceJob,
+      payload.render_job,
+      payload.renderJob,
+      payload.job,
+      meta.remittance_job,
+      meta.remittanceJob,
+      meta.render_job,
+      meta.renderJob,
+      meta.job
+    ];
+    for (const candidate of nested) job = mergePreservingRichArrays(job, parseObjectMaybe(candidate));
+
+    if (!job.pay_batch_id && row.context_kind && /^pay_batch/i.test(trimText(row.context_kind)) && row.context_id) job.pay_batch_id = row.context_id;
+    if (!job.recipient || typeof job.recipient !== 'object' || Array.isArray(job.recipient)) job.recipient = {};
+    job.recipient = mergePreservingRichArrays(job.recipient, {
+      email: row.to || null,
+      name: row.recipient_name || row.recipient_display_name || null,
+      candidate_id: row.recipient_kind && upperText(row.recipient_kind).includes('CANDIDATE') ? row.recipient_id : null,
+      umbrella_id: row.recipient_kind && upperText(row.recipient_kind).includes('UMBRELLA') ? row.recipient_id : null
+    });
+    if (!job.job_kind) job.job_kind = firstNonBlank(scope.job_kind, scope.jobKind, scope.remittance_kind, scope.remittanceKind, row.template_key, row.templateKey, row.type);
+    if (!job.scope) job.scope = firstNonBlank(scope.scope, scope.pay_channel_scope, row.scope, row.pay_channel_scope);
+    if (!job.generated_at_utc && row.created_at_utc) job.generated_at_utc = row.created_at_utc;
+    return job;
+  };
+
+  const rowType = upperText(outboxRow && (outboxRow.type || outboxRow.mail_type || outboxRow.mailType));
+  const rowReference = trimText(outboxRow && outboxRow.reference);
+  const rowContextKind = upperText(outboxRow && outboxRow.context_kind);
+  const shouldHydrateRemittance = rowType === 'REMITTANCE' || /^remittance/i.test(rowReference) || rowContextKind === 'PAY_BATCH_REMITTANCE';
+
+  if (shouldHydrateRemittance && typeof buildRemittanceEmailPayload === 'function') {
+    try {
+      const remittanceJob = buildRemittanceJobFromOutbox(outboxRow || {});
+      const rendered = buildRemittanceEmailPayload(remittanceJob, {
+        payBatchId: firstNonBlank(remittanceJob.pay_batch_id, outboxRow && outboxRow.context_id),
+        payDate: remittanceJob.pay_date || remittanceJob.authoritative_payment_date || null,
+        jobKind: remittanceJob.job_kind || remittanceJob.jobKind || null,
+        scope: remittanceJob.pay_channel_scope || remittanceJob.scope || null,
+        generatedAtUtc: remittanceJob.generated_at_utc || (outboxRow && outboxRow.created_at_utc) || null,
+        authorisedAtUtc: remittanceJob.authorised_at_utc || remittanceJob.authorized_at_utc || remittanceJob.authorisedAtUtc || null,
+        confirmedAtUtc: remittanceJob.confirmed_at_utc || remittanceJob.payment_confirmed_at_utc || remittanceJob.confirmedAtUtc || null,
+        bulkReference: remittanceJob.bulk_reference || remittanceJob.bulkReference || null,
+        detailedBreakdown: remittanceJob.detailed_breakdown === true || remittanceJob.detailedBreakdown === true,
+        onlyConfirmed: remittanceJob.only_confirmed === true || remittanceJob.onlyConfirmed === true,
+        effectiveTestMode: remittanceJob.effective_test_mode === true || remittanceJob.effectiveTestMode === true,
+        payrollTesting: remittanceJob.payroll_testing === true || remittanceJob.payrollTesting === true,
+        testRecipient: remittanceJob.test_recipient || remittanceJob.testRecipient || null,
+        intendedRecipient: remittanceJob.intended_recipient || remittanceJob.intendedRecipient || (outboxRow && outboxRow.to) || null,
+        headerMessage: firstNonBlank(remittanceJob.header_message, remittanceJob.headerMessage, 'Please find below a remittance advice for authorised timesheets:'),
+        footerMessage: firstNonBlank(remittanceJob.footer_message, remittanceJob.footerMessage, 'Many thanks Arthur Rai Medical Services')
+      });
+      if (rendered && (rendered.body_html || rendered.body_text)) {
+        outboxRow = {
+          ...(outboxRow || {}),
+          subject: firstNonBlank(rendered.subject, outboxRow && outboxRow.subject),
+          body_html: rendered.body_html || (outboxRow && outboxRow.body_html) || null,
+          body_text: rendered.body_text || (outboxRow && outboxRow.body_text) || null,
+          email_type: 'html',
+          _rendered_remittance_summary_json: rendered.summary_json || null
+        };
+      }
+    } catch (e) {
+      try { console.warn('[EMAIL_OUTBOX][REMITTANCE_RENDER]', String(e && e.message ? e.message : e)); } catch {}
+    }
+  }
+
   const base = normalizeEmailPayload({
     to: outboxRow.to,
     cc: outboxRow.cc,
@@ -95907,6 +96660,9 @@ async function buildEmailPayloadFromOutboxRow(env, outboxRow) {
 
   return payload;
 }
+
+
+
 
 async function limitOrLinkAttachments(env, { payload }) {
   const limitBytes = Number(env.EMAIL_MAX_PAYLOAD_BYTES) || EMAIL_MAX_PAYLOAD_BYTES;
