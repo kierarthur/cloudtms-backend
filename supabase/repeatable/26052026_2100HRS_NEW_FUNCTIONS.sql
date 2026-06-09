@@ -87302,18 +87302,12 @@ $$;
 DROP FUNCTION IF EXISTS public.pay_settle_rail(uuid, jsonb, uuid);
 DROP FUNCTION IF EXISTS public.pay_settle_rail(uuid, jsonb, uuid, uuid, jsonb);
 
-create or replace function public.pay_settle_rail(
-  p_pay_batch_id uuid,
-  p_settlement_json jsonb,
-  p_actor_user_id uuid,
-  p_operation_id uuid default null,
-  p_settlement_scope_ids jsonb default null
-)
-returns jsonb
-language plpgsql
-security definer
-set search_path = public
-as $$
+CREATE OR REPLACE FUNCTION public.pay_settle_rail(p_pay_batch_id uuid, p_settlement_json jsonb, p_actor_user_id uuid, p_operation_id uuid DEFAULT NULL::uuid, p_settlement_scope_ids jsonb DEFAULT NULL::jsonb)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
 declare
   v_batch record;
 
@@ -88317,7 +88311,12 @@ begin
     SELECT
       COALESCE(COUNT(*) FILTER (WHERE scope_terminality.scope_status = 'SETTLED' OR scope_terminality.has_success_terminal_transfer IS TRUE), 0)::integer,
       COALESCE(COUNT(*) FILTER (WHERE scope_terminality.scope_status = 'FAILED' AND scope_terminality.has_failed_terminal_transfer IS TRUE), 0)::integer,
-      COALESCE(COUNT(*) FILTER (WHERE scope_terminality.scope_status = 'PENDING' OR scope_terminality.has_pending_transfer IS TRUE), 0)::integer,
+      COALESCE(COUNT(*) FILTER (
+        WHERE scope_terminality.scope_status NOT IN ('SETTLED', 'FAILED', 'SKIPPED')
+          AND scope_terminality.has_success_terminal_transfer IS NOT TRUE
+          AND scope_terminality.has_failed_terminal_transfer IS NOT TRUE
+          AND (scope_terminality.scope_status = 'PENDING' OR scope_terminality.has_pending_transfer IS TRUE)
+      ), 0)::integer,
       COALESCE(COUNT(*) FILTER (
         WHERE scope_terminality.scope_status NOT IN ('SETTLED', 'FAILED', 'SKIPPED')
           AND scope_terminality.has_success_terminal_transfer IS NOT TRUE
@@ -90840,8 +90839,7 @@ begin
     'policy_x_checked', true
   );
 end;
-$$;
-
+$function$;
 
 
 
