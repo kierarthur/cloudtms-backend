@@ -147436,10 +147436,6 @@ async function csvAdapter_confirmManual() {
 }
 
 
-
-
-
-
 async function bankingCronTick(env, opts = {}) {
   const trimText = (value) => String(value == null ? '' : value).trim();
   const firstText = function () {
@@ -147470,7 +147466,7 @@ async function bankingCronTick(env, opts = {}) {
 
   const backendRunnerOperationTypes = Array.isArray(opts && opts.operationTypes)
     ? opts.operationTypes.map((value) => firstText(value).toUpperCase()).filter(Boolean)
-    : (Array.isArray(opts && opts.operation_types) ? opts.operation_types.map((value) => firstText(value).toUpperCase()).filter(Boolean) : ['DRAFT_CREATE', 'PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS']);
+    : (Array.isArray(opts && opts.operation_types) ? opts.operation_types.map((value) => firstText(value).toUpperCase()).filter(Boolean) : ['DRAFT_CREATE', 'PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS', 'PAYMENT_SETTLEMENT', 'REMITTANCE_QUEUE']);
 
   const summary = {
     ok: true,
@@ -147478,7 +147474,7 @@ async function bankingCronTick(env, opts = {}) {
     browser_session_required: false,
     backend_runner_owned_scope: true,
     operation_scope: 'BANKING_PAY_BACKEND_RUNNER_OWNED',
-    operation_types: Array.from(new Set(backendRunnerOperationTypes.length ? backendRunnerOperationTypes : ['DRAFT_CREATE', 'PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS'])),
+    operation_types: Array.from(new Set(backendRunnerOperationTypes.length ? backendRunnerOperationTypes : ['DRAFT_CREATE', 'PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS', 'PAYMENT_SETTLEMENT', 'REMITTANCE_QUEUE'])),
     operation_limit: clampInteger(opts && (opts.operationLimit != null ? opts.operationLimit : (opts.activeOperationLimit != null ? opts.activeOperationLimit : opts.claimLimit)), 10, 1, 25),
     advanced_count: 0,
     claimed_count: 0,
@@ -147529,6 +147525,7 @@ async function bankingCronTick(env, opts = {}) {
 
   return summary;
 }
+
 
 async function drainBankingPayWorkbenchJobs(env, opts = {}) {
   const trimStr = (value) => String(value == null ? '' : value).trim();
