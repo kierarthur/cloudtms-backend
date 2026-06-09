@@ -32511,7 +32511,7 @@ async function handleBankingPayBatchPrepare(env, req, user, payBatchId) {
 }
 
 
-async function handleBankingPayBatchSchedule(env, req, user, payBatchId) {
+async function handleBankingPayBatchSchedule(env, req, user, payBatchId, ctx) {
   const id = String(payBatchId || '').trim();
   if (!id) return withCORS(env, req, badRequest('pay_batch_id is required'));
   if (!user || !user.id) return withCORS(env, req, unauthorized('Unauthorized'));
@@ -32656,6 +32656,29 @@ async function handleBankingPayBatchSchedule(env, req, user, payBatchId) {
       }
     });
 
+    try {
+      const operationId = String(
+        operationPayload?.operation_id
+        || operationPayload?.operationId
+        || operationPayload?.id
+        || operationPayload?.operation?.operation_id
+        || operationPayload?.operation?.operationId
+        || operationPayload?.operation?.id
+        || ''
+      ).trim();
+      if (operationId && typeof scheduleBankingPayOperationDrain === 'function') {
+        scheduleBankingPayOperationDrain(env, ctx, {
+          operationId,
+          operationType: 'PAYMENT_EXECUTE',
+          payBatchId: id,
+          actorUserId: user.id,
+          source: 'handleBankingPayBatchSchedule'
+        });
+      }
+    } catch (drainError) {
+      try { console.warn('[handleBankingPayBatchSchedule] immediate operation drain scheduling failed:', drainError?.message || drainError); } catch {}
+    }
+
     return withCORS(env, req, ok(operationPayload));
   } catch (e) {
     const friendly = (typeof makeBankingFriendlyErrorPayload === 'function')
@@ -32664,7 +32687,6 @@ async function handleBankingPayBatchSchedule(env, req, user, payBatchId) {
     return withCORS(env, req, new Response(JSON.stringify(friendly), { status: Number(friendly.http_status || friendly.status || 500) || 500, headers: JSON_HEADERS }));
   }
 }
-
 
 
 async function handlePaymentAuthorisersList(env, req, user) {
@@ -35254,7 +35276,8 @@ async function handleBankingPayCorrectionStatus(env, req, user, correctionReques
   }
 }
 
-async function handleBankingPayBatchExportCsv(env, req, user, payBatchId) {
+
+async function handleBankingPayBatchExportCsv(env, req, user, payBatchId, ctx) {
   if (!user) return withCORS(env, req, unauthorized());
 
   const id = String(payBatchId || '').trim();
@@ -35944,6 +35967,29 @@ async function handleBankingPayBatchExportCsv(env, req, user, payBatchId) {
       input_json: inputJson
     });
 
+    try {
+      const operationId = String(
+        operationPayload?.operation_id
+        || operationPayload?.operationId
+        || operationPayload?.id
+        || operationPayload?.operation?.operation_id
+        || operationPayload?.operation?.operationId
+        || operationPayload?.operation?.id
+        || ''
+      ).trim();
+      if (operationId && typeof scheduleBankingPayOperationDrain === 'function') {
+        scheduleBankingPayOperationDrain(env, ctx, {
+          operationId,
+          operationType: 'PAYMENT_EXECUTE',
+          payBatchId: id,
+          actorUserId: user.id,
+          source: 'handleBankingPayBatchExportCsv.buildCsvExportPrepareOperation'
+        });
+      }
+    } catch (drainError) {
+      try { console.warn('[handleBankingPayBatchExportCsv] bank CSV prepare drain scheduling failed:', drainError?.message || drainError); } catch {}
+    }
+
     return {
       ...operationPayload,
       ok: true,
@@ -36076,7 +36122,6 @@ async function handleBankingPayBatchExportCsv(env, req, user, payBatchId) {
     return withCORS(env, req, jsonResponse(norm.status, norm.body));
   }
 }
-
 
 
 
@@ -36671,9 +36716,7 @@ async function handleBankingPayBatchExportDetailCsv(env, req, user, payBatchId) 
   }
 }
 
-
-
-async function handleBankingPayBatchPoll(env, req, user, payBatchId) {
+async function handleBankingPayBatchPoll(env, req, user, payBatchId, ctx) {
 
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   const trimText = (value) => String(value == null ? '' : value).trim();
@@ -36814,7 +36857,7 @@ async function handleBankingPayBatchPoll(env, req, user, payBatchId) {
       operation_id: null,
       source: 'handleBankingPayBatchPoll'
     });
-    const settlementNudge = await nudgeSettlementFromPollResultIfRequired(env, pollResult, { payBatchId: id, actorUserId, source: 'handleBankingPayBatchPoll' });
+    const settlementNudge = await nudgeSettlementFromPollResultIfRequired(env, pollResult, { payBatchId: id, actorUserId, source: 'handleBankingPayBatchPoll', ctx });
     const evidence = unwrapRpc(await sbRpc(env, 'pay_batch_submission_evidence', { p_pay_batch_id: id, p_counts_only: true }), 'pay_batch_submission_evidence');
     const signal = await readLiveSignal(id, actorUserId, body, 'CURRENT_PAYMENT_STATUS');
     const alertSummary = await readGroupedAlertSummary(actorUserId);
@@ -37153,7 +37196,8 @@ async function handleAuditEventsList(env, req) {
 // - Returns the updated contract_week row (representation)
 // ============================================================================
 
-async function handleBankingProviderWebhookReplayFailedEvents(env, req, user, provider, webhookPublicId) {
+
+async function handleBankingProviderWebhookReplayFailedEvents(env, req, user, provider, webhookPublicId, ctx) {
   const providerKeyRaw = String(provider || '').trim().toUpperCase();
   const providerKey = providerKeyRaw === 'REV' ? 'REVOLUT' : providerKeyRaw;
   const publicId = String(webhookPublicId || '').trim();
@@ -37270,7 +37314,7 @@ async function handleBankingProviderWebhookReplayFailedEvents(env, req, user, pr
           trigger: candidate.settlement_intent.settlement_trigger || 'FAILED_WEBHOOK_REPLAY_TERMINAL_BANK_OUTCOME',
           settlementIntent: candidate.settlement_intent,
           ingestResult: safeObject(candidate.source_row && candidate.source_row.result ? candidate.source_row.result : candidate.source_row)
-        });
+        }, { ctx });
         results.push({ ok: nudgeResult && nudgeResult.ok !== false, pay_batch_id: candidate.pay_batch_id, result: nudgeResult });
       } catch (e) {
         results.push({
@@ -37466,6 +37510,7 @@ async function handleBankingProviderWebhookReplayFailedEvents(env, req, user, pr
   }
 }
 
+
 async function nudgeSettlementFromPollResultIfRequired(env, pollResult, options = {}) {
   const safeObject = (value) => (value && typeof value === 'object' && !Array.isArray(value)) ? value : {};
   const toArray = (value) => Array.isArray(value) ? value : [];
@@ -37479,6 +37524,7 @@ async function nudgeSettlementFromPollResultIfRequired(env, pollResult, options 
     const text = trimText(value).toLowerCase();
     return ['true', 't', '1', 'yes', 'y', 'on'].includes(text);
   };
+  const ctx = options && typeof options.ctx === 'object' ? options.ctx : null;
 
   const result = safeObject(pollResult);
   const nestedResult = safeObject(result.result);
@@ -37606,7 +37652,7 @@ async function nudgeSettlementFromPollResultIfRequired(env, pollResult, options 
         trigger: intent.settlement_trigger || intent.settlementTrigger || result.settlement_trigger || result.settlementTrigger || 'PROVIDER_POLL_TERMINAL_BATCH_READY',
         settlementIntent: intent,
         pollResult: result
-      });
+      }, { ctx });
       rows.push({ ok: nudgeResult && nudgeResult.ok !== false, pay_batch_id: candidate.pay_batch_id, result: nudgeResult });
     } catch (error) {
       rows.push({
@@ -37655,6 +37701,7 @@ async function nudgeSettlementFromPollResultIfRequired(env, pollResult, options 
     settlement_nudge_skipped_reason: skippedReason
   };
 }
+
 
 
 
@@ -38074,11 +38121,7 @@ async function handleBankingAlertPreferencesUpdate(env, req, user) {
 
 
 
-
-
-
-
-async function handleBankingProviderWebhook(env, req, provider, webhookPublicId) {
+async function handleBankingProviderWebhook(env, req, provider, webhookPublicId, ctx) {
   const nowIso = new Date().toISOString();
   const providerKeyRaw = String(provider || '').trim().toUpperCase();
   const providerKey = providerKeyRaw === 'REV' ? 'REVOLUT' : providerKeyRaw;
@@ -38526,7 +38569,7 @@ async function handleBankingProviderWebhook(env, req, provider, webhookPublicId)
           trigger: candidate.settlement_intent.settlement_trigger || 'PROVIDER_WEBHOOK_TERMINAL_BANK_OUTCOME',
           settlementIntent: candidate.settlement_intent,
           ingestResult: safeObject(candidate.source_row && candidate.source_row.result ? candidate.source_row.result : candidate.source_row)
-        });
+        }, { ctx });
         results.push({ ok: nudgeResult && nudgeResult.ok !== false, pay_batch_id: candidate.pay_batch_id, result: nudgeResult });
       } catch (e) {
         results.push({
@@ -39004,7 +39047,10 @@ async function handleBankingProviderWebhook(env, req, provider, webhookPublicId)
 }
 
 
-async function handleBankingPayProviderSubmitReviewResolution(env, req, user, payBatchId) {
+
+
+
+async function handleBankingPayProviderSubmitReviewResolution(env, req, user, payBatchId, ctx) {
   const id = String(payBatchId || '').trim();
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -39260,7 +39306,7 @@ async function handleBankingPayProviderSubmitReviewResolution(env, req, user, pa
         reason: 'CHECK_PROVIDER_STATUS',
         limit: 50
       });
-      const settlementNudge = await nudgeSettlementFromPollResultIfRequired(env, pollResult, { payBatchId: id, actorUserId: String(user.id), source: 'handleBankingPayProviderSubmitReviewResolution' });
+      const settlementNudge = await nudgeSettlementFromPollResultIfRequired(env, pollResult, { payBatchId: id, actorUserId: String(user.id), source: 'handleBankingPayProviderSubmitReviewResolution', ctx });
       const diagnostic = await loadDiagnostic();
       batch = await loadBatch();
       const signalPayload = await loadSignalPayload();
@@ -64563,7 +64609,7 @@ async function handleBankingPayCorrectionStart(env, req, user, payBatchId, ctx) 
     const adapter = provider && typeof getRailAdapter === 'function' ? getRailAdapter(provider) : null;
     if (!adapter || typeof adapter.pollBatch !== 'function') return { ok: false, review_required: true, reason: 'PROVIDER_POLL_ADAPTER_NOT_AVAILABLE', batch_summary: summary };
     const pollResult = await adapter.pollBatch(env, id, actorUserId, { nowUtc: new Date().toISOString(), limit: 50, operationId: null, operation_id: null, source: 'handleBankingPayCorrectionStart' });
-    const settlementNudge = await nudgeSettlementFromPollResultIfRequired(env, pollResult, { payBatchId: id, actorUserId, source: 'handleBankingPayCorrectionStart' });
+    const settlementNudge = await nudgeSettlementFromPollResultIfRequired(env, pollResult, { payBatchId: id, actorUserId, source: 'handleBankingPayCorrectionStart', ctx });
     return {
       ok: true,
       batch_summary: summary,
@@ -64680,7 +64726,6 @@ async function handleBankingPayCorrectionStart(env, req, user, payBatchId, ctx) 
     return rpcErrorResponse(e, 'PAYMENT_CORRECTION_START_FAILED', 'Unable to start payment issue action.');
   }
 }
-
 
 
 
@@ -151163,14 +151208,11 @@ async function executeBankingPayWorkbenchJob(env, claimedJob, opts = {}) {
 }
 
 
-
-
-
 async function nudgeBankingPaySettlementFromTerminalBankOutcome(env, input = {}, options = {}) {
   const trimText = (value) => String(value == null ? '' : value).trim();
   const upperText = (value) => trimText(value).toUpperCase();
   const isPlainObject = (value) => !!value && typeof value === 'object' && !Array.isArray(value);
-  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{12}$/i;
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
   const asPlainObject = (value) => {
     if (isPlainObject(value)) return value;
@@ -151340,6 +151382,9 @@ async function nudgeBankingPaySettlementFromTerminalBankOutcome(env, input = {},
 
   const inputObject = asPlainObject(input);
   const optionsObject = asPlainObject(options);
+  const ctx = (inputObject.ctx && typeof inputObject.ctx === 'object')
+    ? inputObject.ctx
+    : ((optionsObject.ctx && typeof optionsObject.ctx === 'object') ? optionsObject.ctx : null);
   const settlementIntent = asPlainObject(inputObject.settlementIntent || inputObject.settlement_intent || inputObject.intent || optionsObject.settlementIntent || optionsObject.settlement_intent);
   const ingestResult = asPlainObject(inputObject.ingestResult || inputObject.ingest_result || optionsObject.ingestResult || optionsObject.ingest_result);
   const pollResult = asPlainObject(inputObject.pollResult || inputObject.poll_result || optionsObject.pollResult || optionsObject.poll_result);
@@ -151435,6 +151480,49 @@ async function nudgeBankingPaySettlementFromTerminalBankOutcome(env, input = {},
   if (!actorUserId) {
     return fail('SETTLEMENT_NUDGE_ACTOR_USER_ID_REQUIRED', 'Settlement nudge was skipped because no backend actor user id is configured or supplied.', { pay_batch_id: payBatchId });
   }
+
+  const scheduleSettlementOperationDrain = (operationId) => {
+    const resolvedOperationId = trimText(operationId);
+    if (!resolvedOperationId || !uuidRe.test(resolvedOperationId)) {
+      return {
+        ok: false,
+        scheduled: false,
+        skipped: true,
+        reason: 'PAYMENT_SETTLEMENT_OPERATION_ID_MISSING'
+      };
+    }
+    if (typeof scheduleBankingPayOperationDrain !== 'function') {
+      return {
+        ok: false,
+        scheduled: false,
+        skipped: true,
+        reason: 'SCHEDULE_BANKING_PAY_OPERATION_DRAIN_UNAVAILABLE',
+        operation_id: resolvedOperationId,
+        operation_type: 'PAYMENT_SETTLEMENT',
+        pay_batch_id: payBatchId
+      };
+    }
+    try {
+      return scheduleBankingPayOperationDrain(env, ctx, {
+        operationId: resolvedOperationId,
+        operationType: 'PAYMENT_SETTLEMENT',
+        payBatchId,
+        actorUserId,
+        source: 'nudgeBankingPaySettlementFromTerminalBankOutcome'
+      });
+    } catch (drainError) {
+      return {
+        ok: false,
+        scheduled: false,
+        skipped: true,
+        reason: 'PAYMENT_SETTLEMENT_OPERATION_DRAIN_SCHEDULE_FAILED',
+        operation_id: resolvedOperationId,
+        operation_type: 'PAYMENT_SETTLEMENT',
+        pay_batch_id: payBatchId,
+        error: String(drainError && drainError.message ? drainError.message : drainError || 'Immediate settlement operation drain scheduling failed')
+      };
+    }
+  };
 
   const pendingOrUnknownTransferCount = readFirstIntegerField(
     'pending_or_unknown_transfer_count',
@@ -151596,6 +151684,8 @@ async function nudgeBankingPaySettlementFromTerminalBankOutcome(env, input = {},
 
   if (existingOperation && (existingOperation.operation_id || existingOperation.id)) {
     const existingPayload = operationPayload(existingOperation);
+    const existingOperationId = existingPayload.operation_id || existingPayload.operationId || existingPayload.id || existingOperation.operation_id || existingOperation.id || null;
+    const drainSchedule = scheduleSettlementOperationDrain(existingOperationId);
     return {
       ok: true,
       operation_started: false,
@@ -151604,10 +151694,11 @@ async function nudgeBankingPaySettlementFromTerminalBankOutcome(env, input = {},
       settlement_nudge_skipped: false,
       settlement_required: true,
       pay_batch_id: payBatchId,
-      operation_id: existingPayload.operation_id || existingOperation.operation_id || existingOperation.id || null,
+      operation_id: existingOperationId,
       operation_status: existingPayload.status || existingOperation.status || null,
       operation_phase: existingPayload.phase || existingOperation.phase || null,
       operation: existingPayload,
+      operation_drain_schedule: drainSchedule,
       settlement_trigger: readFirstTextField('settlement_trigger', 'settlementTrigger', 'trigger') || 'TERMINAL_BANK_OUTCOME',
       all_batch_transfers_terminal: allBatchTransfersTerminal,
       terminal_success_transfer_count: terminalSuccessTransferCount,
@@ -151722,6 +151813,14 @@ async function nudgeBankingPaySettlementFromTerminalBankOutcome(env, input = {},
   }
 
   const startedPayload = isPlainObject(startedOperation) ? startedOperation : {};
+  const startedOperationId = startedPayload.operation_id
+    || startedPayload.operationId
+    || startedPayload.id
+    || startedPayload.operation?.operation_id
+    || startedPayload.operation?.operationId
+    || startedPayload.operation?.id
+    || null;
+  const drainSchedule = scheduleSettlementOperationDrain(startedOperationId);
   return {
     ok: true,
     operation_started: true,
@@ -151731,10 +151830,11 @@ async function nudgeBankingPaySettlementFromTerminalBankOutcome(env, input = {},
     settlement_required: true,
     finalisation_deferred: true,
     pay_batch_id: payBatchId,
-    operation_id: startedPayload.operation_id || null,
+    operation_id: startedOperationId,
     operation_status: startedPayload.status || null,
     operation_phase: startedPayload.phase || null,
     operation: startedPayload,
+    operation_drain_schedule: drainSchedule,
     idempotency_key: idempotencyKey,
     settlement_trigger: settlementTrigger,
     settlement_mode: 'RAIL_SETTLEMENT',
@@ -151746,6 +151846,8 @@ async function nudgeBankingPaySettlementFromTerminalBankOutcome(env, input = {},
     backend_runner_owned: true
   };
 }
+
+
 
 
 function normalizeBankingPayPreviewDecisions(input, options = {}) {
@@ -157404,7 +157506,7 @@ function matchPath(pathname, pattern) {
 }
 // BACKEND — FULL ROUTER ( default) — unchanged routes map but now benefits from updated CORS/sbFetch
 export default {
-    async fetch(req, env, ctx) {
+        async fetch(req, env, ctx) {
     const pre = preflightIfNeeded(env, req);
     if (pre) return pre;
 
@@ -157453,7 +157555,7 @@ if (req.method === 'PATCH' && p === '/api/users/me/signature') {
 {
   const m = matchPath(p, '/api/banking/pay/provider-webhook/:provider/:webhook_public_id');
   if (m && req.method === 'POST') {
-    return handleBankingProviderWebhook(env, req, m.provider, m.webhook_public_id);
+    return handleBankingProviderWebhook(env, req, m.provider, m.webhook_public_id, ctx);
   }
 }
 
@@ -157515,7 +157617,7 @@ if (req.method === 'GET' && p === '/api/banking/pay/authorisers') {
 {
   const m = matchPath(p, '/api/banking/pay/provider-webhook/:provider/:webhook_public_id/replay-failed');
   if (m && req.method === 'POST') {
-    return handleBankingProviderWebhookReplayFailedEvents(env, req, user, m.provider, m.webhook_public_id);
+    return handleBankingProviderWebhookReplayFailedEvents(env, req, user, m.provider, m.webhook_public_id, ctx);
   }
 }
 
@@ -157561,7 +157663,7 @@ if (req.method === 'PUT' && p === '/api/banking/alerts/preferences') {
 {
   const m = matchPath(p, '/api/banking/pay/batch/:id/provider-submit-review-resolution');
   if (m && req.method === 'POST') {
-    return handleBankingPayProviderSubmitReviewResolution(env, req, user, m.id);
+    return handleBankingPayProviderSubmitReviewResolution(env, req, user, m.id, ctx);
   }
 }
 
@@ -157967,7 +158069,7 @@ if (req.method === 'POST' && p === '/api/banking/pay/reconcile-external') {
   {
     const m = matchPath(p, '/api/banking/pay/batch/:id/schedule');
     if (m && req.method === 'POST') {
-      return handleBankingPayBatchSchedule(env, req, user, m.id);
+      return handleBankingPayBatchSchedule(env, req, user, m.id, ctx);
     }
   }
 
@@ -157981,7 +158083,7 @@ if (req.method === 'POST' && p === '/api/banking/pay/reconcile-external') {
   {
     const m = matchPath(p, '/api/banking/pay/batch/:id/export-csv');
     if (m && req.method === 'GET') {
-      return handleBankingPayBatchExportCsv(env, req, user, m.id);
+      return handleBankingPayBatchExportCsv(env, req, user, m.id, ctx);
     }
   }
 
@@ -158002,7 +158104,7 @@ if (req.method === 'POST' && p === '/api/banking/pay/reconcile-external') {
   {
     const m = matchPath(p, '/api/banking/pay/batch/:id/poll');
     if (m && req.method === 'POST') {
-      return handleBankingPayBatchPoll(env, req, user, m.id);
+      return handleBankingPayBatchPoll(env, req, user, m.id, ctx);
     }
   }
 
