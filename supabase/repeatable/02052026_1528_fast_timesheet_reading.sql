@@ -13630,11 +13630,19 @@ BEGIN
       FALSE AS refs_block_invoicing,
       FALSE AS refs_block_issuing_invoices,
       FALSE AS refs_block_invoice_and_issuing,
-      'NONE'::text AS pay_icon_code,
-      NULL::text AS pay_status_code,
-      NULL::timestamp with time zone AS pay_paid_at_utc,
+      CASE
+        WHEN tps.last_settled_at_utc IS NOT NULL OR sr0.paid_at_utc IS NOT NULL THEN 'COIN'
+        ELSE 'NONE'
+      END::text AS pay_icon_code,
+      CASE
+        WHEN tps.last_settled_at_utc IS NOT NULL OR sr0.paid_at_utc IS NOT NULL THEN 'PAID'
+        ELSE 'UNPAID'
+      END::text AS pay_status_code,
+      COALESCE(tps.last_settled_at_utc, sr0.paid_at_utc) AS pay_paid_at_utc,
       0::numeric AS net_delta_ex_vat
     FROM issue_normalised_rows AS sr0
+    LEFT JOIN public.timesheet_pay_state AS tps
+      ON tps.timesheet_id = sr0.timesheet_id
   )
   SELECT
     rr0.timesheet_id,
@@ -13730,9 +13738,6 @@ BEGIN
     AND (v_client_id IS NULL OR rr0.client_id = v_client_id);
 END;
 $function$;
-
-
-
 
 
 
