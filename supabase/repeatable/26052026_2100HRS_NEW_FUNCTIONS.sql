@@ -102768,7 +102768,6 @@ end;
 $function$;
 
 
-
 CREATE OR REPLACE FUNCTION public.timesheet_pay_state(
   p_timesheet_id uuid,
   p_actor_user_id uuid DEFAULT NULL
@@ -103119,6 +103118,7 @@ BEGIN
       ON pb.id = tpo.consumed_by_pay_batch_id
     WHERE tpo.timesheet_id = p_timesheet_id
       AND tpo.cleared_at_utc IS NULL
+      AND upper(coalesce(tpo.override_type, '')) = 'ADVANCE_THIS_PAYMENT'
     ORDER BY tpo.created_at_utc DESC, tpo.id DESC
     LIMIT 1
   ),
