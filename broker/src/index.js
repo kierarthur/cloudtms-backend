@@ -16364,6 +16364,8 @@ async function sendPayBatchRemittancesInternal(env, opts = {}) {
   };
 }
 
+
+
 function buildRemittanceEmailPayload(job, context = {}) {
   const sourceJob = (typeof normaliseRemittanceJobForRendering === 'function')
     ? normaliseRemittanceJobForRendering((job && typeof job === 'object') ? job : {})
@@ -16451,8 +16453,12 @@ function buildRemittanceEmailPayload(job, context = {}) {
   };
   const collectArrays = (...values) => {
     const out = [];
+    const seenArrays = new Set();
     for (const value of values) {
-      if (Array.isArray(value)) out.push(...value);
+      if (!Array.isArray(value)) continue;
+      if (seenArrays.has(value)) continue;
+      seenArrays.add(value);
+      out.push(...value);
     }
     return out;
   };
@@ -16518,6 +16524,30 @@ function buildRemittanceEmailPayload(job, context = {}) {
     if (/MANUAL\s+ADJUST/.test(compact)) return 'Manual adjustment';
     return '';
   };
+  const normaliseDisplayLabel = (value) => {
+    const raw = String(value == null ? '' : value).trim();
+    if (!raw) return '';
+    const key = raw.toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+    const map = {
+      TRAVEL: 'Travel',
+      ACCOMMODATION: 'Accommodation',
+      HOTEL: 'Accommodation',
+      LODGING: 'Accommodation',
+      MILEAGE: 'Mileage',
+      MILES: 'Mileage',
+      PARKING: 'Parking',
+      FUEL: 'Fuel',
+      SUBSISTENCE: 'Subsistence',
+      TAXI: 'Taxi',
+      TRAIN: 'Train',
+      FLIGHT: 'Flight'
+    };
+    if (map[key]) return map[key];
+    if (/^[A-Z0-9_\-\s]+$/.test(raw) && /[A-Z]/.test(raw)) {
+      return raw.toLowerCase().replace(/[_\-]+/g, ' ').replace(/\s+/g, ' ').trim().replace(/\b\w/g, (m) => m.toUpperCase());
+    }
+    return raw;
+  };
   const friendlyExpenseLineLabel = (line) => {
     const l = line && typeof line === 'object' ? line : {};
     const firstExpenseText = firstNonBlank(
@@ -16540,7 +16570,7 @@ function buildRemittanceEmailPayload(job, context = {}) {
       l.label,
       l.name
     );
-    const safeDirect = String(firstExpenseText || '').trim();
+    const safeDirect = normaliseDisplayLabel(firstExpenseText);
     if (safeDirect && !/^(expense|expenses?|expense_delta|mileage_delta)$/i.test(safeDirect)) return safeDirect;
     let evidence = '';
     try {
@@ -16685,6 +16715,57 @@ function buildRemittanceEmailPayload(job, context = {}) {
     return ['lineindex', String(index)].join('|');
   };
   const normaliseLines = (lines) => uniqueBy(Array.isArray(lines) ? lines : [], lineKey);
+  const sumRenderableLines = (lines) => {
+    const total = { gross_ex_vat: 0, vat: 0, gross_inc_vat: 0 };
+    for (const line of Array.isArray(lines) ? lines : []) {
+      const l = line && typeof line === 'object' ? line : {};
+      const ex = asNum(l.amount_ex_vat ?? l.amountExVat ?? l.total_ex_vat ?? l.totalExVat ?? l.ex_vat ?? l.exVat);
+      const vat = asNum(l.vat ?? l.amount_vat ?? l.amountVat ?? l.total_vat ?? l.totalVat);
+      const inc = asNum(l.amount_inc_vat ?? l.amountIncVat ?? l.total_inc_vat ?? l.totalIncVat ?? l.amount ?? l.total);
+      const safeEx = ex == null && inc != null && vat != null ? inc - vat : ex;
+      const safeVat = vat == null && inc != null && safeEx != null ? inc - safeEx : vat;
+      const safeInc = inc == null && safeEx != null ? safeEx + (safeVat || 0) : inc;
+      total.gross_ex_vat += moneyNum(safeEx);
+      total.vat += moneyNum(safeVat);
+      total.gross_inc_vat += moneyNum(safeInc);
+    }
+    total.gross_ex_vat = Math.round(total.gross_ex_vat * 100) / 100;
+    total.vat = Math.round(total.vat * 100) / 100;
+    total.gross_inc_vat = Math.round(total.gross_inc_vat * 100) / 100;
+    return total;
+  };
+  const timesheetRenderableTotals = (timesheet) => {
+    const ts = timesheet && typeof timesheet === 'object' ? timesheet : {};
+    const totals = (ts.totals && typeof ts.totals === 'object') ? ts.totals : {};
+    const frozenTotals = (ts.frozen_totals && typeof ts.frozen_totals === 'object') ? ts.frozen_totals : {};
+    const lineTotals = sumRenderableLines(collectArrays(
+      ts.unit_rows,
+      ts.unitRows,
+      ts.rate_rows,
+      ts.rateRows,
+      ts.additional_units_rows,
+      ts.additionalUnitsRows,
+      ts.expenses_rows,
+      ts.expensesRows,
+      ts.other_rows,
+      ts.otherRows
+    ));
+    const choose = (value, computed) => {
+      const n = asNum(value);
+      if (n == null) return computed;
+      const rounded = Math.round(n * 100) / 100;
+      if (Math.abs(rounded) < 1e-9 && Math.abs(computed) > 1e-9) return computed;
+      return rounded;
+    };
+    const grossEx = choose(frozenTotals.gross_ex_vat ?? totals.gross_ex_vat ?? totals.total_ex_vat, lineTotals.gross_ex_vat);
+    const vat = choose(frozenTotals.vat ?? frozenTotals.gross_vat ?? totals.vat ?? totals.gross_vat, lineTotals.vat);
+    const grossInc = choose(frozenTotals.gross_inc_vat ?? totals.gross_inc_vat ?? totals.total_inc_vat, lineTotals.gross_inc_vat || (grossEx + vat));
+    return {
+      gross_ex_vat: Math.round(grossEx * 100) / 100,
+      vat: Math.round(vat * 100) / 100,
+      gross_inc_vat: Math.round(grossInc * 100) / 100
+    };
+  };
   const makeCandidate = (candidateLike, rootTimesheets = null) => {
     const candidate = (candidateLike && typeof candidateLike === 'object') ? candidateLike : {};
     const recipient = (sourceJob.recipient && typeof sourceJob.recipient === 'object') ? sourceJob.recipient : {};
@@ -16695,33 +16776,53 @@ function buildRemittanceEmailPayload(job, context = {}) {
       ? rootTimesheets
       : collectArrays(candidate.timesheets, candidate.timesheet_sections, candidate.timesheetSections, candidate.timesheet_summaries, candidate.timesheetSummaries);
     const timesheets = uniqueBy(timesheetsRaw, (timesheet, index) => timesheetKey({ candidate_id: candidateId }, timesheet, index));
+    const nonTimesheetLines = normaliseLines(collectArrays(
+      candidate.non_timesheet_lines,
+      candidate.nonTsLines,
+      candidate.nonTimesheetLines,
+      candidate.deductions,
+      candidate.recoveries,
+      candidate.finance_lines,
+      candidate.financeLines,
+      candidate.adjustment_lines,
+      candidate.adjustmentLines,
+      candidate.other_non_timesheet_lines,
+      candidate.otherNonTimesheetLines
+    ));
     const frozenTotals = (candidate.frozen_totals && typeof candidate.frozen_totals === 'object') ? candidate.frozen_totals : {};
     const totals = (candidate.totals && typeof candidate.totals === 'object') ? candidate.totals : {};
-    const grossEx = moneyNum(frozenTotals.gross_ex_vat ?? totals.gross_ex_vat ?? totals.total_ex_vat);
-    const vat = moneyNum(frozenTotals.vat ?? frozenTotals.gross_vat ?? totals.vat ?? totals.gross_vat);
-    const grossInc = moneyNum(frozenTotals.gross_inc_vat ?? totals.gross_inc_vat ?? totals.total_inc_vat ?? (grossEx + vat));
+    const nonTimesheetTotals = sumRenderableLines(nonTimesheetLines);
+    const timesheetTotals = timesheets.reduce((acc, timesheet) => {
+      const tsTotals = timesheetRenderableTotals(timesheet);
+      acc.gross_ex_vat += moneyNum(tsTotals.gross_ex_vat);
+      acc.vat += moneyNum(tsTotals.vat);
+      acc.gross_inc_vat += moneyNum(tsTotals.gross_inc_vat);
+      return acc;
+    }, { gross_ex_vat: 0, vat: 0, gross_inc_vat: 0 });
+    const detailTotals = {
+      gross_ex_vat: Math.round((timesheetTotals.gross_ex_vat + nonTimesheetTotals.gross_ex_vat) * 100) / 100,
+      vat: Math.round((timesheetTotals.vat + nonTimesheetTotals.vat) * 100) / 100,
+      gross_inc_vat: Math.round((timesheetTotals.gross_inc_vat + nonTimesheetTotals.gross_inc_vat) * 100) / 100
+    };
+    const chooseTotal = (value, computed) => {
+      const n = asNum(value);
+      if (n == null) return moneyNum(computed);
+      const rounded = Math.round(n * 100) / 100;
+      if (Math.abs(rounded) < 1e-9 && Math.abs(moneyNum(computed)) > 1e-9) return moneyNum(computed);
+      return rounded;
+    };
+    const grossEx = chooseTotal(frozenTotals.gross_ex_vat ?? totals.gross_ex_vat ?? totals.total_ex_vat, detailTotals.gross_ex_vat);
+    const vat = chooseTotal(frozenTotals.vat ?? frozenTotals.gross_vat ?? totals.vat ?? totals.gross_vat, detailTotals.vat);
+    const grossInc = chooseTotal(frozenTotals.gross_inc_vat ?? totals.gross_inc_vat ?? totals.total_inc_vat, detailTotals.gross_inc_vat || (grossEx + vat));
     const deductions = moneyNum(frozenTotals.deductions_recoveries_inc_vat ?? frozenTotals.deductions_inc_vat ?? totals.deductions_inc_vat ?? totals?.deductions_summary?.total_deductions);
-    const finalPayable = moneyNum(frozenTotals.final_payable ?? frozenTotals.net_inc_vat ?? totals.final_payable ?? totals.final_paid ?? (grossInc - deductions));
+    const finalPayable = chooseTotal(frozenTotals.final_payable ?? frozenTotals.net_inc_vat ?? totals.final_payable ?? totals.final_paid, grossInc - deductions);
     return {
       ...candidate,
       candidate_id: candidateId,
       display_name: displayName,
       tms_ref: tmsRef,
       timesheets,
-      non_timesheet_lines: normaliseLines(collectArrays(
-        candidate.non_timesheet_lines,
-        candidate.nonTsLines,
-        candidate.non_timesheet_lines,
-        candidate.nonTimesheetLines,
-        candidate.deductions,
-        candidate.recoveries,
-        candidate.finance_lines,
-        candidate.financeLines,
-        candidate.adjustment_lines,
-        candidate.adjustmentLines,
-        candidate.other_non_timesheet_lines,
-        candidate.otherNonTimesheetLines
-      )),
+      non_timesheet_lines: nonTimesheetLines,
       frozen_totals: {
         ...frozenTotals,
         gross_ex_vat: grossEx,
@@ -16738,7 +16839,9 @@ function buildRemittanceEmailPayload(job, context = {}) {
   };
   const recipient = (sourceJob.recipient && typeof sourceJob.recipient === 'object') ? sourceJob.recipient : {};
   const jobKind = String(ctx.jobKind || sourceJob.job_kind || '').trim().toUpperCase();
-  const isUmbrellaJob = jobKind === 'UMBRELLA_REMITTANCE' || String(recipient.entity_kind || '').trim().toUpperCase() === 'UMBRELLA';
+  const isUmbrellaJob = jobKind === 'UMBRELLA_REMITTANCE'
+    || String(recipient.entity_kind || '').trim().toUpperCase() === 'UMBRELLA'
+    || !!String(recipient.umbrella_id || recipient.umbrellaId || sourceJob.umbrella_id || sourceJob.umbrellaId || '').trim();
   const isUmbrellaCopyJob = jobKind === 'CANDIDATE_UMBRELLA_COPY_REMITTANCE';
   const payBatchId = String(ctx.payBatchId || sourceJob.pay_batch_id || '').trim();
   const payDate = String(ctx.payDate || sourceJob.pay_date || sourceJob.authoritative_payment_date || '').trim();
@@ -16757,30 +16860,40 @@ function buildRemittanceEmailPayload(job, context = {}) {
       ? `Remittance Advice Copy – ${recipientName || 'Candidate'} – Pay batch ${shortId(payBatchId)} – ${payDateLabel}`
       : `Remittance Advice – ${recipientName || 'Candidate'} – Pay batch ${shortId(payBatchId)} – ${payDateLabel}`;
   const subject = ctx.effectiveTestMode === true && !/^\[TEST MODE\]/i.test(subjectBase) ? `[TEST MODE] ${subjectBase}` : subjectBase;
+  const rootTimesheets = uniqueBy(collectArrays(
+    sourceJob.timesheets,
+    sourceJob.timesheet_sections,
+    sourceJob.timesheetSections,
+    sourceJob.timesheet_summaries,
+    sourceJob.timesheetSummaries
+  ), (timesheet, index) => timesheetKey({ candidate_id: recipient.candidate_id || sourceJob.candidate_id || sourceJob.candidateId || '' }, timesheet, index));
+  const rootNonTimesheetLines = normaliseLines(collectArrays(
+    sourceJob.non_timesheet_lines,
+    sourceJob.nonTsLines,
+    sourceJob.nonTimesheetLines,
+    sourceJob.deductions,
+    sourceJob.recoveries,
+    sourceJob.finance_lines,
+    sourceJob.financeLines,
+    sourceJob.adjustment_lines,
+    sourceJob.adjustmentLines,
+    sourceJob.other_non_timesheet_lines,
+    sourceJob.otherNonTimesheetLines
+  ));
+  const sourceCandidates = Array.isArray(sourceJob.candidates) ? sourceJob.candidates : [];
+  const fallbackCandidateFromRoot = {
+    candidate_id: recipient.candidate_id || sourceJob.candidate_id || sourceJob.candidateId || '',
+    display_name: recipient.display_name || sourceJob.display_name || sourceJob.candidate_display_name || '',
+    tms_ref: recipient.tms_ref || sourceJob.tms_ref || sourceJob.candidate_tms_ref || '',
+    umbrella_id: recipient.umbrella_id || recipient.umbrellaId || sourceJob.umbrella_id || sourceJob.umbrellaId || '',
+    timesheets: rootTimesheets,
+    totals: sourceJob.totals,
+    frozen_totals: sourceJob.frozen_totals,
+    non_timesheet_lines: rootNonTimesheetLines
+  };
   const candidates = isUmbrellaJob
-    ? uniqueBy((Array.isArray(sourceJob.candidates) ? sourceJob.candidates : []).map((candidate) => makeCandidate(candidate)), candidateKey)
-    : [makeCandidate({
-        candidate_id: recipient.candidate_id,
-        display_name: recipient.display_name,
-        tms_ref: recipient.tms_ref,
-        timesheets: Array.isArray(sourceJob.timesheets) ? sourceJob.timesheets : [],
-        totals: sourceJob.totals,
-        frozen_totals: sourceJob.frozen_totals,
-        non_timesheet_lines: collectArrays(
-          sourceJob.non_timesheet_lines,
-          sourceJob.nonTsLines,
-          sourceJob.non_timesheet_lines,
-          sourceJob.nonTimesheetLines,
-          sourceJob.deductions,
-          sourceJob.recoveries,
-          sourceJob.finance_lines,
-          sourceJob.financeLines,
-          sourceJob.adjustment_lines,
-          sourceJob.adjustmentLines,
-          sourceJob.other_non_timesheet_lines,
-          sourceJob.otherNonTimesheetLines
-        )
-      })];
+    ? uniqueBy((sourceCandidates.length ? sourceCandidates : ((rootTimesheets.length || rootNonTimesheetLines.length) ? [fallbackCandidateFromRoot] : [])).map((candidate) => makeCandidate(candidate)), candidateKey)
+    : [makeCandidate(fallbackCandidateFromRoot)];
   const summary = (sourceJob.summary && typeof sourceJob.summary === 'object') ? sourceJob.summary : {};
   const computedSummary = candidates.reduce((acc, candidate) => {
     const ft = candidate.frozen_totals || {};
@@ -16793,15 +16906,40 @@ function buildRemittanceEmailPayload(job, context = {}) {
     acc.final_payable += moneyNum(ft.final_payable ?? ft.net_inc_vat);
     return acc;
   }, { candidate_count: 0, timesheet_count: 0, gross_ex_vat: 0, vat: 0, gross_inc_vat: 0, deductions: 0, final_payable: 0 });
+  const summaryMoneyOrComputed = (summaryValue, computedValue) => {
+    const raw = String(summaryValue == null ? '' : summaryValue).trim();
+    const computed = moneyNum(computedValue);
+    if (!raw) return computed;
+    const n = Number(raw.replace(/,/g, ''));
+    if (!Number.isFinite(n)) return computed;
+    const rounded = Math.round(n * 100) / 100;
+    if (Math.abs(rounded) < 1e-9 && Math.abs(computed) > 1e-9) return computed;
+    return rounded;
+  };
   const grandTotals = {
     candidate_count: Number(summary.candidate_count ?? computedSummary.candidate_count) || computedSummary.candidate_count,
     timesheet_count: Number(summary.timesheet_count ?? computedSummary.timesheet_count) || computedSummary.timesheet_count,
-    gross_ex_vat: moneyNum(summary.gross_ex_vat ?? computedSummary.gross_ex_vat),
-    vat: moneyNum(summary.vat ?? summary.gross_vat ?? computedSummary.vat),
-    gross_inc_vat: moneyNum(summary.gross_inc_vat ?? computedSummary.gross_inc_vat),
-    deductions: moneyNum(summary.deductions_recoveries_inc_vat ?? summary.deductions_inc_vat ?? computedSummary.deductions),
-    final_payable: moneyNum(summary.final_payable ?? summary.net_inc_vat ?? summary.total_amount ?? computedSummary.final_payable)
+    gross_ex_vat: summaryMoneyOrComputed(summary.gross_ex_vat, computedSummary.gross_ex_vat),
+    vat: summaryMoneyOrComputed(summary.vat ?? summary.gross_vat, computedSummary.vat),
+    gross_inc_vat: summaryMoneyOrComputed(summary.gross_inc_vat, computedSummary.gross_inc_vat),
+    deductions: summaryMoneyOrComputed(summary.deductions_recoveries_inc_vat ?? summary.deductions_inc_vat, computedSummary.deductions),
+    final_payable: summaryMoneyOrComputed(summary.final_payable ?? summary.net_inc_vat ?? summary.total_amount, computedSummary.final_payable)
   };
+  const candidateHasRenderableDetail = (candidate) => {
+    const c = candidate && typeof candidate === 'object' ? candidate : {};
+    const timesheets = Array.isArray(c.timesheets) ? c.timesheets : [];
+    const hasTimesheetRows = timesheets.some((timesheet) => {
+      const ts = timesheet && typeof timesheet === 'object' ? timesheet : {};
+      return collectArrays(ts.unit_rows, ts.unitRows, ts.rate_rows, ts.rateRows, ts.additional_units_rows, ts.additionalUnitsRows, ts.expenses_rows, ts.expensesRows, ts.other_rows, ts.otherRows).length > 0;
+    });
+    return hasTimesheetRows || normaliseLines(collectArrays(c.non_timesheet_lines, c.nonTsLines, c.nonTimesheetLines, c.deductions, c.recoveries, c.finance_lines, c.financeLines, c.adjustment_lines, c.adjustmentLines, c.other_non_timesheet_lines, c.otherNonTimesheetLines)).length > 0;
+  };
+  const candidatePayableAmount = (candidate) => {
+    const ft = (candidate && candidate.frozen_totals && typeof candidate.frozen_totals === 'object') ? candidate.frozen_totals : {};
+    const totals = (candidate && candidate.totals && typeof candidate.totals === 'object') ? candidate.totals : {};
+    return moneyNum(ft.final_payable ?? ft.net_inc_vat ?? ft.gross_inc_vat ?? totals.final_payable ?? totals.net_inc_vat ?? totals.gross_inc_vat);
+  };
+  const renderIncomplete = grandTotals.final_payable > 0 && (!candidates.length || candidates.some((candidate) => candidatePayableAmount(candidate) > 0 && !candidateHasRenderableDetail(candidate)));
   const detailedBreakdown = sourceJob.detailed_breakdown === true || ctx.detailedBreakdown === true;
   const headerMessage = firstNonBlank(ctx.headerMessage, sourceJob.header_message, sourceJob.headerMessage, 'Please find below a remittance advice for authorised timesheets:');
   const footerMessage = firstNonBlank(ctx.footerMessage, sourceJob.footer_message, sourceJob.footerMessage, 'Many thanks Arthur Rai Medical Services');
@@ -16891,6 +17029,32 @@ function buildRemittanceEmailPayload(job, context = {}) {
       html += tableHtml(['Week ending', 'Client', 'Job title', 'Timesheet type', 'Gross excl VAT', 'VAT', 'Gross incl VAT'], timesheetSummaryRows, { title: 'Timesheet summary', alignRight: [4, 5, 6] });
     }
     for (const timesheet of (Array.isArray(candidate.timesheets) ? candidate.timesheets : [])) {
+      const timesheetHasScheduleEvidence = (value) => {
+        const ts = value && typeof value === 'object' ? value : {};
+        return collectArrays(
+          ts.schedule_rows,
+          ts.scheduleRows,
+          ts.segments,
+          ts.segment_rows,
+          ts.segmentRows,
+          ts.shift_rows,
+          ts.shiftRows,
+          ts.schedule_changes,
+          ts.scheduleChanges,
+          ts.resolved_components,
+          ts.resolvedComponents
+        ).length > 0
+          || (ts.base_snapshot_json && typeof ts.base_snapshot_json === 'object')
+          || (ts.baseSnapshotJson && typeof ts.baseSnapshotJson === 'object')
+          || (ts.target_snapshot_json && typeof ts.target_snapshot_json === 'object')
+          || (ts.targetSnapshotJson && typeof ts.targetSnapshotJson === 'object')
+          || (ts.frozen_source_basis_json && typeof ts.frozen_source_basis_json === 'object')
+          || (ts.frozenSourceBasisJson && typeof ts.frozenSourceBasisJson === 'object')
+          || (ts.frozen_component_snapshot_json && typeof ts.frozen_component_snapshot_json === 'object')
+          || (ts.frozenComponentSnapshotJson && typeof ts.frozenComponentSnapshotJson === 'object');
+      };
+      const explicitRenderMode = firstNonBlank(timesheet?.timesheet_render_mode, timesheet?.timesheetRenderMode, timesheet?.render_mode, timesheet?.renderMode);
+      const resolvedRenderMode = explicitRenderMode || (detailedBreakdown && timesheetHasScheduleEvidence(timesheet) ? 'SEGMENT' : 'AGGREGATE');
       const section = renderTimesheetSection({
         candidateDisplay: displayName,
         clientName: timesheet?.client_name != null ? String(timesheet.client_name) : '',
@@ -16899,7 +17063,7 @@ function buildRemittanceEmailPayload(job, context = {}) {
         band: timesheet?.band != null ? String(timesheet.band) : '',
         referenceNumber: timesheet?.reference_number != null ? String(timesheet.reference_number) : '',
         timesheetType: timesheet?.timesheet_type != null ? String(timesheet.timesheet_type) : 'Standard',
-        renderMode: timesheet?.timesheet_render_mode != null ? String(timesheet.timesheet_render_mode) : 'AGGREGATE',
+        renderMode: resolvedRenderMode,
         detailed: detailedBreakdown,
         timesheetId: timesheet?.timesheet_id ?? timesheet?.timesheetId ?? timesheet?.id ?? '',
         candidateId: candidate.candidate_id || '',
@@ -16908,8 +17072,8 @@ function buildRemittanceEmailPayload(job, context = {}) {
         expenses_rows: timesheet?.expenses_rows || timesheet?.expensesRows,
         other_rows: timesheet?.other_rows || timesheet?.otherRows,
         totals: timesheet?.totals,
-        schedule_rows: timesheet?.schedule_rows,
-        schedule_changes: timesheet?.schedule_changes,
+        schedule_rows: collectArrays(timesheet?.schedule_rows, timesheet?.scheduleRows, timesheet?.segments, timesheet?.segment_rows, timesheet?.segmentRows, timesheet?.shift_rows, timesheet?.shiftRows),
+        schedule_changes: collectArrays(timesheet?.schedule_changes, timesheet?.scheduleChanges),
         amended_hours_note: timesheet?.amended_hours_note ?? timesheet?.amendedHoursNote,
         amendment_note: timesheet?.amendment_note ?? timesheet?.amendmentNote,
         delta_note: timesheet?.delta_note ?? timesheet?.deltaNote,
@@ -16926,7 +17090,6 @@ function buildRemittanceEmailPayload(job, context = {}) {
     const nonTimesheetLines = normaliseLines(collectArrays(
       candidate.non_timesheet_lines,
       candidate.nonTsLines,
-      candidate.non_timesheet_lines,
       candidate.nonTimesheetLines,
       candidate.deductions,
       candidate.recoveries,
@@ -17006,13 +17169,12 @@ function buildRemittanceEmailPayload(job, context = {}) {
       vat: grandTotals.vat,
       gross_inc_vat: grandTotals.gross_inc_vat,
       deductions: grandTotals.deductions,
-      final_payable: grandTotals.final_payable
+      final_payable: grandTotals.final_payable,
+      has_candidate_detail: candidates.some(candidateHasRenderableDetail),
+      render_incomplete: renderIncomplete
     }
   };
 }
-
-
-
 
 async function handleBankingPayBatchRetryBlockedFunds(env, req, user, payBatchId) {
 
@@ -96376,6 +96538,7 @@ function validateEmailPayload(p) {
 
 // ---------- Build PA payload (single email) in Apps Script structure ----------
 
+
 async function buildEmailPayloadFromOutboxRow(env, outboxRow) {
   const trimText = (value) => String(value == null ? '' : value).trim();
   const upperText = (value) => trimText(value).toUpperCase();
@@ -96414,6 +96577,498 @@ async function buildEmailPayloadFromOutboxRow(env, outboxRow) {
       if (out[key] == null || trimText(out[key]) === '') out[key] = value;
     }
     return out;
+  };
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  const enc = encodeURIComponent;
+  const isUuidText = (value) => uuidRe.test(trimText(value));
+  const toArray = (value) => Array.isArray(value) ? value : [];
+  const asNumber = (value) => {
+    if (value === null || value === undefined || value === '') return null;
+    const n = Number(value);
+    return Number.isFinite(n) ? n : null;
+  };
+  const moneyValue = (value) => {
+    const n = asNumber(value);
+    return n == null ? 0 : Math.round(n * 100) / 100;
+  };
+  const addMoney = (a, b) => Math.round((moneyValue(a) + moneyValue(b)) * 100) / 100;
+  const candidateHasRenderableDetail = (candidate) => {
+    const c = safeObject(candidate);
+    const nonTs = [
+      c.non_timesheet_lines,
+      c.nonTsLines,
+      c.nonTimesheetLines,
+      c.deductions,
+      c.recoveries,
+      c.finance_lines,
+      c.financeLines,
+      c.adjustment_lines,
+      c.adjustmentLines,
+      c.other_non_timesheet_lines,
+      c.otherNonTimesheetLines
+    ];
+    if (nonTs.some(hasArray)) return true;
+    const timesheets = [];
+    for (const key of ['timesheets', 'timesheet_sections', 'timesheetSections', 'timesheet_summaries', 'timesheetSummaries']) {
+      if (Array.isArray(c[key])) timesheets.push(...c[key]);
+    }
+    if (!timesheets.length) return false;
+    return timesheets.some((timesheet) => {
+      const ts = safeObject(timesheet);
+      return hasArray(ts.unit_rows)
+        || hasArray(ts.unitRows)
+        || hasArray(ts.rate_rows)
+        || hasArray(ts.rateRows)
+        || hasArray(ts.additional_units_rows)
+        || hasArray(ts.additionalUnitsRows)
+        || hasArray(ts.expenses_rows)
+        || hasArray(ts.expensesRows)
+        || hasArray(ts.other_rows)
+        || hasArray(ts.otherRows);
+    });
+  };
+  const remittanceJobHasRenderableDetail = (job) => {
+    const source = safeObject(job);
+    if (toArray(source.candidates).some(candidateHasRenderableDetail)) return true;
+    const rootTimesheets = [];
+    for (const key of ['timesheets', 'timesheet_sections', 'timesheetSections', 'timesheet_summaries', 'timesheetSummaries']) {
+      if (Array.isArray(source[key])) rootTimesheets.push(...source[key]);
+    }
+    if (rootTimesheets.some((timesheet) => candidateHasRenderableDetail({ timesheets: [timesheet] }))) return true;
+    if (hasArray(source.non_timesheet_lines) || hasArray(source.nonTimesheetLines) || hasArray(source.finance_lines) || hasArray(source.financeLines) || hasArray(source.deductions) || hasArray(source.recoveries)) return true;
+    return false;
+  };
+  const remittanceJobSummaryAmount = (job) => {
+    const source = safeObject(job);
+    const summary = safeObject(source.summary);
+    return moneyValue(
+      summary.final_payable
+      ?? summary.net_inc_vat
+      ?? summary.total_amount
+      ?? source.final_payable
+      ?? source.total_amount
+      ?? safeObject(source.frozen_totals).final_payable
+      ?? safeObject(source.totals).final_payable
+    );
+  };
+  const extractFrozenLabel = (...values) => {
+    for (const value of values) {
+      const obj = safeObject(value);
+      const direct = firstNonBlank(
+        obj.label,
+        obj.name,
+        obj.description,
+        obj.expense_code,
+        obj.component_key_value,
+        obj.economic_key_value,
+        safeObject(obj.source_basis_json).expense_code,
+        safeObject(obj.source_basis_json).key_value,
+        safeObject(obj.frozen_component_snapshot_json).label,
+        safeObject(obj.frozen_component_snapshot_json).component_key_value,
+        safeObject(obj.meta_json).economic_key_value,
+        safeObject(obj.meta_json).component_key_value
+      );
+      if (direct) return direct;
+    }
+    return '';
+  };
+  const normaliseRenderLabel = (value) => {
+    const raw = trimText(value);
+    if (!raw) return '';
+    const key = raw.toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+    const map = {
+      TRAVEL: 'Travel',
+      ACCOMMODATION: 'Accommodation',
+      HOTEL: 'Accommodation',
+      LODGING: 'Accommodation',
+      MILEAGE: 'Mileage',
+      MILES: 'Mileage',
+      PARKING: 'Parking',
+      FUEL: 'Fuel',
+      SUBSISTENCE: 'Subsistence',
+      TAXI: 'Taxi',
+      TRAIN: 'Train',
+      FLIGHT: 'Flight'
+    };
+    if (map[key]) return map[key];
+    if (/^[A-Z0-9_\-\s]+$/.test(raw) && /[A-Z]/.test(raw)) {
+      return raw.toLowerCase().replace(/[_\-]+/g, ' ').replace(/\s+/g, ' ').trim().replace(/\b\w/g, (m) => m.toUpperCase());
+    }
+    return raw;
+  };
+  const mergeTotalsInto = (target, exVat, vat, incVat) => {
+    const totals = safeObject(target.frozen_totals);
+    totals.gross_ex_vat = addMoney(totals.gross_ex_vat, exVat);
+    totals.vat = addMoney(totals.vat ?? totals.gross_vat, vat);
+    totals.gross_vat = totals.vat;
+    totals.gross_inc_vat = addMoney(totals.gross_inc_vat, incVat);
+    totals.final_payable = addMoney(totals.final_payable, incVat);
+    totals.net_inc_vat = totals.final_payable;
+    target.frozen_totals = totals;
+  };
+  const getFetchRows = (res) => (res && Array.isArray(res.rows)) ? res.rows.filter((row) => row && typeof row === 'object' && !Array.isArray(row)) : [];
+  const buildQueryUrl = (table, params) => `${env.SUPABASE_URL}/rest/v1/${table}?${params.toString()}`;
+  const referenceUuidToken = (reference, tokenName) => {
+    const ref = trimText(reference);
+    const token = trimText(tokenName).replace(/[^a-z0-9_]/gi, '');
+    if (!ref || !token) return '';
+    const re = new RegExp(`(?:^|:)${token}:([0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})(?=:|$)`, 'i');
+    const match = ref.match(re);
+    return match && match[1] ? match[1] : '';
+  };
+  const referenceTextToken = (reference, tokenName) => {
+    const ref = trimText(reference);
+    const token = trimText(tokenName).replace(/[^a-z0-9_]/gi, '');
+    if (!ref || !token) return '';
+    const re = new RegExp(`(?:^|:)${token}:([^:]+)(?=:|$)`, 'i');
+    const match = ref.match(re);
+    return match && match[1] ? match[1] : '';
+  };
+  const remittanceScopeHints = (job, row) => {
+    const source = safeObject(job);
+    const recipient = safeObject(source.recipient);
+    const ref = trimText(row && row.reference);
+    const recipientKind = upperText(row && row.recipient_kind);
+    const referenceType = upperText(referenceTextToken(ref, 'type'));
+    const jobKind = upperText(source.job_kind || source.jobKind || referenceType);
+    const candidateId = firstNonBlank(
+      referenceUuidToken(ref, 'candidate'),
+      recipient.candidate_id,
+      recipient.candidateId,
+      source.candidate_id,
+      source.candidateId,
+      recipientKind.includes('CANDIDATE') ? row && row.recipient_id : null
+    );
+    const umbrellaId = firstNonBlank(
+      referenceUuidToken(ref, 'umbrella'),
+      recipient.umbrella_id,
+      recipient.umbrellaId,
+      source.umbrella_id,
+      source.umbrellaId,
+      recipientKind.includes('UMBRELLA') ? row && row.recipient_id : null
+    );
+    const transferId = firstNonBlank(
+      referenceUuidToken(ref, 'transfer'),
+      source.pay_bank_transfer_id,
+      source.payBankTransferId,
+      source.transfer_id,
+      source.transferId,
+      safeObject(source.summary).pay_bank_transfer_id,
+      safeObject(source.summary).payBankTransferId
+    );
+    const recipientEntity = upperText(recipient.entity_kind || recipient.entityKind);
+    const isUmbrellaJob = jobKind === 'UMBRELLA_REMITTANCE' || recipientEntity === 'UMBRELLA' || !!umbrellaId;
+    const payChannel = isUmbrellaJob ? 'UMBRELLA' : upperText(source.pay_channel || source.payChannel || source.pay_channel_scope || source.scope);
+    return {
+      candidate_id: isUuidText(candidateId) ? candidateId : '',
+      umbrella_id: isUuidText(umbrellaId) ? umbrellaId : '',
+      pay_bank_transfer_id: isUuidText(transferId) ? transferId : '',
+      pay_channel: ['UMBRELLA', 'PAYE'].includes(payChannel) ? payChannel : '',
+      job_kind: jobKind || referenceType || ''
+    };
+  };
+  const itemMatchesRemittanceScope = (item, hints) => {
+    const scope = safeObject(hints);
+    if (scope.pay_bank_transfer_id && trimText(item && item.pay_bank_transfer_id) !== scope.pay_bank_transfer_id) return false;
+    if (scope.umbrella_id) {
+      const itemUmbrellaId = trimText(item && item.umbrella_id);
+      if (itemUmbrellaId && itemUmbrellaId !== scope.umbrella_id) return false;
+    }
+    if (scope.pay_channel) {
+      const itemPayChannel = upperText(item && item.pay_channel);
+      if (itemPayChannel && itemPayChannel !== scope.pay_channel) return false;
+    }
+    return true;
+  };
+  const hydrateThinRemittanceJobFromFrozenBatchArtifacts = async (job, row) => {
+    const baseJob = safeObject(job);
+    if (remittanceJobHasRenderableDetail(baseJob)) return baseJob;
+
+    const payBatchId = firstNonBlank(baseJob.pay_batch_id, baseJob.payBatchId, row && row.context_id);
+    if (!isUuidText(payBatchId)) return baseJob;
+    if (remittanceJobSummaryAmount(baseJob) <= 0) return baseJob;
+    if (!env || !env.SUPABASE_URL || typeof sbFetch !== 'function') return baseJob;
+
+    const scopeHints = remittanceScopeHints(baseJob, row);
+
+    const candidateQuery = new URLSearchParams();
+    candidateQuery.set('pay_batch_id', `eq.${payBatchId}`);
+    candidateQuery.set('select', 'id,pay_batch_id,candidate_id,candidate_tms_ref,candidate_display_name,gross_preview,net_bank_amount,debt_created,loan_repayment_taken,overpayment_recovery_taken,settlement_status');
+    candidateQuery.set('order', 'candidate_display_name.asc');
+    candidateQuery.set('limit', '50000');
+    let candidateRows = getFetchRows(await sbFetch(env, buildQueryUrl('pay_batch_candidates', candidateQuery), false));
+    if (scopeHints.candidate_id) candidateRows = candidateRows.filter((candidate) => trimText(candidate.candidate_id) === scopeHints.candidate_id);
+    if (!candidateRows.length) return baseJob;
+
+    const candidateIds = candidateRows.map((candidate) => trimText(candidate.id)).filter(isUuidText);
+    if (!candidateIds.length) return baseJob;
+
+    const itemQuery = new URLSearchParams();
+    itemQuery.set('pay_batch_candidate_id', `in.(${candidateIds.map(enc).join(',')})`);
+    itemQuery.set('is_voided', 'eq.false');
+    itemQuery.set('select', 'id,pay_batch_candidate_id,item_type,timesheet_id,segment_key,source_ref,description,amount_ex_vat,amount_vat,amount_inc_vat,pay_channel,umbrella_id,bank_reference,pay_bank_transfer_id,created_at,finance_case_id,frozen_component_snapshot_json,frozen_component_key_type,frozen_component_key_value,frozen_component_classification,frozen_source_basis_json,frozen_source_pay_method,frozen_target_pay_method,frozen_resolution_result_json,payout_instruction_snapshot_json,operation_source_key');
+    itemQuery.set('order', 'created_at.asc');
+    itemQuery.set('limit', '50000');
+    let itemRows = getFetchRows(await sbFetch(env, buildQueryUrl('pay_batch_items', itemQuery), false));
+    itemRows = itemRows.filter((item) => itemMatchesRemittanceScope(item, scopeHints));
+    if (!itemRows.length) return baseJob;
+
+    const itemIds = itemRows.map((item) => trimText(item.id)).filter(isUuidText);
+    const breakdownRows = [];
+    if (itemIds.length) {
+      const breakdownQuery = new URLSearchParams();
+      breakdownQuery.set('pay_batch_item_id', `in.(${itemIds.map(enc).join(',')})`);
+      breakdownQuery.set('select', 'id,pay_batch_item_id,line_kind,bucket_code,unit_name,units,rate,amount_ex_vat,amount_vat,amount_inc_vat,meta_json,created_at_utc,operation_source_key');
+      breakdownQuery.set('order', 'created_at_utc.asc');
+      breakdownQuery.set('limit', '50000');
+      breakdownRows.push(...getFetchRows(await sbFetch(env, buildQueryUrl('pay_batch_item_breakdowns', breakdownQuery), false)));
+    }
+
+    const timesheetIds = Array.from(new Set(itemRows.map((item) => trimText(item.timesheet_id)).filter(isUuidText)));
+    const snapshotRows = [];
+    if (timesheetIds.length) {
+      const snapshotQuery = new URLSearchParams();
+      snapshotQuery.set('pay_batch_id', `eq.${payBatchId}`);
+      snapshotQuery.set('timesheet_id', `in.(${timesheetIds.map(enc).join(',')})`);
+      snapshotQuery.set('select', 'id,pay_batch_id,timesheet_id,candidate_id,pay_channel,base_snapshot_json,target_snapshot_json,signature,created_at_utc');
+      snapshotQuery.set('limit', '50000');
+      snapshotRows.push(...getFetchRows(await sbFetch(env, buildQueryUrl('pay_batch_timesheet_snapshots', snapshotQuery), false)));
+    }
+
+    const breakdownsByItem = new Map();
+    for (const breakdown of breakdownRows) {
+      const key = trimText(breakdown.pay_batch_item_id);
+      if (!key) continue;
+      if (!breakdownsByItem.has(key)) breakdownsByItem.set(key, []);
+      breakdownsByItem.get(key).push(breakdown);
+    }
+
+    const snapshotsByTimesheet = new Map();
+    for (const snapshot of snapshotRows) {
+      const key = trimText(snapshot.timesheet_id);
+      if (key && !snapshotsByTimesheet.has(key)) snapshotsByTimesheet.set(key, snapshot);
+    }
+
+    const hydratedByCandidate = new Map();
+    const ensureCandidate = (candidateRow) => {
+      const candidateId = trimText(candidateRow.candidate_id);
+      const candidateKey = trimText(candidateRow.id) || candidateId;
+      if (hydratedByCandidate.has(candidateKey)) return hydratedByCandidate.get(candidateKey);
+      const candidate = {
+        pay_batch_candidate_id: trimText(candidateRow.id) || null,
+        candidate_id: candidateId || null,
+        display_name: firstNonBlank(candidateRow.candidate_display_name, safeObject(baseJob.recipient).display_name, safeObject(baseJob.recipient).name),
+        tms_ref: firstNonBlank(candidateRow.candidate_tms_ref, safeObject(baseJob.recipient).tms_ref),
+        umbrella_id: firstNonBlank(safeObject(baseJob.recipient).umbrella_id, baseJob.umbrella_id),
+        timesheets: [],
+        non_timesheet_lines: [],
+        frozen_totals: {
+          gross_ex_vat: 0,
+          vat: 0,
+          gross_vat: 0,
+          gross_inc_vat: 0,
+          deductions_recoveries_inc_vat: moneyValue(candidateRow.loan_repayment_taken) + moneyValue(candidateRow.overpayment_recovery_taken),
+          deductions_inc_vat: moneyValue(candidateRow.loan_repayment_taken) + moneyValue(candidateRow.overpayment_recovery_taken),
+          final_payable: asNumber(candidateRow.net_bank_amount) == null ? 0 : moneyValue(candidateRow.net_bank_amount),
+          net_inc_vat: asNumber(candidateRow.net_bank_amount) == null ? 0 : moneyValue(candidateRow.net_bank_amount),
+          timesheet_count: 0
+        }
+      };
+      hydratedByCandidate.set(candidateKey, candidate);
+      return candidate;
+    };
+
+    const snapshotText = (snapshot, ...keys) => {
+      const containers = [safeObject(snapshot.target_snapshot_json), safeObject(snapshot.base_snapshot_json)];
+      for (const container of containers) {
+        for (const key of keys) {
+          const direct = firstNonBlank(container[key], safeObject(container.timesheet)[key], safeObject(container.header)[key], safeObject(container.meta)[key]);
+          if (direct) return direct;
+        }
+      }
+      return '';
+    };
+
+    const snapshotArrays = (snapshot, ...keys) => {
+      const out = [];
+      const containers = [safeObject(snapshot.target_snapshot_json), safeObject(snapshot.base_snapshot_json)];
+      for (const container of containers) {
+        for (const key of keys) {
+          if (Array.isArray(container[key])) out.push(...container[key]);
+          if (Array.isArray(safeObject(container.timesheet)[key])) out.push(...safeObject(container.timesheet)[key]);
+        }
+      }
+      return out;
+    };
+
+    const ensureTimesheet = (candidate, item) => {
+      const timesheetId = trimText(item.timesheet_id);
+      const existing = candidate.timesheets.find((timesheet) => trimText(timesheet.timesheet_id || timesheet.id) === timesheetId);
+      if (existing) {
+        if (upperText(item.item_type) === 'SEGMENT_DELTA') existing.timesheet_render_mode = 'SEGMENT';
+        return existing;
+      }
+      const snapshot = snapshotsByTimesheet.get(timesheetId) || {};
+      const timesheet = {
+        timesheet_id: timesheetId || null,
+        candidate_id: candidate.candidate_id || null,
+        client_name: snapshotText(snapshot, 'client_name', 'clientName', 'client_display_name', 'clientDisplayName'),
+        week_ending_date: snapshotText(snapshot, 'week_ending_date', 'weekEndingDate', 'week_ending', 'weekEnding'),
+        job_title: snapshotText(snapshot, 'job_title', 'jobTitle'),
+        band: snapshotText(snapshot, 'band', 'grade'),
+        reference_number: snapshotText(snapshot, 'reference_number', 'referenceNumber', 'timesheet_ref', 'timesheetRef'),
+        timesheet_type: snapshotText(snapshot, 'timesheet_type', 'timesheetType') || 'Standard',
+        timesheet_render_mode: upperText(item.item_type) === 'SEGMENT_DELTA' ? 'SEGMENT' : 'AGGREGATE',
+        unit_rows: [],
+        additional_units_rows: [],
+        expenses_rows: [],
+        other_rows: [],
+        schedule_rows: snapshotArrays(snapshot, 'schedule_rows', 'scheduleRows', 'segments', 'segment_rows', 'segmentRows', 'shift_rows', 'shiftRows'),
+        schedule_changes: snapshotArrays(snapshot, 'schedule_changes', 'scheduleChanges'),
+        base_snapshot_json: snapshot.base_snapshot_json || null,
+        target_snapshot_json: snapshot.target_snapshot_json || null,
+        totals: { gross_ex_vat: 0, vat: 0, gross_vat: 0, gross_inc_vat: 0 },
+        frozen_totals: { gross_ex_vat: 0, vat: 0, gross_vat: 0, gross_inc_vat: 0 }
+      };
+      candidate.timesheets.push(timesheet);
+      candidate.frozen_totals.timesheet_count = candidate.timesheets.length;
+      return timesheet;
+    };
+
+    const lineFromArtifact = (candidate, item, breakdown) => {
+      const meta = safeObject(breakdown && breakdown.meta_json);
+      const frozenSource = safeObject(item.frozen_source_basis_json || meta.source_basis_json);
+      const frozenComponent = safeObject(item.frozen_component_snapshot_json || meta.frozen_component_snapshot_json);
+      const unitLabel = normaliseRenderLabel(firstNonBlank(
+        breakdown && breakdown.unit_name,
+        breakdown && breakdown.bucket_code,
+        extractFrozenLabel(frozenComponent, frozenSource, meta),
+        item.frozen_component_key_value,
+        item.description,
+        item.item_type
+      ));
+      const amountExVat = breakdown ? breakdown.amount_ex_vat : item.amount_ex_vat;
+      const amountVat = breakdown ? breakdown.amount_vat : item.amount_vat;
+      const amountIncVat = breakdown ? breakdown.amount_inc_vat : item.amount_inc_vat;
+      return {
+        pay_batch_candidate_id: trimText(item.pay_batch_candidate_id) || candidate.pay_batch_candidate_id || null,
+        candidate_id: candidate.candidate_id || null,
+        pay_batch_item_id: trimText(item.id) || null,
+        pay_batch_item_breakdown_id: breakdown ? trimText(breakdown.id) || null : null,
+        item_type: trimText(item.item_type) || null,
+        internal_item_type: trimText(item.item_type) || null,
+        line_kind: firstNonBlank(breakdown && breakdown.line_kind, item.item_type),
+        bucket_code: breakdown ? breakdown.bucket_code || null : null,
+        unit_name: unitLabel || null,
+        unit: unitLabel || null,
+        label: unitLabel || null,
+        description: firstNonBlank(unitLabel, item.description, item.item_type),
+        source_ref: item.source_ref || null,
+        finance_case_id: item.finance_case_id || null,
+        timesheet_id: item.timesheet_id || null,
+        pay_channel: item.pay_channel || null,
+        umbrella_id: item.umbrella_id || null,
+        bank_reference: item.bank_reference || null,
+        pay_bank_transfer_id: item.pay_bank_transfer_id || null,
+        routing_kind: upperText(item.pay_channel) === 'UMBRELLA' ? 'UMBRELLA_COMPANY' : (upperText(item.pay_channel) === 'PAYE' ? 'NORMAL_PAYE_ROUTE' : null),
+        destination_label: upperText(item.pay_channel) === 'UMBRELLA' ? 'umbrella company' : null,
+        ...(breakdown && breakdown.units !== null && breakdown.units !== undefined && trimText(breakdown.units) !== '' ? { quantity: breakdown.units, units: breakdown.units } : {}),
+        ...(breakdown && breakdown.rate !== null && breakdown.rate !== undefined && trimText(breakdown.rate) !== '' ? { rate: breakdown.rate } : {}),
+        amount_ex_vat: amountExVat ?? null,
+        amount_vat: amountVat ?? null,
+        vat: amountVat ?? null,
+        amount_inc_vat: amountIncVat ?? null,
+        total_ex_vat: amountExVat ?? null,
+        total_vat: amountVat ?? null,
+        total_inc_vat: amountIncVat ?? null,
+        frozen_source_basis_json: Object.keys(frozenSource).length ? frozenSource : null,
+        frozen_component_snapshot_json: Object.keys(frozenComponent).length ? frozenComponent : null,
+        frozen_component_key_type: item.frozen_component_key_type || null,
+        frozen_component_key_value: item.frozen_component_key_value || null,
+        frozen_component_classification: item.frozen_component_classification || null,
+        frozen_resolution_result_json: item.frozen_resolution_result_json || null,
+        payout_instruction_snapshot_json: item.payout_instruction_snapshot_json || null,
+        meta_json: Object.keys(meta).length ? meta : null,
+        operation_source_key: firstNonBlank(breakdown && breakdown.operation_source_key, item.operation_source_key)
+      };
+    };
+
+    const candidateRowsById = new Map(candidateRows.map((candidate) => [trimText(candidate.id), candidate]));
+    for (const item of itemRows) {
+      const candidateRow = candidateRowsById.get(trimText(item.pay_batch_candidate_id));
+      if (!candidateRow) continue;
+      const candidate = ensureCandidate(candidateRow);
+      const itemType = upperText(item.item_type);
+      const itemExVat = moneyValue(item.amount_ex_vat);
+      const itemVat = moneyValue(item.amount_vat);
+      const itemIncVat = moneyValue(item.amount_inc_vat);
+      const hasTimesheet = isUuidText(item.timesheet_id);
+      const timesheet = hasTimesheet && ['SEGMENT_DELTA', 'EXPENSE_DELTA', 'MILEAGE_DELTA', 'ADJUSTMENT_DELTA'].includes(itemType)
+        ? ensureTimesheet(candidate, item)
+        : null;
+
+      mergeTotalsInto(candidate, itemExVat, itemVat, itemIncVat);
+      if (asNumber(candidateRow.net_bank_amount) != null) {
+        candidate.frozen_totals.final_payable = moneyValue(candidateRow.net_bank_amount);
+        candidate.frozen_totals.net_inc_vat = candidate.frozen_totals.final_payable;
+      }
+      if (timesheet) {
+        mergeTotalsInto(timesheet, itemExVat, itemVat, itemIncVat);
+        timesheet.totals = { ...safeObject(timesheet.totals), ...safeObject(timesheet.frozen_totals) };
+      }
+
+      const itemBreakdowns = breakdownsByItem.get(trimText(item.id));
+      const lineSources = itemBreakdowns && itemBreakdowns.length ? itemBreakdowns : [null];
+      for (const breakdown of lineSources) {
+        const line = lineFromArtifact(candidate, item, breakdown);
+        if (timesheet) {
+          if (itemType === 'SEGMENT_DELTA') timesheet.unit_rows.push(line);
+          else if (itemType === 'EXPENSE_DELTA' || itemType === 'MILEAGE_DELTA') timesheet.expenses_rows.push(line);
+          else timesheet.other_rows.push(line);
+        } else {
+          candidate.non_timesheet_lines.push(line);
+        }
+      }
+    }
+
+    const hydratedCandidates = Array.from(hydratedByCandidate.values()).filter(candidateHasRenderableDetail);
+    if (!hydratedCandidates.length) return baseJob;
+
+    const hydratedSummary = hydratedCandidates.reduce((acc, candidate) => {
+      const ft = safeObject(candidate.frozen_totals);
+      acc.candidate_count += 1;
+      acc.timesheet_count += Array.isArray(candidate.timesheets) ? candidate.timesheets.length : 0;
+      acc.gross_ex_vat = addMoney(acc.gross_ex_vat, ft.gross_ex_vat);
+      acc.vat = addMoney(acc.vat, ft.vat ?? ft.gross_vat);
+      acc.gross_vat = acc.vat;
+      acc.gross_inc_vat = addMoney(acc.gross_inc_vat, ft.gross_inc_vat);
+      acc.deductions_recoveries_inc_vat = addMoney(acc.deductions_recoveries_inc_vat, ft.deductions_recoveries_inc_vat ?? ft.deductions_inc_vat);
+      acc.deductions_inc_vat = acc.deductions_recoveries_inc_vat;
+      acc.final_payable = addMoney(acc.final_payable, ft.final_payable ?? ft.net_inc_vat);
+      acc.net_inc_vat = acc.final_payable;
+      acc.total_amount = acc.final_payable;
+      return acc;
+    }, {
+      candidate_count: 0,
+      timesheet_count: 0,
+      gross_ex_vat: 0,
+      vat: 0,
+      gross_vat: 0,
+      gross_inc_vat: 0,
+      deductions_recoveries_inc_vat: 0,
+      deductions_inc_vat: 0,
+      final_payable: 0,
+      net_inc_vat: 0,
+      total_amount: 0
+    });
+
+    const hydratedJob = mergePreservingRichArrays(baseJob, {
+      pay_batch_id: payBatchId,
+      _render_hydrated_from_frozen_batch_artifacts: true
+    });
+    hydratedJob.candidates = hydratedCandidates;
+    hydratedJob.summary = mergePreservingRichArrays(hydratedSummary, safeObject(baseJob.summary));
+    return hydratedJob;
   };
   const buildRemittanceJobFromOutbox = (row) => {
     const scope = parseObjectMaybe(row.payment_scope_json ?? row.paymentScopeJson);
@@ -96464,7 +97119,8 @@ async function buildEmailPayloadFromOutboxRow(env, outboxRow) {
 
   if (shouldHydrateRemittance && typeof buildRemittanceEmailPayload === 'function') {
     try {
-      const remittanceJob = buildRemittanceJobFromOutbox(outboxRow || {});
+      let remittanceJob = buildRemittanceJobFromOutbox(outboxRow || {});
+      remittanceJob = await hydrateThinRemittanceJobFromFrozenBatchArtifacts(remittanceJob, outboxRow || {});
       const rendered = buildRemittanceEmailPayload(remittanceJob, {
         payBatchId: firstNonBlank(remittanceJob.pay_batch_id, outboxRow && outboxRow.context_id),
         payDate: remittanceJob.pay_date || remittanceJob.authoritative_payment_date || null,
@@ -96483,7 +97139,10 @@ async function buildEmailPayloadFromOutboxRow(env, outboxRow) {
         headerMessage: firstNonBlank(remittanceJob.header_message, remittanceJob.headerMessage, 'Please find below a remittance advice for authorised timesheets:'),
         footerMessage: firstNonBlank(remittanceJob.footer_message, remittanceJob.footerMessage, 'Many thanks Arthur Rai Medical Services')
       });
-      if (rendered && (rendered.body_html || rendered.body_text)) {
+      const renderedSummary = safeObject(rendered && rendered.summary_json);
+      const renderIncomplete = renderedSummary.render_incomplete === true
+        || (remittanceJobSummaryAmount(remittanceJob) > 0 && !remittanceJobHasRenderableDetail(remittanceJob));
+      if (rendered && (rendered.body_html || rendered.body_text) && renderIncomplete !== true) {
         outboxRow = {
           ...(outboxRow || {}),
           subject: firstNonBlank(rendered.subject, outboxRow && outboxRow.subject),
@@ -96492,6 +97151,8 @@ async function buildEmailPayloadFromOutboxRow(env, outboxRow) {
           email_type: 'html',
           _rendered_remittance_summary_json: rendered.summary_json || null
         };
+      } else if (renderIncomplete === true) {
+        try { console.warn('[EMAIL_OUTBOX][REMITTANCE_RENDER_INCOMPLETE]', JSON.stringify({ outbox_id: outboxRow && outboxRow.id || null, pay_batch_id: remittanceJob && (remittanceJob.pay_batch_id || remittanceJob.payBatchId) || null })); } catch {}
       }
     } catch (e) {
       try { console.warn('[EMAIL_OUTBOX][REMITTANCE_RENDER]', String(e && e.message ? e.message : e)); } catch {}
@@ -96542,7 +97203,6 @@ async function buildEmailPayloadFromOutboxRow(env, outboxRow) {
   const invpdfMode = String(invpdfEffective?.mode || 'free').trim().toLowerCase() === 'paid' ? 'paid' : 'free';
   const emailWorkerCanRender = (invpdfMode === 'paid') && (invpdfEffective?.email_worker_can_render === true);
 
-  const enc = encodeURIComponent;
 
   // Resolve to Apps Script attachmentsV2: [{ Name, ContentBytes }]
   const attachmentsV2 = [];
@@ -96660,9 +97320,6 @@ async function buildEmailPayloadFromOutboxRow(env, outboxRow) {
 
   return payload;
 }
-
-
-
 
 async function limitOrLinkAttachments(env, { payload }) {
   const limitBytes = Number(env.EMAIL_MAX_PAYLOAD_BYTES) || EMAIL_MAX_PAYLOAD_BYTES;
