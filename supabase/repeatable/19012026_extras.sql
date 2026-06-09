@@ -6606,6 +6606,8 @@ $function$;
 
 BEGIN;
 
+
+
 CREATE OR REPLACE FUNCTION public.timesheet_summary_lightweight_rows_v1(
   p_filters jsonb DEFAULT '{}'::jsonb
 )
@@ -7381,7 +7383,13 @@ BEGIN
       )
       AND (
         v_candidate_paid IS NULL
-        OR ((enriched_row.pay_paid_at_utc IS NOT NULL OR enriched_row.paid_at_utc IS NOT NULL) = v_candidate_paid)
+        OR (
+          (
+            UPPER(COALESCE(enriched_row.pay_status_code, '')) IN ('PAID','PARTIALLY_PAID')
+            OR enriched_row.pay_paid_at_utc IS NOT NULL
+            OR enriched_row.paid_at_utc IS NOT NULL
+          ) = v_candidate_paid
+        )
       )
       AND (
         v_is_adjusted IS NULL
@@ -7631,6 +7639,9 @@ BEGIN
   OFFSET v_offset;
 END;
 $function$;
+
+
+
 
 
 REVOKE ALL ON FUNCTION public.timesheet_summary_lightweight_rows_v1(jsonb) FROM PUBLIC;
