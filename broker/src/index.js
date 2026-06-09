@@ -24116,7 +24116,6 @@ async function handleBankingIdLedgerList(env, req, user) {
   }
 }
 
-
 async function advanceBankingPayExecuteOperation(env, operationRow, user, options = {}) {
   const trimStr = (value) => String(value == null ? '' : value).trim();
   const upper = (value) => trimStr(value).toUpperCase();
@@ -24584,6 +24583,126 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
     return output;
   };
 
+
+  const compactErrorForProgress = (value) => {
+    if (!isPlainObject(value)) {
+      const message = trimStr(value);
+      return message ? { message: message.length > 500 ? `${message.slice(0, 500)}…` : message } : null;
+    }
+    return jsonbStripNulls({
+      ok: value.ok === false ? false : (value.ok === true ? true : null),
+      code: trimStr(value.code || value.error_code || value.trigger_status || value.triggerStatus) || null,
+      name: trimStr(value.name || value.error_name || value.errorName) || null,
+      message: compactErrorMessage(value.message || value.error || value.detail || value.details, 500) || null,
+      status: trimStr(value.status || value.operation_status || value.operationStatus) || null,
+      phase: trimStr(value.phase || value.operation_phase || value.operationPhase) || null
+    });
+  };
+
+  const compactOperationSnapshotForProgress = (value) => {
+    const source = isPlainObject(value) ? value : {};
+    const nestedOperation = isPlainObject(source.operation) ? source.operation : {};
+    const rawOperation = isPlainObject(source.raw_operation) ? source.raw_operation : (isPlainObject(source.rawOperation) ? source.rawOperation : {});
+    const row = Object.assign({}, nestedOperation, rawOperation, source);
+    return jsonbStripNulls({
+      id: trimStr(row.id || row.operation_id || row.operationId) || null,
+      operation_id: trimStr(row.operation_id || row.operationId || row.id) || null,
+      operation_type: trimStr(row.operation_type || row.operationType) || null,
+      pay_batch_id: trimStr(row.pay_batch_id || row.payBatchId) || null,
+      root_operation_id: trimStr(row.root_operation_id || row.rootOperationId) || null,
+      status: trimStr(row.status || row.operation_status || row.operationStatus) || null,
+      phase: trimStr(row.phase || row.operation_phase || row.operationPhase) || null,
+      runner_state: trimStr(row.runner_state || row.runnerState) || null,
+      requires_user_action: row.requires_user_action === true || row.requiresUserAction === true ? true : (row.requires_user_action === false || row.requiresUserAction === false ? false : null),
+      resume_reason: trimStr(row.resume_reason || row.resumeReason) || null,
+      run_after_utc: trimStr(row.run_after_utc || row.runAfterUtc) || null,
+      created_at_utc: trimStr(row.created_at_utc || row.createdAtUtc) || null,
+      started_at_utc: trimStr(row.started_at_utc || row.startedAtUtc) || null,
+      updated_at_utc: trimStr(row.updated_at_utc || row.updatedAtUtc) || null,
+      completed_at_utc: trimStr(row.completed_at_utc || row.completedAtUtc) || null,
+      failed_at_utc: trimStr(row.failed_at_utc || row.failedAtUtc) || null,
+      error_json: compactErrorForProgress(row.error_json || row.errorJson || row.error)
+    });
+  };
+
+  const compactSettlementStartForProgress = (value) => {
+    const source = isPlainObject(value) ? value : {};
+    const startPayload = isPlainObject(source.start) ? source.start : source;
+    return jsonbStripNulls({
+      ok: source.ok === false || startPayload.ok === false ? false : (source.ok === true || startPayload.ok === true ? true : null),
+      operation_id: trimStr(source.operation_id || source.operationId || source.id || startPayload.operation_id || startPayload.operationId || startPayload.id) || null,
+      status: trimStr(source.status || startPayload.status || startPayload.operation_status || startPayload.operationStatus) || null,
+      phase: trimStr(source.phase || startPayload.phase || startPayload.operation_phase || startPayload.operationPhase) || null,
+      is_existing: source.is_existing === true || source.isExisting === true || startPayload.is_existing === true || startPayload.isExisting === true ? true : null,
+      error: compactErrorForProgress(source.error || startPayload.error || startPayload.error_json || startPayload.errorJson),
+      operation: compactOperationSnapshotForProgress(startPayload)
+    });
+  };
+
+  const compactSettlementAdvanceForProgress = (value) => {
+    const source = isPlainObject(value) ? value : {};
+    const workerAdvance = isPlainObject(source.worker_advance) ? source.worker_advance : (isPlainObject(source.workerAdvance) ? source.workerAdvance : {});
+    const workerOperation = isPlainObject(workerAdvance.operation) ? workerAdvance.operation : {};
+    const rawOperation = isPlainObject(source.raw_operation) ? source.raw_operation : (isPlainObject(source.rawOperation) ? source.rawOperation : {});
+    const rawProgress = isPlainObject(source.raw_progress_json) ? source.raw_progress_json : (isPlainObject(source.rawProgressJson) ? source.rawProgressJson : (isPlainObject(rawOperation.progress_json) ? rawOperation.progress_json : {}));
+    const rawResult = isPlainObject(source.raw_result_json) ? source.raw_result_json : (isPlainObject(source.rawResultJson) ? source.rawResultJson : (isPlainObject(rawOperation.result_json) ? rawOperation.result_json : {}));
+    const firstCompactSourceObject = (...values) => values.find((entry) => isPlainObject(entry)) || null;
+    const remittanceTimingGate = firstCompactSourceObject(
+      source.remittance_timing_gate,
+      source.remittanceTimingGate,
+      rawProgress.remittance_timing_gate,
+      rawProgress.remittanceTimingGate,
+      rawResult.remittance_timing_gate,
+      rawResult.remittanceTimingGate
+    );
+    const queueResult = firstCompactSourceObject(
+      source.queue_result,
+      source.queueResult,
+      rawProgress.queue_result,
+      rawProgress.queueResult,
+      rawResult.queue_result,
+      rawResult.queueResult
+    );
+    const remittanceOperation = firstCompactSourceObject(
+      source.remittance_operation,
+      source.remittanceOperation,
+      rawProgress.remittance_operation,
+      rawProgress.remittanceOperation,
+      rawResult.remittance_operation,
+      rawResult.remittanceOperation
+    );
+    const childRelease = isPlainObject(source.child_release) ? source.child_release : (isPlainObject(source.childRelease) ? source.childRelease : null);
+    const childOperationId = trimStr(
+      source.child_operation_id || source.childOperationId
+      || rawProgress.child_operation_id || rawProgress.childOperationId
+      || rawResult.child_operation_id || rawResult.childOperationId
+      || (isPlainObject(queueResult) ? (queueResult.child_operation_id || queueResult.childOperationId || queueResult.operation_id || queueResult.operationId) : null)
+      || (isPlainObject(remittanceOperation) ? (remittanceOperation.operation_id || remittanceOperation.operationId || remittanceOperation.id) : null)
+    );
+    return jsonbStripNulls({
+      ok: source.ok === false || workerAdvance.ok === false ? false : (source.ok === true || workerAdvance.ok === true ? true : null),
+      claimed: source.claimed === true || workerAdvance.claimed === true ? true : (source.claimed === false || workerAdvance.claimed === false ? false : null),
+      advanced: source.advanced === true || workerAdvance.advanced === true ? true : (source.advanced === false || workerAdvance.advanced === false ? false : null),
+      waiting: source.waiting === true || workerAdvance.waiting === true ? true : (source.waiting === false || workerAdvance.waiting === false ? false : null),
+      terminal: source.terminal === true || workerAdvance.terminal === true ? true : (source.terminal === false || workerAdvance.terminal === false ? false : null),
+      status: trimStr(source.status || source.operation_status || source.operationStatus || workerAdvance.status || workerOperation.status || rawOperation.status) || null,
+      phase: trimStr(source.phase || source.operation_phase || source.operationPhase || workerAdvance.phase || workerOperation.phase || rawOperation.phase) || null,
+      not_claimed_reason: trimStr(source.not_claimed_reason || source.notClaimedReason || workerAdvance.not_claimed_reason || workerAdvance.notClaimedReason) || null,
+      bounded_advance_steps: Number.isFinite(Number(source.bounded_advance_steps)) ? Math.max(0, Math.trunc(Number(source.bounded_advance_steps))) : null,
+      bounded_advance_stopped_reason: trimStr(source.bounded_advance_stopped_reason) || null,
+      child_operation_id: uuidRe.test(childOperationId) ? childOperationId : null,
+      operation: compactOperationSnapshotForProgress(source.operation || workerOperation || rawOperation),
+      raw_operation: compactOperationSnapshotForProgress(rawOperation),
+      child_release: childRelease ? compactProviderDiagnostic(childRelease) : null,
+      remittance_timing_gate: remittanceTimingGate ? compactProviderDiagnostic(remittanceTimingGate) : null,
+      queue_result: queueResult ? compactProviderDiagnostic(queueResult) : null,
+      remittance_operation: remittanceOperation ? compactProviderDiagnostic(remittanceOperation) : null,
+      operation_queued: source.operation_queued === true || source.operationQueued === true || rawProgress.operation_queued === true || rawProgress.operationQueued === true || rawResult.operation_queued === true || rawResult.operationQueued === true ? true : null,
+      remittance_suppressed: source.remittance_suppressed === true || source.remittanceSuppressed === true || rawProgress.remittance_suppressed === true || rawProgress.remittanceSuppressed === true || rawResult.remittance_suppressed === true || rawResult.remittanceSuppressed === true ? true : null,
+      completed_with_failed_payments: source.completed_with_failed_payments === true || source.completedWithFailedPayments === true || rawProgress.completed_with_failed_payments === true || rawProgress.completedWithFailedPayments === true || rawResult.completed_with_failed_payments === true || rawResult.completedWithFailedPayments === true ? true : null
+    });
+  };
+
   const buildReleaseProgressResume = (patchValue) => {
     const patch = isPlainObject(patchValue) ? patchValue : {};
     const claim = compactProviderSubmitClaimForProgress(patch.provider_submit_claim);
@@ -25030,7 +25149,7 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
         status: workerStatus || workerOperation.status || null,
         phase: workerPhase || workerOperation.phase || null,
         not_claimed_reason: workerAdvance && workerAdvance.claimed !== true ? workerAdvance.not_claimed_reason || 'PAYMENT_SETTLEMENT_CHILD_NOT_CLAIMED' : null,
-        worker_advance: workerAdvance || null,
+        worker_advance: compactSettlementAdvanceForProgress(workerAdvance),
         raw_operation: workerRawOperation,
         raw_progress_json: isPlainObject(workerRawOperation.progress_json) ? workerRawOperation.progress_json : null,
         raw_result_json: isPlainObject(workerRawOperation.result_json) ? workerRawOperation.result_json : null
@@ -26180,7 +26299,7 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
           currentPhase,
           settlementStart.error?.code || 'PAYMENT_SETTLEMENT_OPERATION_START_FAILED',
           settlementStart.error?.message || 'Could not create or reuse the local settlement operation for this immediate payment.',
-          { settlement_start: settlementStart, submission_evidence: submissionEvidence.evidence }
+          { settlement_start: compactSettlementStartForProgress(settlementStart), submission_evidence: submissionEvidence.evidence }
         );
       }
       return moreWork('WAIT_LOCAL_SETTLEMENT', {
@@ -26190,7 +26309,7 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
         active_child_operation_type: 'PAYMENT_SETTLEMENT',
         settlement_status: settlementStart.status || null,
         settlement_phase: settlementStart.phase || null,
-        settlement_start: settlementStart.start || settlementStart,
+        settlement_start: compactSettlementStartForProgress(settlementStart),
         submission_evidence: submissionEvidence.evidence,
         local_settlement_required: true,
         next_required_phase: 'WAIT_LOCAL_SETTLEMENT'
@@ -26208,7 +26327,7 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
             currentPhase,
             settlementStart.error?.code || 'PAYMENT_SETTLEMENT_OPERATION_MISSING',
             settlementStart.error?.message || 'Local settlement operation is missing and could not be recreated safely.',
-            { settlement_start: settlementStart }
+            { settlement_start: compactSettlementStartForProgress(settlementStart) }
           );
         }
       }
@@ -26226,7 +26345,7 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
               settlement_operation_id: settlementOperationId,
               settlement_status: settlementStatus,
               settlement_phase: settlementPhase || null,
-              settlement_operation: settlementAdvance,
+              settlement_operation: compactSettlementAdvanceForProgress(settlementAdvance),
               settlement_remittance_handoff: settlementRemittanceHandoff
             }
           );
@@ -26241,7 +26360,7 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
           active_child_operation_type: 'PAYMENT_SETTLEMENT',
           settlement_status: settlementStatus,
           settlement_phase: settlementPhase || null,
-          settlement_operation: settlementAdvance,
+          settlement_operation: compactSettlementAdvanceForProgress(settlementAdvance),
           settlement_remittance_handoff: settlementRemittanceHandoff,
           remittance_handoff_already_handled_by_settlement: settlementRemittanceHandoff.handled === true,
           local_settlement_required: true,
@@ -26259,7 +26378,7 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
             settlement_operation_id: settlementOperationId,
             settlement_status: settlementStatus,
             settlement_phase: settlementPhase || null,
-            settlement_operation: settlementAdvance
+            settlement_operation: compactSettlementAdvanceForProgress(settlementAdvance)
           }
         );
       }
@@ -26270,7 +26389,7 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
         active_child_operation_type: 'PAYMENT_SETTLEMENT',
         settlement_status: settlementStatus || null,
         settlement_phase: settlementPhase || null,
-        settlement_operation: settlementAdvance,
+        settlement_operation: compactSettlementAdvanceForProgress(settlementAdvance),
         local_settlement_required: true,
         next_required_phase: 'WAIT_LOCAL_SETTLEMENT'
       }, 15, 'WAIT_LOCAL_SETTLEMENT');
@@ -26400,7 +26519,7 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
             operation_status: gateOperationStatus || null,
             trigger_status: gateTriggerStatus,
             configured_timing: gate && gate.configuredTiming ? gate.configuredTiming : null,
-            raw: gate && (gate.raw || gate)
+            raw: gate ? compactProviderDiagnostic(gate.raw || gate) : null
           });
           if (!(gate && gate.deferred === true)) break;
         }
@@ -26411,14 +26530,14 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
               'POST_SETTLEMENT_REMITTANCE_TIMING_DEFERRED',
               'Post-settlement remittance queueing was deferred by the remittance timing gate for every supported confirmed-payment trigger.',
               {
-                remittance_timing_gate: gate.raw || gate,
+                remittance_timing_gate: gate ? compactProviderDiagnostic(gate.raw || gate) : null,
                 remittance_timing_gate_attempts: remittanceTimingGateAttempts,
                 local_settlement_complete: true,
                 remittance_only_confirmed: true
               }
             );
           }
-          return waitingProvider('QUEUE_REMITTANCES', { status_text: 'Remittance queue deferred by timing.', remittance_timing_gate: gate.raw || gate, remittance_timing_gate_attempts: remittanceTimingGateAttempts }, 300);
+          return waitingProvider('QUEUE_REMITTANCES', { status_text: 'Remittance queue deferred by timing.', remittance_timing_gate: gate ? compactProviderDiagnostic(gate.raw || gate) : null, remittance_timing_gate_attempts: remittanceTimingGateAttempts }, 300);
         }
         if (!gate || gate.ok === false) {
           return reviewRequired(
@@ -26426,7 +26545,7 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
             gateTriggerStatus || (gate && gate.triggerStatus) || 'REMITTANCE_QUEUE_STEP_FAILED',
             'Remittance queueing did not complete successfully, so the payment execution operation cannot be marked complete.',
             {
-              remittance_timing_gate: gate && (gate.raw || gate),
+              remittance_timing_gate: gate ? compactProviderDiagnostic(gate.raw || gate) : null,
               remittance_timing_gate_attempts: remittanceTimingGateAttempts,
               local_settlement_complete: queueOnlyConfirmed ? true : progressJson.local_settlement_complete === true,
               remittance_only_confirmed: queueOnlyConfirmed
@@ -26439,7 +26558,7 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
             gateTriggerStatus || 'REMITTANCE_QUEUE_OPERATION_REVIEW_REQUIRED',
             'The remittance queue operation is failed, cancelled, or requires review, so the payment execution operation cannot be marked complete.',
             {
-              remittance_timing_gate: gate && (gate.raw || gate),
+              remittance_timing_gate: gate ? compactProviderDiagnostic(gate.raw || gate) : null,
               remittance_timing_gate_attempts: remittanceTimingGateAttempts,
               remittance_operation_status: gateOperationStatus,
               remittance_operation_id: uuidRe.test(gateChildOperationId || '') ? gateChildOperationId : null,
@@ -26450,7 +26569,7 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
         }
         return moreWork('COMPLETE', {
           status_text: 'Remittance queue step completed.',
-          remittance_timing_gate: gate && (gate.raw || gate),
+          remittance_timing_gate: gate ? compactProviderDiagnostic(gate.raw || gate) : null,
           remittance_timing_gate_attempts: remittanceTimingGateAttempts,
           remittance_only_confirmed: queueOnlyConfirmed,
           remittance_trigger_used: remittanceTimingGateAttempts.length ? remittanceTimingGateAttempts[remittanceTimingGateAttempts.length - 1].trigger : null
