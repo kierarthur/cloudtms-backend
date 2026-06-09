@@ -163679,7 +163679,6 @@ END;
 $function$;
 
 
-
 CREATE OR REPLACE FUNCTION public.pay_batch_timesheet_summary_lightweight_v1(p_filters jsonb DEFAULT '{}'::jsonb)
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -163702,6 +163701,9 @@ DECLARE
   v_order_by text := 'week_ending_date';
   v_order_dir text := 'desc';
   v_purpose text := '';
+  v_membership_mode text := '';
+  v_include_ids_text text := NULL;
+  v_include_ids boolean := TRUE;
   v_has_secondary_filters boolean := FALSE;
 
   v_rows jsonb := '[]'::jsonb;
@@ -163750,6 +163752,22 @@ BEGIN
   v_order_by := COALESCE(LOWER(NULLIF(BTRIM(COALESCE(v_filters->>'order_by', v_filters->>'orderBy', 'week_ending_date')), '')), 'week_ending_date');
   v_order_dir := COALESCE(LOWER(NULLIF(BTRIM(COALESCE(v_filters->>'order_dir', v_filters->>'orderDir', 'desc')), '')), 'desc');
   v_purpose := COALESCE(LOWER(NULLIF(BTRIM(COALESCE(v_filters->>'purpose', '')), '')), '');
+  v_membership_mode := COALESCE(LOWER(NULLIF(BTRIM(COALESCE(v_filters->>'membership_mode', v_filters->>'membershipMode', '')), '')), '');
+  v_include_ids_text := LOWER(NULLIF(BTRIM(COALESCE(v_filters->>'include_ids', v_filters->>'includeIds', v_filters->>'include_membership_ids', v_filters->>'includeMembershipIds', '')), ''));
+
+  IF v_membership_mode IN ('deferred', 'count', 'count_only', 'counts', 'metadata') THEN
+    v_include_ids := FALSE;
+  ELSIF v_membership_mode IN ('ids', 'full', 'full_ids', 'membership_ids') THEN
+    v_include_ids := TRUE;
+  END IF;
+
+  IF v_include_ids_text IS NOT NULL THEN
+    IF v_include_ids_text IN ('0', 'false', 'no', 'n', 'off') THEN
+      v_include_ids := FALSE;
+    ELSIF v_include_ids_text IN ('1', 'true', 'yes', 'y', 'on') THEN
+      v_include_ids := TRUE;
+    END IF;
+  END IF;
 
   IF v_order_by NOT IN (
     'candidate_name', 'candidate',
@@ -163789,7 +163807,9 @@ BEGIN
         'total_pay_ex_vat_sum', 0,
         'total_charge_ex_vat_sum', 0,
         'margin_ex_vat_sum', 0
-      )
+      ),
+      'membership_deferred', CASE WHEN v_purpose IN ('membership', 'memberships', 'ids') AND v_include_ids IS NOT TRUE THEN TRUE ELSE FALSE END,
+      'ids_deferred', CASE WHEN v_purpose IN ('membership', 'memberships', 'ids') AND v_include_ids IS NOT TRUE THEN TRUE ELSE FALSE END
     );
   END IF;
 
@@ -163819,6 +163839,16 @@ BEGIN
     - 'includeTotals'
     - 'include_count'
     - 'includeCount'
+    - 'include_ids'
+    - 'includeIds'
+    - 'include_membership_ids'
+    - 'includeMembershipIds'
+    - 'explicit_full_membership'
+    - 'explicitFullMembership'
+    - 'force_full_membership'
+    - 'forceFullMembership'
+    - 'membership_mode'
+    - 'membershipMode'
     - 'disable_paging'
     - 'disablePaging'
     - 'no_paging'
@@ -163870,7 +163900,17 @@ BEGIN
     - 'include_totals'
     - 'includeTotals'
     - 'include_count'
-    - 'includeCount')
+    - 'includeCount'
+    - 'include_ids'
+    - 'includeIds'
+    - 'include_membership_ids'
+    - 'includeMembershipIds'
+    - 'explicit_full_membership'
+    - 'explicitFullMembership'
+    - 'force_full_membership'
+    - 'forceFullMembership'
+    - 'membership_mode'
+    - 'membershipMode')
     || jsonb_build_object(
       'timesheet_ids', to_jsonb(v_timesheet_ids),
       'disable_paging', TRUE,
@@ -163884,16 +163924,22 @@ BEGIN
     );
 
   IF v_purpose IN ('membership', 'memberships', 'ids') AND v_has_secondary_filters IS NOT TRUE THEN
-    SELECT COALESCE(JSONB_AGG(member_id.timesheet_id::text ORDER BY member_id.timesheet_id::text), '[]'::jsonb)
-      INTO v_row_ids
-    FROM UNNEST(v_timesheet_ids) AS member_id(timesheet_id);
+    IF v_include_ids IS TRUE THEN
+      SELECT COALESCE(JSONB_AGG(member_id.timesheet_id::text ORDER BY member_id.timesheet_id::text), '[]'::jsonb)
+        INTO v_row_ids
+      FROM UNNEST(v_timesheet_ids) AS member_id(timesheet_id);
+    ELSE
+      v_row_ids := '[]'::jsonb;
+    END IF;
 
     RETURN jsonb_build_object(
-      'row_ids', v_row_ids,
-      'ids', v_row_ids,
+      'row_ids', COALESCE(v_row_ids, '[]'::jsonb),
+      'ids', COALESCE(v_row_ids, '[]'::jsonb),
       'total_count', v_total_count,
       'total', v_total_count,
-      'count', v_total_count
+      'count', v_total_count,
+      'membership_deferred', CASE WHEN v_include_ids IS TRUE THEN FALSE ELSE TRUE END,
+      'ids_deferred', CASE WHEN v_include_ids IS TRUE THEN FALSE ELSE TRUE END
     );
   END IF;
 
@@ -163908,7 +163954,10 @@ BEGIN
       WHERE summary_rows.timesheet_id IS NOT NULL
     )
     SELECT
-      COALESCE(JSONB_AGG(filtered_member_ids.row_id ORDER BY filtered_member_ids.row_id), '[]'::jsonb),
+      CASE
+        WHEN v_include_ids IS TRUE THEN COALESCE(JSONB_AGG(filtered_member_ids.row_id ORDER BY filtered_member_ids.row_id), '[]'::jsonb)
+        ELSE '[]'::jsonb
+      END,
       COUNT(filtered_member_ids.row_id)::bigint
     INTO
       v_row_ids,
@@ -163920,66 +163969,258 @@ BEGIN
       'ids', COALESCE(v_row_ids, '[]'::jsonb),
       'total_count', COALESCE(v_total_count, 0),
       'total', COALESCE(v_total_count, 0),
-      'count', COALESCE(v_total_count, 0)
+      'count', COALESCE(v_total_count, 0),
+      'membership_deferred', CASE WHEN v_include_ids IS TRUE THEN FALSE ELSE TRUE END,
+      'ids_deferred', CASE WHEN v_include_ids IS TRUE THEN FALSE ELSE TRUE END
     );
   END IF;
 
-  WITH summary_rows AS MATERIALIZED (
+  WITH snapshot_rows AS MATERIALIZED (
+    SELECT DISTINCT ON (snapshot_row.timesheet_id)
+      snapshot_row.id,
+      snapshot_row.pay_batch_id,
+      snapshot_row.timesheet_id,
+      snapshot_row.candidate_id,
+      snapshot_row.pay_channel,
+      snapshot_row.base_snapshot_json,
+      snapshot_row.target_snapshot_json,
+      snapshot_row.created_at_utc
+    FROM public.pay_batch_timesheet_snapshots AS snapshot_row
+    WHERE snapshot_row.pay_batch_id = v_pay_batch_id
+      AND snapshot_row.timesheet_id IS NOT NULL
+    ORDER BY snapshot_row.timesheet_id, snapshot_row.created_at_utc DESC NULLS LAST, snapshot_row.id
+  ), summary_rows AS MATERIALIZED (
     SELECT summary_row.*
     FROM public.timesheet_summary_lightweight_rows_v1(v_inner_filters) AS summary_row
     WHERE summary_row.timesheet_id = ANY(v_timesheet_ids)
+  ), live_rows AS MATERIALIZED (
+    SELECT
+      summary_rows.timesheet_id,
+      summary_rows.contract_week_id,
+      summary_rows.candidate_name,
+      summary_rows.client_name,
+      summary_rows.week_ending_date,
+      summary_rows.work_date,
+      summary_rows.processing_status_display,
+      summary_rows.tools_stage,
+      summary_rows.route_type,
+      summary_rows.sheet_scope,
+      COALESCE(summary_rows.total_pay_ex_vat, 0)::numeric AS total_pay_ex_vat,
+      COALESCE(summary_rows.total_charge_ex_vat, 0)::numeric AS total_charge_ex_vat,
+      COALESCE(summary_rows.margin_ex_vat, 0)::numeric AS margin_ex_vat,
+      TO_JSONB(summary_rows) AS row_json
+    FROM summary_rows
+  ), fallback_seed AS MATERIALIZED (
+    SELECT
+      snapshot_rows.pay_batch_id,
+      snapshot_rows.timesheet_id,
+      snapshot_rows.candidate_id,
+      snapshot_rows.pay_channel,
+      NULLIF(BTRIM(COALESCE(
+        snapshot_rows.target_snapshot_json->>'candidate_name',
+        snapshot_rows.target_snapshot_json->>'candidateName',
+        snapshot_rows.target_snapshot_json #>> '{candidate,name}',
+        snapshot_rows.target_snapshot_json #>> '{candidate,display_name}',
+        snapshot_rows.base_snapshot_json->>'candidate_name',
+        snapshot_rows.base_snapshot_json->>'candidateName',
+        snapshot_rows.base_snapshot_json #>> '{candidate,name}',
+        snapshot_rows.base_snapshot_json #>> '{candidate,display_name}',
+        ''
+      )), '') AS candidate_name_text,
+      NULLIF(BTRIM(COALESCE(
+        snapshot_rows.target_snapshot_json->>'client_name',
+        snapshot_rows.target_snapshot_json->>'clientName',
+        snapshot_rows.target_snapshot_json #>> '{client,name}',
+        snapshot_rows.base_snapshot_json->>'client_name',
+        snapshot_rows.base_snapshot_json->>'clientName',
+        snapshot_rows.base_snapshot_json #>> '{client,name}',
+        ''
+      )), '') AS client_name_text,
+      NULLIF(BTRIM(COALESCE(
+        snapshot_rows.target_snapshot_json->>'week_ending_date',
+        snapshot_rows.target_snapshot_json->>'weekEndingDate',
+        snapshot_rows.target_snapshot_json #>> '{timesheet,week_ending_date}',
+        snapshot_rows.base_snapshot_json->>'week_ending_date',
+        snapshot_rows.base_snapshot_json->>'weekEndingDate',
+        snapshot_rows.base_snapshot_json #>> '{timesheet,week_ending_date}',
+        ''
+      )), '') AS week_ending_text,
+      NULLIF(BTRIM(COALESCE(
+        snapshot_rows.target_snapshot_json->>'work_date',
+        snapshot_rows.target_snapshot_json->>'workDate',
+        snapshot_rows.target_snapshot_json #>> '{timesheet,work_date}',
+        snapshot_rows.base_snapshot_json->>'work_date',
+        snapshot_rows.base_snapshot_json->>'workDate',
+        snapshot_rows.base_snapshot_json #>> '{timesheet,work_date}',
+        ''
+      )), '') AS work_date_text,
+      NULLIF(BTRIM(COALESCE(
+        snapshot_rows.target_snapshot_json->>'sheet_scope',
+        snapshot_rows.target_snapshot_json->>'sheetScope',
+        snapshot_rows.target_snapshot_json #>> '{timesheet,sheet_scope}',
+        snapshot_rows.base_snapshot_json->>'sheet_scope',
+        snapshot_rows.base_snapshot_json->>'sheetScope',
+        snapshot_rows.base_snapshot_json #>> '{timesheet,sheet_scope}',
+        ''
+      )), '') AS sheet_scope_text
+    FROM snapshot_rows
+    WHERE v_has_secondary_filters IS NOT TRUE
+      AND NOT EXISTS (
+        SELECT 1
+        FROM summary_rows AS existing_summary_row
+        WHERE existing_summary_row.timesheet_id = snapshot_rows.timesheet_id
+      )
+  ), fallback_rows AS MATERIALIZED (
+    SELECT
+      fallback_seed.timesheet_id,
+      NULL::uuid AS contract_week_id,
+      fallback_seed.candidate_name_text AS candidate_name,
+      fallback_seed.client_name_text AS client_name,
+      CASE WHEN fallback_seed.week_ending_text ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' THEN fallback_seed.week_ending_text::date ELSE NULL::date END AS week_ending_date,
+      CASE WHEN fallback_seed.work_date_text ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' THEN fallback_seed.work_date_text::date ELSE NULL::date END AS work_date,
+      'Linked to pay batch'::text AS processing_status_display,
+      'BATCH_LINKED'::text AS tools_stage,
+      NULLIF(BTRIM(COALESCE(fallback_seed.pay_channel, '')), '') AS route_type,
+      NULLIF(BTRIM(COALESCE(fallback_seed.sheet_scope_text, '')), '') AS sheet_scope,
+      0::numeric AS total_pay_ex_vat,
+      0::numeric AS total_charge_ex_vat,
+      0::numeric AS margin_ex_vat,
+      (
+        jsonb_build_object(
+          'id', fallback_seed.timesheet_id,
+          'timesheet_id', fallback_seed.timesheet_id,
+          'contract_week_id', NULL,
+          'contract_id', NULL,
+          'candidate_id', fallback_seed.candidate_id,
+          'candidate_name', fallback_seed.candidate_name_text,
+          'candidate_display_name', fallback_seed.candidate_name_text,
+          'client_id', NULL,
+          'client_name', fallback_seed.client_name_text,
+          'booking_id', NULL,
+          'occupant_key_norm', NULL,
+          'hospital_norm', NULL,
+          'candidate_hint_text', '{}'::jsonb,
+          'week_ending_date', CASE WHEN fallback_seed.week_ending_text ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' THEN fallback_seed.week_ending_text::date ELSE NULL::date END,
+          'work_date', CASE WHEN fallback_seed.work_date_text ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' THEN fallback_seed.work_date_text::date ELSE NULL::date END,
+          'sheet_scope', NULLIF(BTRIM(COALESCE(fallback_seed.sheet_scope_text, '')), ''),
+          'submission_mode', NULL,
+          'submission_mode_snapshot', NULL,
+          'basis', NULL,
+          'route_type', NULLIF(BTRIM(COALESCE(fallback_seed.pay_channel, '')), ''),
+          'route_display', NULLIF(BTRIM(COALESCE(fallback_seed.pay_channel, '')), ''),
+          'route_family', NULL,
+          'route_subfamily', NULL
+        )
+        || jsonb_build_object(
+          'underlying_channel_family', NULL,
+          'summary_stage', 'BATCH_LINKED',
+          'tools_stage', 'BATCH_LINKED',
+          'processing_status', 'BATCH_LINKED',
+          'processing_status_display', 'Linked to pay batch',
+          'authorised_at_utc', NULL,
+          'authorised_at_server', NULL,
+          'processed_at_utc', NULL,
+          'is_authorised', NULL,
+          'total_hours', 0,
+          'total_pay_ex_vat', 0,
+          'total_charge_ex_vat', 0,
+          'margin_ex_vat', 0,
+          'net_delta_ex_vat', 0,
+          'paid_at_utc', NULL,
+          'pay_icon_code', 'NONE',
+          'pay_status_code', 'UNPAID',
+          'pay_paid_at_utc', NULL,
+          'invoice_is_paid', NULL,
+          'invoice_issue_stage', NULL,
+          'invoice_segment_stage', NULL,
+          'invoice_segments_total', 0,
+          'invoice_segments_locked', 0
+        )
+        || jsonb_build_object(
+          'invoice_segments_unlocked', 0,
+          'issue_codes', ARRAY[]::text[],
+          'validation_status', NULL,
+          'validation_summary', NULL,
+          'hr_crosscheck_status', NULL,
+          'hr_crosscheck_issues', ARRAY[]::text[],
+          'qr_status', NULL,
+          'is_qr', NULL,
+          'is_adjusted', NULL,
+          'needs_attention', FALSE,
+          'has_rate_issue', FALSE,
+          'has_pay_channel_issue', FALSE,
+          'client_no_timesheet_required', NULL,
+          'client_autoprocess_hr', NULL,
+          'client_is_nhsp', NULL,
+          'has_any_evidence', NULL,
+          'attached_evidence_count', 0,
+          'primary_artifact_storage_key', NULL,
+          'primary_artifact_display_name', NULL,
+          'primary_artifact_preview_mode', NULL,
+          'pay_batch_id', fallback_seed.pay_batch_id,
+          'pay_channel', fallback_seed.pay_channel,
+          'batch_linked_only', TRUE
+        )
+      ) AS row_json
+    FROM fallback_seed
+  ), combined_rows AS MATERIALIZED (
+    SELECT live_rows.*
+    FROM live_rows
+    UNION ALL
+    SELECT fallback_rows.*
+    FROM fallback_rows
   ), totalled AS (
     SELECT
       COUNT(*)::bigint AS count_all,
-      COALESCE(SUM(COALESCE(summary_rows.total_pay_ex_vat, 0)), 0)::numeric AS total_pay_ex_vat_sum,
-      COALESCE(SUM(COALESCE(summary_rows.total_charge_ex_vat, 0)), 0)::numeric AS total_charge_ex_vat_sum,
-      COALESCE(SUM(COALESCE(summary_rows.margin_ex_vat, 0)), 0)::numeric AS margin_ex_vat_sum
-    FROM summary_rows
+      COALESCE(SUM(COALESCE(combined_rows.total_pay_ex_vat, 0)), 0)::numeric AS total_pay_ex_vat_sum,
+      COALESCE(SUM(COALESCE(combined_rows.total_charge_ex_vat, 0)), 0)::numeric AS total_charge_ex_vat_sum,
+      COALESCE(SUM(COALESCE(combined_rows.margin_ex_vat, 0)), 0)::numeric AS margin_ex_vat_sum
+    FROM combined_rows
   ), ordered_rows AS (
     SELECT
       ROW_NUMBER() OVER (
         ORDER BY
-          CASE WHEN v_order_by IN ('candidate_name', 'candidate') AND v_order_dir = 'asc' THEN summary_rows.candidate_name END ASC NULLS LAST,
-          CASE WHEN v_order_by IN ('candidate_name', 'candidate') AND v_order_dir = 'desc' THEN summary_rows.candidate_name END DESC NULLS LAST,
+          CASE WHEN v_order_by IN ('candidate_name', 'candidate') AND v_order_dir = 'asc' THEN combined_rows.candidate_name END ASC NULLS LAST,
+          CASE WHEN v_order_by IN ('candidate_name', 'candidate') AND v_order_dir = 'desc' THEN combined_rows.candidate_name END DESC NULLS LAST,
 
-          CASE WHEN v_order_by IN ('client_name', 'client') AND v_order_dir = 'asc' THEN summary_rows.client_name END ASC NULLS LAST,
-          CASE WHEN v_order_by IN ('client_name', 'client') AND v_order_dir = 'desc' THEN summary_rows.client_name END DESC NULLS LAST,
+          CASE WHEN v_order_by IN ('client_name', 'client') AND v_order_dir = 'asc' THEN combined_rows.client_name END ASC NULLS LAST,
+          CASE WHEN v_order_by IN ('client_name', 'client') AND v_order_dir = 'desc' THEN combined_rows.client_name END DESC NULLS LAST,
 
-          CASE WHEN v_order_by IN ('week_ending_date', 'week_ending', 'date') AND v_order_dir = 'asc' THEN summary_rows.week_ending_date END ASC NULLS LAST,
-          CASE WHEN v_order_by IN ('week_ending_date', 'week_ending', 'date') AND v_order_dir = 'desc' THEN summary_rows.week_ending_date END DESC NULLS LAST,
+          CASE WHEN v_order_by IN ('week_ending_date', 'week_ending', 'date') AND v_order_dir = 'asc' THEN combined_rows.week_ending_date END ASC NULLS LAST,
+          CASE WHEN v_order_by IN ('week_ending_date', 'week_ending', 'date') AND v_order_dir = 'desc' THEN combined_rows.week_ending_date END DESC NULLS LAST,
 
-          CASE WHEN v_order_by = 'work_date' AND v_order_dir = 'asc' THEN summary_rows.work_date END ASC NULLS LAST,
-          CASE WHEN v_order_by = 'work_date' AND v_order_dir = 'desc' THEN summary_rows.work_date END DESC NULLS LAST,
+          CASE WHEN v_order_by = 'work_date' AND v_order_dir = 'asc' THEN combined_rows.work_date END ASC NULLS LAST,
+          CASE WHEN v_order_by = 'work_date' AND v_order_dir = 'desc' THEN combined_rows.work_date END DESC NULLS LAST,
 
-          CASE WHEN v_order_by IN ('processing_status', 'processing_status_display', 'status') AND v_order_dir = 'asc' THEN summary_rows.processing_status_display END ASC NULLS LAST,
-          CASE WHEN v_order_by IN ('processing_status', 'processing_status_display', 'status') AND v_order_dir = 'desc' THEN summary_rows.processing_status_display END DESC NULLS LAST,
+          CASE WHEN v_order_by IN ('processing_status', 'processing_status_display', 'status') AND v_order_dir = 'asc' THEN combined_rows.processing_status_display END ASC NULLS LAST,
+          CASE WHEN v_order_by IN ('processing_status', 'processing_status_display', 'status') AND v_order_dir = 'desc' THEN combined_rows.processing_status_display END DESC NULLS LAST,
 
-          CASE WHEN v_order_by = 'tools_stage' AND v_order_dir = 'asc' THEN summary_rows.tools_stage END ASC NULLS LAST,
-          CASE WHEN v_order_by = 'tools_stage' AND v_order_dir = 'desc' THEN summary_rows.tools_stage END DESC NULLS LAST,
+          CASE WHEN v_order_by = 'tools_stage' AND v_order_dir = 'asc' THEN combined_rows.tools_stage END ASC NULLS LAST,
+          CASE WHEN v_order_by = 'tools_stage' AND v_order_dir = 'desc' THEN combined_rows.tools_stage END DESC NULLS LAST,
 
-          CASE WHEN v_order_by = 'route_type' AND v_order_dir = 'asc' THEN summary_rows.route_type END ASC NULLS LAST,
-          CASE WHEN v_order_by = 'route_type' AND v_order_dir = 'desc' THEN summary_rows.route_type END DESC NULLS LAST,
+          CASE WHEN v_order_by = 'route_type' AND v_order_dir = 'asc' THEN combined_rows.route_type END ASC NULLS LAST,
+          CASE WHEN v_order_by = 'route_type' AND v_order_dir = 'desc' THEN combined_rows.route_type END DESC NULLS LAST,
 
-          CASE WHEN v_order_by = 'sheet_scope' AND v_order_dir = 'asc' THEN summary_rows.sheet_scope END ASC NULLS LAST,
-          CASE WHEN v_order_by = 'sheet_scope' AND v_order_dir = 'desc' THEN summary_rows.sheet_scope END DESC NULLS LAST,
+          CASE WHEN v_order_by = 'sheet_scope' AND v_order_dir = 'asc' THEN combined_rows.sheet_scope END ASC NULLS LAST,
+          CASE WHEN v_order_by = 'sheet_scope' AND v_order_dir = 'desc' THEN combined_rows.sheet_scope END DESC NULLS LAST,
 
-          CASE WHEN v_order_by IN ('total_pay_ex_vat', 'pay') AND v_order_dir = 'asc' THEN summary_rows.total_pay_ex_vat END ASC NULLS LAST,
-          CASE WHEN v_order_by IN ('total_pay_ex_vat', 'pay') AND v_order_dir = 'desc' THEN summary_rows.total_pay_ex_vat END DESC NULLS LAST,
+          CASE WHEN v_order_by IN ('total_pay_ex_vat', 'pay') AND v_order_dir = 'asc' THEN combined_rows.total_pay_ex_vat END ASC NULLS LAST,
+          CASE WHEN v_order_by IN ('total_pay_ex_vat', 'pay') AND v_order_dir = 'desc' THEN combined_rows.total_pay_ex_vat END DESC NULLS LAST,
 
-          CASE WHEN v_order_by IN ('total_charge_ex_vat', 'charge') AND v_order_dir = 'asc' THEN summary_rows.total_charge_ex_vat END ASC NULLS LAST,
-          CASE WHEN v_order_by IN ('total_charge_ex_vat', 'charge') AND v_order_dir = 'desc' THEN summary_rows.total_charge_ex_vat END DESC NULLS LAST,
+          CASE WHEN v_order_by IN ('total_charge_ex_vat', 'charge') AND v_order_dir = 'asc' THEN combined_rows.total_charge_ex_vat END ASC NULLS LAST,
+          CASE WHEN v_order_by IN ('total_charge_ex_vat', 'charge') AND v_order_dir = 'desc' THEN combined_rows.total_charge_ex_vat END DESC NULLS LAST,
 
-          CASE WHEN v_order_by IN ('margin_ex_vat', 'margin') AND v_order_dir = 'asc' THEN summary_rows.margin_ex_vat END ASC NULLS LAST,
-          CASE WHEN v_order_by IN ('margin_ex_vat', 'margin') AND v_order_dir = 'desc' THEN summary_rows.margin_ex_vat END DESC NULLS LAST,
+          CASE WHEN v_order_by IN ('margin_ex_vat', 'margin') AND v_order_dir = 'asc' THEN combined_rows.margin_ex_vat END ASC NULLS LAST,
+          CASE WHEN v_order_by IN ('margin_ex_vat', 'margin') AND v_order_dir = 'desc' THEN combined_rows.margin_ex_vat END DESC NULLS LAST,
 
-          summary_rows.candidate_name ASC NULLS LAST,
-          summary_rows.week_ending_date DESC NULLS LAST,
-          summary_rows.work_date DESC NULLS LAST,
-          summary_rows.timesheet_id NULLS LAST,
-          summary_rows.contract_week_id NULLS LAST
+          combined_rows.candidate_name ASC NULLS LAST,
+          combined_rows.week_ending_date DESC NULLS LAST,
+          combined_rows.work_date DESC NULLS LAST,
+          combined_rows.timesheet_id NULLS LAST,
+          combined_rows.contract_week_id NULLS LAST
       ) AS __ctms_sort_ord,
-      summary_rows.*
-    FROM summary_rows
+      combined_rows.row_json
+    FROM combined_rows
   ), paged_rows AS (
     SELECT ordered_row.*
     FROM ordered_rows AS ordered_row
@@ -163988,7 +164229,7 @@ BEGIN
     OFFSET v_offset
   )
   SELECT
-    COALESCE((SELECT JSONB_AGG(TO_JSONB(paged_rows) - '__ctms_sort_ord' ORDER BY paged_rows.__ctms_sort_ord) FROM paged_rows), '[]'::jsonb),
+    COALESCE((SELECT JSONB_AGG(paged_rows.row_json ORDER BY paged_rows.__ctms_sort_ord) FROM paged_rows), '[]'::jsonb),
     COALESCE(totalled.count_all, 0),
     COALESCE(totalled.total_pay_ex_vat_sum, 0),
     COALESCE(totalled.total_charge_ex_vat_sum, 0),
@@ -164015,4 +164256,3 @@ BEGIN
   );
 END;
 $function$;
-
