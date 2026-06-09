@@ -52661,16 +52661,32 @@ async function handleTimesheetDetails(env, req, timesheetId) {
     const payStateOutstandingExVat = payStateOutstandingPresent
       ? Number(payStateAdjusted.outstanding_ex_vat || 0)
       : null;
-    const payStateHasPositiveOutstanding = !payStateOutstandingPresent || (
+    const payStateHasPositiveOutstanding = !!(
+      payStateOutstandingPresent &&
       Number.isFinite(payStateOutstandingExVat) &&
       payStateOutstandingExVat > 0
     );
+    const payStateReservedPresent = !!(
+      payStateAdjusted &&
+      Object.prototype.hasOwnProperty.call(payStateAdjusted, 'reserved_ex_vat') &&
+      payStateAdjusted.reserved_ex_vat != null &&
+      String(payStateAdjusted.reserved_ex_vat).trim() !== ''
+    );
+    const payStateReservedExVat = payStateReservedPresent
+      ? Number(payStateAdjusted.reserved_ex_vat || 0)
+      : null;
+    const payStateHasActiveReservation = !!(
+      payStateReservedPresent &&
+      Number.isFinite(payStateReservedExVat) &&
+      payStateReservedExVat > 0
+    );
 
     const canAdvancePayment =
-      (!isHardLocked) &&
+      (!isLockedByInvoice) &&
       (!payStateIsAdvanced) &&
       (!payStateProcessingAny) &&
-      (payStatePaidStatus === 'UNPAID') &&
+      (!payStateHasActiveReservation) &&
+      (payStatePaidStatus !== 'PROCESSING') &&
       payStateHasPositiveOutstanding;
 
     const canUnadvancePayment =
@@ -52682,11 +52698,14 @@ async function handleTimesheetDetails(env, req, timesheetId) {
       (!payStateProcessingAny);
 
     const advancePaymentDisabledReason = (() => {
+      if (isLockedByInvoice) return 'INVOICE_LOCKED';
       if (payStateIsAdvanced) return 'ALREADY_ADVANCED';
-      if (payStatePaidStatus === 'PAID' || isPaid) return 'PAID';
-      if (payStatePaidStatus === 'PARTIALLY_PAID') return 'PARTIALLY_PAID';
-      if (payStateProcessingAny || payStatePaidStatus === 'PROCESSING') return 'PROCESSING';
-      if (!payStateHasPositiveOutstanding) return 'NO_OUTSTANDING_PAY';
+      if (payStateProcessingAny || payStateHasActiveReservation || payStatePaidStatus === 'PROCESSING') return 'PROCESSING';
+      if (!payStateHasPositiveOutstanding) {
+        if (payStatePaidStatus === 'PAID') return 'PAID_NO_OUTSTANDING';
+        if (payStatePaidStatus === 'PARTIALLY_PAID') return 'PARTIALLY_PAID_NO_OUTSTANDING';
+        return 'NO_OUTSTANDING_PAY';
+      }
       return null;
     })();
 
@@ -53062,8 +53081,6 @@ async function handleTimesheetDetails(env, req, timesheetId) {
     return withCORS(env, req, serverError('Failed to load timesheet details'));
   }
 }
-
-
 
 
 
