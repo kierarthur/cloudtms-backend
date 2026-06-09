@@ -44743,7 +44743,6 @@ $function$;
 
 DROP FUNCTION IF EXISTS public.pay_batch_insert_items_from_preview(uuid, uuid);
 
-
 CREATE OR REPLACE FUNCTION public.pay_batch_insert_items_from_preview(p_pay_batch_id uuid, p_actor_user_id uuid DEFAULT NULL::uuid, p_operation_id uuid DEFAULT NULL::uuid, p_candidate_scope_ids jsonb DEFAULT NULL::jsonb)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -45529,11 +45528,37 @@ BEGIN
         WHEN UPPER(COALESCE(prepared_rows.line_json->>'resolution_mode', prepared_rows.line_json->>'saved_resolution_mode', '')) = 'MANUAL_AMOUNT' THEN 'MANUAL_AMOUNT'::public.pay_finance_component_resolution_mode_enum
         ELSE NULL::public.pay_finance_component_resolution_mode_enum
       END AS resolution_mode,
-      ROUND(COALESCE(
-        CASE WHEN COALESCE(prepared_rows.line_json->>'source_reservation_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN ABS((prepared_rows.line_json->>'source_reservation_amount_ex_vat')::numeric) ELSE NULL::numeric END,
-        CASE WHEN COALESCE(prepared_rows.line_json->>'source_entitlement_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN ABS((prepared_rows.line_json->>'source_entitlement_amount_ex_vat')::numeric) ELSE NULL::numeric END,
-        ABS(COALESCE(prepared_rows.allocated_amount, 0))
-      ), 2)::numeric(12,2) AS frozen_source_amount
+      CASE
+        WHEN ROUND(COALESCE(prepared_rows.allocated_amount, 0), 2) > 0
+         AND UPPER(BTRIM(COALESCE(prepared_rows.allocation_type, ''))) <> 'OVERPAYMENT_RECOVERY'
+         AND UPPER(COALESCE(prepared_rows.line_json->>'line_type', prepared_rows.line_json->>'item_type', prepared_rows.allocation_type, '')) NOT IN ('DEBT_CREATED', 'LOAN_REPAYMENT', 'OVERPAYMENT_RECOVERY', 'LOAN_PAYOUT')
+         AND (
+           prepared_rows.key_type IN ('TS_DAY', 'TS_TOTAL', 'ADDITIONAL_CODE', 'ADJUSTMENT_CODE', 'EXPENSE_CODE')
+           OR UPPER(COALESCE(prepared_rows.line_json->>'line_type', prepared_rows.line_json->>'item_type', prepared_rows.allocation_type, '')) IN ('TIMESHEET_PAYMENT', 'SEGMENT_DELTA', 'EXPENSE_DELTA', 'MILEAGE_DELTA', 'ADJUSTMENT_DELTA')
+         ) THEN ROUND(COALESCE(
+          CASE WHEN COALESCE(prepared_rows.line_json->>'source_reservation_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' AND ROUND(ABS((prepared_rows.line_json->>'source_reservation_amount_ex_vat')::numeric), 2) > 0 THEN ABS((prepared_rows.line_json->>'source_reservation_amount_ex_vat')::numeric) ELSE NULL::numeric END,
+          CASE WHEN COALESCE(prepared_rows.line_json->>'source_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' AND ROUND(ABS((prepared_rows.line_json->>'source_amount_ex_vat')::numeric), 2) > 0 THEN ABS((prepared_rows.line_json->>'source_amount_ex_vat')::numeric) ELSE NULL::numeric END,
+          CASE WHEN COALESCE(prepared_rows.line_json->>'source_entitlement_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' AND ROUND(ABS((prepared_rows.line_json->>'source_entitlement_amount_ex_vat')::numeric), 2) > 0 THEN ABS((prepared_rows.line_json->>'source_entitlement_amount_ex_vat')::numeric) ELSE NULL::numeric END,
+          CASE WHEN COALESCE(prepared_rows.line_json->>'frozen_source_amount', '') ~ '^-?[0-9]+(\.[0-9]+)?$' AND ROUND(ABS((prepared_rows.line_json->>'frozen_source_amount')::numeric), 2) > 0 THEN ABS((prepared_rows.line_json->>'frozen_source_amount')::numeric) ELSE NULL::numeric END,
+          CASE WHEN COALESCE(prepared_rows.line_json->>'pay_outstanding_clamped_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' AND ROUND(ABS((prepared_rows.line_json->>'pay_outstanding_clamped_amount_ex_vat')::numeric), 2) > 0 THEN ABS((prepared_rows.line_json->>'pay_outstanding_clamped_amount_ex_vat')::numeric) ELSE NULL::numeric END,
+          CASE WHEN COALESCE(prepared_rows.line_json->>'pay_outstanding_available_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' AND ROUND(ABS((prepared_rows.line_json->>'pay_outstanding_available_ex_vat')::numeric), 2) > 0 THEN ABS((prepared_rows.line_json->>'pay_outstanding_available_ex_vat')::numeric) ELSE NULL::numeric END,
+          CASE WHEN COALESCE(prepared_rows.line_json#>>'{source_basis_json,source_reservation_amount_ex_vat}', '') ~ '^-?[0-9]+(\.[0-9]+)?$' AND ROUND(ABS((prepared_rows.line_json#>>'{source_basis_json,source_reservation_amount_ex_vat}')::numeric), 2) > 0 THEN ABS((prepared_rows.line_json#>>'{source_basis_json,source_reservation_amount_ex_vat}')::numeric) ELSE NULL::numeric END,
+          CASE WHEN COALESCE(prepared_rows.line_json#>>'{source_basis_json,source_amount_ex_vat}', '') ~ '^-?[0-9]+(\.[0-9]+)?$' AND ROUND(ABS((prepared_rows.line_json#>>'{source_basis_json,source_amount_ex_vat}')::numeric), 2) > 0 THEN ABS((prepared_rows.line_json#>>'{source_basis_json,source_amount_ex_vat}')::numeric) ELSE NULL::numeric END,
+          CASE WHEN COALESCE(prepared_rows.line_json#>>'{source_basis_json,source_entitlement_amount_ex_vat}', '') ~ '^-?[0-9]+(\.[0-9]+)?$' AND ROUND(ABS((prepared_rows.line_json#>>'{source_basis_json,source_entitlement_amount_ex_vat}')::numeric), 2) > 0 THEN ABS((prepared_rows.line_json#>>'{source_basis_json,source_entitlement_amount_ex_vat}')::numeric) ELSE NULL::numeric END,
+          CASE WHEN COALESCE(prepared_rows.line_json#>>'{source_basis_json,source_pay_ex_vat}', '') ~ '^-?[0-9]+(\.[0-9]+)?$' AND ROUND(ABS((prepared_rows.line_json#>>'{source_basis_json,source_pay_ex_vat}')::numeric), 2) > 0 THEN ABS((prepared_rows.line_json#>>'{source_basis_json,source_pay_ex_vat}')::numeric) ELSE NULL::numeric END,
+          CASE WHEN COALESCE(prepared_rows.line_json#>>'{frozen_source_basis_json,source_reservation_amount_ex_vat}', '') ~ '^-?[0-9]+(\.[0-9]+)?$' AND ROUND(ABS((prepared_rows.line_json#>>'{frozen_source_basis_json,source_reservation_amount_ex_vat}')::numeric), 2) > 0 THEN ABS((prepared_rows.line_json#>>'{frozen_source_basis_json,source_reservation_amount_ex_vat}')::numeric) ELSE NULL::numeric END,
+          CASE WHEN COALESCE(prepared_rows.line_json#>>'{frozen_source_basis_json,source_pay_ex_vat}', '') ~ '^-?[0-9]+(\.[0-9]+)?$' AND ROUND(ABS((prepared_rows.line_json#>>'{frozen_source_basis_json,source_pay_ex_vat}')::numeric), 2) > 0 THEN ABS((prepared_rows.line_json#>>'{frozen_source_basis_json,source_pay_ex_vat}')::numeric) ELSE NULL::numeric END,
+          CASE WHEN COALESCE(prepared_rows.line_json#>>'{frozen_component_snapshot_json,source_reservation_amount_ex_vat}', '') ~ '^-?[0-9]+(\.[0-9]+)?$' AND ROUND(ABS((prepared_rows.line_json#>>'{frozen_component_snapshot_json,source_reservation_amount_ex_vat}')::numeric), 2) > 0 THEN ABS((prepared_rows.line_json#>>'{frozen_component_snapshot_json,source_reservation_amount_ex_vat}')::numeric) ELSE NULL::numeric END,
+          CASE WHEN COALESCE(prepared_rows.line_json#>>'{frozen_component_snapshot_json,source_pay_ex_vat}', '') ~ '^-?[0-9]+(\.[0-9]+)?$' AND ROUND(ABS((prepared_rows.line_json#>>'{frozen_component_snapshot_json,source_pay_ex_vat}')::numeric), 2) > 0 THEN ABS((prepared_rows.line_json#>>'{frozen_component_snapshot_json,source_pay_ex_vat}')::numeric) ELSE NULL::numeric END,
+          CASE WHEN COALESCE(prepared_rows.line_json#>>'{frozen_component_snapshot_json,source_basis_json,source_pay_ex_vat}', '') ~ '^-?[0-9]+(\.[0-9]+)?$' AND ROUND(ABS((prepared_rows.line_json#>>'{frozen_component_snapshot_json,source_basis_json,source_pay_ex_vat}')::numeric), 2) > 0 THEN ABS((prepared_rows.line_json#>>'{frozen_component_snapshot_json,source_basis_json,source_pay_ex_vat}')::numeric) ELSE NULL::numeric END,
+          ABS(COALESCE(prepared_rows.allocated_amount, 0))
+        ), 2)::numeric(12,2)
+        ELSE ROUND(COALESCE(
+          CASE WHEN COALESCE(prepared_rows.line_json->>'source_reservation_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN ABS((prepared_rows.line_json->>'source_reservation_amount_ex_vat')::numeric) ELSE NULL::numeric END,
+          CASE WHEN COALESCE(prepared_rows.line_json->>'source_entitlement_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN ABS((prepared_rows.line_json->>'source_entitlement_amount_ex_vat')::numeric) ELSE NULL::numeric END,
+          ABS(COALESCE(prepared_rows.allocated_amount, 0))
+        ), 2)::numeric(12,2)
+      END AS frozen_source_amount
     FROM prepared_rows
   ), normalised_rows AS (
     SELECT
@@ -45766,11 +45791,73 @@ BEGIN
       false,
       normalised_rows.finance_case_id,
       normalised_rows.finance_component_id,
-      jsonb_strip_nulls(COALESCE(normalised_rows.line_json->'frozen_component_snapshot_json', normalised_rows.line_json->'component_snapshot_json', '{}'::jsonb) || jsonb_build_object('source', 'banking_pay_operation_candidate_allocation_rows', 'allocation_row_id', normalised_rows.allocation_row_id::text, 'operation_source_key', normalised_rows.operation_source_key, 'timesheet_id', CASE WHEN normalised_rows.timesheet_id IS NULL THEN NULL ELSE normalised_rows.timesheet_id::text END, 'component_key_type', normalised_rows.key_type, 'component_key_value', normalised_rows.key_value)),
+      jsonb_strip_nulls(
+        COALESCE(normalised_rows.line_json->'frozen_component_snapshot_json', normalised_rows.line_json->'component_snapshot_json', '{}'::jsonb)
+        || jsonb_build_object(
+          'source', 'banking_pay_operation_candidate_allocation_rows',
+          'allocation_row_id', normalised_rows.allocation_row_id::text,
+          'operation_source_key', normalised_rows.operation_source_key,
+          'timesheet_id', CASE WHEN normalised_rows.timesheet_id IS NULL THEN NULL ELSE normalised_rows.timesheet_id::text END,
+          'component_key_type', normalised_rows.key_type,
+          'component_key_value', normalised_rows.key_value
+        )
+        || CASE
+          WHEN normalised_rows.item_type IN ('SEGMENT_DELTA', 'EXPENSE_DELTA', 'ADJUSTMENT_DELTA', 'MILEAGE_DELTA')
+           AND ROUND(COALESCE(normalised_rows.amount_ex_vat, 0), 2) > 0
+           AND ROUND(ABS(COALESCE(normalised_rows.frozen_source_amount, 0)), 2) > 0 THEN jsonb_build_object(
+            'source_pay_ex_vat', normalised_rows.frozen_source_amount,
+            'source_amount_ex_vat', normalised_rows.frozen_source_amount,
+            'source_entitlement_amount_ex_vat', normalised_rows.frozen_source_amount,
+            'source_reservation_amount_ex_vat', normalised_rows.frozen_source_amount,
+            'frozen_source_amount', normalised_rows.frozen_source_amount
+          )
+          ELSE '{}'::jsonb
+        END
+        || CASE
+          WHEN normalised_rows.item_type IN ('SEGMENT_DELTA', 'EXPENSE_DELTA', 'ADJUSTMENT_DELTA', 'MILEAGE_DELTA')
+           AND ROUND(COALESCE(normalised_rows.amount_ex_vat, 0), 2) > 0
+           AND ROUND(ABS(COALESCE(normalised_rows.frozen_source_amount, 0)), 2) > 0 THEN jsonb_build_object(
+            'source_basis_json',
+            COALESCE(
+              normalised_rows.line_json#>'{frozen_component_snapshot_json,source_basis_json}',
+              normalised_rows.line_json#>'{component_snapshot_json,source_basis_json}',
+              normalised_rows.line_json->'source_basis_json',
+              '{}'::jsonb
+            )
+            || jsonb_build_object(
+              'source_pay_ex_vat', normalised_rows.frozen_source_amount,
+              'source_amount_ex_vat', normalised_rows.frozen_source_amount,
+              'source_entitlement_amount_ex_vat', normalised_rows.frozen_source_amount,
+              'source_reservation_amount_ex_vat', normalised_rows.frozen_source_amount
+            )
+          )
+          ELSE '{}'::jsonb
+        END
+      ),
       normalised_rows.key_type,
       normalised_rows.key_value,
       normalised_rows.component_classification,
-      jsonb_strip_nulls(COALESCE(normalised_rows.line_json->'source_basis_json', normalised_rows.line_json#>'{economic_key}', '{}'::jsonb) || jsonb_build_object('source', 'banking_pay_workbench_preview_rows', 'allocation_row_id', normalised_rows.allocation_row_id::text, 'timesheet_id', CASE WHEN normalised_rows.timesheet_id IS NULL THEN NULL ELSE normalised_rows.timesheet_id::text END, 'key_type', normalised_rows.key_type, 'key_value', normalised_rows.key_value)),
+      jsonb_strip_nulls(
+        COALESCE(normalised_rows.line_json->'source_basis_json', normalised_rows.line_json#>'{economic_key}', '{}'::jsonb)
+        || jsonb_build_object(
+          'source', 'banking_pay_workbench_preview_rows',
+          'allocation_row_id', normalised_rows.allocation_row_id::text,
+          'timesheet_id', CASE WHEN normalised_rows.timesheet_id IS NULL THEN NULL ELSE normalised_rows.timesheet_id::text END,
+          'key_type', normalised_rows.key_type,
+          'key_value', normalised_rows.key_value
+        )
+        || CASE
+          WHEN normalised_rows.item_type IN ('SEGMENT_DELTA', 'EXPENSE_DELTA', 'ADJUSTMENT_DELTA', 'MILEAGE_DELTA')
+           AND ROUND(COALESCE(normalised_rows.amount_ex_vat, 0), 2) > 0
+           AND ROUND(ABS(COALESCE(normalised_rows.frozen_source_amount, 0)), 2) > 0 THEN jsonb_build_object(
+            'source_pay_ex_vat', normalised_rows.frozen_source_amount,
+            'source_amount_ex_vat', normalised_rows.frozen_source_amount,
+            'source_entitlement_amount_ex_vat', normalised_rows.frozen_source_amount,
+            'source_reservation_amount_ex_vat', normalised_rows.frozen_source_amount
+          )
+          ELSE '{}'::jsonb
+        END
+      ),
       COALESCE(NULLIF(UPPER(BTRIM(normalised_rows.line_json->>'source_pay_method')), ''), normalised_rows.pay_channel),
       normalised_rows.pay_channel,
       normalised_rows.resolution_mode,
@@ -49860,6 +49947,7 @@ $function$;
 DROP FUNCTION IF EXISTS public.pay_batch_create_timesheet_snapshots(uuid, uuid);
 DROP FUNCTION IF EXISTS public.pay_batch_create_timesheet_snapshots(uuid, uuid, uuid, jsonb);
 
+
 CREATE OR REPLACE FUNCTION public.pay_batch_create_timesheet_snapshots(
   p_pay_batch_id uuid,
   p_actor_user_id uuid DEFAULT NULL::uuid,
@@ -49960,54 +50048,192 @@ BEGIN
       snapshot_page.timesheet_id,
       snapshot_page.candidate_id,
       snapshot_page.pay_channel,
-      COALESCE(
-        (
-          SELECT source_item.allocation_basis_json #> '{line,base_snapshot_json}'
-          FROM public.banking_pay_operation_candidate_allocation_rows AS source_item
-          JOIN public.pay_batch_items AS source_batch_item
-            ON source_batch_item.id = source_item.pay_batch_item_id
-          WHERE source_item.operation_id = p_operation_id
-            AND source_batch_item.timesheet_id = snapshot_page.timesheet_id
-            AND source_batch_item.pay_channel = snapshot_page.pay_channel
-            AND jsonb_typeof(source_item.allocation_basis_json #> '{line,base_snapshot_json}') = 'object'
-          ORDER BY source_item.sort_order, source_item.id
-          LIMIT 1
-        ),
-        '{}'::jsonb
-      ) AS base_snapshot_json,
-      jsonb_strip_nulls(
-        jsonb_build_object(
-          'source', 'pay_batch_items_frozen_artifacts',
-          'timesheet_id', snapshot_page.timesheet_id::text,
-          'candidate_id', snapshot_page.candidate_id::text,
-          'pay_channel', snapshot_page.pay_channel,
-          'resolved_components', COALESCE((
-            SELECT jsonb_agg(
-              jsonb_strip_nulls(
-                jsonb_build_object(
-                  'pay_batch_item_id', component_item.id::text,
-                  'component_key_type', component_item.frozen_component_key_type,
-                  'component_key_value', component_item.frozen_component_key_value,
-                  'frozen_component_snapshot_json', component_item.frozen_component_snapshot_json,
-                  'frozen_source_basis_json', component_item.frozen_source_basis_json,
-                  'frozen_target_amount_ex_vat', component_item.frozen_target_amount_ex_vat,
-                  'frozen_target_amount_vat', component_item.frozen_target_amount_vat,
-                  'frozen_target_amount_inc_vat', component_item.frozen_target_amount_inc_vat
+      COALESCE(display_source.base_snapshot_json, '{}'::jsonb) AS base_snapshot_json,
+      (
+        jsonb_strip_nulls(
+          jsonb_build_object(
+            'source', 'pay_batch_items_frozen_artifacts',
+            'timesheet_id', snapshot_page.timesheet_id::text,
+            'candidate_id', snapshot_page.candidate_id::text,
+            'pay_channel', snapshot_page.pay_channel,
+            'resolved_components', COALESCE((
+              SELECT jsonb_agg(
+                jsonb_strip_nulls(
+                  jsonb_build_object(
+                    'pay_batch_item_id', component_item.id::text,
+                    'component_key_type', component_item.frozen_component_key_type,
+                    'component_key_value', component_item.frozen_component_key_value,
+                    'frozen_component_snapshot_json', component_item.frozen_component_snapshot_json,
+                    'frozen_source_basis_json', component_item.frozen_source_basis_json,
+                    'frozen_target_amount_ex_vat', component_item.frozen_target_amount_ex_vat,
+                    'frozen_target_amount_vat', component_item.frozen_target_amount_vat,
+                    'frozen_target_amount_inc_vat', component_item.frozen_target_amount_inc_vat
+                  )
                 )
+                ORDER BY component_item.id
               )
-              ORDER BY component_item.id
-            )
-            FROM public.pay_batch_items AS component_item
-            JOIN public.pay_batch_candidates AS component_candidate
-              ON component_candidate.id = component_item.pay_batch_candidate_id
-            WHERE component_candidate.pay_batch_id = p_pay_batch_id
-              AND component_item.timesheet_id = snapshot_page.timesheet_id
-              AND component_item.pay_channel = snapshot_page.pay_channel
-              AND COALESCE(component_item.is_voided, false) = false
-          ), '[]'::jsonb)
+              FROM public.pay_batch_items AS component_item
+              JOIN public.pay_batch_candidates AS component_candidate
+                ON component_candidate.id = component_item.pay_batch_candidate_id
+              WHERE component_candidate.pay_batch_id = p_pay_batch_id
+                AND component_item.timesheet_id = snapshot_page.timesheet_id
+                AND component_item.pay_channel = snapshot_page.pay_channel
+                AND COALESCE(component_item.is_voided, false) = false
+            ), '[]'::jsonb)
+          )
         )
+        || COALESCE(display_source.display_metadata_json, '{}'::jsonb)
       ) AS target_snapshot_json
     FROM pg_temp.tmp_pay_batch_snapshot_page AS snapshot_page
+    LEFT JOIN LATERAL (
+      WITH source_material AS (
+        SELECT
+          source_allocation.allocation_basis_json #> '{line,target_snapshot_json}' AS allocation_target_json,
+          source_allocation.allocation_basis_json #> '{line,base_snapshot_json}' AS allocation_base_json,
+          source_batch_item.frozen_source_basis_json AS frozen_source_basis_json,
+          source_batch_item.frozen_component_snapshot_json AS frozen_component_snapshot_json
+        FROM public.banking_pay_operation_candidate_allocation_rows AS source_allocation
+        JOIN public.pay_batch_items AS source_batch_item
+          ON source_batch_item.id = source_allocation.pay_batch_item_id
+        WHERE source_allocation.operation_id = p_operation_id
+          AND source_batch_item.timesheet_id = snapshot_page.timesheet_id
+          AND source_batch_item.pay_channel = snapshot_page.pay_channel
+          AND COALESCE(source_batch_item.is_voided, false) = false
+        ORDER BY source_allocation.sort_order, source_allocation.id
+        LIMIT 1
+      )
+      SELECT
+        COALESCE(
+          CASE WHEN jsonb_typeof(source_material.allocation_base_json) = 'object' THEN source_material.allocation_base_json ELSE NULL::jsonb END,
+          '{}'::jsonb
+        ) AS base_snapshot_json,
+        jsonb_strip_nulls(
+          jsonb_build_object(
+            'client_name', NULLIF(BTRIM(COALESCE(
+              source_material.allocation_target_json ->> 'client_name',
+              source_material.allocation_target_json #>> '{client,name}',
+              source_material.allocation_base_json ->> 'client_name',
+              source_material.allocation_base_json #>> '{client,name}',
+              source_material.frozen_source_basis_json ->> 'client_name',
+              source_material.frozen_source_basis_json #>> '{client,name}',
+              source_material.frozen_source_basis_json #>> '{target_snapshot_json,client_name}',
+              source_material.frozen_component_snapshot_json ->> 'client_name',
+              ''
+            )), ''),
+            'client_id', NULLIF(BTRIM(COALESCE(
+              source_material.allocation_target_json ->> 'client_id',
+              source_material.allocation_target_json #>> '{client,id}',
+              source_material.allocation_base_json ->> 'client_id',
+              source_material.allocation_base_json #>> '{client,id}',
+              source_material.frozen_source_basis_json ->> 'client_id',
+              source_material.frozen_source_basis_json #>> '{client,id}',
+              source_material.frozen_source_basis_json #>> '{target_snapshot_json,client_id}',
+              source_material.frozen_component_snapshot_json ->> 'client_id',
+              ''
+            )), ''),
+            'week_ending_date', NULLIF(BTRIM(COALESCE(
+              source_material.allocation_target_json ->> 'week_ending_date',
+              source_material.allocation_target_json ->> 'week_ending',
+              source_material.allocation_base_json ->> 'week_ending_date',
+              source_material.allocation_base_json ->> 'week_ending',
+              source_material.frozen_source_basis_json ->> 'week_ending_date',
+              source_material.frozen_source_basis_json ->> 'week_ending',
+              source_material.frozen_source_basis_json #>> '{target_snapshot_json,week_ending_date}',
+              source_material.frozen_component_snapshot_json ->> 'week_ending_date',
+              ''
+            )), ''),
+            'job_title', NULLIF(BTRIM(COALESCE(
+              source_material.allocation_target_json ->> 'job_title',
+              source_material.allocation_target_json ->> 'jobTitle',
+              source_material.allocation_base_json ->> 'job_title',
+              source_material.frozen_source_basis_json ->> 'job_title',
+              source_material.frozen_source_basis_json #>> '{target_snapshot_json,job_title}',
+              source_material.frozen_component_snapshot_json ->> 'job_title',
+              ''
+            )), ''),
+            'band', NULLIF(BTRIM(COALESCE(
+              source_material.allocation_target_json ->> 'band',
+              source_material.allocation_base_json ->> 'band',
+              source_material.frozen_source_basis_json ->> 'band',
+              source_material.frozen_source_basis_json #>> '{target_snapshot_json,band}',
+              source_material.frozen_component_snapshot_json ->> 'band',
+              ''
+            )), ''),
+            'grade', NULLIF(BTRIM(COALESCE(
+              source_material.allocation_target_json ->> 'grade',
+              source_material.allocation_base_json ->> 'grade',
+              source_material.frozen_source_basis_json ->> 'grade',
+              source_material.frozen_source_basis_json #>> '{target_snapshot_json,grade}',
+              source_material.frozen_component_snapshot_json ->> 'grade',
+              ''
+            )), ''),
+            'reference_number', NULLIF(BTRIM(COALESCE(
+              source_material.allocation_target_json ->> 'reference_number',
+              source_material.allocation_target_json ->> 'timesheet_reference',
+              source_material.allocation_base_json ->> 'reference_number',
+              source_material.allocation_base_json ->> 'timesheet_reference',
+              source_material.frozen_source_basis_json ->> 'reference_number',
+              source_material.frozen_source_basis_json ->> 'timesheet_reference',
+              source_material.frozen_source_basis_json #>> '{target_snapshot_json,reference_number}',
+              source_material.frozen_component_snapshot_json ->> 'reference_number',
+              ''
+            )), ''),
+            'timesheet_type', NULLIF(BTRIM(COALESCE(
+              source_material.allocation_target_json ->> 'timesheet_type',
+              source_material.allocation_base_json ->> 'timesheet_type',
+              source_material.frozen_source_basis_json ->> 'timesheet_type',
+              source_material.frozen_source_basis_json #>> '{target_snapshot_json,timesheet_type}',
+              source_material.frozen_component_snapshot_json ->> 'timesheet_type',
+              ''
+            )), ''),
+            'schedule_rows', COALESCE(
+              CASE WHEN jsonb_typeof(source_material.allocation_target_json -> 'schedule_rows') = 'array' THEN source_material.allocation_target_json -> 'schedule_rows' ELSE NULL::jsonb END,
+              CASE WHEN jsonb_typeof(source_material.allocation_base_json -> 'schedule_rows') = 'array' THEN source_material.allocation_base_json -> 'schedule_rows' ELSE NULL::jsonb END,
+              CASE WHEN jsonb_typeof(source_material.frozen_source_basis_json -> 'schedule_rows') = 'array' THEN source_material.frozen_source_basis_json -> 'schedule_rows' ELSE NULL::jsonb END,
+              CASE WHEN jsonb_typeof(source_material.frozen_source_basis_json #> '{target_snapshot_json,schedule_rows}') = 'array' THEN source_material.frozen_source_basis_json #> '{target_snapshot_json,schedule_rows}' ELSE NULL::jsonb END,
+              CASE WHEN jsonb_typeof(source_material.frozen_component_snapshot_json -> 'schedule_rows') = 'array' THEN source_material.frozen_component_snapshot_json -> 'schedule_rows' ELSE NULL::jsonb END
+            ),
+            'segments', COALESCE(
+              CASE WHEN jsonb_typeof(source_material.allocation_target_json -> 'segments') = 'array' THEN source_material.allocation_target_json -> 'segments' ELSE NULL::jsonb END,
+              CASE WHEN jsonb_typeof(source_material.allocation_base_json -> 'segments') = 'array' THEN source_material.allocation_base_json -> 'segments' ELSE NULL::jsonb END,
+              CASE WHEN jsonb_typeof(source_material.frozen_source_basis_json -> 'segments') = 'array' THEN source_material.frozen_source_basis_json -> 'segments' ELSE NULL::jsonb END,
+              CASE WHEN jsonb_typeof(source_material.frozen_source_basis_json #> '{target_snapshot_json,segments}') = 'array' THEN source_material.frozen_source_basis_json #> '{target_snapshot_json,segments}' ELSE NULL::jsonb END,
+              CASE WHEN jsonb_typeof(source_material.frozen_component_snapshot_json -> 'segments') = 'array' THEN source_material.frozen_component_snapshot_json -> 'segments' ELSE NULL::jsonb END
+            ),
+            'segment_rows', COALESCE(
+              CASE WHEN jsonb_typeof(source_material.allocation_target_json -> 'segment_rows') = 'array' THEN source_material.allocation_target_json -> 'segment_rows' ELSE NULL::jsonb END,
+              CASE WHEN jsonb_typeof(source_material.allocation_base_json -> 'segment_rows') = 'array' THEN source_material.allocation_base_json -> 'segment_rows' ELSE NULL::jsonb END,
+              CASE WHEN jsonb_typeof(source_material.frozen_source_basis_json -> 'segment_rows') = 'array' THEN source_material.frozen_source_basis_json -> 'segment_rows' ELSE NULL::jsonb END,
+              CASE WHEN jsonb_typeof(source_material.frozen_source_basis_json #> '{target_snapshot_json,segment_rows}') = 'array' THEN source_material.frozen_source_basis_json #> '{target_snapshot_json,segment_rows}' ELSE NULL::jsonb END,
+              CASE WHEN jsonb_typeof(source_material.frozen_component_snapshot_json -> 'segment_rows') = 'array' THEN source_material.frozen_component_snapshot_json -> 'segment_rows' ELSE NULL::jsonb END
+            ),
+            'shift_rows', COALESCE(
+              CASE WHEN jsonb_typeof(source_material.allocation_target_json -> 'shift_rows') = 'array' THEN source_material.allocation_target_json -> 'shift_rows' ELSE NULL::jsonb END,
+              CASE WHEN jsonb_typeof(source_material.allocation_base_json -> 'shift_rows') = 'array' THEN source_material.allocation_base_json -> 'shift_rows' ELSE NULL::jsonb END,
+              CASE WHEN jsonb_typeof(source_material.frozen_source_basis_json -> 'shift_rows') = 'array' THEN source_material.frozen_source_basis_json -> 'shift_rows' ELSE NULL::jsonb END,
+              CASE WHEN jsonb_typeof(source_material.frozen_source_basis_json #> '{target_snapshot_json,shift_rows}') = 'array' THEN source_material.frozen_source_basis_json #> '{target_snapshot_json,shift_rows}' ELSE NULL::jsonb END,
+              CASE WHEN jsonb_typeof(source_material.frozen_component_snapshot_json -> 'shift_rows') = 'array' THEN source_material.frozen_component_snapshot_json -> 'shift_rows' ELSE NULL::jsonb END
+            ),
+            'schedule_changes', COALESCE(
+              CASE WHEN jsonb_typeof(source_material.allocation_target_json -> 'schedule_changes') = 'array' THEN source_material.allocation_target_json -> 'schedule_changes' ELSE NULL::jsonb END,
+              CASE WHEN jsonb_typeof(source_material.allocation_base_json -> 'schedule_changes') = 'array' THEN source_material.allocation_base_json -> 'schedule_changes' ELSE NULL::jsonb END,
+              CASE WHEN jsonb_typeof(source_material.frozen_source_basis_json -> 'schedule_changes') = 'array' THEN source_material.frozen_source_basis_json -> 'schedule_changes' ELSE NULL::jsonb END,
+              CASE WHEN jsonb_typeof(source_material.frozen_source_basis_json #> '{target_snapshot_json,schedule_changes}') = 'array' THEN source_material.frozen_source_basis_json #> '{target_snapshot_json,schedule_changes}' ELSE NULL::jsonb END,
+              CASE WHEN jsonb_typeof(source_material.frozen_component_snapshot_json -> 'schedule_changes') = 'array' THEN source_material.frozen_component_snapshot_json -> 'schedule_changes' ELSE NULL::jsonb END
+            ),
+            'amendment_note', NULLIF(BTRIM(COALESCE(
+              source_material.allocation_target_json ->> 'amendment_note',
+              source_material.allocation_target_json ->> 'schedule_note',
+              source_material.allocation_base_json ->> 'amendment_note',
+              source_material.frozen_source_basis_json ->> 'amendment_note',
+              source_material.frozen_source_basis_json #>> '{target_snapshot_json,amendment_note}',
+              source_material.frozen_component_snapshot_json ->> 'amendment_note',
+              ''
+            )), '')
+          )
+        ) AS display_metadata_json
+      FROM source_material
+    ) AS display_source ON true
   ), inserted_snapshots AS (
     INSERT INTO public.pay_batch_timesheet_snapshots(
       pay_batch_id,
@@ -50080,6 +50306,9 @@ BEGIN
   );
 END;
 $function$;
+
+
+
 
 
 DROP FUNCTION IF EXISTS public.pay_batch_build_item_breakdowns(uuid, uuid);
@@ -50263,7 +50492,6 @@ DROP FUNCTION IF EXISTS public.pay_batch_assert_integrity(uuid, uuid);
 DROP FUNCTION IF EXISTS public.pay_batch_assert_integrity(uuid, uuid, uuid);
 
 
-
 CREATE OR REPLACE FUNCTION public.pay_batch_assert_integrity(p_pay_batch_id uuid, p_actor_user_id uuid DEFAULT NULL::uuid, p_operation_id uuid DEFAULT NULL::uuid)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -50292,6 +50520,11 @@ DECLARE
   v_operation_active_item_count integer := 0;
   v_operation_scope_count integer := 0;
   v_operation_reservation_unavailable_scope_count integer := 0;
+  v_consumed_timesheet_payment_override_ids jsonb := '[]'::jsonb;
+  v_expected_advance_override_count integer := 0;
+  v_expected_advance_override_ids jsonb := '[]'::jsonb;
+  v_advance_override_consumption_mismatch_count integer := 0;
+  v_advance_override_consumption_mismatches jsonb := '[]'::jsonb;
 BEGIN
   IF p_pay_batch_id IS NULL THEN
     RAISE EXCEPTION 'pay_batch_id is required';
@@ -50509,7 +50742,8 @@ v_stage := 'STAGE_21_BREAKDOWN_INTEGRITY_MISSING';
         'breakdown_missing_ct', coalesce(v_breakdown_missing_ct, 0),
         'breakdown_bad_ct', coalesce(v_breakdown_bad_ct, 0),
         'blocked_count', jsonb_array_length(coalesce(v_blocked_candidates, '[]'::jsonb)),
-        'consumed_timesheet_override_count', coalesce(v_rows_upd_timesheet_overrides_consumed, 0)
+        'consumed_timesheet_override_count', coalesce(v_rows_upd_timesheet_overrides_consumed, 0),
+        'consumed_timesheet_override_ids', coalesce(v_consumed_timesheet_payment_override_ids, '[]'::jsonb)
       );
     END IF;
 
@@ -50623,7 +50857,8 @@ v_stage := 'STAGE_21_BREAKDOWN_INTEGRITY_MISSING';
         'breakdown_missing_ct', coalesce(v_breakdown_missing_ct, 0),
         'breakdown_bad_ct', coalesce(v_breakdown_bad_ct, 0),
         'blocked_count', jsonb_array_length(coalesce(v_blocked_candidates, '[]'::jsonb)),
-        'consumed_timesheet_override_count', coalesce(v_rows_upd_timesheet_overrides_consumed, 0)
+        'consumed_timesheet_override_count', coalesce(v_rows_upd_timesheet_overrides_consumed, 0),
+        'consumed_timesheet_override_ids', coalesce(v_consumed_timesheet_payment_override_ids, '[]'::jsonb)
       );
     END IF;
 
@@ -50826,7 +51061,8 @@ v_stage := 'STAGE_21_BREAKDOWN_INTEGRITY_MISSING';
         'breakdown_missing_ct', coalesce(v_breakdown_missing_ct, 0),
         'breakdown_bad_ct', coalesce(v_breakdown_bad_ct, 0),
         'blocked_count', jsonb_array_length(coalesce(v_blocked_candidates, '[]'::jsonb)),
-        'consumed_timesheet_override_count', coalesce(v_rows_upd_timesheet_overrides_consumed, 0)
+        'consumed_timesheet_override_count', coalesce(v_rows_upd_timesheet_overrides_consumed, 0),
+        'consumed_timesheet_override_ids', coalesce(v_consumed_timesheet_payment_override_ids, '[]'::jsonb)
       );
     END IF;
 
@@ -50898,10 +51134,15 @@ v_stage := 'STAGE_21_BREAKDOWN_INTEGRITY_MISSING';
         order by consumed.timesheet_id::text, consumed.id::text
       ),
       '[]'::jsonb
+    ),
+    coalesce(
+      jsonb_agg(to_jsonb(consumed.id::text) order by consumed.timesheet_id::text, consumed.id::text),
+      '[]'::jsonb
     )
   into
     v_rows_upd_timesheet_overrides_consumed,
-    v_consumed_timesheet_payment_overrides
+    v_consumed_timesheet_payment_overrides,
+    v_consumed_timesheet_payment_override_ids
   from consumed;
 
   begin
@@ -50912,6 +51153,7 @@ v_stage := 'STAGE_21_BREAKDOWN_INTEGRITY_MISSING';
         'stage', v_stage,
         'pay_batch_id', v_batch_id::text,
         'consumed_timesheet_payment_override_count', coalesce(v_rows_upd_timesheet_overrides_consumed, 0),
+        'consumed_timesheet_payment_override_ids', coalesce(v_consumed_timesheet_payment_override_ids, '[]'::jsonb),
         'consumed_timesheet_payment_overrides', v_consumed_timesheet_payment_overrides
       ),
       'pay_batches',
@@ -50977,6 +51219,198 @@ v_stage := 'STAGE_21_BREAKDOWN_INTEGRITY_MISSING';
 
   
 
+
+  v_stage := 'STAGE_23C_ASSERT_ADVANCE_OVERRIDE_CONSUMPTION';
+
+  IF p_operation_id IS NOT NULL THEN
+    WITH selected_advanced_lines AS (
+      SELECT
+        scope_row.id AS candidate_scope_id,
+        scope_row.candidate_id,
+        scope_row.pay_channel,
+        COALESCE(
+          NULLIF(BTRIM(COALESCE(line_element.value->>'preview_row_id', '')), ''),
+          NULLIF(BTRIM(COALESCE(line_element.value->>'line_id', '')), ''),
+          NULLIF(BTRIM(COALESCE(line_element.value->>'row_id', '')), ''),
+          NULLIF(BTRIM(COALESCE(line_element.value->>'id', '')), '')
+        ) AS preview_row_id,
+        CASE
+          WHEN COALESCE(line_element.value->>'timesheet_id', '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+            THEN (line_element.value->>'timesheet_id')::uuid
+          ELSE NULL::uuid
+        END AS timesheet_id,
+        CASE
+          WHEN COALESCE(line_element.value->>'advanced_override_id', '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+            THEN (line_element.value->>'advanced_override_id')::uuid
+          ELSE NULL::uuid
+        END AS advanced_override_id,
+        NULLIF(BTRIM(COALESCE(line_element.value->>'advanced_override_id', '')), '') AS raw_advanced_override_id,
+        lower(coalesce(line_element.value->>'is_advanced', 'false')) IN ('true','t','1','yes','y') AS is_advanced
+      FROM public.banking_pay_operation_candidate_scope AS scope_row
+      CROSS JOIN LATERAL jsonb_array_elements(coalesce(scope_row.selected_canonical_preview_lines_json, '[]'::jsonb)) AS line_element(value)
+      WHERE scope_row.operation_id = p_operation_id
+        AND scope_row.pay_batch_id = v_batch_id
+        AND jsonb_typeof(line_element.value) = 'object'
+        AND (
+          lower(coalesce(line_element.value->>'is_advanced', 'false')) IN ('true','t','1','yes','y')
+          OR NULLIF(BTRIM(COALESCE(line_element.value->>'advanced_override_id', '')), '') IS NOT NULL
+        )
+    ), expected_advanced_overrides AS (
+      SELECT DISTINCT
+        selected_advanced_lines.candidate_scope_id,
+        selected_advanced_lines.candidate_id,
+        selected_advanced_lines.pay_channel,
+        selected_advanced_lines.preview_row_id,
+        selected_advanced_lines.timesheet_id,
+        selected_advanced_lines.advanced_override_id,
+        selected_advanced_lines.raw_advanced_override_id
+      FROM selected_advanced_lines
+      WHERE selected_advanced_lines.timesheet_id IS NOT NULL
+        AND EXISTS (
+          SELECT 1
+          FROM public.pay_batch_items AS entitlement_item
+          JOIN public.pay_batch_candidates AS entitlement_candidate
+            ON entitlement_candidate.id = entitlement_item.pay_batch_candidate_id
+          WHERE entitlement_candidate.pay_batch_id = v_batch_id
+            AND entitlement_candidate.candidate_id = selected_advanced_lines.candidate_id
+            AND entitlement_item.timesheet_id = selected_advanced_lines.timesheet_id
+            AND coalesce(entitlement_item.is_voided, false) = false
+            AND entitlement_item.item_type IN ('SEGMENT_DELTA','EXPENSE_DELTA','ADJUSTMENT_DELTA','MILEAGE_DELTA')
+            AND (
+              entitlement_item.operation_source_key IS NULL
+              OR entitlement_item.operation_source_key LIKE (p_operation_id::text || ':%')
+              OR EXISTS (
+                SELECT 1
+                FROM public.banking_pay_operation_candidate_allocation_rows AS allocation_row
+                WHERE allocation_row.operation_id = p_operation_id
+                  AND allocation_row.pay_batch_id = v_batch_id
+                  AND allocation_row.pay_batch_item_id = entitlement_item.id
+              )
+            )
+          LIMIT 1
+        )
+    ), matched_advanced_overrides AS (
+      SELECT
+        expected_advanced_overrides.candidate_scope_id,
+        expected_advanced_overrides.candidate_id,
+        expected_advanced_overrides.pay_channel,
+        expected_advanced_overrides.preview_row_id,
+        expected_advanced_overrides.timesheet_id,
+        expected_advanced_overrides.advanced_override_id,
+        expected_advanced_overrides.raw_advanced_override_id,
+        COUNT(matching_override.id)::integer AS matching_consumed_count
+      FROM expected_advanced_overrides
+      LEFT JOIN public.timesheet_payment_overrides AS matching_override
+        ON matching_override.id = expected_advanced_overrides.advanced_override_id
+       AND matching_override.timesheet_id = expected_advanced_overrides.timesheet_id
+       AND matching_override.candidate_id = expected_advanced_overrides.candidate_id
+       AND upper(coalesce(matching_override.override_type, '')) = 'ADVANCE_THIS_PAYMENT'
+       AND matching_override.cleared_at_utc IS NULL
+       AND matching_override.consumed_by_pay_batch_id = v_batch_id
+       AND matching_override.consumed_at_utc IS NOT NULL
+      GROUP BY
+        expected_advanced_overrides.candidate_scope_id,
+        expected_advanced_overrides.candidate_id,
+        expected_advanced_overrides.pay_channel,
+        expected_advanced_overrides.preview_row_id,
+        expected_advanced_overrides.timesheet_id,
+        expected_advanced_overrides.advanced_override_id,
+        expected_advanced_overrides.raw_advanced_override_id
+    ), mismatch_rows AS (
+      SELECT
+        matched_advanced_overrides.*,
+        CASE
+          WHEN matched_advanced_overrides.advanced_override_id IS NULL THEN 'ADVANCED_OVERRIDE_ID_MISSING_OR_INVALID'
+          ELSE 'PAY_DRAFT_ADVANCE_OVERRIDE_NOT_CONSUMED'
+        END AS reason_code
+      FROM matched_advanced_overrides
+      WHERE matched_advanced_overrides.advanced_override_id IS NULL
+         OR matched_advanced_overrides.matching_consumed_count <> 1
+    )
+    SELECT
+      (SELECT COUNT(*)::integer FROM expected_advanced_overrides),
+      COALESCE((
+        SELECT jsonb_agg(to_jsonb(expected_ids.advanced_override_id::text) ORDER BY expected_ids.advanced_override_id::text)
+        FROM (
+          SELECT DISTINCT expected_advanced_overrides.advanced_override_id
+          FROM expected_advanced_overrides
+          WHERE expected_advanced_overrides.advanced_override_id IS NOT NULL
+        ) AS expected_ids
+      ), '[]'::jsonb),
+      (SELECT COUNT(*)::integer FROM mismatch_rows),
+      COALESCE((
+        SELECT jsonb_agg(
+          jsonb_build_object(
+            'check_code', 'PAY_DRAFT_ADVANCE_OVERRIDE_NOT_CONSUMED',
+            'reason_code', mismatch_rows.reason_code,
+            'candidate_scope_id', mismatch_rows.candidate_scope_id::text,
+            'candidate_id', mismatch_rows.candidate_id::text,
+            'pay_channel', mismatch_rows.pay_channel,
+            'preview_row_id', mismatch_rows.preview_row_id,
+            'timesheet_id', mismatch_rows.timesheet_id::text,
+            'advanced_override_id', CASE WHEN mismatch_rows.advanced_override_id IS NULL THEN NULL ELSE mismatch_rows.advanced_override_id::text END,
+            'raw_advanced_override_id', mismatch_rows.raw_advanced_override_id,
+            'matching_consumed_count', mismatch_rows.matching_consumed_count
+          )
+          ORDER BY mismatch_rows.candidate_id::text, mismatch_rows.timesheet_id::text, mismatch_rows.preview_row_id
+        )
+        FROM mismatch_rows
+      ), '[]'::jsonb)
+    INTO
+      v_expected_advance_override_count,
+      v_expected_advance_override_ids,
+      v_advance_override_consumption_mismatch_count,
+      v_advance_override_consumption_mismatches;
+
+    BEGIN
+      PERFORM public._imp_debug_audit(
+        p_actor_user_id,
+        'PAY_CREATE_DRAFT_BATCH:STAGE_23C_ADVANCE_OVERRIDE_CONSUMPTION_ASSERT_RESULT',
+        jsonb_build_object(
+          'stage', v_stage,
+          'pay_batch_id', v_batch_id::text,
+          'operation_id', p_operation_id::text,
+          'expected_advance_override_count', coalesce(v_expected_advance_override_count, 0),
+          'expected_advance_override_ids', coalesce(v_expected_advance_override_ids, '[]'::jsonb),
+          'consumed_timesheet_payment_override_count', coalesce(v_rows_upd_timesheet_overrides_consumed, 0),
+          'consumed_timesheet_payment_override_ids', coalesce(v_consumed_timesheet_payment_override_ids, '[]'::jsonb),
+          'advance_override_consumption_mismatch_count', coalesce(v_advance_override_consumption_mismatch_count, 0),
+          'advance_override_consumption_mismatches', coalesce(v_advance_override_consumption_mismatches, '[]'::jsonb)
+        ),
+        'pay_batches',
+        v_batch_id::text,
+        NULL, NULL, NULL, NULL, NULL
+      );
+    EXCEPTION WHEN OTHERS THEN
+      NULL;
+    END;
+
+    IF coalesce(v_advance_override_consumption_mismatch_count, 0) > 0 THEN
+      RETURN jsonb_build_object(
+        'ok', false,
+        'pay_batch_id', v_batch_id::text,
+        'operation_id', p_operation_id::text,
+        'pass', false,
+        'error', 'PAY_DRAFT_ADVANCE_OVERRIDE_NOT_CONSUMED',
+        'code', 'PAY_DRAFT_ADVANCE_OVERRIDE_NOT_CONSUMED',
+        'message', 'Draft integrity failed because one or more selected Advance Pay overrides were not consumed by the draft batch.',
+        'friendly_error_message', 'Draft integrity failed because one or more selected Advance Pay overrides were not consumed by the draft batch.',
+        'mismatch_details', coalesce(v_advance_override_consumption_mismatches, '[]'::jsonb),
+        'affected_candidate_ids', coalesce((
+          SELECT jsonb_agg(DISTINCT mismatch_value.value->>'candidate_id')
+          FROM jsonb_array_elements(coalesce(v_advance_override_consumption_mismatches, '[]'::jsonb)) AS mismatch_value(value)
+          WHERE NULLIF(mismatch_value.value->>'candidate_id', '') IS NOT NULL
+        ), '[]'::jsonb),
+        'breakdown_missing_ct', coalesce(v_breakdown_missing_ct, 0),
+        'breakdown_bad_ct', coalesce(v_breakdown_bad_ct, 0),
+        'blocked_count', jsonb_array_length(coalesce(v_blocked_candidates, '[]'::jsonb)),
+        'consumed_timesheet_override_count', coalesce(v_rows_upd_timesheet_overrides_consumed, 0),
+        'consumed_timesheet_override_ids', coalesce(v_consumed_timesheet_payment_override_ids, '[]'::jsonb),
+        'expected_advance_override_count', coalesce(v_expected_advance_override_count, 0),
+        'expected_advance_override_ids', coalesce(v_expected_advance_override_ids, '[]'::jsonb)
+      );
+    END IF;
+  END IF;
 
   IF p_operation_id IS NOT NULL THEN
     SELECT count(*)::integer
@@ -51054,7 +51488,8 @@ v_stage := 'STAGE_21_BREAKDOWN_INTEGRITY_MISSING';
         'breakdown_missing_ct', coalesce(v_breakdown_missing_ct, 0),
         'breakdown_bad_ct', coalesce(v_breakdown_bad_ct, 0),
         'blocked_count', jsonb_array_length(coalesce(v_blocked_candidates, '[]'::jsonb)),
-        'consumed_timesheet_override_count', coalesce(v_rows_upd_timesheet_overrides_consumed, 0)
+        'consumed_timesheet_override_count', coalesce(v_rows_upd_timesheet_overrides_consumed, 0),
+        'consumed_timesheet_override_ids', coalesce(v_consumed_timesheet_payment_override_ids, '[]'::jsonb)
       );
     END IF;
 
@@ -51491,7 +51926,8 @@ v_stage := 'STAGE_21_BREAKDOWN_INTEGRITY_MISSING';
         'breakdown_missing_ct', coalesce(v_breakdown_missing_ct, 0),
         'breakdown_bad_ct', coalesce(v_breakdown_bad_ct, 0),
         'blocked_count', jsonb_array_length(coalesce(v_blocked_candidates, '[]'::jsonb)),
-        'consumed_timesheet_override_count', coalesce(v_rows_upd_timesheet_overrides_consumed, 0)
+        'consumed_timesheet_override_count', coalesce(v_rows_upd_timesheet_overrides_consumed, 0),
+        'consumed_timesheet_override_ids', coalesce(v_consumed_timesheet_payment_override_ids, '[]'::jsonb)
       );
     END IF;
   END IF;
@@ -51507,7 +51943,8 @@ v_stage := 'STAGE_21_BREAKDOWN_INTEGRITY_MISSING';
     'breakdown_missing_ct', coalesce(v_breakdown_missing_ct, 0),
     'breakdown_bad_ct', coalesce(v_breakdown_bad_ct, 0),
     'blocked_count', jsonb_array_length(coalesce(v_blocked_candidates, '[]'::jsonb)),
-    'consumed_timesheet_override_count', coalesce(v_rows_upd_timesheet_overrides_consumed, 0)
+    'consumed_timesheet_override_count', coalesce(v_rows_upd_timesheet_overrides_consumed, 0),
+        'consumed_timesheet_override_ids', coalesce(v_consumed_timesheet_payment_override_ids, '[]'::jsonb)
   );
 END;
 $function$;
@@ -89332,21 +89769,33 @@ begin
     last_settled_snapshot_json,
     last_settled_signature,
     last_settled_pay_batch_id,
-    last_settled_at_utc
+    last_settled_at_utc,
+    summary_pay_status_code,
+    summary_pay_icon_code,
+    summary_pay_paid_at_utc,
+    summary_net_delta_ex_vat
   )
   select
     c.timesheet_id,
     c.target_snapshot_json,
     c.signature,
     p_pay_batch_id,
-    v_now
+    v_now,
+    'PAID'::text,
+    'COIN'::text,
+    v_now,
+    0::numeric
   from chosen c
   on conflict (timesheet_id) do update
   set
     last_settled_snapshot_json = excluded.last_settled_snapshot_json,
     last_settled_signature = excluded.last_settled_signature,
     last_settled_pay_batch_id = excluded.last_settled_pay_batch_id,
-    last_settled_at_utc = excluded.last_settled_at_utc;
+    last_settled_at_utc = excluded.last_settled_at_utc,
+    summary_pay_status_code = excluded.summary_pay_status_code,
+    summary_pay_icon_code = excluded.summary_pay_icon_code,
+    summary_pay_paid_at_utc = excluded.summary_pay_paid_at_utc,
+    summary_net_delta_ex_vat = excluded.summary_net_delta_ex_vat;
 
   update public.pay_advance_reservations par
   set
@@ -90861,6 +91310,8 @@ begin
   );
 end;
 $function$;
+
+
 
 
 
@@ -102112,10 +102563,6 @@ $function$;
 
 
 
-
-
-
-
 CREATE OR REPLACE FUNCTION public.timesheet_pay_state(
   p_timesheet_id uuid,
   p_actor_user_id uuid DEFAULT NULL
@@ -102454,7 +102901,13 @@ BEGIN
         WHEN pb.id IS NOT NULL AND upper(COALESCE(pb.status::text,'')) <> 'CANCELLED'
           THEN false
         ELSE true
-      END AS can_unadvance
+      END AS can_unadvance,
+      CASE
+        WHEN tpo.consumed_by_pay_batch_id IS NULL THEN 'ADVANCED_PENDING_BATCH'
+        WHEN pb.id IS NOT NULL AND upper(COALESCE(pb.status::text,'')) = 'CANCELLED' THEN 'ADVANCED_BATCH_CANCELLED'
+        WHEN pb.id IS NOT NULL THEN 'ADVANCED_IN_BATCH'
+        ELSE 'ADVANCED_PENDING_BATCH'
+      END AS advance_status
     FROM public.timesheet_payment_overrides tpo
     LEFT JOIN public.pay_batches pb
       ON pb.id = tpo.consumed_by_pay_batch_id
@@ -102680,7 +103133,7 @@ BEGIN
       count(*)::int AS total_components,
       count(*) FILTER (WHERE cs.is_on_hold = true)::int AS on_hold_components,
       count(*) FILTER (WHERE cs.is_on_hold = false)::int AS payable_components,
-      count(*) FILTER (WHERE cs.is_on_hold = false AND cs.stage IN ('PAID','ADVANCED'))::int AS paid_components,
+      count(*) FILTER (WHERE cs.is_on_hold = false AND cs.stage = 'PAID')::int AS paid_components,
       count(*) FILTER (WHERE cs.is_on_hold = false AND cs.stage = 'ADVANCED')::int AS advanced_components,
       count(*) FILTER (WHERE cs.is_on_hold = false AND cs.stage IN ('PAY_PROCESSING','ADVANCE_PROCESSING'))::int AS processing_components,
       count(*) FILTER (WHERE cs.is_on_hold = false AND cs.stage = 'UNPAID')::int AS unpaid_components,
@@ -102859,7 +103312,8 @@ BEGIN
       COALESCE((SELECT ao.can_unadvance FROM active_override ao LIMIT 1), false) AS can_unadvance,
       (SELECT ao.consumed_by_batch_id FROM active_override ao LIMIT 1) AS advanced_consumed_by_batch_id,
       (SELECT ao.consumed_at_utc FROM active_override ao LIMIT 1) AS advanced_consumed_at_utc,
-      (SELECT ao.consumed_batch_status FROM active_override ao LIMIT 1) AS advanced_batch_status
+      (SELECT ao.consumed_batch_status FROM active_override ao LIMIT 1) AS advanced_batch_status,
+      COALESCE((SELECT ao.advance_status FROM active_override ao LIMIT 1), 'NOT_ADVANCED') AS advance_status
   ),
   snooze_json AS (
     SELECT
@@ -102883,6 +103337,7 @@ BEGIN
       'advanced_consumed_by_batch_id', CASE WHEN oj.advanced_consumed_by_batch_id IS NULL THEN NULL ELSE oj.advanced_consumed_by_batch_id::text END,
       'advanced_consumed_at_utc', oj.advanced_consumed_at_utc,
       'advanced_batch_status', oj.advanced_batch_status,
+      'advance_status', oj.advance_status,
       'is_snoozed', sj.is_snoozed,
       'snooze_until_date', CASE WHEN sj.snooze_until_date IS NULL THEN NULL ELSE sj.snooze_until_date::text END,
       'snooze_is_indefinite', sj.snooze_is_indefinite,
@@ -102954,6 +103409,8 @@ BEGIN
   RETURN v_out;
 END;
 $$;
+
+
 
 
 
@@ -105503,6 +105960,10 @@ declare
   v_candidate_id uuid := null;
   v_existing record;
   v_batch_status text := null;
+  v_outstanding_ex_vat numeric := 0;
+  v_reserved_ex_vat numeric := 0;
+  v_baseline_ex_vat numeric := 0;
+  v_truth_ex_vat numeric := 0;
   v_inserted record;
   v_pay_state jsonb := '{}'::jsonb;
 begin
@@ -105554,6 +106015,7 @@ begin
   into v_existing
   from public.timesheet_payment_overrides tpo
   where tpo.timesheet_id = v_timesheet_id
+    and upper(coalesce(tpo.override_type,'')) = 'ADVANCE_THIS_PAYMENT'
     and tpo.cleared_at_utc is null
   order by tpo.created_at_utc desc, tpo.id desc
   limit 1;
@@ -105567,7 +106029,10 @@ begin
       limit 1;
 
       if coalesce(v_batch_status, '') <> 'CANCELLED' then
-        raise exception 'timesheet_payment_override_set: override already consumed by non-cancelled pay batch %.', v_existing.consumed_by_pay_batch_id;
+        raise exception '%', jsonb_build_object(
+          'code', 'TIMESHEET_ADVANCE_ALREADY_BATCHED',
+          'message', 'This timesheet advance is already in a non-cancelled pay batch.'
+        )::text;
       end if;
 
       update public.timesheet_payment_overrides tpo_old
@@ -105598,6 +106063,44 @@ begin
         ),
         'pay_state', v_pay_state
       );
+    end if;
+  end if;
+
+  select
+    round(coalesce(sum(coalesce(oc.outstanding_ex_vat, 0)), 0), 2),
+    round(coalesce(sum(coalesce(oc.reserved_ex_vat, 0)), 0), 2),
+    round(coalesce(sum(coalesce(oc.baseline_ex_vat, 0)), 0), 2),
+    round(coalesce(sum(coalesce(oc.truth_ex_vat, 0)), 0), 2)
+  into
+    v_outstanding_ex_vat,
+    v_reserved_ex_vat,
+    v_baseline_ex_vat,
+    v_truth_ex_vat
+  from public._pay_outstanding_components(array[v_timesheet_id]) oc;
+
+  if coalesce(v_reserved_ex_vat, 0) > 0 then
+    raise exception '%', jsonb_build_object(
+      'code', 'TIMESHEET_ADVANCE_PAYMENT_PROCESSING',
+      'message', 'This timesheet is already reserved in an active pay batch.'
+    )::text;
+  end if;
+
+  if coalesce(v_outstanding_ex_vat, 0) <= 0 then
+    if coalesce(v_baseline_ex_vat, 0) > 0 and coalesce(v_truth_ex_vat, 0) > 0 and coalesce(v_baseline_ex_vat, 0) >= coalesce(v_truth_ex_vat, 0) then
+      raise exception '%', jsonb_build_object(
+        'code', 'TIMESHEET_ADVANCE_ALREADY_PAID',
+        'message', 'This timesheet has already been paid and cannot be advanced.'
+      )::text;
+    elsif coalesce(v_baseline_ex_vat, 0) > 0 then
+      raise exception '%', jsonb_build_object(
+        'code', 'TIMESHEET_ADVANCE_PART_PAID_NO_OUTSTANDING',
+        'message', 'This timesheet has already been partially paid and has no outstanding payable amount to advance.'
+      )::text;
+    else
+      raise exception '%', jsonb_build_object(
+        'code', 'TIMESHEET_ADVANCE_NO_OUTSTANDING_PAY',
+        'message', 'This timesheet has no outstanding payable amount to advance.'
+      )::text;
     end if;
   end if;
 
@@ -105711,6 +106214,7 @@ begin
   into v_existing
   from public.timesheet_payment_overrides tpo
   where tpo.timesheet_id = v_timesheet_id
+    and upper(coalesce(tpo.override_type,'')) = 'ADVANCE_THIS_PAYMENT'
     and tpo.cleared_at_utc is null
   order by tpo.created_at_utc desc, tpo.id desc
   limit 1;
@@ -105738,7 +106242,10 @@ begin
     limit 1;
 
     if coalesce(v_batch_status, '') <> 'CANCELLED' then
-      raise exception 'timesheet_payment_override_clear: override already consumed by non-cancelled pay batch %.', v_existing.consumed_by_pay_batch_id;
+      raise exception '%', jsonb_build_object(
+        'code', 'TIMESHEET_ADVANCE_ALREADY_BATCHED',
+        'message', 'This timesheet advance is already in a non-cancelled pay batch.'
+      )::text;
     end if;
   end if;
 
@@ -105786,6 +106293,8 @@ begin
   );
 end;
 $function$;
+
+
 
 CREATE OR REPLACE FUNCTION public.pay_finance_case_audit_feed(
   p_finance_case_id uuid
@@ -157742,6 +158251,7 @@ BEGIN
 END;
 $function$;
 
+
 CREATE OR REPLACE FUNCTION public.pay_workbench_seed_candidate_preview_line_source(p_session_id uuid, p_candidate_id uuid, p_context_json jsonb DEFAULT '{}'::jsonb, p_cursor_json jsonb DEFAULT NULL::jsonb, p_limit integer DEFAULT 100)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -158414,20 +158924,84 @@ BEGIN
           'component_key_value', NULLIF(BTRIM(COALESCE(component_rows.component_json->>'component_key_value', '')), '')
         )
         || jsonb_build_object(
-          'case_components', jsonb_build_array(component_rows.component_json)
+          'case_components', jsonb_build_array(
+            CASE
+              WHEN ROUND(ABS(COALESCE(component_rows.source_amount_ex_vat, 0)), 2) > 0 THEN
+                component_rows.component_json
+                || jsonb_build_object(
+                  'source_pay_ex_vat', component_rows.source_amount_ex_vat,
+                  'source_amount_ex_vat', component_rows.source_amount_ex_vat,
+                  'source_entitlement_amount_ex_vat', component_rows.source_amount_ex_vat,
+                  'source_reservation_amount_ex_vat', component_rows.source_amount_ex_vat,
+                  'frozen_source_amount', component_rows.source_amount_ex_vat
+                )
+                || jsonb_build_object(
+                  'source_basis_json',
+                  COALESCE(component_rows.component_json->'source_basis_json', '{}'::jsonb)
+                  || jsonb_build_object(
+                    'source_pay_ex_vat', component_rows.source_amount_ex_vat,
+                    'source_amount_ex_vat', component_rows.source_amount_ex_vat,
+                    'source_entitlement_amount_ex_vat', component_rows.source_amount_ex_vat,
+                    'source_reservation_amount_ex_vat', component_rows.source_amount_ex_vat
+                  )
+                )
+              ELSE component_rows.component_json
+            END
+          )
         )
         || jsonb_build_object(
           'amount_ex_vat', component_rows.signed_component_amount_ex_vat,
           'amount_display', component_rows.signed_component_amount_ex_vat,
           'preview_amount_ex_vat', component_rows.signed_component_amount_ex_vat,
-          'source_basis_json', COALESCE(component_rows.component_json->'source_basis_json', '{}'::jsonb),
-          'frozen_component_snapshot_json', component_rows.component_json
+          'source_basis_json', CASE
+            WHEN ROUND(ABS(COALESCE(component_rows.source_amount_ex_vat, 0)), 2) > 0 THEN
+              COALESCE(component_rows.component_json->'source_basis_json', '{}'::jsonb)
+              || jsonb_build_object(
+                'source_pay_ex_vat', component_rows.source_amount_ex_vat,
+                'source_amount_ex_vat', component_rows.source_amount_ex_vat,
+                'source_entitlement_amount_ex_vat', component_rows.source_amount_ex_vat,
+                'source_reservation_amount_ex_vat', component_rows.source_amount_ex_vat
+              )
+            ELSE COALESCE(component_rows.component_json->'source_basis_json', '{}'::jsonb)
+          END,
+          'frozen_component_snapshot_json', CASE
+            WHEN ROUND(ABS(COALESCE(component_rows.source_amount_ex_vat, 0)), 2) > 0 THEN
+              component_rows.component_json
+              || jsonb_build_object(
+                'source_pay_ex_vat', component_rows.source_amount_ex_vat,
+                'source_amount_ex_vat', component_rows.source_amount_ex_vat,
+                'source_entitlement_amount_ex_vat', component_rows.source_amount_ex_vat,
+                'source_reservation_amount_ex_vat', component_rows.source_amount_ex_vat,
+                'frozen_source_amount', component_rows.source_amount_ex_vat
+              )
+              || jsonb_build_object(
+                'source_basis_json',
+                COALESCE(component_rows.component_json->'source_basis_json', '{}'::jsonb)
+                || jsonb_build_object(
+                  'source_pay_ex_vat', component_rows.source_amount_ex_vat,
+                  'source_amount_ex_vat', component_rows.source_amount_ex_vat,
+                  'source_entitlement_amount_ex_vat', component_rows.source_amount_ex_vat,
+                  'source_reservation_amount_ex_vat', component_rows.source_amount_ex_vat
+                )
+              )
+            ELSE component_rows.component_json
+          END
         )
         || jsonb_build_object(
           'frozen_component_key_type', UPPER(NULLIF(BTRIM(COALESCE(component_rows.component_json->>'component_key_type', '')), '')),
           'frozen_component_key_value', NULLIF(BTRIM(COALESCE(component_rows.component_json->>'component_key_value', '')), ''),
           'frozen_component_classification', NULLIF(BTRIM(COALESCE(component_rows.component_json->>'classification', '')), ''),
-          'frozen_source_basis_json', COALESCE(component_rows.component_json->'source_basis_json', '{}'::jsonb),
+          'frozen_source_basis_json', CASE
+            WHEN ROUND(ABS(COALESCE(component_rows.source_amount_ex_vat, 0)), 2) > 0 THEN
+              COALESCE(component_rows.component_json->'source_basis_json', '{}'::jsonb)
+              || jsonb_build_object(
+                'source_pay_ex_vat', component_rows.source_amount_ex_vat,
+                'source_amount_ex_vat', component_rows.source_amount_ex_vat,
+                'source_entitlement_amount_ex_vat', component_rows.source_amount_ex_vat,
+                'source_reservation_amount_ex_vat', component_rows.source_amount_ex_vat
+              )
+            ELSE COALESCE(component_rows.component_json->'source_basis_json', '{}'::jsonb)
+          END,
           'frozen_source_amount', component_rows.source_amount_ex_vat
         )
         || jsonb_build_object(
@@ -158465,8 +159039,21 @@ BEGIN
           0::numeric
         ), 2) AS unsigned_component_amount_ex_vat,
         ROUND(COALESCE(
-          CASE WHEN COALESCE(component_element.value->>'source_amount', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN (component_element.value->>'source_amount')::numeric ELSE NULL::numeric END,
-          CASE WHEN COALESCE(component_element.value->>'remaining_source_amount', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN (component_element.value->>'remaining_source_amount')::numeric ELSE NULL::numeric END,
+          CASE WHEN COALESCE(component_element.value->>'source_reservation_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' AND ROUND(ABS((component_element.value->>'source_reservation_amount_ex_vat')::numeric), 2) > 0 THEN ABS((component_element.value->>'source_reservation_amount_ex_vat')::numeric) ELSE NULL::numeric END,
+          CASE WHEN COALESCE(component_element.value->>'source_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' AND ROUND(ABS((component_element.value->>'source_amount_ex_vat')::numeric), 2) > 0 THEN ABS((component_element.value->>'source_amount_ex_vat')::numeric) ELSE NULL::numeric END,
+          CASE WHEN COALESCE(component_element.value->>'source_amount', '') ~ '^-?[0-9]+(\.[0-9]+)?$' AND ROUND(ABS((component_element.value->>'source_amount')::numeric), 2) > 0 THEN ABS((component_element.value->>'source_amount')::numeric) ELSE NULL::numeric END,
+          CASE WHEN COALESCE(component_element.value->>'source_entitlement_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' AND ROUND(ABS((component_element.value->>'source_entitlement_amount_ex_vat')::numeric), 2) > 0 THEN ABS((component_element.value->>'source_entitlement_amount_ex_vat')::numeric) ELSE NULL::numeric END,
+          CASE WHEN COALESCE(component_element.value->>'pay_outstanding_clamped_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' AND ROUND(ABS((component_element.value->>'pay_outstanding_clamped_amount_ex_vat')::numeric), 2) > 0 THEN ABS((component_element.value->>'pay_outstanding_clamped_amount_ex_vat')::numeric) ELSE NULL::numeric END,
+          CASE WHEN COALESCE(component_element.value->>'pay_outstanding_available_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' AND ROUND(ABS((component_element.value->>'pay_outstanding_available_ex_vat')::numeric), 2) > 0 THEN ABS((component_element.value->>'pay_outstanding_available_ex_vat')::numeric) ELSE NULL::numeric END,
+          CASE WHEN COALESCE(component_element.value->>'remaining_source_amount', '') ~ '^-?[0-9]+(\.[0-9]+)?$' AND ROUND(ABS((component_element.value->>'remaining_source_amount')::numeric), 2) > 0 THEN ABS((component_element.value->>'remaining_source_amount')::numeric) ELSE NULL::numeric END,
+          CASE WHEN COALESCE(component_element.value#>>'{source_basis_json,source_reservation_amount_ex_vat}', '') ~ '^-?[0-9]+(\.[0-9]+)?$' AND ROUND(ABS((component_element.value#>>'{source_basis_json,source_reservation_amount_ex_vat}')::numeric), 2) > 0 THEN ABS((component_element.value#>>'{source_basis_json,source_reservation_amount_ex_vat}')::numeric) ELSE NULL::numeric END,
+          CASE WHEN COALESCE(component_element.value#>>'{source_basis_json,source_entitlement_amount_ex_vat}', '') ~ '^-?[0-9]+(\.[0-9]+)?$' AND ROUND(ABS((component_element.value#>>'{source_basis_json,source_entitlement_amount_ex_vat}')::numeric), 2) > 0 THEN ABS((component_element.value#>>'{source_basis_json,source_entitlement_amount_ex_vat}')::numeric) ELSE NULL::numeric END,
+          CASE WHEN COALESCE(component_element.value#>>'{source_basis_json,source_amount_ex_vat}', '') ~ '^-?[0-9]+(\.[0-9]+)?$' AND ROUND(ABS((component_element.value#>>'{source_basis_json,source_amount_ex_vat}')::numeric), 2) > 0 THEN ABS((component_element.value#>>'{source_basis_json,source_amount_ex_vat}')::numeric) ELSE NULL::numeric END,
+          CASE WHEN COALESCE(component_element.value#>>'{source_basis_json,source_pay_ex_vat}', '') ~ '^-?[0-9]+(\.[0-9]+)?$' AND ROUND(ABS((component_element.value#>>'{source_basis_json,source_pay_ex_vat}')::numeric), 2) > 0 THEN ABS((component_element.value#>>'{source_basis_json,source_pay_ex_vat}')::numeric) ELSE NULL::numeric END,
+          CASE WHEN COALESCE(component_element.value->>'source_pay_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' AND ROUND(ABS((component_element.value->>'source_pay_ex_vat')::numeric), 2) > 0 THEN ABS((component_element.value->>'source_pay_ex_vat')::numeric) ELSE NULL::numeric END,
+          CASE WHEN COALESCE(component_element.value->>'source_pay_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' AND ROUND(ABS((component_element.value->>'source_pay_amount_ex_vat')::numeric), 2) > 0 THEN ABS((component_element.value->>'source_pay_amount_ex_vat')::numeric) ELSE NULL::numeric END,
+          CASE WHEN UPPER(NULLIF(BTRIM(COALESCE(component_element.value->>'classification', '')), '')) = 'REIMBURSEMENT_GROSS_FIXED' AND COALESCE(component_element.value->>'preview_due_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' AND ROUND(ABS((component_element.value->>'preview_due_amount_ex_vat')::numeric), 2) > 0 THEN ABS((component_element.value->>'preview_due_amount_ex_vat')::numeric) ELSE NULL::numeric END,
+          CASE WHEN UPPER(NULLIF(BTRIM(COALESCE(component_element.value->>'classification', '')), '')) = 'REIMBURSEMENT_GROSS_FIXED' AND COALESCE(component_element.value->>'target_pay_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' AND ROUND(ABS((component_element.value->>'target_pay_ex_vat')::numeric), 2) > 0 THEN ABS((component_element.value->>'target_pay_ex_vat')::numeric) ELSE NULL::numeric END,
           0::numeric
         ), 2) AS source_amount_ex_vat,
         CASE
