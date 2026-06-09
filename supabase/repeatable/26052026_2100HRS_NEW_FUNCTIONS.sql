@@ -62901,17 +62901,11 @@ $function$;
 DROP FUNCTION IF EXISTS public.pay_batch_submission_evidence(uuid);
 DROP FUNCTION IF EXISTS public.pay_batch_submission_evidence(uuid, boolean, uuid, uuid);
 
-CREATE OR REPLACE FUNCTION public.pay_batch_submission_evidence(
-  p_pay_batch_id uuid,
-  p_counts_only boolean DEFAULT false,
-  p_operation_id uuid DEFAULT NULL::uuid,
-  p_chunk_id uuid DEFAULT NULL::uuid,
-  p_mode text DEFAULT 'OPERATION_LIGHT'::text
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public', 'pg_temp'
+CREATE OR REPLACE FUNCTION public.pay_batch_submission_evidence(p_pay_batch_id uuid, p_counts_only boolean DEFAULT false, p_operation_id uuid DEFAULT NULL::uuid, p_chunk_id uuid DEFAULT NULL::uuid, p_mode text DEFAULT 'OPERATION_LIGHT'::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
 AS $function$
 DECLARE
   v_mode text := upper(btrim(coalesce(p_mode, 'OPERATION_LIGHT')));
@@ -63080,6 +63074,8 @@ BEGIN
         'SUBMIT_PROVIDER_TRANSFERS',
         'SEND_PROVIDER_CHUNK',
         'APPLY_RAIL_UPDATES',
+        'START_LOCAL_SETTLEMENT',
+        'WAIT_LOCAL_SETTLEMENT',
         'PAYMENT_SETTLEMENT',
         'SETTLEMENT_SCOPE_SEED',
         'SEED_SETTLEMENT_SCOPE',
@@ -63096,6 +63092,8 @@ BEGIN
         'SUBMIT_PROVIDER_TRANSFERS',
         'SEND_PROVIDER_CHUNK',
         'APPLY_RAIL_UPDATES',
+        'START_LOCAL_SETTLEMENT',
+        'WAIT_LOCAL_SETTLEMENT',
         'PAYMENT_SETTLEMENT',
         'SETTLEMENT_SCOPE_SEED',
         'SEED_SETTLEMENT_SCOPE',
