@@ -12174,6 +12174,7 @@ BEGIN
 END;
 $function$;
 
+
 CREATE OR REPLACE FUNCTION public.bulk_timesheet_workbench_row_source_v1(p_filters jsonb DEFAULT '{}'::jsonb)
 RETURNS TABLE(
   timesheet_id uuid,
@@ -13631,15 +13632,26 @@ BEGIN
       FALSE AS refs_block_issuing_invoices,
       FALSE AS refs_block_invoice_and_issuing,
       CASE
+        WHEN tps.summary_pay_icon_code IS NOT NULL THEN tps.summary_pay_icon_code
+        WHEN tps.summary_pay_status_code = 'PAID' THEN 'COIN'
+        WHEN tps.summary_pay_status_code = 'PARTIALLY_PAID' THEN 'HALF_COIN'
+        WHEN tps.summary_pay_status_code IN ('PROCESSING','ADVANCED') THEN 'CLOCK'
+        WHEN tps.summary_pay_status_code = 'UNPAID' THEN 'NONE'
         WHEN tps.last_settled_at_utc IS NOT NULL OR sr0.paid_at_utc IS NOT NULL THEN 'COIN'
         ELSE 'NONE'
       END::text AS pay_icon_code,
+      COALESCE(
+        tps.summary_pay_status_code,
+        CASE
+          WHEN tps.last_settled_at_utc IS NOT NULL OR sr0.paid_at_utc IS NOT NULL THEN 'PAID'
+          ELSE 'UNPAID'
+        END
+      )::text AS pay_status_code,
       CASE
-        WHEN tps.last_settled_at_utc IS NOT NULL OR sr0.paid_at_utc IS NOT NULL THEN 'PAID'
-        ELSE 'UNPAID'
-      END::text AS pay_status_code,
-      COALESCE(tps.last_settled_at_utc, sr0.paid_at_utc) AS pay_paid_at_utc,
-      0::numeric AS net_delta_ex_vat
+        WHEN tps.summary_pay_status_code IS NOT NULL OR tps.summary_pay_icon_code IS NOT NULL THEN tps.summary_pay_paid_at_utc
+        ELSE COALESCE(tps.last_settled_at_utc, sr0.paid_at_utc)
+      END AS pay_paid_at_utc,
+      COALESCE(tps.summary_net_delta_ex_vat, 0)::numeric AS net_delta_ex_vat
     FROM issue_normalised_rows AS sr0
     LEFT JOIN public.timesheet_pay_state AS tps
       ON tps.timesheet_id = sr0.timesheet_id
@@ -13738,6 +13750,7 @@ BEGIN
     AND (v_client_id IS NULL OR rr0.client_id = v_client_id);
 END;
 $function$;
+
 
 
 
