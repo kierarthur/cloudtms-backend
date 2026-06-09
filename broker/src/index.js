@@ -59956,6 +59956,38 @@ async function handleTimesheetsSummary(env, req) {
     ''
   ).trim();
   const hasPayBatchFilter = !!payBatchId;
+  const truthy = (value) => {
+    if (value === true) return true;
+    if (value === false || value == null) return false;
+    const s = String(value).trim().toLowerCase();
+    return ['1', 'true', 'yes', 'y', 'on', 'ids', 'full', 'full_ids'].includes(s);
+  };
+  const membershipMode = String(
+    q('membership_mode') ||
+    q('membershipMode') ||
+    spec.membership_mode ||
+    spec.membershipMode ||
+    ''
+  ).trim().toLowerCase();
+  const explicitFullMembership = !!(
+    truthy(q('include_ids')) ||
+    truthy(q('includeIds')) ||
+    truthy(q('include_membership_ids')) ||
+    truthy(q('includeMembershipIds')) ||
+    truthy(q('explicit_full_membership')) ||
+    truthy(q('explicitFullMembership')) ||
+    truthy(q('force_full_membership')) ||
+    truthy(q('forceFullMembership')) ||
+    truthy(spec.include_ids) ||
+    truthy(spec.includeIds) ||
+    truthy(spec.include_membership_ids) ||
+    truthy(spec.includeMembershipIds) ||
+    truthy(spec.explicit_full_membership) ||
+    truthy(spec.explicitFullMembership) ||
+    truthy(spec.force_full_membership) ||
+    truthy(spec.forceFullMembership) ||
+    ['ids', 'full', 'full_ids', 'membership_ids'].includes(membershipMode)
+  );
   if (hasPayBatchFilter && !uuidRe.test(payBatchId)) {
     return withCORS(env, req, badRequest('Invalid pay_batch_id filter.'));
   }
@@ -60108,19 +60140,30 @@ async function handleTimesheetsSummary(env, req) {
       };
 
       if (hasPayBatchFilter) {
-        const rpcRes = await sbRpc(env, 'pay_batch_timesheet_summary_lightweight_v1', { p_filters: membershipFilters });
+        const batchMembershipFilters = {
+          ...membershipFilters,
+          pay_batch_id: payBatchId,
+          include_ids: explicitFullMembership,
+          includeIds: explicitFullMembership,
+          membership_mode: explicitFullMembership ? 'ids' : 'deferred'
+        };
+
+        const rpcRes = await sbRpc(env, 'pay_batch_timesheet_summary_lightweight_v1', { p_filters: batchMembershipFilters });
         const payload = unwrapRpcPayload(rpcRes, 'pay_batch_timesheet_summary_lightweight_v1');
         const payloadObj = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
 
-        const membershipIds = normalizeIdList(
-          Array.isArray(payloadObj.row_ids) ? payloadObj.row_ids
-            : Array.isArray(payloadObj.ids) ? payloadObj.ids
-            : Array.isArray(payloadObj.rows) ? payloadObj.rows.map((row) => row && (row.id || row.timesheet_id || row.contract_week_id || ''))
-            : []
-        );
+        const membershipIds = explicitFullMembership
+          ? normalizeIdList(
+              Array.isArray(payloadObj.row_ids) ? payloadObj.row_ids
+                : Array.isArray(payloadObj.ids) ? payloadObj.ids
+                : Array.isArray(payloadObj.rows) ? payloadObj.rows.map((row) => row && (row.id || row.timesheet_id || row.contract_week_id || ''))
+                : []
+            )
+          : [];
 
         const countRaw = Number(payloadObj.total_count ?? payloadObj.total ?? payloadObj.count ?? membershipIds.length);
         const totalCount = Number.isFinite(countRaw) ? countRaw : membershipIds.length;
+        const membershipDeferred = !explicitFullMembership;
 
         return withCORS(env, req, ok({
           section: 'timesheets',
@@ -60129,7 +60172,10 @@ async function handleTimesheetsSummary(env, req) {
           ids: membershipIds.slice(),
           total_count: totalCount,
           total: totalCount,
-          count: totalCount
+          count: totalCount,
+          membership_deferred: membershipDeferred,
+          deferred: membershipDeferred,
+          ids_deferred: membershipDeferred
         }));
       }
 
@@ -105556,6 +105602,7 @@ function buildContractSummaryFilterSpec(input = {}) {
   return clonePlain(out);
 }
 
+
 function buildTimesheetSummaryFilterSpec(input = {}) {
   const trimStr = (v) => String(v == null ? '' : v).trim();
 
@@ -105613,6 +105660,41 @@ function buildTimesheetSummaryFilterSpec(input = {}) {
     getOne('batchId') ||
     ''
   ) || null;
+
+  const getFirstPresent = (...keys) => {
+    for (const key of keys) {
+      const value = getOne(key);
+      if (value === null || value === undefined) continue;
+      if (trimStr(value) === '') continue;
+      return value;
+    }
+    return null;
+  };
+
+  const membershipModeRaw = trimStr(getFirstPresent('membership_mode', 'membershipMode')) || null;
+  const includeIdsRaw = trimStr(getFirstPresent('include_ids', 'includeIds', 'include_membership_ids', 'includeMembershipIds')) || null;
+  const explicitFullMembershipRaw = trimStr(getFirstPresent('explicit_full_membership', 'explicitFullMembership')) || null;
+  const forceFullMembershipRaw = trimStr(getFirstPresent('force_full_membership', 'forceFullMembership')) || null;
+
+  const normalizeBoolControl = (value) => {
+    const s = trimStr(value).toLowerCase();
+    if (!s) return null;
+    if (['1', 'true', 'yes', 'y', 'on'].includes(s)) return true;
+    if (['0', 'false', 'no', 'n', 'off'].includes(s)) return false;
+    return null;
+  };
+
+  const membershipMode = (() => {
+    const s = trimStr(membershipModeRaw).toLowerCase();
+    if (!s) return null;
+    if (['deferred', 'count', 'count_only', 'counts', 'metadata'].includes(s)) return 'deferred';
+    if (['ids', 'full', 'full_ids', 'membership_ids'].includes(s)) return 'ids';
+    return null;
+  })();
+
+  const includeIds = normalizeBoolControl(includeIdsRaw);
+  const explicitFullMembership = normalizeBoolControl(explicitFullMembershipRaw);
+  const forceFullMembership = normalizeBoolControl(forceFullMembershipRaw);
 
   const idExpr = trimStr(getOne('id')) || null;
   const idsCsv = trimStr(getOne('ids')) || null;
@@ -105672,6 +105754,10 @@ function buildTimesheetSummaryFilterSpec(input = {}) {
   if (candidateId) out.candidate_id = candidateId;
   if (quickText) out.q = quickText;
   if (payBatchId) out.pay_batch_id = payBatchId;
+  if (membershipMode) out.membership_mode = membershipMode;
+  if (includeIds !== null) out.include_ids = includeIds;
+  if (explicitFullMembership !== null) out.explicit_full_membership = explicitFullMembership;
+  if (forceFullMembership !== null) out.force_full_membership = forceFullMembership;
   if (ids.length) out.ids = ids;
   if (toolsStage) out.tools_stage = toolsStage;
   if (effectiveIssues) out.issues_filter = effectiveIssues;
@@ -105687,7 +105773,6 @@ function buildTimesheetSummaryFilterSpec(input = {}) {
 
   return clonePlain(out);
 }
-
 
 
 
@@ -108608,6 +108693,45 @@ async function handleSummaryMembership(env, req, section) {
     if (!effectiveFilters.ids.length) delete effectiveFilters.ids;
   }
 
+  const truthy = (value) => {
+    if (value === true) return true;
+    if (value === false || value == null) return false;
+    const s = trimStr(value).toLowerCase();
+    return ['1', 'true', 'yes', 'y', 'on', 'ids', 'full', 'full_ids'].includes(s);
+  };
+
+  const membershipMode = trimStr(
+    (body && (body.membership_mode || body.membershipMode || body.mode)) ||
+    rawFilters.membership_mode ||
+    rawFilters.membershipMode ||
+    effectiveFilters.membership_mode ||
+    effectiveFilters.membershipMode ||
+    ''
+  ).toLowerCase();
+
+  const explicitFullMembership = !!(
+    truthy(body && (body.include_ids || body.includeIds)) ||
+    truthy(body && (body.explicit_full_membership || body.explicitFullMembership)) ||
+    truthy(body && (body.force_full_membership || body.forceFullMembership)) ||
+    truthy(rawFilters.include_ids || rawFilters.includeIds) ||
+    truthy(rawFilters.explicit_full_membership || rawFilters.explicitFullMembership) ||
+    truthy(rawFilters.force_full_membership || rawFilters.forceFullMembership) ||
+    truthy(effectiveFilters.include_ids || effectiveFilters.includeIds) ||
+    truthy(effectiveFilters.explicit_full_membership || effectiveFilters.explicitFullMembership) ||
+    truthy(effectiveFilters.force_full_membership || effectiveFilters.forceFullMembership) ||
+    ['ids', 'full', 'full_ids', 'membership_ids'].includes(membershipMode)
+  );
+
+  const payBatchIdForTimesheets = sectionKey === 'timesheets'
+    ? trimStr(
+        effectiveFilters.pay_batch_id ||
+        effectiveFilters.payBatchId ||
+        effectiveFilters.batch_id ||
+        effectiveFilters.batchId ||
+        ''
+      )
+    : '';
+
   const datasetKey = JSON.stringify({
     section: sectionKey,
     filters: normalizeValue(effectiveFilters) || {}
@@ -108650,16 +108774,41 @@ async function handleSummaryMembership(env, req, section) {
       invoices: '/api/invoices'
     };
 
-    const payload = await invokeJsonHandler(pathMap[sectionKey], {
+    const membershipParams = {
       ...clonePlain(effectiveFilters),
       format: 'membership'
-    });
+    };
 
-    const rowIds = normalizeIdArray(
-      Array.isArray(payload && payload.row_ids)
-        ? payload.row_ids
-        : (Array.isArray(payload && payload.ids) ? payload.ids : [])
+    if (sectionKey === 'timesheets' && payBatchIdForTimesheets) {
+      membershipParams.include_ids = explicitFullMembership ? 'true' : 'false';
+      membershipParams.includeIds = explicitFullMembership ? 'true' : 'false';
+      membershipParams.membership_mode = explicitFullMembership ? 'ids' : 'deferred';
+      membershipParams.explicit_full_membership = explicitFullMembership ? 'true' : 'false';
+    }
+
+    const payload = await invokeJsonHandler(pathMap[sectionKey], membershipParams);
+
+    const payloadDeferred = !!(
+      sectionKey === 'timesheets' &&
+      payBatchIdForTimesheets &&
+      !explicitFullMembership &&
+      payload &&
+      typeof payload === 'object' &&
+      !Array.isArray(payload) &&
+      (
+        payload.membership_deferred === true ||
+        payload.deferred === true ||
+        payload.ids_deferred === true
+      )
     );
+
+    const rowIds = payloadDeferred
+      ? []
+      : normalizeIdArray(
+          Array.isArray(payload && payload.row_ids)
+            ? payload.row_ids
+            : (Array.isArray(payload && payload.ids) ? payload.ids : [])
+        );
 
     const countRaw = Number(payload && (payload.total_count ?? payload.total ?? payload.count ?? rowIds.length));
     const totalCount = Number.isFinite(countRaw) ? countRaw : rowIds.length;
@@ -108670,7 +108819,11 @@ async function handleSummaryMembership(env, req, section) {
       row_ids: rowIds,
       ids: rowIds.slice(),
       total_count: totalCount,
-      total: totalCount
+      total: totalCount,
+      count: totalCount,
+      membership_deferred: payloadDeferred,
+      deferred: payloadDeferred,
+      ids_deferred: payloadDeferred
     }));
   } catch (e) {
     return withCORS(env, req, serverError(String(e?.message || e || 'SUMMARY_MEMBERSHIP_FAILED')));
