@@ -24176,6 +24176,58 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
     }
     return out;
   };
+  const compactProviderSubmitClaimForProgress = (claimValue) => {
+    const claim = isPlainObject(claimValue) ? claimValue : {};
+    const hasClaimEvidence = !!trimStr(claim.chunk_id || claim.id)
+      || Array.isArray(claim.transfer_scope_ids)
+      || Array.isArray(claim.transfers)
+      || Number.isFinite(Number(claim.claimed_count))
+      || Number.isFinite(Number(claim.unit_count))
+      || Number.isFinite(Number(claim.remaining_count))
+      || !!trimStr(claim.provider_submission_status)
+      || claim.ok !== undefined
+      || claim.claim_ok !== undefined;
+    if (!hasClaimEvidence) return {};
+    const transferScopeIds = toArray(claim.transfer_scope_ids).map((value) => trimStr(value)).filter((value) => uuidRe.test(value)).slice(0, 25);
+    const transferCount = Number.isFinite(Number(claim.transfer_count))
+      ? Math.max(0, Math.trunc(Number(claim.transfer_count)))
+      : (Array.isArray(claim.transfers) ? claim.transfers.length : null);
+    const claimedCount = Number.isFinite(Number(claim.claimed_count))
+      ? Math.max(0, Math.trunc(Number(claim.claimed_count)))
+      : (Number.isFinite(Number(claim.unit_count)) ? Math.max(0, Math.trunc(Number(claim.unit_count))) : transferScopeIds.length);
+    const remainingCount = Number.isFinite(Number(claim.remaining_count)) ? Math.max(0, Math.trunc(Number(claim.remaining_count))) : null;
+    const out = {
+      ok: claim.ok === false ? false : (claim.ok === true ? true : undefined),
+      claim_ok: claim.claim_ok === false ? false : (claim.claim_ok === true ? true : undefined),
+      operation_id: trimStr(claim.operation_id) || operationId || undefined,
+      pay_batch_id: trimStr(claim.pay_batch_id) || payBatchId || undefined,
+      chunk_id: trimStr(claim.chunk_id || claim.id) || undefined,
+      chunk_type: trimStr(claim.chunk_type) || 'TRANSFER_SUBMIT',
+      phase: trimStr(claim.phase) || 'SUBMIT_PROVIDER_TRANSFERS',
+      sequence_no: Number.isFinite(Number(claim.sequence_no)) ? Math.max(1, Math.trunc(Number(claim.sequence_no))) : undefined,
+      lock_owner: trimStr(claim.lock_owner || claim.locked_by) || undefined,
+      lock_expires_at_utc: trimStr(claim.lock_expires_at_utc) || undefined,
+      claimed_count: claimedCount,
+      unit_count: Number.isFinite(Number(claim.unit_count)) ? Math.max(0, Math.trunc(Number(claim.unit_count))) : claimedCount,
+      remaining_count: remainingCount,
+      has_more: claim.has_more === true ? true : (claim.has_more === false ? false : undefined),
+      provider_submission_status: trimStr(claim.provider_submission_status) || 'NO_PROVIDER_SUBMISSION_ATTEMPTED',
+      manual_resolution_required: claim.manual_resolution_required === true ? true : (claim.manual_resolution_required === false ? false : undefined),
+      transfer_scope_ids: transferScopeIds,
+      transfer_scope_count: transferScopeIds.length,
+      transfer_count: transferCount,
+      transfers_omitted_from_progress: Array.isArray(claim.transfers),
+      transfer_payload_source: 'banking_pay_operation_chunks.payload_json'
+    };
+    const compact = {};
+    for (const [key, value] of Object.entries(out)) {
+      if (value === undefined || value === null || value === '') continue;
+      if (Array.isArray(value) && value.length === 0) continue;
+      compact[key] = value;
+    }
+    return compact;
+  };
+
   const publicPayload = (row) => {
     if (typeof buildBankingPayOperationPublicPayload === 'function') {
       try { return buildBankingPayOperationPublicPayload(row, { mode: 'PROGRESS_LIGHT' }); } catch {}
@@ -24254,6 +24306,21 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
       COMPLETE: 21
     };
     return Object.prototype.hasOwnProperty.call(ranks, normalised) ? ranks[normalised] : -1;
+  };
+  const canonicalExecutePhase = (value) => {
+    const phase = normalisePhase(value);
+    if (!phase) return '';
+    const aliases = {
+      START: 'VALIDATE_FRESHNESS',
+      SEED_TRANSFER_SCOPES: 'TRANSFER_SCOPE_SEED',
+      PROVIDER_SUBMIT_CLAIM: 'SUBMIT_PROVIDER_TRANSFERS',
+      CLAIM_PROVIDER_SUBMIT: 'SUBMIT_PROVIDER_TRANSFERS',
+      AUTH_START: 'START_AUTHORISATION_PROOF',
+      SCHEDULE_BATCH: 'SCHEDULE_PAYMENT',
+      FINALISE_PROVIDER_SUBMISSION: 'FINALISE_PROVIDER_CHUNK',
+      LOCAL_SETTLEMENT: 'START_LOCAL_SETTLEMENT'
+    };
+    return aliases[phase] || phase;
   };
   const resolveCurrentPhase = (operationPhase, sourceProgressJson) => {
     const progress = isPlainObject(sourceProgressJson) ? sourceProgressJson : {};
@@ -24342,31 +24409,54 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
 
   const saveAndRelease = async (releaseState, nextPhase, progressPatch, resultPatch, errorPatch, delaySeconds, resumeReason) => {
     const progress = isPlainObject(progressPatch) ? progressPatch : {};
-    const releasePayload = await rpc('banking_pay_operation_release_lease', {
-      p_operation_id: operationId,
-      p_lease_owner: lockOwner,
-      p_release_state: releaseState,
-      p_run_after_delay_seconds: clamp(delaySeconds, 0, 0, 86400),
-      p_progress_patch_json: Object.assign({}, progress, {
-        phase: nextPhase,
-        last_bounded_advance_phase: currentPhase,
-        last_bounded_advance_at_utc: new Date().toISOString(),
-        last_message: progress.last_message || progress.status_text || null,
-        phase_resolution_source: phaseResolution.source,
-        phase_drift_recovered: phaseResolution.driftRecovered === true,
-        durable_phase_before_advance: phaseResolution.durablePhase || null,
-        progress_phase_before_advance: phaseResolution.progressPhase || null,
-        resolved_current_phase: currentPhase,
-        operation_actor_user_id: actorUserId,
-        runner_actor_user_id: uuidRe.test(runnerActorUserId) ? runnerActorUserId : null,
-        actor_identity_mode: 'OPERATION_OWNER_FOR_BUSINESS_RPCS',
-        runner_actor_differs_from_operation_actor: uuidRe.test(runnerActorUserId) && runnerActorUserId !== actorUserId
-      }),
-      p_result_patch_json: isPlainObject(resultPatch) ? resultPatch : null,
-      p_error_json: isPlainObject(errorPatch) ? errorPatch : null,
-      p_resume_reason: resumeReason || null,
-      p_actor_user_id: actorUserId
-    }, 'banking_pay_operation_release_lease');
+    const releaseTimeoutMs = limitFromConfig('rpc_timeout_ms', 15000, 1000, 20000);
+    const releaseProgressPatch = Object.assign({}, progress, {
+      phase: nextPhase,
+      last_bounded_advance_phase: currentPhase,
+      last_bounded_advance_at_utc: new Date().toISOString(),
+      last_message: progress.last_message || progress.status_text || null,
+      phase_resolution_source: phaseResolution.source,
+      phase_drift_recovered: phaseResolution.driftRecovered === true,
+      durable_phase_before_advance: phaseResolution.durablePhase || null,
+      progress_phase_before_advance: phaseResolution.progressPhase || null,
+      resolved_current_phase: currentPhase,
+      operation_actor_user_id: actorUserId,
+      runner_actor_user_id: uuidRe.test(runnerActorUserId) ? runnerActorUserId : null,
+      actor_identity_mode: 'OPERATION_OWNER_FOR_BUSINESS_RPCS',
+      runner_actor_differs_from_operation_actor: uuidRe.test(runnerActorUserId) && runnerActorUserId !== actorUserId
+    });
+    const releaseStartedAtMs = Date.now();
+    let releasePayload;
+
+    try {
+      releasePayload = await rpc('banking_pay_operation_release_lease', {
+        p_operation_id: operationId,
+        p_lease_owner: lockOwner,
+        p_release_state: releaseState,
+        p_run_after_delay_seconds: clamp(delaySeconds, 0, 0, 86400),
+        p_progress_patch_json: releaseProgressPatch,
+        p_result_patch_json: isPlainObject(resultPatch) ? resultPatch : null,
+        p_error_json: isPlainObject(errorPatch) ? errorPatch : null,
+        p_resume_reason: resumeReason || null,
+        p_actor_user_id: actorUserId
+      }, 'banking_pay_operation_release_lease');
+    } catch (releaseError) {
+      const releaseDiagnostic = buildReleaseRpcFailureDiagnostic({
+        error: releaseError,
+        phaseBefore: currentPhase,
+        intendedNextPhase: nextPhase,
+        releaseState,
+        elapsedMs: Date.now() - releaseStartedAtMs,
+        timeoutMs: releaseTimeoutMs,
+        progressPatch: releaseProgressPatch,
+        resultPatch,
+        errorPatch,
+        classification: null,
+        providerEvidence: null
+      });
+      try { releaseError.bankingPayReleaseDiagnostic = releaseDiagnostic; } catch {}
+      throw releaseError;
+    }
 
     const latest = await rpc('banking_pay_operation_get', {
       p_operation_id: operationId,
@@ -24476,6 +24566,227 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
     };
   };
 
+
+  const jsonbStripNulls = (value) => {
+    if (!isPlainObject(value)) return {};
+    const output = {};
+    for (const [key, entry] of Object.entries(value)) {
+      if (entry === null || entry === undefined) continue;
+      if (isPlainObject(entry)) {
+        const nested = jsonbStripNulls(entry);
+        if (Object.keys(nested).length > 0) output[key] = nested;
+      } else if (Array.isArray(entry)) {
+        output[key] = entry;
+      } else {
+        output[key] = entry;
+      }
+    }
+    return output;
+  };
+
+  const buildReleaseProgressResume = (patchValue) => {
+    const patch = isPlainObject(patchValue) ? patchValue : {};
+    const claim = compactProviderSubmitClaimForProgress(patch.provider_submit_claim);
+    const chunkId = trimStr(patch.last_provider_submit_chunk_id || patch.last_provider_chunk_id || claim.chunk_id);
+    return jsonbStripNulls({
+      phase: canonicalExecutePhase(patch.phase),
+      next_required_phase: canonicalExecutePhase(patch.next_required_phase || patch.nextRequiredPhase),
+      last_provider_submit_chunk_id: uuidRe.test(chunkId) ? chunkId : null,
+      provider_submit_stage_last_recorded: trimStr(patch.provider_submit_stage_last_recorded || patch.providerSubmitStageLastRecorded) || null,
+      provider_submit_claim_chunk_id: uuidRe.test(trimStr(claim.chunk_id)) ? trimStr(claim.chunk_id) : null,
+      provider_submit_claimed_count: Number.isFinite(Number(claim.claimed_count)) ? Math.max(0, Math.trunc(Number(claim.claimed_count))) : null,
+      provider_submit_transfer_scope_count: Number.isFinite(Number(claim.transfer_scope_count)) ? Math.max(0, Math.trunc(Number(claim.transfer_scope_count))) : null,
+      provider_submit_transfer_count: Number.isFinite(Number(claim.transfer_count)) ? Math.max(0, Math.trunc(Number(claim.transfer_count))) : null,
+      provider_submission_status: trimStr(claim.provider_submission_status || patch.provider_submission_status || patch.providerSubmissionStatus) || null,
+      transfer_payload_source: trimStr(claim.transfer_payload_source) || null
+    });
+  };
+
+  const jsonByteLength = (value) => {
+    try {
+      const json = JSON.stringify(value == null ? null : value);
+      if (typeof TextEncoder !== 'undefined') return new TextEncoder().encode(json).length;
+      return json.length;
+    } catch {
+      try { return String(value == null ? '' : value).length; } catch { return null; }
+    }
+  };
+
+  const compactErrorMessage = (error, maxLength = 700) => {
+    const text = trimStr(error && error.message ? error.message : error);
+    return text.length > maxLength ? `${text.slice(0, maxLength)}…` : text;
+  };
+
+  const isReleaseLeaseRpcError = (error) => {
+    const message = compactErrorMessage(error, 1200);
+    const fn = trimStr(error && error.fn);
+    const status = Number(error && error.status);
+    const releaseNamed = fn === 'banking_pay_operation_release_lease' || /banking_pay_operation_release_lease/i.test(message);
+    const timeoutOrReleaseFailure = status === 408
+      || /timeout|timed out|lock timeout|statement timeout|canceling statement|BANKING_PAY_OPERATION_RELEASE_/i.test(message);
+    return releaseNamed && timeoutOrReleaseFailure;
+  };
+
+  const normaliseRetryPhaseAfterReleaseFailure = (diagnostic) => {
+    const source = isPlainObject(diagnostic) ? diagnostic : {};
+    const resume = isPlainObject(source.release_progress_resume) ? source.release_progress_resume : {};
+    const candidates = [
+      source.intended_next_phase,
+      source.next_phase,
+      source.requested_phase,
+      resume.next_required_phase,
+      resume.phase,
+      progressJson.next_required_phase,
+      progressJson.phase,
+      currentPhase
+    ];
+    for (const candidate of candidates) {
+      const phase = canonicalExecutePhase(candidate);
+      if (!phase) continue;
+      if (phaseRank(phase) >= 0) return phase;
+    }
+    return currentPhase || 'PREPARE_TRANSFER_CHUNKS';
+  };
+
+  const buildReleaseRpcFailureDiagnostic = ({
+    error,
+    phaseBefore,
+    intendedNextPhase,
+    releaseState,
+    elapsedMs,
+    timeoutMs,
+    progressPatch,
+    resultPatch,
+    errorPatch,
+    classification,
+    providerEvidence
+  } = {}) => {
+    const inherited = isPlainObject(error && error.bankingPayReleaseDiagnostic) ? error.bankingPayReleaseDiagnostic : {};
+    const provider = isPlainObject(providerEvidence) ? providerEvidence : (isPlainObject(inherited.provider_evidence_state) ? inherited.provider_evidence_state : null);
+    return jsonbStripNulls({
+      rpc_name: 'banking_pay_operation_release_lease',
+      operation_id: operationId,
+      pay_batch_id: payBatchId,
+      phase_before_failure: phaseBefore || inherited.phase_before_failure || currentPhase,
+      intended_next_phase: intendedNextPhase || inherited.intended_next_phase || null,
+      release_state: releaseState || inherited.release_state || null,
+      elapsed_ms: Number.isFinite(Number(elapsedMs)) ? Math.max(0, Math.trunc(Number(elapsedMs))) : (Number.isFinite(Number(inherited.elapsed_ms)) ? Number(inherited.elapsed_ms) : null),
+      timeout_ms: Number.isFinite(Number(timeoutMs)) ? Math.max(0, Math.trunc(Number(timeoutMs))) : (Number.isFinite(Number(inherited.timeout_ms)) ? Number(inherited.timeout_ms) : null),
+      error_status: Number.isFinite(Number(error && error.status)) ? Number(error.status) : (Number.isFinite(Number(inherited.error_status)) ? Number(inherited.error_status) : null),
+      error_name: trimStr(error && error.name) || inherited.error_name || null,
+      error_fn: trimStr(error && error.fn) || inherited.error_fn || null,
+      error_message: compactErrorMessage(error, 700) || inherited.error_message || null,
+      existing_progress_json_bytes: jsonByteLength(progressJson),
+      progress_patch_bytes: jsonByteLength(progressPatch),
+      result_patch_bytes: jsonByteLength(resultPatch),
+      error_json_bytes: jsonByteLength(errorPatch),
+      release_progress_resume: Object.keys(buildReleaseProgressResume(progressPatch)).length ? buildReleaseProgressResume(progressPatch) : (isPlainObject(inherited.release_progress_resume) ? inherited.release_progress_resume : null),
+      provider_evidence_state: provider,
+      classification: classification || inherited.classification || null,
+      classified_at_utc: new Date().toISOString()
+    });
+  };
+
+  const countRestRowsForProviderEvidence = async (tableAndQuery) => {
+    const separator = String(tableAndQuery).includes('?') ? '&' : '?';
+    const response = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/${tableAndQuery}${separator}limit=1`, { preferExactCount: true });
+    const total = Number(response && response.total);
+    if (Number.isFinite(total)) return Math.max(0, Math.trunc(total));
+    return Array.isArray(response && response.rows) ? response.rows.length : 0;
+  };
+
+  const readProviderDispatchEvidence = async (baseDiagnostic = {}) => {
+    const opFilter = `operation_id=eq.${enc(operationId)}&pay_batch_id=eq.${enc(payBatchId)}`;
+    const batchFilter = `pay_batch_id=eq.${enc(payBatchId)}`;
+    const countSpecs = [
+      ['transfer_scope_count', `banking_pay_operation_transfer_scope?select=id&${opFilter}`],
+      ['local_transfer_prepared_count', `banking_pay_operation_transfer_scope?select=id&${opFilter}&pay_bank_transfer_id=not.is.null`],
+      ['provider_submit_ready_count', `banking_pay_operation_transfer_scope?select=id&${opFilter}&provider_submit_ready=is.true`],
+      ['provider_submit_attempt_count', `banking_pay_operation_transfer_scope?select=id&${opFilter}&provider_submit_attempt_count=gt.0`],
+      ['provider_claimed_state_count', `banking_pay_operation_transfer_scope?select=id&${opFilter}&provider_submit_state=eq.CLAIMED`],
+      ['provider_request_preparing_state_count', `banking_pay_operation_transfer_scope?select=id&${opFilter}&provider_submit_state=eq.REQUEST_PREPARING`],
+      ['provider_request_prepared_count', `banking_pay_operation_transfer_scope?select=id&${opFilter}&provider_request_prepared_at_utc=not.is.null`],
+      ['provider_request_sending_count', `banking_pay_operation_transfer_scope?select=id&${opFilter}&provider_request_sending_at_utc=not.is.null`],
+      ['provider_request_sent_count', `banking_pay_operation_transfer_scope?select=id&${opFilter}&provider_request_sent_at_utc=not.is.null`],
+      ['provider_response_count', `banking_pay_operation_transfer_scope?select=id&${opFilter}&provider_response_at_utc=not.is.null`],
+      ['provider_transaction_count', `banking_pay_operation_transfer_scope?select=id&${opFilter}&provider_transaction_id=not.is.null`],
+      ['provider_ambiguous_state_count', `banking_pay_operation_transfer_scope?select=id&${opFilter}&provider_submit_state=in.(REQUEST_SENDING,REQUEST_SENT_LOCAL,PROVIDER_ACCEPTED,PROVIDER_REJECTED,PROVIDER_UNKNOWN,REVIEW_REQUIRED,CHUNK_FINALISED)`],
+      ['materialised_transfer_count', `pay_bank_transfers?select=id&${batchFilter}`],
+      ['pending_transfer_count', `pay_bank_transfers?select=id&${batchFilter}&status=eq.PENDING`],
+      ['rail_tx_id_count', `pay_bank_transfers?select=id&${batchFilter}&rail_tx_id=not.is.null`],
+      ['rail_state_count', `pay_bank_transfers?select=id&${batchFilter}&rail_state=not.is.null`],
+      ['provider_status_evidence_count', `pay_bank_transfers?select=id&${batchFilter}&status=in.(PROCESSING,UNKNOWN,COMPLETED,FAILED,DECLINED,REJECTED,RETURNED,REVERTED,SUBMISSION_FAILED)`],
+      ['provider_event_count', `pay_bank_transfer_events?select=id&${batchFilter}&event_source=in.(PROVIDER_WEBHOOK,PROVIDER_POLL,PROVIDER_RESPONSE)`],
+      ['provider_event_transaction_count', `pay_bank_transfer_events?select=id&${batchFilter}&provider_transaction_id=not.is.null`],
+      ['provider_event_request_count', `pay_bank_transfer_events?select=id&${batchFilter}&provider_request_id=not.is.null`]
+    ];
+    const counts = {};
+    const readErrors = [];
+    await Promise.all(countSpecs.map(async ([key, path]) => {
+      try {
+        counts[key] = await countRestRowsForProviderEvidence(path);
+      } catch (countError) {
+        counts[key] = null;
+        readErrors.push({ key, message: compactErrorMessage(countError, 240) });
+      }
+    }));
+
+    const countValue = (key) => Number.isFinite(Number(counts[key])) ? Math.max(0, Math.trunc(Number(counts[key]))) : 0;
+    const providerSubmitAttemptCount = countValue('provider_submit_attempt_count');
+    const providerClaimedStateCount = countValue('provider_claimed_state_count');
+    const providerRequestPreparingStateCount = countValue('provider_request_preparing_state_count');
+    const providerRequestPreparedCount = countValue('provider_request_prepared_count');
+    const providerDispatchEvidencePresent = countValue('provider_request_sending_count') > 0
+      || countValue('provider_request_sent_count') > 0
+      || countValue('provider_response_count') > 0
+      || countValue('provider_transaction_count') > 0
+      || countValue('provider_ambiguous_state_count') > 0
+      || countValue('rail_tx_id_count') > 0
+      || countValue('rail_state_count') > 0
+      || countValue('provider_status_evidence_count') > 0
+      || countValue('provider_event_count') > 0
+      || countValue('provider_event_transaction_count') > 0
+      || countValue('provider_event_request_count') > 0;
+    const providerSubmitAttemptEvidencePresent = providerSubmitAttemptCount > 0;
+    const providerCallStarted = providerDispatchEvidencePresent || providerSubmitAttemptEvidencePresent;
+    const providerClaimOrPrepareOnly = providerCallStarted !== true && (providerClaimedStateCount > 0
+      || providerRequestPreparingStateCount > 0
+      || providerRequestPreparedCount > 0);
+
+    return jsonbStripNulls({
+      evidence_read_ok: readErrors.length === 0,
+      provider_call_started: providerCallStarted,
+      provider_dispatch_evidence_present: providerDispatchEvidencePresent,
+      provider_submit_attempt_evidence_present: providerSubmitAttemptEvidencePresent,
+      provider_ambiguity_evidence_present: providerCallStarted,
+      provider_claim_or_prepare_only: providerClaimOrPrepareOnly,
+      provider_request_sending_present: countValue('provider_request_sending_count') > 0,
+      provider_request_sent_present: countValue('provider_request_sent_count') > 0,
+      provider_response_present: countValue('provider_response_count') > 0,
+      provider_transaction_present: countValue('provider_transaction_count') > 0,
+      rail_tx_id_present: countValue('rail_tx_id_count') > 0,
+      rail_state_present: countValue('rail_state_count') > 0,
+      local_transfer_prepared: countValue('local_transfer_prepared_count') > 0,
+      transfer_scope_count: countValue('transfer_scope_count'),
+      local_transfer_prepared_count: countValue('local_transfer_prepared_count'),
+      provider_submit_ready_count: countValue('provider_submit_ready_count'),
+      provider_submit_attempt_count: providerSubmitAttemptCount,
+      provider_claimed_state_count: providerClaimedStateCount,
+      provider_request_preparing_state_count: providerRequestPreparingStateCount,
+      provider_request_prepared_count: providerRequestPreparedCount,
+      materialised_transfer_count: countValue('materialised_transfer_count'),
+      pending_transfer_count: countValue('pending_transfer_count'),
+      provider_status_evidence_count: countValue('provider_status_evidence_count'),
+      provider_event_count: countValue('provider_event_count'),
+      provider_event_transaction_count: countValue('provider_event_transaction_count'),
+      provider_event_request_count: countValue('provider_event_request_count'),
+      evidence_read_error_count: readErrors.length,
+      evidence_read_errors: readErrors.slice(0, 3),
+      diagnostic_source: 'advanceBankingPayExecuteOperation',
+      diagnostic_reason: trimStr(baseDiagnostic && baseDiagnostic.reason) || null
+    });
+  };
+
   const scheduledAtMs = () => {
     const raw = trimStr(inputJson.scheduled_at_utc || inputJson.scheduledAtUtc || operation.scheduled_at_utc || operation.scheduledAtUtc);
     if (!raw) return null;
@@ -24505,11 +24816,99 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
     const targetId = trimStr(targetOperationId);
     if (!uuidRe.test(targetId) || typeof sbFetch !== 'function' || !env || !env.SUPABASE_URL) return {};
     try {
-      const operationRes = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/banking_pay_operations?id=eq.${enc(targetId)}&select=id,operation_type,status,phase,progress_json,result_json,error_json&limit=1`, false);
+      const operationRes = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/banking_pay_operations?id=eq.${enc(targetId)}&select=id,operation_type,status,phase,runner_state,requires_user_action,resume_reason,progress_json,result_json,error_json,failed_at_utc,lease_owner,lease_expires_at_utc,locked_by,lock_expires_at_utc,run_after_utc,updated_at_utc&limit=1`,
+        false
+      );
       const rows = operationRes && Array.isArray(operationRes.rows) ? operationRes.rows : [];
       return isPlainObject(rows[0]) ? rows[0] : {};
     } catch {
       return {};
+    }
+  };
+
+  const readBoolForRecoveryVerification = (value, fallback = false) => {
+    if (value === true || value === false) return value;
+    const text = trimStr(value).toLowerCase();
+    if (['true', 't', '1', 'yes', 'y', 'on'].includes(text)) return true;
+    if (['false', 'f', '0', 'no', 'n', 'off'].includes(text)) return false;
+    return fallback;
+  };
+
+  const buildRetryableRecoveryPersistenceCheck = (row, expectedPhase) => {
+    const source = isPlainObject(row) ? row : {};
+    const status = upper(source.status || source.operation_status);
+    const runnerState = upper(source.runner_state || source.runnerState);
+    const actualPhase = canonicalExecutePhase(source.phase || source.operation_phase);
+    const intendedPhase = canonicalExecutePhase(expectedPhase);
+    const requiresUserAction = readBoolForRecoveryVerification(source.requires_user_action ?? source.requiresUserAction, false);
+    const errorJson = isPlainObject(source.error_json) ? source.error_json : (isPlainObject(source.errorJson) ? source.errorJson : null);
+    const errorJsonPresent = !!(errorJson && Object.keys(errorJson).length);
+    const progressForCheck = isPlainObject(source.progress_json) ? source.progress_json : (isPlainObject(source.progressJson) ? source.progressJson : {});
+    const progressErrorKeyPresent = Object.prototype.hasOwnProperty.call(progressForCheck, 'error');
+    const failedAtUtc = trimStr(source.failed_at_utc || source.failedAtUtc);
+    const leaseOwner = trimStr(source.lease_owner || source.leaseOwner || source.locked_by || source.lockedBy);
+    const statusOk = ['RUNNING', 'WAITING'].includes(status);
+    const runnerOk = runnerState === 'RUNNABLE';
+    const phaseOk = !!intendedPhase && actualPhase === intendedPhase;
+    const requiresOk = requiresUserAction === false;
+    const errorCleared = errorJsonPresent !== true;
+    const progressErrorCleared = progressErrorKeyPresent !== true;
+    const failedCleared = !failedAtUtc;
+    const currentWorkerLeaseReleased = !leaseOwner || leaseOwner !== lockOwner;
+    return jsonbStripNulls({
+      ok: statusOk && runnerOk && phaseOk && requiresOk && errorCleared && progressErrorCleared && failedCleared && currentWorkerLeaseReleased,
+      status,
+      status_ok: statusOk,
+      runner_state: runnerState,
+      runner_state_ok: runnerOk,
+      phase: actualPhase || null,
+      intended_phase: intendedPhase || null,
+      phase_ok: phaseOk,
+      requires_user_action: requiresUserAction,
+      requires_user_action_ok: requiresOk,
+      error_json_present: errorJsonPresent,
+      error_json_cleared: errorCleared,
+      progress_json_error_key_present: progressErrorKeyPresent,
+      progress_json_error_cleared: progressErrorCleared,
+      failed_at_utc_present: !!failedAtUtc,
+      failed_at_utc_cleared: failedCleared,
+      lease_owner_present: !!leaseOwner,
+      current_worker_lease_released: currentWorkerLeaseReleased,
+      current_worker_lease_still_present: !!leaseOwner && leaseOwner === lockOwner,
+      run_after_utc: trimStr(source.run_after_utc || source.runAfterUtc) || null,
+      updated_at_utc: trimStr(source.updated_at_utc || source.updatedAtUtc) || null
+    });
+  };
+
+  const readProviderSubmitChunkPayload = async (chunkIdValue) => {
+    const chunkId = trimStr(chunkIdValue);
+    if (!uuidRe.test(chunkId) || typeof sbFetch !== 'function' || !env || !env.SUPABASE_URL) {
+      return { ok: false, chunk_id: uuidRe.test(chunkId) ? chunkId : null, payload_json: {}, result_json: {}, reason: 'PROVIDER_SUBMIT_CHUNK_ID_OR_FETCH_MISSING' };
+    }
+    try {
+      const chunkRes = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/banking_pay_operation_chunks?id=eq.${enc(chunkId)}&operation_id=eq.${enc(operationId)}&phase=eq.SUBMIT_PROVIDER_TRANSFERS&chunk_type=eq.TRANSFER_SUBMIT&select=id,operation_id,phase,chunk_type,status,payload_json,result_json,locked_by,lock_expires_at_utc&limit=1`,
+        false
+      );
+      const rows = chunkRes && Array.isArray(chunkRes.rows) ? chunkRes.rows : [];
+      const row = isPlainObject(rows[0]) ? rows[0] : {};
+      const payload = isPlainObject(row.payload_json) ? row.payload_json : {};
+      return {
+        ok: !!row.id,
+        chunk_id: trimStr(row.id) || chunkId,
+        status: trimStr(row.status) || null,
+        locked_by: trimStr(row.locked_by) || null,
+        lock_expires_at_utc: trimStr(row.lock_expires_at_utc) || null,
+        payload_json: payload,
+        result_json: isPlainObject(row.result_json) ? row.result_json : {},
+        transfer_scope_count: toArray(payload.transfer_scope_ids).length,
+        transfer_count: toArray(payload.transfers).length
+      };
+    } catch (chunkReadError) {
+      return { ok: false, chunk_id: chunkId, payload_json: {}, result_json: {}, error: compactErrorMessage(chunkReadError, 300) };
     }
   };
 
@@ -25588,18 +25987,43 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
         return moreWork('APPLY_RAIL_UPDATES', { status_text: 'No ready provider-transfer scope rows remain to claim.', provider_submit_claim: claim });
       }
       await recordProviderStage(claim, 'CLAIMED', { provider_submission_status: 'CLAIMED_NOT_PROVIDER_CALLED_YET' });
+      const compactClaim = compactProviderSubmitClaimForProgress(claim);
       return moreWork('SEND_PROVIDER_CHUNK', {
         status_text: 'Claimed one provider queue chunk. Provider submission will run in the next bounded advance.',
-        provider_submit_claim: claim,
+        provider_submit_claim: compactClaim,
         last_provider_submit_chunk_id: trimStr(claim.chunk_id),
-        provider_submit_stage_last_recorded: 'CLAIMED'
+        provider_submit_stage_last_recorded: 'CLAIMED',
+        provider_submit_transfer_scope_count: Number.isFinite(Number(compactClaim.transfer_scope_count)) ? compactClaim.transfer_scope_count : null,
+        provider_submit_transfer_count: Number.isFinite(Number(compactClaim.transfer_count)) ? compactClaim.transfer_count : null,
+        provider_submit_transfer_payload_source: 'banking_pay_operation_chunks.payload_json'
       });
     }
 
     if (['SEND_PROVIDER_CHUNK', 'REQUEST_PROVIDER_SEND'].includes(currentPhase)) {
-      const claim = isPlainObject(progressJson.provider_submit_claim) ? progressJson.provider_submit_claim : {};
-      const chunkId = trimStr(progressJson.last_provider_submit_chunk_id || progressJson.last_provider_chunk_id || claim.chunk_id || options.chunkId);
+      const persistedClaim = isPlainObject(progressJson.provider_submit_claim) ? progressJson.provider_submit_claim : {};
+      const chunkId = trimStr(progressJson.last_provider_submit_chunk_id || progressJson.last_provider_chunk_id || persistedClaim.chunk_id || options.chunkId);
       if (!uuidRe.test(chunkId)) return moreWork('SUBMIT_PROVIDER_TRANSFERS', { status_text: 'No claimed provider chunk is available; claiming will be retried.' });
+      const chunkPayloadRead = await readProviderSubmitChunkPayload(chunkId);
+      const chunkPayload = isPlainObject(chunkPayloadRead.payload_json) ? chunkPayloadRead.payload_json : {};
+      const chunkTransfers = toArray(chunkPayload.transfers);
+      const persistedTransfers = toArray(persistedClaim.transfers);
+      const chunkTransferScopeIds = toArray(chunkPayload.transfer_scope_ids).map((value) => trimStr(value)).filter((value) => uuidRe.test(value));
+      const persistedTransferScopeIds = toArray(persistedClaim.transfer_scope_ids).map((value) => trimStr(value)).filter((value) => uuidRe.test(value));
+      const claim = Object.assign({}, chunkPayload, persistedClaim, {
+        chunk_id: chunkId,
+        transfer_scope_ids: persistedTransferScopeIds.length ? persistedTransferScopeIds : chunkTransferScopeIds,
+        transfers: persistedTransfers.length ? persistedTransfers : chunkTransfers
+      });
+      if (chunkPayloadRead.ok !== true && persistedTransfers.length <= 0 && chunkTransfers.length <= 0) {
+        return moreWork('SEND_PROVIDER_CHUNK', {
+          status_text: 'Claimed provider chunk payload could not be read; provider dispatch has not started and will be retried.',
+          last_provider_submit_chunk_id: chunkId,
+          provider_submit_stage_last_recorded: trimStr(progressJson.provider_submit_stage_last_recorded) || 'CLAIMED',
+          provider_submit_chunk_payload_read_ok: false,
+          provider_submit_chunk_payload_read_error: trimStr(chunkPayloadRead.error || chunkPayloadRead.reason) || 'CHUNK_PAYLOAD_NOT_READABLE',
+          provider_submit_transfer_payload_source: 'banking_pay_operation_chunks.payload_json'
+        }, 5, 'PROVIDER_SUBMIT_CHUNK_PAYLOAD_RETRY');
+      }
       const lastProviderStage = upper(
         progressJson.provider_submit_stage_last_recorded
         || progressJson.providerSubmitStageLastRecorded
@@ -26048,23 +26472,244 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
 
     return reviewRequired(currentPhase, 'UNKNOWN_EXECUTE_PHASE', `Unknown payment execution phase: ${currentPhase}`, { phase: currentPhase });
   } catch (error) {
-    try {
-      await rpc('pay_execute_operation_cleanup_failed_local_artifacts', {
-        p_operation_id: operationId,
-        p_actor_user_id: actorUserId,
-        p_failure_phase: currentPhase,
-        p_failure_error_json: { message: String(error && error.message ? error.message : error), name: error && error.name ? String(error.name) : null },
-        p_dry_run: false
-      }, 'pay_execute_operation_cleanup_failed_local_artifacts');
-    } catch {}
-    return reviewRequired(currentPhase, 'PAYMENT_EXECUTE_OPERATION_FAILED', 'Payment execution operation failed and needs review.', {
-      error: String(error && error.message ? error.message : error),
-      error_name: error && error.name ? String(error.name) : null
+    const releaseFailure = isReleaseLeaseRpcError(error);
+    const baseReleaseDiagnostic = buildReleaseRpcFailureDiagnostic({
+      error,
+      phaseBefore: currentPhase,
+      intendedNextPhase: error && error.bankingPayReleaseDiagnostic ? error.bankingPayReleaseDiagnostic.intended_next_phase : null,
+      releaseState: error && error.bankingPayReleaseDiagnostic ? error.bankingPayReleaseDiagnostic.release_state : null,
+      elapsedMs: error && error.bankingPayReleaseDiagnostic ? error.bankingPayReleaseDiagnostic.elapsed_ms : null,
+      timeoutMs: error && error.bankingPayReleaseDiagnostic ? error.bankingPayReleaseDiagnostic.timeout_ms : null,
+      progressPatch: null,
+      resultPatch: null,
+      errorPatch: null,
+      classification: releaseFailure ? 'RELEASE_LEASE_FAILURE_CLASSIFICATION_PENDING' : 'PAYMENT_EXECUTE_OPERATION_FAILED',
+      providerEvidence: null
+    });
+    let providerEvidence = null;
+
+    if (releaseFailure) {
+      try {
+        providerEvidence = await readProviderDispatchEvidence({ reason: 'release_lease_failure_catch' });
+      } catch (evidenceError) {
+        providerEvidence = {
+          evidence_read_ok: false,
+          provider_call_started: true,
+          evidence_read_error_count: 1,
+          evidence_read_errors: [{ key: 'provider_dispatch_evidence', message: compactErrorMessage(evidenceError, 240) }],
+          diagnostic_source: 'advanceBankingPayExecuteOperation'
+        };
+      }
+    }
+
+    if (releaseFailure && providerEvidence && providerEvidence.evidence_read_ok === true && providerEvidence.provider_call_started !== true) {
+      const retryPhase = normaliseRetryPhaseAfterReleaseFailure(baseReleaseDiagnostic);
+      const retryDiagnostic = buildReleaseRpcFailureDiagnostic({
+        error,
+        phaseBefore: currentPhase,
+        intendedNextPhase: retryPhase,
+        releaseState: 'MORE_WORK',
+        elapsedMs: baseReleaseDiagnostic.elapsed_ms,
+        timeoutMs: baseReleaseDiagnostic.timeout_ms,
+        progressPatch: null,
+        resultPatch: null,
+        errorPatch: null,
+        classification: 'RELEASE_TIMEOUT_BEFORE_PROVIDER_CALL_RETRYABLE',
+        providerEvidence
+      });
+      const releaseResume = isPlainObject(retryDiagnostic.release_progress_resume) ? retryDiagnostic.release_progress_resume : {};
+      const resumeChunkId = trimStr(releaseResume.last_provider_submit_chunk_id || releaseResume.provider_submit_claim_chunk_id);
+      const retryProgressPatch = {
+        status_text: 'Release lease failed before provider dispatch; retrying orchestration without user review.',
+        last_message: 'Release lease failed before provider dispatch; retrying orchestration without user review.',
+        code: 'RELEASE_TIMEOUT_BEFORE_PROVIDER_CALL_RETRYABLE',
+        phase: retryPhase,
+        next_required_phase: retryPhase,
+        retryable_orchestration_issue: true,
+        provider_ambiguity: false,
+        review_required: false,
+        requires_user_action: false,
+        last_rpc_failure: retryDiagnostic,
+        release_timeout_before_provider_call: true,
+        release_failure_classification: 'RETRYABLE_ORCHESTRATION',
+        release_failure_previous_phase: currentPhase,
+        release_failure_intended_next_phase: retryPhase,
+        release_failure_checked_provider_evidence: true,
+        release_failure_reclassified_at_utc: new Date().toISOString(),
+        last_provider_submit_chunk_id: uuidRe.test(resumeChunkId) ? resumeChunkId : undefined,
+        provider_submit_stage_last_recorded: trimStr(releaseResume.provider_submit_stage_last_recorded) || undefined,
+        provider_submit_claim: uuidRe.test(resumeChunkId)
+          ? compactProviderSubmitClaimForProgress({
+            chunk_id: resumeChunkId,
+            claimed_count: releaseResume.provider_submit_claimed_count,
+            transfer_scope_ids: [],
+            transfer_count: releaseResume.provider_submit_transfer_count,
+            provider_submission_status: releaseResume.provider_submission_status || 'NO_PROVIDER_SUBMISSION_ATTEMPTED'
+          })
+          : undefined
+      };
+      let releaseRestore = null;
+      let releaseRestoreError = null;
+      let saveProgressFallback = null;
+
+      try {
+        releaseRestore = await rpc('banking_pay_operation_release_lease', {
+          p_operation_id: operationId,
+          p_lease_owner: lockOwner,
+          p_release_state: 'MORE_WORK',
+          p_run_after_delay_seconds: 5,
+          p_progress_patch_json: retryProgressPatch,
+          p_result_patch_json: null,
+          p_error_json: null,
+          p_resume_reason: 'RELEASE_TIMEOUT_BEFORE_PROVIDER_CALL_RETRYABLE',
+          p_actor_user_id: actorUserId
+        }, 'banking_pay_operation_release_lease');
+      } catch (restoreError) {
+        releaseRestoreError = buildReleaseRpcFailureDiagnostic({
+          error: restoreError,
+          phaseBefore: currentPhase,
+          intendedNextPhase: retryPhase,
+          releaseState: 'MORE_WORK',
+          elapsedMs: null,
+          timeoutMs: limitFromConfig('rpc_timeout_ms', 15000, 1000, 20000),
+          progressPatch: retryProgressPatch,
+          resultPatch: null,
+          errorPatch: null,
+          classification: 'RELEASE_TIMEOUT_BEFORE_PROVIDER_CALL_RETRYABLE_RESTORE_FAILED',
+          providerEvidence
+        });
+        try {
+          saveProgressFallback = await rpc('banking_pay_operation_save_progress', {
+            p_operation_id: operationId,
+            p_status: 'RUNNING',
+            p_phase: retryPhase,
+            p_total_units: null,
+            p_completed_units: null,
+            p_failed_units: null,
+            p_current_chunk_index: null,
+            p_chunk_count: null,
+            p_progress_json: Object.assign({}, retryProgressPatch, { release_restore_error: releaseRestoreError }),
+            p_extend_lock_seconds: null
+          }, 'banking_pay_operation_save_progress');
+        } catch (saveError) {
+          saveProgressFallback = { ok: false, error: compactErrorMessage(saveError, 400) };
+        }
+      }
+
+      let latest = {};
+      let durableRecoveryState = { ok: false, read_ok: false, operation_id: operationId, intended_phase: retryPhase };
+      try {
+        latest = await fetchOperationRawById(operationId);
+        durableRecoveryState = Object.assign(
+          { read_ok: Object.keys(latest).length > 0, operation_id: operationId },
+          buildRetryableRecoveryPersistenceCheck(latest, retryPhase)
+        );
+      } catch (latestReadError) {
+        durableRecoveryState = {
+          ok: false,
+          read_ok: false,
+          operation_id: operationId,
+          intended_phase: retryPhase,
+          read_error: compactErrorMessage(latestReadError, 300)
+        };
+      }
+
+      const latestPublic = publicPayload(latest);
+      if (durableRecoveryState.ok !== true) {
+        return Object.assign({}, latestPublic, {
+          ok: false,
+          status: latest.status || latestPublic.status || null,
+          phase: latest.phase || latestPublic.phase || retryPhase,
+          runner_state: latest.runner_state || latestPublic.runner_state || null,
+          requires_user_action: latest.requires_user_action === true || latestPublic.requires_user_action === true,
+          review_required: latest.requires_user_action === true || latestPublic.requires_user_action === true,
+          retryable_orchestration_issue: false,
+          pre_provider_retryable_classification: true,
+          provider_ambiguity: false,
+          recovery_persist_failed: true,
+          code: 'RELEASE_TIMEOUT_PRE_PROVIDER_RECOVERY_PERSIST_FAILED',
+          message: 'Release timeout was classified as pre-provider retryable, but the operation was not durably restored to RUNNING/WAITING + RUNNABLE with stale error_json/progress_json.error state cleared and the current worker lease released.',
+          release_failure_classification: 'RELEASE_TIMEOUT_PRE_PROVIDER_RECOVERY_PERSIST_FAILED',
+          durable_recovery_state: durableRecoveryState,
+          release: releaseRestore,
+          release_restore_error: releaseRestoreError,
+          save_progress_fallback: saveProgressFallback,
+          last_rpc_failure: Object.assign({}, retryDiagnostic, {
+            classification: 'RELEASE_TIMEOUT_PRE_PROVIDER_RECOVERY_PERSIST_FAILED',
+            durable_recovery_state: durableRecoveryState
+          }),
+          provider_evidence_state: providerEvidence,
+          bounded_advance: true,
+          advanced_phase: currentPhase,
+          next_phase: retryPhase
+        });
+      }
+
+      return Object.assign({}, latestPublic, {
+        ok: true,
+        status: latest.status || latestPublic.status || 'RUNNING',
+        phase: latest.phase || latestPublic.phase || retryPhase,
+        runner_state: latest.runner_state || latestPublic.runner_state || 'RUNNABLE',
+        requires_user_action: false,
+        review_required: false,
+        retryable_orchestration_issue: true,
+        provider_ambiguity: false,
+        recovery_persisted: true,
+        durable_recovery_state: durableRecoveryState,
+        release_failure_classification: 'RETRYABLE_ORCHESTRATION',
+        release: releaseRestore,
+        release_restore_error: releaseRestoreError,
+        save_progress_fallback: saveProgressFallback,
+        last_rpc_failure: retryDiagnostic,
+        provider_evidence_state: providerEvidence,
+        bounded_advance: true,
+        advanced_phase: currentPhase,
+        next_phase: retryPhase,
+        already_released_after_advance: true
+      });
+    }
+
+    if (!releaseFailure) {
+      try {
+        await rpc('pay_execute_operation_cleanup_failed_local_artifacts', {
+          p_operation_id: operationId,
+          p_actor_user_id: actorUserId,
+          p_failure_phase: currentPhase,
+          p_failure_error_json: { message: String(error && error.message ? error.message : error), name: error && error.name ? String(error.name) : null },
+          p_dry_run: false
+        }, 'pay_execute_operation_cleanup_failed_local_artifacts');
+      } catch {}
+    }
+
+    const reviewCode = releaseFailure && providerEvidence && providerEvidence.provider_call_started === true
+      ? 'PROVIDER_AMBIGUITY_AFTER_PROVIDER_CALL_REVIEW_REQUIRED'
+      : 'PAYMENT_EXECUTE_OPERATION_FAILED';
+    const reviewMessage = releaseFailure && providerEvidence && providerEvidence.provider_call_started === true
+      ? 'Payment execution release failed after provider evidence was detected and needs review.'
+      : 'Payment execution operation failed and needs review.';
+    const reviewDiagnostic = buildReleaseRpcFailureDiagnostic({
+      error,
+      phaseBefore: currentPhase,
+      intendedNextPhase: baseReleaseDiagnostic.intended_next_phase || currentPhase,
+      releaseState: 'REVIEW_REQUIRED',
+      elapsedMs: baseReleaseDiagnostic.elapsed_ms,
+      timeoutMs: baseReleaseDiagnostic.timeout_ms,
+      progressPatch: null,
+      resultPatch: null,
+      errorPatch: null,
+      classification: releaseFailure && providerEvidence && providerEvidence.provider_call_started === true ? 'PROVIDER_AMBIGUITY_REVIEW_REQUIRED' : 'PAYMENT_EXECUTE_OPERATION_FAILED',
+      providerEvidence
+    });
+
+    return reviewRequired(currentPhase, reviewCode, reviewMessage, {
+      error: compactErrorMessage(error, 700),
+      error_name: error && error.name ? String(error.name) : null,
+      last_rpc_failure: reviewDiagnostic,
+      provider_evidence_state: providerEvidence,
+      release_failure_checked_provider_evidence: releaseFailure === true
     });
   }
 }
-
-
 
 
 
@@ -26722,7 +27367,6 @@ async function bankingPayOperationsCronTick(env, opts = {}) {
   return summary;
 }
 
-
 async function claimAndAdvanceOneBankingPayOperation(env, opts = {}) {
   const trimText = (value) => String(value == null ? '' : value).trim();
   const upperText = (value) => trimText(value).toUpperCase();
@@ -27019,6 +27663,366 @@ async function claimAndAdvanceOneBankingPayOperation(env, opts = {}) {
     }
     return out;
   };
+
+  const jsonByteLength = (value) => {
+    try {
+      const json = JSON.stringify(value == null ? null : value);
+      if (typeof TextEncoder !== 'undefined') return new TextEncoder().encode(json).length;
+      return json.length;
+    } catch {
+      try { return String(value == null ? '' : value).length; } catch { return null; }
+    }
+  };
+
+  const stripNullishObject = (value) => {
+    if (!asPlainObject(value)) return {};
+    const out = {};
+    for (const [key, entry] of Object.entries(value)) {
+      if (entry === null || entry === undefined) continue;
+      if (asPlainObject(entry)) {
+        const nested = stripNullishObject(entry);
+        if (Object.keys(nested).length) out[key] = nested;
+      } else {
+        out[key] = entry;
+      }
+    }
+    return out;
+  };
+
+  const compactErrorMessage = (error, maxLength = 700) => {
+    const text = trimText(error && error.message ? error.message : error);
+    return text.length > maxLength ? `${text.slice(0, maxLength)}…` : text;
+  };
+
+  const isReleaseLeaseRpcError = (error) => {
+    const message = compactErrorMessage(error, 1200);
+    const fn = trimText(error && error.fn);
+    const status = Number(error && error.status);
+    const releaseNamed = fn === 'banking_pay_operation_release_lease' || /banking_pay_operation_release_lease/i.test(message);
+    const timeoutOrReleaseFailure = status === 408
+      || /timeout|timed out|lock timeout|statement timeout|canceling statement|BANKING_PAY_OPERATION_RELEASE_/i.test(message);
+    return releaseNamed && timeoutOrReleaseFailure;
+  };
+
+  const findReleaseLeaseFailureInPayload = (payload) => {
+    const root = asPlainObject(payload);
+    if (!Object.keys(root).length) return null;
+    const stack = [root];
+    const seen = new WeakSet();
+    let inspected = 0;
+    while (stack.length && inspected < 200) {
+      const node = stack.pop();
+      inspected += 1;
+      if (!node || typeof node !== 'object') continue;
+      if (seen.has(node)) continue;
+      seen.add(node);
+      const message = compactErrorMessage(node.message || node.error_message || node.error || node.status_text || node.code || '', 1200);
+      const fn = trimText(node.fn || node.rpc_name || node.function_name);
+      const status = Number(node.status || node.error_status);
+      if ((fn === 'banking_pay_operation_release_lease' || /banking_pay_operation_release_lease/i.test(message))
+        && (status === 408 || /timeout|timed out|lock timeout|statement timeout|BANKING_PAY_OPERATION_RELEASE_/i.test(message))) {
+        return node;
+      }
+      for (const child of Object.values(node)) {
+        if (child && typeof child === 'object') stack.push(child);
+      }
+    }
+    return null;
+  };
+
+  const canonicalReleaseRetryPhase = (value) => {
+    const phase = upperText(value);
+    if (!phase) return '';
+    const aliases = {
+      START: 'VALIDATE_FRESHNESS',
+      SEED_TRANSFER_SCOPES: 'TRANSFER_SCOPE_SEED',
+      PROVIDER_SUBMIT_CLAIM: 'SUBMIT_PROVIDER_TRANSFERS',
+      CLAIM_PROVIDER_SUBMIT: 'SUBMIT_PROVIDER_TRANSFERS',
+      AUTH_START: 'START_AUTHORISATION_PROOF',
+      SCHEDULE_BATCH: 'SCHEDULE_PAYMENT',
+      FINALISE_PROVIDER_SUBMISSION: 'FINALISE_PROVIDER_CHUNK',
+      LOCAL_SETTLEMENT: 'START_LOCAL_SETTLEMENT'
+    };
+    return aliases[phase] || phase;
+  };
+
+  const normaliseReleaseRetryPhase = (diagnostic) => {
+    const source = asPlainObject(diagnostic);
+    const knownExecutePhases = new Set([
+      'INITIALISE',
+      'VALIDATE_FRESHNESS',
+      'FRESHNESS_SCOPE_SEED',
+      'SEED_FRESHNESS_SCOPE',
+      'FRESHNESS_VALIDATE',
+      'VALIDATE_FRESHNESS_CHUNK',
+      'FRESHNESS_RESULT',
+      'TRANSFER_SCOPE_SEED',
+      'SEED_TRANSFER_SCOPE',
+      'TRANSFER_GROUP_SEED_PAGE',
+      'PREPARE_TRANSFER_SCOPE',
+      'SEED_TRANSFER_SCOPE_ITEMS',
+      'TRANSFER_SCOPE_ITEM_MEMBERSHIP_SEED_PAGE',
+      'SEED_TRANSFER_ROLLUP_CHUNKS',
+      'ROLLUP_TRANSFER_SCOPE_ITEMS',
+      'TRANSFER_SCOPE_ROLLUP_PAGE',
+      'SEED_TRANSFER_SUBMIT_CHUNKS',
+      'PREPARE_TRANSFER_CHUNKS',
+      'TRANSFER_CHUNK_PREPARE_PAGE',
+      'PREPARE_BATCH_PROOF',
+      'PREPARE_BATCH',
+      'START_AUTHORISATION_PROOF',
+      'START_AUTHORISATION',
+      'SCHEDULE_PAYMENT',
+      'SUBMIT_PROVIDER_TRANSFERS',
+      'SEND_PROVIDER_CHUNK',
+      'REQUEST_PROVIDER_SEND',
+      'FINALISE_PROVIDER_CHUNK',
+      'APPLY_RAIL_UPDATES',
+      'START_LOCAL_SETTLEMENT',
+      'WAIT_LOCAL_SETTLEMENT',
+      'QUEUE_REMITTANCES',
+      'WAITING_AUTHORISATION',
+      'COMPLETE'
+    ]);
+    const claimProgress = asPlainObject(typeof claim !== 'undefined' ? (claim.progress_json || claim.progressJson || claim.progress) : null);
+    const releaseResume = asPlainObject(source.release_progress_resume);
+    const candidates = [
+      source.intended_next_phase,
+      source.next_phase,
+      source.requested_phase,
+      source.phase_before_failure,
+      releaseResume.next_required_phase,
+      releaseResume.phase,
+      claimProgress.next_required_phase,
+      claimProgress.phase,
+      typeof claim !== 'undefined' ? claim.phase : null
+    ];
+    for (const candidate of candidates) {
+      const phase = canonicalReleaseRetryPhase(candidate);
+      if (!phase) continue;
+      if (knownExecutePhases.has(phase)) return phase;
+    }
+    return 'PREPARE_TRANSFER_CHUNKS';
+  };
+
+  const buildClaimReleaseFailureDiagnostic = ({ failure, providerEvidence, classification, releaseState, retryPhase } = {}) => {
+    const failureObject = asPlainObject(failure);
+    const inherited = asPlainObject(failure && failure.bankingPayReleaseDiagnostic ? failure.bankingPayReleaseDiagnostic : failureObject.last_rpc_failure || failureObject.release_diag || failureObject);
+    const claimProgress = asPlainObject(typeof claim !== 'undefined' ? (claim.progress_json || claim.progressJson || claim.progress) : null);
+    const releaseProgressResume = asPlainObject(inherited.release_progress_resume);
+    return stripNullishObject({
+      rpc_name: 'banking_pay_operation_release_lease',
+      operation_id: typeof claimedOperationId !== 'undefined' ? claimedOperationId : null,
+      pay_batch_id: typeof claimedPayBatchId !== 'undefined' ? claimedPayBatchId : null,
+      phase_before_failure: inherited.phase_before_failure || inherited.previous_phase || (typeof claim !== 'undefined' ? claim.phase : null) || claimProgress.phase || null,
+      intended_next_phase: retryPhase || inherited.intended_next_phase || inherited.next_phase || inherited.requested_phase || claimProgress.next_required_phase || null,
+      release_state: releaseState || inherited.release_state || null,
+      elapsed_ms: Number.isFinite(Number(inherited.elapsed_ms)) ? Math.max(0, Math.trunc(Number(inherited.elapsed_ms))) : null,
+      timeout_ms: Number.isFinite(Number(inherited.timeout_ms)) ? Math.max(0, Math.trunc(Number(inherited.timeout_ms))) : null,
+      error_status: Number.isFinite(Number(failure && failure.status)) ? Number(failure.status) : (Number.isFinite(Number(inherited.error_status)) ? Number(inherited.error_status) : null),
+      error_name: trimText(failure && failure.name) || inherited.error_name || null,
+      error_fn: trimText(failure && failure.fn) || inherited.error_fn || inherited.rpc_name || null,
+      error_message: compactErrorMessage(failure, 700) || inherited.error_message || inherited.message || null,
+      existing_progress_json_bytes: jsonByteLength(claimProgress),
+      release_progress_resume: Object.keys(releaseProgressResume).length ? releaseProgressResume : null,
+      provider_evidence_state: asPlainObject(providerEvidence) ? providerEvidence : null,
+      classification: classification || inherited.classification || null,
+      classified_at_utc: new Date().toISOString()
+    });
+  };
+
+  const countRowsForProviderEvidence = async (tableAndQuery) => {
+    const separator = String(tableAndQuery).includes('?') ? '&' : '?';
+    const response = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/${tableAndQuery}${separator}limit=1`, { preferExactCount: true });
+    const total = Number(response && response.total);
+    if (Number.isFinite(total)) return Math.max(0, Math.trunc(total));
+    return Array.isArray(response && response.rows) ? response.rows.length : 0;
+  };
+
+  const readProviderDispatchEvidenceForClaim = async () => {
+    if (!isUuid(claimedOperationId) || !isUuid(claimedPayBatchId)) {
+      return {
+        evidence_read_ok: false,
+        provider_call_started: true,
+        evidence_read_error_count: 1,
+        evidence_read_errors: [{ key: 'provider_dispatch_evidence', message: 'operation_id or pay_batch_id missing for provider evidence check' }],
+        diagnostic_source: 'claimAndAdvanceOneBankingPayOperation'
+      };
+    }
+    const opFilter = `operation_id=eq.${enc(claimedOperationId)}&pay_batch_id=eq.${enc(claimedPayBatchId)}`;
+    const batchFilter = `pay_batch_id=eq.${enc(claimedPayBatchId)}`;
+    const countSpecs = [
+      ['transfer_scope_count', `banking_pay_operation_transfer_scope?select=id&${opFilter}`],
+      ['local_transfer_prepared_count', `banking_pay_operation_transfer_scope?select=id&${opFilter}&pay_bank_transfer_id=not.is.null`],
+      ['provider_submit_ready_count', `banking_pay_operation_transfer_scope?select=id&${opFilter}&provider_submit_ready=is.true`],
+      ['provider_submit_attempt_count', `banking_pay_operation_transfer_scope?select=id&${opFilter}&provider_submit_attempt_count=gt.0`],
+      ['provider_claimed_state_count', `banking_pay_operation_transfer_scope?select=id&${opFilter}&provider_submit_state=eq.CLAIMED`],
+      ['provider_request_preparing_state_count', `banking_pay_operation_transfer_scope?select=id&${opFilter}&provider_submit_state=eq.REQUEST_PREPARING`],
+      ['provider_request_prepared_count', `banking_pay_operation_transfer_scope?select=id&${opFilter}&provider_request_prepared_at_utc=not.is.null`],
+      ['provider_request_sending_count', `banking_pay_operation_transfer_scope?select=id&${opFilter}&provider_request_sending_at_utc=not.is.null`],
+      ['provider_request_sent_count', `banking_pay_operation_transfer_scope?select=id&${opFilter}&provider_request_sent_at_utc=not.is.null`],
+      ['provider_response_count', `banking_pay_operation_transfer_scope?select=id&${opFilter}&provider_response_at_utc=not.is.null`],
+      ['provider_transaction_count', `banking_pay_operation_transfer_scope?select=id&${opFilter}&provider_transaction_id=not.is.null`],
+      ['provider_ambiguous_state_count', `banking_pay_operation_transfer_scope?select=id&${opFilter}&provider_submit_state=in.(REQUEST_SENDING,REQUEST_SENT_LOCAL,PROVIDER_ACCEPTED,PROVIDER_REJECTED,PROVIDER_UNKNOWN,REVIEW_REQUIRED,CHUNK_FINALISED)`],
+      ['materialised_transfer_count', `pay_bank_transfers?select=id&${batchFilter}`],
+      ['pending_transfer_count', `pay_bank_transfers?select=id&${batchFilter}&status=eq.PENDING`],
+      ['rail_tx_id_count', `pay_bank_transfers?select=id&${batchFilter}&rail_tx_id=not.is.null`],
+      ['rail_state_count', `pay_bank_transfers?select=id&${batchFilter}&rail_state=not.is.null`],
+      ['provider_status_evidence_count', `pay_bank_transfers?select=id&${batchFilter}&status=in.(PROCESSING,UNKNOWN,COMPLETED,FAILED,DECLINED,REJECTED,RETURNED,REVERTED,SUBMISSION_FAILED)`],
+      ['provider_event_count', `pay_bank_transfer_events?select=id&${batchFilter}&event_source=in.(PROVIDER_WEBHOOK,PROVIDER_POLL,PROVIDER_RESPONSE)`],
+      ['provider_event_transaction_count', `pay_bank_transfer_events?select=id&${batchFilter}&provider_transaction_id=not.is.null`],
+      ['provider_event_request_count', `pay_bank_transfer_events?select=id&${batchFilter}&provider_request_id=not.is.null`]
+    ];
+    const counts = {};
+    const readErrors = [];
+    await Promise.all(countSpecs.map(async ([key, path]) => {
+      try {
+        counts[key] = await countRowsForProviderEvidence(path);
+      } catch (countError) {
+        counts[key] = null;
+        readErrors.push({ key, message: compactErrorMessage(countError, 240) });
+      }
+    }));
+    const countValue = (key) => Number.isFinite(Number(counts[key])) ? Math.max(0, Math.trunc(Number(counts[key]))) : 0;
+    const providerSubmitAttemptCount = countValue('provider_submit_attempt_count');
+    const providerClaimedStateCount = countValue('provider_claimed_state_count');
+    const providerRequestPreparingStateCount = countValue('provider_request_preparing_state_count');
+    const providerRequestPreparedCount = countValue('provider_request_prepared_count');
+    const providerDispatchEvidencePresent = countValue('provider_request_sending_count') > 0
+      || countValue('provider_request_sent_count') > 0
+      || countValue('provider_response_count') > 0
+      || countValue('provider_transaction_count') > 0
+      || countValue('provider_ambiguous_state_count') > 0
+      || countValue('rail_tx_id_count') > 0
+      || countValue('rail_state_count') > 0
+      || countValue('provider_status_evidence_count') > 0
+      || countValue('provider_event_count') > 0
+      || countValue('provider_event_transaction_count') > 0
+      || countValue('provider_event_request_count') > 0;
+    const providerSubmitAttemptEvidencePresent = providerSubmitAttemptCount > 0;
+    const providerCallStarted = providerDispatchEvidencePresent || providerSubmitAttemptEvidencePresent;
+    const providerClaimOrPrepareOnly = providerCallStarted !== true && (providerClaimedStateCount > 0
+      || providerRequestPreparingStateCount > 0
+      || providerRequestPreparedCount > 0);
+    return stripNullishObject({
+      evidence_read_ok: readErrors.length === 0,
+      provider_call_started: providerCallStarted,
+      provider_dispatch_evidence_present: providerDispatchEvidencePresent,
+      provider_submit_attempt_evidence_present: providerSubmitAttemptEvidencePresent,
+      provider_ambiguity_evidence_present: providerCallStarted,
+      provider_claim_or_prepare_only: providerClaimOrPrepareOnly,
+      provider_request_sending_present: countValue('provider_request_sending_count') > 0,
+      provider_request_sent_present: countValue('provider_request_sent_count') > 0,
+      provider_response_present: countValue('provider_response_count') > 0,
+      provider_transaction_present: countValue('provider_transaction_count') > 0,
+      rail_tx_id_present: countValue('rail_tx_id_count') > 0,
+      rail_state_present: countValue('rail_state_count') > 0,
+      local_transfer_prepared: countValue('local_transfer_prepared_count') > 0,
+      transfer_scope_count: countValue('transfer_scope_count'),
+      local_transfer_prepared_count: countValue('local_transfer_prepared_count'),
+      provider_submit_ready_count: countValue('provider_submit_ready_count'),
+      provider_submit_attempt_count: providerSubmitAttemptCount,
+      provider_claimed_state_count: providerClaimedStateCount,
+      provider_request_preparing_state_count: providerRequestPreparingStateCount,
+      provider_request_prepared_count: providerRequestPreparedCount,
+      materialised_transfer_count: countValue('materialised_transfer_count'),
+      pending_transfer_count: countValue('pending_transfer_count'),
+      provider_status_evidence_count: countValue('provider_status_evidence_count'),
+      provider_event_count: countValue('provider_event_count'),
+      provider_event_transaction_count: countValue('provider_event_transaction_count'),
+      provider_event_request_count: countValue('provider_event_request_count'),
+      evidence_read_error_count: readErrors.length,
+      evidence_read_errors: readErrors.slice(0, 3),
+      diagnostic_source: 'claimAndAdvanceOneBankingPayOperation'
+    });
+  };
+
+  const readOperationDurableStateForClaim = async () => {
+    if (!isUuid(claimedOperationId) || typeof sbFetch !== 'function' || !env || !env.SUPABASE_URL) return {};
+    try {
+      const operationRes = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/banking_pay_operations?id=eq.${enc(claimedOperationId)}&select=id,operation_type,status,phase,runner_state,requires_user_action,resume_reason,progress_json,result_json,error_json,failed_at_utc,lease_owner,lease_expires_at_utc,locked_by,lock_expires_at_utc,run_after_utc,updated_at_utc&limit=1`,
+        false
+      );
+      const rows = operationRes && Array.isArray(operationRes.rows) ? operationRes.rows : [];
+      return asPlainObject(rows[0]);
+    } catch {
+      return {};
+    }
+  };
+
+  const buildRetryableRecoveryPersistenceCheckForClaim = (row, expectedPhase) => {
+    const source = asPlainObject(row);
+    const status = upperText(source.status || source.operation_status);
+    const runnerState = upperText(source.runner_state || source.runnerState);
+    const actualPhase = canonicalReleaseRetryPhase(source.phase || source.operation_phase);
+    const intendedPhase = canonicalReleaseRetryPhase(expectedPhase);
+    const requiresUserAction = readBool(source.requires_user_action ?? source.requiresUserAction, false);
+    const errorJson = asPlainObject(source.error_json || source.errorJson);
+    const errorJsonPresent = Object.keys(errorJson).length > 0;
+    const progressForCheck = asPlainObject(source.progress_json || source.progressJson);
+    const progressErrorKeyPresent = Object.prototype.hasOwnProperty.call(progressForCheck, 'error');
+    const failedAtUtc = firstText(source.failed_at_utc, source.failedAtUtc);
+    const leaseOwner = firstText(source.lease_owner, source.leaseOwner, source.locked_by, source.lockedBy);
+    const statusOk = ['RUNNING', 'WAITING'].includes(status);
+    const runnerOk = runnerState === 'RUNNABLE';
+    const phaseOk = !!intendedPhase && actualPhase === intendedPhase;
+    const requiresOk = requiresUserAction === false;
+    const errorCleared = errorJsonPresent !== true;
+    const progressErrorCleared = progressErrorKeyPresent !== true;
+    const failedCleared = !failedAtUtc;
+    const currentWorkerLeaseReleased = !leaseOwner || leaseOwner !== lockOwner;
+    return stripNullishObject({
+      ok: statusOk && runnerOk && phaseOk && requiresOk && errorCleared && progressErrorCleared && failedCleared && currentWorkerLeaseReleased,
+      status,
+      status_ok: statusOk,
+      runner_state: runnerState,
+      runner_state_ok: runnerOk,
+      phase: actualPhase || null,
+      intended_phase: intendedPhase || null,
+      phase_ok: phaseOk,
+      requires_user_action: requiresUserAction,
+      requires_user_action_ok: requiresOk,
+      error_json_present: errorJsonPresent,
+      error_json_cleared: errorCleared,
+      progress_json_error_key_present: progressErrorKeyPresent,
+      progress_json_error_cleared: progressErrorCleared,
+      failed_at_utc_present: !!failedAtUtc,
+      failed_at_utc_cleared: failedCleared,
+      lease_owner_present: !!leaseOwner,
+      current_worker_lease_released: currentWorkerLeaseReleased,
+      current_worker_lease_still_present: !!leaseOwner && leaseOwner === lockOwner,
+      run_after_utc: firstText(source.run_after_utc, source.runAfterUtc) || null,
+      updated_at_utc: firstText(source.updated_at_utc, source.updatedAtUtc) || null
+    });
+  };
+
+  const classifyReleaseFailureForClaim = async (failure, sourceLabel = 'advance_error') => {
+    let evidence;
+    try {
+      evidence = await readProviderDispatchEvidenceForClaim();
+    } catch (evidenceError) {
+      evidence = {
+        evidence_read_ok: false,
+        provider_call_started: true,
+        evidence_read_error_count: 1,
+        evidence_read_errors: [{ key: 'provider_dispatch_evidence', message: compactErrorMessage(evidenceError, 240) }],
+        diagnostic_source: 'claimAndAdvanceOneBankingPayOperation'
+      };
+    }
+    const retryable = evidence && evidence.evidence_read_ok === true && evidence.provider_call_started !== true;
+    const retryPhase = normaliseReleaseRetryPhase(buildClaimReleaseFailureDiagnostic({ failure, providerEvidence: evidence, releaseState: retryable ? 'MORE_WORK' : 'REVIEW_REQUIRED' }));
+    const diagnostic = buildClaimReleaseFailureDiagnostic({
+      failure,
+      providerEvidence: evidence,
+      classification: retryable ? 'RELEASE_TIMEOUT_BEFORE_PROVIDER_CALL_RETRYABLE' : 'PROVIDER_AMBIGUITY_REVIEW_REQUIRED',
+      releaseState: retryable ? 'MORE_WORK' : 'REVIEW_REQUIRED',
+      retryPhase
+    });
+    return { retryable, evidence, diagnostic: Object.assign({}, diagnostic, { source: sourceLabel }), retryPhase };
+  };
+
   const determineReleaseState = (payload, error, context = {}) => {
     const source = asPlainObject(payload);
     const operationTypeForError = upperText(context.operationType || context.operation_type || source.operation_type || source.operationType);
@@ -27109,6 +28113,16 @@ async function claimAndAdvanceOneBankingPayOperation(env, opts = {}) {
   const claimInputJson = asPlainObject(claim.input_json || claim.inputJson || claim.input);
   const claimConfigJson = asPlainObject(claim.config_json || claim.configJson || claim.config);
   const claimProgressJson = asPlainObject(claim.progress_json || claim.progressJson || claim.progress);
+  const claimedPayBatchId = firstText(
+    claim.pay_batch_id,
+    claim.payBatchId,
+    claimInputJson.pay_batch_id,
+    claimInputJson.payBatchId,
+    claimProgressJson.pay_batch_id,
+    claimProgressJson.payBatchId,
+    opts.payBatchId,
+    opts.pay_batch_id
+  );
   const claimConfigHasFrontendCompletionRequired = Object.prototype.hasOwnProperty.call(claimConfigJson, 'frontend_completion_required') || Object.prototype.hasOwnProperty.call(claimConfigJson, 'frontendCompletionRequired');
   const operationBackendRunnerOwned = operationType === 'DRAFT_CREATE' || allowBackendRunnerOwned === true ||
     readBool(claimInputJson.backend_runner_owned, false) ||
@@ -27138,6 +28152,10 @@ async function claimAndAdvanceOneBankingPayOperation(env, opts = {}) {
   let savePayload = null;
   let releaseState = 'MORE_WORK';
   let advanceError = null;
+  let preProviderReleaseRetryable = false;
+  let providerEvidenceState = null;
+  let releaseFailureDiagnostic = null;
+  let releaseRetryPhase = null;
 
   try {
     advancedPayload = await advanceBankingPayOperation(env, claim, {
@@ -27173,15 +28191,222 @@ async function claimAndAdvanceOneBankingPayOperation(env, opts = {}) {
       backend_owned: operationType === 'DRAFT_CREATE' ? true : undefined
     });
     releaseState = determineReleaseState(advancedPayload, null, { operationType });
+    const payloadReleaseFailure = ['PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS'].includes(operationType) ? findReleaseLeaseFailureInPayload(advancedPayload) : null;
+    if (payloadReleaseFailure && releaseState === 'REVIEW_REQUIRED') {
+      const classification = await classifyReleaseFailureForClaim(payloadReleaseFailure, 'advanced_payload');
+      providerEvidenceState = classification.evidence;
+      releaseFailureDiagnostic = classification.diagnostic;
+      releaseRetryPhase = classification.retryPhase;
+      if (classification.retryable === true) {
+        preProviderReleaseRetryable = true;
+        releaseState = 'MORE_WORK';
+      }
+    }
   } catch (error) {
     advanceError = error;
     releaseState = determineReleaseState(null, error, { operationType });
+    if (['PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS'].includes(operationType) && isReleaseLeaseRpcError(error)) {
+      const classification = await classifyReleaseFailureForClaim(error, 'advance_error');
+      providerEvidenceState = classification.evidence;
+      releaseFailureDiagnostic = classification.diagnostic;
+      releaseRetryPhase = classification.retryPhase;
+      if (classification.retryable === true) {
+        preProviderReleaseRetryable = true;
+        releaseState = 'MORE_WORK';
+      } else {
+        releaseState = 'REVIEW_REQUIRED';
+      }
+    }
   }
 
   const publicAdvanced = publicPayload(advancedPayload || claim);
-  const terminalAfterAdvance = !advanceError && (publicAdvanced.terminal === true || ['COMPLETE', 'COMPLETED', 'SUCCESS', 'SUCCEEDED', 'DONE', 'FAILED', 'ERROR', 'CANCELLED', 'CANCELED', 'REVIEW_REQUIRED', 'NEEDS_REVIEW', 'REVIEW'].includes(upperText(publicAdvanced.status || advancedPayload?.status)));
+  const advancedRaw = asPlainObject(advancedPayload);
+  const innerRecoveryPersistFailed = ['PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS'].includes(operationType)
+    && !advanceError
+    && (
+      advancedRaw.recovery_persist_failed === true
+      || publicAdvanced.recovery_persist_failed === true
+      || upperText(advancedRaw.code || publicAdvanced.code) === 'RELEASE_TIMEOUT_PRE_PROVIDER_RECOVERY_PERSIST_FAILED'
+      || upperText(advancedRaw.release_failure_classification || publicAdvanced.release_failure_classification) === 'RELEASE_TIMEOUT_PRE_PROVIDER_RECOVERY_PERSIST_FAILED'
+    );
+  if (innerRecoveryPersistFailed) {
+    const innerRetryPhase = canonicalReleaseRetryPhase(
+      advancedRaw.next_phase
+      || advancedRaw.next_required_phase
+      || advancedRaw.phase
+      || publicAdvanced.next_phase
+      || publicAdvanced.next_required_phase
+      || publicAdvanced.phase
+      || asPlainObject(advancedRaw.last_rpc_failure || publicAdvanced.last_rpc_failure).intended_next_phase
+    ) || normaliseReleaseRetryPhase(asPlainObject(advancedRaw.last_rpc_failure || publicAdvanced.last_rpc_failure || releaseFailureDiagnostic));
+    const latestAfterInnerFailure = await readOperationDurableStateForClaim();
+    const innerRecoveryPersistence = Object.assign(
+      { read_ok: Object.keys(latestAfterInnerFailure).length > 0 },
+      buildRetryableRecoveryPersistenceCheckForClaim(latestAfterInnerFailure, innerRetryPhase)
+    );
+    if (innerRecoveryPersistence.ok === true) {
+      return {
+        ok: true,
+        claimed: true,
+        advanced: true,
+        operation_id: claimedOperationId,
+        lock_owner: lockOwner,
+        release_state: 'MORE_WORK',
+        operation: publicPayload(Object.assign({}, publicAdvanced, latestAfterInnerFailure)),
+        save_progress: { saved: false, skipped: true, reason: 'INNER_EXECUTE_RECOVERY_ALREADY_PERSISTED' },
+        release: { ok: true, skipped: true, reason: 'INNER_EXECUTE_RECOVERY_ALREADY_PERSISTED' },
+        error: null,
+        retryable_orchestration_issue: true,
+        provider_ambiguity: false,
+        recovery_persisted: true,
+        durable_recovery_state: innerRecoveryPersistence,
+        release_failure_classification: 'RETRYABLE_ORCHESTRATION',
+        already_released_after_advance: true,
+        last_rpc_failure: advancedRaw.last_rpc_failure || publicAdvanced.last_rpc_failure || releaseFailureDiagnostic,
+        provider_evidence_state: advancedRaw.provider_evidence_state || publicAdvanced.provider_evidence_state || providerEvidenceState
+      };
+    }
+    return {
+      ok: false,
+      claimed: true,
+      advanced: false,
+      operation_id: claimedOperationId,
+      lock_owner: lockOwner,
+      release_state: 'MORE_WORK',
+      operation: publicPayload(Object.assign({}, publicAdvanced, latestAfterInnerFailure)),
+      save_progress: { saved: false, skipped: true, reason: 'INNER_EXECUTE_RECOVERY_PERSIST_FAILED' },
+      release: { ok: false, skipped: true, reason: 'INNER_EXECUTE_RECOVERY_PERSIST_FAILED' },
+      error: {
+        code: 'RELEASE_TIMEOUT_PRE_PROVIDER_RECOVERY_PERSIST_FAILED',
+        message: 'Inner execute classified a release timeout as pre-provider retryable, but durable recovery with stale error_json/progress_json.error state cleared was not confirmed by the outer worker.'
+      },
+      retryable_orchestration_issue: false,
+      pre_provider_retryable_classification: true,
+      provider_ambiguity: false,
+      recovery_persist_failed: true,
+      durable_recovery_state: innerRecoveryPersistence,
+      release_failure_classification: 'RELEASE_TIMEOUT_PRE_PROVIDER_RECOVERY_PERSIST_FAILED',
+      last_rpc_failure: advancedRaw.last_rpc_failure || publicAdvanced.last_rpc_failure || releaseFailureDiagnostic,
+      provider_evidence_state: advancedRaw.provider_evidence_state || publicAdvanced.provider_evidence_state || providerEvidenceState
+    };
+  }
+  const innerRecoveryPersistedSignal = ['PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS'].includes(operationType)
+    && !advanceError
+    && (
+      advancedRaw.recovery_persisted === true
+      || publicAdvanced.recovery_persisted === true
+      || advancedRaw.retryable_orchestration_issue === true
+      || publicAdvanced.retryable_orchestration_issue === true
+      || advancedRaw.already_released_after_advance === true
+      || publicAdvanced.already_released_after_advance === true
+    );
+  if (innerRecoveryPersistedSignal) {
+    const innerRetryPhase = canonicalReleaseRetryPhase(
+      advancedRaw.next_phase
+      || advancedRaw.next_required_phase
+      || publicAdvanced.next_phase
+      || publicAdvanced.next_required_phase
+      || asPlainObject(advancedRaw.durable_recovery_state || publicAdvanced.durable_recovery_state).intended_phase
+      || asPlainObject(advancedRaw.last_rpc_failure || publicAdvanced.last_rpc_failure).intended_next_phase
+      || advancedRaw.phase
+      || publicAdvanced.phase
+    ) || normaliseReleaseRetryPhase(asPlainObject(advancedRaw.last_rpc_failure || publicAdvanced.last_rpc_failure || releaseFailureDiagnostic));
+    const latestAfterInnerRecovery = await readOperationDurableStateForClaim();
+    const innerRecoveryPersistence = Object.assign(
+      { read_ok: Object.keys(latestAfterInnerRecovery).length > 0 },
+      buildRetryableRecoveryPersistenceCheckForClaim(latestAfterInnerRecovery, innerRetryPhase)
+    );
+    if (innerRecoveryPersistence.ok === true) {
+      return {
+        ok: true,
+        claimed: true,
+        advanced: true,
+        operation_id: claimedOperationId,
+        lock_owner: lockOwner,
+        release_state: 'MORE_WORK',
+        operation: publicPayload(Object.assign({}, publicAdvanced, latestAfterInnerRecovery)),
+        save_progress: { saved: false, skipped: true, reason: 'INNER_EXECUTE_RECOVERY_ALREADY_PERSISTED' },
+        release: { ok: true, skipped: true, reason: 'INNER_EXECUTE_RECOVERY_ALREADY_PERSISTED' },
+        error: null,
+        retryable_orchestration_issue: true,
+        provider_ambiguity: false,
+        recovery_persisted: true,
+        durable_recovery_state: innerRecoveryPersistence,
+        release_failure_classification: 'RETRYABLE_ORCHESTRATION',
+        already_released_after_advance: true,
+        last_rpc_failure: advancedRaw.last_rpc_failure || publicAdvanced.last_rpc_failure || releaseFailureDiagnostic,
+        provider_evidence_state: advancedRaw.provider_evidence_state || publicAdvanced.provider_evidence_state || providerEvidenceState
+      };
+    }
+    return {
+      ok: false,
+      claimed: true,
+      advanced: false,
+      operation_id: claimedOperationId,
+      lock_owner: lockOwner,
+      release_state: 'MORE_WORK',
+      operation: publicPayload(Object.assign({}, publicAdvanced, latestAfterInnerRecovery)),
+      save_progress: { saved: false, skipped: true, reason: 'INNER_EXECUTE_RECOVERY_PERSIST_VERIFICATION_FAILED' },
+      release: { ok: false, skipped: true, reason: 'INNER_EXECUTE_RECOVERY_PERSIST_VERIFICATION_FAILED' },
+      error: {
+        code: 'RELEASE_TIMEOUT_PRE_PROVIDER_RECOVERY_PERSIST_FAILED',
+        message: 'Inner execute reported pre-provider retryable recovery, but the outer worker could not verify durable RUNNING/WAITING + RUNNABLE recovery with stale error_json/progress_json.error state cleared and the current worker lease released.'
+      },
+      retryable_orchestration_issue: false,
+      pre_provider_retryable_classification: true,
+      provider_ambiguity: false,
+      recovery_persist_failed: true,
+      durable_recovery_state: innerRecoveryPersistence,
+      release_failure_classification: 'RELEASE_TIMEOUT_PRE_PROVIDER_RECOVERY_PERSIST_FAILED',
+      last_rpc_failure: Object.assign({}, advancedRaw.last_rpc_failure || publicAdvanced.last_rpc_failure || releaseFailureDiagnostic || {}, {
+        classification: 'RELEASE_TIMEOUT_PRE_PROVIDER_RECOVERY_PERSIST_FAILED',
+        durable_recovery_state: innerRecoveryPersistence
+      }),
+      provider_evidence_state: advancedRaw.provider_evidence_state || publicAdvanced.provider_evidence_state || providerEvidenceState
+    };
+  }
+
+  const terminalAfterAdvance = !preProviderReleaseRetryable && !advanceError && (publicAdvanced.terminal === true || ['COMPLETE', 'COMPLETED', 'SUCCESS', 'SUCCEEDED', 'DONE', 'FAILED', 'ERROR', 'CANCELLED', 'CANCELED', 'REVIEW_REQUIRED', 'NEEDS_REVIEW', 'REVIEW'].includes(upperText(publicAdvanced.status || advancedPayload?.status)));
   const advancedLeaseOwner = firstText(publicAdvanced.lease_owner, publicAdvanced.lock_owner, publicAdvanced.locked_by, advancedPayload && (advancedPayload.lease_owner || advancedPayload.lock_owner || advancedPayload.locked_by));
   const terminalStillLeasedToThisWorker = terminalAfterAdvance && advancedLeaseOwner === lockOwner && publicAdvanced.leased !== false;
+  const nonTerminalExecuteAlreadyReleased = !preProviderReleaseRetryable
+    && !advanceError
+    && !terminalAfterAdvance
+    && ['PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS'].includes(operationType)
+    && upperText(publicAdvanced.status || advancedPayload?.status || claim.status) !== 'REVIEW_REQUIRED'
+    && (advancedLeaseOwner === '' || advancedLeaseOwner !== lockOwner);
+  if (nonTerminalExecuteAlreadyReleased) {
+    const latestAlreadyReleasedState = await readOperationDurableStateForClaim();
+    const latestAlreadyReleasedLeaseOwner = firstText(
+      latestAlreadyReleasedState.lease_owner,
+      latestAlreadyReleasedState.leaseOwner,
+      latestAlreadyReleasedState.locked_by,
+      latestAlreadyReleasedState.lockedBy
+    );
+    if (Object.keys(latestAlreadyReleasedState).length > 0 && (!latestAlreadyReleasedLeaseOwner || latestAlreadyReleasedLeaseOwner !== lockOwner)) {
+      return {
+        ok: true,
+        claimed: true,
+        advanced: true,
+        operation_id: claimedOperationId,
+        lock_owner: lockOwner,
+        release_state: releaseState,
+        operation: publicPayload(Object.assign({}, publicAdvanced, latestAlreadyReleasedState)),
+        save_progress: { saved: false, skipped: true, reason: 'OPERATION_ALREADY_RELEASED_AFTER_BOUNDED_ADVANCE' },
+        release: { ok: true, skipped: true, reason: 'OPERATION_ALREADY_RELEASED_AFTER_BOUNDED_ADVANCE' },
+        error: null,
+        already_released_after_advance: true,
+        already_released_state_confirmed: Object.keys(latestAlreadyReleasedState).length > 0,
+        durable_state: Object.keys(latestAlreadyReleasedState).length > 0 ? {
+          status: upperText(latestAlreadyReleasedState.status),
+          phase: upperText(latestAlreadyReleasedState.phase),
+          runner_state: upperText(latestAlreadyReleasedState.runner_state),
+          requires_user_action: readBool(latestAlreadyReleasedState.requires_user_action, false),
+          lease_owner_present: !!latestAlreadyReleasedLeaseOwner
+        } : null
+      };
+    }
+  }
   const progressPatch = compactProgressPatch(publicAdvanced, {
     source,
     lock_owner: lockOwner,
@@ -27199,7 +28424,8 @@ async function claimAndAdvanceOneBankingPayOperation(env, opts = {}) {
     operation_actor_user_id: actorContext.operationActorUserId || null,
     business_actor_user_id: actorContext.businessActorUserId || null
   });
-  const advanceErrorPayload = advanceError ? compactError(advanceError) : null;
+  const rawAdvanceErrorPayload = advanceError ? compactError(advanceError) : null;
+  const advanceErrorPayload = preProviderReleaseRetryable ? null : rawAdvanceErrorPayload;
   if (advanceErrorPayload) {
     progressPatch.error = advanceErrorPayload;
     if (operationType === 'DRAFT_CREATE') {
@@ -27209,6 +28435,48 @@ async function claimAndAdvanceOneBankingPayOperation(env, opts = {}) {
         'DRAFT_CREATE_OPERATION_FAILED'
       );
     }
+  }
+
+  if (preProviderReleaseRetryable) {
+    const retryPhase = releaseRetryPhase || normaliseReleaseRetryPhase(releaseFailureDiagnostic);
+    const releaseResume = asPlainObject(releaseFailureDiagnostic && releaseFailureDiagnostic.release_progress_resume);
+    const resumeChunkId = firstText(releaseResume.last_provider_submit_chunk_id, releaseResume.provider_submit_claim_chunk_id);
+    delete progressPatch.error;
+    Object.assign(progressPatch, {
+      status: 'RUNNING',
+      phase: retryPhase,
+      runner_state: 'RUNNABLE',
+      next_required_phase: retryPhase,
+      release_state: 'MORE_WORK',
+      resume_reason: 'RELEASE_TIMEOUT_BEFORE_PROVIDER_CALL_RETRYABLE',
+      run_after_delay_seconds: 5,
+      requires_user_action: false,
+      review_required: false,
+      retryable_orchestration_issue: true,
+      provider_ambiguity: false,
+      release_timeout_before_provider_call: true,
+      release_failure_classification: 'RETRYABLE_ORCHESTRATION',
+      release_failure_previous_phase: releaseFailureDiagnostic && releaseFailureDiagnostic.phase_before_failure || claim.phase || null,
+      release_failure_intended_next_phase: retryPhase,
+      release_failure_checked_provider_evidence: true,
+      last_message: 'Release lease failed before provider dispatch; retrying orchestration without user review.',
+      status_text: 'Release lease failed before provider dispatch; retrying orchestration without user review.',
+      last_rpc_failure: releaseFailureDiagnostic,
+      provider_evidence_state: providerEvidenceState,
+      release_failure_reclassified_at_utc: new Date().toISOString(),
+      last_provider_submit_chunk_id: isUuid(resumeChunkId) ? resumeChunkId : undefined,
+      provider_submit_stage_last_recorded: firstText(releaseResume.provider_submit_stage_last_recorded) || undefined,
+      provider_submit_claim: isUuid(resumeChunkId)
+        ? {
+          chunk_id: resumeChunkId,
+          claimed_count: Number.isFinite(Number(releaseResume.provider_submit_claimed_count)) ? Math.max(0, Math.trunc(Number(releaseResume.provider_submit_claimed_count))) : undefined,
+          transfer_scope_count: Number.isFinite(Number(releaseResume.provider_submit_transfer_scope_count)) ? Math.max(0, Math.trunc(Number(releaseResume.provider_submit_transfer_scope_count))) : undefined,
+          transfer_count: Number.isFinite(Number(releaseResume.provider_submit_transfer_count)) ? Math.max(0, Math.trunc(Number(releaseResume.provider_submit_transfer_count))) : undefined,
+          provider_submission_status: firstText(releaseResume.provider_submission_status, 'NO_PROVIDER_SUBMISSION_ATTEMPTED'),
+          transfer_payload_source: 'banking_pay_operation_chunks.payload_json'
+        }
+        : undefined
+    });
   }
 
   if (terminalAfterAdvance && !terminalStillLeasedToThisWorker) {
@@ -27226,11 +28494,14 @@ async function claimAndAdvanceOneBankingPayOperation(env, opts = {}) {
     };
   }
 
+  const saveProgressStatus = preProviderReleaseRetryable ? 'RUNNING' : (publicAdvanced.status || claim.status || null);
+  const saveProgressPhase = preProviderReleaseRetryable ? (releaseRetryPhase || normaliseReleaseRetryPhase(releaseFailureDiagnostic)) : (publicAdvanced.phase || claim.phase || null);
+
   try {
     savePayload = unwrapRpcPayload(await sbRpc(env, 'banking_pay_operation_save_progress', {
       p_operation_id: claimedOperationId,
-      p_status: publicAdvanced.status || claim.status || null,
-      p_phase: publicAdvanced.phase || claim.phase || null,
+      p_status: saveProgressStatus,
+      p_phase: saveProgressPhase,
       p_total_units: Number.isFinite(Number(publicAdvanced.total_units)) ? Math.max(0, Math.trunc(Number(publicAdvanced.total_units))) : null,
       p_completed_units: Number.isFinite(Number(publicAdvanced.completed_units)) ? Math.max(0, Math.trunc(Number(publicAdvanced.completed_units))) : null,
       p_failed_units: Number.isFinite(Number(publicAdvanced.failed_units)) ? Math.max(0, Math.trunc(Number(publicAdvanced.failed_units))) : null,
@@ -27271,7 +28542,7 @@ async function claimAndAdvanceOneBankingPayOperation(env, opts = {}) {
       p_run_after_delay_seconds: delaySeconds,
       p_progress_patch_json: progressPatch,
       p_result_patch_json: releaseState === 'COMPLETE' ? { worker_completed_at_utc: new Date().toISOString() } : null,
-      p_error_json: advanceErrorPayload,
+      p_error_json: preProviderReleaseRetryable ? null : advanceErrorPayload,
       p_resume_reason: progressPatch.resume_reason || progressPatch.next_required_phase || (operationType === 'DRAFT_CREATE' && releaseState === 'FAILED' ? 'DRAFT_CREATE_OPERATION_FAILED' : releaseState),
       p_actor_user_id: actorContext.businessActorUserId || actorUserId
     }, {
@@ -27283,21 +28554,69 @@ async function claimAndAdvanceOneBankingPayOperation(env, opts = {}) {
     releasePayload = { ok: false, error: compactError(releaseError) };
   }
 
-  if (advanceError && opts.throwOnAdvanceError === true) throw advanceError;
+  let retryableRecoveryPersistence = null;
+  let retryableRecoveryDurableState = null;
+  if (preProviderReleaseRetryable) {
+    const retryPhaseForVerification = releaseRetryPhase || normaliseReleaseRetryPhase(releaseFailureDiagnostic);
+    retryableRecoveryDurableState = await readOperationDurableStateForClaim();
+    retryableRecoveryPersistence = Object.assign(
+      { read_ok: Object.keys(retryableRecoveryDurableState).length > 0 },
+      buildRetryableRecoveryPersistenceCheckForClaim(retryableRecoveryDurableState, retryPhaseForVerification)
+    );
+    if (retryableRecoveryPersistence.ok !== true) {
+      return {
+        ok: false,
+        claimed: true,
+        advanced: false,
+        operation_id: claimedOperationId,
+        lock_owner: lockOwner,
+        release_state: releaseState,
+        operation: publicPayload(Object.assign({}, publicAdvanced, retryableRecoveryDurableState)),
+        save_progress: savePayload,
+        release: releasePayload,
+        error: {
+          code: 'RELEASE_TIMEOUT_PRE_PROVIDER_RECOVERY_PERSIST_FAILED',
+          message: 'Release timeout was classified as pre-provider retryable, but the outer worker could not verify durable RUNNING/WAITING + RUNNABLE recovery with stale error_json/progress_json.error state cleared and the current worker lease released.'
+        },
+        retryable_orchestration_issue: false,
+        pre_provider_retryable_classification: true,
+        provider_ambiguity: false,
+        recovery_persist_failed: true,
+        release_failure_classification: 'RELEASE_TIMEOUT_PRE_PROVIDER_RECOVERY_PERSIST_FAILED',
+        last_rpc_failure: Object.assign({}, releaseFailureDiagnostic || {}, {
+          classification: 'RELEASE_TIMEOUT_PRE_PROVIDER_RECOVERY_PERSIST_FAILED',
+          durable_recovery_state: retryableRecoveryPersistence
+        }),
+        provider_evidence_state: providerEvidenceState,
+        durable_recovery_state: retryableRecoveryPersistence
+      };
+    }
+  }
+
+  if (advanceError && opts.throwOnAdvanceError === true && preProviderReleaseRetryable !== true) throw advanceError;
 
   return {
-    ok: advanceError ? false : true,
+    ok: advanceError && preProviderReleaseRetryable !== true ? false : true,
     claimed: true,
-    advanced: !advanceError,
+    advanced: !advanceError || preProviderReleaseRetryable === true,
     operation_id: claimedOperationId,
     lock_owner: lockOwner,
     release_state: releaseState,
     operation: publicAdvanced,
     save_progress: savePayload,
     release: releasePayload,
-    error: advanceErrorPayload
+    error: advanceErrorPayload,
+    retryable_orchestration_issue: preProviderReleaseRetryable === true,
+    provider_ambiguity: preProviderReleaseRetryable === true ? false : (providerEvidenceState && providerEvidenceState.provider_call_started === true ? true : null),
+    recovery_persisted: preProviderReleaseRetryable === true ? true : undefined,
+    durable_recovery_state: retryableRecoveryPersistence,
+    release_failure_classification: preProviderReleaseRetryable === true ? 'RETRYABLE_ORCHESTRATION' : (releaseFailureDiagnostic ? releaseFailureDiagnostic.classification || null : null),
+    last_rpc_failure: releaseFailureDiagnostic,
+    provider_evidence_state: providerEvidenceState
   };
 }
+
+
 
 
 async function handleBankingPayCancelNotSentAndRecalculate(env, req, user, payBatchId) {
