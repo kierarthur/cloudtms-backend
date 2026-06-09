@@ -64369,7 +64369,6 @@ DROP FUNCTION IF EXISTS public.banking_pay_operation_claim_next(uuid, uuid, text
 
 DROP FUNCTION IF EXISTS public.banking_pay_operation_claim_next(uuid, uuid, text, integer);
 
-
 CREATE OR REPLACE FUNCTION public.banking_pay_operation_claim_next(
     p_operation_id uuid DEFAULT NULL::uuid,
     p_actor_user_id uuid DEFAULT NULL::uuid,
@@ -64479,12 +64478,23 @@ BEGIN
           OR (
             upper(BTRIM(COALESCE(operation_row.status, ''))) = 'WAITING_PROVIDER'
             AND v_allow_backend_runner_owned IS TRUE
-            AND upper(BTRIM(COALESCE(operation_row.operation_type, ''))) = 'PAYMENT_EXECUTE'
             AND upper(BTRIM(COALESCE(operation_row.runner_state, ''))) IN ('WAITING_PROVIDER', 'RUNNABLE')
             AND (
-              upper(BTRIM(COALESCE(operation_row.phase, ''))) IN ('APPLY_RAIL_UPDATES', 'WAITING_PROVIDER', 'WAIT_PROVIDER', 'PROVIDER_WAIT', 'PROVIDER_WAITING', 'WAITING_PROVIDER_CONFIRMATION', 'POLL_PROVIDER', 'PROVIDER_POLL', 'APPLY_PROVIDER_UPDATES', 'CHECK_PROVIDER_OUTCOME')
-              OR upper(BTRIM(COALESCE(operation_row.progress_json->>'phase', operation_row.progress_json->>'operation_phase', operation_row.progress_json->>'operationPhase', operation_row.progress_json->>'next_phase', operation_row.progress_json->>'nextPhase', ''))) IN ('APPLY_RAIL_UPDATES', 'WAITING_PROVIDER', 'WAIT_PROVIDER', 'PROVIDER_WAIT', 'PROVIDER_WAITING', 'WAITING_PROVIDER_CONFIRMATION', 'POLL_PROVIDER', 'PROVIDER_POLL', 'APPLY_PROVIDER_UPDATES', 'CHECK_PROVIDER_OUTCOME')
-              OR upper(BTRIM(COALESCE(operation_row.resume_reason, operation_row.progress_json->>'resume_reason', operation_row.progress_json->>'resumeReason', ''))) IN ('AWAITING_PROVIDER_OUTCOME', 'WAITING_PROVIDER', 'WAIT_PROVIDER', 'PROVIDER_WAIT')
+              (
+                upper(BTRIM(COALESCE(operation_row.operation_type, ''))) = 'PAYMENT_EXECUTE'
+                AND (
+                  upper(BTRIM(COALESCE(operation_row.phase, ''))) IN ('APPLY_RAIL_UPDATES', 'WAITING_PROVIDER', 'WAIT_PROVIDER', 'PROVIDER_WAIT', 'PROVIDER_WAITING', 'WAITING_PROVIDER_CONFIRMATION', 'POLL_PROVIDER', 'PROVIDER_POLL', 'APPLY_PROVIDER_UPDATES', 'CHECK_PROVIDER_OUTCOME')
+                  OR upper(BTRIM(COALESCE(operation_row.progress_json->>'phase', operation_row.progress_json->>'operation_phase', operation_row.progress_json->>'operationPhase', operation_row.progress_json->>'next_phase', operation_row.progress_json->>'nextPhase', ''))) IN ('APPLY_RAIL_UPDATES', 'WAITING_PROVIDER', 'WAIT_PROVIDER', 'PROVIDER_WAIT', 'PROVIDER_WAITING', 'WAITING_PROVIDER_CONFIRMATION', 'POLL_PROVIDER', 'PROVIDER_POLL', 'APPLY_PROVIDER_UPDATES', 'CHECK_PROVIDER_OUTCOME')
+                  OR upper(BTRIM(COALESCE(operation_row.resume_reason, operation_row.progress_json->>'resume_reason', operation_row.progress_json->>'resumeReason', ''))) IN ('AWAITING_PROVIDER_OUTCOME', 'WAITING_PROVIDER', 'WAIT_PROVIDER', 'PROVIDER_WAIT')
+                )
+              )
+              OR (
+                upper(BTRIM(COALESCE(operation_row.operation_type, ''))) = 'PAYMENT_SETTLEMENT'
+                AND (
+                  upper(BTRIM(COALESCE(operation_row.phase, ''))) = 'APPLY_SETTLEMENT_CHUNKS'
+                  OR upper(BTRIM(COALESCE(operation_row.progress_json->>'phase', operation_row.progress_json->>'operation_phase', operation_row.progress_json->>'operationPhase', operation_row.progress_json->>'next_phase', operation_row.progress_json->>'nextPhase', ''))) = 'APPLY_SETTLEMENT_CHUNKS'
+                )
+              )
             )
           )
         )
@@ -64650,14 +64660,26 @@ BEGIN
           WHEN upper(BTRIM(COALESCE(v_visible.status, ''))) = 'WAITING_PROVIDER'
            AND v_allow_backend_runner_owned IS NOT TRUE THEN 'WAITING_PROVIDER_BACKEND_RUNNER_REQUIRED'
           WHEN upper(BTRIM(COALESCE(v_visible.status, ''))) = 'WAITING_PROVIDER'
-           AND upper(BTRIM(COALESCE(v_visible.operation_type, ''))) <> 'PAYMENT_EXECUTE' THEN 'WAITING_PROVIDER_OPERATION_TYPE_NOT_CLAIMABLE'
+           AND upper(BTRIM(COALESCE(v_visible.operation_type, ''))) NOT IN ('PAYMENT_EXECUTE', 'PAYMENT_SETTLEMENT') THEN 'WAITING_PROVIDER_OPERATION_TYPE_NOT_CLAIMABLE'
           WHEN upper(BTRIM(COALESCE(v_visible.status, ''))) = 'WAITING_PROVIDER'
            AND upper(BTRIM(COALESCE(v_visible.runner_state, ''))) NOT IN ('WAITING_PROVIDER', 'RUNNABLE') THEN 'WAITING_PROVIDER_NOT_RUNNABLE'
           WHEN upper(BTRIM(COALESCE(v_visible.status, ''))) = 'WAITING_PROVIDER'
            AND NOT (
-             upper(BTRIM(COALESCE(v_visible.phase, ''))) IN ('APPLY_RAIL_UPDATES', 'WAITING_PROVIDER', 'WAIT_PROVIDER', 'PROVIDER_WAIT', 'PROVIDER_WAITING', 'WAITING_PROVIDER_CONFIRMATION', 'POLL_PROVIDER', 'PROVIDER_POLL', 'APPLY_PROVIDER_UPDATES', 'CHECK_PROVIDER_OUTCOME')
-             OR upper(BTRIM(COALESCE(v_visible.progress_json->>'phase', v_visible.progress_json->>'operation_phase', v_visible.progress_json->>'operationPhase', v_visible.progress_json->>'next_phase', v_visible.progress_json->>'nextPhase', ''))) IN ('APPLY_RAIL_UPDATES', 'WAITING_PROVIDER', 'WAIT_PROVIDER', 'PROVIDER_WAIT', 'PROVIDER_WAITING', 'WAITING_PROVIDER_CONFIRMATION', 'POLL_PROVIDER', 'PROVIDER_POLL', 'APPLY_PROVIDER_UPDATES', 'CHECK_PROVIDER_OUTCOME')
-             OR upper(BTRIM(COALESCE(v_visible.resume_reason, v_visible.progress_json->>'resume_reason', v_visible.progress_json->>'resumeReason', ''))) IN ('AWAITING_PROVIDER_OUTCOME', 'WAITING_PROVIDER', 'WAIT_PROVIDER', 'PROVIDER_WAIT')
+             (
+               upper(BTRIM(COALESCE(v_visible.operation_type, ''))) = 'PAYMENT_EXECUTE'
+               AND (
+                 upper(BTRIM(COALESCE(v_visible.phase, ''))) IN ('APPLY_RAIL_UPDATES', 'WAITING_PROVIDER', 'WAIT_PROVIDER', 'PROVIDER_WAIT', 'PROVIDER_WAITING', 'WAITING_PROVIDER_CONFIRMATION', 'POLL_PROVIDER', 'PROVIDER_POLL', 'APPLY_PROVIDER_UPDATES', 'CHECK_PROVIDER_OUTCOME')
+                 OR upper(BTRIM(COALESCE(v_visible.progress_json->>'phase', v_visible.progress_json->>'operation_phase', v_visible.progress_json->>'operationPhase', v_visible.progress_json->>'next_phase', v_visible.progress_json->>'nextPhase', ''))) IN ('APPLY_RAIL_UPDATES', 'WAITING_PROVIDER', 'WAIT_PROVIDER', 'PROVIDER_WAIT', 'PROVIDER_WAITING', 'WAITING_PROVIDER_CONFIRMATION', 'POLL_PROVIDER', 'PROVIDER_POLL', 'APPLY_PROVIDER_UPDATES', 'CHECK_PROVIDER_OUTCOME')
+                 OR upper(BTRIM(COALESCE(v_visible.resume_reason, v_visible.progress_json->>'resume_reason', v_visible.progress_json->>'resumeReason', ''))) IN ('AWAITING_PROVIDER_OUTCOME', 'WAITING_PROVIDER', 'WAIT_PROVIDER', 'PROVIDER_WAIT')
+               )
+             )
+             OR (
+               upper(BTRIM(COALESCE(v_visible.operation_type, ''))) = 'PAYMENT_SETTLEMENT'
+               AND (
+                 upper(BTRIM(COALESCE(v_visible.phase, ''))) = 'APPLY_SETTLEMENT_CHUNKS'
+                 OR upper(BTRIM(COALESCE(v_visible.progress_json->>'phase', v_visible.progress_json->>'operation_phase', v_visible.progress_json->>'operationPhase', v_visible.progress_json->>'next_phase', v_visible.progress_json->>'nextPhase', ''))) = 'APPLY_SETTLEMENT_CHUNKS'
+               )
+             )
            ) THEN 'WAITING_PROVIDER_NOT_RECHECK_PHASE'
           ELSE 'NOT_RUNNABLE'
         END;
@@ -64738,7 +64760,6 @@ BEGIN
       NULL::timestamptz;
 END;
 $function$;
-
 
 
 
