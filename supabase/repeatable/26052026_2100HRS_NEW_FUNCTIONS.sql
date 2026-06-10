@@ -65725,6 +65725,22 @@ DECLARE
     v_existing_draft_is_exhausted boolean := false;
     v_existing_draft_is_stale boolean := false;
     v_terminalise_reason text := NULL::text;
+    v_settlement_batch_clean_success boolean := false;
+    v_settlement_durable_truth jsonb := '{}'::jsonb;
+    v_settlement_batch_status text := NULL::text;
+    v_settlement_execution_commit_state text := NULL::text;
+    v_settlement_execution_commit_ref_present boolean := false;
+    v_settlement_completed_at_utc_present boolean := false;
+    v_settlement_freshness_validation_status text := NULL::text;
+    v_settlement_freshness_clean boolean := true;
+    v_settlement_transfer_count integer := 0;
+    v_settlement_terminal_success_transfer_count integer := 0;
+    v_settlement_terminal_failed_transfer_count integer := 0;
+    v_settlement_pending_or_unknown_transfer_count integer := 0;
+    v_settlement_candidate_count integer := 0;
+    v_settlement_settled_candidate_count integer := 0;
+    v_settlement_item_count integer := 0;
+    v_settlement_linked_nonvoid_item_count integer := 0;
 BEGIN
     PERFORM set_config('lock_timeout', '3s', true);
 
@@ -65834,6 +65850,10 @@ BEGIN
 
     IF v_operation_type IN ('PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS') AND p_pay_batch_id IS NOT NULL THEN
         PERFORM pg_advisory_xact_lock(pg_catalog.hashtextextended('banking_pay_operation_start:PAYMENT_EXECUTION_BATCH:' || p_pay_batch_id::text, 0));
+    END IF;
+
+    IF v_operation_type = 'PAYMENT_SETTLEMENT' AND p_pay_batch_id IS NOT NULL THEN
+        PERFORM pg_advisory_xact_lock(pg_catalog.hashtextextended('banking_pay_operation_start:PAYMENT_SETTLEMENT_BATCH:' || p_pay_batch_id::text, 0));
     END IF;
 
     IF v_operation_type = 'DRAFT_CREATE' AND p_workbench_session_id IS NOT NULL THEN
@@ -65975,31 +65995,312 @@ BEGIN
                 RETURN;
             END IF;
         ELSE
-            IF v_operation_type IN ('PAYMENT_SETTLEMENT', 'REMITTANCE_QUEUE')
-               AND upper(BTRIM(COALESCE(v_operation.status, ''))) NOT IN ('COMPLETE', 'COMPLETED', 'FAILED', 'CANCELLED', 'CANCELED', 'ERROR', 'REVIEW_REQUIRED') THEN
-                UPDATE public.banking_pay_operations AS child_operation_update
-                SET config_json = jsonb_strip_nulls(COALESCE(child_operation_update.config_json, '{}'::jsonb) || jsonb_build_object(
+            v_existing_status := upper(BTRIM(COALESCE(v_operation.status, '')));
+
+            IF v_operation_type = 'PAYMENT_SETTLEMENT'
+               AND p_pay_batch_id IS NOT NULL
+               AND v_existing_status IN ('FAILED', 'CANCELLED', 'CANCELED', 'ERROR', 'REVIEW_REQUIRED') THEN
+                NULL;
+            ELSE
+                IF v_operation_type IN ('PAYMENT_SETTLEMENT', 'REMITTANCE_QUEUE')
+                   AND v_existing_status NOT IN ('COMPLETE', 'COMPLETED', 'FAILED', 'CANCELLED', 'CANCELED', 'ERROR', 'REVIEW_REQUIRED') THEN
+                    UPDATE public.banking_pay_operations AS child_operation_update
+                    SET config_json = jsonb_strip_nulls(COALESCE(child_operation_update.config_json, '{}'::jsonb) || jsonb_build_object(
+                            'server_runnable', true,
+                            'backend_runner_owned', true,
+                            'frontend_completion_required', false,
+                            'operation_created_for_backend_runner', true,
+                            'run_after_utc', COALESCE(child_operation_update.run_after_utc, v_now)::text
+                        )),
+                        progress_json = jsonb_strip_nulls(COALESCE(child_operation_update.progress_json, '{}'::jsonb) || jsonb_build_object(
+                            'server_runnable', true,
+                            'backend_runner_owned', true,
+                            'frontend_completion_required', false,
+                            'operation_created_for_backend_runner', true,
+                            'operation_reused_for_backend_runner', true,
+                            'runner_flags_repaired_at_utc', v_now::text,
+                            'run_after_utc', COALESCE(child_operation_update.run_after_utc, v_now)::text
+                        )),
+                        runner_state = 'RUNNABLE',
+                        requires_user_action = false,
+                        run_after_utc = COALESCE(child_operation_update.run_after_utc, v_now),
+                        updated_at_utc = v_now
+                    WHERE child_operation_update.id = v_operation.id
+                    RETURNING child_operation_update.* INTO v_operation;
+                END IF;
+
+                RETURN QUERY
+                SELECT
+                    v_operation.id,
+                    v_operation.operation_type,
+                    v_operation.status,
+                    v_operation.phase,
+                    v_operation.actor_user_id,
+                    v_operation.workbench_session_id,
+                    v_operation.pay_batch_id,
+                    v_operation.root_operation_id,
+                    v_operation.idempotency_key,
+                    v_operation.input_json,
+                    v_operation.config_json,
+                    v_operation.progress_json,
+                    v_operation.result_json,
+                    v_operation.error_json,
+                    v_operation.total_units,
+                    v_operation.completed_units,
+                    v_operation.failed_units,
+                    v_operation.current_chunk_index,
+                    v_operation.chunk_count,
+                    COALESCE(v_operation.lease_owner, v_operation.locked_by),
+                    COALESCE(v_operation.lease_expires_at_utc, v_operation.lock_expires_at_utc),
+                    v_operation.created_at_utc,
+                    v_operation.started_at_utc,
+                    v_operation.updated_at_utc,
+                    v_operation.completed_at_utc,
+                    v_operation.failed_at_utc,
+                    true;
+                RETURN;
+            END IF;
+        END IF;
+    END IF;
+
+    IF v_operation_type = 'PAYMENT_SETTLEMENT' AND p_pay_batch_id IS NOT NULL THEN
+        WITH batch_summary AS (
+            SELECT
+                batch_row.status AS batch_status,
+                batch_row.execution_commit_state AS execution_commit_state,
+                NULLIF(BTRIM(COALESCE(batch_row.execution_commit_ref, '')), '') IS NOT NULL AS execution_commit_ref_present,
+                batch_row.completed_at_utc IS NOT NULL AS completed_at_utc_present,
+                batch_row.freshness_validation_status AS freshness_validation_status,
+                upper(BTRIM(COALESCE(batch_row.freshness_validation_status, ''))) NOT IN ('STALE', 'FAILED', 'BLOCKED', 'CONFLICT') AS freshness_clean
+            FROM public.pay_batches AS batch_row
+            WHERE batch_row.id = p_pay_batch_id
+        ), transfer_base AS (
+            SELECT
+                transfer_row.id AS pay_bank_transfer_id,
+                upper(BTRIM(COALESCE(transfer_row.status, ''))) AS status_text,
+                upper(BTRIM(COALESCE(transfer_row.rail_state, ''))) AS rail_state_text,
+                transfer_row.completed_at_utc AS completed_at_utc
+            FROM public.pay_bank_transfers AS transfer_row
+            WHERE transfer_row.pay_batch_id = p_pay_batch_id
+        ), transfer_flags AS (
+            SELECT
+                transfer_base.pay_bank_transfer_id,
+                (
+                    transfer_base.status_text IN ('FAILED', 'DECLINED', 'REJECTED', 'CANCELLED', 'CANCELED', 'VOIDED', 'RETURNED', 'REVERTED', 'BLOCKED', 'SUBMISSION_FAILED', 'FAILED_BEFORE_COMMIT')
+                    OR transfer_base.rail_state_text IN ('FAILED', 'DECLINED', 'REJECTED', 'CANCELLED', 'CANCELED', 'VOIDED', 'RETURNED', 'REVERTED', 'BLOCKED', 'SUBMISSION_FAILED', 'FAILED_BEFORE_COMMIT')
+                ) AS is_failed,
+                (
+                    transfer_base.status_text IN ('COMPLETED', 'SETTLED', 'PAID', 'CONFIRMED', 'SUCCESS', 'SUCCEEDED')
+                    OR transfer_base.rail_state_text IN ('COMPLETED', 'SETTLED', 'PAID', 'CONFIRMED', 'SUCCESS', 'SUCCEEDED')
+                    OR transfer_base.completed_at_utc IS NOT NULL
+                ) AS has_success_evidence
+            FROM transfer_base
+        ), transfer_summary AS (
+            SELECT
+                COUNT(*)::integer AS transfer_count,
+                COUNT(*) FILTER (WHERE transfer_flags.has_success_evidence AND transfer_flags.is_failed IS NOT TRUE)::integer AS terminal_success_transfer_count,
+                COUNT(*) FILTER (WHERE transfer_flags.is_failed)::integer AS terminal_failed_transfer_count,
+                COUNT(*) FILTER (WHERE transfer_flags.has_success_evidence IS NOT TRUE AND transfer_flags.is_failed IS NOT TRUE)::integer AS pending_or_unknown_transfer_count
+            FROM transfer_flags
+        ), candidate_summary AS (
+            SELECT
+                COUNT(*)::integer AS candidate_count,
+                COUNT(*) FILTER (
+                    WHERE upper(BTRIM(COALESCE(batch_candidate.settlement_status, ''))) IN ('SETTLED', 'PAID', 'CONFIRMED')
+                       OR batch_candidate.settled_at_utc IS NOT NULL
+                )::integer AS settled_candidate_count
+            FROM public.pay_batch_candidates AS batch_candidate
+            WHERE batch_candidate.pay_batch_id = p_pay_batch_id
+        ), item_summary AS (
+            SELECT
+                COUNT(*) FILTER (
+                    WHERE COALESCE(batch_item.is_voided, false) = false
+                      AND COALESCE(batch_item.item_type, '') <> 'DEBT_CREATED'
+                )::integer AS item_count,
+                COUNT(*) FILTER (
+                    WHERE COALESCE(batch_item.is_voided, false) = false
+                      AND COALESCE(batch_item.item_type, '') <> 'DEBT_CREATED'
+                      AND batch_item.pay_bank_transfer_id IS NOT NULL
+                )::integer AS linked_nonvoid_item_count
+            FROM public.pay_batch_candidates AS batch_candidate
+            JOIN public.pay_batch_items AS batch_item
+              ON batch_item.pay_batch_candidate_id = batch_candidate.id
+            WHERE batch_candidate.pay_batch_id = p_pay_batch_id
+        )
+        SELECT
+            batch_summary.batch_status,
+            batch_summary.execution_commit_state,
+            batch_summary.execution_commit_ref_present,
+            batch_summary.completed_at_utc_present,
+            batch_summary.freshness_validation_status,
+            batch_summary.freshness_clean,
+            COALESCE(transfer_summary.transfer_count, 0),
+            COALESCE(transfer_summary.terminal_success_transfer_count, 0),
+            COALESCE(transfer_summary.terminal_failed_transfer_count, 0),
+            COALESCE(transfer_summary.pending_or_unknown_transfer_count, 0),
+            COALESCE(candidate_summary.candidate_count, 0),
+            COALESCE(candidate_summary.settled_candidate_count, 0),
+            COALESCE(item_summary.item_count, 0),
+            COALESCE(item_summary.linked_nonvoid_item_count, 0)
+        INTO
+            v_settlement_batch_status,
+            v_settlement_execution_commit_state,
+            v_settlement_execution_commit_ref_present,
+            v_settlement_completed_at_utc_present,
+            v_settlement_freshness_validation_status,
+            v_settlement_freshness_clean,
+            v_settlement_transfer_count,
+            v_settlement_terminal_success_transfer_count,
+            v_settlement_terminal_failed_transfer_count,
+            v_settlement_pending_or_unknown_transfer_count,
+            v_settlement_candidate_count,
+            v_settlement_settled_candidate_count,
+            v_settlement_item_count,
+            v_settlement_linked_nonvoid_item_count
+        FROM batch_summary
+        CROSS JOIN transfer_summary
+        CROSS JOIN candidate_summary
+        CROSS JOIN item_summary;
+
+        v_settlement_batch_clean_success := (
+             upper(BTRIM(COALESCE(v_settlement_batch_status, ''))) = 'SETTLED'
+         AND upper(BTRIM(COALESCE(v_settlement_execution_commit_state, ''))) = 'COMMITTED'
+         AND COALESCE(v_settlement_execution_commit_ref_present, false) = true
+         AND COALESCE(v_settlement_completed_at_utc_present, false) = true
+         AND COALESCE(v_settlement_transfer_count, 0) > 0
+         AND COALESCE(v_settlement_terminal_success_transfer_count, 0) > 0
+         AND COALESCE(v_settlement_terminal_failed_transfer_count, 0) = 0
+         AND COALESCE(v_settlement_pending_or_unknown_transfer_count, 0) = 0
+         AND COALESCE(v_settlement_candidate_count, 0) > 0
+         AND COALESCE(v_settlement_settled_candidate_count, 0) = COALESCE(v_settlement_candidate_count, 0)
+         AND (COALESCE(v_settlement_item_count, 0) = 0 OR COALESCE(v_settlement_linked_nonvoid_item_count, 0) = COALESCE(v_settlement_item_count, 0))
+         AND COALESCE(v_settlement_freshness_clean, true) = true
+        );
+
+        v_settlement_durable_truth := jsonb_build_object(
+            'batch_status', v_settlement_batch_status,
+            'execution_commit_state', v_settlement_execution_commit_state,
+            'execution_commit_ref_present', COALESCE(v_settlement_execution_commit_ref_present, false),
+            'completed_at_utc_present', COALESCE(v_settlement_completed_at_utc_present, false),
+            'freshness_validation_status', v_settlement_freshness_validation_status,
+            'freshness_clean', COALESCE(v_settlement_freshness_clean, true),
+            'transfer_count', COALESCE(v_settlement_transfer_count, 0),
+            'terminal_success_transfer_count', COALESCE(v_settlement_terminal_success_transfer_count, 0),
+            'terminal_failed_transfer_count', COALESCE(v_settlement_terminal_failed_transfer_count, 0),
+            'pending_or_unknown_transfer_count', COALESCE(v_settlement_pending_or_unknown_transfer_count, 0),
+            'candidate_count', COALESCE(v_settlement_candidate_count, 0),
+            'settled_candidate_count', COALESCE(v_settlement_settled_candidate_count, 0),
+            'unsettled_candidate_count', GREATEST(COALESCE(v_settlement_candidate_count, 0) - COALESCE(v_settlement_settled_candidate_count, 0), 0),
+            'item_count', COALESCE(v_settlement_item_count, 0),
+            'linked_nonvoid_item_count', COALESCE(v_settlement_linked_nonvoid_item_count, 0),
+            'verified_clean_success', COALESCE(v_settlement_batch_clean_success, false)
+        );
+
+        SELECT settlement_operation.*
+        INTO v_existing_by_batch
+        FROM public.banking_pay_operations AS settlement_operation
+        WHERE settlement_operation.pay_batch_id = p_pay_batch_id
+          AND settlement_operation.operation_type = 'PAYMENT_SETTLEMENT'
+          AND (
+                upper(BTRIM(COALESCE(settlement_operation.status, ''))) IN ('QUEUED', 'RUNNING', 'WAITING', 'WAITING_AUTHORISATION', 'WAITING_AUTHORIZATION', 'WAITING_PROVIDER')
+             OR upper(BTRIM(COALESCE(settlement_operation.status, ''))) = 'REVIEW_REQUIRED'
+             OR (COALESCE(v_settlement_batch_clean_success, false) = true AND upper(BTRIM(COALESCE(settlement_operation.status, ''))) = 'COMPLETE' AND settlement_operation.phase = 'COMPLETE')
+             OR (COALESCE(v_settlement_batch_clean_success, false) = true AND upper(BTRIM(COALESCE(settlement_operation.status, ''))) IN ('FAILED', 'CANCELLED', 'CANCELED'))
+          )
+        ORDER BY
+          CASE
+            WHEN upper(BTRIM(COALESCE(settlement_operation.status, ''))) IN ('QUEUED', 'RUNNING', 'WAITING', 'WAITING_AUTHORISATION', 'WAITING_AUTHORIZATION', 'WAITING_PROVIDER') THEN 0
+            WHEN COALESCE(v_settlement_batch_clean_success, false) = true AND upper(BTRIM(COALESCE(settlement_operation.status, ''))) = 'COMPLETE' THEN 1
+            WHEN COALESCE(v_settlement_batch_clean_success, false) = true AND upper(BTRIM(COALESCE(settlement_operation.status, ''))) IN ('FAILED', 'REVIEW_REQUIRED', 'CANCELLED', 'CANCELED') THEN 2
+            ELSE 9
+          END,
+          COALESCE(settlement_operation.completed_at_utc, settlement_operation.updated_at_utc, settlement_operation.created_at_utc) DESC,
+          settlement_operation.id DESC
+        LIMIT 1
+        FOR UPDATE;
+
+        IF FOUND THEN
+            v_operation := v_existing_by_batch;
+            v_existing_status := upper(BTRIM(COALESCE(v_operation.status, '')));
+
+            IF v_existing_status IN ('QUEUED', 'RUNNING', 'WAITING', 'WAITING_AUTHORISATION', 'WAITING_AUTHORIZATION', 'WAITING_PROVIDER') THEN
+                UPDATE public.banking_pay_operations AS settlement_operation_update
+                SET config_json = jsonb_strip_nulls(COALESCE(settlement_operation_update.config_json, '{}'::jsonb) || jsonb_build_object(
                         'server_runnable', true,
                         'backend_runner_owned', true,
                         'frontend_completion_required', false,
                         'operation_created_for_backend_runner', true,
-                        'run_after_utc', COALESCE(child_operation_update.run_after_utc, v_now)::text
+                        'run_after_utc', COALESCE(settlement_operation_update.run_after_utc, v_now)::text
                     )),
-                    progress_json = jsonb_strip_nulls(COALESCE(child_operation_update.progress_json, '{}'::jsonb) || jsonb_build_object(
+                    progress_json = jsonb_strip_nulls(COALESCE(settlement_operation_update.progress_json, '{}'::jsonb) || jsonb_build_object(
                         'server_runnable', true,
                         'backend_runner_owned', true,
                         'frontend_completion_required', false,
                         'operation_created_for_backend_runner', true,
                         'operation_reused_for_backend_runner', true,
+                        'payment_settlement_batch_guard_reused', true,
+                        'payment_settlement_batch_guard_reason', 'EXISTING_ACTIVE_SETTLEMENT_OPERATION',
+                        'durable_settlement_truth', v_settlement_durable_truth,
                         'runner_flags_repaired_at_utc', v_now::text,
-                        'run_after_utc', COALESCE(child_operation_update.run_after_utc, v_now)::text
+                        'run_after_utc', COALESCE(settlement_operation_update.run_after_utc, v_now)::text
                     )),
                     runner_state = 'RUNNABLE',
                     requires_user_action = false,
-                    run_after_utc = COALESCE(child_operation_update.run_after_utc, v_now),
+                    run_after_utc = COALESCE(settlement_operation_update.run_after_utc, v_now),
                     updated_at_utc = v_now
-                WHERE child_operation_update.id = v_operation.id
-                RETURNING child_operation_update.* INTO v_operation;
+                WHERE settlement_operation_update.id = v_operation.id
+                RETURNING settlement_operation_update.* INTO v_operation;
+            ELSIF COALESCE(v_settlement_batch_clean_success, false) = true THEN
+                UPDATE public.banking_pay_operations AS settlement_operation_update
+                SET status = 'COMPLETE',
+                    phase = 'COMPLETE',
+                    runner_state = 'COMPLETE',
+                    requires_user_action = false,
+                    resume_reason = CASE
+                        WHEN upper(BTRIM(COALESCE(settlement_operation_update.status, ''))) = 'COMPLETE' THEN COALESCE(settlement_operation_update.resume_reason, 'EXISTING_COMPLETED_SETTLEMENT_OPERATION')
+                        ELSE 'BATCH_ALREADY_DURABLY_SETTLED'
+                    END,
+                    lease_owner = NULL::text,
+                    lease_expires_at_utc = NULL::timestamptz,
+                    locked_by = NULL::text,
+                    lock_expires_at_utc = NULL::timestamptz,
+                    run_after_utc = NULL::timestamptz,
+                    completed_at_utc = COALESCE(settlement_operation_update.completed_at_utc, v_now),
+                    progress_json = jsonb_strip_nulls(COALESCE(settlement_operation_update.progress_json, '{}'::jsonb) || jsonb_build_object(
+                        'payment_settlement_batch_guard_reused', true,
+                        'payment_settlement_batch_guard_reason', CASE
+                            WHEN upper(BTRIM(COALESCE(settlement_operation_update.status, ''))) = 'COMPLETE' THEN 'EXISTING_COMPLETED_SETTLEMENT_OPERATION'
+                            ELSE 'OBSOLETE_TERMINAL_SETTLEMENT_OPERATION_COMPLETED_BY_DURABLE_SUCCESS'
+                        END,
+                        'idempotent_settlement_complete', true,
+                        'already_settled', true,
+                        'obsolete_terminal_status_before_idempotent_completion', CASE
+                            WHEN upper(BTRIM(COALESCE(settlement_operation_update.status, ''))) = 'COMPLETE' THEN NULL::text
+                            ELSE upper(BTRIM(COALESCE(settlement_operation_update.status, '')))
+                        END,
+                        'durable_settlement_truth', v_settlement_durable_truth,
+                        'batch_guard_checked_at_utc', v_now::text
+                    )),
+                    result_json = jsonb_strip_nulls(COALESCE(settlement_operation_update.result_json, '{}'::jsonb) || jsonb_build_object(
+                        'ok', true,
+                        'idempotent_settlement_complete', true,
+                        'already_settled', true,
+                        'reason', 'BATCH_ALREADY_DURABLY_SETTLED',
+                        'durable_settlement_truth', v_settlement_durable_truth
+                    )),
+                    error_json = CASE
+                        WHEN upper(BTRIM(COALESCE(settlement_operation_update.status, ''))) IN ('FAILED', 'REVIEW_REQUIRED', 'CANCELLED', 'CANCELED')
+                        THEN jsonb_strip_nulls(COALESCE(settlement_operation_update.error_json, '{}'::jsonb) || jsonb_build_object(
+                            'obsolete_by_durable_settlement_success', true,
+                            'obsolete_terminal_status_before_idempotent_completion', upper(BTRIM(COALESCE(settlement_operation_update.status, ''))),
+                            'durable_settlement_truth', v_settlement_durable_truth,
+                            'batch_guard_checked_at_utc', v_now::text
+                        ))
+                        ELSE settlement_operation_update.error_json
+                    END,
+                    updated_at_utc = v_now
+                WHERE settlement_operation_update.id = v_operation.id
+                RETURNING settlement_operation_update.* INTO v_operation;
             END IF;
 
             RETURN QUERY
@@ -66031,6 +66332,133 @@ BEGIN
                 v_operation.completed_at_utc,
                 v_operation.failed_at_utc,
                 true;
+            RETURN;
+        ELSIF COALESCE(v_settlement_batch_clean_success, false) = true THEN
+            INSERT INTO public.banking_pay_operations (
+                operation_type,
+                status,
+                phase,
+                actor_user_id,
+                workbench_session_id,
+                pay_batch_id,
+                root_operation_id,
+                idempotency_key,
+                input_json,
+                config_json,
+                progress_json,
+                result_json,
+                error_json,
+                total_units,
+                completed_units,
+                failed_units,
+                current_chunk_index,
+                chunk_count,
+                locked_by,
+                lock_expires_at_utc,
+                started_at_utc,
+                completed_at_utc,
+                run_after_utc,
+                lease_owner,
+                lease_expires_at_utc,
+                heartbeat_at_utc,
+                last_advanced_at_utc,
+                attempt_count,
+                max_attempts,
+                requires_user_action,
+                runner_state,
+                resume_reason
+            )
+            VALUES (
+                v_operation_type,
+                'COMPLETE',
+                'COMPLETE',
+                p_actor_user_id,
+                p_workbench_session_id,
+                p_pay_batch_id,
+                p_root_operation_id,
+                v_idempotency_key,
+                v_compact_input_json,
+                jsonb_strip_nulls(v_compact_config_json || jsonb_build_object(
+                    'server_runnable', true,
+                    'backend_runner_owned', true,
+                    'frontend_completion_required', false,
+                    'operation_created_for_backend_runner', true,
+                    'idempotent_complete_on_start', true
+                )),
+                jsonb_strip_nulls(jsonb_build_object(
+                    'server_runnable', true,
+                    'backend_runner_owned', true,
+                    'frontend_completion_required', false,
+                    'progress_version', 1,
+                    'status_text', 'Payment settlement already complete from durable batch truth.',
+                    'operation_created_for_backend_runner', true,
+                    'started_by_operation_start', true,
+                    'payment_settlement_batch_guard_reused', false,
+                    'payment_settlement_batch_guard_reason', 'BATCH_ALREADY_DURABLY_SETTLED',
+                    'idempotent_settlement_complete', true,
+                    'already_settled', true,
+                    'durable_settlement_truth', v_settlement_durable_truth,
+                    'created_at_utc', v_now::text
+                )),
+                jsonb_strip_nulls(jsonb_build_object(
+                    'ok', true,
+                    'idempotent_settlement_complete', true,
+                    'already_settled', true,
+                    'reason', 'BATCH_ALREADY_DURABLY_SETTLED',
+                    'durable_settlement_truth', v_settlement_durable_truth
+                )),
+                NULL::jsonb,
+                0,
+                0,
+                0,
+                0,
+                0,
+                NULL::text,
+                NULL::timestamptz,
+                v_now,
+                v_now,
+                NULL::timestamptz,
+                NULL::text,
+                NULL::timestamptz,
+                v_now,
+                v_now,
+                0,
+                v_max_attempts,
+                false,
+                'COMPLETE',
+                'BATCH_ALREADY_DURABLY_SETTLED'
+            )
+            RETURNING * INTO v_operation;
+
+            RETURN QUERY
+            SELECT
+                v_operation.id,
+                v_operation.operation_type,
+                v_operation.status,
+                v_operation.phase,
+                v_operation.actor_user_id,
+                v_operation.workbench_session_id,
+                v_operation.pay_batch_id,
+                v_operation.root_operation_id,
+                v_operation.idempotency_key,
+                v_operation.input_json,
+                v_operation.config_json,
+                v_operation.progress_json,
+                v_operation.result_json,
+                v_operation.error_json,
+                v_operation.total_units,
+                v_operation.completed_units,
+                v_operation.failed_units,
+                v_operation.current_chunk_index,
+                v_operation.chunk_count,
+                COALESCE(v_operation.lease_owner, v_operation.locked_by),
+                COALESCE(v_operation.lease_expires_at_utc, v_operation.lock_expires_at_utc),
+                v_operation.created_at_utc,
+                v_operation.started_at_utc,
+                v_operation.updated_at_utc,
+                v_operation.completed_at_utc,
+                v_operation.failed_at_utc,
+                false;
             RETURN;
         END IF;
     END IF;
@@ -150796,13 +151224,11 @@ END;
 $function$;
 
 
-CREATE OR REPLACE FUNCTION public.pay_batch_display_summary_refresh(
-  p_pay_batch_id uuid
-)
-RETURNS void
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
+CREATE OR REPLACE FUNCTION public.pay_batch_display_summary_refresh(p_pay_batch_id uuid)
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
 AS $function$
 BEGIN
   IF p_pay_batch_id IS NULL THEN
@@ -150883,8 +151309,19 @@ BEGIN
         'summary_source', 'durable_refresh',
         'summary_refresh_required', false,
         'refreshed_at_utc', now()::text,
-        'latest_operation_status', latest_operation.status,
+        'latest_operation_status', CASE
+          WHEN COALESCE(latest_operation.obsolete_by_durable_settlement, false) THEN 'COMPLETE'
+          ELSE latest_operation.status
+        END,
+        'latest_operation_phase', CASE
+          WHEN COALESCE(latest_operation.obsolete_by_durable_settlement, false) THEN 'COMPLETE'
+          ELSE latest_operation.phase
+        END,
+        'latest_operation_status_raw', latest_operation.status,
+        'latest_operation_phase_raw', latest_operation.phase,
         'latest_operation_type', latest_operation.operation_type,
+        'durable_settlement_success', COALESCE(durable_settlement_summary.durable_settlement_success, false),
+        'latest_operation_obsolete_by_durable_settlement', COALESCE(latest_operation.obsolete_by_durable_settlement, false),
         'batch_status_raw', pay_batch_row.status,
         'batch_status_label', CASE
           WHEN COALESCE(draft_create_failure_summary.draft_creation_failed, false) THEN 'Draft creation failed'
@@ -150898,14 +151335,20 @@ BEGIN
         'draft_creation_failed', COALESCE(draft_create_failure_summary.draft_creation_failed, false),
         'draft_creation_failed_partial', COALESCE(draft_create_failure_summary.draft_creation_failed_partial, false),
         'draft_creation_failed_has_items', COALESCE(draft_create_failure_summary.draft_creation_failed_has_items, false),
-        'batch_action_blocked', COALESCE(draft_create_failure_summary.draft_creation_failed, false),
-        'normal_draft_actions_blocked', COALESCE(draft_create_failure_summary.draft_creation_failed, false),
+        'batch_action_blocked', CASE
+          WHEN COALESCE(durable_settlement_summary.durable_settlement_success, false) THEN false
+          ELSE COALESCE(draft_create_failure_summary.draft_creation_failed, false)
+        END,
+        'normal_draft_actions_blocked', CASE
+          WHEN COALESCE(durable_settlement_summary.durable_settlement_success, false) THEN false
+          ELSE COALESCE(draft_create_failure_summary.draft_creation_failed, false)
+        END,
         'draft_creation_failed_operation_id', CASE
-          WHEN COALESCE(draft_create_failure_summary.draft_creation_failed, false) THEN latest_operation.id::text
+          WHEN COALESCE(draft_create_failure_summary.draft_creation_failed, false) AND COALESCE(durable_settlement_summary.durable_settlement_success, false) IS NOT TRUE THEN latest_operation.id::text
           ELSE NULL::text
         END,
         'draft_creation_failed_operation_phase', CASE
-          WHEN COALESCE(draft_create_failure_summary.draft_creation_failed, false) THEN latest_operation.phase
+          WHEN COALESCE(draft_create_failure_summary.draft_creation_failed, false) AND COALESCE(durable_settlement_summary.durable_settlement_success, false) IS NOT TRUE THEN latest_operation.phase
           ELSE NULL::text
         END,
         'batch_terminal_with_failed_payments', UPPER(BTRIM(COALESCE(pay_batch_row.status, ''))) = 'FAILED',
@@ -150914,7 +151357,8 @@ BEGIN
         'terminal_failed_payment_count', COALESCE(transfer_summary.terminal_failed_payment_count, 0),
         'terminal_success_payment_count', COALESCE(transfer_summary.terminal_success_payment_count, 0),
         'settlement_required', (
-          UPPER(BTRIM(COALESCE(pay_batch_row.status, ''))) = 'WAITING_BANK_CONFIRM'
+          COALESCE(durable_settlement_summary.durable_settlement_success, false) IS NOT TRUE
+          AND UPPER(BTRIM(COALESCE(pay_batch_row.status, ''))) = 'WAITING_BANK_CONFIRM'
           AND COALESCE(transfer_summary.transfer_count, 0) > 0
           AND COALESCE(transfer_summary.pending_bank_outcome_count, 0) = 0
           AND COALESCE(transfer_summary.unknown_bank_outcome_count, 0) = 0
@@ -150922,7 +151366,8 @@ BEGIN
           AND (COALESCE(transfer_summary.terminal_success_payment_count, 0) + COALESCE(transfer_summary.terminal_failed_payment_count, 0)) > 0
         ),
         'settlement_nudge_recommended', (
-          UPPER(BTRIM(COALESCE(pay_batch_row.status, ''))) = 'WAITING_BANK_CONFIRM'
+          COALESCE(durable_settlement_summary.durable_settlement_success, false) IS NOT TRUE
+          AND UPPER(BTRIM(COALESCE(pay_batch_row.status, ''))) = 'WAITING_BANK_CONFIRM'
           AND COALESCE(transfer_summary.transfer_count, 0) > 0
           AND COALESCE(transfer_summary.pending_bank_outcome_count, 0) = 0
           AND COALESCE(transfer_summary.unknown_bank_outcome_count, 0) = 0
@@ -150932,8 +151377,14 @@ BEGIN
       )
     ) AS issue_summary_counts,
     latest_operation.id AS latest_operation_id,
-    latest_operation.status AS latest_operation_status,
-    latest_operation.phase AS latest_operation_phase,
+    CASE
+      WHEN COALESCE(latest_operation.obsolete_by_durable_settlement, false) THEN 'COMPLETE'
+      ELSE latest_operation.status
+    END AS latest_operation_status,
+    CASE
+      WHEN COALESCE(latest_operation.obsolete_by_durable_settlement, false) THEN 'COMPLETE'
+      ELSE latest_operation.phase
+    END AS latest_operation_phase,
     NULLIF(
       BTRIM(
         CONCAT_WS(
@@ -151029,13 +151480,13 @@ BEGIN
       SELECT
         transfer_row.amount,
         CASE
-          WHEN UPPER(BTRIM(COALESCE(transfer_row.status, ''))) IN ('COMPLETED','SETTLED','PAID','COMMITTED','EXECUTED')
-            OR UPPER(BTRIM(COALESCE(transfer_row.rail_state, ''))) IN ('COMPLETED','SETTLED','PAID','COMMITTED','EXECUTED','BANK_CONFIRMED','MANUAL_CONFIRM')
+          WHEN UPPER(BTRIM(COALESCE(transfer_row.status, ''))) IN ('FAILED','REJECTED','DECLINED','RETURNED','REVERTED','CANCELLED','CANCELED','VOIDED','BLOCKED','SUBMISSION_FAILED','FAILED_BEFORE_COMMIT')
+            OR UPPER(BTRIM(COALESCE(transfer_row.rail_state, ''))) IN ('FAILED','REJECTED','DECLINED','RETURNED','REVERTED','CANCELLED','CANCELED','VOIDED','BLOCKED','SUBMISSION_FAILED','FAILED_BEFORE_COMMIT')
+            THEN 'FAILED_RETURNED'
+          WHEN UPPER(BTRIM(COALESCE(transfer_row.status, ''))) IN ('COMPLETED','SETTLED','PAID','COMMITTED','EXECUTED','SUCCESS','SUCCEEDED')
+            OR UPPER(BTRIM(COALESCE(transfer_row.rail_state, ''))) IN ('COMPLETED','SETTLED','PAID','COMMITTED','EXECUTED','SUCCESS','SUCCEEDED','BANK_CONFIRMED','MANUAL_CONFIRM')
             OR transfer_row.completed_at_utc IS NOT NULL
             THEN 'SENT_CONFIRMED'
-          WHEN UPPER(BTRIM(COALESCE(transfer_row.status, ''))) IN ('FAILED','REJECTED','DECLINED','RETURNED','CANCELLED','CANCELED','SUBMISSION_FAILED','FAILED_BEFORE_COMMIT')
-            OR UPPER(BTRIM(COALESCE(transfer_row.rail_state, ''))) IN ('FAILED','REJECTED','DECLINED','RETURNED','CANCELLED','CANCELED')
-            THEN 'FAILED_RETURNED'
           WHEN UPPER(BTRIM(COALESCE(transfer_row.status, ''))) IN ('UNKNOWN','UNCERTAIN','REVIEW_REQUIRED')
             OR UPPER(BTRIM(COALESCE(transfer_row.rail_state, ''))) IN ('UNKNOWN','UNCERTAIN','REVIEW_REQUIRED')
             THEN 'CHECK_REQUIRED'
@@ -151056,11 +151507,29 @@ BEGIN
     ) AS transfer_class
   ) AS transfer_summary ON true
   LEFT JOIN LATERAL (
+    SELECT (
+      UPPER(BTRIM(COALESCE(pay_batch_row.status, ''))) = 'SETTLED'
+      AND UPPER(BTRIM(COALESCE(pay_batch_row.execution_commit_state, ''))) = 'COMMITTED'
+      AND COALESCE(transfer_summary.terminal_success_payment_count, 0) > 0
+      AND COALESCE(transfer_summary.terminal_failed_payment_count, 0) = 0
+      AND COALESCE(transfer_summary.pending_bank_outcome_count, 0) = 0
+      AND COALESCE(transfer_summary.unknown_bank_outcome_count, 0) = 0
+      AND COALESCE(transfer_summary.not_sent_count, 0) = 0
+      AND COALESCE(candidate_summary.candidate_count, 0) > 0
+      AND COALESCE(candidate_summary.settled_candidate_count, 0) = COALESCE(candidate_summary.candidate_count, 0)
+    ) AS durable_settlement_success
+  ) AS durable_settlement_summary ON true
+  LEFT JOIN LATERAL (
     SELECT
       operation_row.id,
       operation_row.operation_type,
       operation_row.status,
-      operation_row.phase
+      operation_row.phase,
+      (
+        COALESCE(durable_settlement_summary.durable_settlement_success, false) = true
+        AND UPPER(BTRIM(COALESCE(operation_row.operation_type, ''))) IN ('PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS', 'PAYMENT_SETTLEMENT')
+        AND UPPER(BTRIM(COALESCE(operation_row.status, ''))) IN ('FAILED', 'REVIEW_REQUIRED', 'RUNNING', 'WAITING', 'WAITING_AUTHORISATION', 'WAITING_AUTHORIZATION', 'WAITING_PROVIDER')
+      ) AS obsolete_by_durable_settlement
     FROM public.banking_pay_operations AS operation_row
     WHERE operation_row.pay_batch_id = pay_batch_row.id
        OR EXISTS (
@@ -151069,7 +151538,15 @@ BEGIN
          WHERE operation_scope.operation_id = operation_row.id
            AND operation_scope.pay_batch_id = pay_batch_row.id
        )
-    ORDER BY operation_row.updated_at_utc DESC NULLS LAST,
+    ORDER BY
+             CASE
+               WHEN COALESCE(durable_settlement_summary.durable_settlement_success, false) = true
+                AND UPPER(BTRIM(COALESCE(operation_row.operation_type, ''))) IN ('PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS', 'PAYMENT_SETTLEMENT')
+                AND UPPER(BTRIM(COALESCE(operation_row.status, ''))) IN ('FAILED', 'REVIEW_REQUIRED', 'RUNNING', 'WAITING', 'WAITING_AUTHORISATION', 'WAITING_AUTHORIZATION', 'WAITING_PROVIDER')
+                 THEN 1
+               ELSE 0
+             END ASC,
+             operation_row.updated_at_utc DESC NULLS LAST,
              operation_row.created_at_utc DESC NULLS LAST,
              operation_row.id DESC
     LIMIT 1
@@ -163694,6 +164171,18 @@ DECLARE
   v_item_transfer_linked_count integer := 0;
   v_item_transfer_reused_count integer := 0;
   v_item_transfer_conflict_count integer := 0;
+  v_batch_already_settled boolean := false;
+  v_idempotent_settlement_complete boolean := false;
+  v_transfer_count integer := 0;
+  v_terminal_success_transfer_count integer := 0;
+  v_terminal_failed_transfer_count integer := 0;
+  v_pending_or_unknown_transfer_count integer := 0;
+  v_candidate_count integer := 0;
+  v_settled_candidate_count integer := 0;
+  v_item_count integer := 0;
+  v_linked_nonvoid_item_count integer := 0;
+  v_existing_completed_settlement_operation_id uuid := NULL::uuid;
+  v_freshness_clean boolean := true;
 BEGIN
   IF p_operation_id IS NULL THEN
     RAISE EXCEPTION 'operation_id is required';
@@ -163892,9 +164381,9 @@ BEGIN
     WHERE batch_candidate.pay_batch_id = p_pay_batch_id
       AND COALESCE(batch_item.is_voided, false) = false
       AND COALESCE(batch_item.item_type, '') <> 'DEBT_CREATED'
-      AND (
-        upper(COALESCE(batch_candidate.settlement_status, '')) NOT IN ('SETTLED', 'PAID', 'CONFIRMED')
-        OR batch_candidate.settlement_status IS NULL
+      AND NOT (
+        upper(BTRIM(COALESCE(batch_candidate.settlement_status, ''))) IN ('SETTLED', 'PAID', 'CONFIRMED')
+        OR batch_candidate.settled_at_utc IS NOT NULL
       )
       AND (
         v_scope = 'ALL'
@@ -163994,6 +164483,118 @@ BEGIN
        v_stale_scope_skipped_count
   FROM upserted_scope;
 
+  WITH transfer_base AS (
+    SELECT
+      transfer_row.id AS pay_bank_transfer_id,
+      upper(BTRIM(COALESCE(transfer_row.status, ''))) AS status_text,
+      upper(BTRIM(COALESCE(transfer_row.rail_state, ''))) AS rail_state_text,
+      transfer_row.completed_at_utc AS completed_at_utc
+    FROM public.pay_bank_transfers AS transfer_row
+    WHERE transfer_row.pay_batch_id = p_pay_batch_id
+  ), transfer_flags AS (
+    SELECT
+      transfer_base.pay_bank_transfer_id,
+      (
+        transfer_base.status_text IN ('FAILED', 'DECLINED', 'REJECTED', 'CANCELLED', 'CANCELED', 'VOIDED', 'RETURNED', 'REVERTED', 'BLOCKED', 'SUBMISSION_FAILED', 'FAILED_BEFORE_COMMIT')
+        OR transfer_base.rail_state_text IN ('FAILED', 'DECLINED', 'REJECTED', 'CANCELLED', 'CANCELED', 'VOIDED', 'RETURNED', 'REVERTED', 'BLOCKED', 'SUBMISSION_FAILED', 'FAILED_BEFORE_COMMIT')
+      ) AS is_failed,
+      (
+        transfer_base.status_text IN ('COMPLETED', 'SETTLED', 'PAID', 'CONFIRMED', 'SUCCESS', 'SUCCEEDED')
+        OR transfer_base.rail_state_text IN ('COMPLETED', 'SETTLED', 'PAID', 'CONFIRMED', 'SUCCESS', 'SUCCEEDED')
+        OR transfer_base.completed_at_utc IS NOT NULL
+      ) AS has_success_evidence
+    FROM transfer_base
+  ), transfer_summary AS (
+    SELECT
+      COUNT(*)::integer AS transfer_count,
+      COUNT(*) FILTER (WHERE transfer_flags.has_success_evidence AND transfer_flags.is_failed IS NOT TRUE)::integer AS terminal_success_transfer_count,
+      COUNT(*) FILTER (WHERE transfer_flags.is_failed)::integer AS terminal_failed_transfer_count,
+      COUNT(*) FILTER (WHERE transfer_flags.has_success_evidence IS NOT TRUE AND transfer_flags.is_failed IS NOT TRUE)::integer AS pending_or_unknown_transfer_count
+    FROM transfer_flags
+  ), candidate_summary AS (
+    SELECT
+      COUNT(*)::integer AS candidate_count,
+      COUNT(*) FILTER (
+        WHERE upper(BTRIM(COALESCE(batch_candidate.settlement_status, ''))) IN ('SETTLED', 'PAID', 'CONFIRMED')
+           OR batch_candidate.settled_at_utc IS NOT NULL
+      )::integer AS settled_candidate_count
+    FROM public.pay_batch_candidates AS batch_candidate
+    WHERE batch_candidate.pay_batch_id = p_pay_batch_id
+  ), item_summary AS (
+    SELECT
+      COUNT(*) FILTER (
+        WHERE COALESCE(batch_item.is_voided, false) = false
+          AND COALESCE(batch_item.item_type, '') <> 'DEBT_CREATED'
+      )::integer AS item_count,
+      COUNT(*) FILTER (
+        WHERE COALESCE(batch_item.is_voided, false) = false
+          AND COALESCE(batch_item.item_type, '') <> 'DEBT_CREATED'
+          AND batch_item.pay_bank_transfer_id IS NOT NULL
+      )::integer AS linked_nonvoid_item_count
+    FROM public.pay_batch_candidates AS batch_candidate
+    JOIN public.pay_batch_items AS batch_item
+      ON batch_item.pay_batch_candidate_id = batch_candidate.id
+    WHERE batch_candidate.pay_batch_id = p_pay_batch_id
+  ), completed_settlement_operation AS (
+    SELECT settlement_operation.id AS operation_id
+    FROM public.banking_pay_operations AS settlement_operation
+    WHERE settlement_operation.pay_batch_id = p_pay_batch_id
+      AND settlement_operation.operation_type = 'PAYMENT_SETTLEMENT'
+      AND settlement_operation.status = 'COMPLETE'
+      AND settlement_operation.phase = 'COMPLETE'
+      AND settlement_operation.id <> p_operation_id
+    ORDER BY COALESCE(settlement_operation.completed_at_utc, settlement_operation.updated_at_utc, settlement_operation.created_at_utc) DESC,
+             settlement_operation.id DESC
+    LIMIT 1
+  )
+  SELECT
+    COALESCE(transfer_summary.transfer_count, 0),
+    COALESCE(transfer_summary.terminal_success_transfer_count, 0),
+    COALESCE(transfer_summary.terminal_failed_transfer_count, 0),
+    COALESCE(transfer_summary.pending_or_unknown_transfer_count, 0),
+    COALESCE(candidate_summary.candidate_count, 0),
+    COALESCE(candidate_summary.settled_candidate_count, 0),
+    COALESCE(item_summary.item_count, 0),
+    COALESCE(item_summary.linked_nonvoid_item_count, 0),
+    completed_settlement_operation.operation_id,
+    upper(BTRIM(COALESCE(v_batch_row.freshness_validation_status, ''))) NOT IN ('STALE', 'FAILED', 'BLOCKED', 'CONFLICT')
+  INTO
+    v_transfer_count,
+    v_terminal_success_transfer_count,
+    v_terminal_failed_transfer_count,
+    v_pending_or_unknown_transfer_count,
+    v_candidate_count,
+    v_settled_candidate_count,
+    v_item_count,
+    v_linked_nonvoid_item_count,
+    v_existing_completed_settlement_operation_id,
+    v_freshness_clean
+  FROM transfer_summary
+  CROSS JOIN candidate_summary
+  CROSS JOIN item_summary
+  LEFT JOIN completed_settlement_operation ON true;
+
+  v_batch_already_settled := (
+       upper(BTRIM(COALESCE(v_batch_row.status, ''))) = 'SETTLED'
+   AND upper(BTRIM(COALESCE(v_batch_row.execution_commit_state, ''))) = 'COMMITTED'
+   AND NULLIF(BTRIM(COALESCE(v_batch_row.execution_commit_ref, '')), '') IS NOT NULL
+   AND v_batch_row.completed_at_utc IS NOT NULL
+   AND COALESCE(v_transfer_count, 0) > 0
+   AND COALESCE(v_terminal_success_transfer_count, 0) > 0
+   AND COALESCE(v_terminal_failed_transfer_count, 0) = 0
+   AND COALESCE(v_pending_or_unknown_transfer_count, 0) = 0
+   AND COALESCE(v_candidate_count, 0) > 0
+   AND COALESCE(v_settled_candidate_count, 0) = COALESCE(v_candidate_count, 0)
+   AND (COALESCE(v_item_count, 0) = 0 OR COALESCE(v_linked_nonvoid_item_count, 0) = COALESCE(v_item_count, 0))
+   AND COALESCE(v_freshness_clean, true) = true
+  );
+
+  v_idempotent_settlement_complete := (
+    COALESCE(v_batch_already_settled, false) = true
+    AND COALESCE(v_created_count, 0) = 0
+    AND COALESCE(v_settlement_unit_count, 0) = 0
+  );
+
   UPDATE public.banking_pay_operations AS operation_update
   SET pay_batch_id = p_pay_batch_id,
       updated_at_utc = v_now
@@ -164012,10 +164613,33 @@ BEGIN
     'transfer_scope_operation_id', CASE WHEN v_transfer_scope_operation_id IS NULL THEN NULL ELSE v_transfer_scope_operation_id::text END,
     'item_transfer_linked_count', COALESCE(v_item_transfer_linked_count, 0),
     'item_transfer_reused_count', COALESCE(v_item_transfer_reused_count, 0),
-    'item_transfer_conflict_count', COALESCE(v_item_transfer_conflict_count, 0)
+    'item_transfer_conflict_count', COALESCE(v_item_transfer_conflict_count, 0),
+    'batch_already_settled', COALESCE(v_batch_already_settled, false),
+    'idempotent_settlement_complete', COALESCE(v_idempotent_settlement_complete, false),
+    'existing_completed_settlement_operation_id', CASE WHEN v_existing_completed_settlement_operation_id IS NULL THEN NULL ELSE v_existing_completed_settlement_operation_id::text END,
+    'durable_settlement_truth', jsonb_build_object(
+      'batch_status', v_batch_row.status,
+      'execution_commit_state', v_batch_row.execution_commit_state,
+      'execution_commit_ref_present', NULLIF(BTRIM(COALESCE(v_batch_row.execution_commit_ref, '')), '') IS NOT NULL,
+      'completed_at_utc_present', v_batch_row.completed_at_utc IS NOT NULL,
+      'freshness_validation_status', v_batch_row.freshness_validation_status,
+      'freshness_clean', COALESCE(v_freshness_clean, true),
+      'transfer_count', COALESCE(v_transfer_count, 0),
+      'terminal_success_transfer_count', COALESCE(v_terminal_success_transfer_count, 0),
+      'terminal_failed_transfer_count', COALESCE(v_terminal_failed_transfer_count, 0),
+      'pending_or_unknown_transfer_count', COALESCE(v_pending_or_unknown_transfer_count, 0),
+      'candidate_count', COALESCE(v_candidate_count, 0),
+      'settled_candidate_count', COALESCE(v_settled_candidate_count, 0),
+      'unsettled_candidate_count', GREATEST(COALESCE(v_candidate_count, 0) - COALESCE(v_settled_candidate_count, 0), 0),
+      'item_count', COALESCE(v_item_count, 0),
+      'linked_nonvoid_item_count', COALESCE(v_linked_nonvoid_item_count, 0),
+      'verified_clean_success', COALESCE(v_batch_already_settled, false)
+    )
   );
 END;
 $function$;
+
+
 
 
 
