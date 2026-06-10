@@ -103404,6 +103404,54 @@ BEGIN
       round(coalesce(sum(coalesce(oc.reserved_ex_vat,0)),0),2)::numeric AS reserved_ex_vat
     FROM public._pay_outstanding_components(ARRAY[p_timesheet_id]) oc
   ),
+  paid_totals AS (
+    SELECT
+      round(coalesce(sum(coalesce(paid_item.amount_ex_vat, 0)), 0), 2)::numeric AS paid_to_date_ex_vat,
+      count(paid_item.id)::int AS paid_item_count,
+      max(coalesce(paid_candidate.settled_at_utc, paid_transfer.completed_at_utc, paid_batch.completed_at_utc)) AS last_paid_at_utc
+    FROM public.pay_batch_items AS paid_item
+    JOIN public.pay_batch_candidates AS paid_candidate
+      ON paid_candidate.id = paid_item.pay_batch_candidate_id
+    JOIN public.pay_batches AS paid_batch
+      ON paid_batch.id = paid_candidate.pay_batch_id
+    LEFT JOIN public.pay_bank_transfers AS paid_transfer
+      ON paid_transfer.id = paid_item.pay_bank_transfer_id
+     AND paid_transfer.pay_batch_id = paid_batch.id
+    LEFT JOIN LATERAL public._pay_rail_state_money_movement_classify(
+      paid_transfer.status,
+      paid_transfer.rail_state,
+      coalesce(paid_transfer.rail_meta_json, '{}'::jsonb),
+      coalesce(paid_transfer.rail_meta_json, '{}'::jsonb)
+    ) AS paid_transfer_classifier
+      ON paid_transfer.id IS NOT NULL
+    WHERE paid_item.timesheet_id = p_timesheet_id
+      AND coalesce(paid_item.is_voided, false) = false
+      AND paid_item.item_type IN ('SEGMENT_DELTA','EXPENSE_DELTA','ADJUSTMENT_DELTA','MILEAGE_DELTA')
+      AND paid_batch.cancelled_at_utc IS NULL
+      AND upper(btrim(coalesce(paid_batch.status, ''))) <> 'CANCELLED'
+      AND (
+        upper(btrim(coalesce(paid_candidate.settlement_status, ''))) IN ('SETTLED','PAID','CONFIRMED')
+        OR upper(btrim(coalesce(paid_batch.status, ''))) = 'SETTLED'
+        OR coalesce(paid_transfer_classifier.is_final_money_moved, false) = true
+        OR upper(btrim(coalesce(paid_transfer.status, ''))) IN ('COMPLETED','COMPLETE','SETTLED','PAID','EXECUTED','COMMITTED','SUCCESS','SUCCESSFUL','SUCCEEDED')
+        OR upper(btrim(coalesce(paid_transfer.rail_state, ''))) IN ('COMPLETED','COMPLETE','SETTLED','PAID','EXECUTED','COMMITTED','SUCCESS','SUCCESSFUL','SUCCEEDED')
+        OR paid_transfer.completed_at_utc IS NOT NULL
+        OR EXISTS (
+          SELECT 1
+          FROM public.banking_pay_operation_settlement_scope AS paid_settlement_scope
+          WHERE paid_settlement_scope.pay_batch_id = paid_batch.id
+            AND paid_settlement_scope.pay_batch_candidate_id = paid_candidate.id
+            AND paid_settlement_scope.status = 'SETTLED'
+            AND (
+              (
+                paid_item.pay_bank_transfer_id IS NOT NULL
+                AND paid_settlement_scope.payload_json #>> '{payment_scope_json,pay_bank_transfer_id}' = paid_item.pay_bank_transfer_id::text
+              )
+              OR coalesce(paid_settlement_scope.payload_json->'pay_batch_item_ids', '[]'::jsonb) ? paid_item.id::text
+            )
+        )
+      )
+  ),
   mode AS (
     SELECT
       COALESCE((SELECT (mf.actual_segments_mode OR mf.synthetic_daily_mode) FROM mode_flags mf LIMIT 1), false) AS is_segments_mode
@@ -103603,6 +103651,11 @@ BEGIN
         'outstanding_ex_vat', a.outstanding_ex_vat,
         'reserved_ex_vat', a.reserved_ex_vat
       ),
+      'paid_totals', jsonb_build_object(
+        'paid_to_date_ex_vat', coalesce(pt.paid_to_date_ex_vat, 0),
+        'paid_item_count', coalesce(pt.paid_item_count, 0),
+        'last_paid_at_utc', pt.last_paid_at_utc
+      ),
       'hover', h.hover_summary,
       'components', cj.components,
       'segment_snoozes', ssj.segment_snoozes
@@ -103612,6 +103665,7 @@ BEGIN
   CROSS JOIN mode m
   CROSS JOIN paid_status ps
   CROSS JOIN adjusted a
+  CROSS JOIN paid_totals pt
   CROSS JOIN hover h
   CROSS JOIN comp_json cj
   CROSS JOIN segment_snoozes_json ssj
@@ -103654,8 +103708,6 @@ BEGIN
   RETURN v_out;
 END;
 $$;
-
-
 
 
 
