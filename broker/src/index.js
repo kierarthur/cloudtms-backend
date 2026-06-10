@@ -18560,6 +18560,8 @@ function formatCloudTmsGbp(value) {
   }).format(numericValue);
 }
 
+
+
 function renderTimesheetSection(ctx) {
   const context = (ctx && typeof ctx === 'object') ? ctx : {};
   const h = (value) => escapeHtml(String(value == null ? '' : value));
@@ -18589,7 +18591,8 @@ function renderTimesheetSection(ctx) {
     }).format(moneyNum(value));
   };
 
-  const firstNonBlank = (...values) => {
+  const firstNonBlank = function() {
+    const values = Array.prototype.slice.call(arguments);
     for (const value of values) {
       const s = String(value == null ? '' : value).trim();
       if (s) return s;
@@ -18855,14 +18858,47 @@ function renderTimesheetSection(ctx) {
 
   const normalizeUnitRows = (rows, sectionName) => {
     const out = [];
+    const genericAmountOnlyUnitKeys = new Set([
+      'SEGMENT_DELTA',
+      'TIMESHEET_PAY',
+      'TIMESHEETPAY',
+      'TIMESHEET_PAYMENT',
+      'TS_BUCKET',
+      'UNIT'
+    ]);
+
     for (const row of dedupeUnitRows(rows, sectionName)) {
-      const unit = friendlyUnitLabel(row, sectionName);
-      const qty = asNum(row?.quantity ?? row?.qty ?? row?.units);
-      const rate = asNum(row?.rate ?? row?.unit_rate ?? row?.unitRate);
-      const totalEx = asNum(row?.total_ex_vat ?? row?.amount_ex_vat ?? row?.totalExVat ?? row?.amountExVat ?? row?.total ?? row?.amount);
-      const vat = asNum(row?.vat ?? row?.amount_vat ?? row?.amountVat ?? row?.total_vat ?? row?.totalVat);
-      const totalInc = asNum(row?.total_inc_vat ?? row?.amount_inc_vat ?? row?.totalIncVat ?? row?.amountIncVat ?? ((totalEx != null || vat != null) ? Number(totalEx || 0) + Number(vat || 0) : null));
+      const source = safeObject(row);
+      const unit = friendlyUnitLabel(source, sectionName);
+      const qty = asNum(source.quantity ?? source.qty ?? source.units);
+      const rate = asNum(source.rate ?? source.unit_rate ?? source.unitRate);
+      const totalEx = asNum(source.total_ex_vat ?? source.amount_ex_vat ?? source.totalExVat ?? source.amountExVat ?? source.total ?? source.amount);
+      const vat = asNum(source.vat ?? source.amount_vat ?? source.amountVat ?? source.total_vat ?? source.totalVat);
+      const totalInc = asNum(source.total_inc_vat ?? source.amount_inc_vat ?? source.totalIncVat ?? source.amountIncVat ?? ((totalEx != null || vat != null) ? Number(totalEx || 0) + Number(vat || 0) : null));
       if ((qty == null || Math.abs(qty) < 1e-9) && (totalEx == null || Math.abs(totalEx) < 1e-9) && (totalInc == null || Math.abs(totalInc) < 1e-9)) continue;
+
+      const rawBucket = firstNonBlank(source.bucket_code, source.bucketCode, source.bucket, source.code);
+      const rawUnit = firstNonBlank(source.unit, source.unit_name, source.unitName, source.label, source.name);
+      const rawLineKindKey = labelKey(source.line_kind || source.lineKind || source.kind || source.line_kind_raw || source.lineKindRaw);
+      const rawItemTypeKey = labelKey(source.item_type || source.itemType || source.internal_item_type || source.internalItemType || source.type);
+      const rawUnitKey = labelKey(rawUnit);
+      const friendlyUnitKey = labelKey(unit);
+      const hasNoBucket = !rawBucket;
+      const hasNoQuantity = qty == null || Math.abs(qty) < 1e-9;
+      const hasNoRate = rate == null;
+      const genericAmountOnlyTimesheetRow = sectionName === 'unit_rows'
+        && hasNoBucket
+        && hasNoQuantity
+        && hasNoRate
+        && (
+          genericAmountOnlyUnitKeys.has(rawUnitKey)
+          || genericAmountOnlyUnitKeys.has(friendlyUnitKey)
+          || rawLineKindKey === 'TS_BUCKET'
+          || rawItemTypeKey === 'SEGMENT_DELTA'
+        );
+
+      if (genericAmountOnlyTimesheetRow) continue;
+
       out.push({
         unit: unit || (sectionName === 'expenses_rows' ? 'Approved expense' : 'Unit'),
         quantity: qty == null ? '' : String(qty),
@@ -18891,14 +18927,13 @@ function renderTimesheetSection(ctx) {
     const rowType = labelKey(firstNonBlank(source.row_type, source.rowType, source.kind, source.type, source.schedule_kind, source.scheduleKind, source.segment_type, source.segmentType));
     const explicitScheduleRow = /SCHEDULE|SHIFT|SEGMENT|CHANGE|AMEND/.test(rowType) || source.is_schedule_row === true || source.isScheduleRow === true;
     if (!(start || end || hasBreakEvidence || explicitScheduleRow)) return null;
-    return {
-      ...source,
-      date,
-      start_utc: start,
-      end_utc: end,
-      break_mins: breakMins,
-      breaks: Array.isArray(breaks) ? breaks : source.breaks
-    };
+    const normalised = Object.assign({}, source);
+    normalised.date = date;
+    normalised.start_utc = start;
+    normalised.end_utc = end;
+    normalised.break_mins = breakMins;
+    normalised.breaks = Array.isArray(breaks) ? breaks : source.breaks;
+    return normalised;
   };
 
   const collectFrozenScheduleRows = () => {
@@ -19099,7 +19134,6 @@ function renderTimesheetSection(ctx) {
     }
   };
 }
-
 
 
 async function buildPayBatchDetailPdfFromRows(exportObj) {
@@ -24767,7 +24801,6 @@ async function handleBankingIdLedgerList(env, req, user) {
 
 
 
-
 async function advanceBankingPayExecuteOperation(env, operationRow, user, options = {}) {
   const trimStr = (value) => String(value == null ? '' : value).trim();
   const upper = (value) => trimStr(value).toUpperCase();
@@ -25163,6 +25196,18 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
       return { ok: false, skipped: true, code: 'PAY_BATCH_COMPLETION_NOTICE_FAILED', error: String(error && error.message ? error.message : error) };
     }
   };
+  const attachCompletionNoticeResult = (payload, noticeResult) => {
+    if (!payload || typeof payload !== 'object') return payload;
+    const result = isPlainObject(noticeResult) ? noticeResult : {};
+    payload.completion_notice_attempted = true;
+    payload.completion_notice_queued = result.completion_notice_queued === true;
+    payload.completion_notice_skipped = result.completion_notice_skipped === true || result.skipped === true;
+    payload.completion_notice_skip_reason = result.completion_notice_skip_reason || result.skip_reason || null;
+    payload.completion_notice_reference = result.completion_notice_reference || result.reference || null;
+    payload.completion_notice_errors = Array.isArray(result.completion_notice_errors) ? result.completion_notice_errors : (Array.isArray(result.error_rows) ? result.error_rows : []);
+    payload.completion_notice_result = result;
+    return payload;
+  };
 
   const executeMaterialTouchPhases = new Set([
     'START_AUTHORISATION_PROOF',
@@ -25284,13 +25329,13 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
   const waitingAuthorisation = (progress) => saveAndRelease('WAITING_AUTHORISATION', 'WAITING_AUTHORISATION', progress, null, null, 0, 'AWAITING_HUMAN_AUTHORISATION');
   const reviewRequired = async (phase, code, message, details) => {
     const payload = await saveAndRelease('REVIEW_REQUIRED', phase || currentPhase, { status_text: message, review_required: true, code }, null, { code, message, details: isPlainObject(details) ? details : {} }, 0, code);
-    await queueCompletionNoticeBestEffort(code || 'PAYMENT_EXECUTE_REVIEW_REQUIRED', { review_required: true, phase: phase || currentPhase });
-    return payload;
+    const completionNoticeResult = await queueCompletionNoticeBestEffort(code || 'PAYMENT_EXECUTE_REVIEW_REQUIRED', { review_required: true, phase: phase || currentPhase });
+    return attachCompletionNoticeResult(payload, completionNoticeResult);
   };
   const complete = async (progress) => {
     const payload = await saveAndRelease('COMPLETE', 'COMPLETE', Object.assign({ status_text: 'Payment execution operation complete.' }, isPlainObject(progress) ? progress : {}), null, null, 0, 'COMPLETE');
-    await queueCompletionNoticeBestEffort('PAYMENT_EXECUTE_COMPLETE', { phase: 'COMPLETE' });
-    return payload;
+    const completionNoticeResult = await queueCompletionNoticeBestEffort('PAYMENT_EXECUTE_COMPLETE', { phase: 'COMPLETE' });
+    return attachCompletionNoticeResult(payload, completionNoticeResult);
   };
 
   const firstTransferScopeIdFromChunk = (claim) => {
@@ -27657,6 +27702,8 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
     });
   }
 }
+
+
 
 
 async function withBankingPayOperationLease(env, operationRow, options = {}, advanceOnce = null) {
@@ -45812,7 +45859,6 @@ async function handleBankingPayBatchGetSectionPage(env, req, user, payBatchId) {
 }
 
 
-
 async function advanceBankingPaySettlementOperation(env, operationRow, user, options = {}) {
   const unwrapRpcPayload = (rpcRes, key) => {
     let payload = rpcRes;
@@ -45922,6 +45968,18 @@ async function advanceBankingPaySettlementOperation(env, operationRow, user, opt
       return { ok: false, skipped: true, code: 'PAY_BATCH_COMPLETION_NOTICE_FAILED', error: String(error && error.message ? error.message : error) };
     }
   };
+  const attachSettlementCompletionNoticeResult = (payload, noticeResult) => {
+    if (!payload || typeof payload !== 'object') return payload;
+    const result = safeObject(noticeResult);
+    payload.completion_notice_attempted = true;
+    payload.completion_notice_queued = result.completion_notice_queued === true;
+    payload.completion_notice_skipped = result.completion_notice_skipped === true || result.skipped === true;
+    payload.completion_notice_skip_reason = result.completion_notice_skip_reason || result.skip_reason || null;
+    payload.completion_notice_reference = result.completion_notice_reference || result.reference || null;
+    payload.completion_notice_errors = Array.isArray(result.completion_notice_errors) ? result.completion_notice_errors : (Array.isArray(result.error_rows) ? result.error_rows : []);
+    payload.completion_notice_result = result;
+    return payload;
+  };
   const save = async (status, nextPhase, progress = {}, counters = {}) => {
     const savedPayload = buildBankingPayOperationPublicPayload(await sbRpc(env, 'banking_pay_operation_save_progress', {
       p_operation_id: operationId,
@@ -45967,11 +46025,12 @@ async function advanceBankingPaySettlementOperation(env, operationRow, user, opt
         result_status: resultObject.batch_status_label || null,
         error_code: errorObject.code || null
       });
-      await queueSettlementCompletionNoticeBestEffort(`PAYMENT_SETTLEMENT_${statusText}`, {
+      const completionNoticeResult = await queueSettlementCompletionNoticeBestEffort(`PAYMENT_SETTLEMENT_${statusText}`, {
         status: statusText,
         result: resultObject,
         error: errorObject
       });
+      attachSettlementCompletionNoticeResult(finishedPayload, completionNoticeResult);
     }
     return finishedPayload;
   };
@@ -61646,6 +61705,14681 @@ async function touchBankingPayBatchPaymentStateChanged(env, payBatchId, options 
   return result;
 }
 
+
+
+
+async function advanceBankingPayDraftCreateOperation(env, operationRow, user, options = {}) {
+  const unwrapRpcPayload = (rpcRes, key) => {
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(payload) && payload.length === 1 && payload[0] && typeof payload[0] === 'object') payload = payload[0];
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) payload = payload[key];
+      if (Array.isArray(payload) && payload.length === 1 && payload[0] && typeof payload[0] === 'object') payload = payload[0];
+    } catch {}
+    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+  };
+
+  const safeObject = (value) => (value && typeof value === 'object' && !Array.isArray(value)) ? value : {};
+  const enc = encodeURIComponent;
+  const operation = safeObject(operationRow);
+  const operationId = String(operation.operation_id || operation.id || '').trim();
+  const inputJson = safeObject(operation.input_json);
+  const configJson = safeObject(operation.config_json);
+  const progressJson = safeObject(operation.progress_json);
+  const workbenchSessionId = String(operation.workbench_session_id || inputJson.workbench_session_id || inputJson.session_id || '').trim();
+  const runnerActorUserId = String(options.runnerActorUserId || options.runner_actor_user_id || user?.runner_actor_user_id || user?.runnerActorUserId || '').trim();
+  const operationActorUserId = String(operation.actor_user_id || operation.actorUserId || inputJson.actor_user_id || inputJson.actorUserId || '').trim();
+  const actorUserId = String(operationActorUserId || user?.id || user?.business_actor_user_id || user?.businessActorUserId || '').trim();
+  const lockOwner = String(options.lockOwner || `draft:${operationId}`).trim();
+  const lockSeconds = Number.isFinite(Number(configJson.lock_seconds)) ? Math.max(5, Math.min(3600, Math.trunc(Number(configJson.lock_seconds)))) : 60;
+  const phase = String(operation.phase || 'VALIDATE_SESSION').trim().toUpperCase() || 'VALIDATE_SESSION';
+
+  if (!operationId) throw new Error('advanceBankingPayDraftCreateOperation: operation_id is required');
+  if (!workbenchSessionId) throw new Error('advanceBankingPayDraftCreateOperation: workbench_session_id is required');
+  if (!actorUserId) throw new Error('advanceBankingPayDraftCreateOperation: actor_user_id is required');
+
+  const numberFrom = (value, fallback) => {
+    const n = Number(value);
+    if (Number.isFinite(n) && n > 0) return Math.trunc(n);
+    return fallback;
+  };
+  const isDraftCreateTerminalStatus = (value) => ['COMPLETE', 'COMPLETED', 'SUCCESS', 'SUCCEEDED', 'DONE', 'FAILED', 'ERROR', 'CANCELLED', 'CANCELED', 'REVIEW_REQUIRED', 'NEEDS_REVIEW', 'REVIEW'].includes(String(value || '').trim().toUpperCase());
+  const isDraftCreateFailedOrReviewStatus = (value) => ['FAILED', 'ERROR', 'REVIEW_REQUIRED', 'NEEDS_REVIEW', 'REVIEW'].includes(String(value || '').trim().toUpperCase());
+  const draftCreateMaxPhaseUnits = Math.max(1, Math.min(50, numberFrom(options.maxPhaseUnits ?? options.max_phase_units, 20)));
+  const draftCreateMaxChunksPerCall = Math.max(1, Math.min(50, numberFrom(options.maxChunksPerCall ?? options.max_chunks_per_call ?? options.maxChunksPerLease ?? options.max_chunks_per_lease, 10)));
+  const draftCreateRequestBudgetMs = Math.max(1000, Math.min(25000, numberFrom(options.requestBudgetMs ?? options.request_budget_ms ?? options.requestBudget ?? options.request_budget, 20000)));
+  const draftCreateSingleStepMode = options.__draftCreateSingleStep === true || options.singleStep === true || options.single_step === true;
+  const draftCreateChunkPhaseSet = new Set(['SEED_ALLOCATION_ROWS', 'INSERT_CANDIDATES', 'INSERT_ITEMS', 'APPLY_FINANCE_ADJUSTMENTS', 'FINALISE_RESERVATIONS', 'POPULATE_CANDIDATE_SUMMARIES', 'CREATE_TIMESHEET_SNAPSHOTS', 'BUILD_ITEM_BREAKDOWNS']);
+  const fetchLatestDraftCreateOperationRow = async () => {
+    try {
+      const { rows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/banking_pay_operations?id=eq.${enc(operationId)}&select=*&limit=1`,
+        false
+      );
+      return Array.isArray(rows) && rows.length > 0 && rows[0] && typeof rows[0] === 'object' ? rows[0] : null;
+    } catch {
+      return null;
+    }
+  };
+
+  if (!draftCreateSingleStepMode && draftCreateMaxPhaseUnits > 1) {
+    const loopStartedAtMs = Date.now();
+    let currentOperationRow = operation;
+    let lastStepPayload = null;
+    let draftCreateChunkSteps = 0;
+    const advancedStepSummaries = [];
+
+    for (let stepIndex = 0; stepIndex < draftCreateMaxPhaseUnits; stepIndex += 1) {
+      const elapsedMs = Date.now() - loopStartedAtMs;
+      const remainingBudgetMs = draftCreateRequestBudgetMs - elapsedMs;
+      if (remainingBudgetMs <= 750) {
+        return Object.assign({}, lastStepPayload || buildBankingPayOperationPublicPayload(currentOperationRow), {
+          advanced_steps: advancedStepSummaries.length,
+          draft_create_bounded_advance: true,
+          budget_exhausted: true,
+          stop_reason: 'REQUEST_BUDGET_EXHAUSTED',
+          step_summaries: advancedStepSummaries
+        });
+      }
+
+      const beforePhase = String(currentOperationRow.phase || 'VALIDATE_SESSION').trim().toUpperCase() || 'VALIDATE_SESSION';
+      const beforeStatus = String(currentOperationRow.status || 'RUNNING').trim().toUpperCase() || 'RUNNING';
+      const beforeUpdatedAt = String(currentOperationRow.updated_at_utc || currentOperationRow.updatedAtUtc || '').trim();
+      lastStepPayload = await advanceBankingPayDraftCreateOperation(env, currentOperationRow, user, Object.assign({}, options, {
+        __draftCreateSingleStep: true,
+        singleStep: true,
+        single_step: true,
+        maxPhaseUnits: 1,
+        max_phase_units: 1,
+        maxChunksPerCall: 1,
+        max_chunks_per_call: 1,
+        requestBudgetMs: Math.max(750, Math.min(remainingBudgetMs, draftCreateRequestBudgetMs)),
+        request_budget_ms: Math.max(750, Math.min(remainingBudgetMs, draftCreateRequestBudgetMs))
+      }));
+
+      const publicStepPayload = safeObject(lastStepPayload);
+      const stepStatus = String(publicStepPayload.status || '').trim().toUpperCase();
+      const stepPhase = String(publicStepPayload.phase || '').trim().toUpperCase();
+      advancedStepSummaries.push({
+        step: stepIndex + 1,
+        started_phase: beforePhase,
+        ended_phase: stepPhase || beforePhase,
+        status: stepStatus || beforeStatus
+      });
+
+      if (isDraftCreateFailedOrReviewStatus(stepStatus) || isDraftCreateTerminalStatus(stepStatus)) {
+        return Object.assign({}, publicStepPayload, {
+          advanced_steps: advancedStepSummaries.length,
+          draft_create_bounded_advance: true,
+          budget_exhausted: false,
+          stop_reason: isDraftCreateFailedOrReviewStatus(stepStatus) ? 'TERMINAL_FAILURE_OR_REVIEW' : 'TERMINAL',
+          step_summaries: advancedStepSummaries
+        });
+      }
+
+      const latestOperationRow = await fetchLatestDraftCreateOperationRow();
+      if (!latestOperationRow) {
+        return Object.assign({}, publicStepPayload, {
+          advanced_steps: advancedStepSummaries.length,
+          draft_create_bounded_advance: true,
+          budget_exhausted: false,
+          stop_reason: 'LATEST_OPERATION_ROW_NOT_FOUND',
+          step_summaries: advancedStepSummaries
+        });
+      }
+
+      const latestStatus = String(latestOperationRow.status || '').trim().toUpperCase();
+      const latestPhase = String(latestOperationRow.phase || '').trim().toUpperCase();
+      const latestRunAfterMs = Date.parse(String(latestOperationRow.run_after_utc || '').trim());
+      const latestUpdatedAt = String(latestOperationRow.updated_at_utc || '').trim();
+
+      if (isDraftCreateFailedOrReviewStatus(latestStatus) || isDraftCreateTerminalStatus(latestStatus)) {
+        return Object.assign({}, buildBankingPayOperationPublicPayload(latestOperationRow), {
+          advanced_steps: advancedStepSummaries.length,
+          draft_create_bounded_advance: true,
+          budget_exhausted: false,
+          stop_reason: isDraftCreateFailedOrReviewStatus(latestStatus) ? 'TERMINAL_FAILURE_OR_REVIEW' : 'TERMINAL',
+          step_summaries: advancedStepSummaries
+        });
+      }
+
+      if (latestStatus === 'WAITING_RETRY' && Number.isFinite(latestRunAfterMs) && latestRunAfterMs > Date.now()) {
+        return Object.assign({}, buildBankingPayOperationPublicPayload(latestOperationRow), {
+          advanced_steps: advancedStepSummaries.length,
+          draft_create_bounded_advance: true,
+          budget_exhausted: false,
+          stop_reason: 'WAITING_RETRY_RUN_AFTER_FUTURE',
+          step_summaries: advancedStepSummaries
+        });
+      }
+
+      if (draftCreateChunkPhaseSet.has(beforePhase) && latestPhase === beforePhase) {
+        draftCreateChunkSteps += 1;
+        if (draftCreateChunkSteps >= draftCreateMaxChunksPerCall) {
+          return Object.assign({}, buildBankingPayOperationPublicPayload(latestOperationRow), {
+            advanced_steps: advancedStepSummaries.length,
+            chunk_steps: draftCreateChunkSteps,
+            draft_create_bounded_advance: true,
+            budget_exhausted: false,
+            stop_reason: 'MAX_CHUNKS_PER_CALL_REACHED',
+            step_summaries: advancedStepSummaries
+          });
+        }
+      }
+
+      if (latestPhase === beforePhase && latestStatus === beforeStatus && latestUpdatedAt && beforeUpdatedAt && latestUpdatedAt === beforeUpdatedAt) {
+        return Object.assign({}, buildBankingPayOperationPublicPayload(latestOperationRow), {
+          advanced_steps: advancedStepSummaries.length,
+          draft_create_bounded_advance: true,
+          budget_exhausted: false,
+          stop_reason: 'NO_PROGRESS_MADE',
+          step_summaries: advancedStepSummaries
+        });
+      }
+
+      currentOperationRow = latestOperationRow;
+    }
+
+    return Object.assign({}, lastStepPayload || buildBankingPayOperationPublicPayload(currentOperationRow), {
+      advanced_steps: advancedStepSummaries.length,
+      chunk_steps: draftCreateChunkSteps,
+      draft_create_bounded_advance: true,
+      budget_exhausted: false,
+      stop_reason: 'MAX_PHASE_UNITS_REACHED',
+      step_summaries: advancedStepSummaries
+    });
+  }
+  const selectedPreviewRowIds = Array.isArray(inputJson.selected_preview_row_ids)
+    ? inputJson.selected_preview_row_ids
+    : (Array.isArray(inputJson.selectedPreviewRowIds)
+      ? inputJson.selectedPreviewRowIds
+      : (Array.isArray(inputJson.draft_selected_preview_row_ids)
+        ? inputJson.draft_selected_preview_row_ids
+        : (Array.isArray(inputJson.draftSelectedPreviewRowIds) ? inputJson.draftSelectedPreviewRowIds : null)));
+  const selectedPreviewRowCount = Array.isArray(selectedPreviewRowIds)
+    ? selectedPreviewRowIds.length
+    : Math.max(0, Number.isFinite(Number(inputJson.selected_preview_row_count || inputJson.selectedPreviewRowCount || inputJson.selected_rows_total)) ? Math.trunc(Number(inputJson.selected_preview_row_count || inputJson.selectedPreviewRowCount || inputJson.selected_rows_total)) : 0);
+  const payChannelScope = String(inputJson.pay_channel_scope || inputJson.payChannelScope || 'ALL').trim().toUpperCase() || 'ALL';
+  const sameWeekPayeOverrideJson = safeObject(inputJson.same_week_paye_override_json || inputJson.sameWeekPayeOverrideJson);
+  const draftCreatePhaseOrder = [
+    'VALIDATE_SESSION',
+    'SYNC_SELECTED_ROWS',
+    'WAIT_FOR_PREVIEW_READY',
+    'SEED_CANDIDATE_SCOPE',
+    'DRAIN_TSFIN',
+    'ENSURE_PAYEE_READINESS',
+    'SEED_ALLOCATION_ROWS',
+    'CREATE_BATCH_SHELLS',
+    'SEED_DRAFT_CHUNKS',
+    'INSERT_CANDIDATES',
+    'INSERT_ITEMS',
+    'APPLY_FINANCE_ADJUSTMENTS',
+    'FINALISE_RESERVATIONS',
+    'POPULATE_CANDIDATE_SUMMARIES',
+    'CREATE_TIMESHEET_SNAPSHOTS',
+    'BUILD_ITEM_BREAKDOWNS',
+    'ASSERT_INTEGRITY',
+    'POST_CREATE_REFRESH',
+    'COMPLETE'
+  ];
+  const phaseIndexFor = (phaseName) => {
+    const idx = draftCreatePhaseOrder.indexOf(String(phaseName || '').trim().toUpperCase());
+    return idx >= 0 ? idx + 1 : null;
+  };
+  const uniqueDraftUuidArray = (values) => uniqueUuidArray(Array.isArray(values) ? values : []);
+  const batchIdsFromProgressPatch = (patch = {}) => {
+    const source = safeObject(patch);
+    return uniqueDraftUuidArray(source.created_pay_batch_ids || source.createdPayBatchIds || source.pay_batch_ids || source.payBatchIds || []);
+  };
+  const buildDraftCreateProgressSummary = (status, nextPhase, progressPatch = {}) => {
+    const patch = safeObject(progressPatch);
+    const batchIds = batchIdsFromProgressPatch(patch);
+    const lastMessage = String(patch.last_message || patch.status_text || patch.message || '').trim() || null;
+    const summary = Object.assign({}, patch, {
+      operation_type: 'DRAFT_CREATE',
+      operation_id: operationId,
+      workbench_session_id: workbenchSessionId,
+      session_id: workbenchSessionId,
+      source_session_id: workbenchSessionId,
+      selected_preview_row_count: selectedPreviewRowCount,
+      selected_rows_total: selectedPreviewRowCount,
+      phase: nextPhase,
+      phase_index: phaseIndexFor(nextPhase),
+      phase_total: draftCreatePhaseOrder.length,
+      status,
+      backend_runner_owned: true,
+      frontend_completion_required: false,
+      business_actor_user_id: actorUserId,
+      operation_actor_user_id: operationActorUserId || actorUserId,
+      runner_actor_user_id: runnerActorUserId || null,
+      last_message: lastMessage,
+      status_text: lastMessage || patch.status_text || null
+    });
+    if (batchIds.length) {
+      summary.pay_batch_ids = batchIds;
+      summary.created_pay_batch_ids = batchIds;
+      if (batchIds.length === 1) summary.pay_batch_id = batchIds[0];
+    }
+    return summary;
+  };
+  const buildDraftCreateTerminalResult = (resultJson = {}) => {
+    const result = safeObject(resultJson);
+    const batchIds = uniqueDraftUuidArray(result.created_pay_batch_ids || result.pay_batch_ids || result.createdPayBatchIds || result.payBatchIds || []);
+    const primaryPayBatchId = String(result.primary_pay_batch_id || result.primaryPayBatchId || result.pay_batch_id || result.payBatchId || batchIds[0] || '').trim() || null;
+    return Object.assign({}, result, {
+      ok: result.ok !== false,
+      operation_type: 'DRAFT_CREATE',
+      operation_id: operationId,
+      workbench_session_id: workbenchSessionId,
+      session_id: workbenchSessionId,
+      source_session_id: workbenchSessionId,
+      pay_batch_ids: batchIds,
+      created_pay_batch_ids: batchIds,
+      primary_pay_batch_id: primaryPayBatchId,
+      pay_batch_id: primaryPayBatchId,
+      created_batch_count: Number.isFinite(Number(result.created_batch_count)) ? Math.max(0, Math.trunc(Number(result.created_batch_count))) : batchIds.length,
+      backend_runner_owned: true,
+      frontend_completion_required: false
+    });
+  };
+  const lockProgress = async (status, nextPhase, progressPatch = {}, counters = {}) => buildBankingPayOperationPublicPayload(await sbRpc(env, 'banking_pay_operation_save_progress', {
+    p_operation_id: operationId,
+    p_status: status,
+    p_phase: nextPhase,
+    p_total_units: counters.total_units ?? null,
+    p_completed_units: counters.completed_units ?? null,
+    p_failed_units: counters.failed_units ?? null,
+    p_current_chunk_index: counters.current_chunk_index ?? null,
+    p_chunk_count: counters.chunk_count ?? null,
+    p_progress_json: buildDraftCreateProgressSummary(status, nextPhase, progressPatch),
+    p_extend_lock_seconds: null
+  }));
+  const lockProgressForRetryableWait = async (nextPhase, progressPatch = {}, waitSeconds = 10, counters = {}) => lockProgress('WAITING_RETRY', nextPhase, Object.assign({}, safeObject(progressPatch), {
+    runner_state: 'RUNNABLE',
+    run_after_delay_seconds: Math.max(1, Math.min(60, Math.trunc(Number(waitSeconds) || 10))),
+    run_after_utc: new Date(Date.now() + Math.max(1, Math.min(60, Math.trunc(Number(waitSeconds) || 10))) * 1000).toISOString(),
+    resume_reason: 'WAITING_FOR_PREVIEW_READY'
+  }), counters);
+  const finish = async (status, resultJson = null, errorJson = null) => buildBankingPayOperationPublicPayload(await sbRpc(env, 'banking_pay_operation_finish', {
+    p_operation_id: operationId,
+    p_status: status,
+    p_result_json: status === 'COMPLETE' ? buildDraftCreateTerminalResult(resultJson || {}) : resultJson,
+    p_error_json: errorJson
+  }));
+  const claim = async () => unwrapRpcPayload(await sbRpc(env, 'banking_pay_operation_claim_chunk', {
+    p_operation_id: operationId,
+    p_phase: phase,
+    p_chunk_type: 'CANDIDATE_SCOPE',
+    p_lock_owner: lockOwner,
+    p_lock_seconds: lockSeconds
+  }), 'banking_pay_operation_claim_chunk');
+  const finishChunk = async (chunkId, status, completed, failed, result, error = null) => sbRpc(env, 'banking_pay_operation_finish_chunk', {
+    p_chunk_id: chunkId,
+    p_status: status,
+    p_completed_count: completed,
+    p_failed_count: failed,
+    p_result_json: result,
+    p_error_json: error
+  });
+  const fetchCandidateScopes = async (extraQuery = '') => {
+    const { rows } = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/banking_pay_operation_candidate_scope?operation_id=eq.${enc(operationId)}&select=id,candidate_id,pay_channel,pay_batch_id,chunk_sequence,status,allocation_basis_json,candidate_totals_json,selected_preview_row_ids_json,selected_timesheet_ids_json,selected_finance_case_ids_json,selected_canonical_preview_lines_json,effective_canonical_preview_lines_json,baseline_component_rows_json,effective_payees_json${extraQuery}`);
+    return rows || [];
+  };
+  const collectReservationAvailabilityFromScopes = (scopeRows = []) => {
+    const previewRows = [];
+    let skippedPreviewRowCount = 0;
+    let clippedPreviewRowCount = 0;
+    let skippedItemRows = 0;
+    let clippedItemRows = 0;
+    const seenPreviewRows = new Set();
+
+    for (const scopeRow of Array.isArray(scopeRows) ? scopeRows : []) {
+      const allocationBasis = safeObject(scopeRow?.allocation_basis_json);
+      const reservationAvailability = safeObject(allocationBasis.reservation_availability);
+      if (!Object.keys(reservationAvailability).length) continue;
+
+      skippedPreviewRowCount += Number(reservationAvailability.skipped_preview_row_count || 0) || 0;
+      clippedPreviewRowCount += Number(reservationAvailability.clipped_preview_row_count || 0) || 0;
+      skippedItemRows += Number(reservationAvailability.skipped_item_rows || 0) || 0;
+      clippedItemRows += Number(reservationAvailability.clipped_item_rows || 0) || 0;
+
+      const rows = Array.isArray(reservationAvailability.preview_rows) ? reservationAvailability.preview_rows : [];
+      for (const row of rows) {
+        const rowObj = safeObject(row);
+        const key = [scopeRow.id, rowObj.preview_row_id || '', rowObj.timesheet_id || '', rowObj.candidate_id || ''].join('|');
+        if (seenPreviewRows.has(key)) continue;
+        seenPreviewRows.add(key);
+        previewRows.push(Object.assign({}, rowObj, {
+          candidate_scope_id: scopeRow.id || null,
+          pay_batch_id: scopeRow.pay_batch_id || null,
+          pay_channel: rowObj.pay_channel || scopeRow.pay_channel || null
+        }));
+      }
+    }
+
+    const hasAvailabilityAdjustment = skippedPreviewRowCount > 0 || clippedPreviewRowCount > 0 || skippedItemRows > 0 || clippedItemRows > 0 || previewRows.length > 0;
+    return {
+      applied: hasAvailabilityAdjustment,
+      skipped_preview_row_count: skippedPreviewRowCount,
+      clipped_preview_row_count: clippedPreviewRowCount,
+      skipped_item_rows: skippedItemRows,
+      clipped_item_rows: clippedItemRows,
+      message: hasAvailabilityAdjustment ? 'Some payments were not added because they are already reserved in another draft batch.' : null,
+      preview_rows: previewRows
+    };
+  };
+  const fetchOperationScopedPayeesForReadiness = async () => {
+    const scopedPayChannels = payChannelScope === 'PAYE' ? ['PAYE'] : (payChannelScope === 'UMBRELLA' ? ['UMBRELLA'] : null);
+    const payChannelFilter = Array.isArray(scopedPayChannels) && scopedPayChannels.length
+      ? `&pay_channel=in.(${scopedPayChannels.map(enc).join(',')})`
+      : '';
+    const { rows } = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/banking_pay_operation_candidate_scope?operation_id=eq.${enc(operationId)}${payChannelFilter}&select=id,candidate_id,pay_channel,status,effective_payees_json&order=chunk_sequence.asc,id.asc&limit=50000`);
+    const scopeRows = Array.isArray(rows) ? rows : [];
+    const scopedPayees = [];
+    const seenKeys = new Set();
+
+    const asArray = (value) => {
+      if (Array.isArray(value)) return value;
+      if (typeof value === 'string') {
+        try {
+          const parsed = JSON.parse(value);
+          return Array.isArray(parsed) ? parsed : [];
+        } catch {}
+      }
+      return [];
+    };
+
+    const normaliseKind = (value) => {
+      const kind = String(value || '').trim().toUpperCase();
+      return kind === 'UMBRELLA_COMPANY' ? 'UMBRELLA' : kind;
+    };
+
+    for (const scopeRow of scopeRows) {
+      const scopePayChannel = String(scopeRow.pay_channel || '').trim().toUpperCase();
+      if (payChannelScope === 'PAYE' && scopePayChannel !== 'PAYE') continue;
+      if (payChannelScope === 'UMBRELLA' && scopePayChannel !== 'UMBRELLA') continue;
+
+      for (const payeeValue of asArray(scopeRow.effective_payees_json)) {
+        const payee = safeObject(payeeValue);
+        if (!Object.keys(payee).length) continue;
+
+        const payeeMap = safeObject(payee.payee_map);
+        const payeeKind = normaliseKind(payee.payee_entity_kind || payee.entity_kind);
+        const payeeEntityId = String(payee.payee_entity_id || payee.entity_id || '').trim();
+        const bankDetailsHash = String(payee.bank_details_hash || payee.bank_details_hash_snapshot || '').trim();
+        const payeeId = String(payeeMap.payee_id || payee.payee_id || '').trim();
+        const payeeAccountId = String(payeeMap.payee_account_id || payee.payee_account_id || '').trim();
+        const payeeKey = [payeeKind, payeeEntityId, bankDetailsHash, payeeId, payeeAccountId].join('|');
+
+        if (!payeeKind && !payeeEntityId && !bankDetailsHash && !payeeId && !payeeAccountId) continue;
+        if (seenKeys.has(payeeKey)) continue;
+
+        seenKeys.add(payeeKey);
+        scopedPayees.push(payee);
+      }
+    }
+
+    return {
+      payees: scopedPayees,
+      scope_count: scopeRows.length,
+      payee_count: scopedPayees.length,
+      source: 'banking_pay_operation_candidate_scope.effective_payees_json'
+    };
+  };
+  const groupScopeIdsByBatch = async (candidateScopeIds) => {
+    const ids = (candidateScopeIds || []).map((x) => String(x || '').trim()).filter(Boolean);
+    if (!ids.length) return [];
+    const { rows } = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/banking_pay_operation_candidate_scope?id=in.(${ids.map(enc).join(',')})&operation_id=eq.${enc(operationId)}&select=id,candidate_id,pay_channel,pay_batch_id&limit=10000`);
+    const map = new Map();
+    for (const row of rows || []) {
+      const batchId = String(row.pay_batch_id || '').trim();
+      if (!batchId) continue;
+      const payChannel = String(row.pay_channel || 'ALL').trim().toUpperCase() || 'ALL';
+      const key = `${batchId}|${payChannel}`;
+      if (!map.has(key)) map.set(key, { pay_batch_id: batchId, pay_channel: payChannel, candidate_scope_ids: [] });
+      map.get(key).candidate_scope_ids.push(String(row.id));
+    }
+    return Array.from(map.values());
+  };
+
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  const isUuid = (value) => uuidRe.test(String(value || '').trim());
+  const uniqueUuidArray = (values) => {
+    const out = [];
+    const seen = new Set();
+    for (const value of values || []) {
+      const text = String(value || '').trim();
+      if (!isUuid(text) || seen.has(text)) continue;
+      seen.add(text);
+      out.push(text);
+    }
+    return out;
+  };
+  const countArray = (value) => Array.isArray(value) ? value.length : 0;
+  const numberFromObjectKeys = (source, keys, fallback = 0) => {
+    const objectSource = safeObject(source);
+    for (const key of keys) {
+      const n = Number(objectSource[key]);
+      if (Number.isFinite(n)) return Math.max(0, Math.trunc(n));
+    }
+    return fallback;
+  };
+  const sumNumberFromObjectKeys = (source, keys) => {
+    const objectSource = safeObject(source);
+    let total = 0;
+    for (const key of keys) {
+      const n = Number(objectSource[key]);
+      if (Number.isFinite(n)) total += Math.max(0, Math.trunc(n));
+    }
+    return total;
+  };
+  const extractCandidateScopeIdsFromChunkPayload = (payload) => {
+    const payloadObject = safeObject(payload);
+    const candidateValues = [];
+    for (const key of ['units', 'candidate_scope_ids', 'candidateScopeIds', 'scope_unit_ids', 'scopeUnitIds']) {
+      if (Array.isArray(payloadObject[key])) {
+        for (const candidateValue of payloadObject[key]) candidateValues.push(candidateValue);
+      }
+    }
+    return uniqueUuidArray(candidateValues);
+  };
+  const assertDraftCreateChunkHasRowBackedScope = (currentPhase, chunkRow, scopeIds) => {
+    const chunkObject = safeObject(chunkRow);
+    const payloadObject = safeObject(chunkObject.payload_json || chunkObject.payloadJson || chunkObject.payload);
+    const phaseName = String(currentPhase || phase || '').trim().toUpperCase();
+    const chunkUnitCount = Number.isFinite(Number(chunkObject.unit_count)) ? Math.max(0, Math.trunc(Number(chunkObject.unit_count))) : countArray(scopeIds);
+    const sourceTable = String(payloadObject.source_table || payloadObject.sourceTable || '').trim();
+    if (payloadObject.row_backed !== true) {
+      throw new Error(`${phaseName}_CHUNK_NOT_ROW_BACKED`);
+    }
+    if (payloadObject.legacy_tiny_compat === true || sourceTable === 'diagnostic_legacy_units') {
+      throw new Error(`${phaseName}_CHUNK_DIAGNOSTIC_LEGACY_UNITS`);
+    }
+    if (chunkUnitCount > 0 && (!Array.isArray(scopeIds) || scopeIds.length <= 0)) {
+      throw new Error(`${phaseName}_CHUNK_SCOPE_IDS_MISSING`);
+    }
+    return true;
+  };
+  const countDraftCreateRpcWork = (currentPhase, result) => {
+    const resultObject = safeObject(result);
+    const phaseName = String(currentPhase || '').trim().toUpperCase();
+    if (phaseName === 'INSERT_CANDIDATES') {
+      return sumNumberFromObjectKeys(resultObject, ['inserted_candidate_rows', 'reused_candidate_rows', 'updated_candidate_rows', 'inserted_count', 'reused_count', 'updated_count', 'candidate_rows_inserted']);
+    }
+    if (phaseName === 'INSERT_ITEMS') {
+      return sumNumberFromObjectKeys(resultObject, ['inserted_item_rows', 'reused_item_rows', 'linked_allocation_rows', 'inserted_count', 'reused_count']);
+    }
+    if (phaseName === 'CREATE_TIMESHEET_SNAPSHOTS') {
+      return sumNumberFromObjectKeys(resultObject, ['inserted_snapshot_rows', 'inserted_count', 'updated_count', 'reused_count']);
+    }
+    if (phaseName === 'BUILD_ITEM_BREAKDOWNS') {
+      return sumNumberFromObjectKeys(resultObject, ['inserted_breakdown_rows', 'inserted_count', 'reused_count']);
+    }
+    if (phaseName === 'POPULATE_CANDIDATE_SUMMARIES') {
+      return sumNumberFromObjectKeys(resultObject, ['summaries_inserted', 'summaries_updated', 'updated_candidate_rows']);
+    }
+    return 1;
+  };
+  const assertDraftCreateRpcProducedWork = (currentPhase, group, result) => {
+    const phaseName = String(currentPhase || '').trim().toUpperCase();
+    const resultObject = safeObject(result);
+    const candidateScopeCount = Array.isArray(group?.candidate_scope_ids) ? group.candidate_scope_ids.length : 0;
+    if (resultObject.ok === false || sumNumberFromObjectKeys(resultObject, ['failed_count', 'failed_candidate_rows', 'failed_item_rows']) > 0) {
+      throw new Error(`${phaseName}_RPC_FAILED`);
+    }
+    if (candidateScopeCount > 0 && ['INSERT_CANDIDATES', 'INSERT_ITEMS', 'CREATE_TIMESHEET_SNAPSHOTS', 'BUILD_ITEM_BREAKDOWNS'].includes(phaseName) && countDraftCreateRpcWork(phaseName, resultObject) <= 0) {
+      throw new Error(`${phaseName}_RPC_EMPTY_RESULT`);
+    }
+    return true;
+  };
+  const collectCreatedPayBatchIdsFromGroupsAndResults = (groups = [], results = []) => {
+    const idSet = new Set();
+    for (const group of Array.isArray(groups) ? groups : []) if (isUuid(group?.pay_batch_id)) idSet.add(String(group.pay_batch_id).trim());
+    for (const resultRow of Array.isArray(results) ? results : []) collectPayBatchIdsFromValue(resultRow, idSet);
+    return uniqueUuidArray(Array.from(idSet));
+  };
+  const collectPayBatchIdsFromValue = (value, out = new Set()) => {
+    const seenObjects = new WeakSet();
+
+    const visit = (node, keyHint = '') => {
+      if (node == null) return;
+      const hint = String(keyHint || '').trim().toLowerCase();
+
+      if (typeof node === 'string' || typeof node === 'number' || typeof node === 'boolean') {
+        const text = String(node || '').trim();
+        if (hint.includes('pay_batch_id') && isUuid(text)) out.add(text);
+        return;
+      }
+
+      if (Array.isArray(node)) {
+        for (const item of node) visit(item, hint);
+        return;
+      }
+
+      if (typeof node !== 'object') return;
+      if (seenObjects.has(node)) return;
+      seenObjects.add(node);
+
+      for (const [key, child] of Object.entries(node)) {
+        const childKey = String(key || '').trim().toLowerCase();
+        const isBatchIdKey = childKey === 'pay_batch_id' || childKey.endsWith('_pay_batch_id');
+        const isBatchIdsKey = childKey === 'pay_batch_ids' || childKey === 'created_pay_batch_ids' || childKey.endsWith('_pay_batch_ids');
+
+        if (isBatchIdKey) {
+          if (isUuid(child)) out.add(String(child).trim());
+          continue;
+        }
+
+        if (isBatchIdsKey && Array.isArray(child)) {
+          for (const item of child) {
+            if (isUuid(item)) out.add(String(item).trim());
+          }
+          continue;
+        }
+
+        visit(child, childKey);
+      }
+    };
+
+    visit(value, '');
+    return out;
+  };
+  const fetchOperationChunkRowsForCleanup = async () => {
+    try {
+      const { rows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/banking_pay_operation_chunks?operation_id=eq.${enc(operationId)}&select=phase,status,result_json,error_json&limit=50000`,
+        false
+      );
+      return Array.isArray(rows) ? rows : [];
+    } catch {
+      return [];
+    }
+  };
+  const fetchPayBatchRowsForCleanup = async (payBatchIds) => {
+    const ids = uniqueUuidArray(payBatchIds);
+    if (!ids.length) return [];
+    try {
+      const { rows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/pay_batches?id=in.(${ids.map(enc).join(',')})&select=id,status,execution_commit_state,batch_kind_fixed,source_workbench_session_id,source_snapshot_run_id,created_at_utc&limit=${Math.max(1, ids.length)}`,
+        false
+      );
+      return Array.isArray(rows) ? rows : [];
+    } catch {
+      return [];
+    }
+  };
+  const fetchPayBatchCleanupSafety = async (payBatchId) => {
+    const batchId = String(payBatchId || '').trim();
+    if (!isUuid(batchId)) {
+      return {
+        ok: false,
+        pay_batch_id: batchId || null,
+        batch_row_present: false,
+        candidate_row_present: true,
+        item_row_present: true,
+        transfer_row_present: true,
+        candidate_row_count_cap_exceeded: false,
+        safe_empty_shell: false,
+        safe_failed_partial: false,
+        reason: 'INVALID_PAY_BATCH_ID'
+      };
+    }
+
+    let batchRow = null;
+    let candidateRows = [];
+    let candidateRowPresent = true;
+    let itemRowPresent = true;
+    let transferRowPresent = true;
+    let candidateRowCountCapExceeded = false;
+
+    try {
+      const { rows: batchRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/pay_batches?id=eq.${enc(batchId)}&select=id,status,execution_commit_state,source_workbench_session_id,source_snapshot_run_id,source_session_version,created_by_user_id,created_at_utc&limit=1`,
+        false
+      );
+      batchRow = Array.isArray(batchRows) && batchRows.length > 0 ? batchRows[0] : null;
+    } catch {
+      batchRow = null;
+    }
+
+    if (!batchRow) {
+      return {
+        ok: false,
+        pay_batch_id: batchId,
+        batch_row_present: false,
+        candidate_row_present: true,
+        item_row_present: true,
+        transfer_row_present: true,
+        candidate_row_count_cap_exceeded: false,
+        safe_empty_shell: false,
+        safe_failed_partial: false,
+        reason: 'PAY_BATCH_ROW_NOT_FOUND'
+      };
+    }
+
+    try {
+      const { rows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/pay_batch_candidates?pay_batch_id=eq.${enc(batchId)}&select=id&limit=1001`,
+        false
+      );
+      candidateRows = Array.isArray(rows) ? rows : [];
+      candidateRowPresent = candidateRows.length > 0;
+      candidateRowCountCapExceeded = candidateRows.length > 1000;
+    } catch {
+      candidateRows = [];
+      candidateRowPresent = true;
+      candidateRowCountCapExceeded = true;
+    }
+
+    if (candidateRowCountCapExceeded) {
+      itemRowPresent = true;
+    } else if (candidateRows.length <= 0) {
+      itemRowPresent = false;
+    } else {
+      const candidateIds = uniqueUuidArray(candidateRows.map((candidateRow) => candidateRow && candidateRow.id));
+      if (candidateIds.length <= 0) {
+        itemRowPresent = true;
+      } else {
+        try {
+          const { rows: itemRows } = await sbFetch(
+            env,
+            `${env.SUPABASE_URL}/rest/v1/pay_batch_items?pay_batch_candidate_id=in.(${candidateIds.map(enc).join(',')})&select=id&limit=1`,
+            false
+          );
+          itemRowPresent = Array.isArray(itemRows) && itemRows.length > 0;
+        } catch {
+          itemRowPresent = true;
+        }
+      }
+    }
+
+    try {
+      const { rows: transferRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/pay_bank_transfers?pay_batch_id=eq.${enc(batchId)}&select=id&limit=1`,
+        false
+      );
+      transferRowPresent = Array.isArray(transferRows) && transferRows.length > 0;
+    } catch {
+      transferRowPresent = true;
+    }
+
+    const status = String(batchRow.status || '').trim().toUpperCase();
+    const executionCommitState = String(batchRow.execution_commit_state || '').trim().toUpperCase();
+    const sourceWorkbenchSessionId = String(batchRow.source_workbench_session_id || '').trim();
+    const expectedSnapshotRunId = String(inputJson.source_snapshot_run_id || inputJson.sourceSnapshotRunId || '').trim();
+    const sourceSnapshotRunId = String(batchRow.source_snapshot_run_id || '').trim();
+    const sourceSessionMatches = !!workbenchSessionId && sourceWorkbenchSessionId === workbenchSessionId;
+    const snapshotMatches = !expectedSnapshotRunId || !sourceSnapshotRunId || sourceSnapshotRunId === expectedSnapshotRunId;
+    const safeEmptyShell = status === 'DRAFT'
+      && (!executionCommitState || executionCommitState === 'NOT_SUBMITTED')
+      && sourceSessionMatches
+      && snapshotMatches
+      && candidateRowCountCapExceeded !== true
+      && itemRowPresent !== true
+      && transferRowPresent !== true;
+    const safeFailedPartial = status === 'DRAFT'
+      && (!executionCommitState || executionCommitState === 'NOT_SUBMITTED')
+      && sourceSessionMatches
+      && snapshotMatches
+      && candidateRowCountCapExceeded !== true
+      && transferRowPresent !== true;
+
+    return {
+      ok: true,
+      pay_batch_id: batchId,
+      batch_row_present: true,
+      batch_status: status || null,
+      execution_commit_state: executionCommitState || null,
+      source_workbench_session_id: sourceWorkbenchSessionId || null,
+      source_snapshot_run_id: sourceSnapshotRunId || null,
+      expected_workbench_session_id: workbenchSessionId || null,
+      expected_source_snapshot_run_id: expectedSnapshotRunId || null,
+      source_session_matches: sourceSessionMatches,
+      source_snapshot_matches: snapshotMatches,
+      candidate_row_present: candidateRowPresent,
+      candidate_row_count_checked: candidateRows.length,
+      candidate_row_count_cap_exceeded: candidateRowCountCapExceeded,
+      item_row_present: itemRowPresent,
+      transfer_row_present: transferRowPresent,
+      safe_empty_shell: safeEmptyShell,
+      safe_failed_partial: safeFailedPartial,
+      reason: safeEmptyShell ? null : (safeFailedPartial ? null : 'DIRECT_CANCEL_SAFETY_CHECK_FAILED')
+    };
+  };
+
+  const touchDraftCreateBatchFailureSignal = async (payBatchId, reason, signalScope = {}) => {
+    const batchId = String(payBatchId || '').trim();
+    if (!isUuid(batchId)) {
+      return {
+        ok: false,
+        skipped: true,
+        reason: 'INVALID_PAY_BATCH_ID',
+        pay_batch_id: batchId || null
+      };
+    }
+
+    const scope = Object.assign({
+      operation_id: operationId,
+      operation_type: 'DRAFT_CREATE',
+      workbench_session_id: workbenchSessionId,
+      failure_phase: phase,
+      draft_create_failure: true,
+      failed_empty_shell_possible: true
+    }, safeObject(signalScope));
+
+    let signal = null;
+    let signalError = null;
+    let summaryRefreshed = false;
+    let summaryError = null;
+
+    try {
+      signal = unwrapRpcPayload(await sbRpc(env, 'banking_pay_batch_signal_touch', {
+        p_pay_batch_id: batchId,
+        p_change_reason: String(reason || 'DRAFT_CREATE_FAILED').slice(0, 120),
+        p_change_source: 'advanceBankingPayDraftCreateOperation',
+        p_change_scope_json: scope,
+        p_touch_payment_status: true,
+        p_touch_correction_progress: false,
+        p_touch_alerts: true,
+        p_touch_overview: true
+      }), 'banking_pay_batch_signal_touch');
+    } catch (error) {
+      signalError = String(error?.message || error || '');
+    }
+
+    try {
+      await sbRpc(env, 'pay_batch_display_summary_refresh', {
+        p_pay_batch_id: batchId
+      });
+      summaryRefreshed = true;
+    } catch (error) {
+      summaryError = String(error?.message || error || '');
+    }
+
+    return {
+      ok: !signalError && summaryRefreshed,
+      pay_batch_id: batchId,
+      signal,
+      signal_error: signalError,
+      summary_refreshed: summaryRefreshed,
+      summary_error: summaryError
+    };
+  };
+
+  const cancelEmptyDraftBatchShellDirectly = async (payBatchId, cancelReason, cleanupContext = {}) => {
+    const batchId = String(payBatchId || '').trim();
+    const reason = String(cancelReason || 'Draft creation failed before any payable draft items were created.').slice(0, 500);
+    const context = safeObject(cleanupContext);
+
+    if (!isUuid(batchId)) {
+      return {
+        ok: false,
+        skipped: true,
+        reason: 'INVALID_PAY_BATCH_ID',
+        pay_batch_id: batchId || null
+      };
+    }
+
+    const safety = await fetchPayBatchCleanupSafety(batchId);
+    if (safety.safe_empty_shell !== true) {
+      return {
+        ok: false,
+        skipped: true,
+        reason: 'NOT_EMPTY_DRAFT_SHELL',
+        pay_batch_id: batchId,
+        safety
+      };
+    }
+
+    const cancelledAtUtc = new Date().toISOString();
+    const patchPayload = {
+      status: 'CANCELLED',
+      cancelled_at_utc: cancelledAtUtc,
+      cancelled_by_user_id: actorUserId,
+      cancel_reason: reason,
+      execution_commit_state: 'NOT_SUBMITTED',
+      schedule_kind: null,
+      scheduled_at_utc: null,
+      scheduled_by_user_id: null,
+      funding_account_ref: null,
+      funds_warning_hours_json: null
+    };
+
+    const { rows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/pay_batches?id=eq.${enc(batchId)}&status=eq.DRAFT&or=(execution_commit_state.is.null,execution_commit_state.eq.NOT_SUBMITTED)&source_workbench_session_id=eq.${enc(workbenchSessionId)}`,
+      {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Prefer: 'return=representation'
+        },
+        body: JSON.stringify(patchPayload)
+      }
+    );
+
+    const updatedRow = Array.isArray(rows) && rows.length ? rows[0] : null;
+    const updateOk = String(updatedRow?.status || '').trim().toUpperCase() === 'CANCELLED';
+
+    const signal = await touchDraftCreateBatchFailureSignal(batchId, 'DRAFT_CREATE_FAILED_EMPTY_SHELL_CANCELLED', Object.assign({}, context, {
+      cleanup_reason: reason,
+      cleanup_mode: 'DIRECT_EMPTY_DRAFT_SHELL_CANCEL',
+      cancelled_at_utc: cancelledAtUtc,
+      update_ok: updateOk
+    }));
+
+    return {
+      ok: updateOk,
+      pay_batch_id: batchId,
+      status: updatedRow?.status || null,
+      cancelled_at_utc: updatedRow?.cancelled_at_utc || cancelledAtUtc,
+      cancel_reason: updatedRow?.cancel_reason || reason,
+      cleanup_mode: 'DIRECT_EMPTY_DRAFT_SHELL_CANCEL',
+      safety,
+      signal
+    };
+  };
+  async function discoverCreatedDraftBatchIds() {
+    const extraValues = Array.prototype.slice.call(arguments);
+    const ids = new Set();
+    collectPayBatchIdsFromValue(progressJson, ids);
+    collectPayBatchIdsFromValue(inputJson, ids);
+    for (const value of extraValues || []) collectPayBatchIdsFromValue(value, ids);
+
+    try {
+      const scopes = await fetchCandidateScopes('&limit=50000');
+      for (const scope of scopes || []) {
+        const batchId = String(scope.pay_batch_id || '').trim();
+        if (isUuid(batchId)) ids.add(batchId);
+      }
+    } catch {}
+
+    const chunks = await fetchOperationChunkRowsForCleanup();
+    for (const chunk of chunks || []) {
+      collectPayBatchIdsFromValue(chunk?.result_json, ids);
+      collectPayBatchIdsFromValue(chunk?.error_json, ids);
+    }
+
+    return uniqueUuidArray(Array.from(ids));
+  }
+  const cancelCreatedDraftBatchesForFailure = async (failureErrorJson = {}, cleanupOptions = {}) => {
+    const failurePayload = safeObject(failureErrorJson);
+    const failurePhase = String(cleanupOptions.phase || failurePayload.phase || phase || '').trim().toUpperCase() || 'UNKNOWN';
+    const failureCode = String(failurePayload.code || failurePayload.error_code || 'DRAFT_CREATE_OPERATION_FAILED').trim().toUpperCase() || 'DRAFT_CREATE_OPERATION_FAILED';
+    const discoveredBatchIds = await discoverCreatedDraftBatchIds(failurePayload, cleanupOptions);
+    const batchRows = await fetchPayBatchRowsForCleanup(discoveredBatchIds);
+    const batchRowById = new Map(batchRows.map((row) => [String(row.id || '').trim(), row]));
+    const results = [];
+
+    for (const batchId of discoveredBatchIds) {
+      const row = batchRowById.get(batchId) || null;
+      const status = String(row?.status || '').trim().toUpperCase();
+      const executionCommitState = String(row?.execution_commit_state || '').trim().toUpperCase();
+
+      if (!row) {
+        results.push({ pay_batch_id: batchId, ok: false, skipped: true, reason: 'PAY_BATCH_ROW_NOT_FOUND' });
+        continue;
+      }
+
+      if (status === 'CANCELLED') {
+        const signal = await touchDraftCreateBatchFailureSignal(batchId, 'DRAFT_CREATE_FAILED_BATCH_ALREADY_CANCELLED', {
+          failure_phase: failurePhase,
+          failure_code: failureCode,
+          status_before: status,
+          execution_commit_state_before: executionCommitState || null
+        });
+        results.push({ pay_batch_id: batchId, ok: true, skipped: true, already_cancelled: true, status, execution_commit_state: executionCommitState || null, signal });
+        continue;
+      }
+
+      if (status !== 'DRAFT') {
+        const signal = await touchDraftCreateBatchFailureSignal(batchId, 'DRAFT_CREATE_FAILED_BATCH_NOT_DRAFT', {
+          failure_phase: failurePhase,
+          failure_code: failureCode,
+          status_before: status,
+          execution_commit_state_before: executionCommitState || null
+        });
+        results.push({ pay_batch_id: batchId, ok: false, skipped: true, reason: 'PAY_BATCH_NOT_DRAFT', status, execution_commit_state: executionCommitState || null, signal });
+        continue;
+      }
+
+      if (executionCommitState && executionCommitState !== 'NOT_SUBMITTED') {
+        const signal = await touchDraftCreateBatchFailureSignal(batchId, 'DRAFT_CREATE_FAILED_BATCH_ALREADY_SUBMITTED_OR_COMMITTED', {
+          failure_phase: failurePhase,
+          failure_code: failureCode,
+          status_before: status,
+          execution_commit_state_before: executionCommitState
+        });
+        results.push({ pay_batch_id: batchId, ok: false, skipped: true, reason: 'PAY_BATCH_ALREADY_SUBMITTED_OR_COMMITTED', status, execution_commit_state: executionCommitState, signal });
+        continue;
+      }
+
+      const cancelReason = `Draft creation failed during ${failurePhase}: ${failureCode}`.slice(0, 500);
+      const directCancel = await cancelEmptyDraftBatchShellDirectly(batchId, cancelReason, {
+        failure_phase: failurePhase,
+        failure_code: failureCode,
+        status_before: status,
+        execution_commit_state_before: executionCommitState || null
+      });
+
+      if (directCancel.ok === true) {
+        results.push({
+          pay_batch_id: batchId,
+          ok: true,
+          status_before: status,
+          execution_commit_state_before: executionCommitState || null,
+          cancel_reason: cancelReason,
+          cancel_status: 'CANCELLED',
+          cancelled_at_utc: directCancel.cancelled_at_utc || null,
+          cleanup_mode: directCancel.cleanup_mode || 'DIRECT_EMPTY_DRAFT_SHELL_CANCEL',
+          direct_empty_shell_cancel: directCancel
+        });
+        continue;
+      }
+
+      try {
+        const abortPayload = unwrapRpcPayload(await sbRpc(env, 'pay_batch_abort_failed_draft_create_partial', {
+          p_operation_id: operationId,
+          p_pay_batch_id: batchId,
+          p_actor_user_id: actorUserId,
+          p_reason: cancelReason,
+          p_failure_json: Object.assign({}, failurePayload, {
+            code: failureCode,
+            phase: failurePhase,
+            called_from_failure_finalisation: true,
+            cleanup_source: 'advanceBankingPayDraftCreateOperation.cancelCreatedDraftBatchesForFailure'
+          })
+        }), 'pay_batch_abort_failed_draft_create_partial');
+        const abortStatus = String(abortPayload.status_after || abortPayload.status || abortPayload.batch_status || '').trim().toUpperCase();
+        const abortOk = abortPayload.ok === true || abortStatus === 'CANCELLED';
+        const signal = await touchDraftCreateBatchFailureSignal(batchId, abortOk ? 'DRAFT_CREATE_FAILED_PARTIAL_ABORTED' : 'DRAFT_CREATE_FAILED_PARTIAL_ABORT_RETURNED_NOT_OK', {
+          failure_phase: failurePhase,
+          failure_code: failureCode,
+          status_before: status,
+          execution_commit_state_before: executionCommitState || null,
+          abort_status: abortStatus || null,
+          abort_ok: abortOk,
+          draft_creation_failed_partial: abortPayload.draft_creation_failed_partial === true,
+          batch_action_blocked: abortPayload.batch_action_blocked !== false
+        });
+        results.push({
+          pay_batch_id: batchId,
+          ok: abortOk,
+          status_before: status,
+          execution_commit_state_before: executionCommitState || null,
+          cancel_reason: cancelReason,
+          cancel_status: abortStatus || null,
+          cancelled_at_utc: abortPayload.cleaned_at_utc || abortPayload.cancelled_at_utc || null,
+          cleanup_mode: abortPayload.cleanup_mode || 'FAILED_DRAFT_CREATE_PARTIAL_ABORT',
+          draft_creation_failed_partial: abortPayload.draft_creation_failed_partial === true,
+          batch_action_blocked: abortPayload.batch_action_blocked !== false,
+          failed_partial_cleanup_status: abortOk ? 'ABORTED' : 'FAILED',
+          payload: abortPayload,
+          direct_empty_shell_cancel: directCancel,
+          signal
+        });
+      } catch (abortError) {
+        const signal = await touchDraftCreateBatchFailureSignal(batchId, 'DRAFT_CREATE_FAILED_BATCH_CLEANUP_FAILED', {
+          failure_phase: failurePhase,
+          failure_code: failureCode,
+          status_before: status,
+          execution_commit_state_before: executionCommitState || null,
+          cleanup_error: String(abortError?.message || abortError || ''),
+          direct_empty_shell_cancel: directCancel
+        });
+        results.push({
+          pay_batch_id: batchId,
+          ok: false,
+          status_before: status,
+          execution_commit_state_before: executionCommitState || null,
+          cancel_reason: cancelReason,
+          direct_empty_shell_cancel: directCancel,
+          failed_partial_cleanup_status: 'FAILED',
+          error: String(abortError?.message || abortError || ''),
+          signal
+        });
+      }
+    }
+
+    const attempted = discoveredBatchIds.length > 0;
+    const cancelled = results.filter((result) => result.ok === true && result.skipped !== true).map((result) => result.pay_batch_id);
+    const alreadyCancelled = results.filter((result) => result.ok === true && result.already_cancelled === true).map((result) => result.pay_batch_id);
+    const failed = results.filter((result) => result.ok !== true).map((result) => result.pay_batch_id);
+
+    return {
+      ok: failed.length === 0,
+      attempted,
+      operation_id: operationId,
+      workbench_session_id: workbenchSessionId,
+      failure_phase: failurePhase,
+      failure_code: failureCode,
+      discovered_pay_batch_ids: discoveredBatchIds,
+      cancelled_pay_batch_ids: cancelled,
+      already_cancelled_pay_batch_ids: alreadyCancelled,
+      failed_pay_batch_ids: failed,
+      result_count: results.length,
+      results
+    };
+  };
+
+  const finishFailedWithCleanup = async (resultJson = null, errorJson = null, cleanupOptions = {}) => {
+    const baseError = safeObject(errorJson);
+    const cleanup = await cancelCreatedDraftBatchesForFailure(baseError, cleanupOptions);
+    const cleanupStatus = cleanup.ok === true ? (cleanup.attempted ? 'COMPLETE' : 'NOT_REQUIRED') : 'FAILED';
+    const cleanupResults = Array.isArray(cleanup.results) ? cleanup.results : [];
+    const failedPartialAborted = cleanupResults.some((cleanupResult) => cleanupResult && cleanupResult.failed_partial_cleanup_status === 'ABORTED' || cleanupResult && cleanupResult.cleanup_mode === 'FAILED_DRAFT_CREATE_PARTIAL_ABORT');
+    const finishedOperation = await finish('FAILED', resultJson, Object.assign({}, baseError, {
+      cleanup_required: cleanup.attempted === true,
+      cleanup_status: cleanupStatus,
+      created_batch_cleanup: cleanup,
+      draft_creation_failed_partial: failedPartialAborted,
+      failed_partial_cleanup_status: failedPartialAborted ? 'ABORTED' : cleanupStatus,
+      batch_action_blocked: cleanup.attempted === true,
+      normal_draft_actions_blocked: cleanup.attempted === true,
+      created_pay_batch_ids: Array.isArray(cleanup.discovered_pay_batch_ids) ? cleanup.discovered_pay_batch_ids : []
+    }));
+
+    const affectedBatchIds = uniqueDraftUuidArray([].concat(
+      Array.isArray(cleanup.discovered_pay_batch_ids) ? cleanup.discovered_pay_batch_ids : [],
+      Array.isArray(cleanup.cancelled_pay_batch_ids) ? cleanup.cancelled_pay_batch_ids : [],
+      Array.isArray(cleanup.already_cancelled_pay_batch_ids) ? cleanup.already_cancelled_pay_batch_ids : [],
+      Array.isArray(cleanup.failed_pay_batch_ids) ? cleanup.failed_pay_batch_ids : [],
+      Array.isArray(cleanup.results) ? cleanup.results.map((cleanupResult) => cleanupResult && cleanupResult.pay_batch_id) : []
+    ));
+
+    for (const batchId of affectedBatchIds) {
+      try {
+        await touchDraftCreateBatchFailureSignal(batchId, cleanup.ok === true ? 'DRAFT_CREATE_OPERATION_FAILED_FINALISED' : 'DRAFT_CREATE_OPERATION_FAILED_CLEANUP_INCOMPLETE', {
+          failure_phase: cleanup.failure_phase || cleanupOptions.phase || baseError.phase || phase,
+          failure_code: cleanup.failure_code || baseError.code || baseError.error_code || 'DRAFT_CREATE_OPERATION_FAILED',
+          operation_status: 'FAILED',
+          operation_finished: true,
+          cleanup_attempted: cleanup.attempted === true,
+          cleanup_status: cleanupStatus,
+          cleanup_ok: cleanup.ok === true,
+          cleanup_cancelled_batch: Array.isArray(cleanup.cancelled_pay_batch_ids) && cleanup.cancelled_pay_batch_ids.includes(batchId),
+          cleanup_failed_batch: Array.isArray(cleanup.failed_pay_batch_ids) && cleanup.failed_pay_batch_ids.includes(batchId)
+        });
+      } catch {}
+    }
+
+    return finishedOperation;
+  };
+
+  const isAcceptableWorkbenchDiscardFailure = (value) => {
+    const text = String(
+      value?.error_code ||
+      value?.code ||
+      value?.message ||
+      value?.error ||
+      value ||
+      ''
+    ).trim();
+    if (!text) return false;
+    return /already\s+discarded|not\s+open|not\s+found|stale|obsolete|discarded/i.test(text);
+  };
+  const discardSourceWorkbenchSessionForOptionA = async () => {
+    if (!workbenchSessionId) {
+      return {
+        attempted: false,
+        ok: false,
+        acceptable: false,
+        source_session_id: null,
+        reason: 'SOURCE_SESSION_ID_MISSING'
+      };
+    }
+
+    try {
+      const discardPayload = unwrapRpcPayload(await sbRpc(env, 'pay_workbench_session_discard', {
+        p_session_id: workbenchSessionId,
+        p_actor_user_id: actorUserId
+      }), 'pay_workbench_session_discard');
+      const status = String(discardPayload.status || discardPayload.session_status || '').trim().toUpperCase();
+      const discardedAtUtc = String(discardPayload.discarded_at_utc || discardPayload.discardedAtUtc || '').trim();
+      const ok = discardPayload.ok === true || status === 'DISCARDED' || !!discardedAtUtc || discardPayload.state_changed === true;
+      const alreadyDiscarded = discardPayload.already_discarded === true || discardPayload.alreadyDiscarded === true || status === 'DISCARDED';
+      return {
+        attempted: true,
+        ok: ok || alreadyDiscarded,
+        acceptable: ok || alreadyDiscarded,
+        source_session_id: workbenchSessionId,
+        source_session_discarded: ok || alreadyDiscarded,
+        already_discarded: alreadyDiscarded,
+        discarded_at_utc: discardedAtUtc || null,
+        payload: discardPayload
+      };
+    } catch (discardError) {
+      const acceptable = isAcceptableWorkbenchDiscardFailure(discardError);
+      return {
+        attempted: true,
+        ok: acceptable,
+        acceptable,
+        source_session_id: workbenchSessionId,
+        source_session_discarded: acceptable,
+        warning: acceptable ? null : 'SOURCE_SESSION_DISCARD_FAILED',
+        error: String(discardError?.message || discardError || '')
+      };
+    }
+  };
+
+  const cancelSkippedEmptyReservedDraftBatches = async (payBatchIds = [], reason = 'Draft shell contained only already-reserved payments and was excluded from the created draft result.') => {
+    const ids = uniqueUuidArray(payBatchIds);
+    const results = [];
+
+    for (const batchId of ids) {
+      const directCancel = await cancelEmptyDraftBatchShellDirectly(batchId, reason, {
+        failure_phase: 'ASSERT_INTEGRITY',
+        failure_code: 'PAY_DRAFT_ALL_SELECTED_PAYMENTS_ALREADY_RESERVED',
+        cleanup_reason: 'SKIPPED_EMPTY_RESERVED_DRAFT'
+      });
+
+      if (directCancel.ok === true) {
+        results.push({
+          pay_batch_id: batchId,
+          ok: true,
+          status: directCancel.status || 'CANCELLED',
+          cancelled_at_utc: directCancel.cancelled_at_utc || null,
+          cancellation_outcome: 'DIRECT_EMPTY_DRAFT_SHELL_CANCEL',
+          direct_empty_shell_cancel: directCancel
+        });
+        continue;
+      }
+
+      if (directCancel?.safety?.safe_failed_partial === true) {
+        try {
+          const abortPayload = unwrapRpcPayload(await sbRpc(env, 'pay_batch_abort_failed_draft_create_partial', {
+            p_operation_id: operationId,
+            p_pay_batch_id: batchId,
+            p_actor_user_id: actorUserId,
+            p_reason: reason,
+            p_failure_json: {
+              code: 'PAY_DRAFT_ALL_SELECTED_PAYMENTS_ALREADY_RESERVED',
+              phase: 'ASSERT_INTEGRITY',
+              called_from_failure_finalisation: true,
+              cleanup_source: 'advanceBankingPayDraftCreateOperation.cancelSkippedEmptyReservedDraftBatches',
+              cleanup_reason: 'SKIPPED_EMPTY_RESERVED_DRAFT',
+              direct_empty_shell_cancel: directCancel
+            }
+          }), 'pay_batch_abort_failed_draft_create_partial');
+          const abortStatus = String(abortPayload.status_after || abortPayload.status || abortPayload.batch_status || '').trim().toUpperCase();
+          const abortOk = abortPayload.ok === true || abortStatus === 'CANCELLED';
+          const signal = await touchDraftCreateBatchFailureSignal(batchId, abortOk ? 'DRAFT_CREATE_SKIPPED_RESERVED_PARTIAL_ABORTED' : 'DRAFT_CREATE_SKIPPED_RESERVED_PARTIAL_ABORT_RETURNED_NOT_OK', {
+            failure_phase: 'ASSERT_INTEGRITY',
+            failure_code: 'PAY_DRAFT_ALL_SELECTED_PAYMENTS_ALREADY_RESERVED',
+            abort_status: abortStatus || null,
+            abort_ok: abortOk,
+            draft_creation_failed_partial: abortPayload.draft_creation_failed_partial === true,
+            batch_action_blocked: abortPayload.batch_action_blocked !== false,
+            direct_empty_shell_cancel: directCancel
+          });
+          results.push({
+            pay_batch_id: batchId,
+            ok: abortOk,
+            status: abortStatus || null,
+            cancelled_at_utc: abortPayload.cleaned_at_utc || abortPayload.cancelled_at_utc || null,
+            cancellation_outcome: abortPayload.cleanup_mode || 'FAILED_DRAFT_CREATE_PARTIAL_ABORT',
+            cleanup_mode: abortPayload.cleanup_mode || 'FAILED_DRAFT_CREATE_PARTIAL_ABORT',
+            draft_creation_failed_partial: abortPayload.draft_creation_failed_partial === true,
+            batch_action_blocked: abortPayload.batch_action_blocked !== false,
+            failed_partial_cleanup_status: abortOk ? 'ABORTED' : 'FAILED',
+            payload: abortPayload,
+            direct_empty_shell_cancel: directCancel,
+            signal
+          });
+        } catch (abortError) {
+          const signal = await touchDraftCreateBatchFailureSignal(batchId, 'DRAFT_CREATE_SKIPPED_RESERVED_PARTIAL_ABORT_FAILED', {
+            failure_phase: 'ASSERT_INTEGRITY',
+            failure_code: 'PAY_DRAFT_ALL_SELECTED_PAYMENTS_ALREADY_RESERVED',
+            cleanup_error: String(abortError?.message || abortError || ''),
+            direct_empty_shell_cancel: directCancel
+          });
+          results.push({
+            pay_batch_id: batchId,
+            ok: false,
+            direct_empty_shell_cancel: directCancel,
+            failed_partial_cleanup_status: 'FAILED',
+            error: String(abortError?.message || abortError || ''),
+            signal
+          });
+        }
+        continue;
+      }
+
+      const signal = await touchDraftCreateBatchFailureSignal(batchId, 'DRAFT_CREATE_SKIPPED_EMPTY_RESERVED_CLEANUP_FAILED', {
+        failure_phase: 'ASSERT_INTEGRITY',
+        failure_code: 'PAY_DRAFT_ALL_SELECTED_PAYMENTS_ALREADY_RESERVED',
+        cleanup_error: directCancel?.reason || directCancel?.safety?.reason || 'DIRECT_EMPTY_SHELL_CANCEL_FAILED_AND_FAILED_PARTIAL_UNSAFE',
+        direct_empty_shell_cancel: directCancel
+      });
+      results.push({
+        pay_batch_id: batchId,
+        ok: false,
+        direct_empty_shell_cancel: directCancel,
+        error: directCancel?.reason || directCancel?.safety?.reason || 'DIRECT_EMPTY_SHELL_CANCEL_FAILED_AND_FAILED_PARTIAL_UNSAFE',
+        signal
+      });
+    }
+
+    return {
+      attempted: ids.length > 0,
+      ok: results.every((result) => result.ok === true),
+      requested_pay_batch_ids: ids,
+      cancelled_pay_batch_ids: results.filter((result) => result.ok === true).map((result) => result.pay_batch_id),
+      failed_pay_batch_ids: results.filter((result) => result.ok !== true).map((result) => result.pay_batch_id),
+      results
+    };
+  };
+
+  try {
+    if (phase === 'INITIALISE' || phase === 'VALIDATE_SESSION') {
+      const validation = unwrapRpcPayload(await sbRpc(env, 'pay_workbench_prepare_draft', {
+        p_session_id: workbenchSessionId,
+        p_actor_user_id: actorUserId,
+        p_selected_preview_row_ids: selectedPreviewRowIds,
+        p_pay_channel_scope: payChannelScope,
+        p_override_reason: inputJson.override_reason || null,
+        p_override_continue: inputJson.override_continue === true,
+        p_override_verified: inputJson.override_verified === true,
+        p_override_verified_by_user_id: inputJson.override_verified_by_user_id || null,
+        p_override_verified_at_utc: inputJson.override_verified_at_utc || null,
+        p_operation_id: operationId,
+        p_operation_mode: true,
+        p_allow_legacy_unchunked: false
+      }), 'pay_workbench_prepare_draft');
+      if (validation.ok === false) return finishFailedWithCleanup( null, { code: 'DRAFT_SESSION_VALIDATION_FAILED', message: 'Draft session validation failed.', validation });
+      return lockProgress('RUNNING', 'SYNC_SELECTED_ROWS', { status_text: 'Selected payment rows checked.', validation });
+    }
+
+    if (phase === 'SYNC_SELECTED_ROWS') {
+      return lockProgress('RUNNING', 'WAIT_FOR_PREVIEW_READY', { status_text: 'Selected payment rows are stable.' });
+    }
+
+    if (phase === 'WAIT_FOR_PREVIEW_READY') {
+      const progress = unwrapRpcPayload(await sbRpc(env, 'pay_workbench_session_get_progress', { p_session_id: workbenchSessionId }), 'pay_workbench_session_get_progress');
+      const ready = progress.ready === true || progress.ready_flag === true || String(progress.status || '').toUpperCase() === 'READY';
+      if (!ready) return lockProgressForRetryableWait('WAIT_FOR_PREVIEW_READY', { status_text: 'Waiting for payment preview to become ready.', session_progress: progress }, 10);
+      return lockProgress('RUNNING', 'SEED_CANDIDATE_SCOPE', { status_text: 'Payment preview is ready.', session_progress: progress });
+    }
+
+    if (phase === 'DRAIN_TSFIN') {
+      if (typeof tsfinBestEffortMakeReadyForDraft === 'function') {
+        const drain = await tsfinBestEffortMakeReadyForDraft(env, inputJson.selected_timesheet_ids || inputJson.selectedTimesheetIds || [], {
+          operationId,
+          chunkSize: numberFrom(configJson.tsfin_chunk_size, 100),
+          lockOwner,
+          cursor: numberFrom(progressJson.tsfin_drain_cursor, 0)
+        });
+        const nextCursor = Number.isFinite(Number(drain?.next_cursor)) ? Math.max(0, Math.trunc(Number(drain.next_cursor))) : null;
+        const remaining = Number.isFinite(Number(drain?.remaining)) ? Math.max(0, Math.trunc(Number(drain.remaining))) : 0;
+        const madeReady = Number.isFinite(Number(drain?.made_ready)) ? Math.max(0, Math.trunc(Number(drain.made_ready))) : 0;
+        const failedCount = Number.isFinite(Number(drain?.failed)) ? Math.max(0, Math.trunc(Number(drain.failed))) : 0;
+        const stillPending = Number.isFinite(Number(drain?.still_pending)) ? Math.max(0, Math.trunc(Number(drain.still_pending))) : 0;
+        const currentCursor = Number.isFinite(Number(progressJson.tsfin_drain_cursor)) ? Math.max(0, Math.trunc(Number(progressJson.tsfin_drain_cursor))) : 0;
+        const tailRetryCount = Number.isFinite(Number(progressJson.tsfin_drain_tail_retry_count)) ? Math.max(0, Math.trunc(Number(progressJson.tsfin_drain_tail_retry_count))) : 0;
+
+        if (failedCount > 0) {
+          return finishFailedWithCleanup( null, {
+            code: 'DRAFT_TSFIN_READINESS_FAILED',
+            message: 'Timesheet financials could not be prepared for draft creation.',
+            tsfin_drain: drain || null
+          });
+        }
+
+        if (remaining > 0 || stillPending > 0) {
+          const retrySameTail = nextCursor === null;
+          if (retrySameTail && stillPending > 0 && madeReady <= 0 && tailRetryCount >= 2) {
+            return finishFailedWithCleanup( null, {
+              code: 'DRAFT_TSFIN_READINESS_PENDING',
+              message: 'Timesheet financials are still pending after repeated draft-readiness attempts.',
+              tsfin_drain: drain || null
+            });
+          }
+          return lockProgress('RUNNING', 'DRAIN_TSFIN', {
+            status_text: retrySameTail ? 'Timesheet financials are still pending; CloudTMS will retry this readiness chunk.' : 'Prepared one timesheet financials chunk.',
+            tsfin_drain: drain,
+            tsfin_drain_cursor: retrySameTail ? currentCursor : nextCursor,
+            tsfin_drain_tail_retry_count: retrySameTail ? tailRetryCount + 1 : 0
+          });
+        }
+
+        return lockProgress('RUNNING', 'ENSURE_PAYEE_READINESS', {
+          status_text: 'Timesheet financials checked.',
+          tsfin_drain: drain || null,
+          tsfin_drain_cursor: nextCursor,
+          tsfin_drain_tail_retry_count: 0
+        });
+      }
+      return lockProgress('RUNNING', 'ENSURE_PAYEE_READINESS', { status_text: 'Timesheet financials readiness helper is not installed; continuing with SQL readiness gates.' });
+    }
+
+    if (phase === 'ENSURE_PAYEE_READINESS') {
+      if (typeof revolutEnsurePayeesReadyFromPreview === 'function') {
+        const scopedPayeeReadiness = await fetchOperationScopedPayeesForReadiness();
+        const fallbackInputPayees = Array.isArray(inputJson.payees) ? inputJson.payees : [];
+        const payeesForReadiness = scopedPayeeReadiness.scope_count > 0 ? scopedPayeeReadiness.payees : fallbackInputPayees;
+        const ready = await revolutEnsurePayeesReadyFromPreview(env, inputJson.rail_env_snapshot || inputJson.rail_env || null, payeesForReadiness, actorUserId, {
+          operationId,
+          chunkSize: numberFrom(configJson.payee_readiness_chunk_size, 50),
+          lockOwner,
+          cursor: numberFrom(progressJson.payee_readiness_cursor, 0)
+        });
+        const nextCursor = Number.isFinite(Number(ready?.next_cursor)) ? Math.max(0, Math.trunc(Number(ready.next_cursor))) : null;
+        const remaining = Number.isFinite(Number(ready?.remaining)) ? Math.max(0, Math.trunc(Number(ready.remaining))) : 0;
+        const failedCount = Number.isFinite(Number(ready?.failed ?? ready?.failed_count)) ? Math.max(0, Math.trunc(Number(ready.failed ?? ready.failed_count))) : 0;
+        const readinessProgress = Object.assign({}, (ready && typeof ready === 'object' && !Array.isArray(ready) ? ready : {}), {
+          operation_scoped_payee_source: scopedPayeeReadiness.source,
+          operation_scoped_scope_count: scopedPayeeReadiness.scope_count,
+          operation_scoped_payee_count: scopedPayeeReadiness.payee_count,
+          used_input_payee_fallback: scopedPayeeReadiness.scope_count <= 0
+        });
+
+        if (failedCount > 0) {
+          return finishFailedWithCleanup( null, {
+            code: 'DRAFT_PAYEE_READINESS_FAILED',
+            message: 'Provider payee readiness could not be completed for draft creation.',
+            payee_readiness: readinessProgress
+          });
+        }
+
+        if (nextCursor !== null && remaining > 0) {
+          return lockProgress('RUNNING', 'ENSURE_PAYEE_READINESS', {
+            status_text: 'Checked one payee readiness chunk.',
+            payee_readiness: readinessProgress,
+            payee_readiness_cursor: nextCursor
+          });
+        }
+        return lockProgress('RUNNING', 'SEED_ALLOCATION_ROWS', {
+          status_text: 'Payee readiness checked.',
+          payee_readiness: readinessProgress,
+          payee_readiness_cursor: nextCursor
+        });
+      }
+      return lockProgress('RUNNING', 'SEED_ALLOCATION_ROWS', { status_text: 'Payee readiness helper is not installed; continuing with SQL readiness gates.' });
+    }
+
+    if (phase === 'SEED_CANDIDATE_SCOPE') {
+      const seeded = unwrapRpcPayload(await sbRpc(env, 'pay_workbench_prepare_draft_scope_seed', {
+        p_operation_id: operationId,
+        p_workbench_session_id: workbenchSessionId,
+        p_actor_user_id: actorUserId,
+        p_selected_preview_row_ids: selectedPreviewRowIds,
+        p_pay_channel_scope: payChannelScope,
+        p_same_week_paye_override_json: sameWeekPayeOverrideJson
+      }), 'pay_workbench_prepare_draft_scope_seed');
+      const candidateScopeCount = Number.isFinite(Number(seeded.candidate_scope_count)) ? Math.max(0, Math.trunc(Number(seeded.candidate_scope_count))) : 0;
+      const seededSelectedCount = Number.isFinite(Number(seeded.selected_row_count)) ? Math.max(0, Math.trunc(Number(seeded.selected_row_count))) : selectedPreviewRowCount;
+      if (selectedPreviewRowCount > 0 && candidateScopeCount <= 0) {
+        return finishFailedWithCleanup(null, {
+          code: 'DRAFT_CANDIDATE_SCOPE_EMPTY',
+          message: 'Selected preview rows did not produce row-backed candidate scope for draft creation.',
+          selected_preview_row_count: selectedPreviewRowCount,
+          candidate_scope_seed: seeded
+        }, { phase: 'SEED_CANDIDATE_SCOPE' });
+      }
+      return lockProgress('RUNNING', 'DRAIN_TSFIN', {
+        status_text: 'Candidate payrun scope seeded.',
+        candidate_scope_seed: seeded,
+        selected_preview_row_count: seededSelectedCount,
+        candidate_scope_count: candidateScopeCount,
+        tsfin_drain_cursor: 0,
+        payee_readiness_cursor: 0
+      }, { total_units: candidateScopeCount || null, completed_units: 0, failed_units: 0 });
+    }
+
+    if (phase === 'SEED_ALLOCATION_ROWS') {
+      const allocationChunksSeeded = progressJson.allocation_chunks_seeded === true;
+      const allocationChunkSeed = safeObject(progressJson.allocation_chunk_seed);
+
+      if (!allocationChunksSeeded) {
+        const scopes = await fetchCandidateScopes('&order=chunk_sequence.asc,id.asc&limit=50000');
+        const allScopeIds = scopes.map((r) => String(r.id || '').trim()).filter((value) => isUuid(value));
+        if (selectedPreviewRowCount > 0 && allScopeIds.length <= 0) {
+          return finishFailedWithCleanup(null, {
+            code: 'DRAFT_CANDIDATE_SCOPE_EMPTY',
+            message: 'No row-backed candidate scope rows were available for allocation seeding.',
+            selected_preview_row_count: selectedPreviewRowCount
+          }, { phase: 'SEED_ALLOCATION_ROWS' });
+        }
+        const seed = unwrapRpcPayload(await sbRpc(env, 'banking_pay_operation_seed_chunks', {
+          p_operation_id: operationId,
+          p_phase: 'SEED_ALLOCATION_ROWS',
+          p_chunk_type: 'CANDIDATE_SCOPE',
+          p_chunk_size: numberFrom(configJson.draft_finance_chunk_size, 50),
+          p_units_json: allScopeIds
+        }), 'banking_pay_operation_seed_chunks');
+        return lockProgress('RUNNING', 'SEED_ALLOCATION_ROWS', {
+          status_text: 'Deduction and recovery allocation chunks are ready.',
+          allocation_chunks_seeded: true,
+          allocation_chunk_seed: seed,
+          candidate_scope_count: allScopeIds.length,
+          total_units: seed.total_units || allScopeIds.length,
+          chunk_count: seed.chunk_count || 0
+        }, {
+          total_units: seed.total_units || allScopeIds.length,
+          completed_units: 0,
+          failed_units: 0,
+          current_chunk_index: 0,
+          chunk_count: seed.chunk_count || 0
+        });
+      }
+
+      const chunk = await claim();
+      if (!chunk || !chunk.chunk_id) {
+        return lockProgress('RUNNING', 'CREATE_BATCH_SHELLS', {
+          status_text: 'Deduction and recovery allocation rows seeded.',
+          allocation_chunks_seeded: true,
+          allocation_chunk_seed: allocationChunkSeed
+        });
+      }
+
+      const scopeIds = extractCandidateScopeIdsFromChunkPayload(chunk.payload_json || chunk.payloadJson || {});
+      try {
+        assertDraftCreateChunkHasRowBackedScope('SEED_ALLOCATION_ROWS', chunk, scopeIds);
+        const seeded = unwrapRpcPayload(await sbRpc(env, 'pay_workbench_prepare_draft_allocation_rows_seed', {
+          p_operation_id: operationId,
+          p_candidate_scope_ids: scopeIds
+        }), 'pay_workbench_prepare_draft_allocation_rows_seed');
+        const insertedRows = Number.isFinite(Number(seeded.allocation_rows_inserted)) ? Math.max(0, Math.trunc(Number(seeded.allocation_rows_inserted))) : 0;
+        const reusedRows = Number.isFinite(Number(seeded.allocation_rows_reused)) ? Math.max(0, Math.trunc(Number(seeded.allocation_rows_reused))) : 0;
+        if (scopeIds.length > 0 && insertedRows + reusedRows <= 0) {
+          throw new Error('DRAFT_ALLOCATION_ROWS_EMPTY');
+        }
+        await finishChunk(chunk.chunk_id, 'COMPLETE', scopeIds.length, 0, seeded, null);
+        return lockProgress('RUNNING', 'SEED_ALLOCATION_ROWS', {
+          status_text: 'Seeded one deduction and recovery allocation chunk.',
+          allocation_chunks_seeded: true,
+          allocation_chunk_seed: allocationChunkSeed,
+          allocation_rows_seed: seeded,
+          allocation_rows_inserted: insertedRows,
+          allocation_rows_reused: reusedRows,
+          candidate_scope_count: scopeIds.length
+        }, {
+          total_units: allocationChunkSeed.total_units || null,
+          completed_units: scopeIds.length,
+          failed_units: 0,
+          current_chunk_index: chunk.sequence_no || null,
+          chunk_count: allocationChunkSeed.chunk_count || null
+        });
+      } catch (e) {
+        await finishChunk(chunk.chunk_id, 'FAILED', 0, scopeIds.length || 1, null, { code: 'SEED_ALLOCATION_ROWS_CHUNK_FAILED', message: String(e?.message || e || '') });
+        return finishFailedWithCleanup( null, { code: 'SEED_ALLOCATION_ROWS_CHUNK_FAILED', message: 'Draft allocation seeding chunk failed.', error: String(e?.message || e || '') });
+      }
+    }
+
+    if (phase === 'CREATE_BATCH_SHELLS') {
+      const scopes = await fetchCandidateScopes('&order=pay_channel.asc,chunk_sequence.asc,id.asc&limit=50000');
+      if (selectedPreviewRowCount > 0 && (!Array.isArray(scopes) || scopes.length <= 0)) {
+        return finishFailedWithCleanup(null, {
+          code: 'DRAFT_CANDIDATE_SCOPE_EMPTY',
+          message: 'No row-backed candidate scope rows were available for draft batch shell creation.',
+          selected_preview_row_count: selectedPreviewRowCount
+        }, { phase: 'CREATE_BATCH_SHELLS' });
+      }
+      const payChannels = Array.from(new Set(scopes.map((r) => String(r.pay_channel || '').trim().toUpperCase()).filter(Boolean)));
+      const shellResults = [];
+      for (const payChannel of payChannels) {
+        const shell = unwrapRpcPayload(await sbRpc(env, 'pay_batch_shell_ensure_from_operation', {
+          p_operation_id: operationId,
+          p_workbench_session_id: workbenchSessionId,
+          p_actor_user_id: actorUserId,
+          p_batch_kind: inputJson.batch_kind || inputJson.batchKind || 'STANDARD_PAYRUN',
+          p_pay_channel: payChannel,
+          p_input_json: inputJson
+        }), 'pay_batch_shell_ensure_from_operation');
+        shellResults.push(shell);
+      }
+      return lockProgress('RUNNING', 'SEED_DRAFT_CHUNKS', { status_text: 'Draft batch shell created.', batch_shells: shellResults });
+    }
+
+    if (phase === 'SEED_DRAFT_CHUNKS') {
+      const scopes = await fetchCandidateScopes('&order=chunk_sequence.asc,id.asc&limit=50000');
+      const scopeIds = scopes.map((r) => String(r.id || '').trim()).filter((value) => isUuid(value));
+      if (selectedPreviewRowCount > 0 && scopeIds.length <= 0) {
+        return finishFailedWithCleanup(null, {
+          code: 'DRAFT_CANDIDATE_SCOPE_EMPTY',
+          message: 'No row-backed candidate scope ids were available for draft chunk seeding.',
+          selected_preview_row_count: selectedPreviewRowCount
+        }, { phase: 'SEED_DRAFT_CHUNKS' });
+      }
+      const seeded = unwrapRpcPayload(await sbRpc(env, 'banking_pay_operation_seed_chunks', {
+        p_operation_id: operationId,
+        p_phase: 'INSERT_CANDIDATES',
+        p_chunk_type: 'CANDIDATE_SCOPE',
+        p_chunk_size: numberFrom(configJson.draft_candidate_chunk_size, 100),
+        p_units_json: scopeIds
+      }), 'banking_pay_operation_seed_chunks');
+      for (const draftPhase of ['INSERT_ITEMS', 'APPLY_FINANCE_ADJUSTMENTS', 'FINALISE_RESERVATIONS', 'POPULATE_CANDIDATE_SUMMARIES', 'CREATE_TIMESHEET_SNAPSHOTS', 'BUILD_ITEM_BREAKDOWNS']) {
+        await sbRpc(env, 'banking_pay_operation_seed_chunks', {
+          p_operation_id: operationId,
+          p_phase: draftPhase,
+          p_chunk_type: 'CANDIDATE_SCOPE',
+          p_chunk_size: draftPhase === 'APPLY_FINANCE_ADJUSTMENTS' ? numberFrom(configJson.draft_finance_chunk_size, 50) : numberFrom(configJson.draft_candidate_chunk_size, 100),
+          p_units_json: scopeIds
+        });
+      }
+      return lockProgress('RUNNING', 'INSERT_CANDIDATES', {
+        status_text: 'Draft candidate chunks seeded.',
+        draft_chunk_seed: seeded,
+        candidate_scope_count: scopeIds.length,
+        chunk_count: seeded.chunk_count || 0,
+        total_units: scopeIds.length
+      }, { total_units: scopeIds.length, completed_units: 0, failed_units: 0, chunk_count: seeded.chunk_count || 0 });
+    }
+
+    if (['INSERT_CANDIDATES', 'INSERT_ITEMS', 'APPLY_FINANCE_ADJUSTMENTS', 'FINALISE_RESERVATIONS', 'POPULATE_CANDIDATE_SUMMARIES', 'CREATE_TIMESHEET_SNAPSHOTS', 'BUILD_ITEM_BREAKDOWNS'].includes(phase)) {
+      const chunk = await claim();
+      const nextPhaseByCurrent = {
+        INSERT_CANDIDATES: 'INSERT_ITEMS',
+        INSERT_ITEMS: 'APPLY_FINANCE_ADJUSTMENTS',
+        APPLY_FINANCE_ADJUSTMENTS: 'FINALISE_RESERVATIONS',
+        FINALISE_RESERVATIONS: 'POPULATE_CANDIDATE_SUMMARIES',
+        POPULATE_CANDIDATE_SUMMARIES: 'CREATE_TIMESHEET_SNAPSHOTS',
+        CREATE_TIMESHEET_SNAPSHOTS: 'BUILD_ITEM_BREAKDOWNS',
+        BUILD_ITEM_BREAKDOWNS: 'ASSERT_INTEGRITY'
+      };
+      if (!chunk || !chunk.chunk_id) return lockProgress('RUNNING', nextPhaseByCurrent[phase], { status_text: `${phase} chunks complete.` });
+      const scopeIds = extractCandidateScopeIdsFromChunkPayload(chunk.payload_json || chunk.payloadJson || {});
+      const groups = await groupScopeIdsByBatch(scopeIds);
+      const results = [];
+      try {
+        assertDraftCreateChunkHasRowBackedScope(phase, chunk, scopeIds);
+        if (scopeIds.length > 0 && groups.length <= 0) {
+          throw new Error(`${phase}_CHUNK_GROUPS_EMPTY`);
+        }
+        for (const group of groups) {
+          let result;
+          if (phase === 'INSERT_CANDIDATES') {
+            result = unwrapRpcPayload(await sbRpc(env, 'pay_batch_insert_candidates_from_preview', { p_pay_batch_id: group.pay_batch_id, p_actor_user_id: actorUserId, p_operation_id: operationId, p_candidate_scope_ids: group.candidate_scope_ids }), 'pay_batch_insert_candidates_from_preview');
+          } else if (phase === 'INSERT_ITEMS') {
+            result = unwrapRpcPayload(await sbRpc(env, 'pay_batch_insert_items_from_preview', { p_pay_batch_id: group.pay_batch_id, p_actor_user_id: actorUserId, p_operation_id: operationId, p_candidate_scope_ids: group.candidate_scope_ids }), 'pay_batch_insert_items_from_preview');
+          } else if (phase === 'APPLY_FINANCE_ADJUSTMENTS') {
+            result = unwrapRpcPayload(await sbRpc(env, 'pay_batch_apply_finance_adjustments', { p_pay_batch_id: group.pay_batch_id, p_pay_channel_scope: group.pay_channel, p_actor_user_id: actorUserId, p_vat_rate_pct: null, p_week_start: null, p_operation_id: operationId, p_candidate_scope_ids: group.candidate_scope_ids }), 'pay_batch_apply_finance_adjustments');
+          } else if (phase === 'FINALISE_RESERVATIONS') {
+            result = unwrapRpcPayload(await sbRpc(env, 'pay_batch_finalize_reservations_and_markers', { p_pay_batch_id: group.pay_batch_id, p_pay_channel_scope: group.pay_channel, p_actor_user_id: actorUserId, p_pay_date: inputJson.pay_date || null, p_week_start: inputJson.week_start || null, p_operation_id: operationId, p_candidate_scope_ids: group.candidate_scope_ids }), 'pay_batch_finalize_reservations_and_markers');
+          } else if (phase === 'POPULATE_CANDIDATE_SUMMARIES') {
+            result = unwrapRpcPayload(await sbRpc(env, 'pay_batch_populate_candidate_summaries', { p_pay_batch_id: group.pay_batch_id, p_pay_channel_scope: group.pay_channel, p_actor_user_id: actorUserId, p_operation_id: operationId, p_candidate_scope_ids: group.candidate_scope_ids }), 'pay_batch_populate_candidate_summaries');
+          } else if (phase === 'CREATE_TIMESHEET_SNAPSHOTS') {
+            result = unwrapRpcPayload(await sbRpc(env, 'pay_batch_create_timesheet_snapshots', { p_pay_batch_id: group.pay_batch_id, p_actor_user_id: actorUserId, p_operation_id: operationId, p_candidate_scope_ids: group.candidate_scope_ids }), 'pay_batch_create_timesheet_snapshots');
+          } else {
+            result = unwrapRpcPayload(await sbRpc(env, 'pay_batch_build_item_breakdowns', { p_pay_batch_id: group.pay_batch_id, p_actor_user_id: actorUserId, p_operation_id: operationId, p_candidate_scope_ids: group.candidate_scope_ids }), 'pay_batch_build_item_breakdowns');
+          }
+          assertDraftCreateRpcProducedWork(phase, group, result);
+          results.push({ pay_batch_id: group.pay_batch_id, pay_channel: group.pay_channel, candidate_scope_ids: group.candidate_scope_ids, result });
+        }
+        const createdPayBatchIds = collectCreatedPayBatchIdsFromGroupsAndResults(groups, results);
+        await finishChunk(chunk.chunk_id, 'COMPLETE', scopeIds.length, 0, { phase, scope_ids: scopeIds, pay_batch_ids: createdPayBatchIds, results }, null);
+        return lockProgress('RUNNING', phase, {
+          status_text: `Processed one ${phase} draft chunk.`,
+          candidate_scope_count: scopeIds.length,
+          current_chunk_index: chunk.sequence_no || null,
+          chunk_count: progressJson.chunk_count || progressJson.last_chunk_seed?.chunk_count || null,
+          completed_units: scopeIds.length,
+          pay_batch_ids: createdPayBatchIds,
+          created_pay_batch_ids: createdPayBatchIds,
+          last_chunk_result: { phase, scope_ids: scopeIds, pay_batch_ids: createdPayBatchIds, results }
+        }, { current_chunk_index: chunk.sequence_no || null, completed_units: scopeIds.length });
+      } catch (e) {
+        await finishChunk(chunk.chunk_id, 'FAILED', 0, scopeIds.length || 1, null, { code: `${phase}_CHUNK_FAILED`, message: String(e?.message || e || '') });
+        return finishFailedWithCleanup( null, { code: `${phase}_CHUNK_FAILED`, message: `Draft ${phase} chunk failed.`, error: String(e?.message || e || '') });
+      }
+    }
+
+    if (phase === 'ASSERT_INTEGRITY') {
+      const scopes = await fetchCandidateScopes('&limit=50000');
+      const batchIds = Array.from(new Set(scopes.map((r) => String(r.pay_batch_id || '').trim()).filter(Boolean)));
+      const integrityResults = [];
+      const successfulBatchIds = [];
+      const skippedEmptyReservedBatchIds = [];
+      let skippedEmptyReservedCleanup = null;
+
+      for (const batchId of batchIds) {
+        const integrity = unwrapRpcPayload(await sbRpc(env, 'pay_batch_assert_integrity', {
+          p_pay_batch_id: batchId,
+          p_actor_user_id: actorUserId,
+          p_operation_id: operationId
+        }), 'pay_batch_assert_integrity');
+        const integrityCode = String(integrity.error || integrity.code || '').trim().toUpperCase();
+        const failedIntegrity = integrity.ok === false || integrity.pass === false;
+        integrityResults.push({ pay_batch_id: batchId, result: integrity });
+
+        if (!failedIntegrity) {
+          successfulBatchIds.push(batchId);
+          continue;
+        }
+
+        if (integrityCode === 'PAY_DRAFT_ALL_SELECTED_PAYMENTS_ALREADY_RESERVED') {
+          skippedEmptyReservedBatchIds.push(batchId);
+          continue;
+        }
+
+        const integrityMessage = String(integrity.friendly_error_message || integrity.message || 'Draft integrity check failed.').trim() || 'Draft integrity check failed.';
+        const reservationAvailability = collectReservationAvailabilityFromScopes(scopes);
+        return finishFailedWithCleanup( null, {
+          code: integrityCode || 'DRAFT_INTEGRITY_FAILED',
+          message: integrityMessage,
+          integrity_results: integrityResults,
+          reservation_availability: reservationAvailability
+        });
+      }
+
+      if (!successfulBatchIds.length && skippedEmptyReservedBatchIds.length) {
+        const reservationAvailability = collectReservationAvailabilityFromScopes(scopes);
+        return finishFailedWithCleanup( null, {
+          code: 'PAY_DRAFT_ALL_SELECTED_PAYMENTS_ALREADY_RESERVED',
+          message: 'No draft was created because all selected payments are already reserved in another active draft batch.',
+          integrity_results: integrityResults,
+          reservation_availability: reservationAvailability,
+          skipped_empty_pay_batch_ids: skippedEmptyReservedBatchIds
+        });
+      }
+
+      if (skippedEmptyReservedBatchIds.length) {
+        skippedEmptyReservedCleanup = await cancelSkippedEmptyReservedDraftBatches(
+          skippedEmptyReservedBatchIds,
+          'Draft shell contained only payments already reserved in another active draft batch; eligible payments were created in a separate draft shell.'
+        );
+      }
+
+      return lockProgress('RUNNING', 'POST_CREATE_REFRESH', {
+        status_text: skippedEmptyReservedBatchIds.length
+          ? 'Draft integrity checked; empty already-reserved draft shells were excluded.'
+          : 'Draft integrity checked.',
+        integrity_results: integrityResults,
+        pay_batch_ids: successfulBatchIds,
+        created_pay_batch_ids: successfulBatchIds,
+        skipped_empty_pay_batch_ids: skippedEmptyReservedBatchIds,
+        cancelled_empty_pay_batch_ids: skippedEmptyReservedCleanup?.cancelled_pay_batch_ids || [],
+        empty_reserved_batch_cleanup: skippedEmptyReservedCleanup
+      });
+    }
+
+    if (phase === 'POST_CREATE_REFRESH') {
+      const scopes = await fetchCandidateScopes('&limit=50000');
+      const candidateIds = Array.from(new Set(scopes.map((r) => String(r.candidate_id || '').trim()).filter(Boolean)));
+      const scopedBatchIds = Array.from(new Set(scopes.map((r) => String(r.pay_batch_id || '').trim()).filter(Boolean)));
+      const skippedEmptyBatchIds = uniqueUuidArray(progressJson.skipped_empty_pay_batch_ids || []);
+      const emptyReservedBatchCleanup = safeObject(progressJson.empty_reserved_batch_cleanup);
+      const cancelledEmptyBatchIds = uniqueUuidArray(progressJson.cancelled_empty_pay_batch_ids || emptyReservedBatchCleanup.cancelled_pay_batch_ids || []);
+      const progressBatchIds = uniqueUuidArray(progressJson.created_pay_batch_ids || progressJson.pay_batch_ids || []);
+      const batchIds = progressBatchIds.length
+        ? progressBatchIds
+        : scopedBatchIds.filter((batchId) => !skippedEmptyBatchIds.includes(batchId));
+      const reservationAvailability = collectReservationAvailabilityFromScopes(scopes);
+
+      let refresh = null;
+      let refreshWarning = null;
+      let discard = null;
+
+      try {
+        if (candidateIds.length) {
+          refresh = unwrapRpcPayload(await sbRpc(env, 'pay_workbench_enqueue_candidate_refresh_many', {
+            p_session_id: workbenchSessionId,
+            p_candidate_ids: candidateIds,
+            p_reason: 'DRAFT_CREATED',
+            p_actor_user_id: actorUserId
+          }), 'pay_workbench_enqueue_candidate_refresh_many');
+        }
+      } catch (refreshError) {
+        refreshWarning = {
+          code: 'POST_CREATE_PREVIEW_REFRESH_QUEUE_FAILED',
+          message: 'Draft batch was created, but the post-create preview refresh could not be queued.',
+          error: String(refreshError?.message || refreshError || '')
+        };
+      }
+
+      try {
+        discard = await discardSourceWorkbenchSessionForOptionA();
+      } catch (discardError) {
+        discard = {
+          attempted: true,
+          ok: false,
+          acceptable: false,
+          source_session_id: workbenchSessionId,
+          source_session_discarded: false,
+          warning: 'SOURCE_SESSION_DISCARD_FAILED',
+          error: String(discardError?.message || discardError || '')
+        };
+      }
+
+      const refreshJobIds = Array.from(new Set([].concat(
+        Array.isArray(refresh?.refresh_job_ids) ? refresh.refresh_job_ids : [],
+        Array.isArray(refresh?.dirty_refresh_job_ids) ? refresh.dirty_refresh_job_ids : [],
+        Array.isArray(refresh?.snapshot_refresh_job_ids) ? refresh.snapshot_refresh_job_ids : [],
+        Array.isArray(refresh?.job_ids) ? refresh.job_ids : []
+      ).map((value) => String(value || '').trim()).filter(Boolean)));
+      const snapshotRefreshJobIds = Array.from(new Set([].concat(
+        Array.isArray(refresh?.snapshot_refresh_job_ids) ? refresh.snapshot_refresh_job_ids : [],
+        Array.isArray(refresh?.refresh_job_ids) ? refresh.refresh_job_ids : [],
+        Array.isArray(refresh?.dirty_refresh_job_ids) ? refresh.dirty_refresh_job_ids : []
+      ).map((value) => String(value || '').trim()).filter(Boolean)));
+      const dirtyCandidateIds = Array.from(new Set([].concat(
+        candidateIds,
+        Array.isArray(refresh?.dirty_candidate_ids) ? refresh.dirty_candidate_ids : [],
+        Array.isArray(refresh?.candidate_ids) ? refresh.candidate_ids : []
+      ).map((value) => String(value || '').trim()).filter(Boolean)));
+
+      const postCreateRefresh = {
+        ok: !(refreshWarning || (discard && discard.ok === false && discard.acceptable !== true)),
+        source_session_id: workbenchSessionId,
+        source_session_discarded: discard?.source_session_discarded === true || discard?.ok === true || discard?.acceptable === true,
+        source_session_discard: discard || null,
+        requires_new_session: true,
+        dirty_candidate_ids: dirtyCandidateIds,
+        refresh_job_ids: refreshJobIds,
+        snapshot_refresh_job_ids: snapshotRefreshJobIds,
+        created_pay_batch_ids: batchIds,
+        pay_batch_ids: batchIds,
+        skipped_empty_pay_batch_ids: skippedEmptyBatchIds,
+        cancelled_empty_pay_batch_ids: cancelledEmptyBatchIds,
+        empty_reserved_batch_cleanup: Object.keys(emptyReservedBatchCleanup).length ? emptyReservedBatchCleanup : null,
+        reservation_availability: reservationAvailability,
+        draft_availability: reservationAvailability,
+        skipped_preview_row_count: reservationAvailability.skipped_preview_row_count,
+        clipped_preview_row_count: reservationAvailability.clipped_preview_row_count,
+        refresh: refresh || null,
+        warning: refreshWarning || ((discard && discard.ok === false && discard.acceptable !== true) ? {
+          code: 'SOURCE_SESSION_DISCARD_FAILED',
+          message: 'Draft batch was created, but the source preview session could not be discarded.',
+          error: discard.error || null
+        } : null)
+      };
+
+      return lockProgress('RUNNING', 'COMPLETE', {
+        status_text: postCreateRefresh.warning ? 'Draft created; post-draft preview refresh needs attention.' : 'Post-draft refresh queued.',
+        post_create_refresh: postCreateRefresh,
+        refresh: postCreateRefresh,
+        pay_batch_ids: batchIds,
+        created_pay_batch_ids: batchIds,
+        skipped_empty_pay_batch_ids: skippedEmptyBatchIds,
+        cancelled_empty_pay_batch_ids: cancelledEmptyBatchIds,
+        empty_reserved_batch_cleanup: Object.keys(emptyReservedBatchCleanup).length ? emptyReservedBatchCleanup : null,
+        reservation_availability: reservationAvailability,
+        draft_availability: reservationAvailability,
+        skipped_preview_row_count: reservationAvailability.skipped_preview_row_count,
+        clipped_preview_row_count: reservationAvailability.clipped_preview_row_count,
+        source_session_id: workbenchSessionId,
+        source_session_discarded: postCreateRefresh.source_session_discarded,
+        requires_new_session: true,
+        dirty_candidate_ids: dirtyCandidateIds,
+        refresh_job_ids: refreshJobIds,
+        snapshot_refresh_job_ids: snapshotRefreshJobIds
+      });
+    }
+
+    if (phase === 'COMPLETE') {
+      const scopes = await fetchCandidateScopes('&order=pay_channel.asc,chunk_sequence.asc,id.asc&limit=50000');
+      const reservationAvailability = collectReservationAvailabilityFromScopes(scopes);
+      const batchById = new Map();
+      const candidateIds = new Set();
+      const skippedEmptyBatchIds = uniqueUuidArray(progressJson.skipped_empty_pay_batch_ids || []);
+      const cancelledEmptyBatchIds = uniqueUuidArray(progressJson.cancelled_empty_pay_batch_ids || []);
+      const preferredBatchIds = uniqueUuidArray(progressJson.created_pay_batch_ids || progressJson.pay_batch_ids || []);
+      const preferredBatchIdSet = new Set(preferredBatchIds);
+      const skippedEmptyBatchIdSet = new Set(skippedEmptyBatchIds);
+      for (const scope of scopes) {
+        const batchId = String(scope.pay_batch_id || '').trim();
+        const payChannel = String(scope.pay_channel || 'ALL').trim().toUpperCase() || 'ALL';
+        const candidateId = String(scope.candidate_id || '').trim();
+        if (candidateId) candidateIds.add(candidateId);
+        if (!batchId) continue;
+        if (skippedEmptyBatchIdSet.has(batchId)) continue;
+        if (preferredBatchIdSet.size && !preferredBatchIdSet.has(batchId)) continue;
+        if (!batchById.has(batchId)) batchById.set(batchId, { pay_batch_id: batchId, pay_channel: payChannel });
+      }
+      const createdBatches = Array.from(batchById.values());
+      const batchIds = createdBatches.map((row) => row.pay_batch_id);
+      const payeBatch = createdBatches.find((row) => String(row.pay_channel || '').toUpperCase() === 'PAYE') || null;
+      const umbrellaBatch = createdBatches.find((row) => ['UMBRELLA', 'NON_PAYE', 'NONPAYE'].includes(String(row.pay_channel || '').toUpperCase())) || null;
+      const refresh = safeObject(progressJson.post_create_refresh || progressJson.refresh || {});
+      const refreshCandidateIds = Array.from(new Set([].concat(
+        Array.from(candidateIds),
+        Array.isArray(progressJson.dirty_candidate_ids) ? progressJson.dirty_candidate_ids : [],
+        Array.isArray(refresh.dirty_candidate_ids) ? refresh.dirty_candidate_ids : []
+      ).map((value) => String(value || '').trim()).filter(Boolean)));
+      const refreshJobIds = Array.from(new Set([].concat(
+        Array.isArray(progressJson.refresh_job_ids) ? progressJson.refresh_job_ids : [],
+        Array.isArray(refresh.refresh_job_ids) ? refresh.refresh_job_ids : [],
+        Array.isArray(refresh.dirty_refresh_job_ids) ? refresh.dirty_refresh_job_ids : []
+      ).map((value) => String(value || '').trim()).filter(Boolean)));
+      const snapshotRefreshJobIds = Array.from(new Set([].concat(
+        Array.isArray(progressJson.snapshot_refresh_job_ids) ? progressJson.snapshot_refresh_job_ids : [],
+        Array.isArray(refresh.snapshot_refresh_job_ids) ? refresh.snapshot_refresh_job_ids : [],
+        refreshJobIds
+      ).map((value) => String(value || '').trim()).filter(Boolean)));
+      const sourceSessionDiscarded = refresh.source_session_discarded === true || progressJson.source_session_discarded === true;
+      const requiresNewSession = true;
+      const postCreateRefresh = Object.assign({}, refresh, {
+        source_session_id: workbenchSessionId,
+        source_session_discarded: sourceSessionDiscarded,
+        requires_new_session: requiresNewSession,
+        dirty_candidate_ids: refreshCandidateIds,
+        refresh_job_ids: refreshJobIds,
+        snapshot_refresh_job_ids: snapshotRefreshJobIds,
+        created_pay_batch_ids: batchIds,
+        pay_batch_ids: batchIds,
+        skipped_empty_pay_batch_ids: skippedEmptyBatchIds,
+        cancelled_empty_pay_batch_ids: cancelledEmptyBatchIds,
+        reservation_availability: reservationAvailability,
+        draft_availability: reservationAvailability,
+        skipped_preview_row_count: reservationAvailability.skipped_preview_row_count,
+        clipped_preview_row_count: reservationAvailability.clipped_preview_row_count,
+        replacement_session_id: null,
+        refreshed_session_id: null
+      });
+
+      return finish('COMPLETE', {
+        ok: true,
+        operation_id: operationId,
+        workbench_session_id: workbenchSessionId,
+        session_id: workbenchSessionId,
+        source_session_id: workbenchSessionId,
+        source_snapshot_run_id: inputJson.source_snapshot_run_id || null,
+        source_session_version: inputJson.source_session_version || null,
+        source_session_signature: inputJson.source_session_signature || null,
+        source_session_discarded: sourceSessionDiscarded,
+        requires_new_session: requiresNewSession,
+        replacement_session_id: null,
+        replacement_session_signature: null,
+        replacement_session_version: null,
+        refreshed_session_id: null,
+        refreshed_session_signature: null,
+        refreshed_session_version: null,
+        pay_batch_ids: batchIds,
+        created_pay_batch_ids: batchIds,
+        skipped_empty_pay_batch_ids: skippedEmptyBatchIds,
+        cancelled_empty_pay_batch_ids: cancelledEmptyBatchIds,
+        operation_type: 'DRAFT_CREATE',
+        primary_pay_batch_id: batchIds[0] || null,
+        pay_batch_id: batchIds[0] || null,
+        created_batch_count: batchIds.length,
+        backend_runner_owned: true,
+        frontend_completion_required: false,
+        paye_pay_batch_id: payeBatch?.pay_batch_id || null,
+        umbrella_pay_batch_id: umbrellaBatch?.pay_batch_id || null,
+        created_batches: createdBatches,
+        reservation_availability: reservationAvailability,
+        draft_availability: reservationAvailability,
+        skipped_preview_row_count: reservationAvailability.skipped_preview_row_count,
+        clipped_preview_row_count: reservationAvailability.clipped_preview_row_count,
+        candidate_count: candidateIds.size,
+        dirty_candidate_ids: refreshCandidateIds,
+        refresh_candidate_ids: refreshCandidateIds,
+        refresh_job_ids: refreshJobIds,
+        snapshot_refresh_job_ids: snapshotRefreshJobIds,
+        post_create_refresh: postCreateRefresh,
+        refresh: postCreateRefresh,
+        preview_refresh_warning: postCreateRefresh.warning || null,
+        session: {
+          session_id: workbenchSessionId,
+          source_session_id: workbenchSessionId,
+          source_session_version: inputJson.source_session_version || null,
+          source_session_signature: inputJson.source_session_signature || null,
+          source_session_discarded: sourceSessionDiscarded,
+          requires_new_session: requiresNewSession,
+          replacement_session_id: null,
+          replacement_session_signature: null,
+          replacement_session_version: null,
+          consumed: true,
+          preview_reopen_required: true
+        }
+      }, null);
+    }
+
+    return finishFailedWithCleanup( null, { code: 'UNKNOWN_DRAFT_PHASE', message: `Unknown draft operation phase: ${phase}`, phase });
+  } catch (e) {
+    return finishFailedWithCleanup( null, { code: 'DRAFT_CREATE_OPERATION_FAILED', message: 'Draft create operation failed.', phase, error: String(e?.message || e || '') });
+  }
+}
+
+async function advanceBankingPayRemittanceOperation(env, operationRow, user, options = {}) {
+  const unwrapRpcPayload = (rpcRes, key) => {
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(payload) && payload.length === 1 && payload[0] && typeof payload[0] === 'object') payload = payload[0];
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) payload = payload[key];
+      if (Array.isArray(payload) && payload.length === 1 && payload[0] && typeof payload[0] === 'object') payload = payload[0];
+    } catch {}
+    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+  };
+
+  const safeObject = (value) => (value && typeof value === 'object' && !Array.isArray(value)) ? value : {};
+  const enc = encodeURIComponent;
+  const operation = safeObject(operationRow);
+  const operationId = String(operation.operation_id || operation.id || '').trim();
+  const payBatchId = String(operation.pay_batch_id || '').trim();
+  const actorUserId = String(user?.id || operation.actor_user_id || operation.input_json?.actor_user_id || '').trim();
+  const inputJson = safeObject(operation.input_json);
+  const configJson = safeObject(operation.config_json);
+  const lockOwner = String(options.lockOwner || `remittance:${operationId}`).trim();
+  const lockSeconds = Number.isFinite(Number(configJson.lock_seconds)) ? Math.max(5, Math.min(3600, Math.trunc(Number(configJson.lock_seconds)))) : 60;
+  const phase = String(operation.phase || 'VALIDATE_BATCH').trim().toUpperCase() || 'VALIDATE_BATCH';
+
+  if (!operationId) throw new Error('advanceBankingPayRemittanceOperation: operation_id is required');
+  if (!payBatchId) throw new Error('advanceBankingPayRemittanceOperation: pay_batch_id is required');
+  if (!actorUserId) throw new Error('advanceBankingPayRemittanceOperation: actor_user_id is required');
+
+  const chunkSize = (name, fallback) => Number.isFinite(Number(configJson[name])) ? Math.max(1, Math.trunc(Number(configJson[name]))) : fallback;
+  const save = async (status, nextPhase, progressJson = {}, counters = {}) => buildBankingPayOperationPublicPayload(await sbRpc(env, 'banking_pay_operation_save_progress', {
+    p_operation_id: operationId,
+    p_status: status,
+    p_phase: nextPhase,
+    p_total_units: counters.total_units ?? null,
+    p_completed_units: counters.completed_units ?? null,
+    p_failed_units: counters.failed_units ?? null,
+    p_current_chunk_index: counters.current_chunk_index ?? null,
+    p_chunk_count: counters.chunk_count ?? null,
+    p_progress_json: progressJson,
+    p_extend_lock_seconds: null
+  }));
+  const finish = async (status, resultJson = null, errorJson = null) => buildBankingPayOperationPublicPayload(await sbRpc(env, 'banking_pay_operation_finish', {
+    p_operation_id: operationId,
+    p_status: status,
+    p_result_json: resultJson,
+    p_error_json: errorJson
+  }));
+  const claim = async (claimPhase, chunkType) => unwrapRpcPayload(await sbRpc(env, 'banking_pay_operation_claim_chunk', {
+    p_operation_id: operationId,
+    p_phase: claimPhase,
+    p_chunk_type: chunkType,
+    p_lock_owner: lockOwner,
+    p_lock_seconds: lockSeconds
+  }), 'banking_pay_operation_claim_chunk');
+  const finishChunk = async (chunkId, status, completed, failed, result, error = null) => sbRpc(env, 'banking_pay_operation_finish_chunk', {
+    p_chunk_id: chunkId,
+    p_status: status,
+    p_completed_count: completed,
+    p_failed_count: failed,
+    p_result_json: result,
+    p_error_json: error
+  });
+  const fetchScopeIds = async (kind) => {
+    const wantedKind = String(kind || '').trim().toUpperCase();
+    const { rows } = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/banking_pay_operation_remittance_scope?operation_id=eq.${enc(operationId)}&select=id,remittance_type,status&order=created_at_utc.asc,id.asc&limit=50000`);
+    return (rows || [])
+      .filter((r) => {
+        const remittanceType = String(r?.remittance_type || '').trim().toUpperCase();
+        const remittanceStatus = String(r?.status || '').trim().toUpperCase();
+        const isPayoutNotice = remittanceType.includes('PAYOUT') || remittanceType.includes('NOTICE');
+        const statusIsQueueable = remittanceStatus === 'PENDING' || remittanceStatus === 'FAILED';
+        return statusIsQueueable && (wantedKind === 'PAYOUT_NOTICE' ? isPayoutNotice : !isPayoutNotice);
+      })
+      .map((r) => String(r.id || '').trim())
+      .filter(Boolean);
+  };
+
+  const isUuidText = (value) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(value || '').trim());
+
+  const extractRemittanceScopeIdsFromChunk = (chunk) => {
+    const payload = safeObject(chunk?.payload_json);
+    const ids = [];
+    const seen = new Set();
+    const pushId = (value) => {
+      const text = String(value || '').trim();
+      if (!isUuidText(text) || seen.has(text)) return;
+      seen.add(text);
+      ids.push(text);
+    };
+    const pushArray = (value) => {
+      if (!Array.isArray(value)) {
+        pushId(value);
+        return;
+      }
+      for (const entry of value) {
+        if (entry && typeof entry === 'object' && !Array.isArray(entry)) {
+          pushId(entry.remittance_scope_id || entry.remittanceScopeId || entry.scope_unit_id || entry.scopeUnitId || entry.id);
+        } else {
+          pushId(entry);
+        }
+      }
+    };
+
+    pushId(payload.remittance_scope_id || payload.remittanceScopeId || payload.scope_unit_id || payload.scopeUnitId || payload.id);
+    pushArray(payload.remittance_scope_ids);
+    pushArray(payload.remittanceScopeIds);
+    pushArray(payload.scope_unit_ids);
+    pushArray(payload.scopeUnitIds);
+    pushArray(payload.units);
+    return ids;
+  };
+
+  const readBool = (value, fallback = false) => {
+    if (typeof value === 'boolean') return value;
+    if (typeof value === 'number') return value !== 0;
+    if (value === null || value === undefined) return !!fallback;
+    const text = String(value).trim().toLowerCase();
+    if (['true', '1', 'yes', 'y', 'on'].includes(text)) return true;
+    if (['false', '0', 'no', 'n', 'off'].includes(text)) return false;
+    return !!fallback;
+  };
+
+
+  const extractQueueCounts = (queueResult = {}) => {
+    const result = safeObject(queueResult);
+    const numberFrom = function numberFromKeys() {
+      for (const key of Array.from(arguments)) {
+        const value = result[key];
+        if (Number.isFinite(Number(value))) return Math.max(0, Math.trunc(Number(value)));
+      }
+      return 0;
+    };
+    const rows = Array.isArray(result.jobs) ? result.jobs : (Array.isArray(result.rows) ? result.rows : []);
+    return {
+      queued_count: numberFrom('queued_count', 'inserted_outbox_count', 'inserted_count', 'queued', 'job_count'),
+      reused_count: numberFrom('reused_count', 'reused_outbox_count', 'already_queued_count', 'already_queued'),
+      skipped_count: numberFrom('skipped_count', 'skipped'),
+      failed_count: numberFrom('failed_count', 'failed'),
+      remaining_count: numberFrom('remaining_count', 'remaining'),
+      outbox_ids: Array.isArray(result.outbox_ids) ? result.outbox_ids : rows.map((row) => String(row?.outbox_id || row?.mail_outbox_id || '').trim()).filter(Boolean)
+    };
+  };
+
+  const isPlaceholderOnlyQueueResult = (queueResult = {}) => {
+    const result = safeObject(queueResult);
+    const renderStatus = String(result.render_status || result.body_render_status || result.remittance_render_status || '').trim().toUpperCase();
+    if (result.placeholder_only === true || result.placeholder_body_only === true || result.body_rendered === false || renderStatus === 'PLACEHOLDER_ONLY') return true;
+    let serialised = '';
+    try { serialised = JSON.stringify(result); } catch { serialised = String(result || ''); }
+    const placeholder = 'Please find the payment remittance information for this payment batch.';
+    const hasPlaceholder = serialised.includes(placeholder);
+    const hasRenderedAdvice = result.body_rendered === true || result.attachment_count > 0 || result.render_status === 'RENDERED' || result.remittance_payload_version || result.payload_hash;
+    return hasPlaceholder && !hasRenderedAdvice;
+  };
+
+  const onlyConfirmed = readBool(inputJson.only_confirmed ?? inputJson.onlyConfirmed, false);
+  const trigger = String(inputJson.trigger || '').trim().toUpperCase() || (onlyConfirmed ? 'ON_PAYMENT_CONFIRMED' : 'ON_EXECUTION');
+
+  const getPaymentRemittanceSendTiming = async () => {
+    const { rows } = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/settings_defaults?select=payment_remittance_send_timing&order=id.asc&limit=1`);
+    const rawTiming = String((rows && rows[0] && rows[0].payment_remittance_send_timing) || 'ON_EXECUTION').trim().toUpperCase() || 'ON_EXECUTION';
+    return rawTiming === 'ON_PAYMENT_CONFIRMED' ? 'ON_PAYMENT_CONFIRMED' : 'ON_EXECUTION';
+  };
+
+  const getBatchRemittanceIntent = async () => {
+    const { rows } = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/pay_batches?id=eq.${enc(payBatchId)}&select=id,execution_intent_json,settlement_confirmation_json&limit=1`);
+    const row = rows && rows[0] ? rows[0] : {};
+    return {
+      execution_intent_json: safeObject(row.execution_intent_json),
+      settlement_confirmation_json: safeObject(row.settlement_confirmation_json)
+    };
+  };
+
+  const evaluateRemittanceOperationGuard = async () => {
+    const configuredTiming = await getPaymentRemittanceSendTiming();
+    if (!['ON_EXECUTION', 'ON_PAYMENT_CONFIRMED'].includes(trigger)) {
+      return {
+        finish: true,
+        status: 'FAILED',
+        result: null,
+        error: {
+          code: 'UNSUPPORTED_REMITTANCE_TRIGGER',
+          message: `Unsupported remittance trigger: ${trigger}`,
+          trigger,
+          configured_timing: configuredTiming
+        }
+      };
+    }
+    if (configuredTiming !== trigger) {
+      return {
+        finish: true,
+        status: 'COMPLETE',
+        result: {
+          ok: true,
+          pay_batch_id: payBatchId,
+          operation_id: operationId,
+          remittance_queue_complete: true,
+          remittance_deferred_by_timing: true,
+          trigger,
+          configured_timing: configuredTiming,
+          queued_count: 0,
+          reused_count: 0,
+          skipped_count: 0,
+          failed_count: 0,
+          message: 'Remittance queue deferred because configured timing does not match this operation trigger.'
+        },
+        error: null
+      };
+    }
+
+    const batchIntent = await getBatchRemittanceIntent();
+    const executionIntent = safeObject(batchIntent.execution_intent_json);
+    const settlementConfirmation = safeObject(batchIntent.settlement_confirmation_json);
+    const suppressRemittances = readBool(inputJson.suppress_remittances, false)
+      || readBool(inputJson.do_not_send_remittances, false)
+      || readBool(executionIntent.suppress_remittances, false)
+      || readBool(executionIntent.suppress_remittances_pending, false)
+      || readBool(settlementConfirmation.suppress_remittances, false)
+      || readBool(settlementConfirmation.suppress_remittances_pending, false);
+
+    if (suppressRemittances) {
+      return {
+        finish: true,
+        status: 'COMPLETE',
+        result: {
+          ok: true,
+          pay_batch_id: payBatchId,
+          operation_id: operationId,
+          remittance_queue_complete: true,
+          remittance_suppressed: true,
+          suppress_remittances: true,
+          trigger,
+          configured_timing: configuredTiming,
+          queued_count: 0,
+          reused_count: 0,
+          skipped_count: 0,
+          failed_count: 0,
+          message: 'Remittance queue suppressed for this payment operation.'
+        },
+        error: null
+      };
+    }
+
+    return {
+      finish: false,
+      configured_timing: configuredTiming,
+      trigger
+    };
+  };
+
+  try {
+    if (phase === 'INITIALISE' || phase === 'VALIDATE_BATCH') {
+      const guard = await evaluateRemittanceOperationGuard();
+      if (guard.finish === true) return finish(guard.status, guard.result, guard.error);
+      const summary = unwrapRpcPayload(await sbRpc(env, 'pay_batch_execution_summary_get', {
+        p_pay_batch_id: payBatchId,
+        p_actor_user_id: actorUserId
+      }), 'pay_batch_execution_summary_get');
+      return save('RUNNING', 'SEED_REMITTANCE_SCOPE', {
+        current_phase: phase,
+        next_phase: 'SEED_REMITTANCE_SCOPE',
+        terminal: false,
+        should_keep_advancing: true,
+        status_text: 'Remittance batch checked.',
+        batch_summary: summary,
+        trigger: guard.trigger,
+        configured_timing: guard.configured_timing
+      });
+    }
+
+    if (phase === 'SEED_REMITTANCE_SCOPE') {
+      const guard = await evaluateRemittanceOperationGuard();
+      if (guard.finish === true) return finish(guard.status, guard.result, guard.error);
+      const seeded = unwrapRpcPayload(await sbRpc(env, 'pay_operation_remittance_scope_seed', {
+        p_operation_id: operationId,
+        p_pay_batch_id: payBatchId,
+        p_scope: inputJson.scope || 'ALL',
+        p_actor_user_id: actorUserId
+      }), 'pay_operation_remittance_scope_seed');
+
+      if (seeded.deferred === true) {
+        return finish('COMPLETE', {
+          ok: true,
+          pay_batch_id: payBatchId,
+          operation_id: operationId,
+          remittance_queue_complete: true,
+          remittance_deferred_by_timing: true,
+          trigger: seeded.trigger || trigger,
+          configured_timing: seeded.configured_timing || guard.configured_timing,
+          queued_count: 0,
+          reused_count: 0,
+          skipped_count: 0,
+          failed_count: 0,
+          remittance_scope_seed: seeded,
+          message: 'Remittance queue deferred by configured timing.'
+        }, null);
+      }
+
+      if (seeded.suppressed === true) {
+        return finish('COMPLETE', {
+          ok: true,
+          pay_batch_id: payBatchId,
+          operation_id: operationId,
+          remittance_queue_complete: true,
+          remittance_suppressed: true,
+          suppress_remittances: true,
+          trigger: seeded.trigger || trigger,
+          configured_timing: seeded.configured_timing || guard.configured_timing,
+          queued_count: 0,
+          reused_count: 0,
+          skipped_count: 0,
+          failed_count: 0,
+          remittance_scope_seed: seeded,
+          message: 'Remittance queue suppressed for this payment operation.'
+        }, null);
+      }
+
+      const remittanceIds = await fetchScopeIds('REMITTANCE');
+      const payoutIds = await fetchScopeIds('PAYOUT_NOTICE');
+      const totalScopeIds = remittanceIds.length + payoutIds.length;
+      if (totalScopeIds <= 0) {
+        return save('RUNNING', 'COMPLETE', {
+          status_text: 'No queueable remittance scope rows were found.',
+          no_queueable_remittance_scope: true,
+          trigger: seeded.trigger || trigger,
+          configured_timing: seeded.configured_timing || guard.configured_timing,
+          trigger_status: seeded.trigger_status || 'NO_QUEUEABLE_REMITTANCE_SCOPE',
+          remittance_scope_seed: seeded
+        }, { total_units: 0, completed_units: 0, failed_units: 0, current_chunk_index: 0, chunk_count: 0 });
+      }
+
+      const remittanceSeed = remittanceIds.length > 0 ? unwrapRpcPayload(await sbRpc(env, 'banking_pay_operation_seed_chunks', {
+        p_operation_id: operationId,
+        p_phase: 'QUEUE_REMITTANCE_CHUNKS',
+        p_chunk_type: 'REMITTANCE',
+        p_chunk_size: chunkSize('remittance_chunk_size', 100),
+        p_units_json: remittanceIds
+      }), 'banking_pay_operation_seed_chunks') : { chunk_count: 0, total_units: 0 };
+      const payoutSeed = payoutIds.length > 0 ? unwrapRpcPayload(await sbRpc(env, 'banking_pay_operation_seed_chunks', {
+        p_operation_id: operationId,
+        p_phase: 'QUEUE_PAYOUT_NOTICE_CHUNKS',
+        p_chunk_type: 'PAYOUT_NOTICE',
+        p_chunk_size: chunkSize('payout_notice_chunk_size', 100),
+        p_units_json: payoutIds
+      }), 'banking_pay_operation_seed_chunks') : { chunk_count: 0, total_units: 0 };
+      return save('RUNNING', remittanceIds.length > 0 ? 'QUEUE_REMITTANCE_CHUNKS' : 'QUEUE_PAYOUT_NOTICE_CHUNKS', {
+        current_phase: phase,
+        next_phase: remittanceIds.length > 0 ? 'QUEUE_REMITTANCE_CHUNKS' : 'QUEUE_PAYOUT_NOTICE_CHUNKS',
+        terminal: false,
+        should_keep_advancing: true,
+        queued_count: 0,
+        reused_count: 0,
+        skipped_count: 0,
+        failed_count: 0,
+        remaining_count: totalScopeIds,
+        status_text: 'Remittance chunks are ready.',
+        trigger: seeded.trigger || trigger,
+        configured_timing: seeded.configured_timing || guard.configured_timing,
+        remittance_scope_seed: seeded,
+        remittance_chunk_seed: remittanceSeed,
+        payout_notice_chunk_seed: payoutSeed
+      }, { total_units: totalScopeIds, completed_units: 0, failed_units: 0, current_chunk_index: 0, chunk_count: Number(remittanceSeed.chunk_count || 0) + Number(payoutSeed.chunk_count || 0) });
+    }
+
+    if (phase === 'QUEUE_REMITTANCE_CHUNKS') {
+      const guard = await evaluateRemittanceOperationGuard();
+      if (guard.finish === true) return finish(guard.status, guard.result, guard.error);
+      const chunk = await claim('QUEUE_REMITTANCE_CHUNKS', 'REMITTANCE');
+      if (chunk && chunk.chunk_id) {
+        const ids = extractRemittanceScopeIdsFromChunk(chunk);
+        const failedUnitCount = Math.max(1, ids.length || Number(chunk.unit_count || 0) || 1);
+        if (ids.length <= 0) {
+          const missingScopeError = {
+            code: 'REMITTANCE_CHUNK_SCOPE_IDS_MISSING',
+            message: 'Remittance chunk is missing remittance scope ids.',
+            operation_id: operationId,
+            pay_batch_id: payBatchId,
+            chunk_id: String(chunk.chunk_id || ''),
+            phase,
+            chunk_payload_json: safeObject(chunk.payload_json)
+          };
+          await finishChunk(chunk.chunk_id, 'FAILED', 0, failedUnitCount, safeObject(chunk.payload_json), missingScopeError);
+          return finish('FAILED', null, missingScopeError);
+        }
+        try {
+          const queued = unwrapRpcPayload(await sbRpc(env, 'pay_remittance_queue_commit_stage', {
+            p_pay_batch_id: payBatchId,
+            p_scope: inputJson.scope || 'ALL',
+            p_actor_user_id: actorUserId,
+            p_only_confirmed: onlyConfirmed,
+            p_operation_id: operationId,
+            p_remittance_scope_ids: ids
+          }), 'pay_remittance_queue_commit_stage');
+          if (isPlaceholderOnlyQueueResult(queued)) {
+            await finishChunk(chunk.chunk_id, 'FAILED', 0, ids.length || 1, queued, { code: 'REMITTANCE_PLACEHOLDER_ONLY_CONTENT', message: 'Remittance queue chunk produced placeholder-only advice content.' });
+            return finish('FAILED', null, { code: 'REMITTANCE_PLACEHOLDER_ONLY_CONTENT', message: 'Remittance queue chunk produced placeholder-only advice content.', phase, queue_result: queued });
+          }
+          const queuedCounts = extractQueueCounts(queued);
+          await finishChunk(chunk.chunk_id, 'COMPLETE', ids.length, Number(queued.failed || queued.failed_count || queuedCounts.failed_count || 0), queued, null);
+          return save('RUNNING', 'QUEUE_REMITTANCE_CHUNKS', {
+            current_phase: phase,
+            next_phase: 'QUEUE_REMITTANCE_CHUNKS',
+            terminal: false,
+            should_keep_advancing: true,
+            status_text: 'Queued one remittance chunk.',
+            last_chunk_result: queued,
+            queued_count: queuedCounts.queued_count,
+            reused_count: queuedCounts.reused_count,
+            skipped_count: queuedCounts.skipped_count,
+            failed_count: queuedCounts.failed_count,
+            remaining_count: queuedCounts.remaining_count,
+            outbox_ids: queuedCounts.outbox_ids
+          }, { current_chunk_index: chunk.sequence_no || null });
+        } catch (e) {
+          await finishChunk(chunk.chunk_id, 'FAILED', 0, ids.length || 1, null, { code: 'REMITTANCE_QUEUE_CHUNK_FAILED', message: String(e?.message || e || '') });
+          return finish('FAILED', null, { code: 'REMITTANCE_QUEUE_CHUNK_FAILED', message: 'Remittance queue chunk failed.', error: String(e?.message || e || '') });
+        }
+      }
+      return save('RUNNING', 'QUEUE_PAYOUT_NOTICE_CHUNKS', { current_phase: phase, next_phase: 'QUEUE_PAYOUT_NOTICE_CHUNKS', terminal: false, should_keep_advancing: true, status_text: 'All remittance chunks queued.' });
+    }
+
+    if (phase === 'QUEUE_PAYOUT_NOTICE_CHUNKS') {
+      const guard = await evaluateRemittanceOperationGuard();
+      if (guard.finish === true) return finish(guard.status, guard.result, guard.error);
+      const chunk = await claim('QUEUE_PAYOUT_NOTICE_CHUNKS', 'PAYOUT_NOTICE');
+      if (chunk && chunk.chunk_id) {
+        const ids = extractRemittanceScopeIdsFromChunk(chunk);
+        const failedUnitCount = Math.max(1, ids.length || Number(chunk.unit_count || 0) || 1);
+        if (ids.length <= 0) {
+          const missingScopeError = {
+            code: 'PAYOUT_NOTICE_CHUNK_SCOPE_IDS_MISSING',
+            message: 'Payout notice chunk is missing remittance scope ids.',
+            operation_id: operationId,
+            pay_batch_id: payBatchId,
+            chunk_id: String(chunk.chunk_id || ''),
+            phase,
+            chunk_payload_json: safeObject(chunk.payload_json)
+          };
+          await finishChunk(chunk.chunk_id, 'FAILED', 0, failedUnitCount, safeObject(chunk.payload_json), missingScopeError);
+          return finish('FAILED', null, missingScopeError);
+        }
+        try {
+          const queued = unwrapRpcPayload(await sbRpc(env, 'pay_finance_payout_notice_queue_commit_stage', {
+            p_pay_batch_id: payBatchId,
+            p_actor_user_id: actorUserId,
+            p_only_confirmed: onlyConfirmed,
+            p_operation_id: operationId,
+            p_remittance_scope_ids: ids
+          }), 'pay_finance_payout_notice_queue_commit_stage');
+          if (isPlaceholderOnlyQueueResult(queued)) {
+            await finishChunk(chunk.chunk_id, 'FAILED', 0, ids.length || 1, queued, { code: 'PAYOUT_NOTICE_PLACEHOLDER_ONLY_CONTENT', message: 'Payout notice queue chunk produced placeholder-only advice content.' });
+            return finish('FAILED', null, { code: 'PAYOUT_NOTICE_PLACEHOLDER_ONLY_CONTENT', message: 'Payout notice queue chunk produced placeholder-only advice content.', phase, queue_result: queued });
+          }
+          const queuedCounts = extractQueueCounts(queued);
+          await finishChunk(chunk.chunk_id, 'COMPLETE', ids.length, Number(queued.failed || queued.failed_count || queuedCounts.failed_count || 0), queued, null);
+          return save('RUNNING', 'QUEUE_PAYOUT_NOTICE_CHUNKS', {
+            current_phase: phase,
+            next_phase: 'QUEUE_PAYOUT_NOTICE_CHUNKS',
+            terminal: false,
+            should_keep_advancing: true,
+            status_text: 'Queued one payout notice chunk.',
+            last_chunk_result: queued,
+            queued_count: queuedCounts.queued_count,
+            reused_count: queuedCounts.reused_count,
+            skipped_count: queuedCounts.skipped_count,
+            failed_count: queuedCounts.failed_count,
+            remaining_count: queuedCounts.remaining_count,
+            outbox_ids: queuedCounts.outbox_ids
+          }, { current_chunk_index: chunk.sequence_no || null });
+        } catch (e) {
+          await finishChunk(chunk.chunk_id, 'FAILED', 0, ids.length || 1, null, { code: 'PAYOUT_NOTICE_QUEUE_CHUNK_FAILED', message: String(e?.message || e || '') });
+          return finish('FAILED', null, { code: 'PAYOUT_NOTICE_QUEUE_CHUNK_FAILED', message: 'Payout notice queue chunk failed.', error: String(e?.message || e || '') });
+        }
+      }
+      return save('RUNNING', 'COMPLETE', { current_phase: phase, next_phase: 'COMPLETE', terminal: false, should_keep_advancing: true, status_text: 'All payout notice chunks queued.' });
+    }
+
+    if (phase === 'COMPLETE') {
+      return finish('COMPLETE', {
+        ok: true,
+        current_phase: phase,
+        next_phase: null,
+        terminal: true,
+        should_keep_advancing: false,
+        pay_batch_id: payBatchId,
+        operation_id: operationId,
+        remittance_queue_complete: true,
+        trigger,
+        only_confirmed: onlyConfirmed
+      }, null);
+    }
+
+    return finish('FAILED', null, { code: 'UNKNOWN_REMITTANCE_PHASE', message: `Unknown remittance operation phase: ${phase}`, phase });
+  } catch (e) {
+    return finish('FAILED', null, { code: 'REMITTANCE_OPERATION_FAILED', message: 'Remittance operation failed.', phase, error: String(e?.message || e || '') });
+  }
+}
+
+
+
+async function handleContractWeekReplaceManualPdf(env, req, weekId) {
+ 
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const cw = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}&select=id,timesheet_id,uploaded_pdf_r2_key`
+  );
+  if (!cw) return withCORS(env, req, notFound('Week not found'));
+
+  const hasAnySegmentInvoiceLock = (tf) => {
+    try {
+      const ib = tf?.invoice_breakdown_json;
+      if (!ib || typeof ib !== 'object') return false;
+      const mode = String(ib?.mode || '').toUpperCase();
+      if (mode !== 'SEGMENTS') return false;
+      const segs = Array.isArray(ib?.segments) ? ib.segments : [];
+      return segs.some(s => {
+        const v = s?.invoice_locked_invoice_id;
+        return v != null && String(v).trim() !== '';
+      });
+    } catch {
+      return false;
+    }
+  };
+
+
+  // If already invoiced/paid, forbid replacement at this path
+  if (cw.timesheet_id) {
+    const tsfin = await sbGetOne(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheets_financials?timesheet_id=eq.${enc(cw.timesheet_id)}&is_current=eq.true&select=locked_by_invoice_id,paid_at_utc,invoice_breakdown_json`
+    );
+    if (tsfin?.locked_by_invoice_id || hasAnySegmentInvoiceLock(tsfin) || tsfin?.paid_at_utc) {
+      return withCORS(env, req, badRequest('Invoiced/paid; unissue/unpay first to replace PDF'));
+    }
+  }
+
+  let body;
+  try { body = await parseJSONBody(req); } catch { return withCORS(env, req, badRequest('Invalid JSON')); }
+
+  if (!body?.r2_key) return withCORS(env, req, badRequest('r2_key is required'));
+  const newKey = normalizeKey(String(body.r2_key));
+
+  // sanity check new key exists
+  const exists = await r2Exists(env, newKey).catch(() => false);
+  if (!exists) return withCORS(env, req, badRequest('r2_key does not exist in R2'));
+
+  const oldKey = cw.uploaded_pdf_r2_key ? normalizeKey(String(cw.uploaded_pdf_r2_key)) : null;
+
+  await patchContractWeekScan(env, weekId, newKey);
+
+  // ✅ NEW: delete old scan blob if replaced
+  try {
+    const bucket = env.R2_BUCKET || env.R2;
+    if (bucket && typeof bucket.delete === 'function') {
+      const o = String(oldKey || '').replace(/^\/+/, '').trim();
+      const n = String(newKey || '').replace(/^\/+/, '').trim();
+      if (o && n && o !== n) {
+        await bucket.delete(o).catch(() => {});
+      }
+    }
+  } catch {
+    // non-fatal
+  }
+
+  return withCORS(env, req, ok({ replaced: true, r2_key: newKey }));
+}
+
+
+
+async function handleManualTimesheetQueueEnqueue(env, req) {
+  const enc = encodeURIComponent;
+
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  let body;
+  try {
+    body = await parseJSONBody(req);
+  } catch {
+    return withCORS(env, req, badRequest('Invalid JSON'));
+  }
+
+  const files = Array.isArray(body?.files) ? body.files : [];
+  if (!files.length) {
+    return withCORS(env, req, badRequest('files[] is required and must be a non-empty array'));
+  }
+
+  // Normalise rotation to 0/90/180/270 – optional for queue viewer
+  const normaliseRotation = (raw) => {
+    if (raw == null) return 0;
+    let n = Number(raw);
+    if (!Number.isFinite(n)) return 0;
+    n = ((n % 360) + 360) % 360;
+    if (n >= 315 || n < 45) return 0;
+    if (n >= 45 && n < 135) return 90;
+    if (n >= 135 && n < 225) return 180;
+    return 270;
+  };
+
+  const normaliseMetaJson = (rawMeta, fallbackPageCount, fallbackSourceLabel) => {
+    let base = {};
+    if (rawMeta && typeof rawMeta === 'object' && !Array.isArray(rawMeta)) {
+      base = { ...rawMeta };
+    }
+    if (fallbackPageCount != null && fallbackPageCount !== '') {
+      const n = Number(fallbackPageCount);
+      if (Number.isFinite(n) && n > 0) base.page_count = Math.floor(n);
+    }
+    if (fallbackSourceLabel != null && String(fallbackSourceLabel).trim()) {
+      base.source_label = String(fallbackSourceLabel).trim();
+    }
+    return base;
+  };
+
+  const isSupportedImportFile = (file) => {
+    const mime = String(file?.mime_type || '').trim().toLowerCase();
+    const name = String(file?.original_filename || '').trim().toLowerCase();
+
+    if (mime === 'application/pdf') return true;
+    if (mime.startsWith('image/')) return true;
+
+    const ext = name.includes('.') ? name.split('.').pop() : '';
+    return ['pdf', 'png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'tif', 'tiff', 'heic', 'heif'].includes(ext);
+  };
+
+  // Collect distinct, non-empty hashes from this batch
+  const batchHashes = Array.from(
+    new Set(
+      files
+        .map(f => String(f?.content_hash || '').trim())
+        .filter(Boolean)
+    )
+  );
+
+  // 1) Load existing active queue items for these hashes to avoid duplicates
+  const existingByHash = new Map();
+  if (batchHashes.length) {
+    const hashParam = batchHashes.map(h => enc(h)).join(',');
+    const { rows: existingRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue` +
+        `?content_hash=in.(${hashParam})` +
+        `&status=in.(QUEUED,IN_PROGRESS)` +
+        `&select=id,content_hash`
+    );
+    for (const r of existingRows || []) {
+      if (r.content_hash) {
+        existingByHash.set(String(r.content_hash), r);
+      }
+    }
+  }
+
+  const seenInRequest = new Set();
+  const enqueued = [];
+  const duplicates = [];
+  const errors = [];
+  const ignored = [];
+
+  for (const f of files) {
+    const r2Key  = String(f?.r2_key || '').trim();
+    const fname  = String(f?.original_filename || '').trim();
+    const mime   = f?.mime_type ? String(f.mime_type) : null;
+    const hash   = String(f?.content_hash || '').trim();
+    const rotDeg = normaliseRotation(f?.rotation_degrees);
+
+    if (!r2Key || !fname || !hash) {
+      errors.push({
+        r2_key: r2Key || null,
+        original_filename: fname || null,
+        reason: 'MISSING_FIELDS'
+      });
+      continue;
+    }
+
+    if (!isSupportedImportFile(f)) {
+      ignored.push({
+        r2_key: r2Key,
+        original_filename: fname,
+        reason: 'UNSUPPORTED_FILE_TYPE'
+      });
+      continue;
+    }
+
+    // Deduplicate within the same request
+    if (seenInRequest.has(hash)) {
+      duplicates.push({
+        r2_key: r2Key,
+        original_filename: fname,
+        reason: 'DUPLICATE_IN_REQUEST'
+      });
+      continue;
+    }
+    seenInRequest.add(hash);
+
+    // Deduplicate against existing active queue rows
+    if (existingByHash.has(hash)) {
+      duplicates.push({
+        r2_key: r2Key,
+        original_filename: fname,
+        existing_queue_id: existingByHash.get(hash).id,
+        reason: 'ALREADY_IN_QUEUE'
+      });
+      continue;
+    }
+
+    // Insert into manual_timesheet_queue
+    const payload = {
+      r2_key: r2Key,
+      original_filename: fname,
+      mime_type: mime,
+      content_hash: hash,
+      uploaded_by_user_id: user.id,
+      last_rotation_deg: rotDeg,
+      meta_json: normaliseMetaJson(f?.meta_json, f?.page_count, f?.source_label)
+    };
+
+    const res = await fetch(
+      `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue`,
+      {
+        method: 'POST',
+        headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+        body: JSON.stringify(payload)
+      }
+    );
+
+    if (!res.ok) {
+      const txt = await res.text().catch(() => '');
+      // If we hit the partial unique index because of a race, treat as duplicate
+      if (/duplicate key value/i.test(txt) || res.status === 409) {
+        duplicates.push({
+          r2_key: r2Key,
+          original_filename: fname,
+          reason: 'ALREADY_IN_QUEUE_RACE'
+        });
+        continue;
+      }
+
+      errors.push({
+        r2_key: r2Key,
+        original_filename: fname,
+        reason: 'INSERT_FAILED',
+        detail: txt || null
+      });
+      continue;
+    }
+
+    const json = await res.json().catch(() => []);
+    const rec = Array.isArray(json) ? json[0] : json;
+    if (!rec?.id) {
+      errors.push({
+        r2_key: r2Key,
+        original_filename: fname,
+        reason: 'NO_ID_RETURNED'
+      });
+      continue;
+    }
+    enqueued.push(rec);
+    existingByHash.set(hash, rec);
+  }
+
+  return withCORS(env, req, ok({
+    enqueued,
+    duplicates,
+    ignored,
+    errors
+  }));
+}
+
+async function handleManualTimesheetQueueList(env, req) {
+  const enc = encodeURIComponent;
+  const url = new URL(req.url);
+  const q = (k) => url.searchParams.get(k);
+
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const statusParam = (q('status') || 'QUEUED').trim();
+  const uploadedBy  = (q('uploaded_by') || '').trim();
+  const limitParam  = q('limit');
+  const limit       = limitParam ? Math.min(Math.max(Number(limitParam) || 0, 1), 500) : 100;
+
+  const fromDate    = (q('uploaded_from') || '').trim();
+  const toDate      = (q('uploaded_to') || '').trim();
+
+  const statuses = statusParam
+    .split(',')
+    .map(s => s.trim().toUpperCase())
+    .filter(Boolean);
+
+  let urlStr =
+    `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue` +
+    `?select=*` +
+    `&order=uploaded_at_utc.asc`;
+
+  if (statuses.length === 1) {
+    urlStr += `&status=eq.${enc(statuses[0])}`;
+  } else if (statuses.length > 1) {
+    urlStr += `&status=in.(${statuses.map(enc).join(',')})`;
+  }
+
+  if (uploadedBy) {
+    urlStr += `&uploaded_by_user_id=eq.${enc(uploadedBy)}`;
+  }
+
+  if (fromDate) {
+    urlStr += `&uploaded_at_utc=gte.${enc(fromDate)}`;
+  }
+  if (toDate) {
+    urlStr += `&uploaded_at_utc=lte.${enc(toDate)}`;
+  }
+
+  urlStr += `&limit=${limit}`;
+
+  try {
+    const { rows } = await sbFetch(env, urlStr);
+    const items = Array.isArray(rows) ? rows : [];
+    const loadedAtUtc = new Date().toISOString();
+    return withCORS(env, req, ok({
+      items,
+      queue_rows: items,
+      rows: items,
+      scope: 'global',
+      queue_scope: `global:${statuses.length === 1 ? statuses[0] : (statuses.join(',') || 'QUEUED')}`,
+      status: statuses.length === 1 ? statuses[0] : (statuses.join(',') || statusParam || 'QUEUED'),
+      statuses,
+      loaded_count: items.length,
+      returned_count: items.length,
+      count: items.length,
+      loaded_at_utc: loadedAtUtc,
+      queue_loaded_at_utc: loadedAtUtc
+    }));
+  } catch (e) {
+    console.error('[MT_QUEUE_LIST] error', {
+      err: e?.message || String(e)
+    });
+    return withCORS(env, req, serverError('Failed to list manual timesheet queue'));
+  }
+}
+
+
+ async function handleManualTimesheetQueueGet(env, req, queueId) {
+  const enc = encodeURIComponent;
+
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  if (!queueId) {
+    return withCORS(env, req, badRequest('queue_id is required'));
+  }
+
+  try {
+    const { rows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue` +
+      `?id=eq.${enc(queueId)}` +
+      `&select=*` +
+      `&limit=1`
+    );
+    const item = rows?.[0] || null;
+    if (!item) {
+      return withCORS(env, req, notFound('Queue item not found'));
+    }
+
+    return withCORS(env, req, ok({ item }));
+  } catch (e) {
+    console.error('[MT_QUEUE_GET] error', {
+      queue_id: queueId,
+      err: e?.message || String(e)
+    });
+    return withCORS(env, req, serverError('Failed to load manual timesheet queue item'));
+  }
+}
+
+async function handleManualTimesheetQueueDelete(env, req, queueId) {
+  const enc = encodeURIComponent;
+
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  if (!queueId) {
+    return withCORS(env, req, badRequest('queue_id is required'));
+  }
+
+  try {
+    const { rows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue` +
+      `?id=eq.${enc(queueId)}` +
+      `&select=id,status,timesheet_id,r2_key,original_filename` +
+      `&limit=1`
+    );
+    const item = rows?.[0] || null;
+    if (!item) {
+      return withCORS(env, req, notFound('Queue item not found'));
+    }
+
+    const status = String(item.status || '').toUpperCase();
+    if (status === 'ATTACHED') {
+      return withCORS(env, req, badRequest('Cannot delete: item is already attached to a timesheet'));
+    }
+    if (status === 'STAGED') {
+      return withCORS(env, req, badRequest('Cannot delete: item is staged to a contract week and must be deleted via the staged evidence flow'));
+    }
+
+    const bucket = env.R2_BUCKET || env.R2;
+    const canDelete = !!(bucket && typeof bucket.delete === 'function');
+    const storageKey = String(item.r2_key || '').trim().replace(/^\/+/, '');
+    let storageDeleted = false;
+
+    if (storageKey && canDelete) {
+      try {
+        await bucket.delete(storageKey);
+        storageDeleted = true;
+      } catch {
+        storageDeleted = false;
+      }
+    }
+
+    const delRes = await fetch(
+      `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue?id=eq.${enc(queueId)}`,
+      {
+        method: 'DELETE',
+        headers: { ...sbHeaders(env), Prefer: 'return-minimal' }
+      }
+    );
+
+    if (!delRes.ok) {
+      const txt = await delRes.text().catch(() => '');
+      return withCORS(env, req, serverError(`Failed to delete queue item: ${txt}`));
+    }
+
+    try {
+      await writeAudit(
+        env,
+        user,
+        'MANUAL_TIMESHEET_QUEUE_DELETED',
+        {
+          queue_id: item.id,
+          r2_key: item.r2_key,
+          original_filename: item.original_filename,
+          storage_deleted: storageDeleted
+        },
+        { entity: 'manual_timesheet_queue', subject_id: item.id, req }
+      );
+    } catch {
+      // best-effort
+    }
+
+    return withCORS(env, req, ok({
+      deleted: true,
+      id: item.id,
+      storage_deleted: storageDeleted
+    }));
+  } catch (e) {
+    console.error('[MT_QUEUE_DELETE] error', {
+      queue_id: queueId,
+      err: e?.message || String(e)
+    });
+    return withCORS(env, req, serverError('Failed to delete manual timesheet queue item'));
+  }
+}
+
+
+
+
+
+async function handleManualTimesheetQueueStageToContractWeek(env, req, queueId) {
+  const enc = encodeURIComponent;
+
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+  if (!queueId) return withCORS(env, req, badRequest('queue_id is required'));
+
+  let body;
+  try {
+    body = await parseJSONBody(req);
+  } catch {
+    return withCORS(env, req, badRequest('Invalid JSON'));
+  }
+
+  const contractWeekId = String(body?.contract_week_id || body?.contractWeekId || '').trim();
+  if (!contractWeekId) {
+    return withCORS(env, req, badRequest('contract_week_id is required'));
+  }
+
+  const normaliseKind = (k) => {
+    const s = String(k || '').trim();
+    if (!s) return '';
+    const u = s.toUpperCase();
+
+    if (u === 'TIMESHEET' || u === 'TS') return 'TIMESHEET';
+    if (u === 'MILEAGE' || u === 'MILES' || u === 'MILE') return 'MILEAGE';
+    if (u === 'TRAVEL' || u === 'EXPENSE' || u === 'EXPENSES') return 'TRAVEL';
+    if (u === 'ACCOMMODATION' || u === 'ACCOM') return 'ACCOMMODATION';
+    if (u === 'OTHER') return 'OTHER';
+
+    return u;
+  };
+
+  const requestedKind = normaliseKind(body?.kind || body?.evidence_kind || 'TIMESHEET') || 'TIMESHEET';
+  const allowedKinds = new Set(['TIMESHEET', 'MILEAGE', 'TRAVEL', 'ACCOMMODATION', 'OTHER']);
+  if (!allowedKinds.has(requestedKind)) {
+    return withCORS(env, req, badRequest('Invalid staged evidence kind'));
+  }
+
+  const buildStagedEvidenceResponse = (itemRow, metaInput, kind, uploadedPdfKey) => {
+    const meta = (metaInput && typeof metaInput === 'object' && !Array.isArray(metaInput)) ? metaInput : {};
+    const stagedKind = normaliseKind(kind || meta.staged_kind || meta.kind || 'TIMESHEET') || 'TIMESHEET';
+    const r2Key = String(itemRow?.r2_key || '').trim() || null;
+    const displayName = String(itemRow?.original_filename || '').trim() || 'Staged evidence';
+    const mimeType = String(itemRow?.mime_type || '').trim() || null;
+    return {
+      staged: true,
+      id: itemRow.id,
+      queue_id: itemRow.id,
+      contract_week_id: contractWeekId,
+      timesheet_id: null,
+      kind: stagedKind,
+      staged_kind: stagedKind,
+      r2_key: r2Key,
+      storage_key: r2Key,
+      file_key: r2Key,
+      download_storage_key: r2Key,
+      original_filename: itemRow?.original_filename || displayName,
+      display_name: displayName,
+      filename: displayName,
+      mime_type: mimeType,
+      content_type: mimeType,
+      content_hash: itemRow?.content_hash || null,
+      uploaded_at_utc: itemRow?.uploaded_at_utc || null,
+      staged_at_utc: meta.staged_at_utc || now,
+      staged_by_user_id: meta.staged_by_user_id || user.id || null,
+      last_rotation_deg: Number.isFinite(Number(itemRow?.last_rotation_deg)) ? Number(itemRow.last_rotation_deg) : 0,
+      rotation_degrees: Number.isFinite(Number(itemRow?.last_rotation_deg)) ? Number(itemRow.last_rotation_deg) : 0,
+      status: 'STAGED',
+      is_staged_context: true,
+      source_label: 'Staged',
+      source_badge: 'Staged',
+      uploaded_pdf_r2_key: uploadedPdfKey || null,
+      meta_json: meta
+    };
+  };
+
+  const now = nowIso();
+
+  const evidenceEligibility = await resolveContractWeekDraftEvidenceEligibility(env, contractWeekId, {
+    action: 'stage',
+    queue_id: queueId,
+    kind: requestedKind
+  });
+  if (!evidenceEligibility.ok) {
+    if (evidenceEligibility.reason === 'NOT_FOUND') {
+      return withCORS(env, req, notFound(evidenceEligibility.message || 'Contract week not found'));
+    }
+    return withCORS(env, req, badRequest(evidenceEligibility.message || 'Evidence cannot be uploaded for this row because it does not have a supported expenses draft target.'));
+  }
+  const contractWeek = evidenceEligibility.contractWeek;
+  const { rows: qRows } = await sbFetch(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue` +
+      `?id=eq.${enc(queueId)}` +
+      `&select=id,status,timesheet_id,r2_key,original_filename,mime_type,content_hash,uploaded_by_user_id,uploaded_at_utc,last_rotation_deg,meta_json` +
+      `&limit=1`
+  );
+  const item = qRows?.[0] || null;
+  if (!item) {
+    return withCORS(env, req, notFound('Queue item not found'));
+  }
+
+  const status = String(item.status || '').trim().toUpperCase();
+  const currentMeta = (item.meta_json && typeof item.meta_json === 'object' && !Array.isArray(item.meta_json))
+    ? item.meta_json
+    : {};
+
+  if (status === 'ATTACHED') {
+    return withCORS(env, req, badRequest('Cannot stage an attached queue item'));
+  }
+  if (status === 'DISCARDED') {
+    return withCORS(env, req, badRequest('Cannot stage a discarded queue item'));
+  }
+
+  const currentStagedContractWeekId = String(currentMeta?.contract_week_id || '').trim();
+  const currentStagedKind = normaliseKind(currentMeta?.staged_kind || currentMeta?.kind || '');
+
+  if (status === 'STAGED') {
+    if (currentStagedContractWeekId === contractWeekId || currentStagedContractWeekId === '') {
+      if (requestedKind === 'TIMESHEET') {
+        const { rows: existingTimesheetRows } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue` +
+            `?status=eq.${enc('STAGED')}` +
+            `&meta_json->>contract_week_id=eq.${enc(contractWeekId)}` +
+            `&select=id,meta_json,r2_key`
+        );
+        const duplicateTimesheet = (existingTimesheetRows || []).find(row => {
+          const rowId = String(row?.id || '').trim();
+          const rowMeta = (row?.meta_json && typeof row.meta_json === 'object' && !Array.isArray(row.meta_json))
+            ? row.meta_json
+            : {};
+          const rowMetaContractWeekId = String(rowMeta?.contract_week_id || '').trim();
+          const rowKind = normaliseKind(rowMeta?.staged_kind || rowMeta?.kind || '');
+          return rowId !== String(item.id) && rowKind === 'TIMESHEET' && rowMetaContractWeekId === contractWeekId;
+        });
+        if (duplicateTimesheet) {
+          return withCORS(env, req, badRequest('Only one staged TIMESHEET file may exist for a contract week at a time'));
+        }
+      }
+
+      const ensuredMeta = {
+        ...currentMeta,
+        contract_week_id: contractWeekId,
+        staged_kind: requestedKind || currentStagedKind || 'TIMESHEET',
+        staged_at_utc: String(currentMeta?.staged_at_utc || now),
+        staged_by_user_id: currentMeta?.staged_by_user_id || user.id
+      };
+      const stagedMetaNeedsPatch = !!(
+        requestedKind !== currentStagedKind ||
+        currentStagedContractWeekId !== contractWeekId ||
+        String(currentMeta?.staged_at_utc || '').trim() === '' ||
+        String(currentMeta?.staged_by_user_id || '').trim() === '' ||
+        String(currentMeta?.contract_week_id || '').trim() !== contractWeekId ||
+        normaliseKind(currentMeta?.staged_kind || currentMeta?.kind || '') !== (requestedKind || currentStagedKind || 'TIMESHEET')
+      );
+
+      let responseUploadedPdfKey = (requestedKind === 'TIMESHEET' ? (item.r2_key || null) : (contractWeek.uploaded_pdf_r2_key || null));
+
+      if (stagedMetaNeedsPatch) {
+        const patchRes = await fetch(
+          `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue?id=eq.${enc(queueId)}`,
+          {
+            method: 'PATCH',
+            headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+            body: JSON.stringify({
+              status: 'STAGED',
+              timesheet_id: null,
+              meta_json: ensuredMeta
+            })
+          }
+        );
+        if (!patchRes.ok) {
+          const txt = await patchRes.text().catch(() => '');
+          return withCORS(env, req, serverError(`Failed to update staged queue item: ${txt}`));
+        }
+
+        let nextUploadedPdfKey = contractWeek.uploaded_pdf_r2_key || null;
+        if (requestedKind === 'TIMESHEET') {
+          nextUploadedPdfKey = item.r2_key || null;
+        } else if (currentStagedKind === 'TIMESHEET') {
+          const { rows: remainingTimesheetRows } = await sbFetch(
+            env,
+            `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue` +
+              `?status=eq.${enc('STAGED')}` +
+              `&meta_json->>contract_week_id=eq.${enc(contractWeekId)}` +
+              `&select=id,meta_json,r2_key`
+          );
+          const otherTimesheet = (remainingTimesheetRows || []).find(row => {
+            const rowId = String(row?.id || '').trim();
+            if (rowId === String(item.id)) return false;
+            const rowMeta = (row?.meta_json && typeof row.meta_json === 'object' && !Array.isArray(row.meta_json))
+              ? row.meta_json
+              : {};
+            const rowMetaContractWeekId = String(rowMeta?.contract_week_id || '').trim();
+            const rowKind = normaliseKind(rowMeta?.staged_kind || rowMeta?.kind || '');
+            return rowKind === 'TIMESHEET' && rowMetaContractWeekId === contractWeekId;
+          });
+          nextUploadedPdfKey = otherTimesheet?.r2_key || null;
+        }
+
+        responseUploadedPdfKey = nextUploadedPdfKey;
+
+        await fetch(
+          `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(contractWeekId)}`,
+          {
+            method: 'PATCH',
+            headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+            body: JSON.stringify({
+              uploaded_pdf_r2_key: nextUploadedPdfKey,
+              updated_at: now
+            })
+          }
+        ).catch(() => {});
+      }
+
+      return withCORS(env, req, ok(buildStagedEvidenceResponse(item, ensuredMeta, requestedKind, responseUploadedPdfKey)));
+    }
+
+    return withCORS(env, req, badRequest('Queue item is already staged to a different contract week'));
+  }
+
+  if (requestedKind === 'TIMESHEET') {
+    const { rows: stagedRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue` +
+        `?status=eq.${enc('STAGED')}` +
+        `&meta_json->>contract_week_id=eq.${enc(contractWeekId)}` +
+        `&select=id,meta_json`
+    );
+
+    const existingTimesheet = (stagedRows || []).find(row => {
+      const rowMeta = (row?.meta_json && typeof row.meta_json === 'object' && !Array.isArray(row.meta_json))
+        ? row.meta_json
+        : {};
+      const rowMetaContractWeekId = String(rowMeta?.contract_week_id || '').trim();
+      const rowKind = normaliseKind(rowMeta?.staged_kind || rowMeta?.kind || '');
+      return rowKind === 'TIMESHEET' && rowMetaContractWeekId === contractWeekId;
+    });
+
+    if (existingTimesheet) {
+      return withCORS(env, req, badRequest('Only one staged TIMESHEET file may exist for a contract week at a time'));
+    }
+  }
+
+  const nextMeta = {
+    ...currentMeta,
+    contract_week_id: contractWeekId,
+    staged_kind: requestedKind,
+    staged_at_utc: now,
+    staged_by_user_id: user.id
+  };
+
+  const patchQueueRes = await fetch(
+    `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue?id=eq.${enc(queueId)}`,
+    {
+      method: 'PATCH',
+      headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+      body: JSON.stringify({
+        status: 'STAGED',
+        timesheet_id: null,
+        meta_json: nextMeta
+      })
+    }
+  );
+
+  if (!patchQueueRes.ok) {
+    const txt = await patchQueueRes.text().catch(() => '');
+    return withCORS(env, req, serverError(`Failed to stage queue item: ${txt}`));
+  }
+
+  const uploadedPdfKey = (requestedKind === 'TIMESHEET') ? (item.r2_key || null) : (contractWeek.uploaded_pdf_r2_key || null);
+
+  await fetch(
+    `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(contractWeekId)}`,
+    {
+      method: 'PATCH',
+      headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+      body: JSON.stringify({
+        uploaded_pdf_r2_key: uploadedPdfKey,
+        updated_at: now
+      })
+    }
+  ).catch(() => {});
+
+  try {
+    await writeAudit(
+      env,
+      user,
+      'MANUAL_TIMESHEET_QUEUE_STAGED',
+      {
+        queue_id: item.id,
+        contract_week_id: contractWeekId,
+        r2_key: item.r2_key || null,
+        original_filename: item.original_filename || null,
+        staged_kind: requestedKind
+      },
+      { entity: 'manual_timesheet_queue', subject_id: item.id, req }
+    );
+  } catch {}
+
+  return withCORS(env, req, ok(buildStagedEvidenceResponse(item, nextMeta, requestedKind, uploadedPdfKey)));
+}
+
+
+
+
+
+
+
+async function handleContractWeekStagedEvidenceList(env, req, weekId) {
+  const enc = encodeURIComponent;
+
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+  if (!weekId) return withCORS(env, req, badRequest('contract_week_id is required'));
+
+  const normaliseKind = (k) => {
+    const s = String(k || '').trim();
+    if (!s) return '';
+    const u = s.toUpperCase();
+    if (u === 'TIMESHEET' || u === 'TS') return 'TIMESHEET';
+    if (u === 'MILEAGE' || u === 'MILES' || u === 'MILE') return 'MILEAGE';
+    if (u === 'TRAVEL' || u === 'EXPENSE' || u === 'EXPENSES') return 'TRAVEL';
+    if (u === 'ACCOMMODATION' || u === 'ACCOM') return 'ACCOMMODATION';
+    if (u === 'OTHER') return 'OTHER';
+    return u;
+  };
+
+  const evidenceEligibility = await resolveContractWeekDraftEvidenceEligibility(env, weekId, { action: 'list' });
+  if (!evidenceEligibility.ok) {
+    if (evidenceEligibility.reason === 'NOT_FOUND') {
+      return withCORS(env, req, notFound(evidenceEligibility.message || 'Contract week not found'));
+    }
+    return withCORS(env, req, badRequest(evidenceEligibility.message || 'Evidence cannot be uploaded for this row because it does not have a supported expenses draft target.'));
+  }
+  const contractWeek = evidenceEligibility.contractWeek;
+
+  const { rows } = await sbFetch(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue` +
+      `?status=eq.${enc('STAGED')}` +
+      `&meta_json->>contract_week_id=eq.${enc(weekId)}` +
+      `&select=id,r2_key,original_filename,mime_type,content_hash,uploaded_by_user_id,uploaded_at_utc,last_rotation_deg,meta_json` +
+      `&order=uploaded_at_utc.asc,id.asc`
+  );
+
+  const stagedRows = Array.isArray(rows) ? rows : [];
+  const items = stagedRows.map((row) => {
+    const meta = (row?.meta_json && typeof row.meta_json === 'object' && !Array.isArray(row.meta_json))
+      ? row.meta_json
+      : {};
+
+    const kind = normaliseKind(meta?.staged_kind || meta?.kind || 'TIMESHEET') || 'TIMESHEET';
+    const pageCountRaw = meta?.page_count;
+    const pageCount = Number.isFinite(Number(pageCountRaw)) && Number(pageCountRaw) > 0
+      ? Math.floor(Number(pageCountRaw))
+      : null;
+
+    return {
+      id: row.id,
+      queue_id: row.id,
+      filename: row.original_filename || null,
+      original_filename: row.original_filename || null,
+      kind,
+      staged_kind: kind,
+      staged_by: row.uploaded_by_user_id || null,
+      staged_by_user_id: row.uploaded_by_user_id || null,
+      staged_at_utc: String(meta?.staged_at_utc || row.uploaded_at_utc || ''),
+      uploaded_at_utc: row.uploaded_at_utc || null,
+      rotation_degrees: (row.last_rotation_deg != null ? Number(row.last_rotation_deg) : 0),
+      page_count: pageCount,
+      source_badge: String(meta?.source_label || 'Staged').trim(),
+      r2_key: row.r2_key || null,
+      mime_type: row.mime_type || null,
+      content_hash: row.content_hash || null,
+      can_delete: true,
+      can_return_to_queue: true,
+      can_reclassify: true,
+      is_primary_timesheet_file: (
+        kind === 'TIMESHEET' &&
+        String(contractWeek.uploaded_pdf_r2_key || '').trim() !== '' &&
+        String(contractWeek.uploaded_pdf_r2_key || '').trim().replace(/^\/+/, '') === String(row.r2_key || '').trim().replace(/^\/+/, '')
+      )
+    };
+  });
+
+  return withCORS(env, req, ok({
+    contract_week_id: weekId,
+    items
+  }));
+}
+
+
+
+async function handleContractWeekStagedEvidenceUpdateKind(env, req, weekId, queueId) {
+  const enc = encodeURIComponent;
+
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+  if (!weekId) return withCORS(env, req, badRequest('contract_week_id is required'));
+  if (!queueId) return withCORS(env, req, badRequest('queue_id is required'));
+
+  let body;
+  try {
+    body = await parseJSONBody(req);
+  } catch {
+    return withCORS(env, req, badRequest('Invalid JSON'));
+  }
+
+  const normaliseKind = (k) => {
+    const s = String(k || '').trim();
+    if (!s) return '';
+    const u = s.toUpperCase();
+
+    if (u === 'TIMESHEET' || u === 'TS') return 'TIMESHEET';
+    if (u === 'MILEAGE' || u === 'MILES' || u === 'MILE') return 'MILEAGE';
+    if (u === 'TRAVEL' || u === 'EXPENSE' || u === 'EXPENSES') return 'TRAVEL';
+    if (u === 'ACCOMMODATION' || u === 'ACCOM') return 'ACCOMMODATION';
+    if (u === 'OTHER') return 'OTHER';
+
+    return u;
+  };
+
+  const requestedKind = normaliseKind(body?.kind || body?.evidence_kind || body?.staged_kind || '');
+  const allowedKinds = new Set(['TIMESHEET', 'MILEAGE', 'TRAVEL', 'ACCOMMODATION', 'OTHER']);
+
+  if (!requestedKind || !allowedKinds.has(requestedKind)) {
+    return withCORS(env, req, badRequest('Invalid staged evidence kind'));
+  }
+
+  const evidenceEligibility = await resolveContractWeekDraftEvidenceEligibility(env, weekId, {
+    action: 'update_kind',
+    queue_id: queueId,
+    kind: requestedKind
+  });
+  if (!evidenceEligibility.ok) {
+    if (evidenceEligibility.reason === 'NOT_FOUND') {
+      return withCORS(env, req, notFound(evidenceEligibility.message || 'Contract week not found'));
+    }
+    return withCORS(env, req, badRequest(evidenceEligibility.message || 'Evidence cannot be uploaded for this row because it does not have a supported expenses draft target.'));
+  }
+  const contractWeek = evidenceEligibility.contractWeek;
+
+  const { rows: qRows } = await sbFetch(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue` +
+      `?id=eq.${enc(queueId)}` +
+      `&select=id,status,r2_key,meta_json` +
+      `&limit=1`
+  );
+  const item = qRows?.[0] || null;
+  if (!item) {
+    return withCORS(env, req, notFound('Staged queue item not found'));
+  }
+
+  const status = String(item.status || '').trim().toUpperCase();
+  if (status !== 'STAGED') {
+    return withCORS(env, req, badRequest('Queue item is not currently staged'));
+  }
+
+  const currentMeta = (item.meta_json && typeof item.meta_json === 'object' && !Array.isArray(item.meta_json))
+    ? item.meta_json
+    : {};
+
+  const itemContractWeekId = String(currentMeta?.contract_week_id || '').trim();
+  if (itemContractWeekId !== weekId) {
+    return withCORS(env, req, badRequest('Staged queue item does not belong to this contract week'));
+  }
+
+  const currentKind = normaliseKind(currentMeta?.staged_kind || currentMeta?.kind || 'TIMESHEET') || 'TIMESHEET';
+
+  if (requestedKind === 'TIMESHEET') {
+    const { rows: stagedRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue` +
+        `?status=eq.${enc('STAGED')}` +
+        `&meta_json->>contract_week_id=eq.${enc(weekId)}` +
+        `&select=id,meta_json`
+    );
+
+    const duplicateTimesheet = (stagedRows || []).find(row => {
+      const rowId = String(row?.id || '').trim();
+      if (rowId === String(queueId)) return false;
+      const rowMeta = (row?.meta_json && typeof row.meta_json === 'object' && !Array.isArray(row.meta_json))
+        ? row.meta_json
+        : {};
+      const rowKind = normaliseKind(rowMeta?.staged_kind || rowMeta?.kind || '');
+      return rowKind === 'TIMESHEET';
+    });
+
+    if (duplicateTimesheet) {
+      return withCORS(env, req, badRequest('Only one staged TIMESHEET file may exist for a contract week at a time'));
+    }
+  }
+
+  const nextMeta = {
+    ...currentMeta,
+    contract_week_id: weekId,
+    staged_kind: requestedKind,
+    staged_at_utc: String(currentMeta?.staged_at_utc || nowIso()),
+    staged_by_user_id: currentMeta?.staged_by_user_id || user.id
+  };
+
+  const patchRes = await fetch(
+    `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue?id=eq.${enc(queueId)}`,
+    {
+      method: 'PATCH',
+      headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+      body: JSON.stringify({
+        meta_json: nextMeta
+      })
+    }
+  );
+
+  if (!patchRes.ok) {
+    const txt = await patchRes.text().catch(() => '');
+    return withCORS(env, req, serverError(`Failed to update staged evidence kind: ${txt}`));
+  }
+
+  let nextUploadedPdfKey = contractWeek.uploaded_pdf_r2_key || null;
+
+  if (requestedKind === 'TIMESHEET') {
+    nextUploadedPdfKey = item.r2_key || null;
+  } else if (currentKind === 'TIMESHEET') {
+    const { rows: stagedRowsAfter } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue` +
+        `?status=eq.${enc('STAGED')}` +
+        `&meta_json->>contract_week_id=eq.${enc(weekId)}` +
+        `&select=id,r2_key,meta_json`
+    );
+
+    const replacementTimesheet = (stagedRowsAfter || []).find(row => {
+      const rowId = String(row?.id || '').trim();
+      if (rowId === String(queueId)) return false;
+      const rowMeta = (row?.meta_json && typeof row.meta_json === 'object' && !Array.isArray(row.meta_json))
+        ? row.meta_json
+        : {};
+      const rowKind = normaliseKind(rowMeta?.staged_kind || rowMeta?.kind || '');
+      return rowKind === 'TIMESHEET';
+    });
+
+    nextUploadedPdfKey = replacementTimesheet?.r2_key || null;
+  }
+
+  await fetch(
+    `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}`,
+    {
+      method: 'PATCH',
+      headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+      body: JSON.stringify({
+        uploaded_pdf_r2_key: nextUploadedPdfKey,
+        updated_at: nowIso()
+      })
+    }
+  ).catch(() => {});
+
+  try {
+    await writeAudit(
+      env,
+      user,
+      'MANUAL_TIMESHEET_QUEUE_STAGED_KIND_UPDATED',
+      {
+        queue_id: item.id,
+        contract_week_id: weekId,
+        previous_kind: currentKind,
+        next_kind: requestedKind,
+        uploaded_pdf_r2_key: nextUploadedPdfKey
+      },
+      { entity: 'manual_timesheet_queue', subject_id: item.id, req }
+    );
+  } catch {}
+
+  return withCORS(env, req, ok({
+    updated: true,
+    id: item.id,
+    contract_week_id: weekId,
+    previous_kind: currentKind,
+    kind: requestedKind,
+    uploaded_pdf_r2_key: nextUploadedPdfKey
+  }));
+}
+
+async function handleContractWeekStagedEvidenceReturnToQueue(env, req, weekId, queueId) {
+  const enc = encodeURIComponent;
+
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+  if (!weekId) return withCORS(env, req, badRequest('contract_week_id is required'));
+  if (!queueId) return withCORS(env, req, badRequest('queue_id is required'));
+
+  const trimStr = (v) => String(v || '').trim();
+
+  const normaliseKind = (k) => {
+    const s = String(k || '').trim();
+    if (!s) return '';
+    const u = s.toUpperCase();
+
+    if (u === 'TIMESHEET' || u === 'TS') return 'TIMESHEET';
+    if (u === 'MILEAGE' || u === 'MILES' || u === 'MILE') return 'MILEAGE';
+    if (u === 'TRAVEL' || u === 'EXPENSE' || u === 'EXPENSES') return 'TRAVEL';
+    if (u === 'ACCOMMODATION' || u === 'ACCOM') return 'ACCOMMODATION';
+    if (u === 'OTHER') return 'OTHER';
+
+    return u;
+  };
+
+  const stripStagedMeta = (meta) => {
+    const src = (meta && typeof meta === 'object' && !Array.isArray(meta)) ? { ...meta } : {};
+    delete src.contract_week_id;
+    delete src.staged_kind;
+    delete src.staged_at_utc;
+    delete src.staged_by_user_id;
+    delete src.materialised_to_timesheet_id;
+    delete src.materialised_at_utc;
+    delete src.dematerialised_from_timesheet_id;
+    delete src.dematerialised_from_booking_id;
+    delete src.dematerialised_at_utc;
+    return src;
+  };
+
+  const queueStatus = (row) => String(row?.status || '').trim().toUpperCase();
+  const queueRowIsAlreadyAvailable = (row) => ['QUEUED', 'IN_PROGRESS'].includes(queueStatus(row));
+  const fetchExistingAvailableQueueRow = async (sourceItem) => {
+    const sourceId = trimStr(sourceItem?.id);
+    const sourceHash = trimStr(sourceItem?.content_hash);
+    const sourceStorageKey = trimStr(sourceItem?.r2_key).replace(/^\/+/, '');
+    const queries = [];
+
+    if (sourceHash) {
+      queries.push(
+        `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue` +
+          `?content_hash=eq.${enc(sourceHash)}` +
+          `&status=in.(QUEUED,IN_PROGRESS)` +
+          `&select=id,status,timesheet_id,r2_key,original_filename,mime_type,content_hash,uploaded_by_user_id,uploaded_at_utc,last_rotation_deg,meta_json` +
+          `&order=uploaded_at_utc.desc` +
+          `&limit=10`
+      );
+    }
+
+    if (sourceStorageKey) {
+      queries.push(
+        `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue` +
+          `?r2_key=eq.${enc(sourceStorageKey)}` +
+          `&status=in.(QUEUED,IN_PROGRESS)` +
+          `&select=id,status,timesheet_id,r2_key,original_filename,mime_type,content_hash,uploaded_by_user_id,uploaded_at_utc,last_rotation_deg,meta_json` +
+          `&order=uploaded_at_utc.desc` +
+          `&limit=10`
+      );
+    }
+
+    for (const url of queries) {
+      const { rows } = await sbFetch(env, url);
+      const candidates = Array.isArray(rows) ? rows : [];
+      const found = candidates.find((row) => trimStr(row?.id) && trimStr(row?.id) !== sourceId && queueRowIsAlreadyAvailable(row));
+      if (found) return found;
+    }
+
+    return null;
+  };
+  const deleteStagedQueueRow = async (id, errorPrefix) => {
+    const delRes = await fetch(
+      `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue?id=eq.${enc(id)}`,
+      { method: 'DELETE', headers: { ...sbHeaders(env), Prefer: 'return=minimal' } }
+    );
+
+    if (!delRes.ok) {
+      const txt = await delRes.text().catch(() => '');
+      return { ok: false, response: withCORS(env, req, serverError(`${errorPrefix}: ${txt}`)) };
+    }
+
+    return { ok: true };
+  };
+
+  const now = nowIso();
+
+  const evidenceEligibility = await resolveContractWeekDraftEvidenceEligibility(env, weekId, {
+    action: 'return_to_queue',
+    queue_id: queueId
+  });
+  if (!evidenceEligibility.ok) {
+    if (evidenceEligibility.reason === 'NOT_FOUND') {
+      return withCORS(env, req, notFound(evidenceEligibility.message || 'Contract week not found'));
+    }
+    return withCORS(env, req, badRequest(evidenceEligibility.message || 'Evidence cannot be uploaded for this row because it does not have a supported expenses draft target.'));
+  }
+  const contractWeek = evidenceEligibility.contractWeek;
+
+  const { rows: qRows } = await sbFetch(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue` +
+      `?id=eq.${enc(queueId)}` +
+      `&select=id,status,timesheet_id,r2_key,original_filename,mime_type,content_hash,uploaded_by_user_id,uploaded_at_utc,last_rotation_deg,meta_json` +
+      `&limit=1`
+  );
+  const item = qRows?.[0] || null;
+  if (!item) {
+    return withCORS(env, req, notFound('Staged queue item not found'));
+  }
+
+  const status = String(item.status || '').trim().toUpperCase();
+  if (status !== 'STAGED') {
+    return withCORS(env, req, badRequest('Queue item is not currently staged'));
+  }
+
+  const currentMeta = (item.meta_json && typeof item.meta_json === 'object' && !Array.isArray(item.meta_json))
+    ? item.meta_json
+    : {};
+
+  const itemContractWeekId = trimStr(currentMeta?.contract_week_id);
+  if (itemContractWeekId !== String(weekId)) {
+    return withCORS(env, req, badRequest('Staged queue item does not belong to this contract week'));
+  }
+
+  const stagedKind = normaliseKind(currentMeta?.staged_kind || currentMeta?.kind || 'TIMESHEET') || 'TIMESHEET';
+
+  const currentUploadedPdfKey = trimStr(contractWeek.uploaded_pdf_r2_key).replace(/^\/+/, '');
+  const itemStorageKey = trimStr(item.r2_key).replace(/^\/+/, '');
+  const shouldClearUploadedPdf = (
+    stagedKind === 'TIMESHEET' &&
+    currentUploadedPdfKey &&
+    itemStorageKey &&
+    currentUploadedPdfKey === itemStorageKey
+  );
+
+  let queueRowId = item.id;
+  let reusedExistingQueueRow = false;
+  let removedStagedQueueId = null;
+  let existingAvailableQueueRow = await fetchExistingAvailableQueueRow(item);
+
+  if (existingAvailableQueueRow?.id) {
+    const deleteResult = await deleteStagedQueueRow(item.id, 'Failed to remove staged evidence after finding an existing queue item');
+    if (!deleteResult.ok) return deleteResult.response;
+    queueRowId = existingAvailableQueueRow.id;
+    reusedExistingQueueRow = true;
+    removedStagedQueueId = item.id;
+  } else {
+    const patchQueueRes = await fetch(
+      `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue?id=eq.${enc(queueId)}`,
+      {
+        method: 'PATCH',
+        headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+        body: JSON.stringify({
+          status: 'QUEUED',
+          timesheet_id: null,
+          meta_json: stripStagedMeta(currentMeta)
+        })
+      }
+    );
+
+    if (!patchQueueRes.ok) {
+      const txt = await patchQueueRes.text().catch(() => '');
+      const duplicateContentHash = /manual_timesheet_queue_content_hash_active_idx|duplicate key value|23505/i.test(txt || '');
+      if (duplicateContentHash) {
+        existingAvailableQueueRow = await fetchExistingAvailableQueueRow(item);
+        if (existingAvailableQueueRow?.id) {
+          const deleteResult = await deleteStagedQueueRow(item.id, 'Failed to remove staged evidence after duplicate queue content was detected');
+          if (!deleteResult.ok) return deleteResult.response;
+          queueRowId = existingAvailableQueueRow.id;
+          reusedExistingQueueRow = true;
+          removedStagedQueueId = item.id;
+        } else {
+          return withCORS(env, req, serverError(`Failed to return staged evidence to queue: ${txt}`));
+        }
+      } else {
+        return withCORS(env, req, serverError(`Failed to return staged evidence to queue: ${txt}`));
+      }
+    }
+  }
+
+  if (shouldClearUploadedPdf) {
+    await fetch(
+      `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}`,
+      {
+        method: 'PATCH',
+        headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+        body: JSON.stringify({
+          uploaded_pdf_r2_key: null,
+          updated_at: now
+        })
+      }
+    ).catch(() => {});
+  }
+
+  try {
+    await writeAudit(
+      env,
+      user,
+      reusedExistingQueueRow
+        ? 'MANUAL_TIMESHEET_QUEUE_STAGED_REMOVED_EXISTING_QUEUE_REUSED'
+        : 'MANUAL_TIMESHEET_QUEUE_STAGED_RETURNED_TO_QUEUE',
+      {
+        queue_id: queueRowId,
+        original_staged_queue_id: item.id,
+        removed_staged_queue_id: removedStagedQueueId,
+        reused_existing_queue_row: reusedExistingQueueRow,
+        contract_week_id: weekId,
+        r2_key: item.r2_key || null,
+        original_filename: item.original_filename || null,
+        staged_kind: stagedKind,
+        content_hash: item.content_hash || null,
+        cleared_uploaded_pdf_r2_key: !!shouldClearUploadedPdf
+      },
+      { entity: 'manual_timesheet_queue', subject_id: queueRowId || item.id, req }
+    );
+  } catch {}
+
+  return withCORS(env, req, ok({
+    returned_to_queue: true,
+    id: queueRowId,
+    original_staged_queue_id: item.id,
+    removed_staged_queue_id: removedStagedQueueId,
+    reused_existing_queue_row: reusedExistingQueueRow,
+    contract_week_id: weekId,
+    kind: stagedKind,
+    uploaded_pdf_r2_key: shouldClearUploadedPdf ? null : (contractWeek.uploaded_pdf_r2_key || null)
+  }));
+}
+
+
+
+async function handleContractWeekStagedEvidenceDelete(env, req, weekId, queueId) {
+  const enc = encodeURIComponent;
+
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+  if (!weekId) return withCORS(env, req, badRequest('contract_week_id is required'));
+  if (!queueId) return withCORS(env, req, badRequest('queue_id is required'));
+
+  const trimStr = (v) => String(v || '').trim();
+
+  const normaliseKind = (k) => {
+    const s = String(k || '').trim();
+    if (!s) return '';
+    const u = s.toUpperCase();
+
+    if (u === 'TIMESHEET' || u === 'TS') return 'TIMESHEET';
+    if (u === 'MILEAGE' || u === 'MILES' || u === 'MILE') return 'MILEAGE';
+    if (u === 'TRAVEL' || u === 'EXPENSE' || u === 'EXPENSES') return 'TRAVEL';
+    if (u === 'ACCOMMODATION' || u === 'ACCOM') return 'ACCOMMODATION';
+    if (u === 'OTHER') return 'OTHER';
+
+    return u;
+  };
+
+  const now = nowIso();
+
+  const evidenceEligibility = await resolveContractWeekDraftEvidenceEligibility(env, weekId, {
+    action: 'delete',
+    queue_id: queueId
+  });
+  if (!evidenceEligibility.ok) {
+    if (evidenceEligibility.reason === 'NOT_FOUND') {
+      return withCORS(env, req, notFound(evidenceEligibility.message || 'Contract week not found'));
+    }
+    return withCORS(env, req, badRequest(evidenceEligibility.message || 'Evidence cannot be uploaded for this row because it does not have a supported expenses draft target.'));
+  }
+  const contractWeek = evidenceEligibility.contractWeek;
+
+  const { rows: qRows } = await sbFetch(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue` +
+      `?id=eq.${enc(queueId)}` +
+      `&select=id,status,timesheet_id,r2_key,original_filename,meta_json` +
+      `&limit=1`
+  );
+  const item = qRows?.[0] || null;
+  if (!item) {
+    return withCORS(env, req, notFound('Staged queue item not found'));
+  }
+
+  const status = String(item.status || '').trim().toUpperCase();
+  if (status !== 'STAGED') {
+    return withCORS(env, req, badRequest('Queue item is not currently staged'));
+  }
+
+  const currentMeta = (item.meta_json && typeof item.meta_json === 'object' && !Array.isArray(item.meta_json))
+    ? item.meta_json
+    : {};
+
+  const itemContractWeekId = trimStr(currentMeta?.contract_week_id);
+  if (itemContractWeekId !== String(weekId)) {
+    return withCORS(env, req, badRequest('Staged queue item does not belong to this contract week'));
+  }
+
+  const stagedKind = normaliseKind(currentMeta?.staged_kind || currentMeta?.kind || 'TIMESHEET') || 'TIMESHEET';
+
+  const cleanStorageKey = trimStr(item.r2_key).replace(/^\/+/, '');
+  const bucket = env.R2_BUCKET || env.R2;
+  const canDeleteR2 = !!(bucket && typeof bucket.delete === 'function');
+
+  let storageDeleted = false;
+  if (cleanStorageKey && canDeleteR2) {
+    try {
+      await bucket.delete(cleanStorageKey);
+      storageDeleted = true;
+    } catch {
+      storageDeleted = false;
+    }
+  }
+
+  const delRes = await fetch(
+    `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue?id=eq.${enc(queueId)}`,
+    {
+      method: 'DELETE',
+      headers: { ...sbHeaders(env), Prefer: 'return=minimal' }
+    }
+  );
+
+  if (!delRes.ok) {
+    const txt = await delRes.text().catch(() => '');
+    return withCORS(env, req, serverError(`Failed to delete staged evidence row: ${txt}`));
+  }
+
+  const currentUploadedPdfKey = trimStr(contractWeek.uploaded_pdf_r2_key).replace(/^\/+/, '');
+  const shouldClearUploadedPdf = (
+    stagedKind === 'TIMESHEET' &&
+    currentUploadedPdfKey &&
+    cleanStorageKey &&
+    currentUploadedPdfKey === cleanStorageKey
+  );
+
+  if (shouldClearUploadedPdf) {
+    await fetch(
+      `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}`,
+      {
+        method: 'PATCH',
+        headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+        body: JSON.stringify({
+          uploaded_pdf_r2_key: null,
+          updated_at: now
+        })
+      }
+    ).catch(() => {});
+  }
+
+  try {
+    await writeAudit(
+      env,
+      user,
+      'MANUAL_TIMESHEET_QUEUE_STAGED_DELETED',
+      {
+        queue_id: item.id,
+        contract_week_id: weekId,
+        r2_key: item.r2_key || null,
+        original_filename: item.original_filename || null,
+        staged_kind: stagedKind,
+        storage_deleted: storageDeleted,
+        cleared_uploaded_pdf_r2_key: !!shouldClearUploadedPdf
+      },
+      { entity: 'manual_timesheet_queue', subject_id: item.id, req }
+    );
+  } catch {}
+
+  return withCORS(env, req, ok({
+    deleted: true,
+    id: item.id,
+    contract_week_id: weekId,
+    kind: stagedKind,
+    storage_deleted: storageDeleted,
+    uploaded_pdf_r2_key: shouldClearUploadedPdf ? null : (contractWeek.uploaded_pdf_r2_key || null)
+  }));
+}
+
+
+// BE FIX: require expected_timesheet_id + resolve to CURRENT; strict 409 payload; patch queue + timesheet using CURRENT id only
+
+async function handleManualTimesheetQueueAttach(env, req, queueId) {
+  const enc = encodeURIComponent;
+
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  if (!queueId) return withCORS(env, req, badRequest('queue_id is required'));
+
+  let body;
+  try { body = await parseJSONBody(req); }
+  catch { return withCORS(env, req, badRequest('Invalid JSON')); }
+
+  const requestedTimesheetId = String(body?.timesheet_id || '').trim();
+  if (!requestedTimesheetId) return withCORS(env, req, badRequest('timesheet_id is required'));
+
+  const expected = body?.expected_timesheet_id ? String(body.expected_timesheet_id) : '';
+  if (!expected) return withCORS(env, req, badRequest('expected_timesheet_id is required'));
+  const hasReplacementField =
+    Object.prototype.hasOwnProperty.call(body || {}, 'replace_existing') ||
+    Object.prototype.hasOwnProperty.call(body || {}, 'replace_evidence_id');
+  if (hasReplacementField) {
+    return withCORS(
+      env,
+      req,
+      new Response(
+        JSON.stringify({
+          error: 'DIRECT_REPLACEMENT_NOT_SUPPORTED',
+          message: 'Direct replacement is not supported. Delete the existing evidence or return it to queue first, then add/attach the new evidence.'
+        }),
+        { status: 409, headers: JSON_HEADERS }
+      )
+    );
+  }
+
+  const normalizeKind = (k) => {
+    const s = String(k || '').trim();
+    if (!s) return '';
+    const u = s.toUpperCase();
+
+    if (u === 'EXPENSES' || u === 'EXPENSE') return 'TRAVEL';
+    if (u === 'TRAVEL') return 'TRAVEL';
+
+    if (u === 'MILEAGE' || u === 'MILES' || u === 'MILE') return 'MILEAGE';
+    if (u === 'ACCOMMODATION' || u === 'ACCOM') return 'ACCOMMODATION';
+    if (u === 'OTHER') return 'OTHER';
+    if (u === 'TIMESHEET' || u === 'TS') return 'TIMESHEET';
+
+    return u;
+  };
+
+  const prettyKind = (k) => {
+    const u = String(k || '').toUpperCase();
+    if (u === 'TRAVEL') return 'Travel';
+    if (u === 'MILEAGE') return 'Mileage';
+    if (u === 'ACCOMMODATION') return 'Accommodation';
+    if (u === 'OTHER') return 'Other';
+    if (u === 'TIMESHEET') return 'Timesheet';
+    return String(k || '');
+  };
+
+  const validateTimesheetStorageKey = async (rawKey, sourceLabel) => {
+    const cleanStorageKey = String(rawKey || '').trim().replace(/^\/+/, '');
+    if (!cleanStorageKey) throw new Error(`${sourceLabel || 'Timesheet evidence'} is missing its storage key`);
+
+    const sourceBytes = await r2GetBytes(env, cleanStorageKey);
+    if (!sourceBytes?.length) throw new Error(`${sourceLabel || 'Timesheet evidence'} source file is missing or empty`);
+
+    const contentKind = detectPdfOrImageContentKind(sourceBytes);
+    if (contentKind !== 'application/pdf' && contentKind !== 'image/png' && contentKind !== 'image/jpeg') {
+      throw new Error(`${sourceLabel || 'Timesheet evidence'} must be a PDF or supported image (PNG/JPEG). Detected: ${contentKind}`);
+    }
+
+    return {
+      storageKey: cleanStorageKey,
+      contentKind
+    };
+  };
+
+  const attachQueueItemAsTimesheetEvidence = async (item, currentTsId, requestedKind, storageKeyOverride = null) => {
+    const cleanStorageKey = storageKeyOverride
+      ? String(storageKeyOverride).trim().replace(/^\/+/, '')
+      : String(item?.r2_key || '').trim().replace(/^\/+/, '');
+    if (!cleanStorageKey) {
+      throw new Error('Queue item is missing r2_key');
+    }
+
+    try {
+      if (typeof r2Exists === 'function') {
+        const exists = await r2Exists(env, cleanStorageKey);
+        if (!exists) throw new Error('storage_key does not exist in R2');
+      }
+    } catch (e) {
+      if (String(e?.message || '').includes('does not exist in R2')) throw e;
+    }
+
+    const { rows: evRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheet_evidence` +
+        `?timesheet_id=eq.${enc(currentTsId)}` +
+        `&select=id,kind,display_name,storage_key,created_at,created_by`
+    );
+    const evidenceRows = Array.isArray(evRows) ? evRows : [];
+
+    const existingSameStorage = evidenceRows.find(row =>
+      String(row?.storage_key || '').trim().replace(/^\/+/, '') === cleanStorageKey
+    ) || null;
+
+    const existingTimesheetEvidence = evidenceRows.find(row =>
+      String(row?.kind || '').trim().toUpperCase() === 'TIMESHEET' &&
+      String(row?.storage_key || '').trim().replace(/^\/+/, '') !== cleanStorageKey
+    ) || null;
+
+    if (String(requestedKind).toUpperCase() === 'TIMESHEET' && existingTimesheetEvidence) {
+      throw new Error('Only one TIMESHEET evidence file may be attached to a timesheet at a time');
+    }
+
+    if (existingSameStorage) {
+      return existingSameStorage;
+    }
+
+    const nowIsoVal = new Date().toISOString();
+    const payload = [{
+      timesheet_id: currentTsId,
+      kind: requestedKind,
+      display_name: (item?.original_filename && String(item.original_filename).trim().length
+        ? String(item.original_filename).trim()
+        : prettyKind(requestedKind) || requestedKind),
+      storage_key: cleanStorageKey,
+      created_at: nowIsoVal,
+      created_by: user.id || null
+    }];
+
+    const insRes = await fetch(`${env.SUPABASE_URL}/rest/v1/timesheet_evidence`, {
+      method: 'POST',
+      headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+      body: JSON.stringify(payload)
+    });
+
+    const txt = await insRes.text().catch(() => '');
+    if (!insRes.ok) {
+      throw new Error(txt || 'Failed to create canonical timesheet evidence');
+    }
+
+    let row = null;
+    try {
+      const json = txt ? JSON.parse(txt) : [];
+      row = Array.isArray(json) ? json[0] : json;
+    } catch {
+      row = null;
+    }
+
+    if (!row?.id) {
+      throw new Error('No evidence id returned from canonical attach');
+    }
+
+    return row;
+  };
+
+  // ✅ resolve + guard
+  const resolved = await resolveTimesheetToCurrent(env, requestedTimesheetId);
+  const currentTimesheetId = resolved?.current_timesheet_id ? String(resolved.current_timesheet_id) : '';
+  if (!currentTimesheetId) return withCORS(env, req, badRequest('Timesheet not found for timesheet_id'));
+
+  if (String(expected) !== String(currentTimesheetId)) {
+    return withCORS(
+      env,
+      req,
+      new Response(JSON.stringify({ error: 'TIMESHEET_MOVED', current_timesheet_id: currentTimesheetId }), {
+        status: 409,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    );
+  }
+
+  try {
+    const { rows: qRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue` +
+        `?id=eq.${enc(queueId)}` +
+        `&select=id,status,timesheet_id,content_hash,r2_key,last_rotation_deg,meta_json,original_filename` +
+        `&limit=1`
+    );
+    const item = qRows?.[0] || null;
+    if (!item) return withCORS(env, req, notFound('Queue item not found'));
+
+    const requestedKind = normalizeKind(body?.kind || body?.evidence_kind || 'TIMESHEET') || 'TIMESHEET';
+    const status = String(item.status || '').toUpperCase();
+
+    if (status === 'DISCARDED') return withCORS(env, req, badRequest('Cannot attach a discarded queue item'));
+    if (status === 'STAGED') return withCORS(env, req, badRequest('Cannot attach a staged queue item through the queue attach route'));
+
+    // Validate CURRENT timesheet exists and is not invoiced/paid
+    const ts = await sbGetOne(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheets` +
+        `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+        `&is_current=eq.true` +
+        `&select=timesheet_id,manual_pdf_r2_key`
+    );
+    if (!ts) return withCORS(env, req, badRequest('Timesheet not found for timesheet_id'));
+
+    const evidencePolicy = await getTimesheetEvidenceMutationPolicy(env, currentTimesheetId);
+    if (evidencePolicy.document_locked) {
+      return withCORS(env, req, badRequest('Timesheet is invoice/document locked; cannot attach evidence'));
+    }
+    if (evidencePolicy.import_authoritative) {
+      return withCORS(env, req, badRequest('Evidence is view-only for this route and cannot be attached here'));
+    }
+
+    const policySummary = (evidencePolicy.summary && typeof evidencePolicy.summary === 'object') ? evidencePolicy.summary : {};
+    const policyText = [
+      policySummary.route_type,
+      policySummary.route_family,
+      policySummary.basis,
+      policySummary.weekly_timesheet_source,
+      policySummary.submission_mode,
+      policySummary.adjustment_origin
+    ].map(value => String(value == null ? '' : value).trim().toUpperCase()).filter(Boolean).join('|');
+    const blocksTimesheetEvidenceForNoTimesheetRow = !!(
+      String(requestedKind).toUpperCase() === 'TIMESHEET' &&
+      (
+        policySummary.client_no_timesheet_required === true ||
+        policySummary.no_timesheet_required === true ||
+        policySummary.contract_no_timesheet_required === true ||
+        policySummary.client_is_nhsp === true ||
+        policySummary.is_nhsp === true ||
+        policyText.includes('NO_TIMESHEET') ||
+        policyText.includes('NHSP') ||
+        policyText.includes('HEALTHROSTER')
+      )
+    );
+    if (blocksTimesheetEvidenceForNoTimesheetRow) {
+      return withCORS(env, req, badRequest('TIMESHEET evidence cannot be attached to this timesheet type. Attach the Queue image as permitted expense evidence instead.'));
+    }
+
+    const attachedId = String(item.timesheet_id || '').trim();
+    if (status === 'ATTACHED' && attachedId) {
+      const attachedResolved = await resolveTimesheetToCurrent(env, attachedId).catch(() => null);
+      const attachedCurrent = attachedResolved?.current_timesheet_id ? String(attachedResolved.current_timesheet_id) : attachedId;
+
+      if (String(attachedCurrent) !== String(currentTimesheetId)) {
+        return withCORS(env, req, badRequest('Queue item already attached to a different timesheet'));
+      }
+    }
+
+    let manualMaterialized = null;
+    let evidenceStorageKey = String(item?.r2_key || '').trim().replace(/^\/+/, '');
+    if (String(requestedKind).toUpperCase() === 'TIMESHEET') {
+      const validatedTimesheetStorage = await validateTimesheetStorageKey(evidenceStorageKey, 'Queue timesheet evidence');
+      evidenceStorageKey = String(validatedTimesheetStorage.storageKey || '').trim().replace(/^\/+/, '');
+      manualMaterialized = {
+        pdfKey: evidenceStorageKey,
+        wasConverted: false,
+        sourceKey: evidenceStorageKey,
+        contentKind: validatedTimesheetStorage.contentKind
+      };
+    }
+
+    const currentMeta = (item.meta_json && typeof item.meta_json === 'object' && !Array.isArray(item.meta_json))
+      ? item.meta_json
+      : {};
+
+    const nextQueueMeta = {
+      ...currentMeta,
+      attached_kind: requestedKind,
+      attached_to_timesheet_id: currentTimesheetId,
+      attached_at_utc: nowIso()
+    };
+
+    const patchQueueAttached = async () => {
+      const patchQueueRes = await fetch(`${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue?id=eq.${enc(queueId)}`, {
+        method: 'PATCH',
+        headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+        body: JSON.stringify({
+          status: 'ATTACHED',
+          timesheet_id: currentTimesheetId,
+          meta_json: nextQueueMeta
+        })
+      });
+      if (!patchQueueRes.ok) {
+        const txt = await patchQueueRes.text().catch(() => '');
+        throw new Error(`Failed to attach queue item: ${txt}`);
+      }
+    };
+
+    const evidenceRow = await attachQueueItemAsTimesheetEvidence(item, currentTimesheetId, requestedKind, evidenceStorageKey);
+    await patchQueueAttached();
+
+    if (evidenceStorageKey && String(requestedKind).toUpperCase() === 'TIMESHEET') {
+      await fetch(
+        `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(currentTimesheetId)}&is_current=eq.true`,
+        {
+          method: 'PATCH',
+          headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+          body: JSON.stringify({
+            manual_pdf_r2_key: evidenceStorageKey,
+            manual_pdf_rotation_degrees: (item.last_rotation_deg != null ? Number(item.last_rotation_deg) : 0)
+          })
+        }
+      ).catch(() => {});
+    }
+
+    try {
+      await writeAudit(
+        env,
+        user,
+        'MANUAL_TIMESHEET_QUEUE_ATTACHED',
+        {
+          queue_id: item.id,
+          requested_timesheet_id: requestedTimesheetId,
+          current_timesheet_id: currentTimesheetId,
+          content_hash: item.content_hash || null,
+          r2_key: item.r2_key || null,
+          source_r2_key: evidenceStorageKey !== String(item?.r2_key || '').trim().replace(/^\/+/, '') ? (item.r2_key || null) : null,
+          materialized_pdf_r2_key: evidenceStorageKey || null,
+          materialized_was_converted: manualMaterialized ? !!manualMaterialized.wasConverted : false,
+          evidence_id: evidenceRow?.id || null,
+          kind: requestedKind
+        },
+        { entity: 'manual_timesheet_queue', subject_id: item.id, req }
+      );
+    } catch {}
+
+    return withCORS(env, req, ok({
+      attached: true,
+      id: item.id,
+      evidence_id: evidenceRow?.id || null,
+      kind: requestedKind,
+      timesheet_id: currentTimesheetId,
+      current_timesheet_id: currentTimesheetId
+    }));
+  } catch (e) {
+    return withCORS(env, req, serverError(e?.message || 'Failed to attach manual timesheet queue item'));
+  }
+}
+
+
+
+
+
+ async function handleManualTimesheetQueueRotate(env, req, queueId) {
+  const enc = encodeURIComponent;
+
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  if (!queueId) {
+    return withCORS(env, req, badRequest('queue_id is required'));
+  }
+
+  let body;
+  try {
+    body = await parseJSONBody(req);
+  } catch {
+    return withCORS(env, req, badRequest('Invalid JSON'));
+  }
+
+  const rawRot = body?.rotation_degrees;
+  if (rawRot == null) {
+    return withCORS(env, req, badRequest('rotation_degrees is required'));
+  }
+
+  const normaliseRotation = (raw) => {
+    let n = Number(raw);
+    if (!Number.isFinite(n)) return 0;
+    n = ((n % 360) + 360) % 360;
+    if (n >= 315 || n < 45) return 0;
+    if (n >= 45 && n < 135) return 90;
+    if (n >= 135 && n < 225) return 180;
+    return 270;
+  };
+
+  const deg = normaliseRotation(rawRot);
+
+  try {
+    // Ensure queue item exists
+    const { rows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue` +
+      `?id=eq.${enc(queueId)}` +
+      `&select=id,last_rotation_deg` +
+      `&limit=1`
+    );
+    const item = rows?.[0] || null;
+    if (!item) {
+      return withCORS(env, req, notFound('Queue item not found'));
+    }
+
+    const patchRes = await fetch(
+      `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue?id=eq.${enc(queueId)}`,
+      {
+        method: 'PATCH',
+        headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+        body: JSON.stringify({ last_rotation_deg: deg })
+      }
+    );
+
+    if (!patchRes.ok) {
+      const txt = await patchRes.text().catch(() => '');
+      return withCORS(env, req, serverError(`Failed to update rotation: ${txt}`));
+    }
+
+    const updated = (await patchRes.json().catch(() => []))[0] || { id: queueId, last_rotation_deg: deg };
+
+    try {
+      await writeAudit(
+        env,
+        user,
+        'MANUAL_TIMESHEET_QUEUE_ROTATED',
+        {
+          queue_id: updated.id,
+          last_rotation_deg: updated.last_rotation_deg
+        },
+        { entity: 'manual_timesheet_queue', subject_id: updated.id, req }
+      );
+    } catch {
+      // best-effort
+    }
+
+    return withCORS(env, req, ok({
+      id: updated.id,
+      last_rotation_deg: updated.last_rotation_deg
+    }));
+  } catch (e) {
+    console.error('[MT_QUEUE_ROTATE] error', {
+      queue_id: queueId,
+      err: e?.message || String(e)
+    });
+    return withCORS(env, req, serverError('Failed to update manual timesheet queue rotation'));
+  }
+}
+
+async function handleTimesheetPdf(env, req, timesheetId) {
+  const enc = encodeURIComponent;
+
+  // Admin auth
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  if (!timesheetId) {
+    return withCORS(env, req, badRequest('timesheet_id is required'));
+  }
+
+  try {
+    // ✅ Stale-safe resolve (read path)
+    const resolved = await resolveTimesheetToCurrent(env, timesheetId);
+    if (!resolved?.current_timesheet_id) {
+      return withCORS(env, req, notFound('Timesheet not found'));
+    }
+
+    const currentTimesheetId = String(resolved.current_timesheet_id);
+
+    // ensureTimesheetPdf will either:
+    // - return manual scanned evidence key (manual_pdf_r2_key) if present and allowed, OR
+    // - return the generated/system PDF key
+    const r2Key = await ensureTimesheetPdf(env, currentTimesheetId);
+    if (!r2Key) {
+      return withCORS(env, req, serverError('Failed to ensure timesheet PDF'));
+    }
+
+    // ✅ Rotation: only apply to scanned/manual evidence PDFs
+    // (Generated/system PDFs should always be 0 rotation.)
+    let rotationDeg = 0;
+    try {
+      const { rows: tsRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/timesheets` +
+          `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+          `&is_current=eq.true` +
+          `&select=manual_pdf_r2_key,manual_pdf_rotation_degrees` +
+          `&limit=1`
+      );
+      const ts = tsRows?.[0] || null;
+
+      const manualKey = ts?.manual_pdf_r2_key ? normalizeKey(ts.manual_pdf_r2_key) : null;
+      const usedKey = r2Key ? normalizeKey(r2Key) : null;
+
+      // Only rotate if we're actually returning the manual scanned PDF
+      if (manualKey && usedKey && manualKey === usedKey) {
+        const n = Number(ts.manual_pdf_rotation_degrees);
+        if (Number.isFinite(n)) rotationDeg = n;
+      }
+    } catch {
+      rotationDeg = 0;
+    }
+
+    return withCORS(env, req, ok({
+      requested_timesheet_id: resolved.requested_timesheet_id || timesheetId,
+      current_timesheet_id: currentTimesheetId,
+      was_stale: !!resolved.was_stale,
+
+      r2_key: r2Key,
+      rotation_degrees: rotationDeg
+    }));
+  } catch (e) {
+    console.error('[TIMESHEET_PDF] error', {
+      timesheet_id: timesheetId,
+      err: e?.message || String(e)
+    });
+    return withCORS(env, req, serverError('Failed to generate or locate timesheet PDF'));
+  }
+}
+
+// BE FIX: expected guard + resolve CW-linked timesheet to CURRENT before mutating TS/TSFIN; strict 409 payload
+
+
+
+async function handleTimesheetUpdateReference(env, req, timesheetId) {
+  const enc = encodeURIComponent;
+
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  let body;
+  try { body = await parseJSONBody(req); }
+  catch { return withCORS(env, req, badRequest('Invalid JSON')); }
+
+  const expectedTimesheetId = body?.expected_timesheet_id || null;
+  const guard = await guardCurrentTimesheetWrite(env, req, timesheetId, expectedTimesheetId);
+  if (!guard.ok) return guard.res;
+
+  const currentTimesheetId = guard.resolved.current_timesheet_id;
+
+  const currentTs = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+      `&is_current=eq.true` +
+      `&select=timesheet_id,reference_number,reference_set_at`
+  );
+  if (!currentTs) return withCORS(env, req, notFound('Timesheet not found'));
+
+  const nextReferenceNumberRaw = String(body?.reference_number ?? '').trim();
+  const nextReferenceNumber = nextReferenceNumberRaw || null;
+  const currentReferenceNumber = String(currentTs.reference_number ?? '').trim() || null;
+  const now = nowIso();
+
+  const nextReferenceSetAt = nextReferenceNumber
+    ? ((nextReferenceNumber !== currentReferenceNumber) ? now : (currentTs.reference_set_at || now))
+    : null;
+
+  const res = await fetch(
+    `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(currentTimesheetId)}&is_current=eq.true`,
+    {
+      method: 'PATCH',
+      headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+      body: JSON.stringify({
+        reference_number: nextReferenceNumber,
+        reference_set_at: nextReferenceSetAt,
+        updated_at: now
+      })
+    }
+  );
+
+  if (!res.ok) return withCORS(env, req, serverError(await res.text()));
+  const row = (await res.json().catch(() => []))[0];
+
+  return withCORS(env, req, ok({
+    ...row,
+    booking_id: guard.resolved.booking_id || null,
+    requested_timesheet_id: guard.resolved.requested_timesheet_id || timesheetId,
+    current_timesheet_id: currentTimesheetId,
+    current_version: guard.resolved.current_version ?? null,
+    was_stale: !!guard.resolved.was_stale
+  }));
+}
+
+async function handleContractWeekManualDraftDetails(env, req, weekId) {
+  const enc = encodeURIComponent;
+  const WLOG = true;
+  const wlog = (step, extra = {}) => {
+    if (!WLOG) return;
+    try {
+      console.log(JSON.stringify({
+        tag: 'HANDLE_CONTRACT_WEEK_MANUAL_DRAFT_DETAILS',
+        step,
+        at_utc: new Date().toISOString(),
+        contract_week_id: String(weekId || ''),
+        ...(extra && typeof extra === 'object' ? extra : {})
+      }));
+    } catch {}
+  };
+
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  if (!weekId) {
+    return withCORS(env, req, badRequest('contract_week_id is required'));
+  }
+
+  const boolish = (v) => {
+    if (v === true) return true;
+    if (v === false) return false;
+    if (v == null) return false;
+    const s = String(v).trim().toLowerCase();
+    return (s === 'true' || s === '1' || s === 'yes' || s === 'y' || s === 'on');
+  };
+
+  const asYmd = (v) => {
+    const s = String(v || '').slice(0, 10);
+    return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null;
+  };
+
+  const normaliseJsonObj = (v) => {
+    if (v == null) return null;
+    if (typeof v === 'object') return v;
+    if (typeof v === 'string') {
+      try {
+        const p = JSON.parse(v);
+        return (p && typeof p === 'object') ? p : null;
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  };
+
+  const normaliseExpenseDraft = (src) => {
+    const obj = (src && typeof src === 'object') ? src : {};
+    const asNonNeg2 = (val) => {
+      const n = Number(val == null || val === '' ? 0 : val);
+      return (Number.isFinite(n) && n > 0) ? Math.round(n * 100) / 100 : 0;
+    };
+    return {
+      mileage_units: asNonNeg2(obj.mileage_units),
+      travel_pay: asNonNeg2(obj.travel_pay),
+      travel_charge: asNonNeg2(obj.travel_charge),
+      accommodation_pay: asNonNeg2(obj.accommodation_pay),
+      accommodation_charge: asNonNeg2(obj.accommodation_charge),
+      other_pay: asNonNeg2(obj.other_pay),
+      other_charge: asNonNeg2(obj.other_charge),
+      note: String(obj.note ?? obj.notes ?? '').trim()
+    };
+  };
+
+  const pickEffectiveClientSettingsRow = (rows, ymd) => {
+    if (!Array.isArray(rows) || !rows.length) return null;
+    const w = asYmd(ymd);
+    if (!w) return rows[0] || null;
+
+    for (const row of rows) {
+      if (!row) continue;
+      const ef = asYmd(row.effective_from);
+      if (ef == null) return row;
+      if (ef <= w) return row;
+    }
+    return rows[0] || null;
+  };
+
+  try {
+    wlog('start', { actor_user_id: user?.id || null });
+
+    const cw = await sbGetOne(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}&select=*`
+    );
+    if (!cw) {
+      wlog('not_found_contract_week');
+      return withCORS(env, req, notFound('Contract week not found'));
+    }
+
+    if (cw.timesheet_id) {
+      wlog('bad_request_has_real_timesheet', { timesheet_id: cw.timesheet_id || null });
+      return withCORS(env, req, badRequest('manual-draft-details only applies to contract-week-only weekly rows'));
+    }
+
+    const submissionModeSnapshot = String(cw.submission_mode_snapshot || '').toUpperCase();
+    if (submissionModeSnapshot !== 'MANUAL' && submissionModeSnapshot !== 'ELECTRONIC') {
+      wlog('bad_request_unsupported_submission_mode', { submission_mode_snapshot: submissionModeSnapshot || null });
+      return withCORS(env, req, badRequest('manual-draft-details only applies to MANUAL or ELECTRONIC contract weeks'));
+    }
+
+    const contract = await sbGetOne(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(cw.contract_id)}&select=*`
+    );
+    if (!contract) {
+      wlog('not_found_contract', { contract_id: cw.contract_id || null });
+      return withCORS(env, req, notFound('Contract not found'));
+    }
+
+    let clientSettingsRows = [];
+    try {
+      const { rows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/client_settings` +
+          `?client_id=eq.${enc(contract.client_id)}` +
+          `&select=effective_from,created_at,requires_hr,autoprocess_hr,no_timesheet_required,is_nhsp,pay_reference_required,invoice_reference_required,hr_validation_required,ts_reference_required,hr_attach_to_invoice,ts_attach_to_invoice` +
+          `&order=effective_from.desc.nullslast,created_at.desc` +
+          `&limit=250`
+      );
+      clientSettingsRows = Array.isArray(rows) ? rows : [];
+    } catch {
+      clientSettingsRows = [];
+    }
+
+    const cs = pickEffectiveClientSettingsRow(clientSettingsRows, cw.week_ending_date);
+
+    let policy = null;
+    try {
+      policy = await loadPolicy(env, contract.client_id || null, cw.week_ending_date || null);
+    } catch {
+      policy = null;
+    }
+    if (!policy || typeof policy !== 'object') policy = {};
+
+    const bhList = Array.isArray(policy.bh_list)
+      ? policy.bh_list
+      : (() => {
+          const raw = normaliseJsonObj(policy.bh_list);
+          return Array.isArray(raw) ? raw : [];
+        })();
+
+    const totalsJson = (cw.totals_json && typeof cw.totals_json === 'object') ? { ...cw.totals_json } : {};
+    const draftHoursRaw = (totalsJson.hours && typeof totalsJson.hours === 'object') ? totalsJson.hours : {};
+    const draftHours = {
+      day: Number(draftHoursRaw.day || 0) || 0,
+      night: Number(draftHoursRaw.night || 0) || 0,
+      sat: Number(draftHoursRaw.sat || 0) || 0,
+      sun: Number(draftHoursRaw.sun || 0) || 0,
+      bh: Number(draftHoursRaw.bh || 0) || 0
+    };
+
+    const additionalUnitsWeekRaw = normaliseJsonObj(totalsJson.additional_units_week) || {};
+    const additionalUnitsPerDayRaw = normaliseJsonObj(totalsJson.additional_units_per_day) || {};
+    const draftExpenses = normaliseExpenseDraft(normaliseJsonObj(totalsJson.expenses_draft) || {});
+
+    let stdScheduleJson = null;
+    try {
+      if (cw.planned_schedule_json == null) {
+        const tpl = normaliseJsonObj(contract.std_schedule_json);
+        const we = asYmd(cw.week_ending_date);
+        if (tpl && we) {
+          stdScheduleJson = buildPlannedScheduleFromTemplate(tpl, we);
+        }
+      }
+    } catch {
+      stdScheduleJson = null;
+    }
+
+    const plannedScheduleJson =
+      (cw.planned_schedule_json != null)
+        ? cw.planned_schedule_json
+        : null;
+
+    const clientRequiresHr = contract.overrideclientsettings
+      ? !!contract.requires_hr
+      : !!(cs && cs.requires_hr === true);
+
+    const clientAutoprocessHr = contract.overrideclientsettings
+      ? !!contract.autoprocess_hr
+      : !!(cs && cs.autoprocess_hr === true);
+
+    const clientNoTimesheetRequired = contract.overrideclientsettings
+      ? !!contract.no_timesheet_required
+      : !!(cs && cs.no_timesheet_required === true);
+
+    const clientIsNhsp = contract.overrideclientsettings
+      ? !!contract.is_nhsp
+      : !!(cs && cs.is_nhsp === true);
+
+    const requireReferenceToPay = contract.overrideclientsettings
+      ? !!contract.require_reference_to_pay
+      : !!(cs && cs.pay_reference_required === true);
+
+    const requireReferenceToInvoice = contract.overrideclientsettings
+      ? !!contract.require_reference_to_invoice
+      : !!(cs && cs.invoice_reference_required === true);
+
+    const isAdjustment = !!(cw.is_adjustment === true || Number(cw.additional_seq || 0) > 0);
+    const isElectronic = (submissionModeSnapshot === 'ELECTRONIC');
+
+    let resolvedImportAuthoritative = null;
+    try {
+      resolvedImportAuthoritative = await resolveImportAuthoritative(env, {
+        contract_week_id: cw.id,
+        contract_id: contract.id || cw.contract_id || null
+      });
+    } catch {
+      resolvedImportAuthoritative = null;
+    }
+
+    const resolvedRouteType = String(resolvedImportAuthoritative?.route_type || '').trim().toUpperCase();
+    const resolvedImportAuthoritativeFlag = !!(resolvedImportAuthoritative && resolvedImportAuthoritative.is_import_authoritative === true);
+    const resolvedManualAdjustmentEditable = !!(resolvedImportAuthoritative && resolvedImportAuthoritative.manual_adjustment_editable === true);
+
+    const hasNhspLineage = !!(
+      resolvedRouteType === 'WEEKLY_NHSP' ||
+      resolvedRouteType === 'WEEKLY_NHSP_ADJUSTMENT' ||
+      clientIsNhsp === true
+    );
+    const hasHealthRosterLineage = !!(
+      resolvedRouteType === 'WEEKLY_HEALTHROSTER' ||
+      resolvedRouteType === 'WEEKLY_HEALTHROSTER_ADJUSTMENT' ||
+      clientAutoprocessHr === true
+    );
+    const manualAdditionalDraft = !!(
+      isAdjustment &&
+      submissionModeSnapshot === 'MANUAL' &&
+      (resolvedManualAdjustmentEditable || cw.is_adjustment === true || Number(cw.additional_seq || 0) > 0)
+    );
+
+    let routeType = '';
+    if (manualAdditionalDraft) {
+      if (hasNhspLineage) routeType = 'WEEKLY_NHSP_ADJUSTMENT';
+      else if (hasHealthRosterLineage) routeType = 'WEEKLY_HEALTHROSTER_ADJUSTMENT';
+      else routeType = 'WEEKLY_MANUAL_ADJUSTMENT';
+    } else if (resolvedRouteType === 'WEEKLY_NHSP' || resolvedRouteType === 'WEEKLY_NHSP_ADJUSTMENT') {
+      routeType = resolvedRouteType;
+    } else if (resolvedRouteType === 'WEEKLY_HEALTHROSTER' || resolvedRouteType === 'WEEKLY_HEALTHROSTER_ADJUSTMENT') {
+      routeType = resolvedRouteType;
+    } else if (clientIsNhsp) {
+      routeType = isAdjustment ? 'WEEKLY_NHSP_ADJUSTMENT' : 'WEEKLY_NHSP';
+    } else if (clientAutoprocessHr && clientNoTimesheetRequired) {
+      routeType = isAdjustment ? 'WEEKLY_HEALTHROSTER_ADJUSTMENT' : 'WEEKLY_HEALTHROSTER';
+    } else if (isAdjustment) {
+      routeType = 'WEEKLY_MANUAL_ADJUSTMENT';
+    } else {
+      routeType = isElectronic ? 'WEEKLY_ELECTRONIC' : 'WEEKLY_MANUAL';
+    }
+
+    const fallbackImportAuthoritative = !!(
+      !manualAdditionalDraft &&
+      (
+        routeType === 'WEEKLY_NHSP' ||
+        (routeType === 'WEEKLY_HEALTHROSTER' && clientNoTimesheetRequired === true)
+      )
+    );
+
+    const isImportAuthoritative = manualAdditionalDraft
+      ? false
+      : (resolvedImportAuthoritative && resolvedImportAuthoritative.ok)
+        ? resolvedImportAuthoritativeFlag
+        : fallbackImportAuthoritative;
+
+    const compareBlockRequired =
+      (routeType === 'WEEKLY_HEALTHROSTER') &&
+      (clientNoTimesheetRequired !== true);
+
+    const underlyingChannelFamily = isImportAuthoritative
+      ? null
+      : (manualAdditionalDraft ? 'MANUAL_NON_QR' : (isElectronic ? 'ELECTRONIC' : 'MANUAL_NON_QR'));
+
+    const routeFamily = isImportAuthoritative ? 'IMPORT_AUTHORITATIVE' : underlyingChannelFamily;
+
+    const routeDisplay = (() => {
+      if (routeType === 'WEEKLY_NHSP_ADJUSTMENT') return 'NHSP Adjustment';
+      if (routeType === 'WEEKLY_NHSP') return 'NHSP';
+      if (routeType === 'WEEKLY_HEALTHROSTER_ADJUSTMENT') return 'HealthRoster Adjustment';
+      if (routeType === 'WEEKLY_HEALTHROSTER') {
+        return clientNoTimesheetRequired ? 'HealthRoster (no timesheets)' : 'HealthRoster (timesheets required)';
+      }
+      if (routeType === 'WEEKLY_MANUAL_ADJUSTMENT') return 'Manual Adjustment';
+      if (isAdjustment) {
+        return isElectronic ? 'Electronic Adjustment' : 'Manual Adjustment';
+      }
+      return isElectronic ? 'Weekly Electronic' : 'Weekly Manual';
+    })();
+
+    const summaryStage = 'UNPROCESSED';
+
+    const plannedScheduleIsExplicitlyEmpty = Array.isArray(plannedScheduleJson) && plannedScheduleJson.length === 0;
+    const draftHoursAreZero =
+      Number(draftHours.day || 0) === 0 &&
+      Number(draftHours.night || 0) === 0 &&
+      Number(draftHours.sat || 0) === 0 &&
+      Number(draftHours.sun || 0) === 0 &&
+      Number(draftHours.bh || 0) === 0;
+    const keepEmptyAdditionalManualSchedule = !!(manualAdditionalDraft && plannedScheduleIsExplicitlyEmpty && draftHoursAreZero);
+
+    const effective = {
+      route_type: routeType,
+      route_display: routeDisplay,
+      summary_stage: summaryStage,
+      client_requires_hr: clientRequiresHr,
+      client_autoprocess_hr: clientAutoprocessHr,
+      client_no_timesheet_required: clientNoTimesheetRequired,
+      client_is_nhsp: clientIsNhsp,
+      contract_id: contract.id || null,
+      require_reference_to_pay: requireReferenceToPay,
+      require_reference_to_invoice: requireReferenceToInvoice,
+      ready_to_pay: false,
+      issue_codes: [],
+      route_family: routeFamily,
+      route_subfamily: underlyingChannelFamily,
+      underlying_channel_family: underlyingChannelFamily,
+      is_import_authoritative: isImportAuthoritative,
+      is_adjustment: isAdjustment,
+      additional_seq: Number(cw.additional_seq || 0),
+      suppress_standard_schedule_fallback: keepEmptyAdditionalManualSchedule,
+      keep_additional_manual_adjustment_schedule_empty: keepEmptyAdditionalManualSchedule,
+      __suppressStandardScheduleFallback: keepEmptyAdditionalManualSchedule,
+      __keepAdditionalManualAdjustmentScheduleEmpty: keepEmptyAdditionalManualSchedule
+    };
+
+    const uploadedPdfKey = (cw.uploaded_pdf_r2_key && String(cw.uploaded_pdf_r2_key).trim())
+      ? String(cw.uploaded_pdf_r2_key).trim()
+      : null;
+
+    const action_flags = {
+      can_restore_qr_pending: false,
+      can_restore_qr_signed: false,
+      can_revert_to_electronic: false,
+      can_allow_qr_again: false,
+      can_allow_electronic_again: false,
+      supports_electronic_submission: isElectronic,
+      is_manual_only: !isElectronic,
+      qr_scenario: null,
+      is_adjustment: isAdjustment,
+      locked_by_invoice: false,
+      paid: false,
+      can_advance_payment: false,
+      can_unadvance_payment: false,
+      can_snooze_payment: false,
+      can_clear_payment_snooze: false,
+      is_unprocessed: true,
+      route_family: routeFamily,
+      underlying_channel_family: underlyingChannelFamily,
+      is_import_authoritative: isImportAuthoritative,
+      compare_block_required: compareBlockRequired,
+      route_type: routeType,
+      route_subfamily: underlyingChannelFamily,
+      additional_seq: Number(cw.additional_seq || 0),
+      manual_additional_draft: manualAdditionalDraft,
+      keep_additional_manual_adjustment_schedule_empty: keepEmptyAdditionalManualSchedule,
+      suppress_standard_schedule_fallback: keepEmptyAdditionalManualSchedule,
+      has_primary_artifact: !!uploadedPdfKey,
+      primary_left_pane_mode: uploadedPdfKey ? 'TIMESHEET_ARTIFACT' : 'NONE',
+      primary_artifact_storage_key: uploadedPdfKey,
+      electronic_artifact_exists: isElectronic && !!uploadedPdfKey,
+      healthroster_compare_required: compareBlockRequired,
+      cw_submission_mode_snapshot: submissionModeSnapshot,
+      submission_mode_snapshot: submissionModeSnapshot
+    };
+
+    const contractWeekOut = {
+      ...cw,
+      route_type: routeType,
+      route_display: routeDisplay,
+      route_family: routeFamily,
+      route_subfamily: underlyingChannelFamily,
+      underlying_channel_family: underlyingChannelFamily,
+      is_import_authoritative: isImportAuthoritative,
+      suppress_standard_schedule_fallback: keepEmptyAdditionalManualSchedule,
+      keep_additional_manual_adjustment_schedule_empty: keepEmptyAdditionalManualSchedule,
+      __suppressStandardScheduleFallback: keepEmptyAdditionalManualSchedule,
+      __keepAdditionalManualAdjustmentScheduleEmpty: keepEmptyAdditionalManualSchedule,
+      planned_schedule_json: keepEmptyAdditionalManualSchedule ? [] : plannedScheduleJson,
+      std_schedule_json: stdScheduleJson,
+      submission_mode_snapshot: submissionModeSnapshot,
+      totals_json: {
+        ...totalsJson,
+        hours: draftHours,
+        additional_units_week: additionalUnitsWeekRaw,
+        additional_units_per_day: additionalUnitsPerDayRaw,
+        expenses_draft: draftExpenses
+      }
+    };
+
+    const weeklyModeOut = (() => {
+      if (routeType === 'WEEKLY_NHSP' || routeType === 'WEEKLY_NHSP_ADJUSTMENT' || clientIsNhsp) {
+        return 'NHSP';
+      }
+      if (routeType === 'WEEKLY_HEALTHROSTER' || routeType === 'WEEKLY_HEALTHROSTER_ADJUSTMENT' || (clientAutoprocessHr && clientNoTimesheetRequired)) {
+        return 'HEALTHROSTER';
+      }
+      return 'NONE';
+    })();
+
+    const hrWeeklyBehaviourOut = (() => {
+      if (routeType === 'WEEKLY_HEALTHROSTER' || routeType === 'WEEKLY_HEALTHROSTER_ADJUSTMENT') {
+        return clientNoTimesheetRequired ? 'CREATE' : 'VERIFY';
+      }
+      return '';
+    })();
+
+    const policyOut = {
+      ...policy,
+      bh_list: bhList,
+      weekly_mode: weeklyModeOut,
+      hr_weekly_behaviour: hrWeeklyBehaviourOut,
+      requires_hr: clientRequiresHr,
+      autoprocess_hr: clientAutoprocessHr,
+      no_timesheet_required: clientNoTimesheetRequired,
+      is_nhsp: clientIsNhsp
+    };
+
+    wlog('finish', {
+      contract_week_id: cw.id || null,
+      contract_id: contract.id || null,
+      week_ending_date: cw.week_ending_date || null,
+      submission_mode_snapshot: submissionModeSnapshot,
+      is_adjustment: isAdjustment,
+      resolved_import_authoritative_source: resolvedImportAuthoritative?.source || null,
+      resolved_import_authoritative: resolvedImportAuthoritativeFlag,
+      route_type: routeType,
+      route_display: routeDisplay,
+      route_family: routeFamily,
+      route_subfamily: underlyingChannelFamily,
+      underlying_channel_family: underlyingChannelFamily,
+      is_import_authoritative: isImportAuthoritative,
+      manual_additional_draft: manualAdditionalDraft,
+      keep_additional_manual_adjustment_schedule_empty: keepEmptyAdditionalManualSchedule,
+      suppress_standard_schedule_fallback: keepEmptyAdditionalManualSchedule,
+      compare_block_required: compareBlockRequired,
+      summary_stage: summaryStage
+    });
+
+    return withCORS(env, req, ok({
+      booking_id: null,
+      requested_timesheet_id: null,
+      current_timesheet_id: null,
+      current_version: null,
+      was_stale: false,
+
+      timesheet: null,
+      tsfin: null,
+
+      invoiceBreakdown: null,
+      isSegmentsMode: false,
+      segments: [],
+
+      invoice_no_by_invoice_id: {},
+
+      validations: [],
+      shifts: [],
+
+      effective,
+
+      ready_to_pay: false,
+      summary_stage: summaryStage,
+      route_type: routeType,
+      route_display: routeDisplay,
+      issue_codes: [],
+      submission_mode_snapshot: submissionModeSnapshot,
+      cw_submission_mode_snapshot: submissionModeSnapshot,
+
+      sheet_scope: 'WEEKLY',
+      qr_status: null,
+      qr_generated_at: null,
+      qr_scanned_at: null,
+      manual_pdf_r2_key: uploadedPdfKey,
+
+      contract_week_id: cw.id,
+      contract_week: contractWeekOut,
+
+      policy: policyOut,
+      evidence: [],
+
+      pay_state: null,
+      segment_snoozes: [],
+      is_advanced: false,
+      can_unadvance: false,
+      advanced_consumed_by_batch_id: null,
+      is_snoozed: false,
+      snooze_until_date: null,
+      snooze_is_indefinite: false,
+      snooze_note: null,
+
+      action_flags
+    }));
+  } catch (e) {
+    console.error('[CONTRACT_WEEK_MANUAL_DRAFT_DETAILS] error', {
+      contract_week_id: weekId,
+      err: e?.message || String(e)
+    });
+    wlog('error', { err: e?.message || String(e) });
+    return withCORS(env, req, serverError('Failed to load contract week manual draft details'));
+  }
+}
+
+async function handleTimesheetDetails(env, req, timesheetId) {
+  const enc = encodeURIComponent;
+  const WLOG = true;
+  const wlog = (step, extra = {}) => {
+    if (!WLOG) return;
+    try {
+      console.log(JSON.stringify({
+        tag: 'HANDLE_TIMESHEET_DETAILS',
+        step,
+        at_utc: new Date().toISOString(),
+        requested_timesheet_id: String(timesheetId || ''),
+        ...(extra && typeof extra === 'object' ? extra : {})
+      }));
+    } catch {}
+  };
+
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  if (!timesheetId) {
+    return withCORS(env, req, badRequest('timesheet_id is required'));
+  }
+
+  try {
+    wlog('start', {
+      actor_user_id: user?.id || null
+    });
+
+    // ─────────────────────────────────────────────────────────────
+    // Resolve stale/historical timesheet_id -> current by booking_id
+    // ─────────────────────────────────────────────────────────────
+    const resolved = await resolveTimesheetToCurrent(env, timesheetId);
+    if (!resolved) {
+      wlog('not_found_after_resolve');
+      return withCORS(env, req, notFound('Timesheet not found'));
+    }
+
+    const bookingId = resolved.booking_id || null;
+    const currentTimesheetId = resolved.current_timesheet_id || timesheetId;
+
+    wlog('resolved', resolved);
+
+    // Current timesheet record (ALWAYS load by current_timesheet_id)
+    let ts = null;
+    {
+      const { rows: tsRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/timesheets` +
+          `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+          `&select=*` +
+          `&limit=1`
+      );
+      ts = tsRows?.[0] || null;
+    }
+    if (!ts) {
+      wlog('not_found_current_timesheet_row', {
+        current_timesheet_id: currentTimesheetId
+      });
+      return withCORS(env, req, notFound('Timesheet not found'));
+    }
+
+    // Linked contract_week (if any) - points at CURRENT row id.
+    // If the timesheet pointer was damaged by a historical delete bug, fall back
+    // to the base contract/week row for display only; destructive repair is not
+    // attempted here.
+    let contractWeekId = null;
+    let contractWeek = null;
+    try {
+      const { rows: cwRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+          `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+          `&select=*` +
+          `&limit=1`
+      );
+      contractWeek = cwRows?.[0] || null;
+      contractWeekId = contractWeek?.id || null;
+    } catch {
+      contractWeekId = null;
+      contractWeek = null;
+    }
+
+    if (!contractWeek && ts?.contract_id && ts?.week_ending_date) {
+      try {
+        const { rows: fallbackCwRows } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+            `?contract_id=eq.${enc(ts.contract_id)}` +
+            `&week_ending_date=eq.${enc(ts.week_ending_date)}` +
+            `&additional_seq=eq.0` +
+            `&is_adjustment=eq.false` +
+            `&select=*` +
+            `&limit=1`
+        );
+        contractWeek = fallbackCwRows?.[0] || null;
+        contractWeekId = contractWeek?.id || null;
+      } catch {}
+    }
+
+    wlog('loaded_timesheet_and_contract_week', {
+      current_timesheet_id: currentTimesheetId,
+      booking_id: bookingId,
+      timesheet_version: ts?.version ?? null,
+      timesheet_is_current: ts?.is_current ?? null,
+      contract_week_id: contractWeekId,
+      contract_week_timesheet_id: contractWeek?.timesheet_id || null
+    });
+
+    const boolish = (v) => {
+      if (v === true) return true;
+      if (v === false) return false;
+      if (v == null) return false;
+      const s = String(v).trim().toLowerCase();
+      return (s === 'true' || s === '1' || s === 'yes' || s === 'y' || s === 'on');
+    };
+
+    const asUuidString = (v) => {
+      const s = String(v || '').trim();
+      return s || null;
+    };
+
+    // ✅ adjustment detection used to hard-block convert actions.
+    // Must not let timesheets.is_adjustment=false mask linked contract_week truth.
+    const contractWeekAdditionalSeq = Number(contractWeek?.additional_seq || 0);
+    const isAdjustment = !!(
+      ts?.is_adjustment === true ||
+      contractWeek?.is_adjustment === true ||
+      contractWeekAdditionalSeq > 0 ||
+      (ts?.parent_timesheet_id != null && String(ts.parent_timesheet_id).trim() !== '') ||
+      (ts?.correction_id != null && String(ts.correction_id).trim() !== '') ||
+      (ts?.correction_kind != null && String(ts.correction_kind).trim() !== '')
+    );
+
+    // Current TSFIN snapshot (current TSFIN row keyed to current timesheet_id)
+    let tsfinRaw = null;
+    {
+      const { rows: finRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+          `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+          `&is_current=eq.true` +
+          `&select=*` +
+          `&limit=1`
+      );
+      tsfinRaw = finRows?.[0] || null;
+    }
+
+    wlog('loaded_tsfin', {
+      current_timesheet_id: currentTimesheetId,
+      tsfin_found: !!tsfinRaw,
+      tsfin_id: tsfinRaw?.id || null,
+      processing_status: tsfinRaw?.processing_status || null,
+      basis: tsfinRaw?.basis || null,
+      locked_by_invoice_id: tsfinRaw?.locked_by_invoice_id || null,
+      paid_at_utc: tsfinRaw?.paid_at_utc || null
+    });
+
+    // ─────────────────────────────────────────────────────────────
+    // ✅ Repair-on-open for corrupt SEGMENTS snapshots
+    // If TSFIN has invalid segment elements, enqueue priority + run worker once for this timesheet,
+    // then re-fetch TSFIN before returning details.
+    // ─────────────────────────────────────────────────────────────
+    try {
+      const ib0 = tsfinRaw?.invoice_breakdown_json;
+      const segs0 =
+        (ib0 && typeof ib0 === 'object' && String(ib0.mode || '').toUpperCase() === 'SEGMENTS' && Array.isArray(ib0.segments))
+          ? ib0.segments
+          : null;
+
+      if (segs0 && segs0.length) {
+        let invalidCount0 = 0;
+        for (const s0 of segs0) {
+          const isObj0 = !!(s0 && typeof s0 === 'object' && !Array.isArray(s0));
+          const sid0 = isObj0 ? String(s0.segment_id || '').trim() : '';
+          if (!isObj0 || !sid0) invalidCount0++;
+        }
+
+        if (invalidCount0 > 0) {
+          wlog('repair_on_open_triggered', {
+            current_timesheet_id: currentTimesheetId,
+            invalid_segment_count: invalidCount0
+          });
+
+          // Enqueue TSFIN recompute with priority and run the worker once for this id
+          try {
+            await sbRpc(env, 'enqueue_ts_financials_priority', {
+              _timesheet_ids: [currentTimesheetId],
+              _reason: 'CONTEXT_CHANGED'
+            });
+          } catch {}
+
+          try {
+            await runTsfinWorkerOnce(env, { limit: 50, onlyTimesheetIds: [currentTimesheetId] });
+          } catch {}
+
+          // Re-fetch TSFIN after worker attempt
+          try {
+            const { rows: finRows2 } = await sbFetch(
+              env,
+              `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+                `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+                `&is_current=eq.true` +
+                `&select=*` +
+                `&limit=1`
+            );
+            tsfinRaw = finRows2?.[0] || tsfinRaw;
+          } catch {}
+
+          wlog('repair_on_open_refetched_tsfin', {
+            current_timesheet_id: currentTimesheetId,
+            tsfin_id: tsfinRaw?.id || null
+          });
+        }
+      }
+    } catch {}
+
+    // ─────────────────────────────────────────────────────────────
+    // Authoritative pay_state (paid/partially paid/processing/advanced + adjusted delta)
+    // Computed in DB for consistency via public.timesheet_pay_state.
+    // Do not synthesize payment economics from summary-cache fields if this fails.
+    // ─────────────────────────────────────────────────────────────
+    const describePayStateRpcShape = (value, depth = 0) => {
+      try {
+        if (value == null) return value === null ? 'null' : 'undefined';
+        if (Array.isArray(value)) {
+          const first = value.length ? describePayStateRpcShape(value[0], depth + 1) : 'empty';
+          return `array(len=${value.length}, first=${first})`;
+        }
+        if (typeof value === 'object') {
+          const keys = Object.keys(value).slice(0, 12);
+          if (depth >= 2) return `object(keys=${keys.join(',')})`;
+          const nested = {};
+          for (const key of keys) {
+            const child = value[key];
+            if (child && (Array.isArray(child) || typeof child === 'object')) {
+              nested[key] = describePayStateRpcShape(child, depth + 1);
+            } else {
+              nested[key] = typeof child;
+            }
+          }
+          return { keys, nested };
+        }
+        return typeof value;
+      } catch {
+        return 'shape_unavailable';
+      }
+    };
+
+    const previewPayStateRpcPayload = (value) => {
+      try {
+        const seen = new WeakSet();
+        const json = JSON.stringify(value, (key, val) => {
+          if (typeof val === 'bigint') return val.toString();
+          if (val && typeof val === 'object') {
+            if (seen.has(val)) return '[Circular]';
+            seen.add(val);
+          }
+          return val;
+        });
+        return String(json || '').slice(0, 1200);
+      } catch {
+        return '';
+      }
+    };
+
+    const unwrapTimesheetPayStateRpc = (rpcRes) => {
+      const candidates = [];
+      const pushCandidate = (value) => {
+        if (value && typeof value === 'object' && !Array.isArray(value)) candidates.push(value);
+      };
+
+      const visit = (value, depth = 0) => {
+        if (value == null || depth > 4) return;
+        if (Array.isArray(value)) {
+          if (value.length === 1) visit(value[0], depth + 1);
+          else {
+            for (const item of value) visit(item, depth + 1);
+          }
+          return;
+        }
+        if (typeof value !== 'object') return;
+
+        if (value.ok === true || Object.prototype.hasOwnProperty.call(value, 'paid_status') || Object.prototype.hasOwnProperty.call(value, 'adjusted')) {
+          pushCandidate(value);
+        }
+
+        for (const key of ['timesheet_pay_state', 'data', 'result', 'payload', 'body']) {
+          if (Object.prototype.hasOwnProperty.call(value, key)) visit(value[key], depth + 1);
+        }
+
+        if (Array.isArray(value.rows)) visit(value.rows, depth + 1);
+      };
+
+      visit(rpcRes, 0);
+      return candidates.find((candidate) => candidate && candidate.ok === true) || candidates[0] || null;
+    };
+
+    let payState = null;
+    try {
+      const ps0 = await sbRpc(env, 'timesheet_pay_state', {
+        p_timesheet_id: currentTimesheetId,
+        p_actor_user_id: user.id
+      });
+
+      const ps = unwrapTimesheetPayStateRpc(ps0);
+      if (ps && typeof ps === 'object' && !Array.isArray(ps) && ps.ok === true) {
+        payState = ps;
+        wlog('pay_state_loaded', {
+          current_timesheet_id: currentTimesheetId,
+          paid_status: String(ps.paid_status || '').trim() || null,
+          has_adjusted: !!(ps.adjusted && typeof ps.adjusted === 'object'),
+          has_paid_totals: !!(ps.paid_totals && typeof ps.paid_totals === 'object')
+        });
+      } else {
+        const diag = {
+          current_timesheet_id: currentTimesheetId,
+          rpc_shape: describePayStateRpcShape(ps0),
+          unwrapped_shape: describePayStateRpcShape(ps),
+          unwrapped_ok: ps && typeof ps === 'object' ? ps.ok : null,
+          error: ps && typeof ps === 'object' ? (ps.error || ps.code || null) : null,
+          rpc_preview: previewPayStateRpcPayload(ps0)
+        };
+        console.warn('[TIMESHEET_DETAILS] pay_state unavailable/unexpected', diag);
+        wlog('pay_state_unavailable_or_unexpected', diag);
+        payState = null;
+      }
+    } catch (e) {
+      const diag = {
+        current_timesheet_id: currentTimesheetId,
+        err: e?.message || String(e),
+        status: e?.status || null,
+        body_preview: e?.body ? String(e.body).slice(0, 1200) : null
+      };
+      console.warn('[TIMESHEET_DETAILS] pay_state rpc failed', diag);
+      wlog('pay_state_rpc_failed', diag);
+      payState = null;
+    }
+
+    const payStateOut = (payState && typeof payState === 'object' && !Array.isArray(payState))
+      ? {
+          ...payState,
+          is_advanced: payState.is_advanced === true,
+          can_unadvance: payState.can_unadvance === true,
+          advanced_consumed_by_batch_id:
+            (payState.advanced_consumed_by_batch_id != null && String(payState.advanced_consumed_by_batch_id).trim())
+              ? String(payState.advanced_consumed_by_batch_id).trim()
+              : null,
+          is_snoozed: payState.is_snoozed === true,
+          snooze_until_date:
+            (payState.snooze_until_date != null && String(payState.snooze_until_date).trim())
+              ? String(payState.snooze_until_date).trim()
+              : null,
+          snooze_is_indefinite: payState.snooze_is_indefinite === true,
+          snooze_note:
+            (payState.snooze_note != null && String(payState.snooze_note).trim())
+              ? String(payState.snooze_note).trim()
+              : null,
+          segment_snoozes: Array.isArray(payState.segment_snoozes)
+            ? payState.segment_snoozes
+                .filter((row) => row && typeof row === 'object' && !Array.isArray(row))
+                .map((row) => ({
+                  ...row,
+                  snooze_id:
+                    (row.snooze_id != null && String(row.snooze_id).trim())
+                      ? String(row.snooze_id).trim()
+                      : null,
+                  candidate_id:
+                    (row.candidate_id != null && String(row.candidate_id).trim())
+                      ? String(row.candidate_id).trim()
+                      : null,
+                  timesheet_id:
+                    (row.timesheet_id != null && String(row.timesheet_id).trim())
+                      ? String(row.timesheet_id).trim()
+                      : null,
+                  booking_id:
+                    (row.booking_id != null && String(row.booking_id).trim())
+                      ? String(row.booking_id).trim()
+                      : null,
+                  segment_id:
+                    (row.segment_id != null && String(row.segment_id).trim())
+                      ? String(row.segment_id).trim()
+                      : null,
+                  segment_stable_key:
+                    (row.segment_stable_key != null && String(row.segment_stable_key).trim())
+                      ? String(row.segment_stable_key).trim()
+                      : null,
+                  snooze_kind:
+                    (row.snooze_kind != null && String(row.snooze_kind).trim())
+                      ? String(row.snooze_kind).trim()
+                      : null,
+                  snooze_until_date:
+                    (row.snooze_until_date != null && String(row.snooze_until_date).trim())
+                      ? String(row.snooze_until_date).trim()
+                      : null,
+                  note:
+                    (row.note != null && String(row.note).trim())
+                      ? String(row.note).trim()
+                      : null,
+                  snooze_note:
+                    (row.snooze_note != null && String(row.snooze_note).trim())
+                      ? String(row.snooze_note).trim()
+                      : ((row.note != null && String(row.note).trim())
+                          ? String(row.note).trim()
+                          : null),
+                  date:
+                    (row.date != null && String(row.date).trim())
+                      ? String(row.date).trim()
+                      : null,
+                  work_date:
+                    (row.work_date != null && String(row.work_date).trim())
+                      ? String(row.work_date).trim()
+                      : ((row.date != null && String(row.date).trim())
+                          ? String(row.date).trim()
+                          : null),
+                  ref_num:
+                    (row.ref_num != null && String(row.ref_num).trim())
+                      ? String(row.ref_num).trim()
+                      : null,
+                  snooze_state:
+                    (row.snooze_state != null && String(row.snooze_state).trim())
+                      ? String(row.snooze_state).trim()
+                      : (((row.snooze_until_date != null && String(row.snooze_until_date).trim()))
+                          ? 'DATED_SNOOZED'
+                          : 'INDEFINITE_SNOOZED')
+                }))
+            : []
+        }
+      : null;
+
+    const segmentSnoozesOut = (payStateOut && Array.isArray(payStateOut.segment_snoozes))
+      ? payStateOut.segment_snoozes
+      : [];
+
+    // ─────────────────────────────────────────────────────────────
+    // Contract-resolved EFFECTIVE flags (source of truth = v_timesheets_summary)
+    // ─────────────────────────────────────────────────────────────
+    let summaryRow = null;
+    try {
+      const { rows: sRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/v_timesheets_summary` +
+          `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+          `&select=*` +
+          `&limit=1`
+      );
+      summaryRow = sRows?.[0] || null;
+    } catch {
+      summaryRow = null;
+    }
+
+    const processingStatusUpper = String(tsfinRaw?.processing_status || '').toUpperCase();
+    const fallbackSummaryStage =
+      (processingStatusUpper === 'UNPROCESSED' || processingStatusUpper === 'UNASSIGNED')
+        ? 'UNPROCESSED'
+        : null;
+
+    const effectiveSummaryStage =
+      (summaryRow && summaryRow.summary_stage != null && String(summaryRow.summary_stage).trim())
+        ? summaryRow.summary_stage
+        : fallbackSummaryStage;
+
+    const effective = summaryRow ? {
+      route_type: summaryRow.route_type ?? null,
+      // ✅ NEW: backend-derived display label (single UI field)
+      route_display: summaryRow.route_display ?? null,
+
+      summary_stage: effectiveSummaryStage,
+
+      client_requires_hr: summaryRow.client_requires_hr,
+      client_autoprocess_hr: summaryRow.client_autoprocess_hr,
+      client_no_timesheet_required: summaryRow.client_no_timesheet_required,
+      client_is_nhsp: summaryRow.client_is_nhsp,
+
+      contract_id: summaryRow.contract_id ?? contractWeek?.contract_id ?? ts.contract_id ?? null,
+      require_reference_to_pay: summaryRow.require_reference_to_pay,
+      require_reference_to_invoice: summaryRow.require_reference_to_invoice,
+
+      ready_to_pay: summaryRow.ready_to_pay,
+      issue_codes: summaryRow.issue_codes
+    } : {
+      route_type: null,
+      route_display: null,
+      summary_stage: fallbackSummaryStage,
+
+      client_requires_hr: undefined,
+      client_autoprocess_hr: undefined,
+      client_no_timesheet_required: undefined,
+      client_is_nhsp: undefined,
+
+      contract_id: contractWeek?.contract_id ?? ts.contract_id ?? null,
+      require_reference_to_pay: undefined,
+      require_reference_to_invoice: undefined,
+
+      ready_to_pay: undefined,
+      issue_codes: undefined
+    };
+
+    wlog('loaded_effective_summary', {
+      current_timesheet_id: currentTimesheetId,
+      summary_found: !!summaryRow,
+      route_type: effective.route_type || null,
+      route_display: effective.route_display || null,
+      summary_stage: effective.summary_stage || null,
+      ready_to_pay: effective.ready_to_pay
+    });
+
+    let resolvedImportAuthoritative = null;
+    try {
+      resolvedImportAuthoritative = await resolveImportAuthoritative(env, {
+        timesheet_id: currentTimesheetId,
+        contract_week_id: contractWeekId,
+        contract_id: effective.contract_id || contractWeek?.contract_id || ts.contract_id || null
+      });
+    } catch {
+      resolvedImportAuthoritative = null;
+    }
+
+    // Validation rows (most recent first)
+    const { rows: valRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheet_validations` +
+        `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+        `&select=*` +
+        `&order=validated_at_utc.desc,created_at.desc`
+    );
+    const validations = valRows || [];
+
+    // Linked nhsp_shifts (if any)
+    const { rows: shiftRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/nhsp_shifts` +
+        `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+        `&select=*` +
+        `&order=work_date.asc,start_utc.asc`
+    );
+    const shifts = shiftRows || [];
+
+    // ───────────────────── Policy snapshot (SQL-first; avoids broken loadPolicy) ─────────────────────
+    let policy = null;
+    let supportsElectronicSubmission = false;
+
+    try {
+      const fromFin = tsfinRaw?.policy_snapshot_json;
+      if (fromFin && typeof fromFin === 'object') {
+        policy = fromFin;
+      } else if (typeof fromFin === 'string') {
+        try {
+          const parsed = JSON.parse(fromFin);
+          if (parsed && typeof parsed === 'object') policy = parsed;
+        } catch {}
+      }
+
+      if (!policy) {
+        const ctxRows = await sbRpc(env, 'tsfin_load_context_batch', { p_timesheet_ids: [currentTimesheetId] });
+        const ctx = Array.isArray(ctxRows) ? ctxRows[0] : (ctxRows || null);
+
+        let pol = ctx?.out_policy ?? null;
+        if (typeof pol === 'string') {
+          try { pol = JSON.parse(pol); } catch { pol = null; }
+        }
+        policy = (pol && typeof pol === 'object') ? pol : null;
+      }
+
+      const dsm = String(policy?.default_submission_mode || '').toUpperCase();
+      supportsElectronicSubmission = (dsm === 'ELECTRONIC');
+    } catch (e) {
+      console.warn('[TIMESHEET_DETAILS] policy resolution failed (non-fatal)', {
+        timesheet_id: currentTimesheetId,
+        err: e?.message || String(e)
+      });
+      policy = null;
+      supportsElectronicSubmission = false;
+    }
+
+    // ───────────────────── Derived route/scenario helpers ─────────────────────
+    const routeTypeUpper = String(effective.route_type || '').toUpperCase();
+    const clientNoTimesheetRequired = boolish(effective.client_no_timesheet_required);
+    const clientIsNhsp = boolish(effective.client_is_nhsp);
+    const resolvedImportAuthoritativeFlag = !!(resolvedImportAuthoritative && resolvedImportAuthoritative.is_import_authoritative === true);
+    const resolvedManualAdjustmentEditable = !!(resolvedImportAuthoritative && resolvedImportAuthoritative.manual_adjustment_editable === true);
+    const resolvedManualAdjustmentRouteType = String(resolvedImportAuthoritative?.manual_adjustment_route_type || resolvedImportAuthoritative?.route_type || '').trim().toUpperCase();
+
+    const subMode = String(ts.submission_mode || '').toUpperCase();
+    const qrStatus = String(ts.qr_status || '').toUpperCase() || null;
+
+    const importDerivedAdjustment = !!(
+      String(ts.adjustment_origin || '').trim().toUpperCase() === 'IMPORT_CORRECTION' ||
+      String(ts.adjustment_origin || '').trim().toUpperCase() === 'IMPORT_CANCELLATION' ||
+      (ts.correction_id != null && String(ts.correction_id).trim() !== '') ||
+      (ts.correction_kind != null && String(ts.correction_kind).trim() !== '')
+    );
+    const hasNhspAdjustmentLineage = !!(
+      resolvedManualAdjustmentRouteType === 'WEEKLY_NHSP_ADJUSTMENT' ||
+      routeTypeUpper === 'WEEKLY_NHSP' ||
+      routeTypeUpper === 'WEEKLY_NHSP_ADJUSTMENT' ||
+      clientIsNhsp === true ||
+      String(tsfinRaw?.basis || '').toUpperCase().includes('NHSP')
+    );
+    const hasHealthRosterAdjustmentLineage = !!(
+      resolvedManualAdjustmentRouteType === 'WEEKLY_HEALTHROSTER_ADJUSTMENT' ||
+      routeTypeUpper === 'WEEKLY_HEALTHROSTER' ||
+      routeTypeUpper === 'WEEKLY_HEALTHROSTER_ADJUSTMENT' ||
+      String(tsfinRaw?.basis || '').toUpperCase().includes('HEALTHROSTER') ||
+      boolish(effective.client_autoprocess_hr)
+    );
+    const manualAdditionalAdjustment = !!(
+      resolvedManualAdjustmentEditable ||
+      (
+        isAdjustment &&
+        subMode === 'MANUAL' &&
+        !importDerivedAdjustment &&
+        (
+          contractWeek?.is_adjustment === true ||
+          contractWeekAdditionalSeq > 0 ||
+          ts?.is_adjustment === true ||
+          (ts?.parent_timesheet_id != null && String(ts.parent_timesheet_id).trim() !== '')
+        )
+      )
+    );
+    const manualAdditionalRouteType = (() => {
+      if (!manualAdditionalAdjustment) return null;
+      if (resolvedManualAdjustmentRouteType === 'WEEKLY_NHSP_ADJUSTMENT') return 'WEEKLY_NHSP_ADJUSTMENT';
+      if (resolvedManualAdjustmentRouteType === 'WEEKLY_HEALTHROSTER_ADJUSTMENT') return 'WEEKLY_HEALTHROSTER_ADJUSTMENT';
+      if (resolvedManualAdjustmentRouteType === 'WEEKLY_MANUAL_ADJUSTMENT') return 'WEEKLY_MANUAL_ADJUSTMENT';
+      if (hasNhspAdjustmentLineage) return 'WEEKLY_NHSP_ADJUSTMENT';
+      if (hasHealthRosterAdjustmentLineage) return 'WEEKLY_HEALTHROSTER_ADJUSTMENT';
+      return 'WEEKLY_MANUAL_ADJUSTMENT';
+    })();
+
+    const hasQrToken = !!(ts.qr_token && String(ts.qr_token).trim());
+    const hasQrGenerated = !!ts.qr_generated_at;
+    const hasQrScanned = !!ts.qr_scanned_at;
+    const hasQrLastSentHash = !!(ts.qr_last_sent_hash && String(ts.qr_last_sent_hash).trim());
+
+    const isQrRoute = !!(
+      qrStatus ||
+      hasQrToken ||
+      hasQrGenerated ||
+      hasQrScanned ||
+      hasQrLastSentHash
+    );
+
+    const fallbackImportAuthoritative = !!(
+      !manualAdditionalAdjustment &&
+      (
+        (routeTypeUpper === 'WEEKLY_NHSP') ||
+        (routeTypeUpper === 'WEEKLY_HEALTHROSTER' && clientNoTimesheetRequired === true) ||
+        (clientIsNhsp === true && routeTypeUpper === 'WEEKLY_MANUAL' && subMode !== 'MANUAL')
+      )
+    );
+
+    const isImportAuthoritative = resolvedManualAdjustmentEditable
+      ? false
+      : (resolvedImportAuthoritative && resolvedImportAuthoritative.ok)
+        ? resolvedImportAuthoritativeFlag
+        : fallbackImportAuthoritative;
+
+    const compareBlockRequired = !!(
+      !manualAdditionalAdjustment &&
+      routeTypeUpper === 'WEEKLY_HEALTHROSTER' &&
+      clientNoTimesheetRequired !== true
+    );
+
+    const underlyingChannelFamily = isImportAuthoritative
+      ? null
+      : (manualAdditionalAdjustment
+          ? 'MANUAL_NON_QR'
+          : (isQrRoute
+              ? 'QR'
+              : (subMode === 'ELECTRONIC' ? 'ELECTRONIC' : 'MANUAL_NON_QR')));
+
+    const routeFamily = isImportAuthoritative ? 'IMPORT_AUTHORITATIVE' : underlyingChannelFamily;
+
+    const effectiveRouteType = (() => {
+      const current = String(effective.route_type || '').trim().toUpperCase();
+      if (manualAdditionalAdjustment) {
+        return manualAdditionalRouteType;
+      }
+      return current || null;
+    })();
+
+    const actualScheduleFromTimesheet = Array.isArray(ts.actual_schedule_json) ? ts.actual_schedule_json : [];
+    const actualScheduleFromTsfin = Array.isArray(tsfinRaw?.actual_schedule_json) ? tsfinRaw.actual_schedule_json : [];
+    const plannedScheduleFromContractWeek = Array.isArray(contractWeek?.planned_schedule_json) ? contractWeek.planned_schedule_json : [];
+    const tsfinTotalHours = Number(tsfinRaw?.total_hours || 0);
+    const invoiceSegments = Array.isArray(tsfinRaw?.invoice_breakdown_json?.segments) ? tsfinRaw.invoice_breakdown_json.segments : [];
+    const keepEmptyAdditionalManualSchedule = !!(
+      manualAdditionalAdjustment &&
+      tsfinTotalHours === 0 &&
+      actualScheduleFromTimesheet.length === 0 &&
+      actualScheduleFromTsfin.length === 0 &&
+      plannedScheduleFromContractWeek.length === 0 &&
+      invoiceSegments.length === 0
+    );
+    const canonicalActualSchedule = keepEmptyAdditionalManualSchedule ? [] : (actualScheduleFromTimesheet.length ? actualScheduleFromTimesheet : actualScheduleFromTsfin);
+    const canonicalPlannedSchedule = keepEmptyAdditionalManualSchedule ? [] : plannedScheduleFromContractWeek;
+
+    const effectiveRouteDisplay = (() => {
+      if (manualAdditionalAdjustment) {
+        if (effectiveRouteType === 'WEEKLY_NHSP_ADJUSTMENT') return 'NHSP Adjustment';
+        if (effectiveRouteType === 'WEEKLY_HEALTHROSTER_ADJUSTMENT') return 'HealthRoster Adjustment';
+        if (effectiveRouteType === 'WEEKLY_MANUAL_ADJUSTMENT') return 'Manual Adjustment';
+      }
+      return effective.route_display || null;
+    })();
+
+    effective.route_type = effectiveRouteType;
+    effective.route_display = effectiveRouteDisplay;
+    effective.route_family = routeFamily;
+    effective.route_subfamily = underlyingChannelFamily;
+    effective.underlying_channel_family = underlyingChannelFamily;
+    effective.is_import_authoritative = isImportAuthoritative;
+    effective.is_adjustment = isAdjustment;
+    effective.additional_seq = contractWeekAdditionalSeq;
+    effective.actual_schedule_json = canonicalActualSchedule;
+    effective.planned_schedule_json = canonicalPlannedSchedule;
+    effective.total_hours = keepEmptyAdditionalManualSchedule ? 0 : tsfinTotalHours;
+    effective.suppress_standard_schedule_fallback = keepEmptyAdditionalManualSchedule;
+    effective.keep_additional_manual_adjustment_schedule_empty = keepEmptyAdditionalManualSchedule;
+    effective.__suppressStandardScheduleFallback = keepEmptyAdditionalManualSchedule;
+    effective.__keepAdditionalManualAdjustmentScheduleEmpty = keepEmptyAdditionalManualSchedule;
+
+    const generatedPdfKey = ts.generated_pdf_at_utc ? `docs-pdf/timesheets/ts_${currentTimesheetId}.pdf` : null;
+    const manualPdfKey = (ts.manual_pdf_r2_key && String(ts.manual_pdf_r2_key).trim()) ? String(ts.manual_pdf_r2_key).trim() : null;
+    const nurseSigKey = (ts.r2_nurse_key && String(ts.r2_nurse_key).trim()) ? String(ts.r2_nurse_key).trim() : null;
+    const authSigKey = (ts.r2_auth_key && String(ts.r2_auth_key).trim()) ? String(ts.r2_auth_key).trim() : null;
+
+    let primaryLeftPaneMode = 'NONE';
+    let primaryArtifactStorageKey = null;
+    let hasPrimaryArtifact = false;
+    let electronicArtifactExists = false;
+
+    if (isImportAuthoritative) {
+      primaryLeftPaneMode = 'IMPORT_SOURCE_ONLY';
+      primaryArtifactStorageKey = null;
+      hasPrimaryArtifact = false;
+      electronicArtifactExists = false;
+    } else if (routeFamily === 'QR') {
+      primaryLeftPaneMode = 'TIMESHEET_ARTIFACT';
+      primaryArtifactStorageKey = manualPdfKey || generatedPdfKey || null;
+      hasPrimaryArtifact = !!(primaryArtifactStorageKey || hasQrGenerated || hasQrToken || hasQrScanned || hasQrLastSentHash);
+      electronicArtifactExists = false;
+    } else if (routeFamily === 'ELECTRONIC') {
+      if (generatedPdfKey) {
+        primaryLeftPaneMode = 'TIMESHEET_ARTIFACT';
+        primaryArtifactStorageKey = generatedPdfKey;
+        hasPrimaryArtifact = true;
+        electronicArtifactExists = true;
+      } else if (manualPdfKey) {
+        primaryLeftPaneMode = 'TIMESHEET_ARTIFACT';
+        primaryArtifactStorageKey = manualPdfKey;
+        hasPrimaryArtifact = true;
+        electronicArtifactExists = true;
+      } else if (nurseSigKey || authSigKey) {
+        primaryLeftPaneMode = 'SIGNATURES_ONLY';
+        primaryArtifactStorageKey = null;
+        hasPrimaryArtifact = false;
+        electronicArtifactExists = false;
+      }
+    } else if (routeFamily === 'MANUAL_NON_QR') {
+      primaryLeftPaneMode = manualPdfKey ? 'TIMESHEET_ARTIFACT' : 'NONE';
+      primaryArtifactStorageKey = manualPdfKey || null;
+      hasPrimaryArtifact = !!manualPdfKey;
+      electronicArtifactExists = false;
+    }
+
+    const importIdSet = new Set();
+    const importSourceSystems = new Set();
+    const externalRowKeySet = new Set();
+    const hrRequestIdSet = new Set();
+    const workDateSet = new Set();
+    const shiftIdSet = new Set();
+    const refNumSet = new Set();
+
+    for (const sh of shifts) {
+      if (!sh || typeof sh !== 'object') continue;
+      const latestImportId = asUuidString(sh.latest_import_id);
+      const srcSystem = String(sh.source_system || '').trim();
+      const extKey = String(sh.external_row_key || '').trim();
+      const reqId = String(sh.hr_request_id || '').trim();
+      const workDate = String(sh.work_date || '').trim();
+      const shiftId = asUuidString(sh.id);
+      const refNum = String(sh.ref_num || '').trim();
+
+      if (latestImportId) importIdSet.add(latestImportId);
+      if (srcSystem) importSourceSystems.add(srcSystem);
+      if (extKey) externalRowKeySet.add(extKey);
+      if (reqId) hrRequestIdSet.add(reqId);
+      if (workDate) workDateSet.add(workDate);
+      if (shiftId) shiftIdSet.add(shiftId);
+      if (refNum) refNumSet.add(refNum);
+    }
+
+    for (const vr of validations) {
+      if (!vr || typeof vr !== 'object') continue;
+      const lastSource = asUuidString(vr.last_source);
+      if (lastSource) importIdSet.add(lastSource);
+    }
+
+    try {
+      const extRows = tsfinRaw?.external_source_rows_json;
+      if (extRows && typeof extRows === 'object') {
+        const walk = (v) => {
+          if (Array.isArray(v)) {
+            for (const it of v) walk(it);
+            return;
+          }
+          if (!v || typeof v !== 'object') return;
+
+          const iid = asUuidString(v.import_id || v.latest_import_id || v.source_import_id || null);
+          const extKey = String(v.external_row_key || '').trim();
+          const reqId = String(v.hr_request_id || v.request_id || '').trim();
+          const workDate = String(v.work_date || v.date_local || '').trim();
+          const src = String(v.source_system || '').trim();
+          const refNum = String(v.ref_num || '').trim();
+
+          if (iid) importIdSet.add(iid);
+          if (extKey) externalRowKeySet.add(extKey);
+          if (reqId) hrRequestIdSet.add(reqId);
+          if (workDate) workDateSet.add(workDate);
+          if (src) importSourceSystems.add(src);
+          if (refNum) refNumSet.add(refNum);
+
+          for (const val of Object.values(v)) walk(val);
+        };
+        walk(extRows);
+      }
+    } catch {}
+
+    try {
+      const sched = Array.isArray(ts.actual_schedule_json) ? ts.actual_schedule_json : [];
+      for (const seg of sched) {
+        if (!seg || typeof seg !== 'object') continue;
+        const iid = asUuidString(seg.import_id);
+        const extKey = String(seg.external_row_key || '').trim();
+        const reqId = String(seg.hr_request_id || seg.request_id || '').trim();
+        const workDate = String(seg.date || '').trim();
+        const refNum = String(seg.ref_num || '').trim();
+        if (iid) importIdSet.add(iid);
+        if (extKey) externalRowKeySet.add(extKey);
+        if (reqId) hrRequestIdSet.add(reqId);
+        if (workDate) workDateSet.add(workDate);
+        if (refNum) refNumSet.add(refNum);
+      }
+    } catch {}
+
+    const importedDetailRefs = {
+      import_ids: Array.from(importIdSet),
+      source_systems: Array.from(importSourceSystems),
+      shift_ids: Array.from(shiftIdSet),
+      external_row_keys: Array.from(externalRowKeySet),
+      hr_request_ids: Array.from(hrRequestIdSet),
+      work_dates: Array.from(workDateSet),
+      ref_nums: Array.from(refNumSet)
+    };
+
+    let policyOut = (policy && typeof policy === 'object') ? { ...policy } : {};
+    if (!Object.prototype.hasOwnProperty.call(policyOut, 'weekly_mode')) {
+      const policyRouteTypeUpper = String(effectiveRouteType || routeTypeUpper || '').toUpperCase();
+      if (policyRouteTypeUpper === 'WEEKLY_NHSP' || policyRouteTypeUpper === 'WEEKLY_NHSP_ADJUSTMENT' || clientIsNhsp) {
+        policyOut.weekly_mode = 'NHSP';
+      } else if (policyRouteTypeUpper === 'WEEKLY_HEALTHROSTER' || policyRouteTypeUpper === 'WEEKLY_HEALTHROSTER_ADJUSTMENT') {
+        policyOut.weekly_mode = 'HEALTHROSTER';
+      } else if (String(ts.sheet_scope || '').toUpperCase() === 'WEEKLY') {
+        policyOut.weekly_mode = 'NONE';
+      } else {
+        policyOut.weekly_mode = null;
+      }
+    }
+    if (!Object.prototype.hasOwnProperty.call(policyOut, 'hr_weekly_behaviour')) {
+      const policyRouteTypeUpper = String(effectiveRouteType || routeTypeUpper || '').toUpperCase();
+      if (policyRouteTypeUpper === 'WEEKLY_HEALTHROSTER' || policyRouteTypeUpper === 'WEEKLY_HEALTHROSTER_ADJUSTMENT') {
+        policyOut.hr_weekly_behaviour = clientNoTimesheetRequired ? 'CREATE' : 'VERIFY';
+      } else {
+        policyOut.hr_weekly_behaviour = '';
+      }
+    }
+
+    const qrIsCancelled = (qrStatus === 'CANCELLED');
+    const qrIsExpired   = (qrStatus === 'EXPIRED');
+    const hasIssuedProof = (hasQrToken && hasQrGenerated) || hasQrLastSentHash;
+
+    const isManualOnly =
+      (subMode === 'MANUAL') &&
+      !qrStatus &&
+      !hasQrToken &&
+      !hasQrGenerated &&
+      !hasQrScanned;
+
+    let qrScenario = null;
+
+    if (qrStatus === 'CANCELLED') {
+      qrScenario = 'CANCELLED';
+    } else if (qrStatus === 'EXPIRED') {
+      qrScenario = 'EXPIRED';
+    } else if (qrStatus === 'PENDING') {
+      if (!hasIssuedProof && !hasQrScanned) qrScenario = 'SCENARIO_1';
+      else qrScenario = 'SCENARIO_2';
+    } else if (qrStatus === 'USED') {
+      qrScenario = 'SCENARIO_3';
+    } else {
+      qrScenario = null;
+    }
+
+    // Locks / payment-action flags. Payment state is authoritative when present.
+    const isLockedByInvoice = !!(tsfinRaw?.locked_by_invoice_id);
+    const payStateAvailable = !!(payStateOut && typeof payStateOut === 'object' && !Array.isArray(payStateOut) && payStateOut.ok === true);
+    const payStatePaidStatus = payStateAvailable ? String(payStateOut?.paid_status || '').trim().toUpperCase() : '';
+    const payStateProcessingAny = !!(payStateAvailable && payStateOut.processing_any === true);
+    const payStateIsAdvanced = !!(payStateAvailable && (payStateOut.is_advanced === true || payStateOut.advanced_any === true || payStatePaidStatus === 'ADVANCED'));
+    const payStateCanUnadvance = !!(payStateAvailable && payStateOut.can_unadvance === true);
+    const payStateIsSnoozed = !!(payStateAvailable && payStateOut.is_snoozed === true);
+    const payStateAdjusted = (payStateAvailable && payStateOut.adjusted && typeof payStateOut.adjusted === 'object' && !Array.isArray(payStateOut.adjusted))
+      ? payStateOut.adjusted
+      : null;
+    const payStateIsPaid = !!(payStateAvailable && (payStatePaidStatus === 'PAID' || payStatePaidStatus === 'PARTIALLY_PAID'));
+    const isPaid = payStateIsPaid;
+    const isHardLocked = isLockedByInvoice || (payStateAvailable ? payStateIsPaid : !!(tsfinRaw?.paid_at_utc));
+    const payStateOutstandingPresent = !!(
+      payStateAdjusted &&
+      Object.prototype.hasOwnProperty.call(payStateAdjusted, 'outstanding_ex_vat') &&
+      payStateAdjusted.outstanding_ex_vat != null &&
+      String(payStateAdjusted.outstanding_ex_vat).trim() !== ''
+    );
+    const payStateOutstandingExVat = payStateOutstandingPresent
+      ? Number(payStateAdjusted.outstanding_ex_vat || 0)
+      : null;
+    const payStateHasPositiveOutstanding = !!(
+      payStateOutstandingPresent &&
+      Number.isFinite(payStateOutstandingExVat) &&
+      payStateOutstandingExVat > 0
+    );
+    const payStateReservedPresent = !!(
+      payStateAdjusted &&
+      Object.prototype.hasOwnProperty.call(payStateAdjusted, 'reserved_ex_vat') &&
+      payStateAdjusted.reserved_ex_vat != null &&
+      String(payStateAdjusted.reserved_ex_vat).trim() !== ''
+    );
+    const payStateReservedExVat = payStateReservedPresent
+      ? Number(payStateAdjusted.reserved_ex_vat || 0)
+      : null;
+    const payStateHasActiveReservation = !!(
+      payStateReservedPresent &&
+      Number.isFinite(payStateReservedExVat) &&
+      payStateReservedExVat > 0
+    );
+    const payStateNetDeltaPresent = !!(
+      payStateAdjusted &&
+      Object.prototype.hasOwnProperty.call(payStateAdjusted, 'net_delta_ex_vat') &&
+      payStateAdjusted.net_delta_ex_vat != null &&
+      String(payStateAdjusted.net_delta_ex_vat).trim() !== ''
+    );
+    const payStateNetDeltaExVat = payStateNetDeltaPresent
+      ? Number(payStateAdjusted.net_delta_ex_vat || 0)
+      : null;
+    const payStateIsOverpaid = !!(
+      payStateNetDeltaPresent &&
+      Number.isFinite(payStateNetDeltaExVat) &&
+      payStateNetDeltaExVat < 0
+    );
+    const payStateSuppressesReadyToPay = !!(
+      payStateAvailable &&
+      (
+        payStatePaidStatus === 'PAID' ||
+        payStatePaidStatus === 'PARTIALLY_PAID' ||
+        payStatePaidStatus === 'PROCESSING' ||
+        payStateProcessingAny ||
+        payStateIsAdvanced ||
+        payStateHasActiveReservation ||
+        payStateIsOverpaid
+      )
+    );
+
+    if (payStateSuppressesReadyToPay) {
+      effective.ready_to_pay = false;
+    }
+
+    const canAdvancePayment =
+      (!isLockedByInvoice) &&
+      (!payStateIsAdvanced) &&
+      (!payStateProcessingAny) &&
+      (!payStateHasActiveReservation) &&
+      (payStatePaidStatus !== 'PROCESSING') &&
+      payStateHasPositiveOutstanding;
+
+    const canUnadvancePayment =
+      (!isHardLocked) &&
+      payStateIsAdvanced &&
+      payStateCanUnadvance &&
+      (payStatePaidStatus !== 'PAID') &&
+      (payStatePaidStatus !== 'PARTIALLY_PAID') &&
+      (!payStateProcessingAny);
+
+    const advancePaymentDisabledReason = (() => {
+      if (isLockedByInvoice) return 'INVOICE_LOCKED';
+      if (payStateIsAdvanced) return 'ALREADY_ADVANCED';
+      if (payStateProcessingAny || payStateHasActiveReservation || payStatePaidStatus === 'PROCESSING') return 'PROCESSING';
+      if (!payStateHasPositiveOutstanding) {
+        if (payStatePaidStatus === 'PAID') return 'PAID_NO_OUTSTANDING';
+        if (payStatePaidStatus === 'PARTIALLY_PAID') return 'PARTIALLY_PAID_NO_OUTSTANDING';
+        return 'NO_OUTSTANDING_PAY';
+      }
+      return null;
+    })();
+
+    const canSnoozePayment =
+      payStateAvailable &&
+      (!isHardLocked) &&
+      (!payStateIsSnoozed) &&
+      (!payStateProcessingAny) &&
+      (payStatePaidStatus !== 'PAID') &&
+      (payStatePaidStatus !== 'PARTIALLY_PAID');
+
+    const canClearPaymentSnooze =
+      payStateAvailable &&
+      (!isHardLocked) &&
+      payStateIsSnoozed;
+
+    // Action availability flags (history by booking_id)
+    let canRestoreQrPending = false;
+    let canRestoreQrSigned = false;
+    let canRevertToElectronic = false;
+
+    if (bookingId) {
+      try {
+        const { rows: pendingRows } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/timesheets` +
+            `?booking_id=eq.${enc(bookingId)}` +
+            `&is_current=eq.false` +
+            `&qr_status=eq.PENDING` +
+            `&qr_generated_at=is.not.null` +
+            `&qr_scanned_at=is.null` +
+            `&qr_token=is.not.null` +
+            `&select=timesheet_id,version` +
+            `&order=version.desc` +
+            `&limit=1`
+        );
+        canRestoreQrPending = !!(pendingRows && pendingRows.length);
+      } catch {}
+
+      try {
+        const { rows: signedRows } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/timesheets` +
+            `?booking_id=eq.${enc(bookingId)}` +
+            `&is_current=eq.false` +
+            `&qr_status=eq.USED` +
+            `&qr_scanned_at=is.not.null` +
+            `&manual_pdf_r2_key=is.not.null` +
+            `&select=timesheet_id,version` +
+            `&order=version.desc` +
+            `&limit=1`
+        );
+        canRestoreQrSigned = !!(signedRows && signedRows.length);
+      } catch {}
+
+      try {
+        const { rows: elecRows } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/timesheets` +
+            `?booking_id=eq.${enc(bookingId)}` +
+            `&is_current=eq.false` +
+            `&submission_mode=eq.ELECTRONIC` +
+            `&select=timesheet_id,version` +
+            `&order=version.desc` +
+            `&limit=1`
+        );
+        canRevertToElectronic = !!(elecRows && elecRows.length);
+      } catch {}
+    }
+
+    // ✅ adjustment sheets cannot be converted/restored to QR/Electronic
+    if (isAdjustment) {
+      canRestoreQrPending = false;
+      canRestoreQrSigned = false;
+      canRevertToElectronic = false;
+    }
+
+    const canAllowQrAgain = (!isHardLocked) && isManualOnly && !isAdjustment;
+    const canAllowElectronicAgain = (!isHardLocked) && isManualOnly && supportsElectronicSubmission && !isAdjustment;
+
+    // Shape TS + TSFIN for FE
+    const timesheetOut = {
+      ...ts,
+      actual_schedule_json: canonicalActualSchedule,
+      is_adjustment: isAdjustment,
+      day_references_json: Object.prototype.hasOwnProperty.call(ts, 'day_references_json')
+        ? ts.day_references_json
+        : null
+    };
+
+    const tsfinOut = tsfinRaw
+      ? {
+          ...tsfinRaw,
+          hr_crosscheck_status: Object.prototype.hasOwnProperty.call(tsfinRaw, 'hr_crosscheck_status')
+            ? tsfinRaw.hr_crosscheck_status
+            : null,
+          hr_crosscheck_issues: Object.prototype.hasOwnProperty.call(tsfinRaw, 'hr_crosscheck_issues')
+            ? tsfinRaw.hr_crosscheck_issues
+            : null,
+          external_source_rows_json: Object.prototype.hasOwnProperty.call(tsfinRaw, 'external_source_rows_json')
+            ? tsfinRaw.external_source_rows_json
+            : null
+        }
+      : null;
+
+    const invoiceBreakdown =
+      (tsfinOut && tsfinOut.invoice_breakdown_json && typeof tsfinOut.invoice_breakdown_json === 'object')
+        ? tsfinOut.invoice_breakdown_json
+        : null;
+
+    const isSegmentsMode =
+      !!(invoiceBreakdown && String(invoiceBreakdown.mode || '').toUpperCase() === 'SEGMENTS');
+
+    const segments =
+      (isSegmentsMode && invoiceBreakdown && Array.isArray(invoiceBreakdown.segments))
+        ? invoiceBreakdown.segments
+        : [];
+
+    // ✅ invoice_no_by_invoice_id (segment-aware)
+    const invoice_no_by_invoice_id = (() => Object.create(null))();
+    try {
+      const isUuid = (s) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(s || '').trim());
+
+      const invIdSet = new Set();
+
+      const wholeInvId = tsfinOut?.locked_by_invoice_id != null ? String(tsfinOut.locked_by_invoice_id).trim() : '';
+      if (wholeInvId && isUuid(wholeInvId)) invIdSet.add(wholeInvId);
+
+      for (const seg of (Array.isArray(segments) ? segments : [])) {
+        if (!seg || typeof seg !== 'object') continue;
+        const segInvId = seg.invoice_locked_invoice_id != null ? String(seg.invoice_locked_invoice_id).trim() : '';
+        if (segInvId && isUuid(segInvId)) invIdSet.add(segInvId);
+      }
+
+      const allIds = Array.from(invIdSet);
+      if (allIds.length) {
+        const chunkSize = 200;
+
+        let lookedUp = false;
+        try {
+          for (let i = 0; i < allIds.length; i += chunkSize) {
+            const chunk = allIds.slice(i, i + chunkSize);
+            const { rows: invRows } = await sbFetch(
+              env,
+              `${env.SUPABASE_URL}/rest/v1/invoices` +
+                `?select=id,invoice_no` +
+                `&id=in.(${chunk.map(encodeURIComponent).join(',')})`
+            );
+
+            for (const r of (invRows || [])) {
+              const id = r?.id != null ? String(r.id).trim() : '';
+              const no = (r?.invoice_no != null) ? String(r.invoice_no).trim() : '';
+              if (id && no) invoice_no_by_invoice_id[id] = no;
+            }
+          }
+          lookedUp = true;
+        } catch {
+          lookedUp = false;
+        }
+
+        if (!lookedUp) {
+          try {
+            for (let i = 0; i < allIds.length; i += chunkSize) {
+              const chunk = allIds.slice(i, i + chunkSize);
+              const { rows: invRows2 } = await sbFetch(
+                env,
+                `${env.SUPABASE_URL}/rest/v1/v_invoices_summary` +
+                  `?select=id,invoice_no` +
+                  `&id=in.(${chunk.map(encodeURIComponent).join(',')})`
+              );
+
+              for (const r of (invRows2 || [])) {
+                const id = r?.id != null ? String(r.id).trim() : '';
+                const no = (r?.invoice_no != null) ? String(r.invoice_no).trim() : '';
+                if (id && no) invoice_no_by_invoice_id[id] = no;
+              }
+            }
+          } catch {}
+        }
+      }
+    } catch {}
+
+    const contractWeekOut = contractWeek
+      ? {
+          ...contractWeek,
+          is_adjustment: isAdjustment || contractWeek?.is_adjustment === true,
+          additional_seq: contractWeekAdditionalSeq,
+          planned_schedule_json: canonicalPlannedSchedule
+        }
+      : null;
+
+    const action_flags = {
+      can_restore_qr_pending: (!isHardLocked) && canRestoreQrPending,
+      can_restore_qr_signed: (!isHardLocked) && canRestoreQrSigned,
+      can_revert_to_electronic: (!isHardLocked) && canRevertToElectronic,
+
+      can_allow_qr_again: canAllowQrAgain,
+      can_allow_electronic_again: canAllowElectronicAgain,
+
+      supports_electronic_submission: supportsElectronicSubmission,
+      is_manual_only: isManualOnly,
+      qr_scenario: qrScenario,
+
+      is_adjustment: isAdjustment,
+
+      locked_by_invoice: isLockedByInvoice,
+      paid: isPaid,
+
+      can_advance_payment: canAdvancePayment,
+      can_unadvance_payment: canUnadvancePayment,
+      advance_payment_disabled_reason: advancePaymentDisabledReason,
+      can_snooze_payment: canSnoozePayment,
+      can_clear_payment_snooze: canClearPaymentSnooze,
+
+      is_unprocessed: fallbackSummaryStage === 'UNPROCESSED',
+      route_type: effectiveRouteType,
+      route_family: routeFamily,
+      route_subfamily: underlyingChannelFamily,
+      underlying_channel_family: underlyingChannelFamily,
+      is_import_authoritative: isImportAuthoritative,
+      additional_seq: contractWeekAdditionalSeq,
+      keep_additional_manual_adjustment_schedule_empty: keepEmptyAdditionalManualSchedule,
+      suppress_standard_schedule_fallback: keepEmptyAdditionalManualSchedule,
+      compare_block_required: compareBlockRequired,
+      has_primary_artifact: hasPrimaryArtifact,
+      primary_left_pane_mode: primaryLeftPaneMode,
+      primary_artifact_storage_key: primaryArtifactStorageKey,
+      electronic_artifact_exists: electronicArtifactExists,
+      healthroster_compare_required: compareBlockRequired
+    };
+
+    const bulk_authorise = {
+      route_family: routeFamily,
+      is_import_authoritative: isImportAuthoritative,
+      underlying_channel_family: underlyingChannelFamily,
+      compare_block_required: compareBlockRequired,
+      primary_left_pane_mode: primaryLeftPaneMode,
+      has_primary_artifact: hasPrimaryArtifact,
+      primary_artifact_storage_key: primaryArtifactStorageKey,
+      electronic_artifact_exists: electronicArtifactExists,
+      imported_detail_refs: importedDetailRefs
+    };
+
+    const artifact_hints = {
+      route_type: effectiveRouteType,
+      route_family: routeFamily,
+      route_subfamily: underlyingChannelFamily,
+      underlying_channel_family: underlyingChannelFamily,
+      is_import_authoritative: isImportAuthoritative,
+      additional_seq: contractWeekAdditionalSeq,
+      keep_additional_manual_adjustment_schedule_empty: keepEmptyAdditionalManualSchedule,
+      suppress_standard_schedule_fallback: keepEmptyAdditionalManualSchedule,
+      primary_left_pane_mode: primaryLeftPaneMode,
+      has_primary_artifact: hasPrimaryArtifact,
+      primary_artifact_storage_key: primaryArtifactStorageKey,
+      generated_pdf_storage_key: generatedPdfKey,
+      manual_pdf_storage_key: manualPdfKey,
+      nurse_signature_key: nurseSigKey,
+      authoriser_signature_key: authSigKey,
+      imported_detail_refs: importedDetailRefs
+    };
+
+    const healthroster_compare = {
+      required: compareBlockRequired,
+      underlying_channel_family: underlyingChannelFamily,
+      imported_detail_refs: importedDetailRefs
+    };
+
+    wlog('finish', {
+      booking_id: bookingId,
+      requested_timesheet_id: resolved.requested_timesheet_id,
+      current_timesheet_id: resolved.current_timesheet_id,
+      current_version: resolved.current_version,
+      was_stale: resolved.was_stale,
+      contract_week_id: contractWeekId,
+      tsfin_found: !!tsfinOut,
+      is_segments_mode: isSegmentsMode,
+      segments_count: Array.isArray(segments) ? segments.length : 0,
+      validations_count: Array.isArray(validations) ? validations.length : 0,
+      shifts_count: Array.isArray(shifts) ? shifts.length : 0,
+      route_type: effective.route_type || null,
+      route_display: effective.route_display || null,
+      route_family: routeFamily,
+      compare_block_required: compareBlockRequired
+    });
+
+    return withCORS(env, req, ok({
+      booking_id: bookingId,
+      requested_timesheet_id: resolved.requested_timesheet_id,
+      current_timesheet_id: resolved.current_timesheet_id,
+      current_version: resolved.current_version,
+      was_stale: resolved.was_stale,
+
+      timesheet: timesheetOut,
+      tsfin: tsfinOut,
+
+      invoiceBreakdown,
+      isSegmentsMode,
+      segments,
+
+      invoice_no_by_invoice_id,
+
+      validations,
+      shifts,
+
+      effective,
+
+      // backwards-compatible echoes
+      ready_to_pay: payStateSuppressesReadyToPay ? false : !!effective.ready_to_pay,
+      summary_stage: effective.summary_stage || null,
+      route_type: effective.route_type || null,
+      route_family: routeFamily,
+      route_subfamily: underlyingChannelFamily,
+      underlying_channel_family: underlyingChannelFamily,
+      is_import_authoritative: isImportAuthoritative,
+      is_adjustment: isAdjustment,
+      additional_seq: contractWeekAdditionalSeq,
+      actual_schedule_json: canonicalActualSchedule,
+      planned_schedule_json: canonicalPlannedSchedule,
+      total_hours: keepEmptyAdditionalManualSchedule ? 0 : tsfinTotalHours,
+      suppress_standard_schedule_fallback: keepEmptyAdditionalManualSchedule,
+      keep_additional_manual_adjustment_schedule_empty: keepEmptyAdditionalManualSchedule,
+      __suppressStandardScheduleFallback: keepEmptyAdditionalManualSchedule,
+      __keepAdditionalManualAdjustmentScheduleEmpty: keepEmptyAdditionalManualSchedule,
+
+      // ✅ NEW: backend-derived display label (single UI field)
+      route_display: effective.route_display || null,
+
+      issue_codes: Array.isArray(effective.issue_codes) ? effective.issue_codes : [],
+
+      sheet_scope: ts.sheet_scope || null,
+      qr_status: ts.qr_status || null,
+      qr_generated_at: ts.qr_generated_at || null,
+      qr_scanned_at: ts.qr_scanned_at || null,
+      manual_pdf_r2_key: ts.manual_pdf_r2_key || null,
+
+      contract_week_id: contractWeekId,
+      contract_week: contractWeekOut,
+
+      policy: policyOut,
+      evidence: [],
+
+      pay_state: payStateOut,
+      segment_snoozes: segmentSnoozesOut,
+      is_advanced: !!(payStateOut && payStateOut.is_advanced === true),
+      can_unadvance: !!(payStateOut && payStateOut.can_unadvance === true),
+      advanced_consumed_by_batch_id:
+        (payStateOut && payStateOut.advanced_consumed_by_batch_id != null && String(payStateOut.advanced_consumed_by_batch_id).trim())
+          ? String(payStateOut.advanced_consumed_by_batch_id).trim()
+          : null,
+      is_snoozed: !!(payStateOut && payStateOut.is_snoozed === true),
+      snooze_until_date:
+        (payStateOut && payStateOut.snooze_until_date != null && String(payStateOut.snooze_until_date).trim())
+          ? String(payStateOut.snooze_until_date).trim()
+          : null,
+      snooze_is_indefinite: !!(payStateOut && payStateOut.snooze_is_indefinite === true),
+      snooze_note:
+        (payStateOut && payStateOut.snooze_note != null && String(payStateOut.snooze_note).trim())
+          ? String(payStateOut.snooze_note).trim()
+          : null,
+
+      action_flags,
+      bulk_authorise,
+      artifact_hints,
+      healthroster_compare
+    }));
+  } catch (e) {
+    console.error('[TIMESHEET_DETAILS] error', {
+      timesheet_id: timesheetId,
+      err: e?.message || String(e)
+    });
+    wlog('error', {
+      err: e?.message || String(e)
+    });
+    return withCORS(env, req, serverError('Failed to load timesheet details'));
+  }
+}
+
+async function collectRailUpdatesForBankingPayOperation(env, options = {}) {
+  const trimText = (value) => String(value == null ? '' : value).trim();
+  const upperText = (value) => trimText(value).toUpperCase();
+  const isPlainObject = (value) => !!value && typeof value === 'object' && !Array.isArray(value);
+  const toArray = (value) => Array.isArray(value) ? value : [];
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+  const clampInteger = (value, fallback, min, max) => {
+    const n = Number(value);
+    const resolved = Number.isFinite(n) ? Math.trunc(n) : fallback;
+    return Math.max(min, Math.min(max, resolved));
+  };
+
+  const firstText = function () {
+    for (let i = 0; i < arguments.length; i += 1) {
+      const text = trimText(arguments[i]);
+      if (text) return text;
+    }
+    return '';
+  };
+
+  const firstUuid = function () {
+    for (let i = 0; i < arguments.length; i += 1) {
+      const text = trimText(arguments[i]);
+      if (uuidRe.test(text)) return text;
+    }
+    return '';
+  };
+
+  const numberOrNull = (value) => {
+    if (value === null || value === undefined || value === '') return null;
+    const n = Number(value);
+    return Number.isFinite(n) ? n : null;
+  };
+
+  const compactError = (error, maxLength = 500) => {
+    const text = trimText(error && error.message ? error.message : error || '');
+    return text ? text.slice(0, maxLength) : 'UNKNOWN_ERROR';
+  };
+
+  const unwrapRpcPayload = (rpcRes, key) => {
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(payload) && payload.length === 1 && isPlainObject(payload[0])) payload = payload[0];
+      if (payload && typeof payload === 'object' && key && Object.prototype.hasOwnProperty.call(payload, key)) payload = payload[key];
+      if (Array.isArray(payload) && payload.length === 1 && isPlainObject(payload[0])) payload = payload[0];
+    } catch {}
+    return isPlainObject(payload) ? payload : {};
+  };
+
+  const enc = encodeURIComponent;
+  const source = isPlainObject(options) ? options : {};
+  const operationId = firstUuid(source.operation_id, source.operationId, source.id);
+  const payBatchId = firstUuid(source.pay_batch_id, source.payBatchId, source.batch_id, source.batchId);
+  const actorUserId = firstUuid(source.actor_user_id, source.actorUserId, source.user_id, source.userId);
+  const limit = clampInteger(source.limit ?? source.rail_update_limit ?? source.railUpdateLimit, 100, 1, 100);
+  const nowIso = new Date().toISOString();
+
+  const baseResult = (patch = {}) => ({
+    ok: patch.ok !== false,
+    collector_available: true,
+    collector: 'collectRailUpdatesForBankingPayOperation',
+    collection_mode: 'PROVIDER_POLL_TO_RAIL_UPDATE_ROWS',
+    operation_id: operationId || null,
+    pay_batch_id: payBatchId || null,
+    actor_user_id: actorUserId || null,
+    limit,
+    chunk_id: null,
+    updates: [],
+    update_count: 0,
+    terminal_update_count: 0,
+    pending_update_count: 0,
+    failed_update_count: 0,
+    unknown_update_count: 0,
+    polled_count: 0,
+    candidate_count: 0,
+    skipped_count: 0,
+    has_more: false,
+    warnings: [],
+    errors: [],
+    server_utc: nowIso,
+    ...patch
+  });
+
+  if (!env) {
+    return baseResult({ ok: false, error_code: 'RAIL_UPDATE_COLLECTOR_ENV_REQUIRED', errors: ['env is required'] });
+  }
+  if (!operationId) {
+    return baseResult({ ok: false, error_code: 'RAIL_UPDATE_COLLECTOR_OPERATION_ID_REQUIRED', errors: ['operation_id is required'] });
+  }
+  if (!payBatchId) {
+    return baseResult({ ok: false, error_code: 'RAIL_UPDATE_COLLECTOR_PAY_BATCH_ID_REQUIRED', errors: ['pay_batch_id is required'] });
+  }
+  if (!actorUserId) {
+    return baseResult({ ok: false, error_code: 'RAIL_UPDATE_COLLECTOR_ACTOR_USER_ID_REQUIRED', errors: ['actor_user_id is required'] });
+  }
+  if (typeof sbFetch !== 'function' || !env.SUPABASE_URL) {
+    return baseResult({ ok: false, error_code: 'RAIL_UPDATE_COLLECTOR_SBFETCH_UNAVAILABLE', errors: ['sbFetch and SUPABASE_URL are required'] });
+  }
+
+  const loadRestRows = async (pathWithQuery, { pageSize = 1000, maxPages = 25 } = {}) => {
+    const rowsOut = [];
+    const safePageSize = clampInteger(pageSize, 1000, 1, 1000);
+    const safeMaxPages = clampInteger(maxPages, 25, 1, 250);
+    const joiner = String(pathWithQuery || '').includes('?') ? '&' : '?';
+    for (let pageIndex = 0; pageIndex < safeMaxPages; pageIndex += 1) {
+      const offset = pageIndex * safePageSize;
+      const res = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}${pathWithQuery}${joiner}limit=${enc(String(safePageSize))}&offset=${enc(String(offset))}`,
+        false
+      );
+      const pageRows = res && Array.isArray(res.rows) ? res.rows : [];
+      rowsOut.push(...pageRows);
+      if (pageRows.length < safePageSize) break;
+    }
+    return rowsOut;
+  };
+
+  let operationRow = null;
+  try {
+    const opRes = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/banking_pay_operations?id=eq.${enc(operationId)}&select=id,operation_type,status,phase,runner_state,pay_batch_id,input_json,config_json,progress_json&limit=1`,
+      false
+    );
+    operationRow = opRes && Array.isArray(opRes.rows) && isPlainObject(opRes.rows[0]) ? opRes.rows[0] : null;
+  } catch (error) {
+    return baseResult({ ok: false, error_code: 'RAIL_UPDATE_COLLECTOR_OPERATION_READ_FAILED', errors: [compactError(error)] });
+  }
+
+  if (!operationRow || !operationRow.id) {
+    return baseResult({ ok: false, error_code: 'RAIL_UPDATE_COLLECTOR_OPERATION_NOT_FOUND', errors: ['Banking Pay operation was not found'] });
+  }
+
+  if (trimText(operationRow.pay_batch_id) && trimText(operationRow.pay_batch_id) !== payBatchId) {
+    return baseResult({
+      ok: false,
+      error_code: 'RAIL_UPDATE_COLLECTOR_OPERATION_BATCH_MISMATCH',
+      operation_pay_batch_id: trimText(operationRow.pay_batch_id),
+      errors: ['Operation pay_batch_id does not match requested pay_batch_id']
+    });
+  }
+
+  const operationType = upperText(operationRow.operation_type);
+  if (!['PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS'].includes(operationType)) {
+    return baseResult({
+      ok: true,
+      updates: [],
+      update_count: 0,
+      skipped: true,
+      skip_reason: 'OPERATION_TYPE_NOT_RAIL_UPDATE_COLLECTABLE',
+      operation_type: operationType || null
+    });
+  }
+
+  const inputJson = isPlainObject(operationRow.input_json) ? operationRow.input_json : {};
+  const progressJson = isPlainObject(operationRow.progress_json) ? operationRow.progress_json : {};
+
+  let summary = {};
+  if (typeof sbRpc === 'function') {
+    try {
+      summary = unwrapRpcPayload(await sbRpc(env, 'pay_batch_execution_summary_get', {
+        p_pay_batch_id: payBatchId,
+        p_actor_user_id: actorUserId
+      }, {
+        routeClass: 'RAIL_UPDATE_COLLECTOR_SUMMARY',
+        purpose: 'COLLECT_RAIL_UPDATES_EXECUTION_SUMMARY',
+        timeoutMs: 8000
+      }), 'pay_batch_execution_summary_get');
+    } catch (error) {
+      summary = { ok: false, summary_read_error: compactError(error) };
+    }
+  }
+
+  let batchRow = null;
+  try {
+    const batchRes = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/pay_batches?id=eq.${enc(payBatchId)}&select=id,status,rail_provider_snapshot,rail_env_snapshot,execution_commit_state,completed_at_utc,cancelled_at_utc&limit=1`,
+      false
+    );
+    batchRow = batchRes && Array.isArray(batchRes.rows) && isPlainObject(batchRes.rows[0]) ? batchRes.rows[0] : null;
+  } catch (error) {
+    return baseResult({ ok: false, error_code: 'RAIL_UPDATE_COLLECTOR_BATCH_READ_FAILED', errors: [compactError(error)] });
+  }
+
+  if (!batchRow || !batchRow.id) {
+    return baseResult({ ok: false, error_code: 'RAIL_UPDATE_COLLECTOR_BATCH_NOT_FOUND', errors: ['Payment batch was not found'] });
+  }
+
+  const providerRaw = firstText(
+    summary.rail_provider_snapshot,
+    summary.provider,
+    summary.provider_key,
+    batchRow.rail_provider_snapshot,
+    inputJson.rail_provider_snapshot,
+    progressJson.rail_provider_snapshot,
+    'REVOLUT'
+  ).toUpperCase();
+  const providerKey = providerRaw === 'REV' ? 'REVOLUT' : providerRaw;
+  const railEnv = firstText(summary.rail_env_snapshot, summary.provider_environment, batchRow.rail_env_snapshot, inputJson.rail_env_snapshot, progressJson.rail_env_snapshot, 'PROD').toUpperCase() || 'PROD';
+
+  if (providerKey !== 'REVOLUT') {
+    return baseResult({
+      ok: true,
+      provider_key: providerKey || null,
+      rail_env: railEnv,
+      updates: [],
+      update_count: 0,
+      skipped: true,
+      skip_reason: providerKey === 'CSV' ? 'CSV_RAIL_HAS_NO_PROVIDER_RAIL_UPDATES' : 'RAIL_PROVIDER_NOT_SUPPORTED_BY_COLLECTOR'
+    });
+  }
+
+  if (typeof revolutAuth_getAccessToken !== 'function' || typeof revolutPayment_poll !== 'function') {
+    return baseResult({
+      ok: true,
+      provider_key: providerKey,
+      rail_env: railEnv,
+      updates: [],
+      update_count: 0,
+      skipped: true,
+      skip_reason: 'REVOLUT_POLL_HELPERS_UNAVAILABLE',
+      warnings: ['revolutAuth_getAccessToken or revolutPayment_poll is unavailable; execution will continue waiting on local provider evidence']
+    });
+  }
+
+  const terminalBatchStatus = new Set(['SETTLED', 'FAILED', 'PARTIAL', 'CANCELLED', 'CANCELED']);
+  if (terminalBatchStatus.has(upperText(batchRow.status))) {
+    return baseResult({
+      ok: true,
+      provider_key: providerKey,
+      rail_env: railEnv,
+      updates: [],
+      update_count: 0,
+      skipped: true,
+      skip_reason: 'BATCH_ALREADY_TERMINAL',
+      batch_status: batchRow.status || null
+    });
+  }
+
+  const scopeSelect = [
+    'id',
+    'operation_id',
+    'pay_batch_id',
+    'pay_bank_transfer_id',
+    'provider_submit_chunk_id',
+    'provider_submit_state',
+    'provider_submission_status',
+    'provider_review_required',
+    'provider_unsafe_reason',
+    'provider_request_id',
+    'provider_idempotency_key',
+    'provider_transaction_id',
+    'request_id',
+    'status',
+    'amount',
+    'currency',
+    'payment_reference',
+    'transfer_group_key',
+    'updated_at_utc'
+  ].join(',');
+
+  let scopeRows = [];
+  try {
+    scopeRows = await loadRestRows(
+      `/rest/v1/banking_pay_operation_transfer_scope?operation_id=eq.${enc(operationId)}&pay_batch_id=eq.${enc(payBatchId)}&pay_bank_transfer_id=not.is.null&select=${scopeSelect}&order=updated_at_utc.asc.nullslast,id.asc`,
+      { pageSize: Math.max(limit * 4, limit), maxPages: 5 }
+    );
+  } catch (error) {
+    return baseResult({ ok: false, provider_key: providerKey, rail_env: railEnv, error_code: 'RAIL_UPDATE_COLLECTOR_SCOPE_READ_FAILED', errors: [compactError(error)] });
+  }
+
+  const transferIds = Array.from(new Set(scopeRows.map((row) => trimText(row && row.pay_bank_transfer_id)).filter((value) => uuidRe.test(value))));
+  const transferMap = new Map();
+  const transferSelect = 'id,pay_batch_id,request_id,amount,currency,status,rail_tx_id,rail_state,rail_meta_json,payment_reference,transfer_group_key';
+  try {
+    for (let i = 0; i < transferIds.length; i += 50) {
+      const chunk = transferIds.slice(i, i + 50);
+      if (!chunk.length) continue;
+      const res = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/pay_bank_transfers?pay_batch_id=eq.${enc(payBatchId)}&id=in.(${chunk.map(enc).join(',')})&select=${transferSelect}&limit=${chunk.length}`,
+        false
+      );
+      for (const row of (res && Array.isArray(res.rows) ? res.rows : [])) {
+        const rowId = trimText(row && row.id);
+        if (uuidRe.test(rowId)) transferMap.set(rowId, row);
+      }
+    }
+  } catch (error) {
+    return baseResult({ ok: false, provider_key: providerKey, rail_env: railEnv, error_code: 'RAIL_UPDATE_COLLECTOR_TRANSFER_READ_FAILED', errors: [compactError(error)] });
+  }
+
+  const terminalSuccessStates = new Set(['COMPLETED', 'SETTLED', 'PAID', 'SUCCESS', 'SUCCEEDED']);
+  const terminalFailureStates = new Set(['FAILED', 'DECLINED', 'REJECTED', 'CANCELLED', 'CANCELED', 'RETURNED', 'REVERTED']);
+  const pendingStates = new Set(['PENDING', 'PROCESSING', 'QUEUED', 'CREATED', 'ACCEPTED', 'IN_FLIGHT', 'SUBMITTED', 'PENDING_SETTLEMENT', 'PENDING_CONFIRMATION']);
+
+  const readTransferMeta = (transferRow) => isPlainObject(transferRow && transferRow.rail_meta_json) ? transferRow.rail_meta_json : {};
+  const readTransferDiagnostic = (transferRow) => {
+    const meta = readTransferMeta(transferRow);
+    return isPlainObject(meta.provider_submit_diagnostic) ? meta.provider_submit_diagnostic : {};
+  };
+  const isTerminalLocalTransfer = (scopeRow, transferRow) => {
+    const transferStatus = upperText(transferRow && transferRow.status);
+    const railState = upperText(transferRow && transferRow.rail_state);
+    const scopeState = upperText(scopeRow && scopeRow.provider_submit_state);
+    const scopeSubmissionStatus = upperText(scopeRow && scopeRow.provider_submission_status);
+
+    if (transferStatus === 'COMPLETED' && terminalSuccessStates.has(railState)) return true;
+    if (terminalFailureStates.has(transferStatus) && (terminalFailureStates.has(railState) || railState === '')) return true;
+    if (['PROVIDER_REJECTED'].includes(scopeState) || ['PROVIDER_SUBMISSION_REJECTED'].includes(scopeSubmissionStatus)) return true;
+    return false;
+  };
+  const requestIdFor = (scopeRow, transferRow) => {
+    const meta = readTransferMeta(transferRow);
+    const diagnostic = readTransferDiagnostic(transferRow);
+    return firstText(
+      scopeRow && scopeRow.provider_request_id,
+      scopeRow && scopeRow.provider_idempotency_key,
+      scopeRow && scopeRow.request_id,
+      transferRow && transferRow.request_id,
+      diagnostic.request_id,
+      diagnostic.idempotency_key,
+      diagnostic.local_provider_request_id,
+      meta.provider_request_id,
+      meta.request_id,
+      meta.idempotency_key,
+      meta.local_provider_request_id
+    );
+  };
+
+  const candidates = [];
+  const seenCandidateTransfers = new Set();
+  for (const scopeRow of scopeRows) {
+    if (!isPlainObject(scopeRow)) continue;
+    const transferId = trimText(scopeRow.pay_bank_transfer_id);
+    if (!uuidRe.test(transferId)) continue;
+    if (seenCandidateTransfers.has(transferId)) continue;
+    const transferRow = transferMap.get(transferId) || {};
+    const requestId = requestIdFor(scopeRow, transferRow);
+    if (!requestId) continue;
+    if (isTerminalLocalTransfer(scopeRow, transferRow)) continue;
+
+    const transferStatus = upperText(transferRow.status);
+    const railState = upperText(transferRow.rail_state);
+    const scopeState = upperText(scopeRow.provider_submit_state);
+    const scopeSubmissionStatus = upperText(scopeRow.provider_submission_status);
+    const diagnostic = readTransferDiagnostic(transferRow);
+    const diagnosticStatus = upperText(diagnostic.provider_submission_status);
+    const pollable = pendingStates.has(transferStatus)
+      || pendingStates.has(railState)
+      || transferStatus === 'UNKNOWN'
+      || railState === 'UNKNOWN'
+      || transferStatus === 'COMPLETED' && pendingStates.has(railState)
+      || ['PROVIDER_ACCEPTED', 'PROVIDER_UNKNOWN', 'CHUNK_FINALISED', 'REQUEST_SENT_LOCAL', 'REQUEST_SENDING'].includes(scopeState)
+      || ['PROVIDER_SUBMISSION_ACCEPTED', 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_PENDING'].includes(scopeSubmissionStatus)
+      || ['PROVIDER_SUBMISSION_ACCEPTED', 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_PENDING'].includes(diagnosticStatus);
+
+    if (!pollable) continue;
+    seenCandidateTransfers.add(transferId);
+    candidates.push({ scopeRow, transferRow, transferId, requestId });
+  }
+
+  const boundedCandidates = candidates.slice(0, limit);
+  if (!boundedCandidates.length) {
+    return baseResult({
+      ok: true,
+      provider_key: providerKey,
+      rail_env: railEnv,
+      candidate_count: 0,
+      updates: [],
+      update_count: 0,
+      skipped: true,
+      skip_reason: scopeRows.length ? 'NO_POLLABLE_PROVIDER_TRANSFER_ROWS' : 'NO_OPERATION_TRANSFER_SCOPE_ROWS'
+    });
+  }
+
+  let token = null;
+  try {
+    token = await revolutAuth_getAccessToken(env);
+  } catch (error) {
+    return baseResult({
+      ok: true,
+      provider_key: providerKey,
+      rail_env: railEnv,
+      candidate_count: candidates.length,
+      polled_count: 0,
+      updates: [],
+      update_count: 0,
+      warnings: [`Revolut access token unavailable: ${compactError(error, 240)}`],
+      provider_wait_required: true,
+      skip_reason: 'REVOLUT_ACCESS_TOKEN_UNAVAILABLE'
+    });
+  }
+
+  const buildProviderDiagnostic = ({ state, classification, polled, requestId, transferId, rawRailState, providerTransactionId, providerReference, errorCode, errorMessage }) => {
+    const terminalSuccess = classification === 'TERMINAL_SUCCESS';
+    const terminalFailure = classification === 'TERMINAL_FAILURE';
+    const pending = classification === 'PENDING';
+    const unknown = classification === 'UNKNOWN';
+    return {
+      diagnostic_version: 1,
+      generated_at_utc: new Date().toISOString(),
+      provider_call_stage: terminalSuccess
+        ? 'PROVIDER_PAYMENT_POLL_TERMINAL_SUCCESS'
+        : terminalFailure
+          ? 'PROVIDER_PAYMENT_POLL_TERMINAL_FAILURE'
+          : pending
+            ? 'PROVIDER_PAYMENT_POLL_PENDING'
+            : 'PROVIDER_PAYMENT_POLL_UNKNOWN',
+      provider_submission_status: terminalSuccess
+        ? 'PROVIDER_SUBMISSION_ACCEPTED'
+        : terminalFailure
+          ? 'PROVIDER_SUBMISSION_REJECTED'
+          : pending
+            ? 'PROVIDER_SUBMISSION_PENDING'
+            : 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME',
+      review_reason_code: terminalSuccess
+        ? 'PROVIDER_TERMINAL_SUCCESS_CONFIRMED'
+        : terminalFailure
+          ? 'PROVIDER_TERMINAL_FAILURE_CONFIRMED'
+          : pending
+            ? 'PROVIDER_PAYMENT_STILL_PENDING'
+            : 'PROVIDER_POLL_UNKNOWN_STATE',
+      provider_submission_attempted: true,
+      provider_called: true,
+      provider_request_sent: true,
+      provider_request_sent_confirmed: true,
+      provider_response_received: true,
+      provider_response_present: true,
+      provider_external_evidence_present: !!(providerTransactionId || providerReference),
+      provider_submission_accepted: terminalSuccess,
+      provider_submission_rejected: terminalFailure,
+      provider_submission_unknown: unknown,
+      provider_acceptance_evidence_present: terminalSuccess,
+      manual_resolution_required: unknown,
+      safe_retry_available: false,
+      rail_provider: 'REVOLUT',
+      request_id: requestId,
+      idempotency_key: requestId,
+      transfer_id: transferId,
+      provider_transaction_id: providerTransactionId || null,
+      provider_reference: providerReference || null,
+      provider_state: rawRailState || state || null,
+      rail_tx_id: terminalSuccess ? providerTransactionId || providerReference || null : null,
+      rail_state: rawRailState || state || null,
+      response_received_at_utc: firstText(polled && polled.response_received_at_utc, polled && polled.event_time_utc) || new Date().toISOString(),
+      provider_error_code: errorCode || null,
+      provider_error_message_redacted: errorMessage || null
+    };
+  };
+
+  const normalisePolledState = (polled) => {
+    const raw = upperText(polled && (polled.normalised_state || polled.normalized_state || polled.status || polled.rail_state || polled.provider_state));
+    if (raw === 'CANCELED') return 'CANCELLED';
+    if (raw === 'SUCCESS' || raw === 'SUCCEEDED' || raw === 'SETTLED' || raw === 'PAID') return 'COMPLETED';
+    if (raw === 'DECLINED') return 'DECLINED';
+    if (raw === 'REJECTED') return 'REJECTED';
+    if (raw === 'FAILED') return 'FAILED';
+    if (raw === 'CANCELLED') return 'CANCELLED';
+    if (raw === 'RETURNED') return 'RETURNED';
+    if (raw === 'REVERTED' || raw === 'REVERSED') return 'REVERTED';
+    if (raw === 'PROCESSING') return 'PROCESSING';
+    if (raw === 'PENDING' || raw === 'CREATED' || raw === 'QUEUED' || raw === 'ACCEPTED' || raw === 'IN_FLIGHT' || raw === 'SUBMITTED') return 'PENDING';
+    if (raw === 'COMPLETED') return 'COMPLETED';
+    return raw || 'UNKNOWN';
+  };
+
+  const updates = [];
+  const warnings = [];
+  const errors = [];
+  let polledCount = 0;
+  let terminalUpdateCount = 0;
+  let pendingUpdateCount = 0;
+  let failedUpdateCount = 0;
+  let unknownUpdateCount = 0;
+
+  for (const candidate of boundedCandidates) {
+    const transferRow = candidate.transferRow || {};
+    const amount = numberOrNull(transferRow.amount ?? candidate.scopeRow.amount) ?? 0;
+    const currency = upperText(transferRow.currency || candidate.scopeRow.currency || 'GBP') || 'GBP';
+    let polled = null;
+    try {
+      polled = await revolutPayment_poll(env, token, {
+        request_id: candidate.requestId,
+        transfer_id: candidate.transferId,
+        pay_batch_id: payBatchId,
+        amount,
+        currency
+      });
+      polledCount += 1;
+    } catch (error) {
+      warnings.push({
+        transfer_id: candidate.transferId,
+        request_id: candidate.requestId,
+        reason: 'REVOLUT_PAYMENT_POLL_THROWN',
+        error: compactError(error, 300)
+      });
+      continue;
+    }
+
+    const normalisedState = normalisePolledState(polled);
+    const rawRailState = firstText(polled && polled.rail_state, polled && polled.provider_state, normalisedState);
+    const providerTransactionId = firstText(polled && polled.provider_transaction_id, polled && polled.rail_tx_id, polled && polled.provider_event_id);
+    const providerReference = firstText(polled && polled.provider_reference, polled && polled.payment_reference, providerTransactionId);
+    const providerEventTime = firstText(polled && polled.event_time_utc, polled && polled.response_received_at_utc, nowIso);
+    const eventStateForKey = normalisedState || 'UNKNOWN';
+    const polledEventSource = upperText(polled && polled.event_source);
+    const polledEventTransport = upperText(polled && polled.provider_event_transport);
+    const providerHttpStatus = polled && polled.provider_http_status !== undefined && polled.provider_http_status !== null
+      ? Number(polled.provider_http_status)
+      : null;
+    const providerResponsePresent = polled && (polled.provider_response_present === true || polled.provider_response_received === true);
+    const hasExternalProviderEvidence = !!(providerTransactionId || providerReference);
+    const hasProviderPollEvidence = polledEventSource === 'PROVIDER_POLL'
+      || polledEventTransport === 'PROVIDER_POLL'
+      || hasExternalProviderEvidence === true;
+
+    if (providerResponsePresent !== true && hasProviderPollEvidence !== true) {
+      warnings.push({
+        transfer_id: candidate.transferId,
+        request_id: candidate.requestId,
+        reason: 'REVOLUT_POLL_NO_PROVIDER_RESPONSE',
+        provider_error_code: polled && polled.provider_error_code || null,
+        message: polled && polled.provider_error_message_redacted || null
+      });
+      continue;
+    }
+
+    if (hasProviderPollEvidence !== true) {
+      warnings.push({
+        transfer_id: candidate.transferId,
+        request_id: candidate.requestId,
+        reason: 'REVOLUT_POLL_NO_APPLICABLE_PROVIDER_EVIDENCE',
+        provider_http_status: Number.isFinite(providerHttpStatus) ? providerHttpStatus : null,
+        provider_error_code: polled && polled.provider_error_code || null,
+        message: polled && polled.provider_error_message_redacted || null
+      });
+      continue;
+    }
+
+    let classification = 'UNKNOWN';
+    if (terminalSuccessStates.has(normalisedState) && hasExternalProviderEvidence) classification = 'TERMINAL_SUCCESS';
+    else if (terminalSuccessStates.has(normalisedState) && !hasExternalProviderEvidence) classification = 'UNKNOWN';
+    else if (terminalFailureStates.has(normalisedState)) classification = 'TERMINAL_FAILURE';
+    else if (pendingStates.has(normalisedState)) classification = 'PENDING';
+
+    const diagnostic = buildProviderDiagnostic({
+      state: normalisedState,
+      classification,
+      polled,
+      requestId: candidate.requestId,
+      transferId: candidate.transferId,
+      rawRailState,
+      providerTransactionId,
+      providerReference,
+      errorCode: polled && polled.provider_error_code || null,
+      errorMessage: polled && polled.provider_error_message_redacted || null
+    });
+
+    const eventKey = [
+      'REVOLUT',
+      railEnv,
+      'OPERATION_RAIL_UPDATE_POLL',
+      payBatchId,
+      candidate.transferId,
+      providerTransactionId || providerReference || candidate.requestId,
+      eventStateForKey
+    ].join('|');
+
+    const updateStatus = classification === 'TERMINAL_SUCCESS'
+      ? 'COMPLETED'
+      : classification === 'TERMINAL_FAILURE'
+        ? normalisedState
+        : classification === 'PENDING'
+          ? (normalisedState === 'PROCESSING' ? 'PROCESSING' : 'PENDING')
+          : 'UNKNOWN';
+
+    if (classification === 'TERMINAL_SUCCESS') terminalUpdateCount += 1;
+    else if (classification === 'TERMINAL_FAILURE') failedUpdateCount += 1;
+    else if (classification === 'PENDING') pendingUpdateCount += 1;
+    else unknownUpdateCount += 1;
+
+    updates.push({
+      transfer_id: candidate.transferId,
+      pay_bank_transfer_id: candidate.transferId,
+      pay_batch_id: payBatchId,
+      provider_key: 'REVOLUT',
+      rail_provider: 'REVOLUT',
+      rail_env: railEnv,
+      adapter_key: 'REVOLUT',
+      adapter_version: 'v1',
+      provider_event_transport: 'PROVIDER_POLL',
+      event_source: 'PROVIDER_POLL',
+      provider_event_type: 'PAYMENT_POLL',
+      provider_event_key: eventKey,
+      idempotency_key: eventKey,
+      provider_event_id: providerTransactionId || providerReference || eventKey,
+      provider_transaction_id: providerTransactionId || null,
+      provider_request_id: candidate.requestId,
+      request_id: candidate.requestId,
+      provider_reference: providerReference || providerTransactionId || null,
+      provider_state: rawRailState || normalisedState,
+      normalised_state: updateStatus,
+      normalized_state: updateStatus,
+      provider_error_code: polled && polled.provider_error_code || null,
+      provider_error_message_redacted: polled && polled.provider_error_message_redacted || null,
+      event_time_utc: providerEventTime,
+      amount: numberOrNull(polled && polled.amount) ?? amount,
+      currency: upperText(polled && polled.currency) || currency,
+      provider_submit_diagnostic: diagnostic,
+      raw_payload: {
+        source_adapter: 'REVOLUT',
+        source_action: 'OPERATION_RAIL_UPDATE_POLL',
+        request_id: candidate.requestId,
+        local_provider_request_id: firstText(polled && polled.local_provider_request_id, candidate.requestId),
+        operation_id: operationId,
+        pay_batch_id: payBatchId,
+        transfer_scope_id: candidate.scopeRow.id || null,
+        provider_response: isPlainObject(polled && polled.raw_payload) ? polled.raw_payload : (isPlainObject(polled) ? polled : {})
+      },
+      mapping_hints_json: {
+        source_adapter: 'REVOLUT',
+        source_action: 'OPERATION_RAIL_UPDATE_POLL',
+        pay_batch_id: payBatchId,
+        pay_bank_transfer_id: candidate.transferId,
+        operation_id: operationId,
+        transfer_scope_id: candidate.scopeRow.id || null,
+        provider_transaction_id: providerTransactionId || null,
+        provider_request_id: candidate.requestId,
+        rail_tx_id: classification === 'TERMINAL_SUCCESS' ? (providerTransactionId || providerReference || null) : null
+      },
+      status: updateStatus,
+      rail_tx_id: classification === 'TERMINAL_SUCCESS' ? (providerTransactionId || providerReference || null) : (providerTransactionId || null),
+      rail_state: rawRailState || updateStatus,
+      rail_meta_json: isPlainObject(polled && polled.rail_meta_json) ? polled.rail_meta_json : null,
+      manual_resolution_required: classification === 'UNKNOWN',
+      failed_reason: classification === 'TERMINAL_FAILURE' ? firstText(polled && polled.provider_error_message_redacted, polled && polled.provider_error_code, normalisedState) : null,
+      completed_at_utc: classification === 'TERMINAL_SUCCESS' ? providerEventTime : null
+    });
+  }
+
+  return baseResult({
+    ok: true,
+    provider_key: providerKey,
+    rail_env: railEnv,
+    candidate_count: candidates.length,
+    bounded_candidate_count: boundedCandidates.length,
+    skipped_count: Math.max(0, candidates.length - boundedCandidates.length),
+    polled_count: polledCount,
+    updates,
+    update_count: updates.length,
+    terminal_update_count: terminalUpdateCount,
+    pending_update_count: pendingUpdateCount,
+    failed_update_count: failedUpdateCount,
+    unknown_update_count: unknownUpdateCount,
+    has_more: candidates.length > boundedCandidates.length,
+    provider_wait_required: updates.length <= 0 || pendingUpdateCount > 0,
+    warnings,
+    errors
+  });
+}
+
+
+
+
+
+
+async function handleTimesheetUnauthorise(env, req, timesheetId) {
+  const enc = encodeURIComponent;
+
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  let body;
+  try { body = await parseJSONBody(req); }
+  catch { return withCORS(env, req, badRequest('Invalid JSON')); }
+
+  const expectedTimesheetId = body?.expected_timesheet_id || null;
+  const guard = await guardCurrentTimesheetWrite(env, req, timesheetId, expectedTimesheetId);
+  if (!guard.ok) return guard.res;
+
+  const now = nowIso();
+
+  const parseMaybeJsonObj = (v) => {
+    if (v == null) return null;
+    if (typeof v === 'object') return v;
+    if (typeof v === 'string') {
+      try {
+        const p = JSON.parse(v);
+        return (p && typeof p === 'object') ? p : null;
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  };
+
+  const parseRpcFailure = (err) => {
+    let payload = null;
+    if (err && err.json && typeof err.json === 'object') {
+      payload = err.json;
+    } else if (typeof err?.body === 'string' && err.body) {
+      try {
+        payload = JSON.parse(err.body);
+      } catch {}
+    }
+    return {
+      status: Number(err?.status || 0) || 0,
+      message: String(payload?.message || err?.message || ''),
+      details: payload?.details ?? payload?.detail ?? null,
+      payload
+    };
+  };
+
+  let rpcRes;
+  try {
+    rpcRes = await sbRpc(env, 'timesheet_unauthorise_atomic', {
+      p_timesheet_id: String(timesheetId),
+      p_expected_timesheet_id: String(expectedTimesheetId),
+      p_now_utc: now
+    });
+  } catch (e) {
+    const rpcErr = parseRpcFailure(e);
+    const detailObj = parseMaybeJsonObj(rpcErr.details);
+
+    if (rpcErr.message === 'TIMESHEET_MOVED') {
+      const currentTsId = detailObj?.current_timesheet_id ? String(detailObj.current_timesheet_id) : '';
+      return withCORS(
+        env,
+        req,
+        new Response(
+          JSON.stringify({ error: 'TIMESHEET_MOVED', current_timesheet_id: currentTsId || null }),
+          { status: 409, headers: { 'Content-Type': 'application/json' } }
+        )
+      );
+    }
+
+    if (rpcErr.message === 'NO_TSFIN') {
+      return withCORS(env, req, badRequest('No financial snapshot to unauthorise'));
+    }
+
+    if (rpcErr.message === 'TIMESHEET_LOCKED_OR_PAID') {
+      return withCORS(env, req, badRequest('Cannot unauthorise: timesheet is locked or paid'));
+    }
+
+    if (rpcErr.message === 'TIMESHEET_NOT_FOUND') {
+      return withCORS(env, req, notFound('Timesheet not found'));
+    }
+
+    if (
+      rpcErr.message === 'expected_timesheet_id is required' ||
+      rpcErr.message === 'p_timesheet_id is required'
+    ) {
+      return withCORS(env, req, badRequest(rpcErr.message));
+    }
+
+    return withCORS(env, req, serverError(String(rpcErr.message || e?.message || e)));
+  }
+
+  const rpcRow = Array.isArray(rpcRes)
+    ? ((rpcRes[0] && typeof rpcRes[0] === 'object') ? rpcRes[0] : null)
+    : ((rpcRes && typeof rpcRes === 'object') ? rpcRes : null);
+
+  if (!rpcRow) {
+    return withCORS(env, req, serverError('timesheet_unauthorise_atomic returned no row'));
+  }
+
+  const tsfinAfter = parseMaybeJsonObj(rpcRow.timesheet_financials_json);
+  const prevStatus = String(rpcRow.processing_status_before || tsfinAfter?.processing_status || '').toUpperCase() || null;
+  const newStatus = String(rpcRow.processing_status_after || tsfinAfter?.processing_status || 'PENDING_AUTH').toUpperCase();
+
+  return withCORS(env, req, ok({
+    unauthorised: true,
+    processing_status: newStatus,
+    previous_status: prevStatus,
+    booking_id: rpcRow.booking_id || guard.resolved.booking_id || null,
+    requested_timesheet_id: rpcRow.requested_timesheet_id || guard.resolved.requested_timesheet_id || timesheetId,
+    current_timesheet_id: rpcRow.current_timesheet_id || guard.resolved.current_timesheet_id || null,
+    current_version: rpcRow.current_version ?? guard.resolved.current_version ?? null,
+    was_stale: rpcRow.was_stale != null ? !!rpcRow.was_stale : !!guard.resolved.was_stale
+  }));
+}
+
+
+async function handleTimesheetDailyManualProcess(env, req, timesheetId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const trimStr = (value) => String(value == null ? '' : value).trim();
+  const unwrapRpcPayload = (payload, fnName) => {
+    let out = payload;
+    if (Array.isArray(out) && out.length === 1) out = out[0];
+    if (out && typeof out === 'object' && !Array.isArray(out) && Object.prototype.hasOwnProperty.call(out, fnName)) {
+      out = out[fnName];
+    }
+    return (out && typeof out === 'object' && !Array.isArray(out)) ? out : {};
+  };
+  const pickObject = (value) => (value && typeof value === 'object' && !Array.isArray(value)) ? value : {};
+  const errorCodeOf = (payload, fallback = '') => String(payload?.error_code || payload?.error || fallback || '').trim().toUpperCase();
+  const statusForProcessError = (payload) => {
+    const code = errorCodeOf(payload);
+    if (code === 'TIMESHEET_MOVED' || code === 'ROW_SIGNATURE_MISMATCH') return 409;
+    if (
+      code === 'TIMESHEET_LOCKED_OR_PAID' ||
+      code === 'TIMESHEET_ALREADY_AUTHORISED' ||
+      code === 'NOT_UNPROCESSED' ||
+      code === 'TSFIN_PATCH_MISMATCH' ||
+      code === 'TIMESHEET_PATCH_REQUIRES_RECALCULATION' ||
+      code === 'AUTHORITATIVE_TSFIN_MISSING' ||
+      code === 'AUTHORITATIVE_TSFIN_INCOMPLETE' ||
+      code === 'AUTHORITATIVE_TSFIN_TOTALS_MISSING'
+    ) return 409;
+    if (
+      code === 'TIMESHEET_ID_REQUIRED' ||
+      code === 'EXPECTED_TIMESHEET_ID_REQUIRED' ||
+      code === 'ACTOR_USER_ID_REQUIRED' ||
+      code === 'TIMESHEET_NOT_FOUND' ||
+      code === 'CURRENT_TIMESHEET_NOT_FOUND' ||
+      code === 'NOT_DAILY' ||
+      code === 'NOT_MANUAL' ||
+      code === 'NO_TSFIN' ||
+      code === 'CANDIDATE_MISSING' ||
+      code === 'CLIENT_MISSING' ||
+      code === 'RATE_ISSUE' ||
+      code === 'PAY_CHANNEL_ISSUE' ||
+      code === 'PAY_METHOD_MISSING' ||
+      code === 'CANDIDATE_ASSIGNMENT_UNRESOLVED' ||
+      code === 'TSFIN_PATCH_FORBIDDEN_FIELD' ||
+      code === 'TSFIN_PATCH_NUMERIC_INVALID' ||
+      code === 'TSFIN_PATCH_INVALID_NUMERIC' ||
+      code === 'TIMESHEET_PATCH_MUST_BE_OBJECT' ||
+      code === 'TSFIN_PATCH_MUST_BE_OBJECT'
+    ) return 400;
+    return 500;
+  };
+  const responseForRpcPayload = (payload, fallbackMessage) => {
+    if (!payload || typeof payload !== 'object' || payload.ok !== false) {
+      return withCORS(env, req, ok(payload || {}));
+    }
+    const status = statusForProcessError(payload);
+    const body = {
+      error: payload.error_code || payload.error || 'PROCESS_FAILED',
+      error_code: payload.error_code || payload.error || 'PROCESS_FAILED',
+      message: payload.message || fallbackMessage,
+      ...payload
+    };
+    return withCORS(env, req, new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } }));
+  };
+  const parseRpcErrorPayload = (err) => {
+    if (err && err.json && typeof err.json === 'object') return err.json;
+    if (typeof err?.body === 'string' && err.body) {
+      try { return JSON.parse(err.body); } catch {}
+    }
+    return { ok: false, error_code: 'RPC_FAILED', message: String(err?.message || err || 'Failed to process daily manual timesheet') };
+  };
+
+  const requestedTimesheetId = trimStr(timesheetId || '');
+  if (!requestedTimesheetId) return withCORS(env, req, badRequest('timesheet_id is required'));
+
+  let body = {};
+  try {
+    const raw = await req.clone().text();
+    body = (raw && trimStr(raw)) ? JSON.parse(String(raw)) : {};
+  } catch {
+    return withCORS(env, req, badRequest('Invalid JSON'));
+  }
+
+  const expectedTimesheetId = trimStr(
+    body?.expected_timesheet_id ||
+    body?.expectedTimesheetId ||
+    body?.expected_current_timesheet_id ||
+    body?.expectedCurrentTimesheetId ||
+    body?.current_timesheet_id ||
+    body?.currentTimesheetId ||
+    requestedTimesheetId
+  );
+  const expectedRowSignature = trimStr(
+    body?.expected_row_signature ||
+    body?.expectedRowSignature ||
+    body?.row_signature ||
+    body?.rowSignature ||
+    body?.data_row?.row_signature ||
+    body?.dataRow?.rowSignature ||
+    ''
+  );
+
+  const forbiddenTsfinPatchFields = new Set([
+    'candidate_id',
+    'client_id',
+    'pay_method',
+    'candidate_assignment',
+    'basis',
+    'policy_snapshot_json',
+    'rate_source_refs_json',
+    'normal_hours',
+    'unsocial_hours',
+    'saturday_hours',
+    'sunday_hours',
+    'bank_holiday_hours',
+    'sleep_in_units',
+    'on_call_units',
+    'mileage_units',
+    'expenses_units',
+    'hours_day',
+    'hours_night',
+    'hours_sat',
+    'hours_sun',
+    'hours_bh',
+    'pay_day',
+    'pay_night',
+    'pay_sat',
+    'pay_sun',
+    'pay_bh',
+    'charge_day',
+    'charge_night',
+    'charge_sat',
+    'charge_sun',
+    'charge_bh',
+    'total_hours',
+    'total_pay_ex_vat',
+    'total_charge_ex_vat',
+    'margin_ex_vat',
+    'net_delta_ex_vat',
+    'normal_pay_rate',
+    'unsocial_pay_rate',
+    'saturday_pay_rate',
+    'sunday_pay_rate',
+    'bank_holiday_pay_rate',
+    'normal_charge_rate',
+    'unsocial_charge_rate',
+    'saturday_charge_rate',
+    'sunday_charge_rate',
+    'bank_holiday_charge_rate',
+    'mileage_pay_rate',
+    'mileage_charge_rate',
+    'expenses_pay',
+    'expenses_charge',
+    'expenses_pay_ex_vat',
+    'expenses_charge_ex_vat',
+    'expenses_description',
+    'mileage_pay_ex_vat',
+    'mileage_charge_ex_vat',
+    'travel_pay_ex_vat',
+    'travel_charge_ex_vat',
+    'accommodation_pay_ex_vat',
+    'accommodation_charge_ex_vat',
+    'other_pay_ex_vat',
+    'other_charge_ex_vat',
+    'additional_pay_ex_vat',
+    'additional_charge_ex_vat',
+    'additional_margin_ex_vat',
+    'has_rate_issue',
+    'has_pay_channel_issue'
+  ]);
+  const findForbiddenTsfinField = (sourceName, value) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+    for (const key of Object.keys(value)) {
+      if (forbiddenTsfinPatchFields.has(key)) {
+        return { source: sourceName, field: key };
+      }
+    }
+    return null;
+  };
+  const forbiddenHit =
+    findForbiddenTsfinField('body.tsfin_patch_json', body?.tsfin_patch_json) ||
+    findForbiddenTsfinField('body.tsfinPatchJson', body?.tsfinPatchJson) ||
+    findForbiddenTsfinField('body.tsfin_patch', body?.tsfin_patch) ||
+    findForbiddenTsfinField('body.tsfinPatch', body?.tsfinPatch) ||
+    findForbiddenTsfinField('body.tsfin', body?.tsfin) ||
+    findForbiddenTsfinField('body', body);
+
+  if (forbiddenHit) {
+    return withCORS(
+      env,
+      req,
+      new Response(
+        JSON.stringify({
+          ok: false,
+          success: false,
+          error: 'TSFIN_PATCH_FORBIDDEN_FIELD',
+          error_code: 'TSFIN_PATCH_FORBIDDEN_FIELD',
+          message: 'This field is payroll-authoritative and cannot be supplied by the client when processing a daily manual timesheet.',
+          source: forbiddenHit.source,
+          field: forbiddenHit.field,
+          timesheet_id: requestedTimesheetId
+        }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
+      )
+    );
+  }
+
+  const timesheetPatchKeys = [
+    'worked_start_iso',
+    'worked_end_iso',
+    'break_start_iso',
+    'break_end_iso',
+    'break_minutes',
+    'worked_minutes',
+    'actual_schedule_json',
+    'additional_units_week',
+    'additional_units_per_day',
+    'reference_number'
+  ];
+  const tsfinPatchKeys = [
+    'worked_start_iso',
+    'worked_end_iso',
+    'break_start_iso',
+    'break_end_iso',
+    'break_minutes',
+    'actual_schedule_json',
+    'actual_minutes_by_day_json',
+    'additional_units_json'
+  ];
+
+  const explicitTimesheetPatch = pickObject(body?.timesheet_patch_json || body?.timesheetPatchJson || body?.timesheet_patch || body?.timesheetPatch);
+  const explicitTsfinPatch = pickObject(body?.tsfin_patch_json || body?.tsfinPatchJson || body?.tsfin_patch || body?.tsfinPatch || body?.tsfin);
+  const timesheetPatch = { ...explicitTimesheetPatch };
+  const tsfinPatch = { ...explicitTsfinPatch };
+
+  for (const key of timesheetPatchKeys) {
+    if (Object.prototype.hasOwnProperty.call(body || {}, key) && !Object.prototype.hasOwnProperty.call(timesheetPatch, key)) {
+      timesheetPatch[key] = body[key];
+    }
+  }
+  for (const key of tsfinPatchKeys) {
+    if (Object.prototype.hasOwnProperty.call(body || {}, key) && !Object.prototype.hasOwnProperty.call(tsfinPatch, key)) {
+      tsfinPatch[key] = body[key];
+    }
+  }
+  if (expectedRowSignature && !Object.prototype.hasOwnProperty.call(timesheetPatch, 'row_signature')) {
+    timesheetPatch.row_signature = expectedRowSignature;
+  }
+
+  try {
+    const rpcRes = await sbRpc(env, 'timesheet_daily_manual_process_atomic', {
+      p_timesheet_id: requestedTimesheetId,
+      p_expected_timesheet_id: expectedTimesheetId || requestedTimesheetId,
+      p_actor_user_id: user?.id || null,
+      p_timesheet_patch_json: timesheetPatch,
+      p_tsfin_patch_json: tsfinPatch,
+      p_expected_row_signature: expectedRowSignature || null
+    }, { timeoutMs: 45000 });
+    const payload = unwrapRpcPayload(rpcRes, 'timesheet_daily_manual_process_atomic');
+    return responseForRpcPayload(payload, 'Failed to process daily manual timesheet');
+  } catch (err) {
+    const payload = parseRpcErrorPayload(err);
+    return responseForRpcPayload(payload, 'Failed to process daily manual timesheet');
+  }
+}
+
+
+
+
+async function handleTimesheetDailyManualUnprocess(env, req, timesheetId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const trimStr = (value) => String(value == null ? '' : value).trim();
+  const unwrapRpcPayload = (payload, fnName) => {
+    let out = payload;
+    if (Array.isArray(out) && out.length === 1) out = out[0];
+    if (out && typeof out === 'object' && !Array.isArray(out) && Object.prototype.hasOwnProperty.call(out, fnName)) {
+      out = out[fnName];
+    }
+    return (out && typeof out === 'object' && !Array.isArray(out)) ? out : {};
+  };
+  const statusForUnprocessError = (payload) => {
+    const code = String(payload?.error_code || payload?.error || '').trim().toUpperCase();
+    if (code === 'TIMESHEET_MOVED' || code === 'ROW_SIGNATURE_MISMATCH') return 409;
+    if (
+      code === 'TIMESHEET_LOCKED_OR_PAID' ||
+      code === 'TIMESHEET_AUTHORISED_EDIT_BLOCKED' ||
+      code === 'ALREADY_UNPROCESSED' ||
+      code === 'UNPROCESS_NOT_ALLOWED'
+    ) return 409;
+    if (
+      code === 'TIMESHEET_ID_REQUIRED' ||
+      code === 'EXPECTED_TIMESHEET_ID_REQUIRED' ||
+      code === 'TIMESHEET_NOT_FOUND' ||
+      code === 'CURRENT_TIMESHEET_NOT_FOUND' ||
+      code === 'NOT_DAILY' ||
+      code === 'NOT_MANUAL' ||
+      code === 'NO_TSFIN'
+    ) return 400;
+    return 500;
+  };
+  const responseForRpcPayload = (payload, fallbackMessage) => {
+    if (!payload || typeof payload !== 'object' || payload.ok !== false) {
+      return withCORS(env, req, ok(payload || {}));
+    }
+    const status = statusForUnprocessError(payload);
+    const body = {
+      error: payload.error_code || payload.error || 'UNPROCESS_FAILED',
+      error_code: payload.error_code || payload.error || 'UNPROCESS_FAILED',
+      message: payload.message || fallbackMessage,
+      ...payload
+    };
+    return withCORS(env, req, new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } }));
+  };
+  const parseRpcErrorPayload = (err) => {
+    if (err && err.json && typeof err.json === 'object') return err.json;
+    if (typeof err?.body === 'string' && err.body) {
+      try { return JSON.parse(err.body); } catch {}
+    }
+    return { ok: false, error_code: 'RPC_FAILED', message: String(err?.message || err || 'Failed to unprocess daily manual timesheet') };
+  };
+
+  const requestedTimesheetId = trimStr(timesheetId || '');
+  if (!requestedTimesheetId) return withCORS(env, req, badRequest('timesheet_id is required'));
+
+  let body = {};
+  try {
+    const raw = await req.clone().text();
+    body = (raw && trimStr(raw)) ? JSON.parse(String(raw)) : {};
+  } catch {
+    return withCORS(env, req, badRequest('Invalid JSON'));
+  }
+
+  const expectedTimesheetId = trimStr(
+    body?.expected_timesheet_id ||
+    body?.expectedTimesheetId ||
+    body?.expected_current_timesheet_id ||
+    body?.expectedCurrentTimesheetId ||
+    body?.current_timesheet_id ||
+    body?.currentTimesheetId ||
+    requestedTimesheetId
+  );
+  const expectedRowSignature = trimStr(
+    body?.expected_row_signature ||
+    body?.expectedRowSignature ||
+    body?.row_signature ||
+    body?.rowSignature ||
+    body?.data_row?.row_signature ||
+    body?.dataRow?.rowSignature ||
+    ''
+  );
+
+  try {
+    const rpcRes = await sbRpc(env, 'timesheet_daily_manual_unprocess_atomic', {
+      p_timesheet_id: requestedTimesheetId,
+      p_expected_timesheet_id: expectedTimesheetId || requestedTimesheetId,
+      p_actor_user_id: user?.id || null,
+      p_expected_row_signature: expectedRowSignature || null
+    }, { timeoutMs: 45000 });
+    const payload = unwrapRpcPayload(rpcRes, 'timesheet_daily_manual_unprocess_atomic');
+    return responseForRpcPayload(payload, 'Failed to unprocess daily manual timesheet');
+  } catch (err) {
+    const payload = parseRpcErrorPayload(err);
+    return responseForRpcPayload(payload, 'Failed to unprocess daily manual timesheet');
+  }
+}
+
+
+async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
+  const enc = encodeURIComponent;
+
+  // 1) Auth
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  if (!timesheetId) {
+    return withCORS(env, req, badRequest('timesheet_id is required'));
+  }
+
+  // 2) Parse body
+  let body;
+  try {
+    body = await parseJSONBody(req);
+  } catch {
+    return withCORS(env, req, badRequest('Invalid JSON'));
+  }
+
+  const requestContext = String(body?.context || body?.mode || '').trim().toLowerCase();
+  const bulkAuthoriseMode = !!(
+    body?.bulk_authorise === true ||
+    body?.bulkAuthorise === true ||
+    body?.bulk_authorise_mode === true ||
+    body?.bulkAuthoriseMode === true ||
+    requestContext === 'bulk_authorise'
+  );
+  const bulkProcessMode = !bulkAuthoriseMode && !!(
+    body?.bulk_process === true ||
+    body?.bulkProcess === true ||
+    body?.bulk_process_mode === true ||
+    body?.bulkProcessMode === true ||
+    requestContext === 'bulk_process'
+  );
+  const bulkPatchResponseRequested = !!(
+    bulkAuthoriseMode ||
+    bulkProcessMode ||
+    body?.return_bulk_patch === true ||
+    body?.returnBulkPatch === true
+  );
+  const bulkDatasetMode = bulkAuthoriseMode ? 'authorise' : 'process';
+  const bulkResponseContext = bulkAuthoriseMode ? 'bulk_authorise' : (bulkProcessMode ? 'bulk_process' : 'standard');
+  const expectedRowSignature = String(
+    body?.expected_row_signature ||
+    body?.expectedRowSignature ||
+    body?.row_signature ||
+    body?.rowSignature ||
+    ''
+  ).trim();
+
+  const processNowIntent = !!(
+    body?.process_now === true ||
+    body?.processNow === true ||
+    body?.process === true ||
+    String(body?.action || '').trim().toUpperCase() === 'PROCESS' ||
+    String(body?.operation || '').trim().toUpperCase() === 'PROCESS'
+  );
+
+  if (bulkProcessMode && processNowIntent) {
+    return withCORS(
+      env,
+      req,
+      new Response(
+        JSON.stringify({
+          error_code: 'USE_DAILY_MANUAL_PROCESS_ATOMIC',
+          message: 'Bulk Process must use the daily manual process endpoint so save and process happen through timesheet_daily_manual_process_atomic.',
+          timesheet_id: timesheetId
+        }),
+        { status: 409, headers: { 'Content-Type': 'application/json' } }
+      )
+    );
+  }
+
+  // NEW: guarded write (optimistic concurrency)
+  const expectedTimesheetId = body?.expected_timesheet_id || null;
+  const guard = await guardCurrentTimesheetWrite(env, req, timesheetId, expectedTimesheetId);
+  if (!guard.ok) return guard.res;
+
+  // From here on, always act on the CURRENT timesheet row.
+  let currentTimesheetId = guard.resolved.current_timesheet_id;
+
+  const has = (k) => Object.prototype.hasOwnProperty.call(body || {}, k);
+
+  // Optional helper input (do NOT patch to DB unless you actually have this column)
+  let worked_date_ymd = body?.worked_date_ymd ? String(body.worked_date_ymd) : null;
+
+  // Worked/break inputs (only patch if provided)
+  const worked_start_iso_in = has('worked_start_iso') ? body.worked_start_iso : undefined;
+  const worked_end_iso_in   = has('worked_end_iso')   ? body.worked_end_iso   : undefined;
+  const break_start_iso_in  = has('break_start_iso')  ? body.break_start_iso  : undefined;
+  const break_end_iso_in    = has('break_end_iso')    ? body.break_end_iso    : undefined;
+  const break_minutes_in    = has('break_minutes')    ? body.break_minutes    : undefined;
+
+  // NEW: schedule_json payload (preferred FE shape for daily upsert)
+  const schedule_json_in    = has('schedule_json')    ? body.schedule_json    : undefined;
+  const reference_number_in = has('reference_number') ? body.reference_number : undefined;
+
+  // QR action hints from FE decision modal (legacy booleans still supported)
+  const rawIssueQr        = body?.issue_qr === true;
+  const rawDisableQr      = body?.disable_qr === true;
+  const rawRevokeToManual = body?.revoke_to_manual === true;
+  const rawRevokeQr       = body?.revoke_qr === true;   // legacy
+  const rawReissueQr      = body?.reissue_qr === true;  // legacy
+
+  // ✅ NEW: preferred enum (from After-save decision modal)
+  const qrActionEnumRaw = String(body?.qr_action || body?.qrAction || '').trim().toUpperCase();
+  const enumOk = (x) => (
+    x === 'INVALIDATE' ||
+    x === 'REVOKE_TO_MANUAL' ||
+    x === 'REISSUE' ||
+    x === 'ISSUE' ||
+    x === 'DISABLE' ||
+    x === 'SAVE_WITHOUT_ISSUE'
+  );
+
+  const now = nowIso();
+
+  // ✅ FIX: daily-manual-upsert no longer issues/resends QR.
+  // These legacy variables must exist so the function does not throw ReferenceError.
+  const qrIssued   = false;
+  const qrReissued = false;
+  const qrToken    = null;
+  const qr_r2_key  = null;
+  const pdfKey     = null;
+
+  // Helpers
+  const trimStr = (v) => String(v == null ? '' : v).trim();
+
+  const parseMaybeJsonObj = (v) => {
+    if (v == null) return null;
+    if (typeof v === 'object') return v;
+    if (typeof v === 'string') {
+      try {
+        const parsed = JSON.parse(v);
+        return (parsed && typeof parsed === 'object') ? parsed : null;
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  };
+
+  const loadDailyManualBulkPatchRow = async ({ timesheetId: patchTimesheetId, datasetMode = 'process', changedDomains = [] } = {}) => {
+    const tsId = trimStr(patchTimesheetId);
+    if (!tsId) return null;
+
+    const domainList = Array.isArray(changedDomains)
+      ? changedDomains.map(v => trimStr(v)).filter(Boolean)
+      : [];
+
+    const filters = {
+      dataset_mode: datasetMode === 'authorise' ? 'authorise' : 'process',
+      projection: 'dataset_row',
+      profile: 'list',
+      timesheet_id: tsId,
+      actor_user_id: user?.id || null
+    };
+
+    if (domainList.length) filters.changed_domains = domainList;
+
+    const patchRes = await sbRpc(env, 'bulk_timesheet_row_patch_v1', { p_filters: filters }, { timeoutMs: 45000 });
+    const first = Array.isArray(patchRes) ? (patchRes[0] || null) : patchRes;
+    const rowJson = parseMaybeJsonObj(first?.row_json) || parseMaybeJsonObj(first?.bulk_timesheet_row_patch_v1) || parseMaybeJsonObj(first);
+    return (rowJson && typeof rowJson === 'object' && !Array.isArray(rowJson)) ? rowJson : null;
+  };
+
+  const normIso = (v) => {
+    if (v === undefined) return undefined;
+    if (v === null) return null;
+    const s = trimStr(v);
+    return s ? s : null; // treat '' as null (clear)
+  };
+
+  const normTextOrNull = (v) => {
+    if (v === undefined) return undefined;
+    const s = trimStr(v);
+    return s ? s : null;
+  };
+
+  const parseOptionalBreakMinutesInput = (v) => {
+    if (v === undefined) return undefined;
+    if (v === null) return null;
+    const s = trimStr(v);
+    if (!s) return null;
+    const n = Number(s);
+    return Number.isFinite(n) ? n : NaN;
+  };
+
+  const hasIso = (v) => (v != null && trimStr(v) !== '');
+
+  const isoToMs = (iso) => {
+    if (!hasIso(iso)) return null;
+    const t = new Date(String(iso)).getTime();
+    return Number.isFinite(t) ? t : null;
+  };
+
+  const bad = (msg) => withCORS(env, req, badRequest(msg));
+
+  const parseYmd = (ymdStr) => {
+    if (!ymdStr || typeof ymdStr !== 'string') return null;
+    const m = ymdStr.trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!m) return null;
+    const y = Number(m[1]), mo = Number(m[2]), d = Number(m[3]);
+    if (!Number.isFinite(y) || !Number.isFinite(mo) || !Number.isFinite(d)) return null;
+    if (mo < 1 || mo > 12 || d < 1 || d > 31) return null;
+    return { y, mo, d };
+  };
+
+  const addDaysYmd = (ymdStr, days) => {
+    const p = parseYmd(ymdStr);
+    if (!p) return null;
+    const dt = new Date(Date.UTC(p.y, p.mo - 1, p.d, 0, 0, 0, 0));
+    dt.setUTCDate(dt.getUTCDate() + Number(days || 0));
+    const y = dt.getUTCFullYear();
+    const m = String(dt.getUTCMonth() + 1).padStart(2, '0');
+    const d = String(dt.getUTCDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  };
+
+  const normaliseHHMM = (raw) => {
+    let s = String(raw || '').trim();
+    if (!s) return '';
+    if (/^\d{1,2}:\d{2}$/.test(s)) {
+      const [h, m] = s.split(':');
+      const hh = String(Number(h) || 0).padStart(2, '0');
+      const mm = String(Number(m) || 0).padStart(2, '0');
+      return `${hh}:${mm}`;
+    }
+    s = s.replace(':', '');
+    if (!/^\d{1,4}$/.test(s)) return '';
+    if (s.length <= 2) {
+      const h = Number(s);
+      if (!Number.isFinite(h)) return '';
+      return `${String(h).padStart(2, '0')}:00`;
+    }
+    const mm = s.slice(-2);
+    const h  = s.slice(0, -2);
+    const hh = String(Number(h) || 0).padStart(2, '0');
+    const mm2 = String(Number(mm) || 0).padStart(2, '0');
+    return `${hh}:${mm2}`;
+  };
+
+  const hhmmToMinutes = (hhmm) => {
+    if (!hhmm || typeof hhmm !== 'string') return null;
+    const m = hhmm.trim().match(/^(\d{2}):(\d{2})$/);
+    if (!m) return null;
+    const h = Number(m[1]);
+    const mi = Number(m[2]);
+    if (!Number.isFinite(h) || !Number.isFinite(mi)) return null;
+    if (h < 0 || h > 23 || mi < 0 || mi > 59) return null;
+    return h * 60 + mi;
+  };
+
+  const uniqueLocalUtcCandidates = (ymdStr, hhmmStr) => {
+    const out = [];
+    const seen = new Set();
+
+    const pushIso = (iso) => {
+      if (!iso) return;
+      const ms = new Date(String(iso)).getTime();
+      if (!Number.isFinite(ms)) return;
+      const norm = new Date(ms).toISOString();
+      if (seen.has(norm)) return;
+      seen.add(norm);
+      out.push({ iso: norm, ms });
+    };
+
+    pushIso(ukLocalToUtcISO(ymdStr, hhmmStr, { prefer: 'earlier' }));
+    pushIso(ukLocalToUtcISO(ymdStr, hhmmStr, { prefer: 'later' }));
+
+    out.sort((a, b) => a.ms - b.ms);
+    return out;
+  };
+
+  const resolveLocalWindowToIso = (startYmd, startHHMM, endYmd, endHHMM, label) => {
+    const startCandidates = uniqueLocalUtcCandidates(startYmd, startHHMM);
+    if (!startCandidates.length) return { error: `Non-existent local start time on ${label}` };
+
+    const endCandidates = uniqueLocalUtcCandidates(endYmd, endHHMM);
+    if (!endCandidates.length) return { error: `Non-existent local end time on ${label}` };
+
+    const pairMap = new Map();
+
+    const pushPair = (startIso, endIso) => {
+      if (!startIso || !endIso) return;
+      const startMs = new Date(String(startIso)).getTime();
+      const endMs   = new Date(String(endIso)).getTime();
+      if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) return;
+      const key = `${startMs}|${endMs}`;
+      if (pairMap.has(key)) return;
+      pairMap.set(key, {
+        start_iso: new Date(startMs).toISOString(),
+        end_iso:   new Date(endMs).toISOString(),
+        start_ms: startMs,
+        end_ms: endMs
+      });
+    };
+
+    for (const startCand of startCandidates) {
+      const endAfter = ukLocalToUtcISO(endYmd, endHHMM, { afterIso: startCand.iso, prefer: 'later' });
+      pushPair(startCand.iso, endAfter);
+
+      for (const endCand of endCandidates) {
+        pushPair(startCand.iso, endCand.iso);
+      }
+    }
+
+    const pairs = Array.from(pairMap.values()).sort((a, b) => a.start_ms - b.start_ms || a.end_ms - b.end_ms);
+
+    if (!pairs.length) return { error: `Invalid local time range on ${label}` };
+    if (pairs.length > 1) return { error: `Ambiguous local time range across DST change on ${label}` };
+
+    return pairs[0];
+  };
+
+  // Map schedule_json -> ISO fields (Europe/London local HH:MM + YMD -> UTC ISO)
+  const mapScheduleJsonToIso = (scheduleJson) => {
+    let seg = null;
+
+    if (Array.isArray(scheduleJson)) {
+      const nonNull = scheduleJson.filter(x => x && typeof x === 'object');
+      if (!nonNull.length) return { error: 'schedule_json must contain at least one day entry.' };
+
+      const usableDays = nonNull.filter((x) => {
+        const rawYmd = trimStr(x?.date || x?.work_date || x?.ymd || '');
+        return !!(rawYmd && parseYmd(rawYmd));
+      });
+
+      if (!usableDays.length) return { error: 'schedule_json must contain at least one usable day entry with a valid date.' };
+      if (usableDays.length > 1) {
+        const dates = new Set(usableDays.map(x => trimStr(x.date || x.work_date || x.ymd || '')).filter(Boolean));
+        if (dates.size > 1) return { error: 'DAILY schedule_json must contain exactly one date entry.' };
+      }
+      seg = usableDays[0];
+    } else if (scheduleJson && typeof scheduleJson === 'object') {
+      seg = scheduleJson;
+    } else {
+      return { error: 'schedule_json must be an object or array.' };
+    }
+
+    const ymdStrRaw = trimStr(seg.date || seg.work_date || seg.ymd || '');
+    const ymdStr = ymdStrRaw || null;
+    if (!ymdStr || !parseYmd(ymdStr)) return { error: 'schedule_json.date must be a valid YYYY-MM-DD.' };
+
+    const startHHMM = normaliseHHMM(seg.start || seg.worked_start || '');
+    const endHHMM   = normaliseHHMM(seg.end   || seg.worked_end   || '');
+
+    const hasStart = !!startHHMM;
+    const hasEnd   = !!endHHMM;
+
+    if (hasStart !== hasEnd) return { error: 'schedule_json.start and schedule_json.end must both be present (or both blank).' };
+
+    let worked_start_iso = null;
+    let worked_end_iso   = null;
+    let workedStartMs    = null;
+    let workedEndMs      = null;
+    let worked_minutes   = null;
+
+    let shiftStartMin0 = null;
+    let shiftEndMin0   = null;
+    let shiftStartAdj  = null;
+    let shiftEndAdj    = null;
+
+    if (hasStart && hasEnd) {
+      shiftStartMin0 = hhmmToMinutes(startHHMM);
+      shiftEndMin0   = hhmmToMinutes(endHHMM);
+      if (shiftStartMin0 == null || shiftEndMin0 == null) return { error: 'schedule_json.start/end must be valid HH:MM.' };
+      if (shiftStartMin0 === shiftEndMin0) return { error: 'schedule_json.start cannot equal schedule_json.end.' };
+
+      shiftStartAdj = shiftStartMin0;
+      shiftEndAdj   = (shiftEndMin0 > shiftStartMin0) ? shiftEndMin0 : (shiftEndMin0 + 1440);
+
+      const endDayAdd = Math.floor(shiftEndAdj / 1440);
+      const endYmd = addDaysYmd(ymdStr, endDayAdd);
+      if (!endYmd) return { error: 'Failed to compute overnight end date.' };
+
+      const workedResolved = resolveLocalWindowToIso(
+        ymdStr,
+        startHHMM,
+        endYmd,
+        normaliseHHMM(`${Math.floor((shiftEndAdj % 1440) / 60)}:${String((shiftEndAdj % 1440) % 60).padStart(2, '0')}`),
+        ymdStr
+      );
+      if (workedResolved?.error) return { error: workedResolved.error };
+
+      worked_start_iso = workedResolved.start_iso;
+      worked_end_iso   = workedResolved.end_iso;
+      workedStartMs    = workedResolved.start_ms;
+      workedEndMs      = workedResolved.end_ms;
+      worked_minutes   = Math.round((workedResolved.end_ms - workedResolved.start_ms) / 60000);
+
+      if (!worked_start_iso || !worked_end_iso || !(workedEndMs > workedStartMs)) {
+        return { error: 'Failed to convert schedule_json.start/end to ISO.' };
+      }
+      if (!(worked_minutes > 0)) {
+        return { error: 'Worked shift duration must be at least 1 minute.' };
+      }
+    }
+
+    let brStartHHMM = normaliseHHMM(seg.break_start || '');
+    let brEndHHMM   = normaliseHHMM(seg.break_end   || '');
+
+    const breaksArr = Array.isArray(seg.breaks) ? seg.breaks : [];
+    const meaningfulBreaks = breaksArr.filter(b => b && typeof b === 'object' && (trimStr(b.start || '') || trimStr(b.end || '')));
+
+    if ((!brStartHHMM && !brEndHHMM) && meaningfulBreaks.length) {
+      brStartHHMM = normaliseHHMM(meaningfulBreaks[0].start || '');
+      brEndHHMM   = normaliseHHMM(meaningfulBreaks[0].end   || '');
+    }
+
+    if (meaningfulBreaks.length > 1) {
+      return { error: 'DAILY schedule_json supports only one break window. Remove extra breaks or use break_minutes only.' };
+    }
+
+    const hasBrStart = !!brStartHHMM;
+    const hasBrEnd   = !!brEndHHMM;
+
+    if (hasBrStart !== hasBrEnd) return { error: 'schedule_json.break_start and schedule_json.break_end must both be present (or both blank).' };
+
+    let break_start_iso = null;
+    let break_end_iso   = null;
+    let break_minutes   = null;
+
+    const rawBreakMinutes =
+      seg.break_minutes === '' || seg.break_minutes == null
+        ? null
+        : Number(seg.break_minutes);
+
+    if ((hasBrStart || hasBrEnd || rawBreakMinutes != null) && !(hasStart && hasEnd)) {
+      return { error: 'You cannot set break times/minutes without worked start and end times.' };
+    }
+
+    if (hasBrStart && hasBrEnd) {
+      const bs0 = hhmmToMinutes(brStartHHMM);
+      const be0 = hhmmToMinutes(brEndHHMM);
+      if (bs0 == null || be0 == null) return { error: 'schedule_json.break_start/end must be valid HH:MM.' };
+      if (bs0 === be0) return { error: 'schedule_json.break_start cannot equal schedule_json.break_end.' };
+
+      let bsAdj = bs0;
+      if (bsAdj < shiftStartAdj) bsAdj += 1440;
+
+      let beAdj = be0;
+      if (beAdj < bsAdj) beAdj += 1440;
+
+      if (bsAdj < shiftStartAdj || beAdj > shiftEndAdj || beAdj <= bsAdj) {
+        return { error: 'Break window must be within the worked shift span (overnight-aware).' };
+      }
+
+      const bsDayAdd = Math.floor(bsAdj / 1440);
+      const beDayAdd = Math.floor(beAdj / 1440);
+
+      const bsYmd = addDaysYmd(ymdStr, bsDayAdd);
+      const beYmd = addDaysYmd(ymdStr, beDayAdd);
+      if (!bsYmd || !beYmd) return { error: 'Failed to compute break dates.' };
+
+      const bsM = bsAdj % 1440;
+      const beM = beAdj % 1440;
+
+      const bsHH = String(Math.floor(bsM / 60)).padStart(2, '0');
+      const bsMM = String(bsM % 60).padStart(2, '0');
+
+      const beHH = String(Math.floor(beM / 60)).padStart(2, '0');
+      const beMM = String(beM % 60).padStart(2, '0');
+
+      const breakResolved = resolveLocalWindowToIso(bsYmd, `${bsHH}:${bsMM}`, beYmd, `${beHH}:${beMM}`, `${ymdStr} (break window)`);
+      if (breakResolved?.error) return { error: breakResolved.error };
+
+      break_start_iso = breakResolved.start_iso;
+      break_end_iso   = breakResolved.end_iso;
+
+      if (!break_start_iso || !break_end_iso || !(breakResolved.end_ms > breakResolved.start_ms)) {
+        return { error: 'Failed to convert break window to ISO.' };
+      }
+
+      if (workedStartMs == null || workedEndMs == null) {
+        return { error: 'Cannot set a break window without a worked start/end.' };
+      }
+
+      if (breakResolved.start_ms < workedStartMs || breakResolved.end_ms > workedEndMs) {
+        return { error: 'Break window must be fully within the worked shift span.' };
+      }
+
+      break_minutes = Math.round((breakResolved.end_ms - breakResolved.start_ms) / 60000);
+      if (!(break_minutes > 0)) return { error: 'Break duration must be > 0 minutes.' };
+      if (worked_minutes != null && break_minutes > worked_minutes) {
+        return { error: 'Break duration cannot exceed the worked shift duration.' };
+      }
+    } else if (rawBreakMinutes != null) {
+      if (!Number.isFinite(rawBreakMinutes) || rawBreakMinutes < 0) {
+        return { error: 'schedule_json.break_minutes must be a non-negative number.' };
+      }
+
+      break_minutes = Math.round(rawBreakMinutes);
+      if (worked_minutes != null && break_minutes > worked_minutes) {
+        return { error: 'schedule_json.break_minutes cannot exceed the worked shift duration.' };
+      }
+    }
+
+    return {
+      ymd: ymdStr,
+      worked_start_iso,
+      worked_end_iso,
+      break_start_iso,
+      break_end_iso,
+      break_minutes,
+      worked_minutes,
+      normalized_schedule_json: {
+        date: ymdStr,
+        start: startHHMM || '',
+        end: endHHMM || '',
+        break_start: (hasBrStart && hasBrEnd) ? (brStartHHMM || '') : '',
+        break_end: (hasBrStart && hasBrEnd) ? (brEndHHMM || '') : '',
+        break_minutes: (hasBrStart && hasBrEnd) ? '' : (break_minutes == null ? '' : break_minutes)
+      }
+    };
+  };
+
+  const buildNormalizedDailyScheduleFromFinalState = ({ workedStartIso, workedEndIso, breakStartIso, breakEndIso, breakMinutes, ymdHint } = {}) => {
+    if (!(hasIso(workedStartIso) && hasIso(workedEndIso))) return null;
+
+    const startParts = toLocalParts(workedStartIso, 'Europe/London');
+    const endParts = toLocalParts(workedEndIso, 'Europe/London');
+    if (!startParts?.ymd || !startParts?.hhmm || !endParts?.hhmm) return null;
+
+    let breakStartHHMM = '';
+    let breakEndHHMM = '';
+    const hasBreakWindow = hasIso(breakStartIso) && hasIso(breakEndIso);
+
+    if (hasBreakWindow) {
+      const brStartParts = toLocalParts(breakStartIso, 'Europe/London');
+      const brEndParts = toLocalParts(breakEndIso, 'Europe/London');
+      breakStartHHMM = brStartParts?.hhmm || '';
+      breakEndHHMM = brEndParts?.hhmm || '';
+    }
+
+    const effectiveYmd = (ymdHint && parseYmd(ymdHint)) ? ymdHint : startParts.ymd;
+
+    return {
+      date: effectiveYmd,
+      start: startParts.hhmm || '',
+      end: endParts.hhmm || '',
+      break_start: breakStartHHMM,
+      break_end: breakEndHHMM,
+      break_minutes: hasBreakWindow
+        ? ''
+        : ((breakMinutes == null || !Number.isFinite(Number(breakMinutes))) ? '' : Math.round(Number(breakMinutes)))
+    };
+  };
+
+  // Helper: rotate current TS -> history, insert new current version (restorable)
+  const rotateTimesheetVersion = async (currentTs, revokeReason, qrActionForNew) => {
+    if (!currentTs || !currentTs.timesheet_id) return currentTs;
+
+    const oldVersion = Number(currentTs.version || 1);
+    const newVersion = oldVersion + 1;
+    const now2 = nowIso();
+
+    await fetch(
+      `${env.SUPABASE_URL}/rest/v1/timesheets` +
+        `?timesheet_id=eq.${enc(currentTs.timesheet_id)}` +
+        `&version=eq.${enc(oldVersion)}`,
+      {
+        method: 'PATCH',
+        headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+        body: JSON.stringify({
+          is_current: false,
+          status: 'REVOKED',
+          revoked_reason: revokeReason || null,
+          revoked_by: user?.id || null,
+          updated_at: now2
+        })
+      }
+    );
+
+    const act = String(qrActionForNew || '').toUpperCase();
+    const newIsQrPending = (act === 'INVALIDATE' || act === 'REISSUE' || act === 'ISSUE');
+
+    const newRow = {
+      ...currentTs,
+      version: newVersion,
+      is_current: true,
+
+      status: currentTs.status || 'RECEIVED',
+
+      revoked_reason: null,
+      revoked_by: null,
+
+      // ✅ Recommended: new current should not inherit signed/manual evidence or authorisation after QR invalidate/reissue
+      manual_pdf_r2_key: (newIsQrPending ? null : null),
+      authorised_at_server: (newIsQrPending ? null : null),
+
+      // ✅ QR state:
+      // INVALIDATE/REISSUE/ISSUE => QR enabled but not issued (token/gen cleared, qr_status=PENDING)
+      // REVOKE_TO_MANUAL/DISABLE => manual-only (clear QR state so UI doesn't show QR)
+      qr_token: null,
+      qr_status: newIsQrPending ? 'PENDING' : null,
+      qr_payload_json: {},     // never null
+      qr_generated_at: null,
+      qr_scanned_at: null,
+      qr_scan_info_json: null,
+      qr_r2_key: null,
+
+      // ✅ Hash truth fields (must exist in DB)
+      qr_last_sent_hash: null,
+      qr_last_sent_at_utc: null,
+      qr_signed_hash: null,
+      qr_signed_at_utc: null,
+
+      updated_at: now2,
+      created_at: now2
+    };
+
+    delete newRow.id;
+    delete newRow.timesheet_id;
+
+    const ins = await fetch(`${env.SUPABASE_URL}/rest/v1/timesheets`, {
+      method: 'POST',
+      headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+      body: JSON.stringify([newRow])
+    });
+
+    if (!ins.ok) {
+      const t = await ins.text().catch(() => '');
+      throw new Error(`Failed to rotate daily timesheet version: ${t}`);
+    }
+
+    const created = (await ins.json().catch(() => []))[0] || null;
+
+    // ✅ NEW: purge superseded versions immediately (best-effort; never blocks caller)
+    // ✅ FIX: do NOT reference bookingId here (it is not in scope); only use values available here.
+    try {
+      const bid = (created?.booking_id || currentTs?.booking_id || null);
+      if (bid) {
+        await purgeSupersededTimesheetArtifactsForBooking(env, bid);
+      }
+    } catch (e) {
+      try {
+        console.warn('[DAILY_MANUAL_UPSERT][ROTATE] purge failed (non-fatal)', {
+          booking_id: (created?.booking_id || currentTs?.booking_id || null),
+          err: e?.message || String(e)
+        });
+      } catch {}
+    }
+
+    return created || { ...currentTs, version: newVersion, is_current: true };
+  };
+
+    // 3) Load DAILY timesheet (current version) — use currentTimesheetId
+  let ts = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+      `&is_current=eq.true` +
+      `&select=*`
+  );
+  if (!ts) return withCORS(env, req, notFound('Timesheet not found'));
+
+  // ✅ Hard rule: reject any attempt to alter hours/schedule while authorised
+  if (ts.authorised_at_server) {
+    return withCORS(
+      env,
+      req,
+      new Response(
+        JSON.stringify({
+          error_code: 'TIMESHEET_AUTHORISED_EDIT_BLOCKED',
+          message: 'This timesheet is authorised. Unauthorise it before changing hours.'
+        }),
+        { status: 409, headers: { 'Content-Type': 'application/json' } }
+      )
+    );
+  }
+
+  const sheetScope = String(ts.sheet_scope || '').toUpperCase();
+  if (sheetScope !== 'DAILY') {
+    return bad('Timesheet is not DAILY; daily-manual-upsert only applies to DAILY sheets');
+  }
+
+  const subMode = String(ts.submission_mode || '').toUpperCase();
+  if (subMode !== 'MANUAL') {
+    return bad('Timesheet must be MANUAL before editing hours. Use switch-daily-to-manual first.');
+  }
+
+  // 4) Load TSFIN – must not be locked/paid — use currentTimesheetId
+  const tsfin = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+      `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+      `&is_current=eq.true` +
+      `&select=*`
+  );
+  if (!tsfin) return withCORS(env, req, serverError('No TSFIN snapshot found'));
+
+  if (tsfin.locked_by_invoice_id || tsfin.paid_at_utc) {
+    return bad('Timesheet already invoiced or paid; cannot edit');
+  }
+
+  const isDailyManualCurrentlyUnprocessed = (value) =>
+    String(value || '').trim().toUpperCase() === 'UNPROCESSED';
+
+  const wasUnprocessedBefore = isDailyManualCurrentlyUnprocessed(tsfin.processing_status);
+
+  const writeDailyManualSaveAudit = async () => {
+    try {
+      await writeAudit(
+        env,
+        user,
+        'TIMESHEET_DRAFT_SAVED',
+        {
+          timesheet_id: currentTimesheetId,
+          sheet_scope: 'DAILY',
+          submission_mode: 'MANUAL',
+          source: 'timesheet_daily_manual_upsert',
+          qr_action: qrAction,
+          processing_status: finAfter?.processing_status ?? null,
+          bucket_hours: finAfter ? {
+            day:   Number(finAfter.hours_day   ?? 0),
+            night: Number(finAfter.hours_night ?? 0),
+            sat:   Number(finAfter.hours_sat   ?? 0),
+            sun:   Number(finAfter.hours_sun   ?? 0),
+            bh:    Number(finAfter.hours_bh    ?? 0),
+            total: Number(finAfter.total_hours ?? 0)
+          } : null
+        },
+        { entity: 'timesheets', subject_id: currentTimesheetId, req }
+      );
+    } catch {}
+  };
+  // ─────────────────────────────────────────────────────────────
+  // NEW: schedule_json -> ISO mapping (runs BEFORE validation)
+  // ─────────────────────────────────────────────────────────────
+  const scheduleProvided = (schedule_json_in !== undefined);
+  let mappedWorkedStartIso = worked_start_iso_in;
+  let mappedWorkedEndIso   = worked_end_iso_in;
+  let mappedBreakStartIso  = break_start_iso_in;
+  let mappedBreakEndIso    = break_end_iso_in;
+  let mappedBreakMinutesIn = break_minutes_in;
+  let mappedScheduleYmd    = null;
+
+  if (scheduleProvided) {
+    if (schedule_json_in == null) return bad('schedule_json must not be null.');
+    const mapped = mapScheduleJsonToIso(schedule_json_in);
+    if (mapped && mapped.error) return bad(mapped.error);
+
+    mappedScheduleYmd = mapped.ymd || null;
+    worked_date_ymd = mapped.ymd || worked_date_ymd;
+
+    mappedWorkedStartIso = mapped.worked_start_iso;
+    mappedWorkedEndIso   = mapped.worked_end_iso;
+    mappedBreakStartIso  = mapped.break_start_iso;
+    mappedBreakEndIso    = mapped.break_end_iso;
+    mappedBreakMinutesIn = (mapped.break_minutes != null) ? mapped.break_minutes : null;
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // ✅ Pre-validate worked/break ordering + partials BEFORE rotate/patch/rebuild
+  // ─────────────────────────────────────────────────────────────
+  const shouldPatchWorked = scheduleProvided || worked_start_iso_in !== undefined || worked_end_iso_in !== undefined;
+  const shouldPatchBreakTimes = scheduleProvided || break_start_iso_in !== undefined || break_end_iso_in !== undefined;
+  const shouldPatchBreakMinutes = scheduleProvided || break_minutes_in !== undefined;
+  const shouldPatchActualSchedule = shouldPatchWorked || shouldPatchBreakTimes || shouldPatchBreakMinutes;
+  const referenceProvided = (reference_number_in !== undefined);
+
+  let nextWorkedStartIso = (mappedWorkedStartIso !== undefined) ? normIso(mappedWorkedStartIso) : normIso(ts.worked_start_iso);
+  let nextWorkedEndIso   = (mappedWorkedEndIso   !== undefined) ? normIso(mappedWorkedEndIso)   : normIso(ts.worked_end_iso);
+
+  let nextBreakStartIso  = (mappedBreakStartIso  !== undefined) ? normIso(mappedBreakStartIso)  : normIso(ts.break_start_iso);
+  let nextBreakEndIso    = (mappedBreakEndIso    !== undefined) ? normIso(mappedBreakEndIso)    : normIso(ts.break_end_iso);
+
+  let nextBreakMinutesNum =
+    (mappedBreakMinutesIn !== undefined)
+      ? parseOptionalBreakMinutesInput(mappedBreakMinutesIn)
+      : (ts.break_minutes != null ? Number(ts.break_minutes) : null);
+
+  let hasShiftStart = hasIso(nextWorkedStartIso);
+  let hasShiftEnd   = hasIso(nextWorkedEndIso);
+
+  if (hasShiftStart !== hasShiftEnd) {
+    return bad('worked_start_iso and worked_end_iso must both be provided (or both cleared).');
+  }
+
+  let shiftStartMs = null;
+  let shiftEndMs   = null;
+  let shiftMinutes = null;
+
+  if (hasShiftStart && hasShiftEnd) {
+    shiftStartMs = isoToMs(nextWorkedStartIso);
+    shiftEndMs   = isoToMs(nextWorkedEndIso);
+
+    if (shiftStartMs == null || shiftEndMs == null) {
+      return bad('worked_start_iso/worked_end_iso must be valid ISO timestamps.');
+    }
+
+    const diffMs = shiftEndMs - shiftStartMs;
+    if (diffMs <= 0) {
+      return bad('worked_end_iso must be after worked_start_iso (overnight shifts must use next-day end ISO).');
+    }
+
+    const diffMin = diffMs / 60000;
+    if (!(diffMin > 0)) {
+      return bad('Worked shift duration must be > 0 minutes.');
+    }
+
+    if (diffMs === 0) {
+      return bad('worked_start_iso cannot equal worked_end_iso.');
+    }
+
+    shiftMinutes = Math.round(diffMin);
+    if (shiftMinutes <= 0) {
+      return bad('Worked shift duration must be at least 1 minute.');
+    }
+  }
+
+  const shiftClearedExplicitly = shouldPatchWorked && !hasShiftStart && !hasShiftEnd;
+  if (shiftClearedExplicitly) {
+    nextBreakStartIso = null;
+    nextBreakEndIso = null;
+    nextBreakMinutesNum = null;
+  }
+
+  const hasBrStart = hasIso(nextBreakStartIso);
+  const hasBrEnd   = hasIso(nextBreakEndIso);
+
+  if (hasBrStart !== hasBrEnd) {
+    return bad('break_start_iso and break_end_iso must both be provided (or both cleared).');
+  }
+
+  const anyBreakInfo =
+    (hasBrStart && hasBrEnd) ||
+    (mappedBreakMinutesIn !== undefined && nextBreakMinutesNum != null) ||
+    (!shiftClearedExplicitly && mappedBreakMinutesIn === undefined && Number.isFinite(nextBreakMinutesNum));
+
+  if (anyBreakInfo && !(hasShiftStart && hasShiftEnd)) {
+    return bad('You cannot set break times/minutes without worked_start_iso and worked_end_iso.');
+  }
+
+  let computedBreakMinutes = null;
+
+  if (hasBrStart && hasBrEnd) {
+    const brStartMs = isoToMs(nextBreakStartIso);
+    const brEndMs   = isoToMs(nextBreakEndIso);
+
+    if (brStartMs == null || brEndMs == null) {
+      return bad('break_start_iso/break_end_iso must be valid ISO timestamps.');
+    }
+
+    const brDiffMs = brEndMs - brStartMs;
+    if (brDiffMs <= 0) {
+      return bad('break_end_iso must be after break_start_iso (overnight breaks must use next-day end ISO).');
+    }
+
+    if (brDiffMs === 0) {
+      return bad('break_start_iso cannot equal break_end_iso.');
+    }
+
+    if (brStartMs < shiftStartMs || brEndMs > shiftEndMs) {
+      return bad('Break window must be fully within the worked shift span.');
+    }
+
+    computedBreakMinutes = Math.round(brDiffMs / 60000);
+    if (!(computedBreakMinutes > 0)) {
+      return bad('Break duration must be > 0 minutes.');
+    }
+
+    if (shiftMinutes != null && computedBreakMinutes > shiftMinutes) {
+      return bad('Break duration cannot exceed the worked shift duration.');
+    }
+
+    nextBreakMinutesNum = computedBreakMinutes;
+  } else {
+    if (mappedBreakMinutesIn !== undefined) {
+      if (nextBreakMinutesNum != null) {
+        if (!Number.isFinite(nextBreakMinutesNum) || nextBreakMinutesNum < 0) {
+          return bad('break_minutes must be a non-negative number.');
+        }
+        nextBreakMinutesNum = Math.round(nextBreakMinutesNum);
+        if (shiftMinutes != null && nextBreakMinutesNum > shiftMinutes) {
+          return bad('break_minutes cannot exceed the worked shift duration.');
+        }
+      }
+    } else if (Number.isFinite(nextBreakMinutesNum) && shiftMinutes != null && nextBreakMinutesNum > shiftMinutes) {
+      return bad('Existing break_minutes exceeds the worked shift duration. Please reduce break_minutes or set break_start_iso/break_end_iso.');
+    }
+  }
+
+  const nextWorkedMinutes = (hasShiftStart && hasShiftEnd && Number.isFinite(shiftMinutes)) ? shiftMinutes : null;
+
+  const currentReferenceNumber = normTextOrNull(ts.reference_number);
+  const nextReferenceNumber = referenceProvided ? normTextOrNull(reference_number_in) : currentReferenceNumber;
+  const nextReferenceSetAt = referenceProvided
+    ? (nextReferenceNumber ? ((nextReferenceNumber !== currentReferenceNumber) ? now : (ts.reference_set_at || now)) : null)
+    : (ts.reference_set_at ?? null);
+
+  const nextActualScheduleJson = shouldPatchActualSchedule
+    ? buildNormalizedDailyScheduleFromFinalState({
+        workedStartIso: nextWorkedStartIso,
+        workedEndIso: nextWorkedEndIso,
+        breakStartIso: nextBreakStartIso,
+        breakEndIso: nextBreakEndIso,
+        breakMinutes: nextBreakMinutesNum,
+        ymdHint: mappedScheduleYmd || worked_date_ymd || null
+      })
+    : (ts.actual_schedule_json != null ? ts.actual_schedule_json : null);
+
+  const shouldPatchBreakTimesResolved = shouldPatchBreakTimes || shiftClearedExplicitly;
+  const shouldPatchBreakMinutesResolved = shouldPatchBreakMinutes || shiftClearedExplicitly || (hasBrStart && hasBrEnd);
+
+  // ─────────────────────────────────────────────────────────────
+  // MINIMAL TIMESHEET AUDIT: capture BEFORE for diffing
+  // ─────────────────────────────────────────────────────────────
+  const tsBefore = { ...ts };
+  const finBefore = { ...tsfin };
+
+  let preBulkPatchRow = null;
+  if (bulkPatchResponseRequested && expectedRowSignature) {
+    try {
+      preBulkPatchRow = await loadDailyManualBulkPatchRow({
+        timesheetId: currentTimesheetId,
+        datasetMode: bulkDatasetMode,
+        changedDomains: ['manual', 'save']
+      });
+    } catch (e) {
+      return withCORS(env, req, serverError(`Failed to load daily manual bulk row signature: ${e?.message || e}`));
+    }
+
+    const currentRowSignature = String(preBulkPatchRow?.row_signature || '').trim();
+    if (!currentRowSignature || currentRowSignature !== expectedRowSignature) {
+      return withCORS(
+        env,
+        req,
+        new Response(
+          JSON.stringify({
+            error: 'ROW_SIGNATURE_MISMATCH',
+            error_code: 'ROW_SIGNATURE_MISMATCH',
+            message: 'Timesheet changed after it was loaded. Refresh the row and try again.',
+            expected_row_signature: expectedRowSignature,
+            current_row_signature: currentRowSignature || null,
+            current_timesheet_id: currentTimesheetId,
+            requested_timesheet_id: guard.resolved.requested_timesheet_id || timesheetId,
+            was_stale: !!guard.resolved.was_stale
+          }),
+          { status: 409, headers: { 'Content-Type': 'application/json' } }
+        )
+      );
+    }
+  }
+
+  const hadQrBefore = !!(
+    ts.qr_status ||
+    ts.qr_token ||
+    ts.qr_generated_at ||
+    ts.qr_scanned_at
+  );
+
+  // ✅ Decide requested QR action (enum preferred)
+  let qrAction = null; // 'INVALIDATE' | 'REVOKE_TO_MANUAL' | 'REISSUE' | 'ISSUE' | 'DISABLE' | null
+
+  if (enumOk(qrActionEnumRaw)) {
+    // SAVE_WITHOUT_ISSUE means "no QR side-effects here"
+    qrAction = (qrActionEnumRaw === 'SAVE_WITHOUT_ISSUE') ? null : qrActionEnumRaw;
+  } else if (hadQrBefore) {
+    // Legacy fallback (only meaningful if the sheet already had QR activity)
+    if (rawReissueQr) qrAction = 'REISSUE';
+    else if (rawRevokeToManual || rawRevokeQr) qrAction = 'REVOKE_TO_MANUAL';
+    else if (rawDisableQr) qrAction = 'DISABLE';
+    else if (rawIssueQr) qrAction = 'ISSUE';
+  }
+
+  const preRotateVersion = Number(ts.version || 1);
+  let rotated = false;
+  let rotateReason = null;
+
+  // Rotate for invalidate/revoke/disable/reissue so restore is possible and old evidence remains in history.
+  if (hadQrBefore && (qrAction === 'INVALIDATE' || qrAction === 'REISSUE' || qrAction === 'REVOKE_TO_MANUAL' || qrAction === 'DISABLE')) {
+    const why =
+      (qrAction === 'INVALIDATE' || qrAction === 'REISSUE') ? 'QR_INVALIDATED_AFTER_CONTENT_CHANGE' :
+      (qrAction === 'REVOKE_TO_MANUAL') ? 'QR_REVOKED_TO_MANUAL' :
+      'QR_DISABLED_TO_MANUAL';
+
+    rotateReason = why;
+    ts = await rotateTimesheetVersion(ts, why, qrAction);
+    rotated = true;
+
+    // After rotation we are now operating on the new timesheet_id
+    currentTimesheetId = ts?.timesheet_id || currentTimesheetId;
+  }
+
+  // 5) Patch worked/break/reference fields (on CURRENT timesheet id)
+  const patchBody = { updated_at: now };
+
+  if (shouldPatchWorked) {
+    patchBody.worked_start_iso = normIso(nextWorkedStartIso);
+    patchBody.worked_end_iso   = normIso(nextWorkedEndIso);
+    patchBody.worked_minutes   = nextWorkedMinutes;
+  }
+
+  if (shouldPatchBreakTimesResolved) {
+    patchBody.break_start_iso = normIso(nextBreakStartIso);
+    patchBody.break_end_iso   = normIso(nextBreakEndIso);
+  }
+
+  if (shouldPatchBreakMinutesResolved) {
+    patchBody.break_minutes = (Number.isFinite(nextBreakMinutesNum) ? Math.round(nextBreakMinutesNum) : null);
+  }
+
+  if (shouldPatchActualSchedule) {
+    patchBody.actual_schedule_json = nextActualScheduleJson;
+  }
+
+  if (referenceProvided) {
+    patchBody.reference_number = nextReferenceNumber;
+    patchBody.reference_set_at = nextReferenceSetAt;
+  }
+
+  const patchRes = await fetch(
+    `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+      `&is_current=eq.true`,
+    {
+      method: 'PATCH',
+      headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+      body: JSON.stringify(patchBody)
+    }
+  ).catch((e) => ({ ok: false, __err: e }));
+
+  if (!patchRes || !patchRes.ok) {
+    const patchErrText = patchRes?.__err
+      ? String(patchRes.__err?.message || patchRes.__err)
+      : await patchRes.text().catch(() => '');
+    return withCORS(env, req, serverError(`Failed to save daily manual timesheet: ${patchErrText || 'Unknown patch failure'}`));
+  }
+
+  // 6) Reload updated TS for snapshot + QR (CURRENT timesheet id)
+  const updatedTs = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+      `&is_current=eq.true` +
+      `&select=*`
+  );
+
+   // 7) Rebuild DAILY snapshot (TSFIN) — SQL-first (band no-guess enforced)
+  try {
+    // Priority enqueue JUST this timesheet
+    await sbRpc(env, 'enqueue_ts_financials_priority', {
+      _timesheet_ids: [currentTimesheetId],
+      _reason: 'CONTEXT_CHANGED'
+    });
+
+    // Deterministic drain ONLY this timesheet
+    await runTsfinWorkerOnce(env, {
+      limit: 1,
+      onlyTimesheetIds: [currentTimesheetId]
+    });
+
+    // NOTE: we intentionally do NOT hard-fail if picked=0 (rare race if leased elsewhere);
+    // it's still queued and will update shortly via the normal drain.
+  } catch (e) {
+    return withCORS(env, req, serverError(`Failed to rebuild daily snapshot: ${e?.message || e}`));
+  }
+
+
+  // Reload TSFIN after recompute (CURRENT timesheet id)
+  let finAfter = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+      `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+      `&is_current=eq.true` +
+      `&select=*`
+  ).catch(() => null);
+
+  if (wasUnprocessedBefore && finAfter?.id) {
+    const finAfterStatus = String(finAfter.processing_status || '').trim().toUpperCase();
+    if (finAfterStatus !== 'UNPROCESSED') {
+      await fetch(
+        `${env.SUPABASE_URL}/rest/v1/timesheets_financials?id=eq.${enc(finAfter.id)}`,
+        {
+          method: 'PATCH',
+          headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+          body: JSON.stringify({
+            processing_status: 'UNPROCESSED',
+            updated_at: nowIso()
+          })
+        }
+      ).catch(() => {});
+
+      finAfter = await sbGetOne(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+          `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+          `&is_current=eq.true` +
+          `&select=*`
+      ).catch(() => finAfter);
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // MINIMAL TIMESHEET AUDIT: log HOURS_CHANGED only when meaningful
+  // ─────────────────────────────────────────────────────────────
+  const changedFields = [];
+  const same = (a, b) => String(a ?? '') === String(b ?? '');
+
+  if ((scheduleProvided || worked_start_iso_in !== undefined) && !same(tsBefore.worked_start_iso, updatedTs?.worked_start_iso)) changedFields.push('worked_start_iso');
+  if ((scheduleProvided || worked_end_iso_in   !== undefined) && !same(tsBefore.worked_end_iso,   updatedTs?.worked_end_iso))   changedFields.push('worked_end_iso');
+  if ((scheduleProvided || break_start_iso_in  !== undefined) && !same(tsBefore.break_start_iso,  updatedTs?.break_start_iso))  changedFields.push('break_start_iso');
+  if ((scheduleProvided || break_end_iso_in    !== undefined) && !same(tsBefore.break_end_iso,    updatedTs?.break_end_iso))    changedFields.push('break_end_iso');
+  if ((scheduleProvided || break_minutes_in !== undefined || (hasBrStart && hasBrEnd)) && !same(tsBefore.break_minutes, updatedTs?.break_minutes)) changedFields.push('break_minutes');
+
+  const hoursChangedBuckets = !!(finAfter && (
+    Number(finBefore.hours_day   ?? 0) !== Number(finAfter.hours_day   ?? 0) ||
+    Number(finBefore.hours_night ?? 0) !== Number(finAfter.hours_night ?? 0) ||
+    Number(finBefore.hours_sat   ?? 0) !== Number(finAfter.hours_sat   ?? 0) ||
+    Number(finBefore.hours_sun   ?? 0) !== Number(finAfter.hours_sun   ?? 0) ||
+    Number(finBefore.hours_bh    ?? 0) !== Number(finAfter.hours_bh    ?? 0) ||
+    Number(finBefore.total_hours ?? 0) !== Number(finAfter.total_hours ?? 0)
+  ));
+
+  if (changedFields.length || hoursChangedBuckets) {
+    try {
+      await writeAudit(
+        env,
+        user,
+        'TIMESHEET_HOURS_CHANGED',
+        {
+          timesheet_id: currentTimesheetId,
+          sheet_scope: 'DAILY',
+          submission_mode: 'MANUAL',
+          changed_fields: changedFields,
+          rotated_for_qr: rotated,
+          rotate_reason: rotateReason,
+          before: {
+            worked_start_iso: tsBefore.worked_start_iso ?? null,
+            worked_end_iso:   tsBefore.worked_end_iso   ?? null,
+            break_start_iso:  tsBefore.break_start_iso  ?? null,
+            break_end_iso:    tsBefore.break_end_iso    ?? null,
+            break_minutes:    tsBefore.break_minutes    ?? null,
+            bucket_hours: {
+              day:   Number(finBefore.hours_day   ?? 0),
+              night: Number(finBefore.hours_night ?? 0),
+              sat:   Number(finBefore.hours_sat   ?? 0),
+              sun:   Number(finBefore.hours_sun   ?? 0),
+              bh:    Number(finBefore.hours_bh    ?? 0),
+              total: Number(finBefore.total_hours ?? 0)
+            }
+          },
+          after: {
+            worked_start_iso: updatedTs?.worked_start_iso ?? null,
+            worked_end_iso:   updatedTs?.worked_end_iso   ?? null,
+            break_start_iso:  updatedTs?.break_start_iso  ?? null,
+            break_end_iso:    updatedTs?.break_end_iso    ?? null,
+            break_minutes:    updatedTs?.break_minutes    ?? null,
+            bucket_hours: finAfter ? {
+              day:   Number(finAfter.hours_day   ?? 0),
+              night: Number(finAfter.hours_night ?? 0),
+              sat:   Number(finAfter.hours_sat   ?? 0),
+              sun:   Number(finAfter.hours_sun   ?? 0),
+              bh:    Number(finAfter.hours_bh    ?? 0),
+              total: Number(finAfter.total_hours ?? 0)
+            } : null
+          }
+        },
+        { entity: 'timesheets', subject_id: currentTimesheetId, req }
+      );
+    } catch {}
+  }
+
+  // 8) QR state change for after-save actions (NEW)
+  // - INVALIDATE / REISSUE: clear token/payload/scanned + clear hashes, keep qr_status='PENDING' (QR-enabled, not issued)
+  // - REVOKE_TO_MANUAL / DISABLE: clear QR fields and hashes so QR UI does not show
+  if (qrAction && finAfter && !finAfter.locked_by_invoice_id && !finAfter.paid_at_utc) {
+    const now2 = nowIso();
+
+    const act = String(qrAction || '').toUpperCase();
+    const qrEnablePending = (act === 'INVALIDATE' || act === 'REISSUE' || act === 'ISSUE');
+    const qrClearAll = (act === 'REVOKE_TO_MANUAL' || act === 'DISABLE');
+
+    const tsPatch = {
+      updated_at: now2,
+
+      qr_token: null,
+      qr_generated_at: null,
+      qr_scanned_at: null,
+      qr_scan_info_json: null,
+      qr_r2_key: null,
+      qr_payload_json: {},
+
+      qr_last_sent_hash: null,
+      qr_last_sent_at_utc: null,
+      qr_signed_hash: null,
+      qr_signed_at_utc: null,
+
+      manual_pdf_r2_key: null,
+      authorised_at_server: null
+    };
+
+    if (qrEnablePending) {
+      tsPatch.qr_status = 'PENDING';
+    } else if (qrClearAll) {
+      tsPatch.qr_status = null;
+    }
+
+    await fetch(
+      `${env.SUPABASE_URL}/rest/v1/timesheets` +
+        `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+        `&is_current=eq.true`,
+      {
+        method: 'PATCH',
+        headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+        body: JSON.stringify(tsPatch)
+      }
+    ).catch(() => {});
+
+    const desired = wasUnprocessedBefore ? 'UNPROCESSED' : 'AWAITING_MANUAL_SIGNATURE';
+    if (String(finAfter.processing_status || '').toUpperCase() !== desired) {
+      await fetch(
+        `${env.SUPABASE_URL}/rest/v1/timesheets_financials?id=eq.${enc(finAfter.id)}`,
+        {
+          method: 'PATCH',
+          headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+          body: JSON.stringify({ processing_status: desired, updated_at: now2 })
+        }
+      ).catch(() => {});
+      finAfter = { ...(finAfter || {}), processing_status: desired };
+    }
+  }
+
+  // NOTE: We do NOT issue/send a QR from daily-manual-upsert anymore.
+  // Sending happens via /api/timesheets/:id/qr-resend after save when the FE chooses “Send new now”.
+
+  // ─────────────────────────────────────────────────────────────
+  // MINIMAL TIMESHEET AUDIT: QR events (only meaningful ones)
+  // ─────────────────────────────────────────────────────────────
+  try {
+    if (qrAction === 'DISABLE' && rotated) {
+      await writeAudit(
+        env,
+        user,
+        'TIMESHEET_QR_DISABLED',
+        {
+          timesheet_id: currentTimesheetId,
+          sheet_scope: 'DAILY',
+          rotated: true,
+          from_version: preRotateVersion,
+          to_version: Number(ts?.version || preRotateVersion),
+          reason: rotateReason
+        },
+        { entity: 'timesheets', subject_id: currentTimesheetId, req }
+      );
+    }
+
+    if (qrAction === 'REVOKE_TO_MANUAL' && rotated) {
+      await writeAudit(
+        env,
+        user,
+        'TIMESHEET_QR_REVOKED_TO_MANUAL',
+        {
+          timesheet_id: currentTimesheetId,
+          sheet_scope: 'DAILY',
+          rotated: true,
+          from_version: preRotateVersion,
+          to_version: Number(ts?.version || preRotateVersion),
+          reason: rotateReason
+        },
+        { entity: 'timesheets', subject_id: currentTimesheetId, req }
+      );
+    }
+
+    // ✅ FIX: Remove issuance/reissue audit blocks — daily-manual-upsert does not issue QR now.
+    // if (qrIssued && qrToken) { ... }
+    // if (qrReissued && qrToken) { ... }
+
+  } catch {}
+
+  // ─────────────────────────────────────────────────────────────
+  // MINIMAL TIMESHEET AUDIT: PROCESSED (always after rebuild)
+  // ─────────────────────────────────────────────────────────────
+  if (wasUnprocessedBefore) {
+    if (changedFields.length || hoursChangedBuckets || qrAction) {
+      await writeDailyManualSaveAudit();
+    }
+  } else {
+    try {
+      await writeAudit(
+        env,
+        user,
+        'TIMESHEET_PROCESSED',
+        {
+          timesheet_id: currentTimesheetId,
+          sheet_scope: 'DAILY',
+          submission_mode: 'MANUAL',
+          source: 'timesheet_daily_manual_upsert',
+          qr_action: qrAction,
+          processing_status: finAfter?.processing_status ?? null,
+          bucket_hours: finAfter ? {
+            day:   Number(finAfter.hours_day   ?? 0),
+            night: Number(finAfter.hours_night ?? 0),
+            sat:   Number(finAfter.hours_sat   ?? 0),
+            sun:   Number(finAfter.hours_sun   ?? 0),
+            bh:    Number(finAfter.hours_bh    ?? 0),
+            total: Number(finAfter.total_hours ?? 0)
+          } : null
+        },
+        { entity: 'timesheets', subject_id: currentTimesheetId, req }
+      );
+    } catch {}
+  }
+
+
+
+  const finalTs = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+      `&is_current=eq.true` +
+      `&select=*`
+  ).catch(() => updatedTs || ts || null);
+
+  if (bulkPatchResponseRequested) {
+    const manualChanged = !!(
+      shouldPatchActualSchedule ||
+      referenceProvided ||
+      rotated ||
+      qrAction ||
+      changedFields.length ||
+      hoursChangedBuckets
+    );
+
+    let bulkRow = null;
+    try {
+      bulkRow = await loadDailyManualBulkPatchRow({
+        timesheetId: currentTimesheetId,
+        datasetMode: bulkDatasetMode,
+        changedDomains: manualChanged ? ['manual', 'schedule', 'save'] : ['save']
+      });
+    } catch (e) {
+      return withCORS(env, req, serverError(`Failed to build daily manual bulk patch row: ${e?.message || e}`));
+    }
+
+    if (!bulkRow || typeof bulkRow !== 'object' || Array.isArray(bulkRow)) {
+      return withCORS(env, req, serverError('bulk_timesheet_row_patch_v1 did not return a daily manual row patch.'));
+    }
+
+    const rowPatch = (bulkRow.row_patch && typeof bulkRow.row_patch === 'object' && !Array.isArray(bulkRow.row_patch))
+      ? bulkRow.row_patch
+      : {};
+    const rowKey = String(bulkRow.row_key || rowPatch.row_key || `timesheet:${currentTimesheetId}`).trim();
+    const rowSignature = String(bulkRow.row_signature || rowPatch.row_signature || '').trim() || null;
+    const cacheHints = {
+      ...((bulkRow.cache_invalidation_hints && typeof bulkRow.cache_invalidation_hints === 'object' && !Array.isArray(bulkRow.cache_invalidation_hints)) ? bulkRow.cache_invalidation_hints : {}),
+      row_keys: [rowKey].filter(Boolean),
+      timesheet_ids: [currentTimesheetId].filter(Boolean),
+      storage_keys: [],
+      datasets: ['bulk_process', 'bulk_authorise'],
+      row_signature: rowSignature,
+      manual_changed: manualChanged,
+      status_only: !manualChanged,
+      identity_changed: rotated === true,
+      invalidate_context: false,
+      invalidate_row_context: false,
+      invalidate_editor_context: manualChanged,
+      invalidate_preview: false,
+      invalidate_evidence: false
+    };
+
+    return withCORS(env, req, ok({
+      timesheet_id: currentTimesheetId,
+      booking_id: guard.resolved.booking_id || null,
+      requested_timesheet_id: guard.resolved.requested_timesheet_id || timesheetId,
+      current_timesheet_id: currentTimesheetId,
+      expected_timesheet_id: currentTimesheetId,
+      current_version: finalTs?.version ?? ts?.version ?? guard.resolved.current_version ?? null,
+      was_stale: !!guard.resolved.was_stale,
+
+      worked_start_iso: finalTs?.worked_start_iso ?? null,
+      worked_end_iso: finalTs?.worked_end_iso ?? null,
+      break_start_iso: finalTs?.break_start_iso ?? null,
+      break_end_iso: finalTs?.break_end_iso ?? null,
+      break_minutes: finalTs?.break_minutes ?? null,
+      worked_minutes: finalTs?.worked_minutes ?? null,
+      actual_schedule_json: finalTs?.actual_schedule_json ?? null,
+      reference_number: finalTs?.reference_number ?? null,
+      reference_set_at: finalTs?.reference_set_at ?? null,
+      processing_status: finAfter?.processing_status ?? null,
+
+      timesheet: finalTs || null,
+      tsfin: finAfter || null,
+      row_patch: rowPatch,
+      row_patches: [rowPatch],
+      data_row: bulkRow,
+      row: bulkRow,
+      row_key: rowKey,
+      new_row_key: rowKey,
+      row_signature: rowSignature,
+      backend_row_signature: rowSignature,
+      row_backend_signature: rowSignature,
+      count_deltas: (bulkRow.count_deltas && typeof bulkRow.count_deltas === 'object' && !Array.isArray(bulkRow.count_deltas)) ? bulkRow.count_deltas : {},
+      cache_invalidation_hints: cacheHints,
+      cache_invalidation: {
+        row_keys: cacheHints.row_keys,
+        timesheet_ids: cacheHints.timesheet_ids,
+        storage_keys: cacheHints.storage_keys,
+        datasets: cacheHints.datasets,
+        row_signature: cacheHints.row_signature,
+        manual_changed: cacheHints.manual_changed,
+        invalidate_context: cacheHints.invalidate_context,
+        invalidate_preview: cacheHints.invalidate_preview
+      },
+      response_context: bulkResponseContext,
+      bulk_authorise: bulkDatasetMode === 'authorise',
+      bulk_process: bulkDatasetMode === 'process',
+      summary_row_hint: {
+        timesheet_id: currentTimesheetId,
+        booking_id: guard.resolved.booking_id || null,
+        processing_status: finAfter?.processing_status ?? null,
+        reference_number: finalTs?.reference_number ?? null,
+        worked_start_iso: finalTs?.worked_start_iso ?? null,
+        worked_end_iso: finalTs?.worked_end_iso ?? null,
+        break_start_iso: finalTs?.break_start_iso ?? null,
+        break_end_iso: finalTs?.break_end_iso ?? null,
+        break_minutes: finalTs?.break_minutes ?? null,
+        worked_minutes: finalTs?.worked_minutes ?? null,
+        actual_schedule_json: finalTs?.actual_schedule_json ?? null,
+        total_hours: finAfter?.total_hours ?? null
+      },
+
+      qr_action: qrAction,
+      qr_issued: qrIssued,
+      qr_reissued: qrReissued,
+      qr_pdf_key: pdfKey,
+      qr_r2_key,
+      qr_token: qrToken || null
+    }));
+  }
+
+  return withCORS(env, req, ok({
+    timesheet_id: currentTimesheetId,
+    booking_id: guard.resolved.booking_id || null,
+    requested_timesheet_id: guard.resolved.requested_timesheet_id || timesheetId,
+    current_timesheet_id: currentTimesheetId,
+    current_version: finalTs?.version ?? ts?.version ?? guard.resolved.current_version ?? null,
+    was_stale: !!guard.resolved.was_stale,
+
+    worked_start_iso: finalTs?.worked_start_iso ?? null,
+    worked_end_iso: finalTs?.worked_end_iso ?? null,
+    break_start_iso: finalTs?.break_start_iso ?? null,
+    break_end_iso: finalTs?.break_end_iso ?? null,
+    break_minutes: finalTs?.break_minutes ?? null,
+    worked_minutes: finalTs?.worked_minutes ?? null,
+    actual_schedule_json: finalTs?.actual_schedule_json ?? null,
+    reference_number: finalTs?.reference_number ?? null,
+    reference_set_at: finalTs?.reference_set_at ?? null,
+    processing_status: finAfter?.processing_status ?? null,
+
+    timesheet: finalTs || null,
+    tsfin: finAfter || null,
+    summary_row_hint: {
+      timesheet_id: currentTimesheetId,
+      booking_id: guard.resolved.booking_id || null,
+      processing_status: finAfter?.processing_status ?? null,
+      reference_number: finalTs?.reference_number ?? null,
+      worked_start_iso: finalTs?.worked_start_iso ?? null,
+      worked_end_iso: finalTs?.worked_end_iso ?? null,
+      break_start_iso: finalTs?.break_start_iso ?? null,
+      break_end_iso: finalTs?.break_end_iso ?? null,
+      break_minutes: finalTs?.break_minutes ?? null,
+      worked_minutes: finalTs?.worked_minutes ?? null,
+      actual_schedule_json: finalTs?.actual_schedule_json ?? null,
+      total_hours: finAfter?.total_hours ?? null
+    },
+
+    qr_action: qrAction,
+    qr_issued: qrIssued,
+    qr_reissued: qrReissued,
+    qr_pdf_key: pdfKey,
+    qr_r2_key,
+    qr_token: qrToken || null
+  }));
+}
+
+
+async function handleContractWeekDeleteTimesheet(env, req, weekId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+  if (!weekId) return withCORS(env, req, badRequest('contract_week_id is required'));
+
+  const enc = encodeURIComponent;
+  const trimStr = (v) => String(v || '').trim();
+  const now = nowIso();
+  const round2 = (v) => {
+    const n = Number(v || 0);
+    return Number.isFinite(n) ? Math.round(n * 100) / 100 : 0;
+  };
+  const parseMaybeJsonObj = (src) => {
+    if (src == null) return null;
+    if (typeof src === 'object') return src;
+    const s = String(src).trim();
+    if (!s) return null;
+    try {
+      const parsed = JSON.parse(s);
+      return (parsed && typeof parsed === 'object') ? parsed : null;
+    } catch {
+      return null;
+    }
+  };
+  const normaliseUnitsWeekMap = (src) => {
+    const obj = parseMaybeJsonObj(src) || {};
+    const out = {};
+    for (const [keyRaw, valueRaw] of Object.entries(obj)) {
+      const code = String(keyRaw || '').toUpperCase().trim();
+      if (!code) continue;
+      const n = Number(valueRaw || 0);
+      if (!Number.isFinite(n) || n <= 0) continue;
+      out[code] = n;
+    }
+    return out;
+  };
+  const normaliseUnitsPerDay = (src) => {
+    const obj = parseMaybeJsonObj(src) || {};
+    const out = {};
+    for (const [codeRaw, dayMap] of Object.entries(obj)) {
+      const code = String(codeRaw || '').toUpperCase().trim();
+      if (!code || !dayMap || typeof dayMap !== 'object') continue;
+      const outDays = {};
+      for (const [dateRaw, valueRaw] of Object.entries(dayMap)) {
+        const ymd = String(dateRaw || '').slice(0, 10);
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) continue;
+        const n = Number(valueRaw || 0);
+        if (!Number.isFinite(n) || n <= 0) continue;
+        outDays[ymd] = n;
+      }
+      if (Object.keys(outDays).length) out[code] = outDays;
+    }
+    return out;
+  };
+  const extractExpenseNote = (desc) => {
+    if (desc == null) return '';
+    if (typeof desc === 'object') {
+      const noteA = typeof desc.note === 'string' ? desc.note.trim() : '';
+      const noteB = (!noteA && typeof desc.notes === 'string') ? desc.notes.trim() : '';
+      return noteA || noteB || '';
+    }
+    const s = String(desc).trim();
+    if (!s) return '';
+    try {
+      const parsed = JSON.parse(s);
+      if (parsed && typeof parsed === 'object') {
+        const noteA = typeof parsed.note === 'string' ? parsed.note.trim() : '';
+        const noteB = (!noteA && typeof parsed.notes === 'string') ? parsed.notes.trim() : '';
+        return noteA || noteB || '';
+      }
+    } catch {}
+    return s;
+  };
+  const buildExpenseDraftFromTsfin = (tsfinRow, existingDraft) => {
+    const existing = parseMaybeJsonObj(existingDraft) || {};
+    return {
+      mileage_units: round2(Number(tsfinRow?.mileage_units ?? 0)),
+      travel_pay: round2(Number(tsfinRow?.travel_pay_ex_vat ?? 0)),
+      travel_charge: round2(Number(tsfinRow?.travel_charge_ex_vat ?? 0)),
+      accommodation_pay: round2(Number(tsfinRow?.accommodation_pay_ex_vat ?? 0)),
+      accommodation_charge: round2(Number(tsfinRow?.accommodation_charge_ex_vat ?? 0)),
+      other_pay: round2(Number(tsfinRow?.other_pay_ex_vat ?? 0)),
+      other_charge: round2(Number(tsfinRow?.other_charge_ex_vat ?? 0)),
+      note: extractExpenseNote(tsfinRow?.expenses_description ?? existing.note ?? existing.notes ?? '')
+    };
+  };
+
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+
+  const bulkContextText = String(body?.context || body?.mode || '').trim().toLowerCase();
+  const bulkMode = !!(
+    body?.bulk === true ||
+    body?.bulk_process === true ||
+    body?.bulkProcess === true ||
+    body?.bulk_process_mode === true ||
+    body?.bulkProcessMode === true ||
+    body?.bulk_authorise === true ||
+    body?.bulkAuthorise === true ||
+    body?.return_bulk_patch === true ||
+    body?.returnBulkPatch === true ||
+    bulkContextText === 'bulk_process' ||
+    bulkContextText === 'bulk_authorise'
+  );
+  const bulkDatasetMode = (
+    body?.bulk_authorise === true ||
+    body?.bulkAuthorise === true ||
+    bulkContextText === 'bulk_authorise'
+  ) ? 'authorise' : 'process';
+  const expectedRowSignature = String(
+    body?.expected_row_signature ||
+    body?.expectedRowSignature ||
+    body?.row_signature ||
+    body?.rowSignature ||
+    ''
+  ).trim();
+
+  const headerValueForContractWeekUnprocessDebug = (name) => {
+    try {
+      return req?.headers?.get?.(name);
+    } catch {
+      return null;
+    }
+  };
+  const contractWeekUnprocessDebugParams = (() => {
+    try {
+      return new URL(req?.url || '').searchParams;
+    } catch {
+      return null;
+    }
+  })();
+  const isTruthyContractWeekUnprocessDebugFlag = (value) => {
+    if (value === true || value === 1) return true;
+    const text = String(value ?? '').trim().toLowerCase();
+    return text === 'true' || text === '1' || text === 'yes' || text === 'y' || text === 'on';
+  };
+  const contractWeekUnprocessTimingDebugEnabled = !!(
+    isTruthyContractWeekUnprocessDebugFlag(body?.debug) ||
+    isTruthyContractWeekUnprocessDebugFlag(body?.debug_timing) ||
+    isTruthyContractWeekUnprocessDebugFlag(body?.debugTiming) ||
+    isTruthyContractWeekUnprocessDebugFlag(body?.timing_debug) ||
+    isTruthyContractWeekUnprocessDebugFlag(body?.timingDebug) ||
+    isTruthyContractWeekUnprocessDebugFlag(body?.cw_unprocess_debug) ||
+    isTruthyContractWeekUnprocessDebugFlag(body?.cwUnprocessDebug) ||
+    isTruthyContractWeekUnprocessDebugFlag(headerValueForContractWeekUnprocessDebug('x-debug')) ||
+    isTruthyContractWeekUnprocessDebugFlag(headerValueForContractWeekUnprocessDebug('x-debug-timing')) ||
+    isTruthyContractWeekUnprocessDebugFlag(headerValueForContractWeekUnprocessDebug('x-cw-unprocess-debug')) ||
+    isTruthyContractWeekUnprocessDebugFlag(headerValueForContractWeekUnprocessDebug('x-bulk-process-debug')) ||
+    isTruthyContractWeekUnprocessDebugFlag(contractWeekUnprocessDebugParams?.get('debug')) ||
+    isTruthyContractWeekUnprocessDebugFlag(contractWeekUnprocessDebugParams?.get('debug_timing')) ||
+    isTruthyContractWeekUnprocessDebugFlag(contractWeekUnprocessDebugParams?.get('timing_debug')) ||
+    isTruthyContractWeekUnprocessDebugFlag(contractWeekUnprocessDebugParams?.get('cw_unprocess_debug')) ||
+    isTruthyContractWeekUnprocessDebugFlag(env?.CW_UNPROCESS_DEBUG) ||
+    isTruthyContractWeekUnprocessDebugFlag(env?.BULK_PROCESS_DEBUG) ||
+    isTruthyContractWeekUnprocessDebugFlag(env?.DEBUG_TIMINGS) ||
+    (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true)
+  );
+  const contractWeekUnprocessTimingStartedAtMs = Date.now();
+  let contractWeekUnprocessTimingPreviousAtMs = contractWeekUnprocessTimingStartedAtMs;
+  let contractWeekUnprocessTimingContractWeekId = String(weekId || '').trim() || null;
+  let contractWeekUnprocessTimingCurrentTimesheetId = null;
+  let contractWeekUnprocessTimingBookingId = null;
+  let contractWeekUnprocessTimingAllIdsCount = 0;
+  const wlogUnprocess = (step, extra = {}) => {
+    if (!contractWeekUnprocessTimingDebugEnabled) return;
+    const nowMs = Date.now();
+    const extraObj = (extra && typeof extra === 'object' && !Array.isArray(extra)) ? extra : {};
+    const payload = {
+      tag: 'CW_UNPROCESS',
+      route: 'CW_UNPROCESS',
+      step,
+      at_utc: new Date(nowMs).toISOString(),
+      elapsed_ms: nowMs - contractWeekUnprocessTimingStartedAtMs,
+      duration_ms: nowMs - contractWeekUnprocessTimingPreviousAtMs,
+      week_id: String(weekId || ''),
+      contract_week_id: contractWeekUnprocessTimingContractWeekId,
+      current_timesheet_id: contractWeekUnprocessTimingCurrentTimesheetId,
+      booking_id: contractWeekUnprocessTimingBookingId,
+      all_ids_count: contractWeekUnprocessTimingAllIdsCount,
+      bulk_dataset_mode: bulkDatasetMode,
+      bulk_process_mode: bulkMode && bulkDatasetMode === 'process',
+      bulk_mode: bulkMode,
+      ...extraObj
+    };
+    contractWeekUnprocessTimingPreviousAtMs = nowMs;
+    try {
+      console.log(JSON.stringify(payload));
+    } catch {}
+  };
+
+  wlogUnprocess('request_parsed', {
+    actor_user_id: user?.id || null,
+    body_keys: (body && typeof body === 'object') ? Object.keys(body) : [],
+    expected_timesheet_id_present: !!body?.expected_timesheet_id,
+    expected_row_signature_present: !!expectedRowSignature,
+    bulk_mode: bulkMode,
+    bulk_dataset_mode: bulkDatasetMode,
+    bulk_process_mode: bulkMode && bulkDatasetMode === 'process'
+  });
+  const parseBulkPatchRow = (value) => {
+    if (!value) return null;
+    if (typeof value === 'string') {
+      const source = value.trim();
+      if (!source) return null;
+      try {
+        const parsed = JSON.parse(source);
+        return parseBulkPatchRow(parsed);
+      } catch {
+        return null;
+      }
+    }
+    if (typeof value !== 'object' || Array.isArray(value)) return null;
+    if (value.row_json !== undefined) return parseBulkPatchRow(value.row_json);
+    if (value.bulk_timesheet_row_patch_v1 !== undefined) return parseBulkPatchRow(value.bulk_timesheet_row_patch_v1);
+    return value;
+  };
+  const firstBulkString = function firstBulkString() {
+    for (let i = 0; i < arguments.length; i += 1) {
+      const str = String(arguments[i] == null ? '' : arguments[i]).trim();
+      if (str) return str;
+    }
+    return '';
+  };
+  const bulkDecisionRowKey = (row, fallbackTimesheetId, fallbackContractWeekId) => {
+    const source = row && typeof row === 'object' && !Array.isArray(row) ? row : {};
+    const explicit = firstBulkString(source.row_key, source.rowKey, source.new_row_key);
+    if (explicit) return explicit;
+    const rowTimesheetId = firstBulkString(source.current_timesheet_id, source.timesheet_id, source.expected_timesheet_id, fallbackTimesheetId);
+    if (rowTimesheetId) return `timesheet:${rowTimesheetId}`;
+    const rowContractWeekId = firstBulkString(source.contract_week_id, source.week_id, fallbackContractWeekId);
+    if (rowContractWeekId) return `contract_week:${rowContractWeekId}`;
+    return firstBulkString(source.stable_row_id, source.id);
+  };
+  const loadBulkRoutePatchRow = async (patchTimesheetId, patchContractWeekId, changedDomains = []) => {
+    const patchFilters = {
+      dataset_mode: bulkDatasetMode,
+      projection: 'dataset_row',
+      profile: 'list'
+    };
+    if (patchTimesheetId) patchFilters.timesheet_id = String(patchTimesheetId);
+    if (patchContractWeekId) patchFilters.contract_week_id = String(patchContractWeekId);
+    if (user?.id) patchFilters.actor_user_id = String(user.id);
+    if (Array.isArray(changedDomains)) {
+      const cleanDomains = changedDomains.map(v => trimStr(v)).filter(Boolean);
+      if (cleanDomains.length) patchFilters.changed_domains = cleanDomains;
+    }
+    const patchRows = await sbRpc(
+      env,
+      'bulk_timesheet_row_patch_v1',
+      { p_filters: patchFilters },
+      { timeoutMs: 45000 }
+    );
+    const firstPatchRow = Array.isArray(patchRows) ? (patchRows[0] || null) : patchRows;
+    return parseBulkPatchRow(firstPatchRow);
+  };
+  let bulkPrePatchRow = null;
+  let bulkPreviousRowKey = null;
+  const ensureBulkPreDeletionPatch = async (patchTimesheetId, patchContractWeekId) => {
+    if (!bulkMode) return null;
+    try {
+      bulkPrePatchRow = await loadBulkRoutePatchRow(patchTimesheetId, patchContractWeekId);
+    } catch (err) {
+      return new Response(JSON.stringify({
+        error: 'BULK_ROUTE_PATCH_LOAD_FAILED',
+        error_code: 'BULK_ROUTE_PATCH_LOAD_FAILED',
+        message: err?.message || String(err || 'Failed to load bulk route patch row'),
+        current_timesheet_id: patchTimesheetId || null,
+        contract_week_id: patchContractWeekId || null
+      }), { status: 409, headers: { 'Content-Type': 'application/json' } });
+    }
+    if (!bulkPrePatchRow || typeof bulkPrePatchRow !== 'object' || Array.isArray(bulkPrePatchRow) || !Object.keys(bulkPrePatchRow).length) {
+      return new Response(JSON.stringify({
+        error: 'BULK_ROUTE_PATCH_ROW_NOT_FOUND',
+        error_code: 'BULK_ROUTE_PATCH_ROW_NOT_FOUND',
+        message: 'Could not load the current bulk row before weekly unprocess.',
+        current_timesheet_id: patchTimesheetId || null,
+        contract_week_id: patchContractWeekId || null
+      }), { status: 409, headers: { 'Content-Type': 'application/json' } });
+    }
+    bulkPreviousRowKey = bulkDecisionRowKey(bulkPrePatchRow, patchTimesheetId, patchContractWeekId);
+    const currentRowSignature = String(bulkPrePatchRow.row_signature || '').trim();
+    if (expectedRowSignature && currentRowSignature !== expectedRowSignature) {
+      return new Response(JSON.stringify({
+        error: 'ROW_SIGNATURE_MISMATCH',
+        error_code: 'ROW_SIGNATURE_MISMATCH',
+        message: 'This bulk row changed after it was loaded. Refresh the row and try again.',
+        expected_row_signature: expectedRowSignature,
+        current_row_signature: currentRowSignature || null,
+        current_timesheet_id: firstBulkString(bulkPrePatchRow.current_timesheet_id, bulkPrePatchRow.timesheet_id, patchTimesheetId) || null,
+        contract_week_id: firstBulkString(bulkPrePatchRow.contract_week_id, patchContractWeekId) || null,
+        previous_row_key: bulkPreviousRowKey || null
+      }), { status: 409, headers: { 'Content-Type': 'application/json' } });
+    }
+    return null;
+  };
+  const buildBulkDeletePatchPayload = async ({ previousTimesheetIdForPatch, currentContractWeekIdForPatch, actionName, extraContext = {} }) => {
+    return buildBulkRouteMutationPatch(
+      env,
+      user?.id || null,
+      bulkDatasetMode,
+      previousTimesheetIdForPatch || firstBulkString(bulkPrePatchRow?.current_timesheet_id, bulkPrePatchRow?.timesheet_id),
+      null,
+      firstBulkString(bulkPrePatchRow?.contract_week_id, currentContractWeekIdForPatch),
+      currentContractWeekIdForPatch,
+      bulkPreviousRowKey,
+      actionName,
+      {
+        ...body,
+        ...extraContext,
+        preDecisionRow: bulkPrePatchRow,
+        pre_decision_row: bulkPrePatchRow,
+        prePatchRow: bulkPrePatchRow,
+        pre_patch_row: bulkPrePatchRow,
+        previousRowKey: bulkPreviousRowKey,
+        previous_row_key: bulkPreviousRowKey,
+        expected_row_signature: expectedRowSignature || null,
+        bulk: true,
+        bulk_process: bulkDatasetMode === 'process',
+        bulk_authorise: bulkDatasetMode === 'authorise',
+        return_bulk_patch: true,
+        previousStorageKey: bulkPrePatchRow?.primary_artifact_storage_key || null,
+        previous_storage_key: bulkPrePatchRow?.primary_artifact_storage_key || null,
+        timeoutMs: 45000
+      }
+    );
+  };
+
+  const cw = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}&select=*`
+  );
+  if (!cw) {
+    return withCORS(env, req, notFound('Week not found'));
+  }
+  contractWeekUnprocessTimingContractWeekId = String(cw?.id || weekId || '').trim() || contractWeekUnprocessTimingContractWeekId;
+  wlogUnprocess('contract_week_loaded', {
+    contract_week_timesheet_id: cw?.timesheet_id || null,
+    contract_id: cw?.contract_id || null,
+    contract_week_status: cw?.status || null,
+    week_ending_date: cw?.week_ending_date || null
+  });
+
+  if (!cw.timesheet_id) {
+    return handleContractWeekDeletePlanned(env, req, weekId);
+  }
+
+  const expected = body?.expected_timesheet_id ? String(body.expected_timesheet_id) : '';
+  if (!expected) return withCORS(env, req, badRequest('expected_timesheet_id is required'));
+
+  const resolved = await resolveTimesheetToCurrent(env, cw.timesheet_id);
+  if (!resolved?.current_timesheet_id) {
+    return withCORS(env, req, serverError('Failed to resolve current timesheet for contract week'));
+  }
+  const currentTimesheetId = String(resolved.current_timesheet_id);
+  contractWeekUnprocessTimingCurrentTimesheetId = currentTimesheetId || contractWeekUnprocessTimingCurrentTimesheetId;
+  wlogUnprocess('current_timesheet_resolved', {
+    requested_timesheet_id: cw?.timesheet_id || null,
+    current_timesheet_id: currentTimesheetId || null,
+    resolved_booking_id: resolved?.booking_id || null,
+    was_stale: !!resolved?.was_stale
+  });
+
+  if (String(expected) !== String(currentTimesheetId)) {
+    return withCORS(
+      env,
+      req,
+      new Response(
+        JSON.stringify({ error: 'TIMESHEET_MOVED', current_timesheet_id: currentTimesheetId }),
+        { status: 409, headers: { 'Content-Type': 'application/json' } }
+      )
+    );
+  }
+
+  if (!resolved.booking_id) {
+    return withCORS(env, req, serverError('Failed to resolve booking_id for contract week timesheet'));
+  }
+  const bookingId = String(resolved.booking_id);
+  contractWeekUnprocessTimingBookingId = bookingId || contractWeekUnprocessTimingBookingId;
+
+  wlogUnprocess('bulk_pre_deletion_patch_load_started', {
+    current_timesheet_id: currentTimesheetId || null,
+    contract_week_id: weekId || null,
+    bulk_mode: bulkMode
+  });
+  const bulkPreDeletionError = await ensureBulkPreDeletionPatch(currentTimesheetId, weekId);
+  if (bulkPreDeletionError) return withCORS(env, req, bulkPreDeletionError);
+  wlogUnprocess('bulk_pre_deletion_patch_loaded', {
+    current_timesheet_id: currentTimesheetId || null,
+    contract_week_id: weekId || null,
+    loaded: !!bulkPrePatchRow,
+    previous_row_key: bulkPreviousRowKey || null,
+    skipped: !bulkMode
+  });
+
+  const currentWeeklyTs = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+      `&is_current=eq.true` +
+      `&select=timesheet_id,submission_mode,actual_schedule_json,additional_units_week,additional_units_per_day,day_references_json,manual_pdf_r2_key,week_ending_date`
+  );
+  if (!currentWeeklyTs) {
+    return withCORS(env, req, serverError('Failed to load current weekly timesheet for contract week reopen'));
+  }
+  wlogUnprocess('current_weekly_timesheet_loaded', {
+    current_timesheet_id: currentWeeklyTs?.timesheet_id || currentTimesheetId || null,
+    submission_mode_present: currentWeeklyTs?.submission_mode != null,
+    manual_pdf_r2_key_present: !!currentWeeklyTs?.manual_pdf_r2_key
+  });
+
+  const currentWeeklyTsfin = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+      `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+      `&is_current=eq.true` +
+      `&select=timesheet_id,hours_day,hours_night,hours_sat,hours_sun,hours_bh,total_hours,mileage_units,travel_pay_ex_vat,travel_charge_ex_vat,accommodation_pay_ex_vat,accommodation_charge_ex_vat,other_pay_ex_vat,other_charge_ex_vat,expenses_description`
+  );
+  if (!currentWeeklyTsfin) {
+    return withCORS(env, req, serverError('Failed to load current weekly TSFIN for contract week reopen'));
+  }
+  wlogUnprocess('current_financial_row_loaded', {
+    current_timesheet_id: currentWeeklyTsfin?.timesheet_id || currentTimesheetId || null,
+    total_hours: currentWeeklyTsfin?.total_hours ?? null,
+    has_expenses_description: currentWeeklyTsfin?.expenses_description != null
+  });
+
+  const dematerialiseTimesheetEvidenceToContractWeekStage = async (contractWeekRow, bookingIdArg, seriesIdsArg, currentTsIdArg) => {
+    const ids = Array.isArray(seriesIdsArg)
+      ? seriesIdsArg.map(x => trimStr(x)).filter(Boolean)
+      : [];
+
+    if (!ids.length) {
+      return {
+        staged_count: 0,
+        primary_timesheet_storage_key: null
+      };
+    }
+
+    const inList = ids.map(x => enc(x)).join(',');
+
+    const { rows: evRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheet_evidence` +
+        `?timesheet_id=in.(${inList})` +
+        `&select=id,timesheet_id,kind,display_name,storage_key,created_at,created_by` +
+        `&order=created_at.asc,id.asc`
+    );
+    const evidenceRows = Array.isArray(evRows) ? evRows : [];
+
+    const { rows: queueRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue` +
+        `?timesheet_id=in.(${inList})` +
+        `&select=id,r2_key,original_filename,mime_type,content_hash,uploaded_by_user_id,uploaded_at_utc,status,last_rotation_deg,meta_json`
+    );
+    const provenanceRows = Array.isArray(queueRows) ? queueRows : [];
+
+    const { rows: tsRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheets` +
+        `?timesheet_id=in.(${inList})` +
+        `&select=timesheet_id,manual_pdf_r2_key,manual_pdf_rotation_degrees,is_current,version`
+    );
+    const tsMetaRows = Array.isArray(tsRows) ? tsRows : [];
+
+    const queueByKey = new Map();
+    for (const row of provenanceRows) {
+      const key = trimStr(row?.r2_key).replace(/^\/+/, '');
+      if (!key || queueByKey.has(key)) continue;
+      queueByKey.set(key, row);
+    }
+
+    const tsMetaById = new Map();
+    for (const row of tsMetaRows) {
+      const id = trimStr(row?.timesheet_id);
+      if (!id) continue;
+      tsMetaById.set(id, row);
+    }
+
+    const basenameFromKey = (k) => {
+      const clean = trimStr(k).replace(/^\/+/, '');
+      if (!clean) return 'file';
+      const parts = clean.split('/');
+      return trimStr(parts[parts.length - 1]) || 'file';
+    };
+
+    const seenStorageKeys = new Set();
+    const stageItems = [];
+
+    for (const ev of evidenceRows) {
+      const storageKey = trimStr(ev?.storage_key).replace(/^\/+/, '');
+      if (!storageKey || seenStorageKeys.has(storageKey)) continue;
+      seenStorageKeys.add(storageKey);
+
+      const kindRaw = trimStr(ev?.kind).toUpperCase();
+      const kind = ['TIMESHEET', 'MILEAGE', 'TRAVEL', 'ACCOMMODATION', 'OTHER'].includes(kindRaw) ? kindRaw : 'OTHER';
+
+      const tsMeta = tsMetaById.get(trimStr(ev?.timesheet_id)) || null;
+      const manualPdfKey = trimStr(tsMeta?.manual_pdf_r2_key).replace(/^\/+/, '');
+      const inferredRotation =
+        kind === 'TIMESHEET' && manualPdfKey && manualPdfKey === storageKey
+          ? Number(tsMeta?.manual_pdf_rotation_degrees ?? 0)
+          : 0;
+
+      stageItems.push({
+        source: 'TIMESHEET_EVIDENCE',
+        evidence_id: trimStr(ev?.id) || null,
+        timesheet_id: trimStr(ev?.timesheet_id) || null,
+        kind,
+        storage_key: storageKey,
+        display_name: trimStr(ev?.display_name) || basenameFromKey(storageKey),
+        created_at: ev?.created_at || now,
+        created_by: ev?.created_by || user.id,
+        rotation_deg: inferredRotation
+      });
+    }
+
+    const currentTsMeta = tsMetaById.get(trimStr(currentTsIdArg)) || null;
+    const currentManualPdfKey = trimStr(currentTsMeta?.manual_pdf_r2_key).replace(/^\/+/, '');
+    if (currentManualPdfKey && !seenStorageKeys.has(currentManualPdfKey)) {
+      seenStorageKeys.add(currentManualPdfKey);
+      stageItems.push({
+        source: 'LEGACY_MANUAL_PDF_POINTER',
+        evidence_id: null,
+        timesheet_id: trimStr(currentTsIdArg) || null,
+        kind: 'TIMESHEET',
+        storage_key: currentManualPdfKey,
+        display_name: basenameFromKey(currentManualPdfKey),
+        created_at: now,
+        created_by: user.id,
+        rotation_deg: Number(currentTsMeta?.manual_pdf_rotation_degrees ?? 0)
+      });
+    }
+
+    let primaryTimesheetStorageKey = null;
+
+    for (const item of stageItems) {
+      const existingQueue = queueByKey.get(item.storage_key) || null;
+      const mergedMeta = {
+        ...((existingQueue?.meta_json && typeof existingQueue.meta_json === 'object') ? existingQueue.meta_json : {}),
+        contract_week_id: String(contractWeekRow.id),
+        staged_kind: item.kind,
+        dematerialised_from_timesheet_id: item.timesheet_id || null,
+        dematerialised_from_booking_id: String(bookingIdArg || ''),
+        dematerialised_at_utc: now
+      };
+
+      if (existingQueue?.id) {
+        const updRes = await fetch(
+          `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue?id=eq.${enc(existingQueue.id)}`,
+          {
+            method: 'PATCH',
+            headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+            body: JSON.stringify({
+              status: 'STAGED',
+              timesheet_id: null,
+              original_filename: item.display_name,
+              uploaded_by_user_id: existingQueue.uploaded_by_user_id || item.created_by || user.id,
+              uploaded_at_utc: existingQueue.uploaded_at_utc || item.created_at || now,
+              last_rotation_deg: Number.isFinite(Number(existingQueue.last_rotation_deg))
+                ? Number(existingQueue.last_rotation_deg)
+                : Number(item.rotation_deg || 0),
+              meta_json: mergedMeta
+            })
+          }
+        );
+        if (!updRes.ok) {
+          const txt = await updRes.text().catch(() => '');
+          throw new Error(`Failed to stage queue provenance row: ${txt || existingQueue.id}`);
+        }
+      } else {
+        const insRes = await fetch(
+          `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue`,
+          {
+            method: 'POST',
+            headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+            body: JSON.stringify([{
+              r2_key: item.storage_key,
+              original_filename: item.display_name,
+              mime_type: null,
+              content_hash: `DEMATERIALISED:${item.evidence_id || item.storage_key}`,
+              uploaded_by_user_id: item.created_by || user.id,
+              uploaded_at_utc: item.created_at || now,
+              status: 'STAGED',
+              timesheet_id: null,
+              last_rotation_deg: Number(item.rotation_deg || 0),
+              meta_json: mergedMeta
+            }])
+          }
+        );
+        if (!insRes.ok) {
+          const txt = await insRes.text().catch(() => '');
+          throw new Error(`Failed to create staged queue row: ${txt || item.storage_key}`);
+        }
+      }
+
+      if (!primaryTimesheetStorageKey && item.kind === 'TIMESHEET') {
+        primaryTimesheetStorageKey = item.storage_key;
+      }
+    }
+
+    if (evidenceRows.length) {
+      const evidenceIds = evidenceRows.map(row => trimStr(row?.id)).filter(Boolean);
+      if (evidenceIds.length) {
+        const delRes = await fetch(
+          `${env.SUPABASE_URL}/rest/v1/timesheet_evidence?id=in.(${evidenceIds.map(enc).join(',')})`,
+          { method: 'DELETE', headers: { ...sbHeaders(env), Prefer: 'return=minimal' } }
+        );
+        if (!delRes.ok) {
+          const txt = await delRes.text().catch(() => '');
+          throw new Error(`Failed to delete canonical evidence rows after dematerialise: ${txt}`);
+        }
+      }
+    }
+
+    return {
+      staged_count: stageItems.length,
+      primary_timesheet_storage_key: primaryTimesheetStorageKey
+    };
+  };
+
+  let reopenSnapshot = '';
+  try {
+    const sm = currentWeeklyTs?.submission_mode != null ? String(currentWeeklyTs.submission_mode).trim().toUpperCase() : '';
+    if (sm) reopenSnapshot = sm;
+  } catch {}
+  if (!reopenSnapshot) {
+    try {
+      const tsRow = await sbGetOne(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(currentTimesheetId)}&is_current=eq.true&select=submission_mode`
+      );
+      const sm = tsRow?.submission_mode != null ? String(tsRow.submission_mode).trim().toUpperCase() : '';
+      if (sm) reopenSnapshot = sm;
+    } catch {}
+  }
+  if (!reopenSnapshot) {
+    reopenSnapshot = (cw.submission_mode_snapshot != null ? String(cw.submission_mode_snapshot).trim().toUpperCase() : '') || 'MANUAL';
+  }
+  if (reopenSnapshot !== 'ELECTRONIC') reopenSnapshot = 'MANUAL';
+
+  const { rows: tsRowsAll } = await sbFetch(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?booking_id=eq.${enc(bookingId)}` +
+      `&select=timesheet_id`
+  );
+  const allIds = (tsRowsAll || []).map(r => r.timesheet_id).filter(Boolean);
+  contractWeekUnprocessTimingAllIdsCount = allIds.length;
+  wlogUnprocess('all_booking_timesheet_ids_loaded', {
+    booking_id: bookingId || null,
+    all_ids_count: allIds.length
+  });
+
+  if (allIds.length) {
+    const inList = allIds.map(x => `"${String(x).replace(/"/g, '')}"`).join(',');
+    const { rows: finRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+        `?is_current=eq.true&timesheet_id=in.(${inList})` +
+        `&select=timesheet_id,paid_at_utc,locked_by_invoice_id`
+    );
+
+    for (const f of (finRows || [])) {
+      if (f?.paid_at_utc) {
+        wlogUnprocess('paid_locked_invoice_guard_checked', {
+          blocked: true,
+          reason: 'paid',
+          timesheet_id: f?.timesheet_id || null,
+          checked_financial_rows: Array.isArray(finRows) ? finRows.length : 0
+        });
+        return withCORS(env, req, badRequest('Cannot delete: already paid'));
+      }
+      if (f?.locked_by_invoice_id) {
+        wlogUnprocess('paid_locked_invoice_guard_checked', {
+          blocked: true,
+          reason: 'invoiced',
+          timesheet_id: f?.timesheet_id || null,
+          checked_financial_rows: Array.isArray(finRows) ? finRows.length : 0
+        });
+        return withCORS(env, req, badRequest('Cannot delete: invoiced'));
+      }
+    }
+    wlogUnprocess('paid_locked_invoice_guard_checked', {
+      blocked: false,
+      checked_financial_rows: Array.isArray(finRows) ? finRows.length : 0
+    });
+  } else {
+    wlogUnprocess('paid_locked_invoice_guard_checked', {
+      blocked: false,
+      checked_financial_rows: 0,
+      skipped: true
+    });
+  }
+
+  const collectActiveTimesheetSnoozes = async (bookingIdArg, timesheetIdsArg) => {
+    const merged = new Map();
+    const baseSelect = 'id,candidate_id,timesheet_id,booking_id,segment_id,segment_stable_key,snooze_kind';
+    const seriesIds = Array.isArray(timesheetIdsArg)
+      ? timesheetIdsArg.map(x => trimStr(x)).filter(Boolean)
+      : [];
+
+    const collect = async (url) => {
+      try {
+        const { rows: fetchedRows } = await sbFetch(env, url);
+        for (const row of (Array.isArray(fetchedRows) ? fetchedRows : [])) {
+          const id = trimStr(row?.id);
+          if (!id) continue;
+          merged.set(id, row);
+        }
+      } catch {}
+    };
+
+    if (bookingIdArg) {
+      await collect(
+        `${env.SUPABASE_URL}/rest/v1/pay_item_snoozes` +
+          `?booking_id=eq.${enc(String(bookingIdArg))}` +
+          `&source_ref=is.null` +
+          `&cleared_at_utc=is.null` +
+          `&select=${baseSelect}` +
+          `&limit=2000`
+      );
+    }
+
+    if (seriesIds.length) {
+      await collect(
+        `${env.SUPABASE_URL}/rest/v1/pay_item_snoozes` +
+          `?timesheet_id=in.(${seriesIds.map(enc).join(',')})` +
+          `&source_ref=is.null` +
+          `&cleared_at_utc=is.null` +
+          `&select=${baseSelect}` +
+          `&limit=2000`
+      );
+    }
+
+    return Array.from(merged.values());
+  };
+
+  const clearCollectedSnoozes = async (snoozeRows, clearReason) => {
+    const clearedIds = [];
+    const failedIds = [];
+
+    for (const snoozeRow of (Array.isArray(snoozeRows) ? snoozeRows : [])) {
+      const snoozeId = trimStr(snoozeRow?.id);
+      if (!snoozeId) continue;
+
+      let cleared = false;
+
+      try {
+        await sbRpc(env, 'pay_snooze_clear', {
+          p_snooze_id: snoozeId,
+          p_actor_user_id: user.id
+        });
+        cleared = true;
+      } catch {}
+
+      if (!cleared) {
+        const now2 = nowIso();
+        try {
+          const patchRes = await fetch(
+            `${env.SUPABASE_URL}/rest/v1/pay_item_snoozes?id=eq.${enc(snoozeId)}&cleared_at_utc=is.null`,
+            {
+              method: 'PATCH',
+              headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+              body: JSON.stringify({
+                cleared_at_utc: now2,
+                cleared_by_user_id: user.id,
+                updated_at_utc: now2,
+                updated_by_user_id: user.id
+              })
+            }
+          );
+
+          if (!patchRes.ok) {
+            const txt = await patchRes.text().catch(() => '');
+            throw new Error(txt || `Failed to clear snooze ${snoozeId}`);
+          }
+
+          try {
+            await writeAudit(
+              env,
+              user,
+              'SNOOZE_CLEARED',
+              {
+                snooze_id: snoozeId,
+                booking_id: bookingId || null,
+                timesheet_id: trimStr(snoozeRow?.timesheet_id) || null,
+                segment_id: trimStr(snoozeRow?.segment_id) || null,
+                segment_stable_key: trimStr(snoozeRow?.segment_stable_key) || null,
+                snooze_kind: trimStr(snoozeRow?.snooze_kind) || null,
+                clear_reason: clearReason || null
+              },
+              {
+                entity: 'pay_item_snoozes',
+                subject_id: snoozeId,
+                req,
+                reason: clearReason || null
+              }
+            );
+          } catch {}
+
+          cleared = true;
+        } catch {}
+      }
+
+      if (cleared) clearedIds.push(snoozeId);
+      else failedIds.push(snoozeId);
+    }
+
+    return { clearedIds, failedIds };
+  };
+
+  const snoozesToClear = await collectActiveTimesheetSnoozes(bookingId, allIds);
+  wlogUnprocess('snoozes_collected', {
+    snooze_count: Array.isArray(snoozesToClear) ? snoozesToClear.length : 0,
+    booking_id: bookingId || null,
+    all_ids_count: allIds.length
+  });
+
+  let dematerialised = { staged_count: 0, primary_timesheet_storage_key: null };
+  wlogUnprocess('evidence_dematerialisation_started', {
+    contract_week_id: weekId || null,
+    booking_id: bookingId || null,
+    all_ids_count: allIds.length
+  });
+  try {
+    dematerialised = await dematerialiseTimesheetEvidenceToContractWeekStage(
+      cw,
+      bookingId,
+      allIds,
+      currentTimesheetId
+    );
+  } catch (e) {
+    return withCORS(env, req, serverError(`Failed to preserve weekly evidence during unprocess: ${e?.message || String(e)}`));
+  }
+  wlogUnprocess('evidence_dematerialisation_completed', {
+    contract_week_id: weekId || null,
+    booking_id: bookingId || null,
+    all_ids_count: allIds.length,
+    staged_count: Number(dematerialised?.staged_count || 0),
+    primary_timesheet_storage_key_present: !!dematerialised?.primary_timesheet_storage_key
+  });
+
+  if (allIds.length) {
+    const inParam = allIds.map(enc).join(',');
+
+    wlogUnprocess('cleanup_deletes_started', {
+      all_ids_count: allIds.length
+    });
+    await Promise.all([
+      fetch(
+        `${env.SUPABASE_URL}/rest/v1/ts_pdfs_outbox?timesheet_id=in.(${inParam})`,
+        { method: 'DELETE', headers: { ...sbHeaders(env), Prefer: 'return=minimal' } }
+      ).catch(() => {}),
+
+      fetch(
+        `${env.SUPABASE_URL}/rest/v1/ts_financials_outbox?timesheet_id=in.(${inParam})`,
+        { method: 'DELETE', headers: { ...sbHeaders(env), Prefer: 'return=minimal' } }
+      ).catch(() => {}),
+
+      fetch(
+        `${env.SUPABASE_URL}/rest/v1/timesheet_validations?timesheet_id=in.(${inParam})`,
+        { method: 'DELETE', headers: { ...sbHeaders(env), Prefer: 'return=minimal' } }
+      ).catch(() => {}),
+
+      fetch(
+        `${env.SUPABASE_URL}/rest/v1/timesheets_financials?timesheet_id=in.(${inParam})`,
+        { method: 'DELETE', headers: { ...sbHeaders(env), Prefer: 'return=minimal' } }
+      ).catch(() => {})
+    ]);
+    wlogUnprocess('cleanup_deletes_completed', {
+      all_ids_count: allIds.length
+    });
+  } else {
+    wlogUnprocess('cleanup_deletes_started', { all_ids_count: 0, skipped: true });
+    wlogUnprocess('cleanup_deletes_completed', { all_ids_count: 0, skipped: true });
+  }
+
+  wlogUnprocess('timesheets_delete_started', {
+    booking_id: bookingId || null,
+    all_ids_count: allIds.length
+  });
+
+  const delTs = await fetch(
+    `${env.SUPABASE_URL}/rest/v1/timesheets?booking_id=eq.${enc(bookingId)}`,
+    { method: 'DELETE', headers: { ...sbHeaders(env), Prefer: 'return=minimal' } }
+  );
+  if (!delTs.ok) {
+    return withCORS(env, req, serverError(await delTs.text()));
+  }
+  wlogUnprocess('timesheets_delete_completed', {
+    booking_id: bookingId || null,
+    all_ids_count: allIds.length
+  });
+
+  const existingTotalsJson = parseMaybeJsonObj(cw.totals_json) || {};
+  const reopenedTotalsJson = {
+    ...existingTotalsJson,
+    hours: {
+      day: Number(currentWeeklyTsfin.hours_day ?? 0),
+      night: Number(currentWeeklyTsfin.hours_night ?? 0),
+      sat: Number(currentWeeklyTsfin.hours_sat ?? 0),
+      sun: Number(currentWeeklyTsfin.hours_sun ?? 0),
+      bh: Number(currentWeeklyTsfin.hours_bh ?? 0)
+    },
+    additional_units_week: normaliseUnitsWeekMap(currentWeeklyTs.additional_units_week),
+    additional_units_per_day: normaliseUnitsPerDay(currentWeeklyTs.additional_units_per_day),
+    expenses_draft: buildExpenseDraftFromTsfin(currentWeeklyTsfin, existingTotalsJson.expenses_draft)
+  };
+
+  const reopenedDayEntriesJson = parseMaybeJsonObj(currentWeeklyTs.day_references_json) || {};
+  const reopenedPlannedScheduleJson = (() => {
+    const parsed = parseMaybeJsonObj(currentWeeklyTs.actual_schedule_json);
+    if (Array.isArray(parsed)) return parsed;
+    return null;
+  })();
+
+  wlogUnprocess('contract_week_reopen_patch_started', {
+    contract_week_id: weekId || null,
+    reopen_submission_mode_snapshot: reopenSnapshot || null
+  });
+  const contractWeekPatchRes = await fetch(
+    `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}`,
+    {
+      method: 'PATCH',
+      headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+      body: JSON.stringify({
+        timesheet_id: null,
+        status: 'OPEN',
+        submission_mode_snapshot: reopenSnapshot,
+        uploaded_pdf_r2_key: dematerialised.primary_timesheet_storage_key || null,
+        planned_schedule_json: reopenedPlannedScheduleJson,
+        totals_json: reopenedTotalsJson,
+        day_entries_json: reopenedDayEntriesJson,
+        updated_at: now
+      })
+    }
+  );
+  if (!contractWeekPatchRes.ok) {
+    return withCORS(env, req, serverError(await contractWeekPatchRes.text().catch(() => 'Failed to reopen contract week')));
+  }
+  wlogUnprocess('contract_week_reopen_patch_completed', {
+    contract_week_id: weekId || null,
+    reopen_submission_mode_snapshot: reopenSnapshot || null
+  });
+
+  const snoozeClearResult = await clearCollectedSnoozes(
+    snoozesToClear,
+    'TIMESHEET_DELETED_NOT_REQUIRED'
+  );
+  wlogUnprocess('snoozes_cleared', {
+    requested_snooze_count: Array.isArray(snoozesToClear) ? snoozesToClear.length : 0,
+    cleared_count: Array.isArray(snoozeClearResult?.clearedIds) ? snoozeClearResult.clearedIds.length : 0,
+    failed_count: Array.isArray(snoozeClearResult?.failedIds) ? snoozeClearResult.failedIds.length : 0
+  });
+
+  let reopenedContractWeek = null;
+  try {
+    reopenedContractWeek = await sbGetOne(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}` +
+        `&select=id,contract_id,week_ending_date,status,submission_mode_snapshot,timesheet_id,uploaded_pdf_r2_key,additional_seq,is_adjustment,planned_schedule_json,totals_json,day_entries_json,updated_at`
+    );
+  } catch {
+    reopenedContractWeek = null;
+  }
+  wlogUnprocess('reopened_contract_week_refetched', {
+    contract_week_id: weekId || null,
+    found: !!reopenedContractWeek
+  });
+
+  if (!reopenedContractWeek) {
+    reopenedContractWeek = {
+      id: weekId,
+      contract_id: cw.contract_id || null,
+      week_ending_date: (cw.week_ending_date != null ? String(cw.week_ending_date) : null),
+      status: 'OPEN',
+      submission_mode_snapshot: reopenSnapshot,
+      timesheet_id: null,
+      uploaded_pdf_r2_key: dematerialised.primary_timesheet_storage_key || null,
+      additional_seq: Number(cw.additional_seq ?? 0) || 0,
+      is_adjustment: cw.is_adjustment === true,
+      planned_schedule_json: reopenedPlannedScheduleJson,
+      totals_json: reopenedTotalsJson,
+      day_entries_json: reopenedDayEntriesJson,
+      updated_at: now
+    };
+  }
+
+  const summaryRowHint = {
+    id: weekId,
+    contract_week_id: weekId,
+    timesheet_id: null,
+    contract_id: reopenedContractWeek.contract_id || cw.contract_id || null,
+    week_ending_date:
+      (reopenedContractWeek.week_ending_date != null
+        ? String(reopenedContractWeek.week_ending_date)
+        : (cw.week_ending_date != null ? String(cw.week_ending_date) : null)),
+    status:
+      (reopenedContractWeek.status != null
+        ? String(reopenedContractWeek.status)
+        : 'OPEN'),
+    submission_mode_snapshot:
+      (reopenedContractWeek.submission_mode_snapshot != null
+        ? String(reopenedContractWeek.submission_mode_snapshot)
+        : reopenSnapshot)
+  };
+
+  let auditCompleted = false;
+  try {
+    await writeAudit(
+      env,
+      user,
+      'CONTRACT_WEEK_TIMESHEET_DELETED',
+      {
+        contract_week_id: weekId,
+        booking_id: bookingId,
+        timesheet_id: currentTimesheetId,
+        reopened_submission_mode_snapshot: reopenSnapshot,
+        staged_evidence_count: Number(dematerialised.staged_count || 0),
+        staged_primary_timesheet_storage_key: dematerialised.primary_timesheet_storage_key || null,
+        cleared_snooze_ids: snoozeClearResult.clearedIds,
+        snooze_clear_failed_ids: snoozeClearResult.failedIds
+      },
+      { entity: 'contract_weeks', subject_id: weekId, req }
+    );
+    auditCompleted = true;
+  } catch {}
+  wlogUnprocess('audit_completed', {
+    attempted: true,
+    completed: auditCompleted,
+    contract_week_id: weekId || null,
+    current_timesheet_id: currentTimesheetId || null
+  });
+
+  if (bulkMode) {
+    let bulkPatch = null;
+    try {
+      wlogUnprocess('final_bulk_mutation_patch_started', {
+        previous_timesheet_id: currentTimesheetId || null,
+        contract_week_id: weekId || null,
+        bulk_dataset_mode: bulkDatasetMode
+      });
+      bulkPatch = await buildBulkDeletePatchPayload({
+        previousTimesheetIdForPatch: currentTimesheetId,
+        currentContractWeekIdForPatch: weekId,
+        actionName: 'CONTRACT_WEEK_DELETE_TIMESHEET_REOPEN',
+        extraContext: {
+          currentVersion: null,
+          postDecisionRow: null,
+          previousBulkProcessBucket: firstBulkString(bulkPrePatchRow?.bulk_process_bucket, 'PROCESSED')
+        }
+      });
+      wlogUnprocess('final_bulk_mutation_patch_completed', {
+        previous_timesheet_id: currentTimesheetId || null,
+        contract_week_id: weekId || null,
+        bulk_dataset_mode: bulkDatasetMode,
+        row_key: bulkPatch?.row_key || bulkPatch?.new_row_key || bulkPatch?.data_row?.row_key || null,
+        row_signature_present: !!(bulkPatch?.row_signature || bulkPatch?.data_row?.row_signature)
+      });
+    } catch (e) {
+      return withCORS(env, req, serverError(`Failed to build bulk weekly unprocess patch: ${e?.message || String(e)}`));
+    }
+
+    const patchedRowPatch = {
+      ...((bulkPatch?.row_patch && typeof bulkPatch.row_patch === 'object') ? bulkPatch.row_patch : {}),
+      previous_row_key: bulkPatch?.previous_row_key || bulkPreviousRowKey || null,
+      row_key: bulkPatch?.row_key || bulkPatch?.new_row_key || bulkPatch?.data_row?.row_key || null,
+      new_row_key: bulkPatch?.new_row_key || bulkPatch?.row_key || bulkPatch?.data_row?.row_key || null,
+      previous_timesheet_id: currentTimesheetId,
+      current_timesheet_id: null,
+      expected_timesheet_id: null,
+      timesheet_id: null,
+      contract_week_id: weekId,
+      previous_bulk_process_bucket: firstBulkString(bulkPrePatchRow?.bulk_process_bucket, bulkPatch?.previous_bulk_process_bucket, 'PROCESSED'),
+      bulk_process_bucket: firstBulkString(bulkPatch?.bulk_process_bucket, bulkPatch?.data_row?.bulk_process_bucket, 'UNPROCESSED')
+    };
+
+    wlogUnprocess('response_built', {
+      response_type: 'bulk',
+      contract_week_id: weekId || null,
+      previous_timesheet_id: currentTimesheetId || null,
+      row_key: bulkPatch?.row_key || bulkPatch?.new_row_key || bulkPatch?.data_row?.row_key || null
+    });
+
+    return withCORS(env, req, ok({
+      ...bulkPatch,
+      deleted: true,
+      reopened: true,
+      bulk_mode: true,
+      contract_week_id: weekId,
+      previous_timesheet_id: currentTimesheetId,
+      current_timesheet_id: null,
+      expected_timesheet_id: null,
+      previous_row_key: bulkPatch?.previous_row_key || bulkPreviousRowKey || null,
+      new_row_key: bulkPatch?.new_row_key || bulkPatch?.row_key || bulkPatch?.data_row?.row_key || null,
+      row_key: bulkPatch?.row_key || bulkPatch?.new_row_key || bulkPatch?.data_row?.row_key || null,
+      row_signature: bulkPatch?.row_signature || bulkPatch?.data_row?.row_signature || null,
+      row_patch: patchedRowPatch,
+      data_row: (bulkPatch?.data_row && typeof bulkPatch.data_row === 'object') ? bulkPatch.data_row : ((bulkPatch?.row && typeof bulkPatch.row === 'object') ? bulkPatch.row : {}),
+      row: (bulkPatch?.row && typeof bulkPatch.row === 'object') ? bulkPatch.row : ((bulkPatch?.data_row && typeof bulkPatch.data_row === 'object') ? bulkPatch.data_row : {}),
+      previous_bulk_process_bucket: patchedRowPatch.previous_bulk_process_bucket,
+      bulk_process_bucket: patchedRowPatch.bulk_process_bucket,
+      count_deltas: bulkPatch?.count_deltas || {},
+      cache_invalidation_hints: bulkPatch?.cache_invalidation_hints || {},
+      planned: false,
+      timesheet_id: null,
+      contract_week_status:
+        (reopenedContractWeek.status != null
+          ? String(reopenedContractWeek.status)
+          : 'OPEN'),
+      reopened_submission_mode_snapshot:
+        (reopenedContractWeek.submission_mode_snapshot != null
+          ? String(reopenedContractWeek.submission_mode_snapshot)
+          : reopenSnapshot),
+      week_ending_date:
+        (reopenedContractWeek.week_ending_date != null
+          ? String(reopenedContractWeek.week_ending_date)
+          : (cw.week_ending_date != null ? String(cw.week_ending_date) : null)),
+      contract_week: reopenedContractWeek,
+      summary_row_hint: summaryRowHint,
+      booking_id: bookingId,
+      requested_timesheet_id: cw.timesheet_id,
+      was_stale: !!resolved?.was_stale,
+      cleared_snooze_ids: snoozeClearResult.clearedIds,
+      snooze_clear_failed_ids: snoozeClearResult.failedIds
+    }));
+  }
+
+  wlogUnprocess('response_built', {
+    response_type: 'standard',
+    contract_week_id: weekId || null,
+    previous_timesheet_id: currentTimesheetId || null
+  });
+
+  return withCORS(env, req, ok({
+    deleted: true,
+    planned: false,
+    contract_week_id: weekId,
+    timesheet_id: null,
+    contract_week_status:
+      (reopenedContractWeek.status != null
+        ? String(reopenedContractWeek.status)
+        : 'OPEN'),
+    reopened_submission_mode_snapshot:
+      (reopenedContractWeek.submission_mode_snapshot != null
+        ? String(reopenedContractWeek.submission_mode_snapshot)
+        : reopenSnapshot),
+    week_ending_date:
+      (reopenedContractWeek.week_ending_date != null
+        ? String(reopenedContractWeek.week_ending_date)
+        : (cw.week_ending_date != null ? String(cw.week_ending_date) : null)),
+    contract_week: reopenedContractWeek,
+    summary_row_hint: summaryRowHint,
+    booking_id: bookingId,
+    requested_timesheet_id: cw.timesheet_id,
+    current_timesheet_id: currentTimesheetId,
+    was_stale: !!resolved?.was_stale,
+    cleared_snooze_ids: snoozeClearResult.clearedIds,
+    snooze_clear_failed_ids: snoozeClearResult.failedIds
+  }));
+}
+
+
+
+async function handleContractWeekCreateExpenseSheet(env, req, weekId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const enc = encodeURIComponent;
+
+  const cw = await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}&select=*`);
+  if (!cw) return withCORS(env, req, notFound('Week not found'));
+  const contract = await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(cw.contract_id)}&select=*`);
+  if (!contract) return withCORS(env, req, notFound('Contract not found'));
+
+  const candidate = contract.candidate_id
+    ? await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/candidates?id=eq.${enc(contract.candidate_id)}&select=id,display_name`)
+    : null;
+
+  const client = contract.client_id
+    ? await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/clients?id=eq.${enc(contract.client_id)}&select=id,name`)
+    : null;
+
+  const booking_id = await makeWeeklyBookingId(contract?.candidate_id || null, contract, cw);
+
+  const now = nowIso();
+
+  const payload = [{
+    booking_id, version: 1, is_current: true, status: 'SUBMITTED',
+    occupant_key_norm: (candidate?.display_name || String(candidate?.id || 'worker')).toLowerCase(),
+    hospital_norm: (contract.display_site || client?.name || String(contract.client_id)).toLowerCase(),
+    ward_norm: (contract.ward_hint || 'contract').toLowerCase(),
+    job_title_norm: (contract.role || 'weekly').toLowerCase(),
+    shift_label_norm: 'weekly-expenses',
+    week_ending_date: cw.week_ending_date,
+    contract_id: contract.id,
+
+    submission_mode: 'MANUAL',
+    sheet_scope: 'WEEKLY',
+
+    manual_pdf_r2_key: null,
+    line_type: 'EXPENSES',
+    created_at: now, updated_at: now
+  }];
+
+  const ins = await fetch(`${env.SUPABASE_URL}/rest/v1/timesheets`, {
+    method: 'POST',
+    headers: { ...sbHeaders(env), 'Prefer': 'return=representation' },
+    body: JSON.stringify(payload)
+  });
+  if (!ins.ok) return withCORS(env, req, serverError(await ins.text()));
+  const ts = (await ins.json().catch(()=>[]))[0];
+
+  if (!cw.timesheet_id) {
+    await fetch(`${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(cw.id)}`, {
+      method: 'PATCH',
+      headers: { ...sbHeaders(env), 'Prefer': 'return=minimal' },
+      body: JSON.stringify({ timesheet_id: ts.timesheet_id, updated_at: nowIso() })
+    });
+  }
+
+  const snap = {
+    timesheet_id: ts.timesheet_id,
+    timesheet_version: ts.version || 1,
+    basis: 'CONTRACT_WEEKLY',
+    candidate_id: contract.candidate_id,
+    client_id: contract.client_id,
+    candidate_assignment: 'ASSIGNED',
+    processing_status: 'PENDING_AUTH',
+    pay_method: contract.pay_method_snapshot,
+
+    policy_snapshot_json: {},
+    rate_source_refs_json: {},
+
+    hours_day: 0, hours_night: 0, hours_sat: 0, hours_sun: 0, hours_bh: 0,
+    total_hours: 0,
+
+    total_pay_ex_vat: 0, total_charge_ex_vat: 0, margin_ex_vat: 0,
+
+    additional_units_json: {},
+    additional_pay_ex_vat: 0,
+    additional_charge_ex_vat: 0,
+    additional_margin_ex_vat: 0,
+
+    invoice_breakdown_json: {
+      mode: 'EXPENSES_ONLY',
+      totals: { total_pay_ex_vat: 0, total_charge_ex_vat: 0, margin_ex_vat: 0 }
+    },
+
+    created_at: nowIso(),
+  };
+
+  await writeSnapshot(env, snap);
+
+  // ✅ 3.11: always return created timesheet_id
+  return withCORS(env, req, ok({ timesheet_id: ts.timesheet_id }));
+}
+
+
+// ----------------------------------------------------------------------------
+// C) WEEKLY (ELECTRONIC) – public broker endpoints
+// ----------------------------------------------------------------------------
+
+async function handleTimesheetsPresignWeekly(env, req) {
+  // Public: presign nurse/authoriser signature uploads for a weekly slot + return bucket labels for UI
+  let body;
+  try {
+    body = await parseJSONBody(req);
+  } catch {
+    return withCORS(env, req, badRequest('Invalid JSON'));
+  }
+
+  let cw = null;
+  if (body.contract_week_id) {
+    cw = await sbGetOne(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(body.contract_week_id)}&select=*`
+    );
+  } else if (body.contract_id && body.week_ending_date) {
+    const addSeq = Number(body.additional_seq || 0);
+    cw = await sbGetOne(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+        `?contract_id=eq.${enc(body.contract_id)}` +
+        `&week_ending_date=eq.${enc(body.week_ending_date)}` +
+        `&additional_seq=eq.${enc(addSeq)}` +
+        `&select=*`
+    );
+  }
+  if (!cw) return withCORS(env, req, notFound('Weekly slot not found'));
+
+  const contract = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(cw.contract_id)}` +
+      `&select=id,candidate_id,client_id,bucket_labels_json,additional_rates_json`
+  );
+  if (!contract) return withCORS(env, req, notFound('Contract not found'));
+
+  const candidateId = contract.candidate_id;
+  const clientId = contract.client_id;
+
+  const hasAnySegmentInvoiceLock = (tf) => {
+    try {
+      const ib = tf?.invoice_breakdown_json;
+      if (!ib || typeof ib !== 'object') return false;
+      const mode = String(ib?.mode || '').toUpperCase();
+      if (mode !== 'SEGMENTS') return false;
+      const segs = Array.isArray(ib?.segments) ? ib.segments : [];
+      return segs.some(s => {
+        const v = s?.invoice_locked_invoice_id;
+        return v != null && String(v).trim() !== '';
+      });
+    } catch {
+      return false;
+    }
+  };
+
+  // Authoritative: client_settings.default_submission_mode must be ELECTRONIC for electronic presign
+  let supportsElectronic = false;
+  try {
+    const { rows: csRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/client_settings` +
+        `?client_id=eq.${enc(clientId)}` +
+        `&select=default_submission_mode,updated_at,created_at` +
+        `&order=updated_at.desc.nullslast,created_at.desc.nullslast` +
+        `&limit=1`
+    );
+    const cs = csRows?.[0] || null;
+    const dsm = String(cs?.default_submission_mode || '').toUpperCase();
+    supportsElectronic = (dsm === 'ELECTRONIC');
+  } catch {
+    supportsElectronic = false;
+  }
+
+  if (!supportsElectronic) {
+    return withCORS(env, req, badRequest('Electronic submission is not enabled for this client'));
+  }
+
+  // If there is an existing timesheet, enforce resubmission rules:
+  // block presign when manual-only or locked (paid/invoiced)
+  let nextVersion = 1;
+  if (cw.timesheet_id) {
+    const tsid = cw.timesheet_id;
+
+    const tsCur = await sbGetOne(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheets` +
+        `?timesheet_id=eq.${enc(tsid)}` +
+        `&is_current=eq.true` +
+        `&select=timesheet_id,submission_mode,qr_status,qr_token,qr_generated_at,qr_scanned_at`
+    );
+
+    const finCur = await sbGetOne(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+        `?timesheet_id=eq.${enc(tsid)}` +
+        `&is_current=eq.true` +
+        `&select=paid_at_utc,locked_by_invoice_id,invoice_breakdown_json`
+    );
+
+    if (finCur?.paid_at_utc) {
+      return withCORS(env, req, badRequest('Cannot presign: already paid'));
+    }
+    if (finCur?.locked_by_invoice_id || hasAnySegmentInvoiceLock(finCur)) {
+      return withCORS(env, req, badRequest('Cannot presign: invoiced'));
+    }
+
+    // manual-only derivation
+    const sm = String(tsCur?.submission_mode || '').toUpperCase();
+    const qrStatus = String(tsCur?.qr_status || '').toUpperCase() || '';
+    const hasQrToken = !!(tsCur?.qr_token && String(tsCur.qr_token).trim());
+    const hasQrGen = !!tsCur?.qr_generated_at;
+    const hasQrScan = !!tsCur?.qr_scanned_at;
+
+    const isManualOnly = (sm === 'MANUAL') && !qrStatus && !hasQrToken && !hasQrGen && !hasQrScan;
+    if (isManualOnly) {
+      return withCORS(env, req, badRequest('Cannot presign: manual-only (candidate submission disabled)'));
+    }
+
+    // next version for signatures = max(version)+1
+    try {
+      const { rows: vRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/timesheets` +
+          `?timesheet_id=eq.${enc(tsid)}` +
+          `&select=version` +
+          `&order=version.desc` +
+          `&limit=1`
+      );
+      const maxV = Number(vRows?.[0]?.version || 1);
+      nextVersion = (Number.isFinite(maxV) ? maxV : 1) + 1;
+    } catch {
+      nextVersion = 2;
+    }
+  }
+
+  const DEFAULT_LABELS = { day: 'Day', night: 'Night', sat: 'Sat', sun: 'Sun', bh: 'BH' };
+  const bucketLabels = (contract.bucket_labels_json && typeof contract.bucket_labels_json === 'object')
+    ? contract.bucket_labels_json
+    : DEFAULT_LABELS;
+
+  const additional_rates = Array.isArray(contract.additional_rates_json)
+    ? contract.additional_rates_json
+    : [];
+
+  const bookingId = makeWeeklyBookingId(candidateId, contract, cw);
+  const weC = ymdCompact(cw.week_ending_date);
+
+  // IMPORTANT: use nextVersion so resubmissions don't overwrite prior signatures
+  const base = `Signatures/we=${weC}/${bookingId}/v${nextVersion}`;
+  const nurseKey = `${base}/nurse.png`;
+  const authKey  = `${base}/authoriser.png`;
+
+  // Tokens – 10MB each
+  const nurseToken = await createToken(env, 'UPLOAD', {
+    key: nurseKey,
+    c: 'sign',
+    ttlSec: 3600,
+    maxBytes: 10 * 1024 * 1024,
+    contentTypes: ['image/png', 'image/jpeg']
+  });
+  const authToken  = await createToken(env, 'UPLOAD', {
+    key: authKey,
+    c: 'sign',
+    ttlSec: 3600,
+    maxBytes: 10 * 1024 * 1024,
+    contentTypes: ['image/png', 'image/jpeg']
+  });
+
+  const origin = new URL(req.url).origin;
+  return withCORS(env, req, ok({
+    booking_id: bookingId,
+    week_ending_date: cw.week_ending_date,
+    bucket_labels: bucketLabels,
+    additional_rates,
+    next_version: nextVersion,
+    keys: {
+      nurse: {
+        key: nurseKey,
+        token: nurseToken,
+        upload_url: `${origin}/api/signatures/upload?key=${enc(nurseKey)}&token=${enc(nurseToken)}`
+      },
+      authoriser: {
+        key: authKey,
+        token: authToken,
+        upload_url: `${origin}/api/signatures/upload?key=${enc(authKey)}&token=${enc(authToken)}`
+      }
+    }
+  }));
+}
+
+
+async function handleTimesheetsEligibilityWeekly(env, req) {
+  const enc = encodeURIComponent;
+
+  // Public: app supplies candidate_id, optional client_id; return eligible weeks + per-contract bucket labels
+  let body; try { body = await parseJSONBody(req); } catch { body = {}; }
+  const candidateId = body.candidate_id || null;
+  if (!candidateId) return withCORS(env, req, badRequest('candidate_id required'));
+
+  // We now include more statuses because resubmission is allowed when not locked/paid and not manual-only.
+  // (OPEN/PLANNED are "no timesheet yet", SUBMITTED/AUTHORISED are "timesheet exists; may be resubmittable".)
+  const statuses = ['OPEN', 'PLANNED', 'SUBMITTED', 'AUTHORISED'];
+
+  let url =
+    `${env.SUPABASE_URL}/rest/v1/v_contract_weeks_enriched?select=*` +
+    `&candidate_id=eq.${enc(candidateId)}` +
+    `&status=in.(${statuses.map(s => enc(s)).join(',')})`;
+
+  if (body.client_id) url += `&client_id=eq.${enc(body.client_id)}`;
+
+  const { rows } = await sbFetch(env, url);
+  const list = rows || [];
+
+  // Attach bucket labels + is_ad_hoc per contract for the app UI
+  const DEFAULT_LABELS = { day: 'Day', night: 'Night', sat: 'Sat', sun: 'Sun', bh: 'BH' };
+  const contractIds = [...new Set(list.map(r => r.contract_id).filter(Boolean))];
+  let mapLabels = {};
+  let mapIsAdHoc = {};
+
+  if (contractIds.length) {
+    const { rows: cons } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/contracts?id=in.(${contractIds.map(enc).join(',')})&select=id,bucket_labels_json,is_ad_hoc`
+    );
+    mapLabels = Object.fromEntries(
+      (cons || []).map(c => [
+        c.id,
+        (c.bucket_labels_json && typeof c.bucket_labels_json === 'object')
+          ? c.bucket_labels_json
+          : DEFAULT_LABELS
+      ])
+    );
+    mapIsAdHoc = Object.fromEntries(
+      (cons || []).map(c => [ c.id, !!c.is_ad_hoc ])
+    );
+  }
+
+  // Batch: client_settings (authoritative electronic capability)
+  const clientIds = [...new Set(list.map(r => r.client_id).filter(Boolean))];
+  const clientSupportsElectronic = {};
+  if (clientIds.length) {
+    try {
+      const { rows: csRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/client_settings` +
+          `?client_id=in.(${clientIds.map(enc).join(',')})` +
+          `&select=client_id,default_submission_mode,updated_at,created_at` +
+          `&order=client_id.asc,updated_at.desc.nullslast,created_at.desc.nullslast`
+      );
+
+      // take first row per client_id (because sorted desc within each client_id)
+      for (const row of (csRows || [])) {
+        const cid = row?.client_id;
+        if (!cid) continue;
+        if (Object.prototype.hasOwnProperty.call(clientSupportsElectronic, cid)) continue;
+        const dsm = String(row?.default_submission_mode || '').toUpperCase();
+        clientSupportsElectronic[cid] = (dsm === 'ELECTRONIC');
+      }
+    } catch {
+      // default: false if missing
+    }
+  }
+
+  // Batch: timesheets current + tsfin current for rows that already have a timesheet_id
+  const timesheetIds = [...new Set(list.map(r => r.timesheet_id).filter(Boolean))];
+
+  const mapTsCurrent = {};   // timesheet_id -> ts row
+  const mapFinCurrent = {};  // timesheet_id -> fin row
+
+  if (timesheetIds.length) {
+    try {
+      const { rows: tsRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/timesheets` +
+          `?timesheet_id=in.(${timesheetIds.map(enc).join(',')})` +
+          `&is_current=eq.true` +
+          `&select=timesheet_id,submission_mode,qr_status,qr_token,qr_generated_at,qr_scanned_at`
+      );
+      for (const t of (tsRows || [])) {
+        if (t?.timesheet_id) mapTsCurrent[t.timesheet_id] = t;
+      }
+    } catch {}
+
+    try {
+      const { rows: finRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+          `?timesheet_id=in.(${timesheetIds.map(enc).join(',')})` +
+          `&is_current=eq.true` +
+          `&select=timesheet_id,paid_at_utc,locked_by_invoice_id,processing_status`
+      );
+      for (const f of (finRows || [])) {
+        if (f?.timesheet_id) mapFinCurrent[f.timesheet_id] = f;
+      }
+    } catch {}
+  }
+
+  const deriveIsManualOnly = (ts) => {
+    if (!ts || typeof ts !== 'object') return false;
+    const sm = String(ts.submission_mode || '').toUpperCase();
+    if (sm !== 'MANUAL') return false;
+
+    const qrStatus = String(ts.qr_status || '').toUpperCase() || '';
+    const hasQrToken = !!(ts.qr_token && String(ts.qr_token).trim());
+    const hasQrGen = !!ts.qr_generated_at;
+    const hasQrScan = !!ts.qr_scanned_at;
+
+    return !qrStatus && !hasQrToken && !hasQrGen && !hasQrScan;
+  };
+
+  const deriveLocked = (fin) => {
+    if (!fin || typeof fin !== 'object') return { locked: false, reason: null };
+    if (fin.paid_at_utc) return { locked: true, reason: 'PAID' };
+    if (fin.locked_by_invoice_id) return { locked: true, reason: 'INVOICED' };
+    return { locked: false, reason: null };
+  };
+
+  const withLabels = list.map(r => {
+    const clientId = r.client_id || null;
+    const supportsElectronic = !!(clientId && clientSupportsElectronic[clientId] === true);
+
+    const tsid = r.timesheet_id || null;
+    const tsCur = tsid ? (mapTsCurrent[tsid] || null) : null;
+    const finCur = tsid ? (mapFinCurrent[tsid] || null) : null;
+
+    const isManualOnly = deriveIsManualOnly(tsCur);
+    const lockInfo = deriveLocked(finCur);
+
+    // Eligibility rules (candidate pipeline):
+    // - If no timesheet yet: can always choose QR; electronic only if supportsElectronic
+    // - If timesheet exists: can resubmit if not locked/paid and not manual-only
+    // - manual-only hard stop blocks both QR and electronic from candidate
+    const hasExistingTs = !!tsid;
+
+    const canSubmitQr =
+      !lockInfo.locked &&
+      !isManualOnly;
+
+    const canSubmitElectronic =
+      supportsElectronic &&
+      !lockInfo.locked &&
+      !isManualOnly;
+
+    const canProceed = canSubmitQr || canSubmitElectronic;
+
+    let blockedReason = null;
+    if (!canProceed) {
+      if (lockInfo.locked) blockedReason = lockInfo.reason || 'LOCKED';
+      else if (isManualOnly) blockedReason = 'MANUAL_ONLY';
+      else if (!supportsElectronic) blockedReason = 'ELECTRONIC_DISABLED';
+      else blockedReason = 'BLOCKED';
+    }
+
+    const isResubmission = hasExistingTs && !lockInfo.locked && !isManualOnly;
+
+    const isAdHoc = mapIsAdHoc[r.contract_id] === true;
+
+    return {
+      ...r,
+      bucket_labels: mapLabels[r.contract_id] || DEFAULT_LABELS,
+
+      // ✅ NEW: contract-level ad hoc flag (authoritative from contracts table)
+      contract_is_ad_hoc: isAdHoc,
+      is_ad_hoc: (r && Object.prototype.hasOwnProperty.call(r, 'is_ad_hoc') && r.is_ad_hoc != null) ? r.is_ad_hoc : isAdHoc,
+
+      supports_electronic_submission: supportsElectronic,
+      has_existing_timesheet: hasExistingTs,
+      is_resubmission: isResubmission,
+      is_manual_only: isManualOnly,
+      locked: lockInfo.locked,
+      locked_reason: lockInfo.reason,
+      can_submit_qr: canSubmitQr,
+      can_submit_electronic: canSubmitElectronic,
+      can_proceed: canProceed,
+      blocked_reason: blockedReason
+    };
+  });
+
+  return withCORS(env, req, ok(withLabels));
+}
+
+// GET /api/timesheets/:id/evidence
+// GET /api/timesheets/:id/evidence
+
+
+function hasAnySegmentInvoiceLock(input) {
+  try {
+    const invoiceBreakdownInput = (
+      input &&
+      typeof input === 'object' &&
+      Object.prototype.hasOwnProperty.call(input, 'invoice_breakdown_json')
+    ) ? input.invoice_breakdown_json : input;
+
+    if (invoiceBreakdownInput == null) return false;
+
+    let parsed = invoiceBreakdownInput;
+    if (typeof parsed === 'string') {
+      const raw = parsed.trim();
+      if (!raw) return false;
+      try {
+        parsed = JSON.parse(raw);
+      } catch {
+        return false;
+      }
+    }
+
+    let segments = [];
+    if (Array.isArray(parsed)) {
+      // Legacy array-shaped segment breakdown
+      segments = parsed;
+    } else if (parsed && typeof parsed === 'object') {
+      segments = Array.isArray(parsed.segments) ? parsed.segments : [];
+    } else {
+      return false;
+    }
+
+    return segments.some((segment) => {
+      const invoiceId = segment?.invoice_locked_invoice_id;
+      return invoiceId != null && String(invoiceId).trim() !== '';
+    });
+  } catch {
+    return false;
+  }
+}
+
+async function getTimesheetEvidenceMutationPolicy(env, timesheetId, opts = {}) {
+  const enc = encodeURIComponent;
+  const out = {
+    can_manage_evidence: false,
+    document_locked: false,
+    document_lock_reason: null,
+    candidate_paid: false,
+    authorised: false,
+    import_authoritative: false,
+    protected_reason: null,
+    current_timesheet_id: null,
+    resolved: null,
+    summary: null
+  };
+
+  const yes = (v) => {
+    if (v === true) return true;
+    if (v === false || v == null) return false;
+    const s = String(v).trim().toLowerCase();
+    return s === 'true' || s === '1' || s === 'yes' || s === 'y' || s === 'on';
+  };
+  const n = (v) => {
+    const x = Number(v);
+    return Number.isFinite(x) ? x : 0;
+  };
+  const up = (v) => String(v == null ? '' : v).trim().toUpperCase();
+
+  const resolved = await resolveTimesheetToCurrent(env, timesheetId).catch(() => null);
+  if (!resolved?.current_timesheet_id) {
+    out.protected_reason = 'INVALID_TIMESHEET_CONTEXT';
+    return out;
+  }
+
+  const currentTsId = String(resolved.current_timesheet_id);
+  out.current_timesheet_id = currentTsId;
+  out.resolved = resolved;
+
+  const tsRow = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?timesheet_id=eq.${enc(currentTsId)}` +
+      `&is_current=eq.true` +
+      `&select=timesheet_id,contract_id,authorised_at_server,revoked_at,sheet_scope,submission_mode,line_type,is_adjustment,adjustment_origin,parent_timesheet_id,qr_status` +
+      `&limit=1`
+  ).catch(() => null);
+
+  if (!tsRow?.timesheet_id) {
+    out.protected_reason = 'INVALID_TIMESHEET_CONTEXT';
+    return out;
+  }
+
+  out.authorised =
+    !!(tsRow?.authorised_at_server) &&
+    !(tsRow?.revoked_at && String(tsRow.revoked_at).trim());
+
+  const contract = tsRow?.contract_id
+    ? await sbGetOne(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/contracts` +
+          `?id=eq.${enc(tsRow.contract_id)}` +
+          `&select=id,self_bill,no_timesheet_required,weekly_timesheet_source,is_nhsp` +
+          `&limit=1`
+      ).catch(() => null)
+    : null;
+
+  const fin = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+      `?timesheet_id=eq.${enc(currentTsId)}` +
+      `&is_current=eq.true` +
+      `&select=locked_by_invoice_id,paid_at_utc,invoice_breakdown_json,basis` +
+      `&limit=1`
+  ).catch(() => null);
+
+  const summary = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/v_timesheets_summary_base` +
+      `?timesheet_id=eq.${enc(currentTsId)}` +
+      `&select=timesheet_id,client_no_timesheet_required,basis,route_type,additional_seq,is_adjustment,is_qr,qr_status,paid_at_utc,locked_by_invoice_id,invoice_segments_locked,client_is_nhsp` +
+      `&limit=1`
+  ).catch(() => null);
+
+  const cw = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+      `?timesheet_id=eq.${enc(currentTsId)}` +
+      `&select=additional_seq,submission_mode_snapshot,is_adjustment` +
+      `&limit=1`
+  ).catch(() => null);
+
+  out.candidate_paid = !!(fin?.paid_at_utc || summary?.paid_at_utc);
+
+  const segmentLocked =
+    hasAnySegmentInvoiceLock(fin) ||
+    n(summary?.invoice_segments_locked) > 0;
+
+  const wholeInvoiceLocked = !!(fin?.locked_by_invoice_id || summary?.locked_by_invoice_id);
+  if (wholeInvoiceLocked || segmentLocked) {
+    out.document_locked = true;
+    out.document_lock_reason = wholeInvoiceLocked ? 'INVOICE_LOCKED' : 'INVOICE_SEGMENT_LOCKED';
+  }
+
+  const routeTypeU = up(summary?.route_type || contract?.weekly_timesheet_source);
+  const basisU = up(summary?.basis ?? fin?.basis);
+  const actualRouteOrBasisText = [routeTypeU, basisU].filter(Boolean).join('|');
+  const derivedRouteFamily = actualRouteOrBasisText.includes('NHSP')
+    ? 'NHSP'
+    : actualRouteOrBasisText.includes('HEALTHROSTER')
+      ? 'HEALTHROSTER'
+      : actualRouteOrBasisText.includes('IMPORT')
+        ? 'IMPORT'
+        : '';
+
+  const classificationContext = {
+    ...(summary || {}),
+    ...(tsRow || {}),
+    basis: summary?.basis ?? fin?.basis ?? null,
+    route_type: summary?.route_type ?? contract?.weekly_timesheet_source ?? null,
+    route_family: derivedRouteFamily,
+    additional_seq: summary?.additional_seq ?? cw?.additional_seq ?? null,
+    is_adjustment: tsRow?.is_adjustment ?? summary?.is_adjustment ?? cw?.is_adjustment ?? null,
+    submission_mode: tsRow?.submission_mode ?? cw?.submission_mode_snapshot ?? null,
+    self_bill: contract?.self_bill ?? false,
+    no_timesheet_required: contract?.no_timesheet_required ?? false,
+    contract_no_timesheet_required: contract?.no_timesheet_required ?? false,
+    client_no_timesheet_required: summary?.client_no_timesheet_required ?? false,
+    weekly_timesheet_source: contract?.weekly_timesheet_source ?? null,
+    client_is_nhsp: summary?.client_is_nhsp ?? false,
+    is_nhsp: contract?.is_nhsp ?? false,
+    invoice_breakdown_json: fin?.invoice_breakdown_json ?? null,
+    invoice_segments_locked: summary?.invoice_segments_locked ?? 0,
+    locked_by_invoice_id: fin?.locked_by_invoice_id ?? summary?.locked_by_invoice_id ?? null,
+    paid_at_utc: fin?.paid_at_utc ?? summary?.paid_at_utc ?? null,
+    is_qr: summary?.is_qr ?? null,
+    qr_status: tsRow?.qr_status ?? summary?.qr_status ?? null
+  };
+
+  out.summary = classificationContext;
+  out.import_authoritative = isImportAuthoritativeEvidenceContext(classificationContext);
+
+  const evidence = opts?.evidence_item || null;
+  const evidenceId = String(evidence?.id || opts?.evidence_id || '').trim();
+  let evidenceProtected = false;
+
+  if (evidenceId.startsWith('SYS:')) evidenceProtected = true;
+
+  if (evidence && typeof evidence === 'object') {
+    const hasOwn = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
+    const kindU = String(evidence?.kind || '').trim().toUpperCase();
+    const hasEnrichedProtectionMarker = !!(
+      hasOwn(evidence, 'source_system') ||
+      hasOwn(evidence, 'source_badge') ||
+      hasOwn(evidence, 'provenance') ||
+      hasOwn(evidence, 'origin') ||
+      hasOwn(evidence, 'is_system') ||
+      hasOwn(evidence, 'system') ||
+      hasOwn(evidence, 'is_protected') ||
+      hasOwn(evidence, 'from_import') ||
+      hasOwn(evidence, 'import_id')
+    );
+    const src = hasEnrichedProtectionMarker
+      ? String(
+          evidence?.source_system ||
+          evidence?.source_badge ||
+          evidence?.provenance ||
+          evidence?.origin ||
+          ''
+        ).toUpperCase()
+      : '';
+
+    if (
+      evidenceId.startsWith('SYS:') ||
+      kindU === 'AUTHORISATION' ||
+      kindU === 'SYSTEM' ||
+      (
+        hasEnrichedProtectionMarker &&
+        (
+          evidence?.is_system === true ||
+          evidence?.system === true ||
+          evidence?.is_protected === true ||
+          evidence?.from_import === true ||
+          !!evidence?.import_id ||
+          src.includes('NHSP') ||
+          src.includes('HEALTHROSTER') ||
+          src.includes('IMPORT')
+        )
+      )
+    ) {
+      evidenceProtected = true;
+    }
+  }
+
+  if (out.authorised) {
+    out.protected_reason = 'TIMESHEET_AUTHORISED_EDIT_BLOCKED';
+  } else if (out.candidate_paid) {
+    out.protected_reason = 'TIMESHEET_PAID_EDIT_BLOCKED';
+  } else if (out.document_locked) {
+    out.protected_reason = out.document_lock_reason === 'INVOICE_SEGMENT_LOCKED'
+      ? 'TIMESHEET_SEGMENT_INVOICE_LOCKED_EDIT_BLOCKED'
+      : 'TIMESHEET_INVOICE_LOCKED_EDIT_BLOCKED';
+  } else if (out.import_authoritative) {
+    out.protected_reason = 'IMPORT_AUTHORITATIVE_EXPENSES_BLOCKED';
+  } else if (evidenceProtected) {
+    out.protected_reason = 'PROTECTED_IMPORT_OR_SYSTEM_EVIDENCE';
+  }
+
+  out.can_manage_evidence = !out.protected_reason;
+  return out;
+}
+
+
+
+async function applyTimesheetEvidenceReplacement(env, args = {}) {
+  throw new Error('Direct evidence replacement is not supported. Delete or return the existing evidence first, then add/attach the new evidence.');
+}
+
+async function handleTimesheetEvidenceList(env, req, tsId) {
+  const enc = encodeURIComponent;
+
+  // Auth: admin only
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  if (!tsId) return withCORS(env, req, badRequest('timesheet_id is required'));
+
+  // ✅ Rotation-safe: resolve requested -> current
+  const resolved = await resolveTimesheetToCurrent(env, tsId);
+  if (!resolved) return withCORS(env, req, notFound('Timesheet not found'));
+  const currentTsId = resolved.current_timesheet_id;
+
+  // Optional: meta=1 returns wrapper object; default keeps legacy array response
+  let wantMeta = false;
+  try {
+    const u = new URL(req.url);
+    wantMeta = (u.searchParams.get('meta') === '1');
+  } catch {
+    wantMeta = false;
+  }
+
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const asUuidStringOrNull = (v) => {
+    if (v == null) return null;
+    const s = String(v).trim();
+    return (s && UUID_RE.test(s)) ? s : null;
+  };
+
+  const safeJsonParse = (v) => {
+    if (v == null) return null;
+    if (typeof v === 'object') return v;
+    const s = String(v).trim();
+    if (!s) return null;
+    try { return JSON.parse(s); } catch { return null; }
+  };
+
+  const cleanStorageKey = (v) => String(v || '').trim().replace(/^\/+/, '');
+
+  const collectImportIdsFromObject = (obj, outSet) => {
+    if (!obj || typeof obj !== 'object') return;
+
+    const tryAdd = (val) => {
+      const u = asUuidStringOrNull(val);
+      if (u) outSet.add(u);
+    };
+
+    tryAdd(obj.import_id);
+    tryAdd(obj.evidence_import_id);
+    tryAdd(obj.trigger_import_id);
+    tryAdd(obj.old_import_id);
+    tryAdd(obj.new_import_id);
+    tryAdd(obj.base_import_id);
+
+    if (obj.import_correction && typeof obj.import_correction === 'object') {
+      tryAdd(obj.import_correction.import_id);
+      tryAdd(obj.import_correction.evidence_import_id);
+      tryAdd(obj.import_correction.trigger_import_id);
+      tryAdd(obj.import_correction.base_import_id);
+      tryAdd(obj.import_correction.old_import_id);
+      tryAdd(obj.import_correction.new_import_id);
+    }
+
+    if (obj.import_cancellation && typeof obj.import_cancellation === 'object') {
+      tryAdd(obj.import_cancellation.import_id);
+      tryAdd(obj.import_cancellation.evidence_import_id);
+      tryAdd(obj.import_cancellation.trigger_import_id);
+      tryAdd(obj.import_cancellation.base_import_id);
+      tryAdd(obj.import_cancellation.old_import_id);
+      tryAdd(obj.import_cancellation.new_import_id);
+    }
+  };
+
+  try {
+    // ─────────────────────────────────────────────────────────────
+    // 0) Load timesheet row (QR evidence + electronic signature evidence)
+    // ─────────────────────────────────────────────────────────────
+    const ts = await sbGetOne(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheets` +
+        `?timesheet_id=eq.${enc(currentTsId)}` +
+        `&is_current=eq.true` +
+        `&select=` +
+          [
+            'timesheet_id',
+            'booking_id',
+            'version',
+            'sheet_scope',
+            'week_ending_date',
+
+            // DAILY shift fields
+            'worked_start_iso',
+            'worked_end_iso',
+            'break_start_iso',
+            'break_end_iso',
+            'break_minutes',
+
+            // WEEKLY fields used for hashing + summary
+            'reference_number',
+            'day_references_json',
+            'actual_schedule_json',
+
+            // ✅ NEW: allow legacy fallback from hint JSON
+            'candidate_hint_text',
+
+            // PDF pointer (manual + QR)
+            'manual_pdf_r2_key',
+            'manual_pdf_rotation_degrees',
+
+            // QR state
+            'qr_status',
+            'qr_token',
+            'qr_generated_at',
+            'qr_scanned_at',
+            'qr_last_sent_hash',
+            'qr_last_sent_at_utc',
+            'qr_signed_hash',
+
+            // additional units (hashing)
+            'additional_units_week',
+            'additional_units_per_day',
+
+            // electronic signatures (no new storage)
+            'r2_nurse_key',
+            'r2_auth_key',
+            'auth_name',
+            'auth_job_title',
+            'authorised_at_server',
+
+            // ✅ NEW: PDF generation flag (system-generated)
+            'generated_pdf_at_utc',
+
+            // ✅ NEW: used to decide whether to show generated PDF item
+            'submission_mode'
+          ].join(',') +
+        `&limit=1`
+    );
+
+    if (!ts) return withCORS(env, req, notFound('Timesheet not found'));
+
+    const scope = String(ts?.sheet_scope || '').toUpperCase();
+    const qrStatus = String(ts?.qr_status || '').toUpperCase();
+
+    const hasToken = !!(ts?.qr_token && String(ts.qr_token).trim());
+    const hasGen = !!ts?.qr_generated_at;
+    const hasScan = !!ts?.qr_scanned_at;
+
+    const lastSentHash = (ts?.qr_last_sent_hash != null) ? String(ts.qr_last_sent_hash) : '';
+    const signedHash = (ts?.qr_signed_hash != null) ? String(ts.qr_signed_hash) : '';
+
+    // issued proof is (token+generated_at) OR qr_last_sent_hash
+    const hasIssuedProof = ((hasToken && hasGen) || !!(lastSentHash && String(lastSentHash).trim()));
+
+    const awaitingSignatureUpload = (qrStatus === 'PENDING') && hasIssuedProof && !hasScan;
+    const signedReceived = (qrStatus === 'USED') && hasScan;
+
+    const stableClone = (v) => {
+      if (Array.isArray(v)) return v.map(stableClone);
+      if (v && typeof v === 'object') {
+        const out = {};
+        for (const k of Object.keys(v).sort()) out[k] = stableClone(v[k]);
+        return out;
+      }
+      return v;
+    };
+
+    const computeCurrentHash = async () => {
+      if (!ts) return null;
+
+      if (scope === 'WEEKLY') {
+        const obj = {
+          sheet_scope: 'WEEKLY',
+          week_ending_date: ts.week_ending_date || null,
+          actual_schedule_json: ts.actual_schedule_json || null,
+          reference_number: ts.reference_number || null,
+          day_references_json: ts.day_references_json || null,
+          additional_units_week: ts.additional_units_week || {},
+          additional_units_per_day: ts.additional_units_per_day || {}
+        };
+        return await sha256Hex(JSON.stringify(stableClone(obj)));
+      }
+
+      const obj = {
+        sheet_scope: 'DAILY',
+        worked_start_iso: ts.worked_start_iso || null,
+        worked_end_iso: ts.worked_end_iso || null,
+        break_start_iso: ts.break_start_iso || null,
+        break_end_iso: ts.break_end_iso || null,
+        break_minutes: (ts.break_minutes != null ? ts.break_minutes : null),
+        reference_number: ts.reference_number || null,
+        day_references_json: ts.day_references_json || null
+      };
+      return await sha256Hex(JSON.stringify(stableClone(obj)));
+    };
+
+    let current_hash = null;
+    try {
+      current_hash = ts ? await computeCurrentHash() : null;
+    } catch (e) {
+      current_hash = null;
+      console.warn('[handleTimesheetEvidenceList] current hash compute failed (non-fatal)', {
+        timesheet_id: currentTsId,
+        err: e?.message || String(e)
+      });
+    }
+
+    const issuedStillMatches =
+      !!current_hash && !!lastSentHash && (String(current_hash) === String(lastSentHash));
+
+    const signedStillMatches =
+      !!current_hash && !!signedHash && (String(current_hash) === String(signedHash));
+
+    // ─────────────────────────────────────────────────────────────
+    // 0b) Shared evidence mutation policy
+    // ─────────────────────────────────────────────────────────────
+    const evidencePolicy = await getTimesheetEvidenceMutationPolicy(env, currentTsId);
+    const summary = evidencePolicy?.summary || null;
+    const importAuthoritative = !!evidencePolicy?.import_authoritative;
+    const routeEvidenceEditable = !!evidencePolicy?.can_manage_evidence;
+
+    // ─────────────────────────────────────────────────────────────
+    // 1) User evidence rows (timesheet_evidence)
+    // ─────────────────────────────────────────────────────────────
+    const fetchTimesheetEvidenceRows = async () => {
+      const { rows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/timesheet_evidence` +
+          `?timesheet_id=eq.${enc(currentTsId)}` +
+          `&select=id,kind,display_name,storage_key,created_at,created_by` +
+          `&order=created_at.asc`
+      );
+      return Array.isArray(rows) ? rows : [];
+    };
+    const evRows = await fetchTimesheetEvidenceRows();
+
+    const evidenceStorageKeys = Array.from(new Set(
+      (evRows || [])
+        .map((ev) => cleanStorageKey(ev?.storage_key))
+        .filter(Boolean)
+    ));
+
+    const queueProvenanceByStorageKey = {};
+    if (evidenceStorageKeys.length) {
+      try {
+        const r2Param = evidenceStorageKeys.map(enc).join(',');
+        const { rows: queueRows } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue` +
+            `?timesheet_id=eq.${enc(currentTsId)}` +
+            `&r2_key=in.(${r2Param})` +
+            `&select=id,r2_key,status,timesheet_id,last_rotation_deg,meta_json` +
+            `&limit=1000`
+        );
+
+        for (const row of (queueRows || [])) {
+          const key = cleanStorageKey(row?.r2_key);
+          if (!key) continue;
+          if (!queueProvenanceByStorageKey[key]) queueProvenanceByStorageKey[key] = row;
+        }
+      } catch (e) {
+        console.warn('[handleTimesheetEvidenceList] queue provenance enrich failed (non-fatal)', {
+          timesheet_id: currentTsId,
+          err: e?.message || String(e)
+        });
+      }
+    }
+
+    const userEvidenceRaw = (evRows || []).map(ev => {
+      const out = { ...(ev || {}) };
+      const storageKey = cleanStorageKey(out.storage_key);
+      const queueMatch = storageKey ? queueProvenanceByStorageKey[storageKey] : null;
+      const queueMetaObj = (queueMatch?.meta_json && typeof queueMatch.meta_json === 'object' && !Array.isArray(queueMatch.meta_json))
+        ? queueMatch.meta_json
+        : null;
+
+      out.timesheet_id = currentTsId;
+      out.filename = out.display_name || null;
+      out.storage_key = storageKey || null;
+      if (queueMatch?.id != null && String(queueMatch.id).trim()) {
+        const queueId = String(queueMatch.id).trim();
+        out.queue_id = queueId;
+        out.manual_timesheet_queue_id = queueId;
+        out.last_rotation_deg = Number(queueMatch.last_rotation_deg ?? 0);
+        out.rotation_degrees = Number(queueMatch.last_rotation_deg ?? 0);
+        out.rotation_deg = Number(queueMatch.last_rotation_deg ?? 0);
+      }
+      if (queueMetaObj) out.meta_json = queueMetaObj;
+      out.system = false;
+      out.is_view_only = !routeEvidenceEditable;
+      out.can_delete = routeEvidenceEditable;
+      out.can_reclassify = routeEvidenceEditable;
+      out.can_return_to_queue = routeEvidenceEditable;
+      out.source_badge = 'Attached';
+      if (!out.uploaded_at_utc && out.created_at) out.uploaded_at_utc = out.created_at;
+      return out;
+    });
+
+    // ─────────────────────────────────────────────────────────────
+    // 1b) Enrich user evidence with uploader display name
+    // ─────────────────────────────────────────────────────────────
+    const uploaderIds = new Set();
+    for (const ev of userEvidenceRaw) {
+      const uid = ev && ev.created_by ? String(ev.created_by).trim() : '';
+      if (uid) uploaderIds.add(uid);
+    }
+
+    const uploaderMap = {};
+    if (uploaderIds.size) {
+      try {
+        const idParam = Array.from(uploaderIds).map(enc).join(',');
+        const { rows: uRows } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/tms_users` +
+            `?id=in.(${idParam})` +
+            `&select=id,display_name` +
+            `&limit=1000`
+        );
+
+        for (const u of (uRows || [])) {
+          const id = u && u.id ? String(u.id) : '';
+          if (!id) continue;
+          uploaderMap[id] = (u && u.display_name != null) ? String(u.display_name) : '';
+        }
+      } catch (e) {
+        console.warn('[handleTimesheetEvidenceList] uploader enrich failed (non-fatal)', {
+          err: e?.message || String(e)
+        });
+      }
+    }
+
+    const userEvidence = userEvidenceRaw.map(ev => {
+      const out = { ...(ev || {}) };
+      const uid = out.created_by ? String(out.created_by).trim() : '';
+      const dn = uid && Object.prototype.hasOwnProperty.call(uploaderMap, uid) ? uploaderMap[uid] : '';
+      out.uploaded_by_display = dn || null;
+      out.created_by_display = dn || null;
+      return out;
+    });
+
+    const userEvidenceStorageKeys = new Set(
+      userEvidence
+        .map(ev => cleanStorageKey(ev.storage_key))
+        .filter(Boolean)
+    );
+
+    // ─────────────────────────────────────────────────────────────
+    // 2) System evidence rows (QR + Imports + Authorisation + Electronic signatures + Generated PDF + primary manual file)
+    // ─────────────────────────────────────────────────────────────
+    const systemEvidence = [];
+
+    // 2A) QR system evidence
+    const docsPdfKey = `docs-pdf/timesheets/ts_${currentTsId}.pdf`;
+
+    if (signedReceived) {
+      const storageKey = (ts?.manual_pdf_r2_key && String(ts.manual_pdf_r2_key).trim())
+        ? String(ts.manual_pdf_r2_key).trim()
+        : docsPdfKey;
+
+      if (storageKey) {
+        systemEvidence.push({
+          id: `SYS:QR:SIGNED:${currentTsId}`,
+          timesheet_id: currentTsId,
+          kind: 'QR',
+          filename: 'QR Timesheet (Signed)',
+          display_name: 'QR Timesheet (Signed)',
+          storage_key: storageKey,
+          created_at: ts?.qr_scanned_at || null,
+          uploaded_at_utc: ts?.qr_scanned_at || null,
+          system: true,
+          is_view_only: true,
+          can_delete: false,
+          can_reclassify: false,
+          can_return_to_queue: false,
+          preview_mode: 'PDF',
+          is_primary: true,
+          source_badge: 'QR',
+          meta_json: {
+            qr_status: qrStatus || null,
+            matches_current: (signedStillMatches || null)
+          }
+        });
+      }
+    } else if (awaitingSignatureUpload) {
+      const storageKey = (ts?.manual_pdf_r2_key && String(ts.manual_pdf_r2_key).trim())
+        ? String(ts.manual_pdf_r2_key).trim()
+        : docsPdfKey;
+
+      const issuedAt = ts?.qr_last_sent_at_utc || ts?.qr_generated_at || null;
+
+      systemEvidence.push({
+        id: `SYS:QR:UNSIGNED:${currentTsId}`,
+        timesheet_id: currentTsId,
+        kind: 'QR',
+        filename: 'QR Timesheet (Unsigned)',
+        display_name: 'QR Timesheet (Unsigned)',
+        storage_key: storageKey,
+        created_at: issuedAt,
+        uploaded_at_utc: issuedAt,
+        system: true,
+        is_view_only: true,
+        can_delete: false,
+        can_reclassify: false,
+        can_return_to_queue: false,
+        preview_mode: 'PDF',
+        is_primary: false,
+        source_badge: 'QR',
+        meta_json: {
+          qr_status: qrStatus || null,
+          matches_current: (issuedStillMatches || null)
+        }
+      });
+    }
+
+    // 2A.2) Generated system PDF evidence (ELECTRONIC + generated_pdf_at_utc, but avoid duplicating QR entry)
+    const submissionMode = String(ts?.submission_mode || '').toUpperCase();
+    const hasGeneratedPdf = !!ts?.generated_pdf_at_utc;
+    const qrEvidenceAlreadyShown = signedReceived || awaitingSignatureUpload;
+
+    if (!qrEvidenceAlreadyShown && submissionMode === 'ELECTRONIC' && hasGeneratedPdf) {
+      systemEvidence.push({
+        id: `SYS:PDF:GENERATED:${currentTsId}`,
+        timesheet_id: currentTsId,
+        kind: 'PDF',
+        filename: 'Timesheet (Generated PDF)',
+        display_name: 'Timesheet (Generated PDF)',
+        storage_key: docsPdfKey,
+        created_at: ts.generated_pdf_at_utc,
+        uploaded_at_utc: ts.generated_pdf_at_utc,
+        system: true,
+        is_view_only: true,
+        can_delete: false,
+        can_reclassify: false,
+        can_return_to_queue: false,
+        preview_mode: 'PDF',
+        is_primary: true,
+        source_badge: 'Generated',
+        meta_json: {
+          generated_pdf_at_utc: ts.generated_pdf_at_utc,
+          submission_mode: submissionMode
+        }
+      });
+    }
+
+    // 2A.3) Manual scanned/current primary PDF/image when present and not already represented canonically
+    const manualPrimaryKey = cleanStorageKey(ts?.manual_pdf_r2_key);
+    const shouldShowManualPrimaryArtifact =
+      !!manualPrimaryKey &&
+      !userEvidenceStorageKeys.has(manualPrimaryKey) &&
+      !qrEvidenceAlreadyShown &&
+      !(submissionMode === 'ELECTRONIC' && hasGeneratedPdf);
+
+    if (shouldShowManualPrimaryArtifact) {
+      systemEvidence.push({
+        id: `SYS:PRIMARY_ARTIFACT:${currentTsId}`,
+        timesheet_id: currentTsId,
+        kind: 'TIMESHEET',
+        filename: 'Timesheet (Primary file)',
+        display_name: 'Timesheet (Primary file)',
+        storage_key: manualPrimaryKey,
+        created_at: null,
+        uploaded_at_utc: null,
+        system: true,
+        is_view_only: true,
+        can_delete: false,
+        can_reclassify: false,
+        can_return_to_queue: false,
+        preview_mode: 'PRIMARY_ARTIFACT',
+        is_primary: true,
+        source_badge: 'Primary',
+        meta_json: {
+          manual_pdf_rotation_degrees: (ts?.manual_pdf_rotation_degrees != null ? Number(ts.manual_pdf_rotation_degrees) : 0),
+          submission_mode: submissionMode
+        }
+      });
+    }
+
+    // 2B) Authorisation evidence vs Electronic signatures evidence
+    let auth_actor_user_id = null;
+    let auth_actor_display = null;
+
+    try {
+      const { rows: aeRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/audit_events` +
+          `?object_type=eq.timesheets` +
+          `&object_id_text=eq.${enc(currentTsId)}` +
+          `&action=eq.TIMESHEET_AUTHORISED` +
+          `&select=actor_user_id,actor_display,ts_utc` +
+          `&order=ts_utc.desc` +
+          `&limit=1`
+      );
+
+      const ae = (aeRows && aeRows.length) ? aeRows[0] : null;
+      const uid = ae && ae.actor_user_id ? String(ae.actor_user_id).trim() : '';
+      if (uid) auth_actor_user_id = uid;
+
+      const ad = ae && ae.actor_display != null ? String(ae.actor_display).trim() : '';
+      if (ad) auth_actor_display = ad;
+    } catch {
+      auth_actor_user_id = null;
+      auth_actor_display = null;
+    }
+
+    if (auth_actor_user_id) {
+      try {
+        const u = await sbGetOne(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/tms_users` +
+            `?id=eq.${enc(auth_actor_user_id)}` +
+            `&select=id,display_name` +
+            `&limit=1`
+        );
+        const dn = (u && u.display_name != null) ? String(u.display_name).trim() : '';
+        if (dn) auth_actor_display = dn;
+      } catch {
+        // keep existing auth_actor_display
+      }
+    }
+
+    const authorisedAt = ts?.authorised_at_server || null;
+    if (authorisedAt) {
+      systemEvidence.push({
+        id: `SYS:AUTHORISATION:${currentTsId}`,
+        timesheet_id: currentTsId,
+        kind: 'AUTHORISATION',
+        filename: 'Timesheet authorised (System)',
+        display_name: 'Timesheet authorised (System)',
+        storage_key: null,
+        created_at: authorisedAt,
+        uploaded_at_utc: authorisedAt,
+        system: true,
+        is_view_only: true,
+        can_delete: false,
+        can_reclassify: false,
+        can_return_to_queue: false,
+        preview_mode: 'AUTHORISATION',
+        is_primary: false,
+        source_badge: 'System',
+        meta_json: {
+          actor_user_id: auth_actor_user_id,
+          actor_display: auth_actor_display,
+
+          booking_id: ts?.booking_id || null,
+          version: (ts?.version != null ? Number(ts.version) : null),
+
+          authorised_at_server: authorisedAt,
+          auth_name: ts?.auth_name || null,
+          auth_job_title: ts?.auth_job_title || null,
+
+          sheet_scope: ts?.sheet_scope || null,
+          week_ending_date: ts?.week_ending_date || null,
+          reference_number: ts?.reference_number || null,
+
+          worked_start_iso: ts?.worked_start_iso || null,
+          worked_end_iso: ts?.worked_end_iso || null,
+          break_start_iso: ts?.break_start_iso || null,
+          break_end_iso: ts?.break_end_iso || null,
+          break_minutes: (ts?.break_minutes != null ? ts.break_minutes : null),
+
+          actual_schedule_json: (ts?.actual_schedule_json != null ? ts.actual_schedule_json : null)
+        }
+      });
+    }
+
+    const nurseKey = (ts?.r2_nurse_key && String(ts.r2_nurse_key).trim()) ? String(ts.r2_nurse_key).trim() : null;
+    const authKey = (ts?.r2_auth_key && String(ts.r2_auth_key).trim()) ? String(ts.r2_auth_key).trim() : null;
+    const hasSignatureArtefacts = !!(nurseKey || authKey);
+
+    if (hasSignatureArtefacts) {
+      systemEvidence.push({
+        id: `SYS:ELECTRONIC_SIGNATURES:${currentTsId}`,
+        timesheet_id: currentTsId,
+        kind: 'ELECTRONIC_SIGNATURES',
+        filename: 'Electronic signatures',
+        display_name: 'Electronic signatures',
+        storage_key: null,
+        created_at: authorisedAt,
+        uploaded_at_utc: authorisedAt,
+        system: true,
+        is_view_only: true,
+        can_delete: false,
+        can_reclassify: false,
+        can_return_to_queue: false,
+        preview_mode: 'SIGNATURES',
+        is_primary: true,
+        source_badge: 'Electronic',
+        meta_json: {
+          booking_id: ts?.booking_id || null,
+          version: (ts?.version != null ? Number(ts.version) : null),
+
+          authorised_at_server: authorisedAt,
+          auth_name: ts?.auth_name || null,
+          auth_job_title: ts?.auth_job_title || null,
+
+          r2_nurse_key: nurseKey,
+          r2_auth_key: authKey,
+
+          sheet_scope: ts?.sheet_scope || null,
+          week_ending_date: ts?.week_ending_date || null,
+          reference_number: ts?.reference_number || null,
+
+          worked_start_iso: ts?.worked_start_iso || null,
+          worked_end_iso: ts?.worked_end_iso || null,
+          break_start_iso: ts?.break_start_iso || null,
+          break_end_iso: ts?.break_end_iso || null,
+          break_minutes: (ts?.break_minutes != null ? ts.break_minutes : null),
+
+          actual_schedule_json: (ts?.actual_schedule_json != null ? ts.actual_schedule_json : null)
+        }
+      });
+    }
+
+    // 2C) NHSP / HealthRoster imports
+    const importIds = new Set();
+
+    try {
+      const { rows: shiftRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/nhsp_shifts` +
+          `?timesheet_id=eq.${enc(currentTsId)}` +
+          `&select=latest_import_id,source_system` +
+          `&limit=10000`
+      );
+      for (const sh of shiftRows || []) {
+        const iid = sh && sh.latest_import_id ? String(sh.latest_import_id).trim() : '';
+        if (iid) importIds.add(iid);
+      }
+    } catch {}
+
+    try {
+      const { rows: valRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/timesheet_validations` +
+          `?timesheet_id=eq.${enc(currentTsId)}` +
+          `&select=last_source,updated_at` +
+          `&order=updated_at.desc` +
+          `&limit=1`
+      );
+      const lastSource = valRows?.[0]?.last_source || null;
+      if (lastSource) {
+        const iid = String(lastSource).trim();
+        if (iid) importIds.add(iid);
+      }
+    } catch {}
+
+    try {
+      const sched = (ts?.actual_schedule_json != null) ? ts.actual_schedule_json : null;
+      const schedObj = safeJsonParse(sched);
+      const arr = Array.isArray(schedObj) ? schedObj : [];
+      for (const seg of arr) {
+        if (!seg || typeof seg !== 'object') continue;
+        const iid = asUuidStringOrNull(seg.import_id);
+        if (iid) importIds.add(iid);
+      }
+    } catch {}
+
+    try {
+      const hintObj = safeJsonParse(ts?.candidate_hint_text);
+      if (hintObj) collectImportIdsFromObject(hintObj, importIds);
+    } catch {}
+
+    if (importIds.size) {
+      try {
+        const idParam = Array.from(importIds).map(enc).join(',');
+        const { rows: impRows } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/hr_imports` +
+            `?id=in.(${idParam})` +
+            `&select=id,source_system,filename,uploaded_at_utc,file_r2_key` +
+            `&limit=1000`
+        );
+
+        for (const r of (impRows || [])) {
+          if (!r || !r.file_r2_key) continue;
+
+          const sys = String(r.source_system || '').toUpperCase();
+          const importId = r.id ? String(r.id) : '';
+
+          let kindLabel = sys || 'SYSTEM';
+          if (sys.includes('NHSP')) kindLabel = 'NHSP';
+          else if (sys.includes('HEALTHROSTER')) kindLabel = 'HealthRoster';
+
+          const uploadedAt = r.uploaded_at_utc || null;
+
+          const fileName = (r.filename != null) ? String(r.filename).trim() : '';
+          const typeLabel = `${kindLabel} import`;
+
+          systemEvidence.push({
+            id: `SYS:${kindLabel}:${importId || 'UNKNOWN'}`,
+            timesheet_id: currentTsId,
+            kind: kindLabel,
+            filename: fileName || null,
+            display_name: typeLabel,
+            storage_key: r.file_r2_key,
+            download_storage_key: r.file_r2_key,
+            created_at: uploadedAt,
+            uploaded_at_utc: uploadedAt,
+            system: true,
+            is_view_only: true,
+            can_delete: false,
+            can_reclassify: false,
+            can_return_to_queue: false,
+            uploaded_by_display: 'System',
+            created_by_display: 'System',
+            source_badge: kindLabel,
+            preview_mode: 'IMPORT_TABLE'
+          });
+        }
+      } catch {
+        // non-fatal
+      }
+    }
+
+    const all = [...userEvidence, ...systemEvidence];
+
+    const toTs = (x) => {
+      const s = x && (x.uploaded_at_utc || x.created_at);
+      if (!s) return 0;
+      const t = new Date(s).getTime();
+      return Number.isFinite(t) ? t : 0;
+    };
+    all.sort((a, b) => toTs(a) - toTs(b));
+
+    if (wantMeta) {
+      return withCORS(env, req, ok({
+        requested_timesheet_id: resolved.requested_timesheet_id || tsId,
+        current_timesheet_id: currentTsId,
+        was_stale: !!resolved.was_stale,
+        route_type: summary?.route_type || null,
+        import_authoritative: importAuthoritative,
+        route_evidence_editable: routeEvidenceEditable,
+        evidence: all
+      }));
+    }
+
+    return withCORS(env, req, ok(all));
+  } catch (e) {
+    return withCORS(env, req, serverError(`Failed to list timesheet evidence: ${e?.message || e}`));
+  }
+}
+
+
+
+function isImportAuthoritativeEvidenceContext(summary) {
+  const up = (v) => String(v || '').trim().toUpperCase();
+  const yes = (v) => {
+    if (v === true) return true;
+    if (v === false || v == null) return false;
+    const s = String(v).trim().toLowerCase();
+    return s === 'true' || s === '1' || s === 'yes' || s === 'y' || s === 'on';
+  };
+  const num = (v) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : 0;
+  };
+  const hasText = (v) => String(v == null ? '' : v).trim() !== '';
+
+  const basisU = up(summary?.basis);
+  const submissionModeU = up(summary?.submission_mode || summary?.submission_mode_snapshot || summary?.cw_submission_mode_snapshot);
+  const lineTypeU = up(summary?.line_type);
+  const adjustmentOriginU = up(summary?.adjustment_origin);
+  const routeTypeU = up(summary?.route_type);
+  const routeFamilyU = up(summary?.route_family);
+  const routeSubfamilyU = up(summary?.route_subfamily);
+  const sourceU = up(summary?.source || summary?.source_system || summary?.weekly_timesheet_source || summary?.basis_source);
+  const correctionKindU = up(summary?.correction_kind);
+
+  const invoiceBreakdown = (() => {
+    const raw = summary?.invoice_breakdown_json;
+    if (!raw) return null;
+    if (typeof raw === 'object') return raw;
+    if (typeof raw === 'string') {
+      try {
+        return JSON.parse(raw);
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  })();
+
+  const invoiceModeU = up(invoiceBreakdown?.mode);
+
+  const noTsRequired =
+    yes(summary?.client_no_timesheet_required) ||
+    yes(summary?.no_timesheet_required) ||
+    yes(summary?.contract_no_timesheet_required);
+
+  const hasExplicitManualAdditionalFlag =
+    yes(summary?.manually_created) ||
+    yes(summary?.is_manual_additional) ||
+    yes(summary?.manual_additional) ||
+    yes(summary?.manual_adjustment) ||
+    yes(summary?.created_manually) ||
+    yes(summary?.is_additional_manual) ||
+    yes(summary?.is_manual_adjustment);
+
+  const hasManualSignal =
+    submissionModeU === 'MANUAL' ||
+    hasExplicitManualAdditionalFlag ||
+    routeSubfamilyU.includes('MANUAL') ||
+    routeTypeU.includes('MANUAL') ||
+    routeFamilyU.includes('MANUAL');
+
+  const hasParentAnchor = hasText(summary?.parent_timesheet_id);
+  const hasAdditionalSeq = num(summary?.additional_seq) > 0 || num(summary?.contract_week_additional_seq) > 0;
+
+  const hasManualAdjustmentOrigin =
+    adjustmentOriginU.includes('MANUAL') ||
+    adjustmentOriginU.includes('ADDITIONAL') ||
+    adjustmentOriginU.includes('ADD_ADDITIONAL') ||
+    adjustmentOriginU.includes('CORRECTION') ||
+    adjustmentOriginU.includes('EXPENSE');
+
+  const hasManualAdditionalLineType =
+    lineTypeU.includes('MANUAL_ADDITIONAL') ||
+    lineTypeU.includes('ADDITIONAL_MANUAL') ||
+    lineTypeU.includes('ADDITIONAL') ||
+    (lineTypeU.includes('ADJUST') && hasManualSignal);
+
+  const hasManualCorrectionKind =
+    correctionKindU.includes('MANUAL') ||
+    correctionKindU.includes('ADDITIONAL') ||
+    correctionKindU.includes('ADD_ADDITIONAL') ||
+    correctionKindU.includes('CORRECTION') ||
+    correctionKindU.includes('EXPENSE') ||
+    (correctionKindU.includes('ADJUST') && hasManualSignal);
+
+  const hasAdjustmentBasis =
+    basisU === 'NHSP_ADJUSTMENT' ||
+    basisU === 'HEALTHROSTER_ADJUSTMENT';
+
+  const isClearlyAdditionalOrManualAdjustment = !!(
+    hasExplicitManualAdditionalFlag ||
+    hasParentAnchor ||
+    hasAdditionalSeq ||
+    hasManualAdjustmentOrigin ||
+    hasManualAdditionalLineType ||
+    hasManualCorrectionKind ||
+    (submissionModeU === 'MANUAL' && yes(summary?.is_adjustment)) ||
+    (hasManualSignal && hasAdjustmentBasis)
+  );
+
+  if (isClearlyAdditionalOrManualAdjustment) return false;
+
+  const originalNhspHrBasis =
+    basisU === 'NHSP' ||
+    basisU === 'HEALTHROSTER_SELF_BILL';
+
+  const routeSourceText = [
+    routeTypeU,
+    routeFamilyU,
+    routeSubfamilyU,
+    sourceU,
+    up(summary?.basis_source),
+    up(summary?.underlying_channel_family),
+    up(summary?.submission_channel),
+    up(summary?.source_channel)
+  ].filter(Boolean).join('|');
+
+  const actualRouteOrSourceSaysOriginalImport = !!(
+    routeSourceText.includes('IMPORT_AUTHORITATIVE') ||
+    routeSourceText.includes('IMPORT') ||
+    routeSourceText.includes('NHSP') ||
+    routeSourceText.includes('HEALTHROSTER') ||
+    routeSourceText.includes('NO_TIMESHEET_REQUIRED')
+  );
+
+  const explicitImportAuthoritative =
+    yes(summary?.is_import_authoritative) ||
+    yes(summary?.import_authoritative);
+
+  const clientNhspLineage = yes(summary?.client_is_nhsp) || yes(summary?.is_nhsp);
+  const clientLineageSupportedByRowSource = !!(
+    clientNhspLineage &&
+    (
+      originalNhspHrBasis ||
+      noTsRequired ||
+      actualRouteOrSourceSaysOriginalImport ||
+      explicitImportAuthoritative
+    )
+  );
+
+  const adjustmentBasisWithOriginalImportSignals = !!(
+    hasAdjustmentBasis &&
+    !hasManualSignal &&
+    !hasParentAnchor &&
+    !hasAdditionalSeq &&
+    !hasManualAdjustmentOrigin &&
+    (
+      actualRouteOrSourceSaysOriginalImport ||
+      explicitImportAuthoritative ||
+      clientLineageSupportedByRowSource
+    )
+  );
+
+  if (invoiceModeU === 'SEGMENTS' && !(
+    noTsRequired ||
+    originalNhspHrBasis ||
+    actualRouteOrSourceSaysOriginalImport ||
+    explicitImportAuthoritative ||
+    adjustmentBasisWithOriginalImportSignals ||
+    clientLineageSupportedByRowSource
+  )) {
+    return false;
+  }
+
+  return !!(
+    noTsRequired ||
+    originalNhspHrBasis ||
+    explicitImportAuthoritative ||
+    actualRouteOrSourceSaysOriginalImport ||
+    adjustmentBasisWithOriginalImportSignals ||
+    clientLineageSupportedByRowSource
+  );
+}
+
+
+async function handleTimesheetEvidenceReturnToQueue(env, req, tsId, evidenceId) {
+  const enc = encodeURIComponent;
+
+  const evidencePolicyBlockedResponse = (policy, actionLabel) => {
+    const reason = policy?.protected_reason || (!policy?.can_manage_evidence ? 'EVIDENCE_MUTATION_BLOCKED' : null);
+    const code = reason || 'EVIDENCE_MUTATION_BLOCKED';
+    let message = `Evidence cannot be ${actionLabel || 'changed'} for this timesheet.`;
+    if (code === 'TIMESHEET_AUTHORISED_EDIT_BLOCKED') {
+      message = 'This timesheet is authorised. Unauthorise it before changing expenses or expense evidence.';
+    } else if (code === 'TIMESHEET_PAID_EDIT_BLOCKED') {
+      message = 'This timesheet has been paid and cannot be amended directly.';
+    } else if (code === 'TIMESHEET_SEGMENT_INVOICE_LOCKED_EDIT_BLOCKED') {
+      message = 'This timesheet has invoice-locked segments. Create an additional manual adjustment for any further expenses or expense evidence.';
+    } else if (code === 'TIMESHEET_INVOICE_LOCKED_EDIT_BLOCKED') {
+      message = 'This timesheet is invoice locked. Create an additional manual adjustment for any further expenses or expense evidence.';
+    } else if (code === 'IMPORT_AUTHORITATIVE_EXPENSES_BLOCKED' || code === 'IMPORT_AUTHORITATIVE_ROUTE') {
+      message = 'This original import-authoritative timesheet is view-only for direct expenses. Create an additional manual timesheet for expenses and expense evidence.';
+    } else if (code === 'PROTECTED_IMPORT_OR_SYSTEM_EVIDENCE' || code === 'SYSTEM_EVIDENCE') {
+      message = 'This protected system or import evidence cannot be changed.';
+    } else if (code === 'INVALID_TIMESHEET_CONTEXT') {
+      message = 'Invalid or missing current timesheet context.';
+    }
+    return new Response(
+      JSON.stringify({ error: code, error_code: code, message, protected_reason: reason }),
+      { status: code === 'INVALID_TIMESHEET_CONTEXT' ? 400 : 409, headers: JSON_HEADERS }
+    );
+  };
+
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+  if (!tsId) return withCORS(env, req, badRequest('timesheet_id is required'));
+  if (!evidenceId) return withCORS(env, req, badRequest('evidence_id is required'));
+
+  if (String(evidenceId).startsWith('SYS:')) {
+    return withCORS(env, req, evidencePolicyBlockedResponse({ protected_reason: 'PROTECTED_IMPORT_OR_SYSTEM_EVIDENCE', can_manage_evidence: false }, 'returned to the queue'));
+  }
+
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  if (!uuidRe.test(String(evidenceId))) {
+    return withCORS(env, req, badRequest('Invalid evidence_id'));
+  }
+
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+
+  const expected = body?.expected_timesheet_id ? String(body.expected_timesheet_id) : '';
+  if (!expected) return withCORS(env, req, badRequest('expected_timesheet_id is required'));
+
+  const resolved = await resolveTimesheetToCurrent(env, tsId);
+  if (!resolved) return withCORS(env, req, notFound('Timesheet not found'));
+  const currentTsId = resolved.current_timesheet_id;
+
+  if (String(expected) !== String(currentTsId)) {
+    return withCORS(
+      env,
+      req,
+      new Response(
+        JSON.stringify({ error: 'TIMESHEET_MOVED', current_timesheet_id: currentTsId }),
+        { status: 409, headers: { 'Content-Type': 'application/json' } }
+      )
+    );
+  }
+
+  const trimStr = (v) => String(v || '').trim();
+
+  const normalizeKind = (k) => {
+    const s = String(k || '').trim();
+    if (!s) return '';
+    const u = s.toUpperCase();
+
+    if (u === 'EXPENSES' || u === 'EXPENSE') return 'TRAVEL';
+    if (u === 'TRAVEL') return 'TRAVEL';
+    if (u === 'MILEAGE' || u === 'MILES' || u === 'MILE') return 'MILEAGE';
+    if (u === 'ACCOMMODATION' || u === 'ACCOM') return 'ACCOMMODATION';
+    if (u === 'OTHER') return 'OTHER';
+    if (u === 'TIMESHEET' || u === 'TS') return 'TIMESHEET';
+
+    return u;
+  };
+
+  const stripAttachedMeta = (meta) => {
+    const src = (meta && typeof meta === 'object' && !Array.isArray(meta)) ? { ...meta } : {};
+    delete src.attached_kind;
+    delete src.attached_to_timesheet_id;
+    delete src.attached_at_utc;
+    return src;
+  };
+
+  const queueStatus = (row) => String(row?.status || '').trim().toUpperCase();
+  const queueRowIsAlreadyAvailable = (row) => ['QUEUED', 'IN_PROGRESS'].includes(queueStatus(row));
+  const fetchExistingAvailableQueueRowByContentHash = async (contentHash, excludeId = '') => {
+    const cleanHash = trimStr(contentHash);
+    if (!cleanHash) return null;
+    const { rows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue` +
+        `?content_hash=eq.${enc(cleanHash)}` +
+        `&status=in.(QUEUED,IN_PROGRESS)` +
+        `&select=id,r2_key,original_filename,mime_type,content_hash,uploaded_by_user_id,uploaded_at_utc,status,timesheet_id,last_rotation_deg,meta_json` +
+        `&order=uploaded_at_utc.desc` +
+        `&limit=10`
+    );
+    const candidates = Array.isArray(rows) ? rows : [];
+    return candidates.find((row) => trimStr(row?.id) && (!excludeId || trimStr(row.id) !== trimStr(excludeId)) && queueRowIsAlreadyAvailable(row)) || null;
+  };
+  const deleteQueueRowIfPresent = async (id, errorPrefix) => {
+    const cleanId = trimStr(id);
+    if (!cleanId) return { ok: true };
+    const delRes = await fetch(
+      `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue?id=eq.${enc(cleanId)}`,
+      { method: 'DELETE', headers: { ...sbHeaders(env), Prefer: 'return=minimal' } }
+    );
+
+    if (!delRes.ok) {
+      const txt = await delRes.text().catch(() => '');
+      return { ok: false, response: withCORS(env, req, serverError(`${errorPrefix}: ${txt}`)) };
+    }
+
+    return { ok: true };
+  };
+
+  try {
+    const evidencePolicy = await getTimesheetEvidenceMutationPolicy(env, currentTsId);
+    if (!evidencePolicy?.can_manage_evidence) {
+      return withCORS(env, req, evidencePolicyBlockedResponse(evidencePolicy, 'returned to the queue'));
+    }
+
+    const { rows: evRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheet_evidence` +
+        `?id=eq.${enc(evidenceId)}` +
+        `&timesheet_id=eq.${enc(currentTsId)}` +
+        `&select=id,kind,display_name,storage_key,created_at,created_by` +
+        `&limit=1`
+    );
+    const ev = evRows?.[0] || null;
+    if (!ev) return withCORS(env, req, notFound('Evidence not found for this timesheet'));
+
+    const evPolicy = await getTimesheetEvidenceMutationPolicy(env, currentTsId, { evidence_item: ev });
+    if (!evPolicy?.can_manage_evidence) {
+      return withCORS(env, req, evidencePolicyBlockedResponse(evPolicy, 'returned to the queue'));
+    }
+
+    const tsMeta = await sbGetOne(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheets` +
+        `?timesheet_id=eq.${enc(currentTsId)}` +
+        `&is_current=eq.true` +
+        `&select=timesheet_id,contract_id,week_ending_date,sheet_scope,submission_mode,manual_pdf_r2_key,manual_pdf_rotation_degrees`
+    ).catch(() => null);
+
+    const storageKey = trimStr(ev.storage_key).replace(/^\/+/, '');
+    if (!storageKey) {
+      return withCORS(env, req, badRequest('Evidence has no storage_key and cannot be returned to queue'));
+    }
+
+    const { rows: queueRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue` +
+        `?r2_key=eq.${enc(storageKey)}` +
+        `&select=id,r2_key,original_filename,mime_type,content_hash,uploaded_by_user_id,uploaded_at_utc,status,timesheet_id,last_rotation_deg,meta_json` +
+        `&order=uploaded_at_utc.desc` +
+        `&limit=20`
+    );
+
+    const queueCandidates = Array.isArray(queueRows) ? queueRows : [];
+
+    const alreadyAvailableQueueRow = queueCandidates.find(row => queueRowIsAlreadyAvailable(row)) || null;
+    const attachedQueueRow = queueCandidates.find(row =>
+      String(row?.timesheet_id || '') === String(currentTsId) &&
+      queueStatus(row) === 'ATTACHED'
+    ) || null;
+
+    let reusableQueueRow = attachedQueueRow || null;
+
+    if (!reusableQueueRow) {
+      reusableQueueRow = alreadyAvailableQueueRow || null;
+    }
+
+    if (!reusableQueueRow) {
+      reusableQueueRow =
+        queueCandidates.find(row =>
+          ['DISCARDED'].includes(queueStatus(row))
+        ) || null;
+    }
+
+    if (!reusableQueueRow) {
+      reusableQueueRow =
+        queueCandidates.find(row =>
+          !['STAGED'].includes(queueStatus(row))
+        ) || null;
+    }
+
+    const nowIsoVal = new Date().toISOString();
+    const evKind = normalizeKind(ev.kind || '') || 'OTHER';
+
+    let queueRowId = null;
+    let reusedExistingQueueRow = false;
+    let removedAttachedQueueId = null;
+
+    const activeDuplicateByHash = alreadyAvailableQueueRow || await fetchExistingAvailableQueueRowByContentHash(
+      attachedQueueRow?.content_hash || reusableQueueRow?.content_hash || '',
+      attachedQueueRow?.id || reusableQueueRow?.id || ''
+    );
+
+    if (activeDuplicateByHash?.id) {
+      queueRowId = activeDuplicateByHash.id;
+      reusedExistingQueueRow = true;
+      if (attachedQueueRow?.id && trimStr(attachedQueueRow.id) !== trimStr(activeDuplicateByHash.id)) {
+        const deleteAttachedQueueResult = await deleteQueueRowIfPresent(attachedQueueRow.id, 'Failed to remove attached queue row after finding an existing queue item');
+        if (!deleteAttachedQueueResult.ok) return deleteAttachedQueueResult.response;
+        removedAttachedQueueId = attachedQueueRow.id;
+      }
+    } else if (reusableQueueRow?.id) {
+      const currentMeta = (reusableQueueRow.meta_json && typeof reusableQueueRow.meta_json === 'object' && !Array.isArray(reusableQueueRow.meta_json))
+        ? reusableQueueRow.meta_json
+        : {};
+
+      const patchPayload = {
+        status: 'QUEUED',
+        timesheet_id: null,
+        original_filename: trimStr(reusableQueueRow.original_filename) || trimStr(ev.display_name) || trimStr(reusableQueueRow.r2_key),
+        mime_type: reusableQueueRow.mime_type || null,
+        content_hash: trimStr(reusableQueueRow.content_hash),
+        uploaded_by_user_id: reusableQueueRow.uploaded_by_user_id || ev.created_by || user.id,
+        uploaded_at_utc: reusableQueueRow.uploaded_at_utc || ev.created_at || nowIsoVal,
+        last_rotation_deg: Number.isFinite(Number(reusableQueueRow.last_rotation_deg))
+          ? Number(reusableQueueRow.last_rotation_deg)
+          : Number(tsMeta?.manual_pdf_rotation_degrees ?? 0),
+        meta_json: stripAttachedMeta(currentMeta)
+      };
+
+      const patchQueueRes = await fetch(
+        `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue?id=eq.${enc(reusableQueueRow.id)}`,
+        {
+          method: 'PATCH',
+          headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+          body: JSON.stringify(patchPayload)
+        }
+      );
+
+      if (!patchQueueRes.ok) {
+        const txt = await patchQueueRes.text().catch(() => '');
+        const duplicateContentHash = /manual_timesheet_queue_content_hash_active_idx|duplicate key value|23505/i.test(txt || '');
+        if (duplicateContentHash) {
+          const duplicateQueueRow = await fetchExistingAvailableQueueRowByContentHash(reusableQueueRow.content_hash, reusableQueueRow.id);
+          if (duplicateQueueRow?.id) {
+            queueRowId = duplicateQueueRow.id;
+            reusedExistingQueueRow = true;
+            if (queueStatus(reusableQueueRow) === 'ATTACHED' && String(reusableQueueRow?.timesheet_id || '') === String(currentTsId)) {
+              const deleteAttachedQueueResult = await deleteQueueRowIfPresent(reusableQueueRow.id, 'Failed to remove attached queue row after duplicate queue content was detected');
+              if (!deleteAttachedQueueResult.ok) return deleteAttachedQueueResult.response;
+              removedAttachedQueueId = reusableQueueRow.id;
+            }
+          } else {
+            return withCORS(env, req, serverError(`Failed to reuse queue row for return-to-queue: ${txt}`));
+          }
+        } else {
+          return withCORS(env, req, serverError(`Failed to reuse queue row for return-to-queue: ${txt}`));
+        }
+      } else {
+        queueRowId = reusableQueueRow.id;
+      }
+    } else {
+      const syntheticHash = `RETURNED:${storageKey}`;
+
+      const insertPayload = {
+        r2_key: storageKey,
+        original_filename: trimStr(ev.display_name) || storageKey.split('/').pop() || 'file',
+        mime_type: null,
+        content_hash: syntheticHash,
+        uploaded_by_user_id: ev.created_by || user.id,
+        uploaded_at_utc: ev.created_at || nowIsoVal,
+        status: 'QUEUED',
+        timesheet_id: null,
+        last_rotation_deg: Number(tsMeta?.manual_pdf_rotation_degrees ?? 0),
+        meta_json: {}
+      };
+
+      const insertRes = await fetch(
+        `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue`,
+        {
+          method: 'POST',
+          headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+          body: JSON.stringify(insertPayload)
+        }
+      );
+
+      const txt = await insertRes.text().catch(() => '');
+      if (!insertRes.ok) {
+        const duplicateContentHash = /manual_timesheet_queue_content_hash_active_idx|duplicate key value|23505/i.test(txt || '');
+        if (duplicateContentHash) {
+          const duplicateQueueRow = await fetchExistingAvailableQueueRowByContentHash(syntheticHash, '');
+          if (duplicateQueueRow?.id) {
+            queueRowId = duplicateQueueRow.id;
+            reusedExistingQueueRow = true;
+          } else {
+            return withCORS(env, req, serverError(`Failed to create queue row for return-to-queue: ${txt}`));
+          }
+        } else {
+          return withCORS(env, req, serverError(`Failed to create queue row for return-to-queue: ${txt}`));
+        }
+      } else {
+        let inserted = null;
+        try {
+          const json = txt ? JSON.parse(txt) : [];
+          inserted = Array.isArray(json) ? json[0] : json;
+        } catch {
+          inserted = null;
+        }
+
+        if (!inserted?.id) {
+          return withCORS(env, req, serverError('Failed to create queue row for return-to-queue'));
+        }
+
+        queueRowId = inserted.id;
+      }
+    }
+
+    const delRes = await fetch(
+      `${env.SUPABASE_URL}/rest/v1/timesheet_evidence?id=eq.${enc(evidenceId)}`,
+      { method: 'DELETE', headers: { ...sbHeaders(env), Prefer: 'return=minimal' } }
+    );
+
+    if (!delRes.ok) {
+      const txt = await delRes.text().catch(() => '');
+      return withCORS(env, req, serverError(`Failed to detach evidence from timesheet: ${txt}`));
+    }
+
+    const evKindU = String(evKind || '').toUpperCase();
+    const currentManualPdfKey = trimStr(tsMeta?.manual_pdf_r2_key).replace(/^\/+/, '');
+    const shouldClearManualPdf =
+      evKindU === 'TIMESHEET' &&
+      currentManualPdfKey &&
+      currentManualPdfKey === storageKey;
+
+    if (shouldClearManualPdf) {
+      await fetch(
+        `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(currentTsId)}&is_current=eq.true`,
+        {
+          method: 'PATCH',
+          headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+          body: JSON.stringify({
+            manual_pdf_r2_key: null,
+            manual_pdf_rotation_degrees: 0
+          })
+        }
+      ).catch(() => {});
+    }
+
+    try {
+      await writeAudit(
+        env,
+        user,
+        reusedExistingQueueRow
+          ? 'TIMESHEET_EVIDENCE_REMOVED_EXISTING_QUEUE_REUSED'
+          : 'TIMESHEET_EVIDENCE_RETURNED_TO_QUEUE',
+        {
+          timesheet_id: currentTsId,
+          evidence_id: evidenceId,
+          queue_id: queueRowId,
+          removed_attached_queue_id: removedAttachedQueueId,
+          reused_existing_queue_row: reusedExistingQueueRow,
+          kind: ev.kind || null,
+          display_name: ev.display_name || null,
+          storage_key: ev.storage_key || null,
+          contract_id: tsMeta?.contract_id || null,
+          week_ending_date: tsMeta?.week_ending_date || null,
+          sheet_scope: tsMeta?.sheet_scope || null,
+          submission_mode: tsMeta?.submission_mode || null,
+          cleared_manual_pdf_r2_key: shouldClearManualPdf
+        },
+        { entity: 'timesheets', subject_id: currentTsId, req }
+      );
+    } catch {}
+
+    return withCORS(env, req, ok({
+      returned_to_queue: true,
+      requested_timesheet_id: resolved.requested_timesheet_id || tsId,
+      current_timesheet_id: currentTsId,
+      was_stale: !!resolved.was_stale,
+      queue_id: queueRowId,
+      removed_attached_queue_id: removedAttachedQueueId,
+      reused_existing_queue_row: reusedExistingQueueRow,
+      cleared_manual_pdf_r2_key: shouldClearManualPdf
+    }));
+  } catch (e) {
+    return withCORS(env, req, serverError(`Failed to return timesheet evidence to queue: ${e?.message || e}`));
+  }
+}
+
+
+
+// POST /api/timesheets/:id/evidence
+// POST /api/timesheets/:id/evidence
+
+
+// DELETE /api/timesheets/:id/evidence/:evidence_id
+
+
+
+// DELETE /api/timesheets/:id/evidence/:evidence_id
+
+async function handleTimesheetReplaceManualPdf(env, req, timesheetId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+  if (!timesheetId) return withCORS(env, req, badRequest('timesheet_id is required'));
+
+  let body = null;
+  try {
+    body = await parseJSONBody(req);
+  } catch {
+    return withCORS(env, req, badRequest('Invalid JSON payload'));
+  }
+
+  const expected = body?.expected_timesheet_id ? String(body.expected_timesheet_id) : '';
+  if (!expected) return withCORS(env, req, badRequest('expected_timesheet_id is required'));
+
+  const resolved = await resolveTimesheetToCurrent(env, timesheetId);
+  if (!resolved) return withCORS(env, req, notFound('Timesheet not found'));
+  const currentTimesheetId = resolved.current_timesheet_id;
+
+  if (String(expected) !== String(currentTimesheetId)) {
+    return withCORS(
+      env,
+      req,
+      new Response(
+        JSON.stringify({ error: 'TIMESHEET_MOVED', current_timesheet_id: currentTimesheetId }),
+        { status: 409, headers: { 'Content-Type': 'application/json' } }
+      )
+    );
+  }
+
+  return withCORS(
+    env,
+    req,
+    new Response(
+      JSON.stringify({
+        error: 'DIRECT_REPLACEMENT_NOT_SUPPORTED',
+        message: 'Direct replacement is not supported. Delete the existing evidence or return it to queue first, then add/attach the new evidence.'
+      }),
+      { status: 409, headers: JSON_HEADERS }
+    )
+  );
+}
+
+
+
+async function rebuildWeeklyTsfinForTimesheet(env, timesheetId, contract) {
+  // ⚠️ RETIRED (Jan 2026): Do NOT call this in loops/bulk operations. Use tsfinTargetedDrainNow(env, { timesheetIds: [...], reason, chunkSize }) so TSFIN recompute stays SQL-first + batched.
+
+  const enc = encodeURIComponent;
+  const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+  const asNumberLocal = (v) => (v == null ? 0 : Number(v) || 0);
+
+  // ─────────────────────────────────────────────────────────────
+  // Helper: write snapshot via SQL outbox + batch writer (deterministic reason)
+  // ─────────────────────────────────────────────────────────────
+ const writeTsfinViaSql = async (tsid, snapshot, reason = 'CONTEXT_CHANGED') => {
+  let outboxId = null;
+
+  try {
+    // Ensure outbox row exists (priority)
+    await sbRpc(env, 'enqueue_ts_financials_priority', {
+      _timesheet_ids: [tsid],
+      _reason: reason
+    });
+
+    // ✅ RPC-only deterministic lease (no REST)
+    const leased = await sbRpc(env, 'tsfin_dequeue_specific', {
+      p_timesheet_ids: [tsid],
+      p_limit: 1
+    });
+
+    const row = Array.isArray(leased) ? leased[0] : null;
+    outboxId = row?.id || null;
+
+    if (!outboxId) {
+      return { ok: false, outbox_id: null, reason: 'NO_OUTBOX_ROW' };
+    }
+
+    const wr = await rpcTsfinWriteSnapshotsAndComplete(env, {
+      rows: [{
+        outbox_id: outboxId,
+        timesheet_id: tsid,
+        snapshot
+      }]
+    });
+
+    const ok = (Number(wr?.ok_count || 0) > 0);
+    return { ok, outbox_id: outboxId, wr };
+  } catch (e) {
+    return { ok: false, outbox_id: outboxId, error: String(e?.message || e) };
+  }
+};
+
+  // ─────────────────────────────────────────────────────────────
+  // Load current TS + current TSFIN in ONE RPC (no per-item REST)
+  // ─────────────────────────────────────────────────────────────
+  const ctxRows = await rpcTsfinLoadContextBatch(env, { timesheetIds: [timesheetId] });
+  const ctx = (Array.isArray(ctxRows) && ctxRows[0]) ? ctxRows[0] : null;
+
+  const ts = ctx?.out_timesheet || null;
+  const fin = ctx?.out_cur_fin || null;
+
+  if (!fin) return { ok: false, reason: 'NO_SNAPSHOT' };
+  if (!ts)  return { ok: false, reason: 'TS_NOT_FOUND' };
+
+  if (fin.locked_by_invoice_id || fin.paid_at_utc) {
+    return { ok: false, reason: 'LOCKED_OR_PAID' };
+  }
+
+  // Contract rates (weekly uses contract rates; not client-default windows)
+  const pc = payChargeFromContract(contract);
+  const pay = pc?.pay || null;
+  const charge = pc?.charge || null;
+  const method = pc?.method || contract?.pay_method_snapshot || contract?.pay_method || null;
+  if (!pay || !charge) return { ok: false, reason: 'CONTRACT_RATES_MISSING' };
+
+  const basisRaw = fin.basis || '';
+  const basisU = String(basisRaw).toUpperCase();
+
+  // ─────────────────────────────────────────────────────────────
+  // Helpers
+  // ─────────────────────────────────────────────────────────────
+  const toYmd = (d) => {
+    const yyyy = d.getUTCFullYear();
+    const mm   = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const dd   = String(d.getUTCDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  };
+
+  const addDaysYmd = (ymd, days) => {
+    const d = new Date(`${String(ymd)}T00:00:00Z`);
+    if (!Number.isFinite(d.getTime())) return String(ymd || '');
+    d.setUTCDate(d.getUTCDate() + Number(days || 0));
+    return toYmd(d);
+  };
+
+  const parseHHMM = (s) => {
+    const m = String(s || '').trim().match(/^(\d{1,2}):(\d{2})$/);
+    if (!m) return null;
+    const hh = Number(m[1]), mm = Number(m[2]);
+    if (!Number.isFinite(hh) || !Number.isFinite(mm)) return null;
+    if (hh < 0 || hh > 23 || mm < 0 || mm > 59) return null;
+    return hh * 60 + mm;
+  };
+
+  const getWeekDates = (weekEndingYmd) => {
+    const out = [];
+    if (!weekEndingYmd) return out;
+    try {
+      const base = new Date(`${String(weekEndingYmd)}T00:00:00Z`);
+      if (!Number.isFinite(base.getTime())) return out;
+      for (let offset = 6; offset >= 0; offset--) {
+        const d = new Date(base);
+        d.setUTCDate(base.getUTCDate() - offset);
+        out.push({ ymd: toYmd(d), dow: d.getUTCDay() });
+      }
+    } catch {}
+    return out;
+  };
+
+  const normaliseFreq = (raw) => {
+    const s = String(raw || '').toUpperCase();
+    if (s === 'ONE_PER_WEEK')          return 'ONE_PER_WEEK';
+    if (s === 'ONE_PER_DAY')           return 'ONE_PER_DAY';
+    if (s === 'WEEKENDS_AND_BH_ONLY')  return 'WEEKENDS_AND_BH_ONLY';
+    if (s === 'WEEKDAYS_EXCL_BH_ONLY') return 'WEEKDAYS_EXCL_BH_ONLY';
+    return 'ONE_PER_WEEK';
+  };
+
+  // units + additional calculation: prefers ts.additional_units_* then falls back to fin.additional_units_json
+  const computeAdditionalFromTsOrFin = async () => {
+    const cfgArrRaw = contract.additional_rates_json;
+    let cfgArr = Array.isArray(cfgArrRaw) ? cfgArrRaw : [];
+    if (typeof cfgArrRaw === 'string') {
+      try { cfgArr = JSON.parse(cfgArrRaw); } catch { cfgArr = []; }
+    }
+    if (!Array.isArray(cfgArr)) cfgArr = [];
+
+    if (!cfgArr.length) {
+      return {
+        additional_units_json: {},
+        additional_pay_ex_vat: 0,
+        additional_charge_ex_vat: 0,
+        additional_margin_ex_vat: 0
+      };
+    }
+
+    let unitsWeek = ts.additional_units_week || {};
+    let unitsPerDay = ts.additional_units_per_day || {};
+    if (typeof unitsWeek === 'string') { try { unitsWeek = JSON.parse(unitsWeek); } catch { unitsWeek = {}; } }
+    if (typeof unitsPerDay === 'string') { try { unitsPerDay = JSON.parse(unitsPerDay); } catch { unitsPerDay = {}; } }
+    if (!unitsWeek || typeof unitsWeek !== 'object') unitsWeek = {};
+    if (!unitsPerDay || typeof unitsPerDay !== 'object') unitsPerDay = {};
+
+    const finStored = (fin.additional_units_json && typeof fin.additional_units_json === 'object') ? fin.additional_units_json : {};
+    const weekDates = getWeekDates(ts.week_ending_date || null);
+
+    // BH list via loadPolicy (canonical)
+    let bhSet = new Set();
+    try {
+      const ymd = ts.week_ending_date || null;
+      const pol = await loadPolicy(env, contract.client_id, ymd);
+      const bhList = Array.isArray(pol?.bh_list) ? pol.bh_list : [];
+      bhSet = new Set(bhList.map(String));
+    } catch {
+      bhSet = new Set();
+    }
+    const isBH = (ymd) => bhSet.has(String(ymd));
+
+    const shouldIncludeDay = (freq, meta) => {
+      const { ymd, dow } = meta;
+      const bh = isBH(ymd);
+      if (freq === 'ONE_PER_DAY')           return true;
+      if (freq === 'WEEKENDS_AND_BH_ONLY')  return bh || dow === 0 || dow === 6;
+      if (freq === 'WEEKDAYS_EXCL_BH_ONLY') return !bh && dow >= 1 && dow <= 5;
+      return false;
+    };
+
+    const additional_units_json = {};
+    let additional_pay_ex_vat = 0;
+    let additional_charge_ex_vat = 0;
+
+    for (const cfg of cfgArr) {
+      if (!cfg || !cfg.code) continue;
+      const code = String(cfg.code || '').toUpperCase().trim();
+      if (!code) continue;
+
+      const freq = normaliseFreq(cfg.frequency);
+
+      let unitCount = 0;
+      let daysUsed = undefined;
+
+      if (freq === 'ONE_PER_WEEK') {
+        const u = Number(unitsWeek[code] ?? 0);
+        if (Number.isFinite(u) && u > 0) unitCount = u;
+        else {
+          const stored = finStored[code] || null;
+          const su = Number(stored?.unit_count ?? 0);
+          if (Number.isFinite(su) && su > 0) unitCount = su;
+          if (stored && stored.days && typeof stored.days === 'object') daysUsed = stored.days;
+        }
+      } else {
+        const perRaw = (unitsPerDay[code] && typeof unitsPerDay[code] === 'object') ? unitsPerDay[code] : {};
+        const stored = finStored[code] || null;
+        const storedDays = (stored && stored.days && typeof stored.days === 'object') ? stored.days : null;
+
+        const perDayOut = {};
+        let any = false;
+
+        if (weekDates.length) {
+          for (const meta of weekDates) {
+            const v = Number(perRaw?.[meta.ymd] ?? 0);
+            if (!Number.isFinite(v) || v <= 0) continue;
+            if (!shouldIncludeDay(freq, meta)) continue;
+            unitCount += v;
+            perDayOut[meta.ymd] = (perDayOut[meta.ymd] || 0) + v;
+            any = true;
+          }
+        }
+
+        if (!any && storedDays) {
+          for (const [ymd, vv] of Object.entries(storedDays)) {
+            const meta = {
+              ymd: String(ymd || ''),
+              dow: (() => { try { return new Date(`${String(ymd)}T00:00:00Z`).getUTCDay(); } catch { return null; } })()
+            };
+            const v = Number(vv ?? 0);
+            if (!Number.isFinite(v) || v <= 0) continue;
+            if (meta.dow == null) continue;
+            if (!shouldIncludeDay(freq, meta)) continue;
+            unitCount += v;
+            perDayOut[meta.ymd] = (perDayOut[meta.ymd] || 0) + v;
+            any = true;
+          }
+        }
+
+        if (any && Object.keys(perDayOut).length) daysUsed = perDayOut;
+      }
+
+      if (!Number.isFinite(unitCount) || unitCount <= 0) continue;
+
+      const payRate =
+        (cfg.pay_rate != null && Number.isFinite(Number(cfg.pay_rate)))
+          ? Number(cfg.pay_rate)
+          : Number((finStored[code] && finStored[code].pay_rate) || 0);
+
+      const chargeRate =
+        (cfg.charge_rate != null && Number.isFinite(Number(cfg.charge_rate)))
+          ? Number(cfg.charge_rate)
+          : Number((finStored[code] && finStored[code].charge_rate) || 0);
+
+      const payEx = +Number(unitCount * payRate).toFixed(2);
+      const chgEx = +Number(unitCount * chargeRate).toFixed(2);
+
+      additional_units_json[code] = {
+        bucket_name: cfg.bucket_name || finStored?.[code]?.bucket_name || null,
+        unit_name:   cfg.unit_name   || finStored?.[code]?.unit_name   || null,
+        frequency:   freq,
+        unit_count:  unitCount,
+        pay_rate:    payRate,
+        charge_rate: chargeRate,
+        pay_ex_vat:  payEx,
+        charge_ex_vat: chgEx,
+        ...(daysUsed ? { days: daysUsed } : {})
+      };
+
+      additional_pay_ex_vat += payEx;
+      additional_charge_ex_vat += chgEx;
+    }
+
+    additional_pay_ex_vat = +Number(additional_pay_ex_vat).toFixed(2);
+    additional_charge_ex_vat = +Number(additional_charge_ex_vat).toFixed(2);
+    const additional_margin_ex_vat = +Number(additional_charge_ex_vat - additional_pay_ex_vat).toFixed(2);
+
+    return { additional_units_json, additional_pay_ex_vat, additional_charge_ex_vat, additional_margin_ex_vat };
+  };
+
+  const getPreservedBySegmentId = () => {
+    const preserved = new Map();
+    try {
+      const ib = fin.invoice_breakdown_json || null;
+      const mode = String(ib?.mode || '').toUpperCase();
+      const segs = Array.isArray(ib?.segments) ? ib.segments : null;
+      if (mode !== 'SEGMENTS' || !segs) return preserved;
+
+      for (const s of segs) {
+        const sid = s?.segment_id ? String(s.segment_id) : null;
+        if (!sid) continue;
+        preserved.set(sid, {
+          exclude_from_pay: (typeof s.exclude_from_pay === 'boolean') ? s.exclude_from_pay : undefined,
+          invoice_target_week_start: (s.invoice_target_week_start != null) ? String(s.invoice_target_week_start) : undefined,
+          invoice_locked_invoice_id: (s.invoice_locked_invoice_id != null) ? String(s.invoice_locked_invoice_id) : undefined
+        });
+      }
+    } catch {}
+    return preserved;
+  };
+
+  // Ensure policy_snapshot_json is NOT NULL (DB constraint)
+  let policySnap = fin.policy_snapshot_json;
+  if (!policySnap || typeof policySnap !== 'object') {
+    try {
+      const ymd = ts.week_ending_date || null;
+      policySnap = ymd ? await loadPolicy(env, contract.client_id, ymd) : {};
+    } catch {
+      policySnap = {};
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // Evidence base routing
+  // ─────────────────────────────────────────────────────────────
+
+  // NHSP basis: rebuild using NHSP shifts (SEGMENTS)
+  if (basisU === 'NHSP' || basisU === 'NHSP_ADJUSTMENT') {
+    // ✅ NEW: batch RPC instead of REST /nhsp_shifts
+    let shifts = [];
+    try {
+      const rows = await sbRpc(env, 'tsfin_load_nhsp_shifts_batch', {
+        p_timesheet_ids: [ts.timesheet_id]
+      });
+
+      const r0 = Array.isArray(rows) ? rows[0] : null;
+      const arr = r0?.shifts;
+
+      if (Array.isArray(arr)) shifts = arr;
+      else if (typeof arr === 'string') {
+        try {
+          const parsed = JSON.parse(arr);
+          if (Array.isArray(parsed)) shifts = parsed;
+        } catch {}
+      } else {
+        shifts = [];
+      }
+    } catch {
+      shifts = [];
+    }
+
+    // Request-scope policy cache for this call
+    const policyCache = new Map();
+    const getPolicyCached = async (client_id, ymd) => {
+      const key = `${String(client_id || '')}|${String(ymd || '')}`;
+      if (policyCache.has(key)) return policyCache.get(key);
+      const pol = await loadPolicy(env, client_id, ymd);
+      policyCache.set(key, pol);
+      return pol;
+    };
+
+    if (shifts.length) {
+      const nhspImportId = fin.nhsp_import_id || null;
+
+      // buildNhspWeeklySnapshotCached is compute-only and accepts curFin
+      const built = await buildNhspWeeklySnapshotCached(
+        env,
+        ts,
+        contract,
+        shifts,
+        nhspImportId,
+        fin.basis || 'NHSP',
+        getPolicyCached,
+        fin
+      );
+
+      if (!built?.ok || !built?.snapshot) return { ok: false, reason: built?.reason || 'NHSP_BUILD_FAILED' };
+
+      const wr = await writeTsfinViaSql(ts.timesheet_id, built.snapshot, 'CONTEXT_CHANGED');
+      if (!wr.ok) {
+        // fallback legacy write (and clear outbox if we created one)
+        await writeSnapshot(env, built.snapshot);
+        if (wr.outbox_id) { try { await sbRpc(env, 'tsfin_work_success', { p_id: wr.outbox_id }); } catch {} }
+      }
+
+      return { ok: true, mode: 'NHSP_REBUILD' };
+    }
+
+    // If no shifts found, fall back to preserving existing segments evidence if present
+    const ib = fin.invoice_breakdown_json || null;
+    const mode = String(ib?.mode || '').toUpperCase();
+    const segs = Array.isArray(ib?.segments) ? ib.segments : null;
+
+    if (mode === 'SEGMENTS' && segs && segs.length) {
+      const preservedSegs = segs.map(s => {
+        const hDay   = asNumberLocal(s.hours_day);
+        const hNight = asNumberLocal(s.hours_night);
+        const hSat   = asNumberLocal(s.hours_sat);
+        const hSun   = asNumberLocal(s.hours_sun);
+        const hBh    = asNumberLocal(s.hours_bh);
+
+        const payEx = round2(
+          hDay   * asNumberLocal(pay.day) +
+          hNight * asNumberLocal(pay.night) +
+          hSat   * asNumberLocal(pay.sat) +
+          hSun   * asNumberLocal(pay.sun) +
+          hBh    * asNumberLocal(pay.bh)
+        );
+
+        const chgEx = round2(
+          hDay   * asNumberLocal(charge.day) +
+          hNight * asNumberLocal(charge.night) +
+          hSat   * asNumberLocal(charge.sat) +
+          hSun   * asNumberLocal(charge.sun) +
+          hBh    * asNumberLocal(charge.bh)
+        );
+
+        return { ...s, pay_amount: payEx, charge_amount: chgEx };
+      });
+
+      let sumDay = 0, sumNight = 0, sumSat = 0, sumSun = 0, sumBh = 0;
+      let sumPay = 0, sumChg = 0;
+      preservedSegs.forEach(s => {
+        sumDay += asNumberLocal(s.hours_day);
+        sumNight += asNumberLocal(s.hours_night);
+        sumSat += asNumberLocal(s.hours_sat);
+        sumSun += asNumberLocal(s.hours_sun);
+        sumBh += asNumberLocal(s.hours_bh);
+        sumPay += asNumberLocal(s.pay_amount);
+        sumChg += asNumberLocal(s.charge_amount);
+      });
+
+      const addl = await computeAdditionalFromTsOrFin();
+
+      const hours = {
+        day: round2(sumDay),
+        night: round2(sumNight),
+        sat: round2(sumSat),
+        sun: round2(sumSun),
+        bh: round2(sumBh)
+      };
+      const total_hours = round2(hours.day + hours.night + hours.sat + hours.sun + hours.bh);
+
+      const total_pay_ex_vat = +Number(round2(sumPay) + Number(addl.additional_pay_ex_vat || 0)).toFixed(2);
+      const total_charge_ex_vat = +Number(round2(sumChg) + Number(addl.additional_charge_ex_vat || 0)).toFixed(2);
+      const margin_ex_vat = +Number(total_charge_ex_vat - total_pay_ex_vat).toFixed(2);
+
+      const snap = { ...fin };
+      delete snap.id;
+      delete snap.is_current;
+
+      snap.timesheet_id = ts.timesheet_id;
+      snap.timesheet_version = ts.version || fin.timesheet_version || 1;
+
+      snap.candidate_id = contract.candidate_id;
+      snap.client_id = contract.client_id;
+      snap.pay_method = method;
+
+      snap.policy_snapshot_json = policySnap;
+      snap.rate_source_refs_json = { mode: 'CONTRACT_RATES_JSON', contract_id: contract.id || null };
+
+      snap.hours_day = hours.day;
+      snap.hours_night = hours.night;
+      snap.hours_sat = hours.sat;
+      snap.hours_sun = hours.sun;
+      snap.hours_bh = hours.bh;
+
+      snap.pay_day = (pay.day != null) ? Number(pay.day) : null;
+      snap.pay_night = (pay.night != null) ? Number(pay.night) : null;
+      snap.pay_sat = (pay.sat != null) ? Number(pay.sat) : null;
+      snap.pay_sun = (pay.sun != null) ? Number(pay.sun) : null;
+      snap.pay_bh = (pay.bh != null) ? Number(pay.bh) : null;
+
+      snap.charge_day = (charge.day != null) ? Number(charge.day) : null;
+      snap.charge_night = (charge.night != null) ? Number(charge.night) : null;
+      snap.charge_sat = (charge.sat != null) ? Number(charge.sat) : null;
+      snap.charge_sun = (charge.sun != null) ? Number(charge.sun) : null;
+      snap.charge_bh = (charge.bh != null) ? Number(charge.bh) : null;
+
+      snap.total_hours = total_hours;
+
+      snap.additional_units_json = addl.additional_units_json || {};
+      snap.additional_pay_ex_vat = +Number(addl.additional_pay_ex_vat || 0).toFixed(2);
+      snap.additional_charge_ex_vat = +Number(addl.additional_charge_ex_vat || 0).toFixed(2);
+      snap.additional_margin_ex_vat = +Number(addl.additional_margin_ex_vat || 0).toFixed(2);
+
+      snap.total_pay_ex_vat = total_pay_ex_vat;
+      snap.total_charge_ex_vat = total_charge_ex_vat;
+      snap.margin_ex_vat = margin_ex_vat;
+
+      snap.invoice_breakdown_json = {
+        mode: 'SEGMENTS',
+        segments: preservedSegs,
+        additional: {
+          units: addl.additional_units_json || {},
+          pay_ex_vat: +Number(addl.additional_pay_ex_vat || 0).toFixed(2),
+          charge_ex_vat: +Number(addl.additional_charge_ex_vat || 0).toFixed(2),
+          margin_ex_vat: +Number(addl.additional_margin_ex_vat || 0).toFixed(2)
+        },
+        totals: { total_pay_ex_vat, total_charge_ex_vat, margin_ex_vat }
+      };
+
+      const wr = await writeTsfinViaSql(ts.timesheet_id, snap, 'CONTEXT_CHANGED');
+      if (!wr.ok) {
+        await writeSnapshot(env, snap);
+        if (wr.outbox_id) { try { await sbRpc(env, 'tsfin_work_success', { p_id: wr.outbox_id }); } catch {} }
+      }
+
+      return { ok: true, mode: 'SEGMENTS_EVIDENCE_REPRICE' };
+    }
+
+    return { ok: false, reason: 'NO_SHIFTS_FOR_NHSP_REBUILD' };
+  }
+
+  // Schedule-driven weekly -> SEGMENTS
+  if (Array.isArray(ts.actual_schedule_json) && ts.actual_schedule_json.length) {
+    const preservedById = getPreservedBySegmentId();
+
+    const segments = [];
+    let sumDay = 0, sumNight = 0, sumSat = 0, sumSun = 0, sumBh = 0;
+    let sumPay = 0, sumChg = 0;
+
+    const scheduleEntryToUtcRange = (seg) => {
+      const date = String(seg?.date || '').trim();
+      if (!date) return { startUtcIso: null, endUtcIso: null };
+
+      const startIsoRaw = seg?.start_utc || seg?.start_iso || null;
+      const endIsoRaw   = seg?.end_utc   || seg?.end_iso   || null;
+
+      const isIsoLike = (s) => {
+        const x = String(s || '');
+        return x.includes('T') && (x.endsWith('Z') || /[+\-]\d{2}:\d{2}$/.test(x));
+      };
+
+      if (startIsoRaw && endIsoRaw && isIsoLike(startIsoRaw) && isIsoLike(endIsoRaw)) {
+        return { startUtcIso: String(startIsoRaw), endUtcIso: String(endIsoRaw) };
+      }
+
+      const startHH = String(seg?.start || '').trim();
+      const endHH   = String(seg?.end   || '').trim();
+      if (!startHH || !endHH) return { startUtcIso: null, endUtcIso: null };
+
+      const sMin = parseHHMM(startHH);
+      const eMin = parseHHMM(endHH);
+      if (sMin == null || eMin == null) return { startUtcIso: null, endUtcIso: null };
+
+      const overnight = (eMin <= sMin);
+      const endYmd = overnight ? addDaysYmd(date, 1) : date;
+
+      if (typeof ukLocalToUtcISO !== 'function') return { startUtcIso: null, endUtcIso: null };
+
+      return {
+        startUtcIso: ukLocalToUtcISO(date, startHH),
+        endUtcIso:   ukLocalToUtcISO(endYmd, endHH)
+      };
+    };
+
+    for (let i = 0; i < ts.actual_schedule_json.length; i++) {
+      const seg = ts.actual_schedule_json[i] || {};
+      const mins = await resolveBucketsFromSchedule(env, contract, [seg]);
+
+      const hDay   = +(asNumberLocal(mins.day)   / 60).toFixed(2);
+      const hNight = +(asNumberLocal(mins.night) / 60).toFixed(2);
+      const hSat   = +(asNumberLocal(mins.sat)   / 60).toFixed(2);
+      const hSun   = +(asNumberLocal(mins.sun)   / 60).toFixed(2);
+      const hBh    = +(asNumberLocal(mins.bh)    / 60).toFixed(2);
+
+      sumDay += hDay; sumNight += hNight; sumSat += hSat; sumSun += hSun; sumBh += hBh;
+
+      const payEx = round2(
+        hDay   * asNumberLocal(pay.day) +
+        hNight * asNumberLocal(pay.night) +
+        hSat   * asNumberLocal(pay.sat) +
+        hSun   * asNumberLocal(pay.sun) +
+        hBh    * asNumberLocal(pay.bh)
+      );
+
+      const chgEx = round2(
+        hDay   * asNumberLocal(charge.day) +
+        hNight * asNumberLocal(charge.night) +
+        hSat   * asNumberLocal(charge.sat) +
+        hSun   * asNumberLocal(charge.sun) +
+        hBh    * asNumberLocal(charge.bh)
+      );
+
+      sumPay += payEx;
+      sumChg += chgEx;
+
+      const sid = `ts:${ts.timesheet_id}:${i}`;
+      const preserved = preservedById.get(sid) || null;
+
+      const exclude_from_pay =
+        (preserved && typeof preserved.exclude_from_pay === 'boolean') ? preserved.exclude_from_pay : false;
+
+      const invoice_target_week_start =
+        (preserved && preserved.invoice_target_week_start != null) ? preserved.invoice_target_week_start : undefined;
+
+      const invoice_locked_invoice_id =
+        (preserved && preserved.invoice_locked_invoice_id != null) ? preserved.invoice_locked_invoice_id : undefined;
+
+      const { startUtcIso, endUtcIso } = scheduleEntryToUtcRange(seg);
+      const br = Number(seg.break_mins ?? seg.break_minutes ?? 0);
+
+      segments.push({
+        segment_id: sid,
+        date: seg.date || null,
+        start_utc: startUtcIso,
+        end_utc: endUtcIso,
+        break_mins: Number.isFinite(br) ? br : 0,
+
+        ref_num: (seg.ref_num != null && String(seg.ref_num).trim()) ? String(seg.ref_num).trim() : null,
+        breaks: Array.isArray(seg.breaks) ? seg.breaks : [],
+
+        hours_day: hDay,
+        hours_night: hNight,
+        hours_sat: hSat,
+        hours_sun: hSun,
+        hours_bh: hBh,
+
+        pay_amount: payEx,
+        charge_amount: chgEx,
+
+        exclude_from_pay,
+        ...(invoice_target_week_start != null ? { invoice_target_week_start } : {}),
+        ...(invoice_locked_invoice_id != null ? { invoice_locked_invoice_id } : {})
+      });
+    }
+
+    const hours = {
+      day: round2(sumDay),
+      night: round2(sumNight),
+      sat: round2(sumSat),
+      sun: round2(sumSun),
+      bh: round2(sumBh)
+    };
+    const total_hours = round2(hours.day + hours.night + hours.sat + hours.sun + hours.bh);
+
+    const addl = await computeAdditionalFromTsOrFin();
+
+    const total_pay_ex_vat = +Number(round2(sumPay) + Number(addl.additional_pay_ex_vat || 0)).toFixed(2);
+    const total_charge_ex_vat = +Number(round2(sumChg) + Number(addl.additional_charge_ex_vat || 0)).toFixed(2);
+    const margin_ex_vat = +Number(total_charge_ex_vat - total_pay_ex_vat).toFixed(2);
+
+    const snap = { ...fin };
+    delete snap.id;
+    delete snap.is_current;
+
+    snap.timesheet_id = ts.timesheet_id;
+    snap.timesheet_version = ts.version || fin.timesheet_version || 1;
+    snap.candidate_id = contract.candidate_id;
+    snap.client_id = contract.client_id;
+    snap.pay_method = method;
+
+    snap.policy_snapshot_json = policySnap;
+    snap.rate_source_refs_json = { mode: 'CONTRACT_RATES_JSON', contract_id: contract.id || null };
+
+    snap.hours_day = hours.day;
+    snap.hours_night = hours.night;
+    snap.hours_sat = hours.sat;
+    snap.hours_sun = hours.sun;
+    snap.hours_bh = hours.bh;
+
+    snap.pay_day = (pay.day != null) ? Number(pay.day) : null;
+    snap.pay_night = (pay.night != null) ? Number(pay.night) : null;
+    snap.pay_sat = (pay.sat != null) ? Number(pay.sat) : null;
+    snap.pay_sun = (pay.sun != null) ? Number(pay.sun) : null;
+    snap.pay_bh = (pay.bh != null) ? Number(pay.bh) : null;
+
+    snap.charge_day = (charge.day != null) ? Number(charge.day) : null;
+    snap.charge_night = (charge.night != null) ? Number(charge.night) : null;
+    snap.charge_sat = (charge.sat != null) ? Number(charge.sat) : null;
+    snap.charge_sun = (charge.sun != null) ? Number(charge.sun) : null;
+    snap.charge_bh = (charge.bh != null) ? Number(charge.bh) : null;
+
+    snap.total_hours = total_hours;
+
+    snap.additional_units_json = addl.additional_units_json || {};
+    snap.additional_pay_ex_vat = +Number(addl.additional_pay_ex_vat || 0).toFixed(2);
+    snap.additional_charge_ex_vat = +Number(addl.additional_charge_ex_vat || 0).toFixed(2);
+    snap.additional_margin_ex_vat = +Number(addl.additional_margin_ex_vat || 0).toFixed(2);
+
+    snap.total_pay_ex_vat = total_pay_ex_vat;
+    snap.total_charge_ex_vat = total_charge_ex_vat;
+    snap.margin_ex_vat = margin_ex_vat;
+
+    snap.invoice_breakdown_json = {
+      mode: 'SEGMENTS',
+      segments,
+      additional: {
+        units: addl.additional_units_json || {},
+        pay_ex_vat: +Number(addl.additional_pay_ex_vat || 0).toFixed(2),
+        charge_ex_vat: +Number(addl.additional_charge_ex_vat || 0).toFixed(2),
+        margin_ex_vat: +Number(addl.additional_margin_ex_vat || 0).toFixed(2)
+      },
+      totals: { total_pay_ex_vat, total_charge_ex_vat, margin_ex_vat }
+    };
+
+    const wr = await writeTsfinViaSql(ts.timesheet_id, snap, 'CONTEXT_CHANGED');
+    if (!wr.ok) {
+      await writeSnapshot(env, snap);
+      if (wr.outbox_id) { try { await sbRpc(env, 'tsfin_work_success', { p_id: wr.outbox_id }); } catch {} }
+    }
+
+    return { ok: true, mode: 'SCHEDULE_SEGMENTS_REBUILD' };
+  }
+
+  // Existing SEGMENTS evidence (non-NHSP): reprice without changing hours evidence
+  {
+    const ib = fin.invoice_breakdown_json || null;
+    const mode = String(ib?.mode || '').toUpperCase();
+    const segs = Array.isArray(ib?.segments) ? ib.segments : null;
+
+    if (mode === 'SEGMENTS' && segs && segs.length) {
+      const nextSegments = segs.map(s => {
+        const hDay   = asNumberLocal(s.hours_day);
+        const hNight = asNumberLocal(s.hours_night);
+        const hSat   = asNumberLocal(s.hours_sat);
+        const hSun   = asNumberLocal(s.hours_sun);
+        const hBh    = asNumberLocal(s.hours_bh);
+
+        const payEx = round2(
+          hDay   * asNumberLocal(pay.day) +
+          hNight * asNumberLocal(pay.night) +
+          hSat   * asNumberLocal(pay.sat) +
+          hSun   * asNumberLocal(pay.sun) +
+          hBh    * asNumberLocal(pay.bh)
+        );
+
+        const chgEx = round2(
+          hDay   * asNumberLocal(charge.day) +
+          hNight * asNumberLocal(charge.night) +
+          hSat   * asNumberLocal(charge.sat) +
+          hSun   * asNumberLocal(charge.sun) +
+          hBh    * asNumberLocal(charge.bh)
+        );
+
+        return { ...s, pay_amount: payEx, charge_amount: chgEx };
+      });
+
+      let sumDay = 0, sumNight = 0, sumSat = 0, sumSun = 0, sumBh = 0;
+      let sumPay = 0, sumChg = 0;
+      nextSegments.forEach(s => {
+        sumDay += asNumberLocal(s.hours_day);
+        sumNight += asNumberLocal(s.hours_night);
+        sumSat += asNumberLocal(s.hours_sat);
+        sumSun += asNumberLocal(s.hours_sun);
+        sumBh += asNumberLocal(s.hours_bh);
+        sumPay += asNumberLocal(s.pay_amount);
+        sumChg += asNumberLocal(s.charge_amount);
+      });
+
+      const addl = await computeAdditionalFromTsOrFin();
+
+      const hours = {
+        day: round2(sumDay),
+        night: round2(sumNight),
+        sat: round2(sumSat),
+        sun: round2(sumSun),
+        bh: round2(sumBh)
+      };
+      const total_hours = round2(hours.day + hours.night + hours.sat + hours.sun + hours.bh);
+
+      const total_pay_ex_vat = +Number(round2(sumPay) + Number(addl.additional_pay_ex_vat || 0)).toFixed(2);
+      const total_charge_ex_vat = +Number(round2(sumChg) + Number(addl.additional_charge_ex_vat || 0)).toFixed(2);
+      const margin_ex_vat = +Number(total_charge_ex_vat - total_pay_ex_vat).toFixed(2);
+
+      const snap = { ...fin };
+      delete snap.id;
+      delete snap.is_current;
+
+      snap.timesheet_id = ts.timesheet_id;
+      snap.timesheet_version = ts.version || fin.timesheet_version || 1;
+      snap.candidate_id = contract.candidate_id;
+      snap.client_id = contract.client_id;
+      snap.pay_method = method;
+
+      snap.policy_snapshot_json = policySnap;
+      snap.rate_source_refs_json = { mode: 'CONTRACT_RATES_JSON', contract_id: contract.id || null };
+
+      snap.hours_day = hours.day;
+      snap.hours_night = hours.night;
+      snap.hours_sat = hours.sat;
+      snap.hours_sun = hours.sun;
+      snap.hours_bh = hours.bh;
+
+      snap.pay_day = (pay.day != null) ? Number(pay.day) : null;
+      snap.pay_night = (pay.night != null) ? Number(pay.night) : null;
+      snap.pay_sat = (pay.sat != null) ? Number(pay.sat) : null;
+      snap.pay_sun = (pay.sun != null) ? Number(pay.sun) : null;
+      snap.pay_bh = (pay.bh != null) ? Number(pay.bh) : null;
+
+      snap.charge_day = (charge.day != null) ? Number(charge.day) : null;
+      snap.charge_night = (charge.night != null) ? Number(charge.night) : null;
+      snap.charge_sat = (charge.sat != null) ? Number(charge.sat) : null;
+      snap.charge_sun = (charge.sun != null) ? Number(charge.sun) : null;
+      snap.charge_bh = (charge.bh != null) ? Number(charge.bh) : null;
+
+      snap.total_hours = total_hours;
+
+      snap.additional_units_json = addl.additional_units_json || {};
+      snap.additional_pay_ex_vat = +Number(addl.additional_pay_ex_vat || 0).toFixed(2);
+      snap.additional_charge_ex_vat = +Number(addl.additional_charge_ex_vat || 0).toFixed(2);
+      snap.additional_margin_ex_vat = +Number(addl.additional_margin_ex_vat || 0).toFixed(2);
+
+      snap.total_pay_ex_vat = total_pay_ex_vat;
+      snap.total_charge_ex_vat = total_charge_ex_vat;
+      snap.margin_ex_vat = margin_ex_vat;
+
+      snap.invoice_breakdown_json = {
+        mode: 'SEGMENTS',
+        segments: nextSegments,
+        additional: {
+          units: addl.additional_units_json || {},
+          pay_ex_vat: +Number(addl.additional_pay_ex_vat || 0).toFixed(2),
+          charge_ex_vat: +Number(addl.additional_charge_ex_vat || 0).toFixed(2),
+          margin_ex_vat: +Number(addl.additional_margin_ex_vat || 0).toFixed(2)
+        },
+        totals: { total_pay_ex_vat, total_charge_ex_vat, margin_ex_vat }
+      };
+
+      const wr = await writeTsfinViaSql(ts.timesheet_id, snap, 'CONTEXT_CHANGED');
+      if (!wr.ok) {
+        await writeSnapshot(env, snap);
+        if (wr.outbox_id) { try { await sbRpc(env, 'tsfin_work_success', { p_id: wr.outbox_id }); } catch {} }
+      }
+
+      return { ok: true, mode: 'SEGMENTS_EVIDENCE_REPRICE' };
+    }
+  }
+
+  // Fallback AGGREGATE only when we truly do not have segment evidence
+  const hours = {
+    day:   Number(fin.hours_day   || 0),
+    night: Number(fin.hours_night || 0),
+    sat:   Number(fin.hours_sat   || 0),
+    sun:   Number(fin.hours_sun   || 0),
+    bh:    Number(fin.hours_bh    || 0)
+  };
+
+  const totalHoursPay =
+    (hours.day   * (pay.day   || 0)) +
+    (hours.night * (pay.night || 0)) +
+    (hours.sat   * (pay.sat   || 0)) +
+    (hours.sun   * (pay.sun   || 0)) +
+    (hours.bh    * (pay.bh    || 0));
+
+  const totalHoursCharge =
+    (hours.day   * (charge.day   || 0)) +
+    (hours.night * (charge.night || 0)) +
+    (hours.sat   * (charge.sat   || 0)) +
+    (hours.sun   * (charge.sun   || 0)) +
+    (hours.bh    * (charge.bh    || 0));
+
+  const hoursPayEx    = +Number(totalHoursPay).toFixed(2);
+  const hoursChargeEx = +Number(totalHoursCharge).toFixed(2);
+
+  const addl = await computeAdditionalFromTsOrFin();
+
+  const total_pay_ex_vat    = +Number(hoursPayEx    + Number(addl.additional_pay_ex_vat || 0)).toFixed(2);
+  const total_charge_ex_vat = +Number(hoursChargeEx + Number(addl.additional_charge_ex_vat || 0)).toFixed(2);
+  const margin_ex_vat       = +Number(total_charge_ex_vat - total_pay_ex_vat).toFixed(2);
+
+  const invoice_breakdown_json = {
+    mode: "AGGREGATE",
+    base_hours: {
+      day: hours.day,
+      night: hours.night,
+      sat: hours.sat,
+      sun: hours.sun,
+      bh: hours.bh,
+      pay_rates: { day: pay.day, night: pay.night, sat: pay.sat, sun: pay.sun, bh: pay.bh },
+      charge_rates: { day: charge.day, night: charge.night, sat: charge.sat, sun: charge.sun, bh: charge.bh },
+      pay_ex_vat: hoursPayEx,
+      charge_ex_vat: hoursChargeEx,
+    },
+    additional: {
+      units: addl.additional_units_json || {},
+      pay_ex_vat: +Number(addl.additional_pay_ex_vat || 0).toFixed(2),
+      charge_ex_vat: +Number(addl.additional_charge_ex_vat || 0).toFixed(2),
+      margin_ex_vat: +Number(addl.additional_margin_ex_vat || 0).toFixed(2),
+    },
+    totals: { total_pay_ex_vat, total_charge_ex_vat, margin_ex_vat },
+  };
+
+  const snap = { ...fin };
+  delete snap.id;
+  delete snap.is_current;
+
+  snap.timesheet_id = ts.timesheet_id;
+  snap.timesheet_version = ts.version || fin.timesheet_version || 1;
+  snap.candidate_id = contract.candidate_id;
+  snap.client_id = contract.client_id;
+  snap.pay_method = method;
+
+  snap.policy_snapshot_json = policySnap;
+  snap.rate_source_refs_json = { mode: 'CONTRACT_RATES_JSON', contract_id: contract.id || null };
+
+  snap.pay_day = (pay.day != null) ? Number(pay.day) : null;
+  snap.pay_night = (pay.night != null) ? Number(pay.night) : null;
+  snap.pay_sat = (pay.sat != null) ? Number(pay.sat) : null;
+  snap.pay_sun = (pay.sun != null) ? Number(pay.sun) : null;
+  snap.pay_bh = (pay.bh != null) ? Number(pay.bh) : null;
+
+  snap.charge_day = (charge.day != null) ? Number(charge.day) : null;
+  snap.charge_night = (charge.night != null) ? Number(charge.night) : null;
+  snap.charge_sat = (charge.sat != null) ? Number(charge.sat) : null;
+  snap.charge_sun = (charge.sun != null) ? Number(charge.sun) : null;
+  snap.charge_bh = (charge.bh != null) ? Number(charge.bh) : null;
+
+  snap.total_hours = round2(hours.day + hours.night + hours.sat + hours.sun + hours.bh);
+
+  snap.additional_units_json = addl.additional_units_json || {};
+  snap.additional_pay_ex_vat = +Number(addl.additional_pay_ex_vat || 0).toFixed(2);
+  snap.additional_charge_ex_vat = +Number(addl.additional_charge_ex_vat || 0).toFixed(2);
+  snap.additional_margin_ex_vat = +Number(addl.additional_margin_ex_vat || 0).toFixed(2);
+
+  snap.total_pay_ex_vat = total_pay_ex_vat;
+  snap.total_charge_ex_vat = total_charge_ex_vat;
+  snap.margin_ex_vat = margin_ex_vat;
+
+  snap.invoice_breakdown_json = invoice_breakdown_json;
+
+  const wr = await writeTsfinViaSql(ts.timesheet_id, snap, 'CONTEXT_CHANGED');
+  if (!wr.ok) {
+    await writeSnapshot(env, snap);
+    if (wr.outbox_id) { try { await sbRpc(env, 'tsfin_work_success', { p_id: wr.outbox_id }); } catch {} }
+  }
+
+  return { ok: true, mode: 'AGGREGATE_FALLBACK' };
+}
+
+async function handleTimesheetQrResendEmail(env, req, timesheetId) {
+  const enc = encodeURIComponent;
+
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+  if (!timesheetId) return withCORS(env, req, badRequest('timesheet_id is required'));
+
+  // ✅ Guarded write: require expected_timesheet_id
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+  const expected = body?.expected_timesheet_id ? String(body.expected_timesheet_id) : '';
+  if (!expected) return withCORS(env, req, badRequest('expected_timesheet_id is required'));
+
+  const queueMode = !!(
+    body?.bulk_process === true ||
+    body?.bulkProcess === true ||
+    body?.bulk_authorise === true ||
+    body?.bulkAuthorise === true ||
+    body?.queue_only === true ||
+    body?.queueOnly === true ||
+    body?.enqueue_only === true ||
+    body?.enqueueOnly === true ||
+    body?.return_bulk_patch === true ||
+    body?.returnBulkPatch === true ||
+    String(body?.context || '').trim().toLowerCase() === 'bulk_process' ||
+    String(body?.mode || '').trim().toLowerCase() === 'bulk_process' ||
+    String(body?.context || '').trim().toLowerCase() === 'bulk_authorise' ||
+    String(body?.mode || '').trim().toLowerCase() === 'bulk_authorise'
+  );
+
+  const unwrapRpcPayload = (payload, fnName) => {
+    let out = payload;
+    if (Array.isArray(out) && out.length === 1) out = out[0];
+    if (out && typeof out === 'object' && !Array.isArray(out) && Object.prototype.hasOwnProperty.call(out, fnName)) {
+      out = out[fnName];
+    }
+    return (out && typeof out === 'object' && !Array.isArray(out)) ? out : {};
+  };
+
+  const statusForQrEnqueuePayload = (payload) => {
+    const code = String(payload?.error_code || payload?.error || '').trim().toUpperCase();
+    if (code === 'TIMESHEET_MOVED') return 409;
+    if (code === 'TIMESHEET_LOCKED_OR_PAID' || code === 'QR_ALREADY_SIGNED') return 409;
+    if (code) return 400;
+    return 500;
+  };
+
+  if (queueMode) {
+    try {
+      const rpcRes = await sbRpc(env, 'timesheet_qr_send_enqueue_v1', {
+        p_timesheet_id: timesheetId,
+        p_expected_timesheet_id: expected,
+        p_actor_user_id: user?.id || null,
+        p_idempotency_key: body?.idempotency_key || body?.idempotencyKey || null
+      }, { timeoutMs: 45000 });
+      const payload = unwrapRpcPayload(rpcRes, 'timesheet_qr_send_enqueue_v1');
+      if (payload && payload.ok === false) {
+        const status = statusForQrEnqueuePayload(payload);
+        return withCORS(env, req, new Response(JSON.stringify({
+          error: payload.error_code || payload.error || 'QR_SEND_ENQUEUE_FAILED',
+          error_code: payload.error_code || payload.error || 'QR_SEND_ENQUEUE_FAILED',
+          message: payload.message || 'Failed to queue QR send.',
+          ...payload
+        }), { status, headers: { 'Content-Type': 'application/json' } }));
+      }
+      return withCORS(env, req, ok({
+        ...payload,
+        queued: payload.queued !== false,
+        bulk_mode: true
+      }));
+    } catch (err) {
+      return withCORS(env, req, serverError(String(err?.message || err || 'Failed to queue QR send')));
+    }
+  }
+
+
+  // ✅ stale-safe resolve
+  const resolved = await resolveTimesheetToCurrent(env, timesheetId);
+  if (!resolved) return withCORS(env, req, notFound('Timesheet not found'));
+  const currentTimesheetId = resolved.current_timesheet_id;
+
+  // ✅ Guard mismatch → 409 TIMESHEET_MOVED
+  if (String(expected) !== String(currentTimesheetId)) {
+    return withCORS(
+      env,
+      req,
+      new Response(
+        JSON.stringify({ error: 'TIMESHEET_MOVED', current_timesheet_id: currentTimesheetId }),
+        { status: 409, headers: { 'Content-Type': 'application/json' } }
+      )
+    );
+  }
+
+  const cleanKey = (k) => String(k || '').replace(/^\/+/, '').trim();
+
+  const patchTimesheetCurrentOrThrow = async (patchBody, label) => {
+    const url =
+      `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+      `&is_current=eq.true`;
+
+    const r = await fetch(url, {
+      method: 'PATCH',
+      headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+      body: JSON.stringify(patchBody)
+    });
+
+    if (!r.ok) {
+      const t = await r.text().catch(() => '');
+      throw new Error(`[QR_RESEND] timesheet patch failed (${label}): ${r.status} ${t}`);
+    }
+  };
+
+  // Load current timesheet
+  let ts = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+      `&is_current=eq.true` +
+      `&select=*` +
+      `&limit=1`
+  );
+  if (!ts) return withCORS(env, req, notFound('Timesheet not found'));
+
+  const scope = String(ts.sheet_scope || '').toUpperCase();
+
+  let qrStatus = String(ts.qr_status || '').toUpperCase();
+  let hasToken = !!(ts.qr_token && String(ts.qr_token).trim());
+  let hasGeneratedAt = !!ts.qr_generated_at;
+  let scannedAt = ts.qr_scanned_at || null;
+
+  // ✅ NEW: never allow resend/reissue if signed markers exist
+  const hasSignedMarkers =
+    !!ts.qr_scanned_at ||
+    !!(ts.qr_signed_hash && String(ts.qr_signed_hash).trim());
+  if (hasSignedMarkers) {
+    return withCORS(env, req, badRequest('Cannot resend/reissue: timesheet already has signed markers'));
+  }
+
+  if (qrStatus === 'EXPIRED') {
+    return withCORS(env, req, badRequest('QR is expired; reissue required'));
+  }
+  if (qrStatus !== 'PENDING') {
+    return withCORS(env, req, badRequest(`QR send not allowed (qr_status=${qrStatus || 'NULL'})`));
+  }
+
+  // Internal state classification (NOT user-facing)
+  const awaitingSignatureUpload = (hasToken && hasGeneratedAt && !scannedAt); // issued, not scanned
+  const notYetIssued = (!scannedAt && (!hasToken || !hasGeneratedAt));       // no token/gen
+
+  if (!notYetIssued && !awaitingSignatureUpload) {
+    return withCORS(env, req, badRequest('QR send not allowed in current state'));
+  }
+
+  // ✅ Must have hours before sending
+  const hasHoursForSend = (() => {
+    if (scope === 'WEEKLY') {
+      const arr = Array.isArray(ts.actual_schedule_json) ? ts.actual_schedule_json : [];
+      return arr.some(seg => {
+        if (!seg || typeof seg !== 'object') return false;
+        const s = String(seg.start || '').trim();
+        const e = String(seg.end || '').trim();
+        return !!(s && e);
+      });
+    }
+    const ws = ts.worked_start_iso ? String(ts.worked_start_iso).trim() : '';
+    const we = ts.worked_end_iso   ? String(ts.worked_end_iso).trim()   : '';
+    return !!(ws && we);
+  })();
+
+  if (!hasHoursForSend) {
+    return withCORS(env, req, badRequest('Cannot send: no hours recorded yet'));
+  }
+
+  // Resolve contract + candidate email first
+  if (!ts.contract_id) {
+    return withCORS(env, req, badRequest('Cannot send: timesheet.contract_id is missing'));
+  }
+
+  const contract = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/contracts` +
+      `?id=eq.${enc(ts.contract_id)}` +
+      `&select=id,candidate_id,client_id` +
+      `&limit=1`
+  );
+  if (!contract) return withCORS(env, req, badRequest('Cannot send: contract not found'));
+
+  const cand = contract.candidate_id
+    ? await sbGetOne(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/candidates` +
+          `?id=eq.${enc(contract.candidate_id)}` +
+          `&select=id,display_name,email` +
+          `&limit=1`
+      )
+    : null;
+
+  const toEmail = cand?.email ? String(cand.email).trim() : null;
+  if (!toEmail) return withCORS(env, req, badRequest('Candidate email not found'));
+
+  // TSFIN defence-in-depth
+  try {
+    const fin = await sbGetOne(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+        `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+        `&is_current=eq.true` +
+        `&select=id,processing_status,locked_by_invoice_id,paid_at_utc,invoice_breakdown_json` +
+        `&limit=1`
+    );
+
+    const hasSegmentInvoiceLock = (invoiceBreakdownJson) => {
+      try {
+        const source = invoiceBreakdownJson && typeof invoiceBreakdownJson === 'object' ? invoiceBreakdownJson : null;
+        if (!source) return false;
+        const segments = Array.isArray(source)
+          ? source
+          : (Array.isArray(source.segments) ? source.segments : []);
+        return segments.some((segment) => {
+          if (!segment || typeof segment !== 'object') return false;
+          const lockedInvoiceId = segment.invoice_locked_invoice_id ?? segment.locked_by_invoice_id ?? null;
+          return lockedInvoiceId != null && String(lockedInvoiceId).trim() !== '';
+        });
+      } catch {
+        return false;
+      }
+    };
+
+    if (fin && (fin.locked_by_invoice_id || fin.paid_at_utc || hasSegmentInvoiceLock(fin.invoice_breakdown_json))) {
+      return withCORS(env, req, badRequest('Cannot send: timesheet is invoiced/locked or paid'));
+    }
+
+    if (fin && String(fin.processing_status || '').toUpperCase() !== 'AWAITING_MANUAL_SIGNATURE') {
+      const nowFix = nowIso();
+      await fetch(
+        `${env.SUPABASE_URL}/rest/v1/timesheets_financials?id=eq.${enc(fin.id)}`,
+        {
+          method: 'PATCH',
+          headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+          body: JSON.stringify({
+            processing_status: 'AWAITING_MANUAL_SIGNATURE',
+            updated_at: nowFix
+          })
+        }
+      ).catch(() => {});
+    }
+  } catch {}
+
+  const dateLabel =
+    (scope === 'WEEKLY')
+      ? (ts.week_ending_date || '')
+      : (ts.worked_start_iso ? String(ts.worked_start_iso).slice(0, 10) : '');
+
+  // ------------------------------------------------------------
+  // Hash: compute current printable-content hash (hours/layout content)
+  // ------------------------------------------------------------
+  const stableClone = (v) => {
+    if (Array.isArray(v)) return v.map(stableClone);
+    if (v && typeof v === 'object') {
+      const out = {};
+      for (const k of Object.keys(v).sort()) out[k] = stableClone(v[k]);
+      return out;
+    }
+    return v;
+  };
+
+  const hashObj = {
+    sheet_scope: scope || null,
+    week_ending_date: ts.week_ending_date || null,
+    worked_start_iso: ts.worked_start_iso || null,
+    worked_end_iso: ts.worked_end_iso || null,
+    break_start_iso: ts.break_start_iso || null,
+    break_end_iso: ts.break_end_iso || null,
+    break_minutes: (ts.break_minutes != null ? ts.break_minutes : null),
+    reference_number: ts.reference_number || null,
+    day_references_json: ts.day_references_json || null,
+    actual_schedule_json: ts.actual_schedule_json || null,
+    additional_units_week: ts.additional_units_week || null,
+    additional_units_per_day: ts.additional_units_per_day || null
+  };
+
+  let current_hash = null;
+  try {
+    current_hash = await sha256Hex(JSON.stringify(stableClone(hashObj)));
+  } catch (e) {
+    return withCORS(env, req, serverError(`Failed to compute QR content hash: ${e?.message || e}`));
+  }
+
+  const prev_last_sent_hash = (ts.qr_last_sent_hash != null) ? String(ts.qr_last_sent_hash) : '';
+  const hasPrevHash = !!String(prev_last_sent_hash || '').trim();
+  const canResendSameHours = hasPrevHash && (String(prev_last_sent_hash) === String(current_hash));
+
+  // ------------------------------------------------------------
+  // ✅ NEW: refs change detection uses canonical SQL reference sig
+  // This is the required "refs changed => reissue" behaviour (SEGMENTS-safe)
+  // ------------------------------------------------------------
+  const unwrapScalar = (v, fnName) => {
+    if (v == null) return null;
+    if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') return String(v);
+    if (v && typeof v === 'object' && !Array.isArray(v) && Object.prototype.hasOwnProperty.call(v, 'data')) {
+      return unwrapScalar(v.data, fnName);
+    }
+    if (Array.isArray(v)) {
+      if (v.length === 0) return null;
+      const o = v[0];
+      if (typeof o === 'string' || typeof o === 'number' || typeof o === 'boolean') return String(o);
+      if (o && typeof o === 'object') {
+        if (fnName && Object.prototype.hasOwnProperty.call(o, fnName)) return o[fnName] == null ? null : String(o[fnName]);
+        const ks = Object.keys(o);
+        if (ks.length === 1) return o[ks[0]] == null ? null : String(o[ks[0]]);
+      }
+      return null;
+    }
+    if (v && typeof v === 'object') {
+      if (fnName && Object.prototype.hasOwnProperty.call(v, fnName)) return v[fnName] == null ? null : String(v[fnName]);
+      const ks = Object.keys(v);
+      if (ks.length === 1) return v[ks[0]] == null ? null : String(v[ks[0]]);
+    }
+    return null;
+  };
+
+  let current_refs_sig = null;
+  try {
+    const sigRes = await sbRpc(env, 'timesheet_pdf_reference_sig', { p_timesheet_id: currentTimesheetId });
+    const sig = unwrapScalar(sigRes, 'timesheet_pdf_reference_sig');
+    current_refs_sig = (sig && String(sig).trim()) ? String(sig).trim() : null;
+  } catch {
+    current_refs_sig = null; // non-fatal
+  }
+
+  const prev_refs_sig = (ts.qr_sent_refs_sig != null) ? String(ts.qr_sent_refs_sig).trim() : '';
+  const hasPrevRefsSig = !!prev_refs_sig;
+
+  const mustReissueBecauseHoursChanged =
+    awaitingSignatureUpload && hasPrevHash && !canResendSameHours;
+
+  const mustReissueBecauseNoBaselineHash =
+    awaitingSignatureUpload && !hasPrevHash;
+
+  // ✅ NEW: reference-change driven reissue (prevents signing old copy)
+  const mustReissueBecauseRefsChanged =
+    awaitingSignatureUpload &&
+    hasPrevRefsSig &&
+    !!current_refs_sig &&
+    (prev_refs_sig !== current_refs_sig);
+
+  const mustReissueBecauseNoBaselineRefsSig =
+    awaitingSignatureUpload &&
+    !hasPrevRefsSig &&
+    !!current_refs_sig;
+
+  let result = null; // 'NEW_ISSUED' | 'RESENT' | 'REISSUED'
+
+  // ------------------------------------------------------------
+  // If we need a new token: create it + persist token/gen properly
+  // ------------------------------------------------------------
+  let qrTokenToUse = (ts.qr_token && String(ts.qr_token).trim()) ? String(ts.qr_token).trim() : null;
+  let qr_r2_key = ts.qr_r2_key || null;
+
+  // ✅ NEW: remember old QR key so we can delete it if we reissue and successfully repoint
+  const oldQrKey = ts.qr_r2_key ? cleanKey(ts.qr_r2_key) : null;
+
+  if (
+    notYetIssued ||
+    mustReissueBecauseHoursChanged ||
+    mustReissueBecauseNoBaselineHash ||
+    mustReissueBecauseRefsChanged ||
+    mustReissueBecauseNoBaselineRefsSig
+  ) {
+    const now2 = nowIso();
+
+    let qrToken;
+    try {
+      qrToken = (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
+        ? crypto.randomUUID()
+        : `${currentTimesheetId}:${Date.now()}`;
+    } catch {
+      qrToken = `${currentTimesheetId}:${Date.now()}`;
+    }
+
+    // Store TSQ1 payload on current row
+    let qrRes = null;
+    try {
+      qrRes = await generateAndStoreTimesheetQr(env, {
+        timesheet_id: currentTimesheetId,
+        contract_week_id: null,
+        contract_id: contract.id,
+        candidate_id: contract.candidate_id || null,
+        client_id: contract.client_id || null,
+        week_ending_ymd: (scope === 'WEEKLY') ? (ts.week_ending_date || null) : (dateLabel || null),
+        qr_token: qrToken
+      });
+    } catch (e) {
+      return withCORS(env, req, serverError(`Failed to generate QR: ${e?.message || e}`));
+    }
+
+    qrTokenToUse = qrToken;
+    qr_r2_key = qrRes?.qr_r2_key || null;
+
+    try {
+      await patchTimesheetCurrentOrThrow({
+        qr_token: qrToken,
+        qr_status: 'PENDING',
+        qr_generated_at: now2,
+        qr_scanned_at: null,
+        qr_scan_info_json: null,
+        qr_r2_key: qr_r2_key || null,
+        updated_at: now2
+      }, 'issue_token');
+    } catch (e) {
+      return withCORS(env, req, serverError(e?.message || 'Failed to persist QR token'));
+    }
+
+    // ✅ NEW: delete old QR image key now that we replaced it (best-effort)
+    try {
+      const bucket = env.R2_BUCKET || env.R2;
+      const newQrKey = qr_r2_key ? cleanKey(qr_r2_key) : null;
+      if (bucket && typeof bucket.delete === 'function' && oldQrKey && newQrKey && oldQrKey !== newQrKey) {
+        await bucket.delete(oldQrKey).catch(() => {});
+      }
+    } catch {
+      // non-fatal
+    }
+
+    result = notYetIssued ? 'NEW_ISSUED' : 'REISSUED';
+
+    // Reload so any subsequent logic sees the issued state
+    ts = await sbGetOne(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheets` +
+        `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+        `&is_current=eq.true` +
+        `&select=*` +
+        `&limit=1`
+    );
+  } else {
+    result = 'RESENT';
+  }
+
+  // ✅ Ensure we have a GENERATED printable PDF to attach
+  let pdfKey = null;
+  try {
+    pdfKey = await renderTimesheetPDFAndSave(env, currentTimesheetId);
+  } catch (e) {
+    return withCORS(env, req, serverError('Failed to prepare timesheet PDF for send'));
+  }
+  if (!pdfKey) return withCORS(env, req, serverError('No PDF available to send'));
+
+  // ✅ OPTIONAL: ensure manual_pdf_r2_key points to the generated PDF if blank (materialises evidence)
+  try {
+    const patchUrl =
+      `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+      `&is_current=eq.true` +
+      `&or=(manual_pdf_r2_key.is.null,manual_pdf_r2_key.eq.)`;
+
+    await fetch(
+      patchUrl,
+      {
+        method: 'PATCH',
+        headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+        body: JSON.stringify({
+          manual_pdf_r2_key: pdfKey,
+          updated_at: nowIso()
+        })
+      }
+    ).catch(() => {});
+  } catch {
+    // non-fatal
+  }
+
+  const subject =
+    (scope === 'WEEKLY')
+      ? `Weekly QR timesheet – week ending ${dateLabel || '(unknown)'}`
+      : `Daily QR timesheet – ${dateLabel || '(unknown date)'}`;
+
+  const lines = [
+    `Please print the attached timesheet, ask the ward manager to sign it,`,
+    `and then upload the signed copy via the app.`,
+    ``,
+    ...(dateLabel ? [`Date: ${dateLabel}`] : []),
+    `Timesheet ID: ${currentTimesheetId}`
+  ];
+  const body_text = lines.join('\n');
+  const body_html = `<p>${lines.map(l => (l === '' ? '<br/>' : l)).join('<br/>')}</p>`;
+
+  const insert = await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox`, {
+    method: 'POST',
+    headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+    body: JSON.stringify({
+      type: 'TIMESHEET_QR',
+      to: toEmail,
+      cc: null,
+      bcc: null,
+      reply_to: null,
+      importance: 'Normal',
+      email_type: 'html',
+      subject,
+      body_html,
+      body_text,
+      attachments: [{ r2_key: pdfKey, filename: `Timesheet_${dateLabel || currentTimesheetId}.pdf` }],
+      status: 'QUEUED',
+      reference: `timesheet_qr:${String(result || 'send').toLowerCase()}:${currentTimesheetId}`,
+      recipient_kind: 'candidate',
+      recipient_id: contract.candidate_id || null,
+      context_kind: 'timesheets',
+      context_id: currentTimesheetId,
+      mailshot_run_id: null,
+      document_template_id: null,
+      created_by: user?.id || null
+    })
+  });
+
+  if (!insert.ok) {
+    const t = await insert.text().catch(() => '');
+    return withCORS(env, req, serverError(`Failed to queue QR email: ${t}`));
+  }
+
+  // Persist last-sent hash + timestamp (non-fatal)
+  // ✅ FIX: qr_sent_refs_* derived from canonical SQL reference rows/sig (SEGMENTS-safe; does NOT rely on schedule)
+  const nowSent = nowIso();
+  try {
+    const asArray = (v) => {
+      if (v == null) return [];
+      if (Array.isArray(v)) return v;
+      if (v && typeof v === 'object' && Array.isArray(v.data)) return v.data;
+      if (v && typeof v === 'object' && Array.isArray(v.rows)) return v.rows;
+      return [v];
+    };
+
+    const rowsRes = await sbRpc(env, 'timesheet_pdf_reference_rows', { p_timesheet_id: currentTimesheetId });
+    const rowsArr = asArray(rowsRes);
+
+    const qrRefsRows = [];
+    for (const r of rowsArr) {
+      const rowKey = String(r?.row_key || r?.rowKey || '').trim();
+      if (!rowKey) continue;
+      const refVal = (r && (r.current_reference ?? r.currentReference)) ?? null;
+      qrRefsRows.push({ row_key: rowKey, current_reference: (refVal == null ? null : String(refVal)) });
+    }
+
+    qrRefsRows.sort((a, b) => String(a.row_key).localeCompare(String(b.row_key)));
+
+    let qrSentRefsSig = null;
+    try {
+      const sigRes = await sbRpc(env, 'timesheet_pdf_reference_sig', { p_timesheet_id: currentTimesheetId });
+      const sig = unwrapScalar(sigRes, 'timesheet_pdf_reference_sig');
+      qrSentRefsSig = (sig && String(sig).trim()) ? String(sig).trim() : null;
+    } catch {
+      qrSentRefsSig = null;
+    }
+
+    if (!qrSentRefsSig) {
+      const rawSig = qrRefsRows
+        .map(r => `${String(r.row_key)}=${String(r.current_reference ?? '')}`)
+        .join('||');
+      qrSentRefsSig = await sha256Hex(rawSig);
+    }
+
+    await fetch(
+      `${env.SUPABASE_URL}/rest/v1/timesheets` +
+        `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+        `&is_current=eq.true`,
+      {
+        method: 'PATCH',
+        headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+        body: JSON.stringify({
+          qr_last_sent_hash: current_hash,
+          qr_last_sent_at_utc: nowSent,
+
+          qr_sent_refs_snapshot_json: qrRefsRows,
+          qr_sent_refs_sig: qrSentRefsSig,
+          qr_sent_refs_captured_at_utc: nowSent,
+
+          updated_at: nowSent
+        })
+      }
+    ).catch(() => {});
+  } catch {}
+
+  // Audit
+  try {
+    await writeAudit(
+      env,
+      user,
+      'QR_RESENT',
+      {
+        timesheet_id: currentTimesheetId,
+        pdf_r2_key: pdfKey,
+        to: toEmail,
+        result,
+        current_hash,
+        prev_last_sent_hash: prev_last_sent_hash || null,
+        qr_token_written: !!(qrTokenToUse && String(qrTokenToUse).trim())
+      },
+      { entity: 'timesheets', subject_id: currentTimesheetId, req }
+    );
+  } catch {}
+
+  return withCORS(env, req, ok({
+    queued: true,
+    result, // 'NEW_ISSUED' | 'RESENT' | 'REISSUED'
+    timesheet_id: currentTimesheetId,
+    current_timesheet_id: currentTimesheetId,
+    requested_timesheet_id: resolved.requested_timesheet_id || timesheetId,
+    was_stale: !!resolved.was_stale,
+
+    pdf_key: pdfKey,
+
+    // Action hints for UI
+    qr_can_resend_same_hours: true,
+    current_hash,
+    qr_last_sent_hash: current_hash
+  }));
+}
+
+async function handleTimesheetsSummary(env, req) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const urlObj = new URL(req.url);
+  const q = (k) => urlObj.searchParams.get(k);
+
+  const format = String(q('format') || 'json').toLowerCase();
+
+  const pageRaw = q('page') || '1';
+  const pageSizeRaw = q('page_size') || '50';
+
+  const page = Math.max(1, parseInt(pageRaw, 10) || 1);
+  const pageSize = Math.max(1, Math.min(200, parseInt(pageSizeRaw, 10) || 50));
+
+  const includeTotals = String(q('include_totals') || '').toLowerCase() === 'true';
+  const includeCount = String(q('include_count') || '').toLowerCase() === 'true';
+
+  const orderByParam = (q('order_by') || '').toLowerCase();
+  const orderDirParam = (q('order_dir') || '').toLowerCase();
+
+  const allowedSort = {
+    week_ending_date:          'week_ending_date',
+    client_name:               'client_name',
+    candidate_name:            'candidate_name',
+    tools_stage:               'tools_stage',
+    processing_status:         'processing_status_display',
+    processing_status_display: 'processing_status_display',
+    route_type:                'route_type',
+    sheet_scope:               'sheet_scope',
+    total_pay_ex_vat:          'total_pay_ex_vat',
+    total_charge_ex_vat:       'total_charge_ex_vat',
+    margin_ex_vat:             'margin_ex_vat',
+    pay:                       'total_pay_ex_vat',
+    charge:                    'total_charge_ex_vat',
+    margin:                    'margin_ex_vat'
+  };
+
+  const defaultOrderCol = 'week_ending_date';
+  const orderCol = allowedSort[orderByParam] || defaultOrderCol;
+  const orderDir = (orderDirParam === 'asc') ? 'asc' : 'desc';
+
+  const spec = buildTimesheetSummaryFilterSpec(urlObj.searchParams);
+
+  const idList = Array.isArray(spec.ids) ? spec.ids.map(String).map(s => s.trim()).filter(Boolean) : [];
+  const hasIdFilter = idList.length > 0;
+
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  const payBatchId = String(
+    spec.pay_batch_id ||
+    spec.payBatchId ||
+    spec.batch_id ||
+    spec.batchId ||
+    q('pay_batch_id') ||
+    q('payBatchId') ||
+    q('batch_id') ||
+    q('batchId') ||
+    ''
+  ).trim();
+  const hasPayBatchFilter = !!payBatchId;
+  const truthy = (value) => {
+    if (value === true) return true;
+    if (value === false || value == null) return false;
+    const s = String(value).trim().toLowerCase();
+    return ['1', 'true', 'yes', 'y', 'on', 'ids', 'full', 'full_ids'].includes(s);
+  };
+  const membershipMode = String(
+    q('membership_mode') ||
+    q('membershipMode') ||
+    spec.membership_mode ||
+    spec.membershipMode ||
+    ''
+  ).trim().toLowerCase();
+  const explicitFullMembership = !!(
+    truthy(q('include_ids')) ||
+    truthy(q('includeIds')) ||
+    truthy(q('include_membership_ids')) ||
+    truthy(q('includeMembershipIds')) ||
+    truthy(q('explicit_full_membership')) ||
+    truthy(q('explicitFullMembership')) ||
+    truthy(q('force_full_membership')) ||
+    truthy(q('forceFullMembership')) ||
+    truthy(spec.include_ids) ||
+    truthy(spec.includeIds) ||
+    truthy(spec.include_membership_ids) ||
+    truthy(spec.includeMembershipIds) ||
+    truthy(spec.explicit_full_membership) ||
+    truthy(spec.explicitFullMembership) ||
+    truthy(spec.force_full_membership) ||
+    truthy(spec.forceFullMembership) ||
+    ['ids', 'full', 'full_ids', 'membership_ids'].includes(membershipMode)
+  );
+  if (hasPayBatchFilter && !uuidRe.test(payBatchId)) {
+    return withCORS(env, req, badRequest('Invalid pay_batch_id filter.'));
+  }
+  if (hasPayBatchFilter) {
+    spec.pay_batch_id = payBatchId;
+  }
+
+  const unwrapRpcPayload = (payload, fnName = null) => {
+    let out = payload;
+    if (Array.isArray(out) && out.length === 1 && fnName && out[0] && typeof out[0] === 'object' && Object.prototype.hasOwnProperty.call(out[0], fnName)) {
+      out = out[0][fnName];
+    } else if (out && typeof out === 'object' && !Array.isArray(out) && fnName && Object.prototype.hasOwnProperty.call(out, fnName)) {
+      out = out[fnName];
+    }
+    return out;
+  };
+
+  const rpcRows = (payload, fnName = null) => {
+    const out = unwrapRpcPayload(payload, fnName);
+    if (Array.isArray(out)) return out;
+    if (out && typeof out === 'object' && Array.isArray(out.data)) return out.data;
+    if (out && typeof out === 'object' && Array.isArray(out.rows)) return out.rows;
+    return [];
+  };
+
+  const firstRpcRow = (payload, fnName = null) => {
+    const rows = rpcRows(payload, fnName);
+    return rows && rows.length ? rows[0] : null;
+  };
+
+  const normalizeSummaryRows = (rows) => {
+    return (rows || []).map((r) => {
+      const o = { ...(r || {}) };
+
+      if (!Object.prototype.hasOwnProperty.call(o, 'route_type')) o.route_type = null;
+      if (!Object.prototype.hasOwnProperty.call(o, 'route_display')) o.route_display = null;
+      if (!Object.prototype.hasOwnProperty.call(o, 'client_no_timesheet_required')) o.client_no_timesheet_required = null;
+      if (!Object.prototype.hasOwnProperty.call(o, 'client_autoprocess_hr')) o.client_autoprocess_hr = null;
+      if (!Object.prototype.hasOwnProperty.call(o, 'client_is_nhsp')) o.client_is_nhsp = null;
+      if (!Object.prototype.hasOwnProperty.call(o, 'tools_stage')) o.tools_stage = null;
+      if (!Object.prototype.hasOwnProperty.call(o, 'processing_status_display')) o.processing_status_display = null;
+      if (!Object.prototype.hasOwnProperty.call(o, 'invoice_is_paid')) o.invoice_is_paid = null;
+      if (!Object.prototype.hasOwnProperty.call(o, 'pay_icon_code')) o.pay_icon_code = 'NONE';
+      if (!Object.prototype.hasOwnProperty.call(o, 'pay_status_code')) o.pay_status_code = null;
+      if (!Object.prototype.hasOwnProperty.call(o, 'pay_paid_at_utc')) o.pay_paid_at_utc = null;
+      if (!Object.prototype.hasOwnProperty.call(o, 'net_delta_ex_vat')) o.net_delta_ex_vat = 0;
+      if (!Object.prototype.hasOwnProperty.call(o, 'summary_stage')) o.summary_stage = null;
+
+      const payStatus = String(o.pay_status_code || '').trim().toUpperCase();
+      o.pay_status_code = ['PAID', 'PARTIALLY_PAID', 'PROCESSING', 'ADVANCED', 'UNPAID'].includes(payStatus)
+        ? payStatus
+        : 'UNPAID';
+
+      if (!o.pay_icon_code || String(o.pay_icon_code).trim().toUpperCase() === 'NONE') {
+        if (o.pay_status_code === 'PAID') o.pay_icon_code = 'COIN';
+        else if (o.pay_status_code === 'PARTIALLY_PAID') o.pay_icon_code = 'HALF_COIN';
+        else if (o.pay_status_code === 'PROCESSING' || o.pay_status_code === 'ADVANCED') o.pay_icon_code = 'CLOCK';
+        else o.pay_icon_code = 'NONE';
+      }
+
+      const timesheetId = (o.timesheet_id != null && String(o.timesheet_id).trim()) ? String(o.timesheet_id).trim() : null;
+      const contractWeekId = (o.contract_week_id != null && String(o.contract_week_id).trim()) ? String(o.contract_week_id).trim() : null;
+      const processingStatus = String(o.processing_status || '').trim().toUpperCase();
+      const summaryStage = String(o.summary_stage || '').trim().toUpperCase();
+      const processingStatusDisplay = String(o.processing_status_display || '').trim();
+
+      const isRealRowUnprocessed =
+        !!timesheetId &&
+        (
+          processingStatus === 'UNPROCESSED' ||
+          processingStatus === 'UNASSIGNED' ||
+          summaryStage === 'UNPROCESSED'
+        );
+
+      const isPlannedWeeklyUnprocessed =
+        !timesheetId &&
+        !!contractWeekId &&
+        (
+          summaryStage === 'UNPROCESSED' ||
+          String(o.contract_week_status || '').trim().toUpperCase() === 'OPEN' ||
+          String(o.contract_week_status || '').trim().toUpperCase() === 'PLANNED'
+        );
+
+      if (isRealRowUnprocessed || isPlannedWeeklyUnprocessed) {
+        o.summary_stage = 'UNPROCESSED';
+        o.tools_stage = 'UNPROCESSED';
+        o.processing_status_display = 'Unprocessed';
+      } else {
+        if (!o.tools_stage && summaryStage === 'UNPROCESSED') {
+          o.tools_stage = 'UNPROCESSED';
+        }
+        if (!processingStatusDisplay && summaryStage === 'UNPROCESSED') {
+          o.processing_status_display = 'Unprocessed';
+        }
+        if (!o.summary_stage && (processingStatus === 'UNPROCESSED' || processingStatus === 'UNASSIGNED')) {
+          o.summary_stage = 'UNPROCESSED';
+        }
+      }
+
+      if (!Object.prototype.hasOwnProperty.call(o, 'id') || o.id == null || String(o.id).trim() === '') {
+        o.id = timesheetId || contractWeekId || null;
+      }
+
+      return o;
+    });
+  };
+
+  const getStableSummaryId = (row) => {
+    const id = row?.timesheet_id || row?.contract_week_id || row?.id || null;
+    return id == null ? null : String(id);
+  };
+
+  const normalizeIdList = (values) => {
+    const out = [];
+    const seen = new Set();
+    const arr = Array.isArray(values) ? values : [];
+    for (const raw of arr) {
+      const v = String(raw == null ? '' : raw).trim();
+      if (!v || seen.has(v)) continue;
+      seen.add(v);
+      out.push(v);
+    }
+    return out;
+  };
+
+  const baseFilters = {
+    ...spec,
+    order_by: orderCol,
+    order_dir: orderDir
+  };
+
+  if (hasIdFilter) {
+    baseFilters.ids = idList;
+    if (idList.length === 1) baseFilters.id = idList[0];
+  }
+
+  if (format === 'membership') {
+    try {
+      const datasetKey = JSON.stringify({
+        section: 'timesheets',
+        filters: spec || {}
+      });
+
+      const membershipFilters = {
+        ...baseFilters,
+        purpose: 'membership',
+        disable_paging: true,
+        no_paging: true,
+        apply_paging: false
+      };
+
+      if (hasPayBatchFilter) {
+        const batchMembershipFilters = {
+          ...membershipFilters,
+          pay_batch_id: payBatchId,
+          include_ids: explicitFullMembership,
+          includeIds: explicitFullMembership,
+          membership_mode: explicitFullMembership ? 'ids' : 'deferred'
+        };
+
+        const rpcRes = await sbRpc(env, 'pay_batch_timesheet_summary_lightweight_v1', { p_filters: batchMembershipFilters });
+        const payload = unwrapRpcPayload(rpcRes, 'pay_batch_timesheet_summary_lightweight_v1');
+        const payloadObj = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+
+        const membershipIds = explicitFullMembership
+          ? normalizeIdList(
+              Array.isArray(payloadObj.row_ids) ? payloadObj.row_ids
+                : Array.isArray(payloadObj.ids) ? payloadObj.ids
+                : Array.isArray(payloadObj.rows) ? payloadObj.rows.map((row) => row && (row.id || row.timesheet_id || row.contract_week_id || ''))
+                : []
+            )
+          : [];
+
+        const countRaw = Number(payloadObj.total_count ?? payloadObj.total ?? payloadObj.count ?? membershipIds.length);
+        const totalCount = Number.isFinite(countRaw) ? countRaw : membershipIds.length;
+        const membershipDeferred = !explicitFullMembership;
+
+        return withCORS(env, req, ok({
+          section: 'timesheets',
+          dataset_key: datasetKey,
+          row_ids: membershipIds,
+          ids: membershipIds.slice(),
+          total_count: totalCount,
+          total: totalCount,
+          count: totalCount,
+          membership_deferred: membershipDeferred,
+          deferred: membershipDeferred,
+          ids_deferred: membershipDeferred
+        }));
+      }
+
+      const rpcRes = await sbRpc(env, 'timesheet_list_ids', { p_filters: membershipFilters });
+      const rows = rpcRows(rpcRes);
+      const membershipIds = normalizeIdList(
+        rows.map((row) => {
+          if (row == null) return '';
+          if (typeof row === 'string') return row;
+          if (typeof row === 'object' && Object.prototype.hasOwnProperty.call(row, 'id')) return row.id;
+          return '';
+        })
+      );
+
+      const totalCount = membershipIds.length;
+
+      return withCORS(env, req, ok({
+        section: 'timesheets',
+        dataset_key: datasetKey,
+        row_ids: membershipIds,
+        ids: membershipIds.slice(),
+        total_count: totalCount,
+        total: totalCount,
+        count: totalCount
+      }));
+    } catch (e) {
+      return withCORS(env, req, serverError(`Failed to fetch timesheets summary membership: ${e?.message || e}`));
+    }
+  }
+
+  const effLimit = hasIdFilter ? Math.min(200, Math.max(1, idList.length)) : pageSize;
+  const effOffset = hasIdFilter ? 0 : ((page - 1) * pageSize);
+
+  const rowFilters = {
+    ...baseFilters,
+    limit: effLimit,
+    offset: effOffset
+  };
+
+  try {
+    if (hasPayBatchFilter) {
+      const batchFilters = {
+        ...baseFilters,
+        pay_batch_id: payBatchId,
+        limit: effLimit,
+        offset: effOffset
+      };
+
+      const rowRes = await sbRpc(env, 'pay_batch_timesheet_summary_lightweight_v1', { p_filters: batchFilters });
+      const payload = unwrapRpcPayload(rowRes, 'pay_batch_timesheet_summary_lightweight_v1');
+      const payloadObj = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+      const rawRows = Array.isArray(payloadObj.rows) ? payloadObj.rows : rpcRows(payload, 'pay_batch_timesheet_summary_lightweight_v1');
+      const outRows = normalizeSummaryRows(rawRows);
+
+      const payloadTotals = (payloadObj.totals && typeof payloadObj.totals === 'object' && !Array.isArray(payloadObj.totals))
+        ? payloadObj.totals
+        : null;
+      const countRaw = Number(payloadObj.total_count ?? payloadObj.total ?? payloadObj.count ?? payloadTotals?.count_all ?? outRows.length);
+      const totalCount = Number.isFinite(countRaw) ? countRaw : outRows.length;
+
+      const totals = includeTotals
+        ? {
+            count_all: totalCount,
+            total_pay_ex_vat_sum: Number(payloadTotals?.total_pay_ex_vat_sum || 0),
+            total_charge_ex_vat_sum: Number(payloadTotals?.total_charge_ex_vat_sum || 0),
+            margin_ex_vat_sum: Number(payloadTotals?.margin_ex_vat_sum || 0)
+          }
+        : null;
+
+      return withCORS(env, req, ok({
+        items: outRows,
+        page,
+        page_size: pageSize,
+        count: totalCount,
+        total: totalCount,
+        totals: totals || undefined
+      }));
+    }
+
+    const rowRes = await sbRpc(env, 'timesheet_summary_lightweight_rows_v1', { p_filters: rowFilters });
+    const outRows = normalizeSummaryRows(rpcRows(rowRes, 'timesheet_summary_lightweight_rows_v1'));
+
+    let totals = null;
+    let totalCount = outRows.length;
+
+    if (includeTotals || includeCount) {
+      const totalFilters = {
+        ...baseFilters,
+        purpose: 'totals',
+        disable_paging: true,
+        no_paging: true,
+        apply_paging: false
+      };
+
+      const totRes = await sbRpc(env, 'timesheet_list_totals', { p_filters: totalFilters });
+      const tot0 = firstRpcRow(totRes, 'timesheet_list_totals') || null;
+
+      if (includeTotals) {
+        totals = tot0 || { count_all: 0, total_pay_ex_vat_sum: 0, margin_ex_vat_sum: 0 };
+        totalCount = Number(totals?.count_all || 0);
+      } else if (includeCount) {
+        totalCount = Number(tot0?.count_all || 0);
+      }
+    }
+
+    return withCORS(env, req, ok({
+      items: outRows,
+      page,
+      page_size: pageSize,
+      count: totalCount,
+      totals: totals || undefined
+    }));
+  } catch (e) {
+    return withCORS(env, req, serverError(`Failed to fetch timesheets summary: ${e?.message || e}`));
+  }
+}
+
+
+function scheduleBankingPayOperationDrain(env, ctx, options = {}) {
+  const startedAt = Date.now();
+  const trimText = (value) => String(value == null ? '' : value).trim();
+  const upperText = (value) => trimText(value).toUpperCase();
+  const asObject = (value) => (value && typeof value === 'object' && !Array.isArray(value)) ? value : {};
+  const clampInteger = (value, fallback, min, max) => {
+    const n = Number(value);
+    const resolved = Number.isFinite(n) ? Math.trunc(n) : fallback;
+    return Math.max(min, Math.min(max, resolved));
+  };
+  const firstText = function () {
+    for (let i = 0; i < arguments.length; i += 1) {
+      const text = trimText(arguments[i]);
+      if (text) return text;
+    }
+    return '';
+  };
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  const isUuid = (value) => uuidRe.test(trimText(value));
+  const enc = encodeURIComponent;
+  const compactError = (error) => ({
+    code: firstText(error && (error.code || error.error_code || error.errorCode), 'BANKING_PAY_OPERATION_DRAIN_ERROR'),
+    message: String(error && error.message ? error.message : (error || 'Banking Pay operation drain failed.')).slice(0, 1000),
+    name: error && error.name ? String(error.name).slice(0, 120) : null
+  });
+
+  const supportedOperationTypes = new Set(['DRAFT_CREATE', 'PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS', 'PAYMENT_SETTLEMENT', 'REMITTANCE_QUEUE']);
+  const requestedOperationType = upperText(options.operationType || options.operation_type);
+  const operationType = supportedOperationTypes.has(requestedOperationType) ? requestedOperationType : '';
+  const operationId = isUuid(options.operationId || options.operation_id || options.id) ? trimText(options.operationId || options.operation_id || options.id) : '';
+  const payBatchId = isUuid(options.payBatchId || options.pay_batch_id) ? trimText(options.payBatchId || options.pay_batch_id) : '';
+  const rootOperationId = isUuid(options.rootOperationId || options.root_operation_id) ? trimText(options.rootOperationId || options.root_operation_id) : '';
+  const actorUserId = firstText(options.actorUserId, options.actor_user_id, env && env.PAY_ACTOR_USER_ID, env && env.INVOICE_ACTOR_USER_ID, env && env.TSFIN_ACTOR_USER_ID);
+  const source = firstText(options.source, 'scheduleBankingPayOperationDrain');
+  const maxOperations = clampInteger(options.maxOperations != null ? options.maxOperations : (options.max_operations != null ? options.max_operations : options.maxOperationsPerTick), 6, 1, 20);
+  const maxAdvanceCalls = clampInteger(options.maxAdvanceCalls != null ? options.maxAdvanceCalls : (options.max_advance_calls != null ? options.max_advance_calls : options.maxAdvanceCallsPerTick), Math.max(1, maxOperations), 1, 30);
+  const maxRuntimeMs = clampInteger(options.maxRuntimeMs != null ? options.maxRuntimeMs : options.max_runtime_ms, 20000, 1000, 60000);
+  const lockSeconds = clampInteger(options.lockSeconds != null ? options.lockSeconds : (options.lock_seconds != null ? options.lock_seconds : options.leaseSeconds), 60, 10, 300);
+
+  const scheduledSummary = {
+    ok: true,
+    scheduled: false,
+    source,
+    operation_id: operationId || null,
+    operation_type: operationType || null,
+    pay_batch_id: payBatchId || null,
+    root_operation_id: rootOperationId || null,
+    max_operations: maxOperations,
+    max_advance_calls: maxAdvanceCalls,
+    max_runtime_ms: maxRuntimeMs,
+    lock_seconds: lockSeconds,
+    scheduled_at_utc: new Date().toISOString()
+  };
+
+  const runDrain = async () => {
+    const runStartedAt = Date.now();
+    const summary = {
+      ok: true,
+      source,
+      operation_id: operationId || null,
+      operation_type: operationType || null,
+      pay_batch_id: payBatchId || null,
+      root_operation_id: rootOperationId || null,
+      attempted_count: 0,
+      claimed_count: 0,
+      advanced_count: 0,
+      skipped_count: 0,
+      stopped_reason: null,
+      operations: [],
+      errors: []
+    };
+
+    const stopWith = (reason) => {
+      if (!summary.stopped_reason) summary.stopped_reason = reason || 'STOPPED';
+      summary.elapsed_ms = Date.now() - runStartedAt;
+      return summary;
+    };
+
+    const logInfo = (message, payload) => {
+      try { console.log(message, payload); } catch {}
+    };
+    const logWarn = (message, payload) => {
+      try { console.warn(message, payload); } catch {}
+    };
+
+    if (!env) return stopWith('ENV_MISSING');
+    if (typeof claimAndAdvanceOneBankingPayOperation !== 'function') return stopWith('CLAIM_AND_ADVANCE_HELPER_MISSING');
+    if (typeof sbFetch !== 'function' || !env.SUPABASE_URL) return stopWith('SUPABASE_FETCH_UNAVAILABLE');
+    if (!actorUserId) return stopWith('ACTOR_USER_ID_MISSING');
+    if (!operationId && !payBatchId && !rootOperationId) return stopWith('NO_OPERATION_SCOPE_FOR_IMMEDIATE_DRAIN');
+
+    const terminalStatuses = new Set(['COMPLETE', 'FAILED', 'CANCELLED', 'CANCELED', 'REVIEW_REQUIRED']);
+    const userWaitStatuses = new Set(['WAITING_AUTHORISATION', 'WAITING_AUTHORIZATION']);
+    const providerWaitStatuses = new Set(['WAITING_PROVIDER']);
+    const nonRunnableRunnerStates = new Set(['WAITING_USER', 'WAITING_USER_REVIEW', 'WAITING_AUTHORISATION', 'WAITING_AUTHORIZATION', 'WAITING_PROVIDER', 'COMPLETE', 'FAILED', 'REVIEW_REQUIRED']);
+
+    const operationIdsSeen = new Set();
+    const operationQueue = [];
+    const pushOperationId = (id, type, reason, allowRepeat) => {
+      const text = trimText(id);
+      const repeatAllowed = allowRepeat === true;
+      if (!isUuid(text)) return;
+      if (!repeatAllowed && operationIdsSeen.has(text)) return;
+      const typeText = upperText(type);
+      if (typeText && !supportedOperationTypes.has(typeText)) return;
+      if (!repeatAllowed) operationIdsSeen.add(text);
+      operationQueue.push({ operation_id: text, operation_type: typeText || '', reason: trimText(reason) || 'queued' });
+    };
+
+    const parseTimeMs = (value) => {
+      const text = trimText(value);
+      if (!text) return null;
+      const ms = Date.parse(text);
+      return Number.isFinite(ms) ? ms : null;
+    };
+
+    const shouldStopBeforeClaim = (row) => {
+      const operationRow = asObject(row);
+      if (!Object.keys(operationRow).length) return { stop: false, reason: null };
+      const status = upperText(operationRow.status);
+      const runnerState = upperText(operationRow.runner_state || operationRow.runnerState);
+      const rowOperationType = upperText(operationRow.operation_type || operationRow.operationType);
+      const runAfterMs = parseTimeMs(operationRow.run_after_utc || operationRow.runAfterUtc);
+      if (rowOperationType && !supportedOperationTypes.has(rowOperationType)) return { stop: true, reason: 'UNSUPPORTED_OPERATION_TYPE' };
+      if (terminalStatuses.has(status)) return { stop: true, reason: `TERMINAL_STATUS_${status}` };
+      if (userWaitStatuses.has(status) || operationRow.requires_user_action === true) return { stop: true, reason: 'WAITING_FOR_USER_OR_AUTHORISATION' };
+      if (providerWaitStatuses.has(status)) return { stop: true, reason: 'WAITING_PROVIDER' };
+      if (runAfterMs !== null && runAfterMs > Date.now()) return { stop: true, reason: 'RUN_AFTER_NOT_DUE' };
+      if (runnerState && nonRunnableRunnerStates.has(runnerState)) return { stop: true, reason: `RUNNER_STATE_${runnerState}` };
+      return { stop: false, reason: null };
+    };
+
+    const fetchOperationRow = async (id) => {
+      if (!isUuid(id)) return null;
+      const { rows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/banking_pay_operations` +
+        `?id=eq.${enc(id)}` +
+        `&select=id,operation_type,status,phase,runner_state,requires_user_action,run_after_utc,pay_batch_id,root_operation_id,created_at_utc,updated_at_utc` +
+        `&limit=1`,
+        false
+      );
+      return Array.isArray(rows) && rows[0] && typeof rows[0] === 'object' ? rows[0] : null;
+    };
+
+    const discoverRelatedOperationIds = async () => {
+      if (!payBatchId && !rootOperationId) return [];
+      const discovered = [];
+      const appendRows = (rows, reason) => {
+        for (const row of Array.isArray(rows) ? rows : []) {
+          const rowObj = asObject(row);
+          const rowId = trimText(rowObj.id);
+          const rowType = upperText(rowObj.operation_type);
+          if (!isUuid(rowId) || !supportedOperationTypes.has(rowType)) continue;
+          const stop = shouldStopBeforeClaim(rowObj);
+          if (stop.stop) continue;
+          discovered.push({ operation_id: rowId, operation_type: rowType, reason });
+        }
+      };
+
+      if (payBatchId) {
+        try {
+          const { rows } = await sbFetch(
+            env,
+            `${env.SUPABASE_URL}/rest/v1/banking_pay_operations` +
+            `?pay_batch_id=eq.${enc(payBatchId)}` +
+            `&operation_type=in.(DRAFT_CREATE,PAYMENT_EXECUTE,PAYMENT_RETRY_BLOCKED_FUNDS,PAYMENT_SETTLEMENT,REMITTANCE_QUEUE)` +
+            `&select=id,operation_type,status,phase,runner_state,requires_user_action,run_after_utc,pay_batch_id,root_operation_id,created_at_utc,updated_at_utc` +
+            `&order=created_at_utc.asc.nullslast,id.asc` +
+            `&limit=25`,
+            false
+          );
+          appendRows(rows, 'pay_batch_related');
+        } catch (error) {
+          summary.errors.push(Object.assign({ stage: 'discover_pay_batch_related' }, compactError(error)));
+        }
+      }
+
+      const effectiveRootOperationId = rootOperationId || operationId;
+      if (effectiveRootOperationId) {
+        try {
+          const { rows } = await sbFetch(
+            env,
+            `${env.SUPABASE_URL}/rest/v1/banking_pay_operations` +
+            `?root_operation_id=eq.${enc(effectiveRootOperationId)}` +
+            `&operation_type=in.(PAYMENT_SETTLEMENT,REMITTANCE_QUEUE)` +
+            `&select=id,operation_type,status,phase,runner_state,requires_user_action,run_after_utc,pay_batch_id,root_operation_id,created_at_utc,updated_at_utc` +
+            `&order=created_at_utc.asc.nullslast,id.asc` +
+            `&limit=25`,
+            false
+          );
+          appendRows(rows, 'root_operation_related');
+        } catch (error) {
+          summary.errors.push(Object.assign({ stage: 'discover_root_related' }, compactError(error)));
+        }
+      }
+
+      return discovered;
+    };
+
+    const advanceOneOperation = async (queuedOperation) => {
+      const queued = asObject(queuedOperation);
+      const targetOperationId = trimText(queued.operation_id);
+      if (!isUuid(targetOperationId)) return { queued: false, reason: 'INVALID_OPERATION_ID' };
+
+      let beforeRow = null;
+      try {
+        beforeRow = await fetchOperationRow(targetOperationId);
+      } catch (error) {
+        return { queued: true, claimed: false, advanced: false, operation_id: targetOperationId, reason: 'READ_OPERATION_BEFORE_CLAIM_FAILED', error: compactError(error) };
+      }
+      if (!beforeRow) return { queued: true, claimed: false, advanced: false, operation_id: targetOperationId, reason: 'OPERATION_NOT_FOUND' };
+
+      const preClaimStop = shouldStopBeforeClaim(beforeRow);
+      if (preClaimStop.stop) {
+        return {
+          queued: true,
+          claimed: false,
+          advanced: false,
+          operation_id: targetOperationId,
+          operation_type: upperText(beforeRow.operation_type) || queued.operation_type || null,
+          reason: preClaimStop.reason,
+          operation: beforeRow
+        };
+      }
+
+      const targetOperationType = upperText(beforeRow.operation_type) || queued.operation_type || operationType || '';
+      const lockOwner = `banking-pay-immediate-drain:${source}:${targetOperationId}:${Date.now()}:${Math.random().toString(36).slice(2)}`.slice(0, 250);
+      const advanceResult = await claimAndAdvanceOneBankingPayOperation(env, {
+        actorUserId,
+        actor_user_id: actorUserId,
+        businessActorUserId: actorUserId,
+        business_actor_user_id: actorUserId,
+        operationId: targetOperationId,
+        operation_id: targetOperationId,
+        payBatchId: trimText(beforeRow.pay_batch_id) || payBatchId || null,
+        pay_batch_id: trimText(beforeRow.pay_batch_id) || payBatchId || null,
+        lockOwner,
+        lock_owner: lockOwner,
+        lockSeconds,
+        lock_seconds: lockSeconds,
+        allowBackendRunnerOwned: true,
+        allow_backend_runner_owned: true,
+        operationTypes: targetOperationType ? [targetOperationType] : Array.from(supportedOperationTypes),
+        operation_types: targetOperationType ? [targetOperationType] : Array.from(supportedOperationTypes),
+        source: `${source}.immediateDrain`,
+        runAfterDelaySeconds: 0,
+        run_after_delay_seconds: 0,
+        requestBudget: clampInteger(options.requestBudgetMs != null ? options.requestBudgetMs : options.request_budget_ms, Math.max(1000, Math.min(15000, maxRuntimeMs - (Date.now() - runStartedAt))), 1000, 25000),
+        request_budget: clampInteger(options.requestBudgetMs != null ? options.requestBudgetMs : options.request_budget_ms, Math.max(1000, Math.min(15000, maxRuntimeMs - (Date.now() - runStartedAt))), 1000, 25000),
+        draftCreateMaxPhaseUnits: clampInteger(options.draftCreateMaxPhaseUnits != null ? options.draftCreateMaxPhaseUnits : options.draft_create_max_phase_units, 20, 1, 50),
+        draft_create_max_phase_units: clampInteger(options.draftCreateMaxPhaseUnits != null ? options.draftCreateMaxPhaseUnits : options.draft_create_max_phase_units, 20, 1, 50),
+        draftCreateMaxChunksPerLease: clampInteger(options.draftCreateMaxChunksPerLease != null ? options.draftCreateMaxChunksPerLease : options.draft_create_max_chunks_per_lease, 10, 1, 50),
+        draft_create_max_chunks_per_lease: clampInteger(options.draftCreateMaxChunksPerLease != null ? options.draftCreateMaxChunksPerLease : options.draft_create_max_chunks_per_lease, 10, 1, 50)
+      });
+      return advanceResult;
+    };
+
+    if (operationId) pushOperationId(operationId, operationType, 'specific_operation');
+
+    logInfo('[BankingPayDrain] scheduled', {
+      source,
+      operation_id: operationId || null,
+      operation_type: operationType || null,
+      pay_batch_id: payBatchId || null,
+      root_operation_id: rootOperationId || null,
+      max_operations: maxOperations,
+      max_advance_calls: maxAdvanceCalls,
+      max_runtime_ms: maxRuntimeMs
+    });
+
+    while (summary.attempted_count < maxAdvanceCalls && summary.claimed_count < maxOperations) {
+      if (Date.now() - runStartedAt >= maxRuntimeMs) return stopWith('BUDGET_EXHAUSTED');
+
+      if (!operationQueue.length) {
+        const related = await discoverRelatedOperationIds();
+        for (const row of related) pushOperationId(row.operation_id, row.operation_type, row.reason);
+      }
+      if (!operationQueue.length) return stopWith(summary.attempted_count > 0 ? 'NO_MORE_RELATED_RUNNABLE_OPERATIONS' : 'NO_RUNNABLE_OPERATION_FOUND');
+
+      const next = operationQueue.shift();
+      let advanceResult;
+      try {
+        advanceResult = await advanceOneOperation(next);
+      } catch (error) {
+        const compact = compactError(error);
+        summary.ok = false;
+        summary.errors.push(Object.assign({ stage: 'advance_one_operation', operation_id: next && next.operation_id ? next.operation_id : null }, compact));
+        return stopWith(compact.code || 'ADVANCE_ONE_OPERATION_FAILED');
+      }
+
+      summary.attempted_count += 1;
+      summary.operations.push(advanceResult);
+      if (advanceResult && advanceResult.claimed === true) summary.claimed_count += 1;
+      if (advanceResult && advanceResult.advanced === true) summary.advanced_count += 1;
+      if (!advanceResult || advanceResult.claimed !== true) {
+        summary.skipped_count += 1;
+        const reason = firstText(advanceResult && (advanceResult.not_claimed_reason || advanceResult.reason), 'NOT_CLAIMED');
+        if (['WAITING_PROVIDER', 'WAITING_FOR_USER_OR_AUTHORISATION', 'RUN_AFTER_NOT_DUE'].includes(reason)) return stopWith(reason);
+        if (!operationQueue.length) return stopWith(reason);
+        continue;
+      }
+
+      const releaseState = upperText(advanceResult.release_state || advanceResult.releaseState || advanceResult.release && advanceResult.release.release_state);
+      const resultOperation = asObject(advanceResult.operation || advanceResult.advance_result || advanceResult);
+      const resultStatus = upperText(resultOperation.status || advanceResult.status);
+      const resultRunnerState = upperText(resultOperation.runner_state || resultOperation.runnerState || advanceResult.runner_state);
+      if (releaseState === 'WAITING_PROVIDER' || resultStatus === 'WAITING_PROVIDER' || resultRunnerState === 'WAITING_PROVIDER') return stopWith('WAITING_PROVIDER');
+      if (releaseState === 'WAITING_AUTHORISATION' || userWaitStatuses.has(resultStatus) || resultOperation.requires_user_action === true) return stopWith('WAITING_FOR_USER_OR_AUTHORISATION');
+      if (releaseState === 'REVIEW_REQUIRED' || resultStatus === 'REVIEW_REQUIRED' || resultOperation.review_required === true) return stopWith('REVIEW_REQUIRED');
+      if (releaseState === 'FAILED' || ['FAILED', 'CANCELLED', 'CANCELED'].includes(resultStatus)) return stopWith(`TERMINAL_STATUS_${resultStatus || releaseState}`);
+      if (releaseState === 'MORE_WORK') {
+        pushOperationId(next && next.operation_id, resultOperation.operation_type || next && next.operation_type || operationType, 'same_operation_more_work', true);
+        continue;
+      }
+      if (releaseState === 'COMPLETE' || resultStatus === 'COMPLETE') {
+        if (Date.now() - runStartedAt >= maxRuntimeMs) return stopWith('BUDGET_EXHAUSTED_AFTER_COMPLETE');
+        continue;
+      }
+    }
+
+    return stopWith(summary.attempted_count >= maxAdvanceCalls ? 'MAX_ADVANCE_CALLS_REACHED' : 'MAX_OPERATIONS_REACHED');
+  };
+
+  try {
+    const task = runDrain()
+      .then((summary) => {
+        try {
+          console.log('[BankingPayDrain] completed', {
+            source,
+            operation_id: operationId || null,
+            operation_type: operationType || null,
+            pay_batch_id: payBatchId || null,
+            claimed_count: summary && summary.claimed_count,
+            advanced_count: summary && summary.advanced_count,
+            stopped_reason: summary && summary.stopped_reason,
+            elapsed_ms: summary && summary.elapsed_ms
+          });
+        } catch {}
+        return summary;
+      })
+      .catch((error) => {
+        try {
+          console.warn('[BankingPayDrain] failed', {
+            source,
+            operation_id: operationId || null,
+            operation_type: operationType || null,
+            pay_batch_id: payBatchId || null,
+            elapsed_ms: Date.now() - startedAt,
+            error: compactError(error)
+          });
+        } catch {}
+        return { ok: false, error: compactError(error), stopped_reason: 'UNHANDLED_DRAIN_ERROR', elapsed_ms: Date.now() - startedAt };
+      });
+
+    if (ctx && typeof ctx.waitUntil === 'function') {
+      ctx.waitUntil(task);
+      scheduledSummary.scheduled = true;
+      scheduledSummary.mode = 'waitUntil';
+      return scheduledSummary;
+    }
+
+    scheduledSummary.scheduled = true;
+    scheduledSummary.mode = 'best_effort_promise';
+    return scheduledSummary;
+  } catch (error) {
+    try {
+      console.warn('[BankingPayDrain] schedule failed', {
+        source,
+        operation_id: operationId || null,
+        operation_type: operationType || null,
+        pay_batch_id: payBatchId || null,
+        error: compactError(error)
+      });
+    } catch {}
+    return Object.assign({}, scheduledSummary, {
+      ok: false,
+      scheduled: false,
+      mode: 'schedule_failed',
+      error: compactError(error),
+      elapsed_ms: Date.now() - startedAt
+    });
+  }
+}
+
+async function touchBankingPayBatchPaymentStateChanged(env, payBatchId, options = {}) {
+  const trimText = (value) => String(value == null ? '' : value).trim();
+  const upperText = (value) => trimText(value).toUpperCase();
+  const asObject = (value) => (value && typeof value === 'object' && !Array.isArray(value)) ? value : {};
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  const isUuid = (value) => uuidRe.test(trimText(value));
+  const firstText = function () {
+    for (let i = 0; i < arguments.length; i += 1) {
+      const text = trimText(arguments[i]);
+      if (text) return text;
+    }
+    return '';
+  };
+  const compactError = (error) => ({
+    code: firstText(error && (error.code || error.error_code || error.errorCode), 'BANKING_PAY_BATCH_SIGNAL_TOUCH_FAILED'),
+    message: String(error && error.message ? error.message : (error || 'Banking Pay batch signal touch failed.')).slice(0, 1000),
+    name: error && error.name ? String(error.name).slice(0, 120) : null
+  });
+
+  const id = trimText(payBatchId || options.payBatchId || options.pay_batch_id);
+  const bestEffort = options.bestEffort !== false && options.best_effort !== false;
+  const source = firstText(options.source, 'touchBankingPayBatchPaymentStateChanged');
+  const reason = firstText(options.reason, options.changeReason, options.change_reason, 'PAYMENT_STATE_CHANGED');
+  const operationId = isUuid(options.operationId || options.operation_id) ? trimText(options.operationId || options.operation_id) : null;
+  const rootOperationId = isUuid(options.rootOperationId || options.root_operation_id) ? trimText(options.rootOperationId || options.root_operation_id) : null;
+  const actorUserId = isUuid(options.actorUserId || options.actor_user_id) ? trimText(options.actorUserId || options.actor_user_id) : null;
+  const supportedLanes = new Set(['overview', 'payment_status', 'alerts', 'remittances']);
+  const suppliedLanes = Array.isArray(options.lanes)
+    ? options.lanes
+    : (Array.isArray(options.touchLanes) ? options.touchLanes : (Array.isArray(options.touch_lanes) ? options.touch_lanes : []));
+  const lanes = [];
+  for (const lane of suppliedLanes) {
+    const normalized = upperText(lane).toLowerCase();
+    if (supportedLanes.has(normalized) && !lanes.includes(normalized)) lanes.push(normalized);
+  }
+  if (!lanes.length) {
+    lanes.push('overview', 'payment_status');
+  }
+
+  const result = {
+    ok: true,
+    pay_batch_id: id || null,
+    source,
+    reason,
+    lanes: lanes.slice(),
+    display_summary_refresh: null,
+    signal_touch: null,
+    errors: []
+  };
+
+  const failOrRecord = (stage, error) => {
+    const compact = Object.assign({ stage }, compactError(error));
+    result.ok = false;
+    result.errors.push(compact);
+    if (!bestEffort) {
+      const thrown = new Error(compact.message);
+      thrown.code = compact.code;
+      thrown.stage = stage;
+      thrown.details = result;
+      throw thrown;
+    }
+    try { console.warn('[BankingPayBatchTouch] best-effort failure', compact); } catch {}
+    return compact;
+  };
+
+  if (!id || !isUuid(id)) {
+    failOrRecord('validate_pay_batch_id', new Error('PAY_BATCH_ID_REQUIRED'));
+    return result;
+  }
+  if (!env) {
+    failOrRecord('validate_env', new Error('ENV_REQUIRED'));
+    return result;
+  }
+  if (typeof sbRpc !== 'function') {
+    failOrRecord('validate_rpc_helper', new Error('SB_RPC_REQUIRED'));
+    return result;
+  }
+
+  const touchPaymentStatus = lanes.includes('payment_status');
+  const touchOverview = lanes.includes('overview') || lanes.includes('remittances');
+  const touchAlerts = lanes.includes('alerts');
+  const changeScopeJson = Object.assign(
+    {},
+    asObject(options.changeScopeJson || options.change_scope_json || options.scopeJson || options.scope_json),
+    {
+      source,
+      reason,
+      lanes: lanes.slice(),
+      operation_id: operationId,
+      root_operation_id: rootOperationId,
+      actor_user_id: actorUserId,
+      touched_at_utc: new Date().toISOString()
+    }
+  );
+
+  try {
+    const refreshRes = await sbRpc(env, 'pay_batch_display_summary_refresh', {
+      p_pay_batch_id: id
+    }, {
+      routeClass: 'DISPLAY',
+      purpose: 'PAY_BATCH_DISPLAY_SUMMARY_REFRESH_AFTER_PAYMENT_STATE_CHANGE',
+      timeoutMs: 8000
+    });
+    result.display_summary_refresh = { ok: true, result: refreshRes == null ? null : refreshRes };
+  } catch (error) {
+    result.display_summary_refresh = { ok: false, error: compactError(error) };
+    failOrRecord('pay_batch_display_summary_refresh', error);
+  }
+
+  try {
+    const signalRes = await sbRpc(env, 'banking_pay_batch_signal_touch', {
+      p_pay_batch_id: id,
+      p_change_reason: reason,
+      p_change_source: source,
+      p_change_scope_json: changeScopeJson,
+      p_touch_payment_status: touchPaymentStatus,
+      p_touch_correction_progress: false,
+      p_touch_alerts: touchAlerts,
+      p_touch_overview: touchOverview
+    }, {
+      routeClass: 'WATCH_SIGNAL',
+      purpose: 'BANKING_PAY_BATCH_SIGNAL_TOUCH_AFTER_PAYMENT_STATE_CHANGE',
+      timeoutMs: 8000
+    });
+    result.signal_touch = { ok: true, result: signalRes == null ? null : signalRes };
+  } catch (error) {
+    result.signal_touch = { ok: false, error: compactError(error) };
+    failOrRecord('banking_pay_batch_signal_touch', error);
+  }
+
+  result.ok = result.errors.length === 0;
+  return result;
+}
+
+
+
 async function sendPayBatchCompletionNoticeAllAuthorisers(env, options = {}) {
   const enc = encodeURIComponent;
   const trimText = (value) => String(value == null ? '' : value).trim();
@@ -61717,6 +76451,41 @@ async function sendPayBatchCompletionNoticeAllAuthorisers(env, options = {}) {
     message: String(error && error.message ? error.message : (error || 'Pay batch completion notice failed.')).slice(0, 1000),
     name: error && error.name ? String(error.name).slice(0, 120) : null
   });
+  const compactResultForMarker = (value) => {
+    const sourceObj = asObject(value);
+    const shallow = Object.assign({}, sourceObj);
+    if (shallow.outcome && typeof shallow.outcome === 'object') {
+      const outcome = asObject(shallow.outcome);
+      shallow.outcome = {
+        ok: outcome.ok !== false,
+        eligible_to_send: outcome.eligible_to_send === true,
+        skip_reason: outcome.skip_reason || null,
+        pay_batch_id: outcome.pay_batch_id || null,
+        batch_status: outcome.batch_status || null,
+        execution_commit_state: outcome.execution_commit_state || null,
+        root_operation_id: outcome.root_operation_id || null,
+        settlement_operation_id: outcome.settlement_operation_id || null,
+        route_has_terminal_evidence: outcome.route_has_terminal_evidence === true,
+        settlement_terminal: outcome.settlement_terminal === true,
+        manual_or_no_terminal_route: outcome.manual_or_no_terminal_route === true,
+        transfer_count: outcome.transfer_count || 0,
+        paid_like_count: outcome.paid_like_count || 0,
+        failed_like_count: outcome.failed_like_count || 0,
+        returned_like_count: outcome.returned_like_count || 0,
+        pending_or_unknown_count: outcome.pending_or_unknown_count || 0,
+        paid_like_amount_total: outcome.paid_like_amount_total || 0,
+        amount_requiring_review: outcome.amount_requiring_review || 0,
+        completed_at_utc: outcome.completed_at_utc || null,
+        has_issues: outcome.has_issues === true,
+        issue_lines: Array.isArray(outcome.issue_lines) ? outcome.issue_lines.slice(0, 20) : []
+      };
+    }
+    if (Array.isArray(shallow.inserted)) shallow.inserted = shallow.inserted.slice(0, 50);
+    if (Array.isArray(shallow.error_rows)) shallow.error_rows = shallow.error_rows.slice(0, 50);
+    if (Array.isArray(shallow.completion_notice_errors)) shallow.completion_notice_errors = shallow.completion_notice_errors.slice(0, 50);
+    shallow.recorded_at_utc = new Date().toISOString();
+    return shallow;
+  };
   const tableHtml = (headers, rows, opts = {}) => {
     const alignRight = new Set(opts.alignRight || []);
     const title = opts.title ? `<h2 style="font-size:16px;margin:18px 0 8px;color:#111827;">${h(opts.title)}</h2>` : '';
@@ -61724,15 +76493,144 @@ async function sendPayBatchCompletionNoticeAllAuthorisers(env, options = {}) {
     const body = `<tbody>${rows.map((row) => `<tr>${headers.map((_, index) => `<td style="border:1px solid #e5e7eb;padding:8px 9px;text-align:${alignRight.has(index) ? 'right' : 'left'};font-size:12px;color:#111827;vertical-align:top;">${h(row[index] == null ? '' : row[index])}</td>`).join('')}</tr>`).join('')}</tbody>`;
     return `${title}<table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse;width:100%;margin:0 0 12px 0;">${head}${body}</table>`;
   };
+  const clampNumber = (value, fallback, min, max) => {
+    const n = Number(value);
+    const resolved = Number.isFinite(n) ? n : fallback;
+    return Math.max(min, Math.min(max, resolved));
+  };
+  const throttleMinutes = clampNumber(options.completionNoticeThrottleMinutes ?? options.completion_notice_throttle_minutes ?? options.throttleMinutes ?? options.throttle_minutes, 60, 5, 1440);
+  const nextAttemptIso = () => new Date(Date.now() + (throttleMinutes * 60 * 1000)).toISOString();
 
   const payBatchId = trimText(options.payBatchId || options.pay_batch_id || options.id);
   const actorUserId = isUuid(options.actorUserId || options.actor_user_id) ? trimText(options.actorUserId || options.actor_user_id) : null;
   const source = firstText(options.source, 'sendPayBatchCompletionNoticeAllAuthorisers');
+  const reason = firstText(options.reason, 'PAY_BATCH_COMPLETION_NOTICE_ATTEMPT');
 
-  if (!env) return { ok: false, queued: 0, skipped: true, skip_reason: 'ENV_REQUIRED' };
-  if (typeof sbFetch !== 'function' || !env.SUPABASE_URL) return { ok: false, queued: 0, skipped: true, skip_reason: 'SUPABASE_FETCH_UNAVAILABLE' };
-  if (typeof derivePayBatchTerminalPaymentOutcome !== 'function') return { ok: false, queued: 0, skipped: true, skip_reason: 'DERIVE_OUTCOME_HELPER_UNAVAILABLE' };
-  if (!isUuid(payBatchId)) return { ok: false, queued: 0, skipped: true, skip_reason: 'PAY_BATCH_ID_REQUIRED' };
+  if (!env) return { ok: false, queued: 0, skipped: true, completion_notice_attempted: false, completion_notice_queued: false, completion_notice_skipped: true, completion_notice_skip_reason: 'ENV_REQUIRED', skip_reason: 'ENV_REQUIRED' };
+  if (typeof sbFetch !== 'function' || !env.SUPABASE_URL) return { ok: false, queued: 0, skipped: true, completion_notice_attempted: false, completion_notice_queued: false, completion_notice_skipped: true, completion_notice_skip_reason: 'SUPABASE_FETCH_UNAVAILABLE', skip_reason: 'SUPABASE_FETCH_UNAVAILABLE' };
+  if (typeof derivePayBatchTerminalPaymentOutcome !== 'function') return { ok: false, queued: 0, skipped: true, completion_notice_attempted: false, completion_notice_queued: false, completion_notice_skipped: true, completion_notice_skip_reason: 'DERIVE_OUTCOME_HELPER_UNAVAILABLE', skip_reason: 'DERIVE_OUTCOME_HELPER_UNAVAILABLE' };
+  if (!isUuid(payBatchId)) return { ok: false, queued: 0, skipped: true, completion_notice_attempted: false, completion_notice_queued: false, completion_notice_skipped: true, completion_notice_skip_reason: 'PAY_BATCH_ID_REQUIRED', skip_reason: 'PAY_BATCH_ID_REQUIRED' };
+
+  const patchNoticeMarker = async (patch, patchOptions = {}) => {
+    const url = `${env.SUPABASE_URL}/rest/v1/pay_batches` +
+      `?id=eq.${enc(payBatchId)}` +
+      (patchOptions.onlyUnqueued === true ? `&completion_notice_queued_at_utc=is.null` : '') +
+      (patchOptions.returnRepresentation === true ? `&select=id,completion_notice_queued_at_utc,completion_notice_reference,completion_notice_last_attempt_at_utc,completion_notice_next_attempt_at_utc,completion_notice_last_result_json` : '');
+    const res = await fetch(url, {
+      method: 'PATCH',
+      headers: Object.assign({}, sbHeaders(env), {
+        'Content-Type': 'application/json',
+        Prefer: patchOptions.returnRepresentation === true ? 'return=representation' : 'return=minimal'
+      }),
+      body: JSON.stringify(patch)
+    });
+    const txt = await res.text().catch(() => '');
+    let json = null;
+    try { json = txt ? JSON.parse(txt) : null; } catch { json = null; }
+    if (!res.ok) {
+      const error = new Error(`pay_batches completion notice marker patch failed: ${txt || res.status}`);
+      error.status = res.status;
+      error.body = txt;
+      throw error;
+    }
+    return Array.isArray(json) ? json : (json ? [json] : []);
+  };
+
+  const recordSkipped = async (skipReason, patch = {}) => {
+    const result = Object.assign({
+      ok: true,
+      pay_batch_id: payBatchId,
+      completion_notice_attempted: true,
+      completion_notice_queued: false,
+      completion_notice_skipped: true,
+      completion_notice_skip_reason: skipReason,
+      completion_notice_result: 'SKIPPED',
+      queued: 0,
+      skipped: true,
+      skip_reason: skipReason,
+      source,
+      reason,
+      recipient_count: 0,
+      outbox_rows_covered_count: 0
+    }, asObject(patch));
+    const nowIso = new Date().toISOString();
+    try {
+      await patchNoticeMarker({
+        completion_notice_last_attempt_at_utc: nowIso,
+        completion_notice_next_attempt_at_utc: nextAttemptIso(),
+        completion_notice_last_result_json: compactResultForMarker(result)
+      }, { onlyUnqueued: true, returnRepresentation: false });
+    } catch (error) {
+      result.marker_update_error = compactError(error);
+    }
+    return result;
+  };
+
+  let existingMarkerRow = null;
+  try {
+    const { rows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/pay_batches` +
+      `?id=eq.${enc(payBatchId)}` +
+      `&select=id,completion_notice_queued_at_utc,completion_notice_reference` +
+      `&limit=1`,
+      false
+    );
+    existingMarkerRow = Array.isArray(rows) && rows[0] && typeof rows[0] === 'object' ? rows[0] : null;
+  } catch (error) {
+    return {
+      ok: false,
+      pay_batch_id: payBatchId,
+      queued: 0,
+      skipped: true,
+      completion_notice_attempted: false,
+      completion_notice_queued: false,
+      completion_notice_skipped: true,
+      completion_notice_skip_reason: 'COMPLETION_NOTICE_MARKER_LOOKUP_FAILED',
+      skip_reason: 'COMPLETION_NOTICE_MARKER_LOOKUP_FAILED',
+      error: compactError(error),
+      source,
+      reason
+    };
+  }
+
+  if (existingMarkerRow && trimText(existingMarkerRow.completion_notice_queued_at_utc)) {
+    return {
+      ok: true,
+      pay_batch_id: payBatchId,
+      queued: 0,
+      skipped: true,
+      completion_notice_attempted: false,
+      completion_notice_queued: true,
+      completion_notice_skipped: true,
+      completion_notice_skip_reason: 'COMPLETION_NOTICE_ALREADY_QUEUED',
+      skip_reason: 'COMPLETION_NOTICE_ALREADY_QUEUED',
+      completion_notice_reference: trimText(existingMarkerRow.completion_notice_reference) || null,
+      reference: trimText(existingMarkerRow.completion_notice_reference) || null,
+      source,
+      reason
+    };
+  }
+
+  const attemptStartedAtUtc = new Date().toISOString();
+  try {
+    await patchNoticeMarker({
+      completion_notice_last_attempt_at_utc: attemptStartedAtUtc,
+      completion_notice_last_result_json: {
+        ok: true,
+        completion_notice_attempted: true,
+        completion_notice_queued: false,
+        completion_notice_skipped: false,
+        completion_notice_result: 'ATTEMPT_STARTED',
+        pay_batch_id: payBatchId,
+        source,
+        reason,
+        attempted_at_utc: attemptStartedAtUtc
+      }
+    }, { onlyUnqueued: true, returnRepresentation: false });
+  } catch {
+    // The durable queued marker below is the important marker. A failed best-effort attempt timestamp must not send email early.
+  }
 
   let outcome;
   try {
@@ -61746,22 +76644,18 @@ async function sendPayBatchCompletionNoticeAllAuthorisers(env, options = {}) {
       source
     });
   } catch (error) {
-    return { ok: false, queued: 0, skipped: true, skip_reason: 'OUTCOME_DERIVATION_FAILED', error: compactError(error) };
+    return recordSkipped('OUTCOME_DERIVATION_FAILED', { ok: false, error: compactError(error) });
   }
 
   if (!outcome || outcome.eligible_to_send !== true) {
-    return {
-      ok: true,
-      queued: 0,
-      skipped: true,
-      skip_reason: outcome && outcome.skip_reason ? outcome.skip_reason : 'NOT_ELIGIBLE_TO_SEND',
+    return recordSkipped(outcome && outcome.skip_reason ? outcome.skip_reason : 'NOT_ELIGIBLE_TO_SEND', {
       outcome: outcome || null
-    };
+    });
   }
 
   const rootOperationId = isUuid(outcome.root_operation_id) ? trimText(outcome.root_operation_id) : (isUuid(options.rootOperationId || options.root_operation_id) ? trimText(options.rootOperationId || options.root_operation_id) : null);
   const reference = `pay_batch_completed:${payBatchId}:${rootOperationId || 'batch-terminal'}`;
-  const deterministicPrefix = `pay_batch_completed:${payBatchId}:${rootOperationId || 'batch-terminal'}`;
+  const deterministicPrefix = `pay_batch_completed:${payBatchId}`;
   const hasIssues = outcome.has_issues === true;
   const payDateLabel = outcome.pay_date ? fmtDate(outcome.pay_date) : '';
   const shortId = payBatchId.slice(0, 8);
@@ -61844,7 +76738,7 @@ async function sendPayBatchCompletionNoticeAllAuthorisers(env, options = {}) {
     );
     authUsers = Array.isArray(rows) ? rows : [];
   } catch (error) {
-    return { ok: false, queued: 0, skipped: true, skip_reason: 'AUTHORISER_LOOKUP_FAILED', error: compactError(error), outcome };
+    return recordSkipped('AUTHORISER_LOOKUP_FAILED', { ok: false, reference, completion_notice_reference: reference, error: compactError(error), outcome });
   }
 
   const recipients = [];
@@ -61859,28 +76753,11 @@ async function sendPayBatchCompletionNoticeAllAuthorisers(env, options = {}) {
   }
 
   if (!recipients.length) {
-    return { ok: true, queued: 0, skipped: true, skip_reason: 'NO_AUTHORISER_RECIPIENTS', reference, outcome };
+    return recordSkipped('NO_AUTHORISER_RECIPIENTS', { reference, completion_notice_reference: reference, outcome });
   }
 
-  let existingRows = [];
-  try {
-    const { rows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/mail_outbox` +
-      `?select=id,to,status,reference,deterministic_outbox_key` +
-      `&type=eq.BROADCAST` +
-      `&reference=eq.${enc(reference)}` +
-      `&limit=1000`,
-      false
-    );
-    existingRows = Array.isArray(rows) ? rows : [];
-  } catch (error) {
-    return { ok: false, queued: 0, skipped: true, skip_reason: 'EXISTING_NOTICE_LOOKUP_FAILED', reference, error: compactError(error), outcome };
-  }
-
-  const existingTo = new Set(existingRows.map((row) => trimText(row && row.to).toLowerCase()).filter(Boolean));
   let queued = 0;
-  let skipped_exists = 0;
+  let coveredByConflict = 0;
   let errors = 0;
   const inserted = [];
   const error_rows = [];
@@ -61889,10 +76766,6 @@ async function sendPayBatchCompletionNoticeAllAuthorisers(env, options = {}) {
     const toEmail = trimText(recipient.email);
     const toKey = toEmail.toLowerCase();
     if (!toEmail) continue;
-    if (existingTo.has(toKey)) {
-      skipped_exists += 1;
-      continue;
-    }
 
     const deterministicOutboxKey = `${deterministicPrefix}:to:${toKey}`.slice(0, 500);
     const paymentScopeJson = {
@@ -61914,9 +76787,12 @@ async function sendPayBatchCompletionNoticeAllAuthorisers(env, options = {}) {
     };
 
     try {
-      const ins = await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox`, {
+      const ins = await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox?on_conflict=deterministic_outbox_key`, {
         method: 'POST',
-        headers: Object.assign({}, sbHeaders(env), { Prefer: 'return=representation' }),
+        headers: Object.assign({}, sbHeaders(env), {
+          'Content-Type': 'application/json',
+          Prefer: 'resolution=ignore-duplicates,return=representation'
+        }),
         body: JSON.stringify({
           type: 'BROADCAST',
           to: toEmail,
@@ -61946,13 +76822,16 @@ async function sendPayBatchCompletionNoticeAllAuthorisers(env, options = {}) {
       let json = null;
       try { json = txt ? JSON.parse(txt) : null; } catch { json = null; }
       if (ins.ok) {
-        queued += 1;
-        existingTo.add(toKey);
-        const row = Array.isArray(json) ? json[0] : json;
-        inserted.push({ to: toEmail, id: row && row.id ? row.id : null });
+        const rows = Array.isArray(json) ? json : (json ? [json] : []);
+        if (rows.length) {
+          queued += 1;
+          const row = rows[0];
+          inserted.push({ to: toEmail, id: row && row.id ? row.id : null, deterministic_outbox_key: deterministicOutboxKey });
+        } else {
+          coveredByConflict += 1;
+        }
       } else if (ins.status === 409 || /duplicate|deterministic_outbox_key|unique/i.test(txt)) {
-        skipped_exists += 1;
-        existingTo.add(toKey);
+        coveredByConflict += 1;
       } else {
         errors += 1;
         error_rows.push({ to: toEmail, status: ins.status, error: txt.slice(0, 500) });
@@ -61963,24 +76842,118 @@ async function sendPayBatchCompletionNoticeAllAuthorisers(env, options = {}) {
     }
   }
 
-  return {
-    ok: errors === 0,
+  const coveredCount = queued + coveredByConflict;
+  if (errors > 0 || coveredCount < recipients.length) {
+    const failedResult = {
+      ok: false,
+      pay_batch_id: payBatchId,
+      root_operation_id: rootOperationId,
+      settlement_operation_id: outcome.settlement_operation_id || null,
+      reference,
+      completion_notice_reference: reference,
+      subject,
+      user_facing_status: statusLabel,
+      has_issues: hasIssues,
+      recipient_count: recipients.length,
+      recipients_total: recipients.length,
+      outbox_rows_covered_count: coveredCount,
+      queued,
+      skipped_exists: coveredByConflict,
+      completion_notice_attempted: true,
+      completion_notice_queued: false,
+      completion_notice_skipped: false,
+      completion_notice_skip_reason: null,
+      completion_notice_result: 'OUTBOX_QUEUE_INCOMPLETE',
+      errors,
+      completion_notice_errors: error_rows,
+      inserted,
+      error_rows,
+      outcome,
+      source,
+      reason
+    };
+    try {
+      await patchNoticeMarker({
+        completion_notice_last_attempt_at_utc: new Date().toISOString(),
+        completion_notice_next_attempt_at_utc: nextAttemptIso(),
+        completion_notice_last_result_json: compactResultForMarker(failedResult)
+      }, { onlyUnqueued: true, returnRepresentation: false });
+    } catch (error) {
+      failedResult.marker_update_error = compactError(error);
+    }
+    return failedResult;
+  }
+
+  const successResult = {
+    ok: true,
     pay_batch_id: payBatchId,
     root_operation_id: rootOperationId,
     settlement_operation_id: outcome.settlement_operation_id || null,
     reference,
+    completion_notice_reference: reference,
     subject,
     user_facing_status: statusLabel,
     has_issues: hasIssues,
+    recipient_count: recipients.length,
     recipients_total: recipients.length,
+    outbox_rows_covered_count: coveredCount,
     queued,
-    skipped_exists,
-    errors,
+    skipped_exists: coveredByConflict,
+    completion_notice_attempted: true,
+    completion_notice_queued: true,
+    completion_notice_skipped: false,
+    completion_notice_skip_reason: null,
+    completion_notice_result: queued > 0 ? 'QUEUED' : 'ALREADY_COVERED_BY_DETERMINISTIC_KEY',
+    errors: 0,
+    completion_notice_errors: [],
     inserted,
-    error_rows,
-    outcome
+    error_rows: [],
+    outcome,
+    source,
+    reason
   };
+
+  try {
+    const markerRows = await patchNoticeMarker({
+      completion_notice_queued_at_utc: new Date().toISOString(),
+      completion_notice_reference: reference,
+      completion_notice_last_attempt_at_utc: new Date().toISOString(),
+      completion_notice_next_attempt_at_utc: null,
+      completion_notice_last_result_json: compactResultForMarker(successResult)
+    }, { onlyUnqueued: true, returnRepresentation: true });
+    if (!markerRows.length) {
+      const { rows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/pay_batches` +
+        `?id=eq.${enc(payBatchId)}` +
+        `&select=id,completion_notice_queued_at_utc,completion_notice_reference` +
+        `&limit=1`,
+        false
+      );
+      const row = Array.isArray(rows) && rows[0] && typeof rows[0] === 'object' ? rows[0] : null;
+      if (row && trimText(row.completion_notice_queued_at_utc)) {
+        successResult.completion_notice_result = 'ALREADY_MARKED_QUEUED';
+        successResult.completion_notice_reference = trimText(row.completion_notice_reference) || reference;
+        successResult.reference = successResult.completion_notice_reference;
+      } else {
+        throw new Error('pay_batches completion notice marker was not set');
+      }
+    }
+  } catch (error) {
+    successResult.ok = false;
+    successResult.completion_notice_queued = false;
+    successResult.completion_notice_result = 'QUEUED_BUT_MARK_FAILED';
+    successResult.errors = 1;
+    successResult.completion_notice_errors = [compactError(error)];
+    successResult.error_rows = [compactError(error)];
+  }
+
+  return successResult;
 }
+
+
+
+
 
 async function derivePayBatchTerminalPaymentOutcome(env, options = {}) {
   const enc = encodeURIComponent;
@@ -151354,7 +166327,6 @@ async function csvAdapter_confirmManual() {
   throw new Error('USE_EXECUTE_MODAL_SETTLEMENT: CSV/manual settlement must be completed through the Execute modal authorisation flow.');
 }
 
-
 async function bankingCronTick(env, opts = {}) {
   const trimText = (value) => String(value == null ? '' : value).trim();
   const firstText = function () {
@@ -151395,10 +166367,12 @@ async function bankingCronTick(env, opts = {}) {
     operation_scope: 'BANKING_PAY_BACKEND_RUNNER_OWNED',
     operation_types: Array.from(new Set(backendRunnerOperationTypes.length ? backendRunnerOperationTypes : ['DRAFT_CREATE', 'PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS', 'PAYMENT_SETTLEMENT', 'REMITTANCE_QUEUE'])),
     operation_limit: clampInteger(opts && (opts.operationLimit != null ? opts.operationLimit : (opts.activeOperationLimit != null ? opts.activeOperationLimit : opts.claimLimit)), 10, 1, 25),
+    completion_notice_catchup_limit: clampInteger(opts && (opts.completionNoticeLimit != null ? opts.completionNoticeLimit : opts.completion_notice_limit), 5, 1, 10),
     advanced_count: 0,
     claimed_count: 0,
     no_runnable_count: 0,
     operation_runner_result: null,
+    completion_notice_catchup_result: null,
     operations_advanced: [],
     operations_not_claimed: [],
     warnings: [],
@@ -151442,8 +166416,189 @@ async function bankingCronTick(env, opts = {}) {
     }
   }
 
+  if (typeof queueDuePayBatchCompletionNotices === 'function') {
+    try {
+      const completionNoticeResult = await queueDuePayBatchCompletionNotices(env, {
+        actorUserId,
+        actor_user_id: actorUserId,
+        nowUtc: nowUtc.toISOString(),
+        now_utc: nowUtc.toISOString(),
+        limit: summary.completion_notice_catchup_limit,
+        completionNoticeLimit: summary.completion_notice_catchup_limit,
+        completion_notice_limit: summary.completion_notice_catchup_limit,
+        completionNoticeThrottleMinutes: clampInteger(opts && (opts.completionNoticeThrottleMinutes != null ? opts.completionNoticeThrottleMinutes : opts.completion_notice_throttle_minutes), 60, 5, 1440),
+        completion_notice_throttle_minutes: clampInteger(opts && (opts.completionNoticeThrottleMinutes != null ? opts.completionNoticeThrottleMinutes : opts.completion_notice_throttle_minutes), 60, 5, 1440),
+        source: 'bankingCronTick'
+      });
+      summary.completion_notice_catchup_result = completionNoticeResult;
+      if (completionNoticeResult && completionNoticeResult.ok === false) {
+        summary.ok = false;
+        summary.errors.push({ code: 'PAY_BATCH_COMPLETION_NOTICE_CATCHUP_FAILED', result: completionNoticeResult });
+      }
+    } catch (error) {
+      summary.ok = false;
+      summary.errors.push({ code: 'PAY_BATCH_COMPLETION_NOTICE_CATCHUP_EXCEPTION', error: String(error && error.message ? error.message : (error || 'unknown')) });
+    }
+  } else {
+    summary.warnings.push({ code: 'PAY_BATCH_COMPLETION_NOTICE_CATCHUP_UNAVAILABLE' });
+  }
+
   return summary;
 }
+
+async function queueDuePayBatchCompletionNotices(env, opts = {}) {
+  const enc = encodeURIComponent;
+  const trimText = (value) => String(value == null ? '' : value).trim();
+  const upperText = (value) => trimText(value).toUpperCase();
+  const clampInteger = (value, fallback, min, max) => {
+    const n = Number(value);
+    const resolved = Number.isFinite(n) ? Math.trunc(n) : fallback;
+    return Math.max(min, Math.min(max, resolved));
+  };
+  const compactError = (error) => ({
+    code: trimText(error && (error.code || error.error_code || error.errorCode)) || 'PAY_BATCH_COMPLETION_NOTICE_CATCHUP_FAILED',
+    message: String(error && error.message ? error.message : (error || 'Pay batch completion notice catch-up failed.')).slice(0, 1000),
+    name: error && error.name ? String(error.name).slice(0, 120) : null
+  });
+
+  const limit = clampInteger(opts.limit ?? opts.completionNoticeLimit ?? opts.completion_notice_limit, 5, 1, 10);
+  const nowUtc = (() => {
+    const input = trimText(opts.nowUtc || opts.now_utc);
+    const parsed = input ? new Date(input) : new Date();
+    return parsed && !Number.isNaN(parsed.getTime()) ? parsed : new Date();
+  })();
+  const actorUserId = trimText(opts.actorUserId || opts.actor_user_id || (env && (env.PAY_ACTOR_USER_ID || env.INVOICE_ACTOR_USER_ID || env.TSFIN_ACTOR_USER_ID))) || null;
+  const throttleMinutes = clampInteger(opts.throttleMinutes ?? opts.throttle_minutes ?? opts.completionNoticeThrottleMinutes ?? opts.completion_notice_throttle_minutes, 60, 5, 1440);
+  const source = trimText(opts.source) || 'queueDuePayBatchCompletionNotices';
+
+  const summary = {
+    ok: true,
+    source,
+    now_utc: nowUtc.toISOString(),
+    limit,
+    discovery_source: 'pay_batches',
+    catchup_marker: 'completion_notice_queued_at_utc',
+    provider_polling: false,
+    mail_outbox_scanned: false,
+    candidates_seen: 0,
+    attempted: 0,
+    queued: 0,
+    skipped: 0,
+    throttled: 0,
+    errors: 0,
+    results: [],
+    error_rows: []
+  };
+
+  if (!env || !env.SUPABASE_URL || typeof sbFetch !== 'function') {
+    summary.ok = false;
+    summary.errors += 1;
+    summary.error_rows.push({ code: 'SUPABASE_FETCH_UNAVAILABLE' });
+    return summary;
+  }
+  if (typeof sendPayBatchCompletionNoticeAllAuthorisers !== 'function') {
+    summary.ok = false;
+    summary.errors += 1;
+    summary.error_rows.push({ code: 'PAY_BATCH_COMPLETION_NOTICE_FUNCTION_UNAVAILABLE' });
+    return summary;
+  }
+
+  let candidates = [];
+  try {
+    const dueIso = nowUtc.toISOString();
+    const statusFilter = ['SETTLED', 'PARTIAL', 'FAILED', 'CANCELLED'].map(enc).join(',');
+    const { rows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/pay_batches` +
+      `?select=id,status,rail_provider_snapshot,completed_at_utc,completion_notice_next_attempt_at_utc,completion_notice_last_attempt_at_utc` +
+      `&completion_notice_queued_at_utc=is.null` +
+      `&or=(completion_notice_next_attempt_at_utc.is.null,completion_notice_next_attempt_at_utc.lte.${enc(dueIso)})` +
+      `&status=in.(${statusFilter})` +
+      `&rail_provider_snapshot=eq.REVOLUT` +
+      `&completed_at_utc=not.is.null` +
+      `&order=completed_at_utc.asc.nullslast` +
+      `&limit=${limit}`,
+      false
+    );
+    candidates = Array.isArray(rows) ? rows.filter((row) => row && typeof row === 'object' && trimText(row.id)) : [];
+  } catch (error) {
+    summary.ok = false;
+    summary.errors += 1;
+    summary.error_rows.push(Object.assign({ stage: 'DISCOVER_DUE_PAY_BATCHES' }, compactError(error)));
+    return summary;
+  }
+
+  summary.candidates_seen = candidates.length;
+
+  for (const candidate of candidates) {
+    const payBatchId = trimText(candidate.id);
+    if (!payBatchId) continue;
+    summary.attempted += 1;
+    try {
+      const result = await sendPayBatchCompletionNoticeAllAuthorisers(env, {
+        payBatchId,
+        pay_batch_id: payBatchId,
+        actorUserId,
+        actor_user_id: actorUserId,
+        source,
+        reason: 'PAY_BATCH_COMPLETION_NOTICE_CATCHUP_DUE',
+        completionNoticeThrottleMinutes: throttleMinutes,
+        completion_notice_throttle_minutes: throttleMinutes,
+        context: {
+          catchup: true,
+          candidate_status: candidate.status || null,
+          candidate_completed_at_utc: candidate.completed_at_utc || null,
+          candidate_rail_provider_snapshot: candidate.rail_provider_snapshot || null
+        }
+      });
+      const skipped = result && (result.completion_notice_skipped === true || result.skipped === true);
+      const queued = result && result.completion_notice_queued === true;
+      if (queued) summary.queued += 1;
+      else if (skipped) {
+        summary.skipped += 1;
+        if (upperText(result.completion_notice_skip_reason || result.skip_reason) !== 'COMPLETION_NOTICE_ALREADY_QUEUED') summary.throttled += 1;
+      } else if (!result || result.ok === false) {
+        summary.errors += 1;
+        summary.ok = false;
+      }
+      summary.results.push({
+        pay_batch_id: payBatchId,
+        status: candidate.status || null,
+        completed_at_utc: candidate.completed_at_utc || null,
+        ok: result ? result.ok !== false : false,
+        completion_notice_queued: queued === true,
+        completion_notice_skipped: skipped === true,
+        completion_notice_skip_reason: result ? (result.completion_notice_skip_reason || result.skip_reason || null) : 'NO_RESULT',
+        completion_notice_reference: result ? (result.completion_notice_reference || result.reference || null) : null,
+        recipient_count: result ? (result.recipient_count || result.recipients_total || 0) : 0,
+        outbox_rows_covered_count: result ? (result.outbox_rows_covered_count || 0) : 0,
+        errors: result ? (result.errors || 0) : 1
+      });
+      if (result && result.ok === false) {
+        summary.ok = false;
+        const rowErrors = Array.isArray(result.completion_notice_errors) ? result.completion_notice_errors : (Array.isArray(result.error_rows) ? result.error_rows : []);
+        summary.error_rows.push({ pay_batch_id: payBatchId, errors: rowErrors.slice(0, 10), result: result.completion_notice_result || null });
+      }
+    } catch (error) {
+      summary.ok = false;
+      summary.errors += 1;
+      summary.error_rows.push(Object.assign({ pay_batch_id: payBatchId, stage: 'QUEUE_COMPLETION_NOTICE' }, compactError(error)));
+      summary.results.push({
+        pay_batch_id: payBatchId,
+        status: candidate.status || null,
+        completed_at_utc: candidate.completed_at_utc || null,
+        ok: false,
+        completion_notice_queued: false,
+        completion_notice_skipped: false,
+        completion_notice_skip_reason: 'QUEUE_COMPLETION_NOTICE_EXCEPTION',
+        errors: 1
+      });
+    }
+  }
+
+  return summary;
+}
+
 
 
 async function drainBankingPayWorkbenchJobs(env, opts = {}) {
