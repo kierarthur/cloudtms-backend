@@ -7658,6 +7658,7 @@ DROP FUNCTION IF EXISTS public.contract_week_manual_upsert_atomic(uuid, uuid, js
 
 
 
+
 CREATE OR REPLACE FUNCTION public.contract_week_manual_upsert_atomic(p_week_id uuid, p_expected_timesheet_id uuid DEFAULT NULL::uuid, p_timesheet_create_json jsonb DEFAULT NULL::jsonb, p_timesheet_patch_json jsonb DEFAULT '{}'::jsonb, p_contract_week_patch_json jsonb DEFAULT '{}'::jsonb, p_tsfin_snapshot_json jsonb DEFAULT NULL::jsonb, p_rotation_json jsonb DEFAULT NULL::jsonb, p_actor_user_id uuid DEFAULT NULL::uuid, p_materialise_staged_evidence boolean DEFAULT true, p_now_utc timestamp with time zone DEFAULT now(), p_expected_row_signature text DEFAULT NULL::text)
  RETURNS TABLE(contract_week_id uuid, contract_id uuid, timesheet_id uuid, current_timesheet_id uuid, current_timesheet_version integer, was_stale boolean, created_now boolean, processing_status ts_fin_processing_status_enum, contract_week_json jsonb, timesheet_json jsonb, timesheet_financials_json jsonb)
  LANGUAGE plpgsql
@@ -7775,6 +7776,7 @@ DECLARE
   v_existing_contract_week_schedule_empty boolean := FALSE;
   v_payload_keep_empty_requested boolean := FALSE;
   v_payload_explicit_schedule_edit boolean := FALSE;
+  v_paid_direct_expense_change boolean := FALSE;
 BEGIN
   IF p_week_id IS NULL THEN
     RAISE EXCEPTION 'p_week_id is required';
@@ -8328,9 +8330,49 @@ BEGIN
         WHERE NULLIF(BTRIM(COALESCE(invoice_segment.segment_json->>'invoice_locked_invoice_id', '')), '') IS NOT NULL
       ) INTO v_segment_invoice_lock;
 
+      v_paid_direct_expense_change := FALSE;
+
+      IF v_current_tsfin.paid_at_utc IS NOT NULL
+         AND v_tsfin_snapshot_json IS NOT NULL THEN
+        SELECT (
+          EXISTS (
+            SELECT 1
+            FROM (VALUES
+              ('mileage_units', COALESCE(v_current_tsfin.mileage_units, 0)::numeric),
+              ('mileage_pay_rate', COALESCE(v_current_tsfin.mileage_pay_rate, 0)::numeric),
+              ('mileage_charge_rate', COALESCE(v_current_tsfin.mileage_charge_rate, 0)::numeric),
+              ('mileage_pay_ex_vat', COALESCE(v_current_tsfin.mileage_pay_ex_vat, 0)::numeric),
+              ('mileage_charge_ex_vat', COALESCE(v_current_tsfin.mileage_charge_ex_vat, 0)::numeric),
+              ('travel_pay_ex_vat', COALESCE(v_current_tsfin.travel_pay_ex_vat, 0)::numeric),
+              ('travel_charge_ex_vat', COALESCE(v_current_tsfin.travel_charge_ex_vat, 0)::numeric),
+              ('accommodation_pay_ex_vat', COALESCE(v_current_tsfin.accommodation_pay_ex_vat, 0)::numeric),
+              ('accommodation_charge_ex_vat', COALESCE(v_current_tsfin.accommodation_charge_ex_vat, 0)::numeric),
+              ('other_pay_ex_vat', COALESCE(v_current_tsfin.other_pay_ex_vat, 0)::numeric),
+              ('other_charge_ex_vat', COALESCE(v_current_tsfin.other_charge_ex_vat, 0)::numeric),
+              ('expenses_pay_ex_vat', COALESCE(v_current_tsfin.expenses_pay_ex_vat, 0)::numeric),
+              ('expenses_charge_ex_vat', COALESCE(v_current_tsfin.expenses_charge_ex_vat, 0)::numeric)
+            ) AS paid_expense_guard(field_name, current_value)
+            WHERE v_tsfin_snapshot_json ? paid_expense_guard.field_name
+              AND (
+                CASE
+                  WHEN NULLIF(BTRIM(COALESCE(v_tsfin_snapshot_json->>paid_expense_guard.field_name, '')), '') ~ v_numeric_re
+                    THEN (v_tsfin_snapshot_json->>paid_expense_guard.field_name)::numeric
+                  ELSE 0::numeric
+                END
+              ) IS DISTINCT FROM paid_expense_guard.current_value
+          )
+          OR (
+            v_tsfin_snapshot_json ? 'expenses_description'
+            AND NULLIF(BTRIM(COALESCE(v_tsfin_snapshot_json->>'expenses_description', '')), '')
+                IS DISTINCT FROM NULLIF(BTRIM(COALESCE(v_current_tsfin.expenses_description, '')), '')
+          )
+        )
+        INTO v_paid_direct_expense_change;
+      END IF;
+
       IF v_current_tsfin.locked_by_invoice_id IS NOT NULL
-         OR v_current_tsfin.paid_at_utc IS NOT NULL
-         OR COALESCE(v_segment_invoice_lock, FALSE) = TRUE THEN
+         OR COALESCE(v_segment_invoice_lock, FALSE) = TRUE
+         OR COALESCE(v_paid_direct_expense_change, FALSE) = TRUE THEN
         RAISE EXCEPTION 'TIMESHEET_LOCKED_OR_PAID';
       END IF;
     END IF;
@@ -8783,9 +8825,49 @@ BEGIN
         WHERE NULLIF(BTRIM(COALESCE(reuse_invoice_segment.segment_json->>'invoice_locked_invoice_id', '')), '') IS NOT NULL
       ) INTO v_segment_invoice_lock;
 
+      v_paid_direct_expense_change := FALSE;
+
+      IF v_current_tsfin.paid_at_utc IS NOT NULL
+         AND v_tsfin_snapshot_json IS NOT NULL THEN
+        SELECT (
+          EXISTS (
+            SELECT 1
+            FROM (VALUES
+              ('mileage_units', COALESCE(v_current_tsfin.mileage_units, 0)::numeric),
+              ('mileage_pay_rate', COALESCE(v_current_tsfin.mileage_pay_rate, 0)::numeric),
+              ('mileage_charge_rate', COALESCE(v_current_tsfin.mileage_charge_rate, 0)::numeric),
+              ('mileage_pay_ex_vat', COALESCE(v_current_tsfin.mileage_pay_ex_vat, 0)::numeric),
+              ('mileage_charge_ex_vat', COALESCE(v_current_tsfin.mileage_charge_ex_vat, 0)::numeric),
+              ('travel_pay_ex_vat', COALESCE(v_current_tsfin.travel_pay_ex_vat, 0)::numeric),
+              ('travel_charge_ex_vat', COALESCE(v_current_tsfin.travel_charge_ex_vat, 0)::numeric),
+              ('accommodation_pay_ex_vat', COALESCE(v_current_tsfin.accommodation_pay_ex_vat, 0)::numeric),
+              ('accommodation_charge_ex_vat', COALESCE(v_current_tsfin.accommodation_charge_ex_vat, 0)::numeric),
+              ('other_pay_ex_vat', COALESCE(v_current_tsfin.other_pay_ex_vat, 0)::numeric),
+              ('other_charge_ex_vat', COALESCE(v_current_tsfin.other_charge_ex_vat, 0)::numeric),
+              ('expenses_pay_ex_vat', COALESCE(v_current_tsfin.expenses_pay_ex_vat, 0)::numeric),
+              ('expenses_charge_ex_vat', COALESCE(v_current_tsfin.expenses_charge_ex_vat, 0)::numeric)
+            ) AS paid_expense_guard(field_name, current_value)
+            WHERE v_tsfin_snapshot_json ? paid_expense_guard.field_name
+              AND (
+                CASE
+                  WHEN NULLIF(BTRIM(COALESCE(v_tsfin_snapshot_json->>paid_expense_guard.field_name, '')), '') ~ v_numeric_re
+                    THEN (v_tsfin_snapshot_json->>paid_expense_guard.field_name)::numeric
+                  ELSE 0::numeric
+                END
+              ) IS DISTINCT FROM paid_expense_guard.current_value
+          )
+          OR (
+            v_tsfin_snapshot_json ? 'expenses_description'
+            AND NULLIF(BTRIM(COALESCE(v_tsfin_snapshot_json->>'expenses_description', '')), '')
+                IS DISTINCT FROM NULLIF(BTRIM(COALESCE(v_current_tsfin.expenses_description, '')), '')
+          )
+        )
+        INTO v_paid_direct_expense_change;
+      END IF;
+
       IF v_current_tsfin.locked_by_invoice_id IS NOT NULL
-         OR v_current_tsfin.paid_at_utc IS NOT NULL
-         OR COALESCE(v_segment_invoice_lock, FALSE) = TRUE THEN
+         OR COALESCE(v_segment_invoice_lock, FALSE) = TRUE
+         OR COALESCE(v_paid_direct_expense_change, FALSE) = TRUE THEN
         RAISE EXCEPTION 'TIMESHEET_LOCKED_OR_PAID';
       END IF;
     END IF;
@@ -9200,7 +9282,6 @@ BEGIN
   RETURN NEXT;
 END;
 $function$;
-
 
 
 
