@@ -23034,7 +23034,7 @@ DECLARE
   v_now timestamptz := now();
   v_cutoff timestamptz := COALESCE(p_now_utc, v_now);
   v_stale_running_seconds integer := 180;
-  v_stale_cutoff timestamptz := COALESCE(p_now_utc, v_now) - make_interval(secs => 180);
+  v_stale_cutoff timestamptz := NULL::timestamptz;
   v_recovered_stale jsonb := '[]'::jsonb;
   v_dead_stale jsonb := '[]'::jsonb;
   v_claimed jsonb := '[]'::jsonb;
@@ -23097,6 +23097,22 @@ BEGIN
   ELSE
     v_allowed_job_types := NULL::text[];
   END IF;
+
+  IF p_session_id IS NOT NULL
+     AND (
+       v_allowed_job_types IS NULL
+       OR 'WORKBENCH_SESSION_SCOPE_SEED' = ANY(v_allowed_job_types)
+       OR 'WORKBENCH_CANDIDATE_LINE_WORK_SEED' = ANY(v_allowed_job_types)
+       OR 'WORKBENCH_CANDIDATE_LINE_WORK_PROCESS' = ANY(v_allowed_job_types)
+       OR 'WORKBENCH_PREVIEW_ROWS_MATERIALISE' = ANY(v_allowed_job_types)
+     ) THEN
+    v_stale_running_seconds := 25;
+  ELSE
+    v_stale_running_seconds := 180;
+  END IF;
+
+  v_stale_cutoff := v_cutoff - make_interval(secs => v_stale_running_seconds);
+
   FOR v_stale_row IN
     WITH stale_candidates AS (
       SELECT
@@ -23967,7 +23983,6 @@ BEGIN
   );
 END;
 $function$;
-
 
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_complete_job(p_job_id uuid, p_result_json jsonb DEFAULT '{}'::jsonb)
@@ -153158,6 +153173,9 @@ BEGIN
     SELECT
       canonical_ready_rows.*,
       component_probe.selected_amount_ex_vat AS fixed_reimbursement_original_amount_ex_vat,
+      component_probe.selected_amount_ex_vat AS economic_original_amount_ex_vat,
+      component_probe.economic_key_type,
+      component_probe.economic_key_value,
       component_probe.single_fixed_reimbursement_key_type,
       component_probe.single_fixed_reimbursement_key_value
     FROM canonical_ready_rows
@@ -153167,6 +153185,8 @@ BEGIN
           THEN ROUND(NULLIF(BTRIM(COALESCE(canonical_ready_rows.result_row_json->>'amount_ex_vat', canonical_ready_rows.result_row_json->>'preview_amount_ex_vat', '')), '')::numeric, 2)
           ELSE NULL::numeric
         END AS selected_amount_ex_vat,
+        UPPER(NULLIF(BTRIM(COALESCE(canonical_ready_rows.result_row_json#>>'{economic_key,key_type}', canonical_ready_rows.result_row_json->>'key_type', '')), '')) AS economic_key_type,
+        NULLIF(BTRIM(COALESCE(canonical_ready_rows.result_row_json#>>'{economic_key,key_value}', canonical_ready_rows.result_row_json->>'key_value', '')), '') AS economic_key_value,
         CASE
           WHEN component_counts.object_component_count = 1
            AND component_counts.fixed_reimbursement_component_count = 1 THEN component_counts.fixed_reimbursement_key_type
@@ -153221,7 +153241,16 @@ BEGIN
     WHERE component_probe_rows.page_ordinal <= v_limit
       AND component_probe_rows.rotation_validation_failed IS NOT TRUE
       AND component_probe_rows.timesheet_id IS NOT NULL
-      AND component_probe_rows.single_fixed_reimbursement_key_type IS NOT NULL
+      AND (
+        component_probe_rows.single_fixed_reimbursement_key_type IS NOT NULL
+        OR (
+          component_probe_rows.target_section = 'canonical_preview_lines'
+          AND component_probe_rows.economic_key_type IN ('TS_DAY', 'TS_TOTAL')
+          AND component_probe_rows.economic_key_value IS NOT NULL
+          AND component_probe_rows.economic_original_amount_ex_vat IS NOT NULL
+          AND ROUND(COALESCE(component_probe_rows.economic_original_amount_ex_vat, 0), 2) > 0
+        )
+      )
   ), outstanding_component_rows AS (
     SELECT
       outstanding_components.timesheet_id,
@@ -153231,7 +153260,7 @@ BEGIN
     FROM outstanding_timesheet_ids
     JOIN public._pay_outstanding_components(outstanding_timesheet_ids.timesheet_ids, NULL::uuid) AS outstanding_components
       ON true
-  ), selected_rows AS (
+  ), selected_rows_base AS (
     SELECT
       component_probe_rows.*,
       (
@@ -153246,16 +153275,16 @@ BEGIN
         AND component_probe_rows.fixed_reimbursement_original_amount_ex_vat IS NOT NULL
         AND ROUND(ABS(COALESCE(component_probe_rows.fixed_reimbursement_original_amount_ex_vat, 0)), 2) > 0
         AND (
-          outstanding_component_rows.outstanding_ex_vat IS NULL
-          OR ROUND(COALESCE(outstanding_component_rows.outstanding_ex_vat, 0), 2) <= 0
+          fixed_outstanding_component_rows.outstanding_ex_vat IS NULL
+          OR ROUND(COALESCE(fixed_outstanding_component_rows.outstanding_ex_vat, 0), 2) <= 0
         )
       ) AS fixed_reimbursement_not_outstanding,
       (
         component_probe_rows.single_fixed_reimbursement_key_type IS NOT NULL
         AND component_probe_rows.fixed_reimbursement_original_amount_ex_vat IS NOT NULL
         AND ROUND(ABS(COALESCE(component_probe_rows.fixed_reimbursement_original_amount_ex_vat, 0)), 2) > 0
-        AND outstanding_component_rows.outstanding_ex_vat IS NOT NULL
-        AND ROUND(COALESCE(outstanding_component_rows.outstanding_ex_vat, 0), 2) = 0
+        AND fixed_outstanding_component_rows.outstanding_ex_vat IS NOT NULL
+        AND ROUND(COALESCE(fixed_outstanding_component_rows.outstanding_ex_vat, 0), 2) = 0
         AND UPPER(NULLIF(BTRIM(COALESCE(component_probe_rows.result_row_json#>>'{economic_key,key_type}', component_probe_rows.result_row_json->>'key_type', '')), '')) = component_probe_rows.single_fixed_reimbursement_key_type
         AND NULLIF(BTRIM(COALESCE(component_probe_rows.result_row_json#>>'{economic_key,key_value}', component_probe_rows.result_row_json->>'key_value', '')), '') = component_probe_rows.single_fixed_reimbursement_key_value
       ) AS suppress_zero_outstanding_fixed_reimbursement,
@@ -153263,21 +153292,53 @@ BEGIN
         component_probe_rows.single_fixed_reimbursement_key_type IS NOT NULL
         AND component_probe_rows.fixed_reimbursement_original_amount_ex_vat IS NOT NULL
         AND ROUND(ABS(COALESCE(component_probe_rows.fixed_reimbursement_original_amount_ex_vat, 0)), 2) > 0
-        AND outstanding_component_rows.outstanding_ex_vat IS NOT NULL
-        AND ROUND(COALESCE(outstanding_component_rows.outstanding_ex_vat, 0), 2) < 0
+        AND fixed_outstanding_component_rows.outstanding_ex_vat IS NOT NULL
+        AND ROUND(COALESCE(fixed_outstanding_component_rows.outstanding_ex_vat, 0), 2) < 0
         AND UPPER(NULLIF(BTRIM(COALESCE(component_probe_rows.result_row_json#>>'{economic_key,key_type}', component_probe_rows.result_row_json->>'key_type', '')), '')) = component_probe_rows.single_fixed_reimbursement_key_type
         AND NULLIF(BTRIM(COALESCE(component_probe_rows.result_row_json#>>'{economic_key,key_value}', component_probe_rows.result_row_json->>'key_value', '')), '') = component_probe_rows.single_fixed_reimbursement_key_value
       ) AS suppress_negative_outstanding_fixed_reimbursement,
       (
         component_probe_rows.single_fixed_reimbursement_key_type IS NOT NULL
         AND component_probe_rows.fixed_reimbursement_original_amount_ex_vat IS NOT NULL
-        AND outstanding_component_rows.outstanding_ex_vat IS NOT NULL
-        AND ROUND(COALESCE(outstanding_component_rows.outstanding_ex_vat, 0), 2) > 0
-        AND ROUND(ABS(COALESCE(component_probe_rows.fixed_reimbursement_original_amount_ex_vat, 0)), 2) > ROUND(ABS(COALESCE(outstanding_component_rows.outstanding_ex_vat, 0)), 2)
+        AND fixed_outstanding_component_rows.outstanding_ex_vat IS NOT NULL
+        AND ROUND(COALESCE(fixed_outstanding_component_rows.outstanding_ex_vat, 0), 2) > 0
+        AND ROUND(ABS(COALESCE(component_probe_rows.fixed_reimbursement_original_amount_ex_vat, 0)), 2) > ROUND(ABS(COALESCE(fixed_outstanding_component_rows.outstanding_ex_vat, 0)), 2)
         AND UPPER(NULLIF(BTRIM(COALESCE(component_probe_rows.result_row_json#>>'{economic_key,key_type}', component_probe_rows.result_row_json->>'key_type', '')), '')) = component_probe_rows.single_fixed_reimbursement_key_type
         AND NULLIF(BTRIM(COALESCE(component_probe_rows.result_row_json#>>'{economic_key,key_value}', component_probe_rows.result_row_json->>'key_value', '')), '') = component_probe_rows.single_fixed_reimbursement_key_value
       ) AS clamp_fixed_reimbursement_to_outstanding,
-      ROUND(COALESCE(outstanding_component_rows.outstanding_ex_vat, 0), 2) AS fixed_reimbursement_outstanding_ex_vat,
+      ROUND(COALESCE(fixed_outstanding_component_rows.outstanding_ex_vat, 0), 2) AS fixed_reimbursement_outstanding_ex_vat,
+      ROUND(COALESCE(economic_outstanding_component_rows.outstanding_ex_vat, 0), 2) AS economic_outstanding_ex_vat,
+      (
+        component_probe_rows.single_fixed_reimbursement_key_type IS NULL
+        AND component_probe_rows.target_section = 'canonical_preview_lines'
+        AND component_probe_rows.economic_key_type IN ('TS_DAY', 'TS_TOTAL')
+        AND component_probe_rows.economic_key_value IS NOT NULL
+        AND component_probe_rows.economic_original_amount_ex_vat IS NOT NULL
+        AND ROUND(COALESCE(component_probe_rows.economic_original_amount_ex_vat, 0), 2) > 0
+        AND economic_outstanding_component_rows.outstanding_ex_vat IS NOT NULL
+        AND ROUND(COALESCE(economic_outstanding_component_rows.outstanding_ex_vat, 0), 2) = 0
+      ) AS suppress_zero_outstanding_economic_key,
+      (
+        component_probe_rows.single_fixed_reimbursement_key_type IS NULL
+        AND component_probe_rows.target_section = 'canonical_preview_lines'
+        AND component_probe_rows.economic_key_type IN ('TS_DAY', 'TS_TOTAL')
+        AND component_probe_rows.economic_key_value IS NOT NULL
+        AND component_probe_rows.economic_original_amount_ex_vat IS NOT NULL
+        AND ROUND(COALESCE(component_probe_rows.economic_original_amount_ex_vat, 0), 2) > 0
+        AND economic_outstanding_component_rows.outstanding_ex_vat IS NOT NULL
+        AND ROUND(COALESCE(economic_outstanding_component_rows.outstanding_ex_vat, 0), 2) < 0
+      ) AS suppress_negative_outstanding_economic_key,
+      (
+        component_probe_rows.single_fixed_reimbursement_key_type IS NULL
+        AND component_probe_rows.target_section = 'canonical_preview_lines'
+        AND component_probe_rows.economic_key_type IN ('TS_DAY', 'TS_TOTAL')
+        AND component_probe_rows.economic_key_value IS NOT NULL
+        AND component_probe_rows.economic_original_amount_ex_vat IS NOT NULL
+        AND ROUND(COALESCE(component_probe_rows.economic_original_amount_ex_vat, 0), 2) > 0
+        AND economic_outstanding_component_rows.outstanding_ex_vat IS NOT NULL
+        AND ROUND(COALESCE(economic_outstanding_component_rows.outstanding_ex_vat, 0), 2) > 0
+        AND ROUND(ABS(COALESCE(component_probe_rows.economic_original_amount_ex_vat, 0)), 2) > ROUND(ABS(COALESCE(economic_outstanding_component_rows.outstanding_ex_vat, 0)), 2)
+      ) AS clamp_economic_key_to_outstanding,
       CASE
         WHEN component_probe_rows.rotation_validation_failed IS NOT TRUE
          AND component_probe_rows.target_section = 'canonical_preview_lines'
@@ -153299,18 +153360,125 @@ BEGIN
            AND component_probe_rows.fixed_reimbursement_original_amount_ex_vat IS NOT NULL
            AND ROUND(ABS(COALESCE(component_probe_rows.fixed_reimbursement_original_amount_ex_vat, 0)), 2) > 0
            AND (
-             outstanding_component_rows.outstanding_ex_vat IS NULL
-             OR ROUND(COALESCE(outstanding_component_rows.outstanding_ex_vat, 0), 2) <= 0
+             fixed_outstanding_component_rows.outstanding_ex_vat IS NULL
+             OR ROUND(COALESCE(fixed_outstanding_component_rows.outstanding_ex_vat, 0), 2) <= 0
            )
+         )
+         AND NOT (
+           component_probe_rows.single_fixed_reimbursement_key_type IS NULL
+           AND component_probe_rows.target_section = 'canonical_preview_lines'
+           AND component_probe_rows.economic_key_type IN ('TS_DAY', 'TS_TOTAL')
+           AND component_probe_rows.economic_key_value IS NOT NULL
+           AND component_probe_rows.economic_original_amount_ex_vat IS NOT NULL
+           AND ROUND(COALESCE(component_probe_rows.economic_original_amount_ex_vat, 0), 2) > 0
+           AND economic_outstanding_component_rows.outstanding_ex_vat IS NOT NULL
+           AND ROUND(COALESCE(economic_outstanding_component_rows.outstanding_ex_vat, 0), 2) <= 0
          )
         THEN true
         ELSE false
       END AS target_selected
     FROM component_probe_rows
-    LEFT JOIN outstanding_component_rows
-      ON outstanding_component_rows.timesheet_id = component_probe_rows.timesheet_id
-     AND outstanding_component_rows.key_type = component_probe_rows.single_fixed_reimbursement_key_type
-     AND outstanding_component_rows.key_value = component_probe_rows.single_fixed_reimbursement_key_value
+    LEFT JOIN outstanding_component_rows AS fixed_outstanding_component_rows
+      ON fixed_outstanding_component_rows.timesheet_id = component_probe_rows.timesheet_id
+     AND fixed_outstanding_component_rows.key_type = component_probe_rows.single_fixed_reimbursement_key_type
+     AND fixed_outstanding_component_rows.key_value = component_probe_rows.single_fixed_reimbursement_key_value
+    LEFT JOIN outstanding_component_rows AS economic_outstanding_component_rows
+      ON economic_outstanding_component_rows.timesheet_id = component_probe_rows.timesheet_id
+     AND economic_outstanding_component_rows.key_type = component_probe_rows.economic_key_type
+     AND economic_outstanding_component_rows.key_value = component_probe_rows.economic_key_value
+  ), selected_rows AS (
+    SELECT
+      selected_rows_base.*,
+      CASE
+        WHEN selected_rows_base.clamp_economic_key_to_outstanding IS TRUE THEN
+          jsonb_build_object(
+            'amount_ex_vat', selected_rows_base.economic_outstanding_ex_vat,
+            'preview_amount_ex_vat', selected_rows_base.economic_outstanding_ex_vat,
+            'amount_display', selected_rows_base.economic_outstanding_ex_vat,
+            'section_amount_ex_vat', selected_rows_base.economic_outstanding_ex_vat,
+            'section_amount_display', selected_rows_base.economic_outstanding_ex_vat,
+            'component_amount_ex_vat', selected_rows_base.economic_outstanding_ex_vat,
+            'target_pay_ex_vat', selected_rows_base.economic_outstanding_ex_vat,
+            'ready_preview_amount_ex_vat', selected_rows_base.economic_outstanding_ex_vat,
+            'preview_component_amount_ex_vat', selected_rows_base.economic_outstanding_ex_vat,
+            'source_amount_ex_vat', selected_rows_base.economic_outstanding_ex_vat,
+            'source_entitlement_amount_ex_vat', ABS(selected_rows_base.economic_original_amount_ex_vat),
+            'source_reservation_amount_ex_vat', ABS(selected_rows_base.economic_outstanding_ex_vat),
+            'remaining_source_amount', selected_rows_base.economic_outstanding_ex_vat,
+            'frozen_source_amount', ABS(selected_rows_base.economic_outstanding_ex_vat),
+            'frozen_target_amount_ex_vat', selected_rows_base.economic_outstanding_ex_vat,
+            'pay_economic_outstanding_clamped', true,
+            'pay_outstanding_clamped', true,
+            'pay_outstanding_original_amount_ex_vat', selected_rows_base.economic_original_amount_ex_vat,
+            'pay_outstanding_clamped_amount_ex_vat', selected_rows_base.economic_outstanding_ex_vat,
+            'pay_outstanding_available_ex_vat', selected_rows_base.economic_outstanding_ex_vat,
+            'pay_outstanding_blocked', false,
+            'outstanding_block_reason', NULL
+          )
+          || jsonb_build_object(
+            'preview_contract', COALESCE(selected_rows_base.result_row_json->'preview_contract', '{}'::jsonb)
+              || jsonb_build_object(
+                'amount_ex_vat', selected_rows_base.economic_outstanding_ex_vat,
+                'selection_amount_ex_vat', selected_rows_base.economic_outstanding_ex_vat,
+                'source_entitlement_amount_ex_vat', ABS(selected_rows_base.economic_original_amount_ex_vat),
+                'source_reservation_amount_ex_vat', ABS(selected_rows_base.economic_outstanding_ex_vat),
+                'pay_outstanding_clamped', true
+              ),
+            'source_basis_json', COALESCE(selected_rows_base.result_row_json->'source_basis_json', '{}'::jsonb)
+              || jsonb_build_object(
+                'pay_amount_ex_vat', selected_rows_base.economic_outstanding_ex_vat,
+                'source_pay_ex_vat', selected_rows_base.economic_outstanding_ex_vat,
+                'source_entitlement_amount_ex_vat', ABS(selected_rows_base.economic_original_amount_ex_vat),
+                'source_reservation_amount_ex_vat', ABS(selected_rows_base.economic_outstanding_ex_vat),
+                'pay_outstanding_clamped', true,
+                'original_source_pay_ex_vat', selected_rows_base.economic_original_amount_ex_vat
+              ),
+            'frozen_source_basis_json', COALESCE(selected_rows_base.result_row_json->'frozen_source_basis_json', selected_rows_base.result_row_json->'source_basis_json', '{}'::jsonb)
+              || jsonb_build_object(
+                'pay_amount_ex_vat', selected_rows_base.economic_outstanding_ex_vat,
+                'source_pay_ex_vat', selected_rows_base.economic_outstanding_ex_vat,
+                'source_entitlement_amount_ex_vat', ABS(selected_rows_base.economic_original_amount_ex_vat),
+                'source_reservation_amount_ex_vat', ABS(selected_rows_base.economic_outstanding_ex_vat),
+                'pay_outstanding_clamped', true,
+                'original_source_pay_ex_vat', selected_rows_base.economic_original_amount_ex_vat
+              ),
+            'frozen_component_snapshot_json', COALESCE(selected_rows_base.result_row_json->'frozen_component_snapshot_json', '{}'::jsonb)
+              || jsonb_build_object(
+                'source_pay_ex_vat', selected_rows_base.economic_outstanding_ex_vat,
+                'target_pay_ex_vat', selected_rows_base.economic_outstanding_ex_vat,
+                'component_amount_ex_vat', selected_rows_base.economic_outstanding_ex_vat,
+                'preview_component_amount_ex_vat', selected_rows_base.economic_outstanding_ex_vat,
+                'pay_outstanding_clamped', true,
+                'original_source_pay_ex_vat', selected_rows_base.economic_original_amount_ex_vat
+              )
+              || jsonb_build_object(
+                'source_basis_json', COALESCE(selected_rows_base.result_row_json#>'{frozen_component_snapshot_json,source_basis_json}', '{}'::jsonb)
+                  || jsonb_build_object(
+                    'pay_amount_ex_vat', selected_rows_base.economic_outstanding_ex_vat,
+                    'source_pay_ex_vat', selected_rows_base.economic_outstanding_ex_vat,
+                    'source_entitlement_amount_ex_vat', ABS(selected_rows_base.economic_original_amount_ex_vat),
+                    'source_reservation_amount_ex_vat', ABS(selected_rows_base.economic_outstanding_ex_vat),
+                    'pay_outstanding_clamped', true,
+                    'original_source_pay_ex_vat', selected_rows_base.economic_original_amount_ex_vat
+                  )
+              )
+          )
+          || CASE
+            WHEN jsonb_typeof(selected_rows_base.result_row_json->'case_resolution_summary') = 'object' THEN jsonb_build_object(
+              'case_resolution_summary',
+              selected_rows_base.result_row_json->'case_resolution_summary'
+              || jsonb_build_object(
+                'safe_amount_ex_vat', selected_rows_base.economic_outstanding_ex_vat,
+                'pay_outstanding_clamped', true,
+                'pay_outstanding_original_amount_ex_vat', selected_rows_base.economic_original_amount_ex_vat,
+                'pay_outstanding_clamped_amount_ex_vat', selected_rows_base.economic_outstanding_ex_vat
+              )
+            )
+            ELSE '{}'::jsonb
+          END
+        ELSE '{}'::jsonb
+      END AS economic_outstanding_payload_json
+    FROM selected_rows_base
   )
   SELECT selected_rows.*,
          CASE
@@ -153337,14 +153505,18 @@ BEGIN
     AND materialise_rows.existing_preview_row_id IS NULL
     AND materialise_rows.rotation_validation_failed IS NOT TRUE
     AND materialise_rows.suppress_zero_outstanding_fixed_reimbursement IS NOT TRUE
-    AND materialise_rows.suppress_negative_outstanding_fixed_reimbursement IS NOT TRUE;
+    AND materialise_rows.suppress_negative_outstanding_fixed_reimbursement IS NOT TRUE
+    AND materialise_rows.suppress_zero_outstanding_economic_key IS NOT TRUE
+    AND materialise_rows.suppress_negative_outstanding_economic_key IS NOT TRUE;
 
   SELECT COUNT(*)::integer
   INTO v_suppressed_preview_row_count
   FROM pg_temp._tmp_pay_wb_preview_materialise AS materialise_rows
   WHERE materialise_rows.page_ordinal <= v_limit
     AND (materialise_rows.suppress_zero_outstanding_fixed_reimbursement IS TRUE
-     OR materialise_rows.suppress_negative_outstanding_fixed_reimbursement IS TRUE);
+     OR materialise_rows.suppress_negative_outstanding_fixed_reimbursement IS TRUE
+     OR materialise_rows.suppress_zero_outstanding_economic_key IS TRUE
+     OR materialise_rows.suppress_negative_outstanding_economic_key IS TRUE);
 
   SELECT COUNT(*)::integer
   INTO v_materialise_error_count
@@ -153361,7 +153533,9 @@ BEGIN
       AND materialise_rows.existing_preview_row_id IS NULL
       AND materialise_rows.rotation_validation_failed IS NOT TRUE
       AND materialise_rows.suppress_zero_outstanding_fixed_reimbursement IS NOT TRUE
-    AND materialise_rows.suppress_negative_outstanding_fixed_reimbursement IS NOT TRUE
+      AND materialise_rows.suppress_negative_outstanding_fixed_reimbursement IS NOT TRUE
+      AND materialise_rows.suppress_zero_outstanding_economic_key IS NOT TRUE
+      AND materialise_rows.suppress_negative_outstanding_economic_key IS NOT TRUE
     GROUP BY materialise_rows.target_section
   ) AS section_delta;
 
@@ -153375,6 +153549,8 @@ BEGIN
     WHERE selected_rows.rotation_validation_failed IS NOT TRUE
       AND selected_rows.suppress_zero_outstanding_fixed_reimbursement IS NOT TRUE
       AND selected_rows.suppress_negative_outstanding_fixed_reimbursement IS NOT TRUE
+      AND selected_rows.suppress_zero_outstanding_economic_key IS NOT TRUE
+      AND selected_rows.suppress_negative_outstanding_economic_key IS NOT TRUE
   ), suppressed_existing_preview AS (
     UPDATE public.banking_pay_workbench_preview_rows AS preview_row
     SET status = 'SUPERSEDED',
@@ -153384,15 +153560,23 @@ BEGIN
           || jsonb_build_object(
             'materialisation_suppressed', true,
             'materialisation_suppressed_reason', CASE
-              WHEN selected_rows.suppress_negative_outstanding_fixed_reimbursement IS TRUE THEN 'NEGATIVE_OUTSTANDING_ROUTED_TO_OVERPAYMENT'
+              WHEN selected_rows.suppress_negative_outstanding_fixed_reimbursement IS TRUE
+                OR selected_rows.suppress_negative_outstanding_economic_key IS TRUE THEN 'NEGATIVE_OUTSTANDING_ROUTED_TO_OVERPAYMENT'
+              WHEN selected_rows.suppress_zero_outstanding_economic_key IS TRUE THEN 'ZERO_OUTSTANDING_ECONOMIC_KEY'
               ELSE 'ZERO_OUTSTANDING_FIXED_REIMBURSEMENT'
             END,
             'materialisation_suppressed_at_utc', v_now::text,
             'materialised_no_visible_preview_row', true,
             'pay_outstanding_blocked', true,
-            'pay_outstanding_available_ex_vat', selected_rows.fixed_reimbursement_outstanding_ex_vat,
+            'pay_outstanding_available_ex_vat', CASE
+              WHEN selected_rows.suppress_zero_outstanding_economic_key IS TRUE
+                OR selected_rows.suppress_negative_outstanding_economic_key IS TRUE THEN selected_rows.economic_outstanding_ex_vat
+              ELSE selected_rows.fixed_reimbursement_outstanding_ex_vat
+            END,
             'outstanding_block_reason', CASE
-              WHEN selected_rows.suppress_negative_outstanding_fixed_reimbursement IS TRUE THEN 'NEGATIVE_OUTSTANDING_ROUTED_TO_OVERPAYMENT'
+              WHEN selected_rows.suppress_negative_outstanding_fixed_reimbursement IS TRUE
+                OR selected_rows.suppress_negative_outstanding_economic_key IS TRUE THEN 'NEGATIVE_OUTSTANDING_ROUTED_TO_OVERPAYMENT'
+              WHEN selected_rows.suppress_zero_outstanding_economic_key IS TRUE THEN 'ECONOMIC_KEY_OUTSTANDING_NOT_AVAILABLE'
               ELSE 'REIMBURSEMENT_OUTSTANDING_NOT_AVAILABLE'
             END
           ),
@@ -153409,9 +153593,20 @@ BEGIN
           AND preview_row.key_value IS NOT DISTINCT FROM selected_rows.single_fixed_reimbursement_key_value
           AND UPPER(BTRIM(COALESCE(preview_row.row_json->>'line_type', preview_row.row_json->>'item_type', ''))) <> 'OVERPAYMENT_RECOVERY'
         )
+        OR (
+          preview_row.session_id = p_session_id
+          AND preview_row.candidate_id = selected_rows.candidate_id
+          AND preview_row.section = selected_rows.target_section
+          AND preview_row.timesheet_id IS NOT DISTINCT FROM selected_rows.timesheet_id
+          AND preview_row.key_type IS NOT DISTINCT FROM selected_rows.economic_key_type
+          AND preview_row.key_value IS NOT DISTINCT FROM selected_rows.economic_key_value
+          AND UPPER(BTRIM(COALESCE(preview_row.row_json->>'line_type', preview_row.row_json->>'item_type', ''))) <> 'OVERPAYMENT_RECOVERY'
+        )
       )
       AND (selected_rows.suppress_zero_outstanding_fixed_reimbursement IS TRUE
-        OR selected_rows.suppress_negative_outstanding_fixed_reimbursement IS TRUE)
+        OR selected_rows.suppress_negative_outstanding_fixed_reimbursement IS TRUE
+        OR selected_rows.suppress_zero_outstanding_economic_key IS TRUE
+        OR selected_rows.suppress_negative_outstanding_economic_key IS TRUE)
       AND UPPER(BTRIM(COALESCE(preview_row.status, ''))) <> 'SUPERSEDED'
     RETURNING preview_row.id
   ), upserted_preview AS (
@@ -153579,6 +153774,10 @@ BEGIN
           )
           ELSE '{}'::jsonb
         END
+        || CASE
+          WHEN selected_rows.clamp_economic_key_to_outstanding IS TRUE THEN COALESCE(selected_rows.economic_outstanding_payload_json, '{}'::jsonb)
+          ELSE '{}'::jsonb
+        END
         || jsonb_build_object(
           'materialised_at_utc', v_now::text,
           'materialised_from_line_work_id', selected_rows.id::text,
@@ -153626,23 +153825,33 @@ BEGIN
               'rotation_failure_reason', selected_rows.rotation_failure_reason
             )
           WHEN selected_rows.suppress_zero_outstanding_fixed_reimbursement IS TRUE
-            OR selected_rows.suppress_negative_outstanding_fixed_reimbursement IS TRUE THEN
+            OR selected_rows.suppress_negative_outstanding_fixed_reimbursement IS TRUE
+            OR selected_rows.suppress_zero_outstanding_economic_key IS TRUE
+            OR selected_rows.suppress_negative_outstanding_economic_key IS TRUE THEN
             COALESCE(line_work.result_row_json, '{}'::jsonb)
             || jsonb_build_object(
               'draftable', false,
               'is_ready_for_draft', false,
               'selection_allowed', false,
               'pay_outstanding_blocked', true,
-              'pay_outstanding_available_ex_vat', selected_rows.fixed_reimbursement_outstanding_ex_vat,
+              'pay_outstanding_available_ex_vat', CASE
+                WHEN selected_rows.suppress_zero_outstanding_economic_key IS TRUE
+                  OR selected_rows.suppress_negative_outstanding_economic_key IS TRUE THEN selected_rows.economic_outstanding_ex_vat
+                ELSE selected_rows.fixed_reimbursement_outstanding_ex_vat
+              END,
               'outstanding_block_reason', CASE
-                WHEN selected_rows.suppress_negative_outstanding_fixed_reimbursement IS TRUE THEN 'NEGATIVE_OUTSTANDING_ROUTED_TO_OVERPAYMENT'
+                WHEN selected_rows.suppress_negative_outstanding_fixed_reimbursement IS TRUE
+                  OR selected_rows.suppress_negative_outstanding_economic_key IS TRUE THEN 'NEGATIVE_OUTSTANDING_ROUTED_TO_OVERPAYMENT'
+                WHEN selected_rows.suppress_zero_outstanding_economic_key IS TRUE THEN 'ECONOMIC_KEY_OUTSTANDING_NOT_AVAILABLE'
                 ELSE 'REIMBURSEMENT_OUTSTANDING_NOT_AVAILABLE'
               END
             )
             || jsonb_build_object(
               'materialisation_suppressed', true,
               'materialisation_suppressed_reason', CASE
-                WHEN selected_rows.suppress_negative_outstanding_fixed_reimbursement IS TRUE THEN 'NEGATIVE_OUTSTANDING_ROUTED_TO_OVERPAYMENT'
+                WHEN selected_rows.suppress_negative_outstanding_fixed_reimbursement IS TRUE
+                  OR selected_rows.suppress_negative_outstanding_economic_key IS TRUE THEN 'NEGATIVE_OUTSTANDING_ROUTED_TO_OVERPAYMENT'
+                WHEN selected_rows.suppress_zero_outstanding_economic_key IS TRUE THEN 'ZERO_OUTSTANDING_ECONOMIC_KEY'
                 ELSE 'ZERO_OUTSTANDING_FIXED_REIMBURSEMENT'
               END,
               'materialisation_suppressed_at_utc', v_now::text,
@@ -153773,6 +153982,10 @@ BEGIN
               ELSE '{}'::jsonb
             END
           ELSE line_work.result_row_json
+        END
+        || CASE
+          WHEN selected_rows.clamp_economic_key_to_outstanding IS TRUE THEN COALESCE(selected_rows.economic_outstanding_payload_json, '{}'::jsonb)
+          ELSE '{}'::jsonb
         END,
         error_json = CASE
           WHEN selected_rows.rotation_validation_failed IS TRUE THEN jsonb_build_object(
@@ -153990,6 +154203,8 @@ BEGIN
   );
 END;
 $function$;
+
+
 
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_mark_finance_case_dirty()
@@ -159962,7 +160177,6 @@ DECLARE
   v_superseded_stale_count integer := 0;
 BEGIN
   PERFORM public.banking_pay_hot_path_budget_apply('WORKBENCH_CHUNK');
-  v_stale_cutoff := v_now - make_interval(secs => v_stale_running_seconds);
 
   IF p_session_id IS NULL THEN
     RAISE EXCEPTION 'PAY_WORKBENCH_CONTINUATION_SESSION_ID_REQUIRED'
@@ -160031,6 +160245,8 @@ BEGIN
 
   v_actor_user_id := COALESCE(v_actor_user_id, v_session_row.actor_user_id);
   v_session_signature_token := md5(COALESCE(v_session_row.session_signature, ''));
+  v_stale_running_seconds := 25;
+  v_stale_cutoff := v_now - make_interval(secs => v_stale_running_seconds);
 
   IF p_source_job_id IS NOT NULL THEN
     SELECT source_job.*
@@ -160538,7 +160754,6 @@ BEGIN
   );
 END;
 $function$;
-
 
 
 
