@@ -42075,7 +42075,8 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
      }
    };
  
-   // Lock enforcement: block changes if invoiced or paid
+   // Lock enforcement: invoice locks still block all direct changes. Candidate paid status alone
+   // must not block hours/schedule amendment, but it still blocks direct expense amendment.
    let finLock = null;
    if (ts && ts.timesheet_id) {
      finLock = await sbGetOne(
@@ -42084,13 +42085,20 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
          `?timesheet_id=eq.${enc(ts.timesheet_id)}` +
          `&is_current=eq.true&select=*`
      );
-     if (finLock && (finLock.locked_by_invoice_id || hasAnySegmentInvoiceLock(finLock) || finLock.paid_at_utc)) {
-       wlog('bad_request_locked_or_paid', {
+     if (finLock && (finLock.locked_by_invoice_id || hasAnySegmentInvoiceLock(finLock))) {
+       wlog('bad_request_invoice_locked', {
          timesheet_id: ts.timesheet_id,
          locked_by_invoice_id: finLock?.locked_by_invoice_id || null,
          paid_at_utc: finLock?.paid_at_utc || null
        });
-       return withCORS(env, req, badRequest('Timesheet already invoiced or paid; changes are blocked'));
+       return withCORS(env, req, badRequest('Timesheet already invoiced; changes are blocked'));
+     }
+     if (finLock && finLock.paid_at_utc && hasExpensesDraftKey) {
+       wlog('bad_request_paid_expenses_blocked', {
+         timesheet_id: ts.timesheet_id,
+         paid_at_utc: finLock?.paid_at_utc || null
+       });
+       return withCORS(env, req, badRequest('This timesheet is paid, so expenses cannot be amended directly.'));
      }
    }
  
@@ -44022,6 +44030,10 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
      created_now: !!createdNow
    }));
  }
+
+
+
+
 
 
 function formatCloudTmsLondonDate(value) {
@@ -54507,7 +54519,6 @@ async function handleTimesheetDailyManualUnprocess(env, req, timesheetId) {
   }
 }
 
-
 async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
   const enc = encodeURIComponent;
 
@@ -55190,7 +55201,8 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
     return bad('Timesheet must be MANUAL before editing hours. Use switch-daily-to-manual first.');
   }
 
-  // 4) Load TSFIN – must not be locked/paid — use currentTimesheetId
+  // 4) Load TSFIN – invoice lock still blocks direct editing, but paid status alone
+  // does not block hours/schedule amendment.
   const tsfin = await sbGetOne(
     env,
     `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
@@ -55200,8 +55212,8 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
   );
   if (!tsfin) return withCORS(env, req, serverError('No TSFIN snapshot found'));
 
-  if (tsfin.locked_by_invoice_id || tsfin.paid_at_utc) {
-    return bad('Timesheet already invoiced or paid; cannot edit');
+  if (tsfin.locked_by_invoice_id) {
+    return bad('Timesheet already invoiced; cannot edit');
   }
 
   const isDailyManualCurrentlyUnprocessed = (value) =>
@@ -55676,7 +55688,9 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
   // 8) QR state change for after-save actions (NEW)
   // - INVALIDATE / REISSUE: clear token/payload/scanned + clear hashes, keep qr_status='PENDING' (QR-enabled, not issued)
   // - REVOKE_TO_MANUAL / DISABLE: clear QR fields and hashes so QR UI does not show
-  if (qrAction && finAfter && !finAfter.locked_by_invoice_id && !finAfter.paid_at_utc) {
+  // Candidate payment status alone must not suppress QR invalidation/manual conversion
+  // after an otherwise-allowed hours/schedule change. Invoice lock still blocks it.
+  if (qrAction && finAfter && !finAfter.locked_by_invoice_id) {
     const now2 = nowIso();
 
     const act = String(qrAction || '').toUpperCase();
@@ -55985,6 +55999,8 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
     qr_token: qrToken || null
   }));
 }
+
+
 
 
 async function handleContractWeekDeleteTimesheet(env, req, weekId) {
