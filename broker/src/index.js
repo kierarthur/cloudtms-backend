@@ -37703,8 +37703,6 @@ async function nudgeSettlementFromPollResultIfRequired(env, pollResult, options 
 }
 
 
-
-
 async function handleBankingPayBatchWatchSignal(env, req, user, payBatchId) {
   const id = String(payBatchId || '').trim();
   if (!id) return withCORS(env, req, badRequest('pay_batch_id is required'));
@@ -37757,6 +37755,39 @@ async function handleBankingPayBatchWatchSignal(env, req, user, payBatchId) {
     if (raw.cursorJson && typeof raw.cursorJson === 'object' && !Array.isArray(raw.cursorJson)) out.cursor_json = compactVisibleSection(raw.cursorJson);
     return out;
   };
+  const normaliseWatchTab = (value) => {
+    const raw = String(value || '').trim().toLowerCase().replace(/-/g, '_');
+    if (!raw) return 'overview';
+    if (raw === 'remittance') return 'remittances';
+    if (raw === 'payment_issue') return 'payment_issues';
+    if (raw === 'payment_status') return 'current_payment_status';
+    return raw;
+  };
+  const watchTabAllowed = (value) => new Set([
+    'overview',
+    'current_payment_status',
+    'payment_issues',
+    'candidates',
+    'items',
+    'item_breakdowns',
+    'transfers',
+    'finance_case_groups',
+    'remittances',
+    'communications',
+    'auth_history',
+    'events'
+  ]).has(String(value || '').trim().toLowerCase());
+  const safeNoChangeWatchPayload = (currentTab, currentSectionJson, reason = 'WATCH_SIGNAL_UNSUPPORTED_VISIBLE_TAB') => ({
+    ok: true,
+    pay_batch_id: id,
+    changed: false,
+    changed_areas: [],
+    recommended_refresh: 'NONE',
+    current_tab: currentTab || 'overview',
+    current_section_json: safeObject(currentSectionJson),
+    watch_skipped: true,
+    watch_skip_reason: reason
+  });
 
   if (req.method !== 'GET' && req.method !== 'POST') {
     return jsonResponse({ ok: false, error_code: 'METHOD_NOT_ALLOWED', message: 'Batch watch uses GET or POST.' }, 405);
@@ -37771,23 +37802,37 @@ async function handleBankingPayBatchWatchSignal(env, req, user, payBatchId) {
     const url = new URL(req.url);
     const body = await readJsonFromRequest();
     const currentSectionJson = compactVisibleSection(body.current_section_json || body.currentSectionJson || body.visible_section_json || body.visibleSectionJson || body.section || {});
-    const currentTab = String(body.current_tab || body.currentTab || url.searchParams.get('current_tab') || url.searchParams.get('currentTab') || '').trim().slice(0, 80) || 'OVERVIEW';
+    const currentTabRaw = String(body.current_tab || body.currentTab || url.searchParams.get('current_tab') || url.searchParams.get('currentTab') || '').trim().slice(0, 80) || 'OVERVIEW';
+    const currentTab = normaliseWatchTab(currentTabRaw);
 
-    const rpcPayload = unwrapRpcPayload(await sbRpc(env, 'banking_pay_batch_watch_signal', {
-      p_pay_batch_id: id,
-      p_actor_user_id: String(user.id),
-      p_known_version: parseBigIntLike(body.known_version != null ? body.known_version : (body.knownVersion != null ? body.knownVersion : (url.searchParams.get('known_version') != null ? url.searchParams.get('known_version') : (url.searchParams.get('knownVersion') != null ? url.searchParams.get('knownVersion') : url.searchParams.get('version'))))),
-      p_known_payment_status_version: parseBigIntLike(body.known_payment_status_version != null ? body.known_payment_status_version : (body.knownPaymentStatusVersion != null ? body.knownPaymentStatusVersion : (url.searchParams.get('known_payment_status_version') != null ? url.searchParams.get('known_payment_status_version') : url.searchParams.get('knownPaymentStatusVersion')))),
-      p_known_correction_progress_version: parseBigIntLike(body.known_correction_progress_version != null ? body.known_correction_progress_version : (body.knownCorrectionProgressVersion != null ? body.knownCorrectionProgressVersion : (url.searchParams.get('known_correction_progress_version') != null ? url.searchParams.get('known_correction_progress_version') : url.searchParams.get('knownCorrectionProgressVersion')))),
-      p_known_alert_version: parseBigIntLike(body.known_alert_version != null ? body.known_alert_version : (body.knownAlertVersion != null ? body.knownAlertVersion : (url.searchParams.get('known_alert_version') != null ? url.searchParams.get('known_alert_version') : url.searchParams.get('knownAlertVersion')))),
-      p_known_overview_version: parseBigIntLike(body.known_overview_version != null ? body.known_overview_version : (body.knownOverviewVersion != null ? body.knownOverviewVersion : (url.searchParams.get('known_overview_version') != null ? url.searchParams.get('known_overview_version') : url.searchParams.get('knownOverviewVersion')))),
-      p_current_tab: currentTab,
-      p_current_section_json: currentSectionJson
-    }, {
-      routeClass: 'WATCH_SIGNAL',
-      purpose: 'BANKING_PAY_BATCH_WATCH_SIGNAL',
-      timeoutMs: 5000
-    }), 'banking_pay_batch_watch_signal');
+    if (!watchTabAllowed(currentTab)) {
+      return jsonResponse(safeNoChangeWatchPayload(currentTab, currentSectionJson, 'WATCH_SIGNAL_VISIBLE_TAB_NOT_SUPPORTED_BY_BACKEND_WRAPPER'));
+    }
+
+    let rpcPayload = {};
+    try {
+      rpcPayload = unwrapRpcPayload(await sbRpc(env, 'banking_pay_batch_watch_signal', {
+        p_pay_batch_id: id,
+        p_actor_user_id: String(user.id),
+        p_known_version: parseBigIntLike(body.known_version != null ? body.known_version : (body.knownVersion != null ? body.knownVersion : (url.searchParams.get('known_version') != null ? url.searchParams.get('known_version') : (url.searchParams.get('knownVersion') != null ? url.searchParams.get('knownVersion') : url.searchParams.get('version'))))),
+        p_known_payment_status_version: parseBigIntLike(body.known_payment_status_version != null ? body.known_payment_status_version : (body.knownPaymentStatusVersion != null ? body.knownPaymentStatusVersion : (url.searchParams.get('known_payment_status_version') != null ? url.searchParams.get('known_payment_status_version') : url.searchParams.get('knownPaymentStatusVersion')))),
+        p_known_correction_progress_version: parseBigIntLike(body.known_correction_progress_version != null ? body.known_correction_progress_version : (body.knownCorrectionProgressVersion != null ? body.knownCorrectionProgressVersion : (url.searchParams.get('known_correction_progress_version') != null ? url.searchParams.get('known_correction_progress_version') : url.searchParams.get('knownCorrectionProgressVersion')))),
+        p_known_alert_version: parseBigIntLike(body.known_alert_version != null ? body.known_alert_version : (body.knownAlertVersion != null ? body.knownAlertVersion : (url.searchParams.get('known_alert_version') != null ? url.searchParams.get('known_alert_version') : url.searchParams.get('knownAlertVersion')))),
+        p_known_overview_version: parseBigIntLike(body.known_overview_version != null ? body.known_overview_version : (body.knownOverviewVersion != null ? body.knownOverviewVersion : (url.searchParams.get('known_overview_version') != null ? url.searchParams.get('known_overview_version') : url.searchParams.get('knownOverviewVersion')))),
+        p_current_tab: currentTab,
+        p_current_section_json: currentSectionJson
+      }, {
+        routeClass: 'WATCH_SIGNAL',
+        purpose: 'BANKING_PAY_BATCH_WATCH_SIGNAL',
+        timeoutMs: 5000
+      }), 'banking_pay_batch_watch_signal');
+    } catch (rpcError) {
+      const rpcErrorText = String(rpcError && (rpcError.message || rpcError.error || rpcError.code || rpcError.error_code) || rpcError || '');
+      if (rpcErrorText.includes('BANKING_PAY_BATCH_WATCH_SIGNAL_VISIBLE_TAB_NOT_ALLOWED') || rpcErrorText.includes('BANKING_PAY_BATCH_WATCH_SIGNAL_VISIBLE_TAB_REQUIRED')) {
+        return jsonResponse(safeNoChangeWatchPayload(currentTab, currentSectionJson, 'WATCH_SIGNAL_VISIBLE_TAB_REJECTED_BY_RPC'));
+      }
+      throw rpcError;
+    }
 
     return jsonResponse(rpcPayload && Object.keys(rpcPayload).length ? rpcPayload : { ok: true, pay_batch_id: id, changed: false, recommended_refresh: 'NONE' });
   } catch (e) {
@@ -37798,6 +37843,7 @@ async function handleBankingPayBatchWatchSignal(env, req, user, payBatchId) {
     return withCORS(env, req, new Response(JSON.stringify(friendly), { status: Number(friendly.http_status || friendly.status || 500) || 500, headers: JSON_HEADERS }));
   }
 }
+
 
 
 
@@ -51867,8 +51913,6 @@ async function handleContractWeekManualDraftDetails(env, req, weekId) {
   }
 }
 
-
-
 async function handleTimesheetDetails(env, req, timesheetId) {
   const enc = encodeURIComponent;
   const WLOG = true;
@@ -52086,9 +52130,86 @@ async function handleTimesheetDetails(env, req, timesheetId) {
     } catch {}
 
     // ─────────────────────────────────────────────────────────────
-    // ✅ NEW: pay_state (paid/partially paid/processing/advanced + adjusted delta)
-    // Computed in DB for consistency (segment-aware) via public.timesheet_pay_state
+    // Authoritative pay_state (paid/partially paid/processing/advanced + adjusted delta)
+    // Computed in DB for consistency via public.timesheet_pay_state.
+    // Do not synthesize payment economics from summary-cache fields if this fails.
     // ─────────────────────────────────────────────────────────────
+    const describePayStateRpcShape = (value, depth = 0) => {
+      try {
+        if (value == null) return value === null ? 'null' : 'undefined';
+        if (Array.isArray(value)) {
+          const first = value.length ? describePayStateRpcShape(value[0], depth + 1) : 'empty';
+          return `array(len=${value.length}, first=${first})`;
+        }
+        if (typeof value === 'object') {
+          const keys = Object.keys(value).slice(0, 12);
+          if (depth >= 2) return `object(keys=${keys.join(',')})`;
+          const nested = {};
+          for (const key of keys) {
+            const child = value[key];
+            if (child && (Array.isArray(child) || typeof child === 'object')) {
+              nested[key] = describePayStateRpcShape(child, depth + 1);
+            } else {
+              nested[key] = typeof child;
+            }
+          }
+          return { keys, nested };
+        }
+        return typeof value;
+      } catch {
+        return 'shape_unavailable';
+      }
+    };
+
+    const previewPayStateRpcPayload = (value) => {
+      try {
+        const seen = new WeakSet();
+        const json = JSON.stringify(value, (key, val) => {
+          if (typeof val === 'bigint') return val.toString();
+          if (val && typeof val === 'object') {
+            if (seen.has(val)) return '[Circular]';
+            seen.add(val);
+          }
+          return val;
+        });
+        return String(json || '').slice(0, 1200);
+      } catch {
+        return '';
+      }
+    };
+
+    const unwrapTimesheetPayStateRpc = (rpcRes) => {
+      const candidates = [];
+      const pushCandidate = (value) => {
+        if (value && typeof value === 'object' && !Array.isArray(value)) candidates.push(value);
+      };
+
+      const visit = (value, depth = 0) => {
+        if (value == null || depth > 4) return;
+        if (Array.isArray(value)) {
+          if (value.length === 1) visit(value[0], depth + 1);
+          else {
+            for (const item of value) visit(item, depth + 1);
+          }
+          return;
+        }
+        if (typeof value !== 'object') return;
+
+        if (value.ok === true || Object.prototype.hasOwnProperty.call(value, 'paid_status') || Object.prototype.hasOwnProperty.call(value, 'adjusted')) {
+          pushCandidate(value);
+        }
+
+        for (const key of ['timesheet_pay_state', 'data', 'result', 'payload', 'body']) {
+          if (Object.prototype.hasOwnProperty.call(value, key)) visit(value[key], depth + 1);
+        }
+
+        if (Array.isArray(value.rows)) visit(value.rows, depth + 1);
+      };
+
+      visit(rpcRes, 0);
+      return candidates.find((candidate) => candidate && candidate.ok === true) || candidates[0] || null;
+    };
+
     let payState = null;
     try {
       const ps0 = await sbRpc(env, 'timesheet_pay_state', {
@@ -52096,16 +52217,37 @@ async function handleTimesheetDetails(env, req, timesheetId) {
         p_actor_user_id: user.id
       });
 
-      let ps = ps0;
-      try {
-        if (Array.isArray(ps0) && ps0.length === 1 && ps0[0] && typeof ps0[0] === 'object') ps = ps0[0];
-        if (ps && typeof ps === 'object' && Object.prototype.hasOwnProperty.call(ps, 'timesheet_pay_state')) {
-          ps = ps.timesheet_pay_state;
-        }
-      } catch {}
-
-      payState = (ps && typeof ps === 'object' && !Array.isArray(ps)) ? ps : null;
-    } catch {
+      const ps = unwrapTimesheetPayStateRpc(ps0);
+      if (ps && typeof ps === 'object' && !Array.isArray(ps) && ps.ok === true) {
+        payState = ps;
+        wlog('pay_state_loaded', {
+          current_timesheet_id: currentTimesheetId,
+          paid_status: String(ps.paid_status || '').trim() || null,
+          has_adjusted: !!(ps.adjusted && typeof ps.adjusted === 'object'),
+          has_paid_totals: !!(ps.paid_totals && typeof ps.paid_totals === 'object')
+        });
+      } else {
+        const diag = {
+          current_timesheet_id: currentTimesheetId,
+          rpc_shape: describePayStateRpcShape(ps0),
+          unwrapped_shape: describePayStateRpcShape(ps),
+          unwrapped_ok: ps && typeof ps === 'object' ? ps.ok : null,
+          error: ps && typeof ps === 'object' ? (ps.error || ps.code || null) : null,
+          rpc_preview: previewPayStateRpcPayload(ps0)
+        };
+        console.warn('[TIMESHEET_DETAILS] pay_state unavailable/unexpected', diag);
+        wlog('pay_state_unavailable_or_unexpected', diag);
+        payState = null;
+      }
+    } catch (e) {
+      const diag = {
+        current_timesheet_id: currentTimesheetId,
+        err: e?.message || String(e),
+        status: e?.status || null,
+        body_preview: e?.body ? String(e.body).slice(0, 1200) : null
+      };
+      console.warn('[TIMESHEET_DETAILS] pay_state rpc failed', diag);
+      wlog('pay_state_rpc_failed', diag);
       payState = null;
     }
 
@@ -52675,29 +52817,20 @@ async function handleTimesheetDetails(env, req, timesheetId) {
       qrScenario = null;
     }
 
-    // Locks
+    // Locks / payment-action flags. Payment state is authoritative when present.
     const isLockedByInvoice = !!(tsfinRaw?.locked_by_invoice_id);
-    const payStatePaidStatus = String(payStateOut?.paid_status || '').trim().toUpperCase();
-    const payStateIsPaid = (payStatePaidStatus === 'PAID' || payStatePaidStatus === 'PARTIALLY_PAID');
-    const payStateSuppressesReadyToPay = !!(
-      payStatePaidStatus === 'PAID' ||
-      payStatePaidStatus === 'PARTIALLY_PAID' ||
-      payStatePaidStatus === 'PROCESSING'
-    );
-    const isPaid = !!(tsfinRaw?.paid_at_utc) || payStateIsPaid;
-    const isHardLocked = isLockedByInvoice || isPaid;
-
-    if (payStateSuppressesReadyToPay) {
-      effective.ready_to_pay = false;
-    }
-
-    const payStateProcessingAny = !!(payStateOut && payStateOut.processing_any === true);
-    const payStateIsAdvanced = !!(payStateOut && payStateOut.is_advanced === true);
-    const payStateCanUnadvance = !!(payStateOut && payStateOut.can_unadvance === true);
-    const payStateIsSnoozed = !!(payStateOut && payStateOut.is_snoozed === true);
-    const payStateAdjusted = (payStateOut && payStateOut.adjusted && typeof payStateOut.adjusted === 'object' && !Array.isArray(payStateOut.adjusted))
+    const payStateAvailable = !!(payStateOut && typeof payStateOut === 'object' && !Array.isArray(payStateOut) && payStateOut.ok === true);
+    const payStatePaidStatus = payStateAvailable ? String(payStateOut?.paid_status || '').trim().toUpperCase() : '';
+    const payStateProcessingAny = !!(payStateAvailable && payStateOut.processing_any === true);
+    const payStateIsAdvanced = !!(payStateAvailable && (payStateOut.is_advanced === true || payStateOut.advanced_any === true || payStatePaidStatus === 'ADVANCED'));
+    const payStateCanUnadvance = !!(payStateAvailable && payStateOut.can_unadvance === true);
+    const payStateIsSnoozed = !!(payStateAvailable && payStateOut.is_snoozed === true);
+    const payStateAdjusted = (payStateAvailable && payStateOut.adjusted && typeof payStateOut.adjusted === 'object' && !Array.isArray(payStateOut.adjusted))
       ? payStateOut.adjusted
       : null;
+    const payStateIsPaid = !!(payStateAvailable && (payStatePaidStatus === 'PAID' || payStatePaidStatus === 'PARTIALLY_PAID'));
+    const isPaid = payStateIsPaid;
+    const isHardLocked = isLockedByInvoice || (payStateAvailable ? payStateIsPaid : !!(tsfinRaw?.paid_at_utc));
     const payStateOutstandingPresent = !!(
       payStateAdjusted &&
       Object.prototype.hasOwnProperty.call(payStateAdjusted, 'outstanding_ex_vat') &&
@@ -52726,6 +52859,36 @@ async function handleTimesheetDetails(env, req, timesheetId) {
       Number.isFinite(payStateReservedExVat) &&
       payStateReservedExVat > 0
     );
+    const payStateNetDeltaPresent = !!(
+      payStateAdjusted &&
+      Object.prototype.hasOwnProperty.call(payStateAdjusted, 'net_delta_ex_vat') &&
+      payStateAdjusted.net_delta_ex_vat != null &&
+      String(payStateAdjusted.net_delta_ex_vat).trim() !== ''
+    );
+    const payStateNetDeltaExVat = payStateNetDeltaPresent
+      ? Number(payStateAdjusted.net_delta_ex_vat || 0)
+      : null;
+    const payStateIsOverpaid = !!(
+      payStateNetDeltaPresent &&
+      Number.isFinite(payStateNetDeltaExVat) &&
+      payStateNetDeltaExVat < 0
+    );
+    const payStateSuppressesReadyToPay = !!(
+      payStateAvailable &&
+      (
+        payStatePaidStatus === 'PAID' ||
+        payStatePaidStatus === 'PARTIALLY_PAID' ||
+        payStatePaidStatus === 'PROCESSING' ||
+        payStateProcessingAny ||
+        payStateIsAdvanced ||
+        payStateHasActiveReservation ||
+        payStateIsOverpaid
+      )
+    );
+
+    if (payStateSuppressesReadyToPay) {
+      effective.ready_to_pay = false;
+    }
 
     const canAdvancePayment =
       (!isLockedByInvoice) &&
@@ -52756,6 +52919,7 @@ async function handleTimesheetDetails(env, req, timesheetId) {
     })();
 
     const canSnoozePayment =
+      payStateAvailable &&
       (!isHardLocked) &&
       (!payStateIsSnoozed) &&
       (!payStateProcessingAny) &&
@@ -52763,6 +52927,7 @@ async function handleTimesheetDetails(env, req, timesheetId) {
       (payStatePaidStatus !== 'PARTIALLY_PAID');
 
     const canClearPaymentSnooze =
+      payStateAvailable &&
       (!isHardLocked) &&
       payStateIsSnoozed;
 
@@ -53127,6 +53292,674 @@ async function handleTimesheetDetails(env, req, timesheetId) {
     return withCORS(env, req, serverError('Failed to load timesheet details'));
   }
 }
+
+async function collectRailUpdatesForBankingPayOperation(env, options = {}) {
+  const trimText = (value) => String(value == null ? '' : value).trim();
+  const upperText = (value) => trimText(value).toUpperCase();
+  const isPlainObject = (value) => !!value && typeof value === 'object' && !Array.isArray(value);
+  const toArray = (value) => Array.isArray(value) ? value : [];
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+  const clampInteger = (value, fallback, min, max) => {
+    const n = Number(value);
+    const resolved = Number.isFinite(n) ? Math.trunc(n) : fallback;
+    return Math.max(min, Math.min(max, resolved));
+  };
+
+  const firstText = function () {
+    for (let i = 0; i < arguments.length; i += 1) {
+      const text = trimText(arguments[i]);
+      if (text) return text;
+    }
+    return '';
+  };
+
+  const firstUuid = function () {
+    for (let i = 0; i < arguments.length; i += 1) {
+      const text = trimText(arguments[i]);
+      if (uuidRe.test(text)) return text;
+    }
+    return '';
+  };
+
+  const numberOrNull = (value) => {
+    if (value === null || value === undefined || value === '') return null;
+    const n = Number(value);
+    return Number.isFinite(n) ? n : null;
+  };
+
+  const compactError = (error, maxLength = 500) => {
+    const text = trimText(error && error.message ? error.message : error || '');
+    return text ? text.slice(0, maxLength) : 'UNKNOWN_ERROR';
+  };
+
+  const unwrapRpcPayload = (rpcRes, key) => {
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(payload) && payload.length === 1 && isPlainObject(payload[0])) payload = payload[0];
+      if (payload && typeof payload === 'object' && key && Object.prototype.hasOwnProperty.call(payload, key)) payload = payload[key];
+      if (Array.isArray(payload) && payload.length === 1 && isPlainObject(payload[0])) payload = payload[0];
+    } catch {}
+    return isPlainObject(payload) ? payload : {};
+  };
+
+  const enc = encodeURIComponent;
+  const source = isPlainObject(options) ? options : {};
+  const operationId = firstUuid(source.operation_id, source.operationId, source.id);
+  const payBatchId = firstUuid(source.pay_batch_id, source.payBatchId, source.batch_id, source.batchId);
+  const actorUserId = firstUuid(source.actor_user_id, source.actorUserId, source.user_id, source.userId);
+  const limit = clampInteger(source.limit ?? source.rail_update_limit ?? source.railUpdateLimit, 100, 1, 100);
+  const nowIso = new Date().toISOString();
+
+  const baseResult = (patch = {}) => ({
+    ok: patch.ok !== false,
+    collector_available: true,
+    collector: 'collectRailUpdatesForBankingPayOperation',
+    collection_mode: 'PROVIDER_POLL_TO_RAIL_UPDATE_ROWS',
+    operation_id: operationId || null,
+    pay_batch_id: payBatchId || null,
+    actor_user_id: actorUserId || null,
+    limit,
+    chunk_id: null,
+    updates: [],
+    update_count: 0,
+    terminal_update_count: 0,
+    pending_update_count: 0,
+    failed_update_count: 0,
+    unknown_update_count: 0,
+    polled_count: 0,
+    candidate_count: 0,
+    skipped_count: 0,
+    has_more: false,
+    warnings: [],
+    errors: [],
+    server_utc: nowIso,
+    ...patch
+  });
+
+  if (!env) {
+    return baseResult({ ok: false, error_code: 'RAIL_UPDATE_COLLECTOR_ENV_REQUIRED', errors: ['env is required'] });
+  }
+  if (!operationId) {
+    return baseResult({ ok: false, error_code: 'RAIL_UPDATE_COLLECTOR_OPERATION_ID_REQUIRED', errors: ['operation_id is required'] });
+  }
+  if (!payBatchId) {
+    return baseResult({ ok: false, error_code: 'RAIL_UPDATE_COLLECTOR_PAY_BATCH_ID_REQUIRED', errors: ['pay_batch_id is required'] });
+  }
+  if (!actorUserId) {
+    return baseResult({ ok: false, error_code: 'RAIL_UPDATE_COLLECTOR_ACTOR_USER_ID_REQUIRED', errors: ['actor_user_id is required'] });
+  }
+  if (typeof sbFetch !== 'function' || !env.SUPABASE_URL) {
+    return baseResult({ ok: false, error_code: 'RAIL_UPDATE_COLLECTOR_SBFETCH_UNAVAILABLE', errors: ['sbFetch and SUPABASE_URL are required'] });
+  }
+
+  const loadRestRows = async (pathWithQuery, { pageSize = 1000, maxPages = 25 } = {}) => {
+    const rowsOut = [];
+    const safePageSize = clampInteger(pageSize, 1000, 1, 1000);
+    const safeMaxPages = clampInteger(maxPages, 25, 1, 250);
+    const joiner = String(pathWithQuery || '').includes('?') ? '&' : '?';
+    for (let pageIndex = 0; pageIndex < safeMaxPages; pageIndex += 1) {
+      const offset = pageIndex * safePageSize;
+      const res = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}${pathWithQuery}${joiner}limit=${enc(String(safePageSize))}&offset=${enc(String(offset))}`,
+        false
+      );
+      const pageRows = res && Array.isArray(res.rows) ? res.rows : [];
+      rowsOut.push(...pageRows);
+      if (pageRows.length < safePageSize) break;
+    }
+    return rowsOut;
+  };
+
+  let operationRow = null;
+  try {
+    const opRes = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/banking_pay_operations?id=eq.${enc(operationId)}&select=id,operation_type,status,phase,runner_state,pay_batch_id,input_json,config_json,progress_json&limit=1`,
+      false
+    );
+    operationRow = opRes && Array.isArray(opRes.rows) && isPlainObject(opRes.rows[0]) ? opRes.rows[0] : null;
+  } catch (error) {
+    return baseResult({ ok: false, error_code: 'RAIL_UPDATE_COLLECTOR_OPERATION_READ_FAILED', errors: [compactError(error)] });
+  }
+
+  if (!operationRow || !operationRow.id) {
+    return baseResult({ ok: false, error_code: 'RAIL_UPDATE_COLLECTOR_OPERATION_NOT_FOUND', errors: ['Banking Pay operation was not found'] });
+  }
+
+  if (trimText(operationRow.pay_batch_id) && trimText(operationRow.pay_batch_id) !== payBatchId) {
+    return baseResult({
+      ok: false,
+      error_code: 'RAIL_UPDATE_COLLECTOR_OPERATION_BATCH_MISMATCH',
+      operation_pay_batch_id: trimText(operationRow.pay_batch_id),
+      errors: ['Operation pay_batch_id does not match requested pay_batch_id']
+    });
+  }
+
+  const operationType = upperText(operationRow.operation_type);
+  if (!['PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS'].includes(operationType)) {
+    return baseResult({
+      ok: true,
+      updates: [],
+      update_count: 0,
+      skipped: true,
+      skip_reason: 'OPERATION_TYPE_NOT_RAIL_UPDATE_COLLECTABLE',
+      operation_type: operationType || null
+    });
+  }
+
+  const inputJson = isPlainObject(operationRow.input_json) ? operationRow.input_json : {};
+  const progressJson = isPlainObject(operationRow.progress_json) ? operationRow.progress_json : {};
+
+  let summary = {};
+  if (typeof sbRpc === 'function') {
+    try {
+      summary = unwrapRpcPayload(await sbRpc(env, 'pay_batch_execution_summary_get', {
+        p_pay_batch_id: payBatchId,
+        p_actor_user_id: actorUserId
+      }, {
+        routeClass: 'RAIL_UPDATE_COLLECTOR_SUMMARY',
+        purpose: 'COLLECT_RAIL_UPDATES_EXECUTION_SUMMARY',
+        timeoutMs: 8000
+      }), 'pay_batch_execution_summary_get');
+    } catch (error) {
+      summary = { ok: false, summary_read_error: compactError(error) };
+    }
+  }
+
+  let batchRow = null;
+  try {
+    const batchRes = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/pay_batches?id=eq.${enc(payBatchId)}&select=id,status,rail_provider_snapshot,rail_env_snapshot,execution_commit_state,completed_at_utc,cancelled_at_utc&limit=1`,
+      false
+    );
+    batchRow = batchRes && Array.isArray(batchRes.rows) && isPlainObject(batchRes.rows[0]) ? batchRes.rows[0] : null;
+  } catch (error) {
+    return baseResult({ ok: false, error_code: 'RAIL_UPDATE_COLLECTOR_BATCH_READ_FAILED', errors: [compactError(error)] });
+  }
+
+  if (!batchRow || !batchRow.id) {
+    return baseResult({ ok: false, error_code: 'RAIL_UPDATE_COLLECTOR_BATCH_NOT_FOUND', errors: ['Payment batch was not found'] });
+  }
+
+  const providerRaw = firstText(
+    summary.rail_provider_snapshot,
+    summary.provider,
+    summary.provider_key,
+    batchRow.rail_provider_snapshot,
+    inputJson.rail_provider_snapshot,
+    progressJson.rail_provider_snapshot,
+    'REVOLUT'
+  ).toUpperCase();
+  const providerKey = providerRaw === 'REV' ? 'REVOLUT' : providerRaw;
+  const railEnv = firstText(summary.rail_env_snapshot, summary.provider_environment, batchRow.rail_env_snapshot, inputJson.rail_env_snapshot, progressJson.rail_env_snapshot, 'PROD').toUpperCase() || 'PROD';
+
+  if (providerKey !== 'REVOLUT') {
+    return baseResult({
+      ok: true,
+      provider_key: providerKey || null,
+      rail_env: railEnv,
+      updates: [],
+      update_count: 0,
+      skipped: true,
+      skip_reason: providerKey === 'CSV' ? 'CSV_RAIL_HAS_NO_PROVIDER_RAIL_UPDATES' : 'RAIL_PROVIDER_NOT_SUPPORTED_BY_COLLECTOR'
+    });
+  }
+
+  if (typeof revolutAuth_getAccessToken !== 'function' || typeof revolutPayment_poll !== 'function') {
+    return baseResult({
+      ok: true,
+      provider_key: providerKey,
+      rail_env: railEnv,
+      updates: [],
+      update_count: 0,
+      skipped: true,
+      skip_reason: 'REVOLUT_POLL_HELPERS_UNAVAILABLE',
+      warnings: ['revolutAuth_getAccessToken or revolutPayment_poll is unavailable; execution will continue waiting on local provider evidence']
+    });
+  }
+
+  const terminalBatchStatus = new Set(['SETTLED', 'FAILED', 'PARTIAL', 'CANCELLED', 'CANCELED']);
+  if (terminalBatchStatus.has(upperText(batchRow.status))) {
+    return baseResult({
+      ok: true,
+      provider_key: providerKey,
+      rail_env: railEnv,
+      updates: [],
+      update_count: 0,
+      skipped: true,
+      skip_reason: 'BATCH_ALREADY_TERMINAL',
+      batch_status: batchRow.status || null
+    });
+  }
+
+  const scopeSelect = [
+    'id',
+    'operation_id',
+    'pay_batch_id',
+    'pay_bank_transfer_id',
+    'provider_submit_chunk_id',
+    'provider_submit_state',
+    'provider_submission_status',
+    'provider_review_required',
+    'provider_unsafe_reason',
+    'provider_request_id',
+    'provider_idempotency_key',
+    'provider_transaction_id',
+    'request_id',
+    'status',
+    'amount',
+    'currency',
+    'payment_reference',
+    'transfer_group_key',
+    'updated_at_utc'
+  ].join(',');
+
+  let scopeRows = [];
+  try {
+    scopeRows = await loadRestRows(
+      `/rest/v1/banking_pay_operation_transfer_scope?operation_id=eq.${enc(operationId)}&pay_batch_id=eq.${enc(payBatchId)}&pay_bank_transfer_id=not.is.null&select=${scopeSelect}&order=updated_at_utc.asc.nullslast,id.asc`,
+      { pageSize: Math.max(limit * 4, limit), maxPages: 5 }
+    );
+  } catch (error) {
+    return baseResult({ ok: false, provider_key: providerKey, rail_env: railEnv, error_code: 'RAIL_UPDATE_COLLECTOR_SCOPE_READ_FAILED', errors: [compactError(error)] });
+  }
+
+  const transferIds = Array.from(new Set(scopeRows.map((row) => trimText(row && row.pay_bank_transfer_id)).filter((value) => uuidRe.test(value))));
+  const transferMap = new Map();
+  const transferSelect = 'id,pay_batch_id,request_id,amount,currency,status,rail_tx_id,rail_state,rail_meta_json,payment_reference,transfer_group_key';
+  try {
+    for (let i = 0; i < transferIds.length; i += 50) {
+      const chunk = transferIds.slice(i, i + 50);
+      if (!chunk.length) continue;
+      const res = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/pay_bank_transfers?pay_batch_id=eq.${enc(payBatchId)}&id=in.(${chunk.map(enc).join(',')})&select=${transferSelect}&limit=${chunk.length}`,
+        false
+      );
+      for (const row of (res && Array.isArray(res.rows) ? res.rows : [])) {
+        const rowId = trimText(row && row.id);
+        if (uuidRe.test(rowId)) transferMap.set(rowId, row);
+      }
+    }
+  } catch (error) {
+    return baseResult({ ok: false, provider_key: providerKey, rail_env: railEnv, error_code: 'RAIL_UPDATE_COLLECTOR_TRANSFER_READ_FAILED', errors: [compactError(error)] });
+  }
+
+  const terminalSuccessStates = new Set(['COMPLETED', 'SETTLED', 'PAID', 'SUCCESS', 'SUCCEEDED']);
+  const terminalFailureStates = new Set(['FAILED', 'DECLINED', 'REJECTED', 'CANCELLED', 'CANCELED', 'RETURNED', 'REVERTED']);
+  const pendingStates = new Set(['PENDING', 'PROCESSING', 'QUEUED', 'CREATED', 'ACCEPTED', 'IN_FLIGHT', 'SUBMITTED', 'PENDING_SETTLEMENT', 'PENDING_CONFIRMATION']);
+
+  const readTransferMeta = (transferRow) => isPlainObject(transferRow && transferRow.rail_meta_json) ? transferRow.rail_meta_json : {};
+  const readTransferDiagnostic = (transferRow) => {
+    const meta = readTransferMeta(transferRow);
+    return isPlainObject(meta.provider_submit_diagnostic) ? meta.provider_submit_diagnostic : {};
+  };
+  const isTerminalLocalTransfer = (scopeRow, transferRow) => {
+    const transferStatus = upperText(transferRow && transferRow.status);
+    const railState = upperText(transferRow && transferRow.rail_state);
+    const scopeState = upperText(scopeRow && scopeRow.provider_submit_state);
+    const scopeSubmissionStatus = upperText(scopeRow && scopeRow.provider_submission_status);
+
+    if (transferStatus === 'COMPLETED' && terminalSuccessStates.has(railState)) return true;
+    if (terminalFailureStates.has(transferStatus) && (terminalFailureStates.has(railState) || railState === '')) return true;
+    if (['PROVIDER_REJECTED'].includes(scopeState) || ['PROVIDER_SUBMISSION_REJECTED'].includes(scopeSubmissionStatus)) return true;
+    return false;
+  };
+  const requestIdFor = (scopeRow, transferRow) => {
+    const meta = readTransferMeta(transferRow);
+    const diagnostic = readTransferDiagnostic(transferRow);
+    return firstText(
+      scopeRow && scopeRow.provider_request_id,
+      scopeRow && scopeRow.provider_idempotency_key,
+      scopeRow && scopeRow.request_id,
+      transferRow && transferRow.request_id,
+      diagnostic.request_id,
+      diagnostic.idempotency_key,
+      diagnostic.local_provider_request_id,
+      meta.provider_request_id,
+      meta.request_id,
+      meta.idempotency_key,
+      meta.local_provider_request_id
+    );
+  };
+
+  const candidates = [];
+  const seenCandidateTransfers = new Set();
+  for (const scopeRow of scopeRows) {
+    if (!isPlainObject(scopeRow)) continue;
+    const transferId = trimText(scopeRow.pay_bank_transfer_id);
+    if (!uuidRe.test(transferId)) continue;
+    if (seenCandidateTransfers.has(transferId)) continue;
+    const transferRow = transferMap.get(transferId) || {};
+    const requestId = requestIdFor(scopeRow, transferRow);
+    if (!requestId) continue;
+    if (isTerminalLocalTransfer(scopeRow, transferRow)) continue;
+
+    const transferStatus = upperText(transferRow.status);
+    const railState = upperText(transferRow.rail_state);
+    const scopeState = upperText(scopeRow.provider_submit_state);
+    const scopeSubmissionStatus = upperText(scopeRow.provider_submission_status);
+    const diagnostic = readTransferDiagnostic(transferRow);
+    const diagnosticStatus = upperText(diagnostic.provider_submission_status);
+    const pollable = pendingStates.has(transferStatus)
+      || pendingStates.has(railState)
+      || transferStatus === 'UNKNOWN'
+      || railState === 'UNKNOWN'
+      || transferStatus === 'COMPLETED' && pendingStates.has(railState)
+      || ['PROVIDER_ACCEPTED', 'PROVIDER_UNKNOWN', 'CHUNK_FINALISED', 'REQUEST_SENT_LOCAL', 'REQUEST_SENDING'].includes(scopeState)
+      || ['PROVIDER_SUBMISSION_ACCEPTED', 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_PENDING'].includes(scopeSubmissionStatus)
+      || ['PROVIDER_SUBMISSION_ACCEPTED', 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME', 'PROVIDER_SUBMISSION_PENDING'].includes(diagnosticStatus);
+
+    if (!pollable) continue;
+    seenCandidateTransfers.add(transferId);
+    candidates.push({ scopeRow, transferRow, transferId, requestId });
+  }
+
+  const boundedCandidates = candidates.slice(0, limit);
+  if (!boundedCandidates.length) {
+    return baseResult({
+      ok: true,
+      provider_key: providerKey,
+      rail_env: railEnv,
+      candidate_count: 0,
+      updates: [],
+      update_count: 0,
+      skipped: true,
+      skip_reason: scopeRows.length ? 'NO_POLLABLE_PROVIDER_TRANSFER_ROWS' : 'NO_OPERATION_TRANSFER_SCOPE_ROWS'
+    });
+  }
+
+  let token = null;
+  try {
+    token = await revolutAuth_getAccessToken(env);
+  } catch (error) {
+    return baseResult({
+      ok: true,
+      provider_key: providerKey,
+      rail_env: railEnv,
+      candidate_count: candidates.length,
+      polled_count: 0,
+      updates: [],
+      update_count: 0,
+      warnings: [`Revolut access token unavailable: ${compactError(error, 240)}`],
+      provider_wait_required: true,
+      skip_reason: 'REVOLUT_ACCESS_TOKEN_UNAVAILABLE'
+    });
+  }
+
+  const buildProviderDiagnostic = ({ state, classification, polled, requestId, transferId, rawRailState, providerTransactionId, providerReference, errorCode, errorMessage }) => {
+    const terminalSuccess = classification === 'TERMINAL_SUCCESS';
+    const terminalFailure = classification === 'TERMINAL_FAILURE';
+    const pending = classification === 'PENDING';
+    const unknown = classification === 'UNKNOWN';
+    return {
+      diagnostic_version: 1,
+      generated_at_utc: new Date().toISOString(),
+      provider_call_stage: terminalSuccess
+        ? 'PROVIDER_PAYMENT_POLL_TERMINAL_SUCCESS'
+        : terminalFailure
+          ? 'PROVIDER_PAYMENT_POLL_TERMINAL_FAILURE'
+          : pending
+            ? 'PROVIDER_PAYMENT_POLL_PENDING'
+            : 'PROVIDER_PAYMENT_POLL_UNKNOWN',
+      provider_submission_status: terminalSuccess
+        ? 'PROVIDER_SUBMISSION_ACCEPTED'
+        : terminalFailure
+          ? 'PROVIDER_SUBMISSION_REJECTED'
+          : pending
+            ? 'PROVIDER_SUBMISSION_PENDING'
+            : 'UNKNOWN_PROVIDER_SUBMISSION_OUTCOME',
+      review_reason_code: terminalSuccess
+        ? 'PROVIDER_TERMINAL_SUCCESS_CONFIRMED'
+        : terminalFailure
+          ? 'PROVIDER_TERMINAL_FAILURE_CONFIRMED'
+          : pending
+            ? 'PROVIDER_PAYMENT_STILL_PENDING'
+            : 'PROVIDER_POLL_UNKNOWN_STATE',
+      provider_submission_attempted: true,
+      provider_called: true,
+      provider_request_sent: true,
+      provider_request_sent_confirmed: true,
+      provider_response_received: true,
+      provider_response_present: true,
+      provider_external_evidence_present: !!(providerTransactionId || providerReference),
+      provider_submission_accepted: terminalSuccess,
+      provider_submission_rejected: terminalFailure,
+      provider_submission_unknown: unknown,
+      provider_acceptance_evidence_present: terminalSuccess,
+      manual_resolution_required: unknown,
+      safe_retry_available: false,
+      rail_provider: 'REVOLUT',
+      request_id: requestId,
+      idempotency_key: requestId,
+      transfer_id: transferId,
+      provider_transaction_id: providerTransactionId || null,
+      provider_reference: providerReference || null,
+      provider_state: rawRailState || state || null,
+      rail_tx_id: terminalSuccess ? providerTransactionId || providerReference || null : null,
+      rail_state: rawRailState || state || null,
+      response_received_at_utc: firstText(polled && polled.response_received_at_utc, polled && polled.event_time_utc) || new Date().toISOString(),
+      provider_error_code: errorCode || null,
+      provider_error_message_redacted: errorMessage || null
+    };
+  };
+
+  const normalisePolledState = (polled) => {
+    const raw = upperText(polled && (polled.normalised_state || polled.normalized_state || polled.status || polled.rail_state || polled.provider_state));
+    if (raw === 'CANCELED') return 'CANCELLED';
+    if (raw === 'SUCCESS' || raw === 'SUCCEEDED' || raw === 'SETTLED' || raw === 'PAID') return 'COMPLETED';
+    if (raw === 'DECLINED') return 'DECLINED';
+    if (raw === 'REJECTED') return 'REJECTED';
+    if (raw === 'FAILED') return 'FAILED';
+    if (raw === 'CANCELLED') return 'CANCELLED';
+    if (raw === 'RETURNED') return 'RETURNED';
+    if (raw === 'REVERTED' || raw === 'REVERSED') return 'REVERTED';
+    if (raw === 'PROCESSING') return 'PROCESSING';
+    if (raw === 'PENDING' || raw === 'CREATED' || raw === 'QUEUED' || raw === 'ACCEPTED' || raw === 'IN_FLIGHT' || raw === 'SUBMITTED') return 'PENDING';
+    if (raw === 'COMPLETED') return 'COMPLETED';
+    return raw || 'UNKNOWN';
+  };
+
+  const updates = [];
+  const warnings = [];
+  const errors = [];
+  let polledCount = 0;
+  let terminalUpdateCount = 0;
+  let pendingUpdateCount = 0;
+  let failedUpdateCount = 0;
+  let unknownUpdateCount = 0;
+
+  for (const candidate of boundedCandidates) {
+    const transferRow = candidate.transferRow || {};
+    const amount = numberOrNull(transferRow.amount ?? candidate.scopeRow.amount) ?? 0;
+    const currency = upperText(transferRow.currency || candidate.scopeRow.currency || 'GBP') || 'GBP';
+    let polled = null;
+    try {
+      polled = await revolutPayment_poll(env, token, {
+        request_id: candidate.requestId,
+        transfer_id: candidate.transferId,
+        pay_batch_id: payBatchId,
+        amount,
+        currency
+      });
+      polledCount += 1;
+    } catch (error) {
+      warnings.push({
+        transfer_id: candidate.transferId,
+        request_id: candidate.requestId,
+        reason: 'REVOLUT_PAYMENT_POLL_THROWN',
+        error: compactError(error, 300)
+      });
+      continue;
+    }
+
+    const normalisedState = normalisePolledState(polled);
+    const rawRailState = firstText(polled && polled.rail_state, polled && polled.provider_state, normalisedState);
+    const providerTransactionId = firstText(polled && polled.provider_transaction_id, polled && polled.rail_tx_id, polled && polled.provider_event_id);
+    const providerReference = firstText(polled && polled.provider_reference, polled && polled.payment_reference, providerTransactionId);
+    const providerEventTime = firstText(polled && polled.event_time_utc, polled && polled.response_received_at_utc, nowIso);
+    const eventStateForKey = normalisedState || 'UNKNOWN';
+    const polledEventSource = upperText(polled && polled.event_source);
+    const polledEventTransport = upperText(polled && polled.provider_event_transport);
+    const providerHttpStatus = polled && polled.provider_http_status !== undefined && polled.provider_http_status !== null
+      ? Number(polled.provider_http_status)
+      : null;
+    const providerResponsePresent = polled && (polled.provider_response_present === true || polled.provider_response_received === true);
+    const hasExternalProviderEvidence = !!(providerTransactionId || providerReference);
+    const hasProviderPollEvidence = polledEventSource === 'PROVIDER_POLL'
+      || polledEventTransport === 'PROVIDER_POLL'
+      || hasExternalProviderEvidence === true;
+
+    if (providerResponsePresent !== true && hasProviderPollEvidence !== true) {
+      warnings.push({
+        transfer_id: candidate.transferId,
+        request_id: candidate.requestId,
+        reason: 'REVOLUT_POLL_NO_PROVIDER_RESPONSE',
+        provider_error_code: polled && polled.provider_error_code || null,
+        message: polled && polled.provider_error_message_redacted || null
+      });
+      continue;
+    }
+
+    if (hasProviderPollEvidence !== true) {
+      warnings.push({
+        transfer_id: candidate.transferId,
+        request_id: candidate.requestId,
+        reason: 'REVOLUT_POLL_NO_APPLICABLE_PROVIDER_EVIDENCE',
+        provider_http_status: Number.isFinite(providerHttpStatus) ? providerHttpStatus : null,
+        provider_error_code: polled && polled.provider_error_code || null,
+        message: polled && polled.provider_error_message_redacted || null
+      });
+      continue;
+    }
+
+    let classification = 'UNKNOWN';
+    if (terminalSuccessStates.has(normalisedState) && hasExternalProviderEvidence) classification = 'TERMINAL_SUCCESS';
+    else if (terminalSuccessStates.has(normalisedState) && !hasExternalProviderEvidence) classification = 'UNKNOWN';
+    else if (terminalFailureStates.has(normalisedState)) classification = 'TERMINAL_FAILURE';
+    else if (pendingStates.has(normalisedState)) classification = 'PENDING';
+
+    const diagnostic = buildProviderDiagnostic({
+      state: normalisedState,
+      classification,
+      polled,
+      requestId: candidate.requestId,
+      transferId: candidate.transferId,
+      rawRailState,
+      providerTransactionId,
+      providerReference,
+      errorCode: polled && polled.provider_error_code || null,
+      errorMessage: polled && polled.provider_error_message_redacted || null
+    });
+
+    const eventKey = [
+      'REVOLUT',
+      railEnv,
+      'OPERATION_RAIL_UPDATE_POLL',
+      payBatchId,
+      candidate.transferId,
+      providerTransactionId || providerReference || candidate.requestId,
+      eventStateForKey
+    ].join('|');
+
+    const updateStatus = classification === 'TERMINAL_SUCCESS'
+      ? 'COMPLETED'
+      : classification === 'TERMINAL_FAILURE'
+        ? normalisedState
+        : classification === 'PENDING'
+          ? (normalisedState === 'PROCESSING' ? 'PROCESSING' : 'PENDING')
+          : 'UNKNOWN';
+
+    if (classification === 'TERMINAL_SUCCESS') terminalUpdateCount += 1;
+    else if (classification === 'TERMINAL_FAILURE') failedUpdateCount += 1;
+    else if (classification === 'PENDING') pendingUpdateCount += 1;
+    else unknownUpdateCount += 1;
+
+    updates.push({
+      transfer_id: candidate.transferId,
+      pay_bank_transfer_id: candidate.transferId,
+      pay_batch_id: payBatchId,
+      provider_key: 'REVOLUT',
+      rail_provider: 'REVOLUT',
+      rail_env: railEnv,
+      adapter_key: 'REVOLUT',
+      adapter_version: 'v1',
+      provider_event_transport: 'PROVIDER_POLL',
+      event_source: 'PROVIDER_POLL',
+      provider_event_type: 'PAYMENT_POLL',
+      provider_event_key: eventKey,
+      idempotency_key: eventKey,
+      provider_event_id: providerTransactionId || providerReference || eventKey,
+      provider_transaction_id: providerTransactionId || null,
+      provider_request_id: candidate.requestId,
+      request_id: candidate.requestId,
+      provider_reference: providerReference || providerTransactionId || null,
+      provider_state: rawRailState || normalisedState,
+      normalised_state: updateStatus,
+      normalized_state: updateStatus,
+      provider_error_code: polled && polled.provider_error_code || null,
+      provider_error_message_redacted: polled && polled.provider_error_message_redacted || null,
+      event_time_utc: providerEventTime,
+      amount: numberOrNull(polled && polled.amount) ?? amount,
+      currency: upperText(polled && polled.currency) || currency,
+      provider_submit_diagnostic: diagnostic,
+      raw_payload: {
+        source_adapter: 'REVOLUT',
+        source_action: 'OPERATION_RAIL_UPDATE_POLL',
+        request_id: candidate.requestId,
+        local_provider_request_id: firstText(polled && polled.local_provider_request_id, candidate.requestId),
+        operation_id: operationId,
+        pay_batch_id: payBatchId,
+        transfer_scope_id: candidate.scopeRow.id || null,
+        provider_response: isPlainObject(polled && polled.raw_payload) ? polled.raw_payload : (isPlainObject(polled) ? polled : {})
+      },
+      mapping_hints_json: {
+        source_adapter: 'REVOLUT',
+        source_action: 'OPERATION_RAIL_UPDATE_POLL',
+        pay_batch_id: payBatchId,
+        pay_bank_transfer_id: candidate.transferId,
+        operation_id: operationId,
+        transfer_scope_id: candidate.scopeRow.id || null,
+        provider_transaction_id: providerTransactionId || null,
+        provider_request_id: candidate.requestId,
+        rail_tx_id: classification === 'TERMINAL_SUCCESS' ? (providerTransactionId || providerReference || null) : null
+      },
+      status: updateStatus,
+      rail_tx_id: classification === 'TERMINAL_SUCCESS' ? (providerTransactionId || providerReference || null) : (providerTransactionId || null),
+      rail_state: rawRailState || updateStatus,
+      rail_meta_json: isPlainObject(polled && polled.rail_meta_json) ? polled.rail_meta_json : null,
+      manual_resolution_required: classification === 'UNKNOWN',
+      failed_reason: classification === 'TERMINAL_FAILURE' ? firstText(polled && polled.provider_error_message_redacted, polled && polled.provider_error_code, normalisedState) : null,
+      completed_at_utc: classification === 'TERMINAL_SUCCESS' ? providerEventTime : null
+    });
+  }
+
+  return baseResult({
+    ok: true,
+    provider_key: providerKey,
+    rail_env: railEnv,
+    candidate_count: candidates.length,
+    bounded_candidate_count: boundedCandidates.length,
+    skipped_count: Math.max(0, candidates.length - boundedCandidates.length),
+    polled_count: polledCount,
+    updates,
+    update_count: updates.length,
+    terminal_update_count: terminalUpdateCount,
+    pending_update_count: pendingUpdateCount,
+    failed_update_count: failedUpdateCount,
+    unknown_update_count: unknownUpdateCount,
+    has_more: candidates.length > boundedCandidates.length,
+    provider_wait_required: updates.length <= 0 || pendingUpdateCount > 0,
+    warnings,
+    errors
+  });
+}
+
+
+
 
 
 
@@ -59943,7 +60776,7 @@ async function handleTimesheetsSummary(env, req) {
   const idList = Array.isArray(spec.ids) ? spec.ids.map(String).map(s => s.trim()).filter(Boolean) : [];
   const hasIdFilter = idList.length > 0;
 
-  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{12}$/i;
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   const payBatchId = String(
     spec.pay_batch_id ||
     spec.payBatchId ||
