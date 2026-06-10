@@ -103218,15 +103218,13 @@ end;
 $function$;
 
 
-CREATE OR REPLACE FUNCTION public.timesheet_pay_state(
-  p_timesheet_id uuid,
-  p_actor_user_id uuid DEFAULT NULL
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $$
+
+CREATE OR REPLACE FUNCTION public.timesheet_pay_state(p_timesheet_id uuid, p_actor_user_id uuid DEFAULT NULL::uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
 DECLARE
   v_out jsonb;
   v_has_tsfin boolean := false;
@@ -103711,16 +103709,31 @@ BEGIN
         WHEN nullif(btrim(COALESCE(pbi.segment_key,'')), '') IS NOT NULL
           THEN nullif(btrim(COALESCE(pbi.segment_key,'')), '')
         WHEN pbi.source_ref IS NOT NULL AND btrim(COALESCE(pbi.source_ref,'')) LIKE 'seg:%'
-          THEN nullif(btrim(split_part(btrim(pbi.source_ref), ':', 2)), '')
+          THEN nullif(btrim(substring(btrim(COALESCE(pbi.source_ref,'')) from 5)), '')
         ELSE 'TOTAL'
       END AS component_id,
       pb.status AS batch_status,
-      pb.completed_at_utc AS completed_at_utc
+      pb.completed_at_utc AS completed_at_utc,
+      pbt.status AS transfer_status,
+      pbt.rail_state AS transfer_rail_state,
+      COALESCE(pbt_classifier.is_final_money_moved, false) AS transfer_final_money_moved,
+      COALESCE(pbt_classifier.is_pending_non_final, false) AS transfer_pending_non_final,
+      COALESCE(pbt_classifier.is_terminal_no_money, false) AS transfer_terminal_no_money
     FROM public.pay_batch_items pbi
     JOIN public.pay_batch_candidates pbc
       ON pbc.id = pbi.pay_batch_candidate_id
     JOIN public.pay_batches pb
       ON pb.id = pbc.pay_batch_id
+    LEFT JOIN public.pay_bank_transfers pbt
+      ON pbt.id = pbi.pay_bank_transfer_id
+     AND pbt.pay_batch_id = pb.id
+    LEFT JOIN LATERAL public._pay_rail_state_money_movement_classify(
+      pbt.status,
+      pbt.rail_state,
+      COALESCE(pbt.rail_meta_json, '{}'::jsonb),
+      COALESCE(pbt.rail_meta_json, '{}'::jsonb)
+    ) AS pbt_classifier
+      ON pbt.id IS NOT NULL
     WHERE pbi.timesheet_id = p_timesheet_id
       AND pbi.is_voided = false
       AND pbi.item_type IN ('SEGMENT_DELTA','EXPENSE_DELTA','ADJUSTMENT_DELTA','MILEAGE_DELTA')
@@ -103731,12 +103744,17 @@ BEGIN
       pi.component_id,
       max(CASE WHEN upper(COALESCE(pi.batch_status::text,'')) = 'SETTLED' THEN 1 ELSE 0 END)::int AS has_settled_norm,
       max(CASE WHEN upper(COALESCE(pi.batch_status::text,'')) = 'SETTLED' THEN pi.completed_at_utc ELSE NULL END) AS settled_at_utc,
-      max(CASE WHEN upper(COALESCE(pi.batch_status::text,'')) IN (
-                 'DRAFT','DRAFT_CREATED','READY',
-                 'WAITING_BANK_CONFIRM','PARTIAL','FAILED','BLOCKED_FUNDS',
-                 'SCHEDULED','EXECUTING','AWAITING_AUTHORISATION','AUTHORISED_FOR_PAYMENT'
-               )
-               THEN 1 ELSE 0 END)::int AS has_proc_any
+      max(CASE
+            WHEN COALESCE(pi.transfer_final_money_moved, false) = false
+             AND COALESCE(pi.transfer_terminal_no_money, false) = false
+             AND (
+               COALESCE(pi.transfer_pending_non_final, false) = true
+               OR upper(COALESCE(pi.batch_status::text,'')) IN ('EXECUTING','WAITING_BANK_CONFIRM')
+               OR upper(COALESCE(pi.transfer_status::text,'')) IN ('PENDING','PROCESSING','UNKNOWN')
+             )
+              THEN 1
+            ELSE 0
+          END)::int AS has_proc_any
     FROM pay_items pi
     WHERE pi.component_id IS NOT NULL
     GROUP BY pi.component_id
@@ -103996,34 +104014,40 @@ BEGIN
     FROM (
       SELECT
         CASE
-          WHEN pc.cached_pay_status_code IN ('PAID','PARTIALLY_PAID','PROCESSING','ADVANCED')
-            THEN pc.cached_pay_status_code
-          WHEN c.payable_components IS NULL OR c.payable_components = 0 THEN 'UNPAID'
-          WHEN c.paid_components = c.payable_components THEN 'PAID'
-          WHEN c.paid_components > 0 THEN 'PARTIALLY_PAID'
-          WHEN c.processing_components > 0 THEN 'PROCESSING'
+          WHEN c.processing_components > 0 OR pc.cached_pay_status_code = 'PROCESSING' THEN 'PROCESSING'
+          WHEN coalesce(pt.paid_to_date_ex_vat,0) > 0
+               AND greatest(coalesce(d.reserved_ex_vat,0),0) <= 0
+               AND greatest(coalesce(d.outstanding_ex_vat,0),0) <= 0
+               AND coalesce(d.net_delta_ex_vat,0) <= 0 THEN 'PAID'
+          WHEN coalesce(pt.paid_to_date_ex_vat,0) > 0 THEN 'PARTIALLY_PAID'
           ELSE 'UNPAID'
         END AS paid_status_code,
-        coalesce(pc.cached_paid_at_utc, c.paid_at_utc) AS paid_at_utc
+        coalesce(pt.last_paid_at_utc, pc.cached_paid_at_utc, c.paid_at_utc) AS paid_at_utc
       FROM counts c
       CROSS JOIN pay_cache pc
+      CROSS JOIN paid_totals pt
+      CROSS JOIN delta d
     ) resolved
   ),
   adjusted AS (
     SELECT
-      d.net_delta_ex_vat,
-      d.outstanding_ex_vat,
-      d.reserved_ex_vat,
+      coalesce(d.net_delta_ex_vat,0) AS net_delta_ex_vat,
+      greatest(coalesce(d.outstanding_ex_vat,0),0) AS outstanding_ex_vat,
+      greatest(coalesce(d.reserved_ex_vat,0),0) AS reserved_ex_vat,
       CASE
-        WHEN d.net_delta_ex_vat > 0 THEN 'PAY_OUTSTANDING'
-        WHEN d.net_delta_ex_vat < 0 THEN 'OVERPAID'
+        WHEN greatest(coalesce(d.outstanding_ex_vat,0),0) > 0 THEN 'PAY_OUTSTANDING'
+        WHEN coalesce(d.net_delta_ex_vat,0) < 0 THEN 'OVERPAID'
         ELSE 'NONE'
       END AS adjusted_pill,
       CASE
-        WHEN d.net_delta_ex_vat > 0 THEN
-          'Timesheet adjusted after payment. Additional pay outstanding: £' || to_char(abs(d.net_delta_ex_vat), 'FM999999990D00')
-        WHEN d.net_delta_ex_vat < 0 THEN
-          'Timesheet adjusted after payment. Overpaid by: £' || to_char(abs(d.net_delta_ex_vat), 'FM999999990D00')
+        WHEN greatest(coalesce(d.outstanding_ex_vat,0),0) > 0 THEN
+          'Timesheet adjusted after payment. Additional pay outstanding: £' || to_char(greatest(coalesce(d.outstanding_ex_vat,0),0), 'FM999999990D00')
+        WHEN coalesce(d.net_delta_ex_vat,0) > 0
+             AND greatest(coalesce(d.reserved_ex_vat,0),0) >= coalesce(d.net_delta_ex_vat,0)
+             AND greatest(coalesce(d.outstanding_ex_vat,0),0) <= 0 THEN
+          'Timesheet adjusted after payment. Additional pay is reserved. No unreserved amount is currently owed.'
+        WHEN coalesce(d.net_delta_ex_vat,0) < 0 THEN
+          'Timesheet adjusted after payment. Current overpaid position: £' || to_char(abs(coalesce(d.net_delta_ex_vat,0)), 'FM999999990D00')
         ELSE NULL
       END AS adjusted_message
     FROM delta d
@@ -104157,7 +104181,8 @@ BEGIN
 
   RETURN v_out;
 END;
-$$;
+$function$;
+
 
 
 
