@@ -50492,36 +50492,178 @@ BEGIN
   ORDER BY allocation_row.candidate_scope_id, allocation_row.sort_order, pay_batch_item.id
   LIMIT 100;
 
-  WITH inserted_breakdowns AS (
-    INSERT INTO public.pay_batch_item_breakdowns(
-      pay_batch_item_id,
-      line_kind,
-      bucket_code,
-      unit_name,
-      units,
-      rate,
-      amount_ex_vat,
-      amount_vat,
-      amount_inc_vat,
-      meta_json,
-      operation_source_key
-    )
+  WITH segment_component_source AS (
     SELECT
-      item_page.id,
+      item_page.*,
+      component_entry.component_json,
+      component_entry.component_ordinal::integer AS component_ordinal
+    FROM pg_temp.tmp_pay_batch_breakdown_item_page AS item_page
+    JOIN LATERAL jsonb_array_elements(
+      CASE
+        WHEN jsonb_typeof(item_page.frozen_resolution_payload_json->'case_components') = 'array'
+          THEN item_page.frozen_resolution_payload_json->'case_components'
+        ELSE '[]'::jsonb
+      END
+    ) WITH ORDINALITY AS component_entry(component_json, component_ordinal)
+      ON item_page.item_type = 'SEGMENT_DELTA'
+    WHERE component_entry.component_json IS NOT NULL
+      AND jsonb_typeof(component_entry.component_json) = 'object'
+      AND (
+        NULLIF(BTRIM(COALESCE(component_entry.component_json->>'label', '')), '') IS NOT NULL
+        OR NULLIF(BTRIM(COALESCE(component_entry.component_json->>'bucket_code', component_entry.component_json #>> '{source_basis_json,bucket_code}', '')), '') IS NOT NULL
+        OR COALESCE(component_entry.component_json->>'target_units', component_entry.component_json->>'source_units', component_entry.component_json #>> '{source_basis_json,source_units}', component_entry.component_json #>> '{source_basis_json,units}', '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+        OR COALESCE(component_entry.component_json->>'target_rate', component_entry.component_json->>'source_rate', component_entry.component_json #>> '{source_basis_json,source_rate}', component_entry.component_json #>> '{source_basis_json,rate}', '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+        OR COALESCE(component_entry.component_json->>'target_pay_ex_vat', component_entry.component_json->>'target_amount_ex_vat', component_entry.component_json->>'component_amount_ex_vat', component_entry.component_json->>'preview_component_amount_ex_vat', component_entry.component_json->>'ready_preview_amount_ex_vat', component_entry.component_json->>'source_pay_ex_vat', component_entry.component_json->>'source_amount_ex_vat', component_entry.component_json #>> '{source_basis_json,source_pay_ex_vat}', '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+      )
+  ), segment_component_derived AS (
+    SELECT
+      segment_component_source.*,
+      NULLIF(UPPER(BTRIM(COALESCE(
+        segment_component_source.component_json->>'bucket_code',
+        segment_component_source.component_json #>> '{source_basis_json,bucket_code}',
+        segment_component_source.component_json->>'label',
+        ''
+      ))), '') AS derived_bucket_code,
+      COALESCE(
+        NULLIF(BTRIM(segment_component_source.component_json->>'label'), ''),
+        NULLIF(UPPER(BTRIM(segment_component_source.component_json->>'bucket_code')), ''),
+        NULLIF(UPPER(BTRIM(segment_component_source.component_json #>> '{source_basis_json,bucket_code}')), ''),
+        NULLIF(BTRIM(segment_component_source.frozen_component_snapshot_json->>'label'), ''),
+        NULLIF(BTRIM(segment_component_source.description), ''),
+        segment_component_source.item_type
+      ) AS derived_unit_name,
+      NULLIF(BTRIM(COALESCE(
+        segment_component_source.component_json->>'target_units',
+        segment_component_source.component_json->>'source_units',
+        segment_component_source.component_json #>> '{source_basis_json,source_units}',
+        segment_component_source.component_json #>> '{source_basis_json,units}',
+        segment_component_source.frozen_component_snapshot_json->>'target_units',
+        segment_component_source.frozen_source_basis_json->>'units',
+        ''
+      )), '') AS derived_units_text,
+      NULLIF(BTRIM(COALESCE(
+        segment_component_source.component_json->>'target_rate',
+        segment_component_source.component_json->>'source_rate',
+        segment_component_source.component_json #>> '{source_basis_json,source_rate}',
+        segment_component_source.component_json #>> '{source_basis_json,rate}',
+        segment_component_source.frozen_component_snapshot_json->>'target_rate',
+        segment_component_source.frozen_source_basis_json->>'rate',
+        ''
+      )), '') AS derived_rate_text,
+      NULLIF(BTRIM(COALESCE(
+        segment_component_source.component_json->>'target_pay_ex_vat',
+        segment_component_source.component_json->>'target_amount_ex_vat',
+        segment_component_source.component_json->>'component_amount_ex_vat',
+        segment_component_source.component_json->>'preview_component_amount_ex_vat',
+        segment_component_source.component_json->>'ready_preview_amount_ex_vat',
+        segment_component_source.component_json->>'source_pay_ex_vat',
+        segment_component_source.component_json->>'source_amount_ex_vat',
+        segment_component_source.component_json #>> '{source_basis_json,source_pay_ex_vat}',
+        ''
+      )), '') AS derived_amount_text
+    FROM segment_component_source
+  ), segment_component_amounts AS (
+    SELECT
+      segment_component_derived.*,
+      CASE WHEN segment_component_derived.derived_units_text ~ '^-?[0-9]+(\.[0-9]+)?$' THEN segment_component_derived.derived_units_text::numeric ELSE NULL::numeric END AS derived_units,
+      CASE WHEN segment_component_derived.derived_rate_text ~ '^-?[0-9]+(\.[0-9]+)?$' THEN segment_component_derived.derived_rate_text::numeric ELSE NULL::numeric END AS derived_rate,
+      CASE
+        WHEN segment_component_derived.derived_amount_text ~ '^-?[0-9]+(\.[0-9]+)?$' THEN segment_component_derived.derived_amount_text::numeric
+        WHEN segment_component_derived.derived_units_text ~ '^-?[0-9]+(\.[0-9]+)?$'
+         AND segment_component_derived.derived_rate_text ~ '^-?[0-9]+(\.[0-9]+)?$'
+          THEN segment_component_derived.derived_units_text::numeric * segment_component_derived.derived_rate_text::numeric
+        ELSE 0::numeric
+      END AS derived_amount_ex_vat,
+      ROUND(COALESCE(segment_component_derived.frozen_target_amount_vat, segment_component_derived.amount_vat, 0), 2) AS item_total_vat
+    FROM segment_component_derived
+  ), segment_component_prorated AS (
+    SELECT
+      segment_component_amounts.*,
+      COUNT(*) OVER (PARTITION BY segment_component_amounts.id) AS component_count,
+      ROW_NUMBER() OVER (PARTITION BY segment_component_amounts.id ORDER BY segment_component_amounts.component_ordinal, segment_component_amounts.id) AS component_position,
+      SUM(ROUND(COALESCE(segment_component_amounts.derived_amount_ex_vat, 0), 2)) OVER (PARTITION BY segment_component_amounts.id) AS component_total_ex_vat,
+      ROUND(
+        CASE
+          WHEN SUM(ROUND(COALESCE(segment_component_amounts.derived_amount_ex_vat, 0), 2)) OVER (PARTITION BY segment_component_amounts.id) <> 0 THEN
+            COALESCE(segment_component_amounts.item_total_vat, 0)
+            * ROUND(COALESCE(segment_component_amounts.derived_amount_ex_vat, 0), 2)
+            / NULLIF(SUM(ROUND(COALESCE(segment_component_amounts.derived_amount_ex_vat, 0), 2)) OVER (PARTITION BY segment_component_amounts.id), 0)
+          WHEN COUNT(*) OVER (PARTITION BY segment_component_amounts.id) > 0 THEN
+            COALESCE(segment_component_amounts.item_total_vat, 0) / NULLIF(COUNT(*) OVER (PARTITION BY segment_component_amounts.id), 0)
+          ELSE 0
+        END,
+        2
+      ) AS provisional_component_vat
+    FROM segment_component_amounts
+  ), segment_component_allocated AS (
+    SELECT
+      segment_component_prorated.*,
+      CASE
+        WHEN segment_component_prorated.component_position = segment_component_prorated.component_count THEN
+          ROUND(
+            COALESCE(segment_component_prorated.item_total_vat, 0)
+            - COALESCE(
+                SUM(segment_component_prorated.provisional_component_vat) OVER (
+                  PARTITION BY segment_component_prorated.id
+                  ORDER BY segment_component_prorated.component_ordinal, segment_component_prorated.id
+                  ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
+                ),
+                0
+              ),
+            2
+          )
+        ELSE segment_component_prorated.provisional_component_vat
+      END AS derived_amount_vat
+    FROM segment_component_prorated
+  ), component_breakdown_rows AS (
+    SELECT
+      segment_component_allocated.id AS pay_batch_item_id,
+      'TS_BUCKET'::text AS line_kind,
+      segment_component_allocated.derived_bucket_code AS bucket_code,
+      segment_component_allocated.derived_unit_name AS unit_name,
+      segment_component_allocated.derived_units AS units,
+      segment_component_allocated.derived_rate AS rate,
+      ROUND(COALESCE(segment_component_allocated.derived_amount_ex_vat, 0), 2) AS amount_ex_vat,
+      ROUND(COALESCE(segment_component_allocated.derived_amount_vat, 0), 2) AS amount_vat,
+      ROUND(COALESCE(segment_component_allocated.derived_amount_ex_vat, 0) + COALESCE(segment_component_allocated.derived_amount_vat, 0), 2) AS amount_inc_vat,
+      jsonb_strip_nulls(
+        jsonb_build_object(
+          'finance_case_id', CASE WHEN segment_component_allocated.finance_case_id IS NULL THEN NULL ELSE segment_component_allocated.finance_case_id::text END,
+          'finance_component_id', CASE WHEN segment_component_allocated.finance_component_id IS NULL THEN NULL ELSE segment_component_allocated.finance_component_id::text END,
+          'component_key_type', segment_component_allocated.frozen_component_key_type,
+          'component_key_value', segment_component_allocated.frozen_component_key_value,
+          'economic_key_type', segment_component_allocated.frozen_component_key_type,
+          'economic_key_value', segment_component_allocated.frozen_component_key_value,
+          'source_basis_json', segment_component_allocated.frozen_source_basis_json,
+          'frozen_component_snapshot_json', segment_component_allocated.frozen_component_snapshot_json,
+          'case_component_json', segment_component_allocated.component_json,
+          'case_component_ordinal', segment_component_allocated.component_ordinal,
+          'source_reservation_amount_ex_vat', public._pay_batch_item_source_reservation_amount_ex_vat(segment_component_allocated.id),
+          'target_amount_ex_vat', ROUND(COALESCE(segment_component_allocated.derived_amount_ex_vat, 0), 2),
+          'resolution_mode', CASE WHEN segment_component_allocated.frozen_resolution_mode IS NULL THEN NULL ELSE segment_component_allocated.frozen_resolution_mode::text END,
+          'resolution_payload_json', segment_component_allocated.frozen_resolution_payload_json,
+          'resolution_result_json', segment_component_allocated.frozen_resolution_result_json
+        )
+      ) AS meta_json,
+      p_operation_id::text || ':breakdown:' || segment_component_allocated.id::text || ':component:' || segment_component_allocated.component_ordinal::text AS operation_source_key
+    FROM segment_component_allocated
+  ), fallback_breakdown_rows AS (
+    SELECT
+      item_page.id AS pay_batch_item_id,
       CASE
         WHEN item_page.item_type = 'SEGMENT_DELTA' THEN 'TS_BUCKET'
         WHEN item_page.item_type = 'MILEAGE_DELTA' THEN 'MILEAGE'
         WHEN item_page.item_type = 'ADJUSTMENT_DELTA' THEN 'ADJUSTMENT'
         WHEN item_page.item_type IN ('MANUAL_CREDIT_PAYOUT', 'MANUAL_DEBT_RECOVERY') THEN item_page.item_type
         ELSE 'EXPENSE'
-      END,
-      NULLIF(UPPER(BTRIM(COALESCE(item_page.frozen_component_snapshot_json->>'bucket_code', item_page.frozen_source_basis_json->>'bucket_code', ''))), ''),
-      COALESCE(NULLIF(BTRIM(item_page.frozen_component_snapshot_json->>'label'), ''), NULLIF(BTRIM(item_page.description), ''), item_page.item_type),
-      CASE WHEN COALESCE(item_page.frozen_component_snapshot_json->>'target_units', item_page.frozen_source_basis_json->>'units', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN COALESCE(item_page.frozen_component_snapshot_json->>'target_units', item_page.frozen_source_basis_json->>'units')::numeric ELSE NULL::numeric END,
-      CASE WHEN COALESCE(item_page.frozen_component_snapshot_json->>'target_rate', item_page.frozen_source_basis_json->>'rate', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN COALESCE(item_page.frozen_component_snapshot_json->>'target_rate', item_page.frozen_source_basis_json->>'rate')::numeric ELSE NULL::numeric END,
-      ROUND(COALESCE(item_page.frozen_target_amount_ex_vat, item_page.amount_ex_vat, 0), 2),
-      ROUND(COALESCE(item_page.frozen_target_amount_vat, item_page.amount_vat, 0), 2),
-      ROUND(COALESCE(item_page.frozen_target_amount_inc_vat, item_page.amount_inc_vat, 0), 2),
+      END AS line_kind,
+      NULLIF(UPPER(BTRIM(COALESCE(item_page.frozen_component_snapshot_json->>'bucket_code', item_page.frozen_source_basis_json->>'bucket_code', ''))), '') AS bucket_code,
+      COALESCE(NULLIF(BTRIM(item_page.frozen_component_snapshot_json->>'label'), ''), NULLIF(BTRIM(item_page.description), ''), item_page.item_type) AS unit_name,
+      CASE WHEN COALESCE(item_page.frozen_component_snapshot_json->>'target_units', item_page.frozen_source_basis_json->>'units', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN COALESCE(item_page.frozen_component_snapshot_json->>'target_units', item_page.frozen_source_basis_json->>'units')::numeric ELSE NULL::numeric END AS units,
+      CASE WHEN COALESCE(item_page.frozen_component_snapshot_json->>'target_rate', item_page.frozen_source_basis_json->>'rate', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN COALESCE(item_page.frozen_component_snapshot_json->>'target_rate', item_page.frozen_source_basis_json->>'rate')::numeric ELSE NULL::numeric END AS rate,
+      ROUND(COALESCE(item_page.frozen_target_amount_ex_vat, item_page.amount_ex_vat, 0), 2) AS amount_ex_vat,
+      ROUND(COALESCE(item_page.frozen_target_amount_vat, item_page.amount_vat, 0), 2) AS amount_vat,
+      ROUND(COALESCE(item_page.frozen_target_amount_inc_vat, item_page.amount_inc_vat, 0), 2) AS amount_inc_vat,
       jsonb_strip_nulls(
         jsonb_build_object(
           'finance_case_id', CASE WHEN item_page.finance_case_id IS NULL THEN NULL ELSE item_page.finance_case_id::text END,
@@ -50538,9 +50680,46 @@ BEGIN
           'resolution_payload_json', item_page.frozen_resolution_payload_json,
           'resolution_result_json', item_page.frozen_resolution_result_json
         )
-      ),
-      p_operation_id::text || ':breakdown:' || item_page.id::text
+      ) AS meta_json,
+      p_operation_id::text || ':breakdown:' || item_page.id::text AS operation_source_key
     FROM pg_temp.tmp_pay_batch_breakdown_item_page AS item_page
+    WHERE item_page.item_type <> 'SEGMENT_DELTA'
+       OR NOT EXISTS (
+         SELECT 1
+         FROM segment_component_source AS existing_component
+         WHERE existing_component.id = item_page.id
+       )
+  ), breakdown_rows AS (
+    SELECT * FROM component_breakdown_rows
+    UNION ALL
+    SELECT * FROM fallback_breakdown_rows
+  ), inserted_breakdowns AS (
+    INSERT INTO public.pay_batch_item_breakdowns(
+      pay_batch_item_id,
+      line_kind,
+      bucket_code,
+      unit_name,
+      units,
+      rate,
+      amount_ex_vat,
+      amount_vat,
+      amount_inc_vat,
+      meta_json,
+      operation_source_key
+    )
+    SELECT
+      breakdown_rows.pay_batch_item_id,
+      breakdown_rows.line_kind,
+      breakdown_rows.bucket_code,
+      breakdown_rows.unit_name,
+      breakdown_rows.units,
+      breakdown_rows.rate,
+      breakdown_rows.amount_ex_vat,
+      breakdown_rows.amount_vat,
+      breakdown_rows.amount_inc_vat,
+      breakdown_rows.meta_json,
+      breakdown_rows.operation_source_key
+    FROM breakdown_rows
     ON CONFLICT (pay_batch_item_id, operation_source_key) WHERE operation_source_key IS NOT NULL DO NOTHING
     RETURNING public.pay_batch_item_breakdowns.id
   )
@@ -50586,8 +50765,6 @@ BEGIN
   );
 END;
 $function$;
-
-
 
 
 
@@ -93477,10 +93654,37 @@ begin
                    'source_ref', item_row.source_ref,
                    'pay_channel', item_row.pay_channel,
                    'line_kind', COALESCE(breakdown_row.line_kind, item_row.item_type),
-                   'bucket_code', breakdown_row.bucket_code,
-                   'unit', breakdown_row.unit_name,
-                   'quantity', breakdown_row.units,
-                   'rate', breakdown_row.rate,
+                   'bucket_code', COALESCE(
+                     NULLIF(UPPER(BTRIM(COALESCE(breakdown_row.bucket_code, ''))), ''),
+                     CASE WHEN component_probe.component_json IS NULL THEN NULL ELSE NULLIF(UPPER(BTRIM(COALESCE(component_probe.component_json->>'bucket_code', component_probe.component_json #>> '{source_basis_json,bucket_code}', component_probe.component_json->>'label', ''))), '') END
+                   ),
+                   'unit', CASE
+                     WHEN component_probe.component_json IS NOT NULL
+                      AND (
+                        NULLIF(BTRIM(COALESCE(breakdown_row.unit_name, '')), '') IS NULL
+                        OR UPPER(BTRIM(COALESCE(breakdown_row.unit_name, ''))) IN ('SEGMENT_DELTA','TIMESHEET PAY','TIMESHEET_PAY','TIMESHEET_PAYMENT','TS_BUCKET')
+                      ) THEN COALESCE(
+                        NULLIF(BTRIM(component_probe.component_json->>'label'), ''),
+                        NULLIF(UPPER(BTRIM(component_probe.component_json->>'bucket_code')), ''),
+                        NULLIF(UPPER(BTRIM(component_probe.component_json #>> '{source_basis_json,bucket_code}')), ''),
+                        breakdown_row.unit_name
+                      )
+                     ELSE breakdown_row.unit_name
+                   END,
+                   'quantity', CASE
+                     WHEN component_probe.component_json IS NOT NULL
+                      AND breakdown_row.units IS NULL
+                      AND COALESCE(component_probe.component_json->>'target_units', component_probe.component_json->>'source_units', component_probe.component_json #>> '{source_basis_json,source_units}', component_probe.component_json #>> '{source_basis_json,units}', '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+                       THEN COALESCE(component_probe.component_json->>'target_units', component_probe.component_json->>'source_units', component_probe.component_json #>> '{source_basis_json,source_units}', component_probe.component_json #>> '{source_basis_json,units}')::numeric
+                     ELSE breakdown_row.units
+                   END,
+                   'rate', CASE
+                     WHEN component_probe.component_json IS NOT NULL
+                      AND breakdown_row.rate IS NULL
+                      AND COALESCE(component_probe.component_json->>'target_rate', component_probe.component_json->>'source_rate', component_probe.component_json #>> '{source_basis_json,source_rate}', component_probe.component_json #>> '{source_basis_json,rate}', '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+                       THEN COALESCE(component_probe.component_json->>'target_rate', component_probe.component_json->>'source_rate', component_probe.component_json #>> '{source_basis_json,source_rate}', component_probe.component_json #>> '{source_basis_json,rate}')::numeric
+                     ELSE breakdown_row.rate
+                   END,
                    'total_ex_vat', COALESCE(breakdown_row.amount_ex_vat, item_row.amount_ex_vat),
                    'total_vat', COALESCE(breakdown_row.amount_vat, item_row.amount_vat),
                    'total_inc_vat', COALESCE(breakdown_row.amount_inc_vat, item_row.amount_inc_vat),
@@ -93494,6 +93698,34 @@ begin
                   AND candidate_row.pay_batch_id = p_pay_batch_id
                  LEFT JOIN public.pay_batch_item_breakdowns AS breakdown_row
                    ON breakdown_row.pay_batch_item_id = item_row.id
+                 LEFT JOIN LATERAL (
+                   SELECT component_entry.component_json
+                   FROM jsonb_array_elements(
+                     CASE
+                       WHEN jsonb_typeof(breakdown_row.meta_json->'resolution_payload_json'->'case_components') = 'array'
+                         THEN breakdown_row.meta_json->'resolution_payload_json'->'case_components'
+                       ELSE '[]'::jsonb
+                     END
+                   ) WITH ORDINALITY AS component_entry(component_json, component_ordinal)
+                   WHERE component_entry.component_json IS NOT NULL
+                     AND jsonb_typeof(component_entry.component_json) = 'object'
+                     AND (
+                       NULLIF(BTRIM(COALESCE(component_entry.component_json->>'label', '')), '') IS NOT NULL
+                       OR NULLIF(BTRIM(COALESCE(component_entry.component_json->>'bucket_code', component_entry.component_json #>> '{source_basis_json,bucket_code}', '')), '') IS NOT NULL
+                       OR COALESCE(component_entry.component_json->>'target_units', component_entry.component_json->>'source_units', component_entry.component_json #>> '{source_basis_json,source_units}', component_entry.component_json #>> '{source_basis_json,units}', '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+                       OR COALESCE(component_entry.component_json->>'target_rate', component_entry.component_json->>'source_rate', component_entry.component_json #>> '{source_basis_json,source_rate}', component_entry.component_json #>> '{source_basis_json,rate}', '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+                     )
+                   ORDER BY component_entry.component_ordinal
+                   LIMIT 1
+                 ) AS component_probe
+                   ON upper(coalesce(breakdown_row.line_kind,'')) = 'TS_BUCKET'
+                  AND NULLIF(BTRIM(COALESCE(breakdown_row.bucket_code, '')), '') IS NULL
+                  AND breakdown_row.units IS NULL
+                  AND breakdown_row.rate IS NULL
+                  AND (
+                    NULLIF(BTRIM(COALESCE(breakdown_row.unit_name, '')), '') IS NULL
+                    OR UPPER(BTRIM(COALESCE(breakdown_row.unit_name, ''))) IN ('SEGMENT_DELTA','TIMESHEET PAY','TIMESHEET_PAY','TIMESHEET_PAYMENT','TS_BUCKET')
+                  )
                  WHERE (item_id.value #>> '{}') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
                    AND COALESCE(item_row.is_voided, false) = false
                ), '[]'::jsonb),
@@ -93688,10 +93920,37 @@ begin
                    'source_ref', item_row.source_ref,
                    'pay_channel', item_row.pay_channel,
                    'line_kind', COALESCE(breakdown_row.line_kind, item_row.item_type),
-                   'bucket_code', breakdown_row.bucket_code,
-                   'unit', breakdown_row.unit_name,
-                   'quantity', breakdown_row.units,
-                   'rate', breakdown_row.rate,
+                   'bucket_code', COALESCE(
+                     NULLIF(UPPER(BTRIM(COALESCE(breakdown_row.bucket_code, ''))), ''),
+                     CASE WHEN component_probe.component_json IS NULL THEN NULL ELSE NULLIF(UPPER(BTRIM(COALESCE(component_probe.component_json->>'bucket_code', component_probe.component_json #>> '{source_basis_json,bucket_code}', component_probe.component_json->>'label', ''))), '') END
+                   ),
+                   'unit', CASE
+                     WHEN component_probe.component_json IS NOT NULL
+                      AND (
+                        NULLIF(BTRIM(COALESCE(breakdown_row.unit_name, '')), '') IS NULL
+                        OR UPPER(BTRIM(COALESCE(breakdown_row.unit_name, ''))) IN ('SEGMENT_DELTA','TIMESHEET PAY','TIMESHEET_PAY','TIMESHEET_PAYMENT','TS_BUCKET')
+                      ) THEN COALESCE(
+                        NULLIF(BTRIM(component_probe.component_json->>'label'), ''),
+                        NULLIF(UPPER(BTRIM(component_probe.component_json->>'bucket_code')), ''),
+                        NULLIF(UPPER(BTRIM(component_probe.component_json #>> '{source_basis_json,bucket_code}')), ''),
+                        breakdown_row.unit_name
+                      )
+                     ELSE breakdown_row.unit_name
+                   END,
+                   'quantity', CASE
+                     WHEN component_probe.component_json IS NOT NULL
+                      AND breakdown_row.units IS NULL
+                      AND COALESCE(component_probe.component_json->>'target_units', component_probe.component_json->>'source_units', component_probe.component_json #>> '{source_basis_json,source_units}', component_probe.component_json #>> '{source_basis_json,units}', '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+                       THEN COALESCE(component_probe.component_json->>'target_units', component_probe.component_json->>'source_units', component_probe.component_json #>> '{source_basis_json,source_units}', component_probe.component_json #>> '{source_basis_json,units}')::numeric
+                     ELSE breakdown_row.units
+                   END,
+                   'rate', CASE
+                     WHEN component_probe.component_json IS NOT NULL
+                      AND breakdown_row.rate IS NULL
+                      AND COALESCE(component_probe.component_json->>'target_rate', component_probe.component_json->>'source_rate', component_probe.component_json #>> '{source_basis_json,source_rate}', component_probe.component_json #>> '{source_basis_json,rate}', '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+                       THEN COALESCE(component_probe.component_json->>'target_rate', component_probe.component_json->>'source_rate', component_probe.component_json #>> '{source_basis_json,source_rate}', component_probe.component_json #>> '{source_basis_json,rate}')::numeric
+                     ELSE breakdown_row.rate
+                   END,
                    'total_ex_vat', COALESCE(breakdown_row.amount_ex_vat, item_row.amount_ex_vat),
                    'total_vat', COALESCE(breakdown_row.amount_vat, item_row.amount_vat),
                    'total_inc_vat', COALESCE(breakdown_row.amount_inc_vat, item_row.amount_inc_vat),
@@ -93705,6 +93964,34 @@ begin
                   AND candidate_row.pay_batch_id = p_pay_batch_id
                  LEFT JOIN public.pay_batch_item_breakdowns AS breakdown_row
                    ON breakdown_row.pay_batch_item_id = item_row.id
+                 LEFT JOIN LATERAL (
+                   SELECT component_entry.component_json
+                   FROM jsonb_array_elements(
+                     CASE
+                       WHEN jsonb_typeof(breakdown_row.meta_json->'resolution_payload_json'->'case_components') = 'array'
+                         THEN breakdown_row.meta_json->'resolution_payload_json'->'case_components'
+                       ELSE '[]'::jsonb
+                     END
+                   ) WITH ORDINALITY AS component_entry(component_json, component_ordinal)
+                   WHERE component_entry.component_json IS NOT NULL
+                     AND jsonb_typeof(component_entry.component_json) = 'object'
+                     AND (
+                       NULLIF(BTRIM(COALESCE(component_entry.component_json->>'label', '')), '') IS NOT NULL
+                       OR NULLIF(BTRIM(COALESCE(component_entry.component_json->>'bucket_code', component_entry.component_json #>> '{source_basis_json,bucket_code}', '')), '') IS NOT NULL
+                       OR COALESCE(component_entry.component_json->>'target_units', component_entry.component_json->>'source_units', component_entry.component_json #>> '{source_basis_json,source_units}', component_entry.component_json #>> '{source_basis_json,units}', '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+                       OR COALESCE(component_entry.component_json->>'target_rate', component_entry.component_json->>'source_rate', component_entry.component_json #>> '{source_basis_json,source_rate}', component_entry.component_json #>> '{source_basis_json,rate}', '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+                     )
+                   ORDER BY component_entry.component_ordinal
+                   LIMIT 1
+                 ) AS component_probe
+                   ON upper(coalesce(breakdown_row.line_kind,'')) = 'TS_BUCKET'
+                  AND NULLIF(BTRIM(COALESCE(breakdown_row.bucket_code, '')), '') IS NULL
+                  AND breakdown_row.units IS NULL
+                  AND breakdown_row.rate IS NULL
+                  AND (
+                    NULLIF(BTRIM(COALESCE(breakdown_row.unit_name, '')), '') IS NULL
+                    OR UPPER(BTRIM(COALESCE(breakdown_row.unit_name, ''))) IN ('SEGMENT_DELTA','TIMESHEET PAY','TIMESHEET_PAY','TIMESHEET_PAYMENT','TS_BUCKET')
+                  )
                  WHERE (item_id.value #>> '{}') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
                    AND COALESCE(item_row.is_voided, false) = false
                ), '[]'::jsonb),
@@ -94118,16 +94405,71 @@ begin
         ci.pay_batch_item_id,
         pbib.id as pay_batch_item_breakdown_id,
         pbib.line_kind,
-        pbib.bucket_code,
-        pbib.unit_name,
-        pbib.units,
-        pbib.rate,
+        COALESCE(
+          NULLIF(UPPER(BTRIM(COALESCE(pbib.bucket_code, ''))), ''),
+          CASE WHEN component_probe.component_json IS NULL THEN NULL ELSE NULLIF(UPPER(BTRIM(COALESCE(component_probe.component_json->>'bucket_code', component_probe.component_json #>> '{source_basis_json,bucket_code}', component_probe.component_json->>'label', ''))), '') END
+        ) as bucket_code,
+        CASE
+          WHEN component_probe.component_json IS NOT NULL
+           AND (
+             NULLIF(BTRIM(COALESCE(pbib.unit_name, '')), '') IS NULL
+             OR UPPER(BTRIM(COALESCE(pbib.unit_name, ''))) IN ('SEGMENT_DELTA','TIMESHEET PAY','TIMESHEET_PAY','TIMESHEET_PAYMENT','TS_BUCKET')
+           ) THEN COALESCE(
+             NULLIF(BTRIM(component_probe.component_json->>'label'), ''),
+             NULLIF(UPPER(BTRIM(component_probe.component_json->>'bucket_code')), ''),
+             NULLIF(UPPER(BTRIM(component_probe.component_json #>> '{source_basis_json,bucket_code}')), ''),
+             pbib.unit_name
+           )
+          ELSE pbib.unit_name
+        END as unit_name,
+        CASE
+          WHEN component_probe.component_json IS NOT NULL
+           AND pbib.units IS NULL
+           AND COALESCE(component_probe.component_json->>'target_units', component_probe.component_json->>'source_units', component_probe.component_json #>> '{source_basis_json,source_units}', component_probe.component_json #>> '{source_basis_json,units}', '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+            THEN COALESCE(component_probe.component_json->>'target_units', component_probe.component_json->>'source_units', component_probe.component_json #>> '{source_basis_json,source_units}', component_probe.component_json #>> '{source_basis_json,units}')::numeric
+          ELSE pbib.units
+        END as units,
+        CASE
+          WHEN component_probe.component_json IS NOT NULL
+           AND pbib.rate IS NULL
+           AND COALESCE(component_probe.component_json->>'target_rate', component_probe.component_json->>'source_rate', component_probe.component_json #>> '{source_basis_json,source_rate}', component_probe.component_json #>> '{source_basis_json,rate}', '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+            THEN COALESCE(component_probe.component_json->>'target_rate', component_probe.component_json->>'source_rate', component_probe.component_json #>> '{source_basis_json,source_rate}', component_probe.component_json #>> '{source_basis_json,rate}')::numeric
+          ELSE pbib.rate
+        END as rate,
         pbib.amount_ex_vat,
         pbib.amount_vat,
         pbib.amount_inc_vat
       from cand_items ci
       join public.pay_batch_item_breakdowns pbib
         on pbib.pay_batch_item_id = ci.pay_batch_item_id
+      left join lateral (
+        select component_entry.component_json
+        from jsonb_array_elements(
+          case
+            when jsonb_typeof(pbib.meta_json->'resolution_payload_json'->'case_components') = 'array'
+              then pbib.meta_json->'resolution_payload_json'->'case_components'
+            else '[]'::jsonb
+          end
+        ) with ordinality as component_entry(component_json, component_ordinal)
+        where component_entry.component_json is not null
+          and jsonb_typeof(component_entry.component_json) = 'object'
+          and (
+            NULLIF(BTRIM(COALESCE(component_entry.component_json->>'label', '')), '') IS NOT NULL
+            OR NULLIF(BTRIM(COALESCE(component_entry.component_json->>'bucket_code', component_entry.component_json #>> '{source_basis_json,bucket_code}', '')), '') IS NOT NULL
+            OR COALESCE(component_entry.component_json->>'target_units', component_entry.component_json->>'source_units', component_entry.component_json #>> '{source_basis_json,source_units}', component_entry.component_json #>> '{source_basis_json,units}', '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+            OR COALESCE(component_entry.component_json->>'target_rate', component_entry.component_json->>'source_rate', component_entry.component_json #>> '{source_basis_json,source_rate}', component_entry.component_json #>> '{source_basis_json,rate}', '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+          )
+        order by component_entry.component_ordinal
+        limit 1
+      ) as component_probe
+        on upper(coalesce(pbib.line_kind,'')) = 'TS_BUCKET'
+       and NULLIF(BTRIM(COALESCE(pbib.bucket_code, '')), '') IS NULL
+       and pbib.units IS NULL
+       and pbib.rate IS NULL
+       and (
+         NULLIF(BTRIM(COALESCE(pbib.unit_name, '')), '') IS NULL
+         OR UPPER(BTRIM(COALESCE(pbib.unit_name, ''))) IN ('SEGMENT_DELTA','TIMESHEET PAY','TIMESHEET_PAY','TIMESHEET_PAYMENT','TS_BUCKET')
+       )
       where ci.timesheet_id is not null
     ),
     ts_unit_rows as (
@@ -95111,16 +95453,71 @@ begin
         ci.pay_batch_item_id,
         pbib.id as pay_batch_item_breakdown_id,
         pbib.line_kind,
-        pbib.bucket_code,
-        pbib.unit_name,
-        pbib.units,
-        pbib.rate,
+        COALESCE(
+          NULLIF(UPPER(BTRIM(COALESCE(pbib.bucket_code, ''))), ''),
+          CASE WHEN component_probe.component_json IS NULL THEN NULL ELSE NULLIF(UPPER(BTRIM(COALESCE(component_probe.component_json->>'bucket_code', component_probe.component_json #>> '{source_basis_json,bucket_code}', component_probe.component_json->>'label', ''))), '') END
+        ) as bucket_code,
+        CASE
+          WHEN component_probe.component_json IS NOT NULL
+           AND (
+             NULLIF(BTRIM(COALESCE(pbib.unit_name, '')), '') IS NULL
+             OR UPPER(BTRIM(COALESCE(pbib.unit_name, ''))) IN ('SEGMENT_DELTA','TIMESHEET PAY','TIMESHEET_PAY','TIMESHEET_PAYMENT','TS_BUCKET')
+           ) THEN COALESCE(
+             NULLIF(BTRIM(component_probe.component_json->>'label'), ''),
+             NULLIF(UPPER(BTRIM(component_probe.component_json->>'bucket_code')), ''),
+             NULLIF(UPPER(BTRIM(component_probe.component_json #>> '{source_basis_json,bucket_code}')), ''),
+             pbib.unit_name
+           )
+          ELSE pbib.unit_name
+        END as unit_name,
+        CASE
+          WHEN component_probe.component_json IS NOT NULL
+           AND pbib.units IS NULL
+           AND COALESCE(component_probe.component_json->>'target_units', component_probe.component_json->>'source_units', component_probe.component_json #>> '{source_basis_json,source_units}', component_probe.component_json #>> '{source_basis_json,units}', '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+            THEN COALESCE(component_probe.component_json->>'target_units', component_probe.component_json->>'source_units', component_probe.component_json #>> '{source_basis_json,source_units}', component_probe.component_json #>> '{source_basis_json,units}')::numeric
+          ELSE pbib.units
+        END as units,
+        CASE
+          WHEN component_probe.component_json IS NOT NULL
+           AND pbib.rate IS NULL
+           AND COALESCE(component_probe.component_json->>'target_rate', component_probe.component_json->>'source_rate', component_probe.component_json #>> '{source_basis_json,source_rate}', component_probe.component_json #>> '{source_basis_json,rate}', '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+            THEN COALESCE(component_probe.component_json->>'target_rate', component_probe.component_json->>'source_rate', component_probe.component_json #>> '{source_basis_json,source_rate}', component_probe.component_json #>> '{source_basis_json,rate}')::numeric
+          ELSE pbib.rate
+        END as rate,
         pbib.amount_ex_vat,
         pbib.amount_vat,
         pbib.amount_inc_vat
       from cand_items ci
       join public.pay_batch_item_breakdowns pbib
         on pbib.pay_batch_item_id = ci.pay_batch_item_id
+      left join lateral (
+        select component_entry.component_json
+        from jsonb_array_elements(
+          case
+            when jsonb_typeof(pbib.meta_json->'resolution_payload_json'->'case_components') = 'array'
+              then pbib.meta_json->'resolution_payload_json'->'case_components'
+            else '[]'::jsonb
+          end
+        ) with ordinality as component_entry(component_json, component_ordinal)
+        where component_entry.component_json is not null
+          and jsonb_typeof(component_entry.component_json) = 'object'
+          and (
+            NULLIF(BTRIM(COALESCE(component_entry.component_json->>'label', '')), '') IS NOT NULL
+            OR NULLIF(BTRIM(COALESCE(component_entry.component_json->>'bucket_code', component_entry.component_json #>> '{source_basis_json,bucket_code}', '')), '') IS NOT NULL
+            OR COALESCE(component_entry.component_json->>'target_units', component_entry.component_json->>'source_units', component_entry.component_json #>> '{source_basis_json,source_units}', component_entry.component_json #>> '{source_basis_json,units}', '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+            OR COALESCE(component_entry.component_json->>'target_rate', component_entry.component_json->>'source_rate', component_entry.component_json #>> '{source_basis_json,source_rate}', component_entry.component_json #>> '{source_basis_json,rate}', '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+          )
+        order by component_entry.component_ordinal
+        limit 1
+      ) as component_probe
+        on upper(coalesce(pbib.line_kind,'')) = 'TS_BUCKET'
+       and NULLIF(BTRIM(COALESCE(pbib.bucket_code, '')), '') IS NULL
+       and pbib.units IS NULL
+       and pbib.rate IS NULL
+       and (
+         NULLIF(BTRIM(COALESCE(pbib.unit_name, '')), '') IS NULL
+         OR UPPER(BTRIM(COALESCE(pbib.unit_name, ''))) IN ('SEGMENT_DELTA','TIMESHEET PAY','TIMESHEET_PAY','TIMESHEET_PAYMENT','TS_BUCKET')
+       )
       where ci.timesheet_id is not null
     ),
     ts_unit_rows as (
@@ -95985,16 +96382,71 @@ begin
         ci.pay_batch_item_id,
         pbib.id as pay_batch_item_breakdown_id,
         pbib.line_kind,
-        pbib.bucket_code,
-        pbib.unit_name,
-        pbib.units,
-        pbib.rate,
+        COALESCE(
+          NULLIF(UPPER(BTRIM(COALESCE(pbib.bucket_code, ''))), ''),
+          CASE WHEN component_probe.component_json IS NULL THEN NULL ELSE NULLIF(UPPER(BTRIM(COALESCE(component_probe.component_json->>'bucket_code', component_probe.component_json #>> '{source_basis_json,bucket_code}', component_probe.component_json->>'label', ''))), '') END
+        ) as bucket_code,
+        CASE
+          WHEN component_probe.component_json IS NOT NULL
+           AND (
+             NULLIF(BTRIM(COALESCE(pbib.unit_name, '')), '') IS NULL
+             OR UPPER(BTRIM(COALESCE(pbib.unit_name, ''))) IN ('SEGMENT_DELTA','TIMESHEET PAY','TIMESHEET_PAY','TIMESHEET_PAYMENT','TS_BUCKET')
+           ) THEN COALESCE(
+             NULLIF(BTRIM(component_probe.component_json->>'label'), ''),
+             NULLIF(UPPER(BTRIM(component_probe.component_json->>'bucket_code')), ''),
+             NULLIF(UPPER(BTRIM(component_probe.component_json #>> '{source_basis_json,bucket_code}')), ''),
+             pbib.unit_name
+           )
+          ELSE pbib.unit_name
+        END as unit_name,
+        CASE
+          WHEN component_probe.component_json IS NOT NULL
+           AND pbib.units IS NULL
+           AND COALESCE(component_probe.component_json->>'target_units', component_probe.component_json->>'source_units', component_probe.component_json #>> '{source_basis_json,source_units}', component_probe.component_json #>> '{source_basis_json,units}', '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+            THEN COALESCE(component_probe.component_json->>'target_units', component_probe.component_json->>'source_units', component_probe.component_json #>> '{source_basis_json,source_units}', component_probe.component_json #>> '{source_basis_json,units}')::numeric
+          ELSE pbib.units
+        END as units,
+        CASE
+          WHEN component_probe.component_json IS NOT NULL
+           AND pbib.rate IS NULL
+           AND COALESCE(component_probe.component_json->>'target_rate', component_probe.component_json->>'source_rate', component_probe.component_json #>> '{source_basis_json,source_rate}', component_probe.component_json #>> '{source_basis_json,rate}', '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+            THEN COALESCE(component_probe.component_json->>'target_rate', component_probe.component_json->>'source_rate', component_probe.component_json #>> '{source_basis_json,source_rate}', component_probe.component_json #>> '{source_basis_json,rate}')::numeric
+          ELSE pbib.rate
+        END as rate,
         pbib.amount_ex_vat,
         pbib.amount_vat,
         pbib.amount_inc_vat
       from cand_items ci
       join public.pay_batch_item_breakdowns pbib
         on pbib.pay_batch_item_id = ci.pay_batch_item_id
+      left join lateral (
+        select component_entry.component_json
+        from jsonb_array_elements(
+          case
+            when jsonb_typeof(pbib.meta_json->'resolution_payload_json'->'case_components') = 'array'
+              then pbib.meta_json->'resolution_payload_json'->'case_components'
+            else '[]'::jsonb
+          end
+        ) with ordinality as component_entry(component_json, component_ordinal)
+        where component_entry.component_json is not null
+          and jsonb_typeof(component_entry.component_json) = 'object'
+          and (
+            NULLIF(BTRIM(COALESCE(component_entry.component_json->>'label', '')), '') IS NOT NULL
+            OR NULLIF(BTRIM(COALESCE(component_entry.component_json->>'bucket_code', component_entry.component_json #>> '{source_basis_json,bucket_code}', '')), '') IS NOT NULL
+            OR COALESCE(component_entry.component_json->>'target_units', component_entry.component_json->>'source_units', component_entry.component_json #>> '{source_basis_json,source_units}', component_entry.component_json #>> '{source_basis_json,units}', '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+            OR COALESCE(component_entry.component_json->>'target_rate', component_entry.component_json->>'source_rate', component_entry.component_json #>> '{source_basis_json,source_rate}', component_entry.component_json #>> '{source_basis_json,rate}', '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+          )
+        order by component_entry.component_ordinal
+        limit 1
+      ) as component_probe
+        on upper(coalesce(pbib.line_kind,'')) = 'TS_BUCKET'
+       and NULLIF(BTRIM(COALESCE(pbib.bucket_code, '')), '') IS NULL
+       and pbib.units IS NULL
+       and pbib.rate IS NULL
+       and (
+         NULLIF(BTRIM(COALESCE(pbib.unit_name, '')), '') IS NULL
+         OR UPPER(BTRIM(COALESCE(pbib.unit_name, ''))) IN ('SEGMENT_DELTA','TIMESHEET PAY','TIMESHEET_PAY','TIMESHEET_PAYMENT','TS_BUCKET')
+       )
       where ci.timesheet_id is not null
     ),
     ts_unit_rows as (
@@ -96601,8 +97053,6 @@ begin
   );
 end;
 $function$;
-
-
 
 
 
