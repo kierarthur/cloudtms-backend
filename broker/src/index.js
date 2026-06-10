@@ -24798,8 +24798,6 @@ async function handleBankingIdLedgerList(env, req, user) {
 }
 
 
-
-
 async function advanceBankingPayExecuteOperation(env, operationRow, user, options = {}) {
   const trimStr = (value) => String(value == null ? '' : value).trim();
   const upper = (value) => trimStr(value).toUpperCase();
@@ -25180,7 +25178,22 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
   };
 
   const queueCompletionNoticeBestEffort = async (reason, extra = {}) => {
-    if (typeof sendPayBatchCompletionNoticeAllAuthorisers !== 'function') return { ok: false, skipped: true, code: 'PAY_BATCH_COMPLETION_NOTICE_FUNCTION_UNAVAILABLE' };
+    if (typeof sendPayBatchCompletionNoticeAllAuthorisers !== 'function') {
+      return {
+        ok: false,
+        attempted: true,
+        queued: false,
+        skipped: true,
+        already_queued: false,
+        code: 'PAY_BATCH_COMPLETION_NOTICE_FUNCTION_UNAVAILABLE',
+        completion_notice_attempted: true,
+        completion_notice_queued: false,
+        completion_notice_skipped: true,
+        completion_notice_skip_reason: 'PAY_BATCH_COMPLETION_NOTICE_FUNCTION_UNAVAILABLE',
+        completion_notice_result: 'SKIPPED',
+        skip_reason: 'PAY_BATCH_COMPLETION_NOTICE_FUNCTION_UNAVAILABLE'
+      };
+    }
     try {
       return await sendPayBatchCompletionNoticeAllAuthorisers(env, {
         payBatchId,
@@ -25191,17 +25204,37 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
         context: isPlainObject(extra) ? extra : {}
       });
     } catch (error) {
-      try { console.warn('[advanceBankingPayExecuteOperation] completion notice attempt failed:', error && error.message ? error.message : error); } catch {}
-      return { ok: false, skipped: true, code: 'PAY_BATCH_COMPLETION_NOTICE_FAILED', error: String(error && error.message ? error.message : error) };
+      const errorMessage = String(error && error.message ? error.message : error);
+      try { console.warn('[advanceBankingPayExecuteOperation] completion notice attempt failed:', errorMessage); } catch {}
+      return {
+        ok: false,
+        attempted: true,
+        queued: false,
+        skipped: true,
+        already_queued: false,
+        code: 'PAY_BATCH_COMPLETION_NOTICE_FAILED',
+        completion_notice_attempted: true,
+        completion_notice_queued: false,
+        completion_notice_skipped: true,
+        completion_notice_skip_reason: 'PAY_BATCH_COMPLETION_NOTICE_FAILED',
+        completion_notice_result: 'FAILED',
+        skip_reason: 'PAY_BATCH_COMPLETION_NOTICE_FAILED',
+        error: errorMessage
+      };
     }
   };
   const attachCompletionNoticeResult = (payload, noticeResult) => {
     if (!payload || typeof payload !== 'object') return payload;
     const result = isPlainObject(noticeResult) ? noticeResult : {};
-    payload.completion_notice_attempted = true;
-    payload.completion_notice_queued = result.completion_notice_queued === true;
+    const alreadyQueued = result.already_queued === true || result.completion_notice_already_queued === true;
+    const skipReason = result.completion_notice_skip_reason || result.skip_reason || result.code || null;
+    payload.completion_notice_attempted = result.completion_notice_attempted === true
+      || result.attempted === true
+      || (result.completion_notice_attempted !== false && result.attempted !== false);
+    payload.completion_notice_queued = result.completion_notice_queued === true || result.queued === true || alreadyQueued;
+    payload.completion_notice_already_queued = alreadyQueued;
     payload.completion_notice_skipped = result.completion_notice_skipped === true || result.skipped === true;
-    payload.completion_notice_skip_reason = result.completion_notice_skip_reason || result.skip_reason || null;
+    payload.completion_notice_skip_reason = skipReason;
     payload.completion_notice_reference = result.completion_notice_reference || result.reference || null;
     payload.completion_notice_errors = Array.isArray(result.completion_notice_errors) ? result.completion_notice_errors : (Array.isArray(result.error_rows) ? result.error_rows : []);
     payload.completion_notice_result = result;
@@ -25327,14 +25360,40 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
   const waitingProvider = (nextPhase, progress, delaySeconds = 60) => saveAndRelease('WAITING_PROVIDER', nextPhase, progress, null, null, delaySeconds, 'AWAITING_PROVIDER_OUTCOME');
   const waitingAuthorisation = (progress) => saveAndRelease('WAITING_AUTHORISATION', 'WAITING_AUTHORISATION', progress, null, null, 0, 'AWAITING_HUMAN_AUTHORISATION');
   const reviewRequired = async (phase, code, message, details) => {
-    const payload = await saveAndRelease('REVIEW_REQUIRED', phase || currentPhase, { status_text: message, review_required: true, code }, null, { code, message, details: isPlainObject(details) ? details : {} }, 0, code);
-    const completionNoticeResult = await queueCompletionNoticeBestEffort(code || 'PAYMENT_EXECUTE_REVIEW_REQUIRED', { review_required: true, phase: phase || currentPhase });
-    return attachCompletionNoticeResult(payload, completionNoticeResult);
+    const completionNoticeResult = await queueCompletionNoticeBestEffort(code || 'PAYMENT_EXECUTE_REVIEW_REQUIRED', {
+      review_required: true,
+      phase: phase || currentPhase,
+      code: code || null
+    });
+    const completionNoticePatch = attachCompletionNoticeResult({}, completionNoticeResult);
+    return saveAndRelease(
+      'REVIEW_REQUIRED',
+      phase || currentPhase,
+      Object.assign({ status_text: message, review_required: true, code }, completionNoticePatch),
+      completionNoticePatch,
+      { code, message, details: isPlainObject(details) ? details : {} },
+      0,
+      code
+    );
   };
   const complete = async (progress) => {
-    const payload = await saveAndRelease('COMPLETE', 'COMPLETE', Object.assign({ status_text: 'Payment execution operation complete.' }, isPlainObject(progress) ? progress : {}), null, null, 0, 'COMPLETE');
-    const completionNoticeResult = await queueCompletionNoticeBestEffort('PAYMENT_EXECUTE_COMPLETE', { phase: 'COMPLETE' });
-    return attachCompletionNoticeResult(payload, completionNoticeResult);
+    const progressObject = isPlainObject(progress) ? progress : {};
+    const completionNoticeResult = await queueCompletionNoticeBestEffort('PAYMENT_EXECUTE_COMPLETE', {
+      phase: 'COMPLETE',
+      local_settlement_complete: progressObject.local_settlement_complete === true || progressJson.local_settlement_complete === true,
+      settlement_operation_id: progressObject.settlement_operation_id || progressJson.settlement_operation_id || progressJson.active_child_operation_id || null,
+      remittance_timing_gate: progressObject.remittance_timing_gate || progressJson.remittance_timing_gate || null
+    });
+    const completionNoticePatch = attachCompletionNoticeResult({}, completionNoticeResult);
+    return saveAndRelease(
+      'COMPLETE',
+      'COMPLETE',
+      Object.assign({ status_text: 'Payment execution operation complete.' }, progressObject, completionNoticePatch),
+      completionNoticePatch,
+      null,
+      0,
+      'COMPLETE'
+    );
   };
 
   const firstTransferScopeIdFromChunk = (claim) => {
@@ -76875,7 +76934,6 @@ async function touchBankingPayBatchPaymentStateChanged(env, payBatchId, options 
 }
 
 
-
 async function sendPayBatchCompletionNoticeAllAuthorisers(env, options = {}) {
   const enc = encodeURIComponent;
   const trimText = (value) => String(value == null ? '' : value).trim();
@@ -77091,18 +77149,22 @@ async function sendPayBatchCompletionNoticeAllAuthorisers(env, options = {}) {
   }
 
   if (existingMarkerRow && trimText(existingMarkerRow.completion_notice_queued_at_utc)) {
+    const existingReference = trimText(existingMarkerRow.completion_notice_reference) || null;
     return {
       ok: true,
       pay_batch_id: payBatchId,
       queued: 0,
       skipped: true,
+      already_queued: true,
+      completion_notice_already_queued: true,
       completion_notice_attempted: false,
       completion_notice_queued: true,
       completion_notice_skipped: true,
       completion_notice_skip_reason: 'COMPLETION_NOTICE_ALREADY_QUEUED',
       skip_reason: 'COMPLETION_NOTICE_ALREADY_QUEUED',
-      completion_notice_reference: trimText(existingMarkerRow.completion_notice_reference) || null,
-      reference: trimText(existingMarkerRow.completion_notice_reference) || null,
+      completion_notice_result: 'ALREADY_QUEUED',
+      completion_notice_reference: existingReference,
+      reference: existingReference,
       source,
       reason
     };
@@ -77395,6 +77457,8 @@ async function sendPayBatchCompletionNoticeAllAuthorisers(env, options = {}) {
     outbox_rows_covered_count: coveredCount,
     queued,
     skipped_exists: coveredByConflict,
+    already_queued: queued === 0 && coveredByConflict > 0,
+    completion_notice_already_queued: queued === 0 && coveredByConflict > 0,
     completion_notice_attempted: true,
     completion_notice_queued: true,
     completion_notice_skipped: false,
@@ -77428,6 +77492,8 @@ async function sendPayBatchCompletionNoticeAllAuthorisers(env, options = {}) {
       );
       const row = Array.isArray(rows) && rows[0] && typeof rows[0] === 'object' ? rows[0] : null;
       if (row && trimText(row.completion_notice_queued_at_utc)) {
+        successResult.already_queued = true;
+        successResult.completion_notice_already_queued = true;
         successResult.completion_notice_result = 'ALREADY_MARKED_QUEUED';
         successResult.completion_notice_reference = trimText(row.completion_notice_reference) || reference;
         successResult.reference = successResult.completion_notice_reference;
@@ -77446,9 +77512,6 @@ async function sendPayBatchCompletionNoticeAllAuthorisers(env, options = {}) {
 
   return successResult;
 }
-
-
-
 
 
 async function derivePayBatchTerminalPaymentOutcome(env, options = {}) {
@@ -77544,6 +77607,7 @@ async function derivePayBatchTerminalPaymentOutcome(env, options = {}) {
     false
   );
   const transfers = Array.isArray(transferRows) ? transferRows.filter((row) => row && typeof row === 'object') : [];
+  const transferIds = transfers.map((row) => trimText(row && row.id)).filter((id) => isUuid(id));
   const transferCount = transfers.length;
 
   if (transferCount === 0) {
@@ -77577,16 +77641,22 @@ async function derivePayBatchTerminalPaymentOutcome(env, options = {}) {
 
   let transferEvents = [];
   try {
-    const { rows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/pay_bank_transfer_events` +
-      `?pay_batch_id=eq.${enc(payBatchId)}` +
-      `&select=id,pay_bank_transfer_id,provider_event_id,provider_reference,provider_transaction_id,provider_state,normalised_state,event_source,event_time_utc,received_at_utc,mapping_status,amount,raw_payload` +
-      `&order=event_time_utc.desc.nullslast,received_at_utc.desc.nullslast,id.desc` +
-      `&limit=1000`,
-      false
-    );
-    transferEvents = Array.isArray(rows) ? rows.filter((row) => row && typeof row === 'object') : [];
+    const eventSelect = 'id,pay_bank_transfer_id,provider_event_id,provider_reference,provider_transaction_id,provider_state,normalised_state,event_source,event_time_utc,received_at_utc,mapping_status,amount,raw_payload';
+    const eventChunkSize = 100;
+    for (let offset = 0; offset < transferIds.length; offset += eventChunkSize) {
+      const idChunk = transferIds.slice(offset, offset + eventChunkSize);
+      if (!idChunk.length) continue;
+      const { rows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/pay_bank_transfer_events` +
+        `?pay_bank_transfer_id=in.(${idChunk.map((id) => enc(id)).join(',')})` +
+        `&select=${eventSelect}` +
+        `&order=event_time_utc.desc.nullslast,received_at_utc.desc.nullslast,id.desc` +
+        `&limit=1000`,
+        false
+      );
+      if (Array.isArray(rows)) transferEvents.push(...rows.filter((row) => row && typeof row === 'object'));
+    }
   } catch {
     transferEvents = [];
   }
@@ -77661,10 +77731,11 @@ async function derivePayBatchTerminalPaymentOutcome(env, options = {}) {
   const transferHasTerminalEvidence = (transfer) => {
     const transferObj = asObject(transfer);
     const provider = upperText(transferObj.rail_provider || batch.rail_provider_snapshot);
+    const status = upperText(transferObj.status);
     const railState = upperText(transferObj.rail_state);
     const railMeta = asObject(transferObj.rail_meta_json);
     const events = toArray(eventsByTransferId.get(trimText(transferObj.id)));
-    const hasTerminalRailState = hasTerminalState(railState);
+    const hasTerminalCanonicalState = hasTerminalState(status, railState);
     const hasProviderTransactionIdentity = !!firstText(
       transferObj.rail_tx_id,
       readDeepText(railMeta, ['provider_transaction_id', 'providerTransactionId', 'provider_reference', 'providerReference', 'rail_tx_id', 'railTxId', 'provider_event_id', 'providerEventId'])
@@ -77681,7 +77752,7 @@ async function derivePayBatchTerminalPaymentOutcome(env, options = {}) {
       if (terminalProviderEventStates.has(eventState) && (hasProviderIdentity || eventSource.includes('PROVIDER') || eventSource.includes('WEBHOOK') || eventSource.includes('POLL'))) return true;
     }
 
-    if (!hasTerminalRailState) return false;
+    if (!hasTerminalCanonicalState) return false;
     if (hasProviderTransactionIdentity) return true;
     if (hasExplicitTerminalProviderEvidence) return true;
     return false;
@@ -77881,7 +77952,6 @@ async function derivePayBatchTerminalPaymentOutcome(env, options = {}) {
     issue_lines: issueLines.length ? issueLines : ['The terminal payment outcome is ambiguous and requires review.']
   });
 }
-
 
 
 async function handleBulkProcessDataset(env, req) {
