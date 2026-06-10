@@ -13264,11 +13264,11 @@ async function handleBankingPayWorkbenchSessionOpen(env, req, user, ctx = null) 
             actorUserId,
             budgetProfile: 'INTERACTIVE_PREVIEW',
             profile: 'INTERACTIVE_PREVIEW',
-            claimLimit: 2,
-            maxPasses: 2,
-            maxJobs: 4,
+            claimLimit: 4,
+            maxPasses: 4,
+            maxJobs: 8,
             maxRows: 300,
-            maxRuntimeMs: 3500,
+            maxRuntimeMs: 6000,
             allowedJobTypes: [
               'WORKBENCH_SESSION_SCOPE_SEED',
               'WORKBENCH_CANDIDATE_LINE_WORK_SEED',
@@ -13368,7 +13368,6 @@ async function handleBankingPayWorkbenchSessionOpen(env, req, user, ctx = null) 
   }
   return execute();
 }
-
 
 
 
@@ -13964,6 +13963,7 @@ async function handleBankingPayWorkbenchSessionGetCandidate(env, req, user, sess
   }
 }
 
+
 async function handleBankingPayWorkbenchSessionProgress(env, req, user, sessionId, ctx = null) {
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   const trimStr = (value) => String(value == null ? '' : value).trim();
@@ -14084,11 +14084,11 @@ async function handleBankingPayWorkbenchSessionProgress(env, req, user, sessionI
             actorUserId,
             budgetProfile: 'INTERACTIVE_PREVIEW',
             profile: 'INTERACTIVE_PREVIEW',
-            claimLimit: 2,
-            maxPasses: 2,
-            maxJobs: 4,
+            claimLimit: 4,
+            maxPasses: 4,
+            maxJobs: 8,
             maxRows: 300,
-            maxRuntimeMs: 3500,
+            maxRuntimeMs: 6000,
             allowedJobTypes: [
               'WORKBENCH_SESSION_SCOPE_SEED',
               'WORKBENCH_CANDIDATE_LINE_WORK_SEED',
@@ -166615,8 +166615,6 @@ async function queueDuePayBatchCompletionNotices(env, opts = {}) {
   return summary;
 }
 
-
-
 async function drainBankingPayWorkbenchJobs(env, opts = {}) {
   const trimStr = (value) => String(value == null ? '' : value).trim();
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -166713,7 +166711,7 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
   const maxRowsMax = numberInRange(sourceOptions.maxRowsMax ?? sourceOptions.max_rows_max, 5000, 1, 5000);
   const maxRuntimeMsMax = numberInRange(sourceOptions.maxRuntimeMsMax ?? sourceOptions.max_runtime_ms_max, 30000, 1000, 30000);
   const claimLimit = numberInRange(sourceOptions.claimLimit ?? sourceOptions.claim_limit, 5, 1, claimLimitMax);
-  const maxPasses = numberInRange(sourceOptions.maxPasses ?? sourceOptions.max_passes, 1, 1, 2);
+  const maxPasses = numberInRange(sourceOptions.maxPasses ?? sourceOptions.max_passes, 1, 1, 4);
   const maxJobs = numberInRange(sourceOptions.maxJobs ?? sourceOptions.max_jobs, Math.min(maxJobsMax, claimLimit * maxPasses), 1, maxJobsMax);
   const maxRows = numberInRange(sourceOptions.maxRows ?? sourceOptions.max_rows, 500, 1, maxRowsMax);
   const maxRuntimeMs = numberInRange(sourceOptions.maxRuntimeMs ?? sourceOptions.max_runtime_ms, 10000, 1000, maxRuntimeMsMax);
@@ -167064,6 +167062,10 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
   if (summary.failed_count > 0 || summary.errors.length > 0) summary.ok = false;
   return summary;
 }
+
+
+
+
 
 async function executeBankingPayWorkbenchJob(env, claimedJob, opts = {}) {
   const trimStr = (value) => String(value == null ? '' : value).trim();
