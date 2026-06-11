@@ -39940,6 +39940,8 @@ async function handleBankingPayProviderSubmitReviewResolution(env, req, user, pa
 }
 
 
+
+// Replacement function: handleContractWeekManualUpsert (patched source lines 39943-44494)
 async function handleContractWeekManualUpsert(env, req, weekId) {
    const enc = encodeURIComponent;
  
@@ -40790,29 +40792,102 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
    const hasZeroContractWeekHours = (totalsObj) => {
      const totals = (totalsObj && typeof totalsObj === 'object') ? totalsObj : {};
      const hoursObj = (totals.hours && typeof totals.hours === 'object' && !Array.isArray(totals.hours)) ? totals.hours : null;
-     if (!hoursObj) return false;
-     return (
-       Number(hoursObj.day || 0) === 0 &&
-       Number(hoursObj.night || 0) === 0 &&
-       Number(hoursObj.sat || 0) === 0 &&
-       Number(hoursObj.sun || 0) === 0 &&
-       Number(hoursObj.bh || 0) === 0
-     );
+     const readHour = (...keys) => {
+       for (const key of keys) {
+         if (hoursObj && Object.prototype.hasOwnProperty.call(hoursObj, key)) return Number(hoursObj[key] || 0);
+         if (Object.prototype.hasOwnProperty.call(totals, key)) return Number(totals[key] || 0);
+       }
+       return null;
+     };
+     const values = [
+       readHour('day', 'hours_day'),
+       readHour('night', 'hours_night'),
+       readHour('sat', 'hours_sat'),
+       readHour('sun', 'hours_sun'),
+       readHour('bh', 'bank_holiday', 'hours_bh')
+     ];
+     if (values.some((v) => v == null || !Number.isFinite(v))) return false;
+     return values.every((v) => Number(v || 0) === 0);
+   };
+ 
+   const isContractWeekAuthorisedLockedPaidOrInvoiced = (week) => {
+     const w = (week && typeof week === 'object') ? week : {};
+     const upper = (value) => String(value == null ? '' : value).trim().toUpperCase();
+     const status = upper(w.status || w.contract_week_status || w.processing_status || '');
+     if (['AUTHORISED', 'AUTHORIZED', 'INVOICED', 'PAID', 'CANCELLED', 'CANCELED'].includes(status)) return true;
+     if (w.authorised_at || w.authorised_at_utc || w.authorised_at_server || w.authorized_at || w.authorized_at_utc) return true;
+     if (w.locked_by_invoice_id || w.invoice_id || w.invoiced_at || w.invoiced_at_utc) return true;
+     if (w.paid_at || w.paid_at_utc || w.paid_by_user_id) return true;
+     if (w.invoice_locked === true || w.is_invoiced === true || w.is_paid === true || w.is_authorised === true || w.is_authorized === true) return true;
+     return false;
+   };
+ 
+   const isImportAuthoritativeOrNoTimesheetRequiredContext = (week) => {
+     const w = (week && typeof week === 'object') ? week : {};
+     const upper = (value) => String(value == null ? '' : value).trim().toUpperCase();
+     if (w.is_import_authoritative === true || w.import_authoritative === true) return true;
+     if (w.no_timesheet_required === true || w.no_timesheet_required_snapshot === true || w.timesheet_not_required === true) return true;
+     if (w.direct_expenses_blocked === true || w.expenses_blocked === true) return true;
+     const routeType = upper(w.route_type_snapshot || w.route_type);
+     const routeFamily = upper(w.route_family_snapshot || w.route_family);
+     const routeSubfamily = upper(w.route_subfamily_snapshot || w.route_subfamily);
+     const source = upper(w.source || w.source_system || w.import_source || w.timesheet_source || w.channel || w.submission_channel);
+     if (routeType.includes('IMPORT') || routeFamily.includes('IMPORT') || routeSubfamily.includes('IMPORT')) return true;
+     if (source.includes('IMPORT') || source.includes('NO_TIMESHEET_REQUIRED')) return true;
+     return false;
    };
  
    const isConfirmedAdditionalManualAdjustmentWeek = ({ contractWeekObj, totalsObj }) => {
      const week = (contractWeekObj && typeof contractWeekObj === 'object') ? contractWeekObj : {};
      const totals = (totalsObj && typeof totalsObj === 'object') ? totalsObj : {};
      const additionalSeq = Number(week.additional_seq || 0);
-     const submissionMode = String(week.submission_mode_snapshot || '').trim().toUpperCase();
+     const submissionMode = String(week.submission_mode_snapshot || week.submission_mode || '').trim().toUpperCase();
      const plannedScheduleExplicitlyEmpty = isExplicitlyEmptyScheduleArray(week.planned_schedule_json);
  
      return !!(
+       String(week.id || week.contract_week_id || '').trim() &&
        (additionalSeq > 0 || week.is_adjustment === true) &&
        submissionMode === 'MANUAL' &&
        plannedScheduleExplicitlyEmpty &&
-       hasZeroContractWeekHours(totals)
+       hasZeroContractWeekHours(totals) &&
+       !isContractWeekAuthorisedLockedPaidOrInvoiced(week) &&
+       !isImportAuthoritativeOrNoTimesheetRequiredContext(week)
      );
+   };
+ 
+   const isConfirmedParentWeeklyManualContractWeek = ({ contractWeekObj, totalsObj }) => {
+     const week = (contractWeekObj && typeof contractWeekObj === 'object') ? contractWeekObj : {};
+     const totals = (totalsObj && typeof totalsObj === 'object') ? totalsObj : {};
+     const additionalSeq = Number(week.additional_seq || 0);
+     if (!String(week.id || week.contract_week_id || '').trim()) return false;
+     if (additionalSeq !== 0 || week.is_adjustment === true) return false;
+     if (!isExplicitlyEmptyScheduleArray(week.planned_schedule_json)) return false;
+     if (!hasZeroContractWeekHours(totals)) return false;
+     if (isContractWeekAuthorisedLockedPaidOrInvoiced(week)) return false;
+     if (isImportAuthoritativeOrNoTimesheetRequiredContext(week)) return false;
+ 
+     const upper = (value) => String(value == null ? '' : value).trim().toUpperCase();
+     const submissionMode = upper(week.submission_mode_snapshot || week.submission_mode);
+     const routeType = upper(week.route_type_snapshot || week.route_type);
+     const routeFamily = upper(week.route_family || week.route_family_snapshot);
+     const routeSubfamily = upper(week.route_subfamily || week.route_subfamily_snapshot);
+     const underlyingFamily = upper(week.underlying_channel_family || week.underlying_channel_family_snapshot);
+     const sheetScope = upper(week.sheet_scope || week.sheet_scope_snapshot);
+ 
+     const isWeeklyScope = !!(
+       sheetScope === 'WEEKLY' ||
+       routeType.startsWith('WEEKLY') ||
+       routeFamily === 'WEEKLY'
+     );
+     const isManualRoute = !!(
+       submissionMode === 'MANUAL' ||
+       routeType.includes('MANUAL') ||
+       routeFamily.includes('MANUAL') ||
+       routeSubfamily.includes('MANUAL') ||
+       underlyingFamily.includes('MANUAL')
+     );
+ 
+     return !!(isWeeklyScope && isManualRoute);
    };
  
    const canProcessEmptyWeeklyManualDraft = ({ schedule, unitsWeekObj, unitsPerDayObj, expenseDraftObj, contractWeekObj, totalsObj }) => {
@@ -40823,9 +40898,12 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
      const perDayHasUnits = hasPositiveNestedUnitValue(unitsPerDayObj || {});
      const hasAnyUnits = weekHasUnits || perDayHasUnits;
      const hasAnyExpenseClaims = hasPositiveExpenseDraftClaims(expenseDraftObj);
-     const isAdditionalManualAdjustmentWeek = isConfirmedAdditionalManualAdjustmentWeek({ contractWeekObj, totalsObj });
+     if (!hasAnyUnits && !hasAnyExpenseClaims) return false;
  
-     return !!(isAdditionalManualAdjustmentWeek && (hasAnyUnits || hasAnyExpenseClaims));
+     const isAdditionalManualAdjustmentWeek = isConfirmedAdditionalManualAdjustmentWeek({ contractWeekObj, totalsObj });
+     const isParentWeeklyManualContractWeek = isConfirmedParentWeeklyManualContractWeek({ contractWeekObj, totalsObj });
+ 
+     return !!(isAdditionalManualAdjustmentWeek || isParentWeeklyManualContractWeek);
    };
  
    const isTruthyPayloadFlag = (value) => {
@@ -42266,6 +42344,7 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
      });
  
      const allowEmptyNoTimesheetCreate = !!(
+       allowEmptyCreate &&
        (requestMarksNoTimesheetImageRequired || requestMarksNoHoursTimesheetImageSuppressed) &&
        (
          hasPositiveExpenseDraftClaims(expensesDraft) ||
@@ -42286,13 +42365,16 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
          no_timesheet_image_required: requestMarksNoTimesheetImageRequired,
          no_hours_timesheet_image_suppressed: requestMarksNoHoursTimesheetImageSuppressed
        });
-       return withCORS(env, req, badRequest('Cannot create a timesheet with an empty schedule unless this is an additional manual adjustment row with expense claims or additional units.'));
+       return withCORS(env, req, badRequest('Cannot create a timesheet with an empty schedule unless this weekly manual contract week has expense claims/additional units, or this is an additional manual adjustment row with expense claims/additional units.'));
      }
  
-     wlog('allow_empty_schedule_additional_manual_adjustment_create', {
+     wlog('allow_empty_schedule_weekly_manual_expense_or_additional_create', {
        allow_empty_create: true,
        allow_empty_no_timesheet_create: allowEmptyNoTimesheetCreate,
        additional_seq: cw?.additional_seq ?? null,
+       is_adjustment: cw?.is_adjustment === true,
+       route_type: cw?.route_type || cw?.route_type_snapshot || null,
+       submission_mode_snapshot: cw?.submission_mode_snapshot || cw?.submission_mode || null,
        has_expense_claims: hasPositiveExpenseDraftClaims(expensesDraft),
        has_additional_units: hasPositiveNestedUnitValue(unitsWeek || {}) || hasPositiveNestedUnitValue(unitsPerDay || {}),
        no_timesheet_image_required: requestMarksNoTimesheetImageRequired,
@@ -44455,8 +44537,6 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
      created_now: !!createdNow
    }));
  }
-
-
 
 
 
