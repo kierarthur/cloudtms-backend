@@ -39942,6 +39942,7 @@ async function handleBankingPayProviderSubmitReviewResolution(env, req, user, pa
 
 
 // Replacement function: handleContractWeekManualUpsert (patched source lines 39943-44494)
+
 async function handleContractWeekManualUpsert(env, req, weekId) {
    const enc = encodeURIComponent;
  
@@ -40877,7 +40878,8 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
      const isWeeklyScope = !!(
        sheetScope === 'WEEKLY' ||
        routeType.startsWith('WEEKLY') ||
-       routeFamily === 'WEEKLY'
+       routeFamily === 'WEEKLY' ||
+       String(week.week_ending_date || week.weekEndingDate || '').trim()
      );
      const isManualRoute = !!(
        submissionMode === 'MANUAL' ||
@@ -40945,6 +40947,10 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
        hasZeroContractWeekHours(existingWeekTotalsForScheduleSafety)
      )
    );
+   const keepEmptyParentWeeklyManualContractWeek = !!isConfirmedParentWeeklyManualContractWeek({
+     contractWeekObj: cw,
+     totalsObj: existingWeekTotalsForScheduleSafety
+   });
    const additionalManualAdjustmentWeek = !!(cw.is_adjustment === true || Number(cw.additional_seq || 0) > 0);
    const explicitUserScheduleEditRequested = requestHasExplicitUserScheduleEditMarker();
  
@@ -42068,6 +42074,25 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
      }
    }
  
+   const shouldDiscardNonUserFallbackScheduleForExplicitBlankWeek = !!(
+     Array.isArray(actual_schedule_json) &&
+     actual_schedule_json.length > 0 &&
+     !explicitUserScheduleEditRequested &&
+     (keepEmptyAdditionalManualAdjustmentWeek || keepEmptyParentWeeklyManualContractWeek)
+   );
+
+   if (shouldDiscardNonUserFallbackScheduleForExplicitBlankWeek) {
+     wlog('discard_standard_schedule_fallback_for_explicit_blank_contract_week', {
+       supplied_segments: actual_schedule_json.length,
+       contract_week_id: cw?.id || null,
+       additional_seq: cw?.additional_seq ?? null,
+       is_adjustment: cw?.is_adjustment === true,
+       parent_weekly_manual_contract_week: keepEmptyParentWeeklyManualContractWeek,
+       additional_manual_adjustment_week: keepEmptyAdditionalManualAdjustmentWeek
+     });
+     actual_schedule_json = [];
+   }
+
    const requestedSuppressTimesheetEvidenceMaterialisation = !!(
      isTruthyPayloadFlag(body?.suppress_timesheet_evidence_materialisation) ||
      isTruthyPayloadFlag(body?.suppressTimesheetEvidenceMaterialisation) ||
@@ -42124,19 +42149,10 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
      !actualScheduleHasWorkedHoursForMaterialisation
    );
  
-   if (keepEmptyAdditionalManualAdjustmentWeek && actual_schedule_json.length > 0 && !explicitUserScheduleEditRequested) {
-     wlog('discard_standard_schedule_fallback_for_keep_empty_additional_manual_adjustment', {
-       supplied_segments: actual_schedule_json.length,
-       contract_week_id: cw?.id || null,
-       additional_seq: cw?.additional_seq ?? null,
-       is_adjustment: cw?.is_adjustment === true
-     });
-     actual_schedule_json = [];
-   }
- 
    wlog('schedule_normalised', {
      schedule_segments: actual_schedule_json.length,
      keep_empty_additional_manual_adjustment: keepEmptyAdditionalManualAdjustmentWeek,
+     keep_empty_parent_weekly_manual_contract_week: keepEmptyParentWeeklyManualContractWeek,
      explicit_user_schedule_edit: explicitUserScheduleEditRequested,
      has_worked_hours_for_timesheet_evidence: actualScheduleHasWorkedHoursForMaterialisation,
      suppress_timesheet_evidence_materialisation: suppressTimesheetEvidenceMaterialisation,
@@ -42358,6 +42374,7 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
          allow_empty_create: false,
          additional_seq: cw?.additional_seq ?? null,
          submission_mode_snapshot: cw?.submission_mode_snapshot || null,
+         parent_weekly_manual_contract_week: keepEmptyParentWeeklyManualContractWeek,
          planned_schedule_explicitly_empty: isExplicitlyEmptyScheduleArray(cw?.planned_schedule_json),
          contract_week_hours_zero: hasZeroContractWeekHours(existingWeekTotalsForDraft),
          has_expense_claims: hasPositiveExpenseDraftClaims(expensesDraft),
@@ -44537,6 +44554,7 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
      created_now: !!createdNow
    }));
  }
+
 
 
 
