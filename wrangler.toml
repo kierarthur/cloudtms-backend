@@ -92,6 +92,7 @@ TIMESHEET_TEMPLATE_KEY = "Assets/Stationery/Timesheet/Blank Timesheet.pdf"
 [[env.test.r2_buckets]]
 binding = "R2"
 bucket_name = "test-cloudtms"
+preview_bucket_name = "test-cloudtms-preview"
 
 [[env.test.kv_namespaces]]
 binding = "SESSIONS"
