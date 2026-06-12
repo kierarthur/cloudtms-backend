@@ -28794,6 +28794,7 @@ async function bankingPayOperationsCronTick(env, opts = {}) {
   return summary;
 }
 
+
 async function claimAndAdvanceOneBankingPayOperation(env, opts = {}) {
   const trimText = (value) => String(value == null ? '' : value).trim();
   const upperText = (value) => trimText(value).toUpperCase();
@@ -29076,7 +29077,10 @@ async function claimAndAdvanceOneBankingPayOperation(env, opts = {}) {
       'status', 'phase', 'runner_state', 'next_required_phase', 'last_message', 'resume_reason',
       'requires_user_action', 'review_required', 'waiting_authorisation', 'waiting_provider',
       'provider_submission_status', 'review_reason_code', 'provider_submit_state', 'run_after_utc',
-      'run_after_delay_seconds', 'runAfterDelaySeconds'
+      'run_after_delay_seconds', 'runAfterDelaySeconds', 'release_state', 'releaseState',
+      'operation_release_state', 'operationReleaseState', 'retryable_remittance_error', 'remittance_retry',
+      'retryable_error', 'retry_schedule_seconds', 'retry_index', 'retry_waits_elapsed',
+      'next_retry_after_seconds', 'transient_error_code', 'error_code', 'error_status', 'error_message'
     ];
     for (const key of copyKeys) {
       if (source[key] !== undefined && source[key] !== null && source[key] !== '') out[key] = source[key];
@@ -29460,10 +29464,33 @@ async function claimAndAdvanceOneBankingPayOperation(env, opts = {}) {
       if (code.includes('PROVIDER') && (code.includes('UNKNOWN') || code.includes('AMBIG') || code.includes('SENT_LOCAL'))) return 'REVIEW_REQUIRED';
       return 'REVIEW_REQUIRED';
     }
+    const sourceProgress = asPlainObject(source.progress || source.progress_json || source.progressJson);
+    const explicitReleaseState = upperText(
+      source.release_state ||
+      source.releaseState ||
+      source.operation_release_state ||
+      source.operationReleaseState ||
+      sourceProgress.release_state ||
+      sourceProgress.releaseState
+    );
+    if (['WAITING_RETRY', 'RETRYABLE_ERROR', 'RETRYABLE_FAILURE', 'RETRY', 'TRANSIENT_ERROR'].includes(explicitReleaseState)) return 'WAITING_RETRY';
     const status = upperText(source.status || source.operation_status);
     const phase = upperText(source.phase || source.operation_phase);
     const operationTypeForRelease = upperText(source.operation_type || source.operationType);
     const runnerState = upperText(source.runner_state || source.runnerState);
+    const resumeReason = upperText(source.resume_reason || source.resumeReason || sourceProgress.resume_reason || sourceProgress.resumeReason);
+    const retryStatus = upperText(source.retry_status || source.retryStatus || source.retry_state || source.retryState || sourceProgress.retry_status || sourceProgress.retryStatus || sourceProgress.retry_state || sourceProgress.retryState);
+    const retryRunAfterMs = parseTimeMs(source.run_after_utc || source.runAfterUtc || sourceProgress.run_after_utc || sourceProgress.runAfterUtc);
+    if (operationTypeForRelease === 'REMITTANCE_QUEUE' && (
+      retryStatus === 'WAITING_RETRY' ||
+      resumeReason === 'REMITTANCE_TRANSIENT_RETRY_SCHEDULED' ||
+      source.retryable_remittance_error === true ||
+      source.remittance_retry === true ||
+      sourceProgress.retryable_remittance_error === true ||
+      sourceProgress.remittance_retry === true ||
+      (status === 'RUNNING' && runnerState === 'RUNNABLE' && retryRunAfterMs !== null && retryRunAfterMs > Date.now())
+    )) return 'WAITING_RETRY';
+    if (['WAITING_RETRY', 'RETRYABLE_ERROR', 'RETRYABLE_FAILURE', 'RETRY', 'TRANSIENT_ERROR'].includes(status) || source.retryable_remittance_error === true || source.remittance_retry === true) return 'WAITING_RETRY';
     if (['COMPLETE', 'COMPLETED', 'SUCCESS', 'SUCCEEDED', 'DONE'].includes(status)) return 'COMPLETE';
     if (['FAILED', 'ERROR', 'CANCELLED', 'CANCELED'].includes(status)) return 'FAILED';
     if (phase === 'COMPLETE') {
@@ -29834,6 +29861,7 @@ async function claimAndAdvanceOneBankingPayOperation(env, opts = {}) {
       };
     }
   }
+  const retryReleaseStates = new Set(['WAITING_RETRY', 'RETRYABLE_ERROR', 'RETRYABLE_FAILURE', 'RETRY', 'TRANSIENT_ERROR']);
   const progressPatch = compactProgressPatch(publicAdvanced, {
     source,
     lock_owner: lockOwner,
@@ -29851,6 +29879,15 @@ async function claimAndAdvanceOneBankingPayOperation(env, opts = {}) {
     operation_actor_user_id: actorContext.operationActorUserId || null,
     business_actor_user_id: actorContext.businessActorUserId || null
   });
+  if (retryReleaseStates.has(releaseState)) {
+    const rawRetryStatus = upperText(progressPatch.status || publicAdvanced.status || advancedPayload?.status || progressPatch.release_state || releaseState);
+    if (rawRetryStatus && rawRetryStatus !== 'RUNNING') progressPatch.retry_status = progressPatch.retry_status || rawRetryStatus;
+    progressPatch.status = 'RUNNING';
+    progressPatch.runner_state = progressPatch.runner_state || 'RUNNABLE';
+    progressPatch.requires_user_action = false;
+    progressPatch.review_required = false;
+  }
+
   const rawAdvanceErrorPayload = advanceError ? compactError(advanceError) : null;
   const advanceErrorPayload = preProviderReleaseRetryable ? null : rawAdvanceErrorPayload;
   if (advanceErrorPayload) {
@@ -29921,7 +29958,11 @@ async function claimAndAdvanceOneBankingPayOperation(env, opts = {}) {
     };
   }
 
-  const saveProgressStatus = preProviderReleaseRetryable ? 'RUNNING' : (publicAdvanced.status || claim.status || null);
+  const saveProgressStatus = preProviderReleaseRetryable
+    ? 'RUNNING'
+    : (retryReleaseStates.has(releaseState) || retryReleaseStates.has(upperText(publicAdvanced.status || advancedPayload?.status))
+      ? 'RUNNING'
+      : (publicAdvanced.status || claim.status || null));
   const saveProgressPhase = preProviderReleaseRetryable ? (releaseRetryPhase || normaliseReleaseRetryPhase(releaseFailureDiagnostic)) : (publicAdvanced.phase || claim.phase || null);
 
   try {
@@ -29949,18 +29990,16 @@ async function claimAndAdvanceOneBankingPayOperation(env, opts = {}) {
   const progressRunAfterMs = parseTimeMs(progressPatch.run_after_utc || progressPatch.runAfterUtc);
   const progressRunAfterDelaySeconds = progressRunAfterMs === null ? null : Math.max(0, Math.ceil((progressRunAfterMs - Date.now()) / 1000));
   const optionDelaySeconds = Number(opts.runAfterDelaySeconds != null ? opts.runAfterDelaySeconds : opts.run_after_delay_seconds);
-  const delaySeconds = releaseState === 'MORE_WORK'
-    ? clampInteger(
-      Number.isFinite(progressDelaySeconds)
-        ? progressDelaySeconds
-        : (Number.isFinite(progressRunAfterDelaySeconds) && progressRunAfterDelaySeconds > 0
-          ? progressRunAfterDelaySeconds
-          : (Number.isFinite(optionDelaySeconds) ? optionDelaySeconds : 0)),
-      0,
-      0,
-      60
-    )
-    : (releaseState === 'WAITING_PROVIDER' ? 60 : 0);
+  const requestedDelaySeconds = Number.isFinite(progressDelaySeconds)
+    ? progressDelaySeconds
+    : (Number.isFinite(progressRunAfterDelaySeconds) && progressRunAfterDelaySeconds > 0
+      ? progressRunAfterDelaySeconds
+      : (Number.isFinite(optionDelaySeconds) ? optionDelaySeconds : 0));
+  const delaySeconds = retryReleaseStates.has(releaseState)
+    ? clampInteger(requestedDelaySeconds, 0, 0, 3600)
+    : (releaseState === 'MORE_WORK'
+      ? clampInteger(requestedDelaySeconds, 0, 0, 60)
+      : (releaseState === 'WAITING_PROVIDER' ? 60 : 0));
   try {
     releasePayload = unwrapRpcPayload(await sbRpc(env, 'banking_pay_operation_release_lease', {
       p_operation_id: claimedOperationId,
@@ -30042,8 +30081,6 @@ async function claimAndAdvanceOneBankingPayOperation(env, opts = {}) {
     provider_evidence_state: providerEvidenceState
   };
 }
-
-
 
 
 async function handleBankingPayCancelNotSentAndRecalculate(env, req, user, payBatchId) {
@@ -49622,6 +49659,8 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
   }
 }
 
+
+
 async function advanceBankingPayRemittanceOperation(env, operationRow, user, options = {}) {
   const unwrapRpcPayload = (rpcRes, key) => {
     let payload = rpcRes;
@@ -49741,6 +49780,150 @@ async function advanceBankingPayRemittanceOperation(env, operationRow, user, opt
     if (['true', '1', 'yes', 'y', 'on'].includes(text)) return true;
     if (['false', '0', 'no', 'n', 'off'].includes(text)) return false;
     return !!fallback;
+  };
+
+  const REMITTANCE_RETRY_SCHEDULE_SECONDS = [5 * 60, 10 * 60, 10 * 60, 10 * 60, 10 * 60, 60 * 60, 60 * 60, 60 * 60, 60 * 60];
+
+  const compactErrorText = (error) => String(error && error.message ? error.message : (error || '')).trim();
+
+  const classifyRetryableRemittanceError = (error) => {
+    const message = compactErrorText(error);
+    const code = String(error && (error.code || error.error_code || error.errorCode || '') || '').trim().toUpperCase();
+    const status = Number(error && (error.status || error.statusCode || error.http_status || error.httpStatus));
+    const combined = `${code} ${message}`.toLowerCase();
+    const retryable =
+      status === 408 || status === 502 || status === 503 || status === 504 ||
+      /\b(http\s*)?408\b/.test(combined) ||
+      /\b(502|503|504)\b/.test(combined) ||
+      /timeout|timed out|deadline exceeded|fetch failed|network|temporar(?:y|ily)|gateway timeout|bad gateway|service unavailable|upstream/i.test(combined) ||
+      (/banking_pay_operation_seed_chunks/i.test(message) && /timeout|408|timed out/i.test(message));
+
+    let transientCode = 'TRANSIENT_REMITTANCE_ERROR';
+    if (/banking_pay_operation_seed_chunks/i.test(message) && /timeout|408|timed out/i.test(message)) transientCode = 'RPC_TIMEOUT';
+    else if (status === 408 || /\b(http\s*)?408\b/i.test(message)) transientCode = 'HTTP_408_TIMEOUT';
+    else if (status === 502 || status === 503 || status === 504 || /\b(502|503|504)\b/.test(message)) transientCode = 'UPSTREAM_GATEWAY_TRANSIENT';
+    else if (/fetch failed|network/i.test(message)) transientCode = 'NETWORK_OR_FETCH_FAILED';
+    else if (/deadline exceeded|timeout|timed out/i.test(message)) transientCode = 'TIMEOUT';
+
+    return {
+      retryable,
+      transient_error_code: transientCode,
+      message,
+      code: code || null,
+      status: Number.isFinite(status) ? status : null
+    };
+  };
+
+  const buildRetryableRemittanceProgress = (error, phaseForRetry, extra = {}) => {
+    const classification = classifyRetryableRemittanceError(error);
+    const retryWaitsElapsed = Math.max(0, Math.trunc(Number(operation.attempt_count || 0) || 0));
+    const nextRetryAfterSeconds = REMITTANCE_RETRY_SCHEDULE_SECONDS[retryWaitsElapsed] || null;
+    const exhausted = nextRetryAfterSeconds == null;
+    const nextRunAfterUtc = exhausted ? null : new Date(Date.now() + (nextRetryAfterSeconds * 1000)).toISOString();
+    const errorMessage = classification.message || 'Retryable remittance operation failure.';
+    const statusText = exhausted
+      ? 'Remittance retry schedule exhausted. User action is required.'
+      : `Remittance queue hit a transient failure and will retry in ${Math.round(nextRetryAfterSeconds / 60)} minute(s).`;
+
+    const progress = {
+      current_phase: phaseForRetry,
+      next_phase: phaseForRetry,
+      next_required_phase: phaseForRetry,
+      terminal: exhausted,
+      should_keep_advancing: false,
+      status: exhausted ? 'FAILED' : 'RUNNING',
+      retry_status: exhausted ? 'FAILED' : 'WAITING_RETRY',
+      runner_state: exhausted ? 'FAILED' : 'RUNNABLE',
+      release_state: exhausted ? 'FAILED' : 'WAITING_RETRY',
+      resume_reason: exhausted ? 'REMITTANCE_RETRY_SCHEDULE_EXHAUSTED' : 'REMITTANCE_TRANSIENT_RETRY_SCHEDULED',
+      requires_user_action: exhausted,
+      review_required: exhausted,
+      remittance_retry: exhausted !== true,
+      retryable_remittance_error: exhausted !== true,
+      retryable_error: classification.retryable === true,
+      retry_schedule_seconds: REMITTANCE_RETRY_SCHEDULE_SECONDS,
+      retry_index: retryWaitsElapsed + 1,
+      retry_waits_elapsed: retryWaitsElapsed,
+      next_retry_after_seconds: nextRetryAfterSeconds,
+      run_after_delay_seconds: nextRetryAfterSeconds || 0,
+      run_after_utc: nextRunAfterUtc,
+      retry_state: exhausted ? 'EXHAUSTED' : 'WAITING_RETRY',
+      transient_error_code: classification.transient_error_code,
+      phase: phaseForRetry,
+      status_text: statusText,
+      last_retryable_error: {
+        code: classification.code,
+        status: classification.status,
+        message: errorMessage.slice(0, 1000)
+      }
+    };
+
+    return Object.assign({
+      ok: false,
+      terminal: exhausted,
+      should_keep_advancing: false,
+      pay_batch_id: payBatchId,
+      operation_id: operationId,
+      status: exhausted ? 'FAILED' : 'RUNNING',
+      retry_status: exhausted ? 'FAILED' : 'WAITING_RETRY',
+      phase: phaseForRetry,
+      runner_state: exhausted ? 'FAILED' : 'RUNNABLE',
+      requires_user_action: exhausted,
+      review_required: exhausted,
+      release_state: exhausted ? 'FAILED' : 'WAITING_RETRY',
+      resume_reason: exhausted ? 'REMITTANCE_RETRY_SCHEDULE_EXHAUSTED' : 'REMITTANCE_TRANSIENT_RETRY_SCHEDULED',
+      retryable_remittance_error: exhausted !== true,
+      retryable_error: classification.retryable === true,
+      remittance_retry: exhausted !== true,
+      retry_schedule_seconds: REMITTANCE_RETRY_SCHEDULE_SECONDS,
+      retry_index: retryWaitsElapsed + 1,
+      retry_waits_elapsed: retryWaitsElapsed,
+      next_retry_after_seconds: nextRetryAfterSeconds,
+      run_after_delay_seconds: nextRetryAfterSeconds || 0,
+      run_after_utc: nextRunAfterUtc,
+      transient_error_code: classification.transient_error_code,
+      error_code: classification.code,
+      error_status: classification.status,
+      error_message: errorMessage.slice(0, 1000),
+      status_text: statusText,
+      error_json: {
+        code: exhausted ? 'REMITTANCE_RETRY_SCHEDULE_EXHAUSTED' : 'REMITTANCE_TRANSIENT_RETRY_SCHEDULED',
+        message: exhausted ? 'Remittance retry schedule exhausted after transient failures.' : 'Remittance operation will retry after a transient failure.',
+        phase: phaseForRetry,
+        error: errorMessage,
+        transient_error_code: classification.transient_error_code,
+        retryable_error: classification.retryable === true,
+        retry_schedule_seconds: REMITTANCE_RETRY_SCHEDULE_SECONDS,
+        retry_index: retryWaitsElapsed + 1,
+        retry_waits_elapsed: retryWaitsElapsed,
+        next_retry_after_seconds: nextRetryAfterSeconds,
+        run_after_utc: nextRunAfterUtc,
+        requires_user_action: exhausted
+      },
+      progress
+    }, extra && typeof extra === 'object' ? extra : {});
+  };
+
+  const retryOrFailRemittanceTransient = async (error, phaseForRetry, extra = {}) => {
+    const classification = classifyRetryableRemittanceError(error);
+    if (classification.retryable !== true) throw error;
+
+    const retryPayload = buildRetryableRemittanceProgress(error, phaseForRetry, extra);
+    if (retryPayload.terminal === true) {
+      return Object.assign(await finish('FAILED', null, retryPayload.error_json), retryPayload);
+    }
+
+    try {
+      await save('RUNNING', phaseForRetry, retryPayload.progress, {
+        total_units: extra.total_units ?? null,
+        completed_units: extra.completed_units ?? null,
+        failed_units: extra.failed_units ?? null,
+        current_chunk_index: extra.current_chunk_index ?? null,
+        chunk_count: extra.chunk_count ?? null
+      });
+    } catch {}
+
+    return retryPayload;
   };
 
 
@@ -50035,6 +50218,14 @@ async function advanceBankingPayRemittanceOperation(env, operationRow, user, opt
             outbox_ids: queuedCounts.outbox_ids
           }, { current_chunk_index: chunk.sequence_no || null });
         } catch (e) {
+          if (classifyRetryableRemittanceError(e).retryable === true) {
+            return retryOrFailRemittanceTransient(e, phase, {
+              total_units: ids.length || 1,
+              failed_units: ids.length || 1,
+              current_chunk_index: chunk.sequence_no || null,
+              chunk_count: null
+            });
+          }
           await finishChunk(chunk.chunk_id, 'FAILED', 0, ids.length || 1, null, { code: 'REMITTANCE_QUEUE_CHUNK_FAILED', message: String(e?.message || e || '') });
           return finish('FAILED', null, { code: 'REMITTANCE_QUEUE_CHUNK_FAILED', message: 'Remittance queue chunk failed.', error: String(e?.message || e || '') });
         }
@@ -50091,6 +50282,14 @@ async function advanceBankingPayRemittanceOperation(env, operationRow, user, opt
             outbox_ids: queuedCounts.outbox_ids
           }, { current_chunk_index: chunk.sequence_no || null });
         } catch (e) {
+          if (classifyRetryableRemittanceError(e).retryable === true) {
+            return retryOrFailRemittanceTransient(e, phase, {
+              total_units: ids.length || 1,
+              failed_units: ids.length || 1,
+              current_chunk_index: chunk.sequence_no || null,
+              chunk_count: null
+            });
+          }
           await finishChunk(chunk.chunk_id, 'FAILED', 0, ids.length || 1, null, { code: 'PAYOUT_NOTICE_QUEUE_CHUNK_FAILED', message: String(e?.message || e || '') });
           return finish('FAILED', null, { code: 'PAYOUT_NOTICE_QUEUE_CHUNK_FAILED', message: 'Payout notice queue chunk failed.', error: String(e?.message || e || '') });
         }
@@ -50115,9 +50314,19 @@ async function advanceBankingPayRemittanceOperation(env, operationRow, user, opt
 
     return finish('FAILED', null, { code: 'UNKNOWN_REMITTANCE_PHASE', message: `Unknown remittance operation phase: ${phase}`, phase });
   } catch (e) {
-    return finish('FAILED', null, { code: 'REMITTANCE_OPERATION_FAILED', message: 'Remittance operation failed.', phase, error: String(e?.message || e || '') });
+    try {
+      return await retryOrFailRemittanceTransient(e, phase);
+    } catch (nonRetryableError) {
+      return finish('FAILED', null, {
+        code: 'REMITTANCE_OPERATION_FAILED',
+        message: 'Remittance operation failed.',
+        phase,
+        error: String(nonRetryableError?.message || nonRetryableError || '')
+      });
+    }
   }
 }
+
 
 
 
@@ -62950,6 +63159,7 @@ async function sendPayBatchCompletionNoticeAllAuthorisers(env, options = {}) {
 }
 
 
+
 async function derivePayBatchTerminalPaymentOutcome(env, options = {}) {
   const enc = encodeURIComponent;
   const trimText = (value) => String(value == null ? '' : value).trim();
@@ -63009,8 +63219,11 @@ async function derivePayBatchTerminalPaymentOutcome(env, options = {}) {
     rail_env: null,
     completed_at_utc: null,
     user_facing_status: null,
+    notice_kind: null,
     has_issues: false,
-    issue_lines: []
+    issue_lines: [],
+    has_provider_transfer_route: false,
+    manual_or_no_terminal_route: false
   }, patch);
 
   const payBatchId = trimText(options.payBatchId || options.pay_batch_id || options.id);
@@ -63134,6 +63347,8 @@ async function derivePayBatchTerminalPaymentOutcome(env, options = {}) {
   let terminalEvidenceCount = 0;
   let revolutTransferCount = 0;
   let csvTransferCount = 0;
+  let transferWithRailTxCount = 0;
+  let providerTerminalEventCount = 0;
   const issueLines = [];
   const completedTimes = [];
 
@@ -63201,12 +63416,24 @@ async function derivePayBatchTerminalPaymentOutcome(env, options = {}) {
     if (railEnv) envSet.add(railEnv);
     if (provider === 'REVOLUT') revolutTransferCount += 1;
     if (provider === 'CSV') csvTransferCount += 1;
+    const railMeta = asObject(transfer.rail_meta_json);
+    if (firstText(
+      transfer.rail_tx_id,
+      transfer.request_id,
+      readDeepText(railMeta, ['provider_transaction_id', 'providerTransactionId', 'provider_reference', 'providerReference', 'rail_tx_id', 'railTxId', 'provider_event_id', 'providerEventId'])
+    )) transferWithRailTxCount += 1;
 
     const status = upperText(transfer.status);
     const railState = upperText(transfer.rail_state);
     const amount = roundMoney(transfer.amount);
     const evidence = transferHasTerminalEvidence(transfer);
     if (evidence) terminalEvidenceCount += 1;
+    if (evidence && toArray(eventsByTransferId.get(trimText(transfer.id))).some((eventRow) => {
+      const eventState = upperText(eventRow.normalised_state || eventRow.provider_state);
+      const eventSource = upperText(eventRow.event_source);
+      const hasProviderIdentity = !!firstText(eventRow.provider_event_id, eventRow.provider_reference, eventRow.provider_transaction_id);
+      return terminalProviderEventStates.has(eventState) && (hasProviderIdentity || eventSource.includes('PROVIDER') || eventSource.includes('WEBHOOK') || eventSource.includes('POLL'));
+    })) providerTerminalEventCount += 1;
     if (trimText(transfer.completed_at_utc)) completedTimes.push(transfer.completed_at_utc);
 
     if (isReturnedState(status) || isReturnedState(railState)) {
@@ -63246,8 +63473,24 @@ async function derivePayBatchTerminalPaymentOutcome(env, options = {}) {
   const providerLabelRaw = providerSet.size ? Array.from(providerSet).join('/') : firstText(batch.rail_provider_snapshot, batch.banking_system_snapshot);
   const railEnvRaw = envSet.size ? Array.from(envSet).join('/') : firstText(batch.rail_env_snapshot);
   const providerLabel = providerLabelRaw ? `${providerLabelRaw}${railEnvRaw ? ` ${railEnvRaw}` : ''}` : null;
-  const manualOrNoTerminalRoute = (csvTransferCount > 0 && revolutTransferCount === 0) || upperText(batch.rail_provider_snapshot) === 'CSV' || upperText(batch.banking_system_snapshot).includes('CSV');
-  const routeHasTerminalEvidence = manualOrNoTerminalRoute !== true && revolutTransferCount > 0 && terminalEvidenceCount >= transferCount;
+  const batchRailProvider = upperText(batch.rail_provider_snapshot);
+  const batchBankingSystem = upperText(batch.banking_system_snapshot);
+  const executionCommitted = upperText(batch.execution_commit_state) === 'COMMITTED';
+  const terminalTransferOutcomeCount = paidLikeCount + failedLikeCount + returnedLikeCount;
+  const hasProviderTransferRoute = revolutTransferCount > 0
+    || batchRailProvider === 'REVOLUT'
+    || transferWithRailTxCount > 0
+    || providerTerminalEventCount > 0;
+  const manualOrNoTerminalRoute = hasProviderTransferRoute !== true && (
+    (csvTransferCount > 0 && revolutTransferCount === 0)
+    || batchRailProvider === 'CSV'
+    || batchBankingSystem.includes('CSV')
+  );
+  const paymentTerminalEvidenceConfirmed = terminalEvidenceCount > 0
+    && terminalTransferOutcomeCount === transferCount
+    && pendingOrUnknownCount === 0
+    && executionCommitted === true;
+  const routeHasTerminalEvidence = hasProviderTransferRoute === true && paymentTerminalEvidenceConfirmed === true;
 
   const rootOperation = (() => {
     if (rootOperationIdInput) {
@@ -63318,7 +63561,13 @@ async function derivePayBatchTerminalPaymentOutcome(env, options = {}) {
     settlement_terminal: settlementTerminal,
     settlement_status: settlementStatus || null,
     terminal_evidence_count: terminalEvidenceCount,
-    manual_or_no_terminal_route: manualOrNoTerminalRoute === true
+    manual_or_no_terminal_route: manualOrNoTerminalRoute === true,
+    has_provider_transfer_route: hasProviderTransferRoute === true,
+    provider_terminal_event_count: providerTerminalEventCount,
+    transfer_with_rail_tx_count: transferWithRailTxCount,
+    revolut_transfer_count: revolutTransferCount,
+    csv_transfer_count: csvTransferCount,
+    notice_kind: null
   };
 
   if (pendingOrUnknownCount > 0) {
@@ -63347,6 +63596,7 @@ async function derivePayBatchTerminalPaymentOutcome(env, options = {}) {
       eligible_to_send: true,
       skip_reason: null,
       user_facing_status: 'Paid',
+      notice_kind: 'PAYMENT_COMPLETED',
       has_issues: false,
       issue_lines: []
     });
@@ -63357,6 +63607,7 @@ async function derivePayBatchTerminalPaymentOutcome(env, options = {}) {
       eligible_to_send: true,
       skip_reason: null,
       user_facing_status: 'Partially paid with issues',
+      notice_kind: 'PAYMENT_COMPLETED_WITH_ISSUES',
       has_issues: true,
       issue_lines: issueLines.length ? issueLines : ['Some transfers were paid and some transfers failed, were rejected, or were returned.']
     });
@@ -63367,6 +63618,7 @@ async function derivePayBatchTerminalPaymentOutcome(env, options = {}) {
       eligible_to_send: true,
       skip_reason: null,
       user_facing_status: 'Payment failed',
+      notice_kind: 'PAYMENT_COMPLETED_WITH_ISSUES',
       has_issues: true,
       issue_lines: issueLines.length ? issueLines : ['All materialised transfers failed, were rejected, or were returned.']
     });
@@ -63377,6 +63629,7 @@ async function derivePayBatchTerminalPaymentOutcome(env, options = {}) {
       eligible_to_send: true,
       skip_reason: null,
       user_facing_status: paidLikeCount > 0 ? 'Partially paid / review required' : 'Review required',
+      notice_kind: 'PAYMENT_COMPLETED_WITH_ISSUES',
       has_issues: true,
       issue_lines: issueLines.length ? issueLines : ['The payment reached terminal evidence but local settlement requires review.']
     });
@@ -63388,6 +63641,9 @@ async function derivePayBatchTerminalPaymentOutcome(env, options = {}) {
     issue_lines: issueLines.length ? issueLines : ['The terminal payment outcome is ambiguous and requires review.']
   });
 }
+
+
+
 
 
 async function handleBulkProcessDataset(env, req) {
