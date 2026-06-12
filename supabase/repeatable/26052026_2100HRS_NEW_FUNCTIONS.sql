@@ -19229,7 +19229,7 @@ BEGIN
           'active_operation_status', page_source.active_payment_operation_status,
           'active_operation_phase', page_source.active_payment_operation_phase,
           'active_operation', page_source.active_payment_operation,
-          'issue_summary_counts', CASE WHEN v_include_correction_summary THEN COALESCE(page_source.issue_summary_counts, '{}'::jsonb) ELSE '{}'::jsonb END,
+          'issue_summary_counts', COALESCE(page_source.issue_summary_counts, '{}'::jsonb),
           'stale_summary_json', COALESCE(page_source.stale_summary_json, '{}'::jsonb),
           'freshness_validation_status', COALESCE(page_source.display_freshness_validation_status, page_source.freshness_validation_status),
           'freshness_checked_at_utc', COALESCE(page_source.display_freshness_checked_at_utc, page_source.freshness_checked_at_utc),
@@ -19312,6 +19312,7 @@ BEGIN
   );
 END;
 $function$;
+
 
 
 
@@ -151306,6 +151307,20 @@ BEGIN
         'check_required_amount', ROUND(COALESCE(transfer_summary.check_required_amount, 0), 2),
         'not_sent_count', COALESCE(transfer_summary.not_sent_count, 0),
         'not_sent_amount', ROUND(COALESCE(transfer_summary.not_sent_amount, 0), 2),
+        'remittance_operation_failed_count', COALESCE(communication_summary.remittance_operation_failed_count, 0),
+        'remittance_requires_user_action_count', COALESCE(communication_summary.remittance_requires_user_action_count, 0),
+        'remittance_scope_pending_count', COALESCE(communication_summary.remittance_scope_pending_count, 0),
+        'remittance_scope_without_outbox_count', COALESCE(communication_summary.remittance_scope_without_outbox_count, 0),
+        'remittance_outbox_failed_count', COALESCE(communication_summary.remittance_outbox_failed_count, 0),
+        'completion_notice_skipped_count', COALESCE(communication_summary.completion_notice_skipped_count, 0),
+        'completion_notice_failed_count', COALESCE(communication_summary.completion_notice_failed_count, 0),
+        'completion_notice_due_count', COALESCE(communication_summary.completion_notice_due_count, 0),
+        'mail_outbox_failed_count', COALESCE(communication_summary.mail_outbox_failed_count, 0),
+        'post_settlement_communication_issue_count', COALESCE(communication_summary.post_settlement_communication_issue_count, 0),
+        'post_settlement_communication_issue', COALESCE(communication_summary.post_settlement_communication_issue, false),
+        'post_settlement_communication_issue_lines', COALESCE(communication_summary.post_settlement_communication_issue_lines, '[]'::jsonb)
+      )
+      || jsonb_build_object(
         'summary_source', 'durable_refresh',
         'summary_refresh_required', false,
         'refreshed_at_utc', now()::text,
@@ -151350,7 +151365,9 @@ BEGIN
         'draft_creation_failed_operation_phase', CASE
           WHEN COALESCE(draft_create_failure_summary.draft_creation_failed, false) AND COALESCE(durable_settlement_summary.durable_settlement_success, false) IS NOT TRUE THEN latest_operation.phase
           ELSE NULL::text
-        END,
+        END
+      )
+      || jsonb_build_object(
         'batch_terminal_with_failed_payments', UPPER(BTRIM(COALESCE(pay_batch_row.status, ''))) = 'FAILED',
         'pending_bank_outcome_count', COALESCE(transfer_summary.pending_bank_outcome_count, 0),
         'unknown_bank_outcome_count', COALESCE(transfer_summary.unknown_bank_outcome_count, 0),
@@ -151520,6 +151537,151 @@ BEGIN
     ) AS durable_settlement_success
   ) AS durable_settlement_summary ON true
   LEFT JOIN LATERAL (
+    WITH remittance_ops AS (
+      SELECT op.*
+      FROM public.banking_pay_operations AS op
+      WHERE op.pay_batch_id = pay_batch_row.id
+        AND UPPER(BTRIM(COALESCE(op.operation_type, ''))) = 'REMITTANCE_QUEUE'
+    ),
+    batch_mail AS (
+      SELECT mail.*
+      FROM public.mail_outbox AS mail
+      WHERE (mail.context_kind = 'pay_batches' AND mail.context_id = pay_batch_row.id)
+         OR mail.deterministic_outbox_key ILIKE ('%' || pay_batch_row.id::text || '%')
+         OR mail.reference ILIKE ('%' || pay_batch_row.id::text || '%')
+         OR mail.payment_scope_json->>'pay_batch_id' = pay_batch_row.id::text
+    ),
+    counts AS (
+      SELECT
+        (
+          SELECT COUNT(*)
+          FROM remittance_ops AS op
+          WHERE UPPER(BTRIM(COALESCE(op.status, ''))) IN ('FAILED', 'ERROR')
+             OR UPPER(BTRIM(COALESCE(op.runner_state, ''))) = 'FAILED'
+        )::integer AS remittance_operation_failed_count,
+        (
+          SELECT COUNT(*)
+          FROM remittance_ops AS op
+          WHERE COALESCE(op.requires_user_action, false) = true
+        )::integer AS remittance_requires_user_action_count,
+        (
+          SELECT COUNT(*)
+          FROM public.banking_pay_operation_remittance_scope AS scope
+          WHERE scope.pay_batch_id = pay_batch_row.id
+            AND UPPER(BTRIM(COALESCE(scope.status, ''))) = 'PENDING'
+        )::integer AS remittance_scope_pending_count,
+        (
+          SELECT COUNT(*)
+          FROM public.banking_pay_operation_remittance_scope AS scope
+          WHERE scope.pay_batch_id = pay_batch_row.id
+            AND UPPER(BTRIM(COALESCE(scope.status, ''))) = 'PENDING'
+            AND scope.outbox_id IS NULL
+        )::integer AS remittance_scope_without_outbox_count,
+        (
+          SELECT COUNT(DISTINCT mail.id)
+          FROM public.banking_pay_operation_remittance_scope AS scope
+          JOIN public.mail_outbox AS mail
+            ON mail.id = scope.outbox_id
+            OR mail.deterministic_outbox_key = scope.deterministic_outbox_key
+          WHERE scope.pay_batch_id = pay_batch_row.id
+            AND UPPER(BTRIM(COALESCE(mail.status::text, ''))) = 'FAILED'
+        )::integer AS remittance_outbox_failed_count,
+        (
+          SELECT COUNT(*)
+          FROM batch_mail AS mail
+          WHERE UPPER(BTRIM(COALESCE(mail.status::text, ''))) = 'FAILED'
+        )::integer AS mail_outbox_failed_count,
+        (
+          SELECT COUNT(*)
+          FROM batch_mail AS mail
+          WHERE (
+              mail.payment_scope_json->>'notice_kind' IN ('PAYMENT_COMPLETED', 'PAYMENT_COMPLETED_WITH_ISSUES')
+              OR mail.deterministic_outbox_key ILIKE 'pay_batch_completed:%'
+            )
+            AND UPPER(BTRIM(COALESCE(mail.status::text, ''))) = 'FAILED'
+        )::integer AS completion_notice_failed_count,
+        (
+          SELECT COUNT(*)
+          FROM batch_mail AS mail
+          WHERE mail.payment_scope_json->>'notice_kind' IN ('PAYMENT_COMPLETED', 'PAYMENT_COMPLETED_WITH_ISSUES')
+             OR mail.deterministic_outbox_key ILIKE 'pay_batch_completed:%'
+        )::integer AS completion_notice_outbox_count
+    ),
+    final_counts AS (
+      SELECT
+        counts.*,
+        CASE
+          WHEN UPPER(BTRIM(COALESCE(pay_batch_row.status, ''))) = 'SETTLED'
+           AND UPPER(BTRIM(COALESCE(pay_batch_row.execution_commit_state, ''))) = 'COMMITTED'
+           AND pay_batch_row.completion_notice_queued_at_utc IS NULL
+           AND (
+             UPPER(BTRIM(COALESCE(pay_batch_row.completion_notice_last_result_json->>'completion_notice_skipped', ''))) IN ('TRUE', '1', 'YES')
+             OR UPPER(BTRIM(COALESCE(pay_batch_row.completion_notice_last_result_json->>'skipped', ''))) IN ('TRUE', '1', 'YES')
+             OR NULLIF(BTRIM(COALESCE(
+               pay_batch_row.completion_notice_last_result_json->>'completion_notice_skip_reason',
+               pay_batch_row.completion_notice_last_result_json->>'skip_reason',
+               pay_batch_row.completion_notice_last_result_json #>> '{outcome,skip_reason}',
+               pay_batch_row.completion_notice_last_result_json #>> '{completion_notice_result,skip_reason}',
+               ''
+             )), '') IS NOT NULL
+           )
+            THEN 1
+          ELSE 0
+        END::integer AS completion_notice_skipped_count,
+        CASE
+          WHEN UPPER(BTRIM(COALESCE(pay_batch_row.status, ''))) = 'SETTLED'
+           AND UPPER(BTRIM(COALESCE(pay_batch_row.execution_commit_state, ''))) = 'COMMITTED'
+           AND COALESCE(transfer_summary.transfer_count, 0) > 0
+           AND pay_batch_row.completion_notice_queued_at_utc IS NULL
+           AND COALESCE(counts.completion_notice_outbox_count, 0) = 0
+           AND (pay_batch_row.completion_notice_next_attempt_at_utc IS NULL OR pay_batch_row.completion_notice_next_attempt_at_utc <= now())
+            THEN 1
+          ELSE 0
+        END::integer AS completion_notice_due_count
+      FROM counts
+    )
+    SELECT
+      final_counts.remittance_operation_failed_count,
+      final_counts.remittance_requires_user_action_count,
+      final_counts.remittance_scope_pending_count,
+      final_counts.remittance_scope_without_outbox_count,
+      final_counts.remittance_outbox_failed_count,
+      final_counts.mail_outbox_failed_count,
+      final_counts.completion_notice_failed_count,
+      final_counts.completion_notice_skipped_count,
+      final_counts.completion_notice_due_count,
+      (
+        final_counts.remittance_operation_failed_count
+        + final_counts.remittance_requires_user_action_count
+        + CASE WHEN (final_counts.remittance_operation_failed_count + final_counts.remittance_requires_user_action_count) > 0 THEN final_counts.remittance_scope_without_outbox_count ELSE 0 END
+        + final_counts.remittance_outbox_failed_count
+        + final_counts.mail_outbox_failed_count
+        + final_counts.completion_notice_failed_count
+        + final_counts.completion_notice_skipped_count
+        + final_counts.completion_notice_due_count
+      )::integer AS post_settlement_communication_issue_count,
+      (
+        final_counts.remittance_operation_failed_count
+        + final_counts.remittance_requires_user_action_count
+        + CASE WHEN (final_counts.remittance_operation_failed_count + final_counts.remittance_requires_user_action_count) > 0 THEN final_counts.remittance_scope_without_outbox_count ELSE 0 END
+        + final_counts.remittance_outbox_failed_count
+        + final_counts.mail_outbox_failed_count
+        + final_counts.completion_notice_failed_count
+        + final_counts.completion_notice_skipped_count
+        + final_counts.completion_notice_due_count
+      ) > 0 AS post_settlement_communication_issue,
+      COALESCE((
+        SELECT jsonb_agg(issue_line.line_value)
+        FROM (VALUES
+          (CASE WHEN (final_counts.remittance_operation_failed_count + final_counts.remittance_requires_user_action_count + final_counts.remittance_outbox_failed_count) > 0 THEN 'Payment settled, but remittance email failed and needs attention.'::text ELSE NULL::text END),
+          (CASE WHEN (final_counts.completion_notice_failed_count + final_counts.completion_notice_skipped_count + final_counts.completion_notice_due_count) > 0 THEN 'Payment settled, but final payment completion email was skipped/failed or has not queued.'::text ELSE NULL::text END),
+          (CASE WHEN final_counts.mail_outbox_failed_count > 0 THEN 'Payment settled, but one or more payment communication emails failed.'::text ELSE NULL::text END)
+        ) AS issue_line(line_value)
+        WHERE issue_line.line_value IS NOT NULL
+      ), '[]'::jsonb) AS post_settlement_communication_issue_lines
+    FROM final_counts
+  ) AS communication_summary ON true
+  LEFT JOIN LATERAL (
     SELECT
       operation_row.id,
       operation_row.operation_type,
@@ -151657,18 +151819,18 @@ BEGIN
     1,
     1,
     0,
-    0,
+    1,
     1,
     now(),
     now(),
     NULL::timestamptz,
-    NULL::timestamptz,
+    now(),
     'DISPLAY_SUMMARY_REFRESH',
     'pay_batch_display_summary_refresh',
     jsonb_build_object(
       'summary_source', 'durable_refresh',
       'summary_refresh_required', false,
-      'changed_areas', jsonb_build_array('overview', 'payment_status')
+      'changed_areas', jsonb_build_array('overview', 'payment_status', 'remittances', 'payment_issues', 'alerts')
     ),
     '[]'::jsonb,
     '[]'::jsonb,
@@ -151679,19 +151841,22 @@ BEGIN
   SET
     version = COALESCE(banking_pay_batch_change_signals.version, 0) + 1,
     payment_status_version = COALESCE(banking_pay_batch_change_signals.payment_status_version, 0) + 1,
+    alert_version = COALESCE(banking_pay_batch_change_signals.alert_version, 0) + 1,
     overview_version = COALESCE(banking_pay_batch_change_signals.overview_version, 0) + 1,
     last_changed_at_utc = now(),
     last_payment_status_changed_at_utc = now(),
+    last_alert_changed_at_utc = now(),
     last_change_reason = 'DISPLAY_SUMMARY_REFRESH',
     last_change_source = 'pay_batch_display_summary_refresh',
     last_change_scope_json = COALESCE(banking_pay_batch_change_signals.last_change_scope_json, '{}'::jsonb) || jsonb_build_object(
       'summary_source', 'durable_refresh',
       'summary_refresh_required', false,
-      'changed_areas', jsonb_build_array('overview', 'payment_status')
+      'changed_areas', jsonb_build_array('overview', 'payment_status', 'remittances', 'payment_issues', 'alerts')
     ),
     updated_at_utc = now();
 END;
 $function$;
+
 
 
 
@@ -165622,3 +165787,198 @@ BEGIN
   );
 END;
 $function$;
+
+
+-- CloudTMS / Codex Cloud TEST-only diagnostic SQL runner
+-- Install ONLY in the TEST Supabase project: yakevhtttcsljosbdpov
+--
+-- Purpose:
+--   Let Codex Cloud run tightly guarded read/query diagnostics over Supabase HTTPS RPC,
+--   because Codex Cloud cannot reach the Supabase Postgres pooler over raw TCP/5432.
+--
+-- Endpoint after install:
+--   POST https://yakevhtttcsljosbdpov.supabase.co/rest/v1/rpc/codex_debug_select_sql
+--
+-- Expected JSON body:
+--   {
+--     "p_sql": "select id from settings_defaults limit 1",
+--     "p_limit": 100
+--   }
+--
+-- Important:
+--   This is TEST-only.
+--   This version deliberately does NOT create a restricted owner role.
+--   It grants EXECUTE to service_role only.
+--   It still blocks obvious destructive SQL, multiple statements, comments, DDL/DML keywords,
+--   transaction control, explicit locks, and dangerous helper functions.
+
+CREATE OR REPLACE FUNCTION public.codex_debug_select_sql(
+  p_sql text,
+  p_limit integer DEFAULT 100
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+DECLARE
+  v_sql text;
+  v_norm text;
+  v_limit integer;
+  v_rows jsonb := '[]'::jsonb;
+  v_row_count integer := 0;
+  v_truncated boolean := false;
+BEGIN
+  v_sql := btrim(coalesce(p_sql, ''));
+
+  IF v_sql = '' THEN
+    RAISE EXCEPTION 'codex_debug_select_sql: p_sql is required'
+      USING ERRCODE = '22023';
+  END IF;
+
+  IF length(v_sql) > 20000 THEN
+    RAISE EXCEPTION 'codex_debug_select_sql: SQL text is too long'
+      USING ERRCODE = '22023';
+  END IF;
+
+  -- Single statement only. This intentionally also blocks semicolons inside strings.
+  IF position(';' in v_sql) > 0 THEN
+    RAISE EXCEPTION 'codex_debug_select_sql: semicolons / multiple statements are not allowed'
+      USING ERRCODE = '22023';
+  END IF;
+
+  -- Keep the guard simple and conservative: no comments, because comments can hide/recombine tokens.
+  IF position('--' in v_sql) > 0
+     OR position('/*' in v_sql) > 0
+     OR position('*/' in v_sql) > 0 THEN
+    RAISE EXCEPTION 'codex_debug_select_sql: SQL comments are not allowed'
+      USING ERRCODE = '22023';
+  END IF;
+
+  v_norm := lower(regexp_replace(v_sql, '\s+', ' ', 'g'));
+
+  -- Only SELECT / WITH diagnostics.
+  IF NOT (v_norm ~ '^\s*(select|with)\M') THEN
+    RAISE EXCEPTION 'codex_debug_select_sql: only SELECT/WITH queries are allowed'
+      USING ERRCODE = '22023';
+  END IF;
+
+  -- Block obvious write/DDL/transaction/control statements even if embedded in CTEs.
+  IF v_norm ~ '\m(insert|update|delete|drop|alter|create|truncate|grant|revoke|call|do|copy|execute|merge|vacuum|analyze|reindex|cluster|refresh|listen|notify|lock|begin|commit|rollback|savepoint|set|reset|into)\M' THEN
+    RAISE EXCEPTION 'codex_debug_select_sql: blocked keyword in diagnostic SQL'
+      USING ERRCODE = '22023';
+  END IF;
+
+  -- Block explicit row locks.
+  IF v_norm ~ '\mfor\s+(update|no\s+key\s+update|share|key\s+share)\M' THEN
+    RAISE EXCEPTION 'codex_debug_select_sql: row-locking clauses are not allowed'
+      USING ERRCODE = '22023';
+  END IF;
+
+  -- Block known side-effect / disruption / external-call helpers.
+  IF v_norm ~ '\m(pg_sleep|pg_terminate_backend|pg_cancel_backend|pg_reload_conf|pg_rotate_logfile|pg_start_backup|pg_stop_backup|pg_advisory_lock|pg_try_advisory_lock|nextval|setval|lo_import|lo_export|dblink|http_get|http_post|http_put|http_delete|net\.)\M' THEN
+    RAISE EXCEPTION 'codex_debug_select_sql: blocked function or extension call in diagnostic SQL'
+      USING ERRCODE = '22023';
+  END IF;
+
+  v_limit := greatest(1, least(coalesce(p_limit, 100), 500));
+
+  -- Keep diagnostics bounded.
+  PERFORM set_config('statement_timeout', '5000ms', true);
+  PERFORM set_config('lock_timeout', '1000ms', true);
+  PERFORM set_config('idle_in_transaction_session_timeout', '5000ms', true);
+
+  EXECUTE format(
+    $fmt$
+      SELECT
+        coalesce(jsonb_agg(to_jsonb(_codex_row) ORDER BY _codex_ord), '[]'::jsonb),
+        count(*)::integer
+      FROM (
+        SELECT _codex_inner.*, row_number() OVER () AS _codex_ord
+        FROM (
+          %s
+        ) AS _codex_inner
+        LIMIT %s
+      ) AS _codex_row
+    $fmt$,
+    v_sql,
+    v_limit + 1
+  )
+  INTO v_rows, v_row_count;
+
+  IF v_row_count > v_limit THEN
+    v_truncated := true;
+
+    SELECT coalesce(jsonb_agg(value ORDER BY ord), '[]'::jsonb)
+    INTO v_rows
+    FROM jsonb_array_elements(v_rows) WITH ORDINALITY AS e(value, ord)
+    WHERE ord <= v_limit;
+
+    v_row_count := v_limit;
+  END IF;
+
+  -- Remove the internal ordinal from returned rows.
+  SELECT coalesce(jsonb_agg(value - '_codex_ord'), '[]'::jsonb)
+  INTO v_rows
+  FROM jsonb_array_elements(v_rows) AS e(value);
+
+  RETURN jsonb_build_object(
+    'ok', true,
+    'limit', v_limit,
+    'row_count', v_row_count,
+    'truncated', v_truncated,
+    'rows', v_rows
+  );
+
+EXCEPTION
+  WHEN OTHERS THEN
+    RETURN jsonb_build_object(
+      'ok', false,
+      'sqlstate', SQLSTATE,
+      'message', SQLERRM,
+      'rows', '[]'::jsonb
+    );
+END;
+$$;
+
+COMMENT ON FUNCTION public.codex_debug_select_sql(text, integer)
+IS 'TEST-only Codex Cloud diagnostic SQL runner. Allows guarded SELECT/WITH diagnostics over Supabase REST/RPC. Do not install in production.';
+
+-- Make ownership explicit where possible in Supabase SQL Editor.
+-- If this line fails due permissions, the function still exists; review owner manually.
+ALTER FUNCTION public.codex_debug_select_sql(text, integer) OWNER TO postgres;
+
+-- Do not expose broadly.
+REVOKE ALL ON FUNCTION public.codex_debug_select_sql(text, integer) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.codex_debug_select_sql(text, integer) FROM anon;
+REVOKE ALL ON FUNCTION public.codex_debug_select_sql(text, integer) FROM authenticated;
+
+-- Intended caller for Codex Cloud full-stack TEST environment.
+GRANT EXECUTE ON FUNCTION public.codex_debug_select_sql(text, integer) TO service_role;
+
+-- Ask PostgREST/Supabase REST API to reload its schema cache so /rpc can see the new function.
+NOTIFY pgrst, 'reload schema';
+
+-- Smoke tests to run manually in Supabase SQL Editor after install:
+--
+-- select public.codex_debug_select_sql(
+--   'select id from settings_defaults limit 1',
+--   10
+-- );
+--
+-- select public.codex_debug_select_sql(
+--   'select id, status from pay_batches order by created_at_utc desc limit 5',
+--   10
+-- );
+--
+-- Expected blocked example:
+-- select public.codex_debug_select_sql(
+--   'delete from settings_defaults where id = 1',
+--   10
+-- );
+--
+-- Optional uninstall:
+-- drop function if exists public.codex_debug_select_sql(text, integer);
+
+
+
