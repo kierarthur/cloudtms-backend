@@ -165953,7 +165953,7 @@ REVOKE ALL ON FUNCTION public.codex_debug_select_sql(text, integer) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.codex_debug_select_sql(text, integer) FROM anon;
 REVOKE ALL ON FUNCTION public.codex_debug_select_sql(text, integer) FROM authenticated;
 
--- Intended caller for Codex Cloud full-stack TEST environment.
+-- Intended caller  for Codex Cloud full-stack TEST environment.
 GRANT EXECUTE ON FUNCTION public.codex_debug_select_sql(text, integer) TO service_role;
 
 -- Ask PostgREST/Supabase REST API to reload its schema cache so /rpc can see the new function.
@@ -165979,6 +165979,3 @@ NOTIFY pgrst, 'reload schema';
 --
 -- Optional uninstall:
 -- drop function if exists public.codex_debug_select_sql(text, integer);
-
-
-
