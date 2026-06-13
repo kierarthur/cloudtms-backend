@@ -7656,8 +7656,6 @@ COMMIT;
 DROP FUNCTION IF EXISTS public.contract_week_manual_upsert_bulk_process_atomic(uuid, uuid, jsonb, jsonb, jsonb, jsonb, jsonb, uuid, boolean, timestamp with time zone);
 DROP FUNCTION IF EXISTS public.contract_week_manual_upsert_atomic(uuid, uuid, jsonb, jsonb, jsonb, jsonb, jsonb, uuid, boolean, timestamp with time zone);
 
-
-
 CREATE OR REPLACE FUNCTION public.contract_week_manual_upsert_atomic(p_week_id uuid, p_expected_timesheet_id uuid DEFAULT NULL::uuid, p_timesheet_create_json jsonb DEFAULT NULL::jsonb, p_timesheet_patch_json jsonb DEFAULT '{}'::jsonb, p_contract_week_patch_json jsonb DEFAULT '{}'::jsonb, p_tsfin_snapshot_json jsonb DEFAULT NULL::jsonb, p_rotation_json jsonb DEFAULT NULL::jsonb, p_actor_user_id uuid DEFAULT NULL::uuid, p_materialise_staged_evidence boolean DEFAULT true, p_now_utc timestamp with time zone DEFAULT now(), p_expected_row_signature text DEFAULT NULL::text)
  RETURNS TABLE(contract_week_id uuid, contract_id uuid, timesheet_id uuid, current_timesheet_id uuid, current_timesheet_version integer, was_stale boolean, created_now boolean, processing_status ts_fin_processing_status_enum, contract_week_json jsonb, timesheet_json jsonb, timesheet_financials_json jsonb)
  LANGUAGE plpgsql
@@ -8986,18 +8984,18 @@ BEGIN
       v_queue_storage_key := NULLIF(
         BTRIM(
           COALESCE(
-            v_queue_item.r2_key,
-            v_queue_item.meta_json->>'r2_key',
-            v_queue_item.meta_json->>'storage_key',
-            v_queue_item.meta_json->>'file_key',
-            v_queue_item.meta_json->>'canonical_key',
+            NULLIF(BTRIM(COALESCE(v_queue_item.r2_key, '')), ''),
+            NULLIF(BTRIM(COALESCE(v_queue_item.meta_json->>'r2_key', '')), ''),
+            NULLIF(BTRIM(COALESCE(v_queue_item.meta_json->>'storage_key', '')), ''),
+            NULLIF(BTRIM(COALESCE(v_queue_item.meta_json->>'file_key', '')), ''),
+            NULLIF(BTRIM(COALESCE(v_queue_item.meta_json->>'canonical_key', '')), ''),
             ''
           )
         ),
         ''
       );
       IF v_queue_storage_key IS NOT NULL THEN
-        v_queue_storage_key := regexp_replace(v_queue_storage_key, '^/+', '');
+        v_queue_storage_key := NULLIF(regexp_replace(v_queue_storage_key, '^/+', ''), '');
       END IF;
 
       IF v_queue_kind = 'TIMESHEET' THEN
@@ -9102,7 +9100,7 @@ BEGIN
           v_current_ts.timesheet_id,
           v_queue_kind,
           v_queue_item.original_filename,
-          v_queue_item.r2_key,
+          COALESCE(v_queue_storage_key, v_queue_item.r2_key),
           COALESCE(v_queue_item.uploaded_at_utc, v_now),
           COALESCE(v_queue_item.uploaded_by_user_id, p_actor_user_id)
         );
