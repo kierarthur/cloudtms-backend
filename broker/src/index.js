@@ -41031,7 +41031,39 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
      err.publicMessage = clientMessage;
      if (options?.internalDetail != null) err.internalDetail = String(options.internalDetail);
      if (options?.stage != null) err.stage = String(options.stage);
+     if (options?.details && typeof options.details === 'object' && !Array.isArray(options.details)) err.details = options.details;
      return err;
+   };
+
+   const buildStagedTimesheetConflictResponse = (message, details = {}) => withCORS(env, req, new Response(JSON.stringify({
+     error: 'STAGED_TIMESHEET_CONFLICT',
+     error_code: 'STAGED_TIMESHEET_CONFLICT',
+     message: message || 'Only one active staged TIMESHEET file may exist for a contract week at a time.',
+     contract_week_id: cw?.id || weekId || null,
+     refresh_required: true,
+     detail: (details && typeof details === 'object' && !Array.isArray(details)) ? details : null
+   }), { status: 409, headers: { 'Content-Type': 'application/json' } }));
+
+   const isStagedTimesheetUniqueConflictText = (text) => {
+     const lowered = String(text || '').toLowerCase();
+     return !!(
+       lowered.includes('uq_manual_timesheet_queue_one_active_staged_timesheet_per_contract_week') ||
+       lowered.includes('one_active_staged_timesheet_per_contract_week') ||
+       lowered.includes('staged_timesheet_conflict') ||
+       (lowered.includes('23505') && lowered.includes('manual_timesheet_queue')) ||
+       (lowered.includes('duplicate key') && lowered.includes('manual_timesheet_queue'))
+     );
+   };
+
+   const stripStaleStagedEvidenceTargetMeta = (meta) => {
+     const cleaned = (meta && typeof meta === 'object' && !Array.isArray(meta)) ? { ...meta } : {};
+     delete cleaned.deferred_target_timesheet_id;
+     delete cleaned.materialisation_deferred_at_utc;
+     delete cleaned.deferred_rotation_degrees;
+     delete cleaned.dematerialised_from_timesheet_id;
+     delete cleaned.dematerialised_from_booking_id;
+     delete cleaned.dematerialised_at_utc;
+     return cleaned;
    };
  
    let stagedQueuePreflightCacheValid = true;
@@ -41072,7 +41104,7 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
        `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue` +
          `?status=eq.${enc('STAGED')}` +
          `&meta_json->>contract_week_id=eq.${enc(contractWeekId)}` +
-         `&select=id,r2_key,original_filename,uploaded_by_user_id,uploaded_at_utc,last_rotation_deg,meta_json` +
+         `&select=id,r2_key,original_filename,mime_type,content_hash,uploaded_by_user_id,uploaded_at_utc,last_rotation_deg,meta_json` +
          `&order=uploaded_at_utc.asc,id.asc`
      );
  
@@ -41081,7 +41113,7 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
  
      const normalisedItems = items.map((item) => {
        const meta = (item?.meta_json && typeof item.meta_json === 'object') ? item.meta_json : {};
-       const kindRaw = String(meta?.staged_kind || meta?.kind || 'TIMESHEET').trim().toUpperCase();
+       const kindRaw = String(meta?.staged_kind || meta?.kind || meta?.attached_kind || 'TIMESHEET').trim().toUpperCase();
        const kind = allowedKinds.has(kindRaw) ? kindRaw : 'OTHER';
        return {
          ...item,
@@ -41111,7 +41143,17 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
      const timesheetKindItems = items.filter(item => item.staged_kind === 'TIMESHEET');
      if (!timesheetKindItems.length) return null;
 
-     const normaliseStagedTimesheetStorageKey = (item) => String(item?.r2_key || '').trim().replace(/^\/+/, '');
+     const normaliseStagedTimesheetStorageKey = (item) => {
+       const meta = (item?.meta_json && typeof item.meta_json === 'object' && !Array.isArray(item.meta_json)) ? item.meta_json : {};
+       return String(
+         item?.r2_key ||
+         meta?.r2_key ||
+         meta?.storage_key ||
+         meta?.file_key ||
+         meta?.canonical_key ||
+         ''
+       ).trim().replace(/^\/+/, '');
+     };
      const keyedTimesheetItems = timesheetKindItems.map((item) => ({
        item,
        storage_key: normaliseStagedTimesheetStorageKey(item)
@@ -41128,8 +41170,15 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
      const storageKeys = [...new Set(keyedTimesheetItems.map((entry) => entry.storage_key).filter(Boolean))];
      if (storageKeys.length > 1) {
        throw buildStagedTimesheetEvidenceError(
-         'INVALID_TIMESHEET_EVIDENCE',
-         'Multiple different staged TIMESHEET files were found for this contract week. Remove the duplicate/incorrect file and try again.'
+         'STAGED_TIMESHEET_CONFLICT',
+         'Multiple different staged TIMESHEET files were found for this contract week. Remove the duplicate/incorrect file and try again.',
+         {
+           publicMessage: 'Multiple different staged TIMESHEET files were found for this contract week. Remove the duplicate/incorrect file and try again.',
+           details: {
+             contract_week_id: String(contractWeekId || ''),
+             storage_keys: storageKeys
+           }
+         }
        );
      }
 
@@ -41207,6 +41256,17 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
 
      const stagedWriteError = async (response, stage, fallbackText) => {
        const txt = response ? await readFailureText(response) : '';
+       if (isStagedTimesheetUniqueConflictText(txt)) {
+         return buildStagedTimesheetEvidenceError(
+           'STAGED_TIMESHEET_CONFLICT',
+           'Only one active staged TIMESHEET file may exist for a contract week at a time. Refresh the row and try again.',
+           {
+             publicMessage: 'Only one active staged TIMESHEET file may exist for a contract week at a time. Refresh the row and try again.',
+             internalDetail: txt || fallbackText || 'staged TIMESHEET unique invariant failed',
+             stage
+           }
+         );
+       }
        return buildStagedTimesheetEvidenceError(
          'STAGED_EVIDENCE_WRITE_FAILED',
          stagedTimesheetEvidenceSafeMessage(fallbackText),
@@ -41326,12 +41386,10 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
          }
 
          const duplicateNextMeta = {
-           ...duplicateQueueMeta,
+           ...stripStaleStagedEvidenceTargetMeta(duplicateQueueMeta),
            contract_week_id: cleanContractWeekId,
            staged_kind: 'TIMESHEET',
            materialisation_deferred_to_backend: false,
-           deferred_target_timesheet_id: cleanTargetTimesheetId,
-           deferred_rotation_degrees: prepared.rotation_deg,
            materialised_to_timesheet_id: cleanTargetTimesheetId,
            materialised_at_utc: nowIso(),
            materialised_storage_key: cleanStorageKey,
@@ -41548,12 +41606,10 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
      }
 
      const nextMeta = {
-       ...currentQueueMeta,
+       ...stripStaleStagedEvidenceTargetMeta(currentQueueMeta),
        contract_week_id: cleanContractWeekId,
        staged_kind: 'TIMESHEET',
        materialisation_deferred_to_backend: false,
-       deferred_target_timesheet_id: cleanTargetTimesheetId,
-       deferred_rotation_degrees: prepared.rotation_deg,
        materialised_to_timesheet_id: cleanTargetTimesheetId,
        materialised_at_utc: nowIso(),
        materialised_storage_key: cleanStorageKey
@@ -41616,14 +41672,21 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
      return [...new Set(kinds)];
    };
 
-   const evidenceSourceKeyOf = (item) => String(
-     item?.storage_key ||
-     item?.r2_key ||
-     item?.file_key ||
-     item?.download_storage_key ||
-     item?.preview_storage_key ||
-     ''
-   ).trim().replace(/^\/+/, '');
+   const evidenceSourceKeyOf = (item) => {
+     const meta = (item?.meta_json && typeof item.meta_json === 'object' && !Array.isArray(item.meta_json)) ? item.meta_json : {};
+     return String(
+       item?.storage_key ||
+       item?.r2_key ||
+       item?.file_key ||
+       item?.download_storage_key ||
+       item?.preview_storage_key ||
+       meta?.r2_key ||
+       meta?.storage_key ||
+       meta?.file_key ||
+       meta?.canonical_key ||
+       ''
+     ).trim().replace(/^\/+/, '');
+   };
 
    const buildExpenseEvidenceIssue = (kind, code, message, item = null) => ({
      category: expenseEvidenceKindCategories[String(kind || '').trim().toUpperCase()] || String(kind || '').trim().toLowerCase() || null,
@@ -41843,11 +41906,10 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
          : (prepared.meta_json || {});
 
        const nextMeta = {
-         ...currentQueueMeta,
+         ...stripStaleStagedEvidenceTargetMeta(currentQueueMeta),
          contract_week_id: String(contractWeekId),
          staged_kind: kind,
          materialisation_deferred_to_backend: false,
-         deferred_target_timesheet_id: String(targetTimesheetId),
          materialised_to_timesheet_id: String(targetTimesheetId),
          materialised_at_utc: nowIso(),
          materialised_storage_key: storageKey
@@ -43362,7 +43424,7 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
    if (willCreateNow) rpcWeekPatch.status = 'SUBMITTED';
  
    let preparedStagedTimesheetEvidence = null;
-   if (targetTimesheetIdForWrite && !suppressTimesheetEvidenceMaterialisation) {
+   if (targetTimesheetIdForWrite) {
      try {
        preparedStagedTimesheetEvidence = await prepareContractWeekStagedTimesheetEvidence(cw.id, targetTimesheetIdForWrite, { usePreflightCache: true });
        wlog('staged_timesheet_evidence_prepared', {
@@ -43394,12 +43456,19 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
          code: e?.code || null,
          err: e?.message || String(e)
        });
+       if (e?.code === 'STAGED_TIMESHEET_CONFLICT') {
+         return buildStagedTimesheetConflictResponse(
+           e?.publicMessage || e?.message || 'Multiple staged TIMESHEET files were found for this contract week.',
+           e?.details || { stage: e?.stage || 'prepare_staged_timesheet_evidence' }
+         );
+       }
        if (e?.code === 'INVALID_TIMESHEET_EVIDENCE') {
          return withCORS(env, req, badRequest(e?.message || 'Invalid staged TIMESHEET evidence'));
        }
        return withCORS(env, req, serverError(e?.publicMessage || stagedTimesheetEvidenceSafeMessage('Failed to prepare staged TIMESHEET evidence')));
      }
-   } else if (targetTimesheetIdForWrite && suppressTimesheetEvidenceMaterialisation) {
+   }
+   if (targetTimesheetIdForWrite && suppressTimesheetEvidenceMaterialisation && !preparedStagedTimesheetEvidence) {
      wlog('skipped_staged_timesheet_evidence_materialisation', {
        contract_week_id: cw.id,
        target_timesheet_id: targetTimesheetIdForWrite,
@@ -43510,12 +43579,14 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
      return (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) ? parsed : null;
    })();
  
+   const backendPreparedAnyStagedEvidence = !!(
+     preparedStagedTimesheetEvidence ||
+     (Array.isArray(preparedStagedExpenseEvidence) && preparedStagedExpenseEvidence.length > 0)
+   );
+
    const shouldMaterialiseStagedEvidenceInRpc = !!(
-     !preparedStagedTimesheetEvidence &&
-     (
-       !suppressTimesheetEvidenceMaterialisation ||
-       (willCreateNow && Array.isArray(preparedStagedExpenseEvidence) && preparedStagedExpenseEvidence.length > 0)
-     )
+     !backendPreparedAnyStagedEvidence &&
+     !suppressTimesheetEvidenceMaterialisation
    );
 
    const rpcFunctionName = bulkPatchResponseRequested
@@ -43683,6 +43754,13 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
      if (rpcErr.message === 'TIMESHEET_NOT_FOUND') {
        return withCORS(env, req, notFound('Timesheet not found'));
      }
+     if (isStagedTimesheetUniqueConflictText([rpcErr.message, rpcErr.details, JSON.stringify(rpcErr.payload || {})].join(' '))) {
+       return buildStagedTimesheetConflictResponse(
+         'Only one active staged TIMESHEET file may exist for a contract week at a time. Refresh the row and try again.',
+         { stage: 'sql_rpc', sqlstate: rpcErr.status || null }
+       );
+     }
+
      if (rpcErr.message === 'EVIDENCE_REQUIRED') {
        return withCORS(
          env,
@@ -43698,6 +43776,27 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
            }
          )
        );
+     }
+
+     if (rpcErr.message === 'MULTIPLE_STAGED_TIMESHEET_FILES') {
+       return withCORS(
+         env,
+         req,
+         new Response(
+           JSON.stringify({
+             error: 'STAGED_TIMESHEET_CONFLICT',
+             error_code: 'MULTIPLE_STAGED_TIMESHEET_FILES',
+             message: 'Multiple different staged TIMESHEET files were found for this contract week. Remove the duplicate/incorrect file and try again.',
+             detail: detailObj || null,
+             contract_week_id: detailObj?.contract_week_id || cw.id || weekId
+           }),
+           { status: 409, headers: { 'Content-Type': 'application/json' } }
+         )
+       );
+     }
+
+     if (rpcErr.message === 'INVALID_TIMESHEET_EVIDENCE') {
+       return withCORS(env, req, badRequest('Invalid staged TIMESHEET evidence'));
      }
      if (
        rpcErr.message === 'expected_timesheet_id is required' ||
@@ -43840,6 +43939,13 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
        ) {
          return withCORS(env, req, notFound('Timesheet not found'));
        }
+       if (isStagedTimesheetUniqueConflictText([message, errorCode, bulkPayload.detail, JSON.stringify(bulkPayload.detail_json || {})].join(' '))) {
+         return buildStagedTimesheetConflictResponse(
+           'Only one active staged TIMESHEET file may exist for a contract week at a time. Refresh the row and try again.',
+           { stage: 'bulk_sql_rpc', error_code: errorCode || null }
+         );
+       }
+
        if (message === 'EVIDENCE_REQUIRED' || errorCode === 'EVIDENCE_REQUIRED') {
          const missing = Array.isArray(bulkPayload.missing) ? bulkPayload.missing : [];
          return withCORS(
@@ -43850,6 +43956,27 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
              { status: 400, headers: { 'Content-Type': 'application/json' } }
            )
          );
+       }
+
+       if (message === 'MULTIPLE_STAGED_TIMESHEET_FILES' || errorCode === 'MULTIPLE_STAGED_TIMESHEET_FILES') {
+         return withCORS(
+           env,
+           req,
+           new Response(
+             JSON.stringify({
+               error: 'STAGED_TIMESHEET_CONFLICT',
+               error_code: 'MULTIPLE_STAGED_TIMESHEET_FILES',
+               message: 'Multiple different staged TIMESHEET files were found for this contract week. Remove the duplicate/incorrect file and try again.',
+               detail_json: bulkPayload.detail_json || null,
+               contract_week_id: bulkPayload.contract_week_id || cw.id || weekId
+             }),
+             { status: 409, headers: { 'Content-Type': 'application/json' } }
+           )
+         );
+       }
+
+       if (message === 'INVALID_TIMESHEET_EVIDENCE' || errorCode === 'INVALID_TIMESHEET_EVIDENCE') {
+         return withCORS(env, req, badRequest('Invalid staged TIMESHEET evidence'));
        }
        return withCORS(env, req, serverError(message));
      }
@@ -44078,6 +44205,12 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
            code: e?.code || null,
            err: e?.message || String(e)
          });
+         if (e?.code === 'STAGED_TIMESHEET_CONFLICT') {
+           return buildStagedTimesheetConflictResponse(
+             e?.publicMessage || e?.message || 'Multiple staged TIMESHEET files were found for this contract week.',
+             e?.details || { stage: e?.stage || 'materialise_staged_timesheet_evidence' }
+           );
+         }
          if (e?.code === 'INVALID_TIMESHEET_EVIDENCE') {
            return withCORS(env, req, badRequest(e?.message || 'Invalid staged TIMESHEET evidence'));
          }
@@ -44436,6 +44569,12 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
          code: e?.code || null,
          err: e?.message || String(e)
        });
+       if (e?.code === 'STAGED_TIMESHEET_CONFLICT') {
+         return buildStagedTimesheetConflictResponse(
+           e?.publicMessage || e?.message || 'Multiple staged TIMESHEET files were found for this contract week.',
+           e?.details || { stage: e?.stage || 'materialise_staged_timesheet_evidence' }
+         );
+       }
        if (e?.code === 'INVALID_TIMESHEET_EVIDENCE') {
          return withCORS(env, req, badRequest(e?.message || 'Invalid staged TIMESHEET evidence'));
        }
@@ -50797,8 +50936,6 @@ async function handleManualTimesheetQueueDelete(env, req, queueId) {
 
 
 
-
-
 async function handleManualTimesheetQueueStageToContractWeek(env, req, queueId) {
   const enc = encodeURIComponent;
 
@@ -50841,7 +50978,7 @@ async function handleManualTimesheetQueueStageToContractWeek(env, req, queueId) 
   const buildStagedEvidenceResponse = (itemRow, metaInput, kind, uploadedPdfKey) => {
     const meta = (metaInput && typeof metaInput === 'object' && !Array.isArray(metaInput)) ? metaInput : {};
     const stagedKind = normaliseKind(kind || meta.staged_kind || meta.kind || 'TIMESHEET') || 'TIMESHEET';
-    const r2Key = String(itemRow?.r2_key || '').trim() || null;
+    const r2Key = String(itemRow?.r2_key || uploadedPdfKey || '').trim() || null;
     const displayName = String(itemRow?.original_filename || '').trim() || 'Staged evidence';
     const mimeType = String(itemRow?.mime_type || '').trim() || null;
     return {
@@ -50877,6 +51014,118 @@ async function handleManualTimesheetQueueStageToContractWeek(env, req, queueId) 
   };
 
   const now = nowIso();
+
+  const stagedStorageKey = (row) => {
+    const meta = (row?.meta_json && typeof row.meta_json === 'object' && !Array.isArray(row.meta_json)) ? row.meta_json : {};
+    return String(
+      row?.r2_key ||
+      meta?.r2_key ||
+      meta?.storage_key ||
+      meta?.file_key ||
+      meta?.canonical_key ||
+      ''
+    ).trim().replace(/^\/+/, '');
+  };
+
+  const cleanStageMeta = (meta) => {
+    const cleaned = (meta && typeof meta === 'object' && !Array.isArray(meta)) ? { ...meta } : {};
+    delete cleaned.deferred_target_timesheet_id;
+    delete cleaned.materialised_to_timesheet_id;
+    delete cleaned.materialisation_deferred_to_backend;
+    delete cleaned.materialisation_deferred_at_utc;
+    delete cleaned.materialised_storage_key;
+    delete cleaned.materialised_at_utc;
+    delete cleaned.deferred_rotation_degrees;
+    return cleaned;
+  };
+
+  const stagedTimesheetConflict = (message, details = {}) => withCORS(env, req, new Response(JSON.stringify({
+    error: 'STAGED_TIMESHEET_CONFLICT',
+    error_code: 'STAGED_TIMESHEET_CONFLICT',
+    message,
+    contract_week_id: contractWeekId,
+    refresh_required: true,
+    ...details
+  }), { status: 409, headers: JSON_HEADERS }));
+
+  const readResponseText = async (response) => {
+    try {
+      return await response.text();
+    } catch {
+      return '';
+    }
+  };
+
+  const isStagedTimesheetUniqueConflictText = (text) => {
+    const lowered = String(text || '').toLowerCase();
+    return !!(
+      lowered.includes('uq_manual_timesheet_queue_one_active_staged_timesheet_per_contract_week') ||
+      lowered.includes('one_active_staged_timesheet_per_contract_week') ||
+      lowered.includes('staged_timesheet_conflict') ||
+      (lowered.includes('23505') && lowered.includes('manual_timesheet_queue')) ||
+      (lowered.includes('duplicate key') && lowered.includes('manual_timesheet_queue'))
+    );
+  };
+
+  const mapQueueWriteFailure = async (response, fallbackMessage, details = {}) => {
+    const txt = await readResponseText(response);
+    if (isStagedTimesheetUniqueConflictText(txt)) {
+      return stagedTimesheetConflict(
+        'Only one active staged TIMESHEET file may exist for a contract week at a time. Refresh the row and try again.',
+        details
+      );
+    }
+    return withCORS(env, req, serverError(`${fallbackMessage}: ${txt}`));
+  };
+
+  const patchContractWeekPrimaryTimesheetKey = async (uploadedPdfKey) => {
+    const patchRes = await fetch(
+      `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(contractWeekId)}`,
+      {
+        method: 'PATCH',
+        headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+        body: JSON.stringify({
+          uploaded_pdf_r2_key: uploadedPdfKey || null,
+          updated_at: now
+        })
+      }
+    );
+    if (!patchRes.ok) {
+      const txt = await readResponseText(patchRes);
+      return withCORS(env, req, serverError(`Failed to update contract week primary TIMESHEET artifact: ${txt}`));
+    }
+    return null;
+  };
+
+  const discardSameStorageTimesheetDuplicate = async (duplicateItem, duplicateMetaSource, canonicalQueueId) => {
+    const duplicateMeta = {
+      ...cleanStageMeta(duplicateMetaSource),
+      contract_week_id: contractWeekId,
+      staged_kind: 'TIMESHEET',
+      duplicate_timesheet_evidence_identity: true,
+      duplicate_of_queue_item_id: canonicalQueueId || null,
+      materialisation_noop_reason: 'same_storage_key_duplicate',
+      same_storage_duplicate_deactivated_at_utc: now,
+      duplicate_stage_noop_at_utc: now
+    };
+    const discardDuplicateRes = await fetch(
+      `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue?id=eq.${enc(duplicateItem.id)}`,
+      {
+        method: 'PATCH',
+        headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+        body: JSON.stringify({
+          status: 'DISCARDED',
+          timesheet_id: null,
+          meta_json: duplicateMeta
+        })
+      }
+    );
+    if (!discardDuplicateRes.ok) {
+      const txt = await readResponseText(discardDuplicateRes);
+      return withCORS(env, req, serverError(`Failed to deactivate same-storage staged TIMESHEET duplicate: ${txt}`));
+    }
+    return null;
+  };
 
   const evidenceEligibility = await resolveContractWeekDraftEvidenceEligibility(env, contractWeekId, {
     action: 'stage',
@@ -50914,8 +51163,14 @@ async function handleManualTimesheetQueueStageToContractWeek(env, req, queueId) 
     return withCORS(env, req, badRequest('Cannot stage a discarded queue item'));
   }
 
+  const requestedTimesheetStorageKey = requestedKind === 'TIMESHEET' ? stagedStorageKey(item) : '';
+  if (requestedKind === 'TIMESHEET' && !requestedTimesheetStorageKey) {
+    return withCORS(env, req, badRequest('Staged TIMESHEET evidence is missing storage_key'));
+  }
+
   const currentStagedContractWeekId = String(currentMeta?.contract_week_id || '').trim();
-  const currentStagedKind = normaliseKind(currentMeta?.staged_kind || currentMeta?.kind || '');
+  const currentStagedKindSource = currentMeta?.staged_kind || currentMeta?.kind || currentMeta?.attached_kind || (currentStagedContractWeekId ? 'TIMESHEET' : '');
+  const currentStagedKind = normaliseKind(currentStagedKindSource) || (currentStagedContractWeekId ? 'TIMESHEET' : '');
 
   if (status === 'STAGED') {
     if (currentStagedContractWeekId === contractWeekId || currentStagedContractWeekId === '') {
@@ -50925,7 +51180,7 @@ async function handleManualTimesheetQueueStageToContractWeek(env, req, queueId) 
           `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue` +
             `?status=eq.${enc('STAGED')}` +
             `&meta_json->>contract_week_id=eq.${enc(contractWeekId)}` +
-            `&select=id,meta_json,r2_key`
+            `&select=id,status,timesheet_id,r2_key,original_filename,mime_type,content_hash,uploaded_by_user_id,uploaded_at_utc,last_rotation_deg,meta_json`
         );
         const duplicateTimesheet = (existingTimesheetRows || []).find(row => {
           const rowId = String(row?.id || '').trim();
@@ -50933,16 +51188,39 @@ async function handleManualTimesheetQueueStageToContractWeek(env, req, queueId) 
             ? row.meta_json
             : {};
           const rowMetaContractWeekId = String(rowMeta?.contract_week_id || '').trim();
-          const rowKind = normaliseKind(rowMeta?.staged_kind || rowMeta?.kind || '');
+          const rowKind = normaliseKind(rowMeta?.staged_kind || rowMeta?.kind || rowMeta?.attached_kind || 'TIMESHEET');
           return rowId !== String(item.id) && rowKind === 'TIMESHEET' && rowMetaContractWeekId === contractWeekId;
         });
         if (duplicateTimesheet) {
-          return withCORS(env, req, badRequest('Only one staged TIMESHEET file may exist for a contract week at a time'));
+          const currentStorageKey = stagedStorageKey(item);
+          const duplicateStorageKey = stagedStorageKey(duplicateTimesheet);
+          if (!currentStorageKey || !duplicateStorageKey) {
+            return withCORS(env, req, badRequest('Staged TIMESHEET evidence is missing storage_key'));
+          }
+          if (currentStorageKey !== duplicateStorageKey) {
+            return stagedTimesheetConflict('Only one staged TIMESHEET file may exist for a contract week at a time. The existing staged TIMESHEET file has a different storage key.', {
+              existing_queue_id: duplicateTimesheet.id || null,
+              queue_id: item.id || null
+            });
+          }
+
+          const keptMeta = (duplicateTimesheet.meta_json && typeof duplicateTimesheet.meta_json === 'object' && !Array.isArray(duplicateTimesheet.meta_json))
+            ? duplicateTimesheet.meta_json
+            : {};
+          const discardDuplicateError = await discardSameStorageTimesheetDuplicate(item, currentMeta, duplicateTimesheet.id);
+          if (discardDuplicateError) return discardDuplicateError;
+          const artifactPatchError = await patchContractWeekPrimaryTimesheetKey(duplicateStorageKey);
+          if (artifactPatchError) return artifactPatchError;
+          return withCORS(env, req, ok({
+            ...buildStagedEvidenceResponse(duplicateTimesheet, keptMeta, 'TIMESHEET', duplicateStorageKey),
+            reused_existing_staged_timesheet: true,
+            deactivated_same_storage_duplicate_queue_id: item.id
+          }));
         }
       }
 
       const ensuredMeta = {
-        ...currentMeta,
+        ...cleanStageMeta(currentMeta),
         contract_week_id: contractWeekId,
         staged_kind: requestedKind || currentStagedKind || 'TIMESHEET',
         staged_at_utc: String(currentMeta?.staged_at_utc || now),
@@ -50954,10 +51232,10 @@ async function handleManualTimesheetQueueStageToContractWeek(env, req, queueId) 
         String(currentMeta?.staged_at_utc || '').trim() === '' ||
         String(currentMeta?.staged_by_user_id || '').trim() === '' ||
         String(currentMeta?.contract_week_id || '').trim() !== contractWeekId ||
-        normaliseKind(currentMeta?.staged_kind || currentMeta?.kind || '') !== (requestedKind || currentStagedKind || 'TIMESHEET')
+        normaliseKind(currentMeta?.staged_kind || currentMeta?.kind || currentMeta?.attached_kind || '') !== (requestedKind || currentStagedKind || 'TIMESHEET')
       );
 
-      let responseUploadedPdfKey = (requestedKind === 'TIMESHEET' ? (item.r2_key || null) : (contractWeek.uploaded_pdf_r2_key || null));
+      let responseUploadedPdfKey = (requestedKind === 'TIMESHEET' ? (requestedTimesheetStorageKey || null) : (contractWeek.uploaded_pdf_r2_key || null));
 
       if (stagedMetaNeedsPatch) {
         const patchRes = await fetch(
@@ -50973,20 +51251,21 @@ async function handleManualTimesheetQueueStageToContractWeek(env, req, queueId) 
           }
         );
         if (!patchRes.ok) {
-          const txt = await patchRes.text().catch(() => '');
-          return withCORS(env, req, serverError(`Failed to update staged queue item: ${txt}`));
+          return await mapQueueWriteFailure(patchRes, 'Failed to update staged queue item', {
+            queue_id: item.id || null
+          });
         }
 
         let nextUploadedPdfKey = contractWeek.uploaded_pdf_r2_key || null;
         if (requestedKind === 'TIMESHEET') {
-          nextUploadedPdfKey = item.r2_key || null;
+          nextUploadedPdfKey = requestedTimesheetStorageKey || null;
         } else if (currentStagedKind === 'TIMESHEET') {
           const { rows: remainingTimesheetRows } = await sbFetch(
             env,
             `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue` +
               `?status=eq.${enc('STAGED')}` +
               `&meta_json->>contract_week_id=eq.${enc(contractWeekId)}` +
-              `&select=id,meta_json,r2_key`
+              `&select=id,status,timesheet_id,r2_key,original_filename,mime_type,content_hash,uploaded_by_user_id,uploaded_at_utc,last_rotation_deg,meta_json`
           );
           const otherTimesheet = (remainingTimesheetRows || []).find(row => {
             const rowId = String(row?.id || '').trim();
@@ -50995,25 +51274,24 @@ async function handleManualTimesheetQueueStageToContractWeek(env, req, queueId) 
               ? row.meta_json
               : {};
             const rowMetaContractWeekId = String(rowMeta?.contract_week_id || '').trim();
-            const rowKind = normaliseKind(rowMeta?.staged_kind || rowMeta?.kind || '');
+            const rowKind = normaliseKind(rowMeta?.staged_kind || rowMeta?.kind || rowMeta?.attached_kind || 'TIMESHEET');
             return rowKind === 'TIMESHEET' && rowMetaContractWeekId === contractWeekId;
           });
-          nextUploadedPdfKey = otherTimesheet?.r2_key || null;
+          nextUploadedPdfKey = otherTimesheet ? (stagedStorageKey(otherTimesheet) || null) : null;
         }
 
         responseUploadedPdfKey = nextUploadedPdfKey;
 
-        await fetch(
-          `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(contractWeekId)}`,
-          {
-            method: 'PATCH',
-            headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
-            body: JSON.stringify({
-              uploaded_pdf_r2_key: nextUploadedPdfKey,
-              updated_at: now
-            })
-          }
-        ).catch(() => {});
+        const artifactPatchError = await patchContractWeekPrimaryTimesheetKey(nextUploadedPdfKey);
+        if (artifactPatchError) return artifactPatchError;
+      } else if (
+        requestedKind === 'TIMESHEET' &&
+        requestedTimesheetStorageKey &&
+        String(contractWeek.uploaded_pdf_r2_key || '').trim().replace(/^\/+/,'') !== requestedTimesheetStorageKey
+      ) {
+        responseUploadedPdfKey = requestedTimesheetStorageKey;
+        const artifactPatchError = await patchContractWeekPrimaryTimesheetKey(requestedTimesheetStorageKey);
+        if (artifactPatchError) return artifactPatchError;
       }
 
       return withCORS(env, req, ok(buildStagedEvidenceResponse(item, ensuredMeta, requestedKind, responseUploadedPdfKey)));
@@ -51028,7 +51306,7 @@ async function handleManualTimesheetQueueStageToContractWeek(env, req, queueId) 
       `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue` +
         `?status=eq.${enc('STAGED')}` +
         `&meta_json->>contract_week_id=eq.${enc(contractWeekId)}` +
-        `&select=id,meta_json`
+        `&select=id,status,timesheet_id,r2_key,original_filename,mime_type,content_hash,uploaded_by_user_id,uploaded_at_utc,last_rotation_deg,meta_json`
     );
 
     const existingTimesheet = (stagedRows || []).find(row => {
@@ -51036,17 +51314,39 @@ async function handleManualTimesheetQueueStageToContractWeek(env, req, queueId) 
         ? row.meta_json
         : {};
       const rowMetaContractWeekId = String(rowMeta?.contract_week_id || '').trim();
-      const rowKind = normaliseKind(rowMeta?.staged_kind || rowMeta?.kind || '');
+      const rowKind = normaliseKind(rowMeta?.staged_kind || rowMeta?.kind || rowMeta?.attached_kind || 'TIMESHEET');
       return rowKind === 'TIMESHEET' && rowMetaContractWeekId === contractWeekId;
     });
 
     if (existingTimesheet) {
-      return withCORS(env, req, badRequest('Only one staged TIMESHEET file may exist for a contract week at a time'));
+      const currentStorageKey = stagedStorageKey(item);
+      const existingStorageKey = stagedStorageKey(existingTimesheet);
+      if (!currentStorageKey || !existingStorageKey) {
+        return withCORS(env, req, badRequest('Staged TIMESHEET evidence is missing storage_key'));
+      }
+      if (currentStorageKey !== existingStorageKey) {
+        return stagedTimesheetConflict('Only one staged TIMESHEET file may exist for a contract week at a time. The existing staged TIMESHEET file has a different storage key.', {
+          existing_queue_id: existingTimesheet.id || null,
+          queue_id: item.id || null
+        });
+      }
+      const existingMeta = (existingTimesheet.meta_json && typeof existingTimesheet.meta_json === 'object' && !Array.isArray(existingTimesheet.meta_json))
+        ? existingTimesheet.meta_json
+        : {};
+      const discardDuplicateError = await discardSameStorageTimesheetDuplicate(item, currentMeta, existingTimesheet.id);
+      if (discardDuplicateError) return discardDuplicateError;
+      const artifactPatchError = await patchContractWeekPrimaryTimesheetKey(existingStorageKey);
+      if (artifactPatchError) return artifactPatchError;
+      return withCORS(env, req, ok({
+        ...buildStagedEvidenceResponse(existingTimesheet, existingMeta, 'TIMESHEET', existingStorageKey),
+        reused_existing_staged_timesheet: true,
+        deactivated_same_storage_duplicate_queue_id: item.id
+      }));
     }
   }
 
   const nextMeta = {
-    ...currentMeta,
+    ...cleanStageMeta(currentMeta),
     contract_week_id: contractWeekId,
     staged_kind: requestedKind,
     staged_at_utc: now,
@@ -51067,23 +51367,15 @@ async function handleManualTimesheetQueueStageToContractWeek(env, req, queueId) 
   );
 
   if (!patchQueueRes.ok) {
-    const txt = await patchQueueRes.text().catch(() => '');
-    return withCORS(env, req, serverError(`Failed to stage queue item: ${txt}`));
+    return await mapQueueWriteFailure(patchQueueRes, 'Failed to stage queue item', {
+      queue_id: item.id || null
+    });
   }
 
-  const uploadedPdfKey = (requestedKind === 'TIMESHEET') ? (item.r2_key || null) : (contractWeek.uploaded_pdf_r2_key || null);
+  const uploadedPdfKey = (requestedKind === 'TIMESHEET') ? (requestedTimesheetStorageKey || null) : (contractWeek.uploaded_pdf_r2_key || null);
 
-  await fetch(
-    `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(contractWeekId)}`,
-    {
-      method: 'PATCH',
-      headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
-      body: JSON.stringify({
-        uploaded_pdf_r2_key: uploadedPdfKey,
-        updated_at: now
-      })
-    }
-  ).catch(() => {});
+  const artifactPatchError = await patchContractWeekPrimaryTimesheetKey(uploadedPdfKey);
+  if (artifactPatchError) return artifactPatchError;
 
   try {
     await writeAudit(
@@ -51194,7 +51486,6 @@ async function handleContractWeekStagedEvidenceList(env, req, weekId) {
 }
 
 
-
 async function handleContractWeekStagedEvidenceUpdateKind(env, req, weekId, queueId) {
   const enc = encodeURIComponent;
 
@@ -51248,7 +51539,7 @@ async function handleContractWeekStagedEvidenceUpdateKind(env, req, weekId, queu
     env,
     `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue` +
       `?id=eq.${enc(queueId)}` +
-      `&select=id,status,r2_key,meta_json` +
+      `&select=id,status,timesheet_id,r2_key,original_filename,mime_type,content_hash,uploaded_by_user_id,uploaded_at_utc,last_rotation_deg,meta_json` +
       `&limit=1`
   );
   const item = qRows?.[0] || null;
@@ -51270,7 +51561,95 @@ async function handleContractWeekStagedEvidenceUpdateKind(env, req, weekId, queu
     return withCORS(env, req, badRequest('Staged queue item does not belong to this contract week'));
   }
 
-  const currentKind = normaliseKind(currentMeta?.staged_kind || currentMeta?.kind || 'TIMESHEET') || 'TIMESHEET';
+  const currentKind = normaliseKind(currentMeta?.staged_kind || currentMeta?.kind || currentMeta?.attached_kind || 'TIMESHEET') || 'TIMESHEET';
+  const now = nowIso();
+
+  const stagedStorageKey = (row) => {
+    const meta = (row?.meta_json && typeof row.meta_json === 'object' && !Array.isArray(row.meta_json)) ? row.meta_json : {};
+    return String(
+      row?.r2_key ||
+      meta?.r2_key ||
+      meta?.storage_key ||
+      meta?.file_key ||
+      meta?.canonical_key ||
+      ''
+    ).trim().replace(/^\/+/, '');
+  };
+
+  const cleanStageMeta = (meta) => {
+    const cleaned = (meta && typeof meta === 'object' && !Array.isArray(meta)) ? { ...meta } : {};
+    delete cleaned.deferred_target_timesheet_id;
+    delete cleaned.materialised_to_timesheet_id;
+    delete cleaned.materialisation_deferred_to_backend;
+    delete cleaned.materialisation_deferred_at_utc;
+    delete cleaned.materialised_storage_key;
+    delete cleaned.materialised_at_utc;
+    delete cleaned.deferred_rotation_degrees;
+    return cleaned;
+  };
+
+  const stagedTimesheetConflict = (message, details = {}) => withCORS(env, req, new Response(JSON.stringify({
+    error: 'STAGED_TIMESHEET_CONFLICT',
+    error_code: 'STAGED_TIMESHEET_CONFLICT',
+    message,
+    contract_week_id: weekId,
+    refresh_required: true,
+    ...details
+  }), { status: 409, headers: JSON_HEADERS }));
+
+  const readResponseText = async (response) => {
+    try {
+      return await response.text();
+    } catch {
+      return '';
+    }
+  };
+
+  const isStagedTimesheetUniqueConflictText = (text) => {
+    const lowered = String(text || '').toLowerCase();
+    return !!(
+      lowered.includes('uq_manual_timesheet_queue_one_active_staged_timesheet_per_contract_week') ||
+      lowered.includes('one_active_staged_timesheet_per_contract_week') ||
+      lowered.includes('staged_timesheet_conflict') ||
+      (lowered.includes('23505') && lowered.includes('manual_timesheet_queue')) ||
+      (lowered.includes('duplicate key') && lowered.includes('manual_timesheet_queue'))
+    );
+  };
+
+  const mapQueueWriteFailure = async (response, fallbackMessage, details = {}) => {
+    const txt = await readResponseText(response);
+    if (isStagedTimesheetUniqueConflictText(txt)) {
+      return stagedTimesheetConflict(
+        'Only one active staged TIMESHEET file may exist for a contract week at a time. Refresh the row and try again.',
+        details
+      );
+    }
+    return withCORS(env, req, serverError(`${fallbackMessage}: ${txt}`));
+  };
+
+  const patchContractWeekPrimaryTimesheetKey = async (uploadedPdfKey) => {
+    const patchRes = await fetch(
+      `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}`,
+      {
+        method: 'PATCH',
+        headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+        body: JSON.stringify({
+          uploaded_pdf_r2_key: uploadedPdfKey || null,
+          updated_at: now
+        })
+      }
+    );
+    if (!patchRes.ok) {
+      const txt = await readResponseText(patchRes);
+      return withCORS(env, req, serverError(`Failed to update contract week primary TIMESHEET artifact: ${txt}`));
+    }
+    return null;
+  };
+
+  const requestedTimesheetStorageKey = requestedKind === 'TIMESHEET' ? stagedStorageKey(item) : '';
+  if (requestedKind === 'TIMESHEET' && !requestedTimesheetStorageKey) {
+    return withCORS(env, req, badRequest('Staged TIMESHEET evidence is missing storage_key'));
+  }
 
   if (requestedKind === 'TIMESHEET') {
     const { rows: stagedRows } = await sbFetch(
@@ -51278,7 +51657,7 @@ async function handleContractWeekStagedEvidenceUpdateKind(env, req, weekId, queu
       `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue` +
         `?status=eq.${enc('STAGED')}` +
         `&meta_json->>contract_week_id=eq.${enc(weekId)}` +
-        `&select=id,meta_json`
+        `&select=id,status,timesheet_id,r2_key,original_filename,mime_type,content_hash,uploaded_by_user_id,uploaded_at_utc,last_rotation_deg,meta_json`
     );
 
     const duplicateTimesheet = (stagedRows || []).find(row => {
@@ -51287,20 +51666,69 @@ async function handleContractWeekStagedEvidenceUpdateKind(env, req, weekId, queu
       const rowMeta = (row?.meta_json && typeof row.meta_json === 'object' && !Array.isArray(row.meta_json))
         ? row.meta_json
         : {};
-      const rowKind = normaliseKind(rowMeta?.staged_kind || rowMeta?.kind || '');
+      const rowKind = normaliseKind(rowMeta?.staged_kind || rowMeta?.kind || rowMeta?.attached_kind || 'TIMESHEET');
       return rowKind === 'TIMESHEET';
     });
 
     if (duplicateTimesheet) {
-      return withCORS(env, req, badRequest('Only one staged TIMESHEET file may exist for a contract week at a time'));
+      const currentStorageKey = stagedStorageKey(item);
+      const duplicateStorageKey = stagedStorageKey(duplicateTimesheet);
+      if (!currentStorageKey || !duplicateStorageKey) {
+        return withCORS(env, req, badRequest('Staged TIMESHEET evidence is missing storage_key'));
+      }
+      if (currentStorageKey !== duplicateStorageKey) {
+        return stagedTimesheetConflict('Only one staged TIMESHEET file may exist for a contract week at a time. The existing staged TIMESHEET file has a different storage key.', {
+          existing_queue_id: duplicateTimesheet.id || null,
+          queue_id: item.id || null
+        });
+      }
+
+      const duplicateMeta = {
+        ...cleanStageMeta(currentMeta),
+        contract_week_id: weekId,
+        staged_kind: 'TIMESHEET',
+        duplicate_timesheet_evidence_identity: true,
+        duplicate_of_queue_item_id: duplicateTimesheet.id,
+        materialisation_noop_reason: 'same_storage_key_duplicate',
+        same_storage_duplicate_deactivated_at_utc: now,
+        duplicate_stage_noop_at_utc: now
+      };
+      const discardRes = await fetch(
+        `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue?id=eq.${enc(queueId)}`,
+        {
+          method: 'PATCH',
+          headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+          body: JSON.stringify({
+            status: 'DISCARDED',
+            timesheet_id: null,
+            meta_json: duplicateMeta
+          })
+        }
+      );
+      if (!discardRes.ok) {
+        const txt = await readResponseText(discardRes);
+        return withCORS(env, req, serverError(`Failed to deactivate same-storage staged TIMESHEET duplicate: ${txt}`));
+      }
+      const artifactPatchError = await patchContractWeekPrimaryTimesheetKey(duplicateStorageKey);
+      if (artifactPatchError) return artifactPatchError;
+      return withCORS(env, req, ok({
+        updated: true,
+        id: duplicateTimesheet.id,
+        contract_week_id: weekId,
+        previous_kind: currentKind,
+        kind: 'TIMESHEET',
+        uploaded_pdf_r2_key: duplicateStorageKey,
+        reused_existing_staged_timesheet: true,
+        deactivated_same_storage_duplicate_queue_id: item.id
+      }));
     }
   }
 
   const nextMeta = {
-    ...currentMeta,
+    ...cleanStageMeta(currentMeta),
     contract_week_id: weekId,
     staged_kind: requestedKind,
-    staged_at_utc: String(currentMeta?.staged_at_utc || nowIso()),
+    staged_at_utc: String(currentMeta?.staged_at_utc || now),
     staged_by_user_id: currentMeta?.staged_by_user_id || user.id
   };
 
@@ -51316,14 +51744,15 @@ async function handleContractWeekStagedEvidenceUpdateKind(env, req, weekId, queu
   );
 
   if (!patchRes.ok) {
-    const txt = await patchRes.text().catch(() => '');
-    return withCORS(env, req, serverError(`Failed to update staged evidence kind: ${txt}`));
+    return await mapQueueWriteFailure(patchRes, 'Failed to update staged evidence kind', {
+      queue_id: item.id || null
+    });
   }
 
   let nextUploadedPdfKey = contractWeek.uploaded_pdf_r2_key || null;
 
   if (requestedKind === 'TIMESHEET') {
-    nextUploadedPdfKey = item.r2_key || null;
+    nextUploadedPdfKey = requestedTimesheetStorageKey || null;
   } else if (currentKind === 'TIMESHEET') {
     const { rows: stagedRowsAfter } = await sbFetch(
       env,
@@ -51339,24 +51768,15 @@ async function handleContractWeekStagedEvidenceUpdateKind(env, req, weekId, queu
       const rowMeta = (row?.meta_json && typeof row.meta_json === 'object' && !Array.isArray(row.meta_json))
         ? row.meta_json
         : {};
-      const rowKind = normaliseKind(rowMeta?.staged_kind || rowMeta?.kind || '');
+      const rowKind = normaliseKind(rowMeta?.staged_kind || rowMeta?.kind || rowMeta?.attached_kind || 'TIMESHEET');
       return rowKind === 'TIMESHEET';
     });
 
-    nextUploadedPdfKey = replacementTimesheet?.r2_key || null;
+    nextUploadedPdfKey = replacementTimesheet ? (stagedStorageKey(replacementTimesheet) || null) : null;
   }
 
-  await fetch(
-    `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}`,
-    {
-      method: 'PATCH',
-      headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
-      body: JSON.stringify({
-        uploaded_pdf_r2_key: nextUploadedPdfKey,
-        updated_at: nowIso()
-      })
-    }
-  ).catch(() => {});
+  const artifactPatchError = await patchContractWeekPrimaryTimesheetKey(nextUploadedPdfKey);
+  if (artifactPatchError) return artifactPatchError;
 
   try {
     await writeAudit(
@@ -51383,6 +51803,7 @@ async function handleContractWeekStagedEvidenceUpdateKind(env, req, weekId, queu
     uploaded_pdf_r2_key: nextUploadedPdfKey
   }));
 }
+
 
 async function handleContractWeekStagedEvidenceReturnToQueue(env, req, weekId, queueId) {
   const enc = encodeURIComponent;
@@ -56856,8 +57277,6 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
 }
 
 
-
-
 async function handleContractWeekDeleteTimesheet(env, req, weekId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -56881,6 +57300,37 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
     } catch {
       return null;
     }
+  };
+  const readResponseText = async (response) => {
+    try {
+      return await response.text();
+    } catch {
+      return '';
+    }
+  };
+  const isStagedTimesheetUniqueConflictText = (text) => {
+    const lowered = String(text || '').toLowerCase();
+    return !!(
+      lowered.includes('uq_manual_timesheet_queue_one_active_staged_timesheet_per_contract_week') ||
+      lowered.includes('one_active_staged_timesheet_per_contract_week') ||
+      lowered.includes('staged_timesheet_conflict') ||
+      (lowered.includes('23505') && lowered.includes('manual_timesheet_queue')) ||
+      (lowered.includes('duplicate key') && lowered.includes('manual_timesheet_queue'))
+    );
+  };
+  const buildStagedTimesheetConflictError = (message, details = {}) => {
+    const err = new Error(message);
+    err.code = 'STAGED_TIMESHEET_CONFLICT';
+    err.httpStatus = 409;
+    err.details = (details && typeof details === 'object' && !Array.isArray(details)) ? details : {};
+    return err;
+  };
+  const buildInvalidStagedTimesheetEvidenceError = (message, details = {}) => {
+    const err = new Error(message);
+    err.code = 'INVALID_TIMESHEET_EVIDENCE';
+    err.httpStatus = 400;
+    err.details = (details && typeof details === 'object' && !Array.isArray(details)) ? details : {};
+    return err;
   };
   const normaliseUnitsWeekMap = (src) => {
     const obj = parseMaybeJsonObj(src) || {};
@@ -57292,10 +57742,12 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
     if (!ids.length) {
       return {
         staged_count: 0,
-        primary_timesheet_storage_key: null
+        primary_timesheet_storage_key: null,
+        repaired_same_key_duplicate_count: 0
       };
     }
 
+    const contractWeekId = trimStr(contractWeekRow?.id);
     const inList = ids.map(x => enc(x)).join(',');
 
     const { rows: evRows } = await sbFetch(
@@ -57311,9 +57763,23 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
       env,
       `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue` +
         `?timesheet_id=in.(${inList})` +
-        `&select=id,r2_key,original_filename,mime_type,content_hash,uploaded_by_user_id,uploaded_at_utc,status,last_rotation_deg,meta_json`
+        `&select=id,timesheet_id,r2_key,original_filename,mime_type,content_hash,uploaded_by_user_id,uploaded_at_utc,status,last_rotation_deg,meta_json` +
+        `&order=uploaded_at_utc.asc,id.asc`
     );
     const provenanceRows = Array.isArray(queueRows) ? queueRows : [];
+
+    let contractWeekStagedRows = [];
+    if (contractWeekId) {
+      const { rows: stagedRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue` +
+          `?status=eq.${enc('STAGED')}` +
+          `&meta_json->>contract_week_id=eq.${enc(contractWeekId)}` +
+          `&select=id,timesheet_id,r2_key,original_filename,mime_type,content_hash,uploaded_by_user_id,uploaded_at_utc,status,last_rotation_deg,meta_json` +
+          `&order=uploaded_at_utc.asc,id.asc`
+      );
+      contractWeekStagedRows = Array.isArray(stagedRows) ? stagedRows : [];
+    }
 
     const { rows: tsRows } = await sbFetch(
       env,
@@ -57322,13 +57788,6 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
         `&select=timesheet_id,manual_pdf_r2_key,manual_pdf_rotation_degrees,is_current,version`
     );
     const tsMetaRows = Array.isArray(tsRows) ? tsRows : [];
-
-    const queueByKey = new Map();
-    for (const row of provenanceRows) {
-      const key = trimStr(row?.r2_key).replace(/^\/+/, '');
-      if (!key || queueByKey.has(key)) continue;
-      queueByKey.set(key, row);
-    }
 
     const tsMetaById = new Map();
     for (const row of tsMetaRows) {
@@ -57342,6 +57801,42 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
       if (!clean) return 'file';
       const parts = clean.split('/');
       return trimStr(parts[parts.length - 1]) || 'file';
+    };
+
+    const normaliseStageKind = (rowOrMeta, fallback = 'TIMESHEET') => {
+      const meta = rowOrMeta?.meta_json && typeof rowOrMeta.meta_json === 'object'
+        ? rowOrMeta.meta_json
+        : ((rowOrMeta && typeof rowOrMeta === 'object') ? rowOrMeta : {});
+      const raw = trimStr(meta?.staged_kind || meta?.kind || meta?.attached_kind || fallback).toUpperCase();
+      if (['TIMESHEET', 'MILEAGE', 'TRAVEL', 'ACCOMMODATION', 'OTHER'].includes(raw)) return raw;
+      return 'OTHER';
+    };
+
+    const queueStorageKey = (row) => {
+      const meta = row?.meta_json && typeof row.meta_json === 'object' ? row.meta_json : {};
+      return trimStr(
+        row?.r2_key ||
+        meta?.r2_key ||
+        meta?.storage_key ||
+        meta?.file_key ||
+        meta?.canonical_key ||
+        ''
+      ).replace(/^\/+/, '');
+    };
+
+    const cleanDematerialisedMeta = (meta) => {
+      const cleaned = (meta && typeof meta === 'object' && !Array.isArray(meta)) ? { ...meta } : {};
+      delete cleaned.deferred_target_timesheet_id;
+      delete cleaned.materialised_to_timesheet_id;
+      delete cleaned.materialisation_deferred_to_backend;
+      delete cleaned.materialisation_deferred_at_utc;
+      delete cleaned.materialised_storage_key;
+      delete cleaned.materialised_at_utc;
+      delete cleaned.deferred_rotation_degrees;
+      delete cleaned.duplicate_of_queue_item_id;
+      delete cleaned.duplicate_timesheet_evidence_identity;
+      delete cleaned.materialisation_noop_reason;
+      return cleaned;
     };
 
     const seenStorageKeys = new Set();
@@ -57392,12 +57887,138 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
       });
     }
 
+    const timesheetStageItems = stageItems.filter((item) => item.kind === 'TIMESHEET');
+    const activeStagedTimesheetRows = contractWeekStagedRows.filter((row) => normaliseStageKind(row) === 'TIMESHEET');
+    const activeStagedTimesheetKeys = new Set();
+    let activeStagedTimesheetMissingKey = null;
+    for (const row of activeStagedTimesheetRows) {
+      const key = queueStorageKey(row);
+      if (!key) {
+        activeStagedTimesheetMissingKey = row;
+        continue;
+      }
+      activeStagedTimesheetKeys.add(key);
+    }
+
+    if (timesheetStageItems.length && activeStagedTimesheetMissingKey) {
+      throw buildInvalidStagedTimesheetEvidenceError(
+        'Cannot unprocess: an active staged TIMESHEET evidence row is missing its storage key. Repair the staged evidence row and try again.',
+        {
+          contract_week_id: contractWeekId || null,
+          queue_id: activeStagedTimesheetMissingKey?.id || null,
+          reason: 'missing_storage_key'
+        }
+      );
+    }
+
+    const dematerialisedTimesheetKeys = new Set(timesheetStageItems.map((item) => item.storage_key).filter(Boolean));
+    if (timesheetStageItems.length && dematerialisedTimesheetKeys.size > 1) {
+      throw buildStagedTimesheetConflictError(
+        'Cannot unprocess: the current timesheet has multiple different TIMESHEET evidence files. Resolve the evidence conflict before unprocessing.',
+        {
+          contract_week_id: contractWeekId || null,
+          dematerialised_storage_keys: Array.from(dematerialisedTimesheetKeys),
+          timesheet_id: currentTsIdArg || null
+        }
+      );
+    }
+
+    if (timesheetStageItems.length && activeStagedTimesheetKeys.size > 1) {
+      throw buildStagedTimesheetConflictError(
+        'Cannot unprocess: multiple different active staged TIMESHEET files already exist for this contract week. Remove the duplicate/incorrect file and try again.',
+        {
+          contract_week_id: contractWeekId || null,
+          active_storage_keys: Array.from(activeStagedTimesheetKeys),
+          active_queue_ids: activeStagedTimesheetRows.map((row) => trimStr(row?.id)).filter(Boolean)
+        }
+      );
+    }
+
+    if (
+      timesheetStageItems.length &&
+      activeStagedTimesheetKeys.size === 1 &&
+      dematerialisedTimesheetKeys.size > 0
+    ) {
+      const existingKey = Array.from(activeStagedTimesheetKeys)[0];
+      for (const key of dematerialisedTimesheetKeys) {
+        if (key !== existingKey) {
+          throw buildStagedTimesheetConflictError(
+            'Cannot unprocess: a different active staged TIMESHEET file already exists for this contract week. Remove or replace it before unprocessing.',
+            {
+              contract_week_id: contractWeekId || null,
+              existing_storage_key: existingKey || null,
+              dematerialised_storage_key: key || null
+            }
+          );
+        }
+      }
+    }
+
+    const duplicateQueueIdsToDeactivate = new Set();
+    let repairedSameKeyDuplicateCount = 0;
+    if (timesheetStageItems.length && activeStagedTimesheetRows.length > 1 && activeStagedTimesheetKeys.size === 1) {
+      const sorted = activeStagedTimesheetRows
+        .slice()
+        .sort((a, b) => {
+          const au = trimStr(a?.uploaded_at_utc);
+          const bu = trimStr(b?.uploaded_at_utc);
+          if (au && bu && au !== bu) return au < bu ? -1 : 1;
+          return trimStr(a?.id) < trimStr(b?.id) ? -1 : 1;
+        });
+      const canonicalQueue = sorted[0] || null;
+      for (const duplicateQueue of sorted.slice(1)) {
+        const duplicateId = trimStr(duplicateQueue?.id);
+        if (!duplicateId || !canonicalQueue?.id) continue;
+        duplicateQueueIdsToDeactivate.add(duplicateId);
+        const duplicateMeta = {
+          ...cleanDematerialisedMeta(duplicateQueue?.meta_json),
+          contract_week_id: contractWeekId,
+          staged_kind: 'TIMESHEET',
+          duplicate_timesheet_evidence_identity: true,
+          duplicate_of_queue_item_id: canonicalQueue.id,
+          materialisation_noop_reason: 'same_storage_key_duplicate',
+          same_storage_duplicate_deactivated_at_utc: now
+        };
+        const dupPatch = await fetch(
+          `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue?id=eq.${enc(duplicateId)}`,
+          {
+            method: 'PATCH',
+            headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+            body: JSON.stringify({
+              status: 'DISCARDED',
+              timesheet_id: null,
+              meta_json: duplicateMeta
+            })
+          }
+        );
+        if (!dupPatch.ok) {
+          const txt = await readResponseText(dupPatch);
+          throw new Error(`Failed to deactivate same-storage staged TIMESHEET duplicate: ${txt || duplicateId}`);
+        }
+        repairedSameKeyDuplicateCount += 1;
+      }
+    }
+
+    const queueByKey = new Map();
+    const putQueueByKey = (row, options = {}) => {
+      const key = queueStorageKey(row);
+      const id = trimStr(row?.id);
+      if (!key || !id || duplicateQueueIdsToDeactivate.has(id)) return;
+      const existing = queueByKey.get(key) || null;
+      if (!existing || options.preferActiveStaged === true) {
+        queueByKey.set(key, row);
+      }
+    };
+
+    for (const row of provenanceRows) putQueueByKey(row, { preferActiveStaged: false });
+    for (const row of contractWeekStagedRows) putQueueByKey(row, { preferActiveStaged: true });
+
     let primaryTimesheetStorageKey = null;
 
     for (const item of stageItems) {
       const existingQueue = queueByKey.get(item.storage_key) || null;
       const mergedMeta = {
-        ...((existingQueue?.meta_json && typeof existingQueue.meta_json === 'object') ? existingQueue.meta_json : {}),
+        ...cleanDematerialisedMeta(existingQueue?.meta_json),
         contract_week_id: String(contractWeekRow.id),
         staged_kind: item.kind,
         dematerialised_from_timesheet_id: item.timesheet_id || null,
@@ -57414,6 +58035,7 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
             body: JSON.stringify({
               status: 'STAGED',
               timesheet_id: null,
+              r2_key: item.storage_key,
               original_filename: item.display_name,
               uploaded_by_user_id: existingQueue.uploaded_by_user_id || item.created_by || user.id,
               uploaded_at_utc: existingQueue.uploaded_at_utc || item.created_at || now,
@@ -57425,7 +58047,17 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
           }
         );
         if (!updRes.ok) {
-          const txt = await updRes.text().catch(() => '');
+          const txt = await readResponseText(updRes);
+          if (isStagedTimesheetUniqueConflictText(txt)) {
+            throw buildStagedTimesheetConflictError(
+              'Cannot unprocess: another active staged TIMESHEET candidate already exists for this contract week. Refresh the row and try again.',
+              {
+                contract_week_id: contractWeekId || null,
+                queue_id: existingQueue.id || null,
+                storage_key: item.storage_key || null
+              }
+            );
+          }
           throw new Error(`Failed to stage queue provenance row: ${txt || existingQueue.id}`);
         }
       } else {
@@ -57449,7 +58081,16 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
           }
         );
         if (!insRes.ok) {
-          const txt = await insRes.text().catch(() => '');
+          const txt = await readResponseText(insRes);
+          if (isStagedTimesheetUniqueConflictText(txt)) {
+            throw buildStagedTimesheetConflictError(
+              'Cannot unprocess: another active staged TIMESHEET candidate already exists for this contract week. Refresh the row and try again.',
+              {
+                contract_week_id: contractWeekId || null,
+                storage_key: item.storage_key || null
+              }
+            );
+          }
           throw new Error(`Failed to create staged queue row: ${txt || item.storage_key}`);
         }
       }
@@ -57475,7 +58116,8 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
 
     return {
       staged_count: stageItems.length,
-      primary_timesheet_storage_key: primaryTimesheetStorageKey
+      primary_timesheet_storage_key: primaryTimesheetStorageKey,
+      repaired_same_key_duplicate_count: repairedSameKeyDuplicateCount
     };
   };
 
@@ -57691,6 +58333,25 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
       currentTimesheetId
     );
   } catch (e) {
+    if (e?.code === 'STAGED_TIMESHEET_CONFLICT') {
+      return withCORS(env, req, new Response(JSON.stringify({
+        error: 'STAGED_TIMESHEET_CONFLICT',
+        error_code: 'STAGED_TIMESHEET_CONFLICT',
+        message: e?.message || 'Only one active staged TIMESHEET file may exist for a contract week at a time.',
+        contract_week_id: weekId || null,
+        refresh_required: true,
+        detail: e?.details || null
+      }), { status: 409, headers: JSON_HEADERS }));
+    }
+    if (e?.code === 'INVALID_TIMESHEET_EVIDENCE') {
+      return withCORS(env, req, new Response(JSON.stringify({
+        error: 'INVALID_TIMESHEET_EVIDENCE',
+        error_code: 'INVALID_TIMESHEET_EVIDENCE',
+        message: e?.message || 'Invalid staged TIMESHEET evidence',
+        contract_week_id: weekId || null,
+        detail: e?.details || null
+      }), { status: 400, headers: JSON_HEADERS }));
+    }
     return withCORS(env, req, serverError(`Failed to preserve weekly evidence during unprocess: ${e?.message || String(e)}`));
   }
   wlogUnprocess('evidence_dematerialisation_completed', {
@@ -58020,6 +58681,7 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
     snooze_clear_failed_ids: snoozeClearResult.failedIds
   }));
 }
+
 
 
 
