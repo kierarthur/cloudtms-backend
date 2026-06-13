@@ -7658,7 +7658,6 @@ DROP FUNCTION IF EXISTS public.contract_week_manual_upsert_atomic(uuid, uuid, js
 
 
 
-
 CREATE OR REPLACE FUNCTION public.contract_week_manual_upsert_atomic(p_week_id uuid, p_expected_timesheet_id uuid DEFAULT NULL::uuid, p_timesheet_create_json jsonb DEFAULT NULL::jsonb, p_timesheet_patch_json jsonb DEFAULT '{}'::jsonb, p_contract_week_patch_json jsonb DEFAULT '{}'::jsonb, p_tsfin_snapshot_json jsonb DEFAULT NULL::jsonb, p_rotation_json jsonb DEFAULT NULL::jsonb, p_actor_user_id uuid DEFAULT NULL::uuid, p_materialise_staged_evidence boolean DEFAULT true, p_now_utc timestamp with time zone DEFAULT now(), p_expected_row_signature text DEFAULT NULL::text)
  RETURNS TABLE(contract_week_id uuid, contract_id uuid, timesheet_id uuid, current_timesheet_id uuid, current_timesheet_version integer, was_stale boolean, created_now boolean, processing_status ts_fin_processing_status_enum, contract_week_json jsonb, timesheet_json jsonb, timesheet_financials_json jsonb)
  LANGUAGE plpgsql
@@ -7725,6 +7724,8 @@ DECLARE
 
   v_queue_item public.manual_timesheet_queue%ROWTYPE;
   v_queue_kind text := NULL;
+  v_queue_storage_key text := NULL;
+  v_primary_timesheet_queue_id uuid := NULL;
   v_primary_timesheet_storage_key text := NULL;
   v_primary_timesheet_rotation_raw integer := 0;
   v_primary_timesheet_rotation_deg integer := 0;
@@ -7811,6 +7812,11 @@ BEGIN
   IF NOT FOUND THEN
     RAISE EXCEPTION 'CONTRACT_WEEK_NOT_FOUND';
   END IF;
+
+  -- Serialise weekly manual process/materialisation for the contract-week staged evidence keyspace.
+  -- The partial unique index added by the staged TIMESHEET invariant is the hard backstop;
+  -- this lock reduces avoidable retry/conflict churn inside this SQL transaction.
+  PERFORM pg_advisory_xact_lock(hashtext('contract_week_staged_timesheet:' || v_week.id::text));
 
   SELECT *
   INTO v_contract
@@ -8968,6 +8974,7 @@ BEGIN
         COALESCE(
           NULLIF(BTRIM(COALESCE(v_queue_item.meta_json->>'staged_kind', '')), ''),
           NULLIF(BTRIM(COALESCE(v_queue_item.meta_json->>'kind', '')), ''),
+          NULLIF(BTRIM(COALESCE(v_queue_item.meta_json->>'attached_kind', '')), ''),
           'TIMESHEET'
         )
       );
@@ -8976,32 +8983,111 @@ BEGIN
         v_queue_kind := 'OTHER';
       END IF;
 
+      v_queue_storage_key := NULLIF(
+        BTRIM(
+          COALESCE(
+            v_queue_item.r2_key,
+            v_queue_item.meta_json->>'r2_key',
+            v_queue_item.meta_json->>'storage_key',
+            v_queue_item.meta_json->>'file_key',
+            v_queue_item.meta_json->>'canonical_key',
+            ''
+          )
+        ),
+        ''
+      );
+      IF v_queue_storage_key IS NOT NULL THEN
+        v_queue_storage_key := regexp_replace(v_queue_storage_key, '^/+', '');
+      END IF;
+
       IF v_queue_kind = 'TIMESHEET' THEN
-        v_timesheet_kind_count := v_timesheet_kind_count + 1;
-        IF v_timesheet_kind_count > 1 THEN
-          RAISE EXCEPTION 'Only one staged TIMESHEET file may be materialised to a weekly manual timesheet';
+        IF v_queue_storage_key IS NULL THEN
+          RAISE EXCEPTION USING
+            MESSAGE = 'INVALID_TIMESHEET_EVIDENCE',
+            DETAIL = jsonb_build_object(
+              'reason', 'missing_storage_key',
+              'queue_id', v_queue_item.id::text,
+              'contract_week_id', v_week.id::text
+            )::text;
         END IF;
 
-        v_primary_timesheet_rotation_raw := COALESCE(v_queue_item.last_rotation_deg, 0);
-        v_primary_timesheet_rotation_raw := ((v_primary_timesheet_rotation_raw % 360) + 360) % 360;
-        v_primary_timesheet_rotation_deg :=
-          CASE
-            WHEN v_primary_timesheet_rotation_raw >= 315 OR v_primary_timesheet_rotation_raw < 45 THEN 0
-            WHEN v_primary_timesheet_rotation_raw >= 45 AND v_primary_timesheet_rotation_raw < 135 THEN 90
-            WHEN v_primary_timesheet_rotation_raw >= 135 AND v_primary_timesheet_rotation_raw < 225 THEN 180
-            ELSE 270
-          END;
+        IF v_primary_timesheet_storage_key IS NULL THEN
+          v_primary_timesheet_storage_key := v_queue_storage_key;
+          v_primary_timesheet_queue_id := v_queue_item.id;
+          v_primary_timesheet_rotation_raw := COALESCE(v_queue_item.last_rotation_deg, 0);
+          v_primary_timesheet_rotation_raw := ((v_primary_timesheet_rotation_raw % 360) + 360) % 360;
+          v_primary_timesheet_rotation_deg :=
+            CASE
+              WHEN v_primary_timesheet_rotation_raw >= 315 OR v_primary_timesheet_rotation_raw < 45 THEN 0
+              WHEN v_primary_timesheet_rotation_raw >= 45 AND v_primary_timesheet_rotation_raw < 135 THEN 90
+              WHEN v_primary_timesheet_rotation_raw >= 135 AND v_primary_timesheet_rotation_raw < 225 THEN 180
+              ELSE 270
+            END;
+        ELSIF v_queue_storage_key IS DISTINCT FROM v_primary_timesheet_storage_key THEN
+          RAISE EXCEPTION USING
+            MESSAGE = 'MULTIPLE_STAGED_TIMESHEET_FILES',
+            DETAIL = jsonb_build_object(
+              'reason', 'different_storage_key_conflict',
+              'contract_week_id', v_week.id::text,
+              'existing_storage_key', v_primary_timesheet_storage_key,
+              'conflicting_storage_key', v_queue_storage_key,
+              'queue_id', v_queue_item.id::text
+            )::text;
+        END IF;
+
+        v_timesheet_kind_count := v_timesheet_kind_count + 1;
+
+        IF v_timesheet_kind_count = 1 THEN
+          IF NOT EXISTS (
+            SELECT 1
+            FROM public.timesheet_evidence AS te
+            WHERE te.timesheet_id = v_current_ts.timesheet_id
+              AND te.kind = 'TIMESHEET'
+              AND te.storage_key = v_queue_storage_key
+            LIMIT 1
+          ) THEN
+            INSERT INTO public.timesheet_evidence (
+              timesheet_id,
+              kind,
+              display_name,
+              storage_key,
+              created_at,
+              created_by
+            )
+            VALUES (
+              v_current_ts.timesheet_id,
+              'TIMESHEET',
+              v_queue_item.original_filename,
+              v_queue_storage_key,
+              COALESCE(v_queue_item.uploaded_at_utc, v_now),
+              COALESCE(v_queue_item.uploaded_by_user_id, p_actor_user_id)
+            );
+          END IF;
+        END IF;
 
         UPDATE public.manual_timesheet_queue AS mq
-        SET meta_json = COALESCE(v_queue_item.meta_json, '{}'::jsonb)
-          || jsonb_build_object(
-            'contract_week_id', v_week.id::text,
-            'staged_kind', v_queue_kind,
-            'materialisation_deferred_to_backend', true,
-            'materialisation_deferred_at_utc', to_jsonb(v_now),
-            'deferred_target_timesheet_id', v_current_ts.timesheet_id::text,
-            'deferred_rotation_degrees', v_primary_timesheet_rotation_deg
-          )
+        SET status = 'ATTACHED',
+            timesheet_id = v_current_ts.timesheet_id,
+            r2_key = v_queue_storage_key,
+            meta_json = (
+              COALESCE(v_queue_item.meta_json, '{}'::jsonb)
+                - 'deferred_target_timesheet_id'
+                - 'materialisation_deferred_at_utc'
+                - 'deferred_rotation_degrees'
+                - 'dematerialised_from_timesheet_id'
+                - 'dematerialised_from_booking_id'
+                - 'dematerialised_at_utc'
+            ) || jsonb_build_object(
+              'contract_week_id', v_week.id::text,
+              'staged_kind', 'TIMESHEET',
+              'materialisation_deferred_to_backend', false,
+              'materialised_to_timesheet_id', v_current_ts.timesheet_id::text,
+              'materialised_at_utc', to_jsonb(v_now),
+              'materialised_storage_key', v_queue_storage_key,
+              'duplicate_timesheet_evidence_identity', (v_timesheet_kind_count > 1),
+              'duplicate_of_queue_item_id', CASE WHEN v_timesheet_kind_count > 1 THEN v_primary_timesheet_queue_id::text ELSE NULL END,
+              'materialisation_noop_reason', CASE WHEN v_timesheet_kind_count > 1 THEN 'same_storage_key_duplicate' ELSE NULL END
+            )
         WHERE mq.id = v_queue_item.id;
       ELSE
         INSERT INTO public.timesheet_evidence (
@@ -9024,13 +9110,19 @@ BEGIN
         UPDATE public.manual_timesheet_queue AS mq
         SET status = 'ATTACHED',
             timesheet_id = v_current_ts.timesheet_id,
-            meta_json = COALESCE(v_queue_item.meta_json, '{}'::jsonb)
-              || jsonb_build_object(
-                'contract_week_id', v_week.id::text,
-                'staged_kind', v_queue_kind,
-                'materialised_to_timesheet_id', v_current_ts.timesheet_id::text,
-                'materialised_at_utc', to_jsonb(v_now)
-              )
+            meta_json = (
+              COALESCE(v_queue_item.meta_json, '{}'::jsonb)
+                - 'deferred_target_timesheet_id'
+                - 'materialisation_deferred_at_utc'
+                - 'deferred_rotation_degrees'
+            ) || jsonb_build_object(
+              'contract_week_id', v_week.id::text,
+              'staged_kind', v_queue_kind,
+              'materialisation_deferred_to_backend', false,
+              'materialised_to_timesheet_id', v_current_ts.timesheet_id::text,
+              'materialised_at_utc', to_jsonb(v_now),
+              'materialised_storage_key', COALESCE(v_queue_storage_key, v_queue_item.r2_key)
+            )
         WHERE mq.id = v_queue_item.id;
       END IF;
     END LOOP;
@@ -9282,7 +9374,6 @@ BEGIN
   RETURN NEXT;
 END;
 $function$;
-
 
 
 CREATE OR REPLACE FUNCTION public.timesheet_unauthorise_atomic(
