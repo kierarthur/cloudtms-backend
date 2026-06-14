@@ -1655,283 +1655,263 @@ END;
 $function$;
 
 
-
 CREATE OR REPLACE FUNCTION public.timesheet_daily_manual_unprocess_atomic(p_timesheet_id uuid, p_expected_timesheet_id uuid, p_actor_user_id uuid DEFAULT NULL::uuid, p_now_utc timestamp with time zone DEFAULT now(), p_expected_row_signature text DEFAULT NULL::text)
  RETURNS jsonb
  LANGUAGE plpgsql
- VOLATILE SECURITY DEFINER
+ SECURITY DEFINER
  SET search_path TO 'public'
 AS $function$
 DECLARE
   v_now timestamp with time zone := COALESCE(p_now_utc, now());
-  v_requested_booking_id text := NULL;
-  v_requested_timesheet_id uuid := NULL;
-  v_current_timesheet_id uuid := NULL;
-  v_current_version integer := NULL;
-  v_was_stale boolean := FALSE;
-  v_sheet_scope text := NULL;
-  v_submission_mode text := NULL;
-  v_authorised_at_server timestamp with time zone := NULL;
-  v_tsfin_id uuid := NULL;
+  v_requested_ts public.timesheets%ROWTYPE;
+  v_current_ts public.timesheets%ROWTYPE;
+  v_current_tsfin public.timesheets_financials%ROWTYPE;
   v_previous_status public.ts_fin_processing_status_enum := NULL;
   v_new_status public.ts_fin_processing_status_enum := 'UNPROCESSED'::public.ts_fin_processing_status_enum;
-  v_locked_by_invoice_id uuid := NULL;
-  v_paid_at_utc timestamp with time zone := NULL;
-  v_invoice_breakdown_json jsonb := NULL;
-  v_has_segment_invoice_lock boolean := FALSE;
-  v_tsfin_json jsonb := NULL;
-  v_timesheet_json jsonb := NULL;
-  v_pre_row jsonb := NULL;
-  v_post_row jsonb := NULL;
+  v_has_segment_invoice_lock boolean := false;
+  v_before_signature_json jsonb := '{}'::jsonb;
+  v_after_signature_json jsonb := '{}'::jsonb;
+  v_current_row_signature text := NULL;
   v_expected_row_signature text := NULL;
+  v_after_row_signature text := NULL;
+  v_error_state text := NULL;
+  v_error_message text := NULL;
 BEGIN
+  PERFORM set_config('lock_timeout', '2500ms', true);
+
   IF p_timesheet_id IS NULL THEN
-    RETURN JSONB_BUILD_OBJECT('ok', FALSE, 'operation', 'daily_manual_unprocess', 'error_code', 'TIMESHEET_ID_REQUIRED', 'message', 'p_timesheet_id is required.');
+    RETURN jsonb_build_object('ok', false, 'operation', 'daily_manual_unprocess', 'error_code', 'TIMESHEET_ID_REQUIRED', 'message', 'p_timesheet_id is required.');
   END IF;
 
   IF p_expected_timesheet_id IS NULL THEN
-    RETURN JSONB_BUILD_OBJECT('ok', FALSE, 'operation', 'daily_manual_unprocess', 'error_code', 'EXPECTED_TIMESHEET_ID_REQUIRED', 'message', 'p_expected_timesheet_id is required.');
+    RETURN jsonb_build_object('ok', false, 'operation', 'daily_manual_unprocess', 'error_code', 'EXPECTED_TIMESHEET_ID_REQUIRED', 'message', 'p_expected_timesheet_id is required.');
   END IF;
 
-  SELECT requested_ts.booking_id,
-         requested_ts.timesheet_id
-    INTO v_requested_booking_id,
-         v_requested_timesheet_id
-  FROM public.timesheets AS requested_ts
-  WHERE requested_ts.timesheet_id = p_timesheet_id
+  SELECT ts.*
+    INTO v_requested_ts
+  FROM public.timesheets AS ts
+  WHERE ts.timesheet_id = p_timesheet_id
   LIMIT 1;
 
-  IF v_requested_timesheet_id IS NULL THEN
-    RETURN JSONB_BUILD_OBJECT('ok', FALSE, 'operation', 'daily_manual_unprocess', 'error_code', 'TIMESHEET_NOT_FOUND', 'message', 'Timesheet was not found.', 'requested_timesheet_id', p_timesheet_id);
+  IF v_requested_ts.timesheet_id IS NULL THEN
+    RETURN jsonb_build_object('ok', false, 'operation', 'daily_manual_unprocess', 'error_code', 'TIMESHEET_NOT_FOUND', 'message', 'Timesheet was not found.', 'requested_timesheet_id', p_timesheet_id);
   END IF;
 
-  SELECT current_ts.timesheet_id,
-         current_ts.version
-    INTO v_current_timesheet_id,
-         v_current_version
-  FROM public.timesheets AS current_ts
-  WHERE current_ts.booking_id = v_requested_booking_id
-    AND current_ts.is_current = TRUE
-  ORDER BY current_ts.version DESC NULLS LAST, current_ts.timesheet_id DESC
-  LIMIT 1;
+  SELECT ts.*
+    INTO v_current_ts
+  FROM public.timesheets AS ts
+  WHERE ts.booking_id = v_requested_ts.booking_id
+    AND ts.is_current = true
+  ORDER BY ts.version DESC NULLS LAST, ts.updated_at DESC NULLS LAST, ts.created_at DESC NULLS LAST, ts.timesheet_id DESC
+  LIMIT 1
+  FOR UPDATE;
 
-  IF v_current_timesheet_id IS NULL THEN
-    v_current_timesheet_id := v_requested_timesheet_id;
+  IF v_current_ts.timesheet_id IS NULL THEN
+    RETURN jsonb_build_object('ok', false, 'operation', 'daily_manual_unprocess', 'error_code', 'CURRENT_TIMESHEET_NOT_FOUND', 'message', 'Current timesheet was not found.', 'requested_timesheet_id', p_timesheet_id);
   END IF;
 
-  v_was_stale := v_requested_timesheet_id IS DISTINCT FROM v_current_timesheet_id;
-
-  IF p_expected_timesheet_id IS DISTINCT FROM v_current_timesheet_id THEN
-    RETURN JSONB_BUILD_OBJECT(
-      'ok', FALSE,
+  IF p_expected_timesheet_id IS DISTINCT FROM v_current_ts.timesheet_id THEN
+    RETURN jsonb_build_object(
+      'ok', false,
       'operation', 'daily_manual_unprocess',
       'error_code', 'TIMESHEET_MOVED',
       'message', 'Timesheet has moved to a newer current row.',
       'requested_timesheet_id', p_timesheet_id,
       'expected_timesheet_id', p_expected_timesheet_id,
-      'current_timesheet_id', v_current_timesheet_id,
-      'was_stale', v_was_stale
+      'current_timesheet_id', v_current_ts.timesheet_id,
+      'was_stale', v_requested_ts.timesheet_id IS DISTINCT FROM v_current_ts.timesheet_id
     );
   END IF;
 
-  SELECT current_ts.sheet_scope::text,
-         current_ts.submission_mode::text,
-         current_ts.authorised_at_server,
-         current_ts.version,
-         TO_JSONB(current_ts)
-    INTO v_sheet_scope,
-         v_submission_mode,
-         v_authorised_at_server,
-         v_current_version,
-         v_timesheet_json
-  FROM public.timesheets AS current_ts
-  WHERE current_ts.timesheet_id = v_current_timesheet_id
-    AND current_ts.is_current = TRUE
+  IF v_current_ts.sheet_scope IS DISTINCT FROM 'DAILY'::public.timesheet_scope_enum THEN
+    RETURN jsonb_build_object('ok', false, 'operation', 'daily_manual_unprocess', 'error_code', 'NOT_DAILY', 'message', 'Timesheet is not DAILY; daily manual unprocess only applies to DAILY sheets.', 'current_timesheet_id', v_current_ts.timesheet_id);
+  END IF;
+
+  IF v_current_ts.submission_mode IS DISTINCT FROM 'MANUAL'::public.submission_mode_enum THEN
+    RETURN jsonb_build_object('ok', false, 'operation', 'daily_manual_unprocess', 'error_code', 'NOT_MANUAL', 'message', 'Timesheet must be MANUAL before unprocessing.', 'current_timesheet_id', v_current_ts.timesheet_id);
+  END IF;
+
+  IF v_current_ts.authorised_at_server IS NOT NULL THEN
+    RETURN jsonb_build_object('ok', false, 'operation', 'daily_manual_unprocess', 'error_code', 'TIMESHEET_AUTHORISED_EDIT_BLOCKED', 'message', 'This timesheet is authorised. Unauthorise it before unprocessing.', 'current_timesheet_id', v_current_ts.timesheet_id);
+  END IF;
+
+  SELECT tf.*
+    INTO v_current_tsfin
+  FROM public.timesheets_financials AS tf
+  WHERE tf.timesheet_id = v_current_ts.timesheet_id
+    AND tf.is_current = true
+  ORDER BY tf.computed_at_utc DESC NULLS LAST, tf.updated_at DESC NULLS LAST, tf.created_at DESC NULLS LAST, tf.id DESC
   LIMIT 1
   FOR UPDATE;
 
-  IF v_sheet_scope IS NULL THEN
-    RETURN JSONB_BUILD_OBJECT('ok', FALSE, 'operation', 'daily_manual_unprocess', 'error_code', 'CURRENT_TIMESHEET_NOT_FOUND', 'message', 'Current timesheet was not found.', 'current_timesheet_id', v_current_timesheet_id);
+  IF v_current_tsfin.id IS NULL THEN
+    RETURN jsonb_build_object('ok', false, 'operation', 'daily_manual_unprocess', 'error_code', 'NO_TSFIN', 'message', 'No current financial snapshot exists for this timesheet.', 'current_timesheet_id', v_current_ts.timesheet_id);
   END IF;
 
-  IF UPPER(COALESCE(v_sheet_scope, '')) <> 'DAILY' THEN
-    RETURN JSONB_BUILD_OBJECT('ok', FALSE, 'operation', 'daily_manual_unprocess', 'error_code', 'NOT_DAILY', 'message', 'Timesheet is not DAILY; daily manual unprocess only applies to DAILY sheets.', 'current_timesheet_id', v_current_timesheet_id);
+  v_before_signature_json := public.timesheet_lifecycle_signature_v1(v_current_ts.timesheet_id, NULL::uuid, false);
+  v_current_row_signature := NULLIF(BTRIM(COALESCE(v_before_signature_json ->> 'backend_row_signature', v_before_signature_json ->> 'row_signature', v_before_signature_json ->> 'signature', '')), '');
+  v_expected_row_signature := NULLIF(BTRIM(COALESCE(p_expected_row_signature, '')), '');
+
+  IF COALESCE((v_before_signature_json ->> 'ok')::boolean, false) IS DISTINCT FROM true OR v_current_row_signature IS NULL THEN
+    RETURN jsonb_build_object(
+      'ok', false,
+      'operation', 'daily_manual_unprocess',
+      'error_code', 'ROW_SIGNATURE_UNAVAILABLE',
+      'message', 'Unable to compute the current lifecycle signature for this timesheet.',
+      'current_timesheet_id', v_current_ts.timesheet_id
+    );
   END IF;
 
-  IF UPPER(COALESCE(v_submission_mode, '')) <> 'MANUAL' THEN
-    RETURN JSONB_BUILD_OBJECT('ok', FALSE, 'operation', 'daily_manual_unprocess', 'error_code', 'NOT_MANUAL', 'message', 'Timesheet must be MANUAL before unprocessing.', 'current_timesheet_id', v_current_timesheet_id);
+  IF v_expected_row_signature IS NOT NULL AND COALESCE(v_current_row_signature, '') IS DISTINCT FROM v_expected_row_signature THEN
+    RETURN jsonb_build_object(
+      'ok', false,
+      'operation', 'daily_manual_unprocess',
+      'error_code', 'ROW_SIGNATURE_MISMATCH',
+      'message', 'Timesheet changed after it was loaded. Refresh the row and try again.',
+      'current_timesheet_id', v_current_ts.timesheet_id,
+      'expected_row_signature', v_expected_row_signature,
+      'current_row_signature', v_current_row_signature
+    );
   END IF;
 
-  IF v_authorised_at_server IS NOT NULL THEN
-    RETURN JSONB_BUILD_OBJECT('ok', FALSE, 'operation', 'daily_manual_unprocess', 'error_code', 'TIMESHEET_AUTHORISED_EDIT_BLOCKED', 'message', 'This timesheet is authorised. Unauthorise it before unprocessing.', 'current_timesheet_id', v_current_timesheet_id);
-  END IF;
-
-  SELECT tsfin_current.id,
-         tsfin_current.processing_status,
-         tsfin_current.locked_by_invoice_id,
-         tsfin_current.paid_at_utc,
-         tsfin_current.invoice_breakdown_json
-    INTO v_tsfin_id,
-         v_previous_status,
-         v_locked_by_invoice_id,
-         v_paid_at_utc,
-         v_invoice_breakdown_json
-  FROM public.timesheets_financials AS tsfin_current
-  WHERE tsfin_current.timesheet_id = v_current_timesheet_id
-    AND tsfin_current.is_current = TRUE
-  ORDER BY tsfin_current.computed_at_utc DESC NULLS LAST, tsfin_current.id DESC
-  LIMIT 1
-  FOR UPDATE;
-
-  IF v_tsfin_id IS NULL THEN
-    RETURN JSONB_BUILD_OBJECT('ok', FALSE, 'operation', 'daily_manual_unprocess', 'error_code', 'NO_TSFIN', 'message', 'No current financial snapshot exists for this timesheet.', 'current_timesheet_id', v_current_timesheet_id);
-  END IF;
+  v_previous_status := v_current_tsfin.processing_status;
 
   SELECT EXISTS (
     SELECT 1
     FROM jsonb_array_elements(
       CASE
-        WHEN v_invoice_breakdown_json IS NULL THEN '[]'::jsonb
-        WHEN jsonb_typeof(v_invoice_breakdown_json) = 'array' THEN v_invoice_breakdown_json
-        WHEN jsonb_typeof(v_invoice_breakdown_json) = 'object'
-         AND jsonb_typeof(v_invoice_breakdown_json->'segments') = 'array' THEN v_invoice_breakdown_json->'segments'
+        WHEN v_current_tsfin.invoice_breakdown_json IS NULL THEN '[]'::jsonb
+        WHEN jsonb_typeof(v_current_tsfin.invoice_breakdown_json) = 'array' THEN v_current_tsfin.invoice_breakdown_json
+        WHEN jsonb_typeof(v_current_tsfin.invoice_breakdown_json) = 'object'
+         AND jsonb_typeof(v_current_tsfin.invoice_breakdown_json -> 'segments') = 'array' THEN v_current_tsfin.invoice_breakdown_json -> 'segments'
         ELSE '[]'::jsonb
       END
     ) AS invoice_segment(segment_json)
-    WHERE NULLIF(BTRIM(COALESCE(invoice_segment.segment_json->>'invoice_locked_invoice_id', '')), '') IS NOT NULL
+    WHERE NULLIF(BTRIM(COALESCE(invoice_segment.segment_json ->> 'invoice_locked_invoice_id', '')), '') IS NOT NULL
   ) INTO v_has_segment_invoice_lock;
 
-  IF v_locked_by_invoice_id IS NOT NULL OR v_paid_at_utc IS NOT NULL OR v_has_segment_invoice_lock = TRUE THEN
-    RETURN JSONB_BUILD_OBJECT('ok', FALSE, 'operation', 'daily_manual_unprocess', 'error_code', 'TIMESHEET_LOCKED_OR_PAID', 'message', 'Cannot unprocess: timesheet is locked or paid.', 'current_timesheet_id', v_current_timesheet_id);
+  IF v_current_tsfin.locked_by_invoice_id IS NOT NULL OR v_current_tsfin.paid_at_utc IS NOT NULL OR COALESCE(v_has_segment_invoice_lock, false) THEN
+    RETURN jsonb_build_object(
+      'ok', false,
+      'operation', 'daily_manual_unprocess',
+      'error_code', 'TIMESHEET_LOCKED_OR_PAID',
+      'specific_error_code', CASE
+        WHEN v_current_tsfin.paid_at_utc IS NOT NULL THEN 'TIMESHEET_PAID'
+        ELSE 'TIMESHEET_LOCKED_BY_INVOICE'
+      END,
+      'message', 'Cannot unprocess: timesheet is locked or paid.',
+      'current_timesheet_id', v_current_ts.timesheet_id,
+      'current_row_signature', v_current_row_signature
+    );
   END IF;
 
   IF v_previous_status = 'UNPROCESSED'::public.ts_fin_processing_status_enum THEN
-    RETURN JSONB_BUILD_OBJECT('ok', FALSE, 'operation', 'daily_manual_unprocess', 'error_code', 'ALREADY_UNPROCESSED', 'message', 'Timesheet is already UNPROCESSED.', 'current_timesheet_id', v_current_timesheet_id, 'previous_status', v_previous_status);
+    RETURN jsonb_build_object('ok', false, 'operation', 'daily_manual_unprocess', 'error_code', 'ALREADY_UNPROCESSED', 'message', 'Timesheet is already UNPROCESSED.', 'current_timesheet_id', v_current_ts.timesheet_id, 'previous_status', v_previous_status::text, 'current_row_signature', v_current_row_signature);
   END IF;
 
   IF v_previous_status NOT IN ('PENDING_AUTH'::public.ts_fin_processing_status_enum, 'READY_FOR_HR'::public.ts_fin_processing_status_enum) THEN
-    RETURN JSONB_BUILD_OBJECT(
-      'ok', FALSE,
+    RETURN jsonb_build_object(
+      'ok', false,
       'operation', 'daily_manual_unprocess',
       'error_code', 'PROCESSING_STATUS_NOT_UNPROCESSABLE',
       'message', 'Timesheet is not in a processing state that can be moved back to UNPROCESSED.',
-      'current_timesheet_id', v_current_timesheet_id,
-      'previous_status', v_previous_status
+      'current_timesheet_id', v_current_ts.timesheet_id,
+      'previous_status', v_previous_status::text,
+      'current_row_signature', v_current_row_signature
     );
   END IF;
 
-  v_expected_row_signature := NULLIF(BTRIM(COALESCE(p_expected_row_signature, '')), '');
+  UPDATE public.timesheets_financials AS tf
+     SET processing_status = v_new_status,
+         processed_by_user_id = NULL,
+         processed_at_utc = NULL,
+         authorised_by_user_id = NULL,
+         authorised_at_utc = NULL,
+         updated_at = v_now
+   WHERE tf.id = v_current_tsfin.id
+     AND tf.is_current = true
+   RETURNING * INTO v_current_tsfin;
 
-  SELECT decision_result.row_json
-    INTO v_pre_row
-  FROM public.bulk_timesheet_row_patch_v1(JSONB_BUILD_OBJECT('dataset_mode', 'process', 'timesheet_id', v_current_timesheet_id::text)) AS decision_result(row_json)
-  LIMIT 1;
-
-  IF v_expected_row_signature IS NOT NULL
-     AND NULLIF(BTRIM(COALESCE(v_pre_row->>'row_signature', '')), '') IS DISTINCT FROM v_expected_row_signature THEN
-    RETURN JSONB_BUILD_OBJECT(
-      'ok', FALSE,
-      'operation', 'daily_manual_unprocess',
-      'error_code', 'ROW_SIGNATURE_MISMATCH',
-      'message', 'Timesheet changed after it was loaded. Refresh the row and try again.',
-      'current_timesheet_id', v_current_timesheet_id,
-      'expected_row_signature', v_expected_row_signature,
-      'current_row_signature', v_pre_row->>'row_signature'
-    );
+  IF v_current_tsfin.id IS NULL THEN
+    RETURN jsonb_build_object('ok', false, 'operation', 'daily_manual_unprocess', 'error_code', 'TSFIN_UPDATE_FAILED', 'message', 'Failed to move daily timesheet back to UNPROCESSED.', 'current_timesheet_id', v_current_ts.timesheet_id);
   END IF;
 
-  UPDATE public.timesheets_financials AS tsfin_update
-  SET processing_status = v_new_status,
-      processed_by_user_id = NULL,
-      processed_at_utc = NULL,
-      authorised_by_user_id = NULL,
-      authorised_at_utc = NULL,
-      updated_at = v_now
-  WHERE tsfin_update.id = v_tsfin_id
-    AND tsfin_update.is_current = TRUE
-  RETURNING TO_JSONB(tsfin_update)
-  INTO v_tsfin_json;
-
-  IF v_tsfin_json IS NULL THEN
-    RETURN JSONB_BUILD_OBJECT('ok', FALSE, 'operation', 'daily_manual_unprocess', 'error_code', 'TSFIN_UPDATE_FAILED', 'message', 'Failed to move daily timesheet back to UNPROCESSED.', 'current_timesheet_id', v_current_timesheet_id);
-  END IF;
-
-  SELECT TO_JSONB(current_ts)
-    INTO v_timesheet_json
-  FROM public.timesheets AS current_ts
-  WHERE current_ts.timesheet_id = v_current_timesheet_id
-    AND current_ts.is_current = TRUE
-  LIMIT 1;
-
-  SELECT decision_result.row_json
-    INTO v_post_row
-  FROM public.bulk_timesheet_row_patch_v1(JSONB_BUILD_OBJECT('dataset_mode', 'process', 'timesheet_id', v_current_timesheet_id::text)) AS decision_result(row_json)
-  LIMIT 1;
+  v_after_signature_json := public.timesheet_lifecycle_signature_v1(v_current_ts.timesheet_id, NULL::uuid, false);
+  v_after_row_signature := NULLIF(BTRIM(COALESCE(v_after_signature_json ->> 'backend_row_signature', v_after_signature_json ->> 'row_signature', v_after_signature_json ->> 'signature', '')), '');
 
   PERFORM public._audit_insert(
     'timesheet',
-    v_current_timesheet_id::text,
+    v_current_ts.timesheet_id::text,
     'TIMESHEET_DAILY_MANUAL_UNPROCESSED',
-    JSONB_BUILD_OBJECT(
-      'row', COALESCE(v_pre_row, JSONB_BUILD_OBJECT()),
-      'processing_status', v_previous_status,
-      'row_signature', v_pre_row->>'row_signature'
+    jsonb_build_object(
+      'timesheet_id', v_current_ts.timesheet_id,
+      'timesheet_financials_id', v_current_tsfin.id,
+      'previous_processing_status', v_previous_status::text,
+      'previous_row_signature', v_current_row_signature
     ),
-    JSONB_BUILD_OBJECT(
-      'row', COALESCE(v_post_row, JSONB_BUILD_OBJECT()),
-      'processing_status', v_new_status,
-      'row_signature', v_post_row->>'row_signature'
+    jsonb_build_object(
+      'timesheet_id', v_current_ts.timesheet_id,
+      'timesheet_financials_id', v_current_tsfin.id,
+      'new_processing_status', v_new_status::text,
+      'processed_at_utc', NULL::text,
+      'processed_by_user_id', NULL::text,
+      'authorised_at_utc', NULL::text,
+      'authorised_by_user_id', NULL::text,
+      'new_row_signature', v_after_row_signature
     ),
     'DAILY_MANUAL_UNPROCESS',
     p_actor_user_id
   );
 
-  RETURN JSONB_BUILD_OBJECT(
-    'ok', TRUE,
+  RETURN jsonb_build_object(
+    'ok', true,
+    'success', true,
     'operation', 'daily_manual_unprocess',
-    'unprocessed', TRUE,
-    'success', TRUE,
+    'unprocessed', true,
     'requested_timesheet_id', p_timesheet_id,
     'expected_timesheet_id', p_expected_timesheet_id,
-    'current_timesheet_id', v_current_timesheet_id,
-    'timesheet_id', v_current_timesheet_id,
-    'current_version', v_current_version,
-    'was_stale', v_was_stale,
-    'previous_status', v_previous_status,
-    'processing_status', v_new_status,
-    'status_transition', JSONB_BUILD_OBJECT('from', v_previous_status, 'to', v_new_status, 'processed_at_utc', NULL::text, 'processed_by_user_id', NULL::text),
-    'timesheet', COALESCE(v_timesheet_json, NULL::jsonb),
-    'tsfin', COALESCE(v_tsfin_json, NULL::jsonb),
-    'row_patch', COALESCE(v_post_row->'row_patch', JSONB_BUILD_OBJECT()),
-    'row_patches', JSONB_BUILD_ARRAY(COALESCE(v_post_row->'row_patch', JSONB_BUILD_OBJECT())),
-    'row_signature', v_post_row->>'row_signature',
-    'data_row', COALESCE(v_post_row, JSONB_BUILD_OBJECT()),
-    'count_deltas', JSONB_BUILD_OBJECT('unprocessed', 1, 'processed', -1),
-    'cache_invalidation_hints', JSONB_BUILD_OBJECT(
-      'row_keys', JSONB_BUILD_ARRAY(COALESCE(v_post_row->>'row_key', 'timesheet:' || v_current_timesheet_id::text)),
-      'timesheet_ids', JSONB_BUILD_ARRAY(v_current_timesheet_id),
-      'storage_keys', '[]'::jsonb,
-      'datasets', JSONB_BUILD_ARRAY('bulk_process', 'bulk_authorise'),
-      'row_signature', v_post_row->>'row_signature',
-      'status_only', TRUE,
-      'identity_changed', FALSE,
-      'manual_changed', FALSE,
-      'invalidate_context', FALSE,
-      'invalidate_row_context', FALSE,
-      'invalidate_preview', FALSE,
-      'invalidate_evidence', FALSE
-    ),
-    'cache_invalidation', JSONB_BUILD_OBJECT(
-      'rows', JSONB_BUILD_ARRAY(JSONB_BUILD_OBJECT('row_key', COALESCE(v_post_row->>'row_key', 'timesheet:' || v_current_timesheet_id::text), 'timesheet_id', v_current_timesheet_id, 'new_row_signature', v_post_row->>'row_signature')),
-      'artifacts', '[]'::jsonb,
-      'datasets', JSONB_BUILD_ARRAY('bulk_process', 'bulk_authorise'),
-      'status_only', TRUE,
-      'invalidate_context', FALSE,
-      'invalidate_preview', FALSE
-    )
+    'current_timesheet_id', v_current_ts.timesheet_id,
+    'timesheet_id', v_current_ts.timesheet_id,
+    'timesheet_financials_id', v_current_tsfin.id,
+    'current_version', v_current_ts.version,
+    'was_stale', v_requested_ts.timesheet_id IS DISTINCT FROM v_current_ts.timesheet_id,
+    'previous_status', v_previous_status::text,
+    'previous_processing_status', v_previous_status::text,
+    'processing_status', v_new_status::text,
+    'new_processing_status', v_new_status::text,
+    'backend_row_signature', v_after_row_signature,
+    'row_signature', v_after_row_signature,
+    'status_transition', jsonb_build_object('from', v_previous_status::text, 'to', v_new_status::text, 'processed_at_utc', NULL::text, 'processed_by_user_id', NULL::text),
+    'affected_rows', jsonb_build_array(jsonb_build_object('timesheet_id', v_current_ts.timesheet_id, 'row_key', 'timesheet:' || v_current_ts.timesheet_id::text)),
+    'count_deltas', jsonb_build_object('unprocessed', 1, 'processed', -1),
+    'cache_invalidation_hints', jsonb_build_object('changed_domains', jsonb_build_array('timesheets', 'timesheets_financials'), 'timesheet_id', v_current_ts.timesheet_id)
+  );
+EXCEPTION WHEN OTHERS THEN
+  GET STACKED DIAGNOSTICS v_error_state = RETURNED_SQLSTATE, v_error_message = MESSAGE_TEXT;
+  IF v_error_state IN ('55P03', '57014') THEN
+    RETURN jsonb_build_object('ok', false, 'operation', 'daily_manual_unprocess', 'error_code', 'LOCK_TIMEOUT', 'message', 'The timesheet is currently locked by another operation.', 'timesheet_id', p_timesheet_id);
+  END IF;
+  RAISE;
+END;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.timesheet_daily_manual_unprocess_atomic(p_timesheet_id uuid, p_expected_timesheet_id uuid, p_actor_user_id uuid DEFAULT NULL::uuid, p_now_utc timestamp with time zone DEFAULT now())
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+BEGIN
+  RETURN public.timesheet_daily_manual_unprocess_atomic(
+    p_timesheet_id => p_timesheet_id,
+    p_expected_timesheet_id => p_expected_timesheet_id,
+    p_actor_user_id => p_actor_user_id,
+    p_now_utc => p_now_utc,
+    p_expected_row_signature => NULL::text
   );
 END;
 $function$;
+
 
 
 
