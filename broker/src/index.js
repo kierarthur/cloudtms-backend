@@ -54444,9 +54444,6 @@ async function handleTimesheetDailyManualUnprocess(env, req, timesheetId) {
   }
 }
 
-
-
-
 async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
   const enc = encodeURIComponent;
 
@@ -54487,6 +54484,14 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
     body?.return_bulk_patch === true ||
     body?.returnBulkPatch === true
   );
+  const minimalLifecycleMutation = !!(
+    body?.minimal_lifecycle_mutation === true ||
+    body?.minimalLifecycleMutation === true ||
+    body?.requires_affected_row_refresh === true ||
+    body?.requiresAffectedRowRefresh === true ||
+    String(body?.response_context || body?.responseContext || '').trim().toLowerCase() === 'minimal_lifecycle_mutation'
+  );
+  const fullBulkPatchResponseRequested = bulkPatchResponseRequested && !minimalLifecycleMutation;
   const bulkDatasetMode = bulkAuthoriseMode ? 'authorise' : 'process';
   const bulkResponseContext = bulkAuthoriseMode ? 'bulk_authorise' : (bulkProcessMode ? 'bulk_process' : 'standard');
   const expectedRowSignature = String(
@@ -55361,7 +55366,7 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
   const finBefore = { ...tsfin };
 
   let preBulkPatchRow = null;
-  if (bulkPatchResponseRequested && expectedRowSignature) {
+  if (fullBulkPatchResponseRequested && expectedRowSignature) {
     try {
       preBulkPatchRow = await loadDailyManualBulkPatchRow({
         timesheetId: currentTimesheetId,
@@ -55776,6 +55781,91 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
       hoursChangedBuckets
     );
 
+    const minimalRowKey = `timesheet:${currentTimesheetId}`;
+    const minimalCacheHints = {
+      row_keys: [minimalRowKey].filter(Boolean),
+      timesheet_ids: [currentTimesheetId].filter(Boolean),
+      storage_keys: [],
+      datasets: ['bulk_process', 'bulk_authorise'],
+      row_signature: null,
+      manual_changed: manualChanged,
+      status_only: !manualChanged,
+      identity_changed: rotated === true,
+      invalidate_context: false,
+      invalidate_row_context: false,
+      invalidate_editor_context: manualChanged,
+      invalidate_preview: false,
+      invalidate_evidence: false
+    };
+
+    if (minimalLifecycleMutation) {
+      return withCORS(env, req, ok({
+        ok: true,
+        success: true,
+        response_context: 'minimal_lifecycle_mutation',
+        minimal_lifecycle_mutation: true,
+        timesheet_id: currentTimesheetId,
+        booking_id: guard.resolved.booking_id || null,
+        requested_timesheet_id: guard.resolved.requested_timesheet_id || timesheetId,
+        current_timesheet_id: currentTimesheetId,
+        expected_timesheet_id: currentTimesheetId,
+        current_version: finalTs?.version ?? ts?.version ?? guard.resolved.current_version ?? null,
+        was_stale: !!guard.resolved.was_stale,
+        affected_rows: [{
+          row_key: minimalRowKey,
+          timesheet_id: currentTimesheetId,
+          current_timesheet_id: currentTimesheetId,
+          expected_timesheet_id: currentTimesheetId,
+          booking_id: guard.resolved.booking_id || null,
+          contract_week_id: finalTs?.contract_week_id ?? ts?.contract_week_id ?? null,
+          current_version: finalTs?.version ?? ts?.version ?? guard.resolved.current_version ?? null,
+          processing_status: finAfter?.processing_status ?? null,
+          reference_number: finalTs?.reference_number ?? null
+        }],
+        requires_affected_row_refresh: true,
+        refresh_required: true,
+        row_key: minimalRowKey,
+        new_row_key: minimalRowKey,
+        row_signature: null,
+        backend_row_signature: null,
+        row_backend_signature: null,
+        count_deltas: {},
+        cache_invalidation_hints: minimalCacheHints,
+        cache_invalidation: {
+          row_keys: minimalCacheHints.row_keys,
+          timesheet_ids: minimalCacheHints.timesheet_ids,
+          storage_keys: minimalCacheHints.storage_keys,
+          datasets: minimalCacheHints.datasets,
+          row_signature: minimalCacheHints.row_signature,
+          manual_changed: minimalCacheHints.manual_changed,
+          invalidate_context: minimalCacheHints.invalidate_context,
+          invalidate_preview: minimalCacheHints.invalidate_preview
+        },
+        bulk_authorise: bulkDatasetMode === 'authorise',
+        bulk_process: bulkDatasetMode === 'process',
+        summary_row_hint: {
+          timesheet_id: currentTimesheetId,
+          booking_id: guard.resolved.booking_id || null,
+          processing_status: finAfter?.processing_status ?? null,
+          reference_number: finalTs?.reference_number ?? null,
+          worked_start_iso: finalTs?.worked_start_iso ?? null,
+          worked_end_iso: finalTs?.worked_end_iso ?? null,
+          break_start_iso: finalTs?.break_start_iso ?? null,
+          break_end_iso: finalTs?.break_end_iso ?? null,
+          break_minutes: finalTs?.break_minutes ?? null,
+          worked_minutes: finalTs?.worked_minutes ?? null,
+          actual_schedule_json: finalTs?.actual_schedule_json ?? null,
+          total_hours: finAfter?.total_hours ?? null
+        },
+        qr_action: qrAction,
+        qr_issued: qrIssued,
+        qr_reissued: qrReissued,
+        qr_pdf_key: pdfKey,
+        qr_r2_key,
+        qr_token: qrToken || null
+      }));
+    }
+
     let bulkRow = null;
     try {
       bulkRow = await loadDailyManualBulkPatchRow({
@@ -55883,6 +55973,7 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
     }));
   }
 
+
   return withCORS(env, req, ok({
     timesheet_id: currentTimesheetId,
     booking_id: guard.resolved.booking_id || null,
@@ -55927,6 +56018,7 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
     qr_token: qrToken || null
   }));
 }
+
 
 async function handleContractWeekDeleteTimesheet(env, req, weekId) {
   const user = await requireUser(env, req, ['admin']);
