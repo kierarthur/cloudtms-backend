@@ -123143,7 +123143,7 @@ async function buildInvoiceEvidenceImagePdfBytes(imageBytes, contentKind, contex
   });
 
   return await pdfDoc.save();
-}
+} 
 
 async function ensureInvoiceEvidenceBytesArePdf(bytes, context = {}) {
   const bytesU8 = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes || []);
