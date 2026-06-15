@@ -121583,6 +121583,47 @@ async function handleInvoiceBatchIssueConfirm(env, req) {
   }
 }
 
+function safeInvoiceEvidenceContextText(context = {}) {
+  const rawKey = String(context?.storageKey || context?.sourceKey || '').trim();
+  const rawName = String(context?.displayName || context?.name || '').trim();
+
+  let key = rawKey || rawName || 'unknown evidence object';
+
+  // Keep identifiers useful while avoiding accidental signed URL / token leakage.
+  key = key
+    .replace(/^https?:\/\/[^/]+\/?/i, '')
+    .split(/[?#]/)[0]
+    .replace(/^\/+/, '')
+    .replace(/(authorization\s*:?\s*bearer\s+)[^\s,;]+/ig, '$1[redacted]')
+    .replace(/(token=)[^&\s]+/ig, '$1[redacted]')
+    .replace(/(apikey=)[^&\s]+/ig, '$1[redacted]')
+    .replace(/(service[_-]?role[_-]?key\s*[:=]\s*)[^\s,;]+/ig, '$1[redacted]')
+    .replace(/(X-Amz-Signature=)[^&\s]+/ig, '$1[redacted]')
+    .replace(/(X-Amz-Credential=)[^&\s]+/ig, '$1[redacted]')
+    .replace(/[^A-Za-z0-9._\-\/=:@() ]/g, '_')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (!key) key = 'unknown evidence object';
+  if (key.length > 180) key = `${key.slice(0, 90)}...${key.slice(-70)}`;
+  return key;
+}
+
+
+function safeInvoiceEvidenceParserMessage(err) {
+  let msg = (err && typeof err === 'object' && err.message) ? err.message : err;
+  msg = String(msg || 'unknown parser error')
+    .replace(/(authorization\s*:?\s*bearer\s+)[^\s,;]+/ig, '$1[redacted]')
+    .replace(/(token=)[^&\s]+/ig, '$1[redacted]')
+    .replace(/(apikey=)[^&\s]+/ig, '$1[redacted]')
+    .replace(/(service[_-]?role[_-]?key\s*[:=]\s*)[^\s,;]+/ig, '$1[redacted]')
+    .replace(/(X-Amz-Signature=)[^&\s]+/ig, '$1[redacted]')
+    .replace(/(X-Amz-Credential=)[^&\s]+/ig, '$1[redacted]')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return (msg || 'unknown parser error').slice(0, 240);
+}
+
 
 async function handleInvoiceRender(env, req, invoiceId) {
   const user = await requireUser(env, req, ['admin']);
@@ -121729,6 +121770,8 @@ async function handleInvoiceRender(env, req, invoiceId) {
 
     let effectiveForceRegen = !!(forceRegen || cacheMissingR2);
     let renderError = null;
+    let deterministicRenderFailure = false;
+    let deterministicRenderFailureKind = null;
 
     // User-triggered Open/Preview must try immediate render first, including in
     // free mode. The shared core already adds the DRAFT INVOICE watermark for
@@ -121763,13 +121806,35 @@ async function handleInvoiceRender(env, req, invoiceId) {
         }
       }
 
+      deterministicRenderFailure = deterministicRenderFailure || core?.deterministic_render_failure === true;
+      deterministicRenderFailureKind = core?.render_failure_kind || deterministicRenderFailureKind;
       renderError = safeRenderError(core?.error || 'RENDER_FAILED');
     } catch (e) {
+      deterministicRenderFailure = deterministicRenderFailure || e?.deterministic_render_failure === true;
+      deterministicRenderFailureKind = e?.render_failure_kind || deterministicRenderFailureKind;
       renderError = safeRenderError(e, 'RENDER_EXCEPTION');
     }
 
     if (String(renderError || '').toLowerCase().includes('invoice not found')) {
       return withCORS(env, req, notFound('Invoice not found'));
+    }
+
+    // Deterministic attachment parsing/conversion failures will fail identically
+    // in the queue; return the safe cause now instead of masking it as queued.
+    if (deterministicRenderFailure) {
+      return withCORS(env, req, badRequest(
+        renderError || 'Invoice PDF immediate render failed due to an unsupported or corrupt attachment.',
+        {
+          ready: false,
+          queued: false,
+          force_regen: effectiveForceRegen,
+          expected_pdf_key: expectedPdfKey,
+          cache_missing_r2: cacheMissingR2,
+          render_error: renderError,
+          deterministic_render_failure: true,
+          render_failure_kind: deterministicRenderFailureKind
+        }
+      ));
     }
 
     // Queue render job only after immediate render genuinely failed.
@@ -121815,7 +121880,6 @@ async function handleInvoiceRender(env, req, invoiceId) {
     return withCORS(env, req, serverError('Failed to render or enqueue invoice PDF'));
   }
 }
-
 
 
 async function handleInvoiceEmail(env, req, invoiceId) {
@@ -123025,6 +123089,106 @@ async function handleGetInvoice(env, req, invoiceId) {
 // - Does NOT build a downloadUrl (that remains in handleInvoiceRender)
 // ============================================================================
 
+async function buildInvoiceEvidenceImagePdfBytes(imageBytes, contentKind, context = {}) {
+  const bytesU8 = imageBytes instanceof Uint8Array ? imageBytes : new Uint8Array(imageBytes || []);
+  const pdfDoc = await PDFDocument.create();
+
+  let img = null;
+  if (contentKind === 'image/png') {
+    img = await pdfDoc.embedPng(bytesU8);
+  } else if (contentKind === 'image/jpeg') {
+    img = await pdfDoc.embedJpg(bytesU8);
+  } else {
+    throw new Error(`Unsupported evidence image format: ${contentKind || 'unknown'}`);
+  }
+
+  const imgW = Number(img?.width || 0);
+  const imgH = Number(img?.height || 0);
+  if (!(imgW > 0) || !(imgH > 0)) {
+    throw new Error('Evidence image has invalid dimensions');
+  }
+
+  // A4 dimensions in PDF points (72 points/inch).
+  const A4_PORTRAIT = { width: 595.28, height: 841.89, orientation: 'portrait' };
+  const A4_LANDSCAPE = { width: 841.89, height: 595.28, orientation: 'landscape' };
+  const rawMargin = Number(context?.marginPoints ?? 36);
+  const margin = Number.isFinite(rawMargin) ? Math.max(0, Math.min(rawMargin, 144)) : 36;
+
+  const fitFor = (pageDef) => {
+    const maxW = Math.max(1, pageDef.width - (2 * margin));
+    const maxH = Math.max(1, pageDef.height - (2 * margin));
+    const scale = Math.min(maxW / imgW, maxH / imgH);
+    const drawW = imgW * scale;
+    const drawH = imgH * scale;
+    return {
+      ...pageDef,
+      scale,
+      drawW,
+      drawH,
+      x: (pageDef.width - drawW) / 2,
+      y: (pageDef.height - drawH) / 2
+    };
+  };
+
+  const portraitFit = fitFor(A4_PORTRAIT);
+  const landscapeFit = fitFor(A4_LANDSCAPE);
+  const chosen = (landscapeFit.scale > portraitFit.scale + 0.000001) ? landscapeFit : portraitFit;
+
+  const page = pdfDoc.addPage([chosen.width, chosen.height]);
+  page.drawImage(img, {
+    x: chosen.x,
+    y: chosen.y,
+    width: chosen.drawW,
+    height: chosen.drawH
+  });
+
+  return await pdfDoc.save();
+}
+
+async function ensureInvoiceEvidenceBytesArePdf(bytes, context = {}) {
+  const bytesU8 = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes || []);
+  const sourceLabel = String(context?.sourceLabel || 'Invoice evidence')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 80) || 'Invoice evidence';
+  const contextText = safeInvoiceEvidenceContextText(context);
+  const declaredType = String(context?.mimeType || context?.contentType || '')
+    .replace(/[^A-Za-z0-9._+\-/;= ]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 120) || 'not supplied';
+
+  if (!bytesU8.length) {
+    throw new Error(`${sourceLabel} attachment is missing or empty: ${contextText}`);
+  }
+
+  const detectedType = detectPdfOrImageContentKind(bytesU8);
+
+  if (detectedType === 'application/pdf') {
+    try {
+      await PDFDocument.load(bytesU8);
+    } catch (e) {
+      throw new Error(
+        `Failed to parse evidence PDF attachment: ${contextText}; label=${sourceLabel}; detected=${detectedType}; declared=${declaredType}; ${safeInvoiceEvidenceParserMessage(e)}`
+      );
+    }
+    return bytesU8;
+  }
+
+  if (detectedType === 'image/png' || detectedType === 'image/jpeg') {
+    try {
+      return await buildInvoiceEvidenceImagePdfBytes(bytesU8, detectedType, context);
+    } catch (e) {
+      throw new Error(
+        `Failed to parse or convert evidence image attachment: ${contextText}; label=${sourceLabel}; detected=${detectedType}; declared=${declaredType}; ${safeInvoiceEvidenceParserMessage(e)}`
+      );
+    }
+  }
+
+  throw new Error(
+    `Unsupported evidence document type for invoice attachment: ${contextText}; label=${sourceLabel}; detected=${detectedType}; declared=${declaredType}; supported=PDF, PNG, JPEG/JPG`
+  );
+}
 
 async function _renderInvoiceBundleAndStore(env, req, invoiceId, userForAudit, opts) {
   const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
@@ -125122,12 +125286,19 @@ const docsKeys = tsIds.map(tsId => normalizeKey(`docs-pdf/timesheets/ts_${tsId}.
       }
       let safeBytes = bytes;
       try {
-        safeBytes = await ensureManualTimesheetBytesArePdf(bytes, {
+        safeBytes = await ensureInvoiceEvidenceBytesArePdf(bytes, {
           sourceLabel: 'Timesheet evidence',
-          storageKey: norm
+          storageKey: norm,
+          displayName: ev?.display_name || null,
+          mimeType: ev?.mime_type || ev?.content_type || null
         });
       } catch (e) {
-        return { ok: false, error: `Unsupported manual timesheet evidence document type: ${e?.message || e}` };
+        return {
+          ok: false,
+          error: `Timesheet evidence attachment failed: ${e?.message || e}`,
+          deterministic_render_failure: true,
+          render_failure_kind: 'INVOICE_EVIDENCE_ATTACHMENT_PARSE'
+        };
       }
       dedupeKeys.add(norm);
       timesheetEvidenceBytesList.push(safeBytes);
@@ -125182,7 +125353,12 @@ const docsKeys = tsIds.map(tsId => normalizeKey(`docs-pdf/timesheets/ts_${tsId}.
           storageKey: norm
         });
       } catch (e) {
-        return { ok: false, error: `Unsupported manual timesheet document type: ${e?.message || e}` };
+        return {
+          ok: false,
+          error: `Unsupported manual timesheet document type: ${e?.message || e}`,
+          deterministic_render_failure: true,
+          render_failure_kind: 'MANUAL_TIMESHEET_ATTACHMENT_PARSE'
+        };
       }
       dedupeKeys.add(norm);
       manualTsBytesList.push(safeBytes);
@@ -125201,8 +125377,24 @@ const docsKeys = tsIds.map(tsId => normalizeKey(`docs-pdf/timesheets/ts_${tsId}.
         missing.push({ kind: 'EVIDENCE_PDF', timesheet_id: ev?.timesheet_id || null, storage_key: norm });
         continue;
       }
+      let safeBytes = bytes;
+      try {
+        safeBytes = await ensureInvoiceEvidenceBytesArePdf(bytes, {
+          sourceLabel: 'Invoice evidence',
+          storageKey: norm,
+          displayName: ev?.display_name || null,
+          mimeType: ev?.mime_type || ev?.content_type || null
+        });
+      } catch (e) {
+        return {
+          ok: false,
+          error: `Invoice evidence attachment failed: ${e?.message || e}`,
+          deterministic_render_failure: true,
+          render_failure_kind: 'INVOICE_EVIDENCE_ATTACHMENT_PARSE'
+        };
+      }
       dedupeKeys.add(norm);
-      evidenceBytesList.push(bytes);
+      evidenceBytesList.push(safeBytes);
     }
 
     log('log', 'artefact_fetch_summary', {
