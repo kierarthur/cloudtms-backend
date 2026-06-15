@@ -39989,7 +39989,6 @@ async function handleBankingPayProviderSubmitReviewResolution(env, req, user, pa
 
 // Replacement function: handleContractWeekManualUpsert (patched source lines 39943-44494)
 
-
 async function handleContractWeekManualUpsert(env, req, weekId) {
    const enc = encodeURIComponent;
  
@@ -41274,6 +41273,34 @@ const expenseEvidenceKindCategories = {
      isTruthyPayloadFlag(body?.noHoursTimesheetImageSuppressed) ||
      isTruthyPayloadFlag(body?.__noHoursTimesheetImageSuppressed)
    );
+   const normaliseQueueStorageKeyForProcess = (value) => String(value == null ? '' : value).trim().replace(/^\/+/, '');
+   const selectedQueueTimesheetMaterialisation = (() => {
+     if (!bulkProcessResponseRequested) return null;
+     const src =
+       parseMaybeJsonObj(body?.queue_timesheet_materialisation) ||
+       parseMaybeJsonObj(body?.queueTimesheetMaterialisation) ||
+       parseMaybeJsonObj(body?.selected_queue_timesheet) ||
+       parseMaybeJsonObj(body?.selectedQueueTimesheet) ||
+       {};
+     const queueId = String(
+       src.queue_id || src.queueId || body?.selected_queue_timesheet_queue_id || body?.selectedQueueTimesheetQueueId || body?.queue_timesheet_queue_id || body?.queueTimesheetQueueId || ''
+     ).trim();
+     const storageKey = normaliseQueueStorageKeyForProcess(
+       src.storage_key || src.storageKey || src.r2_key || src.r2Key || body?.selected_queue_timesheet_storage_key || body?.selectedQueueTimesheetStorageKey || body?.queue_timesheet_storage_key || body?.queueTimesheetStorageKey || ''
+     );
+     if (!queueId || !storageKey) return null;
+     return {
+       ...((src && typeof src === 'object' && !Array.isArray(src)) ? src : {}),
+       queue_id: queueId,
+       storage_key: storageKey,
+       kind: 'TIMESHEET',
+       contract_week_id: String(cw?.id || weekId || '').trim() || null,
+       preview_selection_key: String(src.preview_selection_key || src.previewSelectionKey || body?.selected_queue_timesheet_preview_selection_key || body?.selectedQueueTimesheetPreviewSelectionKey || '').trim() || null,
+       preview_identity: String(src.preview_identity || src.previewIdentity || body?.preview_identity || body?.previewIdentity || '').trim() || null,
+       active_identity: String(src.active_identity || src.activeIdentity || body?.active_identity || body?.activeIdentity || '').trim() || null,
+       source: 'bulk_process_displayed_queue_preview'
+     };
+   })();
    const minutesForTimesheetEvidenceMaterialisation = (entry) => {
      if (!entry || typeof entry !== 'object') return 0;
      const numericMinuteKeys = ['worked_minutes', 'paid_minutes', 'duration_minutes', 'total_minutes', 'minutes'];
@@ -41308,11 +41335,12 @@ const expenseEvidenceKindCategories = {
    const actualScheduleHasWorkedHoursForMaterialisation = Array.isArray(actual_schedule_json)
      ? actual_schedule_json.some((entry) => minutesForTimesheetEvidenceMaterialisation(entry) > 0)
      : false;
-   const suppressTimesheetEvidenceMaterialisation = !!(
+   let hasAdditionalUnitsForTimesheetEvidenceMaterialisation = false;
+   let suppressNoHoursNoAdditionalUnitsTimesheetEvidence = false;
+   let suppressTimesheetEvidenceMaterialisation = !!(
      requestedSuppressTimesheetEvidenceMaterialisation ||
      requestMarksNoTimesheetImageRequired ||
-     requestMarksNoHoursTimesheetImageSuppressed ||
-     !actualScheduleHasWorkedHoursForMaterialisation
+     requestMarksNoHoursTimesheetImageSuppressed
    );
  
    wlog('schedule_normalised', {
@@ -41323,7 +41351,8 @@ const expenseEvidenceKindCategories = {
      has_worked_hours_for_timesheet_evidence: actualScheduleHasWorkedHoursForMaterialisation,
      suppress_timesheet_evidence_materialisation: suppressTimesheetEvidenceMaterialisation,
      no_timesheet_image_required: requestMarksNoTimesheetImageRequired,
-     no_hours_timesheet_image_suppressed: requestMarksNoHoursTimesheetImageSuppressed
+     no_hours_timesheet_image_suppressed: requestMarksNoHoursTimesheetImageSuppressed,
+     selected_queue_timesheet_materialisation: selectedQueueTimesheetMaterialisation ? { queue_id: selectedQueueTimesheetMaterialisation.queue_id, storage_key: selectedQueueTimesheetMaterialisation.storage_key } : null
    });
  
    // Resolve bucket minutes from schedule (single source of truth + authoritative schedule validation)
@@ -41644,6 +41673,31 @@ const expenseEvidenceKindCategories = {
      // ✅ Do NOT derive weekly totals from per-day here.
      // Backend stores exactly what it receives; frontend is responsible for coherence.
    } catch {}
+ 
+   hasAdditionalUnitsForTimesheetEvidenceMaterialisation = !!(
+     hasPositiveNestedUnitValue(unitsWeek || {}) ||
+     hasPositiveNestedUnitValue(unitsPerDay || {})
+   );
+   suppressNoHoursNoAdditionalUnitsTimesheetEvidence = !!(
+     !actualScheduleHasWorkedHoursForMaterialisation &&
+     !hasAdditionalUnitsForTimesheetEvidenceMaterialisation
+   );
+   suppressTimesheetEvidenceMaterialisation = !!(
+     requestedSuppressTimesheetEvidenceMaterialisation ||
+     requestMarksNoTimesheetImageRequired ||
+     requestMarksNoHoursTimesheetImageSuppressed ||
+     suppressNoHoursNoAdditionalUnitsTimesheetEvidence
+   );
+   wlog('timesheet_evidence_materialisation_policy_resolved', {
+     has_worked_hours_for_timesheet_evidence: actualScheduleHasWorkedHoursForMaterialisation,
+     has_additional_units_for_timesheet_evidence: hasAdditionalUnitsForTimesheetEvidenceMaterialisation,
+     suppress_no_hours_no_additional_units_timesheet_evidence: suppressNoHoursNoAdditionalUnitsTimesheetEvidence,
+     suppress_timesheet_evidence_materialisation: suppressTimesheetEvidenceMaterialisation,
+     requested_suppress_timesheet_evidence_materialisation: requestedSuppressTimesheetEvidenceMaterialisation,
+     no_timesheet_image_required: requestMarksNoTimesheetImageRequired,
+     no_hours_timesheet_image_suppressed: requestMarksNoHoursTimesheetImageSuppressed,
+     selected_queue_timesheet_materialisation: selectedQueueTimesheetMaterialisation ? { queue_id: selectedQueueTimesheetMaterialisation.queue_id, storage_key: selectedQueueTimesheetMaterialisation.storage_key } : null
+   });
  
    let additional_units_json = {};
    let additional_pay_ex_vat = 0;
@@ -42482,7 +42536,12 @@ const expenseEvidenceKindCategories = {
    if (willCreateNow) rpcWeekPatch.status = 'SUBMITTED';
  
    let preparedStagedTimesheetEvidence = null;
-   if (targetTimesheetIdForWrite) {
+   const shouldPrepareStagedTimesheetEvidence = !!(
+     targetTimesheetIdForWrite &&
+     !suppressTimesheetEvidenceMaterialisation &&
+     !selectedQueueTimesheetMaterialisation
+   );
+   if (shouldPrepareStagedTimesheetEvidence) {
      try {
        preparedStagedTimesheetEvidence = await prepareContractWeekStagedTimesheetEvidence(cw.id, targetTimesheetIdForWrite, { usePreflightCache: true });
        wlog('staged_timesheet_evidence_prepared', {
@@ -42526,20 +42585,25 @@ const expenseEvidenceKindCategories = {
        return withCORS(env, req, serverError(e?.publicMessage || stagedTimesheetEvidenceSafeMessage('Failed to prepare staged TIMESHEET evidence')));
      }
    }
-   if (targetTimesheetIdForWrite && suppressTimesheetEvidenceMaterialisation && !preparedStagedTimesheetEvidence) {
+   if (targetTimesheetIdForWrite && !preparedStagedTimesheetEvidence && !shouldPrepareStagedTimesheetEvidence) {
      wlog('skipped_staged_timesheet_evidence_materialisation', {
        contract_week_id: cw.id,
        target_timesheet_id: targetTimesheetIdForWrite,
        no_timesheet_image_required: requestMarksNoTimesheetImageRequired,
        no_hours_timesheet_image_suppressed: requestMarksNoHoursTimesheetImageSuppressed,
-       has_worked_hours_for_timesheet_evidence: actualScheduleHasWorkedHoursForMaterialisation
+       has_worked_hours_for_timesheet_evidence: actualScheduleHasWorkedHoursForMaterialisation,
+       has_additional_units_for_timesheet_evidence: hasAdditionalUnitsForTimesheetEvidenceMaterialisation,
+       suppress_no_hours_no_additional_units_timesheet_evidence: suppressNoHoursNoAdditionalUnitsTimesheetEvidence,
+       selected_queue_timesheet_materialisation: selectedQueueTimesheetMaterialisation ? { queue_id: selectedQueueTimesheetMaterialisation.queue_id, storage_key: selectedQueueTimesheetMaterialisation.storage_key } : null,
+       suppress_timesheet_evidence_materialisation: !!suppressTimesheetEvidenceMaterialisation
      });
      wlog('staged_timesheet_evidence_prepared', {
        contract_week_id: cw.id,
        target_timesheet_id: targetTimesheetIdForWrite,
        prepared: false,
        skipped: true,
-       suppress_timesheet_evidence_materialisation: true
+       suppress_timesheet_evidence_materialisation: !!suppressTimesheetEvidenceMaterialisation,
+       selected_queue_timesheet_materialisation_present: !!selectedQueueTimesheetMaterialisation
      });
    }
  
@@ -42641,9 +42705,21 @@ const expenseEvidenceKindCategories = {
      preparedStagedTimesheetEvidence ||
      (Array.isArray(preparedStagedExpenseEvidence) && preparedStagedExpenseEvidence.length > 0)
    );
+   const shouldMaterialiseSelectedQueueTimesheetInRpc = !!(
+     selectedQueueTimesheetMaterialisation &&
+     !suppressTimesheetEvidenceMaterialisation
+   );
+   const queueTimesheetMaterialisationRpcInstruction = shouldMaterialiseSelectedQueueTimesheetInRpc
+     ? selectedQueueTimesheetMaterialisation
+     : (suppressTimesheetEvidenceMaterialisation ? {
+         suppress_timesheet_evidence_materialisation: true,
+         no_timesheet_image_required: requestMarksNoTimesheetImageRequired,
+         no_hours_timesheet_image_suppressed: requestMarksNoHoursTimesheetImageSuppressed,
+         source: 'bulk_process_timesheet_image_suppression'
+       } : null);
    const rpcShouldOwnPreparedStagedEvidenceMaterialisation = !!(
-     targetTimesheetIdForWrite &&
-     (backendPreparedAnyStagedEvidence || !suppressTimesheetEvidenceMaterialisation)
+     (targetTimesheetIdForWrite && (backendPreparedAnyStagedEvidence || !suppressTimesheetEvidenceMaterialisation)) ||
+     shouldMaterialiseSelectedQueueTimesheetInRpc
    );
 
    const shouldMaterialiseStagedEvidenceInRpc = rpcShouldOwnPreparedStagedEvidenceMaterialisation;
@@ -42656,6 +42732,8 @@ const expenseEvidenceKindCategories = {
      prepared_timesheet_evidence: !!preparedStagedTimesheetEvidence,
      prepared_expense_evidence_count: Array.isArray(preparedStagedExpenseEvidence) ? preparedStagedExpenseEvidence.length : 0,
      suppress_timesheet_evidence_materialisation: !!suppressTimesheetEvidenceMaterialisation,
+     selected_queue_timesheet_materialisation: selectedQueueTimesheetMaterialisation ? { queue_id: selectedQueueTimesheetMaterialisation.queue_id, storage_key: selectedQueueTimesheetMaterialisation.storage_key } : null,
+     rpc_should_materialise_selected_queue_timesheet: !!shouldMaterialiseSelectedQueueTimesheetInRpc,
      rpc_should_materialise_staged_evidence: !!shouldMaterialiseStagedEvidenceInRpc,
      skip_post_rpc_prepared_staged_evidence_materialisation: !!skipPostRpcPreparedStagedEvidenceMaterialisation
    });
@@ -42680,6 +42758,7 @@ const expenseEvidenceKindCategories = {
          p_rotation_json: rotationRpcJson,
          p_actor_user_id: user?.id || null,
          p_materialise_staged_evidence: shouldMaterialiseStagedEvidenceInRpc,
+         p_queue_timesheet_materialisation_json: queueTimesheetMaterialisationRpcInstruction,
          p_now_utc: nowIso2,
          p_expected_row_signature: expectedRowSignature || null,
          p_response_context: rpcResponseContextForManualUpsert
@@ -42694,6 +42773,7 @@ const expenseEvidenceKindCategories = {
          p_rotation_json: rotationRpcJson,
          p_actor_user_id: user?.id || null,
          p_materialise_staged_evidence: shouldMaterialiseStagedEvidenceInRpc,
+         p_queue_timesheet_materialisation_json: queueTimesheetMaterialisationRpcInstruction,
          p_now_utc: nowIso2,
          p_expected_row_signature: expectedRowSignature || null
        };
@@ -42935,6 +43015,17 @@ const expenseEvidenceKindCategories = {
            current_row_signature: bulkPayload.current_row_signature || detailJson?.current_row_signature || null
          }), { status: 409, headers: { 'Content-Type': 'application/json' } }));
        }
+       if (/^(PREVIEW_QUEUE_IMAGE_MISSING|PREVIEW_QUEUE_IMAGE_MISMATCH|QUEUE_ITEM_NOT_AVAILABLE|QUEUE_ITEM_STORAGE_MISMATCH|QUEUE_ITEM_ALREADY_CONSUMED|QUEUE_ITEM_STORAGE_REQUIRED)$/i.test(message) || /^(PREVIEW_QUEUE_IMAGE_MISSING|PREVIEW_QUEUE_IMAGE_MISMATCH|QUEUE_ITEM_NOT_AVAILABLE|QUEUE_ITEM_STORAGE_MISMATCH|QUEUE_ITEM_ALREADY_CONSUMED|QUEUE_ITEM_STORAGE_REQUIRED)$/i.test(errorCode)) {
+         return withCORS(env, req, new Response(JSON.stringify({
+           ...conflictPayload,
+           error: 'QUEUE_ITEM_NOT_AVAILABLE',
+           error_code: 'QUEUE_ITEM_NOT_AVAILABLE',
+           message: 'This timesheet image no longer exists and therefore the timesheet cannot be processed with this image. Please find another image and try again.',
+           queue_id: selectedQueueTimesheetMaterialisation?.queue_id || detailJson?.queue_id || bulkPayload.queue_id || null,
+           storage_key: selectedQueueTimesheetMaterialisation?.storage_key || detailJson?.storage_key || bulkPayload.storage_key || null,
+           refresh_required: true
+         }), { status: 409, headers: { 'Content-Type': 'application/json' } }));
+       }
        if (message === 'TSFIN_SNAPSHOT_MISMATCH' || errorCode === 'TSFIN_SNAPSHOT_MISMATCH') {
          return withCORS(env, req, new Response(JSON.stringify({
            ...conflictPayload,
@@ -43161,7 +43252,6 @@ const expenseEvidenceKindCategories = {
 
    return withCORS(env, req, ok(responsePayload));
  }
-
 
 
 
@@ -50610,8 +50700,11 @@ async function handleContractWeekStagedEvidenceDelete(env, req, weekId, queueId)
 
 // BE FIX: require expected_timesheet_id + resolve to CURRENT; strict 409 payload; patch queue + timesheet using CURRENT id only
 
+
+
 async function handleManualTimesheetQueueAttach(env, req, queueId) {
   const enc = encodeURIComponent;
+  const STALE_QUEUE_IMAGE_MESSAGE = 'This timesheet image no longer exists and therefore the timesheet cannot be processed with this image. Please find another image and try again.';
 
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -50622,14 +50715,18 @@ async function handleManualTimesheetQueueAttach(env, req, queueId) {
   try { body = await parseJSONBody(req); }
   catch { return withCORS(env, req, badRequest('Invalid JSON')); }
 
-  const requestedTimesheetId = String(body?.timesheet_id || '').trim();
+  const trimStr = (value) => String(value == null ? '' : value).trim();
+  const normalizeStorageKey = (value) => trimStr(value).replace(/^\/+/, '');
+  const requestedTimesheetId = trimStr(body?.timesheet_id || body?.timesheetId || '');
   if (!requestedTimesheetId) return withCORS(env, req, badRequest('timesheet_id is required'));
 
-  const expected = body?.expected_timesheet_id ? String(body.expected_timesheet_id) : '';
+  const expected = trimStr(body?.expected_timesheet_id || body?.expectedTimesheetId || '');
   if (!expected) return withCORS(env, req, badRequest('expected_timesheet_id is required'));
   const hasReplacementField =
     Object.prototype.hasOwnProperty.call(body || {}, 'replace_existing') ||
-    Object.prototype.hasOwnProperty.call(body || {}, 'replace_evidence_id');
+    Object.prototype.hasOwnProperty.call(body || {}, 'replaceExisting') ||
+    Object.prototype.hasOwnProperty.call(body || {}, 'replace_evidence_id') ||
+    Object.prototype.hasOwnProperty.call(body || {}, 'replaceEvidenceId');
   if (hasReplacementField) {
     return withCORS(
       env,
@@ -50645,13 +50742,12 @@ async function handleManualTimesheetQueueAttach(env, req, queueId) {
   }
 
   const normalizeKind = (k) => {
-    const s = String(k || '').trim();
+    const s = trimStr(k);
     if (!s) return '';
     const u = s.toUpperCase();
 
     if (u === 'EXPENSES' || u === 'EXPENSE') return 'TRAVEL';
     if (u === 'TRAVEL') return 'TRAVEL';
-
     if (u === 'MILEAGE' || u === 'MILES' || u === 'MILE') return 'MILEAGE';
     if (u === 'ACCOMMODATION' || u === 'ACCOM') return 'ACCOMMODATION';
     if (u === 'OTHER') return 'OTHER';
@@ -50660,18 +50756,27 @@ async function handleManualTimesheetQueueAttach(env, req, queueId) {
     return u;
   };
 
-  const prettyKind = (k) => {
-    const u = String(k || '').toUpperCase();
-    if (u === 'TRAVEL') return 'Travel';
-    if (u === 'MILEAGE') return 'Mileage';
-    if (u === 'ACCOMMODATION') return 'Accommodation';
-    if (u === 'OTHER') return 'Other';
-    if (u === 'TIMESHEET') return 'Timesheet';
-    return String(k || '');
-  };
+  const staleQueueImageResponse = (details = {}) => withCORS(
+    env,
+    req,
+    new Response(
+      JSON.stringify({
+        ok: false,
+        success: false,
+        error: details.error || 'QUEUE_ITEM_NOT_AVAILABLE',
+        error_code: details.error_code || details.error || 'QUEUE_ITEM_NOT_AVAILABLE',
+        message: STALE_QUEUE_IMAGE_MESSAGE,
+        queue_id: queueId || null,
+        expected_storage_key: details.expected_storage_key || null,
+        storage_key: details.storage_key || null,
+        refresh_required: true
+      }),
+      { status: 409, headers: JSON_HEADERS }
+    )
+  );
 
   const validateTimesheetStorageKey = async (rawKey, sourceLabel) => {
-    const cleanStorageKey = String(rawKey || '').trim().replace(/^\/+/, '');
+    const cleanStorageKey = normalizeStorageKey(rawKey);
     if (!cleanStorageKey) throw new Error(`${sourceLabel || 'Timesheet evidence'} is missing its storage key`);
 
     const sourceBytes = await r2GetBytes(env, cleanStorageKey);
@@ -50688,87 +50793,20 @@ async function handleManualTimesheetQueueAttach(env, req, queueId) {
     };
   };
 
-  const attachQueueItemAsTimesheetEvidence = async (item, currentTsId, requestedKind, storageKeyOverride = null) => {
-    const cleanStorageKey = storageKeyOverride
-      ? String(storageKeyOverride).trim().replace(/^\/+/, '')
-      : String(item?.r2_key || '').trim().replace(/^\/+/, '');
-    if (!cleanStorageKey) {
-      throw new Error('Queue item is missing r2_key');
+  const unwrapRpcPayload = (payload, fnName) => {
+    let out = payload;
+    if (Array.isArray(out) && out.length === 1) out = out[0];
+    if (out && typeof out === 'object' && !Array.isArray(out) && Object.prototype.hasOwnProperty.call(out, fnName)) out = out[fnName];
+    if (typeof out === 'string') {
+      try { out = JSON.parse(out); } catch {}
     }
-
-    try {
-      if (typeof r2Exists === 'function') {
-        const exists = await r2Exists(env, cleanStorageKey);
-        if (!exists) throw new Error('storage_key does not exist in R2');
-      }
-    } catch (e) {
-      if (String(e?.message || '').includes('does not exist in R2')) throw e;
-    }
-
-    const { rows: evRows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/timesheet_evidence` +
-        `?timesheet_id=eq.${enc(currentTsId)}` +
-        `&select=id,kind,display_name,storage_key,created_at,created_by`
-    );
-    const evidenceRows = Array.isArray(evRows) ? evRows : [];
-
-    const existingSameStorage = evidenceRows.find(row =>
-      String(row?.storage_key || '').trim().replace(/^\/+/, '') === cleanStorageKey
-    ) || null;
-
-    const existingTimesheetEvidence = evidenceRows.find(row =>
-      String(row?.kind || '').trim().toUpperCase() === 'TIMESHEET' &&
-      String(row?.storage_key || '').trim().replace(/^\/+/, '') !== cleanStorageKey
-    ) || null;
-
-    if (String(requestedKind).toUpperCase() === 'TIMESHEET' && existingTimesheetEvidence) {
-      throw new Error('Only one TIMESHEET evidence file may be attached to a timesheet at a time');
-    }
-
-    if (existingSameStorage) {
-      return existingSameStorage;
-    }
-
-    const nowIsoVal = new Date().toISOString();
-    const payload = [{
-      timesheet_id: currentTsId,
-      kind: requestedKind,
-      display_name: (item?.original_filename && String(item.original_filename).trim().length
-        ? String(item.original_filename).trim()
-        : prettyKind(requestedKind) || requestedKind),
-      storage_key: cleanStorageKey,
-      created_at: nowIsoVal,
-      created_by: user.id || null
-    }];
-
-    const insRes = await fetch(`${env.SUPABASE_URL}/rest/v1/timesheet_evidence`, {
-      method: 'POST',
-      headers: { ...sbHeaders(env), Prefer: 'return=representation' },
-      body: JSON.stringify(payload)
-    });
-
-    const txt = await insRes.text().catch(() => '');
-    if (!insRes.ok) {
-      throw new Error(txt || 'Failed to create canonical timesheet evidence');
-    }
-
-    let row = null;
-    try {
-      const json = txt ? JSON.parse(txt) : [];
-      row = Array.isArray(json) ? json[0] : json;
-    } catch {
-      row = null;
-    }
-
-    if (!row?.id) {
-      throw new Error('No evidence id returned from canonical attach');
-    }
-
-    return row;
+    return (out && typeof out === 'object' && !Array.isArray(out)) ? out : {};
   };
 
-  // ✅ resolve + guard
+  const requestedKind = normalizeKind(body?.kind || body?.evidence_kind || body?.evidenceKind || 'TIMESHEET') || 'TIMESHEET';
+  const allowedKinds = new Set(['TIMESHEET', 'MILEAGE', 'TRAVEL', 'ACCOMMODATION', 'OTHER']);
+  if (!allowedKinds.has(requestedKind)) return withCORS(env, req, badRequest('Invalid evidence kind'));
+
   const resolved = await resolveTimesheetToCurrent(env, requestedTimesheetId);
   const currentTimesheetId = resolved?.current_timesheet_id ? String(resolved.current_timesheet_id) : '';
   if (!currentTimesheetId) return withCORS(env, req, badRequest('Timesheet not found for timesheet_id'));
@@ -50789,19 +50827,32 @@ async function handleManualTimesheetQueueAttach(env, req, queueId) {
       env,
       `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue` +
         `?id=eq.${enc(queueId)}` +
-        `&select=id,status,timesheet_id,content_hash,r2_key,last_rotation_deg,meta_json,original_filename` +
+        `&select=id,status,timesheet_id,content_hash,r2_key,last_rotation_deg,meta_json,original_filename,uploaded_by_user_id,uploaded_at_utc,mime_type` +
         `&limit=1`
     );
     const item = qRows?.[0] || null;
-    if (!item) return withCORS(env, req, notFound('Queue item not found'));
+    if (!item) return staleQueueImageResponse({ error: 'QUEUE_ITEM_NOT_AVAILABLE' });
 
-    const requestedKind = normalizeKind(body?.kind || body?.evidence_kind || 'TIMESHEET') || 'TIMESHEET';
+    const expectedStorageKey =
+      normalizeStorageKey(body?.expected_storage_key) ||
+      normalizeStorageKey(body?.expectedStorageKey) ||
+      normalizeStorageKey(body?.storage_key) ||
+      normalizeStorageKey(body?.storageKey) ||
+      normalizeStorageKey(item?.r2_key);
+    const queueStorageKey = normalizeStorageKey(item?.r2_key);
+
+    if (!expectedStorageKey) {
+      return withCORS(env, req, badRequest('expected_storage_key is required'));
+    }
+    if (!queueStorageKey || queueStorageKey !== expectedStorageKey) {
+      return staleQueueImageResponse({ error: 'QUEUE_ITEM_STORAGE_MISMATCH', expected_storage_key: expectedStorageKey, storage_key: queueStorageKey || null });
+    }
+
     const status = String(item.status || '').toUpperCase();
+    if (status !== 'QUEUED' || trimStr(item.timesheet_id)) {
+      return staleQueueImageResponse({ error: 'QUEUE_ITEM_NOT_AVAILABLE', expected_storage_key: expectedStorageKey, storage_key: queueStorageKey });
+    }
 
-    if (status === 'DISCARDED') return withCORS(env, req, badRequest('Cannot attach a discarded queue item'));
-    if (status === 'STAGED') return withCORS(env, req, badRequest('Cannot attach a staged queue item through the queue attach route'));
-
-    // Validate CURRENT timesheet exists and is not invoiced/paid
     const ts = await sbGetOne(
       env,
       `${env.SUPABASE_URL}/rest/v1/timesheets` +
@@ -50829,7 +50880,7 @@ async function handleManualTimesheetQueueAttach(env, req, queueId) {
       policySummary.adjustment_origin
     ].map(value => String(value == null ? '' : value).trim().toUpperCase()).filter(Boolean).join('|');
     const blocksTimesheetEvidenceForNoTimesheetRow = !!(
-      String(requestedKind).toUpperCase() === 'TIMESHEET' &&
+      requestedKind === 'TIMESHEET' &&
       (
         policySummary.client_no_timesheet_required === true ||
         policySummary.no_timesheet_required === true ||
@@ -50845,71 +50896,43 @@ async function handleManualTimesheetQueueAttach(env, req, queueId) {
       return withCORS(env, req, badRequest('TIMESHEET evidence cannot be attached to this timesheet type. Attach the Queue image as permitted expense evidence instead.'));
     }
 
-    const attachedId = String(item.timesheet_id || '').trim();
-    if (status === 'ATTACHED' && attachedId) {
-      const attachedResolved = await resolveTimesheetToCurrent(env, attachedId).catch(() => null);
-      const attachedCurrent = attachedResolved?.current_timesheet_id ? String(attachedResolved.current_timesheet_id) : attachedId;
-
-      if (String(attachedCurrent) !== String(currentTimesheetId)) {
-        return withCORS(env, req, badRequest('Queue item already attached to a different timesheet'));
-      }
-    }
-
     let manualMaterialized = null;
-    let evidenceStorageKey = String(item?.r2_key || '').trim().replace(/^\/+/, '');
-    if (String(requestedKind).toUpperCase() === 'TIMESHEET') {
-      const validatedTimesheetStorage = await validateTimesheetStorageKey(evidenceStorageKey, 'Queue timesheet evidence');
-      evidenceStorageKey = String(validatedTimesheetStorage.storageKey || '').trim().replace(/^\/+/, '');
+    if (requestedKind === 'TIMESHEET') {
+      const validatedTimesheetStorage = await validateTimesheetStorageKey(expectedStorageKey, 'Queue timesheet evidence');
       manualMaterialized = {
-        pdfKey: evidenceStorageKey,
+        pdfKey: validatedTimesheetStorage.storageKey,
         wasConverted: false,
-        sourceKey: evidenceStorageKey,
+        sourceKey: validatedTimesheetStorage.storageKey,
         contentKind: validatedTimesheetStorage.contentKind
       };
     }
 
-    const currentMeta = (item.meta_json && typeof item.meta_json === 'object' && !Array.isArray(item.meta_json))
-      ? item.meta_json
-      : {};
+    const rpcPayload = await sbRpc(env, 'manual_timesheet_queue_attach_process_atomic', {
+      p_queue_id: queueId,
+      p_timesheet_id: currentTimesheetId,
+      p_expected_timesheet_id: expected,
+      p_expected_storage_key: expectedStorageKey,
+      p_kind: requestedKind,
+      p_actor_user_id: user?.id || null,
+      p_source_json: {
+        source: body?.source || 'manual_timesheet_queue_attach',
+        preview_selection_key: body?.preview_selection_key || body?.previewSelectionKey || null,
+        preview_identity: body?.preview_identity || body?.previewIdentity || null,
+        active_identity: body?.active_identity || body?.activeIdentity || null,
+        route: 'manual-timesheet-queue-attach'
+      },
+      p_now_utc: nowIso()
+    }, { timeoutMs: 45000 });
+    const payload = unwrapRpcPayload(rpcPayload, 'manual_timesheet_queue_attach_process_atomic');
 
-    const nextQueueMeta = {
-      ...currentMeta,
-      attached_kind: requestedKind,
-      attached_to_timesheet_id: currentTimesheetId,
-      attached_at_utc: nowIso()
-    };
-
-    const patchQueueAttached = async () => {
-      const patchQueueRes = await fetch(`${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue?id=eq.${enc(queueId)}`, {
-        method: 'PATCH',
-        headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
-        body: JSON.stringify({
-          status: 'ATTACHED',
-          timesheet_id: currentTimesheetId,
-          meta_json: nextQueueMeta
-        })
-      });
-      if (!patchQueueRes.ok) {
-        const txt = await patchQueueRes.text().catch(() => '');
-        throw new Error(`Failed to attach queue item: ${txt}`);
+    if (!payload || payload.ok === false || payload.success === false) {
+      const code = String(payload?.error_code || payload?.error || '').trim().toUpperCase();
+      if (/QUEUE_ITEM|PREVIEW_QUEUE_IMAGE|NO_LONGER|MISSING|CONSUMED|STORAGE_MISMATCH/.test(code)) {
+        return staleQueueImageResponse({ error: code || 'QUEUE_ITEM_NOT_AVAILABLE', expected_storage_key: expectedStorageKey, storage_key: queueStorageKey });
       }
-    };
-
-    const evidenceRow = await attachQueueItemAsTimesheetEvidence(item, currentTimesheetId, requestedKind, evidenceStorageKey);
-    await patchQueueAttached();
-
-    if (evidenceStorageKey && String(requestedKind).toUpperCase() === 'TIMESHEET') {
-      await fetch(
-        `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(currentTimesheetId)}&is_current=eq.true`,
-        {
-          method: 'PATCH',
-          headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
-          body: JSON.stringify({
-            manual_pdf_r2_key: evidenceStorageKey,
-            manual_pdf_rotation_degrees: (item.last_rotation_deg != null ? Number(item.last_rotation_deg) : 0)
-          })
-        }
-      ).catch(() => {});
+      const message = String(payload?.message || payload?.error || payload?.error_code || 'Failed to attach manual timesheet queue item').trim();
+      const statusCode = code === 'TIMESHEET_EVIDENCE_ALREADY_EXISTS' ? 409 : 500;
+      return withCORS(env, req, new Response(JSON.stringify({ ...payload, error: code || 'ATTACH_FAILED', error_code: code || 'ATTACH_FAILED', message }), { status: statusCode, headers: JSON_HEADERS }));
     }
 
     try {
@@ -50923,11 +50946,11 @@ async function handleManualTimesheetQueueAttach(env, req, queueId) {
           current_timesheet_id: currentTimesheetId,
           content_hash: item.content_hash || null,
           r2_key: item.r2_key || null,
-          source_r2_key: evidenceStorageKey !== String(item?.r2_key || '').trim().replace(/^\/+/, '') ? (item.r2_key || null) : null,
-          materialized_pdf_r2_key: evidenceStorageKey || null,
+          materialized_pdf_r2_key: payload.storage_key || expectedStorageKey || null,
           materialized_was_converted: manualMaterialized ? !!manualMaterialized.wasConverted : false,
-          evidence_id: evidenceRow?.id || null,
-          kind: requestedKind
+          evidence_id: payload.evidence_id || null,
+          kind: requestedKind,
+          process_atomic_attach: true
         },
         { entity: 'manual_timesheet_queue', subject_id: item.id, req }
       );
@@ -50936,17 +50959,23 @@ async function handleManualTimesheetQueueAttach(env, req, queueId) {
     return withCORS(env, req, ok({
       attached: true,
       id: item.id,
-      evidence_id: evidenceRow?.id || null,
+      queue_id: item.id,
+      evidence_id: payload.evidence_id || null,
       kind: requestedKind,
+      storage_key: payload.storage_key || expectedStorageKey || null,
       timesheet_id: currentTimesheetId,
-      current_timesheet_id: currentTimesheetId
+      current_timesheet_id: currentTimesheetId,
+      consumed_queue_item: true,
+      queue_item_consumed: true
     }));
   } catch (e) {
-    return withCORS(env, req, serverError(e?.message || 'Failed to attach manual timesheet queue item'));
+    const message = String(e?.message || e || 'Failed to attach manual timesheet queue item');
+    if (/QUEUE_ITEM|PREVIEW_QUEUE_IMAGE|NO_LONGER|MISSING|CONSUMED|STORAGE_MISMATCH|not found/i.test(message)) {
+      return staleQueueImageResponse({ error: 'QUEUE_ITEM_NOT_AVAILABLE' });
+    }
+    return withCORS(env, req, serverError(message));
   }
 }
-
-
 
 
 
@@ -57961,6 +57990,7 @@ function isImportAuthoritativeEvidenceContext(summary) {
   );
 }
 
+
 async function handleTimesheetEvidenceReturnToQueue(env, req, tsId, evidenceId) {
   const enc = encodeURIComponent;
 
@@ -58097,6 +58127,27 @@ async function handleTimesheetEvidenceReturnToQueue(env, req, tsId, evidenceId) 
     if (!storageKey) {
       return withCORS(env, req, badRequest('Evidence has no storage_key and cannot be returned to queue'));
     }
+    const expectedStorageKey = normalizeStorageKey(body?.expected_storage_key || body?.expectedStorageKey || body?.storage_key || body?.storageKey || '');
+    if (expectedStorageKey && expectedStorageKey !== storageKey) {
+      return withCORS(
+        env,
+        req,
+        new Response(
+          JSON.stringify({
+            ok: false,
+            success: false,
+            error: 'RETURN_QUEUE_STORAGE_MISMATCH',
+            error_code: 'RETURN_QUEUE_STORAGE_MISMATCH',
+            message: 'The attached evidence no longer matches the queue image that Process attempted to restore.',
+            expected_storage_key: expectedStorageKey,
+            storage_key: storageKey,
+            refresh_required: true
+          }),
+          { status: 409, headers: JSON_HEADERS }
+        )
+      );
+    }
+    const expectedQueueId = trimStr(body?.queue_id || body?.queueId || body?.expected_queue_id || body?.expectedQueueId || '');
 
     const storageBasename = storageKey.split('/').pop() || 'file';
     const displayName = trimStr(ev.display_name) || storageBasename;
@@ -58137,24 +58188,28 @@ async function handleTimesheetEvidenceReturnToQueue(env, req, tsId, evidenceId) 
     };
 
     const queueCandidates = await fetchQueueRowsForStorageKey();
+    const queueMatchesExpected = (row) => !expectedQueueId || trimStr(row?.id) === expectedQueueId;
 
     const attachedQueueRow = queueCandidates.find(row =>
+      queueMatchesExpected(row) &&
       normalizeStorageKey(row?.r2_key) === storageKey &&
       String(row?.timesheet_id || '') === String(currentTsId) &&
       queueStatus(row) === 'ATTACHED'
     ) || null;
 
-    const alreadyAvailableQueueRow = queueCandidates.find(row =>
+    const alreadyAvailableQueueRow = expectedQueueId ? null : (queueCandidates.find(row =>
       normalizeStorageKey(row?.r2_key) === storageKey &&
       queueRowIsAlreadyAvailable(row)
-    ) || null;
+    ) || null);
 
     const discardedQueueRow = queueCandidates.find(row =>
+      queueMatchesExpected(row) &&
       normalizeStorageKey(row?.r2_key) === storageKey &&
       queueStatus(row) === 'DISCARDED'
     ) || null;
 
     const safeExactQueueRow = queueCandidates.find(row => {
+      if (!queueMatchesExpected(row)) return false;
       if (normalizeStorageKey(row?.r2_key) !== storageKey) return false;
       const status = queueStatus(row);
       if (status === 'STAGED' || status === 'ATTACHED') return false;
@@ -58312,6 +58367,25 @@ async function handleTimesheetEvidenceReturnToQueue(env, req, tsId, evidenceId) 
     };
 
     const selectedQueueRow = attachedQueueRow || alreadyAvailableQueueRow || discardedQueueRow || safeExactQueueRow || null;
+    if (expectedQueueId && !selectedQueueRow?.id) {
+      return withCORS(
+        env,
+        req,
+        new Response(
+          JSON.stringify({
+            ok: false,
+            success: false,
+            error: 'RETURN_QUEUE_ROW_MISSING',
+            error_code: 'RETURN_QUEUE_ROW_MISSING',
+            message: 'Failed to restore the exact queue image that Process attached. Refresh the row and queue before trying again.',
+            queue_id: expectedQueueId,
+            storage_key: storageKey,
+            refresh_required: true
+          }),
+          { status: 409, headers: JSON_HEADERS }
+        )
+      );
+    }
 
     if (selectedQueueRow?.id) {
       const mode = attachedQueueRow?.id === selectedQueueRow.id
@@ -58417,6 +58491,18 @@ async function handleTimesheetEvidenceReturnToQueue(env, req, tsId, evidenceId) 
     return withCORS(env, req, serverError(`Failed to return timesheet evidence to queue: ${e?.message || e}`));
   }
 }
+
+
+
+// POST /api/timesheets/:id/evidence
+// POST /api/timesheets/:id/evidence
+
+
+// DELETE /api/timesheets/:id/evidence/:evidence_id
+
+
+
+// DELETE /api/timesheets/:id/evidence/:evidence_id
 
 
 

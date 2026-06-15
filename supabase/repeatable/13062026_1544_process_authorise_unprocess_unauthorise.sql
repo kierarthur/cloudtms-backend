@@ -2,22 +2,11 @@
 DROP FUNCTION IF EXISTS public.contract_week_manual_upsert_atomic(uuid, uuid, jsonb, jsonb, jsonb, jsonb, jsonb, uuid, boolean, timestamp with time zone);
 DROP FUNCTION IF EXISTS public.contract_week_manual_upsert_atomic(uuid, uuid, jsonb, jsonb, jsonb, jsonb, jsonb, uuid, boolean, timestamp with time zone, text);
 
-CREATE OR REPLACE FUNCTION public.contract_week_manual_upsert_atomic(
-  p_week_id uuid,
-  p_expected_timesheet_id uuid DEFAULT NULL::uuid,
-  p_timesheet_create_json jsonb DEFAULT NULL::jsonb,
-  p_timesheet_patch_json jsonb DEFAULT '{}'::jsonb,
-  p_contract_week_patch_json jsonb DEFAULT '{}'::jsonb,
-  p_tsfin_snapshot_json jsonb DEFAULT NULL::jsonb,
-  p_rotation_json jsonb DEFAULT NULL::jsonb,
-  p_actor_user_id uuid DEFAULT NULL::uuid,
-  p_materialise_staged_evidence boolean DEFAULT true,
-  p_now_utc timestamp with time zone DEFAULT now(),
-  p_expected_row_signature text DEFAULT NULL::text
-)
+DROP FUNCTION IF EXISTS public.contract_week_manual_upsert_atomic(uuid, uuid, jsonb, jsonb, jsonb, jsonb, jsonb, uuid, boolean, timestamp with time zone, text);
+CREATE OR REPLACE FUNCTION public.contract_week_manual_upsert_atomic(p_week_id uuid, p_expected_timesheet_id uuid DEFAULT NULL::uuid, p_timesheet_create_json jsonb DEFAULT NULL::jsonb, p_timesheet_patch_json jsonb DEFAULT '{}'::jsonb, p_contract_week_patch_json jsonb DEFAULT '{}'::jsonb, p_tsfin_snapshot_json jsonb DEFAULT NULL::jsonb, p_rotation_json jsonb DEFAULT NULL::jsonb, p_actor_user_id uuid DEFAULT NULL::uuid, p_materialise_staged_evidence boolean DEFAULT true, p_now_utc timestamp with time zone DEFAULT now(), p_expected_row_signature text DEFAULT NULL::text, p_queue_timesheet_materialisation_json jsonb DEFAULT NULL::jsonb)
  RETURNS jsonb
  LANGUAGE plpgsql
- VOLATILE SECURITY DEFINER
+ SECURITY DEFINER
  SET search_path TO 'public'
 AS $function$
 DECLARE
@@ -32,6 +21,9 @@ DECLARE
   v_week_patch_json jsonb := CASE WHEN p_contract_week_patch_json IS NULL THEN '{}'::jsonb WHEN jsonb_typeof(p_contract_week_patch_json) = 'object' THEN p_contract_week_patch_json ELSE NULL END;
   v_tsfin_snapshot_json jsonb := CASE WHEN p_tsfin_snapshot_json IS NULL THEN NULL WHEN jsonb_typeof(p_tsfin_snapshot_json) = 'object' THEN p_tsfin_snapshot_json ELSE NULL END;
   v_rotation_json jsonb := CASE WHEN p_rotation_json IS NULL THEN NULL WHEN jsonb_typeof(p_rotation_json) = 'object' THEN p_rotation_json ELSE NULL END;
+  v_queue_timesheet_materialisation_json jsonb := CASE WHEN p_queue_timesheet_materialisation_json IS NULL THEN NULL WHEN jsonb_typeof(p_queue_timesheet_materialisation_json) = 'object' THEN p_queue_timesheet_materialisation_json ELSE NULL END;
+  v_suppress_timesheet_evidence_materialisation boolean := false;
+  v_has_selected_queue_timesheet_materialisation boolean := false;
   v_create_rec public.timesheets%ROWTYPE;
   v_patch_rec public.timesheets%ROWTYPE;
   v_week_patch_rec public.contract_weeks%ROWTYPE;
@@ -64,6 +56,11 @@ DECLARE
   v_attached_evidence_count integer := 0;
   v_attached_queue_count integer := 0;
   v_duplicate_queue_count integer := 0;
+  v_selected_queue_id_text text := NULL;
+  v_selected_queue_id uuid := NULL;
+  v_selected_queue_storage_key text := NULL;
+  v_selected_queue_contract_week_text text := NULL;
+  v_existing_timesheet_evidence_conflict_count integer := 0;
   v_tsfin_result jsonb := '{}'::jsonb;
   v_error_state text := NULL;
   v_error_message text := NULL;
@@ -88,6 +85,16 @@ BEGIN
   END IF;
   IF p_rotation_json IS NOT NULL AND v_rotation_json IS NULL THEN
     RAISE EXCEPTION USING MESSAGE = 'INVALID_PAYLOAD', DETAIL = jsonb_build_object('field', 'p_rotation_json')::text;
+  END IF;
+  IF p_queue_timesheet_materialisation_json IS NOT NULL AND v_queue_timesheet_materialisation_json IS NULL THEN
+    RAISE EXCEPTION USING MESSAGE = 'INVALID_PAYLOAD', DETAIL = jsonb_build_object('field', 'p_queue_timesheet_materialisation_json')::text;
+  END IF;
+
+  IF v_queue_timesheet_materialisation_json IS NOT NULL THEN
+    v_suppress_timesheet_evidence_materialisation := LOWER(BTRIM(COALESCE(v_queue_timesheet_materialisation_json ->> 'suppress_timesheet_evidence_materialisation', v_queue_timesheet_materialisation_json ->> 'suppressTimesheetEvidenceMaterialisation', ''))) IN ('true','1','yes','y','on');
+    v_has_selected_queue_timesheet_materialisation := NOT v_suppress_timesheet_evidence_materialisation
+      AND NULLIF(BTRIM(COALESCE(v_queue_timesheet_materialisation_json ->> 'queue_id', v_queue_timesheet_materialisation_json ->> 'queueId', '')), '') IS NOT NULL
+      AND NULLIF(regexp_replace(COALESCE(NULLIF(BTRIM(COALESCE(v_queue_timesheet_materialisation_json ->> 'storage_key', '')), ''), NULLIF(BTRIM(COALESCE(v_queue_timesheet_materialisation_json ->> 'storageKey', '')), ''), NULLIF(BTRIM(COALESCE(v_queue_timesheet_materialisation_json ->> 'r2_key', '')), ''), ''), '^/+', ''), '') IS NOT NULL;
   END IF;
 
   SELECT cw.*
@@ -434,6 +441,107 @@ BEGIN
      RETURNING * INTO v_current_ts;
   END IF;
 
+  IF p_materialise_staged_evidence AND v_has_selected_queue_timesheet_materialisation THEN
+    v_selected_queue_id_text := NULLIF(BTRIM(COALESCE(v_queue_timesheet_materialisation_json ->> 'queue_id', v_queue_timesheet_materialisation_json ->> 'queueId', '')), '');
+    v_selected_queue_storage_key := NULLIF(regexp_replace(COALESCE(NULLIF(BTRIM(COALESCE(v_queue_timesheet_materialisation_json ->> 'storage_key', '')), ''), NULLIF(BTRIM(COALESCE(v_queue_timesheet_materialisation_json ->> 'storageKey', '')), ''), NULLIF(BTRIM(COALESCE(v_queue_timesheet_materialisation_json ->> 'r2_key', '')), ''), ''), '^/+', ''), '');
+    v_selected_queue_contract_week_text := NULLIF(BTRIM(COALESCE(v_queue_timesheet_materialisation_json ->> 'contract_week_id', v_queue_timesheet_materialisation_json ->> 'contractWeekId', '')), '');
+
+    IF v_selected_queue_id_text IS NULL OR v_selected_queue_storage_key IS NULL THEN
+      RAISE EXCEPTION USING MESSAGE = 'PREVIEW_QUEUE_IMAGE_MISSING', DETAIL = jsonb_build_object('contract_week_id', v_week.id, 'queue_id', v_selected_queue_id_text, 'storage_key', v_selected_queue_storage_key, 'reason', 'missing_queue_identity')::text;
+    END IF;
+
+    BEGIN
+      v_selected_queue_id := v_selected_queue_id_text::uuid;
+    EXCEPTION WHEN OTHERS THEN
+      RAISE EXCEPTION USING MESSAGE = 'PREVIEW_QUEUE_IMAGE_MISSING', DETAIL = jsonb_build_object('contract_week_id', v_week.id, 'queue_id', v_selected_queue_id_text, 'storage_key', v_selected_queue_storage_key, 'reason', 'invalid_queue_id')::text;
+    END;
+
+    IF v_selected_queue_contract_week_text IS NOT NULL AND v_selected_queue_contract_week_text <> v_week.id::text THEN
+      RAISE EXCEPTION USING MESSAGE = 'PREVIEW_QUEUE_IMAGE_MISMATCH', DETAIL = jsonb_build_object('contract_week_id', v_week.id, 'supplied_contract_week_id', v_selected_queue_contract_week_text, 'queue_id', v_selected_queue_id, 'storage_key', v_selected_queue_storage_key, 'reason', 'active_contract_week_mismatch')::text;
+    END IF;
+
+    SELECT mq.*
+      INTO v_queue_item
+      FROM public.manual_timesheet_queue AS mq
+     WHERE mq.id = v_selected_queue_id
+     FOR UPDATE;
+
+    IF v_queue_item.id IS NULL THEN
+      RAISE EXCEPTION USING MESSAGE = 'PREVIEW_QUEUE_IMAGE_MISSING', DETAIL = jsonb_build_object('contract_week_id', v_week.id, 'queue_id', v_selected_queue_id, 'storage_key', v_selected_queue_storage_key, 'reason', 'queue_row_not_found')::text;
+    END IF;
+
+    v_queue_storage_key := NULLIF(regexp_replace(COALESCE(NULLIF(BTRIM(COALESCE(v_queue_item.r2_key, '')), ''), NULLIF(BTRIM(COALESCE(v_queue_item.meta_json ->> 'r2_key', '')), ''), NULLIF(BTRIM(COALESCE(v_queue_item.meta_json ->> 'storage_key', '')), ''), NULLIF(BTRIM(COALESCE(v_queue_item.meta_json ->> 'file_key', '')), ''), NULLIF(BTRIM(COALESCE(v_queue_item.meta_json ->> 'canonical_key', '')), ''), ''), '^/+', ''), '');
+    IF v_queue_storage_key IS NULL OR v_queue_storage_key IS DISTINCT FROM v_selected_queue_storage_key THEN
+      RAISE EXCEPTION USING MESSAGE = 'QUEUE_ITEM_STORAGE_MISMATCH', DETAIL = jsonb_build_object('contract_week_id', v_week.id, 'queue_id', v_selected_queue_id, 'expected_storage_key', v_selected_queue_storage_key, 'actual_storage_key', v_queue_storage_key)::text;
+    END IF;
+
+    IF UPPER(COALESCE(v_queue_item.status, '')) <> 'QUEUED' OR v_queue_item.timesheet_id IS NOT NULL THEN
+      RAISE EXCEPTION USING MESSAGE = 'QUEUE_ITEM_NOT_AVAILABLE', DETAIL = jsonb_build_object('contract_week_id', v_week.id, 'queue_id', v_selected_queue_id, 'storage_key', v_selected_queue_storage_key, 'status', v_queue_item.status, 'timesheet_id', v_queue_item.timesheet_id)::text;
+    END IF;
+
+    v_queue_kind := 'TIMESHEET';
+
+    IF v_primary_timesheet_storage_key IS NULL THEN
+      v_primary_timesheet_storage_key := v_queue_storage_key;
+      v_primary_timesheet_queue_id := v_queue_item.id;
+      v_primary_timesheet_rotation_raw := ((COALESCE(v_queue_item.last_rotation_deg, 0)::integer % 360) + 360) % 360;
+      v_primary_timesheet_rotation_deg := CASE WHEN v_primary_timesheet_rotation_raw >= 315 OR v_primary_timesheet_rotation_raw < 45 THEN 0 WHEN v_primary_timesheet_rotation_raw >= 45 AND v_primary_timesheet_rotation_raw < 135 THEN 90 WHEN v_primary_timesheet_rotation_raw >= 135 AND v_primary_timesheet_rotation_raw < 225 THEN 180 ELSE 270 END;
+    ELSIF v_queue_storage_key IS DISTINCT FROM v_primary_timesheet_storage_key THEN
+      RAISE EXCEPTION USING MESSAGE = 'STAGED_TIMESHEET_CONFLICT', DETAIL = jsonb_build_object('contract_week_id', v_week.id, 'existing_storage_key', v_primary_timesheet_storage_key, 'conflicting_storage_key', v_queue_storage_key, 'queue_id', v_queue_item.id)::text;
+    END IF;
+    v_timesheet_stage_key_count := v_timesheet_stage_key_count + 1;
+
+    SELECT COUNT(*)
+      INTO v_existing_timesheet_evidence_conflict_count
+      FROM public.timesheet_evidence AS te
+     WHERE te.timesheet_id = v_current_ts.timesheet_id
+       AND UPPER(COALESCE(te.kind, '')) = 'TIMESHEET'
+       AND NULLIF(regexp_replace(COALESCE(te.storage_key, ''), '^/+', ''), '') IS DISTINCT FROM v_queue_storage_key;
+    IF COALESCE(v_existing_timesheet_evidence_conflict_count, 0) > 0 THEN
+      RAISE EXCEPTION USING MESSAGE = 'TIMESHEET_EVIDENCE_ALREADY_EXISTS', DETAIL = jsonb_build_object('contract_week_id', v_week.id, 'timesheet_id', v_current_ts.timesheet_id, 'queue_id', v_queue_item.id, 'storage_key', v_queue_storage_key)::text;
+    END IF;
+
+    IF NOT EXISTS (
+      SELECT 1
+        FROM public.timesheet_evidence AS te
+       WHERE te.timesheet_id = v_current_ts.timesheet_id
+         AND UPPER(COALESCE(te.kind, '')) = 'TIMESHEET'
+         AND NULLIF(regexp_replace(COALESCE(te.storage_key, ''), '^/+', ''), '') = v_queue_storage_key
+    ) THEN
+      INSERT INTO public.timesheet_evidence(timesheet_id, kind, display_name, storage_key, created_at, created_by)
+      VALUES (v_current_ts.timesheet_id, 'TIMESHEET', v_queue_item.original_filename, v_queue_storage_key, COALESCE(v_queue_item.uploaded_at_utc, v_now), COALESCE(v_queue_item.uploaded_by_user_id, p_actor_user_id));
+      v_attached_evidence_count := v_attached_evidence_count + 1;
+    ELSE
+      v_duplicate_queue_count := v_duplicate_queue_count + 1;
+    END IF;
+
+    UPDATE public.manual_timesheet_queue AS mq
+       SET status = 'ATTACHED',
+           timesheet_id = v_current_ts.timesheet_id,
+           r2_key = v_queue_storage_key,
+           meta_json = (COALESCE(mq.meta_json, '{}'::jsonb) - 'deferred_target_timesheet_id' - 'materialisation_deferred_at_utc' - 'deferred_rotation_degrees' - 'dematerialised_from_timesheet_id' - 'dematerialised_from_booking_id' - 'dematerialised_at_utc')
+             || jsonb_build_object(
+               'contract_week_id', v_week.id::text,
+               'staged_kind', 'TIMESHEET',
+               'selected_queue_timesheet_materialisation', true,
+               'materialisation_deferred_to_backend', false,
+               'materialised_to_timesheet_id', v_current_ts.timesheet_id::text,
+               'materialised_at_utc', v_now,
+               'materialised_storage_key', v_queue_storage_key,
+               'materialised_from_process_preview', true,
+               'preview_selection_key', COALESCE(v_queue_timesheet_materialisation_json ->> 'preview_selection_key', v_queue_timesheet_materialisation_json ->> 'previewSelectionKey'),
+               'preview_identity', COALESCE(v_queue_timesheet_materialisation_json ->> 'preview_identity', v_queue_timesheet_materialisation_json ->> 'previewIdentity'),
+               'active_identity', COALESCE(v_queue_timesheet_materialisation_json ->> 'active_identity', v_queue_timesheet_materialisation_json ->> 'activeIdentity')
+             )
+     WHERE mq.id = v_queue_item.id
+       AND mq.status = 'QUEUED'
+       AND mq.timesheet_id IS NULL;
+    IF NOT FOUND THEN
+      RAISE EXCEPTION USING MESSAGE = 'QUEUE_ITEM_NOT_AVAILABLE', DETAIL = jsonb_build_object('contract_week_id', v_week.id, 'queue_id', v_selected_queue_id, 'storage_key', v_selected_queue_storage_key, 'reason', 'conditional_attach_failed')::text;
+    END IF;
+    v_attached_queue_count := v_attached_queue_count + 1;
+  END IF;
+
   IF p_materialise_staged_evidence THEN
     FOR v_queue_item IN
       SELECT mq.*
@@ -446,6 +554,9 @@ BEGIN
       v_queue_kind := UPPER(COALESCE(NULLIF(BTRIM(v_queue_item.meta_json ->> 'staged_kind'), ''), NULLIF(BTRIM(v_queue_item.meta_json ->> 'kind'), ''), NULLIF(BTRIM(v_queue_item.meta_json ->> 'attached_kind'), ''), 'TIMESHEET'));
       IF v_queue_kind NOT IN ('TIMESHEET','MILEAGE','TRAVEL','ACCOMMODATION','OTHER') THEN
         v_queue_kind := 'OTHER';
+      END IF;
+      IF v_queue_kind = 'TIMESHEET' AND (v_suppress_timesheet_evidence_materialisation OR v_has_selected_queue_timesheet_materialisation) THEN
+        CONTINUE;
       END IF;
       v_queue_storage_key := NULLIF(regexp_replace(COALESCE(NULLIF(BTRIM(COALESCE(v_queue_item.r2_key, '')), ''), NULLIF(BTRIM(COALESCE(v_queue_item.meta_json ->> 'r2_key', '')), ''), NULLIF(BTRIM(COALESCE(v_queue_item.meta_json ->> 'storage_key', '')), ''), NULLIF(BTRIM(COALESCE(v_queue_item.meta_json ->> 'file_key', '')), ''), NULLIF(BTRIM(COALESCE(v_queue_item.meta_json ->> 'canonical_key', '')), ''), ''), '^/+', ''), '');
       IF v_queue_storage_key IS NULL THEN
@@ -624,7 +735,9 @@ BEGIN
       'attached_queue_count', v_attached_queue_count,
       'duplicate_queue_count', v_duplicate_queue_count,
       'primary_timesheet_storage_key', v_primary_timesheet_storage_key,
-      'primary_timesheet_rotation_degrees', v_primary_timesheet_rotation_deg
+      'primary_timesheet_rotation_degrees', v_primary_timesheet_rotation_deg,
+      'selected_queue_timesheet_queue_id', v_selected_queue_id,
+      'selected_queue_timesheet_storage_key', v_selected_queue_storage_key
     ),
     'affected_rows', jsonb_build_array(jsonb_build_object(
       'timesheet_id', v_current_ts.timesheet_id,
@@ -654,6 +767,7 @@ EXCEPTION
     RAISE;
 END;
 $function$;
+
 
 DROP FUNCTION IF EXISTS public.contract_week_manual_upsert_atomic(uuid, uuid, jsonb, jsonb, jsonb, jsonb, jsonb, uuid, boolean, timestamp with time zone);
 DROP FUNCTION IF EXISTS public.contract_week_manual_upsert_atomic(uuid, uuid, jsonb, jsonb, jsonb, jsonb, jsonb, uuid, boolean, timestamp with time zone, text);
@@ -1561,25 +1675,11 @@ DROP FUNCTION IF EXISTS public.contract_week_manual_upsert_bulk_process_atomic(u
 DROP FUNCTION IF EXISTS public.contract_week_manual_upsert_bulk_process_atomic(uuid, uuid, jsonb, jsonb, jsonb, jsonb, jsonb, uuid, boolean, timestamp with time zone, text);
 DROP FUNCTION IF EXISTS public.contract_week_manual_upsert_bulk_process_atomic(uuid, uuid, jsonb, jsonb, jsonb, jsonb, jsonb, uuid, boolean, timestamp with time zone, text, jsonb, jsonb, text);
 
-CREATE OR REPLACE FUNCTION public.contract_week_manual_upsert_bulk_process_atomic(
-  p_week_id uuid,
-  p_expected_timesheet_id uuid DEFAULT NULL::uuid,
-  p_timesheet_create_json jsonb DEFAULT NULL::jsonb,
-  p_timesheet_patch_json jsonb DEFAULT '{}'::jsonb,
-  p_contract_week_patch_json jsonb DEFAULT '{}'::jsonb,
-  p_tsfin_snapshot_json jsonb DEFAULT NULL::jsonb,
-  p_rotation_json jsonb DEFAULT NULL::jsonb,
-  p_actor_user_id uuid DEFAULT NULL::uuid,
-  p_materialise_staged_evidence boolean DEFAULT true,
-  p_now_utc timestamp with time zone DEFAULT now(),
-  p_expected_row_signature text DEFAULT NULL::text,
-  p_expected_current_tsfin_snapshot_json jsonb DEFAULT NULL::jsonb,
-  p_next_tsfin_snapshot_json jsonb DEFAULT NULL::jsonb,
-  p_response_context text DEFAULT NULL::text
-)
+DROP FUNCTION IF EXISTS public.contract_week_manual_upsert_bulk_process_atomic(uuid, uuid, jsonb, jsonb, jsonb, jsonb, jsonb, uuid, boolean, timestamp with time zone, text, jsonb, jsonb, text);
+CREATE OR REPLACE FUNCTION public.contract_week_manual_upsert_bulk_process_atomic(p_week_id uuid, p_expected_timesheet_id uuid DEFAULT NULL::uuid, p_timesheet_create_json jsonb DEFAULT NULL::jsonb, p_timesheet_patch_json jsonb DEFAULT '{}'::jsonb, p_contract_week_patch_json jsonb DEFAULT '{}'::jsonb, p_tsfin_snapshot_json jsonb DEFAULT NULL::jsonb, p_rotation_json jsonb DEFAULT NULL::jsonb, p_actor_user_id uuid DEFAULT NULL::uuid, p_materialise_staged_evidence boolean DEFAULT true, p_now_utc timestamp with time zone DEFAULT now(), p_expected_row_signature text DEFAULT NULL::text, p_expected_current_tsfin_snapshot_json jsonb DEFAULT NULL::jsonb, p_next_tsfin_snapshot_json jsonb DEFAULT NULL::jsonb, p_response_context text DEFAULT NULL::text, p_queue_timesheet_materialisation_json jsonb DEFAULT NULL::jsonb)
  RETURNS jsonb
  LANGUAGE plpgsql
- VOLATILE SECURITY DEFINER
+ SECURITY DEFINER
  SET search_path TO 'public'
 AS $function$
 DECLARE
@@ -1609,7 +1709,8 @@ BEGIN
     p_actor_user_id => p_actor_user_id,
     p_materialise_staged_evidence => p_materialise_staged_evidence,
     p_now_utc => v_now,
-    p_expected_row_signature => p_expected_row_signature
+    p_expected_row_signature => p_expected_row_signature,
+    p_queue_timesheet_materialisation_json => p_queue_timesheet_materialisation_json
   );
 
   RETURN COALESCE(v_result, '{}'::jsonb)
@@ -10166,5 +10267,205 @@ BEGIN
       'context', NULLIF(BTRIM(COALESCE(p_context, '')), '')
     )
   );
+END;
+$function$;
+
+
+CREATE OR REPLACE FUNCTION public.manual_timesheet_queue_attach_process_atomic(
+  p_queue_id uuid,
+  p_timesheet_id uuid,
+  p_expected_timesheet_id uuid,
+  p_expected_storage_key text,
+  p_kind text DEFAULT 'TIMESHEET'::text,
+  p_actor_user_id uuid DEFAULT NULL::uuid,
+  p_source_json jsonb DEFAULT '{}'::jsonb,
+  p_now_utc timestamp with time zone DEFAULT now()
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_now timestamp with time zone := COALESCE(p_now_utc, now());
+  v_queue public.manual_timesheet_queue%ROWTYPE;
+  v_ts public.timesheets%ROWTYPE;
+  v_kind text := UPPER(BTRIM(COALESCE(p_kind, 'TIMESHEET')));
+  v_expected_storage_key text := NULLIF(regexp_replace(COALESCE(BTRIM(p_expected_storage_key), ''), '^/+', ''), '');
+  v_queue_storage_key text := NULL;
+  v_existing_same public.timesheet_evidence%ROWTYPE;
+  v_existing_conflict public.timesheet_evidence%ROWTYPE;
+  v_evidence_id uuid := NULL;
+  v_display_name text := NULL;
+  v_rotation_raw integer := 0;
+  v_rotation_degrees integer := 0;
+  v_error_state text := NULL;
+  v_error_message text := NULL;
+  v_error_detail text := NULL;
+BEGIN
+  PERFORM set_config('lock_timeout', '2500ms', true);
+
+  IF p_queue_id IS NULL THEN
+    RETURN jsonb_build_object('ok', false, 'success', false, 'error_code', 'QUEUE_ID_REQUIRED', 'message', 'p_queue_id is required.');
+  END IF;
+  IF p_timesheet_id IS NULL THEN
+    RETURN jsonb_build_object('ok', false, 'success', false, 'error_code', 'TIMESHEET_ID_REQUIRED', 'message', 'p_timesheet_id is required.');
+  END IF;
+  IF p_expected_timesheet_id IS NULL THEN
+    RETURN jsonb_build_object('ok', false, 'success', false, 'error_code', 'EXPECTED_TIMESHEET_ID_REQUIRED', 'message', 'p_expected_timesheet_id is required.');
+  END IF;
+  IF v_expected_storage_key IS NULL THEN
+    RETURN jsonb_build_object('ok', false, 'success', false, 'error_code', 'QUEUE_ITEM_STORAGE_REQUIRED', 'message', 'p_expected_storage_key is required.', 'queue_id', p_queue_id);
+  END IF;
+
+  IF v_kind = '' OR v_kind = 'TS' THEN
+    v_kind := 'TIMESHEET';
+  ELSIF v_kind IN ('EXPENSE', 'EXPENSES') THEN
+    v_kind := 'TRAVEL';
+  ELSIF v_kind IN ('MILES', 'MILE') THEN
+    v_kind := 'MILEAGE';
+  ELSIF v_kind = 'ACCOM' THEN
+    v_kind := 'ACCOMMODATION';
+  END IF;
+
+  IF v_kind NOT IN ('TIMESHEET','MILEAGE','TRAVEL','ACCOMMODATION','OTHER') THEN
+    RETURN jsonb_build_object('ok', false, 'success', false, 'error_code', 'INVALID_EVIDENCE_KIND', 'message', 'Invalid evidence kind.', 'kind', p_kind);
+  END IF;
+
+  SELECT ts.*
+    INTO v_ts
+    FROM public.timesheets AS ts
+   WHERE ts.timesheet_id = p_timesheet_id
+     AND ts.is_current = true
+   FOR UPDATE;
+
+  IF v_ts.timesheet_id IS NULL THEN
+    RETURN jsonb_build_object('ok', false, 'success', false, 'error_code', 'TIMESHEET_NOT_FOUND', 'message', 'Timesheet was not found.', 'timesheet_id', p_timesheet_id);
+  END IF;
+
+  IF v_ts.timesheet_id IS DISTINCT FROM p_expected_timesheet_id THEN
+    RETURN jsonb_build_object('ok', false, 'success', false, 'error_code', 'TIMESHEET_MOVED', 'message', 'TIMESHEET_MOVED', 'timesheet_id', p_timesheet_id, 'current_timesheet_id', v_ts.timesheet_id, 'expected_timesheet_id', p_expected_timesheet_id);
+  END IF;
+
+  SELECT mq.*
+    INTO v_queue
+    FROM public.manual_timesheet_queue AS mq
+   WHERE mq.id = p_queue_id
+   FOR UPDATE;
+
+  IF v_queue.id IS NULL THEN
+    RETURN jsonb_build_object('ok', false, 'success', false, 'error_code', 'QUEUE_ITEM_NOT_AVAILABLE', 'message', 'Queue item is no longer available.', 'queue_id', p_queue_id, 'expected_storage_key', v_expected_storage_key);
+  END IF;
+
+  v_queue_storage_key := NULLIF(regexp_replace(COALESCE(BTRIM(v_queue.r2_key), ''), '^/+', ''), '');
+  IF v_queue_storage_key IS NULL OR v_queue_storage_key IS DISTINCT FROM v_expected_storage_key THEN
+    RETURN jsonb_build_object('ok', false, 'success', false, 'error_code', 'QUEUE_ITEM_STORAGE_MISMATCH', 'message', 'Queue item storage key no longer matches the displayed preview.', 'queue_id', p_queue_id, 'expected_storage_key', v_expected_storage_key, 'storage_key', v_queue_storage_key);
+  END IF;
+
+  IF UPPER(COALESCE(v_queue.status, '')) <> 'QUEUED' OR v_queue.timesheet_id IS NOT NULL THEN
+    RETURN jsonb_build_object('ok', false, 'success', false, 'error_code', 'QUEUE_ITEM_NOT_AVAILABLE', 'message', 'Queue item is no longer available.', 'queue_id', p_queue_id, 'storage_key', v_queue_storage_key, 'status', v_queue.status, 'timesheet_id', v_queue.timesheet_id);
+  END IF;
+
+  IF v_kind = 'TIMESHEET' THEN
+    SELECT te.*
+      INTO v_existing_conflict
+      FROM public.timesheet_evidence AS te
+     WHERE te.timesheet_id = v_ts.timesheet_id
+       AND UPPER(COALESCE(te.kind, '')) = 'TIMESHEET'
+       AND NULLIF(regexp_replace(COALESCE(te.storage_key, ''), '^/+', ''), '') IS DISTINCT FROM v_queue_storage_key
+     ORDER BY te.created_at DESC NULLS LAST, te.id DESC
+     LIMIT 1
+     FOR UPDATE;
+
+    IF v_existing_conflict.id IS NOT NULL THEN
+      RETURN jsonb_build_object('ok', false, 'success', false, 'error_code', 'TIMESHEET_EVIDENCE_ALREADY_EXISTS', 'message', 'Only one TIMESHEET evidence file may be attached to a timesheet at a time.', 'timesheet_id', v_ts.timesheet_id, 'existing_evidence_id', v_existing_conflict.id, 'queue_id', p_queue_id, 'storage_key', v_queue_storage_key);
+    END IF;
+  END IF;
+
+  SELECT te.*
+    INTO v_existing_same
+    FROM public.timesheet_evidence AS te
+   WHERE te.timesheet_id = v_ts.timesheet_id
+     AND UPPER(COALESCE(te.kind, '')) = v_kind
+     AND NULLIF(regexp_replace(COALESCE(te.storage_key, ''), '^/+', ''), '') = v_queue_storage_key
+   ORDER BY te.created_at DESC NULLS LAST, te.id DESC
+   LIMIT 1
+   FOR UPDATE;
+
+  IF v_existing_same.id IS NOT NULL THEN
+    v_evidence_id := v_existing_same.id;
+  ELSE
+    v_display_name := COALESCE(NULLIF(BTRIM(v_queue.original_filename), ''), split_part(v_queue_storage_key, '/', array_length(string_to_array(v_queue_storage_key, '/'), 1)));
+    INSERT INTO public.timesheet_evidence(timesheet_id, kind, display_name, storage_key, created_at, created_by)
+    VALUES (v_ts.timesheet_id, v_kind, v_display_name, v_queue_storage_key, v_now, COALESCE(p_actor_user_id, v_queue.uploaded_by_user_id))
+    RETURNING id INTO v_evidence_id;
+  END IF;
+
+  v_rotation_raw := ((COALESCE(v_queue.last_rotation_deg, 0)::integer % 360) + 360) % 360;
+  v_rotation_degrees := CASE
+    WHEN v_rotation_raw >= 315 OR v_rotation_raw < 45 THEN 0
+    WHEN v_rotation_raw >= 45 AND v_rotation_raw < 135 THEN 90
+    WHEN v_rotation_raw >= 135 AND v_rotation_raw < 225 THEN 180
+    ELSE 270
+  END;
+
+  UPDATE public.manual_timesheet_queue AS mq
+     SET status = 'ATTACHED',
+         timesheet_id = v_ts.timesheet_id,
+         r2_key = v_queue_storage_key,
+         meta_json = COALESCE(mq.meta_json, '{}'::jsonb)
+           || jsonb_build_object(
+             'attached_kind', v_kind,
+             'attached_to_timesheet_id', v_ts.timesheet_id::text,
+             'attached_at_utc', v_now,
+             'attached_storage_key', v_queue_storage_key,
+             'attached_from_process', COALESCE((p_source_json ->> 'source') = 'bulk_process_displayed_queue_preview', false),
+             'process_claimed_at_utc', v_now,
+             'preview_selection_key', COALESCE(p_source_json ->> 'preview_selection_key', p_source_json ->> 'previewSelectionKey'),
+             'preview_identity', COALESCE(p_source_json ->> 'preview_identity', p_source_json ->> 'previewIdentity'),
+             'active_identity', COALESCE(p_source_json ->> 'active_identity', p_source_json ->> 'activeIdentity')
+           )
+   WHERE mq.id = p_queue_id
+     AND mq.status = 'QUEUED'
+     AND mq.timesheet_id IS NULL
+     AND NULLIF(regexp_replace(COALESCE(mq.r2_key, ''), '^/+', ''), '') = v_queue_storage_key;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION USING MESSAGE = 'QUEUE_ITEM_NOT_AVAILABLE', DETAIL = jsonb_build_object('queue_id', p_queue_id, 'storage_key', v_queue_storage_key, 'reason', 'conditional_attach_failed')::text;
+  END IF;
+
+  IF v_kind = 'TIMESHEET' THEN
+    UPDATE public.timesheets AS ts
+       SET manual_pdf_r2_key = v_queue_storage_key,
+           manual_pdf_rotation_degrees = v_rotation_degrees,
+           updated_at = v_now
+     WHERE ts.timesheet_id = v_ts.timesheet_id
+       AND ts.is_current = true;
+  END IF;
+
+  RETURN jsonb_build_object(
+    'ok', true,
+    'success', true,
+    'attached', true,
+    'queue_id', p_queue_id,
+    'id', p_queue_id,
+    'evidence_id', v_evidence_id,
+    'timesheet_id', v_ts.timesheet_id,
+    'current_timesheet_id', v_ts.timesheet_id,
+    'kind', v_kind,
+    'storage_key', v_queue_storage_key,
+    'queue_item_consumed', true,
+    'consumed_queue_item', true,
+    'changed_domains', jsonb_build_array('timesheet_evidence', 'manual_timesheet_queue', 'timesheets')
+  );
+EXCEPTION WHEN OTHERS THEN
+  GET STACKED DIAGNOSTICS v_error_state = RETURNED_SQLSTATE, v_error_message = MESSAGE_TEXT, v_error_detail = PG_EXCEPTION_DETAIL;
+  IF v_error_state IN ('55P03', '57014') THEN
+    RETURN jsonb_build_object('ok', false, 'success', false, 'error_code', 'LOCK_TIMEOUT', 'message', 'LOCK_TIMEOUT', 'sqlstate', v_error_state, 'detail', v_error_detail, 'queue_id', p_queue_id, 'timesheet_id', p_timesheet_id);
+  END IF;
+  IF v_error_message IN ('QUEUE_ITEM_NOT_AVAILABLE', 'QUEUE_ITEM_STORAGE_MISMATCH', 'PREVIEW_QUEUE_IMAGE_MISSING') THEN
+    RETURN jsonb_build_object('ok', false, 'success', false, 'error_code', v_error_message, 'message', v_error_message, 'sqlstate', v_error_state, 'detail', v_error_detail, 'queue_id', p_queue_id, 'timesheet_id', p_timesheet_id);
+  END IF;
+  RETURN jsonb_build_object('ok', false, 'success', false, 'error_code', COALESCE(NULLIF(v_error_message, ''), v_error_state), 'message', COALESCE(NULLIF(v_error_message, ''), 'Failed to attach queue item.'), 'sqlstate', v_error_state, 'detail', v_error_detail, 'queue_id', p_queue_id, 'timesheet_id', p_timesheet_id);
 END;
 $function$;
