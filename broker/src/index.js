@@ -121583,6 +121583,7 @@ async function handleInvoiceBatchIssueConfirm(env, req) {
   }
 }
 
+
 async function handleInvoiceRender(env, req, invoiceId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -121592,6 +121593,18 @@ async function handleInvoiceRender(env, req, invoiceId) {
   const expectedPdfKey = `docs-pdf/invoices/invoice_${cleanInvoiceId}.pdf`;
 
   const normalizePdfKey = (v) => String(v || '').trim().replace(/^\/+/, '');
+
+  const r2HeadForInvoiceRender = async (key) => {
+    try {
+      const cleanKey = normalizePdfKey(key);
+      if (!cleanKey) return null;
+      const bucket = env.R2_BUCKET || env.R2;
+      if (!bucket || typeof bucket.head !== 'function') return null;
+      return await bucket.head(cleanKey);
+    } catch {
+      return null;
+    }
+  };
 
   const safeRenderError = (err, fallback = 'RENDER_FAILED') => {
     const raw = (err && typeof err === 'object' && err.message) ? err.message : err;
@@ -121697,7 +121710,7 @@ async function handleInvoiceRender(env, req, invoiceId) {
           const tGen = new Date(genAt).getTime();
 
           if (Number.isFinite(tUpd) && Number.isFinite(tGen) && tUpd <= tGen) {
-            const head = await r2Head(env, key);
+            const head = await r2HeadForInvoiceRender(key);
             if (head) {
               return withCORS(env, req, ok({
                 pdf_key: key,
@@ -121727,7 +121740,7 @@ async function handleInvoiceRender(env, req, invoiceId) {
       // If the DB key is stale/missing in R2, force a real render now.
       if (core?.ok && core?.pdf_key && core?.cached === true) {
         const cachedKey = normalizePdfKey(core.pdf_key);
-        const head = cachedKey ? await r2Head(env, cachedKey) : null;
+        const head = cachedKey ? await r2HeadForInvoiceRender(cachedKey) : null;
         if (!head) {
           cacheMissingR2 = true;
           effectiveForceRegen = true;
