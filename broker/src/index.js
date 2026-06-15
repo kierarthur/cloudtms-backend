@@ -57990,7 +57990,6 @@ function isImportAuthoritativeEvidenceContext(summary) {
   );
 }
 
-
 async function handleTimesheetEvidenceReturnToQueue(env, req, tsId, evidenceId) {
   const enc = encodeURIComponent;
 
@@ -58431,19 +58430,83 @@ async function handleTimesheetEvidenceReturnToQueue(env, req, tsId, evidenceId) 
       evKindU === 'TIMESHEET' &&
       currentManualPdfKey &&
       currentManualPdfKey === storageKey;
+    let clearedManualPdf = false;
 
     if (shouldClearManualPdf) {
-      await fetch(
-        `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(currentTsId)}&is_current=eq.true`,
-        {
+      const clearPayload = {
+        manual_pdf_r2_key: null,
+        manual_pdf_rotation_degrees: 0
+      };
+
+      const clearStaleManualPdfPointer = async (useExactKeyFilter) => {
+        const rawManualPdfKey = trimStr(tsMeta?.manual_pdf_r2_key);
+        const url =
+          `${env.SUPABASE_URL}/rest/v1/timesheets` +
+          `?timesheet_id=eq.${enc(currentTsId)}` +
+          `&is_current=eq.true` +
+          (useExactKeyFilter && rawManualPdfKey ? `&manual_pdf_r2_key=eq.${enc(rawManualPdfKey)}` : '');
+
+        const res = await fetch(url, {
           method: 'PATCH',
-          headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
-          body: JSON.stringify({
-            manual_pdf_r2_key: null,
-            manual_pdf_rotation_degrees: 0
-          })
+          headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+          body: JSON.stringify(clearPayload)
+        });
+        const txt = await res.text().catch(() => '');
+        return { res, txt };
+      };
+
+      try {
+        let { res: clearRes, txt: clearTxt } = await clearStaleManualPdfPointer(true);
+
+        if (!clearRes.ok) {
+          return withCORS(env, req, serverError(`Failed to clear stale manual_pdf_r2_key after return-to-queue: ${clearTxt}`));
         }
-      ).catch(() => {});
+
+        let clearRows = [];
+        try {
+          clearRows = clearTxt ? JSON.parse(clearTxt) : [];
+        } catch {
+          clearRows = [];
+        }
+
+        if (!Array.isArray(clearRows) || clearRows.length < 1) {
+          const latestTsMeta = await sbGetOne(
+            env,
+            `${env.SUPABASE_URL}/rest/v1/timesheets` +
+              `?timesheet_id=eq.${enc(currentTsId)}` +
+              `&is_current=eq.true` +
+              `&select=timesheet_id,manual_pdf_r2_key` +
+              `&limit=1`
+          ).catch(() => null);
+
+          if (!latestTsMeta) {
+            return withCORS(env, req, serverError('Failed to verify stale manual_pdf_r2_key after return-to-queue: current timesheet row was not available'));
+          }
+
+          const latestManualPdfKey = normalizeStorageKey(latestTsMeta?.manual_pdf_r2_key);
+
+          if (latestManualPdfKey && latestManualPdfKey === storageKey) {
+            ({ res: clearRes, txt: clearTxt } = await clearStaleManualPdfPointer(false));
+            if (!clearRes.ok) {
+              return withCORS(env, req, serverError(`Failed to clear stale manual_pdf_r2_key after return-to-queue: ${clearTxt}`));
+            }
+
+            try {
+              clearRows = clearTxt ? JSON.parse(clearTxt) : [];
+            } catch {
+              clearRows = [];
+            }
+
+            if (!Array.isArray(clearRows) || clearRows.length < 1) {
+              return withCORS(env, req, serverError('Failed to clear stale manual_pdf_r2_key after return-to-queue: no current timesheet row was updated'));
+            }
+          }
+        }
+
+        clearedManualPdf = Array.isArray(clearRows) && clearRows.length > 0;
+      } catch (e) {
+        return withCORS(env, req, serverError(`Failed to clear stale manual_pdf_r2_key after return-to-queue: ${e?.message || e}`));
+      }
     }
 
     try {
@@ -58469,7 +58532,8 @@ async function handleTimesheetEvidenceReturnToQueue(env, req, tsId, evidenceId) 
           week_ending_date: tsMeta?.week_ending_date || null,
           sheet_scope: tsMeta?.sheet_scope || null,
           submission_mode: tsMeta?.submission_mode || null,
-          cleared_manual_pdf_r2_key: shouldClearManualPdf
+          manual_pdf_clear_required: shouldClearManualPdf,
+          cleared_manual_pdf_r2_key: clearedManualPdf
         },
         { entity: 'timesheets', subject_id: currentTsId, req }
       );
@@ -58485,12 +58549,14 @@ async function handleTimesheetEvidenceReturnToQueue(env, req, tsId, evidenceId) 
       reused_existing_queue_row: reusedExistingQueueRow,
       return_queue_mode: returnedQueueMode,
       content_hash_remapped_for_return: contentHashRemappedForReturn,
-      cleared_manual_pdf_r2_key: shouldClearManualPdf
+      manual_pdf_clear_required: shouldClearManualPdf,
+      cleared_manual_pdf_r2_key: clearedManualPdf
     }));
   } catch (e) {
     return withCORS(env, req, serverError(`Failed to return timesheet evidence to queue: ${e?.message || e}`));
   }
 }
+
 
 
 
