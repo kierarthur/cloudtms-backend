@@ -121588,6 +121588,38 @@ async function handleInvoiceRender(env, req, invoiceId) {
   if (!user) return withCORS(env, req, unauthorized());
 
   const enc = encodeURIComponent;
+  const cleanInvoiceId = String(invoiceId || '').trim();
+  const expectedPdfKey = `docs-pdf/invoices/invoice_${cleanInvoiceId}.pdf`;
+
+  const normalizePdfKey = (v) => String(v || '').trim().replace(/^\/+/, '');
+
+  const safeRenderError = (err, fallback = 'RENDER_FAILED') => {
+    const raw = (err && typeof err === 'object' && err.message) ? err.message : err;
+    let s = String(raw || '').trim();
+    if (!s) s = fallback;
+
+    // Keep user-facing diagnostics useful, but do not echo tokens/secrets/stacks.
+    s = s
+      .replace(/(authorization\s*:?\s*bearer\s+)[^\s,;]+/ig, '$1[redacted]')
+      .replace(/(token=)[^&\s]+/ig, '$1[redacted]')
+      .replace(/(apikey=)[^&\s]+/ig, '$1[redacted]')
+      .replace(/(service[_-]?role[_-]?key\s*[:=]\s*)[^\s,;]+/ig, '$1[redacted]')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    return s.slice(0, 300) || fallback;
+  };
+
+  const rpcCount = (v) => {
+    const raw =
+      (typeof v === 'number') ? v :
+      (typeof v?.data === 'number') ? v.data :
+      (Array.isArray(v) && typeof v[0] === 'number') ? v[0] :
+      (Array.isArray(v?.data) && typeof v.data[0] === 'number') ? v.data[0] :
+      0;
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : 0;
+  };
 
   // Parse optional { force_regen: true }
   let forceRegen = false;
@@ -121598,7 +121630,9 @@ async function handleInvoiceRender(env, req, invoiceId) {
     forceRegen = false;
   }
 
-  // Load invpdf effective config (free vs paid)
+  // Load invpdf effective config. User-triggered "Open invoice PDF" is allowed to
+  // attempt immediate render regardless of free/paid queue defaults; config still
+  // controls queue fallback when immediate render genuinely fails.
   let invpdf = null;
   try {
     const s = await loadSettingsDefaults(env);
@@ -121610,10 +121644,30 @@ async function handleInvoiceRender(env, req, invoiceId) {
   }
 
   const mode = String(invpdf?.mode || 'free').trim().toLowerCase() === 'paid' ? 'paid' : 'free';
-  const allowInlineRender = (mode === 'paid') && (invpdf?.allow_inline_render === true);
   const queueOnRender = (invpdf?.queue_on_render !== false);
-  const expectedPdfKey = `docs-pdf/invoices/invoice_${String(invoiceId).trim()}.pdf`;
   let cacheMissingR2 = false;
+
+  const auditQueueFallback = async (details = {}) => {
+    try {
+      await writeAudit(
+        env,
+        user,
+        'INVOICE_RENDER_INLINE_FALLBACK_QUEUED',
+        {
+          invoice_id: cleanInvoiceId,
+          mode,
+          queue_on_render: queueOnRender,
+          force_regen: !!details.force_regen,
+          cache_missing_r2: !!details.cache_missing_r2,
+          render_error: details.render_error || null,
+          queued_rows_affected: details.queued_rows_affected ?? null
+        },
+        { entity: 'invoice', subject_id: cleanInvoiceId, req }
+      );
+    } catch {
+      // writeAudit is best-effort; never block queue fallback.
+    }
+  };
 
   try {
     // ✅ Fast-path caching (skip render entirely if still valid and not force_regen)
@@ -121623,14 +121677,18 @@ async function handleInvoiceRender(env, req, invoiceId) {
         const { rows } = await sbFetch(
           env,
           `${env.SUPABASE_URL}/rest/v1/invoices` +
-            `?id=eq.${enc(invoiceId)}` +
-            `&select=invoice_pdf_r2_key,invoice_pdf_generated_at_utc,updated_at` +
+            `?id=eq.${enc(cleanInvoiceId)}` +
+            `&select=id,invoice_pdf_r2_key,invoice_pdf_generated_at_utc,updated_at` +
             `&limit=1`,
           false
         );
 
+        if (Array.isArray(rows) && rows.length === 0) {
+          return withCORS(env, req, notFound('Invoice not found'));
+        }
+
         const inv = rows && rows.length ? rows[0] : null;
-        const key = (inv && typeof inv.invoice_pdf_r2_key === 'string') ? inv.invoice_pdf_r2_key.trim().replace(/^\/+/, '') : '';
+        const key = normalizePdfKey(inv && typeof inv.invoice_pdf_r2_key === 'string' ? inv.invoice_pdf_r2_key : '');
         const genAt = inv ? inv.invoice_pdf_generated_at_utc : null;
         const updAt = inv ? inv.updated_at : null;
 
@@ -121652,38 +121710,81 @@ async function handleInvoiceRender(env, req, invoiceId) {
           }
         }
       } catch {
-        // non-fatal: fall through
+        // non-fatal: fall through to immediate render path
       }
     }
 
-    const effectiveForceRegen = !!(forceRegen || cacheMissingR2);
+    let effectiveForceRegen = !!(forceRegen || cacheMissingR2);
+    let renderError = null;
 
-    // Paid-mode optional: attempt inline render (best-effort), but ALWAYS fall back to queue if it fails.
-    if (allowInlineRender) {
-      try {
-        const core = await _renderInvoiceBundleAndStore(env, req, invoiceId, user, { force_regen: effectiveForceRegen });
-        if (core?.ok && core?.pdf_key) {
+    // User-triggered Open/Preview must try immediate render first, including in
+    // free mode. The shared core already adds the DRAFT INVOICE watermark for
+    // unissued invoices and performs the existing attachment checks.
+    try {
+      let core = await _renderInvoiceBundleAndStore(env, req, cleanInvoiceId, user, { force_regen: effectiveForceRegen });
+
+      // Defence: if the shared core reports a cache hit, verify R2 here too.
+      // If the DB key is stale/missing in R2, force a real render now.
+      if (core?.ok && core?.pdf_key && core?.cached === true) {
+        const cachedKey = normalizePdfKey(core.pdf_key);
+        const head = cachedKey ? await r2Head(env, cachedKey) : null;
+        if (!head) {
+          cacheMissingR2 = true;
+          effectiveForceRegen = true;
+          core = await _renderInvoiceBundleAndStore(env, req, cleanInvoiceId, user, { force_regen: true });
+        }
+      }
+
+      if (core?.ok && core?.pdf_key) {
+        const pdfKey = normalizePdfKey(core.pdf_key);
+        if (pdfKey) {
           return withCORS(env, req, ok({
-            pdf_key: String(core.pdf_key).replace(/^\/+/, ''),
+            pdf_key: pdfKey,
             cached: !!core.cached,
             rendered_inline: true,
             ready: true,
-            cache_missing_r2: cacheMissingR2
+            cache_missing_r2: cacheMissingR2,
+            generated_now: !core.cached,
+            force_regen: effectiveForceRegen
           }));
         }
-      } catch {
-        // fall through to queue
       }
+
+      renderError = safeRenderError(core?.error || 'RENDER_FAILED');
+    } catch (e) {
+      renderError = safeRenderError(e, 'RENDER_EXCEPTION');
     }
 
-    // Queue render job (free-plan safe default)
+    if (String(renderError || '').toLowerCase().includes('invoice not found')) {
+      return withCORS(env, req, notFound('Invoice not found'));
+    }
+
+    // Queue render job only after immediate render genuinely failed.
     if (!queueOnRender) {
-      return withCORS(env, req, badRequest('Invoice render queueing is disabled by settings (invpdf.queue_on_render=false).'));
+      return withCORS(env, req, badRequest(
+        'Invoice PDF immediate render failed and queueing is disabled by settings (invpdf.queue_on_render=false).',
+        {
+          ready: false,
+          queued: false,
+          force_regen: effectiveForceRegen,
+          expected_pdf_key: expectedPdfKey,
+          cache_missing_r2: cacheMissingR2,
+          render_error: renderError
+        }
+      ));
     }
 
-    await sbRpc(env, 'invpdf_enqueue_one', {
-      p_invoice_id: String(invoiceId),
+    const enq = await sbRpc(env, 'invpdf_enqueue_one', {
+      p_invoice_id: cleanInvoiceId,
       p_force_regen: effectiveForceRegen
+    });
+    const queuedRowsAffected = rpcCount(enq);
+
+    await auditQueueFallback({
+      force_regen: effectiveForceRegen,
+      cache_missing_r2: cacheMissingR2,
+      render_error: renderError,
+      queued_rows_affected: queuedRowsAffected
     });
 
     return withCORS(env, req, ok({
@@ -121691,13 +121792,18 @@ async function handleInvoiceRender(env, req, invoiceId) {
       ready: false,
       force_regen: effectiveForceRegen,
       rendered_inline: false,
+      inline_attempted: true,
       expected_pdf_key: expectedPdfKey,
-      cache_missing_r2: cacheMissingR2
+      cache_missing_r2: cacheMissingR2,
+      render_error: renderError,
+      queued_rows_affected: queuedRowsAffected
     }));
   } catch (e) {
     return withCORS(env, req, serverError('Failed to render or enqueue invoice PDF'));
   }
 }
+
+
 
 async function handleInvoiceEmail(env, req, invoiceId) {
   const enc = encodeURIComponent;
@@ -122938,6 +123044,18 @@ async function _renderInvoiceBundleAndStore(env, req, invoiceId, userForAudit, o
   };
 
   log('log', 'start', { force_regen: forceRegen });
+
+  const r2HeadForInvoiceRender = async (key) => {
+    try {
+      const cleanKey = normalizeKey(String(key || ''));
+      if (!cleanKey) return null;
+      const bucket = env.R2_BUCKET || env.R2;
+      if (!bucket || typeof bucket.head !== 'function') return null;
+      return await bucket.head(cleanKey);
+    } catch {
+      return null;
+    }
+  };
 
   function toMarginsObj(m) {
     const dflt = { top: 32, right: 12, bottom: 20, left: 12 };
@@ -124380,20 +124498,29 @@ function buildNhspReportHTML(inv, header, nhspData) {
           const tGen = new Date(genAt).getTime();
 
           if (Number.isFinite(tUpd) && Number.isFinite(tGen) && tUpd <= tGen) {
-            log('log', 'bundle_cache_hit', { ms: Date.now() - t0, pdf_key: key.replace(/^\/+/, '') });
-            return {
-              ok: true,
-              pdf_key: key.replace(/^\/+/, ''),
-              cached: true,
-              attached_timesheets: 0,
-              attached_hr: false,
-              attached_nhsp: false,
-              attached_evidence: 0,
-              attached_timesheet_evidence: 0,
-              attached_manual_timesheets: 0,
-              regen_timesheet_ids: regenTimesheetIds,
-              qr_refs_changed_timesheet_ids: qrRefsChangedTimesheetIds
-            };
+            const cleanCachedKey = key.replace(/^\/+/, '');
+            const cachedHead = await r2HeadForInvoiceRender(cleanCachedKey);
+            if (cachedHead) {
+              log('log', 'bundle_cache_hit', { ms: Date.now() - t0, pdf_key: cleanCachedKey });
+              return {
+                ok: true,
+                pdf_key: cleanCachedKey,
+                cached: true,
+                attached_timesheets: 0,
+                attached_hr: false,
+                attached_nhsp: false,
+                attached_evidence: 0,
+                attached_timesheet_evidence: 0,
+                attached_manual_timesheets: 0,
+                regen_timesheet_ids: regenTimesheetIds,
+                qr_refs_changed_timesheet_ids: qrRefsChangedTimesheetIds
+              };
+            }
+
+            log('error', 'bundle_cache_missing_r2_regenerating', {
+              ms: Date.now() - t0,
+              pdf_key: cleanCachedKey
+            });
           }
         }
       }
@@ -125005,7 +125132,12 @@ const docsKeys = tsIds.map(tsId => normalizeKey(`docs-pdf/timesheets/ts_${tsId}.
 
         const bytes = await r2GetBytes(env, norm);
         if (!bytes || !bytes.length) {
-          if (expenseOnlySet.has(String(tsId)) || tsEvidenceFetchedSet.has(String(tsId)) || noPhysicalTimesheetSet.has(String(tsId))) continue;
+          if (
+            expenseOnlySet.has(String(tsId)) ||
+            tsEvidenceFetchedSet.has(String(tsId)) ||
+            noPhysicalTimesheetSet.has(String(tsId)) ||
+            manualKeyByTsId.has(String(tsId))
+          ) continue;
           missing.push({ kind: 'TIMESHEET_PDF', timesheet_id: tsId, storage_key: norm });
           continue;
         }
@@ -125259,8 +125391,9 @@ const docsKeys = tsIds.map(tsId => normalizeKey(`docs-pdf/timesheets/ts_${tsId}.
       return out;
     });
 
-    if (!renderAll || !renderAll.invoicePdfU8) {
-      return { ok: false, error: "Failed to render invoice bundle" };
+    step = 'BROWSER_RENDER_VERIFY';
+    if (!renderAll || !renderAll.invoicePdfU8 || !renderAll.invoicePdfU8.length) {
+      throw new Error('Invoice PDF renderer did not return PDF bytes');
     }
 
     const invoicePdfU8 = renderAll.invoicePdfU8;
@@ -125358,10 +125491,16 @@ const docsKeys = tsIds.map(tsId => normalizeKey(`docs-pdf/timesheets/ts_${tsId}.
     const pdfKey = normalizeKey(`docs-pdf/invoices/invoice_${invoiceId}.pdf`);
     await r2Put(env, pdfKey, combinedU8, { httpMetadata: { contentType: "application/pdf" } });
 
+    step = 'R2_PUT_VERIFY';
+    const storedHead = await r2HeadForInvoiceRender(pdfKey);
+    if (!storedHead) {
+      throw new Error('Invoice PDF R2 upload verification failed');
+    }
+
     const nowIso = new Date().toISOString();
 
     step = 'DB_PATCH_INVOICE';
-    await fetch(
+    const patchRes = await fetch(
       `${env.SUPABASE_URL}/rest/v1/invoices?id=eq.${enc(invoiceId)}`,
       {
         method: "PATCH",
@@ -125374,6 +125513,13 @@ const docsKeys = tsIds.map(tsId => normalizeKey(`docs-pdf/timesheets/ts_${tsId}.
         }),
       }
     );
+
+    if (!patchRes.ok) {
+      let patchText = '';
+      try { patchText = await patchRes.text(); } catch {}
+      patchText = String(patchText || '').replace(/\s+/g, ' ').trim().slice(0, 800);
+      throw new Error(`Invoice PDF DB patch failed (${patchRes.status}): ${patchText || patchRes.statusText || 'unknown error'}`);
+    }
 
     step = 'DONE';
     log('log', 'success', { ms: Date.now() - t0, pdf_key: pdfKey });
@@ -125428,7 +125574,26 @@ const docsKeys = tsIds.map(tsId => normalizeKey(`docs-pdf/timesheets/ts_${tsId}.
       });
     }
 
-    return { ok: false, error: "Failed to render invoice bundle" };
+    const safePublicError = (() => {
+      let msg = String(errMessage || '').trim() || 'Unknown render error';
+      msg = msg
+        .replace(/(authorization\s*:?\s*bearer\s+)[^\s,;]+/ig, '$1[redacted]')
+        .replace(/(token=)[^&\s]+/ig, '$1[redacted]')
+        .replace(/(apikey=)[^&\s]+/ig, '$1[redacted]')
+        .replace(/(service[_-]?role[_-]?key\s*[:=]\s*)[^\s,;]+/ig, '$1[redacted]')
+        .replace(/(X-Amz-Signature=)[^&\s]+/ig, '$1[redacted]')
+        .replace(/(X-Amz-Credential=)[^&\s]+/ig, '$1[redacted]')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+      const safeStep = String(step || 'UNKNOWN')
+        .replace(/[^A-Za-z0-9_:-]/g, '_')
+        .slice(0, 80) || 'UNKNOWN';
+
+      return `Failed to render invoice bundle at ${safeStep}: ${(msg.slice(0, 500) || 'Unknown render error')}`;
+    })();
+
+    return { ok: false, error: safePublicError, render_step: step || null };
   }
 }
 
