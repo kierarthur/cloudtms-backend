@@ -161691,7 +161691,6 @@ BEGIN
 END;
 $function$;
 
-
 CREATE OR REPLACE FUNCTION public.pay_workbench_seed_candidate_preview_line_source(p_session_id uuid, p_candidate_id uuid, p_context_json jsonb DEFAULT '{}'::jsonb, p_cursor_json jsonb DEFAULT NULL::jsonb, p_limit integer DEFAULT 100)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -162171,7 +162170,6 @@ BEGIN
       WHERE NOT (
         component_element.value IS NOT NULL
         AND jsonb_typeof(component_element.value) = 'object'
-        AND UPPER(NULLIF(BTRIM(COALESCE(component_element.value->>'classification', '')), '')) = 'REIMBURSEMENT_GROSS_FIXED'
         AND UPPER(NULLIF(BTRIM(COALESCE(component_element.value->>'component_key_type', '')), '')) IN ('EXPENSE_CODE', 'ADDITIONAL_CODE')
         AND NULLIF(BTRIM(COALESCE(component_element.value->>'component_key_value', '')), '') IS NOT NULL
       )
@@ -162254,6 +162252,8 @@ BEGIN
               CASE WHEN COALESCE(component_element.value->>'preview_due_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN (component_element.value->>'preview_due_amount_ex_vat')::numeric ELSE NULL::numeric END,
               CASE WHEN COALESCE(component_element.value->>'allocated_source_due_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN (component_element.value->>'allocated_source_due_amount_ex_vat')::numeric ELSE NULL::numeric END,
               CASE WHEN COALESCE(component_element.value->>'target_pay_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN (component_element.value->>'target_pay_ex_vat')::numeric ELSE NULL::numeric END,
+              CASE WHEN COALESCE(component_element.value->>'component_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN (component_element.value->>'component_amount_ex_vat')::numeric ELSE NULL::numeric END,
+              CASE WHEN COALESCE(component_element.value->>'source_pay_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN (component_element.value->>'source_pay_ex_vat')::numeric ELSE NULL::numeric END,
               CASE WHEN COALESCE(component_element.value->>'remaining_source_amount', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN (component_element.value->>'remaining_source_amount')::numeric ELSE NULL::numeric END,
               0::numeric
             ), 2))
@@ -162261,6 +162261,8 @@ BEGIN
               CASE WHEN COALESCE(component_element.value->>'preview_due_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN (component_element.value->>'preview_due_amount_ex_vat')::numeric ELSE NULL::numeric END,
               CASE WHEN COALESCE(component_element.value->>'allocated_source_due_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN (component_element.value->>'allocated_source_due_amount_ex_vat')::numeric ELSE NULL::numeric END,
               CASE WHEN COALESCE(component_element.value->>'target_pay_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN (component_element.value->>'target_pay_ex_vat')::numeric ELSE NULL::numeric END,
+              CASE WHEN COALESCE(component_element.value->>'component_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN (component_element.value->>'component_amount_ex_vat')::numeric ELSE NULL::numeric END,
+              CASE WHEN COALESCE(component_element.value->>'source_pay_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN (component_element.value->>'source_pay_ex_vat')::numeric ELSE NULL::numeric END,
               CASE WHEN COALESCE(component_element.value->>'remaining_source_amount', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN (component_element.value->>'remaining_source_amount')::numeric ELSE NULL::numeric END,
               0::numeric
             ), 2))
@@ -162270,7 +162272,6 @@ BEGIN
       WHERE base_rows.line_type = 'TIMESHEET_PAYMENT'
         AND component_element.value IS NOT NULL
         AND jsonb_typeof(component_element.value) = 'object'
-        AND UPPER(NULLIF(BTRIM(COALESCE(component_element.value->>'classification', '')), '')) = 'REIMBURSEMENT_GROSS_FIXED'
         AND UPPER(NULLIF(BTRIM(COALESCE(component_element.value->>'component_key_type', '')), '')) IN ('EXPENSE_CODE', 'ADDITIONAL_CODE')
         AND NULLIF(BTRIM(COALESCE(component_element.value->>'component_key_value', '')), '') IS NOT NULL
     ) AS explicit_component_amounts
@@ -162295,7 +162296,6 @@ BEGIN
       WHERE NOT (
         component_element.value IS NOT NULL
         AND jsonb_typeof(component_element.value) = 'object'
-        AND UPPER(NULLIF(BTRIM(COALESCE(component_element.value->>'classification', '')), '')) = 'REIMBURSEMENT_GROSS_FIXED'
         AND UPPER(NULLIF(BTRIM(COALESCE(component_element.value->>'component_key_type', '')), '')) IN ('EXPENSE_CODE', 'ADDITIONAL_CODE')
         AND NULLIF(BTRIM(COALESCE(component_element.value->>'component_key_value', '')), '') IS NOT NULL
       )
@@ -162475,6 +162475,8 @@ BEGIN
           CASE WHEN COALESCE(component_element.value->>'preview_due_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN (component_element.value->>'preview_due_amount_ex_vat')::numeric ELSE NULL::numeric END,
           CASE WHEN COALESCE(component_element.value->>'allocated_source_due_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN (component_element.value->>'allocated_source_due_amount_ex_vat')::numeric ELSE NULL::numeric END,
           CASE WHEN COALESCE(component_element.value->>'target_pay_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN (component_element.value->>'target_pay_ex_vat')::numeric ELSE NULL::numeric END,
+          CASE WHEN COALESCE(component_element.value->>'component_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN (component_element.value->>'component_amount_ex_vat')::numeric ELSE NULL::numeric END,
+          CASE WHEN COALESCE(component_element.value->>'source_pay_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN (component_element.value->>'source_pay_ex_vat')::numeric ELSE NULL::numeric END,
           CASE WHEN COALESCE(component_element.value->>'remaining_source_amount', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN (component_element.value->>'remaining_source_amount')::numeric ELSE NULL::numeric END,
           0::numeric
         ), 2) AS unsigned_component_amount_ex_vat,
@@ -162503,6 +162505,8 @@ BEGIN
             CASE WHEN COALESCE(component_element.value->>'preview_due_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN (component_element.value->>'preview_due_amount_ex_vat')::numeric ELSE NULL::numeric END,
             CASE WHEN COALESCE(component_element.value->>'allocated_source_due_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN (component_element.value->>'allocated_source_due_amount_ex_vat')::numeric ELSE NULL::numeric END,
             CASE WHEN COALESCE(component_element.value->>'target_pay_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN (component_element.value->>'target_pay_ex_vat')::numeric ELSE NULL::numeric END,
+            CASE WHEN COALESCE(component_element.value->>'component_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN (component_element.value->>'component_amount_ex_vat')::numeric ELSE NULL::numeric END,
+            CASE WHEN COALESCE(component_element.value->>'source_pay_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN (component_element.value->>'source_pay_ex_vat')::numeric ELSE NULL::numeric END,
             CASE WHEN COALESCE(component_element.value->>'remaining_source_amount', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN (component_element.value->>'remaining_source_amount')::numeric ELSE NULL::numeric END,
             0::numeric
           ), 2))
@@ -162510,6 +162514,8 @@ BEGIN
             CASE WHEN COALESCE(component_element.value->>'preview_due_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN (component_element.value->>'preview_due_amount_ex_vat')::numeric ELSE NULL::numeric END,
             CASE WHEN COALESCE(component_element.value->>'allocated_source_due_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN (component_element.value->>'allocated_source_due_amount_ex_vat')::numeric ELSE NULL::numeric END,
             CASE WHEN COALESCE(component_element.value->>'target_pay_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN (component_element.value->>'target_pay_ex_vat')::numeric ELSE NULL::numeric END,
+            CASE WHEN COALESCE(component_element.value->>'component_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN (component_element.value->>'component_amount_ex_vat')::numeric ELSE NULL::numeric END,
+            CASE WHEN COALESCE(component_element.value->>'source_pay_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN (component_element.value->>'source_pay_ex_vat')::numeric ELSE NULL::numeric END,
             CASE WHEN COALESCE(component_element.value->>'remaining_source_amount', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN (component_element.value->>'remaining_source_amount')::numeric ELSE NULL::numeric END,
             0::numeric
           ), 2))
@@ -162526,7 +162532,6 @@ BEGIN
         base_rows.line_type <> 'TIMESHEET_PAYMENT'
         OR (
           base_rows.line_type = 'TIMESHEET_PAYMENT'
-          AND UPPER(NULLIF(BTRIM(COALESCE(component_rows.component_json->>'classification', '')), '')) = 'REIMBURSEMENT_GROSS_FIXED'
           AND UPPER(NULLIF(BTRIM(COALESCE(component_rows.component_json->>'component_key_type', '')), '')) IN ('EXPENSE_CODE', 'ADDITIONAL_CODE')
           AND NULLIF(BTRIM(COALESCE(component_rows.component_json->>'component_key_value', '')), '') IS NOT NULL
         )
@@ -162793,10 +162798,6 @@ BEGIN
 END;
 $function$;
 
-
-
-
-
 CREATE OR REPLACE FUNCTION public.pay_workbench_preview_line_economic_key(p_line_json jsonb DEFAULT '{}'::jsonb, p_timesheet_id uuid DEFAULT NULL::uuid, p_item_type text DEFAULT NULL::text, p_segment_json jsonb DEFAULT NULL::jsonb, p_key_type_hint text DEFAULT NULL::text, p_key_value_hint text DEFAULT NULL::text)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -162918,12 +162919,16 @@ BEGIN
       v_single_component_amount_ex_vat := ROUND((v_single_case_component_json->>'allocated_source_due_amount_ex_vat')::numeric, 2);
     ELSIF COALESCE(v_single_case_component_json->>'target_pay_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN
       v_single_component_amount_ex_vat := ROUND((v_single_case_component_json->>'target_pay_ex_vat')::numeric, 2);
+    ELSIF COALESCE(v_single_case_component_json->>'component_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN
+      v_single_component_amount_ex_vat := ROUND((v_single_case_component_json->>'component_amount_ex_vat')::numeric, 2);
+    ELSIF COALESCE(v_single_case_component_json->>'source_pay_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN
+      v_single_component_amount_ex_vat := ROUND((v_single_case_component_json->>'source_pay_ex_vat')::numeric, 2);
     ELSIF COALESCE(v_single_case_component_json->>'remaining_source_amount', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN
       v_single_component_amount_ex_vat := ROUND((v_single_case_component_json->>'remaining_source_amount')::numeric, 2);
     END IF;
 
-    IF v_single_component_classification = 'REIMBURSEMENT_GROSS_FIXED'
-       AND v_single_component_key_type IN ('EXPENSE_CODE', 'ADDITIONAL_CODE')
+    IF v_single_component_key_type IN ('EXPENSE_CODE', 'ADDITIONAL_CODE')
+       AND (v_single_component_classification IS NULL OR v_single_component_classification = 'REIMBURSEMENT_GROSS_FIXED')
        AND v_single_component_key_value IS NOT NULL
        AND (
          v_key_type_hint IN ('EXPENSE_CODE', 'ADDITIONAL_CODE')
@@ -163070,6 +163075,9 @@ BEGIN
   );
 END;
 $function$;
+
+
+
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_preview_line_contract_ok(
   p_line_json jsonb DEFAULT '{}'::jsonb,
