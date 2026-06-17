@@ -28419,7 +28419,6 @@ begin
 end;
 $function$;
 
-
 CREATE OR REPLACE FUNCTION public.pay_preview_candidate_build_canonical_lines(p_context_json jsonb, p_candidate_id uuid)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -28630,6 +28629,12 @@ begin
           cp.cand_display_name,
           cp.payee_entity_kind,
           cp.payee_entity_id,
+          cp.payee_bank_hash,
+          cp.payee_name_check_status,
+          cp.payee_name_check_has_override,
+          cp.payee_map_present,
+          coalesce(cp.blockers, '[]'::jsonb) as payee_blockers,
+          (jsonb_array_length(coalesce(cp.blockers, '[]'::jsonb)) > 0) as has_payee_readiness_block,
           (cp.is_ready_for_draft and coalesce(tcr.is_blocked, false) = false) as is_ready_for_draft,
           ato.override_id,
           ato.override_reason,
@@ -29173,6 +29178,12 @@ begin
           ctl.cand_display_name,
           ctl.payee_entity_kind,
           ctl.payee_entity_id,
+          ctl.payee_bank_hash,
+          ctl.payee_name_check_status,
+          ctl.payee_name_check_has_override,
+          ctl.payee_map_present,
+          coalesce(ctl.payee_blockers, '[]'::jsonb) as payee_blockers,
+          coalesce(ctl.has_payee_readiness_block, false) as has_payee_readiness_block,
           ctl.is_ready_for_draft,
           ctl.override_id,
           ctl.override_reason,
@@ -29286,10 +29297,13 @@ begin
             or coalesce(ctps.ready_segment_count, 0) > 0
           ) as has_ready_presentation,
           (
-            ctps.case_is_blocked = false
-            and ctps.has_active_timesheet_snooze = false
+            ctps.has_active_timesheet_snooze = false
             and ctps.is_ready_for_draft = false
             and coalesce(nullif(ctps.case_resolution_summary_json->>'case_needs_resolution','')::boolean, false) = false
+            and (
+              ctps.case_is_blocked = false
+              or coalesce(ctps.has_payee_readiness_block, false) = true
+            )
             and (
               round(coalesce(ctps.ready_segment_amount_ex_vat, 0) + coalesce(ctps.non_segment_amount_ex_vat, 0), 2) <> 0
               or coalesce(ctps.ready_segment_count, 0) > 0
@@ -29299,10 +29313,13 @@ begin
             ctps.has_active_timesheet_snooze = true
             or coalesce(ctps.blocked_visible_segment_count, 0) > 0
             or (
-              ctps.case_is_blocked = false
-              and ctps.has_active_timesheet_snooze = false
+              ctps.has_active_timesheet_snooze = false
               and ctps.is_ready_for_draft = false
               and coalesce(nullif(ctps.case_resolution_summary_json->>'case_needs_resolution','')::boolean, false) = false
+              and (
+                ctps.case_is_blocked = false
+                or coalesce(ctps.has_payee_readiness_block, false) = true
+              )
               and (
                 round(coalesce(ctps.ready_segment_amount_ex_vat, 0) + coalesce(ctps.non_segment_amount_ex_vat, 0), 2) <> 0
                 or coalesce(ctps.ready_segment_count, 0) > 0
@@ -29332,10 +29349,13 @@ begin
             )
             and coalesce(ctps.blocked_visible_segment_count, 0) = 0
             and not (
-              ctps.case_is_blocked = false
-              and ctps.has_active_timesheet_snooze = false
+              ctps.has_active_timesheet_snooze = false
               and ctps.is_ready_for_draft = false
               and coalesce(nullif(ctps.case_resolution_summary_json->>'case_needs_resolution','')::boolean, false) = false
+              and (
+                ctps.case_is_blocked = false
+                or coalesce(ctps.has_payee_readiness_block, false) = true
+              )
               and (
                 round(coalesce(ctps.ready_segment_amount_ex_vat, 0) + coalesce(ctps.non_segment_amount_ex_vat, 0), 2) <> 0
                 or coalesce(ctps.ready_segment_count, 0) > 0
@@ -29621,6 +29641,17 @@ begin
               'adjustment_comment', null
             )
             || jsonb_build_object(
+              'payee_entity_kind', ctpp.payee_entity_kind,
+              'payee_entity_id', case when ctpp.payee_entity_id is null then null else ctpp.payee_entity_id::text end,
+              'payee_bank_hash', ctpp.payee_bank_hash,
+              'bank_details_hash', ctpp.payee_bank_hash,
+              'name_check_status', ctpp.payee_name_check_status,
+              'name_check_has_override', ctpp.payee_name_check_has_override,
+              'payee_map_present', ctpp.payee_map_present,
+              'blockers', coalesce(ctpp.payee_blockers, '[]'::jsonb),
+              'payee_blockers', coalesce(ctpp.payee_blockers, '[]'::jsonb)
+            )
+            || jsonb_build_object(
               'amount_ex_vat', case
                 when ctpp.has_active_timesheet_snooze = true or ctpp.has_non_resolution_readiness_block = true then ctpp.amount_ex_vat
                 else ctpp.blocked_section_amount_ex_vat
@@ -29633,6 +29664,8 @@ begin
               'advanced_override_id', case when ctpp.override_id is null then null else ctpp.override_id::text end,
               'advanced_reason', ctpp.override_reason,
               'blocked_reason_codes', (
+                coalesce(ctpp.payee_blockers, '[]'::jsonb)
+                ||
                 (case
                   when ctpp.has_active_timesheet_snooze = true then jsonb_build_array('BLOCKED_DATED_SNOOZE')
                   else '[]'::jsonb
@@ -30500,6 +30533,8 @@ begin
   );
 end;
 $function$;
+
+
 
 
 CREATE OR REPLACE FUNCTION public.pay_preview_candidate_build_case_component_rows(p_context_json jsonb, p_candidate_id uuid)
