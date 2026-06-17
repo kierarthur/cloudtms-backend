@@ -53756,6 +53756,292 @@ async function collectRailUpdatesForBankingPayOperation(env, options = {}) {
 }
 
 
+async function handleBankingPayPayeeReadinessEnsure(env, req, user) {
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return withCORS(env, req, badRequest('Invalid JSON'));
+  }
+
+  const trimText = (value) => String(value == null ? '' : value).trim();
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  const actorUserId = trimText(user && user.id ? user.id : '');
+
+  let provider = trimText(body.provider || body.rail_provider).toUpperCase();
+  let railEnv = trimText(body.env || body.rail_env).toUpperCase();
+
+  const entityKind = trimText(body.entity_kind || body.payee_entity_kind).toUpperCase();
+  const entityId = trimText(body.entity_id || body.payee_entity_id);
+  const bankDetailsHash = trimText(
+    body.bank_details_hash ||
+    body.payee_bank_hash ||
+    body.bank_details_hash_snapshot ||
+    body.snapshot_bank_details_hash
+  );
+  const suppliedCandidateId = trimText(body.candidate_id || body.candidateId);
+  const suppliedWorkbenchSessionId = trimText(body.workbench_session_id || body.workbenchSessionId || body.session_id || body.sessionId);
+
+  if (!entityKind) return withCORS(env, req, badRequest('entity_kind is required (CANDIDATE|UMBRELLA)'));
+  if (!(entityKind === 'CANDIDATE' || entityKind === 'UMBRELLA')) return withCORS(env, req, badRequest('entity_kind must be CANDIDATE or UMBRELLA'));
+  if (!entityId) return withCORS(env, req, badRequest('entity_id is required'));
+  if (!uuidRe.test(entityId)) return withCORS(env, req, badRequest('entity_id must be a UUID'));
+  if (!bankDetailsHash) return withCORS(env, req, badRequest('bank_details_hash is required'));
+  if (suppliedCandidateId && !uuidRe.test(suppliedCandidateId)) return withCORS(env, req, badRequest('candidate_id must be a UUID when supplied'));
+  if (suppliedWorkbenchSessionId && !uuidRe.test(suppliedWorkbenchSessionId)) return withCORS(env, req, badRequest('workbench_session_id must be a UUID when supplied'));
+
+  if (!provider || !railEnv) {
+    try {
+      const sel = ['rail_provider_default', 'rail_env_default'].join(',');
+      const { rows } = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/settings_defaults?id=eq.1&select=${sel}&limit=1`);
+      const r0 = (rows && rows[0]) ? rows[0] : null;
+
+      if (!provider) provider = trimText(r0?.rail_provider_default || 'CSV').toUpperCase();
+      if (!railEnv) railEnv = trimText(r0?.rail_env_default || 'PROD').toUpperCase();
+    } catch {
+      if (!provider) provider = 'CSV';
+      if (!railEnv) railEnv = 'PROD';
+    }
+  }
+
+  if (!provider) return withCORS(env, req, badRequest('provider is required'));
+  if (!railEnv) return withCORS(env, req, badRequest('env is required'));
+
+  if (provider !== 'REVOLUT') {
+    return withCORS(
+      env,
+      req,
+      new Response(
+        JSON.stringify({
+          ok: false,
+          code: 'BANK_NAME_CHECK_PROVIDER_UNSUPPORTED',
+          message: 'Bank/name check readiness is only available for Revolut pay rails.',
+          provider,
+          rail_env: railEnv
+        }),
+        { status: 400, headers: JSON_HEADERS }
+      )
+    );
+  }
+
+  try {
+    const target = await resolveRailPayeeTargetByHash(env, {
+      entity_kind: entityKind,
+      entity_id: entityId,
+      bank_details_hash: bankDetailsHash
+    });
+
+    if (!target || target.found !== true) {
+      return withCORS(
+        env,
+        req,
+        new Response(
+          JSON.stringify({
+            ok: false,
+            code: String(target?.reason || 'PAYEE_TARGET_NOT_FOUND'),
+            message: 'The payee bank details no longer match the current Banking Pay candidate data. Refresh Banking Pay and try again.',
+            entity_kind: entityKind,
+            entity_id: entityId,
+            bank_details_hash: bankDetailsHash
+          }),
+          { status: 400, headers: JSON_HEADERS }
+        )
+      );
+    }
+
+    const resolvedHash = trimText(target.bank_details_hash || bankDetailsHash);
+    const bankFields = (target.bank_fields && typeof target.bank_fields === 'object') ? target.bank_fields : {};
+
+    let effectiveCandidateId = suppliedCandidateId;
+    if (entityKind === 'CANDIDATE') {
+      if (suppliedCandidateId && suppliedCandidateId !== entityId) {
+        return withCORS(env, req, badRequest('candidate_id must match entity_id for CANDIDATE payee readiness'));
+      }
+      effectiveCandidateId = entityId;
+    } else {
+      if (!effectiveCandidateId) {
+        return withCORS(env, req, badRequest('candidate_id is required for UMBRELLA payee readiness'));
+      }
+
+      const qs = new URLSearchParams();
+      qs.set('select', 'id,umbrella_id');
+      qs.set('id', `eq.${effectiveCandidateId}`);
+      qs.set('limit', '1');
+      const candidateUrl = `${env.SUPABASE_URL}/rest/v1/candidates?${qs.toString()}`;
+      const candidateRes = await sbFetch(env, candidateUrl);
+      const candidateRow = (candidateRes && Array.isArray(candidateRes.rows) && candidateRes.rows.length) ? candidateRes.rows[0] : null;
+      const candidateUmbrellaId = trimText(candidateRow?.umbrella_id || '');
+      if (!candidateRow || candidateUmbrellaId !== entityId) {
+        return withCORS(env, req, badRequest('candidate_id does not belong to the supplied umbrella payee'));
+      }
+    }
+
+    const fetchNameCheckRow = async () => {
+      const qs = new URLSearchParams();
+      qs.set('select', 'id,status,override_reason,override_hash,checked_at_utc,updated_at_utc,result_json');
+      qs.set('rail_provider', `eq.${provider}`);
+      qs.set('rail_env', `eq.${railEnv}`);
+      qs.set('entity_kind', `eq.${entityKind}`);
+      qs.set('entity_id', `eq.${entityId}`);
+      qs.set('bank_details_hash', `eq.${resolvedHash}`);
+      qs.set('limit', '1');
+      const res = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/bank_name_checks?${qs.toString()}`);
+      return (res && Array.isArray(res.rows) && res.rows.length) ? res.rows[0] : null;
+    };
+
+    const fetchPayeeMapRow = async () => {
+      const qs = new URLSearchParams();
+      qs.set('select', 'id,payee_id,payee_account_id,updated_at_utc');
+      qs.set('rail_provider', `eq.${provider}`);
+      qs.set('rail_env', `eq.${railEnv}`);
+      qs.set('entity_kind', `eq.${entityKind}`);
+      qs.set('entity_id', `eq.${entityId}`);
+      qs.set('bank_details_hash', `eq.${resolvedHash}`);
+      qs.set('limit', '1');
+      const res = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/bank_payee_map?${qs.toString()}`);
+      return (res && Array.isArray(res.rows) && res.rows.length) ? res.rows[0] : null;
+    };
+
+    const beforeNameCheck = await fetchNameCheckRow();
+    const beforePayeeMap = await fetchPayeeMapRow();
+    const beforeNameStatus = trimText(beforeNameCheck?.status || 'UNVERIFIED').toUpperCase() || 'UNVERIFIED';
+    const beforeOverrideHash = trimText(beforeNameCheck?.override_hash || '');
+    const beforeOverrideReason = trimText(beforeNameCheck?.override_reason || '');
+    const beforeHasOverride = (!!beforeOverrideHash && beforeOverrideHash === resolvedHash) || !!beforeOverrideReason;
+    const beforePayeeMapPresent = !!beforePayeeMap;
+
+    const blockers = [];
+    if (!(beforeNameStatus === 'PASS' || beforeHasOverride)) blockers.push('BLOCKED_NAME_CHECK');
+    if (!beforePayeeMapPresent) blockers.push('BLOCKED_NO_PAYEE_MAP');
+
+    let readiness = {
+      ok: true,
+      did_work: false,
+      attempted_count: 0,
+      success_count: 0,
+      failed_count: 0,
+      skipped_count: 0,
+      diagnostics: []
+    };
+
+    if (blockers.length) {
+      const payeeName = trimText(bankFields.payee_name || bankFields.account_holder || '');
+      const sortCode = trimText(bankFields.sort_code || '');
+      const accountNumber = trimText(bankFields.account_number || '');
+      const accountType = entityKind === 'UMBRELLA' ? 'Business' : 'Personal';
+      const payee = {
+        candidate_id: effectiveCandidateId || null,
+        payee_entity_kind: entityKind,
+        payee_entity_id: entityId,
+        bank_details_hash: resolvedHash,
+        blockers,
+        name_check: {
+          status: beforeNameStatus,
+          has_override: beforeHasOverride
+        },
+        payee_map: {
+          present: beforePayeeMapPresent
+        },
+        payee_name: payeeName,
+        account_holder: payeeName,
+        sort_code: sortCode,
+        account_number: accountNumber,
+        account_type: accountType,
+        transfers: [
+          {
+            payee_name: payeeName,
+            account_holder: payeeName,
+            sort_code: sortCode,
+            account_number: accountNumber,
+            account_type: accountType
+          }
+        ]
+      };
+
+      readiness = await revolutEnsurePayeesReadyFromPreview(env, railEnv, [payee], actorUserId || null, {
+        chunkSize: 1,
+        cursor: 0,
+        candidateIds: effectiveCandidateId ? [effectiveCandidateId] : [],
+        payeeIds: [entityId],
+        lockOwner: `interactive-payee-readiness:${effectiveCandidateId || entityId}:${Date.now()}`
+      });
+    }
+
+    const finalNameCheck = await fetchNameCheckRow();
+    const finalPayeeMap = await fetchPayeeMapRow();
+    const finalNameStatus = trimText(finalNameCheck?.status || beforeNameStatus || 'UNVERIFIED').toUpperCase() || 'UNVERIFIED';
+    const finalOverrideHash = trimText(finalNameCheck?.override_hash || '');
+    const finalOverrideReason = trimText(finalNameCheck?.override_reason || '');
+    const finalHasOverride = (!!finalOverrideHash && finalOverrideHash === resolvedHash) || !!finalOverrideReason;
+    const finalPayeeMapPresent = !!finalPayeeMap;
+    const failedCount = Number(readiness?.failed_count ?? readiness?.failed ?? 0);
+    const succeeded = (finalPayeeMapPresent === true) && (finalNameStatus === 'PASS' || finalHasOverride === true);
+    const needsReview = !succeeded && (failedCount > 0 || ['FAIL', 'NEAR_MATCH', 'UNAVAILABLE'].includes(finalNameStatus));
+
+    let fastLane = null;
+    if (suppliedWorkbenchSessionId && effectiveCandidateId && typeof runInteractiveWorkbenchCandidateFastLane === 'function') {
+      try {
+        fastLane = await runInteractiveWorkbenchCandidateFastLane(
+          env,
+          suppliedWorkbenchSessionId,
+          effectiveCandidateId,
+          actorUserId || null,
+          null,
+          'PAYEE_READINESS_ENSURE'
+        );
+      } catch (e) {
+        fastLane = {
+          ok: false,
+          skipped: true,
+          reason: 'FAST_LANE_FAILED',
+          error: String(e?.message || e || 'FAST_LANE_FAILED')
+        };
+      }
+    }
+
+    const responsePayload = {
+      ok: true,
+      action: 'PAYEE_READINESS_ENSURE',
+      queued: false,
+      running: false,
+      succeeded,
+      status: succeeded ? 'SUCCEEDED' : (needsReview ? 'NEEDS_REVIEW' : 'SUBMITTED'),
+      provider,
+      rail_env: railEnv,
+      entity_kind: entityKind,
+      entity_id: entityId,
+      candidate_id: effectiveCandidateId || null,
+      bank_details_hash: resolvedHash,
+      name_check: {
+        status: finalNameStatus,
+        has_override: finalHasOverride,
+        checked_at_utc: finalNameCheck?.checked_at_utc || null,
+        updated_at_utc: finalNameCheck?.updated_at_utc || null,
+        result_json: finalNameCheck?.result_json || null
+      },
+      payee_map: {
+        present: finalPayeeMapPresent,
+        id: finalPayeeMap?.id || null,
+        payee_id: finalPayeeMap?.payee_id || null,
+        payee_account_id: finalPayeeMap?.payee_account_id || null,
+        updated_at_utc: finalPayeeMap?.updated_at_utc || null
+      },
+      readiness,
+      fast_lane: fastLane,
+      refresh_hint: {
+        reason: 'PAYEE_READINESS_CHANGED',
+        candidate_id: effectiveCandidateId || null,
+        workbench_session_id: suppliedWorkbenchSessionId || null,
+        sections: ['canonical_preview_lines', 'blocked_for_pay', 'cases_resolutions']
+      }
+    };
+
+    return withCORS(env, req, ok(responsePayload));
+  } catch (e) {
+    return withCORS(env, req, serverError(String(e?.message || e || 'Failed to run payee readiness')));
+  }
+}
+
+
 async function handleTimesheetUnauthorise(env, req, timesheetId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
